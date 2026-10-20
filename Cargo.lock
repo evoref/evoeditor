@@ -229,6 +229,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "eve-platform"
+version = "0.0.0"
+dependencies = [
+ "eve-core",
+ "eve-text",
+ "eve-view",
+ "windows-sys 0.59.0",
+]
+
+[[package]]
 name = "eve-testkit"
 version = "0.0.0"
 dependencies = [
