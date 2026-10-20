@@ -123,6 +123,7 @@ fn dirty_env() -> Env {
     s
 }
 
+// verifies: AC-FR-107-3
 #[test]
 fn dirty_な文書を置き換えると確認が出て_キャンセルで何も変わらない() {
     let mut s = dirty_env();

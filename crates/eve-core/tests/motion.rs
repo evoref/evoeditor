@@ -164,6 +164,7 @@ fn 単語移動() {
     check("foo|\nbar", "cursor.move_word_right", "foo\n|bar");
 }
 
+// verifies: AC-FR-303-1 AC-FR-303-2
 #[test]
 fn スマートホームとエンド() {
     check("    fo|o", "cursor.home", "    |foo"); // インデント終端へ
@@ -304,11 +305,15 @@ fn 指定行へ移動() {
         "aa\nbb\ncc\n|dd",
         "範囲外は最終行へ丸める"
     );
-    assert_eq!(
-        go(Args::new().with_int("line", 0)),
-        "|aa\nbb\ncc\ndd",
-        "0 以下は先頭行"
-    );
+    for bad in [0, -3] {
+        let mut s = Scene::new("aa\n|bb\ncc\ndd");
+        assert_eq!(
+            s.run_args("cursor.goto_line", Args::new().with_int("line", bad)),
+            CommandResult::Rejected(eve_core::RejectReason::InvalidArgs),
+            "1 未満は不正な入力 (03 §5.6)"
+        );
+        assert_eq!(s.shown(), "aa\n|bb\ncc\ndd", "動かない");
+    }
     assert_eq!(
         go(Args::new().with_int("line", 2).with_int("col", 99)),
         "aa\nbb|\ncc\ndd",

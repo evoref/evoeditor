@@ -27,15 +27,19 @@ status = "todo"
 id = "AC-FR-104-1"
 requirement = "FR-104"
 kind = "T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "名前を付けて保存は既定のキーから実行できる",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-104-3"
 requirement = "FR-104"
 kind = "T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "無編集の上書き保存は書き込まず_変更なしと示す",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-105-1"
@@ -76,8 +80,10 @@ status = "todo"
 id = "AC-FR-107-1"
 requirement = "FR-107"
 kind = "T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "終了の確認は_3_択で_キャンセルでは何も変わらない",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-107-2"
@@ -90,8 +96,13 @@ status = "todo"
 id = "AC-FR-107-3"
 requirement = "FR-107"
 kind = "T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "dirty_な文書を置き換えると確認が出て_キャンセルで何も変わらない",
+    "新規バッファの作成でも_dirty_なら確認が出て_キャンセルで何も変わらない",
+    "読込が失敗したら今の文書がそのまま残る",
+    "読込が取り消されたら今の文書がそのまま残る",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-108-1"
@@ -286,8 +297,10 @@ status = "todo"
 id = "AC-FR-124-1"
 requirement = "FR-124"
 kind = "T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "新規バッファを作り_保存すると名前を尋ねられる",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-127-1"
@@ -307,15 +320,19 @@ status = "todo"
 id = "AC-FR-201-1"
 requirement = "FR-201"
 kind = "T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "書記素クラスタは_backspace_と_delete_で_1_回で消える",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-202-1"
 requirement = "FR-202"
 kind = "T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "改行の自動インデント",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-202-2"
@@ -335,15 +352,19 @@ status = "todo"
 id = "AC-FR-203-1"
 requirement = "FR-203"
 kind = "T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "連続入力は_1_回の_undo_で戻り_時間窓で区切れる",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-203-2"
 requirement = "FR-203"
 kind = "T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "undo_と_redo_を繰り返しても各時点の文書と選択に一致する",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-203-3"
@@ -356,29 +377,37 @@ status = "todo"
 id = "AC-FR-204-1"
 requirement = "FR-204"
 kind = "T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "保存時点に戻ると未変更の表示になる",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-204-2"
 requirement = "FR-204"
 kind = "T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "編集して保存すると履歴が残り_undo_で_dirty_に戻る",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-204-3"
 requirement = "FR-204"
 kind = "T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "保存点より後を_undo_してから編集すると_以後_dirty_のまま",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-204-4"
 requirement = "FR-204"
 kind = "T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "履歴の上限で古い履歴を破棄しても_未変更の表示は変わらない",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-205-1"
@@ -440,57 +469,73 @@ status = "todo"
 id = "AC-FR-301-1"
 requirement = "FR-301"
 kind = "T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "左右の移動は全角_結合文字_絵文字_国旗を_1_書記素ずつ",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-301-2"
 requirement = "FR-301"
 kind = "T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "上下の移動は全角と半角の混在する行の間で目標の表示列を保つ",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-302-1"
 requirement = "FR-302"
 kind = "T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "期待結果の表",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-303-1"
 requirement = "FR-303"
 kind = "T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "スマートホームとエンド",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-303-2"
 requirement = "FR-303"
 kind = "T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "スマートホームとエンド",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-304-1"
 requirement = "FR-304"
 kind = "T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "ページ移動は可視行数マイナス1行ずつ進み_カーソルは画面内に留まる",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-305-1"
 requirement = "FR-305"
 kind = "T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "shift_付きの各移動で選択が拡張され_全選択で文書全体になる",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-306-1"
 requirement = "FR-306"
 kind = "T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "範囲外の行番号は最終行に丸めて通知する",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-401-1"
@@ -860,8 +905,10 @@ status = "todo"
 id = "AC-NFR-203-1"
 requirement = "NFR-203"
 kind = "B / T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "履歴が上限に達したら古い履歴を破棄して_文書ごとに_1_回通知する",
+]
+status = "done"
 
 [[ac]]
 id = "AC-NFR-203-2"
@@ -1140,8 +1187,10 @@ status = "todo"
 id = "AC-NFR-701-1"
 requirement = "NFR-701"
 kind = "T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "例_開いて選択を消して保存する",
+]
+status = "done"
 
 [[ac]]
 id = "AC-NFR-704-1"
@@ -1168,19 +1217,25 @@ status = "todo"
 id = "AC-NFR-707-4"
 requirement = "NFR-707"
 kind = "T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "query_で文書一覧_本文_選択_ステータス_オーバーレイを読める",
+]
+status = "done"
 
 [[ac]]
 id = "AC-NFR-707-5"
 requirement = "NFR-707"
 kind = "T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "文書の変更とメッセージとオーバーレイの開閉が_editor_event_になる",
+]
+status = "done"
 
 [[ac]]
 id = "AC-NFR-707-6"
 requirement = "NFR-707"
 kind = "T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "同じ状態の同じ_query_は同じ応答",
+]
+status = "done"

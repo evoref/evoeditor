@@ -120,6 +120,7 @@ fn 選択への入力は置換し_undo_で選択ごと戻る() {
     assert_eq!(s.shown(), "aX|d");
 }
 
+// verifies: AC-FR-203-1
 #[test]
 fn 連続入力は_1_回の_undo_で戻り_時間窓で区切れる() {
     let mut s = Scene::new("|");
@@ -159,6 +160,7 @@ fn カーソル移動は_undo_の結合を封印する() {
     assert_eq!(s.shown(), "|");
 }
 
+// verifies: AC-FR-202-1
 #[test]
 fn 改行の自動インデント() {
     // 03 §15.3 の期待例。· は空白、→ はタブ

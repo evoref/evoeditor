@@ -163,6 +163,11 @@ impl Harness {
         self.collect();
     }
 
+    /// 実行待ちのジョブをすべて取り消す (結果は次の `run_jobs` で `Editor` に届く)。
+    pub fn cancel_jobs(&mut self) {
+        self.jobs.cancel_all();
+    }
+
     /// 実行待ちのジョブの数 (「保存が走っている最中」の検査用)。
     pub fn pending_jobs(&self) -> usize {
         self.jobs.pending()

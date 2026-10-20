@@ -2,6 +2,7 @@
 
 use eve_testkit::Harness;
 
+// verifies: AC-NFR-701-1
 #[test]
 fn 例_開いて選択を消して保存する() {
     let mut h = Harness::new().with_file("/w/a.txt", b"hello\r\nworld");

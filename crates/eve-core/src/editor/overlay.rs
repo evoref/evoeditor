@@ -464,7 +464,11 @@ pub(super) fn parse_goto(s: &str) -> Option<Args> {
     } else {
         args = args.with(
             "line",
-            ArgValue::Int(line.parse::<i64>().ok().filter(|_| !line.is_empty())?),
+            ArgValue::Int(
+                line.parse::<i64>()
+                    .ok()
+                    .filter(|n| !line.is_empty() && *n >= 1)?,
+            ),
         );
     }
     if let Some(c) = col {
