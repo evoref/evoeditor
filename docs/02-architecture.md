@@ -146,7 +146,7 @@ flowchart LR
 | 22 | AI 連携に適した開発構成 (規範行 ID・`spec:`・spec-index・シナリオ DSL・ヘッドレス駆動・モジュール所有境界) | [ADR-0033](10-decisions.md#adr-0033-ai-連携に適した開発構成) | 確定 |
 | 23 | ローカル LLM を一級市民とする。既定は外部の `llama-server` 等へのループバック HTTP 接続、子プロセスとしての管理はオプトイン、プロセス内推論はしない | [ADR-0034](10-decisions.md#adr-0034-ローカル-llm-を一級市民とする接続方式) | 一部提案中 (方針と接続形態の既定は確定 (ユーザー回答、OQ-129)。方式の細目 OQ-128 / OQ-133 は提案中) |
 | 24 | LLM の能力モデル (`LlmCaps`) と、サーバのトークナイザでの予算計算・先頭を固定したプロンプトによるキャッシュ再利用・制約付きの構造化出力・1 スロット前提の要求スケジューラ。core から見た AI は `AiService` のままで、これらは eve-ai の内部 | [ADR-0035](10-decisions.md#adr-0035-llm-の能力モデルとキャッシュを活かすプロンプト構築) | 提案中 |
-| 25 | **公開 crate の外部の消費者**: core・TUI・ヘッドレスを OSS で公開する。外部の消費者が依存してよい公開 crate を限り (§4.1)、境界型の互換は契約版で守る。core は frontend を知らない | [ADR-0038](10-decisions.md#adr-0038-公開-crate-の外部の消費者と寄稿の方針) | 一部提案中 (確定 (ユーザー回答) は Apache-2.0 単独の OSS、寄稿は DCO) |
+| 25 | **公開 crate の外部の消費者**: core・TUI・ヘッドレスを OSS で公開する。外部の消費者が依存してよい公開 crate を限り (§4.1)、境界型の互換は契約版で守る。core は frontend を知らない | [ADR-0038](10-decisions.md#adr-0038-公開-crate-の外部の消費者と寄稿の方針) | 確定 (ユーザー回答) (Apache-2.0 単独の OSS、寄稿は DCO、外部の消費者の依存範囲と契約の運用) |
 | 26 | **v0.1 の範囲の整合と先行投資の縮小**: 01 を版の正本とし、最初の利用者が v0.1 にいない拡張点は型・名前の予約に留める (駆動 API の実装、`EditSummary` の生成、C3 の固定等は後の版) | [ADR-0039](10-decisions.md#adr-0039-v01-の範囲の整合と先行投資の縮小) | 確定 (ユーザー回答) |
 | 27 | **v0.1 の最小核**: 単一文書 (文書の集合は内部で残す、§5.1)・UI は日本語のみ (MessageKey の外部化は残す)・Windows のみ出荷 (core は OS 非依存を保ち、Unix の実装は出荷する版、§4.7) | [ADR-0042](10-decisions.md#adr-0042-v01-の最小核-案-lwindows-のみの出荷日本語のみの-ui) | 確定 (ユーザー回答) |
 | 28 | Windows のビルドは C ランタイムを静的にリンクする (`+crt-static`。`.cargo/config.toml` に書く、§13 / §17.1) | — | 確定 (ユーザー回答) |
@@ -2115,13 +2115,13 @@ ADR-0033 (確定) に従い、仕様・コード・テストを機械的に結�
 evoeditor/                    # 公開リポジトリ (案、12 §3.3)
 ├─ LICENSE / NOTICE          # Apache-2.0 単独 (確定、OQ-19 / 152。LICENSE は既存、NOTICE は 12 §3.2)
 ├─ CLAUDE.md / AGENTS.md     # エージェント向けの短い入口 (11-dev-workflow を参照。仕様の再掲はしない。初版は手書きの CLAUDE.md、AGENTS.md は v0.2 まで、OQ-148。M0c の内容の正本は 08 §4)
-├─ CONTRIBUTING.md           # 人間向け。寄稿ポリシー (DCO。確定 (ユーザー回答)、OQ-154)。最小の版は最初の push の前 (12 §5.6)
-├─ README.md / SECURITY.md   # 開発の状態と報告窓口 (12 §5.5 / §5.6。最初の push の前に置く)
-├─ minisign.pub              # リリース署名の公開鍵 (最初の push に含める。12 §5.6、11 §9.7)
-├─ .github/                  # Issue / PR のテンプレート (最初の push の前)、ワークフロー (M1 のタスク (0) から、09 §6)
-│  ├─ dependabot.yml         # 依存の更新 (cargo と GitHub Actions、週 1・グループ化。最初の push の準備で置く、09 §6.3)
+├─ CONTRIBUTING.md           # 人間向け。寄稿ポリシー (DCO。確定 (ユーザー回答)、OQ-154)。最小の版は最初の push の前に置いた (12 §5.6、2026-10-20)
+├─ README.md / SECURITY.md   # 開発の状態と報告窓口 (12 §5.5 / §5.6。最初の push の前に置いた、2026-10-20)
+├─ minisign.pub              # リリース署名の公開鍵 (最初の push に含めた。12 §5.6、11 §9.7)
+├─ .github/                  # Issue / PR のテンプレート (最初の push の前に置いた)、ワークフロー (M1 のタスク (0) から、09 §6)
+│  ├─ dependabot.yml         # 依存の更新 (cargo と GitHub Actions、週 1・グループ化。最初の push の準備で置いた、09 §6.3)
 │  ├─ allowed_signers        # リリースのタグの SSH 署名の公開鍵 (git verify-tag 用、11 §9.7)
-│  └─ fuzz-recipients.txt    # fuzz のクラッシュ入力を暗号化する age の受取人の公開鍵 (最初の push に含める、09 §6.3、11 §9.7)
+│  └─ fuzz-recipients.txt    # fuzz のクラッシュ入力を暗号化する age の受取人の公開鍵 (最初の push に含めた、09 §6.3、11 §9.7)
 ├─ .claude/                  # 設定・役割別エージェント・コマンド (内容は 11)
 ├─ CHANGELOG.md              # 版ごとの変更 (リリースノートの元。12)
 ├─ Cargo.toml                # workspace。[workspace.lints] に clippy 規則
