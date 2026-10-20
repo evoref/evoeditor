@@ -19,3 +19,4 @@ eve-view = { version = "0.0.0", path = "../eve-view" }
 
 [dev-dependencies]
 proptest = "1.12.0"
+eve-testkit = { version = "0.0.0", path = "../eve-testkit" }
