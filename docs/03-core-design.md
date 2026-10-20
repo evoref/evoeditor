@@ -295,7 +295,7 @@ impl Selection {
 | N1 | 各 Range の anchor / head を書記素境界へスナップ (head は移動方向の `Bias`、anchor は元位置に近い側) |
 | N2 | `start` 昇順にソート。`primary` はソート後も同じ Range を指し続ける |
 | N3 | **重なる、または接する** Range は 1 つに併合する。接する (`a.end == b.start`) ものを併合するのは、両方とも非空のときのみ。空カーソル同士が同一位置にあれば 1 つにする。併合後の向きは primary (含まれていれば) の向き、なければ先頭の向き |
-| N4 | 空の Range と非空 Range が同じ位置で重なる場合、空の方を捨てる (非空を優先) |
+| N4 | 空の Range の位置が非空 Range の `[start, end]` (**両端を含む**) にある場合、空の方を捨てる (非空を優先)。選択の端に重なるカーソルは見た目に冗長なため。ただし空の Range が primary のときは、`start < 位置 < end` なら非空の Range に併合し (その Range が primary になる)、端なら残す (primary は捨てない、N5) |
 | N5 | ranges が空になることはない (最後の 1 つは削除できない。削除要求は primary を残す) |
 | N6 | すべての `Pos <= len_bytes()` |
 
