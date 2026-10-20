@@ -272,7 +272,11 @@ fn base_width(g: &str, rest: &str, cfg: &WidthConfig) -> usize {
     if w == 0 && is_combining(first) {
         return 1; // 孤立結合文字: ◌ + 結合
     }
-    w
+    // 半角カナの濁点・半濁点は、書記素では基底に結合するが、端末は別に 1 セル進めて描く (03 §13.2、S-06)
+    w + rest
+        .chars()
+        .filter(|c| matches!(c, '\u{FF9E}' | '\u{FF9F}'))
+        .count()
 }
 
 /// 1 行の文字列の表示幅 (セル数)。タブは次のタブストップまで進める。改行は含めない行の内容を渡す。
@@ -402,6 +406,7 @@ pub fn is_width_risky(g: &str) -> bool {
     g.chars().any(|c| {
         matches!(c,
             '\u{200D}' | '\u{FE0E}' | '\u{FE0F}'                                  // ZWJ・VS15 / VS16
+            | '\u{FF9E}' | '\u{FF9F}'                                           // 半角カナの濁点・半濁点
             | '\u{1F1E6}'..='\u{1F1FF}'                                          // 地域指示記号
             | '\u{1F3FB}'..='\u{1F3FF}'                                          // 肌色修飾
             | '\u{E000}'..='\u{F8FF}' | '\u{F0000}'..='\u{FFFFD}' | '\u{100000}'..='\u{10FFFD}') // 私用領域
@@ -419,6 +424,19 @@ mod tests {
 
     fn w(g: &str) -> u8 {
         grapheme_width(g, &WidthConfig::default())
+    }
+
+    #[test]
+    fn 半角カナの濁点は基底に足して数える() {
+        assert_eq!(w("ｶﾞ"), 2);
+        assert_eq!(w("ﾊﾟ"), 2);
+        assert_eq!(w("ｶ"), 1);
+        assert!(is_width_risky("ｶﾞ"));
+        assert!(!is_width_risky("ｶ"));
+        let cfg = WidthConfig::default();
+        assert_eq!(str_display_width("ｶﾞｷﾞ", &cfg), 4);
+        let d = grapheme_display("ｶﾞ", &cfg);
+        assert_eq!(d.base_width + d.marks_width, 2);
     }
 
     #[test]
