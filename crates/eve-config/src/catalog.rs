@@ -163,8 +163,8 @@ fn placeholder_names(s: &str) -> impl Iterator<Item = &str> {
     let mut rest = s;
     while let Some(i) = rest.find('{') {
         let tail = &rest[i..];
-        if tail.starts_with("{{") {
-            rest = &tail[2..];
+        if let Some(t) = tail.strip_prefix("{{") {
+            rest = t;
             continue;
         }
         match tail.find('}') {
