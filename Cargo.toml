@@ -11,6 +11,7 @@ members = [
     "crates/eve-host",
     "crates/eve-tui",
     "crates/eve-platform",
+    "bins/evoeditor",
     "crates/eve-testkit",
     "crates/eve-docs-tables",
     "xtask",

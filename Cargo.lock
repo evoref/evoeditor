@@ -262,15 +262,29 @@ dependencies = [
 name = "eve-tui"
 version = "0.0.0"
 dependencies = [
+ "eve-host",
  "eve-testkit",
  "eve-view",
  "ratatui",
+ "unicode-width",
  "windows-sys 0.59.0",
 ]
 
 [[package]]
 name = "eve-view"
 version = "0.0.0"
+
+[[package]]
+name = "evoeditor"
+version = "0.0.0"
+dependencies = [
+ "eve-config",
+ "eve-core",
+ "eve-host",
+ "eve-platform",
+ "eve-tui",
+ "eve-view",
+]
 
 [[package]]
 name = "fastrand"

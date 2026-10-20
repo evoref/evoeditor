@@ -14,6 +14,7 @@ workspace = true
 
 [dependencies]
 eve-view = { version = "0.0.0", path = "../eve-view" }
+eve-host = { version = "0.0.0", path = "../eve-host" }
 # 採用版は S-06 で固定 (02 §13.2)。ウィジェットは使わず、Buffer のセルへの書込と差分出力だけを使う (ADR-0005)
 ratatui = { version = "=0.30.2", default-features = false }
 
@@ -29,3 +30,4 @@ windows-sys = { version = "0.59", features = [
 
 [dev-dependencies]
 eve-testkit = { version = "0.0.0", path = "../eve-testkit" }
+unicode-width = "0.2"
