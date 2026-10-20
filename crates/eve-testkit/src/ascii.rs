@@ -93,7 +93,7 @@ fn chrome_lines(frame: &Frame) -> String {
                 .map(|k| {
                     k.strokes
                         .iter()
-                        .map(|s| format!("{:?}", s.key))
+                        .map(|s| eve_core::format_stroke(*s))
                         .collect::<Vec<_>>()
                         .join(" ")
                 })
