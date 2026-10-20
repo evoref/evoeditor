@@ -92,6 +92,8 @@ impl Catalog {
         args: &[(&str, &str)],
         key_label: &dyn Fn(&str) -> Option<String>,
     ) -> String {
+        let expanded = expand_conditionals(template, args);
+        let template = expanded.as_str();
         let mut out = String::with_capacity(template.len() + 16);
         let mut rest = template;
         while let Some(i) = rest.find(['{', '}']) {
@@ -130,6 +132,53 @@ impl Catalog {
         out.push_str(rest);
         out
     }
+}
+
+/// 条件付きの文 〔 〕 (04 §15.2): 中の引数がすべて値を持つときだけ中身を出し、〔 〕 は表示しない。
+/// 1 つでも引数が無い・空なら、〔 〕 ごと省く。入れ子は扱わない。
+fn expand_conditionals(template: &str, args: &[(&str, &str)]) -> String {
+    let mut out = String::with_capacity(template.len());
+    let mut rest = template;
+    while let Some(start) = rest.find('〔') {
+        out.push_str(&rest[..start]);
+        let after = &rest[start + '〔'.len_utf8()..];
+        let Some(end) = after.find('〕') else {
+            // 閉じていない: そのまま出す
+            out.push_str(&rest[start..]);
+            return out;
+        };
+        let inner = &after[..end];
+        if placeholder_names(inner).all(|n| args.iter().any(|(k, v)| *k == n && !v.is_empty())) {
+            out.push_str(inner);
+        }
+        rest = &after[end + '〕'.len_utf8()..];
+    }
+    out.push_str(rest);
+    out
+}
+
+/// 文字列の中の `{name}` の name (`{key:…}` と `{{` のエスケープは除く)。
+fn placeholder_names(s: &str) -> impl Iterator<Item = &str> {
+    let mut names = Vec::new();
+    let mut rest = s;
+    while let Some(i) = rest.find('{') {
+        let tail = &rest[i..];
+        if tail.starts_with("{{") {
+            rest = &tail[2..];
+            continue;
+        }
+        match tail.find('}') {
+            Some(end) => {
+                let name = &tail[1..end];
+                if !name.starts_with("key:") {
+                    names.push(name);
+                }
+                rest = &tail[end + 1..];
+            }
+            None => break,
+        }
+    }
+    names.into_iter()
 }
 
 fn flatten(
@@ -241,5 +290,30 @@ mod tests {
         assert_eq!(base_key("msg.search.count.other"), "msg.search.count");
         assert_eq!(base_key("msg.search.count.one"), "msg.search.count");
         assert_eq!(base_key("msg.save.failed.text"), "msg.save.failed.text");
+    }
+
+    #[test]
+    fn 条件付きの文は引数があるときだけ出す() {
+        let c = cat("[a]
+b = \"{path} を開けません〔(一時ファイル {tmp})〕\"
+");
+        assert_eq!(
+            c.render("a.b", &[("path", "x")], &no_keys),
+            "x を開けません"
+        );
+        assert_eq!(
+            c.render("a.b", &[("path", "x"), ("tmp", "")], &no_keys),
+            "x を開けません",
+            "空の値は省く"
+        );
+        assert_eq!(
+            c.render("a.b", &[("path", "x"), ("tmp", "t.tmp")], &no_keys),
+            "x を開けません(一時ファイル t.tmp)"
+        );
+        // 閉じていない 〔 はそのまま
+        let d = cat("[a]
+b = \"x〔y\"
+");
+        assert_eq!(d.render("a.b", &[], &no_keys), "x〔y");
     }
 }

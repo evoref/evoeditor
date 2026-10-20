@@ -146,16 +146,25 @@ impl Editor {
         match ev {
             InputEvent::Key(k) => {
                 if k.kind != KeyKind::Release {
-                    self.state
-                        .dismiss_message_on_key(k.code == KeyCode::Esc && k.mods.is_empty());
+                    let is_esc = k.code == KeyCode::Esc && k.mods.is_empty();
+                    let chord_pending = !self.keymap.pending().is_empty();
+                    // 保留中の Esc は保留を取り消す (メッセージは消さない、04 §8.9 の Esc の優先順位)
+                    if !(is_esc && chord_pending) {
+                        self.state.dismiss_message_on_key(is_esc);
+                    }
                     self.on_key(KeyStroke {
                         mods: k.mods,
                         key: k.code,
                     });
                 }
             }
-            InputEvent::Text(s) => self.on_text(&s),
+            InputEvent::Text(s) => {
+                self.state.dismiss_message_on_key(false);
+                self.on_text(&s);
+            }
             InputEvent::Paste(s) => {
+                self.state.dismiss_message_on_key(false);
+                self.state.dismiss_error_on_command();
                 // チョードの保留中の貼り付けは、保留を破棄して本文を入れる
                 self.keymap.clear_pending();
                 edit::paste_text(&mut self.state, &s);

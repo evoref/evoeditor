@@ -12,6 +12,8 @@ pub(super) struct ShownMessage {
     pub level: MessageLevel,
     pub text: String,
     pub hint: Option<String>,
+    /// 表示した時刻 (Warning は最低 1 秒表示する、04 §8.9)。
+    pub shown_at: crate::time::Tick,
 }
 
 impl EditorState {
@@ -54,8 +56,16 @@ impl EditorState {
         } else {
             (cat.render(key, args, &label), None)
         };
-        self.message = Some(ShownMessage { level, text, hint });
-        self.unread = self.unread.saturating_add(1);
+        // 表示中のメッセージが読まれる前に置き換わったら、未読として数える (履歴の閲覧は v0.2)
+        if self.message.is_some() {
+            self.unread = self.unread.saturating_add(1);
+        }
+        self.message = Some(ShownMessage {
+            level,
+            text,
+            hint,
+            shown_at: self.now,
+        });
         self.push_event(EditorEvent::MessageShown {
             level,
             key: key.to_owned(),
@@ -63,14 +73,23 @@ impl EditorState {
         self.mark_dirty_render();
     }
 
-    /// キー入力でメッセージを消す: Info は次のキー入力で、Warning / Error は `Esc` で消える (04 §8.9)。
+    /// キー入力でメッセージを消す (04 §8.9): Info は次のキー入力で、Warning は `Esc` または (最低 1 秒表示した後の)
+    /// 次のキー入力で、Error は `Esc` で消える。`Esc` の優先順位 (オーバーレイ・チョード・読込の取消が先) は呼び出し側が決める。
     pub(super) fn dismiss_message_on_key(&mut self, is_esc: bool) {
+        let now = self.now;
         let dismiss = match &self.message {
-            Some(m) => m.level == MessageLevel::Info || is_esc,
+            Some(m) => match m.level {
+                MessageLevel::Info => true,
+                MessageLevel::Warn => {
+                    is_esc || now.saturating_sub(m.shown_at) >= crate::time::Millis(1000)
+                }
+                _ => is_esc,
+            },
             None => false,
         };
         if dismiss {
             self.message = None;
+            self.unread = 0;
             self.mark_dirty_render();
         }
     }
@@ -83,6 +102,7 @@ impl EditorState {
             .is_some_and(|m| m.level == MessageLevel::Error)
         {
             self.message = None;
+            self.unread = 0;
             self.mark_dirty_render();
         }
     }

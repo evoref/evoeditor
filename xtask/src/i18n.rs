@@ -59,8 +59,13 @@ fn cells(s: &str) -> usize {
 
 fn braces_balanced(s: &str) -> bool {
     let mut depth = 0i32;
-    for c in s.chars() {
+    let mut it = s.chars().peekable();
+    while let Some(c) = it.next() {
         match c {
+            // `{{` は `{` のエスケープ (07 §17.2)
+            '{' if it.peek() == Some(&'{') => {
+                it.next();
+            }
             '{' => depth += 1,
             '}' => depth -= 1,
             _ => {}
@@ -224,9 +229,15 @@ fn flatten(prefix: &str, v: &toml::Value, out: &mut BTreeMap<String, String>) {
         toml::Value::String(s) => {
             out.insert(prefix.to_owned(), s.clone());
         }
-        _ => {}
+        // 文字列でもテーブルでもない値は、実行時の読込 (`Catalog::parse`) が拒否する。印を付けて検査で報告する
+        _ => {
+            out.insert(prefix.to_owned(), NOT_A_STRING.to_owned());
+        }
     }
 }
+
+/// `flatten` が文字列でない値に付ける印。
+const NOT_A_STRING: &str = "\0not-a-string";
 
 pub fn run() -> Result<(), String> {
     let root = workspace_root();
@@ -357,7 +368,27 @@ pub fn run() -> Result<(), String> {
                 "locales/ja.toml の `{k}` は目録・カタログにありません (余剰)"
             ));
         }
+        let known_ids: BTreeSet<&str> = commands.iter().map(|c| c.id.as_str()).collect();
         for (k, v) in &have {
+            if v == NOT_A_STRING {
+                errors.push(format!(
+                    "locales/ja.toml: `{k}` は文字列でもテーブルでもありません"
+                ));
+                continue;
+            }
+            // `{key:<command_id>}` の CommandId は 07 §11.6 のカタログにあるもの (07 §17.3)
+            let mut rest = v.as_str();
+            while let Some(i) = rest.find("{key:") {
+                let tail = &rest[i + 5..];
+                let end = tail.find('}').unwrap_or(tail.len());
+                let id = &tail[..end];
+                if !known_ids.contains(id) {
+                    errors.push(format!(
+                        "locales/ja.toml: `{k}` の `{{key:{id}}}` はカタログにない CommandId です"
+                    ));
+                }
+                rest = &tail[end..];
+            }
             if k.starts_with("hint.") && cells(v) > HINT_MAX_CELLS {
                 errors.push(format!("locales/ja.toml: `{k}` のヒントが表示幅 {HINT_MAX_CELLS} セルを超えています ({v})"));
             }

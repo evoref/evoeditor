@@ -173,7 +173,7 @@ fn 保存の成功は情報メッセージで_次のキーで消える() {
     let text: String = m.text.spans.iter().map(|sp| sp.text.as_str()).collect();
     assert_eq!(text, "/w/n.txt を保存しました");
     assert!(m.hint.is_none());
-    assert!(f.messages.unread >= 1);
+    assert_eq!(f.messages.unread, 0, "他に未読はない");
     s.key(KeyCode::Right, Modifiers::NONE);
     assert!(
         s.frame().messages.current.is_none(),
@@ -326,4 +326,107 @@ fn 存在しない文言キーはキー名で出る() {
         .map(|sp| sp.text.as_str())
         .collect();
     assert_eq!(t, "info.nothing.here");
+}
+
+fn message_text(f: &Frame) -> Option<String> {
+    f.messages
+        .current
+        .as_ref()
+        .map(|m| m.text.spans.iter().map(|sp| sp.text.as_str()).collect())
+}
+
+#[test]
+fn 警告は_esc_か_1_秒後の次のキーで消える() {
+    let mut s = Env::new();
+    s.fs.add_dir("/w2");
+    s.run("file.open", Args::new().with_str("path", "/nodir/x.txt")); // 親フォルダなし → Warn
+    assert_eq!(
+        s.frame().messages.current.as_ref().map(|m| m.level),
+        Some(MessageLevel::Warn)
+    );
+    s.e.tick(eve_core::Tick(500));
+    s.key(KeyCode::Right, Modifiers::NONE);
+    assert!(
+        s.frame().messages.current.is_some(),
+        "1 秒たつまでは消えない"
+    );
+    s.e.tick(eve_core::Tick(1500));
+    s.key(KeyCode::Right, Modifiers::NONE);
+    assert!(
+        s.frame().messages.current.is_none(),
+        "1 秒後の次のキーで消える"
+    );
+}
+
+#[test]
+fn 保留中の_esc_はチョードだけを取り消しメッセージは残す() {
+    let mut s = Env::new();
+    s.e.state_mut().show_message(
+        MessageLevel::Error,
+        "msg.save.failed",
+        &[("path", "p"), ("reason", "r")],
+    );
+    s.key(KeyCode::Char('k'), Modifiers::CTRL);
+    s.key(KeyCode::Esc, Modifiers::NONE);
+    assert!(
+        s.frame().messages.current.is_some(),
+        "1 回目の Esc はチョードの取消"
+    );
+    s.key(KeyCode::Esc, Modifiers::NONE);
+    assert!(
+        s.frame().messages.current.is_none(),
+        "2 回目の Esc でメッセージが消える"
+    );
+}
+
+#[test]
+fn text_の入力でも情報メッセージは消える() {
+    let mut s = Env::new();
+    s.e.state_mut()
+        .show_message(MessageLevel::Info, "info.save.done", &[("path", "p")]);
+    s.type_text("a");
+    assert!(s.frame().messages.current.is_none());
+}
+
+#[test]
+fn 置き換えられた未読を数える() {
+    let mut s = Env::new();
+    s.e.state_mut()
+        .show_message(MessageLevel::Info, "info.save.done", &[("path", "a")]);
+    s.e.state_mut()
+        .show_message(MessageLevel::Info, "info.save.done", &[("path", "b")]);
+    assert_eq!(s.frame().messages.unread, 1);
+    assert_eq!(
+        message_text(&s.frame()).as_deref(),
+        Some("b を保存しました")
+    );
+}
+
+#[test]
+fn 未解決のプレースホルダを出さない() {
+    let mut s = Env::new();
+    s.run("file.open", Args::new().with_str("path", "/nodir/x.txt"));
+    let t = message_text(&s.frame()).unwrap();
+    assert!(!t.contains('{') && t.contains("/nodir"), "{t}");
+    s.type_text("a");
+    s.run("file.save", Args::new());
+    let t = message_text(&s.frame()).unwrap();
+    assert!(!t.contains('{'), "{t}");
+    let mut s = Env::new();
+    s.fs.add_file("/w/bin.dat", b"\x00\x01");
+    s.run("file.open", Args::new().with_str("path", "/w/bin.dat"));
+    let t = message_text(&s.frame()).unwrap();
+    assert!(t.contains("binary") && !t.contains('{'), "{t}");
+}
+
+#[test]
+fn 不正バイトのエスケープ文字は文言でも記号になる() {
+    let mut s = Env::new();
+    s.e.state_mut().show_message(
+        MessageLevel::Info,
+        "info.save.done",
+        &[("path", &format!("a{}b", eve_encoding::escape_byte(0x9A)))],
+    );
+    let t = message_text(&s.frame()).unwrap();
+    assert_eq!(t, "a<0x9A>b を保存しました");
 }

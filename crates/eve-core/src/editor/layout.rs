@@ -315,7 +315,12 @@ pub(super) fn cell_text(s: &str, cut: CutPolicy) -> CellText {
     let mut width = 0u16;
     for (_, g) in grapheme_indices(s) {
         let (text, w, style) = match g {
-            "	" => (" ".to_owned(), 1, Style::DEFAULT),
+            "\t" => (" ".to_owned(), 1, Style::DEFAULT),
+            // 不正バイトのエスケープ文字は表示用の記号にする (INV-F1)
+            g if g.chars().count() == 1 && g.chars().next().and_then(unescape_char).is_some() => {
+                let b = g.chars().next().and_then(unescape_char).unwrap_or(0);
+                (format!("<0x{b:02X}>"), 6, Style::DEFAULT)
+            }
             _ => {
                 let d = grapheme_display(g, &cfg);
                 let w = d.base_width + d.marks_width;

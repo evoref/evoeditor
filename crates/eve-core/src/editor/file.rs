@@ -145,7 +145,11 @@ impl EditorState {
             return CommandResult::Rejected(RejectReason::NotAvailable);
         }
         let Ok(path) = self.paths.normalize(raw_path) else {
-            self.message(MessageLevel::Error, "msg.open.failed", raw_path);
+            self.show_message(
+                MessageLevel::Error,
+                "msg.open.failed",
+                &[("path", raw_path), ("reason", "invalid path")],
+            );
             return CommandResult::Rejected(RejectReason::InvalidArgs);
         };
         let replace = self.active_document();
@@ -228,7 +232,11 @@ impl EditorState {
             return CommandResult::Rejected(RejectReason::NoTarget);
         };
         let Ok(path) = self.paths.normalize(raw_path) else {
-            self.message(MessageLevel::Error, "msg.save.invalid_path", raw_path);
+            self.show_message(
+                MessageLevel::Error,
+                "msg.save.invalid_path",
+                &[("path", raw_path), ("reason", "invalid path")],
+            );
             return CommandResult::Rejected(RejectReason::InvalidArgs);
         };
         let Some(doc) = self.documents.get(&doc_id) else {
@@ -357,24 +365,35 @@ impl EditorState {
                 } else {
                     "info.open.new_file"
                 };
-                self.message(
+                let dir = parent_missing
+                    .as_ref()
+                    .map(FsPath::display)
+                    .unwrap_or_default();
+                self.show_message(
                     if parent_missing.is_some() {
                         MessageLevel::Warn
                     } else {
                         MessageLevel::Info
                     },
                     key,
-                    &path.display(),
+                    &[("path", &path.display()), ("dir", &dir)],
                 );
                 self.complete_open(doc_id, view, replace);
             }
             JobResult::NeedsConfirm { ask, .. } => {
                 // 確認ダイアログ (後続) ができるまでは開かない。今の文書はそのまま
-                let key = match ask {
-                    ConfirmAsk::Binary => "ui.confirm.open.binary",
-                    ConfirmAsk::UnsupportedBom { .. } => "ui.confirm.open.utf32",
+                let reason = match ask {
+                    ConfirmAsk::Binary => "binary",
+                    ConfirmAsk::UnsupportedBom { .. } => "utf-32 bom",
                 };
-                self.open_failed(doc_id, replace, MessageLevel::Warn, key, &path, "");
+                self.open_failed(
+                    doc_id,
+                    replace,
+                    MessageLevel::Warn,
+                    "msg.open.failed",
+                    &path,
+                    reason,
+                );
             }
             JobResult::Failed { err, .. } => {
                 let reason = reason_label(&err);
@@ -439,7 +458,11 @@ impl EditorState {
                 err: JobError::Fs(e),
                 ..
             } if e.kind != FsErrorKind::NotFound => {
-                self.message(MessageLevel::Error, "msg.save.check_failed", &shown);
+                self.show_message(
+                    MessageLevel::Error,
+                    "msg.save.check_failed",
+                    &[("path", &shown), ("reason", &fs_reason(&e))],
+                );
             }
             JobResult::Failed {
                 err: JobError::Cancelled,
@@ -484,6 +507,13 @@ impl EditorState {
             }
             JobResult::Failed { err, .. } => {
                 let reason = reason_label(&err);
+                let dir = match &err {
+                    JobError::Fs(FsError {
+                        detail: Some(FsErrorDetail::ParentMissing { dir }),
+                        ..
+                    }) => dir.display(),
+                    _ => String::new(),
+                };
                 let (level, key) = match err {
                     JobError::Cancelled => (MessageLevel::Info, "info.save.aborted"),
                     JobError::Fs(e) => (MessageLevel::Error, save_error_key(&e)),
@@ -492,7 +522,11 @@ impl EditorState {
                 self.show_message(
                     level,
                     key,
-                    &[("path", &path.display()), ("reason", &reason)],
+                    &[
+                        ("path", &path.display()),
+                        ("reason", &reason),
+                        ("dir", &dir),
+                    ],
                 );
             }
             _ => {}
@@ -503,15 +537,19 @@ impl EditorState {
 /// `{reason}` に入れる短い分類名 (技術的な識別子。OS のエラーの分類文言 `ui.reason.*` は目録ができてから)。
 fn reason_label(err: &JobError) -> String {
     match err {
-        JobError::Fs(e) => format!("{:?}", e.kind)
-            .split([' ', '{'])
-            .next()
-            .unwrap_or("")
-            .to_lowercase(),
+        JobError::Fs(e) => fs_reason(e),
         JobError::Panic => "panic".to_owned(),
         JobError::OutOfMemory { .. } => "out of memory".to_owned(),
-        _ => String::new(),
+        JobError::Cancelled => "cancelled".to_owned(),
     }
+}
+
+fn fs_reason(e: &FsError) -> String {
+    format!("{:?}", e.kind)
+        .split([' ', '{'])
+        .next()
+        .unwrap_or("unknown")
+        .to_lowercase()
 }
 
 /// 開く失敗の MessageKey (04 §15.2)。
