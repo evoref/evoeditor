@@ -12,6 +12,7 @@ mod document;
 mod editor;
 mod fs;
 mod fspath;
+mod io_jobs;
 mod jobs;
 mod paths;
 mod time;
@@ -30,8 +31,10 @@ pub use editor::{
 };
 pub use fs::*;
 pub use fspath::FsPath;
+pub use io_jobs::OpenOptions;
 pub use jobs::{
-    JobError, JobKind, JobPorts, JobRequest, JobResult, JobSpawner, MetaPurpose, Ports, run_job,
+    ConfirmAsk, JobError, JobKind, JobPorts, JobRequest, JobResult, JobSpawner, MetaPurpose, Ports,
+    run_job,
 };
 pub use paths::Paths;
 pub use time::{Clock, Millis, Tick};

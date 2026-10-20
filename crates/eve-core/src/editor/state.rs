@@ -1,13 +1,18 @@
 //! `EditorState`: 文書・View・Window の集合と、変更の唯一の経路 (docs/02 §5.1 / §5.2、docs/03 §6.5 の手順 7〜12)。
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::rc::Rc;
+use std::sync::Arc;
 
 use eve_text::{Bias, ByteOff, LineIdx, Selection, TextRead};
 use eve_view::{
-    Capabilities, DocumentId, EditorEvent, Effect, OriginKind, Revision, ViewId, WindowId,
+    Capabilities, DocumentId, EditorEvent, Effect, JobId, OriginKind, Revision, ViewId, WindowId,
 };
 
+use super::file::Pending;
 use crate::document::{Applied, AppliedTx, ApplyError, Document, Transaction};
+use crate::jobs::JobSpawner;
+use crate::paths::Paths;
 use crate::time::Tick;
 
 use super::context::CtxValue;
@@ -52,10 +57,15 @@ pub struct EditorState {
     events: Vec<EditorEvent>,
     snapshot_updates: BTreeSet<DocumentId>,
     needs_render: bool,
+    /// ジョブの投入口 (`Ports.jobs`)。
+    pub(super) jobs: Rc<dyn JobSpawner>,
+    pub(super) paths: Arc<dyn Paths>,
+    /// 未完了のジョブと、その結果の宛先。
+    pub(super) pending: BTreeMap<JobId, Pending>,
 }
 
 impl EditorState {
-    pub fn new(caps: Capabilities) -> EditorState {
+    pub fn new(caps: Capabilities, jobs: Rc<dyn JobSpawner>, paths: Arc<dyn Paths>) -> EditorState {
         EditorState {
             documents: BTreeMap::new(),
             views: BTreeMap::new(),
@@ -68,7 +78,15 @@ impl EditorState {
             events: Vec::new(),
             snapshot_updates: BTreeSet::new(),
             needs_render: true,
+            jobs,
+            paths,
+            pending: BTreeMap::new(),
         }
+    }
+
+    /// 退避用の公開物が変わった文書として記録する (03 §6.5 手順 12。保存の完了・読込の完了)。
+    pub(super) fn mark_snapshot_update(&mut self, doc: DocumentId) {
+        self.snapshot_updates.insert(doc);
     }
 
     fn fresh(&mut self) -> u64 {
@@ -129,6 +147,11 @@ impl EditorState {
         let id = WindowId(self.fresh());
         self.windows.push(Window { id, root });
         id
+    }
+
+    /// 開いている文書の数。
+    pub fn documents_len(&self) -> usize {
+        self.documents.len()
     }
 
     pub fn document(&self, id: DocumentId) -> Option<&Document> {

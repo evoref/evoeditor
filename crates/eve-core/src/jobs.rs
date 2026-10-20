@@ -1,7 +1,7 @@
 //! ジョブの型と `JobSpawner` Port (docs/02-architecture.md §4.4 / §9.3)。
 //!
 //! ジョブはワーカーで動き、結果を `JobResult` で返す。結果は `base` (投入時の Revision) を持ち、受け取る側が
-//! 古い結果を捨てる (ADR-0020)。M1 の変種は `Metadata` だけ。読込・保存・検索は、その最初の利用者の版で足す。
+//! 古い結果を捨てる (ADR-0020)。M1 の変種は `Metadata`・`Open`・`Save`。検索などは、その最初の利用者の版で足す。
 
 use std::rc::Rc;
 use std::sync::Arc;
@@ -9,8 +9,13 @@ use std::sync::Arc;
 use eve_view::{DocumentId, JobId, Revision};
 
 use crate::cancel::CancelToken;
-use crate::fs::{FileMeta, FileStamp, FileSystem, FsError};
+use eve_encoding::{PuaEscapeMode, UnsupportedBom};
+use eve_text::{Snapshot, Text};
+
+use crate::document::{ReadOnlyReasons, TextFormat};
+use crate::fs::{Expect, FileMeta, FileStamp, FileSystem, FsError, SaveReport};
 use crate::fspath::FsPath;
+use crate::io_jobs::{OpenOptions, SaveParams, run_open, run_save};
 use crate::paths::Paths;
 use crate::time::Clock;
 
@@ -30,6 +35,26 @@ pub struct JobRequest {
 pub enum JobKind {
     /// ファイルの `metadata` と Stamp を調べる。
     Metadata { path: FsPath, purpose: MetaPurpose },
+    /// ファイルを開く (03 §9.2)。M1 は UTF-8 だけ。
+    Open { path: FsPath, opts: OpenOptions },
+    /// Snapshot を UTF-8 で原子的に保存する (03 §9.3)。`expected` は書く前と置換の直前に照合する。
+    Save {
+        path: FsPath,
+        snapshot: Snapshot,
+        bom: bool,
+        pua: PuaEscapeMode,
+        expected: Expect,
+    },
+}
+
+/// 確認が要る理由 (03 §9.2)。ジョブは確認を求めて終了し、回答を得た main が再投入する。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum ConfirmAsk {
+    /// バイナリの疑い。
+    Binary,
+    /// 対応していない BOM (UTF-32 など)。
+    UnsupportedBom { kind: UnsupportedBom },
 }
 
 /// `Metadata` ジョブの目的 (結果を受けた側の分岐に使う)。
@@ -51,10 +76,49 @@ pub enum JobResult {
         meta: FileMeta,
         stamp: FileStamp,
     },
+    /// 読込の完了。
+    Complete {
+        job: JobId,
+        text: Text,
+        format: TextFormat,
+        meta: FileMeta,
+        stamp: FileStamp,
+        /// 読んでいる間にファイルが変わった、または読む量の上限で打ち切った。
+        changed_during_load: bool,
+        /// 内容・属性から決まる読み取り専用の理由。
+        detected: ReadOnlyReasons,
+    },
+    /// 存在しないパスを開いた (新規ファイル)。フォルダも無ければ `parent_missing` にそのフォルダ。
+    NewFile {
+        job: JobId,
+        parent_missing: Option<FsPath>,
+    },
+    NeedsConfirm {
+        job: JobId,
+        ask: ConfirmAsk,
+    },
+    Saved {
+        job: JobId,
+        report: SaveReport,
+    },
     Failed {
         job: JobId,
         err: JobError,
     },
+}
+
+impl JobResult {
+    /// 結果が属するジョブ。
+    pub fn job(&self) -> JobId {
+        match self {
+            JobResult::Meta { job, .. }
+            | JobResult::Complete { job, .. }
+            | JobResult::NewFile { job, .. }
+            | JobResult::NeedsConfirm { job, .. }
+            | JobResult::Saved { job, .. }
+            | JobResult::Failed { job, .. } => *job,
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -120,6 +184,25 @@ pub fn run_job(
         return;
     }
     let result = match &req.kind {
+        JobKind::Open { path, opts } => run_open(req.id, path, *opts, ports, cancel),
+        JobKind::Save {
+            path,
+            snapshot,
+            bom,
+            pua,
+            expected,
+        } => run_save(
+            req.id,
+            SaveParams {
+                path,
+                snapshot,
+                bom: *bom,
+                pua: *pua,
+                expected: *expected,
+            },
+            ports,
+            cancel,
+        ),
         JobKind::Metadata { path, .. } => match ports.fs.metadata(path) {
             Ok(meta) => {
                 if cancel.is_cancelled() {
