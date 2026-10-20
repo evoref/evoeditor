@@ -1,0 +1,17 @@
+# cargo-nextest の設定 (docs/09-testing-quality.md §3.6 / §6.2、docs/11-dev-workflow.md §1)。
+# retries を付けてよいのは L5 (E2E) だけ (docs/11 §1)。それ以外の profile に retries を付けない。
+
+[profile.default]
+fail-fast = true
+
+# CI (ci.yml の test ジョブ)。失敗しても残りのテストを回し、すべての失敗をまとめて見せる。
+[profile.ci]
+fail-fast = false
+slow-timeout = { period = "60s", terminate-after = 5 }
+
+# L5 の E2E (ConPTY、feature test-hooks)。端末の挙動は揺れるので、ここだけ retries を許す。
+# 対象のテストができる M2 以降で、ジョブ (e2e) と一緒に使う。
+[profile.e2e]
+fail-fast = false
+retries = 2
+slow-timeout = { period = "60s", terminate-after = 5 }
