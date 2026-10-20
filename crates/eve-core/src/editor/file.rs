@@ -44,6 +44,32 @@ impl EditorState {
         });
     }
 
+    /// 読込を待っている間、置き換え対象の今の文書は編集を受け付けない (03 §9.2 の置き換えの手順)。
+    /// 編集は読込の完了で黙って捨てられてしまうため。
+    pub(super) fn open_replacing(&self) -> bool {
+        self.pending.values().any(|p| {
+            matches!(
+                p,
+                Pending::Open {
+                    replace: Some(_),
+                    ..
+                }
+            )
+        })
+    }
+
+    fn open_in_progress(&self) -> bool {
+        self.pending
+            .values()
+            .any(|p| matches!(p, Pending::Open { .. }))
+    }
+
+    fn save_in_progress(&self, doc_id: DocumentId) -> bool {
+        self.pending
+            .values()
+            .any(|p| matches!(p, Pending::Save { doc, .. } | Pending::CheckUnchanged { doc } if *doc == doc_id))
+    }
+
     /// 今の文書 (最初の Window の View の文書)。
     pub fn active_document(&self) -> Option<DocumentId> {
         let w = self.first_window()?;
@@ -52,6 +78,9 @@ impl EditorState {
 
     /// 無題の新規文書を作る (FR-124)。今の文書があれば置き換える (dirty なら確認が要るので拒否する)。
     pub fn new_untitled(&mut self) -> CommandResult {
+        if self.open_in_progress() {
+            return CommandResult::Rejected(RejectReason::NotAvailable);
+        }
         let replace = self.active_document();
         if replace
             .and_then(|d| self.document(d))
@@ -106,6 +135,10 @@ impl EditorState {
     /// ファイルを開く (03 §9.2)。Loading の文書を作ってすぐ読込ジョブを投入する。
     /// すでに文書があるときは、読込が終わるまで今の文書を表示し続け、完了で置き換える。
     pub fn open_path(&mut self, raw_path: &str, opts: OpenOptions) -> CommandResult {
+        // 読込の途中の置き換えの重なりは受け付けない (置き換え対象の文書が孤立しないように)
+        if self.open_in_progress() {
+            return CommandResult::Rejected(RejectReason::NotAvailable);
+        }
         let Ok(path) = self.paths.normalize(raw_path) else {
             self.message(MessageLevel::Error, "msg.open.failed");
             return CommandResult::Rejected(RejectReason::InvalidArgs);
@@ -158,7 +191,7 @@ impl EditorState {
         let Some(path) = doc.path.clone() else {
             return CommandResult::Rejected(RejectReason::NeedsInput);
         };
-        if self.pending.values().any(|p| matches!(p, Pending::Save { doc, .. } | Pending::CheckUnchanged { doc } if *doc == doc_id)) {
+        if self.save_in_progress(doc_id) {
             self.message(MessageLevel::Info, "info.save.in_progress");
             return CommandResult::Done;
         }
@@ -176,7 +209,8 @@ impl EditorState {
                 .insert(job, Pending::CheckUnchanged { doc: doc_id });
             return CommandResult::Pending(job);
         }
-        self.start_save(doc_id)
+        let expected = doc.disk_stamp.map_or(Expect::Absent, Expect::Stamp);
+        self.start_save(doc_id, path, expected)
     }
 
     /// 名前を付けて保存 (パスを指定する)。
@@ -188,26 +222,37 @@ impl EditorState {
             self.message(MessageLevel::Error, "msg.save.invalid_path");
             return CommandResult::Rejected(RejectReason::InvalidArgs);
         };
-        let Some(doc) = self.documents.get_mut(&doc_id) else {
+        let Some(doc) = self.documents.get(&doc_id) else {
             return CommandResult::Rejected(RejectReason::NoTarget);
         };
-        if doc.path.as_ref() != Some(&path) {
-            // 別のファイルへ書く: 保存先の状態は未知なので、存在しないことを期待する (既存なら Conflict)。
-            // 上書きの確認は確認ダイアログ (後続) の仕事
-            doc.path = Some(path);
-            doc.disk_stamp = None;
+        // 読込中・読込に失敗した文書は保存できない (中身が揃っていない)
+        if doc.load_state != crate::document::LoadState::Ready {
+            return CommandResult::Rejected(RejectReason::NotAvailable);
         }
-        self.start_save(doc_id)
+        if self.save_in_progress(doc_id) {
+            self.message(MessageLevel::Info, "info.save.in_progress");
+            return CommandResult::Done;
+        }
+        let same = doc.path.as_ref() == Some(&path);
+        // 読み取り専用の文書を同じファイルへ書くと、元のバイト列を損なうことがある (03 §9.7 (a) の 1)
+        if same && !doc.is_editable() {
+            self.message(MessageLevel::Warn, "msg.save_as.same_file_read_only");
+            return CommandResult::Rejected(RejectReason::ReadOnly);
+        }
+        // 同じファイルなら読んだときの Stamp で照合する。別のファイルへは存在しないことを期待する
+        // (既存なら Conflict。上書きの確認は確認ダイアログ (後続) の仕事)。パスと Stamp は成功してから更新する
+        let expected = if same {
+            doc.disk_stamp.map_or(Expect::Absent, Expect::Stamp)
+        } else {
+            Expect::Absent
+        };
+        self.start_save(doc_id, path, expected)
     }
 
-    fn start_save(&mut self, doc_id: DocumentId) -> CommandResult {
+    fn start_save(&mut self, doc_id: DocumentId, path: FsPath, expected: Expect) -> CommandResult {
         let Some(doc) = self.documents.get_mut(&doc_id) else {
             return CommandResult::Rejected(RejectReason::NoTarget);
         };
-        let Some(path) = doc.path.clone() else {
-            return CommandResult::Rejected(RejectReason::NeedsInput);
-        };
-        let expected = doc.disk_stamp.map_or(Expect::Absent, Expect::Stamp);
         let (bom, pua) = (doc.format.has_bom, doc.format.pua_escape);
         let revision = doc.revision();
         let (snapshot, at) = doc.begin_save();
@@ -345,9 +390,10 @@ impl EditorState {
         if replace.is_some() {
             // 今の文書はそのまま残す (FR-107 AC-3)
             self.close_document(doc);
-        } else if let Some(d) = self.documents.get_mut(&doc) {
-            // 最初の文書の読込に失敗: 失敗した文書 (空) を示す
-            d.load_state = crate::document::LoadState::Failed;
+        } else {
+            // 最初の文書の読込に失敗: 失敗した文書は閉じ、無題の文書で始める (再試行できる、03 §9.2 の「失敗」)
+            let (_, untitled) = self.add_document(Document::new_untitled());
+            self.show_view(untitled, Some(doc));
             let _ = view;
         }
     }
@@ -380,7 +426,15 @@ impl EditorState {
                 ..
             } => self.message(MessageLevel::Info, "info.save.aborted"),
             _ => {
-                self.start_save(doc_id);
+                let Some((path, expected)) = self.documents.get(&doc_id).and_then(|d| {
+                    Some((
+                        d.path.clone()?,
+                        d.disk_stamp.map_or(Expect::Absent, Expect::Stamp),
+                    ))
+                }) else {
+                    return;
+                };
+                self.start_save(doc_id, path, expected);
             }
         }
     }
@@ -396,6 +450,8 @@ impl EditorState {
         match r {
             JobResult::Saved { report, .. } => {
                 if let Some(doc) = self.documents.get_mut(&doc_id) {
+                    // 名前を付けて保存のパスは、書けてから文書のパスにする (03 §9.3 手順 7)
+                    doc.path = Some(path.clone());
                     doc.finish_save(at, Some(report.new_stamp));
                 }
                 self.push_event(EditorEvent::DocumentSaved {

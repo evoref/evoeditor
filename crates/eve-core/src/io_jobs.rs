@@ -29,8 +29,10 @@ fn read_slack(len: u64) -> u64 {
 /// 開くときの指定。
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct OpenOptions {
-    /// `--readonly` など。読み取り専用の理由 `UserRequested` を付け、バイナリ・UTF-32 の確認を出さない。
+    /// 確認 (バイナリ・UTF-32 の BOM) への回答「読み取り専用で開く」の再投入。確認を出さず、読み取り専用で開く。
     pub read_only_requested: bool,
+    /// `--readonly`。読み取り専用の理由 `UserRequested` を付けるだけで、確認は通常どおり出す。
+    pub user_read_only: bool,
     /// 文字コードを UTF-8 と指定して開く (FR-111)。BOM の判定や確認を出さず本文として読む。
     pub forced_utf8: bool,
 }
@@ -84,6 +86,7 @@ pub(crate) fn run_open(
     let mut builder = TextBuilder::new();
     let mut decoder: Option<Utf8Decoder> = None;
     let mut sniffed = false;
+    let mut binary_confirmed = false;
     let mut out = String::new();
     let mut truncated = false;
     loop {
@@ -120,10 +123,8 @@ pub(crate) fn run_open(
                         ask: ConfirmAsk::UnsupportedBom { kind },
                     };
                 }
-                // 読み取り専用の指定があれば、バイナリ・未対応の BOM も本文のバイトとして UTF-8 で読む (不正バイトは保持)
-                DetectedKind::Utf8 { .. }
-                | DetectedKind::Binary
-                | DetectedKind::UnsupportedBom(_) => {}
+                // 確認への回答「読み取り専用で開く」の再投入: バイナリ・未対応の BOM も本文のバイトとして UTF-8 で読む
+                DetectedKind::Binary => binary_confirmed = true,
                 _ => {}
             }
             let skip_bom = matches!(kind, DetectedKind::Utf8 { bom_len: 3 });
@@ -171,8 +172,11 @@ pub(crate) fn run_open(
     if meta.readonly {
         detected.insert(ReadOnlyReason::FileAttribute);
     }
-    if opts.read_only_requested {
+    if opts.read_only_requested || opts.user_read_only {
         detected.insert(ReadOnlyReason::UserRequested);
+    }
+    if binary_confirmed {
+        detected.insert(ReadOnlyReason::Binary);
     }
     // 不正バイトがあるとき、または元から真の私用文字と衝突しているとき (03 §8.3) は読み取り専用
     if format.invalid_bytes > 0 || dec.collision_with_invalid() {

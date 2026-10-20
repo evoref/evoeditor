@@ -116,7 +116,7 @@ impl Editor {
             }
             Some(p) => {
                 let opts = crate::OpenOptions {
-                    read_only_requested: read_only,
+                    user_read_only: read_only,
                     ..Default::default()
                 };
                 self.state.open_path(p, opts);

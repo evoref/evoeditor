@@ -434,3 +434,143 @@ fn 読込中は編集できず_完了すると編集できる() {
     s.type_text("x");
     assert_eq!(s.text(), "xabc");
 }
+
+#[test]
+fn 読込を待つ間は今の文書を編集できず_重ねた置き換えも拒否する() {
+    let mut s = Env::new();
+    s.fs.add_file("/w/a.txt", b"aaa");
+    s.fs.add_file("/w/b.txt", b"bbb");
+    s.fs.add_file("/w/c.txt", b"ccc");
+    s.open("/w/a.txt");
+    // b を開き始める (ジョブはまだ実行しない)
+    let r = s.e.execute(
+        CommandInvocation::new("file.open", InvocationSource::Keymap)
+            .with_args(Args::new().with_str("path", "/w/b.txt")),
+    );
+    assert!(matches!(r, CommandResult::Pending(_)));
+    s.type_text("x"); // 読込の完了で捨てられる編集は受け付けない
+    assert_eq!(s.text(), "aaa");
+    for (id, args) in [
+        ("file.open", Args::new().with_str("path", "/w/c.txt")),
+        ("file.new", Args::new()),
+    ] {
+        let r =
+            s.e.execute(CommandInvocation::new(id, InvocationSource::Keymap).with_args(args));
+        assert_eq!(
+            r,
+            CommandResult::Rejected(RejectReason::NotAvailable),
+            "{id}"
+        );
+    }
+    s.pump();
+    assert_eq!(s.text(), "bbb");
+    assert_eq!(s.e.state().documents_len(), 1, "孤立した文書はない");
+    s.type_text("y");
+    assert_eq!(s.text(), "ybbb", "完了後は編集できる");
+}
+
+#[test]
+fn 読み取り専用の文書を同じファイルへ名前を付けて保存しない() {
+    let mut s = Env::new();
+    let src: &[u8] = b"ok \x9A\n";
+    s.fs.add_file("/w/bad.txt", src);
+    s.open("/w/bad.txt");
+    s.messages();
+    let r = s.run("file.save_as", Args::new().with_str("path", "/w/bad.txt"));
+    assert_eq!(r, CommandResult::Rejected(RejectReason::ReadOnly));
+    assert_eq!(
+        s.fs.read("/w/bad.txt").unwrap(),
+        src,
+        "元のバイト列を損なわない"
+    );
+    assert!(
+        s.messages()
+            .contains(&"msg.save_as.same_file_read_only".to_owned())
+    );
+}
+
+#[test]
+fn 名前を付けて保存の失敗はパスと_stamp_を変えない() {
+    let mut s = Env::new();
+    s.fs.add_file("/w/a.txt", b"abc");
+    s.fs.add_file("/w/other.txt", b"EXIST");
+    s.open("/w/a.txt");
+    let stamp = s.doc().1.disk_stamp;
+    s.type_text("x");
+    s.run("file.save_as", Args::new().with_str("path", "/w/other.txt")); // 既存 → Conflict
+    assert_eq!(s.fs.read("/w/other.txt").unwrap(), b"EXIST");
+    let (_, d) = s.doc();
+    assert_eq!(
+        d.path,
+        Some(FsPath::from("/w/a.txt")),
+        "失敗したのでパスは元のまま"
+    );
+    assert_eq!(d.disk_stamp, stamp);
+    assert!(d.is_dirty());
+    // 元のファイルへはそのまま保存できる
+    s.run("file.save", Args::new());
+    assert_eq!(s.fs.read("/w/a.txt").unwrap(), b"xabc");
+}
+
+#[test]
+fn 保存の待ちの間の名前を付けて保存は無視する() {
+    let mut s = Env::new();
+    s.fs.add_file("/w/a.txt", b"abc");
+    s.open("/w/a.txt");
+    s.type_text("d");
+    s.e.execute(CommandInvocation::new(
+        "file.save",
+        InvocationSource::Keymap,
+    ));
+    s.messages();
+    let r = s.e.execute(
+        CommandInvocation::new("file.save_as", InvocationSource::Keymap)
+            .with_args(Args::new().with_str("path", "/w/a.txt")),
+    );
+    assert_eq!(r, CommandResult::Done);
+    assert!(s.messages().contains(&"info.save.in_progress".to_owned()));
+    s.pump();
+    assert_eq!(s.jobs.pending(), 0);
+}
+
+#[test]
+fn 読込中の文書は名前を付けて保存できない() {
+    let mut s = Env::new();
+    s.fs.add_file("/w/a.txt", b"abc");
+    s.e.open_initial(Some("/w/a.txt"), false);
+    let r = s.e.execute(
+        CommandInvocation::new("file.save_as", InvocationSource::Keymap)
+            .with_args(Args::new().with_str("path", "/w/zz.txt")),
+    );
+    assert_eq!(r, CommandResult::Rejected(RejectReason::NotAvailable));
+    s.pump();
+    assert!(!s.fs.exists("/w/zz.txt"));
+}
+
+#[test]
+fn 最初の読込の失敗は無題で始まり_再試行できる() {
+    let mut s = Env::new();
+    s.fs.add_file("/w/bin.dat", b"\x00\x01\x02");
+    s.e.open_initial(Some("/w/bin.dat"), false);
+    s.pump();
+    let (_, d) = s.doc();
+    assert!(
+        d.path.is_none() && d.is_editable(),
+        "失敗した文書は閉じ、無題の文書で始まる"
+    );
+    assert_eq!(s.e.state().documents_len(), 1);
+    // 同じパスを開き直せる (already_open にならない)
+    s.messages();
+    s.fs.add_file("/w/bin.dat", b"text now");
+    s.open("/w/bin.dat");
+    assert_eq!(s.text(), "text now");
+}
+
+#[test]
+fn readonly_の指定でもバイナリの確認は出す() {
+    let mut s = Env::new();
+    s.fs.add_file("/w/bin.dat", b"\x00\x01\x02");
+    s.e.open_initial(Some("/w/bin.dat"), true);
+    s.pump();
+    assert!(s.messages().contains(&"ui.confirm.open.binary".to_owned()));
+}
