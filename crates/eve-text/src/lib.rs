@@ -10,14 +10,26 @@
 #![forbid(unsafe_code)]
 
 mod changeset;
+mod grapheme;
 mod selection;
 mod text;
 mod types;
+mod width;
+mod word;
 
 pub use changeset::{
     Bias, ChangeSet, ChangeSetError, ComposeError, Edit, EditError, InsertText, Op, OverlapKind,
     RangeMap,
 };
+pub use grapheme::{
+    CONTEXT as GRAPHEME_CONTEXT, is_grapheme_boundary, next_grapheme_boundary,
+    prev_grapheme_boundary, snap_to_grapheme, snap_to_nearest_grapheme,
+};
 pub use selection::{MapPolicy, Range, Selection};
 pub use text::{Chunks, Snapshot, Text, TextBuilder, TextRead};
 pub use types::{ByteOff, ByteRange, CharIdx, LineEnding, LineIdx, Pos, Utf16Off};
+pub use width::{
+    ControlStyle, EmojiWidth, MAX_GRAPHEME_WIDTH, WidthConfig, grapheme_width, invisible_marks,
+    invisible_marks_text, is_width_risky,
+};
+pub use word::{ScriptClass, classify_grapheme, next_word_stop, prev_word_stop};

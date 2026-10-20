@@ -1,9 +1,10 @@
 //! `Range` / `Selection` (docs/03-core-design.md §4)。純データと、ChangeSet による写像。
 //!
-//! 書記素境界へのスナップ (N1) は書記素境界の関数 (B2) と一緒に入れる。ここでは N2〜N6
-//! (`Selection::merged`) と写像 (`Selection::map`) までを持つ。
+//! N1 (書記素境界へのスナップ) は `normalized`、N2〜N6 は `merged`。写像は `map`。
 
 use crate::changeset::{Bias, ChangeSet};
+use crate::grapheme::{snap_to_grapheme, snap_to_nearest_grapheme};
+use crate::text::TextRead;
 use crate::types::{ByteOff, Pos};
 
 /// 選択範囲。`anchor == head` なら選択なしのカーソル。半開区間 `[start, end)` が選択内容で、向きを保持する。
@@ -210,6 +211,49 @@ impl Selection {
         }
     }
 
+    /// N1〜N6 のすべて: 各 Range の anchor / head を近い書記素境界へ寄せ (同じ距離なら前)、`merged` を通す。
+    /// 移動の向きを持つスナップ (head を移動方向の `Bias` に寄せる) は `normalized_with_head_bias` を使う。
+    pub fn normalized(self, text: &dyn TextRead) -> Selection {
+        let snap = |r: &Range| {
+            Range::new(
+                snap_to_nearest_grapheme(text, r.anchor),
+                snap_to_nearest_grapheme(text, r.head),
+            )
+        };
+        let ranges = self.ranges.iter().map(snap).collect();
+        Selection {
+            ranges,
+            primary: self.primary,
+        }
+        .merged(text.len_bytes())
+    }
+
+    /// `normalized` と同じだが、head は `head_bias` の側の書記素境界へ寄せる (anchor は近い方)。
+    pub fn normalized_with_head_bias(self, text: &dyn TextRead, head_bias: Bias) -> Selection {
+        let snap = |r: &Range| {
+            Range::new(
+                snap_to_nearest_grapheme(text, r.anchor),
+                snap_to_grapheme(text, r.head, head_bias),
+            )
+        };
+        let ranges = self.ranges.iter().map(snap).collect();
+        Selection {
+            ranges,
+            primary: self.primary,
+        }
+        .merged(text.len_bytes())
+    }
+
+    /// 各 Range に移動 `f` を適用して `normalized` する。
+    pub fn transform(&self, text: &dyn TextRead, f: impl Fn(Range) -> Range) -> Selection {
+        let ranges = self.ranges.iter().map(|r| f(*r)).collect();
+        Selection {
+            ranges,
+            primary: self.primary,
+        }
+        .normalized(text)
+    }
+
     /// `ChangeSet` による写像 (03 §6.4)。元の `ChangeSet` を順に使う (合成したものは使わない)。
     /// 結果は N2〜N6 を満たす。
     pub fn map(&self, cs: &ChangeSet, policy: MapPolicy) -> Selection {
@@ -409,5 +453,34 @@ mod tests {
             "(3,4) と (6,7) は (2,2) に潰れて 1 つ、(9,10) は 3,4 へ"
         );
         assert_eq!(m.primary_index(), 0);
+    }
+
+    #[test]
+    fn 正規化は書記素境界に寄せて併合する() {
+        let base = Text::from("a\r\nb");
+        let s = sel(&[(2, 4)], 0).normalized(&base);
+        assert_eq!(pairs(&s), [(1, 4)], "CR と LF の間は前 (同じ距離) に寄る");
+        // 寄せた結果、重なる Range は併合される
+        let t = Text::from("e\u{301}e\u{301}");
+        let s = sel(&[(0, 4), (3, 5)], 0).normalized(&t);
+        assert_eq!(
+            pairs(&s),
+            [(0, 6)],
+            "(0,3) と (3,6) に寄って接し、1 つになる"
+        );
+        let s = sel(&[(1, 1)], 0).normalized_with_head_bias(&t, Bias::After);
+        assert_eq!(
+            pairs(&s),
+            [(0, 3)],
+            "anchor は近い方 (0)、head は After (3)"
+        );
+    }
+
+    #[test]
+    fn 変換は移動の後に正規化する() {
+        let base = Text::from("a\r\nb");
+        let s = Selection::point(ByteOff(0))
+            .transform(&base, |r| r.with_head(ByteOff(2)).collapse_to_head());
+        assert_eq!(pairs(&s), [(1, 1)]);
     }
 }
