@@ -1510,7 +1510,12 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 | `msg.config.type_mismatch` | 型不一致。`{actual}` は書かれた値の型、`{expected}` は期待する型 (どちらも下の `ui.config.type.*`)。該当項目は下位層の値 (v0.1 は既定値) に戻す | {item} の値の型が違います (書かれた型: {actual}) / {expected} で書いてください。この項目は既定値 {default} を使います |
 | `msg.config.out_of_range` | 範囲外。`{range}` は許容範囲 (例 `1〜16`)。`{default}` は戻した値 (丸める項目 (07 §4.2) は丸めた値) | {item} の値 {value} は範囲外です / {range} で指定してください。この項目は {default} を使います |
 | `msg.config.invalid_value` | 列挙値不正 (`file.default_encoding` の許容値外を含む)。`{allowed}` は許容値を `, ` で並べたもの | {item} の値 {value} は使えません / 使える値: {allowed}。この項目は既定値 {default} を使います |
-| `ui.config.type.integer` / `.float` / `.string` / `.bool` / `.array` / `.table` | `{actual}` / `{expected}` に入れる型の語 | 整数 / 小数 / 文字列 / 真偽値 (`true` か `false`) / 配列 / テーブル |
+| `ui.config.type.integer` | `{actual}` / `{expected}` に入れる型の語 | 整数 |
+| `ui.config.type.float` | `{actual}` / `{expected}` に入れる型の語 | 小数 |
+| `ui.config.type.string` | `{actual}` / `{expected}` に入れる型の語 | 文字列 |
+| `ui.config.type.bool` | `{actual}` / `{expected}` に入れる型の語 | 真偽値 (`true` か `false`) |
+| `ui.config.type.array` | `{actual}` / `{expected}` に入れる型の語 | 配列 |
+| `ui.config.type.table` | `{actual}` / `{expected}` に入れる型の語 | テーブル |
 | `info.config.unsupported` (v0.2) | 公開前のキー・予約のセクション・後の版の値 (07 §5 冒頭の「このバージョンでは未対応」)。v0.1 は画面に出さず、件数にも数えず、ログにだけ書く (07 §4.3)。`config.show_diagnostics` (v0.2) の一覧で使う | {item} はこのバージョンでは未対応のため無視しました |
 
 v0.2 以降の診断 (名前だけを予約し、文言はその版で言語ファイルに加える): `msg.config.unknown_command` (キーマップの未知のコマンド ID)、`msg.config.invalid_key_notation` (キー表記の構文エラー)、`msg.config.chord_prefix` (プレフィックス衝突)、`msg.config.unknown_name` (存在しないテーマ・言語・ロケール名)、`info.config.key_conflict` (同一キーの重複)、`info.config.deprecated_key` (廃止キーの自動変換)、`info.config.ignored_workspace` (所有者検査で無視したワークスペース設定、v0.4)、`info.config.pending_trust` (信頼待ちの危険項目、v0.4)、`msg.config.unsafe_value` (安全性違反、v0.4)。
