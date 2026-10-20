@@ -13,3 +13,4 @@ v0.1.0 のリリースまでの `0.0.x` は、マイルストーンを数える�
 - workspace の骨格 (M1 のタスク (0)): `Cargo.toml`、`.cargo/config.toml`、`deny.toml`、`deps-policy.toml`、`clippy.toml`、`rustfmt.toml`、crate の枠。
 - 開発用ツール `cargo xtask` の `check` (速い車線)・`check-deps` (依存規則 R1〜R12)・`check-ac-checklist`、docs の表を読む `eve-docs-tables`。
 - CI (`.github/workflows/ci.yml`): check・fmt・clippy・test・deps・dco・gitleaks・pr-source、nextest の設定 (`.config/nextest.toml`)。
+- `cargo xtask i18n` (UI 文言の検査)・`cargo xtask gen-corpus` (巨大・長大のコーパスの決定的な生成)、CI の `i18n` ジョブ。

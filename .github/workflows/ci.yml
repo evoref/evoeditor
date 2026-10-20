@@ -1,6 +1,7 @@
 # フル車線 (docs/09-testing-quality.md §6.1 / §6.2、docs/11-dev-workflow.md §8.1)。
 # 必須のステータスチェックの名前は、ジョブの表示名そのもの (docs/11 §9.1 の固定名):
 #   check / fmt / clippy (windows) / clippy (linux) / test (windows) / test (linux) / deps / dco / gitleaks / pr-source
+# 2 段目 (ジョブを足す PR の merge 後に必須に加える): i18n
 # 表示名を変えるときは、ブランチ保護の必須チェックの名前も同じ手順で差し替える。
 # パスのフィルタは付けない (docs だけ・コードだけの PR でも全ジョブを回す)。
 name: ci
@@ -149,6 +150,24 @@ jobs:
         run: cargo deny check
       - name: 依存規則 R1〜R12 と docs/02 §4.1 の突合
         run: cargo xtask check-deps --docs
+
+  # UI 文言の検査 (docs/09 §6.2 の i18n): docs の MessageKey 目録・コマンドカタログと、言語ファイルのキー集合。
+  # 2 段目の必須チェック。この PR が merge された直後に、ブランチ保護の必須に加える (docs/09 §6.2)。
+  i18n:
+    name: i18n
+    needs: check
+    runs-on: windows-2025
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Rust (stable)
+        run: rustup toolchain install stable --profile minimal --no-self-update && rustup default stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          shared-key: windows
+      - run: cargo xtask i18n
 
   # DCO: PR の全コミットに Signed-off-by があること (docs/11 §9.4、OQ-154)。
   # 対象外 (ジョブの if で飛ばす。飛ばしたジョブは必須のチェックとして成功扱い):
