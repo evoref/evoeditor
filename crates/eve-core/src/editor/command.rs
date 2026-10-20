@@ -213,6 +213,10 @@ impl CommandRegistry {
 
     /// 権限・条件を確かめて実行する (02 §6.1)。
     pub fn execute(&self, state: &mut EditorState, inv: &CommandInvocation) -> CommandResult {
+        // オーバーレイが出ている間はモーダル: 入力欄の編集はプロンプトへ、それ以外の文書のコマンドは拒否する
+        if let Some(r) = state.overlay_intercept(inv) {
+            return r;
+        }
         let Some(spec) = self.specs.get(&inv.id) else {
             return CommandResult::Rejected(RejectReason::UnknownCommand);
         };

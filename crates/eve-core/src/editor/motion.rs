@@ -228,6 +228,17 @@ motion_fns! {
 
 /// `cursor.goto_line { line: int | "$", col?: int }`。行・桁は 1 始まり (桁は書記素数)。範囲外は丸める。
 fn goto_line(ctx: &mut CommandCtx<'_>) -> CommandResult {
+    // 行の指定がないとき (Ctrl+G) は、行番号を尋ねる入力プロンプトを出す
+    if ctx.args.get("line").is_none() {
+        ctx.state
+            .open_prompt(super::overlay::PromptKind::GotoLine, String::new());
+        return CommandResult::Done;
+    }
+    goto_line_command(ctx)
+}
+
+/// `cursor.goto_line` の本体 (行の指定があるとき。プロンプトの確定からも使う)。
+pub(super) fn goto_line_command(ctx: &mut CommandCtx<'_>) -> CommandResult {
     let Some((view_id, doc_id)) = active(ctx) else {
         return CommandResult::Rejected(RejectReason::NoTarget);
     };

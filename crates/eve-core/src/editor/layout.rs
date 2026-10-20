@@ -412,6 +412,7 @@ pub(super) fn build_frame(
     let heads: Vec<usize> = visible.iter().map(|r| r.head.0).collect();
     let primary_head = view.selection.primary().head.0;
 
+    let overlay_open = state.overlay.is_some();
     let mut out_rows = Vec::with_capacity(rows);
     let mut cursors = Vec::new();
     let mut primary: Option<CellPos> = None;
@@ -473,7 +474,7 @@ pub(super) fn build_frame(
         gutter_width: gw,
         rows: out_rows,
         cursors,
-        focused: true,
+        focused: !overlay_open,
     };
     Some(Frame {
         window,
@@ -482,13 +483,20 @@ pub(super) fn build_frame(
             rows: rows as u16,
         },
         panes: vec![pane],
-        focus: FocusTarget::Pane(view_id),
-        primary_cursor: primary.map(|pos| CursorPlacement {
-            pos,
-            shape: CursorShape::Bar,
-        }),
+        focus: if overlay_open {
+            FocusTarget::Overlay(0)
+        } else {
+            FocusTarget::Pane(view_id)
+        },
+        primary_cursor: primary
+            .filter(|_| !overlay_open)
+            .map(|pos| CursorPlacement {
+                pos,
+                shape: CursorShape::Bar,
+            }),
         status: super::chrome::status_model(state, view_id, chord),
         hints: super::chrome::hint_model(state, chord),
+        overlays: super::chrome::overlay_models(state),
         messages: message_model(state),
         texts: super::chrome::chrome_texts(state),
         title: title(doc),

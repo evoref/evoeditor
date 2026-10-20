@@ -562,9 +562,7 @@ quit_saving = "{path} の保存が終わっていません — `[W] 待つ` ★ 
 reload_discard = "{path} を読み込み直すと、保存していない変更が失われます (読み込み直した後に元に戻すで戻せます) — `[L] 再読込 (変更を破棄)` / `[Esc] キャンセル` ★"
 save_failed = "保存できません: (上の `msg.save.*` の text) — (Busy のときだけ `[T] 再試行` /) `[A] 別名で保存` ★ / `[R] 退避先に保存` (`[Esc] キャンセル` = 中止)"
 save_failed_closed = "保存できませんでした: (`msg.save.*` の text) — {path} は既に閉じています。`[R] 退避先に保存` ★ / `[D] 破棄`"
-unsaved = "{path} には保存されていない変更があります — `[S] 保存して終了` ★ / `[D] 破棄して終了`"
 unsaved_reopen = "{path} には保存されていない変更があります — `[S] 保存してから開き直す` ★ / `[D] 破棄して開き直す`"
-unsaved_replace = "{path} には保存されていない変更があります — `[S] 保存してから開く` ★ / `[D] 破棄して開く`"
 
 nav_hint = "Tab / ←→ で選択、Enter で決定"
 cancel = "[Esc] キャンセル"
@@ -682,3 +680,15 @@ via_palette = "コマンドパレットから実行"
 
 [ui]
 too_small = "端末が小さすぎます ({cols}x{rows} 以上が必要)"
+
+[ui.confirm.unsaved]
+title = "未保存の変更"
+message = "{path} には保存されていない変更があります"
+save = "[S] 保存して終了"
+discard = "[D] 破棄して終了"
+
+[ui.confirm.unsaved_replace]
+title = "未保存の変更"
+message = "{path} には保存されていない変更があります"
+save = "[S] 保存してから開く"
+discard = "[D] 破棄して開く"

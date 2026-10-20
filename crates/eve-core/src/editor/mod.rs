@@ -14,6 +14,7 @@ mod keymap;
 mod layout;
 mod message;
 mod motion;
+mod overlay;
 mod state;
 
 use eve_view::{
@@ -49,6 +50,7 @@ impl Editor {
         edit::register(&mut registry);
         motion::register(&mut registry);
         file::register(&mut registry);
+        overlay::register(&mut registry);
         let mut editor = Editor {
             state: EditorState::new(caps, ports.jobs.clone(), ports.paths.clone()),
             registry,
@@ -167,7 +169,11 @@ impl Editor {
                 self.state.dismiss_error_on_command();
                 // チョードの保留中の貼り付けは、保留を破棄して本文を入れる
                 self.keymap.clear_pending();
-                edit::paste_text(&mut self.state, &s);
+                if self.state.is_dialog() {
+                    // 確認ダイアログでは貼り付けを捨てる (選択肢が実行されないように)
+                } else if !self.state.prompt_paste(&s) {
+                    edit::paste_text(&mut self.state, &s);
+                }
             }
             InputEvent::Resize { cols, rows } => self.state.set_viewport(cols, rows),
             InputEvent::CapabilitiesChanged(caps) => self.state.set_caps(caps),
@@ -179,11 +185,21 @@ impl Editor {
     /// 編集面にフォーカスがあるときのコンテキストの参照順 (07 §7.1)。
     const EDITOR_CONTEXTS: [&'static str; 2] = ["editor", "global"];
 
+    /// フォーカスの場所ごとのコンテキストの参照順 (07 §7.1)。確認ダイアログはモーダルで `global` を参照しない。
+    fn contexts_for(overlay: &str) -> &'static [&'static str] {
+        match overlay {
+            "dialog" => &["dialog"],
+            "prompt" => &["prompt", "global"],
+            _ => &Self::EDITOR_CONTEXTS,
+        }
+    }
+
     fn on_key(&mut self, stroke: KeyStroke) {
         let state = &self.state;
+        let contexts = Self::contexts_for(state.overlay_name());
         let res = self
             .keymap
-            .resolve(&Self::EDITOR_CONTEXTS, stroke, &|n| state.context_value(n));
+            .resolve(contexts, stroke, &|n| state.context_value(n));
         match res {
             Resolution::Run(inv) => {
                 self.execute(inv);
@@ -193,7 +209,12 @@ impl Editor {
                 if let KeyCode::Char(c) = stroke.key
                     && stroke.mods.is_empty()
                 {
-                    self.insert_text(&c.to_string());
+                    if self.state.is_dialog() {
+                        // 確認ダイアログはアクセラレータとして照合する (一致しなければ捨てる、K1)
+                        self.state.dialog_accelerator(c);
+                    } else {
+                        self.insert_text(&c.to_string());
+                    }
                 }
             }
             Resolution::Pending | Resolution::Cancelled | Resolution::UnassignedInSequence => {}
@@ -201,6 +222,14 @@ impl Editor {
     }
 
     fn on_text(&mut self, s: &str) {
+        if self.state.is_dialog() {
+            // 確認ダイアログ: 複数書記素の Text はすべて捨て、1 書記素ならアクセラレータとして照合する (K1)
+            let mut it = s.chars();
+            if let (Some(c), None) = (it.next(), it.next()) {
+                self.state.dialog_accelerator(c);
+            }
+            return;
+        }
         if !self.keymap.pending().is_empty() {
             // チョードの保留中: 先頭の書記素を 2 打目として照合し、残りは捨てる (K1)
             let t = eve_text::Text::from(s);

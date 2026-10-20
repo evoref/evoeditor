@@ -3,8 +3,9 @@
 
 use eve_text::{ByteOff, ByteRange, TextRead, grapheme_indices};
 use eve_view::{
-    ChromeTexts, CutPolicy, HintContext, HintItem, HintModel, KeyCode, KeyLabel, KeyStroke,
-    Modifiers, StatusAlign, StatusItem, StatusKind, StatusModel, ViewId,
+    Choice, ChoiceId, ChromeTexts, CutPolicy, HintContext, HintItem, HintModel, InputFieldModel,
+    KeyCode, KeyLabel, KeyStroke, Modifiers, OverlayModel, StatusAlign, StatusItem, StatusKind,
+    StatusModel, ViewId,
 };
 
 use crate::document::{Document, LoadState};
@@ -213,7 +214,136 @@ pub(super) fn status_model(
     StatusModel { items }
 }
 
+/// オーバーレイのモデル (確認・入力プロンプト)。文言は core が解決して `CellText` で渡す。
+pub(super) fn overlay_models(state: &EditorState) -> Vec<OverlayModel> {
+    use super::overlay::{ACCELERATORS, CHOICE_CANCEL, CHOICE_DISCARD, CHOICE_SAVE, Overlay};
+    match &state.overlay {
+        None => Vec::new(),
+        Some(Overlay::Confirm(c)) => {
+            let key = |leaf: &str| format!("ui.confirm.{}.{leaf}", c.name);
+            let args = [("path", c.path.as_str())];
+            let accel = |idx: usize| {
+                ACCELERATORS
+                    .iter()
+                    .find(|(_, i)| *i == idx)
+                    .map(|(k, _)| *k)
+            };
+            let choice = |idx: usize, id: u16, text: String, destructive: bool| Choice {
+                id: ChoiceId(id),
+                label: cell_text(&text, CutPolicy::Never),
+                key: accel(idx),
+                destructive,
+            };
+            vec![OverlayModel::Confirm {
+                title: cell_text(&render(state, &key("title"), &[]), CutPolicy::Never),
+                message: cell_text(&render(state, &key("message"), &args), CutPolicy::End),
+                details: None,
+                choices: vec![
+                    choice(
+                        CHOICE_SAVE,
+                        CHOICE_SAVE as u16,
+                        render(state, &key("save"), &[]),
+                        false,
+                    ),
+                    choice(
+                        CHOICE_DISCARD,
+                        CHOICE_DISCARD as u16,
+                        render(state, &key("discard"), &[]),
+                        true,
+                    ),
+                    choice(
+                        CHOICE_CANCEL,
+                        CHOICE_CANCEL as u16,
+                        render(state, "ui.confirm.cancel", &[]),
+                        false,
+                    ),
+                ],
+                default: ChoiceId(CHOICE_SAVE as u16),
+                focused: ChoiceId(c.focused as u16),
+                nav_hint: Some(cell_text(
+                    &render(state, "ui.confirm.nav_hint", &[]),
+                    CutPolicy::End,
+                )),
+            }]
+        }
+        Some(Overlay::Prompt(p)) => {
+            let name = p.kind.name();
+            let cells = cell_text(&p.text, CutPolicy::End).spans;
+            let cursor = cell_text(&p.text[..p.cursor], CutPolicy::End).spans.len();
+            let input = InputFieldModel {
+                len: cells.len(),
+                cells,
+                first: 0,
+                cursor,
+                selection: None,
+                placeholder: None,
+            };
+            let hint_key = format!("ui.prompt.{name}.hint");
+            let hint = state
+                .catalog()
+                .contains(&hint_key)
+                .then(|| cell_text(&render(state, &hint_key, &[]), CutPolicy::End));
+            let error = p.error.map(|kind| {
+                cell_text(
+                    &render(state, &format!("ui.prompt.{name}.error.{kind}"), &[]),
+                    CutPolicy::End,
+                )
+            });
+            vec![OverlayModel::Prompt {
+                title: cell_text(
+                    &render(state, &format!("ui.prompt.{name}.title"), &[]),
+                    CutPolicy::Never,
+                ),
+                input,
+                hint,
+                error,
+            }]
+        }
+    }
+}
+
 pub(super) fn hint_model(state: &EditorState, chord: &[KeyStroke]) -> HintModel {
+    if state.overlay.is_some() {
+        // オーバーレイ: 決定・取消 (確認は次へも)。キーは固定 (オーバーレイの割当は既定のまま)
+        let stroke = |key| KeyLabel {
+            strokes: vec![KeyStroke {
+                mods: Modifiers::NONE,
+                key,
+            }],
+        };
+        let word = |cmd: &str| {
+            cell_text(
+                state
+                    .catalog()
+                    .get(&format!("hint.{cmd}"))
+                    .unwrap_or("hint"),
+                CutPolicy::Never,
+            )
+        };
+        let mut items = vec![
+            HintItem {
+                keys: vec![stroke(KeyCode::Esc)],
+                text: word("ui.cancel"),
+                priority: 5,
+            },
+            HintItem {
+                keys: vec![stroke(KeyCode::Enter)],
+                text: word("ui.confirm"),
+                priority: 4,
+            },
+        ];
+        if state.is_dialog() {
+            items.push(HintItem {
+                keys: vec![stroke(KeyCode::Tab)],
+                text: word("ui.list_next"),
+                priority: 3,
+            });
+        }
+        return HintModel {
+            context: HintContext::Overlay,
+            items,
+        };
+    }
     if !chord.is_empty() {
         // チョード保留中は `Esc 取消` だけを出す (04 §8.8)
         let esc = KeyLabel {

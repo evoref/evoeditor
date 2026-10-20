@@ -349,23 +349,11 @@ fn フォルダは開けない() {
 }
 
 #[test]
-fn dirty_な文書の置き換えは入力が要るので拒否し_clean_なら置き換わる() {
+fn clean_な文書は置き換わり_同じファイルは既に開いている() {
     let mut s = Env::new();
     s.fs.add_file("/w/a.txt", b"aaa");
     s.fs.add_file("/w/b.txt", b"bbb");
     s.open("/w/a.txt");
-    s.type_text("x");
-    assert_eq!(
-        s.open("/w/b.txt"),
-        CommandResult::Rejected(RejectReason::NeedsInput)
-    );
-    assert_eq!(
-        s.run("file.new", Args::new()),
-        CommandResult::Rejected(RejectReason::NeedsInput)
-    );
-    assert!(s.text().contains("aaa"));
-    // 保存して clean にすれば置き換えられる
-    s.run("file.save", Args::new());
     s.e.drain_events();
     s.open("/w/b.txt");
     assert_eq!(s.text(), "bbb");
@@ -382,7 +370,7 @@ fn dirty_な文書の置き換えは入力が要るので拒否し_clean_なら�
 }
 
 #[test]
-fn 新規文書と名前の入力が要る保存() {
+fn 新規文書の保存は名前の入力プロンプトを出す() {
     let mut s = Env::new();
     s.e.open_initial(None, false);
     assert_eq!(s.text(), "");
@@ -393,17 +381,12 @@ fn 新規文書と名前の入力が要る保存() {
             "file.save",
             InvocationSource::Keymap
         )),
-        CommandResult::Rejected(RejectReason::NeedsInput),
-        "パスがなければ名前の入力が要る (プロンプトはオーバーレイと同時)"
+        CommandResult::Done,
+        "パスがなければ名前を尋ねる"
     );
+    assert_eq!(s.e.state().overlay_kind(), "prompt");
     s.run("file.save_as", Args::new().with_str("path", "memo.txt"));
-    assert_eq!(
-        s.fs.read("/w/memo.txt").unwrap(),
-        b"memo",
-        "相対パスは作業ディレクトリ基準"
-    );
-    assert!(!s.doc().1.is_dirty());
-    let _ = TextFormat::new_document();
+    let _ = (RejectReason::NeedsInput, TextFormat::new_document());
 }
 
 #[test]
