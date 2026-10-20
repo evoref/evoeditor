@@ -18,6 +18,11 @@ impl CancelToken {
         self.0.store(true, Ordering::Release);
     }
 
+    /// 他にも同じトークンを持つ者がいる (ジョブがまだワーカーの手元にある)。
+    pub fn is_shared(&self) -> bool {
+        Arc::strong_count(&self.0) > 1
+    }
+
     pub fn is_cancelled(&self) -> bool {
         self.0.load(Ordering::Acquire)
     }
