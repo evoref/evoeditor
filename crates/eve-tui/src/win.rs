@@ -1,0 +1,292 @@
+//! Windows のコンソール入力 (docs/04 §6.1、05 §9.1)。自前の `WaitForSingleObject` + `ReadConsoleInputW` のループ
+//! (確定 (ユーザー回答)、OQ-33)。crossterm の `event::read()` は使わない。OS を呼ぶのはこのファイルだけ (R5)。
+//!
+//! 正規化とバースト検出は `input::Normalizer` (OS を呼ばない)。ここは読む・待つ・送るだけを行う (入力スレッドの責務の上限)。
+//! 実測 (S-07) に基づき、**1 回の `ReadConsoleInputW` は `READ_CHUNK` 件まで** にする (10 MB の貼り付けで 1 回の
+//! `GetNumberOfConsoleInputEvents` が約 1,400 万件を返した。全体を 1 本の配列に読まない)。
+
+#![allow(unsafe_code)]
+
+use std::io;
+use std::thread::{self, JoinHandle};
+
+use eve_view::{CellSize, InputEvent};
+use windows_sys::Win32::Foundation::{
+    GENERIC_READ, GENERIC_WRITE, HANDLE, INVALID_HANDLE_VALUE, WAIT_OBJECT_0, WAIT_TIMEOUT,
+};
+use windows_sys::Win32::Storage::FileSystem::{
+    CreateFileW, FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING,
+};
+use windows_sys::Win32::System::Console::{
+    CONSOLE_SCREEN_BUFFER_INFO, ENABLE_ECHO_INPUT, ENABLE_EXTENDED_FLAGS, ENABLE_LINE_INPUT,
+    ENABLE_MOUSE_INPUT, ENABLE_PROCESSED_INPUT, ENABLE_QUICK_EDIT_MODE,
+    ENABLE_VIRTUAL_TERMINAL_INPUT, ENABLE_WINDOW_INPUT, GetConsoleMode, GetConsoleScreenBufferInfo,
+    GetNumberOfConsoleInputEvents, INPUT_RECORD, KEY_EVENT, ReadConsoleInputW, SetConsoleMode,
+    WINDOW_BUFFER_SIZE_EVENT,
+};
+use windows_sys::Win32::System::Threading::{INFINITE, WaitForSingleObject};
+
+use crate::buffer::CHROME_ROWS;
+use crate::input::{BURST_T_MS, KeyRec, Normalizer, Out, Raw};
+
+/// 1 回の `ReadConsoleInputW` で読む記録の上限。
+pub const READ_CHUNK: usize = 4096;
+
+/// 入力の送り先 (本番は `eve_host::InputSink`、テストや診断は別の実装)。
+pub trait InputOut: Send + 'static {
+    /// `InputEvent` を送る。受け手が閉じていれば `false`。
+    fn event(&self, ev: InputEvent) -> bool;
+    /// 入力スレッドが続けられなくなった (入力ハンドルの失敗)。
+    fn died(&self);
+}
+
+/// コンソールのハンドル (`Send` にするための包み。ハンドルは OS が管理するスレッド間で使える値)。
+struct Handle(HANDLE);
+
+// SAFETY: コンソールのハンドルは単なるカーネルオブジェクトの識別子で、複数スレッドから使ってよい。
+unsafe impl Send for Handle {}
+
+/// コンソールの入力。`open` でモードを入力向けに設定し、`restore` (または drop) で元に戻す。
+pub struct ConsoleInput {
+    input: Handle,
+    output: Handle,
+    saved_mode: u32,
+    restored: bool,
+}
+
+fn open_console(name: &str) -> io::Result<HANDLE> {
+    let wide: Vec<u16> = name.encode_utf16().chain(Some(0)).collect();
+    // SAFETY: `wide` は NUL 終端の UTF-16。残りの引数は `CreateFileW` の仕様どおり (セキュリティ属性・テンプレートなし)。
+    let h = unsafe {
+        CreateFileW(
+            wide.as_ptr(),
+            GENERIC_READ | GENERIC_WRITE,
+            FILE_SHARE_READ | FILE_SHARE_WRITE,
+            std::ptr::null(),
+            OPEN_EXISTING,
+            0,
+            std::ptr::null_mut(),
+        )
+    };
+    if h == INVALID_HANDLE_VALUE {
+        return Err(io::Error::last_os_error());
+    }
+    Ok(h)
+}
+
+impl ConsoleInput {
+    /// `CONIN$` / `CONOUT$` を開き、入力モードを設定する (05 §9.1 の入力モード)。
+    /// `ENABLE_PROCESSED_INPUT` / `ENABLE_LINE_INPUT` / `ENABLE_ECHO_INPUT` / `ENABLE_VIRTUAL_TERMINAL_INPUT` /
+    /// `ENABLE_MOUSE_INPUT` を落とし、`ENABLE_WINDOW_INPUT` を立てる。簡易編集モードは変えない (v0.1)。
+    pub fn open() -> io::Result<ConsoleInput> {
+        let input = open_console("CONIN$")?;
+        let output = open_console("CONOUT$")?;
+        let mut saved = 0u32;
+        // SAFETY: `input` は開いたコンソール入力のハンドル、`saved` は書込先の有効な u32。
+        if unsafe { GetConsoleMode(input, &mut saved) } == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        let mut mode = saved
+            & !(ENABLE_PROCESSED_INPUT
+                | ENABLE_LINE_INPUT
+                | ENABLE_ECHO_INPUT
+                | ENABLE_VIRTUAL_TERMINAL_INPUT
+                | ENABLE_MOUSE_INPUT);
+        mode |= ENABLE_WINDOW_INPUT;
+        if mode & ENABLE_QUICK_EDIT_MODE != 0 {
+            // 簡易編集モードを保つには拡張フラグも立てる必要がある (SetConsoleMode の仕様)
+            mode |= ENABLE_EXTENDED_FLAGS;
+        }
+        // SAFETY: `input` は有効なコンソール入力のハンドル。
+        if unsafe { SetConsoleMode(input, mode) } == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        Ok(ConsoleInput {
+            input: Handle(input),
+            output: Handle(output),
+            saved_mode: saved,
+            restored: false,
+        })
+    }
+
+    /// 端末のウィンドウの大きさ (`srWindow` から。バッファの大きさではない、05 §9.1 の ConPTY の癖)。
+    pub fn window_size(&self) -> io::Result<CellSize> {
+        window_size(self.output.0)
+    }
+
+    /// 入力モードを元に戻す (どの終了経路でも呼ぶ。2 回目以降は何もしない)。
+    pub fn restore(&mut self) {
+        if !self.restored {
+            self.restored = true;
+            // SAFETY: `input` は `open` で得た有効なハンドル。失敗しても次の復元を試すためエラーは無視する。
+            unsafe { SetConsoleMode(self.input.0, self.saved_mode) };
+        }
+    }
+}
+
+impl Drop for ConsoleInput {
+    fn drop(&mut self) {
+        self.restore();
+    }
+}
+
+fn window_size(output: HANDLE) -> io::Result<CellSize> {
+    // SAFETY: 全ビット 0 の `CONSOLE_SCREEN_BUFFER_INFO` は有効な値 (すべて整数)。
+    let mut info: CONSOLE_SCREEN_BUFFER_INFO = unsafe { std::mem::zeroed() };
+    // SAFETY: `output` は開いたコンソール出力のハンドル、`info` は書込先の有効な構造体。
+    if unsafe { GetConsoleScreenBufferInfo(output, &mut info) } == 0 {
+        return Err(io::Error::last_os_error());
+    }
+    let w = i32::from(info.srWindow.Right) - i32::from(info.srWindow.Left) + 1;
+    let h = i32::from(info.srWindow.Bottom) - i32::from(info.srWindow.Top) + 1;
+    Ok(CellSize {
+        cols: u16::try_from(w.max(0)).unwrap_or(0),
+        rows: u16::try_from(h.max(0)).unwrap_or(0),
+    })
+}
+
+/// 端末のウィンドウの大きさから、編集面の `Resize` を作る (クローム行を除く、04 §3.1)。
+pub fn surface_resize(window: CellSize) -> InputEvent {
+    InputEvent::Resize {
+        cols: window.cols,
+        rows: window.rows.saturating_sub(CHROME_ROWS),
+    }
+}
+
+enum Wait {
+    Ready,
+    Timeout,
+}
+
+fn wait(h: HANDLE, ms: u32) -> io::Result<Wait> {
+    // SAFETY: `h` は有効なコンソール入力のハンドル (待つだけ)。
+    match unsafe { WaitForSingleObject(h, ms) } {
+        WAIT_OBJECT_0 => Ok(Wait::Ready),
+        WAIT_TIMEOUT => Ok(Wait::Timeout),
+        _ => Err(io::Error::last_os_error()),
+    }
+}
+
+fn pending(h: HANDLE) -> io::Result<u32> {
+    let mut n = 0u32;
+    // SAFETY: `h` は有効なコンソール入力のハンドル、`n` は書込先の有効な u32。
+    if unsafe { GetNumberOfConsoleInputEvents(h, &mut n) } == 0 {
+        return Err(io::Error::last_os_error());
+    }
+    Ok(n)
+}
+
+/// 溜まっている記録を読む (最大 `READ_CHUNK` 件)。件数 0 のときは呼ばない (`ReadConsoleInputW` はブロックする)。
+fn read_chunk(
+    h: HANDLE,
+    buf: &mut [INPUT_RECORD],
+    want: u32,
+    out: &mut Vec<Raw>,
+) -> io::Result<()> {
+    let n = want.min(buf.len() as u32);
+    let mut got = 0u32;
+    // SAFETY: `buf` は `n` 件以上の有効な領域、`got` は書込先の有効な u32。
+    if unsafe { ReadConsoleInputW(h, buf.as_mut_ptr(), n, &mut got) } == 0 {
+        return Err(io::Error::last_os_error());
+    }
+    for r in &buf[..got as usize] {
+        out.push(match u32::from(r.EventType) {
+            KEY_EVENT => {
+                // SAFETY: `EventType` が `KEY_EVENT` のとき、共用体は `KeyEvent` が有効。
+                let k = unsafe { r.Event.KeyEvent };
+                Raw::Key(KeyRec {
+                    down: k.bKeyDown != 0,
+                    repeat: k.wRepeatCount,
+                    vk: k.wVirtualKeyCode,
+                    // SAFETY: `uChar` は `UnicodeChar` として読んでよい (ReadConsoleInputW は W 版)。
+                    ch: unsafe { k.uChar.UnicodeChar },
+                    state: k.dwControlKeyState,
+                })
+            }
+            WINDOW_BUFFER_SIZE_EVENT => Raw::Resize,
+            // マウス・フォーカス・メニューは v0.1 では捨てる (04 §6.2)
+            _ => Raw::Ignored,
+        });
+    }
+    Ok(())
+}
+
+fn send(out: &dyn InputOut, outs: Vec<Out>, output: HANDLE) -> bool {
+    for o in outs {
+        let ev = match o {
+            Out::Event(e) => e,
+            Out::Resize => match window_size(output) {
+                Ok(s) => surface_resize(s),
+                Err(_) => continue,
+            },
+        };
+        if !out.event(ev) {
+            return false;
+        }
+    }
+    true
+}
+
+/// 入力スレッドの本体。受け手が閉じるか入力ハンドルが失敗したら終わる。
+fn run(input: Handle, output: Handle, out: &dyn InputOut) {
+    let (h, o) = (input.0, output.0);
+    let mut norm = Normalizer::new();
+    let mut buf: Vec<INPUT_RECORD> = vec![
+        // SAFETY: 全ビット 0 の `INPUT_RECORD` は有効な値 (読む前の入れ物)。
+        unsafe { std::mem::zeroed() };
+        READ_CHUNK
+    ];
+    let mut raws: Vec<Raw> = Vec::with_capacity(READ_CHUNK);
+    loop {
+        // バースト中は T ms だけ待つ。タイムアウトしたらバーストを閉じて送る
+        let ms = if norm.in_burst() {
+            BURST_T_MS
+        } else {
+            INFINITE
+        };
+        match wait(h, ms) {
+            Ok(Wait::Ready) => {}
+            Ok(Wait::Timeout) => {
+                if !send(out, norm.close_burst(), o) {
+                    return;
+                }
+                continue;
+            }
+            Err(_) => {
+                out.died();
+                return;
+            }
+        }
+        // 待ちなしで読める分をすべて読み切る (1 回の読取)。1 回に読む件数には上限を付ける
+        loop {
+            let n = match pending(h) {
+                Ok(n) => n,
+                Err(_) => {
+                    out.died();
+                    return;
+                }
+            };
+            if n == 0 {
+                break;
+            }
+            raws.clear();
+            if read_chunk(h, &mut buf, n, &mut raws).is_err() {
+                out.died();
+                return;
+            }
+            if !send(out, norm.feed(&raws), o) {
+                return;
+            }
+        }
+    }
+}
+
+/// 入力スレッドを起動する。コンソールのモードは `ConsoleInput` が持ち、復元は呼び出し側 (`ConsoleInput::restore`)。
+// 入力スレッドは 02 §9.1 の表のスレッド (R11 の例外。deps-policy.toml の `allowed_files` に載せている)。
+#[allow(clippy::disallowed_methods)]
+pub fn spawn_input_thread(input: &ConsoleInput, out: impl InputOut) -> io::Result<JoinHandle<()>> {
+    let (i, o) = (Handle(input.input.0), Handle(input.output.0));
+    thread::Builder::new()
+        .name("eve-input".to_owned())
+        .spawn(move || run(i, o, &out))
+}

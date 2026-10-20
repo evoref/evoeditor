@@ -21,7 +21,9 @@ max_c_dependencies = 0
 # 例外は 02 §9.1 の表のスレッドで、許可する crate とファイルをここに列挙する (該当の crate ができたときに足す)。
 allowed_crates = ["eve-host"]
 # 例: { crate = "eve-tui", file = "src/input.rs" }
-allowed_files = []
+allowed_files = [
+    { crate = "eve-tui", file = "src/win.rs" },
+]
 
 [crate."eve-text"]
 # lib、v0.1
