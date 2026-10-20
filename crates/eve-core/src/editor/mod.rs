@@ -8,6 +8,7 @@ mod command;
 mod context;
 mod default_keymap;
 mod edit;
+mod file;
 mod keymap;
 mod motion;
 mod state;
@@ -44,8 +45,9 @@ impl Editor {
         let mut registry = CommandRegistry::new();
         edit::register(&mut registry);
         motion::register(&mut registry);
+        file::register(&mut registry);
         Editor {
-            state: EditorState::new(caps),
+            state: EditorState::new(caps, ports.jobs.clone(), ports.paths.clone()),
             registry,
             keymap: default_keymap::default_keymap(),
             ports,
@@ -96,6 +98,30 @@ impl Editor {
     /// キーマップを差し替える (層を足した設定の反映、テスト)。保留中のストロークは破棄する。
     pub fn set_keymap(&mut self, keymap: Keymap) {
         self.keymap = keymap;
+    }
+
+    /// ジョブの結果を受け取る (Host が `HostMsg::Job` で呼ぶ)。
+    pub fn on_job_result(&mut self, r: crate::jobs::JobResult) {
+        self.state.on_job_result(r);
+    }
+
+    /// 起動時の開き方 (`Host::start` が最初の `Resize` の後に呼ぶ)。パスがなければ無題の文書 (FR-124)。
+    pub fn open_initial(&mut self, path: Option<&str>, read_only: bool) {
+        match path {
+            None => {
+                let (_, view) = self.state.add_document(Document::new_untitled());
+                if self.state.first_window().is_none() {
+                    self.state.add_window(view);
+                }
+            }
+            Some(p) => {
+                let opts = crate::OpenOptions {
+                    user_read_only: read_only,
+                    ..Default::default()
+                };
+                self.state.open_path(p, opts);
+            }
+        }
     }
 
     /// 入力を処理する (02 §5.4)。キーはキーマップを通してコマンドを実行し、`Text` は文字として挿入する。

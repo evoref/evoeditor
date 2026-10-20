@@ -140,6 +140,8 @@ pub enum RejectReason {
     InvalidArgs,
     /// 対象の文書・View がない。
     NoTarget,
+    /// 確認または入力 (名前の入力・上書きの確認など) が要る。確認の UI ができるまでは拒否する。
+    NeedsInput,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
