@@ -49,7 +49,7 @@ pub enum Query {
     Capabilities,
     /// Window のステータスバーのモデル。
     Status { window: WindowId },
-    /// Window に出ているオーバーレイ (なければ空)。
+    /// Window の最前面のオーバーレイ (なければ `None`)。
     Overlay { window: WindowId },
 }
 
@@ -76,7 +76,7 @@ pub enum Answer {
     },
     Capabilities(Capabilities),
     Status(StatusModel),
-    Overlay(Vec<OverlayModel>),
+    Overlay(Option<OverlayModel>),
 }
 
 /// Selection の Range 1 つ (バイトオフセット)。

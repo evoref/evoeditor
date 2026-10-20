@@ -118,7 +118,7 @@ impl Editor {
             }
             Query::Overlay { window } => {
                 self.window_root(*window)?;
-                Ok(Answer::Overlay(chrome::overlay_models(state)))
+                Ok(Answer::Overlay(chrome::overlay_models(state).pop()))
             }
             _ => Err(QueryError::Unsupported),
         }

@@ -250,7 +250,12 @@ pub(super) fn goto_line_command(ctx: &mut CommandCtx<'_>) -> CommandResult {
     let mut clamped_from = None;
     let line = match ctx.args.get("line") {
         Some(ArgValue::Int(n)) => {
-            let want = usize::try_from(*n).unwrap_or(1).max(1) - 1;
+            // 0 以下は 1 行目 (丸めの通知の文言は「最後の行」なので出さない。仕様の穴は PR に記載)。収まらない大きな値は最終行
+            let want = if *n < 1 {
+                0
+            } else {
+                usize::try_from(*n).unwrap_or(usize::MAX) - 1
+            };
             if want > last {
                 clamped_from = Some(want + 1);
             }

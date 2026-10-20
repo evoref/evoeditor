@@ -77,12 +77,12 @@ fn query_で文書一覧_本文_選択_ステータス_オーバーレイを読�
     }
     assert_eq!(
         answer(&h, &Query::Overlay { window }),
-        Answer::Overlay(Vec::new())
+        Answer::Overlay(None)
     );
     h.text("x");
     h.keys("ctrl+q");
     match answer(&h, &Query::Overlay { window }) {
-        Answer::Overlay(o) => assert_eq!(o.len(), 1),
+        Answer::Overlay(o) => assert!(o.is_some()),
         a => panic!("{a:?}"),
     }
 }
@@ -292,4 +292,68 @@ fn 履歴が上限に達したら古い履歴を破棄して_文書ごとに_1_�
     let before = h.doc_text();
     h.keys("ctrl+z");
     assert_eq!(h.doc_text().len(), before.len() - 2);
+}
+
+#[test]
+fn ドル記号と0以下の行番号と巨大な行番号() {
+    let mut h = Harness::new().with_file(
+        "/w/a.txt", b"a
+b
+c",
+    );
+    h.open("/w/a.txt");
+    h.run_jobs();
+    h.clear_log();
+    h.cmd_with(
+        "cursor.goto_line",
+        eve_core::Args::new().with_str("line", "$"),
+    );
+    assert!(h.messages().is_empty(), "最終行の指定は範囲外ではない");
+    h.cmd_with(
+        "cursor.goto_line",
+        eve_core::Args::new().with_int("line", i64::MAX),
+    );
+    assert_eq!(h.messages(), vec!["info.goto_line.clamped".to_owned()]);
+    h.clear_log();
+    h.cmd_with(
+        "cursor.goto_line",
+        eve_core::Args::new().with_int("line", 0),
+    );
+    assert!(h.frame_text().contains("行 1,"));
+}
+
+#[test]
+fn プロンプトから範囲外の行番号を入れると通知する() {
+    let mut h = Harness::new().with_file(
+        "/w/a.txt", b"a
+b
+c",
+    );
+    h.open("/w/a.txt");
+    h.run_jobs();
+    h.clear_log();
+    h.keys("ctrl+g");
+    h.text("50");
+    h.keys("enter");
+    assert_eq!(h.messages(), vec!["info.goto_line.clamped".to_owned()]);
+}
+
+#[test]
+fn undo_では履歴破棄の通知を出さない() {
+    let mut h = Harness::new();
+    for _ in 0..10_010 {
+        h.text(
+            "a
+",
+        );
+        h.advance_ms(1500);
+    }
+    h.clear_log();
+    for _ in 0..5 {
+        h.keys("ctrl+z");
+    }
+    assert!(
+        !h.messages()
+            .contains(&"info.undo.history_trimmed".to_owned())
+    );
 }

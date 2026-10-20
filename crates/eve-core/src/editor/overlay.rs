@@ -81,7 +81,6 @@ fn text_of(s: &str) -> Text {
 }
 
 impl EditorState {
-    /// 出ているオーバーレイの種類 (`""` なし / `"dialog"` / `"prompt"`)。
     /// オーバーレイを置き換える。種類が変わる (開く・閉じる・種類が替わる) ときは `OverlayChanged` を積む。
     pub(super) fn set_overlay(&mut self, new: Option<Overlay>) {
         let kind = |o: &Option<Overlay>| {
@@ -115,6 +114,7 @@ impl EditorState {
         old
     }
 
+    /// 出ているオーバーレイの種類 (`""` なし / `"dialog"` / `"prompt"`)。
     pub fn overlay_kind(&self) -> &'static str {
         self.overlay_name()
     }
