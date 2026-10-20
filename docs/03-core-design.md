@@ -1551,13 +1551,14 @@ pub fn is_width_risky(g: &str) -> bool;                      // 端末との幅�
 
 設定キーの正本は 07 §5.3 (`view.ambiguous_width = 1 | 2` → `ambiguous_wide`、`view.emoji_width = "auto" | 1 | 2` → `emoji_width` (`EmojiWidth::Auto` / `One` / `Two`)、`view.control_char_style`)。`view.emoji_width` と `view.control_char_style` は v0.1 では既定値の定数で、キーの公開は v0.2 (07 §5.13)。
 
-**幅危険書記素の分類は `eve-text` (本節) の責務** とする (04 §4.7 (b) は端末実測の補正を持つ)。幅関数と同じ場所に置く理由: 分類は Unicode プロパティで決まり端末に依存しないため。04 は端末実測に基づく **補正表** (端末種別ごとに「この文字を 1 セルで描く」等) と、危険行の **再描画戦略** を持つ。`is_width_risky` が真となる分類: ZWJ シーケンス、異体字セレクタ (VS15/VS16) 付き、地域指示記号 (国旗)、肌色修飾、Emoji_Presentation、East Asian Ambiguous、私用領域 (PUA、Nerd Font アイコン)、`unicode-width` のバージョンより新しい可能性のある未割当・新規コードポイント。core は `RenderRow.width_risky = 行内に 1 つ以上含む` を Frame に載せる (02 §8.2)。
+**幅危険書記素の分類は `eve-text` (本節) の責務** とする (04 §4.7 (b) は端末実測の補正を持つ)。幅関数と同じ場所に置く理由: 分類は Unicode プロパティで決まり端末に依存しないため。04 は端末実測に基づく **補正表** (端末種別ごとに「この文字を 1 セルで描く」等) と、危険行の **再描画戦略** を持つ。`is_width_risky` が真となる分類: ZWJ シーケンス、異体字セレクタ (VS15/VS16) 付き、地域指示記号 (国旗)、肌色修飾、半角カナの濁点・半濁点 (U+FF9E / U+FF9F)、Emoji_Presentation、East Asian Ambiguous、私用領域 (PUA、Nerd Font アイコン)、`unicode-width` のバージョンより新しい可能性のある未割当・新規コードポイント。core は `RenderRow.width_risky = 行内に 1 つ以上含む` を Frame に載せる (02 §8.2)。
 
 | 分類 | 幅 | 根拠 / 補足 |
 |---|---|---|
 | 東アジアの W / F | 2 | UAX #11 (`unicode-width`) |
 | 東アジアの Ambiguous (A) | 設定 (`ambiguous_wide`、既定 false = 1) | NFR-605。端末の挙動と合わせる。04 の幅プローブ (明示コマンド) で既定値を提案 |
 | 結合文字 (Mn/Me/Mc の一部)、絵文字 ZWJ 列の中の ZWJ、異体字の列の中の VS | 0 (基底に吸収) | 書記素単位で幅を求めるため個別には扱わない。可視化の対象 (下の「不可視文字」) に当たるものは除く |
+| 半角カナの濁点・半濁点 (U+FF9E / U+FF9F) | **各 1** (基底の幅に足す。例 `ｶﾞ` = 2、`ﾊﾟ` = 2) | UAX #29 では Extend として基底に結合し `unicode-width` は 0 で数えるが、**Windows Terminal と conhost のどちらも、これらを基底とは別に 1 セル進めて描く** (S-06 の実測、08 §3)。幅 0 のままだと行の後ろの列がずれる。`is_width_risky` は真とする |
 | 絵文字表示 (Emoji_Presentation) | 2 | 端末の多くが 2 セル。`emoji_width = One` で 1 に、`Auto` は 04 の端末補正に従う |
 | テキスト表示の絵文字 + VS16 | 2 | — |
 | 地域指示記号ペア (国旗) | 2 | 単独の指示記号も 2 とする (端末差大。04 の補正表) |
