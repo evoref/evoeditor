@@ -162,3 +162,21 @@ fn 未保存の文書は退避用のスロットに公開される() {
     e.input(InputEvent::Text("x".into()));
     assert_eq!(e.host.emergency_slots().len(), 1);
 }
+
+#[test]
+fn 破棄して置き換えた文書のスロットは消える() {
+    let mut e = env();
+    e.start();
+    e.input(InputEvent::Text("x".into()));
+    assert_eq!(e.host.emergency_slots().len(), 1);
+    // file.new → 未保存の確認で「破棄」
+    e.input(InputEvent::Key(KeyEvent::press(
+        KeyCode::Char('n'),
+        Modifiers::CTRL,
+    )));
+    e.input(InputEvent::Key(KeyEvent::press(
+        KeyCode::Char('d'),
+        Modifiers::NONE,
+    )));
+    assert!(e.host.emergency_slots().is_empty(), "{}", e.ascii());
+}

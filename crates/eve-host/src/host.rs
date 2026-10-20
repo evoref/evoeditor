@@ -30,6 +30,9 @@ pub enum StepOutcome {
 
 #[derive(Debug)]
 pub enum StartError {
+    /// `Frontend::init` の失敗 (端末でない等)。端末を変えていないので復元は要らない。
+    Init(FrontendError),
+    /// 入力の開始の失敗。
     Frontend(FrontendError),
     /// 起動時に Window を作れなかった (内部エラー)。
     NoWindow,
@@ -38,7 +41,7 @@ pub enum StartError {
 impl fmt::Display for StartError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            StartError::Frontend(e) => e.fmt(f),
+            StartError::Init(e) | StartError::Frontend(e) => e.fmt(f),
             StartError::NoWindow => write!(f, "起動時に Window を作れませんでした"),
         }
     }
@@ -126,7 +129,7 @@ impl Host {
     ) -> Result<(), StartError> {
         let caps = frontend
             .init(&FrontendConfig::default())
-            .map_err(StartError::Frontend)?;
+            .map_err(StartError::Init)?;
         self.editor.state_mut().set_caps(caps);
         let size = frontend.surface_size();
         self.editor.state_mut().set_viewport(size.cols, size.rows);
@@ -154,12 +157,18 @@ impl Host {
         read_only: bool,
     ) -> ExitCode {
         if let Err(e) = self.start(frontend, path, read_only) {
-            frontend.restore();
+            // 07 §18.4: 端末の初期化失敗は 5 (04 §15.2 stderr.not_a_terminal)、それ以外の起動時の失敗は 1。
+            let (key, code) = if matches!(e, StartError::Init(_)) {
+                ("stderr.not_a_terminal", ExitCode(5))
+            } else {
+                frontend.restore();
+                ("stderr.fatal", ExitCode(1))
+            };
             self.exit_stderr.push(StderrLine {
-                key: "stderr.startup.failed".to_owned(),
+                key: key.to_owned(),
                 args: vec![("reason".to_owned(), e.to_string())],
             });
-            return ExitCode(2);
+            return code;
         }
         loop {
             // 待機: 次のメッセージか、次の期限 (Editor の deadline・間引いた描画・frontend の時間)
