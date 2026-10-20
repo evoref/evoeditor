@@ -17,8 +17,9 @@ mod time;
 
 pub use cancel::CancelToken;
 pub use document::{
-    HistoryStep, NodeId, Origin, RecordOutcome, Transaction, TransactionMeta, UndoBudget,
-    UndoGroupHint, UndoHistory,
+    Applied, AppliedTx, ApplyError, Document, EolStats, HistoryStep, LoadState, NodeId, Origin,
+    ReadOnlyReason, ReadOnlyReasons, RecordOutcome, TextFormat, Transaction, TransactionMeta,
+    UndoBudget, UndoGroupHint, UndoHistory,
 };
 pub use fs::*;
 pub use fspath::FsPath;
