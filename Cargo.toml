@@ -1,5 +1,5 @@
 # evoeditor の workspace (docs/02-architecture.md §17.1、docs/11-dev-workflow.md §1)。
-# 着手してよい crate だけを置く (docs/08-roadmap.md §5)。G1b を通過したので eve-tui を足した。eve-platform / bins/evoeditor は後続の PR。
+# 着手してよい crate だけを置く (docs/08-roadmap.md §5)。G1b を通過したので eve-tui と eve-platform を足した。bins/evoeditor は後続の PR。
 [workspace]
 resolver = "3"
 members = [
@@ -10,6 +10,7 @@ members = [
     "crates/eve-core",
     "crates/eve-host",
     "crates/eve-tui",
+    "crates/eve-platform",
     "crates/eve-testkit",
     "crates/eve-docs-tables",
     "xtask",
