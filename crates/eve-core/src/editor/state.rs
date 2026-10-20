@@ -12,6 +12,9 @@ use crate::time::Tick;
 
 use super::context::CtxValue;
 
+/// 上下の余白の既定 (行)。
+const SCROLL_MARGIN: usize = 3;
+
 /// スクロール位置。`top` は先頭可視行の行頭 (03 §4.6)。折り返しと水平スクロールは TUI の版で足す。
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct ScrollPos {
@@ -304,38 +307,65 @@ impl EditorState {
         }
     }
 
-    /// 先頭可視行を `delta` 行ずらす (範囲内に収める)。
+    /// 先頭可視行の上限 (最後の行が画面の最下行に来る位置)。これより下へは動かさない。
+    fn max_top_line(&self, doc: DocumentId) -> usize {
+        let rows = self.viewport.1 as usize;
+        self.documents
+            .get(&doc)
+            .map_or(0, |d| d.text().len_lines().saturating_sub(rows.max(1)))
+    }
+
+    /// 先頭可視行を `delta` 行ずらす (文書の範囲内に収め、短い文書を画面の外へ押し出さない)。
     pub fn scroll_lines(&mut self, view: ViewId, delta: i64) {
+        let Some(doc) = self.views.get(&view).map(|v| v.doc) else {
+            return;
+        };
+        let max_top = self.max_top_line(doc) as i64;
         let Some(v) = self.views.get_mut(&view) else {
             return;
         };
-        let Some(d) = self.documents.get(&v.doc) else {
+        let Some(d) = self.documents.get(&doc) else {
             return;
         };
         let t = d.text();
-        let last = t.len_lines().saturating_sub(1) as i64;
         let top = t.byte_to_line(v.scroll.top).0 as i64;
-        let new = (top + delta).clamp(0, last) as usize;
+        let new = top.saturating_add(delta).clamp(0, max_top.max(0)) as usize;
         v.scroll.top = t.line_to_byte(LineIdx(new));
         self.needs_render = true;
     }
 
-    /// カーソル (primary の head) が可視範囲に入るよう、先頭可視行を最小限に動かす (方針の正本は 04)。
+    /// 上下の余白 (行)。`view.scroll_margin` の既定 3 (04 §10。v0.1 は定数)。小さな画面では半分以下にする。
+    fn scroll_margin(&self) -> usize {
+        SCROLL_MARGIN.min((self.viewport.1 as usize).saturating_sub(1) / 2)
+    }
+
+    /// カーソル (primary の head) が余白を除いた可視範囲に入るよう、先頭可視行を最小限に動かす。
     pub fn ensure_cursor_visible(&mut self, view: ViewId) {
+        let margin = self.scroll_margin();
+        self.ensure_cursor_visible_with_margin(view, margin);
+    }
+
+    pub fn ensure_cursor_visible_with_margin(&mut self, view: ViewId, margin: usize) {
         let rows = self.viewport.1 as usize;
+        let Some(doc) = self.views.get(&view).map(|v| v.doc) else {
+            return;
+        };
+        let max_top = self.max_top_line(doc);
         let Some(v) = self.views.get_mut(&view) else {
             return;
         };
-        let Some(d) = self.documents.get(&v.doc) else {
+        let Some(d) = self.documents.get(&doc) else {
             return;
         };
         let t = d.text();
         let line = t.byte_to_line(v.selection.primary().head).0;
         let top = t.byte_to_line(v.scroll.top).0;
-        let new_top = if line < top {
-            line
-        } else if rows > 0 && line >= top + rows {
-            line + 1 - rows
+        let new_top = if line < top + margin {
+            line.saturating_sub(margin)
+        } else if rows > 0 && line + margin >= top + rows {
+            (line + margin + 1)
+                .saturating_sub(rows)
+                .min(max_top.max(top))
         } else {
             top
         };
@@ -343,6 +373,26 @@ impl EditorState {
             v.scroll.top = t.line_to_byte(LineIdx(new_top));
             self.needs_render = true;
         }
+    }
+
+    /// カーソルを含む行をビューポートの中央に置く (指定行へ移動の後、03 §5.6)。
+    pub fn center_cursor(&mut self, view: ViewId) {
+        let rows = self.viewport.1 as usize;
+        let Some(doc) = self.views.get(&view).map(|v| v.doc) else {
+            return;
+        };
+        let max_top = self.max_top_line(doc);
+        let Some(v) = self.views.get_mut(&view) else {
+            return;
+        };
+        let Some(d) = self.documents.get(&doc) else {
+            return;
+        };
+        let t = d.text();
+        let line = t.byte_to_line(v.selection.primary().head).0;
+        let new_top = line.saturating_sub(rows / 2).min(max_top);
+        v.scroll.top = t.line_to_byte(LineIdx(new_top));
+        self.needs_render = true;
     }
 
     /// View の Selection を設定する (書記素境界へ正規化し、`goal_dcol` はクリア)。

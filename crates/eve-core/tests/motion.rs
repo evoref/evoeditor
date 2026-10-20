@@ -278,8 +278,8 @@ fn 範囲外へ動くとスクロールして見える位置に保つ() {
     }
     assert_eq!(
         s.top_line(),
-        3,
-        "12 行目のカーソルが最下行 (rows = 10 → 先頭は 3)"
+        6,
+        "12 行目のカーソルは下から 3 行の余白を残す (rows = 10)"
     );
     s.run("cursor.doc_start");
     assert_eq!(s.top_line(), 0);
@@ -314,7 +314,22 @@ fn 指定行へ移動() {
         "aa\nbb|\ncc\ndd",
         "桁は行末に丸める"
     );
-    assert_eq!(go(Args::new()), "|aa\nbb\ncc\ndd");
+    assert_eq!(
+        go(Args::new()),
+        "|aa
+bb
+cc
+dd",
+        "line がなければ何もしない"
+    );
+    assert_eq!(
+        go(Args::new().with_int("line", 2).with_int("col", 0)),
+        "aa
+|bb
+cc
+dd",
+        "col も範囲外は丸める"
+    );
     let mut s = Scene::new("|a");
     assert_eq!(
         s.run_args("cursor.goto_line", Args::new().with_str("line", "x")),
@@ -373,4 +388,48 @@ fn 外部の主体は移動を呼べる() {
         InvocationSource::External,
     ));
     assert_eq!(r, CommandResult::Done, "read は可");
+}
+
+#[test]
+fn 複数のカーソルの上下移動は_primary_の目標列_他は各自の列() {
+    let mut s = Scene::new("|abcdef\nabcdef\nabcdef");
+    let r = |p: usize| Range::point(ByteOff(p));
+    // 2 つのカーソル: 列 2 (primary でない) と 列 5 (primary)
+    s.e.state_mut()
+        .set_selection(s.view, Selection::new(vec![r(2), r(5)], 1).unwrap());
+    s.run("cursor.move_down");
+    let v = s.e.state().view(s.view).unwrap();
+    let heads: Vec<usize> = v.selection.iter().map(|r| r.head.0).collect();
+    assert_eq!(heads, [9, 12], "それぞれの列 (2 と 5) のまま次の行へ");
+    assert_eq!(v.goal_dcol, Some(5), "目標列は primary のもの");
+}
+
+#[test]
+fn 大きな_count_でも止まり_ページ移動の量が溢れない() {
+    let mut s = Scene::new("|abc");
+    s.run_args("cursor.move_right", Args::new().with_int("count", i64::MAX));
+    assert_eq!(s.shown(), "abc|", "動けなくなったら打ち切る");
+    s.run_args("cursor.page_down", Args::new().with_int("count", i64::MAX));
+}
+
+#[test]
+fn ページ移動で短い文書を画面の外へ押し出さない() {
+    let text: String = (0..20).map(|i| format!("l{i}\n")).collect();
+    let mut s = Scene::new(&format!("|{text}"));
+    s.e.handle_input(s.win, InputEvent::Resize { cols: 80, rows: 24 });
+    s.run("cursor.page_down");
+    assert_eq!(s.top_line(), 0, "21 行 (末尾の空行を含む) は 24 行に収まる");
+}
+
+#[test]
+fn 指定行へ移動は行をビューポートの中央に置く() {
+    let text: String = (0..50).map(|i| format!("{i}\n")).collect();
+    let mut s = Scene::new(&format!("|{text}"));
+    s.e.handle_input(s.win, InputEvent::Resize { cols: 80, rows: 10 });
+    s.run_args("cursor.goto_line", Args::new().with_int("line", 30));
+    assert_eq!(
+        s.top_line(),
+        29 - 5,
+        "29 行目 (0 始まり) を中央 (rows / 2) に"
+    );
 }

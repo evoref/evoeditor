@@ -137,9 +137,17 @@ fn run(ctx: &mut CommandCtx<'_>, m: Motion, extend: bool) -> CommandResult {
     let (Some(doc), Some(view)) = (ctx.state.document(doc_id), ctx.state.view(view_id)) else {
         return CommandResult::Rejected(RejectReason::NoTarget);
     };
-    let mut goal = if m.keeps_goal() { view.goal_dcol } else { None };
+    // 目標列は View に 1 つ。primary がそれを使い維持する。他の Range は各自の現在の列を目標にする (03 §5.2)
+    let primary = view.selection.primary_index();
+    let mut primary_goal = if m.keeps_goal() { view.goal_dcol } else { None };
     let mut out = Vec::with_capacity(view.selection.len());
-    for r in view.selection.iter() {
+    for (i, r) in view.selection.iter().enumerate() {
+        let mut own_goal = None;
+        let goal = if i == primary {
+            &mut primary_goal
+        } else {
+            &mut own_goal
+        };
         let mut head = r.head;
         let mut collapsed_first = false;
         // 選択がある状態の水平移動 (Shift なし) は start / end へ潰して移動しない (CUA 慣習、03 §5.1)
@@ -152,7 +160,11 @@ fn run(ctx: &mut CommandCtx<'_>, m: Motion, extend: bool) -> CommandResult {
             collapsed_first = true;
         }
         for _ in 0..(if collapsed_first { count - 1 } else { count }) {
-            head = step(doc, &mut goal, head, m, rows);
+            let next = step(doc, goal, head, m, rows);
+            if next == head {
+                break; // これ以上動けない (大きな count で長く回らない)
+            }
+            head = next;
         }
         out.push(if extend {
             r.with_head(head)
@@ -160,22 +172,30 @@ fn run(ctx: &mut CommandCtx<'_>, m: Motion, extend: bool) -> CommandResult {
             Range::point(head)
         });
     }
-    let primary = view.selection.primary_index();
     let Some(sel) = Selection::new(out, primary) else {
         return CommandResult::Rejected(RejectReason::InvalidArgs);
     };
     // ページ移動はスクロール位置も同じ行数だけ動かし、カーソルの画面上の相対位置を保つ
     let page_scroll = match m {
-        Motion::PageUp => Some(-(rows.saturating_sub(1).max(1) as i64) * count as i64),
-        Motion::PageDown => Some((rows.saturating_sub(1).max(1) as i64) * count as i64),
+        Motion::PageUp => Some(
+            (rows.saturating_sub(1).max(1) as i64)
+                .saturating_mul(count as i64)
+                .saturating_neg(),
+        ),
+        Motion::PageDown => {
+            Some((rows.saturating_sub(1).max(1) as i64).saturating_mul(count as i64))
+        }
         _ => None,
     };
-    let keep = m.keeps_goal().then_some(goal).flatten();
+    let keep = m.keeps_goal().then_some(primary_goal).flatten();
     ctx.state.set_selection_with_goal(view_id, sel, keep);
     if let Some(d) = page_scroll {
+        // カーソルの画面上の相対位置を保つので、余白は適用しない
         ctx.state.scroll_lines(view_id, d);
+        ctx.state.ensure_cursor_visible_with_margin(view_id, 0);
+    } else {
+        ctx.state.ensure_cursor_visible(view_id);
     }
-    ctx.state.ensure_cursor_visible(view_id);
     CommandResult::Done
 }
 
@@ -225,12 +245,13 @@ fn goto_line(ctx: &mut CommandCtx<'_>) -> CommandResult {
     let line = match ctx.args.get("line") {
         Some(ArgValue::Int(n)) => (usize::try_from(*n).unwrap_or(1).max(1) - 1).min(last),
         Some(ArgValue::Str(s)) if s == "$" => last,
-        None => 0,
+        // 行の指定がないとき (Ctrl+G) は行番号を尋ねる入力プロンプト (オーバーレイ) の役目。それができるまでは何もしない
+        None => return CommandResult::Done,
         Some(_) => return CommandResult::Rejected(RejectReason::InvalidArgs),
     };
     let col = match ctx.args.get("col") {
         None => 1,
-        Some(ArgValue::Int(n)) if *n >= 1 => *n as usize,
+        Some(ArgValue::Int(n)) => usize::try_from(*n).unwrap_or(1).max(1),
         Some(_) => return CommandResult::Rejected(RejectReason::InvalidArgs),
     };
     let (ls, le) = (
@@ -248,7 +269,8 @@ fn goto_line(ctx: &mut CommandCtx<'_>) -> CommandResult {
     }
     ctx.state
         .set_selection(view_id, Selection::point(p.min(le)));
-    ctx.state.ensure_cursor_visible(view_id);
+    // 移動後、カーソルを含む行をビューポートの中央に置く (03 §5.6)
+    ctx.state.center_cursor(view_id);
     CommandResult::Done
 }
 
