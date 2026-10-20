@@ -51,7 +51,10 @@ pub fn classify_grapheme(g: &str, prev: Option<ScriptClass>) -> ScriptClass {
         | '\u{4E00}'..='\u{9FFF}'
         | '\u{F900}'..='\u{FAFF}'
         | '\u{2E80}'..='\u{2FDF}'
-        | '\u{20000}'..='\u{2FA1F}' => ScriptClass::Han,
+        | '\u{20000}'..='\u{2FA1F}'
+        | '\u{30000}'..='\u{323AF}'
+        | '\u{3021}'..='\u{3029}'
+        | '\u{3038}'..='\u{303B}' => ScriptClass::Han,
         '\u{3041}'..='\u{3096}' | '\u{309F}' => ScriptClass::Hiragana,
         '\u{30A1}'..='\u{30FA}'
         | '\u{30FF}'

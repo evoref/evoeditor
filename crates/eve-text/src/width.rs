@@ -119,7 +119,7 @@ fn is_emoji_modifier(c: char) -> bool {
 /// 絵文字 ZWJ 列の中の ZWJ、絵文字タグ列の中のタグ文字、基底文字の直後の異体字セレクタは可視化しない。
 pub fn invisible_marks(g: &str) -> Vec<String> {
     let cs: Vec<char> = g.chars().collect();
-    let emoji_tag_seq = cs.first() == Some(&'\u{1F3F4}');
+    let emoji_tag_seq = cs.first() == Some(&'\u{1F3F4}') && cs.last() == Some(&'\u{E007F}');
     let mut out = Vec::new();
     for (i, &c) in cs.iter().enumerate() {
         if let Some(n) = vs_number(c) {
@@ -177,17 +177,21 @@ fn is_c1_control(c: char) -> bool {
     matches!(c, '\u{80}'..='\u{9F}')
 }
 
-/// 絵文字の表示 (幅 2 が既定) を持つ書記素か。
+/// 絵文字の表示 (幅 2 が既定) を持つ書記素か。地域指示記号、または絵文字ブロックの文字が
+/// 絵文字の表示になるもの (VS16・肌色修飾・ZWJ 列・UAX #11 で幅 2) を指す。テキスト表示の絵文字 (幅 1) は含まない。
 fn is_emoji_like(g: &str) -> bool {
-    g.chars().any(|c| {
-        c == '\u{FE0F}'
-            || c == '\u{200D}'
-            || matches!(c, '\u{1F1E6}'..='\u{1F1FF}')
-            || is_emoji_modifier(c)
-    }) || g
-        .chars()
-        .next()
-        .is_some_and(|c| matches!(c, '\u{1F300}'..='\u{1FAFF}' | '\u{1F000}'..='\u{1F2FF}'))
+    if g.chars().any(|c| matches!(c, '\u{1F1E6}'..='\u{1F1FF}')) {
+        return true;
+    }
+    let Some(base) = g.chars().next() else {
+        return false;
+    };
+    if !is_pictographic(base) {
+        return false;
+    }
+    g.chars()
+        .any(|c| c == '\u{FE0F}' || c == '\u{200D}' || is_emoji_modifier(c))
+        || UnicodeWidthStr::width(base.encode_utf8(&mut [0u8; 4])) == 2
 }
 
 /// 結合文字 (Mn / Me の主なブロック) か。孤立しているときに ◌ を足す判定に使う。
@@ -240,10 +244,6 @@ pub fn grapheme_width(g: &str, cfg: &WidthConfig) -> u8 {
     if total > 0 {
         return total.min(MAX_GRAPHEME_WIDTH as usize) as u8;
     }
-    if marks.is_empty() && !cfg.show_invisible {
-        // 不可視文字を可視化しない設定で、幅 0 の書記素: 0 のまま
-        return 0;
-    }
     if !marks.is_empty() {
         return 0; // show_invisible = false の不可視文字
     }
@@ -279,15 +279,13 @@ pub fn is_width_risky(g: &str) -> bool {
             '\u{200D}' | '\u{FE0E}' | '\u{FE0F}'                                  // ZWJ・VS15 / VS16
             | '\u{1F1E6}'..='\u{1F1FF}'                                          // 地域指示記号
             | '\u{1F3FB}'..='\u{1F3FF}'                                          // 肌色修飾
-            | '\u{1F300}'..='\u{1FAFF}' | '\u{1F000}'..='\u{1F2FF}'              // 絵文字の表示
             | '\u{E000}'..='\u{F8FF}' | '\u{F0000}'..='\u{FFFFD}' | '\u{100000}'..='\u{10FFFD}') // 私用領域
-    }) || {
-        let mut buf = [0u8; 4];
-        g.chars().any(|c| {
+    }) || is_emoji_like(g)
+        || g.chars().any(|c| {
+            let mut buf = [0u8; 4];
             let s: &str = c.encode_utf8(&mut buf);
-            UnicodeWidthStr::width(s) != UnicodeWidthStr::width_cjk(s)
+            UnicodeWidthStr::width(s) != UnicodeWidthStr::width_cjk(s) // 東アジアの曖昧幅
         })
-    }
 }
 
 #[cfg(test)]
@@ -441,5 +439,33 @@ mod tests {
             "曖昧幅 (unicode-width は Greek / Cyrillic を曖昧幅にしない)"
         );
         assert!(is_width_risky("\u{E0B0}"), "私用領域");
+    }
+
+    #[test]
+    fn レビューで見つかった境界の例() {
+        assert_eq!(w("a\u{200D}"), 1 + 5, "絵文字でない基底の ZWJ は示す");
+        let one = WidthConfig {
+            emoji_width: EmojiWidth::One,
+            ..WidthConfig::default()
+        };
+        assert_eq!(grapheme_width("あ\u{200D}", &one), 2 + 5);
+        assert_eq!(w("\u{1F5A5}"), 1, "テキスト表示の絵文字は幅 1");
+        assert!(!is_width_risky("\u{1F5A5}"));
+        assert_eq!(
+            grapheme_width("\u{2B50}", &one),
+            1,
+            "BMP の絵文字表示 (幅 2) も emoji_width に従う"
+        );
+        assert!(is_width_risky("\u{2B50}"));
+        let off = WidthConfig {
+            show_invisible: false,
+            ..WidthConfig::default()
+        };
+        assert_eq!(grapheme_width("\u{180B}", &off), 8, "幅 0 のセルは作らない");
+        assert_eq!(
+            invisible_marks("\u{1F3F4}\u{E0067}\u{E0062}"),
+            ["<U+E0067>", "<U+E0062>"],
+            "終端のないタグ列は示す"
+        );
     }
 }

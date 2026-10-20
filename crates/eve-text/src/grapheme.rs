@@ -62,10 +62,10 @@ pub fn is_grapheme_boundary(text: &dyn TextRead, pos: Pos) -> bool {
     })
 }
 
-/// `pos` より後ろの最初の書記素境界。末尾にいれば末尾。`pos` は char 境界に丸める (後ろ向き)。
+/// `pos` より後ろの最初の書記素境界。末尾にいれば末尾。`pos` が char 境界でなければ、含む char の先頭から数える。
 pub fn next_grapheme_boundary(text: &dyn TextRead, pos: Pos) -> Pos {
     let len = text.len_bytes();
-    let p = to_char_boundary(text, pos, Bias::After);
+    let p = to_char_boundary(text, pos, Bias::Before);
     if p >= len {
         return ByteOff(len);
     }
@@ -77,9 +77,9 @@ pub fn next_grapheme_boundary(text: &dyn TextRead, pos: Pos) -> Pos {
     ByteOff(next.unwrap_or(len).clamp(p + 1, len))
 }
 
-/// `pos` より前の最後の書記素境界。先頭にいれば先頭。`pos` は char 境界に丸める (前向き)。
+/// `pos` より前の最後の書記素境界。先頭にいれば先頭。`pos` が char 境界でなければ、含む char の末尾から数える。
 pub fn prev_grapheme_boundary(text: &dyn TextRead, pos: Pos) -> Pos {
-    let p = to_char_boundary(text, pos, Bias::Before);
+    let p = to_char_boundary(text, pos, Bias::After);
     if p == 0 {
         return ByteOff(0);
     }
@@ -245,5 +245,14 @@ mod tests {
             steps += 1;
             assert!(steps < 100);
         }
+    }
+
+    #[test]
+    fn char_境界でない位置からの移動() {
+        let x = t("あい");
+        assert_eq!(next_grapheme_boundary(&x, ByteOff(1)), ByteOff(3));
+        assert_eq!(prev_grapheme_boundary(&x, ByteOff(4)), ByteOff(3));
+        assert_eq!(next_grapheme_boundary(&x, ByteOff(4)), ByteOff(6));
+        assert_eq!(prev_grapheme_boundary(&x, ByteOff(2)), ByteOff(0));
     }
 }
