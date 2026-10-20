@@ -314,12 +314,45 @@ c",
         eve_core::Args::new().with_int("line", i64::MAX),
     );
     assert_eq!(h.messages(), vec!["info.goto_line.clamped".to_owned()]);
+    // 1 未満は不正な入力 (拒否して動かさない。通知もしない)
     h.clear_log();
-    h.cmd_with(
+    let r = h.cmd_with(
         "cursor.goto_line",
         eve_core::Args::new().with_int("line", 0),
     );
-    assert!(h.frame_text().contains("行 1,"));
+    assert_eq!(
+        r,
+        eve_core::CommandResult::Rejected(eve_core::RejectReason::InvalidArgs)
+    );
+    assert!(h.messages().is_empty());
+}
+
+#[test]
+fn プロンプトに_0_を入れると不正な入力として開いたまま() {
+    let mut h = Harness::new().with_file(
+        "/w/a.txt", b"a
+b
+c",
+    );
+    h.open("/w/a.txt");
+    h.run_jobs();
+    h.keys("ctrl+g");
+    h.text("0");
+    h.keys("enter");
+    assert_eq!(h.overlay(), "prompt");
+    let window = h.editor.state().first_window().unwrap();
+    let Answer::Overlay(Some(eve_view::OverlayModel::Prompt { error, .. })) =
+        answer(&h, &Query::Overlay { window })
+    else {
+        panic!("入力プロンプトが開いたまま");
+    };
+    let msg: String = error
+        .expect("検証エラーがある")
+        .spans
+        .iter()
+        .map(|s| s.text.as_str())
+        .collect();
+    assert!(msg.contains("行番号を入力してください"), "{msg}");
 }
 
 #[test]

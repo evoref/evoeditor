@@ -144,6 +144,7 @@ fn bom_と_crlf_を保持して保存する() {
     );
 }
 
+// verifies: AC-FR-104-3
 #[test]
 fn 無編集の上書き保存は書き込まず_変更なしと示す() {
     let mut s = Env::new();
@@ -180,6 +181,7 @@ fn ディスクが変わっていれば未編集でも保存へ進む() {
     assert!(!s.messages().contains(&"info.save.unchanged".to_owned()));
 }
 
+// verifies: AC-FR-204-2
 #[test]
 fn 編集して保存すると履歴が残り_undo_で_dirty_に戻る() {
     let mut s = Env::new();

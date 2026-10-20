@@ -56,6 +56,14 @@ impl ManualJobSpawner {
         n
     }
 
+    /// 実行待ちのジョブをすべて取り消す (それぞれ `Cancelled` の結果が inbox に積まれる)。
+    pub fn cancel_all(&self) {
+        let ids: Vec<JobId> = self.queue.borrow().iter().map(|j| j.req.id).collect();
+        for id in ids {
+            self.cancel(id);
+        }
+    }
+
     /// 結果の inbox を空にして返す (Host の受信口の代わり)。
     pub fn take_results(&self) -> Vec<JobResult> {
         self.inbox.borrow_mut().drain(..).collect()
