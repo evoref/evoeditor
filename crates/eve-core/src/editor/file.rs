@@ -15,6 +15,7 @@ use crate::jobs::{ConfirmAsk, JobError, JobKind, JobResult, MetaPurpose};
 use super::command::{
     CommandCtx, CommandKind, CommandRegistry, CommandResult, CommandSpec, Permission, RejectReason,
 };
+use super::overlay::{Continuation, PromptKind};
 use super::state::EditorState;
 
 /// 投入したジョブと、その結果の宛先。
@@ -81,18 +82,20 @@ impl EditorState {
         self.view(self.window_view(w)?).map(|v| v.doc)
     }
 
-    /// 無題の新規文書を作る (FR-124)。今の文書があれば置き換える (dirty なら確認が要るので拒否する)。
+    /// 無題の新規文書を作る (FR-124)。今の文書があれば置き換える。dirty なら保存・破棄・キャンセルの確認を出す。
     pub fn new_untitled(&mut self) -> CommandResult {
         if self.open_in_progress() {
             return CommandResult::Rejected(RejectReason::NotAvailable);
         }
-        let replace = self.active_document();
-        if replace
-            .and_then(|d| self.document(d))
-            .is_some_and(Document::is_dirty)
-        {
-            return CommandResult::Rejected(RejectReason::NeedsInput);
+        if self.confirm_if_dirty("unsaved_replace", Continuation::New) {
+            return CommandResult::Done;
         }
+        self.new_untitled_forced()
+    }
+
+    /// 確認を済ませた (破棄または保存した) 後の新規作成。
+    pub(super) fn new_untitled_forced(&mut self) -> CommandResult {
+        let replace = self.active_document();
         let (_, view) = self.add_document(Document::new_untitled());
         self.show_view(view, replace);
         CommandResult::Done
@@ -125,13 +128,14 @@ impl EditorState {
             .pending
             .iter()
             .filter(|(_, p)| match p {
-                Pending::Open { doc: d, .. }
-                | Pending::CheckUnchanged { doc: d }
-                | Pending::Save { doc: d, .. } => *d == doc,
+                Pending::Open { doc: d, .. } | Pending::CheckUnchanged { doc: d } => *d == doc,
+                // 保存ジョブは取り消さず、完了を待つ (03 §9.2 の「閉じる手順」。ユーザーが求めた保存を中断しない)
+                Pending::Save { .. } => false,
             })
             .map(|(id, _)| *id)
             .collect();
         for id in ids {
+            self.continuations.remove(&id);
             self.pending.remove(&id);
             self.jobs.cancel(id);
         }
@@ -140,6 +144,15 @@ impl EditorState {
     /// ファイルを開く (03 §9.2)。Loading の文書を作ってすぐ読込ジョブを投入する。
     /// すでに文書があるときは、読込が終わるまで今の文書を表示し続け、完了で置き換える。
     pub fn open_path(&mut self, raw_path: &str, opts: OpenOptions) -> CommandResult {
+        self.open_path_inner(raw_path, opts, false)
+    }
+
+    /// 確認を済ませた (破棄または保存した) 後に開く。
+    pub(super) fn open_path_forced(&mut self, raw_path: &str, opts: OpenOptions) -> CommandResult {
+        self.open_path_inner(raw_path, opts, true)
+    }
+
+    fn open_path_inner(&mut self, raw_path: &str, opts: OpenOptions, force: bool) -> CommandResult {
         // 読込の途中の置き換えの重なりは受け付けない (置き換え対象の文書が孤立しないように)
         if self.open_in_progress() {
             return CommandResult::Rejected(RejectReason::NotAvailable);
@@ -153,18 +166,22 @@ impl EditorState {
             return CommandResult::Rejected(RejectReason::InvalidArgs);
         };
         let replace = self.active_document();
-        if let Some(cur) = replace.and_then(|d| self.document(d)) {
-            if cur.is_dirty() {
-                return CommandResult::Rejected(RejectReason::NeedsInput);
-            }
-            if cur.path.as_ref() == Some(&path) {
-                self.message(
-                    MessageLevel::Info,
-                    "info.open.already_open",
-                    &path.display(),
-                );
-                return CommandResult::Done;
-            }
+        if replace
+            .and_then(|d| self.document(d))
+            .is_some_and(|cur| cur.path.as_ref() == Some(&path))
+        {
+            self.message(
+                MessageLevel::Info,
+                "info.open.already_open",
+                &path.display(),
+            );
+            return CommandResult::Done;
+        }
+        // 未保存の変更があれば、保存・破棄・キャンセルを尋ねる (FR-107 AC-3)
+        if !force
+            && self.confirm_if_dirty("unsaved_replace", Continuation::Open(raw_path.to_owned()))
+        {
+            return CommandResult::Done;
         }
         let mut doc = Document::new_untitled();
         doc.path = Some(path.clone());
@@ -202,7 +219,9 @@ impl EditorState {
             return CommandResult::Rejected(RejectReason::NoTarget);
         };
         let Some(path) = doc.path.clone() else {
-            return CommandResult::Rejected(RejectReason::NeedsInput);
+            // パスがなければ名前を尋ねる
+            self.open_prompt(PromptKind::SaveAs { then: None }, String::new());
+            return CommandResult::Done;
         };
         if self.save_in_progress(doc_id) {
             self.message(MessageLevel::Info, "info.save.in_progress", &path.display());
@@ -223,11 +242,40 @@ impl EditorState {
             return CommandResult::Pending(job);
         }
         let expected = doc.disk_stamp.map_or(Expect::Absent, Expect::Stamp);
-        self.start_save(doc_id, path, expected)
+        self.start_save(doc_id, path, expected, None)
+    }
+
+    /// 確認で「保存」を選んだ後: 保存し、成功したら `cont` を続ける。パスがなければ名前を尋ねてから保存する。
+    pub(super) fn save_then(&mut self, cont: Continuation) -> CommandResult {
+        let Some(doc_id) = self.active_document() else {
+            return CommandResult::Rejected(RejectReason::NoTarget);
+        };
+        let Some(doc) = self.document(doc_id) else {
+            return CommandResult::Rejected(RejectReason::NoTarget);
+        };
+        // 保存中なら、その保存の完了後に続ける (二重に保存しない)
+        let in_flight = self.pending.iter().find_map(|(job, p)| match p {
+            Pending::Save { doc, .. } if *doc == doc_id => Some(*job),
+            _ => None,
+        });
+        if let Some(job) = in_flight {
+            self.continuations.insert(job, cont);
+            return CommandResult::Pending(job);
+        }
+        let Some(path) = doc.path.clone() else {
+            self.open_prompt(PromptKind::SaveAs { then: Some(cont) }, String::new());
+            return CommandResult::Done;
+        };
+        let expected = doc.disk_stamp.map_or(Expect::Absent, Expect::Stamp);
+        self.start_save(doc_id, path, expected, Some(cont))
     }
 
     /// 名前を付けて保存 (パスを指定する)。
-    pub fn request_save_as(&mut self, raw_path: &str) -> CommandResult {
+    pub(super) fn request_save_as(
+        &mut self,
+        raw_path: &str,
+        cont: Option<Continuation>,
+    ) -> CommandResult {
         let Some(doc_id) = self.active_document() else {
             return CommandResult::Rejected(RejectReason::NoTarget);
         };
@@ -267,10 +315,16 @@ impl EditorState {
         } else {
             Expect::Absent
         };
-        self.start_save(doc_id, path, expected)
+        self.start_save(doc_id, path, expected, cont)
     }
 
-    fn start_save(&mut self, doc_id: DocumentId, path: FsPath, expected: Expect) -> CommandResult {
+    fn start_save(
+        &mut self,
+        doc_id: DocumentId,
+        path: FsPath,
+        expected: Expect,
+        cont: Option<Continuation>,
+    ) -> CommandResult {
         let Some(doc) = self.documents.get_mut(&doc_id) else {
             return CommandResult::Rejected(RejectReason::NoTarget);
         };
@@ -288,6 +342,9 @@ impl EditorState {
                 expected,
             },
         );
+        if let Some(c) = cont {
+            self.continuations.insert(job, c);
+        }
         self.pending.insert(
             job,
             Pending::Save {
@@ -302,7 +359,9 @@ impl EditorState {
 
     /// ジョブの結果を受け取る (02 §5.4)。
     pub fn on_job_result(&mut self, r: JobResult) {
-        let Some(pending) = self.pending.remove(&r.job()) else {
+        let job = r.job();
+        let cont = self.continuations.remove(&job);
+        let Some(pending) = self.pending.remove(&job) else {
             return;
         };
         match pending {
@@ -318,7 +377,7 @@ impl EditorState {
                 at,
                 revision,
                 path,
-            } => self.finish_save(doc, at, revision, &path, r),
+            } => self.finish_save(doc, at, revision, &path, cont, r),
         }
         self.mark_dirty_render();
     }
@@ -477,7 +536,7 @@ impl EditorState {
                 }) else {
                     return;
                 };
-                self.start_save(doc_id, path, expected);
+                self.start_save(doc_id, path, expected, None);
             }
         }
     }
@@ -488,6 +547,7 @@ impl EditorState {
         at: NodeId,
         revision: eve_view::Revision,
         path: &FsPath,
+        cont: Option<Continuation>,
         r: JobResult,
     ) {
         match r {
@@ -504,6 +564,18 @@ impl EditorState {
                 });
                 self.message(MessageLevel::Info, "info.save.done", &path.display());
                 self.mark_snapshot_update(doc_id);
+                // 保存の後に続ける操作 (開く・新規作成・終了)。保存が失敗したときは続けない
+                // 保存の間に編集されていたら、続きの操作の前にもう一度尋ねる (03 §9.7。編集を捨てない)
+                if let Some(c) = cont {
+                    let name = if c == Continuation::Quit {
+                        "unsaved"
+                    } else {
+                        "unsaved_replace"
+                    };
+                    if !self.confirm_if_dirty(name, c.clone()) {
+                        self.run_continuation(c);
+                    }
+                }
             }
             JobResult::Failed { err, .. } => {
                 let reason = reason_label(&err);
@@ -591,8 +663,11 @@ fn file_new(ctx: &mut CommandCtx<'_>) -> CommandResult {
 fn file_open(ctx: &mut CommandCtx<'_>) -> CommandResult {
     match arg_path(ctx) {
         Some(p) => ctx.state.open_path(&p, OpenOptions::default()),
-        // パスがなければ入力プロンプトで尋ねる (オーバーレイと同時)
-        None => CommandResult::Rejected(RejectReason::NeedsInput),
+        // パスがなければ入力プロンプトで尋ねる
+        None => {
+            ctx.state.open_prompt(PromptKind::Open, String::new());
+            CommandResult::Done
+        }
     }
 }
 
@@ -602,8 +677,19 @@ fn file_save(ctx: &mut CommandCtx<'_>) -> CommandResult {
 
 fn file_save_as(ctx: &mut CommandCtx<'_>) -> CommandResult {
     match arg_path(ctx) {
-        Some(p) => ctx.state.request_save_as(&p),
-        None => CommandResult::Rejected(RejectReason::NeedsInput),
+        Some(p) => ctx.state.request_save_as(&p, None),
+        None => {
+            // 名前を尋ねる。初期値は今のパス
+            let initial = ctx
+                .state
+                .active_document()
+                .and_then(|d| ctx.state.document(d))
+                .and_then(|d| d.path.as_ref().map(FsPath::display))
+                .unwrap_or_default();
+            ctx.state
+                .open_prompt(PromptKind::SaveAs { then: None }, initial);
+            CommandResult::Done
+        }
     }
 }
 

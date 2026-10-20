@@ -68,6 +68,10 @@ pub struct EditorState {
     pub(super) key_labels: BTreeMap<String, String>,
     /// コマンド → 第一割当のストローク列 (ヒントバーの逆引き)。
     pub(super) key_seqs: BTreeMap<String, Vec<eve_view::KeyStroke>>,
+    /// 出ているオーバーレイ (確認・入力プロンプト)。モーダル。
+    pub(super) overlay: Option<super::overlay::Overlay>,
+    /// 保存ジョブの完了後に続ける操作。
+    pub(super) continuations: BTreeMap<JobId, super::overlay::Continuation>,
     /// 表示中のメッセージ (解決済み)。
     pub(super) message: Option<super::message::ShownMessage>,
     /// 未読のメッセージの数。
@@ -93,6 +97,8 @@ impl EditorState {
             pending: BTreeMap::new(),
             key_labels: BTreeMap::new(),
             key_seqs: BTreeMap::new(),
+            overlay: None,
+            continuations: BTreeMap::new(),
             message: None,
             unread: 0,
         }
@@ -507,7 +513,7 @@ impl EditorState {
             "doc.has_path" => b(doc.is_some_and(|d| d.path.is_some())),
             "doc.dirty" => b(doc.is_some_and(Document::is_dirty)),
             "selection.empty" => b(view.is_none_or(|v| v.selection.iter().all(|r| r.is_empty()))),
-            "overlay.active" => Some(CtxValue::Str(String::new())),
+            "overlay.active" => Some(CtxValue::Str(self.overlay_name().to_owned())),
             "search.active" | "search.replace_active" => b(false),
             "caps.can_suspend" => b(self.caps.can_suspend),
             "editor" => b(true),

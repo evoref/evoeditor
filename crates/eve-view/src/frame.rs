@@ -278,6 +278,58 @@ pub struct HintModel {
     pub items: Vec<HintItem>,
 }
 
+/// 確認ダイアログの選択肢の識別子。
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub struct ChoiceId(pub u16);
+
+/// 確認ダイアログの選択肢。
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Choice {
+    pub id: ChoiceId,
+    pub label: CellText,
+    /// アクセラレータ (`Text` の 1 文字。大小は区別しない)。
+    pub key: Option<char>,
+    /// 破壊的な選択肢 (既定にしない)。
+    pub destructive: bool,
+}
+
+/// 1 行の入力欄。カーソルのセル位置 = `cells[..cursor - first]` の幅の和。
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct InputFieldModel {
+    /// 1 書記素 = 1 `Span` (無害化済み・幅付き)。カーソルを含む最大 1,024 書記素の窓。
+    pub cells: Vec<Span>,
+    /// `cells[0]` の欄内の書記素番号。
+    pub first: usize,
+    /// 欄全体の書記素数。
+    pub len: usize,
+    /// 欄内の書記素番号。
+    pub cursor: usize,
+    pub selection: Option<std::ops::Range<usize>>,
+    pub placeholder: Option<CellText>,
+}
+
+/// オーバーレイ (意味的モデル。位置と見た目は frontend が決める)。v0.1 は確認と入力プロンプト。
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum OverlayModel {
+    Prompt {
+        title: CellText,
+        input: InputFieldModel,
+        hint: Option<CellText>,
+        /// 入力の検証エラー。
+        error: Option<CellText>,
+    },
+    Confirm {
+        title: CellText,
+        message: CellText,
+        details: Option<Vec<CellText>>,
+        choices: Vec<Choice>,
+        default: ChoiceId,
+        focused: ChoiceId,
+        nav_hint: Option<CellText>,
+    },
+}
+
 /// frontend が自分の判断で出す場面の、core が解決済みの文言。
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ChromeTexts {
@@ -297,6 +349,8 @@ pub struct Frame {
     pub primary_cursor: Option<CursorPlacement>,
     pub status: StatusModel,
     pub hints: HintModel,
+    /// 前面順。
+    pub overlays: Vec<OverlayModel>,
     /// メッセージ行。
     pub messages: MessageModel,
     pub texts: ChromeTexts,

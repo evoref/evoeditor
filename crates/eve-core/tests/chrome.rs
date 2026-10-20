@@ -238,7 +238,7 @@ fn ヒントバーは割当のある項目を優先度の降順で出す() {
         .iter()
         .map(|h| h.text.spans.iter().map(|sp| sp.text.as_str()).collect())
         .collect();
-    assert_eq!(words, ["保存", "開く", "元に戻す", "行へ移動"]);
+    assert_eq!(words, ["終了", "保存", "開く", "元に戻す", "行へ移動"]);
     assert!(
         f.hints
             .items
@@ -246,7 +246,7 @@ fn ヒントバーは割当のある項目を優先度の降順で出す() {
             .all(|w| w[0].priority >= w[1].priority)
     );
     // キー: file.save は Ctrl+S
-    let k = &f.hints.items[0].keys[0].strokes[0];
+    let k = &f.hints.items[1].keys[0].strokes[0];
     assert_eq!((k.key, k.mods), (KeyCode::Char('s'), Modifiers::CTRL));
 }
 

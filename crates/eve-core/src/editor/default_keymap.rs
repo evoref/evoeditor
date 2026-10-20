@@ -11,6 +11,34 @@ pub(super) fn default_keymap() -> Keymap {
         l.bind(ctx, keys, cmd, "")
             .expect("既定キーマップの書式は正しい");
     };
+    // どこでも
+    bind("global", "mod+q", "app.quit");
+    // 確認ダイアログ (モーダル。dialog のみを参照する)
+    bind("dialog", "enter", "ui.confirm");
+    bind("dialog", "esc", "ui.cancel");
+    for (keys, cmd) in [
+        ("tab", "ui.list_next"),
+        ("right", "ui.list_next"),
+        ("down", "ui.list_next"),
+        ("shift+tab", "ui.list_prev"),
+        ("left", "ui.list_prev"),
+        ("up", "ui.list_prev"),
+    ] {
+        bind("dialog", keys, cmd);
+    }
+    // 入力プロンプト (prompt → global)
+    bind("prompt", "enter", "ui.confirm");
+    bind("prompt", "esc", "ui.cancel");
+    for (keys, cmd) in [
+        ("backspace", "edit.delete_backward"),
+        ("delete", "edit.delete_forward"),
+        ("left", "cursor.move_left"),
+        ("right", "cursor.move_right"),
+        ("home", "cursor.home"),
+        ("end", "cursor.end"),
+    ] {
+        bind("prompt", keys, cmd);
+    }
     // ファイル
     bind("editor", "mod+s", "file.save");
     bind("editor", "mod+shift+s", "file.save_as");

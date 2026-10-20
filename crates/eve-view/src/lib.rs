@@ -27,9 +27,10 @@ pub use command::CommandId;
 pub use effect::{ClipboardTarget, ClipboardText, Effect, QuitRescue, StderrLine};
 pub use events::{EditorEvent, MessageLevel, OriginKind, OriginTag, OverlayKind};
 pub use frame::{
-    CellPos, CellRect, CellText, ChromeTexts, Color, CursorPlacement, CursorShape, CutPolicy,
-    Frame, HintContext, HintItem, HintModel, KeyLabel, Message, MessageModel, PaneFrame, RenderRow,
-    RowSource, Span, StatusAlign, StatusItem, StatusKind, StatusModel, Style, StyleMods,
+    CellPos, CellRect, CellText, Choice, ChoiceId, ChromeTexts, Color, CursorPlacement,
+    CursorShape, CutPolicy, Frame, HintContext, HintItem, HintModel, InputFieldModel, KeyLabel,
+    Message, MessageModel, OverlayModel, PaneFrame, RenderRow, RowSource, Span, StatusAlign,
+    StatusItem, StatusKind, StatusModel, Style, StyleMods,
 };
 pub use ids::{
     ClipboardHandleId, ClipboardToken, DocumentId, JobId, Revision, ViewId, ViewRevision, WindowId,

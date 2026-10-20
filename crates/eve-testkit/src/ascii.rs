@@ -189,6 +189,7 @@ mod tests {
             }),
             status: Default::default(),
             hints: Default::default(),
+            overlays: Vec::new(),
             messages: Default::default(),
             texts: Default::default(),
             title: String::new(),
