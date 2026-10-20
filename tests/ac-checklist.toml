@@ -1069,8 +1069,10 @@ status = "todo"
 id = "AC-NFR-406-1"
 requirement = "NFR-406"
 kind = "R"
-verified_by = []
-status = "todo"
+verified_by = [
+    "依存規則検査はこのリポジトリで通る",
+]
+status = "done"
 
 [[ac]]
 id = "AC-NFR-501-1"
@@ -1204,8 +1206,10 @@ status = "done"
 id = "AC-NFR-704-1"
 requirement = "NFR-704"
 kind = "R"
-verified_by = []
-status = "todo"
+verified_by = [
+    "unsafe_を許す_crate_以外は_forbid_unsafe_code_を持つ",
+]
+status = "done"
 
 [[ac]]
 id = "AC-NFR-706-1"
