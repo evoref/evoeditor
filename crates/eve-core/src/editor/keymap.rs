@@ -126,6 +126,54 @@ pub fn parse_sequence(s: &str) -> Result<Vec<KeyStroke>, KeyParseError> {
     }
 }
 
+/// ストロークの表示表記 (`Ctrl+S`。04 §7.8。TUI は全 OS で `Ctrl`)。言語に依存しない ASCII。
+pub fn format_stroke(k: KeyStroke) -> String {
+    let mut s = String::new();
+    for (m, name) in [
+        (Modifiers::CTRL, "Ctrl"),
+        (Modifiers::ALT, "Alt"),
+        (Modifiers::SHIFT, "Shift"),
+        (Modifiers::SUPER, "Super"),
+    ] {
+        if k.mods.contains(m) {
+            s.push_str(name);
+            s.push('+');
+        }
+    }
+    match k.key {
+        KeyCode::Char(' ') => s.push_str("Space"),
+        KeyCode::Char(c) => s.extend(c.to_uppercase()),
+        KeyCode::F(n) => s.push_str(&format!("F{n}")),
+        KeyCode::Enter => s.push_str("Enter"),
+        KeyCode::Tab => s.push_str("Tab"),
+        KeyCode::Esc => s.push_str("Esc"),
+        KeyCode::Backspace => s.push_str("Backspace"),
+        KeyCode::Delete => s.push_str("Delete"),
+        KeyCode::Insert => s.push_str("Insert"),
+        KeyCode::Home => s.push_str("Home"),
+        KeyCode::End => s.push_str("End"),
+        KeyCode::PageUp => s.push_str("PageUp"),
+        KeyCode::PageDown => s.push_str("PageDown"),
+        KeyCode::Up => s.push_str("Up"),
+        KeyCode::Down => s.push_str("Down"),
+        KeyCode::Left => s.push_str("Left"),
+        KeyCode::Right => s.push_str("Right"),
+        KeyCode::Menu => s.push_str("Menu"),
+        KeyCode::CapsLock => s.push_str("CapsLock"),
+        KeyCode::PrintScreen => s.push_str("PrintScreen"),
+        _ => s.push('?'),
+    }
+    s
+}
+
+/// チョードを含むストローク列の表記 (`Ctrl+K S`)。
+pub fn format_sequence(seq: &[KeyStroke]) -> String {
+    seq.iter()
+        .map(|k| format_stroke(*k))
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
 // ---------- 割当と層 ----------
 
 /// 1 つの割当。
@@ -256,6 +304,32 @@ impl Keymap {
             layers,
             pending: Vec::new(),
         })
+    }
+
+    /// コマンドごとの第一割当 (`{key:<command_id>}` の解決とヒントの逆引き)。
+    /// 層は優先順、コンテキストは編集面の参照順 (`editor` → `global`) で、最初に見つかった割当を採る。
+    pub fn first_bindings(
+        &self,
+        contexts: &[&str],
+    ) -> std::collections::BTreeMap<String, Vec<KeyStroke>> {
+        let mut out = std::collections::BTreeMap::new();
+        for ctx in contexts {
+            for layer in &self.layers {
+                for b in layer.bindings.iter().filter(|b| b.context == *ctx) {
+                    out.entry(b.command.as_str().to_owned())
+                        .or_insert_with(|| b.sequence.clone());
+                }
+            }
+        }
+        out
+    }
+
+    /// `first_bindings` の表示表記版。
+    pub fn first_labels(&self, contexts: &[&str]) -> std::collections::BTreeMap<String, String> {
+        self.first_bindings(contexts)
+            .into_iter()
+            .map(|(k, v)| (k, format_sequence(&v)))
+            .collect()
     }
 
     /// 保留中のストローク (ヒント表示用)。
@@ -499,5 +573,23 @@ mod tests {
         let x = |n: &str| (n == "x").then_some(CtxValue::Bool(true));
         assert_eq!(id(&m.resolve(&["editor"], ks("tab"), &x)), "a");
         assert_eq!(id(&m.resolve(&["editor"], ks("tab"), &no_ctx)), "b");
+    }
+
+    #[test]
+    fn キーの表記() {
+        assert_eq!(format_stroke(ks("mod+s")), "Ctrl+S");
+        assert_eq!(format_stroke(ks("ctrl+shift+left")), "Ctrl+Shift+Left");
+        assert_eq!(format_stroke(ks("f12")), "F12");
+        assert_eq!(format_stroke(ks("alt+space")), "Alt+Space");
+        assert_eq!(
+            format_sequence(&parse_sequence("ctrl+k s").unwrap()),
+            "Ctrl+K S"
+        );
+        let m = map();
+        let labels = m.first_labels(&["editor", "global"]);
+        assert_eq!(labels["file.save"], "Ctrl+S");
+        assert_eq!(labels["app.quit"], "Ctrl+Q");
+        assert_eq!(labels["user.enter"], "Enter", "上の層の割当が先");
+        assert_eq!(labels["file.save_as"], "Ctrl+K S");
     }
 }

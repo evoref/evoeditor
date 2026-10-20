@@ -37,11 +37,16 @@ pub(super) enum Pending {
 }
 
 impl EditorState {
-    fn message(&mut self, level: MessageLevel, key: &str) {
-        self.push_event(EditorEvent::MessageShown {
-            level,
-            key: key.to_owned(),
-        });
+    /// MessageKey を解決して表示する。`path` は `{path}` (表示用のパス)。
+    fn message(&mut self, level: MessageLevel, key: &str, path: &str) {
+        self.show_message(level, key, &[("path", path)]);
+    }
+
+    /// 保存ジョブの完了を待っているか (ステータスバーの `[保存中]`)。
+    pub(super) fn is_saving(&self, doc: DocumentId) -> bool {
+        self.pending
+            .values()
+            .any(|p| matches!(p, Pending::Save { doc: d, .. } if *d == doc))
     }
 
     /// 読込を待っている間、置き換え対象の今の文書は編集を受け付けない (03 §9.2 の置き換えの手順)。
@@ -140,7 +145,11 @@ impl EditorState {
             return CommandResult::Rejected(RejectReason::NotAvailable);
         }
         let Ok(path) = self.paths.normalize(raw_path) else {
-            self.message(MessageLevel::Error, "msg.open.failed");
+            self.show_message(
+                MessageLevel::Error,
+                "msg.open.failed",
+                &[("path", raw_path), ("reason", "invalid path")],
+            );
             return CommandResult::Rejected(RejectReason::InvalidArgs);
         };
         let replace = self.active_document();
@@ -149,7 +158,11 @@ impl EditorState {
                 return CommandResult::Rejected(RejectReason::NeedsInput);
             }
             if cur.path.as_ref() == Some(&path) {
-                self.message(MessageLevel::Info, "info.open.already_open");
+                self.message(
+                    MessageLevel::Info,
+                    "info.open.already_open",
+                    &path.display(),
+                );
                 return CommandResult::Done;
             }
         }
@@ -192,7 +205,7 @@ impl EditorState {
             return CommandResult::Rejected(RejectReason::NeedsInput);
         };
         if self.save_in_progress(doc_id) {
-            self.message(MessageLevel::Info, "info.save.in_progress");
+            self.message(MessageLevel::Info, "info.save.in_progress", &path.display());
             return CommandResult::Done;
         }
         if !doc.is_dirty() {
@@ -219,7 +232,11 @@ impl EditorState {
             return CommandResult::Rejected(RejectReason::NoTarget);
         };
         let Ok(path) = self.paths.normalize(raw_path) else {
-            self.message(MessageLevel::Error, "msg.save.invalid_path");
+            self.show_message(
+                MessageLevel::Error,
+                "msg.save.invalid_path",
+                &[("path", raw_path), ("reason", "invalid path")],
+            );
             return CommandResult::Rejected(RejectReason::InvalidArgs);
         };
         let Some(doc) = self.documents.get(&doc_id) else {
@@ -230,13 +247,17 @@ impl EditorState {
             return CommandResult::Rejected(RejectReason::NotAvailable);
         }
         if self.save_in_progress(doc_id) {
-            self.message(MessageLevel::Info, "info.save.in_progress");
+            self.message(MessageLevel::Info, "info.save.in_progress", &path.display());
             return CommandResult::Done;
         }
         let same = doc.path.as_ref() == Some(&path);
         // 読み取り専用の文書を同じファイルへ書くと、元のバイト列を損なうことがある (03 §9.7 (a) の 1)
         if same && !doc.is_editable() {
-            self.message(MessageLevel::Warn, "msg.save_as.same_file_read_only");
+            self.message(
+                MessageLevel::Warn,
+                "msg.save_as.same_file_read_only",
+                &path.display(),
+            );
             return CommandResult::Rejected(RejectReason::ReadOnly);
         }
         // 同じファイルなら読んだときの Stamp で照合する。別のファイルへは存在しないことを期待する
@@ -321,51 +342,68 @@ impl EditorState {
                 ..
             } => {
                 let mut d = Document::from_text(text, format);
-                d.path = Some(path);
+                d.path = Some(path.clone());
                 d.disk_stamp = Some(stamp);
                 d.read_only = detected;
                 self.documents.insert(doc_id, d);
                 if changed_during_load {
-                    self.message(MessageLevel::Warn, "msg.open.changed_during_load");
+                    self.message(
+                        MessageLevel::Warn,
+                        "msg.open.changed_during_load",
+                        &path.display(),
+                    );
                 }
                 self.complete_open(doc_id, view, replace);
             }
             JobResult::NewFile { parent_missing, .. } => {
                 // 存在しないパス: 空の新規文書 (dirty ではない)。保存すると作成する
                 let mut d = Document::new_untitled();
-                d.path = Some(path);
+                d.path = Some(path.clone());
                 self.documents.insert(doc_id, d);
                 let key = if parent_missing.is_some() {
                     "msg.open.parent_missing"
                 } else {
                     "info.open.new_file"
                 };
-                self.message(
+                let dir = parent_missing
+                    .as_ref()
+                    .map(FsPath::display)
+                    .unwrap_or_default();
+                self.show_message(
                     if parent_missing.is_some() {
                         MessageLevel::Warn
                     } else {
                         MessageLevel::Info
                     },
                     key,
+                    &[("path", &path.display()), ("dir", &dir)],
                 );
                 self.complete_open(doc_id, view, replace);
             }
             JobResult::NeedsConfirm { ask, .. } => {
                 // 確認ダイアログ (後続) ができるまでは開かない。今の文書はそのまま
-                let key = match ask {
-                    ConfirmAsk::Binary => "ui.confirm.open.binary",
-                    ConfirmAsk::UnsupportedBom { .. } => "ui.confirm.open.utf32",
+                let reason = match ask {
+                    ConfirmAsk::Binary => "binary",
+                    ConfirmAsk::UnsupportedBom { .. } => "utf-32 bom",
                 };
-                self.open_failed(doc_id, view, replace, MessageLevel::Warn, key);
+                self.open_failed(
+                    doc_id,
+                    replace,
+                    MessageLevel::Warn,
+                    "msg.open.failed",
+                    &path,
+                    reason,
+                );
             }
             JobResult::Failed { err, .. } => {
+                let reason = reason_label(&err);
                 let (level, key) = match err {
                     JobError::Cancelled => (MessageLevel::Info, "info.open.cancelled"),
                     JobError::Fs(e) => (MessageLevel::Error, open_error_key(&e)),
                     JobError::OutOfMemory { .. } => (MessageLevel::Error, "msg.open.out_of_memory"),
                     _ => (MessageLevel::Error, "msg.open.failed"),
                 };
-                self.open_failed(doc_id, view, replace, level, key);
+                self.open_failed(doc_id, replace, level, key, &path, &reason);
             }
             _ => {}
         }
@@ -381,12 +419,13 @@ impl EditorState {
     fn open_failed(
         &mut self,
         doc: DocumentId,
-        view: ViewId,
         replace: Option<DocumentId>,
         level: MessageLevel,
         key: &str,
+        path: &FsPath,
+        reason: &str,
     ) {
-        self.message(level, key);
+        self.show_message(level, key, &[("path", &path.display()), ("reason", reason)]);
         if replace.is_some() {
             // 今の文書はそのまま残す (FR-107 AC-3)
             self.close_document(doc);
@@ -394,7 +433,6 @@ impl EditorState {
             // 最初の文書の読込に失敗: 失敗した文書は閉じ、無題の文書で始める (再試行できる、03 §9.2 の「失敗」)
             let (_, untitled) = self.add_document(Document::new_untitled());
             self.show_view(untitled, Some(doc));
-            let _ = view;
         }
     }
 
@@ -402,6 +440,7 @@ impl EditorState {
         let Some(doc) = self.documents.get(&doc_id) else {
             return;
         };
+        let shown = doc.path.as_ref().map(FsPath::display).unwrap_or_default();
         let unchanged = match &r {
             // 読んだときの Stamp と一致し、編集もなければ書き込まない
             JobResult::Meta { stamp, .. } => {
@@ -413,18 +452,22 @@ impl EditorState {
             _ => false,
         };
         match r {
-            _ if unchanged => self.message(MessageLevel::Info, "info.save.unchanged"),
+            _ if unchanged => self.message(MessageLevel::Info, "info.save.unchanged", &shown),
             // NotFound は不一致として保存へ進む。その他の失敗は照合の失敗として示す
             JobResult::Failed {
                 err: JobError::Fs(e),
                 ..
             } if e.kind != FsErrorKind::NotFound => {
-                self.message(MessageLevel::Error, "msg.save.check_failed");
+                self.show_message(
+                    MessageLevel::Error,
+                    "msg.save.check_failed",
+                    &[("path", &shown), ("reason", &fs_reason(&e))],
+                );
             }
             JobResult::Failed {
                 err: JobError::Cancelled,
                 ..
-            } => self.message(MessageLevel::Info, "info.save.aborted"),
+            } => self.message(MessageLevel::Info, "info.save.aborted", &shown),
             _ => {
                 let Some((path, expected)) = self.documents.get(&doc_id).and_then(|d| {
                     Some((
@@ -459,20 +502,54 @@ impl EditorState {
                     revision,
                     path: path.display(),
                 });
-                self.message(MessageLevel::Info, "info.save.done");
+                self.message(MessageLevel::Info, "info.save.done", &path.display());
                 self.mark_snapshot_update(doc_id);
             }
             JobResult::Failed { err, .. } => {
+                let reason = reason_label(&err);
+                let dir = match &err {
+                    JobError::Fs(FsError {
+                        detail: Some(FsErrorDetail::ParentMissing { dir }),
+                        ..
+                    }) => dir.display(),
+                    _ => String::new(),
+                };
                 let (level, key) = match err {
                     JobError::Cancelled => (MessageLevel::Info, "info.save.aborted"),
                     JobError::Fs(e) => (MessageLevel::Error, save_error_key(&e)),
                     _ => (MessageLevel::Error, "msg.save.failed"),
                 };
-                self.message(level, key);
+                self.show_message(
+                    level,
+                    key,
+                    &[
+                        ("path", &path.display()),
+                        ("reason", &reason),
+                        ("dir", &dir),
+                    ],
+                );
             }
             _ => {}
         }
     }
+}
+
+/// `{reason}` に入れる短い分類名 (技術的な識別子。OS のエラーの分類文言 `ui.reason.*` は目録ができてから)。
+fn reason_label(err: &JobError) -> String {
+    match err {
+        JobError::Fs(e) => fs_reason(e),
+        JobError::Panic => "panic".to_owned(),
+        JobError::OutOfMemory { .. } => "out of memory".to_owned(),
+        JobError::Cancelled => "cancelled".to_owned(),
+    }
+}
+
+fn fs_reason(e: &FsError) -> String {
+    format!("{:?}", e.kind)
+        .split([' ', '{'])
+        .next()
+        .unwrap_or("unknown")
+        .to_lowercase()
 }
 
 /// 開く失敗の MessageKey (04 §15.2)。

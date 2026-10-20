@@ -27,8 +27,9 @@ pub use command::CommandId;
 pub use effect::{ClipboardTarget, ClipboardText, Effect, QuitRescue, StderrLine};
 pub use events::{EditorEvent, MessageLevel, OriginKind, OriginTag, OverlayKind};
 pub use frame::{
-    CellPos, CellRect, Color, CursorPlacement, CursorShape, Frame, PaneFrame, RenderRow, RowSource,
-    Span, Style, StyleMods,
+    CellPos, CellRect, CellText, ChromeTexts, Color, CursorPlacement, CursorShape, CutPolicy,
+    Frame, HintContext, HintItem, HintModel, KeyLabel, Message, MessageModel, PaneFrame, RenderRow,
+    RowSource, Span, StatusAlign, StatusItem, StatusKind, StatusModel, Style, StyleMods,
 };
 pub use ids::{
     ClipboardHandleId, ClipboardToken, DocumentId, JobId, Revision, ViewId, ViewRevision, WindowId,

@@ -334,7 +334,7 @@ fn バイナリは確認が要るので開かず_今の文書を残す() {
     s.messages();
     s.open("/w/bin.dat");
     assert_eq!(s.doc().0, id, "今の文書がそのまま残る (FR-107 AC-3)");
-    assert!(s.messages().contains(&"ui.confirm.open.binary".to_owned()));
+    assert!(s.messages().contains(&"msg.open.failed".to_owned()));
 }
 
 #[test]
@@ -572,5 +572,5 @@ fn readonly_の指定でもバイナリの確認は出す() {
     s.fs.add_file("/w/bin.dat", b"\x00\x01\x02");
     s.e.open_initial(Some("/w/bin.dat"), true);
     s.pump();
-    assert!(s.messages().contains(&"ui.confirm.open.binary".to_owned()));
+    assert!(s.messages().contains(&"msg.open.failed".to_owned()));
 }

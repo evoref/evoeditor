@@ -120,11 +120,15 @@ dependencies = [
 [[package]]
 name = "eve-config"
 version = "0.0.0"
+dependencies = [
+ "toml",
+]
 
 [[package]]
 name = "eve-core"
 version = "0.0.0"
 dependencies = [
+ "eve-config",
  "eve-encoding",
  "eve-testkit",
  "eve-text",

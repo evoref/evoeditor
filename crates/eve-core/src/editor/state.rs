@@ -64,6 +64,14 @@ pub struct EditorState {
     pub(super) paths: Arc<dyn Paths>,
     /// 未完了のジョブと、その結果の宛先。
     pub(super) pending: BTreeMap<JobId, Pending>,
+    /// `{key:<command_id>}` の解決用のキー表記 (コマンド → 第一割当)。
+    pub(super) key_labels: BTreeMap<String, String>,
+    /// コマンド → 第一割当のストローク列 (ヒントバーの逆引き)。
+    pub(super) key_seqs: BTreeMap<String, Vec<eve_view::KeyStroke>>,
+    /// 表示中のメッセージ (解決済み)。
+    pub(super) message: Option<super::message::ShownMessage>,
+    /// 未読のメッセージの数。
+    pub(super) unread: u16,
 }
 
 impl EditorState {
@@ -83,6 +91,10 @@ impl EditorState {
             jobs,
             paths,
             pending: BTreeMap::new(),
+            key_labels: BTreeMap::new(),
+            key_seqs: BTreeMap::new(),
+            message: None,
+            unread: 0,
         }
     }
 

@@ -8,7 +8,9 @@
 //! (`U+10FF00..`) を含まない (可視記号に展開済み)。frontend は `Span` をそのまま出力してよい。
 
 use crate::caps::CellSize;
+use crate::events::MessageLevel;
 use crate::ids::{Revision, ViewId, ViewRevision, WindowId};
+use crate::input::KeyStroke;
 use crate::query::FocusTarget;
 
 /// 色。
@@ -166,6 +168,123 @@ pub struct CursorPlacement {
     pub shape: CursorShape,
 }
 
+/// 切り詰めてよい位置 (`CellText` が幅に収まらないとき)。`Never` 以外は 1 書記素 = 1 `Span` で渡す。
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum CutPolicy {
+    #[default]
+    Never,
+    End,
+    Middle,
+}
+
+/// クロームの文字列 (幅は core が計算済み。frontend は幅関数を持たない)。
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct CellText {
+    pub spans: Vec<Span>,
+    /// `spans` の幅の和。
+    pub width: u16,
+    pub cut: CutPolicy,
+}
+
+/// メッセージ行の 1 件 (NFR-602 の 2 部構成: `text` = 何が起きたか、`hint` = どうすればよいか)。
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Message {
+    pub level: MessageLevel,
+    pub text: CellText,
+    pub hint: Option<CellText>,
+}
+
+/// メッセージ行のモデル (FR-505)。
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct MessageModel {
+    pub current: Option<Message>,
+    /// 未読の件数 (履歴の閲覧は v0.2)。
+    pub unread: u16,
+}
+
+/// ステータスバーの項目の種類 (04 §8.7)。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum StatusKind {
+    Path,
+    Dirty,
+    ReadOnly,
+    Loading,
+    Saving,
+    Degraded,
+    Chord,
+    Selection,
+    Position,
+    Encoding,
+    Eol,
+}
+
+/// ステータスバーの左詰め群・右詰め群のどちらに置くか。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum StatusAlign {
+    Left,
+    Right,
+}
+
+/// ステータスバーの項目。長い形と短い形は core が言語ファイルから解決済みで、幅も計算済み。
+/// frontend は優先度の低い項目から、短い形にし、それでも足りなければ項目を落とす (優先度 5 は落とさない)。
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct StatusItem {
+    pub kind: StatusKind,
+    pub long: CellText,
+    pub short: Option<CellText>,
+    /// 大きいほど最後まで残る。
+    pub priority: u8,
+    pub align: StatusAlign,
+}
+
+/// ステータスバー。`items` の順が表示順 (左群は左から、右群は右から寄せる)。
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct StatusModel {
+    pub items: Vec<StatusItem>,
+}
+
+/// ヒントバーの文脈 (v0.1 は 2 つ)。
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum HintContext {
+    /// 編集面にフォーカスがあり、チョードの保留もない。
+    #[default]
+    Normal,
+    /// オーバーレイ・検索バーにフォーカスがある、またはチョードの保留中。
+    Overlay,
+}
+
+/// キーの表示用の並び (チョードは複数ストローク)。表記 (`Ctrl+S` / `^S`) は frontend が作る。
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct KeyLabel {
+    pub strokes: Vec<KeyStroke>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct HintItem {
+    pub keys: Vec<KeyLabel>,
+    pub text: CellText,
+    /// 07 §11.6 の「ヒント」列の優先度 (大きいほど残る)。
+    pub priority: u8,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct HintModel {
+    pub context: HintContext,
+    /// 優先度の降順。
+    pub items: Vec<HintItem>,
+}
+
+/// frontend が自分の判断で出す場面の、core が解決済みの文言。
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ChromeTexts {
+    /// 端末が小さすぎるとき (`ui.too_small`)。
+    pub too_small: CellText,
+}
+
 /// 1 回の描画で frontend に渡すもの。
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Frame {
@@ -176,6 +295,11 @@ pub struct Frame {
     pub focus: FocusTarget,
     /// 編集面にフォーカスがあるときだけ `Some`。
     pub primary_cursor: Option<CursorPlacement>,
+    pub status: StatusModel,
+    pub hints: HintModel,
+    /// メッセージ行。
+    pub messages: MessageModel,
+    pub texts: ChromeTexts,
     /// 端末タイトル (無害化済み)。
     pub title: String,
 }

@@ -10,6 +10,8 @@ pub struct AsciiOptions {
     pub show_gutter: bool,
     pub mark_selection: bool,
     pub show_cursor: bool,
+    /// ステータス・ヒント・メッセージ行を末尾に出す。
+    pub show_chrome: bool,
 }
 
 impl Default for AsciiOptions {
@@ -18,6 +20,7 @@ impl Default for AsciiOptions {
             show_gutter: false,
             mark_selection: true,
             show_cursor: true,
+            show_chrome: false,
         }
     }
 }
@@ -57,6 +60,58 @@ fn put_spans(cells: &mut Vec<Cell>, spans: &[eve_view::Span]) {
     }
 }
 
+fn cell_text(t: &eve_view::CellText) -> String {
+    t.spans.iter().map(|s| s.text.as_str()).collect()
+}
+
+/// クローム (ステータス・ヒント・メッセージ) を 1 行ずつの文字列にする。
+fn chrome_lines(frame: &Frame) -> String {
+    use eve_view::StatusAlign;
+    let join = |align: StatusAlign| {
+        frame
+            .status
+            .items
+            .iter()
+            .filter(|i| i.align == align)
+            .map(|i| cell_text(&i.long))
+            .collect::<Vec<_>>()
+            .join(" ")
+    };
+    let mut out = format!(
+        "status: {} | {}\n",
+        join(StatusAlign::Left),
+        join(StatusAlign::Right)
+    );
+    let hints: Vec<String> = frame
+        .hints
+        .items
+        .iter()
+        .map(|h| {
+            let keys: Vec<String> = h
+                .keys
+                .iter()
+                .map(|k| {
+                    k.strokes
+                        .iter()
+                        .map(|s| format!("{:?}", s.key))
+                        .collect::<Vec<_>>()
+                        .join(" ")
+                })
+                .collect();
+            format!("{} {}", keys.join("/"), cell_text(&h.text))
+        })
+        .collect();
+    out.push_str(&format!("hints: {}\n", hints.join(" | ")));
+    if let Some(m) = &frame.messages.current {
+        out.push_str(&format!("message[{:?}]: {}", m.level, cell_text(&m.text)));
+        if let Some(h) = &m.hint {
+            out.push_str(&format!(" / {}", cell_text(h)));
+        }
+        out.push('\n');
+    }
+    out
+}
+
 /// Frame を ASCII の文字列にする (最初の Pane だけ。複数 Pane は分割を入れる版で足す)。
 pub fn render_ascii(frame: &Frame, opts: AsciiOptions) -> String {
     let mut out = String::new();
@@ -90,6 +145,9 @@ pub fn render_ascii(frame: &Frame, opts: AsciiOptions) -> String {
             out.push_str(&line);
             out.push('\n');
         }
+    }
+    if opts.show_chrome {
+        out.push_str(&chrome_lines(frame));
     }
     if opts.show_cursor
         && let Some(c) = frame.primary_cursor
@@ -129,6 +187,10 @@ mod tests {
                 pos: CellPos { col: 2, row: 0 },
                 shape: CursorShape::Bar,
             }),
+            status: Default::default(),
+            hints: Default::default(),
+            messages: Default::default(),
+            texts: Default::default(),
             title: String::new(),
         }
     }
