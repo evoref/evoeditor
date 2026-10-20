@@ -1,0 +1,15 @@
+# docs/02-architecture.md §17.1 / §13.7、docs/11-dev-workflow.md §1、docs/05-platform.md §16
+
+[alias]
+xtask = "run --package xtask --"
+
+# 依存の版の選択で、MSRV (workspace.package の rust-version) と互換の版を優先する (Cargo 1.84+)。
+[resolver]
+incompatible-rust-versions = "fallback"
+
+# Windows の C ランタイムを静的にリンクする。Visual C++ 再頒布可能パッケージの無い Windows 11 でも
+# 単一の実行ファイルで動かすため (確定 (ユーザー回答)、docs/05-platform.md §16.4)。
+# 配布ビルド・計測用ビルド・テストのビルドが同じ CRT になるよう、リポジトリ直下に置く。
+# 注意: `cargo install --git` は、この設定を読まない (cargo は設定を実行時のカレントから探すため)。
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]

@@ -1,0 +1,13 @@
+[package]
+name = "eve-text"
+description = "rope ラッパ (TextStorage)、位置変換、書記素・単語境界、表示幅、ChangeSet、Range / Selection (docs/02 §4.1、docs/03 §2〜§4)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true

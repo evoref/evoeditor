@@ -1,0 +1,13 @@
+[package]
+name = "eve-host"
+description = "Composition Root の共通部: 設定読込、Port の注入、JobSpawner、単一受信口、メインループ (docs/02 §4.1 / §9)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true

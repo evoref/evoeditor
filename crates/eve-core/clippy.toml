@@ -1,0 +1,29 @@
+# R3: eve-core は std::fs / std::process / std::net を直接使わない (Port 経由)。
+# std::thread も Instant::now も使わない (JobSpawner / Clock 経由)。
+# docs/02-architecture.md §4.3 R3、docs/09-testing-quality.md §7。
+# 専用の clippy.toml は、ルートの clippy.toml とマージされないので、R11 の項目もここに含める。
+
+disallowed-types = [
+    { path = "std::fs::File", reason = "R3: ファイル I/O は FileSystem Port 経由 (docs/02 §4.4)" },
+    { path = "std::process::Command", reason = "R3: 外部プロセスは Port 経由" },
+    { path = "std::net::TcpStream", reason = "R3: ネットワークは Port 経由" },
+    { path = "std::net::TcpListener", reason = "R3: ネットワークは Port 経由" },
+    { path = "std::net::UdpSocket", reason = "R3: ネットワークは Port 経由" },
+]
+
+disallowed-methods = [
+    { path = "std::fs::read", reason = "R3: FileSystem Port 経由" },
+    { path = "std::fs::read_to_string", reason = "R3: FileSystem Port 経由" },
+    { path = "std::fs::write", reason = "R3: FileSystem Port 経由" },
+    { path = "std::fs::read_dir", reason = "R3: FileSystem Port 経由" },
+    { path = "std::fs::metadata", reason = "R3: FileSystem Port 経由" },
+    { path = "std::fs::copy", reason = "R3: FileSystem Port 経由" },
+    { path = "std::fs::rename", reason = "R3: FileSystem Port 経由" },
+    { path = "std::fs::remove_file", reason = "R3: FileSystem Port 経由" },
+    { path = "std::fs::create_dir_all", reason = "R3: FileSystem Port 経由" },
+    { path = "std::fs::canonicalize", reason = "R3: FileSystem Port 経由" },
+    { path = "std::thread::spawn", reason = "R3 / R11: JobSpawner 経由" },
+    { path = "std::thread::Builder::spawn", reason = "R3 / R11: JobSpawner 経由" },
+    { path = "std::time::Instant::now", reason = "R3: Clock Port 経由 (テストの決定性)" },
+    { path = "std::time::SystemTime::now", reason = "R3: Clock Port 経由 (テストの決定性)" },
+]
