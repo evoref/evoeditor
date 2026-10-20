@@ -614,18 +614,18 @@ OSC 11 (背景色)、DECRQM、DA1、CSI ? u 等の **応答は入力ストリー
 
 | 物理キー | `ReadConsoleInputW` 経路 (Windows、v0.1 の本命) | VT 入力経路 (Unix (v0.2) の参考) |
 |---|---|---|
-| キーの押下・解放 | `bKeyDown` で Press / Release を区別する。Release は破棄 (§6.1) | 区別しない (押下だけが届く) |
-| `Ctrl+H` | `Key{ Char('h'), CTRL }` (`Ctrl+Backspace` = `Key{ Backspace, CTRL }` と区別される見込み) | 0x08 → `Key{ Backspace, CTRL }` (`Ctrl+Backspace` と区別不能) |
-| `Ctrl+I` | `Key{ Char('i'), CTRL }` (`Tab` と区別される見込み) | 0x09 → `Key{ Tab }` |
-| `Ctrl+M` | `Key{ Char('m'), CTRL }` (`Enter` と区別される見込み) | 0x0D → `Key{ Enter }` |
-| `Ctrl+[` | `Key{ Char('['), CTRL }` (**`Esc` にならない**) | 0x1B → `Key{ Esc }` |
+| キーの押下・解放 | `bKeyDown` で Press / Release を区別する。Release は破棄 (§6.1)。**キーリピートは、同じキーの KeyDown (`wRepeatCount` は 1) が KeyUp なしで続く形で届く** (S-07)。`FOCUS_EVENT` は届き (フォーカスの移動で out / in)、無視してもループは詰まらない | 区別しない (押下だけが届く) |
+| `Ctrl+H` | `Key{ Char('h'), CTRL }` (`vk=0x48`・`UnicodeChar=U+0008`。`Backspace` 単独は `vk=0x08`。**S-07 で両端末とも確認**) | 0x08 → `Key{ Backspace, CTRL }` (`Ctrl+Backspace` と区別不能) |
+| `Ctrl+I` | `Key{ Char('i'), CTRL }` (`vk=0x49`・`U+0009`。`Tab` 単独は `vk=0x09`。**S-07 で確認**) | 0x09 → `Key{ Tab }` |
+| `Ctrl+M` | `Key{ Char('m'), CTRL }` (`vk=0x4D`・`U+000D`。`Enter` 単独は `vk=0x0D`。**S-07 で確認**) | 0x0D → `Key{ Enter }` |
+| `Ctrl+[` | `Key{ Char('['), CTRL }` (`vk=0xDB`・`U+001B`。**`Esc` (`vk=0x1B`) にならない**。**S-07 で確認**) | 0x1B → `Key{ Esc }` |
 | `Esc` 単独 | `Key{ Esc }` (後続バイトの待ちが無く、遅れない) | 0x1B 単独 (後続の有無で `Alt` 前置と区別。§6.5) |
 | `Alt+文字` | `Key{ Char(c), ALT }` (`LEFT_ALT_PRESSED` / `RIGHT_ALT_PRESSED`) | `ESC` 前置 (レガシー) |
-| `Ctrl+Shift+文字` | 区別可 (`dwControlKeyState`) | 区別不能 (拡張キーボードプロトコル下では区別可、§6.3) |
+| `Ctrl+Shift+文字` | 区別可 (`dwControlKeyState` の `LEFT_CTRL_PRESSED` と `SHIFT_PRESSED`。`Ctrl+Shift+S/Z/B` で S-07 に確認。最初の `Ctrl+Shift+A` だけ KeyDown が欠けた 1 例があり、再現条件は不明 (OS・IME のホットキーの可能性)) | 区別不能 (拡張キーボードプロトコル下では区別可、§6.3) |
 | `AltGr+文字` (欧州配列) | `RIGHT_ALT_PRESSED` と `LEFT_CTRL_PRESSED` が立ち `UnicodeChar` が印字可能文字 → `Text(文字)` (§6.2 の表) | 端末が文字にして送る |
-| 日本語キーボードの IME 制御キー (半角/全角・変換・無変換・カタカナひらがな) | IME が消費して届かないか、届いても未知のキーとして破棄 (§6.2 の表) | 届かない |
-| IME の確定文字列 | 文字ごとに `UnicodeChar` を持つ KeyDown (と KeyUp) の列として届く想定 (仮想キーコードは S-07 で確認)。`Text` に合体する (§6.1)。バースト検出の N の影響を受けない (§6.6) | UTF-8 の文字列として届く |
-| `Ctrl+Break` | キーとしては使わない。コンソールが `CTRL_BREAK_EVENT` を生成する (`ENABLE_PROCESSED_INPUT` と無関係。05 §11.2)。`VK_CANCEL` のキーイベントが届いても破棄する | — |
+| 日本語キーボードの IME 制御キー (半角/全角・変換・無変換・カタカナひらがな) | **S-07 の実測: 半角/全角は KeyDown・KeyUp とも届かない。変換 (`vk=0x1C`)・無変換 (`vk=0x1D`)・英数 (`vk=0xF0`) などは KeyUp だけが届く** (KeyDown は IME が消費する)。Release は破棄するので入力は詰まらない | 届かない |
+| IME の確定文字列 | **S-07 の実測: 確定した文字ごとに、`vk=0x00`・`scan=0x00`・`UnicodeChar` = その文字 (全角英数や `あ` を含む) の KeyDown と KeyUp の対**として届く (修飾なし)。`Text` に合体する (§6.1)。バースト検出の N の影響を受けない (§6.6)。**確定の `Enter` は KeyDown が届かず、KeyUp (`vk=0x0D`) だけが届き得る**ので、Release を破棄すれば確定の Enter は漏れない。サロゲートペア (𠮷 等) の確定は未確認 | UTF-8 の文字列として届く |
+| `Ctrl+Break` | キーとしては使わない。コンソールが `CTRL_BREAK_EVENT` を生成する (`ENABLE_PROCESSED_INPUT` と無関係。05 §11.2)。**S-07 の実測: 両端末で `CTRL_BREAK_EVENT` が届き、入力ループは詰まらない。KeyDown (`VK_CANCEL`) は届かず、KeyUp (`vk=0x03`、`U+0003`) だけが届く** (破棄する) | — |
 
 - 影響: §7.3 は `Ctrl+I` / `Ctrl+M` / `Ctrl+[` を割り当てず、`Ctrl+H` は `[E]` の別名 (`search.replace_open`。第一は `Ctrl+R`) としてだけ使うので、既定キーマップで届く機能は経路によらず変わらない。`Ctrl+H` の `[E]` の割当は、`Key{ Char('h'), CTRL }` として区別されて届く経路 (Windows の `ReadConsoleInputW` 経路、拡張キーボードプロトコル下) でだけ有効で、正規化で `Key{ Backspace, CTRL }` に畳まれる経路 (VT 入力のレガシー端末) では届かず無効になる (その端末では 0x08 は `Ctrl+Backspace` として動く。`Ctrl+H` を `Ctrl+Backspace` に寄せることはしない)。Windows で `Ctrl+[` を `Esc` に寄せるか (他の端末と挙動をそろえる)、そのまま `Ctrl+[` として渡すかは S-07 の後に決める。09 §3.4 の到達性検査は経路によらず「`Ctrl+I/M/[` を割り当てず、`[E]` の割当 (`Ctrl+H` を含む) を到達の手段に数えない」前提で通る。
 
@@ -695,7 +695,9 @@ OSC 11 (背景色)、DECRQM、DA1、CSI ? u 等の **応答は入力ストリー
 - **開始**: 1 回の読取のうち、**文字を生成する `KeyDown` だけを数えた件数** が **N 以上** (`bKeyDown` が真で `UnicodeChar` が 0 でないもの。`KeyUp`・修飾キー単独・矢印等の文字を生成しないキー・`WINDOW_BUFFER_SIZE_EVENT`・`FOCUS_EVENT` 等は数えない。`GetNumberOfConsoleInputEvents` の値は読む件数にだけ使い、N との比較には使わない。Release を数えると 1 文字が 2 件になり、N の意味が曖昧になるため)。N 未満の読取は待たずにすぐ正規化して送る (通常のタイプに待ちを入れない。NFR-103)。
 - **継続**: バースト中は `WaitForSingleObject(hIn, T)` で次の入力を待つ。T ms 以内に入力があれば 1 回の読取をして同じバーストに連結し、また待つ。待ちがタイムアウトした (**T ms 無入力**) らバーストを閉じて `Paste` を送る。
 - **タイマの粒度**: `WaitForSingleObject` のタイムアウトは Windows のタイマ分解能 (既定 15.6 ms、05 §2.3) で丸められるので、T = 16 ms の実効の待ちは **16〜31 ms** になる (`timeBeginPeriod` で分解能は上げない)。バーストを閉じるのがこの分だけ遅れるのは貼り付けのときだけで、通常のタイプには影響しない。T は分解能より短くしない (それより短い間隔は区別できず、待ちの丸めでバーストを途中で閉じるため)。
-- **v0.1 の暫定値**: **N = 16、T = 16 ms** (S-07 で conhost・Windows Terminal の実測から確定する。定数で、設定キーにしない)。
+- **v0.1 の値 (S-07 の実測で確定、2026-10-21)**: **N = 16、T = 16 ms** (定数で、設定キーにしない)。実測: 貼り付けは Windows Terminal・conhost のどちらでも、待ちなしで読める分を読み切る方式で 1 つのバッチ (Windows Terminal の 10 MB は端末側の書込が遅く、1 回の連続読取が約 5 秒続くが、バッチの間隔は 16 ms 未満) になる。36 文字の貼り付け (72 記録) でも N を超え、通常の打鍵は 1 バッチ 1〜2 件なので区別できる。15 文字以下の貼り付けは通常入力に混ざる (上の既知の制約)。
+- **読取の件数に上限を付ける (S-07)**: 10 MB の貼り付けで `GetNumberOfConsoleInputEvents` が 1,078 万〜1,391 万件 (`INPUT_RECORD` 20 B で約 215〜280 MB) を返した。**1 回の `ReadConsoleInputW` は 4,096〜8,192 件までとし**、読んだ分を本文の `String` へ直接連結する (全体を 1 つの配列に読まない)。
+- **NFR-111 (10 MB の貼り付け、記録)**: 入力経路だけで Windows Terminal は約 5.5〜5.9 秒 (約 220 万記録/秒。端末側の書込が支配的でアプリでは縮められない)、conhost は約 0.7 秒。
 - **IME の確定は N の影響を受けない**: IME の確定文字列は 1 回の読取に複数の文字として届き、長い確定では N 件以上になり得るが、確定文字列は改行も制御文字も含まないので、下の「バーストの扱い」により `Paste` にならず `Text` のまま送られる。N 未満でも `Text` の合体 (§6.1) で 1 つになる。どちらでも結果は同じ `Text` で、自動インデントも Undo の単位も変わらない (確定の直後に T ms 以内に押した `Enter` がバーストに連結されることは、人の打鍵の間隔では起きない想定。S-07 で確認)。
 
 **バーストの扱い (数え方に関する規定)**: バーストと判定した入力列に **改行 (`Enter`) も制御文字・Ctrl 付きキーも含まれない** ときは、`Paste` にせず通常どおり `Text` (§6.1 の合体、最大 64 KiB) のまま送る (自動インデントも制御文字の問題も起きず、`Paste` にする利点が無い)。
@@ -705,6 +707,8 @@ OSC 11 (背景色)、DECRQM、DA1、CSI ? u 等の **応答は入力ストリー
 **バースト規則 (バースト検出とブラケットペーストのどちらにも適用)**: バースト (= `Paste` に合成した入力列、およびブラケットペースト終了直後の同一 read バッチ内の入力) に含まれる **制御文字・Ctrl 付きキーは、コマンドとして解釈せず、対応する制御文字 (0x01〜0x1F) を本文として挿入** する。これにより内容依存のコマンド実行を構造的に防ぐ。挿入後は FR-507 で可視化される。10 MB の貼り付けは 1 つの `Paste` に合成されるため NFR-111 の経路に乗る。**例外 (バーストの末尾)**: バーストの最後のイベントが、単独の Ctrl 付きキー、またはコマンドに割り当てたキー (例: 貼り付けの直後に押した `Ctrl+S`) であれば、それはバーストに含めず **コマンドとして扱う** (制御文字として本文に入れない)。末尾の 1 打鍵だけが対象で、バーストの途中の制御文字は上の規則どおり本文に入る。
 
 **バースト中の本文の作り方 (Windows)**: Windows の自前ループは通常、仮想キーコードを優先してキーを作る (§6.2 の「入力経路ごとの写像」) ので、そのままでは貼り付けた本文の 0x09 / 0x08 / 0x1B / 0x0D が `VK_TAB` / `VK_BACK` / `VK_ESCAPE` / `VK_RETURN` の `Key{ Tab }` / `Key{ Backspace }` / `Key{ Esc }` / `Key{ Enter }` になり、本文として入らない (タブが字下げ操作に、0x08 が削除に化ける)。そこで **バーストと判定した入力列では、仮想キーコードではなく各 `KeyDown` の `UnicodeChar` を本文にする**: 0x09 / 0x08 / 0x1B 等の制御文字はその文字のまま本文に入れ (上のバースト規則)、0x0D (`Enter`) は改行として本文に入れる (改行の正規化は core の貼り付けの入口で行う。03 §8.4)。`UnicodeChar` が 0 のキー (矢印・修飾キー単独等) は本文に入れない。上の末尾の例外 (コマンドとして扱う最後の 1 打鍵) の判定だけは仮想キーコードで行う。
+
+**実測 (S-07、2026-10-21)**: 貼り付けた本文のタブと改行は両端末で `UnicodeChar` = `U+0009` (`vk=0x09`)・`U+000D` (`vk=0x0D`、CRLF は CR 1 つ) で届く。**conhost は 0x08 と ESC も `VK_BACK` (`vk=0x08`) / `VK_ESCAPE` (`vk=0x1B`) のキーとして届ける** (仮想キーコード優先だと削除や Esc に化けるので、本節の規則は必須)。**Windows Terminal は貼り付けから 0x08 と ESC を除く** (届かない)。conhost では `Ctrl+V` のキー (`U+0016`、`vk=0x56`) 自体もアプリに届く (「Ctrl キーショートカットを有効にする」が OFF のとき)。Windows Terminal は `Ctrl+V` の KeyDown を届けず、貼り付け本文だけが届く。
 
 入力経路は確定 ([OQ-33](#18-未決事項)、確定 (ユーザー回答)。`ReadConsoleInputW` の自前ループ + バースト検出)。**S-07 の出口条件** に次を含める (正本は 08 §3): (a) バースト検出の N と T の決定 (上の暫定値の確認または変更。conhost・Windows Terminal で、貼り付けが 1 回の読取に何件届くかと、読取の間隔を実測する。10 MB の貼り付けが 1 つの `Paste` になり NFR-111 を満たすこと。バースト中のタブ・0x08・ESC・改行が上の「バースト中の本文の作り方」で本文として入ること)、(b) IME (Microsoft IME・Google 日本語入力) の確定文字列が `Text` として届き、確定の `Enter` が漏れないこと、(c) AltGr (欧州配列) の文字が `Text` になること、(d) 日本語キーボードのキー (半角/全角・変換・無変換・カタカナひらがな、`¥` `@` `[` 等の記号キー) が詰まらずに正しく届く・または破棄されること、(e) `Ctrl+Break` で `CTRL_BREAK_EVENT` が届き (05 §11.2)、自前ループが詰まらないこと、(f) `Ctrl+H` / `Ctrl+I` / `Ctrl+M` / `Ctrl+[` / `Ctrl+Shift+文字` の写像 (§6.2 の「入力経路ごとの写像」) と Press / Release・キーリピートの区別、`MOUSE_EVENT` / `FOCUS_EVENT` を捨てても入力が詰まらないこと、(g) Windows Terminal で、ブラケットペースト無効のアプリに複数行・大きなテキストを貼ったときの確認ダイアログ (`multiLinePasteWarning` / `largePasteWarning`) の出る条件と版による違い (README の案内に使う、§6.4)、(h) conhost の設定「Ctrl キーショートカットを有効にする」での `Ctrl+V` / `Ctrl+F` 等の横取り (§7.3a)、(i) `WT_SESSION` の誤判定の実態 (§5.2a)。バースト検出は、macOS / Linux を出荷する版でブラケットペースト非対応のレガシー端末 (Unix) にも適用する (Should。Unix の入力経路で 1 回の読取の件数と間隔を得られるかは v0.2 の着手時に確認する)。
 
