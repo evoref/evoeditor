@@ -30,3 +30,6 @@ rustc-ice-*.txt
 .minisign/
 .age/
 .ssh/
+
+# xtask gen-corpus の生成物 (コミットしない。docs/09 §4)
+/testdata/generated/
