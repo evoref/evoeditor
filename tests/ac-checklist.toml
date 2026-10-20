@@ -6,7 +6,8 @@
 # - kind は docs/09-testing-quality.md §8.5 の検証区分 (T: 自動テスト, B: ベンチ, M: 手動, R: レビュー)。
 #   AC 単位で区分が違う場合 (例 FR-206 の AC-3 は M) は、実装時に kind を直す。
 # - status = "done" の項目は verified_by が 1 つ以上必要 (xtask check の検査、11 §3.3)。
-# - 初版は 01 §5 の表と 09 §8.5 の表から機械的に起こした (2026-10-20)。
+# - 初版は 01 §5 の表と 09 §8.5 の表から起こした (2026-10-20)。抽出の規則は docs/11 §8.5 (eve-docs-tables が実装)。
+#   後の版の AC (頭部の注記が v0.2 などの版や「…版から適用」を含むもの) は含めない。
 
 [[ac]]
 id = "AC-FR-101-1"
@@ -800,21 +801,7 @@ verified_by = []
 status = "todo"
 
 [[ac]]
-id = "AC-NFR-101-2"
-requirement = "NFR-101"
-kind = "B"
-verified_by = []
-status = "todo"
-
-[[ac]]
 id = "AC-NFR-102-1"
-requirement = "NFR-102"
-kind = "B"
-verified_by = []
-status = "todo"
-
-[[ac]]
-id = "AC-NFR-102-2"
 requirement = "NFR-102"
 kind = "B"
 verified_by = []
@@ -828,13 +815,6 @@ verified_by = []
 status = "todo"
 
 [[ac]]
-id = "AC-NFR-103-2"
-requirement = "NFR-103"
-kind = "B"
-verified_by = []
-status = "todo"
-
-[[ac]]
 id = "AC-NFR-104-1"
 requirement = "NFR-104"
 kind = "B"
@@ -842,21 +822,7 @@ verified_by = []
 status = "todo"
 
 [[ac]]
-id = "AC-NFR-104-2"
-requirement = "NFR-104"
-kind = "B"
-verified_by = []
-status = "todo"
-
-[[ac]]
 id = "AC-NFR-105-1"
-requirement = "NFR-105"
-kind = "B"
-verified_by = []
-status = "todo"
-
-[[ac]]
-id = "AC-NFR-105-2"
 requirement = "NFR-105"
 kind = "B"
 verified_by = []
@@ -1193,13 +1159,6 @@ status = "todo"
 
 [[ac]]
 id = "AC-NFR-707-2"
-requirement = "NFR-707"
-kind = "T"
-verified_by = []
-status = "todo"
-
-[[ac]]
-id = "AC-NFR-707-3"
 requirement = "NFR-707"
 kind = "T"
 verified_by = []
