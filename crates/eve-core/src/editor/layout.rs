@@ -49,6 +49,21 @@ struct Unit {
     risky: bool,
 }
 
+/// 溜めた文字列を通常の書記素として表示に変換して `parts` に足す。
+fn flush_run(run: &mut String, parts: &mut Vec<(String, u16, bool)>, cfg: &WidthConfig) {
+    if run.is_empty() {
+        return;
+    }
+    let d = grapheme_display(run, cfg);
+    if !d.base.is_empty() {
+        parts.push((d.base, d.base_width, false));
+    }
+    if !d.marks.is_empty() {
+        parts.push((d.marks, d.marks_width, true));
+    }
+    run.clear();
+}
+
 /// 行の内容を表示の単位に展開する。
 fn units(content: &str, esc: bool) -> Vec<Unit> {
     let cfg = width_config();
@@ -66,12 +81,18 @@ fn units(content: &str, esc: bool) -> Vec<Unit> {
             }
         } else if g == "\u{3000}" {
             parts.push(("[]".to_owned(), 2, true));
-        } else if esc
-            && g.chars().count() == 1
-            && g.chars().next().and_then(unescape_char).is_some()
-        {
-            let b = g.chars().next().and_then(unescape_char).unwrap_or(0);
-            parts.push((format!("<0x{b:02X}>"), 6, true));
+        } else if esc && g.chars().any(|c| unescape_char(c).is_some()) {
+            // 不正バイトのエスケープ文字は 1 文字ずつ `<0xHH>` にする (結合文字などと同じ書記素になることがある)
+            let mut run = String::new();
+            for c in g.chars() {
+                if let Some(b) = unescape_char(c) {
+                    flush_run(&mut run, &mut parts, &cfg);
+                    parts.push((format!("<0x{b:02X}>"), 6, true));
+                } else {
+                    run.push(c);
+                }
+            }
+            flush_run(&mut run, &mut parts, &cfg);
         } else {
             let d = grapheme_display(g, &cfg);
             let first = g.chars().next().unwrap_or(' ');
@@ -115,20 +136,35 @@ fn esc_enabled(doc: &Document) -> bool {
     doc.format.pua_escape == PuaEscapeMode::Enabled
 }
 
-/// 行内のバイト位置 `byte` にあるカーソルの表示列 (行頭から)。
-pub(super) fn cursor_col(doc: &Document, line: usize, byte: usize) -> usize {
+/// 行内のバイト位置 `byte` にあるカーソルの (表示列, そのセルの幅)。行末では (行の幅, 1)。
+pub(super) fn cursor_cell(doc: &Document, line: usize, byte: usize) -> (usize, usize) {
     let (_, content, _) = line_content(doc, line);
     let us = units(&content, esc_enabled(doc));
     match us.iter().find(|u| u.byte >= byte) {
-        Some(u) => u.col,
-        None => us.last().map_or(0, |u| u.col + u.width),
+        Some(u) => (u.col, u.width.max(1)),
+        None => (us.last().map_or(0, |u| u.col + u.width), 1),
     }
 }
 
-/// 行番号のガターの幅 (桁数 + 区切りの空白 1)。
-pub(super) fn gutter_width(doc: &Document) -> u16 {
+/// 行内のバイト位置 `byte` にあるカーソルの表示列 (行頭から)。移動の目標列もこの表示と同じ幅で数える。
+pub(super) fn cursor_col(doc: &Document, line: usize, byte: usize) -> usize {
+    cursor_cell(doc, line, byte).0
+}
+
+/// 表示列 `dcol` に対応する行内のバイト位置。セルの途中は、その単位の前に寄せる (`Bias::Before`)。行の幅を超えれば行末。
+pub(super) fn byte_at_col(doc: &Document, line: usize, dcol: usize) -> usize {
+    let (_, content, _) = line_content(doc, line);
+    let us = units(&content, esc_enabled(doc));
+    us.iter()
+        .find(|u| dcol < u.col + u.width)
+        .map_or(content.len(), |u| u.byte)
+}
+
+/// 行番号のガターの幅 (桁数 + 区切りの空白 1)。画面が狭くて本文が入らないときは、ガターを出さない (0)。
+pub(super) fn gutter_width(doc: &Document, cols: usize) -> u16 {
     let lines = doc.text().len_lines().max(1);
-    (lines.to_string().len().max(2) + 1) as u16
+    let w = lines.to_string().len().max(2) + 1;
+    if cols >= w + 2 { w as u16 } else { 0 }
 }
 
 /// 隣り合う ASCII の記号でない Span を結合する (Span の契約: 含む書記素の幅がすべて同じ)。
@@ -169,7 +205,11 @@ fn build_row(
     let (ls, content, has_terminator) = line_content(doc, line);
     let us = units(&content, esc_enabled(doc));
     let total = us.last().map_or(0, |u| u.col + u.width);
-    let selected = |byte_abs: usize| sel.iter().any(|&(s, e)| byte_abs >= s && byte_abs < e);
+    // 選択は start 昇順で重ならないので二分探索する
+    let selected = |byte_abs: usize| {
+        let i = sel.partition_point(|&(_, e)| e <= byte_abs);
+        sel.get(i).is_some_and(|&(s, _)| s <= byte_abs)
+    };
     let (win_start, win_end) = (left, left + cols);
     let (mut clipped_left, mut clipped_right, mut risky) = (false, false, false);
     let mut spans: Vec<Span> = Vec::new();
@@ -255,6 +295,9 @@ fn build_row(
 }
 
 fn gutter_spans(line: usize, width: u16) -> Vec<Span> {
+    if width == 0 {
+        return Vec::new();
+    }
     let text = format!("{:>w$} ", line + 1, w = width as usize - 1);
     vec![Span {
         text,
@@ -270,7 +313,14 @@ fn title(doc: &Document) -> String {
         .as_ref()
         .and_then(|p| p.file_name())
         .unwrap_or_else(|| "無題".to_owned());
-    let name: String = name.chars().filter(|c| !c.is_control()).collect();
+    // 制御文字と、表示を偽装できる双方向の制御文字は端末のタイトルに出さない
+    let name: String = name
+        .chars()
+        .filter(|c| {
+            !c.is_control()
+                && !matches!(c, '\u{200E}' | '\u{200F}' | '\u{061C}' | '\u{202A}'..='\u{202E}' | '\u{2066}'..='\u{2069}')
+        })
+        .collect();
     format!(
         "{}{} - evoeditor",
         if doc.is_dirty() { "* " } else { "" },
@@ -285,20 +335,31 @@ pub(super) fn build_frame(state: &EditorState, window: WindowId) -> Option<Frame
     let doc = state.document(view.doc)?;
     let (cols, rows) = state.viewport();
     let (cols, rows) = (cols as usize, rows as usize);
-    let gw = gutter_width(doc);
+    let gw = gutter_width(doc, cols);
     let text_cols = cols.saturating_sub(gw as usize);
     let t = doc.text();
     let top_line = t.byte_to_line(view.scroll.top).0;
     let left = view.scroll.left_col as usize;
     let n_lines = t.len_lines();
 
-    let sel: Vec<(usize, usize)> = view
-        .selection
+    // 可視範囲に触れる Range だけを使う (Range は start 昇順で重ならないので二分探索できる)。
+    // 多数のカーソルがあっても、フレームの生成は可視範囲の大きさに比例する
+    let vis_start = t
+        .line_to_byte(LineIdx(top_line.min(n_lines.saturating_sub(1))))
+        .0;
+    let vis_end = t
+        .line_end_byte(LineIdx((top_line + rows).min(n_lines.saturating_sub(1))))
+        .0;
+    let ranges = view.selection.ranges();
+    let first = ranges.partition_point(|r| r.end().0 < vis_start);
+    let last = ranges.partition_point(|r| r.start().0 <= vis_end);
+    let visible = &ranges[first..last.max(first)];
+    let sel: Vec<(usize, usize)> = visible
         .iter()
         .filter(|r| !r.is_empty())
         .map(|r| (r.start().0, r.end().0))
         .collect();
-    let heads: Vec<usize> = view.selection.iter().map(|r| r.head.0).collect();
+    let heads: Vec<usize> = visible.iter().map(|r| r.head.0).collect();
     let primary_head = view.selection.primary().head.0;
 
     let mut out_rows = Vec::with_capacity(rows);
@@ -380,12 +441,12 @@ pub(super) fn build_frame(state: &EditorState, window: WindowId) -> Option<Frame
     })
 }
 
-/// View の `ViewId` から水平スクロールの調整に使う、カーソルの表示列 (primary の head)。
-pub(super) fn primary_cursor_col(state: &EditorState, view: ViewId) -> Option<(usize, usize)> {
+/// 水平スクロールの調整に使う、primary のカーソルの (表示列, セルの幅)。
+pub(super) fn primary_cursor_cell(state: &EditorState, view: ViewId) -> Option<(usize, usize)> {
     let v = state.view(view)?;
     let d = state.document(v.doc)?;
     let head = v.selection.primary().head;
     let line = d.text().byte_to_line(head);
     let ls = d.text().line_to_byte(line).0;
-    Some((cursor_col(d, line.0, head.0.saturating_sub(ls)), line.0))
+    Some(cursor_cell(d, line.0, head.0.saturating_sub(ls)))
 }

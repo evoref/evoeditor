@@ -247,3 +247,122 @@ fn タイトルと_revision() {
     assert_eq!(f.panes[0].revision.0.0, 1);
     let _ = s.view;
 }
+
+#[test]
+fn 絵文字の列は_zwj_と_vs16_を残して_幅のとおりに出す() {
+    let mut s = Scene::new("👨\u{200D}👩\u{200D}👧❤\u{FE0F}x|", 20, 1);
+    let f = s.frame();
+    let row = &f.panes[0].rows[0];
+    let all: String = row.spans.iter().map(|sp| sp.text.as_str()).collect();
+    assert!(
+        all.contains("👨\u{200D}👩\u{200D}👧"),
+        "ZWJ 列を壊さない: {all:?}"
+    );
+    assert!(all.contains("❤\u{FE0F}"), "VS16 を残す: {all:?}");
+    // 1 書記素 = 幅 2 の Span (3 つの文字を 1 つの Span に入れても幅は 2)
+    let family = row
+        .spans
+        .iter()
+        .find(|sp| sp.text.starts_with('👨'))
+        .unwrap();
+    assert_eq!(family.width, 2);
+}
+
+#[test]
+fn 不正バイトのエスケープは結合文字と同じ書記素でも_記号になる() {
+    let esc = eve_encoding::escape_byte(0x80);
+    let src = format!("{esc}\u{301}z|");
+    let mut s = Scene::new(&src, 30, 1);
+    let f = s.frame();
+    for sp in &f.panes[0].rows[0].spans {
+        assert!(
+            sp.text
+                .chars()
+                .all(|c| eve_encoding::unescape_char(c).is_none()),
+            "{:?}",
+            sp.text
+        );
+    }
+    assert!(s.ascii().starts_with("<0x80>"), "{}", s.ascii());
+}
+
+#[test]
+fn 入力で右端を越えたらスクロールしてカーソルが見える() {
+    let mut s = Scene::new("|", 14, 2); // 本文 11 桁
+    for _ in 0..30 {
+        s.e.execute(
+            CommandInvocation::new("edit.insert_text", InvocationSource::Keymap)
+                .with_args(Args::new().with_str("text", "x")),
+        );
+    }
+    let f = s.frame();
+    assert!(f.primary_cursor.is_some(), "カーソルが見える");
+    assert!(f.panes[0].rows[0].clipped_left);
+    // 行を短くしても (Backspace)、カーソルが見える
+    for _ in 0..25 {
+        s.run("edit.delete_backward");
+    }
+    let f = s.frame();
+    assert!(f.primary_cursor.is_some());
+    assert!(!f.panes[0].rows[0].clipped_left);
+    // 画面を狭くしても見える
+    s.e.handle_input(s.win, InputEvent::Resize { cols: 8, rows: 2 });
+    for _ in 0..10 {
+        s.e.execute(
+            CommandInvocation::new("edit.insert_text", InvocationSource::Keymap)
+                .with_args(Args::new().with_str("text", "y")),
+        );
+    }
+    assert!(s.frame().primary_cursor.is_some());
+}
+
+#[test]
+fn 幅のある単位が右端にかかるときは全体が見える位置までスクロールする() {
+    let mut s = Scene::new("0123456789\t|x", 14, 1); // 本文 11 桁。タブは 10 桁目から 12 桁目まで
+    s.run("cursor.move_left");
+    let f = s.frame();
+    let c = f.primary_cursor.expect("カーソル").pos;
+    let w: u16 = f.panes[0].rows[0].spans.iter().map(|sp| sp.width).sum();
+    assert!(c.col - f.panes[0].gutter_width < w + 1);
+    assert!(c.col < 14);
+}
+
+#[test]
+fn 画面が狭いときはガターを出さない() {
+    let mut s = Scene::new("ab|", 3, 1);
+    let f = s.frame();
+    assert_eq!(f.panes[0].gutter_width, 0);
+    assert!(f.panes[0].rows[0].gutter.is_empty());
+    let w: u16 = f.panes[0].rows[0].spans.iter().map(|sp| sp.width).sum();
+    assert!(w <= 3);
+}
+
+#[test]
+fn 縦移動の目標列は表示の幅で数える() {
+    // 不正バイト (表示は 6 桁) の次の `a` は表示の 6 桁目。次の行に移っても表示の列を保つ
+    let esc = eve_encoding::escape_byte(0x80);
+    let mut s = Scene::new(&format!("{esc}a|bc\nxxxxxxxxxx"), 30, 2);
+    s.run("cursor.move_down");
+    let f = s.frame();
+    // 上の行: <0x80>a の後ろ = 表示列 7。下の行も表示列 7
+    assert_eq!(
+        f.panes[0].cursors,
+        vec![eve_view::CellPos { col: 3 + 7, row: 1 }]
+    );
+}
+
+#[test]
+fn 多数のカーソルでも可視範囲の分だけを作る() {
+    let text: String = (0..2000).map(|i| format!("{i}\n")).collect();
+    let mut s = Scene::new(&format!("|{text}"), 20, 5);
+    let ranges: Vec<Range> = (0..2000).map(|i| Range::point(ByteOff(i * 2))).collect();
+    // 先頭付近の 5 行にだけカーソルがある範囲を可視にする (バイト位置は 0, 2, 4 ... でおおむね各行の先頭)
+    s.e.state_mut()
+        .set_selection(s.view, Selection::new(ranges, 0).unwrap());
+    let f = s.frame();
+    assert_eq!(f.panes[0].rows.len(), 5);
+    assert!(
+        f.panes[0].cursors.len() <= 5 + 5,
+        "可視行にあるカーソルだけ"
+    );
+}

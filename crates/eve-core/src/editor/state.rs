@@ -105,6 +105,11 @@ impl EditorState {
         if self.viewport != (cols, rows) {
             self.viewport = (cols, rows);
             self.needs_render = true;
+            // 画面の大きさが変わっても、カーソルが見えるようにする
+            let views: Vec<ViewId> = self.views.keys().copied().collect();
+            for v in views {
+                self.ensure_cursor_visible(v);
+            }
         }
     }
 
@@ -300,6 +305,10 @@ impl EditorState {
             let top = a.changes.map_pos(view.scroll.top, Bias::Before);
             view.scroll.top = text.line_to_byte(LineIdx(text.byte_to_line(top).0));
         }
+        // 編集の後もカーソルが見えるようにする (行が短くなった・画面の右端を越えた)
+        if let Some(v) = issuer {
+            self.ensure_cursor_visible(v);
+        }
         self.events.push(EditorEvent::DocumentChanged {
             doc,
             revision: a.revision,
@@ -377,7 +386,7 @@ impl EditorState {
 
     /// カーソルの列が見えるよう水平スクロールを調整する (折り返しなし)。
     fn ensure_horizontal(&mut self, view: ViewId) {
-        let Some((col, _)) = super::layout::primary_cursor_col(self, view) else {
+        let Some((col, cell_w)) = super::layout::primary_cursor_cell(self, view) else {
             return;
         };
         let Some(doc) = self
@@ -387,16 +396,19 @@ impl EditorState {
         else {
             return;
         };
-        let text_cols =
-            (self.viewport.0 as usize).saturating_sub(super::layout::gutter_width(doc) as usize);
+        let text_cols = (self.viewport.0 as usize)
+            .saturating_sub(super::layout::gutter_width(doc, self.viewport.0 as usize) as usize);
         let Some(v) = self.views.get_mut(&view) else {
             return;
         };
         let left = v.scroll.left_col as usize;
-        let new_left = if col < left {
+        let new_left = if col + cell_w <= text_cols {
+            0 // 行頭からカーソルまでが画面に収まるなら、スクロールしない
+        } else if col < left {
             col
-        } else if text_cols > 0 && col >= left + text_cols {
-            col + 1 - text_cols
+        } else if text_cols > 0 && col + cell_w > left + text_cols {
+            // 幅のある単位 (全角・記号) の全体が見えるようにする。画面より広ければ先頭のセルを優先する
+            (col + cell_w - text_cols).min(col)
         } else {
             left
         };

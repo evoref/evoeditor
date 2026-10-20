@@ -118,39 +118,46 @@ fn is_emoji_modifier(c: char) -> bool {
 /// 書記素に含まれる不可視文字の可視化の記号を、コードポイントの順に返す (§13.2)。
 /// 絵文字 ZWJ 列の中の ZWJ、絵文字タグ列の中のタグ文字、基底文字の直後の異体字セレクタは可視化しない。
 pub fn invisible_marks(g: &str) -> Vec<String> {
+    scan_marks(g).0
+}
+
+/// 不可視文字の記号と、記号にならなかった文字 (基底・絵文字列の中の ZWJ・基底の直後の VS・旗のタグ列など) を分ける。
+/// `rest` は元の書記素から記号になった文字だけを除いたもの (絵文字の列を壊さない)。
+fn scan_marks(g: &str) -> (Vec<String>, String) {
     let cs: Vec<char> = g.chars().collect();
     let emoji_tag_seq = cs.first() == Some(&'\u{1F3F4}') && cs.last() == Some(&'\u{E007F}');
-    let mut out = Vec::new();
+    let mut marks = Vec::new();
+    let mut rest = String::with_capacity(g.len());
     for (i, &c) in cs.iter().enumerate() {
-        if let Some(n) = vs_number(c) {
+        let mark = if let Some(n) = vs_number(c) {
+            // 基底の直後の VS は可視化しない (異体字・絵文字表示の指定)。先頭または VS の直後だけ示す
             let lone = i == 0 || vs_number(cs[i - 1]).is_some();
-            if lone {
-                out.push(format!("<VS{n}>"));
-            }
-            continue;
-        }
-        if c == '\u{200D}' {
-            // 前後が絵文字 (VS・肌色修飾を挟んでよい) なら、絵文字 ZWJ 列の中
-            let before = cs[..i]
-                .iter()
-                .rev()
-                .find(|&&x| vs_number(x).is_none() && !is_emoji_modifier(x));
-            let after = cs[i + 1..]
-                .iter()
-                .find(|&&x| vs_number(x).is_none() && !is_emoji_modifier(x));
-            if matches!((before, after), (Some(&b), Some(&a)) if is_pictographic(b) && is_pictographic(a))
-            {
-                continue;
-            }
-        }
-        if emoji_tag_seq && matches!(c, '\u{E0020}'..='\u{E007F}') {
-            continue;
-        }
-        if let Some(m) = cf_mark(c) {
-            out.push(m);
+            lone.then(|| format!("<VS{n}>"))
+        } else if (c == '\u{200D}' && zwj_inside_emoji(&cs, i))
+            || (emoji_tag_seq && matches!(c, '\u{E0020}'..='\u{E007F}'))
+        {
+            None
+        } else {
+            cf_mark(c)
+        };
+        match mark {
+            Some(m) => marks.push(m),
+            None => rest.push(c),
         }
     }
-    out
+    (marks, rest)
+}
+
+/// 前後が絵文字 (VS・肌色修飾を挟んでよい) の ZWJ か。
+fn zwj_inside_emoji(cs: &[char], i: usize) -> bool {
+    let before = cs[..i]
+        .iter()
+        .rev()
+        .find(|&&x| vs_number(x).is_none() && !is_emoji_modifier(x));
+    let after = cs[i + 1..]
+        .iter()
+        .find(|&&x| vs_number(x).is_none() && !is_emoji_modifier(x));
+    matches!((before, after), (Some(&b), Some(&a)) if is_pictographic(b) && is_pictographic(a))
 }
 
 /// 記号を並べた表示文字列と、その長さ (セル数)。4 個を超える分は `<+N>`。
@@ -231,10 +238,7 @@ pub fn grapheme_width(g: &str, cfg: &WidthConfig) -> u8 {
         0
     };
     // 基底の幅: 可視化の対象を除いた残りの幅
-    let rest: String = g
-        .chars()
-        .filter(|&c| cf_mark(c).is_none() && vs_number(c).is_none())
-        .collect();
+    let rest = scan_marks(g).1;
     let base = if rest.is_empty() {
         0
     } else {
@@ -360,10 +364,7 @@ pub fn grapheme_display(g: &str, cfg: &WidthConfig) -> GraphemeDisplay {
     } else {
         String::new()
     };
-    let rest: String = g
-        .chars()
-        .filter(|&c| cf_mark(c).is_none() && vs_number(c).is_none())
-        .collect();
+    let rest = scan_marks(g).1;
     let isolated_combining =
         rest.chars().next().is_some_and(is_combining) && UnicodeWidthStr::width(rest.as_str()) == 0;
     let mut base_width = if rest.is_empty() || isolated_combining {
