@@ -271,6 +271,19 @@ fn base_width(g: &str, rest: &str, cfg: &WidthConfig) -> usize {
     w
 }
 
+/// 1 行の文字列の表示幅 (セル数)。タブは次のタブストップまで進める。改行は含めない行の内容を渡す。
+pub fn str_display_width(s: &str, cfg: &WidthConfig) -> usize {
+    use unicode_segmentation::UnicodeSegmentation;
+    let tab = cfg.tab_width.max(1) as usize;
+    s.graphemes(true).fold(0, |col, g| {
+        if g == "	" {
+            col + tab - col % tab
+        } else {
+            col + grapheme_width(g, cfg) as usize
+        }
+    })
+}
+
 /// 端末との幅の不一致が起きやすい書記素か (§13.2)。`RenderRow.width_risky` の素材。
 /// 未割当・新規のコードポイントは表がないので判定できない (04 の補正表が受ける)。
 pub fn is_width_risky(g: &str) -> bool {

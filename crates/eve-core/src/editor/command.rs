@@ -221,6 +221,10 @@ impl CommandRegistry {
         if !spec.when.eval(&|name| state.context_value(name)) {
             return CommandResult::Rejected(RejectReason::NotAvailable);
         }
+        // Motion の実行はカーソル移動なので、Undo の結合を封印する (03 §7.3 R3)
+        if spec.kind == CommandKind::Motion {
+            state.seal_active_history();
+        }
         let mut ctx = CommandCtx {
             state,
             args: &inv.args,

@@ -265,6 +265,18 @@ impl EditorState {
         self.needs_render = true;
     }
 
+    /// Window の View が表示している文書の Undo の結合を封印する (カーソル移動の実行時)。
+    pub fn seal_active_history(&mut self) {
+        let doc = self
+            .windows
+            .first()
+            .and_then(|w| self.views.get(&w.root))
+            .map(|v| v.doc);
+        if let Some(d) = doc.and_then(|d| self.documents.get_mut(&d)) {
+            d.seal_history();
+        }
+    }
+
     /// View の Selection を設定する (書記素境界へ正規化し、`goal_dcol` はクリア)。
     pub fn set_selection(&mut self, view: ViewId, sel: Selection) {
         let Some(v) = self.views.get_mut(&view) else {
