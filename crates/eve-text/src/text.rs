@@ -60,6 +60,11 @@ impl Text {
             rope: self.rope.clone(),
         }
     }
+
+    /// 内部の rope への可変参照。`ChangeSet` の適用 (同じ crate の中) だけが使う。
+    pub(crate) fn rope_mut(&mut self) -> &mut Rope {
+        &mut self.rope
+    }
 }
 
 impl From<&str> for Text {

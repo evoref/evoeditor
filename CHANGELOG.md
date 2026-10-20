@@ -15,3 +15,4 @@ v0.1.0 のリリースまでの `0.0.x` は、マイルストーンを数える�
 - CI (`.github/workflows/ci.yml`): check・fmt・clippy・test・deps・dco・gitleaks・pr-source、nextest の設定 (`.config/nextest.toml`)。
 - `cargo xtask i18n` (UI 文言の検査)・`cargo xtask gen-corpus` (巨大・長大のコーパスの決定的な生成)、CI の `i18n` ジョブ。
 - `eve-text`: テキストストレージ (`Text` / `Snapshot` / `TextBuilder` / `TextRead`)、行の定義 (LF・CRLF・CR)、位置変換 (byte ⇔ char ⇔ UTF-16 ⇔ 行)、チャンク走査。
+- `eve-text`: `ChangeSet` (合成・逆変換・位置写像・範囲写像) と `Text::apply`。
