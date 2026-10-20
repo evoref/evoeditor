@@ -543,7 +543,7 @@ fn check_docs(policy: &Policy, root: &Path, rep: &mut Report) {
 
 #[cfg(test)]
 mod tests {
-    use super::has_leading_forbid_unsafe;
+    use super::*;
 
     #[test]
     fn forbid_unsafe_は項目より前になければならない() {
@@ -557,5 +557,29 @@ mod tests {
             "fn a() {}\n#![forbid(unsafe_code)]\n"
         ));
         assert!(!has_leading_forbid_unsafe("//! doc\n"));
+    }
+
+    // verifies: AC-NFR-406-1
+    #[test]
+    fn 依存規則検査はこのリポジトリで通る() {
+        // CI の `xtask check-deps` と同じ検査 (docs の突合を含む)。clippy の `disallowed_*` は `xtask check` の (2)
+        run(true).expect("依存規則検査が通る");
+    }
+
+    // verifies: AC-NFR-704-1
+    #[test]
+    fn unsafe_を許す_crate_以外は_forbid_unsafe_code_を持つ() {
+        let root = workspace_root();
+        let json = run_capture(Command::new("cargo").args([
+            "metadata",
+            "--format-version",
+            "1",
+            "--locked",
+        ]))
+        .expect("cargo metadata");
+        let graph = Graph::from_metadata(serde_json::from_str(&json).expect("metadata"));
+        let mut rep = Report::default();
+        check_forbid_unsafe(&graph, &root, &mut rep);
+        assert!(rep.failures.is_empty(), "{:?}", rep.failures);
     }
 }
