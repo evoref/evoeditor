@@ -42,6 +42,8 @@ impl Default for UndoBudget {
 #[derive(Clone, Debug)]
 struct UndoNode {
     id: NodeId,
+    /// 最初の Transaction の由来 (結合しても変えない。Undo / Redo の通知に「元の Origin」として載せる)。
+    origin: Origin,
     redo: ChangeSet,
     undo: ChangeSet,
     selection_before: Option<Selection>,
@@ -64,6 +66,8 @@ pub struct RecordOutcome {
 #[derive(Clone, Debug)]
 pub struct HistoryStep {
     pub changes: ChangeSet,
+    /// ノードを作った Transaction の Origin (Undo / Redo は独立した Origin を持たない)。
+    pub origin: Origin,
     /// 発行 View に復元する Selection。Undo は `selection_before`、Redo は `selection_after`。
     pub selection: Option<Selection>,
 }
@@ -375,6 +379,7 @@ impl UndoHistory {
         );
         self.undo.push_back(UndoNode {
             id,
+            origin: tx.origin.clone(),
             redo: tx.changes.clone(),
             undo: inverse,
             selection_before: tx.selection_before.clone(),
@@ -410,6 +415,7 @@ impl UndoHistory {
         let node = self.undo.pop_back()?;
         let step = HistoryStep {
             changes: node.undo.clone(),
+            origin: node.origin.clone(),
             selection: node.selection_before.clone(),
         };
         self.redo.push(node);
@@ -422,6 +428,7 @@ impl UndoHistory {
         let node = self.redo.pop()?;
         let step = HistoryStep {
             changes: node.redo.clone(),
+            origin: node.origin.clone(),
             selection: node.selection_after.clone(),
         };
         self.undo.push_back(node);

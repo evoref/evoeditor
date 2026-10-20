@@ -125,6 +125,7 @@ version = "0.0.0"
 name = "eve-core"
 version = "0.0.0"
 dependencies = [
+ "eve-encoding",
  "eve-text",
  "eve-view",
  "proptest",
