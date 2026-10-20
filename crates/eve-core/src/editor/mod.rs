@@ -6,6 +6,7 @@
 
 mod command;
 mod context;
+mod edit;
 mod state;
 
 use eve_view::{Capabilities, DocumentId, EditorEvent, Effect, ViewId, WindowId};
@@ -31,9 +32,11 @@ pub struct Editor {
 impl Editor {
     /// 空の EditorState を作る。I/O もジョブ投入もしない。
     pub fn new(ports: Ports, caps: Capabilities) -> Editor {
+        let mut registry = CommandRegistry::new();
+        edit::register(&mut registry);
         Editor {
             state: EditorState::new(caps),
-            registry: CommandRegistry::new(),
+            registry,
             ports,
         }
     }
