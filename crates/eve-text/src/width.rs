@@ -118,39 +118,46 @@ fn is_emoji_modifier(c: char) -> bool {
 /// 書記素に含まれる不可視文字の可視化の記号を、コードポイントの順に返す (§13.2)。
 /// 絵文字 ZWJ 列の中の ZWJ、絵文字タグ列の中のタグ文字、基底文字の直後の異体字セレクタは可視化しない。
 pub fn invisible_marks(g: &str) -> Vec<String> {
+    scan_marks(g).0
+}
+
+/// 不可視文字の記号と、記号にならなかった文字 (基底・絵文字列の中の ZWJ・基底の直後の VS・旗のタグ列など) を分ける。
+/// `rest` は元の書記素から記号になった文字だけを除いたもの (絵文字の列を壊さない)。
+fn scan_marks(g: &str) -> (Vec<String>, String) {
     let cs: Vec<char> = g.chars().collect();
     let emoji_tag_seq = cs.first() == Some(&'\u{1F3F4}') && cs.last() == Some(&'\u{E007F}');
-    let mut out = Vec::new();
+    let mut marks = Vec::new();
+    let mut rest = String::with_capacity(g.len());
     for (i, &c) in cs.iter().enumerate() {
-        if let Some(n) = vs_number(c) {
+        let mark = if let Some(n) = vs_number(c) {
+            // 基底の直後の VS は可視化しない (異体字・絵文字表示の指定)。先頭または VS の直後だけ示す
             let lone = i == 0 || vs_number(cs[i - 1]).is_some();
-            if lone {
-                out.push(format!("<VS{n}>"));
-            }
-            continue;
-        }
-        if c == '\u{200D}' {
-            // 前後が絵文字 (VS・肌色修飾を挟んでよい) なら、絵文字 ZWJ 列の中
-            let before = cs[..i]
-                .iter()
-                .rev()
-                .find(|&&x| vs_number(x).is_none() && !is_emoji_modifier(x));
-            let after = cs[i + 1..]
-                .iter()
-                .find(|&&x| vs_number(x).is_none() && !is_emoji_modifier(x));
-            if matches!((before, after), (Some(&b), Some(&a)) if is_pictographic(b) && is_pictographic(a))
-            {
-                continue;
-            }
-        }
-        if emoji_tag_seq && matches!(c, '\u{E0020}'..='\u{E007F}') {
-            continue;
-        }
-        if let Some(m) = cf_mark(c) {
-            out.push(m);
+            lone.then(|| format!("<VS{n}>"))
+        } else if (c == '\u{200D}' && zwj_inside_emoji(&cs, i))
+            || (emoji_tag_seq && matches!(c, '\u{E0020}'..='\u{E007F}'))
+        {
+            None
+        } else {
+            cf_mark(c)
+        };
+        match mark {
+            Some(m) => marks.push(m),
+            None => rest.push(c),
         }
     }
-    out
+    (marks, rest)
+}
+
+/// 前後が絵文字 (VS・肌色修飾を挟んでよい) の ZWJ か。
+fn zwj_inside_emoji(cs: &[char], i: usize) -> bool {
+    let before = cs[..i]
+        .iter()
+        .rev()
+        .find(|&&x| vs_number(x).is_none() && !is_emoji_modifier(x));
+    let after = cs[i + 1..]
+        .iter()
+        .find(|&&x| vs_number(x).is_none() && !is_emoji_modifier(x));
+    matches!((before, after), (Some(&b), Some(&a)) if is_pictographic(b) && is_pictographic(a))
 }
 
 /// 記号を並べた表示文字列と、その長さ (セル数)。4 個を超える分は `<+N>`。
@@ -231,10 +238,7 @@ pub fn grapheme_width(g: &str, cfg: &WidthConfig) -> u8 {
         0
     };
     // 基底の幅: 可視化の対象を除いた残りの幅
-    let rest: String = g
-        .chars()
-        .filter(|&c| cf_mark(c).is_none() && vs_number(c).is_none())
-        .collect();
+    let rest = scan_marks(g).1;
     let base = if rest.is_empty() {
         0
     } else {
@@ -305,6 +309,91 @@ pub fn display_col_to_byte(line: &str, dcol: usize, cfg: &WidthConfig) -> usize 
         col += w;
     }
     line.len()
+}
+
+/// 行の文字列を書記素に分け、各書記素の (行内のバイト位置, 文字列) を返す。
+pub fn grapheme_indices(s: &str) -> Vec<(usize, &str)> {
+    use unicode_segmentation::UnicodeSegmentation;
+    s.grapheme_indices(true).collect()
+}
+
+/// 1 書記素の表示 (Frame の `Span` の素材)。`base` は元の文字 (または代替の記号)、`marks` は不可視文字の記号。
+/// 幅は `base_width + marks_width` (`grapheme_width` と同じ値。上限 48)。タブは含まない (列に依存するので呼び出し側が展開する)。
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct GraphemeDisplay {
+    pub base: String,
+    pub base_width: u16,
+    pub marks: String,
+    pub marks_width: u16,
+}
+
+/// 書記素 `g` の表示を求める (03 §13.2)。制御文字は可視記号 (`^X` / `<U+0085>`)、不可視文字は記号、
+/// 孤立結合文字は `◌` + 結合、幅 0 になるものは `<U+XXXX>`。
+pub fn grapheme_display(g: &str, cfg: &WidthConfig) -> GraphemeDisplay {
+    let Some(first) = g.chars().next() else {
+        return GraphemeDisplay::default();
+    };
+    let sym = |text: String| {
+        let w = text.chars().count() as u16;
+        GraphemeDisplay {
+            base: text,
+            base_width: w,
+            marks: String::new(),
+            marks_width: 0,
+        }
+    };
+    if is_c0_control(first) {
+        return match cfg.control_style {
+            ControlStyle::Caret => sym(format!(
+                "^{}",
+                if first == '\u{7F}' {
+                    '?'
+                } else {
+                    (first as u8 ^ 0x40) as char
+                }
+            )),
+            ControlStyle::Hex => sym(format!("<U+{:04X}>", first as u32)),
+        };
+    }
+    if is_c1_control(first) {
+        return sym(format!("<U+{:04X}>", first as u32));
+    }
+    let marks_all = invisible_marks(g);
+    let marks = if cfg.show_invisible {
+        marks_text(&marks_all)
+    } else {
+        String::new()
+    };
+    let rest = scan_marks(g).1;
+    let isolated_combining =
+        rest.chars().next().is_some_and(is_combining) && UnicodeWidthStr::width(rest.as_str()) == 0;
+    let mut base_width = if rest.is_empty() || isolated_combining {
+        0
+    } else {
+        base_width(g, &rest, cfg)
+    };
+    let mut base = rest;
+    if base_width == 0 && !base.is_empty() {
+        // 孤立結合文字は ◌ + 結合 (幅 1)。それ以外で幅 0 のものは記号にする
+        if base.chars().next().is_some_and(is_combining) {
+            base.insert(0, '\u{25CC}');
+            base_width = 1;
+        } else if marks_all.is_empty() {
+            base = format!("<U+{:04X}>", first as u32);
+            base_width = base.chars().count();
+        } else {
+            base.clear();
+        }
+    }
+    let marks_width = marks.chars().count();
+    let total = (base_width + marks_width).min(MAX_GRAPHEME_WIDTH as usize);
+    let marks_width = marks_width.min(total);
+    GraphemeDisplay {
+        base,
+        base_width: (total - marks_width) as u16,
+        marks,
+        marks_width: marks_width as u16,
+    }
 }
 
 /// 端末との幅の不一致が起きやすい書記素か (§13.2)。`RenderRow.width_risky` の素材。
@@ -521,5 +610,45 @@ mod tests {
         // 書記素: 結合文字は基底と一緒
         assert_eq!(display_col_to_byte("e\u{301}x", 1, &cfg), 3);
         assert_eq!(display_col_to_byte("", 5, &cfg), 0);
+    }
+
+    #[test]
+    fn 表示は幅関数と一致する() {
+        let cfg = WidthConfig::default();
+        for g in [
+            "a",
+            "あ",
+            "e\u{301}",
+            "\u{301}",
+            "\u{200B}",
+            "a\u{200C}",
+            "\u{1B}",
+            "\u{7F}",
+            "\u{85}",
+            "😀",
+            "👨\u{200D}👩",
+            "\u{180B}",
+            "🇯🇵",
+            "\u{FE0F}",
+            "한",
+            "\u{E0B0}",
+        ] {
+            let d = grapheme_display(g, &cfg);
+            assert_eq!(
+                d.base_width + d.marks_width,
+                grapheme_width(g, &cfg) as u16,
+                "{g:?}"
+            );
+            assert!(
+                !d.base.is_empty() || !d.marks.is_empty(),
+                "{g:?} は何か描く"
+            );
+        }
+        assert_eq!(grapheme_display("\u{1B}", &cfg).base, "^[");
+        assert_eq!(grapheme_display("\u{7F}", &cfg).base, "^?");
+        assert_eq!(grapheme_display("\u{85}", &cfg).base, "<U+0085>");
+        assert_eq!(grapheme_display("\u{301}", &cfg).base, "\u{25CC}\u{301}");
+        let z = grapheme_display("a\u{200C}", &cfg);
+        assert_eq!((z.base.as_str(), z.marks.as_str()), ("a", "<ZWNJ>"));
     }
 }

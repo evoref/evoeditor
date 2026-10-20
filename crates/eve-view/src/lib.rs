@@ -17,6 +17,7 @@ mod caps;
 mod command;
 mod effect;
 mod events;
+mod frame;
 mod ids;
 mod input;
 mod query;
@@ -25,6 +26,10 @@ pub use caps::{Capabilities, CellSize, ColorDepth};
 pub use command::CommandId;
 pub use effect::{ClipboardTarget, ClipboardText, Effect, QuitRescue, StderrLine};
 pub use events::{EditorEvent, MessageLevel, OriginKind, OriginTag, OverlayKind};
+pub use frame::{
+    CellPos, CellRect, Color, CursorPlacement, CursorShape, Frame, PaneFrame, RenderRow, RowSource,
+    Span, Style, StyleMods,
+};
 pub use ids::{
     ClipboardHandleId, ClipboardToken, DocumentId, JobId, Revision, ViewId, ViewRevision, WindowId,
 };

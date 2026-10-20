@@ -24,6 +24,8 @@ const SCROLL_MARGIN: usize = 3;
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct ScrollPos {
     pub top: ByteOff,
+    /// 水平スクロール量 (表示列。折り返しなしのとき)。
+    pub left_col: u32,
 }
 
 /// 文書の表示と Selection の単位。
@@ -103,6 +105,11 @@ impl EditorState {
         if self.viewport != (cols, rows) {
             self.viewport = (cols, rows);
             self.needs_render = true;
+            // 画面の大きさが変わっても、カーソルが見えるようにする
+            let views: Vec<ViewId> = self.views.keys().copied().collect();
+            for v in views {
+                self.ensure_cursor_visible(v);
+            }
         }
     }
 
@@ -298,6 +305,10 @@ impl EditorState {
             let top = a.changes.map_pos(view.scroll.top, Bias::Before);
             view.scroll.top = text.line_to_byte(LineIdx(text.byte_to_line(top).0));
         }
+        // 編集の後もカーソルが見えるようにする (行が短くなった・画面の右端を越えた)
+        if let Some(v) = issuer {
+            self.ensure_cursor_visible(v);
+        }
         self.events.push(EditorEvent::DocumentChanged {
             doc,
             revision: a.revision,
@@ -369,6 +380,45 @@ impl EditorState {
     }
 
     pub fn ensure_cursor_visible_with_margin(&mut self, view: ViewId, margin: usize) {
+        self.ensure_vertical(view, margin);
+        self.ensure_horizontal(view);
+    }
+
+    /// カーソルの列が見えるよう水平スクロールを調整する (折り返しなし)。
+    fn ensure_horizontal(&mut self, view: ViewId) {
+        let Some((col, cell_w)) = super::layout::primary_cursor_cell(self, view) else {
+            return;
+        };
+        let Some(doc) = self
+            .views
+            .get(&view)
+            .and_then(|v| self.documents.get(&v.doc))
+        else {
+            return;
+        };
+        let text_cols = (self.viewport.0 as usize)
+            .saturating_sub(super::layout::gutter_width(doc, self.viewport.0 as usize) as usize);
+        let Some(v) = self.views.get_mut(&view) else {
+            return;
+        };
+        let left = v.scroll.left_col as usize;
+        let new_left = if col + cell_w <= text_cols {
+            0 // 行頭からカーソルまでが画面に収まるなら、スクロールしない
+        } else if col < left {
+            col
+        } else if text_cols > 0 && col + cell_w > left + text_cols {
+            // 幅のある単位 (全角・記号) の全体が見えるようにする。画面より広ければ先頭のセルを優先する
+            (col + cell_w - text_cols).min(col)
+        } else {
+            left
+        };
+        if new_left != left {
+            v.scroll.left_col = u32::try_from(new_left).unwrap_or(u32::MAX);
+            self.needs_render = true;
+        }
+    }
+
+    fn ensure_vertical(&mut self, view: ViewId, margin: usize) {
         let rows = self.viewport.1 as usize;
         let Some(doc) = self.views.get(&view).map(|v| v.doc) else {
             return;

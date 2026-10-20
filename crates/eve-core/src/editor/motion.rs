@@ -2,11 +2,9 @@
 //!
 //! 移動の起点はいつも `head`。`select.extend_*` は移動先を `with_head` で head にし (anchor は動かさない)、
 //! `cursor.*` は移動先へ潰す。複数 Range には各 Range 独立に適用し、`normalized()` で併合する。
-
 use eve_text::{
-    ByteOff, ByteRange, LineIdx, Range, Selection, TextRead, WidthConfig, display_col_to_byte,
-    next_grapheme_boundary, next_word_stop, prev_grapheme_boundary, prev_word_stop,
-    str_display_width,
+    ByteOff, ByteRange, LineIdx, Range, Selection, TextRead, next_grapheme_boundary,
+    next_word_stop, prev_grapheme_boundary, prev_word_stop,
 };
 use eve_view::{DocumentId, ViewId};
 
@@ -57,19 +55,15 @@ fn line_of(doc: &Document, p: ByteOff) -> (usize, usize, usize) {
 }
 
 fn display_col(doc: &Document, ls: usize, p: usize) -> u32 {
-    let s = doc
-        .text()
-        .slice_to_string(ByteRange::new(ByteOff(ls), ByteOff(p)));
-    u32::try_from(str_display_width(&s, &WidthConfig::default())).unwrap_or(u32::MAX)
+    // 表示 (Frame) と同じ幅で数える: タブ・記号・不正バイトの `<0xHH>` を含む
+    let line = doc.text().byte_to_line(ByteOff(p)).0;
+    u32::try_from(super::layout::cursor_col(doc, line, p - ls)).unwrap_or(u32::MAX)
 }
 
 /// 行 `line` の表示列 `dcol` の位置 (セルの途中は前に寄せる)。
 fn pos_at_dcol(doc: &Document, line: usize, dcol: u32) -> ByteOff {
-    let t = doc.text();
-    let l = LineIdx(line);
-    let (ls, le) = (t.line_to_byte(l).0, t.line_end_byte(l).0);
-    let s = t.slice_to_string(ByteRange::new(ByteOff(ls), ByteOff(le)));
-    ByteOff(ls + display_col_to_byte(&s, dcol as usize, &WidthConfig::default()))
+    let ls = doc.text().line_to_byte(LineIdx(line)).0;
+    ByteOff(ls + super::layout::byte_at_col(doc, line, dcol as usize))
 }
 
 /// 行頭空白の直後 (インデント終端)。

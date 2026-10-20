@@ -7,11 +7,13 @@
 // eve-core の FsError は大きい型 (エラーは稀な経路)。値で返す。
 #![allow(clippy::result_large_err)]
 
+mod ascii;
 mod clock;
 mod jobs;
 mod memfs;
 mod paths;
 
+pub use ascii::{AsciiOptions, render_ascii};
 pub use clock::ManualClock;
 pub use jobs::ManualJobSpawner;
 pub use memfs::{BytesSource, FsOp, MemFs, SourceFailure, WriteStep};

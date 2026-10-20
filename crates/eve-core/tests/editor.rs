@@ -167,13 +167,13 @@ fn スクロール位置は行頭へ丸めて写像する() {
     let (doc_id, v, _) = e.open_document(doc("aaa\nbbb\nccc"));
     e.state_mut().set_scroll_top(v, ByteOff(4));
     let d = e.state().document(doc_id).unwrap();
-    // 先頭に 2 バイト挿入 → 先頭可視行 (2 行目) の行頭は 6
-    let tx = Transaction::new(insert_cs(d, 0, "xx"), Origin::User, Tick(0)).with_view(v);
+    // 他の View (発行 View でない) の編集: 先頭に 2 バイト挿入 → 先頭可視行 (2 行目) の行頭は 6
+    let tx = Transaction::new(insert_cs(d, 0, "xx"), Origin::User, Tick(0));
     e.state_mut().apply_transaction(doc_id, tx).unwrap();
     assert_eq!(e.state().view(v).unwrap().scroll.top, ByteOff(6));
     // 2 行目の途中に挿入しても、行頭は動かない
     let d = e.state().document(doc_id).unwrap();
-    let tx = Transaction::new(insert_cs(d, 8, "yy"), Origin::User, Tick(1)).with_view(v);
+    let tx = Transaction::new(insert_cs(d, 8, "yy"), Origin::User, Tick(1));
     e.state_mut().apply_transaction(doc_id, tx).unwrap();
     assert_eq!(e.state().view(v).unwrap().scroll.top, ByteOff(6));
 }
