@@ -29,7 +29,8 @@ pub use selection::{MapPolicy, Range, Selection};
 pub use text::{Chunks, Snapshot, Text, TextBuilder, TextRead};
 pub use types::{ByteOff, ByteRange, CharIdx, LineEnding, LineIdx, Pos, Utf16Off};
 pub use width::{
-    ControlStyle, EmojiWidth, MAX_GRAPHEME_WIDTH, WidthConfig, display_col_to_byte, grapheme_width,
-    invisible_marks, invisible_marks_text, is_width_risky, str_display_width,
+    ControlStyle, EmojiWidth, GraphemeDisplay, MAX_GRAPHEME_WIDTH, WidthConfig,
+    display_col_to_byte, grapheme_display, grapheme_indices, grapheme_width, invisible_marks,
+    invisible_marks_text, is_width_risky, str_display_width,
 };
 pub use word::{ScriptClass, classify_grapheme, next_word_stop, prev_word_stop};

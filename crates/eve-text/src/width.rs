@@ -307,6 +307,94 @@ pub fn display_col_to_byte(line: &str, dcol: usize, cfg: &WidthConfig) -> usize 
     line.len()
 }
 
+/// 行の文字列を書記素に分け、各書記素の (行内のバイト位置, 文字列) を返す。
+pub fn grapheme_indices(s: &str) -> Vec<(usize, &str)> {
+    use unicode_segmentation::UnicodeSegmentation;
+    s.grapheme_indices(true).collect()
+}
+
+/// 1 書記素の表示 (Frame の `Span` の素材)。`base` は元の文字 (または代替の記号)、`marks` は不可視文字の記号。
+/// 幅は `base_width + marks_width` (`grapheme_width` と同じ値。上限 48)。タブは含まない (列に依存するので呼び出し側が展開する)。
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct GraphemeDisplay {
+    pub base: String,
+    pub base_width: u16,
+    pub marks: String,
+    pub marks_width: u16,
+}
+
+/// 書記素 `g` の表示を求める (03 §13.2)。制御文字は可視記号 (`^X` / `<U+0085>`)、不可視文字は記号、
+/// 孤立結合文字は `◌` + 結合、幅 0 になるものは `<U+XXXX>`。
+pub fn grapheme_display(g: &str, cfg: &WidthConfig) -> GraphemeDisplay {
+    let Some(first) = g.chars().next() else {
+        return GraphemeDisplay::default();
+    };
+    let sym = |text: String| {
+        let w = text.chars().count() as u16;
+        GraphemeDisplay {
+            base: text,
+            base_width: w,
+            marks: String::new(),
+            marks_width: 0,
+        }
+    };
+    if is_c0_control(first) {
+        return match cfg.control_style {
+            ControlStyle::Caret => sym(format!(
+                "^{}",
+                if first == '\u{7F}' {
+                    '?'
+                } else {
+                    (first as u8 ^ 0x40) as char
+                }
+            )),
+            ControlStyle::Hex => sym(format!("<U+{:04X}>", first as u32)),
+        };
+    }
+    if is_c1_control(first) {
+        return sym(format!("<U+{:04X}>", first as u32));
+    }
+    let marks_all = invisible_marks(g);
+    let marks = if cfg.show_invisible {
+        marks_text(&marks_all)
+    } else {
+        String::new()
+    };
+    let rest: String = g
+        .chars()
+        .filter(|&c| cf_mark(c).is_none() && vs_number(c).is_none())
+        .collect();
+    let isolated_combining =
+        rest.chars().next().is_some_and(is_combining) && UnicodeWidthStr::width(rest.as_str()) == 0;
+    let mut base_width = if rest.is_empty() || isolated_combining {
+        0
+    } else {
+        base_width(g, &rest, cfg)
+    };
+    let mut base = rest;
+    if base_width == 0 && !base.is_empty() {
+        // 孤立結合文字は ◌ + 結合 (幅 1)。それ以外で幅 0 のものは記号にする
+        if base.chars().next().is_some_and(is_combining) {
+            base.insert(0, '\u{25CC}');
+            base_width = 1;
+        } else if marks_all.is_empty() {
+            base = format!("<U+{:04X}>", first as u32);
+            base_width = base.chars().count();
+        } else {
+            base.clear();
+        }
+    }
+    let marks_width = marks.chars().count();
+    let total = (base_width + marks_width).min(MAX_GRAPHEME_WIDTH as usize);
+    let marks_width = marks_width.min(total);
+    GraphemeDisplay {
+        base,
+        base_width: (total - marks_width) as u16,
+        marks,
+        marks_width: marks_width as u16,
+    }
+}
+
 /// 端末との幅の不一致が起きやすい書記素か (§13.2)。`RenderRow.width_risky` の素材。
 /// 未割当・新規のコードポイントは表がないので判定できない (04 の補正表が受ける)。
 pub fn is_width_risky(g: &str) -> bool {
@@ -521,5 +609,45 @@ mod tests {
         // 書記素: 結合文字は基底と一緒
         assert_eq!(display_col_to_byte("e\u{301}x", 1, &cfg), 3);
         assert_eq!(display_col_to_byte("", 5, &cfg), 0);
+    }
+
+    #[test]
+    fn 表示は幅関数と一致する() {
+        let cfg = WidthConfig::default();
+        for g in [
+            "a",
+            "あ",
+            "e\u{301}",
+            "\u{301}",
+            "\u{200B}",
+            "a\u{200C}",
+            "\u{1B}",
+            "\u{7F}",
+            "\u{85}",
+            "😀",
+            "👨\u{200D}👩",
+            "\u{180B}",
+            "🇯🇵",
+            "\u{FE0F}",
+            "한",
+            "\u{E0B0}",
+        ] {
+            let d = grapheme_display(g, &cfg);
+            assert_eq!(
+                d.base_width + d.marks_width,
+                grapheme_width(g, &cfg) as u16,
+                "{g:?}"
+            );
+            assert!(
+                !d.base.is_empty() || !d.marks.is_empty(),
+                "{g:?} は何か描く"
+            );
+        }
+        assert_eq!(grapheme_display("\u{1B}", &cfg).base, "^[");
+        assert_eq!(grapheme_display("\u{7F}", &cfg).base, "^?");
+        assert_eq!(grapheme_display("\u{85}", &cfg).base, "<U+0085>");
+        assert_eq!(grapheme_display("\u{301}", &cfg).base, "\u{25CC}\u{301}");
+        let z = grapheme_display("a\u{200C}", &cfg);
+        assert_eq!((z.base.as_str(), z.marks.as_str()), ("a", "<ZWNJ>"));
     }
 }

@@ -24,6 +24,8 @@ const SCROLL_MARGIN: usize = 3;
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct ScrollPos {
     pub top: ByteOff,
+    /// 水平スクロール量 (表示列。折り返しなしのとき)。
+    pub left_col: u32,
 }
 
 /// 文書の表示と Selection の単位。
@@ -369,6 +371,42 @@ impl EditorState {
     }
 
     pub fn ensure_cursor_visible_with_margin(&mut self, view: ViewId, margin: usize) {
+        self.ensure_vertical(view, margin);
+        self.ensure_horizontal(view);
+    }
+
+    /// カーソルの列が見えるよう水平スクロールを調整する (折り返しなし)。
+    fn ensure_horizontal(&mut self, view: ViewId) {
+        let Some((col, _)) = super::layout::primary_cursor_col(self, view) else {
+            return;
+        };
+        let Some(doc) = self
+            .views
+            .get(&view)
+            .and_then(|v| self.documents.get(&v.doc))
+        else {
+            return;
+        };
+        let text_cols =
+            (self.viewport.0 as usize).saturating_sub(super::layout::gutter_width(doc) as usize);
+        let Some(v) = self.views.get_mut(&view) else {
+            return;
+        };
+        let left = v.scroll.left_col as usize;
+        let new_left = if col < left {
+            col
+        } else if text_cols > 0 && col >= left + text_cols {
+            col + 1 - text_cols
+        } else {
+            left
+        };
+        if new_left != left {
+            v.scroll.left_col = u32::try_from(new_left).unwrap_or(u32::MAX);
+            self.needs_render = true;
+        }
+    }
+
+    fn ensure_vertical(&mut self, view: ViewId, margin: usize) {
         let rows = self.viewport.1 as usize;
         let Some(doc) = self.views.get(&view).map(|v| v.doc) else {
             return;

@@ -10,6 +10,7 @@ mod default_keymap;
 mod edit;
 mod file;
 mod keymap;
+mod layout;
 mod motion;
 mod state;
 
@@ -211,6 +212,13 @@ impl Editor {
 
     pub fn take_snapshot_updates(&mut self) -> Vec<DocumentId> {
         self.state.take_snapshot_updates()
+    }
+
+    /// Window の Frame を作る (可視範囲だけ。コストは文書の大きさに依存しない)。
+    pub fn frame(&mut self, window: WindowId) -> Option<eve_view::Frame> {
+        let f = layout::build_frame(&self.state, window);
+        self.state.mark_rendered();
+        f
     }
 
     pub fn needs_render(&self) -> bool {
