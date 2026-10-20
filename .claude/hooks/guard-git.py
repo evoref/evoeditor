@@ -2,8 +2,9 @@
 """PreToolUse hook: ブランチ運用 (docs/11-dev-workflow.md §9.1) を守らせる。
 
 - main / develop への直接 push・force push・削除を拒否
-- main 上での commit / merge / rebase 等を拒否 (develop 上は確認を求める)
+- main / develop 上での commit / merge / rebase 等を拒否 (作業ブランチ → PR で入れる)
 - リリースタグ (v*) の作成・push を拒否 (署名付きタグは人間が付ける)
+- git stash を拒否 (作業ツリーを動かす操作)。reset --hard / clean -f / restore / checkout -- は確認を求める
 - gh pr merge は確認を求める (merge は人間)
 
 標準入力の JSON から tool_input.command を読み、deny / ask のときだけ JSON を出力する。
@@ -128,13 +129,24 @@ def main():
             if any(a in ("-d", "-D", "--delete", "-m", "-M", "--move") for a in args) and \
                     any(a in PROTECTED for a in args if not a.startswith("-")):
                 decide("deny", "main / develop の削除・改名は禁止です。")
-        elif sub == "reset" and "--hard" in args and branch in PROTECTED:
-            decide("deny", f"{branch} 上の reset --hard は禁止です。")
+        elif sub == "stash" and not (args and args[0] in ("list", "show")):
+            decide("deny", "git stash は使いません (作業ツリーを動かし、改行コードや未追跡の変更を壊しやすい)。"
+                           "退避が要るときは、作業ブランチにコミットするか、人間に頼んでください。")
+        elif sub == "reset" and "--hard" in args:
+            if branch in PROTECTED:
+                decide("deny", f"{branch} 上の reset --hard は禁止です。")
+            decide("ask", "reset --hard は作業ツリーの変更を捨てます。実行してよいか確認してください。")
+        elif sub == "clean" and any(a.startswith("-") and "f" in a for a in args):
+            decide("ask", "git clean -f は未追跡のファイルを削除します。実行してよいか確認してください。")
+        elif sub == "restore" and "--staged" not in args:
+            decide("ask", "git restore は作業ツリーの変更を捨てます。実行してよいか確認してください。")
+        elif sub == "checkout" and "--" in args:
+            decide("ask", "git checkout -- <path> は作業ツリーの変更を捨てます。実行してよいか確認してください。")
         elif sub in MUTATING:
             if branch == "main":
                 decide("deny", "main へ直接コミット・マージはしません。main はリリース専用です (develop → main の PR)。")
             if branch == "develop":
-                decide("ask", "develop への直接コミット・マージです。通常は作業ブランチ → PR (squash) で入れます。最初の push (M0e) など例外のときだけ許可してください。")
+                decide("deny", "develop へ直接コミット・マージはしません。作業ブランチを切って PR (squash) で入れてください (docs/11 §9.1)。")
 
 
 if __name__ == "__main__":

@@ -8,7 +8,7 @@ Rust 製テキストエディタ。**仕様書駆動** ([ADR-0001](docs/10-decis
 
 - 長命ブランチは `main` と `develop` の 2 本だけ。
   - `main`: リリース専用。リリースした版だけが入る。**直接 commit / push しない**。
-  - `develop`: 開発の本線。**直接 commit / push しない** (最初の push (M0e) だけ例外。確認が出る)。
+  - `develop`: 開発の本線。**直接 commit / push しない** (最初の push (M0e) は 2026-10-20 に完了済みで、例外はない)。変更は作業ブランチ → PR で入れる。
 - 作業ブランチは **`develop` から作る**。種別は `feat/` `fix/` `spec/` (docs) `chore/` `spike/`。名前は `<種別>/<crate>-<短い説明>` (例: `feat/eve-core-linear-undo`、`spec/04-color-depth`)。エージェントの作業は `agent/<名前>/<Issue 番号>-<短い説明>`。
 - **1 タスク = 1 作業ブランチ = 1 PR**。PR は `develop` 宛て、squash で入れる (develop 上で 1 作業 = 1 コミット)。マージ後に作業ブランチを削除する。rebase は作業ブランチ内でだけ自由。
 - `dev/<版>`、`release/*`、`hotfix/*` ブランチは使わない。
@@ -32,7 +32,17 @@ Rust 製テキストエディタ。**仕様書駆動** ([ADR-0001](docs/10-decis
 
 - `.claude/settings.json` の PreToolUse hook (`.claude/hooks/guard-git.py`) が、次を拒否または確認にする。
   - `main` / `develop` への push、force push、リモートのブランチ削除
-  - `main` 上の commit / merge / rebase など (`develop` 上は確認)
-  - `v*` タグの作成と push、`gh pr merge` (確認)
+  - `main` / `develop` 上の commit / merge / rebase など
+  - `v*` タグの作成と push
+  - `git stash` (作業ツリーを動かし、改行コードや未追跡の変更を壊しやすいため)
+  - `git reset --hard` / `git clean -f` / `git restore` / `git checkout -- <path>` (作業ツリーの変更を捨てる。確認が出る)
+  - `gh pr merge` (確認)
 - GitHub のブランチ保護 (`main` と `develop`: PR 必須、直接 push・force push・削除の禁止) も併用する。設定の手順は [docs/11 §9.1](docs/11-dev-workflow.md)。
 - hook に拒否されたら、回避せずに理由を人間に伝えて指示を待つ。
+
+## サブエージェントに作業を任せるとき
+
+- 依頼文に、**作業ツリーを動かす git コマンド (`stash` / `checkout` / `reset` / `restore` / `clean`) を使わない** ことを明記する (hook でも拒否される)。
+- 編集するファイルの範囲 (例: `docs/` のみ) と、コミットしないことを明記する。
+- 各ファイルの改行コード (CRLF/LF) を維持させる。Python では `newline=''` で読み書きする。
+- 報告は信用しきらず、完了後に自分で `git status` / `git diff --stat` / リンク検査で確かめる。
