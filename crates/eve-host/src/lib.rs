@@ -1,5 +1,19 @@
-//! Composition Root の共通部: 設定読込、Port の注入、JobSpawner、単一受信口、メインループ (docs/02 §4.1 / §9)。G1a で着手するのは端末に依存しない部分 (Host::step・ジョブ・JobSpawner) だけ。
+//! Composition Root の共通部: Port の注入、単一受信口、メインループ (docs/02 §4.1 / §9)。
+//! G1a で着手するのは端末に依存しない部分 (`Host::step`・`Frontend` trait・受信口)。
 //!
-//! 現在は workspace の骨格 (M1 のタスク (0)) で、実装はない。実装は docs/08-roadmap.md §2.2 の「最初の縦切り」の順に入れる。
+//! 現在の範囲 (M1 の D1a): `Frontend` trait、`HostMsg`、`Host::step` / `Host::run`、システム時計。
+//! 本番の `JobSpawner` (固定 2 本のワーカー)、緊急退避の書き手、シグナル・クリップボードは、それぞれの版で足す。
 
 #![forbid(unsafe_code)]
+
+mod clock;
+mod frontend;
+mod host;
+mod msg;
+
+pub use clock::SystemClock;
+pub use frontend::{
+    EffectOutcome, Frontend, FrontendConfig, FrontendError, InputSink, RenderOutcome,
+};
+pub use host::{Host, StartError, StepOutcome};
+pub use msg::{ExitCode, FatalReason, HostMsg, SignalKind};

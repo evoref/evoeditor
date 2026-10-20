@@ -150,12 +150,19 @@ dependencies = [
 [[package]]
 name = "eve-host"
 version = "0.0.0"
+dependencies = [
+ "eve-core",
+ "eve-testkit",
+ "eve-text",
+ "eve-view",
+]
 
 [[package]]
 name = "eve-testkit"
 version = "0.0.0"
 dependencies = [
  "eve-core",
+ "eve-host",
  "eve-view",
 ]
 

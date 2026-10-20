@@ -15,6 +15,7 @@ mod layout;
 mod message;
 mod motion;
 mod overlay;
+mod snapshot;
 mod state;
 
 use eve_view::{
@@ -29,6 +30,7 @@ pub use command::{
 pub use context::{ContextExpr, CtxValue, ParseError};
 pub use edit::normalize_eol;
 pub use keymap::{Binding, KeyParseError, Keymap, Layer, Resolution, parse_sequence, parse_stroke};
+pub use snapshot::DocSnapshot;
 pub use state::{EditorState, ScrollPos, View, Window};
 
 use crate::document::Document;
@@ -261,6 +263,28 @@ impl Editor {
 
     pub fn drain_events(&mut self) -> Vec<EditorEvent> {
         self.state.drain_events()
+    }
+
+    /// 退避用の公開物を作る。dirty でない文書・読込中の文書・閉じた文書は `None` (スロットを空にする)。
+    pub fn emergency_snapshot(&self, doc: DocumentId) -> Option<DocSnapshot> {
+        let d = self.state.document(doc)?;
+        if !d.is_dirty() || d.load_state != crate::document::LoadState::Ready {
+            return None;
+        }
+        Some(DocSnapshot {
+            doc,
+            snapshot: d.snapshot(),
+            format: d.format.clone(),
+            revision: d.revision(),
+            saved_node_exists: d.history().saved().is_some(),
+            sensitive: false,
+            path: d.path.clone(),
+            untitled_name: d.path.is_none().then(|| {
+                self.state
+                    .catalog()
+                    .render("status.untitled", &[("n", "1")], &|_| None)
+            }),
+        })
     }
 
     pub fn take_snapshot_updates(&mut self) -> Vec<DocumentId> {
