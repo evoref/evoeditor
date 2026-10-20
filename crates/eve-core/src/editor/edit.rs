@@ -40,6 +40,31 @@ fn active(ctx: &CommandCtx<'_>) -> Option<(ViewId, DocumentId)> {
     Some((v, ctx.state.view(v)?.doc))
 }
 
+/// 重なる編集を切り詰める (03 §4.5 の 2): 先行する Range を優先し、後続は重なる部分を切り詰める。
+/// 切り詰めて何も残らない編集は捨てる。先行より前にさかのぼる編集 (順序が逆) は捨てる。
+fn trim_overlaps(plans: Vec<Option<Plan>>) -> Vec<Option<Plan>> {
+    let mut covered_end = 0usize;
+    let mut prev_start = 0usize;
+    plans
+        .into_iter()
+        .map(|p| {
+            let mut p = p?;
+            if p.del.start.0 < prev_start {
+                return None;
+            }
+            if p.del.start.0 < covered_end {
+                p.del = ByteRange::new(ByteOff(covered_end), ByteOff(p.del.end.0.max(covered_end)));
+            }
+            if p.del.is_empty() && p.ins.is_empty() {
+                return None;
+            }
+            prev_start = p.del.start.0;
+            covered_end = covered_end.max(p.del.end.0);
+            Some(p)
+        })
+        .collect()
+}
+
 /// 各 Range に `f` を適用して 1 つの Transaction として適用する。`f` が全部 `None` なら何もしない。
 fn edit_each(
     ctx: &mut CommandCtx<'_>,
@@ -52,7 +77,7 @@ fn edit_each(
         return CommandResult::Rejected(RejectReason::NoTarget);
     };
     let before = view.selection.clone();
-    let plans: Vec<Option<Plan>> = before.iter().map(|r| f(doc, r)).collect();
+    let plans = trim_overlaps(before.iter().map(|r| f(doc, r)).collect());
     if plans.iter().all(Option::is_none) {
         return CommandResult::Done;
     }
@@ -80,7 +105,8 @@ fn edit_each(
                     CursorRule::Keep => r.map(&cs, Bias::After),
                 });
             }
-            None => ranges.push(r.map(&cs, Bias::After)),
+            // 自分の編集がない Range は、他の Range の挿入位置では前に留まる (03 §4.5 の 3)
+            None => ranges.push(r.map(&cs, Bias::Before)),
         }
     }
     let Some(after) = Selection::new(ranges, before.primary_index()) else {

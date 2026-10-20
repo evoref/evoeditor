@@ -374,3 +374,55 @@ fn text_引数がない入力は拒否() {
         CommandResult::Rejected(RejectReason::InvalidArgs)
     );
 }
+
+fn scene_with(text: &str, sel: Vec<(usize, usize)>, primary: usize) -> Scene {
+    let mut s = Scene::new(&format!("{text}|"));
+    let ranges = sel
+        .into_iter()
+        .map(|(a, h)| Range::new(ByteOff(a), ByteOff(h)))
+        .collect();
+    let selection = Selection::new(ranges, primary).unwrap();
+    // 複数の Range は、正規化を通る `set_selection` で作る (併合されないものだけを渡す)
+    s.e.state_mut().set_selection(s.view, selection);
+    s
+}
+
+fn all(s: &Scene) -> (String, Vec<(usize, usize)>) {
+    let d = s.e.state().document(s.doc).unwrap();
+    let v = s.e.state().view(s.view).unwrap();
+    (
+        d.to_string_lossy(),
+        v.selection.iter().map(|r| (r.anchor.0, r.head.0)).collect(),
+    )
+}
+
+#[test]
+fn 複数のカーソルでの重なる削除は先行を優先して切り詰める() {
+    // "foo bar" のカーソル 5 と 7 で単語削除 (後方): [4,5) と [4,7) → 先行を優先、後続は重なりを切り詰める
+    let mut s = scene_with("foo bar", vec![(5, 5), (7, 7)], 0);
+    assert_eq!(s.run("edit.delete_word_backward"), CommandResult::Done);
+    let (text, sel) = all(&s);
+    assert_eq!(text, "foo ");
+    assert_eq!(
+        sel,
+        vec![(4, 4)],
+        "2 つのカーソルは同じ位置になり 1 つに併合される"
+    );
+}
+
+#[test]
+fn 複数のカーソルで同じ行をシフトタブしても_1_回だけ() {
+    let mut s = scene_with("    ab", vec![(5, 5), (6, 6)], 0);
+    assert_eq!(s.run("edit.outdent"), CommandResult::Done);
+    assert_eq!(all(&s).0, "ab");
+}
+
+#[test]
+fn 編集のない_range_は他の挿入位置で前に留まる() {
+    // 選択 [0,4) と、その端の primary カーソル 4 (N4 で残る)。Tab はカーソルだけが挿入する
+    let mut s = scene_with("abcdefgh", vec![(0, 4), (4, 4)], 1);
+    assert_eq!(s.run("edit.indent"), CommandResult::Done);
+    let (text, sel) = all(&s);
+    assert_eq!(text, "abcd    efgh");
+    assert_eq!(sel[0], (0, 4), "選択は挿入した空白を覆わない");
+}
