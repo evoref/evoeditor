@@ -379,6 +379,22 @@ proptest! {
         prop_assert_eq!(contents(&t), before);
     }
 
+    // spec: 03 §2.3 (CRLF がチャンクの境目で分割されない保証)。編集の後も保たれる (S-02 の確認項目。編集の端が CR / LF のとき)
+    #[test]
+    fn 編集の後も_crlf_はチャンクの境目で分割されない(s in any_text(), steps in proptest::collection::vec(raw_edits(), 1..5)) {
+        let mut t = Text::from(s.as_str());
+        let mut cur = s.clone();
+        for raw in &steps {
+            let (cs, edits) = make_cs(&t, &cur, raw);
+            t.apply(&cs).unwrap();
+            cur = model_apply(&cur, &edits);
+            let chunks: Vec<&str> = t.chunks(ByteRange::all(t.len_bytes())).collect();
+            for pair in chunks.windows(2) {
+                prop_assert!(!(pair[0].ends_with('\r') && pair[1].starts_with('\n')), "編集後に CRLF がチャンクの境目で分割された");
+            }
+        }
+    }
+
     // spec: ChangeSet・Undo のプロパティテスト (08 §2.2 の (1))。適用のたびに invert を積み、逆順に適用すると元に戻る
     #[test]
     fn 逆変換を積んで巻き戻すと元に戻り_やり直すと同じ結果になる(s in any_text(), steps in proptest::collection::vec(raw_edits(), 1..6)) {
