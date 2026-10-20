@@ -1,0 +1,11 @@
+# clippy の設定 (docs/02-architecture.md §4.3 R3 / R7 / R11、docs/09-testing-quality.md §7)。
+#
+# このファイルは、専用の clippy.toml を持たない crate に適用される。clippy は crate のディレクトリから
+# 上に向かって最初に見つかった clippy.toml だけを読む (マージしない)。そのため、専用の clippy.toml を
+# 持つ crate (eve-core、eve-host) は、ここにある R11 の項目も自分のファイルに書く。
+
+# R11 (案): std::thread::spawn を使ってよいのは eve-host のみ (例外は docs/02 §9.1 の表のスレッド)。
+disallowed-methods = [
+    { path = "std::thread::spawn", reason = "R11: スレッドを作ってよいのは eve-host だけ。作業は JobSpawner の固定 2 本を使う (docs/02 §4.3)" },
+    { path = "std::thread::Builder::spawn", reason = "R11: スレッドを作ってよいのは eve-host だけ (docs/02 §4.3)" },
+]

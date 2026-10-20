@@ -1,0 +1,13 @@
+[package]
+name = "eve-view"
+description = "core と frontend の境界型 (InputEvent / Frame / Effect / CommandId など) だけを持つ (docs/02 §4.1 / §8.4)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true

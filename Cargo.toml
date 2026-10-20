@@ -1,0 +1,41 @@
+# evoeditor の workspace (docs/02-architecture.md §17.1、docs/11-dev-workflow.md §1)。
+# G1a で着手してよい crate だけを置く (docs/08-roadmap.md §5)。eve-tui / eve-platform / bins/evoeditor は G1b / G1c の後。
+[workspace]
+resolver = "3"
+members = [
+    "crates/eve-text",
+    "crates/eve-encoding",
+    "crates/eve-view",
+    "crates/eve-config",
+    "crates/eve-core",
+    "crates/eve-host",
+    "crates/eve-testkit",
+    "crates/eve-docs-tables",
+    "xtask",
+]
+
+[workspace.package]
+version = "0.0.0"
+edition = "2024"
+# MSRV: 「最新安定版 − 2 マイナー」を下限の目安にする (OQ-14、docs/05-platform.md §16.1)。
+rust-version = "1.97"
+license = "Apache-2.0"
+# crates.io への公開は 1.0 の前 (OQ-20)。公開するまで、誤って publish しないようにする。
+publish = false
+repository = "https://github.com/evoref/evoeditor"
+authors = ["evoref"]
+
+# 全 crate が [lints] workspace = true で継承する (docs/09-testing-quality.md §6.2: clippy 警告 0、-D warnings)。
+# pedantic の採用リントと missing_docs (公開 crate) は v0.3 から (NFR-705)。
+[workspace.lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
+
+[workspace.lints.clippy]
+# R5: unsafe は eve-platform / eve-tui の FFI 部分だけ。使う場合は // SAFETY: を必須にする (NFR-704)。
+undocumented_unsafe_blocks = "deny"
+dbg_macro = "deny"
+todo = "warn"
+unimplemented = "warn"
+# ライブラリは標準出力・標準エラーに直接書かない (端末の描画を壊す。ログは tracing 経由)。
+print_stdout = "warn"
+print_stderr = "warn"
