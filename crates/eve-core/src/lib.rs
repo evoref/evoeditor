@@ -8,6 +8,7 @@
 #![allow(clippy::result_large_err)]
 
 mod cancel;
+mod document;
 mod fs;
 mod fspath;
 mod jobs;
@@ -15,6 +16,10 @@ mod paths;
 mod time;
 
 pub use cancel::CancelToken;
+pub use document::{
+    HistoryStep, NodeId, Origin, RecordOutcome, Transaction, TransactionMeta, UndoBudget,
+    UndoGroupHint, UndoHistory,
+};
 pub use fs::*;
 pub use fspath::FsPath;
 pub use jobs::{

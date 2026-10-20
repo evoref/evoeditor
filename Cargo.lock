@@ -127,6 +127,7 @@ version = "0.0.0"
 dependencies = [
  "eve-text",
  "eve-view",
+ "proptest",
 ]
 
 [[package]]
