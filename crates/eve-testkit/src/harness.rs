@@ -15,7 +15,8 @@ use eve_core::{
     Ports,
 };
 use eve_view::{
-    Capabilities, DocumentId, EditorEvent, Effect, Frame, InputEvent, KeyEvent, WindowId,
+    Answer, Capabilities, DocumentId, EditorEvent, Effect, Frame, InputEvent, KeyEvent, Query,
+    QueryError, WindowId,
 };
 
 use crate::ascii::{AsciiOptions, render_ascii};
@@ -179,6 +180,11 @@ impl Harness {
     }
 
     // ---- 検査 ----
+
+    /// 読み取り専用の問い合わせ (`Editor::query`、NFR-707 AC-4)。
+    pub fn query(&self, q: &Query) -> Result<Answer, QueryError> {
+        self.editor.query(q)
+    }
 
     pub fn doc_id(&self) -> DocumentId {
         self.editor

@@ -247,8 +247,15 @@ pub(super) fn goto_line_command(ctx: &mut CommandCtx<'_>) -> CommandResult {
     };
     let t = doc.text();
     let last = t.len_lines().saturating_sub(1);
+    let mut clamped_from = None;
     let line = match ctx.args.get("line") {
-        Some(ArgValue::Int(n)) => (usize::try_from(*n).unwrap_or(1).max(1) - 1).min(last),
+        Some(ArgValue::Int(n)) => {
+            let want = usize::try_from(*n).unwrap_or(1).max(1) - 1;
+            if want > last {
+                clamped_from = Some(want + 1);
+            }
+            want.min(last)
+        }
         Some(ArgValue::Str(s)) if s == "$" => last,
         // 行の指定がないとき (Ctrl+G) は行番号を尋ねる入力プロンプト (オーバーレイ) の役目。それができるまでは何もしない
         None => return CommandResult::Done,
@@ -274,6 +281,17 @@ pub(super) fn goto_line_command(ctx: &mut CommandCtx<'_>) -> CommandResult {
     }
     ctx.state
         .set_selection(view_id, Selection::point(p.min(le)));
+    // 範囲外の行番号は最終行に丸めて通知する (FR-306 AC-1)
+    if let Some(want) = clamped_from {
+        ctx.state.show_message(
+            eve_view::MessageLevel::Info,
+            "info.goto_line.clamped",
+            &[
+                ("line", &want.to_string()),
+                ("last", &(last + 1).to_string()),
+            ],
+        );
+    }
     // 移動後、カーソルを含む行をビューポートの中央に置く (03 §5.6)
     ctx.state.center_cursor(view_id);
     CommandResult::Done

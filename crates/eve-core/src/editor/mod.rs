@@ -15,6 +15,7 @@ mod layout;
 mod message;
 mod motion;
 mod overlay;
+mod query;
 mod snapshot;
 mod state;
 
