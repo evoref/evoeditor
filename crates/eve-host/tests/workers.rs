@@ -142,14 +142,54 @@ fn ワーカーのパニックは_failed_で返り_ワーカーは生き続け�
             other => panic!("{other:?}"),
         }
     }
+    assert!(
+        rx.recv_timeout(Duration::from_millis(100)).is_err(),
+        "結果は 1 件ずつ"
+    );
+}
+
+/// 1 件目の `metadata` が `release` されるまで止まるファイルシステム。
+struct GateFs {
+    inner: Arc<MemFs>,
+    entered: std::sync::mpsc::Sender<()>,
+    release: std::sync::Mutex<std::sync::mpsc::Receiver<()>>,
+}
+
+impl FileSystem for GateFs {
+    fn metadata(&self, p: &FsPath) -> Result<FileMeta, FsError> {
+        let _ = self.entered.send(());
+        let _ = self.release.lock().unwrap().recv();
+        self.inner.metadata(p)
+    }
+    fn canonicalize(&self, p: &FsPath) -> Result<FsPath, FsError> {
+        self.inner.canonicalize(p)
+    }
+    fn open_read(&self, p: &FsPath) -> Result<Box<dyn ReadChunks + Send>, FsError> {
+        self.inner.open_read(p)
+    }
+    fn write_atomic(
+        &self,
+        p: &FsPath,
+        d: &mut dyn ReadChunks,
+        o: &SaveOptions,
+    ) -> Result<SaveReport, FsError> {
+        self.inner.write_atomic(p, d, o)
+    }
 }
 
 #[test]
-fn 待機中のジョブの取消しは_cancelled_で返る() {
+fn 待機中のジョブの取消しは_cancelled_で返り_結果は1件だけ() {
     let clock = Arc::new(SystemClock::new());
-    let fs = Arc::new(MemFs::new(clock.clone()));
-    fs.add_dir("/w");
-    fs.add_file("/w/a.txt", b"x");
+    let mem = Arc::new(MemFs::new(clock.clone()));
+    mem.add_dir("/w");
+    mem.add_file("/w/a.txt", b"x");
+    let (etx, erx) = std::sync::mpsc::channel();
+    let (rtx, rrx) = std::sync::mpsc::channel();
+    let fs = Arc::new(GateFs {
+        inner: mem,
+        entered: etx,
+        release: std::sync::Mutex::new(rrx),
+    });
     let jp = JobPorts {
         fs,
         clock,
@@ -161,19 +201,28 @@ fn 待機中のジョブの取消しは_cancelled_で返る() {
         path: FsPath::from("/w/a.txt"),
         purpose: MetaPurpose::ExternalCheck,
     };
-    // 取消しを先に立てられるよう、投入と同じ呼び出しの中で cancel する (ワーカーが取り出す前でも後でも結果は 1 件)
-    let id = sp.spawn(None, Revision(0), kind());
-    sp.cancel(id);
-    let r = recv_job(&rx);
-    assert_eq!(r.job(), id);
-    assert!(matches!(
-        r,
-        JobResult::Meta { .. }
-            | JobResult::Failed {
-                err: JobError::Cancelled,
-                ..
-            }
-    ));
+    let a = sp.spawn(None, Revision(0), kind());
+    // a が実行中 (ワーカーが止まっている) の間に b を投入して取り消す
+    erx.recv_timeout(Duration::from_secs(10)).unwrap();
+    let b = sp.spawn(None, Revision(0), kind());
+    sp.cancel(b);
     // 存在しない JobId の取消しは何もしない
     sp.cancel(eve_view::JobId(999));
+    rtx.send(()).unwrap();
+    let mut got = [recv_job(&rx), recv_job(&rx)];
+    got.sort_by_key(|r| r.job().0);
+    assert!(
+        matches!(got[0], JobResult::Meta { job, .. } if job == a),
+        "{:?}",
+        got[0]
+    );
+    assert!(
+        matches!(&got[1], JobResult::Failed { job, err: JobError::Cancelled } if *job == b),
+        "{:?}",
+        got[1]
+    );
+    assert!(
+        rx.recv_timeout(Duration::from_millis(100)).is_err(),
+        "結果は 1 件ずつ"
+    );
 }

@@ -7,8 +7,9 @@
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::panic::{AssertUnwindSafe, catch_unwind};
-use std::sync::mpsc::{self, Sender};
+use std::sync::mpsc::{self, RecvTimeoutError, Sender};
 use std::thread::{self, JoinHandle};
+use std::time::Duration;
 
 use eve_core::{
     CancelToken, JobError, JobKind, JobPorts, JobRequest, JobResult, JobSpawner, run_job,
@@ -16,6 +17,9 @@ use eve_core::{
 use eve_view::{DocumentId, JobId, Revision};
 
 use crate::msg::HostMsg;
+
+/// `Drop` がワーカーの終了を待つ上限 (02 §11.2.1 の置換中フラグの待ちに合わせる)。
+const JOIN_WAIT: Duration = Duration::from_secs(1);
 
 struct Work {
     req: JobRequest,
@@ -28,15 +32,21 @@ pub struct ThreadJobSpawner {
     tokens: RefCell<HashMap<JobId, CancelToken>>,
     queue: RefCell<Option<Sender<Work>>>,
     thread: RefCell<Option<JoinHandle<()>>>,
+    /// ワーカーが終わると送信側が閉じる (Drop の待ちに上限を付けるため)。
+    done: mpsc::Receiver<()>,
+    tx: Sender<HostMsg>,
 }
 
 impl ThreadJobSpawner {
     /// `tx` は Host の受信口への送信口 (`Host::sender`、または `channel` で作ったもの)。
     pub fn new(ports: JobPorts, tx: Sender<HostMsg>) -> std::io::Result<ThreadJobSpawner> {
         let (qtx, qrx) = mpsc::channel::<Work>();
+        let (done_tx, done) = mpsc::channel::<()>();
+        let host_tx = tx.clone();
         let handle = thread::Builder::new()
             .name("eve-io".to_owned())
             .spawn(move || {
+                let _done = done_tx;
                 // 送信口が閉じる (spawner が drop される) までキューを直列に処理する
                 while let Ok(Work { req, cancel }) = qrx.recv() {
                     let job = req.id;
@@ -58,6 +68,8 @@ impl ThreadJobSpawner {
             tokens: RefCell::default(),
             queue: RefCell::new(Some(qtx)),
             thread: RefCell::new(Some(handle)),
+            done,
+            tx: host_tx,
         })
     }
 }
@@ -82,9 +94,14 @@ impl JobSpawner for ThreadJobSpawner {
             },
             cancel,
         };
-        if let Some(q) = self.queue.borrow().as_ref() {
-            // ワーカーが死んでいれば送れない。結果は来ない (Host は Fatal で終わる)
-            let _ = q.send(work);
+        if let Some(q) = self.queue.borrow().as_ref()
+            && q.send(work).is_err()
+        {
+            // ワーカーが死んでいる: ジョブ表の行が残らないよう、その場で終端の結果を返す
+            let _ = self.tx.send(HostMsg::Job(Box::new(JobResult::Failed {
+                job: id,
+                err: JobError::Panic,
+            })));
         }
         id
     }
@@ -103,7 +120,14 @@ impl Drop for ThreadJobSpawner {
             t.cancel();
         }
         self.queue.borrow_mut().take();
-        if let Some(h) = self.thread.borrow_mut().take() {
+        // 待つのは短い間だけ。OS の呼出しで止まったワーカーは切り離す (実行中の置換は run_job が完了させる)
+        let finished = matches!(
+            self.done.recv_timeout(JOIN_WAIT),
+            Err(RecvTimeoutError::Disconnected)
+        );
+        if let Some(h) = self.thread.borrow_mut().take()
+            && finished
+        {
             let _ = h.join();
         }
     }
