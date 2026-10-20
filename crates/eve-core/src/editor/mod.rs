@@ -9,6 +9,7 @@ mod context;
 mod default_keymap;
 mod edit;
 mod keymap;
+mod motion;
 mod state;
 
 use eve_view::{
@@ -42,6 +43,7 @@ impl Editor {
     pub fn new(ports: Ports, caps: Capabilities) -> Editor {
         let mut registry = CommandRegistry::new();
         edit::register(&mut registry);
+        motion::register(&mut registry);
         Editor {
             state: EditorState::new(caps),
             registry,

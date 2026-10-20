@@ -7,7 +7,7 @@ use super::keymap::{Keymap, Layer};
 /// 既定のキーマップを作る。
 pub(super) fn default_keymap() -> Keymap {
     let mut l = Layer::new("default");
-    let mut bind = |ctx, keys, cmd| {
+    let mut bind = |ctx: &'static str, keys: &str, cmd: &str| {
         l.bind(ctx, keys, cmd, "")
             .expect("既定キーマップの書式は正しい");
     };
@@ -24,6 +24,62 @@ pub(super) fn default_keymap() -> Keymap {
     bind("editor", "tab", "edit.indent");
     bind("editor", "shift+tab", "edit.outdent");
     bind("editor", "mod+a", "select.all");
+    // 移動・選択 (shift 付きは select.extend_*)
+    for (key, cmd, ext) in [
+        ("left", "cursor.move_left", "select.extend_left"),
+        ("right", "cursor.move_right", "select.extend_right"),
+        ("up", "cursor.move_up", "select.extend_up"),
+        ("down", "cursor.move_down", "select.extend_down"),
+        (
+            "ctrl+left",
+            "cursor.move_word_left",
+            "select.extend_word_left",
+        ),
+        (
+            "ctrl+right",
+            "cursor.move_word_right",
+            "select.extend_word_right",
+        ),
+        (
+            "alt+left",
+            "cursor.move_word_left",
+            "select.extend_word_left",
+        ),
+        (
+            "alt+right",
+            "cursor.move_word_right",
+            "select.extend_word_right",
+        ),
+        ("home", "cursor.home", "select.extend_home"),
+        ("end", "cursor.end", "select.extend_end"),
+        (
+            "ctrl+home",
+            "cursor.doc_start",
+            "select.extend_to_doc_start",
+        ),
+        ("ctrl+end", "cursor.doc_end", "select.extend_to_doc_end"),
+        ("pageup", "cursor.page_up", "select.extend_page_up"),
+        ("pagedown", "cursor.page_down", "select.extend_page_down"),
+    ] {
+        bind("editor", key, cmd);
+        bind("editor", &format!("shift+{key}"), ext);
+    }
+    bind("editor", "alt+b", "cursor.move_word_left");
+    bind("editor", "alt+f", "cursor.move_word_right");
+    bind("editor", "mod+g", "cursor.goto_line");
+    // チョードの代替キー ((alt))
+    for (keys, cmd) in [
+        ("ctrl+k left", "cursor.home"),
+        ("ctrl+k right", "cursor.end"),
+        ("ctrl+k shift+left", "select.extend_home"),
+        ("ctrl+k shift+right", "select.extend_end"),
+        ("ctrl+k ,", "cursor.page_up"),
+        ("ctrl+k .", "cursor.page_down"),
+        ("ctrl+k <", "select.extend_page_up"),
+        ("ctrl+k >", "select.extend_page_down"),
+    ] {
+        bind("editor", keys, cmd);
+    }
     Keymap::new(vec![l]).expect("既定キーマップに曖昧なチョードはない")
 }
 
