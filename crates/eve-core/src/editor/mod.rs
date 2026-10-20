@@ -151,7 +151,7 @@ impl Editor {
                     let is_esc = k.code == KeyCode::Esc && k.mods.is_empty();
                     let chord_pending = !self.keymap.pending().is_empty();
                     // 保留中の Esc は保留を取り消す (メッセージは消さない、04 §8.9 の Esc の優先順位)
-                    if !(is_esc && chord_pending) {
+                    if !(is_esc && (chord_pending || self.state.overlay_kind() != "")) {
                         self.state.dismiss_message_on_key(is_esc);
                     }
                     self.on_key(KeyStroke {
@@ -207,7 +207,8 @@ impl Editor {
             Resolution::Unbound => {
                 // 修飾のない印字可能文字は Text と同じ扱い。それ以外は無視する (「未割当」の通知はメッセージ基盤と同時)
                 if let KeyCode::Char(c) = stroke.key
-                    && stroke.mods.is_empty()
+                    && (stroke.mods.is_empty()
+                        || (self.state.is_dialog() && stroke.mods == Modifiers::SHIFT))
                 {
                     if self.state.is_dialog() {
                         // 確認ダイアログはアクセラレータとして照合する (一致しなければ捨てる、K1)

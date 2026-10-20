@@ -250,14 +250,15 @@ impl EditorState {
                 self.prompt_error("empty")
             }
             PromptKind::Open => {
-                self.overlay = None;
-                self.mark_dirty_render();
-                self.open_path(&text, OpenOptions::default())
+                let res = self.run_from_prompt(|st| st.open_path(&text, OpenOptions::default()));
+                self.restore_prompt_if_rejected(Overlay::Prompt(p.clone()), &res, false);
+                res
             }
             PromptKind::SaveAs { then } => {
-                self.overlay = None;
-                self.mark_dirty_render();
-                self.request_save_as(&text, then.clone())
+                let res = self.run_from_prompt(|st| st.request_save_as(&text, then.clone()));
+                // 保存が始まらなかったとき (不正なパス・保存中・保存できない文書) は、名前の入力に戻る (03 §9.7)
+                self.restore_prompt_if_rejected(Overlay::Prompt(p.clone()), &res, true);
+                res
             }
             PromptKind::GotoLine => match parse_goto(&text) {
                 Some(args) => {
@@ -271,6 +272,30 @@ impl EditorState {
                 }
                 None => self.prompt_error("invalid"),
             },
+        }
+    }
+
+    /// プロンプトを閉じてから `f` を実行する (`f` が別のオーバーレイを出すことがある)。
+    fn run_from_prompt(
+        &mut self,
+        f: impl FnOnce(&mut EditorState) -> CommandResult,
+    ) -> CommandResult {
+        self.overlay = None;
+        self.mark_dirty_render();
+        f(self)
+    }
+
+    /// 確定が拒否された (または `need_job` で保存ジョブが始まらなかった) ときは、プロンプトを元に戻す。
+    /// 別のオーバーレイが出ていれば、それを優先する。
+    fn restore_prompt_if_rejected(&mut self, prev: Overlay, res: &CommandResult, need_job: bool) {
+        let failed = match res {
+            CommandResult::Rejected(_) => true,
+            CommandResult::Done => need_job,
+            _ => false,
+        };
+        if failed && self.overlay.is_none() {
+            self.overlay = Some(prev);
+            self.mark_dirty_render();
         }
     }
 
@@ -329,6 +354,12 @@ impl EditorState {
 
     /// 確認ダイアログのアクセラレータ (`Text` / 修飾なしのキー。大小は区別しない)。一致しなければ捨てる。
     pub fn dialog_accelerator(&mut self, c: char) {
+        // 全角英字は半角に畳み、大小は区別しない (02 §7.2 K1)
+        let c = match c {
+            '\u{FF21}'..='\u{FF3A}' => char::from_u32(c as u32 - 0xFF21 + 'A' as u32).unwrap_or(c),
+            '\u{FF41}'..='\u{FF5A}' => char::from_u32(c as u32 - 0xFF41 + 'a' as u32).unwrap_or(c),
+            _ => c,
+        };
         let c = c.to_lowercase().next().unwrap_or(c);
         if let Some((_, idx)) = ACCELERATORS.iter().find(|(k, _)| *k == c) {
             self.choose(*idx);

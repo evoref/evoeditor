@@ -227,8 +227,8 @@ impl CommandRegistry {
         if !spec.when.eval(&|name| state.context_value(name)) {
             return CommandResult::Rejected(RejectReason::NotAvailable);
         }
-        // Error のメッセージは、次のコマンド実行で消える (カーソル移動では消えない、04 §8.9)
-        if spec.kind != CommandKind::Motion {
+        // Error のメッセージは、次の編集・ファイルのコマンド実行で消える (カーソル移動・オーバーレイ内の操作では消えない、04 §8.9)
+        if matches!(spec.kind, CommandKind::Edit | CommandKind::File) {
             state.dismiss_error_on_command();
         }
         // Motion の実行はカーソル移動なので、Undo の結合を封印する (03 §7.3 R3)

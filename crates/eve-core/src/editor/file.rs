@@ -128,9 +128,9 @@ impl EditorState {
             .pending
             .iter()
             .filter(|(_, p)| match p {
-                Pending::Open { doc: d, .. }
-                | Pending::CheckUnchanged { doc: d }
-                | Pending::Save { doc: d, .. } => *d == doc,
+                Pending::Open { doc: d, .. } | Pending::CheckUnchanged { doc: d } => *d == doc,
+                // 保存ジョブは取り消さず、完了を待つ (03 §9.2 の「閉じる手順」。ユーザーが求めた保存を中断しない)
+                Pending::Save { .. } => false,
             })
             .map(|(id, _)| *id)
             .collect();
@@ -253,6 +253,15 @@ impl EditorState {
         let Some(doc) = self.document(doc_id) else {
             return CommandResult::Rejected(RejectReason::NoTarget);
         };
+        // 保存中なら、その保存の完了後に続ける (二重に保存しない)
+        let in_flight = self.pending.iter().find_map(|(job, p)| match p {
+            Pending::Save { doc, .. } if *doc == doc_id => Some(*job),
+            _ => None,
+        });
+        if let Some(job) = in_flight {
+            self.continuations.insert(job, cont);
+            return CommandResult::Pending(job);
+        }
         let Some(path) = doc.path.clone() else {
             self.open_prompt(PromptKind::SaveAs { then: Some(cont) }, String::new());
             return CommandResult::Done;
@@ -556,8 +565,16 @@ impl EditorState {
                 self.message(MessageLevel::Info, "info.save.done", &path.display());
                 self.mark_snapshot_update(doc_id);
                 // 保存の後に続ける操作 (開く・新規作成・終了)。保存が失敗したときは続けない
+                // 保存の間に編集されていたら、続きの操作の前にもう一度尋ねる (03 §9.7。編集を捨てない)
                 if let Some(c) = cont {
-                    self.run_continuation(c);
+                    let name = if c == Continuation::Quit {
+                        "unsaved"
+                    } else {
+                        "unsaved_replace"
+                    };
+                    if !self.confirm_if_dirty(name, c.clone()) {
+                        self.run_continuation(c);
+                    }
                 }
             }
             JobResult::Failed { err, .. } => {

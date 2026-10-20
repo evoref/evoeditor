@@ -464,3 +464,100 @@ fn 読み取り専用の文書でもプロンプトは入力できる() {
     };
     assert_eq!(input.len, 4);
 }
+
+#[test]
+fn 保存の間に編集したら_続きの前にもう一度尋ねる() {
+    let mut s = dirty_env();
+    s.run("app.quit", Args::new());
+    // 「保存」を選ぶ (ジョブはまだ実行しない) → 保存中に入力する
+    s.e.handle_input(s.win, InputEvent::Text("s".into()));
+    s.e.handle_input(s.win, InputEvent::Text("y".into()));
+    s.pump();
+    assert_eq!(
+        s.fs.read("/w/a.txt").unwrap(),
+        b"xaaa",
+        "保存したのは選択時の内容"
+    );
+    assert!(
+        !s.quit_requested(),
+        "保存中に編集された: そのまま終了しない"
+    );
+    assert_eq!(s.overlay(), "dialog", "もう一度尋ねる");
+    assert_eq!(s.doc_text(), "xyaaa");
+}
+
+#[test]
+fn 明示の保存の最中に破棄で置き換えても_保存は完了する() {
+    let mut s = dirty_env();
+    s.e.execute(CommandInvocation::new(
+        "file.save",
+        InvocationSource::Keymap,
+    )); // ジョブはまだ
+    s.open("/w/b.txt"); // 保存中は dirty のまま → 確認
+    assert_eq!(s.overlay(), "dialog");
+    s.e.handle_input(s.win, InputEvent::Text("d".into()));
+    s.pump();
+    assert_eq!(s.doc_text(), "bbb");
+    assert_eq!(
+        s.fs.read("/w/a.txt").unwrap(),
+        b"xaaa",
+        "求められた保存は中断されない"
+    );
+}
+
+#[test]
+fn 保存中に確認で保存を選んでも_二重に保存しない() {
+    let mut s = dirty_env();
+    s.e.execute(CommandInvocation::new(
+        "file.save",
+        InvocationSource::Keymap,
+    ));
+    s.open("/w/b.txt");
+    s.e.handle_input(s.win, InputEvent::Text("s".into()));
+    assert_eq!(s.jobs.pending(), 1, "保存ジョブは 1 つだけ");
+    s.pump();
+    assert_eq!(s.fs.read("/w/a.txt").unwrap(), b"xaaa");
+    assert_eq!(s.doc_text(), "bbb", "その保存の完了後に続きの操作");
+}
+
+#[test]
+fn 全角のアクセラレータと_shift_付きのキー() {
+    let mut s = dirty_env();
+    s.open("/w/b.txt");
+    s.text("Ｄ"); // 全角英字は半角に畳む
+    assert_eq!(s.doc_text(), "bbb");
+    let mut s = dirty_env();
+    s.open("/w/b.txt");
+    s.key(KeyCode::Char('d'), Modifiers::SHIFT); // 大文字は shift + 小文字で届く
+    assert_eq!(s.doc_text(), "bbb");
+}
+
+#[test]
+fn オーバーレイを閉じる_esc_はメッセージを消さない() {
+    let mut s = dirty_env();
+    s.open("/w/b.txt");
+    s.e.state_mut().show_message(
+        eve_view::MessageLevel::Error,
+        "msg.save.failed",
+        &[("path", "p"), ("reason", "r")],
+    );
+    s.key(KeyCode::Esc, Modifiers::NONE);
+    assert_eq!(s.overlay(), "");
+    assert!(
+        s.frame().messages.current.is_some(),
+        "1 回の Esc は 1 つのことだけ"
+    );
+}
+
+#[test]
+fn 名前を付けて保存が拒否されたら_プロンプトに戻る() {
+    let mut s = Env::new();
+    s.fs.add_file("/w/bad.txt", b"x\x9A");
+    s.open("/w/bad.txt"); // 不正バイト → 読み取り専用
+    s.run("file.save_as", Args::new());
+    assert_eq!(s.overlay(), "prompt");
+    s.key(KeyCode::Enter, Modifiers::NONE); // 同じファイル → 拒否
+    assert_eq!(s.overlay(), "prompt", "拒否されたら名前の入力に戻る");
+    s.key(KeyCode::Esc, Modifiers::NONE);
+    assert_eq!(s.fs.read("/w/bad.txt").unwrap(), b"x\x9A");
+}
