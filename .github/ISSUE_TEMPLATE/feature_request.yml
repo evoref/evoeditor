@@ -1,0 +1,38 @@
+name: 機能の要望
+description: こういう機能が欲しい、こう変えてほしい
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        要望の前に、[ロードマップ](https://github.com/evoref/evoeditor/blob/develop/docs/08-roadmap.md)と[要件](https://github.com/evoref/evoeditor/blob/develop/docs/01-requirements.md)を確認すると、すでに計画済みかが分かります。
+  - type: textarea
+    id: problem
+    attributes:
+      label: 困っていること
+      description: どんな場面で、何ができなくて困っていますか。
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 望む動作
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: 今の回避策・検討した代案
+  - type: input
+    id: related
+    attributes:
+      label: 関連する要件・未決事項 (あれば)
+      description: docs/ の FR / NFR / OQ の番号
+      placeholder: "FR-401, OQ-41"
+  - type: checkboxes
+    id: confirm
+    attributes:
+      label: 確認
+      options:
+        - label: 同じ内容の Issue が無いか確認しました。
+          required: true
