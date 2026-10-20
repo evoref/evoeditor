@@ -18,11 +18,12 @@ use windows_sys::Win32::Storage::FileSystem::{
     CreateFileW, FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING,
 };
 use windows_sys::Win32::System::Console::{
-    CONSOLE_SCREEN_BUFFER_INFO, ENABLE_ECHO_INPUT, ENABLE_EXTENDED_FLAGS, ENABLE_LINE_INPUT,
-    ENABLE_MOUSE_INPUT, ENABLE_PROCESSED_INPUT, ENABLE_QUICK_EDIT_MODE,
-    ENABLE_VIRTUAL_TERMINAL_INPUT, ENABLE_WINDOW_INPUT, GetConsoleMode, GetConsoleScreenBufferInfo,
+    CONSOLE_SCREEN_BUFFER_INFO, DISABLE_NEWLINE_AUTO_RETURN, ENABLE_ECHO_INPUT,
+    ENABLE_EXTENDED_FLAGS, ENABLE_LINE_INPUT, ENABLE_MOUSE_INPUT, ENABLE_PROCESSED_INPUT,
+    ENABLE_QUICK_EDIT_MODE, ENABLE_VIRTUAL_TERMINAL_INPUT, ENABLE_VIRTUAL_TERMINAL_PROCESSING,
+    ENABLE_WINDOW_INPUT, GetConsoleMode, GetConsoleScreenBufferInfo, GetConsoleTitleW,
     GetNumberOfConsoleInputEvents, INPUT_RECORD, KEY_EVENT, ReadConsoleInputW, SetConsoleMode,
-    WINDOW_BUFFER_SIZE_EVENT,
+    SetConsoleTitleW, WINDOW_BUFFER_SIZE_EVENT, WriteConsoleW,
 };
 use windows_sys::Win32::System::Threading::{INFINITE, WaitForSingleObject};
 
@@ -289,4 +290,98 @@ pub fn spawn_input_thread(input: &ConsoleInput, out: impl InputOut) -> io::Resul
     thread::Builder::new()
         .name("eve-input".to_owned())
         .spawn(move || run(i, o, &out))
+}
+
+/// コンソールの出力 (`CONOUT$`)。VT 出力を有効にし、UTF-16 に変換して `WriteConsoleW` で書く (05 §9.1。標準出力が
+/// リダイレクトされていても描画先は常にコンソール)。
+pub struct ConsoleOut {
+    handle: Handle,
+    saved_mode: u32,
+    saved_title: Option<Vec<u16>>,
+    restored: bool,
+}
+
+impl ConsoleOut {
+    /// `CONOUT$` を開き、`ENABLE_VIRTUAL_TERMINAL_PROCESSING | DISABLE_NEWLINE_AUTO_RETURN` を設定する。VT を拒否する
+    /// コンソールは `Err` (起動エラー、`stderr.unsupported_console`)。元のモードと端末タイトルを保存する。
+    pub fn open() -> io::Result<ConsoleOut> {
+        let h = open_console("CONOUT$")?;
+        let mut saved = 0u32;
+        // SAFETY: `h` は開いたコンソール出力のハンドル、`saved` は書込先の有効な u32。
+        if unsafe { GetConsoleMode(h, &mut saved) } == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        let mode = saved | ENABLE_VIRTUAL_TERMINAL_PROCESSING | DISABLE_NEWLINE_AUTO_RETURN;
+        // SAFETY: `h` は有効なコンソール出力のハンドル。
+        if unsafe { SetConsoleMode(h, mode) } == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        let mut buf = vec![0u16; 4096];
+        // SAFETY: `buf` は `buf.len()` 個の u16 の有効な領域。
+        let n = unsafe { GetConsoleTitleW(buf.as_mut_ptr(), buf.len() as u32) } as usize;
+        let title = (n > 0 && n < buf.len()).then(|| buf[..n].to_vec());
+        Ok(ConsoleOut {
+            handle: Handle(h),
+            saved_mode: saved,
+            saved_title: title,
+            restored: false,
+        })
+    }
+
+    /// 文字列を書く (UTF-16 に変換し、サロゲートペアを割らずに分けて書く)。
+    pub fn write_str(&mut self, s: &str) -> io::Result<()> {
+        const MAX_UNITS: usize = 16 * 1024;
+        let units: Vec<u16> = s.encode_utf16().collect();
+        let mut rest: &[u16] = &units;
+        while !rest.is_empty() {
+            let mut n = rest.len().min(MAX_UNITS);
+            // 上位サロゲートで切らない
+            if n < rest.len() && (0xD800..0xDC00).contains(&rest[n - 1]) {
+                n -= 1;
+            }
+            let mut written = 0u32;
+            // SAFETY: `rest[..n]` は有効な u16 の領域、`written` は書込先の有効な u32。
+            let ok = unsafe {
+                WriteConsoleW(
+                    self.handle.0,
+                    rest.as_ptr().cast(),
+                    n as u32,
+                    &mut written,
+                    std::ptr::null(),
+                )
+            };
+            if ok == 0 {
+                return Err(io::Error::last_os_error());
+            }
+            rest = &rest[(written as usize).min(rest.len()).max(1)..];
+        }
+        Ok(())
+    }
+
+    /// 端末のウィンドウの大きさ (`srWindow`)。
+    pub fn window_size(&self) -> io::Result<CellSize> {
+        window_size(self.handle.0)
+    }
+
+    /// 退避しておいた端末タイトルとコンソールモードを戻す (冪等。失敗しても続ける)。
+    pub fn restore(&mut self) {
+        if self.restored {
+            return;
+        }
+        self.restored = true;
+        if let Some(t) = &self.saved_title {
+            let mut z = t.clone();
+            z.push(0);
+            // SAFETY: `z` は NUL 終端の UTF-16。
+            unsafe { SetConsoleTitleW(z.as_ptr()) };
+        }
+        // SAFETY: `handle` は `open` で得た有効なハンドル。
+        unsafe { SetConsoleMode(self.handle.0, self.saved_mode) };
+    }
+}
+
+impl Drop for ConsoleOut {
+    fn drop(&mut self) {
+        self.restore();
+    }
 }

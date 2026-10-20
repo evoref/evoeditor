@@ -1,0 +1,25 @@
+[package]
+name = "evoeditor"
+description = "evoeditor: Rust 製のテキストエディタ (引数の解析と Host の起動だけ。docs/02 §4.1)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "evoeditor"
+path = "src/main.rs"
+
+[dependencies]
+eve-core = { version = "0.0.0", path = "../../crates/eve-core" }
+eve-config = { version = "0.0.0", path = "../../crates/eve-config" }
+eve-host = { version = "0.0.0", path = "../../crates/eve-host" }
+eve-platform = { version = "0.0.0", path = "../../crates/eve-platform" }
+eve-tui = { version = "0.0.0", path = "../../crates/eve-tui" }
+eve-view = { version = "0.0.0", path = "../../crates/eve-view" }
