@@ -76,6 +76,8 @@ pub struct EditorState {
     pub(super) message: Option<super::message::ShownMessage>,
     /// 未読のメッセージの数。
     pub(super) unread: u16,
+    /// 履歴の破棄を通知した文書 (文書ごとに 1 回)。
+    trim_notified: BTreeSet<DocumentId>,
 }
 
 impl EditorState {
@@ -101,6 +103,7 @@ impl EditorState {
             continuations: BTreeMap::new(),
             message: None,
             unread: 0,
+            trim_notified: BTreeSet::new(),
         }
     }
 
@@ -296,6 +299,14 @@ impl EditorState {
     }
 
     fn after_change(&mut self, doc: DocumentId, a: &Applied, issuer: Option<ViewId>) {
+        // 履歴の予算による破棄は、文書ごとに 1 回だけ通知する (03 §7.5)
+        if a.record.as_ref().is_some_and(|r| r.pruned) && self.trim_notified.insert(doc) {
+            self.show_message(
+                eve_view::MessageLevel::Info,
+                "info.undo.history_trimmed",
+                &[],
+            );
+        }
         let Some(document) = self.documents.get(&doc) else {
             return;
         };

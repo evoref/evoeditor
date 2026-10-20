@@ -1,10 +1,10 @@
 //! `Query` / `Answer`: 読み取り専用の問い合わせ (docs/02-architecture.md §10.1)。副作用がない。テストのハーネスと
 //! (後の版の) 駆動 API が、状態を取り出す唯一の手段 (01 NFR-707 AC-4)。
 //!
-//! 今は v0.1 で応答する変種のうち、`Frame` の型を要らないものだけを置く。`Status` / `Overlay` は `Frame` の型と
-//! 一緒に足す。予約の変種 (`Commands` / `KeymapReverse`) は、最初の利用者の版で足す。
+//! 予約の変種 (`Commands` / `KeymapReverse`) は、最初の利用者の版で足す。
 
 use crate::caps::Capabilities;
+use crate::frame::{OverlayModel, StatusModel};
 use crate::ids::{DocumentId, Revision, ViewId, WindowId};
 
 /// 位置の範囲 `[start, end)`。UTF-8 のバイトオフセット (ADR-0010)。
@@ -47,6 +47,10 @@ pub enum Query {
     Selection { view: ViewId },
     /// frontend の能力。
     Capabilities,
+    /// Window のステータスバーのモデル。
+    Status { window: WindowId },
+    /// Window の最前面のオーバーレイ (なければ `None`)。
+    Overlay { window: WindowId },
 }
 
 /// 問い合わせの応答。
@@ -71,6 +75,8 @@ pub enum Answer {
         primary: usize,
     },
     Capabilities(Capabilities),
+    Status(StatusModel),
+    Overlay(Option<OverlayModel>),
 }
 
 /// Selection の Range 1 つ (バイトオフセット)。

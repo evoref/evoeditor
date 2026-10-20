@@ -5,7 +5,7 @@
 //! コンテキストは確認が `dialog` のみ、プロンプトが `prompt` → `global`。
 
 use eve_text::{ByteOff, Text, next_grapheme_boundary, prev_grapheme_boundary};
-use eve_view::{Effect, QuitRescue};
+use eve_view::{EditorEvent, Effect, OverlayKind, QuitRescue};
 
 use crate::editor::command::{
     ArgValue, Args, CommandCtx, CommandInvocation, CommandKind, CommandRegistry, CommandResult,
@@ -81,6 +81,39 @@ fn text_of(s: &str) -> Text {
 }
 
 impl EditorState {
+    /// オーバーレイを置き換える。種類が変わる (開く・閉じる・種類が替わる) ときは `OverlayChanged` を積む。
+    pub(super) fn set_overlay(&mut self, new: Option<Overlay>) {
+        let kind = |o: &Option<Overlay>| {
+            o.as_ref().map(|o| match o {
+                Overlay::Confirm(_) => OverlayKind::Confirm,
+                Overlay::Prompt(_) => OverlayKind::Prompt,
+            })
+        };
+        let (before, after) = (kind(&self.overlay), kind(&new));
+        self.overlay = new;
+        if before != after
+            && let Some(window) = self.first_window()
+        {
+            self.push_event(EditorEvent::OverlayChanged {
+                window,
+                overlay: after,
+            });
+        }
+    }
+
+    fn take_overlay(&mut self) -> Option<Overlay> {
+        let old = self.overlay.take();
+        if old.is_some()
+            && let Some(window) = self.first_window()
+        {
+            self.push_event(EditorEvent::OverlayChanged {
+                window,
+                overlay: None,
+            });
+        }
+        old
+    }
+
     /// 出ているオーバーレイの種類 (`""` なし / `"dialog"` / `"prompt"`)。
     pub fn overlay_kind(&self) -> &'static str {
         self.overlay_name()
@@ -114,12 +147,12 @@ impl EditorState {
             .as_ref()
             .map(|p| p.display())
             .unwrap_or_else(|| self.untitled_name());
-        self.overlay = Some(Overlay::Confirm(ConfirmState {
+        self.set_overlay(Some(Overlay::Confirm(ConfirmState {
             name,
             path,
             cont,
             focused: CHOICE_SAVE,
-        }));
+        })));
         self.mark_dirty_render();
         true
     }
@@ -130,7 +163,7 @@ impl EditorState {
     }
 
     fn choose(&mut self, choice: usize) -> CommandResult {
-        let Some(Overlay::Confirm(c)) = self.overlay.take() else {
+        let Some(Overlay::Confirm(c)) = self.take_overlay() else {
             return CommandResult::Rejected(RejectReason::NotAvailable);
         };
         self.mark_dirty_render();
@@ -169,12 +202,12 @@ impl EditorState {
 
     pub(super) fn open_prompt(&mut self, kind: PromptKind, initial: String) {
         let cursor = initial.len();
-        self.overlay = Some(Overlay::Prompt(PromptState {
+        self.set_overlay(Some(Overlay::Prompt(PromptState {
             kind,
             text: initial,
             cursor,
             error: None,
-        }));
+        })));
         self.mark_dirty_render();
     }
 
@@ -262,7 +295,7 @@ impl EditorState {
             }
             PromptKind::GotoLine => match parse_goto(&text) {
                 Some(args) => {
-                    self.overlay = None;
+                    self.set_overlay(None);
                     self.mark_dirty_render();
                     let mut ctx = CommandCtx {
                         state: self,
@@ -280,7 +313,7 @@ impl EditorState {
         &mut self,
         f: impl FnOnce(&mut EditorState) -> CommandResult,
     ) -> CommandResult {
-        self.overlay = None;
+        self.set_overlay(None);
         self.mark_dirty_render();
         f(self)
     }
@@ -294,7 +327,7 @@ impl EditorState {
             _ => false,
         };
         if failed && self.overlay.is_none() {
-            self.overlay = Some(prev);
+            self.set_overlay(Some(prev));
             self.mark_dirty_render();
         }
     }
@@ -323,7 +356,7 @@ impl EditorState {
 
     /// `ui.cancel`: オーバーレイを閉じる (データは変えない)。出ていなければ何もしない。
     pub fn ui_cancel(&mut self) -> CommandResult {
-        if self.overlay.take().is_some() {
+        if self.take_overlay().is_some() {
             self.mark_dirty_render();
         }
         CommandResult::Done
