@@ -1,0 +1,1227 @@
+# v0.1 の Must の受入基準 (AC) のチェックリスト (docs/11-dev-workflow.md §3.3、docs/08-roadmap.md M0c (d))。
+#
+# - 01-requirements.md §5.1〜5.4 の AC を、AC-<要件 ID>-<n> の形で 1 件ずつ並べる。
+# - 人が更新する。AC を満たす PR を merge するときに、status を done にし、verified_by に
+#   検証の実体 (テスト関数名・ベンチ ID・docs/compat/ の手順の記録) を書く。
+# - kind は docs/09-testing-quality.md §8.5 の検証区分 (T: 自動テスト, B: ベンチ, M: 手動, R: レビュー)。
+#   AC 単位で区分が違う場合 (例 FR-206 の AC-3 は M) は、実装時に kind を直す。
+# - status = "done" の項目は verified_by が 1 つ以上必要 (xtask check の検査、11 §3.3)。
+# - 初版は 01 §5 の表と 09 §8.5 の表から機械的に起こした (2026-10-20)。
+
+[[ac]]
+id = "AC-FR-101-1"
+requirement = "FR-101"
+kind = "T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-101-2"
+requirement = "FR-101"
+kind = "T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-104-1"
+requirement = "FR-104"
+kind = "T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-104-3"
+requirement = "FR-104"
+kind = "T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-105-1"
+requirement = "FR-105"
+kind = "T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-105-2"
+requirement = "FR-105"
+kind = "T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-106-1"
+requirement = "FR-106"
+kind = "T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-106-2"
+requirement = "FR-106"
+kind = "T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-106-3"
+requirement = "FR-106"
+kind = "T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-107-1"
+requirement = "FR-107"
+kind = "T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-107-2"
+requirement = "FR-107"
+kind = "T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-107-3"
+requirement = "FR-107"
+kind = "T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-108-1"
+requirement = "FR-108"
+kind = "T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-109-1"
+requirement = "FR-109"
+kind = "T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-109-2"
+requirement = "FR-109"
+kind = "T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-109-3"
+requirement = "FR-109"
+kind = "T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-109-4"
+requirement = "FR-109"
+kind = "T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-109-5"
+requirement = "FR-109"
+kind = "T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-111-1"
+requirement = "FR-111"
+kind = "T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-111-2"
+requirement = "FR-111"
+kind = "T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-111-3"
+requirement = "FR-111"
+kind = "T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-111-4"
+requirement = "FR-111"
+kind = "T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-112-1"
+requirement = "FR-112"
+kind = "T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-112-2"
+requirement = "FR-112"
+kind = "T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-112-3"
+requirement = "FR-112"
+kind = "T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-112-4"
+requirement = "FR-112"
+kind = "T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-113-1"
+requirement = "FR-113"
+kind = "T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-113-2"
+requirement = "FR-113"
+kind = "T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-113-3"
+requirement = "FR-113"
+kind = "T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-113-4"
+requirement = "FR-113"
+kind = "T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-114-1"
+requirement = "FR-114"
+kind = "T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-115-1"
+requirement = "FR-115"
+kind = "T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-115-2"
+requirement = "FR-115"
+kind = "T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-116-1"
+requirement = "FR-116"
+kind = "T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-116-3"
+requirement = "FR-116"
+kind = "T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-116-4"
+requirement = "FR-116"
+kind = "T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-117-1"
+requirement = "FR-117"
+kind = "T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-117-2"
+requirement = "FR-117"
+kind = "T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-122-1"
+requirement = "FR-122"
+kind = "M"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-124-1"
+requirement = "FR-124"
+kind = "T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-127-1"
+requirement = "FR-127"
+kind = "T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-127-2"
+requirement = "FR-127"
+kind = "T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-201-1"
+requirement = "FR-201"
+kind = "T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-202-1"
+requirement = "FR-202"
+kind = "T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-202-2"
+requirement = "FR-202"
+kind = "T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-202-3"
+requirement = "FR-202"
+kind = "T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-203-1"
+requirement = "FR-203"
+kind = "T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-203-2"
+requirement = "FR-203"
+kind = "T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-203-3"
+requirement = "FR-203"
+kind = "T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-204-1"
+requirement = "FR-204"
+kind = "T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-204-2"
+requirement = "FR-204"
+kind = "T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-204-3"
+requirement = "FR-204"
+kind = "T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-204-4"
+requirement = "FR-204"
+kind = "T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-205-1"
+requirement = "FR-205"
+kind = "T/M"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-205-2"
+requirement = "FR-205"
+kind = "T/M"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-205-3"
+requirement = "FR-205"
+kind = "T/M"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-205-4"
+requirement = "FR-205"
+kind = "T/M"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-206-1"
+requirement = "FR-206"
+kind = "T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-206-2"
+requirement = "FR-206"
+kind = "T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-206-3"
+requirement = "FR-206"
+kind = "T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-206-4"
+requirement = "FR-206"
+kind = "T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-301-1"
+requirement = "FR-301"
+kind = "T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-301-2"
+requirement = "FR-301"
+kind = "T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-302-1"
+requirement = "FR-302"
+kind = "T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-303-1"
+requirement = "FR-303"
+kind = "T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-303-2"
+requirement = "FR-303"
+kind = "T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-304-1"
+requirement = "FR-304"
+kind = "T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-305-1"
+requirement = "FR-305"
+kind = "T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-306-1"
+requirement = "FR-306"
+kind = "T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-401-1"
+requirement = "FR-401"
+kind = "T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-401-2"
+requirement = "FR-401"
+kind = "T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-401-3"
+requirement = "FR-401"
+kind = "T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-402-4"
+requirement = "FR-402"
+kind = "T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-404-1"
+requirement = "FR-404"
+kind = "B"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-404-2"
+requirement = "FR-404"
+kind = "B"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-404-3"
+requirement = "FR-404"
+kind = "B"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-404-4"
+requirement = "FR-404"
+kind = "B"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-501-1"
+requirement = "FR-501"
+kind = "T/M"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-501-2"
+requirement = "FR-501"
+kind = "T/M"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-502-1"
+requirement = "FR-502"
+kind = "T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-503-1"
+requirement = "FR-503"
+kind = "M"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-503-2"
+requirement = "FR-503"
+kind = "M"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-504-1"
+requirement = "FR-504"
+kind = "M"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-505-1"
+requirement = "FR-505"
+kind = "M"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-506-1"
+requirement = "FR-506"
+kind = "T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-507-1"
+requirement = "FR-507"
+kind = "T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-507-2"
+requirement = "FR-507"
+kind = "T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-507-3"
+requirement = "FR-507"
+kind = "T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-511-1"
+requirement = "FR-511"
+kind = "M"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-511-2"
+requirement = "FR-511"
+kind = "M"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-512-1"
+requirement = "FR-512"
+kind = "M"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-512-2"
+requirement = "FR-512"
+kind = "M"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-513-1"
+requirement = "FR-513"
+kind = "T/M"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-513-2"
+requirement = "FR-513"
+kind = "T/M"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-513-3"
+requirement = "FR-513"
+kind = "T/M"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-513-4"
+requirement = "FR-513"
+kind = "T/M"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-514-2"
+requirement = "FR-514"
+kind = "M"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-601-1"
+requirement = "FR-601"
+kind = "R/T, M"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-601-2"
+requirement = "FR-601"
+kind = "R/T, M"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-602-1"
+requirement = "FR-602"
+kind = "M"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-602-2"
+requirement = "FR-602"
+kind = "M"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-603-1"
+requirement = "FR-603"
+kind = "R/T, M"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-605-1"
+requirement = "FR-605"
+kind = "M"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-605-2"
+requirement = "FR-605"
+kind = "M"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-606-1"
+requirement = "FR-606"
+kind = "T/M"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-606-2"
+requirement = "FR-606"
+kind = "T/M"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-606-3"
+requirement = "FR-606"
+kind = "T/M"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-609-1"
+requirement = "FR-609"
+kind = "T/M"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-701-1"
+requirement = "FR-701"
+kind = "T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-701-3"
+requirement = "FR-701"
+kind = "T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-702-1"
+requirement = "FR-702"
+kind = "T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-FR-703-1"
+requirement = "FR-703"
+kind = "T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-NFR-101-1"
+requirement = "NFR-101"
+kind = "B"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-NFR-101-2"
+requirement = "NFR-101"
+kind = "B"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-NFR-102-1"
+requirement = "NFR-102"
+kind = "B"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-NFR-102-2"
+requirement = "NFR-102"
+kind = "B"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-NFR-103-1"
+requirement = "NFR-103"
+kind = "B"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-NFR-103-2"
+requirement = "NFR-103"
+kind = "B"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-NFR-104-1"
+requirement = "NFR-104"
+kind = "B"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-NFR-104-2"
+requirement = "NFR-104"
+kind = "B"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-NFR-105-1"
+requirement = "NFR-105"
+kind = "B"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-NFR-105-2"
+requirement = "NFR-105"
+kind = "B"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-NFR-106-3"
+requirement = "NFR-106"
+kind = "B"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-NFR-107-1"
+requirement = "NFR-107"
+kind = "B"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-NFR-201-1"
+requirement = "NFR-201"
+kind = "B / T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-NFR-202-1"
+requirement = "NFR-202"
+kind = "B / T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-NFR-203-1"
+requirement = "NFR-203"
+kind = "B / T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-NFR-203-2"
+requirement = "NFR-203"
+kind = "B / T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-NFR-204-1"
+requirement = "NFR-204"
+kind = "B / T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-NFR-301-1"
+requirement = "NFR-301"
+kind = "T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-NFR-301-2"
+requirement = "NFR-301"
+kind = "T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-NFR-302-1"
+requirement = "NFR-302"
+kind = "T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-NFR-302-2"
+requirement = "NFR-302"
+kind = "T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-NFR-302-3"
+requirement = "NFR-302"
+kind = "T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-NFR-302-5"
+requirement = "NFR-302"
+kind = "T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-NFR-302-6"
+requirement = "NFR-302"
+kind = "T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-NFR-303-1"
+requirement = "NFR-303"
+kind = "T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-NFR-303-2"
+requirement = "NFR-303"
+kind = "T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-NFR-303-3"
+requirement = "NFR-303"
+kind = "T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-NFR-303-4"
+requirement = "NFR-303"
+kind = "T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-NFR-304-1"
+requirement = "NFR-304"
+kind = "T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-NFR-304-2"
+requirement = "NFR-304"
+kind = "T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-NFR-304-3"
+requirement = "NFR-304"
+kind = "T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-NFR-305-1"
+requirement = "NFR-305"
+kind = "T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-NFR-401-1"
+requirement = "NFR-401"
+kind = "T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-NFR-402-1"
+requirement = "NFR-402"
+kind = "M"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-NFR-403-1"
+requirement = "NFR-403"
+kind = "M"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-NFR-404-1"
+requirement = "NFR-404"
+kind = "T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-NFR-406-1"
+requirement = "NFR-406"
+kind = "R"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-NFR-501-1"
+requirement = "NFR-501"
+kind = "T/R"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-NFR-502-1"
+requirement = "NFR-502"
+kind = "T/R"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-NFR-502-2"
+requirement = "NFR-502"
+kind = "T/R"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-NFR-503-1"
+requirement = "NFR-503"
+kind = "T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-NFR-504-1"
+requirement = "NFR-504"
+kind = "R/T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-NFR-505-1"
+requirement = "NFR-505"
+kind = "T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-NFR-507-1"
+requirement = "NFR-507"
+kind = "T/R"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-NFR-602-1"
+requirement = "NFR-602"
+kind = "R"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-NFR-603-1"
+requirement = "NFR-603"
+kind = "T/R"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-NFR-603-2"
+requirement = "NFR-603"
+kind = "T/R"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-NFR-603-4"
+requirement = "NFR-603"
+kind = "T/R"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-NFR-603-5"
+requirement = "NFR-603"
+kind = "T/R"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-NFR-603-6"
+requirement = "NFR-603"
+kind = "T/R"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-NFR-603-7"
+requirement = "NFR-603"
+kind = "T/R"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-NFR-603-8"
+requirement = "NFR-603"
+kind = "T/R"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-NFR-604-1"
+requirement = "NFR-604"
+kind = "R/T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-NFR-605-1"
+requirement = "NFR-605"
+kind = "T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-NFR-701-1"
+requirement = "NFR-701"
+kind = "T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-NFR-704-1"
+requirement = "NFR-704"
+kind = "R"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-NFR-706-1"
+requirement = "NFR-706"
+kind = "R"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-NFR-707-2"
+requirement = "NFR-707"
+kind = "T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-NFR-707-3"
+requirement = "NFR-707"
+kind = "T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-NFR-707-4"
+requirement = "NFR-707"
+kind = "T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-NFR-707-5"
+requirement = "NFR-707"
+kind = "T"
+verified_by = []
+status = "todo"
+
+[[ac]]
+id = "AC-NFR-707-6"
+requirement = "NFR-707"
+kind = "T"
+verified_by = []
+status = "todo"
