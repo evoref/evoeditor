@@ -43,6 +43,8 @@ pub struct EditorState {
     /// Editor の「今」。Host が各メッセージの処理の前に `tick` で渡した値で、コマンドの実行中に読み直さない。
     pub(crate) now: Tick,
     pub(crate) caps: Capabilities,
+    /// Window の編集面の大きさ (セル)。ページ移動などが使う。
+    viewport: (u16, u16),
     effects: Vec<Effect>,
     events: Vec<EditorEvent>,
     snapshot_updates: BTreeSet<DocumentId>,
@@ -58,6 +60,7 @@ impl EditorState {
             next_id: 1,
             now: Tick(0),
             caps,
+            viewport: (80, 24),
             effects: Vec::new(),
             events: Vec::new(),
             snapshot_updates: BTreeSet::new(),
@@ -69,6 +72,22 @@ impl EditorState {
         let id = self.next_id;
         self.next_id += 1;
         id
+    }
+
+    pub fn viewport(&self) -> (u16, u16) {
+        self.viewport
+    }
+
+    pub fn set_viewport(&mut self, cols: u16, rows: u16) {
+        if self.viewport != (cols, rows) {
+            self.viewport = (cols, rows);
+            self.needs_render = true;
+        }
+    }
+
+    pub fn set_caps(&mut self, caps: Capabilities) {
+        self.caps = caps;
+        self.needs_render = true;
     }
 
     pub fn now(&self) -> Tick {
