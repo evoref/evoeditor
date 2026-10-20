@@ -25,7 +25,7 @@ pub use document::{
 };
 pub use editor::{
     ArgValue, Args, Binding, CommandCtx, CommandInvocation, CommandKind, CommandRegistry,
-    CommandResult, CommandSpec, ContextExpr, CtxValue, Editor, EditorState, Handler,
+    CommandResult, CommandSpec, ContextExpr, CtxValue, DocSnapshot, Editor, EditorState, Handler,
     InvocationSource, KeyParseError, Keymap, Layer, ParseError, Permission, RejectReason,
     Resolution, ScrollPos, View, Window, normalize_eol, parse_sequence, parse_stroke,
 };

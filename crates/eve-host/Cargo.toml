@@ -11,3 +11,11 @@ publish.workspace = true
 
 [lints]
 workspace = true
+
+[dependencies]
+eve-core = { version = "0.0.0", path = "../eve-core" }
+eve-view = { version = "0.0.0", path = "../eve-view" }
+
+[dev-dependencies]
+eve-testkit = { version = "0.0.0", path = "../eve-testkit" }
+eve-text = { version = "0.0.0", path = "../eve-text" }

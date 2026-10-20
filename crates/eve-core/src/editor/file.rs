@@ -118,6 +118,8 @@ impl EditorState {
     fn close_document(&mut self, doc: DocumentId) {
         self.views.retain(|_, v| v.doc != doc);
         if self.documents.remove(&doc).is_some() {
+            // 退避用の公開物から外す (破棄した内容を緊急退避に残さない)
+            self.mark_snapshot_update(doc);
             self.push_event(EditorEvent::DocumentClosed { doc });
             self.take_pending_for(doc);
         }
