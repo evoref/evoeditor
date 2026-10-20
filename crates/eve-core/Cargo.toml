@@ -16,6 +16,7 @@ workspace = true
 eve-text = { version = "0.0.0", path = "../eve-text" }
 eve-encoding = { version = "0.0.0", path = "../eve-encoding" }
 eve-view = { version = "0.0.0", path = "../eve-view" }
+eve-config = { version = "0.0.0", path = "../eve-config" }
 
 [dev-dependencies]
 proptest = "1.12.0"

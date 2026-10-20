@@ -1,0 +1,684 @@
+# locales/ja.toml: 同梱の日本語 UI 文言 (docs/07 §17、docs/04 §15)。
+[meta]
+language = "ja"
+
+[cmd.app.quit]
+description = "エディタを終了します。"
+title = "終了"
+
+[cmd.clipboard.copy]
+description = "選択範囲をクリップボードにコピーします。"
+title = "コピー"
+
+[cmd.clipboard.cut]
+description = "選択範囲を切り取ってクリップボードに入れます。"
+title = "切り取り"
+
+[cmd.cursor.doc_end]
+description = "カーソルを文書の末尾へ動かします。"
+title = "文書の末尾へ移動"
+
+[cmd.cursor.doc_start]
+description = "カーソルを文書の先頭へ動かします。"
+title = "文書の先頭へ移動"
+
+[cmd.cursor.end]
+description = "カーソルを行の末尾へ動かします。"
+title = "行末へ移動"
+
+[cmd.cursor.goto_line]
+description = "指定した行へカーソルを動かします。"
+title = "行へ移動"
+
+[cmd.cursor.home]
+description = "カーソルを行の先頭へ動かします。"
+title = "行頭へ移動"
+
+[cmd.cursor.move_down]
+description = "カーソルを下の行へ動かします。"
+title = "下へ移動"
+
+[cmd.cursor.move_left]
+description = "カーソルを左へ動かします。"
+title = "左へ移動"
+
+[cmd.cursor.move_right]
+description = "カーソルを右へ動かします。"
+title = "右へ移動"
+
+[cmd.cursor.move_up]
+description = "カーソルを上の行へ動かします。"
+title = "上へ移動"
+
+[cmd.cursor.move_word_left]
+description = "カーソルを一つ前の単語の先頭へ動かします。"
+title = "単語の左へ移動"
+
+[cmd.cursor.move_word_right]
+description = "カーソルを次の単語の末尾へ動かします。"
+title = "単語の右へ移動"
+
+[cmd.cursor.page_down]
+description = "カーソルを一画面ぶん下へ動かします。"
+title = "次のページへ移動"
+
+[cmd.cursor.page_up]
+description = "カーソルを一画面ぶん上へ動かします。"
+title = "前のページへ移動"
+
+[cmd.edit.delete_backward]
+description = "カーソルの前の文字を削除します。"
+title = "前の文字を削除"
+
+[cmd.edit.delete_forward]
+description = "カーソルの後ろの文字を削除します。"
+title = "後ろの文字を削除"
+
+[cmd.edit.delete_word_backward]
+description = "カーソルの前の単語を削除します。"
+title = "前の単語を削除"
+
+[cmd.edit.delete_word_forward]
+description = "カーソルの後ろの単語を削除します。"
+title = "後ろの単語を削除"
+
+[cmd.edit.indent]
+description = "行頭にインデントを入れます。"
+title = "インデント"
+
+[cmd.edit.insert_text]
+description = "カーソル位置に文字を挿入します。"
+title = "文字を挿入"
+
+[cmd.edit.newline]
+description = "カーソル位置で改行します。"
+title = "改行"
+
+[cmd.edit.outdent]
+description = "行頭のインデントを一段浅くします。"
+title = "インデント解除"
+
+[cmd.edit.paste]
+description = "クリップボードの内容を貼り付けます。"
+title = "貼り付け"
+
+[cmd.edit.redo]
+description = "元に戻した編集をやり直します。"
+title = "やり直し"
+
+[cmd.edit.undo]
+description = "直前の編集を取り消します。"
+title = "元に戻す"
+
+[cmd.file.new]
+description = "無題の新しい文書を作ります。"
+title = "新規作成"
+
+[cmd.file.open]
+description = "ファイルを開きます。"
+title = "開く"
+
+[cmd.file.reload]
+description = "ファイルを読み込み直します。"
+title = "再読込"
+
+[cmd.file.reopen_with_encoding]
+description = "文字コードを指定して、ファイルを開き直します。"
+title = "文字コードを指定して開き直す"
+
+[cmd.file.save]
+description = "現在の文書を上書き保存します。"
+title = "保存"
+
+[cmd.file.save_as]
+description = "現在の文書を別の名前で保存します。"
+title = "名前を付けて保存"
+
+[cmd.file.set_encoding]
+description = "保存時に使う文字コードを変更します。"
+title = "文字コードを変更"
+
+[cmd.file.set_line_ending]
+description = "文書の改行コードを LF・CRLF・CR のいずれかに変換します。"
+title = "改行コードを変換"
+
+[cmd.search.next]
+description = "次の一致へ移動します。"
+title = "次を検索"
+
+[cmd.search.open]
+description = "検索バーを開きます。"
+title = "検索"
+
+[cmd.search.prev]
+description = "前の一致へ移動します。"
+title = "前を検索"
+
+[cmd.search.replace_all]
+description = "一致した箇所をすべて置換します。"
+title = "すべて置換"
+
+[cmd.search.replace_open]
+description = "置換欄つきで検索バーを開きます。"
+title = "置換"
+
+[cmd.search.toggle_case]
+description = "検索で大文字と小文字を区別するかを切り替えます。"
+title = "大小文字の区別を切替"
+
+[cmd.select.all]
+description = "文書全体を選択します。"
+title = "すべて選択"
+
+[cmd.select.extend_down]
+description = "選択範囲を下の行へ広げます。"
+title = "下へ選択"
+
+[cmd.select.extend_end]
+description = "選択範囲を行の末尾まで広げます。"
+title = "行末まで選択"
+
+[cmd.select.extend_home]
+description = "選択範囲を行の先頭まで広げます。"
+title = "行頭まで選択"
+
+[cmd.select.extend_left]
+description = "選択範囲を左へ広げます。"
+title = "左へ選択"
+
+[cmd.select.extend_page_down]
+description = "選択範囲を一画面ぶん下へ広げます。"
+title = "次のページまで選択"
+
+[cmd.select.extend_page_up]
+description = "選択範囲を一画面ぶん上へ広げます。"
+title = "前のページまで選択"
+
+[cmd.select.extend_right]
+description = "選択範囲を右へ広げます。"
+title = "右へ選択"
+
+[cmd.select.extend_to_doc_end]
+description = "選択範囲を文書の末尾まで広げます。"
+title = "文書の末尾まで選択"
+
+[cmd.select.extend_to_doc_start]
+description = "選択範囲を文書の先頭まで広げます。"
+title = "文書の先頭まで選択"
+
+[cmd.select.extend_up]
+description = "選択範囲を上の行へ広げます。"
+title = "上へ選択"
+
+[cmd.select.extend_word_left]
+description = "選択範囲を一つ前の単語まで広げます。"
+title = "単語の左へ選択"
+
+[cmd.select.extend_word_right]
+description = "選択範囲を次の単語まで広げます。"
+title = "単語の右へ選択"
+
+[cmd.ui.cancel]
+description = "開いている入力欄やダイアログを閉じます。"
+title = "取り消し"
+
+[cmd.ui.confirm]
+description = "入力内容や選択中の項目を決定します。"
+title = "決定"
+
+[cmd.ui.dialog_choose]
+description = "ダイアログの選択肢を指定して選びます。"
+title = "選択肢を選ぶ"
+
+[cmd.ui.list_next]
+description = "一覧やダイアログで次の項目へ移ります。"
+title = "次の項目"
+
+[cmd.ui.list_page_down]
+description = "一覧を一画面ぶん下へ送ります。"
+title = "一覧の次のページ"
+
+[cmd.ui.list_page_up]
+description = "一覧を一画面ぶん上へ戻します。"
+title = "一覧の前のページ"
+
+[cmd.ui.list_prev]
+description = "一覧やダイアログで前の項目へ移ります。"
+title = "前の項目"
+
+[cmd.ui.palette_open]
+description = "コマンドパレットを開きます。"
+title = "コマンドパレット"
+
+[cmd.ui.redraw]
+description = "画面を描き直します。"
+title = "再描画"
+
+[hint.app]
+quit = "終了"
+
+[hint.cursor]
+goto_line = "行へ移動"
+
+[hint.edit]
+undo = "元に戻す"
+
+[hint.file]
+open = "開く"
+save = "保存"
+
+[hint.search]
+next = "次へ"
+open = "検索"
+prev = "前へ"
+replace_all = "全置換"
+toggle_case = "大小"
+
+[hint.ui]
+cancel = "取消"
+confirm = "決定"
+list_next = "次へ"
+palette_open = "コマンド"
+
+[info.app]
+release_summary = "(版ごとに書く)"
+updated = "evoeditor {version} に更新しました: {summary}"
+
+[info.cli]
+unsupported = "{option} はこのバージョンでは使えないため無視しました"
+
+[info.config]
+unsupported = "{item} はこのバージョンでは未対応のため無視しました"
+
+[info.eol]
+converted = "{count} 個の改行を {eol} に変換しました (元に戻すで戻せます)"
+unchanged = "改行はすでに {eol} です"
+
+[info.goto_line]
+clamped = "行 {line} はありません。最後の行 ({last}) へ移動しました"
+
+[info.open]
+already_open = "{path} は既に開いています"
+cancelled = "{path} の読込を取り消しました"
+guess_unsupported = "{path} の文字コードは {guess} と推定されましたが、この版では扱えないため {encoding} として開きました / 正しく見えないときは、文字コードを指定して開き直す ({key:file.reopen_with_encoding}) で選び直してください"
+long_line = "{path} には非常に長い行があるため、読み取り専用で開きました (長い行は先頭の一部だけを表示します)"
+lossy_roundtrip = "この文字コードでは、編集した箇所の一部の文字が保存時に別のバイト列になることがあります ({count} 箇所)"
+new_file = "{path} は無いため、新しいファイルとして開きました (保存すると作成します)"
+redetected = "文字コードを {encoding} と判定し直しました"
+
+[info.paste]
+first_line_only = "入力欄には最初の行だけを貼り付けました"
+
+[info.recovery]
+old = "30 日より古い退避が {count} 件あります: {dir}"
+
+[info.reload]
+busy = "{path} は読み込み中です。読込が終わってから実行してください"
+done = "{path} を読み込み直しました (元に戻すで戻せます)"
+done_read_only = "{path} を読み込み直しました (読み取り専用のため元に戻せません)"
+
+[info.reopen]
+history_cleared = "{encoding} で開き直しました。元に戻す履歴は消えました"
+
+[info.save]
+aborted = "保存を中止しました ({path} は書き換えていません)"
+done = "{path} を保存しました"
+in_place = "{path} を直接上書きで保存しました"
+in_progress = "保存中です"
+to_recovery = "退避先 {target} に保存しました。元のファイル {path} は変更していません"
+unchanged = "変更はありません (ファイルは書き換えていません)"
+
+[info.search]
+replace_empty_query = "検索する文字列を入力してください"
+replace_no_match = "置換する箇所はありません"
+replaced = "{count} 件を置換しました (元に戻すで戻せます)"
+wrapped_backward = "文書の先頭に達したので、末尾から検索しました"
+wrapped_forward = "文書の末尾に達したので、先頭から検索しました"
+
+[info.undo]
+history_trimmed = "メモリの上限のため、古い元に戻す履歴を破棄しました"
+
+[msg.cli.directory]
+hint = "ファイルのパスを指定して起動してください"
+text = "{path} はフォルダなので開けません。無題の文書を開きました"
+
+[msg.clipboard.fallback]
+hint = "他のアプリとの間でコピー・貼り付けするには、端末の範囲選択と貼り付けを使ってください"
+text = "システムのクリップボードを使えないため、エディタ内のクリップボードを使いました: {reason}"
+
+[msg.config.invalid_value]
+hint = "使える値: {allowed}。この項目は既定値 {default} を使います"
+text = "{item} の値 {value} は使えません"
+
+[msg.config.out_of_range]
+hint = "{range} で指定してください。この項目は {default} を使います"
+text = "{item} の値 {value} は範囲外です"
+
+[msg.config.problem]
+hint = "{hint}"
+text = "設定の問題 ({file}:{line}): {detail}"
+
+[msg.config.problems]
+hint = "該当の項目は既定値を使っています。全件はログ ({log}) を見てください"
+text = "設定に {count} 件の問題があります。最初の 1 件: {detail}"
+
+[msg.config.syntax]
+hint = "該当の行を直してください。直すまでは既定値で動きます"
+text = "この設定ファイルは書式が正しくないため使っていません: {reason}"
+
+[msg.config.type_mismatch]
+hint = "{expected} で書いてください。この項目は既定値 {default} を使います"
+text = "{item} の値の型が違います (書かれた型: {actual})"
+
+[msg.config.unknown_key]
+hint = "〔{suggestion} ではありませんか?〕設定できる項目は同梱の config.example.toml を見てください"
+text = "{item} という設定項目はありません"
+
+[msg.edit.read_only]
+hint = "属性・権限が理由なら、名前を付けて保存 ({key:file.save_as}) した先で編集できます。文字コードの誤判定なら、文字コードを指定して開き直す ({key:file.reopen_with_encoding}) で直せます"
+text = "読み取り専用のため編集できません ({reason})"
+
+[msg.edit.replacing]
+hint = "読込が終わるまでお待ちください。やめるときは {key:ui.cancel} で読込を取り消せます"
+text = "別のファイルを読み込み中のため、今の文書は編集できません"
+
+[msg.eol.convert_stale]
+hint = "入力を止めてから、もう一度実行してください"
+text = "編集が続いたため、改行コードの変換を中止しました"
+
+[msg.io.stalled]
+hint = "しばらく待つか、{key:ui.cancel} で取り消してください。他のファイル操作はその間も続けられます"
+text = "ファイルの操作が応答していません (ネットワーク上のファイルなど)"
+
+[msg.open.busy]
+hint = "そのプログラムを閉じてから開き直してください"
+text = "他のプログラムが {path} を使用中のため読めませんでした"
+
+[msg.open.changed_during_load]
+hint = "内容を確かめ、必要なら文字コードを指定して開き直す ({key:file.reopen_with_encoding}) で読み直してください"
+text = "読み込んでいる間に {path} が変更されました"
+
+[msg.open.failed]
+hint = "パスと権限を確かめてください"
+text = "{path} を開けませんでした: {reason}"
+
+[msg.open.interrupted_new]
+hint = "新しいファイルとして開きました。内容を入力し直して保存してください。〔書きかけの一時ファイル {tmp} が残っています。不要なら削除してください。〕"
+text = "{path} の前回の保存 (新規作成) は完了していません。ファイルは作成されていません"
+
+[msg.open.interrupted_save]
+hint = "元の内容が {backup} に残っている可能性があります。確かめてから開き直してください。〔書きかけの一時ファイル {tmp} が残っています。不要なら削除してください。〕"
+text = "{path} の前回の保存が中断されていました"
+
+[msg.open.interrupted_save_incomplete]
+hint = "ファイル {path} は書き換わる前に中断した見込みです。内容を確かめ、バックアップは確かめてから削除してください"
+text = "{path} の前回の保存が中断されていました。バックアップ {backup} は途中までしか書かれていません"
+
+[msg.open.interrupted_save_no_backup]
+hint = "内容を確かめてから編集してください。〔書きかけの一時ファイル {tmp} が残っています。不要なら削除してください。〕"
+text = "{path} の前回の保存は、上書きの途中で中断した可能性があります。ファイルが壊れているおそれがあり、バックアップは確認できません"
+
+[msg.open.not_a_file]
+hint = "ファイルのパスを指定してください"
+text = "{path} はファイルではありません (フォルダ等)"
+
+[msg.open.out_of_memory]
+hint = "他のプログラムを閉じてから開き直してください"
+text = "メモリが足りないため {path} の読込を中止しました"
+
+[msg.open.parent_missing]
+hint = "フォルダを作ってから保存するか、別名で保存 ({key:file.save_as}) してください"
+text = "{path} のフォルダ {dir} がありません。新しいファイルとして開きましたが、このままでは保存できません"
+
+[msg.open.permission_denied]
+hint = "ファイルの権限を確かめてください"
+text = "{path} を読む権限がありません"
+
+[msg.open.read_failed]
+hint = "もう一度開く ({key:file.open}) か、パスと接続を確かめてください"
+text = "{path} の読込の途中で失敗しました: {reason}"
+
+[msg.open.reserved_name]
+hint = "別の名前を指定してください"
+text = "{path} は Windows で予約された名前なので開けません"
+
+[msg.recovery.found]
+hint = "ファイルを開いて内容を確かめ、要らなくなったらそのフォルダを削除してください"
+text = "異常終了の時に保存されていなかった内容を退避しています: {dir} (退避は全部で {count} 件)"
+
+[msg.recovery.found_rescue]
+hint = "要らなくなったらそのフォルダを削除してください"
+text = "「退避先に保存」で書いた内容が残っています: {dir} (退避は全部で {count} 件)"
+
+[msg.recovery.unknown_format]
+hint = "新しい版の evoeditor で開いてください"
+text = "{dir} の退避は新しい版の形式なので読みません (移動も削除もしていません)"
+
+[msg.reload.missing]
+hint = "今の内容を残すには、上書き保存 ({key:file.save}) でファイルを作り直すか、名前を付けて保存 ({key:file.save_as}) してください"
+text = "{path} が見つからないため読み込み直せません"
+
+[msg.save.acl_not_preserved]
+hint = "必要なら保存後に設定し直してください"
+text = "{path} の ACL・拡張属性は引き継がれません"
+
+[msg.save.attributes_not_copied]
+hint = "必要なら OS で設定し直してください"
+text = "{path} の権限・属性の一部を引き継げませんでした: {reason}"
+
+[msg.save.backup_failed]
+hint = "続く確認で選んでください"
+text = "直接上書きの前のバックアップを作れませんでした。何も書き込んでいません"
+
+[msg.save.busy]
+hint = "そのプログラムを閉じて {key:file.save} で再試行するか、別名で保存してください"
+text = "他のプログラムが {path} を使用中のため保存できませんでした"
+
+[msg.save.changed_after_save]
+hint = "次に保存するときに内容を確認します。必要なら再読込 ({key:file.reload}) で確かめてください"
+text = "{path} を保存しましたが、保存の直後に他のプログラムが変更した可能性があります"
+
+[msg.save.check_failed]
+hint = "何も書き込んでいません。{key:file.save} でもう一度保存してください"
+text = "{path} の状態を確認できなかったため、保存を中止しました: {reason}"
+
+[msg.save.dangling_link]
+hint = "別名で保存 ({key:file.save_as}) するか、リンク先のフォルダを作ってから保存してください"
+text = "{path} はリンクで、リンク先 {target} がありません。保存していません"
+
+[msg.save.disk_full]
+hint = "空きを作って {key:file.save} で再試行するか、別の場所へ保存 ({key:file.save_as}) してください"
+text = "ディスクの空きが足りないため {path} を保存できませんでした。ファイルは変更していません"
+
+[msg.save.encoding_unsupported_iso2022]
+hint = "文字コードを指定して開き直す ({key:file.reopen_with_encoding}) で別の文字コード (UTF-8 等) として開き直してください"
+text = "不正なバイトを含むため、この文書は ISO-2022-JP では保存できません。何も書き込んでいません"
+
+[msg.save.failed]
+hint = "別名で保存 ({key:file.save_as}) するか、権限を確認してください"
+text = "{path} を保存できませんでした: {reason}"
+
+[msg.save.in_place_failed]
+hint = "別名で保存 ({key:file.save_as}) してから、バックアップと見比べてください"
+text = "{path} の直接上書きの途中で失敗しました。ファイルが壊れている可能性があります。書き込む前の内容: {backup}"
+
+[msg.save.in_place_failed_no_backup]
+hint = "別名で保存 ({key:file.save_as}) して、今の内容を残してください"
+text = "{path} の直接上書きの途中で失敗しました。ファイルが壊れている可能性があり、バックアップはありません"
+
+[msg.save.invalid_path]
+hint = "別のファイル名で保存してください"
+text = "{path} には保存できません: {reason}"
+
+[msg.save.moved_to_backup]
+hint = "続く確認で別名で保存し、元のファイルは {backup} の名前を元に戻してください"
+text = "保存の途中で失敗し、元のファイルは {backup} に移っています"
+
+[msg.save.parent_missing]
+hint = "フォルダを作ってから {key:file.save} で再試行するか、別名で保存 ({key:file.save_as}) してください"
+text = "{dir} が無いため {path} を保存できません"
+
+[msg.save.permission_denied]
+hint = "別名で保存するか、退避先に保存してください"
+text = "{path} に書き込む権限がありません"
+
+[msg.save.read_only_fs]
+hint = "別名で保存 ({key:file.save_as}) してください"
+text = "{path} は読み取り専用の場所にあります"
+
+[msg.save.recovery_failed]
+hint = "別名で保存 ({key:file.save_as}) してください"
+text = "退避先に保存できませんでした: {reason}。元のファイル {path} は変更していません"
+
+[msg.save_as.not_a_file]
+hint = "別のファイル名を入力してください"
+text = "{path} はファイルではありません (フォルダ等)"
+
+[msg.save_as.same_file_read_only]
+hint = "別のファイル名を入力してください"
+text = "読み取り専用の文書は、同じファイル {path} には保存できません"
+
+[msg.save_as.target_read_only]
+hint = "別のファイル名を入力してください"
+text = "{path} は読み取り専用属性のファイルなので上書きできません"
+
+[msg.search.replace_stale]
+hint = "入力を止めてから、もう一度実行してください"
+text = "編集が続いたため、すべて置換を中止しました"
+
+[ui.config.type]
+array = "配列"
+bool = "真偽値 (`true` か `false`)"
+float = "小数"
+integer = "整数"
+string = "文字列"
+table = "テーブル"
+
+[ui.confirm]
+external_change = "{path} は開いた後に他のプログラムで変更されています — `[O] 上書き` / `[A] 別名で保存` ★ (`[Esc] キャンセル` = 中止。01 FR-117 AC-1)。このダイアログの `[L] 再読込 (自分の変更を破棄)` は v0.2 (フォーカス復帰時の確認と同時。v0.1 は `[Esc]` で中止してから `file.reload` で読み直せる、03 §9.5)。**v0.2 の `ui.confirm.external_modified` / `ui.confirm.external_deleted` (下の読込・外部変更の表) は、フォーカス復帰・明示コマンドでの検知時に出す別のダイアログで、本行を置き換えない**。保存時の競合は v0.2 以降も本行を使う (検知で無視を選んだ後の保存で再確認するのがこの行)"
+external_deleted = "{path} は削除されています — `[K] 新規として保持 (保存で作り直す)` ★ / `[C] 閉じる`"
+external_modified = "{path} は他のプログラムで変更されています — `[L] 再読込 (自分の変更を破棄)` / `[I] 無視 (保存時に再確認)` ★"
+quit_saving = "{path} の保存が終わっていません — `[W] 待つ` ★ / `[Q] 保存を中止して終了 (保存していない内容は退避します)`"
+reload_discard = "{path} を読み込み直すと、保存していない変更が失われます (読み込み直した後に元に戻すで戻せます) — `[L] 再読込 (変更を破棄)` / `[Esc] キャンセル` ★"
+save_failed = "保存できません: (上の `msg.save.*` の text) — (Busy のときだけ `[T] 再試行` /) `[A] 別名で保存` ★ / `[R] 退避先に保存` (`[Esc] キャンセル` = 中止)"
+save_failed_closed = "保存できませんでした: (`msg.save.*` の text) — {path} は既に閉じています。`[R] 退避先に保存` ★ / `[D] 破棄`"
+unsaved = "{path} には保存されていない変更があります — `[S] 保存して終了` ★ / `[D] 破棄して終了`"
+unsaved_reopen = "{path} には保存されていない変更があります — `[S] 保存してから開き直す` ★ / `[D] 破棄して開き直す`"
+unsaved_replace = "{path} には保存されていない変更があります — `[S] 保存してから開く` ★ / `[D] 破棄して開く`"
+
+nav_hint = "Tab / ←→ で選択、Enter で決定"
+cancel = "[Esc] キャンセル"
+
+[ui.confirm.open]
+binary = "{path} はバイナリファイルのようです — `[R] 読み取り専用で開く` ★ / `[E] 文字コードを指定して開く`"
+huge = "{path} は {size} あります。開くと多くのメモリを使います — `[R] 読み取り専用で開く` ★ (`[Esc] キャンセル` = 中止)"
+invalid_bytes = "{path} は {encoding} として不正なバイトが多く含まれます ({ratio})。開くとメモリを約 {factor} 倍使います — `[R] 読み取り専用で開く` ★ / `[E] 文字コードを指定して開く` / `[C] 中止` (`[Esc] キャンセル` も中止)"
+utf32 = "{path} の先頭に UTF-32 の BOM があります。UTF-32 には対応していません — `[R] 読み取り専用で開く` ★ / `[E] 文字コードを指定して開く`"
+
+[ui.confirm.save]
+atomic_unsupported = "{path} は安全な方法 (一時ファイルと置換) で保存できません: {reason} — `[O] 直接上書き (バックアップ付き)` / `[A] 別名で保存` ★ (既定は別名で保存。確定 (ユーザー回答))"
+dangling_link = "{path} はリンクで、リンク先 {target} がありません — `[C] リンク先に作成 (リンクを保つ)` ★"
+escape_normalized = "{count} 行でエスケープシーケンスの書き方が変わります (文字は変わりません) — `[S] 保存` ★ / `[A] 別名で保存`"
+hardlink = "{path} には他に {links} 個の名前 (ハードリンク) があります — `[K] リンクを保って直接上書き (バックアップ付き)` / `[B] このファイルだけ切り離して保存` (★ は `[Esc] キャンセル`)"
+lossy_roundtrip = "{count} 箇所が、同じ文字の別のバイト表現で保存されます (例: {example}) — `[S] 保存` / `[A] 別名で保存` ★"
+overwrite = "{path} は既にあります。上書きしますか? — `[O] 上書き` / `[R] 別の名前を入力` ★ (既定は別の名前を入力。確定 (ユーザー回答))"
+overwrite_without_backup = "{path} のバックアップを作れませんでした。バックアップなしで上書きしますか? 上書きの途中で失敗・中断すると、元の内容は取り戻せません — `[O] バックアップなしで上書き` / `[A] 別名で保存` (★ は `[Esc] キャンセル`)"
+read_only = "{path} は読み取り専用です — `[A] 別名で保存` ★ / `[W] 読み取り専用を解除して保存`"
+target_exists = "{path} は、この文書を作った後に他のプログラムによって作られています — `[O] 上書き` / `[A] 別名で保存` ★"
+unmappable = "{count} 個の文字は {encoding} で表せません (最初: 行 {line}, 桁 {col}) — `[U] UTF-8 で保存` / `[R] 置換して保存` (★ は `[Esc] キャンセル`。キャンセルするとカーソルが最初の該当位置へ移る)"
+
+[ui.confirm.save.unmappable_replace]
+header = "次の {total} 個の文字を置き換えて {encoding} で保存します (全角カナへ {kana} 個、互換文字へ {compat} 個、`?` へ {question} 個) — `[R] 置換して保存` (★ は `[Esc] キャンセル`)。`{total}` = `kana + compat + question` (02 §9.3 の `ReplaceCounts`)。3 つの件数は 0 でもこの順で出す"
+item = "行 {line}, 桁 {col}: {char} ({codepoint}) → {replacement}"
+more = "ほか {count} 個"
+
+[ui.load_state]
+loading = "読込中"
+
+[ui.read_only_reason]
+binary = "バイナリファイル"
+file_attribute = "読み取り専用属性のファイル"
+invalid_bytes = "不正なバイトを含むファイル"
+large_file_viewer = "巨大なファイル (読み取り専用で開く指定)"
+long_line = "非常に長い行を含むファイル"
+no_write_permission = "書き込む権限のないファイル"
+stateful_encoding_with_invalid_bytes = "不正なバイトを含む ISO-2022-JP のファイル"
+user_requested = "読み取り専用で開く指定 (`--readonly`)"
+
+
+# --- 04 §15.1 の画面文言 (ステータス・検索バー・パレット・プロンプト・確認の共通) ---
+[status]
+untitled = "無題-{n}"
+eol_mixed = "混在"
+selection = "({count} 文字選択)"
+
+[status.loading]
+long = "[読込中 {percent}%]"
+short = "{percent}%"
+
+[status.read_only]
+long = "[RO]"
+short = "RO"
+
+[status.saving]
+long = "[保存中]"
+short = "保存中"
+
+[status.degraded.long_line]
+long = "[長い行: 一部表示]"
+short = "一部"
+
+[status.encoding]
+bom = "{encoding} BOM"
+
+[status.position]
+long = "行 {line}, 桁 {col}"
+short = "{line}:{col}"
+
+[ui.search]
+label = "検索:"
+replace_label = "置換:"
+replace_all_button = "[A] すべて置換"
+
+[ui.search.count]
+running = "{found}/…"
+exact = "{current}/{total}"
+at_least = "{current}/{total}+"
+approx = "約 {total}"
+no_match = "0 件"
+
+[ui.palette]
+title = "コマンド"
+arg_title = "{command}: {arg}"
+footer = "{matched}/{total}"
+placeholder = "コマンドを入力"
+disabled = "現在は実行できません: {reason}"
+no_match = "一致するコマンドはありません"
+
+[ui.prompt.open]
+title = "開く"
+
+[ui.prompt.save_as]
+title = "名前を付けて保存"
+
+[ui.prompt.goto_line]
+title = "行へ移動"
+hint = "行、行:桁、$ (最終行)"
+
+[ui.prompt.arg]
+title = "{arg}"
+
+[ui.prompt.goto_line.error]
+invalid = "行番号を入力してください (例: 12、12:5、$)"
+
+[ui.prompt.open.error]
+empty = "パスを入力してください"
+
+[ui.prompt.save_as.error]
+empty = "パスを入力してください"
+
+[ui.key]
+via_palette = "コマンドパレットから実行"
+
+[ui]
+too_small = "端末が小さすぎます ({cols}x{rows} 以上が必要)"

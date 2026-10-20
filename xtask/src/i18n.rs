@@ -22,6 +22,7 @@ use eve_docs_tables::{identifiers, read_tables, strip_parentheticals};
 use crate::util::{read_text, workspace_root};
 
 const MESSAGE_HEADING: &str = "### 15.2 保存・読込・退避・パニックの文言目録";
+const SCREEN_HEADING: &str = "### 15.1 v0.1 の画面文言 (ja)";
 const CATALOG_HEADING: &str = "### 11.6 v0.1 CommandId カタログ (付録)";
 /// 言語ファイルに入れない (eve-host の定数表に置く) キーの接頭辞。
 const NOT_IN_LOCALE: [&str; 3] = ["stderr.", "panic.", "cli."];
@@ -90,6 +91,31 @@ fn read_messages(doc04: &str) -> Result<Vec<Entry>, String> {
                 ja: t.cell(row, "ja").unwrap_or_default().to_owned(),
                 line: row.line,
             });
+        }
+    }
+    Ok(out)
+}
+
+/// 04 §15.1 の画面文言の MessageKey。`MessageKey` 列は `a.b.long` / `.short` のように、後ろの項目が
+/// 直前のキーの最後の語を置き換える略記を使う。
+fn read_screen_keys(doc04: &str) -> Result<BTreeSet<String>, String> {
+    let tables = read_tables(doc04, SCREEN_HEADING, &["MessageKey", "ja"])
+        .map_err(|e| format!("04 §15.1 の画面文言を読めません: {e}"))?;
+    let mut out = BTreeSet::new();
+    for t in &tables {
+        for row in &t.rows {
+            let mut prev: Option<String> = None;
+            for id in identifiers(t.cell(row, "MessageKey").unwrap_or_default()) {
+                let key = match (id.strip_prefix('.'), &prev) {
+                    (Some(tail), Some(p)) => {
+                        let base = p.rsplit_once('.').map_or(p.as_str(), |(b, _)| b);
+                        format!("{base}.{tail}")
+                    }
+                    _ => id,
+                };
+                prev = Some(key.clone());
+                out.insert(key);
+            }
         }
     }
     Ok(out)
@@ -207,6 +233,7 @@ pub fn run() -> Result<(), String> {
     println!("▶ i18n");
     let mut errors: Vec<String> = Vec::new();
     let messages = read_messages(&read_text(&root.join("docs/04-tui-design.md"))?)?;
+    let screen_keys = read_screen_keys(&read_text(&root.join("docs/04-tui-design.md"))?)?;
     let commands = read_catalog(&read_text(&root.join("docs/07-config-extensibility.md"))?)?;
 
     // 1. 目録の整合
@@ -284,11 +311,29 @@ pub fn run() -> Result<(), String> {
             .map_err(|e| format!("locales/ja.toml を読めません: {e}"))?;
         let mut have = BTreeMap::new();
         flatten("", &value, &mut have);
-        let mut want: BTreeSet<String> = messages
+        // `[meta]` は文言ではない
+        have.retain(|k, _| !k.starts_with("meta."));
+        let mut want: BTreeSet<String> = BTreeSet::new();
+        for e in messages
             .iter()
             .filter(|e| !NOT_IN_LOCALE.iter().any(|p| e.key.starts_with(p)))
-            .map(|e| e.key.clone())
-            .collect();
+        {
+            // 目録の `msg.<domain>.<name>` は言語ファイルでは `.text` と `.hint` の 2 つ (07 §17.2)
+            if e.key.starts_with("msg.") && !e.key.ends_with(".text") && !e.key.ends_with(".hint") {
+                want.insert(format!("{}.text", e.key));
+                want.insert(format!("{}.hint", e.key));
+            } else {
+                want.insert(e.key.clone());
+            }
+        }
+        for k in screen_keys
+            .iter()
+            .filter(|k| !NOT_IN_LOCALE.iter().any(|p| k.starts_with(p)))
+        {
+            if !k.starts_with("hint.") {
+                want.insert(k.clone());
+            }
+        }
         for c in &commands {
             want.insert(format!("cmd.{}.title", c.id));
             want.insert(format!("cmd.{}.description", c.id));

@@ -9,8 +9,9 @@ use eve_text::{
     grapheme_indices, is_width_risky,
 };
 use eve_view::{
-    CellPos, CellRect, CellSize, CursorPlacement, CursorShape, FocusTarget, Frame, PaneFrame,
-    RenderRow, RowSource, Span, Style, StyleMods, ViewId, ViewRevision, WindowId,
+    CellPos, CellRect, CellSize, CellText, CursorPlacement, CursorShape, CutPolicy, FocusTarget,
+    Frame, Message, MessageModel, PaneFrame, RenderRow, RowSource, Span, Style, StyleMods, ViewId,
+    ViewRevision, WindowId,
 };
 
 use eve_encoding::{PuaEscapeMode, unescape_char};
@@ -306,6 +307,46 @@ fn gutter_spans(line: usize, width: u16) -> Vec<Span> {
     }]
 }
 
+/// 文字列を `CellText` にする (INV-F1: 制御文字などは記号に展開済み。幅は core が計算する)。
+/// `cut` が `Never` 以外のときは 1 書記素 = 1 `Span` で渡す。
+pub(super) fn cell_text(s: &str, cut: CutPolicy) -> CellText {
+    let cfg = width_config();
+    let mut spans = Vec::new();
+    let mut width = 0u16;
+    for (_, g) in grapheme_indices(s) {
+        let (text, w, style) = match g {
+            "	" => (" ".to_owned(), 1, Style::DEFAULT),
+            _ => {
+                let d = grapheme_display(g, &cfg);
+                let w = d.base_width + d.marks_width;
+                (format!("{}{}", d.base, d.marks), w, Style::DEFAULT)
+            }
+        };
+        if w == 0 {
+            continue;
+        }
+        width = width.saturating_add(w);
+        spans.push(Span {
+            text,
+            width: w,
+            style,
+        });
+    }
+    CellText { spans, width, cut }
+}
+
+fn message_model(state: &EditorState) -> MessageModel {
+    let current = state.current_message().map(|m| Message {
+        level: m.level,
+        text: cell_text(&m.text, CutPolicy::End),
+        hint: m.hint.as_deref().map(|h| cell_text(h, CutPolicy::End)),
+    });
+    MessageModel {
+        current,
+        unread: state.unread_messages(),
+    }
+}
+
 /// 端末タイトル (無害化済み)。
 fn title(doc: &Document) -> String {
     let name = doc
@@ -329,7 +370,11 @@ fn title(doc: &Document) -> String {
 }
 
 /// Window の Frame を作る。
-pub(super) fn build_frame(state: &EditorState, window: WindowId) -> Option<Frame> {
+pub(super) fn build_frame(
+    state: &EditorState,
+    window: WindowId,
+    chord: &[eve_view::KeyStroke],
+) -> Option<Frame> {
     let view_id = state.window_view(window)?;
     let view = state.view(view_id)?;
     let doc = state.document(view.doc)?;
@@ -437,6 +482,10 @@ pub(super) fn build_frame(state: &EditorState, window: WindowId) -> Option<Frame
             pos,
             shape: CursorShape::Bar,
         }),
+        status: super::chrome::status_model(state, view_id, chord),
+        hints: super::chrome::hint_model(state, chord),
+        messages: message_model(state),
+        texts: super::chrome::chrome_texts(state),
         title: title(doc),
     })
 }

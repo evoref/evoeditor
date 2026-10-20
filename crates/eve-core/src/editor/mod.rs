@@ -4,6 +4,7 @@
 //! 現在の範囲 (M1 の C2a): 文書・View・Window の集合、変更の唯一の経路 (`EditorState::apply_transaction`)、
 //! コマンドのレジストリと `execute`。編集コマンド・キーマップ・移動は後続の PR で足す。
 
+mod chrome;
 mod command;
 mod context;
 mod default_keymap;
@@ -11,6 +12,7 @@ mod edit;
 mod file;
 mod keymap;
 mod layout;
+mod message;
 mod motion;
 mod state;
 
@@ -47,12 +49,21 @@ impl Editor {
         edit::register(&mut registry);
         motion::register(&mut registry);
         file::register(&mut registry);
-        Editor {
+        let mut editor = Editor {
             state: EditorState::new(caps, ports.jobs.clone(), ports.paths.clone()),
             registry,
             keymap: default_keymap::default_keymap(),
             ports,
-        }
+        };
+        editor.refresh_key_labels();
+        editor
+    }
+
+    /// `{key:<command_id>}` の解決に使うキー表記を、今のキーマップから作り直す。
+    fn refresh_key_labels(&mut self) {
+        let labels = self.keymap.first_labels(&Self::EDITOR_CONTEXTS);
+        let seqs = self.keymap.first_bindings(&Self::EDITOR_CONTEXTS);
+        self.state.set_key_bindings(labels, seqs);
     }
 
     pub fn state(&self) -> &EditorState {
@@ -99,6 +110,7 @@ impl Editor {
     /// キーマップを差し替える (層を足した設定の反映、テスト)。保留中のストロークは破棄する。
     pub fn set_keymap(&mut self, keymap: Keymap) {
         self.keymap = keymap;
+        self.refresh_key_labels();
     }
 
     /// ジョブの結果を受け取る (Host が `HostMsg::Job` で呼ぶ)。
@@ -134,6 +146,8 @@ impl Editor {
         match ev {
             InputEvent::Key(k) => {
                 if k.kind != KeyKind::Release {
+                    self.state
+                        .dismiss_message_on_key(k.code == KeyCode::Esc && k.mods.is_empty());
                     self.on_key(KeyStroke {
                         mods: k.mods,
                         key: k.code,
@@ -216,7 +230,7 @@ impl Editor {
 
     /// Window の Frame を作る (可視範囲だけ。コストは文書の大きさに依存しない)。
     pub fn frame(&mut self, window: WindowId) -> Option<eve_view::Frame> {
-        let f = layout::build_frame(&self.state, window);
+        let f = layout::build_frame(&self.state, window, self.keymap.pending());
         self.state.mark_rendered();
         f
     }

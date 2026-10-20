@@ -11,6 +11,12 @@ pub(super) fn default_keymap() -> Keymap {
         l.bind(ctx, keys, cmd, "")
             .expect("既定キーマップの書式は正しい");
     };
+    // ファイル
+    bind("editor", "mod+s", "file.save");
+    bind("editor", "mod+shift+s", "file.save_as");
+    bind("editor", "ctrl+k s", "file.save_as");
+    bind("editor", "mod+o", "file.open");
+    bind("editor", "mod+n", "file.new");
     // 編集
     bind("editor", "enter", "edit.newline");
     bind("editor", "mod+z", "edit.undo");
