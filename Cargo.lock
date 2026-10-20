@@ -136,6 +136,9 @@ version = "0.0.0"
 [[package]]
 name = "eve-encoding"
 version = "0.0.0"
+dependencies = [
+ "proptest",
+]
 
 [[package]]
 name = "eve-host"
