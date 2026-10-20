@@ -70,6 +70,14 @@ fn edit_each(
     ctx: &mut CommandCtx<'_>,
     f: impl Fn(&Document, &Range) -> Option<Plan>,
 ) -> CommandResult {
+    edit_each_as(ctx, Origin::User, f)
+}
+
+fn edit_each_as(
+    ctx: &mut CommandCtx<'_>,
+    origin: Origin,
+    f: impl Fn(&Document, &Range) -> Option<Plan>,
+) -> CommandResult {
     let Some((view_id, doc_id)) = active(ctx) else {
         return CommandResult::Rejected(RejectReason::NoTarget);
     };
@@ -112,7 +120,7 @@ fn edit_each(
     let Some(after) = Selection::new(ranges, before.primary_index()) else {
         return CommandResult::Rejected(RejectReason::InvalidArgs);
     };
-    let tx = Transaction::new(cs, Origin::User, ctx.state.now())
+    let tx = Transaction::new(cs, origin, ctx.state.now())
         .with_view(view_id)
         .with_selections(Some(before), Some(after));
     match ctx.state.apply_transaction(doc_id, tx) {
@@ -158,6 +166,43 @@ fn newline(ctx: &mut CommandCtx<'_>) -> CommandResult {
         let copy_end = indent_end(doc, ls, le).min(p.0);
         let indent = text.slice_to_string(ByteRange::new(ByteOff(ls), ByteOff(copy_end)));
         let ins = format!("{}{}", doc.format.default_eol.as_str(), indent);
+        Some(Plan {
+            del: ByteRange::new(r.start(), r.end()),
+            ins,
+            cursor: CursorRule::AfterInsert,
+        })
+    })
+}
+
+// ---------- 貼り付け ----------
+
+/// 改行の正規化 (03 §8.4): `\r\n`・単独の `\r`・単独の `\n` をそれぞれ 1 つの `eol` にする。
+pub fn normalize_eol(text: &str, eol: eve_text::LineEnding) -> String {
+    let eol = eol.as_str();
+    let mut out = String::with_capacity(text.len());
+    let mut chars = text.chars().peekable();
+    while let Some(c) = chars.next() {
+        match c {
+            '\r' => {
+                if chars.peek() == Some(&'\n') {
+                    chars.next();
+                }
+                out.push_str(eol);
+            }
+            '\n' => out.push_str(eol),
+            c => out.push(c),
+        }
+    }
+    out
+}
+
+/// `InputEvent::Paste` の本文を挿入する。改行を文書の `default_eol` に正規化し、自動インデントは適用しない。
+/// 本文の制御文字はコマンドとして解釈せず文字として入れる。Origin は `Paste` (1 操作 = 1 Undo)。
+pub(super) fn paste_text(state: &mut super::state::EditorState, text: &str) -> CommandResult {
+    let args = super::command::Args::new();
+    let mut ctx = CommandCtx { state, args: &args };
+    edit_each_as(&mut ctx, Origin::Paste, |doc, r| {
+        let ins = normalize_eol(text, doc.format.default_eol);
         Some(Plan {
             del: ByteRange::new(r.start(), r.end()),
             ins,

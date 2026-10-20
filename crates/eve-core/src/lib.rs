@@ -23,9 +23,10 @@ pub use document::{
     UndoBudget, UndoGroupHint, UndoHistory,
 };
 pub use editor::{
-    ArgValue, Args, CommandCtx, CommandInvocation, CommandKind, CommandRegistry, CommandResult,
-    CommandSpec, ContextExpr, CtxValue, Editor, EditorState, Handler, InvocationSource, ParseError,
-    Permission, RejectReason, ScrollPos, View, Window,
+    ArgValue, Args, Binding, CommandCtx, CommandInvocation, CommandKind, CommandRegistry,
+    CommandResult, CommandSpec, ContextExpr, CtxValue, Editor, EditorState, Handler,
+    InvocationSource, KeyParseError, Keymap, Layer, ParseError, Permission, RejectReason,
+    Resolution, ScrollPos, View, Window, normalize_eol, parse_sequence, parse_stroke,
 };
 pub use fs::*;
 pub use fspath::FsPath;
