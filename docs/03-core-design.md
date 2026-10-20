@@ -199,7 +199,7 @@ pub struct TextBuilder;                // 読込時に decode 済みチャンク
 
 | ID | 不変条件 |
 |---|---|
-| INV-T1 | 内容は常に妥当な UTF-8。挿入文字列は `&str` であることで保証する。位置は **全 Op の境界** (各 `Retain` / `Delete` の両端と各 `Insert` の位置。いずれも適用前の文書のバイト位置) を検査し、1 つでも char 境界でなければ `apply` は `ChangeSetError::NotCharBoundary { pos }` を返して **何も変更しない** (検査は書き換えの前にまとめて行う)。`ChangeSet::from_sorted_edits` も同じ検査を行い、違反を `NotCharBoundary` で返す (§6.2) |
+| INV-T1 | 内容は常に妥当な UTF-8。挿入文字列は `&str` であることで保証する。位置は **全 Op の境界** (各 `Retain` / `Delete` の両端と各 `Insert` の位置。いずれも適用前の文書のバイト位置) を検査し、1 つでも char 境界でなければ `apply` は `ChangeSetError::NotCharBoundary { pos }` を返して **何も変更しない** (検査は書き換えの前にまとめて行う。`len_before` が文書のバイト数と違うときは `ChangeSetError::LenMismatch` で、これも何も変更しない)。`ChangeSet::from_sorted_edits` も同じ検査を行い、違反を `NotCharBoundary` で返す (§6.2) |
 | INV-T2 | `len_lines() == (区切りの数) + 1` |
 | INV-T3 | `Snapshot` は生成後に内容が変化しない。`Text::apply` 後も既存 Snapshot は旧内容を保つ |
 | INV-T4 | `byte_to_char(char_to_byte(c)) == c`、`char_to_byte(byte_to_char(b)) == b` (b が char 境界のとき) |
@@ -408,7 +408,7 @@ pub struct ChangeSet {
 impl ChangeSet {
     pub fn identity(len: usize) -> ChangeSet;
     pub fn from_sorted_edits(base: &dyn TextRead, edits: impl Iterator<Item = Edit>) -> Result<ChangeSet, EditError>;  // EditError = Overlap | NotCharBoundary { pos } | OutOfRange。len_before = base.len_bytes()。重なりを切り詰めない (§4.5)
-    pub fn compose(&self, next: &ChangeSet) -> Result<ChangeSet, LenMismatch>;  // self を適用後に next を適用 = 1 つの ChangeSet
+    pub fn compose(&self, next: &ChangeSet) -> Result<ChangeSet, ComposeError>;  // ComposeError = LenMismatch | SplitInsideChar (next の境界が、self が挿入した文字の途中)。self を適用後に next を適用 = 1 つの ChangeSet
     pub fn invert(&self, before: &Snapshot) -> ChangeSet;                       // 適用を取り消す ChangeSet。InsertText::Slice を作るため所有した Snapshot を受け取る (§6.5)
     pub fn map_pos(&self, p: Pos, bias: Bias) -> Pos;                           // 位置写像 (§6.4)
     pub fn map_range(&self, r: ByteRange) -> RangeMap;                          // Mapped(ByteRange) | Overlapped { mapped: Option<ByteRange>, kind } (§6.4)
@@ -491,7 +491,7 @@ pub enum Origin {
 
 `MapPolicy` は Selection 全体に対する既定方針を決める: `Own` (自分の挿入は After)、`Other` (他者の挿入は Before)。
 
-**`map_range` の戻り値** (06 X3 の要求): 範囲 `[s, e)` に対して ChangeSet の変更が (a) 範囲と交差しない → `Mapped(新範囲)`、(b) 範囲の内側で挿入・削除が起きた、範囲の境界をまたぐ、または **範囲の端 (`s` / `e`) に接する挿入** がある → `Overlapped { mapped: Option<新範囲>, kind: Inside | Straddle | Touch }`。Decoration / 検索結果は `Overlapped` のうち `Touch` を「写像のみ (位置をずらす)」、`Inside` / `Straddle` を無効化と解釈し、AI Proposal (§18 / 06 §7.4) は **`Touch` も含めて失効** と解釈する (保守的: 誤適用より失効の方が安全、v0.1)。呼び出し側が意味を決められるよう、`map_range` 自身は分類だけを返す。`OverlapKind::{Inside, Straddle, Touch}` の 3 変種は残し (確定、[OQ-36](10-decisions.md#oq-36-ai-の安全方針-3-点))、`OverlapKind` は `#[non_exhaustive]` とする (分類を後から足せるように)。AI ハンクの失効の方針は未決 (OQ-36 (c)。推奨は `Touch` も失効)。
+**`map_range` の戻り値** (06 X3 の要求): 範囲 `[s, e)` に対して ChangeSet の変更が (a) 範囲と交差しない → `Mapped(新範囲)`、(b) 範囲の内側で挿入・削除が起きた、範囲の境界をまたぐ、または **範囲の端 (`s` / `e`) に接する挿入** がある → `Overlapped { mapped: Option<新範囲>, kind: Inside | Straddle | Touch }`。Decoration / 検索結果は `Overlapped` のうち `Touch` を「写像のみ (位置をずらす)」、`Inside` / `Straddle` を無効化と解釈し、AI Proposal (§18 / 06 §7.4) は **`Touch` も含めて失効** と解釈する (保守的: 誤適用より失効の方が安全、v0.1)。呼び出し側が意味を決められるよう、`map_range` 自身は分類だけを返す。空の範囲 (位置) が削除・置換の内側にある場合は、位置が消えるので `Straddle` とする (端に接する削除は交差とみなさない)。`compose` で合成した ChangeSet の `map_pos` は、元の ChangeSet を順に写像した結果と一致するとは限らない (合成で「残す部分」の構造が失われるため)ので、Selection の写像には合成したものを使わず、元の ChangeSet を順に使う。`OverlapKind::{Inside, Straddle, Touch}` の 3 変種は残し (確定、[OQ-36](10-decisions.md#oq-36-ai-の安全方針-3-点))、`OverlapKind` は `#[non_exhaustive]` とする (分類を後から足せるように)。AI ハンクの失効の方針は未決 (OQ-36 (c)。推奨は `Touch` も失効)。
 
 ### 6.5 Document::apply の手順
 
