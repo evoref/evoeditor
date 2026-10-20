@@ -1,0 +1,271 @@
+# フル車線 (docs/09-testing-quality.md §6.1 / §6.2、docs/11-dev-workflow.md §8.1)。
+# 必須のステータスチェックの名前は、ジョブの表示名そのもの (docs/11 §9.1 の固定名):
+#   check / fmt / clippy (windows) / clippy (linux) / test (windows) / test (linux) / deps / dco / gitleaks / pr-source
+# 表示名を変えるときは、ブランチ保護の必須チェックの名前も同じ手順で差し替える。
+# パスのフィルタは付けない (docs だけ・コードだけの PR でも全ジョブを回す)。
+name: ci
+
+on:
+  pull_request:
+    branches: [develop, main]
+  push:
+    branches: [develop, main]
+
+# 権限は読み取りだけ (docs/09 §6.5)。書込みが要るジョブができたら、ジョブ単位で足す。
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  CARGO_INCREMENTAL: "0"
+  CARGO_PROFILE_DEV_DEBUG: "0"
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: "1"
+  INSTA_UPDATE: "no"
+
+defaults:
+  run:
+    shell: bash
+
+# アクションはコミット SHA で固定する (docs/09 §6.5)。更新は Dependabot (github-actions) が PR にする。
+# actions/checkout v7.0.1          3d3c42e5aac5ba805825da76410c181273ba90b1
+# Swatinem/rust-cache v2.9.2       6323deb102c322ba6fcbdcafc7e3dddab59af2b6
+# taiki-e/install-action v2.87.29  8cca0918f8471c33515202b73f56ab27f2bed283
+
+jobs:
+  # 速い車線。PR の最初のジョブで、失敗したら他のジョブ (fmt / clippy / test / deps) を始めない。
+  check:
+    name: check
+    runs-on: windows-2025
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Rust (stable)
+        run: rustup toolchain install stable --profile minimal --component rustfmt,clippy --no-self-update && rustup default stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          shared-key: windows
+      - uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2.87.29
+        with:
+          tool: cargo-nextest@0.9.148
+      - run: cargo xtask check
+
+  fmt:
+    name: fmt
+    needs: check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Rust (stable)
+        run: rustup toolchain install stable --profile minimal --component rustfmt --no-self-update && rustup default stable
+      - run: cargo fmt --all --check
+
+  clippy:
+    name: clippy (${{ matrix.name }})
+    needs: check
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # ランナーの名称は変わり得るので、この matrix に集約する (docs/09 §6.4)。
+          - name: windows
+            runner: windows-2025
+            # 全 crate
+            args: --workspace --all-targets --all-features
+          - name: linux
+            runner: ubuntu-24.04
+            # Linux CI の対象 crate (core 系 + eve-host + eve-testkit) と開発用ツール (docs/02 §4.7)
+            args: -p eve-text -p eve-encoding -p eve-view -p eve-config -p eve-core -p eve-host -p eve-testkit -p eve-docs-tables -p xtask --all-targets --all-features
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Rust (stable)
+        run: rustup toolchain install stable --profile minimal --component clippy --no-self-update && rustup default stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          shared-key: ${{ matrix.name }}
+      - run: cargo clippy ${{ matrix.args }} -- -D warnings
+
+  test:
+    name: test (${{ matrix.name }})
+    needs: check
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: windows
+            runner: windows-2025
+            args: --workspace
+          - name: linux
+            runner: ubuntu-24.04
+            args: -p eve-text -p eve-encoding -p eve-view -p eve-config -p eve-core -p eve-host -p eve-testkit -p eve-docs-tables -p xtask
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Rust (stable)
+        run: rustup toolchain install stable --profile minimal --no-self-update && rustup default stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          shared-key: ${{ matrix.name }}
+      - uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2.87.29
+        with:
+          tool: cargo-nextest@0.9.148
+      # テストがまだ無い crate があっても通す (--no-tests=pass)。シナリオ (Harness) も nextest で実行する。
+      - run: cargo nextest run --profile ci ${{ matrix.args }} --no-tests=pass
+      - run: cargo test --doc ${{ matrix.args }}
+
+  deps:
+    name: deps
+    needs: check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Rust (stable)
+        run: rustup toolchain install stable --profile minimal --no-self-update && rustup default stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          shared-key: linux
+      - uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2.87.29
+        with:
+          tool: cargo-deny@0.20.2
+      - name: cargo deny (licenses / bans / advisories / sources)
+        run: cargo deny check
+      - name: 依存規則 R1〜R12 と docs/02 §4.1 の突合
+        run: cargo xtask check-deps --docs
+
+  # DCO: PR の全コミットに Signed-off-by があること (docs/11 §9.4、OQ-154)。
+  # 対象外 (ジョブの if で飛ばす。飛ばしたジョブは必須のチェックとして成功扱い):
+  #   (a) 昇格と取り込みの PR (develop → main、main → develop) の merge commit
+  #   (b) Dependabot の PR
+  # どちらも head のリポジトリが base と同じであることを条件に含める (fork から同名のブランチで出した PR を除外しない)。
+  dco:
+    name: dco
+    if: >-
+      github.event_name == 'pull_request' &&
+      !(github.event.pull_request.head.repo.full_name == github.repository &&
+        ((github.base_ref == 'main' && github.head_ref == 'develop') ||
+         (github.base_ref == 'develop' && github.head_ref == 'main') ||
+         (github.base_ref == 'develop' && startsWith(github.head_ref, 'dependabot/'))))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: 全コミットの Signed-off-by を確かめる
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          missing=0
+          # merge commit (develop を取り込んだものなど) は対象外。中のコミットは取り込み元で検査済み。
+          for c in $(git log --no-merges --format=%H "$BASE_SHA..$HEAD_SHA"); do
+            if ! git log -1 --format=%B "$c" | grep -Eq '^Signed-off-by: .+ <.+@.+>$'; then
+              echo "::error::Signed-off-by がありません: $(git log -1 --format='%h %s' "$c")"
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then
+            echo "各コミットに 'git commit -s' で Signed-off-by を付けてください (CONTRIBUTING.md)。"
+            exit 1
+          fi
+          echo "すべてのコミットに Signed-off-by があります。"
+
+  # 秘密情報の検出 (OQ-169)。gitleaks (MIT。CI の道具で配布物には入らない) を、チェックサムを固定して使う。
+  # 検出した値は出力しない (--redact)。
+  gitleaks:
+    name: gitleaks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      GITLEAKS_VERSION: "8.30.1"
+      GITLEAKS_SHA256: "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: gitleaks を入れる (SHA-256 を検証)
+        run: |
+          set -euo pipefail
+          curl -sSfL -o gitleaks.tar.gz "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          echo "${GITLEAKS_SHA256}  gitleaks.tar.gz" | sha256sum -c -
+          tar -xzf gitleaks.tar.gz gitleaks
+      - name: PR の差分のコミットを検査する
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: ./gitleaks git --redact --no-banner --log-opts="${BASE_SHA}..${HEAD_SHA}" .
+      - name: push の差分のコミットを検査する
+        if: github.event_name == 'push'
+        env:
+          BEFORE_SHA: ${{ github.event.before }}
+          AFTER_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          # 新しいブランチの最初の push (before が 0 だけ) は、直近 1 コミットだけを検査する
+          if [ "${BEFORE_SHA}" = "0000000000000000000000000000000000000000" ]; then
+            ./gitleaks git --redact --no-banner --log-opts="-1 ${AFTER_SHA}" .
+          else
+            ./gitleaks git --redact --no-banner --log-opts="${BEFORE_SHA}..${AFTER_SHA}" .
+          fi
+
+  # PR の head ブランチの検査 (docs/11 §9.1 のブランチ保護を補う軽いジョブ)。コードはチェックアウトしない。
+  #   main が受ける PR の head は develop だけ。
+  #   develop への PR の head は、作業ブランチ (feat/ fix/ spec/ chore/ spike/ agent/)・Dependabot (dependabot/)・main だけ。
+  #   fork からの PR は、base が develop のときだけ許す (外部の寄稿者の PR)。main への fork の PR は失敗にする。
+  pr-source:
+    name: pr-source
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - name: head と base の組を検査する
+        env:
+          BASE: ${{ github.base_ref }}
+          HEAD: ${{ github.head_ref }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          ng() { echo "::error::$1"; exit 1; }
+          if [ "$HEAD_REPO" != "$REPO" ]; then
+            [ "$BASE" = "develop" ] || ng "fork からの PR は develop 宛てだけ受け付けます (base: $BASE)"
+            echo "fork からの PR (base: develop) を許可します"
+            exit 0
+          fi
+          case "$BASE" in
+            main)
+              [ "$HEAD" = "develop" ] || ng "main が受ける PR の head は develop だけです (head: $HEAD)"
+              ;;
+            develop)
+              case "$HEAD" in
+                feat/*|fix/*|spec/*|chore/*|spike/*|agent/*|dependabot/*|main) ;;
+                *) ng "develop への PR の head は作業ブランチ (feat/ fix/ spec/ chore/ spike/ agent/)・dependabot/・main だけです (head: $HEAD)" ;;
+              esac
+              ;;
+            *)
+              ng "想定外の base です: $BASE"
+              ;;
+          esac
+          echo "OK: $HEAD -> $BASE"
