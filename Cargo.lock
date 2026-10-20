@@ -126,6 +126,7 @@ name = "eve-core"
 version = "0.0.0"
 dependencies = [
  "eve-encoding",
+ "eve-testkit",
  "eve-text",
  "eve-view",
  "proptest",

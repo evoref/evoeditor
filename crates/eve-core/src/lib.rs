@@ -9,6 +9,7 @@
 
 mod cancel;
 mod document;
+mod editor;
 mod fs;
 mod fspath;
 mod jobs;
@@ -20,6 +21,11 @@ pub use document::{
     Applied, AppliedTx, ApplyError, Document, EolStats, HistoryStep, LoadState, NodeId, Origin,
     ReadOnlyReason, ReadOnlyReasons, RecordOutcome, TextFormat, Transaction, TransactionMeta,
     UndoBudget, UndoGroupHint, UndoHistory,
+};
+pub use editor::{
+    ArgValue, Args, CommandCtx, CommandInvocation, CommandKind, CommandRegistry, CommandResult,
+    CommandSpec, ContextExpr, CtxValue, Editor, EditorState, Handler, InvocationSource, ParseError,
+    Permission, RejectReason, ScrollPos, View, Window,
 };
 pub use fs::*;
 pub use fspath::FsPath;
