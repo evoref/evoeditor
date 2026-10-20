@@ -16,3 +16,8 @@ workspace = true
 eve-core = { version = "0.0.0", path = "../eve-core" }
 eve-view = { version = "0.0.0", path = "../eve-view" }
 eve-host = { version = "0.0.0", path = "../eve-host" }
+
+# 自前のハーネス (p50 / p99 を出すため criterion は使わない)。cargo bench -p eve-testkit --bench bm_105
+[[bench]]
+name = "bm_105"
+harness = false

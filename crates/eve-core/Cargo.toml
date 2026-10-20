@@ -20,4 +20,6 @@ eve-config = { version = "0.0.0", path = "../eve-config" }
 
 [dev-dependencies]
 proptest = "1.12.0"
+memory-stats = "1.2.0"
+eve-docs-tables = { version = "0.0.0", path = "../eve-docs-tables" }
 eve-testkit = { version = "0.0.0", path = "../eve-testkit" }

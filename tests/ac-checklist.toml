@@ -370,8 +370,10 @@ status = "done"
 id = "AC-FR-203-3"
 requirement = "FR-203"
 kind = "T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "ランダムな編集の後_メモリの増分は_undo_の会計値の_1_2_倍以下",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-204-1"
@@ -744,8 +746,10 @@ status = "todo"
 id = "AC-FR-601-2"
 requirement = "FR-601"
 kind = "R/T, M"
-verified_by = []
-status = "todo"
+verified_by = [
+    "登録済みの全コマンドの_permission_がカタログの_perm_列と一致する",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-602-1"
@@ -870,8 +874,10 @@ status = "todo"
 id = "AC-NFR-105-1"
 requirement = "NFR-105"
 kind = "B"
-verified_by = []
-status = "todo"
+verified_by = [
+    "BM-105",
+]
+status = "done"
 
 [[ac]]
 id = "AC-NFR-106-3"
@@ -914,8 +920,10 @@ status = "done"
 id = "AC-NFR-203-2"
 requirement = "NFR-203"
 kind = "B / T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "ランダムな編集の後_メモリの増分は_undo_の会計値の_1_2_倍以下",
+]
+status = "done"
 
 [[ac]]
 id = "AC-NFR-204-1"
