@@ -388,10 +388,12 @@ impl UndoHistory {
     /// 予算を超えたら古い側から破棄する (最低 1 ノードは残す)。破棄したら `true`。
     fn prune(&mut self) -> bool {
         let mut pruned = false;
+        let mut total = self.bytes();
         while self.undo.len() > 1
-            && (self.undo.len() > self.budget.max_nodes || self.bytes() > self.budget.max_bytes)
+            && (self.undo.len() > self.budget.max_nodes || total > self.budget.max_bytes)
         {
             if let Some(n) = self.undo.pop_front() {
+                total = total.saturating_sub(n.bytes);
                 self.base = n.id;
                 pruned = true;
             }
