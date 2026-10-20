@@ -27,7 +27,8 @@ pub use editor::{
     ArgValue, Args, Binding, CommandCtx, CommandInvocation, CommandKind, CommandRegistry,
     CommandResult, CommandSpec, ContextExpr, CtxValue, DocSnapshot, Editor, EditorState, Handler,
     InvocationSource, KeyParseError, Keymap, Layer, ParseError, Permission, RejectReason,
-    Resolution, ScrollPos, View, Window, normalize_eol, parse_sequence, parse_stroke,
+    Resolution, ScrollPos, View, Window, format_stroke, normalize_eol, parse_sequence,
+    parse_stroke,
 };
 pub use fs::*;
 pub use fspath::FsPath;

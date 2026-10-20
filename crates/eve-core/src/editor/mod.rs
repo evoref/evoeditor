@@ -29,7 +29,9 @@ pub use command::{
 };
 pub use context::{ContextExpr, CtxValue, ParseError};
 pub use edit::normalize_eol;
-pub use keymap::{Binding, KeyParseError, Keymap, Layer, Resolution, parse_sequence, parse_stroke};
+pub use keymap::{
+    Binding, KeyParseError, Keymap, Layer, Resolution, format_stroke, parse_sequence, parse_stroke,
+};
 pub use snapshot::DocSnapshot;
 pub use state::{EditorState, ScrollPos, View, Window};
 
