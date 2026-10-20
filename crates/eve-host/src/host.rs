@@ -49,6 +49,11 @@ impl fmt::Display for StartError {
 
 impl std::error::Error for StartError {}
 
+/// 受信口 (送信口と受信口の対)。
+pub fn channel() -> (Sender<HostMsg>, Receiver<HostMsg>) {
+    mpsc::channel()
+}
+
 pub struct Host {
     editor: Editor,
     clock: Arc<dyn Clock>,
@@ -70,8 +75,12 @@ pub struct Host {
 impl Host {
     /// Port から Host を作る。Editor は空で、`start` で frontend の能力と最初の文書を設定する。
     pub fn new(ports: Ports) -> Host {
+        Host::with_channel(ports, channel())
+    }
+
+    /// 受信口を外で作った Host。`ThreadJobSpawner` のように、Host より先に送信口が要る Port のため。
+    pub fn with_channel(ports: Ports, (tx, inbox): (Sender<HostMsg>, Receiver<HostMsg>)) -> Host {
         let clock = ports.clock.clone();
-        let (tx, inbox) = mpsc::channel();
         Host {
             editor: Editor::new(ports, Capabilities::default()),
             clock,

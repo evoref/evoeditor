@@ -12,6 +12,7 @@ use crate::ascii::{AsciiOptions, render_ascii};
 struct Shared {
     frames: Vec<Frame>,
     restored: u32,
+    sink: Option<InputSink>,
 }
 
 /// テストから観察する口 (Host に渡した後も持てる)。
@@ -31,6 +32,11 @@ impl HeadlessProbe {
         self.last_frame().map(|f| render_ascii(&f, opts))
     }
 
+    /// `start_input` で渡された入力口 (別スレッドから入力を送る用。起動前は `None`)。
+    pub fn sink(&self) -> Option<InputSink> {
+        self.0.lock().unwrap().sink.clone()
+    }
+
     /// `restore` が呼ばれた回数 (終了経路で 1 回だけ呼ばれるはず)。
     pub fn restore_count(&self) -> u32 {
         self.0.lock().unwrap().restored
@@ -41,7 +47,6 @@ pub struct HeadlessFrontend {
     size: CellSize,
     caps: Capabilities,
     shared: HeadlessProbe,
-    sink: Option<InputSink>,
     wake: Option<Duration>,
 }
 
@@ -51,18 +56,12 @@ impl HeadlessFrontend {
             size: CellSize { cols, rows },
             caps: Capabilities::default(),
             shared: HeadlessProbe::default(),
-            sink: None,
             wake: None,
         }
     }
 
     pub fn probe(&self) -> HeadlessProbe {
         self.shared.clone()
-    }
-
-    /// `start_input` で渡された入力口 (起動前は `None`)。
-    pub fn sink(&self) -> Option<&InputSink> {
-        self.sink.as_ref()
     }
 
     pub fn set_wake_after(&mut self, d: Option<Duration>) {
@@ -76,7 +75,7 @@ impl Frontend for HeadlessFrontend {
     }
 
     fn start_input(&mut self, tx: InputSink) -> Result<(), FrontendError> {
-        self.sink = Some(tx);
+        self.shared.0.lock().unwrap().sink = Some(tx);
         Ok(())
     }
 

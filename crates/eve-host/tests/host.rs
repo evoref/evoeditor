@@ -124,7 +124,7 @@ fn シグナルと致命的エラーは_restore_して終了する() {
 fn 入力口から送ったメッセージが溜まっていれば_1_回の_step_でまとめて処理する() {
     let mut e = env();
     e.start();
-    let sink = e.fe.sink().unwrap().clone();
+    let sink = e.probe.sink().unwrap();
     assert!(sink.send(InputEvent::Text("b".into())));
     assert!(sink.send(InputEvent::Text("c".into())));
     let w = e.host.window().unwrap();
