@@ -162,7 +162,7 @@ fn 最初のフレームは全画面で_buffer_と同じ画面になる() {
     let r = render(&f);
     let mut e = Emitter::new();
     let out = e.frame(&r, &f, true);
-    let mut s = Screen::new(30, 9);
+    let mut s = Screen::new(30, r.buffer.area.height as usize);
     s.feed(&out);
     assert_eq!(s.rows(), buffer_rows(&r));
     assert!(
@@ -198,7 +198,7 @@ fn カーソルは最後に出力され_形状は変わったときだけ() {
 fn 部分更新の結果は全再描画と同じ() {
     let mut h = Harness::new().with_size(40, 8);
     let mut e = Emitter::new();
-    let mut s = Screen::new(40, 11);
+    let mut s = Screen::new(40, 8 + 3);
     let steps = [
         "abc",
         "\n日本語",
@@ -221,7 +221,7 @@ fn 部分更新の結果は全再描画と同じ() {
         let out = e.frame(&r, &f, true);
         s.feed(&out);
         // 全再描画 (新しい出力器・新しい端末) と同じ
-        let mut fresh = Screen::new(40, 11);
+        let mut fresh = Screen::new(40, 8 + 3);
         fresh.feed(&Emitter::new().frame(&r, &f, true));
         assert_eq!(s.rows(), fresh.rows(), "段階 {i}: {step:?}");
         assert_eq!(s.rows(), buffer_rows(&r), "段階 {i}");

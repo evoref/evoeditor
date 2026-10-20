@@ -1,7 +1,7 @@
 //! `Frame` → `Buffer` の変換 (docs/04 §4.2、L4 の TestBackend 相当の検査)。`Harness` (eve-testkit) で Frame を作る。
 
 use eve_testkit::Harness;
-use eve_tui::buffer::{CHROME_ROWS, render_panes, row_text};
+use eve_tui::buffer::{chrome_rows_for_surface, render_panes, row_text};
 use eve_tui::glyphs::Glyphs;
 use eve_view::{Color, ColorDepth, Frame, Style};
 use ratatui::buffer::CellDiffOption;
@@ -16,7 +16,10 @@ fn バッファはクロームの行ぶん大きい() {
     let f = frame_of(&mut h);
     let r = render_panes(&f, ColorDepth::TrueColor, &Glyphs::unicode());
     assert_eq!(r.buffer.area.width, f.size.cols);
-    assert_eq!(r.buffer.area.height, f.size.rows + CHROME_ROWS);
+    assert_eq!(
+        r.buffer.area.height,
+        f.size.rows + chrome_rows_for_surface(f.size.rows)
+    );
 }
 
 #[test]
