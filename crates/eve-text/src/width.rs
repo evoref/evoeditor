@@ -284,6 +284,29 @@ pub fn str_display_width(s: &str, cfg: &WidthConfig) -> usize {
     })
 }
 
+/// 表示列 `dcol` に対応する、行内のバイト位置 (書記素境界)。全角の右半分のようにセルの途中に当たる列は、
+/// その書記素の前に寄せる (`Bias::Before`、03 §3.2 の `display_to_pos`)。行の幅を超える列は行末。
+pub fn display_col_to_byte(line: &str, dcol: usize, cfg: &WidthConfig) -> usize {
+    use unicode_segmentation::UnicodeSegmentation;
+    let tab = cfg.tab_width.max(1) as usize;
+    let mut col = 0usize;
+    for (i, g) in line.grapheme_indices(true) {
+        if col >= dcol {
+            return i;
+        }
+        let w = if g == "\t" {
+            tab - col % tab
+        } else {
+            grapheme_width(g, cfg) as usize
+        };
+        if col + w > dcol {
+            return i; // セルの途中: 前に寄せる
+        }
+        col += w;
+    }
+    line.len()
+}
+
 /// 端末との幅の不一致が起きやすい書記素か (§13.2)。`RenderRow.width_risky` の素材。
 /// 未割当・新規のコードポイントは表がないので判定できない (04 の補正表が受ける)。
 pub fn is_width_risky(g: &str) -> bool {
@@ -480,5 +503,23 @@ mod tests {
             ["<U+E0067>", "<U+E0062>"],
             "終端のないタグ列は示す"
         );
+    }
+
+    #[test]
+    fn 表示列から行内の位置へ() {
+        let cfg = WidthConfig::default();
+        assert_eq!(display_col_to_byte("abc", 0, &cfg), 0);
+        assert_eq!(display_col_to_byte("abc", 2, &cfg), 2);
+        assert_eq!(display_col_to_byte("abc", 9, &cfg), 3, "行末に丸める");
+        // 全角 (幅 2): 列 1 はセルの途中なので前の境界
+        assert_eq!(display_col_to_byte("あい", 1, &cfg), 0);
+        assert_eq!(display_col_to_byte("あい", 2, &cfg), 3);
+        assert_eq!(display_col_to_byte("あい", 3, &cfg), 3);
+        // タブ (幅 4): 列 2 はタブの途中
+        assert_eq!(display_col_to_byte("a\tb", 2, &cfg), 1);
+        assert_eq!(display_col_to_byte("a\tb", 4, &cfg), 2);
+        // 書記素: 結合文字は基底と一緒
+        assert_eq!(display_col_to_byte("e\u{301}x", 1, &cfg), 3);
+        assert_eq!(display_col_to_byte("", 5, &cfg), 0);
     }
 }

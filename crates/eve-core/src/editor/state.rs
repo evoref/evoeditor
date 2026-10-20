@@ -296,6 +296,55 @@ impl EditorState {
         }
     }
 
+    /// `set_selection` と同じだが、目標列 (`goal_dcol`) を指定する (垂直移動・ページ移動が維持する)。
+    pub fn set_selection_with_goal(&mut self, view: ViewId, sel: Selection, goal: Option<u32>) {
+        self.set_selection(view, sel);
+        if let Some(v) = self.views.get_mut(&view) {
+            v.goal_dcol = goal;
+        }
+    }
+
+    /// 先頭可視行を `delta` 行ずらす (範囲内に収める)。
+    pub fn scroll_lines(&mut self, view: ViewId, delta: i64) {
+        let Some(v) = self.views.get_mut(&view) else {
+            return;
+        };
+        let Some(d) = self.documents.get(&v.doc) else {
+            return;
+        };
+        let t = d.text();
+        let last = t.len_lines().saturating_sub(1) as i64;
+        let top = t.byte_to_line(v.scroll.top).0 as i64;
+        let new = (top + delta).clamp(0, last) as usize;
+        v.scroll.top = t.line_to_byte(LineIdx(new));
+        self.needs_render = true;
+    }
+
+    /// カーソル (primary の head) が可視範囲に入るよう、先頭可視行を最小限に動かす (方針の正本は 04)。
+    pub fn ensure_cursor_visible(&mut self, view: ViewId) {
+        let rows = self.viewport.1 as usize;
+        let Some(v) = self.views.get_mut(&view) else {
+            return;
+        };
+        let Some(d) = self.documents.get(&v.doc) else {
+            return;
+        };
+        let t = d.text();
+        let line = t.byte_to_line(v.selection.primary().head).0;
+        let top = t.byte_to_line(v.scroll.top).0;
+        let new_top = if line < top {
+            line
+        } else if rows > 0 && line >= top + rows {
+            line + 1 - rows
+        } else {
+            top
+        };
+        if new_top != top {
+            v.scroll.top = t.line_to_byte(LineIdx(new_top));
+            self.needs_render = true;
+        }
+    }
+
     /// View の Selection を設定する (書記素境界へ正規化し、`goal_dcol` はクリア)。
     pub fn set_selection(&mut self, view: ViewId, sel: Selection) {
         let Some(v) = self.views.get_mut(&view) else {
