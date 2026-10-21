@@ -1271,3 +1271,75 @@ fn 文字コードの引数が無ければ尋ねる() {
     s.pump();
     assert_eq!(s.doc().1.format.encoding, eve_core::Encoding::ShiftJis);
 }
+
+#[test]
+fn 改行コードを変換すると全区切りが揃い_undo_で本文と書式が戻る() {
+    let mut s = Env::new();
+    s.fs.add_file("/w/a.txt", b"a\nb\r\nc\rd");
+    s.open("/w/a.txt");
+    assert!(s.doc().1.format.eol_stats.is_mixed());
+    s.messages();
+    let r = s.run("file.set_line_ending", Args::new().with_str("eol", "crlf"));
+    assert_eq!(r, CommandResult::Done);
+    assert_eq!(s.text(), "a\r\nb\r\nc\r\nd");
+    let d = s.doc().1;
+    assert!(d.is_dirty());
+    assert_eq!(d.format.default_eol, eve_text::LineEnding::Crlf);
+    assert!(!d.format.eol_stats.is_mixed() && d.format.eol_stats.crlf == 3);
+    assert!(s.messages().contains(&"info.eol.converted".to_owned()));
+    // 1 回の Undo で本文と default_eol が戻る
+    s.run("edit.undo", Args::new());
+    assert_eq!(s.text(), "a\nb\r\nc\rd");
+    let d = s.doc().1;
+    assert_eq!(d.format.default_eol, eve_text::LineEnding::Lf);
+    assert!(d.format.eol_stats.is_mixed());
+    assert!(!d.is_dirty());
+    s.run("edit.redo", Args::new());
+    assert_eq!(s.text(), "a\r\nb\r\nc\r\nd");
+}
+
+#[test]
+fn 変換済みなら本文を変えず_履歴も増えない() {
+    let mut s = Env::new();
+    s.fs.add_file("/w/a.txt", b"a\nb\n");
+    s.open("/w/a.txt");
+    s.messages();
+    s.run("file.set_line_ending", Args::new().with_str("eol", "lf"));
+    assert!(!s.doc().1.is_dirty());
+    assert!(s.messages().contains(&"info.eol.unchanged".to_owned()));
+    assert_eq!(s.doc().1.history().undo_len(), 0);
+    // 改行が無い文書では default_eol だけが変わる (メタデータ。Undo の対象外)
+    s.fs.add_file("/w/b.txt", b"abc");
+    s.open("/w/b.txt");
+    s.run("file.set_line_ending", Args::new().with_str("eol", "cr"));
+    let d = s.doc().1;
+    assert_eq!(d.format.default_eol, eve_text::LineEnding::Cr);
+    assert!(!d.is_dirty() && d.history().undo_len() == 0);
+}
+
+#[test]
+fn 改行コードの変換は読み取り専用では拒否し_引数の誤りも拒否する() {
+    let mut s = Env::new();
+    s.fs.add_file("/w/a.txt", b"a\nb");
+    s.open("/w/a.txt");
+    let r = s.run("file.set_line_ending", Args::new().with_str("eol", "xx"));
+    assert_eq!(r, CommandResult::Rejected(RejectReason::InvalidArgs));
+    let r = s.run("file.set_line_ending", Args::new());
+    assert_eq!(r, CommandResult::Rejected(RejectReason::InvalidArgs));
+    s.fs.add_file("/w/ro.txt", b"x\n");
+    s.fs.set_readonly("/w/ro.txt", true);
+    s.open("/w/ro.txt");
+    let r = s.run("file.set_line_ending", Args::new().with_str("eol", "crlf"));
+    assert!(matches!(r, CommandResult::Rejected(_)));
+    assert_eq!(s.text(), "x\n");
+}
+
+#[test]
+fn 変換した文書の保存は区切りをそのまま書く() {
+    let mut s = Env::new();
+    s.fs.add_file("/w/a.txt", b"a\nb\n");
+    s.open("/w/a.txt");
+    s.run("file.set_line_ending", Args::new().with_str("eol", "crlf"));
+    s.run("file.save", Args::new());
+    assert_eq!(s.fs.read("/w/a.txt").unwrap(), b"a\r\nb\r\n");
+}

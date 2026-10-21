@@ -157,6 +157,14 @@ impl EditorState {
         (doc_id, view_id)
     }
 
+    /// 新しく挿入する改行だけを変える (本文を変えないメタデータの変更。Undo の対象外・dirty にしない、03 §8.4)。
+    pub fn set_default_eol(&mut self, doc: DocumentId, eol: eve_text::LineEnding) {
+        if let Some(d) = self.documents.get_mut(&doc) {
+            d.format.default_eol = eol;
+            self.needs_render = true;
+        }
+    }
+
     pub fn add_view(&mut self, doc: DocumentId) -> ViewId {
         let id = ViewId(self.fresh());
         self.views.insert(
