@@ -399,3 +399,32 @@ fn 逆順の範囲の長さは_0() {
 }
 
 // TODO(1-b): ChangeSet の適用を入れたら、INV-T3 (apply の後も、旧 Snapshot が旧内容を保つ) のテストをここに足す。
+
+// 空の範囲 (逆順を含む) は、char の途中の位置でも空のまま (CI の proptest で見つかった、チャンクをまたぐ長いテキストの再現)
+#[test]
+fn 空の範囲は_char_の途中でも空のまま() {
+    let s = "あ😀éa".repeat(2000);
+    let t = Text::from(s.as_str());
+    for p in 0..=s.len() {
+        let empty = ByteRange {
+            start: ByteOff(p),
+            end: ByteOff(p),
+        };
+        assert_eq!(t.chunks(empty).count(), 0, "位置 {p}");
+        assert_eq!(t.slice_to_string(empty), "", "位置 {p}");
+        if p > 0 {
+            let rev = ByteRange {
+                start: ByteOff(p),
+                end: ByteOff(p - 1),
+            };
+            assert_eq!(t.chunks(rev).count(), 0, "逆順 {p}");
+            assert_eq!(t.slice_to_string(rev), "", "逆順 {p}");
+        }
+    }
+    // 空でない範囲は従来どおり外側の char 境界へ丸める (あ = 0..3 の途中 1..2 → 0..3)
+    let r = ByteRange {
+        start: ByteOff(1),
+        end: ByteOff(2),
+    };
+    assert_eq!(t.slice_to_string(r), "あ");
+}
