@@ -4,9 +4,13 @@
 //! (5) AC のチェックリストの検査、(6) 変更した crate の Harness のシナリオテスト。
 //! この 3 か所 (11 §8.1・09 §6.1・08 §2.2) は同時に直す。
 
+use std::collections::BTreeSet;
 use std::process::Command;
 
-use crate::{ac_checklist, check_deps, util::run};
+use crate::{
+    ac_checklist, check_deps,
+    util::{run, run_capture},
+};
 
 pub fn run_all() -> Result<(), String> {
     run(
@@ -42,8 +46,68 @@ pub fn run_all() -> Result<(), String> {
     .map_err(|e| format!("{e}\n  (cargo-nextest が無ければ `cargo install cargo-nextest --locked` で入れてください)"))?;
     check_deps::run(false)?;
     ac_checklist::run()?;
-    println!("▶ (6) 変更した crate の Harness のシナリオテスト");
-    println!("  (未実装: eve-testkit の Harness ができてから足す。M1 の最初の縦切り (2))");
+    scenario_tests()?;
     println!("\ncheck: すべて通りました");
     Ok(())
+}
+
+/// (3) で既に回した crate。
+const COVERED: [&str; 3] = ["eve-text", "eve-encoding", "eve-core"];
+
+/// 作業ブランチの変更 (`develop` との分岐点から作業ツリーまで、未追跡を含む) に含まれるファイルの crate 名。
+fn changed_packages() -> Result<BTreeSet<String>, String> {
+    let base = ["origin/develop", "develop", "main"]
+        .into_iter()
+        .find_map(|b| {
+            run_capture(Command::new("git").args(["merge-base", "HEAD", b]))
+                .ok()
+                .map(|s| s.trim().to_owned())
+        });
+    let mut files: Vec<String> = Vec::new();
+    if let Some(base) = base {
+        files.extend(
+            run_capture(Command::new("git").args(["diff", "--name-only", &base]))?
+                .lines()
+                .map(str::to_owned),
+        );
+    }
+    files.extend(
+        run_capture(Command::new("git").args(["ls-files", "--others", "--exclude-standard"]))?
+            .lines()
+            .map(str::to_owned),
+    );
+    Ok(files
+        .iter()
+        .filter_map(|f| {
+            let mut it = f.split('/');
+            match (it.next(), it.next()) {
+                // `bins/evoeditor` の package 名は `evoeditor`
+                (Some("crates"), Some(name)) | (Some("bins"), Some(name)) => Some(name.to_owned()),
+                _ => None,
+            }
+        })
+        .collect())
+}
+
+/// (6) 変更した crate のテスト (Harness のシナリオを含む)。(3) で回した crate は除く。
+fn scenario_tests() -> Result<(), String> {
+    let changed: Vec<String> = changed_packages()?
+        .into_iter()
+        .filter(|p| !COVERED.contains(&p.as_str()))
+        .collect();
+    if changed.is_empty() {
+        println!(
+            "▶ (6) 変更した crate のテスト: 対象なし ((3) で回した crate だけ、または変更なし)"
+        );
+        return Ok(());
+    }
+    let mut cmd = Command::new("cargo");
+    cmd.args(["nextest", "run", "--no-tests=pass"]);
+    for p in &changed {
+        cmd.args(["-p", p]);
+    }
+    run(
+        &format!("(6) 変更した crate のテスト ({})", changed.join(", ")),
+        &mut cmd,
+    )
 }
