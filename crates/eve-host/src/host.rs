@@ -70,12 +70,19 @@ pub struct Host {
     slots: BTreeMap<DocumentId, DocSnapshot>,
     events: Vec<EditorEvent>,
     exit_stderr: Vec<StderrLine>,
+    /// 起動時に開くファイルの文字コードの指定 (`--encoding`)。
+    initial_encoding: Option<eve_core::Encoding>,
 }
 
 impl Host {
     /// Port から Host を作る。Editor は空で、`start` で frontend の能力と最初の文書を設定する。
     pub fn new(ports: Ports) -> Host {
         Host::with_channel(ports, channel())
+    }
+
+    /// 起動時に開くファイルの文字コードを指定する (`--encoding`、FR-111)。`start` / `run` の前に呼ぶ。
+    pub fn set_initial_encoding(&mut self, encoding: Option<eve_core::Encoding>) {
+        self.initial_encoding = encoding;
     }
 
     /// 受信口を外で作った Host。`ThreadJobSpawner` のように、Host より先に送信口が要る Port のため。
@@ -93,6 +100,7 @@ impl Host {
             slots: BTreeMap::new(),
             events: Vec::new(),
             exit_stderr: Vec::new(),
+            initial_encoding: None,
         }
     }
 
@@ -143,7 +151,8 @@ impl Host {
         let size = frontend.surface_size();
         self.editor.state_mut().set_viewport(size.cols, size.rows);
         self.editor.tick(self.clock.now());
-        self.editor.open_initial(path, read_only);
+        self.editor
+            .open_initial_with(path, read_only, self.initial_encoding);
         let window = self
             .editor
             .state()

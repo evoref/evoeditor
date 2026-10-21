@@ -1,6 +1,6 @@
 //! 文書の形式情報 (docs/02 §5.1、docs/03 §8.1 / §9.6): 改行の統計、`TextFormat`、読み取り専用の理由、読込状態。
 
-use eve_encoding::PuaEscapeMode;
+use eve_encoding::{Encoding, PuaEscapeMode, RoundtripSummary};
 use eve_text::{ByteOff, LineEnding, TextRead};
 
 /// 改行の種類別の数。`CRLF` は 1 つと数える (03 §2.4)。
@@ -103,9 +103,11 @@ pub(crate) fn count_range(text: &dyn TextRead, start: usize, end: usize) -> EolS
     st
 }
 
-/// 文書の形式 (03 §8.1)。`encoding` は M1 では UTF-8 だけなので持たない (他の文字コードの版で足す)。
+/// 文書の形式 (03 §8.1)。
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TextFormat {
+    pub encoding: Encoding,
+    /// BOM の種類は `encoding` から決まる (UTF-8 / UTF-16LE / UTF-16BE)。保存時に同じものを書く。
     pub has_bom: bool,
     /// 新規に挿入する改行 (文書全体の改行コードではない)。
     pub default_eol: LineEnding,
@@ -113,17 +115,21 @@ pub struct TextFormat {
     /// 不正バイトの保持マーカーの数。0 でなければ読み取り専用 (NFR-304)。
     pub invalid_bytes: u32,
     pub pua_escape: PuaEscapeMode,
+    /// 読込時の往復の検査 (03 §8.7。v0.1 は件数と先頭の位置だけ)。
+    pub roundtrip: RoundtripSummary,
 }
 
 impl TextFormat {
     /// 新規文書 (無題・存在しないパス)。`default_eol` は全 OS で LF。
     pub fn new_document() -> TextFormat {
         TextFormat {
+            encoding: Encoding::Utf8,
             has_bom: false,
             default_eol: LineEnding::Lf,
             eol_stats: EolStats::default(),
             invalid_bytes: 0,
             pua_escape: PuaEscapeMode::Enabled,
+            roundtrip: RoundtripSummary::default(),
         }
     }
 }

@@ -301,6 +301,45 @@ fn 日本語のファイルを引数で開いて表示する() {
     let _ = std::fs::remove_dir_all(dir);
 }
 
+// 文字コード: Shift_JIS のファイルを判定して開く。`--encoding` の指定と、名前の誤り
+#[test]
+fn shift_jis_のファイルを開いて文字コードを表示する() {
+    let dir = temp_dir("sjis");
+    let path = dir.join("sjis.txt");
+    let text = "日本語のテキストエディタです。これは文章の見本で、文字コードの判定に使います。
+";
+    let (bytes, _, _) = encoding_rs::SHIFT_JIS.encode(text);
+    std::fs::write(&path, &bytes).unwrap();
+    let mut s = Session::start(&[path.to_str().unwrap()]);
+    s.wait_for("本文と文字コード", |t| {
+        t.contains("日本語のテキストエディタです") && t.contains("Shift_JIS")
+    });
+    s.send(CTRL_Q);
+    assert_eq!(s.wait_exit(), 0);
+    assert_eq!(
+        std::fs::read(&path).unwrap(),
+        bytes.as_ref(),
+        "開いて閉じただけではバイトが変わらない"
+    );
+    // 指定して開く (UTF-8 と指定すると不正バイトを含む読み取り専用)
+    let mut s = Session::start(&["--encoding", "utf-8", path.to_str().unwrap()]);
+    s.wait_for("UTF-8 と読み取り専用", |t| {
+        t.contains("UTF-8") && t.contains("RO")
+    });
+    s.send(CTRL_Q);
+    assert_eq!(s.wait_exit(), 0);
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn 未知の文字コードの指定は使い方の誤り() {
+    let out = std::process::Command::new(EXE)
+        .args(["--encoding", "latin1", "x.txt"])
+        .output()
+        .expect("起動");
+    assert_eq!(out.status.code(), Some(2));
+}
+
 // (9) 貼り付けの安全: 本文の Ctrl+S (0x13) はコマンドにならず、文字として入る
 #[test]
 fn 貼り付けの本文の制御文字はコマンドとして実行されない() {

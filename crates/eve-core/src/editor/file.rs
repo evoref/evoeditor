@@ -330,7 +330,20 @@ impl EditorState {
         let Some(doc) = self.documents.get_mut(&doc_id) else {
             return CommandResult::Rejected(RejectReason::NoTarget);
         };
-        let (bom, pua) = (doc.format.has_bom, doc.format.pua_escape);
+        // 状態付き符号化 (ISO-2022-JP) で不正バイトを含む文書は保存しない (03 §8.3 (a)。不正バイトを失わないため)
+        if doc.format.encoding.is_stateful() && doc.format.invalid_bytes > 0 {
+            self.show_message(
+                MessageLevel::Error,
+                "msg.save.encoding_unsupported_iso2022",
+                &[("path", &path.display())],
+            );
+            return CommandResult::Rejected(RejectReason::NotAvailable);
+        }
+        let (encoding, bom, pua) = (
+            doc.format.encoding,
+            doc.format.has_bom,
+            doc.format.pua_escape,
+        );
         let revision = doc.revision();
         let (snapshot, at) = doc.begin_save();
         let job = self.jobs.spawn(
@@ -339,6 +352,7 @@ impl EditorState {
             JobKind::Save {
                 path: path.clone(),
                 snapshot,
+                encoding,
                 bom,
                 pua,
                 expected,
@@ -400,8 +414,11 @@ impl EditorState {
                 stamp,
                 changed_during_load,
                 detected,
+                notes,
                 ..
             } => {
+                let lossy = format.roundtrip.lossy_lines;
+                let encoding = format.encoding;
                 let mut d = Document::from_text(text, format);
                 d.path = Some(path.clone());
                 d.disk_stamp = Some(stamp);
@@ -412,6 +429,32 @@ impl EditorState {
                         MessageLevel::Warn,
                         "msg.open.changed_during_load",
                         &path.display(),
+                    );
+                }
+                // 文字コードに関する通知 (最後に出したものが現在のメッセージ)
+                if lossy > 0 {
+                    self.show_message(
+                        MessageLevel::Info,
+                        "info.open.lossy_roundtrip",
+                        &[("count", &lossy.to_string())],
+                    );
+                }
+                if let Some(e) = notes.redetected {
+                    self.show_message(
+                        MessageLevel::Info,
+                        "info.open.redetected",
+                        &[("encoding", e.name())],
+                    );
+                }
+                if let Some(guess) = notes.guess_unsupported {
+                    self.show_message(
+                        MessageLevel::Info,
+                        "info.open.guess_unsupported",
+                        &[
+                            ("path", &path.display()),
+                            ("guess", guess),
+                            ("encoding", encoding.name()),
+                        ],
                     );
                 }
                 self.complete_open(doc_id, view, replace);
@@ -446,6 +489,7 @@ impl EditorState {
                 let reason = match ask {
                     ConfirmAsk::Binary => "binary",
                     ConfirmAsk::UnsupportedBom { .. } => "utf-32 bom",
+                    ConfirmAsk::ManyInvalidBytes { .. } => "many invalid bytes",
                 };
                 self.open_failed(
                     doc_id,
@@ -578,6 +622,17 @@ impl EditorState {
                         self.run_continuation(c);
                     }
                 }
+            }
+            // 保存先の文字コードで表せない文字がある: 何も書いていない (確認ダイアログと置換は後続、03 §8.6 E3)
+            JobResult::Unmappable { total, .. } => {
+                self.show_message(
+                    MessageLevel::Error,
+                    "msg.save.failed",
+                    &[
+                        ("path", &path.display()),
+                        ("reason", &format!("unmappable ({total})")),
+                    ],
+                );
             }
             JobResult::Failed { err, .. } => {
                 let reason = reason_label(&err);
