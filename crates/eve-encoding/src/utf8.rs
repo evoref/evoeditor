@@ -33,6 +33,8 @@ pub enum PuaEscapeMode {
     /// 元のテキストが真にこの範囲の文字を含む。不正バイトが 0 ならエスケープを使わない
     /// (この範囲の文字をそのまま扱う)。不正バイトもあるときは `Decoder::collision_with_invalid` が真で、読み取り専用に固定する。
     DisabledCollision,
+    /// 状態付き符号化 (ISO-2022-JP)。エスケープ文字を元のバイトに戻して書くことはできない (03 §8.3)。
+    DisabledStateful,
 }
 
 /// UTF-8 のデコーダ。`decode` をチャンクごとに呼び、最後のチャンクで `last = true` にする。

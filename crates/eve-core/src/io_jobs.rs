@@ -104,11 +104,10 @@ pub(crate) fn run_open(
             sniffed = true;
             let head = &chunk[..chunk.len().min(SNIFF_LEN)];
             let file_complete = meta.len as usize <= head.len();
-            let det_opts = DetectOptions {
-                forced: opts
-                    .forced_utf8
+            let det_opts = DetectOptions::default().with_forced(
+                opts.forced_utf8
                     .then_some(eve_encoding::ForcedEncoding::Utf8),
-            };
+            );
             let Detection { kind, .. } = detect(head, file_complete, &det_opts);
             match kind {
                 DetectedKind::Binary if !opts.read_only_requested => {

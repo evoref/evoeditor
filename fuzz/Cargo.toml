@@ -1,0 +1,26 @@
+# fuzz_decode (docs/09 §3.3 / §6.3)。本体の workspace から除外した別の crate (cargo-fuzz の標準の配置)。
+# 実行は Linux の nightly だけ: `cargo +nightly fuzz run fuzz_decode -- -max_total_time=600 -close_fd_mask=3`
+# (libFuzzer は MSVC 非対応。Windows の CI では同じ関数を proptest で回す: crates/eve-encoding/tests/fuzz_decode.rs)。
+[package]
+name = "eve-fuzz"
+version = "0.0.0"
+edition = "2024"
+publish = false
+license = "Apache-2.0"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+eve-encoding = { path = "../crates/eve-encoding" }
+
+[[bin]]
+name = "fuzz_decode"
+path = "fuzz_targets/fuzz_decode.rs"
+test = false
+doc = false
+bench = false
+
+# 本体の workspace に入れない
+[workspace]
