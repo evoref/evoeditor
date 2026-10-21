@@ -473,8 +473,9 @@ mod tests {
     #[test]
     fn フラグのディレクトリは所有者のみの_dacl() {
         let d = tmp_dir("dacl");
-        let key = "0123456789abcdef";
-        let dir = create_flag_dir(&d.join("state"), key).unwrap();
+        // 実際のキー (パスの XXH3-64) を使う。固定の 16 進の文字列は秘密情報の検出に当たる
+        let key = flag_key(&d.join("a.txt")).unwrap();
+        let dir = create_flag_dir(&d.join("state"), &key).unwrap();
         let out = std::process::Command::new("icacls")
             .arg(&dir)
             .output()
