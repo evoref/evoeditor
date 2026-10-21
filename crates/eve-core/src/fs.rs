@@ -31,6 +31,14 @@ pub trait FileSystem: Send + Sync {
         Ok(Vec::new())
     }
 
+    /// 起動時の退避の案内 (`msg.recovery.found` / `found_rescue`) 用に、退避ディレクトリを列挙する (05 §7.5 の「`recovery/` の走査と
+    /// 削除の規則」)。`state_dir/recovery/` 直下と `recovery/rescue/` 直下、代替の退避先の同じ位置にある、名前の形
+    /// (`<UTC timestamp>-<pid>[-<n>]`) に合うディレクトリだけを返す (`inflight/` は見ない。形に合わない名前は無視。中のファイルは読まない)。
+    /// 場所が無ければ空。状態ディレクトリを持たない実装は常に空。
+    fn list_recovery_dirs(&self) -> Result<Vec<RecoveryDirEntry>, FsError> {
+        Ok(Vec::new())
+    }
+
     /// ファイルを 1 つ消す (保存中フラグの掃除など)。存在しなければ `NotFound`。
     fn remove_file(&self, _path: &FsPath) -> Result<(), FsError> {
         Err(FsError::new(FsErrorKind::Other))
@@ -151,6 +159,14 @@ impl FileStamp {
             hash,
         }
     }
+}
+
+/// 退避ディレクトリ 1 つ (起動時の案内用。中身は読まない)。
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RecoveryDirEntry {
+    pub path: FsPath,
+    /// 「退避先に保存」の退避 (`recovery/rescue/` の下)。異常終了の退避ではない。
+    pub rescue: bool,
 }
 
 // ---------- 保存中フラグと中断の痕跡 (02 §4.5、05 §4.6 / §7.5) ----------

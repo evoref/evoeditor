@@ -36,6 +36,11 @@ struct Session {
 
 impl Session {
     fn start(args: &[&str]) -> Session {
+        Session::start_in(args, None)
+    }
+
+    /// `state` を指定すると、その状態ディレクトリで起動する (前の実行が残した退避・フラグを見せる)。
+    fn start_in(args: &[&str], state: Option<PathBuf>) -> Session {
         let pty = native_pty_system()
             .openpty(PtySize {
                 rows: ROWS,
@@ -50,11 +55,13 @@ impl Session {
         cmd.env_remove("WT_SESSION");
         cmd.env_remove("TERM_PROGRAM");
         // 利用者の状態ディレクトリを汚さない (保存中フラグ・退避はここに書く)
-        let state = std::env::temp_dir().join(format!(
-            "evo-e2e-state-{}-{}",
-            std::process::id(),
-            STATE_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
-        ));
+        let state = state.unwrap_or_else(|| {
+            std::env::temp_dir().join(format!(
+                "evo-e2e-state-{}-{}",
+                std::process::id(),
+                STATE_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+            ))
+        });
         cmd.env("EVE_STATE_DIR", &state);
         let child = pty.slave.spawn_command(cmd).expect("起動できません");
         drop(pty.slave);
@@ -396,6 +403,27 @@ fn コンソールを閉じると未保存の内容を退避して終了する()
         "unsaved text"
     );
     let _ = std::fs::remove_dir_all(&s.state);
+}
+
+// 起動時に、前の異常終了が残した退避の場所を案内する (msg.recovery.found、02 §11.2.1 の復旧 v0.1)
+#[test]
+fn 退避が残っていると起動時に場所を案内する() {
+    let mut s1 = Session::start(&[]);
+    s1.wait_ready();
+    type_slowly(&s1, "lost work");
+    s1.wait_for("入力が見える", |t| t.contains("lost work"));
+    let state = s1.state.clone();
+    s1.close_console();
+    assert!(s1.exit_within(Duration::from_secs(10)).is_some());
+    // 同じ状態ディレクトリで再び起動する
+    let mut s2 = Session::start_in(&[], Some(state.clone()));
+    // 本文は長いパスの手前で省略される (04 §8.9: 対処 (hint) を残し、本文の詳細から縮める。履歴 UI は v0.2)。案内が出ること自体を確かめる
+    s2.wait_for("退避の案内", |t| {
+        t.contains("異常終了の時に") && t.contains("そのフォルダを削除してください")
+    });
+    s2.send(CTRL_Q);
+    assert_eq!(s2.wait_exit(), 0);
+    let _ = std::fs::remove_dir_all(&state);
 }
 
 // 保存すると保存中フラグを書いて消す (05 §4.6): 状態ディレクトリにフラグが残らない

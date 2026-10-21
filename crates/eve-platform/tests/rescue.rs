@@ -248,3 +248,90 @@ fn 長い名前と予約文字のファイル名() {
     assert!(names.iter().all(|n| n.encode_utf16().count() < 255));
     let _ = fs::remove_dir_all(state);
 }
+
+// ---- 起動時の走査 (list_recovery_dirs、05 §7.5「recovery/ の走査と削除の規則」) ----
+
+use eve_core::FileSystem;
+use eve_platform::fs::WinFs;
+
+#[test]
+fn 走査は名前の形に合うディレクトリだけを返し_inflight_と中身は見ない() {
+    let state = tmp("scan");
+    let rec = state.join("s").join("recovery");
+    for d in [
+        "20261021T120000Z-100",
+        "20261021T120000Z-100-2",
+        "rescue/20261022T000000Z-300",
+        "inflight/0123456789abcdef", // inflight は見ない
+        "not-a-recovery",
+        "rescue/junk",
+    ] {
+        fs::create_dir_all(rec.join(d)).unwrap();
+    }
+    fs::write(rec.join("20261021T120000Z-999"), b"file").unwrap(); // ファイルは対象外
+    let fsys = WinFs::new(state.join("s"));
+    let mut got: Vec<(String, bool)> = fsys
+        .list_recovery_dirs()
+        .unwrap()
+        .into_iter()
+        .map(|e| {
+            (
+                e.path
+                    .as_path()
+                    .file_name()
+                    .unwrap()
+                    .to_string_lossy()
+                    .into_owned(),
+                e.rescue,
+            )
+        })
+        // 代替の退避先 (他のテスト・実行が残したもの) は除く
+        .filter(|(n, _)| {
+            [
+                "20261021T120000Z-100",
+                "20261021T120000Z-100-2",
+                "20261022T000000Z-300",
+            ]
+            .contains(&n.as_str())
+        })
+        .collect();
+    got.sort();
+    assert_eq!(
+        got,
+        vec![
+            ("20261021T120000Z-100".to_owned(), false),
+            ("20261021T120000Z-100-2".to_owned(), false),
+            ("20261022T000000Z-300".to_owned(), true),
+        ]
+    );
+    // 状態ディレクトリを持たない実装は (代替の退避先を除いて) 何も返さない
+    assert!(
+        WinFs::default()
+            .list_recovery_dirs()
+            .unwrap()
+            .iter()
+            .all(|e| !e.path.as_path().starts_with(&state))
+    );
+    let _ = fs::remove_dir_all(state);
+}
+
+#[test]
+fn 書いた退避は次の走査で見つかる() {
+    let state = tmp("scan2");
+    let sd = state.join("s");
+    let w = WinRescue::new(Some(sd.clone()));
+    let out = w.write(
+        &[doc(1, "x", None, |_| {})],
+        RescueReason::Panic,
+        Duration::from_secs(5),
+    );
+    let written = out.dir.unwrap();
+    let found = WinFs::new(&sd).list_recovery_dirs().unwrap();
+    assert!(
+        found
+            .iter()
+            .any(|e| e.path.as_path() == written && !e.rescue),
+        "{found:?}"
+    );
+    let _ = fs::remove_dir_all(state);
+}

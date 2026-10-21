@@ -11,7 +11,7 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use eve_core::{
     ChunkError, Clock, Expect, FileId, FileKind, FileMeta, FileStamp, FileSystem, FileTime,
     FsError, FsErrorDetail, FsErrorKind, FsKind, FsPath, FsyncLevel, HardlinkPolicy,
-    InflightRecord, ReadChunks, SaveMethod, SaveOptions, SaveReport,
+    InflightRecord, ReadChunks, RecoveryDirEntry, SaveMethod, SaveOptions, SaveReport,
 };
 
 /// 障害を注入できる操作。
@@ -56,6 +56,8 @@ struct State {
     steps: Vec<WriteStep>,
     /// 保存中フラグ (テストが `add_inflight` で積む)。
     inflight: Vec<InflightRecord>,
+    /// 退避ディレクトリ (テストが `add_recovery_dir` で積む)。
+    recovery: Vec<RecoveryDirEntry>,
 }
 
 pub struct MemFs {
@@ -83,6 +85,7 @@ impl MemFs {
                 read_fail_after: None,
                 steps: Vec::new(),
                 inflight: Vec::new(),
+                recovery: Vec::new(),
             }),
         }
     }
@@ -154,6 +157,14 @@ impl MemFs {
     /// 保存中フラグを積む (中断の痕跡の再現。`InflightRecord.flag` は `/state/inflight/…` のような任意のパス)。
     pub fn add_inflight(&self, record: InflightRecord) {
         self.st().inflight.push(record);
+    }
+
+    /// 退避ディレクトリを積む (起動時の案内の再現)。`rescue` は「退避先に保存」の退避。
+    pub fn add_recovery_dir(&self, path: &str, rescue: bool) {
+        self.st().recovery.push(RecoveryDirEntry {
+            path: FsPath::from(path),
+            rescue,
+        });
     }
 
     /// 残っている保存中フラグ。
@@ -298,6 +309,10 @@ fn step(s: &mut State, st: WriteStep) -> Result<(), FsError> {
 }
 
 impl FileSystem for MemFs {
+    fn list_recovery_dirs(&self) -> Result<Vec<RecoveryDirEntry>, FsError> {
+        Ok(self.st().recovery.clone())
+    }
+
     fn inflight_for(&self, path: &FsPath) -> Result<Vec<InflightRecord>, FsError> {
         let s = self.st();
         Ok(s.inflight

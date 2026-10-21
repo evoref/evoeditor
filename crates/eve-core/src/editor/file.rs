@@ -29,6 +29,8 @@ pub(super) enum Pending {
     },
     /// 未編集の上書き保存の照合 (03 §9.3 手順 0)。
     CheckUnchanged { doc: DocumentId },
+    /// 起動時の退避ディレクトリの走査。
+    RecoveryScan,
     Save {
         doc: DocumentId,
         at: NodeId,
@@ -132,7 +134,7 @@ impl EditorState {
             .filter(|(_, p)| match p {
                 Pending::Open { doc: d, .. } | Pending::CheckUnchanged { doc: d } => *d == doc,
                 // 保存ジョブは取り消さず、完了を待つ (03 §9.2 の「閉じる手順」。ユーザーが求めた保存を中断しない)
-                Pending::Save { .. } => false,
+                Pending::Save { .. } | Pending::RecoveryScan => false,
             })
             .map(|(id, _)| *id)
             .collect();
@@ -388,6 +390,7 @@ impl EditorState {
                 replace,
             } => self.finish_open(doc, view, path, replace, r),
             Pending::CheckUnchanged { doc } => self.finish_check(doc, r),
+            Pending::RecoveryScan => self.finish_recovery_scan(r),
             Pending::Save {
                 doc,
                 at,
@@ -396,6 +399,56 @@ impl EditorState {
             } => self.finish_save(doc, at, revision, &path, cont, r),
         }
         self.mark_dirty_render();
+    }
+
+    /// 起動時に退避ディレクトリを走査するジョブを投入する (`open_initial` が呼ぶ)。
+    pub(super) fn start_recovery_scan(&mut self) {
+        let job = self
+            .jobs
+            .spawn(None, eve_view::Revision::INITIAL, JobKind::RecoveryScan);
+        self.pending.insert(job, Pending::RecoveryScan);
+    }
+
+    /// 退避が残っていれば場所を案内する (`msg.recovery.found` / `found_rescue`、02 §9.3。中身は読まない)。
+    /// 案内するのは最も新しい退避 (名前の `<UTC timestamp>-<pid>[-<n>]` の順)。「退避先に保存」の退避だけなら文言を分ける。
+    fn finish_recovery_scan(&mut self, r: JobResult) {
+        let JobResult::RecoveryFound { mut dirs, .. } = r else {
+            return;
+        };
+        if dirs.is_empty() {
+            return;
+        }
+        let only_rescue = dirs.iter().all(|d| d.rescue);
+        // 異常終了の退避があれば、その中で最も新しいものを示す (無ければ「退避先に保存」の中で最も新しいもの)
+        if !only_rescue {
+            dirs.retain(|d| !d.rescue);
+        }
+        let key = |d: &crate::fs::RecoveryDirEntry| {
+            d.path
+                .as_path()
+                .file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_default()
+        };
+        // 同じ時刻は `-<n>` の大きい方が新しい。名前の長さ → 辞書順で比べる (`-2` は `-` なしより後)
+        dirs.sort_by(|a, b| {
+            let (ka, kb) = (key(a), key(b));
+            ka.get(..16)
+                .cmp(&kb.get(..16))
+                .then(ka.len().cmp(&kb.len()))
+                .then(ka.cmp(&kb))
+        });
+        let count = dirs.len().to_string();
+        let newest = dirs.last().map(|d| d.path.display()).unwrap_or_default();
+        self.show_message(
+            MessageLevel::Warn,
+            if only_rescue {
+                "msg.recovery.found_rescue"
+            } else {
+                "msg.recovery.found"
+            },
+            &[("dir", &newest), ("count", &count)],
+        );
     }
 
     fn finish_open(
