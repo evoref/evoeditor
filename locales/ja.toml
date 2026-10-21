@@ -574,16 +574,31 @@ invalid_bytes = "{path} は {encoding} として不正なバイトが多く含�
 utf32 = "{path} の先頭に UTF-32 の BOM があります。UTF-32 には対応していません — `[R] 読み取り専用で開く` ★ / `[E] 文字コードを指定して開く`"
 
 [ui.confirm.save]
-atomic_unsupported = "{path} は安全な方法 (一時ファイルと置換) で保存できません: {reason} — `[O] 直接上書き (バックアップ付き)` / `[A] 別名で保存` ★ (既定は別名で保存。確定 (ユーザー回答))"
 dangling_link = "{path} はリンクで、リンク先 {target} がありません — `[C] リンク先に作成 (リンクを保つ)` ★"
 escape_normalized = "{count} 行でエスケープシーケンスの書き方が変わります (文字は変わりません) — `[S] 保存` ★ / `[A] 別名で保存`"
-hardlink = "{path} には他に {links} 個の名前 (ハードリンク) があります — `[K] リンクを保って直接上書き (バックアップ付き)` / `[B] このファイルだけ切り離して保存` (★ は `[Esc] キャンセル`)"
 lossy_roundtrip = "{count} 箇所が、同じ文字の別のバイト表現で保存されます (例: {example}) — `[S] 保存` / `[A] 別名で保存` ★"
 overwrite = "{path} は既にあります。上書きしますか? — `[O] 上書き` / `[R] 別の名前を入力` ★ (既定は別の名前を入力。確定 (ユーザー回答))"
-overwrite_without_backup = "{path} のバックアップを作れませんでした。バックアップなしで上書きしますか? 上書きの途中で失敗・中断すると、元の内容は取り戻せません — `[O] バックアップなしで上書き` / `[A] 別名で保存` (★ は `[Esc] キャンセル`)"
 read_only = "{path} は読み取り専用です — `[A] 別名で保存` ★ / `[W] 読み取り専用を解除して保存`"
 target_exists = "{path} は、この文書を作った後に他のプログラムによって作られています — `[O] 上書き` / `[A] 別名で保存` ★"
 unmappable = "{count} 個の文字は {encoding} で表せません (最初: 行 {line}, 桁 {col}) — `[U] UTF-8 で保存` / `[R] 置換して保存` (★ は `[Esc] キャンセル`。キャンセルするとカーソルが最初の該当位置へ移る)"
+
+[ui.confirm.save.atomic_unsupported]
+title = "安全に保存できません"
+message = "{path} は安全な方法 (一時ファイルと置換) で保存できません: {reason}"
+direct = "[O] 直接上書き (バックアップ付き)"
+alt = "[A] 別名で保存"
+
+[ui.confirm.save.hardlink]
+title = "ハードリンクのファイル"
+message = "{path} には他に {links} 個の名前 (ハードリンク) があります"
+direct = "[K] リンクを保って直接上書き (バックアップ付き)"
+break = "[B] このファイルだけ切り離して保存"
+
+[ui.confirm.save.overwrite_without_backup]
+title = "バックアップを作れません"
+message = "{path} のバックアップを作れませんでした。バックアップなしで上書きしますか? 上書きの途中で失敗・中断すると、元の内容は取り戻せません"
+overwrite = "[O] バックアップなしで上書き"
+alt = "[A] 別名で保存"
 
 [ui.confirm.save.unmappable_replace]
 header = "次の {total} 個の文字を置き換えて {encoding} で保存します (全角カナへ {kana} 個、互換文字へ {compat} 個、`?` へ {question} 個) — `[R] 置換して保存` (★ は `[Esc] キャンセル`)。`{total}` = `kana + compat + question` (02 §9.3 の `ReplaceCounts`)。3 つの件数は 0 でもこの順で出す"

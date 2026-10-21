@@ -715,3 +715,97 @@ fn 退避が無ければ案内しない() {
     s.pump();
     assert!(!s.messages().iter().any(|k| k.starts_with("msg.recovery")));
 }
+
+/// 編集済みの文書を開き、原子的保存が `kind` で失敗する状態にして保存する。
+fn edited_save_fails(s: &mut Env, kind: eve_core::FsErrorKind) {
+    s.fs.add_file("/w/a.txt", b"abc");
+    s.open("/w/a.txt");
+    s.e.execute(CommandInvocation::new(
+        "cursor.doc_end",
+        InvocationSource::Keymap,
+    ));
+    s.type_text("d");
+    s.messages();
+    s.fs.fail_next(eve_testkit::FsOp::WriteAtomic, kind);
+    s.run("file.save", Args::new());
+}
+
+fn dialog_open(s: &Env) -> bool {
+    s.e.state().overlay_kind() == "dialog"
+}
+
+#[test]
+fn 原子的置換ができなければ確認を出し_直接上書きで保存する() {
+    let mut s = Env::new();
+    edited_save_fails(&mut s, eve_core::FsErrorKind::AtomicUnsupported);
+    assert!(dialog_open(&s), "確認が出る");
+    assert_eq!(
+        s.fs.read("/w/a.txt").unwrap(),
+        b"abc",
+        "確認の間は何も書かない"
+    );
+    s.type_text("o");
+    s.pump();
+    assert_eq!(s.fs.read("/w/a.txt").unwrap(), b"abcd");
+    assert!(!s.doc().1.is_dirty());
+    assert!(s.messages().contains(&"info.save.in_place".to_owned()));
+}
+
+#[test]
+fn 原子的置換の確認のキャンセルでは何も書かず_dirty_のまま() {
+    let mut s = Env::new();
+    edited_save_fails(&mut s, eve_core::FsErrorKind::AtomicUnsupported);
+    s.key(KeyCode::Esc, Modifiers::NONE);
+    s.pump();
+    assert!(!dialog_open(&s));
+    assert_eq!(s.fs.read("/w/a.txt").unwrap(), b"abc");
+    assert!(s.doc().1.is_dirty());
+}
+
+#[test]
+fn 原子的置換の確認の別名で保存は名前の入力へ進む() {
+    let mut s = Env::new();
+    edited_save_fails(&mut s, eve_core::FsErrorKind::AtomicUnsupported);
+    s.type_text("a");
+    s.pump();
+    assert_eq!(s.e.state().overlay_kind(), "prompt");
+    assert_eq!(s.fs.read("/w/a.txt").unwrap(), b"abc");
+}
+
+#[test]
+fn バックアップを作れなければ確認し_承認するとバックアップなしで上書きする() {
+    let mut s = Env::new();
+    edited_save_fails(&mut s, eve_core::FsErrorKind::AtomicUnsupported);
+    s.fs.fail_next(
+        eve_testkit::FsOp::WriteInPlace,
+        eve_core::FsErrorKind::BackupFailed,
+    );
+    s.type_text("o");
+    s.pump();
+    assert!(dialog_open(&s), "バックアップなしの確認が続く");
+    assert_eq!(s.fs.read("/w/a.txt").unwrap(), b"abc");
+    s.type_text("o");
+    s.pump();
+    assert_eq!(s.fs.read("/w/a.txt").unwrap(), b"abcd");
+    assert!(!s.doc().1.is_dirty());
+}
+
+#[test]
+fn ハードリンクはリンクを保つか切り離すかを選ぶ() {
+    let mut s = Env::new();
+    s.fs.add_file("/w/a.txt", b"abc");
+    s.fs.set_nlink("/w/a.txt", 2);
+    s.open("/w/a.txt");
+    s.e.execute(CommandInvocation::new(
+        "cursor.doc_end",
+        InvocationSource::Keymap,
+    ));
+    s.type_text("d");
+    s.run("file.save", Args::new());
+    assert!(dialog_open(&s));
+    // 切り離して保存: 原子的置換で書き、nlink は 1 になる
+    s.type_text("b");
+    s.pump();
+    assert_eq!(s.fs.read("/w/a.txt").unwrap(), b"abcd");
+    assert!(!s.doc().1.is_dirty());
+}

@@ -21,6 +21,7 @@ pub enum FsOp {
     Canonicalize,
     OpenRead,
     WriteAtomic,
+    WriteInPlace,
 }
 
 /// `write_atomic` のステップ (失敗を注入でき、到達したステップは `MemFs::steps` に残る)。
@@ -466,6 +467,55 @@ impl FileSystem for MemFs {
         };
         Ok(SaveReport {
             method,
+            new_stamp,
+            warnings: Vec::new(),
+        })
+    }
+
+    /// 直接上書き: 既存のファイルの内容をその場で置き換える (file_id と nlink は保つ)。バックアップは持たない
+    /// (`fail_next(WriteInPlace, BackupFailed)` で事前バックアップの失敗を注入できる)。
+    fn write_in_place(
+        &self,
+        path: &FsPath,
+        data: &mut dyn ReadChunks,
+        _len: u64,
+        opts: &SaveOptions,
+        _cancel: &eve_core::CancelToken,
+    ) -> Result<SaveReport, FsError> {
+        let mut s = self.st();
+        injected(&mut s, FsOp::WriteInPlace)?;
+        let Some(existing) = s.files.get(path).cloned() else {
+            return Err(not_found(&s, path));
+        };
+        let have = FileStamp::from_meta(&meta_of(&existing), None);
+        if let Expect::Stamp(want) = opts.expected
+            && !stamp_matches(&want, &have)
+        {
+            return Err(FsError::new(FsErrorKind::Conflict {
+                current: Some(have),
+            }));
+        }
+        if existing.readonly {
+            return Err(FsError::new(FsErrorKind::PermissionDenied));
+        }
+        let mut buf: Vec<u8> = Vec::new();
+        loop {
+            match data.next_chunk() {
+                Ok(Some(chunk)) => buf.extend_from_slice(chunk),
+                Ok(None) => break,
+                Err(_) => return Err(FsError::new(FsErrorKind::SourceFailed)),
+            }
+        }
+        let mtime = self.now_time(&mut s);
+        let entry = Entry {
+            data: buf,
+            mtime,
+            ..existing
+        };
+        let new_stamp = FileStamp::from_meta(&meta_of(&entry), None);
+        s.files.insert(path.clone(), entry);
+        Ok(SaveReport {
+            method: SaveMethod::InPlace,
             new_stamp,
             warnings: Vec::new(),
         })

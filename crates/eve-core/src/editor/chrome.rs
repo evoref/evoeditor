@@ -220,49 +220,40 @@ pub(super) fn status_model(
 
 /// オーバーレイのモデル (確認・入力プロンプト)。文言は core が解決して `CellText` で渡す。
 pub(super) fn overlay_models(state: &EditorState) -> Vec<OverlayModel> {
-    use super::overlay::{ACCELERATORS, CHOICE_CANCEL, CHOICE_DISCARD, CHOICE_SAVE, Overlay};
+    use super::overlay::Overlay;
     match &state.overlay {
         None => Vec::new(),
         Some(Overlay::Confirm(c)) => {
             let key = |leaf: &str| format!("ui.confirm.{}.{leaf}", c.name);
-            let args = [("path", c.path.as_str())];
-            let accel = |idx: usize| {
-                ACCELERATORS
-                    .iter()
-                    .find(|(_, i)| *i == idx)
-                    .map(|(k, _)| *k)
-            };
-            let choice = |idx: usize, id: u16, text: String, destructive: bool| Choice {
-                id: ChoiceId(id),
-                label: cell_text(&text, CutPolicy::Never),
-                key: accel(idx),
-                destructive,
-            };
+            let args: Vec<(&str, &str)> = c
+                .args
+                .iter()
+                .map(|(k, v)| (k.as_str(), v.as_str()))
+                .collect();
+            let mut choices: Vec<Choice> = c
+                .choices
+                .iter()
+                .enumerate()
+                .map(|(i, d)| Choice {
+                    id: ChoiceId(i as u16),
+                    label: cell_text(&render(state, &key(d.id), &args), CutPolicy::Never),
+                    key: d.accel,
+                    destructive: d.destructive,
+                })
+                .collect();
+            // キャンセルは最後 (`Esc`)
+            choices.push(Choice {
+                id: ChoiceId(c.cancel_index() as u16),
+                label: cell_text(&render(state, "ui.confirm.cancel", &[]), CutPolicy::Never),
+                key: None,
+                destructive: false,
+            });
             vec![OverlayModel::Confirm {
                 title: cell_text(&render(state, &key("title"), &[]), CutPolicy::Never),
                 message: cell_text(&render(state, &key("message"), &args), CutPolicy::End),
                 details: None,
-                choices: vec![
-                    choice(
-                        CHOICE_SAVE,
-                        CHOICE_SAVE as u16,
-                        render(state, &key("save"), &[]),
-                        false,
-                    ),
-                    choice(
-                        CHOICE_DISCARD,
-                        CHOICE_DISCARD as u16,
-                        render(state, &key("discard"), &[]),
-                        true,
-                    ),
-                    choice(
-                        CHOICE_CANCEL,
-                        CHOICE_CANCEL as u16,
-                        render(state, "ui.confirm.cancel", &[]),
-                        false,
-                    ),
-                ],
-                default: ChoiceId(CHOICE_SAVE as u16),
+                choices,
+                default: ChoiceId(c.default as u16),
                 focused: ChoiceId(c.focused as u16),
                 nav_hint: Some(cell_text(
                     &render(state, "ui.confirm.nav_hint", &[]),

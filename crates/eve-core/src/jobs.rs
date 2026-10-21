@@ -14,12 +14,30 @@ use eve_text::{Snapshot, Text};
 
 use crate::document::{ReadOnlyReasons, TextFormat};
 use crate::fs::{
-    Expect, FileMeta, FileStamp, FileSystem, FsError, InterruptedSave, RecoveryDirEntry, SaveReport,
+    Expect, FileMeta, FileStamp, FileSystem, FsError, HardlinkPolicy, InPlaceBackup,
+    InterruptedSave, RecoveryDirEntry, SaveReport,
 };
 use crate::fspath::FsPath;
 use crate::io_jobs::{OpenOptions, SaveParams, run_open, run_save};
 use crate::paths::Paths;
 use crate::time::Clock;
+
+/// 保存の方式 (03 §9.3)。既定は原子的保存。確認 (`AtomicUnsupported` / ハードリンク / `BackupFailed`) の後で直接上書きにする。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SaveStrategy {
+    /// 一時ファイル + 置換 (`write_atomic`)。`hardlink` は `nlink > 1` の方針。
+    Atomic { hardlink: HardlinkPolicy },
+    /// 直接上書き (`write_in_place`)。`backup = SkipConfirmed` は「バックアップなしで上書き」を承認した再投入。
+    InPlace { backup: InPlaceBackup },
+}
+
+impl Default for SaveStrategy {
+    fn default() -> SaveStrategy {
+        SaveStrategy::Atomic {
+            hardlink: HardlinkPolicy::Ask,
+        }
+    }
+}
 
 /// ジョブの依頼。
 #[derive(Clone, Debug)]
@@ -49,6 +67,7 @@ pub enum JobKind {
         bom: bool,
         pua: PuaEscapeMode,
         expected: Expect,
+        strategy: SaveStrategy,
     },
 }
 
@@ -233,6 +252,7 @@ pub fn run_job(
             bom,
             pua,
             expected,
+            strategy,
         } => run_save(
             req.id,
             SaveParams {
@@ -242,6 +262,7 @@ pub fn run_job(
                 bom: *bom,
                 pua: *pua,
                 expected: *expected,
+                strategy: *strategy,
             },
             ports,
             cancel,

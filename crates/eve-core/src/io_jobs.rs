@@ -391,23 +391,27 @@ pub(crate) struct SaveParams<'a> {
     pub bom: bool,
     pub pua: PuaEscapeMode,
     pub expected: Expect,
+    pub strategy: crate::jobs::SaveStrategy,
 }
 
-/// 乾式走査: 出力は捨てて、表現不能の文字だけを集める (03 §8.6 E1。書く前に止めるため)。
-fn dry_run(p: &SaveParams<'_>, cancel: &CancelToken) -> Option<EncodeReport> {
+/// 乾式走査: 出力は捨てて、表現不能の文字と出力のバイト長だけを集める (03 §8.6 E1・05 §4.4 手順 0。書く前に止めるため)。
+fn dry_run(p: &SaveParams<'_>, cancel: &CancelToken) -> Option<(EncodeReport, u64)> {
     let mut enc = Encoder::new(p.encoding, p.bom, EscapePolicy::from_mode(p.pua));
     let mut report = EncodeReport::default();
     let mut sink = Vec::new();
+    let mut out_len = 0u64;
     for s in p.snapshot.chunks(ByteRange::all(p.snapshot.len_bytes())) {
         if cancel.is_cancelled() {
             return None;
         }
         sink.clear();
         enc.encode(s, &mut sink, &mut report);
+        out_len += sink.len() as u64;
     }
     sink.clear();
     enc.finish(&mut sink, &mut report);
-    Some(report)
+    out_len += sink.len() as u64;
+    Some((report, out_len))
 }
 
 pub(crate) fn run_save(
@@ -416,9 +420,13 @@ pub(crate) fn run_save(
     ports: &JobPorts,
     cancel: &CancelToken,
 ) -> JobResult {
-    // UTF-8 と UTF-16 は全 Unicode スカラー値を表せるので、表現不能になり得るのはエスケープ文字だけ (E4)。
-    // それ以外 (Shift_JIS・EUC-JP・ISO-2022-JP) は書く前に走査する
-    if !(p.encoding == Encoding::Utf8 || p.encoding.is_utf16())
+    use crate::jobs::SaveStrategy;
+    // 直接上書きは出力の長さが要るので常に乾式走査をする。それ以外は、UTF-8 と UTF-16 が全 Unicode スカラー値を表せるので、
+    // 表現不能になり得るのはエスケープ文字だけ (E4)。Shift_JIS・EUC-JP・ISO-2022-JP は書く前に走査する
+    let in_place = matches!(p.strategy, SaveStrategy::InPlace { .. });
+    let mut out_len = 0u64;
+    if in_place
+        || !(p.encoding == Encoding::Utf8 || p.encoding.is_utf16())
         || EscapePolicy::from_mode(p.pua) == EscapePolicy::Reject
     {
         match dry_run(&p, cancel) {
@@ -428,7 +436,7 @@ pub(crate) fn run_save(
                     err: JobError::Cancelled,
                 };
             }
-            Some(report) if !report.is_empty() => {
+            Some((report, _)) if !report.is_empty() => {
                 return JobResult::Unmappable {
                     job: id,
                     total: report.total,
@@ -436,7 +444,7 @@ pub(crate) fn run_save(
                     encoding: p.encoding,
                 };
             }
-            Some(_) => {}
+            Some((_, n)) => out_len = n,
         }
     }
     let SaveParams {
@@ -446,6 +454,7 @@ pub(crate) fn run_save(
         bom,
         pua,
         expected,
+        strategy,
     } = p;
     let mut src = SnapshotSource {
         chunks: snapshot.chunks(ByteRange::all(snapshot.len_bytes())),
@@ -456,10 +465,20 @@ pub(crate) fn run_save(
         started: false,
         finished: false,
     };
-    match ports
-        .fs
-        .write_atomic(path, &mut src, &SaveOptions::user_file(expected))
-    {
+    let mut opts = SaveOptions::user_file(expected);
+    let result = match strategy {
+        SaveStrategy::Atomic { hardlink } => {
+            opts.hardlink = hardlink;
+            ports.fs.write_atomic(path, &mut src, &opts)
+        }
+        SaveStrategy::InPlace { backup } => {
+            opts.in_place_backup = backup;
+            ports
+                .fs
+                .write_in_place(path, &mut src, out_len, &opts, cancel)
+        }
+    };
+    match result {
         Ok(report) => JobResult::Saved { job: id, report },
         Err(_) if cancel.is_cancelled() => JobResult::Failed {
             job: id,

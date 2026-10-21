@@ -26,21 +26,59 @@ pub(super) enum Continuation {
     Quit,
 }
 
-/// 未保存の確認ダイアログ。選択肢は 0 = 保存、1 = 破棄、2 = キャンセル (既定は保存)。
-#[derive(Clone, Debug)]
-pub(super) struct ConfirmState {
-    /// `ui.confirm.<name>` の名前。
-    pub name: &'static str,
-    pub path: String,
-    pub cont: Continuation,
-    pub focused: usize,
+/// 確認ダイアログの選択肢 1 つ。文言は `ui.confirm.<name>.<id>`。キャンセル (`ui.confirm.cancel`、`Esc`) は選択肢の最後に自動で付く。
+#[derive(Clone, Copy, Debug)]
+pub(super) struct ChoiceDef {
+    pub id: &'static str,
+    /// アクセラレータ (小文字。大小は区別しない)。
+    pub accel: Option<char>,
+    /// 破棄などの破壊的な選択肢 (既定にしない)。
+    pub destructive: bool,
 }
 
-pub(super) const CHOICE_SAVE: usize = 0;
-pub(super) const CHOICE_DISCARD: usize = 1;
-pub(super) const CHOICE_CANCEL: usize = 2;
-/// アクセラレータ (大小を区別しない)。
-pub(super) const ACCELERATORS: [(char, usize); 2] = [('s', CHOICE_SAVE), ('d', CHOICE_DISCARD)];
+/// 選択肢を選んだときの動作 (確認の種類ごと)。
+#[derive(Clone, Debug)]
+pub(super) enum ConfirmAction {
+    /// 未保存の変更 (終了・置き換え): 選択肢 0 = 保存して続ける、1 = 破棄して続ける。
+    Unsaved(Continuation),
+    /// 保存の代替 (原子的置換ができない・ハードリンク・バックアップを作れない)。選択肢の意味は `SaveFallback` の種類による。
+    Fallback(super::file::FallbackAsk),
+}
+
+/// 確認ダイアログ。選択肢は `choices` (+ 最後にキャンセル)。
+#[derive(Clone, Debug)]
+pub(super) struct ConfirmState {
+    /// `ui.confirm.<name>` の名前 (`unsaved` / `save.atomic_unsupported` など)。
+    pub name: &'static str,
+    /// 文言の引数 (`{path}` など)。
+    pub args: Vec<(String, String)>,
+    pub choices: Vec<ChoiceDef>,
+    /// 初めにフォーカスする選択肢 (`choices.len()` はキャンセル)。
+    pub default: usize,
+    pub focused: usize,
+    pub action: ConfirmAction,
+}
+
+impl ConfirmState {
+    /// キャンセルの番号 (選択肢の数)。
+    pub(super) fn cancel_index(&self) -> usize {
+        self.choices.len()
+    }
+}
+
+/// 未保存の確認の選択肢 (既定は保存)。
+pub(super) const UNSAVED_CHOICES: [ChoiceDef; 2] = [
+    ChoiceDef {
+        id: "save",
+        accel: Some('s'),
+        destructive: false,
+    },
+    ChoiceDef {
+        id: "discard",
+        accel: Some('d'),
+        destructive: true,
+    },
+];
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) enum PromptKind {
@@ -149,12 +187,20 @@ impl EditorState {
             .unwrap_or_else(|| self.untitled_name());
         self.set_overlay(Some(Overlay::Confirm(ConfirmState {
             name,
-            path,
-            cont,
-            focused: CHOICE_SAVE,
+            args: vec![("path".to_owned(), path)],
+            choices: UNSAVED_CHOICES.to_vec(),
+            default: 0,
+            focused: 0,
+            action: ConfirmAction::Unsaved(cont),
         })));
         self.mark_dirty_render();
         true
+    }
+
+    /// 確認ダイアログを出す (種類は `action`)。
+    pub(super) fn open_confirm(&mut self, c: ConfirmState) {
+        self.set_overlay(Some(Overlay::Confirm(c)));
+        self.mark_dirty_render();
     }
 
     fn untitled_name(&self) -> String {
@@ -167,10 +213,16 @@ impl EditorState {
             return CommandResult::Rejected(RejectReason::NotAvailable);
         };
         self.mark_dirty_render();
-        match choice {
-            CHOICE_SAVE => self.save_then(c.cont),
-            CHOICE_DISCARD => self.run_continuation(c.cont),
-            _ => CommandResult::Done,
+        // キャンセル (最後の選択肢): データを変えない
+        if choice >= c.cancel_index() {
+            return CommandResult::Done;
+        }
+        match c.action {
+            ConfirmAction::Unsaved(cont) => match choice {
+                0 => self.save_then(cont),
+                _ => self.run_continuation(cont),
+            },
+            ConfirmAction::Fallback(ask) => self.choose_fallback(ask, choice),
         }
     }
 
@@ -367,7 +419,7 @@ impl EditorState {
         let Some(Overlay::Confirm(c)) = &mut self.overlay else {
             return CommandResult::Rejected(RejectReason::NotAvailable);
         };
-        let n = 3;
+        let n = c.choices.len() + 1;
         c.focused = if forward {
             (c.focused + 1) % n
         } else {
@@ -379,7 +431,11 @@ impl EditorState {
 
     /// `ui.dialog_choose { choice }`。
     pub fn ui_dialog_choose(&mut self, choice: usize) -> CommandResult {
-        if !self.is_dialog() || choice > CHOICE_CANCEL {
+        let n = match &self.overlay {
+            Some(Overlay::Confirm(c)) => c.choices.len(),
+            _ => return CommandResult::Rejected(RejectReason::NotAvailable),
+        };
+        if choice > n {
             return CommandResult::Rejected(RejectReason::NotAvailable);
         }
         self.choose(choice)
@@ -394,8 +450,12 @@ impl EditorState {
             _ => c,
         };
         let c = c.to_lowercase().next().unwrap_or(c);
-        if let Some((_, idx)) = ACCELERATORS.iter().find(|(k, _)| *k == c) {
-            self.choose(*idx);
+        let idx = match &self.overlay {
+            Some(Overlay::Confirm(st)) => st.choices.iter().position(|d| d.accel == Some(c)),
+            _ => None,
+        };
+        if let Some(idx) = idx {
+            self.choose(idx);
         }
     }
 }
