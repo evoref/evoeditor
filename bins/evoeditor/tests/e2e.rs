@@ -1,0 +1,355 @@
+//! L5 端末 E2E (docs/09 §3.6): 実バイナリを ConPTY (portable-pty) で起動し、`vt100` で画面を解釈して検査する。
+//! 遅く不安定になりやすいので最小限。生バイト列は比較しない (ConPTY は出力を再合成するため)。
+//!
+//! v0.1 の M2 で成り立つシナリオ: (1) 起動と終了、(2) 未保存の終了の確認ダイアログ、(3) 制御キーがアプリに届く、
+//! (5) 端末の復元、(9) 貼り付けの安全。保存・強制終了・パニック退避・権限 ((1) の保存、(6)〜(8)、(10)) は M3 以降。
+
+#![cfg(windows)]
+// 検査の失敗は panic で伝える。
+#![allow(clippy::print_stdout, clippy::print_stderr)]
+
+use std::io::{Read, Write};
+use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
+use std::thread;
+use std::time::{Duration, Instant};
+
+use portable_pty::{Child, CommandBuilder, MasterPty, PtySize, native_pty_system};
+
+const EXE: &str = env!("CARGO_BIN_EXE_evoeditor");
+const COLS: u16 = 100;
+const ROWS: u16 = 30;
+/// 画面の変化を待つ上限 (失敗として扱う。時間の許容ではない)。
+const WAIT: Duration = Duration::from_secs(15);
+
+struct Session {
+    child: Box<dyn Child + Send + Sync>,
+    writer: Arc<Mutex<Box<dyn Write + Send>>>,
+    parser: Arc<Mutex<vt100::Parser>>,
+    raw: Arc<Mutex<Vec<u8>>>,
+    // pty を閉じないよう保持する
+    _master: Box<dyn MasterPty + Send>,
+}
+
+impl Session {
+    fn start(args: &[&str]) -> Session {
+        let pty = native_pty_system()
+            .openpty(PtySize {
+                rows: ROWS,
+                cols: COLS,
+                pixel_width: 0,
+                pixel_height: 0,
+            })
+            .expect("ConPTY を開けません");
+        let mut cmd = CommandBuilder::new(EXE);
+        cmd.args(args);
+        cmd.env_remove("NO_COLOR");
+        cmd.env_remove("WT_SESSION");
+        cmd.env_remove("TERM_PROGRAM");
+        let child = pty.slave.spawn_command(cmd).expect("起動できません");
+        drop(pty.slave);
+        let mut reader = pty.master.try_clone_reader().expect("reader");
+        let writer: Arc<Mutex<Box<dyn Write + Send>>> =
+            Arc::new(Mutex::new(pty.master.take_writer().expect("writer")));
+        let parser = Arc::new(Mutex::new(vt100::Parser::new(ROWS, COLS, 0)));
+        let raw = Arc::new(Mutex::new(Vec::new()));
+        {
+            let (parser, raw, writer) = (parser.clone(), raw.clone(), writer.clone());
+            // テストの駆動側の読み取りスレッド (製品のスレッドではない。R11 の対象外)
+            #[allow(clippy::disallowed_methods)]
+            thread::spawn(move || {
+                let mut buf = [0u8; 4096];
+                while let Ok(n) = reader.read(&mut buf) {
+                    if n == 0 {
+                        break;
+                    }
+                    let chunk = &buf[..n];
+                    // ConPTY は起動時にカーソル位置を尋ねる (DSR)。端末として答える
+                    if chunk.windows(4).any(|w| w == b"\x1b[6n")
+                        && let Ok(mut w) = writer.lock()
+                    {
+                        let _ = w.write_all(b"\x1b[1;1R");
+                        let _ = w.flush();
+                    }
+                    raw.lock().unwrap().extend_from_slice(chunk);
+                    parser.lock().unwrap().process(chunk);
+                }
+            });
+        }
+        Session {
+            child,
+            writer,
+            parser,
+            raw,
+            _master: pty.master,
+        }
+    }
+
+    fn send(&self, bytes: &[u8]) {
+        let mut w = self.writer.lock().unwrap();
+        w.write_all(bytes).expect("入力を書けません");
+        w.flush().expect("flush");
+    }
+
+    fn screen(&self) -> String {
+        self.parser.lock().unwrap().screen().contents()
+    }
+
+    fn row(&self, y: u16) -> String {
+        let p = self.parser.lock().unwrap();
+        p.screen().rows(0, COLS).nth(y as usize).unwrap_or_default()
+    }
+
+    /// 画面が条件を満たすまで待つ。満たさなければ画面を添えて失敗。
+    fn wait_for(&self, what: &str, pred: impl Fn(&str) -> bool) {
+        let t = Instant::now();
+        while t.elapsed() < WAIT {
+            if pred(&self.screen()) {
+                return;
+            }
+            thread::sleep(Duration::from_millis(25));
+        }
+        panic!("待っても {what} にならない。画面:\n{}", self.screen());
+    }
+
+    /// プロセスの終了を待つ。終了コードを返す。
+    fn wait_exit(&mut self) -> u32 {
+        let t = Instant::now();
+        while t.elapsed() < WAIT {
+            if let Some(st) = self.child.try_wait().expect("try_wait") {
+                return st.exit_code();
+            }
+            thread::sleep(Duration::from_millis(25));
+        }
+        panic!("終了しない。画面:\n{}", self.screen());
+    }
+
+    fn running(&mut self) -> bool {
+        self.child.try_wait().expect("try_wait").is_none()
+    }
+
+    fn raw_text(&self) -> String {
+        String::from_utf8_lossy(&self.raw.lock().unwrap()).into_owned()
+    }
+
+    /// 最初の画面 (ステータスバーが出る) まで待つ。
+    fn wait_ready(&self) {
+        self.wait_for("最初の画面", |s| s.contains("無題-1"));
+    }
+}
+
+impl Drop for Session {
+    fn drop(&mut self) {
+        let _ = self.child.kill();
+    }
+}
+
+const CTRL_Q: &[u8] = b"\x11";
+const CTRL_C: &[u8] = b"\x03";
+const CTRL_S: &[u8] = b"\x13";
+const CTRL_Z: &[u8] = b"\x1a";
+
+/// 文字を 1 つずつ (バーストにならないよう間隔をあけて) 送る。
+fn type_slowly(s: &Session, text: &str) {
+    for ch in text.chars() {
+        let mut b = [0u8; 4];
+        s.send(ch.encode_utf8(&mut b).as_bytes());
+        thread::sleep(Duration::from_millis(40));
+    }
+}
+
+fn temp_dir(name: &str) -> PathBuf {
+    let d = std::env::temp_dir().join(format!("evo-e2e-{}-{name}", std::process::id()));
+    std::fs::create_dir_all(&d).unwrap();
+    d
+}
+
+// (1) 起動 → 終了 (未保存の変更なし)。(5) 端末の復元のシーケンスが出力に含まれる
+#[test]
+fn 起動して最初の画面が出て_ctrl_q_で終了コード_0() {
+    let mut s = Session::start(&[]);
+    s.wait_ready();
+    assert!(s.screen().contains("終了"), "ヒントバー:\n{}", s.screen());
+    s.send(CTRL_Q);
+    assert_eq!(s.wait_exit(), 0);
+}
+
+#[test]
+fn 終了すると代替スクリーンを抜けカーソルを表示に戻す() {
+    let mut s = Session::start(&[]);
+    s.wait_ready();
+    s.send(CTRL_Q);
+    assert_eq!(s.wait_exit(), 0);
+    thread::sleep(Duration::from_millis(300));
+    let raw = s.raw_text();
+    assert!(raw.contains("\x1b[?1049h"), "代替スクリーンに入る");
+    let leave = raw.rfind("\x1b[?1049l");
+    assert!(leave.is_some(), "代替スクリーンを抜ける: {raw:?}");
+    let tail = &raw[leave.unwrap()..];
+    // 抜けた後にカーソルが非表示のままになっていない
+    let hide = raw.rfind("\x1b[?25l");
+    let show = raw.rfind("\x1b[?25h");
+    assert!(
+        show.is_some() && hide.is_none_or(|h| show.unwrap() > h),
+        "カーソルを表示に戻す (末尾: {tail:?})"
+    );
+}
+
+// (2) 未保存で Ctrl+Q → 確認ダイアログが見える。Tab → Enter と d のそれぞれで「破棄」を選べる
+#[test]
+fn 未保存で_ctrl_q_は確認ダイアログを出し_tab_enter_で破棄できる() {
+    let mut s = Session::start(&[]);
+    s.wait_ready();
+    type_slowly(&s, "abc");
+    s.wait_for("入力が見える", |t| t.contains("abc"));
+    s.send(CTRL_Q);
+    s.wait_for("確認ダイアログ", |t| {
+        t.contains("[S]") && t.contains("[D]")
+    });
+    assert!(s.running(), "ダイアログが出ている間は終了しない");
+    s.send(b"\t");
+    thread::sleep(Duration::from_millis(150));
+    s.send(b"\r");
+    assert_eq!(s.wait_exit(), 0);
+}
+
+#[test]
+fn 未保存で_ctrl_q_の確認は_d_で破棄できる() {
+    let mut s = Session::start(&[]);
+    s.wait_ready();
+    type_slowly(&s, "abc");
+    s.send(CTRL_Q);
+    s.wait_for("確認ダイアログ", |t| t.contains("[D]"));
+    s.send(b"d");
+    assert_eq!(s.wait_exit(), 0);
+}
+
+#[test]
+fn 確認ダイアログは_esc_でキャンセルして編集に戻る() {
+    let mut s = Session::start(&[]);
+    s.wait_ready();
+    type_slowly(&s, "abc");
+    s.send(CTRL_Q);
+    s.wait_for("確認ダイアログ", |t| t.contains("[D]"));
+    s.send(b"\x1b");
+    s.wait_for("ダイアログが閉じる", |t| !t.contains("[D]"));
+    assert!(s.running());
+    assert!(s.screen().contains("abc"));
+    s.send(CTRL_Q);
+    s.wait_for("再び確認", |t| t.contains("[D]"));
+    s.send(b"d");
+    assert_eq!(s.wait_exit(), 0);
+}
+
+// (3) raw モードで端末の制御キーがアプリに届く
+#[test]
+fn ctrl_c_はプロセスを殺さず_ctrl_z_は_undo_として届く() {
+    let mut s = Session::start(&[]);
+    s.wait_ready();
+    s.send(CTRL_C);
+    thread::sleep(Duration::from_millis(500));
+    assert!(s.running(), "Ctrl+C でプロセスが死なない");
+    type_slowly(&s, "ab");
+    s.wait_for("入力が見える", |t| t.contains("ab"));
+    s.send(CTRL_Z);
+    s.wait_for("Undo で消える", |t| !t.contains("ab"));
+    assert!(s.running());
+    s.send(CTRL_Q);
+    assert_eq!(s.wait_exit(), 0);
+}
+
+#[test]
+fn ctrl_s_はコマンドとして届き_無題なら名前の入力が出る() {
+    let mut s = Session::start(&[]);
+    s.wait_ready();
+    type_slowly(&s, "x");
+    s.send(CTRL_S);
+    // 無題の保存は名前を尋ねる (入力プロンプトのヒントは overlay 文脈: Esc が出る)
+    s.wait_for("プロンプト", |t| t.contains("Esc"));
+    assert!(
+        !s.screen().contains("^Q"),
+        "overlay 文脈のヒント:\n{}",
+        s.screen()
+    );
+    s.send(b"\x1b");
+    s.wait_for("プロンプトが閉じる", |t| {
+        t.contains("^Q") || t.contains("Ctrl+Q")
+    });
+    s.send(CTRL_Q);
+    s.wait_for("確認", |t| t.contains("[D]"));
+    s.send(b"d");
+    assert_eq!(s.wait_exit(), 0);
+}
+
+// ファイル引数で開く (日本語の内容とファイル名)
+#[test]
+fn 日本語のファイルを引数で開いて表示する() {
+    let dir = temp_dir("open");
+    let path = dir.join("日本語.txt");
+    std::fs::write(&path, "こんにちは\nsecond\n").unwrap();
+    let mut s = Session::start(&[path.to_str().unwrap()]);
+    s.wait_for("本文", |t| {
+        t.contains("こんにちは") && t.contains("second")
+    });
+    assert!(s.screen().contains("日本語.txt"), "{}", s.screen());
+    s.send(CTRL_Q);
+    assert_eq!(s.wait_exit(), 0, "変更なしなら確認なしで終了");
+    assert_eq!(
+        std::fs::read_to_string(&path).unwrap(),
+        "こんにちは\nsecond\n"
+    );
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+// (9) 貼り付けの安全: 本文の Ctrl+S (0x13) はコマンドにならず、文字として入る
+#[test]
+fn 貼り付けの本文の制御文字はコマンドとして実行されない() {
+    let mut s = Session::start(&[]);
+    s.wait_ready();
+    // 1 回の書込 (個別キーのバースト) で送る。0x13 を含む
+    let mut body = Vec::new();
+    body.extend_from_slice(b"head-");
+    body.push(0x13);
+    body.extend_from_slice(b"-middle-text-that-makes-a-long-burst-");
+    body.extend_from_slice(b"\x1b[201~");
+    body.extend_from_slice(b"-tail");
+    s.send(&body);
+    s.wait_for("本文が入る", |t| {
+        t.contains("head-") && t.contains("-tail")
+    });
+    // 保存の入力プロンプトは出ない (Ctrl+S がコマンドにならなかった)。ヒントバーは normal 文脈のまま
+    let hint = s.row(ROWS - 1);
+    assert!(
+        hint.contains("^Q") || hint.contains("Ctrl+Q"),
+        "overlay になっていない: {hint:?}"
+    );
+    assert!(s.running());
+    s.send(CTRL_Q);
+    s.wait_for("確認", |t| t.contains("[D]"));
+    s.send(b"d");
+    assert_eq!(s.wait_exit(), 0);
+}
+
+// 配布 exe のスモーク S2: --version (pty 不要)
+#[test]
+fn version_は版を出して終了コード_0() {
+    let out = std::process::Command::new(EXE)
+        .arg("--version")
+        .output()
+        .expect("起動");
+    assert!(out.status.success());
+    let text = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        text.trim() == format!("evoeditor {}", env!("CARGO_PKG_VERSION")),
+        "{text:?}"
+    );
+}
+
+#[test]
+fn 使い方の誤りは終了コード_2() {
+    let out = std::process::Command::new(EXE)
+        .arg("--nope")
+        .output()
+        .expect("起動");
+    assert_eq!(out.status.code(), Some(2));
+}
