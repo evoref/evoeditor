@@ -43,6 +43,8 @@ pub struct TuiFrontend {
     glyphs: Glyphs,
     thread: Option<JoinHandle<()>>,
     entered: bool,
+    /// 「復元済み」の原子フラグ。`restore` と受信スレッドの緊急の復元が共有し、立てた側だけが復元の出力をする (02 §9.6 手順 4)。
+    restored: eve_view::TermRestoredFlag,
 }
 
 fn err(what: &str, e: &io::Error) -> FrontendError {
@@ -66,6 +68,7 @@ impl TuiFrontend {
             glyphs: Glyphs::unicode(),
             thread: None,
             entered: false,
+            restored: eve_view::TermRestoredFlag::default(),
         }
     }
 
@@ -183,12 +186,33 @@ impl Frontend for TuiFrontend {
         }
     }
 
+    fn emergency_restore_info(&self) -> Option<eve_host::EmergencyRestoreInfo> {
+        let (out, input) = (self.out.as_ref()?, self.input.as_ref()?);
+        // 保存したモード: 出力 (u32 LE) + 入力 (u32 LE)。`eve_platform::term::emergency_restore` が解釈する
+        let mut mode = Vec::with_capacity(8);
+        mode.extend_from_slice(&out.saved_mode().to_le_bytes());
+        mode.extend_from_slice(&input.saved_mode().to_le_bytes());
+        Some(eve_host::EmergencyRestoreInfo {
+            handle: eve_view::RawTermHandle(out.raw_handle()),
+            bytes: EMERGENCY_BYTES,
+            saved_mode: eve_view::SavedTermMode(mode.into_boxed_slice()),
+            restored: self.restored.clone(),
+        })
+    }
+
     fn restore(&mut self) {
         // 04 §14.3: ESU → SGR リセット → カーソル → 自動折り返し → 代替スクリーン。続けてタイトルとコンソールモード。
         // 何度呼んでも安全で、失敗しても次を試す
         if self.entered {
             self.entered = false;
-            self.write(LEAVE);
+            // 緊急の復元が先に出力していたら、二重に出さない
+            if !self
+                .restored
+                .0
+                .swap(true, std::sync::atomic::Ordering::AcqRel)
+            {
+                self.write(LEAVE);
+            }
         }
         if let Some(o) = self.out.as_mut() {
             o.restore();
@@ -211,6 +235,9 @@ impl Drop for TuiFrontend {
         self.restore();
     }
 }
+
+/// 緊急の端末復元で書くバイト列: 先頭の CAN (書きかけの VT シーケンスを打ち切る) + 復元の固定の列 (04 §14.3)。
+const EMERGENCY_BYTES: &[u8] = b"\x18\x1b[?2026l\x1b[0m\x1b[0 q\x1b[?25h\x1b[?7h\x1b[?1049l";
 
 /// 編集面の下のクローム行数 (`surface_size` の計算に使う)。
 pub const fn chrome_rows() -> u16 {

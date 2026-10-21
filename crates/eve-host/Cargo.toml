@@ -12,6 +12,10 @@ publish.workspace = true
 [lints]
 workspace = true
 
+[features]
+# テスト専用の経路 (メインの停止の注入など。環境変数 `EVE_TEST_HOOK`)。配布ビルドには入れない (09 §3.6)
+test-hooks = []
+
 [dependencies]
 arc-swap = "1.9.3"
 eve-core = { version = "0.0.0", path = "../eve-core" }

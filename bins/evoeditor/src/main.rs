@@ -130,6 +130,8 @@ fn run(
         state_dir.as_path().to_path_buf(),
     ))));
     let emergency = host.emergency();
+    let restore_info = host.restore_info();
+    let run_finished = host.run_finished();
 
     // コンソールのコントロールイベント (Ctrl+Break・ウィンドウの閉鎖など)。ハンドラのスレッドは、メインを待たずに直ちに
     // 退避を書き (CTRL_CLOSE は最大 3.5 s、それ以外は最大 2.5 s)、その後にメインへ終了を知らせる。退避はプロセスで 1 回だけ
@@ -157,7 +159,36 @@ fn run(
                 ),
             };
             emergency.run(reason, budget);
-            tx.send(HostMsg::Signal(kind)).is_ok()
+            let sent = tx.send(HostMsg::Signal(kind)).is_ok();
+            // CTRL_CLOSE は送るだけで戻る (ハンドラから戻るとプロセスが終わる。端末はコンソールごと閉じられる、02 §9.6 手順 2)
+            if !sent || matches!(ev, CtrlEvent::Close) {
+                return sent;
+            }
+            // CTRL_C / CTRL_BREAK: 戻らずに最大 2 秒、メインの終了を待つ (戻るとプロセスが続行する)。
+            // 終わらなければメインが止まっている: 受信スレッドが端末を復元して終了する (02 §9.6 手順 4)
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+            while std::time::Instant::now() < deadline {
+                if run_finished.load(std::sync::atomic::Ordering::Acquire) {
+                    return true;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            }
+            if let Some(info) = restore_info.get() {
+                eve_platform::term::emergency_restore(
+                    info.handle.0,
+                    info.bytes,
+                    &info.saved_mode.0,
+                    &info.restored.0,
+                );
+            }
+            // 退避の結果はベストエフォートで 1 回出す (端末の復元の後)
+            if let Some(o) = emergency.outcome() {
+                let mut err = std::io::stderr().lock();
+                for l in texts::recovery_lines(&o) {
+                    let _ = writeln!(err, "{l}");
+                }
+            }
+            std::process::exit(130)
         });
     }
 

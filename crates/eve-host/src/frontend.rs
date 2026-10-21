@@ -5,7 +5,10 @@ use std::fmt;
 use std::sync::mpsc::Sender;
 use std::time::Duration;
 
-use eve_view::{Capabilities, CellSize, Effect, Frame, InputEvent, WindowId};
+use eve_view::{
+    Capabilities, CellSize, Effect, Frame, InputEvent, RawTermHandle, SavedTermMode,
+    TermRestoredFlag, WindowId,
+};
 
 use crate::msg::HostMsg;
 
@@ -71,6 +74,19 @@ impl InputSink {
     }
 }
 
+/// 緊急の端末復元の情報 (`Frontend::emergency_restore_info`)。`Send + Sync`。
+#[derive(Clone, Debug)]
+pub struct EmergencyRestoreInfo {
+    /// 描画先の生ハンドル。
+    pub handle: RawTermHandle,
+    /// 先頭の CAN (0x18) + 復元の固定のバイト列 (04 §14.3)。
+    pub bytes: &'static [u8],
+    /// 起動時に保存したモード。
+    pub saved_mode: SavedTermMode,
+    /// 「復元済み」の原子フラグ (frontend の `restore` と共有)。
+    pub restored: TermRestoredFlag,
+}
+
 pub trait Frontend {
     /// 端末の確認・初期化・能力の判定。Host が設定を読んだ後、Editor を作る前に 1 回だけ呼ぶ。失敗なら起動エラー。
     fn init(&mut self, cfg: &FrontendConfig) -> Result<Capabilities, FrontendError>;
@@ -85,6 +101,11 @@ pub trait Frontend {
     fn restore(&mut self);
     /// frontend 自身の時間で再描画が要るまでの待ち時間 (視覚ベルの復帰など)。要らなければ `None`。
     fn wake_after(&self) -> Option<Duration> {
+        None
+    }
+    /// 受信スレッドが Frontend に触れずに端末を戻すための情報 (02 §9.2、§9.6 手順 4)。`init` の後に 1 回取得する。
+    /// 端末を持たない frontend は `None`。
+    fn emergency_restore_info(&self) -> Option<EmergencyRestoreInfo> {
         None
     }
     fn suspend(&mut self) {}

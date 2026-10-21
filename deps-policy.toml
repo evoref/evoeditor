@@ -23,6 +23,7 @@ allowed_crates = ["eve-host"]
 # 例: { crate = "eve-tui", file = "src/input.rs" }
 allowed_files = [
     { crate = "eve-tui", file = "src/win.rs" },
+    { crate = "eve-platform", file = "src/term.rs" },
 ]
 
 [crate."eve-text"]

@@ -16,7 +16,8 @@ mod workers;
 pub use clock::SystemClock;
 pub use emergency::{EmergencyCtl, EmergencyState};
 pub use frontend::{
-    EffectOutcome, Frontend, FrontendConfig, FrontendError, InputSink, RenderOutcome,
+    EffectOutcome, EmergencyRestoreInfo, Frontend, FrontendConfig, FrontendError, InputSink,
+    RenderOutcome,
 };
 pub use host::{
     Host, RESCUE_BUDGET_CLOSE, RESCUE_BUDGET_FATAL, RESCUE_BUDGET_SIGNAL, StartError, StepOutcome,

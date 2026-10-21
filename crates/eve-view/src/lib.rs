@@ -21,6 +21,7 @@ mod frame;
 mod ids;
 mod input;
 mod query;
+mod term;
 
 pub use caps::{Capabilities, CellSize, ColorDepth};
 pub use command::CommandId;
@@ -40,6 +41,7 @@ pub use query::{
     Answer, ByteRange, DocumentInfo, FocusTarget, LoadStateView, Query, QueryError, SelRange,
     WindowInfo,
 };
+pub use term::{RawTermHandle, SavedTermMode, TermRestoredFlag};
 
 /// 契約の版。境界型を変えるごとに上げる (C1 から)。Frame JSON と駆動 API の `initialize` に含める。
 /// C0 (M1 まで) は 0 のまま。契約版 1 の固定は TUI 完成後のレビュー (C3)。
