@@ -293,7 +293,8 @@ fn 親フォルダがないパスは警告し_保存はエラー() {
     s.type_text("a");
     s.run("file.save", Args::new());
     assert!(!s.fs.exists("/nodir/x.txt"), "フォルダは作らない");
-    assert!(s.messages().contains(&"msg.save.parent_missing".to_owned()));
+    // 失敗の text は保存の失敗の確認の本文に入る (別名で保存を案内する)
+    assert!(dialog_open(&s));
 }
 
 #[test]
@@ -808,4 +809,77 @@ fn ハードリンクはリンクを保つか切り離すかを選ぶ() {
     s.pump();
     assert_eq!(s.fs.read("/w/a.txt").unwrap(), b"abcd");
     assert!(!s.doc().1.is_dirty());
+}
+
+#[test]
+fn 保存の失敗は確認を出し_退避先に保存すると本文を書いて_dirty_のまま() {
+    let mut s = Env::new();
+    edited_save_fails(&mut s, eve_core::FsErrorKind::PermissionDenied);
+    assert!(dialog_open(&s), "失敗の後の選択が出る");
+    s.type_text("r");
+    s.pump();
+    assert_eq!(s.fs.recovery_written(), vec![b"abcd".to_vec()]);
+    assert_eq!(
+        s.fs.read("/w/a.txt").unwrap(),
+        b"abc",
+        "元のファイルは変えない"
+    );
+    assert!(s.doc().1.is_dirty());
+    assert!(s.messages().contains(&"info.save.to_recovery".to_owned()));
+}
+
+#[test]
+fn 退避先に保存が失敗するとそれを示す() {
+    let mut s = Env::new();
+    edited_save_fails(&mut s, eve_core::FsErrorKind::DiskFull);
+    s.fs.fail_next(
+        eve_testkit::FsOp::WriteRecovery,
+        eve_core::FsErrorKind::DiskFull,
+    );
+    s.type_text("r");
+    s.pump();
+    assert!(s.fs.recovery_written().is_empty());
+    assert!(
+        s.messages()
+            .contains(&"msg.save.recovery_failed".to_owned())
+    );
+    assert!(s.doc().1.is_dirty());
+}
+
+#[test]
+fn 保存の失敗の確認の別名で保存とキャンセル() {
+    let mut s = Env::new();
+    edited_save_fails(&mut s, eve_core::FsErrorKind::PermissionDenied);
+    s.type_text("a");
+    s.pump();
+    assert_eq!(s.e.state().overlay_kind(), "prompt");
+    s.key(KeyCode::Esc, Modifiers::NONE);
+    s.messages();
+    s.fs.fail_next(
+        eve_testkit::FsOp::WriteAtomic,
+        eve_core::FsErrorKind::PermissionDenied,
+    );
+    s.run("file.save", Args::new());
+    assert!(dialog_open(&s));
+    s.key(KeyCode::Esc, Modifiers::NONE);
+    assert!(!dialog_open(&s));
+    assert!(s.messages().contains(&"info.save.aborted".to_owned()));
+    assert!(s.fs.recovery_written().is_empty());
+}
+
+#[test]
+fn busy_のときだけ再試行でき_照合を通って保存される() {
+    let mut s = Env::new();
+    edited_save_fails(&mut s, eve_core::FsErrorKind::Busy);
+    assert!(dialog_open(&s));
+    s.type_text("t");
+    s.pump();
+    assert_eq!(s.fs.read("/w/a.txt").unwrap(), b"abcd");
+    assert!(!s.doc().1.is_dirty());
+    // Busy 以外には再試行が無い (t は無視される)
+    let mut s = Env::new();
+    edited_save_fails(&mut s, eve_core::FsErrorKind::PermissionDenied);
+    s.type_text("t");
+    s.pump();
+    assert!(dialog_open(&s));
 }

@@ -200,7 +200,11 @@ fn エラーは_text_と_hint_の_2_部でキー表記を解決する() {
     s.fs.add_file("/w/a.txt", b"abc");
     s.run("file.open", Args::new().with_str("path", "/w/a.txt"));
     s.type_text("x");
-    s.fs.fail_next(eve_testkit::FsOp::WriteAtomic, eve_core::FsErrorKind::Other);
+    // 照合の失敗 (Conflict) は確認を出さずメッセージで示す
+    s.fs.fail_next(
+        eve_testkit::FsOp::WriteAtomic,
+        eve_core::FsErrorKind::Conflict { current: None },
+    );
     s.run("file.save", Args::new());
     let f = s.frame();
     let m = f.messages.current.expect("エラー");

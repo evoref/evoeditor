@@ -22,3 +22,42 @@ pub struct DocSnapshot {
     pub path: Option<FsPath>,
     pub untitled_name: Option<String>,
 }
+
+impl DocSnapshot {
+    /// 本文のバイト列 (内部表現のまま。テスト・小さな文書向け。大きな文書は `snapshot.chunks` で流す)。
+    pub fn to_vec(&self) -> Vec<u8> {
+        use eve_text::TextRead;
+        let mut out = Vec::with_capacity(self.snapshot.len_bytes());
+        for c in self
+            .snapshot
+            .chunks(eve_text::ByteRange::all(self.snapshot.len_bytes()))
+        {
+            out.extend_from_slice(c.as_bytes());
+        }
+        out
+    }
+}
+
+impl super::state::EditorState {
+    /// 文書の公開物を作る。`dirty_only` なら dirty でない文書は `None` (緊急退避)。読込中・閉じた文書は常に `None`。
+    /// 「退避先に保存」は保存に失敗した文書 (dirty でないこともある) を `dirty_only = false` で作る。
+    pub(crate) fn rescue_snapshot(&self, doc: DocumentId, dirty_only: bool) -> Option<DocSnapshot> {
+        let d = self.document(doc)?;
+        if (dirty_only && !d.is_dirty()) || d.load_state != crate::document::LoadState::Ready {
+            return None;
+        }
+        Some(DocSnapshot {
+            doc,
+            snapshot: d.snapshot(),
+            format: d.format.clone(),
+            revision: d.revision(),
+            saved_node_exists: d.history().saved().is_some(),
+            sensitive: false,
+            path: d.path.clone(),
+            untitled_name: d.path.is_none().then(|| {
+                self.catalog()
+                    .render("status.untitled", &[("n", "1")], &|_| None)
+            }),
+        })
+    }
+}

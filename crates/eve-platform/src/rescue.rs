@@ -103,15 +103,17 @@ fn create_unique_dir(base: &Path, secs: i64) -> io::Result<PathBuf> {
 }
 
 /// 退避先を決めて作る。通常の場所 (`state_dir/recovery`) に作れなければ代替の退避先。戻り値は (ディレクトリ, 代替か)。
-fn open_dir(state_dir: Option<&Path>, secs: i64) -> io::Result<(PathBuf, bool)> {
+/// `rescue` は「退避先に保存」(`reason = "user_save"`) で、`recovery/rescue/` の下に作る (05 §7.5)。
+fn open_dir(state_dir: Option<&Path>, secs: i64, rescue: bool) -> io::Result<(PathBuf, bool)> {
+    let sub = |base: PathBuf| if rescue { base.join("rescue") } else { base };
     if let Some(sd) = state_dir
-        && let Ok(d) = create_unique_dir(&sd.join("recovery"), secs)
+        && let Ok(d) = create_unique_dir(&sub(sd.join("recovery")), secs)
     {
         return Ok((d, false));
     }
     let sid = current_user_sid()?;
     let base = std::env::temp_dir().join(format!("eve-recovery-{sid}"));
-    create_unique_dir(&base, secs).map(|d| (d, true))
+    create_unique_dir(&sub(base), secs).map(|d| (d, true))
 }
 
 /// 本文のファイル名の `<basename>` に使える形にする (予約文字・制御文字を `_`、長さを制限)。
@@ -301,7 +303,11 @@ impl RescueWriter for WinRescue {
             return out;
         }
         let secs = now_secs();
-        let (dir, fallback) = match open_dir(self.state_dir.as_deref(), secs) {
+        let (dir, fallback) = match open_dir(
+            self.state_dir.as_deref(),
+            secs,
+            reason == RescueReason::UserSave,
+        ) {
             Ok(x) => x,
             Err(e) => {
                 out.error = Some(e.to_string());

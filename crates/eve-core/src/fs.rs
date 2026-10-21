@@ -39,6 +39,13 @@ pub trait FileSystem: Send + Sync {
         Ok(Vec::new())
     }
 
+    /// 「退避先に保存」(03 §9.7 (e))。`doc` を `state_dir/recovery/rescue/<UTC timestamp>-<pid>[-<n>]/` に緊急退避と同じ形式
+    /// (`<n>-<basename>.txt` + `manifest.toml`、`reason = "user_save"`) で書き、書いたディレクトリを返す。`state_dir` を使えなければ
+    /// 代替の退避先に書く。元のファイルには触れない。書けなければ `FsError`。
+    fn write_recovery(&self, _doc: &crate::DocSnapshot) -> Result<FsPath, FsError> {
+        Err(FsError::new(FsErrorKind::Other))
+    }
+
     /// ファイルを 1 つ消す (保存中フラグの掃除など)。存在しなければ `NotFound`。
     fn remove_file(&self, _path: &FsPath) -> Result<(), FsError> {
         Err(FsError::new(FsErrorKind::Other))

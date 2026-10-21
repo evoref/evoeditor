@@ -335,3 +335,27 @@ fn 書いた退避は次の走査で見つかる() {
     );
     let _ = fs::remove_dir_all(state);
 }
+
+#[test]
+fn 退避先に保存は_rescue_の下に_user_save_で書く() {
+    use eve_core::FileSystem;
+    let state = tmp("userSave");
+    let fs_ = eve_platform::fs::WinFs::new(&state);
+    let d = doc(1, "本文\nabc", Some("a.txt"), |_| {});
+    let dir = fs_.write_recovery(&d).expect("書ける");
+    let dir = dir.as_path().to_path_buf();
+    assert_eq!(dir.parent().unwrap(), state.join("recovery").join("rescue"));
+    let m = manifest(&dir);
+    assert!(
+        m.contains("reason = \"user_save\"") && m.contains("complete = true"),
+        "{m}"
+    );
+    assert_eq!(
+        fs::read_to_string(dir.join("1-a.txt.txt")).unwrap(),
+        "本文\nabc"
+    );
+    // 起動時の走査は rescue として見つける
+    let found = fs_.list_recovery_dirs().unwrap();
+    assert!(found.iter().any(|e| e.rescue), "{found:?}");
+    let _ = fs::remove_dir_all(state);
+}

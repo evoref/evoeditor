@@ -414,10 +414,11 @@ trait FileSystem: Send + Sync {
                                                                              // 開くジョブが **開くたびに 1 回** 呼ぶ (存在するファイルでも NotFound でも。03 §9.2)。キーは開くパスと、
                                                                              // シンボリックリンクならリンク先の 2 つまで (同じなら 1 つ。キーの作り方は下表「保存中フラグのキー」)。ディレクトリを列挙しないので O(1)
                                                                              // (読むのは高々 2 つの小さなディレクトリ)。フラグのディレクトリが無ければ空の Vec
-    fn create_recovery_dir(&self) -> Result<RecoveryDirCreated, FsError>;    // v0.1: 「退避先に保存」(JobKind::WriteRecovery) の出力先を新しく作る。場所と名前は実装が決める:
+    fn write_recovery(&self, doc: &DocSnapshot) -> Result<FsPath, FsError>; // v0.1: 「退避先に保存」(JobKind::WriteRecovery)。実装が出力先を新しく作り、緊急退避と同じ形式で書いて、書いたディレクトリを返す:
                                                                              // state_dir/recovery/rescue/<UTC timestamp>-<pid>[-<n>]/ を所有者のみで作り (名前の形の定義は 05 §7.5 の「退避ディレクトリの名前の形」)、
-                                                                             // state_dir を使えなければ代替の退避先 (§11.2.1、05 §7.5。Windows は %TEMP%\eve-recovery-<SID>\rescue\) の下に同じ名前で作る。
-                                                                             // 壁時計・pid・SID は実装 (eve-platform) が取る (core は取らない、§4.4「時刻の源」)。どちらも作れなければ FsError
+                                                                             // 本文 (<n>-<basename>.txt) と manifest.toml (reason = "user_save"、created_at) を書く。state_dir を使えなければ代替の退避先
+                                                                             // (§11.2.1、05 §7.5。Windows は %TEMP%\eve-recovery-<SID>\rescue\) の下に同じ名前で作る。壁時計・pid・SID は実装 (eve-platform) が取る
+                                                                             // (core は取らない、§4.4「時刻の源」)。全部書けなければ FsError (部分的に書いた分は manifest に written = false で残る)
     fn list_recovery_dirs(&self) -> Result<Vec<RecoveryDirEntry>, FsError>;  // v0.1: 起動時の退避の案内 (msg.recovery.found / found_rescue、§9.3) 用。state_dir/recovery/ 直下と recovery/rescue/ 直下、
                                                                              // 代替の退避先の同じ位置にある、05 §7.5 の名前の形 (<UTC timestamp>-<pid>[-<n>]) に合うディレクトリだけを返す (inflight/ は見ない。
                                                                              // 形に合わない名前は無視。中のファイルは読まない。05 §7.5 の「recovery/ の走査と削除の規則」)。場所が無ければ空の Vec
@@ -429,10 +430,8 @@ struct FileMeta  { kind: FileKind /*File|Dir|Other*/, len: u64, mtime: FileTime,
                    file_id: Option<FileId>, nlink: u32, link: Option<LinkInfo /*dangling 含む*/>, fs_kind: FsKind /*Local|Network|Unknown*/,
                    owner_is_me: Option<bool> /*他ユーザー所有の事前判定 (05 §4.4)。判定できない OS・FS は None*/ }
 struct FileStamp { mtime: FileTime, len: u64, file_id: Option<FileId>, hash: Option<ContentHash> } // 外部変更の比較キー (計算規則は 05 §5.5)
-struct RecoveryDirCreated { dir: FsPath /*作ったディレクトリ*/, created_at: String /*UTC、RFC 3339。manifest の created_at にそのまま書く*/,
-                            alternate: bool /*代替の退避先に作った*/ }
 struct RecoveryDirEntry { dir: FsPath, kind: RecoveryDirKind /*Emergency (recovery/ 直下) | Rescue (rescue/ の中)*/, alternate: bool }
-// create_recovery_dir / list_recovery_dirs の場所 (state_dir と代替の退避先) は、FileSystem の実装が構築時に Host から受け取る
+// write_recovery / list_recovery_dirs の場所 (state_dir と代替の退避先) は、FileSystem の実装が構築時に Host から受け取る
 // (本番は eve-platform が Paths と同じ解決結果を持つ。MemFs はテストの Paths の一時ディレクトリ)
 // 提案、OQ-200 (採る場合に加える): 退避・事前バックアップの件数と合計容量の上限の確認 (05 §7.5) は、list_recovery_dirs が中のファイルを
 // 読まず大きさも返さないので、上の操作だけではできない。採る場合は FileSystem に
@@ -1398,7 +1397,7 @@ enum JobKind {                     // Port は持たない (run_job が JobPorts
     Swap     { dir: FsPath, doc: DocSnapshot /*1 文書分*/ },                                          // bg (v0.2)。SaveOptions { private: true, state_file: true, expected: Expect::Any, .. } で書く
     WriteRecovery { doc: DocSnapshot /*1 文書分*/ },               // bg。03 §9.7 (e) の「退避先に保存」。I/O を伴うが io ではなく bg ワーカーで FileSystem Port を使う
                                                                       // (SaveOptions { private: true, state_file: true, expected: Expect::Absent, .. })。
-                                                                      // ジョブは FileSystem::create_recovery_dir (§4.5) で出力先を作り (場所・名前 (05 §7.5 の名前の形)・created_at・
+                                                                      // ジョブは FileSystem::write_recovery (§4.5) を呼ぶ。実装が出力先を作り (場所・名前 (05 §7.5 の名前の形)・created_at・
                                                                       // state_dir を使えないときの代替の退避先は Port の実装が決める)、その中に緊急退避と同じ形式
                                                                       // (<n>-<basename>.txt + manifest.toml、reason = "user_save") を緊急退避と共用のシリアライズ関数で書く (§11.2.1)。
                                                                       // 書く順は本文 → manifest (complete = true・written = true で 1 回だけ)。どちらも新しいディレクトリへの新しいファイルなので
@@ -1911,7 +1910,7 @@ sensitive = false                     # 任意 (無ければ false)。秘密フ�
 | `Range`, `Selection` (データと写像) | eve-text | 03 |
 | `ByteRange` (同名の 2 つの型) | eve-text (`ByteOff` (usize) の組。ChangeSet・検索・Decoration 等の内部の範囲、03 §19) と eve-view (`{ start: u64, end: u64 }`。境界型 (`Query` / `Answer` / `EditDelta` / `Hunk`) の範囲、§10.1) | 変換は eve-core だけが行う: eve-text → eve-view は usize → u64 (損失なし)、eve-view → eve-text は文書の長さと UTF-8 の境界を検査してから変換し、外れたら `QueryError::RangeOutOfBounds` 等で拒否する (32 ビットの環境で usize に収まらない値も同じ)。eve-core の外 (frontend・eve-protocol) は eve-view の型だけを見る。コードでは `eve_text::ByteRange` / `eve_view::ByteRange` と crate 名で区別する |
 | `FsPath`、`ReplacingCount` (置換中フラグの計数) | eve-core | 02 §4.4 (FsPath と eve-view の String のパスの変換規則を含む) |
-| `RecoveryDirCreated` / `RecoveryDirEntry` / `RecoveryDirKind` | eve-core (Port の型) | 02 §4.5 → 05 §7.5 (場所と命名) |
+| `RecoveryDirEntry` / `RecoveryDirKind` | eve-core (Port の型) | 02 §4.5 → 05 §7.5 (場所と命名) |
 | 文字コード判定・照合・エスケープ | eve-encoding | 03 §8 (アルゴリズム)、02 §13.4 (方式) |
 | Ports trait (`FileSystem` / `Clock` / `JobSpawner` / `Paths`)、`Ports` / `JobPorts`、`Tick` / `Millis`、`CancelToken`、`InflightRecord` / `InterruptedSave` / `InterruptedMethod`、`ThreadGuard` の印と `assert_not_main_thread_fs()` | eve-core (`HostTasks` は eve-host) | **02 §4.4 / §4.5 (trait・型・エラー分類の正本)** → 05 (OS 別実装規則) / 03 (呼出し手順) |
 | `Frontend` trait / `Host` / `HostMsg` / `InputSink` / `HostBuilder` / `RescueWriter` / `LogSink` / `EmergencyRestoreInfo` | eve-host (緊急の端末復元の実行は eve-platform の Host 部品。`ClipboardProvider` の trait は eve-platform が定義し eve-host が再公開) | 02 §9.2 / §9.6 (正本) → 04 (TUI の実装)、05 §11 (OS 別の復元) |
