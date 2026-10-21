@@ -13,7 +13,9 @@ use eve_encoding::{Encoding, PuaEscapeMode, UnsupportedBom};
 use eve_text::{Snapshot, Text};
 
 use crate::document::{ReadOnlyReasons, TextFormat};
-use crate::fs::{Expect, FileMeta, FileStamp, FileSystem, FsError, InterruptedSave, SaveReport};
+use crate::fs::{
+    Expect, FileMeta, FileStamp, FileSystem, FsError, InterruptedSave, RecoveryDirEntry, SaveReport,
+};
 use crate::fspath::FsPath;
 use crate::io_jobs::{OpenOptions, SaveParams, run_open, run_save};
 use crate::paths::Paths;
@@ -35,6 +37,8 @@ pub struct JobRequest {
 pub enum JobKind {
     /// ファイルの `metadata` と Stamp を調べる。
     Metadata { path: FsPath, purpose: MetaPurpose },
+    /// 起動時の退避ディレクトリの走査 (02 §9.3 の `RecoveryScan`。メインスレッドでは列挙しない)。
+    RecoveryScan,
     /// ファイルを開く (03 §9.2)。文字コードは判定する (03 §8.2) か、`opts.forced` で指定する。
     Open { path: FsPath, opts: OpenOptions },
     /// Snapshot を `encoding` で原子的に保存する (03 §9.3 / §8.6)。表現不能の文字があれば何も書かず `JobResult::Unmappable`。`expected` は書く前と置換の直前に照合する。
@@ -103,6 +107,11 @@ pub enum JobResult {
         /// 残っていた保存中フラグから見つけた、中断された保存の痕跡 (直接上書きの中断など、存在するファイルでも返す)。
         interrupted_save: Option<InterruptedSave>,
     },
+    /// 起動時の退避ディレクトリの走査の結果 (新しい順ではなく列挙した順。main が整えて案内する)。
+    RecoveryFound {
+        job: JobId,
+        dirs: Vec<RecoveryDirEntry>,
+    },
     /// 存在しないパスを開いた (新規ファイル)。フォルダも無ければ `parent_missing` にそのフォルダ。
     NewFile {
         job: JobId,
@@ -141,6 +150,7 @@ impl JobResult {
             | JobResult::Complete { job, .. }
             | JobResult::NewFile { job, .. }
             | JobResult::NeedsConfirm { job, .. }
+            | JobResult::RecoveryFound { job, .. }
             | JobResult::Saved { job, .. }
             | JobResult::Unmappable { job, .. }
             | JobResult::Failed { job, .. } => *job,
@@ -211,6 +221,10 @@ pub fn run_job(
         return;
     }
     let result = match &req.kind {
+        JobKind::RecoveryScan => JobResult::RecoveryFound {
+            job: req.id,
+            dirs: ports.fs.list_recovery_dirs().unwrap_or_default(),
+        },
         JobKind::Open { path, opts } => run_open(req.id, path, *opts, ports, cancel),
         JobKind::Save {
             path,

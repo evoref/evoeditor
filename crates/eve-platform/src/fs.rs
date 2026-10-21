@@ -201,6 +201,10 @@ impl FileSystem for WinFs {
             .unwrap_or_default())
     }
 
+    fn list_recovery_dirs(&self) -> Result<Vec<eve_core::RecoveryDirEntry>, FsError> {
+        Ok(crate::rescue::list_recovery_dirs(self.state_dir()))
+    }
+
     fn remove_file(&self, path: &FsPath) -> Result<(), FsError> {
         fs::remove_file(path.as_path()).map_err(|e| map_io_error(e, path))
     }

@@ -135,6 +135,66 @@ fn safe_basename(name: &str) -> String {
     }
 }
 
+// ---------- 起動時の走査 ----------
+
+/// 退避ディレクトリの名前の形か: `<YYYYMMDDTHHMMSSZ>-<pid>[-<n>]` (05 §7.5。n は 2 以上)。
+pub(crate) fn is_recovery_dir_name(name: &str) -> bool {
+    let b = name.as_bytes();
+    // YYYYMMDDTHHMMSSZ
+    if b.len() < 18
+        || !b[..8].iter().all(u8::is_ascii_digit)
+        || b[8] != b'T'
+        || !b[9..15].iter().all(u8::is_ascii_digit)
+        || b[15] != b'Z'
+        || b[16] != b'-'
+    {
+        return false;
+    }
+    let mut parts = name[17..].split('-');
+    let digits =
+        |s: Option<&str>| s.is_some_and(|s| !s.is_empty() && s.bytes().all(|c| c.is_ascii_digit()));
+    if !digits(parts.next()) {
+        return false;
+    }
+    match parts.next() {
+        None => true,
+        Some(n) => {
+            digits(Some(n)) && n.parse::<u32>().is_ok_and(|n| n >= 2) && parts.next().is_none()
+        }
+    }
+}
+
+/// `base` の直下にある、名前の形に合うディレクトリ (中のファイルは読まない)。
+fn scan_base(base: &Path, rescue: bool, out: &mut Vec<eve_core::RecoveryDirEntry>) {
+    let Ok(rd) = fs::read_dir(base) else { return };
+    for e in rd.flatten() {
+        let Ok(ft) = e.file_type() else { continue };
+        if ft.is_dir() && is_recovery_dir_name(&e.file_name().to_string_lossy()) {
+            out.push(eve_core::RecoveryDirEntry {
+                path: eve_core::FsPath::new(e.path()),
+                rescue,
+            });
+        }
+    }
+}
+
+/// 起動時の退避の案内用の列挙 (05 §7.5 の「`recovery/` の走査と削除の規則」)。`state_dir/recovery/` の直下と `recovery/rescue/` の
+/// 直下、代替の退避先 (`%TEMP%\eve-recovery-<SID>\` とその `rescue\`) の同じ位置だけを見る。`inflight/` は見ない。
+pub(crate) fn list_recovery_dirs(state_dir: Option<&Path>) -> Vec<eve_core::RecoveryDirEntry> {
+    let mut out = Vec::new();
+    if let Some(sd) = state_dir {
+        let base = sd.join("recovery");
+        scan_base(&base, false, &mut out);
+        scan_base(&base.join("rescue"), true, &mut out);
+    }
+    if let Ok(sid) = current_user_sid() {
+        let base = std::env::temp_dir().join(format!("eve-recovery-{sid}"));
+        scan_base(&base, false, &mut out);
+        scan_base(&base.join("rescue"), true, &mut out);
+    }
+    out
+}
+
 // ---------- manifest ----------
 
 struct ManifestDoc {
@@ -360,6 +420,30 @@ mod tests {
         // うるう年の 2 月 29 日
         assert_eq!(timestamp_basic(1_709_164_800), "20240229T000000Z");
         assert_eq!(timestamp_basic(-1), "19691231T235959Z");
+    }
+
+    #[test]
+    fn 退避ディレクトリの名前の形() {
+        for ok in [
+            "20261021T123456Z-1234",
+            "20261021T123456Z-1234-2",
+            "20261021T123456Z-1-17",
+        ] {
+            assert!(is_recovery_dir_name(ok), "{ok}");
+        }
+        for ng in [
+            "inflight",
+            "rescue",
+            "20261021T123456Z",
+            "20261021T123456Z-",
+            "20261021T123456-1234",
+            "20261021T123456Z-12a",
+            "20261021T123456Z-1234-1",
+            "20261021T123456Z-1234-2-3",
+            "2026-10-21T123456Z-1234",
+        ] {
+            assert!(!is_recovery_dir_name(ng), "{ng}");
+        }
     }
 
     #[test]

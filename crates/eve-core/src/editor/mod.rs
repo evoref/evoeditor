@@ -153,6 +153,8 @@ impl Editor {
                 self.state.open_path(p, opts);
             }
         }
+        // 起動時の退避の案内 (走査は io のジョブ。開く文書のメッセージの後に出る)
+        self.state.start_recovery_scan();
     }
 
     /// 入力を処理する (02 §5.4)。キーはキーマップを通してコマンドを実行し、`Text` は文字として挿入する。

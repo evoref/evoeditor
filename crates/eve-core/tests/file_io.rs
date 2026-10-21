@@ -661,3 +661,57 @@ fn 痕跡が実在する記録は報告しなくてもフラグを残す() {
     s.open("/w/a.txt");
     assert_eq!(s.fs.inflight_records().len(), 1);
 }
+
+// ---- 起動時の退避の案内 (02 §9.3 の RecoveryScan、05 §7.5) ----
+
+#[test]
+fn 起動時に退避が残っていれば最も新しいものの場所を案内する() {
+    let mut s = Env::new();
+    s.fs.add_recovery_dir("/s/recovery/20261001T000000Z-100", false);
+    s.fs.add_recovery_dir("/s/recovery/20261021T120000Z-200", false);
+    s.fs.add_recovery_dir("/s/recovery/20261021T120000Z-200-2", false);
+    s.fs.add_recovery_dir("/s/recovery/rescue/20261022T000000Z-300", true);
+    s.e.open_initial(None, false);
+    s.pump();
+    let keys = s.messages();
+    assert_eq!(
+        keys.last().map(String::as_str),
+        Some("msg.recovery.found"),
+        "異常終了の退避があるので found (rescue ではない): {keys:?}"
+    );
+    let frame = s.e.frame(s.win()).unwrap();
+    let text: String = frame
+        .messages
+        .current
+        .expect("現在のメッセージ")
+        .text
+        .spans
+        .iter()
+        .map(|sp| sp.text.as_str())
+        .collect();
+    assert!(
+        text.contains("20261021T120000Z-200-2"),
+        "同じ時刻は -n の大きい方が新しい: {text}"
+    );
+    assert!(text.contains('3'), "異常終了の退避は 3 件: {text}");
+}
+
+#[test]
+fn 退避先に保存の退避だけなら文言を分ける() {
+    let mut s = Env::new();
+    s.fs.add_recovery_dir("/s/recovery/rescue/20261022T000000Z-300", true);
+    s.e.open_initial(None, false);
+    s.pump();
+    assert!(
+        s.messages()
+            .contains(&"msg.recovery.found_rescue".to_owned())
+    );
+}
+
+#[test]
+fn 退避が無ければ案内しない() {
+    let mut s = Env::new();
+    s.e.open_initial(None, false);
+    s.pump();
+    assert!(!s.messages().iter().any(|k| k.starts_with("msg.recovery")));
+}
