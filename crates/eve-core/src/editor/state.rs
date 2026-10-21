@@ -78,6 +78,8 @@ pub struct EditorState {
     pub(super) unread: u16,
     /// 履歴の破棄を通知した文書 (文書ごとに 1 回)。
     trim_notified: BTreeSet<DocumentId>,
+    /// 内部レジスタ・ハンドルの表・貼り付けの token (クリップボード、`clipboard.rs`)。
+    pub(super) clipboard: super::clipboard::ClipboardState,
 }
 
 impl EditorState {
@@ -104,6 +106,7 @@ impl EditorState {
             message: None,
             unread: 0,
             trim_notified: BTreeSet::new(),
+            clipboard: Default::default(),
         }
     }
 

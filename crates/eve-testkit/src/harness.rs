@@ -111,6 +111,14 @@ impl Harness {
         self.input(InputEvent::Text(s.to_owned()));
     }
 
+    /// `Effect::RequestClipboard` への応答 (`InputEvent::ClipboardContent`)。
+    pub fn clipboard_content(&mut self, token: eve_view::ClipboardToken, text: Option<&str>) {
+        self.input(InputEvent::ClipboardContent {
+            token,
+            text: text.map(str::to_owned),
+        });
+    }
+
     /// ブラケットペースト。
     pub fn paste(&mut self, s: &str) {
         self.input(InputEvent::Paste(s.to_owned()));
