@@ -510,6 +510,25 @@ pub(super) fn register(r: &mut CommandRegistry) {
         cmd_dialog_choose
     );
     reg_ui!(r, "app.quit", "", cmd_quit);
+    #[cfg(feature = "test-hooks")]
+    if test_hook_panic_command() {
+        reg_ui!(r, "internal.debug_panic", "", cmd_debug_panic);
+    }
+}
+
+/// `EVE_TEST_HOOK` に `panic_command` があるか (09 §3.6。無ければ `internal.debug_panic` を登録しない)。
+#[cfg(feature = "test-hooks")]
+pub(super) fn test_hook_panic_command() -> bool {
+    std::env::var("EVE_TEST_HOOK").is_ok_and(|v| {
+        v.split(',')
+            .any(|h| h.split('=').next() == Some("panic_command"))
+    })
+}
+
+/// パニックの注入 (NFR-302 AC-1)。
+#[cfg(feature = "test-hooks")]
+fn cmd_debug_panic(_ctx: &mut CommandCtx<'_>) -> CommandResult {
+    panic!("internal.debug_panic: テストによるパニックの注入");
 }
 
 /// 行へ移動の入力 (`12` / `12:5` / `$` / `$:3`) を `cursor.goto_line` の引数にする。
