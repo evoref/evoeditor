@@ -3,7 +3,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 /// リポジトリのルート (`xtask/` の 1 つ上)。
 pub fn workspace_root() -> PathBuf {
@@ -58,18 +58,72 @@ pub fn run_capture(cmd: &mut Command) -> Result<String, String> {
     String::from_utf8(out.stdout).map_err(|e| format!("{cmd:?}: 出力が UTF-8 ではありません: {e}"))
 }
 
-/// 外部コマンドを標準入出力を引き継いで実行する。失敗したら `Err`。
+/// 1 ステップの時間の上限 (秒)。環境変数 `XTASK_STEP_TIMEOUT_SECS` で変えられる。
+/// 超えたら子を強制終了して失敗にする (子が何も出力せず止まったとき、`xtask check` が終わらなくなるのを防ぐ)。
+fn step_timeout() -> Duration {
+    let secs = std::env::var("XTASK_STEP_TIMEOUT_SECS")
+        .ok()
+        .and_then(|v| v.parse::<u64>().ok())
+        .unwrap_or(20 * 60);
+    Duration::from_secs(secs)
+}
+
+/// 外部コマンドを標準入出力を引き継いで実行する。失敗したら `Err`。時間の上限 (`step_timeout`) を超えたら
+/// 子のプロセスの木を表示して強制終了し、`Err` にする。
 pub fn run(label: &str, cmd: &mut Command) -> Result<(), String> {
     println!("▶ {label}");
     let start = Instant::now();
-    let status = cmd
+    let mut child = cmd
         .current_dir(workspace_root())
-        .status()
+        .spawn()
         .map_err(|e| format!("{label}: 実行できません: {e}"))?;
+    let limit = step_timeout();
+    let status = loop {
+        match child.try_wait() {
+            Ok(Some(st)) => break st,
+            Ok(None) if start.elapsed() >= limit => {
+                eprintln!(
+                    "{label}: {} 秒たっても終わりません。子のプロセスの状況:",
+                    limit.as_secs()
+                );
+                dump_processes(child.id());
+                kill_tree(child.id());
+                let _ = child.wait();
+                return Err(format!(
+                    "{label}: 時間切れで中断しました ({} 秒。XTASK_STEP_TIMEOUT_SECS で変えられます)",
+                    limit.as_secs()
+                ));
+            }
+            Ok(None) => std::thread::sleep(Duration::from_millis(250)),
+            Err(e) => return Err(format!("{label}: 待てません: {e}")),
+        }
+    };
     println!("  ({:.1} 秒)", start.elapsed().as_secs_f32());
     if status.success() {
         Ok(())
     } else {
         Err(format!("{label}: 失敗しました ({status})"))
+    }
+}
+
+/// `root` の子孫のプロセスを表示する (どこで止まったかを後から調べるため。Windows のみ。失敗しても何もしない)。
+fn dump_processes(root: u32) {
+    if !cfg!(windows) {
+        return;
+    }
+    let script = format!(
+        "$all = Get-CimInstance Win32_Process;          function Kids($id, $d) {{ $all | Where-Object ParentProcessId -eq $id | ForEach-Object {{            ('  ' * $d) + \"$($_.ProcessId) $($_.Name) $($_.CreationDate) \" + ($_.CommandLine + '').Substring(0, [Math]::Min(140, ($_.CommandLine + '').Length));            Kids $_.ProcessId ($d + 1) }} }};          Kids {root} 1"
+    );
+    let _ = Command::new("powershell")
+        .args(["-NoProfile", "-Command", &script])
+        .status();
+}
+
+/// `root` とその子孫を強制終了する。
+fn kill_tree(root: u32) {
+    if cfg!(windows) {
+        let _ = Command::new("taskkill")
+            .args(["/F", "/T", "/PID", &root.to_string()])
+            .status();
     }
 }
