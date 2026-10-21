@@ -13,6 +13,7 @@ pub mod clipboard;
 #[cfg(windows)]
 pub mod console;
 pub mod dirs;
+#[cfg(windows)]
 pub mod fs;
 #[cfg(windows)]
 mod hooks;
