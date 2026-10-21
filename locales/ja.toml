@@ -595,7 +595,6 @@ lossy_roundtrip = "{count} 箇所が、同じ文字の別のバイト表現で�
 overwrite = "{path} は既にあります。上書きしますか? — `[O] 上書き` / `[R] 別の名前を入力` ★ (既定は別の名前を入力。確定 (ユーザー回答))"
 read_only = "{path} は読み取り専用です — `[A] 別名で保存` ★ / `[W] 読み取り専用を解除して保存`"
 target_exists = "{path} は、この文書を作った後に他のプログラムによって作られています — `[O] 上書き` / `[A] 別名で保存` ★"
-unmappable = "{count} 個の文字は {encoding} で表せません (最初: 行 {line}, 桁 {col}) — `[U] UTF-8 で保存` / `[R] 置換して保存` (★ は `[Esc] キャンセル`。キャンセルするとカーソルが最初の該当位置へ移る)"
 
 [ui.confirm.save_failed]
 title = "保存できません"
@@ -621,6 +620,12 @@ title = "バックアップを作れません"
 message = "{path} のバックアップを作れませんでした。バックアップなしで上書きしますか? 上書きの途中で失敗・中断すると、元の内容は取り戻せません"
 overwrite = "[O] バックアップなしで上書き"
 alt = "[A] 別名で保存"
+
+[ui.confirm.save.unmappable]
+title = "表現できない文字"
+message = "{count} 個の文字は {encoding} で表せません (最初: 行 {line}, 桁 {col})"
+utf8 = "[U] UTF-8 で保存"
+replace = "[R] 置換して保存"
 
 [ui.confirm.save.unmappable_replace]
 header = "次の {total} 個の文字を置き換えて {encoding} で保存します (全角カナへ {kana} 個、互換文字へ {compat} 個、`?` へ {question} 個) — `[R] 置換して保存` (★ は `[Esc] キャンセル`)。`{total}` = `kana + compat + question` (02 §9.3 の `ReplaceCounts`)。3 つの件数は 0 でもこの順で出す"
