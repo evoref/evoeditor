@@ -79,6 +79,10 @@ pub struct Host {
     initial_encoding: Option<eve_core::Encoding>,
     /// 緊急退避の共有状態 (公開物のスロット・1 回だけ実行する CAS)。他のスレッドからも使う。
     emergency: Arc<EmergencyCtl>,
+    /// 緊急の端末復元の情報 (`init` の後に 1 回だけ入る。受信スレッドが読む、02 §9.6 手順 4)。
+    restore_info: Arc<std::sync::OnceLock<crate::frontend::EmergencyRestoreInfo>>,
+    /// `run` が終わった (メインが終了へ向かっている)。受信スレッドが「メインの終了待ち」で見る (02 §9.6 手順 2)。
+    run_finished: Arc<std::sync::atomic::AtomicBool>,
 }
 
 impl Host {
@@ -109,7 +113,19 @@ impl Host {
             exit_stderr: Vec::new(),
             initial_encoding: None,
             emergency: EmergencyCtl::new(),
+            restore_info: Arc::new(std::sync::OnceLock::new()),
+            run_finished: Arc::new(std::sync::atomic::AtomicBool::new(false)),
         }
+    }
+
+    /// 緊急の端末復元の情報の置き場 (受信スレッドに配る。`start` の `init` の後に入る)。
+    pub fn restore_info(&self) -> Arc<std::sync::OnceLock<crate::frontend::EmergencyRestoreInfo>> {
+        Arc::clone(&self.restore_info)
+    }
+
+    /// `run` が終わると立つフラグ。受信スレッドが、シグナルの後にメインが終了へ向かったかを見るのに使う。
+    pub fn run_finished(&self) -> Arc<std::sync::atomic::AtomicBool> {
+        Arc::clone(&self.run_finished)
     }
 
     /// 緊急退避の共有状態。コンソールイベントのハンドラ・パニックの後始末が、メインを待たずに退避を呼ぶのに使う (02 §11.2.1)。
@@ -166,6 +182,9 @@ impl Host {
             .init(&FrontendConfig::default())
             .map_err(StartError::Init)?;
         self.editor.state_mut().set_caps(caps);
+        if let Some(info) = frontend.emergency_restore_info() {
+            let _ = self.restore_info.set(info);
+        }
         let size = frontend.surface_size();
         self.editor.state_mut().set_viewport(size.cols, size.rows);
         self.editor.tick(self.clock.now());
@@ -185,8 +204,20 @@ impl Host {
         Ok(())
     }
 
-    /// TUI の既定ループ。終了コードを返す。
+    /// TUI の既定ループ。終了コードを返す。終わると `run_finished` を立てる。
     pub fn run(
+        &mut self,
+        frontend: &mut dyn Frontend,
+        path: Option<&str>,
+        read_only: bool,
+    ) -> ExitCode {
+        let code = self.run_loop(frontend, path, read_only);
+        self.run_finished
+            .store(true, std::sync::atomic::Ordering::Release);
+        code
+    }
+
+    fn run_loop(
         &mut self,
         frontend: &mut dyn Frontend,
         path: Option<&str>,
@@ -264,6 +295,13 @@ impl Host {
                 }
                 HostMsg::Job(result) => self.editor.on_job_result(*result),
                 HostMsg::Signal(kind) => {
+                    // test-hooks: メインが止まった状態の再現 (受信スレッドの緊急の端末復元を検査する、09 §3.6)
+                    #[cfg(feature = "test-hooks")]
+                    if test_hook("main_stall") {
+                        loop {
+                            std::thread::sleep(std::time::Duration::from_secs(3600));
+                        }
+                    }
                     // 非対話の終了要求: 退避を書く (受信スレッドが先に書いていれば、その `Done` を待つ) → 端末の復元 → 終了 (02 §11.2.1)
                     let (reason, budget) = match kind {
                         crate::msg::SignalKind::ConsoleClose => {
@@ -369,4 +407,11 @@ impl Host {
             self.events.drain(..drop);
         }
     }
+}
+
+/// 環境変数 `EVE_TEST_HOOK` (`,` 区切り) に `name` があるか。
+#[cfg(feature = "test-hooks")]
+fn test_hook(name: &str) -> bool {
+    std::env::var("EVE_TEST_HOOK")
+        .is_ok_and(|v| v.split(',').any(|h| h.split('=').next() == Some(name)))
 }

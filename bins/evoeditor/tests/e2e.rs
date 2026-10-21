@@ -752,3 +752,40 @@ fn パニックの退避が時間切れでも終了コードとクラッシュ�
     );
     let _ = std::fs::remove_dir_all(&s.state);
 }
+
+// (8) メインが止まった状態の Ctrl+Break (test-hooks `main_stall`): 受信スレッドが退避を書き、2 秒待ってもメインが終わらないので
+// 端末を緊急に復元して終了コード 130 で終わる (02 §9.6 手順 4、合計 5 s の内)。
+#[cfg(feature = "test-hooks")]
+#[test]
+fn メインが止まっていても_ctrl_break_で端末を戻して終了する() {
+    let mut s = Session::start_with(&[], None, &[("EVE_TEST_HOOK", "main_stall")]);
+    s.wait_ready();
+    type_slowly(&s, "unsaved text");
+    s.wait_for("入力が見える", |t| t.contains("unsaved text"));
+    let pid = s.child.process_id().expect("pid");
+    let sent = Instant::now();
+    let st = std::process::Command::new(helper_exe())
+        .args(["console-event", &pid.to_string(), "ctrl-break"])
+        .status()
+        .unwrap();
+    assert!(st.success(), "console-event: {st:?}");
+    let code = s.exit_within(Duration::from_secs(8));
+    let elapsed = sent.elapsed();
+    assert_eq!(code, Some(130), "{elapsed:?}");
+    assert!(
+        elapsed >= Duration::from_secs(2) && elapsed < Duration::from_millis(5500),
+        "メインの終了を 2 秒待ち、合計 5 秒の内で終わる: {elapsed:?}"
+    );
+    s.wait_raw("\x1b[?1049l");
+    assert!(s.raw_text().contains("\x1b[?1049l"), "端末を戻した");
+    let dirs: Vec<_> = std::fs::read_dir(s.state.join("recovery"))
+        .unwrap()
+        .flatten()
+        .filter(|e| e.file_name().to_string_lossy().contains('Z'))
+        .map(|e| e.path())
+        .collect();
+    assert_eq!(dirs.len(), 1, "{dirs:?}");
+    let manifest = std::fs::read_to_string(dirs[0].join("manifest.toml")).unwrap();
+    assert!(manifest.contains("complete = true"), "{manifest}");
+    let _ = std::fs::remove_dir_all(&s.state);
+}

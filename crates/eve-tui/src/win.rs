@@ -115,6 +115,11 @@ impl ConsoleInput {
         window_size(self.output.0)
     }
 
+    /// 起動時に保存した入力のモード (緊急の端末復元に渡す)。
+    pub fn saved_mode(&self) -> u32 {
+        self.saved_mode
+    }
+
     /// 入力モードを元に戻す (どの終了経路でも呼ぶ。2 回目以降は何もしない)。
     pub fn restore(&mut self) {
         if !self.restored {
@@ -361,6 +366,16 @@ impl ConsoleOut {
     /// 端末のウィンドウの大きさ (`srWindow`)。
     pub fn window_size(&self) -> io::Result<CellSize> {
         window_size(self.handle.0)
+    }
+
+    /// 描画先の生ハンドル (緊急の端末復元に渡す。ポインタ ⇔ 整数の変換はここだけ)。
+    pub fn raw_handle(&self) -> usize {
+        self.handle.0 as usize
+    }
+
+    /// 起動時に保存した出力のモード (緊急の端末復元に渡す)。
+    pub fn saved_mode(&self) -> u32 {
+        self.saved_mode
     }
 
     /// 退避しておいた端末タイトルとコンソールモードを戻す (冪等。失敗しても続ける)。
