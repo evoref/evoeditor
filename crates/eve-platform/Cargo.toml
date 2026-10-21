@@ -14,11 +14,11 @@ workspace = true
 
 [dependencies]
 eve-core = { version = "0.0.0", path = "../eve-core" }
+eve-text = { version = "0.0.0", path = "../eve-text" }
 xxhash-rust = { version = "0.8.19", features = ["xxh3"] }
 
 [dev-dependencies]
 eve-view = { version = "0.0.0", path = "../eve-view" }
-eve-text = { version = "0.0.0", path = "../eve-text" }
 
 # Windows の API (ファイルの識別・クリップボード・コンソールイベント)。unsafe は Windows 専用のモジュールに閉じる (R5)
 [target.'cfg(windows)'.dependencies]

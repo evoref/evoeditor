@@ -7,9 +7,10 @@ use std::fmt;
 use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 
-use eve_core::{Clock, DocSnapshot, Editor, Millis, Ports, Tick};
+use eve_core::{Clock, DocSnapshot, Editor, Millis, Ports, RescueReason, RescueWriter, Tick};
 use eve_view::{Capabilities, DocumentId, EditorEvent, Effect, StderrLine, WindowId};
 
+use crate::emergency::EmergencyCtl;
 use crate::frontend::{
     EffectOutcome, Frontend, FrontendConfig, FrontendError, InputSink, RenderOutcome,
 };
@@ -21,6 +22,10 @@ const STEP_BUDGET: Millis = Millis(8);
 const RENDER_INTERVAL: Millis = Millis(16);
 /// 蓄えておく `EditorEvent` の上限 (購読者がいない間に増え続けない)。
 const MAX_EVENTS: usize = 4096;
+/// 緊急退避の時間予算 (02 §11.2.1 の表)。パニック・Fatal は 5 s、シグナル系 (CTRL_C / CTRL_BREAK 等) は 2.5 s、CTRL_CLOSE は 3.5 s。
+pub const RESCUE_BUDGET_FATAL: std::time::Duration = std::time::Duration::from_secs(5);
+pub const RESCUE_BUDGET_SIGNAL: std::time::Duration = std::time::Duration::from_millis(2500);
+pub const RESCUE_BUDGET_CLOSE: std::time::Duration = std::time::Duration::from_millis(3500);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum StepOutcome {
@@ -72,6 +77,8 @@ pub struct Host {
     exit_stderr: Vec<StderrLine>,
     /// 起動時に開くファイルの文字コードの指定 (`--encoding`)。
     initial_encoding: Option<eve_core::Encoding>,
+    /// 緊急退避の共有状態 (公開物のスロット・1 回だけ実行する CAS)。他のスレッドからも使う。
+    emergency: Arc<EmergencyCtl>,
 }
 
 impl Host {
@@ -101,7 +108,18 @@ impl Host {
             events: Vec::new(),
             exit_stderr: Vec::new(),
             initial_encoding: None,
+            emergency: EmergencyCtl::new(),
         }
+    }
+
+    /// 緊急退避の共有状態。コンソールイベントのハンドラ・パニックの後始末が、メインを待たずに退避を呼ぶのに使う (02 §11.2.1)。
+    pub fn emergency(&self) -> Arc<EmergencyCtl> {
+        Arc::clone(&self.emergency)
+    }
+
+    /// 緊急退避の書き手を設定する (`start` / `run` の前に呼ぶ)。
+    pub fn set_rescue_writer(&mut self, w: Arc<dyn RescueWriter>) {
+        self.emergency.set_writer(w);
     }
 
     pub fn editor(&self) -> &Editor {
@@ -245,12 +263,21 @@ impl Host {
                     self.editor.handle_input(w, ev);
                 }
                 HostMsg::Job(result) => self.editor.on_job_result(*result),
-                HostMsg::Signal(_) => {
-                    // 非対話の終了要求 (緊急退避の書き込みは M3)
+                HostMsg::Signal(kind) => {
+                    // 非対話の終了要求: 退避を書く (受信スレッドが先に書いていれば、その `Done` を待つ) → 端末の復元 → 終了 (02 §11.2.1)
+                    let (reason, budget) = match kind {
+                        crate::msg::SignalKind::ConsoleClose => {
+                            (RescueReason::ConsoleClose, RESCUE_BUDGET_CLOSE)
+                        }
+                        _ => (RescueReason::Signal, RESCUE_BUDGET_SIGNAL),
+                    };
+                    self.emergency.run(reason, budget);
                     frontend.restore();
                     return StepOutcome::Exit(ExitCode::INTERRUPTED);
                 }
                 HostMsg::Fatal(_) => {
+                    // 入力スレッドの死亡・非メインスレッドのパニック: メインが退避を書く (最大 5 s) → 端末の復元 → 終了
+                    self.emergency.run(RescueReason::Fatal, RESCUE_BUDGET_FATAL);
                     frontend.restore();
                     return StepOutcome::Exit(ExitCode::FATAL);
                 }
@@ -324,9 +351,11 @@ impl Host {
         for doc in self.editor.take_snapshot_updates() {
             match self.editor.emergency_snapshot(doc) {
                 Some(s) => {
+                    self.emergency.publish(doc, Some(s.clone()));
                     self.slots.insert(doc, s);
                 }
                 None => {
+                    self.emergency.publish(doc, None);
                     self.slots.remove(&doc);
                 }
             }

@@ -8,6 +8,7 @@
 #![allow(clippy::print_stdout, clippy::print_stderr)]
 
 mod cli;
+mod texts;
 
 use std::io::Write as _;
 use std::panic::{AssertUnwindSafe, catch_unwind};
@@ -16,15 +17,17 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use eve_config::Catalog;
+use eve_core::RescueReason;
 use eve_core::{Encoding, JobPorts, Paths as _, Ports};
 use eve_host::{Host, HostMsg, SignalKind, SystemClock, ThreadJobSpawner, channel};
 use eve_platform::dirs::WinPaths;
 use eve_platform::fs::WinFs;
+use eve_platform::rescue::WinRescue;
 use eve_tui::frontend::TuiFrontend;
 
 use cli::{Cli, UsageError};
 
-/// パニックの内容 (フックが書き、復元の後に出す)。
+/// パニックの内容 (フックが書き、復元の後に出す)。メッセージ・場所・バックトレース。文書の内容は含まない。
 static PANIC_INFO: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
 
 const HELP: &str = "\
@@ -98,7 +101,8 @@ fn run(
         }
     };
     let clock = Arc::new(SystemClock::new());
-    let fs = Arc::new(WinFs::new(paths.state_dir().as_path()));
+    let state_dir = paths.state_dir();
+    let fs = Arc::new(WinFs::new(state_dir.as_path()));
     let (tx, rx) = channel();
     let job_ports = JobPorts {
         fs: fs.clone(),
@@ -121,16 +125,38 @@ fn run(
     let mut host = Host::with_channel(ports, (tx.clone(), rx));
     host.set_initial_encoding(encoding);
 
-    // コンソールのコントロールイベント (Ctrl+Break・ウィンドウの閉鎖など)。緊急退避は M3
+    // 緊急退避の書き手 (公開済みの DocSnapshot だけを読み、Port を通さずに書く、02 §11.2.1)
+    host.set_rescue_writer(Arc::new(WinRescue::new(Some(
+        state_dir.as_path().to_path_buf(),
+    ))));
+    let emergency = host.emergency();
+
+    // コンソールのコントロールイベント (Ctrl+Break・ウィンドウの閉鎖など)。ハンドラのスレッドは、メインを待たずに直ちに
+    // 退避を書き (CTRL_CLOSE は最大 3.5 s、それ以外は最大 2.5 s)、その後にメインへ終了を知らせる。退避はプロセスで 1 回だけ
     {
         let tx = tx.clone();
+        let emergency = emergency.clone();
         let _ = eve_platform::console::install_handler(move |ev| {
+            use eve_host::{RESCUE_BUDGET_CLOSE, RESCUE_BUDGET_SIGNAL};
             use eve_platform::console::CtrlEvent;
-            let kind = match ev {
-                CtrlEvent::CtrlC | CtrlEvent::CtrlBreak => SignalKind::Interrupt,
-                CtrlEvent::Close => SignalKind::ConsoleClose,
-                _ => SignalKind::Terminate,
+            let (kind, reason, budget) = match ev {
+                CtrlEvent::Close => (
+                    SignalKind::ConsoleClose,
+                    RescueReason::ConsoleClose,
+                    RESCUE_BUDGET_CLOSE,
+                ),
+                CtrlEvent::CtrlC | CtrlEvent::CtrlBreak => (
+                    SignalKind::Interrupt,
+                    RescueReason::Signal,
+                    RESCUE_BUDGET_SIGNAL,
+                ),
+                _ => (
+                    SignalKind::Terminate,
+                    RescueReason::Signal,
+                    RESCUE_BUDGET_SIGNAL,
+                ),
             };
+            emergency.run(reason, budget);
             tx.send(HostMsg::Signal(kind)).is_ok()
         });
     }
@@ -138,7 +164,8 @@ fn run(
     // パニックの表示は端末の復元の後にする (代替スクリーン内に出すと消えるため)。フックは端末に触れない (04 §14.2)
     std::panic::set_hook(Box::new(|info| {
         if let Ok(mut m) = PANIC_INFO.lock() {
-            *m = Some(info.to_string());
+            let bt = std::backtrace::Backtrace::force_capture();
+            *m = Some(format!("{info}\n\n{bt}"));
         }
     }));
     let mut frontend = TuiFrontend::new();
@@ -156,19 +183,54 @@ fn run(
                 );
             }
             print_exit_lines(&mut host);
+            // シグナル・致命的エラーで終わったときの退避の結果 (退避したときだけ。通常終了では書いていない)
+            if let Some(o) = emergency.outcome() {
+                let mut err = std::io::stderr().lock();
+                for l in texts::recovery_lines(&o) {
+                    let _ = writeln!(err, "{l}");
+                }
+            }
             code.0
         }
         Err(_) => {
-            // 端末を復元した後に出す (代替スクリーン内の表示は消えるため)
-            eprintln!("予期しないエラーのため evoeditor を終了しました。");
-            if let Ok(m) = PANIC_INFO.lock()
-                && let Some(info) = m.as_ref()
-            {
-                eprintln!("{info}");
+            // パニック: 退避 (最大 5 s。メインの catch_unwind の後) → 端末の復元は済み → panic.header → 退避の結果 → クラッシュログ → 報告先
+            let rescued = emergency.run(RescueReason::Panic, eve_host::RESCUE_BUDGET_FATAL);
+            let mut err = std::io::stderr().lock();
+            let _ = writeln!(err, "{}", texts::PANIC_HEADER);
+            if let Some(o) = rescued {
+                for l in texts::recovery_lines(&o) {
+                    let _ = writeln!(err, "{l}");
+                }
             }
+            if let Some(path) = write_crash_log(state_dir.as_path()) {
+                let _ = writeln!(err, "{}", texts::panic_crash_log(&path));
+            }
+            let _ = writeln!(
+                err,
+                "{}",
+                texts::panic_report(&format!("{}/issues", env!("CARGO_PKG_REPOSITORY")))
+            );
             EXIT_PANIC
         }
     }
+}
+
+/// クラッシュログを `state_dir/log/crash-<pid>-<秒>.txt` に書く (09 §10)。パニックのメッセージ・場所・バックトレースだけで、
+/// 文書の内容は含まない。書けなければ `None`。
+fn write_crash_log(state_dir: &std::path::Path) -> Option<std::path::PathBuf> {
+    let info = PANIC_INFO.lock().ok()?.clone()?;
+    let dir = state_dir.join("log");
+    std::fs::create_dir_all(&dir).ok()?;
+    let secs = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs());
+    let path = dir.join(format!("crash-{}-{secs}.txt", std::process::id()));
+    let body = format!(
+        "evoeditor {} のクラッシュログ (文書の内容は含みません)\n\n{info}\n",
+        env!("CARGO_PKG_VERSION")
+    );
+    std::fs::write(&path, body).ok()?;
+    Some(path)
 }
 
 fn main() -> ProcessExit {

@@ -136,7 +136,7 @@ impl Drop for OwnerOnly {
 }
 
 /// 現在のユーザーの SID の文字列 (`S-1-5-21-…`)。
-fn current_user_sid() -> io::Result<String> {
+pub(crate) fn current_user_sid() -> io::Result<String> {
     let mut token: HANDLE = ptr::null_mut();
     // SAFETY: 自プロセスのトークンを問い合わせ用に開く。
     if unsafe { OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut token) } == 0 {

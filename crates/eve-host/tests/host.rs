@@ -180,3 +180,99 @@ fn 破棄して置き換えた文書のスロットは消える() {
     )));
     assert!(e.host.emergency_slots().is_empty(), "{}", e.ascii());
 }
+
+// ---- 緊急退避 (02 §11.2.1) ----
+
+use std::sync::Mutex;
+use std::time::Duration;
+
+use eve_core::{DocSnapshot, RescueOutcome, RescueReason, RescueWriter};
+
+/// 呼ばれた回数・契機・文書の数を記録する書き手。
+#[derive(Default)]
+struct Spy {
+    calls: Mutex<Vec<(RescueReason, usize)>>,
+}
+
+impl RescueWriter for Spy {
+    fn write(
+        &self,
+        docs: &[Arc<DocSnapshot>],
+        reason: RescueReason,
+        _budget: Duration,
+    ) -> RescueOutcome {
+        self.calls.lock().unwrap().push((reason, docs.len()));
+        RescueOutcome {
+            total: docs.len(),
+            written: docs.len(),
+            complete: true,
+            ..RescueOutcome::default()
+        }
+    }
+}
+
+fn with_spy(e: &mut Env) -> Arc<Spy> {
+    let spy = Arc::new(Spy::default());
+    e.host.set_rescue_writer(spy.clone());
+    spy
+}
+
+#[test]
+fn 致命的エラーでは_dirty_な文書を退避してから_restore_する() {
+    let mut e = env();
+    let spy = with_spy(&mut e);
+    e.start();
+    e.input(InputEvent::Text("unsaved".into()));
+    let out = e
+        .host
+        .step(&mut e.fe, HostMsg::Fatal(FatalReason::InputThreadDied));
+    assert_eq!(out, StepOutcome::Exit(ExitCode::FATAL));
+    assert_eq!(*spy.calls.lock().unwrap(), vec![(RescueReason::Fatal, 1)]);
+    assert_eq!(e.probe.restore_count(), 1);
+    let o = e.host.emergency().outcome().expect("結果を bin が読む");
+    assert!(o.complete && o.written == 1);
+}
+
+#[test]
+fn シグナルとコンソールの閉鎖は契機を区別して退避する() {
+    let mut e = env();
+    let spy = with_spy(&mut e);
+    e.start();
+    e.input(InputEvent::Text("x".into()));
+    e.host
+        .step(&mut e.fe, HostMsg::Signal(SignalKind::ConsoleClose));
+    assert_eq!(
+        *spy.calls.lock().unwrap(),
+        vec![(RescueReason::ConsoleClose, 1)]
+    );
+}
+
+#[test]
+fn 受信スレッドが先に退避していればメインは書き直さない() {
+    let mut e = env();
+    let spy = with_spy(&mut e);
+    e.start();
+    e.input(InputEvent::Text("x".into()));
+    // コンソールハンドラのスレッドが先に書いた (メインを待たない、02 §11.2.1)
+    let ctl = e.host.emergency();
+    std::thread::spawn(move || ctl.run(RescueReason::Signal, Duration::from_secs(1)))
+        .join()
+        .unwrap();
+    e.host
+        .step(&mut e.fe, HostMsg::Signal(SignalKind::Interrupt));
+    assert_eq!(
+        spy.calls.lock().unwrap().len(),
+        1,
+        "退避はプロセスで 1 回だけ"
+    );
+}
+
+#[test]
+fn 保存済みの文書しか無ければ退避する文書は無い() {
+    let mut e = env();
+    let spy = with_spy(&mut e);
+    e.start();
+    e.host
+        .step(&mut e.fe, HostMsg::Fatal(FatalReason::InputThreadDied));
+    assert_eq!(*spy.calls.lock().unwrap(), vec![(RescueReason::Fatal, 0)]);
+}
