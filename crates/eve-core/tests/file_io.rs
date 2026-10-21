@@ -1168,3 +1168,106 @@ fn 再読込の後に読み取り専用なら_undo_できない() {
         "読み取り専用では Undo できない"
     );
 }
+
+#[test]
+fn 文字コードを指定して保存すると_書式は成功のときだけ変わる() {
+    let mut s = Env::new();
+    s.fs.add_file("/w/a.txt", "日本語\n".as_bytes());
+    s.open("/w/a.txt");
+    let before = s.fs.stamp("/w/a.txt");
+    let r = s.run(
+        "file.set_encoding",
+        Args::new().with_str("encoding", "shift_jis"),
+    );
+    assert!(matches!(r, CommandResult::Pending(_)), "未編集でも書く");
+    assert_eq!(s.fs.read("/w/a.txt").unwrap(), sjis_bytes("日本語\n"));
+    assert_ne!(s.fs.stamp("/w/a.txt"), before);
+    let d = s.doc().1;
+    assert_eq!(d.format.encoding, eve_core::Encoding::ShiftJis);
+    assert!(!d.is_dirty(), "dirty にならない (03 §9.3)");
+    assert_eq!(s.text(), "日本語\n");
+}
+
+#[test]
+fn utf16_を指定すると_bom_を付けて書く() {
+    let mut s = Env::new();
+    s.fs.add_file("/w/a.txt", b"ab");
+    s.open("/w/a.txt");
+    s.run(
+        "file.set_encoding",
+        Args::new().with_str("encoding", "utf-16le"),
+    );
+    assert_eq!(
+        s.fs.read("/w/a.txt").unwrap(),
+        vec![0xFF, 0xFE, b'a', 0, b'b', 0]
+    );
+    assert!(s.doc().1.format.has_bom);
+}
+
+#[test]
+fn 表現できない文字があれば書かず_書式も変えない() {
+    let mut s = Env::new();
+    s.fs.add_file("/w/a.txt", "a😀".as_bytes());
+    s.open("/w/a.txt");
+    s.run(
+        "file.set_encoding",
+        Args::new().with_str("encoding", "shift_jis"),
+    );
+    assert_eq!(s.fs.read("/w/a.txt").unwrap(), "a😀".as_bytes());
+    assert_eq!(s.doc().1.format.encoding, eve_core::Encoding::Utf8);
+}
+
+#[test]
+fn 保存が失敗したら書式は変わらない() {
+    let mut s = Env::new();
+    s.fs.add_file("/w/a.txt", b"abc");
+    s.open("/w/a.txt");
+    s.fs.fail_next(
+        eve_testkit::FsOp::WriteAtomic,
+        eve_core::FsErrorKind::PermissionDenied,
+    );
+    s.run(
+        "file.set_encoding",
+        Args::new().with_str("encoding", "euc-jp"),
+    );
+    assert!(dialog_open(&s));
+    assert_eq!(s.doc().1.format.encoding, eve_core::Encoding::Utf8);
+    // 退避先に保存でも書式は変えない
+    s.type_text("r");
+    s.pump();
+    assert_eq!(s.doc().1.format.encoding, eve_core::Encoding::Utf8);
+}
+
+#[test]
+fn 無題の文書は名前を尋ねて新しい書式で保存する() {
+    let mut s = Env::new();
+    s.e.open_initial(None, false);
+    s.pump();
+    s.type_text("ab");
+    s.run(
+        "file.set_encoding",
+        Args::new().with_str("encoding", "utf-16be"),
+    );
+    assert_eq!(s.e.state().overlay_kind(), "prompt");
+    s.type_text("/w/n.txt");
+    s.key(KeyCode::Enter, Modifiers::NONE);
+    s.pump();
+    assert_eq!(
+        s.fs.read("/w/n.txt").unwrap(),
+        vec![0xFE, 0xFF, 0, b'a', 0, b'b']
+    );
+    assert_eq!(s.doc().1.format.encoding, eve_core::Encoding::Utf16Be);
+}
+
+#[test]
+fn 文字コードの引数が無ければ尋ねる() {
+    let mut s = Env::new();
+    s.fs.add_file("/w/a.txt", b"abc");
+    s.open("/w/a.txt");
+    s.run("file.set_encoding", Args::new());
+    assert_eq!(s.e.state().overlay_kind(), "prompt");
+    s.type_text("shift_jis");
+    s.key(KeyCode::Enter, Modifiers::NONE);
+    s.pump();
+    assert_eq!(s.doc().1.format.encoding, eve_core::Encoding::ShiftJis);
+}
