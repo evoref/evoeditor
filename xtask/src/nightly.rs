@@ -116,15 +116,33 @@ fn fuzz(seconds: u64, seed: u64, out_dir: &Path, summary: &mut Vec<String>) -> R
     let _ = std::fs::remove_dir_all(&artifacts);
     std::fs::create_dir_all(&artifacts).map_err(|e| format!("{}: {e}", artifacts.display()))?;
     // ビルドの出力は見せる (入力もスタックも含まない)。失敗の原因を後から追えるようにする
+    // 対象は nightly の rustc のホストにする。cargo-fuzz は既定で自分がビルドされた対象 (配布の実行ファイルは musl) を使うので、
+    // 明示しないと「musl の std が無い」「sanitizer は静的リンクの libc と非互換」で失敗する
+    let host = host_triple()?;
     run(
         "cargo +nightly fuzz build fuzz_decode",
-        Command::new("cargo").args(["+nightly", "fuzz", "build", "fuzz_decode"]),
+        Command::new("cargo").args([
+            "+nightly",
+            "fuzz",
+            "build",
+            "--target",
+            &host,
+            "fuzz_decode",
+        ]),
     )?;
     println!("▶ fuzz_decode ({seconds} 秒、seed {seed})");
     // 出力は受けて、クラッシュが見つかったときは出さない: 公開のログに入力とスタックを出さない (-close_fd_mask=3 に加えて、こちらでも受けて出さない)
     let prefix = format!("-artifact_prefix={}/", artifacts.display());
     let output = Command::new("cargo")
-        .args(["+nightly", "fuzz", "run", "fuzz_decode", "--"])
+        .args([
+            "+nightly",
+            "fuzz",
+            "run",
+            "--target",
+            &host,
+            "fuzz_decode",
+            "--",
+        ])
         .arg(format!("-max_total_time={seconds}"))
         .arg("-close_fd_mask=3")
         .arg(format!("-seed={seed}"))
@@ -199,6 +217,15 @@ fn fuzz(seconds: u64, seed: u64, out_dir: &Path, summary: &mut Vec<String>) -> R
         crashes.len(),
         encrypted.len()
     ))
+}
+
+/// nightly の rustc のホストの対象 (`rustc +nightly -vV` の `host:`)。
+fn host_triple() -> Result<String, String> {
+    let out = run_capture(Command::new("rustc").args(["+nightly", "-vV"]))?;
+    out.lines()
+        .find_map(|l| l.strip_prefix("host: "))
+        .map(|h| h.trim().to_owned())
+        .ok_or_else(|| "rustc +nightly -vV に host の行がありません".to_owned())
 }
 
 fn list_crashes(dir: &Path) -> Result<Vec<PathBuf>, String> {
