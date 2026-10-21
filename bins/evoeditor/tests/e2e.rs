@@ -301,6 +301,62 @@ fn 日本語のファイルを引数で開いて表示する() {
     let _ = std::fs::remove_dir_all(dir);
 }
 
+// (1) 起動 → 文字入力 → Ctrl+S → Ctrl+Q、ファイルの内容が一致する (無題は名前を尋ねる)
+#[test]
+fn 入力して保存して終了するとファイルの内容が一致する() {
+    let dir = temp_dir("save");
+    let path = dir.join("saved.txt");
+    let mut s = Session::start(&[]);
+    s.wait_ready();
+    type_slowly(&s, "hello");
+    s.send(CTRL_S);
+    s.wait_for("名前の入力", |t| t.contains("Esc"));
+    s.send(path.to_str().unwrap().as_bytes());
+    thread::sleep(Duration::from_millis(300));
+    s.send(b"\r");
+    s.wait_for("保存した", |t| {
+        t.contains("saved.txt") && !t.contains("[+]")
+    });
+    s.send(CTRL_Q);
+    assert_eq!(s.wait_exit(), 0, "保存済みなので確認なしで終了する");
+    assert_eq!(std::fs::read(&path).unwrap(), b"hello");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+// 配布 exe のスモーク S3 に相当: 日本語のファイルを開く → 1 文字入力 → Ctrl+S → Ctrl+Q、バイト列が期待どおり
+#[test]
+fn 日本語のファイルを開いて編集して保存する() {
+    let dir = temp_dir("save-jp");
+    let path = dir.join("日本語.txt");
+    std::fs::write(
+        &path,
+        "こんにちは
+",
+    )
+    .unwrap();
+    let mut s = Session::start(&[path.to_str().unwrap()]);
+    s.wait_for("本文", |t| t.contains("こんにちは"));
+    type_slowly(&s, "x");
+    s.wait_for("変更あり", |t| t.contains("[+]"));
+    s.send(CTRL_S);
+    s.wait_for("保存した", |t| !t.contains("[+]"));
+    s.send(CTRL_Q);
+    assert_eq!(s.wait_exit(), 0);
+    assert_eq!(
+        std::fs::read(&path).unwrap(),
+        "xこんにちは
+"
+        .as_bytes()
+    );
+    // 一時ファイル・退避名が残らない
+    let names: Vec<String> = std::fs::read_dir(&dir)
+        .unwrap()
+        .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+        .collect();
+    assert_eq!(names, ["日本語.txt"], "{names:?}");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
 // 文字コード: Shift_JIS のファイルを判定して開く。`--encoding` の指定と、名前の誤り
 #[test]
 fn shift_jis_のファイルを開いて文字コードを表示する() {

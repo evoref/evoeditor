@@ -257,6 +257,12 @@ pub enum SaveWarning {
     AttrsNotPreserved { what: Vec<AttrKind> },
     /// 置換で他の利用者からの権限が元より狭くなった。
     PermissionNarrowed,
+    /// `fsync` に失敗した (ネットワーク FS・リムーバブル)。保存は続けた (05 §4.1 手順 3)。
+    FsyncFailed,
+    /// 置換の直後に他のプログラムが保存先を変更した可能性がある (FileId が一致しない)。次の保存は照合で Conflict になる (05 §4.1 手順 7)。
+    ChangedAfterSave,
+    /// 退避名 (`.<name>.eve-bak-*`) を消せなかった。保存先は新しい内容で完全 (05 §4.1 手順 7)。
+    BackupNotRemoved { path: FsPath },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
