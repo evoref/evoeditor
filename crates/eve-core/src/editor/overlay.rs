@@ -148,7 +148,8 @@ pub(super) struct PromptState {
 
 #[derive(Clone, Debug)]
 pub(super) enum Overlay {
-    Confirm(ConfirmState),
+    // 大きいので Box にする (clippy::large_enum_variant。Prompt との差が大きい)
+    Confirm(Box<ConfirmState>),
     Prompt(PromptState),
 }
 
@@ -223,7 +224,7 @@ impl EditorState {
             .as_ref()
             .map(|p| p.display())
             .unwrap_or_else(|| self.untitled_name());
-        self.set_overlay(Some(Overlay::Confirm(ConfirmState {
+        self.set_overlay(Some(Overlay::Confirm(Box::new(ConfirmState {
             name,
             args: vec![("path".to_owned(), path)],
             choices: UNSAVED_CHOICES.to_vec(),
@@ -231,14 +232,14 @@ impl EditorState {
             default: 0,
             focused: 0,
             action: ConfirmAction::Unsaved(cont),
-        })));
+        }))));
         self.mark_dirty_render();
         true
     }
 
     /// 確認ダイアログを出す (種類は `action`)。
     pub(super) fn open_confirm(&mut self, c: ConfirmState) {
-        self.set_overlay(Some(Overlay::Confirm(c)));
+        self.set_overlay(Some(Overlay::Confirm(Box::new(c))));
         self.mark_dirty_render();
     }
 
