@@ -67,6 +67,14 @@ impl Env {
         self.run("file.open", Args::new().with_str("path", path));
     }
 
+    /// 不正バイトが多いファイルの確認(03 §8.3)が出ていれば「読み取り専用で開く」を選ぶ。
+    fn accept_read_only(&mut self) {
+        if self.e.state().overlay_kind() == "dialog" {
+            self.type_text("r");
+            self.pump();
+        }
+    }
+
     fn open_as(&mut self, path: &str, enc: Encoding) {
         self.e.state_mut().open_path(
             path,
@@ -76,6 +84,7 @@ impl Env {
             },
         );
         self.pump();
+        self.accept_read_only();
     }
 
     fn doc(&self) -> &Document {
@@ -257,6 +266,7 @@ fn 対応外の文字コードの推定は既定で開いて案内する() {
     );
     s.messages();
     s.open("/w/a.txt");
+    s.accept_read_only();
     assert_eq!(s.doc().format.encoding, Encoding::Utf8);
     assert!(
         s.messages()

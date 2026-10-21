@@ -85,6 +85,8 @@ pub enum ConfirmAsk {
     UnsupportedBom { kind: UnsupportedBom },
     /// 不正バイトが多い (sniff 範囲で 1% 超、03 §8.3)。`permille` は千分率 (本文の構築を始める前に判定する)。
     ManyInvalidBytes { encoding: Encoding, permille: u32 },
+    /// 巨大ファイル (`file.huge_file_warn_bytes`、FR-127)。開くと多くのメモリを使う。
+    HugeFile { len: u64 },
 }
 
 /// 読込の完了に添える通知 (info メッセージの材料)。

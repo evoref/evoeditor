@@ -457,6 +457,8 @@ fn 読み取り専用の文書でもプロンプトは入力できる() {
     let mut s = Env::new();
     s.fs.add_file("/w/bad.txt", b"x\x9A");
     s.open("/w/bad.txt");
+    s.text("r"); // 不正バイトの確認: 読み取り専用で開く
+    s.pump();
     s.run("file.open", Args::new());
     s.text("/w/q");
     let f = s.frame();
@@ -554,7 +556,9 @@ fn オーバーレイを閉じる_esc_はメッセージを消さない() {
 fn 名前を付けて保存が拒否されたら_プロンプトに戻る() {
     let mut s = Env::new();
     s.fs.add_file("/w/bad.txt", b"x\x9A");
-    s.open("/w/bad.txt"); // 不正バイト → 読み取り専用
+    s.open("/w/bad.txt"); // 不正バイト → 確認 → 読み取り専用
+    s.text("r");
+    s.pump();
     s.run("file.save_as", Args::new());
     assert_eq!(s.overlay(), "prompt");
     s.key(KeyCode::Enter, Modifiers::NONE); // 同じファイル → 拒否

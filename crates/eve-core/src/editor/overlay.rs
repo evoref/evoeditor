@@ -45,6 +45,8 @@ pub(super) enum ConfirmAction {
     Fallback(super::file::FallbackAsk),
     /// 保存の失敗の後の選択 (再試行 / 別名で保存 / 退避先に保存)。
     SaveFailed(super::file::SaveFailedAsk),
+    /// 開くときの確認 (読み取り専用で開く / 文字コードを指定して開く / 中止、03 §9.2)。
+    Open(super::file::OpenAsk),
 }
 
 /// 確認ダイアログ。選択肢は `choices` (+ 最後にキャンセル)。
@@ -85,8 +87,14 @@ pub(super) const UNSAVED_CHOICES: [ChoiceDef; 2] = [
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) enum PromptKind {
     Open,
-    SaveAs { then: Option<Continuation> },
+    SaveAs {
+        then: Option<Continuation>,
+    },
     GotoLine,
+    /// 開くときの確認で「文字コードを指定して開く」を選んだ後の文字コードの入力 (03 §9.2)。
+    Encoding {
+        ask: super::file::OpenAsk,
+    },
 }
 
 impl PromptKind {
@@ -96,6 +104,7 @@ impl PromptKind {
             PromptKind::Open => "open",
             PromptKind::SaveAs { .. } => "save_as",
             PromptKind::GotoLine => "goto_line",
+            PromptKind::Encoding { .. } => "encoding",
         }
     }
 }
@@ -217,8 +226,12 @@ impl EditorState {
         self.mark_dirty_render();
         // キャンセル (最後の選択肢): データを変えない
         if choice >= c.cancel_index() {
-            if matches!(c.action, ConfirmAction::SaveFailed(_)) {
-                self.show_message(MessageLevel::Info, "info.save.aborted", &[]);
+            match &c.action {
+                ConfirmAction::SaveFailed(_) => {
+                    self.show_message(MessageLevel::Info, "info.save.aborted", &[]);
+                }
+                ConfirmAction::Open(ask) => self.open_aborted(ask),
+                _ => {}
             }
             return CommandResult::Done;
         }
@@ -230,6 +243,7 @@ impl EditorState {
             },
             ConfirmAction::Fallback(ask) => self.choose_fallback(ask, choice),
             ConfirmAction::SaveFailed(ask) => self.choose_save_failed(ask, id),
+            ConfirmAction::Open(ask) => self.choose_open(ask, id),
         }
     }
 
@@ -352,6 +366,16 @@ impl EditorState {
                 self.restore_prompt_if_rejected(Overlay::Prompt(p.clone()), &res, true);
                 res
             }
+            PromptKind::Encoding { ask } => match eve_encoding::Encoding::from_label(&text) {
+                Some(enc) => {
+                    self.set_overlay(None);
+                    self.mark_dirty_render();
+                    let mut opts = ask.opts;
+                    opts.forced = Some(enc);
+                    self.respawn_open(ask.clone(), opts)
+                }
+                None => self.prompt_error("invalid"),
+            },
             PromptKind::GotoLine => match parse_goto(&text) {
                 Some(args) => {
                     self.set_overlay(None);
@@ -419,6 +443,18 @@ impl EditorState {
         if let Some(Overlay::Confirm(c)) = &self.overlay {
             let cancel = c.cancel_index();
             return self.choose(cancel);
+        }
+        // 文字コードの入力の `Esc` は、開くこと自体の中止
+        if let Some(Overlay::Prompt(PromptState {
+            kind: PromptKind::Encoding { ask },
+            ..
+        })) = &self.overlay
+        {
+            let ask = ask.clone();
+            self.take_overlay();
+            self.mark_dirty_render();
+            self.open_aborted(&ask);
+            return CommandResult::Done;
         }
         if self.take_overlay().is_some() {
             self.mark_dirty_render();

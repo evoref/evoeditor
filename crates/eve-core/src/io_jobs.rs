@@ -28,9 +28,8 @@ const SNIFF_LEN: usize = 64 * 1024;
 const REDETECT_WINDOW: usize = 64 * 1024;
 /// 不正バイトの比率の警告の閾値 (千分率。sniff 範囲で 1% 超、03 §8.3)。
 const MANY_INVALID_PERMILLE: u32 = 10;
-/// 不正バイトの比率の警告を出す最小のファイルの大きさ。確認ダイアログ (後続) ができるまでは、メモリの倍率が問題になる大きさの
-/// ファイルだけにする (小さなファイルは読み取り専用で開く。03 §8.3 は大きさによらず警告するので、ダイアログと同時に外す)。
-const MANY_INVALID_MIN_FILE: u64 = 16 * 1024 * 1024;
+/// 巨大ファイルの警告の閾値 (`file.huge_file_warn_bytes` の既定、FR-127)。
+const HUGE_FILE_WARN: u64 = 512 * 1024 * 1024;
 
 /// 読込の上限の余裕 (`max(1 MiB, len / 16)`、03 §9.2)。読込中に伸び続けるファイルを際限なく読まない。
 fn read_slack(len: u64) -> u64 {
@@ -46,6 +45,10 @@ pub struct OpenOptions {
     pub user_read_only: bool,
     /// 文字コードを指定して開く (FR-111、`--encoding`)。判定せず、BOM は指定した文字コードのものだけ読み飛ばす (03 §8.2 手順 2)。
     pub forced: Option<Encoding>,
+    /// 確認「巨大ファイル」への回答「読み取り専用で開く」の再投入。巨大ファイルの確認を出さない。
+    pub confirmed_large: bool,
+    /// 確認の回答で決まった読み取り専用の理由 (ジョブは読まずに引き継ぐ、03 §9.2)。
+    pub pending: ReadOnlyReasons,
 }
 
 pub(crate) fn run_open(
@@ -130,6 +133,13 @@ fn open_inner(
     if cancel.is_cancelled() {
         return cancelled();
     }
+    // 巨大ファイル (FR-127): 読み始める前に確認する
+    if !opts.confirmed_large && meta.len >= HUGE_FILE_WARN {
+        return JobResult::NeedsConfirm {
+            job: id,
+            ask: ConfirmAsk::HugeFile { len: meta.len },
+        };
+    }
     let stamp_before = FileStamp::from_meta(&meta, None);
 
     // 3. 読み始める
@@ -182,7 +192,7 @@ fn open_inner(
                     };
                 }
                 // 確認への回答「読み取り専用で開く」の再投入: バイナリ・未対応の BOM も本文のバイトとして UTF-8 で読む
-                DetectedKind::Binary => binary_confirmed = true,
+                DetectedKind::Binary | DetectedKind::UnsupportedBom(_) => binary_confirmed = true,
                 _ => {}
             }
             let (enc, bom_len) = match kind {
@@ -191,7 +201,7 @@ fn open_inner(
                 _ => (Encoding::Utf8, 0),
             };
             // 不正バイトが多いファイルは、本文の構築を始める前に確認する (03 §8.3)
-            if !opts.read_only_requested && meta.len >= MANY_INVALID_MIN_FILE {
+            if !opts.read_only_requested {
                 let mut probe = Decoder::new(enc, bom_len > 0);
                 let mut sink = String::new();
                 probe.decode(head, file_complete, &mut sink);
@@ -295,7 +305,7 @@ fn open_inner(
         pua_escape: dec.pua_mode(),
         roundtrip: chk.finish(),
     };
-    let mut detected = ReadOnlyReasons::default();
+    let mut detected = opts.pending;
     if meta.readonly {
         detected.insert(ReadOnlyReason::FileAttribute);
     }

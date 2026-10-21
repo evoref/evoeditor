@@ -1353,9 +1353,9 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 | パレットの引数の一覧 (`List.title`) | `ui.palette.arg_title` | {command}: {arg} | — |
 | パレット (`List.footer`) | `ui.palette.footer` | {matched}/{total} | — |
 | パレット | `ui.palette.placeholder` | コマンドを入力 | 14 |
-| 入力プロンプト (`Prompt.title`) | `ui.prompt.open.title` / `ui.prompt.save_as.title` / `ui.prompt.goto_line.title` / `ui.prompt.arg.title` | 開く / 名前を付けて保存 / 行へ移動 / {arg} | 4、16、8、— |
-| 入力プロンプト (`Prompt.hint`) | `ui.prompt.goto_line.hint` | 行、行:桁、$ (最終行) | — |
-| 入力プロンプト (`Prompt.error`) | `ui.prompt.goto_line.error.invalid` / `ui.prompt.open.error.empty` / `ui.prompt.save_as.error.empty` | 行番号を入力してください (例: 12、12:5、$) / パスを入力してください / パスを入力してください | — |
+| 入力プロンプト (`Prompt.title`) | `ui.prompt.open.title` / `ui.prompt.save_as.title` / `ui.prompt.goto_line.title` / `ui.prompt.encoding.title` / `ui.prompt.arg.title` | 開く / 名前を付けて保存 / 行へ移動 / 文字コードを指定して開く / {arg} | 4、16、8、12、— |
+| 入力プロンプト (`Prompt.hint`) | `ui.prompt.goto_line.hint` / `ui.prompt.encoding.hint` | 行、行:桁、$ (最終行) / UTF-8、Shift_JIS、EUC-JP、ISO-2022-JP、UTF-16LE、UTF-16BE | —、— |
+| 入力プロンプト (`Prompt.error`) | `ui.prompt.goto_line.error.invalid` / `ui.prompt.open.error.empty` / `ui.prompt.save_as.error.empty` / `ui.prompt.encoding.error.invalid` | 行番号を入力してください (例: 12、12:5、$) / パスを入力してください / パスを入力してください / 対応していない文字コードです | — |
 | パレット (実行できない) | `ui.palette.disabled` | 現在は実行できません: {reason} | — |
 | パレット (0 件。`List.no_match`) | `ui.palette.no_match` | 一致するコマンドはありません | — |
 | キー表記 (割当なし) | `ui.key.via_palette` | コマンドパレットから実行 | — |
@@ -1454,10 +1454,22 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 
 | MessageKey | 出す場面 | ja |
 |---|---|---|
-| `ui.confirm.open.huge` | 巨大ファイル (`file.huge_file_warn_bytes`、FR-127。`ConfirmAsk::HugeFile { len }`。選択肢の正本は 03 §9.2) | {path} は {size} あります。開くと多くのメモリを使います — `[R] 読み取り専用で開く` ★ (`[Esc] キャンセル` = 中止) |
-| `ui.confirm.open.invalid_bytes` | 不正なバイトが多い (FR-127。`ConfirmAsk::ManyInvalidBytes { ratio, encoding, memory_factor }`。選択肢の正本は 03 §9.2。`{factor}` は `memory_factor` を小数 1 桁で示す) | {path} は {encoding} として不正なバイトが多く含まれます ({ratio})。開くとメモリを約 {factor} 倍使います — `[R] 読み取り専用で開く` ★ / `[E] 文字コードを指定して開く` / `[C] 中止` (`[Esc] キャンセル` も中止) |
-| `ui.confirm.open.binary` | バイナリ (FR-115) | {path} はバイナリファイルのようです — `[R] 読み取り専用で開く` ★ / `[E] 文字コードを指定して開く` |
-| `ui.confirm.open.utf32` | UTF-32 の BOM (`FF FE 00 00` / `00 00 FE FF`) を検出した (03 §8.2 手順 1 / §8.9。`ConfirmAsk::UnsupportedBom { kind }`。選択肢はバイナリと同じ) | {path} の先頭に UTF-32 の BOM があります。UTF-32 には対応していません — `[R] 読み取り専用で開く` ★ / `[E] 文字コードを指定して開く` |
+| `ui.confirm.open.huge.title` | 巨大ファイル (`file.huge_file_warn_bytes`、FR-127。`ConfirmAsk::HugeFile { len }`。選択肢の正本は 03 §9.2) | 巨大なファイル |
+| `ui.confirm.open.huge.message` | 同上 | {path} は {size} あります。開くと多くのメモリを使います |
+| `ui.confirm.open.huge.readonly` | 同上 (既定。アクセラレータ `R`) | [R] 読み取り専用で開く |
+| `ui.confirm.open.invalid_bytes.title` | 不正なバイトが多い (FR-127。`ConfirmAsk::ManyInvalidBytes { ratio, encoding, memory_factor }`。選択肢の正本は 03 §9.2。`{factor}` は `memory_factor` を小数 1 桁で示す) | 不正なバイトが多いファイル |
+| `ui.confirm.open.invalid_bytes.message` | 同上 | {path} は {encoding} として不正なバイトが多く含まれます ({ratio})。開くとメモリを約 {factor} 倍使います |
+| `ui.confirm.open.invalid_bytes.readonly` | 同上 (既定。アクセラレータ `R`) | [R] 読み取り専用で開く |
+| `ui.confirm.open.invalid_bytes.encoding` | 同上 (アクセラレータ `E`。選ぶと `ui.prompt.encoding` で文字コードを尋ねる) | [E] 文字コードを指定して開く |
+| `ui.confirm.open.invalid_bytes.abort` | 同上 (アクセラレータ `C`。`Esc` も同じ中止) | [C] 中止 |
+| `ui.confirm.open.binary.title` | バイナリ (FR-115) | バイナリファイル |
+| `ui.confirm.open.binary.message` | 同上 | {path} はバイナリファイルのようです |
+| `ui.confirm.open.binary.readonly` | 同上 (既定。アクセラレータ `R`) | [R] 読み取り専用で開く |
+| `ui.confirm.open.binary.encoding` | 同上 (アクセラレータ `E`。選ぶと `ui.prompt.encoding` で文字コードを尋ねる) | [E] 文字コードを指定して開く |
+| `ui.confirm.open.utf32.title` | UTF-32 の BOM (`FF FE 00 00` / `00 00 FE FF`) を検出した (03 §8.2 手順 1 / §8.9。`ConfirmAsk::UnsupportedBom { kind }`。選択肢はバイナリと同じ) | UTF-32 のファイル |
+| `ui.confirm.open.utf32.message` | 同上 | {path} の先頭に UTF-32 の BOM があります。UTF-32 には対応していません |
+| `ui.confirm.open.utf32.readonly` | 同上 (既定。アクセラレータ `R`) | [R] 読み取り専用で開く |
+| `ui.confirm.open.utf32.encoding` | 同上 (アクセラレータ `E`。選ぶと `ui.prompt.encoding` で文字コードを尋ねる) | [E] 文字コードを指定して開く |
 | `info.open.new_file` | 存在しないパスを開いた (新規ファイル。01 FR-101 AC-2) | {path} は無いため、新しいファイルとして開きました (保存すると作成します) |
 | `msg.open.parent_missing` | 存在しないパスを開き、そのフォルダも無い (`JobResult::NewFile` の `parent_missing`、03 §9.2 手順 2)。引数は `{path}` (開いたパス) と `{dir}` (`parent_missing` に入った、無いフォルダ) | {path} のフォルダ {dir} がありません。新しいファイルとして開きましたが、このままでは保存できません / フォルダを作ってから保存するか、別名で保存 ({key:file.save_as}) してください |
 | `info.open.already_open` | 開こうとしたファイルが今の文書と同じ (03 §9.2 手順 0 / 2b) | {path} は既に開いています |

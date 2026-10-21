@@ -303,6 +303,9 @@ fn 不正バイトは読み取り専用で開き_別名保存でバイト一致�
     let src: &[u8] = b"ok \x9A\xFF end\n";
     s.fs.add_file("/w/bad.txt", src);
     s.open("/w/bad.txt");
+    // 不正バイトが多いので確認が出る (03 §8.3): 読み取り専用で開く
+    s.type_text("r");
+    s.pump();
     let (_, d) = s.doc();
     assert_eq!(d.format.invalid_bytes, 2);
     assert!(d.read_only.contains(eve_core::ReadOnlyReason::InvalidBytes));
@@ -336,8 +339,87 @@ fn バイナリは確認が要るので開かず_今の文書を残す() {
     let (id, _) = s.doc();
     s.messages();
     s.open("/w/bin.dat");
-    assert_eq!(s.doc().0, id, "今の文書がそのまま残る (FR-107 AC-3)");
-    assert!(s.messages().contains(&"msg.open.failed".to_owned()));
+    assert!(dialog_open(&s), "確認が出る");
+    assert_eq!(s.doc().0, id, "確認の間は今の文書がそのまま表示される");
+    s.key(KeyCode::Esc, Modifiers::NONE);
+    s.pump();
+    assert_eq!(
+        s.doc().0,
+        id,
+        "中止すると今の文書がそのまま残る (FR-107 AC-3)"
+    );
+    assert!(s.messages().contains(&"info.open.cancelled".to_owned()));
+    assert_eq!(s.e.state().documents_len(), 1, "読込中の文書は捨てる");
+}
+
+#[test]
+fn バイナリを読み取り専用で開く() {
+    let mut s = Env::new();
+    s.fs.add_file("/w/bin.dat", b" ");
+    s.open("/w/bin.dat");
+    assert!(dialog_open(&s));
+    s.type_text("r");
+    s.pump();
+    let (_, d) = s.doc();
+    assert!(!d.is_editable() && !d.read_only.is_empty(), "読み取り専用");
+    assert!(
+        d.read_only.contains(eve_core::ReadOnlyReason::Binary),
+        "理由は Binary"
+    );
+}
+
+#[test]
+fn 文字コードを指定して開く() {
+    let mut s = Env::new();
+    // Shift_JIS の「あ」(82 A0) の前に NUL: 判定ではバイナリ。UTF-8 を指定すれば NUL も本文として読める
+    s.fs.add_file("/w/bin.dat", b" abc");
+    s.open("/w/bin.dat");
+    s.type_text("e");
+    assert_eq!(s.e.state().overlay_kind(), "prompt");
+    // 不明な名前は入力欄に戻る
+    s.type_text("nonsense");
+    s.key(KeyCode::Enter, Modifiers::NONE);
+    s.pump();
+    assert_eq!(s.e.state().overlay_kind(), "prompt");
+    for _ in 0.."nonsense".len() {
+        s.key(KeyCode::Backspace, Modifiers::NONE);
+    }
+    s.type_text("utf-8");
+    s.key(KeyCode::Enter, Modifiers::NONE);
+    s.pump();
+    assert!(!dialog_open(&s) && s.e.state().overlay_kind() != "prompt");
+    assert_eq!(s.doc().1.format.encoding, eve_core::Encoding::Utf8);
+    assert!(s.text().ends_with("abc"));
+}
+
+#[test]
+fn 文字コードの入力で_esc_は開くのを中止する() {
+    let mut s = Env::new();
+    s.fs.add_file("/w/a.txt", b"abc");
+    s.fs.add_file("/w/bin.dat", b" ");
+    s.open("/w/a.txt");
+    s.open("/w/bin.dat");
+    s.type_text("e");
+    s.key(KeyCode::Esc, Modifiers::NONE);
+    s.pump();
+    assert_eq!(s.text(), "abc");
+    assert_eq!(s.e.state().overlay_kind(), "");
+    assert_eq!(s.e.state().documents_len(), 1);
+}
+
+#[test]
+fn 不正バイトが多いファイルは小さくても確認する() {
+    let mut s = Env::new();
+    s.fs.add_file("/w/bad.txt", b"ab\x9A\x9Bcd");
+    s.open("/w/bad.txt");
+    assert!(
+        dialog_open(&s),
+        "ManyInvalidBytes の確認 (大きさによらず、03 §8.3)"
+    );
+    s.type_text("c");
+    s.pump();
+    assert!(!dialog_open(&s));
+    assert_eq!(s.e.state().documents_len(), 1);
 }
 
 #[test]
@@ -461,6 +543,8 @@ fn 読み取り専用の文書を同じファイルへ名前を付けて保存�
     let src: &[u8] = b"ok \x9A\n";
     s.fs.add_file("/w/bad.txt", src);
     s.open("/w/bad.txt");
+    s.type_text("r");
+    s.pump();
     s.messages();
     let r = s.run("file.save_as", Args::new().with_str("path", "/w/bad.txt"));
     assert_eq!(r, CommandResult::Rejected(RejectReason::ReadOnly));
@@ -539,6 +623,9 @@ fn 最初の読込の失敗は無題で始まり_再試行できる() {
     s.fs.add_file("/w/bin.dat", b"\x00\x01\x02");
     s.e.open_initial(Some("/w/bin.dat"), false);
     s.pump();
+    assert!(dialog_open(&s));
+    s.key(KeyCode::Esc, Modifiers::NONE);
+    s.pump();
     let (_, d) = s.doc();
     assert!(
         d.path.is_none() && d.is_editable(),
@@ -558,7 +645,7 @@ fn readonly_の指定でもバイナリの確認は出す() {
     s.fs.add_file("/w/bin.dat", b"\x00\x01\x02");
     s.e.open_initial(Some("/w/bin.dat"), true);
     s.pump();
-    assert!(s.messages().contains(&"msg.open.failed".to_owned()));
+    assert!(dialog_open(&s), "--readonly でもバイナリの確認は出る");
 }
 
 // ---- 中断された保存の痕跡 (02 §4.5「中断の痕跡の写像」、05 §4.6) ----

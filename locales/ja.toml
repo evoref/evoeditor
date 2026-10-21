@@ -566,11 +566,29 @@ unsaved_reopen = "{path} には保存されていない変更があります —
 nav_hint = "Tab / ←→ で選択、Enter で決定"
 cancel = "[Esc] キャンセル"
 
-[ui.confirm.open]
-binary = "{path} はバイナリファイルのようです — `[R] 読み取り専用で開く` ★ / `[E] 文字コードを指定して開く`"
-huge = "{path} は {size} あります。開くと多くのメモリを使います — `[R] 読み取り専用で開く` ★ (`[Esc] キャンセル` = 中止)"
-invalid_bytes = "{path} は {encoding} として不正なバイトが多く含まれます ({ratio})。開くとメモリを約 {factor} 倍使います — `[R] 読み取り専用で開く` ★ / `[E] 文字コードを指定して開く` / `[C] 中止` (`[Esc] キャンセル` も中止)"
-utf32 = "{path} の先頭に UTF-32 の BOM があります。UTF-32 には対応していません — `[R] 読み取り専用で開く` ★ / `[E] 文字コードを指定して開く`"
+[ui.confirm.open.binary]
+title = "バイナリファイル"
+message = "{path} はバイナリファイルのようです"
+readonly = "[R] 読み取り専用で開く"
+encoding = "[E] 文字コードを指定して開く"
+
+[ui.confirm.open.huge]
+title = "巨大なファイル"
+message = "{path} は {size} あります。開くと多くのメモリを使います"
+readonly = "[R] 読み取り専用で開く"
+
+[ui.confirm.open.invalid_bytes]
+title = "不正なバイトが多いファイル"
+message = "{path} は {encoding} として不正なバイトが多く含まれます ({ratio})。開くとメモリを約 {factor} 倍使います"
+readonly = "[R] 読み取り専用で開く"
+encoding = "[E] 文字コードを指定して開く"
+abort = "[C] 中止"
+
+[ui.confirm.open.utf32]
+title = "UTF-32 のファイル"
+message = "{path} の先頭に UTF-32 の BOM があります。UTF-32 には対応していません"
+readonly = "[R] 読み取り専用で開く"
+encoding = "[E] 文字コードを指定して開く"
 
 [ui.confirm.save]
 dangling_link = "{path} はリンクで、リンク先 {target} がありません — `[C] リンク先に作成 (リンクを保つ)` ★"
@@ -683,6 +701,13 @@ title = "名前を付けて保存"
 [ui.prompt.goto_line]
 title = "行へ移動"
 hint = "行、行:桁、$ (最終行)"
+
+[ui.prompt.encoding]
+title = "文字コードを指定して開く"
+hint = "UTF-8、Shift_JIS、EUC-JP、ISO-2022-JP、UTF-16LE、UTF-16BE"
+
+[ui.prompt.encoding.error]
+invalid = "対応していない文字コードです"
 
 [ui.prompt.arg]
 title = "{arg}"

@@ -135,6 +135,8 @@ fn 同じ状態の同じ_query_は同じ応答() {
     let mut h = Harness::new().with_file("/w/a.txt", b"a\r\nb\nc\xFF");
     h.open("/w/a.txt");
     h.run_jobs();
+    h.text("r"); // 不正バイトの確認: 読み取り専用で開く
+    h.run_jobs();
     h.keys("ctrl+a");
     let doc = h.doc_id();
     let window = h.editor.state().first_window().unwrap();
