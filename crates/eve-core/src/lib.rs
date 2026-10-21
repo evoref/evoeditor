@@ -12,6 +12,7 @@ mod document;
 mod editor;
 mod fs;
 mod fspath;
+mod interrupted;
 mod io_jobs;
 mod jobs;
 mod paths;

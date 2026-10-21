@@ -21,7 +21,7 @@ impl Clock for FixedClock {
 
 fn ports(cwd: &str) -> JobPorts {
     JobPorts {
-        fs: Arc::new(WinFs),
+        fs: Arc::new(WinFs::default()),
         clock: Arc::new(FixedClock),
         paths: Arc::new(WinPaths::new(
             Dirs::resolve(&|_| None),

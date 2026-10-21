@@ -179,8 +179,13 @@ fn ceil_boundary(rope: &Rope, b: usize) -> usize {
     b
 }
 
+/// 範囲を外側の char 境界へ丸める。**空の範囲 (終点が始点以下。逆順を含む) は丸めても空のまま** で、char の途中の位置でも
+/// その char に広げない (点は広がらない。広げると、空の範囲の `chunks` が char 1 つ分の文字列を返してしまう)。
 fn rounded_range(rope: &Rope, r: ByteRange) -> (usize, usize) {
     let start = floor_boundary(rope, r.start.0);
+    if r.end.0 <= r.start.0 {
+        return (start, start);
+    }
     let end = ceil_boundary(rope, r.end.0).max(start);
     (start, end)
 }

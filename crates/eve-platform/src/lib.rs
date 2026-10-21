@@ -13,6 +13,8 @@
 pub mod console;
 pub mod dirs;
 pub mod fs;
+#[cfg(windows)]
+mod inflight;
 pub mod path;
 #[cfg(windows)]
 mod save;

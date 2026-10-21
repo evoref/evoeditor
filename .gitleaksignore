@@ -1,0 +1,3 @@
+# gitleaks の誤検知の除外 (指紋 = <コミット>:<ファイル>:<規則>:<行>)。履歴の書き換え (force push) はしないので、検出済みのコミットの指紋で除外する。
+# 5ad8eed: eve-platform の inflight.rs のテストにあった 16 桁の 16 進の固定文字列 (保存中フラグのキーの例。秘密ではない)。次のコミットで固定文字列をやめた。
+5ad8eed0680b31aa043f31397e89b5d7b05e696a:crates/eve-platform/src/inflight.rs:generic-api-key:476

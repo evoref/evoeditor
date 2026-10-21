@@ -16,6 +16,8 @@ use std::time::{Duration, Instant};
 
 use portable_pty::{Child, CommandBuilder, MasterPty, PtySize, native_pty_system};
 
+static STATE_SEQ: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+
 const EXE: &str = env!("CARGO_BIN_EXE_evoeditor");
 const COLS: u16 = 100;
 const ROWS: u16 = 30;
@@ -29,6 +31,7 @@ struct Session {
     raw: Arc<Mutex<Vec<u8>>>,
     // pty を閉じないよう保持する
     _master: Box<dyn MasterPty + Send>,
+    state: PathBuf,
 }
 
 impl Session {
@@ -46,6 +49,13 @@ impl Session {
         cmd.env_remove("NO_COLOR");
         cmd.env_remove("WT_SESSION");
         cmd.env_remove("TERM_PROGRAM");
+        // 利用者の状態ディレクトリを汚さない (保存中フラグ・退避はここに書く)
+        let state = std::env::temp_dir().join(format!(
+            "evo-e2e-state-{}-{}",
+            std::process::id(),
+            STATE_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+        ));
+        cmd.env("EVE_STATE_DIR", &state);
         let child = pty.slave.spawn_command(cmd).expect("起動できません");
         drop(pty.slave);
         let mut reader = pty.master.try_clone_reader().expect("reader");
@@ -82,6 +92,7 @@ impl Session {
             parser,
             raw,
             _master: pty.master,
+            state,
         }
     }
 
@@ -320,6 +331,32 @@ fn 入力して保存して終了するとファイルの内容が一致する()
     s.send(CTRL_Q);
     assert_eq!(s.wait_exit(), 0, "保存済みなので確認なしで終了する");
     assert_eq!(std::fs::read(&path).unwrap(), b"hello");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+// 保存すると保存中フラグを書いて消す (05 §4.6): 状態ディレクトリにフラグが残らない
+#[test]
+fn 保存の後に保存中フラグが残らない() {
+    let dir = temp_dir("flag");
+    let path = dir.join("f.txt");
+    std::fs::write(&path, "abc").unwrap();
+    let mut s = Session::start(&[path.to_str().unwrap()]);
+    s.wait_for("本文", |t| t.contains("abc"));
+    type_slowly(&s, "x");
+    s.send(CTRL_S);
+    s.wait_for("保存した", |t| !t.contains("[+]"));
+    let inflight = s.state.join("recovery").join("inflight");
+    let leftovers: Vec<_> = std::fs::read_dir(&inflight)
+        .map(|rd| {
+            rd.flatten()
+                .flat_map(|d| std::fs::read_dir(d.path()).into_iter().flatten().flatten())
+                .collect()
+        })
+        .unwrap_or_default();
+    assert!(leftovers.is_empty(), "{leftovers:?}");
+    s.send(CTRL_Q);
+    assert_eq!(s.wait_exit(), 0);
+    let _ = std::fs::remove_dir_all(&s.state);
     let _ = std::fs::remove_dir_all(dir);
 }
 
