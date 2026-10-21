@@ -52,6 +52,13 @@ pub(super) fn default_keymap() -> Keymap {
     bind("editor", "mod+n", "file.new");
     // 編集
     bind("editor", "enter", "edit.newline");
+    // クリップボード
+    bind("editor", "mod+c", "clipboard.copy");
+    bind("editor", "mod+x", "clipboard.cut");
+    bind("editor", "mod+v", "edit.paste");
+    bind("editor", "ctrl+insert", "clipboard.copy");
+    bind("editor", "shift+delete", "clipboard.cut");
+    bind("editor", "shift+insert", "edit.paste");
     bind("editor", "mod+z", "edit.undo");
     bind("editor", "mod+y", "edit.redo");
     bind("editor", "mod+shift+z", "edit.redo");

@@ -129,6 +129,26 @@ fn edit_each_as(
     }
 }
 
+// ---------- クリップボード (03 §15.3) ----------
+
+/// `clipboard.cut`: 選択をクリップボードへ入れてから削除する。選択が空なら何もしない。
+fn clipboard_cut(ctx: &mut CommandCtx<'_>) -> CommandResult {
+    if !ctx.state.copy_selection() {
+        return CommandResult::Done;
+    }
+    edit_each_as(
+        ctx,
+        Origin::Command(eve_view::CommandId::new("clipboard.cut")),
+        |_, r| {
+            (!r.is_empty()).then(|| Plan {
+                del: ByteRange::new(r.start(), r.end()),
+                ins: String::new(),
+                cursor: CursorRule::AfterInsert,
+            })
+        },
+    )
+}
+
 // ---------- 改行コードの変換 (03 §8.4、FR-113) ----------
 
 /// `file.set_line_ending { eol }`。`eol` と異なるすべての区切りを `eol` に置き換え、`default_eol` も `eol` にする。
@@ -507,6 +527,23 @@ pub(super) fn register(r: &mut CommandRegistry) {
     use Permission::{None as NoPerm, Propose, Read};
     let w = "!doc.read_only";
     reg!(r, "file.set_line_ending", Edit, Propose, w, set_line_ending);
+    reg!(
+        r,
+        "clipboard.copy",
+        CommandKind::Ui,
+        NoPerm,
+        "!selection.empty",
+        super::clipboard::copy
+    );
+    reg!(
+        r,
+        "clipboard.cut",
+        Edit,
+        NoPerm,
+        "!selection.empty && !doc.read_only",
+        clipboard_cut
+    );
+    reg!(r, "edit.paste", Edit, NoPerm, w, super::clipboard::paste);
     reg!(r, "edit.insert_text", Edit, Propose, w, insert_text);
     reg!(r, "edit.newline", Edit, Propose, w, newline);
     reg!(r, "edit.undo", Edit, NoPerm, w, undo);

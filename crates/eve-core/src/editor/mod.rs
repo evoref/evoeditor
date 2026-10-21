@@ -5,6 +5,7 @@
 //! コマンドのレジストリと `execute`。編集コマンド・キーマップ・移動は後続の PR で足す。
 
 mod chrome;
+mod clipboard;
 mod command;
 mod context;
 mod default_keymap;
@@ -24,6 +25,7 @@ use eve_view::{
     Modifiers, ViewId, WindowId,
 };
 
+pub use clipboard::ClipboardSource;
 pub use command::{
     ArgValue, Args, CommandCtx, CommandInvocation, CommandKind, CommandRegistry, CommandResult,
     CommandSpec, Handler, InvocationSource, Permission, RejectReason,
@@ -195,7 +197,10 @@ impl Editor {
             }
             InputEvent::Resize { cols, rows } => self.state.set_viewport(cols, rows),
             InputEvent::CapabilitiesChanged(caps) => self.state.set_caps(caps),
-            // Focus と ClipboardContent は、それを使う機能 (クリップボード) と同時に扱う
+            // システムクリップボードの読み取りの応答。最後の要求の token と違えば捨てる
+            InputEvent::ClipboardContent { token, text } => {
+                self.state.on_clipboard_content(token, text);
+            }
             _ => {}
         }
     }
@@ -284,6 +289,11 @@ impl Editor {
     /// 退避用の公開物を作る。dirty でない文書・読込中の文書・閉じた文書は `None` (スロットを空にする)。
     pub fn emergency_snapshot(&self, doc: DocumentId) -> Option<DocSnapshot> {
         self.state.rescue_snapshot(doc, true)
+    }
+
+    /// `Effect::SetClipboard` の `Handle` の中身を取り出す (Host が実行時に呼ぶ、02 §4.4)。
+    pub fn take_clipboard(&mut self, id: eve_view::ClipboardHandleId) -> Option<ClipboardSource> {
+        self.state.take_clipboard(id)
     }
 
     pub fn take_snapshot_updates(&mut self) -> Vec<DocumentId> {

@@ -335,7 +335,26 @@ impl Host {
             if frontend.apply_effect(&eff) == EffectOutcome::Handled {
                 continue;
             }
-            // クリップボード・ベルなど: 提供者 (ClipboardProvider) ができる版で扱う
+            match eff {
+                // 書込: 内部レジスタには core が書き済み。ハンドルは回収して捨てる (システムへの書込は提供者ができる版で)
+                Effect::SetClipboard { content, .. } => {
+                    if let eve_view::ClipboardText::Handle(id) = content {
+                        let _ = self.editor.take_clipboard(id);
+                    }
+                    continue;
+                }
+                // 読込: システムクリップボードの提供者が無い間は「読めなかった」と返し、core が内部レジスタから貼り付ける
+                Effect::RequestClipboard { token, .. } => {
+                    if let Some(w) = self.window {
+                        self.editor.handle_input(
+                            w,
+                            eve_view::InputEvent::ClipboardContent { token, text: None },
+                        );
+                    }
+                    continue;
+                }
+                _ => {}
+            }
             if let Effect::Quit { code, stderr, .. } = eff {
                 frontend.restore();
                 self.exit_stderr = stderr;
