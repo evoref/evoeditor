@@ -40,6 +40,12 @@ pub(super) enum Pending {
     RecoveryScan,
     /// 「退避先に保存」(03 §9.7 (e))。`path` は元のファイル。
     WriteRecovery { path: FsPath },
+    /// 表現不能の文字の置換の ChangeSet を作るジョブ (E3 の選択肢 2)。`revision` は投入時の文書の Revision。
+    ReplaceUnmappable {
+        ask: UnmappableAsk,
+        revision: eve_view::Revision,
+        retried: bool,
+    },
     Save {
         doc: DocumentId,
         at: NodeId,
@@ -103,6 +109,9 @@ pub(super) struct UnmappableAsk {
     pub cont: Option<Continuation>,
     /// 最初の表現不能の文字の通し番号 (Unicode スカラー値、0 始まり)。キャンセルでカーソルをここへ移す。
     pub first_char: u64,
+    /// 保存先の文字コード (`file.set_encoding` の指定があればそれ)。
+    pub encoding: Encoding,
+    pub fmt: Option<NewFormat>,
 }
 
 /// 保存の代替の確認 (`AtomicUnsupported` / ハードリンク / `BackupFailed`、03 §9.3 手順 7・05 §4.4)。
@@ -220,6 +229,7 @@ impl EditorState {
             .iter()
             .filter(|(_, p)| match p {
                 Pending::Open { doc: d, .. } | Pending::CheckUnchanged { doc: d } => *d == doc,
+                Pending::ReplaceUnmappable { ask, .. } => ask.doc == doc,
                 // 保存ジョブは取り消さず、完了を待つ (03 §9.2 の「閉じる手順」。ユーザーが求めた保存を中断しない)
                 Pending::Save { .. } | Pending::RecoveryScan | Pending::WriteRecovery { .. } => {
                     false
@@ -568,6 +578,11 @@ impl EditorState {
             } => self.finish_open(doc, view, path, replace, opts, kind, r),
             Pending::CheckUnchanged { doc } => self.finish_check(doc, r),
             Pending::WriteRecovery { path } => self.finish_write_recovery(&path, r),
+            Pending::ReplaceUnmappable {
+                ask,
+                revision,
+                retried,
+            } => self.finish_replace_unmappable(ask, revision, retried, r),
             Pending::RecoveryScan => self.finish_recovery_scan(r),
             Pending::Save {
                 doc,
@@ -603,6 +618,19 @@ impl EditorState {
                 destructive: false,
             });
         }
+        // 置換して保存: 文書が編集できるときだけ (表現不能の文字にエスケープ文字を含まないとき)
+        if !has_escape
+            && self
+                .documents
+                .get(&ask.doc)
+                .is_some_and(|d| d.is_editable())
+        {
+            choices.push(ChoiceDef {
+                id: "replace",
+                accel: Some('r'),
+                destructive: false,
+            });
+        }
         let default = choices.len();
         self.open_confirm(ConfirmState {
             name: "save.unmappable",
@@ -613,6 +641,7 @@ impl EditorState {
                 ("col".to_owned(), col.to_string()),
             ],
             choices,
+            details: Vec::new(),
             default,
             focused: default,
             action: ConfirmAction::Unmappable(ask),
@@ -634,6 +663,9 @@ impl EditorState {
 
     /// 表現不能の確認の選択 (キャンセルは `unmappable_cancelled`)。
     pub(super) fn choose_unmappable(&mut self, ask: UnmappableAsk, id: &str) -> CommandResult {
+        if id == "replace" {
+            return self.spawn_replace(ask, false);
+        }
         let UnmappableAsk {
             doc,
             path,
@@ -655,6 +687,177 @@ impl EditorState {
             ),
             _ => CommandResult::Done,
         }
+    }
+
+    /// 表現不能の文字を置換する ChangeSet を作るジョブを投入する (03 §8.6 の選択肢 2)。
+    fn spawn_replace(&mut self, ask: UnmappableAsk, retried: bool) -> CommandResult {
+        let Some(doc) = self.documents.get(&ask.doc) else {
+            return CommandResult::Done;
+        };
+        let revision = doc.revision();
+        let job = self.jobs.spawn(
+            Some(ask.doc),
+            revision,
+            JobKind::ReplaceUnmappable {
+                snapshot: doc.snapshot(),
+                encoding: ask.encoding,
+                pua: doc.format.pua_escape,
+            },
+        );
+        self.pending.insert(
+            job,
+            Pending::ReplaceUnmappable {
+                ask,
+                revision,
+                retried,
+            },
+        );
+        CommandResult::Pending(job)
+    }
+
+    /// 置換の ChangeSet ができた: 対象の一覧を示して確認を取る。作った Revision と今の Revision が違えば 1 回だけ作り直す。
+    fn finish_replace_unmappable(
+        &mut self,
+        ask: UnmappableAsk,
+        revision: eve_view::Revision,
+        retried: bool,
+        r: JobResult,
+    ) {
+        use super::overlay::{ChoiceDef, ConfirmAction, ConfirmState};
+        match r {
+            JobResult::UnmappableReplacement {
+                changes,
+                targets,
+                counts,
+                ..
+            } => {
+                let Some(doc) = self.documents.get(&ask.doc) else {
+                    return;
+                };
+                if doc.revision() != revision {
+                    if retried {
+                        self.show_message(
+                            MessageLevel::Error,
+                            "msg.save.failed",
+                            &[("path", &ask.path.display()), ("reason", "stale")],
+                        );
+                    } else {
+                        self.spawn_replace(ask, true);
+                    }
+                    return;
+                }
+                let mut details: Vec<String> = Vec::with_capacity(targets.len() + 1);
+                for t in &targets {
+                    let (line, col) = self.pos_of_offset(ask.doc, t.offset);
+                    let shown = if t.ch.is_control() { '\u{FFFD}' } else { t.ch };
+                    details.push(self.catalog().render(
+                        "ui.confirm.save.unmappable_replace.item",
+                        &[
+                            ("line", &line.to_string()),
+                            ("col", &col.to_string()),
+                            ("char", &shown.to_string()),
+                            ("codepoint", &format!("U+{:04X}", t.ch as u32)),
+                            ("replacement", &t.replacement.to_string()),
+                        ],
+                        &|_| None,
+                    ));
+                }
+                let rest = counts.total().saturating_sub(targets.len() as u64);
+                if rest > 0 {
+                    details.push(self.catalog().render(
+                        "ui.confirm.save.unmappable_replace.more",
+                        &[("count", &rest.to_string())],
+                        &|_| None,
+                    ));
+                }
+                self.open_confirm(ConfirmState {
+                    name: "save.unmappable_replace",
+                    args: vec![
+                        ("total".to_owned(), counts.total().to_string()),
+                        ("encoding".to_owned(), ask.encoding.name().to_owned()),
+                        ("kana".to_owned(), counts.kana.to_string()),
+                        ("compat".to_owned(), counts.compat.to_string()),
+                        ("question".to_owned(), counts.question.to_string()),
+                    ],
+                    choices: vec![ChoiceDef {
+                        id: "replace",
+                        accel: Some('r'),
+                        destructive: false,
+                    }],
+                    details,
+                    // 既定はキャンセル
+                    default: 1,
+                    focused: 1,
+                    action: ConfirmAction::UnmappableReplace {
+                        ask,
+                        changes,
+                        revision,
+                    },
+                });
+            }
+            JobResult::Failed { err, .. } => {
+                let (level, key) = match err {
+                    JobError::Cancelled => (MessageLevel::Info, "info.save.aborted"),
+                    _ => (MessageLevel::Error, "msg.save.failed"),
+                };
+                self.show_message(
+                    level,
+                    key,
+                    &[("path", &ask.path.display()), ("reason", "replace")],
+                );
+            }
+            _ => {}
+        }
+    }
+
+    /// バイト位置 `off` の (行, 桁)。どちらも 1 始まり (桁は文字数)。
+    fn pos_of_offset(&self, doc: DocumentId, off: usize) -> (usize, usize) {
+        use eve_text::TextRead;
+        let Some(d) = self.documents.get(&doc) else {
+            return (1, 1);
+        };
+        let t = d.text();
+        let line = t.byte_to_line(eve_text::ByteOff(off)).0;
+        let line_start = t.line_to_byte(eve_text::LineIdx(line)).0;
+        let body = t.slice_to_string(eve_text::ByteRange::new(
+            eve_text::ByteOff(line_start),
+            eve_text::ByteOff(off),
+        ));
+        (line + 1, body.chars().count() + 1)
+    }
+
+    /// 置換の確認で「置換して保存」: ChangeSet を 1 つの Transaction (`Origin::System`、Undo で戻せる) として適用し、
+    /// 同じ文字コードで保存し直す (03 §8.6)。作った Revision が古ければ作り直す。
+    pub(super) fn apply_replacement_and_save(
+        &mut self,
+        ask: UnmappableAsk,
+        changes: eve_text::ChangeSet,
+        revision: eve_view::Revision,
+    ) -> CommandResult {
+        use crate::document::{Origin, Transaction, UndoGroupHint};
+        let Some(doc) = self.documents.get(&ask.doc) else {
+            return CommandResult::Done;
+        };
+        if doc.revision() != revision {
+            return self.spawn_replace(ask, true);
+        }
+        let view = self.first_window().and_then(|w| self.window_view(w));
+        let sel = view.and_then(|v| self.views.get(&v).map(|v| v.selection.clone()));
+        let mut tx = Transaction::new(changes, Origin::System, self.now)
+            .with_undo_group(UndoGroupHint::Break)
+            .with_selections(sel, None);
+        if let Some(v) = view {
+            tx = tx.with_view(v);
+        }
+        if self.apply_transaction(ask.doc, tx).is_err() {
+            self.show_message(
+                MessageLevel::Error,
+                "msg.save.failed",
+                &[("path", &ask.path.display()), ("reason", "replace")],
+            );
+            return CommandResult::Done;
+        }
+        self.start_save_fmt(ask.doc, ask.path, ask.expected, ask.cont, ask.fmt)
     }
 
     /// 表現不能の確認のキャンセル: 保存しない (後続も中止)。カーソルを最初の表現不能の位置へ移す。
@@ -722,6 +925,7 @@ impl EditorState {
             name: "save_failed",
             args: vec![("detail".to_owned(), detail)],
             choices,
+            details: Vec::new(),
             default,
             focused: default,
             action: ConfirmAction::SaveFailed(ask),
@@ -811,6 +1015,7 @@ impl EditorState {
                 ("links".to_owned(), links.to_owned()),
             ],
             choices,
+            details: Vec::new(),
             default,
             focused: default,
             action: ConfirmAction::Fallback(ask),
@@ -1080,6 +1285,7 @@ impl EditorState {
             name,
             args,
             choices,
+            details: Vec::new(),
             default: 0,
             focused: 0,
             action: ConfirmAction::Open(ask),
@@ -1314,6 +1520,7 @@ impl EditorState {
                     destructive: true,
                 }],
                 // 既定はキャンセル (破壊的な選択肢は既定にしない)
+                details: Vec::new(),
                 default: 1,
                 focused: 1,
                 action: ConfirmAction::Reload,
@@ -1672,6 +1879,8 @@ impl EditorState {
                         expected,
                         cont,
                         first_char: recorded[0].char_index,
+                        encoding,
+                        fmt,
                     },
                     total,
                     encoding,

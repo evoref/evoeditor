@@ -53,6 +53,12 @@ pub(super) enum ConfirmAction {
     Reload,
     /// 表現不能の文字があって保存を中止した後の選択 (UTF-8 で保存 / キャンセル、03 §8.6)。
     Unmappable(super::file::UnmappableAsk),
+    /// 置換の一覧の確認 (置換して保存 / キャンセル、03 §8.6)。`revision` は ChangeSet を作った時点の文書の Revision。
+    UnmappableReplace {
+        ask: super::file::UnmappableAsk,
+        changes: eve_text::ChangeSet,
+        revision: eve_view::Revision,
+    },
 }
 
 /// 確認ダイアログ。選択肢は `choices` (+ 最後にキャンセル)。
@@ -63,6 +69,8 @@ pub(super) struct ConfirmState {
     /// 文言の引数 (`{path}` など)。
     pub args: Vec<(String, String)>,
     pub choices: Vec<ChoiceDef>,
+    /// 本文の下に 1 行ずつ出す詳細 (E3 の置換の一覧)。無ければ空。
+    pub details: Vec<String>,
     /// 初めにフォーカスする選択肢 (`choices.len()` はキャンセル)。
     pub default: usize,
     pub focused: usize,
@@ -140,7 +148,8 @@ pub(super) struct PromptState {
 
 #[derive(Clone, Debug)]
 pub(super) enum Overlay {
-    Confirm(ConfirmState),
+    // 大きいので Box にする (clippy::large_enum_variant。Prompt との差が大きい)
+    Confirm(Box<ConfirmState>),
     Prompt(PromptState),
 }
 
@@ -215,21 +224,22 @@ impl EditorState {
             .as_ref()
             .map(|p| p.display())
             .unwrap_or_else(|| self.untitled_name());
-        self.set_overlay(Some(Overlay::Confirm(ConfirmState {
+        self.set_overlay(Some(Overlay::Confirm(Box::new(ConfirmState {
             name,
             args: vec![("path".to_owned(), path)],
             choices: UNSAVED_CHOICES.to_vec(),
+            details: Vec::new(),
             default: 0,
             focused: 0,
             action: ConfirmAction::Unsaved(cont),
-        })));
+        }))));
         self.mark_dirty_render();
         true
     }
 
     /// 確認ダイアログを出す (種類は `action`)。
     pub(super) fn open_confirm(&mut self, c: ConfirmState) {
-        self.set_overlay(Some(Overlay::Confirm(c)));
+        self.set_overlay(Some(Overlay::Confirm(Box::new(c))));
         self.mark_dirty_render();
     }
 
@@ -250,7 +260,9 @@ impl EditorState {
                     self.show_message(MessageLevel::Info, "info.save.aborted", &[]);
                 }
                 ConfirmAction::Open(ask) => self.open_aborted(ask),
-                ConfirmAction::Unmappable(ask) => self.unmappable_cancelled(ask),
+                ConfirmAction::Unmappable(ask) | ConfirmAction::UnmappableReplace { ask, .. } => {
+                    self.unmappable_cancelled(ask)
+                }
                 _ => {}
             }
             return CommandResult::Done;
@@ -266,6 +278,11 @@ impl EditorState {
             ConfirmAction::Open(ask) => self.choose_open(ask, id),
             ConfirmAction::Reload => self.start_reload(),
             ConfirmAction::Unmappable(ask) => self.choose_unmappable(ask, id),
+            ConfirmAction::UnmappableReplace {
+                ask,
+                changes,
+                revision,
+            } => self.apply_replacement_and_save(ask, changes, revision),
         }
     }
 

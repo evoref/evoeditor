@@ -1402,3 +1402,82 @@ fn 表現できない文字の確認のキャンセルは最初の位置へ移�
     let head = s.e.state().view(view).unwrap().selection.primary().head.0;
     assert_eq!(s.text().find('😀'), Some(head), "{id:?}");
 }
+
+#[test]
+fn 置換して保存は一覧を示し_確認の後に置換して書く() {
+    let mut s = Env::new();
+    s.fs.add_file("/w/a.txt", &sjis_bytes("日本語のテキストです。\n"));
+    s.open("/w/a.txt");
+    s.e.execute(CommandInvocation::new(
+        "cursor.doc_end",
+        InvocationSource::Keymap,
+    ));
+    // 絵文字は表現不能 (`?` へ)、U+2212 は黙って別の文字に写される (互換文字へ)
+    s.type_text("😀\u{2212}");
+    s.run("file.save", Args::new());
+    assert!(dialog_open(&s));
+    s.type_text("r");
+    s.pump();
+    // 置換の一覧の確認 (details に対象が並ぶ)
+    assert!(dialog_open(&s), "置換の確認");
+    assert_eq!(
+        s.fs.read("/w/a.txt").unwrap(),
+        sjis_bytes("日本語のテキストです。\n"),
+        "確認の間は何も書かない"
+    );
+    s.type_text("r");
+    s.pump();
+    assert_eq!(
+        s.fs.read("/w/a.txt").unwrap(),
+        sjis_bytes("日本語のテキストです。\n?\u{FF0D}")
+    );
+    assert_eq!(s.text(), "日本語のテキストです。\n?\u{FF0D}");
+    assert!(!s.doc().1.is_dirty());
+    // 置換は 1 つの Transaction (Undo で戻せる)
+    s.run("edit.undo", Args::new());
+    assert!(s.text().ends_with("😀\u{2212}"));
+}
+
+#[test]
+fn iso_2022_jp_の半角カナは全角カナへ置換する() {
+    let mut s = Env::new();
+    s.fs.add_file("/w/a.txt", "ｱｲｳ\n".as_bytes());
+    s.open("/w/a.txt");
+    s.run(
+        "file.set_encoding",
+        Args::new().with_str("encoding", "iso-2022-jp"),
+    );
+    assert!(dialog_open(&s));
+    s.type_text("r");
+    s.pump();
+    s.type_text("r");
+    s.pump();
+    let (expected, _, _) = encoding_rs::ISO_2022_JP.encode("アイウ\n");
+    assert_eq!(s.fs.read("/w/a.txt").unwrap(), expected.as_ref());
+    assert_eq!(s.doc().1.format.encoding, eve_core::Encoding::Iso2022Jp);
+}
+
+#[test]
+fn 置換の確認のキャンセルは何も変えず_最初の位置へ移る() {
+    let mut s = Env::new();
+    s.fs.add_file("/w/a.txt", &sjis_bytes("日本語のテキストです。\n"));
+    s.open("/w/a.txt");
+    s.e.execute(CommandInvocation::new(
+        "cursor.doc_end",
+        InvocationSource::Keymap,
+    ));
+    s.type_text("😀");
+    s.run("file.save", Args::new());
+    s.type_text("r");
+    s.pump();
+    assert!(dialog_open(&s));
+    s.key(KeyCode::Esc, Modifiers::NONE);
+    s.pump();
+    assert!(!dialog_open(&s));
+    assert!(s.text().ends_with('😀'), "置換していない");
+    assert!(s.doc().1.is_dirty());
+    assert_eq!(
+        s.fs.read("/w/a.txt").unwrap(),
+        sjis_bytes("日本語のテキストです。\n")
+    );
+}

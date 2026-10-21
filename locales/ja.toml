@@ -628,7 +628,9 @@ utf8 = "[U] UTF-8 で保存"
 replace = "[R] 置換して保存"
 
 [ui.confirm.save.unmappable_replace]
-header = "次の {total} 個の文字を置き換えて {encoding} で保存します (全角カナへ {kana} 個、互換文字へ {compat} 個、`?` へ {question} 個) — `[R] 置換して保存` (★ は `[Esc] キャンセル`)。`{total}` = `kana + compat + question` (02 §9.3 の `ReplaceCounts`)。3 つの件数は 0 でもこの順で出す"
+title = "置換の確認"
+message = "次の {total} 個の文字を置き換えて {encoding} で保存します (全角カナへ {kana} 個、互換文字へ {compat} 個、`?` へ {question} 個)"
+replace = "[R] 置換して保存"
 item = "行 {line}, 桁 {col}: {char} ({codepoint}) → {replacement}"
 more = "ほか {count} 個"
 
