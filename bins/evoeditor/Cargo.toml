@@ -23,3 +23,8 @@ eve-host = { version = "0.0.0", path = "../../crates/eve-host" }
 eve-platform = { version = "0.0.0", path = "../../crates/eve-platform" }
 eve-tui = { version = "0.0.0", path = "../../crates/eve-tui" }
 eve-view = { version = "0.0.0", path = "../../crates/eve-view" }
+
+[dev-dependencies]
+# L5 端末 E2E (docs/09 §3.6): ConPTY で実バイナリを駆動し、vt100 で画面を解釈する
+portable-pty = "0.9"
+vt100 = "0.16"
