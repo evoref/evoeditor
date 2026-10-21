@@ -291,6 +291,7 @@ version = "0.0.0"
 dependencies = [
  "arc-swap",
  "eve-core",
+ "eve-platform",
  "eve-testkit",
  "eve-text",
  "eve-view",
