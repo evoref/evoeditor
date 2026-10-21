@@ -145,6 +145,8 @@ fn fuzz(seconds: u64, seed: u64, out_dir: &Path, summary: &mut Vec<String>) -> R
         ])
         .arg(format!("-max_total_time={seconds}"))
         .arg("-close_fd_mask=3")
+        // 1 入力あたりの上限。既定の 1200 秒だと、ハングする入力 1 件で夜間ジョブが 20 分止まる
+        .arg("-timeout=60")
         .arg(format!("-seed={seed}"))
         .arg(prefix)
         .current_dir(workspace_root())
@@ -187,7 +189,14 @@ fn fuzz(seconds: u64, seed: u64, out_dir: &Path, summary: &mut Vec<String>) -> R
     let recipients = workspace_root().join(".github").join("fuzz-recipients.txt");
     let mut encrypted: Vec<String> = Vec::new();
     for (i, f) in crashes.iter().enumerate() {
-        let dst = artifacts.join(format!("crash-{:03}.age", i + 1));
+        // 種類 (crash / oom / timeout) は名前に残す (入力の内容ではないので公開してよい)。メンテナが調べる順序の手掛かりになる
+        let kind = f
+            .file_name()
+            .and_then(|n| n.to_str())
+            .and_then(|n| n.split('-').next())
+            .unwrap_or("crash")
+            .to_owned();
+        let dst = artifacts.join(format!("{kind}-{:03}.age", i + 1));
         let ok = Command::new("age")
             .arg("-R")
             .arg(&recipients)
