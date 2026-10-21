@@ -36,9 +36,12 @@ pub(crate) fn value(name: &str) -> Option<u64> {
 /// フックが `name` を指していれば、その値の文字列 (値なしは空)。
 #[cfg(feature = "test-hooks")]
 fn active(name: &str) -> Option<String> {
+    // 値は `,` 区切りで複数指定できる (`panic_command,recovery_timeout=0`)
     let spec = std::env::var("EVE_TEST_HOOK").ok()?;
-    let (n, v) = spec.split_once('=').unwrap_or((spec.as_str(), ""));
-    (n == name).then(|| v.to_owned())
+    spec.split(',').find_map(|h| {
+        let (n, v) = h.split_once('=').unwrap_or((h, ""));
+        (n == name).then(|| v.to_owned())
+    })
 }
 
 /// プロセスを今すぐ終了する (Drop も `atexit` も走らせない。`TerminateProcess` による強制終了の再現)。

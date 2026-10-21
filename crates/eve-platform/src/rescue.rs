@@ -291,6 +291,9 @@ impl RescueWriter for WinRescue {
         reason: RescueReason,
         budget: Duration,
     ) -> RescueOutcome {
+        // test-hooks: `recovery_timeout=<ms>` で退避の段の予算を縮め、時間切れ (`complete = false`) を起こす (09 §3.6)
+        let budget = crate::hooks::value("recovery_timeout")
+            .map_or(budget, |ms| budget.min(Duration::from_millis(ms)));
         let start = Instant::now();
         let expired = || start.elapsed() >= budget;
         let mut out = RescueOutcome {
