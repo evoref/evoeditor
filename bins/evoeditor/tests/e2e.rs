@@ -175,6 +175,17 @@ impl Session {
         self.child.try_wait().expect("try_wait").is_none()
     }
 
+    /// 出力（生）に `needle` が現れるまで待つ。終了の直後は読み取りスレッドがまだ残りを読んでいることがある。
+    fn wait_raw(&self, needle: &str) {
+        let t = Instant::now();
+        while t.elapsed() < Duration::from_secs(5) {
+            if self.raw_text().contains(needle) {
+                return;
+            }
+            thread::sleep(Duration::from_millis(25));
+        }
+    }
+
     fn raw_text(&self) -> String {
         String::from_utf8_lossy(&self.raw.lock().unwrap()).into_owned()
     }
@@ -597,6 +608,7 @@ fn パニックすると端末を戻し_未保存の内容を退避してクラ�
     s.wait_for("入力が見える", |t| t.contains("unsaved text"));
     s.send(b"[24~"); // F12 = internal.debug_panic
     assert_eq!(s.wait_exit(), 70, "パニックの終了コード");
+    s.wait_raw("問題を報告するときは");
     let raw = s.raw_text();
     let pos = |needle: &str| {
         raw.find(needle)
@@ -676,6 +688,7 @@ fn コンソールイベントで退避して終了する(kind: &str) {
         .unwrap();
     assert!(st.success(), "console-event: {st:?}");
     assert_eq!(s.exit_within(Duration::from_secs(5)), Some(130));
+    s.wait_raw("[?1049l");
     let dirs: Vec<_> = std::fs::read_dir(s.state.join("recovery"))
         .unwrap()
         .flatten()
@@ -703,4 +716,39 @@ fn コンソールイベントで退避して終了する(kind: &str) {
 #[test]
 fn ctrl_break_を受けると未保存の内容を退避して終了する() {
     コンソールイベントで退避して終了する("ctrl-break");
+}
+
+// (7) recovery_timeout (test-hooks): 退避の段の予算が尽きても、打ち切りの manifest (complete = false) を残し、
+// 端末復元・クラッシュログ・終了コード 70 までは進む。
+#[cfg(feature = "test-hooks")]
+#[test]
+fn パニックの退避が時間切れでも終了コードとクラッシュログまで進む() {
+    let mut s = Session::start_with(
+        &[],
+        None,
+        &[("EVE_TEST_HOOK", "panic_command,recovery_timeout=0")],
+    );
+    s.wait_ready();
+    type_slowly(&s, "unsaved text");
+    s.wait_for("入力が見える", |t| t.contains("unsaved text"));
+    s.send(b"\x1b[24~");
+    assert_eq!(s.wait_exit(), 70);
+    s.wait_raw("問題を報告するときは");
+    let raw = s.raw_text();
+    assert!(raw.contains("予期しないエラーのため"), "{raw}");
+    assert!(raw.contains("クラッシュログ:"), "{raw}");
+    let dirs: Vec<_> = std::fs::read_dir(s.state.join("recovery"))
+        .unwrap()
+        .flatten()
+        .filter(|e| e.file_name().to_string_lossy().contains('Z'))
+        .map(|e| e.path())
+        .collect();
+    assert_eq!(dirs.len(), 1, "{dirs:?}");
+    let manifest = std::fs::read_to_string(dirs[0].join("manifest.toml")).unwrap();
+    assert!(manifest.contains("complete = false"), "{manifest}");
+    assert!(
+        !manifest.contains("written = true"),
+        "時間切れなので本文は書けていない: {manifest}"
+    );
+    let _ = std::fs::remove_dir_all(&s.state);
 }
