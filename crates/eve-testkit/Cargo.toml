@@ -22,3 +22,7 @@ unicode-width = "0.2"
 [[bench]]
 name = "bm_105"
 harness = false
+
+[[bench]]
+name = "bm_103a"
+harness = false
