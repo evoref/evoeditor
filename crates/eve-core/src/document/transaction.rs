@@ -72,6 +72,8 @@ pub struct Transaction {
     pub timestamp: Tick,
     pub undo_group: UndoGroupHint,
     pub meta: TransactionMeta,
+    /// 書式と読み取り専用の理由の変更 (再読込)。適用で差し替え、Undo ノードに持たせて一緒に戻す (03 §7.2)。
+    pub format_change: Option<super::format::FormatChange>,
 }
 
 impl Transaction {
@@ -86,7 +88,13 @@ impl Transaction {
             timestamp,
             undo_group: UndoGroupHint::Auto,
             meta: TransactionMeta::default(),
+            format_change: None,
         }
+    }
+
+    pub fn with_format_change(mut self, c: super::format::FormatChange) -> Transaction {
+        self.format_change = Some(c);
+        self
     }
 
     pub fn with_selections(

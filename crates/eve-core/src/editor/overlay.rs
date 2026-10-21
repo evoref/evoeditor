@@ -49,6 +49,8 @@ pub(super) enum ConfirmAction {
     SaveFailed(super::file::SaveFailedAsk),
     /// 開くときの確認 (読み取り専用で開く / 文字コードを指定して開く / 中止、03 §9.2)。
     Open(super::file::OpenAsk),
+    /// dirty な文書の再読込 (変更を破棄、03 §9.5)。
+    Reload,
 }
 
 /// 確認ダイアログ。選択肢は `choices` (+ 最後にキャンセル)。
@@ -248,6 +250,7 @@ impl EditorState {
             ConfirmAction::Fallback(ask) => self.choose_fallback(ask, choice),
             ConfirmAction::SaveFailed(ask) => self.choose_save_failed(ask, id),
             ConfirmAction::Open(ask) => self.choose_open(ask, id),
+            ConfirmAction::Reload => self.start_reload(),
         }
     }
 
