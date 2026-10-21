@@ -9,6 +9,7 @@
 // eve-core の `FsError` は大きい型 (エラーは稀な経路)。値で返す。
 #![allow(clippy::result_large_err)]
 
+pub mod clipboard;
 #[cfg(windows)]
 pub mod console;
 pub mod dirs;

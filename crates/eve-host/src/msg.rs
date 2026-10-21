@@ -45,6 +45,13 @@ pub enum HostMsg {
     Signal(SignalKind),
     /// 入力スレッドの死亡・非メインスレッドのパニック。
     Fatal(FatalReason),
+    /// クリップボード取得の結果 (使い捨てのスレッドから、02 §9.1)。token が待っているものと違えば捨てる。
+    Clipboard {
+        token: eve_view::ClipboardToken,
+        result: Result<Option<String>, eve_platform::clipboard::ClipboardFailure>,
+    },
+    /// システムクリップボードへの書込の失敗 (使い捨てのスレッドから)。
+    ClipboardWriteFailed(eve_platform::clipboard::ClipboardFailure),
     /// `run()` の待機が期限で終わった (メッセージなし)。
     Tick,
 }

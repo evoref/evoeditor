@@ -291,6 +291,11 @@ impl Editor {
         self.state.rescue_snapshot(doc, true)
     }
 
+    /// システムクリップボードを使えなかったことを知らせる (Host が書込の失敗・取得のタイムアウトで呼ぶ)。
+    pub fn notify_clipboard_fallback(&mut self, reason: &str) {
+        self.state.notify_clipboard_fallback(reason);
+    }
+
     /// `Effect::SetClipboard` の `Handle` の中身を取り出す (Host が実行時に呼ぶ、02 §4.4)。
     pub fn take_clipboard(&mut self, id: eve_view::ClipboardHandleId) -> Option<ClipboardSource> {
         self.state.take_clipboard(id)

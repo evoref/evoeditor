@@ -126,6 +126,8 @@ fn run(
     };
     let mut host = Host::with_channel(ports, (tx.clone(), rx));
     host.set_initial_encoding(encoding);
+    // システムクリップボード (所有者ウィンドウのスレッドは最初の読み書きで遅延して起こす、05 §8.1)
+    host.set_clipboard(Arc::new(eve_platform::clipboard::WinClipboard::new()));
 
     // 緊急退避の書き手 (公開済みの DocSnapshot だけを読み、Port を通さずに書く、02 §11.2.1)
     host.set_rescue_writer(Arc::new(WinRescue::new(Some(
