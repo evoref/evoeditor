@@ -180,15 +180,19 @@ pub(super) fn status_model(
         Right,
         CutPolicy::Never,
     ));
-    let enc = if doc.format.has_bom {
-        render(state, "status.encoding.bom", &[("encoding", "UTF-8")])
-    } else {
-        "UTF-8".to_owned()
+    let (name, short) = (doc.format.encoding.name(), doc.format.encoding.short_name());
+    let with_bom = |n: &str| {
+        if doc.format.has_bom {
+            render(state, "status.encoding.bom", &[("encoding", n)])
+        } else {
+            n.to_owned()
+        }
     };
+    let (enc, enc_short) = (with_bom(name), with_bom(short));
     items.push(item(
         StatusKind::Encoding,
         &enc,
-        None,
+        (enc_short != enc).then_some(enc_short.as_str()),
         3,
         Right,
         CutPolicy::Never,

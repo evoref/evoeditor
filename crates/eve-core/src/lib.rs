@@ -30,12 +30,13 @@ pub use editor::{
     Resolution, ScrollPos, View, Window, format_stroke, normalize_eol, parse_sequence,
     parse_stroke,
 };
+pub use eve_encoding::Encoding;
 pub use fs::*;
 pub use fspath::FsPath;
 pub use io_jobs::OpenOptions;
 pub use jobs::{
-    ConfirmAsk, JobError, JobKind, JobPorts, JobRequest, JobResult, JobSpawner, MetaPurpose, Ports,
-    run_job,
+    ConfirmAsk, JobError, JobKind, JobPorts, JobRequest, JobResult, JobSpawner, MetaPurpose,
+    OpenNotes, Ports, run_job,
 };
 pub use paths::Paths;
 pub use time::{Clock, Millis, Tick};

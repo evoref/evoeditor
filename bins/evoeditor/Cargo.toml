@@ -28,3 +28,4 @@ eve-view = { version = "0.0.0", path = "../../crates/eve-view" }
 # L5 端末 E2E (docs/09 §3.6): ConPTY で実バイナリを駆動し、vt100 で画面を解釈する
 portable-pty = "0.9"
 vt100 = "0.16"
+encoding_rs = "0.8.42"

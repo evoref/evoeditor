@@ -1,10 +1,13 @@
 //! 読込・保存ジョブの本体 (docs/03 §9.2 / §9.3)。`run_job` から呼ばれ、ワーカー (またはテストの `ManualJobSpawner`) で動く。
 //!
-//! M1 の範囲: UTF-8 だけを開く。非 UTF-8 の判定 (UTF-16・Shift_JIS 等)、巨大ファイルの確認、進捗、保存中フラグ、
-//! 内容ハッシュは、それぞれを使う版で足す。保存は `FileSystem::write_atomic` (原子的保存) だけ。
+//! 読込: 先頭 64 KiB で文字コードを判定し (03 §8.2)、チャンクごとに復号して `TextBuilder` に積む。不正バイトは PUA にエスケープして
+//! 保持し (§8.3)、読込時に往復を検査し (§8.7)、信頼度が低いとき後半で別の文字コードが現れたら判定し直して 1 回だけやり直す (§8.2.1)。
+//! 巨大ファイルの確認、進捗、保存中フラグ、内容ハッシュは、それぞれを使う版で足す。保存は `FileSystem::write_atomic` (原子的保存) だけで、
+//! 非 UTF-8 では出力の前に乾式走査で表現不能の文字を探し、あれば何も書かずに `JobResult::Unmappable` を返す (§8.6 E1)。
 
 use eve_encoding::{
-    DetectOptions, DetectedKind, Detection, PuaEscapeMode, Utf8Decoder, Utf8Encoder, detect,
+    Confidence, Decoder, DetectOptions, DetectedKind, Detection, EncodeReport, Encoder, Encoding,
+    EscapePolicy, PuaEscapeMode, RoundtripChecker, detect, find_iso_switch, redetect_window,
 };
 use eve_text::{ByteRange, LineEnding, Snapshot, TextBuilder, TextRead};
 use eve_view::JobId;
@@ -16,10 +19,17 @@ use crate::fs::{
     SaveOptions,
 };
 use crate::fspath::FsPath;
-use crate::jobs::{ConfirmAsk, JobError, JobPorts, JobResult};
+use crate::jobs::{ConfirmAsk, JobError, JobPorts, JobResult, OpenNotes};
 
 /// 先頭の判定に使うバイト数 (03 §8.2 の `sniff_len`)。
 const SNIFF_LEN: usize = 64 * 1024;
+/// 再判定の窓の大きさ (03 §8.2.1)。
+const REDETECT_WINDOW: usize = 64 * 1024;
+/// 不正バイトの比率の警告の閾値 (千分率。sniff 範囲で 1% 超、03 §8.3)。
+const MANY_INVALID_PERMILLE: u32 = 10;
+/// 不正バイトの比率の警告を出す最小のファイルの大きさ。確認ダイアログ (後続) ができるまでは、メモリの倍率が問題になる大きさの
+/// ファイルだけにする (小さなファイルは読み取り専用で開く。03 §8.3 は大きさによらず警告するので、ダイアログと同時に外す)。
+const MANY_INVALID_MIN_FILE: u64 = 16 * 1024 * 1024;
 
 /// 読込の上限の余裕 (`max(1 MiB, len / 16)`、03 §9.2)。読込中に伸び続けるファイルを際限なく読まない。
 fn read_slack(len: u64) -> u64 {
@@ -29,12 +39,12 @@ fn read_slack(len: u64) -> u64 {
 /// 開くときの指定。
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct OpenOptions {
-    /// 確認 (バイナリ・UTF-32 の BOM) への回答「読み取り専用で開く」の再投入。確認を出さず、読み取り専用で開く。
+    /// 確認 (バイナリ・UTF-32 の BOM・不正バイトが多い) への回答「読み取り専用で開く」の再投入。確認を出さず、読み取り専用で開く。
     pub read_only_requested: bool,
     /// `--readonly`。読み取り専用の理由 `UserRequested` を付けるだけで、確認は通常どおり出す。
     pub user_read_only: bool,
-    /// 文字コードを UTF-8 と指定して開く (FR-111)。BOM の判定や確認を出さず本文として読む。
-    pub forced_utf8: bool,
+    /// 文字コードを指定して開く (FR-111、`--encoding`)。判定せず、BOM は指定した文字コードのものだけ読み飛ばす (03 §8.2 手順 2)。
+    pub forced: Option<Encoding>,
 }
 
 pub(crate) fn run_open(
@@ -43,6 +53,47 @@ pub(crate) fn run_open(
     opts: OpenOptions,
     ports: &JobPorts,
     cancel: &CancelToken,
+) -> JobResult {
+    open_inner(id, path, opts, ports, cancel, None)
+}
+
+/// 先頭の判定の結果 (1 チャンク目で決まる)。
+struct Plan {
+    enc: Encoding,
+    bom_len: usize,
+    confidence: Confidence,
+    binary_confirmed: bool,
+    guess_unsupported: Option<&'static str>,
+}
+
+/// 判定し直した位置の周辺の窓 (03 §8.2.1)。信頼度「低」の UTF-8 で、不正な UTF-8 または ISO-2022-JP のエスケープ列を
+/// 初めて見つけたときだけ判定し直す。別の文字コードが推定されればその文字コード。
+fn redetect(chunk: &[u8], chunk_is_file_end: bool, opts: &DetectOptions) -> Option<Encoding> {
+    // 契機: ISO-2022-JP のエスケープ列 (窓の先頭をその位置にする) か、不正な UTF-8 (その周辺)
+    let (start, iso) = match find_iso_switch(chunk) {
+        Some(p) => (p, true),
+        None => match std::str::from_utf8(chunk) {
+            Ok(_) => return None,
+            // 末尾の切れた多バイト列だけなら不正ではない
+            Err(e) if e.error_len().is_none() && !chunk_is_file_end => return None,
+            Err(e) => (e.valid_up_to().saturating_sub(REDETECT_WINDOW / 2), false),
+        },
+    };
+    let end = (start + REDETECT_WINDOW).min(chunk.len());
+    let window = &chunk[start..end];
+    // ISO-2022-JP の契機で窓が 7 bit なら手順 4' だけ (redetect_window が行う)
+    let complete = end == chunk.len() && chunk_is_file_end;
+    let _ = iso;
+    redetect_window(window, complete, opts).and_then(|d| d.encoding())
+}
+
+fn open_inner(
+    id: JobId,
+    path: &FsPath,
+    opts: OpenOptions,
+    ports: &JobPorts,
+    cancel: &CancelToken,
+    redetected: Option<Encoding>,
 ) -> JobResult {
     let fail = |err| JobResult::Failed { job: id, err };
     let cancelled = || JobResult::Failed {
@@ -84,9 +135,11 @@ pub(crate) fn run_open(
     let limit = meta.len.saturating_add(read_slack(meta.len));
     let mut read_total: u64 = 0;
     let mut builder = TextBuilder::new();
-    let mut decoder: Option<Utf8Decoder> = None;
-    let mut sniffed = false;
-    let mut binary_confirmed = false;
+    let det_opts = DetectOptions::default().with_forced(opts.forced);
+    let mut plan: Option<Plan> = None;
+    let mut decoder: Option<Decoder> = None;
+    let mut checker: Option<RoundtripChecker> = None;
+    let mut redetect_checked = false;
     let mut out = String::new();
     let mut truncated = false;
     loop {
@@ -100,15 +153,16 @@ pub(crate) fn run_open(
             Err(_) => return fail(JobError::Fs(FsError::new(FsErrorKind::Other))),
         };
         let mut chunk: &[u8] = chunk;
-        if !sniffed {
-            sniffed = true;
+        let first = plan.is_none();
+        if first {
             let head = &chunk[..chunk.len().min(SNIFF_LEN)];
             let file_complete = meta.len as usize <= head.len();
-            let det_opts = DetectOptions::default().with_forced(
-                opts.forced_utf8
-                    .then_some(eve_encoding::ForcedEncoding::Utf8),
-            );
-            let Detection { kind, .. } = detect(head, file_complete, &det_opts);
+            let Detection {
+                kind,
+                confidence,
+                unsupported_guess,
+            } = detect(head, file_complete, &det_opts);
+            let mut binary_confirmed = false;
             match kind {
                 DetectedKind::Binary if !opts.read_only_requested => {
                     return JobResult::NeedsConfirm {
@@ -126,8 +180,37 @@ pub(crate) fn run_open(
                 DetectedKind::Binary => binary_confirmed = true,
                 _ => {}
             }
-            let skip_bom = matches!(kind, DetectedKind::Utf8 { bom_len: 3 });
-            decoder = Some(Utf8Decoder::new(skip_bom));
+            let (enc, bom_len) = match kind {
+                DetectedKind::Utf8 { bom_len } => (Encoding::Utf8, bom_len),
+                DetectedKind::Encoded { encoding, bom_len } => (encoding, bom_len),
+                _ => (Encoding::Utf8, 0),
+            };
+            // 不正バイトが多いファイルは、本文の構築を始める前に確認する (03 §8.3)
+            if !opts.read_only_requested && meta.len >= MANY_INVALID_MIN_FILE {
+                let mut probe = Decoder::new(enc, bom_len > 0);
+                let mut sink = String::new();
+                probe.decode(head, file_complete, &mut sink);
+                let permille =
+                    (u64::from(probe.invalid_bytes()) * 1000 / head.len().max(1) as u64) as u32;
+                if permille > MANY_INVALID_PERMILLE {
+                    return JobResult::NeedsConfirm {
+                        job: id,
+                        ask: ConfirmAsk::ManyInvalidBytes {
+                            encoding: enc,
+                            permille,
+                        },
+                    };
+                }
+            }
+            decoder = Some(Decoder::new(enc, bom_len > 0));
+            checker = Some(RoundtripChecker::new(enc));
+            plan = Some(Plan {
+                enc,
+                bom_len,
+                confidence,
+                binary_confirmed,
+                guess_unsupported: unsupported_guess,
+            });
         }
         // 読む量の上限
         let room = limit.saturating_sub(read_total) as usize;
@@ -136,19 +219,57 @@ pub(crate) fn run_open(
             truncated = true;
         }
         read_total += chunk.len() as u64;
-        let Some(dec) = decoder.as_mut() else { break };
+        let (Some(dec), Some(chk), Some(pl)) = (decoder.as_mut(), checker.as_mut(), plan.as_ref())
+        else {
+            break;
+        };
+        // 再判定 (03 §8.2.1): 信頼度「低」の UTF-8 で、後半に別の文字コードが現れたら 1 回だけ先頭からやり直す
+        if !redetect_checked
+            && opts.forced.is_none()
+            && redetected.is_none()
+            && pl.enc == Encoding::Utf8
+            && pl.confidence == Confidence::Low
+        {
+            let file_end = read_total >= meta.len;
+            if let Some(other) = redetect(chunk, file_end, &det_opts) {
+                let again = OpenOptions {
+                    forced: Some(other),
+                    ..opts
+                };
+                return open_inner(id, path, again, ports, cancel, Some(other));
+            }
+            // 不正な UTF-8 も ISO-2022-JP の列も無い間は、次のチャンクでも見る。最初に見つけた契機で一度だけ判定する
+            if find_iso_switch(chunk).is_some() || std::str::from_utf8(chunk).is_err() {
+                redetect_checked = true;
+            }
+        }
         out.clear();
         dec.decode(chunk, false, &mut out);
         builder.append(&out);
+        // 往復の検査は元のバイト列 (BOM を除く) で行う
+        let body = if first {
+            &chunk[pl.bom_len.min(chunk.len())..]
+        } else {
+            chunk
+        };
+        chk.feed(body, false);
         if truncated {
             break;
         }
     }
     // 空のファイルは sniff なしで終わる
-    let mut dec = decoder.unwrap_or_else(|| Utf8Decoder::new(true));
+    let mut dec =
+        decoder.unwrap_or_else(|| Decoder::new(opts.forced.unwrap_or(Encoding::Utf8), true));
+    let mut chk = checker.unwrap_or_else(|| RoundtripChecker::new(Encoding::Utf8));
     out.clear();
     dec.decode(&[], true, &mut out);
     builder.append(&out);
+    chk.feed(&[], true);
+    let (enc, binary_confirmed, guess_unsupported) = plan
+        .as_ref()
+        .map_or((opts.forced.unwrap_or(Encoding::Utf8), false, None), |p| {
+            (p.enc, p.binary_confirmed, p.guess_unsupported)
+        });
     let text = builder.finish();
 
     // 読込前後の metadata を比較する (05 §4.5)
@@ -158,14 +279,16 @@ pub(crate) fn run_open(
             a.mtime != stamp_before.mtime || a.len != stamp_before.len
         });
 
-    // 形式: BOM・不正バイト・改行の多数派 (同数なら LF、改行がなければ LF)
+    // 形式: 文字コード・BOM・不正バイト・改行の多数派 (同数なら LF、改行がなければ LF)
     let eol_stats = EolStats::count(&text);
     let format = TextFormat {
+        encoding: enc,
         has_bom: dec.has_bom(),
         default_eol: eol_stats.majority(LineEnding::Lf),
         eol_stats,
         invalid_bytes: dec.invalid_bytes(),
         pua_escape: dec.pua_mode(),
+        roundtrip: chk.finish(),
     };
     let mut detected = ReadOnlyReasons::default();
     if meta.readonly {
@@ -177,8 +300,11 @@ pub(crate) fn run_open(
     if binary_confirmed {
         detected.insert(ReadOnlyReason::Binary);
     }
-    // 不正バイトがあるとき、または元から真の私用文字と衝突しているとき (03 §8.3) は読み取り専用
-    if format.invalid_bytes > 0 || dec.collision_with_invalid() {
+    // 不正バイトがあるとき、または元から真の私用文字と衝突しているとき (03 §8.3) は読み取り専用。
+    // 状態付き符号化 (ISO-2022-JP) は不正バイトを元のバイトに戻して書けないので、理由を分ける
+    if enc.is_stateful() && format.invalid_bytes > 0 {
+        detected.insert(ReadOnlyReason::StatefulEncodingWithInvalidBytes);
+    } else if format.invalid_bytes > 0 || dec.collision_with_invalid() {
         detected.insert(ReadOnlyReason::InvalidBytes);
     }
     // 衝突があっても不正バイトが 0 ならエスケープを使わないので編集できる
@@ -192,16 +318,22 @@ pub(crate) fn run_open(
         stamp,
         changed_during_load,
         detected,
+        notes: OpenNotes {
+            redetected,
+            guess_unsupported,
+        },
     }
 }
 
-/// 保存のためのチャンク供給: Snapshot を UTF-8 に符号化して `write_atomic` に渡す。
+/// 保存のためのチャンク供給: Snapshot を `encoding` に符号化して `write_atomic` に渡す。
 struct SnapshotSource<'a> {
     chunks: eve_text::Chunks<'a>,
-    enc: Utf8Encoder,
+    enc: Encoder,
     buf: Vec<u8>,
+    report: EncodeReport,
     cancel: &'a CancelToken,
     started: bool,
+    finished: bool,
 }
 
 impl ReadChunks for SnapshotSource<'_> {
@@ -209,20 +341,38 @@ impl ReadChunks for SnapshotSource<'_> {
         if self.cancel.is_cancelled() {
             return Err(ChunkError::Aborted);
         }
-        self.buf.clear();
-        match self.chunks.next() {
-            Some(s) => {
-                self.enc.encode(s, &mut self.buf);
-                self.started = true;
-                Ok(Some(&self.buf))
+        loop {
+            self.buf.clear();
+            match self.chunks.next() {
+                Some(s) => {
+                    self.enc.encode(s, &mut self.buf, &mut self.report);
+                    self.started = true;
+                    if !self.report.is_empty() {
+                        // 表現不能の文字: 何も書かずに止める (乾式走査で見つけているので、ここへは来ないはず)
+                        return Err(ChunkError::Aborted);
+                    }
+                    // ISO-2022-JP は行末までためるので、出力が空のチャンクがある
+                    if self.buf.is_empty() {
+                        continue;
+                    }
+                    return Ok(Some(&self.buf));
+                }
+                None if !self.started => {
+                    // 空の文書: BOM だけを書く (なければ何も書かない)
+                    self.started = true;
+                    self.enc.encode("", &mut self.buf, &mut self.report);
+                    return Ok((!self.buf.is_empty()).then_some(&self.buf[..]));
+                }
+                None if !self.finished => {
+                    self.finished = true;
+                    self.enc.finish(&mut self.buf, &mut self.report);
+                    if !self.report.is_empty() {
+                        return Err(ChunkError::Aborted);
+                    }
+                    return Ok((!self.buf.is_empty()).then_some(&self.buf[..]));
+                }
+                None => return Ok(None),
             }
-            None if !self.started => {
-                // 空の文書: BOM だけを書く (なければ何も書かない)
-                self.started = true;
-                self.enc.encode("", &mut self.buf);
-                Ok((!self.buf.is_empty()).then_some(&self.buf[..]))
-            }
-            None => Ok(None),
         }
     }
 }
@@ -231,9 +381,27 @@ impl ReadChunks for SnapshotSource<'_> {
 pub(crate) struct SaveParams<'a> {
     pub path: &'a FsPath,
     pub snapshot: &'a Snapshot,
+    pub encoding: Encoding,
     pub bom: bool,
     pub pua: PuaEscapeMode,
     pub expected: Expect,
+}
+
+/// 乾式走査: 出力は捨てて、表現不能の文字だけを集める (03 §8.6 E1。書く前に止めるため)。
+fn dry_run(p: &SaveParams<'_>, cancel: &CancelToken) -> Option<EncodeReport> {
+    let mut enc = Encoder::new(p.encoding, p.bom, EscapePolicy::from_mode(p.pua));
+    let mut report = EncodeReport::default();
+    let mut sink = Vec::new();
+    for s in p.snapshot.chunks(ByteRange::all(p.snapshot.len_bytes())) {
+        if cancel.is_cancelled() {
+            return None;
+        }
+        sink.clear();
+        enc.encode(s, &mut sink, &mut report);
+    }
+    sink.clear();
+    enc.finish(&mut sink, &mut report);
+    Some(report)
 }
 
 pub(crate) fn run_save(
@@ -242,19 +410,45 @@ pub(crate) fn run_save(
     ports: &JobPorts,
     cancel: &CancelToken,
 ) -> JobResult {
+    // UTF-8 と UTF-16 は全 Unicode スカラー値を表せるので、表現不能になり得るのはエスケープ文字だけ (E4)。
+    // それ以外 (Shift_JIS・EUC-JP・ISO-2022-JP) は書く前に走査する
+    if !(p.encoding == Encoding::Utf8 || p.encoding.is_utf16())
+        || EscapePolicy::from_mode(p.pua) == EscapePolicy::Reject
+    {
+        match dry_run(&p, cancel) {
+            None => {
+                return JobResult::Failed {
+                    job: id,
+                    err: JobError::Cancelled,
+                };
+            }
+            Some(report) if !report.is_empty() => {
+                return JobResult::Unmappable {
+                    job: id,
+                    total: report.total,
+                    recorded: report.recorded,
+                    encoding: p.encoding,
+                };
+            }
+            Some(_) => {}
+        }
+    }
     let SaveParams {
         path,
         snapshot,
+        encoding,
         bom,
         pua,
         expected,
     } = p;
     let mut src = SnapshotSource {
         chunks: snapshot.chunks(ByteRange::all(snapshot.len_bytes())),
-        enc: Utf8Encoder::new(bom, pua),
+        enc: Encoder::new(encoding, bom, EscapePolicy::from_mode(pua)),
         buf: Vec::new(),
+        report: EncodeReport::default(),
         cancel,
         started: false,
+        finished: false,
     };
     match ports
         .fs

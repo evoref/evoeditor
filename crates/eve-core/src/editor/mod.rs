@@ -127,6 +127,16 @@ impl Editor {
 
     /// 起動時の開き方 (`Host::start` が最初の `Resize` の後に呼ぶ)。パスがなければ無題の文書 (FR-124)。
     pub fn open_initial(&mut self, path: Option<&str>, read_only: bool) {
+        self.open_initial_with(path, read_only, None);
+    }
+
+    /// `open_initial` に文字コードの指定 (`--encoding`、FR-111) を加えたもの。
+    pub fn open_initial_with(
+        &mut self,
+        path: Option<&str>,
+        read_only: bool,
+        forced: Option<crate::Encoding>,
+    ) {
         match path {
             None => {
                 let (_, view) = self.state.add_document(Document::new_untitled());
@@ -137,6 +147,7 @@ impl Editor {
             Some(p) => {
                 let opts = crate::OpenOptions {
                     user_read_only: read_only,
+                    forced,
                     ..Default::default()
                 };
                 self.state.open_path(p, opts);

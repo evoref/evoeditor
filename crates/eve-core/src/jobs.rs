@@ -9,7 +9,7 @@ use std::sync::Arc;
 use eve_view::{DocumentId, JobId, Revision};
 
 use crate::cancel::CancelToken;
-use eve_encoding::{PuaEscapeMode, UnsupportedBom};
+use eve_encoding::{Encoding, PuaEscapeMode, UnsupportedBom};
 use eve_text::{Snapshot, Text};
 
 use crate::document::{ReadOnlyReasons, TextFormat};
@@ -35,12 +35,13 @@ pub struct JobRequest {
 pub enum JobKind {
     /// ファイルの `metadata` と Stamp を調べる。
     Metadata { path: FsPath, purpose: MetaPurpose },
-    /// ファイルを開く (03 §9.2)。M1 は UTF-8 だけ。
+    /// ファイルを開く (03 §9.2)。文字コードは判定する (03 §8.2) か、`opts.forced` で指定する。
     Open { path: FsPath, opts: OpenOptions },
-    /// Snapshot を UTF-8 で原子的に保存する (03 §9.3)。`expected` は書く前と置換の直前に照合する。
+    /// Snapshot を `encoding` で原子的に保存する (03 §9.3 / §8.6)。表現不能の文字があれば何も書かず `JobResult::Unmappable`。`expected` は書く前と置換の直前に照合する。
     Save {
         path: FsPath,
         snapshot: Snapshot,
+        encoding: Encoding,
         bom: bool,
         pua: PuaEscapeMode,
         expected: Expect,
@@ -55,6 +56,17 @@ pub enum ConfirmAsk {
     Binary,
     /// 対応していない BOM (UTF-32 など)。
     UnsupportedBom { kind: UnsupportedBom },
+    /// 不正バイトが多い (sniff 範囲で 1% 超、03 §8.3)。`permille` は千分率 (本文の構築を始める前に判定する)。
+    ManyInvalidBytes { encoding: Encoding, permille: u32 },
+}
+
+/// 読込の完了に添える通知 (info メッセージの材料)。
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct OpenNotes {
+    /// 先頭の判定が外れて、判定し直して読み直した (03 §8.2.1。`info.open.redetected`)。
+    pub redetected: Option<Encoding>,
+    /// chardetng が 7 種にない文字コードを推定した (その名前。`info.open.guess_unsupported`)。
+    pub guess_unsupported: Option<&'static str>,
 }
 
 /// `Metadata` ジョブの目的 (結果を受けた側の分岐に使う)。
@@ -87,6 +99,7 @@ pub enum JobResult {
         changed_during_load: bool,
         /// 内容・属性から決まる読み取り専用の理由。
         detected: ReadOnlyReasons,
+        notes: OpenNotes,
     },
     /// 存在しないパスを開いた (新規ファイル)。フォルダも無ければ `parent_missing` にそのフォルダ。
     NewFile {
@@ -100,6 +113,15 @@ pub enum JobResult {
     Saved {
         job: JobId,
         report: SaveReport,
+    },
+    /// 保存先の文字コードで表現できない文字がある (03 §8.6 E1)。元のファイルには何も書いていない。
+    Unmappable {
+        job: JobId,
+        /// 総数。
+        total: u64,
+        /// 先頭 100 件。
+        recorded: Vec<eve_encoding::Unmappable>,
+        encoding: Encoding,
     },
     Failed {
         job: JobId,
@@ -116,6 +138,7 @@ impl JobResult {
             | JobResult::NewFile { job, .. }
             | JobResult::NeedsConfirm { job, .. }
             | JobResult::Saved { job, .. }
+            | JobResult::Unmappable { job, .. }
             | JobResult::Failed { job, .. } => *job,
         }
     }
@@ -188,6 +211,7 @@ pub fn run_job(
         JobKind::Save {
             path,
             snapshot,
+            encoding,
             bom,
             pua,
             expected,
@@ -196,6 +220,7 @@ pub fn run_job(
             SaveParams {
                 path,
                 snapshot,
+                encoding: *encoding,
                 bom: *bom,
                 pua: *pua,
                 expected: *expected,

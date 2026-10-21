@@ -252,6 +252,7 @@ dependencies = [
 name = "eve-core"
 version = "0.0.0"
 dependencies = [
+ "encoding_rs",
  "eve-config",
  "eve-docs-tables",
  "eve-encoding",
@@ -337,6 +338,7 @@ version = "0.0.0"
 name = "evoeditor"
 version = "0.0.0"
 dependencies = [
+ "encoding_rs",
  "eve-config",
  "eve-core",
  "eve-host",

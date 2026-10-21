@@ -16,7 +16,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use eve_config::Catalog;
-use eve_core::{JobPorts, Ports};
+use eve_core::{Encoding, JobPorts, Ports};
 use eve_host::{Host, HostMsg, SignalKind, SystemClock, ThreadJobSpawner, channel};
 use eve_platform::dirs::WinPaths;
 use eve_platform::fs::WinFs;
@@ -35,7 +35,7 @@ const HELP: &str = "\
 
 オプション:
   -R, --readonly       読み取り専用で開く
-  -e, --encoding <名前>  文字コードを指定して開く
+  -e, --encoding <名前>  文字コードを指定して開く (utf-8 / utf-16le / utf-16be / shift_jis / euc-jp / iso-2022-jp)
   -V, --version        版を表示して終了する
   -h, --help           このヘルプを表示して終了する
   --                   以降を位置引数として扱う
@@ -58,7 +58,10 @@ fn usage_message(e: &UsageError) -> String {
         UsageError::MultipleFiles => {
             "このバージョンでは複数のファイルを同時に開けません。ファイルは 1 つだけ指定してください".to_owned()
         }
-        UsageError::BadEncoding(_) => "文字コードの名前を指定してください".to_owned(),
+        UsageError::BadEncoding(v) if v.is_empty() => "文字コードの名前を指定してください".to_owned(),
+        UsageError::BadEncoding(v) => format!(
+            "文字コード {v} は扱えません (UTF-8・UTF-16LE・UTF-16BE・Shift_JIS・EUC-JP・ISO-2022-JP から指定してください)"
+        ),
     }
 }
 
@@ -80,7 +83,12 @@ fn print_exit_lines(host: &mut Host) {
     }
 }
 
-fn run(file: Option<String>, read_only: bool, ignored: &[String]) -> u8 {
+fn run(
+    file: Option<String>,
+    read_only: bool,
+    encoding: Option<Encoding>,
+    ignored: &[String],
+) -> u8 {
     // 作業ディレクトリ・ディレクトリ・Ports
     let paths = match WinPaths::from_process_env() {
         Ok(p) => Arc::new(p),
@@ -111,6 +119,7 @@ fn run(file: Option<String>, read_only: bool, ignored: &[String]) -> u8 {
         paths,
     };
     let mut host = Host::with_channel(ports, (tx.clone(), rx));
+    host.set_initial_encoding(encoding);
 
     // コンソールのコントロールイベント (Ctrl+Break・ウィンドウの閉鎖など)。緊急退避は M3
     {
@@ -175,9 +184,20 @@ fn main() -> ProcessExit {
         Ok(Cli::Run {
             file,
             read_only,
+            encoding,
             ignored,
-            ..
-        }) => run(file, read_only, &ignored),
+        }) => match encoding.as_deref().map(Encoding::from_label) {
+            // 07 §18.4: 文字コードの名前が分からないのは使い方の誤り
+            Some(None) => {
+                eprintln!(
+                    "evoeditor: {}",
+                    usage_message(&UsageError::BadEncoding(encoding.unwrap_or_default()))
+                );
+                eprintln!("詳しくは evoeditor --help を見てください。");
+                EXIT_USAGE
+            }
+            forced => run(file, read_only, forced.flatten(), &ignored),
+        },
         Err(e) => {
             eprintln!("evoeditor: {}", usage_message(&e));
             eprintln!("詳しくは evoeditor --help を見てください。");
