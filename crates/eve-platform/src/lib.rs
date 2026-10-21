@@ -10,6 +10,8 @@
 #![allow(clippy::result_large_err)]
 
 pub mod clipboard;
+#[cfg(all(windows, feature = "test-hooks"))]
+pub mod clipboard_test;
 #[cfg(windows)]
 pub mod console;
 pub mod dirs;

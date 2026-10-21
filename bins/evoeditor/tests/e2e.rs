@@ -794,3 +794,184 @@ fn メインが止まっていても_ctrl_break_で端末を戻して終了す�
     assert!(manifest.contains("complete = true"), "{manifest}");
     let _ = std::fs::remove_dir_all(&s.state);
 }
+
+// ---- システムクリップボード (05 §8、09 §3.6 / §3.4 の clip-delay)。実クリップボードを使うので、プロセスをまたいで直列にする ----
+
+/// クリップボードを使うテストの排他 (ファイルの排他作成。nextest の別プロセスの間でも直列にする)。
+#[cfg(feature = "test-hooks")]
+struct ClipLock(PathBuf);
+
+#[cfg(feature = "test-hooks")]
+impl ClipLock {
+    fn acquire() -> ClipLock {
+        let path = std::env::temp_dir().join("evo-e2e-clipboard.lock");
+        let t = Instant::now();
+        loop {
+            if std::fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&path)
+                .is_ok()
+            {
+                return ClipLock(path);
+            }
+            // 異常終了で残った古い鎖は 60 秒で捨てる
+            if let Ok(m) = std::fs::metadata(&path)
+                && m.modified()
+                    .ok()
+                    .and_then(|t| t.elapsed().ok())
+                    .is_some_and(|e| e > Duration::from_secs(60))
+            {
+                let _ = std::fs::remove_file(&path);
+            }
+            assert!(
+                t.elapsed() < Duration::from_secs(120),
+                "クリップボードの排他を取れない"
+            );
+            thread::sleep(Duration::from_millis(50));
+        }
+    }
+}
+
+#[cfg(feature = "test-hooks")]
+impl Drop for ClipLock {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.0);
+    }
+}
+
+/// 補助プロセスを起動し、`ready` の行が出るまで待つ。
+#[cfg(feature = "test-hooks")]
+fn spawn_clip_helper(args: &[&str]) -> std::process::Child {
+    use std::io::BufRead;
+    use std::process::Stdio;
+    let mut child = std::process::Command::new(helper_exe())
+        .args(args)
+        .stdout(Stdio::piped())
+        .spawn()
+        .expect("clip 補助プロセス");
+    let out = child.stdout.take().unwrap();
+    let mut line = String::new();
+    std::io::BufReader::new(out).read_line(&mut line).unwrap();
+    assert_eq!(line.trim(), "ready", "補助プロセスの準備");
+    child
+}
+
+/// `clip-read` の出力 (読めるまで 3 秒待つ)。
+#[cfg(feature = "test-hooks")]
+fn clip_read() -> String {
+    let t = Instant::now();
+    loop {
+        let out = std::process::Command::new(helper_exe())
+            .arg("clip-read")
+            .output()
+            .unwrap();
+        if out.status.success() {
+            return String::from_utf8_lossy(&out.stdout).into_owned();
+        }
+        assert!(
+            t.elapsed() < Duration::from_secs(3),
+            "クリップボードを読めない"
+        );
+        thread::sleep(Duration::from_millis(100));
+    }
+}
+
+#[cfg(feature = "test-hooks")]
+#[test]
+fn コピーは実際のクリップボードに入り_貼り付けはそこから読む() {
+    let _lock = ClipLock::acquire();
+    let mut s = Session::start(&[]);
+    s.wait_ready();
+    type_slowly(&s, "hello 日本語");
+    s.send(b"\x01"); // Ctrl+A
+    s.send(b"\x03"); // Ctrl+C
+    thread::sleep(Duration::from_millis(500));
+    assert_eq!(clip_read(), "hello 日本語");
+    // 別のアプリがクリップボードへ入れたものを貼り付ける (遅延なしの遅延レンダリング)
+    let mut helper = spawn_clip_helper(&[
+        "clip-delay",
+        "--delay-render",
+        "0",
+        "--text",
+        "FROM-OTHER-APP",
+        "--lifetime",
+        "10000",
+    ]);
+    s.send(b"\x1b[F"); // End
+    s.send(b"\x16"); // Ctrl+V
+    s.wait_for("貼り付けが見える", |t| t.contains("FROM-OTHER-APP"));
+    let _ = helper.kill();
+    let _ = helper.wait();
+    s.send(CTRL_Q);
+    let _ = s.exit_within(Duration::from_secs(5));
+    let _ = std::fs::remove_dir_all(&s.state);
+}
+
+#[cfg(feature = "test-hooks")]
+#[test]
+fn 取得が遅くても入力は止まらず_2_秒で内部レジスタに切り替わる() {
+    let _lock = ClipLock::acquire();
+    let mut s = Session::start(&[]);
+    s.wait_ready();
+    type_slowly(&s, "REG");
+    s.send(b"\x01\x03"); // Ctrl+A, Ctrl+C: 内部レジスタに入る
+    thread::sleep(Duration::from_millis(500));
+    s.send(b"\x1b[F");
+    // 他のアプリが遅延レンダリングで所有し、応答を 6 秒遅らせる
+    let mut helper = spawn_clip_helper(&[
+        "clip-delay",
+        "--delay-render",
+        "6000",
+        "--text",
+        "SLOW",
+        "--lifetime",
+        "15000",
+    ]);
+    let t = Instant::now();
+    s.send(b"\x16"); // Ctrl+V
+    // 待つ間も入力を受け付ける (メインスレッドを止めない)
+    thread::sleep(Duration::from_millis(300));
+    type_slowly(&s, "x");
+    s.wait_for("待つ間の入力が見える", |t| t.contains("REGx"));
+    assert!(
+        t.elapsed() < Duration::from_millis(1800),
+        "入力は取得を待たずに反映される"
+    );
+    // 2 秒で内部レジスタ (REG) に切り替わる
+    s.wait_for("内部レジスタの貼り付け", |t| {
+        t.contains("REGxREG")
+    });
+    assert!(
+        t.elapsed() >= Duration::from_millis(1800),
+        "切り替えは約 2 秒後"
+    );
+    let _ = helper.kill();
+    let _ = helper.wait();
+    s.send(CTRL_Q);
+    let _ = s.exit_within(Duration::from_secs(5));
+    let _ = std::fs::remove_dir_all(&s.state);
+}
+
+#[cfg(feature = "test-hooks")]
+#[test]
+fn クリップボードを他のプロセスが握っていると内部レジスタに切り替える() {
+    let _lock = ClipLock::acquire();
+    let mut s = Session::start(&[]);
+    s.wait_ready();
+    type_slowly(&s, "REG");
+    s.send(b"\x01\x03");
+    thread::sleep(Duration::from_millis(500));
+    s.send(b"\x1b[F");
+    // クリップボードを開いたまま 4 秒保持する (開く再試行が尽きて Unavailable)
+    let mut helper = spawn_clip_helper(&["clip-delay", "--hold", "4000"]);
+    s.send(b"\x16");
+    s.wait_for("内部レジスタの貼り付け", |t| {
+        t.contains("REGREG")
+    });
+    let _ = helper.kill();
+    let _ = helper.wait();
+    s.send(CTRL_Q);
+    let _ = s.exit_within(Duration::from_secs(5));
+    let _ = std::fs::remove_dir_all(&s.state);
+}
