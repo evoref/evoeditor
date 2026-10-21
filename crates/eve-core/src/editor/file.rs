@@ -31,8 +31,8 @@ pub(super) enum Pending {
         replace: Option<DocumentId>,
         /// 投入したときの指定 (確認の回答で足して再投入する、03 §9.2)。
         opts: OpenOptions,
-        /// 文字コードを指定した開き直し (`file.reopen_with_encoding`、03 §8.8)。同じ文書・View の中身を差し替える。
-        reopen: bool,
+        /// 用途。`Reopen` / `Reload` は同じ文書・View の中身を差し替える。
+        kind: OpenKind,
     },
     /// 未編集の上書き保存の照合 (03 §9.3 手順 0)。
     CheckUnchanged { doc: DocumentId },
@@ -50,6 +50,16 @@ pub(super) enum Pending {
     },
 }
 
+/// 読込ジョブの用途。`Reopen` / `Reload` は同じ文書の中身を差し替える (03 §8.8 / §9.5)。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum OpenKind {
+    Open,
+    /// 文字コードを指定して開き直す: 履歴を消して差し替える (Undo できない)。
+    Reopen,
+    /// 再読込: `Origin::Reload` の Transaction で適用する (Undo できる)。
+    Reload,
+}
+
 /// 開くときの確認 (`ui.confirm.open.*`、03 §9.2) に答えるための材料。読込中の文書 (Loading) は確認の間も残す。
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) struct OpenAsk {
@@ -59,8 +69,8 @@ pub(super) struct OpenAsk {
     pub replace: Option<DocumentId>,
     pub opts: OpenOptions,
     pub ask: ConfirmAsk,
-    /// 開き直し (同じ文書の中身を差し替える)。
-    pub reopen: bool,
+    /// 用途 (開き直し・再読込は同じ文書の中身を差し替える)。
+    pub kind: OpenKind,
 }
 
 /// 保存の失敗の後の選択 (`ui.confirm.save_failed`、03 §9.7 (e))。
@@ -267,7 +277,7 @@ impl EditorState {
                 path,
                 replace,
                 opts,
-                reopen: false,
+                kind: OpenKind::Open,
             },
         );
         CommandResult::Pending(job)
@@ -462,8 +472,8 @@ impl EditorState {
                 path,
                 replace,
                 opts,
-                reopen,
-            } => self.finish_open(doc, view, path, replace, opts, reopen, r),
+                kind,
+            } => self.finish_open(doc, view, path, replace, opts, kind, r),
             Pending::CheckUnchanged { doc } => self.finish_check(doc, r),
             Pending::WriteRecovery { path } => self.finish_write_recovery(&path, r),
             Pending::RecoveryScan => self.finish_recovery_scan(r),
@@ -709,11 +719,11 @@ impl EditorState {
         path: FsPath,
         replace: Option<DocumentId>,
         opts: OpenOptions,
-        reopen: bool,
+        kind: OpenKind,
         r: JobResult,
     ) {
-        if reopen {
-            self.finish_reopen(doc_id, view, path, opts, r);
+        if kind != OpenKind::Open {
+            self.finish_reopen(doc_id, view, path, opts, kind, r);
             return;
         }
         match r {
@@ -815,7 +825,7 @@ impl EditorState {
                     replace,
                     opts,
                     ask,
-                    reopen: false,
+                    kind: OpenKind::Open,
                 });
             }
             JobResult::Failed { err, .. } => {
@@ -921,8 +931,8 @@ impl EditorState {
 
     /// 開くのを中止した (確認の `Esc` / 中止、文字コードの入力の `Esc`)。読込中の文書を捨てる。
     pub(super) fn open_aborted(&mut self, ask: &OpenAsk) {
-        if ask.reopen {
-            // 開き直しの中止: 旧本文・書式・履歴をそのまま保つ (03 §8.8)
+        if ask.kind != OpenKind::Open {
+            // 開き直し・再読込の中止: 旧本文・書式・履歴をそのまま保つ (03 §8.8 / §9.5)
             self.reopen_restore(ask.doc);
             self.message(
                 MessageLevel::Info,
@@ -959,7 +969,7 @@ impl EditorState {
                 path: ask.path,
                 replace: ask.replace,
                 opts,
-                reopen: ask.reopen,
+                kind: ask.kind,
             },
         );
         CommandResult::Pending(job)
@@ -999,6 +1009,40 @@ impl EditorState {
 
     /// 確認を済ませた (または dirty でない) 開き直しの開始。同じ `DocumentId` で読込ジョブを投入し、読込中は旧本文を表示し続ける。
     pub(super) fn start_reopen(&mut self, enc: Encoding) -> CommandResult {
+        // 利用者の指定と書込権限の理由は開き直しでも保つ (03 §8.8 の「読み取り専用の理由の差し替え」)
+        self.start_in_place(
+            OpenKind::Reopen,
+            &[
+                crate::document::ReadOnlyReason::UserRequested,
+                crate::document::ReadOnlyReason::NoWritePermission,
+            ],
+            Some(enc),
+        )
+    }
+
+    /// 確認を済ませた (または dirty でない) 再読込の開始 (03 §9.5)。文字コードは今のものを明示指定して判定し直さない。
+    pub(super) fn start_reload(&mut self) -> CommandResult {
+        // 再読込は `Binary` と `LargeFileViewer` も保つ (明示指定の読込ではバイナリの判定をしない)
+        self.start_in_place(
+            OpenKind::Reload,
+            &[
+                crate::document::ReadOnlyReason::UserRequested,
+                crate::document::ReadOnlyReason::NoWritePermission,
+                crate::document::ReadOnlyReason::Binary,
+                crate::document::ReadOnlyReason::LargeFileViewer,
+            ],
+            None,
+        )
+    }
+
+    /// 同じ文書・View の中身を差し替える読込ジョブの投入。`keep` は今の文書から引き継ぐ読み取り専用の理由。
+    /// `enc` が無ければ今の文書の文字コードを明示指定する。
+    fn start_in_place(
+        &mut self,
+        kind: OpenKind,
+        keep: &[crate::document::ReadOnlyReason],
+        enc: Option<Encoding>,
+    ) -> CommandResult {
         let Some(doc_id) = self.active_document() else {
             return CommandResult::Rejected(RejectReason::NoTarget);
         };
@@ -1014,20 +1058,20 @@ impl EditorState {
         let Some(path) = doc.path.clone() else {
             return CommandResult::Rejected(RejectReason::NotAvailable);
         };
-        // 利用者の指定と書込権限の理由は開き直しでも保つ (03 §8.8 の「読み取り専用の理由の差し替え」)
         let mut pending = crate::document::ReadOnlyReasons::default();
-        for r in [
-            crate::document::ReadOnlyReason::UserRequested,
-            crate::document::ReadOnlyReason::NoWritePermission,
-        ] {
-            if doc.read_only.contains(r) {
-                pending.insert(r);
+        for r in keep {
+            if doc.read_only.contains(*r) {
+                pending.insert(*r);
             }
         }
+        let confirmed_large = pending.contains(crate::document::ReadOnlyReason::LargeFileViewer);
+        let forced = Some(enc.unwrap_or(doc.format.encoding));
         doc.load_state = crate::document::LoadState::Loading;
         let opts = OpenOptions {
-            forced: Some(enc),
+            forced,
             pending,
+            // 巨大ファイルとして開いた文書は、確認を繰り返さない
+            confirmed_large,
             ..OpenOptions::default()
         };
         self.mark_dirty_render();
@@ -1047,10 +1091,124 @@ impl EditorState {
                 path,
                 replace: None,
                 opts,
-                reopen: true,
+                kind,
             },
         );
         CommandResult::Pending(job)
+    }
+
+    /// `file.reload`。dirty なら `ui.confirm.reload_discard` で確認する (既定はキャンセル、03 §9.5)。
+    pub fn reload(&mut self) -> CommandResult {
+        let Some(doc_id) = self.active_document() else {
+            return CommandResult::Rejected(RejectReason::NoTarget);
+        };
+        let Some(doc) = self.documents.get(&doc_id) else {
+            return CommandResult::Rejected(RejectReason::NoTarget);
+        };
+        let Some(path) = doc.path.clone() else {
+            return CommandResult::Rejected(RejectReason::NotAvailable);
+        };
+        if doc.load_state != crate::document::LoadState::Ready || self.open_in_progress() {
+            self.message(MessageLevel::Info, "info.reload.busy", &path.display());
+            return CommandResult::Rejected(RejectReason::NotAvailable);
+        }
+        if self.save_in_progress(doc_id) {
+            self.message(MessageLevel::Info, "info.save.in_progress", &path.display());
+            return CommandResult::Rejected(RejectReason::NotAvailable);
+        }
+        if doc.is_dirty() {
+            use super::overlay::{ChoiceDef, ConfirmAction, ConfirmState};
+            self.open_confirm(ConfirmState {
+                name: "reload_discard",
+                args: vec![("path".to_owned(), path.display())],
+                choices: vec![ChoiceDef {
+                    id: "reload",
+                    accel: Some('l'),
+                    destructive: true,
+                }],
+                // 既定はキャンセル (破壊的な選択肢は既定にしない)
+                default: 1,
+                focused: 1,
+                action: ConfirmAction::Reload,
+            });
+            return CommandResult::Done;
+        }
+        self.start_reload()
+    }
+
+    /// 再読込の適用 (03 §9.5 手順 5): 新しい内容を全置換の `Origin::Reload` の Transaction として適用する。
+    /// 書式と読み取り専用の理由は本文と一緒に差し替え、前後の値を Undo ノードに持たせる (Undo で一緒に戻る)。
+    #[allow(clippy::too_many_arguments)] // 読込の結果 (JobResult::Complete) をそのまま受ける
+    fn apply_reload(
+        &mut self,
+        doc_id: DocumentId,
+        view: ViewId,
+        path: &FsPath,
+        text: eve_text::Text,
+        mut format: crate::document::TextFormat,
+        stamp: crate::fs::FileStamp,
+        detected: crate::document::ReadOnlyReasons,
+    ) {
+        use crate::document::{FormatChange, FormatState, Origin, Transaction};
+        use eve_text::{ByteOff, ByteRange, ChangeSet, Edit, Selection, TextRead};
+        let Some(old) = self.documents.get(&doc_id) else {
+            return;
+        };
+        format.eol_stats = crate::document::EolStats::count(&text);
+        let change = FormatChange {
+            before: FormatState {
+                format: old.format.clone(),
+                read_only: old.read_only,
+            },
+            after: FormatState {
+                format,
+                read_only: detected,
+            },
+        };
+        let new_len = text.len_bytes();
+        let body = text.slice_to_string(ByteRange::all(new_len));
+        let old_len = old.text().len_bytes();
+        let Ok(cs) = ChangeSet::from_sorted_edits(
+            old.text(),
+            [Edit {
+                range: ByteRange::all(old_len),
+                insert: body.into(),
+            }],
+        ) else {
+            self.reopen_restore(doc_id);
+            return;
+        };
+        // カーソルは同じ位置を目安にし (新しい内容の範囲に収める)、Undo では元の Selection に戻す
+        let before_sel = self.views.get(&view).map(|v| v.selection.clone());
+        let head = before_sel.as_ref().map_or(0, |s| s.primary().head.0);
+        let after_sel = Selection::point(ByteOff(head.min(new_len))).normalized(&text);
+        let tx = Transaction::new(cs, Origin::Reload, self.now)
+            .with_selections(before_sel, Some(after_sel))
+            .with_view(view)
+            .with_format_change(change);
+        let applied = self.apply_transaction(doc_id, tx);
+        if let Some(d) = self.documents.get_mut(&doc_id) {
+            d.finish_reload(stamp);
+        }
+        self.mark_dirty_render();
+        if applied.is_err() {
+            self.show_message(
+                MessageLevel::Error,
+                "msg.open.failed",
+                &[("path", &path.display()), ("reason", "reload")],
+            );
+            return;
+        }
+        let read_only = self
+            .documents
+            .get(&doc_id)
+            .is_some_and(|d| !d.read_only.is_empty());
+        let key = if read_only {
+            "info.reload.done_read_only"
+        } else {
+            "info.reload.done"
+        };
+        self.show_message(MessageLevel::Info, key, &[("path", &path.display())]);
     }
 
     /// 開き直しの取消し・失敗: 旧本文・書式・履歴をそのまま保って `Ready` に戻す。
@@ -1067,9 +1225,27 @@ impl EditorState {
         view: ViewId,
         path: FsPath,
         opts: OpenOptions,
+        kind: OpenKind,
         r: JobResult,
     ) {
         match r {
+            JobResult::Complete {
+                text,
+                format,
+                stamp,
+                changed_during_load,
+                detected,
+                ..
+            } if kind == OpenKind::Reload => {
+                self.apply_reload(doc_id, view, &path, text, format, stamp, detected);
+                if changed_during_load {
+                    self.message(
+                        MessageLevel::Warn,
+                        "msg.open.changed_during_load",
+                        &path.display(),
+                    );
+                }
+            }
             JobResult::Complete {
                 text,
                 format,
@@ -1113,7 +1289,7 @@ impl EditorState {
                     replace: None,
                     opts,
                     ask,
-                    reopen: true,
+                    kind,
                 });
             }
             JobResult::Failed { err, .. } => {
@@ -1134,9 +1310,14 @@ impl EditorState {
             // ファイルが無くなった: 旧本文のまま戻す
             _ => {
                 self.reopen_restore(doc_id);
+                let key = if kind == OpenKind::Reload {
+                    "msg.reload.missing"
+                } else {
+                    "msg.open.failed"
+                };
                 self.show_message(
                     MessageLevel::Error,
-                    "msg.open.failed",
+                    key,
                     &[("path", &path.display()), ("reason", "not found")],
                 );
             }
@@ -1488,6 +1669,10 @@ fn file_reopen_with_encoding(ctx: &mut CommandCtx<'_>) -> CommandResult {
     ctx.state.reopen_with_encoding(enc)
 }
 
+fn file_reload(ctx: &mut CommandCtx<'_>) -> CommandResult {
+    ctx.state.reload()
+}
+
 fn file_save(ctx: &mut CommandCtx<'_>) -> CommandResult {
     ctx.state.request_save()
 }
@@ -1531,6 +1716,13 @@ pub(super) fn register(r: &mut CommandRegistry) {
         file_save
     );
     reg!(r, "file.save_as", CommandKind::File, "", file_save_as);
+    reg!(
+        r,
+        "file.reload",
+        CommandKind::File,
+        "doc.has_path",
+        file_reload
+    );
     reg!(
         r,
         "file.reopen_with_encoding",

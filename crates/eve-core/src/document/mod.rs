@@ -10,6 +10,8 @@ mod history;
 mod transaction;
 
 pub use doc::{Applied, AppliedTx, ApplyError, Document};
-pub use format::{EolStats, LoadState, ReadOnlyReason, ReadOnlyReasons, TextFormat};
+pub use format::{
+    EolStats, FormatChange, FormatState, LoadState, ReadOnlyReason, ReadOnlyReasons, TextFormat,
+};
 pub use history::{HistoryStep, NodeId, RecordOutcome, UndoBudget, UndoHistory};
 pub use transaction::{Origin, Transaction, TransactionMeta, UndoGroupHint};

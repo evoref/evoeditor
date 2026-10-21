@@ -121,6 +121,11 @@ impl Document {
             return Err(ApplyError::Rejected);
         }
         if tx.changes.is_identity() {
+            // 本文が同じ再読込: 書式と理由だけ差し替える (履歴のノードは作らない)
+            if let Some(fc) = &tx.format_change {
+                self.format = fc.after.format.clone();
+                self.read_only = fc.after.read_only;
+            }
             return Ok(AppliedTx::Identity {
                 selection: tx.selection_after.clone(),
             });
@@ -139,6 +144,11 @@ impl Document {
         } else {
             Some(self.history.record(tx, inverse))
         };
+        // 再読込: 書式と読み取り専用の理由を新しい内容のものに差し替える (前後の値は Undo ノードが持つ)
+        if let Some(fc) = &tx.format_change {
+            self.format = fc.after.format.clone();
+            self.read_only = fc.after.read_only;
+        }
         Ok(AppliedTx::Changed(Applied {
             old_revision,
             revision: self.revision,
@@ -163,6 +173,7 @@ impl Document {
             step.changes,
             step.origin,
             step.selection,
+            step.format,
         )?))
     }
 
@@ -178,6 +189,7 @@ impl Document {
             step.changes,
             step.origin,
             step.selection,
+            step.format,
         )?))
     }
 
@@ -186,11 +198,17 @@ impl Document {
         changes: ChangeSet,
         origin: Origin,
         selection: Option<Selection>,
+        format: Option<super::format::FormatState>,
     ) -> Result<Applied, ApplyError> {
         let before = self.text.snapshot();
         // 履歴と文書が食い違った場合も、文書は変えない (履歴の不整合は呼び出しの誤り)
         self.text.apply(&changes).map_err(ApplyError::Text)?;
         self.update_eol_stats(&before, &changes);
+        // 再読込のノードは、書式と読み取り専用の理由も一緒に戻す (03 §7.2)
+        if let Some(f) = format {
+            self.format = f.format;
+            self.read_only = f.read_only;
+        }
         let old_revision = self.revision;
         self.revision = self.revision.next();
         Ok(Applied {
@@ -202,6 +220,14 @@ impl Document {
             selection,
             record: None,
         })
+    }
+
+    /// 再読込の完了 (03 §9.5): 読み込んだ内容がディスクの状態なので、ここを保存点にして `Ready` に戻す。
+    pub fn finish_reload(&mut self, stamp: FileStamp) {
+        self.history.seal();
+        self.history.mark_saved();
+        self.disk_stamp = Some(stamp);
+        self.load_state = LoadState::Ready;
     }
 
     /// 保存の開始 (03 §9.3 手順 3): 履歴を封印し、保存に使う Snapshot とその時点の履歴上の位置を返す。

@@ -1063,3 +1063,108 @@ fn 開き直しは引数が無ければ文字コードを尋ねる() {
     s.pump();
     assert_eq!(s.doc().1.format.encoding, eve_core::Encoding::EucJp);
 }
+
+#[test]
+fn 再読込は外部の変更を取り込み_undo_で戻せる() {
+    let mut s = Env::new();
+    s.fs.add_file("/w/a.txt", b"abc");
+    s.open("/w/a.txt");
+    s.fs.set_file(&FsPath::from("/w/a.txt"), b"XYZ\n");
+    s.messages();
+    let r = s.run("file.reload", Args::new());
+    assert!(matches!(r, CommandResult::Pending(_)));
+    assert_eq!(s.text(), "XYZ\n");
+    assert!(!s.doc().1.is_dirty(), "読み直した内容がディスクの状態");
+    assert!(s.messages().contains(&"info.reload.done".to_owned()));
+    // 元に戻すで読み込む前の内容に戻り、保存点から外れる (dirty)
+    s.run("edit.undo", Args::new());
+    assert_eq!(s.text(), "abc");
+    assert!(s.doc().1.is_dirty());
+    s.run("edit.redo", Args::new());
+    assert_eq!(s.text(), "XYZ\n");
+    assert!(!s.doc().1.is_dirty());
+}
+
+#[test]
+fn 再読込の書式の変更は_undo_で本文と一緒に戻る() {
+    let mut s = Env::new();
+    s.fs.add_file("/w/a.txt", b"ab\nc");
+    s.open("/w/a.txt");
+    assert!(!s.doc().1.format.has_bom);
+    // 外部で BOM と CRLF が付いた
+    s.fs.set_file(&FsPath::from("/w/a.txt"), b"\xEF\xBB\xBFab\r\nc");
+    s.run("file.reload", Args::new());
+    let f = s.doc().1.format.clone();
+    assert!(f.has_bom && f.default_eol == eve_text::LineEnding::Crlf);
+    s.run("edit.undo", Args::new());
+    let f = s.doc().1.format.clone();
+    assert!(
+        !f.has_bom && f.default_eol == eve_text::LineEnding::Lf,
+        "書式も戻る"
+    );
+    assert_eq!(s.text(), "ab\nc");
+    s.run("edit.redo", Args::new());
+    assert!(s.doc().1.format.has_bom);
+}
+
+#[test]
+fn dirty_な再読込は確認し_キャンセルでは何も変わらない() {
+    let mut s = Env::new();
+    s.fs.add_file("/w/a.txt", b"abc");
+    s.open("/w/a.txt");
+    s.type_text("x");
+    s.fs.set_file(&FsPath::from("/w/a.txt"), b"NEW");
+    s.run("file.reload", Args::new());
+    assert!(dialog_open(&s));
+    s.key(KeyCode::Esc, Modifiers::NONE);
+    s.pump();
+    assert!(
+        s.text().contains('x') && s.doc().1.is_dirty(),
+        "キャンセルでは何も変わらない"
+    );
+    s.run("file.reload", Args::new());
+    s.type_text("l");
+    s.pump();
+    assert_eq!(s.text(), "NEW");
+    assert!(!s.doc().1.is_dirty());
+    // 破棄した編集も元に戻すで取り戻せる (P1)
+    s.run("edit.undo", Args::new());
+    assert!(s.text().contains('x'));
+}
+
+#[test]
+fn ファイルが無ければ再読込は文書を変えずに知らせる() {
+    let mut s = Env::new();
+    s.fs.add_file("/w/a.txt", b"abc");
+    s.open("/w/a.txt");
+    s.fs.remove(&FsPath::from("/w/a.txt"));
+    s.messages();
+    s.run("file.reload", Args::new());
+    assert_eq!(s.text(), "abc");
+    assert_eq!(s.doc().1.load_state, eve_core::LoadState::Ready);
+    assert!(s.messages().contains(&"msg.reload.missing".to_owned()));
+}
+
+#[test]
+fn 再読込の後に読み取り専用なら_undo_できない() {
+    let mut s = Env::new();
+    s.fs.add_file("/w/a.txt", b"abc");
+    s.open("/w/a.txt");
+    // 外部で不正バイトが入った: 開くときと同じ確認が出る
+    s.fs.set_file(&FsPath::from("/w/a.txt"), b"ab\x9A\x9Bcd");
+    s.messages();
+    s.run("file.reload", Args::new());
+    assert!(dialog_open(&s));
+    s.type_text("r");
+    s.pump();
+    assert!(!s.doc().1.read_only.is_empty());
+    assert!(
+        s.messages()
+            .contains(&"info.reload.done_read_only".to_owned())
+    );
+    let r = s.run("edit.undo", Args::new());
+    assert!(
+        matches!(r, CommandResult::Rejected(_)),
+        "読み取り専用では Undo できない"
+    );
+}

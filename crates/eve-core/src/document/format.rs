@@ -103,6 +103,20 @@ pub(crate) fn count_range(text: &dyn TextRead, start: usize, end: usize) -> EolS
     st
 }
 
+/// 書式と読み取り専用の理由の組。再読込 (`Origin::Reload`) が本文と一緒に差し替え、Undo / Redo が本文と一緒に戻す (03 §7.2)。
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FormatState {
+    pub format: TextFormat,
+    pub read_only: ReadOnlyReasons,
+}
+
+/// Undo ノードに持つ書式の変更 (前後の値)。Undo は `before`、Redo は `after` へ戻す。
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FormatChange {
+    pub before: FormatState,
+    pub after: FormatState,
+}
+
 /// 文書の形式 (03 §8.1)。
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TextFormat {
