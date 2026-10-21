@@ -7,10 +7,12 @@
 use eve_view::{DocumentId, EditorEvent, MessageLevel, ViewId};
 
 use crate::document::{Document, NodeId};
-use crate::fs::{Expect, FsError, FsErrorDetail, FsErrorKind};
+use crate::fs::{
+    Expect, FsError, FsErrorDetail, FsErrorKind, HardlinkPolicy, InPlaceBackup, SaveMethod,
+};
 use crate::fspath::FsPath;
 use crate::io_jobs::OpenOptions;
-use crate::jobs::{ConfirmAsk, JobError, JobKind, JobResult, MetaPurpose};
+use crate::jobs::{ConfirmAsk, JobError, JobKind, JobResult, MetaPurpose, SaveStrategy};
 
 use super::command::{
     CommandCtx, CommandKind, CommandRegistry, CommandResult, CommandSpec, Permission, RejectReason,
@@ -36,7 +38,29 @@ pub(super) enum Pending {
         at: NodeId,
         revision: eve_view::Revision,
         path: FsPath,
+        /// 確認の後に同じ保存をやり直すための照合の期待 (03 §9.3)。
+        expected: Expect,
     },
+}
+
+/// 保存の代替の確認 (`AtomicUnsupported` / ハードリンク / `BackupFailed`、03 §9.3 手順 7・05 §4.4)。
+#[derive(Clone, Debug)]
+pub(super) struct FallbackAsk {
+    pub kind: FallbackKind,
+    pub doc: DocumentId,
+    pub path: FsPath,
+    pub expected: Expect,
+    pub cont: Option<Continuation>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum FallbackKind {
+    /// 原子的置換ができない (`ui.confirm.save.atomic_unsupported`)。選択肢: 直接上書き / 別名で保存 (既定)。
+    AtomicUnsupported,
+    /// ハードリンク (`ui.confirm.save.hardlink`)。選択肢: リンクを保って直接上書き / 切り離して保存。既定はキャンセル。
+    Hardlink,
+    /// 事前バックアップ・保存中フラグを書けなかった (`ui.confirm.save.overwrite_without_backup`)。選択肢: バックアップなしで上書き / 別名で保存。既定はキャンセル。
+    NoBackup,
 }
 
 impl EditorState {
@@ -329,6 +353,18 @@ impl EditorState {
         expected: Expect,
         cont: Option<Continuation>,
     ) -> CommandResult {
+        self.start_save_with(doc_id, path, expected, cont, SaveStrategy::default())
+    }
+
+    /// 保存方式を指定して保存ジョブを投入する (確認の後の再投入で直接上書きにする)。
+    fn start_save_with(
+        &mut self,
+        doc_id: DocumentId,
+        path: FsPath,
+        expected: Expect,
+        cont: Option<Continuation>,
+        strategy: SaveStrategy,
+    ) -> CommandResult {
         let Some(doc) = self.documents.get_mut(&doc_id) else {
             return CommandResult::Rejected(RejectReason::NoTarget);
         };
@@ -358,6 +394,7 @@ impl EditorState {
                 bom,
                 pua,
                 expected,
+                strategy,
             },
         );
         if let Some(c) = cont {
@@ -370,6 +407,7 @@ impl EditorState {
                 at,
                 revision,
                 path,
+                expected,
             },
         );
         CommandResult::Pending(job)
@@ -396,9 +434,79 @@ impl EditorState {
                 at,
                 revision,
                 path,
-            } => self.finish_save(doc, at, revision, &path, cont, r),
+                expected,
+            } => self.finish_save(doc, at, revision, &path, expected, cont, r),
         }
         self.mark_dirty_render();
+    }
+
+    /// 保存の代替の確認を出す。
+    fn open_fallback(&mut self, ask: FallbackAsk, reason: &str, links: &str) {
+        use super::overlay::{ChoiceDef, ConfirmAction, ConfirmState};
+        let choice = |id: &'static str, accel: char| ChoiceDef {
+            id,
+            accel: Some(accel),
+            destructive: false,
+        };
+        let (name, choices, default): (&'static str, Vec<ChoiceDef>, usize) = match ask.kind {
+            FallbackKind::AtomicUnsupported => (
+                "save.atomic_unsupported",
+                vec![choice("direct", 'o'), choice("alt", 'a')],
+                1,
+            ),
+            FallbackKind::Hardlink => (
+                "save.hardlink",
+                vec![choice("direct", 'k'), choice("break", 'b')],
+                2,
+            ),
+            FallbackKind::NoBackup => (
+                "save.overwrite_without_backup",
+                vec![choice("overwrite", 'o'), choice("alt", 'a')],
+                2,
+            ),
+        };
+        self.open_confirm(ConfirmState {
+            name,
+            args: vec![
+                ("path".to_owned(), ask.path.display()),
+                ("reason".to_owned(), reason.to_owned()),
+                ("links".to_owned(), links.to_owned()),
+            ],
+            choices,
+            default,
+            focused: default,
+            action: ConfirmAction::Fallback(ask),
+        });
+    }
+
+    /// 保存の代替の確認の選択 (キャンセルは呼び側が処理済み)。
+    pub(super) fn choose_fallback(&mut self, ask: FallbackAsk, choice: usize) -> CommandResult {
+        let FallbackAsk {
+            kind,
+            doc,
+            path,
+            expected,
+            cont,
+        } = ask;
+        let in_place = |backup| SaveStrategy::InPlace { backup };
+        let strategy = match (kind, choice) {
+            (FallbackKind::AtomicUnsupported | FallbackKind::Hardlink, 0) => {
+                Some(in_place(InPlaceBackup::Required))
+            }
+            (FallbackKind::Hardlink, 1) => Some(SaveStrategy::Atomic {
+                hardlink: HardlinkPolicy::BreakLink,
+            }),
+            (FallbackKind::NoBackup, 0) => Some(in_place(InPlaceBackup::SkipConfirmed)),
+            // 別名で保存: 名前の入力へ (保存の後に続ける操作は引き継ぐ)
+            _ => None,
+        };
+        match strategy {
+            Some(s) => self.start_save_with(doc, path, expected, cont, s),
+            None => {
+                self.open_prompt(PromptKind::SaveAs { then: cont }, String::new());
+                CommandResult::Done
+            }
+        }
     }
 
     /// 起動時に退避ディレクトリを走査するジョブを投入する (`open_initial` が呼ぶ)。
@@ -674,17 +782,20 @@ impl EditorState {
         }
     }
 
+    #[allow(clippy::too_many_arguments)] // 保存ジョブの文脈 (Pending::Save) をそのまま受ける
     fn finish_save(
         &mut self,
         doc_id: DocumentId,
         at: NodeId,
         revision: eve_view::Revision,
         path: &FsPath,
+        expected: Expect,
         cont: Option<Continuation>,
         r: JobResult,
     ) {
         match r {
             JobResult::Saved { report, .. } => {
+                let report_method = report.method;
                 if let Some(doc) = self.documents.get_mut(&doc_id) {
                     // 名前を付けて保存のパスは、書けてから文書のパスにする (03 §9.3 手順 7)
                     doc.path = Some(path.clone());
@@ -695,7 +806,12 @@ impl EditorState {
                     revision,
                     path: path.display(),
                 });
-                self.message(MessageLevel::Info, "info.save.done", &path.display());
+                let key = if report_method == SaveMethod::InPlace {
+                    "info.save.in_place"
+                } else {
+                    "info.save.done"
+                };
+                self.message(MessageLevel::Info, key, &path.display());
                 self.mark_snapshot_update(doc_id);
                 // 保存の後に続ける操作 (開く・新規作成・終了)。保存が失敗したときは続けない
                 // 保存の間に編集されていたら、続きの操作の前にもう一度尋ねる (03 §9.7。編集を捨てない)
@@ -719,6 +835,53 @@ impl EditorState {
                         ("path", &path.display()),
                         ("reason", &format!("unmappable ({total})")),
                     ],
+                );
+            }
+            // 原子的置換ができない・ハードリンク・バックアップを作れない: 確認を出す (承認の後は直接上書き、03 §9.3 手順 7)
+            JobResult::Failed {
+                err: JobError::Fs(ref e),
+                ..
+            } if fallback_kind(&e.kind, &e.detail).is_some()
+                && self.documents.contains_key(&doc_id) =>
+            {
+                let kind =
+                    fallback_kind(&e.kind, &e.detail).unwrap_or(FallbackKind::AtomicUnsupported);
+                let links = match &e.detail {
+                    Some(FsErrorDetail::Hardlink { nlink }) => nlink.saturating_sub(1).to_string(),
+                    _ => String::new(),
+                };
+                let reason = fs_reason(e);
+                self.open_fallback(
+                    FallbackAsk {
+                        kind,
+                        doc: doc_id,
+                        path: path.clone(),
+                        expected,
+                        cont,
+                    },
+                    &reason,
+                    &links,
+                );
+            }
+            JobResult::Failed {
+                err:
+                    JobError::Fs(FsError {
+                        kind: FsErrorKind::InPlaceFailed { backup },
+                        ..
+                    }),
+                ..
+            } => {
+                // 直接上書きの途中の失敗: 元のファイルは壊れている可能性がある。バックアップの場所を必ず示す (05 §4.4 手順 8)
+                let b = backup.as_ref().map(FsPath::display).unwrap_or_default();
+                let key = if backup.is_some() {
+                    "msg.save.in_place_failed"
+                } else {
+                    "msg.save.in_place_failed_no_backup"
+                };
+                self.show_message(
+                    MessageLevel::Error,
+                    key,
+                    &[("path", &path.display()), ("backup", &b)],
                 );
             }
             JobResult::Failed { err, .. } => {
@@ -747,6 +910,17 @@ impl EditorState {
             }
             _ => {}
         }
+    }
+}
+
+fn fallback_kind(kind: &FsErrorKind, detail: &Option<FsErrorDetail>) -> Option<FallbackKind> {
+    match (kind, detail) {
+        (FsErrorKind::AtomicUnsupported, Some(FsErrorDetail::Hardlink { .. })) => {
+            Some(FallbackKind::Hardlink)
+        }
+        (FsErrorKind::AtomicUnsupported, _) => Some(FallbackKind::AtomicUnsupported),
+        (FsErrorKind::BackupFailed, _) => Some(FallbackKind::NoBackup),
+        _ => None,
     }
 }
 

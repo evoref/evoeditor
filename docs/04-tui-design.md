@@ -1413,9 +1413,18 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 | `msg.save.encoding_unsupported_iso2022` | 不正なバイトを含む文書 (§8.3 のエスケープ文字を含む。主に `StatefulEncodingWithInvalidBytes`) を ISO-2022-JP で保存しようとした (上書き保存・名前を付けて保存・文字コードを指定して保存。03 §8.3 の (a) / §9.7 の「連鎖の開始時の拒否」。確認ではなくエラーのメッセージで、選択肢は無い。保存の連鎖と後続 (終了等) は中止。ジョブは投入しない) | 不正なバイトを含むため、この文書は ISO-2022-JP では保存できません。何も書き込んでいません / 文字コードを指定して開き直す ({key:file.reopen_with_encoding}) で別の文字コード (UTF-8 等) として開き直してください |
 | `ui.confirm.save.lossy_roundtrip` | E2' 区分 B の確認 (03 §8.6) | {count} 箇所が、同じ文字の別のバイト表現で保存されます (例: {example}) — `[S] 保存` / `[A] 別名で保存` ★ |
 | `ui.confirm.save.escape_normalized` | 区分 D (ISO-2022-JP のエスケープの書き方が変わる) | {count} 行でエスケープシーケンスの書き方が変わります (文字は変わりません) — `[S] 保存` ★ / `[A] 別名で保存` |
-| `ui.confirm.save.atomic_unsupported` | AtomicUnsupported (ハードリンク・一時ファイル規則 (`InPlacePattern`) 以外: 他人の所有・ディレクトリに書けない・置換が ACL を引き継げない等。`file.atomic_save_fallback = "ask"` (既定) のとき、05 §4.4。`"fail"` では出さずに `msg.save.failed`) | {path} は安全な方法 (一時ファイルと置換) で保存できません: {reason} — `[O] 直接上書き (バックアップ付き)` / `[A] 別名で保存` ★ (既定は別名で保存。確定 (ユーザー回答)) |
-| `ui.confirm.save.overwrite_without_backup` | BackupFailed の後 (事前バックアップ、または in-place の保存中フラグを書けなかった。05 §4.4 手順 2 / 4。既定はキャンセル) | {path} のバックアップを作れませんでした。バックアップなしで上書きしますか? 上書きの途中で失敗・中断すると、元の内容は取り戻せません — `[O] バックアップなしで上書き` / `[A] 別名で保存` (★ は `[Esc] キャンセル`) |
-| `ui.confirm.save.hardlink` | `nlink > 1` (FR-106、OQ-73) | {path} には他に {links} 個の名前 (ハードリンク) があります — `[K] リンクを保って直接上書き (バックアップ付き)` / `[B] このファイルだけ切り離して保存` (★ は `[Esc] キャンセル`) |
+| `ui.confirm.save.atomic_unsupported.title` | `file.atomic_save_fallback = "ask"` (既定) の AtomicUnsupported (ハードリンク・一時ファイル規則 (`InPlacePattern`) 以外: 他人の所有・ディレクトリに書けない・置換が ACL を引き継げない等、05 §4.4。`"fail"` では出さずに `msg.save.failed`。03 §9.7 (e)) | 安全に保存できません |
+| `ui.confirm.save.atomic_unsupported.message` | 同上 | {path} は安全な方法 (一時ファイルと置換) で保存できません: {reason} |
+| `ui.confirm.save.atomic_unsupported.direct` | 同上 (アクセラレータ `O`) | [O] 直接上書き (バックアップ付き) |
+| `ui.confirm.save.atomic_unsupported.alt` | 同上 (既定。アクセラレータ `A`。確定 (ユーザー回答)) | [A] 別名で保存 |
+| `ui.confirm.save.overwrite_without_backup.title` | BackupFailed の後 (事前バックアップ、または in-place の保存中フラグを書けなかった。05 §4.4 手順 2 / 4。既定はキャンセル) | バックアップを作れません |
+| `ui.confirm.save.overwrite_without_backup.message` | 同上 | {path} のバックアップを作れませんでした。バックアップなしで上書きしますか? 上書きの途中で失敗・中断すると、元の内容は取り戻せません |
+| `ui.confirm.save.overwrite_without_backup.overwrite` | 同上 (破壊的。既定にしない。アクセラレータ `O`) | [O] バックアップなしで上書き |
+| `ui.confirm.save.overwrite_without_backup.alt` | 同上 (アクセラレータ `A`) | [A] 別名で保存 |
+| `ui.confirm.save.hardlink.title` | `nlink > 1` (FR-106、OQ-73。既定はキャンセル) | ハードリンクのファイル |
+| `ui.confirm.save.hardlink.message` | 同上 | {path} には他に {links} 個の名前 (ハードリンク) があります |
+| `ui.confirm.save.hardlink.direct` | 同上 (アクセラレータ `K`) | [K] リンクを保って直接上書き (バックアップ付き) |
+| `ui.confirm.save.hardlink.break` | 同上 (アクセラレータ `B`) | [B] このファイルだけ切り離して保存 |
 | `msg.save.dangling_link` | シンボリックリンクのリンク先が無い (05 §4.1。v0.1 は作成せずエラーにする) | {path} はリンクで、リンク先 {target} がありません。保存していません / 別名で保存 ({key:file.save_as}) するか、リンク先のフォルダを作ってから保存してください |
 | `ui.confirm.save.dangling_link` (v0.2) | 同上 (リンク先を作成する選択肢を出す版) | {path} はリンクで、リンク先 {target} がありません — `[C] リンク先に作成 (リンクを保つ)` ★ |
 | `ui.confirm.save.read_only` (v0.2) | 読み取り専用のファイル (FR-116。v0.1 は読み取り専用の文書の編集を拒否するので出ない。v0.1 で読み取り専用の文書に使える保存は名前を付けて保存だけ、03 §9.6) | {path} は読み取り専用です — `[A] 別名で保存` ★ / `[W] 読み取り専用を解除して保存` |

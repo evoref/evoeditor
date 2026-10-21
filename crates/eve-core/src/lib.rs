@@ -38,7 +38,7 @@ pub use fspath::FsPath;
 pub use io_jobs::OpenOptions;
 pub use jobs::{
     ConfirmAsk, JobError, JobKind, JobPorts, JobRequest, JobResult, JobSpawner, MetaPurpose,
-    OpenNotes, Ports, run_job,
+    OpenNotes, Ports, SaveStrategy, run_job,
 };
 pub use paths::Paths;
 pub use rescue::{RescueOutcome, RescueReason, RescueWriter};
