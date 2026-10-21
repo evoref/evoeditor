@@ -527,6 +527,11 @@ fn shift_jis_のファイルを開いて文字コードを表示する() {
     );
     // 指定して開く (UTF-8 と指定すると不正バイトを含む読み取り専用)
     let mut s = Session::start(&["--encoding", "utf-8", path.to_str().unwrap()]);
+    // 不正バイトが多いので確認が出る (03 §8.3): 読み取り専用で開く
+    s.wait_for("不正バイトの確認", |t| {
+        t.contains("不正なバイトが多いファイル")
+    });
+    s.send(b"r");
     s.wait_for("UTF-8 と読み取り専用", |t| {
         t.contains("UTF-8") && t.contains("RO")
     });

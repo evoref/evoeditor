@@ -28,6 +28,8 @@ pub(super) enum Pending {
         view: ViewId,
         path: FsPath,
         replace: Option<DocumentId>,
+        /// 投入したときの指定 (確認の回答で足して再投入する、03 §9.2)。
+        opts: OpenOptions,
     },
     /// 未編集の上書き保存の照合 (03 §9.3 手順 0)。
     CheckUnchanged { doc: DocumentId },
@@ -43,6 +45,17 @@ pub(super) enum Pending {
         /// 確認の後に同じ保存をやり直すための照合の期待 (03 §9.3)。
         expected: Expect,
     },
+}
+
+/// 開くときの確認 (`ui.confirm.open.*`、03 §9.2) に答えるための材料。読込中の文書 (Loading) は確認の間も残す。
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) struct OpenAsk {
+    pub doc: DocumentId,
+    pub view: ViewId,
+    pub path: FsPath,
+    pub replace: Option<DocumentId>,
+    pub opts: OpenOptions,
+    pub ask: ConfirmAsk,
 }
 
 /// 保存の失敗の後の選択 (`ui.confirm.save_failed`、03 §9.7 (e))。
@@ -248,6 +261,7 @@ impl EditorState {
                 view,
                 path,
                 replace,
+                opts,
             },
         );
         CommandResult::Pending(job)
@@ -441,7 +455,8 @@ impl EditorState {
                 view,
                 path,
                 replace,
-            } => self.finish_open(doc, view, path, replace, r),
+                opts,
+            } => self.finish_open(doc, view, path, replace, opts, r),
             Pending::CheckUnchanged { doc } => self.finish_check(doc, r),
             Pending::WriteRecovery { path } => self.finish_write_recovery(&path, r),
             Pending::RecoveryScan => self.finish_recovery_scan(r),
@@ -685,6 +700,7 @@ impl EditorState {
         view: ViewId,
         path: FsPath,
         replace: Option<DocumentId>,
+        opts: OpenOptions,
         r: JobResult,
     ) {
         match r {
@@ -777,21 +793,16 @@ impl EditorState {
                 }
                 self.complete_open(doc_id, view, replace);
             }
+            // 確認が要る: 読込中の文書は残したまま確認を出し、回答で先頭から読み直す (03 §9.2)
             JobResult::NeedsConfirm { ask, .. } => {
-                // 確認ダイアログ (後続) ができるまでは開かない。今の文書はそのまま
-                let reason = match ask {
-                    ConfirmAsk::Binary => "binary",
-                    ConfirmAsk::UnsupportedBom { .. } => "utf-32 bom",
-                    ConfirmAsk::ManyInvalidBytes { .. } => "many invalid bytes",
-                };
-                self.open_failed(
-                    doc_id,
+                self.open_open_confirm(OpenAsk {
+                    doc: doc_id,
+                    view,
+                    path,
                     replace,
-                    MessageLevel::Warn,
-                    "msg.open.failed",
-                    &path,
-                    reason,
-                );
+                    opts,
+                    ask,
+                });
             }
             JobResult::Failed { err, .. } => {
                 let reason = reason_label(&err);
@@ -805,6 +816,128 @@ impl EditorState {
             }
             _ => {}
         }
+    }
+
+    /// 開くときの確認 (`ui.confirm.open.*`) を出す。
+    fn open_open_confirm(&mut self, ask: OpenAsk) {
+        use super::overlay::{ChoiceDef, ConfirmAction, ConfirmState};
+        let choice = |id: &'static str, accel: char| ChoiceDef {
+            id,
+            accel: Some(accel),
+            destructive: false,
+        };
+        let (name, choices, args): (&'static str, Vec<ChoiceDef>, Vec<(String, String)>) =
+            match ask.ask {
+                ConfirmAsk::Binary => (
+                    "open.binary",
+                    vec![choice("readonly", 'r'), choice("encoding", 'e')],
+                    vec![],
+                ),
+                ConfirmAsk::UnsupportedBom { .. } => (
+                    "open.utf32",
+                    vec![choice("readonly", 'r'), choice("encoding", 'e')],
+                    vec![],
+                ),
+                ConfirmAsk::HugeFile { len } => (
+                    "open.huge",
+                    vec![choice("readonly", 'r')],
+                    vec![("size".to_owned(), human_size(len))],
+                ),
+                ConfirmAsk::ManyInvalidBytes { encoding, permille } => (
+                    "open.invalid_bytes",
+                    vec![
+                        choice("readonly", 'r'),
+                        choice("encoding", 'e'),
+                        choice("abort", 'c'),
+                    ],
+                    vec![
+                        ("encoding".to_owned(), encoding.name().to_owned()),
+                        (
+                            "ratio".to_owned(),
+                            format!("{}.{}%", permille / 10, permille % 10),
+                        ),
+                        (
+                            "factor".to_owned(),
+                            format!("{:.1}", encoding.memory_factor()),
+                        ),
+                    ],
+                ),
+            };
+        let mut args = args;
+        args.insert(0, ("path".to_owned(), ask.path.display()));
+        self.open_confirm(ConfirmState {
+            name,
+            args,
+            choices,
+            default: 0,
+            focused: 0,
+            action: ConfirmAction::Open(ask),
+        });
+    }
+
+    /// 開くときの確認の選択 (キャンセルは呼び側が `open_aborted` を呼ぶ)。`id` は選択肢の ID。
+    pub(super) fn choose_open(&mut self, ask: OpenAsk, id: &str) -> CommandResult {
+        match id {
+            "readonly" => {
+                let mut opts = ask.opts;
+                opts.read_only_requested = true;
+                match ask.ask {
+                    ConfirmAsk::HugeFile { .. } => {
+                        opts.confirmed_large = true;
+                        opts.pending
+                            .insert(crate::document::ReadOnlyReason::LargeFileViewer);
+                    }
+                    ConfirmAsk::Binary | ConfirmAsk::UnsupportedBom { .. } => {
+                        opts.pending.insert(crate::document::ReadOnlyReason::Binary);
+                    }
+                    _ => {}
+                }
+                self.respawn_open(ask, opts)
+            }
+            "encoding" => {
+                self.open_prompt(PromptKind::Encoding { ask }, String::new());
+                CommandResult::Done
+            }
+            _ => {
+                self.open_aborted(&ask);
+                CommandResult::Done
+            }
+        }
+    }
+
+    /// 開くのを中止した (確認の `Esc` / 中止、文字コードの入力の `Esc`)。読込中の文書を捨てる。
+    pub(super) fn open_aborted(&mut self, ask: &OpenAsk) {
+        self.open_failed(
+            ask.doc,
+            ask.replace,
+            MessageLevel::Info,
+            "info.open.cancelled",
+            &ask.path,
+            "",
+        );
+    }
+
+    /// 確認の回答の後、同じ読込中の文書へ `opts` で先頭から読み直すジョブを投入する。
+    pub(super) fn respawn_open(&mut self, ask: OpenAsk, opts: OpenOptions) -> CommandResult {
+        let job = self.jobs.spawn(
+            Some(ask.doc),
+            eve_view::Revision::INITIAL,
+            JobKind::Open {
+                path: ask.path.clone(),
+                opts,
+            },
+        );
+        self.pending.insert(
+            job,
+            Pending::Open {
+                doc: ask.doc,
+                view: ask.view,
+                path: ask.path,
+                replace: ask.replace,
+                opts,
+            },
+        );
+        CommandResult::Pending(job)
     }
 
     /// 中断された保存の痕跡の案内 (04 §15.2 の `msg.open.interrupted_*`、02 §4.5 の写像)。
@@ -1057,6 +1190,22 @@ fn fallback_kind(kind: &FsErrorKind, detail: &Option<FsErrorDetail>) -> Option<F
         (FsErrorKind::AtomicUnsupported, _) => Some(FallbackKind::AtomicUnsupported),
         (FsErrorKind::BackupFailed, _) => Some(FallbackKind::NoBackup),
         _ => None,
+    }
+}
+
+/// バイト数を「512.0 MiB」のような短い表記にする。
+fn human_size(n: u64) -> String {
+    const UNITS: [&str; 4] = ["B", "KiB", "MiB", "GiB"];
+    let mut v = n as f64;
+    let mut u = 0;
+    while v >= 1024.0 && u + 1 < UNITS.len() {
+        v /= 1024.0;
+        u += 1;
+    }
+    if u == 0 {
+        format!("{n} B")
+    } else {
+        format!("{v:.1} {}", UNITS[u])
     }
 }
 

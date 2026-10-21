@@ -139,6 +139,9 @@ fn ファイルの状態のステータス() {
     // 読み取り専用
     s.fs.add_file("/w/bad.txt", b"x\x9A");
     s.run("file.open", Args::new().with_str("path", "/w/bad.txt"));
+    // 不正バイトが多いので確認が出る: 読み取り専用で開く
+    s.type_text("r");
+    s.pump();
     let c = s.chrome();
     assert!(c.starts_with("status: bad.txt [RO] |"), "{c}");
 }
@@ -419,8 +422,11 @@ fn 未解決のプレースホルダを出さない() {
     let mut s = Env::new();
     s.fs.add_file("/w/bin.dat", b"\x00\x01");
     s.run("file.open", Args::new().with_str("path", "/w/bin.dat"));
+    // バイナリは確認が出る。中止するとメッセージが出る
+    s.key(KeyCode::Esc, Modifiers::NONE);
+    s.pump();
     let t = message_text(&s.frame()).unwrap();
-    assert!(t.contains("binary") && !t.contains('{'), "{t}");
+    assert!(!t.contains('{'), "{t}");
 }
 
 #[test]
