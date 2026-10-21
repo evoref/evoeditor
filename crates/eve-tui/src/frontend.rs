@@ -1,6 +1,6 @@
 //! `Frontend` の TUI 実装 (docs/02 §9.2、docs/04 §14、Windows)。端末の初期化と復元、入力スレッドの起動、描画。
 //!
-//! 現在の範囲 (M2 の E4a): 編集面の描画 (クローム・オーバーレイは E5)。マウス・フォーカス・ブラケットペースト・拡張キーは
+//! 現在の範囲 (M2 の E5): 編集面・クローム・オーバーレイの描画。マウス・フォーカス・ブラケットペースト・拡張キーは
 //! v0.1 では有効にしない (04 §14.1)。復元は冪等で、どの終了経路でも `restore` (または `Drop`) で行う。
 
 use std::io;
@@ -13,8 +13,9 @@ use eve_host::{
 use eve_view::{Capabilities, CellSize, Effect, Frame, InputEvent};
 
 use crate::ansi::{ENTER, Emitter, LEAVE};
-use crate::buffer::{CHROME_ROWS, render_panes};
+use crate::buffer::CHROME_ROWS;
 use crate::caps::{CapsConfig, ColorMode, Detected, ProcessEnv, check_usable, detect};
+use crate::chrome::render_screen;
 use crate::glyphs::Glyphs;
 use crate::win::{ConsoleInput, ConsoleOut, InputOut, spawn_input_thread, surface_resize};
 
@@ -165,7 +166,8 @@ impl Frontend for TuiFrontend {
             .detected
             .as_ref()
             .map_or(eve_view::ColorDepth::TrueColor, |d| d.caps.color_depth);
-        let r = render_panes(frame, depth, &self.glyphs);
+        let window = self.window().unwrap_or(frame.size);
+        let r = render_screen(frame, window, depth, &self.glyphs);
         let out = self.emitter.frame(&r, frame, true);
         self.write(&out);
         RenderOutcome::Done

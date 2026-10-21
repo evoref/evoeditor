@@ -3,8 +3,8 @@
 //! 幅 2 以上の書記素は、先頭セルに書記素、後続セルを「継続セル」(`CellDiffOption::Skip`) にする (S-06 で、この前提で
 //! 差分出力が崩れないことを確認した)。幅は core が `Span.width` で与えた値に従い、幅関数は持たない。
 //!
-//! 現在の範囲 (M2 の E1): 編集面 (ペイン) とカーソル位置。クローム (ステータス・メッセージ・ヒント) とオーバーレイは
-//! 後の版で足す。バッファはクロームの行ぶん (`CHROME_ROWS`) を確保して空のままにする。
+//! `render_panes` は編集面 (ペイン) とカーソル位置を書き、バッファはクロームの行ぶんを確保して空のままにする。
+//! クローム (ステータス・メッセージ・ヒント) とオーバーレイは `chrome::render_screen` が足す (E5)。
 
 use eve_view::{
     CellPos, Color, ColorDepth, Frame, PaneFrame, RenderRow, RowSource, Span, Style, StyleMods,
@@ -16,9 +16,29 @@ use ratatui::style::{Color as RColor, Modifier, Style as RStyle};
 use crate::color::clamp_style;
 use crate::glyphs::Glyphs;
 use crate::sanitize::replace_controls;
+use crate::theme::Theme;
 
 /// 編集面の下のクロームの行数 (ステータスバー・メッセージ行・ヒントバー、04 §3.1)。
 pub const CHROME_ROWS: u16 = 3;
+
+/// 編集面が `surface_rows` 行のときのクロームの行数。端末が 10 行未満 (= 編集面が 8 行未満) のときは、メッセージ行を
+/// 確保せず 2 行にする (04 §3.5。メッセージは表示中だけヒントバーの行を使う)。
+pub const fn chrome_rows_for_surface(surface_rows: u16) -> u16 {
+    if surface_rows < 8 {
+        CHROME_ROWS - 1
+    } else {
+        CHROME_ROWS
+    }
+}
+
+/// 端末が `window_rows` 行のときの編集面の行数 (`chrome_rows_for_surface` の逆)。
+pub const fn surface_rows_for_window(window_rows: u16) -> u16 {
+    if window_rows < 10 {
+        window_rows.saturating_sub(CHROME_ROWS - 1)
+    } else {
+        window_rows - CHROME_ROWS
+    }
+}
 
 /// 変換の結果。
 #[derive(Debug)]
@@ -58,15 +78,15 @@ pub fn to_ratatui(style: Style) -> RStyle {
     s
 }
 
-struct Writer<'a> {
-    buf: &'a mut Buffer,
-    depth: ColorDepth,
-    clamped: usize,
-    sanitized: usize,
+pub(crate) struct Writer<'a> {
+    pub(crate) buf: &'a mut Buffer,
+    pub(crate) depth: ColorDepth,
+    pub(crate) clamped: usize,
+    pub(crate) sanitized: usize,
 }
 
 impl Writer<'_> {
-    fn style(&mut self, s: Style) -> RStyle {
+    pub(crate) fn style(&mut self, s: Style) -> RStyle {
         let (s, changed) = clamp_style(s, self.depth);
         if changed {
             self.clamped += 1;
@@ -74,7 +94,8 @@ impl Writer<'_> {
         to_ratatui(s)
     }
 
-    fn set(&mut self, x: u16, y: u16, symbol: &str, style: RStyle, skip: bool) {
+    pub(crate) fn set(&mut self, x: u16, y: u16, symbol: &str, style: RStyle, skip: bool) {
+        self.break_wide(x, y);
         if let Some(cell) = self.buf.cell_mut((x, y)) {
             cell.set_symbol(symbol).set_style(style);
             cell.set_diff_option(if skip {
@@ -85,8 +106,47 @@ impl Writer<'_> {
         }
     }
 
+    /// (x, y) に書くことで幅 2 以上の書記素が分断されるとき、残る側を空白にする (端末に半分だけの全角文字を残さない)。
+    fn break_wide(&mut self, x: u16, y: u16) {
+        let Some(cell) = self.buf.cell((x, y)) else {
+            return;
+        };
+        if cell.diff_option == CellDiffOption::Skip {
+            // 継続セルを上書きする: 先頭セルまでさかのぼって空白にする
+            let mut hx = x;
+            while hx > 0 {
+                hx -= 1;
+                let blank_style = self.buf.cell((hx, y)).map(|c| c.style());
+                let is_skip = self
+                    .buf
+                    .cell((hx, y))
+                    .is_some_and(|c| c.diff_option == CellDiffOption::Skip);
+                if let (Some(st), Some(c)) = (blank_style, self.buf.cell_mut((hx, y))) {
+                    c.set_symbol(" ").set_style(st);
+                    c.set_diff_option(CellDiffOption::None);
+                }
+                if !is_skip {
+                    break;
+                }
+            }
+        }
+        // 先頭セルを上書きする: 後ろに続く継続セルを空白にする
+        let mut nx = x + 1;
+        while self
+            .buf
+            .cell((nx, y))
+            .is_some_and(|c| c.diff_option == CellDiffOption::Skip)
+        {
+            if let Some(c) = self.buf.cell_mut((nx, y)) {
+                c.set_symbol(" ");
+                c.set_diff_option(CellDiffOption::None);
+            }
+            nx += 1;
+        }
+    }
+
     /// `limit` (含まない) までに収めて Span を書く。次に書く位置を返す。
-    fn span(&mut self, mut x: u16, y: u16, limit: u16, span: &Span) -> u16 {
+    pub(crate) fn span(&mut self, mut x: u16, y: u16, limit: u16, span: &Span) -> u16 {
         if span.width == 0 || x >= limit {
             return x;
         }
@@ -121,18 +181,21 @@ impl Writer<'_> {
     }
 }
 
-fn render_row(w: &mut Writer<'_>, pane: &PaneFrame, i: u16, row: &RenderRow, glyphs: &Glyphs) {
+fn render_row(
+    w: &mut Writer<'_>,
+    pane: &PaneFrame,
+    i: u16,
+    row: &RenderRow,
+    glyphs: &Glyphs,
+    theme: &Theme,
+) {
     let r = pane.rect;
     let y = r.row + i;
     let limit = r.col + r.cols;
     let mut x = r.col;
     if matches!(row.source, RowSource::Virtual) {
-        // 文書末尾より後の行 (ui.eof_marker。core の Frame は役割を持たないので、暫定で淡い灰色)
-        let s = Style {
-            fg: Color::Rgb(0x80, 0x80, 0x80),
-            ..Style::DEFAULT
-        };
-        let style = w.style(s);
+        // 文書末尾より後の行 (ロール ui.eof_marker)
+        let style = w.style(theme.eof_marker);
         w.set(x, y, glyphs.eof_line.text, style, false);
         return;
     }
@@ -160,7 +223,11 @@ fn render_row(w: &mut Writer<'_>, pane: &PaneFrame, i: u16, row: &RenderRow, gly
 
 /// Frame の編集面を Buffer に書く。
 pub fn render_panes(frame: &Frame, depth: ColorDepth, glyphs: &Glyphs) -> PaneRender {
-    let (cols, rows) = (frame.size.cols, frame.size.rows + CHROME_ROWS);
+    let theme = Theme::for_depth(depth);
+    let (cols, rows) = (
+        frame.size.cols,
+        frame.size.rows + chrome_rows_for_surface(frame.size.rows),
+    );
     let mut buffer = Buffer::empty(Rect::new(0, 0, cols, rows));
     let mut risky_rows = Vec::new();
     let (clamped_cells, sanitized);
@@ -180,7 +247,7 @@ pub fn render_panes(frame: &Frame, depth: ColorDepth, glyphs: &Glyphs) -> PaneRe
                 if row.width_risky {
                     risky_rows.push(pane.rect.row + i);
                 }
-                render_row(&mut w, pane, i, row, glyphs);
+                render_row(&mut w, pane, i, row, glyphs, &theme);
             }
         }
         clamped_cells = w.clamped;

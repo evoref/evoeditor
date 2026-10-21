@@ -27,7 +27,7 @@ use windows_sys::Win32::System::Console::{
 };
 use windows_sys::Win32::System::Threading::{INFINITE, WaitForSingleObject};
 
-use crate::buffer::CHROME_ROWS;
+use crate::buffer::surface_rows_for_window;
 use crate::input::{BURST_T_MS, KeyRec, Normalizer, Out, Raw};
 
 /// 1 回の `ReadConsoleInputW` で読む記録の上限。
@@ -150,7 +150,7 @@ fn window_size(output: HANDLE) -> io::Result<CellSize> {
 pub fn surface_resize(window: CellSize) -> InputEvent {
     InputEvent::Resize {
         cols: window.cols,
-        rows: window.rows.saturating_sub(CHROME_ROWS),
+        rows: surface_rows_for_window(window.rows),
     }
 }
 
