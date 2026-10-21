@@ -1,5 +1,5 @@
 # ベンチの記録 (docs/09-testing-quality.md §5.2 / §6.1、docs/08 §2.2)。手動実行 (workflow_dispatch) だけ。
-# v0.1 は BM-103a (core 区間・診断用)・BM-205 (exe のサイズ) の値を Actions の artifact に残す。リポジトリにはコミットしない。
+# v0.1 は BM-103a (core 区間・診断用)・BM-104 / BM-202 (サイズ別オープンの時間とメモリ・診断用)・BM-205 (exe のサイズ) の値を Actions の artifact に残す。リポジトリにはコミットしない。
 # CI ランナーは共有 VM で変動が大きいので、値は記録と推移の目安で、合否の判定には使わない (判定は基準機、09 §5.1)。
 # BM-101a (起動から最初の Frame) は計測用ビルドの feature (bench-trace) と一緒に M3 以降で足す。
 name: bench
