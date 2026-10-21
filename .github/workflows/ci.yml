@@ -1,7 +1,7 @@
 # フル車線 (docs/09-testing-quality.md §6.1 / §6.2、docs/11-dev-workflow.md §8.1)。
 # 必須のステータスチェックの名前は、ジョブの表示名そのもの (docs/11 §9.1 の固定名):
 #   check / fmt / clippy (windows) / clippy (linux) / test (windows) / test (linux) / deps / dco / gitleaks / pr-source
-# 2 段目 (ジョブを足す PR の merge 後に必須に加える): i18n / e2e
+# 2 段目 (ジョブを足す PR の merge 後に必須に加える): i18n / e2e / check-themes
 # 表示名を変えるときは、ブランチ保護の必須チェックの名前も同じ手順で差し替える。
 # パスのフィルタは付けない (docs だけ・コードだけの PR でも全ジョブを回す)。
 name: ci
@@ -168,6 +168,24 @@ jobs:
         with:
           shared-key: windows
       - run: cargo xtask i18n
+
+  # 組込みテーマのロール表の検査 (docs/09 §3.5、docs/07 §8.2): truecolor と mono の欠落・形・コントラスト・実装との突合。
+  # 2 段目の必須チェック。この PR が merge された直後に、ブランチ保護の必須に加える (docs/09 §6.2)。
+  check-themes:
+    name: check-themes
+    needs: check
+    runs-on: windows-2025
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Rust (stable)
+        run: rustup toolchain install stable --profile minimal --no-self-update && rustup default stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          shared-key: windows
+      - run: cargo xtask check-themes
 
   # L5 端末 E2E (docs/09 §3.6): 実バイナリを ConPTY で起動して画面を検査する。nextest の profile e2e (retries = 2)。
   # M2 で成り立つシナリオだけ (保存・強制終了・パニック退避の test-hooks のシナリオは M3 以降)。

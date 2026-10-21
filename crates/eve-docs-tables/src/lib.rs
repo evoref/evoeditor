@@ -9,6 +9,7 @@ use std::fmt;
 
 pub mod ac;
 pub mod crates;
+pub mod theme;
 
 /// 表の 1 行。
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -1,0 +1,47 @@
+# ベンチの記録 (docs/09-testing-quality.md §5.2 / §6.1、docs/08 §2.2)。手動実行 (workflow_dispatch) だけ。
+# v0.1 は BM-103a (core 区間・診断用)・BM-205 (exe のサイズ) の値を Actions の artifact に残す。リポジトリにはコミットしない。
+# CI ランナーは共有 VM で変動が大きいので、値は記録と推移の目安で、合否の判定には使わない (判定は基準機、09 §5.1)。
+# BM-101a (起動から最初の Frame) は計測用ビルドの feature (bench-trace) と一緒に M3 以降で足す。
+name: bench
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "計測するブランチまたはコミット (空なら vars.NIGHTLY_REF、それも無ければ develop)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+# アクションはコミット SHA で固定する (docs/09 §6.5)。
+# actions/checkout v7.0.1          3d3c42e5aac5ba805825da76410c181273ba90b1
+# Swatinem/rust-cache v2.9.2       6323deb102c322ba6fcbdcafc7e3dddab59af2b6
+# actions/upload-artifact v7.0.2   cf430e030ddbb5b0abf93d22962f4752f3646cd9
+
+jobs:
+  bench:
+    name: bench (windows)
+    runs-on: windows-2025
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref || vars.NIGHTLY_REF || 'develop' }}
+          persist-credentials: false
+      - name: Rust (stable)
+        run: rustup toolchain install stable --profile minimal --no-self-update && rustup default stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          shared-key: windows
+      - run: cargo xtask bench
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: bench-windows
+          path: target/bench/bench.json
+          if-no-files-found: error

@@ -30,4 +30,5 @@ windows-sys = { version = "0.59", features = [
 
 [dev-dependencies]
 eve-testkit = { version = "0.0.0", path = "../eve-testkit" }
+eve-docs-tables = { version = "0.0.0", path = "../eve-docs-tables" }
 unicode-width = "0.2"

@@ -42,7 +42,44 @@ const fn mods(mods: StyleMods) -> Style {
     style(Color::Default, Color::Default, mods)
 }
 
+/// eve-tui が描く領域のロール名 (07 §8.2 の表のロール名と同じ。表との突合は `tests/theme_table.rs`)。
+pub const ROLES: [&str; 13] = [
+    "ui.status_bar",
+    "ui.status_bar.chord",
+    "ui.message.info",
+    "ui.message.warning",
+    "ui.message.error",
+    "ui.hint_bar",
+    "ui.hint_bar.key",
+    "ui.overlay",
+    "ui.input.placeholder",
+    "ui.dialog.button",
+    "ui.dialog.button.focused",
+    "ui.eof_marker",
+    "ui.scroll_marker",
+];
+
 impl Theme {
+    /// ロール名から引く (`ROLES` のもの)。
+    pub fn role(&self, name: &str) -> Option<Style> {
+        Some(match name {
+            "ui.status_bar" => self.status_bar,
+            "ui.status_bar.chord" => self.status_chord,
+            "ui.message.info" => self.message_info,
+            "ui.message.warning" => self.message_warning,
+            "ui.message.error" => self.message_error,
+            "ui.hint_bar" => self.hint_bar,
+            "ui.hint_bar.key" => self.hint_key,
+            "ui.overlay" => self.overlay,
+            "ui.input.placeholder" => self.placeholder,
+            "ui.dialog.button" => self.dialog_button,
+            "ui.dialog.button.focused" => self.dialog_button_focused,
+            "ui.eof_marker" => self.eof_marker,
+            "ui.scroll_marker" => self.scroll_marker,
+            _ => return None,
+        })
+    }
+
     /// 色深度に合わせたテーマ。`Mono` (色なし) は属性だけ、それ以外は truecolor の値 (段への近似は描画時)。
     pub fn for_depth(depth: ColorDepth) -> Theme {
         if depth == ColorDepth::Mono {
