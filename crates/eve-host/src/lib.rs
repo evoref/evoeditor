@@ -15,6 +15,7 @@ mod workers;
 
 pub use clock::SystemClock;
 pub use emergency::{EmergencyCtl, EmergencyState};
+pub use eve_platform::clipboard::{ClipboardFailure, ClipboardProvider};
 pub use frontend::{
     EffectOutcome, EmergencyRestoreInfo, Frontend, FrontendConfig, FrontendError, InputSink,
     RenderOutcome,

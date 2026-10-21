@@ -56,6 +56,19 @@ impl EditorState {
             .is_some_and(|d| d.is_editable())
     }
 
+    /// システムクリップボードを使えなかったことを知らせる (`msg.clipboard.fallback`、同じ起動の中で最初の 1 回だけ)。
+    pub fn notify_clipboard_fallback(&mut self, reason: &str) {
+        if self.clipboard.fallback_notified {
+            return;
+        }
+        self.clipboard.fallback_notified = true;
+        self.show_message(
+            MessageLevel::Info,
+            "msg.clipboard.fallback",
+            &[("reason", reason)],
+        );
+    }
+
     /// 選択をコピーする。選択が空なら何もしない (`false`)。内部レジスタへ書き、`SetClipboard` を積む。
     pub(super) fn copy_selection(&mut self) -> bool {
         let Some(doc_id) = self.active_document() else {
@@ -133,14 +146,7 @@ impl EditorState {
         let text = match text {
             Some(t) => t,
             None => {
-                if !self.clipboard.fallback_notified {
-                    self.clipboard.fallback_notified = true;
-                    self.show_message(
-                        MessageLevel::Info,
-                        "msg.clipboard.fallback",
-                        &[("reason", "取得できませんでした")],
-                    );
-                }
+                self.notify_clipboard_fallback("取得できませんでした");
                 match &self.clipboard.register {
                     Some(src) => src.to_text(),
                     None => return,

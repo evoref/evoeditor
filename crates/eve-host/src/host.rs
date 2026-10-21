@@ -17,6 +17,9 @@ use crate::frontend::{
 use crate::msg::{ExitCode, HostMsg};
 
 /// 1 回の `step` で続けて処理する時間の目安 (超えたら残りは次の `step` へ)。
+/// システムクリップボードの取得を待つ時間 (05 §8.1)。
+const CLIPBOARD_TIMEOUT: Millis = Millis(2000);
+
 const STEP_BUDGET: Millis = Millis(8);
 /// ジョブの結果などによる再描画の最小の間隔 (入力・貼り付けの結果は即時に描く、04 §4.4)。
 const RENDER_INTERVAL: Millis = Millis(16);
@@ -83,6 +86,12 @@ pub struct Host {
     restore_info: Arc<std::sync::OnceLock<crate::frontend::EmergencyRestoreInfo>>,
     /// `run` が終わった (メインが終了へ向かっている)。受信スレッドが「メインの終了待ち」で見る (02 §9.6 手順 2)。
     run_finished: Arc<std::sync::atomic::AtomicBool>,
+    /// システムクリップボードの提供者 (無ければ内部レジスタだけ)。
+    clipboard: Option<Arc<dyn eve_platform::clipboard::ClipboardProvider>>,
+    /// 取得の使い捨てスレッドが動いている (放棄したスレッドが戻るまで立ったまま。次の要求は新しいスレッドを立てない、05 §8.1)。
+    clip_busy: Arc<std::sync::atomic::AtomicBool>,
+    /// 待っている取得の token と期限 (2 秒)。
+    clip_wait: Option<(eve_view::ClipboardToken, Tick)>,
 }
 
 impl Host {
@@ -115,7 +124,15 @@ impl Host {
             emergency: EmergencyCtl::new(),
             restore_info: Arc::new(std::sync::OnceLock::new()),
             run_finished: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            clipboard: None,
+            clip_busy: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            clip_wait: None,
         }
+    }
+
+    /// システムクリップボードの提供者を設定する (`start` / `run` の前に呼ぶ。無ければ内部レジスタだけ)。
+    pub fn set_clipboard(&mut self, p: Arc<dyn eve_platform::clipboard::ClipboardProvider>) {
+        self.clipboard = Some(p);
     }
 
     /// 緊急の端末復元の情報の置き場 (受信スレッドに配る。`start` の `init` の後に入る)。
@@ -270,6 +287,7 @@ impl Host {
             self.editor.next_deadline(),
             self.render_due,
             self.wake_at,
+            self.clip_wait.map(|(_, due)| due),
             from_frontend,
         ]
         .into_iter()
@@ -282,6 +300,7 @@ impl Host {
         let budget_end = self.clock.now() + (STEP_BUDGET);
         // 先頭: アイドル中に過ぎた期限を先に処理する
         self.editor.tick(self.clock.now());
+        self.check_clipboard_timeout();
         self.sync_emergency();
         let mut input_driven = false;
         let mut next = Some(first);
@@ -294,6 +313,25 @@ impl Host {
                     self.editor.handle_input(w, ev);
                 }
                 HostMsg::Job(result) => self.editor.on_job_result(*result),
+                HostMsg::Clipboard { token, result } => {
+                    // 待っている token の結果だけ使う (期限後に届いたものは捨てる)
+                    if self.clip_wait.is_some_and(|(t, _)| t == token) {
+                        self.clip_wait = None;
+                        let text = match result {
+                            Ok(t) => t,
+                            Err(_) => {
+                                self.editor
+                                    .notify_clipboard_fallback("取得できませんでした");
+                                None
+                            }
+                        };
+                        self.deliver_clipboard(token, text);
+                    }
+                }
+                HostMsg::ClipboardWriteFailed(_) => {
+                    self.editor
+                        .notify_clipboard_fallback("書き込めませんでした");
+                }
                 HostMsg::Signal(kind) => {
                     // test-hooks: メインが止まった状態の再現 (受信スレッドの緊急の端末復元を検査する、09 §3.6)
                     #[cfg(feature = "test-hooks")]
@@ -336,21 +374,14 @@ impl Host {
                 continue;
             }
             match eff {
-                // 書込: 内部レジスタには core が書き済み。ハンドルは回収して捨てる (システムへの書込は提供者ができる版で)
+                // 書込: 内部レジスタには core が書き済み。システムへは使い捨てのスレッドで書く (ブロックし得る)
                 Effect::SetClipboard { content, .. } => {
-                    if let eve_view::ClipboardText::Handle(id) = content {
-                        let _ = self.editor.take_clipboard(id);
-                    }
+                    self.write_clipboard(content);
                     continue;
                 }
-                // 読込: システムクリップボードの提供者が無い間は「読めなかった」と返し、core が内部レジスタから貼り付ける
+                // 読込: 使い捨てのスレッドで取得し、2 秒で応答が無ければ内部レジスタからの貼り付けに切り替える (05 §8.1)
                 Effect::RequestClipboard { token, .. } => {
-                    if let Some(w) = self.window {
-                        self.editor.handle_input(
-                            w,
-                            eve_view::InputEvent::ClipboardContent { token, text: None },
-                        );
-                    }
+                    self.read_clipboard(token);
                     continue;
                 }
                 _ => {}
@@ -370,6 +401,94 @@ impl Host {
             .wake_after()
             .map(|d| self.clock.now() + (Millis(u64::try_from(d.as_millis()).unwrap_or(u64::MAX))));
         StepOutcome::Continue
+    }
+
+    /// `Effect::SetClipboard`: 提供者があれば、使い捨てのスレッドで文字列化して書く。上限 (64 MiB) を超えたら書かずに知らせる。
+    #[allow(clippy::disallowed_methods)] // クリップボード書込の使い捨てスレッド (02 §9.1 の表)
+    fn write_clipboard(&mut self, content: eve_view::ClipboardText) {
+        use eve_platform::clipboard::SYSTEM_MAX_BYTES;
+        let source = match content {
+            eve_view::ClipboardText::Handle(id) => self.editor.take_clipboard(id),
+            _ => None,
+        };
+        let Some(provider) = self.clipboard.clone() else {
+            return;
+        };
+        // 文字列化の前に総バイト数で上限と比べる
+        let too_large = match (&content, &source) {
+            (eve_view::ClipboardText::Inline(s), _) => s.len() > SYSTEM_MAX_BYTES,
+            (_, Some(src)) => src.len_bytes() > SYSTEM_MAX_BYTES,
+            _ => false,
+        };
+        if too_large {
+            self.editor
+                .notify_clipboard_fallback("大きすぎてシステムのクリップボードに入りません");
+            return;
+        }
+        let tx = self.tx.clone();
+        let _ = std::thread::Builder::new()
+            .name("eve-clip-write".to_owned())
+            .spawn(move || {
+                let text = match (content, source) {
+                    (eve_view::ClipboardText::Inline(s), _) => s,
+                    (_, Some(src)) => src.to_text(),
+                    _ => return,
+                };
+                if let Err(e) = provider.set_text(&text) {
+                    let _ = tx.send(HostMsg::ClipboardWriteFailed(e));
+                }
+            });
+    }
+
+    /// `Effect::RequestClipboard`。提供者が無い・前の取得が戻っていないときは、直ちに「読めなかった」と返す。
+    #[allow(clippy::disallowed_methods)] // クリップボード取得の使い捨てスレッド (02 §9.1 の表)
+    fn read_clipboard(&mut self, token: eve_view::ClipboardToken) {
+        use std::sync::atomic::Ordering;
+        let provider = self.clipboard.clone();
+        let busy = self.clip_busy.swap(true, Ordering::AcqRel);
+        let (Some(provider), false) = (provider, busy) else {
+            // 放棄したスレッドが戻るまでは積み増さない (busy を立てたのは自分なら戻す)
+            if !busy && self.clipboard.is_none() {
+                self.clip_busy.store(false, Ordering::Release);
+            }
+            self.deliver_clipboard(token, None);
+            return;
+        };
+        let tx = self.tx.clone();
+        let flag = Arc::clone(&self.clip_busy);
+        let spawned = std::thread::Builder::new()
+            .name("eve-clip-read".to_owned())
+            .spawn(move || {
+                let result = provider.get_text();
+                flag.store(false, Ordering::Release);
+                let _ = tx.send(HostMsg::Clipboard { token, result });
+            });
+        if spawned.is_err() {
+            self.clip_busy.store(false, Ordering::Release);
+            self.deliver_clipboard(token, None);
+            return;
+        }
+        self.clip_wait = Some((token, self.clock.now() + CLIPBOARD_TIMEOUT));
+    }
+
+    /// 取得の結果 (または代わりの `None`) を core へ渡す。
+    fn deliver_clipboard(&mut self, token: eve_view::ClipboardToken, text: Option<String>) {
+        if let Some(w) = self.window {
+            self.editor
+                .handle_input(w, eve_view::InputEvent::ClipboardContent { token, text });
+        }
+    }
+
+    /// 取得の期限 (2 秒) が来たら、内部レジスタからの貼り付けに切り替える。取得のスレッドは放棄する (終了を待たない)。
+    fn check_clipboard_timeout(&mut self) {
+        if let Some((token, due)) = self.clip_wait
+            && self.clock.now() >= due
+        {
+            self.clip_wait = None;
+            self.editor
+                .notify_clipboard_fallback("取得がタイムアウトしました");
+            self.deliver_clipboard(token, None);
+        }
     }
 
     /// 描画の間引き: 入力の結果は即時に描く。それ以外 (ジョブの結果など) だけの変化は、直前の描画から 16 ms 未満なら
