@@ -1,6 +1,8 @@
 //! テスト用の補助プロセス (docs/02 §4.1、09 §3.6 の保存途中 kill)。`save` は実ファイルシステムで 1 回保存し、環境変数
 //! `EVE_TEST_HOOK=<切断点>` を指していれば、その地点でプロセスを後始末なしで強制終了する (`eve-platform` の `test-hooks`)。
 //!
+//! `console-event <pid> <ctrl-c|ctrl-break>` は、別プロセスのコンソールにコントロールイベントを送る (09 §3.6 (8))。
+//!
 //! 使い方: `eve-test-helpers save <state_dir> <path> <atomic|inplace|inplace-skip> <content_file>`
 //! 終了コード: 0 = 保存した (`SaveReport` の method を標準出力へ)、3 = 保存の失敗 (`FsErrorKind` を標準エラーへ)、2 = 使い方の誤り、
 //! 137 = 切断点で強制終了。
@@ -37,6 +39,9 @@ impl ReadChunks for Chunks {
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
+    if args.first().map(String::as_str) == Some("console-event") {
+        return console_event(&args[1..]);
+    }
     let [cmd, state, path, mode, content] = args.as_slice() else {
         eprintln!(
             "使い方: eve-test-helpers save <state_dir> <path> <atomic|inplace|inplace-skip> <content_file>"
@@ -86,6 +91,36 @@ fn main() -> ExitCode {
         }
         Err(e) => {
             eprintln!("{:?}", e.kind);
+            ExitCode::from(3)
+        }
+    }
+}
+
+/// `console-event <pid> <ctrl-c|ctrl-break>`: 0 = 送った、2 = 使い方の誤り、3 = 送れなかった。
+fn console_event(args: &[String]) -> ExitCode {
+    use eve_platform::console::{CtrlEvent, send_ctrl_event};
+    let [pid, kind] = args else {
+        eprintln!("使い方: eve-test-helpers console-event <pid> <ctrl-c|ctrl-break>");
+        return ExitCode::from(2);
+    };
+    let (Ok(pid), ev) = (
+        pid.parse::<u32>(),
+        match kind.as_str() {
+            "ctrl-c" => CtrlEvent::CtrlC,
+            "ctrl-break" => CtrlEvent::CtrlBreak,
+            _ => return ExitCode::from(2),
+        },
+    ) else {
+        return ExitCode::from(2);
+    };
+    match send_ctrl_event(pid, ev) {
+        Ok(()) => {
+            // イベントがコンソールに配られるのを待ってから終わる
+            std::thread::sleep(std::time::Duration::from_millis(300));
+            ExitCode::SUCCESS
+        }
+        Err(e) => {
+            eprintln!("送れません: {e}");
             ExitCode::from(3)
         }
     }

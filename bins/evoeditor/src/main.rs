@@ -174,6 +174,8 @@ fn run(
     }));
     // どの経路でも端末を復元する (冪等)
     frontend.restore_terminal();
+    // コンソールのハンドラが退避を書いている最中なら、終わるまで待つ (先にメインが終わると書込が打ち切られる)
+    emergency.wait_if_writing(eve_host::RESCUE_BUDGET_CLOSE);
     match outcome {
         Ok(code) => {
             if !ignored.is_empty() {
