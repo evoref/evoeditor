@@ -1,6 +1,7 @@
 //! `cargo xtask bench`: ベンチの記録 (docs/09-testing-quality.md §5.2 / §6、docs/11 §1)。
 //!
-//! v0.1 の M2 で記録するもの: BM-103a (キー入力の core 区間、ヘッドレス。診断用)、BM-205 (配布ビルドの exe のサイズ)。
+//! 記録するもの: BM-103a (キー入力の core 区間、ヘッドレス。診断用)、BM-104 / BM-202 (サイズ別オープンの時間とメモリ、実ファイル。診断用。
+//! 判定は基準機)、BM-205 (配布ビルドの exe のサイズ)。
 //! BM-101a (起動から最初の Frame まで) は計測用ビルドの隠しフラグと `bench-trace` (記録の仕組み) が要るので M3 以降。
 //! 結果は `target/bench/bench.json` に書く (`bench.yml` が Actions の artifact にする。リポジトリにはコミットしない)。
 //! CI ランナーの値は変動が大きい共有 VM のものなので、判定には使わない (09 §5.1)。`--quick` は動作確認用で、記録には使わない。
@@ -36,6 +37,36 @@ pub fn run_all(args: &[String]) -> Result<(), String> {
         .ok_or("BM-103a の結果の行が見つかりません")?;
     println!("  {line}");
     results.push(line.to_owned());
+
+    // BM-104 / BM-202 (サイズ別オープンの時間とメモリ。実ファイル、Windows)。S-02 の最終判定の材料 (09 §5.2)
+    if cfg!(windows) {
+        println!("▶ BM-104 / BM-202 (サイズ別オープンの時間とメモリ)");
+        let mut cmd = Command::new("cargo");
+        cmd.args([
+            "bench",
+            "-p",
+            "eve-platform",
+            "--bench",
+            "bm_104_202",
+            "--",
+            "--json",
+        ]);
+        if quick {
+            cmd.arg("--quick");
+        }
+        let out = run_capture(&mut cmd)?;
+        let lines: Vec<&str> = out
+            .lines()
+            .filter(|l| l.starts_with("{\"id\":\"BM-104"))
+            .collect();
+        if lines.is_empty() {
+            return Err("BM-104 の結果の行が見つかりません".to_owned());
+        }
+        for l in lines {
+            println!("  {l}");
+            results.push(l.to_owned());
+        }
+    }
 
     println!("▶ BM-205 (配布ビルドの exe のサイズ)");
     run_capture(Command::new("cargo").args(["build", "--release", "-p", "evoeditor"]))?;

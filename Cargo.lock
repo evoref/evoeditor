@@ -301,9 +301,11 @@ dependencies = [
 name = "eve-platform"
 version = "0.0.0"
 dependencies = [
+ "encoding_rs",
  "eve-core",
  "eve-text",
  "eve-view",
+ "memory-stats",
  "windows-sys 0.59.0",
  "xxhash-rust",
 ]
