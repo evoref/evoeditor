@@ -47,7 +47,16 @@ pub(super) enum Pending {
         path: FsPath,
         /// 確認の後に同じ保存をやり直すための照合の期待 (03 §9.3)。
         expected: Expect,
+        /// `file.set_encoding` の新しい書式。保存の成功で文書の書式に確定する。
+        fmt: Option<NewFormat>,
     },
+}
+
+/// `file.set_encoding` が保存に渡す新しい書式 (保存が成功するまで文書の書式は変えない、03 §8.8)。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) struct NewFormat {
+    pub encoding: Encoding,
+    pub bom: bool,
 }
 
 /// 読込ジョブの用途。`Reopen` / `Reload` は同じ文書の中身を差し替える (03 §8.8 / §9.5)。
@@ -82,6 +91,7 @@ pub(super) struct SaveFailedAsk {
     pub cont: Option<Continuation>,
     /// 失敗した保存の時点の本文 (確認の間は編集できない)。「退避先に保存」で書く。
     pub snapshot: std::sync::Arc<crate::DocSnapshot>,
+    pub fmt: Option<NewFormat>,
 }
 
 /// 保存の代替の確認 (`AtomicUnsupported` / ハードリンク / `BackupFailed`、03 §9.3 手順 7・05 §4.4)。
@@ -92,6 +102,7 @@ pub(super) struct FallbackAsk {
     pub path: FsPath,
     pub expected: Expect,
     pub cont: Option<Continuation>,
+    pub fmt: Option<NewFormat>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -349,6 +360,16 @@ impl EditorState {
         raw_path: &str,
         cont: Option<Continuation>,
     ) -> CommandResult {
+        self.request_save_as_fmt(raw_path, cont, None)
+    }
+
+    /// `request_save_as` に新しい書式を渡す版 (`file.set_encoding` の無題・読み取り専用の文書、03 §8.8)。
+    pub(super) fn request_save_as_fmt(
+        &mut self,
+        raw_path: &str,
+        cont: Option<Continuation>,
+        fmt: Option<NewFormat>,
+    ) -> CommandResult {
         let Some(doc_id) = self.active_document() else {
             return CommandResult::Rejected(RejectReason::NoTarget);
         };
@@ -388,7 +409,52 @@ impl EditorState {
         } else {
             Expect::Absent
         };
-        self.start_save(doc_id, path, expected, cont)
+        self.start_save_fmt(doc_id, path, expected, cont, fmt)
+    }
+
+    /// `file.set_encoding`: 指定した文字コードで保存する (03 §8.8)。未編集でも常に書く。文書の書式は保存が成功するまで変えない。
+    /// 文字コードが無ければ尋ねる。パスのない文書と読み取り専用の文書は、名前を付けて保存の流れへ新しい書式を渡す。
+    pub fn set_encoding(&mut self, enc: Option<Encoding>, bom: Option<bool>) -> CommandResult {
+        let Some(doc_id) = self.active_document() else {
+            return CommandResult::Rejected(RejectReason::NoTarget);
+        };
+        let Some(doc) = self.documents.get(&doc_id) else {
+            return CommandResult::Rejected(RejectReason::NoTarget);
+        };
+        if doc.load_state != crate::document::LoadState::Ready {
+            return CommandResult::Rejected(RejectReason::NotAvailable);
+        }
+        let Some(enc) = enc else {
+            self.open_prompt(PromptKind::SetEncoding { bom }, String::new());
+            return CommandResult::Done;
+        };
+        // BOM: UTF-16 は付ける、UTF-8 は今の文書のまま、それ以外は BOM を持たない (指定しても誤りにしない)
+        let has_bom = match enc {
+            Encoding::Utf16Le | Encoding::Utf16Be => bom.unwrap_or(true),
+            Encoding::Utf8 => bom.unwrap_or(doc.format.has_bom),
+            _ => false,
+        };
+        let fmt = NewFormat {
+            encoding: enc,
+            bom: has_bom,
+        };
+        let path = doc.path.clone();
+        if self.save_in_progress(doc_id) {
+            let shown = path.as_ref().map(FsPath::display).unwrap_or_default();
+            self.message(MessageLevel::Info, "info.save.in_progress", &shown);
+            return CommandResult::Done;
+        }
+        match path {
+            Some(path) if doc.is_editable() => {
+                let expected = doc.disk_stamp.map_or(Expect::Absent, Expect::Stamp);
+                self.start_save_fmt(doc_id, path, expected, None, Some(fmt))
+            }
+            other => {
+                let initial = other.as_ref().map(FsPath::display).unwrap_or_default();
+                self.open_prompt(PromptKind::SaveAsFormat { fmt }, initial);
+                CommandResult::Done
+            }
+        }
     }
 
     fn start_save(
@@ -398,7 +464,19 @@ impl EditorState {
         expected: Expect,
         cont: Option<Continuation>,
     ) -> CommandResult {
-        self.start_save_with(doc_id, path, expected, cont, SaveStrategy::default())
+        self.start_save_fmt(doc_id, path, expected, cont, None)
+    }
+
+    /// 新しい書式 `fmt` を保存に渡す (`file.set_encoding`)。成功したときだけ文書の書式に確定する。
+    fn start_save_fmt(
+        &mut self,
+        doc_id: DocumentId,
+        path: FsPath,
+        expected: Expect,
+        cont: Option<Continuation>,
+        fmt: Option<NewFormat>,
+    ) -> CommandResult {
+        self.start_save_with(doc_id, path, expected, cont, SaveStrategy::default(), fmt)
     }
 
     /// 保存方式を指定して保存ジョブを投入する (確認の後の再投入で直接上書きにする)。
@@ -409,12 +487,14 @@ impl EditorState {
         expected: Expect,
         cont: Option<Continuation>,
         strategy: SaveStrategy,
+        fmt: Option<NewFormat>,
     ) -> CommandResult {
         let Some(doc) = self.documents.get_mut(&doc_id) else {
             return CommandResult::Rejected(RejectReason::NoTarget);
         };
+        let out_encoding = fmt.map_or(doc.format.encoding, |f| f.encoding);
         // 状態付き符号化 (ISO-2022-JP) で不正バイトを含む文書は保存しない (03 §8.3 (a)。不正バイトを失わないため)
-        if doc.format.encoding.is_stateful() && doc.format.invalid_bytes > 0 {
+        if out_encoding.is_stateful() && doc.format.invalid_bytes > 0 {
             self.show_message(
                 MessageLevel::Error,
                 "msg.save.encoding_unsupported_iso2022",
@@ -423,8 +503,8 @@ impl EditorState {
             return CommandResult::Rejected(RejectReason::NotAvailable);
         }
         let (encoding, bom, pua) = (
-            doc.format.encoding,
-            doc.format.has_bom,
+            out_encoding,
+            fmt.map_or(doc.format.has_bom, |f| f.bom),
             doc.format.pua_escape,
         );
         let revision = doc.revision();
@@ -453,6 +533,7 @@ impl EditorState {
                 revision,
                 path,
                 expected,
+                fmt,
             },
         );
         CommandResult::Pending(job)
@@ -483,7 +564,8 @@ impl EditorState {
                 revision,
                 path,
                 expected,
-            } => self.finish_save(doc, at, revision, &path, expected, cont, r),
+                fmt,
+            } => self.finish_save(doc, at, revision, &path, expected, fmt, cont, r),
         }
         self.mark_dirty_render();
     }
@@ -494,6 +576,7 @@ impl EditorState {
         doc: DocumentId,
         path: &FsPath,
         expected: Expect,
+        fmt: Option<NewFormat>,
         cont: Option<Continuation>,
     ) -> Option<SaveFailedAsk> {
         let snapshot = self.rescue_snapshot(doc, false)?;
@@ -503,6 +586,7 @@ impl EditorState {
             expected,
             cont,
             snapshot: std::sync::Arc::new(snapshot),
+            fmt,
         })
     }
 
@@ -551,9 +635,10 @@ impl EditorState {
             expected,
             cont,
             snapshot,
+            fmt,
         } = ask;
         match id {
-            "retry" => self.start_save(doc, path, expected, cont),
+            "retry" => self.start_save_fmt(doc, path, expected, cont, fmt),
             "recovery" => {
                 // 続きの操作 (終了・置き換え) は行わない。書いた場所は結果のメッセージで示す
                 let job = self.jobs.spawn(
@@ -639,6 +724,7 @@ impl EditorState {
             path,
             expected,
             cont,
+            fmt,
         } = ask;
         let in_place = |backup| SaveStrategy::InPlace { backup };
         let strategy = match (kind, choice) {
@@ -653,7 +739,7 @@ impl EditorState {
             _ => None,
         };
         match strategy {
-            Some(s) => self.start_save_with(doc, path, expected, cont, s),
+            Some(s) => self.start_save_with(doc, path, expected, cont, s, fmt),
             None => {
                 self.open_prompt(PromptKind::SaveAs { then: cont }, String::new());
                 CommandResult::Done
@@ -1427,6 +1513,7 @@ impl EditorState {
         revision: eve_view::Revision,
         path: &FsPath,
         expected: Expect,
+        fmt: Option<NewFormat>,
         cont: Option<Continuation>,
         r: JobResult,
     ) {
@@ -1434,6 +1521,13 @@ impl EditorState {
             JobResult::Saved { report, .. } => {
                 let report_method = report.method;
                 if let Some(doc) = self.documents.get_mut(&doc_id) {
+                    // `file.set_encoding`: 保存が成功したので新しい書式に確定する。往復の検査結果は旧文字コードのものなので捨てる
+                    // (書いた内容を再エンコードすれば同じバイト列になる、03 §8.8)
+                    if let Some(f) = fmt {
+                        doc.format.encoding = f.encoding;
+                        doc.format.has_bom = f.bom;
+                        doc.format.roundtrip = Default::default();
+                    }
                     // 名前を付けて保存のパスは、書けてから文書のパスにする (03 §9.3 手順 7)
                     doc.path = Some(path.clone());
                     doc.finish_save(at, Some(report.new_stamp));
@@ -1495,6 +1589,7 @@ impl EditorState {
                         path: path.clone(),
                         expected,
                         cont,
+                        fmt,
                     },
                     &reason,
                     &links,
@@ -1508,7 +1603,7 @@ impl EditorState {
                     }),
                 ..
             } => {
-                let ask = self.save_failed_ask(doc_id, path, expected, cont);
+                let ask = self.save_failed_ask(doc_id, path, expected, fmt, cont);
                 // 直接上書きの途中の失敗: 元のファイルは壊れている可能性がある。バックアップの場所を必ず示す (05 §4.4 手順 8)
                 let b = backup.as_ref().map(FsPath::display).unwrap_or_default();
                 let key = if backup.is_some() {
@@ -1524,7 +1619,7 @@ impl EditorState {
                 );
             }
             JobResult::Failed { err, .. } => {
-                let ask = self.save_failed_ask(doc_id, path, expected, cont);
+                let ask = self.save_failed_ask(doc_id, path, expected, fmt, cont);
                 // 照合の失敗 (Conflict) は別の経路 (外部変更の確認、後続)。取消しは確認なしで示す
                 let ask = ask.filter(|_| {
                     !matches!(
@@ -1673,6 +1768,21 @@ fn file_reload(ctx: &mut CommandCtx<'_>) -> CommandResult {
     ctx.state.reload()
 }
 
+fn file_set_encoding(ctx: &mut CommandCtx<'_>) -> CommandResult {
+    let enc = match ctx.args.str("encoding") {
+        Some(name) => match Encoding::from_label(name) {
+            Some(e) => Some(e),
+            None => return CommandResult::Rejected(RejectReason::InvalidArgs),
+        },
+        None => None,
+    };
+    let bom = match ctx.args.get("bom") {
+        Some(super::command::ArgValue::Bool(b)) => Some(*b),
+        _ => None,
+    };
+    ctx.state.set_encoding(enc, bom)
+}
+
 fn file_save(ctx: &mut CommandCtx<'_>) -> CommandResult {
     ctx.state.request_save()
 }
@@ -1722,6 +1832,13 @@ pub(super) fn register(r: &mut CommandRegistry) {
         CommandKind::File,
         "doc.has_path",
         file_reload
+    );
+    reg!(
+        r,
+        "file.set_encoding",
+        CommandKind::File,
+        "",
+        file_set_encoding
     );
     reg!(
         r,

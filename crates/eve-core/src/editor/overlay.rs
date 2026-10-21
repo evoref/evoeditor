@@ -101,6 +101,14 @@ pub(super) enum PromptKind {
     },
     /// `file.reopen_with_encoding` に引数が無いときの文字コードの入力 (03 §8.8)。
     ReopenEncoding,
+    /// `file.set_encoding` に引数が無いときの文字コードの入力 (03 §8.8)。
+    SetEncoding {
+        bom: Option<bool>,
+    },
+    /// `file.set_encoding` で、パスのない・読み取り専用の文書の名前の入力 (名前を付けて保存へ新しい書式を渡す)。
+    SaveAsFormat {
+        fmt: super::file::NewFormat,
+    },
 }
 
 impl PromptKind {
@@ -110,7 +118,10 @@ impl PromptKind {
             PromptKind::Open => "open",
             PromptKind::SaveAs { .. } => "save_as",
             PromptKind::GotoLine => "goto_line",
-            PromptKind::Encoding { .. } | PromptKind::ReopenEncoding => "encoding",
+            PromptKind::Encoding { .. }
+            | PromptKind::ReopenEncoding
+            | PromptKind::SetEncoding { .. } => "encoding",
+            PromptKind::SaveAsFormat { .. } => "save_as",
         }
     }
 }
@@ -360,7 +371,9 @@ impl EditorState {
         };
         let text = p.text.trim().to_owned();
         match &p.kind {
-            PromptKind::Open | PromptKind::SaveAs { .. } if text.is_empty() => {
+            PromptKind::Open | PromptKind::SaveAs { .. } | PromptKind::SaveAsFormat { .. }
+                if text.is_empty() =>
+            {
                 self.prompt_error("empty")
             }
             PromptKind::Open => {
@@ -381,6 +394,20 @@ impl EditorState {
                     let mut opts = ask.opts;
                     opts.forced = Some(enc);
                     self.respawn_open(ask.clone(), opts)
+                }
+                None => self.prompt_error("invalid"),
+            },
+            PromptKind::SaveAsFormat { fmt } => {
+                let res =
+                    self.run_from_prompt(|st| st.request_save_as_fmt(&text, None, Some(*fmt)));
+                self.restore_prompt_if_rejected(Overlay::Prompt(p.clone()), &res, true);
+                res
+            }
+            PromptKind::SetEncoding { bom } => match eve_encoding::Encoding::from_label(&text) {
+                Some(enc) => {
+                    self.set_overlay(None);
+                    self.mark_dirty_render();
+                    self.set_encoding(Some(enc), *bom)
                 }
                 None => self.prompt_error("invalid"),
             },
