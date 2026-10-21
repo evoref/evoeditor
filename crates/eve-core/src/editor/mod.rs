@@ -283,24 +283,7 @@ impl Editor {
 
     /// 退避用の公開物を作る。dirty でない文書・読込中の文書・閉じた文書は `None` (スロットを空にする)。
     pub fn emergency_snapshot(&self, doc: DocumentId) -> Option<DocSnapshot> {
-        let d = self.state.document(doc)?;
-        if !d.is_dirty() || d.load_state != crate::document::LoadState::Ready {
-            return None;
-        }
-        Some(DocSnapshot {
-            doc,
-            snapshot: d.snapshot(),
-            format: d.format.clone(),
-            revision: d.revision(),
-            saved_node_exists: d.history().saved().is_some(),
-            sensitive: false,
-            path: d.path.clone(),
-            untitled_name: d.path.is_none().then(|| {
-                self.state
-                    .catalog()
-                    .render("status.untitled", &[("n", "1")], &|_| None)
-            }),
-        })
+        self.state.rescue_snapshot(doc, true)
     }
 
     pub fn take_snapshot_updates(&mut self) -> Vec<DocumentId> {

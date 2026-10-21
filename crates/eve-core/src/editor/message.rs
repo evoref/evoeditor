@@ -42,6 +42,18 @@ impl EditorState {
 
     /// MessageKey を解決して表示する。`msg.*` は `.text` と `.hint`、それ以外は 1 つの文。
     /// 外向きには `EditorEvent::MessageShown` (キーだけ) も積む。
+    /// メッセージ `key` の本文だけを解決する (確認ダイアログの本文に入れる。`hint` は含めない)。
+    pub(super) fn message_text(&self, key: &str, args: &[(&str, &str)]) -> String {
+        let cat = self.catalog();
+        let label = |c: &str| self.key_label(c);
+        let text_key = format!("{key}.text");
+        if cat.contains(&text_key) {
+            cat.render(&text_key, args, &label)
+        } else {
+            cat.render(key, args, &label)
+        }
+    }
+
     pub fn show_message(&mut self, level: MessageLevel, key: &str, args: &[(&str, &str)]) {
         let cat = self.catalog();
         let label = |c: &str| self.key_label(c);

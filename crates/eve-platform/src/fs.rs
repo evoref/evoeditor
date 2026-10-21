@@ -205,6 +205,26 @@ impl FileSystem for WinFs {
         Ok(crate::rescue::list_recovery_dirs(self.state_dir()))
     }
 
+    fn write_recovery(&self, doc: &eve_core::DocSnapshot) -> Result<FsPath, FsError> {
+        use eve_core::{RescueReason, RescueWriter};
+        let out = crate::rescue::WinRescue::new(self.state_dir.clone()).write(
+            &[std::sync::Arc::new(doc.clone())],
+            RescueReason::UserSave,
+            std::time::Duration::from_secs(30),
+        );
+        match out.dir {
+            Some(dir) if out.complete => Ok(FsPath::new(dir)),
+            _ => {
+                let msg = out
+                    .error
+                    .unwrap_or_else(|| "書き込めませんでした".to_owned());
+                let mut e = FsError::new(FsErrorKind::Other);
+                e.source = Some(io::Error::other(msg));
+                Err(e)
+            }
+        }
+    }
+
     fn write_in_place(
         &self,
         path: &FsPath,

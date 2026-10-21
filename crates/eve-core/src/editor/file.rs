@@ -33,6 +33,8 @@ pub(super) enum Pending {
     CheckUnchanged { doc: DocumentId },
     /// 起動時の退避ディレクトリの走査。
     RecoveryScan,
+    /// 「退避先に保存」(03 §9.7 (e))。`path` は元のファイル。
+    WriteRecovery { path: FsPath },
     Save {
         doc: DocumentId,
         at: NodeId,
@@ -41,6 +43,17 @@ pub(super) enum Pending {
         /// 確認の後に同じ保存をやり直すための照合の期待 (03 §9.3)。
         expected: Expect,
     },
+}
+
+/// 保存の失敗の後の選択 (`ui.confirm.save_failed`、03 §9.7 (e))。
+#[derive(Clone, Debug)]
+pub(super) struct SaveFailedAsk {
+    pub doc: DocumentId,
+    pub path: FsPath,
+    pub expected: Expect,
+    pub cont: Option<Continuation>,
+    /// 失敗した保存の時点の本文 (確認の間は編集できない)。「退避先に保存」で書く。
+    pub snapshot: std::sync::Arc<crate::DocSnapshot>,
 }
 
 /// 保存の代替の確認 (`AtomicUnsupported` / ハードリンク / `BackupFailed`、03 §9.3 手順 7・05 §4.4)。
@@ -158,7 +171,9 @@ impl EditorState {
             .filter(|(_, p)| match p {
                 Pending::Open { doc: d, .. } | Pending::CheckUnchanged { doc: d } => *d == doc,
                 // 保存ジョブは取り消さず、完了を待つ (03 §9.2 の「閉じる手順」。ユーザーが求めた保存を中断しない)
-                Pending::Save { .. } | Pending::RecoveryScan => false,
+                Pending::Save { .. } | Pending::RecoveryScan | Pending::WriteRecovery { .. } => {
+                    false
+                }
             })
             .map(|(id, _)| *id)
             .collect();
@@ -428,6 +443,7 @@ impl EditorState {
                 replace,
             } => self.finish_open(doc, view, path, replace, r),
             Pending::CheckUnchanged { doc } => self.finish_check(doc, r),
+            Pending::WriteRecovery { path } => self.finish_write_recovery(&path, r),
             Pending::RecoveryScan => self.finish_recovery_scan(r),
             Pending::Save {
                 doc,
@@ -438,6 +454,110 @@ impl EditorState {
             } => self.finish_save(doc, at, revision, &path, expected, cont, r),
         }
         self.mark_dirty_render();
+    }
+
+    /// 保存の失敗の確認に渡す材料 (文書が無い・読込中なら `None`)。
+    fn save_failed_ask(
+        &self,
+        doc: DocumentId,
+        path: &FsPath,
+        expected: Expect,
+        cont: Option<Continuation>,
+    ) -> Option<SaveFailedAsk> {
+        let snapshot = self.rescue_snapshot(doc, false)?;
+        Some(SaveFailedAsk {
+            doc,
+            path: path.clone(),
+            expected,
+            cont,
+            snapshot: std::sync::Arc::new(snapshot),
+        })
+    }
+
+    /// 保存の失敗を `ui.confirm.save_failed` で示す (03 §9.7 (e))。本文にメッセージ `key` の text を入れる。
+    /// 材料が無ければ (文書が閉じている等) メッセージだけ示す。`retry` は Busy のときだけ (何も書いていないので照合は通る)。
+    fn report_save_failure(
+        &mut self,
+        ask: Option<SaveFailedAsk>,
+        key: &str,
+        args: &[(&str, &str)],
+        retry: bool,
+    ) {
+        use super::overlay::{ChoiceDef, ConfirmAction, ConfirmState};
+        let Some(ask) = ask else {
+            self.show_message(MessageLevel::Error, key, args);
+            return;
+        };
+        let detail = self.message_text(key, args);
+        let choice = |id: &'static str, accel: char| ChoiceDef {
+            id,
+            accel: Some(accel),
+            destructive: false,
+        };
+        let mut choices = Vec::new();
+        if retry {
+            choices.push(choice("retry", 't'));
+        }
+        choices.push(choice("alt", 'a'));
+        choices.push(choice("recovery", 'r'));
+        let default = usize::from(retry);
+        self.open_confirm(ConfirmState {
+            name: "save_failed",
+            args: vec![("detail".to_owned(), detail)],
+            choices,
+            default,
+            focused: default,
+            action: ConfirmAction::SaveFailed(ask),
+        });
+    }
+
+    /// 保存の失敗の確認の選択 (キャンセルは呼び側が処理済み)。`id` は選択肢の ID。
+    pub(super) fn choose_save_failed(&mut self, ask: SaveFailedAsk, id: &str) -> CommandResult {
+        let SaveFailedAsk {
+            doc,
+            path,
+            expected,
+            cont,
+            snapshot,
+        } = ask;
+        match id {
+            "retry" => self.start_save(doc, path, expected, cont),
+            "recovery" => {
+                // 続きの操作 (終了・置き換え) は行わない。書いた場所は結果のメッセージで示す
+                let job = self.jobs.spawn(
+                    Some(doc),
+                    snapshot.revision,
+                    JobKind::WriteRecovery { doc: snapshot },
+                );
+                self.pending.insert(job, Pending::WriteRecovery { path });
+                CommandResult::Pending(job)
+            }
+            // 別名で保存: 名前の入力へ (保存の後に続ける操作は引き継ぐ)
+            _ => {
+                self.open_prompt(PromptKind::SaveAs { then: cont }, String::new());
+                CommandResult::Done
+            }
+        }
+    }
+
+    /// 「退避先に保存」の結果。文書の状態 (dirty・保存点) は変えない。
+    fn finish_write_recovery(&mut self, path: &FsPath, r: JobResult) {
+        match r {
+            JobResult::RecoveryWritten { path: target, .. } => self.show_message(
+                MessageLevel::Info,
+                "info.save.to_recovery",
+                &[("target", &target.display()), ("path", &path.display())],
+            ),
+            JobResult::Failed { err, .. } => {
+                let reason = reason_label(&err);
+                self.show_message(
+                    MessageLevel::Error,
+                    "msg.save.recovery_failed",
+                    &[("reason", &reason), ("path", &path.display())],
+                );
+            }
+            _ => {}
+        }
     }
 
     /// 保存の代替の確認を出す。
@@ -871,6 +991,7 @@ impl EditorState {
                     }),
                 ..
             } => {
+                let ask = self.save_failed_ask(doc_id, path, expected, cont);
                 // 直接上書きの途中の失敗: 元のファイルは壊れている可能性がある。バックアップの場所を必ず示す (05 §4.4 手順 8)
                 let b = backup.as_ref().map(FsPath::display).unwrap_or_default();
                 let key = if backup.is_some() {
@@ -878,13 +999,27 @@ impl EditorState {
                 } else {
                     "msg.save.in_place_failed_no_backup"
                 };
-                self.show_message(
-                    MessageLevel::Error,
+                self.report_save_failure(
+                    ask,
                     key,
                     &[("path", &path.display()), ("backup", &b)],
+                    false,
                 );
             }
             JobResult::Failed { err, .. } => {
+                let ask = self.save_failed_ask(doc_id, path, expected, cont);
+                // 照合の失敗 (Conflict) は別の経路 (外部変更の確認、後続)。取消しは確認なしで示す
+                let ask = ask.filter(|_| {
+                    !matches!(
+                        err,
+                        JobError::Cancelled
+                            | JobError::Fs(FsError {
+                                kind: FsErrorKind::Conflict { .. },
+                                ..
+                            })
+                    )
+                });
+                let retry = matches!(&err, JobError::Fs(e) if e.kind == FsErrorKind::Busy);
                 let reason = reason_label(&err);
                 let dir = match &err {
                     JobError::Fs(FsError {
@@ -898,15 +1033,16 @@ impl EditorState {
                     JobError::Fs(e) => (MessageLevel::Error, save_error_key(&e)),
                     _ => (MessageLevel::Error, "msg.save.failed"),
                 };
-                self.show_message(
-                    level,
-                    key,
-                    &[
-                        ("path", &path.display()),
-                        ("reason", &reason),
-                        ("dir", &dir),
-                    ],
-                );
+                let args = [
+                    ("path", path.display()),
+                    ("reason", reason.clone()),
+                    ("dir", dir),
+                ];
+                let args: Vec<(&str, &str)> = args.iter().map(|(k, v)| (*k, v.as_str())).collect();
+                match ask {
+                    Some(ask) => self.report_save_failure(Some(ask), key, &args, retry),
+                    None => self.show_message(level, key, &args),
+                }
             }
             _ => {}
         }

@@ -22,6 +22,7 @@ pub enum FsOp {
     OpenRead,
     WriteAtomic,
     WriteInPlace,
+    WriteRecovery,
 }
 
 /// `write_atomic` のステップ (失敗を注入でき、到達したステップは `MemFs::steps` に残る)。
@@ -59,6 +60,8 @@ struct State {
     inflight: Vec<InflightRecord>,
     /// 退避ディレクトリ (テストが `add_recovery_dir` で積む)。
     recovery: Vec<RecoveryDirEntry>,
+    /// 「退避先に保存」で書いた本文。
+    recovered: Vec<(FsPath, Vec<u8>)>,
 }
 
 pub struct MemFs {
@@ -87,6 +90,7 @@ impl MemFs {
                 steps: Vec::new(),
                 inflight: Vec::new(),
                 recovery: Vec::new(),
+                recovered: Vec::new(),
             }),
         }
     }
@@ -166,6 +170,11 @@ impl MemFs {
             path: FsPath::from(path),
             rescue,
         });
+    }
+
+    /// 「退避先に保存」で書いた本文 (書いた順)。
+    pub fn recovery_written(&self) -> Vec<Vec<u8>> {
+        self.st().recovered.iter().map(|(_, b)| b.clone()).collect()
     }
 
     /// 残っている保存中フラグ。
@@ -312,6 +321,16 @@ fn step(s: &mut State, st: WriteStep) -> Result<(), FsError> {
 impl FileSystem for MemFs {
     fn list_recovery_dirs(&self) -> Result<Vec<RecoveryDirEntry>, FsError> {
         Ok(self.st().recovery.clone())
+    }
+
+    /// 退避先に保存: `/s/recovery/rescue/<n>` に本文を持つ (テストは `recovery_written` で読む)。
+    fn write_recovery(&self, doc: &eve_core::DocSnapshot) -> Result<FsPath, FsError> {
+        let mut s = self.st();
+        injected(&mut s, FsOp::WriteRecovery)?;
+        let dir = FsPath::from(format!("/s/recovery/rescue/{}", s.recovered.len() + 1).as_str());
+        let body = doc.to_vec();
+        s.recovered.push((dir.clone(), body));
+        Ok(dir)
     }
 
     fn inflight_for(&self, path: &FsPath) -> Result<Vec<InflightRecord>, FsError> {

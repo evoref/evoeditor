@@ -5,7 +5,7 @@
 //! コンテキストは確認が `dialog` のみ、プロンプトが `prompt` → `global`。
 
 use eve_text::{ByteOff, Text, next_grapheme_boundary, prev_grapheme_boundary};
-use eve_view::{EditorEvent, Effect, OverlayKind, QuitRescue};
+use eve_view::{EditorEvent, Effect, MessageLevel, OverlayKind, QuitRescue};
 
 use crate::editor::command::{
     ArgValue, Args, CommandCtx, CommandInvocation, CommandKind, CommandRegistry, CommandResult,
@@ -43,6 +43,8 @@ pub(super) enum ConfirmAction {
     Unsaved(Continuation),
     /// 保存の代替 (原子的置換ができない・ハードリンク・バックアップを作れない)。選択肢の意味は `SaveFallback` の種類による。
     Fallback(super::file::FallbackAsk),
+    /// 保存の失敗の後の選択 (再試行 / 別名で保存 / 退避先に保存)。
+    SaveFailed(super::file::SaveFailedAsk),
 }
 
 /// 確認ダイアログ。選択肢は `choices` (+ 最後にキャンセル)。
@@ -215,14 +217,19 @@ impl EditorState {
         self.mark_dirty_render();
         // キャンセル (最後の選択肢): データを変えない
         if choice >= c.cancel_index() {
+            if matches!(c.action, ConfirmAction::SaveFailed(_)) {
+                self.show_message(MessageLevel::Info, "info.save.aborted", &[]);
+            }
             return CommandResult::Done;
         }
+        let id = c.choices[choice].id;
         match c.action {
             ConfirmAction::Unsaved(cont) => match choice {
                 0 => self.save_then(cont),
                 _ => self.run_continuation(cont),
             },
             ConfirmAction::Fallback(ask) => self.choose_fallback(ask, choice),
+            ConfirmAction::SaveFailed(ask) => self.choose_save_failed(ask, id),
         }
     }
 
@@ -408,6 +415,11 @@ impl EditorState {
 
     /// `ui.cancel`: オーバーレイを閉じる (データは変えない)。出ていなければ何もしない。
     pub fn ui_cancel(&mut self) -> CommandResult {
+        // 確認の `Esc` はキャンセルの選択 (保存の失敗の確認では中止を示す)
+        if let Some(Overlay::Confirm(c)) = &self.overlay {
+            let cancel = c.cancel_index();
+            return self.choose(cancel);
+        }
         if self.take_overlay().is_some() {
             self.mark_dirty_render();
         }

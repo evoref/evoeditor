@@ -69,6 +69,10 @@ pub enum JobKind {
         expected: Expect,
         strategy: SaveStrategy,
     },
+    /// 保存の失敗の後の「退避先に保存」(03 §9.7 (e))。`doc` の公開物を退避ディレクトリへ書く。
+    WriteRecovery {
+        doc: std::sync::Arc<crate::DocSnapshot>,
+    },
 }
 
 /// 確認が要る理由 (03 §9.2)。ジョブは確認を求めて終了し、回答を得た main が再投入する。
@@ -155,6 +159,11 @@ pub enum JobResult {
         recorded: Vec<eve_encoding::Unmappable>,
         encoding: Encoding,
     },
+    /// 「退避先に保存」の成功。`path` は実際に書いたディレクトリ (代替の退避先を含む)。
+    RecoveryWritten {
+        job: JobId,
+        path: FsPath,
+    },
     Failed {
         job: JobId,
         err: JobError,
@@ -171,6 +180,7 @@ impl JobResult {
             | JobResult::NeedsConfirm { job, .. }
             | JobResult::RecoveryFound { job, .. }
             | JobResult::Saved { job, .. }
+            | JobResult::RecoveryWritten { job, .. }
             | JobResult::Unmappable { job, .. }
             | JobResult::Failed { job, .. } => *job,
         }
@@ -267,6 +277,13 @@ pub fn run_job(
             ports,
             cancel,
         ),
+        JobKind::WriteRecovery { doc } => match ports.fs.write_recovery(doc) {
+            Ok(path) => JobResult::RecoveryWritten { job: req.id, path },
+            Err(err) => JobResult::Failed {
+                job: req.id,
+                err: JobError::Fs(err),
+            },
+        },
         JobKind::Metadata { path, .. } => match ports.fs.metadata(path) {
             Ok(meta) => {
                 if cancel.is_cancelled() {
