@@ -6,10 +6,25 @@
 
 #![forbid(unsafe_code)]
 
+mod decode;
 mod detect;
+mod encode;
+mod encoding;
+#[doc(hidden)]
+pub mod fuzzing;
+mod roundtrip;
 mod utf8;
 
+pub use decode::Decoder;
 pub use detect::{
     Confidence, DetectOptions, DetectedKind, Detection, ForcedEncoding, UnsupportedBom, detect,
+    find_iso_switch, redetect_window,
+};
+pub use encode::{
+    EncodeReport, Encoder, EscapePolicy, MAX_RECORDED, Unmappable, UnmappableKind, cp932, utf16_len,
+};
+pub use encoding::Encoding;
+pub use roundtrip::{
+    MAX_LINE, MAX_POSITIONS, RoundtripChecker, RoundtripSummary, check as check_roundtrip,
 };
 pub use utf8::{ESCAPE_BASE, PuaEscapeMode, Utf8Decoder, Utf8Encoder, escape_byte, unescape_char};

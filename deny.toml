@@ -1,8 +1,8 @@
 # cargo-deny の設定 (docs/05-platform.md §17.1 が許可リストの正本。ADR-0018 は確定 (ユーザー回答、2026-10-20))。
 # 公開リポジトリでも GPL / AGPL / LGPL を禁止し、公開 crate を外部の消費者が静的リンクできる状態を保つ
 # (docs/09-testing-quality.md §6.2 R6、§7.1)。
-# fuzz/ は本体の workspace に含めない独立の workspace なので、fuzz/deny.toml を別に置く (M3 で fuzz/ を作るとき。
-# libfuzzer-sys の `AND NCSA` を許すのは fuzz/ 側だけで、ここには足さない)。
+# fuzz/ は本体の workspace に含めない独立の workspace なので、fuzz/deny.toml を別に置く。
+# libfuzzer-sys の `AND NCSA` を許すのは fuzz/ 側だけで、ここには足さない。
 
 [graph]
 targets = [

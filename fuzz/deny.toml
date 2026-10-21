@@ -1,0 +1,54 @@
+# fuzz/ の cargo-deny の設定。本体の deny.toml と同じ許可リストに、libfuzzer-sys の `AND NCSA` だけを足す (docs/09 §6.3)。
+# 実行: `cargo deny --manifest-path fuzz/Cargo.toml check` (本体の workspace とは別なので、nightly ジョブで確かめる)。
+# 元: ../deny.toml (docs/05-platform.md §17.1 が許可リストの正本)。
+# 公開リポジトリでも GPL / AGPL / LGPL を禁止し、公開 crate を外部の消費者が静的リンクできる状態を保つ
+# (docs/09-testing-quality.md §6.2 R6、§7.1)。
+# fuzz/ は本体の workspace に含めない独立の workspace なので、fuzz/deny.toml を別に置く。
+# libfuzzer-sys の `AND NCSA` を許すのは fuzz/ 側だけで、ここには足さない。
+
+[graph]
+targets = [
+    { triple = "x86_64-pc-windows-msvc" },
+    { triple = "x86_64-unknown-linux-gnu" },
+]
+all-features = true
+
+[advisories]
+# 脆弱性の例外の唯一の置き場所 (docs/09 §6.3)。
+# 依存の脆弱性で evoeditor の使い方では到達しないものだけ、到達しない理由と期限を書いて載せる。
+ignore = []
+
+[licenses]
+# 05 §17.1 の許可リスト。`OR` で結ばれた表記は、いずれかがこのリストにあれば通る。
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Zlib",
+    "Unicode-3.0",
+    "Unicode-DFS-2016", # 古い版の unicode-ident 等
+    "0BSD",
+    "BSL-1.0", # Boost Software License (Business Source License とは別物)
+    "CC0-1.0", # データ・小規模 crate 限定 (notify の最新版は CC0-1.0 のみ)
+    "NCSA", # libfuzzer-sys (fuzz/ だけ)
+]
+# MPL-2.0 は個別承認、OpenSSL / ISC (ring / aws-lc-rs) は v1.L で個別承認する。
+# 承認したら、該当の依存を入れるときに exceptions に crate 名つきで足し、理由を docs/10 に記録する。
+exceptions = []
+confidence-threshold = 0.93
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+# workspace 内の path 依存はワイルドカードの版指定を許す。
+allow-wildcard-paths = true
+deny = []
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []
