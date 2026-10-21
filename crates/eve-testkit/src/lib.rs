@@ -14,6 +14,7 @@ mod headless;
 mod jobs;
 mod memfs;
 mod paths;
+mod virtual_screen;
 
 pub use ascii::{AsciiOptions, render_ascii};
 pub use clock::ManualClock;
@@ -22,3 +23,4 @@ pub use headless::{HeadlessFrontend, HeadlessProbe};
 pub use jobs::ManualJobSpawner;
 pub use memfs::{BytesSource, FsOp, MemFs, SourceFailure, WriteStep};
 pub use paths::FixedPaths;
+pub use virtual_screen::{Attr, VirtualScreen, WidthConfig};

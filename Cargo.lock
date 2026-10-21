@@ -245,6 +245,7 @@ dependencies = [
  "eve-core",
  "eve-host",
  "eve-view",
+ "unicode-width",
 ]
 
 [[package]]
