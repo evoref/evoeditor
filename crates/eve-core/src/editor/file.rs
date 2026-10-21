@@ -13,6 +13,7 @@ use crate::fs::{
 use crate::fspath::FsPath;
 use crate::io_jobs::OpenOptions;
 use crate::jobs::{ConfirmAsk, JobError, JobKind, JobResult, MetaPurpose, SaveStrategy};
+use eve_encoding::Encoding;
 
 use super::command::{
     CommandCtx, CommandKind, CommandRegistry, CommandResult, CommandSpec, Permission, RejectReason,
@@ -30,6 +31,8 @@ pub(super) enum Pending {
         replace: Option<DocumentId>,
         /// 投入したときの指定 (確認の回答で足して再投入する、03 §9.2)。
         opts: OpenOptions,
+        /// 文字コードを指定した開き直し (`file.reopen_with_encoding`、03 §8.8)。同じ文書・View の中身を差し替える。
+        reopen: bool,
     },
     /// 未編集の上書き保存の照合 (03 §9.3 手順 0)。
     CheckUnchanged { doc: DocumentId },
@@ -56,6 +59,8 @@ pub(super) struct OpenAsk {
     pub replace: Option<DocumentId>,
     pub opts: OpenOptions,
     pub ask: ConfirmAsk,
+    /// 開き直し (同じ文書の中身を差し替える)。
+    pub reopen: bool,
 }
 
 /// 保存の失敗の後の選択 (`ui.confirm.save_failed`、03 §9.7 (e))。
@@ -262,6 +267,7 @@ impl EditorState {
                 path,
                 replace,
                 opts,
+                reopen: false,
             },
         );
         CommandResult::Pending(job)
@@ -456,7 +462,8 @@ impl EditorState {
                 path,
                 replace,
                 opts,
-            } => self.finish_open(doc, view, path, replace, opts, r),
+                reopen,
+            } => self.finish_open(doc, view, path, replace, opts, reopen, r),
             Pending::CheckUnchanged { doc } => self.finish_check(doc, r),
             Pending::WriteRecovery { path } => self.finish_write_recovery(&path, r),
             Pending::RecoveryScan => self.finish_recovery_scan(r),
@@ -694,6 +701,7 @@ impl EditorState {
         );
     }
 
+    #[allow(clippy::too_many_arguments)] // 読込ジョブの文脈 (Pending::Open) をそのまま受ける
     fn finish_open(
         &mut self,
         doc_id: DocumentId,
@@ -701,8 +709,13 @@ impl EditorState {
         path: FsPath,
         replace: Option<DocumentId>,
         opts: OpenOptions,
+        reopen: bool,
         r: JobResult,
     ) {
+        if reopen {
+            self.finish_reopen(doc_id, view, path, opts, r);
+            return;
+        }
         match r {
             JobResult::Complete {
                 text,
@@ -802,6 +815,7 @@ impl EditorState {
                     replace,
                     opts,
                     ask,
+                    reopen: false,
                 });
             }
             JobResult::Failed { err, .. } => {
@@ -907,6 +921,16 @@ impl EditorState {
 
     /// 開くのを中止した (確認の `Esc` / 中止、文字コードの入力の `Esc`)。読込中の文書を捨てる。
     pub(super) fn open_aborted(&mut self, ask: &OpenAsk) {
+        if ask.reopen {
+            // 開き直しの中止: 旧本文・書式・履歴をそのまま保つ (03 §8.8)
+            self.reopen_restore(ask.doc);
+            self.message(
+                MessageLevel::Info,
+                "info.open.cancelled",
+                &ask.path.display(),
+            );
+            return;
+        }
         self.open_failed(
             ask.doc,
             ask.replace,
@@ -935,9 +959,188 @@ impl EditorState {
                 path: ask.path,
                 replace: ask.replace,
                 opts,
+                reopen: ask.reopen,
             },
         );
         CommandResult::Pending(job)
+    }
+
+    // ---------- 文字コードを指定して開き直す (03 §8.8) ----------
+
+    /// `file.reopen_with_encoding`。`enc` が無ければ文字コードを尋ねる。dirty なら保存か破棄を求める (FR-111 AC-2)。
+    pub fn reopen_with_encoding(&mut self, enc: Option<Encoding>) -> CommandResult {
+        let Some(doc_id) = self.active_document() else {
+            return CommandResult::Rejected(RejectReason::NoTarget);
+        };
+        let Some(doc) = self.documents.get(&doc_id) else {
+            return CommandResult::Rejected(RejectReason::NoTarget);
+        };
+        let Some(path) = doc.path.clone() else {
+            return CommandResult::Rejected(RejectReason::NotAvailable);
+        };
+        if doc.load_state != crate::document::LoadState::Ready || self.open_in_progress() {
+            self.message(MessageLevel::Info, "info.reload.busy", &path.display());
+            return CommandResult::Rejected(RejectReason::NotAvailable);
+        }
+        // 保存ジョブの実行中はその完了を待たせる (保存が終わってから実行し直す)
+        if self.save_in_progress(doc_id) {
+            self.message(MessageLevel::Info, "info.save.in_progress", &path.display());
+            return CommandResult::Rejected(RejectReason::NotAvailable);
+        }
+        let Some(enc) = enc else {
+            self.open_prompt(PromptKind::ReopenEncoding, String::new());
+            return CommandResult::Done;
+        };
+        if self.confirm_if_dirty("unsaved_reopen", Continuation::Reopen(enc)) {
+            return CommandResult::Done;
+        }
+        self.start_reopen(enc)
+    }
+
+    /// 確認を済ませた (または dirty でない) 開き直しの開始。同じ `DocumentId` で読込ジョブを投入し、読込中は旧本文を表示し続ける。
+    pub(super) fn start_reopen(&mut self, enc: Encoding) -> CommandResult {
+        let Some(doc_id) = self.active_document() else {
+            return CommandResult::Rejected(RejectReason::NoTarget);
+        };
+        let Some(w) = self.first_window() else {
+            return CommandResult::Rejected(RejectReason::NoTarget);
+        };
+        let Some(view) = self.window_view(w) else {
+            return CommandResult::Rejected(RejectReason::NoTarget);
+        };
+        let Some(doc) = self.documents.get_mut(&doc_id) else {
+            return CommandResult::Rejected(RejectReason::NoTarget);
+        };
+        let Some(path) = doc.path.clone() else {
+            return CommandResult::Rejected(RejectReason::NotAvailable);
+        };
+        // 利用者の指定と書込権限の理由は開き直しでも保つ (03 §8.8 の「読み取り専用の理由の差し替え」)
+        let mut pending = crate::document::ReadOnlyReasons::default();
+        for r in [
+            crate::document::ReadOnlyReason::UserRequested,
+            crate::document::ReadOnlyReason::NoWritePermission,
+        ] {
+            if doc.read_only.contains(r) {
+                pending.insert(r);
+            }
+        }
+        doc.load_state = crate::document::LoadState::Loading;
+        let opts = OpenOptions {
+            forced: Some(enc),
+            pending,
+            ..OpenOptions::default()
+        };
+        self.mark_dirty_render();
+        let job = self.jobs.spawn(
+            Some(doc_id),
+            eve_view::Revision::INITIAL,
+            JobKind::Open {
+                path: path.clone(),
+                opts,
+            },
+        );
+        self.pending.insert(
+            job,
+            Pending::Open {
+                doc: doc_id,
+                view,
+                path,
+                replace: None,
+                opts,
+                reopen: true,
+            },
+        );
+        CommandResult::Pending(job)
+    }
+
+    /// 開き直しの取消し・失敗: 旧本文・書式・履歴をそのまま保って `Ready` に戻す。
+    fn reopen_restore(&mut self, doc: DocumentId) {
+        if let Some(d) = self.documents.get_mut(&doc) {
+            d.load_state = crate::document::LoadState::Ready;
+        }
+        self.mark_dirty_render();
+    }
+
+    fn finish_reopen(
+        &mut self,
+        doc_id: DocumentId,
+        view: ViewId,
+        path: FsPath,
+        opts: OpenOptions,
+        r: JobResult,
+    ) {
+        match r {
+            JobResult::Complete {
+                text,
+                format,
+                stamp,
+                changed_during_load,
+                detected,
+                ..
+            } => {
+                let encoding = format.encoding;
+                let mut d = Document::from_text(text, format);
+                d.path = Some(path.clone());
+                d.disk_stamp = Some(stamp);
+                d.read_only = detected;
+                // 本文・書式・理由を一括で差し替え、履歴は新しい根 (保存点 = 根)。開き直しは Undo できない (03 §8.8)
+                self.documents.insert(doc_id, d);
+                if let Some(v) = self.views.get_mut(&view) {
+                    v.selection = eve_text::Selection::point(eve_text::ByteOff(0));
+                    v.scroll = Default::default();
+                    v.goal_dcol = None;
+                }
+                self.mark_snapshot_update(doc_id);
+                self.mark_dirty_render();
+                if changed_during_load {
+                    self.message(
+                        MessageLevel::Warn,
+                        "msg.open.changed_during_load",
+                        &path.display(),
+                    );
+                }
+                self.show_message(
+                    MessageLevel::Info,
+                    "info.reopen.history_cleared",
+                    &[("encoding", encoding.name())],
+                );
+            }
+            JobResult::NeedsConfirm { ask, .. } => {
+                self.open_open_confirm(OpenAsk {
+                    doc: doc_id,
+                    view,
+                    path,
+                    replace: None,
+                    opts,
+                    ask,
+                    reopen: true,
+                });
+            }
+            JobResult::Failed { err, .. } => {
+                self.reopen_restore(doc_id);
+                let reason = reason_label(&err);
+                let (level, key) = match err {
+                    JobError::Cancelled => (MessageLevel::Info, "info.open.cancelled"),
+                    JobError::Fs(e) => (MessageLevel::Error, open_error_key(&e)),
+                    JobError::OutOfMemory { .. } => (MessageLevel::Error, "msg.open.out_of_memory"),
+                    _ => (MessageLevel::Error, "msg.open.failed"),
+                };
+                self.show_message(
+                    level,
+                    key,
+                    &[("path", &path.display()), ("reason", &reason)],
+                );
+            }
+            // ファイルが無くなった: 旧本文のまま戻す
+            _ => {
+                self.reopen_restore(doc_id);
+                self.show_message(
+                    MessageLevel::Error,
+                    "msg.open.failed",
+                    &[("path", &path.display()), ("reason", "not found")],
+                );
+            }
+        }
     }
 
     /// 中断された保存の痕跡の案内 (04 §15.2 の `msg.open.interrupted_*`、02 §4.5 の写像)。
@@ -1069,10 +1272,10 @@ impl EditorState {
                 // 保存の後に続ける操作 (開く・新規作成・終了)。保存が失敗したときは続けない
                 // 保存の間に編集されていたら、続きの操作の前にもう一度尋ねる (03 §9.7。編集を捨てない)
                 if let Some(c) = cont {
-                    let name = if c == Continuation::Quit {
-                        "unsaved"
-                    } else {
-                        "unsaved_replace"
+                    let name = match c {
+                        Continuation::Quit => "unsaved",
+                        Continuation::Reopen(_) => "unsaved_reopen",
+                        _ => "unsaved_replace",
                     };
                     if !self.confirm_if_dirty(name, c.clone()) {
                         self.run_continuation(c);
@@ -1274,6 +1477,17 @@ fn file_open(ctx: &mut CommandCtx<'_>) -> CommandResult {
     }
 }
 
+fn file_reopen_with_encoding(ctx: &mut CommandCtx<'_>) -> CommandResult {
+    let enc = match ctx.args.str("encoding") {
+        Some(name) => match Encoding::from_label(name) {
+            Some(e) => Some(e),
+            None => return CommandResult::Rejected(RejectReason::InvalidArgs),
+        },
+        None => None,
+    };
+    ctx.state.reopen_with_encoding(enc)
+}
+
 fn file_save(ctx: &mut CommandCtx<'_>) -> CommandResult {
     ctx.state.request_save()
 }
@@ -1317,4 +1531,11 @@ pub(super) fn register(r: &mut CommandRegistry) {
         file_save
     );
     reg!(r, "file.save_as", CommandKind::File, "", file_save_as);
+    reg!(
+        r,
+        "file.reopen_with_encoding",
+        CommandKind::File,
+        "doc.has_path",
+        file_reopen_with_encoding
+    );
 }

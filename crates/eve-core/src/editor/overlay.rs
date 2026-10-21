@@ -24,6 +24,8 @@ pub(super) enum Continuation {
     New,
     /// 終了する。
     Quit,
+    /// 文字コードを指定して開き直す (`file.reopen_with_encoding`、未保存の確認の後)。
+    Reopen(eve_encoding::Encoding),
 }
 
 /// 確認ダイアログの選択肢 1 つ。文言は `ui.confirm.<name>.<id>`。キャンセル (`ui.confirm.cancel`、`Esc`) は選択肢の最後に自動で付く。
@@ -95,6 +97,8 @@ pub(super) enum PromptKind {
     Encoding {
         ask: super::file::OpenAsk,
     },
+    /// `file.reopen_with_encoding` に引数が無いときの文字コードの入力 (03 §8.8)。
+    ReopenEncoding,
 }
 
 impl PromptKind {
@@ -104,7 +108,7 @@ impl PromptKind {
             PromptKind::Open => "open",
             PromptKind::SaveAs { .. } => "save_as",
             PromptKind::GotoLine => "goto_line",
-            PromptKind::Encoding { .. } => "encoding",
+            PromptKind::Encoding { .. } | PromptKind::ReopenEncoding => "encoding",
         }
     }
 }
@@ -252,6 +256,7 @@ impl EditorState {
         match cont {
             Continuation::Open(path) => self.open_path_forced(&path, OpenOptions::default()),
             Continuation::New => self.new_untitled_forced(),
+            Continuation::Reopen(enc) => self.start_reopen(enc),
             Continuation::Quit => {
                 self.push_effect(Effect::Quit {
                     code: 0,
@@ -373,6 +378,14 @@ impl EditorState {
                     let mut opts = ask.opts;
                     opts.forced = Some(enc);
                     self.respawn_open(ask.clone(), opts)
+                }
+                None => self.prompt_error("invalid"),
+            },
+            PromptKind::ReopenEncoding => match eve_encoding::Encoding::from_label(&text) {
+                Some(enc) => {
+                    self.set_overlay(None);
+                    self.mark_dirty_render();
+                    self.reopen_with_encoding(Some(enc))
                 }
                 None => self.prompt_error("invalid"),
             },

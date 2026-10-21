@@ -561,7 +561,6 @@ external_modified = "{path} は他のプログラムで変更されています 
 quit_saving = "{path} の保存が終わっていません — `[W] 待つ` ★ / `[Q] 保存を中止して終了 (保存していない内容は退避します)`"
 reload_discard = "{path} を読み込み直すと、保存していない変更が失われます (読み込み直した後に元に戻すで戻せます) — `[L] 再読込 (変更を破棄)` / `[Esc] キャンセル` ★"
 save_failed_closed = "保存できませんでした: (`msg.save.*` の text) — {path} は既に閉じています。`[R] 退避先に保存` ★ / `[D] 破棄`"
-unsaved_reopen = "{path} には保存されていない変更があります — `[S] 保存してから開き直す` ★ / `[D] 破棄して開き直す`"
 
 nav_hint = "Tab / ←→ で選択、Enter で決定"
 cancel = "[Esc] キャンセル"
@@ -732,6 +731,12 @@ title = "未保存の変更"
 message = "{path} には保存されていない変更があります"
 save = "[S] 保存して終了"
 discard = "[D] 破棄して終了"
+
+[ui.confirm.unsaved_reopen]
+title = "未保存の変更"
+message = "{path} には保存されていない変更があります"
+save = "[S] 保存してから開き直す"
+discard = "[D] 破棄して開き直す"
 
 [ui.confirm.unsaved_replace]
 title = "未保存の変更"

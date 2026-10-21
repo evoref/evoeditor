@@ -970,3 +970,96 @@ fn busy_のときだけ再試行でき_照合を通って保存される() {
     s.pump();
     assert!(dialog_open(&s));
 }
+
+fn sjis_bytes(s: &str) -> Vec<u8> {
+    let (b, _, _) = encoding_rs::SHIFT_JIS.encode(s);
+    b.into_owned()
+}
+
+#[test]
+fn 文字コードを指定して開き直す() {
+    let mut s = Env::new();
+    s.fs.add_file("/w/a.txt", b"abc\ndef\n");
+    s.open("/w/a.txt");
+    let (id, _) = s.doc();
+    // 履歴を作ってから保存し (dirty でない)、開き直す
+    s.e.execute(CommandInvocation::new(
+        "cursor.doc_end",
+        InvocationSource::Keymap,
+    ));
+    s.type_text("x");
+    s.run("file.save", Args::new());
+    s.messages();
+    let r = s.run(
+        "file.reopen_with_encoding",
+        Args::new().with_str("encoding", "shift_jis"),
+    );
+    assert!(matches!(r, CommandResult::Pending(_)));
+    let (id2, d) = s.doc();
+    assert_eq!(id2, id, "同じ DocumentId");
+    assert_eq!(d.format.encoding, eve_core::Encoding::ShiftJis);
+    assert!(!d.is_dirty());
+    assert!(
+        s.messages()
+            .contains(&"info.reopen.history_cleared".to_owned())
+    );
+    // 開き直しは Undo できない
+    s.run("edit.undo", Args::new());
+    assert_eq!(s.text(), "abc\ndef\nx");
+}
+
+#[test]
+fn 開き直しは未保存なら確認し_破棄すると読み直す() {
+    let mut s = Env::new();
+    s.fs.add_file("/w/a.txt", &sjis_bytes("日本語のテキストです。"));
+    s.open("/w/a.txt");
+    assert_eq!(s.doc().1.format.encoding, eve_core::Encoding::ShiftJis);
+    s.type_text("x");
+    s.run(
+        "file.reopen_with_encoding",
+        Args::new().with_str("encoding", "utf-8"),
+    );
+    assert!(dialog_open(&s), "未保存の確認 (ui.confirm.unsaved_reopen)");
+    s.type_text("d");
+    s.pump();
+    // Shift_JIS のバイトを UTF-8 として読むと不正バイトが多い: 続けて確認が出る
+    assert!(dialog_open(&s));
+    s.type_text("r");
+    s.pump();
+    let (_, d) = s.doc();
+    assert_eq!(d.format.encoding, eve_core::Encoding::Utf8);
+    assert!(d.format.invalid_bytes > 0 && !d.is_dirty());
+    assert!(d.read_only.contains(eve_core::ReadOnlyReason::InvalidBytes));
+}
+
+#[test]
+fn 開き直しの確認で中止すると旧本文と書式のまま() {
+    let mut s = Env::new();
+    s.fs.add_file("/w/a.txt", &sjis_bytes("日本語のテキストです。"));
+    s.open("/w/a.txt");
+    let before = s.text();
+    s.run(
+        "file.reopen_with_encoding",
+        Args::new().with_str("encoding", "utf-8"),
+    );
+    assert!(dialog_open(&s), "不正バイトの確認");
+    s.key(KeyCode::Esc, Modifiers::NONE);
+    s.pump();
+    let (_, d) = s.doc();
+    assert_eq!(d.format.encoding, eve_core::Encoding::ShiftJis);
+    assert_eq!(d.load_state, eve_core::LoadState::Ready);
+    assert_eq!(s.text(), before);
+}
+
+#[test]
+fn 開き直しは引数が無ければ文字コードを尋ねる() {
+    let mut s = Env::new();
+    s.fs.add_file("/w/a.txt", b"abc");
+    s.open("/w/a.txt");
+    s.run("file.reopen_with_encoding", Args::new());
+    assert_eq!(s.e.state().overlay_kind(), "prompt");
+    s.type_text("euc-jp");
+    s.key(KeyCode::Enter, Modifiers::NONE);
+    s.pump();
+    assert_eq!(s.doc().1.format.encoding, eve_core::Encoding::EucJp);
+}
