@@ -146,7 +146,7 @@ fn process_start() -> Option<FileTime> {
 }
 
 /// `state_dir/recovery/inflight/<key>/` を所有者のみの DACL で作る (中のファイルは継承で所有者のみ、05 §5.6)。
-fn create_flag_dir(state_dir: &Path, key: &str) -> io::Result<PathBuf> {
+pub(crate) fn create_flag_dir(state_dir: &Path, key: &str) -> io::Result<PathBuf> {
     fs::create_dir_all(state_dir)?;
     let dir = state_dir.join("recovery").join("inflight").join(key);
     create_dir_all_private(&dir)?;
@@ -181,11 +181,13 @@ pub(crate) fn create_dir_all_private(dir: &Path) -> io::Result<()> {
     Ok(())
 }
 
-/// フラグを書く (一時名に書いて fsync し、名前を変える。照合も保存中フラグも使わない下位関数)。書いたフラグのパスを返す。
-pub(crate) fn write_flag(state_dir: &Path, key: &str, body: &FlagBody<'_>) -> io::Result<PathBuf> {
-    let dir = create_flag_dir(state_dir, key)?;
-    let name = format!("{}-{}.toml", std::process::id(), next_seq());
-    let path = dir.join(&name);
+/// 書いたフラグを同じパスのまま書き直す (一時名 + 名前の変更。05 §4.4 手順 4 の `backup_complete = true`)。
+pub(crate) fn rewrite_flag(path: &Path, body: &FlagBody<'_>) -> io::Result<()> {
+    write_replace(path, flag_text(body).as_bytes())
+}
+
+/// フラグの内容 (TOML)。
+fn flag_text(body: &FlagBody<'_>) -> String {
     let mut text = String::new();
     let mut line = |k: &str, v: String| {
         text.push_str(k);
@@ -209,6 +211,15 @@ pub(crate) fn write_flag(state_dir: &Path, key: &str, body: &FlagBody<'_>) -> io
     }
     line("backup_recorded", body.backup_recorded.to_string());
     line("backup_complete", body.backup_complete.to_string());
+    text
+}
+
+/// フラグを書く (一時名に書いて fsync し、名前を変える。照合も保存中フラグも使わない下位関数)。書いたフラグのパスを返す。
+pub(crate) fn write_flag(state_dir: &Path, key: &str, body: &FlagBody<'_>) -> io::Result<PathBuf> {
+    let dir = create_flag_dir(state_dir, key)?;
+    let name = format!("{}-{}.toml", std::process::id(), next_seq());
+    let path = dir.join(&name);
+    let text = flag_text(body);
     write_replace(&path, text.as_bytes())?;
     Ok(path)
 }
@@ -368,7 +379,14 @@ pub(crate) fn clear_others(state_dir: &Path, key: &str, mine: &Path) {
             continue;
         }
         let rec = parse_flag(&p, Path::new(""));
-        let traces = [rec.tmp.as_ref(), rec.backup.as_ref()]
+        // 痕跡は一時ファイルと、置換の退避名 (`.eve-bak-*`)。直接上書きの事前バックアップ (`state_dir/backup/`) は含めない
+        // (02 §4.5「報告した記録を消す時機」。バックアップは利用者が手で扱う)
+        let backup = if rec.method == SaveMethod::InPlace {
+            None
+        } else {
+            rec.backup.as_ref()
+        };
+        let traces = [rec.tmp.as_ref(), backup]
             .into_iter()
             .flatten()
             .any(|t| t.as_path().exists());

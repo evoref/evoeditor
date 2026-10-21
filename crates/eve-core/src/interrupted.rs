@@ -84,7 +84,10 @@ pub(crate) fn map_interrupted(
         let v = judge(fs, r, t_exists);
         if v.report.is_none() {
             // 一時ファイル・退避名のどれかが実在すれば、フラグを残す (v0.2 の起動時の走査の手掛かり)
-            let traces = [r.tmp.as_ref(), r.backup.as_ref()]
+            let backup = (r.method != SaveMethod::InPlace)
+                .then_some(r.backup.as_ref())
+                .flatten();
+            let traces = [r.tmp.as_ref(), backup]
                 .into_iter()
                 .flatten()
                 .any(|p| exists(fs, p));

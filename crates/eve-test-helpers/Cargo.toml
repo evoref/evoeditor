@@ -1,0 +1,26 @@
+[package]
+name = "eve-test-helpers"
+description = "テスト用の補助プロセス (保存の途中で強制終了するための `save`。docs/02 §4.1、09 §3.6)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "eve-test-helpers"
+path = "src/main.rs"
+
+[dependencies]
+eve-core = { version = "0.0.0", path = "../eve-core" }
+# test-hooks の切断点 (`EVE_TEST_HOOK`) を有効にする。この crate は配布物に入らない (dev 用)。
+eve-platform = { version = "0.0.0", path = "../eve-platform", features = ["test-hooks"] }
+
+[dev-dependencies]
+eve-text = { version = "0.0.0", path = "../eve-text" }
+eve-view = { version = "0.0.0", path = "../eve-view" }

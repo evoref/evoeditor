@@ -14,7 +14,11 @@ pub mod console;
 pub mod dirs;
 pub mod fs;
 #[cfg(windows)]
+mod hooks;
+#[cfg(windows)]
 mod inflight;
+#[cfg(windows)]
+mod inplace;
 pub mod path;
 #[cfg(windows)]
 pub mod rescue;

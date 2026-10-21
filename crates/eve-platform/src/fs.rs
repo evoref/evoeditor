@@ -103,7 +103,7 @@ fn file_time(t: io::Result<std::time::SystemTime>) -> FileTime {
 
 #[cfg(windows)]
 #[allow(unsafe_code)]
-mod winapi {
+pub(crate) mod winapi {
     use std::fs::File;
     use std::io;
     use std::os::windows::io::AsRawHandle;
@@ -203,6 +203,17 @@ impl FileSystem for WinFs {
 
     fn list_recovery_dirs(&self) -> Result<Vec<eve_core::RecoveryDirEntry>, FsError> {
         Ok(crate::rescue::list_recovery_dirs(self.state_dir()))
+    }
+
+    fn write_in_place(
+        &self,
+        path: &FsPath,
+        data: &mut dyn ReadChunks,
+        len: u64,
+        opts: &SaveOptions,
+        cancel: &eve_core::CancelToken,
+    ) -> Result<SaveReport, FsError> {
+        self.write_in_place_impl(path, data, len, opts, cancel)
     }
 
     fn remove_file(&self, path: &FsPath) -> Result<(), FsError> {

@@ -308,6 +308,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "eve-test-helpers"
+version = "0.0.0"
+dependencies = [
+ "eve-core",
+ "eve-platform",
+ "eve-text",
+ "eve-view",
+]
+
+[[package]]
 name = "eve-testkit"
 version = "0.0.0"
 dependencies = [

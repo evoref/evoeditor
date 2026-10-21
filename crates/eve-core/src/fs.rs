@@ -44,6 +44,21 @@ pub trait FileSystem: Send + Sync {
         Err(FsError::new(FsErrorKind::Other))
     }
 
+    /// 直接上書きで保存する (ADR-0016、05 §4.4)。呼ぶ前に core が同じ Snapshot の **乾式走査** (エンコード + 照合。書込なし) を終え、
+    /// 表現不能が無いことと出力のバイト長 `len` を確定していること。`data` は乾式走査と同じエンコードをもう一度流す。
+    /// 取消し (`cancel`) は上書きの開始より前の段 (照合・開く・事前バックアップの書込のチャンクごと) でだけ見て、立っていれば
+    /// 一時名のバックアップとフラグを消して `SourceFailed` を返す。上書きの開始以降は見ない (`data` も `Aborted` を返さない)。
+    fn write_in_place(
+        &self,
+        _path: &FsPath,
+        _data: &mut dyn ReadChunks,
+        _len: u64,
+        _opts: &SaveOptions,
+        _cancel: &crate::cancel::CancelToken,
+    ) -> Result<SaveReport, FsError> {
+        Err(FsError::new(FsErrorKind::Other))
+    }
+
     /// 原子的に保存する (一時ファイル + 置換、または新規作成)。`data` の失敗 (`ChunkError`) で書込を止め、
     /// 一時ファイルを消して `SourceFailed` を返す。
     fn write_atomic(
@@ -402,6 +417,14 @@ pub enum FsErrorKind {
     ReplacedMovedToBackup {
         backup: FsPath,
     },
+    /// `write_in_place` の事前バックアップ、または保存中フラグの書込に失敗した (後者は `detail = InflightFlag`)。何も書いていない
+    /// (元ファイルは無傷)。core は「バックアップ無しで上書きしますか」を確認し、承認されたら `SkipConfirmed` で再投入する。
+    BackupFailed,
+    /// `write_in_place` の書込途中の失敗。元ファイルは壊れている可能性がある。`Some` なら事前バックアップは完全で、
+    /// core はそのパスを必ず示す。`None` は「バックアップなしで上書き」を承認していた (元の内容は取り戻せない)。
+    InPlaceFailed {
+        backup: Option<FsPath>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -419,6 +442,8 @@ pub enum FsErrorDetail {
     NotAFile,
     /// ネットワーク上のファイルに到達できない。`kind` は `Other`。
     Network,
+    /// 保存中フラグを書けなかった。`kind` は `BackupFailed` (`write_in_place` のみ。`write_atomic` は警告で続ける)。
+    InflightFlag,
 }
 
 impl fmt::Display for FsError {

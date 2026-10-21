@@ -12,6 +12,10 @@ publish.workspace = true
 [lints]
 workspace = true
 
+[features]
+# テスト専用の経路 (保存途中の kill フック。環境変数 `EVE_TEST_HOOK`)。配布ビルドには入れない (09 §3.6)
+test-hooks = []
+
 [dependencies]
 eve-core = { version = "0.0.0", path = "../eve-core" }
 eve-text = { version = "0.0.0", path = "../eve-text" }
