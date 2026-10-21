@@ -1,6 +1,10 @@
 //! テスト用の補助プロセス (docs/02 §4.1、09 §3.6 の保存途中 kill)。`save` は実ファイルシステムで 1 回保存し、環境変数
 //! `EVE_TEST_HOOK=<切断点>` を指していれば、その地点でプロセスを後始末なしで強制終了する (`eve-platform` の `test-hooks`)。
 //!
+//! `clip-delay --hold <ms>` はクリップボードを開いたまま保持し、`clip-delay --delay-render <ms> --text <文字列> [--lifetime <ms>]` は
+//! 遅延レンダリングで登録して応答を遅らせる (準備ができたら標準出力に `ready` を出す)。`clip-read` は今のクリップボードのテキストを出す
+//! (09 §3.4、実クリップボードの失敗と遅延の検査)。
+//!
 //! `console-event <pid> <ctrl-c|ctrl-break>` は、別プロセスのコンソールにコントロールイベントを送る (09 §3.6 (8))。
 //!
 //! 使い方: `eve-test-helpers save <state_dir> <path> <atomic|inplace|inplace-skip> <content_file>`
@@ -39,8 +43,11 @@ impl ReadChunks for Chunks {
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
-    if args.first().map(String::as_str) == Some("console-event") {
-        return console_event(&args[1..]);
+    match args.first().map(String::as_str) {
+        Some("console-event") => return console_event(&args[1..]),
+        Some("clip-delay") => return clip_delay(&args[1..]),
+        Some("clip-read") => return clip_read(),
+        _ => {}
     }
     let [cmd, state, path, mode, content] = args.as_slice() else {
         eprintln!(
@@ -123,5 +130,54 @@ fn console_event(args: &[String]) -> ExitCode {
             eprintln!("送れません: {e}");
             ExitCode::from(3)
         }
+    }
+}
+
+/// `clip-delay --hold <ms>` / `clip-delay --delay-render <ms> --text <文字列> [--lifetime <ms>]`。
+fn clip_delay(args: &[String]) -> ExitCode {
+    use eve_platform::clipboard_test::{hold, serve_delayed};
+    let flag = |name: &str| {
+        args.iter()
+            .position(|a| a == name)
+            .and_then(|i| args.get(i + 1))
+    };
+    let ready = || {
+        println!("ready");
+        use std::io::Write;
+        let _ = std::io::stdout().flush();
+    };
+    if let Some(ms) = flag("--hold").and_then(|v| v.parse::<u64>().ok()) {
+        // 開けたら `ready` を出して、開いたまま待つ。開けなければ失敗
+        return if hold(ms, ready) {
+            ExitCode::SUCCESS
+        } else {
+            ExitCode::from(3)
+        };
+    }
+    if let Some(delay) = flag("--delay-render").and_then(|v| v.parse::<u64>().ok()) {
+        let text = flag("--text").cloned().unwrap_or_default();
+        let lifetime = flag("--lifetime")
+            .and_then(|v| v.parse::<u64>().ok())
+            .unwrap_or(30_000);
+        return if serve_delayed(&text, delay, lifetime, ready) {
+            ExitCode::SUCCESS
+        } else {
+            ExitCode::from(3)
+        };
+    }
+    eprintln!(
+        "使い方: eve-test-helpers clip-delay --hold <ms> | --delay-render <ms> --text <文字列> [--lifetime <ms>]"
+    );
+    ExitCode::from(2)
+}
+
+/// `clip-read`: 今のクリップボードのテキストを標準出力へ (無ければ空、終了コード 3)。
+fn clip_read() -> ExitCode {
+    match eve_platform::clipboard_test::read_text() {
+        Some(t) => {
+            print!("{t}");
+            ExitCode::SUCCESS
+        }
+        None => ExitCode::from(3),
     }
 }

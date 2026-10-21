@@ -1,5 +1,7 @@
 //! 実ファイルシステム (`WinFs`) で core の読込ジョブ (`run_job`) が動くこと。M1 の MemFs と同じ経路を、実ファイルで通す。
 
+#![cfg(windows)]
+
 use std::sync::Arc;
 
 use eve_core::{
