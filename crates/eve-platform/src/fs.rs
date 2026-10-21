@@ -19,8 +19,24 @@ use crate::path::simplify_verbatim;
 /// 読込のチャンクの大きさ (05 §4.5。64 KiB〜1 MiB でベンチで決める。既定は 1 MiB)。
 pub const READ_CHUNK_BYTES: usize = 1024 * 1024;
 
-#[derive(Clone, Copy, Debug, Default)]
-pub struct WinFs;
+/// Windows のファイルシステム。`state_dir` (05 §7.5) を持つと、保存で保存中フラグを書き、開くときに `inflight_for` で読む。
+/// 持たない (`default()`) と、フラグは書かず空を返す (テスト・状態ディレクトリを使えないとき)。
+#[derive(Clone, Debug, Default)]
+pub struct WinFs {
+    state_dir: Option<std::path::PathBuf>,
+}
+
+impl WinFs {
+    pub fn new(state_dir: impl Into<std::path::PathBuf>) -> WinFs {
+        WinFs {
+            state_dir: Some(state_dir.into()),
+        }
+    }
+
+    pub(crate) fn state_dir(&self) -> Option<&Path> {
+        self.state_dir.as_deref()
+    }
+}
 
 /// OS のエラーを `FsError` に写す (05 §2.1 の写像。Windows の `ERROR_*` コード)。
 pub fn map_io_error(e: io::Error, path: &FsPath) -> FsError {
@@ -178,6 +194,17 @@ fn fs_kind(path: &Path) -> FsKind {
 }
 
 impl FileSystem for WinFs {
+    fn inflight_for(&self, path: &FsPath) -> Result<Vec<eve_core::InflightRecord>, FsError> {
+        Ok(self
+            .state_dir()
+            .map(|sd| crate::inflight::read_flags(sd, path.as_path()))
+            .unwrap_or_default())
+    }
+
+    fn remove_file(&self, path: &FsPath) -> Result<(), FsError> {
+        fs::remove_file(path.as_path()).map_err(|e| map_io_error(e, path))
+    }
+
     fn metadata(&self, path: &FsPath) -> Result<FileMeta, FsError> {
         let p = path.as_path();
         let meta = match fs::metadata(p) {
@@ -347,7 +374,7 @@ mod tests {
             .unwrap()
             .write_all("こんにちは\n".as_bytes())
             .unwrap();
-        let fsys = WinFs;
+        let fsys = WinFs::default();
         let m = fsys.metadata(&p).unwrap();
         assert_eq!(m.kind, FileKind::File);
         assert_eq!(m.len, "こんにちは\n".len() as u64);
@@ -374,7 +401,7 @@ mod tests {
             .map(|i| (i % 251) as u8)
             .collect();
         File::create(p.as_path()).unwrap().write_all(&data).unwrap();
-        let fsys = WinFs;
+        let fsys = WinFs::default();
         let mut r = fsys.open_read(&p).unwrap();
         let mut chunks = 0;
         let mut out = Vec::new();
@@ -390,7 +417,7 @@ mod tests {
     #[test]
     fn 存在しないパスと親の無いパス() {
         let t = Tmp::new("nf");
-        let fsys = WinFs;
+        let fsys = WinFs::default();
         let e = fsys.metadata(&t.path("none.txt")).unwrap_err();
         assert_eq!(e.kind, FsErrorKind::NotFound);
         assert!(e.detail.is_none(), "親が在るときは detail なし");
@@ -410,7 +437,7 @@ mod tests {
     #[test]
     fn ディレクトリは開けない() {
         let t = Tmp::new("dir");
-        let fsys = WinFs;
+        let fsys = WinFs::default();
         let d = FsPath::new(t.0.clone());
         assert_eq!(fsys.metadata(&d).unwrap().kind, FileKind::Dir);
         let e = fsys.open_read(&d).map(|_| ()).unwrap_err();
@@ -434,7 +461,7 @@ mod tests {
         let mut perm = fs::metadata(p.as_path()).unwrap().permissions();
         perm.set_readonly(true);
         fs::set_permissions(p.as_path(), perm.clone()).unwrap();
-        assert!(WinFs.metadata(&p).unwrap().readonly);
+        assert!(WinFs::default().metadata(&p).unwrap().readonly);
         perm.set_readonly(false);
         fs::set_permissions(p.as_path(), perm).unwrap();
     }
@@ -444,7 +471,7 @@ mod tests {
         let t = Tmp::new("canon");
         let p = t.path("c.txt");
         File::create(p.as_path()).unwrap().write_all(b"x").unwrap();
-        let c = WinFs.canonicalize(&p).unwrap();
+        let c = WinFs::default().canonicalize(&p).unwrap();
         let s = c.as_path().to_string_lossy().into_owned();
         assert!(!s.starts_with("\\\\?\\"), "{s}");
         assert!(s.ends_with("c.txt"));

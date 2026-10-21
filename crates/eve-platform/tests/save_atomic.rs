@@ -91,7 +91,7 @@ fn save(
     data: &[u8],
     expect: Expect,
 ) -> Result<eve_core::SaveReport, eve_core::FsError> {
-    WinFs.write_atomic(
+    WinFs::default().write_atomic(
         path,
         &mut Chunks::of(data, 4096),
         &SaveOptions::user_file(expect),
@@ -99,7 +99,7 @@ fn save(
 }
 
 fn stamp(path: &FsPath) -> FileStamp {
-    FileStamp::from_meta(&WinFs.metadata(path).unwrap(), None)
+    FileStamp::from_meta(&WinFs::default().metadata(path).unwrap(), None)
 }
 
 #[test]
@@ -193,7 +193,7 @@ fn 供給側の失敗は一時ファイルを消し元のファイルは無傷()
     fs::write(t.p("a.txt"), b"original").unwrap();
     let s0 = stamp(&p);
     let mut src = Chunks::of(&vec![b'x'; 20_000], 4096).failing(2);
-    let e = WinFs
+    let e = WinFs::default()
         .write_atomic(&p, &mut src, &SaveOptions::user_file(Expect::Stamp(s0)))
         .unwrap_err();
     assert_eq!(e.kind, FsErrorKind::SourceFailed);
@@ -201,7 +201,7 @@ fn 供給側の失敗は一時ファイルを消し元のファイルは無傷()
     assert_eq!(t.names(), ["a.txt"]);
     // 新規ファイルでも部分書込のファイルを残さない
     let mut src = Chunks::of(b"abcdef", 2).failing(1);
-    let e = WinFs
+    let e = WinFs::default()
         .write_atomic(
             &t.path("n.txt"),
             &mut src,
@@ -281,7 +281,7 @@ fn ハードリンクは_ask_で_atomic_unsupported_break_link_なら置換す�
     // リンクを切って置換する
     let mut o = SaveOptions::user_file(Expect::Stamp(s0));
     o.hardlink = HardlinkPolicy::BreakLink;
-    WinFs
+    WinFs::default()
         .write_atomic(&p, &mut Chunks::of(b"new", 8), &o)
         .unwrap();
     assert_eq!(fs::read(t.p("a.txt")).unwrap(), b"new");
@@ -380,7 +380,7 @@ fn private_で作った新規ファイルは所有者と_system_だけ() {
     let p = t.path("secret.txt");
     let mut o = SaveOptions::user_file(Expect::Absent);
     o.private = true;
-    WinFs
+    WinFs::default()
         .write_atomic(&p, &mut Chunks::of(b"secret", 8), &o)
         .unwrap();
     let acl = acl_principals(&t.p("secret.txt")).join("\n");
@@ -444,7 +444,7 @@ fn 一時ファイルの書込中も_t_は旧内容のまま() {
         n: 0,
         seen: &seen,
     };
-    WinFs
+    WinFs::default()
         .write_atomic(&p, &mut src, &SaveOptions::user_file(Expect::Stamp(s0)))
         .unwrap();
     assert!(seen.borrow().iter().all(|b| b == b"OLD"));

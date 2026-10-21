@@ -16,7 +16,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use eve_config::Catalog;
-use eve_core::{Encoding, JobPorts, Ports};
+use eve_core::{Encoding, JobPorts, Paths as _, Ports};
 use eve_host::{Host, HostMsg, SignalKind, SystemClock, ThreadJobSpawner, channel};
 use eve_platform::dirs::WinPaths;
 use eve_platform::fs::WinFs;
@@ -98,7 +98,7 @@ fn run(
         }
     };
     let clock = Arc::new(SystemClock::new());
-    let fs = Arc::new(WinFs);
+    let fs = Arc::new(WinFs::new(paths.state_dir().as_path()));
     let (tx, rx) = channel();
     let job_ports = JobPorts {
         fs: fs.clone(),

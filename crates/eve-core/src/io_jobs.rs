@@ -19,6 +19,7 @@ use crate::fs::{
     SaveOptions,
 };
 use crate::fspath::FsPath;
+use crate::interrupted::map_interrupted;
 use crate::jobs::{ConfirmAsk, JobError, JobPorts, JobResult, OpenNotes};
 
 /// 先頭の判定に使うバイト数 (03 §8.2 の `sniff_len`)。
@@ -101,6 +102,9 @@ fn open_inner(
         err: JobError::Cancelled,
     };
 
+    // 1. 残っている保存中フラグ (開くたびに 1 回。ディレクトリは列挙しない)。見つけた痕跡は T の有無と合わせて写像する
+    let inflight = ports.fs.inflight_for(path).unwrap_or_default();
+
     // 2. metadata
     let meta = match ports.fs.metadata(path) {
         Ok(m) => m,
@@ -112,6 +116,7 @@ fn open_inner(
             return JobResult::NewFile {
                 job: id,
                 parent_missing,
+                interrupted_save: map_interrupted(ports.fs.as_ref(), &inflight, false),
             };
         }
         Err(e) => return fail(JobError::Fs(e)),
@@ -322,6 +327,7 @@ fn open_inner(
             redetected,
             guess_unsupported,
         },
+        interrupted_save: map_interrupted(ports.fs.as_ref(), &inflight, true),
     }
 }
 

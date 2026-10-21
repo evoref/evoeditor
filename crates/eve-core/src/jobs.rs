@@ -13,7 +13,7 @@ use eve_encoding::{Encoding, PuaEscapeMode, UnsupportedBom};
 use eve_text::{Snapshot, Text};
 
 use crate::document::{ReadOnlyReasons, TextFormat};
-use crate::fs::{Expect, FileMeta, FileStamp, FileSystem, FsError, SaveReport};
+use crate::fs::{Expect, FileMeta, FileStamp, FileSystem, FsError, InterruptedSave, SaveReport};
 use crate::fspath::FsPath;
 use crate::io_jobs::{OpenOptions, SaveParams, run_open, run_save};
 use crate::paths::Paths;
@@ -100,11 +100,15 @@ pub enum JobResult {
         /// 内容・属性から決まる読み取り専用の理由。
         detected: ReadOnlyReasons,
         notes: OpenNotes,
+        /// 残っていた保存中フラグから見つけた、中断された保存の痕跡 (直接上書きの中断など、存在するファイルでも返す)。
+        interrupted_save: Option<InterruptedSave>,
     },
     /// 存在しないパスを開いた (新規ファイル)。フォルダも無ければ `parent_missing` にそのフォルダ。
     NewFile {
         job: JobId,
         parent_missing: Option<FsPath>,
+        /// 残っていた保存中フラグから見つけた、中断された保存の痕跡 (新規作成の途中で中断した、置換の途中で退避名に残った、等)。
+        interrupted_save: Option<InterruptedSave>,
     },
     NeedsConfirm {
         job: JobId,

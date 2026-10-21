@@ -415,6 +415,7 @@ impl EditorState {
                 changed_during_load,
                 detected,
                 notes,
+                interrupted_save,
                 ..
             } => {
                 let lossy = format.roundtrip.lossy_lines;
@@ -457,9 +458,17 @@ impl EditorState {
                         ],
                     );
                 }
+                // 中断された保存の痕跡は最も重要なので最後に出す (現在のメッセージにする)
+                if let Some(is) = &interrupted_save {
+                    self.show_interrupted(&path, is);
+                }
                 self.complete_open(doc_id, view, replace);
             }
-            JobResult::NewFile { parent_missing, .. } => {
+            JobResult::NewFile {
+                parent_missing,
+                interrupted_save,
+                ..
+            } => {
                 // 存在しないパス: 空の新規文書 (dirty ではない)。保存すると作成する
                 let mut d = Document::new_untitled();
                 d.path = Some(path.clone());
@@ -482,6 +491,9 @@ impl EditorState {
                     key,
                     &[("path", &path.display()), ("dir", &dir)],
                 );
+                if let Some(is) = &interrupted_save {
+                    self.show_interrupted(&path, is);
+                }
                 self.complete_open(doc_id, view, replace);
             }
             JobResult::NeedsConfirm { ask, .. } => {
@@ -512,6 +524,28 @@ impl EditorState {
             }
             _ => {}
         }
+    }
+
+    /// 中断された保存の痕跡の案内 (04 §15.2 の `msg.open.interrupted_*`、02 §4.5 の写像)。
+    fn show_interrupted(&mut self, path: &FsPath, is: &crate::fs::InterruptedSave) {
+        use crate::fs::SaveMethod;
+        let key = match (is.method, is.backup.is_some(), is.complete) {
+            (SaveMethod::NewFile, _, _) => "msg.open.interrupted_new",
+            (_, true, true) => "msg.open.interrupted_save",
+            (_, true, false) => "msg.open.interrupted_save_incomplete",
+            (_, false, _) => "msg.open.interrupted_save_no_backup",
+        };
+        let backup = is.backup.as_ref().map(FsPath::display).unwrap_or_default();
+        let tmp = is.tmp.as_ref().map(FsPath::display).unwrap_or_default();
+        self.show_message(
+            MessageLevel::Warn,
+            key,
+            &[
+                ("path", &path.display()),
+                ("backup", &backup),
+                ("tmp", &tmp),
+            ],
+        );
     }
 
     fn complete_open(&mut self, doc: DocumentId, view: ViewId, replace: Option<DocumentId>) {

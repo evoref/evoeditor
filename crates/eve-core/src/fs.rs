@@ -24,6 +24,18 @@ pub trait FileSystem: Send + Sync {
     /// `NotFound` の区別は `metadata` と同じ。
     fn open_read(&self, path: &FsPath) -> Result<Box<dyn ReadChunks + Send>, FsError>;
 
+    /// 1 パス分の保存中フラグ (`recovery/inflight/<hash(path)>/<pid>-<seq>.toml`、05 §7.5) を読む。開くジョブが開くたびに 1 回呼ぶ
+    /// (存在するファイルでも `NotFound` でも)。キーは開くパスと、シンボリックリンクならリンク先の 2 つまで。ディレクトリを列挙しないので O(1)。
+    /// フラグのディレクトリが無ければ空の Vec。状態ディレクトリを持たない実装は常に空を返す。
+    fn inflight_for(&self, _path: &FsPath) -> Result<Vec<InflightRecord>, FsError> {
+        Ok(Vec::new())
+    }
+
+    /// ファイルを 1 つ消す (保存中フラグの掃除など)。存在しなければ `NotFound`。
+    fn remove_file(&self, _path: &FsPath) -> Result<(), FsError> {
+        Err(FsError::new(FsErrorKind::Other))
+    }
+
     /// 原子的に保存する (一時ファイル + 置換、または新規作成)。`data` の失敗 (`ChunkError`) で書込を止め、
     /// 一時ファイルを消して `SourceFailed` を返す。
     fn write_atomic(
@@ -139,6 +151,44 @@ impl FileStamp {
             hash,
         }
     }
+}
+
+// ---------- 保存中フラグと中断の痕跡 (02 §4.5、05 §4.6 / §7.5) ----------
+
+/// 保存中フラグ 1 つ分。
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct InflightRecord {
+    /// 保存先のパス (フラグのキー)。
+    pub target: FsPath,
+    /// 書いたプロセス。
+    pub pid: u32,
+    /// 書いたプロセスの起動時刻 (OS のプロセス作成時刻。v0.1 は書くだけで、写像には使わない)。
+    pub started_at: Option<FileTime>,
+    pub method: SaveMethod,
+    /// 一時ファイル (`.<name>.eve-tmp-*`)。
+    pub tmp: Option<FsPath>,
+    /// 置換の退避名 (`.<name>.eve-bak-*`)、または直接上書きの事前バックアップの最終名。
+    pub backup: Option<FsPath>,
+    /// 直接上書きで事前バックアップを作る記録か (`Required` なら true、`SkipConfirmed` なら false)。
+    pub backup_recorded: bool,
+    /// 直接上書き: 事前バックアップを最終名に変えた後に true。原子的保存では常に false。
+    pub backup_complete: bool,
+    /// フラグのファイル自身 (後始末で消す)。
+    pub flag: FsPath,
+    /// フラグを解析できなかった (未知の版・必須キーの欠落・値の不正)。true のとき意味を持つのは `target`・`pid`・`flag` と読めた `tmp` だけ。
+    pub malformed: bool,
+}
+
+/// 開くジョブが見つけた中断された保存の痕跡 (`JobResult::Complete` / `NewFile` の `interrupted_save`)。
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct InterruptedSave {
+    pub method: SaveMethod,
+    /// 実在するバックアップのパス。`complete` なら完全なもの (直接上書きは最終名、原子的保存は退避名)。
+    /// `complete = false` なら最終名ではなく実在する一時名 (無ければ `None`)。
+    pub backup: Option<FsPath>,
+    /// `InflightRecord.tmp` のうち実在するもの。
+    pub tmp: Option<FsPath>,
+    pub complete: bool,
 }
 
 // ---------- 保存 ----------

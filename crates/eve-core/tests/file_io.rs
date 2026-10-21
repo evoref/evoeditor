@@ -559,3 +559,105 @@ fn readonly_の指定でもバイナリの確認は出す() {
     s.pump();
     assert!(s.messages().contains(&"msg.open.failed".to_owned()));
 }
+
+// ---- 中断された保存の痕跡 (02 §4.5「中断の痕跡の写像」、05 §4.6) ----
+
+fn flag(
+    target: &str,
+    method: eve_core::SaveMethod,
+    recorded: bool,
+    complete: bool,
+) -> eve_core::InflightRecord {
+    eve_core::InflightRecord {
+        target: FsPath::from(target),
+        pid: 100,
+        started_at: None,
+        method,
+        tmp: Some(FsPath::from("/w/.a.txt.eve-tmp-100-aaaaaaaa")),
+        backup: Some(FsPath::from("/w/.a.txt.eve-bak-100-bbbbbbbb")),
+        backup_recorded: recorded,
+        backup_complete: complete,
+        flag: FsPath::from("/state/inflight/k/100-1.toml"),
+        malformed: false,
+    }
+}
+
+#[test]
+fn 置換の途中で中断した保存は退避名を案内して_文書は空の新規として開く() {
+    let mut s = Env::new();
+    s.fs.add_file("/w/.a.txt.eve-bak-100-bbbbbbbb", b"original");
+    s.fs.add_inflight(flag("/w/a.txt", eve_core::SaveMethod::Atomic, false, false));
+    s.messages();
+    s.open("/w/a.txt");
+    assert!(
+        s.messages()
+            .contains(&"msg.open.interrupted_save".to_owned())
+    );
+    assert_eq!(
+        s.text(),
+        "",
+        "T が無いので空の新規文書 (黙って開かず、場所を示す)"
+    );
+    assert_eq!(s.fs.inflight_records().len(), 1, "報告した記録は消さない");
+}
+
+#[test]
+fn 新規作成の途中で中断した保存を案内する() {
+    let mut s = Env::new();
+    s.fs.add_file("/w/.a.txt.eve-tmp-100-aaaaaaaa", b"partial");
+    s.fs.add_inflight(flag(
+        "/w/a.txt",
+        eve_core::SaveMethod::NewFile,
+        false,
+        false,
+    ));
+    s.messages();
+    s.open("/w/a.txt");
+    assert!(
+        s.messages()
+            .contains(&"msg.open.interrupted_new".to_owned())
+    );
+}
+
+#[test]
+fn 直接上書きの中断はファイルがあっても案内する() {
+    let mut s = Env::new();
+    s.fs.add_file("/w/a.txt", b"half-written");
+    s.fs.add_file("/w/.a.txt.eve-bak-100-bbbbbbbb", b"original");
+    s.fs.add_inflight(flag("/w/a.txt", eve_core::SaveMethod::InPlace, true, true));
+    s.messages();
+    s.open("/w/a.txt");
+    assert_eq!(s.text(), "half-written", "文書は通常どおり開く");
+    assert!(
+        s.messages()
+            .contains(&"msg.open.interrupted_save".to_owned())
+    );
+}
+
+#[test]
+fn t_が在る原子的保存の痕跡は報告せずフラグを掃除する() {
+    let mut s = Env::new();
+    s.fs.add_file("/w/a.txt", b"fine");
+    s.fs.add_inflight(flag("/w/a.txt", eve_core::SaveMethod::Atomic, false, false));
+    s.messages();
+    s.open("/w/a.txt");
+    let m = s.messages();
+    assert!(
+        !m.iter().any(|k| k.starts_with("msg.open.interrupted")),
+        "{m:?}"
+    );
+    assert!(
+        s.fs.inflight_records().is_empty(),
+        "痕跡の無いフラグは消える"
+    );
+}
+
+#[test]
+fn 痕跡が実在する記録は報告しなくてもフラグを残す() {
+    let mut s = Env::new();
+    s.fs.add_file("/w/a.txt", b"fine");
+    s.fs.add_file("/w/.a.txt.eve-tmp-100-aaaaaaaa", b"leftover");
+    s.fs.add_inflight(flag("/w/a.txt", eve_core::SaveMethod::Atomic, false, false));
+    s.open("/w/a.txt");
+    assert_eq!(s.fs.inflight_records().len(), 1);
+}

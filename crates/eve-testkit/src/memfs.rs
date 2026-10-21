@@ -10,8 +10,8 @@ use std::sync::{Arc, Mutex, MutexGuard};
 
 use eve_core::{
     ChunkError, Clock, Expect, FileId, FileKind, FileMeta, FileStamp, FileSystem, FileTime,
-    FsError, FsErrorDetail, FsErrorKind, FsKind, FsPath, FsyncLevel, HardlinkPolicy, ReadChunks,
-    SaveMethod, SaveOptions, SaveReport,
+    FsError, FsErrorDetail, FsErrorKind, FsKind, FsPath, FsyncLevel, HardlinkPolicy,
+    InflightRecord, ReadChunks, SaveMethod, SaveOptions, SaveReport,
 };
 
 /// 障害を注入できる操作。
@@ -54,6 +54,8 @@ struct State {
     disk_full_after: Option<u64>,
     read_fail_after: Option<u64>,
     steps: Vec<WriteStep>,
+    /// 保存中フラグ (テストが `add_inflight` で積む)。
+    inflight: Vec<InflightRecord>,
 }
 
 pub struct MemFs {
@@ -80,6 +82,7 @@ impl MemFs {
                 disk_full_after: None,
                 read_fail_after: None,
                 steps: Vec::new(),
+                inflight: Vec::new(),
             }),
         }
     }
@@ -146,6 +149,16 @@ impl MemFs {
 
     pub fn remove(&self, path: &FsPath) {
         self.st().files.remove(path);
+    }
+
+    /// 保存中フラグを積む (中断の痕跡の再現。`InflightRecord.flag` は `/state/inflight/…` のような任意のパス)。
+    pub fn add_inflight(&self, record: InflightRecord) {
+        self.st().inflight.push(record);
+    }
+
+    /// 残っている保存中フラグ。
+    pub fn inflight_records(&self) -> Vec<InflightRecord> {
+        self.st().inflight.clone()
     }
 
     pub fn read(&self, path: &str) -> Option<Vec<u8>> {
@@ -285,6 +298,27 @@ fn step(s: &mut State, st: WriteStep) -> Result<(), FsError> {
 }
 
 impl FileSystem for MemFs {
+    fn inflight_for(&self, path: &FsPath) -> Result<Vec<InflightRecord>, FsError> {
+        let s = self.st();
+        Ok(s.inflight
+            .iter()
+            .filter(|r| &r.target == path)
+            .cloned()
+            .collect())
+    }
+
+    fn remove_file(&self, path: &FsPath) -> Result<(), FsError> {
+        let mut s = self.st();
+        // 保存中フラグのファイル、または通常のファイル
+        let before = s.inflight.len();
+        s.inflight.retain(|r| &r.flag != path);
+        if s.inflight.len() != before || s.files.remove(path).is_some() {
+            Ok(())
+        } else {
+            Err(FsError::new(FsErrorKind::NotFound))
+        }
+    }
+
     fn metadata(&self, path: &FsPath) -> Result<FileMeta, FsError> {
         let mut s = self.st();
         injected(&mut s, FsOp::Metadata)?;

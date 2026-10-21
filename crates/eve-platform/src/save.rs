@@ -42,6 +42,7 @@ use windows_sys::Win32::Storage::FileSystem::{
 use windows_sys::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
 
 use crate::fs::{WinFs, map_io_error};
+use crate::inflight;
 use crate::path::simplify_verbatim;
 
 /// 共有違反の再試行の待ち (ミリ秒、05 §4.2。合計 2.55 s)。
@@ -75,15 +76,25 @@ fn os_error(code: u32, path: &FsPath) -> FsError {
 // ---------- 所有者のみの DACL (05 §5.6) ----------
 
 /// 「所有者のみ」の `SECURITY_ATTRIBUTES` (現在のユーザーと SYSTEM だけにフルアクセス、継承を遮断)。
-struct OwnerOnly {
+pub(crate) struct OwnerOnly {
     descriptor: *mut core::ffi::c_void,
     attrs: SECURITY_ATTRIBUTES,
 }
 
 impl OwnerOnly {
-    fn new() -> io::Result<OwnerOnly> {
+    /// ファイル用 (継承は遮断)。
+    pub(crate) fn new() -> io::Result<OwnerOnly> {
+        OwnerOnly::with_aces("")
+    }
+
+    /// ディレクトリ用 (中のファイルとディレクトリへ継承させる)。
+    pub(crate) fn new_dir() -> io::Result<OwnerOnly> {
+        OwnerOnly::with_aces("OICI")
+    }
+
+    fn with_aces(inherit: &str) -> io::Result<OwnerOnly> {
         let sid = current_user_sid()?;
-        let sddl: Vec<u16> = format!("O:{sid}D:P(A;;FA;;;{sid})(A;;FA;;;SY)")
+        let sddl: Vec<u16> = format!("O:{sid}D:P(A;{inherit};FA;;;{sid})(A;{inherit};FA;;;SY)")
             .encode_utf16()
             .chain(Some(0))
             .collect();
@@ -110,7 +121,7 @@ impl OwnerOnly {
         })
     }
 
-    fn as_ptr(&self) -> *const SECURITY_ATTRIBUTES {
+    pub(crate) fn as_ptr(&self) -> *const SECURITY_ATTRIBUTES {
         &self.attrs
     }
 }
@@ -259,6 +270,80 @@ fn same_file_state(a: &FileMeta, b: &FileMeta) -> bool {
     a.mtime == b.mtime && a.len == b.len && a.file_id == b.file_id
 }
 
+/// 保存中フラグ (05 §4.1 手順 0d / 7 / 8)。状態ディレクトリが無い・状態ファイルの書込 (`state_file`) ではフラグを書かない。
+struct FlagGuard {
+    state_dir: Option<PathBuf>,
+    key: Option<String>,
+    path: Option<PathBuf>,
+}
+
+impl FlagGuard {
+    /// 一時ファイルを作る前に書く。書けなければ警告して続ける (原子的置換では T が無傷のまま残るため)。
+    fn begin(
+        state_dir: Option<&Path>,
+        state_file: bool,
+        target: &Path,
+        method: SaveMethod,
+        tmp: &Path,
+        bak: Option<&Path>,
+        warnings: &mut Vec<SaveWarning>,
+    ) -> FlagGuard {
+        let mut g = FlagGuard {
+            state_dir: None,
+            key: None,
+            path: None,
+        };
+        let Some(sd) = state_dir.filter(|_| !state_file) else {
+            return g;
+        };
+        g.state_dir = Some(sd.to_path_buf());
+        g.key = inflight::flag_key(target);
+        let written = g.key.as_deref().and_then(|key| {
+            inflight::write_flag(
+                sd,
+                key,
+                &inflight::FlagBody {
+                    target,
+                    method,
+                    tmp: Some(tmp),
+                    backup: bak,
+                    backup_recorded: false,
+                    backup_complete: false,
+                },
+            )
+            .ok()
+        });
+        match written {
+            Some(p) => g.path = Some(p),
+            None => warnings.push(SaveWarning::InflightFlagNotWritten),
+        }
+        g
+    }
+
+    /// 自分のフラグを消す。
+    fn remove(&mut self) {
+        if let Some(p) = self.path.take() {
+            let _ = fs::remove_file(p);
+        }
+    }
+
+    /// 成功: 自分のフラグと、同じキーに残る他の記録 (痕跡ファイルが実在しないもの) を消す。
+    fn finish_success(&mut self) {
+        let mine = self.path.clone();
+        self.remove();
+        if let (Some(sd), Some(key), Some(mine)) = (&self.state_dir, &self.key, mine) {
+            inflight::clear_others(sd, key, &mine);
+        }
+    }
+}
+
+/// 置換の前の失敗の後片付け: 一時ファイルを消せたらフラグも消す (消せなければ残す。05 §4.1 手順 8)。
+fn abort(tmp: &Path, flag: &mut FlagGuard) {
+    if delete(tmp) {
+        flag.remove();
+    }
+}
+
 impl WinFs {
     pub(crate) fn write_atomic_impl(
         &self,
@@ -346,16 +431,35 @@ impl WinFs {
             None
         };
         let tmp: PathBuf = parent.join(sibling_name(&name, "tmp"));
+        let bak: Option<PathBuf> = existing
+            .is_some()
+            .then(|| parent.join(sibling_name(&name, "bak")));
+        let mut warnings = Vec::new();
+        // 0d. 保存中フラグ (一時ファイルを作る前)
+        let mut flag = FlagGuard::begin(
+            self.state_dir(),
+            opts.state_file,
+            &target,
+            if existing.is_some() {
+                SaveMethod::Atomic
+            } else {
+                SaveMethod::NewFile
+            },
+            &tmp,
+            bak.as_deref(),
+            &mut warnings,
+        );
         let mut file = match create_new(&tmp, owner.as_ref()) {
             Ok(f) => f,
             // 親に書込権限がない (一時ファイルを作れない): 確認付きの直接上書きへ (05 §4.4)
             Err(e) if e.raw_os_error() == Some(ERROR_ACCESS_DENIED as i32) => {
+                flag.remove();
                 return Err(FsError::new(FsErrorKind::AtomicUnsupported));
             }
-            Err(e) => return Err(map_io_error(e, path)),
-        };
-        let cleanup = |tmp: &Path| {
-            delete(tmp);
+            Err(e) => {
+                flag.remove();
+                return Err(map_io_error(e, path));
+            }
         };
 
         // 2. 本文をチャンクで書く
@@ -364,7 +468,7 @@ impl WinFs {
                 Ok(Some(chunk)) => {
                     if let Err(e) = file.write_all(chunk) {
                         drop(file);
-                        cleanup(&tmp);
+                        abort(&tmp, &mut flag);
                         return Err(map_io_error(e, path));
                     }
                 }
@@ -372,7 +476,7 @@ impl WinFs {
                 // 供給側の失敗・取消し: 一時ファイルを消し、元のファイルは無傷
                 Err(e) => {
                     drop(file);
-                    cleanup(&tmp);
+                    abort(&tmp, &mut flag);
                     return Err(match e {
                         ChunkError::Io(err) => err,
                         _ => FsError::new(FsErrorKind::SourceFailed),
@@ -380,7 +484,6 @@ impl WinFs {
                 }
             }
         }
-        let mut warnings = Vec::new();
 
         // 3. fsync。失敗 (ネットワーク FS・リムーバブル) は警告として続ける
         if opts.fsync != FsyncLevel::None && !flush(&file) {
@@ -413,7 +516,7 @@ impl WinFs {
                 Ok(m) => Some(m),
                 Err(e) if e.kind == FsErrorKind::NotFound => None,
                 Err(e) => {
-                    cleanup(&tmp);
+                    abort(&tmp, &mut flag);
                     return Err(e);
                 }
             };
@@ -423,7 +526,7 @@ impl WinFs {
                 _ => true,
             };
             if stale {
-                cleanup(&tmp);
+                abort(&tmp, &mut flag);
                 return Err(conflict(
                     now.as_ref().map(|m| FileStamp::from_meta(m, None)),
                 ));
@@ -435,7 +538,7 @@ impl WinFs {
         let backup: Option<PathBuf>;
         if let Some(orig) = &existing {
             method = SaveMethod::Atomic;
-            let bak = parent.join(sibling_name(&name, "bak"));
+            let bak = bak.clone().expect("T が在るときは退避名を決めてある");
             backup = Some(bak.clone());
             if let Err(e) = replace_file(&target, &tmp, &bak) {
                 // 置換に失敗: T が無傷なら一時ファイルを消して `AtomicUnsupported`、そうでなければ退避名に残っている
@@ -449,7 +552,7 @@ impl WinFs {
                         })
                     }
                     ReplaceFailure::Other(code) if intact => {
-                        cleanup(&tmp);
+                        abort(&tmp, &mut flag);
                         let mut err = FsError::new(FsErrorKind::AtomicUnsupported);
                         err.source = Some(io::Error::from_raw_os_error(code as i32));
                         err
@@ -468,7 +571,7 @@ impl WinFs {
             let ok = unsafe { MoveFileExW(wt.as_ptr(), wd.as_ptr(), MOVEFILE_WRITE_THROUGH) };
             if ok == 0 {
                 let code = last_error();
-                cleanup(&tmp);
+                abort(&tmp, &mut flag);
                 if code == ERROR_ALREADY_EXISTS || code == ERROR_FILE_EXISTS {
                     let cur = self
                         .metadata(&target_path)
@@ -494,13 +597,19 @@ impl WinFs {
                 return Err(FsError::new(FsErrorKind::Other));
             }
         };
+        // 退避名を消せたらフラグを消す。消せなければフラグを残す (v0.2 の起動時の走査の手掛かり)
+        let mut bak_gone = true;
         if let Some(bak) = backup
             && bak.exists()
             && !delete(&bak)
         {
+            bak_gone = false;
             warnings.push(SaveWarning::BackupNotRemoved {
                 path: FsPath::new(bak),
             });
+        }
+        if bak_gone {
+            flag.finish_success();
         }
         Ok(SaveReport {
             method,
