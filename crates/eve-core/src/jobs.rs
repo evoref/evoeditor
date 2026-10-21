@@ -69,6 +69,12 @@ pub enum JobKind {
         expected: Expect,
         strategy: SaveStrategy,
     },
+    /// 表現不能の文字を置換する ChangeSet を作る (E3 の選択肢 2、03 §8.6)。`snapshot` は投入時の Revision のもの。
+    ReplaceUnmappable {
+        snapshot: Snapshot,
+        encoding: Encoding,
+        pua: PuaEscapeMode,
+    },
     /// 保存の失敗の後の「退避先に保存」(03 §9.7 (e))。`doc` の公開物を退避ディレクトリへ書く。
     WriteRecovery {
         doc: std::sync::Arc<crate::DocSnapshot>,
@@ -161,6 +167,13 @@ pub enum JobResult {
         recorded: Vec<eve_encoding::Unmappable>,
         encoding: Encoding,
     },
+    /// 表現不能の文字の置換の ChangeSet ができた (`targets` は先頭 100 件。総数は `counts` の合計)。
+    UnmappableReplacement {
+        job: JobId,
+        changes: eve_text::ChangeSet,
+        targets: Vec<crate::unmap::ReplaceTarget>,
+        counts: crate::unmap::ReplaceCounts,
+    },
     /// 「退避先に保存」の成功。`path` は実際に書いたディレクトリ (代替の退避先を含む)。
     RecoveryWritten {
         job: JobId,
@@ -183,6 +196,7 @@ impl JobResult {
             | JobResult::RecoveryFound { job, .. }
             | JobResult::Saved { job, .. }
             | JobResult::RecoveryWritten { job, .. }
+            | JobResult::UnmappableReplacement { job, .. }
             | JobResult::Unmappable { job, .. }
             | JobResult::Failed { job, .. } => *job,
         }
@@ -279,6 +293,29 @@ pub fn run_job(
             ports,
             cancel,
         ),
+        JobKind::ReplaceUnmappable {
+            snapshot,
+            encoding,
+            pua,
+        } => match crate::unmap::build_replacement(snapshot, *encoding, *pua, cancel) {
+            Ok(Some((changes, targets, counts))) => JobResult::UnmappableReplacement {
+                job: req.id,
+                changes,
+                targets,
+                counts,
+            },
+            // 対象が無い (文書が変わって表現不能が消えた等): 空の置換として返す
+            Ok(None) => JobResult::UnmappableReplacement {
+                job: req.id,
+                changes: eve_text::ChangeSet::identity(eve_text::TextRead::len_bytes(snapshot)),
+                targets: Vec::new(),
+                counts: crate::unmap::ReplaceCounts::default(),
+            },
+            Err(()) => JobResult::Failed {
+                job: req.id,
+                err: JobError::Cancelled,
+            },
+        },
         JobKind::WriteRecovery { doc } => match ports.fs.write_recovery(doc) {
             Ok(path) => JobResult::RecoveryWritten { job: req.id, path },
             Err(err) => JobResult::Failed {

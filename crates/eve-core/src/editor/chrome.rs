@@ -251,7 +251,12 @@ pub(super) fn overlay_models(state: &EditorState) -> Vec<OverlayModel> {
             vec![OverlayModel::Confirm {
                 title: cell_text(&render(state, &key("title"), &[]), CutPolicy::Never),
                 message: cell_text(&render(state, &key("message"), &args), CutPolicy::End),
-                details: None,
+                details: (!c.details.is_empty()).then(|| {
+                    c.details
+                        .iter()
+                        .map(|l| cell_text(l, CutPolicy::End))
+                        .collect()
+                }),
                 choices,
                 default: ChoiceId(c.default as u16),
                 focused: ChoiceId(c.focused as u16),

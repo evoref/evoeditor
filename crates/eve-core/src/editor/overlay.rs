@@ -53,6 +53,12 @@ pub(super) enum ConfirmAction {
     Reload,
     /// 表現不能の文字があって保存を中止した後の選択 (UTF-8 で保存 / キャンセル、03 §8.6)。
     Unmappable(super::file::UnmappableAsk),
+    /// 置換の一覧の確認 (置換して保存 / キャンセル、03 §8.6)。`revision` は ChangeSet を作った時点の文書の Revision。
+    UnmappableReplace {
+        ask: super::file::UnmappableAsk,
+        changes: eve_text::ChangeSet,
+        revision: eve_view::Revision,
+    },
 }
 
 /// 確認ダイアログ。選択肢は `choices` (+ 最後にキャンセル)。
@@ -63,6 +69,8 @@ pub(super) struct ConfirmState {
     /// 文言の引数 (`{path}` など)。
     pub args: Vec<(String, String)>,
     pub choices: Vec<ChoiceDef>,
+    /// 本文の下に 1 行ずつ出す詳細 (E3 の置換の一覧)。無ければ空。
+    pub details: Vec<String>,
     /// 初めにフォーカスする選択肢 (`choices.len()` はキャンセル)。
     pub default: usize,
     pub focused: usize,
@@ -219,6 +227,7 @@ impl EditorState {
             name,
             args: vec![("path".to_owned(), path)],
             choices: UNSAVED_CHOICES.to_vec(),
+            details: Vec::new(),
             default: 0,
             focused: 0,
             action: ConfirmAction::Unsaved(cont),
@@ -250,7 +259,9 @@ impl EditorState {
                     self.show_message(MessageLevel::Info, "info.save.aborted", &[]);
                 }
                 ConfirmAction::Open(ask) => self.open_aborted(ask),
-                ConfirmAction::Unmappable(ask) => self.unmappable_cancelled(ask),
+                ConfirmAction::Unmappable(ask) | ConfirmAction::UnmappableReplace { ask, .. } => {
+                    self.unmappable_cancelled(ask)
+                }
                 _ => {}
             }
             return CommandResult::Done;
@@ -266,6 +277,11 @@ impl EditorState {
             ConfirmAction::Open(ask) => self.choose_open(ask, id),
             ConfirmAction::Reload => self.start_reload(),
             ConfirmAction::Unmappable(ask) => self.choose_unmappable(ask, id),
+            ConfirmAction::UnmappableReplace {
+                ask,
+                changes,
+                revision,
+            } => self.apply_replacement_and_save(ask, changes, revision),
         }
     }
 

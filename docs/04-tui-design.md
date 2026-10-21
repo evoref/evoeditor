@@ -1006,7 +1006,7 @@ core の意味的モデル ([02 §8.1](02-architecture.md#81-方針-adr-0008)) �
 
 - 中央モーダル (コンテキスト `dialog`。`global` の割当も効かない、07 §7.1)。選択肢は `[S] 保存` のように **アクセラレータキーを角括弧で明示** する。破壊的操作 (破棄) は既定ボタンにしない。
 - **フォーカス**: 既定ボタンから始まる。フォーカス中のボタンは `▶` 記号 + `ui.dialog.button.focused` (反転 + 太字) で示す (色に頼らない)。ハードウェアカーソルはフォーカス中のボタンの先頭セルに置く (§6.7 I2 (c))。
-- **詳細** (`Confirm.details`): v0.1 で使うのは E3 の置換の一覧 (03 §8.6、`ui.confirm.save.unmappable_replace.header`) だけで、本文の下に 1 件 1 行で描く。v0.1 はスクロールしない: 画面に収まる行数だけを先頭から描き、描けなかった行があれば最後の行を `…` にする (件数は本文に出ている)。幅を超える行は右端で `…` にする。
+- **詳細** (`Confirm.details`): v0.1 で使うのは E3 の置換の一覧 (03 §8.6、`ui.confirm.save.unmappable_replace.message`) だけで、本文の下に 1 件 1 行で描く。v0.1 はスクロールしない: 画面に収まる行数だけを先頭から描き、描けなかった行があれば最後の行を `…` にする (件数は本文に出ている)。幅を超える行は右端で `…` にする。
 - **文言**: 見出し (`Confirm.title`)・本文 (`message`)・選択肢 (`Choice.label`)・操作の案内 (`Confirm.nav_hint`) はすべて core が解決した文言で届く (`ui.confirm.<name>.title` / `.message` / `.<choice>`、`ui.confirm.nav_hint`、§15)。
 - **操作** (07 §11.6 の `dialog` コンテキスト): `Tab` / `→` / `↓` で次のボタン、`Shift+Tab` / `←` / `↑` で前のボタン (`ui.list_next` / `ui.list_prev`。端で止まらず一周する)、`Enter` でフォーカス中のボタンを実行 (`ui.confirm`)、`Esc` は常に「キャンセル」(データを変えない側、`ui.cancel`)。アクセラレータの文字 (`S` / `D` 等) を押すとその選択肢を直接実行する (`ui.dialog_choose`。大小を区別しない。全角英字は半角に畳んで照合。一致しない文字は捨てる)。
 - **IME が ON のとき**: 文字キーは前編集に入ってアクセラレータとして届かない。`Tab` / 矢印 + `Enter` で選べることを、ダイアログの下端に 1 行で常に示す (`Confirm.nav_hint` = `ui.confirm.nav_hint`: `Tab / ←→ で選択、Enter で決定`)。
@@ -1414,7 +1414,9 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 | `ui.confirm.save.unmappable.message` | 同上 | {count} 個の文字は {encoding} で表せません (最初: 行 {line}, 桁 {col}) |
 | `ui.confirm.save.unmappable.utf8` | 同上 (アクセラレータ `U`。表現不能の文字にエスケープ文字 (03 §8.3) を含むとき・保存先が UTF-8 のときは出さない) | [U] UTF-8 で保存 |
 | `ui.confirm.save.unmappable.replace` | 同上 (アクセラレータ `R`。文書が編集できるときだけ。置換の一覧は `ui.confirm.save.unmappable_replace.*`) | [R] 置換して保存 |
-| `ui.confirm.save.unmappable_replace.header` | E3 で「置換して保存」を選んだ後、置換の前の一覧 (03 §8.6 の「置換の一覧」。一覧は `Confirm.details` に 1 件 1 行で入る。行の文言は下の `.item` / `.more`) | 次の {total} 個の文字を置き換えて {encoding} で保存します (全角カナへ {kana} 個、互換文字へ {compat} 個、`?` へ {question} 個) — `[R] 置換して保存` (★ は `[Esc] キャンセル`)。`{total}` = `kana + compat + question` (02 §9.3 の `ReplaceCounts`)。3 つの件数は 0 でもこの順で出す |
+| `ui.confirm.save.unmappable_replace.title` | E3 で「置換して保存」を選んだ後、置換の前の一覧 (03 §8.6 の「置換の一覧」。一覧は `Confirm.details` に 1 件 1 行で入る。行の文言は下の `.item` / `.more`) | 置換の確認 |
+| `ui.confirm.save.unmappable_replace.message` | 同上 (本文。件数は 0 でもこの順で出す。`{total}` = `kana + compat + question`、02 §9.3 の `ReplaceCounts`) | 次の {total} 個の文字を置き換えて {encoding} で保存します (全角カナへ {kana} 個、互換文字へ {compat} 個、`?` へ {question} 個) |
+| `ui.confirm.save.unmappable_replace.replace` | 同上 (アクセラレータ `R`。既定は `[Esc] キャンセル`) | [R] 置換して保存 |
 | `ui.confirm.save.unmappable_replace.item` | 上の一覧の 1 行 (先頭 100 件) | 行 {line}, 桁 {col}: {char} ({codepoint}) → {replacement} |
 | `ui.confirm.save.unmappable_replace.more` | 上の一覧の最後の行 (101 件目以降があるとき) | ほか {count} 個 |
 | `msg.save.encoding_unsupported_iso2022` | 不正なバイトを含む文書 (§8.3 のエスケープ文字を含む。主に `StatefulEncodingWithInvalidBytes`) を ISO-2022-JP で保存しようとした (上書き保存・名前を付けて保存・文字コードを指定して保存。03 §8.3 の (a) / §9.7 の「連鎖の開始時の拒否」。確認ではなくエラーのメッセージで、選択肢は無い。保存の連鎖と後続 (終了等) は中止。ジョブは投入しない) | 不正なバイトを含むため、この文書は ISO-2022-JP では保存できません。何も書き込んでいません / 文字コードを指定して開き直す ({key:file.reopen_with_encoding}) で別の文字コード (UTF-8 等) として開き直してください |

@@ -19,6 +19,7 @@ mod paths;
 mod replacing;
 mod rescue;
 mod time;
+mod unmap;
 
 pub use cancel::CancelToken;
 pub use document::{
@@ -45,3 +46,4 @@ pub use paths::Paths;
 pub use replacing::{ReplacingCount, ReplacingGuard};
 pub use rescue::{RescueOutcome, RescueReason, RescueWriter};
 pub use time::{Clock, Millis, Tick};
+pub use unmap::{ReplaceCounts, ReplaceTarget};
