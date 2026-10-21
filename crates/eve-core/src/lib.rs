@@ -16,6 +16,7 @@ mod interrupted;
 mod io_jobs;
 mod jobs;
 mod paths;
+mod replacing;
 mod rescue;
 mod time;
 
@@ -41,5 +42,6 @@ pub use jobs::{
     OpenNotes, Ports, SaveStrategy, run_job,
 };
 pub use paths::Paths;
+pub use replacing::{ReplacingCount, ReplacingGuard};
 pub use rescue::{RescueOutcome, RescueReason, RescueWriter};
 pub use time::{Clock, Millis, Tick};

@@ -383,3 +383,49 @@ fn ads_と_hidden_属性はそのまま残る() {
         .unwrap();
     assert!(String::from_utf8_lossy(&out.stdout).contains('H'));
 }
+
+/// 書込の最中に見えた置換中の状態 (下りていたか、置換中のパス)。
+type Seen = std::rc::Rc<Cell<Option<(bool, Vec<String>)>>>;
+
+/// 書込の最中 (チャンクを読むとき) の置換中の計数を記録する供給側。
+struct Probe {
+    count: eve_core::ReplacingCount,
+    seen: Seen,
+    done: bool,
+}
+
+impl ReadChunks for Probe {
+    fn next_chunk(&mut self) -> Result<Option<&[u8]>, ChunkError> {
+        if self.done {
+            return Ok(None);
+        }
+        self.done = true;
+        self.seen
+            .set(Some((self.count.is_zero(), self.count.paths())));
+        Ok(Some(b"new content"))
+    }
+}
+
+#[test]
+fn 直接上書きの書込の間だけ置換中の計数が上がる() {
+    let mut e = Env::new("replacing");
+    let count = eve_core::ReplacingCount::default();
+    e.fs = WinFs::new(&e.state).with_replacing(count.clone());
+    fs::write(e.file("a.txt"), b"old").unwrap();
+    let opts = SaveOptions::user_file(Expect::Stamp(e.stamp("a.txt")));
+    let seen = std::rc::Rc::new(Cell::new(None));
+    let mut src = Probe {
+        count: count.clone(),
+        seen: seen.clone(),
+        done: false,
+    };
+    assert!(count.is_zero());
+    e.fs.write_in_place(&e.path("a.txt"), &mut src, 11, &opts, &CancelToken::new())
+        .expect("書ける");
+    let (was_zero, paths) = seen.take().expect("チャンクを読んだ");
+    assert!(!was_zero, "書込の間は上がっている");
+    assert_eq!(paths.len(), 1);
+    assert!(paths[0].ends_with("a.txt"), "{paths:?}");
+    assert!(count.is_zero(), "終われば下りる");
+    assert_eq!(fs::read(e.file("a.txt")).unwrap(), b"new content");
+}

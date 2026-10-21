@@ -16,6 +16,11 @@ pub fn panic_crash_log(path: &Path) -> String {
     )
 }
 
+/// `stderr.quit.waiting_save`: 保存の完了を待つ前の 1 行 (04 §15.2)。
+pub fn waiting_save(path: &str) -> String {
+    format!("保存の完了を待っています: {path}")
+}
+
 pub fn panic_report(url: &str) -> String {
     format!("問題を報告するときは、クラッシュログを Issue に添付してください: {url}")
 }

@@ -102,7 +102,9 @@ fn run(
     };
     let clock = Arc::new(SystemClock::new());
     let state_dir = paths.state_dir();
-    let fs = Arc::new(WinFs::new(state_dir.as_path()));
+    // 置換中の計数 (保存の置換・直接上書きの間だけ上がる)。終了の経路が下りるのを待つ (02 §9.6 手順 3)
+    let replacing = eve_core::ReplacingCount::default();
+    let fs = Arc::new(WinFs::new(state_dir.as_path()).with_replacing(replacing.clone()));
     let (tx, rx) = channel();
     let job_ports = JobPorts {
         fs: fs.clone(),
@@ -138,7 +140,9 @@ fn run(
     {
         let tx = tx.clone();
         let emergency = emergency.clone();
+        let replacing = replacing.clone();
         let _ = eve_platform::console::install_handler(move |ev| {
+            let t0 = std::time::Instant::now();
             use eve_host::{RESCUE_BUDGET_CLOSE, RESCUE_BUDGET_SIGNAL};
             use eve_platform::console::CtrlEvent;
             let (kind, reason, budget) = match ev {
@@ -161,8 +165,16 @@ fn run(
             emergency.run(reason, budget);
             let sent = tx.send(HostMsg::Signal(kind)).is_ok();
             // CTRL_CLOSE は送るだけで戻る (ハンドラから戻るとプロセスが終わる。端末はコンソールごと閉じられる、02 §9.6 手順 2)
-            if !sent || matches!(ev, CtrlEvent::Close) {
-                return sent;
+            if !sent {
+                return false;
+            }
+            if matches!(ev, CtrlEvent::Close) {
+                // 置換中フラグが下りるのを、受信から 4.3 s まで待ってから戻る (残りの 0.2 s は復帰の余裕、02 §11.2.1)
+                wait_zero(
+                    &replacing,
+                    Some(std::time::Duration::from_millis(4300).saturating_sub(t0.elapsed())),
+                );
+                return true;
             }
             // CTRL_C / CTRL_BREAK: 戻らずに最大 2 秒、メインの終了を待つ (戻るとプロセスが続行する)。
             // 終わらなければメインが止まっている: 受信スレッドが端末を復元して終了する (02 §9.6 手順 4)
@@ -173,6 +185,11 @@ fn run(
                 }
                 std::thread::sleep(std::time::Duration::from_millis(10));
             }
+            // 置換中フラグが下りるのを、受信から 4.8 s まで (復元の 200 ms を残して) 待つ
+            wait_zero(
+                &replacing,
+                Some(std::time::Duration::from_millis(4800).saturating_sub(t0.elapsed())),
+            );
             if let Some(info) = restore_info.get() {
                 eve_platform::term::emergency_restore(
                     info.handle.0,
@@ -205,6 +222,9 @@ fn run(
     }));
     // どの経路でも端末を復元する (冪等)
     frontend.restore_terminal();
+    // 保存の置換・直接上書きの最中なら、終わるまで待つ (途中で終わると元のファイルが壊れる、02 §9.6 手順 3)。端末は復元済みで
+    // 画面に何も出ないので、待つ前に stderr で知らせる
+    wait_replacing(&replacing, None);
     // コンソールのハンドラが退避を書いている最中なら、終わるまで待つ (先にメインが終わると書込が打ち切られる)
     emergency.wait_if_writing(eve_host::RESCUE_BUDGET_CLOSE);
     match outcome {
@@ -228,6 +248,8 @@ fn run(
         Err(_) => {
             // パニック: 退避 (最大 5 s。メインの catch_unwind の後) → 端末の復元は済み → panic.header → 退避の結果 → クラッシュログ → 報告先
             let rescued = emergency.run(RescueReason::Panic, eve_host::RESCUE_BUDGET_FATAL);
+            // 退避の後、置換中フラグを最大 1 s 待つ (合計 5 s の内、02 §11.2.1)
+            wait_zero(&replacing, Some(std::time::Duration::from_secs(1)));
             let mut err = std::io::stderr().lock();
             let _ = writeln!(err, "{}", texts::PANIC_HEADER);
             if let Some(o) = rescued {
@@ -246,6 +268,34 @@ fn run(
             EXIT_PANIC
         }
     }
+}
+
+/// 置換中フラグが下りるまで待つ。`limit` が `None` なら無期限。下りたら `true`。
+fn wait_zero(replacing: &eve_core::ReplacingCount, limit: Option<std::time::Duration>) -> bool {
+    let start = std::time::Instant::now();
+    loop {
+        if replacing.is_zero() {
+            return true;
+        }
+        if limit.is_some_and(|l| start.elapsed() >= l) {
+            return false;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+}
+
+/// 置換中フラグが下りるまで待つ。上がっていたら、待ち始める前に stderr へ 1 行ずつ知らせる。
+fn wait_replacing(replacing: &eve_core::ReplacingCount, limit: Option<std::time::Duration>) {
+    if replacing.is_zero() {
+        return;
+    }
+    {
+        let mut err = std::io::stderr().lock();
+        for p in replacing.paths() {
+            let _ = writeln!(err, "{}", texts::waiting_save(&p));
+        }
+    }
+    wait_zero(replacing, limit);
 }
 
 /// クラッシュログを `state_dir/log/crash-<pid>-<秒>.txt` に書く (09 §10)。パニックのメッセージ・場所・バックトレースだけで、
