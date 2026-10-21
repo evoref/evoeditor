@@ -115,20 +115,46 @@ fn fuzz(seconds: u64, seed: u64, out_dir: &Path, summary: &mut Vec<String>) -> R
     let artifacts = out_dir.join("fuzz-artifacts");
     let _ = std::fs::remove_dir_all(&artifacts);
     std::fs::create_dir_all(&artifacts).map_err(|e| format!("{}: {e}", artifacts.display()))?;
+    // ビルドの出力は見せる (入力もスタックも含まない)。失敗の原因を後から追えるようにする
+    // 対象は nightly の rustc のホストにする。cargo-fuzz は既定で自分がビルドされた対象 (配布の実行ファイルは musl) を使うので、
+    // 明示しないと「musl の std が無い」「sanitizer は静的リンクの libc と非互換」で失敗する
+    let host = host_triple()?;
+    run(
+        "cargo +nightly fuzz build fuzz_decode",
+        Command::new("cargo").args([
+            "+nightly",
+            "fuzz",
+            "build",
+            "--target",
+            &host,
+            "fuzz_decode",
+        ]),
+    )?;
     println!("▶ fuzz_decode ({seconds} 秒、seed {seed})");
-    // 出力は捨てる: 公開のログに入力とスタックを出さない (-close_fd_mask=3 に加えて、こちらでも受けて出さない)
+    // 出力は受けて、クラッシュが見つかったときは出さない: 公開のログに入力とスタックを出さない (-close_fd_mask=3 に加えて、こちらでも受けて出さない)
     let prefix = format!("-artifact_prefix={}/", artifacts.display());
-    let status = Command::new("cargo")
-        .args(["+nightly", "fuzz", "run", "fuzz_decode", "--"])
+    let output = Command::new("cargo")
+        .args([
+            "+nightly",
+            "fuzz",
+            "run",
+            "--target",
+            &host,
+            "fuzz_decode",
+            "--",
+        ])
         .arg(format!("-max_total_time={seconds}"))
         .arg("-close_fd_mask=3")
+        // 1 入力あたりの上限。既定の 1200 秒だと、ハングする入力 1 件で夜間ジョブが 20 分止まる
+        .arg("-timeout=60")
         .arg(format!("-seed={seed}"))
         .arg(prefix)
         .current_dir(workspace_root())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()
         .map_err(|e| format!("cargo fuzz を実行できません: {e}"))?;
+    let status = output.status;
 
     let crashes = list_crashes(&artifacts)?;
     summary.push(format!(
@@ -139,8 +165,23 @@ fn fuzz(seconds: u64, seed: u64, out_dir: &Path, summary: &mut Vec<String>) -> R
         return if status.success() {
             Ok(())
         } else {
+            // クラッシュ入力が無い失敗 (ビルドや環境の問題) だけ、出力の末尾を示す。クラッシュがあるときは出さない
+            let tail = |b: &[u8]| {
+                let t = String::from_utf8_lossy(b);
+                let lines: Vec<&str> = t.lines().collect();
+                lines[lines.len().saturating_sub(30)..].join(
+                    "
+",
+                )
+            };
             Err(format!(
-                "fuzz がクラッシュ無しで失敗しました ({status})。ビルドや環境の問題の可能性があります"
+                "fuzz がクラッシュ無しで失敗しました ({status})。ビルドや環境の問題の可能性があります
+--- stderr の末尾 ---
+{}
+--- stdout の末尾 ---
+{}",
+                tail(&output.stderr),
+                tail(&output.stdout)
             ))
         };
     }
@@ -148,7 +189,14 @@ fn fuzz(seconds: u64, seed: u64, out_dir: &Path, summary: &mut Vec<String>) -> R
     let recipients = workspace_root().join(".github").join("fuzz-recipients.txt");
     let mut encrypted: Vec<String> = Vec::new();
     for (i, f) in crashes.iter().enumerate() {
-        let dst = artifacts.join(format!("crash-{:03}.age", i + 1));
+        // 種類 (crash / oom / timeout) は名前に残す (入力の内容ではないので公開してよい)。メンテナが調べる順序の手掛かりになる
+        let kind = f
+            .file_name()
+            .and_then(|n| n.to_str())
+            .and_then(|n| n.split('-').next())
+            .unwrap_or("crash")
+            .to_owned();
+        let dst = artifacts.join(format!("{kind}-{:03}.age", i + 1));
         let ok = Command::new("age")
             .arg("-R")
             .arg(&recipients)
@@ -180,6 +228,15 @@ fn fuzz(seconds: u64, seed: u64, out_dir: &Path, summary: &mut Vec<String>) -> R
     ))
 }
 
+/// nightly の rustc のホストの対象 (`rustc +nightly -vV` の `host:`)。
+fn host_triple() -> Result<String, String> {
+    let out = run_capture(Command::new("rustc").args(["+nightly", "-vV"]))?;
+    out.lines()
+        .find_map(|l| l.strip_prefix("host: "))
+        .map(|h| h.trim().to_owned())
+        .ok_or_else(|| "rustc +nightly -vV に host の行がありません".to_owned())
+}
+
 fn list_crashes(dir: &Path) -> Result<Vec<PathBuf>, String> {
     let mut v = Vec::new();
     for e in std::fs::read_dir(dir)
@@ -201,7 +258,8 @@ fn proptest() -> Result<(), String> {
         "nextest",
         "run",
         "--profile",
-        "ci",
+        // 夜間の proptest は重い (eve-text の storage は 1 ケースで大きな文書を作る) ので、専用の profile で長い時間を許す
+        "nightly",
         "--no-tests=pass",
     ]);
     for c in LINUX_CRATES {

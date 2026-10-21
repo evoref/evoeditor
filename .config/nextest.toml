@@ -15,3 +15,9 @@ slow-timeout = { period = "60s", terminate-after = 5 }
 fail-fast = false
 retries = 2
 slow-timeout = { period = "60s", terminate-after = 5 }
+
+# 夜間 (`cargo xtask nightly` の proptest 拡張。PROPTEST_CASES=10000)。1 テストが数分かかることがあるので、
+# `ci` の 5 分で打ち切らず、1 時間まで許す (ハングは step 全体の時間の上限 XTASK_STEP_TIMEOUT_SECS で止める)。retries は付けない。
+[profile.nightly]
+fail-fast = false
+slow-timeout = { period = "300s", terminate-after = 12 }
