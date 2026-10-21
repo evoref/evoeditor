@@ -105,7 +105,7 @@ fn method_name(m: SaveMethod) -> &'static str {
 }
 
 /// TOML の基本文字列にする。
-fn toml_str(s: &str) -> String {
+pub(crate) fn toml_str(s: &str) -> String {
     let mut out = String::with_capacity(s.len() + 2);
     out.push('"');
     for c in s.chars() {

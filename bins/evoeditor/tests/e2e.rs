@@ -29,8 +29,8 @@ struct Session {
     writer: Arc<Mutex<Box<dyn Write + Send>>>,
     parser: Arc<Mutex<vt100::Parser>>,
     raw: Arc<Mutex<Vec<u8>>>,
-    // pty を閉じないよう保持する
-    _master: Box<dyn MasterPty + Send>,
+    // pty を閉じないよう保持する (`close_console` で手放すと CTRL_CLOSE_EVENT が起きる)
+    master: Option<Box<dyn MasterPty + Send>>,
     state: PathBuf,
 }
 
@@ -91,7 +91,7 @@ impl Session {
             writer,
             parser,
             raw,
-            _master: pty.master,
+            master: Some(pty.master),
             state,
         }
     }
@@ -133,6 +133,27 @@ impl Session {
             thread::sleep(Duration::from_millis(25));
         }
         panic!("終了しない。画面:\n{}", self.screen());
+    }
+
+    /// 疑似コンソールを閉じる (ウィンドウを閉じた状態。プロセスに `CTRL_CLOSE_EVENT` が届く、09 §3.6 (8b))。
+    /// 閉じる呼出し (`ClosePseudoConsole`) は版によって子の終了を待ってブロックするので、別スレッドで呼ぶ。
+    fn close_console(&mut self) {
+        if let Some(m) = self.master.take() {
+            #[allow(clippy::disallowed_methods)]
+            thread::spawn(move || drop(m));
+        }
+    }
+
+    /// 終了を待つ (上限つき)。終了しなければ `None`。
+    fn exit_within(&mut self, limit: Duration) -> Option<u32> {
+        let t = Instant::now();
+        while t.elapsed() < limit {
+            if let Some(st) = self.child.try_wait().expect("try_wait") {
+                return Some(st.exit_code());
+            }
+            thread::sleep(Duration::from_millis(25));
+        }
+        None
     }
 
     fn running(&mut self) -> bool {
@@ -332,6 +353,49 @@ fn 入力して保存して終了するとファイルの内容が一致する()
     assert_eq!(s.wait_exit(), 0, "保存済みなので確認なしで終了する");
     assert_eq!(std::fs::read(&path).unwrap(), b"hello");
     let _ = std::fs::remove_dir_all(dir);
+}
+
+// (8b ii) コンソールを閉じる (CTRL_CLOSE): 未保存の内容を退避して終了する。退避は受信スレッドがメインを待たずに書く
+#[test]
+fn コンソールを閉じると未保存の内容を退避して終了する() {
+    let mut s = Session::start(&[]);
+    s.wait_ready();
+    type_slowly(&s, "unsaved text");
+    s.wait_for("入力が見える", |t| t.contains("unsaved text"));
+    let recovery = s.state.join("recovery");
+    s.close_console();
+    let code = s.exit_within(Duration::from_secs(10));
+    assert!(
+        code.is_some(),
+        "コンソールを閉じたら終了する (CTRL_CLOSE は約 5 秒で強制終了される)"
+    );
+    // 退避ディレクトリ: <UTC timestamp>-<pid>/ に本文と manifest
+    let dirs: Vec<_> = std::fs::read_dir(&recovery)
+        .map(|rd| {
+            rd.flatten()
+                .filter(|e| e.file_name().to_string_lossy().contains('Z'))
+                .map(|e| e.path())
+                .collect()
+        })
+        .unwrap_or_default();
+    assert_eq!(dirs.len(), 1, "退避は 1 件: {dirs:?} ({recovery:?})");
+    let manifest = std::fs::read_to_string(dirs[0].join("manifest.toml")).unwrap();
+    assert!(
+        manifest.contains("reason = \"console_close\""),
+        "{manifest}"
+    );
+    assert!(manifest.contains("complete = true"), "{manifest}");
+    let body: Vec<_> = std::fs::read_dir(&dirs[0])
+        .unwrap()
+        .flatten()
+        .filter(|e| e.file_name().to_string_lossy().ends_with(".txt"))
+        .collect();
+    assert_eq!(body.len(), 1);
+    assert_eq!(
+        std::fs::read_to_string(body[0].path()).unwrap(),
+        "unsaved text"
+    );
+    let _ = std::fs::remove_dir_all(&s.state);
 }
 
 // 保存すると保存中フラグを書いて消す (05 §4.6): 状態ディレクトリにフラグが残らない

@@ -7,15 +7,20 @@
 #![forbid(unsafe_code)]
 
 mod clock;
+mod emergency;
 mod frontend;
 mod host;
 mod msg;
 mod workers;
 
 pub use clock::SystemClock;
+pub use emergency::{EmergencyCtl, EmergencyState};
 pub use frontend::{
     EffectOutcome, Frontend, FrontendConfig, FrontendError, InputSink, RenderOutcome,
 };
-pub use host::{Host, StartError, StepOutcome, channel};
+pub use host::{
+    Host, RESCUE_BUDGET_CLOSE, RESCUE_BUDGET_FATAL, RESCUE_BUDGET_SIGNAL, StartError, StepOutcome,
+    channel,
+};
 pub use msg::{ExitCode, FatalReason, HostMsg, SignalKind};
 pub use workers::ThreadJobSpawner;

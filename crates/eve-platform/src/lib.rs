@@ -17,4 +17,6 @@ pub mod fs;
 mod inflight;
 pub mod path;
 #[cfg(windows)]
+pub mod rescue;
+#[cfg(windows)]
 mod save;

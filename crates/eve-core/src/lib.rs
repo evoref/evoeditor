@@ -16,6 +16,7 @@ mod interrupted;
 mod io_jobs;
 mod jobs;
 mod paths;
+mod rescue;
 mod time;
 
 pub use cancel::CancelToken;
@@ -40,4 +41,5 @@ pub use jobs::{
     OpenNotes, Ports, run_job,
 };
 pub use paths::Paths;
+pub use rescue::{RescueOutcome, RescueReason, RescueWriter};
 pub use time::{Clock, Millis, Tick};
