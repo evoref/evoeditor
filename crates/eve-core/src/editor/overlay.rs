@@ -51,6 +51,8 @@ pub(super) enum ConfirmAction {
     Open(super::file::OpenAsk),
     /// dirty な文書の再読込 (変更を破棄、03 §9.5)。
     Reload,
+    /// 表現不能の文字があって保存を中止した後の選択 (UTF-8 で保存 / キャンセル、03 §8.6)。
+    Unmappable(super::file::UnmappableAsk),
 }
 
 /// 確認ダイアログ。選択肢は `choices` (+ 最後にキャンセル)。
@@ -248,6 +250,7 @@ impl EditorState {
                     self.show_message(MessageLevel::Info, "info.save.aborted", &[]);
                 }
                 ConfirmAction::Open(ask) => self.open_aborted(ask),
+                ConfirmAction::Unmappable(ask) => self.unmappable_cancelled(ask),
                 _ => {}
             }
             return CommandResult::Done;
@@ -262,6 +265,7 @@ impl EditorState {
             ConfirmAction::SaveFailed(ask) => self.choose_save_failed(ask, id),
             ConfirmAction::Open(ask) => self.choose_open(ask, id),
             ConfirmAction::Reload => self.start_reload(),
+            ConfirmAction::Unmappable(ask) => self.choose_unmappable(ask, id),
         }
     }
 

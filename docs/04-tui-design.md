@@ -1410,7 +1410,10 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 | `msg.save.recovery_failed` | 上の確認で「退避先に保存」を選んだが書けなかった (`state_dir` も代替の退避先 (05 §7.5) も使えない、容量不足等。03 §9.7 の `WritingRecovery`。文書は dirty のまま、後続は中止) | 退避先に保存できませんでした: {reason}。元のファイル {path} は変更していません / 別名で保存 ({key:file.save_as}) してください |
 | `ui.confirm.save_failed_closed` | 閉じた文書 (v0.1 は置き換えで閉じた旧文書) の保存ジョブが失敗した。閉じた文書なので別名で保存・再試行は出さず、保持している `DocSnapshot` から「退避先に保存」か「破棄」の 2 択にする (03 §9.2 の「閉じる手順」(a)。本文には失敗の種類に対応する `msg.save.*` の text を入れる。`Esc` の扱いは 03 の手順に従う。提案、OQ-199。03 の同項と同じ扱い) | 保存できませんでした: (`msg.save.*` の text) — {path} は既に閉じています。`[R] 退避先に保存` ★ / `[D] 破棄` |
 | `msg.save.changed_after_save` | 警告 (`SaveWarning`: 置換の後の T が自分の書いたものと確認できず、保存の直後に他のプログラムが変更した可能性がある。05 §4.1 手順 7。保存自体は成功のまま。次の保存は外部変更として確認される) | {path} を保存しましたが、保存の直後に他のプログラムが変更した可能性があります / 次に保存するときに内容を確認します。必要なら再読込 ({key:file.reload}) で確かめてください |
-| `ui.confirm.save.unmappable` | E3 表現不能 (03 §8.6 の「E3 の選択肢」。選択肢と出す条件の正本は 03) | {count} 個の文字は {encoding} で表せません (最初: 行 {line}, 桁 {col}) — `[U] UTF-8 で保存` / `[R] 置換して保存` (★ は `[Esc] キャンセル`。キャンセルするとカーソルが最初の該当位置へ移る) |
+| `ui.confirm.save.unmappable.title` | E3 表現不能 (03 §8.6 の「E3 の選択肢」。選択肢と出す条件の正本は 03) | 表現できない文字 |
+| `ui.confirm.save.unmappable.message` | 同上 | {count} 個の文字は {encoding} で表せません (最初: 行 {line}, 桁 {col}) |
+| `ui.confirm.save.unmappable.utf8` | 同上 (アクセラレータ `U`。表現不能の文字にエスケープ文字 (03 §8.3) を含むとき・保存先が UTF-8 のときは出さない) | [U] UTF-8 で保存 |
+| `ui.confirm.save.unmappable.replace` | 同上 (アクセラレータ `R`。文書が編集できるときだけ。置換の一覧は `ui.confirm.save.unmappable_replace.*`) | [R] 置換して保存 |
 | `ui.confirm.save.unmappable_replace.header` | E3 で「置換して保存」を選んだ後、置換の前の一覧 (03 §8.6 の「置換の一覧」。一覧は `Confirm.details` に 1 件 1 行で入る。行の文言は下の `.item` / `.more`) | 次の {total} 個の文字を置き換えて {encoding} で保存します (全角カナへ {kana} 個、互換文字へ {compat} 個、`?` へ {question} 個) — `[R] 置換して保存` (★ は `[Esc] キャンセル`)。`{total}` = `kana + compat + question` (02 §9.3 の `ReplaceCounts`)。3 つの件数は 0 でもこの順で出す |
 | `ui.confirm.save.unmappable_replace.item` | 上の一覧の 1 行 (先頭 100 件) | 行 {line}, 桁 {col}: {char} ({codepoint}) → {replacement} |
 | `ui.confirm.save.unmappable_replace.more` | 上の一覧の最後の行 (101 件目以降があるとき) | ほか {count} 個 |

@@ -289,7 +289,7 @@ fn 表現できない文字は何も書かずに保存を止める() {
         "元のファイルは変わらない"
     );
     assert!(s.doc().is_dirty(), "保存していない");
-    assert!(s.messages().contains(&"msg.save.failed".to_owned()));
+    assert_eq!(s.e.state().overlay_kind(), "dialog", "E3 の選択肢が出る");
 }
 
 #[test]

@@ -94,6 +94,17 @@ pub(super) struct SaveFailedAsk {
     pub fmt: Option<NewFormat>,
 }
 
+/// 表現不能の文字があって保存を中止した後の選択 (`ui.confirm.save.unmappable`、03 §8.6 の「E3 の選択肢」)。
+#[derive(Clone, Debug)]
+pub(super) struct UnmappableAsk {
+    pub doc: DocumentId,
+    pub path: FsPath,
+    pub expected: Expect,
+    pub cont: Option<Continuation>,
+    /// 最初の表現不能の文字の通し番号 (Unicode スカラー値、0 始まり)。キャンセルでカーソルをここへ移す。
+    pub first_char: u64,
+}
+
 /// 保存の代替の確認 (`AtomicUnsupported` / ハードリンク / `BackupFailed`、03 §9.3 手順 7・05 §4.4)。
 #[derive(Clone, Debug)]
 pub(super) struct FallbackAsk {
@@ -568,6 +579,96 @@ impl EditorState {
             } => self.finish_save(doc, at, revision, &path, expected, fmt, cont, r),
         }
         self.mark_dirty_render();
+    }
+
+    /// 表現不能の文字の確認を出す。選択肢: UTF-8 で保存 (エスケープ文字を含まないとき) / キャンセル (既定、`Esc`)。
+    /// 「置換して保存」は後続。
+    fn open_unmappable(
+        &mut self,
+        ask: UnmappableAsk,
+        total: u64,
+        encoding: Encoding,
+        has_escape: bool,
+    ) {
+        use super::overlay::{ChoiceDef, ConfirmAction, ConfirmState};
+        let (line, col) = self
+            .char_pos(ask.doc, ask.first_char)
+            .map_or((1, 1), |(_, l, c)| (l, c));
+        let mut choices = Vec::new();
+        // UTF-8 でも表せないのはエスケープ文字だけ (E4)。UTF-8 / UTF-16 で保存中のときは、選んでも結果が同じなので出さない
+        if !has_escape && !matches!(encoding, Encoding::Utf8) {
+            choices.push(ChoiceDef {
+                id: "utf8",
+                accel: Some('u'),
+                destructive: false,
+            });
+        }
+        let default = choices.len();
+        self.open_confirm(ConfirmState {
+            name: "save.unmappable",
+            args: vec![
+                ("count".to_owned(), total.to_string()),
+                ("encoding".to_owned(), encoding.name().to_owned()),
+                ("line".to_owned(), line.to_string()),
+                ("col".to_owned(), col.to_string()),
+            ],
+            choices,
+            default,
+            focused: default,
+            action: ConfirmAction::Unmappable(ask),
+        });
+    }
+
+    /// 通し番号 `n` (Unicode スカラー値) の文字の (バイト位置, 行, 桁)。行・桁は 1 始まり (桁は文字数)。
+    fn char_pos(&self, doc: DocumentId, n: u64) -> Option<(usize, usize, usize)> {
+        use eve_text::TextRead;
+        let d = self.documents.get(&doc)?;
+        let t = d.text();
+        let body = t.slice_to_string(eve_text::ByteRange::all(t.len_bytes()));
+        let (off, _) = body.char_indices().nth(usize::try_from(n).ok()?)?;
+        let line = t.byte_to_line(eve_text::ByteOff(off)).0;
+        let line_start = t.line_to_byte(eve_text::LineIdx(line)).0;
+        let col = body[line_start..off].chars().count();
+        Some((off, line + 1, col + 1))
+    }
+
+    /// 表現不能の確認の選択 (キャンセルは `unmappable_cancelled`)。
+    pub(super) fn choose_unmappable(&mut self, ask: UnmappableAsk, id: &str) -> CommandResult {
+        let UnmappableAsk {
+            doc,
+            path,
+            expected,
+            cont,
+            ..
+        } = ask;
+        match id {
+            // 同じ保存先へ UTF-8 (BOM なし) の書式で保存し直す。書式は保存が成功したときだけ確定する
+            "utf8" => self.start_save_fmt(
+                doc,
+                path,
+                expected,
+                cont,
+                Some(NewFormat {
+                    encoding: Encoding::Utf8,
+                    bom: false,
+                }),
+            ),
+            _ => CommandResult::Done,
+        }
+    }
+
+    /// 表現不能の確認のキャンセル: 保存しない (後続も中止)。カーソルを最初の表現不能の位置へ移す。
+    pub(super) fn unmappable_cancelled(&mut self, ask: &UnmappableAsk) {
+        if let Some((off, _, _)) = self.char_pos(ask.doc, ask.first_char)
+            && let Some(view) = self
+                .first_window()
+                .and_then(|w| self.window_view(w))
+                .filter(|v| self.views.get(v).is_some_and(|v| v.doc == ask.doc))
+        {
+            self.set_selection(view, eve_text::Selection::point(eve_text::ByteOff(off)));
+            self.ensure_cursor_visible(view);
+        }
+        self.show_message(MessageLevel::Info, "info.save.aborted", &[]);
     }
 
     /// 保存の失敗の確認に渡す材料 (文書が無い・読込中なら `None`)。
@@ -1557,7 +1658,26 @@ impl EditorState {
                     }
                 }
             }
-            // 保存先の文字コードで表せない文字がある: 何も書いていない (確認ダイアログと置換は後続、03 §8.6 E3)
+            // 保存先の文字コードで表せない文字がある: 何も書いていない。E3 の選択肢を出す (03 §8.6)
+            JobResult::Unmappable {
+                total,
+                recorded,
+                encoding,
+                ..
+            } if self.documents.contains_key(&doc_id) && !recorded.is_empty() => {
+                self.open_unmappable(
+                    UnmappableAsk {
+                        doc: doc_id,
+                        path: path.clone(),
+                        expected,
+                        cont,
+                        first_char: recorded[0].char_index,
+                    },
+                    total,
+                    encoding,
+                    recorded.iter().any(|u| is_escape_char(u.ch)),
+                );
+            }
             JobResult::Unmappable { total, .. } => {
                 self.show_message(
                     MessageLevel::Error,
@@ -1670,6 +1790,11 @@ fn fallback_kind(kind: &FsErrorKind, detail: &Option<FsErrorDetail>) -> Option<F
         (FsErrorKind::BackupFailed, _) => Some(FallbackKind::NoBackup),
         _ => None,
     }
+}
+
+/// §8.3 のエスケープ文字 (不正バイトの保持マーカー、U+10FF00 + byte)。UTF-8 でも表現不能として扱う (E4)。
+fn is_escape_char(c: char) -> bool {
+    (0x10FF00..=0x10FFFF).contains(&(c as u32))
 }
 
 /// バイト数を「512.0 MiB」のような短い表記にする。

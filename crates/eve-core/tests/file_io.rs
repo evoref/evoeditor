@@ -1343,3 +1343,62 @@ fn 変換した文書の保存は区切りをそのまま書く() {
     s.run("file.save", Args::new());
     assert_eq!(s.fs.read("/w/a.txt").unwrap(), b"a\r\nb\r\n");
 }
+
+#[test]
+fn 表現できない文字の保存は確認し_utf8_で保存できる() {
+    let mut s = Env::new();
+    s.fs.add_file("/w/a.txt", &sjis_bytes("日本語のテキストです。\n"));
+    s.open("/w/a.txt");
+    assert_eq!(s.doc().1.format.encoding, eve_core::Encoding::ShiftJis);
+    s.e.execute(CommandInvocation::new(
+        "cursor.doc_end",
+        InvocationSource::Keymap,
+    ));
+    s.type_text("😀");
+    s.run("file.save", Args::new());
+    assert!(dialog_open(&s), "E3 の選択肢が出る");
+    assert_eq!(
+        s.fs.read("/w/a.txt").unwrap(),
+        sjis_bytes("日本語のテキストです。\n"),
+        "何も書かない"
+    );
+    s.type_text("u");
+    s.pump();
+    assert_eq!(
+        s.fs.read("/w/a.txt").unwrap(),
+        "日本語のテキストです。\n😀".as_bytes()
+    );
+    let d = s.doc().1;
+    assert_eq!(d.format.encoding, eve_core::Encoding::Utf8);
+    assert!(!d.format.has_bom && !d.is_dirty());
+}
+
+#[test]
+fn 表現できない文字の確認のキャンセルは最初の位置へ移り_何も変えない() {
+    let mut s = Env::new();
+    s.fs.add_file("/w/a.txt", b"abc");
+    s.open("/w/a.txt");
+    s.run(
+        "file.set_encoding",
+        Args::new().with_str("encoding", "shift_jis"),
+    );
+    // 表現できる文字だけなので保存できた。ここから絵文字を足して、改めて失敗させる
+    s.type_text("x😀y");
+    s.run("file.save", Args::new());
+    assert!(dialog_open(&s));
+    s.key(KeyCode::Esc, Modifiers::NONE);
+    s.pump();
+    assert!(!dialog_open(&s));
+    assert!(s.doc().1.is_dirty(), "文書は変わらない (dirty のまま)");
+    assert_eq!(s.fs.read("/w/a.txt").unwrap(), b"abc");
+    assert_eq!(s.doc().1.format.encoding, eve_core::Encoding::ShiftJis);
+    // カーソルは最初の表現不能の文字 (絵文字) の位置
+    let (id, _) = s.doc();
+    let view =
+        s.e.state()
+            .first_window()
+            .and_then(|w| s.e.state().window_view(w))
+            .unwrap();
+    let head = s.e.state().view(view).unwrap().selection.primary().head.0;
+    assert_eq!(s.text().find('😀'), Some(head), "{id:?}");
+}
