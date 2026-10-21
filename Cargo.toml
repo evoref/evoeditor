@@ -14,6 +14,7 @@ members = [
     "bins/evoeditor",
     "crates/eve-testkit",
     "crates/eve-docs-tables",
+    "crates/eve-test-helpers",
     "xtask",
 ]
 
