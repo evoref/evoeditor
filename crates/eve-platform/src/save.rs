@@ -593,7 +593,8 @@ impl WinFs {
 
         hooks::hit("kill_before_rename");
 
-        // 5. 置換
+        // 5. 置換 (終了の経路はここが済むまで待つ。置換の途中で終わると元のファイルが退避名に移ったままになる)
+        let _replacing = self.replacing.guard(&target_path.display());
         let method;
         let backup: Option<PathBuf>;
         if let Some(orig) = &existing {

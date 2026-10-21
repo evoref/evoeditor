@@ -321,7 +321,8 @@ impl WinFs {
         }
         hooks::hit("kill_after_inplace_alloc");
 
-        // 6. 上書き (ここから取消しは見ない)
+        // 6. 上書き (ここから取消しは見ない)。書込の全体 (手順 7 の fsync まで) が元のファイルを壊し得る区間
+        let _replacing = self.replacing.guard(&target_path.display());
         let in_place_failed = |e: io::Error| {
             let mut err = FsError::new(FsErrorKind::InPlaceFailed {
                 backup: backup_final.as_ref().map(FsPath::new),

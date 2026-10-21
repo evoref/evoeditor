@@ -24,13 +24,23 @@ pub const READ_CHUNK_BYTES: usize = 1024 * 1024;
 #[derive(Clone, Debug, Default)]
 pub struct WinFs {
     state_dir: Option<std::path::PathBuf>,
+    /// 置換中の計数 (利用者のファイルの置換と直接上書きの書込の間だけ上げる、02 §9.6)。
+    pub(crate) replacing: eve_core::ReplacingCount,
 }
 
 impl WinFs {
     pub fn new(state_dir: impl Into<std::path::PathBuf>) -> WinFs {
         WinFs {
             state_dir: Some(state_dir.into()),
+            replacing: eve_core::ReplacingCount::default(),
         }
+    }
+
+    /// Host が作った置換中の計数を使う (終了の経路が下りるのを待つため)。
+    #[must_use]
+    pub fn with_replacing(mut self, replacing: eve_core::ReplacingCount) -> WinFs {
+        self.replacing = replacing;
+        self
     }
 
     pub(crate) fn state_dir(&self) -> Option<&Path> {

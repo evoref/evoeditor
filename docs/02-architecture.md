@@ -329,7 +329,7 @@ struct FsPath(PathBuf);
 
 // eve-core が定義し、Host が起動時に 1 つ作って配る共有状態 (§9.6 の置換中フラグ)。clone は同じ計数を指す
 #[derive(Clone)]
-struct ReplacingCount(Arc<AtomicUsize>);         // guard() -> ReplacingGuard (作ると +1、drop で -1)、is_zero()。待つ側はブロックしない読みだけをする
+struct ReplacingCount(Arc<..>);                // 中身は計数 (AtomicUsize) と置換中の表示用パスの一覧。guard(path) -> ReplacingGuard (作ると +1、drop で -1)、is_zero()、paths()、wait_zero(limit)。待つ側はブロックしない読みだけをする。paths() は終了時の stderr.quit.waiting_save の {path} に使う
                                                  // Host は 1 つを FileSystem の本番実装 (eve-platform) と MemFs の構築時に渡し、もう 1 つを
                                                  // 自分 (通常終了の待ち) と受信スレッド (非対話終了の待ち) で持つ。Port の利用者 (core) は触らない
 
