@@ -359,3 +359,52 @@ fn 退避先に保存は_rescue_の下に_user_save_で書く() {
     assert!(found.iter().any(|e| e.rescue), "{found:?}");
     let _ = fs::remove_dir_all(state);
 }
+
+#[test]
+fn 未知の_format_version_の退避は一覧に出るが_変更も移動も削除もされない() {
+    use eve_core::FileSystem;
+    let state = tmp("unknownVersion");
+    let old = state.join("recovery").join("20200101T000000Z-1");
+    fs::create_dir_all(&old).unwrap();
+    // 将来の版の manifest (未知の版と未知のキー) と本文
+    let manifest_text = "format_version = 99\nfuture_key = \"x\"\n[[document]]\nfile = \"1-a.txt\"\nnew_field = 7\n";
+    fs::write(old.join("manifest.toml"), manifest_text).unwrap();
+    fs::write(old.join("1-a.txt"), "将来の本文").unwrap();
+    let snapshot = |dir: &Path| -> Vec<(String, Vec<u8>)> {
+        let mut v: Vec<_> = fs::read_dir(dir)
+            .unwrap()
+            .flatten()
+            .map(|e| {
+                (
+                    e.file_name().to_string_lossy().into_owned(),
+                    fs::read(e.path()).unwrap(),
+                )
+            })
+            .collect();
+        v.sort();
+        v
+    };
+    let before = snapshot(&old);
+
+    let fs_ = eve_platform::fs::WinFs::new(&state);
+    // 起動時の走査: 読めない版でも一覧に出る (案内の対象)
+    let found = fs_.list_recovery_dirs().unwrap();
+    assert!(
+        found.iter().any(|e| e.path.as_path() == old),
+        "未知の版でも見つかる: {found:?}"
+    );
+    // 新しい退避を書いても、古い退避には触れない
+    let d = doc(1, "新しい", Some("n.txt"), |_| {});
+    let out = WinRescue::new(Some(state.clone())).write(
+        &[d],
+        RescueReason::Panic,
+        Duration::from_secs(5),
+    );
+    assert!(out.complete);
+    assert_eq!(
+        snapshot(&old),
+        before,
+        "未知の版の退避は変更・移動・削除されない"
+    );
+    let _ = fs::remove_dir_all(state);
+}
