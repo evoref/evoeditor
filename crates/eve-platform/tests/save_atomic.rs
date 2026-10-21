@@ -360,6 +360,20 @@ fn acl_principals(path: &std::path::Path) -> Vec<String> {
         .collect()
 }
 
+/// 継承の印 `(I)` とパスの前置きを除いた、許可のエントリの集合 (`NT AUTHORITY\SYSTEM:(F)` の形)。
+fn acl_entries(path: &std::path::Path) -> std::collections::BTreeSet<String> {
+    let prefix = path.to_string_lossy().into_owned();
+    acl_principals(path)
+        .into_iter()
+        .map(|l| {
+            l.strip_prefix(&prefix)
+                .unwrap_or(&l)
+                .trim()
+                .replace("(I)", "")
+        })
+        .collect()
+}
+
 #[test]
 fn private_で作った新規ファイルは所有者と_system_だけ() {
     let t = Tmp::new("private");
@@ -388,14 +402,21 @@ fn 置換後の_acl_は元の_t_のものを保ち_tmp_の所有者のみにな�
     let t = Tmp::new("acl");
     let p = t.path("a.txt");
     fs::write(t.p("a.txt"), b"old").unwrap();
-    let before = acl_principals(&t.p("a.txt"));
+    let before = acl_entries(&t.p("a.txt"));
     let s0 = stamp(&p);
     save(&p, b"new", Expect::Stamp(s0)).unwrap();
-    let after = acl_principals(&t.p("a.txt"));
-    assert_eq!(
-        before, after,
-        "T の DACL は置換の前後で同じ (05 §4.2 の S-09 の確認項目 (2))"
+    let after = acl_entries(&t.p("a.txt"));
+    // T の許可は 1 つも失われない (tmp の所有者のみの DACL に狭まらない)。継承の印 `(I)` は比べない:
+    // `ReplaceFileW` が T の明示のエントリを適用した結果、親からの継承のエントリが加わることがある (CI のランナーで確認)。
+    // 広がるのは許容、狭まるのは不可 (05 §4.2 の S-09 の確認項目 (2))
+    let lost: Vec<&String> = before.difference(&after).collect();
+    assert!(
+        lost.is_empty(),
+        "失われた許可: {lost:?}
+before={before:?}
+after={after:?}"
     );
+    assert!(!after.is_empty());
 }
 
 #[test]
