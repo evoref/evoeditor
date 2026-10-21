@@ -2,7 +2,7 @@
 //! 遅く不安定になりやすいので最小限。生バイト列は比較しない (ConPTY は出力を再合成するため)。
 //!
 //! v0.1 の M2 で成り立つシナリオ: (1) 起動と終了、(2) 未保存の終了の確認ダイアログ、(3) 制御キーがアプリに届く、
-//! (5) 端末の復元、(9) 貼り付けの安全。保存・強制終了・パニック退避・権限 ((1) の保存、(6)〜(8)、(10)) は M3 以降。
+//! (5) 端末の復元、(9) 貼り付けの安全。(7) のパニック注入は feature test-hooks のときだけ走る。
 
 #![cfg(windows)]
 // 検査の失敗は panic で伝える。
@@ -41,6 +41,11 @@ impl Session {
 
     /// `state` を指定すると、その状態ディレクトリで起動する (前の実行が残した退避・フラグを見せる)。
     fn start_in(args: &[&str], state: Option<PathBuf>) -> Session {
+        Session::start_with(args, state, &[])
+    }
+
+    /// 環境変数を足して起動する (`EVE_TEST_HOOK` など)。
+    fn start_with(args: &[&str], state: Option<PathBuf>, envs: &[(&str, &str)]) -> Session {
         let pty = native_pty_system()
             .openpty(PtySize {
                 rows: ROWS,
@@ -63,6 +68,9 @@ impl Session {
             ))
         });
         cmd.env("EVE_STATE_DIR", &state);
+        for (k, v) in envs {
+            cmd.env(k, v);
+        }
         let child = pty.slave.spawn_command(cmd).expect("起動できません");
         drop(pty.slave);
         let mut reader = pty.master.try_clone_reader().expect("reader");
@@ -576,4 +584,66 @@ fn 使い方の誤りは終了コード_2() {
         .output()
         .expect("起動");
     assert_eq!(out.status.code(), Some(2));
+}
+
+// (7) internal.debug_panic (test-hooks): パニック → 端末復元 + 退避 + クラッシュログ。stderr は 04 §15.2 の順。
+// 実行: cargo test -p evoeditor --features test-hooks --test e2e
+#[cfg(feature = "test-hooks")]
+#[test]
+fn パニックすると端末を戻し_未保存の内容を退避してクラッシュログを残す() {
+    let mut s = Session::start_with(&[], None, &[("EVE_TEST_HOOK", "panic_command")]);
+    s.wait_ready();
+    type_slowly(&s, "unsaved text");
+    s.wait_for("入力が見える", |t| t.contains("unsaved text"));
+    s.send(b"[24~"); // F12 = internal.debug_panic
+    assert_eq!(s.wait_exit(), 70, "パニックの終了コード");
+    let raw = s.raw_text();
+    let pos = |needle: &str| {
+        raw.find(needle)
+            .unwrap_or_else(|| panic!("{needle} が無い: {raw}"))
+    };
+    let leave = pos("[?1049l");
+    let header = pos("予期しないエラーのため");
+    let saved = pos("保存されていない変更を退避しました");
+    let next = pos("次に evoeditor を起動したときに");
+    let crash = pos("クラッシュログ:");
+    let report = pos("問題を報告するときは");
+    assert!(
+        leave < header && header < saved && saved < next && next < crash && crash < report,
+        "端末の復元 → header → 退避 → next → crash_log → report の順: {raw}"
+    );
+    // 退避: 本文がそのまま、manifest が panic
+    let recovery = s.state.join("recovery");
+    let dirs: Vec<_> = std::fs::read_dir(&recovery)
+        .unwrap()
+        .flatten()
+        .filter(|e| e.file_name().to_string_lossy().contains('Z'))
+        .map(|e| e.path())
+        .collect();
+    assert_eq!(dirs.len(), 1, "{dirs:?}");
+    let manifest = std::fs::read_to_string(dirs[0].join("manifest.toml")).unwrap();
+    assert!(manifest.contains("reason = \"panic\""), "{manifest}");
+    assert!(manifest.contains("complete = true"), "{manifest}");
+    let body: Vec<_> = std::fs::read_dir(&dirs[0])
+        .unwrap()
+        .flatten()
+        .filter(|e| e.file_name().to_string_lossy().ends_with(".txt"))
+        .collect();
+    assert_eq!(body.len(), 1);
+    assert_eq!(
+        std::fs::read_to_string(body[0].path()).unwrap(),
+        "unsaved text"
+    );
+    // クラッシュログ: パニックの場所はあるが、文書の内容は含まない
+    let logs: Vec<_> = std::fs::read_dir(s.state.join("log"))
+        .unwrap()
+        .flatten()
+        .collect();
+    assert_eq!(logs.len(), 1);
+    let log = std::fs::read_to_string(logs[0].path()).unwrap();
+    assert!(
+        log.contains("internal.debug_panic") && !log.contains("unsaved text"),
+        "{log}"
+    );
+    let _ = std::fs::remove_dir_all(&s.state);
 }

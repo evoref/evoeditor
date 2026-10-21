@@ -188,7 +188,7 @@ jobs:
       - run: cargo xtask check-themes
 
   # L5 端末 E2E (docs/09 §3.6): 実バイナリを ConPTY で起動して画面を検査する。nextest の profile e2e (retries = 2)。
-  # M2 で成り立つシナリオだけ (保存・強制終了・パニック退避の test-hooks のシナリオは M3 以降)。
+  # 2 本目は test-hooks のビルド (パニック注入 internal.debug_panic など。配布ビルドには無い、docs/09 §3.6)。
   # 2 段目の必須チェック。この PR が merge された直後に、ブランチ保護の必須に加える (docs/09 §6.2)。
   e2e:
     name: e2e
@@ -208,6 +208,7 @@ jobs:
         with:
           tool: cargo-nextest@0.9.148
       - run: cargo nextest run --profile e2e -p evoeditor --test e2e
+      - run: cargo nextest run --profile e2e -p evoeditor --features test-hooks --test e2e
 
   # DCO: PR の全コミットに Signed-off-by があること (docs/11 §9.4、OQ-154)。
   # 対象外 (ジョブの if で飛ばす。飛ばしたジョブは必須のチェックとして成功扱い):

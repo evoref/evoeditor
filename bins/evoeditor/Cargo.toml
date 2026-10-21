@@ -16,6 +16,10 @@ workspace = true
 name = "evoeditor"
 path = "src/main.rs"
 
+[features]
+# テスト専用の経路 (保存途中の kill フック・パニック注入)。配布ビルドには入れない (09 §3.6)
+test-hooks = ["eve-core/test-hooks", "eve-platform/test-hooks"]
+
 [dependencies]
 eve-core = { version = "0.0.0", path = "../../crates/eve-core" }
 eve-config = { version = "0.0.0", path = "../../crates/eve-config" }
