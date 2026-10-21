@@ -115,20 +115,26 @@ fn fuzz(seconds: u64, seed: u64, out_dir: &Path, summary: &mut Vec<String>) -> R
     let artifacts = out_dir.join("fuzz-artifacts");
     let _ = std::fs::remove_dir_all(&artifacts);
     std::fs::create_dir_all(&artifacts).map_err(|e| format!("{}: {e}", artifacts.display()))?;
+    // ビルドの出力は見せる (入力もスタックも含まない)。失敗の原因を後から追えるようにする
+    run(
+        "cargo +nightly fuzz build fuzz_decode",
+        Command::new("cargo").args(["+nightly", "fuzz", "build", "fuzz_decode"]),
+    )?;
     println!("▶ fuzz_decode ({seconds} 秒、seed {seed})");
-    // 出力は捨てる: 公開のログに入力とスタックを出さない (-close_fd_mask=3 に加えて、こちらでも受けて出さない)
+    // 出力は受けて、クラッシュが見つかったときは出さない: 公開のログに入力とスタックを出さない (-close_fd_mask=3 に加えて、こちらでも受けて出さない)
     let prefix = format!("-artifact_prefix={}/", artifacts.display());
-    let status = Command::new("cargo")
+    let output = Command::new("cargo")
         .args(["+nightly", "fuzz", "run", "fuzz_decode", "--"])
         .arg(format!("-max_total_time={seconds}"))
         .arg("-close_fd_mask=3")
         .arg(format!("-seed={seed}"))
         .arg(prefix)
         .current_dir(workspace_root())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()
         .map_err(|e| format!("cargo fuzz を実行できません: {e}"))?;
+    let status = output.status;
 
     let crashes = list_crashes(&artifacts)?;
     summary.push(format!(
@@ -139,8 +145,23 @@ fn fuzz(seconds: u64, seed: u64, out_dir: &Path, summary: &mut Vec<String>) -> R
         return if status.success() {
             Ok(())
         } else {
+            // クラッシュ入力が無い失敗 (ビルドや環境の問題) だけ、出力の末尾を示す。クラッシュがあるときは出さない
+            let tail = |b: &[u8]| {
+                let t = String::from_utf8_lossy(b);
+                let lines: Vec<&str> = t.lines().collect();
+                lines[lines.len().saturating_sub(30)..].join(
+                    "
+",
+                )
+            };
             Err(format!(
-                "fuzz がクラッシュ無しで失敗しました ({status})。ビルドや環境の問題の可能性があります"
+                "fuzz がクラッシュ無しで失敗しました ({status})。ビルドや環境の問題の可能性があります
+--- stderr の末尾 ---
+{}
+--- stdout の末尾 ---
+{}",
+                tail(&output.stderr),
+                tail(&output.stdout)
             ))
         };
     }
@@ -201,7 +222,8 @@ fn proptest() -> Result<(), String> {
         "nextest",
         "run",
         "--profile",
-        "ci",
+        // 夜間の proptest は重い (eve-text の storage は 1 ケースで大きな文書を作る) ので、専用の profile で長い時間を許す
+        "nightly",
         "--no-tests=pass",
     ]);
     for c in LINUX_CRATES {
