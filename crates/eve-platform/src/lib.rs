@@ -4,7 +4,7 @@
 //! 現在の範囲 (M2 の E3): `path` (正規化)、`dirs` (設定・状態・データのディレクトリ)、`fs` (`FileSystem` の読み取り側)、
 //! `console` (コンソールイベントの受信)。保存 (`write_atomic`) は M3、クリップボード (所有者ウィンドウのスレッドが要る) は後の版。
 
-// unsafe は Windows の API を呼ぶ `fs::winapi` と `console` だけに許す (R5)。
+// unsafe は Windows の API を呼ぶ `fs::winapi`・`console`・`save` だけに許す (R5)。
 #![deny(unsafe_code)]
 // eve-core の `FsError` は大きい型 (エラーは稀な経路)。値で返す。
 #![allow(clippy::result_large_err)]
@@ -14,3 +14,5 @@ pub mod console;
 pub mod dirs;
 pub mod fs;
 pub mod path;
+#[cfg(windows)]
+mod save;

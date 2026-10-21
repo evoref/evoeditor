@@ -1,5 +1,5 @@
 //! `FileSystem` Port の実装 (docs/05 §2.1 / §4.5、Windows)。読み取り側 (`metadata` / `canonicalize` / `open_read`)。
-//! 保存 (`write_atomic`) は M3 (05 §4.2 の置換の手順と、保存中フラグ・退避が要る) なので、いまは `Other` のエラーを返す。
+//! 保存 (`write_atomic`) は `save` (05 §4.1 / §4.2)。
 //!
 //! 読込側の規則 (05 §4.5): チャンクは 1 MiB、`EINTR` (`Interrupted`) は内側で再試行する、ハンドルは読込の完了後すぐ閉じる
 //! (呼び側が `ReadChunks` を捨てる)、共有モードは std の既定 (読み・書き・削除を許す)、mmap は使わない。
@@ -270,19 +270,12 @@ impl FileSystem for WinFs {
 
     fn write_atomic(
         &self,
-        _path: &FsPath,
-        _data: &mut dyn ReadChunks,
-        _opts: &SaveOptions,
+        path: &FsPath,
+        data: &mut dyn ReadChunks,
+        opts: &SaveOptions,
     ) -> Result<SaveReport, FsError> {
-        // 05 §4.2 の置換の手順 (一時ファイル・`ReplaceFileW`・保存中フラグ) は M3
-        Err(FsError {
-            kind: FsErrorKind::Other,
-            detail: None,
-            source: Some(io::Error::new(
-                io::ErrorKind::Unsupported,
-                "保存は M3 で実装する (05 §4.2)",
-            )),
-        })
+        // 一時ファイル + `ReplaceFileW` (05 §4.1 / §4.2)。実装は `save`
+        self.write_atomic_impl(path, data, opts)
     }
 }
 
@@ -455,24 +448,6 @@ mod tests {
         let s = c.as_path().to_string_lossy().into_owned();
         assert!(!s.starts_with("\\\\?\\"), "{s}");
         assert!(s.ends_with("c.txt"));
-    }
-
-    #[test]
-    fn 保存はまだ実装していない() {
-        struct Nothing;
-        impl ReadChunks for Nothing {
-            fn next_chunk(&mut self) -> Result<Option<&[u8]>, ChunkError> {
-                Ok(None)
-            }
-        }
-        let t = Tmp::new("save");
-        let r = WinFs.write_atomic(
-            &t.path("w.txt"),
-            &mut Nothing,
-            &SaveOptions::user_file(eve_core::Expect::Absent),
-        );
-        assert_eq!(r.unwrap_err().kind, FsErrorKind::Other);
-        assert!(!t.0.join("w.txt").exists(), "何も書かない");
     }
 
     #[test]
