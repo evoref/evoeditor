@@ -116,11 +116,23 @@ impl EmergencyCtl {
             return self.outcome();
         }
         // 負けた: Done まで待つ (予算の内)
+        self.wait_done(budget);
+        self.outcome()
+    }
+
+    /// 別の経路が退避を書いている最中なら、終わるまで (最大 `budget`) 待つ。書いていなければ何もしない。
+    /// プロセスを終える前に呼ぶ (入力の終端などで先にメインが終わっても、受信スレッドの書込を打ち切らない)。
+    pub fn wait_if_writing(&self, budget: Duration) {
+        if self.state.load(Ordering::Acquire) == WRITING {
+            self.wait_done(budget);
+        }
+    }
+
+    fn wait_done(&self, budget: Duration) {
         let (m, cv) = &self.done;
         if let Ok(g) = m.lock() {
             let _ = cv.wait_timeout_while(g, budget, |done| !*done);
         }
-        self.outcome()
     }
 }
 

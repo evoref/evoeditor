@@ -19,7 +19,7 @@ use windows_sys::Win32::System::Console::{
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum CtrlEvent {
-    /// `ENABLE_PROCESSED_INPUT` を落としているので通常は来ない (`GenerateConsoleCtrlEvent` で来る)。
+    /// `ENABLE_PROCESSED_INPUT` を落としているので来ない (`GenerateConsoleCtrlEvent` で送っても conhost が配らない。実測)。cooked モードの保険として扱う。
     CtrlC,
     /// `Ctrl+Break`。`ENABLE_PROCESSED_INPUT` と無関係に来る (S-07 で確認)。
     CtrlBreak,
@@ -65,6 +65,40 @@ pub fn install_handler(cb: impl Fn(CtrlEvent) -> bool + Send + Sync + 'static) -
     // SAFETY: `handler` は `extern "system"` の関数で、プロセスの終わりまで有効。`TRUE` で追加する。
     if unsafe { SetConsoleCtrlHandler(Some(handler), TRUE) } == 0 {
         return Err(io::Error::last_os_error());
+    }
+    Ok(())
+}
+
+#[cfg(feature = "test-hooks")]
+unsafe extern "system" fn swallow(_kind: u32) -> i32 {
+    TRUE
+}
+
+/// 別プロセス `pid` のコンソールにコントロールイベントを送る (テスト用の補助プロセスから呼ぶ。09 §3.6 (8)、
+/// `console-event`)。自分のコンソールを離れて `pid` のコンソールに接続し、自分は受けないようにして
+/// `GenerateConsoleCtrlEvent` を送る。`CtrlC` / `CtrlBreak` だけ送れる。
+#[cfg(feature = "test-hooks")]
+pub fn send_ctrl_event(pid: u32, ev: CtrlEvent) -> io::Result<()> {
+    use windows_sys::Win32::System::Console::{
+        AttachConsole, FreeConsole, GenerateConsoleCtrlEvent,
+    };
+    let code = match ev {
+        CtrlEvent::CtrlC => CTRL_C_EVENT,
+        CtrlEvent::CtrlBreak => CTRL_BREAK_EVENT,
+        _ => return Err(io::Error::from(io::ErrorKind::InvalidInput)),
+    };
+    // SAFETY: 自プロセスのコンソールの付け替えと、ハンドラの設定 (自分の Ctrl+C を無視) だけ。ポインタは渡さない。
+    unsafe {
+        FreeConsole();
+        if AttachConsole(pid) == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        SetConsoleCtrlHandler(None, TRUE);
+        // Ctrl+Break は上の設定では無視されないので、自分への配送は処理済みにして捨てる
+        SetConsoleCtrlHandler(Some(swallow), TRUE);
+        if GenerateConsoleCtrlEvent(code, 0) == 0 {
+            return Err(io::Error::last_os_error());
+        }
     }
     Ok(())
 }

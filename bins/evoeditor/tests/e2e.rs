@@ -647,3 +647,60 @@ fn パニックすると端末を戻し_未保存の内容を退避してクラ�
     );
     let _ = std::fs::remove_dir_all(&s.state);
 }
+
+/// 補助プロセス `eve-test-helpers` の場所 (evoeditor と同じ出力ディレクトリ)。無ければ cargo で作る。
+fn helper_exe() -> PathBuf {
+    let dir = std::path::Path::new(EXE).parent().unwrap().to_path_buf();
+    let exe = dir.join("eve-test-helpers.exe");
+    if !exe.exists() {
+        let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".to_owned());
+        let ok = std::process::Command::new(cargo)
+            .args(["build", "-p", "eve-test-helpers"])
+            .status()
+            .is_ok_and(|s| s.success());
+        assert!(ok && exe.exists(), "eve-test-helpers を作れません");
+    }
+    exe
+}
+
+/// 疑似コンソールの evoeditor に Ctrl+Break を送り (Ctrl+C は raw モードでは conhost が配らず入力になるので、ここでは扱わない)、未保存の内容を退避して終了コード 130 で終わることを確かめる (09 §3.6 (8))。
+fn コンソールイベントで退避して終了する(kind: &str) {
+    let mut s = Session::start(&[]);
+    s.wait_ready();
+    type_slowly(&s, "unsaved text");
+    s.wait_for("入力が見える", |t| t.contains("unsaved text"));
+    let pid = s.child.process_id().expect("pid");
+    let st = std::process::Command::new(helper_exe())
+        .args(["console-event", &pid.to_string(), kind])
+        .status()
+        .unwrap();
+    assert!(st.success(), "console-event: {st:?}");
+    assert_eq!(s.exit_within(Duration::from_secs(5)), Some(130));
+    let dirs: Vec<_> = std::fs::read_dir(s.state.join("recovery"))
+        .unwrap()
+        .flatten()
+        .filter(|e| e.file_name().to_string_lossy().contains('Z'))
+        .map(|e| e.path())
+        .collect();
+    assert_eq!(dirs.len(), 1, "{dirs:?}");
+    let manifest = std::fs::read_to_string(dirs[0].join("manifest.toml")).unwrap();
+    assert!(manifest.contains("reason = \"signal\""), "{manifest}");
+    assert!(manifest.contains("complete = true"), "{manifest}");
+    let body: Vec<_> = std::fs::read_dir(&dirs[0])
+        .unwrap()
+        .flatten()
+        .filter(|e| e.file_name().to_string_lossy().ends_with(".txt"))
+        .collect();
+    assert_eq!(body.len(), 1);
+    assert_eq!(
+        std::fs::read_to_string(body[0].path()).unwrap(),
+        "unsaved text"
+    );
+    assert!(s.raw_text().contains("[?1049l"), "端末を戻した");
+    let _ = std::fs::remove_dir_all(&s.state);
+}
+
+#[test]
+fn ctrl_break_を受けると未保存の内容を退避して終了する() {
+    コンソールイベントで退避して終了する("ctrl-break");
+}
