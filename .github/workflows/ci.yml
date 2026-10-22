@@ -187,6 +187,28 @@ jobs:
           shared-key: windows
       - run: cargo xtask check-themes
 
+  # 配布ビルドの確認 (docs/09 §6.2 の build-release-smoke): feature・目印の文字列・隠しオプション・CRT の静的リンク。
+  # exe のサイズ (BM-205) を artifact に置く。2 段目の必須チェック候補 (この PR が merge された直後に、ブランチ保護の必須に加えるかを決める)。
+  build-release-smoke:
+    name: build-release-smoke
+    needs: check
+    runs-on: windows-2025
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Rust (stable)
+        run: rustup toolchain install stable --profile minimal --no-self-update && rustup default stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          shared-key: windows-release
+      - run: cargo xtask check-dist
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: bm-205-size
+          path: target/dist/size.json
+
   # L5 端末 E2E (docs/09 §3.6): 実バイナリを ConPTY で起動して画面を検査する。nextest の profile e2e (retries = 2)。
   # 2 本目は test-hooks のビルド (パニック注入 internal.debug_panic など。配布ビルドには無い、docs/09 §3.6)。
   # 2 段目の必須チェック。この PR が merge された直後に、ブランチ保護の必須に加える (docs/09 §6.2)。
