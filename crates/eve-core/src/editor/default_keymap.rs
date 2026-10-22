@@ -15,6 +15,23 @@ pub(super) fn default_keymap() -> Keymap {
     bind("global", "mod+q", "app.quit");
     bind("global", "mod+p", "ui.palette_open");
     bind("global", "f1", "ui.palette_open");
+    // 検索バー (search → prompt → global)
+    for (keys, cmd) in [
+        ("enter", "search.next"),
+        ("down", "search.next"),
+        ("f3", "search.next"),
+        ("up", "search.prev"),
+        ("shift+f3", "search.prev"),
+        ("alt+c", "search.toggle_case"),
+        ("mod+f", "search.open"),
+        ("mod+s", "file.save"),
+        ("mod+shift+s", "file.save_as"),
+        ("mod+o", "file.open"),
+        ("mod+n", "file.new"),
+    ] {
+        bind("search", keys, cmd);
+    }
+    bind("editor", "mod+f", "search.open");
     // コマンドパレット (palette → list → prompt → global)
     bind("palette", "down", "ui.list_next");
     bind("palette", "up", "ui.list_prev");

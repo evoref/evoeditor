@@ -304,7 +304,7 @@ pub(super) fn overlay_models(state: &EditorState) -> Vec<OverlayModel> {
 }
 
 pub(super) fn hint_model(state: &EditorState, chord: &[KeyStroke]) -> HintModel {
-    if state.overlay.is_some() {
+    if state.overlay.is_some() || state.search_bar.is_some() {
         // オーバーレイ: 決定・取消 (確認は次へも)。キーは固定 (オーバーレイの割当は既定のまま)
         let stroke = |key| KeyLabel {
             strokes: vec![KeyStroke {
@@ -333,6 +333,20 @@ pub(super) fn hint_model(state: &EditorState, chord: &[KeyStroke]) -> HintModel 
                 priority: 4,
             },
         ];
+        if state.overlay.is_none() {
+            // 検索バー: Enter は次の一致、Alt+C は大小の切替
+            items[1].text = word("search.next");
+            items.push(HintItem {
+                keys: vec![KeyLabel {
+                    strokes: vec![KeyStroke {
+                        mods: Modifiers::ALT,
+                        key: KeyCode::Char('c'),
+                    }],
+                }],
+                text: word("search.toggle_case"),
+                priority: 2,
+            });
+        }
         if state.is_dialog() {
             items.push(HintItem {
                 keys: vec![stroke(KeyCode::Tab)],

@@ -359,6 +359,27 @@ pub struct ListItem {
     pub disabled_reason: Option<CellText>,
 }
 
+/// 検索の大文字小文字の扱い (FR-402)。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CaseMode {
+    Smart,
+    Sensitive,
+    Insensitive,
+}
+
+/// 検索バー (クロームとして編集面の下に 1 行描く、04 §8.4)。表示中だけ `Frame.search` が `Some`。
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SearchBarModel {
+    /// ラベル (`ui.search.label`)。
+    pub label: CellText,
+    pub input: InputFieldModel,
+    pub case: CaseMode,
+    /// 大小を実際に区別している (トグルを反転して示す)。
+    pub case_on: bool,
+    /// 件数の文言 (`ui.search.count.*`)。検索していなければ `None`。
+    pub count_text: Option<CellText>,
+}
+
 /// frontend が自分の判断で出す場面の、core が解決済みの文言。
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ChromeTexts {
@@ -380,6 +401,8 @@ pub struct Frame {
     pub hints: HintModel,
     /// 前面順。
     pub overlays: Vec<OverlayModel>,
+    /// 検索バー。
+    pub search: Option<SearchBarModel>,
     /// メッセージ行。
     pub messages: MessageModel,
     pub texts: ChromeTexts,

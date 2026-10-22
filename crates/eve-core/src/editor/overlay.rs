@@ -208,6 +208,14 @@ impl EditorState {
         }
     }
 
+    /// キー入力のコンテキスト名: オーバーレイ、無ければ検索バー (`search`)、無ければ空 (編集面)。
+    pub(super) fn input_context(&self) -> &'static str {
+        match self.overlay_name() {
+            "" if self.search_bar.is_some() => "search",
+            n => n,
+        }
+    }
+
     pub(super) fn is_dialog(&self) -> bool {
         matches!(self.overlay, Some(Overlay::Confirm(_)))
     }
@@ -339,6 +347,10 @@ impl EditorState {
         match &mut self.overlay {
             Some(Overlay::Prompt(p)) => Some((&mut p.text, &mut p.cursor)),
             Some(Overlay::Palette(p)) => Some((&mut p.text, &mut p.cursor)),
+            None => self
+                .search_bar
+                .as_mut()
+                .map(|b| (&mut b.text, &mut b.cursor)),
             _ => None,
         }
     }
@@ -346,9 +358,26 @@ impl EditorState {
     /// プロンプトの入力欄を編集するコマンドを横取りする (オーバーレイの間は文書を編集しない)。
     /// オーバーレイが出ていて、オーバーレイ用でも編集用でもないコマンドは拒否する (モーダル)。
     pub(super) fn overlay_intercept(&mut self, inv: &CommandInvocation) -> Option<CommandResult> {
-        self.overlay.as_ref()?;
+        if self.overlay.is_none() && self.search_bar.is_none() {
+            return None;
+        }
         let id = inv.id.as_str();
         if id.starts_with("ui.") || id == "app.quit" {
+            return None;
+        }
+        // 検索バーはモーダルではない: 入力欄の編集だけを受け、それ以外のコマンドは通常どおり実行する
+        if self.overlay.is_none()
+            && !matches!(
+                id,
+                "edit.insert_text"
+                    | "edit.delete_backward"
+                    | "edit.delete_forward"
+                    | "cursor.move_left"
+                    | "cursor.move_right"
+                    | "cursor.home"
+                    | "cursor.end"
+            )
+        {
             return None;
         }
         let is_prompt = matches!(self.overlay, Some(Overlay::Prompt(_)));
@@ -389,6 +418,8 @@ impl EditorState {
                 if let Some(p) = self.prompt_mut() {
                     p.error = None;
                 }
+            } else if self.overlay.is_none() {
+                self.bar_changed();
             } else {
                 self.palette_reset_selection();
             }
@@ -527,6 +558,10 @@ impl EditorState {
 
     /// `ui.cancel`: オーバーレイを閉じる (データは変えない)。出ていなければ何もしない。
     pub fn ui_cancel(&mut self) -> CommandResult {
+        if self.overlay.is_none() && self.search_bar.is_some() {
+            self.search_close();
+            return CommandResult::Done;
+        }
         // 確認の `Esc` はキャンセルの選択 (保存の失敗の確認では中止を示す)
         if let Some(Overlay::Confirm(c)) = &self.overlay {
             let cancel = c.cancel_index();
@@ -622,6 +657,44 @@ fn cmd_dialog_choose(ctx: &mut CommandCtx<'_>) -> CommandResult {
     }
 }
 
+fn cmd_search_open(ctx: &mut CommandCtx<'_>) -> CommandResult {
+    ctx.state.search_open()
+}
+
+fn cmd_search_toggle_case(ctx: &mut CommandCtx<'_>) -> CommandResult {
+    ctx.state.search_toggle_case()
+}
+
+fn cmd_search_next(ctx: &mut CommandCtx<'_>) -> CommandResult {
+    ctx.state.search_move(true);
+    CommandResult::Done
+}
+
+fn cmd_search_prev(ctx: &mut CommandCtx<'_>) -> CommandResult {
+    ctx.state.search_move(false);
+    CommandResult::Done
+}
+
+/// `search.next` / `search.prev` は Motion (実行すると Undo の結合を封印する、03 §7.3 R3)。
+fn reg_motion_search(r: &mut CommandRegistry) {
+    let handlers: [(&str, crate::Handler); 2] = [
+        ("search.next", cmd_search_next),
+        ("search.prev", cmd_search_prev),
+    ];
+    for (id, h) in handlers {
+        r.register(
+            CommandSpec::new(
+                id,
+                CommandKind::Motion,
+                Permission::Read,
+                "search.active",
+                h,
+            )
+            .expect("カタログの when 句は構文が正しい"),
+        );
+    }
+}
+
 fn cmd_palette_open(ctx: &mut CommandCtx<'_>) -> CommandResult {
     ctx.state.open_palette()
 }
@@ -653,6 +726,21 @@ pub(super) fn register(r: &mut CommandRegistry) {
         cmd_dialog_choose
     );
     reg_ui!(r, "ui.palette_open", "", cmd_palette_open);
+    // 07 §11.6 の perm 列は `ui` (キーマップ以外からも呼べるが、外部クライアントには許可を要する)
+    for (id, when, h) in [
+        ("search.open", "", cmd_search_open as crate::Handler),
+        (
+            "search.toggle_case",
+            "search.active",
+            cmd_search_toggle_case,
+        ),
+    ] {
+        r.register(
+            CommandSpec::new(id, CommandKind::Ui, Permission::Ui, when, h)
+                .expect("カタログの when 句は構文が正しい"),
+        );
+    }
+    reg_motion_search(r);
     reg_ui!(r, "app.quit", "", cmd_quit);
     #[cfg(feature = "test-hooks")]
     if test_hook_panic_command() {

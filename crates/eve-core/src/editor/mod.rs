@@ -19,6 +19,7 @@ mod motion;
 mod overlay;
 mod palette;
 mod query;
+mod search_bar;
 mod search_state;
 mod snapshot;
 mod state;
@@ -234,13 +235,14 @@ impl Editor {
             "dialog" => &["dialog"],
             "prompt" => &["prompt", "global"],
             "palette" => &["palette", "list", "prompt", "global"],
+            "search" => &["search", "prompt", "global"],
             _ => &Self::EDITOR_CONTEXTS,
         }
     }
 
     fn on_key(&mut self, stroke: KeyStroke) {
         let state = &self.state;
-        let contexts = Self::contexts_for(state.overlay_name());
+        let contexts = Self::contexts_for(state.input_context());
         let res = self
             .keymap
             .resolve(contexts, stroke, &|n| state.context_value(n));
