@@ -689,6 +689,10 @@ at_least = "{current}/{total}+"
 approx = "約 {total}"
 no_match = "0 件"
 
+[ui.palette.arg]
+encoding = "文字コード"
+eol = "改行コード"
+
 [ui.palette.reason]
 no_changes = "未保存の変更がありません"
 no_path = "文書に保存先のパスがありません"

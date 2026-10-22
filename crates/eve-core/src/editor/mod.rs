@@ -128,10 +128,10 @@ impl Editor {
     pub fn execute(&mut self, inv: CommandInvocation) -> CommandResult {
         let mut res = self.registry.execute(&mut self.state, &inv);
         // パレットで選ばれたコマンドは、パレットを閉じた後に実行する
-        while let Some(id) = self.state.take_deferred_command() {
+        while let Some((id, args)) = self.state.take_deferred_command() {
             res = self.registry.execute(
                 &mut self.state,
-                &CommandInvocation::new(&id, InvocationSource::Palette),
+                &CommandInvocation::new(&id, InvocationSource::Palette).with_args(args),
             );
         }
         res

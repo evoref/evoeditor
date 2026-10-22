@@ -566,6 +566,10 @@ impl EditorState {
             self.search_close();
             return CommandResult::Done;
         }
+        // パレットで引数を尋ねている途中は、`Esc` で 1 段戻る
+        if self.palette_back() {
+            return CommandResult::Done;
+        }
         // 確認の `Esc` はキャンセルの選択 (保存の失敗の確認では中止を示す)
         if let Some(Overlay::Confirm(c)) = &self.overlay {
             let cancel = c.cancel_index();

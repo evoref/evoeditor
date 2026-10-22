@@ -85,7 +85,7 @@ pub struct EditorState {
     /// パレットの候補 (`hidden` を除く登録済みコマンド。CommandId 順)。
     pub(super) palette_entries: Vec<super::palette::PaletteEntry>,
     /// パレットで選ばれ、Editor が次に実行するコマンド。
-    pub(super) deferred_command: Option<String>,
+    pub(super) deferred_command: Option<(String, super::command::Args)>,
     /// 文書内検索の状態 (検索バーが開いている間)。
     pub(super) search: Option<super::search_state::SearchState>,
     /// 検索バー (開いている間)。
