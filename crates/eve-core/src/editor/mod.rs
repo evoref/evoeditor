@@ -116,11 +116,12 @@ impl Editor {
     /// Editor の「今」を更新する (Host が各 step の先頭・各メッセージの処理の直前・最後に呼ぶ)。
     pub fn tick(&mut self, now: Tick) {
         self.state.now = now;
+        self.state.search_tick();
     }
 
     /// 次に `tick` が要る時刻。`None` なら無期限に待ってよい。
     pub fn next_deadline(&self) -> Option<Tick> {
-        None
+        self.state.search_deadline()
     }
 
     /// キーマップを通さずにコマンドを実行する。権限判定フックを通る。

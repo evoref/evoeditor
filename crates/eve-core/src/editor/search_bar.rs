@@ -14,6 +14,7 @@ use crate::document::{Origin, Transaction, UndoGroupHint};
 use crate::editor::command::CommandResult;
 use crate::jobs::{JobKind, JobResult};
 use crate::search::{Case, SearchQuery, build_replace_all, scan_lines};
+use crate::time::Tick;
 
 use super::file::Pending;
 use super::layout::cell_text;
@@ -486,5 +487,38 @@ impl EditorState {
         );
         // 保持した一致は編集で無効になった: 検索をやり直す
         self.bar_changed();
+    }
+}
+
+/// 編集が止まってから再検索するまでの間 (03 §12.2「編集後の結果」)。
+const RESEARCH_DELAY: u64 = 300;
+
+impl EditorState {
+    /// 編集で検索の結果が無効になったら、入力が止まって 300 ms 後に再検索する。`Editor::tick` から呼ぶ。
+    pub(super) fn search_tick(&mut self) {
+        let stale = self.search_bar.is_some() && self.search.is_some() && !self.search_fresh();
+        let cur = self
+            .search
+            .as_ref()
+            .and_then(|s| self.documents.get(&s.doc()).map(|d| d.revision()));
+        let (true, Some(cur)) = (stale, cur) else {
+            self.research = None;
+            return;
+        };
+        match self.research {
+            Some((rev, at)) if rev == cur => {
+                if self.now.saturating_sub(at) >= crate::time::Millis(RESEARCH_DELAY) {
+                    self.research = None;
+                    self.bar_changed();
+                }
+            }
+            // 初めて気づいた、または気づいた後にまた編集された: 待ち直す
+            _ => self.research = Some((cur, self.now)),
+        }
+    }
+
+    /// 次に `tick` が要る時刻 (再検索の期限)。
+    pub(super) fn search_deadline(&self) -> Option<Tick> {
+        self.research.map(|(_, at)| Tick(at.0 + RESEARCH_DELAY))
     }
 }

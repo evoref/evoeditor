@@ -135,6 +135,22 @@ impl EditorState {
             return;
         }
         self.clipboard.token = None;
+        // 入力欄 (プロンプト・パレット・検索バー) が出ていれば、そこへ最初の行だけを貼り付ける (04 §6.6)
+        if self.input_mut_available() {
+            let t = match text {
+                Some(t) => t,
+                None => {
+                    self.notify_clipboard_fallback("取得できませんでした");
+                    match &self.clipboard.register {
+                        Some(src) => src.to_text(),
+                        None => return,
+                    }
+                }
+            };
+            let line = t.lines().next().unwrap_or("").to_owned();
+            self.prompt_paste(&line);
+            return;
+        }
         let editable = self
             .active_document()
             .and_then(|d| self.documents.get(&d))

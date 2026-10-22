@@ -342,6 +342,11 @@ impl EditorState {
         }
     }
 
+    /// 貼り付けを受けられる入力欄があるか。
+    pub(super) fn input_mut_available(&mut self) -> bool {
+        self.input_mut().is_some()
+    }
+
     /// 入力欄 (プロンプトとパレットで共通の編集)。
     fn input_mut(&mut self) -> Option<(&mut String, &mut usize)> {
         match &mut self.overlay {
@@ -368,6 +373,14 @@ impl EditorState {
         let id = inv.id.as_str();
         if id.starts_with("ui.") || id == "app.quit" {
             return None;
+        }
+        // 入力欄への貼り付け: システムクリップボードを要求し、応答は入力欄の最初の行を入れる (`on_clipboard_content`)
+        if id == "edit.paste" {
+            return Some(if self.input_mut().is_some() {
+                self.request_paste()
+            } else {
+                CommandResult::Rejected(RejectReason::NotAvailable)
+            });
         }
         // 検索バーはモーダルではない: 入力欄の編集だけを受け、それ以外のコマンドは通常どおり実行する
         if self.overlay.is_none()
