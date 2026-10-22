@@ -1222,6 +1222,9 @@ impl EditorState {
                 d.disk_stamp = Some(stamp);
                 d.read_only = detected;
                 self.put_document(doc_id, d);
+                if detected.contains(crate::document::ReadOnlyReason::LongLine) {
+                    self.message(MessageLevel::Info, "info.open.long_line", &path.display());
+                }
                 if changed_during_load {
                     self.message(
                         MessageLevel::Warn,

@@ -76,6 +76,9 @@ pub struct Document {
     pub read_only: ReadOnlyReasons,
     pub load_state: LoadState,
     pub display: DisplaySettings,
+    /// 長い行の表示単位の計算結果 (最後の 1 行分)。1 回の操作で同じ行を何度も展開しないための覚え。
+    /// 中身の型は表示の層 (`editor::layout`) だけが知る。
+    pub(crate) layout_cache: std::cell::RefCell<Option<Box<dyn std::any::Any>>>,
 }
 
 impl Document {
@@ -97,6 +100,7 @@ impl Document {
             read_only: ReadOnlyReasons::default(),
             load_state: LoadState::Ready,
             display: DisplaySettings::default(),
+            layout_cache: std::cell::RefCell::new(None),
         }
     }
 

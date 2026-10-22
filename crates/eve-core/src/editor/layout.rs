@@ -74,6 +74,31 @@ fn flush_run(run: &mut String, parts: &mut Vec<(String, u16, bool)>, cfg: &Width
     run.clear();
 }
 
+/// 展開の覚えを使う行の大きさ (これ未満は毎回展開する)。
+const UNITS_CACHE_MIN: usize = 4096;
+
+/// `units` の結果。長い行 (長大行の表示範囲 64 KiB など) は、Revision・行・幅の設定が同じ間は覚えを使う
+/// (1 回の操作で `cursor_cell` と Frame の生成が同じ行を何度も展開するのを避ける、NFR-106)。
+fn units_for(doc: &Document, line: usize, content: &str) -> std::rc::Rc<Vec<Unit>> {
+    use std::rc::Rc;
+    let esc = esc_enabled(doc);
+    let cfg = doc_width_config(doc);
+    if content.len() < UNITS_CACHE_MIN {
+        return Rc::new(units(content, esc, &cfg));
+    }
+    type Key = (eve_view::Revision, usize, bool, u8, bool);
+    let key: Key = (doc.revision(), line, esc, cfg.tab_width, cfg.ambiguous_wide);
+    if let Some(any) = doc.layout_cache.borrow().as_ref()
+        && let Some((k, u)) = any.downcast_ref::<(Key, Rc<Vec<Unit>>)>()
+        && *k == key
+    {
+        return u.clone();
+    }
+    let u = Rc::new(units(content, esc, &cfg));
+    *doc.layout_cache.borrow_mut() = Some(Box::new((key, u.clone())));
+    u
+}
+
 /// 行の内容を表示の単位に展開する。
 fn units(content: &str, esc: bool, cfg: &WidthConfig) -> Vec<Unit> {
     let tab = cfg.tab_width.max(1) as usize;
@@ -129,15 +154,35 @@ fn units(content: &str, esc: bool, cfg: &WidthConfig) -> Vec<Unit> {
     out
 }
 
-fn line_content(doc: &Document, line: usize) -> (usize, String, bool) {
+/// 長大行 (閾値超。読み取り専用で開いたもの) は先頭 64 KiB (書記素の境界) までを表示とカーソルの対象にする (NFR-106、03 §11.5)。
+/// 戻り値は表示の終端のバイト位置 (それ以外の行は行末)。
+pub(super) fn line_visible_end(doc: &Document, ls: usize, le: usize) -> usize {
+    use crate::document::{LONG_LINE_THRESHOLD, LONG_LINE_VISIBLE, ReadOnlyReason};
+    if le - ls > LONG_LINE_THRESHOLD && doc.read_only.contains(ReadOnlyReason::LongLine) {
+        eve_text::snap_to_grapheme(
+            doc.text(),
+            ByteOff(ls + LONG_LINE_VISIBLE),
+            eve_text::Bias::Before,
+        )
+        .0
+        .max(ls)
+    } else {
+        le
+    }
+}
+
+/// (行頭, 表示する内容, 改行があるか, 省略したバイト数)。
+fn line_content(doc: &Document, line: usize) -> (usize, String, bool, usize) {
     let t = doc.text();
     let l = LineIdx(line);
     let (ls, le) = (t.line_to_byte(l).0, t.line_end_byte(l).0);
     let has_terminator = t.line_terminator(l).is_some();
+    let ve = line_visible_end(doc, ls, le);
     (
         ls,
-        t.slice_to_string(ByteRange::new(ByteOff(ls), ByteOff(le))),
+        t.slice_to_string(ByteRange::new(ByteOff(ls), ByteOff(ve))),
         has_terminator,
+        le - ve,
     )
 }
 
@@ -147,8 +192,8 @@ fn esc_enabled(doc: &Document) -> bool {
 
 /// 行内のバイト位置 `byte` にあるカーソルの (表示列, そのセルの幅)。行末では (行の幅, 1)。
 pub(super) fn cursor_cell(doc: &Document, line: usize, byte: usize) -> (usize, usize) {
-    let (_, content, _) = line_content(doc, line);
-    let us = units(&content, esc_enabled(doc), &doc_width_config(doc));
+    let (_, content, _, _) = line_content(doc, line);
+    let us = units_for(doc, line, &content);
     match us.iter().find(|u| u.byte >= byte) {
         Some(u) => (u.col, u.width.max(1)),
         None => (us.last().map_or(0, |u| u.col + u.width), 1),
@@ -162,8 +207,8 @@ pub(super) fn cursor_col(doc: &Document, line: usize, byte: usize) -> usize {
 
 /// 表示列 `dcol` に対応する行内のバイト位置。セルの途中は、その単位の前に寄せる (`Bias::Before`)。行の幅を超えれば行末。
 pub(super) fn byte_at_col(doc: &Document, line: usize, dcol: usize) -> usize {
-    let (_, content, _) = line_content(doc, line);
-    let us = units(&content, esc_enabled(doc), &doc_width_config(doc));
+    let (_, content, _, _) = line_content(doc, line);
+    let us = units_for(doc, line, &content);
     us.iter()
         .find(|u| dcol < u.col + u.width)
         .map_or(content.len(), |u| u.byte)
@@ -205,6 +250,8 @@ struct Marks<'a> {
     current: Option<(usize, usize)>,
     /// 保存先の文字コードで表せない文字 (E3、03 §8.6)。
     unmappable: &'a [(usize, usize)],
+    /// 長大行の省略の印の文言 (省略したバイト数 → 文字列)。
+    omit: &'a dyn Fn(usize) -> String,
 }
 
 /// 1 行を作る。`left` は水平スクロール (表示列)、`cols` は本文の幅。`sel` は選択 (文書のバイト位置の半開区間)、
@@ -220,9 +267,30 @@ fn build_row(
     marks: &Marks<'_>,
     gutter: Vec<Span>,
 ) -> RowOut {
-    let (ls, content, has_terminator) = line_content(doc, line);
-    let us = units(&content, esc_enabled(doc), &doc_width_config(doc));
-    let total = us.last().map_or(0, |u| u.col + u.width);
+    let (ls, content, has_terminator, omitted) = line_content(doc, line);
+    let body = units_for(doc, line, &content);
+    // 省略した分は行末に印を出す (「… (以下 N バイト省略)」。表示だけで、残りは文書に保たれている)
+    let marker: Option<Unit> = (omitted > 0).then(|| {
+        let col = body.last().map_or(0, |u| u.col + u.width);
+        let parts: Vec<(String, u16, bool)> = cell_text(&(marks.omit)(omitted), CutPolicy::Never)
+            .spans
+            .into_iter()
+            .map(|sp| (sp.text.to_string(), sp.width, true))
+            .collect();
+        let width = parts.iter().map(|p| p.1 as usize).sum();
+        Unit {
+            col,
+            parts,
+            width,
+            byte: content.len(),
+            risky: false,
+        }
+    });
+    let us = body.iter().chain(marker.iter());
+    let total = marker
+        .as_ref()
+        .or(body.last())
+        .map_or(0, |u| u.col + u.width);
     // 選択は start 昇順で重ならないので二分探索する
     let selected = |byte_abs: usize| {
         let i = sel.partition_point(|&(_, e)| e <= byte_abs);
@@ -231,7 +299,7 @@ fn build_row(
     let (win_start, win_end) = (left, left + cols);
     let (mut clipped_left, mut clipped_right, mut risky) = (false, false, false);
     let mut spans: Vec<Span> = Vec::new();
-    'units: for u in &us {
+    'units: for u in us.clone() {
         let at = ls + u.byte;
         let mut style_base = if selected(at) {
             StyleMods::REVERSE
@@ -303,7 +371,7 @@ fn build_row(
         .iter()
         .map(|&h| {
             let rel = h.saturating_sub(ls);
-            match us.iter().find(|u| u.byte >= rel) {
+            match us.clone().find(|u| u.byte >= rel) {
                 Some(u) => u.col,
                 None => total,
             }
@@ -447,10 +515,18 @@ pub(super) fn build_frame(
     let found = state.visible_matches(view.doc, top_line, rows);
     let current = state.bar_current();
     let unmappable = state.unmappable_marks_for(view.doc);
+    let omit = |n: usize| {
+        state.catalog().render(
+            "ui.long_line.omitted",
+            &[("bytes", &n.to_string())],
+            &|_| None,
+        )
+    };
     let marks = Marks {
         found: &found,
         current,
         unmappable: &unmappable,
+        omit: &omit,
     };
     let mut out_rows = Vec::with_capacity(rows);
     let mut cursors = Vec::new();

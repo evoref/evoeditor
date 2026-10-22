@@ -25,9 +25,10 @@ pub use cancel::CancelToken;
 mod eol;
 mod search;
 pub use document::{
-    Applied, AppliedTx, ApplyError, DisplaySettings, Document, EolStats, HistoryStep, LoadState,
-    NodeId, Origin, ReadOnlyReason, ReadOnlyReasons, RecordOutcome, TextFormat, Transaction,
-    TransactionMeta, UndoBudget, UndoGroupHint, UndoHistory,
+    Applied, AppliedTx, ApplyError, DisplaySettings, Document, EolStats, HistoryStep,
+    LONG_LINE_THRESHOLD, LONG_LINE_VISIBLE, LoadState, NodeId, Origin, ReadOnlyReason,
+    ReadOnlyReasons, RecordOutcome, TextFormat, Transaction, TransactionMeta, UndoBudget,
+    UndoGroupHint, UndoHistory,
 };
 pub use editor::{
     ArgValue, Args, Binding, CommandCtx, CommandInvocation, CommandKind, CommandRegistry,

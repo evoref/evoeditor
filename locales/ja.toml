@@ -708,6 +708,9 @@ placeholder = "コマンドを入力"
 disabled = "現在は実行できません: {reason}"
 no_match = "一致するコマンドはありません"
 
+[ui.long_line]
+omitted = "… (以下 {bytes} バイト省略)"
+
 [ui.palette.category]
 app = "アプリ"
 clipboard = "クリップボード"
