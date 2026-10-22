@@ -704,6 +704,16 @@ placeholder = "コマンドを入力"
 disabled = "現在は実行できません: {reason}"
 no_match = "一致するコマンドはありません"
 
+[ui.palette.category]
+app = "アプリ"
+clipboard = "クリップボード"
+cursor = "移動"
+edit = "編集"
+file = "ファイル"
+search = "検索"
+select = "選択"
+ui = "画面"
+
 [ui.prompt.open]
 title = "開く"
 

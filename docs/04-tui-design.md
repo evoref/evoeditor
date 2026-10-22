@@ -1363,6 +1363,14 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 | パレット (実行できない理由) | `ui.palette.reason.no_selection` | 選択範囲がありません | — |
 | パレット (実行できない理由) | `ui.palette.reason.unavailable` | 今の状態では使えません | — |
 | パレット (0 件。`List.no_match`) | `ui.palette.no_match` | 一致するコマンドはありません | — |
+| パレットの行のカテゴリ (CommandId の名前空間) | `ui.palette.category.app` | アプリ | — |
+| パレットの行のカテゴリ (CommandId の名前空間) | `ui.palette.category.clipboard` | クリップボード | — |
+| パレットの行のカテゴリ (CommandId の名前空間) | `ui.palette.category.cursor` | 移動 | — |
+| パレットの行のカテゴリ (CommandId の名前空間) | `ui.palette.category.edit` | 編集 | — |
+| パレットの行のカテゴリ (CommandId の名前空間) | `ui.palette.category.file` | ファイル | — |
+| パレットの行のカテゴリ (CommandId の名前空間) | `ui.palette.category.search` | 検索 | — |
+| パレットの行のカテゴリ (CommandId の名前空間) | `ui.palette.category.select` | 選択 | — |
+| パレットの行のカテゴリ (CommandId の名前空間) | `ui.palette.category.ui` | 画面 | — |
 | キー表記 (割当なし) | `ui.key.via_palette` | コマンドパレットから実行 | — |
 | 小さすぎる端末 (`Frame.texts.too_small`) | `ui.too_small` | 端末が小さすぎます ({cols}x{rows} 以上が必要) | — |
 
