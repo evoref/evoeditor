@@ -1,0 +1,25 @@
+# サードパーティの告知 (THIRD-PARTY NOTICES)
+
+evoeditor は、次のソフトウェアを利用しています。各ソフトウェアの著作権表示とライセンスを以下に示します。
+このファイルは `cargo xtask gen-notices` が自動生成します。手で編集しません。
+
+## ライセンスの一覧
+
+{{#each overview}}
+- {{{name}}} ({{count}} 件)
+{{/each}}
+
+{{#each licenses}}
+## {{{name}}}
+
+利用している crate:
+
+{{#each used_by}}
+- {{{crate.name}}} {{{crate.version}}}{{#if crate.repository}} ({{{crate.repository}}}){{/if}}
+{{/each}}
+
+```text
+{{{text}}}
+```
+
+{{/each}}

@@ -1,0 +1,21 @@
+# cargo-about の設定 (docs/05 §17.1、docs/11 §9.6)。THIRD-PARTY-NOTICES.md を生成する: cargo xtask gen-notices
+# 許可リストは deny.toml と同じ (正本は 05 §17.1)。配布する Windows x86_64 の exe の依存だけを対象にする。
+accepted = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Zlib",
+    "Unicode-3.0",
+    "Unicode-DFS-2016",
+    "0BSD",
+    "BSL-1.0",
+    "CC0-1.0",
+]
+targets = ["x86_64-pc-windows-msvc"]
+# このリポジトリの crate (publish = false) は一覧に含めない (本体のライセンスは LICENSE / NOTICE)
+private = { ignore = true }
+ignore-dev-dependencies = true
+ignore-build-dependencies = true
