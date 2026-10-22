@@ -10,6 +10,11 @@ use encoding_rs::DecoderResult;
 use crate::encoding::Encoding;
 use crate::utf8::{PuaEscapeMode, Utf8Decoder, escape_byte, unescape_char};
 
+/// 1 回の `decode_to_string_without_replacement` に最低限用意する出力の空き (バイト)。
+const MIN_SPARE: usize = 16;
+/// 空きを倍にしてよい上限。これを超えても `OutputFull` なら何かがおかしいので、ループを打ち切る。
+const MAX_SPARE: usize = 1 << 26;
+
 /// 不正バイトの回収のために覚えておく、消費済みの入力の長さ (`len + consumed_after` の最大は 6、余裕を見て 16)。
 const HISTORY: usize = 16;
 
@@ -134,12 +139,18 @@ impl RsDecoder {
 
     fn decode_slice(&mut self, src: &[u8], last: bool, out: &mut String) {
         let mut pos = 0;
+        // `OutputFull` が続くとき (入力を消費せず出力も増えない) に空きを倍にして、必ず前へ進める。
+        // `max_utf8_buffer_length_without_replacement` は、入力の末尾が UTF-16 の孤立したサロゲートで終わる状態など、
+        // 内部に持ち越した状態の分を足りなく返すことがある (入力が空でも `OutputFull` になり、空きが 1 バイトのままだと無限ループになる)
+        let mut extra = 0usize;
         loop {
             let rest = &src[pos..];
             let want = self
                 .dec
                 .max_utf8_buffer_length_without_replacement(rest.len())
-                .unwrap_or(rest.len() * 4 + 16);
+                .unwrap_or(rest.len() * 4 + 16)
+                .max(MIN_SPARE)
+                .max(extra);
             out.reserve(want);
             let before = out.len();
             let (res, read) = self
@@ -150,7 +161,13 @@ impl RsDecoder {
             pos += read;
             match res {
                 DecoderResult::InputEmpty => return,
-                DecoderResult::OutputFull => {}
+                DecoderResult::OutputFull => {
+                    extra = want.saturating_mul(2);
+                    // 上限を超えて足りないことは無い (エンコーディングの仕様上、1 文字は 4 バイトまで)。無限ループにしない
+                    if extra > MAX_SPARE {
+                        return;
+                    }
+                }
                 DecoderResult::Malformed(len, after) => {
                     // 不正バイトは、消費した入力の末尾から `after` バイトを除いた直前の `len` バイト
                     let end = self.history.len().saturating_sub(usize::from(after));
@@ -196,6 +213,31 @@ mod tests {
             d.decode(c, it.peek().is_none(), &mut out);
         }
         (out, d.invalid_bytes(), d.has_bom())
+    }
+
+    // fuzz_decode が見つけた timeout (2026-10-22 の夜間、課題 #78)。UTF-16LE で 2 バイトずつ渡し、孤立した上位サロゲートが続くと、
+    // 入力が空の呼出しで `OutputFull` を返し続けて無限ループになっていた。
+    #[test]
+    fn 孤立したサロゲートが続く_utf16_を_2_バイトずつ渡しても終わる() {
+        let body: [u8; 38] = [
+            0xE5, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x25, 0xFF, 0xD8, 0xD8, 0xD8, 0x00, 0xD8,
+            0x00, 0x00, 0x00, 0xD8, 0x21, 0x00, 0x3B, 0x24, 0x1A, 0xD8, 0xD8, 0x1B, 0x00, 0x00,
+            0xD8, 0xD8, 0xD8, 0xD8, 0xD8, 0xD8, 0x21, 0x00, 0x3B, 0x24,
+        ];
+        for chunk in [1usize, 2, 3, 5, 38] {
+            for cap in [0usize, 1, 64] {
+                let mut d = Decoder::new(Encoding::Utf16Le, false);
+                let mut out = String::with_capacity(cap);
+                let mut it = body.chunks(chunk).peekable();
+                while let Some(c) = it.next() {
+                    d.decode(c, it.peek().is_none(), &mut out);
+                }
+                assert!(
+                    d.invalid_bytes() > 0,
+                    "孤立したサロゲートは不正バイトに数える"
+                );
+            }
+        }
     }
 
     #[test]
