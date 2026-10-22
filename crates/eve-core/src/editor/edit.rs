@@ -16,9 +16,6 @@ use super::command::{
     CommandCtx, CommandKind, CommandRegistry, CommandResult, CommandSpec, Permission, RejectReason,
 };
 
-/// インデントの 1 段 (v0.1 は定数: 空白 4 つ。設定の公開は後の版)。
-const INDENT_WIDTH: usize = 4;
-
 /// 1 つの Range に対する編集。
 struct Plan {
     del: ByteRange,
@@ -453,31 +450,38 @@ fn display_col(doc: &Document, line_start: usize, end: usize, cfg: &WidthConfig)
 
 /// Tab キー (選択なし): 次のインデント停止位置までの空白を挿入する。選択があるときは何もしない (v0.1、OQ-193)。
 fn indent(ctx: &mut CommandCtx<'_>) -> CommandResult {
-    edit_each(ctx, |doc, r| {
+    let (unit, width) = {
+        let c = ctx.state.config();
+        (c.indent_unit, c.indent_width.max(1) as usize)
+    };
+    edit_each(ctx, move |doc, r| {
         if !r.is_empty() {
             return None;
         }
         let text = doc.text();
         let line = text.byte_to_line(r.head);
         let ls = text.line_to_byte(line).0;
-        let col = display_col(doc, ls, r.head.0, &WidthConfig::default());
-        let n = INDENT_WIDTH - col % INDENT_WIDTH;
+        let col = display_col(doc, ls, r.head.0, &super::layout::doc_width_config(doc));
+        let ins = match unit {
+            eve_config::IndentUnit::Tab => "	".to_owned(),
+            eve_config::IndentUnit::Space => " ".repeat(width - col % width),
+        };
         Some(Plan {
             del: ByteRange::new(r.head, r.head),
-            ins: " ".repeat(n),
+            ins,
             cursor: CursorRule::AfterInsert,
         })
     })
 }
 
-/// Shift+Tab (選択なし): 行頭空白のうち、表示幅が `INDENT_WIDTH` 以内に収まる部分を削除する。選択があるときは何もしない。
+/// Shift+Tab (選択なし): 行頭空白のうち、表示幅が `editor.indent_width` 以内に収まる部分を削除する。選択があるときは何もしない。
 fn outdent(ctx: &mut CommandCtx<'_>) -> CommandResult {
-    edit_each(ctx, |doc, r| {
+    let width = ctx.state.config().indent_width.max(1) as usize;
+    edit_each(ctx, move |doc, r| {
         if !r.is_empty() {
             return None;
         }
-        let cfg = WidthConfig::default();
-        let tab = cfg.tab_width.max(1) as usize;
+        let tab = doc.display.tab_width.max(1) as usize;
         let text = doc.text();
         let line = text.byte_to_line(r.head);
         let (ls, le) = (text.line_to_byte(line).0, text.line_end_byte(line).0);
@@ -492,7 +496,7 @@ fn outdent(ctx: &mut CommandCtx<'_>) -> CommandResult {
             } else {
                 col + 1
             };
-            if next > INDENT_WIDTH {
+            if next > width {
                 // 先頭の 1 文字が幅を超えるタブなら、そのタブ 1 つを削除する (何も起きない状態を避ける)
                 if bytes == 0 && ch == '\t' {
                     bytes = 1;

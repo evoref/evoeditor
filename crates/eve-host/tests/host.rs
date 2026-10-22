@@ -276,3 +276,20 @@ fn 保存済みの文書しか無ければ退避する文書は無い() {
         .step(&mut e.fe, HostMsg::Fatal(FatalReason::InputThreadDied));
     assert_eq!(*spy.calls.lock().unwrap(), vec![(RescueReason::Fatal, 0)]);
 }
+
+#[test]
+fn 設定の診断は最初の_frame_の後にメッセージとして出す() {
+    let mut e = env();
+    let l = eve_config::load_str("[editor]\ntab_width = 0\n");
+    e.host.set_config(l.config, "config.toml", l.diagnostics);
+    e.start();
+    assert_eq!(e.probe.render_count(), 2, "最初の Frame の後に再描画する");
+    let screen = e
+        .probe
+        .last_ascii(AsciiOptions {
+            show_chrome: true,
+            ..AsciiOptions::default()
+        })
+        .unwrap();
+    assert!(screen.contains("config.toml:2"), "{screen}");
+}

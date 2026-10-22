@@ -290,6 +290,7 @@ name = "eve-host"
 version = "0.0.0"
 dependencies = [
  "arc-swap",
+ "eve-config",
  "eve-core",
  "eve-platform",
  "eve-testkit",

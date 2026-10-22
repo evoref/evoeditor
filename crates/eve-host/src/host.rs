@@ -92,6 +92,10 @@ pub struct Host {
     clip_busy: Arc<std::sync::atomic::AtomicBool>,
     /// 待っている取得の token と期限 (2 秒)。
     clip_wait: Option<(eve_view::ClipboardToken, Tick)>,
+    /// 解決済みの設定 (07 §5.0)。
+    config: eve_config::Config,
+    /// 設定ファイルの診断 (名前, 診断)。最初の Frame の後にメッセージとして出す (07 §4.3、FR-703)。
+    config_report: Option<(String, Vec<eve_config::Diagnostic>)>,
 }
 
 impl Host {
@@ -127,7 +131,21 @@ impl Host {
             clipboard: None,
             clip_busy: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             clip_wait: None,
+            config: eve_config::Config::default(),
+            config_report: None,
         }
+    }
+
+    /// 設定と、その読込の診断を渡す (`start` / `run` の前に呼ぶ)。`file` は診断の表示名。
+    pub fn set_config(
+        &mut self,
+        config: eve_config::Config,
+        file: &str,
+        diagnostics: Vec<eve_config::Diagnostic>,
+    ) {
+        self.config = config;
+        self.editor.state_mut().set_config(config);
+        self.config_report = (!diagnostics.is_empty()).then(|| (file.to_owned(), diagnostics));
     }
 
     /// システムクリップボードの提供者を設定する (`start` / `run` の前に呼ぶ。無ければ内部レジスタだけ)。
@@ -195,9 +213,10 @@ impl Host {
         path: Option<&str>,
         read_only: bool,
     ) -> Result<(), StartError> {
-        let caps = frontend
-            .init(&FrontendConfig::default())
-            .map_err(StartError::Init)?;
+        let fcfg = FrontendConfig {
+            ambiguous_width: self.config.ambiguous_width,
+        };
+        let caps = frontend.init(&fcfg).map_err(StartError::Init)?;
         self.editor.state_mut().set_caps(caps);
         if let Some(info) = frontend.emergency_restore_info() {
             let _ = self.restore_info.set(info);
@@ -218,6 +237,11 @@ impl Host {
             .start_input(InputSink::new(self.tx.clone(), window))
             .map_err(StartError::Frontend)?;
         self.render(frontend);
+        // 設定の診断は最初の Frame の後に出す (起動を妨げない、07 §4.3)
+        if let Some((file, diagnostics)) = self.config_report.take() {
+            self.editor.state_mut().report_config(&file, &diagnostics);
+            self.render(frontend);
+        }
         Ok(())
     }
 

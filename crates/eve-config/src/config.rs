@@ -39,6 +39,8 @@ pub struct Diagnostic {
     pub kind: DiagKind,
     /// ドット区切りのキー (`editor.tab_width`)。構文エラーでは空。
     pub key: String,
+    /// 書かれた値 (文字列はそのまま、整数は書かれた表記。値を持たない診断では空)。
+    pub value: String,
     pub line: u32,
     pub column: u32,
 }
@@ -158,6 +160,7 @@ pub fn load_str(text: &str) -> Loaded {
                     message: e.message().to_owned(),
                 },
                 key: String::new(),
+                value: String::new(),
                 line,
                 column,
             });
@@ -191,6 +194,7 @@ impl Cx<'_> {
             severity,
             kind,
             key,
+            value: String::new(),
             line,
             column,
         });
@@ -237,7 +241,6 @@ impl Cx<'_> {
     }
 
     fn value(&mut self, key: &str, v: &Spanned<DeValue<'_>>) {
-        let at = v.span().start;
         match key {
             "editor.tab_width" => {
                 if let Some(n) = self.int(key, v, 1, 16) {
@@ -268,7 +271,7 @@ impl Cx<'_> {
                 };
                 match encoding(&s) {
                     Some(e) => self.out.config.default_encoding = e,
-                    None => self.invalid(key, ENCODINGS, at),
+                    None => self.invalid(key, ENCODINGS, v),
                 }
             }
             "file.default_line_ending" => {
@@ -306,15 +309,31 @@ impl Cx<'_> {
             key.to_owned(),
             v.span().start,
         );
+        self.set_value(v);
     }
 
-    fn invalid(&mut self, key: &str, allowed: &'static [&'static str], at: usize) {
+    fn invalid(&mut self, key: &str, allowed: &'static [&'static str], v: &Spanned<DeValue<'_>>) {
         self.diag(
             Severity::Warning,
             DiagKind::InvalidValue { allowed },
             key.to_owned(),
-            at,
+            v.span().start,
         );
+        self.set_value(v);
+    }
+
+    /// 直前に積んだ診断に、書かれた値を記録する。
+    fn set_value(&mut self, v: &Spanned<DeValue<'_>>) {
+        let text = match v.get_ref() {
+            DeValue::String(s) => s.to_string(),
+            DeValue::Integer(i) => i.as_str().to_owned(),
+            DeValue::Float(f) => f.as_str().to_owned(),
+            DeValue::Boolean(b) => b.to_string(),
+            other => other.type_str().to_owned(),
+        };
+        if let Some(d) = self.out.diagnostics.last_mut() {
+            d.value = text;
+        }
     }
 
     /// 範囲 `min..=max` の整数。型違い・範囲外は診断を積んで `None` (呼び出し側は既定値のまま)。
@@ -330,6 +349,7 @@ impl Cx<'_> {
                 key.to_owned(),
                 v.span().start,
             );
+            self.set_value(v);
             return None;
         };
         if (min..=max).contains(&n) {
@@ -341,6 +361,7 @@ impl Cx<'_> {
                 key.to_owned(),
                 v.span().start,
             );
+            self.set_value(v);
             None
         }
     }
@@ -365,7 +386,7 @@ impl Cx<'_> {
         if allowed.contains(&s.as_str()) {
             Some(s)
         } else {
-            self.invalid(key, allowed, v.span().start);
+            self.invalid(key, allowed, v);
             None
         }
     }
@@ -385,6 +406,19 @@ fn encoding(s: &str) -> Option<DefaultEncoding> {
         "system" => DefaultEncoding::System,
         _ => return None,
     })
+}
+
+/// 公開キーの既定値の表記 (診断の「既定値 {default} を使います」に入れる)。未知のキーは空。
+pub fn default_display(key: &str) -> &'static str {
+    match key {
+        "editor.tab_width" | "editor.indent_width" => "4",
+        "editor.indent_unit" => "space",
+        "file.default_encoding" => "utf-8",
+        "file.default_line_ending" => "lf",
+        "view.ambiguous_width" => "1",
+        "theme.color_mode" => "auto",
+        _ => "",
+    }
 }
 
 /// 編集距離 2 以下で最も近い候補 (同点は先頭)。

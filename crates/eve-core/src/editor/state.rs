@@ -80,6 +80,8 @@ pub struct EditorState {
     trim_notified: BTreeSet<DocumentId>,
     /// 内部レジスタ・ハンドルの表・貼り付けの token (クリップボード、`clipboard.rs`)。
     pub(super) clipboard: super::clipboard::ClipboardState,
+    /// 解決済みの設定 (07 §5.0 の公開キー)。起動時に Host が `Editor::set_config` で渡す。
+    pub(super) config: eve_config::Config,
 }
 
 impl EditorState {
@@ -107,7 +109,62 @@ impl EditorState {
             unread: 0,
             trim_notified: BTreeSet::new(),
             clipboard: Default::default(),
+            config: eve_config::Config::default(),
         }
+    }
+
+    pub fn config(&self) -> &eve_config::Config {
+        &self.config
+    }
+
+    /// 設定を差し替え、持っている文書の表示設定にも写す。
+    pub fn set_config(&mut self, config: eve_config::Config) {
+        self.config = config;
+        let display = self.display_settings();
+        for d in self.documents.values_mut() {
+            d.display = display;
+        }
+        self.needs_render = true;
+    }
+
+    fn display_settings(&self) -> crate::document::DisplaySettings {
+        crate::document::DisplaySettings {
+            tab_width: self.config.tab_width,
+            ambiguous_wide: self.config.ambiguous_width == 2,
+        }
+    }
+
+    /// 新規文書 (無題・存在しないパス)。文字コードと新しく挿入する改行は `file.default_*` (07 §5.2)。
+    pub(super) fn blank_document(&self) -> Document {
+        use eve_config::{DefaultEncoding, DefaultLineEnding};
+        let mut doc = Document::new_untitled();
+        let (encoding, has_bom) = match self.config.default_encoding {
+            // `system` は OS ロケール由来のヒント (05 §6)。ヒントの実装までは UTF-8
+            DefaultEncoding::Utf8 | DefaultEncoding::System => (crate::Encoding::Utf8, false),
+            DefaultEncoding::Utf8Bom => (crate::Encoding::Utf8, true),
+            DefaultEncoding::Utf16Le => (crate::Encoding::Utf16Le, true),
+            DefaultEncoding::Utf16Be => (crate::Encoding::Utf16Be, true),
+            DefaultEncoding::ShiftJis => (crate::Encoding::ShiftJis, false),
+            DefaultEncoding::EucJp => (crate::Encoding::EucJp, false),
+            DefaultEncoding::Iso2022Jp => (crate::Encoding::Iso2022Jp, false),
+        };
+        doc.format.encoding = encoding;
+        doc.format.has_bom = has_bom;
+        doc.format.default_eol = match self.config.default_line_ending {
+            DefaultLineEnding::Lf => eve_text::LineEnding::Lf,
+            DefaultLineEnding::Crlf => eve_text::LineEnding::Crlf,
+            DefaultLineEnding::Cr => eve_text::LineEnding::Cr,
+            DefaultLineEnding::Native if cfg!(windows) => eve_text::LineEnding::Crlf,
+            DefaultLineEnding::Native => eve_text::LineEnding::Lf,
+        };
+        doc.display = self.display_settings();
+        doc
+    }
+
+    /// 読込の完了などで、既に採番した文書の中身を差し替える。表示設定を写す。
+    pub(super) fn put_document(&mut self, id: DocumentId, mut doc: Document) {
+        doc.display = self.display_settings();
+        self.documents.insert(id, doc);
     }
 
     /// 退避用の公開物が変わった文書として記録する (03 §6.5 手順 12。保存の完了・読込の完了)。
@@ -149,7 +206,8 @@ impl EditorState {
     // ---------- 文書・View・Window ----------
 
     /// 文書を追加し、それを表示する View を作る (カーソルは先頭)。文書の ID は閉じた後も再利用しない。
-    pub fn add_document(&mut self, doc: Document) -> (DocumentId, ViewId) {
+    pub fn add_document(&mut self, mut doc: Document) -> (DocumentId, ViewId) {
+        doc.display = self.display_settings();
         let doc_id = DocumentId(self.fresh());
         self.documents.insert(doc_id, doc);
         let view_id = self.add_view(doc_id);

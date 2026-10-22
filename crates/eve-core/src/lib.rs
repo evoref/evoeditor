@@ -23,9 +23,9 @@ mod unmap;
 
 pub use cancel::CancelToken;
 pub use document::{
-    Applied, AppliedTx, ApplyError, Document, EolStats, HistoryStep, LoadState, NodeId, Origin,
-    ReadOnlyReason, ReadOnlyReasons, RecordOutcome, TextFormat, Transaction, TransactionMeta,
-    UndoBudget, UndoGroupHint, UndoHistory,
+    Applied, AppliedTx, ApplyError, DisplaySettings, Document, EolStats, HistoryStep, LoadState,
+    NodeId, Origin, ReadOnlyReason, ReadOnlyReasons, RecordOutcome, TextFormat, Transaction,
+    TransactionMeta, UndoBudget, UndoGroupHint, UndoHistory,
 };
 pub use editor::{
     ArgValue, Args, Binding, CommandCtx, CommandInvocation, CommandKind, CommandRegistry,

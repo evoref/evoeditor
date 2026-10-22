@@ -194,7 +194,8 @@ impl EditorState {
     /// 確認を済ませた (破棄または保存した) 後の新規作成。
     pub(super) fn new_untitled_forced(&mut self) -> CommandResult {
         let replace = self.active_document();
-        let (_, view) = self.add_document(Document::new_untitled());
+        let doc = self.blank_document();
+        let (_, view) = self.add_document(doc);
         self.show_view(view, replace);
         CommandResult::Done
     }
@@ -1136,7 +1137,7 @@ impl EditorState {
                 d.path = Some(path.clone());
                 d.disk_stamp = Some(stamp);
                 d.read_only = detected;
-                self.documents.insert(doc_id, d);
+                self.put_document(doc_id, d);
                 if changed_during_load {
                     self.message(
                         MessageLevel::Warn,
@@ -1182,9 +1183,9 @@ impl EditorState {
                 ..
             } => {
                 // 存在しないパス: 空の新規文書 (dirty ではない)。保存すると作成する
-                let mut d = Document::new_untitled();
+                let mut d = self.blank_document();
                 d.path = Some(path.clone());
-                self.documents.insert(doc_id, d);
+                self.put_document(doc_id, d);
                 let key = if parent_missing.is_some() {
                     "msg.open.parent_missing"
                 } else {
@@ -1654,7 +1655,7 @@ impl EditorState {
                 d.disk_stamp = Some(stamp);
                 d.read_only = detected;
                 // 本文・書式・理由を一括で差し替え、履歴は新しい根 (保存点 = 根)。開き直しは Undo できない (03 §8.8)
-                self.documents.insert(doc_id, d);
+                self.put_document(doc_id, d);
                 if let Some(v) = self.views.get_mut(&view) {
                     v.selection = eve_text::Selection::point(eve_text::ByteOff(0));
                     v.scroll = Default::default();
@@ -1762,7 +1763,8 @@ impl EditorState {
             self.close_document(doc);
         } else {
             // 最初の文書の読込に失敗: 失敗した文書は閉じ、無題の文書で始める (再試行できる、03 §9.2 の「失敗」)
-            let (_, untitled) = self.add_document(Document::new_untitled());
+            let blank = self.blank_document();
+            let (_, untitled) = self.add_document(blank);
             self.show_view(untitled, Some(doc));
         }
     }

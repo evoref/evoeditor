@@ -38,6 +38,15 @@ fn width_config() -> WidthConfig {
     }
 }
 
+/// 本文の表示幅の設定 (文書ごとの `display` を反映する)。
+pub(super) fn doc_width_config(doc: &Document) -> WidthConfig {
+    WidthConfig {
+        tab_width: doc.display.tab_width,
+        ambiguous_wide: doc.display.ambiguous_wide,
+        ..width_config()
+    }
+}
+
 /// 表示の 1 単位 (1 書記素)。
 struct Unit {
     /// 行頭からの表示列。
@@ -66,8 +75,7 @@ fn flush_run(run: &mut String, parts: &mut Vec<(String, u16, bool)>, cfg: &Width
 }
 
 /// 行の内容を表示の単位に展開する。
-fn units(content: &str, esc: bool) -> Vec<Unit> {
-    let cfg = width_config();
+fn units(content: &str, esc: bool, cfg: &WidthConfig) -> Vec<Unit> {
     let tab = cfg.tab_width.max(1) as usize;
     let mut out = Vec::new();
     let mut col = 0usize;
@@ -87,15 +95,15 @@ fn units(content: &str, esc: bool) -> Vec<Unit> {
             let mut run = String::new();
             for c in g.chars() {
                 if let Some(b) = unescape_char(c) {
-                    flush_run(&mut run, &mut parts, &cfg);
+                    flush_run(&mut run, &mut parts, cfg);
                     parts.push((format!("<0x{b:02X}>"), 6, true));
                 } else {
                     run.push(c);
                 }
             }
-            flush_run(&mut run, &mut parts, &cfg);
+            flush_run(&mut run, &mut parts, cfg);
         } else {
-            let d = grapheme_display(g, &cfg);
+            let d = grapheme_display(g, cfg);
             let first = g.chars().next().unwrap_or(' ');
             let symbolic = (first as u32) < 0x20
                 || (0x7F..=0x9F).contains(&(first as u32))
@@ -140,7 +148,7 @@ fn esc_enabled(doc: &Document) -> bool {
 /// 行内のバイト位置 `byte` にあるカーソルの (表示列, そのセルの幅)。行末では (行の幅, 1)。
 pub(super) fn cursor_cell(doc: &Document, line: usize, byte: usize) -> (usize, usize) {
     let (_, content, _) = line_content(doc, line);
-    let us = units(&content, esc_enabled(doc));
+    let us = units(&content, esc_enabled(doc), &doc_width_config(doc));
     match us.iter().find(|u| u.byte >= byte) {
         Some(u) => (u.col, u.width.max(1)),
         None => (us.last().map_or(0, |u| u.col + u.width), 1),
@@ -155,7 +163,7 @@ pub(super) fn cursor_col(doc: &Document, line: usize, byte: usize) -> usize {
 /// 表示列 `dcol` に対応する行内のバイト位置。セルの途中は、その単位の前に寄せる (`Bias::Before`)。行の幅を超えれば行末。
 pub(super) fn byte_at_col(doc: &Document, line: usize, dcol: usize) -> usize {
     let (_, content, _) = line_content(doc, line);
-    let us = units(&content, esc_enabled(doc));
+    let us = units(&content, esc_enabled(doc), &doc_width_config(doc));
     us.iter()
         .find(|u| dcol < u.col + u.width)
         .map_or(content.len(), |u| u.byte)
@@ -204,7 +212,7 @@ fn build_row(
     gutter: Vec<Span>,
 ) -> RowOut {
     let (ls, content, has_terminator) = line_content(doc, line);
-    let us = units(&content, esc_enabled(doc));
+    let us = units(&content, esc_enabled(doc), &doc_width_config(doc));
     let total = us.last().map_or(0, |u| u.col + u.width);
     // 選択は start 昇順で重ならないので二分探索する
     let selected = |byte_abs: usize| {
