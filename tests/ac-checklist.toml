@@ -309,15 +309,21 @@ status = "todo"
 id = "AC-FR-116-3"
 requirement = "FR-116"
 kind = "T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "上書き保存が権限エラーなら読み取り専用に切り替わり_別名で保存できる",
+    "名前を付けて保存の権限エラーでは今の文書を読み取り専用にしない",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-116-4"
 requirement = "FR-116"
 kind = "T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "読み取り専用属性のファイルを別名で保存すると編集できる",
+    "readonly_の指定と内容由来の理由は別名で保存しても残る",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-117-1"
