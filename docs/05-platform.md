@@ -618,6 +618,7 @@ v0.1 で実装するのは **Windows の列** (Known Folders に当たる `%APPD
 ### 7.3 ログ (02 §11.3 の確定事項)
 
 - **実装**: core と bin は `tracing` の **マクロだけ** を使う。購読者は eve-host の **自前の最小実装** (ADR-0012): **ログのレベル (既定 `warn`。v0.1 は環境変数 `EVE_LOG` だけで変える。設定 `log.level` (07 §5.11) は v0.2) 以上** のイベントをログスレッドへ渡す。ログスレッドは最初に渡すイベントが来たときに遅延生成し、ファイルも最初のイベントで開く。`tracing-subscriber` / `tracing-appender` / `tracing-chrome` は `bench-trace` feature (09 §5) でのみ依存する (v0.1 の依存予算 §17.2)。
+- **v0.1 の実装の範囲**: `tracing` の購読者とログスレッドはまだ無く、`eve-platform` の `Logger` が **呼び出しのスレッドで同期に** 書く (最初のイベントでディレクトリとファイルを作る・`EVE_LOG` のレベル・5 MiB × 3 世代のローテーションは仕様どおり)。使うのは今のところ bin の設定の診断だけ (全件を warn、「このバージョンでは未対応」の情報診断を info で書く)。core がイベントを出すようになる版で、`tracing` のマクロとログスレッドに替える。
 - 場所: `state_dir/log/evoeditor.log` (+ `evoeditor.log.1`, `.2`)。ローテーションは 5 MiB × 3 世代の **定数** (設定キーにしない)。
 - **起動経路で `state_dir` を作らない** (NFR-101): ディレクトリは最初の書込 (ログ・退避・swap-lite・事前バックアップ・`last_version.toml`) の直前に `create_dir_all_private` する (`state_dir/log` も最初のログの書込の直前)。作成の範囲は §7.1 (`config_dir` はユーザーが設定を書くまで作らない)。
 - 権限: §5.6。

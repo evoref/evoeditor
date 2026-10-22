@@ -205,3 +205,41 @@ fn 日本語を含む行でも桁は文字数で数える() {
     let l = load_str("# 設定です\n[editor]\n日本語 = 1\n");
     assert_eq!((l.diagnostics[0].line, l.diagnostics[0].column), (3, 1));
 }
+
+#[test]
+fn 公開前のキーとセクションは情報診断で_警告にしない() {
+    let l = load_str(
+        "[editor]\nauto_indent = false\n[editor.undo]\nmax_steps = 5\n[search]\ncase = \"smart\"\n[view]\nline_numbers = \"off\"\n",
+    );
+    assert_eq!(l.config, Config::default());
+    assert_eq!(l.diagnostics.len(), 4, "{:?}", l.diagnostics);
+    assert!(
+        l.diagnostics
+            .iter()
+            .all(|d| { d.severity == Severity::Info && d.kind == DiagKind::Unsupported })
+    );
+    let keys: Vec<&str> = l.diagnostics.iter().map(|d| d.key.as_str()).collect();
+    assert_eq!(
+        keys,
+        [
+            "editor.auto_indent",
+            "editor.undo",
+            "search",
+            "view.line_numbers"
+        ]
+    );
+}
+
+#[test]
+fn 綴りの候補は公開前のキーからも探す() {
+    let l = load_str("[editor]\nauto_indnt = true\n");
+    assert_eq!(
+        kinds(&l),
+        vec![(
+            "editor.auto_indnt",
+            &DiagKind::UnknownKey {
+                suggestion: Some("editor.auto_indent".to_owned())
+            }
+        )]
+    );
+}

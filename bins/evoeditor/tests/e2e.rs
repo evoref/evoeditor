@@ -841,6 +841,40 @@ fn メインが止まっていてもコンソールを閉じると未保存の�
     let _ = std::fs::remove_dir_all(&s.state);
 }
 
+// 設定ファイルの問題は、最初の画面の後にメッセージ行へ出し、全件をログ (state_dir/log/evoeditor.log) に書く (07 §4.3、05 §7.3)
+#[test]
+fn 設定の問題はメッセージ行に出てログに書かれる() {
+    let cfg = temp_dir("cfg");
+    std::fs::create_dir_all(&cfg).unwrap();
+    std::fs::write(
+        cfg.join("config.toml"),
+        "[editor]
+tab_width = 0
+indent_width = 99
+[search]
+case = \"smart\"
+",
+    )
+    .unwrap();
+    let mut s = Session::start_with(&[], None, &[("EVE_CONFIG_DIR", cfg.to_str().unwrap())]);
+    s.wait_ready();
+    s.wait_for("設定の問題の要約", |t| t.contains("設定に 2 件の"));
+    // ログ: 警告 2 件が書かれる (未対応の情報診断は既定のレベル warn では書かれない)
+    let log = s.state.join("log").join("evoeditor.log");
+    s.send(b"");
+    let _ = s.wait_exit();
+    let text = std::fs::read_to_string(&log).unwrap_or_default();
+    assert_eq!(
+        text.lines().filter(|l| l.contains(" WARN ")).count(),
+        2,
+        "{text}"
+    );
+    assert!(text.contains("editor.tab_width"), "{text}");
+    assert!(!text.contains("search"), "{text}");
+    let _ = std::fs::remove_dir_all(&s.state);
+    let _ = std::fs::remove_dir_all(&cfg);
+}
+
 // ---- システムクリップボード (05 §8、09 §3.6 / §3.4 の clip-delay)。実クリップボードを使うので、プロセスをまたいで直列にする ----
 
 /// クリップボードを使うテストの排他 (ファイルの排他作成。nextest の別プロセスの間でも直列にする)。

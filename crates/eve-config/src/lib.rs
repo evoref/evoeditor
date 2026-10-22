@@ -7,6 +7,7 @@
 
 mod catalog;
 mod config;
+mod reserved;
 
 pub use catalog::{Catalog, CatalogError, base_key};
 pub use config::{

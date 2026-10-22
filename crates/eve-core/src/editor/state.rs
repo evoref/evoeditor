@@ -99,6 +99,10 @@ pub struct EditorState {
     pub(super) research: Option<(eve_view::Revision, Tick)>,
     /// 単発の検索ジョブ (進行中の 1 つだけ)。
     pub(super) find_job: Option<eve_view::JobId>,
+    /// ログファイルの場所 (設定の問題の要約に出す)。
+    pub(super) log_path: Option<String>,
+    /// OS のロケール由来の文字コードのヒント。
+    pub(super) system_encoding: Option<crate::Encoding>,
     /// 検索バーが取る行数 (0 か 1)。編集面はその分だけ縮む。
     pub(super) bar_rows: u16,
     /// ホストが渡した編集面の大きさ (検索バーの分を引く前)。
@@ -138,6 +142,8 @@ impl EditorState {
             unmappable_marks: None,
             research: None,
             find_job: None,
+            system_encoding: None,
+            log_path: None,
             bar_rows: 0,
             surface: (80, 24),
         }
@@ -164,13 +170,38 @@ impl EditorState {
         }
     }
 
+    /// ログファイルの場所を設定する (設定の問題の要約 `msg.config.problems` の `{log}`)。
+    pub fn set_log_path(&mut self, path: Option<String>) {
+        self.log_path = path;
+    }
+
+    /// OS のロケール由来の文字コードのヒントを設定する (`file.default_encoding = "system"` が使う、05 §6)。
+    pub fn set_system_encoding(&mut self, encoding: Option<crate::Encoding>) {
+        self.system_encoding = encoding;
+    }
+
+    /// `file.default_line_ending` の実際の改行 (`native` は OS に従う)。
+    pub(super) fn config_eol(&self) -> eve_text::LineEnding {
+        use eve_config::DefaultLineEnding;
+        match self.config.default_line_ending {
+            DefaultLineEnding::Lf => eve_text::LineEnding::Lf,
+            DefaultLineEnding::Crlf => eve_text::LineEnding::Crlf,
+            DefaultLineEnding::Cr => eve_text::LineEnding::Cr,
+            DefaultLineEnding::Native if cfg!(windows) => eve_text::LineEnding::Crlf,
+            DefaultLineEnding::Native => eve_text::LineEnding::Lf,
+        }
+    }
+
     /// 新規文書 (無題・存在しないパス)。文字コードと新しく挿入する改行は `file.default_*` (07 §5.2)。
     pub(super) fn blank_document(&self) -> Document {
-        use eve_config::{DefaultEncoding, DefaultLineEnding};
+        use eve_config::DefaultEncoding;
         let mut doc = Document::new_untitled();
         let (encoding, has_bom) = match self.config.default_encoding {
-            // `system` は OS ロケール由来のヒント (05 §6)。ヒントの実装までは UTF-8
-            DefaultEncoding::Utf8 | DefaultEncoding::System => (crate::Encoding::Utf8, false),
+            DefaultEncoding::Utf8 => (crate::Encoding::Utf8, false),
+            // `system` は OS ロケール由来のヒント (05 §6)。ヒントが無ければ UTF-8
+            DefaultEncoding::System => {
+                (self.system_encoding.unwrap_or(crate::Encoding::Utf8), false)
+            }
             DefaultEncoding::Utf8Bom => (crate::Encoding::Utf8, true),
             DefaultEncoding::Utf16Le => (crate::Encoding::Utf16Le, true),
             DefaultEncoding::Utf16Be => (crate::Encoding::Utf16Be, true),
@@ -180,13 +211,7 @@ impl EditorState {
         };
         doc.format.encoding = encoding;
         doc.format.has_bom = has_bom;
-        doc.format.default_eol = match self.config.default_line_ending {
-            DefaultLineEnding::Lf => eve_text::LineEnding::Lf,
-            DefaultLineEnding::Crlf => eve_text::LineEnding::Crlf,
-            DefaultLineEnding::Cr => eve_text::LineEnding::Cr,
-            DefaultLineEnding::Native if cfg!(windows) => eve_text::LineEnding::Crlf,
-            DefaultLineEnding::Native => eve_text::LineEnding::Lf,
-        };
+        doc.format.default_eol = self.config_eol();
         doc.display = self.display_settings();
         doc
     }
