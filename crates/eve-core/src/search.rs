@@ -327,6 +327,32 @@ pub fn scan_bytes(
     true
 }
 
+/// すべて置換の ChangeSet を作る (一致を保持せず、走査しながら直接組み立てる、03 §12.5)。
+/// 一致の選び方は検索と同じ。返すのは (ChangeSet, 置換した件数)。取り消されたら `None`。
+pub fn build_replace_all(
+    text: &dyn TextRead,
+    query: &SearchQuery,
+    replacement: &str,
+    cancel: &CancelToken,
+) -> Option<(eve_text::ChangeSet, u64)> {
+    let m = query.matcher()?;
+    let insert: std::sync::Arc<str> = std::sync::Arc::from(replacement);
+    let mut edits: Vec<eve_text::Edit> = Vec::new();
+    let full = ByteRange::new(ByteOff(0), ByteOff(text.len_bytes()));
+    if !scan_bytes(text, &m, full, cancel, &mut |r| {
+        edits.push(eve_text::Edit {
+            range: r,
+            insert: insert.clone(),
+        });
+        true
+    }) {
+        return None;
+    }
+    let n = edits.len() as u64;
+    let cs = eve_text::ChangeSet::from_sorted_edits(text, edits).ok()?;
+    Some((cs, n))
+}
+
 /// 全件走査のジョブ本体 (§12.2)。`from` のある行から文書の末尾まで、続けて先頭からその行の手前までを走査し、
 /// 256 件または 20 ms ごとに `SearchBatch` を送る。保持する一致は `max_matches` 件まで、数えるのは `count_limit` 件まで。
 pub struct SearchJob<'a> {

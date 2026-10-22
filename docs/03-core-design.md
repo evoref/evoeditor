@@ -1512,6 +1512,8 @@ pub struct Match { range: ByteRange, captures: Option<SmallVec<[Option<ByteRange
 2. **実行**: `search.replace_all` (when `search.replace_active && !doc.read_only`。キーは `Alt+A`、または `Tab` で `[A] すべて置換` のボタンへ移って `Enter`、04 §8.4) は、そのときの検索欄の検索語・大小区別 (`SearchBarModel.case`) で作った `SearchQuery` (`kind = Literal`・`whole_word = false`・`scope = Document`) と置換欄の文字列を使う。検索語が空なら何もせず `info.search.replace_empty_query` を出す。置換文字列は展開せずにそのまま挿入する (`$1` や `\n` も文字どおり。置換文字列が空なら一致を削除する)。改行の正規化はしない (置換欄に改行は入らない)。確認ダイアログは出さない (1 回の Undo で戻せるため)。
 3. **一致の収集と ChangeSet**: 一致の選び方は検索と同じ (§12.1 の「一致の選び方」: 重ならないものを左から順に、両端が書記素境界のものだけ)。文書が 1 MiB (`SEARCH_SYNC_STEP_BYTES`、§12.2) 以下ならメインスレッドで、超えればジョブ (`JobKind::ReplaceAll`、02 §9.3) で Snapshot (Revision R) を走査し、一致を保持せずに `ChangeSet::from_sorted_edits` で 1 つの ChangeSet を直接作る (`search.max_matches` / `search.count_limit` の上限の影響を受けない)。ジョブの間も入力は止めず (NFR-103)、検索バーを閉じる (`Esc`) と取り消す。
 4. **適用**: 適用の時点で Revision が R でなければ (準備中に編集した)、今の Snapshot で 1 回だけ作り直し、それも古ければ適用せずに `msg.search.replace_stale` を出す。一致が 0 件なら文書を変えずに `info.search.replace_no_match` を出す。1 件以上なら **1 つの Transaction** (`Origin::Command("search.replace_all")`、`UndoGroupHint::Break`) として適用し (1 Undo 単位、FR-403)、`info.search.replaced` で件数を示す。文書は dirty になる。Undo の予算 (§7.5) の「直前の 1 操作は保持」が大きな置換にも働く。
+**v0.1 の実装の範囲**: 手順 4 の「適用の時点で Revision が R でなければ今の Snapshot で 1 回だけ作り直す」は未実装で、古ければ作り直さず `msg.search.replace_stale` を出して中止する (ジョブの結果が届く前に文書が変わった場合。ジョブにするのは 1 MiB 超の文書だけで、それ以下はメインスレッドで作るので古くならない)。
+
 5. **適用の後**: 主カーソルは元の位置の写像に置き (置換箇所の全選択は `search.replace_all_select_result`、v0.2 以降、07 §5.13)、検索バーと置換欄は開いたまま、保持していた一致は編集で無効になり (§12.2 の「編集後の結果」)、入力が止まった後の再検索で件数が更新される (置換文字列が検索語を含まなければ 0 件になる)。
 
 | 操作 | 手順 |

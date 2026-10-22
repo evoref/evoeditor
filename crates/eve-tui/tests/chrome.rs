@@ -10,7 +10,7 @@ use eve_view::{CellPos, CellSize, ColorDepth, Frame};
 use ratatui::style::Modifier;
 
 fn window_of(f: &Frame) -> CellSize {
-    let base = f.size.rows + u16::from(f.search.is_some());
+    let base = f.size.rows + eve_tui::buffer::bar_rows(f);
     CellSize {
         cols: f.size.cols,
         rows: base + chrome_rows_for_surface(base),
@@ -273,4 +273,44 @@ fn 検索バーは大小の区別を反転で示し_狭いと件数から省く(
             assert!(!bar.contains("1/"), "件数は省く: {bar:?}");
         }
     }
+}
+
+#[test]
+fn 置換欄は_2_行目に出て_フォーカスの欄にカーソルを置く() {
+    let mut h = Harness::new().with_size(60, 12);
+    h.text("foo");
+    h.keys("ctrl+r");
+    h.text("foo");
+    h.keys("tab");
+    h.text("bar");
+    let (rows, cursor) = screen(&mut h, &Glyphs::unicode());
+    let all = joined(&rows);
+    // 編集面 10 行 + 検索バー 2 行 + クローム 3 行
+    assert_eq!(rows.len(), 15, "{all}");
+    assert!(rows[10].starts_with("検索: foo"), "{all}");
+    assert!(rows[11].starts_with("置換: bar"), "{all}");
+    assert!(rows[11].contains("[A] すべて置換"), "{all}");
+    assert_eq!(
+        cursor.map(|c| (c.row, c.col)),
+        Some((11, 9)),
+        "置換欄の末尾"
+    );
+    h.keys("tab");
+    let (rows, cursor) = screen(&mut h, &Glyphs::unicode());
+    let col = rows[11].find("[A]").unwrap();
+    let x = unicode_width::UnicodeWidthStr::width(&rows[11][..col]) as u16;
+    assert_eq!(
+        cursor.map(|c| (c.row, c.col)),
+        Some((11, x)),
+        "ボタンの先頭"
+    );
+    // 狭いとボタンは [A] だけ
+    let mut h = Harness::new().with_size(30, 12);
+    h.keys("ctrl+r");
+    let (rows, _) = screen(&mut h, &Glyphs::unicode());
+    assert!(
+        rows[11].contains("[A]") && !rows[11].contains("すべて"),
+        "{:?}",
+        rows[11]
+    );
 }

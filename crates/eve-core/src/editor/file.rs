@@ -38,6 +38,11 @@ pub(super) enum Pending {
     CheckUnchanged { doc: DocumentId },
     /// 文書内の全件検索。状態は `EditorState::search` にある。
     Search,
+    /// すべて置換の ChangeSet を作るジョブ (03 §12.5)。
+    ReplaceAll {
+        doc: DocumentId,
+        revision: eve_view::Revision,
+    },
     /// 起動時の退避ディレクトリの走査。
     RecoveryScan,
     /// 「退避先に保存」(03 §9.7 (e))。`path` は元のファイル。
@@ -234,6 +239,7 @@ impl EditorState {
                 Pending::Open { doc: d, .. } | Pending::CheckUnchanged { doc: d } => *d == doc,
                 Pending::ReplaceUnmappable { ask, .. } => ask.doc == doc,
                 Pending::Search => self.search.as_ref().is_some_and(|s| s.doc() == doc),
+                Pending::ReplaceAll { doc: d, .. } => *d == doc,
                 // 保存ジョブは取り消さず、完了を待つ (03 §9.2 の「閉じる手順」。ユーザーが求めた保存を中断しない)
                 Pending::Save { .. } | Pending::RecoveryScan | Pending::WriteRecovery { .. } => {
                     false
@@ -590,6 +596,7 @@ impl EditorState {
             } => self.finish_open(doc, view, path, replace, opts, kind, r),
             Pending::CheckUnchanged { doc } => self.finish_check(doc, r),
             Pending::Search => {}
+            Pending::ReplaceAll { doc, revision } => self.finish_replace_all(doc, revision, r),
             Pending::WriteRecovery { path } => self.finish_write_recovery(&path, r),
             Pending::ReplaceUnmappable {
                 ask,

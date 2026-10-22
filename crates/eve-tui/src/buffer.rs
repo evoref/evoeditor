@@ -40,6 +40,14 @@ pub const fn surface_rows_for_window(window_rows: u16) -> u16 {
     }
 }
 
+/// 検索バーが取る行数 (検索欄 1 行 + 置換欄があれば 1 行)。
+pub fn bar_rows(frame: &Frame) -> u16 {
+    frame
+        .search
+        .as_ref()
+        .map_or(0, |b| 1 + u16::from(b.replace.is_some()))
+}
+
 /// 変換の結果。
 #[derive(Debug)]
 pub struct PaneRender {
@@ -225,7 +233,7 @@ fn render_row(
 pub fn render_panes(frame: &Frame, depth: ColorDepth, glyphs: &Glyphs) -> PaneRender {
     let theme = Theme::for_depth(depth);
     // 検索バーは編集面の下に 1 行取る (編集面の行数 `size.rows` はその分を引いてある)
-    let base = frame.size.rows + u16::from(frame.search.is_some());
+    let base = frame.size.rows + bar_rows(frame);
     let (cols, rows) = (frame.size.cols, base + chrome_rows_for_surface(base));
     let mut buffer = Buffer::empty(Rect::new(0, 0, cols, rows));
     let mut risky_rows = Vec::new();

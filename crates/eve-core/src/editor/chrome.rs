@@ -346,6 +346,22 @@ pub(super) fn hint_model(state: &EditorState, chord: &[KeyStroke]) -> HintModel 
                 text: word("search.toggle_case"),
                 priority: 2,
             });
+            if state
+                .search_bar
+                .as_ref()
+                .is_some_and(|b| b.replace.is_some())
+            {
+                items.push(HintItem {
+                    keys: vec![KeyLabel {
+                        strokes: vec![KeyStroke {
+                            mods: Modifiers::ALT,
+                            key: KeyCode::Char('a'),
+                        }],
+                    }],
+                    text: word("search.replace_all"),
+                    priority: 3,
+                });
+            }
         }
         if state.is_dialog() {
             items.push(HintItem {

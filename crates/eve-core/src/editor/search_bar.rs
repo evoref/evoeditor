@@ -5,12 +5,17 @@
 //! `Esc` で閉じると、確定していない一致は選択として残さない。
 
 use eve_text::{ByteOff, ByteRange, LineIdx, Selection, TextRead};
-use eve_view::{CaseMode, CutPolicy, InputFieldModel, SearchBarModel};
+use eve_view::{
+    BarFocus, CaseMode, CutPolicy, InputFieldModel, MessageLevel, ReplaceRowModel, SearchBarModel,
+};
 
 use crate::cancel::CancelToken;
+use crate::document::{Origin, Transaction, UndoGroupHint};
 use crate::editor::command::CommandResult;
-use crate::search::{Case, SearchQuery, scan_lines};
+use crate::jobs::{JobKind, JobResult};
+use crate::search::{Case, SearchQuery, build_replace_all, scan_lines};
 
+use super::file::Pending;
 use super::layout::cell_text;
 use super::search_state::{Found, SearchCount, SearchStep};
 use super::state::EditorState;
@@ -28,7 +33,13 @@ pub(super) struct SearchBarState {
     pub anchor: ByteOff,
     /// 入力で見つかった、まだ選択していない現在の一致。
     pub current: Option<ByteRange>,
+    /// 置換欄 (開いているとき。テキストとカーソル)。
+    pub replace: Option<(String, usize)>,
+    pub focus: BarFocus,
 }
+
+/// すべて置換をジョブで作るときの境界 (`SEARCH_SYNC_STEP_BYTES`、03 §12.2)。これ以下の文書はメインスレッドで作る。
+const REPLACE_SYNC_BYTES: usize = 1 << 20;
 
 impl EditorState {
     /// 検索バーが開いているか (条件式 `search.active`)。
@@ -48,9 +59,63 @@ impl EditorState {
             case: Case::Smart,
             anchor,
             current: None,
+            replace: None,
+            focus: BarFocus::Search,
         });
-        self.set_bar_rows(1);
+        self.set_bar_rows();
         CommandResult::Done
+    }
+
+    /// `search.replace_open`: 置換欄つきで開く (開いていれば置換欄を足す)。読み取り専用の文書では開かない。
+    pub fn search_replace_open(&mut self) -> CommandResult {
+        let read_only = self
+            .active_document()
+            .is_some_and(|d| self.documents.get(&d).is_some_and(|d| !d.is_editable()));
+        if read_only {
+            self.show_message(MessageLevel::Warn, "msg.edit.read_only", &[]);
+            return CommandResult::Done;
+        }
+        self.search_open();
+        if let Some(bar) = &mut self.search_bar {
+            if bar.replace.is_none() {
+                bar.replace = Some((String::new(), 0));
+            }
+            // 検索語が空なら検索欄、あれば置換欄にフォーカスを置く
+            bar.focus = if bar.text.is_empty() {
+                BarFocus::Search
+            } else {
+                BarFocus::Replace
+            };
+        }
+        self.set_bar_rows();
+        CommandResult::Done
+    }
+
+    /// `Tab` / `Shift+Tab`: 検索欄 → 置換欄 → ボタン → 検索欄 (置換欄が開いているときだけ)。
+    pub(super) fn bar_focus_cycle(&mut self, forward: bool) {
+        let Some(bar) = &mut self.search_bar else {
+            return;
+        };
+        if bar.replace.is_none() {
+            return;
+        }
+        let order = [BarFocus::Search, BarFocus::Replace, BarFocus::Button];
+        let i = order.iter().position(|f| *f == bar.focus).unwrap_or(0);
+        bar.focus = order[if forward { (i + 1) % 3 } else { (i + 2) % 3 }];
+        self.mark_dirty_render();
+    }
+
+    /// 入力欄を編集した: 検索欄なら検索をやり直す。
+    pub(super) fn bar_edited(&mut self) {
+        if self
+            .search_bar
+            .as_ref()
+            .is_some_and(|b| b.focus == BarFocus::Search)
+        {
+            self.bar_changed();
+        } else {
+            self.mark_dirty_render();
+        }
     }
 
     /// 検索バーを閉じる。確定していない現在の一致は選択として残さない。
@@ -59,11 +124,16 @@ impl EditorState {
             return;
         }
         self.search_stop();
-        self.set_bar_rows(0);
+        self.cancel_replace_job();
+        self.set_bar_rows();
     }
 
-    fn set_bar_rows(&mut self, n: u16) {
-        self.bar_rows = n;
+    /// 検索バーの行数 (検索欄 1 行 + 置換欄があれば 1 行、閉じていれば 0)。編集面はその分だけ縮む。
+    fn set_bar_rows(&mut self) {
+        self.bar_rows = self
+            .search_bar
+            .as_ref()
+            .map_or(0, |b| 1 + u16::from(b.replace.is_some()));
         let (cols, rows) = self.surface;
         self.apply_viewport(cols, rows);
         self.mark_dirty_render();
@@ -130,6 +200,11 @@ impl EditorState {
         let Some(bar) = &self.search_bar else {
             return SearchStep::NoQuery;
         };
+        // ボタンにフォーカスがあるときの Enter はすべて置換 (Alt が使えない端末向け、04 §8.4)
+        if bar.focus == BarFocus::Button {
+            self.search_replace_all();
+            return SearchStep::NoQuery;
+        }
         if forward
             && let Some(cur) = bar.current
             && let Some(view) = self.first_window().and_then(|w| self.window_view(w))
@@ -196,7 +271,28 @@ impl EditorState {
             )),
         };
         let query = SearchQuery::literal(&bar.text).with_case(bar.case);
+        let replace = bar.replace.as_ref().map(|(text, cur)| {
+            let cells = cell_text(text, CutPolicy::End).spans;
+            let cursor = cell_text(&text[..*cur], CutPolicy::End).spans.len();
+            ReplaceRowModel {
+                label: cell_text(&render("ui.search.replace_label", &[]), CutPolicy::Never),
+                input: InputFieldModel {
+                    len: cells.len(),
+                    cells,
+                    first: 0,
+                    cursor,
+                    selection: None,
+                    placeholder: None,
+                },
+                button: cell_text(
+                    &render("ui.search.replace_all_button", &[]),
+                    CutPolicy::Never,
+                ),
+            }
+        });
         Some(SearchBarModel {
+            replace,
+            focus: bar.focus,
             label: cell_text(&render("ui.search.label", &[]), CutPolicy::Never),
             input: InputFieldModel {
                 len: cells.len(),
@@ -259,5 +355,136 @@ impl EditorState {
             .as_ref()?
             .current
             .map(|r| (r.start.0, r.end.0))
+    }
+}
+
+impl EditorState {
+    fn cancel_replace_job(&mut self) {
+        let ids: Vec<_> = self
+            .pending
+            .iter()
+            .filter(|(_, p)| matches!(p, Pending::ReplaceAll { .. }))
+            .map(|(id, _)| *id)
+            .collect();
+        for id in ids {
+            self.pending.remove(&id);
+            self.jobs.cancel(id);
+        }
+    }
+
+    /// `search.replace_all` (03 §12.5): 検索欄の検索語・大小の区別で、置換欄の文字列にすべて置き換える。1 つの Undo 単位。
+    /// 文書が 1 MiB 以下ならメインスレッドで、超えればジョブで ChangeSet を作る。
+    pub fn search_replace_all(&mut self) -> CommandResult {
+        let Some(bar) = &self.search_bar else {
+            return CommandResult::Rejected(super::command::RejectReason::NotAvailable);
+        };
+        let Some((replacement, _)) = bar.replace.clone() else {
+            return CommandResult::Rejected(super::command::RejectReason::NotAvailable);
+        };
+        let query = SearchQuery::literal(&bar.text).with_case(bar.case);
+        let Some(doc_id) = self.active_document() else {
+            return CommandResult::Done;
+        };
+        let Some(doc) = self.documents.get(&doc_id) else {
+            return CommandResult::Done;
+        };
+        if !doc.is_editable() {
+            self.show_message(MessageLevel::Warn, "msg.edit.read_only", &[]);
+            return CommandResult::Done;
+        }
+        if query.matcher().is_none() {
+            self.show_message(MessageLevel::Info, "info.search.replace_empty_query", &[]);
+            return CommandResult::Done;
+        }
+        // 実行中のすべて置換があれば二重に始めない
+        if self
+            .pending
+            .values()
+            .any(|p| matches!(p, Pending::ReplaceAll { .. }))
+        {
+            return CommandResult::Done;
+        }
+        let revision = doc.revision();
+        if doc.text().len_bytes() <= REPLACE_SYNC_BYTES {
+            let built = build_replace_all(doc.text(), &query, &replacement, &CancelToken::new());
+            if let Some((changes, count)) = built {
+                self.apply_replace_all(doc_id, changes, count);
+            }
+            return CommandResult::Done;
+        }
+        let snapshot = doc.snapshot();
+        let job = self.jobs.spawn(
+            Some(doc_id),
+            revision,
+            JobKind::ReplaceAll {
+                snapshot,
+                query,
+                replacement,
+            },
+        );
+        self.pending.insert(
+            job,
+            Pending::ReplaceAll {
+                doc: doc_id,
+                revision,
+            },
+        );
+        CommandResult::Done
+    }
+
+    /// すべて置換のジョブの結果。作った Revision が古ければ適用せず中止を知らせる。
+    pub(super) fn finish_replace_all(
+        &mut self,
+        doc_id: eve_view::DocumentId,
+        revision: eve_view::Revision,
+        r: JobResult,
+    ) {
+        if let JobResult::ReplaceAllDone { changes, count, .. } = r {
+            let fresh = self
+                .documents
+                .get(&doc_id)
+                .is_some_and(|d| d.revision() == revision);
+            if fresh {
+                self.apply_replace_all(doc_id, changes, count);
+            } else {
+                self.show_message(MessageLevel::Warn, "msg.search.replace_stale", &[]);
+            }
+        }
+    }
+
+    /// ChangeSet を 1 つの Transaction (`Origin::Command("search.replace_all")`、Undo 1 回分) として適用する。
+    fn apply_replace_all(
+        &mut self,
+        doc_id: eve_view::DocumentId,
+        changes: eve_text::ChangeSet,
+        count: u64,
+    ) {
+        if count == 0 {
+            self.show_message(MessageLevel::Info, "info.search.replace_no_match", &[]);
+            return;
+        }
+        let view = self.first_window().and_then(|w| self.window_view(w));
+        let sel = view.and_then(|v| self.views.get(&v).map(|v| v.selection.clone()));
+        let mut tx = Transaction::new(
+            changes,
+            Origin::Command(eve_view::CommandId::new("search.replace_all")),
+            self.now,
+        )
+        .with_undo_group(UndoGroupHint::Break)
+        .with_selections(sel, None);
+        if let Some(v) = view {
+            tx = tx.with_view(v);
+        }
+        if self.apply_transaction(doc_id, tx).is_err() {
+            self.show_message(MessageLevel::Warn, "msg.search.replace_stale", &[]);
+            return;
+        }
+        self.show_message(
+            MessageLevel::Info,
+            "info.search.replaced",
+            &[("count", &count.to_string())],
+        );
+        // 保持した一致は編集で無効になった: 検索をやり直す
+        self.bar_changed();
     }
 }
