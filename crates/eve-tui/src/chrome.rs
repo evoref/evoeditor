@@ -5,10 +5,10 @@
 //! ASCII か、`glyphs` の定数表の記号だけで、幅は定数で数える。枠線も `glyphs` から 1 文字ずつ書く (ratatui のウィジェットは使わない)。
 
 use eve_view::{
-    CaseMode, CellPos, CellSize, CellText, Choice, ColorDepth, CutPolicy, Frame, HintItem,
-    HintModel, InputFieldModel, KeyCode, KeyLabel, KeyStroke, Message, MessageLevel, MessageModel,
-    Modifiers, OverlayModel, SearchBarModel, Span, StatusAlign, StatusItem, StatusKind,
-    StatusModel, Style, StyleMods,
+    BarFocus, CaseMode, CellPos, CellSize, CellText, Choice, ColorDepth, CutPolicy, Frame,
+    HintItem, HintModel, InputFieldModel, KeyCode, KeyLabel, KeyStroke, Message, MessageLevel,
+    MessageModel, Modifiers, OverlayModel, SearchBarModel, Span, StatusAlign, StatusItem,
+    StatusKind, StatusModel, Style, StyleMods,
 };
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
@@ -909,9 +909,46 @@ fn render_search_bar(
         rx = w.span(rx, y, cols, &ascii_span(" ", style));
         put(w, rx, y, cols, &c.spans, style);
     }
-    Some(CellPos {
+    let search_cursor = CellPos {
         col: ix + cursor_x.min(iw.saturating_sub(1)),
         row: y,
+    };
+    let Some(rep) = &bar.replace else {
+        return Some(search_cursor);
+    };
+    // 2 行目: `置換: [入力欄]   [A] すべて置換` (幅が足りなければボタンを `[A]` だけにする)
+    let y2 = y + 1;
+    fill(w, 0, y2, cols, style);
+    let mut x = put(w, 0, y2, cols, &rep.label.spans, style);
+    x = w.span(x, y2, cols, &ascii_span(" ", style));
+    let full_w = text_width(&rep.button.spans);
+    let button_w = if x + 10 + 1 + full_w <= cols {
+        full_w
+    } else {
+        3
+    };
+    let button: Vec<Span> = if button_w == full_w {
+        rep.button.spans.clone()
+    } else {
+        vec![ascii_span("[A]", style)]
+    };
+    let riw = cols.saturating_sub(x + 1 + button_w).max(1);
+    let rix = x;
+    let rcursor_x = draw_input(w, &rep.input, rix, y2, riw, theme, glyphs);
+    let bx = (rix + riw + 1).min(cols.saturating_sub(button_w));
+    let bstyle = if bar.focus == BarFocus::Button {
+        theme.dialog_button_focused
+    } else {
+        theme.dialog_button
+    };
+    put(w, bx, y2, cols, &button, overlay_style(style, bstyle));
+    Some(match bar.focus {
+        BarFocus::Search => search_cursor,
+        BarFocus::Replace => CellPos {
+            col: rix + rcursor_x.min(riw.saturating_sub(1)),
+            row: y2,
+        },
+        BarFocus::Button => CellPos { col: bx, row: y2 },
     })
 }
 
@@ -1166,7 +1203,7 @@ pub fn render_screen(
     let bar_row = frame.size.rows;
     let (cols, surface_rows) = (
         frame.size.cols,
-        frame.size.rows + u16::from(frame.search.is_some()),
+        frame.size.rows + crate::buffer::bar_rows(frame),
     );
     let chrome = chrome_rows_for_surface(surface_rows);
     let area = CellSize {

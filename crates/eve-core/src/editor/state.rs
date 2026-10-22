@@ -620,7 +620,10 @@ impl EditorState {
             "selection.empty" => b(view.is_none_or(|v| v.selection.iter().all(|r| r.is_empty()))),
             "overlay.active" => Some(CtxValue::Str(self.overlay_name().to_owned())),
             "search.active" => b(self.search_bar.is_some()),
-            "search.replace_active" => b(false),
+            "search.replace_active" => b(self
+                .search_bar
+                .as_ref()
+                .is_some_and(|s| s.replace.is_some())),
             "caps.can_suspend" => b(self.caps.can_suspend),
             "editor" => b(true),
             _ => None,

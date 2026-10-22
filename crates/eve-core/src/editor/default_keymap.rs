@@ -23,6 +23,10 @@ pub(super) fn default_keymap() -> Keymap {
         ("up", "search.prev"),
         ("shift+f3", "search.prev"),
         ("alt+c", "search.toggle_case"),
+        ("alt+a", "search.replace_all"),
+        ("tab", "ui.list_next"),
+        ("shift+tab", "ui.list_prev"),
+        ("mod+r", "search.replace_open"),
         ("mod+f", "search.open"),
         ("mod+s", "file.save"),
         ("mod+shift+s", "file.save_as"),
@@ -32,6 +36,7 @@ pub(super) fn default_keymap() -> Keymap {
         bind("search", keys, cmd);
     }
     bind("editor", "mod+f", "search.open");
+    bind("editor", "mod+r", "search.replace_open");
     // コマンドパレット (palette → list → prompt → global)
     bind("palette", "down", "ui.list_next");
     bind("palette", "up", "ui.list_prev");

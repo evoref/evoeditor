@@ -367,7 +367,25 @@ pub enum CaseMode {
     Insensitive,
 }
 
-/// 検索バー (クロームとして編集面の下に 1 行描く、04 §8.4)。表示中だけ `Frame.search` が `Some`。
+/// 検索バーのフォーカス (`Tab` / `Shift+Tab` で 検索欄 → 置換欄 → ボタン を巡回する、04 §8.4)。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BarFocus {
+    Search,
+    Replace,
+    Button,
+}
+
+/// 置換欄の行 (2 行目)。
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ReplaceRowModel {
+    /// ラベル (`ui.search.replace_label`)。
+    pub label: CellText,
+    pub input: InputFieldModel,
+    /// ボタン (`ui.search.replace_all_button`)。
+    pub button: CellText,
+}
+
+/// 検索バー (クロームとして編集面の下に 1 行描く。置換欄があれば 2 行、04 §8.4)。表示中だけ `Frame.search` が `Some`。
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SearchBarModel {
     /// ラベル (`ui.search.label`)。
@@ -378,6 +396,9 @@ pub struct SearchBarModel {
     pub case_on: bool,
     /// 件数の文言 (`ui.search.count.*`)。検索していなければ `None`。
     pub count_text: Option<CellText>,
+    /// 置換欄 (開いているときだけ)。
+    pub replace: Option<ReplaceRowModel>,
+    pub focus: BarFocus,
 }
 
 /// frontend が自分の判断で出す場面の、core が解決済みの文言。

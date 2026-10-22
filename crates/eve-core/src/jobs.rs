@@ -81,6 +81,12 @@ pub enum JobKind {
     },
     /// 文書内の全件検索 (03 §12.2)。`from` の行から末尾まで、続けて先頭から走査し、一致を `SearchBatch` で順に返して
     /// `SearchDone` で終わる。保持するのは `max_matches` 件まで、数えるのは `count_limit` 件まで。
+    /// すべて置換の ChangeSet を作る (03 §12.5)。`snapshot` は投入時の Revision のもの。
+    ReplaceAll {
+        snapshot: Snapshot,
+        query: crate::search::SearchQuery,
+        replacement: String,
+    },
     Search {
         snapshot: Snapshot,
         query: crate::search::SearchQuery,
@@ -188,6 +194,12 @@ pub enum JobResult {
         job: JobId,
         path: FsPath,
     },
+    /// すべて置換の ChangeSet ができた (`count` は置換する件数)。
+    ReplaceAllDone {
+        job: JobId,
+        changes: eve_text::ChangeSet,
+        count: u64,
+    },
     /// 検索の途中経過。一致を走査した順に届く (終わりではない)。
     SearchBatch {
         job: JobId,
@@ -219,6 +231,7 @@ impl JobResult {
             | JobResult::RecoveryWritten { job, .. }
             | JobResult::UnmappableReplacement { job, .. }
             | JobResult::Unmappable { job, .. }
+            | JobResult::ReplaceAllDone { job, .. }
             | JobResult::SearchBatch { job, .. }
             | JobResult::SearchDone { job, .. }
             | JobResult::Failed { job, .. } => *job,
@@ -335,6 +348,21 @@ pub fn run_job(
                 counts: crate::unmap::ReplaceCounts::default(),
             },
             Err(()) => JobResult::Failed {
+                job: req.id,
+                err: JobError::Cancelled,
+            },
+        },
+        JobKind::ReplaceAll {
+            snapshot,
+            query,
+            replacement,
+        } => match crate::search::build_replace_all(snapshot, query, replacement, cancel) {
+            Some((changes, count)) => JobResult::ReplaceAllDone {
+                job: req.id,
+                changes,
+                count,
+            },
+            None => JobResult::Failed {
                 job: req.id,
                 err: JobError::Cancelled,
             },

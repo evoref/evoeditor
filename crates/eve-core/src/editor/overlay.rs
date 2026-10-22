@@ -347,10 +347,14 @@ impl EditorState {
         match &mut self.overlay {
             Some(Overlay::Prompt(p)) => Some((&mut p.text, &mut p.cursor)),
             Some(Overlay::Palette(p)) => Some((&mut p.text, &mut p.cursor)),
-            None => self
-                .search_bar
-                .as_mut()
-                .map(|b| (&mut b.text, &mut b.cursor)),
+            None => {
+                let b = self.search_bar.as_mut()?;
+                match b.focus {
+                    eve_view::BarFocus::Search => Some((&mut b.text, &mut b.cursor)),
+                    eve_view::BarFocus::Replace => b.replace.as_mut().map(|(t, c)| (t, c)),
+                    eve_view::BarFocus::Button => None,
+                }
+            }
             _ => None,
         }
     }
@@ -419,7 +423,7 @@ impl EditorState {
                     p.error = None;
                 }
             } else if self.overlay.is_none() {
-                self.bar_changed();
+                self.bar_edited();
             } else {
                 self.palette_reset_selection();
             }
@@ -590,6 +594,10 @@ impl EditorState {
         if matches!(self.overlay, Some(Overlay::Palette(_))) {
             return self.palette_move(forward);
         }
+        if self.overlay.is_none() && self.search_bar.is_some() {
+            self.bar_focus_cycle(forward);
+            return CommandResult::Done;
+        }
         let Some(Overlay::Confirm(c)) = &mut self.overlay else {
             return CommandResult::Rejected(RejectReason::NotAvailable);
         };
@@ -665,6 +673,14 @@ fn cmd_search_toggle_case(ctx: &mut CommandCtx<'_>) -> CommandResult {
     ctx.state.search_toggle_case()
 }
 
+fn cmd_search_replace_open(ctx: &mut CommandCtx<'_>) -> CommandResult {
+    ctx.state.search_replace_open()
+}
+
+fn cmd_search_replace_all(ctx: &mut CommandCtx<'_>) -> CommandResult {
+    ctx.state.search_replace_all()
+}
+
 fn cmd_search_next(ctx: &mut CommandCtx<'_>) -> CommandResult {
     ctx.state.search_move(true);
     CommandResult::Done
@@ -714,7 +730,7 @@ macro_rules! reg_ui {
 
 /// オーバーレイ内のコマンドと `app.quit` (07 §11.6)。
 pub(super) fn register(r: &mut CommandRegistry) {
-    let active = "overlay.active != \"\"";
+    let active = "overlay.active != \"\" || search.active";
     reg_ui!(r, "ui.confirm", active, cmd_confirm);
     reg_ui!(r, "ui.cancel", "", cmd_cancel);
     reg_ui!(r, "ui.list_next", active, cmd_list_next);
@@ -741,6 +757,27 @@ pub(super) fn register(r: &mut CommandRegistry) {
         );
     }
     reg_motion_search(r);
+    // 置換 (03 §12.5): 置換欄を開く (Ui)、すべて置換 (Edit。承認を要する `propose`)
+    r.register(
+        CommandSpec::new(
+            "search.replace_open",
+            CommandKind::Ui,
+            Permission::Ui,
+            "!doc.read_only",
+            cmd_search_replace_open,
+        )
+        .expect("カタログの when 句は構文が正しい"),
+    );
+    r.register(
+        CommandSpec::new(
+            "search.replace_all",
+            CommandKind::Edit,
+            Permission::Propose,
+            "search.replace_active && !doc.read_only",
+            cmd_search_replace_all,
+        )
+        .expect("カタログの when 句は構文が正しい"),
+    );
     reg_ui!(r, "app.quit", "", cmd_quit);
     #[cfg(feature = "test-hooks")]
     if test_hook_panic_command() {
