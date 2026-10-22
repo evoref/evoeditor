@@ -1557,6 +1557,7 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 | `ui.read_only_reason.binary` | 同上。`Binary` | バイナリファイル |
 | `ui.read_only_reason.large_file_viewer` | 同上。`LargeFileViewer` | 巨大なファイル (読み取り専用で開く指定) |
 | `ui.read_only_reason.long_line` | 同上。`LongLine` | 非常に長い行を含むファイル |
+| `ui.long_line.omitted` | 閾値 (1 MiB) を超える行の、先頭 64 KiB より後ろを省略した印 (行末に出す。NFR-106、03 §11.5)。`{bytes}` は省略したバイト数 | … (以下 {bytes} バイト省略) |
 | `ui.load_state.loading` | 読込中の文書への編集操作を拒否したときの `msg.edit.read_only` の `{reason}` (読込中は読み取り専用の理由ではなく `load_state == Loading` から導出する状態で、03 §9.6。`ui.read_only_reason.*` には入れない。ステータスバーの読込中の表示は `status.loading.long` / `.short`、§8.7) | 読込中 |
 | `info.goto_line.clamped` | 行へ移動で範囲外の番号を入れた (01 FR-306 AC-1) | 行 {line} はありません。最後の行 ({last}) へ移動しました |
 | `msg.clipboard.fallback` | システムのクリップボードを使えず、内部レジスタに切り替えた (01 FR-205 AC-2。同じ起動の中では最初の 1 回だけ出す) | システムのクリップボードを使えないため、エディタ内のクリップボードを使いました: {reason} / 他のアプリとの間でコピー・貼り付けするには、端末の範囲選択と貼り付けを使ってください |

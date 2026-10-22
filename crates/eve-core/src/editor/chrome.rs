@@ -106,6 +106,24 @@ pub(super) fn status_model(
             CutPolicy::Never,
         ));
     }
+    // 長い行を含む文書: 読み取り専用で、閾値を超える行は先頭 64 KiB だけを表示する (NFR-106、04 §8.7)
+    if doc
+        .read_only
+        .contains(crate::document::ReadOnlyReason::LongLine)
+    {
+        let (long, short) = (
+            render(state, "status.degraded.long_line.long", &[]),
+            render(state, "status.degraded.long_line.short", &[]),
+        );
+        items.push(item(
+            StatusKind::Degraded,
+            &long,
+            Some(&short),
+            5,
+            Left,
+            CutPolicy::Never,
+        ));
+    }
     if doc.load_state == LoadState::Loading {
         let a = [("percent", "0")];
         let (long, short) = (

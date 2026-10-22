@@ -308,6 +308,10 @@ fn open_inner(
         roundtrip: chk.finish(),
     };
     let mut detected = opts.pending;
+    // 閾値 (1 MiB) を超える行があれば読み取り専用 (理由 LongLine) で開く。その行は先頭 64 KiB だけを表示する (NFR-106、03 §11.5)
+    if crate::document::has_long_line(&text) {
+        detected.insert(ReadOnlyReason::LongLine);
+    }
     if meta.readonly {
         detected.insert(ReadOnlyReason::FileAttribute);
     }

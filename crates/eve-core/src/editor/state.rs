@@ -639,7 +639,14 @@ impl EditorState {
         let Some(d) = self.documents.get(&v.doc) else {
             return;
         };
-        v.selection = sel.normalized(d.text());
+        let mut sel = sel.normalized(d.text());
+        // 長大行はカーソルと選択を表示範囲 (先頭 64 KiB) に収める (NFR-106、03 §11.5)
+        if d.read_only
+            .contains(crate::document::ReadOnlyReason::LongLine)
+        {
+            sel = clamp_to_visible(d, sel);
+        }
+        v.selection = sel;
         v.goal_dcol = None;
         self.needs_render = true;
     }
@@ -669,4 +676,26 @@ impl EditorState {
             _ => None,
         }
     }
+}
+
+/// 長大行の中の位置を、その行の表示の終端 (先頭 64 KiB) に収める。
+fn clamp_to_visible(d: &Document, sel: Selection) -> Selection {
+    use eve_text::{Range, TextRead};
+    let t = d.text();
+    let clamp = |p: ByteOff| {
+        let l = t.byte_to_line(p);
+        let (ls, le) = (t.line_to_byte(l).0, t.line_end_byte(l).0);
+        let ve = super::layout::line_visible_end(d, ls, le);
+        if ve < le && p.0 > ve && p.0 <= le {
+            ByteOff(ve)
+        } else {
+            p
+        }
+    };
+    let ranges: Vec<Range> = sel
+        .ranges()
+        .iter()
+        .map(|r| Range::new(clamp(r.anchor), clamp(r.head)))
+        .collect();
+    Selection::new(ranges, sel.primary_index()).unwrap_or(sel)
 }
