@@ -79,6 +79,15 @@ pub enum JobKind {
     WriteRecovery {
         doc: std::sync::Arc<crate::DocSnapshot>,
     },
+    /// 文書内の全件検索 (03 §12.2)。`from` の行から末尾まで、続けて先頭から走査し、一致を `SearchBatch` で順に返して
+    /// `SearchDone` で終わる。保持するのは `max_matches` 件まで、数えるのは `count_limit` 件まで。
+    Search {
+        snapshot: Snapshot,
+        query: crate::search::SearchQuery,
+        from: eve_text::ByteOff,
+        max_matches: usize,
+        count_limit: u64,
+    },
 }
 
 /// 確認が要る理由 (03 §9.2)。ジョブは確認を求めて終了し、回答を得た main が再投入する。
@@ -179,6 +188,18 @@ pub enum JobResult {
         job: JobId,
         path: FsPath,
     },
+    /// 検索の途中経過。一致を走査した順に届く (終わりではない)。
+    SearchBatch {
+        job: JobId,
+        matches: Vec<eve_text::ByteRange>,
+    },
+    /// 検索の終わり。`total` は数えた件数、`truncated` は保持の上限を超えた、`count_limited` は数える上限で打ち切った。
+    SearchDone {
+        job: JobId,
+        total: u64,
+        count_limited: bool,
+        truncated: bool,
+    },
     Failed {
         job: JobId,
         err: JobError,
@@ -198,6 +219,8 @@ impl JobResult {
             | JobResult::RecoveryWritten { job, .. }
             | JobResult::UnmappableReplacement { job, .. }
             | JobResult::Unmappable { job, .. }
+            | JobResult::SearchBatch { job, .. }
+            | JobResult::SearchDone { job, .. }
             | JobResult::Failed { job, .. } => *job,
         }
     }
@@ -316,6 +339,28 @@ pub fn run_job(
                 err: JobError::Cancelled,
             },
         },
+        JobKind::Search {
+            snapshot,
+            query,
+            from,
+            max_matches,
+            count_limit,
+        } => {
+            crate::search::run_search(
+                crate::search::SearchJob {
+                    job: req.id,
+                    snapshot,
+                    query,
+                    from: *from,
+                    max_matches: *max_matches,
+                    count_limit: *count_limit,
+                },
+                &*ports.clock,
+                cancel,
+                emit,
+            );
+            return;
+        }
         JobKind::WriteRecovery { doc } => match ports.fs.write_recovery(doc) {
             Ok(path) => JobResult::RecoveryWritten { job: req.id, path },
             Err(err) => JobResult::Failed {

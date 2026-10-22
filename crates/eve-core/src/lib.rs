@@ -22,6 +22,7 @@ mod time;
 mod unmap;
 
 pub use cancel::CancelToken;
+mod search;
 pub use document::{
     Applied, AppliedTx, ApplyError, DisplaySettings, Document, EolStats, HistoryStep, LoadState,
     NodeId, Origin, ReadOnlyReason, ReadOnlyReasons, RecordOutcome, TextFormat, Transaction,
@@ -31,8 +32,8 @@ pub use editor::{
     ArgValue, Args, Binding, CommandCtx, CommandInvocation, CommandKind, CommandRegistry,
     CommandResult, CommandSpec, ContextExpr, CtxValue, DocSnapshot, Editor, EditorState, Handler,
     InvocationSource, KeyParseError, Keymap, Layer, ParseError, Permission, RejectReason,
-    Resolution, ScrollPos, View, Window, format_stroke, normalize_eol, parse_sequence,
-    parse_stroke,
+    Resolution, ScrollPos, SearchCount, SearchStep, View, Window, format_stroke, normalize_eol,
+    parse_sequence, parse_stroke,
 };
 pub use eve_encoding::Encoding;
 pub use fs::*;
@@ -45,5 +46,6 @@ pub use jobs::{
 pub use paths::Paths;
 pub use replacing::{ReplacingCount, ReplacingGuard};
 pub use rescue::{RescueOutcome, RescueReason, RescueWriter};
+pub use search::{Case, Matcher, SearchJob, SearchQuery, run_search, scan_bytes, scan_lines};
 pub use time::{Clock, Millis, Tick};
 pub use unmap::{ReplaceCounts, ReplaceTarget};

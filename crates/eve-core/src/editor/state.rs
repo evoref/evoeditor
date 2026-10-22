@@ -86,6 +86,8 @@ pub struct EditorState {
     pub(super) palette_entries: Vec<super::palette::PaletteEntry>,
     /// パレットで選ばれ、Editor が次に実行するコマンド。
     pub(super) deferred_command: Option<String>,
+    /// 文書内検索の状態 (検索バーが開いている間)。
+    pub(super) search: Option<super::search_state::SearchState>,
 }
 
 impl EditorState {
@@ -116,6 +118,7 @@ impl EditorState {
             config: eve_config::Config::default(),
             palette_entries: Vec::new(),
             deferred_command: None,
+            search: None,
         }
     }
 

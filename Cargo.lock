@@ -268,6 +268,7 @@ dependencies = [
  "eve-testkit",
  "eve-text",
  "eve-view",
+ "memchr",
  "memory-stats",
  "proptest",
 ]
