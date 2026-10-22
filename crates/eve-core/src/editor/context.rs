@@ -74,6 +74,26 @@ impl ContextExpr {
         Ok(ContextExpr(Some(node)))
     }
 
+    /// 式に現れる識別子 (出現順。重複あり)。
+    pub fn vars(&self) -> Vec<String> {
+        fn walk(n: &Node, out: &mut Vec<String>) {
+            match n {
+                Node::Const(_) => {}
+                Node::Var(v) | Node::Cmp { var: v, .. } => out.push(v.clone()),
+                Node::Not(x) => walk(x, out),
+                Node::And(a, b) | Node::Or(a, b) => {
+                    walk(a, out);
+                    walk(b, out);
+                }
+            }
+        }
+        let mut out = Vec::new();
+        if let Some(n) = &self.0 {
+            walk(n, &mut out);
+        }
+        out
+    }
+
     /// `lookup` で識別子の値を引いて評価する。
     pub fn eval(&self, lookup: &dyn Fn(&str) -> Option<CtxValue>) -> bool {
         self.0.as_ref().is_none_or(|n| eval(n, lookup))

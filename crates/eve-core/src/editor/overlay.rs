@@ -151,6 +151,7 @@ pub(super) enum Overlay {
     // 大きいので Box にする (clippy::large_enum_variant。Prompt との差が大きい)
     Confirm(Box<ConfirmState>),
     Prompt(PromptState),
+    Palette(super::palette::PaletteState),
 }
 
 fn text_of(s: &str) -> Text {
@@ -164,6 +165,7 @@ impl EditorState {
             o.as_ref().map(|o| match o {
                 Overlay::Confirm(_) => OverlayKind::Confirm,
                 Overlay::Prompt(_) => OverlayKind::Prompt,
+                Overlay::Palette(_) => OverlayKind::List,
             })
         };
         let (before, after) = (kind(&self.overlay), kind(&new));
@@ -202,6 +204,7 @@ impl EditorState {
             None => "",
             Some(Overlay::Confirm(_)) => "dialog",
             Some(Overlay::Prompt(_)) => "prompt",
+            Some(Overlay::Palette(_)) => "palette",
         }
     }
 
@@ -331,6 +334,15 @@ impl EditorState {
         }
     }
 
+    /// 入力欄 (プロンプトとパレットで共通の編集)。
+    fn input_mut(&mut self) -> Option<(&mut String, &mut usize)> {
+        match &mut self.overlay {
+            Some(Overlay::Prompt(p)) => Some((&mut p.text, &mut p.cursor)),
+            Some(Overlay::Palette(p)) => Some((&mut p.text, &mut p.cursor)),
+            _ => None,
+        }
+    }
+
     /// プロンプトの入力欄を編集するコマンドを横取りする (オーバーレイの間は文書を編集しない)。
     /// オーバーレイが出ていて、オーバーレイ用でも編集用でもないコマンドは拒否する (モーダル)。
     pub(super) fn overlay_intercept(&mut self, inv: &CommandInvocation) -> Option<CommandResult> {
@@ -339,36 +351,47 @@ impl EditorState {
         if id.starts_with("ui.") || id == "app.quit" {
             return None;
         }
-        let Some(p) = self.prompt_mut() else {
+        let is_prompt = matches!(self.overlay, Some(Overlay::Prompt(_)));
+        let Some((text, cursor)) = self.input_mut() else {
             return Some(CommandResult::Rejected(RejectReason::NotAvailable));
         };
-        let t = text_of(&p.text);
+        let t = text_of(text);
+        let mut edited = false;
         match id {
             "edit.insert_text" => {
                 if let Some(s) = inv.args.str("text") {
                     // 入力欄は 1 行: 改行は取り除く
                     let s: String = s.chars().filter(|c| !matches!(c, '\n' | '\r')).collect();
-                    p.text.insert_str(p.cursor, &s);
-                    p.cursor += s.len();
-                    p.error = None;
+                    text.insert_str(*cursor, &s);
+                    *cursor += s.len();
+                    edited = true;
                 }
             }
             "edit.delete_backward" => {
-                let b = prev_grapheme_boundary(&t, ByteOff(p.cursor)).0;
-                p.text.replace_range(b..p.cursor, "");
-                p.cursor = b;
-                p.error = None;
+                let b = prev_grapheme_boundary(&t, ByteOff(*cursor)).0;
+                text.replace_range(b..*cursor, "");
+                *cursor = b;
+                edited = true;
             }
             "edit.delete_forward" => {
-                let e = next_grapheme_boundary(&t, ByteOff(p.cursor)).0;
-                p.text.replace_range(p.cursor..e, "");
-                p.error = None;
+                let e = next_grapheme_boundary(&t, ByteOff(*cursor)).0;
+                text.replace_range(*cursor..e, "");
+                edited = true;
             }
-            "cursor.move_left" => p.cursor = prev_grapheme_boundary(&t, ByteOff(p.cursor)).0,
-            "cursor.move_right" => p.cursor = next_grapheme_boundary(&t, ByteOff(p.cursor)).0,
-            "cursor.home" => p.cursor = 0,
-            "cursor.end" => p.cursor = p.text.len(),
+            "cursor.move_left" => *cursor = prev_grapheme_boundary(&t, ByteOff(*cursor)).0,
+            "cursor.move_right" => *cursor = next_grapheme_boundary(&t, ByteOff(*cursor)).0,
+            "cursor.home" => *cursor = 0,
+            "cursor.end" => *cursor = text.len(),
             _ => return Some(CommandResult::Rejected(RejectReason::NotAvailable)),
+        }
+        if edited {
+            if is_prompt {
+                if let Some(p) = self.prompt_mut() {
+                    p.error = None;
+                }
+            } else {
+                self.palette_reset_selection();
+            }
         }
         self.mark_dirty_render();
         Some(CommandResult::Done)
@@ -376,7 +399,7 @@ impl EditorState {
 
     /// 貼り付けを入力欄へ (改行は取り除く)。
     pub(super) fn prompt_paste(&mut self, s: &str) -> bool {
-        if self.prompt_mut().is_none() {
+        if self.input_mut().is_none() {
             return false;
         }
         let inv =
@@ -497,6 +520,7 @@ impl EditorState {
                 self.choose(f)
             }
             Some(Overlay::Prompt(_)) => self.submit_prompt(),
+            Some(Overlay::Palette(_)) => self.palette_confirm(),
             None => CommandResult::Rejected(RejectReason::NotAvailable),
         }
     }
@@ -528,6 +552,9 @@ impl EditorState {
 
     /// `ui.list_next` / `ui.list_prev`: 確認のフォーカスを移す (折り返す)。
     pub fn ui_list_move(&mut self, forward: bool) -> CommandResult {
+        if matches!(self.overlay, Some(Overlay::Palette(_))) {
+            return self.palette_move(forward);
+        }
         let Some(Overlay::Confirm(c)) = &mut self.overlay else {
             return CommandResult::Rejected(RejectReason::NotAvailable);
         };
@@ -595,6 +622,10 @@ fn cmd_dialog_choose(ctx: &mut CommandCtx<'_>) -> CommandResult {
     }
 }
 
+fn cmd_palette_open(ctx: &mut CommandCtx<'_>) -> CommandResult {
+    ctx.state.open_palette()
+}
+
 fn cmd_quit(ctx: &mut CommandCtx<'_>) -> CommandResult {
     ctx.state.request_quit()
 }
@@ -621,6 +652,7 @@ pub(super) fn register(r: &mut CommandRegistry) {
         "overlay.active == \"dialog\"",
         cmd_dialog_choose
     );
+    reg_ui!(r, "ui.palette_open", "", cmd_palette_open);
     reg_ui!(r, "app.quit", "", cmd_quit);
     #[cfg(feature = "test-hooks")]
     if test_hook_panic_command() {

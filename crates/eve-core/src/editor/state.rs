@@ -82,6 +82,10 @@ pub struct EditorState {
     pub(super) clipboard: super::clipboard::ClipboardState,
     /// 解決済みの設定 (07 §5.0 の公開キー)。起動時に Host が `Editor::set_config` で渡す。
     pub(super) config: eve_config::Config,
+    /// パレットの候補 (`hidden` を除く登録済みコマンド。CommandId 順)。
+    pub(super) palette_entries: Vec<super::palette::PaletteEntry>,
+    /// パレットで選ばれ、Editor が次に実行するコマンド。
+    pub(super) deferred_command: Option<String>,
 }
 
 impl EditorState {
@@ -110,6 +114,8 @@ impl EditorState {
             trim_notified: BTreeSet::new(),
             clipboard: Default::default(),
             config: eve_config::Config::default(),
+            palette_entries: Vec::new(),
+            deferred_command: None,
         }
     }
 

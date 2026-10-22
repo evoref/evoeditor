@@ -689,6 +689,13 @@ at_least = "{current}/{total}+"
 approx = "約 {total}"
 no_match = "0 件"
 
+[ui.palette.reason]
+no_changes = "未保存の変更がありません"
+no_path = "文書に保存先のパスがありません"
+no_selection = "選択範囲がありません"
+unavailable = "今の状態では使えません"
+read_only = "文書が読み取り専用です"
+
 [ui.palette]
 title = "コマンド"
 arg_title = "{command}: {arg}"

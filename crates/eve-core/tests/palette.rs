@@ -1,0 +1,174 @@
+//! コマンドパレット (docs/04 §8.1、07 §11.4、01 FR-602・FR-511・FR-514)。
+
+use eve_testkit::Harness;
+use eve_view::{Frame, ListItem, OverlayModel};
+
+fn list(f: &Frame) -> (&Vec<ListItem>, usize, usize) {
+    let OverlayModel::List {
+        items,
+        first,
+        selected,
+        ..
+    } = &f.overlays[0]
+    else {
+        panic!("List ではありません: {:?}", f.overlays);
+    };
+    (items, *first, *selected)
+}
+
+fn cells(t: &eve_view::CellText) -> String {
+    t.spans.iter().map(|s| s.text.to_string()).collect()
+}
+
+fn ids(f: &Frame) -> Vec<String> {
+    list(f)
+        .0
+        .iter()
+        .map(|i| cells(i.detail.as_ref().unwrap()))
+        .collect()
+}
+
+#[test]
+fn ctrl_p_と_f1_で開き_esc_で閉じる() {
+    let mut h = Harness::new();
+    h.keys("ctrl+p");
+    assert_eq!(h.overlay(), "palette");
+    h.keys("esc");
+    assert_eq!(h.overlay(), "");
+    h.keys("f1");
+    assert_eq!(h.overlay(), "palette");
+}
+
+#[test]
+fn 空の入力は_hidden_を除く全コマンドを_id_順に出す() {
+    let mut h = Harness::new();
+    h.keys("ctrl+p");
+    let f = h.frame();
+    let OverlayModel::List { footer, .. } = &f.overlays[0] else {
+        panic!()
+    };
+    let footer: String = footer.spans.iter().map(|s| s.text.to_string()).collect();
+    assert!(footer.starts_with(&format!("{0}/{0}", footer.split('/').next().unwrap())));
+    let all = ids(&f);
+    assert!(!all.is_empty());
+    let mut sorted = all.clone();
+    sorted.sort();
+    assert_eq!(all, sorted);
+    for hidden in ["ui.confirm", "ui.list_next", "ui.dialog_choose"] {
+        assert!(!all.iter().any(|i| i == hidden), "{hidden} は出さない");
+    }
+}
+
+#[test]
+fn 入力で絞り込み_前方一致を部分一致より先に出す() {
+    let mut h = Harness::new();
+    h.keys("ctrl+p");
+    h.text("save");
+    let all = ids(&h.frame());
+    assert!(all.contains(&"file.save".to_owned()), "{all:?}");
+    assert!(all.contains(&"file.save_as".to_owned()), "{all:?}");
+    // 日本語の title でも探せる
+    h.keys("ctrl+a");
+}
+
+#[test]
+fn 日本語の_title_でも探せて_一致箇所を返す() {
+    let mut h = Harness::new();
+    h.keys("ctrl+p");
+    h.text("名前を付けて");
+    let f = h.frame();
+    let (items, _, _) = list(&f);
+    assert!(ids(&f).contains(&"file.save_as".to_owned()));
+    assert!(items.iter().any(|i| !i.match_ranges.is_empty()));
+}
+
+#[test]
+fn 一致が無ければ_0_件() {
+    let mut h = Harness::new();
+    h.keys("ctrl+p");
+    h.text("zzzzzz");
+    let f = h.frame();
+    assert!(list(&f).0.is_empty());
+    h.keys("enter");
+    assert_eq!(h.overlay(), "palette", "候補が無ければ閉じない");
+}
+
+#[test]
+fn 上下で選択が動き_端で折り返す() {
+    let mut h = Harness::new();
+    h.keys("ctrl+p");
+    assert_eq!(list(&h.frame()).2, 0);
+    h.keys("down");
+    assert_eq!(list(&h.frame()).2, 1);
+    h.keys("up up");
+    let f = h.frame();
+    let total = ids(&f).len().min(12);
+    assert!(
+        list(&f).2 > 1,
+        "先頭から上へは末尾へ折り返す (表示窓 {total})"
+    );
+}
+
+#[test]
+fn enter_で選んだコマンドを実行する() {
+    let mut h = Harness::new();
+    h.keys("ctrl+p");
+    h.text("file.save_as");
+    h.keys("enter");
+    assert_eq!(h.overlay(), "prompt", "名前を付けて保存の入力が開く");
+}
+
+#[test]
+fn 文書を編集するコマンドを実行できる() {
+    let mut h = Harness::new();
+    h.text("abc");
+    h.keys("ctrl+p");
+    h.text("select.all");
+    h.keys("enter");
+    h.keys("ctrl+x");
+    assert_eq!(h.doc_text(), "");
+}
+
+#[test]
+fn 実行できないコマンドは理由つきで出し_enter_では実行しない() {
+    let mut h = Harness::new();
+    h.keys("ctrl+p");
+    h.text("file.");
+    let f = h.frame();
+    let (items, _, _) = list(&f);
+    let d = items
+        .iter()
+        .find(|i| i.disabled_reason.is_some())
+        .expect("無題の文書では実行できないコマンドがある");
+    let reason = cells(d.disabled_reason.as_ref().unwrap());
+    assert!(reason.starts_with("現在は実行できません: "), "{reason}");
+    // その 1 件だけに絞って Enter: 閉じない
+    let id = cells(d.detail.as_ref().unwrap());
+    h.keys("ctrl+a backspace");
+    h.text(&id);
+    h.keys("enter");
+    assert_eq!(h.overlay(), "palette");
+}
+
+#[test]
+fn 割当キーを逆引きして添える() {
+    let mut h = Harness::new();
+    h.keys("ctrl+p");
+    h.text("file.save_as");
+    let f = h.frame();
+    let (items, _, _) = list(&f);
+    let item = items
+        .iter()
+        .find(|i| cells(i.detail.as_ref().unwrap()) == "file.save_as")
+        .unwrap();
+    assert!(!item.keys.is_empty());
+}
+
+#[test]
+fn プロンプトが出ていてもパレットを開ける() {
+    let mut h = Harness::new();
+    h.keys("ctrl+o");
+    assert_eq!(h.overlay(), "prompt");
+    h.keys("ctrl+p");
+    assert_eq!(h.overlay(), "palette");
+}

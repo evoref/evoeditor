@@ -266,6 +266,7 @@ pub(super) fn overlay_models(state: &EditorState) -> Vec<OverlayModel> {
                 )),
             }]
         }
+        Some(Overlay::Palette(p)) => vec![state.palette_model(p)],
         Some(Overlay::Prompt(p)) => {
             let name = p.kind.name();
             let cells = cell_text(&p.text, CutPolicy::End).spans;

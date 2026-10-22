@@ -178,3 +178,42 @@ fn テーマのロール_ステータスバーは反転か背景色() {
     let c = r.buffer.cell((0, 12)).unwrap();
     assert!(c.modifier.contains(Modifier::REVERSED));
 }
+
+#[test]
+fn パレットは枠つきで候補を並べ_選択行に_印を付け_件数を下辺に出す() {
+    let mut h = Harness::new().with_size(80, 20);
+    h.keys("ctrl+p");
+    let (rows, cursor) = screen(&mut h, &Glyphs::unicode());
+    let all = joined(&rows);
+    assert!(all.contains("コマンド"), "見出し\n{all}");
+    assert!(all.contains("コマンドを入力"), "placeholder\n{all}");
+    assert!(all.contains("▶"), "選択行の印\n{all}");
+    assert!(all.contains("app.quit"), "CommandId\n{all}");
+    assert!(
+        rows.iter().any(|r| r.contains("└") && r.contains('/')),
+        "下辺に件数\n{all}"
+    );
+    assert_eq!(cursor.map(|c| c.row), Some(2), "カーソルは入力欄");
+}
+
+#[test]
+fn パレットで絞り込むと件数が変わり_0_件の文言を出す() {
+    let mut h = Harness::new().with_size(80, 20);
+    h.keys("ctrl+p");
+    h.text("zzzzzz");
+    let (rows, _) = screen(&mut h, &Glyphs::unicode());
+    let all = joined(&rows);
+    assert!(all.contains("一致するコマンドはありません"), "{all}");
+    assert!(all.contains("0/"), "{all}");
+}
+
+#[test]
+fn パレットは狭い端末でも壊れない() {
+    for (cols, rows) in [(20, 8), (40, 6), (80, 4)] {
+        let mut h = Harness::new().with_size(cols, rows);
+        h.keys("ctrl+p");
+        let _ = screen(&mut h, &Glyphs::ascii());
+        h.text("save");
+        let _ = screen(&mut h, &Glyphs::ascii());
+    }
+}

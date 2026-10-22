@@ -30,8 +30,8 @@ pub use events::{EditorEvent, MessageLevel, OriginKind, OriginTag, OverlayKind};
 pub use frame::{
     CellPos, CellRect, CellText, Choice, ChoiceId, ChromeTexts, Color, CursorPlacement,
     CursorShape, CutPolicy, Frame, HintContext, HintItem, HintModel, InputFieldModel, KeyLabel,
-    Message, MessageModel, OverlayModel, PaneFrame, RenderRow, RowSource, Span, StatusAlign,
-    StatusItem, StatusKind, StatusModel, Style, StyleMods,
+    ListItem, Message, MessageModel, OverlayModel, PaneFrame, RenderRow, RowSource, Span,
+    StatusAlign, StatusItem, StatusKind, StatusModel, Style, StyleMods,
 };
 pub use ids::{
     ClipboardHandleId, ClipboardToken, DocumentId, JobId, Revision, ViewId, ViewRevision, WindowId,
