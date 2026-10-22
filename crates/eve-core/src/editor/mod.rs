@@ -11,6 +11,7 @@ mod config_report;
 mod context;
 mod default_keymap;
 mod edit;
+mod eol;
 mod file;
 mod keymap;
 mod layout;
