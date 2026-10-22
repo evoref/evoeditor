@@ -357,3 +357,43 @@ fn ステータスバーの文字コードは名前と_bom_を出す() {
     assert_eq!(short, "SJIS");
     let _ = FsPath::display;
 }
+
+/// E3: 表現不能の文字は、確認が出ている間とキャンセルの後も強調し、次の編集で消える (03 §8.6)。
+#[test]
+fn 表現不能の文字を強調し_次の編集まで残す() {
+    use eve_view::{InputEvent, StyleMods};
+    let mut s = Env::new();
+    s.fs.add_file("/w/a.txt", &sjis(JP));
+    s.open("/w/a.txt");
+    s.type_text("😀");
+    s.save();
+    assert_eq!(s.e.state().overlay_kind(), "dialog", "E3 の選択肢が出る");
+    let marked = |s: &mut Env| -> String {
+        let w = s.win();
+        let f = s.e.frame(w).unwrap();
+        f.panes[0]
+            .rows
+            .iter()
+            .flat_map(|r| r.spans.iter())
+            .filter(|sp| {
+                sp.style
+                    .mods
+                    .contains(StyleMods::REVERSE | StyleMods::UNDERLINE)
+            })
+            .map(|sp| sp.text.to_string())
+            .collect()
+    };
+    assert_eq!(marked(&mut s), "😀", "確認が出ている間");
+    let w = s.win();
+    s.e.handle_input(
+        w,
+        InputEvent::Key(eve_view::KeyEvent::press(
+            eve_view::KeyCode::Esc,
+            eve_view::Modifiers::NONE,
+        )),
+    );
+    assert_eq!(s.e.state().overlay_kind(), "");
+    assert_eq!(marked(&mut s), "😀", "キャンセルの後も残る");
+    s.type_text("y");
+    assert_eq!(marked(&mut s), "", "次の編集で消える");
+}

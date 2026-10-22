@@ -203,6 +203,8 @@ struct RowOut {
 struct Marks<'a> {
     found: &'a [(usize, usize)],
     current: Option<(usize, usize)>,
+    /// 保存先の文字コードで表せない文字 (E3、03 §8.6)。
+    unmappable: &'a [(usize, usize)],
 }
 
 /// 1 行を作る。`left` は水平スクロール (表示列)、`cols` は本文の幅。`sel` は選択 (文書のバイト位置の半開区間)、
@@ -237,6 +239,9 @@ fn build_row(
             StyleMods::NONE
         };
         // 検索の一致は下線、入力で見つけた現在の一致は反転 + 太字 + 下線 (色に頼らない、04 §8.4)
+        if marks.unmappable.iter().any(|&(s, e)| s <= at && at < e) {
+            style_base = style_base | StyleMods::REVERSE | StyleMods::UNDERLINE;
+        }
         if marks.current.is_some_and(|(s, e)| s <= at && at < e) {
             style_base = style_base | StyleMods::REVERSE | StyleMods::BOLD | StyleMods::UNDERLINE;
         } else {
@@ -441,9 +446,11 @@ pub(super) fn build_frame(
     let bar_open = state.search_bar.is_some();
     let found = state.visible_matches(view.doc, top_line, rows);
     let current = state.bar_current();
+    let unmappable = state.unmappable_marks_for(view.doc);
     let marks = Marks {
         found: &found,
         current,
+        unmappable: &unmappable,
     };
     let mut out_rows = Vec::with_capacity(rows);
     let mut cursors = Vec::new();
