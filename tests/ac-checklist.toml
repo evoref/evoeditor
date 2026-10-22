@@ -329,8 +329,14 @@ status = "done"
 id = "AC-FR-117-1"
 requirement = "FR-117"
 kind = "T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "外部で変更されていたら書かずに尋ね_上書きを選ぶと保存される",
+    "外部で変更されていたら_別名で保存を選ぶと名前の入力へ進む",
+    "外部で削除されていたら_上書きでファイルを作り直す",
+    "新規ファイルの保存先に後から同名のファイルができていたら尋ねる",
+    "競合の確認は_esc_で中止し_何も書かない",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-117-2"
@@ -1047,8 +1053,10 @@ status = "done"
 id = "AC-NFR-301-2"
 requirement = "NFR-301"
 kind = "T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "置換の途中の失敗は元のファイルの退避先のパスを示す",
+]
+status = "done"
 
 [[ac]]
 id = "AC-NFR-302-1"

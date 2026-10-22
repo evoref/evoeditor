@@ -270,7 +270,11 @@ fn 外部変更があると保存は_conflict_で止まる() {
     s.run("file.save", Args::new());
     assert_eq!(s.fs.read("/w/a.txt").unwrap(), b"theirs");
     assert!(s.doc().1.is_dirty(), "保存できていないので dirty のまま");
-    assert!(s.messages().contains(&"msg.save.failed".to_owned()));
+    // ダイアログを出し、Esc で中止すると何も書かない
+    assert!(dialog_open(&s));
+    s.key(KeyCode::Esc, Modifiers::NONE);
+    assert!(!dialog_open(&s));
+    assert_eq!(s.fs.read("/w/a.txt").unwrap(), b"theirs");
 }
 
 // verifies: AC-FR-101-2
@@ -583,7 +587,9 @@ fn 名前を付けて保存の失敗はパスと_stamp_を変えない() {
     );
     assert_eq!(d.disk_stamp, stamp);
     assert!(d.is_dirty());
-    // 元のファイルへはそのまま保存できる
+    // 競合の確認は中止する (Esc)。元のファイルへはそのまま保存できる
+    assert!(dialog_open(&s));
+    s.key(KeyCode::Esc, Modifiers::NONE);
     s.run("file.save", Args::new());
     assert_eq!(s.fs.read("/w/a.txt").unwrap(), b"xabc");
 }
@@ -1590,4 +1596,117 @@ fn readonly_の指定と内容由来の理由は別名で保存しても残る()
             .contains(eve_core::ReadOnlyReason::UserRequested)
     );
     assert!(!s.doc().1.is_editable());
+}
+
+fn conflict_title(s: &mut Env) -> String {
+    let w = s.win();
+    let f = s.e.frame(w).unwrap();
+    let eve_view::OverlayModel::Confirm { title, .. } = &f.overlays[0] else {
+        panic!("確認ダイアログではありません");
+    };
+    title.spans.iter().map(|sp| sp.text.to_string()).collect()
+}
+
+fn externally_changed() -> Env {
+    let mut s = Env::new();
+    s.fs.add_file("/w/a.txt", b"abc");
+    s.open("/w/a.txt");
+    s.type_text("X");
+    s.messages();
+    s.clock.advance(eve_core::Millis(10));
+    s.fs.set_file(&FsPath::from("/w/a.txt"), b"theirs");
+    s.run("file.save", Args::new());
+    s
+}
+
+// verifies: AC-FR-117-1
+#[test]
+fn 外部で変更されていたら書かずに尋ね_上書きを選ぶと保存される() {
+    let mut s = externally_changed();
+    assert_eq!(conflict_title(&mut s), "外部で変更されています");
+    assert_eq!(
+        s.fs.read("/w/a.txt").unwrap(),
+        b"theirs",
+        "まだ書いていない"
+    );
+    s.type_text("o");
+    s.pump();
+    assert_eq!(s.fs.read("/w/a.txt").unwrap(), b"Xabc");
+    assert!(!s.doc().1.is_dirty());
+}
+
+// verifies: AC-FR-117-1
+#[test]
+fn 外部で変更されていたら_別名で保存を選ぶと名前の入力へ進む() {
+    let mut s = externally_changed();
+    s.type_text("a");
+    s.pump();
+    assert_eq!(s.e.state().overlay_kind(), "prompt");
+    assert_eq!(s.fs.read("/w/a.txt").unwrap(), b"theirs");
+}
+
+// verifies: AC-FR-117-1
+#[test]
+fn 外部で削除されていたら_上書きでファイルを作り直す() {
+    let mut s = Env::new();
+    s.fs.add_file("/w/a.txt", b"abc");
+    s.open("/w/a.txt");
+    s.type_text("X");
+    s.fs.remove(&FsPath::from("/w/a.txt"));
+    s.run("file.save", Args::new());
+    assert_eq!(conflict_title(&mut s), "外部で削除されています");
+    assert!(!s.fs.exists("/w/a.txt"));
+    s.type_text("o");
+    s.pump();
+    assert_eq!(s.fs.read("/w/a.txt").unwrap(), b"Xabc");
+}
+
+// verifies: AC-FR-117-1
+#[test]
+fn 新規ファイルの保存先に後から同名のファイルができていたら尋ねる() {
+    let mut s = Env::new();
+    s.open("/w/new.txt");
+    s.type_text("mine");
+    s.fs.add_file("/w/new.txt", b"theirs");
+    s.run("file.save", Args::new());
+    assert_eq!(conflict_title(&mut s), "同名のファイルがあります");
+    assert_eq!(s.fs.read("/w/new.txt").unwrap(), b"theirs");
+    s.type_text("o");
+    s.pump();
+    assert_eq!(s.fs.read("/w/new.txt").unwrap(), b"mine");
+}
+
+// verifies: AC-FR-117-1
+#[test]
+fn 競合の確認は_esc_で中止し_何も書かない() {
+    let mut s = externally_changed();
+    s.key(KeyCode::Esc, Modifiers::NONE);
+    assert!(!dialog_open(&s));
+    assert_eq!(s.fs.read("/w/a.txt").unwrap(), b"theirs");
+    assert!(s.doc().1.is_dirty());
+}
+
+// verifies: AC-NFR-301-2
+#[test]
+fn 置換の途中の失敗は元のファイルの退避先のパスを示す() {
+    let mut s = Env::new();
+    s.fs.add_file("/w/a.txt", b"abc");
+    s.open("/w/a.txt");
+    s.type_text("d");
+    s.messages();
+    s.fs.fail_next(
+        eve_testkit::FsOp::WriteAtomic,
+        eve_core::FsErrorKind::ReplacedMovedToBackup {
+            backup: FsPath::from("/w/.a.txt.bak123"),
+        },
+    );
+    s.run("file.save", Args::new());
+    assert!(dialog_open(&s), "続く確認で別名で保存できる");
+    let w = s.win();
+    let f = s.e.frame(w).unwrap();
+    let eve_view::OverlayModel::Confirm { message, .. } = &f.overlays[0] else {
+        panic!()
+    };
+    let text: String = message.spans.iter().map(|sp| sp.text.to_string()).collect();
+    assert!(text.contains(".a.txt.bak123"), "{text}");
 }
