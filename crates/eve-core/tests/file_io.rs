@@ -270,7 +270,11 @@ fn 外部変更があると保存は_conflict_で止まる() {
     s.run("file.save", Args::new());
     assert_eq!(s.fs.read("/w/a.txt").unwrap(), b"theirs");
     assert!(s.doc().1.is_dirty(), "保存できていないので dirty のまま");
-    assert!(s.messages().contains(&"msg.save.failed".to_owned()));
+    // ダイアログを出し、Esc で中止すると何も書かない
+    assert!(dialog_open(&s));
+    s.key(KeyCode::Esc, Modifiers::NONE);
+    assert!(!dialog_open(&s));
+    assert_eq!(s.fs.read("/w/a.txt").unwrap(), b"theirs");
 }
 
 // verifies: AC-FR-101-2
@@ -583,7 +587,9 @@ fn 名前を付けて保存の失敗はパスと_stamp_を変えない() {
     );
     assert_eq!(d.disk_stamp, stamp);
     assert!(d.is_dirty());
-    // 元のファイルへはそのまま保存できる
+    // 競合の確認は中止する (Esc)。元のファイルへはそのまま保存できる
+    assert!(dialog_open(&s));
+    s.key(KeyCode::Esc, Modifiers::NONE);
     s.run("file.save", Args::new());
     assert_eq!(s.fs.read("/w/a.txt").unwrap(), b"xabc");
 }
@@ -944,15 +950,16 @@ fn 退避先に保存が失敗するとそれを示す() {
 #[test]
 fn 保存の失敗の確認の別名で保存とキャンセル() {
     let mut s = Env::new();
-    edited_save_fails(&mut s, eve_core::FsErrorKind::PermissionDenied);
+    edited_save_fails(&mut s, eve_core::FsErrorKind::DiskFull);
     s.type_text("a");
     s.pump();
     assert_eq!(s.e.state().overlay_kind(), "prompt");
     s.key(KeyCode::Esc, Modifiers::NONE);
+    // 権限エラーだと文書が読み取り専用になり file.save が無効になるので、失敗はディスクの空きで起こす
     s.messages();
     s.fs.fail_next(
         eve_testkit::FsOp::WriteAtomic,
-        eve_core::FsErrorKind::PermissionDenied,
+        eve_core::FsErrorKind::DiskFull,
     );
     s.run("file.save", Args::new());
     assert!(dialog_open(&s));
@@ -1494,4 +1501,212 @@ fn 置換の確認のキャンセルは何も変えず_最初の位置へ移る(
         s.fs.read("/w/a.txt").unwrap(),
         sjis_bytes("日本語のテキストです。\n")
     );
+}
+
+// verifies: AC-FR-116-3
+#[test]
+fn 上書き保存が権限エラーなら読み取り専用に切り替わり_別名で保存できる() {
+    let mut s = Env::new();
+    edited_save_fails(&mut s, eve_core::FsErrorKind::PermissionDenied);
+    // 失敗の確認を閉じる
+    s.key(KeyCode::Esc, Modifiers::NONE);
+    s.pump();
+    assert!(
+        s.doc()
+            .1
+            .read_only
+            .contains(eve_core::ReadOnlyReason::NoWritePermission),
+        "書込権限なしに切り替わる"
+    );
+    assert_eq!(
+        s.fs.read("/w/a.txt").unwrap(),
+        b"abc",
+        "ファイルは変わらない"
+    );
+    assert_eq!(s.text(), "abcd", "編集した内容は失われない");
+    // 以後の編集は拒否される
+    s.type_text("x");
+    assert_eq!(s.text(), "abcd");
+    // 名前を付けて保存で書けて、書けた先の文書は編集できる
+    s.run("file.save_as", Args::new().with_str("path", "/w/b.txt"));
+    assert_eq!(s.fs.read("/w/b.txt").unwrap(), b"abcd");
+    assert!(s.doc().1.is_editable());
+    s.type_text("x");
+    assert_ne!(s.text(), "abcd", "編集できる");
+}
+
+// verifies: AC-FR-116-3
+#[test]
+fn 名前を付けて保存の権限エラーでは今の文書を読み取り専用にしない() {
+    let mut s = Env::new();
+    s.fs.add_file("/w/a.txt", b"abc");
+    s.open("/w/a.txt");
+    s.type_text("d");
+    s.fs.fail_next(
+        eve_testkit::FsOp::WriteAtomic,
+        eve_core::FsErrorKind::PermissionDenied,
+    );
+    s.run("file.save_as", Args::new().with_str("path", "/w/b.txt"));
+    assert!(
+        !s.doc()
+            .1
+            .read_only
+            .contains(eve_core::ReadOnlyReason::NoWritePermission)
+    );
+}
+
+// verifies: AC-FR-116-4
+#[test]
+fn 読み取り専用属性のファイルを別名で保存すると編集できる() {
+    let mut s = Env::new();
+    s.fs.add_file("/w/ro.txt", b"abc");
+    s.fs.set_readonly("/w/ro.txt", true);
+    s.open("/w/ro.txt");
+    assert!(
+        s.doc()
+            .1
+            .read_only
+            .contains(eve_core::ReadOnlyReason::FileAttribute)
+    );
+    s.run("file.save_as", Args::new().with_str("path", "/w/copy.txt"));
+    assert_eq!(s.fs.read("/w/copy.txt").unwrap(), b"abc");
+    assert!(s.doc().1.is_editable(), "保存後は編集できる");
+    // 元のファイルは変わらない
+    assert_eq!(s.fs.read("/w/ro.txt").unwrap(), b"abc");
+}
+
+// verifies: AC-FR-116-4
+#[test]
+fn readonly_の指定と内容由来の理由は別名で保存しても残る() {
+    let mut s = Env::new();
+    s.fs.add_file("/w/a.txt", b"abc");
+    s.e.state_mut().open_path(
+        "/w/a.txt",
+        eve_core::OpenOptions {
+            user_read_only: true,
+            ..Default::default()
+        },
+    );
+    s.pump();
+    s.run("file.save_as", Args::new().with_str("path", "/w/copy.txt"));
+    assert!(
+        s.doc()
+            .1
+            .read_only
+            .contains(eve_core::ReadOnlyReason::UserRequested)
+    );
+    assert!(!s.doc().1.is_editable());
+}
+
+fn conflict_title(s: &mut Env) -> String {
+    let w = s.win();
+    let f = s.e.frame(w).unwrap();
+    let eve_view::OverlayModel::Confirm { title, .. } = &f.overlays[0] else {
+        panic!("確認ダイアログではありません");
+    };
+    title.spans.iter().map(|sp| sp.text.to_string()).collect()
+}
+
+fn externally_changed() -> Env {
+    let mut s = Env::new();
+    s.fs.add_file("/w/a.txt", b"abc");
+    s.open("/w/a.txt");
+    s.type_text("X");
+    s.messages();
+    s.clock.advance(eve_core::Millis(10));
+    s.fs.set_file(&FsPath::from("/w/a.txt"), b"theirs");
+    s.run("file.save", Args::new());
+    s
+}
+
+// verifies: AC-FR-117-1
+#[test]
+fn 外部で変更されていたら書かずに尋ね_上書きを選ぶと保存される() {
+    let mut s = externally_changed();
+    assert_eq!(conflict_title(&mut s), "外部で変更されています");
+    assert_eq!(
+        s.fs.read("/w/a.txt").unwrap(),
+        b"theirs",
+        "まだ書いていない"
+    );
+    s.type_text("o");
+    s.pump();
+    assert_eq!(s.fs.read("/w/a.txt").unwrap(), b"Xabc");
+    assert!(!s.doc().1.is_dirty());
+}
+
+// verifies: AC-FR-117-1
+#[test]
+fn 外部で変更されていたら_別名で保存を選ぶと名前の入力へ進む() {
+    let mut s = externally_changed();
+    s.type_text("a");
+    s.pump();
+    assert_eq!(s.e.state().overlay_kind(), "prompt");
+    assert_eq!(s.fs.read("/w/a.txt").unwrap(), b"theirs");
+}
+
+// verifies: AC-FR-117-1
+#[test]
+fn 外部で削除されていたら_上書きでファイルを作り直す() {
+    let mut s = Env::new();
+    s.fs.add_file("/w/a.txt", b"abc");
+    s.open("/w/a.txt");
+    s.type_text("X");
+    s.fs.remove(&FsPath::from("/w/a.txt"));
+    s.run("file.save", Args::new());
+    assert_eq!(conflict_title(&mut s), "外部で削除されています");
+    assert!(!s.fs.exists("/w/a.txt"));
+    s.type_text("o");
+    s.pump();
+    assert_eq!(s.fs.read("/w/a.txt").unwrap(), b"Xabc");
+}
+
+// verifies: AC-FR-117-1
+#[test]
+fn 新規ファイルの保存先に後から同名のファイルができていたら尋ねる() {
+    let mut s = Env::new();
+    s.open("/w/new.txt");
+    s.type_text("mine");
+    s.fs.add_file("/w/new.txt", b"theirs");
+    s.run("file.save", Args::new());
+    assert_eq!(conflict_title(&mut s), "同名のファイルがあります");
+    assert_eq!(s.fs.read("/w/new.txt").unwrap(), b"theirs");
+    s.type_text("o");
+    s.pump();
+    assert_eq!(s.fs.read("/w/new.txt").unwrap(), b"mine");
+}
+
+// verifies: AC-FR-117-1
+#[test]
+fn 競合の確認は_esc_で中止し_何も書かない() {
+    let mut s = externally_changed();
+    s.key(KeyCode::Esc, Modifiers::NONE);
+    assert!(!dialog_open(&s));
+    assert_eq!(s.fs.read("/w/a.txt").unwrap(), b"theirs");
+    assert!(s.doc().1.is_dirty());
+}
+
+// verifies: AC-NFR-301-2
+#[test]
+fn 置換の途中の失敗は元のファイルの退避先のパスを示す() {
+    let mut s = Env::new();
+    s.fs.add_file("/w/a.txt", b"abc");
+    s.open("/w/a.txt");
+    s.type_text("d");
+    s.messages();
+    s.fs.fail_next(
+        eve_testkit::FsOp::WriteAtomic,
+        eve_core::FsErrorKind::ReplacedMovedToBackup {
+            backup: FsPath::from("/w/.a.txt.bak123"),
+        },
+    );
+    s.run("file.save", Args::new());
+    assert!(dialog_open(&s), "続く確認で別名で保存できる");
+    let w = s.win();
+    let f = s.e.frame(w).unwrap();
+    let eve_view::OverlayModel::Confirm { message, .. } = &f.overlays[0] else {
+        panic!()
+    };
+    let text: String = message.spans.iter().map(|sp| sp.text.to_string()).collect();
+    assert!(text.contains(".a.txt.bak123"), "{text}");
 }

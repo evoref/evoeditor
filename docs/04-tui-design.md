@@ -1443,6 +1443,18 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 | `ui.confirm.save.escape_normalized.message` | 同上 | {count} 行でエスケープシーケンスの書き方が変わります (文字は変わりません) |
 | `ui.confirm.save.escape_normalized.save` | 同上 (アクセラレータ `S`。既定) | [S] 保存 |
 | `ui.confirm.save.escape_normalized.alt` | 同上 (アクセラレータ `A`) | [A] 別名で保存 |
+| `ui.confirm.save.conflict_changed.title` | 保存時の外部変更の競合 (03 §9.3 手順 5a / 5c、§9.5)。開いた後に既存のファイルが変更された | 外部で変更されています |
+| `ui.confirm.save.conflict_changed.message` | 同上 | {path} は開いた後に他のプログラムで変更されています |
+| `ui.confirm.save.conflict_changed.overwrite` | 同上 (アクセラレータ `O`。`[Esc]` = 中止。v0.1 に再読込の選択肢は無く、`file.reload` で読み直す、03 §9.5) | [O] 上書き |
+| `ui.confirm.save.conflict_changed.alt` | 同上 (既定。アクセラレータ `A`) | [A] 別名で保存 |
+| `ui.confirm.save.conflict_deleted.title` | 同上。開いた後に既存のファイルが削除された (「上書き」はファイルを作り直す) | 外部で削除されています |
+| `ui.confirm.save.conflict_deleted.message` | 同上 | {path} は開いた後に削除されました。上書きするとファイルを作り直します |
+| `ui.confirm.save.conflict_deleted.overwrite` | 同上 (アクセラレータ `O`。`[Esc]` = 中止。v0.1 に再読込の選択肢は無く、`file.reload` で読み直す、03 §9.5) | [O] 上書き |
+| `ui.confirm.save.conflict_deleted.alt` | 同上 (既定。アクセラレータ `A`) | [A] 別名で保存 |
+| `ui.confirm.save.conflict_created.title` | 新規ファイル (存在しないパスを開いた文書・無題の名前を付けて保存) の保存の時点で、同名のファイルがある (`Expect::Absent` の Conflict) | 同名のファイルがあります |
+| `ui.confirm.save.conflict_created.message` | 同上 | {path} は、この文書を作った後に他のプログラムによって作られています |
+| `ui.confirm.save.conflict_created.overwrite` | 同上 (アクセラレータ `O`。`[Esc]` = 中止。v0.1 に再読込の選択肢は無く、`file.reload` で読み直す、03 §9.5) | [O] 上書き |
+| `ui.confirm.save.conflict_created.alt` | 同上 (既定。アクセラレータ `A`) | [A] 別名で保存 |
 | `ui.confirm.save.atomic_unsupported.title` | `file.atomic_save_fallback = "ask"` (既定) の AtomicUnsupported (ハードリンク・一時ファイル規則 (`InPlacePattern`) 以外: 他人の所有・ディレクトリに書けない・置換が ACL を引き継げない等、05 §4.4。`"fail"` では出さずに `msg.save.failed`。03 §9.7 (e)) | 安全に保存できません |
 | `ui.confirm.save.atomic_unsupported.message` | 同上 | {path} は安全な方法 (一時ファイルと置換) で保存できません: {reason} |
 | `ui.confirm.save.atomic_unsupported.direct` | 同上 (アクセラレータ `O`) | [O] 直接上書き (バックアップ付き) |
@@ -1458,8 +1470,6 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 | `msg.save.dangling_link` | シンボリックリンクのリンク先が無い (05 §4.1。v0.1 は作成せずエラーにする) | {path} はリンクで、リンク先 {target} がありません。保存していません / 別名で保存 ({key:file.save_as}) するか、リンク先のフォルダを作ってから保存してください |
 | `ui.confirm.save.dangling_link` (v0.2) | 同上 (リンク先を作成する選択肢を出す版) | {path} はリンクで、リンク先 {target} がありません — `[C] リンク先に作成 (リンクを保つ)` ★ |
 | `ui.confirm.save.read_only` (v0.2) | 読み取り専用のファイル (FR-116。v0.1 は読み取り専用の文書の編集を拒否するので出ない。v0.1 で読み取り専用の文書に使える保存は名前を付けて保存だけ、03 §9.6) | {path} は読み取り専用です — `[A] 別名で保存` ★ / `[W] 読み取り専用を解除して保存` |
-| `ui.confirm.external_change` | 保存時の外部変更の競合 (03 §9.3 手順 5a / 5c、§9.5)。開いた後に変更・削除された既存のファイル (削除されていた場合の「上書き」はファイルを作り直す) | {path} は開いた後に他のプログラムで変更されています — `[O] 上書き` / `[A] 別名で保存` ★ (`[Esc] キャンセル` = 中止。01 FR-117 AC-1)。このダイアログの `[L] 再読込 (自分の変更を破棄)` は v0.2 (フォーカス復帰時の確認と同時。v0.1 は `[Esc]` で中止してから `file.reload` で読み直せる、03 §9.5)。**v0.2 の `ui.confirm.external_modified` / `ui.confirm.external_deleted` (下の読込・外部変更の表) は、フォーカス復帰・明示コマンドでの検知時に出す別のダイアログで、本行を置き換えない**。保存時の競合は v0.2 以降も本行を使う (検知で無視を選んだ後の保存で再確認するのがこの行) |
-| `ui.confirm.save.target_exists` | 新規ファイル (存在しないパスを開いた文書・無題の名前を付けて保存) を保存する時点で、同名のファイルがある (`Expect::Absent` の Conflict、03 §9.3) | {path} は、この文書を作った後に他のプログラムによって作られています — `[O] 上書き` / `[A] 別名で保存` ★ |
 | `ui.confirm.save.overwrite` | 名前を付けて保存で、入力した保存先に既にファイルがある (確認を閉じる `Esc` は名前の入力プロンプトに戻る、§7.5) | {path} は既にあります。上書きしますか? — `[O] 上書き` / `[R] 別の名前を入力` ★ (既定は別の名前を入力。確定 (ユーザー回答)) |
 | `msg.save_as.same_file_read_only` | 名前を付けて保存で、読み取り専用の文書と同じファイルを選んだ (03 §9.7 (a) の 1。名前の入力プロンプトに戻る) | 読み取り専用の文書は、同じファイル {path} には保存できません / 別のファイル名を入力してください |
 | `msg.save_as.target_read_only` | 名前を付けて保存の保存先が読み取り専用属性のファイル (03 §9.7 (a) の 5。上書きの確認の前に拒否し、名前の入力プロンプトに戻る) | {path} は読み取り専用属性のファイルなので上書きできません / 別のファイル名を入力してください |
