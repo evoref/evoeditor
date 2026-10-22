@@ -687,6 +687,8 @@ impl EditorState {
 
     /// 表現不能の確認の選択 (キャンセルは `unmappable_cancelled`)。
     pub(super) fn choose_unmappable(&mut self, ask: UnmappableAsk, id: &str) -> CommandResult {
+        // 保存へ進む選択では強調は要らない (キャンセルのときだけ次の編集まで残す)
+        self.unmappable_marks = None;
         if id == "replace" {
             return self.spawn_replace(ask, false);
         }
@@ -882,6 +884,46 @@ impl EditorState {
             return CommandResult::Done;
         }
         self.start_save_fmt(ask.doc, ask.path, ask.expected, ask.cont, ask.fmt)
+    }
+
+    /// 表現不能の文字 (通し番号 `indices`) の位置を強調として記録する。文書の Revision が変わると無効になる。
+    fn mark_unmappable(&mut self, doc: DocumentId, indices: &[u64]) {
+        use eve_text::TextRead;
+        let Some(d) = self.documents.get(&doc) else {
+            return;
+        };
+        let t = d.text();
+        let want: std::collections::BTreeSet<u64> = indices.iter().copied().collect();
+        let last = want.last().copied().unwrap_or(0);
+        let mut marks: Vec<(usize, usize)> = Vec::with_capacity(want.len());
+        let mut n = 0u64;
+        let mut pos = 0usize;
+        'chunks: for chunk in t.chunks(eve_text::ByteRange::all(t.len_bytes())) {
+            for (i, c) in chunk.char_indices() {
+                if want.contains(&n) {
+                    marks.push((pos + i, pos + i + c.len_utf8()));
+                }
+                n += 1;
+                if n > last {
+                    break 'chunks;
+                }
+            }
+            pos += chunk.len();
+        }
+        self.unmappable_marks = Some((doc, d.revision(), marks));
+        self.mark_dirty_render();
+    }
+
+    /// 強調する表現不能の文字 (文書が変わっていなければ)。
+    pub(super) fn unmappable_marks_for(&self, doc: DocumentId) -> Vec<(usize, usize)> {
+        match &self.unmappable_marks {
+            Some((d, rev, marks))
+                if *d == doc && self.documents.get(d).is_some_and(|x| x.revision() == *rev) =>
+            {
+                marks.clone()
+            }
+            _ => Vec::new(),
+        }
     }
 
     /// 表現不能の確認のキャンセル: 保存しない (後続も中止)。カーソルを最初の表現不能の位置へ移す。
@@ -1897,6 +1939,9 @@ impl EditorState {
                 encoding,
                 ..
             } if self.documents.contains_key(&doc_id) && !recorded.is_empty() => {
+                // 該当箇所 (先頭 100 件) を強調する。次の編集まで残す (03 §8.6)
+                let indices: Vec<u64> = recorded.iter().map(|u| u.char_index).collect();
+                self.mark_unmappable(doc_id, &indices);
                 self.open_unmappable(
                     UnmappableAsk {
                         doc: doc_id,
