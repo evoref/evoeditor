@@ -133,6 +133,10 @@ impl EditorState {
     }
 
     fn search_cancel_job(&mut self) {
+        if let Some(old) = self.find_job.take() {
+            self.jobs.cancel(old);
+            self.pending.remove(&old);
+        }
         if let Some(job) = self.search.as_mut().and_then(|s| s.job.take()) {
             self.jobs.cancel(job);
             self.pending.remove(&job);
@@ -246,7 +250,75 @@ impl EditorState {
                 SearchStep::Moved { wrapped }
             }
             Found::None => SearchStep::NoMatch,
-            Found::Incomplete => SearchStep::NotYet,
+            // 同期検索の範囲では見つからなかった: 単発のジョブに任せる。届いたら移る
+            Found::Incomplete => {
+                self.spawn_find_next(doc_id, query, cursor, forward);
+                SearchStep::NotYet
+            }
+        }
+    }
+
+    /// 単発の検索ジョブを投入する (古い単発は取り消す)。
+    fn spawn_find_next(
+        &mut self,
+        doc_id: DocumentId,
+        query: SearchQuery,
+        cursor: ByteOff,
+        forward: bool,
+    ) {
+        if let Some(old) = self.find_job.take() {
+            self.jobs.cancel(old);
+            self.pending.remove(&old);
+        }
+        let Some(doc) = self.documents.get(&doc_id) else {
+            return;
+        };
+        let revision = doc.revision();
+        let job = self.jobs.spawn(
+            Some(doc_id),
+            revision,
+            JobKind::FindNext {
+                snapshot: doc.snapshot(),
+                query,
+                from: cursor,
+                forward,
+            },
+        );
+        self.pending.insert(
+            job,
+            Pending::FindNext {
+                doc: doc_id,
+                revision,
+                cursor,
+                forward,
+            },
+        );
+        self.find_job = Some(job);
+    }
+
+    /// 単発の検索の結果。文書の Revision と選択が投入時のままなら移る (違えば捨てる)。
+    pub(super) fn finish_find_next(
+        &mut self,
+        doc_id: DocumentId,
+        revision: Revision,
+        cursor: ByteOff,
+        forward: bool,
+        r: JobResult,
+    ) {
+        self.find_job = None;
+        let JobResult::FindNextDone { found, .. } = r else {
+            return;
+        };
+        let same = self
+            .documents
+            .get(&doc_id)
+            .is_some_and(|d| d.revision() == revision)
+            && self.search_cursor(forward) == Some(cursor);
+        if !same {
+            return;
+        }
+        if let Some((m, wrapped)) = found {
+            self.search_select(m, wrapped, forward);
         }
     }
 

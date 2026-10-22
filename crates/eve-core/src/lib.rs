@@ -49,7 +49,8 @@ pub use paths::Paths;
 pub use replacing::{ReplacingCount, ReplacingGuard};
 pub use rescue::{RescueOutcome, RescueReason, RescueWriter};
 pub use search::{
-    Case, Matcher, SearchJob, SearchQuery, build_replace_all, run_search, scan_bytes, scan_lines,
+    Case, Matcher, SearchJob, SearchQuery, build_replace_all, find_next, run_search, scan_bytes,
+    scan_lines,
 };
 pub use time::{Clock, Millis, Tick};
 pub use unmap::{ReplaceCounts, ReplaceTarget};

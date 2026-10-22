@@ -97,6 +97,8 @@ pub struct EditorState {
     pub(super) unmappable_marks: Option<UnmappableMarks>,
     /// 編集で検索の結果が無効になった (Revision, 気づいた時刻)。入力が止まって 300 ms 後に再検索する (03 §12.2)。
     pub(super) research: Option<(eve_view::Revision, Tick)>,
+    /// 単発の検索ジョブ (進行中の 1 つだけ)。
+    pub(super) find_job: Option<eve_view::JobId>,
     /// ログファイルの場所 (設定の問題の要約に出す)。
     pub(super) log_path: Option<String>,
     /// OS のロケール由来の文字コードのヒント。
@@ -139,6 +141,7 @@ impl EditorState {
             search_bar: None,
             unmappable_marks: None,
             research: None,
+            find_job: None,
             system_encoding: None,
             log_path: None,
             bar_rows: 0,
