@@ -33,3 +33,8 @@ eve-view = { version = "0.0.0", path = "../../crates/eve-view" }
 portable-pty = "0.9"
 vt100 = "0.16"
 encoding_rs = "0.8.42"
+
+# 実バイナリを ConPTY で駆動する計測 (BM-101b / 102b / 103b / 107)。cargo bench -p evoeditor --bench bm_pty
+[[bench]]
+name = "bm_pty"
+harness = false
