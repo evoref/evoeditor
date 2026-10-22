@@ -38,6 +38,7 @@ fn shift_tab_は_indent_width_ぶん戻す() {
     assert_eq!(h.doc_text(), "    x");
 }
 
+// verifies: AC-FR-701-1
 #[test]
 fn タブ文字の表示幅は_tab_width() {
     let mut h = Harness::new();

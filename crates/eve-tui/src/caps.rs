@@ -251,6 +251,7 @@ mod tests {
         detect_color_depth(ColorMode::Auto, &MapEnv::new(pairs), windows)
     }
 
+    // verifies: AC-FR-701-1
     #[test]
     fn 色深度の判定表の各行() {
         // 順 1: 設定

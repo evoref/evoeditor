@@ -316,6 +316,7 @@ fn 黙示の置換も表現不能として止める() {
     assert!(s.doc().is_dirty());
 }
 
+// verifies: AC-NFR-303-3
 #[test]
 fn 重複符号化の行を読込時に数えて通知する() {
     let mut s = Env::new();

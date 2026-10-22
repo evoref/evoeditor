@@ -1424,6 +1424,7 @@ fn 表現できない文字の確認のキャンセルは最初の位置へ移�
     assert_eq!(s.text().find('😀'), Some(head), "{id:?}");
 }
 
+// verifies: AC-FR-109-4
 #[test]
 fn 置換して保存は一覧を示し_確認の後に置換して書く() {
     let mut s = Env::new();
@@ -1459,6 +1460,7 @@ fn 置換して保存は一覧を示し_確認の後に置換して書く() {
     assert!(s.text().ends_with("😀\u{2212}"));
 }
 
+// verifies: AC-FR-109-4
 #[test]
 fn iso_2022_jp_の半角カナは全角カナへ置換する() {
     let mut s = Env::new();
