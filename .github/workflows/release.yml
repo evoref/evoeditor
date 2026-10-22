@@ -106,6 +106,8 @@ jobs:
   smoke:
     name: smoke
     needs: build
+    # 手動 (dry-run) では verify-tag が飛ばされる。飛ばされた祖先があると既定の条件 (success()) で連鎖して飛ばされるので明示する
+    if: ${{ !cancelled() && needs.build.result == 'success' }}
     runs-on: windows-2025
     timeout-minutes: 30
     steps:
@@ -157,7 +159,7 @@ jobs:
   draft-release:
     name: draft-release
     needs: smoke
-    if: github.event_name == 'push'
+    if: ${{ !cancelled() && needs.smoke.result == 'success' && github.event_name == 'push' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
