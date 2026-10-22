@@ -13,15 +13,21 @@
 id = "AC-FR-101-1"
 requirement = "FR-101"
 kind = "T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "引数なしは無題_ファイル_1_つは開く",
+    "二つ以上のファイルは使い方の誤り",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-101-2"
 requirement = "FR-101"
 kind = "T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "存在しないパスは空の新規文書で_保存すると作成する",
+    "親フォルダがないパスは警告し_保存はエラー",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-104-1"
@@ -45,15 +51,22 @@ status = "done"
 id = "AC-FR-105-1"
 requirement = "FR-105"
 kind = "T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "原子的保存の切断点では_t_は無傷で一時ファイルが残り_開いても報告しない",
+    "置換の途中の状態では_t_が無く退避名に元が完全に残り_開くと案内する",
+    "上書きの途中の中断では_t_は半端に書き換わりバックアップが元の内容を保つ",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-105-2"
 requirement = "FR-105"
 kind = "T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "供給側の失敗は一時ファイルを消し元のファイルは無傷",
+    "原子的置換ができなければ確認を出し_直接上書きで保存する",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-106-1"
@@ -73,8 +86,10 @@ status = "todo"
 id = "AC-FR-106-3"
 requirement = "FR-106"
 kind = "T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "ハードリンクはリンクを保つか切り離すかを選ぶ",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-107-1"
@@ -89,8 +104,10 @@ status = "done"
 id = "AC-FR-107-2"
 requirement = "FR-107"
 kind = "T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "コンソールを閉じると未保存の内容を退避して終了する",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-107-3"
@@ -108,29 +125,41 @@ status = "done"
 id = "AC-FR-108-1"
 requirement = "FR-108"
 kind = "T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "utf16_の_bom_を保って保存する",
+    "bom_と_crlf_を保持して保存する",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-109-1"
 requirement = "FR-109"
 kind = "T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "shift_jis_を判定して開き_編集して同じ文字コードで保存する",
+    "euc_jp_を開いて保存する",
+    "iso_2022_jp_を判定して行ごとに閉じて保存する",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-109-2"
 requirement = "FR-109"
 kind = "T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "shift_jis_を判定して開き_編集して同じ文字コードで保存する",
+    "shift_jis_の_cp932_外字は往復し_外字以外の編集でも不変",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-109-3"
 requirement = "FR-109"
 kind = "T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "iso_2022_jp_を判定して行ごとに閉じて保存する",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-109-4"
@@ -143,8 +172,10 @@ status = "todo"
 id = "AC-FR-109-5"
 requirement = "FR-109"
 kind = "T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "iso_2022_jp_の判定",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-111-1"
@@ -157,15 +188,21 @@ status = "todo"
 id = "AC-FR-111-2"
 requirement = "FR-111"
 kind = "T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "開き直しは未保存なら確認し_破棄すると読み直す",
+    "開き直しの確認で中止すると旧本文と書式のまま",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-111-3"
 requirement = "FR-111"
 kind = "T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "文字コードを指定して保存すると_書式は成功のときだけ変わる",
+    "保存が失敗したら書式は変わらない",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-111-4"
@@ -178,8 +215,11 @@ status = "todo"
 id = "AC-FR-112-1"
 requirement = "FR-112"
 kind = "T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "表現できない文字は何も書かずに保存を止める",
+    "表現できない文字の保存は確認し_utf8_で保存できる",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-112-2"
@@ -206,8 +246,10 @@ status = "todo"
 id = "AC-FR-113-1"
 requirement = "FR-113"
 kind = "T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "改行の種類はそのまま往復する",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-113-2"
@@ -234,15 +276,20 @@ status = "todo"
 id = "AC-FR-114-1"
 requirement = "FR-114"
 kind = "T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "改行の種類はそのまま往復する",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-115-1"
 requirement = "FR-115"
 kind = "T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "バイナリは確認が要るので開かず_今の文書を残す",
+    "バイナリを読み取り専用で開く",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-115-2"
@@ -338,8 +385,10 @@ status = "done"
 id = "AC-FR-202-2"
 requirement = "FR-202"
 kind = "T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "改行の自動インデント",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-202-3"
@@ -450,8 +499,10 @@ status = "todo"
 id = "AC-FR-206-2"
 requirement = "FR-206"
 kind = "T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "貼り付けの本文の制御文字はコマンドとして実行されない",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-206-3"
@@ -543,29 +594,41 @@ status = "done"
 id = "AC-FR-401-1"
 requirement = "FR-401"
 kind = "T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "入力すると件数が出て_現在の一致は強調するだけで_選択しない",
+    "全件を数えて_次へ_前へ_で移り_端で折り返す",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-401-2"
 requirement = "FR-401"
 kind = "T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "enter_で現在の一致を選択し_次の_enter_で次へ_esc_で選択は残る",
+    "全件を数えて_次へ_前へ_で移り_端で折り返す",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-401-3"
 requirement = "FR-401"
 kind = "T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "一致が無ければ_0_件で_欄を消すと件数も消える",
+    "一致が無ければ_nomatch_で選択を変えない",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-402-4"
 requirement = "FR-402"
 kind = "T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "alt_c_で大小の区別が巡回し_再検索する",
+    "検索バーは大小の区別を反転で示し_狭いと件数から省く",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-404-1"
@@ -584,16 +647,22 @@ status = "todo"
 [[ac]]
 id = "AC-FR-404-3"
 requirement = "FR-404"
-kind = "B"
-verified_by = []
-status = "todo"
+kind = "T"
+verified_by = [
+    "新しい検索は古い検索の結果を捨てる",
+    "取り消すと止まる",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-404-4"
 requirement = "FR-404"
-kind = "B"
-verified_by = []
-status = "todo"
+kind = "T"
+verified_by = [
+    "編集で結果が無効になっても_300_ms_待って自動で再検索する",
+    "編集すると件数は約表示に落ち_次へ_は再検索して動く",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-501-1"
@@ -655,15 +724,21 @@ status = "todo"
 id = "AC-FR-507-1"
 requirement = "FR-507"
 kind = "T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "制御文字と不可視文字と不正バイトを記号にする",
+    "段を超える色は近似され_制御文字は置換される",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-507-2"
 requirement = "FR-507"
 kind = "T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "不可視文字は可視化して幅を持つ",
+    "絵文字の中の_zwj_とタグと異体字は可視化しない",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-507-3"
@@ -731,9 +806,13 @@ status = "todo"
 [[ac]]
 id = "AC-FR-514-2"
 requirement = "FR-514"
-kind = "M"
-verified_by = []
-status = "todo"
+kind = "T"
+verified_by = [
+    "ctrl_p_と_f1_で開き_esc_で閉じる",
+    "空の入力は_hidden_を除く全コマンドを_id_順に出す",
+    "割当キーを逆引きして添える",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-601-1"
@@ -754,16 +833,21 @@ status = "done"
 [[ac]]
 id = "AC-FR-602-1"
 requirement = "FR-602"
-kind = "M"
-verified_by = []
-status = "todo"
+kind = "T"
+verified_by = [
+    "入力で絞り込み_前方一致を部分一致より先に出す",
+    "パレットは枠つきで候補を並べ_選択行に_印を付け_件数を下辺に出す",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-602-2"
 requirement = "FR-602"
-kind = "M"
-verified_by = []
-status = "todo"
+kind = "T"
+verified_by = [
+    "実行できないコマンドは理由つきで出し_enter_では実行しない",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-603-1"
@@ -825,8 +909,11 @@ status = "todo"
 id = "AC-FR-701-3"
 requirement = "FR-701"
 kind = "T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "公開前のキーとセクションは情報診断で_警告にしない",
+    "未対応の情報診断は画面に出さない",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-702-1"
@@ -839,8 +926,16 @@ status = "todo"
 id = "AC-FR-703-1"
 requirement = "FR-703"
 kind = "T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "構文エラーはファイル全体を無視して行と桁を返す",
+    "未知のキーは警告し綴りの候補を出す",
+    "型違いは警告して既定値のまま",
+    "範囲外は既定値へ戻す",
+    "列挙値の不正は許容値を提示する",
+    "全項目を走査し_最初の問題で止まらない",
+    "診断が_1_件ならその内容を_2_件以上なら要約を出す",
+]
+status = "done"
 
 [[ac]]
 id = "AC-NFR-101-1"
@@ -936,8 +1031,11 @@ status = "todo"
 id = "AC-NFR-301-1"
 requirement = "NFR-301"
 kind = "T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "原子的保存の切断点では_t_は無傷で一時ファイルが残り_開いても報告しない",
+    "置換の途中の状態では_t_が無く退避名に元が完全に残り_開くと案内する",
+]
+status = "done"
 
 [[ac]]
 id = "AC-NFR-301-2"
@@ -950,8 +1048,11 @@ status = "todo"
 id = "AC-NFR-302-1"
 requirement = "NFR-302"
 kind = "T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "パニックすると端末を戻し_未保存の内容を退避してクラッシュログを残す",
+    "小さい文書から書いて_manifest_は完了になる",
+]
+status = "done"
 
 [[ac]]
 id = "AC-NFR-302-2"
@@ -978,8 +1079,10 @@ status = "todo"
 id = "AC-NFR-302-6"
 requirement = "NFR-302"
 kind = "T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "未知の_format_version_の退避は一覧に出るが_変更も移動も削除もされない",
+]
+status = "done"
 
 [[ac]]
 id = "AC-NFR-303-1"
@@ -1013,8 +1116,11 @@ status = "todo"
 id = "AC-NFR-304-1"
 requirement = "NFR-304"
 kind = "T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "不正バイトを含む_shift_jis_は読み取り専用で_保存しなければバイトは変わらない",
+    "不正バイトは読み取り専用で開き_別名保存でバイト一致する",
+]
+status = "done"
 
 [[ac]]
 id = "AC-NFR-304-2"
@@ -1027,8 +1133,11 @@ status = "todo"
 id = "AC-NFR-304-3"
 requirement = "NFR-304"
 kind = "T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "文字コードを指定して開き直す",
+    "不正バイトを含む_iso_2022_jp_は専用の理由で読み取り専用_保存を拒否する",
+]
+status = "done"
 
 [[ac]]
 id = "AC-NFR-305-1"
@@ -1113,8 +1222,11 @@ status = "todo"
 id = "AC-NFR-505-1"
 requirement = "NFR-505"
 kind = "T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "退避先は所有者のみの_dacl",
+    "private_で作った新規ファイルは所有者と_system_だけ",
+]
+status = "done"
 
 [[ac]]
 id = "AC-NFR-507-1"

@@ -133,6 +133,7 @@ fn shift_jis_の_cp932_互換文字は区分_a_でバイト一致する() {
     }
 }
 
+// verifies: AC-FR-109-2
 #[test]
 fn shift_jis_の_cp932_外字は往復し_外字以外の編集でも不変() {
     for lead_trail in [
@@ -239,6 +240,7 @@ fn bom_付きの_utf8_と_utf16_は_bom_ごと往復する() {
     }
 }
 
+// verifies: AC-FR-113-1, AC-FR-114-1
 #[test]
 fn 改行の種類はそのまま往復する() {
     let cases: [(&str, &[u8]); 9] = [

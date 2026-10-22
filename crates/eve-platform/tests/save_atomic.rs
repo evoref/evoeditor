@@ -186,6 +186,7 @@ fn 照合の不一致は_conflict_で何も書かない() {
     assert!(!t.p("a.txt").exists());
 }
 
+// verifies: AC-FR-105-2
 #[test]
 fn 供給側の失敗は一時ファイルを消し元のファイルは無傷() {
     let t = Tmp::new("source");
@@ -374,6 +375,7 @@ fn acl_entries(path: &std::path::Path) -> std::collections::BTreeSet<String> {
         .collect()
 }
 
+// verifies: AC-NFR-505-1
 #[test]
 fn private_で作った新規ファイルは所有者と_system_だけ() {
     let t = Tmp::new("private");

@@ -126,6 +126,7 @@ fn sjis(s: &str) -> Vec<u8> {
 
 const JP: &str = "日本語のテキストエディタです。これは文章の見本で、文字コードの判定に使います。\n";
 
+// verifies: AC-FR-109-1, AC-FR-109-2
 #[test]
 fn shift_jis_を判定して開き_編集して同じ文字コードで保存する() {
     let mut s = Env::new();
@@ -139,6 +140,7 @@ fn shift_jis_を判定して開き_編集して同じ文字コードで保存す
     assert_eq!(s.fs.read("/w/a.txt").unwrap(), sjis(&format!("追記{JP}")));
 }
 
+// verifies: AC-FR-109-1
 #[test]
 fn euc_jp_を開いて保存する() {
     let mut s = Env::new();
@@ -155,6 +157,7 @@ fn euc_jp_を開いて保存する() {
     );
 }
 
+// verifies: AC-FR-108-1
 #[test]
 fn utf16_の_bom_を保って保存する() {
     let mut s = Env::new();
@@ -172,6 +175,7 @@ fn utf16_の_bom_を保って保存する() {
     assert_eq!(s.fs.read("/w/a.txt").unwrap(), want);
 }
 
+// verifies: AC-FR-109-1, AC-FR-109-3
 #[test]
 fn iso_2022_jp_を判定して行ごとに閉じて保存する() {
     let mut s = Env::new();
@@ -198,6 +202,7 @@ fn 文字コードを指定して開く() {
     assert!(s.doc().read_only.contains(ReadOnlyReason::InvalidBytes));
 }
 
+// verifies: AC-NFR-304-1
 #[test]
 fn 不正バイトを含む_shift_jis_は読み取り専用で_保存しなければバイトは変わらない() {
     let mut s = Env::new();
@@ -210,6 +215,7 @@ fn 不正バイトを含む_shift_jis_は読み取り専用で_保存しなけ�
     assert_eq!(s.fs.read("/w/a.txt").unwrap(), bytes);
 }
 
+// verifies: AC-NFR-304-3
 #[test]
 fn 不正バイトを含む_iso_2022_jp_は専用の理由で読み取り専用_保存を拒否する() {
     let mut s = Env::new();
@@ -274,6 +280,7 @@ fn 対応外の文字コードの推定は既定で開いて案内する() {
     );
 }
 
+// verifies: AC-FR-112-1
 #[test]
 fn 表現できない文字は何も書かずに保存を止める() {
     let mut s = Env::new();

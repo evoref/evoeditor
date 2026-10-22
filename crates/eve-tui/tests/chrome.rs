@@ -180,6 +180,7 @@ fn テーマのロール_ステータスバーは反転か背景色() {
     assert!(c.modifier.contains(Modifier::REVERSED));
 }
 
+// verifies: AC-FR-602-1
 #[test]
 fn パレットは枠つきで候補を並べ_選択行に_印を付け_件数を下辺に出す() {
     let mut h = Harness::new().with_size(80, 20);
@@ -240,6 +241,7 @@ fn 検索バーは編集面の下に出て_入力欄にカーソルを置く() {
     assert!(rows[12].contains("行"), "{all}");
 }
 
+// verifies: AC-FR-402-4
 #[test]
 fn 検索バーは大小の区別を反転で示し_狭いと件数から省く() {
     let mut h = Harness::new().with_size(60, 12);

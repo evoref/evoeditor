@@ -55,6 +55,7 @@ fn ctrl_f_で開き_編集面が_1_行縮み_esc_で戻る() {
     assert!(matches!(f.focus, FocusTarget::Pane(_)));
 }
 
+// verifies: AC-FR-401-1
 #[test]
 fn 入力すると件数が出て_現在の一致は強調するだけで_選択しない() {
     let mut h = Harness::new().with_size(40, 10);
@@ -93,6 +94,7 @@ fn 入力すると件数が出て_現在の一致は強調するだけで_選択
     assert!(cur.starts_with("foo"), "{cur}");
 }
 
+// verifies: AC-FR-401-2
 #[test]
 fn enter_で現在の一致を選択し_次の_enter_で次へ_esc_で選択は残る() {
     let mut h = Harness::new().with_size(40, 10);
@@ -126,6 +128,7 @@ fn esc_で閉じると未確定の一致は選択に残らない() {
     assert_eq!(sel(&h), before);
 }
 
+// verifies: AC-FR-402-4
 #[test]
 fn alt_c_で大小の区別が巡回し_再検索する() {
     let mut h = Harness::new().with_size(40, 10);
@@ -156,6 +159,7 @@ fn smart_で検索語に大文字があれば_区別を示す() {
     assert!(bar(&mut h).case_on);
 }
 
+// verifies: AC-FR-401-3
 #[test]
 fn 一致が無ければ_0_件で_欄を消すと件数も消える() {
     let mut h = Harness::new().with_size(40, 10);
@@ -245,6 +249,7 @@ fn プロンプトにも貼り付けられる() {
     assert_eq!(s, "/w/x.txt");
 }
 
+// verifies: AC-FR-404-4
 #[test]
 fn 編集で結果が無効になっても_300_ms_待って自動で再検索する() {
     use eve_core::{Origin, Tick, Transaction};

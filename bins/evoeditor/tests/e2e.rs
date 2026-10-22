@@ -382,6 +382,7 @@ fn 入力して保存して終了するとファイルの内容が一致する()
 }
 
 // (8b ii) コンソールを閉じる (CTRL_CLOSE): 未保存の内容を退避して終了する。退避は受信スレッドがメインを待たずに書く
+// verifies: AC-FR-107-2
 #[test]
 fn コンソールを閉じると未保存の内容を退避して終了する() {
     let mut s = Session::start(&[]);
@@ -550,6 +551,7 @@ fn 未知の文字コードの指定は使い方の誤り() {
 }
 
 // (9) 貼り付けの安全: 本文の Ctrl+S (0x13) はコマンドにならず、文字として入る
+// verifies: AC-FR-206-2
 #[test]
 fn 貼り付けの本文の制御文字はコマンドとして実行されない() {
     let mut s = Session::start(&[]);
@@ -604,6 +606,7 @@ fn 使い方の誤りは終了コード_2() {
 
 // (7) internal.debug_panic (test-hooks): パニック → 端末復元 + 退避 + クラッシュログ。stderr は 04 §15.2 の順。
 // 実行: cargo test -p evoeditor --features test-hooks --test e2e
+// verifies: AC-NFR-302-1
 #[cfg(feature = "test-hooks")]
 #[test]
 fn パニックすると端末を戻し_未保存の内容を退避してクラッシュログを残す() {

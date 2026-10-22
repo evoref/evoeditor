@@ -57,6 +57,7 @@ fn dirs_in(base: &Path) -> Vec<PathBuf> {
     v
 }
 
+// verifies: AC-NFR-302-1
 #[test]
 fn 小さい文書から書いて_manifest_は完了になる() {
     let state = tmp("ok");
@@ -200,6 +201,7 @@ fn 状態ディレクトリを使えなければ代替の退避先に書く() {
     let _ = fs::remove_dir_all(state);
 }
 
+// verifies: AC-NFR-505-1
 #[test]
 fn 退避先は所有者のみの_dacl() {
     let state = tmp("acl");
@@ -360,6 +362,7 @@ fn 退避先に保存は_rescue_の下に_user_save_で書く() {
     let _ = fs::remove_dir_all(state);
 }
 
+// verifies: AC-NFR-302-6
 #[test]
 fn 未知の_format_version_の退避は一覧に出るが_変更も移動も削除もされない() {
     use eve_core::FileSystem;

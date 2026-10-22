@@ -28,6 +28,7 @@ fn ids(f: &Frame) -> Vec<String> {
         .collect()
 }
 
+// verifies: AC-FR-514-2
 #[test]
 fn ctrl_p_と_f1_で開き_esc_で閉じる() {
     let mut h = Harness::new();
@@ -39,6 +40,7 @@ fn ctrl_p_と_f1_で開き_esc_で閉じる() {
     assert_eq!(h.overlay(), "palette");
 }
 
+// verifies: AC-FR-514-2
 #[test]
 fn 空の入力は_hidden_を除く全コマンドを_id_順に出す() {
     let mut h = Harness::new();
@@ -59,6 +61,7 @@ fn 空の入力は_hidden_を除く全コマンドを_id_順に出す() {
     }
 }
 
+// verifies: AC-FR-602-1
 #[test]
 fn 入力で絞り込み_前方一致を部分一致より先に出す() {
     let mut h = Harness::new();
@@ -129,6 +132,7 @@ fn 文書を編集するコマンドを実行できる() {
     assert_eq!(h.doc_text(), "");
 }
 
+// verifies: AC-FR-602-2
 #[test]
 fn 実行できないコマンドは理由つきで出し_enter_では実行しない() {
     let mut h = Harness::new();
@@ -150,6 +154,7 @@ fn 実行できないコマンドは理由つきで出し_enter_では実行し�
     assert_eq!(h.overlay(), "palette");
 }
 
+// verifies: AC-FR-514-2
 #[test]
 fn 割当キーを逆引きして添える() {
     let mut h = Harness::new();

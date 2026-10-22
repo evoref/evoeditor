@@ -119,6 +119,7 @@ fn utf8_のファイルを開く() {
     assert!(!d.format.has_bom);
 }
 
+// verifies: AC-FR-108-1
 #[test]
 fn bom_と_crlf_を保持して保存する() {
     let mut s = Env::new();
@@ -272,6 +273,7 @@ fn 外部変更があると保存は_conflict_で止まる() {
     assert!(s.messages().contains(&"msg.save.failed".to_owned()));
 }
 
+// verifies: AC-FR-101-2
 #[test]
 fn 存在しないパスは空の新規文書で_保存すると作成する() {
     let mut s = Env::new();
@@ -285,6 +287,7 @@ fn 存在しないパスは空の新規文書で_保存すると作成する() {
     assert!(!s.doc().1.is_dirty());
 }
 
+// verifies: AC-FR-101-2
 #[test]
 fn 親フォルダがないパスは警告し_保存はエラー() {
     let mut s = Env::new();
@@ -297,6 +300,7 @@ fn 親フォルダがないパスは警告し_保存はエラー() {
     assert!(dialog_open(&s));
 }
 
+// verifies: AC-NFR-304-1
 #[test]
 fn 不正バイトは読み取り専用で開き_別名保存でバイト一致する() {
     let mut s = Env::new();
@@ -330,6 +334,7 @@ fn 不正バイトは読み取り専用で開き_別名保存でバイト一致�
     assert_eq!(s.fs.read("/w/copy.txt").unwrap(), src);
 }
 
+// verifies: AC-FR-115-1
 #[test]
 fn バイナリは確認が要るので開かず_今の文書を残す() {
     let mut s = Env::new();
@@ -352,6 +357,7 @@ fn バイナリは確認が要るので開かず_今の文書を残す() {
     assert_eq!(s.e.state().documents_len(), 1, "読込中の文書は捨てる");
 }
 
+// verifies: AC-FR-115-1
 #[test]
 fn バイナリを読み取り専用で開く() {
     let mut s = Env::new();
@@ -822,6 +828,7 @@ fn dialog_open(s: &Env) -> bool {
     s.e.state().overlay_kind() == "dialog"
 }
 
+// verifies: AC-FR-105-2
 #[test]
 fn 原子的置換ができなければ確認を出し_直接上書きで保存する() {
     let mut s = Env::new();
@@ -878,6 +885,7 @@ fn バックアップを作れなければ確認し_承認するとバックア�
     assert!(!s.doc().1.is_dirty());
 }
 
+// verifies: AC-FR-106-3
 #[test]
 fn ハードリンクはリンクを保つか切り離すかを選ぶ() {
     let mut s = Env::new();
@@ -976,6 +984,7 @@ fn sjis_bytes(s: &str) -> Vec<u8> {
     b.into_owned()
 }
 
+// verifies: AC-NFR-304-3
 #[test]
 fn 文字コードを指定して開き直す() {
     let mut s = Env::new();
@@ -1008,6 +1017,7 @@ fn 文字コードを指定して開き直す() {
     assert_eq!(s.text(), "abc\ndef\nx");
 }
 
+// verifies: AC-FR-111-2
 #[test]
 fn 開き直しは未保存なら確認し_破棄すると読み直す() {
     let mut s = Env::new();
@@ -1032,6 +1042,7 @@ fn 開き直しは未保存なら確認し_破棄すると読み直す() {
     assert!(d.read_only.contains(eve_core::ReadOnlyReason::InvalidBytes));
 }
 
+// verifies: AC-FR-111-2
 #[test]
 fn 開き直しの確認で中止すると旧本文と書式のまま() {
     let mut s = Env::new();
@@ -1169,6 +1180,7 @@ fn 再読込の後に読み取り専用なら_undo_できない() {
     );
 }
 
+// verifies: AC-FR-111-3
 #[test]
 fn 文字コードを指定して保存すると_書式は成功のときだけ変わる() {
     let mut s = Env::new();
@@ -1217,6 +1229,7 @@ fn 表現できない文字があれば書かず_書式も変えない() {
     assert_eq!(s.doc().1.format.encoding, eve_core::Encoding::Utf8);
 }
 
+// verifies: AC-FR-111-3
 #[test]
 fn 保存が失敗したら書式は変わらない() {
     let mut s = Env::new();
@@ -1344,6 +1357,7 @@ fn 変換した文書の保存は区切りをそのまま書く() {
     assert_eq!(s.fs.read("/w/a.txt").unwrap(), b"a\r\nb\r\n");
 }
 
+// verifies: AC-FR-112-1
 #[test]
 fn 表現できない文字の保存は確認し_utf8_で保存できる() {
     let mut s = Env::new();
