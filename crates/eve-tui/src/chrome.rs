@@ -5,9 +5,10 @@
 //! ASCII か、`glyphs` の定数表の記号だけで、幅は定数で数える。枠線も `glyphs` から 1 文字ずつ書く (ratatui のウィジェットは使わない)。
 
 use eve_view::{
-    CellPos, CellSize, CellText, Choice, ColorDepth, CutPolicy, Frame, HintItem, HintModel,
-    InputFieldModel, KeyCode, KeyLabel, KeyStroke, Message, MessageLevel, MessageModel, Modifiers,
-    OverlayModel, Span, StatusAlign, StatusItem, StatusKind, StatusModel, Style, StyleMods,
+    CaseMode, CellPos, CellSize, CellText, Choice, ColorDepth, CutPolicy, Frame, HintItem,
+    HintModel, InputFieldModel, KeyCode, KeyLabel, KeyStroke, Message, MessageLevel, MessageModel,
+    Modifiers, OverlayModel, SearchBarModel, Span, StatusAlign, StatusItem, StatusKind,
+    StatusModel, Style, StyleMods,
 };
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
@@ -848,6 +849,72 @@ fn draw_input(
     cursor_x
 }
 
+/// 検索バー (04 §8.4): `検索: [入力欄] [Aa~] 1/2`。幅が足りなければ件数 → トグルの括弧の順に省き、入力欄は最低 10 セルを残す。
+fn render_search_bar(
+    w: &mut Writer<'_>,
+    y: u16,
+    cols: u16,
+    bar: &SearchBarModel,
+    theme: &Theme,
+    glyphs: &Glyphs,
+) -> Option<CellPos> {
+    let style = theme.overlay;
+    let ascii = glyphs.ellipsis.width == 3;
+    fill(w, 0, y, cols, style);
+    let mark = match bar.case {
+        CaseMode::Smart => "~",
+        CaseMode::Sensitive if ascii => "*",
+        CaseMode::Sensitive => "\u{2713}",
+        CaseMode::Insensitive => "",
+    };
+    let toggle_full = format!("[Aa{mark}]");
+    let toggle_short = format!("Aa{mark}");
+    let label_w = text_width(&bar.label.spans);
+    let count_w = bar.count_text.as_ref().map_or(0, |c| text_width(&c.spans));
+    // 入力欄の最低幅を残して、入る構成を選ぶ
+    let fits = |toggle: &str, count: u16| {
+        let need = label_w
+            + 1
+            + 10
+            + 1
+            + toggle.chars().count() as u16
+            + if count > 0 { 1 + count } else { 0 };
+        need <= cols
+    };
+    let (toggle, show_count) = if fits(&toggle_full, count_w) {
+        (toggle_full, true)
+    } else if fits(&toggle_full, 0) {
+        (toggle_full, false)
+    } else {
+        (toggle_short, false)
+    };
+    let toggle_w = toggle.chars().count() as u16;
+    let mut x = put(w, 0, y, cols, &bar.label.spans, style);
+    x = w.span(x, y, cols, &ascii_span(" ", style));
+    let right_w = 1 + toggle_w + if show_count { 1 + count_w } else { 0 };
+    let iw = cols.saturating_sub(x + right_w).max(1);
+    let ix = x;
+    let cursor_x = draw_input(w, &bar.input, ix, y, iw, theme, glyphs);
+    // 右側: トグル (大小を区別しているときは反転) と件数
+    let mut rx = ix + iw;
+    rx = w.span(rx, y, cols, &ascii_span(" ", style));
+    let tstyle = if bar.case_on {
+        overlay_style(style, Style::with_mods(StyleMods::REVERSE))
+    } else {
+        style
+    };
+    let ts = Span::new(toggle.as_str(), toggle_w, tstyle);
+    rx = w.span(rx, y, cols, &ts);
+    if show_count && let Some(c) = &bar.count_text {
+        rx = w.span(rx, y, cols, &ascii_span(" ", style));
+        put(w, rx, y, cols, &c.spans, style);
+    }
+    Some(CellPos {
+        col: ix + cursor_x.min(iw.saturating_sub(1)),
+        row: y,
+    })
+}
+
 /// リスト選択 (コマンドパレット、04 §8.1)。上部中央。入力欄 1 行 + 候補 (最大 12 行) + 枠。
 fn render_list(
     w: &mut Writer<'_>,
@@ -1095,7 +1162,12 @@ pub fn render_screen(
     let mut r = render_panes(frame, depth, glyphs);
     let theme = Theme::for_depth(depth);
     let ascii = glyphs.ellipsis.width == 3;
-    let (cols, surface_rows) = (frame.size.cols, frame.size.rows);
+    // 検索バーの行は編集面の下。クロームはその下に続く
+    let bar_row = frame.size.rows;
+    let (cols, surface_rows) = (
+        frame.size.cols,
+        frame.size.rows + u16::from(frame.search.is_some()),
+    );
     let chrome = chrome_rows_for_surface(surface_rows);
     let area = CellSize {
         cols,
@@ -1135,6 +1207,9 @@ pub fn render_screen(
                 glyphs,
                 ascii,
             );
+        }
+        if let Some(bar) = &frame.search {
+            cursor = render_search_bar(&mut w, bar_row, cols, bar, &theme, glyphs).or(cursor);
         }
         // オーバーレイ (前面順なので、奥から描く)
         for ov in frame.overlays.iter().rev() {

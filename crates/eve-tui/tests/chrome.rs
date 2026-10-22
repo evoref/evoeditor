@@ -10,9 +10,10 @@ use eve_view::{CellPos, CellSize, ColorDepth, Frame};
 use ratatui::style::Modifier;
 
 fn window_of(f: &Frame) -> CellSize {
+    let base = f.size.rows + u16::from(f.search.is_some());
     CellSize {
         cols: f.size.cols,
-        rows: f.size.rows + chrome_rows_for_surface(f.size.rows),
+        rows: base + chrome_rows_for_surface(base),
     }
 }
 
@@ -63,7 +64,7 @@ fn ステータスバーは幅が足りなければ短い形にして_優先度�
 
 #[test]
 fn ヒントバーは全表示から圧縮される() {
-    let mut h = Harness::new().with_size(100, 12);
+    let mut h = Harness::new().with_size(120, 12);
     let (rows, _) = screen(&mut h, &Glyphs::unicode());
     let hint = &rows[14];
     assert!(hint.contains("Ctrl+Q 終了"), "{hint:?}");
@@ -215,5 +216,61 @@ fn パレットは狭い端末でも壊れない() {
         let _ = screen(&mut h, &Glyphs::ascii());
         h.text("save");
         let _ = screen(&mut h, &Glyphs::ascii());
+    }
+}
+
+#[test]
+fn 検索バーは編集面の下に出て_入力欄にカーソルを置く() {
+    let mut h = Harness::new().with_size(60, 12);
+    h.text("foo bar foo");
+    h.keys("ctrl+home ctrl+f");
+    h.text("foo");
+    h.run_jobs();
+    let (rows, cursor) = screen(&mut h, &Glyphs::unicode());
+    let all = joined(&rows);
+    // 編集面 11 行 + 検索バー + クローム 3 行
+    assert_eq!(rows.len(), 15, "{all}");
+    let bar = &rows[11];
+    assert!(bar.starts_with("検索: foo"), "{bar:?}");
+    assert!(bar.contains("[Aa~]"), "{bar:?}");
+    assert!(bar.trim_end().ends_with("1/2"), "{bar:?}");
+    assert_eq!(cursor.map(|c| c.row), Some(11));
+    assert_eq!(cursor.map(|c| c.col), Some(9), "入力の末尾");
+    // ステータスバーはバーの下
+    assert!(rows[12].contains("行"), "{all}");
+}
+
+#[test]
+fn 検索バーは大小の区別を反転で示し_狭いと件数から省く() {
+    let mut h = Harness::new().with_size(60, 12);
+    h.text("Foo");
+    h.keys("ctrl+f");
+    h.text("Foo");
+    h.run_jobs();
+    let f = h.frame();
+    let r = render_screen(&f, window_of(&f), ColorDepth::TrueColor, &Glyphs::unicode());
+    let bar_y = f.size.rows;
+    let toggle_x = row_text(&r.buffer, bar_y).find("[Aa~]").unwrap();
+    let col = unicode_width::UnicodeWidthStr::width(&row_text(&r.buffer, bar_y)[..toggle_x]) as u16;
+    assert!(
+        r.buffer[(col, bar_y)].modifier.contains(Modifier::REVERSED),
+        "区別しているときは反転"
+    );
+    // 幅 24: 件数を省く
+    for cols in [24u16, 16, 12] {
+        let mut h = Harness::new().with_size(cols, 12);
+        h.text("foo foo");
+        h.keys("ctrl+f");
+        h.text("foo");
+        h.run_jobs();
+        let (rows, _) = screen(&mut h, &Glyphs::ascii());
+        let bar = &rows[11];
+        assert!(
+            bar.starts_with("検索:") || bar.starts_with("Search") || !bar.is_empty(),
+            "{bar:?}"
+        );
+        if cols == 24 {
+            assert!(!bar.contains("1/"), "件数は省く: {bar:?}");
+        }
     }
 }

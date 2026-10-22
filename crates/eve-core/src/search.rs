@@ -72,6 +72,15 @@ impl SearchQuery {
         self.case
     }
 
+    /// 大小を実際に区別して探すか (検索バーのトグルを反転して示す)。
+    pub fn is_case_sensitive(&self) -> bool {
+        match self.case {
+            Case::Sensitive => true,
+            Case::Insensitive => false,
+            Case::Smart => self.pattern.chars().any(|c| fold_char(c) != c),
+        }
+    }
+
     /// 照合器。検索語が空なら `None` (何にも一致しない)。
     pub fn matcher(&self) -> Option<Matcher> {
         // 検索語は 1 行の入力欄から来る。改行を含むものは行をまたぐので一致させない (v0.2 の複数行は別途)

@@ -64,7 +64,7 @@ pub enum SearchStep {
     NoQuery,
 }
 
-enum Found {
+pub(super) enum Found {
     Hit(ByteRange, bool),
     None,
     Incomplete,
@@ -156,6 +156,11 @@ impl EditorState {
 
     /// 件数の表示の材料。
     pub fn search_count(&self) -> SearchCount {
+        self.search_count_for(None)
+    }
+
+    /// `search_count` と同じだが、現在の一致の番号を `probe` (選択していない強調中の一致) から求める。
+    pub(super) fn search_count_for(&self, probe: Option<ByteRange>) -> SearchCount {
         let Some(s) = &self.search else {
             return SearchCount::Idle;
         };
@@ -167,7 +172,7 @@ impl EditorState {
                 found: s.matches.len() as u64,
             };
         }
-        let current = self.search_current_index().map(|i| i as u64 + 1);
+        let current = self.search_current_index(probe).map(|i| i as u64 + 1);
         if s.count_limited {
             SearchCount::AtLeast {
                 current,
@@ -182,16 +187,21 @@ impl EditorState {
     }
 
     /// 選択が保持した一致のどれかと一致していれば、その位置。一部しか持っていないときは求めない。
-    fn search_current_index(&self) -> Option<usize> {
+    fn search_current_index(&self, probe: Option<ByteRange>) -> Option<usize> {
         let s = self.search.as_ref()?;
         if s.truncated || s.count_limited {
             return None;
         }
-        let sel = self
-            .view(self.window_view(self.first_window()?)?)?
-            .selection
-            .primary();
-        let (a, b) = (sel.start(), sel.end());
+        let (a, b) = match probe {
+            Some(r) => (r.start, r.end),
+            None => {
+                let sel = self
+                    .view(self.window_view(self.first_window()?)?)?
+                    .selection
+                    .primary();
+                (sel.start(), sel.end())
+            }
+        };
         s.matches
             .binary_search_by_key(&a, |m| m.start)
             .ok()
@@ -254,7 +264,7 @@ impl EditorState {
     }
 
     /// カーソルから同期検索する (最大 `SYNC_STEP_BYTES`)。文書の端を越えたら反対側から続ける。
-    fn sync_find(
+    pub(super) fn sync_find(
         &self,
         doc_id: DocumentId,
         query: &SearchQuery,

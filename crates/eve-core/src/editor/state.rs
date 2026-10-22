@@ -88,6 +88,12 @@ pub struct EditorState {
     pub(super) deferred_command: Option<String>,
     /// 文書内検索の状態 (検索バーが開いている間)。
     pub(super) search: Option<super::search_state::SearchState>,
+    /// 検索バー (開いている間)。
+    pub(super) search_bar: Option<super::search_bar::SearchBarState>,
+    /// 検索バーが取る行数 (0 か 1)。編集面はその分だけ縮む。
+    pub(super) bar_rows: u16,
+    /// ホストが渡した編集面の大きさ (検索バーの分を引く前)。
+    pub(super) surface: (u16, u16),
 }
 
 impl EditorState {
@@ -119,6 +125,9 @@ impl EditorState {
             palette_entries: Vec::new(),
             deferred_command: None,
             search: None,
+            search_bar: None,
+            bar_rows: 0,
+            surface: (80, 24),
         }
     }
 
@@ -192,6 +201,13 @@ impl EditorState {
     }
 
     pub fn set_viewport(&mut self, cols: u16, rows: u16) {
+        self.surface = (cols, rows);
+        self.apply_viewport(cols, rows);
+    }
+
+    /// 編集面の大きさを、検索バーの分を引いて反映する。
+    pub(super) fn apply_viewport(&mut self, cols: u16, rows: u16) {
+        let rows = rows.saturating_sub(self.bar_rows).max(1);
         if self.viewport != (cols, rows) {
             self.viewport = (cols, rows);
             self.needs_render = true;
@@ -603,7 +619,8 @@ impl EditorState {
             "doc.dirty" => b(doc.is_some_and(Document::is_dirty)),
             "selection.empty" => b(view.is_none_or(|v| v.selection.iter().all(|r| r.is_empty()))),
             "overlay.active" => Some(CtxValue::Str(self.overlay_name().to_owned())),
-            "search.active" | "search.replace_active" => b(false),
+            "search.active" => b(self.search_bar.is_some()),
+            "search.replace_active" => b(false),
             "caps.can_suspend" => b(self.caps.can_suspend),
             "editor" => b(true),
             _ => None,

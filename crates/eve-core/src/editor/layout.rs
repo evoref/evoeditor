@@ -199,6 +199,12 @@ struct RowOut {
     cursor_cols: Vec<usize>,
 }
 
+/// 検索の強調 (文書のバイト位置の半開区間)。`found` は一致 (開始位置の昇順)、`current` は入力で見つけた現在の一致。
+struct Marks<'a> {
+    found: &'a [(usize, usize)],
+    current: Option<(usize, usize)>,
+}
+
 /// 1 行を作る。`left` は水平スクロール (表示列)、`cols` は本文の幅。`sel` は選択 (文書のバイト位置の半開区間)、
 /// `heads` はこの行にあるカーソル (文書のバイト位置)。
 #[allow(clippy::too_many_arguments)]
@@ -209,6 +215,7 @@ fn build_row(
     cols: usize,
     sel: &[(usize, usize)],
     heads: &[usize],
+    marks: &Marks<'_>,
     gutter: Vec<Span>,
 ) -> RowOut {
     let (ls, content, has_terminator) = line_content(doc, line);
@@ -223,11 +230,21 @@ fn build_row(
     let (mut clipped_left, mut clipped_right, mut risky) = (false, false, false);
     let mut spans: Vec<Span> = Vec::new();
     'units: for u in &us {
-        let style_base = if selected(ls + u.byte) {
+        let at = ls + u.byte;
+        let mut style_base = if selected(at) {
             StyleMods::REVERSE
         } else {
             StyleMods::NONE
         };
+        // 検索の一致は下線、入力で見つけた現在の一致は反転 + 太字 + 下線 (色に頼らない、04 §8.4)
+        if marks.current.is_some_and(|(s, e)| s <= at && at < e) {
+            style_base = style_base | StyleMods::REVERSE | StyleMods::BOLD | StyleMods::UNDERLINE;
+        } else {
+            let i = marks.found.partition_point(|&(_, e)| e <= at);
+            if marks.found.get(i).is_some_and(|&(s, _)| s <= at) {
+                style_base = style_base | StyleMods::UNDERLINE;
+            }
+        }
         let mut c = u.col;
         for (text, w, symbol) in &u.parts {
             let (w, c0) = (*w as usize, c);
@@ -421,6 +438,13 @@ pub(super) fn build_frame(
     let primary_head = view.selection.primary().head.0;
 
     let overlay_open = state.overlay.is_some();
+    let bar_open = state.search_bar.is_some();
+    let found = state.visible_matches(view.doc, top_line, rows);
+    let current = state.bar_current();
+    let marks = Marks {
+        found: &found,
+        current,
+    };
     let mut out_rows = Vec::with_capacity(rows);
     let mut cursors = Vec::new();
     let mut primary: Option<CellPos> = None;
@@ -454,6 +478,7 @@ pub(super) fn build_frame(
             text_cols,
             &sel,
             &here,
+            &marks,
             gutter_spans(line, gw),
         );
         for (&h, &c) in here.iter().zip(&ro.cursor_cols) {
@@ -482,7 +507,7 @@ pub(super) fn build_frame(
         gutter_width: gw,
         rows: out_rows,
         cursors,
-        focused: !overlay_open,
+        focused: !overlay_open && !bar_open,
     };
     Some(Frame {
         window,
@@ -493,15 +518,18 @@ pub(super) fn build_frame(
         panes: vec![pane],
         focus: if overlay_open {
             FocusTarget::Overlay(0)
+        } else if bar_open {
+            FocusTarget::SearchBar
         } else {
             FocusTarget::Pane(view_id)
         },
         primary_cursor: primary
-            .filter(|_| !overlay_open)
+            .filter(|_| !overlay_open && !bar_open)
             .map(|pos| CursorPlacement {
                 pos,
                 shape: CursorShape::Bar,
             }),
+        search: state.search_bar_model(),
         status: super::chrome::status_model(state, view_id, chord),
         hints: super::chrome::hint_model(state, chord),
         overlays: super::chrome::overlay_models(state),

@@ -182,6 +182,7 @@ mod tests {
                 cursors: vec![],
                 focused: true,
             }],
+            search: None,
             focus: FocusTarget::Pane(ViewId(1)),
             primary_cursor: Some(CursorPlacement {
                 pos: CellPos { col: 2, row: 0 },

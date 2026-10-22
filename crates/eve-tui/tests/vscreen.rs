@@ -223,7 +223,7 @@ fn 確認ダイアログのカーソルはフォーカス中のボタンの先�
 
 #[test]
 fn ステータスバーとヒントバーは幅ごとに優先度の順で残る() {
-    for cols in [100u16, 80, 60, 40, 30, 24] {
+    for cols in [120u16, 80, 60, 40, 30, 24] {
         let mut h = Harness::new().with_size(cols, 12);
         let mut t = Term::new(
             cols,
@@ -246,8 +246,8 @@ fn ステータスバーとヒントバーは幅ごとに優先度の順で残�
             "{cols} 桁: 優先度 5 は残る: {hint:?}"
         );
         // 幅を超えない (仮想画面は溢れを捨てるので、Buffer と一致していることで確かめている)
-        if cols >= 100 {
-            assert!(hint.contains("Ctrl+Q 終了"), "100 桁は全表示: {hint:?}");
+        if cols >= 120 {
+            assert!(hint.contains("Ctrl+Q 終了"), "120 桁は全表示: {hint:?}");
         }
     }
 }
