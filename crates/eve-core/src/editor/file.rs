@@ -131,6 +131,17 @@ pub(super) struct UnmappableAsk {
     pub fmt: Option<NewFormat>,
 }
 
+/// 区分 B / D の確認 (別のバイト表現で保存される箇所がある、03 §8.6 E2')。承認したら同じ保存を投入し直す。
+#[derive(Clone, Debug)]
+pub(super) struct LossyAsk {
+    pub doc: DocumentId,
+    pub path: FsPath,
+    pub expected: Expect,
+    pub cont: Option<Continuation>,
+    pub strategy: SaveStrategy,
+    pub fmt: Option<NewFormat>,
+}
+
 /// 保存の代替の確認 (`AtomicUnsupported` / ハードリンク / `BackupFailed`、03 §9.3 手順 7・05 §4.4)。
 #[derive(Clone, Debug)]
 pub(super) struct FallbackAsk {
@@ -543,6 +554,25 @@ impl EditorState {
             return CommandResult::Rejected(RejectReason::NoTarget);
         };
         let out_encoding = fmt.map_or(doc.format.encoding, |f| f.encoding);
+        // 区分 B / D: 元の文字コードのまま、別のバイト表現で保存される箇所がある文書を編集して保存するときは、
+        // 書き込む前に確認する (FR-112 AC-4 (a)・NFR-303、03 §8.6 E2')。無編集の上書き保存は書き込まないので出ない。
+        // 承認した Revision では繰り返さない
+        if out_encoding == doc.format.encoding
+            && doc.format.roundtrip.lossy_lines > 0
+            && doc.is_dirty()
+            && self.lossy_ok != Some((doc_id, doc.revision()))
+        {
+            let ask = LossyAsk {
+                doc: doc_id,
+                path,
+                expected,
+                cont,
+                strategy,
+                fmt,
+            };
+            self.open_lossy(ask);
+            return CommandResult::Done;
+        }
         // 状態付き符号化 (ISO-2022-JP) で不正バイトを含む文書は保存しない (03 §8.3 (a)。不正バイトを失わないため)
         if out_encoding.is_stateful() && doc.format.invalid_bytes > 0 {
             self.show_message(
@@ -1105,6 +1135,66 @@ impl EditorState {
             focused: default,
             action: ConfirmAction::Fallback(ask),
         });
+    }
+
+    /// 区分 B (ISO-2022-JP は区分 D のエスケープの書き方) の確認を出す。選択肢: 保存 / 別名で保存。
+    /// 区分 B は別名が既定、区分 D は文字が変わらないので保存が既定 (04 §15.2)。
+    fn open_lossy(&mut self, ask: LossyAsk) {
+        use super::overlay::{ChoiceDef, ConfirmAction, ConfirmState};
+        let Some(doc) = self.documents.get(&ask.doc) else {
+            return;
+        };
+        let count = doc.format.roundtrip.lossy_lines;
+        let example = doc
+            .format
+            .roundtrip
+            .first_offsets
+            .first()
+            .map(u64::to_string)
+            .unwrap_or_default();
+        let (name, default) = if doc.format.encoding.is_stateful() {
+            ("save.escape_normalized", 0)
+        } else {
+            ("save.lossy_roundtrip", 1)
+        };
+        let choice = |id: &'static str, accel: char| ChoiceDef {
+            id,
+            accel: Some(accel),
+            destructive: false,
+        };
+        self.open_confirm(ConfirmState {
+            name,
+            args: vec![
+                ("count".to_owned(), count.to_string()),
+                ("example".to_owned(), example),
+            ],
+            choices: vec![choice("save", 's'), choice("alt", 'a')],
+            details: Vec::new(),
+            default,
+            focused: default,
+            action: ConfirmAction::Lossy(ask),
+        });
+    }
+
+    /// 区分 B / D の確認の選択 (キャンセルは呼び側が処理済み)。保存は、この Revision では確認を繰り返さずに投入し直す。
+    pub(super) fn choose_lossy(&mut self, ask: LossyAsk, choice: usize) -> CommandResult {
+        let LossyAsk {
+            doc,
+            path,
+            expected,
+            cont,
+            strategy,
+            fmt,
+        } = ask;
+        if choice == 0 {
+            if let Some(d) = self.documents.get(&doc) {
+                self.lossy_ok = Some((doc, d.revision()));
+            }
+            return self.start_save_with(doc, path, expected, cont, strategy, fmt);
+        }
+        // 別名で保存: 名前の入力へ (保存の後に続ける操作は引き継ぐ)
+        self.open_prompt(PromptKind::SaveAs { then: cont }, String::new());
+        CommandResult::Done
     }
 
     /// 保存の代替の確認の選択 (キャンセルは呼び側が処理済み)。

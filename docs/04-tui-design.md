@@ -1435,8 +1435,14 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 | `ui.confirm.save.unmappable_replace.item` | 上の一覧の 1 行 (先頭 100 件) | 行 {line}, 桁 {col}: {char} ({codepoint}) → {replacement} |
 | `ui.confirm.save.unmappable_replace.more` | 上の一覧の最後の行 (101 件目以降があるとき) | ほか {count} 個 |
 | `msg.save.encoding_unsupported_iso2022` | 不正なバイトを含む文書 (§8.3 のエスケープ文字を含む。主に `StatefulEncodingWithInvalidBytes`) を ISO-2022-JP で保存しようとした (上書き保存・名前を付けて保存・文字コードを指定して保存。03 §8.3 の (a) / §9.7 の「連鎖の開始時の拒否」。確認ではなくエラーのメッセージで、選択肢は無い。保存の連鎖と後続 (終了等) は中止。ジョブは投入しない) | 不正なバイトを含むため、この文書は ISO-2022-JP では保存できません。何も書き込んでいません / 文字コードを指定して開き直す ({key:file.reopen_with_encoding}) で別の文字コード (UTF-8 等) として開き直してください |
-| `ui.confirm.save.lossy_roundtrip` | E2' 区分 B の確認 (03 §8.6) | {count} 箇所が、同じ文字の別のバイト表現で保存されます (例: {example}) — `[S] 保存` / `[A] 別名で保存` ★ |
-| `ui.confirm.save.escape_normalized` | 区分 D (ISO-2022-JP のエスケープの書き方が変わる) | {count} 行でエスケープシーケンスの書き方が変わります (文字は変わりません) — `[S] 保存` ★ / `[A] 別名で保存` |
+| `ui.confirm.save.lossy_roundtrip.title` | E2' 区分 B の確認 (03 §8.6)。元の文字コードのまま、別のバイト表現で保存される箇所がある文書を編集して保存するとき。`{example}` は最初の該当行の、元のファイルでの先頭からのバイト位置 | 別のバイト表現で保存されます |
+| `ui.confirm.save.lossy_roundtrip.message` | 同上 | {count} 箇所が、同じ文字の別のバイト表現で保存されます (例: 元の先頭から {example} バイト目の行) |
+| `ui.confirm.save.lossy_roundtrip.save` | 同上 (アクセラレータ `S`) | [S] 保存 |
+| `ui.confirm.save.lossy_roundtrip.alt` | 同上 (アクセラレータ `A`。既定) | [A] 別名で保存 |
+| `ui.confirm.save.escape_normalized.title` | 区分 D (ISO-2022-JP のエスケープの書き方が変わる、03 §8.7)。文字は変わらないので「保存」が既定 | エスケープの書き方が変わります |
+| `ui.confirm.save.escape_normalized.message` | 同上 | {count} 行でエスケープシーケンスの書き方が変わります (文字は変わりません) |
+| `ui.confirm.save.escape_normalized.save` | 同上 (アクセラレータ `S`。既定) | [S] 保存 |
+| `ui.confirm.save.escape_normalized.alt` | 同上 (アクセラレータ `A`) | [A] 別名で保存 |
 | `ui.confirm.save.atomic_unsupported.title` | `file.atomic_save_fallback = "ask"` (既定) の AtomicUnsupported (ハードリンク・一時ファイル規則 (`InPlacePattern`) 以外: 他人の所有・ディレクトリに書けない・置換が ACL を引き継げない等、05 §4.4。`"fail"` では出さずに `msg.save.failed`。03 §9.7 (e)) | 安全に保存できません |
 | `ui.confirm.save.atomic_unsupported.message` | 同上 | {path} は安全な方法 (一時ファイルと置換) で保存できません: {reason} |
 | `ui.confirm.save.atomic_unsupported.direct` | 同上 (アクセラレータ `O`) | [O] 直接上書き (バックアップ付き) |

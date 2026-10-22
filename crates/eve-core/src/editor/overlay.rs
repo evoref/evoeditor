@@ -45,6 +45,8 @@ pub(super) enum ConfirmAction {
     Unsaved(Continuation),
     /// 保存の代替 (原子的置換ができない・ハードリンク・バックアップを作れない)。選択肢の意味は `SaveFallback` の種類による。
     Fallback(super::file::FallbackAsk),
+    /// 別のバイト表現で保存される箇所がある文書の保存 (保存 / 別名で保存、03 §8.6 E2')。
+    Lossy(super::file::LossyAsk),
     /// 保存の失敗の後の選択 (再試行 / 別名で保存 / 退避先に保存)。
     SaveFailed(super::file::SaveFailedAsk),
     /// 開くときの確認 (読み取り専用で開く / 文字コードを指定して開く / 中止、03 §9.2)。
@@ -267,7 +269,7 @@ impl EditorState {
         // キャンセル (最後の選択肢): データを変えない
         if choice >= c.cancel_index() {
             match &c.action {
-                ConfirmAction::SaveFailed(_) => {
+                ConfirmAction::SaveFailed(_) | ConfirmAction::Lossy(_) => {
                     self.show_message(MessageLevel::Info, "info.save.aborted", &[]);
                 }
                 ConfirmAction::Open(ask) => self.open_aborted(ask),
@@ -285,6 +287,7 @@ impl EditorState {
                 _ => self.run_continuation(cont),
             },
             ConfirmAction::Fallback(ask) => self.choose_fallback(ask, choice),
+            ConfirmAction::Lossy(ask) => self.choose_lossy(ask, choice),
             ConfirmAction::SaveFailed(ask) => self.choose_save_failed(ask, id),
             ConfirmAction::Open(ask) => self.choose_open(ask, id),
             ConfirmAction::Reload => self.start_reload(),
