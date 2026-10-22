@@ -88,13 +88,15 @@ pub struct EditorState {
     /// パレットの候補 (`hidden` を除く登録済みコマンド。CommandId 順)。
     pub(super) palette_entries: Vec<super::palette::PaletteEntry>,
     /// パレットで選ばれ、Editor が次に実行するコマンド。
-    pub(super) deferred_command: Option<String>,
+    pub(super) deferred_command: Option<(String, super::command::Args)>,
     /// 文書内検索の状態 (検索バーが開いている間)。
     pub(super) search: Option<super::search_state::SearchState>,
     /// 検索バー (開いている間)。
     pub(super) search_bar: Option<super::search_bar::SearchBarState>,
     /// 表現不能の文字の強調 (文書, 作った Revision, 位置)。Revision が変わる (次の編集) まで残る。
     pub(super) unmappable_marks: Option<UnmappableMarks>,
+    /// 編集で検索の結果が無効になった (Revision, 気づいた時刻)。入力が止まって 300 ms 後に再検索する (03 §12.2)。
+    pub(super) research: Option<(eve_view::Revision, Tick)>,
     /// 検索バーが取る行数 (0 か 1)。編集面はその分だけ縮む。
     pub(super) bar_rows: u16,
     /// ホストが渡した編集面の大きさ (検索バーの分を引く前)。
@@ -132,6 +134,7 @@ impl EditorState {
             search: None,
             search_bar: None,
             unmappable_marks: None,
+            research: None,
             bar_rows: 0,
             surface: (80, 24),
         }

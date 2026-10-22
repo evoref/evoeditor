@@ -171,6 +171,16 @@ impl Harness {
         self.collect();
     }
 
+    /// 実行待ちのジョブを 1 周だけ実行し、結果を `Editor` に渡す (結果から再投入されたジョブは走らせない)。
+    pub fn run_jobs_once(&mut self) {
+        self.jobs.run_jobs();
+        for r in self.jobs.take_results() {
+            self.editor.tick(self.clock.now());
+            self.editor.on_job_result(r);
+        }
+        self.collect();
+    }
+
     /// 実行待ちのジョブをすべて取り消す (結果は次の `run_jobs` で `Editor` に届く)。
     pub fn cancel_jobs(&mut self) {
         self.jobs.cancel_all();

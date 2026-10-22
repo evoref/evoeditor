@@ -11,6 +11,7 @@ mod config_report;
 mod context;
 mod default_keymap;
 mod edit;
+mod eol;
 mod file;
 mod keymap;
 mod layout;
@@ -116,21 +117,22 @@ impl Editor {
     /// Editor の「今」を更新する (Host が各 step の先頭・各メッセージの処理の直前・最後に呼ぶ)。
     pub fn tick(&mut self, now: Tick) {
         self.state.now = now;
+        self.state.search_tick();
     }
 
     /// 次に `tick` が要る時刻。`None` なら無期限に待ってよい。
     pub fn next_deadline(&self) -> Option<Tick> {
-        None
+        self.state.search_deadline()
     }
 
     /// キーマップを通さずにコマンドを実行する。権限判定フックを通る。
     pub fn execute(&mut self, inv: CommandInvocation) -> CommandResult {
         let mut res = self.registry.execute(&mut self.state, &inv);
         // パレットで選ばれたコマンドは、パレットを閉じた後に実行する
-        while let Some(id) = self.state.take_deferred_command() {
+        while let Some((id, args)) = self.state.take_deferred_command() {
             res = self.registry.execute(
                 &mut self.state,
-                &CommandInvocation::new(&id, InvocationSource::Palette),
+                &CommandInvocation::new(&id, InvocationSource::Palette).with_args(args),
             );
         }
         res

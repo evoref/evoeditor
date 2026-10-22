@@ -1351,6 +1351,8 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 | 確認ダイアログ (共通の選択肢) | `ui.confirm.cancel` | [Esc] キャンセル | 16 |
 | パレット (`List.title`) | `ui.palette.title` | コマンド | 8 |
 | パレットの引数の一覧 (`List.title`) | `ui.palette.arg_title` | {command}: {arg} | — |
+| パレットの引数の名前 (`{arg}`) | `ui.palette.arg.eol` | 改行コード | — |
+| パレットの引数の名前 (`{arg}`) | `ui.palette.arg.encoding` | 文字コード | — |
 | パレット (`List.footer`) | `ui.palette.footer` | {matched}/{total} | — |
 | パレット | `ui.palette.placeholder` | コマンドを入力 | 14 |
 | 入力プロンプト (`Prompt.title`) | `ui.prompt.open.title` / `ui.prompt.save_as.title` / `ui.prompt.goto_line.title` / `ui.prompt.encoding.title` / `ui.prompt.arg.title` | 開く / 名前を付けて保存 / 行へ移動 / 文字コードを指定して開く / {arg} | 4、16、8、12、— |
