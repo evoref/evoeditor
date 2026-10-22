@@ -54,6 +54,39 @@ impl EditorState {
         }
     }
 
+    /// 読み取り専用の文書を編集しようとした: 理由つきで拒否したことを示す (`msg.edit.read_only`、FR-116 AC-1)。
+    pub(super) fn notify_read_only(&mut self) {
+        use crate::document::ReadOnlyReason as R;
+        let reason = self
+            .active_document()
+            .and_then(|d| self.document(d))
+            .and_then(|d| d.read_only.primary())
+            .and_then(|r| {
+                Some(match r {
+                    R::FileAttribute => "file_attribute",
+                    R::UserRequested => "user_requested",
+                    R::NoWritePermission => "no_write_permission",
+                    R::InvalidBytes => "invalid_bytes",
+                    R::StatefulEncodingWithInvalidBytes => "stateful_encoding_with_invalid_bytes",
+                    R::Binary => "binary",
+                    R::LargeFileViewer => "large_file_viewer",
+                    R::LongLine => "long_line",
+                    // 読込が終わっていない (v0.3 の Partial)。理由の文言はまだ無い
+                    R::LoadIncomplete => return None,
+                })
+            })
+            .map(|k| {
+                self.catalog()
+                    .render(&format!("ui.read_only_reason.{k}"), &[], &|_| None)
+            })
+            .unwrap_or_default();
+        self.show_message(
+            eve_view::MessageLevel::Warn,
+            "msg.edit.read_only",
+            &[("reason", &reason)],
+        );
+    }
+
     pub fn show_message(&mut self, level: MessageLevel, key: &str, args: &[(&str, &str)]) {
         let cat = self.catalog();
         let label = |c: &str| self.key_label(c);

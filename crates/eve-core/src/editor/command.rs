@@ -225,6 +225,14 @@ impl CommandRegistry {
             return CommandResult::Rejected(RejectReason::PermissionDenied);
         }
         if !spec.when.eval(&|name| state.context_value(name)) {
+            // 読み取り専用の文書への編集は、条件で止まるときも理由を示す (FR-116 AC-1)
+            if spec.kind == CommandKind::Edit
+                && state
+                    .context_value("doc.read_only")
+                    .is_some_and(|v| v.truthy())
+            {
+                state.notify_read_only();
+            }
             return CommandResult::Rejected(RejectReason::NotAvailable);
         }
         // Error のメッセージは、次の編集・ファイルのコマンド実行で消える (カーソル移動・オーバーレイ内の操作では消えない、04 §8.9)
@@ -239,6 +247,11 @@ impl CommandRegistry {
             state,
             args: &inv.args,
         };
-        (spec.handler)(&mut ctx)
+        let res = (spec.handler)(&mut ctx);
+        // 読み取り専用の文書への編集は、理由つきで拒否したことを示す (FR-116 AC-1)
+        if matches!(res, CommandResult::Rejected(RejectReason::ReadOnly)) {
+            state.notify_read_only();
+        }
+        res
     }
 }
