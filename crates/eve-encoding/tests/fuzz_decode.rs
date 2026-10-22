@@ -39,3 +39,23 @@ fn 固定の入力() {
         decode_pipeline(data);
     }
 }
+
+/// 2026-10-22 の夜間の fuzz が見つけた timeout (課題 #78)。UTF-16LE を 2 バイトずつ復号すると、孤立した上位サロゲートの続きで
+/// `decode_to_string_without_replacement` が `OutputFull` を返し続け、無限ループになっていた。生成データなので、そのまま回帰に入れる。
+#[test]
+fn fuzz_が見つけた_utf16_の_timeout_は終わる() {
+    let data = include_bytes!(
+        "../../../fuzz/corpus/fuzz_decode/regress_utf16_lone_surrogates_output_full"
+    );
+    // 別スレッドで走らせ、10 秒で終わらなければ失敗にする (ハングでテスト全体を止めない)
+    let (tx, rx) = std::sync::mpsc::channel();
+    #[allow(clippy::disallowed_methods)]
+    std::thread::spawn(move || {
+        decode_pipeline(data);
+        let _ = tx.send(());
+    });
+    assert!(
+        rx.recv_timeout(std::time::Duration::from_secs(10)).is_ok(),
+        "decode_pipeline が 10 秒たっても終わらない"
+    );
+}
