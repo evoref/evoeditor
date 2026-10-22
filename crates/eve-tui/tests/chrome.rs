@@ -316,3 +316,40 @@ fn 置換欄は_2_行目に出て_フォーカスの欄にカーソルを置く(
         rows[11]
     );
 }
+
+// verifies: AC-FR-506-1
+#[test]
+fn 横スクロールで左右に続きがある行の端に印を出す() {
+    let mut h = Harness::new().with_size(30, 8);
+    h.text(&"abcdefghij".repeat(10));
+    // 行末へ: 画面幅を超えるので横スクロールし、左に続きがある (右は行末なので続かない)
+    h.keys("end");
+    let (rows, _) = screen(&mut h, &Glyphs::unicode());
+    let first: Vec<char> = rows[0].chars().collect();
+    assert!(
+        first.contains(&'‹') && !first.contains(&'›'),
+        "左だけに続く: {:?}",
+        rows[0]
+    );
+    // 行頭へ: 右に続きがある
+    h.keys("home");
+    let (rows, _) = screen(&mut h, &Glyphs::unicode());
+    assert!(
+        rows[0].contains('›') && !rows[0].contains('‹'),
+        "右だけに続く: {:?}",
+        rows[0]
+    );
+    // ASCII 縮退時は `<` `>`
+    h.keys("home");
+    let (rows_ascii, _) = screen(&mut h, &Glyphs::ascii());
+    assert!(rows_ascii[0].contains('>'), "{:?}", rows_ascii[0]);
+}
+
+// verifies: AC-FR-506-1
+#[test]
+fn 画面に収まる行には印を出さない() {
+    let mut h = Harness::new().with_size(30, 8);
+    h.text("short");
+    let (rows, _) = screen(&mut h, &Glyphs::unicode());
+    assert!(!rows[0].contains('‹') && !rows[0].contains('›'));
+}

@@ -227,6 +227,15 @@ fn render_row(
     for sp in &row.spans {
         x = w.span(x, y, limit, sp);
     }
+    // 横スクロールで左右に続きがある行は、左端のテキストセルに `‹`、右端のセルに `›` を、テキストとは別の装飾として重ねる
+    // (FR-506、04 §6.4。ASCII 縮退時は `<` `>`)
+    let marker = w.style(theme.scroll_marker);
+    if row.clipped_left && r.col + gutter_w < limit {
+        w.set(r.col + gutter_w, y, glyphs.clip_left.text, marker, false);
+    }
+    if row.clipped_right && limit > r.col + gutter_w {
+        w.set(limit - 1, y, glyphs.clip_right.text, marker, false);
+    }
 }
 
 /// Frame の編集面を Buffer に書く。
