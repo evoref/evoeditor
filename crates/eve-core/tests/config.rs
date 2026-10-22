@@ -92,3 +92,78 @@ fn 診断が無ければ何も出さない() {
     h.editor.state_mut().report_config("config.toml", &[]);
     assert!(h.messages().is_empty());
 }
+
+#[test]
+fn system_は_os_のヒントの文字コードで新規文書を作る() {
+    let mut h = Harness::new();
+    with(&mut h, |c| c.default_encoding = DefaultEncoding::System);
+    h.editor
+        .state_mut()
+        .set_system_encoding(Some(Encoding::ShiftJis));
+    h.cmd("file.new");
+    let id = h.doc_id();
+    assert_eq!(
+        h.editor.state().document(id).unwrap().format.encoding,
+        Encoding::ShiftJis
+    );
+    // ヒントが無ければ UTF-8
+    h.editor.state_mut().set_system_encoding(None);
+    h.cmd("file.new");
+    let id = h.doc_id();
+    assert_eq!(
+        h.editor.state().document(id).unwrap().format.encoding,
+        Encoding::Utf8
+    );
+}
+
+#[test]
+fn 空の既存ファイルと改行のないファイルの改行は設定に従う() {
+    for (bytes, name) in [(&b""[..], "空"), (&b"abc"[..], "改行なし")] {
+        let mut h = Harness::new().with_file("/w/e.txt", bytes);
+        with(&mut h, |c| c.default_line_ending = DefaultLineEnding::Crlf);
+        h.open("/w/e.txt");
+        h.run_jobs();
+        h.keys("ctrl+end");
+        h.keys("enter");
+        h.text("x");
+        assert!(
+            h.doc_text().ends_with("\r\nx") || h.doc_text().ends_with("\nx"),
+            "{name}"
+        );
+        let id = h.doc_id();
+        assert_eq!(
+            h.editor.state().document(id).unwrap().format.default_eol,
+            eve_text::LineEnding::Crlf,
+            "{name}"
+        );
+    }
+    // 改行のあるファイルは多数派を維持する
+    let mut h = Harness::new().with_file("/w/l.txt", b"a\nb\n");
+    with(&mut h, |c| c.default_line_ending = DefaultLineEnding::Crlf);
+    h.open("/w/l.txt");
+    h.run_jobs();
+    let id = h.doc_id();
+    assert_eq!(
+        h.editor.state().document(id).unwrap().format.default_eol,
+        eve_text::LineEnding::Lf
+    );
+}
+
+#[test]
+fn 未対応の情報診断は画面に出さない() {
+    let mut h = Harness::new();
+    let l = load_str("[editor]\nauto_indent = false\n[search]\ncase = \"smart\"\n");
+    assert_eq!(l.diagnostics.len(), 2);
+    h.clear_log();
+    h.editor
+        .state_mut()
+        .report_config("config.toml", &l.diagnostics);
+    assert!(h.messages().is_empty());
+    // 警告が 1 件混じれば、その 1 件だけを数える
+    let l = load_str("[editor]\nauto_indent = false\ntab_width = 0\n");
+    h.editor
+        .state_mut()
+        .report_config("config.toml", &l.diagnostics);
+    let t = h.frame_text();
+    assert!(t.contains("config.toml:3"), "{t}");
+}

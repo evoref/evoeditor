@@ -47,6 +47,8 @@ pub struct OpenOptions {
     pub forced: Option<Encoding>,
     /// 確認「巨大ファイル」への回答「読み取り専用で開く」の再投入。巨大ファイルの確認を出さない。
     pub confirmed_large: bool,
+    /// 改行がない・LF と CR と CRLF が同数のときの `default_eol` (`file.default_line_ending`、03 §8.4)。`None` は LF。
+    pub default_eol: Option<LineEnding>,
     /// 確認の回答で決まった読み取り専用の理由 (ジョブは読まずに引き継ぐ、03 §9.2)。
     pub pending: ReadOnlyReasons,
 }
@@ -294,12 +296,12 @@ fn open_inner(
             a.mtime != stamp_before.mtime || a.len != stamp_before.len
         });
 
-    // 形式: 文字コード・BOM・不正バイト・改行の多数派 (同数なら LF、改行がなければ LF)
+    // 形式: 文字コード・BOM・不正バイト・改行の多数派 (同数・改行なしは `file.default_line_ending`)
     let eol_stats = EolStats::count(&text);
     let format = TextFormat {
         encoding: enc,
         has_bom: dec.has_bom(),
-        default_eol: eol_stats.majority(LineEnding::Lf),
+        default_eol: eol_stats.majority(opts.default_eol.unwrap_or(LineEnding::Lf)),
         eol_stats,
         invalid_bytes: dec.invalid_bytes(),
         pua_escape: dec.pua_mode(),
