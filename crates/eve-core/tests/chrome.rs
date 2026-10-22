@@ -200,23 +200,14 @@ fn 変更なしの保存の文言() {
 #[test]
 fn エラーは_text_と_hint_の_2_部でキー表記を解決する() {
     let mut s = Env::new();
-    s.fs.add_file("/w/a.txt", b"abc");
-    s.run("file.open", Args::new().with_str("path", "/w/a.txt"));
-    s.type_text("x");
-    // 照合の失敗 (Conflict) は確認を出さずメッセージで示す
-    s.fs.fail_next(
-        eve_testkit::FsOp::WriteAtomic,
-        eve_core::FsErrorKind::Conflict { current: None },
-    );
-    s.run("file.save", Args::new());
+    // 親フォルダが無いパスは、新しいファイルとして開いて警告する (確認は出さない)
+    s.run("file.open", Args::new().with_str("path", "/nodir/a.txt"));
+    s.pump();
     let f = s.frame();
-    let m = f.messages.current.expect("エラー");
-    assert_eq!(m.level, MessageLevel::Error);
+    let m = f.messages.current.expect("メッセージ");
+    assert_eq!(m.level, MessageLevel::Warn);
     let text: String = m.text.spans.iter().map(|sp| sp.text.as_str()).collect();
-    assert!(
-        text.starts_with("/w/a.txt を保存できませんでした: "),
-        "{text}"
-    );
+    assert!(text.starts_with("/nodir/a.txt のフォルダ "), "{text}");
     let hint: String = m
         .hint
         .expect("hint")
@@ -226,9 +217,9 @@ fn エラーは_text_と_hint_の_2_部でキー表記を解決する() {
         .collect();
     assert_eq!(
         hint,
-        "別名で保存 (Ctrl+K S) するか、権限を確認してください".replace("Ctrl+K S", "Ctrl+Shift+S")
+        "フォルダを作ってから保存するか、別名で保存 (Ctrl+Shift+S) してください"
     );
-    // Error は Esc で消える。カーソル移動では消えない
+    // Warn は Esc で消える。カーソル移動では消えない
     s.key(KeyCode::Left, Modifiers::NONE);
     assert!(s.frame().messages.current.is_some());
     s.key(KeyCode::Esc, Modifiers::NONE);

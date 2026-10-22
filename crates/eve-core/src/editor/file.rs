@@ -140,10 +140,18 @@ pub(super) struct FallbackAsk {
     pub expected: Expect,
     pub cont: Option<Continuation>,
     pub fmt: Option<NewFormat>,
+    /// 競合 (`Conflict`) の確認のとき、照合で見つけた今の保存先の状態 (`None` = ファイルが無い)。「上書き」はこれを新しい期待値にする。
+    pub conflict_current: Option<crate::FileStamp>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum FallbackKind {
+    /// 開いた後に既存のファイルが外部で変更された (`ui.confirm.save.conflict_changed`、03 §9.5)。選択肢: 上書き / 別名で保存 (既定)。
+    ConflictChanged,
+    /// 開いた後に既存のファイルが外部で削除された (`ui.confirm.save.conflict_deleted`)。「上書き」はファイルを作り直す。
+    ConflictDeleted,
+    /// 新規ファイルの保存先に、同名のファイルが後から作られていた (`ui.confirm.save.conflict_created`)。
+    ConflictCreated,
     /// 原子的置換ができない (`ui.confirm.save.atomic_unsupported`)。選択肢: 直接上書き / 別名で保存 (既定)。
     AtomicUnsupported,
     /// ハードリンク (`ui.confirm.save.hardlink`)。選択肢: リンクを保って直接上書き / 切り離して保存。既定はキャンセル。
@@ -1076,6 +1084,21 @@ impl EditorState {
             destructive: false,
         };
         let (name, choices, default): (&'static str, Vec<ChoiceDef>, usize) = match ask.kind {
+            FallbackKind::ConflictChanged => (
+                "save.conflict_changed",
+                vec![choice("overwrite", 'o'), choice("alt", 'a')],
+                1,
+            ),
+            FallbackKind::ConflictDeleted => (
+                "save.conflict_deleted",
+                vec![choice("overwrite", 'o'), choice("alt", 'a')],
+                1,
+            ),
+            FallbackKind::ConflictCreated => (
+                "save.conflict_created",
+                vec![choice("overwrite", 'o'), choice("alt", 'a')],
+                1,
+            ),
             FallbackKind::AtomicUnsupported => (
                 "save.atomic_unsupported",
                 vec![choice("direct", 'o'), choice("alt", 'a')],
@@ -1116,9 +1139,25 @@ impl EditorState {
             expected,
             cont,
             fmt,
+            conflict_current,
         } = ask;
+        // 競合の「上書き」: 照合で見つけた今の状態を新しい期待値にして、通常の保存を投入し直す (03 §9.5)
+        let expected = match kind {
+            FallbackKind::ConflictChanged
+            | FallbackKind::ConflictDeleted
+            | FallbackKind::ConflictCreated => {
+                conflict_current.map_or(Expect::Absent, Expect::Stamp)
+            }
+            _ => expected,
+        };
         let in_place = |backup| SaveStrategy::InPlace { backup };
         let strategy = match (kind, choice) {
+            (
+                FallbackKind::ConflictChanged
+                | FallbackKind::ConflictDeleted
+                | FallbackKind::ConflictCreated,
+                0,
+            ) => Some(SaveStrategy::default()),
             (FallbackKind::AtomicUnsupported | FallbackKind::Hardlink, 0) => {
                 Some(in_place(InPlaceBackup::Required))
             }
@@ -2009,9 +2048,39 @@ impl EditorState {
                         expected,
                         cont,
                         fmt,
+                        conflict_current: None,
                     },
                     &reason,
                     &links,
+                );
+            }
+            // 保存の直前の照合で、開いた後に保存先が変わっていた: 書き込まずに「上書き / 別名で保存 / 中止」を尋ねる
+            // (FR-117 AC-1、03 §9.5)
+            JobResult::Failed {
+                err:
+                    JobError::Fs(FsError {
+                        kind: FsErrorKind::Conflict { current },
+                        ..
+                    }),
+                ..
+            } if self.documents.contains_key(&doc_id) => {
+                let kind = match (expected, current) {
+                    (Expect::Absent, _) => FallbackKind::ConflictCreated,
+                    (_, None) => FallbackKind::ConflictDeleted,
+                    _ => FallbackKind::ConflictChanged,
+                };
+                self.open_fallback(
+                    FallbackAsk {
+                        kind,
+                        doc: doc_id,
+                        path: path.clone(),
+                        expected,
+                        cont,
+                        fmt,
+                        conflict_current: current,
+                    },
+                    "",
+                    "",
                 );
             }
             JobResult::Failed {
@@ -2051,6 +2120,13 @@ impl EditorState {
                     )
                 });
                 let retry = matches!(&err, JobError::Fs(e) if e.kind == FsErrorKind::Busy);
+                let err_backup = match &err {
+                    JobError::Fs(FsError {
+                        kind: FsErrorKind::ReplacedMovedToBackup { backup },
+                        ..
+                    }) => Some(backup.clone()),
+                    _ => None,
+                };
                 let reason = reason_label(&err);
                 let dir = match &err {
                     JobError::Fs(FsError {
@@ -2064,10 +2140,15 @@ impl EditorState {
                     JobError::Fs(e) => (MessageLevel::Error, save_error_key(&e)),
                     _ => (MessageLevel::Error, "msg.save.failed"),
                 };
+                let backup = match &err_backup {
+                    Some(b) => b.display(),
+                    None => String::new(),
+                };
                 let args = [
                     ("path", path.display()),
                     ("reason", reason.clone()),
                     ("dir", dir),
+                    ("backup", backup),
                 ];
                 let args: Vec<(&str, &str)> = args.iter().map(|(k, v)| (*k, v.as_str())).collect();
                 match ask {
@@ -2149,6 +2230,8 @@ fn save_error_key(e: &FsError) -> &'static str {
         (FsErrorKind::ReadOnlyFs, _) => "msg.save.read_only_fs",
         (FsErrorKind::InvalidPath, _) => "msg.save.invalid_path",
         (FsErrorKind::Busy, _) => "msg.save.busy",
+        // 置換の途中で失敗し、元のファイルは退避名に残っている (NFR-301 AC-2)。そのパスを必ず示す
+        (FsErrorKind::ReplacedMovedToBackup { .. }, _) => "msg.save.moved_to_backup",
         (FsErrorKind::NotFound, Some(FsErrorDetail::ParentMissing { .. })) => {
             "msg.save.parent_missing"
         }
