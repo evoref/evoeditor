@@ -40,6 +40,8 @@ pub(super) fn default_keymap() -> Keymap {
     // コマンドパレット (palette → list → prompt → global)
     bind("palette", "down", "ui.list_next");
     bind("palette", "up", "ui.list_prev");
+    bind("palette", "pagedown", "ui.list_page_down");
+    bind("palette", "pageup", "ui.list_page_up");
     // テスト専用: パニックの注入 (本来キー割当なし。E2E が端末から送れるよう、フックがあるときだけ割り当てる)
     #[cfg(feature = "test-hooks")]
     if super::overlay::test_hook_panic_command() {

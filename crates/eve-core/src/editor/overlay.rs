@@ -728,6 +728,14 @@ fn reg_motion_search(r: &mut CommandRegistry) {
     }
 }
 
+fn cmd_list_page_down(ctx: &mut CommandCtx<'_>) -> CommandResult {
+    ctx.state.palette_page(true)
+}
+
+fn cmd_list_page_up(ctx: &mut CommandCtx<'_>) -> CommandResult {
+    ctx.state.palette_page(false)
+}
+
 fn cmd_palette_open(ctx: &mut CommandCtx<'_>) -> CommandResult {
     ctx.state.open_palette()
 }
@@ -759,6 +767,8 @@ pub(super) fn register(r: &mut CommandRegistry) {
         cmd_dialog_choose
     );
     reg_ui!(r, "ui.palette_open", "", cmd_palette_open);
+    reg_ui!(r, "ui.list_page_down", active, cmd_list_page_down);
+    reg_ui!(r, "ui.list_page_up", active, cmd_list_page_up);
     // 07 §11.6 の perm 列は `ui` (キーマップ以外からも呼べるが、外部クライアントには許可を要する)
     for (id, when, h) in [
         ("search.open", "", cmd_search_open as crate::Handler),

@@ -173,6 +173,55 @@ fn プロンプトが出ていてもパレットを開ける() {
     assert_eq!(h.overlay(), "palette");
 }
 
+#[test]
+fn 行は_カテゴリ_タイトル_で_照合箇所はタイトルに合う() {
+    let mut h = Harness::new();
+    h.keys("ctrl+p");
+    h.text("名前を付けて");
+    let f = h.frame();
+    let (items, _, _) = list(&f);
+    let item = items
+        .iter()
+        .find(|i| cells(i.detail.as_ref().unwrap()) == "file.save_as")
+        .unwrap();
+    let label = cells(&item.label);
+    assert!(label.starts_with("ファイル: "), "{label}");
+    // 照合箇所 (書記素番号) が、ラベルの「名前を付けて」の位置に当たる
+    let r = item.match_ranges[0].clone();
+    let g: Vec<String> = item
+        .label
+        .spans
+        .iter()
+        .map(|s| s.text.to_string())
+        .collect();
+    assert_eq!(g[r].concat(), "名前を付けて");
+}
+
+#[test]
+fn id_は単語に分けた形でも探せる() {
+    let mut h = Harness::new();
+    h.keys("ctrl+p");
+    h.text("save as");
+    assert!(ids(&h.frame()).contains(&"file.save_as".to_owned()));
+}
+
+#[test]
+fn ページ送りは窓の行数ぶん動き_端で止まる() {
+    let mut h = Harness::new();
+    h.keys("ctrl+p");
+    h.keys("pagedown");
+    assert_eq!(list(&h.frame()).2, 12);
+    h.keys("pagedown pagedown pagedown pagedown pagedown pagedown");
+    let f = h.frame();
+    let OverlayModel::List { footer, .. } = &f.overlays[0] else {
+        panic!()
+    };
+    let total: usize = cells(footer).split('/').nth(1).unwrap().parse().unwrap();
+    assert_eq!(list(&f).2, total - 1, "末尾で止まる");
+    h.keys("pageup");
+    assert_eq!(list(&h.frame()).2, total - 13);
+}
+
 fn title(f: &Frame) -> String {
     let OverlayModel::List { title, .. } = &f.overlays[0] else {
         panic!()
@@ -256,4 +305,15 @@ fn 引数の無いコマンドはこれまでどおり実行する() {
     h.text("file.save_as");
     h.keys("enter");
     assert_eq!(h.overlay(), "prompt");
+}
+
+#[test]
+fn 引数の一覧でもページ送りが動く() {
+    let mut h = Harness::new();
+    h.keys("ctrl+p");
+    h.text("file.set_encoding");
+    h.keys("enter pagedown");
+    assert_eq!(list(&h.frame()).2, 5, "6 項目の末尾で止まる");
+    h.keys("pageup");
+    assert_eq!(list(&h.frame()).2, 0);
 }

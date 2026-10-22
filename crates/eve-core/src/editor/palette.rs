@@ -130,6 +130,25 @@ impl EditorState {
         self.palette_entries = entries;
     }
 
+    /// 一覧に出す名前 `カテゴリ: タイトル` (04 §8.1)。カテゴリは CommandId の名前空間。
+    fn command_label(&self, id: &str) -> String {
+        let title = self.command_title(id);
+        let ns = id.split('.').next().unwrap_or(id);
+        let key = format!("ui.palette.category.{ns}");
+        match self.catalog().get(&key) {
+            Some(cat) => format!("{cat}: {title}"),
+            None => title,
+        }
+    }
+
+    /// `command_label` のうちタイトルが始まる書記素番号 (照合した箇所をずらす分)。
+    fn label_offset(&self, id: &str) -> usize {
+        let ns = id.split('.').next().unwrap_or(id);
+        self.catalog()
+            .get(&format!("ui.palette.category.{ns}"))
+            .map_or(0, |cat| grapheme_indices(cat).len() + 2)
+    }
+
     /// 引数の選択肢のうち入力に合うもの (値または表示の部分一致、大小を区別しない)。
     fn arg_hits(&self, def: &'static ArgDef, query: &str) -> Vec<Hit> {
         let q = lower_graphemes(query.trim());
@@ -188,7 +207,13 @@ impl EditorState {
                 continue;
             }
             let title = lower_graphemes(&self.command_title(&e.id));
-            let (t, d) = (find(&title, &q), find(&lower_graphemes(&e.id), &q));
+            // CommandId は、そのままの形 (`file.save_as`) と、単語に分けた形 (`file save as`) の両方で照合する
+            let id_raw = lower_graphemes(&e.id);
+            let id_words = lower_graphemes(&e.id.replace(['.', '_'], " "));
+            let (t, d) = (
+                find(&title, &q),
+                find(&id_raw, &q).or_else(|| find(&id_words, &q)),
+            );
             if t.is_none() && d.is_none() {
                 continue;
             }
@@ -231,6 +256,28 @@ impl EditorState {
 
     pub(super) fn open_palette(&mut self) -> CommandResult {
         self.set_overlay(Some(Overlay::Palette(PaletteState::default())));
+        self.mark_dirty_render();
+        CommandResult::Done
+    }
+
+    /// `ui.list_page_down` / `ui.list_page_up`: 表示窓の行数ぶん動かす (端で止まる)。
+    pub(super) fn palette_page(&mut self, forward: bool) -> CommandResult {
+        let Some(Overlay::Palette(p)) = &self.overlay else {
+            return CommandResult::Rejected(RejectReason::NotAvailable);
+        };
+        let n = match p.stage {
+            Some(def) => self.arg_hits(def, &p.text).len(),
+            None => self.palette_hits(&p.text).len(),
+        };
+        if let Some(Overlay::Palette(p)) = &mut self.overlay
+            && n > 0
+        {
+            p.selected = if forward {
+                (p.selected + WINDOW).min(n - 1)
+            } else {
+                p.selected.saturating_sub(WINDOW)
+            };
+        }
         self.mark_dirty_render();
         CommandResult::Done
     }
@@ -396,9 +443,15 @@ impl EditorState {
                     cell_text(&text, CutPolicy::End)
                 });
                 ListItem {
-                    label: cell_text(&self.command_title(&e.id), CutPolicy::End),
+                    label: cell_text(&self.command_label(&e.id), CutPolicy::End),
                     detail: Some(cell_text(&e.id, CutPolicy::End)),
-                    match_ranges: h.ranges.clone(),
+                    match_ranges: {
+                        let off = self.label_offset(&e.id);
+                        h.ranges
+                            .iter()
+                            .map(|r| r.start + off..r.end + off)
+                            .collect()
+                    },
                     keys: self
                         .key_sequence(&e.id)
                         .map(|strokes| vec![KeyLabel { strokes }])
