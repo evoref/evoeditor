@@ -96,7 +96,7 @@ impl Env {
         run_job(&req, &self.ports(), &CancelToken::new(), &mut |r| {
             out.push(r)
         });
-        out.remove(0)
+        out.pop().expect("結果がある")
     }
 }
 

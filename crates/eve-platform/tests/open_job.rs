@@ -47,8 +47,14 @@ fn open(path: &FsPath, ports: &JobPorts) -> JobResult {
     };
     let mut out = Vec::new();
     run_job(&req, ports, &CancelToken::new(), &mut |r| out.push(r));
-    assert_eq!(out.len(), 1, "結果はちょうど 1 件");
-    out.remove(0)
+    // 終わりの結果の前に届くのは進捗だけ
+    let last = out.pop().expect("結果がある");
+    assert!(
+        out.iter()
+            .all(|r| matches!(r, eve_core::JobResult::Progress { .. })),
+        "終わり以外は進捗"
+    );
+    last
 }
 
 fn tmp_dir(tag: &str) -> std::path::PathBuf {

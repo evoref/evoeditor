@@ -36,6 +36,8 @@ pub(super) fn default_keymap() -> Keymap {
         bind("search", keys, cmd);
     }
     bind("editor", "mod+f", "search.open");
+    // 読込中の取消し (読込中でなければ何もしない、FR-122)
+    bind("editor", "esc", "ui.cancel");
     bind("editor", "mod+r", "search.replace_open");
     // コマンドパレット (palette → list → prompt → global)
     bind("palette", "down", "ui.list_next");

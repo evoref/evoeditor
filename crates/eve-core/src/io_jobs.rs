@@ -59,8 +59,9 @@ pub(crate) fn run_open(
     opts: OpenOptions,
     ports: &JobPorts,
     cancel: &CancelToken,
+    emit: &mut dyn FnMut(JobResult),
 ) -> JobResult {
-    open_inner(id, path, opts, ports, cancel, None)
+    open_inner(id, path, opts, ports, cancel, emit, None)
 }
 
 /// 先頭の判定の結果 (1 チャンク目で決まる)。
@@ -99,6 +100,7 @@ fn open_inner(
     opts: OpenOptions,
     ports: &JobPorts,
     cancel: &CancelToken,
+    emit: &mut dyn FnMut(JobResult),
     redetected: Option<Encoding>,
 ) -> JobResult {
     let fail = |err| JobResult::Failed { job: id, err };
@@ -159,6 +161,13 @@ fn open_inner(
     let mut redetect_checked = false;
     let mut out = String::new();
     let mut truncated = false;
+    // 進捗: 読み始めてすぐ (開く操作から 50 ms 以内) に 1 件、以後は 100 ms 以上あけて (10 Hz 以下、03 §9.2)
+    emit(JobResult::Progress {
+        job: id,
+        bytes: 0,
+        total: meta.len,
+    });
+    let mut last_progress = ports.clock.now();
     loop {
         if cancel.is_cancelled() {
             return cancelled();
@@ -253,7 +262,7 @@ fn open_inner(
                     forced: Some(other),
                     ..opts
                 };
-                return open_inner(id, path, again, ports, cancel, Some(other));
+                return open_inner(id, path, again, ports, cancel, emit, Some(other));
             }
             // 不正な UTF-8 も ISO-2022-JP の列も無い間は、次のチャンクでも見る。最初に見つけた契機で一度だけ判定する
             if find_iso_switch(chunk).is_some() || std::str::from_utf8(chunk).is_err() {
@@ -270,6 +279,15 @@ fn open_inner(
             chunk
         };
         chk.feed(body, false);
+        let now = ports.clock.now();
+        if now.saturating_sub(last_progress) >= crate::time::Millis(100) {
+            last_progress = now;
+            emit(JobResult::Progress {
+                job: id,
+                bytes: read_total,
+                total: meta.len,
+            });
+        }
         if truncated {
             break;
         }

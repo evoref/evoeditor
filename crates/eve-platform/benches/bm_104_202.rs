@@ -82,7 +82,7 @@ mod imp {
         };
         let mut out = Vec::new();
         run_job(&req, ports, &CancelToken::new(), &mut |r| out.push(r));
-        out.remove(0)
+        out.pop().expect("結果がある")
     }
 
     fn percentile(sorted: &[Duration], p: f64) -> Duration {
