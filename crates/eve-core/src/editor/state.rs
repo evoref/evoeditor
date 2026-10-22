@@ -97,6 +97,8 @@ pub struct EditorState {
     pub(super) unmappable_marks: Option<UnmappableMarks>,
     /// 編集で検索の結果が無効になった (Revision, 気づいた時刻)。入力が止まって 300 ms 後に再検索する (03 §12.2)。
     pub(super) research: Option<(eve_view::Revision, Tick)>,
+    /// 単発の検索ジョブ (進行中の 1 つだけ)。
+    pub(super) find_job: Option<eve_view::JobId>,
     /// 検索バーが取る行数 (0 か 1)。編集面はその分だけ縮む。
     pub(super) bar_rows: u16,
     /// ホストが渡した編集面の大きさ (検索バーの分を引く前)。
@@ -135,6 +137,7 @@ impl EditorState {
             search_bar: None,
             unmappable_marks: None,
             research: None,
+            find_job: None,
             bar_rows: 0,
             surface: (80, 24),
         }

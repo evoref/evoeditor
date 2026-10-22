@@ -201,3 +201,49 @@ fn 日本語と書記素境界() {
     assert_eq!(e - s, 1);
     assert_eq!(s, 12);
 }
+
+/// 同期検索の 1 MiB を超えて離れた一致は、単発のジョブで見つけて移る (03 §12.2)。
+fn far_doc() -> String {
+    // 先頭の 1.2 MB は一致なし、その後に一致
+    let mut s = "xxxxxxxxxxx\n".repeat(100_000);
+    s.push_str("needle\n");
+    s
+}
+
+#[test]
+fn 同期検索で届かない一致は単発のジョブで見つけて移る() {
+    let mut h = Harness::new();
+    h.paste(&far_doc());
+    h.keys("ctrl+home");
+    start(&mut h, "needle");
+    assert_eq!(step(&mut h, true), SearchStep::NotYet);
+    assert_eq!(sel(&h), (0, 0), "まだ動かない");
+    h.run_jobs();
+    let want = 12 * 100_000;
+    assert_eq!(sel(&h), (want, want + 6));
+}
+
+#[test]
+fn 後ろ向きでも単発のジョブで見つけ_端を越えると折り返す() {
+    let mut h = Harness::new();
+    h.paste(&far_doc());
+    // 一致の行頭に置く: 前へ進んでも 1 MiB 以内に一致が無く、折り返した先 (自分自身) が答え
+    h.keys("ctrl+end up home");
+    start(&mut h, "needle");
+    assert_eq!(step(&mut h, false), SearchStep::NotYet);
+    h.run_jobs();
+    let want = 12 * 100_000;
+    assert_eq!(sel(&h), (want, want + 6));
+}
+
+#[test]
+fn 単発のジョブの間に選択が変わったら結果を捨てる() {
+    let mut h = Harness::new();
+    h.paste(&far_doc());
+    h.keys("ctrl+home");
+    start(&mut h, "needle");
+    assert_eq!(step(&mut h, true), SearchStep::NotYet);
+    h.keys("right");
+    h.run_jobs();
+    assert_eq!(sel(&h), (1, 1), "利用者が動かしたので動かさない");
+}

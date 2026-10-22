@@ -81,6 +81,13 @@ pub enum JobKind {
     },
     /// 文書内の全件検索 (03 §12.2)。`from` の行から末尾まで、続けて先頭から走査し、一致を `SearchBatch` で順に返して
     /// `SearchDone` で終わる。保持するのは `max_matches` 件まで、数えるのは `count_limit` 件まで。
+    /// 単発の検索: `from` から先 (`forward`) か前の最初の一致 (03 §12.2「`search.next` / `search.prev`」)。
+    FindNext {
+        snapshot: Snapshot,
+        query: crate::search::SearchQuery,
+        from: eve_text::ByteOff,
+        forward: bool,
+    },
     /// 改行コードの変換の ChangeSet を作る (03 §8.4)。`snapshot` は投入時の Revision のもの。
     ConvertEol {
         snapshot: Snapshot,
@@ -199,6 +206,11 @@ pub enum JobResult {
         job: JobId,
         path: FsPath,
     },
+    /// 単発の検索の結果。`found` は (一致, 文書の端を越えたか)。
+    FindNextDone {
+        job: JobId,
+        found: Option<(eve_text::ByteRange, bool)>,
+    },
     /// 改行コードの変換の ChangeSet ができた。
     ConvertEolDone {
         job: JobId,
@@ -243,6 +255,7 @@ impl JobResult {
             | JobResult::Unmappable { job, .. }
             | JobResult::ReplaceAllDone { job, .. }
             | JobResult::ConvertEolDone { job, .. }
+            | JobResult::FindNextDone { job, .. }
             | JobResult::SearchBatch { job, .. }
             | JobResult::SearchDone { job, .. }
             | JobResult::Failed { job, .. } => *job,
@@ -359,6 +372,18 @@ pub fn run_job(
                 counts: crate::unmap::ReplaceCounts::default(),
             },
             Err(()) => JobResult::Failed {
+                job: req.id,
+                err: JobError::Cancelled,
+            },
+        },
+        JobKind::FindNext {
+            snapshot,
+            query,
+            from,
+            forward,
+        } => match crate::search::find_next(snapshot, query, *from, *forward, cancel) {
+            Some(found) => JobResult::FindNextDone { job: req.id, found },
+            None => JobResult::Failed {
                 job: req.id,
                 err: JobError::Cancelled,
             },

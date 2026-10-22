@@ -327,6 +327,79 @@ pub fn scan_bytes(
     true
 }
 
+/// `from` から先 (`forward`) か前の最初の一致を探す。端を越えたら反対側から続ける (`wrapped`)。
+/// 一致が無ければ `Some(None)`、取り消されたら `None`。単発の検索ジョブ (`JobKind::FindNext`) の本体。
+pub fn find_next(
+    text: &dyn TextRead,
+    query: &SearchQuery,
+    from: ByteOff,
+    forward: bool,
+    cancel: &CancelToken,
+) -> Option<Option<(ByteRange, bool)>> {
+    let Some(m) = query.matcher() else {
+        return Some(None);
+    };
+    let len = text.len_bytes();
+    let line_start = text.line_to_byte(text.byte_to_line(from)).0.min(len);
+    let mut hit: Option<ByteRange> = None;
+    if forward {
+        // カーソルの行から末尾まで (カーソルより前に始まる一致は除く)
+        let ok = scan_bytes(
+            text,
+            &m,
+            ByteRange::new(ByteOff(line_start), ByteOff(len)),
+            cancel,
+            &mut |r| {
+                if r.start >= from {
+                    hit = Some(r);
+                    return false;
+                }
+                true
+            },
+        );
+        if let Some(r) = hit {
+            return Some(Some((r, false)));
+        }
+        if !ok && cancel.is_cancelled() {
+            return None;
+        }
+        // 先頭から (最初の一致)
+        let ok = scan_bytes(
+            text,
+            &m,
+            ByteRange::new(ByteOff(0), ByteOff(len)),
+            cancel,
+            &mut |r| {
+                hit = Some(r);
+                false
+            },
+        );
+        if !ok && hit.is_none() {
+            return None;
+        }
+        return Some(hit.map(|r| (r, true)));
+    }
+    // 前へ: 全体を 1 回走査して、`from` より前で終わる最後の一致と、全体の最後の一致を取る
+    let (mut before, mut last): (Option<ByteRange>, Option<ByteRange>) = (None, None);
+    let ok = scan_bytes(
+        text,
+        &m,
+        ByteRange::new(ByteOff(0), ByteOff(len)),
+        cancel,
+        &mut |r| {
+            if r.end <= from {
+                before = Some(r);
+            }
+            last = Some(r);
+            true
+        },
+    );
+    if !ok {
+        return None;
+    }
+    Some(before.map(|r| (r, false)).or(last.map(|r| (r, true))))
+}
+
 /// すべて置換の ChangeSet を作る (一致を保持せず、走査しながら直接組み立てる、03 §12.5)。
 /// 一致の選び方は検索と同じ。返すのは (ChangeSet, 置換した件数)。取り消されたら `None`。
 pub fn build_replace_all(

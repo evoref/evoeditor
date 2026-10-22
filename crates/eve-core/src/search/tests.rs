@@ -201,3 +201,39 @@ fn 最初の一致はすぐ送る() {
     };
     assert_eq!(matches.len(), 1);
 }
+
+fn next(doc: &str, p: &str, from: usize, forward: bool) -> Option<Option<(usize, bool)>> {
+    let t = Text::from(doc);
+    find_next(&t, &lit(p), ByteOff(from), forward, &CancelToken::new())
+        .map(|o| o.map(|(r, w)| (r.start.0, w)))
+}
+
+#[test]
+fn 単発の検索_先へ_前へ_折り返し() {
+    let doc = "ab\nxx\nab\nxx\nab";
+    assert_eq!(next(doc, "ab", 0, true), Some(Some((0, false))));
+    assert_eq!(next(doc, "ab", 1, true), Some(Some((6, false))));
+    assert_eq!(
+        next(doc, "ab", 13, true),
+        Some(Some((0, true))),
+        "末尾を越えて先頭へ"
+    );
+    assert_eq!(next(doc, "ab", 14, false), Some(Some((12, false))));
+    assert_eq!(next(doc, "ab", 2, false), Some(Some((0, false))));
+    assert_eq!(
+        next(doc, "ab", 0, false),
+        Some(Some((12, true))),
+        "先頭を越えて末尾へ"
+    );
+    assert_eq!(next(doc, "zz", 0, true), Some(None));
+    assert_eq!(next(doc, "", 0, false), Some(None));
+}
+
+#[test]
+fn 単発の検索は取り消せる() {
+    let t = Text::from("ab\n".repeat(1000).as_str());
+    let c = CancelToken::new();
+    c.cancel();
+    assert!(find_next(&t, &lit("zz"), ByteOff(0), true, &c).is_none());
+    assert!(find_next(&t, &lit("zz"), ByteOff(0), false, &c).is_none());
+}
