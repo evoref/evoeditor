@@ -1288,8 +1288,12 @@ status = "todo"
 id = "AC-NFR-503-1"
 requirement = "NFR-503"
 kind = "T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "ファイル内容の制御シーケンスは端末への出力に現れない",
+    "ファイル名とメッセージの制御シーケンスは端末への出力に現れない",
+    "貼り付けと入力の制御シーケンスは端末への出力に現れない",
+]
+status = "done"
 
 [[ac]]
 id = "AC-NFR-504-1"
