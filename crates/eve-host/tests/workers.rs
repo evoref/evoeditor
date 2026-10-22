@@ -226,3 +226,42 @@ fn 待機中のジョブの取消しは_cancelled_で返り_結果は1件だけ(
         "結果は 1 件ずつ"
     );
 }
+
+#[test]
+fn 検索は_bg_ワーカーで走り_途中経過と終わりが届く() {
+    let clock = Arc::new(SystemClock::new());
+    let fs = Arc::new(MemFs::new(clock.clone()));
+    let jp = JobPorts {
+        fs: fs.clone(),
+        clock,
+        paths: Arc::new(FixedPaths::default()),
+    };
+    let (tx, rx) = channel();
+    let spawner = ThreadJobSpawner::new(jp, tx).unwrap();
+    let snapshot = eve_text::Text::from("a\n".repeat(600).as_str()).snapshot();
+    let job = spawner.spawn(
+        None,
+        Revision(0),
+        JobKind::Search {
+            snapshot,
+            query: eve_core::SearchQuery::literal("a"),
+            from: eve_text::ByteOff(0),
+            max_matches: 10_000,
+            count_limit: 1_000_000,
+        },
+    );
+    let (mut found, mut total) = (0usize, None);
+    wait_until("検索の終わり", || {
+        while let Ok(HostMsg::Job(r)) = rx.try_recv() {
+            match *r {
+                JobResult::SearchBatch { job: j, matches } if j == job => found += matches.len(),
+                JobResult::SearchDone {
+                    job: j, total: t, ..
+                } if j == job => total = Some(t),
+                _ => {}
+            }
+        }
+        total.is_some()
+    });
+    assert_eq!((found, total), (600, Some(600)));
+}

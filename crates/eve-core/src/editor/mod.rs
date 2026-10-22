@@ -19,6 +19,7 @@ mod motion;
 mod overlay;
 mod palette;
 mod query;
+mod search_state;
 mod snapshot;
 mod state;
 
@@ -37,6 +38,7 @@ pub use edit::normalize_eol;
 pub use keymap::{
     Binding, KeyParseError, Keymap, Layer, Resolution, format_stroke, parse_sequence, parse_stroke,
 };
+pub use search_state::{SearchCount, SearchStep};
 pub use snapshot::DocSnapshot;
 pub use state::{EditorState, ScrollPos, View, Window};
 

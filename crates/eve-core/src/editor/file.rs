@@ -36,6 +36,8 @@ pub(super) enum Pending {
     },
     /// 未編集の上書き保存の照合 (03 §9.3 手順 0)。
     CheckUnchanged { doc: DocumentId },
+    /// 文書内の全件検索。状態は `EditorState::search` にある。
+    Search,
     /// 起動時の退避ディレクトリの走査。
     RecoveryScan,
     /// 「退避先に保存」(03 §9.7 (e))。`path` は元のファイル。
@@ -231,6 +233,7 @@ impl EditorState {
             .filter(|(_, p)| match p {
                 Pending::Open { doc: d, .. } | Pending::CheckUnchanged { doc: d } => *d == doc,
                 Pending::ReplaceUnmappable { ask, .. } => ask.doc == doc,
+                Pending::Search => self.search.as_ref().is_some_and(|s| s.doc() == doc),
                 // 保存ジョブは取り消さず、完了を待つ (03 §9.2 の「閉じる手順」。ユーザーが求めた保存を中断しない)
                 Pending::Save { .. } | Pending::RecoveryScan | Pending::WriteRecovery { .. } => {
                     false
@@ -238,6 +241,9 @@ impl EditorState {
             })
             .map(|(id, _)| *id)
             .collect();
+        if self.search.as_ref().is_some_and(|s| s.doc() == doc) {
+            self.search = None;
+        }
         for id in ids {
             self.continuations.remove(&id);
             self.pending.remove(&id);
@@ -564,6 +570,11 @@ impl EditorState {
     /// ジョブの結果を受け取る (02 §5.4)。
     pub fn on_job_result(&mut self, r: JobResult) {
         let job = r.job();
+        // 検索は途中経過が複数届く。待ちの記録は終わりまで残す
+        if matches!(self.pending.get(&job), Some(Pending::Search)) {
+            self.on_search_result(r);
+            return;
+        }
         let cont = self.continuations.remove(&job);
         let Some(pending) = self.pending.remove(&job) else {
             return;
@@ -578,6 +589,7 @@ impl EditorState {
                 kind,
             } => self.finish_open(doc, view, path, replace, opts, kind, r),
             Pending::CheckUnchanged { doc } => self.finish_check(doc, r),
+            Pending::Search => {}
             Pending::WriteRecovery { path } => self.finish_write_recovery(&path, r),
             Pending::ReplaceUnmappable {
                 ask,
