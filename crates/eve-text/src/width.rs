@@ -450,6 +450,7 @@ mod tests {
         assert_eq!(w("\n"), 0);
     }
 
+    // verifies: AC-NFR-605-1
     #[test]
     fn 曖昧幅は設定に従う() {
         let wide = WidthConfig {

@@ -165,8 +165,12 @@ status = "done"
 id = "AC-FR-109-4"
 requirement = "FR-109"
 kind = "T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "iso_2022_jp_の半角カナは全角カナへ置換する",
+    "jis_系の互換文字はどの文字コードでも表現不能として報告される",
+    "置換して保存は一覧を示し_確認の後に置換して書く",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-109-5"
@@ -230,15 +234,19 @@ status = "done"
 id = "AC-FR-112-2"
 requirement = "FR-112"
 kind = "T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "jis_系の互換文字はどの文字コードでも表現不能として報告される",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-112-3"
 requirement = "FR-112"
 kind = "T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "報告されなかった文字はすべて元の文字に戻る",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-112-4"
@@ -786,8 +794,10 @@ status = "done"
 id = "AC-FR-507-3"
 requirement = "FR-507"
 kind = "T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "不正バイトは_0x_形式で_c1_制御文字は_u_形式で書き分ける",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-511-1"
@@ -944,8 +954,12 @@ status = "todo"
 id = "AC-FR-701-1"
 requirement = "FR-701"
 kind = "T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "タブ文字の表示幅は_tab_width",
+    "曖昧幅の設定で_frame_のセル幅が切り替わる",
+    "色深度の判定表の各行",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-701-3"
@@ -1108,15 +1122,20 @@ status = "done"
 id = "AC-NFR-302-2"
 requirement = "NFR-302"
 kind = "T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "コンソールを閉じると未保存の内容を退避して終了する",
+    "ctrl_break_を受けると未保存の内容を退避して終了する",
+]
+status = "done"
 
 [[ac]]
 id = "AC-NFR-302-3"
 requirement = "NFR-302"
 kind = "T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "メインが止まっていてもコンソールを閉じると未保存の内容を退避して終了する",
+]
+status = "done"
 
 [[ac]]
 id = "AC-NFR-302-5"
@@ -1138,29 +1157,38 @@ status = "done"
 id = "AC-NFR-303-1"
 requirement = "NFR-303"
 kind = "T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "区分_a_のコーパスは無編集の上書き保存でも名前を付けて保存でもバイト一致する",
+]
+status = "done"
 
 [[ac]]
 id = "AC-NFR-303-2"
 requirement = "NFR-303"
 kind = "T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "区分_a_のコーパスは無編集の上書き保存でも名前を付けて保存でもバイト一致する",
+]
+status = "done"
 
 [[ac]]
 id = "AC-NFR-303-3"
 requirement = "NFR-303"
 kind = "T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "区分_b_の文書を編集して保存するときは書き込む前に確認し_保存を選ぶと代表バイトで書く",
+    "重複符号化の行を読込時に数えて通知する",
+]
+status = "done"
 
 [[ac]]
 id = "AC-NFR-303-4"
 requirement = "NFR-303"
 kind = "T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "iso_2022_jp_のエスケープが変わる文書は編集して保存するとき確認する",
+]
+status = "done"
 
 [[ac]]
 id = "AC-NFR-304-1"
@@ -1176,8 +1204,10 @@ status = "done"
 id = "AC-NFR-304-2"
 requirement = "NFR-304"
 kind = "T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "チャンク境界をまたぐ不正バイトも元のバイト値として表示される",
+]
+status = "done"
 
 [[ac]]
 id = "AC-NFR-304-3"
@@ -1352,8 +1382,11 @@ status = "todo"
 id = "AC-NFR-605-1"
 requirement = "NFR-605"
 kind = "T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "曖昧幅の設定で_frame_のセル幅が切り替わる",
+    "曖昧幅は設定に従う",
+]
+status = "done"
 
 [[ac]]
 id = "AC-NFR-701-1"

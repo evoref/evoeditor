@@ -408,6 +408,7 @@ fn 設定ディレクトリが無くても使え_設定ディレクトリは作�
 
 // (8b ii) コンソールを閉じる (CTRL_CLOSE): 未保存の内容を退避して終了する。退避は受信スレッドがメインを待たずに書く
 // verifies: AC-FR-107-2
+// verifies: AC-NFR-302-2
 #[test]
 fn コンソールを閉じると未保存の内容を退避して終了する() {
     let mut s = Session::start(&[]);
@@ -746,6 +747,9 @@ fn コンソールイベントで退避して終了する(kind: &str) {
     let _ = std::fs::remove_dir_all(&s.state);
 }
 
+// 外部からの CTRL_C_EVENT は、端末を生の入力モード (ENABLE_PROCESSED_INPUT なし、04 §6.1) にしているので届かない。
+// キーの Ctrl+C はコマンドとして届く (`ctrl_c_はプロセスを殺さず_ctrl_z_は_undo_として届く`)。外部からの終了は CTRL_BREAK と CTRL_CLOSE。
+// verifies: AC-NFR-302-2
 #[test]
 fn ctrl_break_を受けると未保存の内容を退避して終了する() {
     コンソールイベントで退避して終了する("ctrl-break");
@@ -825,6 +829,7 @@ fn メインが止まっていても_ctrl_break_で端末を戻して終了す�
 
 // (8b iii) メインが止まった状態のコンソールの閉鎖 (test-hooks `main_stall`): 受信スレッドが退避を書く。メインを待たずに
 // 書き終えるので、CTRL_CLOSE の強制終了 (約 5 秒) の内に本文が残る (02 §9.6 手順 2)。
+// verifies: AC-NFR-302-3
 #[cfg(feature = "test-hooks")]
 #[test]
 fn メインが止まっていてもコンソールを閉じると未保存の内容を退避して終了する() {
@@ -839,6 +844,11 @@ fn メインが止まっていてもコンソールを閉じると未保存の�
     assert!(
         code.is_some(),
         "強制終了までに終わる: {:?}",
+        closed.elapsed()
+    );
+    assert!(
+        closed.elapsed() < Duration::from_millis(4500),
+        "受信から 4.5 秒の内に退避が書かれて終わる: {:?}",
         closed.elapsed()
     );
     let dirs: Vec<_> = std::fs::read_dir(&recovery)

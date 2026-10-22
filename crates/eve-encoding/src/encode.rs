@@ -148,7 +148,12 @@ fn rs_encode_with(
         match res {
             EncoderResult::InputEmpty => return bad,
             EncoderResult::OutputFull => {}
-            EncoderResult::Unmappable(ch) => bad.push((pos - ch.len_utf8(), ch)),
+            EncoderResult::Unmappable(ch) => {
+                // ISO-2022-JP のエンコーダは U+000E / U+000F / U+001B を、元の文字ではなく U+FFFD として返す。
+                // 位置と文字は、読み終えた位置の直前の文字から求める
+                let actual = text[..pos].chars().next_back().unwrap_or(ch);
+                bad.push((pos - actual.len_utf8(), actual));
+            }
         }
     }
 }
@@ -487,6 +492,16 @@ mod tests {
             ]
         );
         assert_eq!(r.total, 3);
+    }
+
+    #[test]
+    fn iso_2022_jp_の_so_si_esc_はパニックせず表現不能として報告する() {
+        // encoding_rs は U+000E / U+000F / U+001B を U+FFFD として返す (読み進めた位置から元の文字を求める)
+        for c in ['\u{e}', '\u{f}', '\u{1b}'] {
+            let (_, r) = all(Encoding::Iso2022Jp, &format!("a{c}b"));
+            assert_eq!(r.total, 1, "{c:?}");
+            assert_eq!((r.recorded[0].char_index, r.recorded[0].ch), (1, c));
+        }
     }
 
     #[test]
