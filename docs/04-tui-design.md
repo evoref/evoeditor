@@ -1357,6 +1357,11 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 | 入力プロンプト (`Prompt.hint`) | `ui.prompt.goto_line.hint` / `ui.prompt.encoding.hint` | 行、行:桁、$ (最終行) / UTF-8、Shift_JIS、EUC-JP、ISO-2022-JP、UTF-16LE、UTF-16BE | —、— |
 | 入力プロンプト (`Prompt.error`) | `ui.prompt.goto_line.error.invalid` / `ui.prompt.open.error.empty` / `ui.prompt.save_as.error.empty` / `ui.prompt.encoding.error.invalid` | 行番号を入力してください (例: 12、12:5、$) / パスを入力してください / パスを入力してください / 対応していない文字コードです | — |
 | パレット (実行できない) | `ui.palette.disabled` | 現在は実行できません: {reason} | — |
+| パレット (実行できない理由) | `ui.palette.reason.read_only` | 文書が読み取り専用です | — |
+| パレット (実行できない理由) | `ui.palette.reason.no_path` | 文書に保存先のパスがありません | — |
+| パレット (実行できない理由) | `ui.palette.reason.no_changes` | 未保存の変更がありません | — |
+| パレット (実行できない理由) | `ui.palette.reason.no_selection` | 選択範囲がありません | — |
+| パレット (実行できない理由) | `ui.palette.reason.unavailable` | 今の状態では使えません | — |
 | パレット (0 件。`List.no_match`) | `ui.palette.no_match` | 一致するコマンドはありません | — |
 | キー表記 (割当なし) | `ui.key.via_palette` | コマンドパレットから実行 | — |
 | 小さすぎる端末 (`Frame.texts.too_small`) | `ui.too_small` | 端末が小さすぎます ({cols}x{rows} 以上が必要) | — |

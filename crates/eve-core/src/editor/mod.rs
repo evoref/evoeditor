@@ -17,6 +17,7 @@ mod layout;
 mod message;
 mod motion;
 mod overlay;
+mod palette;
 mod query;
 mod snapshot;
 mod state;
@@ -59,8 +60,15 @@ impl Editor {
         motion::register(&mut registry);
         file::register(&mut registry);
         overlay::register(&mut registry);
+        let mut state = EditorState::new(caps, ports.jobs.clone(), ports.paths.clone());
+        state.set_palette_entries(
+            registry
+                .iter()
+                .filter_map(|s| palette::PaletteEntry::new(s.id.as_str(), &s.when))
+                .collect(),
+        );
         let mut editor = Editor {
-            state: EditorState::new(caps, ports.jobs.clone(), ports.paths.clone()),
+            state,
             registry,
             keymap: default_keymap::default_keymap(),
             ports,
@@ -114,7 +122,15 @@ impl Editor {
 
     /// キーマップを通さずにコマンドを実行する。権限判定フックを通る。
     pub fn execute(&mut self, inv: CommandInvocation) -> CommandResult {
-        self.registry.execute(&mut self.state, &inv)
+        let mut res = self.registry.execute(&mut self.state, &inv);
+        // パレットで選ばれたコマンドは、パレットを閉じた後に実行する
+        while let Some(id) = self.state.take_deferred_command() {
+            res = self.registry.execute(
+                &mut self.state,
+                &CommandInvocation::new(&id, InvocationSource::Palette),
+            );
+        }
+        res
     }
 
     /// キーマップを差し替える (層を足した設定の反映、テスト)。保留中のストロークは破棄する。
@@ -215,6 +231,7 @@ impl Editor {
         match overlay {
             "dialog" => &["dialog"],
             "prompt" => &["prompt", "global"],
+            "palette" => &["palette", "list", "prompt", "global"],
             _ => &Self::EDITOR_CONTEXTS,
         }
     }

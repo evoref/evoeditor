@@ -13,6 +13,11 @@ pub(super) fn default_keymap() -> Keymap {
     };
     // どこでも
     bind("global", "mod+q", "app.quit");
+    bind("global", "mod+p", "ui.palette_open");
+    bind("global", "f1", "ui.palette_open");
+    // コマンドパレット (palette → list → prompt → global)
+    bind("palette", "down", "ui.list_next");
+    bind("palette", "up", "ui.list_prev");
     // テスト専用: パニックの注入 (本来キー割当なし。E2E が端末から送れるよう、フックがあるときだけ割り当てる)
     #[cfg(feature = "test-hooks")]
     if super::overlay::test_hook_panic_command() {

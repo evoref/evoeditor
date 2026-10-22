@@ -328,6 +328,35 @@ pub enum OverlayModel {
         focused: ChoiceId,
         nav_hint: Option<CellText>,
     },
+    /// リスト選択 (コマンドパレット。バッファ一覧・ファインダと共用、FR-511)。
+    /// 照合と並び順は core が決める。`items` は `first` 番目から始まる表示窓 (最大 12 行)。
+    List {
+        title: CellText,
+        input: InputFieldModel,
+        items: Vec<ListItem>,
+        /// `items[0]` の、一致した全項目の中での番号。
+        first: usize,
+        /// 選択中の項目の、一致した全項目の中での番号。
+        selected: usize,
+        /// 件数の文言 (`ui.palette.footer`)。eve-tui は `total` から文言を作らない。
+        footer: CellText,
+        /// 0 件のときに候補の位置へ出す文言。
+        no_match: CellText,
+    },
+}
+
+/// リストの 1 行 (03 §14.6)。
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ListItem {
+    pub label: CellText,
+    /// 右寄せの補足 (パレットでは CommandId)。
+    pub detail: Option<CellText>,
+    /// `label` の書記素番号の半開区間 (照合した箇所)。バイト位置ではない。
+    pub match_ranges: Vec<std::ops::Range<usize>>,
+    /// 解決済みキーマップからの逆引き。
+    pub keys: Vec<KeyLabel>,
+    /// 実行できない理由 (解決済みの文言)。あれば淡色で出す。
+    pub disabled_reason: Option<CellText>,
 }
 
 /// frontend が自分の判断で出す場面の、core が解決済みの文言。
