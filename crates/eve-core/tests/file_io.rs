@@ -944,15 +944,16 @@ fn 退避先に保存が失敗するとそれを示す() {
 #[test]
 fn 保存の失敗の確認の別名で保存とキャンセル() {
     let mut s = Env::new();
-    edited_save_fails(&mut s, eve_core::FsErrorKind::PermissionDenied);
+    edited_save_fails(&mut s, eve_core::FsErrorKind::DiskFull);
     s.type_text("a");
     s.pump();
     assert_eq!(s.e.state().overlay_kind(), "prompt");
     s.key(KeyCode::Esc, Modifiers::NONE);
+    // 権限エラーだと文書が読み取り専用になり file.save が無効になるので、失敗はディスクの空きで起こす
     s.messages();
     s.fs.fail_next(
         eve_testkit::FsOp::WriteAtomic,
-        eve_core::FsErrorKind::PermissionDenied,
+        eve_core::FsErrorKind::DiskFull,
     );
     s.run("file.save", Args::new());
     assert!(dialog_open(&s));
@@ -1494,4 +1495,99 @@ fn 置換の確認のキャンセルは何も変えず_最初の位置へ移る(
         s.fs.read("/w/a.txt").unwrap(),
         sjis_bytes("日本語のテキストです。\n")
     );
+}
+
+// verifies: AC-FR-116-3
+#[test]
+fn 上書き保存が権限エラーなら読み取り専用に切り替わり_別名で保存できる() {
+    let mut s = Env::new();
+    edited_save_fails(&mut s, eve_core::FsErrorKind::PermissionDenied);
+    // 失敗の確認を閉じる
+    s.key(KeyCode::Esc, Modifiers::NONE);
+    s.pump();
+    assert!(
+        s.doc()
+            .1
+            .read_only
+            .contains(eve_core::ReadOnlyReason::NoWritePermission),
+        "書込権限なしに切り替わる"
+    );
+    assert_eq!(
+        s.fs.read("/w/a.txt").unwrap(),
+        b"abc",
+        "ファイルは変わらない"
+    );
+    assert_eq!(s.text(), "abcd", "編集した内容は失われない");
+    // 以後の編集は拒否される
+    s.type_text("x");
+    assert_eq!(s.text(), "abcd");
+    // 名前を付けて保存で書けて、書けた先の文書は編集できる
+    s.run("file.save_as", Args::new().with_str("path", "/w/b.txt"));
+    assert_eq!(s.fs.read("/w/b.txt").unwrap(), b"abcd");
+    assert!(s.doc().1.is_editable());
+    s.type_text("x");
+    assert_ne!(s.text(), "abcd", "編集できる");
+}
+
+// verifies: AC-FR-116-3
+#[test]
+fn 名前を付けて保存の権限エラーでは今の文書を読み取り専用にしない() {
+    let mut s = Env::new();
+    s.fs.add_file("/w/a.txt", b"abc");
+    s.open("/w/a.txt");
+    s.type_text("d");
+    s.fs.fail_next(
+        eve_testkit::FsOp::WriteAtomic,
+        eve_core::FsErrorKind::PermissionDenied,
+    );
+    s.run("file.save_as", Args::new().with_str("path", "/w/b.txt"));
+    assert!(
+        !s.doc()
+            .1
+            .read_only
+            .contains(eve_core::ReadOnlyReason::NoWritePermission)
+    );
+}
+
+// verifies: AC-FR-116-4
+#[test]
+fn 読み取り専用属性のファイルを別名で保存すると編集できる() {
+    let mut s = Env::new();
+    s.fs.add_file("/w/ro.txt", b"abc");
+    s.fs.set_readonly("/w/ro.txt", true);
+    s.open("/w/ro.txt");
+    assert!(
+        s.doc()
+            .1
+            .read_only
+            .contains(eve_core::ReadOnlyReason::FileAttribute)
+    );
+    s.run("file.save_as", Args::new().with_str("path", "/w/copy.txt"));
+    assert_eq!(s.fs.read("/w/copy.txt").unwrap(), b"abc");
+    assert!(s.doc().1.is_editable(), "保存後は編集できる");
+    // 元のファイルは変わらない
+    assert_eq!(s.fs.read("/w/ro.txt").unwrap(), b"abc");
+}
+
+// verifies: AC-FR-116-4
+#[test]
+fn readonly_の指定と内容由来の理由は別名で保存しても残る() {
+    let mut s = Env::new();
+    s.fs.add_file("/w/a.txt", b"abc");
+    s.e.state_mut().open_path(
+        "/w/a.txt",
+        eve_core::OpenOptions {
+            user_read_only: true,
+            ..Default::default()
+        },
+    );
+    s.pump();
+    s.run("file.save_as", Args::new().with_str("path", "/w/copy.txt"));
+    assert!(
+        s.doc()
+            .1
+            .read_only
+            .contains(eve_core::ReadOnlyReason::UserRequested)
+    );
+    assert!(!s.doc().1.is_editable());
 }

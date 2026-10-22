@@ -1923,6 +1923,15 @@ impl EditorState {
                         doc.format.has_bom = f.bom;
                         doc.format.roundtrip = Default::default();
                     }
+                    // 名前を付けて保存 (別のパスへ書いた) では、元のファイルに由来する読み取り専用の理由
+                    // (属性・書込権限なし) を外す。書き込めた保存先の文書は編集できる (FR-116 AC-4、03 §9.6)。
+                    // `--readonly` と内容に由来する理由 (不正バイト・バイナリ・長大行) は残る
+                    if doc.path.as_ref() != Some(path) {
+                        doc.read_only
+                            .remove(crate::document::ReadOnlyReason::FileAttribute);
+                        doc.read_only
+                            .remove(crate::document::ReadOnlyReason::NoWritePermission);
+                    }
                     // 名前を付けて保存のパスは、書けてから文書のパスにする (03 §9.3 手順 7)
                     doc.path = Some(path.clone());
                     doc.finish_save(at, Some(report.new_stamp));
@@ -2038,6 +2047,16 @@ impl EditorState {
                 );
             }
             JobResult::Failed { err, .. } => {
+                // 上書き保存が権限エラーで失敗したら、文書を読み取り専用 (書込権限なし) に切り替える。編集した内容は失われず、
+                // 名前を付けて保存で書ける (FR-116 AC-3、03 §9.6)。名前を付けて保存の失敗では付けない (失敗したのは別のパス)
+                if matches!(&err, JobError::Fs(e) if e.kind == FsErrorKind::PermissionDenied)
+                    && let Some(doc) = self.documents.get_mut(&doc_id)
+                    && doc.path.as_ref() == Some(path)
+                {
+                    doc.read_only
+                        .insert(crate::document::ReadOnlyReason::NoWritePermission);
+                    self.mark_dirty_render();
+                }
                 let ask = self.save_failed_ask(doc_id, path, expected, fmt, cont);
                 // 照合の失敗 (Conflict) は別の経路 (外部変更の確認、後続)。取消しは確認なしで示す
                 let ask = ask.filter(|_| {
