@@ -146,7 +146,7 @@ impl EditorState {
         Some(if forward { r.end() } else { r.start() })
     }
 
-    fn search_fresh(&self) -> bool {
+    pub(super) fn search_fresh(&self) -> bool {
         self.search.as_ref().is_some_and(|s| {
             self.documents
                 .get(&s.doc)
