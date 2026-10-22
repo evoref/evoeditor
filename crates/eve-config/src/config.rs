@@ -21,6 +21,8 @@ pub enum DiagKind {
     Syntax { message: String },
     /// 未知のキー・セクション。`suggestion` は編集距離 2 以下の公開キー。
     UnknownKey { suggestion: Option<String> },
+    /// 後の版で公開する設定 (このバージョンでは未対応)。情報。画面には出さず、件数にも数えない (07 §4.3)。
+    Unsupported,
     /// 型が違う。
     TypeMismatch {
         expected: &'static str,
@@ -202,6 +204,15 @@ impl Cx<'_> {
 
     fn section(&mut self, name: &Spanned<DeString<'_>>, value: &Spanned<DeValue<'_>>) {
         let n: &str = name.get_ref();
+        if crate::reserved::RESERVED_SECTIONS.contains(&n) {
+            self.diag(
+                Severity::Info,
+                DiagKind::Unsupported,
+                n.to_owned(),
+                name.span().start,
+            );
+            return;
+        }
         if !SECTIONS.contains(&n) {
             let suggestion = nearest(n, SECTIONS).map(str::to_owned);
             self.diag(
@@ -228,8 +239,15 @@ impl Cx<'_> {
             let full = format!("{n}.{}", k.get_ref());
             if KEYS.contains(&full.as_str()) {
                 self.value(&full, v);
+            } else if is_reserved_key(&full) {
+                self.diag(Severity::Info, DiagKind::Unsupported, full, k.span().start);
             } else {
-                let suggestion = nearest(&full, KEYS).map(str::to_owned);
+                let all: Vec<&str> = KEYS
+                    .iter()
+                    .chain(crate::reserved::RESERVED_KEYS)
+                    .copied()
+                    .collect();
+                let suggestion = nearest(&full, &all).map(str::to_owned);
                 self.diag(
                     Severity::Warning,
                     DiagKind::UnknownKey { suggestion },
@@ -406,6 +424,14 @@ fn encoding(s: &str) -> Option<DefaultEncoding> {
         "system" => DefaultEncoding::System,
         _ => return None,
     })
+}
+
+/// 公開前のキー (その下の入れ子のキーを含む)。
+fn is_reserved_key(full: &str) -> bool {
+    let prefix = format!("{full}.");
+    crate::reserved::RESERVED_KEYS
+        .iter()
+        .any(|r| *r == full || r.starts_with(&prefix))
 }
 
 /// 公開キーの既定値の表記 (診断の「既定値 {default} を使います」に入れる)。未知のキーは空。

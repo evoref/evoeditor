@@ -272,6 +272,10 @@ impl EditorState {
     }
 
     fn open_path_inner(&mut self, raw_path: &str, opts: OpenOptions, force: bool) -> CommandResult {
+        let opts = OpenOptions {
+            default_eol: opts.default_eol.or(Some(self.config_eol())),
+            ..opts
+        };
         // 読込の途中の置き換えの重なりは受け付けない (置き換え対象の文書が孤立しないように)
         if self.open_in_progress() {
             return CommandResult::Rejected(RejectReason::NotAvailable);
@@ -1531,6 +1535,7 @@ impl EditorState {
             pending,
             // 巨大ファイルとして開いた文書は、確認を繰り返さない
             confirmed_large,
+            default_eol: Some(self.config_eol()),
             ..OpenOptions::default()
         };
         self.mark_dirty_render();

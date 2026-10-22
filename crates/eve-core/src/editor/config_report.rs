@@ -18,12 +18,17 @@ impl EditorState {
     /// 診断を 1 件または要約 1 件のメッセージ (`warn`) にして出す。0 件なら何もしない。
     /// 最初の Frame の後に呼ぶ (起動を妨げない、FR-703)。
     pub fn report_config(&mut self, file: &str, diagnostics: &[Diagnostic]) {
-        let Some(first) = diagnostics.first() else {
+        // 「このバージョンでは未対応」の情報診断は画面に出さず、件数にも数えない (07 §4.3)
+        let shown: Vec<&Diagnostic> = diagnostics
+            .iter()
+            .filter(|d| d.severity != eve_config::Severity::Info)
+            .collect();
+        let Some(&first) = shown.first() else {
             return;
         };
         let (detail, hint) = self.diagnostic_texts(first);
         let line = first.line.to_string();
-        if diagnostics.len() == 1 {
+        if shown.len() == 1 {
             self.show_message(
                 MessageLevel::Warn,
                 "msg.config.problem",
@@ -35,12 +40,15 @@ impl EditorState {
                 ],
             );
         } else {
-            let count = diagnostics.len().to_string();
-            // ログへの書き出しはまだ無い (05 §7.3)
+            let count = shown.len().to_string();
+            let log = self
+                .log_path
+                .clone()
+                .unwrap_or_else(|| "ログなし".to_owned());
             self.show_message(
                 MessageLevel::Warn,
                 "msg.config.problems",
-                &[("count", &count), ("detail", &detail), ("log", "未対応")],
+                &[("count", &count), ("detail", &detail), ("log", &log)],
             );
         }
     }
@@ -52,6 +60,7 @@ impl EditorState {
         let mut args: Vec<(&str, String)> =
             vec![("item", d.key.clone()), ("value", d.value.clone())];
         let kind = match &d.kind {
+            DiagKind::Unsupported => "unsupported",
             DiagKind::Syntax { message } => {
                 args.push(("reason", message.clone()));
                 "syntax"

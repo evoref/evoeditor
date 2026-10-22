@@ -118,6 +118,23 @@ fn load_config(dir: &std::path::Path) -> eve_config::Loaded {
     }
 }
 
+/// 診断の重さ → ログのレベル。
+fn log_level(s: eve_config::Severity) -> eve_platform::log::Level {
+    match s {
+        eve_config::Severity::Info => eve_platform::log::Level::Info,
+        eve_config::Severity::Warning => eve_platform::log::Level::Warn,
+        eve_config::Severity::Error => eve_platform::log::Level::Error,
+    }
+}
+
+/// 診断 1 件のログの行 (ログは英語のみ、05 §7.3)。
+fn describe(d: &eve_config::Diagnostic) -> String {
+    format!(
+        "config {CONFIG_FILE}:{}:{} {} {:?}",
+        d.line, d.column, d.key, d.kind
+    )
+}
+
 /// 設定 `theme.color_mode` を TUI の型へ。
 fn color_mode(mode: eve_config::ColorMode) -> eve_tui::caps::ColorMode {
     use eve_config::ColorMode as C;
@@ -148,6 +165,11 @@ fn run(
     let loaded = load_config(paths.config_dir().as_path());
     let clock = Arc::new(SystemClock::new());
     let state_dir = paths.state_dir();
+    // 設定の診断は全件をログへ書く (画面には最初の 1 件か要約、07 §4.3)。ファイルは最初の書込で作る
+    let logger = eve_platform::log::Logger::new(Some(state_dir.as_path()));
+    for d in &loaded.diagnostics {
+        logger.log(log_level(d.severity), &describe(d));
+    }
     // 置換中の計数 (保存の置換・直接上書きの間だけ上がる)。終了の経路が下りるのを待つ (02 §9.6 手順 3)
     let replacing = eve_core::ReplacingCount::default();
     let fs = Arc::new(WinFs::new(state_dir.as_path()).with_replacing(replacing.clone()));
@@ -174,6 +196,15 @@ fn run(
     host.set_initial_encoding(encoding);
     let config = loaded.config;
     host.set_config(config, CONFIG_FILE, loaded.diagnostics);
+    // 要約の対処 (hint) は省略されないので、長い絶対パスではなく末尾の `log\evoeditor.log` だけを出す
+    host.set_log_path(logger.path().and_then(|p| {
+        let name = p.file_name()?.to_string_lossy().into_owned();
+        let dir = p.parent()?.file_name()?.to_string_lossy().into_owned();
+        Some(format!("{dir}\\{name}"))
+    }));
+    host.set_system_encoding(
+        eve_platform::locale::system_encoding().and_then(Encoding::from_label),
+    );
     // システムクリップボード (所有者ウィンドウのスレッドは最初の読み書きで遅延して起こす、05 §8.1)
     host.set_clipboard(Arc::new(eve_platform::clipboard::WinClipboard::new()));
 

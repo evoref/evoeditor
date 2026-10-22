@@ -136,6 +136,16 @@ impl Host {
         }
     }
 
+    /// ログファイルの場所を渡す (設定の問題の要約に出す)。
+    pub fn set_log_path(&mut self, path: Option<String>) {
+        self.editor.state_mut().set_log_path(path);
+    }
+
+    /// OS のロケール由来の文字コードのヒントを渡す (`file.default_encoding = "system"`、05 §6)。`start` / `run` の前に呼ぶ。
+    pub fn set_system_encoding(&mut self, encoding: Option<eve_core::Encoding>) {
+        self.editor.state_mut().set_system_encoding(encoding);
+    }
+
     /// 設定と、その読込の診断を渡す (`start` / `run` の前に呼ぶ)。`file` は診断の表示名。
     pub fn set_config(
         &mut self,

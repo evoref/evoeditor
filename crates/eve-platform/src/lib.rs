@@ -23,6 +23,9 @@ mod hooks;
 mod inflight;
 #[cfg(windows)]
 mod inplace;
+pub mod locale;
+#[cfg(windows)]
+pub mod log;
 pub mod path;
 #[cfg(windows)]
 pub mod rescue;
