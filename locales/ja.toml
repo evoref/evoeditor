@@ -589,8 +589,6 @@ encoding = "[E] 文字コードを指定して開く"
 
 [ui.confirm.save]
 dangling_link = "{path} はリンクで、リンク先 {target} がありません — `[C] リンク先に作成 (リンクを保つ)` ★"
-escape_normalized = "{count} 行でエスケープシーケンスの書き方が変わります (文字は変わりません) — `[S] 保存` ★ / `[A] 別名で保存`"
-lossy_roundtrip = "{count} 箇所が、同じ文字の別のバイト表現で保存されます (例: {example}) — `[S] 保存` / `[A] 別名で保存` ★"
 overwrite = "{path} は既にあります。上書きしますか? — `[O] 上書き` / `[R] 別の名前を入力` ★ (既定は別の名前を入力。確定 (ユーザー回答))"
 read_only = "{path} は読み取り専用です — `[A] 別名で保存` ★ / `[W] 読み取り専用を解除して保存`"
 
@@ -605,6 +603,18 @@ recovery = "[R] 退避先に保存"
 title = "安全に保存できません"
 message = "{path} は安全な方法 (一時ファイルと置換) で保存できません: {reason}"
 direct = "[O] 直接上書き (バックアップ付き)"
+alt = "[A] 別名で保存"
+
+[ui.confirm.save.lossy_roundtrip]
+title = "別のバイト表現で保存されます"
+message = "{count} 箇所が、同じ文字の別のバイト表現で保存されます (例: 元の先頭から {example} バイト目の行)"
+save = "[S] 保存"
+alt = "[A] 別名で保存"
+
+[ui.confirm.save.escape_normalized]
+title = "エスケープの書き方が変わります"
+message = "{count} 行でエスケープシーケンスの書き方が変わります (文字は変わりません)"
+save = "[S] 保存"
 alt = "[A] 別名で保存"
 
 [ui.confirm.save.conflict_changed]
