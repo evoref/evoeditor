@@ -18,7 +18,13 @@ use portable_pty::{Child, CommandBuilder, MasterPty, PtySize, native_pty_system}
 
 static STATE_SEQ: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
 
-const EXE: &str = env!("CARGO_BIN_EXE_evoeditor");
+/// ビルドしたままの exe。`helper_exe` などの、隣のファイルを探す用。
+const BUILT: &str = env!("CARGO_BIN_EXE_evoeditor");
+
+/// 検査する exe。環境変数 `EVE_EXE` があればそれ (配布 zip から展開した exe のスモーク、docs/09 §3.6 / §9.2 手順 6)。
+fn exe() -> String {
+    std::env::var("EVE_EXE").unwrap_or_else(|_| BUILT.to_owned())
+}
 const COLS: u16 = 100;
 const ROWS: u16 = 30;
 /// 画面の変化を待つ上限 (失敗として扱う。時間の許容ではない)。
@@ -54,7 +60,7 @@ impl Session {
                 pixel_height: 0,
             })
             .expect("ConPTY を開けません");
-        let mut cmd = CommandBuilder::new(EXE);
+        let mut cmd = CommandBuilder::new(exe());
         cmd.args(args);
         cmd.env_remove("NO_COLOR");
         cmd.env_remove("WT_SESSION");
@@ -569,7 +575,7 @@ fn shift_jis_のファイルを開いて文字コードを表示する() {
 
 #[test]
 fn 未知の文字コードの指定は使い方の誤り() {
-    let out = std::process::Command::new(EXE)
+    let out = std::process::Command::new(exe())
         .args(["--encoding", "latin1", "x.txt"])
         .output()
         .expect("起動");
@@ -609,7 +615,7 @@ fn 貼り付けの本文の制御文字はコマンドとして実行されな�
 // 配布 exe のスモーク S2: --version (pty 不要)
 #[test]
 fn version_は版を出して終了コード_0() {
-    let out = std::process::Command::new(EXE)
+    let out = std::process::Command::new(exe())
         .arg("--version")
         .output()
         .expect("起動");
@@ -623,7 +629,7 @@ fn version_は版を出して終了コード_0() {
 
 #[test]
 fn 使い方の誤りは終了コード_2() {
-    let out = std::process::Command::new(EXE)
+    let out = std::process::Command::new(exe())
         .arg("--nope")
         .output()
         .expect("起動");
@@ -696,7 +702,7 @@ fn パニックすると端末を戻し_未保存の内容を退避してクラ�
 
 /// 補助プロセス `eve-test-helpers` の場所 (evoeditor と同じ出力ディレクトリ)。無ければ cargo で作る。
 fn helper_exe() -> PathBuf {
-    let dir = std::path::Path::new(EXE).parent().unwrap().to_path_buf();
+    let dir = std::path::Path::new(BUILT).parent().unwrap().to_path_buf();
     let exe = dir.join("eve-test-helpers.exe");
     if !exe.exists() {
         let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".to_owned());
