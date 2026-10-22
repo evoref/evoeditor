@@ -221,3 +221,99 @@ fn ページ送りは窓の行数ぶん動き_端で止まる() {
     h.keys("pageup");
     assert_eq!(list(&h.frame()).2, total - 13);
 }
+
+fn title(f: &Frame) -> String {
+    let OverlayModel::List { title, .. } = &f.overlays[0] else {
+        panic!()
+    };
+    cells(title)
+}
+
+fn labels(f: &Frame) -> Vec<String> {
+    list(f).0.iter().map(|i| cells(&i.label)).collect()
+}
+
+#[test]
+fn 必須の列挙引数があるコマンドは_同じオーバーレイで値を尋ねる() {
+    let mut h = Harness::new();
+    h.text("a");
+    h.keys("enter");
+    h.text("b");
+    h.keys("ctrl+p");
+    h.text("file.set_line_ending");
+    h.keys("enter");
+    assert_eq!(h.overlay(), "palette", "閉じずに値の一覧になる");
+    let f = h.frame();
+    assert_eq!(title(&f), "改行コードを変換: 改行コード");
+    assert_eq!(labels(&f), ["LF", "CRLF", "CR"]);
+    h.text("crlf");
+    assert_eq!(labels(&h.frame()), ["CRLF"]);
+    h.keys("enter");
+    assert_eq!(h.overlay(), "");
+    let eol = h
+        .editor
+        .state()
+        .document(h.doc_id())
+        .unwrap()
+        .format
+        .default_eol;
+    assert_eq!(eol, eve_text::LineEnding::Crlf);
+}
+
+#[test]
+fn 引数の一覧で_esc_は_1_段戻り_もう一度で閉じる() {
+    let mut h = Harness::new();
+    h.keys("ctrl+p");
+    h.text("file.set_line_ending");
+    h.keys("enter");
+    h.keys("esc");
+    assert_eq!(h.overlay(), "palette");
+    assert_eq!(title(&h.frame()), "コマンド");
+    h.keys("esc");
+    assert_eq!(h.overlay(), "");
+}
+
+#[test]
+fn 文字コードを一覧から選べる() {
+    let mut h = Harness::new();
+    h.text("日本語");
+    h.keys("ctrl+p");
+    h.text("file.set_encoding");
+    h.keys("enter");
+    let f = h.frame();
+    assert_eq!(
+        labels(&f),
+        [
+            "UTF-8",
+            "UTF-16LE",
+            "UTF-16BE",
+            "Shift_JIS",
+            "EUC-JP",
+            "ISO-2022-JP"
+        ]
+    );
+    h.text("shift");
+    h.keys("enter");
+    // パスのない文書では、新しい書式で保存する名前を尋ねる (03 §8.8)
+    assert_eq!(h.overlay(), "prompt");
+}
+
+#[test]
+fn 引数の無いコマンドはこれまでどおり実行する() {
+    let mut h = Harness::new();
+    h.keys("ctrl+p");
+    h.text("file.save_as");
+    h.keys("enter");
+    assert_eq!(h.overlay(), "prompt");
+}
+
+#[test]
+fn 引数の一覧でもページ送りが動く() {
+    let mut h = Harness::new();
+    h.keys("ctrl+p");
+    h.text("file.set_encoding");
+    h.keys("enter pagedown");
+    assert_eq!(list(&h.frame()).2, 5, "6 項目の末尾で止まる");
+    h.keys("pageup");
+    assert_eq!(list(&h.frame()).2, 0);
+}

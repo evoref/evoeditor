@@ -38,6 +38,8 @@ pub(super) enum Pending {
     CheckUnchanged { doc: DocumentId },
     /// 文書内の全件検索。状態は `EditorState::search` にある。
     Search,
+    /// 改行コードの変換の ChangeSet を作るジョブ (03 §8.4)。
+    ConvertEol(super::eol::EolConvert),
     /// すべて置換の ChangeSet を作るジョブ (03 §12.5)。
     ReplaceAll {
         doc: DocumentId,
@@ -240,6 +242,7 @@ impl EditorState {
                 Pending::ReplaceUnmappable { ask, .. } => ask.doc == doc,
                 Pending::Search => self.search.as_ref().is_some_and(|s| s.doc() == doc),
                 Pending::ReplaceAll { doc: d, .. } => *d == doc,
+                Pending::ConvertEol(c) => c.doc == doc,
                 // 保存ジョブは取り消さず、完了を待つ (03 §9.2 の「閉じる手順」。ユーザーが求めた保存を中断しない)
                 Pending::Save { .. } | Pending::RecoveryScan | Pending::WriteRecovery { .. } => {
                     false
@@ -596,6 +599,7 @@ impl EditorState {
             } => self.finish_open(doc, view, path, replace, opts, kind, r),
             Pending::CheckUnchanged { doc } => self.finish_check(doc, r),
             Pending::Search => {}
+            Pending::ConvertEol(c) => self.finish_eol_conversion(c, r),
             Pending::ReplaceAll { doc, revision } => self.finish_replace_all(doc, revision, r),
             Pending::WriteRecovery { path } => self.finish_write_recovery(&path, r),
             Pending::ReplaceUnmappable {

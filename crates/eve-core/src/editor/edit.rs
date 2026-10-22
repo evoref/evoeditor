@@ -152,10 +152,8 @@ fn clipboard_cut(ctx: &mut CommandCtx<'_>) -> CommandResult {
 /// 1 つの Transaction (`UndoGroupHint::Break`) で適用し、Undo ノードの `format_change` に前後の書式を持たせる (1 回の Undo で本文と
 /// `default_eol` が戻る、03 §7.2)。変える改行が無ければ本文は変えず、`default_eol` だけを変える (メタデータ。Undo の対象外)。
 fn set_line_ending(ctx: &mut CommandCtx<'_>) -> CommandResult {
-    use crate::document::UndoGroupHint;
-    use crate::document::{EolStats, FormatChange, FormatState};
     use eve_text::LineEnding;
-    use eve_view::{CommandId, MessageLevel};
+    use eve_view::MessageLevel;
     let eol = match ctx.args.str("eol").map(str::to_ascii_lowercase).as_deref() {
         Some("lf") => LineEnding::Lf,
         Some("crlf") => LineEnding::Crlf,
@@ -198,86 +196,9 @@ fn set_line_ending(ctx: &mut CommandCtx<'_>) -> CommandResult {
             .show_message(MessageLevel::Info, "info.eol.unchanged", &[("eol", name)]);
         return CommandResult::Done;
     }
-    // (3) `eol` と異なるすべての区切りを置き換える ChangeSet を作る
-    let snapshot = doc.snapshot();
-    let body = snapshot.slice_to_string(ByteRange::all(snapshot.len_bytes()));
-    let b = body.as_bytes();
-    let mut edits: Vec<Edit> = Vec::with_capacity(k);
-    let mut i = 0;
-    while i < b.len() {
-        let (len, kind) = match b[i] {
-            b'\r' if b.get(i + 1) == Some(&b'\n') => (2, LineEnding::Crlf),
-            b'\r' => (1, LineEnding::Cr),
-            b'\n' => (1, LineEnding::Lf),
-            _ => {
-                i += 1;
-                continue;
-            }
-        };
-        if kind != eol {
-            edits.push(Edit {
-                range: ByteRange::new(ByteOff(i), ByteOff(i + len)),
-                insert: eol.as_str().into(),
-            });
-        }
-        i += len;
-    }
-    let Ok(cs) = ChangeSet::from_sorted_edits(&snapshot, edits) else {
-        return CommandResult::Rejected(RejectReason::InvalidArgs);
-    };
-    let before = doc.format.clone();
-    let mut after = before.clone();
-    after.default_eol = eol;
-    after.eol_stats = match eol {
-        LineEnding::Lf => EolStats {
-            lf: stats.total(),
-            crlf: 0,
-            cr: 0,
-        },
-        LineEnding::Crlf => EolStats {
-            lf: 0,
-            crlf: stats.total(),
-            cr: 0,
-        },
-        LineEnding::Cr => EolStats {
-            lf: 0,
-            crlf: 0,
-            cr: stats.total(),
-        },
-    };
-    let read_only = doc.read_only;
-    let change = FormatChange {
-        before: FormatState {
-            format: before,
-            read_only,
-        },
-        after: FormatState {
-            format: after,
-            read_only,
-        },
-    };
-    // (5) 1 つの Transaction。選択は ChangeSet で写像する
-    let sel = ctx.state.view(view_id).map(|v| v.selection.clone());
-    let tx = Transaction::new(
-        cs,
-        Origin::Command(CommandId::new("file.set_line_ending")),
-        ctx.state.now(),
-    )
-    .with_view(view_id)
-    .with_undo_group(UndoGroupHint::Break)
-    .with_selections(sel, None)
-    .with_format_change(change);
-    match ctx.state.apply_transaction(doc_id, tx) {
-        Ok(_) => {
-            ctx.state.show_message(
-                MessageLevel::Info,
-                "info.eol.converted",
-                &[("count", &k.to_string()), ("eol", name)],
-            );
-            CommandResult::Done
-        }
-        Err(_) => CommandResult::Rejected(RejectReason::ReadOnly),
-    }
+    // (3)〜(5) ChangeSet を作って 1 つの Transaction で適用する (1 MiB 超はジョブ。editor/eol.rs)
+    ctx.state.convert_eol(doc_id, view_id, eol, k);
+    CommandResult::Done
 }
 
 // ---------- 文字入力・改行 ----------

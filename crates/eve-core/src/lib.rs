@@ -22,6 +22,7 @@ mod time;
 mod unmap;
 
 pub use cancel::CancelToken;
+mod eol;
 mod search;
 pub use document::{
     Applied, AppliedTx, ApplyError, DisplaySettings, Document, EolStats, HistoryStep, LoadState,
@@ -35,6 +36,7 @@ pub use editor::{
     Resolution, ScrollPos, SearchCount, SearchStep, View, Window, format_stroke, normalize_eol,
     parse_sequence, parse_stroke,
 };
+pub use eol::build_eol_conversion;
 pub use eve_encoding::Encoding;
 pub use fs::*;
 pub use fspath::FsPath;

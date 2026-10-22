@@ -7,7 +7,7 @@ use std::ops::Range;
 use eve_text::grapheme_indices;
 use eve_view::{CutPolicy, InputFieldModel, KeyLabel, ListItem, OverlayModel};
 
-use super::command::{CommandResult, RejectReason};
+use super::command::{Args, CommandResult, RejectReason};
 use super::context::{ContextExpr, CtxValue};
 use super::layout::cell_text;
 use super::overlay::Overlay;
@@ -28,6 +28,53 @@ fn hidden(id: &str) -> bool {
                 | "ui.list_page_up"
                 | "ui.dialog_choose"
         )
+}
+
+/// 既定値の無い必須の列挙引数を持つコマンド (07 §11.2)。パレットで選ぶと、同じオーバーレイで値の一覧を尋ねる。
+/// 省略可能な引数 (`path?` など) は尋ねず、各コマンドの既定の動作 (プロンプトを開く等) に任せる。
+#[derive(Debug)]
+pub(super) struct ArgDef {
+    command: &'static str,
+    /// 引数名。
+    arg: &'static str,
+    /// 見出しに入れる引数の名前の MessageKey (`ui.palette.arg.*`)。
+    label_key: &'static str,
+    /// (値, 表示)。
+    choices: &'static [(&'static str, &'static str)],
+}
+
+const ENCODINGS: &[(&str, &str)] = &[
+    ("utf-8", "UTF-8"),
+    ("utf-16le", "UTF-16LE"),
+    ("utf-16be", "UTF-16BE"),
+    ("shift_jis", "Shift_JIS"),
+    ("euc-jp", "EUC-JP"),
+    ("iso-2022-jp", "ISO-2022-JP"),
+];
+
+const ARG_DEFS: &[ArgDef] = &[
+    ArgDef {
+        command: "file.set_line_ending",
+        arg: "eol",
+        label_key: "ui.palette.arg.eol",
+        choices: &[("lf", "LF"), ("crlf", "CRLF"), ("cr", "CR")],
+    },
+    ArgDef {
+        command: "file.reopen_with_encoding",
+        arg: "encoding",
+        label_key: "ui.palette.arg.encoding",
+        choices: ENCODINGS,
+    },
+    ArgDef {
+        command: "file.set_encoding",
+        arg: "encoding",
+        label_key: "ui.palette.arg.encoding",
+        choices: ENCODINGS,
+    },
+];
+
+fn arg_def(command: &str) -> Option<&'static ArgDef> {
+    ARG_DEFS.iter().find(|d| d.command == command)
 }
 
 /// パレットの候補 1 つ (登録済みコマンドの ID と実行条件)。
@@ -54,6 +101,8 @@ pub(super) struct PaletteState {
     pub cursor: usize,
     /// 一致した候補の中での選択位置。
     pub selected: usize,
+    /// 引数を尋ねている最中のコマンド (`Esc` で 1 段戻る)。
+    pub stage: Option<&'static ArgDef>,
 }
 
 struct Hit {
@@ -98,6 +147,41 @@ impl EditorState {
         self.catalog()
             .get(&format!("ui.palette.category.{ns}"))
             .map_or(0, |cat| grapheme_indices(cat).len() + 2)
+    }
+
+    /// 引数の選択肢のうち入力に合うもの (値または表示の部分一致、大小を区別しない)。
+    fn arg_hits(&self, def: &'static ArgDef, query: &str) -> Vec<Hit> {
+        let q = lower_graphemes(query.trim());
+        def.choices
+            .iter()
+            .enumerate()
+            .filter_map(|(i, (value, label))| {
+                if q.is_empty() {
+                    return Some(Hit {
+                        entry: i,
+                        ranges: Vec::new(),
+                    });
+                }
+                let shown = find(&lower_graphemes(label), &q);
+                let raw = find(&lower_graphemes(value), &q);
+                (shown.is_some() || raw.is_some()).then(|| Hit {
+                    entry: i,
+                    ranges: shown.map(|s| s..s + q.len()).into_iter().collect(),
+                })
+            })
+            .collect()
+    }
+
+    /// 引数を尋ねている途中なら 1 段戻って `true` (コマンドの一覧に戻る)。
+    pub(super) fn palette_back(&mut self) -> bool {
+        if let Some(Overlay::Palette(p)) = &mut self.overlay
+            && p.stage.is_some()
+        {
+            *p = PaletteState::default();
+            self.mark_dirty_render();
+            return true;
+        }
+        false
     }
 
     fn command_title(&self, id: &str) -> String {
@@ -181,7 +265,10 @@ impl EditorState {
         let Some(Overlay::Palette(p)) = &self.overlay else {
             return CommandResult::Rejected(RejectReason::NotAvailable);
         };
-        let n = self.palette_hits(&p.text).len();
+        let n = match p.stage {
+            Some(def) => self.arg_hits(def, &p.text).len(),
+            None => self.palette_hits(&p.text).len(),
+        };
         if let Some(Overlay::Palette(p)) = &mut self.overlay
             && n > 0
         {
@@ -207,7 +294,10 @@ impl EditorState {
         let Some(Overlay::Palette(p)) = &self.overlay else {
             return CommandResult::Rejected(RejectReason::NotAvailable);
         };
-        let n = self.palette_hits(&p.text).len();
+        let n = match p.stage {
+            Some(def) => self.arg_hits(def, &p.text).len(),
+            None => self.palette_hits(&p.text).len(),
+        };
         if let Some(Overlay::Palette(p)) = &mut self.overlay
             && n > 0
         {
@@ -227,6 +317,19 @@ impl EditorState {
         let Some(Overlay::Palette(p)) = &self.overlay else {
             return CommandResult::Rejected(RejectReason::NotAvailable);
         };
+        if let Some(def) = p.stage {
+            // 引数の値を選んだ: パレットを閉じて、その値でコマンドを実行する
+            let hits = self.arg_hits(def, &p.text);
+            let Some(hit) = hits.get(p.selected.min(hits.len().saturating_sub(1))) else {
+                return CommandResult::Done;
+            };
+            let value = def.choices[hit.entry].0;
+            self.set_overlay(None);
+            self.deferred_command =
+                Some((def.command.to_owned(), Args::new().with_str(def.arg, value)));
+            self.mark_dirty_render();
+            return CommandResult::Done;
+        }
         let hits = self.palette_hits(&p.text);
         let Some(hit) = hits.get(p.selected.min(hits.len().saturating_sub(1))) else {
             return CommandResult::Done;
@@ -236,18 +339,88 @@ impl EditorState {
             return CommandResult::Done;
         }
         let id = entry.id.clone();
+        // 必須の列挙引数があるコマンドは、同じオーバーレイで値を尋ねる
+        if let Some(def) = arg_def(&id) {
+            self.set_overlay(Some(Overlay::Palette(PaletteState {
+                stage: Some(def),
+                ..PaletteState::default()
+            })));
+            self.mark_dirty_render();
+            return CommandResult::Done;
+        }
         self.set_overlay(None);
-        self.deferred_command = Some(id);
+        self.deferred_command = Some((id, Args::new()));
         self.mark_dirty_render();
         CommandResult::Done
     }
 
     /// 次に実行するコマンド (パレットで選んだもの)。
-    pub fn take_deferred_command(&mut self) -> Option<String> {
+    pub fn take_deferred_command(&mut self) -> Option<(String, Args)> {
         self.deferred_command.take()
     }
 
+    /// 引数の値の一覧 (`ui.palette.arg_title`)。
+    fn arg_model(&self, p: &PaletteState, def: &'static ArgDef) -> OverlayModel {
+        let hits = self.arg_hits(def, &p.text);
+        let selected = p.selected.min(hits.len().saturating_sub(1));
+        let render = |key: &str, args: &[(&str, &str)]| {
+            self.catalog().render(key, args, &|c| self.key_label(c))
+        };
+        let first = if selected < WINDOW {
+            0
+        } else {
+            selected + 1 - WINDOW
+        };
+        let items: Vec<ListItem> = hits
+            .iter()
+            .skip(first)
+            .take(WINDOW)
+            .map(|h| ListItem {
+                label: cell_text(def.choices[h.entry].1, CutPolicy::End),
+                detail: None,
+                match_ranges: h.ranges.clone(),
+                keys: Vec::new(),
+                disabled_reason: None,
+            })
+            .collect();
+        let cells = cell_text(&p.text, CutPolicy::End).spans;
+        let cursor = cell_text(&p.text[..p.cursor], CutPolicy::End).spans.len();
+        let title = render(
+            "ui.palette.arg_title",
+            &[
+                ("command", &self.command_title(def.command)),
+                ("arg", &render(def.label_key, &[])),
+            ],
+        );
+        let footer = render(
+            "ui.palette.footer",
+            &[
+                ("matched", &hits.len().to_string()),
+                ("total", &def.choices.len().to_string()),
+            ],
+        );
+        OverlayModel::List {
+            title: cell_text(&title, CutPolicy::Never),
+            input: InputFieldModel {
+                len: cells.len(),
+                cells,
+                first: 0,
+                cursor,
+                selection: None,
+                placeholder: None,
+            },
+            items,
+            first,
+            selected,
+            footer: cell_text(&footer, CutPolicy::Never),
+            no_match: cell_text(&render("ui.palette.no_match", &[]), CutPolicy::End),
+        }
+    }
+
     pub(super) fn palette_model(&self, p: &PaletteState) -> OverlayModel {
+        if let Some(def) = p.stage {
+            return self.arg_model(p, def);
+        }
         let hits = self.palette_hits(&p.text);
         let selected = p.selected.min(hits.len().saturating_sub(1));
         let first = if selected < WINDOW {

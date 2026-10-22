@@ -795,6 +795,52 @@ fn メインが止まっていても_ctrl_break_で端末を戻して終了す�
     let _ = std::fs::remove_dir_all(&s.state);
 }
 
+// (8b iii) メインが止まった状態のコンソールの閉鎖 (test-hooks `main_stall`): 受信スレッドが退避を書く。メインを待たずに
+// 書き終えるので、CTRL_CLOSE の強制終了 (約 5 秒) の内に本文が残る (02 §9.6 手順 2)。
+#[cfg(feature = "test-hooks")]
+#[test]
+fn メインが止まっていてもコンソールを閉じると未保存の内容を退避して終了する() {
+    let mut s = Session::start_with(&[], None, &[("EVE_TEST_HOOK", "main_stall")]);
+    s.wait_ready();
+    type_slowly(&s, "unsaved text");
+    s.wait_for("入力が見える", |t| t.contains("unsaved text"));
+    let recovery = s.state.join("recovery");
+    let closed = Instant::now();
+    s.close_console();
+    let code = s.exit_within(Duration::from_secs(10));
+    assert!(
+        code.is_some(),
+        "強制終了までに終わる: {:?}",
+        closed.elapsed()
+    );
+    let dirs: Vec<_> = std::fs::read_dir(&recovery)
+        .map(|rd| {
+            rd.flatten()
+                .filter(|e| e.file_name().to_string_lossy().contains('Z'))
+                .map(|e| e.path())
+                .collect()
+        })
+        .unwrap_or_default();
+    assert_eq!(dirs.len(), 1, "退避は 1 件: {dirs:?}");
+    let manifest = std::fs::read_to_string(dirs[0].join("manifest.toml")).unwrap();
+    assert!(
+        manifest.contains("reason = \"console_close\""),
+        "{manifest}"
+    );
+    assert!(manifest.contains("complete = true"), "{manifest}");
+    let body: Vec<_> = std::fs::read_dir(&dirs[0])
+        .unwrap()
+        .flatten()
+        .filter(|e| e.file_name().to_string_lossy().ends_with(".txt"))
+        .collect();
+    assert_eq!(body.len(), 1);
+    assert_eq!(
+        std::fs::read_to_string(body[0].path()).unwrap(),
+        "unsaved text"
+    );
+    let _ = std::fs::remove_dir_all(&s.state);
+}
+
 // ---- システムクリップボード (05 §8、09 §3.6 / §3.4 の clip-delay)。実クリップボードを使うので、プロセスをまたいで直列にする ----
 
 /// クリップボードを使うテストの排他 (ファイルの排他作成。nextest の別プロセスの間でも直列にする)。

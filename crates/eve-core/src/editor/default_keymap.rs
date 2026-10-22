@@ -61,6 +61,8 @@ pub(super) fn default_keymap() -> Keymap {
         bind("dialog", keys, cmd);
     }
     // 入力プロンプト (prompt → global)
+    bind("prompt", "mod+v", "edit.paste");
+    bind("prompt", "shift+insert", "edit.paste");
     bind("prompt", "enter", "ui.confirm");
     bind("prompt", "esc", "ui.cancel");
     for (keys, cmd) in [

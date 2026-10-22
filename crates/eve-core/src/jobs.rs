@@ -81,6 +81,11 @@ pub enum JobKind {
     },
     /// 文書内の全件検索 (03 §12.2)。`from` の行から末尾まで、続けて先頭から走査し、一致を `SearchBatch` で順に返して
     /// `SearchDone` で終わる。保持するのは `max_matches` 件まで、数えるのは `count_limit` 件まで。
+    /// 改行コードの変換の ChangeSet を作る (03 §8.4)。`snapshot` は投入時の Revision のもの。
+    ConvertEol {
+        snapshot: Snapshot,
+        eol: eve_text::LineEnding,
+    },
     /// すべて置換の ChangeSet を作る (03 §12.5)。`snapshot` は投入時の Revision のもの。
     ReplaceAll {
         snapshot: Snapshot,
@@ -194,6 +199,11 @@ pub enum JobResult {
         job: JobId,
         path: FsPath,
     },
+    /// 改行コードの変換の ChangeSet ができた。
+    ConvertEolDone {
+        job: JobId,
+        changes: eve_text::ChangeSet,
+    },
     /// すべて置換の ChangeSet ができた (`count` は置換する件数)。
     ReplaceAllDone {
         job: JobId,
@@ -232,6 +242,7 @@ impl JobResult {
             | JobResult::UnmappableReplacement { job, .. }
             | JobResult::Unmappable { job, .. }
             | JobResult::ReplaceAllDone { job, .. }
+            | JobResult::ConvertEolDone { job, .. }
             | JobResult::SearchBatch { job, .. }
             | JobResult::SearchDone { job, .. }
             | JobResult::Failed { job, .. } => *job,
@@ -352,6 +363,18 @@ pub fn run_job(
                 err: JobError::Cancelled,
             },
         },
+        JobKind::ConvertEol { snapshot, eol } => {
+            match crate::eol::build_eol_conversion(snapshot, *eol, cancel) {
+                Some(changes) => JobResult::ConvertEolDone {
+                    job: req.id,
+                    changes,
+                },
+                None => JobResult::Failed {
+                    job: req.id,
+                    err: JobError::Cancelled,
+                },
+            }
+        }
         JobKind::ReplaceAll {
             snapshot,
             query,

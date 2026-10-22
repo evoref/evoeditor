@@ -205,3 +205,83 @@ fn 検索を開いたまま編集面の行数に合わせて強調する範囲�
     assert!(n <= f.size.rows as usize, "{n}");
     assert!(n >= 1);
 }
+
+fn paste_into_field(h: &mut Harness, content: &str) {
+    h.keys("ctrl+v");
+    let token = h
+        .effects()
+        .iter()
+        .rev()
+        .find_map(|e| match e {
+            eve_view::Effect::RequestClipboard { token, .. } => Some(*token),
+            _ => None,
+        })
+        .expect("RequestClipboard");
+    h.clipboard_content(token, Some(content));
+}
+
+#[test]
+fn クリップボードの最初の行を検索欄へ貼り付ける() {
+    let mut h = Harness::new().with_size(40, 10);
+    h.text("foo bar");
+    h.keys("ctrl+home ctrl+f");
+    paste_into_field(&mut h, "bar\nignored");
+    h.run_jobs();
+    let b = bar(&mut h);
+    assert_eq!(text_of(&b.count_text.unwrap()), "1/1");
+    assert_eq!(h.doc_text(), "foo bar", "文書には貼り付けない");
+}
+
+#[test]
+fn プロンプトにも貼り付けられる() {
+    let mut h = Harness::new().with_size(40, 10);
+    h.keys("ctrl+o");
+    paste_into_field(&mut h, "/w/x.txt");
+    let f = h.frame();
+    let eve_view::OverlayModel::Prompt { input, .. } = &f.overlays[0] else {
+        panic!()
+    };
+    let s: String = input.cells.iter().map(|c| c.text.to_string()).collect();
+    assert_eq!(s, "/w/x.txt");
+}
+
+#[test]
+fn 編集で結果が無効になっても_300_ms_待って自動で再検索する() {
+    use eve_core::{Origin, Tick, Transaction};
+    use eve_text::{ByteOff, ByteRange, ChangeSet, Edit};
+    let mut h = Harness::new().with_size(40, 10);
+    h.text("ab");
+    h.keys("ctrl+home ctrl+f");
+    h.text("ab");
+    h.run_jobs();
+    assert_eq!(text_of(&bar(&mut h).count_text.unwrap()), "1/1");
+    // 検索バーを通さずに文書を変える
+    let doc = h.doc_id();
+    let cs = {
+        let t = h.editor.state().document(doc).unwrap().text();
+        ChangeSet::from_sorted_edits(
+            t,
+            [Edit {
+                range: ByteRange::new(ByteOff(0), ByteOff(0)),
+                insert: "ab ".into(),
+            }],
+        )
+        .unwrap()
+    };
+    h.editor
+        .state_mut()
+        .apply_transaction(doc, Transaction::new(cs, Origin::User, Tick(0)))
+        .unwrap();
+    h.advance_ms(1);
+    assert!(
+        text_of(&bar(&mut h).count_text.unwrap()).starts_with('約'),
+        "約表示"
+    );
+    assert!(h.editor.next_deadline().is_some(), "期限を Host に知らせる");
+    h.advance_ms(299);
+    assert!(text_of(&bar(&mut h).count_text.unwrap()).starts_with('約'));
+    h.advance_ms(1);
+    h.run_jobs();
+    assert_eq!(text_of(&bar(&mut h).count_text.unwrap()), "1/2");
+    assert!(h.editor.next_deadline().is_none());
+}
