@@ -175,6 +175,7 @@ fn 補助プロセスは切断点なしなら保存できる() {
     assert_eq!(fs::read(e.file("a.txt")).unwrap(), ORIG);
 }
 
+// verifies: AC-FR-105-1, AC-NFR-301-1
 #[test]
 fn 原子的保存の切断点では_t_は無傷で一時ファイルが残り_開いても報告しない() {
     for hook in [
@@ -215,6 +216,7 @@ fn 原子的保存の切断点では_t_は無傷で一時ファイルが残り_�
     }
 }
 
+// verifies: AC-FR-105-1, AC-NFR-301-1
 #[test]
 fn 置換の途中の状態では_t_が無く退避名に元が完全に残り_開くと案内する() {
     let e = Env::new("replace-begin");
@@ -338,6 +340,7 @@ fn バックアップの後の切断点では完全なバックアップが残�
     }
 }
 
+// verifies: AC-FR-105-1
 #[test]
 fn 上書きの途中の中断では_t_は半端に書き換わりバックアップが元の内容を保つ() {
     let e = Env::new("ip-mid");

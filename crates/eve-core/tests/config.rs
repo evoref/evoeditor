@@ -65,6 +65,7 @@ fn 新規文書は_file_default_で作る() {
     assert_eq!(doc.format.encoding, Encoding::ShiftJis);
 }
 
+// verifies: AC-FR-703-1
 #[test]
 fn 診断が_1_件ならその内容を_2_件以上なら要約を出す() {
     let mut h = Harness::new();
@@ -149,6 +150,7 @@ fn 空の既存ファイルと改行のないファイルの改行は設定に�
     );
 }
 
+// verifies: AC-FR-701-3
 #[test]
 fn 未対応の情報診断は画面に出さない() {
     let mut h = Harness::new();

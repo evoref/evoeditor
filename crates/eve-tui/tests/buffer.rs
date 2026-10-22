@@ -85,6 +85,7 @@ fn 幅危険書記素を含む行は記録される() {
     assert_eq!(r.risky_rows, vec![1, 2], "国旗と半角カナの濁点の行");
 }
 
+// verifies: AC-FR-507-1
 #[test]
 fn 段を超える色は近似され_制御文字は置換される() {
     let mut h = Harness::new().with_size(30, 6);

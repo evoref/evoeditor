@@ -463,6 +463,7 @@ mod tests {
         assert_ne!(enc(&jp), Some(Encoding::Utf16Le));
     }
 
+    // verifies: AC-FR-109-5
     #[test]
     fn iso_2022_jp_の判定() {
         let jis = b"abc\x1B$B$\"$$\x1B(B def\n";

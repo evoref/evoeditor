@@ -496,6 +496,7 @@ mod tests {
         assert_eq!(grapheme_width("\u{85}", &hex), 8);
     }
 
+    // verifies: AC-FR-507-2
     #[test]
     fn 不可視文字は可視化して幅を持つ() {
         assert_eq!(invisible_marks("\u{200B}"), ["<ZWSP>"]);
@@ -520,6 +521,7 @@ mod tests {
         assert_eq!(grapheme_width("a\u{200C}", &off), 1);
     }
 
+    // verifies: AC-FR-507-2
     #[test]
     fn 絵文字の中の_zwj_とタグと異体字は可視化しない() {
         assert!(invisible_marks("👨\u{200D}👩").is_empty());

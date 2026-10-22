@@ -78,6 +78,7 @@ fn 書記素の途中に当たった候補は捨てる() {
     assert!(find_all(family, &lit("👨")).is_empty());
 }
 
+// verifies: AC-FR-404-3
 #[test]
 fn 取り消すと止まる() {
     let t = Text::from("a\na\na\n");

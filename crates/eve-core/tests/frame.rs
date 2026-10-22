@@ -125,6 +125,7 @@ fn 全角と結合文字と絵文字の幅() {
     assert!(row.width_risky, "絵文字は幅危険書記素");
 }
 
+// verifies: AC-FR-507-1
 #[test]
 fn 制御文字と不可視文字と不正バイトを記号にする() {
     // ESC → ^[、ZWSP → <ZWSP>、PUA エスケープ → <0x9A>

@@ -108,6 +108,7 @@ mod tests {
         }
     }
 
+    // verifies: AC-FR-101-1
     #[test]
     fn 引数なしは無題_ファイル_1_つは開く() {
         assert_eq!(p(&[]).unwrap(), run(None, false));
@@ -145,6 +146,7 @@ mod tests {
         ));
     }
 
+    // verifies: AC-FR-101-1
     #[test]
     fn 二つ以上のファイルは使い方の誤り() {
         assert_eq!(

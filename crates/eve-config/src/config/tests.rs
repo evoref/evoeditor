@@ -53,6 +53,7 @@ fn ドット記法でも読める() {
     assert!(l.diagnostics.is_empty());
 }
 
+// verifies: AC-FR-703-1
 #[test]
 fn 構文エラーはファイル全体を無視して行と桁を返す() {
     let l = load_str("[editor]\ntab_width = 2\nfoo bar\n");
@@ -64,6 +65,7 @@ fn 構文エラーはファイル全体を無視して行と桁を返す() {
     assert_eq!(d.line, 3);
 }
 
+// verifies: AC-FR-703-1
 #[test]
 fn 未知のキーは警告し綴りの候補を出す() {
     let l = load_str("[editor]\ntab_witdh = 2\n");
@@ -108,6 +110,7 @@ fn 未知のセクションは警告する() {
     );
 }
 
+// verifies: AC-FR-703-1
 #[test]
 fn 型違いは警告して既定値のまま() {
     let l = load_str("[editor]\ntab_width = \"4\"\ntab_width2 = 1\n");
@@ -122,6 +125,7 @@ fn 型違いは警告して既定値のまま() {
     assert_eq!(l.diagnostics[0].line, 2);
 }
 
+// verifies: AC-FR-703-1
 #[test]
 fn 範囲外は既定値へ戻す() {
     for src in [
@@ -144,6 +148,7 @@ fn 範囲外は既定値へ戻す() {
     assert_eq!(l.config.ambiguous_width, 1);
 }
 
+// verifies: AC-FR-703-1
 #[test]
 fn 列挙値の不正は許容値を提示する() {
     let l = load_str("file.default_line_ending = \"lf\\n\"\n");
@@ -179,6 +184,7 @@ fn 文字コードの別名は正規名に寄せる() {
     assert_eq!(l.diagnostics.len(), 1);
 }
 
+// verifies: AC-FR-703-1
 #[test]
 fn 全項目を走査し_最初の問題で止まらない() {
     let l = load_str(
@@ -206,6 +212,7 @@ fn 日本語を含む行でも桁は文字数で数える() {
     assert_eq!((l.diagnostics[0].line, l.diagnostics[0].column), (3, 1));
 }
 
+// verifies: AC-FR-701-3
 #[test]
 fn 公開前のキーとセクションは情報診断で_警告にしない() {
     let l = load_str(

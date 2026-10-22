@@ -21,6 +21,7 @@ fn step(h: &mut Harness, forward: bool) -> SearchStep {
     h.editor.state_mut().search_step(forward)
 }
 
+// verifies: AC-FR-401-1, AC-FR-401-2
 #[test]
 fn 全件を数えて_次へ_前へ_で移り_端で折り返す() {
     let mut h = Harness::new();
@@ -76,6 +77,7 @@ fn 走査が終わる前でも_次へ_は同期検索で動く() {
     assert_eq!(sel(&h), (8, 11));
 }
 
+// verifies: AC-FR-401-3
 #[test]
 fn 一致が無ければ_nomatch_で選択を変えない() {
     let mut h = Harness::new();
@@ -129,6 +131,7 @@ fn 大小の区別は_smart_が既定で_切り替えられる() {
     );
 }
 
+// verifies: AC-FR-404-4
 #[test]
 fn 編集すると件数は約表示に落ち_次へ_は再検索して動く() {
     let mut h = Harness::new();
@@ -155,6 +158,7 @@ fn 編集すると件数は約表示に落ち_次へ_は再検索して動く() 
     );
 }
 
+// verifies: AC-FR-404-3
 #[test]
 fn 新しい検索は古い検索の結果を捨てる() {
     let mut h = Harness::new();
