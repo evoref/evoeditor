@@ -11,5 +11,5 @@ mod config;
 pub use catalog::{Catalog, CatalogError, base_key};
 pub use config::{
     ColorMode, Config, DefaultEncoding, DefaultLineEnding, DiagKind, Diagnostic, IndentUnit,
-    Loaded, Severity, load_str,
+    Loaded, Severity, default_display, load_str,
 };

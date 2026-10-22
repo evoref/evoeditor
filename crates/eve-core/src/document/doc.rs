@@ -50,6 +50,22 @@ pub enum ApplyError {
     Text(ChangeSetError),
 }
 
+/// 表示の設定 (`editor.tab_width`・`view.ambiguous_width`、07 §5.0)。Editor が文書を持つときに設定から写す。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct DisplaySettings {
+    pub tab_width: u8,
+    pub ambiguous_wide: bool,
+}
+
+impl Default for DisplaySettings {
+    fn default() -> DisplaySettings {
+        DisplaySettings {
+            tab_width: 4,
+            ambiguous_wide: false,
+        }
+    }
+}
+
 pub struct Document {
     text: Text,
     pub path: Option<FsPath>,
@@ -59,6 +75,7 @@ pub struct Document {
     history: UndoHistory,
     pub read_only: ReadOnlyReasons,
     pub load_state: LoadState,
+    pub display: DisplaySettings,
 }
 
 impl Document {
@@ -79,6 +96,7 @@ impl Document {
             history: UndoHistory::default(),
             read_only: ReadOnlyReasons::default(),
             load_state: LoadState::Ready,
+            display: DisplaySettings::default(),
         }
     }
 

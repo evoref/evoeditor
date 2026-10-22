@@ -86,6 +86,51 @@ fn print_exit_lines(host: &mut Host) {
     }
 }
 
+/// 設定ファイルの名前 (設定ディレクトリの直下、07 §2)。
+const CONFIG_FILE: &str = "config.toml";
+
+/// ユーザー層の設定ファイルを読む。無ければ既定値で、診断も出さない (FR-702)。
+/// 読めない (UTF-8 でない・権限がない等) ときは既定値で動き、診断を 1 件出す。
+fn load_config(dir: &std::path::Path) -> eve_config::Loaded {
+    use eve_config::{DiagKind, Diagnostic, Loaded, Severity};
+    if dir.as_os_str().is_empty() {
+        return eve_config::load_str("");
+    }
+    let unreadable = |message: String| Loaded {
+        config: eve_config::Config::default(),
+        diagnostics: vec![Diagnostic {
+            severity: Severity::Error,
+            kind: DiagKind::Syntax { message },
+            key: String::new(),
+            value: String::new(),
+            line: 0,
+            column: 0,
+        }],
+    };
+    match std::fs::read(dir.join(CONFIG_FILE)) {
+        Ok(bytes) => match String::from_utf8(bytes) {
+            // メモ帳が付ける BOM は読み飛ばす
+            Ok(text) => eve_config::load_str(text.strip_prefix('\u{feff}').unwrap_or(&text)),
+            Err(_) => unreadable("UTF-8 として読めません".to_owned()),
+        },
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => eve_config::load_str(""),
+        Err(e) => unreadable(e.to_string()),
+    }
+}
+
+/// 設定 `theme.color_mode` を TUI の型へ。
+fn color_mode(mode: eve_config::ColorMode) -> eve_tui::caps::ColorMode {
+    use eve_config::ColorMode as C;
+    use eve_tui::caps::ColorMode as T;
+    match mode {
+        C::Auto => T::Auto,
+        C::TrueColor => T::TrueColor,
+        C::Color256 => T::Ansi256,
+        C::Color16 => T::Ansi16,
+        C::None => T::None,
+    }
+}
+
 fn run(
     file: Option<String>,
     read_only: bool,
@@ -100,6 +145,7 @@ fn run(
             return EXIT_ERROR;
         }
     };
+    let loaded = load_config(paths.config_dir().as_path());
     let clock = Arc::new(SystemClock::new());
     let state_dir = paths.state_dir();
     // 置換中の計数 (保存の置換・直接上書きの間だけ上がる)。終了の経路が下りるのを待つ (02 §9.6 手順 3)
@@ -126,6 +172,8 @@ fn run(
     };
     let mut host = Host::with_channel(ports, (tx.clone(), rx));
     host.set_initial_encoding(encoding);
+    let config = loaded.config;
+    host.set_config(config, CONFIG_FILE, loaded.diagnostics);
     // システムクリップボード (所有者ウィンドウのスレッドは最初の読み書きで遅延して起こす、05 §8.1)
     host.set_clipboard(Arc::new(eve_platform::clipboard::WinClipboard::new()));
 
@@ -218,7 +266,7 @@ fn run(
             *m = Some(format!("{info}\n\n{bt}"));
         }
     }));
-    let mut frontend = TuiFrontend::new();
+    let mut frontend = TuiFrontend::with_color_mode(color_mode(config.color_mode));
     let outcome = catch_unwind(AssertUnwindSafe(|| {
         host.run(&mut frontend, file.as_deref(), read_only)
     }));

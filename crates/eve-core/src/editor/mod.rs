@@ -7,6 +7,7 @@
 mod chrome;
 mod clipboard;
 mod command;
+mod config_report;
 mod context;
 mod default_keymap;
 mod edit;
@@ -141,7 +142,8 @@ impl Editor {
     ) {
         match path {
             None => {
-                let (_, view) = self.state.add_document(Document::new_untitled());
+                let doc = self.state.blank_document();
+                let (_, view) = self.state.add_document(doc);
                 if self.state.first_window().is_none() {
                     self.state.add_window(view);
                 }

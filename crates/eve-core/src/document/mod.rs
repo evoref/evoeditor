@@ -9,7 +9,7 @@ mod format;
 mod history;
 mod transaction;
 
-pub use doc::{Applied, AppliedTx, ApplyError, Document};
+pub use doc::{Applied, AppliedTx, ApplyError, DisplaySettings, Document};
 pub use format::{
     EolStats, FormatChange, FormatState, LoadState, ReadOnlyReason, ReadOnlyReasons, TextFormat,
 };
