@@ -250,3 +250,11 @@ fn 綴りの候補は公開前のキーからも探す() {
         )]
     );
 }
+
+/// 配布する設定例 (`dist/config.example.toml`) は、診断なしで読め、既定値と一致する (docs/05 §18.2)。
+#[test]
+fn 配布する設定例は既定値と一致する() {
+    let l = load_str(include_str!("../../../../dist/config.example.toml"));
+    assert!(l.diagnostics.is_empty(), "{:?}", l.diagnostics);
+    assert_eq!(l.config, Config::default());
+}
