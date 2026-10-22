@@ -181,8 +181,11 @@ status = "done"
 id = "AC-FR-111-1"
 requirement = "FR-111"
 kind = "T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "誤判定された_utf16le_は_文字コードを指定して開き直すと正しく表示できる",
+    "shift_jis_を誤判定しても_指定して開き直すと正しく表示できる",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-111-2"
@@ -208,8 +211,10 @@ status = "done"
 id = "AC-FR-111-4"
 requirement = "FR-111"
 kind = "T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "開き直すと表示は内容に合い_履歴は消えて通知は_1_回",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-112-1"
@@ -259,22 +264,29 @@ status = "done"
 id = "AC-FR-113-2"
 requirement = "FR-113"
 kind = "T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "新規文書で_enter_を押すと_lf_が入る",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-113-3"
 requirement = "FR-113"
 kind = "T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "貼り付けの改行は経路によらず文書の既定の改行になる",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-113-4"
 requirement = "FR-113"
 kind = "T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "改行コードの変換は_lf_crlf_cr_のどれでも全部そろい_状態表示と次の_enter_も従う",
+    "改行がすでにそろっていれば文書も履歴も変わらず_読み取り専用では拒否する",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-114-1"
@@ -299,15 +311,19 @@ status = "done"
 id = "AC-FR-115-2"
 requirement = "FR-115"
 kind = "T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "誤判定された_utf16le_は_文字コードを指定して開き直すと正しく表示できる",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-116-1"
 requirement = "FR-116"
 kind = "T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "読み取り専用属性と_readonly_のファイルは編集操作を理由付きで拒否する",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-116-3"
@@ -410,8 +426,10 @@ status = "done"
 id = "AC-FR-202-3"
 requirement = "FR-202"
 kind = "T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "選択して_enter_は選択を改行に置き換え_1_回の_undo_で戻る",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-203-1"
@@ -508,8 +526,10 @@ status = "todo"
 id = "AC-FR-206-1"
 requirement = "FR-206"
 kind = "T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "インデント付きの_100_行を貼ると元のインデントのまま_1_回の_undo_で消える",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-206-2"
@@ -698,8 +718,10 @@ status = "todo"
 id = "AC-FR-502-1"
 requirement = "FR-502"
 kind = "T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "ガター幅は行数の桁数に応じて変わる",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-503-1"
@@ -939,8 +961,10 @@ status = "done"
 id = "AC-FR-702-1"
 requirement = "FR-702"
 kind = "T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "設定ディレクトリが無くても使え_設定ディレクトリは作られない",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-703-1"

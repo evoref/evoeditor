@@ -73,7 +73,7 @@ impl EditorState {
             .active_document()
             .is_some_and(|d| self.documents.get(&d).is_some_and(|d| !d.is_editable()));
         if read_only {
-            self.show_message(MessageLevel::Warn, "msg.edit.read_only", &[]);
+            self.notify_read_only();
             return CommandResult::Done;
         }
         self.search_open();
@@ -390,7 +390,7 @@ impl EditorState {
             return CommandResult::Done;
         };
         if !doc.is_editable() {
-            self.show_message(MessageLevel::Warn, "msg.edit.read_only", &[]);
+            self.notify_read_only();
             return CommandResult::Done;
         }
         if query.matcher().is_none() {

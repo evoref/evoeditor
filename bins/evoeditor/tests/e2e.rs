@@ -381,6 +381,31 @@ fn 入力して保存して終了するとファイルの内容が一致する()
     let _ = std::fs::remove_dir_all(dir);
 }
 
+// 設定ディレクトリが無い環境でも起動・編集・保存・終了ができ、設定ディレクトリは作られない (FR-702 AC-1、07 §4)
+// verifies: AC-FR-702-1
+#[test]
+fn 設定ディレクトリが無くても使え_設定ディレクトリは作られない() {
+    let dir = temp_dir("nocfg");
+    let missing = dir.join("no-such-config-dir");
+    let path = dir.join("saved.txt");
+    let mut s = Session::start_with(&[], None, &[("EVE_CONFIG_DIR", missing.to_str().unwrap())]);
+    s.wait_ready();
+    type_slowly(&s, "hello");
+    s.send(CTRL_S);
+    s.wait_for("名前の入力", |t| t.contains("Esc"));
+    s.send(path.to_str().unwrap().as_bytes());
+    thread::sleep(Duration::from_millis(300));
+    s.send(b"\r");
+    s.wait_for("保存した", |t| {
+        t.contains("saved.txt") && !t.contains("[+]")
+    });
+    s.send(CTRL_Q);
+    assert_eq!(s.wait_exit(), 0);
+    assert_eq!(std::fs::read(&path).unwrap(), b"hello");
+    assert!(!missing.exists(), "設定ディレクトリは作らない");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
 // (8b ii) コンソールを閉じる (CTRL_CLOSE): 未保存の内容を退避して終了する。退避は受信スレッドがメインを待たずに書く
 // verifies: AC-FR-107-2
 #[test]
