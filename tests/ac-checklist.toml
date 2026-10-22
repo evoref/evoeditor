@@ -733,8 +733,12 @@ status = "todo"
 id = "AC-FR-506-1"
 requirement = "FR-506"
 kind = "T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "横スクロールで左右に続きがある行の端に印を出す",
+    "画面に収まる行には印を出さない",
+    "長い行は水平スクロールし_端の全角は空白で埋める",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-507-1"
