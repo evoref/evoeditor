@@ -124,8 +124,13 @@ pub(super) fn status_model(
             CutPolicy::Never,
         ));
     }
-    if doc.load_state == LoadState::Loading {
-        let a = [("percent", "0")];
+    // 読込中: 読込中の文書そのもの、または置き換えの途中で旧文書を見せている間 (03 §9.2) に進捗を出す
+    let loading = (doc.load_state == LoadState::Loading)
+        .then_some(doc.load_percent)
+        .or_else(|| state.loading_percent());
+    if let Some(percent) = loading {
+        let percent = percent.to_string();
+        let a = [("percent", percent.as_str())];
         let (long, short) = (
             render(state, "status.loading.long", &a),
             render(state, "status.loading.short", &a),

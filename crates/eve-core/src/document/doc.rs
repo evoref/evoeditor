@@ -75,6 +75,8 @@ pub struct Document {
     history: UndoHistory,
     pub read_only: ReadOnlyReasons,
     pub load_state: LoadState,
+    /// 読込中の進捗 (百分率)。ステータスバーの `[読込中 n%]` に出す。
+    pub load_percent: u8,
     pub display: DisplaySettings,
     /// 長い行の表示単位の計算結果 (最後の 1 行分)。1 回の操作で同じ行を何度も展開しないための覚え。
     /// 中身の型は表示の層 (`editor::layout`) だけが知る。
@@ -99,6 +101,7 @@ impl Document {
             history: UndoHistory::default(),
             read_only: ReadOnlyReasons::default(),
             load_state: LoadState::Ready,
+            load_percent: 0,
             display: DisplaySettings::default(),
             layout_cache: std::cell::RefCell::new(None),
         }

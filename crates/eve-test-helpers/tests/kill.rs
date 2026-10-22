@@ -102,7 +102,7 @@ impl Env {
         };
         let mut out = Vec::new();
         run_job(&req, &ports, &CancelToken::new(), &mut |r| out.push(r));
-        match out.remove(0) {
+        match out.pop().expect("結果がある") {
             JobResult::Complete {
                 interrupted_save, ..
             } => (interrupted_save, true),

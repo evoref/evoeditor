@@ -210,6 +210,28 @@ impl EditorState {
             .any(|p| matches!(p, Pending::Save { doc, .. } | Pending::CheckUnchanged { doc } if *doc == doc_id))
     }
 
+    /// 進行中の読込 (開く・開き直し・再読込) の進捗 (百分率)。無ければ `None`。
+    pub(super) fn loading_percent(&self) -> Option<u8> {
+        self.pending.values().find_map(|p| match p {
+            Pending::Open { doc, .. } => self.documents.get(doc).map(|d| d.load_percent),
+            _ => None,
+        })
+    }
+
+    /// 読込中の文書の読込ジョブを取り消す。取り消すものがあれば `true`。
+    pub(super) fn cancel_loading(&mut self) -> bool {
+        let ids: Vec<_> = self
+            .pending
+            .iter()
+            .filter(|(_, p)| matches!(p, Pending::Open { .. }))
+            .map(|(id, _)| *id)
+            .collect();
+        for id in &ids {
+            self.jobs.cancel(*id);
+        }
+        !ids.is_empty()
+    }
+
     /// 今の文書 (最初の Window の View の文書)。
     pub fn active_document(&self) -> Option<DocumentId> {
         let w = self.first_window()?;
@@ -630,6 +652,22 @@ impl EditorState {
     /// ジョブの結果を受け取る (02 §5.4)。
     pub fn on_job_result(&mut self, r: JobResult) {
         let job = r.job();
+        // 読込の進捗は終わりではない。待ちの記録は残して、読込中の文書の進捗だけ更新する
+        if let JobResult::Progress { bytes, total, .. } = r {
+            if let Some(Pending::Open { doc, .. }) = self.pending.get(&job) {
+                let pct = bytes
+                    .saturating_mul(100)
+                    .checked_div(total)
+                    .unwrap_or(0)
+                    .min(100) as u8;
+                let doc = *doc;
+                if let Some(d) = self.documents.get_mut(&doc) {
+                    d.load_percent = pct;
+                }
+                self.mark_dirty_render();
+            }
+            return;
+        }
         // 検索は途中経過が複数届く。待ちの記録は終わりまで残す
         if matches!(self.pending.get(&job), Some(Pending::Search)) {
             self.on_search_result(r);

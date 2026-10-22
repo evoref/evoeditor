@@ -222,6 +222,14 @@ pub enum JobResult {
         changes: eve_text::ChangeSet,
         count: u64,
     },
+    /// 読込の進捗 (03 §9.2 手順 3)。開く操作から 50 ms 以内に最初の 1 件を送り、以後は 10 Hz 以下。終わりではない。
+    Progress {
+        job: JobId,
+        /// 読み終えたバイト数。
+        bytes: u64,
+        /// ファイルの大きさ (metadata の len)。
+        total: u64,
+    },
     /// 検索の途中経過。一致を走査した順に届く (終わりではない)。
     SearchBatch {
         job: JobId,
@@ -255,6 +263,7 @@ impl JobResult {
             | JobResult::Unmappable { job, .. }
             | JobResult::ReplaceAllDone { job, .. }
             | JobResult::ConvertEolDone { job, .. }
+            | JobResult::Progress { job, .. }
             | JobResult::FindNextDone { job, .. }
             | JobResult::SearchBatch { job, .. }
             | JobResult::SearchDone { job, .. }
@@ -330,7 +339,7 @@ pub fn run_job(
             job: req.id,
             dirs: ports.fs.list_recovery_dirs().unwrap_or_default(),
         },
-        JobKind::Open { path, opts } => run_open(req.id, path, *opts, ports, cancel),
+        JobKind::Open { path, opts } => run_open(req.id, path, *opts, ports, cancel, emit),
         JobKind::Save {
             path,
             snapshot,

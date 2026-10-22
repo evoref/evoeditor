@@ -586,6 +586,10 @@ impl EditorState {
         if self.palette_back() {
             return CommandResult::Done;
         }
+        // 読込中なら取り消す (FR-122。結果は `Failed { Cancelled }` で届き、旧文書があれば残る)
+        if self.overlay.is_none() && self.cancel_loading() {
+            return CommandResult::Done;
+        }
         // 確認の `Esc` はキャンセルの選択 (保存の失敗の確認では中止を示す)
         if let Some(Overlay::Confirm(c)) = &self.overlay {
             let cancel = c.cancel_index();
