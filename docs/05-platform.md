@@ -1123,7 +1123,7 @@ v0.1 の配布ビルドは `x86_64-pc-windows-msvc` だけ。CI の Linux ジョ
 ### 16.3 ビルドプロファイル
 
 ```toml
-# 案 (Cargo.toml はまだ作らない。ADR-0001)
+# release は実装済み (ルートの Cargo.toml)。dev は案
 [profile.release]
 opt-level = 3
 lto = "fat"          # バイナリサイズ・起動時間 (NFR-101/205)。ビルド時間増は release のみ
