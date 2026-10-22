@@ -43,3 +43,12 @@ unimplemented = "warn"
 # ライブラリは標準出力・標準エラーに直接書かない (端末の描画を壊す。ログは tracing 経由)。
 print_stdout = "warn"
 print_stderr = "warn"
+
+# 配布ビルドと BM 計測だけに使う (docs/05 §16.3)。CI の通常ジョブは dev プロファイルと cargo check で回す。
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "unwind"            # ADR-0012 (abort にしない)
+strip = "symbols"
+debug = "line-tables-only"  # バックトレースの行番号のため (.pdb は別アセット、05 §18.6)
