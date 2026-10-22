@@ -145,11 +145,13 @@ jobs:
           shared-key: linux
       - uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2.87.29
         with:
-          tool: cargo-deny@0.20.2
+          tool: cargo-deny@0.20.2,cargo-about@0.9.2
       - name: cargo deny (licenses / bans / advisories / sources)
         run: cargo deny check
       - name: 依存規則 R1〜R12 と docs/02 §4.1 の突合
         run: cargo xtask check-deps --docs
+      - name: THIRD-PARTY-NOTICES.md が依存と一致する (docs/05 §17.1)
+        run: cargo xtask gen-notices --check
 
   # UI 文言の検査 (docs/09 §6.2 の i18n): docs の MessageKey 目録・コマンドカタログと、言語ファイルのキー集合。
   # 2 段目の必須チェック。この PR が merge された直後に、ブランチ保護の必須に加える (docs/09 §6.2)。
