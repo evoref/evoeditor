@@ -43,7 +43,7 @@ const USAGE: &str = "\
   check-deps          依存規則 R1〜R12 の検査 (--docs: docs/02 §4.1 の表との突合も行う)
   check-dist          配布ビルドの確認 (feature・目印の文字列・隠しオプション・CRT の静的リンク。--exe PATH で既存の exe)
   verify-tag          リリースのタグの検証 (--allowed-signers FILE。タグは作らない・消さない)
-  review-wording      日本語 UI 文言のレビュー用の一覧の生成 (docs/review/ja-wording-v0.1.md)
+  review-wording      日本語 UI 文言のレビュー用の一覧の生成 (--reviewed 日付: 全件 OK の記録)
   dist                配布 zip と SHA256SUMS の作成と検査 (--verify ZIP: 検査だけ。--exe / --version)
   gen-notices         THIRD-PARTY-NOTICES.md の生成 (cargo-about。--check: 最新性の検査)
   check-ac-checklist  tests/ac-checklist.toml の検査 (check の一部)
@@ -60,7 +60,7 @@ fn main() -> ExitCode {
         Some("check-deps") => check_deps::run(args.any(|a| a == "--docs")),
         Some("check-dist") => check_dist::run(&args.collect::<Vec<_>>()),
         Some("verify-tag") => verify_tag::run(&args.collect::<Vec<_>>()),
-        Some("review-wording") => review_wording::run(),
+        Some("review-wording") => review_wording::run(&args.collect::<Vec<_>>()),
         Some("dist") => dist::run(&args.collect::<Vec<_>>()),
         Some("gen-notices") => gen_notices::run(&args.collect::<Vec<_>>()),
         Some("check-ac-checklist") => ac_checklist::run(),
