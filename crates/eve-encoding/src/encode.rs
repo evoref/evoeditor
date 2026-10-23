@@ -263,6 +263,15 @@ impl Encoder {
     /// Shift_JIS / EUC-JP (状態を持たない)。
     fn encode_rs(&mut self, text: &str, out: &mut Vec<u8>, report: &mut EncodeReport) {
         let base = self.chars_done;
+        // 特別な文字 (U+10FF00.. のエスケープは UTF-8 の先頭バイトが 0xF4、Shift_JIS の外字 U+E000..U+E757 は 0xEE) が
+        // 1 つも無ければ、文字ごとの走査をせず全体を 1 区間として符号化する (100 MB の読込の往復検査が支配的だったため)
+        let has_special = text
+            .bytes()
+            .any(|b| b == 0xF4 || (self.enc == Encoding::ShiftJis && b == 0xEE));
+        if !has_special {
+            self.run_rs(text, base, out, report);
+            return;
+        }
         // 特別な文字 (エスケープ・外字) で区切り、間を encoding_rs で符号化して照合する
         let mut run_start = 0;
         let mut chars_before_run = 0u64;
