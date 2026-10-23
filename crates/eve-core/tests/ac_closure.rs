@@ -293,8 +293,19 @@ fn 読み取り専用属性と_readonly_のファイルは編集操作を理由�
         h.keys("ctrl+z ctrl+y");
         assert_eq!(h.doc_text(), "abc\n");
         // 名前を付けて保存で別のパスに書いても、元のファイルの内容は変わらない
+        let before = h.fs.stamp("/w/ro.txt");
         h.cmd_with("file.save_as", Args::new().with_str("path", "/w/copy.txt"));
+        h.run_jobs();
         assert_eq!(h.fs_read("/w/ro.txt").unwrap(), b"abc\n");
+        assert_eq!(
+            h.fs.stamp("/w/ro.txt"),
+            before,
+            "mtime・長さ・ID が変わらない"
+        );
+        if via_attr {
+            let meta = eve_core::FileSystem::metadata(h.fs.as_ref(), &"/w/ro.txt".into()).unwrap();
+            assert!(meta.readonly, "元のファイルの属性は変わらない");
+        }
     }
 }
 

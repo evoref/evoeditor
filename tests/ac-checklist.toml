@@ -72,15 +72,22 @@ status = "done"
 id = "AC-FR-106-1"
 requirement = "FR-106"
 kind = "T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "読み取り専用属性と_readonly_のファイルは編集操作を理由付きで拒否する",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-106-2"
 requirement = "FR-106"
 kind = "T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "ジャンクション経由でもリンク先のファイルを置換しジャンクションは残る",
+    "シンボリックリンクはリンク先を置換しリンクは残る",
+    "ダングリングリンクは保存しない",
+    "ダングリングリンクは専用のメッセージになる",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-106-3"
