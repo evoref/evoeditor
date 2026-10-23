@@ -212,6 +212,10 @@ struct Span {
     end_ns: u64,
     vk: Option<u64>,
     wall_end_unix_ns: Option<u128>,
+    /// 区間の内訳の時刻 (`input.to_flush` のとき)。
+    sent_ns: Option<u64>,
+    render_ns: Option<u64>,
+    emit_ns: Option<u64>,
 }
 
 /// `"key":123` の数を取り出す (記録は形が決まっているので、簡単な走査で足りる)。
@@ -235,6 +239,9 @@ fn read_spans(path: &Path) -> Vec<Span> {
                 end_ns: number_after(l, "end_ns")? as u64,
                 vk: number_after(l, "vk").map(|v| v as u64),
                 wall_end_unix_ns: number_after(l, "wall_end_unix_ns"),
+                sent_ns: number_after(l, "sent_ns").map(|v| v as u64),
+                render_ns: number_after(l, "render_ns").map(|v| v as u64),
+                emit_ns: number_after(l, "emit_ns").map(|v| v as u64),
             })
         })
         .collect()
@@ -352,8 +359,8 @@ fn startup(
     (a, b)
 }
 
-/// キー入力の判定区間 (入力の読取完了 → 描画の `write`)。1 MB の文書の中央で、打鍵間隔 30 ms で `a` を送る。
-fn key_latency_trace(dir: &Path, file: &Path, runs: usize, warmup: usize) -> Vec<Duration> {
+/// キー入力の判定区間 (入力の読取完了 → 描画の `write`) の記録。1 MB の文書の中央で、打鍵間隔 30 ms で `a` を送る。
+fn key_latency_trace(dir: &Path, file: &Path, runs: usize, warmup: usize) -> Vec<Span> {
     const VK_A: u64 = 0x41;
     let trace = dir.join("keys.jsonl");
     let (mut t, _) = Term::start(&[file.to_str().unwrap()], "00000000", Some(&trace));
@@ -379,11 +386,26 @@ fn key_latency_trace(dir: &Path, file: &Path, runs: usize, warmup: usize) -> Vec
         .filter(|s| s.name == "input.to_flush" && s.vk == Some(VK_A))
         .collect();
     let _ = std::fs::remove_file(&trace);
-    spans
-        .iter()
-        .skip(warmup)
-        .map(|s| ns_dur(s.end_ns - s.start_ns))
-        .collect()
+    spans.into_iter().skip(warmup).collect()
+}
+
+/// 内訳 4 区間: 読取完了 → 受信口へ送り終え / → 描画の呼出し (core の処理と Frame 生成) / → 出力の文字列 / → `write` が戻る。
+fn breakdown(spans: &[Span]) -> [Vec<Duration>; 4] {
+    let mut out: [Vec<Duration>; 4] = Default::default();
+    for s in spans {
+        let (Some(sent), Some(render), Some(emit)) = (s.sent_ns, s.render_ns, s.emit_ns) else {
+            continue;
+        };
+        // 内訳の時刻が欠けている (別の描画に使われた) 記録は飛ばす
+        if !(s.start_ns <= sent && sent <= render && render <= emit && emit <= s.end_ns) {
+            continue;
+        }
+        out[0].push(ns_dur(sent - s.start_ns));
+        out[1].push(ns_dur(render - sent));
+        out[2].push(ns_dur(emit - render));
+        out[3].push(ns_dur(s.end_ns - emit));
+    }
+    out
 }
 
 fn main() {
@@ -445,7 +467,11 @@ fn main() {
     }
     if traced && want("103") {
         let file = make_one_mb(&dir);
-        let v = key_latency_trace(&dir, &file, runs, warmup);
+        let spans = key_latency_trace(&dir, &file, runs, warmup);
+        let v: Vec<Duration> = spans
+            .iter()
+            .map(|s| ns_dur(s.end_ns - s.start_ns))
+            .collect();
         report(
             "BM-103b",
             "キー入力 (入力の読取完了 → 描画の write) 打鍵間隔 30 ms",
@@ -453,6 +479,24 @@ fn main() {
             json,
             quick,
         );
+        // 内訳 (切り分け用。判定には使わない)
+        let names = [
+            (
+                "BM-103b-1-read-to-sent",
+                "内訳 1: 読取完了 → 受信口へ送り終え",
+            ),
+            (
+                "BM-103b-2-sent-to-render",
+                "内訳 2: → 描画の呼出し (core の処理と Frame 生成)",
+            ),
+            ("BM-103b-3-render-to-emit", "内訳 3: → 差分の出力の文字列"),
+            ("BM-103b-4-emit-to-write", "内訳 4: → write が戻る"),
+        ];
+        for (series, (id, label)) in breakdown(&spans).into_iter().zip(names) {
+            if !series.is_empty() {
+                report(id, label, series, json, quick);
+            }
+        }
     }
 
     // BM-101c: 起動 → 最初の画面
@@ -572,7 +616,7 @@ fn main() {
         if traced {
             // 判定に使う値: 保存中に送ったカーソル移動 (→) の、入力の読取完了 → 描画の write
             const VK_RIGHT: u64 = 0x27;
-            t.send(b""); // Ctrl+Q (保存は終わっている)
+            t.send(b"\x11"); // Ctrl+Q (保存は終わっている)
             assert_eq!(t.wait_exit(WAIT), Some(0), "正常に終了しません");
             let spans: Vec<Duration> = read_spans(&trace)
                 .into_iter()

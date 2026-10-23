@@ -13,6 +13,10 @@
 //!   どちらも `fields.wall_main_unix_ns` / `fields.wall_end_unix_ns` に、同じ 2 点の壁時計 (UNIX 紀元からの ns) を入れる
 //!   (計測ハーネスの spawn 時刻と比べて、起動 (b) spawn からを求める)。
 //!
+//! `input.to_flush` の `fields` には、区間の内訳 (`sent_ns` = 入力をホストの受信口へ送り終えた時刻、`render_ns` = ホストが描画を
+//! 呼んだ時刻 (core の処理と Frame 生成が済んだ)、`emit_ns` = 差分の出力の文字列ができた時刻。いずれも `start_ns` と同じ時間軸の ns)
+//! も入る。ボトルネックの切り分け用で、判定には使わない。
+//!
 //! 書出しは `flush` (終了の直前) にまとめて行い、計測区間にファイルの I/O を含めない。隠しオプション
 //! `--bench-exit-after-first-frame` は、最初の Frame の `write` が戻った直後に端末を復元して終了する。
 
@@ -35,6 +39,10 @@ mod imp {
     static PENDING: AtomicU64 = AtomicU64::new(0);
     /// その入力のキー (仮想キーコード。計測ハーネスが区間を種類で選ぶための印で、入力した文字ではない)。
     static PENDING_VK: AtomicU64 = AtomicU64::new(0);
+    /// 内訳の時刻 (ns+1。0 は無し)。最も古い入力に対する最初の値だけを残す。
+    static SENT: AtomicU64 = AtomicU64::new(0);
+    static RENDER: AtomicU64 = AtomicU64::new(0);
+    static EMIT: AtomicU64 = AtomicU64::new(0);
     static FIRST_DONE: AtomicBool = AtomicBool::new(false);
     static CONTENT_DONE: AtomicBool = AtomicBool::new(false);
     static EXIT_AFTER_FIRST: AtomicBool = AtomicBool::new(false);
@@ -74,6 +82,28 @@ mod imp {
         }
     }
 
+    fn mark(slot: &AtomicU64) {
+        let Some(s) = STATE.get() else { return };
+        if PENDING.load(Ordering::Acquire) != 0 {
+            let _ = slot.compare_exchange(0, now_ns(s) + 1, Ordering::AcqRel, Ordering::Acquire);
+        }
+    }
+
+    /// 入力をホストの受信口へ送り終えた。
+    pub fn input_sent() {
+        mark(&SENT);
+    }
+
+    /// ホストが描画を呼んだ (core の処理と Frame 生成が済んだ)。
+    pub fn render_enter() {
+        mark(&RENDER);
+    }
+
+    /// 差分の出力の文字列ができた (`write` の直前)。
+    pub fn render_emitted() {
+        mark(&EMIT);
+    }
+
     fn push(line: String) {
         if let Ok(mut v) = LINES.lock() {
             v.push(line);
@@ -106,8 +136,10 @@ mod imp {
         let start = PENDING.swap(0, Ordering::AcqRel);
         if start != 0 {
             let vk = PENDING_VK.load(Ordering::Acquire);
+            let t = |slot: &AtomicU64| slot.swap(0, Ordering::AcqRel).saturating_sub(1);
+            let (sent, render, emit) = (t(&SENT), t(&RENDER), t(&EMIT));
             push(format!(
-                "{{\"name\":\"input.to_flush\",\"start_ns\":{},\"end_ns\":{end},\"thread\":\"{thread}\",\"fields\":{{\"vk\":{vk}}}}}",
+                "{{\"name\":\"input.to_flush\",\"start_ns\":{},\"end_ns\":{end},\"thread\":\"{thread}\",\"fields\":{{\"vk\":{vk},\"sent_ns\":{sent},\"render_ns\":{render},\"emit_ns\":{emit}}}}}",
                 start - 1
             ));
         }
@@ -133,6 +165,12 @@ mod imp {
     pub fn init() {}
     #[inline(always)]
     pub fn input_read(_first_key_down_vk: Option<u16>) {}
+    #[inline(always)]
+    pub fn input_sent() {}
+    #[inline(always)]
+    pub fn render_enter() {}
+    #[inline(always)]
+    pub fn render_emitted() {}
     #[inline(always)]
     pub fn render_done(_content: bool) -> bool {
         false

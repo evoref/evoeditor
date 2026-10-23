@@ -315,6 +315,12 @@ pub fn display_col_to_byte(line: &str, dcol: usize, cfg: &WidthConfig) -> usize 
     line.len()
 }
 
+/// 文字列の先頭の書記素 (空なら空文字列)。1 つだけ必要なときに、全体を分割しないで済む。
+pub fn first_grapheme(s: &str) -> &str {
+    use unicode_segmentation::UnicodeSegmentation;
+    s.graphemes(true).next().unwrap_or("")
+}
+
 /// 行の文字列を書記素に分け、各書記素の (行内のバイト位置, 文字列) を返す。
 pub fn grapheme_indices(s: &str) -> Vec<(usize, &str)> {
     use unicode_segmentation::UnicodeSegmentation;

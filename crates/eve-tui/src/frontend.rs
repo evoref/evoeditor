@@ -24,7 +24,9 @@ struct SinkOut(InputSink);
 
 impl InputOut for SinkOut {
     fn event(&self, ev: InputEvent) -> bool {
-        self.0.send(ev)
+        let ok = self.0.send(ev);
+        crate::trace::input_sent();
+        ok
     }
 
     fn died(&self) {
@@ -165,6 +167,7 @@ impl Frontend for TuiFrontend {
             }
             return RenderOutcome::Done;
         }
+        crate::trace::render_enter();
         let depth = self
             .detected
             .as_ref()
@@ -172,6 +175,7 @@ impl Frontend for TuiFrontend {
         let window = self.window().unwrap_or(frame.size);
         let r = render_screen(frame, window, depth, &self.glyphs);
         let out = self.emitter.frame(&r, frame, true);
+        crate::trace::render_emitted();
         self.write(&out);
         // 計測用ビルド: 描画の `write` が戻った時刻を記録する。`--bench-exit-after-first-frame` なら、端末を復元して終わる
         let content = cfg!(feature = "bench-trace")

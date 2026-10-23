@@ -5,8 +5,8 @@
 //! スタイルはテーマ (eve-config) ができるまで属性だけ (選択 = 反転、記号 = 弱い表示)。
 
 use eve_text::{
-    ByteOff, ByteRange, ControlStyle, EmojiWidth, LineIdx, TextRead, WidthConfig, grapheme_display,
-    grapheme_indices, is_width_risky,
+    ByteOff, ByteRange, ControlStyle, EmojiWidth, LineIdx, TextRead, WidthConfig, first_grapheme,
+    grapheme_display, grapheme_indices, is_width_risky,
 };
 use eve_view::{
     CellPos, CellRect, CellSize, CellText, CursorPlacement, CursorShape, CutPolicy, FocusTarget,
@@ -59,6 +59,18 @@ struct Unit {
     risky: bool,
 }
 
+/// 単独で幅 2・記号でない・不可視のマークなし・幅の危険なし、の通常の文字か (かな・漢字・全角の英数と主な句読点)。
+/// `units` の近道の対象。曖昧幅の設定にも依らないことを、範囲の全文字を `grapheme_display` と照合するテストで確かめている。
+fn is_plain_wide(c: char) -> bool {
+    matches!(c as u32,
+        0x3001..=0x3002        // 、。
+        | 0x300C..=0x300D      // 「」
+        | 0x3041..=0x3096      // ひらがな
+        | 0x30A1..=0x30FA | 0x30FC // カタカナ (・ U+30FB は除く)
+        | 0x4E00..=0x9FFF      // CJK 統合漢字
+        | 0xFF01..=0xFF5E) // 全角の ASCII
+}
+
 /// 溜めた文字列を通常の書記素として表示に変換して `parts` に足す。
 fn flush_run(run: &mut String, parts: &mut Vec<(String, u16, bool)>, cfg: &WidthConfig) {
     if run.is_empty() {
@@ -99,57 +111,99 @@ fn units_for(doc: &Document, line: usize, content: &str) -> std::rc::Rc<Vec<Unit
     u
 }
 
+/// 1 書記素 `g` (行内のバイト位置 `off`、表示列 `col`) を表示の単位に展開する (一般の経路)。
+fn unit_slow(g: &str, off: usize, col: usize, tab: usize, esc: bool, cfg: &WidthConfig) -> Unit {
+    let mut parts: Vec<(String, u16, bool)> = Vec::new();
+    let mut risky = false;
+    if g == "\t" {
+        let w = tab - col % tab;
+        parts.push((">".to_owned(), 1, true));
+        if w > 1 {
+            parts.push((" ".repeat(w - 1), (w - 1) as u16, true));
+        }
+    } else if g == "\u{3000}" {
+        parts.push(("[]".to_owned(), 2, true));
+    } else if esc && g.chars().any(|c| unescape_char(c).is_some()) {
+        // 不正バイトのエスケープ文字は 1 文字ずつ `<0xHH>` にする (結合文字などと同じ書記素になることがある)
+        let mut run = String::new();
+        for c in g.chars() {
+            if let Some(b) = unescape_char(c) {
+                flush_run(&mut run, &mut parts, cfg);
+                parts.push((format!("<0x{b:02X}>"), 6, true));
+            } else {
+                run.push(c);
+            }
+        }
+        flush_run(&mut run, &mut parts, cfg);
+    } else {
+        let d = grapheme_display(g, cfg);
+        let first = g.chars().next().unwrap_or(' ');
+        let symbolic = (first as u32) < 0x20
+            || (0x7F..=0x9F).contains(&(first as u32))
+            || d.base.starts_with("<U+");
+        if !d.base.is_empty() {
+            parts.push((d.base, d.base_width, symbolic));
+        }
+        if !d.marks.is_empty() {
+            parts.push((d.marks, d.marks_width, true));
+        }
+        risky = is_width_risky(g);
+    }
+    let width: usize = parts.iter().map(|p| p.1 as usize).sum();
+    Unit {
+        col,
+        parts,
+        width,
+        byte: off,
+        risky,
+    }
+}
+
 /// 行の内容を表示の単位に展開する。
 fn units(content: &str, esc: bool, cfg: &WidthConfig) -> Vec<Unit> {
     let tab = cfg.tab_width.max(1) as usize;
+    // 印字できる ASCII だけの行 (本文の大半): 書記素の分割も表示の組み立ても要らない (1 文字 = 1 書記素 = 幅 1)
+    if content.bytes().all(|b| (0x20..=0x7E).contains(&b)) {
+        return content
+            .bytes()
+            .enumerate()
+            .map(|(i, b)| Unit {
+                col: i,
+                parts: vec![((b as char).to_string(), 1, false)],
+                width: 1,
+                byte: i,
+                risky: false,
+            })
+            .collect();
+    }
     let mut out = Vec::new();
     let mut col = 0usize;
-    for (off, g) in grapheme_indices(content) {
-        let mut parts: Vec<(String, u16, bool)> = Vec::new();
-        let mut risky = false;
-        if g == "\t" {
-            let w = tab - col % tab;
-            parts.push((">".to_owned(), 1, true));
-            if w > 1 {
-                parts.push((" ".repeat(w - 1), (w - 1) as u16, true));
-            }
-        } else if g == "\u{3000}" {
-            parts.push(("[]".to_owned(), 2, true));
-        } else if esc && g.chars().any(|c| unescape_char(c).is_some()) {
-            // 不正バイトのエスケープ文字は 1 文字ずつ `<0xHH>` にする (結合文字などと同じ書記素になることがある)
-            let mut run = String::new();
-            for c in g.chars() {
-                if let Some(b) = unescape_char(c) {
-                    flush_run(&mut run, &mut parts, cfg);
-                    parts.push((format!("<0x{b:02X}>"), 6, true));
-                } else {
-                    run.push(c);
-                }
-            }
-            flush_run(&mut run, &mut parts, cfg);
-        } else {
-            let d = grapheme_display(g, cfg);
-            let first = g.chars().next().unwrap_or(' ');
-            let symbolic = (first as u32) < 0x20
-                || (0x7F..=0x9F).contains(&(first as u32))
-                || d.base.starts_with("<U+");
-            if !d.base.is_empty() {
-                parts.push((d.base, d.base_width, symbolic));
-            }
-            if !d.marks.is_empty() {
-                parts.push((d.marks, d.marks_width, true));
-            }
-            risky = is_width_risky(g);
+    let mut at = 0usize;
+    while at < content.len() {
+        let rest = &content[at..];
+        let Some(c) = rest.chars().next() else { break };
+        // 印字できる ASCII と幅 2 の通常の文字 (かな・漢字・全角の英数。本文の大半) が続くところは、その 1 文字が 1 書記素
+        // (次の文字も同じ種類なら結合しない) で、書記素の分割も表示の組み立て (文字列の確保が複数回) も通さない
+        let simple = |c: char| matches!(c as u32, 0x20..=0x7E) || is_plain_wide(c);
+        if simple(c) && rest[c.len_utf8()..].chars().next().is_none_or(simple) {
+            let w: u16 = if c.is_ascii() { 1 } else { 2 };
+            out.push(Unit {
+                col,
+                parts: vec![(c.to_string(), w, false)],
+                width: usize::from(w),
+                byte: at,
+                risky: false,
+            });
+            col += usize::from(w);
+            at += c.len_utf8();
+            continue;
         }
-        let width: usize = parts.iter().map(|p| p.1 as usize).sum();
-        out.push(Unit {
-            col,
-            parts,
-            width,
-            byte: off,
-            risky,
-        });
-        col += width;
+        let g = first_grapheme(rest);
+        let off = at;
+        at += g.len();
+        let u = unit_slow(g, off, col, tab, esc, cfg);
+        col += u.width;
+        out.push(u);
     }
     out
 }
@@ -222,20 +276,25 @@ pub(super) fn gutter_width(doc: &Document, cols: usize) -> u16 {
 }
 
 /// 隣り合う ASCII の記号でない Span を結合する (Span の契約: 含む書記素の幅がすべて同じ)。
-fn push_span(spans: &mut Vec<Span>, text: String, width: u16, style: Style) {
+fn push_span(spans: &mut Vec<Span>, text: &str, width: u16, style: Style) {
     let ascii_cells =
         width as usize == text.len() && text.bytes().all(|b| (0x20..0x7F).contains(&b));
     if ascii_cells
         && let Some(last) = spans.last_mut()
         && last.style == style
+        // 幅とバイト数が等しい Span は、ここで結合した ASCII の Span だけ (全書記素が幅 1)。毎回全体を走査しない
         && last.width as usize == last.text.len()
-        && last.text.bytes().all(|b| (0x20..0x7F).contains(&b))
     {
-        last.text.push_str(&text);
+        debug_assert!(last.text.bytes().all(|b| (0x20..0x7F).contains(&b)));
+        last.text.push_str(text);
         last.width += width;
         return;
     }
-    spans.push(Span { text, width, style });
+    spans.push(Span {
+        text: text.to_owned(),
+        width,
+        style,
+    });
 }
 
 struct RowOut {
@@ -343,13 +402,13 @@ fn build_row(
             }
             risky |= u.risky;
             if c0 >= win_start && c <= win_end {
-                push_span(&mut spans, text.clone(), w as u16, style);
+                push_span(&mut spans, text, w as u16, style);
             } else {
                 // セルの途中で切れる: 見える分のセルを空白で埋める
                 let visible = c.min(win_end) - c0.max(win_start);
                 clipped_left |= c0 < win_start;
                 clipped_right |= c > win_end;
-                push_span(&mut spans, " ".repeat(visible), visible as u16, style);
+                push_span(&mut spans, &" ".repeat(visible), visible as u16, style);
             }
         }
     }
@@ -360,12 +419,7 @@ fn build_row(
             .iter()
             .any(|&(s, e)| s <= line_end_abs && e > line_end_abs);
     if eol_selected && total >= win_start && total < win_end {
-        push_span(
-            &mut spans,
-            " ".to_owned(),
-            1,
-            Style::with_mods(StyleMods::REVERSE),
-        );
+        push_span(&mut spans, " ", 1, Style::with_mods(StyleMods::REVERSE));
     }
     let cursor_cols = heads
         .iter()
@@ -630,4 +684,147 @@ pub(super) fn primary_cursor_cell(state: &EditorState, view: ViewId) -> Option<(
     let line = d.text().byte_to_line(head);
     let ls = d.text().line_to_byte(line).0;
     Some(cursor_cell(d, line.0, head.0.saturating_sub(ls)))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// `units` の ASCII の近道は、一般の経路 (書記素の表示の組み立て) と同じ結果になる前提に立つ:
+    /// 印字できる ASCII 1 文字は、幅 1・マークなし・記号でない・幅の危険なし。
+    #[test]
+    fn 印字できる_ascii_の近道は一般の経路と同じ結果になる() {
+        for ambiguous_wide in [false, true] {
+            let cfg = WidthConfig {
+                ambiguous_wide,
+                ..width_config()
+            };
+            for b in 0x20u8..=0x7E {
+                let g = (b as char).to_string();
+                let d = grapheme_display(&g, &cfg);
+                assert_eq!(d.base, g, "{b:#x}");
+                assert_eq!(d.base_width, 1, "{b:#x}");
+                assert!(d.marks.is_empty(), "{b:#x}");
+                assert!(!d.base.starts_with("<U+"), "{b:#x}");
+                assert!(!is_width_risky(&g), "{b:#x}");
+            }
+        }
+    }
+
+    #[test]
+    fn 幅_2_の通常の文字の近道は範囲の全文字で一般の経路と同じ結果になる() {
+        for ambiguous_wide in [false, true] {
+            let cfg = WidthConfig {
+                ambiguous_wide,
+                ..width_config()
+            };
+            let mut checked = 0;
+            for v in 0x3000u32..=0xFFFF {
+                let Some(c) = char::from_u32(v).filter(|&c| is_plain_wide(c)) else {
+                    continue;
+                };
+                let g = c.to_string();
+                let d = grapheme_display(&g, &cfg);
+                assert_eq!(d.base, g, "{v:#x}");
+                assert_eq!((d.base_width, d.marks_width), (2, 0), "{v:#x}");
+                assert!(d.marks.is_empty() && !d.base.starts_with("<U+"), "{v:#x}");
+                assert!(!is_width_risky(&g), "{v:#x}");
+                checked += 1;
+            }
+            assert!(checked > 20_000, "{checked}");
+        }
+    }
+
+    #[test]
+    fn 近道の展開は列とバイト位置が一般の経路と同じ() {
+        let cfg = width_config();
+        // ASCII だけの行 (近道) と、同じ文字列に非 ASCII を足して一般の経路を通した行の、共通部分の展開が同じ
+        let ascii = "the quick brown fox 0123456789";
+        let fast = units(ascii, false, &cfg);
+        let mixed = units(&format!("{ascii}日"), false, &cfg);
+        assert_eq!(fast.len() + 1, mixed.len());
+        for (a, b) in fast.iter().zip(&mixed) {
+            assert_eq!(
+                (a.col, a.width, a.byte, a.risky, &a.parts),
+                (b.col, b.width, b.byte, b.risky, &b.parts)
+            );
+        }
+        assert!(units("", false, &cfg).is_empty());
+    }
+
+    /// 基準: 全ての書記素を一般の経路で展開する。
+    fn units_reference(content: &str, esc: bool, cfg: &WidthConfig) -> Vec<Unit> {
+        let tab = cfg.tab_width.max(1) as usize;
+        let mut col = 0usize;
+        grapheme_indices(content)
+            .into_iter()
+            .map(|(off, g)| {
+                let u = unit_slow(g, off, col, tab, esc, cfg);
+                col += u.width;
+                u
+            })
+            .collect()
+    }
+
+    #[test]
+    fn 近道の展開は全ての書記素を一般の経路で展開した結果と同じになる() {
+        // 決定的な擬似乱数で、近道の文字と、結合・絵文字・ハングル・国旗・タブ・全角空白・制御文字・エスケープを混ぜる
+        let pieces: [&str; 24] = [
+            "a",
+            "Z",
+            " ",
+            "~",
+            "あ",
+            "ア",
+            "漢",
+            "字",
+            "、",
+            "「",
+            "Ａ",
+            "ー",
+            "・",
+            "e\u{301}",
+            "\u{301}",
+            "😀",
+            "👨\u{200D}👩",
+            "🇯🇵",
+            "한",
+            "\t",
+            "\u{3000}",
+            "\u{7}",
+            "\u{85}",
+            "\u{10FF80}",
+        ];
+        let mut x = 0x9E37_79B9_7F4A_7C15u64;
+        let mut next = || {
+            x ^= x << 13;
+            x ^= x >> 7;
+            x ^= x << 17;
+            x
+        };
+        for ambiguous_wide in [false, true] {
+            for esc in [false, true] {
+                let cfg = WidthConfig {
+                    ambiguous_wide,
+                    ..width_config()
+                };
+                for _ in 0..3000 {
+                    let mut line = String::new();
+                    for _ in 0..(next() % 14) {
+                        line.push_str(pieces[(next() % 24) as usize]);
+                    }
+                    let fast = units(&line, esc, &cfg);
+                    let slow = units_reference(&line, esc, &cfg);
+                    assert_eq!(fast.len(), slow.len(), "{line:?}");
+                    for (a, b) in fast.iter().zip(&slow) {
+                        assert_eq!(
+                            (a.col, a.width, a.byte, a.risky, &a.parts),
+                            (b.col, b.width, b.byte, b.risky, &b.parts),
+                            "{line:?}"
+                        );
+                    }
+                }
+            }
+        }
+    }
 }
