@@ -217,6 +217,21 @@ impl MemFs {
         }
     }
 
+    /// 内容を差し替える。更新時刻・長さ・file_id は変えない (mtime の分解能の内の書き換えを再現する)。
+    /// 長さが変わるときは、長さだけは新しい内容になる (長さを同じにしたいときは同じ長さの内容を渡す)。
+    pub fn set_data_keep_mtime(&self, path: &str, data: &[u8]) {
+        if let Some(e) = self.st().files.get_mut(&FsPath::from(path)) {
+            e.data = data.to_vec();
+        }
+    }
+
+    /// 内容を変えずに更新時刻だけを `secs` 秒進める (同期ソフト・ウイルス対策による mtime だけの更新を再現する)。
+    pub fn bump_mtime(&self, path: &str, secs: i64) {
+        if let Some(e) = self.st().files.get_mut(&FsPath::from(path)) {
+            e.mtime.secs += secs;
+        }
+    }
+
     /// `metadata` が返す長さを偽る (FR-127 の 512 MiB の警告を、巨大な中身を作らずに試す)。`None` で戻す。
     pub fn set_fake_len(&self, path: &str, len: Option<u64>) {
         if let Some(e) = self.st().files.get_mut(&FsPath::from(path)) {

@@ -168,6 +168,9 @@ fn open_inner(
         total: meta.len,
     });
     let mut last_progress = ports.clock.now();
+    // 内容ハッシュ (16 MiB 以下。読み込みながら計算する、05 §5.5)
+    let mut hasher = (meta.len <= crate::content_hash::HASH_MAX_LEN)
+        .then(crate::content_hash::ContentHasher::new);
     loop {
         if cancel.is_cancelled() {
             return cancelled();
@@ -179,6 +182,9 @@ fn open_inner(
             Err(_) => return fail(JobError::Fs(FsError::new(FsErrorKind::Other))),
         };
         let mut chunk: &[u8] = chunk;
+        if let Some(h) = hasher.as_mut() {
+            h.update(chunk);
+        }
         let first = plan.is_none();
         if first {
             let head = &chunk[..chunk.len().min(SNIFF_LEN)];
@@ -348,7 +354,13 @@ fn open_inner(
     }
     // 衝突があっても不正バイトが 0 ならエスケープを使わないので編集できる
     // 読込前の stamp を保存の照合に使う。読込中に変わったファイルは、そのまま上書き保存すると照合で Conflict になる
-    let stamp = stamp_before;
+    // 最後まで読み切れたときだけハッシュを付ける (途中で大きさが変わったら付けない)
+    let stamp = FileStamp {
+        hash: hasher
+            .filter(|_| !truncated && read_total == meta.len)
+            .map(|h| h.finish()),
+        ..stamp_before
+    };
     JobResult::Complete {
         job: id,
         text,
@@ -374,10 +386,46 @@ struct SnapshotSource<'a> {
     cancel: &'a CancelToken,
     started: bool,
     finished: bool,
+    /// 書いた内容のハッシュ (16 MiB 以下だけ。超えたら `None` にして計算をやめる、05 §5.5)
+    hasher: Option<crate::content_hash::ContentHasher>,
+    written: u64,
+}
+
+impl SnapshotSource<'_> {
+    /// 書き終えた内容のハッシュ (上限を超えたら `None`)。
+    fn content_hash(&self) -> Option<crate::fs::ContentHash> {
+        self.hasher
+            .as_ref()
+            .map(crate::content_hash::ContentHasher::finish)
+    }
+
+    /// 返すチャンクを数え、ハッシュに入れる。
+    fn track(&mut self) {
+        self.written += self.buf.len() as u64;
+        if self.written > crate::content_hash::HASH_MAX_LEN {
+            self.hasher = None;
+        } else if let Some(h) = self.hasher.as_mut() {
+            h.update(&self.buf);
+        }
+    }
 }
 
 impl ReadChunks for SnapshotSource<'_> {
     fn next_chunk(&mut self) -> Result<Option<&[u8]>, ChunkError> {
+        // 内側が返すのは常に `self.buf` なので、借用を終えてから数えて、あらためて返す
+        match self.next_chunk_inner().map(|c| c.is_some()) {
+            Ok(true) => {
+                self.track();
+                Ok(Some(&self.buf))
+            }
+            Ok(false) => Ok(None),
+            Err(e) => Err(e),
+        }
+    }
+}
+
+impl SnapshotSource<'_> {
+    fn next_chunk_inner(&mut self) -> Result<Option<&[u8]>, ChunkError> {
         if self.cancel.is_cancelled() {
             return Err(ChunkError::Aborted);
         }
@@ -498,6 +546,23 @@ pub(crate) fn run_save(
         cancel,
         started: false,
         finished: false,
+        hasher: Some(crate::content_hash::ContentHasher::new()),
+        written: 0,
+    };
+    // 書き始める前の照合 (内容ハッシュ。05 §5.5): mtime が同じで中身が違えば Conflict、中身が同じで mtime だけが違えば新しい Stamp で続ける
+    let expected = match expected {
+        Expect::Stamp(want) => {
+            match crate::content_hash::reconcile(ports.fs.as_ref(), path, want) {
+                Ok(s) => Expect::Stamp(s),
+                Err(e) => {
+                    return JobResult::Failed {
+                        job: id,
+                        err: JobError::Fs(e),
+                    };
+                }
+            }
+        }
+        other => other,
     };
     let mut opts = SaveOptions::user_file(expected);
     let result = match strategy {
@@ -513,7 +578,13 @@ pub(crate) fn run_save(
         }
     };
     match result {
-        Ok(report) => JobResult::Saved { job: id, report },
+        Ok(mut report) => {
+            // 書いた内容のハッシュを新しい Stamp に入れる (次の照合で、開いてから最初の保存までの外部変更も見逃さない)
+            if report.new_stamp.len == src.written {
+                report.new_stamp.hash = src.content_hash();
+            }
+            JobResult::Saved { job: id, report }
+        }
         Err(_) if cancel.is_cancelled() => JobResult::Failed {
             job: id,
             err: JobError::Cancelled,

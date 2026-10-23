@@ -2034,7 +2034,15 @@ impl EditorState {
             JobResult::Meta { stamp, .. } => {
                 !doc.is_dirty()
                     && doc.disk_stamp.is_some_and(|d| {
-                        d.mtime == stamp.mtime && d.len == stamp.len && d.file_id == stamp.file_id
+                        // 内容ハッシュが双方にあれば、それで決める (mtime だけが違っても中身が同じなら変更なし、
+                        // mtime が同じでも中身が違えば変更あり。05 §5.5)
+                        let same_hash = d.hash.zip(stamp.hash).map(|(a, b)| a == b);
+                        d.len == stamp.len
+                            && d.file_id == stamp.file_id
+                            && match same_hash {
+                                Some(same) => same,
+                                None => d.mtime == stamp.mtime,
+                            }
                     })
             }
             _ => false,
