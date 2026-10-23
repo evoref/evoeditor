@@ -6,7 +6,8 @@
 //! `%TEMP%\eve-recovery-<SID>\` (所有者のみの DACL、05 §7.5) に書く。作るディレクトリは所有者のみ (中のファイルは継承)。
 //!
 //! 本文は内部の UTF-8 のまま・改行を正規化せず・不正バイトの PUA エスケープを保つ (元の文字コードへの再エンコードはしない)。
-//! 範囲外 (後続): 書く前の空き容量の確認、代替の退避先の既存ディレクトリの所有者検査 (05 §7.5)、30 日を超えた退避の案内。
+//! 書く前に空き容量を確かめ (足りなければ代替の退避先へ)、代替の退避先の既存ディレクトリは所有者が自分であることを確かめる (05 §7.5)。
+//! 範囲外 (後続): 30 日を超えた退避の案内。
 
 use std::fs::{self, File};
 use std::io::{self, Write};
@@ -102,18 +103,76 @@ fn create_unique_dir(base: &Path, secs: i64) -> io::Result<PathBuf> {
     Err(io::Error::from(io::ErrorKind::AlreadyExists))
 }
 
+/// 空き容量の問い合わせ (調べられなければ `None`)。
+type FreeFn<'a> = &'a dyn Fn(&Path) -> Option<u64>;
+/// ディレクトリの所有者が自分か。
+type OwnedFn<'a> = &'a dyn Fn(&Path) -> io::Result<bool>;
+
 /// 退避先を決めて作る。通常の場所 (`state_dir/recovery`) に作れなければ代替の退避先。戻り値は (ディレクトリ, 代替か)。
 /// `rescue` は「退避先に保存」(`reason = "user_save"`) で、`recovery/rescue/` の下に作る (05 §7.5)。
-fn open_dir(state_dir: Option<&Path>, secs: i64, rescue: bool) -> io::Result<(PathBuf, bool)> {
+/// `needed` は書く本文の合計 (バイト): 通常の場所の空きが足りなければ代替の退避先へ、どちらも足りなければ
+/// (調べられないときも) 通常の場所に書けるだけ書く (小さい文書から書くので、書けた分が残る)。
+fn open_dir(
+    state_dir: Option<&Path>,
+    secs: i64,
+    rescue: bool,
+    needed: u64,
+) -> io::Result<(PathBuf, bool)> {
+    open_dir_with(
+        state_dir,
+        secs,
+        rescue,
+        needed,
+        &crate::owner::free_bytes,
+        &crate::owner::owned_by_me,
+    )
+}
+
+fn open_dir_with(
+    state_dir: Option<&Path>,
+    secs: i64,
+    rescue: bool,
+    needed: u64,
+    free: FreeFn<'_>,
+    owned: OwnedFn<'_>,
+) -> io::Result<(PathBuf, bool)> {
     let sub = |base: PathBuf| if rescue { base.join("rescue") } else { base };
-    if let Some(sd) = state_dir
-        && let Ok(d) = create_unique_dir(&sub(sd.join("recovery")), secs)
-    {
-        return Ok((d, false));
+    let enough = |dir: &Path| free(dir).is_none_or(|f| f >= needed);
+    // 空きが足りなかった候補 (ほかに使える場所が無いときに使う)
+    let mut short: Option<(PathBuf, bool)> = None;
+    if let Some(sd) = state_dir {
+        let base = sub(sd.join("recovery"));
+        if let Ok(d) = create_unique_dir(&base, secs) {
+            if enough(&d) {
+                return Ok((d, false));
+            }
+            let _ = fs::remove_dir(&d);
+            short = Some((base, false));
+        }
     }
     let sid = current_user_sid()?;
-    let base = std::env::temp_dir().join(format!("eve-recovery-{sid}"));
-    create_unique_dir(&sub(base), secs).map(|d| (d, true))
+    let fallback = std::env::temp_dir().join(format!("eve-recovery-{sid}"));
+    create_dir_all_private(&fallback)?;
+    // 既にある場所は所有者が自分でなければ使わない (他のユーザーが先に作った場所に書かない、05 §7.5)
+    if !owned(&fallback)? {
+        return short
+            .map(|(base, alt)| create_unique_dir(&base, secs).map(|d| (d, alt)))
+            .unwrap_or_else(|| {
+                Err(io::Error::new(
+                    io::ErrorKind::PermissionDenied,
+                    "代替の退避先の所有者が現在のユーザーではありません",
+                ))
+            });
+    }
+    let base = sub(fallback);
+    let d = create_unique_dir(&base, secs)?;
+    if enough(&d) || short.is_none() {
+        return Ok((d, true));
+    }
+    // どちらも足りない: 通常の場所に書けるだけ書く
+    let _ = fs::remove_dir(&d);
+    let (base, alt) = short.expect("上で確かめた");
+    create_unique_dir(&base, secs).map(|d| (d, alt))
 }
 
 /// 本文のファイル名の `<basename>` に使える形にする (予約文字・制御文字を `_`、長さを制限)。
@@ -306,10 +365,17 @@ impl RescueWriter for WinRescue {
             return out;
         }
         let secs = now_secs();
+        // 本文の合計に manifest などの余裕を足した、必要な空き容量
+        let needed = docs
+            .iter()
+            .map(|d| d.snapshot.len_bytes() as u64)
+            .sum::<u64>()
+            .saturating_add(1024 * 1024);
         let (dir, fallback) = match open_dir(
             self.state_dir.as_deref(),
             secs,
             reason == RescueReason::UserSave,
+            needed,
         ) {
             Ok(x) => x,
             Err(e) => {
@@ -496,5 +562,122 @@ mod tests {
             assert!(t.contains(want), "{want}\n{t}");
         }
         assert!(!t.contains("sensitive"), "false は書かない");
+    }
+
+    fn scratch(tag: &str) -> PathBuf {
+        let n = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| d.as_nanos());
+        let p = std::env::temp_dir().join(format!("eve-opendir-{tag}-{}-{n}", std::process::id()));
+        fs::create_dir_all(&p).unwrap();
+        p
+    }
+
+    /// 通常の場所の空きは 100、代替の場所 (名前に `eve-recovery-` を含む) の空きは `alt_free`。
+    fn free_of(alt_free: Option<u64>) -> impl Fn(&Path) -> Option<u64> {
+        move |p: &Path| {
+            if p.to_string_lossy().contains("eve-recovery-") {
+                alt_free
+            } else {
+                Some(100)
+            }
+        }
+    }
+
+    // verifies: AC-NFR-302-1
+    #[test]
+    fn 通常の場所の空きが足りなければ代替の退避先に書く() {
+        let st = scratch("short");
+        let (d, fallback) = open_dir_with(
+            Some(&st),
+            1_792_586_096,
+            false,
+            1000,
+            &free_of(Some(10_000)),
+            &|_| Ok(true),
+        )
+        .unwrap();
+        assert!(fallback, "代替の退避先: {}", d.display());
+        assert!(d.to_string_lossy().contains("eve-recovery-"));
+        // 通常の場所に空のディレクトリを残さない
+        let left: Vec<_> = fs::read_dir(st.join("recovery")).unwrap().collect();
+        assert!(left.is_empty());
+        let _ = fs::remove_dir_all(&st);
+        let _ = fs::remove_dir_all(d.parent().unwrap());
+    }
+
+    #[test]
+    fn 空きが足りていれば通常の場所に書く() {
+        let st = scratch("enough");
+        let (d, fallback) = open_dir_with(
+            Some(&st),
+            1_792_586_096,
+            false,
+            50,
+            &free_of(Some(0)),
+            &|_| Ok(true),
+        )
+        .unwrap();
+        assert!(!fallback && d.starts_with(&st));
+        let _ = fs::remove_dir_all(&st);
+    }
+
+    #[test]
+    fn どちらも足りないときは通常の場所に書けるだけ書く() {
+        let st = scratch("both");
+        let (d, fallback) = open_dir_with(
+            Some(&st),
+            1_792_586_096,
+            false,
+            1_000_000,
+            &free_of(Some(5)),
+            &|_| Ok(true),
+        )
+        .unwrap();
+        assert!(!fallback && d.starts_with(&st), "{}", d.display());
+        let _ = fs::remove_dir_all(&st);
+    }
+
+    #[test]
+    fn 空きを調べられなければ通常の場所に書く() {
+        let st = scratch("unknown");
+        let (_, fallback) = open_dir_with(
+            Some(&st),
+            1_792_586_096,
+            false,
+            u64::MAX,
+            &|_| None,
+            &|_| Ok(true),
+        )
+        .unwrap();
+        assert!(!fallback);
+        let _ = fs::remove_dir_all(&st);
+    }
+
+    // verifies: AC-NFR-302-1
+    #[test]
+    fn 代替の退避先の所有者が違えば使わない() {
+        // 通常の場所が使えない (state_dir なし) ので代替しか無い
+        let e = open_dir_with(None, 1_792_586_096, false, 1, &|_| Some(u64::MAX), &|_| {
+            Ok(false)
+        })
+        .unwrap_err();
+        assert_eq!(e.kind(), io::ErrorKind::PermissionDenied);
+    }
+
+    #[test]
+    fn 代替の所有者が違っても通常の場所があれば通常の場所に書く() {
+        let st = scratch("foreign");
+        let (d, fallback) = open_dir_with(
+            Some(&st),
+            1_792_586_096,
+            false,
+            1000,
+            &free_of(Some(10_000)),
+            &|_| Ok(false),
+        )
+        .unwrap();
+        assert!(!fallback && d.starts_with(&st));
+        let _ = fs::remove_dir_all(&st);
     }
 }
