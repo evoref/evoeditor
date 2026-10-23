@@ -293,12 +293,59 @@ fn ハードリンクは_ask_で_atomic_unsupported_break_link_なら置換す�
     );
 }
 
+/// シンボリックリンクを作れたか。権限が無い開発機では飛ばす。CI (`GITHUB_ACTIONS`) では作れるはずなので、作れなければ失敗にする。
+fn symlink_made(r: std::io::Result<()>) -> bool {
+    match r {
+        Ok(()) => true,
+        Err(e) if std::env::var_os("GITHUB_ACTIONS").is_some() => {
+            panic!("CI でシンボリックリンクを作れません: {e}")
+        }
+        Err(_) => {
+            eprintln!("シンボリックリンクを作れない環境 (権限なし): この検査を飛ばす");
+            false
+        }
+    }
+}
+
+// verifies: AC-FR-106-2
+#[test]
+fn ジャンクション経由でもリンク先のファイルを置換しジャンクションは残る() {
+    // ジャンクションは権限なしで作れるので、飛ばさない
+    let t = Tmp::new("junction");
+    fs::create_dir(t.p("real")).unwrap();
+    fs::write(t.p("real").join("a.txt"), b"old").unwrap();
+    let out = Command::new("cmd")
+        .args(["/C", "mklink", "/J"])
+        .arg(t.p("junc"))
+        .arg(t.p("real"))
+        .output()
+        .expect("cmd");
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stdout)
+    );
+    let via = FsPath::new(t.p("junc").join("a.txt"));
+    let s0 = stamp(&via);
+    save(&via, b"new", Expect::Stamp(s0)).unwrap();
+    assert_eq!(fs::read(t.p("real").join("a.txt")).unwrap(), b"new");
+    assert!(
+        t.p("junc").join("a.txt").exists() && t.p("junc").is_dir(),
+        "ジャンクションは残る"
+    );
+    // 後始末: ジャンクションは中身ごと消さないよう、先にリンクだけを外す
+    fs::remove_dir(t.p("junc")).unwrap();
+}
+
+// verifies: AC-FR-106-2
 #[test]
 fn シンボリックリンクはリンク先を置換しリンクは残る() {
     let t = Tmp::new("symlink");
     fs::write(t.p("real.txt"), b"old").unwrap();
-    if std::os::windows::fs::symlink_file(t.p("real.txt"), t.p("link.txt")).is_err() {
-        eprintln!("シンボリックリンクを作れない環境 (権限なし): この検査を飛ばす");
+    if !symlink_made(std::os::windows::fs::symlink_file(
+        t.p("real.txt"),
+        t.p("link.txt"),
+    )) {
         return;
     }
     let link = t.path("link.txt");
@@ -313,11 +360,14 @@ fn シンボリックリンクはリンク先を置換しリンクは残る() {
     );
 }
 
+// verifies: AC-FR-106-2
 #[test]
 fn ダングリングリンクは保存しない() {
     let t = Tmp::new("dangling");
-    if std::os::windows::fs::symlink_file(t.p("missing.txt"), t.p("link.txt")).is_err() {
-        eprintln!("シンボリックリンクを作れない環境 (権限なし): この検査を飛ばす");
+    if !symlink_made(std::os::windows::fs::symlink_file(
+        t.p("missing.txt"),
+        t.p("link.txt"),
+    )) {
         return;
     }
     let e = save(&t.path("link.txt"), b"x", Expect::Absent).unwrap_err();

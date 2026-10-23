@@ -2285,6 +2285,14 @@ impl EditorState {
                     }) => dir.display(),
                     _ => String::new(),
                 };
+                // ダングリングリンク: リンク先を示す (FR-106 AC-2)
+                let link_target = match &err {
+                    JobError::Fs(FsError {
+                        detail: Some(FsErrorDetail::DanglingLink { target }),
+                        ..
+                    }) => target.display(),
+                    _ => String::new(),
+                };
                 let (level, key) = match err {
                     JobError::Cancelled => (MessageLevel::Info, "info.save.aborted"),
                     JobError::Fs(e) => (MessageLevel::Error, save_error_key(&e)),
@@ -2299,6 +2307,7 @@ impl EditorState {
                     ("reason", reason.clone()),
                     ("dir", dir),
                     ("backup", backup),
+                    ("target", link_target),
                 ];
                 let args: Vec<(&str, &str)> = args.iter().map(|(k, v)| (*k, v.as_str())).collect();
                 match ask {
@@ -2384,6 +2393,10 @@ fn save_error_key(e: &FsError) -> &'static str {
         (FsErrorKind::ReplacedMovedToBackup { .. }, _) => "msg.save.moved_to_backup",
         (FsErrorKind::NotFound, Some(FsErrorDetail::ParentMissing { .. })) => {
             "msg.save.parent_missing"
+        }
+        // リンク先が無いシンボリックリンク: 書かずに、リンク先を示して知らせる (FR-106 AC-2)
+        (FsErrorKind::NotFound, Some(FsErrorDetail::DanglingLink { .. })) => {
+            "msg.save.dangling_link"
         }
         _ => "msg.save.failed",
     }
@@ -2504,4 +2517,22 @@ pub(super) fn register(r: &mut CommandRegistry) {
         "doc.has_path",
         file_reopen_with_encoding
     );
+}
+
+#[cfg(test)]
+mod save_error_tests {
+    use super::*;
+
+    // verifies: AC-FR-106-2
+    #[test]
+    fn ダングリングリンクは専用のメッセージになる() {
+        let e = FsError {
+            kind: FsErrorKind::NotFound,
+            detail: Some(FsErrorDetail::DanglingLink {
+                target: crate::FsPath::from(r"C:\gone\a.txt"),
+            }),
+            source: None,
+        };
+        assert_eq!(save_error_key(&e), "msg.save.dangling_link");
+    }
 }
