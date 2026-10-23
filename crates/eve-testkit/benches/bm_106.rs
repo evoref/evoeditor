@@ -42,7 +42,8 @@ fn main() {
         data.extend_from_slice(b"\nsecond\n");
         // 開く → 最初の Frame (測るたびに新しい Harness で開く。MemFs の用意は測らない)
         let mut open = Vec::new();
-        for _ in 0..runs.min(10) {
+        // p99 を意味のある値にするため 100 回 (10 回だと p99 = 最大値で、外れ値 1 回で合否が変わる)
+        for _ in 0..runs.min(100) {
             let mut h = Harness::new()
                 .with_size(120, 40)
                 .with_file("/w/long.txt", &data);
