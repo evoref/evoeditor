@@ -26,6 +26,8 @@ mod inplace;
 pub mod locale;
 #[cfg(windows)]
 pub mod log;
+#[cfg(windows)]
+mod owner;
 pub mod path;
 #[cfg(windows)]
 pub mod rescue;
