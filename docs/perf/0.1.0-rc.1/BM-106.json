@@ -1,0 +1,128 @@
+{
+  "commit": "e7ee21d",
+  "env": "ENV-W1",
+  "id": "BM-106",
+  "quick": false,
+  "results": [
+    {
+      "case": "ascii",
+      "id": "BM-106",
+      "max_ms": 65.37,
+      "n": 10,
+      "op": "open",
+      "p50_ms": 55.18,
+      "p99_ms": 65.37,
+      "quick": false
+    },
+    {
+      "case": "ascii",
+      "id": "BM-106",
+      "max_ms": 8.18,
+      "n": 200,
+      "op": "end",
+      "p50_ms": 3.53,
+      "p99_ms": 6.69,
+      "quick": false
+    },
+    {
+      "case": "ascii",
+      "id": "BM-106",
+      "max_ms": 0.22,
+      "n": 200,
+      "op": "hscroll",
+      "p50_ms": 0.07,
+      "p99_ms": 0.1,
+      "quick": false
+    },
+    {
+      "case": "ascii",
+      "id": "BM-106",
+      "max_ms": 0.13,
+      "n": 200,
+      "op": "vscroll",
+      "p50_ms": 0.08,
+      "p99_ms": 0.09,
+      "quick": false
+    },
+    {
+      "case": "japanese",
+      "id": "BM-106",
+      "max_ms": 70.23,
+      "n": 10,
+      "op": "open",
+      "p50_ms": 52.5,
+      "p99_ms": 70.23,
+      "quick": false
+    },
+    {
+      "case": "japanese",
+      "id": "BM-106",
+      "max_ms": 3.41,
+      "n": 200,
+      "op": "end",
+      "p50_ms": 1.56,
+      "p99_ms": 2.99,
+      "quick": false
+    },
+    {
+      "case": "japanese",
+      "id": "BM-106",
+      "max_ms": 0.27,
+      "n": 200,
+      "op": "hscroll",
+      "p50_ms": 0.12,
+      "p99_ms": 0.22,
+      "quick": false
+    },
+    {
+      "case": "japanese",
+      "id": "BM-106",
+      "max_ms": 0.34,
+      "n": 200,
+      "op": "vscroll",
+      "p50_ms": 0.08,
+      "p99_ms": 0.32,
+      "quick": false
+    },
+    {
+      "case": "emoji",
+      "id": "BM-106",
+      "max_ms": 66.56,
+      "n": 10,
+      "op": "open",
+      "p50_ms": 43.24,
+      "p99_ms": 66.56,
+      "quick": false
+    },
+    {
+      "case": "emoji",
+      "id": "BM-106",
+      "max_ms": 5.44,
+      "n": 200,
+      "op": "end",
+      "p50_ms": 2.5,
+      "p99_ms": 5.22,
+      "quick": false
+    },
+    {
+      "case": "emoji",
+      "id": "BM-106",
+      "max_ms": 0.61,
+      "n": 200,
+      "op": "hscroll",
+      "p50_ms": 0.26,
+      "p99_ms": 0.55,
+      "quick": false
+    },
+    {
+      "case": "emoji",
+      "id": "BM-106",
+      "max_ms": 0.81,
+      "n": 200,
+      "op": "vscroll",
+      "p50_ms": 0.22,
+      "p99_ms": 0.67,
+      "quick": false
+    }
+  ]
+}
