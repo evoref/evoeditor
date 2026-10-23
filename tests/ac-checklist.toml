@@ -1256,8 +1256,13 @@ status = "todo"
 id = "AC-NFR-404-1"
 requirement = "NFR-404"
 kind = "T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "二百六十文字を超えるパスのファイルを開いて保存できる",
+    "ドライブレターは大文字でも小文字でも扱える",
+    "unc_のパスのファイルを開いて保存できる",
+    "不正な_utf16_のファイル名のファイルを開いて保存できる",
+]
+status = "done"
 
 [[ac]]
 id = "AC-NFR-406-1"
