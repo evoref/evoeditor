@@ -411,3 +411,35 @@ fn 未知の_format_version_の退避は一覧に出るが_変更も移動も削
     );
     let _ = fs::remove_dir_all(state);
 }
+
+// verifies: AC-NFR-302-5
+#[test]
+fn 合計_100_mb_の_dirty_文書の退避が_5_秒以内に完了する() {
+    let state = tmp("big");
+    let w = WinRescue::new(Some(state.join("s")));
+    // 25 MB の文書を 4 つ (日本語と ASCII の混在、改行つき)
+    let line = "0123456789 the quick brown fox 日本語の行です。0123456789\n";
+    let body = line.repeat(25 * 1024 * 1024 / line.len());
+    let docs: Vec<_> = (1..=4u64)
+        .map(|i| doc(i, &body, Some(&format!(r"C:\big{i}.txt")), |_| {}))
+        .collect();
+    use eve_text::TextRead;
+    let total: usize = docs.iter().map(|d| d.snapshot.len_bytes()).sum();
+    assert!(total >= 100 * 1000 * 1000, "合計 {total} バイト");
+    let t = std::time::Instant::now();
+    let out = w.write(&docs, RescueReason::Fatal, Duration::from_secs(5));
+    let elapsed = t.elapsed();
+    assert!(elapsed < Duration::from_secs(5), "{elapsed:?}");
+    assert!(out.complete, "時間内に全部書けた: {:?}", out.error);
+    assert_eq!(out.written, 4);
+    let dir = out.dir.unwrap();
+    assert!(manifest(&dir).contains("complete = true"));
+    let written: u64 = fs::read_dir(&dir)
+        .unwrap()
+        .flatten()
+        .filter(|e| e.path().extension().is_some_and(|x| x == "txt"))
+        .map(|e| e.metadata().unwrap().len())
+        .sum();
+    assert_eq!(written, total as u64, "本文のバイト数が一致する");
+    let _ = fs::remove_dir_all(state);
+}
