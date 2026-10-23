@@ -1,18 +1,24 @@
-//! 実バイナリを ConPTY で駆動する計測 (docs/09-testing-quality.md §5.2、01 §3.0.1 の (b) spawn から / 端末込み)。
+//! 実バイナリを ConPTY で駆動する計測 (docs/09-testing-quality.md §5.2、01 §3.0.1)。
 //!
-//! - **BM-101b**: 起動 (spawn) → 最初の画面 (ステータスバーの `無題-1`) が端末に届くまで (ファイル指定なし)。
-//! - **BM-102b**: 同じ区間で、1 MB の UTF-8 ファイルを引数に渡し、その先頭が画面に届くまで。
-//! - **BM-103b**: キー入力 (`a`) を送ってから、画面にその文字が現れるまで (端末込み)。
-//! - **BM-107**: 100 MB の文書の保存ジョブ (`Ctrl+S`) の実行中に、BM-103b と同じ計測をする (01 NFR-107 AC-1)。
+//! **計測用ビルド** (`--features bench-trace`) のとき、プロセス内の区間の記録 (`EVE_TRACE_FILE`、eve-tui の `trace`) を使って、
+//! 仕様 (01 §3.0.1) の区間で測る。これが判定に使う値:
+//! - **BM-101a / 102a**: `main` 入口 → 最初の Frame の `write` が戻るまで (起動 (a) プロセス内)。ファイル指定なし / 1 MB のファイル。
+//! - **BM-101b / 102b**: 計測ハーネスが spawn した時刻 → 同じ終点 (起動 (b) spawn から。壁時計で比べる)。
+//! - **BM-103b**: 入力スレッドが入力を読み終えた時刻 → 描画の `write` が戻るまで (判定区間 (b))。打鍵間隔 30 ms。
+//! - **BM-107**: 100 MB の文書の保存中のカーソル移動の同じ区間 (01 NFR-107 AC-1。NFR-103 の値を維持するか)。
 //!
-//! **判定は基準機で行う** (開発機の値は目安)。ConPTY を挟むので、実際の Windows Terminal より遅めに出る。
-//! 計測用の隠しフラグと `tracing` の span (BM-101a の (a) プロセス内) は、計測用ビルドを入れる版で足す。
+//! どのビルドでも測る、端末込みの参考値 (ConPTY を挟むので実際の Windows Terminal より遅めに出る。判定には使わない):
+//! - **BM-101c / 102c**: spawn → 最初の画面 (ステータスバーの `無題-1` / ファイルの先頭) が端末に届くまで。
+//! - **BM-103c**: キー入力 (`a`) を送ってから、画面にその文字が現れるまで。
+//!
+//! **判定は基準機で行う** (開発機の値は目安)。
 //!
 //! ```text
-//! cargo bench -p evoeditor --bench bm_pty
-//! cargo bench -p evoeditor --bench bm_pty -- --runs 50          # 回数を減らす (記録には使わない)
-//! cargo bench -p evoeditor --bench bm_pty -- --json             # 1 行ずつの JSON
-//! cargo bench -p evoeditor --bench bm_pty -- --only 103b,107    # 一部だけ
+//! cargo bench -p evoeditor --features bench-trace --bench bm_pty   # 計測用ビルド (判定に使う区間も測る)
+//! cargo bench -p evoeditor --bench bm_pty                          # 端末込みの参考値だけ
+//! cargo bench -p evoeditor --bench bm_pty -- --runs 50             # 回数を減らす (記録には使わない)
+//! cargo bench -p evoeditor --bench bm_pty -- --json                # 1 行ずつの JSON
+//! cargo bench -p evoeditor --bench bm_pty -- --only 103,107        # 一部だけ (101 102 103 107)
 //! ```
 
 #![cfg(windows)]
@@ -21,11 +27,11 @@
 #![allow(clippy::disallowed_methods)]
 
 use std::io::{Read, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use portable_pty::{Child, CommandBuilder, MasterPty, PtySize, native_pty_system};
 
@@ -47,11 +53,13 @@ struct Term {
     saving: Arc<AtomicBool>,
     _master: Box<dyn MasterPty + Send>,
     state: PathBuf,
+    /// spawn の直前の壁時計 (UNIX 紀元からの ns)。起動 (b) の始点。
+    spawn_unix_ns: u128,
 }
 
 impl Term {
-    /// spawn の直前の時刻を返す。
-    fn start(args: &[&str], marker: &'static str) -> (Term, Instant) {
+    /// spawn の直前の時刻を返す。`trace` があれば、区間の記録をそのファイルに出させる (計測用ビルドのとき)。
+    fn start(args: &[&str], marker: &'static str, trace: Option<&Path>) -> (Term, Instant) {
         static SEQ: AtomicUsize = AtomicUsize::new(0);
         let state = std::env::temp_dir().join(format!(
             "evo-bench-state-{}-{}",
@@ -74,6 +82,9 @@ impl Term {
         cmd.env("EVE_STATE_DIR", &state);
         // 設定ディレクトリは無い (設定ファイルなし)
         cmd.env("EVE_CONFIG_DIR", state.join("no-config"));
+        if let Some(t) = trace {
+            cmd.env("EVE_TRACE_FILE", t);
+        }
         let mut reader = pty.master.try_clone_reader().expect("reader");
         let writer = Arc::new(Mutex::new(pty.master.take_writer().expect("writer")));
         let parser = Arc::new(Mutex::new(vt100::Parser::new(ROWS, COLS, 0)));
@@ -82,6 +93,7 @@ impl Term {
         let marker_flag = Arc::new(AtomicBool::new(false));
         let saving = Arc::new(AtomicBool::new(false));
         let t0 = Instant::now();
+        let spawn_unix_ns = unix_ns();
         let child = pty.slave.spawn_command(cmd).expect("起動できません");
         drop(pty.slave);
         {
@@ -132,6 +144,7 @@ impl Term {
                 saving,
                 _master: pty.master,
                 state,
+                spawn_unix_ns,
             },
             t0,
         )
@@ -155,6 +168,18 @@ impl Term {
         }
     }
 
+    /// 終了を待つ。終了コード (待ちきれなければ `None`)。
+    fn wait_exit(&mut self, limit: Duration) -> Option<u32> {
+        let t = Instant::now();
+        while t.elapsed() < limit {
+            if let Ok(Some(st)) = self.child.try_wait() {
+                return Some(st.exit_code());
+            }
+            thread::sleep(Duration::from_millis(1));
+        }
+        None
+    }
+
     /// `a` を 1 つ送り、画面に現れるまでの時間。
     fn key_latency(&mut self) -> Duration {
         let want = self.a_count.load(Ordering::Acquire) + 1;
@@ -172,6 +197,51 @@ impl Drop for Term {
         let _ = self.child.kill();
         let _ = std::fs::remove_dir_all(&self.state);
     }
+}
+
+fn unix_ns() -> u128 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |d| d.as_nanos())
+}
+
+/// 区間の記録 (eve-tui の `trace`) の 1 行。
+struct Span {
+    name: String,
+    start_ns: u64,
+    end_ns: u64,
+    vk: Option<u64>,
+    wall_end_unix_ns: Option<u128>,
+}
+
+/// `"key":123` の数を取り出す (記録は形が決まっているので、簡単な走査で足りる)。
+fn number_after(line: &str, key: &str) -> Option<u128> {
+    let pat = format!("\"{key}\":");
+    let i = line.find(&pat)? + pat.len();
+    let digits: String = line[i..].chars().take_while(char::is_ascii_digit).collect();
+    digits.parse().ok()
+}
+
+fn read_spans(path: &Path) -> Vec<Span> {
+    let Ok(text) = std::fs::read_to_string(path) else {
+        return Vec::new();
+    };
+    text.lines()
+        .filter_map(|l| {
+            let name = l.split("\"name\":\"").nth(1)?.split('"').next()?.to_owned();
+            Some(Span {
+                name,
+                start_ns: number_after(l, "start_ns")? as u64,
+                end_ns: number_after(l, "end_ns")? as u64,
+                vk: number_after(l, "vk").map(|v| v as u64),
+                wall_end_unix_ns: number_after(l, "wall_end_unix_ns"),
+            })
+        })
+        .collect()
+}
+
+fn ns_dur(ns: u64) -> Duration {
+    Duration::from_nanos(ns)
 }
 
 fn percentile(sorted: &[Duration], p: f64) -> Duration {
@@ -211,6 +281,111 @@ fn report(id: &str, label: &str, mut v: Vec<Duration>, json: bool, quick: bool) 
     }
 }
 
+/// 1 MB の UTF-8 (日本語混在) のファイル。
+fn make_one_mb(dir: &Path) -> PathBuf {
+    let path = dir.join("one_mb.txt");
+    if !path.exists() {
+        let mut body = String::new();
+        let mut i = 0u64;
+        while body.len() < 1024 * 1024 {
+            body.push_str(&format!(
+                "{i:08} the quick brown fox 日本語の行です 0123456789\n"
+            ));
+            i += 1;
+        }
+        std::fs::write(&path, &body).expect("1 MB のファイル");
+    }
+    path
+}
+
+/// 計測用ビルドか (隠しオプションを受け付け、区間の記録が書かれる)。
+fn is_traced_build(dir: &Path) -> bool {
+    let trace = dir.join("probe.jsonl");
+    let (mut t, _) = Term::start(&["--bench-exit-after-first-frame"], "", Some(&trace));
+    let code = t.wait_exit(Duration::from_secs(10));
+    let ok = code == Some(0)
+        && read_spans(&trace)
+            .iter()
+            .any(|s| s.name == "startup.first_frame");
+    let _ = std::fs::remove_file(&trace);
+    ok
+}
+
+/// 起動を `runs` 回測る。(a) `main` 入口 → 最初の Frame、(b) spawn → 同じ終点 (壁時計)。
+/// ファイル指定のときは本文が見える最初の Frame まで (画面に目印が出てから `Ctrl+Q` で終了させ、記録を書き出させる)。
+fn startup(
+    dir: &Path,
+    file: Option<&Path>,
+    runs: usize,
+    warmup: usize,
+) -> (Vec<Duration>, Vec<Duration>) {
+    let (mut a, mut b) = (Vec::new(), Vec::new());
+    for i in 0..runs + warmup {
+        let trace = dir.join(format!("startup-{i}.jsonl"));
+        let (mut t, name) = match file {
+            None => (
+                Term::start(&["--bench-exit-after-first-frame"], "", Some(&trace)).0,
+                "startup.first_frame",
+            ),
+            Some(f) => {
+                let t = Term::start(&[f.to_str().unwrap()], "00000000", Some(&trace)).0;
+                t.wait("ファイルの先頭", || t.marker.load(Ordering::Acquire));
+                let mut t = t;
+                t.send(b"\x11"); // Ctrl+Q (未編集なので確認なしで終わる)
+                (t, "startup.first_content")
+            }
+        };
+        let code = t.wait_exit(WAIT);
+        assert_eq!(code, Some(0), "正常に終了しません");
+        let spans = read_spans(&trace);
+        let hit = spans
+            .iter()
+            .find(|s| s.name == name)
+            .unwrap_or_else(|| panic!("{name} の記録がありません"));
+        if i >= warmup {
+            a.push(ns_dur(hit.end_ns - hit.start_ns));
+            let end = hit.wall_end_unix_ns.expect("壁時計");
+            b.push(Duration::from_nanos((end - t.spawn_unix_ns) as u64));
+        }
+        let _ = std::fs::remove_file(&trace);
+    }
+    (a, b)
+}
+
+/// キー入力の判定区間 (入力の読取完了 → 描画の `write`)。1 MB の文書の中央で、打鍵間隔 30 ms で `a` を送る。
+fn key_latency_trace(dir: &Path, file: &Path, runs: usize, warmup: usize) -> Vec<Duration> {
+    const VK_A: u64 = 0x41;
+    let trace = dir.join("keys.jsonl");
+    let (mut t, _) = Term::start(&[file.to_str().unwrap()], "00000000", Some(&trace));
+    t.wait("ファイルの先頭", || t.marker.load(Ordering::Acquire));
+    // 文書の中央 (行へ移動: Ctrl+G → 行番号 → Enter)
+    t.send(b"\x07");
+    thread::sleep(Duration::from_millis(100));
+    t.send(b"9000\r");
+    thread::sleep(Duration::from_millis(300));
+    let n = runs + warmup;
+    for _ in 0..n {
+        t.send(b"a");
+        thread::sleep(Duration::from_millis(30));
+    }
+    // 未保存の確認で破棄 (d) して終了し、記録を書き出させる
+    t.send(b"\x11");
+    thread::sleep(Duration::from_millis(200));
+    t.send(b"d");
+    let code = t.wait_exit(WAIT);
+    assert_eq!(code, Some(0), "正常に終了しません");
+    let spans: Vec<Span> = read_spans(&trace)
+        .into_iter()
+        .filter(|s| s.name == "input.to_flush" && s.vk == Some(VK_A))
+        .collect();
+    let _ = std::fs::remove_file(&trace);
+    spans
+        .iter()
+        .skip(warmup)
+        .map(|s| ns_dur(s.end_ns - s.start_ns))
+        .collect()
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let json = args.iter().any(|a| a == "--json");
@@ -232,11 +407,59 @@ fn main() {
     let dir = std::env::temp_dir().join(format!("evo-bench-pty-{}", std::process::id()));
     std::fs::create_dir_all(&dir).expect("作業ディレクトリ");
 
-    // BM-101b: 起動 → 最初の画面
-    if want("101b") {
+    // ---- 計測用ビルド: プロセス内の区間の記録で、仕様の区間を測る (判定に使う値) ----
+    let traced = is_traced_build(&dir);
+    if !traced && (want("101") || want("102") || want("103") || want("107")) {
+        println!(
+            "(計測用ビルドではないので、BM-101a/b・102a/b・103b・107 は測りません。`--features bench-trace` を付けてください)"
+        );
+    }
+    if traced && want("101") {
+        let (a, b) = startup(&dir, None, runs, warmup);
+        report(
+            "BM-101a",
+            "起動 (a) main 入口 → 最初の Frame",
+            a,
+            json,
+            quick,
+        );
+        report("BM-101b", "起動 (b) spawn → 最初の Frame", b, json, quick);
+    }
+    if traced && want("102") {
+        let file = make_one_mb(&dir);
+        let (a, b) = startup(&dir, Some(&file), runs, warmup);
+        report(
+            "BM-102a",
+            "起動 (a) main 入口 → 本文の最初の Frame (1 MB)",
+            a,
+            json,
+            quick,
+        );
+        report(
+            "BM-102b",
+            "起動 (b) spawn → 本文の最初の Frame (1 MB)",
+            b,
+            json,
+            quick,
+        );
+    }
+    if traced && want("103") {
+        let file = make_one_mb(&dir);
+        let v = key_latency_trace(&dir, &file, runs, warmup);
+        report(
+            "BM-103b",
+            "キー入力 (入力の読取完了 → 描画の write) 打鍵間隔 30 ms",
+            v,
+            json,
+            quick,
+        );
+    }
+
+    // BM-101c: 起動 → 最初の画面
+    if want("101") {
         let mut v = Vec::new();
         for i in 0..runs + warmup {
-            let (t, t0) = Term::start(&[], "");
+            let (t, t0) = Term::start(&[], "", None);
             t.wait("最初の画面", || t.ready.load(Ordering::Acquire));
             let d = t0.elapsed();
             drop(t);
@@ -244,11 +467,17 @@ fn main() {
                 v.push(d);
             }
         }
-        report("BM-101b", "起動 (spawn → 最初の画面)", v, json, quick);
+        report(
+            "BM-101c",
+            "起動 (spawn → 最初の画面、端末込み)",
+            v,
+            json,
+            quick,
+        );
     }
 
     // BM-102b: 1 MB のファイル引数
-    if want("102b") {
+    if want("102") {
         let path = dir.join("one_mb.txt");
         let mut body = String::new();
         let mut i = 0u64;
@@ -261,7 +490,7 @@ fn main() {
         std::fs::write(&path, &body).expect("1 MB のファイル");
         let mut v = Vec::new();
         for i in 0..runs + warmup {
-            let (t, t0) = Term::start(&[path.to_str().unwrap()], "00000000");
+            let (t, t0) = Term::start(&[path.to_str().unwrap()], "00000000", None);
             t.wait("ファイルの先頭", || t.marker.load(Ordering::Acquire));
             let d = t0.elapsed();
             drop(t);
@@ -270,7 +499,7 @@ fn main() {
             }
         }
         report(
-            "BM-102b",
+            "BM-102c",
             "起動 (1 MB のファイル → 先頭の表示)",
             v,
             json,
@@ -279,8 +508,8 @@ fn main() {
     }
 
     // BM-103b: キー入力 → 画面
-    if want("103b") {
-        let (mut t, _) = Term::start(&[], "");
+    if want("103") {
+        let (mut t, _) = Term::start(&[], "", None);
         t.wait("最初の画面", || t.ready.load(Ordering::Acquire));
         let mut v = Vec::new();
         // 行が伸び続けないよう、時々改行する (入力そのものは `a`)
@@ -294,7 +523,7 @@ fn main() {
                 v.push(d);
             }
         }
-        report("BM-103b", "キー入力 → 画面 (端末込み)", v, json, quick);
+        report("BM-103c", "キー入力 → 画面 (端末込み)", v, json, quick);
     }
 
     // BM-107: 100 MB の文書の保存ジョブの実行中の入力
@@ -304,7 +533,12 @@ fn main() {
         let big = line.repeat(100 * 1024 * 1024 / line.len());
         std::fs::write(&path, &big).expect("100 MB のファイル");
         drop(big);
-        let (mut t, t0) = Term::start(&[path.to_str().unwrap()], "quick brown");
+        let trace = dir.join("save.jsonl");
+        let (mut t, t0) = Term::start(
+            &[path.to_str().unwrap()],
+            "quick brown",
+            traced.then_some(trace.as_path()),
+        );
         t.wait("開く", || t.marker.load(Ordering::Acquire));
         thread::sleep(Duration::from_millis(4000));
         println!(
@@ -332,7 +566,30 @@ fn main() {
         if v.is_empty() {
             println!("BM-107: 保存の間に計測できた入力がありません (保存が速すぎる)");
         } else {
-            report("BM-107", "保存中のキー入力 → 画面", v, json, quick);
+            let id = if traced { "BM-107c" } else { "BM-107" };
+            report(id, "保存中のカーソル移動 → 画面 (端末込み)", v, json, quick);
+        }
+        if traced {
+            // 判定に使う値: 保存中に送ったカーソル移動 (→) の、入力の読取完了 → 描画の write
+            const VK_RIGHT: u64 = 0x27;
+            t.send(b""); // Ctrl+Q (保存は終わっている)
+            assert_eq!(t.wait_exit(WAIT), Some(0), "正常に終了しません");
+            let spans: Vec<Duration> = read_spans(&trace)
+                .into_iter()
+                .filter(|s| s.name == "input.to_flush" && s.vk == Some(VK_RIGHT))
+                .map(|s| ns_dur(s.end_ns - s.start_ns))
+                .collect();
+            if spans.is_empty() {
+                println!("BM-107: 記録された区間がありません");
+            } else {
+                report(
+                    "BM-107",
+                    "保存中のカーソル移動 (入力の読取完了 → 描画の write)",
+                    spans,
+                    json,
+                    quick,
+                );
+            }
         }
     }
     let _ = std::fs::remove_dir_all(&dir);

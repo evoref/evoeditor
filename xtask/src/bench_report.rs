@@ -40,30 +40,48 @@ pub(crate) fn verdict(v: &Value) -> Verdict {
         note,
     };
     match id {
+        // 計測用ビルド (bench-trace) のプロセス内の区間の記録。仕様 (01 §3.0.1) の区間そのもの
+        "BM-101a" => t(
+            "p50 8 ms / p99 15 ms",
+            limits(v, 8.0, 15.0),
+            "main 入口 → 最初の Frame の write",
+        ),
+        "BM-102a" => t(
+            "p50 25 ms / p99 50 ms",
+            limits(v, 25.0, 50.0),
+            "main 入口 → 本文の最初の Frame の write (1 MB)",
+        ),
         "BM-101b" => t(
             "p50 40 ms / p99 80 ms",
             limits(v, 40.0, 80.0),
-            "ConPTY 経由で最初の画面が届くまで (端末込みの近似)。ウイルス対策の条件を記録する",
+            "spawn → 最初の Frame の write (壁時計)。ウイルス対策の条件を記録する",
         ),
         "BM-102b" => t(
             "p50 60 ms / p99 100 ms",
             limits(v, 60.0, 100.0),
-            "1 MB のファイルの先頭が届くまで (端末込みの近似)",
+            "spawn → 本文の最初の Frame の write (1 MB、壁時計)",
         ),
-        "BM-103a" => t(
-            "(診断用)",
-            None,
-            "core 区間のみ。判定区間は BM-103b (計測用ビルドの span) で、未実装",
-        ),
+        "BM-103a" => t("(診断用)", None, "core 区間のみ。判定は BM-103b"),
         "BM-103b" => t(
-            "p50 2 ms / p99 8 ms (判定区間)",
-            None,
-            "端末込みの値 (描画の間引き約 16 ms を含む)。判定区間の計測は計測用ビルドが要る",
+            "p50 2 ms / p99 8 ms",
+            limits(v, 2.0, 8.0),
+            "入力の読取完了 → 描画の write (打鍵間隔 30 ms)",
         ),
         "BM-107" => t(
-            "NFR-103 を維持 / 保存時間は参考",
+            "NFR-103 を維持 (p50 2 ms / p99 8 ms)",
+            limits(v, 2.0, 8.0),
+            "100 MB の保存中のカーソル移動 (入力の読取完了 → 描画の write)。保存時間は参考",
+        ),
+        // 端末込みの参考値 (ConPTY を挟む)
+        "BM-101c" | "BM-102c" => t(
+            "(参考)",
             None,
-            "100 MB の保存中のカーソル移動の反映時間 (端末込み)",
+            "spawn → 最初の画面が端末に届くまで (ConPTY 経由の近似)",
+        ),
+        "BM-103c" | "BM-107c" => t(
+            "(参考)",
+            None,
+            "端末込み (ConPTY の出力の周期 約 16 ms を含む)",
         ),
         "BM-106" => t("p99 100 ms", limits(v, f64::MAX, 100.0), ""),
         "BM-205" => t("(記録)", None, "配布ビルドの exe のサイズ"),
@@ -201,7 +219,12 @@ pub(crate) fn write(
             ver.verdict
         ));
     }
-    md.push_str("\nBM-101a・BM-102a (プロセス内) と BM-103b の判定区間は、計測用ビルド (`bench-trace`) が要るため、この版では測れない。\n");
+    if !rows
+        .iter()
+        .any(|v| v.get("id").and_then(Value::as_str) == Some("BM-101a"))
+    {
+        md.push_str("\n**BM-101a / 102a / 101b / 102b / 103b の判定区間が無い**: 計測用ビルド (`bench-trace`) で測っていない。\n");
+    }
     let path = dir.join("summary.md");
     std::fs::write(&path, md).map_err(|e| format!("{}: {e}", path.display()))?;
     Ok(())
@@ -221,8 +244,10 @@ mod tests {
         assert_eq!(ok.verdict, "合格");
         let ng = verdict(&v(r#"{"id":"BM-101b","p50_ms":38.0,"p99_ms":90.0}"#));
         assert_eq!(ng.verdict, "不合格");
-        let r = verdict(&v(r#"{"id":"BM-103b","p50_ms":15.0,"p99_ms":16.0}"#));
-        assert_eq!(r.verdict, "参考", "判定区間と違うので参考");
+        let r = verdict(&v(r#"{"id":"BM-103c","p50_ms":15.0,"p99_ms":16.0}"#));
+        assert_eq!(r.verdict, "参考", "端末込みは参考");
+        let j = verdict(&v(r#"{"id":"BM-103b","p50_ms":1.5,"p99_ms":3.0}"#));
+        assert_eq!(j.verdict, "合格", "判定区間は合否を付ける");
         let d = verdict(&v(r#"{"id":"BM-103a","p50_us":1000.0}"#));
         assert_eq!(d.verdict, "参考");
     }

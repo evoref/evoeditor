@@ -233,6 +233,8 @@ jobs:
           tool: cargo-nextest@0.9.148
       - run: cargo nextest run --profile e2e -p evoeditor --test e2e
       - run: cargo nextest run --profile e2e -p evoeditor --features test-hooks --test e2e
+      # 計測用ビルド (bench-trace、docs/09 §3.6): 隠しオプションと区間の記録が動くこと
+      - run: cargo nextest run --profile e2e -p evoeditor --features bench-trace --test e2e -E 'test(~計測用ビルド)'
 
   # DCO: PR の全コミットに Signed-off-by があること (docs/11 §9.4、OQ-154)。
   # 対象外 (ジョブの if で飛ばす。飛ばしたジョブは必須のチェックとして成功扱い):

@@ -12,6 +12,10 @@ publish.workspace = true
 [lints]
 workspace = true
 
+[features]
+# 計測用ビルドの区間の記録 (docs/09 §3.6)。配布ビルドには入れない
+bench-trace = []
+
 [dependencies]
 eve-view = { version = "0.1.0-rc.1", path = "../eve-view" }
 eve-host = { version = "0.1.0-rc.1", path = "../eve-host" }

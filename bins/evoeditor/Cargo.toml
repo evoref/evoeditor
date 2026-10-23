@@ -19,6 +19,8 @@ path = "src/main.rs"
 [features]
 # テスト専用の経路 (保存途中の kill フック・パニック注入)。配布ビルドには入れない (09 §3.6)
 test-hooks = ["eve-core/test-hooks", "eve-host/test-hooks", "eve-platform/test-hooks"]
+# 計測用ビルドの区間の記録と隠しオプション `--bench-exit-after-first-frame` (docs/09 §3.6 / §5.2)。配布ビルドには入れない
+bench-trace = ["eve-tui/bench-trace"]
 
 [dependencies]
 eve-core = { version = "0.1.0-rc.1", path = "../../crates/eve-core" }

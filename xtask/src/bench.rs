@@ -118,6 +118,8 @@ pub fn run_all(args: &[String]) -> Result<(), String> {
                 "bench",
                 "-p",
                 "evoeditor",
+                "--features",
+                "bench-trace",
                 "--bench",
                 "bm_pty",
                 "--",

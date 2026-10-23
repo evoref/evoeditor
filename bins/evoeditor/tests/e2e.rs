@@ -1099,3 +1099,32 @@ fn クリップボードを他のプロセスが握っていると内部レジ�
     let _ = s.exit_within(Duration::from_secs(5));
     let _ = std::fs::remove_dir_all(&s.state);
 }
+
+// 計測用ビルド (docs/09 §3.6): 隠しオプションで最初の Frame の直後に終了し、区間の記録を書く
+#[cfg(feature = "bench-trace")]
+#[test]
+fn 計測用ビルドは最初の_frame_の直後に終了し_区間の記録を書く() {
+    let dir = temp_dir("bench-trace");
+    let trace = dir.join("trace.jsonl");
+    let mut s = Session::start_with(
+        &["--bench-exit-after-first-frame"],
+        None,
+        &[("EVE_TRACE_FILE", trace.to_str().unwrap())],
+    );
+    assert_eq!(s.wait_exit(), 0);
+    let text = std::fs::read_to_string(&trace).expect("記録が書かれる");
+    assert!(text.contains("\"name\":\"startup.first_frame\""), "{text}");
+    assert!(text.contains("\"wall_end_unix_ns\":"), "{text}");
+    assert!(!text.contains("無題"), "本文・パスを記録に入れない");
+}
+
+// 配布ビルドには隠しオプションが無く、未知のオプションとして終了コード 2 (xtask check-dist も確かめる)
+#[cfg(not(feature = "bench-trace"))]
+#[test]
+fn 配布ビルドでは計測用の隠しオプションは未知のオプション() {
+    let out = std::process::Command::new(exe())
+        .arg("--bench-exit-after-first-frame")
+        .output()
+        .expect("起動");
+    assert_eq!(out.status.code(), Some(2));
+}

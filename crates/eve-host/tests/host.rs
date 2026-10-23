@@ -135,7 +135,7 @@ fn 入力口から送ったメッセージが溜まっていれば_1_回の_step
 }
 
 #[test]
-fn ジョブの結果による再描画は間引かれ_期限で描かれる() {
+fn ジョブの進捗は間引かれ_完了は待たせずに描く() {
     let mut e = env();
     e.fs.set_file(&eve_core::FsPath::from("/w/a.txt"), b"hello");
     e.start();
@@ -143,14 +143,24 @@ fn ジョブの結果による再描画は間引かれ_期限で描かれる() {
     e.host.editor_mut().open_initial(Some("/w/a.txt"), false);
     e.jobs.run_jobs();
     let before = e.probe.render_count();
-    for r in e.jobs.take_results() {
+    let (progress, done): (Vec<_>, Vec<_>) = e
+        .jobs
+        .take_results()
+        .into_iter()
+        .partition(|r| matches!(r, eve_core::JobResult::Progress { .. }));
+    for r in progress {
         e.host.step(&mut e.fe, HostMsg::Job(Box::new(r)));
     }
-    // 直前の描画から 16 ms 未満: 描かない
+    // 進捗は、直前の描画から 16 ms 未満なら描かず、期限で描く
     assert_eq!(e.probe.render_count(), before);
     e.clock.advance(eve_core::Millis(20));
     e.host.step(&mut e.fe, HostMsg::Tick);
-    assert!(e.probe.render_count() > before);
+    let after_progress = e.probe.render_count();
+    // 完了は待たせずに描く (開く操作の最初の画面を 16 ms 遅らせない。NFR-102)
+    for r in done {
+        e.host.step(&mut e.fe, HostMsg::Job(Box::new(r)));
+    }
+    assert!(e.probe.render_count() > after_progress);
     assert!(e.ascii().contains("hello"), "{}", e.ascii());
 }
 

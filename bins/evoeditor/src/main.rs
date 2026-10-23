@@ -398,6 +398,7 @@ fn write_crash_log(state_dir: &std::path::Path) -> Option<std::path::PathBuf> {
 }
 
 fn main() -> ProcessExit {
+    eve_tui::trace::init();
     let code = match cli::parse(std::env::args_os().skip(1)) {
         Ok(Cli::Help) => {
             print!("{HELP}");
@@ -430,5 +431,6 @@ fn main() -> ProcessExit {
             EXIT_USAGE
         }
     };
+    eve_tui::trace::flush();
     ProcessExit::from(code)
 }
