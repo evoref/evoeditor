@@ -60,6 +60,8 @@ fn main() {
     let _ = h.frame();
 
     let mut samples = Vec::with_capacity(runs);
+    // 内訳 (診断用): 入力の処理 (`handle_input` ほか) と Frame 生成
+    let mut handle_samples = Vec::with_capacity(runs);
     for i in 0..runs {
         // 行が伸び続けないよう、時々改行する (入力そのものは "a")
         if i % 60 == 59 {
@@ -68,11 +70,15 @@ fn main() {
         }
         let t = Instant::now();
         h.text("a");
+        let t_handle = t.elapsed();
         let f = h.frame();
         let d = t.elapsed();
+        handle_samples.push(t_handle);
         std::hint::black_box(&f);
         samples.push(d);
     }
+    let mut hv = handle_samples.split_off(warmup);
+    hv.sort();
     let mut v = samples.split_off(warmup);
     v.sort();
     let (p50, p99, p999, max) = (
@@ -98,6 +104,11 @@ fn main() {
             } else {
                 ""
             }
+        );
+        println!(
+            "  内訳: 入力の処理 (handle_input) p50 {:?}  p99 {:?}  / Frame 生成は残り",
+            percentile(&hv, 0.5),
+            percentile(&hv, 0.99)
         );
         println!(
             "  入力 → Frame 生成: n={} p50 {p50:?}  p99 {p99:?}  p99.9 {p999:?}  max {max:?}  (診断用。目標 p50 2 ms / p99 8 ms は端末込みの BM-103b で判定)",
