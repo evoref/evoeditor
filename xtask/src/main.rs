@@ -21,6 +21,7 @@
 
 mod ac_checklist;
 mod bench;
+mod bench_report;
 mod check;
 mod check_deps;
 mod check_dist;
@@ -47,7 +48,8 @@ const USAGE: &str = "\
   dist                配布 zip と SHA256SUMS の作成と検査 (--verify ZIP: 検査だけ。--exe / --version)
   gen-notices         THIRD-PARTY-NOTICES.md の生成 (cargo-about。--check: 最新性の検査)
   check-ac-checklist  tests/ac-checklist.toml の検査 (check の一部)
-  bench               ベンチの記録 (BM-103a・BM-205 → target/bench/bench.json。--quick は動作確認用)
+  bench               ベンチの記録 (BM-103a・BM-205 → target/bench/bench.json。--quick は動作確認用。
+                      --env ENV-W1 --out DIR: 基準機の記録 (BM-106・端末込みの BM-101b/102b/103b/107 も測り、DIR に JSON と summary.md)
   check-themes        組込みテーマのロール表の検査 (07 §8.2。truecolor と mono・コントラスト・実装との突合)
   i18n                UI 文言の検査 (04 §15.2 の目録・07 §11.6 のカタログ・locales/ja.toml)
   gen-corpus          巨大・長大のコーパスの生成 (--seed N --out DIR --only a,b --with-1gb --list)
