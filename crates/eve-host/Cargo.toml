@@ -18,11 +18,11 @@ test-hooks = []
 
 [dependencies]
 arc-swap = "1.9.3"
-eve-config = { version = "0.0.0", path = "../eve-config" }
-eve-core = { version = "0.0.0", path = "../eve-core" }
-eve-platform = { version = "0.0.0", path = "../eve-platform" }
-eve-view = { version = "0.0.0", path = "../eve-view" }
+eve-config = { version = "0.1.0-rc.1", path = "../eve-config" }
+eve-core = { version = "0.1.0-rc.1", path = "../eve-core" }
+eve-platform = { version = "0.1.0-rc.1", path = "../eve-platform" }
+eve-view = { version = "0.1.0-rc.1", path = "../eve-view" }
 
 [dev-dependencies]
-eve-testkit = { version = "0.0.0", path = "../eve-testkit" }
-eve-text = { version = "0.0.0", path = "../eve-text" }
+eve-testkit = { version = "0.1.0-rc.1", path = "../eve-testkit" }
+eve-text = { version = "0.1.0-rc.1", path = "../eve-text" }

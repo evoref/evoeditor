@@ -3,18 +3,35 @@
 このファイルは、版ごとの変更を記録します。リリースノートの元になります (docs/12-licensing-distribution.md、docs/09-testing-quality.md §9)。
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に倣い、版は [Semantic Versioning](https://semver.org/lang/ja/) に従います。
 
-v0.1.0 のリリースまでの `0.0.x` は、マイルストーンを数える内部カウンタで、タグも Release も作りません (docs/11-dev-workflow.md §9.1)。
+v0.1.0 のリリースまでの `0.0.x` は、マイルストーンを数える内部カウンタで、タグも Release も作りませんでした (docs/11-dev-workflow.md §9.1)。
 
 ## [Unreleased]
 
+## [0.1.0-rc.1] - 未定
+
+v0.1 (最小核) のリリース候補です。Windows 11 (x86_64) の Windows Terminal とコンソールホストで動く、日本語 UI のテキストエディタです。配布物は GitHub Releases の zip だけで、インストール・更新・既知の制約は同梱の `README.md` にあります。
+
 ### 追加
 
-- 仕様書 (`docs/`)、リポジトリの運用の整備 (Issue / PR のテンプレート、Dependabot、SECURITY.md、CONTRIBUTING.md など)。
-- workspace の骨格 (M1 のタスク (0)): `Cargo.toml`、`.cargo/config.toml`、`deny.toml`、`deps-policy.toml`、`clippy.toml`、`rustfmt.toml`、crate の枠。
-- 開発用ツール `cargo xtask` の `check` (速い車線)・`check-deps` (依存規則 R1〜R12)・`check-ac-checklist`、docs の表を読む `eve-docs-tables`。
-- CI (`.github/workflows/ci.yml`): check・fmt・clippy・test・deps・dco・gitleaks・pr-source、nextest の設定 (`.config/nextest.toml`)。
-- `cargo xtask i18n` (UI 文言の検査)・`cargo xtask gen-corpus` (巨大・長大のコーパスの決定的な生成)、CI の `i18n` ジョブ。
-- `eve-text`: テキストストレージ (`Text` / `Snapshot` / `TextBuilder` / `TextRead`)、行の定義 (LF・CRLF・CR)、位置変換 (byte ⇔ char ⇔ UTF-16 ⇔ 行)、チャンク走査。
-- `eve-text`: `ChangeSet` (合成・逆変換・位置写像・範囲写像) と `Text::apply`。
-- `eve-text` のベンチ BM-S02 (`cargo bench -p eve-text --bench bm_s02`)。S-02 の暫定判定の記録 (ADR-0004)。
-- `eve-view`: 境界型の最初の定義 (ID 型・入力・能力・`Effect`・`EditorEvent`・`Query`/`Answer`・`CommandId`・`CONTRACT_VERSION`)。
+- **ファイルの読み書き**: UTF-8 (BOM の有無)・UTF-16 (LE/BE)・Shift_JIS・EUC-JP・ISO-2022-JP を判定して開き、**元の文字コード・BOM・改行コード (LF/CRLF/CR、混在も)・末尾の改行の有無のまま**保存します。文字コードを指定して開き直す、文字コードと改行コードを変えて保存する、再読込 (元に戻せる) にも対応します。
+- **安全な保存**: 一時ファイルと置換による原子的な保存で、途中で止まっても元のファイルは壊れません。権限・属性・代替データストリームを保ち、シンボリックリンクとジャンクションはリンク先を更新します。ハードリンク・読み取り専用・書込権限なし・共有違反・ディスクの空きなしなどの失敗は、理由と次の操作を示します。保存できないときの「退避先に保存」もあります。
+- **外部変更の検知**: 保存の直前にファイルの更新時刻・長さ・ID と、16 MiB 以下は内容ハッシュ (XXH3-64) で照合し、他のプログラムが書き換えていれば「上書き / 別名で保存 / 中止」を尋ねます。
+- **表現できない文字の扱い**: 保存先の文字コードで表現できない文字は、書く前に位置を示して「UTF-8 で保存 / 置換して保存」を選ばせます。黙って別の文字にすることはありません。不正なバイトを含むファイルは `<0xNN>` で見えるようにし、読み取り専用で開きます。
+- **大きなファイル**: 読み込みの進捗の表示とキャンセル、100 MB のファイルでも読み込み・保存・検索の間の入力に応答します。512 MiB を超えるファイルと不正バイトの比率が高いファイルは、開く前に警告します。1 MiB を超える長い行を含むファイルは、読み取り専用で先頭 64 KiB を表示します。
+- **編集**: 元に戻す・やり直し、インデント (Tab / Shift+Tab)、貼り付け (本文の制御文字をコマンドとして実行しません)、システムのクリップボード (Windows)。
+- **検索と置換**: 文字列の検索 (大文字小文字の切り替え、件数、一致の強調、折り返し)、リテラルのすべて置換 (1 回の元に戻すで戻せます)。
+- **コマンドパレット** (`F1` / `Ctrl+P`): コマンドの一覧と割り当てキー、引数の選択肢。
+- **日本語 UI**: 全角・半角カナ・絵文字の幅、曖昧幅 (1/2) の設定、IME のカーソル位置の追従、ヒントバー、確認ダイアログ、メッセージ (何が起きたか + どうすればよいか)。
+- **設定**: `config.toml` の 7 項目 (タブ幅・インデント・新規ファイルの文字コードと改行コード・曖昧幅・色の段階)。書き間違いは起動を止めずに知らせます。設定例は同梱の `config.example.toml`。
+- **異常終了への備え**: パニック・コンソールを閉じる・Ctrl+Break のときに、未保存の内容を元の改行コード・文字コードの情報とともに退避し (空き容量の確認つき)、次の起動で場所を案内します。
+- **コマンドライン**: `--version`・`--help`・`--readonly`・`--encoding`。
+- **配布**: Windows x86_64 の zip と `SHA256SUMS`・`THIRD-PARTY-NOTICES.md`・`README.md`・`config.example.toml`。署名の検証手順は `README.md`。
+- 開発の基盤: 仕様書 (`docs/`)、CI (fmt・clippy・テスト・E2E・依存の検査・`cargo deny`・DCO・gitleaks)、`cargo xtask` (check・check-deps・check-dist・dist・gen-notices・bench・i18n ほか)、リリースの手順 (`release.yml`)。
+
+### 既知の制約
+
+同梱の `README.md` の「既知の制約 (v0.1)」を参照してください。主なもの: 対象は Windows 11 のみ (Windows 10・macOS・Linux は対象外)、同時に開ける文書は 1 つ、正規表現の検索なし、実行ファイルに署名なし (SmartScreen・Smart App Control)、強制終了・電源断のときは未保存の内容を退避できません。
+
+### 修正
+
+- 公開前の検証で見つけて直した不具合: ISO-2022-JP の制御文字でエンコーダがパニックする、読み取り専用の編集が無言で無視される、260 文字を超えるパスのファイルを保存できない、ダングリングリンクへの保存で理由が出ない、mtime と長さが同じ書き換えを保存時に見逃す。

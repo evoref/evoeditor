@@ -21,12 +21,12 @@ path = "src/main.rs"
 test-hooks = ["eve-core/test-hooks", "eve-host/test-hooks", "eve-platform/test-hooks"]
 
 [dependencies]
-eve-core = { version = "0.0.0", path = "../../crates/eve-core" }
-eve-config = { version = "0.0.0", path = "../../crates/eve-config" }
-eve-host = { version = "0.0.0", path = "../../crates/eve-host" }
-eve-platform = { version = "0.0.0", path = "../../crates/eve-platform" }
-eve-tui = { version = "0.0.0", path = "../../crates/eve-tui" }
-eve-view = { version = "0.0.0", path = "../../crates/eve-view" }
+eve-core = { version = "0.1.0-rc.1", path = "../../crates/eve-core" }
+eve-config = { version = "0.1.0-rc.1", path = "../../crates/eve-config" }
+eve-host = { version = "0.1.0-rc.1", path = "../../crates/eve-host" }
+eve-platform = { version = "0.1.0-rc.1", path = "../../crates/eve-platform" }
+eve-tui = { version = "0.1.0-rc.1", path = "../../crates/eve-tui" }
+eve-view = { version = "0.1.0-rc.1", path = "../../crates/eve-view" }
 
 [dev-dependencies]
 # L5 端末 E2E (docs/09 §3.6): ConPTY で実バイナリを駆動し、vt100 で画面を解釈する
