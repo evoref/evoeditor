@@ -5,6 +5,7 @@
 //! - `check-deps`: 依存規則 R1〜R12 の検査。`--docs` で docs/02 §4.1 の表との突合。docs/09 §7
 //! - `check-dist`: 配布ビルドにテスト専用の経路が無いことと CRT の静的リンクの確認 (docs/09 §6.2 `build-release-smoke`)
 //! - `verify-tag`: リリースのタグの検証 (署名・位置・版・判定コミットとの差分。`release.yml` の最初のステップ。docs/09 §6.1)
+//! - `review-wording`: 日本語 UI 文言の人手レビュー用の一覧 (docs/review/ja-wording-v0.1.md) を生成する
 //! - `dist`: 配布 zip と SHA256SUMS の作成・検査 (`--verify ZIP` で検査だけ。docs/05 §18.2)
 //! - `gen-notices`: THIRD-PARTY-NOTICES.md の生成 (`--check` で最新性の検査。docs/05 §17.1)
 //! - `check-ac-checklist`: `tests/ac-checklist.toml` の検査 (docs/11 §3.3)
@@ -29,6 +30,7 @@ mod gen_corpus;
 mod gen_notices;
 mod i18n;
 mod nightly;
+mod review_wording;
 mod util;
 mod verify_tag;
 
@@ -41,6 +43,7 @@ const USAGE: &str = "\
   check-deps          依存規則 R1〜R12 の検査 (--docs: docs/02 §4.1 の表との突合も行う)
   check-dist          配布ビルドの確認 (feature・目印の文字列・隠しオプション・CRT の静的リンク。--exe PATH で既存の exe)
   verify-tag          リリースのタグの検証 (--allowed-signers FILE。タグは作らない・消さない)
+  review-wording      日本語 UI 文言のレビュー用の一覧の生成 (docs/review/ja-wording-v0.1.md)
   dist                配布 zip と SHA256SUMS の作成と検査 (--verify ZIP: 検査だけ。--exe / --version)
   gen-notices         THIRD-PARTY-NOTICES.md の生成 (cargo-about。--check: 最新性の検査)
   check-ac-checklist  tests/ac-checklist.toml の検査 (check の一部)
@@ -57,6 +60,7 @@ fn main() -> ExitCode {
         Some("check-deps") => check_deps::run(args.any(|a| a == "--docs")),
         Some("check-dist") => check_dist::run(&args.collect::<Vec<_>>()),
         Some("verify-tag") => verify_tag::run(&args.collect::<Vec<_>>()),
+        Some("review-wording") => review_wording::run(),
         Some("dist") => dist::run(&args.collect::<Vec<_>>()),
         Some("gen-notices") => gen_notices::run(&args.collect::<Vec<_>>()),
         Some("check-ac-checklist") => ac_checklist::run(),
