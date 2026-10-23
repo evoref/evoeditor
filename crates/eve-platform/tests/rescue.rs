@@ -414,6 +414,7 @@ fn 未知の_format_version_の退避は一覧に出るが_変更も移動も削
 
 // verifies: AC-NFR-302-5
 #[test]
+#[allow(clippy::print_stderr)] // 所要時間を記録に残す (--nocapture)
 fn 合計_100_mb_の_dirty_文書の退避が_5_秒以内に完了する() {
     let state = tmp("big");
     let w = WinRescue::new(Some(state.join("s")));
