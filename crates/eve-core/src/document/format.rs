@@ -106,21 +106,41 @@ pub(crate) fn count_range(text: &dyn TextRead, start: usize, end: usize) -> EolS
         e += 1;
     }
     let mut st = EolStats::default();
+    // CR / LF だけを探して飛ぶ (本文の大半は改行でないので、1 バイトずつ見ない。10 MB の長大行で数 ms 縮む)
     let mut prev_cr = false;
     for chunk in text.chunks(eve_text::ByteRange::new(ByteOff(s), ByteOff(e))) {
-        for &b in chunk.as_bytes() {
-            if prev_cr {
-                prev_cr = false;
-                if b == b'\n' {
-                    st.crlf += 1;
-                    continue;
-                }
+        let bytes = chunk.as_bytes();
+        let mut i = 0;
+        if prev_cr {
+            // 前のチャンクの末尾の CR: このチャンクの先頭が LF なら CRLF
+            prev_cr = false;
+            if bytes.first() == Some(&b'\n') {
+                st.crlf += 1;
+                i = 1;
+            } else {
                 st.cr += 1;
             }
-            match b {
-                b'\r' => prev_cr = true,
-                b'\n' => st.lf += 1,
-                _ => {}
+        }
+        while let Some(off) = memchr::memchr2(b'\r', b'\n', &bytes[i..]) {
+            let p = i + off;
+            if bytes[p] == b'\n' {
+                st.lf += 1;
+                i = p + 1;
+            } else {
+                match bytes.get(p + 1) {
+                    Some(b'\n') => {
+                        st.crlf += 1;
+                        i = p + 2;
+                    }
+                    Some(_) => {
+                        st.cr += 1;
+                        i = p + 1;
+                    }
+                    None => {
+                        prev_cr = true;
+                        i = p + 1;
+                    }
+                }
             }
         }
     }
@@ -335,5 +355,87 @@ mod tests {
         r.remove(ReadOnlyReason::FileAttribute);
         assert_eq!(r.primary(), Some(ReadOnlyReason::InvalidBytes));
         assert!(!r.contains(ReadOnlyReason::FileAttribute));
+    }
+
+    /// 基準: 1 バイトずつ数える。
+    fn count_naive(bytes: &[u8]) -> EolStats {
+        let mut st = EolStats::default();
+        let mut prev_cr = false;
+        for &b in bytes {
+            if prev_cr {
+                prev_cr = false;
+                if b == b'\n' {
+                    st.crlf += 1;
+                    continue;
+                }
+                st.cr += 1;
+            }
+            match b {
+                b'\r' => prev_cr = true,
+                b'\n' => st.lf += 1,
+                _ => {}
+            }
+        }
+        if prev_cr {
+            st.cr += 1;
+        }
+        st
+    }
+
+    #[test]
+    fn 改行の数え方は_1_バイトずつ数えた結果と同じ() {
+        let mut x = 0x2545_F491_4F6C_DD1Du64;
+        let mut next = || {
+            x ^= x << 13;
+            x ^= x >> 7;
+            x ^= x << 17;
+            x
+        };
+        let alphabet = ["a", "\r", "\n", "日", "\r\n", "b"];
+        for case in 0..60 {
+            // 長さを変える (ropey のチャンクをまたぐ長さを含む)。CR / LF の多い列と少ない列
+            let len = [0usize, 1, 7, 100, 3000, 40_000][case % 6];
+            let dense = case % 2 == 0;
+            let mut s = String::new();
+            for _ in 0..len {
+                let k = if dense {
+                    next() % 6
+                } else {
+                    [0, 0, 0, 0, 3, 5][(next() % 6) as usize]
+                };
+                s.push_str(alphabet[k as usize % 6]);
+                if !dense && next() % 50 == 0 {
+                    s.push_str(alphabet[1 + (next() % 3) as usize % 3]);
+                }
+            }
+            let t = Text::from(s.as_str());
+            assert_eq!(
+                EolStats::count(&t),
+                count_naive(s.as_bytes()),
+                "case {case}"
+            );
+            // 範囲の途中から (CR と LF の間で切る場合を含む)
+            for _ in 0..10 {
+                if s.is_empty() {
+                    break;
+                }
+                let a = (next() as usize) % s.len();
+                let b = a + (next() as usize) % (s.len() - a + 1);
+                if !s.is_char_boundary(a) || !s.is_char_boundary(b) {
+                    continue;
+                }
+                let got = count_range(&t, a, b);
+                // 基準: 範囲が CR と LF の間で切れていれば広げる (count_range と同じ約束)
+                let (mut ra, mut rb) = (a, b);
+                let bytes = s.as_bytes();
+                if ra > 0 && bytes.get(ra) == Some(&b'\n') && bytes[ra - 1] == b'\r' {
+                    ra -= 1;
+                }
+                if rb > 0 && rb < bytes.len() && bytes[rb - 1] == b'\r' && bytes[rb] == b'\n' {
+                    rb += 1;
+                }
+                assert_eq!(got, count_naive(&bytes[ra..rb]), "case {case} {a}..{b}");
+            }
+        }
     }
 }
