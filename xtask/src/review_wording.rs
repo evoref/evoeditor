@@ -85,7 +85,13 @@ fn cell(s: &str) -> String {
     s.replace('|', "\\|").replace('\n', "<br>")
 }
 
-pub fn run() -> Result<(), String> {
+pub fn run(args: &[String]) -> Result<(), String> {
+    // `--reviewed YYYY-MM-DD`: その日に全件 OK と判定されたことを記録する (判定の列を OK にし、先頭に日付を書く)
+    let reviewed = args
+        .iter()
+        .position(|a| a == "--reviewed")
+        .and_then(|i| args.get(i + 1))
+        .cloned();
     let root = workspace_root();
     let value: toml::Value = toml::from_str(&read_text(&root.join("locales/ja.toml"))?)
         .map_err(|e| format!("locales/ja.toml を読めません: {e}"))?;
@@ -113,13 +119,20 @@ pub fn run() -> Result<(), String> {
          (3) 文末と敬体が揃っている (です・ます)。(4) 角括弧のキー表記 (`[S]` など) が実際のキーと合っている。\
          (5) 引数の `{…}` に入る値で文が崩れない (長いパス・空の値)。(6) ヒントバーの表示は 8 セル以内。\n\n",
     );
-    md.push_str("判定の列には `OK` か、直し方を書いてください。\n\n");
+    match &reviewed {
+        Some(date) => md.push_str(&format!(
+            "**レビュー結果: {date} に全 {} 個を確認し、すべて `OK` と判定された** (PO)。文言を変えたら、この記録は無効になり、再生成してレビューをやり直す。\n\n",
+            texts.len()
+        )),
+        None => md.push_str("判定の列には `OK` か、直し方を書いてください。\n\n"),
+    }
+    let verdict = if reviewed.is_some() { "OK" } else { "" };
     for ((_, name), rows) in &groups {
         md.push_str(&format!("## {name}\n\n{} 個\n\n", rows.len()));
         md.push_str("| キー | 文言 | 出す場面 | 判定 |\n|---|---|---|---|\n");
         for (k, v) in rows {
             md.push_str(&format!(
-                "| `{k}` | {} | {} | |\n",
+                "| `{k}` | {} | {} | {verdict} |\n",
                 cell(v),
                 cell(scenes.get(*k).map_or("", String::as_str))
             ));
