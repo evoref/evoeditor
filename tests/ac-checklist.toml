@@ -564,8 +564,11 @@ status = "todo"
 id = "AC-FR-206-4"
 requirement = "FR-206"
 kind = "T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "十メガバイトの貼り付けでも受信口のメッセージは一万件を超えない",
+    "制御文字を含まない貼り付けは_64_kib_ごとの_text_にまとまる",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-301-1"
@@ -1146,8 +1149,10 @@ status = "done"
 id = "AC-NFR-302-5"
 requirement = "NFR-302"
 kind = "T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "合計_100_mb_の_dirty_文書の退避が_5_秒以内に完了する",
+]
+status = "done"
 
 [[ac]]
 id = "AC-NFR-302-6"
