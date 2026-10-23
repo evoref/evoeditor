@@ -264,13 +264,16 @@ pub(super) fn overlay_models(state: &EditorState) -> Vec<OverlayModel> {
                     destructive: d.destructive,
                 })
                 .collect();
-            // キャンセルは最後 (`Esc`)
-            choices.push(Choice {
-                id: ChoiceId(c.cancel_index() as u16),
-                label: cell_text(&render(state, "ui.confirm.cancel", &[]), CutPolicy::Never),
-                key: None,
-                destructive: false,
-            });
+            // キャンセルは最後 (`Esc`)。「中止」の選択肢を自分で持つ確認 (不正バイトが多いファイル) では、
+            // 同じ意味の表示が 2 つ並ばないよう付けない (`Esc` は変わらずキャンセルの番号に届く)
+            if !c.choices.iter().any(|d| d.id == "abort") {
+                choices.push(Choice {
+                    id: ChoiceId(c.cancel_index() as u16),
+                    label: cell_text(&render(state, "ui.confirm.cancel", &[]), CutPolicy::Never),
+                    key: None,
+                    destructive: false,
+                });
+            }
             vec![OverlayModel::Confirm {
                 title: cell_text(&render(state, &key("title"), &[]), CutPolicy::Never),
                 message: cell_text(&render(state, &key("message"), &args), CutPolicy::End),

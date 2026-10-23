@@ -393,15 +393,20 @@ status = "done"
 id = "AC-FR-127-1"
 requirement = "FR-127"
 kind = "T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "巨大なファイルは読む前に見込みを示して_読み取り専用で開くか中止かを選ばせる",
+    "閾値未満のファイルは警告なしで開く",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-127-2"
 requirement = "FR-127"
 kind = "T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "不正バイトが_1_パーセントを超えると見込みを示して_3_択を出す",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-201-1"

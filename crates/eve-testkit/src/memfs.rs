@@ -42,6 +42,8 @@ struct Entry {
     readonly: bool,
     id: u128,
     nlink: u32,
+    /// `metadata` が返す長さの上書き (巨大ファイルの警告のテスト用。中身は小さいまま)
+    fake_len: Option<u64>,
 }
 
 struct State {
@@ -151,6 +153,7 @@ impl MemFs {
                 readonly,
                 id,
                 nlink,
+                fake_len: None,
             },
         );
     }
@@ -214,6 +217,13 @@ impl MemFs {
         }
     }
 
+    /// `metadata` が返す長さを偽る (FR-127 の 512 MiB の警告を、巨大な中身を作らずに試す)。`None` で戻す。
+    pub fn set_fake_len(&self, path: &str, len: Option<u64>) {
+        if let Some(e) = self.st().files.get_mut(&FsPath::from(path)) {
+            e.fake_len = len;
+        }
+    }
+
     pub fn set_chunk_size(&self, bytes: usize) {
         self.st().chunk_size = bytes.max(1);
     }
@@ -255,7 +265,7 @@ impl MemFs {
 fn meta_of(e: &Entry) -> FileMeta {
     FileMeta {
         kind: FileKind::File,
-        len: e.data.len() as u64,
+        len: e.fake_len.unwrap_or(e.data.len() as u64),
         mtime: e.mtime,
         readonly: e.readonly,
         file_id: Some(FileId {
@@ -473,6 +483,7 @@ impl FileSystem for MemFs {
             readonly: false,
             id: s.next_id,
             nlink: 1,
+            fake_len: None,
         };
         let new_stamp = FileStamp::from_meta(&meta_of(&entry), None);
         s.files.insert(path.clone(), entry);
