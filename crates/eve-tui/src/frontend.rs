@@ -173,6 +173,18 @@ impl Frontend for TuiFrontend {
         let r = render_screen(frame, window, depth, &self.glyphs);
         let out = self.emitter.frame(&r, frame, true);
         self.write(&out);
+        // 計測用ビルド: 描画の `write` が戻った時刻を記録する。`--bench-exit-after-first-frame` なら、端末を復元して終わる
+        let content = cfg!(feature = "bench-trace")
+            && frame.panes.first().is_some_and(|p| {
+                p.rows
+                    .iter()
+                    .any(|r| r.spans.iter().any(|s| !s.text.trim().is_empty()))
+            });
+        if crate::trace::render_done(content) {
+            self.restore();
+            crate::trace::flush();
+            std::process::exit(0);
+        }
         RenderOutcome::Done
     }
 

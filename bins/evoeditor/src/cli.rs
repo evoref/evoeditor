@@ -55,6 +55,9 @@ pub fn parse(args: impl IntoIterator<Item = OsString>) -> Result<Cli, UsageError
             "--readonly" | "-R" => read_only = true,
             // 互換オプション: 受理して無視する (`$EDITOR="evoeditor --wait"`)
             "--wait" => {}
+            // 計測用ビルドだけの隠しオプション (docs/09 §5.2)。配布ビルドでは未知のオプションとして終了コード 2
+            #[cfg(feature = "bench-trace")]
+            "--bench-exit-after-first-frame" => eve_tui::trace::request_exit_after_first_frame(),
             "--encoding" | "-e" => {
                 let v = it
                     .next()

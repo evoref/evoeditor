@@ -195,6 +195,15 @@ fn read_chunk(
     if unsafe { ReadConsoleInputW(h, buf.as_mut_ptr(), n, &mut got) } == 0 {
         return Err(io::Error::last_os_error());
     }
+    // 計測用ビルド: 入力のバイトを読み終えた時刻 (01 §3.0.1 の (b) の始点)。文字を押した記録があるときだけ
+    crate::trace::input_read(buf[..got as usize].iter().find_map(|r| {
+        if u32::from(r.EventType) != KEY_EVENT {
+            return None;
+        }
+        // SAFETY: `EventType` が `KEY_EVENT` のとき、共用体は `KeyEvent` が有効。
+        let k = unsafe { r.Event.KeyEvent };
+        (k.bKeyDown != 0).then_some(k.wVirtualKeyCode)
+    }));
     for r in &buf[..got as usize] {
         out.push(match u32::from(r.EventType) {
             KEY_EVENT => {

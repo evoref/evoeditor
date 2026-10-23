@@ -7,7 +7,9 @@ use std::fmt;
 use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 
-use eve_core::{Clock, DocSnapshot, Editor, Millis, Ports, RescueReason, RescueWriter, Tick};
+use eve_core::{
+    Clock, DocSnapshot, Editor, JobResult, Millis, Ports, RescueReason, RescueWriter, Tick,
+};
 use eve_view::{Capabilities, DocumentId, EditorEvent, Effect, StderrLine, WindowId};
 
 use crate::emergency::EmergencyCtl;
@@ -21,7 +23,7 @@ use crate::msg::{ExitCode, HostMsg};
 const CLIPBOARD_TIMEOUT: Millis = Millis(2000);
 
 const STEP_BUDGET: Millis = Millis(8);
-/// ジョブの結果などによる再描画の最小の間隔 (入力・貼り付けの結果は即時に描く、04 §4.4)。
+/// 進捗・検索の途中経過などによる再描画の最小の間隔 (入力・貼り付けの結果と、ジョブの完了・失敗などは即時に描く、04 §4.4)。
 const RENDER_INTERVAL: Millis = Millis(16);
 /// 蓄えておく `EditorEvent` の上限 (購読者がいない間に増え続けない)。
 const MAX_EVENTS: usize = 4096;
@@ -346,7 +348,17 @@ impl Host {
                     input_driven = true;
                     self.editor.handle_input(w, ev);
                 }
-                HostMsg::Job(result) => self.editor.on_job_result(*result),
+                HostMsg::Job(result) => {
+                    // 完了・失敗・確認などの結果は、待たせずに描く (開く操作の最初の画面を 16 ms 遅らせない)。
+                    // 進捗と検索の途中経過だけを間引く (04 §4.4)
+                    if !matches!(
+                        *result,
+                        JobResult::Progress { .. } | JobResult::SearchBatch { .. }
+                    ) {
+                        input_driven = true;
+                    }
+                    self.editor.on_job_result(*result);
+                }
                 HostMsg::Clipboard { token, result } => {
                     // 待っている token の結果だけ使う (期限後に届いたものは捨てる)
                     if self.clip_wait.is_some_and(|(t, _)| t == token) {

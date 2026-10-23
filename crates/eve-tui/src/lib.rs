@@ -18,5 +18,6 @@ pub mod glyphs;
 pub mod input;
 pub mod sanitize;
 pub mod theme;
+pub mod trace;
 #[cfg(windows)]
 pub mod win;
