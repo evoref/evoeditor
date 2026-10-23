@@ -453,7 +453,7 @@ pub fn run_job(
                 err: JobError::Fs(err),
             },
         },
-        JobKind::Metadata { path, .. } => match ports.fs.metadata(path) {
+        JobKind::Metadata { path, purpose } => match ports.fs.metadata(path) {
             Ok(meta) => {
                 if cancel.is_cancelled() {
                     JobResult::Failed {
@@ -461,7 +461,15 @@ pub fn run_job(
                         err: JobError::Cancelled,
                     }
                 } else {
-                    let stamp = FileStamp::from_meta(&meta, None);
+                    // 未変更の保存の可否は、16 MiB 以下なら内容ハッシュでも照合する (05 §5.5)。読めなければ付けない
+                    let hash = if *purpose == MetaPurpose::UnchangedSave {
+                        crate::content_hash::hash_file(ports.fs.as_ref(), path, meta.len)
+                            .ok()
+                            .flatten()
+                    } else {
+                        None
+                    };
+                    let stamp = FileStamp::from_meta(&meta, hash);
                     JobResult::Meta {
                         job: req.id,
                         meta,
