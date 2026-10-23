@@ -3,6 +3,8 @@
 //! 記録するもの: BM-103a (キー入力の core 区間、ヘッドレス。診断用)、BM-104 / BM-202 (サイズ別オープンの時間とメモリ、実ファイル。診断用。
 //! 判定は基準機)、BM-205 (配布ビルドの exe のサイズ)。
 //! BM-101a (起動から最初の Frame まで) は計測用ビルドの隠しフラグと `bench-trace` (記録の仕組み) が要るので M3 以降。
+//! `--env ENV-W1 --out DIR` を付けると基準機の記録になる: BM-106 と、実バイナリを ConPTY で駆動する BM-101b / 102b / 103b / 107
+//! (`evoeditor` の `bm_pty`) も測り、DIR にベンチ ID ごとの JSON と `summary.md` を書く (`bench_report`、09 §5.3)。
 //! 結果は `target/bench/bench.json` に書く (`bench.yml` が Actions の artifact にする。リポジトリにはコミットしない)。
 //! CI ランナーの値は変動が大きい共有 VM のものなので、判定には使わない (09 §5.1)。`--quick` は動作確認用で、記録には使わない。
 
@@ -12,6 +14,24 @@ use crate::util::{run_capture, workspace_root};
 
 pub fn run_all(args: &[String]) -> Result<(), String> {
     let quick = args.iter().any(|a| a == "--quick");
+    let value = |name: &str| {
+        args.iter()
+            .position(|a| a == name)
+            .and_then(|i| args.get(i + 1))
+    };
+    let (env, out_dir) = (value("--env"), value("--out"));
+    if env.is_some() != out_dir.is_some() {
+        return Err(
+            "--env と --out は一緒に指定します (例: --env ENV-W1 --out docs/perf/0.1.0)".to_owned(),
+        );
+    }
+    if let Some(e) = env
+        && !(e.starts_with("ENV-")
+            && e.len() > 4
+            && e[4..].chars().all(|c| c.is_ascii_alphanumeric()))
+    {
+        return Err(format!("環境 ID は ENV-W1 のような形です: {e}"));
+    }
     let root = workspace_root();
     let mut results: Vec<String> = Vec::new();
 
@@ -68,6 +88,57 @@ pub fn run_all(args: &[String]) -> Result<(), String> {
         }
     }
 
+    if out_dir.is_some() {
+        // BM-106 (長大行。3 種 × 4 操作)
+        println!("▶ BM-106 (長大行)");
+        let mut cmd = Command::new("cargo");
+        cmd.args([
+            "bench",
+            "-p",
+            "eve-testkit",
+            "--bench",
+            "bm_106",
+            "--",
+            "--json",
+        ]);
+        if quick {
+            cmd.arg("--quick");
+        }
+        for l in run_capture(&mut cmd)?
+            .lines()
+            .filter(|l| l.starts_with("{\"id\":\"BM-106\""))
+        {
+            results.push(l.to_owned());
+        }
+        // 実バイナリを ConPTY で駆動する計測 (Windows)。--quick は動作確認の回数
+        if cfg!(windows) {
+            println!("▶ BM-101b / 102b / 103b / 107 (ConPTY、実バイナリ)");
+            let runs = if quick { "30" } else { "1000" };
+            let out = run_capture(Command::new("cargo").args([
+                "bench",
+                "-p",
+                "evoeditor",
+                "--bench",
+                "bm_pty",
+                "--",
+                "--json",
+                "--runs",
+                runs,
+            ]))?;
+            let lines: Vec<&str> = out
+                .lines()
+                .filter(|l| l.starts_with("{\"id\":\"BM-10"))
+                .collect();
+            if lines.is_empty() {
+                return Err("bm_pty の結果の行が見つかりません".to_owned());
+            }
+            for l in lines {
+                println!("  {l}");
+                results.push(l.to_owned());
+            }
+        }
+    }
+
     println!("▶ BM-205 (配布ビルドの exe のサイズ)");
     run_capture(Command::new("cargo").args(["build", "--release", "-p", "evoeditor"]))?;
     let exe = root.join("target/release").join(if cfg!(windows) {
@@ -95,6 +166,14 @@ pub fn run_all(args: &[String]) -> Result<(), String> {
     let path = dir.join("bench.json");
     std::fs::write(&path, json).map_err(|e| format!("{}: {e}", path.display()))?;
     println!("\nbench: {} に書きました", path.display());
+    if let (Some(env), Some(dir)) = (env, out_dir) {
+        let dir = root.join(dir);
+        crate::bench_report::write(&dir, env, &commit, quick, &results)?;
+        println!(
+            "bench: {} に JSON と summary.md を書きました",
+            dir.display()
+        );
+    }
     if quick {
         println!("(--quick は動作確認用です。記録には使いません)");
     }
