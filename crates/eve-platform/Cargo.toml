@@ -17,12 +17,12 @@ workspace = true
 test-hooks = []
 
 [dependencies]
-eve-core = { version = "0.0.0", path = "../eve-core" }
-eve-text = { version = "0.0.0", path = "../eve-text" }
+eve-core = { version = "0.1.0-rc.1", path = "../eve-core" }
+eve-text = { version = "0.1.0-rc.1", path = "../eve-text" }
 xxhash-rust = { version = "0.8.19", features = ["xxh3"] }
 
 [dev-dependencies]
-eve-view = { version = "0.0.0", path = "../eve-view" }
+eve-view = { version = "0.1.0-rc.1", path = "../eve-view" }
 memory-stats = "1.2.0"
 encoding_rs = "0.8.42"
 
