@@ -5,7 +5,7 @@
 //! (3) `status = "done"` の項目は、`verified_by` に実在する検証の実体が 1 つ以上ある:
 //!     - テスト関数名: その関数の直前 (5 行以内) に同じ AC ID の `verifies:` がある
 //!     - ベンチ ID (`BM-…`): docs/09 に載っている
-//!     - 手順の記録: `docs/compat/` の下の実在するファイルのパス
+//!     - 手順の記録: `docs/compat/` の下の実在するファイルのパス。人手のレビューの記録は `docs/review/` の下
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
@@ -141,14 +141,14 @@ pub fn run() -> Result<(), String> {
         let backed = e.verified_by.iter().any(|v| {
             if v.starts_with("BM-") {
                 doc09.contains(v.as_str())
-            } else if v.starts_with("docs/compat/") {
+            } else if v.starts_with("docs/compat/") || v.starts_with("docs/review/") {
                 root.join(v.split('#').next().unwrap_or(v)).exists()
             } else {
                 pairs.iter().any(|(id, name)| id == &e.id && name == v)
             }
         });
         if !backed {
-            errors.push(format!("(3) `{}` は done ですが、verified_by に実在する検証 (テスト関数・ベンチ ID・docs/compat/ の記録) がありません", e.id));
+            errors.push(format!("(3) `{}` は done ですが、verified_by に実在する検証 (テスト関数・ベンチ ID・docs/compat/ または docs/review/ の記録) がありません", e.id));
         }
     }
 
@@ -172,6 +172,34 @@ pub fn run() -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
+    // verifies: AC-NFR-502-1
+    #[test]
+    fn 製品のコードは外部のプロセスを起動しない() {
+        // モードラインやワークスペース設定に外部コマンドがあっても起動されない (v0.1 はそもそも起動する経路が無い)。
+        // 試験・ベンチ・補助の crate を除いた製品のソースに、プロセスを起動する呼出しが無いことを確かめる。
+        let root = crate::util::workspace_root();
+        let mut found = Vec::new();
+        for dir in ["crates", "bins"] {
+            for f in crate::util::rust_files(&root.join(dir)) {
+                let p = f.to_string_lossy().replace('\\', "/");
+                if p.contains("/tests/")
+                    || p.contains("/benches/")
+                    || p.contains("/eve-test-helpers/")
+                    || p.contains("/eve-testkit/")
+                {
+                    continue;
+                }
+                let text = std::fs::read_to_string(&f).unwrap_or_default();
+                // `#[cfg(test)]` の以降は試験のコード
+                let body = text.split("#[cfg(test)]").next().unwrap_or("");
+                if body.contains("Command::new") || body.contains("CreateProcess") {
+                    found.push(p);
+                }
+            }
+        }
+        assert!(found.is_empty(), "プロセスを起動する呼出し: {found:?}");
+    }
+
     use super::ac_ids_in;
 
     #[test]

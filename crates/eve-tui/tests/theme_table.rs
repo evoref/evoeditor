@@ -49,6 +49,7 @@ fn style_of(s: &StyleSpec) -> Style {
 
 // verifies: AC-FR-513-1
 // verifies: AC-FR-513-2
+// verifies: AC-NFR-604-1
 #[test]
 fn 組込みテーマの表は全ロールが_truecolor_と_mono_を持ちコントラストを満たす() {
     let rows = rows();

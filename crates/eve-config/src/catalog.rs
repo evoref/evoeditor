@@ -273,6 +273,7 @@ mod tests {
         );
     }
 
+    // verifies: AC-NFR-603-4
     #[test]
     fn キーが無ければキー名() {
         assert_eq!(Catalog::default().render("x.y", &[], &no_keys), "x.y");
