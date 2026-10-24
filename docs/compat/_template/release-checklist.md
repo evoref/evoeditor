@@ -24,7 +24,7 @@ minisign の検証) は GitHub Release のノートの「検証」の節に書�
 | データ保全 | 09 §8.2。kill テスト・往復コーパスなど | | | | |
 | セキュリティ (依存) | `cargo audit` / `deny advisories` がクリーン (例外は `deny.toml` に期限と理由つき) | | | | |
 | セキュリティ (リリース前の確認) | 09 §8.2 の (a)〜。結果をここに書く | | | | |
-| fuzz | 判定コミットで `fuzz_decode` を 1 時間 (`nightly.yml` の手動実行) してクラッシュ 0。夜間 fuzz の 7 日の観測 | | | | |
+| fuzz | 判定コミットで `fuzz_decode` を 1 時間 (`nightly.yml` の手動実行) してクラッシュ 0。夜間 fuzz の 7 日の観測 (rc は 2 日) | | | | |
 | 契約 | `eve-view` の型が `#[non_exhaustive]` で `CONTRACT_VERSION` を持つ | | | | |
 | 依存 | C を含む依存 0 (`cargo xtask check-deps`) | | | | |
 | ドキュメント | README (`dist/README.md`)・CHANGELOG・生成リファレンスが最新。端末の設定・IME とチョードの注意・既知の制約 (01 §4.6) が README にある | | | | |
