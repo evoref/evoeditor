@@ -1,16 +1,16 @@
 {
-  "commit": "fbda556",
+  "commit": "87aa0c9",
   "env": "ENV-W1",
   "id": "BM-201",
   "quick": false,
   "results": [
     {
       "id": "BM-201",
-      "max": 4.04,
+      "max": 4.2,
       "n": 5,
       "quick": false,
       "unit": "MB",
-      "value": 4.01
+      "value": 4.0
     }
   ]
 }

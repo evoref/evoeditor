@@ -558,8 +558,12 @@ status = "done"
 id = "AC-FR-205-4"
 requirement = "FR-205"
 kind = "T/M"
-verified_by = []
-status = "todo"
+verified_by = [
+    "上限を超える全選択のコピーは文字列化せず内部レジスタだけに入れて知らせる",
+    "BM-103b-clip60",
+    "BM-103b-clip100",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-206-1"

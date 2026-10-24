@@ -1,16 +1,16 @@
 {
-  "commit": "fbda556",
+  "commit": "87aa0c9",
   "env": "ENV-W1",
   "id": "BM-103b-3-render-to-emit",
   "quick": false,
   "results": [
     {
       "id": "BM-103b-3-render-to-emit",
-      "max_ms": 2.64,
-      "n": 1000,
-      "p50_ms": 0.24,
-      "p999_ms": 1.56,
-      "p99_ms": 0.59,
+      "max_ms": 1.1,
+      "n": 999,
+      "p50_ms": 0.22,
+      "p999_ms": 1.03,
+      "p99_ms": 0.68,
       "quick": false
     }
   ]
