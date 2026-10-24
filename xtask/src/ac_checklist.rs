@@ -172,6 +172,44 @@ pub fn run() -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
+    // verifies: AC-NFR-707-2
+    #[test]
+    fn 区分が_t_だけの_ac_は試験関数に結びついている() {
+        // 01 NFR-707 AC-2: ヘッドレスで検証できる Must の AC が、Rust の試験 (Harness 等) で表現されている。
+        // 区分が T だけの AC (自動試験だけで確かめると定めたもの) は、done なら必ず `verifies:` つきの試験関数を持つ
+        let root = workspace_root();
+        let list: File = toml::from_str(&read_text(&root.join("tests/ac-checklist.toml")).unwrap())
+            .expect("チェックリストを読める");
+        let (pairs, _) = scan_verifies(&root);
+        // 試験関数でなく別の裏づけを使う T の AC (理由つき。増やさない)
+        let others = [
+            "AC-FR-117-2",  // 性能の判定 (BM-103b-reconcile)
+            "AC-FR-206-3",  // 実機の IME の手動確認の記録
+            "AC-NFR-401-1", // CI のジョブの実行の記録
+        ];
+        let bad: Vec<&str> = list
+            .ac
+            .iter()
+            .filter(|e| {
+                e.kind.trim() == "T" && e.status == "done" && !others.contains(&e.id.as_str())
+            })
+            .filter(|e| {
+                !e.verified_by
+                    .iter()
+                    .any(|v| pairs.iter().any(|(id, name)| id == &e.id && name == v))
+            })
+            .map(|e| e.id.as_str())
+            .collect();
+        assert!(
+            bad.is_empty(),
+            "試験関数に結びついていない T の AC: {bad:?}"
+        );
+        let n = list.ac.iter().filter(|e| e.kind.trim() == "T").count();
+        assert!(n >= 20, "T の AC が少なすぎる (表の読み違い?): {n}");
+    }
+
     // verifies: AC-NFR-501-1
     #[test]
     fn 製品のコードと依存にネットワーク通信が無い() {
