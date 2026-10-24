@@ -47,6 +47,22 @@ fn style_of(s: &StyleSpec) -> Style {
     }
 }
 
+// verifies: AC-FR-513-1
+// verifies: AC-FR-513-2
+#[test]
+fn 組込みテーマの表は全ロールが_truecolor_と_mono_を持ちコントラストを満たす() {
+    let rows = rows();
+    let errs = eve_docs_tables::theme::check_table(&rows);
+    assert!(
+        errs.is_empty(),
+        "{}",
+        errs.join(
+            "
+"
+        )
+    );
+}
+
 #[test]
 fn eve_tui_のロールは表の_truecolor_と_mono_の値と一致する() {
     let rows = rows();

@@ -107,12 +107,14 @@ fn 行番号と本文とカーソル() {
     assert_eq!(f.panes[0].cursors.len(), 1);
 }
 
+// verifies: AC-FR-501-1
 #[test]
 fn タブと全角スペースは記号で示し_幅は変えない() {
     let mut s = Scene::new("a\tb\n\u{3000}x|", 20, 3);
     assert_eq!(s.ascii(), "a>  b\n[]x\n\ncursor: (6,1)\n");
 }
 
+// verifies: AC-FR-501-1
 #[test]
 fn 全角と結合文字と絵文字の幅() {
     let mut s = Scene::new("あe\u{301}😀|z", 20, 1);
@@ -250,6 +252,7 @@ fn タイトルと_revision() {
     let _ = s.view;
 }
 
+// verifies: AC-FR-501-1
 #[test]
 fn 絵文字の列は_zwj_と_vs16_を残して_幅のとおりに出す() {
     let mut s = Scene::new("👨\u{200D}👩\u{200D}👧❤\u{FE0F}x|", 20, 1);
