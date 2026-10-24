@@ -217,11 +217,19 @@ mod tests {
 
     #[test]
     fn 負けた経路は予算が尽きたら待つのをやめる() {
-        let (c, _) = ctl(600, false);
+        let (c, w) = ctl(600, false);
         let c2 = c.clone();
         let winner =
             std::thread::spawn(move || c2.run(RescueReason::Signal, Duration::from_secs(5)));
-        std::thread::sleep(Duration::from_millis(30));
+        // 勝つ側が書き始めるのを待つ (固定の待ちだと、負荷の高い CI で先に呼ばれて勝敗が逆になる)
+        let wait = Instant::now();
+        while w.calls.load(Ordering::SeqCst) == 0 {
+            assert!(
+                wait.elapsed() < Duration::from_secs(5),
+                "書き手が始まらない"
+            );
+            std::thread::sleep(Duration::from_millis(1));
+        }
         let t = Instant::now();
         let o = c.run(RescueReason::Fatal, Duration::from_millis(100));
         assert!(o.is_none(), "書込中のまま予算が尽きた");
