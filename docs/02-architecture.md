@@ -2025,7 +2025,7 @@ sensitive = false                     # 任意 (無ければ false)。秘密フ�
 | 差分 (v1.L) | imara-diff または similar | AI 提案 (eve-ai 側)・ディスク比較 (FR-517) の差分表示。**v0.x の Reload は全置換 Transaction** とし差分ライブラリを入れない |
 | Markdown (v1.L) | pulldown-cmark (eve-ai 側で構造化してから core に渡す) | core の依存を増やさない (AI チャット表示用) |
 | 秘密値のゼロ化・SSE 解析 (v1.L) | zeroize/secrecy 系、SSE パーサ | v1.L の依存追加チェックリストで評価 |
-| ハッシュ (外部変更検知) | XXH3-64 の純 Rust の実装 (`ContentHash([u8; 8])`、§4.5) | C/asm 依存を v0.x に入れない (05 §17.2)。暗号学的な強度は要らない (偶然の一致を避ければ足りる) |
+| ハッシュ (外部変更検知・保存中フラグのキー) | XXH3-64 の純 Rust の実装。`eve-core` の内容ハッシュ (`ContentHash([u8; 8])`、§4.5) は `twox-hash`、`eve-platform` の保存中フラグの置き場所のキー (`hash(path)`、05 §4.6 / §7.5) は `xxhash-rust` (`eve-platform` は `eve-core` に依存できないため別の crate。同じアルゴリズムなので、どちらかにそろえるのは v0.2 の整理の候補) | C/asm 依存を v0.x に入れない (05 §17.2)。暗号学的な強度は要らない (偶然の一致を避ければ足りる) |
 | C ランタイム (Windows) | 静的リンク (`+crt-static`)。`.cargo/config.toml` に `[target.x86_64-pc-windows-msvc] rustflags = ["-C", "target-feature=+crt-static"]` を書く (§17.1) | 確定 (ユーザー回答)。配布物が VC++ 再頒布可能パッケージに依存しない (単一の実行ファイルで動く) |
 | JSON (駆動 API) | serde_json (dev feature `headless` のみ。v0.2 以降) | 配布同梱は OQ-120 |
 | テスト | insta (Frame スナップショット・契約ゴールデン)、proptest、cargo-fuzz | 09 で確定 |
