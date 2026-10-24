@@ -15,6 +15,7 @@ pub(super) fn default_keymap() -> Keymap {
     bind("global", "mod+q", "app.quit");
     bind("global", "mod+p", "ui.palette_open");
     bind("global", "f1", "ui.palette_open");
+    bind("global", "ctrl+k r", "ui.redraw");
     // 検索バー (search → prompt → global)
     for (keys, cmd) in [
         ("enter", "search.next"),

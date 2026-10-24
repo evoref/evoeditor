@@ -747,6 +747,11 @@ fn cmd_palette_open(ctx: &mut CommandCtx<'_>) -> CommandResult {
     ctx.state.open_palette()
 }
 
+fn cmd_redraw(ctx: &mut CommandCtx<'_>) -> CommandResult {
+    ctx.state.push_effect(Effect::Redraw);
+    CommandResult::Done
+}
+
 fn cmd_quit(ctx: &mut CommandCtx<'_>) -> CommandResult {
     ctx.state.request_quit()
 }
@@ -774,6 +779,7 @@ pub(super) fn register(r: &mut CommandRegistry) {
         cmd_dialog_choose
     );
     reg_ui!(r, "ui.palette_open", "", cmd_palette_open);
+    reg_ui!(r, "ui.redraw", "", cmd_redraw);
     reg_ui!(r, "ui.list_page_down", active, cmd_list_page_down);
     reg_ui!(r, "ui.list_page_up", active, cmd_list_page_up);
     // 07 §11.6 の perm 列は `ui` (キーマップ以外からも呼べるが、外部クライアントには許可を要する)
