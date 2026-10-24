@@ -209,6 +209,11 @@ impl Frontend for TuiFrontend {
                 self.write("\x07");
                 EffectOutcome::Handled
             }
+            Effect::Redraw => {
+                // 次の Frame を全画面の再描画にする (差分の基準を捨てる)
+                self.emitter.invalidate();
+                EffectOutcome::Handled
+            }
             _ => EffectOutcome::Unhandled,
         }
     }

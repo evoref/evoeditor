@@ -929,8 +929,13 @@ status = "done"
 id = "AC-FR-601-1"
 requirement = "FR-601"
 kind = "R/T, M"
-verified_by = []
-status = "todo"
+verified_by = [
+    "登録済みのコマンドの_id_は_v0_1_のカタログと過不足なく一致する",
+    "空の入力は_hidden_を除く全コマンドを_id_順に出す",
+    "実行できないコマンドは理由つきで出し_enter_では実行しない",
+    "必須の列挙引数があるコマンドは_同じオーバーレイで値を尋ねる",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-601-2"
@@ -998,15 +1003,19 @@ status = "todo"
 id = "AC-FR-606-2"
 requirement = "FR-606"
 kind = "T/M"
-verified_by = []
-status = "todo"
+verified_by = [
+    "空の入力は_hidden_を除く全コマンドを_id_順に出す",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-606-3"
 requirement = "FR-606"
 kind = "T/M"
-verified_by = []
-status = "todo"
+verified_by = [
+    "空の入力は_hidden_を除く全コマンドを_id_順に出す",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-609-1"

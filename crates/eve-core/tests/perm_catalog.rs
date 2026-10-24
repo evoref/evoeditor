@@ -79,3 +79,23 @@ fn 外部からの呼出しは_perm_が_none_のコマンドを拒否する() {
     assert!(matches!(r, eve_core::CommandResult::Rejected(_)), "{r:?}");
     assert_eq!(h.quit_code(), None);
 }
+
+// verifies: AC-FR-601-1
+#[test]
+fn 登録済みのコマンドの_id_は_v0_1_のカタログと過不足なく一致する() {
+    let cat = catalog();
+    let h = Harness::new();
+    let reg: std::collections::BTreeSet<String> = h
+        .editor
+        .registry()
+        .iter()
+        .map(|s| s.id.as_str().to_owned())
+        .collect();
+    let doc: std::collections::BTreeSet<String> = cat.keys().cloned().collect();
+    let only_reg: Vec<_> = reg.difference(&doc).collect();
+    let only_doc: Vec<_> = doc.difference(&reg).collect();
+    assert!(
+        only_reg.is_empty() && only_doc.is_empty(),
+        "登録だけ: {only_reg:?} / カタログだけ: {only_doc:?}"
+    );
+}

@@ -41,6 +41,9 @@ fn ctrl_p_と_f1_で開き_esc_で閉じる() {
 }
 
 // verifies: AC-FR-514-2
+// verifies: AC-FR-601-1
+// verifies: AC-FR-606-2
+// verifies: AC-FR-606-3
 #[test]
 fn 空の入力は_hidden_を除く全コマンドを_id_順に出す() {
     let mut h = Harness::new();
@@ -133,6 +136,7 @@ fn 文書を編集するコマンドを実行できる() {
 }
 
 // verifies: AC-FR-602-2
+// verifies: AC-FR-601-1
 #[test]
 fn 実行できないコマンドは理由つきで出し_enter_では実行しない() {
     let mut h = Harness::new();
@@ -238,6 +242,7 @@ fn labels(f: &Frame) -> Vec<String> {
     list(f).0.iter().map(|i| cells(&i.label)).collect()
 }
 
+// verifies: AC-FR-601-1
 #[test]
 fn 必須の列挙引数があるコマンドは_同じオーバーレイで値を尋ねる() {
     let mut h = Harness::new();
@@ -321,4 +326,19 @@ fn 引数の一覧でもページ送りが動く() {
     assert_eq!(list(&h.frame()).2, 5, "6 項目の末尾で止まる");
     h.keys("pageup");
     assert_eq!(list(&h.frame()).2, 0);
+}
+
+#[test]
+fn ui_redraw_は_ctrl_k_r_とパレットから全画面の再描画を依頼する() {
+    let mut h = Harness::new();
+    h.clear_log();
+    h.keys("ctrl+k r");
+    assert!(
+        h.effects().contains(&eve_view::Effect::Redraw),
+        "{:?}",
+        h.effects()
+    );
+    h.clear_log();
+    h.cmd("ui.redraw");
+    assert!(h.effects().contains(&eve_view::Effect::Redraw));
 }
