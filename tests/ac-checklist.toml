@@ -524,8 +524,11 @@ status = "done"
 id = "AC-FR-205-1"
 requirement = "FR-205"
 kind = "T/M"
-verified_by = []
-status = "todo"
+verified_by = [
+    "docs/compat/0.1.0-rc.1/windows-terminal.md",
+    "docs/compat/0.1.0-rc.1/windows-conhost.md",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-205-2"
@@ -570,8 +573,11 @@ status = "done"
 id = "AC-FR-206-3"
 requirement = "FR-206"
 kind = "T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "docs/compat/0.1.0-rc.1/windows-terminal.md",
+    "docs/compat/0.1.0-rc.1/windows-conhost.md",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-206-4"
@@ -740,8 +746,11 @@ status = "todo"
 id = "AC-FR-501-2"
 requirement = "FR-501"
 kind = "T/M"
-verified_by = []
-status = "todo"
+verified_by = [
+    "docs/compat/0.1.0-rc.1/windows-terminal.md",
+    "docs/compat/0.1.0-rc.1/windows-conhost.md",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-502-1"
@@ -831,8 +840,11 @@ status = "todo"
 id = "AC-FR-511-2"
 requirement = "FR-511"
 kind = "M"
-verified_by = []
-status = "todo"
+verified_by = [
+    "docs/compat/0.1.0-rc.1/windows-terminal.md",
+    "docs/compat/0.1.0-rc.1/windows-conhost.md",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-512-1"
@@ -933,15 +945,21 @@ status = "todo"
 id = "AC-FR-605-1"
 requirement = "FR-605"
 kind = "M"
-verified_by = []
-status = "todo"
+verified_by = [
+    "docs/compat/0.1.0-rc.1/windows-terminal.md",
+    "docs/compat/0.1.0-rc.1/windows-conhost.md",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-605-2"
 requirement = "FR-605"
 kind = "M"
-verified_by = []
-status = "todo"
+verified_by = [
+    "docs/compat/0.1.0-rc.1/windows-terminal.md",
+    "docs/compat/0.1.0-rc.1/windows-conhost.md",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-606-1"
@@ -1020,22 +1038,30 @@ status = "done"
 id = "AC-NFR-101-1"
 requirement = "NFR-101"
 kind = "B"
-verified_by = []
-status = "todo"
+verified_by = [
+    "BM-101a",
+    "BM-101b",
+]
+status = "done"
 
 [[ac]]
 id = "AC-NFR-102-1"
 requirement = "NFR-102"
 kind = "B"
-verified_by = []
-status = "todo"
+verified_by = [
+    "BM-102a",
+    "BM-102b",
+]
+status = "done"
 
 [[ac]]
 id = "AC-NFR-103-1"
 requirement = "NFR-103"
 kind = "B"
-verified_by = []
-status = "todo"
+verified_by = [
+    "BM-103b",
+]
+status = "done"
 
 [[ac]]
 id = "AC-NFR-104-1"
@@ -1068,8 +1094,10 @@ status = "done"
 id = "AC-NFR-107-1"
 requirement = "NFR-107"
 kind = "B"
-verified_by = []
-status = "todo"
+verified_by = [
+    "BM-107",
+]
+status = "done"
 
 [[ac]]
 id = "AC-NFR-201-1"
@@ -1082,8 +1110,10 @@ status = "todo"
 id = "AC-NFR-202-1"
 requirement = "NFR-202"
 kind = "B / T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "BM-202",
+]
+status = "done"
 
 [[ac]]
 id = "AC-NFR-203-1"
@@ -1260,8 +1290,11 @@ status = "todo"
 id = "AC-NFR-402-1"
 requirement = "NFR-402"
 kind = "M"
-verified_by = []
-status = "todo"
+verified_by = [
+    "docs/compat/0.1.0-rc.1/windows-terminal.md",
+    "docs/compat/0.1.0-rc.1/windows-conhost.md",
+]
+status = "done"
 
 [[ac]]
 id = "AC-NFR-403-1"
