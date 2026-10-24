@@ -290,3 +290,24 @@ fn 編集で結果が無効になっても_300_ms_待って自動で再検索す
     assert_eq!(text_of(&bar(&mut h).count_text.unwrap()), "1/2");
     assert!(h.editor.next_deadline().is_none());
 }
+
+// verifies: AC-FR-404-2
+#[test]
+fn 一致が_100_万件を超えると件数は上限以上で打ち切る() {
+    // 1,000,001 行の "a" (約 2 MB)。数えるのは 1,000,000 件まで (03 §12.2)
+    let doc = "a\n".repeat(1_000_001);
+    let mut h = Harness::new()
+        .with_size(40, 10)
+        .with_file("/big.txt", doc.as_bytes());
+    h.open("/big.txt");
+    h.run_jobs();
+    h.keys("ctrl+f");
+    h.text("a");
+    h.run_jobs();
+    let count = text_of(&bar(&mut h).count_text.unwrap());
+    assert!(
+        count.contains("1000000") || count.contains("1,000,000"),
+        "{count}"
+    );
+    assert!(count.contains('+') || count.contains("以上"), "{count}");
+}
