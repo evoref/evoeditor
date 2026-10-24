@@ -129,7 +129,7 @@ pub fn run_all(args: &[String]) -> Result<(), String> {
             ]))?;
             let lines: Vec<&str> = out
                 .lines()
-                .filter(|l| l.starts_with("{\"id\":\"BM-10"))
+                .filter(|l| l.starts_with("{\"id\":\"BM-"))
                 .collect();
             if lines.is_empty() {
                 return Err("bm_pty の結果の行が見つかりません".to_owned());
