@@ -1247,3 +1247,96 @@ fn 連続してリサイズしても最後の大きさの画面は全再描画�
     s.send(b"d");
     assert_eq!(s.wait_exit(), 0);
 }
+
+// verifies: AC-NFR-502-2
+#[test]
+fn 同じフォルダとカレントに置いた偽の_dll_は読み込まれない() {
+    // 実行ファイルが起動時に取り込む System32 の DLL (KnownDLLs でないもの) と同じ名前の偽の DLL を、
+    // 実行ファイルと同じフォルダとカレントディレクトリに置いて起動する。読み込まれると DllMain が印のファイルを作る。
+    let dir = std::env::temp_dir().join(format!(
+        "eve-fakedll-{}-{}",
+        std::process::id(),
+        STATE_SEQ.fetch_add(1, std::sync::atomic::Ordering::SeqCst)
+    ));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let mark = dir.join("LOADED.txt");
+    // std を使わない DLL (DllMain の定義が std の実行環境と衝突しないよう、入口を自分で指定する)
+    let src = format!(
+        r#"
+        #![no_std]
+        #[panic_handler]
+        fn panic(_: &core::panic::PanicInfo) -> ! {{ loop {{}} }}
+        #[link(name = "kernel32")]
+        unsafe extern "system" {{
+            fn CreateFileA(name: *const u8, access: u32, share: u32, sec: *mut u8, disp: u32, flags: u32, tmpl: *mut u8) -> isize;
+            fn CloseHandle(h: isize) -> i32;
+        }}
+        #[unsafe(no_mangle)]
+        pub extern "system" fn entry(_h: *mut u8, reason: u32, _r: *mut u8) -> i32 {{
+            if reason == 1 {{
+                unsafe {{
+                    let h = CreateFileA(b"{}\0".as_ptr(), 0x4000_0000, 0, core::ptr::null_mut(), 2, 0x80, core::ptr::null_mut());
+                    if h != -1 {{ CloseHandle(h); }}
+                }}
+            }}
+            1
+        }}
+        // evoeditor が bcryptprimitives.dll から取り込む関数 (読み込まれても起動できるように)
+        #[unsafe(no_mangle)]
+        pub extern "system" fn ProcessPrng(_p: *mut u8, _n: usize) -> i32 {{ 1 }}
+        "#,
+        mark.display().to_string().replace(char::from(92), "/")
+    );
+    let rs = dir.join("fake.rs");
+    std::fs::write(&rs, src).unwrap();
+    let rustc = std::env::var("RUSTC").unwrap_or_else(|_| "rustc".to_owned());
+    let built = std::process::Command::new(rustc)
+        .args([
+            "--edition",
+            "2024",
+            "--crate-type",
+            "cdylib",
+            "-C",
+            "panic=abort",
+            "-C",
+            "link-arg=/ENTRY:entry",
+            "-o",
+        ])
+        .arg(dir.join("bcryptprimitives.dll"))
+        .arg(&rs)
+        .output()
+        .expect("rustc を起動できる");
+    assert!(
+        built.status.success(),
+        "偽の DLL を作れない: {}",
+        String::from_utf8_lossy(&built.stderr)
+    );
+    // 試験の exe を、偽の DLL と同じフォルダへ写して起動する (カレントも同じフォルダ)
+    let exe_copy = dir.join("evoeditor.exe");
+    std::fs::copy(BUILT, &exe_copy).unwrap();
+    let out = std::process::Command::new(&exe_copy)
+        .arg("--version")
+        .current_dir(&dir)
+        .output()
+        .expect("起動できる");
+    assert!(out.status.success(), "{:?}", out);
+    assert!(
+        !mark.exists(),
+        "同じフォルダの偽の bcryptprimitives.dll が読み込まれた"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+// verifies: AC-NFR-502-2
+#[test]
+fn 到達できない_unc_パスを開いている間も_ui_は止まらず終了できる() {
+    // 名前が引けない UNC パス (OS が応答を待つ)。読込はワーカーで行うので、画面は出て、キーも効く
+    let mut s = Session::start(&[r"\\10.255.255.1\share\a.txt"]);
+    s.wait_for("最初の画面", |t| t.contains("終了"));
+    s.send(CTRL_Q);
+    let t = Instant::now();
+    let code = s.wait_exit();
+    assert!(code == 0 || code == 1, "終了コード {code}\n{}", s.screen());
+    assert!(t.elapsed() < WAIT, "Ctrl+Q の後も終了しない");
+}

@@ -398,6 +398,9 @@ fn write_crash_log(state_dir: &std::path::Path) -> Option<std::path::PathBuf> {
 }
 
 fn main() -> ProcessExit {
+    // 他のどの処理より先に、DLL の検索を System32 だけにする (NFR-502 AC-2 (a))
+    #[cfg(windows)]
+    let _ = eve_platform::dll::restrict_search_to_system32();
     eve_tui::trace::init();
     let code = match cli::parse(std::env::args_os().skip(1)) {
         Ok(Cli::Help) => {
