@@ -27,7 +27,7 @@ license = "Apache-2.0"
 # crates.io への公開は 1.0 の前 (OQ-20)。公開するまで、誤って publish しないようにする。
 publish = false
 repository = "https://github.com/evoref/evoeditor"
-authors = ["evoref"]
+authors = ["hiroyuki.ogawa"]
 
 # 全 crate が [lints] workspace = true で継承する (docs/09-testing-quality.md §6.2: clippy 警告 0、-D warnings)。
 # pedantic の採用リントと missing_docs (公開 crate) は v0.3 から (NFR-705)。
