@@ -383,15 +383,20 @@ status = "done"
 id = "AC-FR-117-2"
 requirement = "FR-117"
 kind = "T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "BM-103b-reconcile",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-122-1"
 requirement = "FR-122"
 kind = "M"
-verified_by = []
-status = "todo"
+verified_by = [
+    "BM-104p-100m",
+    "esc_で読込中の文書を取り消すと今の文書が残る",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-124-1"
@@ -705,8 +710,10 @@ status = "done"
 id = "AC-FR-404-1"
 requirement = "FR-404"
 kind = "B"
-verified_by = []
-status = "todo"
+verified_by = [
+    "BM-103b-search",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-404-2"
@@ -850,8 +857,10 @@ status = "done"
 id = "AC-FR-512-1"
 requirement = "FR-512"
 kind = "M"
-verified_by = []
-status = "todo"
+verified_by = [
+    "BM-512",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-512-2"
@@ -1067,8 +1076,12 @@ status = "done"
 id = "AC-NFR-104-1"
 requirement = "NFR-104"
 kind = "B"
-verified_by = []
-status = "todo"
+verified_by = [
+    "BM-104p-10m",
+    "BM-104p-100m",
+    "BM-104-100m",
+]
+status = "done"
 
 [[ac]]
 id = "AC-NFR-105-1"
@@ -1103,8 +1116,10 @@ status = "done"
 id = "AC-NFR-201-1"
 requirement = "NFR-201"
 kind = "B / T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "BM-201",
+]
+status = "done"
 
 [[ac]]
 id = "AC-NFR-202-1"
@@ -1137,8 +1152,10 @@ status = "done"
 id = "AC-NFR-204-1"
 requirement = "NFR-204"
 kind = "B / T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "BM-204",
+]
+status = "done"
 
 [[ac]]
 id = "AC-NFR-301-1"
