@@ -1524,8 +1524,16 @@ status = "done"
 id = "AC-NFR-603-6"
 requirement = "NFR-603"
 kind = "T/R"
-verified_by = []
-status = "todo"
+verified_by = [
+    "起動直後の無題の画面",
+    "ファイルを開いた画面",
+    "検索バーの画面",
+    "コマンドパレットの画面",
+    "入力プロンプトの画面",
+    "未保存で終了する確認ダイアログの画面",
+    "警告メッセージの画面",
+]
+status = "done"
 
 [[ac]]
 id = "AC-NFR-603-7"
@@ -1595,8 +1603,10 @@ status = "done"
 id = "AC-NFR-707-2"
 requirement = "NFR-707"
 kind = "T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "区分が_t_だけの_ac_は試験関数に結びついている",
+]
+status = "done"
 
 [[ac]]
 id = "AC-NFR-707-4"

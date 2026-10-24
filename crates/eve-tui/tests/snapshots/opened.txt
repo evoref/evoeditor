@@ -1,0 +1,18 @@
+ 1│こんにちは、世界
+ 2│hello fox
+ 3│>   タブと[]全角スペース
+ 4│
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+memo.txt                                                     行 1, 桁 1 UTF-8 LF
+
+^Q 終了 ^P コマンド ^S 保存 ^F 検索 ^O 開く ^Z 元に戻す ^G 行へ移動
+cursor: Some(CellPos { col: 3, row: 0 })
