@@ -29,6 +29,7 @@ fn ids(f: &Frame) -> Vec<String> {
 }
 
 // verifies: AC-FR-514-2
+// verifies: AC-FR-603-1
 #[test]
 fn ctrl_p_と_f1_で開き_esc_で閉じる() {
     let mut h = Harness::new();

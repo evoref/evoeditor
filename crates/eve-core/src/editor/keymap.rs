@@ -332,6 +332,12 @@ impl Keymap {
             .collect()
     }
 
+    /// 層 (試験が既定の割当を列挙する)。
+    #[cfg(test)]
+    pub(super) fn layers(&self) -> &[Layer] {
+        &self.layers
+    }
+
     /// 保留中のストローク (ヒント表示用)。
     pub fn pending(&self) -> &[KeyStroke] {
         &self.pending

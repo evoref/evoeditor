@@ -973,8 +973,16 @@ status = "done"
 id = "AC-FR-603-1"
 requirement = "FR-603"
 kind = "R/T, M"
-verified_by = []
-status = "todo"
+verified_by = [
+    "既定キーマップは_07_のカタログの既定キー列と一致する",
+    "ctrl_c_はプロセスを殺さず_ctrl_z_は_undo_として届く",
+    "ctrl_s_はコマンドとして届き_無題なら名前の入力が出る",
+    "確認ダイアログは_esc_でキャンセルして編集に戻る",
+    "ctrl_f_で検索バーが出て_入力した語と一致数が見える",
+    "コピーは実際のクリップボードに入り_貼り付けはそこから読む",
+    "ctrl_p_と_f1_で開き_esc_で閉じる",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-605-1"
