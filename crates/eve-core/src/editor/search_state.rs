@@ -1,7 +1,7 @@
 //! 文書内検索の状態と、次へ・前への移動 (docs/03 §12.2、01 FR-401・FR-404)。
 //!
 //! 全件走査はバックグラウンドのジョブで行い、届いた一致を保持する。移動は保持した一致から選ぶ。保持に無い (走査中で
-//! まだ届いていない、保持の上限を超えた、編集で無効になった) ときは、カーソルから同期検索する (最大 1 MiB)。
+//! まだ届いていない、保持の上限を超えた、編集で無効になった) ときは、カーソルから同期検索する (最大 256 KiB)。
 //! 編集があると保持は無効になり、件数は「約」表示に落ちる。再検索は呼び出し側 (検索バー) が入力の間を置いて始める。
 
 use eve_text::{ByteOff, ByteRange, LineIdx, Range, Selection, TextRead};
@@ -19,7 +19,7 @@ const MAX_MATCHES: usize = 10_000;
 /// 数える一致の上限 (`search.count_limit`、07 §5.5)。
 const COUNT_LIMIT: u64 = 1_000_000;
 /// 同期検索で走査する量 (`SEARCH_SYNC_STEP_BYTES`、03 §12.2)。
-const SYNC_STEP_BYTES: usize = 1 << 20;
+const SYNC_STEP_BYTES: usize = 1 << 18;
 /// 同期検索で一度に `scan_bytes` へ渡す量 (打ち切りの粒度)。
 const SYNC_BATCH_BYTES: usize = 64 << 10;
 
@@ -356,7 +356,7 @@ impl EditorState {
         let line = t.byte_to_line(cursor).0.min(n.saturating_sub(1));
         let cancel = CancelToken::new();
         let len = t.len_bytes();
-        // 行ごとに畳み込む経路は約 50 MB/s なので、1 MiB を走査すると約 20 ms かかる (BM-404)。量を絞り、
+        // 行ごとに畳み込む経路は約 50 MB/s なので、1 MiB を走査すると約 20 ms (256 KiB でも約 5 ms) かかる (BM-404)。量を絞り、
         // 見つからなければ呼び出し側が単発のジョブに回す (`Found::Incomplete`)
         let mut budget = if m.is_chunked() {
             SYNC_STEP_BYTES
