@@ -83,6 +83,42 @@ pub(crate) fn verdict(v: &Value) -> Verdict {
             None,
             "端末込み (ConPTY の出力の周期 約 16 ms を含む)",
         ),
+        // 負荷の下のキー入力 (BM-103b と同じ区間・同じ目標)
+        "BM-103b-search" => t(
+            "NFR-103 を維持 (p50 2 ms / p99 8 ms)",
+            limits(v, 2.0, 8.0),
+            "100 MB の全件検索中のキー入力 (FR-404 AC-1)",
+        ),
+        "BM-103b-reconcile" => t(
+            "NFR-103 を維持 (p50 2 ms / p99 8 ms)",
+            limits(v, 2.0, 8.0),
+            "保存の照合中 (15 MB) のカーソル移動 (FR-117 AC-2)。保存時間は参考",
+        ),
+        "BM-104p-10m" => t(
+            "p99 50 ms",
+            limits(v, f64::MAX, 50.0),
+            "開く → 進捗 (10 MB。Enter の読取完了 → 進捗を含む最初の Frame の write)",
+        ),
+        "BM-104p-100m" => t(
+            "p50 50 ms",
+            limits(v, 50.0, f64::MAX),
+            "開く → 進捗 (100 MB。FR-122 AC-1)",
+        ),
+        "BM-512" => t(
+            "p99 16 ms",
+            limits(v, f64::MAX, 16.0),
+            "リサイズ → 再描画 (FR-512 AC-1)",
+        ),
+        "BM-201" => t(
+            "10 MB 以下 (許容 20 MB)",
+            f(v, "value").map(|x| x <= 20.0),
+            "アイドル時の Private Bytes (最初の Frame の 10 秒後。値は中央値)",
+        ),
+        "BM-204" => t(
+            "0.1 % 未満",
+            f(v, "value").map(|x| x < 0.1),
+            "アイドル時の CPU 使用率 (入力なし)",
+        ),
         "BM-106" => t("p99 100 ms", limits(v, f64::MAX, 100.0), ""),
         "BM-205" => t("(記録)", None, "配布ビルドの exe のサイズ"),
         _ if id.starts_with("BM-104") => {
@@ -195,7 +231,12 @@ pub(crate) fn write(
             .or_else(|| v.get("runs"))
             .and_then(Value::as_u64)
             .map_or("—".to_owned(), |n| n.to_string());
-        let (p50, p99, p999, max) = if f(v, "p50_us").is_some() {
+        let (p50, p99, p999, max) = if let (Some(x), Some(u)) =
+            (f(v, "value"), v.get("unit").and_then(Value::as_str))
+        {
+            // 値 1 つの行 (BM-201 / BM-204)。p50 の列に値と単位を書く
+            (format!("{x:.2} {u}"), "—".into(), "—".into(), "—".into())
+        } else if f(v, "p50_us").is_some() {
             // マイクロ秒の行 (BM-103a) はミリ秒にそろえる
             let ms = |k: &str| f(v, k).map_or("—".to_owned(), |x| format!("{:.3}", x / 1000.0));
             (ms("p50_us"), ms("p99_us"), ms("p999_us"), ms("max_us"))
@@ -266,6 +307,39 @@ mod tests {
             r#"{"id":"BM-104-100m-sjis","p50_ms":1600.0,"mem_delta_bytes":1,"mem_limit_bytes":2}"#,
         ));
         assert_eq!(slow.verdict, "不合格");
+    }
+
+    #[test]
+    fn 負荷下と進捗とリサイズとアイドルの判定() {
+        let ok = |s: &str| verdict(&v(s)).verdict;
+        assert_eq!(
+            ok(r#"{"id":"BM-103b-search","p50_ms":1.7,"p99_ms":2.7}"#),
+            "合格"
+        );
+        assert_eq!(
+            ok(r#"{"id":"BM-103b-search","p50_ms":18.0,"p99_ms":40.0}"#),
+            "不合格"
+        );
+        assert_eq!(
+            ok(r#"{"id":"BM-103b-reconcile","p50_ms":1.0,"p99_ms":3.4}"#),
+            "合格"
+        );
+        assert_eq!(
+            ok(r#"{"id":"BM-104p-10m","p50_ms":1.0,"p99_ms":51.0}"#),
+            "不合格"
+        );
+        assert_eq!(
+            ok(r#"{"id":"BM-104p-100m","p50_ms":1.2,"p99_ms":90.0}"#),
+            "合格"
+        );
+        assert_eq!(
+            ok(r#"{"id":"BM-512","p50_ms":0.6,"p99_ms":17.0}"#),
+            "不合格"
+        );
+        assert_eq!(ok(r#"{"id":"BM-201","value":9.5,"unit":"MB"}"#), "合格");
+        assert_eq!(ok(r#"{"id":"BM-201","value":25.0,"unit":"MB"}"#), "不合格");
+        assert_eq!(ok(r#"{"id":"BM-204","value":0.0,"unit":"%"}"#), "合格");
+        assert_eq!(ok(r#"{"id":"BM-204","value":0.3,"unit":"%"}"#), "不合格");
     }
 
     #[test]

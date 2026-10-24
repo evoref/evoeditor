@@ -160,6 +160,11 @@ pub struct Matcher {
 }
 
 impl Matcher {
+    /// チャンクごとに (memmem で) 走査できる。`false` は行ごとに畳み込む遅い経路 (約 50 MB/s) になる。
+    pub fn is_chunked(&self) -> bool {
+        self.chunked
+    }
+
     /// 1 行の中の一致を左から順に `f` へ渡す。`line_start` は行頭の文書内バイト位置。
     fn find_in_line(
         &self,

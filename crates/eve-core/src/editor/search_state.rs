@@ -9,7 +9,7 @@ use eve_view::{DocumentId, JobId, MessageLevel, Revision};
 
 use crate::cancel::CancelToken;
 use crate::jobs::{JobKind, JobResult};
-use crate::search::{SearchQuery, scan_lines};
+use crate::search::{SearchQuery, scan_bytes};
 
 use super::file::Pending;
 use super::state::EditorState;
@@ -20,6 +20,8 @@ const MAX_MATCHES: usize = 10_000;
 const COUNT_LIMIT: u64 = 1_000_000;
 /// 同期検索で走査する量 (`SEARCH_SYNC_STEP_BYTES`、03 §12.2)。
 const SYNC_STEP_BYTES: usize = 1 << 20;
+/// 同期検索で一度に `scan_bytes` へ渡す量 (打ち切りの粒度)。
+const SYNC_BATCH_BYTES: usize = 64 << 10;
 
 #[derive(Debug)]
 pub(super) struct SearchState {
@@ -353,48 +355,81 @@ impl EditorState {
         let n = t.len_lines();
         let line = t.byte_to_line(cursor).0.min(n.saturating_sub(1));
         let cancel = CancelToken::new();
-        let mut budget = SYNC_STEP_BYTES;
-        // 走査する行の並び: (行, 折り返し済みか)
-        let order: Vec<(usize, bool)> = if forward {
-            (line..n)
-                .map(|l| (l, false))
-                .chain((0..=line).map(|l| (l, true)))
-                .collect()
+        let len = t.len_bytes();
+        // 行ごとに畳み込む経路は約 50 MB/s なので、1 MiB を走査すると約 20 ms かかる (BM-404)。量を絞り、
+        // 見つからなければ呼び出し側が単発のジョブに回す (`Found::Incomplete`)
+        let mut budget = if m.is_chunked() {
+            SYNC_STEP_BYTES
         } else {
-            (0..=line)
-                .rev()
-                .map(|l| (l, false))
-                .chain((line..n).rev().map(|l| (l, true)))
-                .collect()
+            SYNC_STEP_BYTES / 16
         };
-        for (l, wrapped) in order {
-            let (ls, le) = (t.line_to_byte(LineIdx(l)).0, t.line_end_byte(LineIdx(l)).0);
-            let len = le - ls;
-            if len > budget {
-                return Found::Incomplete;
-            }
-            budget -= len.max(1);
-            let mut hit: Option<ByteRange> = None;
-            scan_lines(t, &m, l..l + 1, &cancel, &mut |r| {
-                let ok = if forward {
-                    // 折り返した後は、カーソルの行の全体を対象にする
-                    wrapped || r.start >= cursor
+        // 走査する区間 (行の半開区間, 折り返し済みか)。後ろ向きは区間の終わりから、バッチごとに戻る
+        let segs: [(std::ops::Range<usize>, bool); 2] = if forward {
+            [(line..n, false), (0..line + 1, true)]
+        } else {
+            [(0..line + 1, false), (line..n, true)]
+        };
+        for (seg, wrapped) in segs {
+            let (mut lo, mut hi) = (seg.start, seg.end);
+            while lo < hi {
+                // 次のバッチ: 目標のバイト数 (`SYNC_BATCH_BYTES` か残りの予算) を行の境界に丸める。
+                // 1 行ずつ走査すると 1 MiB で約 20 ms かかる (BM-404) ので、まとめて `scan_bytes` (memmem) に渡す。
+                // 行ごとの位置の引き直しも避け、バッチごとに 1 回だけ引く
+                let want = SYNC_BATCH_BYTES.min(budget);
+                let (a, b) = if forward {
+                    let target = t.line_to_byte(LineIdx(lo)).0.saturating_add(want);
+                    let b = if target >= len {
+                        hi
+                    } else {
+                        (t.byte_to_line(ByteOff(target)).0 + 1).clamp(lo + 1, hi)
+                    };
+                    (lo, b)
                 } else {
-                    wrapped || r.end <= cursor
+                    let end = if hi >= n {
+                        len
+                    } else {
+                        t.line_to_byte(LineIdx(hi)).0
+                    };
+                    let a = t
+                        .byte_to_line(ByteOff(end.saturating_sub(want)))
+                        .0
+                        .clamp(lo, hi - 1);
+                    (a, hi)
                 };
-                if ok {
-                    if forward {
-                        if hit.is_none() {
-                            hit = Some(r);
-                        }
-                        return false;
-                    }
-                    hit = Some(r);
+                let start = t.line_to_byte(LineIdx(a));
+                let end = if b >= n {
+                    ByteOff(len)
+                } else {
+                    t.line_to_byte(LineIdx(b))
+                };
+                let bytes = end.0 - start.0;
+                if bytes > budget {
+                    return Found::Incomplete;
                 }
-                true
-            });
-            if let Some(r) = hit {
-                return Found::Hit(r, wrapped);
+                budget = budget.saturating_sub(bytes.max(1));
+                let mut hit: Option<ByteRange> = None;
+                scan_bytes(t, &m, ByteRange::new(start, end), &cancel, &mut |r| {
+                    let ok = if forward {
+                        // 折り返した後は、カーソルの行の全体を対象にする
+                        wrapped || r.start >= cursor
+                    } else {
+                        wrapped || r.end <= cursor
+                    };
+                    if ok {
+                        hit = Some(r);
+                        // 前向きは最初の一致で止める。後ろ向きはバッチ内の最後の一致を取る
+                        return !forward;
+                    }
+                    true
+                });
+                if let Some(r) = hit {
+                    return Found::Hit(r, wrapped);
+                }
+                if forward {
+                    lo = b;
+                } else {
+                    hi = a;
+                }
             }
         }
         Found::None

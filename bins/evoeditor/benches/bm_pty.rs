@@ -51,6 +51,8 @@ struct Term {
     /// 本文の目印が画面に出た。
     marker: Arc<AtomicBool>,
     saving: Arc<AtomicBool>,
+    /// ステータスバーに読込中の表示が出ている。
+    loading: Arc<AtomicBool>,
     _master: Box<dyn MasterPty + Send>,
     state: PathBuf,
     /// spawn の直前の壁時計 (UNIX 紀元からの ns)。起動 (b) の始点。
@@ -92,6 +94,8 @@ impl Term {
         let ready = Arc::new(AtomicBool::new(false));
         let marker_flag = Arc::new(AtomicBool::new(false));
         let saving = Arc::new(AtomicBool::new(false));
+        let loading = Arc::new(AtomicBool::new(false));
+        let loading_t = loading.clone();
         let t0 = Instant::now();
         let spawn_unix_ns = unix_ns();
         let child = pty.slave.spawn_command(cmd).expect("起動できません");
@@ -130,6 +134,7 @@ impl Term {
                         marker_flag.store(true, Ordering::Release);
                     }
                     saving.store(all.contains("[+]"), Ordering::Release);
+                    loading_t.store(all.contains("読込中"), Ordering::Release);
                 }
             });
         }
@@ -142,6 +147,7 @@ impl Term {
                 ready,
                 marker: marker_flag,
                 saving,
+                loading,
                 _master: pty.master,
                 state,
                 spawn_unix_ns,
@@ -166,6 +172,18 @@ impl Term {
             );
             std::hint::spin_loop();
         }
+    }
+
+    /// 端末の大きさを変える (ConPTY へ。画面の解釈 (vt100) の大きさは変えない。計測は記録で行う)。
+    fn resize(&mut self, cols: u16, rows: u16) {
+        self._master
+            .resize(PtySize {
+                rows,
+                cols,
+                pixel_width: 0,
+                pixel_height: 0,
+            })
+            .expect("リサイズ");
     }
 
     /// 終了を待つ。終了コード (待ちきれなければ `None`)。
@@ -408,6 +426,208 @@ fn breakdown(spans: &[Span]) -> [Vec<Duration>; 4] {
     out
 }
 
+/// 大きい UTF-8 のファイル (`mb` MB 以上。日本語混在、改行つき)。同じ名前で作り直さない。
+fn make_big(dir: &Path, name: &str, mb: usize) -> PathBuf {
+    let path = dir.join(name);
+    if !path.exists() {
+        let line = "0123456789 the quick brown fox 日本語の行です。0123456789\n";
+        let big = line.repeat(mb * 1024 * 1024 / line.len());
+        std::fs::write(&path, &big).expect("大きいファイル");
+    }
+    path
+}
+
+/// 保存中のカーソル移動の判定区間 (入力の読取完了 → 描画の `write`)。`mb` MB の文書を開いて 1 文字入れ、`Ctrl+S` の実行中にカーソルを動かす。
+/// 100 MB は NFR-107 (保存中も NFR-103 を維持)、16 MiB 以下は保存前の照合 (内容ハッシュの読み直し) 中の入力 (FR-117 AC-2)。
+fn save_window(dir: &Path, mb: usize, id: &str, traced: bool, json: bool, quick: bool) {
+    let path = make_big(dir, &format!("big_{mb}mb.txt"), mb);
+    let trace = dir.join(format!("save-{mb}.jsonl"));
+    let (mut t, t0) = Term::start(
+        &[path.to_str().unwrap()],
+        "quick brown",
+        traced.then_some(trace.as_path()),
+    );
+    t.wait("開く", || t.marker.load(Ordering::Acquire));
+    thread::sleep(Duration::from_millis(if mb >= 50 { 4000 } else { 1000 }));
+    println!(
+        "({mb} MB を開くまで約 {:.1} s)",
+        t0.elapsed().as_secs_f64() - if mb >= 50 { 4.0 } else { 1.0 }
+    );
+    let mut v = Vec::new();
+    let mut save_ms = Vec::new();
+    for _ in 0..(if mb >= 50 { 5 } else { 40 }) {
+        t.send(b"a"); // 変更して dirty にする
+        thread::sleep(Duration::from_millis(100));
+        let s0 = Instant::now();
+        t.send(b"\x13"); // Ctrl+S
+        // 保存が終わる (変更マークが消える) まで、カーソル移動 (文書を変えない) の反映を測る
+        while t.saving.load(Ordering::Acquire) && s0.elapsed() < Duration::from_secs(60) {
+            v.push(t.move_latency());
+            thread::sleep(Duration::from_millis(5));
+        }
+        save_ms.push(s0.elapsed());
+    }
+    println!("{id} 保存ジョブ ({mb} MB) の完了まで (参考値): {save_ms:?}");
+    if v.is_empty() {
+        println!("{id}: 保存の間に計測できた入力がありません (保存が速すぎる)");
+    } else {
+        let cid = format!("{id}c");
+        let cid = if traced { cid.as_str() } else { id };
+        report(
+            cid,
+            "保存中のカーソル移動 → 画面 (端末込み)",
+            v,
+            json,
+            quick,
+        );
+    }
+    if traced {
+        // 判定に使う値: 保存中に送ったカーソル移動 (→) の、入力の読取完了 → 描画の write
+        const VK_RIGHT: u64 = 0x27;
+        t.send(b"\x11"); // Ctrl+Q (保存は終わっている)
+        assert_eq!(t.wait_exit(WAIT), Some(0), "正常に終了しません");
+        let spans: Vec<Duration> = read_spans(&trace)
+            .into_iter()
+            .filter(|s| s.name == "input.to_flush" && s.vk == Some(VK_RIGHT))
+            .map(|s| ns_dur(s.end_ns - s.start_ns))
+            .collect();
+        if spans.is_empty() {
+            println!("{id}: 記録された区間がありません");
+        } else {
+            report(
+                id,
+                "保存中のカーソル移動 (入力の読取完了 → 描画の write)",
+                spans,
+                json,
+                quick,
+            );
+        }
+    }
+}
+
+/// 「開く → 進捗」(01 §3.0.1): `Ctrl+O` → パス → `Enter` の、`Enter` の読取完了 → 進捗を含む最初の Frame の `write`。
+/// 2 つのファイルを交互に開く (同じファイルの再読込と区別するため)。
+fn open_progress(dir: &Path, a: &Path, b: &Path, runs: usize, warmup: usize) -> Vec<Duration> {
+    const VK_ENTER: u64 = 0x0D;
+    let trace = dir.join("open.jsonl");
+    let (mut t, _) = Term::start(&[], "", Some(&trace));
+    t.wait("最初の画面", || t.ready.load(Ordering::Acquire));
+    for i in 0..runs + warmup {
+        let p = if i % 2 == 0 { a } else { b };
+        t.send(b"\x0f"); // Ctrl+O
+        thread::sleep(Duration::from_millis(80));
+        t.send(p.to_str().unwrap().as_bytes());
+        thread::sleep(Duration::from_millis(60));
+        t.send(b"\r");
+        // 読込が始まって終わるまで待つ (小さいファイルは見逃すので、待ちは上限つき)
+        let w = Instant::now();
+        while !t.loading.load(Ordering::Acquire) && w.elapsed() < Duration::from_millis(400) {
+            thread::sleep(Duration::from_millis(2));
+        }
+        let w = Instant::now();
+        while t.loading.load(Ordering::Acquire) && w.elapsed() < WAIT {
+            thread::sleep(Duration::from_millis(5));
+        }
+        thread::sleep(Duration::from_millis(150));
+    }
+    t.send(b"\x11");
+    assert_eq!(t.wait_exit(WAIT), Some(0), "正常に終了しません");
+    let spans: Vec<Span> = read_spans(&trace)
+        .into_iter()
+        .filter(|s| s.name == "open.progress" && s.vk == Some(VK_ENTER))
+        .collect();
+    let _ = std::fs::remove_file(&trace);
+    spans
+        .iter()
+        .skip(warmup)
+        .map(|s| ns_dur(s.end_ns - s.start_ns))
+        .collect()
+}
+
+/// 「リサイズ → 再描画」(01 §3.0.1): ウィンドウの大きさを 50 ms ごとに変え、最後のリサイズイベントの読取完了 → 新しい大きさの Frame の `write`。
+fn resize_redraw(dir: &Path, runs: usize, warmup: usize) -> Vec<Duration> {
+    let trace = dir.join("resize.jsonl");
+    let (mut t, _) = Term::start(&[], "", Some(&trace));
+    t.wait("最初の画面", || t.ready.load(Ordering::Acquire));
+    for i in 0..runs + warmup {
+        let (cols, rows) = if i % 2 == 0 { (100, 30) } else { (120, 40) };
+        t.resize(cols, rows);
+        thread::sleep(Duration::from_millis(50));
+    }
+    t.send(b"\x11");
+    assert_eq!(t.wait_exit(WAIT), Some(0), "正常に終了しません");
+    let spans: Vec<Span> = read_spans(&trace)
+        .into_iter()
+        .filter(|s| s.name == "resize.to_flush")
+        .collect();
+    let _ = std::fs::remove_file(&trace);
+    spans
+        .iter()
+        .skip(warmup)
+        .map(|s| ns_dur(s.end_ns - s.start_ns))
+        .collect()
+}
+
+/// アイドル時のメモリ (最初の Frame の 10 秒後の Private Bytes) と CPU (その後 `cpu_secs` 秒間の使用率)。PowerShell で読む。
+fn idle_stats(dir: &Path, cpu_secs: u64) -> (u64, f64) {
+    let (t, _) = Term::start(&[], "", None);
+    t.wait("最初の画面", || t.ready.load(Ordering::Acquire));
+    thread::sleep(Duration::from_secs(10));
+    let pid = t.child.process_id().expect("pid");
+    let (mem, cpu0) = proc_stat(pid);
+    thread::sleep(Duration::from_secs(cpu_secs));
+    let (_, cpu1) = proc_stat(pid);
+    let _ = dir;
+    (mem, (cpu1 - cpu0) / cpu_secs as f64 * 100.0)
+}
+
+/// (Private Bytes, 累積の CPU 時間 (秒))。
+fn proc_stat(pid: u32) -> (u64, f64) {
+    let script = format!(
+        "$p = Get-Process -Id {pid}; \"$($p.PrivateMemorySize64) $($p.TotalProcessorTime.TotalSeconds)\""
+    );
+    let out = std::process::Command::new("powershell")
+        .args(["-NoProfile", "-Command", &script])
+        .output()
+        .expect("powershell");
+    let text = String::from_utf8_lossy(&out.stdout);
+    let mut it = text.split_whitespace();
+    let mem = it.next().and_then(|v| v.parse().ok()).expect("メモリ");
+    let cpu = it.next().and_then(|v| v.parse().ok()).expect("CPU");
+    (mem, cpu)
+}
+
+/// 100 MB の文書の検索バーで文字を打ち続け (1 文字ごとに全件の検索が走る)、その間のキー入力の判定区間 (FR-404 AC-1)。
+fn search_load(dir: &Path, runs: usize, warmup: usize) -> Vec<Duration> {
+    let path = make_big(dir, "big_100mb.txt", 100);
+    let trace = dir.join("search.jsonl");
+    let (mut t, _) = Term::start(&[path.to_str().unwrap()], "quick brown", Some(&trace));
+    t.wait("開く", || t.marker.load(Ordering::Acquire));
+    thread::sleep(Duration::from_millis(4000));
+    t.send(b"\x06"); // Ctrl+F
+    thread::sleep(Duration::from_millis(300));
+    // 一致しない文字を打つ (全件を走査する。`k` `s` を含めない: 含むと行ごとに畳み込む経路になる、03 §12.4)。30 ms ごと
+    for i in 0..runs + warmup {
+        let c = b"qzxjwv"[i % 6];
+        t.send(&[c]);
+        thread::sleep(Duration::from_millis(30));
+    }
+    t.send(b"\x1b"); // 検索バーを閉じる
+    thread::sleep(Duration::from_millis(300));
+    t.send(b"\x11");
+    assert_eq!(t.wait_exit(WAIT), Some(0), "正常に終了しません");
+    let spans: Vec<Span> = read_spans(&trace)
+        .into_iter()
+        .filter(|s| s.name == "input.to_flush" && s.vk.is_some_and(|v| (0x41..=0x5A).contains(&v)))
+        .collect();
+    let _ = std::fs::remove_file(&trace);
+    spans
+        .iter()
+        .skip(warmup)
+        .map(|s| ns_dur(s.end_ns - s.start_ns))
+        .collect()
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let json = args.iter().any(|a| a == "--json");
@@ -572,70 +792,89 @@ fn main() {
 
     // BM-107: 100 MB の文書の保存ジョブの実行中の入力
     if want("107") {
-        let path = dir.join("hundred_mb.txt");
-        let line = "0123456789 the quick brown fox 日本語の行です。0123456789\n";
-        let big = line.repeat(100 * 1024 * 1024 / line.len());
-        std::fs::write(&path, &big).expect("100 MB のファイル");
-        drop(big);
-        let trace = dir.join("save.jsonl");
-        let (mut t, t0) = Term::start(
-            &[path.to_str().unwrap()],
-            "quick brown",
-            traced.then_some(trace.as_path()),
+        save_window(&dir, 100, "BM-107", traced, json, quick);
+    }
+    // ---- 計測用ビルド: 負荷の下のキー入力と、開く・リサイズ・アイドルの区間 (判定に使う値) ----
+    if traced && want("104p") {
+        let a10 = make_big(&dir, "p10_a.txt", 10);
+        let b10 = make_big(&dir, "p10_b.txt", 10);
+        let v = open_progress(&dir, &a10, &b10, runs, warmup);
+        report(
+            "BM-104p-10m",
+            "開く → 進捗 (10 MB。Enter の読取完了 → 進捗を含む最初の Frame の write)",
+            v,
+            json,
+            quick,
         );
-        t.wait("開く", || t.marker.load(Ordering::Acquire));
-        thread::sleep(Duration::from_millis(4000));
-        println!(
-            "(100 MB を開くまで約 {:.1} s)",
-            t0.elapsed().as_secs_f64() - 4.0
+        let a100 = make_big(&dir, "big_100mb.txt", 100);
+        let b100 = make_big(&dir, "p100_b.txt", 100);
+        let n = if quick { 10 } else { 30 };
+        let v = open_progress(&dir, &a100, &b100, n, 3);
+        report(
+            "BM-104p-100m",
+            "開く → 進捗 (100 MB。30 回)",
+            v,
+            json,
+            quick,
         );
-        let mut v = Vec::new();
-        let mut save_ms = Vec::new();
-        for _ in 0..5 {
-            t.send(b"a"); // 変更して dirty にする
-            thread::sleep(Duration::from_millis(100));
-            let s0 = Instant::now();
-            t.send(b""); // Ctrl+S
-            // 保存が終わる (変更マークが消える) まで、カーソル移動 (文書を変えない) の反映を測る
-            while t.saving.load(Ordering::Acquire) && s0.elapsed() < Duration::from_secs(60) {
-                v.push(t.move_latency());
-                thread::sleep(Duration::from_millis(5));
+    }
+    if traced && want("512") {
+        let v = resize_redraw(&dir, runs, warmup);
+        report(
+            "BM-512",
+            "リサイズ → 再描画 (最後のリサイズの読取完了 → 新しい大きさの Frame の write)",
+            v,
+            json,
+            quick,
+        );
+    }
+    if traced && want("404") {
+        let v = search_load(&dir, runs, warmup);
+        report(
+            "BM-103b-search",
+            "100 MB の全件検索中のキー入力 (入力の読取完了 → 描画の write)",
+            v,
+            json,
+            quick,
+        );
+    }
+    if traced && want("117") {
+        save_window(&dir, 15, "BM-103b-reconcile", traced, json, quick);
+    }
+    if want("201") || want("204") {
+        let n = if quick { 1 } else { 5 };
+        let cpu_secs = if quick { 10 } else { 60 };
+        let mut mems = Vec::new();
+        let mut cpu = 0.0;
+        for i in 0..n {
+            let (m, c) = idle_stats(&dir, if i == 0 { cpu_secs } else { 1 });
+            mems.push(m);
+            if i == 0 {
+                cpu = c;
             }
-            save_ms.push(s0.elapsed());
         }
-        println!(
-            "BM-107 保存ジョブ (100 MB) の完了まで (参考値): {:?}",
-            save_ms
-        );
-        if v.is_empty() {
-            println!("BM-107: 保存の間に計測できた入力がありません (保存が速すぎる)");
+        mems.sort_unstable();
+        let (mem_med, mem_max) = (mems[mems.len() / 2], mems[mems.len() - 1]);
+        let mb = |b: u64| b as f64 / (1024.0 * 1024.0);
+        if json {
+            println!(
+                "{{\"id\":\"BM-201\",\"n\":{n},\"value\":{:.2},\"max\":{:.2},\"unit\":\"MB\",\"quick\":{quick}}}",
+                mb(mem_med),
+                mb(mem_max)
+            );
+            println!(
+                "{{\"id\":\"BM-204\",\"n\":1,\"value\":{cpu:.4},\"unit\":\"%\",\"seconds\":{cpu_secs},\"quick\":{quick}}}"
+            );
         } else {
-            let id = if traced { "BM-107c" } else { "BM-107" };
-            report(id, "保存中のカーソル移動 → 画面 (端末込み)", v, json, quick);
-        }
-        if traced {
-            // 判定に使う値: 保存中に送ったカーソル移動 (→) の、入力の読取完了 → 描画の write
-            const VK_RIGHT: u64 = 0x27;
-            t.send(b"\x11"); // Ctrl+Q (保存は終わっている)
-            assert_eq!(t.wait_exit(WAIT), Some(0), "正常に終了しません");
-            let spans: Vec<Duration> = read_spans(&trace)
-                .into_iter()
-                .filter(|s| s.name == "input.to_flush" && s.vk == Some(VK_RIGHT))
-                .map(|s| ns_dur(s.end_ns - s.start_ns))
-                .collect();
-            if spans.is_empty() {
-                println!("BM-107: 記録された区間がありません");
-            } else {
-                report(
-                    "BM-107",
-                    "保存中のカーソル移動 (入力の読取完了 → 描画の write)",
-                    spans,
-                    json,
-                    quick,
-                );
-            }
+            println!(
+                "BM-201 アイドル時のメモリ (Private Bytes、最初の Frame の 10 秒後): n={n} 中央値 {:.2} MB / 最大 {:.2} MB",
+                mb(mem_med),
+                mb(mem_max)
+            );
+            println!("BM-204 アイドル時の CPU 使用率 ({cpu_secs} 秒間): {cpu:.4} %");
         }
     }
+
     let _ = std::fs::remove_dir_all(&dir);
     if quick && !json {
         println!("(--runs 1000 未満は動作確認用です。記録には使いません)");

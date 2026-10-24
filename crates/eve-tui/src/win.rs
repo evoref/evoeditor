@@ -196,6 +196,12 @@ fn read_chunk(
         return Err(io::Error::last_os_error());
     }
     // 計測用ビルド: 入力のバイトを読み終えた時刻 (01 §3.0.1 の (b) の始点)。文字を押した記録があるときだけ
+    if buf[..got as usize]
+        .iter()
+        .any(|r| u32::from(r.EventType) == WINDOW_BUFFER_SIZE_EVENT)
+    {
+        crate::trace::resize_read();
+    }
     crate::trace::input_read(buf[..got as usize].iter().find_map(|r| {
         if u32::from(r.EventType) != KEY_EVENT {
             return None;
