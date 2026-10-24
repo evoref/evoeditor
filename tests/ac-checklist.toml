@@ -1411,8 +1411,11 @@ status = "done"
 id = "AC-NFR-501-1"
 requirement = "NFR-501"
 kind = "T/R"
-verified_by = []
-status = "todo"
+verified_by = [
+    "製品のコードと依存にネットワーク通信が無い",
+    "docs/compat/0.1.0-rc.1/security-checks.md",
+]
+status = "done"
 
 [[ac]]
 id = "AC-NFR-502-1"
@@ -1427,8 +1430,11 @@ status = "done"
 id = "AC-NFR-502-2"
 requirement = "NFR-502"
 kind = "T/R"
-verified_by = []
-status = "todo"
+verified_by = [
+    "配布ビルドの_dll_の検索は_system32_に限る",
+    "docs/compat/0.1.0-rc.1/security-checks.md",
+]
+status = "done"
 
 [[ac]]
 id = "AC-NFR-503-1"
