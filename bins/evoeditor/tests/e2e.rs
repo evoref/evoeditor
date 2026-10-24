@@ -1128,3 +1128,43 @@ fn 配布ビルドでは計測用の隠しオプションは未知のオプシ�
         .expect("起動");
     assert_eq!(out.status.code(), Some(2));
 }
+
+// 検索バー (docs/04 §8): `Ctrl+F` で検索バーが画面に出て、入力した語と一致数が見える。`Esc` で閉じて編集に戻る
+// (端末の編集面の大きさと Frame の大きさが、バーの行数ぶん違うことを、描画が許す。以前は描画が止まって画面が固まった)
+#[test]
+fn ctrl_f_で検索バーが出て_入力した語と一致数が見える() {
+    let mut s = Session::start(&[]);
+    s.wait_ready();
+    type_slowly(&s, "hello fox");
+    s.send(b""); // Ctrl+F
+    s.wait_for("検索バー", |t| t.contains("検索:"));
+    s.send(b"fox");
+    s.wait_for("入力した語と一致数", |t| {
+        t.contains("検索: fox") && t.contains("1/1")
+    });
+    s.send(b""); // Esc
+    s.wait_for("バーが閉じる", |t| !t.contains("検索:"));
+    // 編集に戻っている
+    type_slowly(&s, "!");
+    s.wait_for("文字が入る", |t| t.contains("hello fox!"));
+    s.send(CTRL_Q);
+    s.send(b"d");
+    assert_eq!(s.wait_exit(), 0);
+}
+
+// 置換欄つきの検索バー (`Ctrl+R`) も、画面に出る
+#[test]
+fn ctrl_r_で置換欄つきの検索バーが出る() {
+    let mut s = Session::start(&[]);
+    s.wait_ready();
+    type_slowly(&s, "hello fox");
+    s.send(b""); // Ctrl+R
+    s.wait_for("検索欄と置換欄", |t| {
+        t.contains("検索:") && t.contains("置換:")
+    });
+    s.send(b"");
+    s.wait_for("バーが閉じる", |t| !t.contains("置換:"));
+    s.send(CTRL_Q);
+    s.send(b"d");
+    assert_eq!(s.wait_exit(), 0);
+}

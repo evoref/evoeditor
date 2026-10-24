@@ -156,8 +156,13 @@ impl Frontend for TuiFrontend {
 
     fn render(&mut self, frame: &Frame) -> RenderOutcome {
         // 編集面の大きさが Frame と違えば、出力せずに Resize を送る (04 §3.6。次の反復で正しい Frame が来る)
+        // Frame の編集面は、検索バーが開いていればその行数だけ端末の編集面より小さい (`crate::buffer::bar_rows`)
         let now = self.surface_size();
-        if now != frame.size {
+        let expected = CellSize {
+            cols: now.cols,
+            rows: now.rows.saturating_sub(crate::buffer::bar_rows(frame)),
+        };
+        if expected != frame.size {
             self.emitter.invalidate();
             if let Some(s) = &self.sink {
                 s.send(InputEvent::Resize {
@@ -184,7 +189,13 @@ impl Frontend for TuiFrontend {
                     .iter()
                     .any(|r| r.spans.iter().any(|s| !s.text.trim().is_empty()))
             });
-        if crate::trace::render_done(content) {
+        let progress = cfg!(feature = "bench-trace")
+            && frame
+                .status
+                .items
+                .iter()
+                .any(|i| i.kind == eve_view::StatusKind::Loading);
+        if crate::trace::render_done(content, progress) {
             self.restore();
             crate::trace::flush();
             std::process::exit(0);

@@ -17,6 +17,10 @@
 //! 呼んだ時刻 (core の処理と Frame 生成が済んだ)、`emit_ns` = 差分の出力の文字列ができた時刻。いずれも `start_ns` と同じ時間軸の ns)
 //! も入る。ボトルネックの切り分け用で、判定には使わない。
 //!
+//! - `open.progress`: 直前のキー入力 (`fields.vk`。`Enter` = 0x0D) の読取完了 → 読込の進捗を含む最初の Frame の `write` が戻った時刻
+//!   (01 §3.0.1 の「開く → 進捗」。NFR-104 / FR-122)。
+//! - `resize.to_flush`: 最後のリサイズイベントの読取完了 → 次の Frame の `write` が戻った時刻 (「リサイズ → 再描画」。FR-512)。
+//!
 //! 書出しは `flush` (終了の直前) にまとめて行い、計測区間にファイルの I/O を含めない。隠しオプション
 //! `--bench-exit-after-first-frame` は、最初の Frame の `write` が戻った直後に端末を復元して終了する。
 
@@ -43,6 +47,12 @@ mod imp {
     static SENT: AtomicU64 = AtomicU64::new(0);
     static RENDER: AtomicU64 = AtomicU64::new(0);
     static EMIT: AtomicU64 = AtomicU64::new(0);
+    /// 直近のキー入力の読取完了 (ns+1) とそのキー。「開く → 進捗」の始点。進捗の Frame を書いたら外す。
+    static LAST_READ: AtomicU64 = AtomicU64::new(0);
+    static LAST_VK: AtomicU64 = AtomicU64::new(0);
+    static PROGRESS_ARMED: AtomicBool = AtomicBool::new(false);
+    /// 最後のリサイズイベントの読取完了 (ns+1)。
+    static RESIZE: AtomicU64 = AtomicU64::new(0);
     static FIRST_DONE: AtomicBool = AtomicBool::new(false);
     static CONTENT_DONE: AtomicBool = AtomicBool::new(false);
     static EXIT_AFTER_FIRST: AtomicBool = AtomicBool::new(false);
@@ -73,6 +83,11 @@ mod imp {
 
     pub fn input_read(first_key_down_vk: Option<u16>) {
         let Some(s) = STATE.get() else { return };
+        if let Some(vk) = first_key_down_vk {
+            LAST_READ.store(now_ns(s) + 1, Ordering::Release);
+            LAST_VK.store(u64::from(vk), Ordering::Release);
+            PROGRESS_ARMED.store(true, Ordering::Release);
+        }
         if let Some(vk) = first_key_down_vk
             && PENDING
                 .compare_exchange(0, now_ns(s) + 1, Ordering::AcqRel, Ordering::Acquire)
@@ -110,9 +125,16 @@ mod imp {
         }
     }
 
+    /// リサイズイベントを読み終えた (最後のものだけを残す)。
+    pub fn resize_read() {
+        if let Some(s) = STATE.get() {
+            RESIZE.store(now_ns(s) + 1, Ordering::Release);
+        }
+    }
+
     /// 描画の `write` が戻った直後。最初の Frame だけが `true` を返す (`--bench-exit-after-first-frame` が付いているとき)。
-    /// `content`: この Frame で本文 (空白でない文字) が見える。
-    pub fn render_done(content: bool) -> bool {
+    /// `content`: この Frame で本文 (空白でない文字) が見える。`progress`: この Frame に読込の進捗が出ている。
+    pub fn render_done(content: bool, progress: bool) -> bool {
         let Some(s) = STATE.get() else { return false };
         let end = now_ns(s);
         let thread = std::thread::current().name().unwrap_or("?").to_owned();
@@ -132,6 +154,20 @@ mod imp {
                 );
                 push(l);
             }
+        }
+        if progress && PROGRESS_ARMED.swap(false, Ordering::AcqRel) {
+            let start = LAST_READ.load(Ordering::Acquire).saturating_sub(1);
+            let vk = LAST_VK.load(Ordering::Acquire);
+            push(format!(
+                "{{\"name\":\"open.progress\",\"start_ns\":{start},\"end_ns\":{end},\"thread\":\"{thread}\",\"fields\":{{\"vk\":{vk}}}}}"
+            ));
+        }
+        let resize = RESIZE.swap(0, Ordering::AcqRel);
+        if resize != 0 {
+            push(format!(
+                "{{\"name\":\"resize.to_flush\",\"start_ns\":{},\"end_ns\":{end},\"thread\":\"{thread}\",\"fields\":{{}}}}",
+                resize - 1
+            ));
         }
         let start = PENDING.swap(0, Ordering::AcqRel);
         if start != 0 {
@@ -172,9 +208,11 @@ mod imp {
     #[inline(always)]
     pub fn render_emitted() {}
     #[inline(always)]
-    pub fn render_done(_content: bool) -> bool {
+    pub fn render_done(_content: bool, _progress: bool) -> bool {
         false
     }
+    #[inline(always)]
+    pub fn resize_read() {}
     #[inline(always)]
     pub fn flush() {}
 }
