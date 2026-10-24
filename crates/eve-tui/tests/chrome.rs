@@ -44,6 +44,7 @@ fn ステータスバーは左にファイル名と変更_右に位置() {
     assert!(t.ends_with("LF"), "右端に寄る: {status:?}");
 }
 
+// verifies: AC-FR-503-2
 #[test]
 fn ステータスバーは幅が足りなければ短い形にして_優先度の低い項目から落とす() {
     let mut h = Harness::new().with_size(30, 12);
@@ -352,4 +353,46 @@ fn 画面に収まる行には印を出さない() {
     h.text("short");
     let (rows, _) = screen(&mut h, &Glyphs::unicode());
     assert!(!rows[0].contains('‹') && !rows[0].contains('›'));
+}
+
+// verifies: AC-FR-505-1
+#[test]
+fn メッセージは記号と色で区別でき_警告は対処も並べて出る() {
+    let colour_of_mark = |h: &mut Harness, glyphs: &Glyphs, mark: &str| {
+        let f = h.frame();
+        let r = render_screen(&f, window_of(&f), ColorDepth::TrueColor, glyphs);
+        let area = r.buffer.area;
+        for y in 0..area.height {
+            let row = row_text(&r.buffer, y);
+            if let Some(x) = row.find(mark) {
+                let col = row[..x].chars().count() as u16;
+                return Some((row, r.buffer[(col, y)].style()));
+            }
+        }
+        None
+    };
+    // 警告: 親フォルダが無いパスを開く (本文 + 対処)
+    let mut w = Harness::new().with_size(100, 12);
+    w.open("/nodir/a.txt");
+    w.run_jobs();
+    let (row, warn_style) =
+        colour_of_mark(&mut w, &Glyphs::unicode(), "⚠").expect("警告の記号が出る");
+    assert!(
+        row.contains("フォルダを作ってから保存するか"),
+        "対処 (どうすればよいか) も並ぶ: {row}"
+    );
+    // ASCII の縮退でも記号で区別できる
+    assert!(colour_of_mark(&mut w, &Glyphs::ascii(), "!").is_some());
+    // 情報: 記号が違い、色 (または属性) も違う
+    let mut i = Harness::new()
+        .with_size(100, 12)
+        .with_file("/a.txt", b"hello\n");
+    i.open("/a.txt");
+    i.run_jobs();
+    i.text("x");
+    i.keys("ctrl+s");
+    i.run_jobs();
+    let (_, info_style) =
+        colour_of_mark(&mut i, &Glyphs::unicode(), "ℹ").expect("情報の記号が出る");
+    assert_ne!(warn_style, info_style, "警告と情報は色か属性が違う");
 }

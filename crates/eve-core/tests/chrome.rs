@@ -94,6 +94,7 @@ impl Env {
     }
 }
 
+// verifies: AC-FR-503-1
 #[test]
 fn 無題の文書のステータス() {
     let mut s = Env::new();
@@ -107,6 +108,7 @@ hints: "
     );
 }
 
+// verifies: AC-FR-503-1
 #[test]
 fn 変更と位置と選択のステータス() {
     let mut s = Env::new();
@@ -122,6 +124,7 @@ fn 変更と位置と選択のステータス() {
     assert!(c.contains("(6 文字選択)"), "{c}");
 }
 
+// verifies: AC-FR-503-1
 #[test]
 fn ファイルの状態のステータス() {
     let mut s = Env::new();
@@ -197,6 +200,7 @@ fn 変更なしの保存の文言() {
     );
 }
 
+// verifies: AC-FR-505-1
 #[test]
 fn エラーは_text_と_hint_の_2_部でキー表記を解決する() {
     let mut s = Env::new();
@@ -226,6 +230,7 @@ fn エラーは_text_と_hint_の_2_部でキー表記を解決する() {
     assert!(s.frame().messages.current.is_none());
 }
 
+// verifies: AC-FR-504-1
 #[test]
 fn ヒントバーは割当のある項目を優先度の降順で出す() {
     let mut s = Env::new();
