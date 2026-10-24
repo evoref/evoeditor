@@ -505,6 +505,47 @@ fn save_window(dir: &Path, mb: usize, id: &str, traced: bool, json: bool, quick:
     }
 }
 
+/// `mb` MB の文書を開いて全選択し、`Ctrl+C` の間と後にカーソルを左右に動かす。キー入力の判定区間 (入力の読取完了 → 描画の `write`)。
+/// 60 MB は文字列化とシステムのクリップボードへの書込を含む。100 MB は上限 (64 MiB) を超えるので内部レジスタだけ (FR-205 AC-4)。
+fn clip_window(dir: &Path, mb: usize, id: &str, json: bool, quick: bool) {
+    const VK_LEFT: u64 = 0x25;
+    const VK_RIGHT: u64 = 0x27;
+    let path = make_big(dir, &format!("big_{mb}mb.txt"), mb);
+    let trace = dir.join(format!("clip-{mb}.jsonl"));
+    let (mut t, _) = Term::start(&[path.to_str().unwrap()], "quick brown", Some(&trace));
+    t.wait("開く", || t.marker.load(Ordering::Acquire));
+    thread::sleep(Duration::from_millis(if mb >= 50 { 4000 } else { 1000 }));
+    let rounds = if quick { 3 } else { 10 };
+    let mut keys = 0;
+    for _ in 0..rounds {
+        t.send(b"\x01"); // Ctrl+A
+        thread::sleep(Duration::from_millis(100));
+        t.send(b"\x03"); // Ctrl+C
+        // コピーの間 (文字列化・書込) に、30 ms ごとに左右へ動かす
+        for i in 0..60 {
+            t.send(if i % 2 == 0 { b"\x1b[C" } else { b"\x1b[D" });
+            keys += 1;
+            thread::sleep(Duration::from_millis(30));
+        }
+    }
+    let _ = keys;
+    t.send(b"\x11");
+    assert_eq!(t.wait_exit(WAIT), Some(0), "正常に終了しません");
+    let spans: Vec<Duration> = read_spans(&trace)
+        .into_iter()
+        .filter(|s| s.name == "input.to_flush" && matches!(s.vk, Some(VK_LEFT | VK_RIGHT)))
+        .map(|s| ns_dur(s.end_ns - s.start_ns))
+        .collect();
+    let _ = std::fs::remove_file(&trace);
+    report(
+        id,
+        &format!("{mb} MB の全選択のコピー中のキー入力 (入力の読取完了 → 描画の write)"),
+        spans,
+        json,
+        quick,
+    );
+}
+
 /// 「開く → 進捗」(01 §3.0.1): `Ctrl+O` → パス → `Enter` の、`Enter` の読取完了 → 進捗を含む最初の Frame の `write`。
 /// 2 つのファイルを交互に開く (同じファイルの再読込と区別するため)。
 fn open_progress(dir: &Path, a: &Path, b: &Path, runs: usize, warmup: usize) -> Vec<Duration> {
@@ -840,6 +881,11 @@ fn main() {
     }
     if traced && want("117") {
         save_window(&dir, 15, "BM-103b-reconcile", traced, json, quick);
+    }
+    if traced && want("205") {
+        // FR-205 AC-4: 60 MB (システムへ書く) と 100 MB (上限超過で内部レジスタだけ) の全選択のコピー中のキー入力
+        clip_window(&dir, 60, "BM-103b-clip60", json, quick);
+        clip_window(&dir, 100, "BM-103b-clip100", json, quick);
     }
     if want("201") || want("204") {
         let n = if quick { 1 } else { 5 };

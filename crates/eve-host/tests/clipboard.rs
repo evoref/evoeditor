@@ -216,3 +216,42 @@ fn 取得の失敗は内部レジスタを貼り付ける() {
     assert!(e.pump_worker());
     assert!(e.screen().contains("xyxy"), "{}", e.screen());
 }
+
+// verifies: AC-FR-205-4
+#[test]
+fn 上限を超える全選択のコピーは文字列化せず内部レジスタだけに入れて知らせる() {
+    let mut e = env();
+    e.start();
+    // 64 MiB (05 §8.4) を少し超える本文
+    let big = "0123456789 the quick brown fox 0123456789 0123456789 0123456789 0123456789
+"
+    .repeat(66 * 1024 * 1024 / 73);
+    e.input(InputEvent::Paste(big));
+    e.key(KeyCode::Char('a'), Modifiers::CTRL);
+    let t0 = std::time::Instant::now();
+    e.key(KeyCode::Char('c'), Modifiers::CTRL);
+    // 判定は選択範囲の総バイト数で行う。文字列化もシステムへの書込も起きない
+    assert!(
+        e.written.recv_timeout(Duration::from_millis(500)).is_err(),
+        "上限を超えたのにシステムのクリップボードへ書いた"
+    );
+    assert!(t0.elapsed() < Duration::from_secs(2), "{:?}", t0.elapsed());
+    let keys: Vec<String> = e
+        .host
+        .take_events()
+        .into_iter()
+        .filter_map(|ev| match ev {
+            eve_view::EditorEvent::MessageShown { key, .. } => Some(key),
+            _ => None,
+        })
+        .collect();
+    assert!(
+        keys.contains(&"msg.clipboard.fallback".to_owned()),
+        "{keys:?}"
+    );
+    // 内部レジスタには入っていて、貼り付けで取り出せる (システム側の値は SYS)
+    *e.fake.read_value.lock().unwrap() = Err(ClipboardFailure::Unavailable);
+    e.key(KeyCode::End, Modifiers::CTRL);
+    e.key(KeyCode::Char('v'), Modifiers::CTRL);
+    assert!(e.pump_worker());
+}
