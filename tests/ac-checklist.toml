@@ -539,15 +539,20 @@ status = "done"
 id = "AC-FR-205-2"
 requirement = "FR-205"
 kind = "T/M"
-verified_by = []
-status = "todo"
+verified_by = [
+    "書込の失敗は内部レジスタに切り替えたと知らせる",
+    "取得の失敗は内部レジスタを貼り付ける",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-205-3"
 requirement = "FR-205"
 kind = "T/M"
-verified_by = []
-status = "todo"
+verified_by = [
+    "取得が_2_秒かかると内部レジスタに切り替え_遅れて届いた結果は捨てる",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-205-4"
@@ -719,8 +724,10 @@ status = "done"
 id = "AC-FR-404-2"
 requirement = "FR-404"
 kind = "B"
-verified_by = []
-status = "todo"
+verified_by = [
+    "一致が_100_万件を超えると件数は上限以上で打ち切る",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-404-3"

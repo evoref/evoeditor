@@ -147,6 +147,7 @@ fn 貼り付けはシステムのクリップボードから読む() {
     assert!(e.screen().contains("SYS"), "{}", e.screen());
 }
 
+// verifies: AC-FR-205-3
 #[test]
 fn 取得が_2_秒かかると内部レジスタに切り替え_遅れて届いた結果は捨てる() {
     let mut e = env();
@@ -175,6 +176,7 @@ fn 取得が_2_秒かかると内部レジスタに切り替え_遅れて届い�
     assert!(!e.screen().contains("REGREGSYS") && !e.screen().contains("REGREGREG"));
 }
 
+// verifies: AC-FR-205-2
 #[test]
 fn 書込の失敗は内部レジスタに切り替えたと知らせる() {
     let mut e = env();
@@ -199,6 +201,7 @@ fn 書込の失敗は内部レジスタに切り替えたと知らせる() {
     );
 }
 
+// verifies: AC-FR-205-2
 #[test]
 fn 取得の失敗は内部レジスタを貼り付ける() {
     let mut e = env();
