@@ -932,8 +932,10 @@ status = "done"
 id = "AC-FR-513-4"
 requirement = "FR-513"
 kind = "T/M"
-verified_by = []
-status = "todo"
+verified_by = [
+    "docs/compat/0.1.0-rc.1/color-modes.md",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-514-2"
