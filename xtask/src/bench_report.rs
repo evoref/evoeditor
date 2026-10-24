@@ -94,6 +94,11 @@ pub(crate) fn verdict(v: &Value) -> Verdict {
             limits(v, 2.0, 8.0),
             "保存の照合中 (15 MB) のカーソル移動 (FR-117 AC-2)。保存時間は参考",
         ),
+        "BM-103b-clip60" | "BM-103b-clip100" => t(
+            "NFR-103 を維持 (p50 2 ms / p99 8 ms)",
+            limits(v, 2.0, 8.0),
+            "全選択のコピー中 (60 MB はシステムへ書込、100 MB は上限超過で内部レジスタだけ) のカーソル移動 (FR-205 AC-4)",
+        ),
         "BM-104p-10m" => t(
             "p99 50 ms",
             limits(v, f64::MAX, 50.0),
@@ -331,6 +336,14 @@ mod tests {
         assert_eq!(
             ok(r#"{"id":"BM-104p-100m","p50_ms":1.2,"p99_ms":90.0}"#),
             "合格"
+        );
+        assert_eq!(
+            ok(r#"{"id":"BM-103b-clip60","p50_ms":0.9,"p99_ms":1.4}"#),
+            "合格"
+        );
+        assert_eq!(
+            ok(r#"{"id":"BM-103b-clip100","p50_ms":3.0,"p99_ms":1.4}"#),
+            "不合格"
         );
         assert_eq!(
             ok(r#"{"id":"BM-512","p50_ms":0.6,"p99_ms":17.0}"#),
