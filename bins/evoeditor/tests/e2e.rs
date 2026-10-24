@@ -642,6 +642,7 @@ fn 使い方の誤りは終了コード_2() {
 // (7) internal.debug_panic (test-hooks): パニック → 端末復元 + 退避 + クラッシュログ。stderr は 04 §15.2 の順。
 // 実行: cargo test -p evoeditor --features test-hooks --test e2e
 // verifies: AC-NFR-302-1
+// verifies: AC-NFR-504-1
 #[cfg(feature = "test-hooks")]
 #[test]
 fn パニックすると端末を戻し_未保存の内容を退避してクラッシュログを残す() {
@@ -700,6 +701,8 @@ fn パニックすると端末を戻し_未保存の内容を退避してクラ�
         log.contains("internal.debug_panic") && !log.contains("unsaved text"),
         "{log}"
     );
+    // 端末に出した案内にも本文は含まない (退避の場所だけを示す)
+    assert!(!raw.contains("unsaved text"), "{raw}");
     let _ = std::fs::remove_dir_all(&s.state);
 }
 

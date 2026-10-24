@@ -170,3 +170,25 @@ fn 未対応の情報診断は画面に出さない() {
     let t = h.frame_text();
     assert!(t.contains("config.toml:3"), "{t}");
 }
+
+// verifies: AC-NFR-603-8
+#[test]
+fn ui_locale_は未対応の情報診断になり_画面に出ない() {
+    let mut h = Harness::new();
+    let l = load_str("[ui]\nlocale = \"en\"\n");
+    assert_eq!(l.diagnostics.len(), 1);
+    assert!(
+        l.diagnostics[0].key.starts_with("ui"),
+        "{:?}",
+        l.diagnostics[0]
+    );
+    assert!(matches!(
+        l.diagnostics[0].kind,
+        eve_config::DiagKind::Unsupported
+    ));
+    h.clear_log();
+    h.editor
+        .state_mut()
+        .report_config("config.toml", &l.diagnostics);
+    assert!(h.messages().is_empty());
+}

@@ -1373,8 +1373,10 @@ status = "todo"
 id = "AC-NFR-502-1"
 requirement = "NFR-502"
 kind = "T/R"
-verified_by = []
-status = "todo"
+verified_by = [
+    "製品のコードは外部のプロセスを起動しない",
+]
+status = "done"
 
 [[ac]]
 id = "AC-NFR-502-2"
@@ -1398,8 +1400,10 @@ status = "done"
 id = "AC-NFR-504-1"
 requirement = "NFR-504"
 kind = "R/T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "パニックすると端末を戻し_未保存の内容を退避してクラッシュログを残す",
+]
+status = "done"
 
 [[ac]]
 id = "AC-NFR-505-1"
@@ -1422,36 +1426,46 @@ status = "todo"
 id = "AC-NFR-602-1"
 requirement = "NFR-602"
 kind = "R"
-verified_by = []
-status = "todo"
+verified_by = [
+    "docs/review/ja-wording-v0.1.md",
+]
+status = "done"
 
 [[ac]]
 id = "AC-NFR-603-1"
 requirement = "NFR-603"
 kind = "T/R"
-verified_by = []
-status = "todo"
+verified_by = [
+    "このリポジトリの文言の目録と言語ファイルが検査を通る",
+]
+status = "done"
 
 [[ac]]
 id = "AC-NFR-603-2"
 requirement = "NFR-603"
 kind = "T/R"
-verified_by = []
-status = "todo"
+verified_by = [
+    "このリポジトリの文言の目録と言語ファイルが検査を通る",
+]
+status = "done"
 
 [[ac]]
 id = "AC-NFR-603-4"
 requirement = "NFR-603"
 kind = "T/R"
-verified_by = []
-status = "todo"
+verified_by = [
+    "キーが無ければキー名",
+]
+status = "done"
 
 [[ac]]
 id = "AC-NFR-603-5"
 requirement = "NFR-603"
 kind = "T/R"
-verified_by = []
-status = "todo"
+verified_by = [
+    "このリポジトリの文言の目録と言語ファイルが検査を通る",
+]
+status = "done"
 
 [[ac]]
 id = "AC-NFR-603-6"
@@ -1464,22 +1478,28 @@ status = "todo"
 id = "AC-NFR-603-7"
 requirement = "NFR-603"
 kind = "T/R"
-verified_by = []
-status = "todo"
+verified_by = [
+    "BM-101a",
+]
+status = "done"
 
 [[ac]]
 id = "AC-NFR-603-8"
 requirement = "NFR-603"
 kind = "T/R"
-verified_by = []
-status = "todo"
+verified_by = [
+    "ui_locale_は未対応の情報診断になり_画面に出ない",
+]
+status = "done"
 
 [[ac]]
 id = "AC-NFR-604-1"
 requirement = "NFR-604"
 kind = "R/T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "組込みテーマの表は全ロールが_truecolor_と_mono_を持ちコントラストを満たす",
+]
+status = "done"
 
 [[ac]]
 id = "AC-NFR-605-1"

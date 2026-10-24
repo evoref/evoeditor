@@ -419,6 +419,14 @@ pub fn run() -> Result<(), String> {
 mod tests {
     use super::*;
 
+    // verifies: AC-NFR-603-1
+    // verifies: AC-NFR-603-2
+    // verifies: AC-NFR-603-5
+    #[test]
+    fn このリポジトリの文言の目録と言語ファイルが検査を通る() {
+        run().expect("cargo xtask i18n と同じ検査");
+    }
+
     #[test]
     fn 表示幅の近似() {
         assert_eq!(cells("abc"), 3);
