@@ -1008,6 +1008,7 @@ fn clip_read() -> String {
 }
 
 #[cfg(feature = "test-hooks")]
+// verifies: AC-FR-603-1
 #[test]
 fn コピーは実際のクリップボードに入り_貼り付けはそこから読む() {
     let _lock = ClipLock::acquire();
@@ -1137,6 +1138,7 @@ fn 配布ビルドでは計測用の隠しオプションは未知のオプシ�
 
 // 検索バー (docs/04 §8): `Ctrl+F` で検索バーが画面に出て、入力した語と一致数が見える。`Esc` で閉じて編集に戻る
 // (端末の編集面の大きさと Frame の大きさが、バーの行数ぶん違うことを、描画が許す。以前は描画が止まって画面が固まった)
+// verifies: AC-FR-603-1
 #[test]
 fn ctrl_f_で検索バーが出て_入力した語と一致数が見える() {
     let mut s = Session::start(&[]);
