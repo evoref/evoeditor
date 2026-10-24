@@ -3,7 +3,8 @@
 //!
 //! 検査: (1) 配布ビルドの feature に `test-hooks` / `bench-trace` / `headless` が現れない (`cargo tree -e features`)、
 //! (2) exe に test-hooks と bench-trace の目印の文字列が無い、(3) 隠しオプション `--bench-exit-after-first-frame` が
-//! 未知のオプションとして終了コード 2 で終わる、(4) exe の取り込む DLL に VC ランタイムと UCRT が無い。
+//! 未知のオプションとして終了コード 2 で終わる、(4) exe の取り込む DLL に VC ランタイムと UCRT が無い、
+//! (5) exe のヘッダの DependentLoadFlags が System32 だけから DLL を読む設定 (0x800) になっている (NFR-502 AC-2 (a))。
 //! あわせて BM-205 (exe のサイズ) を `target/dist/size.json` に書く。
 //!
 //! `--exe <パス>` を付けると、ビルドと (1) を飛ばして、そのファイルを検査する (`release.yml` の展開後の exe 用)。
@@ -96,6 +97,17 @@ pub fn run(args: &[String]) -> Result<(), String> {
         ));
     }
 
+    println!("▶ (5) DLL の検索を System32 に限る (DependentLoadFlags)");
+    match dependent_load_flags(&bytes) {
+        Some(f) if f & LOAD_LIBRARY_SEARCH_SYSTEM32 != 0 => {}
+        other => {
+            return Err(format!(
+                "DependentLoadFlags に LOAD_LIBRARY_SEARCH_SYSTEM32 (0x800) がありません: {other:?} \
+                 (.cargo/config.toml の /DEPENDENTLOADFLAG:0x800)"
+            ));
+        }
+    }
+
     let size = bytes.len();
     let dir = root.join("target/dist");
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
@@ -107,6 +119,47 @@ pub fn run(args: &[String]) -> Result<(), String> {
 }
 
 /// `cargo tree -e features` の出力から、禁止された feature を探す。
+/// LOAD_LIBRARY_SEARCH_SYSTEM32: 起動時のインポートの DLL を System32 だけから探す。
+const LOAD_LIBRARY_SEARCH_SYSTEM32: u16 = 0x800;
+
+/// PE (64 ビット) のロード構成ディレクトリの DependentLoadFlags (オフセット 78)。読めなければ None。
+fn dependent_load_flags(pe: &[u8]) -> Option<u16> {
+    let u16_at = |o: usize| pe.get(o..o + 2).map(|b| u16::from_le_bytes([b[0], b[1]]));
+    let u32_at = |o: usize| {
+        pe.get(o..o + 4)
+            .map(|b| u32::from_le_bytes([b[0], b[1], b[2], b[3]]))
+    };
+    let e_lfanew = u32_at(0x3c)? as usize;
+    if pe.get(e_lfanew..e_lfanew + 4)? != [b'P', b'E', 0, 0] {
+        return None;
+    }
+    let nsec = u16_at(e_lfanew + 6)? as usize;
+    let opt_size = u16_at(e_lfanew + 20)? as usize;
+    let opt = e_lfanew + 24;
+    if u16_at(opt)? != 0x20b {
+        return None; // PE32+ (x86_64) だけ
+    }
+    // データディレクトリ 10 = ロード構成
+    let lc_rva = u32_at(opt + 112 + 10 * 8)? as usize;
+    if lc_rva == 0 {
+        return None;
+    }
+    let sections = opt + opt_size;
+    let to_file = |rva: usize| -> Option<usize> {
+        (0..nsec).find_map(|i| {
+            let o = sections + i * 40;
+            let (vsize, va, rsize, raw) = (
+                u32_at(o + 8)? as usize,
+                u32_at(o + 12)? as usize,
+                u32_at(o + 16)? as usize,
+                u32_at(o + 20)? as usize,
+            );
+            (va <= rva && rva < va + vsize.max(rsize)).then(|| rva - va + raw)
+        })
+    };
+    u16_at(to_file(lc_rva)? + 78)
+}
+
 fn forbidden_features(tree: &str) -> Vec<&'static str> {
     FORBIDDEN_FEATURES
         .iter()
@@ -179,6 +232,18 @@ mod tests {
             .collect();
         assert_eq!(forbidden_strings(&wide), ["EVE_TRACE_FILE"]);
         assert!(forbidden_strings(b"nothing here").is_empty());
+    }
+
+    // verifies: AC-NFR-502-2
+    #[test]
+    fn 配布ビルドの_dll_の検索は_system32_に限る() {
+        // リポジトリの設定で作った配布ビルドの exe を見る
+        let exe = crate::util::workspace_root().join("target/release/evoeditor.exe");
+        let Ok(bytes) = std::fs::read(&exe) else {
+            return; // 配布ビルドがまだ無いときは、check-dist (CI の build-release-smoke) が見る
+        };
+        let f = dependent_load_flags(&bytes).expect("ロード構成を読める");
+        assert!(f & LOAD_LIBRARY_SEARCH_SYSTEM32 != 0, "{f:#x}");
     }
 
     #[test]

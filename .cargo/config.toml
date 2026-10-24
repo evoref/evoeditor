@@ -12,4 +12,6 @@ incompatible-rust-versions = "fallback"
 # 配布ビルド・計測用ビルド・テストのビルドが同じ CRT になるよう、リポジトリ直下に置く。
 # 注意: `cargo install --git` は、この設定を読まない (cargo は設定を実行時のカレントから探すため)。
 [target.x86_64-pc-windows-msvc]
-rustflags = ["-C", "target-feature=+crt-static"]
+# 実行ファイルが読み込む DLL を System32 に限る (LOAD_LIBRARY_SEARCH_SYSTEM32 = 0x800 をヘッダの DependentLoadFlags に入れる)。
+# 実行ファイルと同じフォルダや作業フォルダに置かれた DLL を、起動時のインポートで読み込まない (NFR-502 AC-2 (a)、docs/12 の PC 系)。
+rustflags = ["-C", "target-feature=+crt-static", "-C", "link-arg=/DEPENDENTLOADFLAG:0x800"]

@@ -172,6 +172,83 @@ pub fn run() -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
+    // verifies: AC-NFR-501-1
+    #[test]
+    fn 製品のコードと依存にネットワーク通信が無い() {
+        let root = crate::util::workspace_root();
+        // (1) 依存: ネットワークを使う crate が配布ビルドの依存に無い (Cargo.lock の全体で見る。xtask 用も含めて 1 つも無い)
+        let lock = std::fs::read_to_string(root.join("Cargo.lock")).expect("Cargo.lock");
+        let banned = [
+            "reqwest",
+            "hyper",
+            "ureq",
+            "curl",
+            "openssl",
+            "native-tls",
+            "rustls",
+            "socket2",
+            "mio",
+            "tokio",
+            "tungstenite",
+            "h2",
+            "isahc",
+            "attohttpc",
+            "surf",
+            "hickory-resolver",
+        ];
+        let mut found: Vec<String> = Vec::new();
+        for b in banned {
+            if lock.contains(&format!("name = \"{b}\"")) {
+                found.push(format!("依存 {b}"));
+            }
+        }
+        // (2) windows-sys のネットワークの feature を使わない
+        for dir in ["crates", "bins"] {
+            let Ok(rd) = std::fs::read_dir(root.join(dir)) else {
+                continue;
+            };
+            for e in rd.flatten() {
+                let toml = std::fs::read_to_string(e.path().join("Cargo.toml")).unwrap_or_default();
+                if toml.contains("Win32_Networking") || toml.contains("Win32_NetworkManagement") {
+                    found.push(format!(
+                        "{} の windows-sys がネットワークの feature を使う",
+                        e.path().display()
+                    ));
+                }
+            }
+        }
+        // (3) ソース: 試験・ベンチ・補助を除く製品のコードに、ソケットや HTTP の呼出しが無い
+        let patterns = [
+            "std::net",
+            "TcpStream",
+            "TcpListener",
+            "UdpSocket",
+            "WSAStartup",
+            "WinHttp",
+            "InternetOpen",
+            "URLDownload",
+        ];
+        for dir in ["crates", "bins"] {
+            for f in crate::util::rust_files(&root.join(dir)) {
+                let p = f.to_string_lossy().replace('\\', "/");
+                if p.contains("/tests/")
+                    || p.contains("/benches/")
+                    || p.contains("/eve-test-helpers/")
+                {
+                    continue;
+                }
+                let text = std::fs::read_to_string(&f).unwrap_or_default();
+                let body = text.split("#[cfg(test)]").next().unwrap_or("");
+                for pat in patterns {
+                    if body.contains(pat) {
+                        found.push(format!("{p}: {pat}"));
+                    }
+                }
+            }
+        }
+        assert!(found.is_empty(), "ネットワーク通信の可能性: {found:?}");
+    }
+
     // verifies: AC-NFR-502-1
     #[test]
     fn 製品のコードは外部のプロセスを起動しない() {
