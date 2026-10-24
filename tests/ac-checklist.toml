@@ -1334,8 +1334,10 @@ status = "todo"
 id = "AC-NFR-401-1"
 requirement = "NFR-401"
 kind = "T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "docs/compat/0.1.0-rc.1/ci-gates.md",
+]
+status = "done"
 
 [[ac]]
 id = "AC-NFR-402-1"
@@ -1432,8 +1434,10 @@ status = "done"
 id = "AC-NFR-507-1"
 requirement = "NFR-507"
 kind = "T/R"
-verified_by = []
-status = "todo"
+verified_by = [
+    "docs/compat/0.1.0-rc.1/ci-gates.md",
+]
+status = "done"
 
 [[ac]]
 id = "AC-NFR-602-1"
@@ -1546,8 +1550,10 @@ status = "done"
 id = "AC-NFR-706-1"
 requirement = "NFR-706"
 kind = "R"
-verified_by = []
-status = "todo"
+verified_by = [
+    "docs/review/deps-records-0.1.0-rc.1.md",
+]
+status = "done"
 
 [[ac]]
 id = "AC-NFR-707-2"
