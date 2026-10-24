@@ -1,15 +1,15 @@
 {
-  "commit": "1386b14",
+  "commit": "fbda556",
   "env": "ENV-W1",
   "id": "BM-107",
   "quick": false,
   "results": [
     {
       "id": "BM-107",
-      "max_ms": 2.92,
-      "n": 205,
-      "p50_ms": 0.97,
-      "p999_ms": 2.92,
+      "max_ms": 2.0,
+      "n": 190,
+      "p50_ms": 0.88,
+      "p999_ms": 2.0,
       "p99_ms": 1.52,
       "quick": false
     }

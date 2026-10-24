@@ -1,16 +1,16 @@
 {
-  "commit": "1386b14",
+  "commit": "fbda556",
   "env": "ENV-W1",
   "id": "BM-103b-4-emit-to-write",
   "quick": false,
   "results": [
     {
       "id": "BM-103b-4-emit-to-write",
-      "max_ms": 1.81,
-      "n": 998,
+      "max_ms": 1.16,
+      "n": 1000,
       "p50_ms": 0.11,
-      "p999_ms": 1.58,
-      "p99_ms": 0.46,
+      "p999_ms": 0.96,
+      "p99_ms": 0.45,
       "quick": false
     }
   ]
