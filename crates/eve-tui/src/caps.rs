@@ -252,6 +252,7 @@ mod tests {
     }
 
     // verifies: AC-FR-701-1
+    // verifies: AC-FR-513-3
     #[test]
     fn 色深度の判定表の各行() {
         // 順 1: 設定

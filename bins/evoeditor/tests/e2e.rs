@@ -288,6 +288,7 @@ fn 未保存で_ctrl_q_の確認は_d_で破棄できる() {
     assert_eq!(s.wait_exit(), 0);
 }
 
+// verifies: AC-FR-609-1
 #[test]
 fn 確認ダイアログは_esc_でキャンセルして編集に戻る() {
     let mut s = Session::start(&[]);
@@ -306,6 +307,7 @@ fn 確認ダイアログは_esc_でキャンセルして編集に戻る() {
 }
 
 // (3) raw モードで端末の制御キーがアプリに届く
+// verifies: AC-FR-609-1
 #[test]
 fn ctrl_c_はプロセスを殺さず_ctrl_z_は_undo_として届く() {
     let mut s = Session::start(&[]);
@@ -322,6 +324,7 @@ fn ctrl_c_はプロセスを殺さず_ctrl_z_は_undo_として届く() {
     assert_eq!(s.wait_exit(), 0);
 }
 
+// verifies: AC-FR-609-1
 #[test]
 fn ctrl_s_はコマンドとして届き_無題なら名前の入力が出る() {
     let mut s = Session::start(&[]);

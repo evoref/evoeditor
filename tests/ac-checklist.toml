@@ -753,8 +753,12 @@ status = "done"
 id = "AC-FR-501-1"
 requirement = "FR-501"
 kind = "T/M"
-verified_by = []
-status = "todo"
+verified_by = [
+    "タブと全角スペースは記号で示し_幅は変えない",
+    "全角と結合文字と絵文字の幅",
+    "絵文字の列は_zwj_と_vs16_を残して_幅のとおりに出す",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-501-2"
@@ -880,22 +884,28 @@ status = "todo"
 id = "AC-FR-513-1"
 requirement = "FR-513"
 kind = "T/M"
-verified_by = []
-status = "todo"
+verified_by = [
+    "組込みテーマの表は全ロールが_truecolor_と_mono_を持ちコントラストを満たす",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-513-2"
 requirement = "FR-513"
 kind = "T/M"
-verified_by = []
-status = "todo"
+verified_by = [
+    "組込みテーマの表は全ロールが_truecolor_と_mono_を持ちコントラストを満たす",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-513-3"
 requirement = "FR-513"
 kind = "T/M"
-verified_by = []
-status = "todo"
+verified_by = [
+    "色深度の判定表の各行",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-513-4"
@@ -1002,8 +1012,12 @@ status = "todo"
 id = "AC-FR-609-1"
 requirement = "FR-609"
 kind = "T/M"
-verified_by = []
-status = "todo"
+verified_by = [
+    "ctrl_c_はプロセスを殺さず_ctrl_z_は_undo_として届く",
+    "ctrl_s_はコマンドとして届き_無題なら名前の入力が出る",
+    "確認ダイアログは_esc_でキャンセルして編集に戻る",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-701-1"
