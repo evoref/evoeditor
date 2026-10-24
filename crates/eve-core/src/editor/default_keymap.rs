@@ -172,35 +172,43 @@ pub(super) fn default_keymap() -> Keymap {
 
 #[cfg(test)]
 mod tests {
+    use super::super::keymap::{format_sequence, parse_sequence};
     use super::*;
+    use eve_docs_tables::{identifiers, read_tables, strip_parentheticals};
+    use eve_view::KeyStroke;
+    use std::collections::{BTreeMap, BTreeSet};
 
     #[test]
     fn 既定キーマップを作れる() {
         let _ = default_keymap();
     }
 
-    /// 既定キー列 (07 §11.6 の表記) を、割当の組 (`a` / `b` の並び。`—` は `None`) と、直後の括弧書きの注記に分ける。
-    /// 属性 `[E]` `[横]` `(alt)` は読み飛ばし、`ctx`: は文脈の見出しとして読み飛ばす。それ以外の `(…)` は注記。
-    fn groups(cell: &str) -> Vec<(Vec<Option<&str>>, String)> {
-        let mut out: Vec<(Vec<Option<&str>>, String)> = Vec::new();
-        let mut cur: Vec<Option<&str>> = Vec::new();
+    /// 割当 1 件: キー (`—` は `None`) と、拡張キー (`[E]`) が要るか。
+    type Elem<'a> = (Option<&'a str>, bool);
+
+    /// 既定キー列 (07 §11.6 の表記) を、割当の組 (`a` / `b` の並び) と、直後の括弧書きの注記に分ける。
+    /// 属性 `[横]` `(alt)` は読み飛ばし、`[E]` は覚える (対の最後のキーにだけ付いたものは対のすべてに及ぶ)。
+    /// `ctx`: は文脈の見出しとして読み飛ばす。それ以外の `(…)` は注記。
+    fn groups(cell: &str) -> Vec<(Vec<Elem<'_>>, String)> {
+        let mut out: Vec<(Vec<Elem<'_>>, String)> = Vec::new();
+        let mut cur: Vec<Elem<'_>> = Vec::new();
         let mut rest = cell.trim();
         while !rest.is_empty() {
-            if let Some(r) = rest.strip_prefix('`') {
+            let key = if let Some(r) = rest.strip_prefix('`') {
                 let end = r.find('`').expect("バッククォートが閉じている");
                 let (k, after) = (&r[..end], &r[end + 1..]);
                 if let Some(a) = after.strip_prefix(':') {
                     rest = a.trim_start(); // `ctx`: の見出し
                     continue;
                 }
-                cur.push(Some(k));
                 rest = after;
+                Some(k)
             } else if let Some(r) = rest.strip_prefix('—') {
-                cur.push(None);
                 rest = r;
+                None
             } else {
                 rest = rest.trim_start_matches([',', '、', ' ']);
-                if rest.starts_with('(') || rest.starts_with('*') {
+                if rest.starts_with('(') {
                     // 組の外の括弧書き (直前の組の注記)
                     let (note, after) = take_paren(rest);
                     if let Some(last) = out.last_mut() {
@@ -211,21 +219,34 @@ mod tests {
                     rest = &rest[rest.chars().next().map_or(0, char::len_utf8)..];
                 }
                 continue;
-            }
+            };
             // 属性: `[E]` `[横]` `(alt)`
+            let mut enhanced = false;
             loop {
                 let t = rest.trim_start();
                 if t.starts_with('[') {
-                    rest = &t[t.find(']').expect("] が閉じている") + 1..];
+                    let end = t.find(']').expect("] が閉じている");
+                    enhanced |= &t[1..end] == "E";
+                    rest = &t[end + 1..];
                 } else if let Some(r) = t.strip_prefix("(alt)") {
                     rest = r;
                 } else {
                     break;
                 }
             }
+            cur.push((key, enhanced));
             if let Some(r) = rest.trim_start().strip_prefix("/ ") {
                 rest = r; // 同じ組の続き
             } else {
+                // 対の最後にだけ属性があるときは、対のすべてに及ぶ
+                if cur.len() > 1
+                    && cur[..cur.len() - 1].iter().all(|e| !e.1)
+                    && cur[cur.len() - 1].1
+                {
+                    for e in &mut cur {
+                        e.1 = true;
+                    }
+                }
                 out.push((std::mem::take(&mut cur), String::new()));
             }
         }
@@ -234,12 +255,6 @@ mod tests {
 
     /// `(` から対応する `)` まで (入れ子を数える)。中身と残りを返す。
     fn take_paren(s: &str) -> (String, &str) {
-        if !s.starts_with('(') {
-            return (
-                String::new(),
-                &s[s.chars().next().map_or(0, char::len_utf8)..],
-            );
-        }
         let mut depth = 0;
         for (i, c) in s.char_indices() {
             match c {
@@ -256,13 +271,8 @@ mod tests {
         (s[1..].to_owned(), "")
     }
 
-    // verifies: AC-FR-603-1
-    #[test]
-    fn 既定キーマップは_07_のカタログの既定キー列と一致する() {
-        use super::super::keymap::{format_sequence, parse_sequence};
-        use eve_docs_tables::{identifiers, read_tables, strip_parentheticals};
-        use std::collections::BTreeSet;
-
+    /// 07 §11.6 の v0.1 の行の (コマンド, キー列の表記) → 拡張キーが要るか。
+    fn doc_bindings() -> BTreeMap<(String, String), bool> {
         let doc = include_str!("../../../../docs/07-config-extensibility.md");
         let tables = read_tables(
             doc,
@@ -270,9 +280,7 @@ mod tests {
             &["ID", "既定キー"],
         )
         .expect("カタログを読める");
-        // 書式: 割当を `, ` で並べる。対のコマンドは `a` / `b` の形で ID と同じ個数を並べ、無い側は `—`。
-        // 割当には `[E]` `[横]` `(alt)` の注記が付く。`ctx`: は割当の文脈の見出し (比較には使わない)
-        let mut want: BTreeSet<(String, String)> = BTreeSet::new();
+        let mut want = BTreeMap::new();
         for t in &tables {
             for row in &t.rows {
                 let id_cell = t.cell(row, "ID").unwrap_or_default();
@@ -302,17 +310,24 @@ mod tests {
                         ids.len(),
                         elems.len()
                     );
-                    for (i, e) in elems.iter().enumerate() {
+                    for (i, (e, enhanced)) in elems.iter().enumerate() {
                         let Some(k) = e else {
                             continue; // `—` (無い側)
                         };
                         let id = only.unwrap_or(&ids[if ids.len() == 1 { 0 } else { i }]);
                         let seq = parse_sequence(k).unwrap_or_else(|e| panic!("{k}: {e:?}"));
-                        want.insert((id.clone(), format_sequence(&seq)));
+                        want.insert((id.clone(), format_sequence(&seq)), *enhanced);
                     }
                 }
             }
         }
+        want
+    }
+
+    // verifies: AC-FR-603-1
+    #[test]
+    fn 既定キーマップは_07_のカタログの既定キー列と一致する() {
+        let want: BTreeSet<_> = doc_bindings().into_keys().collect();
         let km = default_keymap();
         let mut have: BTreeSet<(String, String)> = BTreeSet::new();
         for l in km.layers() {
@@ -325,6 +340,88 @@ mod tests {
         assert!(
             only_doc.is_empty() && only_impl.is_empty(),
             "カタログだけ: {only_doc:?}\n実装だけ: {only_impl:?}"
+        );
+    }
+
+    /// 04 §7.3a の端末の横取り表から、その端末が横取りするキーの集合 (完全な形のキー表記だけが書いてある)。
+    fn intercepted(terminal: &str) -> BTreeSet<String> {
+        let doc = include_str!("../../../../docs/04-tui-design.md");
+        let start = doc.find("### 7.3a ").expect("7.3a がある");
+        let section = &doc[start..];
+        let row = section
+            .lines()
+            .find(|l| l.starts_with(&format!("| {terminal} |")))
+            .unwrap_or_else(|| panic!("{terminal} の行がある"));
+        let cell = row.split(" | ").nth(1).expect("横取りするキーの列");
+        let cell = strip_parentheticals(cell);
+        let mut out = BTreeSet::new();
+        for (i, part) in cell.split('`').enumerate() {
+            if i % 2 == 1 {
+                let seq = parse_sequence(part).unwrap_or_else(|e| panic!("{part}: {e:?}"));
+                out.insert(format_sequence(&seq));
+            }
+        }
+        out
+    }
+
+    /// 07 §11.6 末尾の「FR-606 の到達性検査」の頻出操作リスト (箇条書きの CommandId)。
+    fn frequent_ops() -> Vec<String> {
+        let doc = include_str!("../../../../docs/07-config-extensibility.md");
+        let start = doc
+            .find("\n**FR-606 の到達性検査**")
+            .expect("頻出操作リストがある");
+        let mut out = Vec::new();
+        for l in doc[start..].lines().skip(1) {
+            if l.starts_with("- ") {
+                out.extend(identifiers(l));
+            } else if !out.is_empty() && !l.trim().is_empty() {
+                break;
+            }
+        }
+        out
+    }
+
+    // verifies: AC-FR-606-1
+    #[test]
+    fn 頻出操作はどの_must_端末でも_拡張キーなしで届く既定キーを持つ() {
+        let ops = frequent_ops();
+        assert_eq!(ops.len(), 37, "計 37 個 (07 §11.6): {ops:?}");
+        let docs = doc_bindings();
+        let km = default_keymap();
+        let mut bound: BTreeMap<String, Vec<Vec<KeyStroke>>> = BTreeMap::new();
+        for l in km.layers() {
+            for b in l.bindings() {
+                bound
+                    .entry(b.command.as_str().to_owned())
+                    .or_default()
+                    .push(b.sequence.clone());
+            }
+        }
+        let mut missing = Vec::new();
+        for terminal in ["Windows Terminal", "conhost"] {
+            let blocked = intercepted(terminal);
+            assert!(
+                blocked.len() >= 3,
+                "{terminal} の横取りするキーを読めている: {blocked:?}"
+            );
+            for op in &ops {
+                let reachable = bound.get(op).into_iter().flatten().any(|seq| {
+                    let name = format_sequence(seq);
+                    // 拡張キー ([E]) が要る割当は、拡張キーなしでは数えない。割当のどのストロークも横取りされないこと
+                    let needs_e = docs.get(&(op.clone(), name)).copied().unwrap_or(false);
+                    !needs_e
+                        && seq
+                            .iter()
+                            .all(|k| !blocked.contains(&format_sequence(std::slice::from_ref(k))))
+                });
+                if !reachable {
+                    missing.push(format!("{terminal}: {op}"));
+                }
+            }
+        }
+        assert!(
+            missing.is_empty(),
+            "届く既定キーが無い頻出操作: {missing:?}"
         );
     }
 }

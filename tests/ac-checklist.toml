@@ -1008,8 +1008,10 @@ status = "done"
 id = "AC-FR-606-1"
 requirement = "FR-606"
 kind = "T/M"
-verified_by = []
-status = "todo"
+verified_by = [
+    "頻出操作はどの_must_端末でも_拡張キーなしで届く既定キーを持つ",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-606-2"
