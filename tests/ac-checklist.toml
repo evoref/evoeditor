@@ -787,29 +787,42 @@ status = "done"
 id = "AC-FR-503-1"
 requirement = "FR-503"
 kind = "M"
-verified_by = []
-status = "todo"
+verified_by = [
+    "起動直後の画面にステータスバーの項目とヒントバーのキーが出る",
+    "無題の文書のステータス",
+    "変更と位置と選択のステータス",
+    "ファイルの状態のステータス",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-503-2"
 requirement = "FR-503"
 kind = "M"
-verified_by = []
-status = "todo"
+verified_by = [
+    "ステータスバーは幅が足りなければ短い形にして_優先度の低い項目から落とす",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-504-1"
 requirement = "FR-504"
 kind = "M"
-verified_by = []
-status = "todo"
+verified_by = [
+    "起動直後の画面にステータスバーの項目とヒントバーのキーが出る",
+    "ヒントバーは割当のある項目を優先度の降順で出す",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-505-1"
 requirement = "FR-505"
 kind = "M"
-verified_by = []
-status = "todo"
+verified_by = [
+    "メッセージは記号と色で区別でき_警告は対処も並べて出る",
+    "エラーは_text_と_hint_の_2_部でキー表記を解決する",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-506-1"
@@ -855,8 +868,10 @@ status = "done"
 id = "AC-FR-511-1"
 requirement = "FR-511"
 kind = "M"
-verified_by = []
-status = "todo"
+verified_by = [
+    "パレット_確認ダイアログ_入力プロンプトは_上下_enter_esc_で同じように動く",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-511-2"
@@ -881,8 +896,10 @@ status = "done"
 id = "AC-FR-512-2"
 requirement = "FR-512"
 kind = "M"
-verified_by = []
-status = "todo"
+verified_by = [
+    "連続してリサイズしても最後の大きさの画面は全再描画した画面と一致する",
+]
+status = "done"
 
 [[ac]]
 id = "AC-FR-513-1"
@@ -1363,8 +1380,11 @@ status = "done"
 id = "AC-NFR-403-1"
 requirement = "NFR-403"
 kind = "M"
-verified_by = []
-status = "todo"
+verified_by = [
+    "色数と拡張キーを無効にした能力でも_must_の操作が通る",
+    "頻出操作はどの_must_端末でも_拡張キーなしで届く既定キーを持つ",
+]
+status = "done"
 
 [[ac]]
 id = "AC-NFR-404-1"

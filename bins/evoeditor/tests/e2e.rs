@@ -123,6 +123,25 @@ impl Session {
         w.flush().expect("flush");
     }
 
+    /// 端末の大きさを変える (ConPTY と、画面を解釈する側の両方)。
+    fn resize(&self, cols: u16, rows: u16) {
+        self.master
+            .as_ref()
+            .expect("pty がある")
+            .resize(PtySize {
+                rows,
+                cols,
+                pixel_width: 0,
+                pixel_height: 0,
+            })
+            .expect("リサイズ");
+        self.parser
+            .lock()
+            .unwrap()
+            .screen_mut()
+            .set_size(rows, cols);
+    }
+
     fn screen(&self) -> String {
         self.parser.lock().unwrap().screen().contents()
     }
@@ -1173,6 +1192,58 @@ fn ctrl_r_で置換欄つきの検索バーが出る() {
     s.send(b"");
     s.wait_for("バーが閉じる", |t| !t.contains("置換:"));
     s.send(CTRL_Q);
+    s.send(b"d");
+    assert_eq!(s.wait_exit(), 0);
+}
+
+// verifies: AC-FR-503-1
+// verifies: AC-FR-504-1
+#[test]
+fn 起動直後の画面にステータスバーの項目とヒントバーのキーが出る() {
+    let mut s = Session::start(&[]);
+    s.wait_ready();
+    let t = s.screen();
+    // ステータスバー: ファイル名・位置・文字コード・改行コード
+    for want in ["無題-1", "行 1, 桁 1", "UTF-8", "LF"] {
+        assert!(
+            t.contains(want),
+            "{want} が無い:
+{t}"
+        );
+    }
+    // ヒントバー: 終了・コマンド (パレット)・保存・検索のキー (FR-504)
+    for want in ["^Q", "終了", "コマンド", "保存", "検索"] {
+        assert!(
+            t.contains(want),
+            "{want} が無い:
+{t}"
+        );
+    }
+    s.send(CTRL_Q);
+    assert_eq!(s.wait_exit(), 0);
+}
+
+// verifies: AC-FR-512-2
+#[test]
+fn 連続してリサイズしても最後の大きさの画面は全再描画した画面と一致する() {
+    let mut s = Session::start(&[]);
+    s.wait_ready();
+    type_slowly(&s, "hello resize");
+    s.wait_for("入力が見える", |t| t.contains("hello resize"));
+    for (cols, rows) in [(100, 30), (60, 12), (120, 40), (40, 10), (90, 25)] {
+        s.resize(cols, rows);
+        thread::sleep(Duration::from_millis(40));
+    }
+    thread::sleep(Duration::from_millis(800));
+    let before = s.screen();
+    assert!(before.contains("hello resize"), "{before}");
+    // 手動の全画面の再描画 (Ctrl+K R) をしても、見え方は変わらない
+    s.send(b"r");
+    thread::sleep(Duration::from_millis(800));
+    let after = s.screen();
+    assert_eq!(before, after, "リサイズ後の画面が全再描画と違う");
+    s.send(CTRL_Q);
+    s.wait_for("確認", |t| t.contains("[D]"));
     s.send(b"d");
     assert_eq!(s.wait_exit(), 0);
 }
