@@ -1,16 +1,16 @@
 {
-  "commit": "fbda556",
+  "commit": "87aa0c9",
   "env": "ENV-W1",
   "id": "BM-103b-search",
   "quick": false,
   "results": [
     {
       "id": "BM-103b-search",
-      "max_ms": 3.26,
+      "max_ms": 3.42,
       "n": 1000,
-      "p50_ms": 1.23,
-      "p999_ms": 2.87,
-      "p99_ms": 2.39,
+      "p50_ms": 1.38,
+      "p999_ms": 3.12,
+      "p99_ms": 2.4,
       "quick": false
     }
   ]

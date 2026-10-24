@@ -1,16 +1,16 @@
 {
-  "commit": "fbda556",
+  "commit": "87aa0c9",
   "env": "ENV-W1",
   "id": "BM-104p-100m",
   "quick": false,
   "results": [
     {
       "id": "BM-104p-100m",
-      "max_ms": 2.27,
+      "max_ms": 2.31,
       "n": 30,
-      "p50_ms": 1.27,
-      "p999_ms": 2.27,
-      "p99_ms": 2.27,
+      "p50_ms": 1.2,
+      "p999_ms": 2.31,
+      "p99_ms": 2.31,
       "quick": false
     }
   ]

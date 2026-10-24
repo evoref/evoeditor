@@ -1,16 +1,16 @@
 {
-  "commit": "fbda556",
+  "commit": "87aa0c9",
   "env": "ENV-W1",
   "id": "BM-104-100m-sjis",
   "quick": false,
   "results": [
     {
       "id": "BM-104-100m-sjis",
-      "max_ms": 501.8,
+      "max_ms": 482.7,
       "mem_delta_bytes": 122925056,
       "mem_limit_bytes": 173015172,
-      "p50_ms": 445.8,
-      "p99_ms": 501.8,
+      "p50_ms": 411.7,
+      "p99_ms": 482.7,
       "quick": false,
       "runs": 30,
       "size_bytes": 94417298

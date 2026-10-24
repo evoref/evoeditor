@@ -1,16 +1,16 @@
 {
-  "commit": "fbda556",
+  "commit": "87aa0c9",
   "env": "ENV-W1",
   "id": "BM-104-1m",
   "quick": false,
   "results": [
     {
       "id": "BM-104-1m",
-      "max_ms": 5.3,
+      "max_ms": 4.3,
       "mem_delta_bytes": 1388544,
       "mem_limit_bytes": 17301537,
       "p50_ms": 2.5,
-      "p99_ms": 4.6,
+      "p99_ms": 4.0,
       "quick": false,
       "runs": 1000,
       "size_bytes": 1048598

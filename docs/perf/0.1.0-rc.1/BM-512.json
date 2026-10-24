@@ -1,16 +1,16 @@
 {
-  "commit": "fbda556",
+  "commit": "87aa0c9",
   "env": "ENV-W1",
   "id": "BM-512",
   "quick": false,
   "results": [
     {
       "id": "BM-512",
-      "max_ms": 27.57,
+      "max_ms": 2.96,
       "n": 1001,
-      "p50_ms": 0.86,
-      "p999_ms": 5.42,
-      "p99_ms": 1.93,
+      "p50_ms": 0.83,
+      "p999_ms": 2.89,
+      "p99_ms": 2.0,
       "quick": false
     }
   ]
