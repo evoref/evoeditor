@@ -16,13 +16,15 @@ NFR-501 AC-1 の (R) と、NFR-502 AC-2 (リリース前の確認、08 §2.2 の
 ## NFR-502 AC-2 (a): 実行ファイルと同じフォルダ・カレントディレクトリの DLL を読み込まない
 
 - 配布する `evoeditor.exe` の起動時インポート: `api-ms-win-core-synch-l1-2-0.dll`・`bcryptprimitives.dll`・`kernel32.dll`・`user32.dll`・`advapi32.dll`・`ntdll.dll` の 6 つ。CRT は静的リンク (VC ランタイム・UCRT は取り込まない、`check-dist` の (4))。
-- `kernel32` `user32` `advapi32` `ntdll` は KnownDLLs、`api-ms-win-*` は API セットで、置いた DLL には差し替えられない。**`bcryptprimitives.dll` は KnownDLLs ではなく**、Windows の既定の検索順では実行ファイルのフォルダが先に探される。
-- **対策**: リンカーオプション `/DEPENDENTLOADFLAG:0x800` (`LOAD_LIBRARY_SEARCH_SYSTEM32`) を `.cargo/config.toml` の `rustflags` に入れ、実行ファイルのヘッダの `DependentLoadFlags` に 0x800 を設定した。起動時のインポートは System32 だけから探す (実行ファイルのフォルダとカレントディレクトリは探さない)。
-- **機械的な確認**: `cargo xtask check-dist` の (5) が、配布ビルドの exe のヘッダの `DependentLoadFlags` に 0x800 があることを確かめる (CI の `build-release-smoke` で PR ごと、`release.yml` の展開後の exe でも)。実行時の `LoadLibrary` による動的な読込は製品のコードに無い。
+- `kernel32` `user32` `advapi32` `ntdll` は KnownDLLs、`api-ms-win-*` は API セットで、置いた DLL には差し替えられない。`bcryptprimitives.dll` は KnownDLLs ではなく、既定の検索順では実行ファイルのフォルダが先に探される。
+- **実測 (2026-10-24、Windows 11)**: 偽の `bcryptprimitives.dll` (読み込まれると印のファイルを作る) を実行ファイルと同じフォルダとカレントに置いて起動しても、**保護なしの exe でも読み込まれなかった**。`KernelBase` が先に System32 のものを読み込むため。したがって現状の exe に再現する隙は確認できていないが、読込の順序は OS の版に依るので、多層の防御として次の対策を入れた。
+- **対策**: (1) リンカーオプション `/DEPENDENTLOADFLAG:0x800` (`LOAD_LIBRARY_SEARCH_SYSTEM32`) を `.cargo/config.toml` の `rustflags` に入れ、ヘッダの `DependentLoadFlags` に 0x800 を設定した (起動時のインポートは System32 だけから探す)。(2) `main` の最初に `SetDefaultDllDirectories(LOAD_LIBRARY_SEARCH_SYSTEM32)` を呼ぶ (`eve_platform::dll`。実行時の `LoadLibrary` にも同じ制限を掛ける)。
+- **機械的な確認**: `cargo xtask check-dist` の (5) が配布ビルドの exe の `DependentLoadFlags` を確かめる (CI の `build-release-smoke` で PR ごと、`release.yml` の展開後の exe でも)。e2e の試験 `同じフォルダとカレントに置いた偽の_dll_は読み込まれない` が、偽の DLL を置いた起動で印のファイルが作られないことを確かめる (docs/09 §8.2 の (a) の手順を自動にしたもの)。
 - 結果: 合格。
 
 ## NFR-502 AC-2 (b): UNC パスを開いたときの認証情報
 
 - UNC パス (`\server\share\…`) のファイルを開くと、Windows が NTLM の認証情報をそのサーバーへ送ることがある。これは OS の動作で、evoeditor からは制御できない。
+- **応答待ちで UI が止まらないこと**: 到達できない UNC パス (`\\10.255.255.1\share\a.txt`) を引数に起動しても、画面が出て `Ctrl+Q` で終了できる (e2e `到達できない_unc_パスを開いている間も_ui_は止まらず終了できる`。読込はワーカーで行う)。
 - **判断**: 既知の制約に書く。`docs/01-requirements.md` §4.6 に「UNC パス」の行を足した (注意喚起のみ。信頼できないサーバーの UNC パスは開かない)。リリースノートと README の既知の制約に同じ文言を載せる (リリースの手順で転記する)。
 - 結果: 確かめて記録した (合格)。
