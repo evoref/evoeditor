@@ -70,7 +70,7 @@ v0.1 は最小核 (案 L) で、開発運用も手書きの最小限にする (�
 | シナリオ (§6) | Rust の `Harness` (語彙を DSL と同じにする) | TOML のシナリオ DSL と `xtask scenario run` (v0.2) |
 | CI (§8.1) | PR / main = Windows x86_64 (全テスト・ConPTY の E2E 10 シナリオ) + Linux x86_64 (Linux CI の対象 crate = core 系 + `eve-host` + `eve-testkit` のビルドとヘッドレスのテスト、09 §6.4)。夜間の fuzz は `fuzz_decode` のみ | macOS の CI・Tier B・iai・soak・補助ジョブ・area-check (v0.2)。Frame JSON ゴールデン・契約変更要求の起票は TUI 完成後 |
 | UI 文言 (§8.2) | `ja` のみ。`ja` の文言の人手レビューとキー集合の検査 (`ja` とコードの MessageKey) | 英語 UI を同梱する v0.2 で訳の運用を加える (確定 (ユーザー回答)、OQ-21) |
-| 出荷と開発環境 | Windows のみ出荷 (Windows 11 の Windows Terminal と conhost。Windows 10 は v0.2 以降の候補)。開発環境は Windows | macOS / Linux の出荷 (v0.2、確定 (ユーザー回答)。macOS の CI ジョブと Unix の実装を加える) |
+| 出荷と開発環境 | Windows のみ出荷 (Windows 11 の Windows Terminal と conhost。Windows 10 は公式には対応しない)。開発環境は Windows | macOS / Linux の出荷 (v0.2、確定 (ユーザー回答)。macOS の CI ジョブと Unix の実装を加える) |
 
 ---
 
