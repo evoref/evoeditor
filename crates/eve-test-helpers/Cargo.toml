@@ -17,10 +17,10 @@ name = "eve-test-helpers"
 path = "src/main.rs"
 
 [dependencies]
-eve-core = { version = "0.1.0-rc.1", path = "../eve-core" }
+eve-core = { version = "0.1.0", path = "../eve-core" }
 # test-hooks の切断点 (`EVE_TEST_HOOK`) を有効にする。この crate は配布物に入らない (dev 用)。
-eve-platform = { version = "0.1.0-rc.1", path = "../eve-platform", features = ["test-hooks"] }
+eve-platform = { version = "0.1.0", path = "../eve-platform", features = ["test-hooks"] }
 
 [dev-dependencies]
-eve-text = { version = "0.1.0-rc.1", path = "../eve-text" }
-eve-view = { version = "0.1.0-rc.1", path = "../eve-view" }
+eve-text = { version = "0.1.0", path = "../eve-text" }
+eve-view = { version = "0.1.0", path = "../eve-view" }

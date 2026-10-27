@@ -19,7 +19,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.1.0-rc.1"
+version = "0.1.0"
 edition = "2024"
 # MSRV: 「最新安定版 − 2 マイナー」を下限の目安にする (OQ-14、docs/05-platform.md §16.1)。
 rust-version = "1.97"
