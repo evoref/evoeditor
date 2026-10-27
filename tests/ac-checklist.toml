@@ -1356,8 +1356,10 @@ status = "done"
 id = "AC-NFR-305-1"
 requirement = "NFR-305"
 kind = "T"
-verified_by = []
-status = "todo"
+verified_by = [
+    "docs/compat/0.1.0/release-checklist.md",
+]
+status = "done"
 
 [[ac]]
 id = "AC-NFR-401-1"
