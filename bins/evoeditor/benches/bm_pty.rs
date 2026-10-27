@@ -89,7 +89,11 @@ impl Term {
         }
         let mut reader = pty.master.try_clone_reader().expect("reader");
         let writer = Arc::new(Mutex::new(pty.master.take_writer().expect("writer")));
-        let parser = Arc::new(Mutex::new(vt100::Parser::new(ROWS, COLS, 0)));
+        let parser = Arc::new(Mutex::new(vt100::Parser::new(
+            std::num::NonZeroU16::new(ROWS).expect("ROWS は 1 以上"),
+            std::num::NonZeroU16::new(COLS).expect("COLS は 1 以上"),
+            0,
+        )));
         let a_count = Arc::new(AtomicUsize::new(0));
         let ready = Arc::new(AtomicBool::new(false));
         let marker_flag = Arc::new(AtomicBool::new(false));
