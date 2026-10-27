@@ -33,7 +33,7 @@ eve-view = { version = "0.1.0", path = "../../crates/eve-view" }
 [dev-dependencies]
 # L5 端末 E2E (docs/09 §3.6): ConPTY で実バイナリを駆動し、vt100 で画面を解釈する
 portable-pty = "0.9"
-vt100 = "0.16"
+vt100 = "0.18"
 encoding_rs = "0.8.42"
 
 # 実バイナリを ConPTY で駆動する計測 (BM-101b / 102b / 103b / 107)。cargo bench -p evoeditor --bench bm_pty

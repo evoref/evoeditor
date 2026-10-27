@@ -82,7 +82,11 @@ impl Session {
         let mut reader = pty.master.try_clone_reader().expect("reader");
         let writer: Arc<Mutex<Box<dyn Write + Send>>> =
             Arc::new(Mutex::new(pty.master.take_writer().expect("writer")));
-        let parser = Arc::new(Mutex::new(vt100::Parser::new(ROWS, COLS, 0)));
+        let parser = Arc::new(Mutex::new(vt100::Parser::new(
+            std::num::NonZeroU16::new(ROWS).expect("ROWS は 1 以上"),
+            std::num::NonZeroU16::new(COLS).expect("COLS は 1 以上"),
+            0,
+        )));
         let raw = Arc::new(Mutex::new(Vec::new()));
         {
             let (parser, raw, writer) = (parser.clone(), raw.clone(), writer.clone());
@@ -135,11 +139,10 @@ impl Session {
                 pixel_height: 0,
             })
             .expect("リサイズ");
-        self.parser
-            .lock()
-            .unwrap()
-            .screen_mut()
-            .set_size(rows, cols);
+        self.parser.lock().unwrap().screen_mut().set_size(
+            std::num::NonZeroU16::new(rows).expect("rows は 1 以上"),
+            std::num::NonZeroU16::new(cols).expect("cols は 1 以上"),
+        );
     }
 
     fn screen(&self) -> String {

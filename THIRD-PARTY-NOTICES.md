@@ -5,7 +5,7 @@ evoeditor は、次のソフトウェアを利用しています。各ソフト�
 
 ## ライセンスの一覧
 
-- MIT License (60 件)
+- MIT License (59 件)
 - BSD 3-Clause "New" or "Revised" License (2 件)
 - Apache License 2.0 (1 件)
 - Boost Software License 1.0 (1 件)
@@ -970,9 +970,8 @@ SOFTWARE.
 
 利用している crate:
 
-- windows-sys 0.59.0 (https://github.com/microsoft/windows-rs)
-- windows-targets 0.52.6 (https://github.com/microsoft/windows-rs)
-- windows_x86_64_msvc 0.52.6 (https://github.com/microsoft/windows-rs)
+- windows-link 0.2.1 (https://github.com/microsoft/windows-rs)
+- windows-sys 0.61.2 (https://github.com/microsoft/windows-rs)
 
 ```text
 MIT License
