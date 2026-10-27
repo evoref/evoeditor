@@ -11,7 +11,7 @@
 | 決めないこと | Port の trait シグネチャ・型名・エラー分類 (02 §4.4 / §4.5)、緊急退避の方式と manifest の形式 (02 §11.2.1)、文字コード変換アルゴリズム (03)、描画・端末能力判定の実装 (04)、設定項目の書式・既定値 (07 §5)、終了コード (07 §18.4)、テスト手順 (09) |
 | v0.1 で読む節 | §1〜§10 (§2.5〜§2.7 を除く) と §11 の **Windows の部分** (§4.3・§9.2・§9.3・§11.1・§11.3 と、§11.2 の「セッション終了の受け方」を除く)、§16・§17、§18.1〜§18.3、§18.6、§18.8〜§18.14 (利用者向け文書の内容。Windows の手順) (一覧の正本は [README §3.1](README.md#31-v01-の実装で読む節)) |
 
-> **v0.1 の実装範囲は Windows のみ** (確定 (ユーザー回答)、ADR-0042、OQ-15): 対象は Windows 11 の Windows Terminal と conhost (Windows 10 は検証環境が無いので v0.2 以降の候補、§1.1) で、macOS / Linux は v0.1 では出荷せず、**v0.2 で出荷する** (確定 (ユーザー回答)。出荷には実機確認の手段 (基準機の追加、10 OQ-23 (d)) の確保が前提で、確保できない OS は次の版に延期する (確定 (ユーザー回答)、10 の残件 #3))。本書の Unix / macOS / Linux の記述 (rename + fsync の保存手順、モード・所有者、シグナル、XDG のパス、`pbcopy` / `wl-copy` / `xclip` / `xsel`・OSC 52 のクリップボード、WSL・SSH、musl 静的ビルド、macOS の署名・公証、Linux パッケージ等) は **v0.2 (macOS / Linux 出荷時) の仕様** として、各節の冒頭または行に明記する。core 系 crate (OS に触れない crate) は OS 非依存を保ち、CI の Linux x86_64 ジョブ (Linux CI の対象 crate (02 §4.7) のコンパイルとヘッドレスのテスト) で移植性を守る (§1.2)。
+> **v0.1 の実装範囲は Windows のみ** (確定 (ユーザー回答)、ADR-0042、OQ-15): 対象は Windows 11 の Windows Terminal と conhost (Windows 10 は公式には対応しない、§1.1) で、macOS / Linux は v0.1 では出荷せず、**v0.2 で出荷する** (確定 (ユーザー回答)。出荷には実機確認の手段 (基準機の追加、10 OQ-23 (d)) の確保が前提で、確保できない OS は次の版に延期する (確定 (ユーザー回答)、10 の残件 #3))。本書の Unix / macOS / Linux の記述 (rename + fsync の保存手順、モード・所有者、シグナル、XDG のパス、`pbcopy` / `wl-copy` / `xclip` / `xsel`・OSC 52 のクリップボード、WSL・SSH、musl 静的ビルド、macOS の署名・公証、Linux パッケージ等) は **v0.2 (macOS / Linux 出荷時) の仕様** として、各節の冒頭または行に明記する。core 系 crate (OS に触れない crate) は OS 非依存を保ち、CI の Linux x86_64 ジョブ (Linux CI の対象 crate (02 §4.7) のコンパイルとヘッドレスのテスト) で移植性を守る (§1.2)。
 >
 > 本書のコード片は仕様説明のための擬似コード (Rust 風) であり、そのまま実装する API ではない。
 > 設計原則の優先順位 ([00 §4](00-overview.md#4-設計原則-優先順位付き)) に従い、本書では **P1 (データを失わない) > P2 (同意なく外へ出さない) > P6 (どの OS でも同じ体験)** を判断軸にする。OS 固有の便利機能は platform 層の「任意機能」として扱い、core は Port 以外の手段で OS に触れない (NFR-406, R3)。
@@ -49,7 +49,7 @@
 | OS | バージョン | アーキ | Rust ターゲット triple | Rust ティア (執筆時点) | 配布形態 | 版 | 備考 |
 |---|---|---|---|---|---|---|---|
 | Windows | 11 | x86_64 | `x86_64-pc-windows-msvc` | Tier 1 | zip (単一 exe) | **v0.1** (唯一の出荷対象) | 確定 (ユーザー回答)、OQ-15。基準機 (01 §3.0) と同じ Windows 11 で確かめる。MSVC ツールチェインを採用 (GNU 版は配布しない) |
-| Windows | 10 (1809 以降、サポート中の版) | x86_64 | `x86_64-pc-windows-msvc` | Tier 1 | zip (v0.1 と同じ) | **v0.2 以降の候補** (検証環境を用意できた版で対象に加える) | v0.1 の対象にしない (確定 (ユーザー回答)、OQ-15。検証環境が無い)。下の「Windows 10 を対象に加えるときの確認事項」 |
+| Windows | 10 (1809 以降、サポート中の版) | x86_64 | `x86_64-pc-windows-msvc` | Tier 1 | zip (v0.1 と同じ) | **公式には対応しない** (確定 (ユーザー回答)、2026-10-25。PO が指示するまで対象に加えない) | v0.1 の対象にしない (確定 (ユーザー回答)、OQ-15。検証環境が無い)。下の「Windows 10 を対象に加えるときの確認事項」 |
 | Windows | 10 / 11 on ARM | aarch64 | `aarch64-pc-windows-msvc` | Tier 1 (Rust 1.91 で昇格) | zip | v0.2 以降 (Tier B のビルドは v0.2) | **Tier B (ビルドのみ)**。Rust のティアとは別の、本プロジェクトの配布上の区分。実機テストは [09 §6](09-testing-quality.md) のランナー可用性に依存 |
 | macOS | 直近 3 メジャー (執筆 2026-10 時点: 26 / 15 / 14) | aarch64 | `aarch64-apple-darwin` | Tier 1 | tar.gz | v0.2 (macOS / Linux 出荷時) | Apple Silicon。ad-hoc 署名必須 (§18.4) |
 | macOS | 同上 | x86_64 | `x86_64-apple-darwin` | Tier 2 (host tools。Rust 1.90 で降格) | tar.gz | v0.2 (macOS / Linux 出荷時) | Intel Mac。出荷時は **Tier B (ビルドのみ)** (CI の x86_64 macOS ランナーの減少・有料化) |
@@ -58,7 +58,7 @@
 | Linux | glibc 2.31 以降 (Ubuntu 20.04 / Debian 11 / RHEL 9 相当) | x86_64 / aarch64 | `*-unknown-linux-gnu` | Tier 1 | tar.gz (v0.4: deb, rpm) | v0.2 以降 (条件付き) | **条件付き追加** (OQ-112): Linux を出荷するとき、musl 版が BM-104 で gnu 版比 1.5 倍以上遅い、または BM-202 が 1.3 倍以上なら同時に追加する。そうでなければ deb / rpm を作る v0.4 で追加。ビルドは §16.2 (zigbuild で glibc 2.31 に固定) |
 
 - **非対応 (ビルドできれば歓迎、CI 非保証)**: FreeBSD / OpenBSD / NetBSD、illumos、Android (Termux)、32bit OS 全般、Windows 7/8.1 (Rust 1.78 以降が非対応)、Windows 10 1809 未満 (ConPTY / VT が無い)、`x86_64-pc-windows-gnu`。v0.1 の Windows 10 (1809 以降) は「非対応」ではなく「対象外 (未確認)」で、起動を拒まない (§9.1 の VT の確認に通れば動く) が、動作を保証しない。
-- **Windows 10 を対象に加えるときの確認事項 (v0.2 以降の候補)**: (1) 1809〜2004 の ConPTY は代替スクリーンのスクロールバックとリサイズに不具合がある (§9.1 の ConPTY の癖)。対象にする最小の版を決め、それより前の版の扱い (既知の制約にするか、対象外にするか) を決める。(2) その時点の Windows Terminal が動く最小の Windows 10 の版を確かめる (**要確認**)。(3) S-06 / S-07 / S-08 / S-11 / S-20 と互換性マトリクス (§9.4) の Windows Terminal・conhost の行を Windows 10 の環境 (実機または VM) で確かめる。Microsoft による Windows 10 の通常のサポートは 2025-10 に終了している (LTSC と拡張セキュリティ更新を除く) ので、加えるかどうか自体をその版の着手前に決める (検証環境の確保は OQ-23 (d) と同じ扱い)。
+- **Windows 10 を対象に加えるときの確認事項 (公式には対応しないので、PO が指示したときだけ使う)**: (1) 1809〜2004 の ConPTY は代替スクリーンのスクロールバックとリサイズに不具合がある (§9.1 の ConPTY の癖)。対象にする最小の版を決め、それより前の版の扱い (既知の制約にするか、対象外にするか) を決める。(2) その時点の Windows Terminal が動く最小の Windows 10 の版を確かめる (**要確認**)。(3) S-06 / S-07 / S-08 / S-11 / S-20 と互換性マトリクス (§9.4) の Windows Terminal・conhost の行を Windows 10 の環境 (実機または VM) で確かめる。Microsoft による Windows 10 の通常のサポートは 2025-10 に終了している (LTSC と拡張セキュリティ更新を除く) ので、加えるかどうか自体をその版の着手前に決める (検証環境の確保は OQ-23 (d) と同じ扱い)。
 - **ユニバーサルバイナリ (macOS、macOS 出荷時)**: `lipo` で結合した 1 ファイルを Homebrew 向けに提供するか否かは §19。
 - **判定方法**: 実行時に OS バージョンを調べて機能を切り替えることは原則しない (P6)。Windows のみ、ConPTY 由来の挙動差を補うため `RtlGetVersion` 相当でビルド番号を取得し、**ログに記録するだけ** に使う (分岐には使わない)。
 
@@ -1351,7 +1351,7 @@ v0.x の間は **stable 1 本** (ADR-0040 決定 6)。プレリリース (`-alph
 
 | OQ | 件名 | 結論 / 結論案 | 区分 / 決定期限 |
 |---|---|---|---|
-| OQ-15 | 対応 OS/端末の範囲 (Intel Mac を Must のままにするか Tier B に下げるか、を含む) | **v0.1 の対象は Windows 11 の Windows Terminal と conhost** (確定 (ユーザー回答)。§1.2 / §9.4。Windows 10 は検証環境が無いので v0.2 以降の候補、§1.1)。macOS / Linux は v0.1 では出荷せず、**v0.2 で出荷する** (確定 (ユーザー回答))。v0.2 では Intel Mac (`x86_64-apple-darwin`) と Windows aarch64 を **Tier B (ビルドのみ)** にする (CI の x86_64 macOS ランナーが減少・有料化傾向。Tier B のビルドは v0.2) | 確定 (ユーザー回答) |
+| OQ-15 | 対応 OS/端末の範囲 (Intel Mac を Must のままにするか Tier B に下げるか、を含む) | **v0.1 の対象は Windows 11 の Windows Terminal と conhost** (確定 (ユーザー回答)。§1.2 / §9.4。Windows 10 は公式には対応しない、§1.1)。macOS / Linux は v0.1 では出荷せず、**v0.2 で出荷する** (確定 (ユーザー回答))。v0.2 では Intel Mac (`x86_64-apple-darwin`) と Windows aarch64 を **Tier B (ビルドのみ)** にする (CI の x86_64 macOS ランナーが減少・有料化傾向。Tier B のビルドは v0.2) | 確定 (ユーザー回答) |
 | OQ-70 | macOS ユニバーサルバイナリを追加提供するか | Homebrew 向けのみ提供 (v0.4)、GitHub Release はアーキ別 | 裁量 / v0.2 着手前 (macOS 出荷前) |
 | ADR-0021 | クリップボードを Port ではなく Effect 経路で扱う | Effect 経路 (§2.8、02 §4.4 / §6.3)。`ClipboardText::Handle` (`Editor::take_clipboard` で取り出す `ClipboardSource`) の文字列化はワーカー | 確定 (ユーザー回答) |
 | OQ-04 | 新規文書の既定改行を `lf` 固定にするか `native` にするか | `lf` (P6 / NFR-405。07 §5.2) | 確定 (ユーザー回答) |
