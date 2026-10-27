@@ -1,0 +1,42 @@
+[package]
+name = "evoeditor"
+description = "evoeditor: Rust 製のテキストエディタ (引数の解析と Host の起動だけ。docs/02 §4.1)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "evoeditor"
+path = "src/main.rs"
+
+[features]
+# テスト専用の経路 (保存途中の kill フック・パニック注入)。配布ビルドには入れない (09 §3.6)
+test-hooks = ["eve-core/test-hooks", "eve-host/test-hooks", "eve-platform/test-hooks"]
+# 計測用ビルドの区間の記録と隠しオプション `--bench-exit-after-first-frame` (docs/09 §3.6 / §5.2)。配布ビルドには入れない
+bench-trace = ["eve-tui/bench-trace"]
+
+[dependencies]
+eve-core = { version = "0.1.0", path = "../../crates/eve-core" }
+eve-config = { version = "0.1.0", path = "../../crates/eve-config" }
+eve-host = { version = "0.1.0", path = "../../crates/eve-host" }
+eve-platform = { version = "0.1.0", path = "../../crates/eve-platform" }
+eve-tui = { version = "0.1.0", path = "../../crates/eve-tui" }
+eve-view = { version = "0.1.0", path = "../../crates/eve-view" }
+
+[dev-dependencies]
+# L5 端末 E2E (docs/09 §3.6): ConPTY で実バイナリを駆動し、vt100 で画面を解釈する
+portable-pty = "0.9"
+vt100 = "0.16"
+encoding_rs = "0.8.42"
+
+# 実バイナリを ConPTY で駆動する計測 (BM-101b / 102b / 103b / 107)。cargo bench -p evoeditor --bench bm_pty
+[[bench]]
+name = "bm_pty"
+harness = false

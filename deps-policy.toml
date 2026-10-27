@@ -1,0 +1,100 @@
+# 依存規則 R1〜R11 の入力 (docs/02-architecture.md §4.3、docs/09-testing-quality.md §7)。
+# xtask check-deps が読む。検査が見るのは normal 依存の辺だけで、dev 依存は対象外。
+#
+# [crate.<name>].forbidden は 02 §4.1 の表の「禁止 crate」列と 1:1 に対応する。
+# 表を更新する PR では、この表も同時に更新する (xtask check-deps --docs が突合する)。
+# この節は 02 §4.1 の表 (2026-10-20 時点) から機械的に起こした。
+
+[limits]
+# NFR-207: 推移的依存の総数と C を含む依存の数 (BM-B02)。v0.1 では総数は報告、C 依存 0 は失敗。
+max_transitive_dependencies = 90
+max_c_dependencies = 0
+
+[allowed_direct_dependencies]
+# R10 (案): eve-encoding の normal 依存は encoding_rs と chardetng のみ。
+"eve-encoding" = ["encoding_rs", "chardetng"]
+# R4: eve-view の外部依存はゼロ (serde のみ optional)。
+"eve-view" = ["serde"]
+
+[thread_spawn]
+# R11 (案): std::thread::spawn / thread::Builder を使ってよいのは eve-host のみ。
+# 例外は 02 §9.1 の表のスレッドで、許可する crate とファイルをここに列挙する (該当の crate ができたときに足す)。
+allowed_crates = ["eve-host"]
+# 例: { crate = "eve-tui", file = "src/input.rs" }
+allowed_files = [
+    { crate = "eve-tui", file = "src/win.rs" },
+    { crate = "eve-platform", file = "src/term.rs" },
+    { crate = "eve-platform", file = "src/clipboard.rs" },
+]
+
+[crate."eve-text"]
+# lib、v0.1
+forbidden = ["ratatui", "crossterm", "tokio", "reqwest", "hyper", "windows-sys", "libc", "eve-encoding", "eve-view", "eve-config", "eve-core", "eve-platform", "eve-host", "eve-tui", "eve-protocol", "eve-syntax", "eve-lsp", "eve-ai", "eve-testkit", "eve-docs-tables"]
+
+[crate."eve-encoding"]
+# lib、v0.1
+forbidden = ["ratatui", "crossterm", "tokio", "reqwest", "hyper", "windows-sys", "libc", "eve-text", "eve-view", "eve-config", "eve-core", "eve-platform", "eve-host", "eve-tui", "eve-protocol", "eve-syntax", "eve-lsp", "eve-ai", "eve-testkit", "eve-docs-tables"]
+
+[crate."eve-view"]
+# lib、v0.1
+forbidden = ["ratatui", "crossterm", "tokio", "reqwest", "hyper", "windows-sys", "libc", "eve-text", "eve-encoding", "eve-config", "eve-core", "eve-platform", "eve-host", "eve-tui", "eve-protocol", "eve-syntax", "eve-lsp", "eve-ai", "eve-testkit", "eve-docs-tables"]
+
+[crate."eve-config"]
+# lib、v0.1
+forbidden = ["ratatui", "crossterm", "tokio", "reqwest", "hyper", "windows-sys", "libc", "eve-core", "eve-platform", "eve-host", "eve-tui", "eve-protocol", "eve-syntax", "eve-lsp", "eve-ai", "eve-testkit", "eve-docs-tables"]
+
+[crate."eve-core"]
+# lib、v0.1
+forbidden = ["ratatui", "crossterm", "tokio", "reqwest", "hyper", "windows-sys", "libc", "eve-platform", "eve-host", "eve-tui", "eve-protocol", "eve-syntax", "eve-lsp", "eve-ai", "eve-testkit", "eve-docs-tables"]
+
+[crate."eve-platform"]
+# lib、v0.1 (Windows の実装のみ。Unix の実装は macOS / Linux を出荷する版、§4.7)
+forbidden = ["ratatui", "crossterm", "eve-host", "eve-tui", "eve-testkit", "eve-docs-tables"]
+
+[crate."eve-host"]
+# lib、v0.1
+forbidden = ["ratatui", "crossterm", "eve-tui", "eve-testkit", "eve-docs-tables"]
+
+[crate."eve-tui"]
+# lib、v0.1
+forbidden = ["eve-testkit", "eve-docs-tables"]
+
+[crate."evoeditor"]
+# bin、v0.1
+forbidden = ["eve-testkit", "eve-docs-tables"]
+
+[crate."eve-protocol"]
+# lib (dev)、v0.2 以降 (dev。ADR-0039)
+forbidden = ["ratatui", "crossterm", "eve-core", "eve-platform", "eve-host", "eve-tui", "eve-testkit", "eve-docs-tables"]
+
+[crate."eve-bench"]
+# bin (dev)、v0.1
+forbidden = []
+
+[crate."eve-testkit"]
+# lib (公開。テスト用で、本番コードは依存しない)、v0.1
+forbidden = []
+
+[crate."eve-docs-tables"]
+# lib (dev、`publish = false`)、v0.1
+forbidden = ["eve-text", "eve-encoding", "eve-view", "eve-config", "eve-core", "eve-platform", "eve-host", "eve-tui", "eve-protocol", "eve-syntax", "eve-lsp", "eve-ai", "eve-testkit"]
+
+[crate."eve-test-helpers"]
+# bin (dev、`publish = false`、feature なし)、v0.1
+forbidden = []
+
+[crate."xtask"]
+# bin (dev、`publish = false`)、v0.1
+forbidden = []
+
+[crate."eve-syntax"]
+# lib、v0.4
+forbidden = ["ratatui", "crossterm", "eve-tui", "eve-lsp", "eve-ai", "eve-testkit", "eve-docs-tables"]
+
+[crate."eve-lsp"]
+# lib、v1.L
+forbidden = ["ratatui", "crossterm", "eve-tui", "eve-syntax", "eve-ai", "eve-testkit", "eve-docs-tables"]
+
+[crate."eve-ai"]
+# lib、v1.L
+forbidden = ["ratatui", "crossterm", "eve-tui", "eve-syntax", "eve-lsp", "eve-testkit", "eve-docs-tables"]

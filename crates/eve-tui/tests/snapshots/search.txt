@@ -1,0 +1,18 @@
+ 1│こんにちは、世界
+ 2│hello fox
+ 3│>   タブと[]全角スペース
+ 4│
+~
+~
+~
+~
+~
+~
+~
+~
+~
+検索: fox                                                              [Aa~] 1/1
+memo.txt                                                     行 1, 桁 1 UTF-8 LF
+
+Esc 取消  Enter 次へ  Alt+C 大小
+cursor: Some(CellPos { col: 9, row: 13 })

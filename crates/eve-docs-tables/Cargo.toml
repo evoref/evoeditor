@@ -1,0 +1,13 @@
+[package]
+name = "eve-docs-tables"
+description = "docs の Markdown の表を、機械可読の規則で読む小さな lib (docs/02 §4.1、docs/11 §8.5)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true

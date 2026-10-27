@@ -1,0 +1,28 @@
+[package]
+name = "eve-host"
+description = "Composition Root の共通部: 設定読込、Port の注入、JobSpawner、単一受信口、メインループ (docs/02 §4.1 / §9)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+# テスト専用の経路 (メインの停止の注入など。環境変数 `EVE_TEST_HOOK`)。配布ビルドには入れない (09 §3.6)
+test-hooks = []
+
+[dependencies]
+arc-swap = "1.9.3"
+eve-config = { version = "0.1.0", path = "../eve-config" }
+eve-core = { version = "0.1.0", path = "../eve-core" }
+eve-platform = { version = "0.1.0", path = "../eve-platform" }
+eve-view = { version = "0.1.0", path = "../eve-view" }
+
+[dev-dependencies]
+eve-testkit = { version = "0.1.0", path = "../eve-testkit" }
+eve-text = { version = "0.1.0", path = "../eve-text" }

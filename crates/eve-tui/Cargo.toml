@@ -1,0 +1,38 @@
+[package]
+name = "eve-tui"
+description = "Frontend の TUI 実装: 端末能力の判定・Frame → ratatui Buffer 描画・入力の正規化 (docs/02 §4.1、docs/04)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+# 計測用ビルドの区間の記録 (docs/09 §3.6)。配布ビルドには入れない
+bench-trace = []
+
+[dependencies]
+eve-view = { version = "0.1.0", path = "../eve-view" }
+eve-host = { version = "0.1.0", path = "../eve-host" }
+# 採用版は S-06 で固定 (02 §13.2)。ウィジェットは使わず、Buffer のセルへの書込と差分出力だけを使う (ADR-0005)
+ratatui = { version = "=0.30.2", default-features = false }
+
+# Windows の入力 (ReadConsoleInputW の自前ループ) とコンソールモード。unsafe は src/win.rs に閉じる (R5)
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_Storage_FileSystem",
+    "Win32_System_Console",
+    "Win32_System_Threading",
+] }
+
+[dev-dependencies]
+eve-testkit = { version = "0.1.0", path = "../eve-testkit" }
+eve-docs-tables = { version = "0.1.0", path = "../eve-docs-tables" }
+unicode-width = "0.2"

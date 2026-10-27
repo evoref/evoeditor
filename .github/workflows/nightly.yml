@@ -1,0 +1,126 @@
+# 夜間ジョブ (docs/09-testing-quality.md §6.1 / §6.3、docs/11 §1)。毎日 UTC 18:00 (JST 03:00) と手動 (workflow_dispatch)。
+# `schedule` は既定ブランチのワークフロー定義で動くので、ここは薄いトリガだけ: 対象のブランチ (変数 NIGHTLY_REF、未設定なら develop。
+# 手動実行では引数 ref で上書き) をチェックアウトし、そのコードの `cargo xtask nightly` を入口にする (手順の中身は xtask にある)。
+# v0.1 の中身: fuzz_decode (10 分)・proptest 拡張 (PROPTEST_CASES=10000)・cargo audit / deny advisories (本体と fuzz/)・coverage (報告のみ)。
+# fuzz のクラッシュ入力は `.github/fuzz-recipients.txt` の公開鍵で age により暗号化したものだけを artifact に上げる (平文は消す)。
+name: nightly
+
+on:
+  schedule:
+    - cron: "0 18 * * *"
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "対象のブランチまたはコミット (空なら vars.NIGHTLY_REF、それも無ければ develop)"
+        required: false
+        default: ""
+      fuzz_seconds:
+        description: "fuzz_decode の時間 (秒)。リリース前の 1 時間の fuzz は 3600 (docs/09 §8.2)"
+        required: false
+        default: "600"
+      only:
+        description: "実行する手順を絞る (fuzz,proptest,audit,coverage のカンマ区切り。空なら全部)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nightly
+  cancel-in-progress: false
+
+env:
+  CARGO_INCREMENTAL: "0"
+  CARGO_PROFILE_DEV_DEBUG: "0"
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: "1"
+  # xtask の各手順の時間の上限 (秒)。proptest 拡張は共有ランナーで 30〜60 分かかる (既定の 20 分では足りない)
+  XTASK_STEP_TIMEOUT_SECS: "5400"
+
+defaults:
+  run:
+    shell: bash
+
+# アクションはコミット SHA で固定する (docs/09 §6.5)。更新は Dependabot (github-actions) が PR にする。
+# actions/checkout v7.0.1          3d3c42e5aac5ba805825da76410c181273ba90b1
+# Swatinem/rust-cache v2.9.2       6323deb102c322ba6fcbdcafc7e3dddab59af2b6
+# taiki-e/install-action v2.87.29  8cca0918f8471c33515202b73f56ab27f2bed283
+# actions/cache v6.1.0             55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+# actions/upload-artifact v7.0.2   cf430e030ddbb5b0abf93d22962f4752f3646cd9
+
+jobs:
+  nightly:
+    name: nightly (linux)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+    # 起票 (ジョブの失敗とクラッシュの件数だけを書く、09 §6.3) のために issues: write をこのジョブに限って足す
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref || vars.NIGHTLY_REF || 'develop' }}
+          persist-credentials: false
+      - name: Rust (stable + nightly)
+        run: |
+          rustup toolchain install stable --profile minimal --component llvm-tools-preview --no-self-update
+          rustup default stable
+          rustup toolchain install nightly --profile minimal --no-self-update
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          shared-key: linux-nightly
+      - uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2.87.29
+        with:
+          tool: cargo-nextest@0.9.148,cargo-fuzz@0.13.2,cargo-audit@0.22.2,cargo-deny@0.20.2,cargo-llvm-cov@0.9.1
+      - name: age (クラッシュ入力の暗号化)
+        run: sudo apt-get update && sudo apt-get install -y age
+      # 夜間の実行で増えた fuzz のコーパスを持ち越す (コミットしない。最小コーパスの更新は人間が PR で行う、09 §6.3)
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: fuzz/corpus
+          key: fuzz-corpus-${{ github.run_id }}
+          restore-keys: |
+            fuzz-corpus-
+      - name: cargo xtask nightly
+        id: nightly
+        run: |
+          only="${{ inputs.only }}"
+          if [ -n "$only" ]; then
+            cargo xtask nightly --fuzz-seconds "${{ inputs.fuzz_seconds || '600' }}" --only "$only"
+          else
+            cargo xtask nightly --fuzz-seconds "${{ inputs.fuzz_seconds || '600' }}"
+          fi
+      - name: 要約
+        if: always()
+        run: |
+          if [ -f target/nightly/summary.txt ]; then
+            { echo '## nightly'; echo '```'; cat target/nightly/summary.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          fi
+      # 暗号化したクラッシュ入力だけを上げる (平文は xtask が消している)
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: fuzz-crashes-encrypted
+          path: target/nightly/fuzz-artifacts/*.age
+          if-no-files-found: ignore
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: nightly-report
+          path: |
+            target/nightly/lcov.info
+            target/nightly/summary.txt
+          if-no-files-found: ignore
+      # 失敗の起票: 書くのはジョブの失敗とクラッシュの件数 (要約) だけ。入力・スタック・原因の推測は書かない
+      - name: 失敗の起票
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          body="nightly の実行が失敗しました: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          if [ -f target/nightly/summary.txt ]; then
+            body="${body}"$'\n\n```\n'"$(cat target/nightly/summary.txt)"$'\n```'
+          fi
+          gh issue create --title "nightly: 失敗 ($(date -u +%Y-%m-%d))" --body "${body}"

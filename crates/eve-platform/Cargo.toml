@@ -1,0 +1,49 @@
+[package]
+name = "eve-platform"
+description = "Ports の OS 実装 (Windows): パス・ディレクトリ・ファイル I/O、Host 側の部品 (docs/02 §4.1、docs/05)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+# テスト専用の経路 (保存途中の kill フック。環境変数 `EVE_TEST_HOOK`)。配布ビルドには入れない (09 §3.6)
+test-hooks = []
+
+[dependencies]
+eve-core = { version = "0.1.0", path = "../eve-core" }
+eve-text = { version = "0.1.0", path = "../eve-text" }
+xxhash-rust = { version = "0.8.19", features = ["xxh3"] }
+
+[dev-dependencies]
+eve-view = { version = "0.1.0", path = "../eve-view" }
+memory-stats = "1.2.0"
+encoding_rs = "0.8.42"
+
+[[bench]]
+name = "bm_104_202"
+harness = false
+
+# Windows の API (ファイルの識別・クリップボード・コンソールイベント)。unsafe は Windows 専用のモジュールに閉じる (R5)
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = [
+    "Win32_Foundation",
+    "Win32_Globalization",
+    "Win32_Graphics_Gdi",
+    "Win32_Security",
+    "Win32_Security_Authorization",
+    "Win32_Storage_FileSystem",
+    "Win32_System_Console",
+    "Win32_System_LibraryLoader",
+    "Win32_System_DataExchange",
+    "Win32_System_Memory",
+    "Win32_System_Ole",
+    "Win32_System_Threading",
+    "Win32_UI_WindowsAndMessaging",
+] }

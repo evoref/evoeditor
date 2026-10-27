@@ -1,0 +1,4 @@
+# eve-host は、スレッドを作ってよい唯一の crate (R11、docs/02-architecture.md §4.3 / §9.1)。
+# 作ってよいのは §9.1 の表のスレッド (io / bg の固定 2 本、ログ、クリップボード取得の使い捨て) に限る。
+# 専用の clippy.toml は、ルートの clippy.toml とマージされないので、ルートの R11 の項目をここでは書かない。
+# std::fs / std::process は eve-host の中でも直接使わない方針だが、Port の実装は eve-platform にある (R5)。

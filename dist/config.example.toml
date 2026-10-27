@@ -1,0 +1,33 @@
+# evoeditor の設定ファイルの例 (v0.1)
+#
+# 使い方: このファイルを `%APPDATA%\evoeditor\config.toml` に写して編集します。
+# evoeditor は設定のフォルダを自動では作りません。フォルダが無ければ自分で作ってください。
+# 設定ファイルが無い、または項目を書かなかったときは、ここに書いた値 (既定値) になります。
+# 値を間違えても起動は止まりません。その項目だけ既定値に戻し、起動後に知らせます。
+# 現在の版で読む項目は、下の 7 個だけです。
+
+[editor]
+# タブ文字の表示幅 (1〜16)。
+tab_width = 4
+# インデントの操作で入れるもの: "space" (スペース) または "tab" (タブ文字)。
+indent_unit = "space"
+# "space" のときの、1 段のインデントの幅 (1〜16)。
+indent_width = 4
+
+[file]
+# 新しいファイルと、文字コードを判定できなかったときの文字コード。
+# "utf-8" / "utf-8-bom" / "utf-16le" / "utf-16be" / "shift_jis" / "euc-jp" / "iso-2022-jp" / "system"
+# ("system" は Windows の既定のコードページ。日本語環境では Shift_JIS 系)
+default_encoding = "utf-8"
+# 新しいファイルの改行: "lf" / "crlf" / "cr" / "native" (Windows では crlf)。
+# 既存のファイルは、開いたときの改行のまま保存します。
+default_line_ending = "lf"
+
+[view]
+# 文字幅が環境で異なる文字 (East Asian Ambiguous。例: ± × ○ など) を 1 桁 (1) と 2 桁 (2) のどちらで描くか。
+# 端末の設定に合わせます。ずれて表示が崩れるときは 2 にしてください。
+ambiguous_width = 1
+
+[theme]
+# 色の段階: "auto" (端末から判定) / "truecolor" / "256" / "16" / "none" (装飾のみ)。
+color_mode = "auto"

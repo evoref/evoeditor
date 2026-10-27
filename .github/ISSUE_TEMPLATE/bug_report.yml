@@ -1,0 +1,73 @@
+name: バグ報告
+description: 動作がおかしい、クラッシュした、データが失われた、など
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        報告ありがとうございます。**セキュリティ上の問題は、ここに書かず**、[非公開の窓口](https://github.com/evoref/evoeditor/security/advisories/new)から報告してください。
+
+        **文書の本文、ファイルのパス全体、API キーなどの秘密情報は、貼り付けないでください。** 再現に必要な最小の内容に置き換えてください。
+  - type: input
+    id: version
+    attributes:
+      label: evoeditor の版
+      description: "`evoeditor --version` の出力"
+      placeholder: "evoeditor 0.1.0"
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: OS とビルド
+      placeholder: "Windows 11 23H2"
+    validations:
+      required: true
+  - type: input
+    id: terminal
+    attributes:
+      label: 端末とシェル
+      placeholder: "Windows Terminal 1.x / PowerShell 7.x"
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 再現の手順
+      placeholder: |
+        1. ...
+        2. ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期待した動作
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: 実際の動作
+    validations:
+      required: true
+  - type: textarea
+    id: crash
+    attributes:
+      label: クラッシュログ (あれば)
+      description: パニックメッセージなど。**文書の本文を含めないでください。**
+      render: text
+  - type: textarea
+    id: file-info
+    attributes:
+      label: 開いていたファイルの特徴 (任意)
+      description: 文字コード、改行コード、おおよそのサイズなど。内容そのものは書かないでください。
+  - type: checkboxes
+    id: confirm
+    attributes:
+      label: 確認
+      options:
+        - label: 秘密情報・文書の本文・パスの全体を含めていません。
+          required: true
+        - label: 同じ内容の Issue が無いか確認しました。
+          required: true

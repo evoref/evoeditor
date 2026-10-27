@@ -1,0 +1,207 @@
+# リリース (docs/09-testing-quality.md §6.1 / §9.2 手順 4〜9、docs/11 §9.3)。
+# 起動: タグ `v*` の push (人間が署名付きタグを付ける。このワークフローはタグを作らない・消さない) と、手動 (dry-run)。
+# 手動 (workflow_dispatch) は dry-run: 指定した ref (空なら develop) で、ビルド → 配布 zip の作成 → 展開後の検査まで行い、
+# Release は作らない。
+# 流れ: verify-tag (タグの検証。最初のステップ) → build (zip / .pdb / SHA256SUMS) → smoke (展開 → 内容物の検査 →
+# --version → L5 スモーク S1〜S3) → draft-release (draft の GitHub Release を作る。publish は人間)。
+# 署名 (SHA256SUMS.minisig) はメンテナの手元 (オフライン鍵) で付ける。CI に秘密鍵は置かない (docs/05 §18.9、docs/11 §9.7)。
+# 失敗したら draft のまま原因を直して同じタグで再実行してよい (docs/09 §9.2 手順 4)。publish した後は成果物を差し替えない。
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "dry-run の対象のブランチまたはコミット (空なら develop)。Release は作らない"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # 最初のステップでタグを検証する (docs/09 §6.1): 署名・タグの位置・版の一致・判定コミットとの内容の一致。
+  # 署名の鍵の一覧は、タグのコミットではなく origin/develop のものを使う (タグ側で一覧を書き換えて通すことを防ぐ)。
+  verify-tag:
+    name: verify-tag
+    if: github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: タグと主要ブランチを取得する
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          git fetch --force --tags origin
+          git fetch origin develop:refs/remotes/origin/develop || true
+          git fetch origin main:refs/remotes/origin/main || true
+          git show "origin/develop:.github/allowed_signers" > "$RUNNER_TEMP/allowed_signers"
+      - name: Rust (stable)
+        run: rustup toolchain install stable --profile minimal --no-self-update && rustup default stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          shared-key: linux
+      - name: タグの検証
+        env:
+          TAG: ${{ github.ref_name }}
+        run: cargo xtask verify-tag "$TAG" --allowed-signers "$RUNNER_TEMP/allowed_signers"
+
+  build:
+    name: build
+    needs: verify-tag
+    # verify-tag は手動 (dry-run) では飛ばされる。失敗・取り消しのときは動かさない
+    if: ${{ !cancelled() && (needs.verify-tag.result == 'success' || needs.verify-tag.result == 'skipped') }}
+    runs-on: windows-2025
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event_name == 'push' && github.ref || inputs.ref || 'develop' }}
+          persist-credentials: false
+      - name: Rust (stable)
+        run: rustup toolchain install stable --profile minimal --no-self-update && rustup default stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          shared-key: windows-release
+      - uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2.87.29
+        with:
+          tool: cargo-about@0.9.2
+      - name: 配布物を作る (cargo xtask dist)
+        shell: bash
+        env:
+          EVENT: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT" = "push" ]; then
+            cargo xtask dist --version "${REF_NAME#v}"
+          else
+            cargo xtask dist
+          fi
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: dist
+          path: |
+            target/dist/*.zip
+            target/dist/*.pdb
+            target/dist/SHA256SUMS
+            target/dist/size.json
+          if-no-files-found: error
+
+  # 検証 (docs/09 §9.2 手順 6): ダウンロード → 展開 → 内容物の検査 → テスト専用の経路が無いこと → --version → L5 スモーク S1〜S3
+  smoke:
+    name: smoke
+    needs: build
+    # 手動 (dry-run) では verify-tag が飛ばされる。飛ばされた祖先があると既定の条件 (success()) で連鎖して飛ばされるので明示する
+    if: ${{ !cancelled() && needs.build.result == 'success' }}
+    runs-on: windows-2025
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event_name == 'push' && github.ref || inputs.ref || 'develop' }}
+          persist-credentials: false
+      - name: Rust (stable)
+        run: rustup toolchain install stable --profile minimal --no-self-update && rustup default stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          shared-key: windows
+      - uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2.87.29
+        with:
+          tool: cargo-nextest@0.9.148
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: dist
+          path: dl
+      - name: SHA256SUMS と照合し、zip を検査する
+        shell: pwsh
+        run: |
+          $zip = Get-ChildItem dl -Filter *.zip | Select-Object -First 1
+          $line = Select-String -Path dl/SHA256SUMS -Pattern ([regex]::Escape($zip.Name)) | Select-Object -First 1
+          if (-not $line) { throw "SHA256SUMS に $($zip.Name) の行がありません" }
+          $want = ($line.Line -split '\s+')[0]
+          $got = (Get-FileHash -Algorithm SHA256 $zip.FullName).Hash.ToLowerInvariant()
+          if ($got -ne $want) { throw "zip のハッシュが SHA256SUMS と違います: $got / $want" }
+          cargo xtask dist --verify $zip.FullName
+          if ($LASTEXITCODE -ne 0) { throw "zip の検査に失敗しました" }
+      - name: 展開して --version がタグ (または Cargo.toml の版) と一致することを確かめる
+        shell: pwsh
+        env:
+          EVENT: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          $zip = Get-ChildItem dl -Filter *.zip | Select-Object -First 1
+          Expand-Archive $zip.FullName -DestinationPath unpacked
+          $out = (& "$PWD\unpacked\evoeditor.exe" --version).Trim()
+          if ($env:EVENT -eq 'push') { $want = "evoeditor " + $env:REF_NAME.TrimStart('v') }
+          else { $want = "evoeditor " + ((Select-String -Path Cargo.toml -Pattern '^version = "(.+)"').Matches[0].Groups[1].Value) }
+          if ($out -ne $want) { throw "--version が想定と違います: '$out' / '$want'" }
+          "EVE_EXE=$PWD\unpacked\evoeditor.exe" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+      - name: L5 スモーク S1〜S3 (展開した exe を EVE_EXE で渡す)
+        shell: pwsh
+        run: cargo nextest run --profile e2e -p evoeditor --test e2e -E 'test(~起動して最初の画面が出て) | test(~version_は版を出して) | test(~日本語のファイルを開いて編集して保存する)'
+
+  # draft の Release を作る。publish は人間 (CHANGELOG 本文・更新手順の文書・リリースのチェックリストを確かめてから、docs/09 §9.2 手順 9)。
+  draft-release:
+    name: draft-release
+    needs: smoke
+    if: ${{ !cancelled() && needs.smoke.result == 'success' && github.event_name == 'push' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: dist
+          path: dl
+      - name: draft の Release を作る
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          flags=(--draft --verify-tag --title "$TAG")
+          case "$TAG" in *-*) flags+=(--prerelease) ;; esac
+          {
+            echo "## 更新の方法"
+            echo
+            echo "(人が書く: 配布経路ごとの手順と、この版で要る移行手順。README の「更新」節と一致させる。)"
+            echo
+            echo "## 変更点"
+            echo
+            echo "(人が書く: CHANGELOG の該当の版を写す。)"
+            echo
+            echo "## 検証"
+            echo
+            echo "- release.yml の実行: $RUN_URL"
+            echo "- タグの検証 (署名・位置・版・判定コミットとの内容の一致)、zip の内容物、テスト専用の経路が無いこと、--version、L5 スモーク S1〜S3: 通過"
+            echo "- 手動の配布経路の検証 (cargo install の経路・クリーンな Windows 11・Smart App Control): (人が追記する)"
+            echo
+            echo "## 署名"
+            echo
+            echo "SHA256SUMS.minisig はメンテナが手元で付ける。公開鍵はリポジトリの README と minisign.pub。"
+            echo
+            echo "## SHA256SUMS"
+            echo
+            echo '```text'
+            cat dl/SHA256SUMS
+            echo '```'
+          } > notes.md
+          gh release create "$TAG" "${flags[@]}" --notes-file notes.md dl/*.zip dl/*.pdb dl/SHA256SUMS

@@ -1,0 +1,33 @@
+[package]
+name = "eve-core"
+description = "Editor ファサード、Document / View、Transaction / Undo、コマンド、検索、Job、Frame 生成、Ports の定義 (docs/02 §4.1、docs/03)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+# テスト専用の経路 (パニック注入コマンド `internal.debug_panic`、環境変数 `EVE_TEST_HOOK=panic_command`)。配布ビルドには入れない (09 §3.6)
+test-hooks = []
+
+[dependencies]
+eve-text = { version = "0.1.0", path = "../eve-text" }
+eve-encoding = { version = "0.1.0", path = "../eve-encoding" }
+eve-view = { version = "0.1.0", path = "../eve-view" }
+eve-config = { version = "0.1.0", path = "../eve-config" }
+memchr = "2.8.3"
+# 内容ハッシュ XXH3-64 (docs/05 §5.5)。純 Rust
+twox-hash = { version = "2.1.5", default-features = false, features = ["std", "xxhash3_64"] }
+
+[dev-dependencies]
+proptest = "1.12.0"
+memory-stats = "1.2.0"
+encoding_rs = "0.8.42"
+eve-docs-tables = { version = "0.1.0", path = "../eve-docs-tables" }
+eve-testkit = { version = "0.1.0", path = "../eve-testkit" }

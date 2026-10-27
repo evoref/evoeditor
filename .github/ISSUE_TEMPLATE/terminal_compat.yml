@@ -1,0 +1,93 @@
+name: 端末の互換性の報告
+description: お使いの端末で evoeditor が正しく動くか (動かないか) の報告
+labels: ["terminal-compat"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        v0.1 の対象は **Windows 11 の Windows Terminal と conhost** です。ほかの端末の報告も、記録として歓迎します。
+        確認した項目だけ選んでください (未確認のままでかまいません)。
+  - type: input
+    id: version
+    attributes:
+      label: evoeditor の版
+      placeholder: "evoeditor 0.1.0"
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: OS とビルド
+      placeholder: "Windows 11 23H2"
+    validations:
+      required: true
+  - type: input
+    id: terminal
+    attributes:
+      label: 端末の名前と版
+      placeholder: "Windows Terminal 1.x"
+    validations:
+      required: true
+  - type: input
+    id: shell
+    attributes:
+      label: シェル (任意)
+      placeholder: "PowerShell 7.x"
+  - type: input
+    id: env
+    attributes:
+      label: "環境変数 TERM / COLORTERM (任意)"
+  - type: dropdown
+    id: truecolor
+    attributes:
+      label: 色 (TrueColor で表示が崩れない)
+      options: ["未確認", "OK", "NG (下に詳細)"]
+    validations:
+      required: true
+  - type: dropdown
+    id: ime
+    attributes:
+      label: 日本語入力 (IME) で入力・確定ができる
+      options: ["未確認", "OK", "NG (下に詳細)"]
+    validations:
+      required: true
+  - type: dropdown
+    id: width
+    attributes:
+      label: 全角文字・絵文字の幅 (カーソルや表示がずれない)
+      options: ["未確認", "OK", "NG (下に詳細)"]
+    validations:
+      required: true
+  - type: dropdown
+    id: keys
+    attributes:
+      label: キー入力 (Ctrl / Alt / Shift の組み合わせ、矢印、Home / End)
+      options: ["未確認", "OK", "NG (下に詳細)"]
+    validations:
+      required: true
+  - type: dropdown
+    id: paste
+    attributes:
+      label: ペースト (貼り付け)
+      options: ["未確認", "OK", "NG (下に詳細)"]
+    validations:
+      required: true
+  - type: dropdown
+    id: resize
+    attributes:
+      label: ウィンドウのリサイズ
+      options: ["未確認", "OK", "NG (下に詳細)"]
+    validations:
+      required: true
+  - type: dropdown
+    id: restore
+    attributes:
+      label: 終了後に端末が元の状態に戻る
+      options: ["未確認", "OK", "NG (下に詳細)"]
+    validations:
+      required: true
+  - type: textarea
+    id: details
+    attributes:
+      label: NG の詳細・その他
+      description: 文書の本文やパスの全体は書かないでください。

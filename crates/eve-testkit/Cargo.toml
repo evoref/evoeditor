@@ -1,0 +1,32 @@
+[package]
+name = "eve-testkit"
+description = "ヘッドレス駆動ハーネス (Harness)、偽 Port (MemFs・ManualClock・ManualJobSpawner)、HeadlessFrontend (docs/02 §4.1、docs/09 §3.4)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+eve-core = { version = "0.1.0", path = "../eve-core" }
+eve-view = { version = "0.1.0", path = "../eve-view" }
+eve-host = { version = "0.1.0", path = "../eve-host" }
+unicode-width = "0.2"
+
+# 自前のハーネス (p50 / p99 を出すため criterion は使わない)。cargo bench -p eve-testkit --bench bm_105
+[[bench]]
+name = "bm_105"
+harness = false
+
+[[bench]]
+name = "bm_103a"
+harness = false
+
+[[bench]]
+name = "bm_106"
+harness = false

@@ -1,0 +1,1640 @@
+# v0.1 の Must の受入基準 (AC) のチェックリスト (docs/11-dev-workflow.md §3.3、docs/08-roadmap.md M0c (d))。
+#
+# - 01-requirements.md §5.1〜5.4 の AC を、AC-<要件 ID>-<n> の形で 1 件ずつ並べる。
+# - 人が更新する。AC を満たす PR を merge するときに、status を done にし、verified_by に
+#   検証の実体 (テスト関数名・ベンチ ID・docs/compat/ の手順の記録) を書く。
+# - kind は docs/09-testing-quality.md §8.5 の検証区分 (T: 自動テスト, B: ベンチ, M: 手動, R: レビュー)。
+#   AC 単位で区分が違う場合 (例 FR-206 の AC-3 は M) は、実装時に kind を直す。
+# - status = "done" の項目は verified_by が 1 つ以上必要 (xtask check の検査、11 §3.3)。
+# - 初版は 01 §5 の表と 09 §8.5 の表から起こした (2026-10-20)。抽出の規則は docs/11 §8.5 (eve-docs-tables が実装)。
+#   後の版の AC (頭部の注記が v0.2 などの版や「…版から適用」を含むもの) は含めない。
+
+[[ac]]
+id = "AC-FR-101-1"
+requirement = "FR-101"
+kind = "T"
+verified_by = [
+    "引数なしは無題_ファイル_1_つは開く",
+    "二つ以上のファイルは使い方の誤り",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-101-2"
+requirement = "FR-101"
+kind = "T"
+verified_by = [
+    "存在しないパスは空の新規文書で_保存すると作成する",
+    "親フォルダがないパスは警告し_保存はエラー",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-104-1"
+requirement = "FR-104"
+kind = "T"
+verified_by = [
+    "名前を付けて保存は既定のキーから実行できる",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-104-3"
+requirement = "FR-104"
+kind = "T"
+verified_by = [
+    "無編集の上書き保存は書き込まず_変更なしと示す",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-105-1"
+requirement = "FR-105"
+kind = "T"
+verified_by = [
+    "原子的保存の切断点では_t_は無傷で一時ファイルが残り_開いても報告しない",
+    "置換の途中の状態では_t_が無く退避名に元が完全に残り_開くと案内する",
+    "上書きの途中の中断では_t_は半端に書き換わりバックアップが元の内容を保つ",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-105-2"
+requirement = "FR-105"
+kind = "T"
+verified_by = [
+    "供給側の失敗は一時ファイルを消し元のファイルは無傷",
+    "原子的置換ができなければ確認を出し_直接上書きで保存する",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-106-1"
+requirement = "FR-106"
+kind = "T"
+verified_by = [
+    "読み取り専用属性と_readonly_のファイルは編集操作を理由付きで拒否する",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-106-2"
+requirement = "FR-106"
+kind = "T"
+verified_by = [
+    "ジャンクション経由でもリンク先のファイルを置換しジャンクションは残る",
+    "シンボリックリンクはリンク先を置換しリンクは残る",
+    "ダングリングリンクは保存しない",
+    "ダングリングリンクは専用のメッセージになる",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-106-3"
+requirement = "FR-106"
+kind = "T"
+verified_by = [
+    "ハードリンクはリンクを保つか切り離すかを選ぶ",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-107-1"
+requirement = "FR-107"
+kind = "T"
+verified_by = [
+    "終了の確認は_3_択で_キャンセルでは何も変わらない",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-107-2"
+requirement = "FR-107"
+kind = "T"
+verified_by = [
+    "コンソールを閉じると未保存の内容を退避して終了する",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-107-3"
+requirement = "FR-107"
+kind = "T"
+verified_by = [
+    "dirty_な文書を置き換えると確認が出て_キャンセルで何も変わらない",
+    "新規バッファの作成でも_dirty_なら確認が出て_キャンセルで何も変わらない",
+    "読込が失敗したら今の文書がそのまま残る",
+    "読込が取り消されたら今の文書がそのまま残る",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-108-1"
+requirement = "FR-108"
+kind = "T"
+verified_by = [
+    "utf16_の_bom_を保って保存する",
+    "bom_と_crlf_を保持して保存する",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-109-1"
+requirement = "FR-109"
+kind = "T"
+verified_by = [
+    "shift_jis_を判定して開き_編集して同じ文字コードで保存する",
+    "euc_jp_を開いて保存する",
+    "iso_2022_jp_を判定して行ごとに閉じて保存する",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-109-2"
+requirement = "FR-109"
+kind = "T"
+verified_by = [
+    "shift_jis_を判定して開き_編集して同じ文字コードで保存する",
+    "shift_jis_の_cp932_外字は往復し_外字以外の編集でも不変",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-109-3"
+requirement = "FR-109"
+kind = "T"
+verified_by = [
+    "iso_2022_jp_を判定して行ごとに閉じて保存する",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-109-4"
+requirement = "FR-109"
+kind = "T"
+verified_by = [
+    "iso_2022_jp_の半角カナは全角カナへ置換する",
+    "jis_系の互換文字はどの文字コードでも表現不能として報告される",
+    "置換して保存は一覧を示し_確認の後に置換して書く",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-109-5"
+requirement = "FR-109"
+kind = "T"
+verified_by = [
+    "iso_2022_jp_の判定",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-111-1"
+requirement = "FR-111"
+kind = "T"
+verified_by = [
+    "誤判定された_utf16le_は_文字コードを指定して開き直すと正しく表示できる",
+    "shift_jis_を誤判定しても_指定して開き直すと正しく表示できる",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-111-2"
+requirement = "FR-111"
+kind = "T"
+verified_by = [
+    "開き直しは未保存なら確認し_破棄すると読み直す",
+    "開き直しの確認で中止すると旧本文と書式のまま",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-111-3"
+requirement = "FR-111"
+kind = "T"
+verified_by = [
+    "文字コードを指定して保存すると_書式は成功のときだけ変わる",
+    "保存が失敗したら書式は変わらない",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-111-4"
+requirement = "FR-111"
+kind = "T"
+verified_by = [
+    "開き直すと表示は内容に合い_履歴は消えて通知は_1_回",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-112-1"
+requirement = "FR-112"
+kind = "T"
+verified_by = [
+    "表現できない文字は何も書かずに保存を止める",
+    "表現できない文字の保存は確認し_utf8_で保存できる",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-112-2"
+requirement = "FR-112"
+kind = "T"
+verified_by = [
+    "jis_系の互換文字はどの文字コードでも表現不能として報告される",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-112-3"
+requirement = "FR-112"
+kind = "T"
+verified_by = [
+    "報告されなかった文字はすべて元の文字に戻る",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-112-4"
+requirement = "FR-112"
+kind = "T"
+verified_by = [
+    "区分_b_の文書を編集して保存するときは書き込む前に確認し_保存を選ぶと代表バイトで書く",
+    "区分_b_の確認で別名で保存を選ぶと名前の入力へ_esc_では何もしない",
+    "euc_jp_の補助漢字を含む文書は編集して保存すると何も書かず表現不能の選択肢を出す",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-113-1"
+requirement = "FR-113"
+kind = "T"
+verified_by = [
+    "改行の種類はそのまま往復する",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-113-2"
+requirement = "FR-113"
+kind = "T"
+verified_by = [
+    "新規文書で_enter_を押すと_lf_が入る",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-113-3"
+requirement = "FR-113"
+kind = "T"
+verified_by = [
+    "貼り付けの改行は経路によらず文書の既定の改行になる",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-113-4"
+requirement = "FR-113"
+kind = "T"
+verified_by = [
+    "改行コードの変換は_lf_crlf_cr_のどれでも全部そろい_状態表示と次の_enter_も従う",
+    "改行がすでにそろっていれば文書も履歴も変わらず_読み取り専用では拒否する",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-114-1"
+requirement = "FR-114"
+kind = "T"
+verified_by = [
+    "改行の種類はそのまま往復する",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-115-1"
+requirement = "FR-115"
+kind = "T"
+verified_by = [
+    "バイナリは確認が要るので開かず_今の文書を残す",
+    "バイナリを読み取り専用で開く",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-115-2"
+requirement = "FR-115"
+kind = "T"
+verified_by = [
+    "誤判定された_utf16le_は_文字コードを指定して開き直すと正しく表示できる",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-116-1"
+requirement = "FR-116"
+kind = "T"
+verified_by = [
+    "読み取り専用属性と_readonly_のファイルは編集操作を理由付きで拒否する",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-116-3"
+requirement = "FR-116"
+kind = "T"
+verified_by = [
+    "上書き保存が権限エラーなら読み取り専用に切り替わり_別名で保存できる",
+    "名前を付けて保存の権限エラーでは今の文書を読み取り専用にしない",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-116-4"
+requirement = "FR-116"
+kind = "T"
+verified_by = [
+    "読み取り専用属性のファイルを別名で保存すると編集できる",
+    "readonly_の指定と内容由来の理由は別名で保存しても残る",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-117-1"
+requirement = "FR-117"
+kind = "T"
+verified_by = [
+    "外部で変更されていたら書かずに尋ね_上書きを選ぶと保存される",
+    "外部で変更されていたら_別名で保存を選ぶと名前の入力へ進む",
+    "外部で削除されていたら_上書きでファイルを作り直す",
+    "新規ファイルの保存先に後から同名のファイルができていたら尋ねる",
+    "競合の確認は_esc_で中止し_何も書かない",
+    "開くと内容ハッシュが付き_16_mib_を超えると付かない",
+    "mtime_も長さも同じ書き換えは保存の前に見つけて尋ねる",
+    "内容が同じで_mtime_だけが違うなら尋ねずに保存する",
+    "保存した内容のハッシュで_次の保存でも同じ書き換えを見つける",
+    "未編集の保存は_mtime_だけの変化なら変更なしとして書かない",
+    "未編集の保存でも_mtime_が同じで中身が違えば尋ねる",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-117-2"
+requirement = "FR-117"
+kind = "T"
+verified_by = [
+    "BM-103b-reconcile",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-122-1"
+requirement = "FR-122"
+kind = "M"
+verified_by = [
+    "BM-104p-100m",
+    "esc_で読込中の文書を取り消すと今の文書が残る",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-124-1"
+requirement = "FR-124"
+kind = "T"
+verified_by = [
+    "新規バッファを作り_保存すると名前を尋ねられる",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-127-1"
+requirement = "FR-127"
+kind = "T"
+verified_by = [
+    "巨大なファイルは読む前に見込みを示して_読み取り専用で開くか中止かを選ばせる",
+    "閾値未満のファイルは警告なしで開く",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-127-2"
+requirement = "FR-127"
+kind = "T"
+verified_by = [
+    "不正バイトが_1_パーセントを超えると見込みを示して_3_択を出す",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-201-1"
+requirement = "FR-201"
+kind = "T"
+verified_by = [
+    "書記素クラスタは_backspace_と_delete_で_1_回で消える",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-202-1"
+requirement = "FR-202"
+kind = "T"
+verified_by = [
+    "改行の自動インデント",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-202-2"
+requirement = "FR-202"
+kind = "T"
+verified_by = [
+    "改行の自動インデント",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-202-3"
+requirement = "FR-202"
+kind = "T"
+verified_by = [
+    "選択して_enter_は選択を改行に置き換え_1_回の_undo_で戻る",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-203-1"
+requirement = "FR-203"
+kind = "T"
+verified_by = [
+    "連続入力は_1_回の_undo_で戻り_時間窓で区切れる",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-203-2"
+requirement = "FR-203"
+kind = "T"
+verified_by = [
+    "undo_と_redo_を繰り返しても各時点の文書と選択に一致する",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-203-3"
+requirement = "FR-203"
+kind = "T"
+verified_by = [
+    "ランダムな編集の後_メモリの増分は_undo_の会計値の_1_2_倍以下",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-204-1"
+requirement = "FR-204"
+kind = "T"
+verified_by = [
+    "保存時点に戻ると未変更の表示になる",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-204-2"
+requirement = "FR-204"
+kind = "T"
+verified_by = [
+    "編集して保存すると履歴が残り_undo_で_dirty_に戻る",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-204-3"
+requirement = "FR-204"
+kind = "T"
+verified_by = [
+    "保存点より後を_undo_してから編集すると_以後_dirty_のまま",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-204-4"
+requirement = "FR-204"
+kind = "T"
+verified_by = [
+    "履歴の上限で古い履歴を破棄しても_未変更の表示は変わらない",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-205-1"
+requirement = "FR-205"
+kind = "T/M"
+verified_by = [
+    "docs/compat/0.1.0-rc.1/windows-terminal.md",
+    "docs/compat/0.1.0-rc.1/windows-conhost.md",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-205-2"
+requirement = "FR-205"
+kind = "T/M"
+verified_by = [
+    "書込の失敗は内部レジスタに切り替えたと知らせる",
+    "取得の失敗は内部レジスタを貼り付ける",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-205-3"
+requirement = "FR-205"
+kind = "T/M"
+verified_by = [
+    "取得が_2_秒かかると内部レジスタに切り替え_遅れて届いた結果は捨てる",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-205-4"
+requirement = "FR-205"
+kind = "T/M"
+verified_by = [
+    "上限を超える全選択のコピーは文字列化せず内部レジスタだけに入れて知らせる",
+    "BM-103b-clip60",
+    "BM-103b-clip100",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-206-1"
+requirement = "FR-206"
+kind = "T"
+verified_by = [
+    "インデント付きの_100_行を貼ると元のインデントのまま_1_回の_undo_で消える",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-206-2"
+requirement = "FR-206"
+kind = "T"
+verified_by = [
+    "貼り付けの本文の制御文字はコマンドとして実行されない",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-206-3"
+requirement = "FR-206"
+kind = "T"
+verified_by = [
+    "docs/compat/0.1.0-rc.1/windows-terminal.md",
+    "docs/compat/0.1.0-rc.1/windows-conhost.md",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-206-4"
+requirement = "FR-206"
+kind = "T"
+verified_by = [
+    "十メガバイトの貼り付けでも受信口のメッセージは一万件を超えない",
+    "制御文字を含まない貼り付けは_64_kib_ごとの_text_にまとまる",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-301-1"
+requirement = "FR-301"
+kind = "T"
+verified_by = [
+    "左右の移動は全角_結合文字_絵文字_国旗を_1_書記素ずつ",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-301-2"
+requirement = "FR-301"
+kind = "T"
+verified_by = [
+    "上下の移動は全角と半角の混在する行の間で目標の表示列を保つ",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-302-1"
+requirement = "FR-302"
+kind = "T"
+verified_by = [
+    "期待結果の表",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-303-1"
+requirement = "FR-303"
+kind = "T"
+verified_by = [
+    "スマートホームとエンド",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-303-2"
+requirement = "FR-303"
+kind = "T"
+verified_by = [
+    "スマートホームとエンド",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-304-1"
+requirement = "FR-304"
+kind = "T"
+verified_by = [
+    "ページ移動は可視行数マイナス1行ずつ進み_カーソルは画面内に留まる",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-305-1"
+requirement = "FR-305"
+kind = "T"
+verified_by = [
+    "shift_付きの各移動で選択が拡張され_全選択で文書全体になる",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-306-1"
+requirement = "FR-306"
+kind = "T"
+verified_by = [
+    "範囲外の行番号は最終行に丸めて通知する",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-401-1"
+requirement = "FR-401"
+kind = "T"
+verified_by = [
+    "入力すると件数が出て_現在の一致は強調するだけで_選択しない",
+    "全件を数えて_次へ_前へ_で移り_端で折り返す",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-401-2"
+requirement = "FR-401"
+kind = "T"
+verified_by = [
+    "enter_で現在の一致を選択し_次の_enter_で次へ_esc_で選択は残る",
+    "全件を数えて_次へ_前へ_で移り_端で折り返す",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-401-3"
+requirement = "FR-401"
+kind = "T"
+verified_by = [
+    "一致が無ければ_0_件で_欄を消すと件数も消える",
+    "一致が無ければ_nomatch_で選択を変えない",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-402-4"
+requirement = "FR-402"
+kind = "T"
+verified_by = [
+    "alt_c_で大小の区別が巡回し_再検索する",
+    "検索バーは大小の区別を反転で示し_狭いと件数から省く",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-404-1"
+requirement = "FR-404"
+kind = "B"
+verified_by = [
+    "BM-103b-search",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-404-2"
+requirement = "FR-404"
+kind = "B"
+verified_by = [
+    "一致が_100_万件を超えると件数は上限以上で打ち切る",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-404-3"
+requirement = "FR-404"
+kind = "T"
+verified_by = [
+    "新しい検索は古い検索の結果を捨てる",
+    "取り消すと止まる",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-404-4"
+requirement = "FR-404"
+kind = "T"
+verified_by = [
+    "編集で結果が無効になっても_300_ms_待って自動で再検索する",
+    "編集すると件数は約表示に落ち_次へ_は再検索して動く",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-501-1"
+requirement = "FR-501"
+kind = "T/M"
+verified_by = [
+    "タブと全角スペースは記号で示し_幅は変えない",
+    "全角と結合文字と絵文字の幅",
+    "絵文字の列は_zwj_と_vs16_を残して_幅のとおりに出す",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-501-2"
+requirement = "FR-501"
+kind = "T/M"
+verified_by = [
+    "docs/compat/0.1.0-rc.1/windows-terminal.md",
+    "docs/compat/0.1.0-rc.1/windows-conhost.md",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-502-1"
+requirement = "FR-502"
+kind = "T"
+verified_by = [
+    "ガター幅は行数の桁数に応じて変わる",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-503-1"
+requirement = "FR-503"
+kind = "M"
+verified_by = [
+    "起動直後の画面にステータスバーの項目とヒントバーのキーが出る",
+    "無題の文書のステータス",
+    "変更と位置と選択のステータス",
+    "ファイルの状態のステータス",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-503-2"
+requirement = "FR-503"
+kind = "M"
+verified_by = [
+    "ステータスバーは幅が足りなければ短い形にして_優先度の低い項目から落とす",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-504-1"
+requirement = "FR-504"
+kind = "M"
+verified_by = [
+    "起動直後の画面にステータスバーの項目とヒントバーのキーが出る",
+    "ヒントバーは割当のある項目を優先度の降順で出す",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-505-1"
+requirement = "FR-505"
+kind = "M"
+verified_by = [
+    "メッセージは記号と色で区別でき_警告は対処も並べて出る",
+    "エラーは_text_と_hint_の_2_部でキー表記を解決する",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-506-1"
+requirement = "FR-506"
+kind = "T"
+verified_by = [
+    "横スクロールで左右に続きがある行の端に印を出す",
+    "画面に収まる行には印を出さない",
+    "長い行は水平スクロールし_端の全角は空白で埋める",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-507-1"
+requirement = "FR-507"
+kind = "T"
+verified_by = [
+    "制御文字と不可視文字と不正バイトを記号にする",
+    "段を超える色は近似され_制御文字は置換される",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-507-2"
+requirement = "FR-507"
+kind = "T"
+verified_by = [
+    "不可視文字は可視化して幅を持つ",
+    "絵文字の中の_zwj_とタグと異体字は可視化しない",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-507-3"
+requirement = "FR-507"
+kind = "T"
+verified_by = [
+    "不正バイトは_0x_形式で_c1_制御文字は_u_形式で書き分ける",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-511-1"
+requirement = "FR-511"
+kind = "M"
+verified_by = [
+    "パレット_確認ダイアログ_入力プロンプトは_上下_enter_esc_で同じように動く",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-511-2"
+requirement = "FR-511"
+kind = "M"
+verified_by = [
+    "docs/compat/0.1.0-rc.1/windows-terminal.md",
+    "docs/compat/0.1.0-rc.1/windows-conhost.md",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-512-1"
+requirement = "FR-512"
+kind = "M"
+verified_by = [
+    "BM-512",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-512-2"
+requirement = "FR-512"
+kind = "M"
+verified_by = [
+    "連続してリサイズしても最後の大きさの画面は全再描画した画面と一致する",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-513-1"
+requirement = "FR-513"
+kind = "T/M"
+verified_by = [
+    "組込みテーマの表は全ロールが_truecolor_と_mono_を持ちコントラストを満たす",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-513-2"
+requirement = "FR-513"
+kind = "T/M"
+verified_by = [
+    "組込みテーマの表は全ロールが_truecolor_と_mono_を持ちコントラストを満たす",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-513-3"
+requirement = "FR-513"
+kind = "T/M"
+verified_by = [
+    "色深度の判定表の各行",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-513-4"
+requirement = "FR-513"
+kind = "T/M"
+verified_by = [
+    "docs/compat/0.1.0-rc.1/color-modes.md",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-514-2"
+requirement = "FR-514"
+kind = "T"
+verified_by = [
+    "ctrl_p_と_f1_で開き_esc_で閉じる",
+    "空の入力は_hidden_を除く全コマンドを_id_順に出す",
+    "割当キーを逆引きして添える",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-601-1"
+requirement = "FR-601"
+kind = "R/T, M"
+verified_by = [
+    "登録済みのコマンドの_id_は_v0_1_のカタログと過不足なく一致する",
+    "空の入力は_hidden_を除く全コマンドを_id_順に出す",
+    "実行できないコマンドは理由つきで出し_enter_では実行しない",
+    "必須の列挙引数があるコマンドは_同じオーバーレイで値を尋ねる",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-601-2"
+requirement = "FR-601"
+kind = "R/T, M"
+verified_by = [
+    "登録済みの全コマンドの_permission_がカタログの_perm_列と一致する",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-602-1"
+requirement = "FR-602"
+kind = "T"
+verified_by = [
+    "入力で絞り込み_前方一致を部分一致より先に出す",
+    "パレットは枠つきで候補を並べ_選択行に_印を付け_件数を下辺に出す",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-602-2"
+requirement = "FR-602"
+kind = "T"
+verified_by = [
+    "実行できないコマンドは理由つきで出し_enter_では実行しない",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-603-1"
+requirement = "FR-603"
+kind = "R/T, M"
+verified_by = [
+    "既定キーマップは_07_のカタログの既定キー列と一致する",
+    "ctrl_c_はプロセスを殺さず_ctrl_z_は_undo_として届く",
+    "ctrl_s_はコマンドとして届き_無題なら名前の入力が出る",
+    "確認ダイアログは_esc_でキャンセルして編集に戻る",
+    "ctrl_f_で検索バーが出て_入力した語と一致数が見える",
+    "コピーは実際のクリップボードに入り_貼り付けはそこから読む",
+    "ctrl_p_と_f1_で開き_esc_で閉じる",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-605-1"
+requirement = "FR-605"
+kind = "M"
+verified_by = [
+    "docs/compat/0.1.0-rc.1/windows-terminal.md",
+    "docs/compat/0.1.0-rc.1/windows-conhost.md",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-605-2"
+requirement = "FR-605"
+kind = "M"
+verified_by = [
+    "docs/compat/0.1.0-rc.1/windows-terminal.md",
+    "docs/compat/0.1.0-rc.1/windows-conhost.md",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-606-1"
+requirement = "FR-606"
+kind = "T/M"
+verified_by = [
+    "頻出操作はどの_must_端末でも_拡張キーなしで届く既定キーを持つ",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-606-2"
+requirement = "FR-606"
+kind = "T/M"
+verified_by = [
+    "空の入力は_hidden_を除く全コマンドを_id_順に出す",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-606-3"
+requirement = "FR-606"
+kind = "T/M"
+verified_by = [
+    "空の入力は_hidden_を除く全コマンドを_id_順に出す",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-609-1"
+requirement = "FR-609"
+kind = "T/M"
+verified_by = [
+    "ctrl_c_はプロセスを殺さず_ctrl_z_は_undo_として届く",
+    "ctrl_s_はコマンドとして届き_無題なら名前の入力が出る",
+    "確認ダイアログは_esc_でキャンセルして編集に戻る",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-701-1"
+requirement = "FR-701"
+kind = "T"
+verified_by = [
+    "タブ文字の表示幅は_tab_width",
+    "曖昧幅の設定で_frame_のセル幅が切り替わる",
+    "色深度の判定表の各行",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-701-3"
+requirement = "FR-701"
+kind = "T"
+verified_by = [
+    "公開前のキーとセクションは情報診断で_警告にしない",
+    "未対応の情報診断は画面に出さない",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-702-1"
+requirement = "FR-702"
+kind = "T"
+verified_by = [
+    "設定ディレクトリが無くても使え_設定ディレクトリは作られない",
+]
+status = "done"
+
+[[ac]]
+id = "AC-FR-703-1"
+requirement = "FR-703"
+kind = "T"
+verified_by = [
+    "構文エラーはファイル全体を無視して行と桁を返す",
+    "未知のキーは警告し綴りの候補を出す",
+    "型違いは警告して既定値のまま",
+    "範囲外は既定値へ戻す",
+    "列挙値の不正は許容値を提示する",
+    "全項目を走査し_最初の問題で止まらない",
+    "診断が_1_件ならその内容を_2_件以上なら要約を出す",
+]
+status = "done"
+
+[[ac]]
+id = "AC-NFR-101-1"
+requirement = "NFR-101"
+kind = "B"
+verified_by = [
+    "BM-101a",
+    "BM-101b",
+]
+status = "done"
+
+[[ac]]
+id = "AC-NFR-102-1"
+requirement = "NFR-102"
+kind = "B"
+verified_by = [
+    "BM-102a",
+    "BM-102b",
+]
+status = "done"
+
+[[ac]]
+id = "AC-NFR-103-1"
+requirement = "NFR-103"
+kind = "B"
+verified_by = [
+    "BM-103b",
+]
+status = "done"
+
+[[ac]]
+id = "AC-NFR-104-1"
+requirement = "NFR-104"
+kind = "B"
+verified_by = [
+    "BM-104p-10m",
+    "BM-104p-100m",
+    "BM-104-100m",
+]
+status = "done"
+
+[[ac]]
+id = "AC-NFR-105-1"
+requirement = "NFR-105"
+kind = "B"
+verified_by = [
+    "BM-105",
+]
+status = "done"
+
+[[ac]]
+id = "AC-NFR-106-3"
+requirement = "NFR-106"
+kind = "B"
+verified_by = [
+    "長大行を含む文書は読み取り専用の理由つきで開き_先頭だけを表示する",
+    "end_は先頭_64_kib_の書記素の境界で止まり_その先の印を出す",
+    "BM-106",
+]
+status = "done"
+
+[[ac]]
+id = "AC-NFR-107-1"
+requirement = "NFR-107"
+kind = "B"
+verified_by = [
+    "BM-107",
+]
+status = "done"
+
+[[ac]]
+id = "AC-NFR-201-1"
+requirement = "NFR-201"
+kind = "B / T"
+verified_by = [
+    "BM-201",
+]
+status = "done"
+
+[[ac]]
+id = "AC-NFR-202-1"
+requirement = "NFR-202"
+kind = "B / T"
+verified_by = [
+    "BM-202",
+]
+status = "done"
+
+[[ac]]
+id = "AC-NFR-203-1"
+requirement = "NFR-203"
+kind = "B / T"
+verified_by = [
+    "履歴が上限に達したら古い履歴を破棄して_文書ごとに_1_回通知する",
+]
+status = "done"
+
+[[ac]]
+id = "AC-NFR-203-2"
+requirement = "NFR-203"
+kind = "B / T"
+verified_by = [
+    "ランダムな編集の後_メモリの増分は_undo_の会計値の_1_2_倍以下",
+]
+status = "done"
+
+[[ac]]
+id = "AC-NFR-204-1"
+requirement = "NFR-204"
+kind = "B / T"
+verified_by = [
+    "BM-204",
+]
+status = "done"
+
+[[ac]]
+id = "AC-NFR-301-1"
+requirement = "NFR-301"
+kind = "T"
+verified_by = [
+    "原子的保存の切断点では_t_は無傷で一時ファイルが残り_開いても報告しない",
+    "置換の途中の状態では_t_が無く退避名に元が完全に残り_開くと案内する",
+]
+status = "done"
+
+[[ac]]
+id = "AC-NFR-301-2"
+requirement = "NFR-301"
+kind = "T"
+verified_by = [
+    "置換の途中の失敗は元のファイルの退避先のパスを示す",
+]
+status = "done"
+
+[[ac]]
+id = "AC-NFR-302-1"
+requirement = "NFR-302"
+kind = "T"
+verified_by = [
+    "パニックすると端末を戻し_未保存の内容を退避してクラッシュログを残す",
+    "小さい文書から書いて_manifest_は完了になる",
+]
+status = "done"
+
+[[ac]]
+id = "AC-NFR-302-2"
+requirement = "NFR-302"
+kind = "T"
+verified_by = [
+    "コンソールを閉じると未保存の内容を退避して終了する",
+    "ctrl_break_を受けると未保存の内容を退避して終了する",
+]
+status = "done"
+
+[[ac]]
+id = "AC-NFR-302-3"
+requirement = "NFR-302"
+kind = "T"
+verified_by = [
+    "メインが止まっていてもコンソールを閉じると未保存の内容を退避して終了する",
+]
+status = "done"
+
+[[ac]]
+id = "AC-NFR-302-5"
+requirement = "NFR-302"
+kind = "T"
+verified_by = [
+    "合計_100_mb_の_dirty_文書の退避が_5_秒以内に完了する",
+]
+status = "done"
+
+[[ac]]
+id = "AC-NFR-302-6"
+requirement = "NFR-302"
+kind = "T"
+verified_by = [
+    "未知の_format_version_の退避は一覧に出るが_変更も移動も削除もされない",
+]
+status = "done"
+
+[[ac]]
+id = "AC-NFR-303-1"
+requirement = "NFR-303"
+kind = "T"
+verified_by = [
+    "区分_a_のコーパスは無編集の上書き保存でも名前を付けて保存でもバイト一致する",
+]
+status = "done"
+
+[[ac]]
+id = "AC-NFR-303-2"
+requirement = "NFR-303"
+kind = "T"
+verified_by = [
+    "区分_a_のコーパスは無編集の上書き保存でも名前を付けて保存でもバイト一致する",
+]
+status = "done"
+
+[[ac]]
+id = "AC-NFR-303-3"
+requirement = "NFR-303"
+kind = "T"
+verified_by = [
+    "区分_b_の文書を編集して保存するときは書き込む前に確認し_保存を選ぶと代表バイトで書く",
+    "重複符号化の行を読込時に数えて通知する",
+]
+status = "done"
+
+[[ac]]
+id = "AC-NFR-303-4"
+requirement = "NFR-303"
+kind = "T"
+verified_by = [
+    "iso_2022_jp_のエスケープが変わる文書は編集して保存するとき確認する",
+]
+status = "done"
+
+[[ac]]
+id = "AC-NFR-304-1"
+requirement = "NFR-304"
+kind = "T"
+verified_by = [
+    "不正バイトを含む_shift_jis_は読み取り専用で_保存しなければバイトは変わらない",
+    "不正バイトは読み取り専用で開き_別名保存でバイト一致する",
+]
+status = "done"
+
+[[ac]]
+id = "AC-NFR-304-2"
+requirement = "NFR-304"
+kind = "T"
+verified_by = [
+    "チャンク境界をまたぐ不正バイトも元のバイト値として表示される",
+]
+status = "done"
+
+[[ac]]
+id = "AC-NFR-304-3"
+requirement = "NFR-304"
+kind = "T"
+verified_by = [
+    "文字コードを指定して開き直す",
+    "不正バイトを含む_iso_2022_jp_は専用の理由で読み取り専用_保存を拒否する",
+]
+status = "done"
+
+[[ac]]
+id = "AC-NFR-305-1"
+requirement = "NFR-305"
+kind = "R"
+verified_by = [
+    "docs/compat/0.1.0/release-checklist.md",
+]
+status = "done"
+
+[[ac]]
+id = "AC-NFR-401-1"
+requirement = "NFR-401"
+kind = "T"
+verified_by = [
+    "docs/compat/0.1.0-rc.1/ci-gates.md",
+]
+status = "done"
+
+[[ac]]
+id = "AC-NFR-402-1"
+requirement = "NFR-402"
+kind = "M"
+verified_by = [
+    "docs/compat/0.1.0-rc.1/windows-terminal.md",
+    "docs/compat/0.1.0-rc.1/windows-conhost.md",
+]
+status = "done"
+
+[[ac]]
+id = "AC-NFR-403-1"
+requirement = "NFR-403"
+kind = "M"
+verified_by = [
+    "色数と拡張キーを無効にした能力でも_must_の操作が通る",
+    "頻出操作はどの_must_端末でも_拡張キーなしで届く既定キーを持つ",
+]
+status = "done"
+
+[[ac]]
+id = "AC-NFR-404-1"
+requirement = "NFR-404"
+kind = "T"
+verified_by = [
+    "二百六十文字を超えるパスのファイルを開いて保存できる",
+    "ドライブレターは大文字でも小文字でも扱える",
+    "unc_のパスのファイルを開いて保存できる",
+    "不正な_utf16_のファイル名のファイルを開いて保存できる",
+]
+status = "done"
+
+[[ac]]
+id = "AC-NFR-406-1"
+requirement = "NFR-406"
+kind = "R"
+verified_by = [
+    "依存規則検査はこのリポジトリで通る",
+]
+status = "done"
+
+[[ac]]
+id = "AC-NFR-501-1"
+requirement = "NFR-501"
+kind = "T/R"
+verified_by = [
+    "製品のコードと依存にネットワーク通信が無い",
+    "docs/compat/0.1.0-rc.1/security-checks.md",
+]
+status = "done"
+
+[[ac]]
+id = "AC-NFR-502-1"
+requirement = "NFR-502"
+kind = "T/R"
+verified_by = [
+    "製品のコードは外部のプロセスを起動しない",
+]
+status = "done"
+
+[[ac]]
+id = "AC-NFR-502-2"
+requirement = "NFR-502"
+kind = "T/R"
+verified_by = [
+    "配布ビルドの_dll_の検索は_system32_に限る",
+    "docs/compat/0.1.0-rc.1/security-checks.md",
+]
+status = "done"
+
+[[ac]]
+id = "AC-NFR-503-1"
+requirement = "NFR-503"
+kind = "T"
+verified_by = [
+    "ファイル内容の制御シーケンスは端末への出力に現れない",
+    "ファイル名とメッセージの制御シーケンスは端末への出力に現れない",
+    "貼り付けと入力の制御シーケンスは端末への出力に現れない",
+]
+status = "done"
+
+[[ac]]
+id = "AC-NFR-504-1"
+requirement = "NFR-504"
+kind = "R/T"
+verified_by = [
+    "パニックすると端末を戻し_未保存の内容を退避してクラッシュログを残す",
+]
+status = "done"
+
+[[ac]]
+id = "AC-NFR-505-1"
+requirement = "NFR-505"
+kind = "T"
+verified_by = [
+    "退避先は所有者のみの_dacl",
+    "private_で作った新規ファイルは所有者と_system_だけ",
+]
+status = "done"
+
+[[ac]]
+id = "AC-NFR-507-1"
+requirement = "NFR-507"
+kind = "T/R"
+verified_by = [
+    "docs/compat/0.1.0-rc.1/ci-gates.md",
+]
+status = "done"
+
+[[ac]]
+id = "AC-NFR-602-1"
+requirement = "NFR-602"
+kind = "R"
+verified_by = [
+    "docs/review/ja-wording-v0.1.md",
+]
+status = "done"
+
+[[ac]]
+id = "AC-NFR-603-1"
+requirement = "NFR-603"
+kind = "T/R"
+verified_by = [
+    "このリポジトリの文言の目録と言語ファイルが検査を通る",
+]
+status = "done"
+
+[[ac]]
+id = "AC-NFR-603-2"
+requirement = "NFR-603"
+kind = "T/R"
+verified_by = [
+    "このリポジトリの文言の目録と言語ファイルが検査を通る",
+]
+status = "done"
+
+[[ac]]
+id = "AC-NFR-603-4"
+requirement = "NFR-603"
+kind = "T/R"
+verified_by = [
+    "キーが無ければキー名",
+]
+status = "done"
+
+[[ac]]
+id = "AC-NFR-603-5"
+requirement = "NFR-603"
+kind = "T/R"
+verified_by = [
+    "このリポジトリの文言の目録と言語ファイルが検査を通る",
+]
+status = "done"
+
+[[ac]]
+id = "AC-NFR-603-6"
+requirement = "NFR-603"
+kind = "T/R"
+verified_by = [
+    "起動直後の無題の画面",
+    "ファイルを開いた画面",
+    "検索バーの画面",
+    "コマンドパレットの画面",
+    "入力プロンプトの画面",
+    "未保存で終了する確認ダイアログの画面",
+    "警告メッセージの画面",
+]
+status = "done"
+
+[[ac]]
+id = "AC-NFR-603-7"
+requirement = "NFR-603"
+kind = "T/R"
+verified_by = [
+    "BM-101a",
+]
+status = "done"
+
+[[ac]]
+id = "AC-NFR-603-8"
+requirement = "NFR-603"
+kind = "T/R"
+verified_by = [
+    "ui_locale_は未対応の情報診断になり_画面に出ない",
+]
+status = "done"
+
+[[ac]]
+id = "AC-NFR-604-1"
+requirement = "NFR-604"
+kind = "R/T"
+verified_by = [
+    "組込みテーマの表は全ロールが_truecolor_と_mono_を持ちコントラストを満たす",
+]
+status = "done"
+
+[[ac]]
+id = "AC-NFR-605-1"
+requirement = "NFR-605"
+kind = "T"
+verified_by = [
+    "曖昧幅の設定で_frame_のセル幅が切り替わる",
+    "曖昧幅は設定に従う",
+]
+status = "done"
+
+[[ac]]
+id = "AC-NFR-701-1"
+requirement = "NFR-701"
+kind = "T"
+verified_by = [
+    "例_開いて選択を消して保存する",
+]
+status = "done"
+
+[[ac]]
+id = "AC-NFR-704-1"
+requirement = "NFR-704"
+kind = "R"
+verified_by = [
+    "unsafe_を許す_crate_以外は_forbid_unsafe_code_を持つ",
+]
+status = "done"
+
+[[ac]]
+id = "AC-NFR-706-1"
+requirement = "NFR-706"
+kind = "R"
+verified_by = [
+    "docs/review/deps-records-0.1.0-rc.1.md",
+]
+status = "done"
+
+[[ac]]
+id = "AC-NFR-707-2"
+requirement = "NFR-707"
+kind = "T"
+verified_by = [
+    "区分が_t_だけの_ac_は試験関数に結びついている",
+]
+status = "done"
+
+[[ac]]
+id = "AC-NFR-707-4"
+requirement = "NFR-707"
+kind = "T"
+verified_by = [
+    "query_で文書一覧_本文_選択_ステータス_オーバーレイを読める",
+]
+status = "done"
+
+[[ac]]
+id = "AC-NFR-707-5"
+requirement = "NFR-707"
+kind = "T"
+verified_by = [
+    "文書の変更とメッセージとオーバーレイの開閉が_editor_event_になる",
+]
+status = "done"
+
+[[ac]]
+id = "AC-NFR-707-6"
+requirement = "NFR-707"
+kind = "T"
+verified_by = [
+    "同じ状態の同じ_query_は同じ応答",
+]
+status = "done"
