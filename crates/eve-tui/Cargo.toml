@@ -24,7 +24,7 @@ ratatui = { version = "=0.30.2", default-features = false }
 
 # Windows の入力 (ReadConsoleInputW の自前ループ) とコンソールモード。unsafe は src/win.rs に閉じる (R5)
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.59", features = [
+windows-sys = { version = "0.61", features = [
     "Win32_Foundation",
     "Win32_Security",
     "Win32_Storage_FileSystem",
