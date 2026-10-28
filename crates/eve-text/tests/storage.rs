@@ -161,12 +161,13 @@ proptest! {
         let t = Text::from(s.as_str());
         let all: String = t.chunks(ByteRange::all(t.len_bytes())).collect();
         prop_assert_eq!(&all, &s);
-        // 部分範囲: char 境界へ丸めた範囲と一致する
+        // 部分範囲: char 境界へ丸めた範囲と一致する。空の範囲 (lo == hi) は char の途中でも空のまま (広げない)
         let (lo, hi) = (a.min(b), a.max(b));
         let floor = (0..=lo.min(s.len())).rev().find(|&i| s.is_char_boundary(i)).unwrap_or(0);
         let ceil = (hi.min(s.len())..=s.len()).find(|&i| s.is_char_boundary(i)).unwrap_or(s.len());
         let part: String = t.chunks(ByteRange::from(lo..hi)).collect();
-        prop_assert_eq!(&part, &s[floor..ceil.max(floor)]);
+        let expected = if lo >= hi { "" } else { &s[floor..ceil.max(floor)] };
+        prop_assert_eq!(&part, expected);
         prop_assert_eq!(t.slice_to_string(ByteRange::from(lo..hi)), part);
     }
 
