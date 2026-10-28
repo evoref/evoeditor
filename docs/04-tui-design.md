@@ -1280,7 +1280,7 @@ TUI ではこれ以上は端末の能力の限界。
 
 ### 14.4 パニック時の画面出力
 
-端末復元 **後** に stderr へ (文言とキーは §15.2 の `panic.*` / `stderr.recovery.*`。例は退避できた場合)。**v0.1 は日本語の行だけ** を出す (OQ-67、確定 (ユーザー回答)。`--help` も `ja`、07 §18.1):
+端末復元 **後** に stderr へ (文言とキーは §15.2 の `panic.*` / `stderr.recovery.*`。例は退避できた場合)。**以下は v0.1 の出力 (日本語の行だけ)。v0.2 (M8 で実装済み) は各行を英語 (ASCII) の行と日本語の行の 2 行にする (下の段落)** (OQ-67、確定 (ユーザー回答)。`--help` も `ja`、07 §18.1):
 
 ```
 予期しないエラーのため evoeditor を終了しました。
@@ -1290,7 +1290,7 @@ TUI ではこれ以上は端末の能力の限界。
 問題を報告するときは、クラッシュログを Issue に添付してください: <URL>
 ```
 
-代替スクリーン内で出したメッセージは代替スクリーン終了で消えるため、必ず復元後に出す。文言は言語ファイルを使わず、eve-host の定数表に置く (パニックの経路で言語ファイルの解決とアロケーションを避ける)。stderr が Windows のコンソールなら `WriteConsoleW` (UTF-16。コードページに依らない) で書き、リダイレクト先には UTF-8 で書く (05 §9)。リダイレクト先をコンソールの出力コードページ (932) で解釈する環境では日本語が化けるので、v0.1 の既知の制約とする (01 §4.6)。**v0.2 (英語 UI と同時) からは、各メッセージの英語 (ASCII) の行を先に、日本語の行を 2 字下げで次に出す** (§15.2 の en 列。英語の行はコードページやリダイレクト先によらず読める)。`--crash-report` は v0.2 なので、v0.1 の利用者が報告する導線はこの案内 (クラッシュログのパスと Issue の URL) である。`{url}` は公開リポジトリの Issues で、窓口は最初の push の前に開いてある (12 §5.6 の PC-7)。v0.1 のリリースの前に `{url}` がこの窓口を指すことを確かめる (09 §8.2)。
+代替スクリーン内で出したメッセージは代替スクリーン終了で消えるため、必ず復元後に出す。文言は言語ファイルを使わず、eve-host の定数表に置く (パニックの経路で言語ファイルの解決とアロケーションを避ける)。stderr が Windows のコンソールなら `WriteConsoleW` (UTF-16。コードページに依らない) で書き、リダイレクト先には UTF-8 で書く (05 §9)。リダイレクト先をコンソールの出力コードページ (932) で解釈する環境では日本語が化けるので、v0.1 の既知の制約とする (01 §4.6)。**v0.2 (英語 UI と同時。M8 の 3 本目で実装済み。起動前の使い方の誤り・`--help`・保存待ちの行も同じ形で、選択中の言語には依らず常に併記する) からは、各メッセージの英語 (ASCII) の行を先に、日本語の行を 2 字下げで次に出す** (§15.2 の en 列。英語の行はコードページやリダイレクト先によらず読める)。`--crash-report` は v0.2 なので、v0.1 の利用者が報告する導線はこの案内 (クラッシュログのパスと Issue の URL) である。`{url}` は公開リポジトリの Issues で、窓口は最初の push の前に開いてある (12 §5.6 の PC-7)。v0.1 のリリースの前に `{url}` がこの窓口を指すことを確かめる (09 §8.2)。
 
 ### 14.5 リサイズ・サスペンド・その他のシグナル
 
@@ -1610,6 +1610,7 @@ v0.2 以降の診断 (名前だけを予約し、文言はその版で言語フ�
 | `cli.help.option.help` | `-h, --help` | Show this help | このヘルプを表示して終了します |
 | `cli.help.option.readonly` | `-R, --readonly` | Open the file read-only | 読み取り専用で開きます |
 | `cli.help.option.encoding` | `-e, --encoding <label>` | Open the file with the given encoding | 文字コードを指定して開きます |
+| `cli.help.option.locale` (v0.2) | `--locale <lang>` | Set the UI language: ja or en (overrides ui.locale and EVE_LANG) | 画面の言語を指定します: ja / en (設定 ui.locale と EVE_LANG より優先) |
 | `cli.help.option.wait` | `--wait` | Accepted for $EDITOR compatibility; has no effect | $EDITOR に設定するときの互換用です (何もしません) |
 | `cli.help.option.end_of_options` | `--` | Treat the rest as file names | 以降をファイル名として扱います |
 | `cli.help.encodings` | `--encoding` に渡せる名前 (07 §5.2 `file.default_encoding` の許容値から `system` を除いたもの) | Encodings: utf-8, utf-8-bom, utf-16le, utf-16be, shift_jis, euc-jp, iso-2022-jp | 使える文字コード名: utf-8, utf-8-bom, utf-16le, utf-16be, shift_jis, euc-jp, iso-2022-jp |

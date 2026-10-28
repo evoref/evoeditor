@@ -30,21 +30,6 @@ use cli::{Cli, UsageError};
 /// パニックの内容 (フックが書き、復元の後に出す)。メッセージ・場所・バックトレース。文書の内容は含まない。
 static PANIC_INFO: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
 
-const HELP: &str = "\
-使い方: evoeditor [オプション] [ファイル]
-
-  ファイルを指定しないと、無題の文書で始めます。
-  存在しないファイルは、保存すると作成されます。
-
-オプション:
-  -R, --readonly       読み取り専用で開く
-  -e, --encoding <名前>  文字コードを指定して開く (utf-8 / utf-16le / utf-16be / shift_jis / euc-jp / iso-2022-jp)
-      --locale <言語>  画面の言語 (ja / en)。設定 ui.locale・環境変数 EVE_LANG・OS の言語より優先する
-  -V, --version        版を表示して終了する
-  -h, --help           このヘルプを表示して終了する
-  --                   以降を位置引数として扱う
-";
-
 /// 実行時エラーでの終了 (07 §18.4)。
 const EXIT_ERROR: u8 = 1;
 /// 使い方の誤り。
@@ -55,21 +40,8 @@ const EXIT_TERMINAL: u8 = 5;
 /// パニック。
 const EXIT_PANIC: u8 = 70;
 
-fn usage_message(e: &UsageError) -> String {
-    match e {
-        UsageError::UnknownOption(o) => format!("未知のオプションです: {o}"),
-        UsageError::MissingValue(o) => format!("{o} には値が必要です"),
-        UsageError::MultipleFiles => {
-            "このバージョンでは複数のファイルを同時に開けません。ファイルは 1 つだけ指定してください".to_owned()
-        }
-        UsageError::BadEncoding(v) if v.is_empty() => "文字コードの名前を指定してください".to_owned(),
-        UsageError::BadEncoding(v) => format!(
-            "文字コード {v} は扱えません (UTF-8・UTF-16LE・UTF-16BE・Shift_JIS・EUC-JP・ISO-2022-JP から指定してください)"
-        ),
-    }
-}
-
-/// 端末の復元の後に出す行 (`Effect::Quit` の `stderr`)。文言は言語ファイルで解決し、キーが無ければキー名を出す。
+/// 端末の復元の後に出す行 (`Effect::Quit` の `stderr` と起動の失敗)。定数表 (英語の行、日本語の行の順) にあるキーはそれで、
+/// 無ければ選択中の言語のカタログで解決し、それも無ければキー名を出す。
 fn print_exit_lines(host: &mut Host, locale: eve_config::Locale) {
     let lines = host.take_exit_stderr();
     if lines.is_empty() {
@@ -83,7 +55,12 @@ fn print_exit_lines(host: &mut Host, locale: eve_config::Locale) {
             .iter()
             .map(|(k, v)| (k.as_str(), v.as_str()))
             .collect();
-        let _ = writeln!(err, "{}", cat.render(&l.key, &args, &|_| None));
+        match texts::stderr_line(&l.key, &l.args) {
+            Some(bi) => bi.write_to(&mut err),
+            None => {
+                let _ = writeln!(err, "{}", cat.render(&l.key, &args, &|_| None));
+            }
+        }
     }
 }
 
@@ -160,7 +137,11 @@ fn run(
     let paths = match WinPaths::from_process_env() {
         Ok(p) => Arc::new(p),
         Err(e) => {
-            eprintln!("作業ディレクトリを取得できません: {e}");
+            texts::Bi::new(
+                format!("Cannot get the working directory: {e}"),
+                format!("作業ディレクトリを取得できません: {e}"),
+            )
+            .write_to(&mut std::io::stderr().lock());
             return EXIT_ERROR;
         }
     };
@@ -207,7 +188,11 @@ fn run(
     let spawner = match ThreadJobSpawner::new(job_ports, tx.clone()) {
         Ok(s) => s,
         Err(e) => {
-            eprintln!("ワーカーを起動できません: {e}");
+            texts::Bi::new(
+                format!("Cannot start the worker thread: {e}"),
+                format!("ワーカーを起動できません: {e}"),
+            )
+            .write_to(&mut std::io::stderr().lock());
             return EXIT_ERROR;
         }
     };
@@ -309,7 +294,7 @@ fn run(
             if let Some(o) = emergency.outcome() {
                 let mut err = std::io::stderr().lock();
                 for l in texts::recovery_lines(&o) {
-                    let _ = writeln!(err, "{l}");
+                    l.write_to(&mut err);
                 }
             }
             std::process::exit(130)
@@ -337,17 +322,14 @@ fn run(
     match outcome {
         Ok(code) => {
             if !ignored.is_empty() {
-                eprintln!(
-                    "このバージョンでは未対応の引数を無視しました: {}",
-                    ignored.join(" ")
-                );
+                texts::ignored_args(ignored).write_to(&mut std::io::stderr().lock());
             }
             print_exit_lines(&mut host, locale);
             // シグナル・致命的エラーで終わったときの退避の結果 (退避したときだけ。通常終了では書いていない)
             if let Some(o) = emergency.outcome() {
                 let mut err = std::io::stderr().lock();
                 for l in texts::recovery_lines(&o) {
-                    let _ = writeln!(err, "{l}");
+                    l.write_to(&mut err);
                 }
             }
             code.0
@@ -358,20 +340,17 @@ fn run(
             // 退避の後、置換中フラグを最大 1 s 待つ (合計 5 s の内、02 §11.2.1)
             wait_zero(&replacing, Some(std::time::Duration::from_secs(1)));
             let mut err = std::io::stderr().lock();
-            let _ = writeln!(err, "{}", texts::PANIC_HEADER);
+            texts::panic_header().write_to(&mut err);
             if let Some(o) = rescued {
                 for l in texts::recovery_lines(&o) {
-                    let _ = writeln!(err, "{l}");
+                    l.write_to(&mut err);
                 }
             }
             if let Some(path) = write_crash_log(state_dir.as_path()) {
-                let _ = writeln!(err, "{}", texts::panic_crash_log(&path));
+                texts::panic_crash_log(&path).write_to(&mut err);
             }
-            let _ = writeln!(
-                err,
-                "{}",
-                texts::panic_report(&format!("{}/issues", env!("CARGO_PKG_REPOSITORY")))
-            );
+            texts::panic_report(&format!("{}/issues", env!("CARGO_PKG_REPOSITORY")))
+                .write_to(&mut err);
             EXIT_PANIC
         }
     }
@@ -399,7 +378,7 @@ fn wait_replacing(replacing: &eve_core::ReplacingCount, limit: Option<std::time:
     {
         let mut err = std::io::stderr().lock();
         for p in replacing.paths() {
-            let _ = writeln!(err, "{}", texts::waiting_save(&p));
+            texts::waiting_save(&p).write_to(&mut err);
         }
     }
     wait_zero(replacing, limit);
@@ -430,7 +409,7 @@ fn main() -> ProcessExit {
     eve_tui::trace::init();
     let code = match cli::parse(std::env::args_os().skip(1)) {
         Ok(Cli::Help) => {
-            print!("{HELP}");
+            print!("{}", texts::help());
             0
         }
         Ok(Cli::Version) => {
@@ -446,11 +425,8 @@ fn main() -> ProcessExit {
         }) => match encoding.as_deref().map(Encoding::from_label) {
             // 07 §18.4: 文字コードの名前が分からないのは使い方の誤り
             Some(None) => {
-                eprintln!(
-                    "evoeditor: {}",
-                    usage_message(&UsageError::BadEncoding(encoding.unwrap_or_default()))
-                );
-                eprintln!("詳しくは evoeditor --help を見てください。");
+                texts::usage_error(&UsageError::BadEncoding(encoding.unwrap_or_default()))
+                    .write_to(&mut std::io::stderr().lock());
                 EXIT_USAGE
             }
             forced => run(
@@ -462,8 +438,7 @@ fn main() -> ProcessExit {
             ),
         },
         Err(e) => {
-            eprintln!("evoeditor: {}", usage_message(&e));
-            eprintln!("詳しくは evoeditor --help を見てください。");
+            texts::usage_error(&e).write_to(&mut std::io::stderr().lock());
             EXIT_USAGE
         }
     };
