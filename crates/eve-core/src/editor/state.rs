@@ -97,6 +97,8 @@ pub struct EditorState {
     pub(super) unmappable_marks: Option<UnmappableMarks>,
     /// 編集で検索の結果が無効になった (Revision, 気づいた時刻)。入力が止まって 300 ms 後に再検索する (03 §12.2)。
     pub(super) research: Option<(eve_view::Revision, Tick)>,
+    /// swap-lite の予約 (03 §10.2)。
+    pub(super) swap: super::swap::SwapState,
     /// 区分 B / D の確認を承認した (文書, Revision)。同じ Revision の保存では確認を繰り返さない。
     pub(super) lossy_ok: Option<(DocumentId, eve_view::Revision)>,
     /// 単発の検索ジョブ (進行中の 1 つだけ)。
@@ -143,6 +145,7 @@ impl EditorState {
             search_bar: None,
             unmappable_marks: None,
             research: None,
+            swap: Default::default(),
             lossy_ok: None,
             find_job: None,
             system_encoding: None,

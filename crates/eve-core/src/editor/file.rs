@@ -55,6 +55,10 @@ pub(super) enum Pending {
     },
     /// 起動時の退避ディレクトリの走査。
     RecoveryScan,
+    /// スワップを書くジョブ (03 §10.2)。
+    Swap { doc: DocumentId },
+    /// スワップを消すジョブ。
+    SwapDiscard { doc: DocumentId },
     /// 「退避先に保存」(03 §9.7 (e))。`path` は元のファイル。
     WriteRecovery { path: FsPath },
     /// 表現不能の文字の置換の ChangeSet を作るジョブ (E3 の選択肢 2)。`revision` は投入時の文書の Revision。
@@ -294,9 +298,11 @@ impl EditorState {
                 Pending::ReplaceAll { doc: d, .. } => *d == doc,
                 Pending::ConvertEol(c) => c.doc == doc,
                 // 保存ジョブは取り消さず、完了を待つ (03 §9.2 の「閉じる手順」。ユーザーが求めた保存を中断しない)
-                Pending::Save { .. } | Pending::RecoveryScan | Pending::WriteRecovery { .. } => {
-                    false
-                }
+                Pending::Save { .. }
+                | Pending::RecoveryScan
+                | Pending::WriteRecovery { .. }
+                | Pending::Swap { .. }
+                | Pending::SwapDiscard { .. } => false,
             })
             .map(|(id, _)| *id)
             .collect();
@@ -703,6 +709,8 @@ impl EditorState {
                 retried,
             } => self.finish_replace_unmappable(ask, revision, retried, r),
             Pending::RecoveryScan => self.finish_recovery_scan(r),
+            Pending::Swap { doc } => self.finish_swap(doc, r),
+            Pending::SwapDiscard { doc } => self.finish_swap_discard(doc, r),
             Pending::Save {
                 doc,
                 at,

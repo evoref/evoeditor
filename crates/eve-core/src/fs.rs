@@ -46,6 +46,22 @@ pub trait FileSystem: Send + Sync {
         Err(FsError::new(FsErrorKind::Other))
     }
 
+    /// スワップ (swap-lite、03 §10.2 / FR-118) を書く。`doc` の全文を緊急退避と同じ形式で、`state_dir/swap/` の `doc` に対応する
+    /// ファイルへ原子的に置き換える (配置・命名は 05 §7.5)。`doc.path` が無ければ無題の文書。実装していない Port は
+    /// `FsErrorKind::Unsupported` を返し、core はそのセッションのスワップを止める。
+    fn write_swap(&self, _doc: &crate::DocSnapshot) -> Result<(), FsError> {
+        Err(FsError::new(FsErrorKind::Unsupported))
+    }
+
+    /// `doc` のスワップを消す (保存の成功・文書を閉じた・正常終了)。無ければ何もしない (成功)。`path` は文書のパス (無題なら `None`)。
+    fn discard_swap(
+        &self,
+        _doc: eve_view::DocumentId,
+        _path: Option<&FsPath>,
+    ) -> Result<(), FsError> {
+        Err(FsError::new(FsErrorKind::Unsupported))
+    }
+
     /// ファイルを 1 つ消す (保存中フラグの掃除など)。存在しなければ `NotFound`。
     fn remove_file(&self, _path: &FsPath) -> Result<(), FsError> {
         Err(FsError::new(FsErrorKind::Other))
@@ -410,6 +426,8 @@ pub enum FsErrorKind {
     DiskFull,
     ReadOnlyFs,
     Other,
+    /// この Port はその操作を実装していない (スワップの `write_swap` など)。呼び側は以後その機能を使わない。
+    Unsupported,
     // ── 保存 ──
     /// `SaveOptions::expected` と不一致。何も書いていない。`current` は照合の時点の保存先の Stamp で、
     /// `None` は保存先が存在しない (開いた後に削除された)。

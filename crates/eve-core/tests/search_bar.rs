@@ -255,6 +255,11 @@ fn 編集で結果が無効になっても_300_ms_待って自動で再検索す
     use eve_core::{Origin, Tick, Transaction};
     use eve_text::{ByteOff, ByteRange, ChangeSet, Edit};
     let mut h = Harness::new().with_size(40, 10);
+    // 期限は再検索のものだけを見る (dirty な文書にはスワップの期限もある)
+    h.editor.state_mut().set_config(eve_config::Config {
+        swap_enabled: false,
+        ..eve_config::Config::default()
+    });
     h.text("ab");
     h.keys("ctrl+home ctrl+f");
     h.text("ab");

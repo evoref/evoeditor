@@ -23,6 +23,8 @@ pub enum FsOp {
     WriteAtomic,
     WriteInPlace,
     WriteRecovery,
+    WriteSwap,
+    DiscardSwap,
 }
 
 /// `write_atomic` のステップ (失敗を注入でき、到達したステップは `MemFs::steps` に残る)。
@@ -64,6 +66,12 @@ struct State {
     recovery: Vec<RecoveryDirEntry>,
     /// 「退避先に保存」で書いた本文。
     recovered: Vec<(FsPath, Vec<u8>)>,
+    /// スワップ (文書 → 書いたときのパスと本文)。
+    swaps: BTreeMap<eve_view::DocumentId, (Option<FsPath>, Vec<u8>)>,
+    /// `write_swap` が成功した回数。
+    swap_writes: u32,
+    /// スワップを実装していない Port のふり (`Unsupported` を返す)。
+    swap_unsupported: bool,
 }
 
 pub struct MemFs {
@@ -93,6 +101,9 @@ impl MemFs {
                 inflight: Vec::new(),
                 recovery: Vec::new(),
                 recovered: Vec::new(),
+                swaps: BTreeMap::new(),
+                swap_writes: 0,
+                swap_unsupported: false,
             }),
         }
     }
@@ -178,6 +189,31 @@ impl MemFs {
     /// 「退避先に保存」で書いた本文 (書いた順)。
     pub fn recovery_written(&self) -> Vec<Vec<u8>> {
         self.st().recovered.iter().map(|(_, b)| b.clone()).collect()
+    }
+
+    /// 文書のスワップの本文 (無ければ `None`)。
+    pub fn swap_of(&self, doc: eve_view::DocumentId) -> Option<Vec<u8>> {
+        self.st().swaps.get(&doc).map(|(_, b)| b.clone())
+    }
+
+    /// 文書のスワップを書いたときのパス (`Some(None)` は無題)。
+    pub fn swap_path_of(&self, doc: eve_view::DocumentId) -> Option<Option<FsPath>> {
+        self.st().swaps.get(&doc).map(|(p, _)| p.clone())
+    }
+
+    /// 残っているスワップの数。
+    pub fn swap_count(&self) -> usize {
+        self.st().swaps.len()
+    }
+
+    /// `write_swap` が成功した回数 (書出しの間隔の検査用)。
+    pub fn swap_writes(&self) -> u32 {
+        self.st().swap_writes
+    }
+
+    /// スワップを実装していない Port のふりをする (`write_swap` / `discard_swap` が `Unsupported`)。
+    pub fn set_swap_unsupported(&self, on: bool) {
+        self.st().swap_unsupported = on;
     }
 
     /// 残っている保存中フラグ。
@@ -356,6 +392,31 @@ impl FileSystem for MemFs {
         let body = doc.to_vec();
         s.recovered.push((dir.clone(), body));
         Ok(dir)
+    }
+
+    fn write_swap(&self, doc: &eve_core::DocSnapshot) -> Result<(), FsError> {
+        let mut s = self.st();
+        if s.swap_unsupported {
+            return Err(FsError::new(FsErrorKind::Unsupported));
+        }
+        injected(&mut s, FsOp::WriteSwap)?;
+        s.swaps.insert(doc.doc, (doc.path.clone(), doc.to_vec()));
+        s.swap_writes += 1;
+        Ok(())
+    }
+
+    fn discard_swap(
+        &self,
+        doc: eve_view::DocumentId,
+        _path: Option<&FsPath>,
+    ) -> Result<(), FsError> {
+        let mut s = self.st();
+        if s.swap_unsupported {
+            return Err(FsError::new(FsErrorKind::Unsupported));
+        }
+        injected(&mut s, FsOp::DiscardSwap)?;
+        s.swaps.remove(&doc);
+        Ok(())
     }
 
     fn inflight_for(&self, path: &FsPath) -> Result<Vec<InflightRecord>, FsError> {

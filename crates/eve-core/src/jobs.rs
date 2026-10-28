@@ -79,6 +79,15 @@ pub enum JobKind {
     WriteRecovery {
         doc: std::sync::Arc<crate::DocSnapshot>,
     },
+    /// スワップを書く (03 §10.2)。`doc` は投入時の公開物で、書込中の文書は変わらない。同じ文書の Swap は同時に 1 つだけ。
+    Swap {
+        doc: std::sync::Arc<crate::DocSnapshot>,
+    },
+    /// スワップを消す (03 §10.2「削除」)。
+    SwapDiscard {
+        doc: DocumentId,
+        path: Option<FsPath>,
+    },
     /// 文書内の全件検索 (03 §12.2)。`from` の行から末尾まで、続けて先頭から走査し、一致を `SearchBatch` で順に返して
     /// `SearchDone` で終わる。保持するのは `max_matches` 件まで、数えるのは `count_limit` 件まで。
     /// 単発の検索: `from` から先 (`forward`) か前の最初の一致 (03 §12.2「`search.next` / `search.prev`」)。
@@ -206,6 +215,14 @@ pub enum JobResult {
         job: JobId,
         path: FsPath,
     },
+    /// スワップを書いた。
+    SwapWritten {
+        job: JobId,
+    },
+    /// スワップを消した。
+    SwapDiscarded {
+        job: JobId,
+    },
     /// 単発の検索の結果。`found` は (一致, 文書の端を越えたか)。
     FindNextDone {
         job: JobId,
@@ -259,6 +276,8 @@ impl JobResult {
             | JobResult::RecoveryFound { job, .. }
             | JobResult::Saved { job, .. }
             | JobResult::RecoveryWritten { job, .. }
+            | JobResult::SwapWritten { job }
+            | JobResult::SwapDiscarded { job }
             | JobResult::UnmappableReplacement { job, .. }
             | JobResult::Unmappable { job, .. }
             | JobResult::ReplaceAllDone { job, .. }
@@ -448,6 +467,20 @@ pub fn run_job(
         }
         JobKind::WriteRecovery { doc } => match ports.fs.write_recovery(doc) {
             Ok(path) => JobResult::RecoveryWritten { job: req.id, path },
+            Err(err) => JobResult::Failed {
+                job: req.id,
+                err: JobError::Fs(err),
+            },
+        },
+        JobKind::Swap { doc } => match ports.fs.write_swap(doc) {
+            Ok(()) => JobResult::SwapWritten { job: req.id },
+            Err(err) => JobResult::Failed {
+                job: req.id,
+                err: JobError::Fs(err),
+            },
+        },
+        JobKind::SwapDiscard { doc, path } => match ports.fs.discard_swap(*doc, path.as_ref()) {
+            Ok(()) => JobResult::SwapDiscarded { job: req.id },
             Err(err) => JobResult::Failed {
                 job: req.id,
                 err: JobError::Fs(err),

@@ -24,6 +24,7 @@ mod search_bar;
 mod search_state;
 mod snapshot;
 mod state;
+mod swap;
 
 use eve_view::{
     Capabilities, DocumentId, EditorEvent, Effect, InputEvent, KeyCode, KeyKind, KeyStroke,
@@ -118,11 +119,15 @@ impl Editor {
     pub fn tick(&mut self, now: Tick) {
         self.state.now = now;
         self.state.search_tick();
+        self.state.swap_tick();
     }
 
     /// 次に `tick` が要る時刻。`None` なら無期限に待ってよい。
     pub fn next_deadline(&self) -> Option<Tick> {
-        self.state.search_deadline()
+        [self.state.search_deadline(), self.state.swap_deadline()]
+            .into_iter()
+            .flatten()
+            .min()
     }
 
     /// キーマップを通さずにコマンドを実行する。権限判定フックを通る。

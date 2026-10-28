@@ -19,6 +19,7 @@ mod jobs;
 mod paths;
 mod replacing;
 mod rescue;
+mod secret;
 mod time;
 mod unmap;
 
@@ -54,5 +55,6 @@ pub use search::{
     Case, Matcher, SearchJob, SearchQuery, build_replace_all, find_next, run_search, scan_bytes,
     scan_lines,
 };
+pub use secret::is_secret_path;
 pub use time::{Clock, Millis, Tick};
 pub use unmap::{ReplaceCounts, ReplaceTarget};
