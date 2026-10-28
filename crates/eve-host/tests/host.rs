@@ -303,3 +303,47 @@ fn 設定の診断は最初の_frame_の後にメッセージとして出す() {
         .unwrap();
     assert!(screen.contains("config.toml:2"), "{screen}");
 }
+
+/// 時計を進めて期限の tick を処理し、積まれたジョブを実行して結果を Host に返す。
+fn advance_and_run(e: &mut Env, ms: u64) {
+    e.clock.advance(eve_core::Millis(ms));
+    e.host.step(&mut e.fe, HostMsg::Tick);
+    e.jobs.run_jobs();
+    for r in e.jobs.take_results() {
+        e.host.step(&mut e.fe, HostMsg::Job(Box::new(r)));
+    }
+}
+
+#[test]
+fn 正常終了ではスワップを消し_異常終了では残す() {
+    // 正常終了 (破棄して終了): 消す
+    let mut e = env();
+    e.start();
+    e.input(InputEvent::Text("abc".into()));
+    advance_and_run(&mut e, 2000);
+    assert_eq!(e.fs.swap_count(), 1, "最後の入力から 2 秒後に書かれる");
+    e.input(InputEvent::Key(KeyEvent::press(
+        KeyCode::Char('q'),
+        Modifiers::CTRL,
+    )));
+    assert_eq!(
+        e.input(InputEvent::Key(KeyEvent::press(
+            KeyCode::Char('d'),
+            Modifiers::NONE
+        ))),
+        StepOutcome::Exit(ExitCode::OK)
+    );
+    assert_eq!(e.fs.swap_count(), 0, "正常終了ではスワップを消す");
+
+    // 割り込み (異常終了): 復旧の材料なので残す
+    let mut e = env();
+    e.start();
+    e.input(InputEvent::Text("abc".into()));
+    advance_and_run(&mut e, 2000);
+    assert_eq!(
+        e.host
+            .step(&mut e.fe, HostMsg::Signal(SignalKind::Interrupt)),
+        StepOutcome::Exit(ExitCode::INTERRUPTED)
+    );
+    assert_eq!(e.fs.swap_count(), 1, "異常終了ではスワップを残す");
+}

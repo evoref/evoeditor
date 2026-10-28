@@ -331,6 +331,12 @@ impl Editor {
         self.state.take_clipboard(id)
     }
 
+    /// ディスクにスワップが残っている文書と、書いたときのパス (無題は `None`)。Host が **正常終了のとき** に消す (03 §10.2「削除」)。
+    /// 異常終了・緊急退避の終了では消さない (復旧の材料)。
+    pub fn swap_leftovers(&self) -> Vec<(DocumentId, Option<crate::FsPath>)> {
+        self.state.swap_leftovers()
+    }
+
     pub fn take_snapshot_updates(&mut self) -> Vec<DocumentId> {
         self.state.take_snapshot_updates()
     }

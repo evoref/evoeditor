@@ -36,4 +36,6 @@ pub mod rescue;
 #[cfg(windows)]
 mod save;
 #[cfg(windows)]
+mod swap;
+#[cfg(windows)]
 pub mod term;

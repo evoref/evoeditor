@@ -33,7 +33,7 @@ pub(crate) fn next_seq() -> u64 {
 // ---------- キー ----------
 
 /// フラグのキーの入力となる正規形 (親を `canonicalize` し、ファイル名を付け直す。親が無ければ `None`)。
-fn normalized(path: &Path) -> Option<String> {
+pub(crate) fn normalized(path: &Path) -> Option<String> {
     let name = path.file_name()?;
     let parent = path.parent()?;
     let parent = if parent.as_os_str().is_empty() {
@@ -126,7 +126,7 @@ pub(crate) fn toml_str(s: &str) -> String {
 }
 
 /// プロセスの作成時刻 (UNIX 紀元からの経過)。取れなければ `None`。
-fn process_start() -> Option<FileTime> {
+pub(crate) fn process_start() -> Option<FileTime> {
     let zero = FILETIME {
         dwLowDateTime: 0,
         dwHighDateTime: 0,

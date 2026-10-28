@@ -67,6 +67,8 @@ pub fn channel() -> (Sender<HostMsg>, Receiver<HostMsg>) {
 pub struct Host {
     editor: Editor,
     clock: Arc<dyn Clock>,
+    /// 正常終了のときにスワップを消すために持つ (`FileSystem` Port。ほかの I/O はジョブの中だけ)。
+    fs: Arc<dyn eve_core::FileSystem>,
     inbox: Receiver<HostMsg>,
     tx: Sender<HostMsg>,
     window: Option<WindowId>,
@@ -114,9 +116,11 @@ impl Host {
     /// 受信口を外で作った Host。`ThreadJobSpawner` のように、Host より先に送信口が要る Port のため。
     pub fn with_channel(ports: Ports, (tx, inbox): (Sender<HostMsg>, Receiver<HostMsg>)) -> Host {
         let clock = ports.clock.clone();
+        let fs = ports.fs.clone();
         Host {
             editor: Editor::new(ports, Capabilities::default()),
             clock,
+            fs,
             inbox,
             tx,
             window: None,
@@ -432,7 +436,19 @@ impl Host {
                 }
                 _ => {}
             }
-            if let Effect::Quit { code, stderr, .. } = eff {
+            if let Effect::Quit {
+                code,
+                stderr,
+                rescue,
+                ..
+            } = eff
+            {
+                // 正常な終了では、スワップはもう要らない。「保存を中止して終了」などの退避を伴う終了では残す (復旧の材料)
+                if code == 0 && matches!(rescue, eve_view::QuitRescue::None) {
+                    for (doc, path) in self.editor.swap_leftovers() {
+                        let _ = self.fs.discard_swap(doc, path.as_ref());
+                    }
+                }
                 frontend.restore();
                 self.exit_stderr = stderr;
                 return StepOutcome::Exit(ExitCode(code));
