@@ -105,6 +105,8 @@ pub struct Config {
     pub swap_max_bytes: u64,
     /// `file.swap.exclude_secret_files`: 秘密ファイルの名前に一致する文書をスワップしない (OQ-109)。
     pub swap_exclude_secret_files: bool,
+    /// `ui.locale`: UI の言語。`None` は `auto` (環境変数・OS ロケールで決める、docs/07 §17.1)。
+    pub ui_locale: Option<crate::Locale>,
 }
 
 impl Default for Config {
@@ -122,6 +124,7 @@ impl Default for Config {
             swap_min_interval_ms: 10_000,
             swap_max_bytes: 64 * 1024 * 1024,
             swap_exclude_secret_files: true,
+            ui_locale: None,
         }
     }
 }
@@ -133,7 +136,7 @@ pub struct Loaded {
     pub diagnostics: Vec<Diagnostic>,
 }
 
-const SECTIONS: &[&str] = &["editor", "file", "view", "theme"];
+const SECTIONS: &[&str] = &["editor", "file", "view", "theme", "ui"];
 const KEYS: &[&str] = &[
     "editor.tab_width",
     "editor.indent_unit",
@@ -147,6 +150,7 @@ const KEYS: &[&str] = &[
     "file.swap.min_interval_ms",
     "file.swap.max_bytes",
     "file.swap.exclude_secret_files",
+    "ui.locale",
 ];
 
 const INDENT_UNITS: &[&str] = &["tab", "space"];
@@ -162,6 +166,7 @@ const ENCODINGS: &[&str] = &[
 ];
 const LINE_ENDINGS: &[&str] = &["lf", "crlf", "cr", "native"];
 const COLOR_MODES: &[&str] = &["auto", "truecolor", "256", "16", "none"];
+const LOCALES: &[&str] = &["auto", "ja", "en"];
 
 /// 設定ファイルの本文を読む。`text` が空でも構文エラーでも `Config` を返す。
 pub fn load_str(text: &str) -> Loaded {
@@ -357,6 +362,18 @@ impl Cx<'_> {
                     };
                 }
             }
+            "ui.locale" => {
+                let Some(s) = self.raw_string(key, v) else {
+                    return;
+                };
+                if s.trim().eq_ignore_ascii_case("auto") {
+                    self.out.config.ui_locale = None;
+                } else if let Some(l) = crate::Locale::parse(&s) {
+                    self.out.config.ui_locale = Some(l);
+                } else {
+                    self.invalid(key, LOCALES, v);
+                }
+            }
             "theme.color_mode" => {
                 if let Some(s) = self.string(key, v, COLOR_MODES) {
                     self.out.config.color_mode = match s.as_str() {
@@ -511,7 +528,7 @@ pub fn default_display(key: &str) -> &'static str {
         "file.swap.interval_ms" => "2000",
         "file.swap.min_interval_ms" => "10000",
         "file.swap.max_bytes" => "67108864",
-        "theme.color_mode" => "auto",
+        "theme.color_mode" | "ui.locale" => "auto",
         _ => "",
     }
 }

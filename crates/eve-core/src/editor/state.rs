@@ -85,6 +85,8 @@ pub struct EditorState {
     pub(super) clipboard: super::clipboard::ClipboardState,
     /// 解決済みの設定 (07 §5.0 の公開キー)。起動時に Host が `Editor::set_config` で渡す。
     pub(super) config: eve_config::Config,
+    /// 選択済みの UI の言語 (07 §17.1)。起動時に Host が `Editor::set_locale` で渡す。
+    pub(super) locale: eve_config::Locale,
     /// パレットの候補 (`hidden` を除く登録済みコマンド。CommandId 順)。
     pub(super) palette_entries: Vec<super::palette::PaletteEntry>,
     /// パレットで選ばれ、Editor が次に実行するコマンド。
@@ -139,6 +141,7 @@ impl EditorState {
             trim_notified: BTreeSet::new(),
             clipboard: Default::default(),
             config: eve_config::Config::default(),
+            locale: eve_config::Locale::default(),
             palette_entries: Vec::new(),
             deferred_command: None,
             search: None,
@@ -167,6 +170,17 @@ impl EditorState {
             d.display = display;
         }
         self.needs_render = true;
+    }
+
+    /// UI の言語を選ぶ。以後の文言はその言語のカタログで解決する。
+    pub fn set_locale(&mut self, locale: eve_config::Locale) {
+        self.locale = locale;
+        self.needs_render = true;
+    }
+
+    /// 選択中の UI の言語。
+    pub fn locale(&self) -> eve_config::Locale {
+        self.locale
     }
 
     fn display_settings(&self) -> crate::document::DisplaySettings {

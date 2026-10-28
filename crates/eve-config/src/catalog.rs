@@ -54,6 +54,14 @@ impl Catalog {
         JA.get_or_init(|| Catalog::parse(BUILTIN_JA).expect("同梱の locales/ja.toml は読める"))
     }
 
+    /// 言語に対応する同梱のカタログ。
+    pub fn builtin(locale: crate::Locale) -> &'static Catalog {
+        match locale {
+            crate::Locale::Ja => Catalog::builtin_ja(),
+            crate::Locale::En => Catalog::builtin_en(),
+        }
+    }
+
     /// 同梱の `en`。キー集合は `ja` と一致する (`cargo xtask i18n` と下の試験が検査する)。
     pub fn builtin_en() -> &'static Catalog {
         static EN: OnceLock<Catalog> = OnceLock::new();

@@ -15,7 +15,6 @@ pub(crate) const RESERVED_SECTIONS: &[&str] = &[
     "process",
     "search",
     "session",
-    "ui",
     "workspace",
 ];
 
@@ -129,7 +128,6 @@ pub(crate) const RESERVED_KEYS: &[&str] = &[
     "ui.line_number.active",
     "ui.list_next",
     "ui.list_page_down",
-    "ui.locale",
     "ui.message.error",
     "ui.message.info",
     "ui.message.warning",
