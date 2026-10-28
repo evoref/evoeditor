@@ -76,8 +76,28 @@ impl Session {
         cmd.env("EVE_STATE_DIR", &state);
         // OS の言語に依らず日本語で始める (言語の選択を試すテストは `envs` や引数で上書きする)
         cmd.env("EVE_LANG", "ja");
+        // 開発者の実際の設定 (%APPDATA%) を読まない。設定ディレクトリを指定しない試験は、スワップを切った空に近い設定で動かす
+        // (スワップの書込・復旧の提案は負荷で時機が揺れ、無関係の試験を邪魔する)。スワップを試す試験は `E2E_SWAP` を渡す
+        // (この変数は製品へは渡さない、試験側の目印)。
+        if !envs.iter().any(|(k, _)| *k == "EVE_CONFIG_DIR") {
+            let swap = envs.iter().any(|(k, _)| *k == "E2E_SWAP");
+            let cfg = state.join("e2e-config");
+            std::fs::create_dir_all(&cfg).expect("設定ディレクトリを作れません");
+            std::fs::write(
+                cfg.join("config.toml"),
+                format!(
+                    "[file.swap]
+enabled = {swap}
+"
+                ),
+            )
+            .expect("設定を書けません");
+            cmd.env("EVE_CONFIG_DIR", &cfg);
+        }
         for (k, v) in envs {
-            cmd.env(k, v);
+            if *k != "E2E_SWAP" {
+                cmd.env(k, v);
+            }
         }
         let child = pty.slave.spawn_command(cmd).expect("起動できません");
         drop(pty.slave);
@@ -240,20 +260,6 @@ const CTRL_S: &[u8] = b"\x13";
 const CTRL_Z: &[u8] = b"\x1a";
 
 /// 文字を 1 つずつ (バーストにならないよう間隔をあけて) 送る。
-/// スワップを切った設定ディレクトリ。退避 (緊急退避) だけを見る試験が、負荷でスワップの書込や復旧の確認に邪魔されないようにする。
-fn no_swap_config(name: &str) -> PathBuf {
-    let cfg = temp_dir(name);
-    std::fs::create_dir_all(&cfg).unwrap();
-    std::fs::write(
-        cfg.join("config.toml"),
-        "[file.swap]
-enabled = false
-",
-    )
-    .unwrap();
-    cfg
-}
-
 fn type_slowly(s: &Session, text: &str) {
     for ch in text.chars() {
         let mut b = [0u8; 4];
@@ -460,9 +466,7 @@ fn 設定ディレクトリが無くても使え_設定ディレクトリは作�
 // verifies: AC-NFR-302-2
 #[test]
 fn コンソールを閉じると未保存の内容を退避して終了する() {
-    let cfg = no_swap_config("cfg-noswap-close");
-    let cfgs = cfg.to_str().unwrap();
-    let mut s = Session::start_with(&[], None, &[("EVE_CONFIG_DIR", cfgs)]);
+    let mut s = Session::start(&[]);
     s.wait_ready();
     type_slowly(&s, "unsaved text");
     s.wait_for("入力が見える", |t| t.contains("unsaved text"));
@@ -505,10 +509,7 @@ fn コンソールを閉じると未保存の内容を退避して終了する()
 // 起動時に、前の異常終了が残した退避の場所を案内する (msg.recovery.found、02 §11.2.1 の復旧 v0.1)
 #[test]
 fn 退避が残っていると起動時に場所を案内する() {
-    let cfg = no_swap_config("cfg-noswap-found");
-    let cfgs = cfg.to_str().unwrap();
-    let envs = [("EVE_CONFIG_DIR", cfgs)];
-    let mut s1 = Session::start_with(&[], None, &envs);
+    let mut s1 = Session::start(&[]);
     s1.wait_ready();
     type_slowly(&s1, "lost work");
     s1.wait_for("入力が見える", |t| t.contains("lost work"));
@@ -516,7 +517,7 @@ fn 退避が残っていると起動時に場所を案内する() {
     s1.close_console();
     assert!(s1.exit_within(Duration::from_secs(10)).is_some());
     // 同じ状態ディレクトリで再び起動する
-    let mut s2 = Session::start_with(&[], Some(state.clone()), &envs);
+    let mut s2 = Session::start_in(&[], Some(state.clone()));
     // 本文は長いパスの手前で省略される (04 §8.9: 対処 (hint) を残し、本文の詳細から縮める。履歴 UI は v0.2)。案内が出ること自体を確かめる
     s2.wait_for("退避の案内", |t| {
         t.contains("異常終了の時に") && t.contains("そのフォルダを削除してください")
@@ -857,18 +858,23 @@ fn メインが止まっていても_ctrl_break_で端末を戻して終了す�
     type_slowly(&s, "unsaved text");
     s.wait_for("入力が見える", |t| t.contains("unsaved text"));
     let pid = s.child.process_id().expect("pid");
-    let sent = Instant::now();
+    // イベントが届いた時刻は、補助プロセスの起動前 (`before`) と終了後 (`after`) の間のどこか。補助プロセスの起動は負荷で
+    // 秒単位で遅れ得るので、製品の時間の下限は `before` から (保守的に長く)、上限は `after` から (保守的に短く) 測る
+    let before = Instant::now();
     let st = std::process::Command::new(helper_exe())
         .args(["console-event", &pid.to_string(), "ctrl-break"])
         .status()
         .unwrap();
     assert!(st.success(), "console-event: {st:?}");
+    let after = Instant::now();
     let code = s.exit_within(Duration::from_secs(8));
-    let elapsed = sent.elapsed();
-    assert_eq!(code, Some(130), "{elapsed:?}");
+    let end = Instant::now();
+    assert_eq!(code, Some(130), "{:?}", end - before);
     assert!(
-        elapsed >= Duration::from_secs(2) && elapsed < Duration::from_millis(5500),
-        "メインの終了を 2 秒待ち、合計 5 秒の内で終わる: {elapsed:?}"
+        end - before >= Duration::from_secs(2) && end - after < Duration::from_millis(5500),
+        "メインの終了を 2 秒待ち、合計 5 秒の内で終わる: {:?} 〜 {:?}",
+        end - after,
+        end - before
     );
     s.wait_raw("\x1b[?1049l");
     assert!(s.raw_text().contains("\x1b[?1049l"), "端末を戻した");
@@ -1397,7 +1403,7 @@ fn wait_for_swap(s: &Session, since: Instant) -> Duration {
 // 適用した内容が強制終了の直前と一致する。無題の文書。
 #[test]
 fn 強制終了してもスワップから復旧できる_無題() {
-    let mut s1 = Session::start(&[]);
+    let mut s1 = Session::start_with(&[], None, &[("E2E_SWAP", "1")]);
     s1.wait_ready();
     type_slowly(&s1, "kill me");
     let last_input = Instant::now();
@@ -1413,7 +1419,7 @@ fn 強制終了してもスワップから復旧できる_無題() {
     let _ = s1.exit_within(Duration::from_secs(10));
     assert!(!swap_dirs(&state).is_empty(), "強制終了後もスワップが残る");
 
-    let mut s2 = Session::start_in(&[], Some(state.clone()));
+    let mut s2 = Session::start_with(&[], Some(state.clone()), &[("E2E_SWAP", "1")]);
     s2.wait_for("復旧の提案", |t| {
         t.contains("未保存の内容が見つかりました")
     });
@@ -1440,7 +1446,7 @@ fn 強制終了してもスワップから復旧できる_ファイル() {
     let dir = temp_dir("swap-file");
     let file = dir.join("memo.txt");
     std::fs::write(&file, "original\n").unwrap();
-    let mut s1 = Session::start(&[file.to_str().unwrap()]);
+    let mut s1 = Session::start_with(&[file.to_str().unwrap()], None, &[("E2E_SWAP", "1")]);
     s1.wait_for("開く", |t| t.contains("original"));
     type_slowly(&s1, "EDIT");
     let last_input = Instant::now();
@@ -1454,7 +1460,11 @@ fn 強制終了してもスワップから復旧できる_ファイル() {
         "保存していないのでファイルは変わらない"
     );
 
-    let mut s2 = Session::start_in(&[file.to_str().unwrap()], Some(state.clone()));
+    let mut s2 = Session::start_with(
+        &[file.to_str().unwrap()],
+        Some(state.clone()),
+        &[("E2E_SWAP", "1")],
+    );
     s2.wait_for("復旧の提案", |t| {
         t.contains("未保存の内容が見つかりました")
     });
@@ -1490,7 +1500,7 @@ fn 強制終了してもスワップから復旧できる_ファイル() {
 // 正常終了ではスワップを残さない (破棄して終了)。
 #[test]
 fn 正常終了ではスワップを消す() {
-    let mut s = Session::start(&[]);
+    let mut s = Session::start_with(&[], None, &[("E2E_SWAP", "1")]);
     s.wait_ready();
     type_slowly(&s, "bye");
     let last_input = Instant::now();

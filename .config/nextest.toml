@@ -1,13 +1,27 @@
 # cargo-nextest の設定 (docs/09-testing-quality.md §3.6 / §6.2、docs/11-dev-workflow.md §1)。
 # retries を付けてよいのは L5 (E2E) だけ (docs/11 §1)。それ以外の profile に retries を付けない。
 
+# L5 (E2E) の同時実行数。1 テストが ConPTY のプロセスを起動し、保存・退避・スワップで fsync を打つので、コア数なりに並べると
+# ディスクの fsync が詰まり、緊急退避の時間予算 (CTRL_CLOSE は 3.5 s) や待ちの上限を超えて不安定になる (24 コアの開発機で再現した)。
+# CI の Windows ランナー (4 コア) と同じ並びにそろえるため、全 profile で 4 に抑える (docs/09 §3.6)。
+[test-groups]
+e2e = { max-threads = 4 }
+
 [profile.default]
 fail-fast = true
+
+[[profile.default.overrides]]
+filter = 'package(evoeditor) & binary(e2e)'
+test-group = 'e2e'
 
 # CI (ci.yml の test ジョブ)。失敗しても残りのテストを回し、すべての失敗をまとめて見せる。
 [profile.ci]
 fail-fast = false
 slow-timeout = { period = "60s", terminate-after = 5 }
+
+[[profile.ci.overrides]]
+filter = 'package(evoeditor) & binary(e2e)'
+test-group = 'e2e'
 
 # L5 の E2E (ConPTY、feature test-hooks)。端末の挙動は揺れるので、ここだけ retries を許す。
 # ジョブ (ci.yml の e2e) が `-p evoeditor --test e2e` で使う。test-hooks のシナリオは M3 以降。
@@ -15,6 +29,10 @@ slow-timeout = { period = "60s", terminate-after = 5 }
 fail-fast = false
 retries = 2
 slow-timeout = { period = "60s", terminate-after = 5 }
+
+[[profile.e2e.overrides]]
+filter = 'package(evoeditor) & binary(e2e)'
+test-group = 'e2e'
 
 # 夜間 (`cargo xtask nightly` の proptest 拡張。PROPTEST_CASES=10000)。1 テストが数分かかることがあるので、
 # `ci` の 5 分で打ち切らず、1 時間まで許す (ハングは step 全体の時間の上限 XTASK_STEP_TIMEOUT_SECS で止める)。retries は付けない。
