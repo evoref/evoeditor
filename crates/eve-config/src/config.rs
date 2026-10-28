@@ -1,6 +1,6 @@
 //! ユーザー層の設定ファイル (`config.toml`) の読込と検証 (docs/07 §4.2・§5.0、01 FR-701〜703)。
 //!
-//! v0.1 の公開キーは 7 個。ファイルが無い・壊れている・値が不正なときも `Config` は必ず返り、
+//! 公開キーは v0.1 の 7 個と、v0.2 の M6 で足した `file.swap.*` の 5 個。ファイルが無い・壊れている・値が不正なときも `Config` は必ず返り、
 //! 問題は `Diagnostic` の列として返す (最初のエラーで止まらない)。不正な項目は既定値に戻す。
 
 use toml::Spanned;
@@ -84,7 +84,7 @@ pub enum ColorMode {
     None,
 }
 
-/// v0.1 の公開キー 7 個 (docs/07 §5.0)。`Default` が既定値。
+/// 公開キー (v0.1 の 7 個 (docs/07 §5.0) と、v0.2 の M6 で足した `file.swap.*` の 5 個)。`Default` が既定値。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Config {
     pub tab_width: u8,
@@ -95,6 +95,16 @@ pub struct Config {
     /// East Asian Ambiguous の幅 (1 か 2)。
     pub ambiguous_width: u8,
     pub color_mode: ColorMode,
+    /// `file.swap.enabled`: swap-lite を使うか (FR-118、docs/07 §5.2)。
+    pub swap_enabled: bool,
+    /// `file.swap.interval_ms`: 最後の入力からスワップを書くまでの遅延。
+    pub swap_interval_ms: u32,
+    /// `file.swap.min_interval_ms`: 同じ文書のスワップの最短の間隔。
+    pub swap_min_interval_ms: u32,
+    /// `file.swap.max_bytes`: これを超える文書はスワップの対象外。
+    pub swap_max_bytes: u64,
+    /// `file.swap.exclude_secret_files`: 秘密ファイルの名前に一致する文書をスワップしない (OQ-109)。
+    pub swap_exclude_secret_files: bool,
 }
 
 impl Default for Config {
@@ -107,6 +117,11 @@ impl Default for Config {
             default_line_ending: DefaultLineEnding::Lf,
             ambiguous_width: 1,
             color_mode: ColorMode::Auto,
+            swap_enabled: true,
+            swap_interval_ms: 2_000,
+            swap_min_interval_ms: 10_000,
+            swap_max_bytes: 64 * 1024 * 1024,
+            swap_exclude_secret_files: true,
         }
     }
 }
@@ -127,6 +142,11 @@ const KEYS: &[&str] = &[
     "file.default_line_ending",
     "view.ambiguous_width",
     "theme.color_mode",
+    "file.swap.enabled",
+    "file.swap.interval_ms",
+    "file.swap.min_interval_ms",
+    "file.swap.max_bytes",
+    "file.swap.exclude_secret_files",
 ];
 
 const INDENT_UNITS: &[&str] = &["tab", "space"];
@@ -235,10 +255,20 @@ impl Cx<'_> {
             );
             return;
         };
+        self.keys(n, table);
+    }
+
+    /// テーブルの中のキーを読む。`[file.swap]` や `swap.enabled = ...` のような入れ子は、公開キーの接頭辞なら中へ入る。
+    fn keys(&mut self, prefix: &str, table: &DeTable<'_>) {
         for (k, v) in table {
-            let full = format!("{n}.{}", k.get_ref());
+            let full = format!("{prefix}.{}", k.get_ref());
+            let nested = format!("{full}.");
             if KEYS.contains(&full.as_str()) {
                 self.value(&full, v);
+            } else if let (DeValue::Table(inner), true) =
+                (v.get_ref(), KEYS.iter().any(|key| key.starts_with(&nested)))
+            {
+                self.keys(&full, inner);
             } else if is_reserved_key(&full) {
                 self.diag(Severity::Info, DiagKind::Unsupported, full, k.span().start);
             } else {
@@ -268,6 +298,31 @@ impl Cx<'_> {
             "editor.indent_width" => {
                 if let Some(n) = self.int(key, v, 1, 16) {
                     self.out.config.indent_width = n as u8;
+                }
+            }
+            "file.swap.enabled" => {
+                if let Some(b) = self.boolean(key, v) {
+                    self.out.config.swap_enabled = b;
+                }
+            }
+            "file.swap.exclude_secret_files" => {
+                if let Some(b) = self.boolean(key, v) {
+                    self.out.config.swap_exclude_secret_files = b;
+                }
+            }
+            "file.swap.interval_ms" => {
+                if let Some(n) = self.int(key, v, 100, 600_000) {
+                    self.out.config.swap_interval_ms = n as u32;
+                }
+            }
+            "file.swap.min_interval_ms" => {
+                if let Some(n) = self.int(key, v, 100, 3_600_000) {
+                    self.out.config.swap_min_interval_ms = n as u32;
+                }
+            }
+            "file.swap.max_bytes" => {
+                if let Some(n) = self.int(key, v, 1_048_576, 1 << 40) {
+                    self.out.config.swap_max_bytes = n as u64;
                 }
             }
             "view.ambiguous_width" => {
@@ -384,6 +439,16 @@ impl Cx<'_> {
         }
     }
 
+    /// 真偽値。型違いは診断を積んで `None`。
+    fn boolean(&mut self, key: &str, v: &Spanned<DeValue<'_>>) -> Option<bool> {
+        if let DeValue::Boolean(b) = v.get_ref() {
+            Some(*b)
+        } else {
+            self.mismatch(key, v, "boolean");
+            None
+        }
+    }
+
     fn raw_string(&mut self, key: &str, v: &Spanned<DeValue<'_>>) -> Option<String> {
         if let DeValue::String(s) = v.get_ref() {
             Some(s.to_string())
@@ -442,6 +507,10 @@ pub fn default_display(key: &str) -> &'static str {
         "file.default_encoding" => "utf-8",
         "file.default_line_ending" => "lf",
         "view.ambiguous_width" => "1",
+        "file.swap.enabled" | "file.swap.exclude_secret_files" => "true",
+        "file.swap.interval_ms" => "2000",
+        "file.swap.min_interval_ms" => "10000",
+        "file.swap.max_bytes" => "67108864",
         "theme.color_mode" => "auto",
         _ => "",
     }

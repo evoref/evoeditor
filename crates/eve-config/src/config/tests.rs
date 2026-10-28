@@ -42,6 +42,7 @@ color_mode = "256"
             default_line_ending: DefaultLineEnding::Crlf,
             ambiguous_width: 2,
             color_mode: ColorMode::Color256,
+            ..Config::default()
         }
     );
 }
@@ -257,4 +258,73 @@ fn 配布する設定例は既定値と一致する() {
     let l = load_str(include_str!("../../../../dist/config.example.toml"));
     assert!(l.diagnostics.is_empty(), "{:?}", l.diagnostics);
     assert_eq!(l.config, Config::default());
+}
+
+#[test]
+fn スワップの_5_キーを_入れ子のテーブルでも_ドットのキーでも読む() {
+    let l = load_str(
+        r#"
+[file.swap]
+enabled = false
+interval_ms = 500
+min_interval_ms = 3000
+max_bytes = 2097152
+exclude_secret_files = false
+"#,
+    );
+    assert!(l.diagnostics.is_empty(), "{:?}", l.diagnostics);
+    let c = l.config;
+    assert!(!c.swap_enabled);
+    assert_eq!((c.swap_interval_ms, c.swap_min_interval_ms), (500, 3000));
+    assert_eq!(c.swap_max_bytes, 2_097_152);
+    assert!(!c.swap_exclude_secret_files);
+    // `[file]` の中のドット記法も同じ
+    let d = load_str(
+        "[file]
+swap.interval_ms = 700
+",
+    );
+    assert!(d.diagnostics.is_empty(), "{:?}", d.diagnostics);
+    assert_eq!(d.config.swap_interval_ms, 700);
+}
+
+#[test]
+fn スワップの既定値は仕様どおり() {
+    let c = Config::default();
+    assert!(c.swap_enabled && c.swap_exclude_secret_files);
+    assert_eq!(c.swap_interval_ms, 2000);
+    assert_eq!(c.swap_min_interval_ms, 10_000);
+    assert_eq!(c.swap_max_bytes, 64 * 1024 * 1024);
+}
+
+#[test]
+fn スワップの値が不正なら警告して既定値のまま() {
+    let l = load_str(
+        r#"
+[file.swap]
+enabled = "yes"
+interval_ms = 5
+max_bytes = 1
+"#,
+    );
+    assert_eq!(l.config, Config::default());
+    let ks = kinds(&l);
+    assert_eq!(ks.len(), 3, "{ks:?}");
+    assert!(matches!(ks[0].1, DiagKind::TypeMismatch { .. }));
+    assert!(matches!(ks[1].1, DiagKind::OutOfRange { .. }));
+    assert!(matches!(ks[2].1, DiagKind::OutOfRange { .. }));
+}
+
+#[test]
+fn スワップの下の未公開キーは情報_未知のキーは警告() {
+    let l = load_str(
+        "[file.swap]
+compact_bytes = 1
+enabeld = true
+",
+    );
+    let ks = kinds(&l);
+    assert_eq!(ks.len(), 2, "{ks:?}");
+    assert!(matches!(ks[0].1, DiagKind::Unsupported));
+    assert!(matches!(ks[1].1, DiagKind::UnknownKey { .. }));
 }
