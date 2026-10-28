@@ -550,6 +550,45 @@ fn clip_window(dir: &Path, mb: usize, id: &str, json: bool, quick: bool) {
     );
 }
 
+/// スワップの書出し中のキー入力 (NFR-307: 書出しは UI を止めない)。`mb` MB (64 MiB 以下) の文書を開いて 1 文字入れ (dirty)、
+/// 続けて 30 ms ごとにカーソルを左右へ動かす。最後の入力から約 2 秒後に全文のスワップが書かれ、その間のキー入力を測る
+/// (入力の読取完了 → 描画の `write`)。書き終えたらまた 1 文字入れ、最短 10 秒の間隔で次の書出しを起こす。
+fn swap_window(dir: &Path, mb: usize, id: &str, json: bool, quick: bool) {
+    const VK_LEFT: u64 = 0x25;
+    const VK_RIGHT: u64 = 0x27;
+    let path = make_big(dir, &format!("big_{mb}mb.txt"), mb);
+    let trace = dir.join(format!("swap-{mb}.jsonl"));
+    let (mut t, _) = Term::start(&[path.to_str().unwrap()], "quick brown", Some(&trace));
+    t.wait("開く", || t.marker.load(Ordering::Acquire));
+    thread::sleep(Duration::from_millis(4000));
+    let rounds = if quick { 2 } else { 5 };
+    for _ in 0..rounds {
+        t.send(b"a"); // 変更して dirty にする (最後の入力から 2 秒後にスワップを書く)
+        // 書出しの前後を含めて 12 秒、30 ms ごとに左右へ動かす (前の書出しから 10 秒以上空く)
+        for i in 0..400 {
+            t.send(if i % 2 == 0 { b"\x1b[C" } else { b"\x1b[D" });
+            thread::sleep(Duration::from_millis(30));
+        }
+    }
+    t.send(b"\x11"); // Ctrl+Q (未保存の確認が出る)
+    thread::sleep(Duration::from_millis(300));
+    t.send(b"d"); // 破棄して終了
+    assert_eq!(t.wait_exit(WAIT), Some(0), "正常に終了しません");
+    let spans: Vec<Duration> = read_spans(&trace)
+        .into_iter()
+        .filter(|s| s.name == "input.to_flush" && matches!(s.vk, Some(VK_LEFT | VK_RIGHT)))
+        .map(|s| ns_dur(s.end_ns - s.start_ns))
+        .collect();
+    let _ = std::fs::remove_file(&trace);
+    report(
+        id,
+        &format!("{mb} MB の文書のスワップ書出し中のキー入力 (入力の読取完了 → 描画の write)"),
+        spans,
+        json,
+        quick,
+    );
+}
+
 /// 「開く → 進捗」(01 §3.0.1): `Ctrl+O` → パス → `Enter` の、`Enter` の読取完了 → 進捗を含む最初の Frame の `write`。
 /// 2 つのファイルを交互に開く (同じファイルの再読込と区別するため)。
 fn open_progress(dir: &Path, a: &Path, b: &Path, runs: usize, warmup: usize) -> Vec<Duration> {
@@ -885,6 +924,10 @@ fn main() {
     }
     if traced && want("117") {
         save_window(&dir, 15, "BM-103b-reconcile", traced, json, quick);
+    }
+    if traced && want("307") {
+        // NFR-307: 60 MB の dirty な文書のスワップ書出し中のキー入力 (64 MiB 以下なので全文を書く)
+        swap_window(&dir, 60, "BM-103b-swap60", json, quick);
     }
     if traced && want("205") {
         // FR-205 AC-4: 60 MB (システムへ書く) と 100 MB (上限超過で内部レジスタだけ) の全選択のコピー中のキー入力

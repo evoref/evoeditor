@@ -470,6 +470,10 @@ text = "{path} は他の evoeditor (pid {pid}) でも開かれています"
 hint = "新しい版の evoeditor で開いてください。このフォルダは移動も削除もしていません"
 text = "読めないスワップが {count} 件あります: {dir}"
 
+[msg.swap.too_large]
+hint = "こまめに保存してください"
+text = "{path} は {mib} MiB を超えるので、未保存の内容の自動保存 (スワップ) の対象外です"
+
 [msg.swap.read_failed]
 hint = "スワップは残してあります。もう一度開いて試してください"
 text = "スワップを読めませんでした: {dir}"
