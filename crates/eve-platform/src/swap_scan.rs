@@ -151,6 +151,14 @@ pub(crate) fn list_swaps(state_dir: &Path) -> Vec<SwapEntry> {
         let parsed = fs::read_to_string(dir.join("manifest.toml"))
             .map(|t| parse_manifest(&t))
             .ok();
+        let modified = fs::metadata(dir.join("manifest.toml"))
+            .and_then(|m| m.modified())
+            .ok()
+            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|d| FileTime {
+                secs: i64::try_from(d.as_secs()).unwrap_or(i64::MAX),
+                nanos: d.subsec_nanos(),
+            });
         let readable = parsed.as_ref().is_some_and(|p| {
             p.version == Some(MANIFEST_VERSION)
                 && p.written == Some(true)
@@ -176,6 +184,7 @@ pub(crate) fn list_swaps(state_dir: &Path) -> Vec<SwapEntry> {
             pid,
             owner,
             sensitive: p.sensitive,
+            modified,
             readable,
         });
     }

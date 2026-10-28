@@ -59,6 +59,17 @@ pub(super) enum Pending {
     Swap { doc: DocumentId },
     /// スワップを消すジョブ。
     SwapDiscard { doc: DocumentId },
+    /// 他のプロセスのスワップの本文を読むジョブ (復旧の適用)。`revision` は提案の時点の文書の Revision。
+    SwapRead {
+        doc: DocumentId,
+        revision: eve_view::Revision,
+        entry: Box<crate::SwapEntry>,
+    },
+    /// 他のプロセスのスワップを消すジョブ。`notify` なら結果を知らせる (利用者が選んだ破棄)。
+    SwapRemove {
+        entry: Box<crate::SwapEntry>,
+        notify: bool,
+    },
     /// 「退避先に保存」(03 §9.7 (e))。`path` は元のファイル。
     WriteRecovery { path: FsPath },
     /// 表現不能の文字の置換の ChangeSet を作るジョブ (E3 の選択肢 2)。`revision` は投入時の文書の Revision。
@@ -302,7 +313,9 @@ impl EditorState {
                 | Pending::RecoveryScan
                 | Pending::WriteRecovery { .. }
                 | Pending::Swap { .. }
-                | Pending::SwapDiscard { .. } => false,
+                | Pending::SwapDiscard { .. }
+                | Pending::SwapRead { .. }
+                | Pending::SwapRemove { .. } => false,
             })
             .map(|(id, _)| *id)
             .collect();
@@ -711,6 +724,12 @@ impl EditorState {
             Pending::RecoveryScan => self.finish_recovery_scan(r),
             Pending::Swap { doc } => self.finish_swap(doc, r),
             Pending::SwapDiscard { doc } => self.finish_swap_discard(doc, r),
+            Pending::SwapRead {
+                doc,
+                revision,
+                entry,
+            } => self.finish_swap_read(doc, revision, *entry, r),
+            Pending::SwapRemove { entry, notify } => self.finish_swap_remove(&entry, notify, r),
             Pending::Save {
                 doc,
                 at,
@@ -1324,9 +1343,13 @@ impl EditorState {
     /// 退避が残っていれば場所を案内する (`msg.recovery.found` / `found_rescue`、02 §9.3。中身は読まない)。
     /// 案内するのは最も新しい退避 (名前の `<UTC timestamp>-<pid>[-<n>]` の順)。「退避先に保存」の退避だけなら文言を分ける。
     fn finish_recovery_scan(&mut self, r: JobResult) {
-        let JobResult::RecoveryFound { mut dirs, .. } = r else {
+        let JobResult::RecoveryFound {
+            mut dirs, swaps, ..
+        } = r
+        else {
             return;
         };
+        self.swap_scan_done(swaps);
         if dirs.is_empty() {
             return;
         }

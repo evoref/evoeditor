@@ -335,6 +335,10 @@ replaced = "{count} 件を置換しました (元に戻すで戻せます)"
 wrapped_backward = "文書の先頭に達したので、末尾から検索しました"
 wrapped_forward = "文書の末尾に達したので、先頭から検索しました"
 
+[info.swap]
+discarded = "スワップを破棄しました"
+recovered = "復旧内容を適用しました。保存するまで {path} は変わりません"
+
 [info.undo]
 history_trimmed = "メモリの上限のため、古い元に戻す履歴を破棄しました"
 
@@ -453,6 +457,30 @@ text = "「退避先に保存」で書いた内容が残っています: {dir} (
 [msg.recovery.unknown_format]
 hint = "新しい版の evoeditor で開いてください"
 text = "{dir} の退避は新しい版の形式なので読みません (移動も削除もしていません)"
+
+[msg.swap.found]
+hint = "該当のファイルを開くと復旧を提案します。要らなければ .swp フォルダを削除してください"
+text = "前回の異常終了で保存されていなかった内容のスワップが {count} 件あります: {dir}"
+
+[msg.swap.other_instance]
+hint = "同じファイルを 2 か所で編集すると、後から保存した内容で上書きされます"
+text = "{path} は他の evoeditor (pid {pid}) でも開かれています"
+
+[msg.swap.unreadable]
+hint = "新しい版の evoeditor で開いてください。このフォルダは移動も削除もしていません"
+text = "読めないスワップが {count} 件あります: {dir}"
+
+[msg.swap.read_failed]
+hint = "スワップは残してあります。もう一度開いて試してください"
+text = "スワップを読めませんでした: {dir}"
+
+[msg.swap.changed_since_offer]
+hint = "スワップは残してあります。もう一度提案します"
+text = "復旧の提案の後で文書が変わったので、適用しませんでした"
+
+[msg.swap.remove_failed]
+hint = "手で削除してください"
+text = "スワップを削除できませんでした: {dir}"
 
 [msg.reload.missing]
 hint = "今の内容を残すには、上書き保存 ({key:file.save}) でファイルを作り直すか、名前を付けて保存 ({key:file.save_as}) してください"
@@ -591,6 +619,14 @@ encoding = "[E] 文字コードを指定して開く"
 dangling_link = "{path} はリンクで、リンク先 {target} がありません — `[C] リンク先に作成 (リンクを保つ)` ★"
 overwrite = "{path} は既にあります。上書きしますか? — `[O] 上書き` / `[R] 別の名前を入力` ★ (既定は別の名前を入力。確定 (ユーザー回答))"
 read_only = "{path} は読み取り専用です — `[A] 別名で保存` ★ / `[W] 読み取り専用を解除して保存`"
+
+[ui.confirm.swap_recovery]
+title = "未保存の内容が見つかりました"
+message = "{path} の保存されていない内容が、前回の異常終了で残っています ({len} バイト)"
+apply = "[A] 復旧内容を適用"
+discard = "[D] スワップを破棄"
+changed = "{path} は、スワップを書いた後で変更されています。適用しても保存するまでファイルは変わりませんが、保存するとその変更を上書きします"
+sensitive = "秘密を含み得るファイルです。要らなくなったら、スワップを削除してください"
 
 [ui.confirm.save_failed]
 title = "保存できません"

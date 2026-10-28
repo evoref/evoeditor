@@ -252,6 +252,8 @@ pub struct SwapEntry {
     pub owner: SwapOwner,
     /// 秘密ファイルパターンに一致した文書 (復旧の案内で削除を促す)。
     pub sensitive: bool,
+    /// スワップを最後に書いた時刻 (manifest の更新時刻)。元のファイルがその後に変わったかの判定に使う (比べるだけ)。
+    pub modified: Option<FileTime>,
     /// 本文を読める。未知の `format_version`・壊れた manifest・書きかけ (`written = false`) は `false`
     /// (その場合 core は適用を提案せず、場所だけを示す。移動も削除もしない、05 §7.5)。
     pub readable: bool,

@@ -448,6 +448,9 @@ impl Host {
                     for (doc, path) in self.editor.swap_leftovers() {
                         let _ = self.fs.discard_swap(doc, path.as_ref());
                     }
+                    for entry in self.editor.swap_recovered_leftovers() {
+                        let _ = self.fs.remove_swap(&entry);
+                    }
                 }
                 frontend.restore();
                 self.exit_stderr = stderr;
