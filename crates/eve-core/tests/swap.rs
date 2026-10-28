@@ -176,6 +176,39 @@ fn 上限を超える文書は対象外() {
 }
 
 #[test]
+fn 上限を超えたら_対象外であることを_1_回だけ知らせる() {
+    let mut h = Harness::new();
+    h.editor.state_mut().set_config(Config {
+        swap_max_bytes: 1_048_576,
+        ..Config::default()
+    });
+    h.paste(&"a".repeat(1_048_577));
+    h.advance_ms(0);
+    assert_eq!(
+        h.messages()
+            .iter()
+            .filter(|k| k.as_str() == "msg.swap.too_large")
+            .count(),
+        1
+    );
+    h.advance_ms(60_000);
+    h.advance_ms(60_000);
+    assert_eq!(
+        h.messages()
+            .iter()
+            .filter(|k| k.as_str() == "msg.swap.too_large")
+            .count(),
+        1,
+        "1 回だけ"
+    );
+    // 上限以下なら知らせない
+    let mut h = Harness::new();
+    typed(&mut h, "small");
+    h.advance_ms(60_000);
+    assert!(!h.messages().contains(&"msg.swap.too_large".to_owned()));
+}
+
+#[test]
 fn 設定で止められる() {
     let mut h = Harness::new();
     h.editor.state_mut().set_config(Config {

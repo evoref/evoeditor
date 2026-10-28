@@ -9,7 +9,7 @@
 #![allow(clippy::print_stdout, clippy::print_stderr)]
 
 use std::io::{Read, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -1342,4 +1342,140 @@ fn 到達できない_unc_パスを開いている間も_ui_は止まらず終�
     let code = s.wait_exit();
     assert!(code == 0 || code == 1, "終了コード {code}\n{}", s.screen());
     assert!(t.elapsed() < WAIT, "Ctrl+Q の後も終了しない");
+}
+
+// ---- スワップ (swap-lite、FR-118 / NFR-307、docs/03 §10.2 / §10.3) ----
+
+/// `swap/` の下の、書き終えた (manifest がある) スワップのディレクトリ。
+fn swap_dirs(state: &Path) -> Vec<PathBuf> {
+    std::fs::read_dir(state.join("swap"))
+        .map(|rd| {
+            rd.flatten()
+                .map(|e| e.path())
+                .filter(|p| p.join("manifest.toml").exists())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// スワップが書かれるまで待つ。最後の入力からの時間を返す。
+fn wait_for_swap(s: &Session, since: Instant) -> Duration {
+    let t = Instant::now();
+    while t.elapsed() < WAIT {
+        if !swap_dirs(&s.state).is_empty() {
+            return since.elapsed();
+        }
+        thread::sleep(Duration::from_millis(25));
+    }
+    panic!("スワップが書かれない。画面:\n{}", s.screen());
+}
+
+// FR-118 / NFR-307: 最後の入力から 2 秒後にスワップが書かれ、強制終了 (TerminateProcess) の後の起動で復旧が提案され、
+// 適用した内容が強制終了の直前と一致する。無題の文書。
+#[test]
+fn 強制終了してもスワップから復旧できる_無題() {
+    let mut s1 = Session::start(&[]);
+    s1.wait_ready();
+    type_slowly(&s1, "kill me");
+    let last_input = Instant::now();
+    s1.wait_for("入力が見える", |t| t.contains("kill me"));
+    let took = wait_for_swap(&s1, last_input);
+    assert!(
+        took < Duration::from_secs(6),
+        "最後の入力から約 2 秒で書かれる: {took:?}"
+    );
+    let state = s1.state.clone();
+    // 強制終了 (TerminateProcess)。正常終了の後始末も、緊急退避も行われない
+    s1.child.kill().expect("kill");
+    let _ = s1.exit_within(Duration::from_secs(10));
+    assert!(!swap_dirs(&state).is_empty(), "強制終了後もスワップが残る");
+
+    let mut s2 = Session::start_in(&[], Some(state.clone()));
+    s2.wait_for("復旧の提案", |t| {
+        t.contains("未保存の内容が見つかりました")
+    });
+    s2.send(b"a"); // [A] 復旧内容を適用
+    s2.wait_for("復旧した内容", |t| {
+        t.contains("kill me") && t.contains("復旧内容を適用しました")
+    });
+    // 適用しても保存するまで dirty。破棄して終了すれば、古いスワップも自分のスワップも残らない
+    s2.send(CTRL_Q);
+    s2.wait_for("未保存の確認", |t| t.contains("[D]"));
+    s2.send(b"d");
+    assert_eq!(s2.wait_exit(), 0);
+    assert!(
+        swap_dirs(&state).is_empty(),
+        "正常終了ではスワップを残さない: {:?}",
+        swap_dirs(&state)
+    );
+    let _ = std::fs::remove_dir_all(&state);
+}
+
+// 開いているファイルのスワップ: 強制終了の後に同じファイルを開くと復旧が提案され、適用してもファイルは保存するまで変わらない。
+#[test]
+fn 強制終了してもスワップから復旧できる_ファイル() {
+    let dir = temp_dir("swap-file");
+    let file = dir.join("memo.txt");
+    std::fs::write(&file, "original\n").unwrap();
+    let mut s1 = Session::start(&[file.to_str().unwrap()]);
+    s1.wait_for("開く", |t| t.contains("original"));
+    type_slowly(&s1, "EDIT");
+    let last_input = Instant::now();
+    wait_for_swap(&s1, last_input);
+    let state = s1.state.clone();
+    s1.child.kill().expect("kill");
+    let _ = s1.exit_within(Duration::from_secs(10));
+    assert_eq!(
+        std::fs::read_to_string(&file).unwrap(),
+        "original\n",
+        "保存していないのでファイルは変わらない"
+    );
+
+    let mut s2 = Session::start_in(&[file.to_str().unwrap()], Some(state.clone()));
+    s2.wait_for("復旧の提案", |t| {
+        t.contains("未保存の内容が見つかりました")
+    });
+    s2.send(b"a");
+    s2.wait_for("復旧した内容", |t| t.contains("EDIToriginal"));
+    assert_eq!(
+        std::fs::read_to_string(&file).unwrap(),
+        "original\n",
+        "適用しても保存するまでファイルは変わらない"
+    );
+    // 保存すると、スワップが片付く
+    s2.send(CTRL_S);
+    s2.wait_for("保存した", |t| t.contains("保存しました"));
+    let t = Instant::now();
+    while t.elapsed() < Duration::from_secs(10) && !swap_dirs(&state).is_empty() {
+        thread::sleep(Duration::from_millis(50));
+    }
+    assert!(
+        swap_dirs(&state).is_empty(),
+        "保存したのでスワップは要らない"
+    );
+    s2.send(CTRL_Q);
+    assert_eq!(s2.wait_exit(), 0);
+    assert_eq!(
+        std::fs::read_to_string(&file).unwrap(),
+        "EDIToriginal\n",
+        "保存した内容"
+    );
+    let _ = std::fs::remove_dir_all(&state);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+// 正常終了ではスワップを残さない (破棄して終了)。
+#[test]
+fn 正常終了ではスワップを消す() {
+    let mut s = Session::start(&[]);
+    s.wait_ready();
+    type_slowly(&s, "bye");
+    let last_input = Instant::now();
+    wait_for_swap(&s, last_input);
+    s.send(CTRL_Q);
+    s.wait_for("未保存の確認", |t| t.contains("[D]"));
+    s.send(b"d");
+    assert_eq!(s.wait_exit(), 0);
+    assert!(swap_dirs(&s.state).is_empty());
+    let _ = std::fs::remove_dir_all(&s.state);
 }

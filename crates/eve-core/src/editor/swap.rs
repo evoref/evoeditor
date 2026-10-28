@@ -32,6 +32,8 @@ pub(super) struct SwapState {
     pub(super) candidates: Vec<crate::SwapEntry>,
     /// 動いている別のプロセスのスワップ (同じファイルを開いたら警告する)。
     pub(super) alive: Vec<crate::SwapEntry>,
+    /// 「スワップの対象外」を知らせた文書 (1 文書につき 1 回)。
+    notified_large: std::collections::BTreeSet<DocumentId>,
     /// 復旧を適用した古いスワップ。新しいスワップが書けるか、文書が保存されるまで消さない。
     pub(super) recovered: BTreeMap<DocumentId, Vec<crate::SwapEntry>>,
 }
@@ -59,6 +61,35 @@ struct SwapDoc {
 }
 
 impl EditorState {
+    /// 上限 (`file.swap.max_bytes`) を超える dirty な文書があれば、スワップの対象外であることを 1 回だけ知らせる (FR-118 AC)。
+    fn swap_notify_large(&mut self) {
+        if !self.config.swap_enabled {
+            return;
+        }
+        let max = self.config.swap_max_bytes;
+        let hit = self.documents.iter().find_map(|(id, d)| {
+            (d.is_dirty()
+                && d.load_state == LoadState::Ready
+                && d.len_bytes() as u64 > max
+                && !self.swap.notified_large.contains(id))
+            .then(|| (*id, d.path.as_ref().map(FsPath::display)))
+        });
+        let Some((id, path)) = hit else {
+            return;
+        };
+        self.swap.notified_large.insert(id);
+        let name = path.unwrap_or_else(|| {
+            self.catalog()
+                .render("status.untitled", &[("n", "1")], &|_| None)
+        });
+        let mib = (max / (1024 * 1024)).to_string();
+        self.show_message(
+            eve_view::MessageLevel::Warn,
+            "msg.swap.too_large",
+            &[("path", &name), ("mib", &mib)],
+        );
+    }
+
     /// 書いてよい文書なら、その Revision。dirty で読込済み・編集可・上限以下で、秘密ファイルの除外に当たらないもの。
     fn swap_eligible(&self, id: DocumentId) -> Option<Revision> {
         let cfg = &self.config;
@@ -96,6 +127,7 @@ impl EditorState {
 
     /// `Editor::tick` から呼ぶ。期限が来た文書のスワップを書くジョブを投入し、要らなくなったスワップを消すジョブを投入する。
     pub(super) fn swap_tick(&mut self) {
+        self.swap_notify_large();
         self.swap_offer();
         self.swap_release_recovered();
         if self.swap.stopped {
