@@ -453,6 +453,24 @@ impl EditorState {
         Ok(applied.map(|a| self.after_change(doc, &a, view)).is_some())
     }
 
+    /// プロセス全体の Undo 履歴の上限 (`editor.undo.total_max_bytes`、NFR-203) を守る: 超えていたら、履歴が最も大きい文書から
+    /// 古い順に破棄する。利用者が編集していない文書の履歴も削るが、dirty 表示は変わらない。破棄した文書ごとに 1 回通知する。
+    pub(super) fn enforce_total_undo_budget(&mut self) {
+        let limit = usize::try_from(self.config.undo_total_max_bytes).unwrap_or(usize::MAX);
+        let mut docs: Vec<(DocumentId, &mut crate::Document)> =
+            self.documents.iter_mut().map(|(id, d)| (*id, d)).collect();
+        let trimmed = crate::trim_to_total_budget(&mut docs, limit);
+        for doc in trimmed {
+            if self.trim_notified.insert(doc) {
+                self.show_message(
+                    eve_view::MessageLevel::Info,
+                    "info.undo.history_trimmed",
+                    &[],
+                );
+            }
+        }
+    }
+
     fn after_change(&mut self, doc: DocumentId, a: &Applied, issuer: Option<ViewId>) {
         // 履歴の予算による破棄は、文書ごとに 1 回だけ通知する (03 §7.5)
         if a.record.as_ref().is_some_and(|r| r.pruned) && self.trim_notified.insert(doc) {
@@ -462,6 +480,7 @@ impl EditorState {
                 &[],
             );
         }
+        self.enforce_total_undo_budget();
         let Some(document) = self.documents.get(&doc) else {
             return;
         };

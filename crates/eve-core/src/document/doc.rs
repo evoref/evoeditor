@@ -269,6 +269,11 @@ impl Document {
         }
     }
 
+    /// プロセス全体の Undo の上限のために、最も古い履歴を 1 つ破棄する。解放した会計値を返す。dirty 表示は変わらない。
+    pub fn trim_history_oldest(&mut self) -> Option<usize> {
+        self.history.trim_oldest()
+    }
+
     /// 履歴の封印 (カーソル移動など)。
     pub fn seal_history(&mut self) {
         self.history.seal();

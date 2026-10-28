@@ -231,7 +231,8 @@ fn 公開前のキーとセクションは情報診断で_警告にしない() {
         keys,
         [
             "editor.auto_indent",
-            "editor.undo",
+            // `editor.undo` は公開キー (total_max_bytes) の接頭辞なので、中に入って個々のキーで報告する
+            "editor.undo.max_steps",
             "search",
             "view.line_numbers"
         ]
@@ -370,4 +371,24 @@ fn ui_の他のキーは公開前で_ui_locale_だけが公開() {
     let l = load_str("[ui]\nlocale = \"en\"\nbell = true\n");
     assert_eq!(l.config.ui_locale, Some(crate::Locale::En));
     assert_eq!(kinds(&l), vec![("ui.bell", &DiagKind::Unsupported)]);
+}
+
+#[test]
+fn undo_total_max_bytes_は範囲つきの整数() {
+    assert_eq!(Config::default().undo_total_max_bytes, 256 * 1024 * 1024);
+    for (text, want) in [
+        ("[editor.undo]\ntotal_max_bytes = 1048576\n", 1_048_576),
+        ("[editor]\nundo.total_max_bytes = 536870912\n", 536_870_912),
+    ] {
+        let l = load_str(text);
+        assert!(l.diagnostics.is_empty(), "{text}: {:?}", l.diagnostics);
+        assert_eq!(l.config.undo_total_max_bytes, want, "{text}");
+    }
+    let l = load_str("[editor.undo]\ntotal_max_bytes = 1000\n");
+    assert_eq!(l.config.undo_total_max_bytes, 256 * 1024 * 1024);
+    assert!(matches!(
+        &l.diagnostics[0].kind,
+        DiagKind::OutOfRange { min: 1_048_576, .. }
+    ));
+    assert_eq!(l.diagnostics[0].key, "editor.undo.total_max_bytes");
 }

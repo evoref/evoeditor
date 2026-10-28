@@ -107,6 +107,8 @@ pub struct Config {
     pub swap_exclude_secret_files: bool,
     /// `ui.locale`: UI の言語。`None` は `auto` (環境変数・OS ロケールで決める、docs/07 §17.1)。
     pub ui_locale: Option<crate::Locale>,
+    /// `editor.undo.total_max_bytes`: プロセス全体の Undo 履歴の上限 (NFR-203、docs/03 §7.5)。
+    pub undo_total_max_bytes: u64,
 }
 
 impl Default for Config {
@@ -125,6 +127,7 @@ impl Default for Config {
             swap_max_bytes: 64 * 1024 * 1024,
             swap_exclude_secret_files: true,
             ui_locale: None,
+            undo_total_max_bytes: 256 * 1024 * 1024,
         }
     }
 }
@@ -151,6 +154,7 @@ const KEYS: &[&str] = &[
     "file.swap.max_bytes",
     "file.swap.exclude_secret_files",
     "ui.locale",
+    "editor.undo.total_max_bytes",
 ];
 
 const INDENT_UNITS: &[&str] = &["tab", "space"];
@@ -362,6 +366,11 @@ impl Cx<'_> {
                     };
                 }
             }
+            "editor.undo.total_max_bytes" => {
+                if let Some(n) = self.int(key, v, 1_048_576, 1 << 40) {
+                    self.out.config.undo_total_max_bytes = n as u64;
+                }
+            }
             "ui.locale" => {
                 let Some(s) = self.raw_string(key, v) else {
                     return;
@@ -528,6 +537,7 @@ pub fn default_display(key: &str) -> &'static str {
         "file.swap.interval_ms" => "2000",
         "file.swap.min_interval_ms" => "10000",
         "file.swap.max_bytes" => "67108864",
+        "editor.undo.total_max_bytes" => "268435456",
         "theme.color_mode" | "ui.locale" => "auto",
         _ => "",
     }
