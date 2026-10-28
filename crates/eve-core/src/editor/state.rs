@@ -61,6 +61,9 @@ pub struct EditorState {
     effects: Vec<Effect>,
     events: Vec<EditorEvent>,
     snapshot_updates: BTreeSet<DocumentId>,
+    /// 閉じた文書のうち、保存ジョブが実行中のものの退避用の公開物 (03 §9.2 の閉じる手順 (a)、§9.8 の不変条件 4)。
+    /// 保存の結果が届くまで緊急退避の対象に残し、保存が成功したら外し、失敗したら退避先に書く。
+    pub(super) closing_snapshots: BTreeMap<DocumentId, super::snapshot::DocSnapshot>,
     needs_render: bool,
     /// ジョブの投入口 (`Ports.jobs`)。
     pub(super) jobs: Rc<dyn JobSpawner>,
@@ -128,6 +131,7 @@ impl EditorState {
             effects: Vec::new(),
             events: Vec::new(),
             snapshot_updates: BTreeSet::new(),
+            closing_snapshots: BTreeMap::new(),
             needs_render: true,
             jobs,
             paths,

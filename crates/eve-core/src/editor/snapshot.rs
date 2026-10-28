@@ -42,7 +42,10 @@ impl super::state::EditorState {
     /// 文書の公開物を作る。`dirty_only` なら dirty でない文書は `None` (緊急退避)。読込中・閉じた文書は常に `None`。
     /// 「退避先に保存」は保存に失敗した文書 (dirty でないこともある) を `dirty_only = false` で作る。
     pub(crate) fn rescue_snapshot(&self, doc: DocumentId, dirty_only: bool) -> Option<DocSnapshot> {
-        let d = self.document(doc)?;
+        let Some(d) = self.document(doc) else {
+            // 閉じたが保存ジョブが実行中の文書は、保存の結果が届くまで公開物を残す
+            return self.closing_snapshots.get(&doc).cloned();
+        };
         if (dirty_only && !d.is_dirty()) || d.load_state != crate::document::LoadState::Ready {
             return None;
         }
