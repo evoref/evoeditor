@@ -24,6 +24,9 @@ impl std::error::Error for CatalogError {}
 /// 同梱の日本語の言語ファイル (実行時のファイル読込はしない)。
 const BUILTIN_JA: &str = include_str!("../../../locales/ja.toml");
 
+/// 同梱の英語の言語ファイル (実行時のファイル読込はしない)。
+const BUILTIN_EN: &str = include_str!("../../../locales/en.toml");
+
 /// 文言の表。
 #[derive(Clone, Debug, Default)]
 pub struct Catalog {
@@ -49,6 +52,12 @@ impl Catalog {
     pub fn builtin_ja() -> &'static Catalog {
         static JA: OnceLock<Catalog> = OnceLock::new();
         JA.get_or_init(|| Catalog::parse(BUILTIN_JA).expect("同梱の locales/ja.toml は読める"))
+    }
+
+    /// 同梱の `en`。キー集合は `ja` と一致する (`cargo xtask i18n` と下の試験が検査する)。
+    pub fn builtin_en() -> &'static Catalog {
+        static EN: OnceLock<Catalog> = OnceLock::new();
+        EN.get_or_init(|| Catalog::parse(BUILTIN_EN).expect("同梱の locales/en.toml は読める"))
     }
 
     pub fn get(&self, key: &str) -> Option<&str> {
@@ -212,6 +221,33 @@ pub fn base_key(key: &str) -> &str {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn 同梱の_en_は_ja_とキー集合が同じで_読める() {
+        let (ja, en) = (Catalog::builtin_ja(), Catalog::builtin_en());
+        let ja_keys: Vec<&str> = ja.keys().collect();
+        let en_keys: Vec<&str> = en.keys().collect();
+        assert_eq!(ja_keys, en_keys);
+        assert!(en.len() > 400);
+    }
+
+    #[test]
+    fn en_の文言を引数で埋める() {
+        let en = Catalog::builtin_en();
+        assert_eq!(
+            en.render("info.save.done", &[("path", "a.txt")], &|_| None),
+            "Saved a.txt"
+        );
+        assert_eq!(
+            en.render("status.untitled", &[("n", "1")], &|_| None),
+            "Untitled-1"
+        );
+        // キー表記は解決済みキーマップから
+        let t = en.render("msg.save.failed.hint", &[], &|id| {
+            (id == "file.save_as").then(|| "Ctrl+Shift+S".to_owned())
+        });
+        assert!(t.contains("Ctrl+Shift+S"), "{t}");
+    }
+
     use super::*;
 
     fn cat(src: &str) -> Catalog {

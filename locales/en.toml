@@ -1,0 +1,848 @@
+# locales/en.toml: bundled English UI messages (docs/07 §17, docs/04 §15).
+# The key set must match locales/ja.toml exactly (checked by `cargo xtask i18n`).
+# Accelerator letters in `[X]` labels must match the Japanese labels (they are defined in code).
+[meta]
+language = "en"
+
+[cmd.app.quit]
+description = "Quit the editor."
+title = "Quit"
+
+[cmd.clipboard.copy]
+description = "Copy the selection to the clipboard."
+title = "Copy"
+
+[cmd.clipboard.cut]
+description = "Cut the selection and put it on the clipboard."
+title = "Cut"
+
+[cmd.cursor.doc_end]
+description = "Move the cursor to the end of the document."
+title = "Go to Document End"
+
+[cmd.cursor.doc_start]
+description = "Move the cursor to the start of the document."
+title = "Go to Document Start"
+
+[cmd.cursor.end]
+description = "Move the cursor to the end of the line."
+title = "Go to Line End"
+
+[cmd.cursor.goto_line]
+description = "Move the cursor to the specified line."
+title = "Go to Line"
+
+[cmd.cursor.home]
+description = "Move the cursor to the start of the line."
+title = "Go to Line Start"
+
+[cmd.cursor.move_down]
+description = "Move the cursor down one line."
+title = "Move Down"
+
+[cmd.cursor.move_left]
+description = "Move the cursor left."
+title = "Move Left"
+
+[cmd.cursor.move_right]
+description = "Move the cursor right."
+title = "Move Right"
+
+[cmd.cursor.move_up]
+description = "Move the cursor up one line."
+title = "Move Up"
+
+[cmd.cursor.move_word_left]
+description = "Move the cursor to the start of the previous word."
+title = "Move Word Left"
+
+[cmd.cursor.move_word_right]
+description = "Move the cursor to the end of the next word."
+title = "Move Word Right"
+
+[cmd.cursor.page_down]
+description = "Move the cursor down by one screen."
+title = "Page Down"
+
+[cmd.cursor.page_up]
+description = "Move the cursor up by one screen."
+title = "Page Up"
+
+[cmd.edit.delete_backward]
+description = "Delete the character before the cursor."
+title = "Delete Backward"
+
+[cmd.edit.delete_forward]
+description = "Delete the character after the cursor."
+title = "Delete Forward"
+
+[cmd.edit.delete_word_backward]
+description = "Delete the word before the cursor."
+title = "Delete Word Backward"
+
+[cmd.edit.delete_word_forward]
+description = "Delete the word after the cursor."
+title = "Delete Word Forward"
+
+[cmd.edit.indent]
+description = "Indent the line."
+title = "Indent"
+
+[cmd.edit.insert_text]
+description = "Insert text at the cursor."
+title = "Insert Text"
+
+[cmd.edit.newline]
+description = "Insert a line break at the cursor."
+title = "New Line"
+
+[cmd.edit.outdent]
+description = "Remove one level of indentation from the line."
+title = "Outdent"
+
+[cmd.edit.paste]
+description = "Paste the clipboard contents."
+title = "Paste"
+
+[cmd.edit.redo]
+description = "Redo the edit that was undone."
+title = "Redo"
+
+[cmd.edit.undo]
+description = "Undo the last edit."
+title = "Undo"
+
+[cmd.file.new]
+description = "Create a new untitled document."
+title = "New"
+
+[cmd.file.open]
+description = "Open a file."
+title = "Open"
+
+[cmd.file.reload]
+description = "Reload the file from disk."
+title = "Reload"
+
+[cmd.file.reopen_with_encoding]
+description = "Reopen the file with a specified encoding."
+title = "Reopen with Encoding"
+
+[cmd.file.save]
+description = "Save the current document."
+title = "Save"
+
+[cmd.file.save_as]
+description = "Save the current document under a different name."
+title = "Save As"
+
+[cmd.file.set_encoding]
+description = "Change the encoding used when saving."
+title = "Set Encoding"
+
+[cmd.file.set_line_ending]
+description = "Convert the document's line endings to LF, CRLF or CR."
+title = "Convert Line Endings"
+
+[cmd.search.next]
+description = "Go to the next match."
+title = "Find Next"
+
+[cmd.search.open]
+description = "Open the search bar."
+title = "Find"
+
+[cmd.search.prev]
+description = "Go to the previous match."
+title = "Find Previous"
+
+[cmd.search.replace_all]
+description = "Replace every match."
+title = "Replace All"
+
+[cmd.search.replace_open]
+description = "Open the search bar with the replace field."
+title = "Replace"
+
+[cmd.search.toggle_case]
+description = "Toggle whether search is case-sensitive."
+title = "Toggle Case Sensitivity"
+
+[cmd.select.all]
+description = "Select the whole document."
+title = "Select All"
+
+[cmd.select.extend_down]
+description = "Extend the selection down one line."
+title = "Select Down"
+
+[cmd.select.extend_end]
+description = "Extend the selection to the end of the line."
+title = "Select to Line End"
+
+[cmd.select.extend_home]
+description = "Extend the selection to the start of the line."
+title = "Select to Line Start"
+
+[cmd.select.extend_left]
+description = "Extend the selection to the left."
+title = "Select Left"
+
+[cmd.select.extend_page_down]
+description = "Extend the selection down by one screen."
+title = "Select Page Down"
+
+[cmd.select.extend_page_up]
+description = "Extend the selection up by one screen."
+title = "Select Page Up"
+
+[cmd.select.extend_right]
+description = "Extend the selection to the right."
+title = "Select Right"
+
+[cmd.select.extend_to_doc_end]
+description = "Extend the selection to the end of the document."
+title = "Select to Document End"
+
+[cmd.select.extend_to_doc_start]
+description = "Extend the selection to the start of the document."
+title = "Select to Document Start"
+
+[cmd.select.extend_up]
+description = "Extend the selection up one line."
+title = "Select Up"
+
+[cmd.select.extend_word_left]
+description = "Extend the selection to the previous word."
+title = "Select Word Left"
+
+[cmd.select.extend_word_right]
+description = "Extend the selection to the next word."
+title = "Select Word Right"
+
+[cmd.ui.cancel]
+description = "Close the open input field or dialog."
+title = "Cancel"
+
+[cmd.ui.confirm]
+description = "Accept the input or the selected item."
+title = "Confirm"
+
+[cmd.ui.dialog_choose]
+description = "Choose a dialog option by number."
+title = "Choose Dialog Option"
+
+[cmd.ui.list_next]
+description = "Move to the next item in a list or dialog."
+title = "Next Item"
+
+[cmd.ui.list_page_down]
+description = "Scroll the list down by one screen."
+title = "List Page Down"
+
+[cmd.ui.list_page_up]
+description = "Scroll the list up by one screen."
+title = "List Page Up"
+
+[cmd.ui.list_prev]
+description = "Move to the previous item in a list or dialog."
+title = "Previous Item"
+
+[cmd.ui.palette_open]
+description = "Open the command palette."
+title = "Command Palette"
+
+[cmd.ui.redraw]
+description = "Redraw the screen."
+title = "Redraw"
+
+[hint.app]
+quit = "Quit"
+
+[hint.cursor]
+goto_line = "Goto"
+
+[hint.edit]
+undo = "Undo"
+
+[hint.file]
+open = "Open"
+save = "Save"
+
+[hint.search]
+next = "Next"
+open = "Find"
+prev = "Prev"
+replace_all = "ReplAll"
+toggle_case = "Case"
+
+[hint.ui]
+cancel = "Cancel"
+confirm = "OK"
+list_next = "Next"
+palette_open = "Commands"
+
+[info.app]
+release_summary = "(written for each release)"
+updated = "Updated to evoeditor {version}: {summary}"
+
+[info.cli]
+unsupported = "{option} is not available in this version and was ignored"
+
+[info.config]
+unsupported = "{item} is not supported in this version and was ignored"
+
+[info.eol]
+converted = "Converted {count} line endings to {eol} (undo restores them)"
+unchanged = "Line endings are already {eol}"
+
+[info.goto_line]
+clamped = "There is no line {line}. Moved to the last line ({last})"
+
+[info.open]
+already_open = "{path} is already open"
+cancelled = "Cancelled loading {path}"
+guess_unsupported = "The encoding of {path} was guessed as {guess}, which is not supported in this version, so it was opened as {encoding} / If it looks wrong, choose another with Reopen with Encoding ({key:file.reopen_with_encoding})"
+long_line = "{path} has a very long line, so it was opened read-only (only the start of a long line is shown)"
+lossy_roundtrip = "In this encoding, some characters in the edited places may be saved as different bytes ({count} places)"
+new_file = "{path} does not exist, so it was opened as a new file (saving creates it)"
+redetected = "Re-detected the encoding as {encoding}"
+
+[info.paste]
+first_line_only = "Only the first line was pasted into the input field"
+
+[info.recovery]
+old = "{count} backups are older than 30 days: {dir}"
+
+[info.reload]
+busy = "{path} is still loading. Run this after loading finishes"
+done = "Reloaded {path} (undo restores the previous content)"
+done_read_only = "Reloaded {path} (it is read-only, so it cannot be undone)"
+
+[info.reopen]
+history_cleared = "Reopened as {encoding}. The undo history was cleared"
+
+[info.save]
+aborted = "Save cancelled ({path} was not changed)"
+done = "Saved {path}"
+in_place = "Saved {path} by overwriting in place"
+in_progress = "Saving"
+to_recovery = "Saved to {target}. The original file {path} was not changed"
+unchanged = "No changes (the file was not rewritten)"
+
+[info.search]
+replace_empty_query = "Enter the text to search for"
+replace_no_match = "Nothing to replace"
+replaced = "Replaced {count} matches (undo restores them)"
+wrapped_backward = "Reached the start of the document, searching from the end"
+wrapped_forward = "Reached the end of the document, searching from the start"
+
+[info.swap]
+discarded = "Discarded the swap"
+recovered = "Applied the recovered content. {path} does not change until you save"
+
+[info.undo]
+history_trimmed = "Dropped old undo history to stay within the memory limit"
+
+[msg.cli.directory]
+hint = "Start with the path of a file"
+text = "{path} is a folder and cannot be opened. An untitled document was opened"
+
+[msg.clipboard.fallback]
+hint = "To copy and paste with other apps, use your terminal's selection and paste"
+text = "The system clipboard is not available, so the editor's own clipboard was used: {reason}"
+
+[msg.config.invalid_value]
+hint = "Allowed values: {allowed}. This item uses the default {default}"
+text = "The value {value} of {item} cannot be used"
+
+[msg.config.out_of_range]
+hint = "Specify a value in {range}. This item uses {default}"
+text = "The value {value} of {item} is out of range"
+
+[msg.config.problem]
+hint = "{hint}"
+text = "Configuration problem ({file}:{line}): {detail}"
+
+[msg.config.problems]
+hint = "The affected items use their defaults. See the log ({log}) for all of them"
+text = "There are {count} problems in the configuration. The first: {detail}"
+
+[msg.config.syntax]
+hint = "Fix the line shown. Until then the defaults are used"
+text = "This configuration file is not used because its syntax is invalid: {reason}"
+
+[msg.config.type_mismatch]
+hint = "Write it as {expected}. This item uses the default {default}"
+text = "The type of the value of {item} is wrong (found: {actual})"
+
+[msg.config.unknown_key]
+hint = "〔Did you mean {suggestion}? 〕See the bundled config.example.toml for the available items"
+text = "There is no configuration item named {item}"
+
+[msg.edit.read_only]
+hint = "If it is due to attributes or permissions, save under another name ({key:file.save_as}) and edit that. If the encoding was misdetected, reopen with an encoding ({key:file.reopen_with_encoding})"
+text = "Cannot edit because the document is read-only ({reason})"
+
+[msg.edit.replacing]
+hint = "Please wait until loading finishes. Press {key:ui.cancel} to cancel the load"
+text = "Another file is loading, so the current document cannot be edited"
+
+[msg.eol.convert_stale]
+hint = "Stop typing and run it again"
+text = "Line-ending conversion was cancelled because editing continued"
+
+[msg.io.stalled]
+hint = "Wait a while, or cancel with {key:ui.cancel}. Other file operations can continue meanwhile"
+text = "A file operation is not responding (for example a file on the network)"
+
+[msg.open.busy]
+hint = "Close that program and open the file again"
+text = "Could not read {path} because another program is using it"
+
+[msg.open.changed_during_load]
+hint = "Check the content and, if needed, reload it with an encoding ({key:file.reopen_with_encoding})"
+text = "{path} changed while it was being loaded"
+
+[msg.open.failed]
+hint = "Check the path and permissions"
+text = "Could not open {path}: {reason}"
+
+[msg.open.interrupted_new]
+hint = "It was opened as a new file. Type the content again and save. 〔A half-written temporary file {tmp} remains. Delete it if you do not need it.〕"
+text = "The previous save (creation) of {path} did not finish. The file was not created"
+
+[msg.open.interrupted_save]
+hint = "The original content may remain in {backup}. Check it before reopening. 〔A half-written temporary file {tmp} remains. Delete it if you do not need it.〕"
+text = "The previous save of {path} was interrupted"
+
+[msg.open.interrupted_save_incomplete]
+hint = "The file {path} was probably interrupted before it was rewritten. Check its content, and check the backup before deleting it"
+text = "The previous save of {path} was interrupted. The backup {backup} is only partly written"
+
+[msg.open.interrupted_save_no_backup]
+hint = "Check the content before editing. 〔A half-written temporary file {tmp} remains. Delete it if you do not need it.〕"
+text = "The previous save of {path} may have been interrupted while overwriting. The file may be damaged, and no backup could be found"
+
+[msg.open.not_a_file]
+hint = "Specify the path of a file"
+text = "{path} is not a file (it may be a folder)"
+
+[msg.open.out_of_memory]
+hint = "Close other programs and open the file again"
+text = "Loading {path} was stopped because memory ran out"
+
+[msg.open.parent_missing]
+hint = "Create the folder and then save, or save under another name ({key:file.save_as})"
+text = "The folder {dir} of {path} does not exist. It was opened as a new file, but it cannot be saved as is"
+
+[msg.open.permission_denied]
+hint = "Check the file's permissions"
+text = "You do not have permission to read {path}"
+
+[msg.open.read_failed]
+hint = "Open it again ({key:file.open}), or check the path and the connection"
+text = "Reading {path} failed partway: {reason}"
+
+[msg.open.reserved_name]
+hint = "Specify a different name"
+text = "{path} cannot be opened because the name is reserved by Windows"
+
+[msg.recovery.found]
+hint = "Open the files to check their content, and delete the folder when you no longer need it"
+text = "Content that was not saved at the last abnormal exit has been backed up: {dir} ({count} backups in total)"
+
+[msg.recovery.found_rescue]
+hint = "Delete the folder when you no longer need it"
+text = "Content written by \"Save to recovery folder\" remains: {dir} ({count} backups in total)"
+
+[msg.recovery.unknown_format]
+hint = "Open it with a newer version of evoeditor"
+text = "The backup in {dir} is in a newer format, so it is not read (it was not moved or deleted)"
+
+[msg.swap.found]
+hint = "Open the matching file and recovery will be offered. Delete the .swp folder if you do not need it"
+text = "There are {count} swaps with content that was not saved at the last abnormal exit: {dir}"
+
+[msg.swap.other_instance]
+hint = "If you edit the same file in two places, the one saved later overwrites the other"
+text = "{path} is also open in another evoeditor (pid {pid})"
+
+[msg.swap.unreadable]
+hint = "Open it with a newer version of evoeditor. This folder was not moved or deleted"
+text = "There are {count} swaps that cannot be read: {dir}"
+
+[msg.swap.too_large]
+hint = "Save often"
+text = "{path} is larger than {mib} MiB, so it is not covered by autosave of unsaved content (swap)"
+
+[msg.swap.read_failed]
+hint = "The swap was kept. Open the file again to retry"
+text = "Could not read the swap: {dir}"
+
+[msg.swap.changed_since_offer]
+hint = "The swap was kept. It will be offered again"
+text = "The document changed after the recovery offer, so it was not applied"
+
+[msg.swap.remove_failed]
+hint = "Delete it by hand"
+text = "Could not delete the swap: {dir}"
+
+[msg.reload.missing]
+hint = "To keep the current content, recreate the file with Save ({key:file.save}), or use Save As ({key:file.save_as})"
+text = "Cannot reload because {path} was not found"
+
+[msg.save.acl_not_preserved]
+hint = "Set them again after saving if needed"
+text = "The ACL and extended attributes of {path} are not preserved"
+
+[msg.save.attributes_not_copied]
+hint = "Set them again in the OS if needed"
+text = "Some permissions and attributes of {path} could not be carried over: {reason}"
+
+[msg.save.backup_failed]
+hint = "Choose in the next prompt"
+text = "Could not make the backup before overwriting in place. Nothing was written"
+
+[msg.save.busy]
+hint = "Close that program and retry with {key:file.save}, or save under another name"
+text = "Could not save because another program is using {path}"
+
+[msg.save.changed_after_save]
+hint = "The content will be checked at the next save. If needed, check with Reload ({key:file.reload})"
+text = "Saved {path}, but another program may have changed it right after the save"
+
+[msg.save.check_failed]
+hint = "Nothing was written. Save again with {key:file.save}"
+text = "Saving was stopped because the state of {path} could not be checked: {reason}"
+
+[msg.save.dangling_link]
+hint = "Save under another name ({key:file.save_as}), or create the folder of the link target and save"
+text = "{path} is a link, and its target {target} does not exist. It was not saved"
+
+[msg.save.disk_full]
+hint = "Free some space and retry with {key:file.save}, or save elsewhere ({key:file.save_as})"
+text = "Could not save {path} because there is not enough free disk space. The file was not changed"
+
+[msg.save.encoding_unsupported_iso2022]
+hint = "Reopen with another encoding such as UTF-8 using Reopen with Encoding ({key:file.reopen_with_encoding})"
+text = "This document cannot be saved as ISO-2022-JP because it contains invalid bytes. Nothing was written"
+
+[msg.save.failed]
+hint = "Save under another name ({key:file.save_as}), or check the permissions"
+text = "Could not save {path}: {reason}"
+
+[msg.save.in_place_failed]
+hint = "Save under another name ({key:file.save_as}) and compare it with the backup"
+text = "Overwriting {path} in place failed partway. The file may be damaged. Content before writing: {backup}"
+
+[msg.save.in_place_failed_no_backup]
+hint = "Save under another name ({key:file.save_as}) to keep the current content"
+text = "Overwriting {path} in place failed partway. The file may be damaged, and there is no backup"
+
+[msg.save.invalid_path]
+hint = "Save under a different file name"
+text = "Cannot save to {path}: {reason}"
+
+[msg.save.moved_to_backup]
+hint = "In the next prompt save under another name, and rename {backup} back to restore the original file"
+text = "Saving failed partway, and the original file was moved to {backup}"
+
+[msg.save.parent_missing]
+hint = "Create the folder and retry with {key:file.save}, or save under another name ({key:file.save_as})"
+text = "Cannot save {path} because {dir} does not exist"
+
+[msg.save.permission_denied]
+hint = "Save under another name, or save to the recovery folder"
+text = "You do not have permission to write to {path}"
+
+[msg.save.read_only_fs]
+hint = "Save under another name ({key:file.save_as})"
+text = "{path} is in a read-only location"
+
+[msg.save.recovery_failed]
+hint = "Save under another name ({key:file.save_as})"
+text = "Could not save to the recovery folder: {reason}. The original file {path} was not changed"
+
+[msg.save_as.not_a_file]
+hint = "Enter a different file name"
+text = "{path} is not a file (it may be a folder)"
+
+[msg.save_as.same_file_read_only]
+hint = "Enter a different file name"
+text = "A read-only document cannot be saved to the same file {path}"
+
+[msg.save_as.target_read_only]
+hint = "Enter a different file name"
+text = "{path} has the read-only attribute and cannot be overwritten"
+
+[msg.search.replace_stale]
+hint = "Stop typing and run it again"
+text = "Replace All was cancelled because editing continued"
+
+[ui.config.type]
+array = "an array"
+bool = "a boolean (`true` or `false`)"
+float = "a decimal number"
+integer = "an integer"
+string = "a string"
+table = "a table"
+
+[ui.confirm]
+external_deleted = "{path} was deleted — `[K] Keep as new (saving recreates it)` ★ / `[C] Close`"
+external_modified = "{path} was changed by another program — `[L] Reload (discard my changes)` / `[I] Ignore (check again when saving)` ★"
+quit_saving = "Saving {path} has not finished — `[W] Wait` ★ / `[Q] Abort the save and quit (unsaved content will be backed up)`"
+save_failed_closed = "Could not save: (the text of `msg.save.*`) — {path} is already closed. `[R] Save to recovery folder` ★ / `[D] Discard`"
+
+nav_hint = "Tab / ←→ to select, Enter to confirm"
+cancel = "[Esc] Cancel"
+
+[ui.confirm.open.binary]
+title = "Binary file"
+message = "{path} looks like a binary file"
+readonly = "[R] Open read-only"
+encoding = "[E] Open with an encoding"
+
+[ui.confirm.open.huge]
+title = "Huge file"
+message = "{path} is {size}. Opening it uses a lot of memory"
+readonly = "[R] Open read-only"
+
+[ui.confirm.open.invalid_bytes]
+title = "File with many invalid bytes"
+message = "{path} contains many bytes that are invalid as {encoding} ({ratio}). Opening it uses about {factor} times the memory"
+readonly = "[R] Open read-only"
+encoding = "[E] Open with an encoding"
+abort = "[C] Cancel"
+
+[ui.confirm.open.utf32]
+title = "UTF-32 file"
+message = "{path} starts with a UTF-32 BOM. UTF-32 is not supported"
+readonly = "[R] Open read-only"
+encoding = "[E] Open with an encoding"
+
+[ui.confirm.save]
+dangling_link = "{path} is a link, and its target {target} does not exist — `[C] Create at the target (keep the link)` ★"
+overwrite = "{path} already exists. Overwrite it? — `[O] Overwrite` / `[R] Enter another name` ★ (default is to enter another name; decided by the product owner)"
+read_only = "{path} is read-only — `[A] Save as` ★ / `[W] Clear read-only and save`"
+
+[ui.confirm.swap_recovery]
+title = "Unsaved content found"
+message = "Unsaved content of {path} was left by the last abnormal exit ({len} bytes)"
+apply = "[A] Apply recovered content"
+discard = "[D] Discard the swap"
+changed = "{path} was changed after the swap was written. Applying does not change the file until you save, but saving overwrites that change"
+sensitive = "This file may contain secrets. Delete the swap when you no longer need it"
+
+[ui.confirm.save_failed]
+title = "Cannot save"
+message = "{detail}"
+retry = "[T] Retry"
+alt = "[A] Save as"
+recovery = "[R] Save to recovery folder"
+
+[ui.confirm.save.atomic_unsupported]
+title = "Cannot save safely"
+message = "{path} cannot be saved the safe way (temporary file and replace): {reason}"
+direct = "[O] Overwrite in place (with backup)"
+alt = "[A] Save as"
+
+[ui.confirm.save.lossy_roundtrip]
+title = "Saved with different bytes"
+message = "{count} places will be saved as different bytes for the same characters (for example the line at byte {example} from the original start)"
+save = "[S] Save"
+alt = "[A] Save as"
+
+[ui.confirm.save.escape_normalized]
+title = "Escape notation changes"
+message = "The escape notation changes on {count} lines (the characters do not change)"
+save = "[S] Save"
+alt = "[A] Save as"
+
+[ui.confirm.save.conflict_changed]
+title = "Changed outside"
+message = "{path} was changed by another program after it was opened"
+overwrite = "[O] Overwrite"
+alt = "[A] Save as"
+
+[ui.confirm.save.conflict_deleted]
+title = "Deleted outside"
+message = "{path} was deleted after it was opened. Overwriting recreates the file"
+overwrite = "[O] Overwrite"
+alt = "[A] Save as"
+
+[ui.confirm.save.conflict_created]
+title = "A file with the same name exists"
+message = "{path} was created by another program after this document was created"
+overwrite = "[O] Overwrite"
+alt = "[A] Save as"
+
+[ui.confirm.save.hardlink]
+title = "Hard-linked file"
+message = "{path} has {links} other names (hard links)"
+direct = "[K] Keep the links and overwrite in place (with backup)"
+break = "[B] Detach this file and save"
+
+[ui.confirm.save.overwrite_without_backup]
+title = "Cannot make a backup"
+message = "Could not make a backup of {path}. Overwrite without a backup? If overwriting fails or is interrupted, the original content cannot be recovered"
+overwrite = "[O] Overwrite without a backup"
+alt = "[A] Save as"
+
+[ui.confirm.save.unmappable]
+title = "Characters that cannot be represented"
+message = "{count} characters cannot be represented in {encoding} (first: line {line}, column {col})"
+utf8 = "[U] Save as UTF-8"
+replace = "[R] Replace and save"
+
+[ui.confirm.save.unmappable_replace]
+title = "Confirm replacement"
+message = "The following {total} characters will be replaced and saved as {encoding} ({kana} to full-width kana, {compat} to compatibility characters, {question} to `?`)"
+replace = "[R] Replace and save"
+item = "line {line}, column {col}: {char} ({codepoint}) → {replacement}"
+more = "and {count} more"
+
+[ui.load_state]
+loading = "Loading"
+
+[ui.read_only_reason]
+binary = "binary file"
+file_attribute = "file with the read-only attribute"
+invalid_bytes = "file with invalid bytes"
+large_file_viewer = "huge file (opened read-only by choice)"
+long_line = "file with a very long line"
+no_write_permission = "file without write permission"
+stateful_encoding_with_invalid_bytes = "ISO-2022-JP file with invalid bytes"
+user_requested = "opened read-only by request (`--readonly`)"
+
+
+# --- screen texts from 04 §15.1 (status, search bar, palette, prompts, shared confirm texts) ---
+[status]
+untitled = "Untitled-{n}"
+eol_mixed = "mixed"
+selection = "({count} chars selected)"
+
+[status.loading]
+long = "[Loading {percent}%]"
+short = "{percent}%"
+
+[status.read_only]
+long = "[RO]"
+short = "RO"
+
+[status.saving]
+long = "[Saving]"
+short = "Saving"
+
+[status.degraded.long_line]
+long = "[Long line: partly shown]"
+short = "Part"
+
+[status.encoding]
+bom = "{encoding} BOM"
+
+[status.position]
+long = "Ln {line}, Col {col}"
+short = "{line}:{col}"
+
+[ui.search]
+label = "Find:"
+replace_label = "Replace:"
+replace_all_button = "[A] Replace All"
+
+[ui.search.count]
+running = "{found}/…"
+exact = "{current}/{total}"
+at_least = "{current}/{total}+"
+approx = "~{total}"
+no_match = "0 matches"
+
+[ui.palette.arg]
+encoding = "Encoding"
+eol = "Line ending"
+
+[ui.palette.reason]
+no_changes = "There are no unsaved changes"
+no_path = "The document has no path to save to"
+no_selection = "There is no selection"
+unavailable = "Not available in the current state"
+read_only = "The document is read-only"
+
+[ui.palette]
+title = "Commands"
+arg_title = "{command}: {arg}"
+footer = "{matched}/{total}"
+placeholder = "Type a command"
+disabled = "Cannot run now: {reason}"
+no_match = "No matching commands"
+
+[ui.long_line]
+omitted = "… ({bytes} more bytes omitted)"
+
+[ui.palette.category]
+app = "App"
+clipboard = "Clipboard"
+cursor = "Move"
+edit = "Edit"
+file = "File"
+search = "Search"
+select = "Select"
+ui = "View"
+
+[ui.prompt.open]
+title = "Open"
+
+[ui.prompt.save_as]
+title = "Save As"
+
+[ui.prompt.goto_line]
+title = "Go to Line"
+hint = "line, line:column, $ (last line)"
+
+[ui.prompt.encoding]
+title = "Open with an Encoding"
+hint = "UTF-8, Shift_JIS, EUC-JP, ISO-2022-JP, UTF-16LE, UTF-16BE"
+
+[ui.prompt.encoding.error]
+invalid = "That encoding is not supported"
+
+[ui.prompt.arg]
+title = "{arg}"
+
+[ui.prompt.goto_line.error]
+invalid = "Enter a line number (for example 12, 12:5, $)"
+
+[ui.prompt.open.error]
+empty = "Enter a path"
+
+[ui.prompt.save_as.error]
+empty = "Enter a path"
+
+[ui.key]
+via_palette = "run from the command palette"
+
+[ui]
+too_small = "The terminal is too small (at least {cols}x{rows} is needed)"
+
+[ui.confirm.unsaved]
+title = "Unsaved changes"
+message = "{path} has unsaved changes"
+save = "[S] Save and quit"
+discard = "[D] Discard and quit"
+
+[ui.confirm.reload_discard]
+title = "Reload"
+message = "Reloading {path} loses the unsaved changes (undo after reloading restores them)"
+reload = "[L] Reload (discard changes)"
+
+[ui.confirm.unsaved_reopen]
+title = "Unsaved changes"
+message = "{path} has unsaved changes"
+save = "[S] Save, then reopen"
+discard = "[D] Discard and reopen"
+
+[ui.confirm.unsaved_replace]
+title = "Unsaved changes"
+message = "{path} has unsaved changes"
+save = "[S] Save, then open"
+discard = "[D] Discard and open"
