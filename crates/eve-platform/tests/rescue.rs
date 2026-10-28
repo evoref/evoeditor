@@ -13,6 +13,11 @@ use eve_platform::rescue::WinRescue;
 use eve_text::{LineEnding, Text};
 use eve_view::{DocumentId, Revision};
 
+/// 時間予算を検査しない試験が渡す予算。
+/// 予算 (5 秒) の判定は専用の 2 つの試験 (予算切れと 100 MB) が行う。ほかの試験が 5 秒を使うと、100 MB の試験とディスクを
+/// 取り合う CI で書き終わらず `complete = false` になって落ちる (2026-10-28 の CI で `written: 1 / total: 2`)。
+const AMPLE: Duration = Duration::from_secs(60);
+
 fn tmp(tag: &str) -> PathBuf {
     let n = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -72,7 +77,7 @@ fn 小さい文書から書いて_manifest_は完了になる() {
         },
     );
     let small = doc(2, "small", None, |_| {});
-    let out = w.write(&[big, small], RescueReason::Panic, Duration::from_secs(5));
+    let out = w.write(&[big, small], RescueReason::Panic, AMPLE);
     assert!(out.complete && !out.fallback, "{out:?}");
     assert_eq!((out.total, out.written), (2, 2));
     let dir = out.dir.unwrap();
@@ -111,7 +116,7 @@ fn 不正バイトのエスケープと_pua_を保つ() {
     let w = WinRescue::new(Some(state.join("s")));
     let text = format!("a{}b\u{FF9E}", eve_encoding_escape(0x9A));
     let d = doc(1, &text, None, |f| f.invalid_bytes = 1);
-    let out = w.write(&[d], RescueReason::Fatal, Duration::from_secs(5));
+    let out = w.write(&[d], RescueReason::Fatal, AMPLE);
     let dir = out.dir.unwrap();
     let body = fs::read_to_string(dir.join("1-無題-1.txt")).unwrap();
     assert_eq!(body, text, "内部の UTF-8 のまま (PUA を保つ)");
@@ -155,7 +160,7 @@ fn 同じ秒の退避は連番で別のディレクトリになる() {
     let mut dirs = Vec::new();
     for i in 0..3 {
         let d = doc(1, "x", None, |_| {});
-        let out = w.write(&[d], RescueReason::Panic, Duration::from_secs(5));
+        let out = w.write(&[d], RescueReason::Panic, AMPLE);
         dirs.push(out.dir.unwrap());
         assert!(out.complete, "{i}");
     }
@@ -182,7 +187,7 @@ fn 状態ディレクトリを使えなければ代替の退避先に書く() {
     fs::write(&blocked, b"file").unwrap();
     let w = WinRescue::new(Some(blocked.clone()));
     let d = doc(1, "rescued", Some("C:\\a.txt"), |_| {});
-    let out = w.write(&[d], RescueReason::ConsoleClose, Duration::from_secs(5));
+    let out = w.write(&[d], RescueReason::ConsoleClose, AMPLE);
     let dir = out.dir.clone().expect("代替の退避先");
     assert!(out.fallback && out.complete, "{out:?}");
     assert!(
@@ -209,7 +214,7 @@ fn 退避先は所有者のみの_dacl() {
     let out = w.write(
         &[doc(1, "secret", None, |_| {})],
         RescueReason::Panic,
-        Duration::from_secs(5),
+        AMPLE,
     );
     let dir = out.dir.unwrap();
     for p in [
@@ -238,7 +243,7 @@ fn 長い名前と予約文字のファイル名() {
     let out = w.write(
         &[doc(1, "x", Some(&long), |_| {})],
         RescueReason::Panic,
-        Duration::from_secs(5),
+        AMPLE,
     );
     assert!(out.complete, "{out:?}");
     let dir = out.dir.unwrap();
@@ -322,11 +327,7 @@ fn 書いた退避は次の走査で見つかる() {
     let state = tmp("scan2");
     let sd = state.join("s");
     let w = WinRescue::new(Some(sd.clone()));
-    let out = w.write(
-        &[doc(1, "x", None, |_| {})],
-        RescueReason::Panic,
-        Duration::from_secs(5),
-    );
+    let out = w.write(&[doc(1, "x", None, |_| {})], RescueReason::Panic, AMPLE);
     let written = out.dir.unwrap();
     let found = WinFs::new(&sd).list_recovery_dirs().unwrap();
     assert!(
@@ -398,11 +399,7 @@ fn 未知の_format_version_の退避は一覧に出るが_変更も移動も削
     );
     // 新しい退避を書いても、古い退避には触れない
     let d = doc(1, "新しい", Some("n.txt"), |_| {});
-    let out = WinRescue::new(Some(state.clone())).write(
-        &[d],
-        RescueReason::Panic,
-        Duration::from_secs(5),
-    );
+    let out = WinRescue::new(Some(state.clone())).write(&[d], RescueReason::Panic, AMPLE);
     assert!(out.complete);
     assert_eq!(
         snapshot(&old),
