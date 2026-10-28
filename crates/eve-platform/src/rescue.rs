@@ -176,7 +176,7 @@ fn open_dir_with(
 }
 
 /// 本文のファイル名の `<basename>` に使える形にする (予約文字・制御文字を `_`、長さを制限)。
-fn safe_basename(name: &str) -> String {
+pub(crate) fn safe_basename(name: &str) -> String {
     let cleaned: String = name
         .chars()
         .map(|c| {
@@ -258,23 +258,23 @@ pub(crate) fn list_recovery_dirs(state_dir: Option<&Path>) -> Vec<eve_core::Reco
 
 // ---------- manifest ----------
 
-struct ManifestDoc {
-    file: String,
-    path: Option<String>,
-    untitled_name: Option<String>,
-    encoding: &'static str,
-    bom: bool,
-    default_eol: &'static str,
-    eol_mixed: bool,
-    final_newline: bool,
-    pua_escaped: bool,
-    revision: u64,
-    len: usize,
-    written: bool,
-    sensitive: bool,
+pub(crate) struct ManifestDoc {
+    pub(crate) file: String,
+    pub(crate) path: Option<String>,
+    pub(crate) untitled_name: Option<String>,
+    pub(crate) encoding: &'static str,
+    pub(crate) bom: bool,
+    pub(crate) default_eol: &'static str,
+    pub(crate) eol_mixed: bool,
+    pub(crate) final_newline: bool,
+    pub(crate) pua_escaped: bool,
+    pub(crate) revision: u64,
+    pub(crate) len: usize,
+    pub(crate) written: bool,
+    pub(crate) sensitive: bool,
 }
 
-fn eol_name(e: LineEnding) -> &'static str {
+pub(crate) fn eol_name(e: LineEnding) -> &'static str {
     match e {
         LineEnding::Lf => "lf",
         LineEnding::Crlf => "crlf",
@@ -282,11 +282,18 @@ fn eol_name(e: LineEnding) -> &'static str {
     }
 }
 
-fn manifest_text(
+/// 書いたプロセスの識別 (スワップの manifest の `pid` / `started_at_*`。復旧が「他のインスタンスが開いている」と残骸を分ける、03 §10.3)。
+pub(crate) struct Owner {
+    pub pid: u32,
+    pub started_at: Option<eve_core::FileTime>,
+}
+
+pub(crate) fn manifest_text(
     reason: RescueReason,
     created_at: &str,
     complete: bool,
     docs: &[ManifestDoc],
+    owner: Option<&Owner>,
 ) -> String {
     let mut t = String::new();
     let kv = |t: &mut String, k: &str, v: String| {
@@ -304,6 +311,13 @@ fn manifest_text(
     kv(&mut t, "created_at", toml_str(created_at));
     kv(&mut t, "reason", toml_str(reason.as_str()));
     kv(&mut t, "complete", complete.to_string());
+    if let Some(o) = owner {
+        kv(&mut t, "pid", o.pid.to_string());
+        if let Some(st) = o.started_at {
+            kv(&mut t, "started_at_secs", st.secs.to_string());
+            kv(&mut t, "started_at_nanos", st.nanos.to_string());
+        }
+    }
     for d in docs {
         t.push_str("\n[[document]]\n");
         kv(&mut t, "file", toml_str(&d.file));
@@ -331,7 +345,7 @@ fn manifest_text(
 
 /// manifest を原子的に更新する (同じディレクトリの一時ファイルに書いて fsync し、rename。途中で強制終了されても
 /// 直前の版か新しい版のどちらかが残る。recovery ディレクトリ内の自前のファイルなので最初から rename、05 §11.2.1)。
-fn write_manifest(dir: &Path, text: &str) -> io::Result<()> {
+pub(crate) fn write_manifest(dir: &Path, text: &str) -> io::Result<()> {
     let tmp = dir.join("manifest.toml.tmp");
     {
         let mut f = File::create(&tmp)?;
@@ -392,7 +406,10 @@ impl RescueWriter for WinRescue {
         order.sort_by_key(|d| (d.snapshot.len_bytes(), d.doc));
         let mut entries: Vec<ManifestDoc> = Vec::with_capacity(order.len());
         let publish = |entries: &[ManifestDoc], complete: bool| {
-            write_manifest(&dir, &manifest_text(reason, &created_at, complete, entries))
+            write_manifest(
+                &dir,
+                &manifest_text(reason, &created_at, complete, entries, None),
+            )
         };
         for (i, d) in order.iter().enumerate() {
             if expired() {
@@ -467,7 +484,11 @@ fn entry_clone(e: &ManifestDoc) -> ManifestDoc {
 }
 
 /// 本文を書いて fsync する。時間切れなら `Ok(None)`、書き終えたら最後のバイト (空なら 0)。
-fn write_body(path: &Path, d: &DocSnapshot, expired: &dyn Fn() -> bool) -> io::Result<Option<u8>> {
+pub(crate) fn write_body(
+    path: &Path,
+    d: &DocSnapshot,
+    expired: &dyn Fn() -> bool,
+) -> io::Result<Option<u8>> {
     let mut f = File::create(path)?;
     let mut last = 0u8;
     for chunk in d.snapshot.chunks(ByteRange::all(d.snapshot.len_bytes())) {
@@ -546,7 +567,13 @@ mod tests {
             written: true,
             sensitive: false,
         };
-        let t = manifest_text(RescueReason::Panic, "2026-10-21T00:00:00Z", true, &[d]);
+        let t = manifest_text(
+            RescueReason::Panic,
+            "2026-10-21T00:00:00Z",
+            true,
+            &[d],
+            None,
+        );
         assert!(t.starts_with("format_version = 1\n"), "{t}");
         for want in [
             "reason = \"panic\"",

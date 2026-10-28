@@ -181,6 +181,16 @@ impl EditorState {
             .min()
     }
 
+    /// ディスクにスワップがある文書 (正常終了のとき、Host が消す。書込中のものを含む)。
+    pub(super) fn swap_leftovers(&self) -> Vec<(DocumentId, Option<FsPath>)> {
+        self.swap
+            .docs
+            .iter()
+            .filter(|(_, e)| e.on_disk)
+            .map(|(id, e)| (*id, e.path.clone()))
+            .collect()
+    }
+
     /// スワップを書くジョブの結果。
     pub(super) fn finish_swap(&mut self, doc: DocumentId, r: JobResult) {
         let Some(e) = self.swap.docs.get_mut(&doc) else {

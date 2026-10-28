@@ -1845,6 +1845,8 @@ created_by = "evoeditor 0.1.0"              # 必須。書いたプログラム�
 created_at = "2026-10-15T12:34:56Z"   # 必須。UTC、RFC 3339
 reason = "signal"                     # 必須。panic | signal | console_close | session_end | fatal | quit_aborted_save (「保存を中止して終了」、§9.6) | user_save (「退避先に保存」、§9.3 の WriteRecovery、03 §9.7 (e)) | swap (v0.2)
 complete = false                      # 必須。全文書を書き終えたら true (時間切れなら false のまま)
+pid = 1234                            # 任意 (スワップだけ、v0.2)。書いたプロセスの pid。復旧が「他のインスタンスが開いている」と残骸を分ける (03 §10.3)
+started_at_secs = 1792586000          # 任意 (スワップだけ)。そのプロセスの作成時刻 (UNIX 秒)。pid の再利用と区別する。`started_at_nanos` が続く
 
 [[document]]                          # 小さい文書から順に。1 文書書くごとに manifest 全体を一時ファイルに書き直し、fsync して rename で置き換える
 file = "1-notes.txt"                  # 必須。退避した本文のファイル名 (manifest からの相対)

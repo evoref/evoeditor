@@ -41,6 +41,7 @@ pub use editor::{
 };
 pub use eol::build_eol_conversion;
 pub use eve_encoding::Encoding;
+pub use eve_view::DocumentId;
 pub use fs::*;
 pub use fspath::FsPath;
 pub use io_jobs::OpenOptions;

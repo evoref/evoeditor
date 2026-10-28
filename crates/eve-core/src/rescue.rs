@@ -22,6 +22,8 @@ pub enum RescueReason {
     QuitAbortedSave,
     /// 「退避先に保存」(後続)。
     UserSave,
+    /// スワップ (swap-lite、03 §10.2)。
+    Swap,
 }
 
 impl RescueReason {
@@ -33,6 +35,7 @@ impl RescueReason {
             RescueReason::Fatal => "fatal",
             RescueReason::QuitAbortedSave => "quit_aborted_save",
             RescueReason::UserSave => "user_save",
+            RescueReason::Swap => "swap",
         }
     }
 }

@@ -235,6 +235,25 @@ impl FileSystem for WinFs {
         }
     }
 
+    fn write_swap(&self, doc: &eve_core::DocSnapshot) -> Result<(), FsError> {
+        // 状態ディレクトリを使えないときはスワップを無効のままにする (05 §7.1)
+        let sd = self
+            .state_dir()
+            .ok_or_else(|| FsError::new(FsErrorKind::Unsupported))?;
+        crate::swap::write_swap(sd, doc)
+    }
+
+    fn discard_swap(
+        &self,
+        doc: eve_core::DocumentId,
+        path: Option<&FsPath>,
+    ) -> Result<(), FsError> {
+        let sd = self
+            .state_dir()
+            .ok_or_else(|| FsError::new(FsErrorKind::Unsupported))?;
+        crate::swap::discard_swap(sd, doc.0, path)
+    }
+
     fn write_in_place(
         &self,
         path: &FsPath,
