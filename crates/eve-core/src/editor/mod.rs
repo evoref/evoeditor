@@ -25,6 +25,7 @@ mod search_state;
 mod snapshot;
 mod state;
 mod swap;
+mod swap_recovery;
 
 use eve_view::{
     Capabilities, DocumentId, EditorEvent, Effect, InputEvent, KeyCode, KeyKind, KeyStroke,
@@ -335,6 +336,11 @@ impl Editor {
     /// 異常終了・緊急退避の終了では消さない (復旧の材料)。
     pub fn swap_leftovers(&self) -> Vec<(DocumentId, Option<crate::FsPath>)> {
         self.state.swap_leftovers()
+    }
+
+    /// 復旧で適用した古いスワップのうち、まだ消していないもの。Host が正常終了のときに消す。
+    pub fn swap_recovered_leftovers(&self) -> Vec<crate::SwapEntry> {
+        self.state.swap_recovered_leftovers()
     }
 
     pub fn take_snapshot_updates(&mut self) -> Vec<DocumentId> {

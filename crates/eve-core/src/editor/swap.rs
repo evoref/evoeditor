@@ -28,6 +28,12 @@ pub(super) struct SwapState {
     docs: BTreeMap<DocumentId, SwapDoc>,
     /// Port がスワップを実装していない。以後このセッションでは何もしない。
     stopped: bool,
+    /// 復旧の候補 (他のプロセスが残した、読めるスワップ)。該当する文書が開いたら提案する (`swap_recovery.rs`)。
+    pub(super) candidates: Vec<crate::SwapEntry>,
+    /// 動いている別のプロセスのスワップ (同じファイルを開いたら警告する)。
+    pub(super) alive: Vec<crate::SwapEntry>,
+    /// 復旧を適用した古いスワップ。新しいスワップが書けるか、文書が保存されるまで消さない。
+    pub(super) recovered: BTreeMap<DocumentId, Vec<crate::SwapEntry>>,
 }
 
 #[derive(Default)]
@@ -90,6 +96,8 @@ impl EditorState {
 
     /// `Editor::tick` から呼ぶ。期限が来た文書のスワップを書くジョブを投入し、要らなくなったスワップを消すジョブを投入する。
     pub(super) fn swap_tick(&mut self) {
+        self.swap_offer();
+        self.swap_release_recovered();
         if self.swap.stopped {
             return;
         }
@@ -188,6 +196,11 @@ impl EditorState {
             .filter(|(_, e)| e.on_disk)
             .map(|(id, e)| (*id, e.path.clone()))
             .collect()
+    }
+
+    /// 文書の新しいスワップを書き終えている (古いスワップを消してよい)。
+    pub(super) fn swap_written(&self, id: DocumentId) -> bool {
+        self.swap.docs.get(&id).is_some_and(|e| e.written.is_some())
     }
 
     /// スワップを書くジョブの結果。

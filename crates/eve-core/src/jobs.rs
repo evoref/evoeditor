@@ -83,6 +83,10 @@ pub enum JobKind {
     Swap {
         doc: std::sync::Arc<crate::DocSnapshot>,
     },
+    /// 他のプロセスが残したスワップの本文を読む (復旧の適用、03 §10.3)。
+    SwapRead { entry: crate::SwapEntry },
+    /// 他のプロセスが残したスワップを消す (復旧の破棄・適用後)。
+    SwapRemove { entry: crate::SwapEntry },
     /// スワップを消す (03 §10.2「削除」)。
     SwapDiscard {
         doc: DocumentId,
@@ -178,6 +182,8 @@ pub enum JobResult {
     RecoveryFound {
         job: JobId,
         dirs: Vec<RecoveryDirEntry>,
+        /// 他のプロセスが残したスワップ (復旧の候補、03 §10.3)。
+        swaps: Vec<crate::SwapEntry>,
     },
     /// 存在しないパスを開いた (新規ファイル)。フォルダも無ければ `parent_missing` にそのフォルダ。
     NewFile {
@@ -221,6 +227,15 @@ pub enum JobResult {
     },
     /// スワップを消した。
     SwapDiscarded {
+        job: JobId,
+    },
+    /// 他のプロセスのスワップの本文を読んだ。
+    SwapRead {
+        job: JobId,
+        body: crate::SwapBody,
+    },
+    /// 他のプロセスのスワップを消した。
+    SwapRemoved {
         job: JobId,
     },
     /// 単発の検索の結果。`found` は (一致, 文書の端を越えたか)。
@@ -278,6 +293,8 @@ impl JobResult {
             | JobResult::RecoveryWritten { job, .. }
             | JobResult::SwapWritten { job }
             | JobResult::SwapDiscarded { job }
+            | JobResult::SwapRead { job, .. }
+            | JobResult::SwapRemoved { job }
             | JobResult::UnmappableReplacement { job, .. }
             | JobResult::Unmappable { job, .. }
             | JobResult::ReplaceAllDone { job, .. }
@@ -357,6 +374,7 @@ pub fn run_job(
         JobKind::RecoveryScan => JobResult::RecoveryFound {
             job: req.id,
             dirs: ports.fs.list_recovery_dirs().unwrap_or_default(),
+            swaps: ports.fs.list_swaps().unwrap_or_default(),
         },
         JobKind::Open { path, opts } => run_open(req.id, path, *opts, ports, cancel, emit),
         JobKind::Save {
@@ -474,6 +492,20 @@ pub fn run_job(
         },
         JobKind::Swap { doc } => match ports.fs.write_swap(doc) {
             Ok(()) => JobResult::SwapWritten { job: req.id },
+            Err(err) => JobResult::Failed {
+                job: req.id,
+                err: JobError::Fs(err),
+            },
+        },
+        JobKind::SwapRead { entry } => match ports.fs.read_swap(entry) {
+            Ok(body) => JobResult::SwapRead { job: req.id, body },
+            Err(err) => JobResult::Failed {
+                job: req.id,
+                err: JobError::Fs(err),
+            },
+        },
+        JobKind::SwapRemove { entry } => match ports.fs.remove_swap(entry) {
+            Ok(()) => JobResult::SwapRemoved { job: req.id },
             Err(err) => JobResult::Failed {
                 job: req.id,
                 err: JobError::Fs(err),

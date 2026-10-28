@@ -100,6 +100,7 @@ fn 終了したプロセスのスワップは_stale_で_要約と本文を読め
     assert_eq!(e.pid, pid);
     assert_eq!(e.revision, 9);
     assert!(e.readable && !e.sensitive);
+    assert!(e.modified.is_some(), "manifest の更新時刻");
     assert_eq!(e.len, "こんにちは\r\n世界".len() as u64);
     assert_eq!(
         e.path.as_ref().unwrap().display(),
@@ -259,6 +260,7 @@ fn 状態ディレクトリが無ければ空_消すのは未対応() {
         pid: 1,
         owner: SwapOwner::Stale,
         sensitive: false,
+        modified: None,
         readable: false,
     };
     assert_eq!(

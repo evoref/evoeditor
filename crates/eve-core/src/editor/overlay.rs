@@ -55,6 +55,12 @@ pub(super) enum ConfirmAction {
     Reload,
     /// 表現不能の文字があって保存を中止した後の選択 (UTF-8 で保存 / キャンセル、03 §8.6)。
     Unmappable(super::file::UnmappableAsk),
+    /// スワップの復旧の提案 (適用 / 破棄 / キャンセル、03 §10.3)。`revision` は提案の時点の文書の Revision。
+    SwapRecovery {
+        entry: Box<crate::SwapEntry>,
+        doc: eve_view::DocumentId,
+        revision: eve_view::Revision,
+    },
     /// 置換の一覧の確認 (置換して保存 / キャンセル、03 §8.6)。`revision` は ChangeSet を作った時点の文書の Revision。
     UnmappableReplace {
         ask: super::file::UnmappableAsk,
@@ -291,6 +297,11 @@ impl EditorState {
             ConfirmAction::SaveFailed(ask) => self.choose_save_failed(ask, id),
             ConfirmAction::Open(ask) => self.choose_open(ask, id),
             ConfirmAction::Reload => self.start_reload(),
+            ConfirmAction::SwapRecovery {
+                entry,
+                doc,
+                revision,
+            } => self.choose_swap_recovery(*entry, doc, revision, id),
             ConfirmAction::Unmappable(ask) => self.choose_unmappable(ask, id),
             ConfirmAction::UnmappableReplace {
                 ask,
