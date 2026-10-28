@@ -254,6 +254,24 @@ impl FileSystem for WinFs {
         crate::swap::discard_swap(sd, doc.0, path)
     }
 
+    fn list_swaps(&self) -> Result<Vec<eve_core::SwapEntry>, FsError> {
+        Ok(self
+            .state_dir()
+            .map(crate::swap_scan::list_swaps)
+            .unwrap_or_default())
+    }
+
+    fn read_swap(&self, entry: &eve_core::SwapEntry) -> Result<eve_core::SwapBody, FsError> {
+        crate::swap_scan::read_swap(entry)
+    }
+
+    fn remove_swap(&self, entry: &eve_core::SwapEntry) -> Result<(), FsError> {
+        let sd = self
+            .state_dir()
+            .ok_or_else(|| FsError::new(FsErrorKind::Unsupported))?;
+        crate::swap_scan::remove_swap(sd, entry)
+    }
+
     fn write_in_place(
         &self,
         path: &FsPath,
