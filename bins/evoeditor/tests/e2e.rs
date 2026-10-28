@@ -240,6 +240,20 @@ const CTRL_S: &[u8] = b"\x13";
 const CTRL_Z: &[u8] = b"\x1a";
 
 /// 文字を 1 つずつ (バーストにならないよう間隔をあけて) 送る。
+/// スワップを切った設定ディレクトリ。退避 (緊急退避) だけを見る試験が、負荷でスワップの書込や復旧の確認に邪魔されないようにする。
+fn no_swap_config(name: &str) -> PathBuf {
+    let cfg = temp_dir(name);
+    std::fs::create_dir_all(&cfg).unwrap();
+    std::fs::write(
+        cfg.join("config.toml"),
+        "[file.swap]
+enabled = false
+",
+    )
+    .unwrap();
+    cfg
+}
+
 fn type_slowly(s: &Session, text: &str) {
     for ch in text.chars() {
         let mut b = [0u8; 4];
@@ -446,7 +460,9 @@ fn 設定ディレクトリが無くても使え_設定ディレクトリは作�
 // verifies: AC-NFR-302-2
 #[test]
 fn コンソールを閉じると未保存の内容を退避して終了する() {
-    let mut s = Session::start(&[]);
+    let cfg = no_swap_config("cfg-noswap-close");
+    let cfgs = cfg.to_str().unwrap();
+    let mut s = Session::start_with(&[], None, &[("EVE_CONFIG_DIR", cfgs)]);
     s.wait_ready();
     type_slowly(&s, "unsaved text");
     s.wait_for("入力が見える", |t| t.contains("unsaved text"));
@@ -489,7 +505,10 @@ fn コンソールを閉じると未保存の内容を退避して終了する()
 // 起動時に、前の異常終了が残した退避の場所を案内する (msg.recovery.found、02 §11.2.1 の復旧 v0.1)
 #[test]
 fn 退避が残っていると起動時に場所を案内する() {
-    let mut s1 = Session::start(&[]);
+    let cfg = no_swap_config("cfg-noswap-found");
+    let cfgs = cfg.to_str().unwrap();
+    let envs = [("EVE_CONFIG_DIR", cfgs)];
+    let mut s1 = Session::start_with(&[], None, &envs);
     s1.wait_ready();
     type_slowly(&s1, "lost work");
     s1.wait_for("入力が見える", |t| t.contains("lost work"));
@@ -497,7 +516,7 @@ fn 退避が残っていると起動時に場所を案内する() {
     s1.close_console();
     assert!(s1.exit_within(Duration::from_secs(10)).is_some());
     // 同じ状態ディレクトリで再び起動する
-    let mut s2 = Session::start_in(&[], Some(state.clone()));
+    let mut s2 = Session::start_with(&[], Some(state.clone()), &envs);
     // 本文は長いパスの手前で省略される (04 §8.9: 対処 (hint) を残し、本文の詳細から縮める。履歴 UI は v0.2)。案内が出ること自体を確かめる
     s2.wait_for("退避の案内", |t| {
         t.contains("異常終了の時に") && t.contains("そのフォルダを削除してください")
@@ -1546,4 +1565,55 @@ fn 設定の_ui_locale_は環境変数より優先し_未知の言語は次の�
     assert!(log.contains("--locale") && log.contains("\"fr\""), "{log}");
     let _ = std::fs::remove_dir_all(&s.state);
     let _ = std::fs::remove_dir_all(&cfg);
+}
+
+// ---- 起動前の文言の英日併記 (04 §14.4 / §15.2、OQ-67): 英語 (ASCII) の行を先に、日本語の行を 2 字下げで次に ----
+
+/// 英語の行の次の行が、2 字下げの日本語の行になっている。
+fn assert_bilingual(text: &str, en_prefix: &str, ja_part: &str) {
+    let lines: Vec<&str> = text.lines().collect();
+    let i = lines
+        .iter()
+        .position(|l| l.starts_with(en_prefix))
+        .unwrap_or_else(|| panic!("{en_prefix} が無い: {text}"));
+    assert!(lines[i].is_ascii(), "{}", lines[i]);
+    assert!(
+        lines[i + 1].starts_with("  ") && lines[i + 1].contains(ja_part),
+        "{text}"
+    );
+}
+
+#[test]
+fn help_は英語の行の次に日本語の行を出す() {
+    let out = std::process::Command::new(exe())
+        .arg("--help")
+        .output()
+        .expect("起動");
+    assert!(out.status.success());
+    let text = String::from_utf8_lossy(&out.stdout);
+    assert_bilingual(&text, "Usage: evoeditor", "使い方:");
+    assert!(
+        text.contains("--locale") && text.contains("--readonly"),
+        "{text}"
+    );
+}
+
+#[test]
+fn 使い方の誤りは英語の行の次に日本語の行を出す() {
+    let out = std::process::Command::new(exe())
+        .args(["--encoding", "latin1", "x.txt"])
+        .output()
+        .expect("起動");
+    assert_eq!(out.status.code(), Some(2));
+    let text = String::from_utf8_lossy(&out.stderr);
+    assert_bilingual(&text, "Unknown encoding: latin1", "latin1 は対応していない");
+    let out = std::process::Command::new(exe())
+        .arg("--nope")
+        .output()
+        .expect("起動");
+    assert_bilingual(
+        &String::from_utf8_lossy(&out.stderr),
+        "Unknown option: --nope",
+        "未知のオプション",
+    );
 }
