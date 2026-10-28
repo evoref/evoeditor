@@ -72,6 +72,8 @@ struct State {
     swap_writes: u32,
     /// スワップを実装していない Port のふり (`Unsupported` を返す)。
     swap_unsupported: bool,
+    /// 他のプロセスが残したスワップ (テストが `add_swap_entry` で積む)。復旧の探索が返す。
+    swap_entries: Vec<(eve_core::SwapEntry, Option<eve_core::SwapBody>)>,
 }
 
 pub struct MemFs {
@@ -104,6 +106,7 @@ impl MemFs {
                 swaps: BTreeMap::new(),
                 swap_writes: 0,
                 swap_unsupported: false,
+                swap_entries: Vec::new(),
             }),
         }
     }
@@ -214,6 +217,20 @@ impl MemFs {
     /// スワップを実装していない Port のふりをする (`write_swap` / `discard_swap` が `Unsupported`)。
     pub fn set_swap_unsupported(&self, on: bool) {
         self.st().swap_unsupported = on;
+    }
+
+    /// 他のプロセスが残したスワップを積む (復旧の探索の再現)。`body` が `None` なら本文を読めない (`read_swap` が失敗する)。
+    pub fn add_swap_entry(&self, entry: eve_core::SwapEntry, body: Option<eve_core::SwapBody>) {
+        self.st().swap_entries.push((entry, body));
+    }
+
+    /// 残っている他のプロセスのスワップ (消した後の確認用)。
+    pub fn swap_entries(&self) -> Vec<eve_core::SwapEntry> {
+        self.st()
+            .swap_entries
+            .iter()
+            .map(|(e, _)| e.clone())
+            .collect()
     }
 
     /// 残っている保存中フラグ。
@@ -392,6 +409,28 @@ impl FileSystem for MemFs {
         let body = doc.to_vec();
         s.recovered.push((dir.clone(), body));
         Ok(dir)
+    }
+
+    fn list_swaps(&self) -> Result<Vec<eve_core::SwapEntry>, FsError> {
+        Ok(self.swap_entries())
+    }
+
+    fn read_swap(&self, entry: &eve_core::SwapEntry) -> Result<eve_core::SwapBody, FsError> {
+        let s = self.st();
+        s.swap_entries
+            .iter()
+            .find(|(e, _)| e.dir == entry.dir)
+            .and_then(|(_, b)| b.clone())
+            .ok_or_else(|| FsError::new(FsErrorKind::NotFound))
+    }
+
+    fn remove_swap(&self, entry: &eve_core::SwapEntry) -> Result<(), FsError> {
+        let mut s = self.st();
+        if s.swap_unsupported {
+            return Err(FsError::new(FsErrorKind::Unsupported));
+        }
+        s.swap_entries.retain(|(e, _)| e.dir != entry.dir);
+        Ok(())
     }
 
     fn write_swap(&self, doc: &eve_core::DocSnapshot) -> Result<(), FsError> {

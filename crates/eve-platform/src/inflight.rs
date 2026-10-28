@@ -240,7 +240,7 @@ fn write_replace(path: &Path, bytes: &[u8]) -> io::Result<()> {
 // ---------- 読み手 ----------
 
 /// TOML の基本文字列 (引用符の中) をほどく。`None` は不正。
-fn parse_string(v: &str) -> Option<String> {
+pub(crate) fn parse_string(v: &str) -> Option<String> {
     let inner = v.strip_prefix('"')?.strip_suffix('"')?;
     let mut out = String::with_capacity(inner.len());
     let mut it = inner.chars();

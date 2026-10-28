@@ -62,6 +62,22 @@ pub trait FileSystem: Send + Sync {
         Err(FsError::new(FsErrorKind::Unsupported))
     }
 
+    /// 他のプロセスが残したスワップを列挙する (復旧の探索、03 §10.3 手順 1)。`state_dir/swap/*.swp` の manifest だけを読む。
+    /// 自分のプロセスのものは含めない。`swap/` が無ければ空。状態ディレクトリを持たない実装は常に空。
+    fn list_swaps(&self) -> Result<Vec<SwapEntry>, FsError> {
+        Ok(Vec::new())
+    }
+
+    /// スワップの本文と形式を読む。`entry.readable` でないものは呼ばない。
+    fn read_swap(&self, _entry: &SwapEntry) -> Result<SwapBody, FsError> {
+        Err(FsError::new(FsErrorKind::Unsupported))
+    }
+
+    /// 他のプロセスが残したスワップを消す (復旧の適用の後・破棄の選択)。`swap/` の下の `.swp` 以外は消さない。無ければ成功。
+    fn remove_swap(&self, _entry: &SwapEntry) -> Result<(), FsError> {
+        Err(FsError::new(FsErrorKind::Unsupported))
+    }
+
     /// ファイルを 1 つ消す (保存中フラグの掃除など)。存在しなければ `NotFound`。
     fn remove_file(&self, _path: &FsPath) -> Result<(), FsError> {
         Err(FsError::new(FsErrorKind::Other))
@@ -205,6 +221,49 @@ pub struct RecoveryDirEntry {
     pub path: FsPath,
     /// 「退避先に保存」の退避 (`recovery/rescue/` の下)。異常終了の退避ではない。
     pub rescue: bool,
+}
+
+// ---------- スワップの候補 (復旧の材料、03 §10.3、05 §7.5) ----------
+
+/// スワップの書き手 (プロセス) の状態。pid の生存確認 (05 §5.3: `OpenProcess` + 起動時刻の一致) で決める。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SwapOwner {
+    /// 書いたプロセスがまだ動いている。他のインスタンスが同じ文書を開いているということ。
+    Alive,
+    /// 書いたプロセスはもういない (異常終了の残骸)。復旧の対象。
+    Stale,
+}
+
+/// `swap/` の下の 1 つのスワップ (manifest だけを読んだ要約)。自分のプロセスのものは含まない。
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SwapEntry {
+    /// スワップのディレクトリ (`swap/<名前>.swp`)。
+    pub dir: FsPath,
+    /// 元のファイルのパス。無題の文書は `None`。
+    pub path: Option<FsPath>,
+    /// 無題の文書の表示名。
+    pub untitled_name: Option<String>,
+    /// 書いた時点の文書の Revision。
+    pub revision: u64,
+    /// 本文のバイト数 (manifest の `len`)。
+    pub len: u64,
+    /// 書いたプロセスの pid。
+    pub pid: u32,
+    pub owner: SwapOwner,
+    /// 秘密ファイルパターンに一致した文書 (復旧の案内で削除を促す)。
+    pub sensitive: bool,
+    /// 本文を読める。未知の `format_version`・壊れた manifest・書きかけ (`written = false`) は `false`
+    /// (その場合 core は適用を提案せず、場所だけを示す。移動も削除もしない、05 §7.5)。
+    pub readable: bool,
+}
+
+/// スワップの本文と、元の形式 (無題の文書に適用するとき、開いている文書に写す)。本文は内部の UTF-8 のまま (PUA エスケープ保持)。
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SwapBody {
+    pub text: String,
+    pub encoding: crate::Encoding,
+    pub has_bom: bool,
+    pub default_eol: eve_text::LineEnding,
 }
 
 // ---------- 保存中フラグと中断の痕跡 (02 §4.5、05 §4.6 / §7.5) ----------

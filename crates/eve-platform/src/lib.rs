@@ -38,4 +38,6 @@ mod save;
 #[cfg(windows)]
 mod swap;
 #[cfg(windows)]
+mod swap_scan;
+#[cfg(windows)]
 pub mod term;
