@@ -252,7 +252,7 @@ provider = "osc52"
 
 ### 5.0 v0.1 の公開キー
 
-v0.1 で設定ファイル (`config.toml`、ユーザー層) から読む **公開キーの全集合** (ADR-0028。**7 個**、確定 (ユーザー回答)。v0.1 の範囲は案 L)。これ以外は定数。選定基準: (a) 環境や利用者によって既定値が合わないことがあり、ファイルの中身に直接効く (新規ファイルの文字コード・改行、タブ幅・インデント)、(b) 端末の設定と合わせないと表示が崩れる (曖昧幅)、(c) 端末の色深度の判定を手で上書きする唯一の手段 (`theme.color_mode`)。UI は `ja` 固定なので `ui.locale` は無い (言語の選択は v0.2、§17.1)。クリップボードは OS 付属の手段 (Win32) で実装する方式が確定しており (OQ-111、確定 (ユーザー回答))、v0.1 に設定は要らないため `[clipboard]` の公開は v0.2。
+v0.1 で設定ファイル (`config.toml`、ユーザー層) から読む **公開キーの全集合** (ADR-0028。**7 個**、確定 (ユーザー回答)。v0.1 の範囲は案 L)。これ以外は定数。選定基準: (a) 環境や利用者によって既定値が合わないことがあり、ファイルの中身に直接効く (新規ファイルの文字コード・改行、タブ幅・インデント)、(b) 端末の設定と合わせないと表示が崩れる (曖昧幅)、(c) 端末の色深度の判定を手で上書きする唯一の手段 (`theme.color_mode`)。`ui.locale` は v0.2 の M8 で公開した (§5.12、§17.1)。クリップボードは OS 付属の手段 (Win32) で実装する方式が確定しており (OQ-111、確定 (ユーザー回答))、v0.1 に設定は要らないため `[clipboard]` の公開は v0.2。
 
 | セクション | v0.1 公開キー | 根拠 |
 |---|---|---|
@@ -261,7 +261,7 @@ v0.1 で設定ファイル (`config.toml`、ユーザー層) から読む **公�
 | `[view]` | `ambiguous_width` | NFR-605 |
 | `[theme]` | `color_mode` | FR-513、04 §5.2a |
 
-件数の内訳: `[editor]` 3、`[file]` 2、`[view]` 1、`[theme]` 1 (計 7)。**v0.2 の M6 で `file.swap.*` の 5 個 (`enabled` / `interval_ms` / `min_interval_ms` / `max_bytes` / `exclude_secret_files`、§5.2) を公開した (計 12)**。範囲は `interval_ms` 100..=600000、`min_interval_ms` 100..=3600000、`max_bytes` 1048576..=1099511627776 (範囲外は警告して既定値)。`[file.swap]` の表でも `[file]` の中の `swap.enabled = ...` でも書ける。v0.1 で公開しないキー (定数で実装し、公開は v0.2): `editor.auto_indent` (既定 true)、`editor.undo.total_max_bytes`、`file.encoding_detection`、`file.write_bom`、`file.huge_file_warn_bytes`、`file.long_line_threshold`、`file.fsync`、`view.line_numbers`、`view.cursor_line_highlight`、`view.show_whitespace` (全角スペースとタブの可視化。v0.1 は `"minimal"` の定数で常に表示、FR-508)、`ui.hint_bar`、`ui.message_timeout_ms`、`ui.synchronized_output`、`theme.name` (v0.1 はテーマが 1 つ)、`search.case`、`keys.preset`、`log.level` (`EVE_LOG` で代える、§5.11)。`ui.locale` は英語 UI と同時 (v0.2)。`[keys.*]` (ユーザーのキー割当) は v0.2 (§7.1)。`[os.*]` / `[env.*]` の条件付きセクションは v0.2 (§3.4)。ここに無いキーの公開時期は各表の P 列と §5.13。公開前のキーを書いても「このバージョンでは未対応」の情報診断で、値は使わない (§5 冒頭)。
+件数の内訳: `[editor]` 3、`[file]` 2、`[view]` 1、`[theme]` 1 (計 7)。**v0.2 の M6 で `file.swap.*` の 5 個 (`enabled` / `interval_ms` / `min_interval_ms` / `max_bytes` / `exclude_secret_files`、§5.2) を公開した (計 12)**。範囲は `interval_ms` 100..=600000、`min_interval_ms` 100..=3600000、`max_bytes` 1048576..=1099511627776 (範囲外は警告して既定値)。`[file.swap]` の表でも `[file]` の中の `swap.enabled = ...` でも書ける。v0.1 で公開しないキー (定数で実装し、公開は v0.2): `editor.auto_indent` (既定 true)、`editor.undo.total_max_bytes`、`file.encoding_detection`、`file.write_bom`、`file.huge_file_warn_bytes`、`file.long_line_threshold`、`file.fsync`、`view.line_numbers`、`view.cursor_line_highlight`、`view.show_whitespace` (全角スペースとタブの可視化。v0.1 は `"minimal"` の定数で常に表示、FR-508)、`ui.hint_bar`、`ui.message_timeout_ms`、`ui.synchronized_output`、`theme.name` (v0.1 はテーマが 1 つ)、`search.case`、`keys.preset`、`log.level` (`EVE_LOG` で代える、§5.11)。**v0.2 の M8 で `ui.locale` を公開した (計 13)**: 値は `"auto"` (既定) か言語タグ (`ja` / `en`。`ja-JP`・`en_US` のように地域を付けても、地域を落として当てる。大文字小文字は区別しない)。同梱していない言語名は警告 (`InvalidValue`、許容値 `auto` / `ja` / `en`) して `auto` として扱い、選択順の次の段へ進む (§17.1)。節は `[ui]`。`[keys.*]` (ユーザーのキー割当) は v0.2 (§7.1)。`[os.*]` / `[env.*]` の条件付きセクションは v0.2 (§3.4)。ここに無いキーの公開時期は各表の P 列と §5.13。公開前のキーを書いても「このバージョンでは未対応」の情報診断で、値は使わない (§5 冒頭)。
 
 ### 5.1 `[editor]` — 編集動作
 
@@ -333,7 +333,7 @@ v0.1 で設定ファイル (`config.toml`、ユーザー層) から読む **公�
 | `ui.hint_bar` | bool | `true` | ヒントバー (v0.1 は常時表示) | FR-504 | v0.1 (定数、公開 v0.2) |
 | `ui.status_bar` | bool | `true` | ステータスバー | FR-503 | v0.1 (定数、公開 v0.2) |
 | `ui.tab_line` | `"auto" \| "always" \| "never"` | `"auto"` (2 バッファ以上で表示) | バッファライン | FR-510 | v0.4 |
-| `ui.locale` | string (BCP 47) / `"auto"` | `"auto"` | UI の言語 (§17.1)。v0.1 は `ja` 固定で、本キーは英語 UI を同梱する v0.2 で公開する | NFR-603 | v0.2 |
+| `ui.locale` | string (BCP 47) / `"auto"` | `"auto"` | UI の言語 (§17.1)。`auto` は環境変数 `EVE_LANG`、OS ロケールの順で決める。`--locale` が最優先。v0.2 の M8 で公開した | NFR-603 | v0.2 |
 | `ui.message_timeout_ms` | int | `5000` | 情報メッセージの表示時間 (04 §8.9) | FR-505 | v0.1 (定数、公開 v0.2) |
 | `ui.mouse` | bool | `true` | マウス入力 (v0.2。v0.1 はマウスを捕捉せず端末の選択・スクロールをそのまま使える、04 §6.8) | FR-307 | v0.2 |
 | `ui.bell` | `"visual" \| "audible" \| "off"` | `"visual"` | ベル | — | v0.1 (定数、公開 v0.2) |
@@ -1436,7 +1436,7 @@ Stage 3 (WASM、§13.1) に移行した場合は `declares.*` を能力ベース
 - 文言はすべて **MessageKey** 経由。コードに英語文字列を直接書かない (lint で検出、09)。
 - **v0.1 の UI 文言は日本語 (`ja`) のみ** (OQ-21、確定 (ユーザー回答))。言語ファイル `locales/ja.toml` をソースツリーに置き、`include_str!` で埋め込む (実行時のファイル読込なし)。**MessageKey による外部化は v0.1 から行う** (コードに文言を直接書かない) ので、後の版で言語を足すときにコードを変えずに済む。キー集合の正は「コードの MessageKey 一覧」で、`ja` はそれと過不足なく一致させる (§17.3)。
 - **言語ファイルに入れる文言** (その版に存在するもの): コマンドの名前と説明 (`cmd.*`)、エラー・警告・情報のメッセージ (`msg.*` の `text` と `hint`、`info.*`)、ヒントバー (`hint.*`)、ステータスバー (`status.*`)、ダイアログ・ラベル (`ui.*`)。設定項目の説明 (`config.*`) とヘルプ画面 (`help.*` の見出しと説明) は、それを画面に出す版 (v0.2 以降) で加える。**言語ファイルに入れないもの**: 識別子 (CommandId、CLI オプション名、設定キー名、テーマのロール名、MessageKey 自体)、ログ (英語のみ)、パレットの照合用の英語の title (定数表、§11.4)、`--help` / `--version` の出力、パニック時・起動前のメッセージと、端末を復元した後に stderr へ出す文言。最後の 3 つは **v0.1 は日本語の行だけ** を出し、**v0.2 (英語 UI と同時) から英語 (ASCII) の行と日本語の行を併記する** (確定 (ユーザー回答)、04 §14.4 / §15.2、OQ-67、01 §4.6)。日本語の行はコンソールなら `WriteConsoleW` (コードページに依らない)、リダイレクト先なら UTF-8 で書く (リダイレクト先を出力コードページ 932 で解釈する環境では化ける。v0.1 の既知の制約で、v0.2 の英語の行はコードページやリダイレクト先によらず読める)。これらも MessageKey (`stderr.*` / `panic.*` / `cli.*`) で識別し、eve-host / bin の定数表に置く (パニックの経路で言語ファイルを引かないため)。目録は 04 §15.2。core が出す stderr の行 (終了時の `Effect::Quit.stderr`) も core は文言を解決せず、キーと引数 (`StderrLine`) で eve-host に渡し、eve-host が定数表から解決する (02 §6.3)。v0.2 の英日併記も eve-host が 1 つの `StderrLine` から英語の行と日本語の行を引いて作る。
-- **v0.2** (確定 (ユーザー回答)、OQ-21。**`locales/en.toml` は M8 で同梱済み**: キー集合・プレースホルダ・`[X]` のアクセラレータ・`〔 〕` の有無が `ja` と一致し、`en` にかな・漢字が無いことを `cargo xtask i18n` が検査する): 英語 UI (`en`。`locales/en.toml` を `ja` と同じく `include_str!` で埋め込む)、言語の選択 (`--locale` > `ui.locale` > 環境変数 `EVE_LANG` > OS ロケール (05 §6.1) > 既定 `ja`)、言語の切替、言語間のキー集合の差分の CI 検査 (§17.3)、設定項目の説明 (`config.*`)、起動前・パニック時の英語 (ASCII) の行の併記 (OQ-67)。**v0.2 以降の候補 (提案中。推奨は v0.3)**: ユーザー層 `locales/<lang>.toml` による上書き・追加言語。同梱の言語ファイルとユーザーの言語ファイルは同じ書式 (§17.2) なので、v0.1 で書式を確定する。v0.1 は `ui.locale`・`--locale`・`EVE_LANG` を持たず、`EVE_LANG` を設定しても読まない (`ui.locale` を書くと「このバージョンでは未対応」の情報診断)。
+- **v0.2** (確定 (ユーザー回答)、OQ-21。**`locales/en.toml` は M8 で同梱済み**: キー集合・プレースホルダ・`[X]` のアクセラレータ・`〔 〕` の有無が `ja` と一致し、`en` にかな・漢字が無いことを `cargo xtask i18n` が検査する): 英語 UI (`en`。`locales/en.toml` を `ja` と同じく `include_str!` で埋め込む)、言語の選択 (`--locale` > `ui.locale` > 環境変数 `EVE_LANG` > OS ロケール (05 §6.1) > 既定 `ja`。**M8 の 2 本目で実装済み**: 選択は `eve_config::select_locale`。`auto`・空の値は未指定として飛ばし、`--locale` と `EVE_LANG` が同梱の言語に当たらなければログに警告して次の段へ進む。OS ロケールの候補が当たらないときは黙って次の段へ進む。言語は起動時に 1 回だけ決める)、言語の切替、言語間のキー集合の差分の CI 検査 (§17.3)、設定項目の説明 (`config.*`)、起動前・パニック時の英語 (ASCII) の行の併記 (OQ-67)。**v0.2 以降の候補 (提案中。推奨は v0.3)**: ユーザー層 `locales/<lang>.toml` による上書き・追加言語。同梱の言語ファイルとユーザーの言語ファイルは同じ書式 (§17.2) なので、v0.1 で書式を確定する。v0.1 は `ui.locale`・`--locale`・`EVE_LANG` を持たず、`EVE_LANG` を設定しても読まなかった (`ui.locale` を書くと「このバージョンでは未対応」の情報診断)。
 - フォールバック: `ja` にキーがなければ **キー名そのもの** を表示する (空白や例外にしない)。同梱の `ja` とコードの MessageKey 一覧の差分ゼロを CI で保証するので (09 §11)、この経路は開発中のビルドのためにある。開発ビルドでは欠落キーを警告ログ。
 - **サイズと起動時間**: 同梱分は `ja` で約 50 KB (TOML 原文。v0.1 の文言の規模から見込み) で、NFR-205 (8 MB) への影響は小さい。起動時のデシリアライズが NFR-101 の起動の予算 (プロセス内 8 ms) に入るかを BM-101a で確かめる (09 §5)。目安は 1 ms 以下。超えるならビルド時に TOML を静的な表 (キー → 文字列の配列) に変換して埋め込む方式に切り替える (書式は変えない)。
 
@@ -1561,7 +1561,7 @@ v0.1 の公開オプションは **5 個** (ADR-0028: 引数解析と `--help` �
 | `--set <key>=<value>` | `-s` | コマンドライン層で 1 項目上書き (TOML 値として解釈。`--set view.wrap=soft`) | v0.2 |
 | `--theme <name>` | — | `--set theme.name=` の短縮 | v0.4 |
 | `--keymap <preset>` | — | `--set keys.preset=` の短縮 | v0.4 |
-| `--locale <lang>` | — | UI 言語 (§17.1 の選択順の最上位)。英語 UI を同梱する v0.2 で加える | v0.2 |
+| `--locale <lang>` | — | UI 言語 (§17.1 の選択順の最上位)。値は `ja` / `en` (地域付きも可)。同梱していない言語名はログに警告を書いて次の段へ進む (使い方の誤りにはしない)。値が無いときは使い方の誤り (終了コード 2)。M8 で実装した | v0.2 |
 | `--workspace <dir>` | `-w` | ワークスペースルートを明示 | v0.4 |
 | `--trust` | — | このワークスペースを信頼して起動 (スクリプト用。警告表示) | v0.4 |
 | `--no-session` | — | セッション復元・保存をしない | v0.4 |
@@ -1589,7 +1589,7 @@ v0.1 の 5 個: `--version` `--help` `--readonly` `--encoding` `--` (+ 受理の
 
 **命名規則**: 実行して結果を出力し終了する操作や値の指定はサブコマンドにせず、`--check-config` / `--dump-config` / `--crash-report` / `--set` と同系統の `--` で始まる小文字・ハイフン区切りのオプションにする (位置引数 `FILE` と衝突させない。`--check-update` もこれに従う)。
 
-環境変数: `EVE_CONFIG_DIR`, `EVE_STATE_DIR`, `EVE_DATA_DIR`, `EVE_CACHE_DIR` (ディレクトリの個別上書き、05 §7.1), `EVE_LOG` (ログの水準。v0.1 で水準を変える唯一の手段), `EVE_LOG_STDERR` (`1` でログを stderr にも出す。ヘッドレス・テスト用、05 §7.3), `NO_COLOR` (色なし = `theme.color_mode = "none"` 相当。各ロールの `mono` 段を使う、04 §12.4), `COLORTERM` / `TERM` (04/05 が解釈), `EVE_LANG` (UI 言語。v0.2、§17.1。v0.1 は読まない), `EVE_NO_SESSION` (`1` で `--no-session` と同じ: セッションの復元も保存もしない。v0.4、§16)。**子プロセスに渡す変数 (予約名。evoeditor が書く側で、読む側ではない)**: `EVE_FILE` (編集中の文書のパス)、`EVE_LINE` (カーソル行、1 始まり)。`ProcessRunner` で起動するフォーマッタ・外部フィルタ (§15。v0.4) の子プロセスにだけ設定する。無題の文書では `EVE_FILE` を設定しない。`EVE_LOG` 等の自前変数は子に渡さない (05 §13.5)。
+環境変数: `EVE_CONFIG_DIR`, `EVE_STATE_DIR`, `EVE_DATA_DIR`, `EVE_CACHE_DIR` (ディレクトリの個別上書き、05 §7.1), `EVE_LOG` (ログの水準。v0.1 で水準を変える唯一の手段), `EVE_LOG_STDERR` (`1` でログを stderr にも出す。ヘッドレス・テスト用、05 §7.3), `NO_COLOR` (色なし = `theme.color_mode = "none"` 相当。各ロールの `mono` 段を使う、04 §12.4), `COLORTERM` / `TERM` (04/05 が解釈), `EVE_LANG` (UI 言語。`ja` / `en`、地域付きも可。v0.2、§17.1。v0.1 は読まない), `EVE_NO_SESSION` (`1` で `--no-session` と同じ: セッションの復元も保存もしない。v0.4、§16)。**子プロセスに渡す変数 (予約名。evoeditor が書く側で、読む側ではない)**: `EVE_FILE` (編集中の文書のパス)、`EVE_LINE` (カーソル行、1 始まり)。`ProcessRunner` で起動するフォーマッタ・外部フィルタ (§15。v0.4) の子プロセスにだけ設定する。無題の文書では `EVE_FILE` を設定しない。`EVE_LOG` 等の自前変数は子に渡さない (05 §13.5)。
 
 テスト・計測用のビルドだけが読む環境変数 (配布ビルドは読まず、実行ファイルに名前も含まない。09 §3.6 / §5、検査は 09 の `build-release-smoke`): `EVE_TEST_HOOK` / `EVE_TEST_HOOK_LOG` (障害注入のフックとその記録。cargo feature `test-hooks` のビルドのみ、09 §3.6)、`EVE_TRACE_FILE` / `EVE_TRACE_FORMAT` (`tracing` の span の記録。cargo feature `bench-trace` を加えた計測用ビルド (release + `test-hooks` + `bench-trace`) のみ、09 §5)。`--help` と利用者向けの文書には出さない。
 

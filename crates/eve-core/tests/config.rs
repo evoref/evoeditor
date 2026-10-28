@@ -173,9 +173,9 @@ fn 未対応の情報診断は画面に出さない() {
 
 // verifies: AC-NFR-603-8
 #[test]
-fn ui_locale_は未対応の情報診断になり_画面に出ない() {
+fn 公開前の_ui_キーは未対応の情報診断になり_画面に出ない() {
     let mut h = Harness::new();
-    let l = load_str("[ui]\nlocale = \"en\"\n");
+    let l = load_str("[ui]\nhint_bar = false\n");
     assert_eq!(l.diagnostics.len(), 1);
     assert!(
         l.diagnostics[0].key.starts_with("ui"),
@@ -191,4 +191,20 @@ fn ui_locale_は未対応の情報診断になり_画面に出ない() {
         .state_mut()
         .report_config("config.toml", &l.diagnostics);
     assert!(h.messages().is_empty());
+}
+
+// NFR-603 AC-3 (v0.2。チェックリストは v0.2 のゲートで作る)
+#[test]
+fn 言語を英語にすると設定の問題の要約が英語になる() {
+    use eve_config::Locale;
+    let mut h = Harness::new();
+    h.editor.state_mut().set_locale(Locale::En);
+    assert_eq!(h.editor.state().locale(), Locale::En);
+    let l = load_str("[editor]\ntab_width = 0\nindent_width = 99\n");
+    h.editor
+        .state_mut()
+        .report_config("config.toml", &l.diagnostics);
+    let t = h.frame_text();
+    assert!(t.contains("2 problems"), "{t}");
+    assert!(!t.contains("件の問題"), "{t}");
 }

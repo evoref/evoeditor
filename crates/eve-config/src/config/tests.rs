@@ -328,3 +328,46 @@ enabeld = true
     assert!(matches!(ks[0].1, DiagKind::Unsupported));
     assert!(matches!(ks[1].1, DiagKind::UnknownKey { .. }));
 }
+
+// NFR-603 AC-3 (v0.2。チェックリストは v0.2 のゲートで作る)
+#[test]
+fn ui_locale_は言語タグか_auto() {
+    use crate::Locale;
+    for (text, want) in [
+        ("auto", None),
+        ("ja", Some(Locale::Ja)),
+        ("en", Some(Locale::En)),
+        ("en-US", Some(Locale::En)),
+        ("JA_jp", Some(Locale::Ja)),
+    ] {
+        let l = load_str(&format!("[ui]\nlocale = \"{text}\"\n"));
+        assert!(l.diagnostics.is_empty(), "{text}: {:?}", l.diagnostics);
+        assert_eq!(l.config.ui_locale, want, "{text}");
+    }
+    // 既定は auto
+    assert_eq!(Config::default().ui_locale, None);
+}
+
+#[test]
+fn ui_locale_の不正な値は警告して_auto_のまま() {
+    let l = load_str("[ui]\nlocale = \"fr\"\n");
+    assert_eq!(l.config.ui_locale, None);
+    assert_eq!(l.diagnostics.len(), 1);
+    assert!(matches!(
+        &l.diagnostics[0].kind,
+        DiagKind::InvalidValue { allowed } if allowed.contains(&"en")
+    ));
+    assert_eq!(l.diagnostics[0].key, "ui.locale");
+    let l = load_str("[ui]\nlocale = 3\n");
+    assert!(matches!(
+        &l.diagnostics[0].kind,
+        DiagKind::TypeMismatch { .. }
+    ));
+}
+
+#[test]
+fn ui_の他のキーは公開前で_ui_locale_だけが公開() {
+    let l = load_str("[ui]\nlocale = \"en\"\nbell = true\n");
+    assert_eq!(l.config.ui_locale, Some(crate::Locale::En));
+    assert_eq!(kinds(&l), vec![("ui.bell", &DiagKind::Unsupported)]);
+}

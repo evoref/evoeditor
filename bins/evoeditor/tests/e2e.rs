@@ -74,6 +74,8 @@ impl Session {
             ))
         });
         cmd.env("EVE_STATE_DIR", &state);
+        // OS の言語に依らず日本語で始める (言語の選択を試すテストは `envs` や引数で上書きする)
+        cmd.env("EVE_LANG", "ja");
         for (k, v) in envs {
             cmd.env(k, v);
         }
@@ -220,7 +222,9 @@ impl Session {
 
     /// 最初の画面 (ステータスバーが出る) まで待つ。
     fn wait_ready(&self) {
-        self.wait_for("最初の画面", |s| s.contains("無題-1"));
+        self.wait_for("最初の画面", |s| {
+            s.contains("無題-1") || s.contains("Untitled-1")
+        });
     }
 }
 
@@ -1478,4 +1482,68 @@ fn 正常終了ではスワップを消す() {
     assert_eq!(s.wait_exit(), 0);
     assert!(swap_dirs(&s.state).is_empty());
     let _ = std::fs::remove_dir_all(&s.state);
+}
+
+// ---- UI の言語の選択 (07 §17.1: --locale > ui.locale > EVE_LANG > OS ロケール > ja) ----
+
+/// ヒントバーの終了の項目が英語になる。
+fn assert_english_ui(s: &Session) {
+    s.wait_for("英語のヒントバー", |t| t.contains("Quit"));
+    assert!(!s.screen().contains("終了"), "{}", s.screen());
+}
+
+// NFR-603 AC-3 (v0.2。チェックリストは v0.2 のゲートで作る)
+#[test]
+fn locale_オプションで画面が英語になる() {
+    let mut s = Session::start(&["--locale", "en"]);
+    s.wait_ready();
+    assert_english_ui(&s);
+    s.send(CTRL_Q);
+    assert_eq!(s.wait_exit(), 0);
+}
+
+// NFR-603 AC-3 (v0.2。チェックリストは v0.2 のゲートで作る)
+#[test]
+fn eve_lang_で画面が英語になり_locale_オプションが優先する() {
+    let mut s = Session::start_with(&[], None, &[("EVE_LANG", "en_US")]);
+    s.wait_ready();
+    assert_english_ui(&s);
+    s.send(CTRL_Q);
+    assert_eq!(s.wait_exit(), 0);
+
+    let mut s = Session::start_with(&["--locale=ja"], None, &[("EVE_LANG", "en")]);
+    s.wait_ready();
+    s.wait_for("日本語のヒントバー", |t| t.contains("終了"));
+    s.send(CTRL_Q);
+    assert_eq!(s.wait_exit(), 0);
+}
+
+// NFR-603 AC-3 (v0.2。チェックリストは v0.2 のゲートで作る)
+#[test]
+fn 設定の_ui_locale_は環境変数より優先し_未知の言語は次の段へ進む() {
+    let cfg = temp_dir("cfg-locale");
+    std::fs::create_dir_all(&cfg).unwrap();
+    std::fs::write(cfg.join("config.toml"), "[ui]\nlocale = \"en\"\n").unwrap();
+    let envs = [
+        ("EVE_CONFIG_DIR", cfg.to_str().unwrap()),
+        ("EVE_LANG", "ja"),
+    ];
+    let mut s = Session::start_with(&[], None, &envs);
+    s.wait_ready();
+    assert_english_ui(&s);
+    s.send(CTRL_Q);
+    assert_eq!(s.wait_exit(), 0);
+    let _ = std::fs::remove_dir_all(&s.state);
+
+    // 未知の言語名の --locale は警告して (ログ)、次の段の ui.locale = "en" に進む
+    let mut s = Session::start_with(&["--locale", "fr"], None, &envs);
+    s.wait_ready();
+    assert_english_ui(&s);
+    s.send(CTRL_Q);
+    assert_eq!(s.wait_exit(), 0);
+    let log =
+        std::fs::read_to_string(s.state.join("log").join("evoeditor.log")).unwrap_or_default();
+    assert!(log.contains("--locale") && log.contains("\"fr\""), "{log}");
+    let _ = std::fs::remove_dir_all(&s.state);
+    let _ = std::fs::remove_dir_all(&cfg);
 }

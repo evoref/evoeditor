@@ -82,6 +82,8 @@ impl Term {
         cmd.env_remove("WT_SESSION");
         cmd.env_remove("TERM_PROGRAM");
         cmd.env("EVE_STATE_DIR", &state);
+        // OS の言語に依らず日本語で計測する
+        cmd.env("EVE_LANG", "ja");
         // 設定ディレクトリは無い (設定ファイルなし)
         cmd.env("EVE_CONFIG_DIR", state.join("no-config"));
         if let Some(t) = trace {

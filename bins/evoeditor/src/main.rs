@@ -39,6 +39,7 @@ const HELP: &str = "\
 オプション:
   -R, --readonly       読み取り専用で開く
   -e, --encoding <名前>  文字コードを指定して開く (utf-8 / utf-16le / utf-16be / shift_jis / euc-jp / iso-2022-jp)
+      --locale <言語>  画面の言語 (ja / en)。設定 ui.locale・環境変数 EVE_LANG・OS の言語より優先する
   -V, --version        版を表示して終了する
   -h, --help           このヘルプを表示して終了する
   --                   以降を位置引数として扱う
@@ -69,12 +70,12 @@ fn usage_message(e: &UsageError) -> String {
 }
 
 /// 端末の復元の後に出す行 (`Effect::Quit` の `stderr`)。文言は言語ファイルで解決し、キーが無ければキー名を出す。
-fn print_exit_lines(host: &mut Host) {
+fn print_exit_lines(host: &mut Host, locale: eve_config::Locale) {
     let lines = host.take_exit_stderr();
     if lines.is_empty() {
         return;
     }
-    let cat = Catalog::builtin_ja();
+    let cat = Catalog::builtin(locale);
     let mut err = std::io::stderr().lock();
     for l in lines {
         let args: Vec<(&str, &str)> = l
@@ -152,6 +153,7 @@ fn run(
     file: Option<String>,
     read_only: bool,
     encoding: Option<Encoding>,
+    cli_locale: Option<&str>,
     ignored: &[String],
 ) -> u8 {
     // 作業ディレクトリ・ディレクトリ・Ports
@@ -165,10 +167,33 @@ fn run(
     let loaded = load_config(paths.config_dir().as_path());
     let clock = Arc::new(SystemClock::new());
     let state_dir = paths.state_dir();
+    // UI の言語: --locale > ui.locale > EVE_LANG > OS の言語 > ja (07 §17.1)。検出は端末の初期化の前に 1 回だけ
+    let env_lang = std::env::var("EVE_LANG").ok();
+    let os_tag = eve_platform::locale::ui_language_tag();
+    let choice = eve_config::select_locale(
+        cli_locale,
+        loaded.config.ui_locale,
+        env_lang.as_deref(),
+        os_tag.as_deref(),
+    );
+    let locale = choice.locale;
     // 設定の診断は全件をログへ書く (画面には最初の 1 件か要約、07 §4.3)。ファイルは最初の書込で作る
     let logger = eve_platform::log::Logger::new(Some(state_dir.as_path()));
     for d in &loaded.diagnostics {
         logger.log(log_level(d.severity), &describe(d));
+    }
+    for w in &choice.warnings {
+        let from = match w.source {
+            eve_config::LocaleSource::Cli => "--locale",
+            _ => "EVE_LANG",
+        };
+        logger.log(
+            eve_platform::log::Level::Warn,
+            &format!(
+                "locale {from} {:?} is not a bundled language; trying the next source",
+                w.value
+            ),
+        );
     }
     // 置換中の計数 (保存の置換・直接上書きの間だけ上がる)。終了の経路が下りるのを待つ (02 §9.6 手順 3)
     let replacing = eve_core::ReplacingCount::default();
@@ -196,6 +221,7 @@ fn run(
     host.set_initial_encoding(encoding);
     let config = loaded.config;
     host.set_config(config, CONFIG_FILE, loaded.diagnostics);
+    host.set_locale(locale);
     // 要約の対処 (hint) は省略されないので、長い絶対パスではなく末尾の `log\evoeditor.log` だけを出す
     host.set_log_path(logger.path().and_then(|p| {
         let name = p.file_name()?.to_string_lossy().into_owned();
@@ -316,7 +342,7 @@ fn run(
                     ignored.join(" ")
                 );
             }
-            print_exit_lines(&mut host);
+            print_exit_lines(&mut host, locale);
             // シグナル・致命的エラーで終わったときの退避の結果 (退避したときだけ。通常終了では書いていない)
             if let Some(o) = emergency.outcome() {
                 let mut err = std::io::stderr().lock();
@@ -415,6 +441,7 @@ fn main() -> ProcessExit {
             file,
             read_only,
             encoding,
+            locale,
             ignored,
         }) => match encoding.as_deref().map(Encoding::from_label) {
             // 07 §18.4: 文字コードの名前が分からないのは使い方の誤り
@@ -426,7 +453,13 @@ fn main() -> ProcessExit {
                 eprintln!("詳しくは evoeditor --help を見てください。");
                 EXIT_USAGE
             }
-            forced => run(file, read_only, forced.flatten(), &ignored),
+            forced => run(
+                file,
+                read_only,
+                forced.flatten(),
+                locale.as_deref(),
+                &ignored,
+            ),
         },
         Err(e) => {
             eprintln!("evoeditor: {}", usage_message(&e));

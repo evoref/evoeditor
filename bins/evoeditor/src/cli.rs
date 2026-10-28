@@ -1,5 +1,5 @@
 //! コマンドラインの解析 (docs/07 §18.1〜§18.3。v0.1 の公開オプションは `--version` `--help` `--readonly` `--encoding` `--`
-//! と、受理して無視する `--wait`)。パーサは外部 crate を使わず、この小さな関数で済ませる (サブコマンドが要る v1.X で見直す、OQ-24)。
+//! と、受理して無視する `--wait`。v0.2 で `--locale` を足した)。パーサは外部 crate を使わず、この小さな関数で済ませる (サブコマンドが要る v1.X で見直す、OQ-24)。
 
 use std::ffi::OsString;
 
@@ -14,6 +14,8 @@ pub enum Cli {
         read_only: bool,
         /// `--encoding` の値 (M3 で使う。v0.1 の M2 では受け取るだけ)。
         encoding: Option<String>,
+        /// `--locale` の値 (UI の言語。選択順の最上位、07 §17.1)。同梱の言語に当たるかは `eve_config::select_locale` が見る。
+        locale: Option<String>,
         /// `+LINE` など、このバージョンでは未対応のため無視した引数 (`info.cli.unsupported` の対象)。
         ignored: Vec<String>,
     },
@@ -40,6 +42,7 @@ pub fn parse(args: impl IntoIterator<Item = OsString>) -> Result<Cli, UsageError
     let mut files: Vec<String> = Vec::new();
     let mut read_only = false;
     let mut encoding = None;
+    let mut locale = None;
     let mut ignored = Vec::new();
     let mut only_positional = false;
     while let Some(a) = it.next() {
@@ -68,6 +71,14 @@ pub fn parse(args: impl IntoIterator<Item = OsString>) -> Result<Cli, UsageError
                 }
                 encoding = Some(v);
             }
+            "--locale" => {
+                locale = Some(
+                    it.next()
+                        .ok_or_else(|| UsageError::MissingValue(a.clone()))
+                        .and_then(to_string)?,
+                );
+            }
+            s if s.starts_with("--locale=") => locale = Some(s["--locale=".len()..].to_owned()),
             s if s.starts_with("--encoding=") => {
                 let v = s["--encoding=".len()..].to_owned();
                 if v.is_empty() {
@@ -90,6 +101,7 @@ pub fn parse(args: impl IntoIterator<Item = OsString>) -> Result<Cli, UsageError
         file: files.pop(),
         read_only,
         encoding,
+        locale,
         ignored,
     })
 }
@@ -107,6 +119,7 @@ mod tests {
             file: file.map(str::to_owned),
             read_only,
             encoding: None,
+            locale: None,
             ignored: vec![],
         }
     }
@@ -149,6 +162,18 @@ mod tests {
         ));
     }
 
+    #[test]
+    fn locale_は値を取る() {
+        let r = p(&["--locale", "en", "a.txt"]).unwrap();
+        assert!(matches!(&r, Cli::Run { locale: Some(l), file: Some(_), .. } if l == "en"));
+        let r = p(&["--locale=ja-JP"]).unwrap();
+        assert!(matches!(&r, Cli::Run { locale: Some(l), .. } if l == "ja-JP"));
+        assert_eq!(
+            p(&["--locale"]).unwrap_err(),
+            UsageError::MissingValue("--locale".into())
+        );
+    }
+
     // verifies: AC-FR-101-1
     #[test]
     fn 二つ以上のファイルは使い方の誤り() {
@@ -188,6 +213,7 @@ mod tests {
                 file: Some("a.txt".into()),
                 read_only: false,
                 encoding: None,
+                locale: None,
                 ignored: vec!["+10".into()],
             }
         );

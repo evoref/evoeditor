@@ -164,6 +164,11 @@ impl Host {
         self.config_report = (!diagnostics.is_empty()).then(|| (file.to_owned(), diagnostics));
     }
 
+    /// UI の言語を渡す (`start` / `run` の前に呼ぶ。選択順は `eve_config::select_locale`、07 §17.1)。
+    pub fn set_locale(&mut self, locale: eve_config::Locale) {
+        self.editor.state_mut().set_locale(locale);
+    }
+
     /// システムクリップボードの提供者を設定する (`start` / `run` の前に呼ぶ。無ければ内部レジスタだけ)。
     pub fn set_clipboard(&mut self, p: Arc<dyn eve_platform::clipboard::ClipboardProvider>) {
         self.clipboard = Some(p);

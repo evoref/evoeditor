@@ -17,9 +17,9 @@ pub(super) struct ShownMessage {
 }
 
 impl EditorState {
-    /// 文言カタログ (v0.1 は同梱の `ja` だけ)。
+    /// 選択中の言語の文言カタログ。
     pub fn catalog(&self) -> &'static Catalog {
-        Catalog::builtin_ja()
+        Catalog::builtin(self.locale)
     }
 
     /// `{key:<command_id>}` のキー表記を引く (解決済みキーマップの第一割当)。`Editor` がキーマップの変更ごとに更新する。
