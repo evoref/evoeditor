@@ -52,7 +52,8 @@ impl super::state::EditorState {
             format: d.format.clone(),
             revision: d.revision(),
             saved_node_exists: d.history().saved().is_some(),
-            sensitive: false,
+            // 秘密ファイルパターン (docs/07 §5.12.2) に一致する文書。退避の manifest の `sensitive` と、終了時の削除の案内になる
+            sensitive: d.path.as_ref().is_some_and(crate::is_secret_path),
             path: d.path.clone(),
             untitled_name: d.path.is_none().then(|| {
                 self.catalog()
