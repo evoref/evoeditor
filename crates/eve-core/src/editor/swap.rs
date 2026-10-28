@@ -138,9 +138,8 @@ impl EditorState {
         }
         if !busy
             && self.swap_due(&e).is_some_and(|due| now >= due)
-            && let Some(mut snap) = self.rescue_snapshot(id, true)
+            && let Some(snap) = self.rescue_snapshot(id, true)
         {
-            snap.sensitive = snap.path.as_ref().is_some_and(crate::is_secret_path);
             let path = snap.path.clone();
             let job = self.jobs.spawn(
                 Some(id),
