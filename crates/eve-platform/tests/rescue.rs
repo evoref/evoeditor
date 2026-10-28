@@ -468,3 +468,40 @@ fn 合計_100_mb_の_dirty_文書の退避が_5_秒以内に完了する() {
     }
     let _ = fs::remove_dir_all(state);
 }
+
+// 03 §9.8 の不変条件 5: 1 文書の書込の失敗 (権限・ロック) は、その文書だけ `written = false` にして次の文書へ進む。
+// 時間切れだけが中断。書けた文書は退避に残る。
+#[test]
+fn 一つの文書の書込が失敗しても_他の文書は退避する() {
+    let state = tmp("one-fails");
+    let w = WinRescue::new(Some(state.join("s")));
+    // 小さい文書から書くので、"a" (1 バイト) が最初、"bbb" が 2 番目、"cccccc" が最後
+    let docs = [
+        doc(1, "a", Some(r"C:\a"), |_| {}),
+        doc(2, "bbb", Some(r"C:\b"), |_| {}),
+        doc(3, "cccccc", Some(r"C:\c"), |_| {}),
+    ];
+    let fail_second = |path: &Path, d: &DocSnapshot, expired: &dyn Fn() -> bool| {
+        if d.doc == DocumentId(2) {
+            return Err(std::io::Error::from(std::io::ErrorKind::PermissionDenied));
+        }
+        eve_platform::rescue::write_body_for_test(path, d, expired)
+    };
+    let out = w.write_with(
+        &docs,
+        RescueReason::Signal,
+        Duration::from_secs(10),
+        &fail_second,
+    );
+    assert_eq!(out.total, 3);
+    assert_eq!(out.written, 2, "失敗した 1 件を除く 2 件は書けた");
+    assert!(!out.complete, "全件ではないので complete は false");
+    let dir = out.dir.expect("退避先");
+    assert_eq!(fs::read_to_string(dir.join("1-a.txt")).unwrap(), "a");
+    assert_eq!(fs::read_to_string(dir.join("3-c.txt")).unwrap(), "cccccc");
+    let m = manifest(&dir);
+    assert!(m.contains("complete = false"), "{m}");
+    assert_eq!(m.matches("written = true").count(), 2, "{m}");
+    assert_eq!(m.matches("written = false").count(), 1, "{m}");
+    let _ = fs::remove_dir_all(state);
+}

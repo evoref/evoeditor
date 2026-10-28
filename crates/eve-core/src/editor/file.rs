@@ -71,7 +71,11 @@ pub(super) enum Pending {
         notify: bool,
     },
     /// 「退避先に保存」(03 §9.7 (e))。`path` は元のファイル。
-    WriteRecovery { path: FsPath },
+    /// `release`: 閉じた文書の保存の失敗で書くとき、書き終えるまで緊急退避に残している公開物の文書。
+    WriteRecovery {
+        path: FsPath,
+        release: Option<DocumentId>,
+    },
     /// 表現不能の文字の置換の ChangeSet を作るジョブ (E3 の選択肢 2)。`revision` は投入時の文書の Revision。
     ReplaceUnmappable {
         ask: UnmappableAsk,
@@ -287,10 +291,20 @@ impl EditorState {
         self.mark_dirty_render();
     }
 
-    fn close_document(&mut self, doc: DocumentId) {
+    /// 文書を閉じる。保存ジョブが実行中なら、その保存の結果が届くまで内容を緊急退避の対象に残す
+    /// (結果が失敗なら退避先に書く。03 §9.2 の閉じる手順 (a))。
+    pub fn close_document(&mut self, doc: DocumentId) {
         self.views.retain(|_, v| v.doc != doc);
+        let saving = self
+            .pending
+            .values()
+            .any(|p| matches!(p, Pending::Save { doc: d, .. } if *d == doc));
+        let retained = saving.then(|| self.rescue_snapshot(doc, true)).flatten();
         if self.documents.remove(&doc).is_some() {
-            // 退避用の公開物から外す (破棄した内容を緊急退避に残さない)
+            if let Some(snap) = retained {
+                self.closing_snapshots.insert(doc, snap);
+            }
+            // 退避用の公開物から外す (破棄した内容を緊急退避に残さない。保存中の文書は上で残している)
             self.mark_snapshot_update(doc);
             self.push_event(EditorEvent::DocumentClosed { doc });
             self.take_pending_for(doc);
@@ -715,7 +729,13 @@ impl EditorState {
             } => self.finish_find_next(doc, revision, cursor, forward, r),
             Pending::ConvertEol(c) => self.finish_eol_conversion(c, r),
             Pending::ReplaceAll { doc, revision } => self.finish_replace_all(doc, revision, r),
-            Pending::WriteRecovery { path } => self.finish_write_recovery(&path, r),
+            Pending::WriteRecovery { path, release } => {
+                self.finish_write_recovery(&path, r);
+                if let Some(doc) = release {
+                    self.closing_snapshots.remove(&doc);
+                    self.mark_snapshot_update(doc);
+                }
+            }
             Pending::ReplaceUnmappable {
                 ask,
                 revision,
@@ -737,9 +757,44 @@ impl EditorState {
                 path,
                 expected,
                 fmt,
-            } => self.finish_save(doc, at, revision, &path, expected, fmt, cont, r),
+            } => {
+                let saved = matches!(r, JobResult::Saved { .. });
+                self.finish_save(doc, at, revision, &path, expected, fmt, cont, r);
+                self.release_closing_snapshot(doc, &path, saved);
+            }
         }
         self.mark_dirty_render();
+    }
+
+    /// 閉じた文書の保存の結果が届いた: 公開物を外す。保存が成功していなければ、内容を失わないよう退避先に書く
+    /// (閉じた文書なので確認は出さない。書いた場所は `finish_write_recovery` のメッセージで示す)。
+    fn release_closing_snapshot(&mut self, doc: DocumentId, path: &FsPath, saved: bool) {
+        if self.documents.contains_key(&doc) {
+            return;
+        }
+        if saved {
+            self.closing_snapshots.remove(&doc);
+            self.mark_snapshot_update(doc);
+            return;
+        }
+        // 失敗: 退避先への書込が終わるまで、公開物は緊急退避に残す
+        let Some(snapshot) = self.closing_snapshots.get(&doc).cloned() else {
+            return;
+        };
+        let job = self.jobs.spawn(
+            Some(doc),
+            snapshot.revision,
+            JobKind::WriteRecovery {
+                doc: std::sync::Arc::new(snapshot),
+            },
+        );
+        self.pending.insert(
+            job,
+            Pending::WriteRecovery {
+                path: path.clone(),
+                release: Some(doc),
+            },
+        );
     }
 
     /// 表現不能の文字の確認を出す。選択肢: UTF-8 で保存 (エスケープ文字を含まないとき) / キャンセル (既定、`Esc`)。
@@ -1071,6 +1126,8 @@ impl EditorState {
         fmt: Option<NewFormat>,
         cont: Option<Continuation>,
     ) -> Option<SaveFailedAsk> {
+        // 閉じた文書には確認を出さない (保存の結果の処理が退避先に書く)
+        self.document(doc)?;
         let snapshot = self.rescue_snapshot(doc, false)?;
         Some(SaveFailedAsk {
             doc,
@@ -1139,7 +1196,13 @@ impl EditorState {
                     snapshot.revision,
                     JobKind::WriteRecovery { doc: snapshot },
                 );
-                self.pending.insert(job, Pending::WriteRecovery { path });
+                self.pending.insert(
+                    job,
+                    Pending::WriteRecovery {
+                        path,
+                        release: None,
+                    },
+                );
                 CommandResult::Pending(job)
             }
             // 別名で保存: 名前の入力へ (保存の後に続ける操作は引き継ぐ)

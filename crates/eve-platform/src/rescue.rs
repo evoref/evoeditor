@@ -357,12 +357,32 @@ pub(crate) fn write_manifest(dir: &Path, text: &str) -> io::Result<()> {
 
 // ---------- 書き手 ----------
 
+/// 本文を 1 つ書く関数 (`write_body` と同じ型)。試験で書込の失敗を差し込むために `write_with` が受ける。
+#[doc(hidden)]
+pub type BodyWriter<'a> =
+    &'a dyn Fn(&Path, &DocSnapshot, &dyn Fn() -> bool) -> io::Result<Option<u8>>;
+
 impl RescueWriter for WinRescue {
     fn write(
         &self,
         docs: &[Arc<DocSnapshot>],
         reason: RescueReason,
         budget: Duration,
+    ) -> RescueOutcome {
+        self.write_with(docs, reason, budget, &write_body)
+    }
+}
+
+impl WinRescue {
+    /// `write` の本体。時間切れだけが中断で、1 文書の書込の失敗 (権限・ロック) はその文書を `written = false` のまま
+    /// 次の文書へ進む (複数文書で、1 件の失敗が他の文書を落とさないため。03 §9.8 の不変条件 5、§10.1)。
+    #[doc(hidden)]
+    pub fn write_with(
+        &self,
+        docs: &[Arc<DocSnapshot>],
+        reason: RescueReason,
+        budget: Duration,
+        body: BodyWriter<'_>,
     ) -> RescueOutcome {
         // test-hooks: `recovery_timeout=<ms>` で退避の段の予算を縮め、時間切れ (`complete = false`) を起こす (09 §3.6)
         let budget = crate::hooks::value("recovery_timeout")
@@ -444,7 +464,7 @@ impl RescueWriter for WinRescue {
                 entries.pop();
                 continue;
             }
-            match write_body(&dir.join(&file), d, &expired) {
+            match body(&dir.join(&file), d, &expired) {
                 Ok(Some(last)) => {
                     entry.final_newline = matches!(last, b'\n' | b'\r');
                     entry.written = true;
@@ -452,8 +472,13 @@ impl RescueWriter for WinRescue {
                     out.written += 1;
                     let _ = publish(&entries, false);
                 }
-                // 時間切れ・書込の失敗: 書けた分の manifest を残して終わる
-                Ok(None) | Err(_) => break,
+                // 時間切れ: 書けた分の manifest を残して終わる
+                Ok(None) => break,
+                // 書込の失敗: この文書は `written = false` のまま、次の文書へ (時間切れでなければ続ける)
+                Err(e) => {
+                    out.error = Some(e.to_string());
+                    let _ = publish(&entries, false);
+                }
             }
         }
         out.complete = out.written == out.total;
@@ -500,6 +525,16 @@ pub(crate) fn write_body(
     }
     f.sync_all()?;
     Ok(Some(last))
+}
+
+/// 試験が書込の失敗を差し込むとき、失敗させない文書に使う本物の書き手。
+#[doc(hidden)]
+pub fn write_body_for_test(
+    path: &Path,
+    d: &DocSnapshot,
+    expired: &dyn Fn() -> bool,
+) -> io::Result<Option<u8>> {
+    write_body(path, d, expired)
 }
 
 #[cfg(test)]
