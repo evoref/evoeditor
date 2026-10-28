@@ -30,7 +30,7 @@ pub use document::{
     Applied, AppliedTx, ApplyError, DisplaySettings, Document, EolStats, HistoryStep,
     LONG_LINE_THRESHOLD, LONG_LINE_VISIBLE, LoadState, NodeId, Origin, ReadOnlyReason,
     ReadOnlyReasons, RecordOutcome, TextFormat, Transaction, TransactionMeta, UndoBudget,
-    UndoGroupHint, UndoHistory,
+    UndoGroupHint, UndoHistory, trim_to_total_budget,
 };
 pub use editor::{
     ArgValue, Args, Binding, CommandCtx, CommandInvocation, CommandKind, CommandRegistry,

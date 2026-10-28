@@ -45,7 +45,6 @@ pub(crate) const RESERVED_KEYS: &[&str] = &[
     "editor.undo.group_timeout_ms",
     "editor.undo.max_bytes",
     "editor.undo.max_steps",
-    "editor.undo.total_max_bytes",
     "editor.vertical_motion_at_edge",
     "editor.word_attach_hiragana",
     "editor.word_motion",
