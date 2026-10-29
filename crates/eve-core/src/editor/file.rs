@@ -207,18 +207,6 @@ impl EditorState {
 
     /// 読込を待っている間、置き換え対象の今の文書は編集を受け付けない (03 §9.2 の置き換えの手順)。
     /// 編集は読込の完了で黙って捨てられてしまうため。
-    pub(super) fn open_replacing(&self) -> bool {
-        self.pending.values().any(|p| {
-            matches!(
-                p,
-                Pending::Open {
-                    replace: Some(_),
-                    ..
-                }
-            )
-        })
-    }
-
     pub(super) fn open_in_progress(&self) -> bool {
         self.pending
             .values()
@@ -282,21 +270,10 @@ impl EditorState {
 
     /// 無題の新規文書を作る (FR-124)。今の文書があれば置き換える。dirty なら保存・破棄・キャンセルの確認を出す。
     pub fn new_untitled(&mut self) -> CommandResult {
-        if self.open_in_progress() {
-            return CommandResult::Rejected(RejectReason::NotAvailable);
-        }
-        if self.confirm_if_dirty("unsaved_replace", Continuation::New) {
-            return CommandResult::Done;
-        }
-        self.new_untitled_forced()
-    }
-
-    /// 確認を済ませた (破棄または保存した) 後の新規作成。
-    pub(super) fn new_untitled_forced(&mut self) -> CommandResult {
-        let replace = self.active_document();
+        // 今の文書は置き換えず、無題のバッファを足して切り替える (03 §9.8)。何も捨てないので確認は要らない
         let doc = self.blank_document();
-        let (_, view) = self.add_document(doc);
-        self.show_view(view, replace);
+        let (id, _) = self.add_document(doc);
+        self.activate_document(id);
         CommandResult::Done
     }
 
@@ -371,23 +348,10 @@ impl EditorState {
     /// ファイルを開く (03 §9.2)。Loading の文書を作ってすぐ読込ジョブを投入する。
     /// すでに文書があるときは、読込が終わるまで今の文書を表示し続け、完了で置き換える。
     pub fn open_path(&mut self, raw_path: &str, opts: OpenOptions) -> CommandResult {
-        self.open_path_inner(raw_path, opts, false)
-    }
-
-    /// 確認を済ませた (破棄または保存した) 後に開く。
-    pub(super) fn open_path_forced(&mut self, raw_path: &str, opts: OpenOptions) -> CommandResult {
-        self.open_path_inner(raw_path, opts, true)
-    }
-
-    fn open_path_inner(&mut self, raw_path: &str, opts: OpenOptions, force: bool) -> CommandResult {
         let opts = OpenOptions {
             default_eol: opts.default_eol.or(Some(self.config_eol())),
             ..opts
         };
-        // 読込の途中の置き換えの重なりは受け付けない (置き換え対象の文書が孤立しないように)
-        if self.open_in_progress() {
-            return CommandResult::Rejected(RejectReason::NotAvailable);
-        }
         let Ok(path) = self.paths.normalize(raw_path) else {
             self.show_message(
                 MessageLevel::Error,
@@ -396,24 +360,26 @@ impl EditorState {
             );
             return CommandResult::Rejected(RejectReason::InvalidArgs);
         };
+        // 今の文書は置き換えない (03 §9.8)。同じパスが既に開いていれば、そのバッファへ切り替える
+        let existing = self
+            .documents
+            .iter()
+            .find(|(_, d)| d.path.as_ref() == Some(&path))
+            .map(|(id, _)| *id);
+        if let Some(id) = existing {
+            if self.active_document() == Some(id) {
+                self.message(
+                    MessageLevel::Info,
+                    "info.open.already_open",
+                    &path.display(),
+                );
+            } else {
+                self.activate_document(id);
+            }
+            return CommandResult::Done;
+        }
+        // 読込が終わったとき、その間に別の文書へ切り替えていなければ新しいバッファへ切り替える
         let replace = self.active_document();
-        if replace
-            .and_then(|d| self.document(d))
-            .is_some_and(|cur| cur.path.as_ref() == Some(&path))
-        {
-            self.message(
-                MessageLevel::Info,
-                "info.open.already_open",
-                &path.display(),
-            );
-            return CommandResult::Done;
-        }
-        // 未保存の変更があれば、保存・破棄・キャンセルを尋ねる (FR-107 AC-3)
-        if !force
-            && self.confirm_if_dirty("unsaved_replace", Continuation::Open(raw_path.to_owned()))
-        {
-            return CommandResult::Done;
-        }
         let mut doc = Document::new_untitled();
         doc.path = Some(path.clone());
         doc.load_state = crate::document::LoadState::Loading;
@@ -2137,8 +2103,22 @@ impl EditorState {
     }
 
     fn complete_open(&mut self, doc: DocumentId, view: ViewId, replace: Option<DocumentId>) {
-        if replace.is_some() {
-            self.show_view(view, replace);
+        // 読込の間に別の文書へ切り替えていなければ、新しいバッファへ切り替える (03 §9.8)
+        if let Some(from) = replace
+            && self.active_document() == Some(from)
+        {
+            // 何も入力していない無題のバッファは、開いたファイルで置き換える (何も失わない。起動直後の Ctrl+O で空のバッファが残らない)
+            let pristine = self.documents.get(&from).is_some_and(|d| {
+                d.path.is_none()
+                    && !d.is_dirty()
+                    && d.len_bytes() == 0
+                    && d.load_state == crate::document::LoadState::Ready
+            });
+            if pristine {
+                self.show_view(view, Some(from));
+            } else {
+                self.activate_document(doc);
+            }
         }
         // 起動時の `+行:桁` / `path:行:桁`: 読み終わった文書の位置へ移る (範囲外は丸める)
         if let Some((line, col)) = self.open_jumps.remove(&doc) {
@@ -2158,7 +2138,7 @@ impl EditorState {
     ) {
         self.show_message(level, key, &[("path", &path.display()), ("reason", reason)]);
         if replace.is_some() {
-            // 今の文書はそのまま残す (FR-107 AC-3)
+            // 足したバッファだけを閉じる。今の文書はそのまま残す (03 §9.8)
             self.close_document(doc);
         } else if self.active_document() == Some(doc) || self.first_window().is_none() {
             // 表示するはずの文書の読込に失敗: 失敗した文書は閉じ、ほかの文書があればそれを、無ければ
@@ -2295,7 +2275,7 @@ impl EditorState {
                     let name = match c {
                         Continuation::Reopen(_) => "unsaved_reopen",
                         Continuation::Close(_) => "unsaved_close",
-                        _ => "unsaved_replace",
+                        _ => "unsaved",
                     };
                     if !self.confirm_doc_if_dirty(doc_id, name, c.clone()) {
                         self.run_continuation(c);

@@ -18,10 +18,6 @@ use super::state::EditorState;
 /// 保存や破棄の後に続ける操作 (03 §9.7 の連鎖の後続)。
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) enum Continuation {
-    /// 別のファイルを開く (入力されたままのパス)。
-    Open(String),
-    /// 新規の無題の文書を作る。
-    New,
     /// 終了する。
     Quit,
     /// 文字コードを指定して開き直す (`file.reopen_with_encoding`、未保存の確認の後)。
@@ -260,7 +256,7 @@ impl EditorState {
 
     // ---------- 未保存の確認 ----------
 
-    /// 今の文書が dirty なら確認を出して `true`。`name` は `unsaved` (終了) か `unsaved_replace` (置き換え)。
+    /// 今の文書が dirty なら確認を出して `true`。`name` は `unsaved` (終了)・`unsaved_close` など。
     pub(super) fn confirm_if_dirty(&mut self, name: &'static str, cont: Continuation) -> bool {
         match self.active_document() {
             Some(doc) => self.confirm_doc_if_dirty(doc, name, cont),
@@ -378,8 +374,6 @@ impl EditorState {
     /// 破棄または保存の後に続ける操作を実行する。
     pub(super) fn run_continuation(&mut self, cont: Continuation) -> CommandResult {
         match cont {
-            Continuation::Open(path) => self.open_path_forced(&path, OpenOptions::default()),
-            Continuation::New => self.new_untitled_forced(),
             Continuation::Reopen(enc) => self.start_reopen(enc),
             Continuation::Close(doc) => self.close_buffer(doc),
             Continuation::Quit => {

@@ -95,9 +95,6 @@ impl EditorState {
 
     /// `buffer.list`: バッファ一覧を開く。直前の文書を選んでおく (`Ctrl+E` `Enter` で直前と往復できる)。
     fn open_buffer_list(&mut self) -> CommandResult {
-        if self.open_replacing() {
-            return CommandResult::Rejected(RejectReason::NotAvailable);
-        }
         let selected = usize::from(self.buffer_order().len() >= 2);
         self.set_overlay(Some(Overlay::Palette(PaletteState {
             buffers: true,
@@ -211,10 +208,6 @@ impl EditorState {
 
     /// 開いた順で `delta` 個先の文書へ切り替える (端で循環する)。文書が 1 件なら何もしない。
     fn switch_buffer(&mut self, delta: isize) -> CommandResult {
-        // 置き換えの読込中は、読込中の文書がまだ集合に入っている。切り替えの対象にしない
-        if self.open_replacing() {
-            return CommandResult::Rejected(RejectReason::NotAvailable);
-        }
         let ids: Vec<DocumentId> = self.documents.keys().copied().collect();
         let Some(pos) = self
             .active_document()
@@ -229,9 +222,6 @@ impl EditorState {
 
     /// 文書を閉じる要求。dirty なら FR-107 の確認を出す (保存を選んだら保存が成功したときだけ閉じる)。
     pub(super) fn request_close(&mut self, doc: DocumentId) -> CommandResult {
-        if self.open_replacing() {
-            return CommandResult::Rejected(RejectReason::NotAvailable);
-        }
         if self.confirm_doc_if_dirty(doc, "unsaved_close", Continuation::Close(doc)) {
             return CommandResult::Done;
         }
@@ -254,7 +244,12 @@ impl EditorState {
                     self.activate_document(n);
                     self.close_document(doc);
                 }
-                None => return self.new_untitled_forced(),
+                None => {
+                    // 最後の 1 件を閉じた: 無題の文書を新しく作る (終了はしない)
+                    let blank = self.blank_document();
+                    let (_, view) = self.add_document(blank);
+                    self.show_view(view, Some(doc));
+                }
             }
         } else {
             self.close_document(doc);
