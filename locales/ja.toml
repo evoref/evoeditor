@@ -82,6 +82,22 @@ title = "前の単語を削除"
 description = "カーソルの後ろの単語を削除します。"
 title = "後ろの単語を削除"
 
+[cmd.edit.delete_line]
+description = "現在の行を削除します。"
+title = "行を削除"
+
+[cmd.edit.duplicate_line]
+description = "現在の行 (選択した行) を下に複製します。"
+title = "行を複製"
+
+[cmd.edit.move_line_down]
+description = "現在の行 (選択した行) を 1 行下へ動かします。"
+title = "行を下へ移動"
+
+[cmd.edit.move_line_up]
+description = "現在の行 (選択した行) を 1 行上へ動かします。"
+title = "行を上へ移動"
+
 [cmd.edit.indent]
 description = "行頭にインデントを入れます。"
 title = "インデント"

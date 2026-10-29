@@ -84,6 +84,22 @@ title = "Delete Word Backward"
 description = "Delete the word after the cursor."
 title = "Delete Word Forward"
 
+[cmd.edit.delete_line]
+description = "Delete the current line."
+title = "Delete Line"
+
+[cmd.edit.duplicate_line]
+description = "Duplicate the current (or selected) lines below."
+title = "Duplicate Line"
+
+[cmd.edit.move_line_down]
+description = "Move the current (or selected) lines down by one."
+title = "Move Line Down"
+
+[cmd.edit.move_line_up]
+description = "Move the current (or selected) lines up by one."
+title = "Move Line Up"
+
 [cmd.edit.indent]
 description = "Indent the line."
 title = "Indent"

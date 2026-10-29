@@ -32,7 +32,6 @@ pub(crate) const RESERVED_KEYS: &[&str] = &[
     "editor.auto_indent",
     "editor.auto_pairs",
     "editor.backspace_unindent",
-    "editor.backspace_unit",
     "editor.focus",
     "editor.insert_final_newline_on_save",
     "editor.multi_cursor",

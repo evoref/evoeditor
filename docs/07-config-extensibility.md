@@ -261,7 +261,7 @@ v0.1 で設定ファイル (`config.toml`、ユーザー層) から読む **公�
 | `[view]` | `ambiguous_width` | NFR-605 |
 | `[theme]` | `color_mode` | FR-513、04 §5.2a |
 
-件数の内訳: `[editor]` 3、`[file]` 2、`[view]` 1、`[theme]` 1 (計 7)。**v0.2 の M9a で `editor.undo.total_max_bytes` を公開した (計 14)**。v0.2 の M6 で `file.swap.*` の 5 個 (`enabled` / `interval_ms` / `min_interval_ms` / `max_bytes` / `exclude_secret_files`、§5.2) を公開した (計 12)**。範囲は `interval_ms` 100..=600000、`min_interval_ms` 100..=3600000、`max_bytes` 1048576..=1099511627776 (範囲外は警告して既定値)。`[file.swap]` の表でも `[file]` の中の `swap.enabled = ...` でも書ける。v0.1 で公開しないキー (定数で実装し、公開は v0.2): `editor.auto_indent` (既定 true)、`editor.undo.total_max_bytes`、`file.encoding_detection`、`file.write_bom`、`file.huge_file_warn_bytes`、`file.long_line_threshold`、`file.fsync`、`view.line_numbers`、`view.cursor_line_highlight`、`view.show_whitespace` (全角スペースとタブの可視化。v0.1 は `"minimal"` の定数で常に表示、FR-508)、`ui.hint_bar`、`ui.message_timeout_ms`、`ui.synchronized_output`、`theme.name` (v0.1 はテーマが 1 つ)、`search.case`、`keys.preset`、`log.level` (`EVE_LOG` で代える、§5.11)。**v0.2 の M8 で `ui.locale` を公開した (計 13)**: 値は `"auto"` (既定) か言語タグ (`ja` / `en`。`ja-JP`・`en_US` のように地域を付けても、地域を落として当てる。大文字小文字は区別しない)。同梱していない言語名は警告 (`InvalidValue`、許容値 `auto` / `ja` / `en`) して `auto` として扱い、選択順の次の段へ進む (§17.1)。節は `[ui]`。`[keys.*]` (ユーザーのキー割当) は v0.2 (§7.1)。`[os.*]` / `[env.*]` の条件付きセクションは v0.2 (§3.4)。ここに無いキーの公開時期は各表の P 列と §5.13。公開前のキーを書いても「このバージョンでは未対応」の情報診断で、値は使わない (§5 冒頭)。
+件数の内訳: `[editor]` 3、`[file]` 2、`[view]` 1、`[theme]` 1 (計 7)。**v0.2 の M9a で `editor.undo.total_max_bytes` を公開した (計 14)**。**v0.2 の M9b で `editor.backspace_unit` (`"grapheme"` / `"codepoint"`) を公開した (計 15)**。v0.2 の M6 で `file.swap.*` の 5 個 (`enabled` / `interval_ms` / `min_interval_ms` / `max_bytes` / `exclude_secret_files`、§5.2) を公開した (計 12)**。範囲は `interval_ms` 100..=600000、`min_interval_ms` 100..=3600000、`max_bytes` 1048576..=1099511627776 (範囲外は警告して既定値)。`[file.swap]` の表でも `[file]` の中の `swap.enabled = ...` でも書ける。v0.1 で公開しないキー (定数で実装し、公開は v0.2): `editor.auto_indent` (既定 true)、`editor.undo.total_max_bytes`、`file.encoding_detection`、`file.write_bom`、`file.huge_file_warn_bytes`、`file.long_line_threshold`、`file.fsync`、`view.line_numbers`、`view.cursor_line_highlight`、`view.show_whitespace` (全角スペースとタブの可視化。v0.1 は `"minimal"` の定数で常に表示、FR-508)、`ui.hint_bar`、`ui.message_timeout_ms`、`ui.synchronized_output`、`theme.name` (v0.1 はテーマが 1 つ)、`search.case`、`keys.preset`、`log.level` (`EVE_LOG` で代える、§5.11)。**v0.2 の M8 で `ui.locale` を公開した (計 13)**: 値は `"auto"` (既定) か言語タグ (`ja` / `en`。`ja-JP`・`en_US` のように地域を付けても、地域を落として当てる。大文字小文字は区別しない)。同梱していない言語名は警告 (`InvalidValue`、許容値 `auto` / `ja` / `en`) して `auto` として扱い、選択順の次の段へ進む (§17.1)。節は `[ui]`。`[keys.*]` (ユーザーのキー割当) は v0.2 (§7.1)。`[os.*]` / `[env.*]` の条件付きセクションは v0.2 (§3.4)。ここに無いキーの公開時期は各表の P 列と §5.13。公開前のキーを書いても「このバージョンでは未対応」の情報診断で、値は使わない (§5 冒頭)。
 
 ### 5.1 `[editor]` — 編集動作
 
@@ -538,7 +538,7 @@ v0.1 で設定ファイル (`config.toml`、ユーザー層) から読む **公�
 
 | キー (公開版) | 既定 (v0.1 の定数) | 由来 |
 |---|---|---|
-| `editor.backspace_unit` | `"grapheme"` (`"codepoint"` に切替可) | 03 §13.1、OQ-45、FR-201 |
+| `editor.backspace_unit` | `"grapheme"` (`"codepoint"` に切替可。**v0.2 の M9b で公開・実装した**) | 03 §13.1、OQ-45、FR-201 |
 | `editor.backspace_unindent` | `false` | 03 §15.3 |
 | `editor.undo.break_on_word` | `false` | 03 §7.3、OQ-50 |
 | `editor.word_attach_hiragana` (v0.4) | `false` (v0.1 の規則は全文字種共通の遷移で、漢字→ひらがなも境界。OQ-117) | 03 §13.3 |
