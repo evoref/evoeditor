@@ -253,6 +253,12 @@ pub(super) fn overlay_models(state: &EditorState) -> Vec<OverlayModel> {
                 .iter()
                 .map(|(k, v)| (k.as_str(), v.as_str()))
                 .collect();
+            // 終了の連鎖 (03 §9.8) は何件目かを前置した本文を使う
+            let message_leaf = if c.args.iter().any(|(k, _)| k == "index") {
+                "chain"
+            } else {
+                "message"
+            };
             let mut choices: Vec<Choice> = c
                 .choices
                 .iter()
@@ -276,7 +282,7 @@ pub(super) fn overlay_models(state: &EditorState) -> Vec<OverlayModel> {
             }
             vec![OverlayModel::Confirm {
                 title: cell_text(&render(state, &key("title"), &[]), CutPolicy::Never),
-                message: cell_text(&render(state, &key("message"), &args), CutPolicy::End),
+                message: cell_text(&render(state, &key(message_leaf), &args), CutPolicy::End),
                 details: (!c.details.is_empty()).then(|| {
                     c.details
                         .iter()

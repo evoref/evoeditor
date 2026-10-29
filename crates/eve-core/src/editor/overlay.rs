@@ -5,7 +5,7 @@
 //! コンテキストは確認が `dialog` のみ、プロンプトが `prompt` → `global`。
 
 use eve_text::{ByteOff, Text, next_grapheme_boundary, prev_grapheme_boundary};
-use eve_view::{EditorEvent, Effect, MessageLevel, OverlayKind, QuitRescue};
+use eve_view::{DocumentId, EditorEvent, Effect, MessageLevel, OverlayKind, QuitRescue, Revision};
 
 use crate::editor::command::{
     ArgValue, Args, CommandCtx, CommandInvocation, CommandKind, CommandRegistry, CommandResult,
@@ -26,6 +26,25 @@ pub(super) enum Continuation {
     Quit,
     /// 文字コードを指定して開き直す (`file.reopen_with_encoding`、未保存の確認の後)。
     Reopen(eve_encoding::Encoding),
+}
+
+/// 終了の連鎖 (`app.quit` で dirty な文書が 1 件以上、03 §9.8)。保存の連鎖 (`SaveChain`) の外に 1 つだけ持つ。
+/// 破棄は印を付けるだけで、文書の内容は終了が確定するまで残す。
+#[derive(Debug)]
+pub(super) struct QuitChain {
+    /// 未確認の文書。先頭が確認中。
+    remaining: Vec<DocumentId>,
+    /// 破棄を選んだ文書と、そのときの Revision。後で編集された文書の印は無効 (もう一度尋ねる)。
+    discarded: Vec<(DocumentId, Revision)>,
+    /// 済んだ (保存した・破棄した) 文書の数。
+    done: usize,
+}
+
+impl QuitChain {
+    /// 連鎖で尋ねる文書の総数 (`ui.confirm.unsaved.chain` の `{total}`)。
+    fn total(&self) -> usize {
+        self.done + self.remaining.len()
+    }
 }
 
 /// 確認ダイアログの選択肢 1 つ。文言は `ui.confirm.<name>.<id>`。キャンセル (`ui.confirm.cancel`、`Esc`) は選択肢の最後に自動で付く。
@@ -74,7 +93,7 @@ pub(super) enum ConfirmAction {
 pub(super) struct ConfirmState {
     /// `ui.confirm.<name>` の名前 (`unsaved` / `save.atomic_unsupported` など)。
     pub name: &'static str,
-    /// 文言の引数 (`{path}` など)。
+    /// 文言の引数 (`{path}` など)。`index` があるときの本文は `message` ではなく `chain` (終了の連鎖、03 §9.8)。
     pub args: Vec<(String, String)>,
     pub choices: Vec<ChoiceDef>,
     /// 本文の下に 1 行ずつ出す詳細 (E3 の置換の一覧)。無ければ空。
@@ -232,7 +251,20 @@ impl EditorState {
 
     /// 今の文書が dirty なら確認を出して `true`。`name` は `unsaved` (終了) か `unsaved_replace` (置き換え)。
     pub(super) fn confirm_if_dirty(&mut self, name: &'static str, cont: Continuation) -> bool {
-        let Some(doc) = self.active_document().and_then(|d| self.document(d)) else {
+        match self.active_document() {
+            Some(doc) => self.confirm_doc_if_dirty(doc, name, cont),
+            None => false,
+        }
+    }
+
+    /// `doc_id` が dirty なら確認を出して `true`。保存の後続は保存した文書に属するので、アクティブ文書ではなく文書を指す。
+    pub(super) fn confirm_doc_if_dirty(
+        &mut self,
+        doc_id: DocumentId,
+        name: &'static str,
+        cont: Continuation,
+    ) -> bool {
+        let Some(doc) = self.document(doc_id) else {
             return false;
         };
         if !doc.is_dirty() {
@@ -243,9 +275,17 @@ impl EditorState {
             .as_ref()
             .map(|p| p.display())
             .unwrap_or_else(|| self.untitled_name());
+        let mut args = vec![("path".to_owned(), path)];
+        // 終了の連鎖で尋ねる文書が 2 件以上なら、何件目かを前置する
+        if cont == Continuation::Quit
+            && let Some(chain) = self.quit_chain.as_ref().filter(|c| c.total() >= 2)
+        {
+            args.push(("index".to_owned(), (chain.done + 1).to_string()));
+            args.push(("total".to_owned(), chain.total().to_string()));
+        }
         self.set_overlay(Some(Overlay::Confirm(Box::new(ConfirmState {
             name,
-            args: vec![("path".to_owned(), path)],
+            args,
             choices: UNSAVED_CHOICES.to_vec(),
             details: Vec::new(),
             default: 0,
@@ -279,6 +319,8 @@ impl EditorState {
                     self.show_message(MessageLevel::Info, "info.save.aborted", &[]);
                 }
                 ConfirmAction::Open(ask) => self.open_aborted(ask),
+                // 終了の連鎖のキャンセル: 連鎖全体を中止し、破棄の印をすべて無効にする (文書は元のまま)
+                ConfirmAction::Unsaved(Continuation::Quit) => self.quit_chain = None,
                 ConfirmAction::Unmappable(ask) | ConfirmAction::UnmappableReplace { ask, .. } => {
                     self.unmappable_cancelled(ask)
                 }
@@ -288,6 +330,10 @@ impl EditorState {
         }
         let id = c.choices[choice].id;
         match c.action {
+            ConfirmAction::Unsaved(Continuation::Quit) => match choice {
+                0 => self.quit_save_head(),
+                _ => self.quit_discard_head(),
+            },
             ConfirmAction::Unsaved(cont) => match choice {
                 0 => self.save_then(cont),
                 _ => self.run_continuation(cont),
@@ -328,12 +374,89 @@ impl EditorState {
         }
     }
 
-    /// 終了する。dirty なら確認を出す。
+    /// 終了する。dirty な文書があれば、全部について確認する終了の連鎖に入る (03 §9.8)。
     pub fn request_quit(&mut self) -> CommandResult {
-        if self.confirm_if_dirty("unsaved", Continuation::Quit) {
-            return CommandResult::Done;
+        let remaining = self.quit_targets(&[]);
+        self.quit_chain = Some(QuitChain {
+            remaining,
+            discarded: Vec::new(),
+            done: 0,
+        });
+        self.advance_quit_chain()
+    }
+
+    /// 確認が要る文書。dirty な全文書から、破棄の印が有効なもの (Revision が変わっていない) を除く。
+    /// アクティブな文書を先頭に、残りは開いた順。
+    fn quit_targets(&self, discarded: &[(DocumentId, Revision)]) -> Vec<DocumentId> {
+        let mut ids: Vec<DocumentId> = self
+            .documents
+            .iter()
+            .filter(|(id, d)| d.is_dirty() && !discarded.contains(&(**id, d.revision())))
+            .map(|(id, _)| *id)
+            .collect();
+        if let Some(i) = self
+            .active_document()
+            .and_then(|a| ids.iter().position(|d| *d == a))
+        {
+            let active = ids.remove(i);
+            ids.insert(0, active);
         }
-        self.run_continuation(Continuation::Quit)
+        ids
+    }
+
+    /// 終了の連鎖を次へ進める: 次の dirty な文書をアクティブにして確認を出す。全部済んで、
+    /// 確認の間に変わった文書も無ければ終了する。
+    pub(super) fn advance_quit_chain(&mut self) -> CommandResult {
+        let Some(mut chain) = self.quit_chain.take() else {
+            return self.request_quit();
+        };
+        // 保存して clean になった・閉じた文書は済んだものとして外す
+        while let Some(&head) = chain.remaining.first() {
+            if self.document(head).is_some_and(|d| d.is_dirty()) {
+                break;
+            }
+            chain.remaining.remove(0);
+            chain.done += 1;
+        }
+        if chain.remaining.is_empty() {
+            // 保存中の編集・破棄の印の後の編集を見落とさない (編集を捨てない)
+            chain.remaining = self.quit_targets(&chain.discarded);
+            if chain.remaining.is_empty() {
+                return self.run_continuation(Continuation::Quit);
+            }
+        }
+        let head = chain.remaining[0];
+        self.quit_chain = Some(chain);
+        self.activate_document(head);
+        self.confirm_doc_if_dirty(head, "unsaved", Continuation::Quit);
+        CommandResult::Done
+    }
+
+    /// 連鎖の確認中の文書。
+    fn quit_head(&self) -> Option<DocumentId> {
+        self.quit_chain.as_ref()?.remaining.first().copied()
+    }
+
+    /// 終了の連鎖で「保存」: 確認中の文書を保存し、成功したら次へ進む。
+    fn quit_save_head(&mut self) -> CommandResult {
+        match self.quit_head() {
+            Some(doc) => self.save_doc_then(doc, Continuation::Quit),
+            None => CommandResult::Rejected(RejectReason::NoTarget),
+        }
+    }
+
+    /// 終了の連鎖で「破棄」: 内容は残して印だけ付け、次へ進む。
+    fn quit_discard_head(&mut self) -> CommandResult {
+        if let Some(chain) = self.quit_chain.as_mut()
+            && !chain.remaining.is_empty()
+        {
+            let doc = chain.remaining.remove(0);
+            chain.done += 1;
+            if let Some(d) = self.documents.get(&doc) {
+                chain.discarded.push((doc, d.revision()));
+            }
+        }
+        self.advance_quit_chain()
     }
 
     // ---------- 入力プロンプト ----------
