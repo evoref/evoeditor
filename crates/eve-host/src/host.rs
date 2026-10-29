@@ -8,7 +8,8 @@ use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 
 use eve_core::{
-    Clock, DocSnapshot, Editor, JobResult, Millis, Ports, RescueReason, RescueWriter, Tick,
+    Clock, DocSnapshot, Editor, InitialFile, JobResult, Millis, Ports, RescueReason, RescueWriter,
+    Tick,
 };
 use eve_view::{Capabilities, DocumentId, EditorEvent, Effect, StderrLine, WindowId};
 
@@ -227,11 +228,11 @@ impl Host {
     }
 
     /// 起動の後半 (02 §9.5): `frontend.init` → 能力と編集面の大きさ → 最初の文書 → 入力の開始 → 最初の Frame。
-    /// `path` が `None` なら無題の文書。
+    /// `files` が空なら無題の文書。複数なら最初のものを表示し、残りは読込中のバッファとして足す。
     pub fn start(
         &mut self,
         frontend: &mut dyn Frontend,
-        path: Option<&str>,
+        files: &[InitialFile],
         read_only: bool,
     ) -> Result<(), StartError> {
         let fcfg = FrontendConfig {
@@ -246,7 +247,7 @@ impl Host {
         self.editor.state_mut().set_viewport(size.cols, size.rows);
         self.editor.tick(self.clock.now());
         self.editor
-            .open_initial_with(path, read_only, self.initial_encoding);
+            .open_initial_files(files, read_only, self.initial_encoding);
         let window = self
             .editor
             .state()
@@ -270,10 +271,10 @@ impl Host {
     pub fn run(
         &mut self,
         frontend: &mut dyn Frontend,
-        path: Option<&str>,
+        files: &[InitialFile],
         read_only: bool,
     ) -> ExitCode {
-        let code = self.run_loop(frontend, path, read_only);
+        let code = self.run_loop(frontend, files, read_only);
         self.run_finished
             .store(true, std::sync::atomic::Ordering::Release);
         code
@@ -282,10 +283,10 @@ impl Host {
     fn run_loop(
         &mut self,
         frontend: &mut dyn Frontend,
-        path: Option<&str>,
+        files: &[InitialFile],
         read_only: bool,
     ) -> ExitCode {
-        if let Err(e) = self.start(frontend, path, read_only) {
+        if let Err(e) = self.start(frontend, files, read_only) {
             // 07 §18.4: 端末の初期化失敗は 5 (04 §15.2 stderr.not_a_terminal)、それ以外の起動時の失敗は 1。
             let (key, code) = if matches!(e, StartError::Init(_)) {
                 ("stderr.not_a_terminal", ExitCode(5))

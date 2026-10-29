@@ -1683,7 +1683,7 @@ v0.2 以降の診断 (名前だけを予約し、文言はその版で言語フ�
 | `stderr.fatal` | 実行時エラーでの終了 (終了コード 1、07 §18.4。端末を復元した後) | evoeditor stopped due to an error: {reason} | エラーのため evoeditor を終了しました: {reason} |
 | `stderr.usage.generic` | 使い方の誤りのうち、下の 3 つ (`unknown_encoding` / `multiple_files` / `dev_only`) 以外 (未知のオプション等。終了コード 2、07 §18.4)。`stderr.usage` は兄弟の 4 つのキーの接頭辞で、それ自体はキーではない | {detail}. Run 'evoeditor --help' for usage. | {detail_ja}。使い方は evoeditor --help で確認してください。 |
 | `stderr.usage.unknown_encoding` | `--encoding` に対応していない文字コード名を渡した (TUI を始めずに終了コード 2、07 §18.3) | Unknown encoding: {label}. Run 'evoeditor --help' for supported encodings. | {label} は対応していない文字コード名です。使える名前は evoeditor --help で確認してください。 |
-| `stderr.usage.multiple_files` | ファイルを 2 つ以上渡した (v0.1 は単一文書。TUI を始めずに終了コード 2、01 FR-101 AC-1、07 §18.2) | Opening more than one file is not supported in this version. | このバージョンでは、一度に開けるファイルは 1 つだけです。 |
+| `stderr.usage.multiple_files` | ファイルを 2 つ以上渡した (**v0.1 のみ**。v0.1 は単一文書。TUI を始めずに終了コード 2、01 FR-101 AC-1、07 §18.2。v0.2 から複数のパスを開くので出さない) | Opening more than one file is not supported in this version. | このバージョンでは、一度に開けるファイルは 1 つだけです。 |
 | `stderr.usage.dev_only` | 配布ビルドに駆動 API の予約名 (`--headless` / `--rpc` / `--fake-ports` / `--allow-write`) を渡した (TUI を始めずに終了コード 2、07 §18.3、OQ-120) | Not supported in this build ({option} is a development feature of v0.2 or later). | このビルドでは未対応です (v0.2 以降の開発版機能): {option} |
 
 凡例 (この表と下のパニックの表): `en` は v0.2 から出す 1 行目 (英語、ASCII)。`ja` は v0.1 から出す行で、v0.2 からは `en` の次の 2 行目になる。
