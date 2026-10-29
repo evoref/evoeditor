@@ -62,6 +62,8 @@ struct State {
     steps: Vec<WriteStep>,
     /// 保存中フラグ (テストが `add_inflight` で積む)。
     inflight: Vec<InflightRecord>,
+    /// 事前バックアップのファイル (テストが `add_orphan_backup` で積む)。
+    orphan_backups: Vec<eve_core::OrphanBackup>,
     /// 退避ディレクトリ (テストが `add_recovery_dir` で積む)。
     recovery: Vec<RecoveryDirEntry>,
     /// 「退避先に保存」で書いた本文。
@@ -101,6 +103,7 @@ impl MemFs {
                 read_fail_after: None,
                 steps: Vec::new(),
                 inflight: Vec::new(),
+                orphan_backups: Vec::new(),
                 recovery: Vec::new(),
                 recovered: Vec::new(),
                 swaps: BTreeMap::new(),
@@ -179,6 +182,25 @@ impl MemFs {
     /// 保存中フラグを積む (中断の痕跡の再現。`InflightRecord.flag` は `/state/inflight/…` のような任意のパス)。
     pub fn add_inflight(&self, record: InflightRecord) {
         self.st().inflight.push(record);
+    }
+
+    /// 孤児の事前バックアップを積む (`list_orphan_backups` が返す。`remove_file` で消える)。
+    pub fn add_orphan_backup(&self, path: &str, partial: bool, len: u64) {
+        self.st().orphan_backups.push(eve_core::OrphanBackup {
+            path: FsPath::from(path),
+            pid: 1,
+            partial,
+            len,
+        });
+    }
+
+    /// 残っている孤児の事前バックアップのパス。
+    pub fn orphan_backup_paths(&self) -> Vec<FsPath> {
+        self.st()
+            .orphan_backups
+            .iter()
+            .map(|o| o.path.clone())
+            .collect()
     }
 
     /// 退避ディレクトリを積む (起動時の案内の再現)。`rescue` は「退避先に保存」の退避。
@@ -467,8 +489,21 @@ impl FileSystem for MemFs {
             .collect())
     }
 
+    fn list_inflight(&self) -> Result<Vec<InflightRecord>, FsError> {
+        Ok(self.st().inflight.clone())
+    }
+
+    fn list_orphan_backups(&self) -> Result<Vec<eve_core::OrphanBackup>, FsError> {
+        Ok(self.st().orphan_backups.clone())
+    }
+
     fn remove_file(&self, path: &FsPath) -> Result<(), FsError> {
         let mut s = self.st();
+        let n = s.orphan_backups.len();
+        s.orphan_backups.retain(|o| &o.path != path);
+        if s.orphan_backups.len() != n {
+            return Ok(());
+        }
         // 保存中フラグのファイル、または通常のファイル
         let before = s.inflight.len();
         s.inflight.retain(|r| &r.flag != path);

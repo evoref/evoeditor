@@ -114,6 +114,8 @@ pub struct EditorState {
     pub(super) research: Option<(eve_view::Revision, Tick)>,
     /// swap-lite の予約 (03 §10.2)。
     pub(super) swap: super::swap::SwapState,
+    /// 起動時の走査が見つけた置換途中の痕跡の提案 (新しい順。05 §4.6)。
+    pub(super) leftovers: Vec<crate::Leftover>,
     /// 区分 B / D の確認を承認した (文書, Revision)。同じ Revision の保存では確認を繰り返さない。
     pub(super) lossy_ok: Option<(DocumentId, eve_view::Revision)>,
     /// 単発の検索ジョブ (進行中の 1 つだけ)。
@@ -168,6 +170,7 @@ impl EditorState {
             unmappable_marks: None,
             research: None,
             swap: Default::default(),
+            leftovers: Vec::new(),
             lossy_ok: None,
             find_job: None,
             system_encoding: None,

@@ -375,6 +375,11 @@ impl Editor {
         self.state.swap_leftovers()
     }
 
+    /// 起動時の走査が見つけた置換途中の痕跡の提案 (新しい順。05 §4.6)。
+    pub fn leftovers(&self) -> &[crate::Leftover] {
+        &self.state.leftovers
+    }
+
     /// 復旧で適用した古いスワップのうち、まだ消していないもの。Host が正常終了のときに消す。
     pub fn swap_recovered_leftovers(&self) -> Vec<crate::SwapEntry> {
         self.state.swap_recovered_leftovers()
