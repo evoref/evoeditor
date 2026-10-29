@@ -53,8 +53,8 @@ pub use paths::Paths;
 pub use replacing::{ReplacingCount, ReplacingGuard};
 pub use rescue::{RescueOutcome, RescueReason, RescueWriter};
 pub use search::{
-    Case, Matcher, QueryError, SearchJob, SearchQuery, build_replace_all, find_next, run_search,
-    scan_bytes, scan_lines,
+    Case, Matcher, QueryError, SearchJob, SearchQuery, build_replace_all, find_next,
+    replacement_for, run_search, scan_bytes, scan_lines, unescape_replacement,
 };
 pub use secret::is_secret_path;
 pub use time::{Clock, Millis, Tick};

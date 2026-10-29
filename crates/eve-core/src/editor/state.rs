@@ -723,6 +723,11 @@ impl EditorState {
                 .search_bar
                 .as_ref()
                 .is_some_and(|s| s.replace.is_some())),
+            // 置換欄にフォーカスがある (`Enter` が 1 件置換になる、07 §11.6)
+            "search.replace_focused" => b(self
+                .search_bar
+                .as_ref()
+                .is_some_and(|s| s.replace.is_some() && s.focus == eve_view::BarFocus::Replace)),
             "caps.can_suspend" => b(self.caps.can_suspend),
             "editor" => b(true),
             _ => None,
