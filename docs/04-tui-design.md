@@ -1481,6 +1481,13 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 | `ui.confirm.unsaved.chain` | v0.2 の終了の連鎖 (03 §9.8) で、dirty な文書が 2 件以上のときの本文。何件目か (`{index}` / `{total}`) を前置する | ({index}/{total}) {path} には保存されていない変更があります |
 | `ui.confirm.unsaved.save` | 同上 (既定の選択肢。アクセラレータ `S`) | [S] 保存して終了 |
 | `ui.confirm.unsaved.discard` | 同上 (破棄する選択肢。既定にしない。アクセラレータ `D`) | [D] 破棄して終了 |
+| `info.save_all.done` | 全保存 (`file.save_all`、03 §9.8) で保存した件数。飛ばした文書が無いとき | {saved} 件の文書を保存しました |
+| `info.save_all.done_skipped` | 同上。名前の無い文書・読み取り専用の文書を飛ばしたとき | {saved} 件の文書を保存しました。名前の無い・読み取り専用の {skipped} 件は保存していません |
+| `info.save_all.none` | 全保存で、保存する文書が 1 件も無かったとき | 保存する文書はありません |
+| `ui.confirm.save_all_failed.title` | 全保存で保存できなかった文書の一覧 (閉じるだけの通知。`details` に 1 文書 1 行で `{path}: {reason}`) | 保存できなかった文書 |
+| `ui.confirm.save_all_failed.message` | 同上 | {count} 件の文書を保存できませんでした。個別に保存して確認してください |
+| `ui.confirm.save_all_failed.abort` | 同上 (閉じる。`Esc` も同じ。アクセラレータ `C`) | [C] 閉じる |
+| `ui.confirm.save_all_failed.needs_confirm` | 全保存で、書く前の確認が要る文書の理由 (一覧の `{reason}` に入る) | 確認が必要です |
 | `ui.confirm.unsaved_close.title` | 未保存の文書を閉じる (`buffer.close`、03 §9.2 の閉じる手順 (d)。v0.2) | 未保存の変更 |
 | `ui.confirm.unsaved_close.message` | 同上 | {path} には保存されていない変更があります |
 | `ui.confirm.unsaved_close.save` | 同上 (既定の選択肢。アクセラレータ `S`) | [S] 保存して閉じる |

@@ -223,7 +223,7 @@ impl EditorState {
             .any(|p| matches!(p, Pending::Open { .. }))
     }
 
-    fn save_in_progress(&self, doc_id: DocumentId) -> bool {
+    pub(super) fn save_in_progress(&self, doc_id: DocumentId) -> bool {
         self.pending
             .values()
             .any(|p| matches!(p, Pending::Save { doc, .. } | Pending::CheckUnchanged { doc } if *doc == doc_id))
@@ -611,7 +611,7 @@ impl EditorState {
         }
     }
 
-    fn start_save(
+    pub(super) fn start_save(
         &mut self,
         doc_id: DocumentId,
         path: FsPath,
@@ -789,8 +789,15 @@ impl EditorState {
                 fmt,
             } => {
                 let saved = matches!(r, JobResult::Saved { .. });
-                self.finish_save(doc, at, revision, &path, expected, fmt, cont, r);
+                // 全保存の 1 件の失敗は、確認を出さず記録するだけ (03 §9.8)
+                let in_batch = self.save_all_failed(job, doc, &path, &r);
+                if in_batch != Some(true) {
+                    self.finish_save(doc, at, revision, &path, expected, fmt, cont, r);
+                }
                 self.release_closing_snapshot(doc, &path, saved);
+                if in_batch.is_some() {
+                    self.finish_save_all_if_done();
+                }
             }
         }
         self.mark_dirty_render();
@@ -2490,7 +2497,7 @@ fn human_size(n: u64) -> String {
 }
 
 /// `{reason}` に入れる短い分類名 (技術的な識別子。OS のエラーの分類文言 `ui.reason.*` は目録ができてから)。
-fn reason_label(err: &JobError) -> String {
+pub(super) fn reason_label(err: &JobError) -> String {
     match err {
         JobError::Fs(e) => fs_reason(e),
         JobError::Panic => "panic".to_owned(),

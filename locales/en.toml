@@ -124,6 +124,10 @@ title = "Next document"
 description = "Switch to the previous document."
 title = "Previous document"
 
+[cmd.file.save_all]
+description = "Save every document with unsaved changes. Untitled and read-only documents are skipped."
+title = "Save All"
+
 [cmd.file.new]
 description = "Create a new untitled document."
 title = "New"
@@ -341,6 +345,11 @@ in_place = "Saved {path} by overwriting in place"
 in_progress = "Saving"
 to_recovery = "Saved to {target}. The original file {path} was not changed"
 unchanged = "No changes (the file was not rewritten)"
+
+[info.save_all]
+done = "Saved {saved} documents"
+done_skipped = "Saved {saved} documents. {skipped} untitled or read-only documents were not saved"
+none = "No documents to save"
 
 [info.search]
 replace_empty_query = "Enter the text to search for"
@@ -854,6 +863,12 @@ title = "Unsaved changes"
 message = "{path} has unsaved changes"
 save = "[S] Save and close"
 discard = "[D] Discard and close"
+
+[ui.confirm.save_all_failed]
+title = "Documents not saved"
+message = "{count} documents could not be saved. Save them one by one to review"
+abort = "[C] Close"
+needs_confirm = "needs confirmation"
 
 [ui.confirm.unsaved_reopen]
 title = "Unsaved changes"

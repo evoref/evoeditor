@@ -78,6 +78,8 @@ pub struct EditorState {
     pub(super) overlay: Option<super::overlay::Overlay>,
     /// 保存ジョブの完了後に続ける操作。
     pub(super) continuations: BTreeMap<JobId, super::overlay::Continuation>,
+    /// 実行中の全保存 (`file.save_all`、03 §9.8)。無ければ `None`。
+    pub(super) save_all: Option<super::save_all::SaveAll>,
     /// 前に表示していた文書 (最近使った順。末尾が直近)。閉じた後に表示する文書を選ぶのに使う。
     pub(super) recent: Vec<DocumentId>,
     /// 終了の連鎖 (`app.quit` で dirty な文書が 1 件以上、03 §9.8)。連鎖の外では `None`。
@@ -144,6 +146,7 @@ impl EditorState {
             key_seqs: BTreeMap::new(),
             overlay: None,
             continuations: BTreeMap::new(),
+            save_all: None,
             recent: Vec::new(),
             quit_chain: None,
             message: None,

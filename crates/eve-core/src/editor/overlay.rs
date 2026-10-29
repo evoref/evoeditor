@@ -64,6 +64,8 @@ pub(super) struct ChoiceDef {
 pub(super) enum ConfirmAction {
     /// 未保存の変更 (終了・置き換え): 選択肢 0 = 保存して続ける、1 = 破棄して続ける。
     Unsaved(Continuation),
+    /// 知らせるだけの確認 (全保存で保存できなかった文書の一覧)。どの選択肢でも何もしない。
+    Notice,
     /// 保存の代替 (原子的置換ができない・ハードリンク・バックアップを作れない)。選択肢の意味は `SaveFallback` の種類による。
     Fallback(super::file::FallbackAsk),
     /// 別のバイト表現で保存される箇所がある文書の保存 (保存 / 別名で保存、03 §8.6 E2')。
@@ -345,6 +347,7 @@ impl EditorState {
                 0 => self.save_then(cont),
                 _ => self.run_continuation(cont),
             },
+            ConfirmAction::Notice => CommandResult::Done,
             ConfirmAction::Fallback(ask) => self.choose_fallback(ask, choice),
             ConfirmAction::Lossy(ask) => self.choose_lossy(ask, choice),
             ConfirmAction::SaveFailed(ask) => self.choose_save_failed(ask, id),
