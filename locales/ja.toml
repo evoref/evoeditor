@@ -825,6 +825,7 @@ too_small = "端末が小さすぎます ({cols}x{rows} 以上が必要)"
 [ui.confirm.unsaved]
 title = "未保存の変更"
 message = "{path} には保存されていない変更があります"
+chain = "({index}/{total}) {path} には保存されていない変更があります"
 save = "[S] 保存して終了"
 discard = "[D] 破棄して終了"
 

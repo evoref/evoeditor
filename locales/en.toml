@@ -827,6 +827,7 @@ too_small = "The terminal is too small (at least {cols}x{rows} is needed)"
 [ui.confirm.unsaved]
 title = "Unsaved changes"
 message = "{path} has unsaved changes"
+chain = "({index}/{total}) {path} has unsaved changes"
 save = "[S] Save and quit"
 discard = "[D] Discard and quit"
 

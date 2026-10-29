@@ -257,6 +257,23 @@ impl EditorState {
         self.view(self.window_view(w)?).map(|v| v.doc)
     }
 
+    /// `doc` を表示する (最初の Window の View をその文書のものにする)。文書の View が無ければ作る。
+    /// 検索バーは文書ごとには持たないので、切り替える前に閉じる (03 §9.8)。
+    pub(super) fn activate_document(&mut self, doc: DocumentId) {
+        if self.active_document() == Some(doc) || !self.documents.contains_key(&doc) {
+            return;
+        }
+        self.search_close();
+        let view = match self.views.iter().find(|(_, v)| v.doc == doc) {
+            Some((id, _)) => *id,
+            None => self.add_view(doc),
+        };
+        if let Some(w) = self.windows.first_mut() {
+            w.root = view;
+        }
+        self.mark_dirty_render();
+    }
+
     /// 無題の新規文書を作る (FR-124)。今の文書があれば置き換える。dirty なら保存・破棄・キャンセルの確認を出す。
     pub fn new_untitled(&mut self) -> CommandResult {
         if self.open_in_progress() {
@@ -458,6 +475,15 @@ impl EditorState {
         let Some(doc_id) = self.active_document() else {
             return CommandResult::Rejected(RejectReason::NoTarget);
         };
+        self.save_doc_then(doc_id, cont)
+    }
+
+    /// `save_then` を、アクティブ文書ではなく `doc_id` に対して行う (保存の連鎖は保存した文書に属する、03 §9.8)。
+    pub(super) fn save_doc_then(
+        &mut self,
+        doc_id: DocumentId,
+        cont: Continuation,
+    ) -> CommandResult {
         let Some(doc) = self.document(doc_id) else {
             return CommandResult::Rejected(RejectReason::NoTarget);
         };
@@ -2223,12 +2249,16 @@ impl EditorState {
                 // 保存の後に続ける操作 (開く・新規作成・終了)。保存が失敗したときは続けない
                 // 保存の間に編集されていたら、続きの操作の前にもう一度尋ねる (03 §9.7。編集を捨てない)
                 if let Some(c) = cont {
+                    if c == Continuation::Quit {
+                        // 終了の連鎖: 保存した文書が clean なら次の文書へ、保存中の編集で dirty なら同じ文書をもう一度尋ねる
+                        self.advance_quit_chain();
+                        return;
+                    }
                     let name = match c {
-                        Continuation::Quit => "unsaved",
                         Continuation::Reopen(_) => "unsaved_reopen",
                         _ => "unsaved_replace",
                     };
-                    if !self.confirm_if_dirty(name, c.clone()) {
+                    if !self.confirm_doc_if_dirty(doc_id, name, c.clone()) {
                         self.run_continuation(c);
                     }
                 }
