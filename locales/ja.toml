@@ -114,6 +114,10 @@ title = "元に戻す"
 description = "現在の文書を閉じます。未保存の変更があれば確認します。"
 title = "閉じる"
 
+[cmd.buffer.list]
+description = "開いている文書の一覧を出して、切り替えます。"
+title = "一覧"
+
 [cmd.buffer.next]
 description = "次の文書へ切り替えます。"
 title = "次の文書"
@@ -794,6 +798,11 @@ footer = "{matched}/{total}"
 placeholder = "コマンドを入力"
 disabled = "現在は実行できません: {reason}"
 no_match = "一致するコマンドはありません"
+
+[ui.buffer_list]
+title = "バッファ"
+placeholder = "文書名で絞り込み"
+no_match = "一致する文書はありません"
 
 [ui.long_line]
 omitted = "… (以下 {bytes} バイト省略)"

@@ -1488,6 +1488,9 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 | `ui.confirm.save_all_failed.message` | 同上 | {count} 件の文書を保存できませんでした。個別に保存して確認してください |
 | `ui.confirm.save_all_failed.abort` | 同上 (閉じる。`Esc` も同じ。アクセラレータ `C`) | [C] 閉じる |
 | `ui.confirm.save_all_failed.needs_confirm` | 全保存で、書く前の確認が要る文書の理由 (一覧の `{reason}` に入る) | 確認が必要です |
+| `ui.buffer_list.title` | バッファ一覧 (`buffer.list`、§8.5。v0.2) の見出し | バッファ |
+| `ui.buffer_list.placeholder` | 同上。入力欄が空のときの案内 (名前とディレクトリで絞り込む) | 文書名で絞り込み |
+| `ui.buffer_list.no_match` | 同上。絞り込みに一致する文書が無いとき | 一致する文書はありません |
 | `ui.confirm.unsaved_close.title` | 未保存の文書を閉じる (`buffer.close`、03 §9.2 の閉じる手順 (d)。v0.2) | 未保存の変更 |
 | `ui.confirm.unsaved_close.message` | 同上 | {path} には保存されていない変更があります |
 | `ui.confirm.unsaved_close.save` | 同上 (既定の選択肢。アクセラレータ `S`) | [S] 保存して閉じる |
