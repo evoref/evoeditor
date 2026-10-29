@@ -368,6 +368,33 @@ pub(crate) fn read_flags(state_dir: &Path, path: &Path) -> Vec<InflightRecord> {
     out
 }
 
+/// `list_inflight`: `recovery/inflight/*/*.toml` をすべて読む。書いたプロセスが動いているもの (自分を含む) は除く。
+pub(crate) fn list_all(state_dir: &Path) -> Vec<InflightRecord> {
+    let Ok(keys) = fs::read_dir(state_dir.join("recovery").join("inflight")) else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    for k in keys.flatten() {
+        let Ok(rd) = fs::read_dir(k.path()) else {
+            continue;
+        };
+        for e in rd.flatten() {
+            let p = e.path();
+            if p.extension().is_none_or(|x| x != "toml") {
+                continue;
+            }
+            let rec = parse_flag(&p, Path::new(""));
+            // 解析できないフラグは起動時刻を読めない。pid だけで生存を見る (動いていれば保存中かもしれないので除く)
+            if crate::swap_scan::process_alive(rec.pid, rec.started_at) {
+                continue;
+            }
+            out.push(rec);
+        }
+    }
+    out.sort_by(|a, b| a.flag.cmp(&b.flag));
+    out
+}
+
 /// 同じキーのディレクトリに残る、自分の今回の記録以外の記録を消す (05 §4.1 手順 7)。
 /// 記録された一時ファイル・退避名が実在する記録は残す。
 pub(crate) fn clear_others(state_dir: &Path, key: &str, mine: &Path) {

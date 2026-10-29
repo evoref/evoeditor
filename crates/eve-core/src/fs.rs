@@ -31,6 +31,21 @@ pub trait FileSystem: Send + Sync {
         Ok(Vec::new())
     }
 
+    /// 起動時の走査 (v0.2、03 §10.3 手順 1b、05 §4.6): `recovery/inflight/*/*.toml` の保存中フラグをすべて読む。
+    /// 書いたプロセスが今も動いているもの (pid と起動時刻が一致。自分のプロセスを含む) は除く (保存中のフラグを孤児にしない)。
+    /// 解析できないフラグは `malformed = true` で返す (その `target` は空)。ディレクトリが無ければ空。
+    /// 状態ディレクトリを持たない実装は常に空を返す。
+    fn list_inflight(&self) -> Result<Vec<InflightRecord>, FsError> {
+        Ok(Vec::new())
+    }
+
+    /// 起動時の走査 (v0.2、05 §4.6): `state_dir/backup/` の直下にある、in-place の事前バックアップ (`*.bak` / `*.bak.tmp`、05 §7.5)
+    /// を列挙する。名前の pid のプロセスが動いているもの、`fr119/` などのサブディレクトリ、形に合わない名前は含めない。
+    /// どのフラグが記録したものかは見ない (照合は core)。場所が無ければ空。状態ディレクトリを持たない実装は常に空。
+    fn list_orphan_backups(&self) -> Result<Vec<OrphanBackup>, FsError> {
+        Ok(Vec::new())
+    }
+
     /// 起動時の退避の案内 (`msg.recovery.found` / `found_rescue`) 用に、退避ディレクトリを列挙する (05 §7.5 の「`recovery/` の走査と
     /// 削除の規則」)。`state_dir/recovery/` 直下と `recovery/rescue/` 直下、代替の退避先の同じ位置にある、名前の形
     /// (`<UTC timestamp>-<pid>[-<n>]`) に合うディレクトリだけを返す (`inflight/` は見ない。形に合わない名前は無視。中のファイルは読まない)。
@@ -292,6 +307,17 @@ pub struct InflightRecord {
     pub flag: FsPath,
     /// フラグを解析できなかった (未知の版・必須キーの欠落・値の不正)。true のとき意味を持つのは `target`・`pid`・`flag` と読めた `tmp` だけ。
     pub malformed: bool,
+}
+
+/// `state_dir/backup/` の直下に残る、事前バックアップのファイル (`list_orphan_backups` の要素)。
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct OrphanBackup {
+    pub path: FsPath,
+    /// ファイル名の末尾の pid (書いたプロセス。動いていないものだけが列挙される)。
+    pub pid: u32,
+    /// `.bak.tmp` (書込中に中断した、完全でない写し) なら true。`.bak` は完全な写し。
+    pub partial: bool,
+    pub len: u64,
 }
 
 /// 開くジョブが見つけた中断された保存の痕跡 (`JobResult::Complete` / `NewFile` の `interrupted_save`)。
