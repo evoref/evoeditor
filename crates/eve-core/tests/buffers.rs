@@ -269,3 +269,33 @@ fn 保存に失敗したら閉じない() {
     assert!(s.exists(a), "保存に失敗したら閉じない");
     assert_eq!(s.active(), a);
 }
+
+impl Env {
+    /// ステータスバーのファイル名の項目。
+    fn status_name(&mut self) -> String {
+        let f = self.e.frame(self.win).unwrap();
+        let name = &f.status.items[0];
+        assert_eq!(name.kind, eve_view::StatusKind::Path);
+        name.long.spans.iter().map(|s| s.text.as_str()).collect()
+    }
+}
+
+#[test]
+fn ステータスバーは文書が_2_件以上のとき何番目かを出す() {
+    let mut one = Env::new();
+    assert_eq!(one.status_name(), "無題-1", "1 件なら出さない");
+
+    let (mut s, _) = three();
+    assert_eq!(s.status_name(), "無題-1 (1/3)");
+    s.run("buffer.next");
+    assert_eq!(s.status_name(), "無題-1 (2/3)");
+    s.run("buffer.prev");
+    s.run("buffer.prev");
+    assert_eq!(s.status_name(), "無題-1 (3/3)");
+    s.run("buffer.close");
+    assert_eq!(
+        s.status_name(),
+        "無題-1 (1/2)",
+        "閉じると数が減り、最近使った a を表示する"
+    );
+}
