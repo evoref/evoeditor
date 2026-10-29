@@ -17,6 +17,7 @@ mod file;
 mod help;
 mod keymap;
 mod layout;
+mod leftover_offer;
 mod message;
 mod motion;
 mod overlay;

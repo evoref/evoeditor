@@ -84,6 +84,8 @@ pub(super) enum ConfirmAction {
         doc: eve_view::DocumentId,
         revision: eve_view::Revision,
     },
+    /// 置換途中の痕跡の提案 (05 §4.6。選択肢は提案の種類による)。
+    Leftover(Box<crate::Leftover>),
     /// 置換の一覧の確認 (置換して保存 / キャンセル、03 §8.6)。`revision` は ChangeSet を作った時点の文書の Revision。
     UnmappableReplace {
         ask: super::file::UnmappableAsk,
@@ -363,6 +365,7 @@ impl EditorState {
                 doc,
                 revision,
             } => self.choose_swap_recovery(*entry, doc, revision, id),
+            ConfirmAction::Leftover(l) => self.choose_leftover(*l, id),
             ConfirmAction::Unmappable(ask) => self.choose_unmappable(ask, id),
             ConfirmAction::UnmappableReplace {
                 ask,

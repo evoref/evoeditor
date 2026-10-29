@@ -39,6 +39,12 @@ pub trait FileSystem: Send + Sync {
         Ok(Vec::new())
     }
 
+    /// `from` を `to` の名前に変える。**`to` が既に在れば失敗する** (置き換えない。M6e の「退避名を元の名前に戻す」、05 §4.6)。
+    /// 同じボリューム内の移動だけ。実装していない Port は `Unsupported`。
+    fn rename_no_replace(&self, _from: &FsPath, _to: &FsPath) -> Result<(), FsError> {
+        Err(FsError::new(FsErrorKind::Unsupported))
+    }
+
     /// 起動時の走査 (v0.2、05 §4.6): `state_dir/backup/` の直下にある、in-place の事前バックアップ (`*.bak` / `*.bak.tmp`、05 §7.5)
     /// を列挙する。名前の pid のプロセスが動いているもの、`fr119/` などのサブディレクトリ、形に合わない名前は含めない。
     /// どのフラグが記録したものかは見ない (照合は core)。場所が無ければ空。状態ディレクトリを持たない実装は常に空。

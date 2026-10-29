@@ -65,6 +65,8 @@ pub(super) enum Pending {
         revision: eve_view::Revision,
         entry: Box<crate::SwapEntry>,
     },
+    /// 置換途中の痕跡の操作のジョブ (05 §4.6)。
+    Leftover(Box<super::leftover_offer::LeftoverAsk>),
     /// 他のプロセスのスワップを消すジョブ。`notify` なら結果を知らせる (利用者が選んだ破棄)。
     SwapRemove {
         entry: Box<crate::SwapEntry>,
@@ -351,7 +353,8 @@ impl EditorState {
                 | Pending::Swap { .. }
                 | Pending::SwapDiscard { .. }
                 | Pending::SwapRead { .. }
-                | Pending::SwapRemove { .. } => false,
+                | Pending::SwapRemove { .. }
+                | Pending::Leftover(_) => false,
             })
             .map(|(id, _)| *id)
             .collect();
@@ -781,6 +784,7 @@ impl EditorState {
                 entry,
             } => self.finish_swap_read(doc, revision, *entry, r),
             Pending::SwapRemove { entry, notify } => self.finish_swap_remove(&entry, notify, r),
+            Pending::Leftover(ask) => self.finish_leftover(*ask, r),
             Pending::Save {
                 doc,
                 at,

@@ -374,6 +374,10 @@ in_progress = "Saving"
 to_recovery = "Saved to {target}. The original file {path} was not changed"
 unchanged = "No changes (the file was not rewritten)"
 
+[info.leftover]
+deleted = "Deleted the leftover of {path}"
+restored = "Restored {path}"
+
 [info.save_all]
 done = "Saved {saved} documents"
 done_skipped = "Saved {saved} documents. {skipped} untitled or read-only documents were not saved"
@@ -508,6 +512,14 @@ text = "Content written by \"Save to recovery folder\" remains: {dir} ({count} b
 [msg.recovery.unknown_format]
 hint = "Open it with a newer version of evoeditor"
 text = "The backup in {dir} is in a newer format, so it is not read (it was not moved or deleted)"
+
+[msg.leftover.failed]
+hint = "Check the path and permissions"
+text = "Could not clean up {path}: {reason}"
+
+[msg.leftover.tmp_opened]
+hint = "Delete it from the prompt at the next start if you do not need it"
+text = "Opened the temporary file read-only. It is the in-progress content of {path} and may be cut off at the end"
 
 [msg.swap.found]
 hint = "Open the matching file and recovery will be offered. Delete the .swp folder if you do not need it"
@@ -690,6 +702,29 @@ apply = "[A] Apply recovered content"
 discard = "[D] Discard the swap"
 changed = "{path} was changed after the swap was written. Applying does not change the file until you save, but saving overwrites that change"
 sensitive = "This file may contain secrets. Delete the swap when you no longer need it"
+
+[ui.confirm.leftover_both]
+title = "Traces of an interrupted save found"
+message = "Saving {path} stopped halfway: the original file is still at the backup name {bak}, and the new content is left in {tmp}"
+both = "[B] Restore the original and open the new content in another buffer"
+restore = "[R] Restore the original only"
+
+[ui.confirm.leftover_bak]
+title = "Traces of an interrupted save found"
+message = "Saving {path} stopped halfway: the original file is still at the backup name {bak}"
+restore = "[R] Restore the original"
+delete = "[D] Delete the backup name"
+
+[ui.confirm.leftover_stale]
+title = "A backup name was left after saving"
+message = "{path} was saved, but the pre-replace backup name {bak} is left"
+delete = "[D] Delete the backup name"
+
+[ui.confirm.leftover_tmp]
+title = "A temporary file of an interrupted save is left"
+message = "The in-progress content of {path} is left in {tmp}. It may be cut off at the end"
+open = "[O] Open in another buffer to check"
+delete = "[D] Delete the temporary file"
 
 [ui.confirm.save_failed]
 title = "Cannot save"

@@ -1667,6 +1667,25 @@ v0.2 以降の診断 (名前だけを予約し、文言はその版で言語フ�
 | `msg.swap.remove_failed` (v0.2) | 他のプロセスのスワップを消せなかった | スワップを削除できませんでした: {dir} / 手で削除してください |
 | `info.swap.recovered` (v0.2) | 復旧の提案で「適用」を選び、適用した (`Transaction(Origin::Recovery)`。dirty・Undo 可) | 復旧内容を適用しました。保存するまで {path} は変わりません |
 | `info.swap.discarded` (v0.2) | 復旧の提案で「破棄」を選び、スワップを消した | スワップを破棄しました |
+| `msg.leftover.failed` (v0.2) | 置換途中の痕跡の提案への答え (戻す・削除) に失敗した (05 §4.6) | {path} の後始末に失敗しました: {reason} / パスと権限を確認してください |
+| `msg.leftover.tmp_opened` (v0.2) | 一時ファイルを読み取り専用で開いた (末尾が切れている可能性) | 一時ファイルを読み取り専用で開きました。{path} の保存の途中の内容で、末尾が切れている可能性があります / 不要なら次の起動で削除を選んでください |
+| `info.leftover.restored` (v0.2) | 退避名を元の名前に戻した | {path} を元に戻しました |
+| `info.leftover.deleted` (v0.2) | 退避名または一時ファイルを削除した | {path} の後始末として削除しました |
+| `ui.confirm.leftover_both.title` (v0.2) | 置換途中の痕跡の提案: T が無く、退避名と一時ファイルの両方がある (05 §4.6。起動時) | 保存の途中で中断された痕跡があります |
+| `ui.confirm.leftover_both.message` (v0.2) | 同上 | {path} の保存が途中で止まり、元のファイルが退避名 {bak} に移ったまま、新しい内容が {tmp} に残っています |
+| `ui.confirm.leftover_both.both` (v0.2) | 同上 (既定の選択肢。アクセラレータ `B`) | [B] 元に戻して、新しい内容を別バッファで開く |
+| `ui.confirm.leftover_both.restore` (v0.2) | 同上 (アクセラレータ `R`) | [R] 元に戻すだけ |
+| `ui.confirm.leftover_bak.title` (v0.2) | 同上: T が無く、退避名だけがある | 保存の途中で中断された痕跡があります |
+| `ui.confirm.leftover_bak.message` (v0.2) | 同上 | {path} の保存が途中で止まり、元のファイルが退避名 {bak} に移ったままです |
+| `ui.confirm.leftover_bak.restore` (v0.2) | 同上 (既定の選択肢。アクセラレータ `R`) | [R] 元に戻す |
+| `ui.confirm.leftover_bak.delete` (v0.2) | 同上 (削除する選択肢。既定にしない。アクセラレータ `D`) | [D] 退避名を削除 |
+| `ui.confirm.leftover_stale.title` (v0.2) | 同上: T があり、退避名が残っている (置換の成功後の削除漏れ。内容が同一なら確認なしで消すので出ない) | 保存の後に退避名が残っています |
+| `ui.confirm.leftover_stale.message` (v0.2) | 同上 | {path} の保存は終わっていますが、置換前の退避名 {bak} が残っています |
+| `ui.confirm.leftover_stale.delete` (v0.2) | 同上 (アクセラレータ `D`) | [D] 退避名を削除 |
+| `ui.confirm.leftover_tmp.title` (v0.2) | 同上: 一時ファイルがある (T の有無に依らない) | 保存の途中の一時ファイルが残っています |
+| `ui.confirm.leftover_tmp.message` (v0.2) | 同上 | {path} の保存の途中の内容が {tmp} に残っています。末尾が切れている可能性があります |
+| `ui.confirm.leftover_tmp.open` (v0.2) | 同上 (既定の選択肢。アクセラレータ `O`。読み取り専用の追加の文書として開く) | [O] 別バッファで開いて確認 |
+| `ui.confirm.leftover_tmp.delete` (v0.2) | 同上 (削除する選択肢。既定にしない。アクセラレータ `D`) | [D] 一時ファイルを削除 |
 | `ui.confirm.swap_recovery.title` (v0.2) | 復旧の提案 (03 §10.3。起動時、または該当のファイルを開いたとき。複数文書の前の M6 は適用 / 破棄の 2 択) | 未保存の内容が見つかりました |
 | `ui.confirm.swap_recovery.message` (v0.2) | 同上 | {path} の保存されていない内容が、前回の異常終了で残っています ({len} バイト) |
 | `ui.confirm.swap_recovery.apply` (v0.2) | 同上 (既定の選択肢。アクセラレータ `A`) | [A] 復旧内容を適用 |

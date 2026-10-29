@@ -372,6 +372,10 @@ in_progress = "保存中です"
 to_recovery = "退避先 {target} に保存しました。元のファイル {path} は変更していません"
 unchanged = "変更はありません (ファイルは書き換えていません)"
 
+[info.leftover]
+deleted = "{path} の後始末として削除しました"
+restored = "{path} を元に戻しました"
+
 [info.save_all]
 done = "{saved} 件の文書を保存しました"
 done_skipped = "{saved} 件の文書を保存しました。名前の無い・読み取り専用の {skipped} 件は保存していません"
@@ -506,6 +510,14 @@ text = "「退避先に保存」で書いた内容が残っています: {dir} (
 [msg.recovery.unknown_format]
 hint = "新しい版の evoeditor で開いてください"
 text = "{dir} の退避は新しい版の形式なので読みません (移動も削除もしていません)"
+
+[msg.leftover.failed]
+hint = "パスと権限を確認してください"
+text = "{path} の後始末に失敗しました: {reason}"
+
+[msg.leftover.tmp_opened]
+hint = "不要なら次の起動で削除を選んでください"
+text = "一時ファイルを読み取り専用で開きました。{path} の保存の途中の内容で、末尾が切れている可能性があります"
 
 [msg.swap.found]
 hint = "該当のファイルを開くと復旧を提案します。要らなければ .swp フォルダを削除してください"
@@ -688,6 +700,29 @@ apply = "[A] 復旧内容を適用"
 discard = "[D] スワップを破棄"
 changed = "{path} は、スワップを書いた後で変更されています。適用しても保存するまでファイルは変わりませんが、保存するとその変更を上書きします"
 sensitive = "秘密を含み得るファイルです。要らなくなったら、スワップを削除してください"
+
+[ui.confirm.leftover_both]
+title = "保存の途中で中断された痕跡があります"
+message = "{path} の保存が途中で止まり、元のファイルが退避名 {bak} に移ったまま、新しい内容が {tmp} に残っています"
+both = "[B] 元に戻して、新しい内容を別バッファで開く"
+restore = "[R] 元に戻すだけ"
+
+[ui.confirm.leftover_bak]
+title = "保存の途中で中断された痕跡があります"
+message = "{path} の保存が途中で止まり、元のファイルが退避名 {bak} に移ったままです"
+restore = "[R] 元に戻す"
+delete = "[D] 退避名を削除"
+
+[ui.confirm.leftover_stale]
+title = "保存の後に退避名が残っています"
+message = "{path} の保存は終わっていますが、置換前の退避名 {bak} が残っています"
+delete = "[D] 退避名を削除"
+
+[ui.confirm.leftover_tmp]
+title = "保存の途中の一時ファイルが残っています"
+message = "{path} の保存の途中の内容が {tmp} に残っています。末尾が切れている可能性があります"
+open = "[O] 別バッファで開いて確認"
+delete = "[D] 一時ファイルを削除"
 
 [ui.confirm.save_failed]
 title = "保存できません"
