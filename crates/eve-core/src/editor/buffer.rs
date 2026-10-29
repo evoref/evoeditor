@@ -7,10 +7,35 @@ use eve_view::DocumentId;
 use super::command::{
     CommandCtx, CommandKind, CommandRegistry, CommandResult, CommandSpec, Permission, RejectReason,
 };
+use super::file::Pending;
 use super::overlay::Continuation;
 use super::state::EditorState;
 
 impl EditorState {
+    /// 表示中の文書の、開いた順での番号 (1 始まり) と文書の数。文書が 1 件なら `None`
+    /// (ステータスバーの `(2/3)`、03 §9.8)。置き換えの読込中の文書は数えない。
+    pub(super) fn buffer_position(&self) -> Option<(usize, usize)> {
+        let active = self.active_document()?;
+        let ids: Vec<DocumentId> = self
+            .documents
+            .keys()
+            .copied()
+            .filter(|d| *d == active || !self.is_loading_replacement(*d))
+            .collect();
+        let pos = ids.iter().position(|d| *d == active)?;
+        (ids.len() >= 2).then_some((pos + 1, ids.len()))
+    }
+
+    /// 置き換えで読込中の文書か (まだ表示されておらず、読込が終わるまで集合の外のものとして扱う)。
+    fn is_loading_replacement(&self, doc: DocumentId) -> bool {
+        self.pending.values().any(|p| {
+            matches!(
+                p,
+                Pending::Open { doc: d, replace: Some(_), .. } if *d == doc
+            )
+        })
+    }
+
     /// 開いた順で `delta` 個先の文書へ切り替える (端で循環する)。文書が 1 件なら何もしない。
     fn switch_buffer(&mut self, delta: isize) -> CommandResult {
         // 置き換えの読込中は、読込中の文書がまだ集合に入っている。切り替えの対象にしない

@@ -74,6 +74,11 @@ pub(super) fn status_model(
         Some(n) => n,
         None => render(state, "status.untitled", &[("n", "1")]),
     };
+    // 文書が 2 件以上のときは、ファイル名の後ろに何番目かを出す (03 §9.8)
+    let name = match state.buffer_position() {
+        Some((n, total)) => format!("{name} ({n}/{total})"),
+        None => name,
+    };
     items.push(item(
         StatusKind::Path,
         &name,
