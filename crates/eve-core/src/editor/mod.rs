@@ -21,6 +21,7 @@ mod motion;
 mod overlay;
 mod palette;
 mod query;
+mod save_all;
 mod search_bar;
 mod search_state;
 mod snapshot;
@@ -67,6 +68,7 @@ impl Editor {
         motion::register(&mut registry);
         file::register(&mut registry);
         buffer::register(&mut registry);
+        save_all::register(&mut registry);
         overlay::register(&mut registry);
         let mut state = EditorState::new(caps, ports.jobs.clone(), ports.paths.clone());
         state.set_palette_entries(

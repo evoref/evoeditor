@@ -122,6 +122,10 @@ title = "次の文書"
 description = "前の文書へ切り替えます。"
 title = "前の文書"
 
+[cmd.file.save_all]
+description = "未保存の変更がある文書をすべて保存します。名前の無い文書と読み取り専用の文書は飛ばします。"
+title = "すべて保存"
+
 [cmd.file.new]
 description = "無題の新しい文書を作ります。"
 title = "新規作成"
@@ -339,6 +343,11 @@ in_place = "{path} を直接上書きで保存しました"
 in_progress = "保存中です"
 to_recovery = "退避先 {target} に保存しました。元のファイル {path} は変更していません"
 unchanged = "変更はありません (ファイルは書き換えていません)"
+
+[info.save_all]
+done = "{saved} 件の文書を保存しました"
+done_skipped = "{saved} 件の文書を保存しました。名前の無い・読み取り専用の {skipped} 件は保存していません"
+none = "保存する文書はありません"
 
 [info.search]
 replace_empty_query = "検索する文字列を入力してください"
@@ -852,6 +861,12 @@ title = "未保存の変更"
 message = "{path} には保存されていない変更があります"
 save = "[S] 保存して閉じる"
 discard = "[D] 破棄して閉じる"
+
+[ui.confirm.save_all_failed]
+title = "保存できなかった文書"
+message = "{count} 件の文書を保存できませんでした。個別に保存して確認してください"
+abort = "[C] 閉じる"
+needs_confirm = "確認が必要です"
 
 [ui.confirm.unsaved_reopen]
 title = "未保存の変更"
