@@ -26,6 +26,8 @@ pub(super) enum Continuation {
     Quit,
     /// 文字コードを指定して開き直す (`file.reopen_with_encoding`、未保存の確認の後)。
     Reopen(eve_encoding::Encoding),
+    /// 文書を閉じる (`buffer.close`、03 §9.2 の閉じる手順と共通)。
+    Close(DocumentId),
 }
 
 /// 終了の連鎖 (`app.quit` で dirty な文書が 1 件以上、03 §9.8)。保存の連鎖 (`SaveChain`) の外に 1 つだけ持つ。
@@ -334,6 +336,11 @@ impl EditorState {
                 0 => self.quit_save_head(),
                 _ => self.quit_discard_head(),
             },
+            // 保存の後続は保存する文書に属する (アクティブ文書とは限らない、03 §9.8)
+            ConfirmAction::Unsaved(cont @ Continuation::Close(doc)) => match choice {
+                0 => self.save_doc_then(doc, cont),
+                _ => self.run_continuation(cont),
+            },
             ConfirmAction::Unsaved(cont) => match choice {
                 0 => self.save_then(cont),
                 _ => self.run_continuation(cont),
@@ -363,6 +370,7 @@ impl EditorState {
             Continuation::Open(path) => self.open_path_forced(&path, OpenOptions::default()),
             Continuation::New => self.new_untitled_forced(),
             Continuation::Reopen(enc) => self.start_reopen(enc),
+            Continuation::Close(doc) => self.close_buffer(doc),
             Continuation::Quit => {
                 self.push_effect(Effect::Quit {
                     code: 0,

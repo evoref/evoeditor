@@ -1366,6 +1366,7 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 | パレット (実行できない理由) | `ui.palette.reason.unavailable` | 今の状態では使えません | — |
 | パレット (0 件。`List.no_match`) | `ui.palette.no_match` | 一致するコマンドはありません | — |
 | パレットの行のカテゴリ (CommandId の名前空間) | `ui.palette.category.app` | アプリ | — |
+| パレットの行のカテゴリ (CommandId の名前空間) | `ui.palette.category.buffer` | バッファ | — |
 | パレットの行のカテゴリ (CommandId の名前空間) | `ui.palette.category.clipboard` | クリップボード | — |
 | パレットの行のカテゴリ (CommandId の名前空間) | `ui.palette.category.cursor` | 移動 | — |
 | パレットの行のカテゴリ (CommandId の名前空間) | `ui.palette.category.edit` | 編集 | — |
@@ -1480,6 +1481,10 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 | `ui.confirm.unsaved.chain` | v0.2 の終了の連鎖 (03 §9.8) で、dirty な文書が 2 件以上のときの本文。何件目か (`{index}` / `{total}`) を前置する | ({index}/{total}) {path} には保存されていない変更があります |
 | `ui.confirm.unsaved.save` | 同上 (既定の選択肢。アクセラレータ `S`) | [S] 保存して終了 |
 | `ui.confirm.unsaved.discard` | 同上 (破棄する選択肢。既定にしない。アクセラレータ `D`) | [D] 破棄して終了 |
+| `ui.confirm.unsaved_close.title` | 未保存の文書を閉じる (`buffer.close`、03 §9.2 の閉じる手順 (d)。v0.2) | 未保存の変更 |
+| `ui.confirm.unsaved_close.message` | 同上 | {path} には保存されていない変更があります |
+| `ui.confirm.unsaved_close.save` | 同上 (既定の選択肢。アクセラレータ `S`) | [S] 保存して閉じる |
+| `ui.confirm.unsaved_close.discard` | 同上 (破棄する選択肢。既定にしない。アクセラレータ `D`) | [D] 破棄して閉じる |
 | `ui.confirm.unsaved_replace.title` | 未保存の文書を、別のファイルを開く・新規作成で置き換える (v0.1 は単一文書、§7.2) | 未保存の変更 |
 | `ui.confirm.unsaved_replace.message` | 同上 | {path} には保存されていない変更があります |
 | `ui.confirm.unsaved_replace.save` | 同上 (既定の選択肢。アクセラレータ `S`) | [S] 保存してから開く |
