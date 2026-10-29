@@ -12,7 +12,7 @@ use std::sync::Arc;
 
 use eve_core::{
     CancelToken, Clock, FsPath, InterruptedSave, JobKind, JobPorts, JobRequest, JobResult,
-    OpenOptions, SaveMethod, Tick, run_job,
+    Leftover, LeftoverKind, LeftoverOp, OpenOptions, SaveMethod, Tick, run_job,
 };
 use eve_platform::dirs::{Dirs, WinPaths};
 use eve_platform::fs::WinFs;
@@ -424,4 +424,122 @@ fn 中断の後の保存の成功で前の記録は消える() {
     assert_eq!(e.flags(), 0);
     assert!(e.open_report("a.txt").0.is_none(), "もう案内しない");
     let _ = Path::new("");
+}
+
+// ---- 起動時の走査と提案の適用 (M6e、05 §4.6「起動時の提案の規則」、03 §10.3 手順 1b) ----
+
+impl Env {
+    fn run(&self, kind: JobKind) -> JobResult {
+        let ports = JobPorts {
+            fs: Arc::new(self.fs()),
+            clock: Arc::new(FixedClock),
+            paths: Arc::new(WinPaths::new(
+                Dirs::resolve(&|_| None),
+                PathCtx {
+                    cwd: self.root.to_string_lossy().into_owned(),
+                    home: None,
+                },
+            )),
+        };
+        let req = JobRequest {
+            id: JobId(1),
+            doc: None,
+            base: Revision(0),
+            kind,
+        };
+        let mut out = Vec::new();
+        run_job(&req, &ports, &CancelToken::new(), &mut |r| out.push(r));
+        out.pop().expect("結果がある")
+    }
+
+    /// 起動時の走査 (`RecoveryScan`) が作る置換途中の痕跡の提案。
+    fn scan(&self) -> Vec<Leftover> {
+        match self.run(JobKind::RecoveryScan) {
+            JobResult::RecoveryFound { leftovers, .. } => leftovers,
+            other => panic!("{other:?}"),
+        }
+    }
+
+    fn act(&self, l: &Leftover, op: LeftoverOp) -> Result<(), String> {
+        match self.run(JobKind::LeftoverAct {
+            leftover: Box::new(l.clone()),
+            op,
+        }) {
+            JobResult::LeftoverDone { .. } => Ok(()),
+            JobResult::Failed { err, .. } => Err(format!("{err:?}")),
+            other => panic!("{other:?}"),
+        }
+    }
+}
+
+#[test]
+fn 置換の途中の強制終了は_走査で_bak_と_tmp_の両方の提案になり_戻して_tmp_を片付けられる() {
+    let e = Env::new("scan-both");
+    fs::write(e.file("a.txt"), ORIG).unwrap();
+    killed(&e.save("a.txt", "atomic", NEW, Some("kill_after_replace_begin")));
+    assert!(!e.file("a.txt").exists());
+    let l = e.scan();
+    assert_eq!(l.len(), 1, "{l:?}");
+    assert_eq!(l[0].kind, LeftoverKind::BakAndTmp);
+    assert_eq!(l[0].target.as_path(), e.file("a.txt"));
+    // 戻す: T は元の内容に戻る。tmp が残るのでフラグも残り、次の走査では tmp の提案になる
+    e.act(&l[0], LeftoverOp::Restore).expect("戻せる");
+    assert_eq!(fs::read(e.file("a.txt")).unwrap(), ORIG);
+    assert_eq!(e.flags(), 1);
+    let l2 = e.scan();
+    assert_eq!(l2.len(), 1, "{l2:?}");
+    assert_eq!(l2[0].kind, LeftoverKind::Tmp);
+    // tmp を消すと痕跡もフラグも無くなる
+    e.act(&l2[0], LeftoverOp::DeleteTmp).expect("消せる");
+    assert_eq!(e.flags(), 0);
+    assert!(e.names().iter().all(|n| n == "a.txt"), "{:?}", e.names());
+    assert!(e.scan().is_empty());
+}
+
+#[test]
+fn 戻す先に_t_が作られていたら置き換えずに失敗し_退避名を残す() {
+    let e = Env::new("scan-conflict");
+    fs::write(e.file("a.txt"), ORIG).unwrap();
+    killed(&e.save("a.txt", "atomic", NEW, Some("kill_after_replace_begin")));
+    let l = e.scan();
+    fs::write(e.file("a.txt"), b"created meanwhile").unwrap();
+    assert!(e.act(&l[0], LeftoverOp::Restore).is_err());
+    assert_eq!(fs::read(e.file("a.txt")).unwrap(), b"created meanwhile");
+    assert!(
+        l[0].bak.as_ref().is_some_and(|b| b.as_path().exists()),
+        "退避名は残る"
+    );
+    assert_eq!(e.flags(), 1);
+}
+
+#[test]
+fn 置換の前の強制終了は_走査で_tmp_の提案で_t_は無傷() {
+    for hook in ["kill_after_tmp_write", "kill_before_rename"] {
+        let e = Env::new("scan-tmp");
+        fs::write(e.file("a.txt"), ORIG).unwrap();
+        killed(&e.save("a.txt", "atomic", NEW, Some(hook)));
+        let l = e.scan();
+        assert_eq!(l.len(), 1, "{hook}: {l:?}");
+        assert_eq!(l[0].kind, LeftoverKind::Tmp, "{hook}");
+        assert!(l[0].bak.is_none() && l[0].tmp.is_some());
+        assert_eq!(fs::read(e.file("a.txt")).unwrap(), ORIG);
+    }
+}
+
+#[test]
+fn 新規ファイルの保存の強制終了も_tmp_の提案になる() {
+    let e = Env::new("scan-new");
+    killed(&e.save("n.txt", "atomic", NEW, Some("kill_before_rename")));
+    let l = e.scan();
+    assert_eq!(l.len(), 1, "{l:?}");
+    assert_eq!(l[0].kind, LeftoverKind::Tmp);
+    assert!(!e.file("n.txt").exists());
+}
+
+#[test]
+fn 保存が成功していれば走査は何も提案しない() {
+    let e = Env::new("scan-clean");
+    fs::write(e.file("a.txt"), ORIG).unwrap();
+    assert_eq!(e.save("a.txt", "atomic", NEW, None).code, Some(0));
+    assert!(e.scan().is_empty());
 }

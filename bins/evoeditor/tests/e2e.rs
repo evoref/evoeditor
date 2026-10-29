@@ -1532,6 +1532,85 @@ fn 強制終了してもスワップから復旧できる_ファイル() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+// 置換途中の痕跡 (M6e、05 §4.6): 保存の途中 (置換の直前) で強制終了すると一時ファイルが残り、次の起動で提案が出る。
+// 「別バッファで開く」は読み取り専用で開き、次の起動の「削除」で一時ファイルもフラグも無くなる。
+// 実行: cargo test -p evoeditor --features test-hooks --test e2e
+#[cfg(feature = "test-hooks")]
+#[test]
+fn 保存の途中の強制終了の後の起動で一時ファイルの提案が出て_開いて確認し_削除できる() {
+    let dir = temp_dir("leftover");
+    let file = dir.join("memo.txt");
+    std::fs::write(&file, "original\n").unwrap();
+    let mut s1 = Session::start_with(
+        &[file.to_str().unwrap()],
+        None,
+        &[("EVE_TEST_HOOK", "kill_before_rename")],
+    );
+    s1.wait_for("開く", |t| t.contains("original"));
+    type_slowly(&s1, "EDIT");
+    s1.send(CTRL_S);
+    assert!(
+        s1.exit_within(Duration::from_secs(10)).is_some(),
+        "置換の直前で強制終了する"
+    );
+    let state = s1.state.clone();
+    let tmps = |dir: &Path| -> Vec<PathBuf> {
+        std::fs::read_dir(dir)
+            .unwrap()
+            .flatten()
+            .map(|e| e.path())
+            .filter(|p| {
+                p.file_name()
+                    .and_then(|n| n.to_str())
+                    .is_some_and(|n| n.starts_with(".memo.txt.eve-tmp-"))
+            })
+            .collect()
+    };
+    assert_eq!(tmps(&dir).len(), 1, "一時ファイルが残る");
+    assert_eq!(std::fs::read_to_string(&file).unwrap(), "original\n");
+
+    // 次の起動: 提案が出る。「別バッファで開く」で中身が見え、読み取り専用で、元のファイルは変わらない
+    let mut s2 = Session::start_in(&[], Some(state.clone()));
+    s2.wait_for("提案", |t| {
+        t.contains("保存の途中の一時ファイルが残っています")
+    });
+    s2.send(b"o");
+    s2.wait_for("一時ファイルの内容", |t| {
+        t.contains("EDIToriginal")
+    });
+    type_slowly(&s2, "zzz");
+    thread::sleep(Duration::from_millis(300));
+    assert!(
+        !s2.screen().contains("zzz"),
+        "読み取り専用なので編集できない"
+    );
+    s2.send(CTRL_Q);
+    assert_eq!(s2.wait_exit(), 0);
+    assert_eq!(tmps(&dir).len(), 1, "開くだけでは消さない");
+
+    // その次の起動: 削除を選ぶと一時ファイルも保存中フラグも無くなる
+    let mut s3 = Session::start_in(&[], Some(state.clone()));
+    s3.wait_for("提案", |t| {
+        t.contains("保存の途中の一時ファイルが残っています")
+    });
+    s3.send(b"d");
+    s3.wait_for("削除した", |t| t.contains("後始末として削除しました"));
+    s3.send(CTRL_Q);
+    assert_eq!(s3.wait_exit(), 0);
+    assert!(tmps(&dir).is_empty(), "一時ファイルを消した");
+    let inflight = state.join("recovery").join("inflight");
+    let flags = std::fs::read_dir(&inflight)
+        .map(|rd| {
+            rd.flatten()
+                .flat_map(|d| std::fs::read_dir(d.path()).into_iter().flatten().flatten())
+                .count()
+        })
+        .unwrap_or(0);
+    assert_eq!(flags, 0, "保存中フラグも消える");
+    let _ = std::fs::remove_dir_all(&state);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 // 正常終了ではスワップを残さない (破棄して終了)。
 #[test]
 fn 正常終了ではスワップを消す() {
