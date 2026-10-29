@@ -658,7 +658,6 @@ table = "テーブル"
 [ui.confirm]
 external_deleted = "{path} は削除されています — `[K] 新規として保持 (保存で作り直す)` ★ / `[C] 閉じる`"
 external_modified = "{path} は他のプログラムで変更されています — `[L] 再読込 (自分の変更を破棄)` / `[I] 無視 (保存時に再確認)` ★"
-quit_saving = "{path} の保存が終わっていません — `[W] 待つ` ★ / `[Q] 保存を中止して終了 (保存していない内容は退避します)`"
 save_failed_closed = "保存できませんでした: (`msg.save.*` の text) — {path} は既に閉じています。`[R] 退避先に保存` ★ / `[D] 破棄`"
 
 nav_hint = "Tab / ←→ で選択、Enter で決定"
@@ -962,6 +961,12 @@ title = "未保存の変更"
 message = "{path} には保存されていない変更があります"
 save = "[S] 保存して閉じる"
 discard = "[D] 破棄して閉じる"
+
+[ui.confirm.quit_saving]
+title = "保存が終わっていません"
+message = "{path} の保存が終わっていません"
+wait = "[W] 待つ"
+abort = "[Q] 保存を中止して終了 (保存していない内容は退避します)"
 
 [ui.confirm.save_all_failed]
 title = "保存できなかった文書"

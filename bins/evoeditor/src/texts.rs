@@ -71,11 +71,39 @@ pub fn panic_report(url: &str) -> Bi {
 
 /// 終了時の行 (`Effect::Quit.stderr` と Host の起動失敗) のうち、定数表にあるもの。無ければ `None`。
 pub fn stderr_line(key: &str, args: &[(String, String)]) -> Option<Bi> {
-    let reason = args
-        .iter()
-        .find(|(k, _)| k == "reason")
-        .map_or("", |(_, v)| v.as_str());
+    let arg = |name: &str| {
+        args.iter()
+            .find(|(k, _)| k == name)
+            .map_or("", |(_, v)| v.as_str())
+    };
+    let (reason, path, backup) = (arg("reason"), arg("path"), arg("backup"));
     Some(match key {
+        "stderr.quit_abort.save_failed" => Bi::new(
+            format!("Saving {path} failed before exit: {reason}"),
+            format!("終了の前に {path} の保存が失敗しました: {reason}"),
+        ),
+        "stderr.quit_abort.moved_to_backup" => Bi::new(
+            format!("Saving {path} failed before exit. The original file was moved to: {backup}"),
+            format!(
+                "終了の前に {path} の保存が失敗し、元のファイルは {backup} に移っています。名前を元に戻してください"
+            ),
+        ),
+        "stderr.quit_abort.in_place_failed" => Bi::new(
+            format!(
+                "Overwriting {path} failed before exit. The file may be damaged. Backup: {backup}"
+            ),
+            format!(
+                "終了の前に {path} の直接上書きが失敗しました。ファイルが壊れている可能性があります。書き込む前の内容: {backup}"
+            ),
+        ),
+        "stderr.quit_abort.in_place_failed_no_backup" => Bi::new(
+            format!(
+                "Overwriting {path} failed before exit. The file may be damaged, and there is no backup."
+            ),
+            format!(
+                "終了の前に {path} の直接上書きが失敗しました。ファイルが壊れている可能性があり、バックアップはありません"
+            ),
+        ),
         "stderr.not_a_terminal" => Bi::new(
             "evoeditor must be run in a terminal.",
             "evoeditor は端末の中で起動してください。",

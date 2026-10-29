@@ -80,6 +80,8 @@ pub(super) enum ConfirmAction {
         doc: eve_view::DocumentId,
         revision: eve_view::Revision,
     },
+    /// 保存中の終了の確認 (待つ / 保存を中止して終了、03 §9.7 (f))。
+    QuitSaving,
     /// 置換途中の痕跡の提案 (05 §4.6。選択肢は提案の種類による)。
     Leftover(Box<crate::Leftover>),
     /// 置換の一覧の確認 (置換して保存 / キャンセル、03 §8.6)。`revision` は ChangeSet を作った時点の文書の Revision。
@@ -362,6 +364,7 @@ impl EditorState {
                 revision,
             } => self.choose_swap_recovery(*entry, doc, revision, id),
             ConfirmAction::Leftover(l) => self.choose_leftover(*l, id),
+            ConfirmAction::QuitSaving => self.choose_quit_saving(id),
             ConfirmAction::Unmappable(ask) => self.choose_unmappable(ask, id),
             ConfirmAction::UnmappableReplace {
                 ask,
@@ -389,6 +392,15 @@ impl EditorState {
 
     /// 終了する。dirty な文書があれば、全部について確認する終了の連鎖に入る (03 §9.8)。
     pub fn request_quit(&mut self) -> CommandResult {
+        // 保存ジョブの実行中は、その完了を待つ (03 §9.7 (f))
+        if let Some(r) = self.quit_while_saving(true) {
+            return r;
+        }
+        self.begin_quit()
+    }
+
+    /// 保存中の待ちを済ませた後の終了の入口: dirty な全文書の確認 (終了の連鎖) へ進む。
+    fn begin_quit(&mut self) -> CommandResult {
         let remaining = self.quit_targets(&[]);
         self.quit_chain = Some(QuitChain {
             remaining,
@@ -421,7 +433,10 @@ impl EditorState {
     /// 確認の間に変わった文書も無ければ終了する。
     pub(super) fn advance_quit_chain(&mut self) -> CommandResult {
         let Some(mut chain) = self.quit_chain.take() else {
-            return self.request_quit();
+            if let Some(r) = self.quit_while_saving(false) {
+                return r;
+            }
+            return self.begin_quit();
         };
         // 保存して clean になった・閉じた文書は済んだものとして外す
         while let Some(&head) = chain.remaining.first() {

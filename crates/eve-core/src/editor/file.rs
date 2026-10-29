@@ -760,6 +760,16 @@ impl EditorState {
                 fmt,
             } => {
                 let saved = matches!(r, JobResult::Saved { .. });
+                // 「保存を中止して終了」の最中: 成功は採用し、失敗は終了時の stderr に残す。確認も後続も出さない
+                if self.quit_abort.is_some() {
+                    if !self.quit_abort_save_result(&path, &r) {
+                        self.finish_save(doc, at, revision, &path, expected, fmt, None, r);
+                    }
+                    self.release_closing_snapshot(doc, &path, saved);
+                    self.quit_abort_check();
+                    self.mark_dirty_render();
+                    return;
+                }
                 // 全保存の 1 件の失敗は、確認を出さず記録するだけ (03 §9.8)
                 let in_batch = self.save_all_failed(job, doc, &path, &r);
                 if in_batch != Some(true) {
