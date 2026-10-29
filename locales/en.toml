@@ -176,6 +176,10 @@ title = "Find"
 description = "Go to the previous match."
 title = "Find Previous"
 
+[cmd.search.replace]
+description = "Replace the current match with the replacement text and move to the next one."
+title = "Replace"
+
 [cmd.search.replace_all]
 description = "Replace every match."
 title = "Replace All"

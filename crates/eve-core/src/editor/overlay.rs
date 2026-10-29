@@ -859,6 +859,10 @@ fn cmd_search_replace_open(ctx: &mut CommandCtx<'_>) -> CommandResult {
     ctx.state.search_replace_open()
 }
 
+fn cmd_search_replace(ctx: &mut CommandCtx<'_>) -> CommandResult {
+    ctx.state.search_replace()
+}
+
 fn cmd_search_replace_all(ctx: &mut CommandCtx<'_>) -> CommandResult {
     ctx.state.search_replace_all()
 }
@@ -973,6 +977,16 @@ pub(super) fn register(r: &mut CommandRegistry) {
             Permission::Ui,
             "!doc.read_only",
             cmd_search_replace_open,
+        )
+        .expect("カタログの when 句は構文が正しい"),
+    );
+    r.register(
+        CommandSpec::new(
+            "search.replace",
+            CommandKind::Edit,
+            Permission::Propose,
+            "search.replace_active && !doc.read_only",
+            cmd_search_replace,
         )
         .expect("カタログの when 句は構文が正しい"),
     );

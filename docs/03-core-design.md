@@ -1572,6 +1572,12 @@ pub struct Match { range: ByteRange, captures: Option<SmallVec<[Option<ByteRange
 
 **v0.1 はリテラルの「すべて置換」だけを実装する** (確定 (ユーザー回答)。FR-403 の v0.1 の範囲)。`search.replace_open` (置換欄を開く) と `search.replace_all` を実装し、1 件置換 `search.replace`・正規表現の置換文字列の展開・選択範囲内 (`SearchQuery.scope`) は v0.2 で、CommandId と型を予約する。手順は下表で固定し、表の「1 件置換」「選択範囲内」と正規表現の行は v0.2 の規則である。
 
+**v0.2 の追加** (M9a。下の v0.1 の手順に重ねる):
+
+- **すべて置換の問い合わせ**: 検索バーの現在の `SearchQuery` をそのまま使う (大小区別・正規表現・単語単位。下の手順 2 の「`kind = Literal`・`whole_word = false`」は v0.1 の定数で、v0.2 は検索バーのトグルに従う)。選択範囲内 (`scope`) は未実装。
+- **置換文字列**: リテラルでは従来どおり展開しない。**正規表現では** `$1` / `${name}` を一致ごとに展開し (`regex` crate の構文。`$$` は `$`)、`\n` は文書の既定の改行 (`default_eol`) に、`\\` は `\` 1 つに直す (ほかの `\` はそのまま)。存在しないグループは空文字列になる。
+- **1 件置換 (`search.replace`、置換欄の `Enter`)**: when は `search.replace_active && !doc.read_only`。対象は、**選択範囲がちょうど 1 つの一致ならその一致** (`search.next` で確定した一致)、そうでなければ **入力で強調している現在の一致**。その範囲を置換文字列 (正規表現では展開後) に置き換える 1 つの Transaction (`Origin::Command("search.replace")`、`UndoGroupHint::Break` で **置換ごとに別の Undo 単位**) として適用し、カーソルを置換の後ろに置いて、そこから先の最初の一致を強調する (終端で折り返さない。起点は置換の後ろ)。対象が無ければ `info.search.replace_no_match`、検索語が空なら `info.search.replace_empty_query`。検索欄の `Enter` (`search.next`) は変わらない。
+
 **v0.1 のすべて置換の手順**:
 
 1. **置換欄**: `search.replace_open` (when `!doc.read_only`) は検索バーを置換欄つきで開く (開いていれば置換欄を足す)。フォーカスは検索語が空なら検索欄、空でなければ置換欄に置く。置換欄は検索欄と同じ 1 行の入力欄 (`SearchBarModel.replace`、02 §8.2。改行は入力できず、貼り付けは最初の行だけ、04 §6.6)。検索語の入力・大小区別の切替・件数の表示は置換欄があっても検索と同じ (§12.1 / §12.2)。読み取り専用の文書では置換欄を開かず `msg.edit.read_only` を出す。開いた後に文書が読み取り専用になったときは、`search.replace_all` の when が偽になり実行できない (パレットでは淡色と理由)。

@@ -13,7 +13,10 @@ use crate::cancel::CancelToken;
 use crate::document::{Origin, Transaction, UndoGroupHint};
 use crate::editor::command::CommandResult;
 use crate::jobs::{JobKind, JobResult};
-use crate::search::{Case, QueryError, SearchQuery, build_replace_all, scan_lines};
+use crate::search::{
+    Case, QueryError, SearchQuery, build_replace_all, replacement_for, scan_lines,
+    unescape_replacement,
+};
 use crate::time::Tick;
 
 use super::file::Pending;
@@ -459,6 +462,12 @@ impl EditorState {
             self.notify_read_only();
             return CommandResult::Done;
         }
+        // 正規表現では置換文字列の `\n` を文書の既定の改行に直す (`$1` の展開は一致ごと、03 §12.5)
+        let replacement = if query.is_regex() {
+            unescape_replacement(&replacement, doc.format.default_eol.as_str())
+        } else {
+            replacement
+        };
         if query.matcher().is_none() {
             self.show_message(MessageLevel::Info, "info.search.replace_empty_query", &[]);
             return CommandResult::Done;
@@ -496,6 +505,103 @@ impl EditorState {
                 revision,
             },
         );
+        CommandResult::Done
+    }
+
+    /// 1 件置換の対象の一致: 選択範囲がちょうど一致ならそれ (`search.next` で確定した一致)、
+    /// そうでなければ入力で強調している現在の一致。
+    fn replace_target(
+        &self,
+        doc_id: eve_view::DocumentId,
+        query: &SearchQuery,
+        replacement: &str,
+    ) -> Option<(ByteRange, String)> {
+        let doc = self.documents.get(&doc_id)?;
+        let text = doc.text();
+        let sel = self
+            .first_window()
+            .and_then(|w| self.window_view(w))
+            .and_then(|v| self.view(v))
+            .map(|v| *v.selection.primary())?;
+        let selected = ByteRange::new(sel.start(), sel.end());
+        if !selected.is_empty()
+            && let Some(s) = replacement_for(text, query, selected, replacement)
+        {
+            return Some((selected, s));
+        }
+        let cur = self.search_bar.as_ref()?.current?;
+        replacement_for(text, query, cur, replacement).map(|s| (cur, s))
+    }
+
+    /// `search.replace` (03 §12.5): 現在の一致を置換欄の文字列に置き換え、次の一致を強調する。置換ごとに別の Undo 単位。
+    /// 正規表現では `$1` / `${name}` を展開し、`\n` を既定の改行にする。
+    pub fn search_replace(&mut self) -> CommandResult {
+        let Some(bar) = &self.search_bar else {
+            return CommandResult::Rejected(super::command::RejectReason::NotAvailable);
+        };
+        let Some((replacement, _)) = bar.replace.clone() else {
+            return CommandResult::Rejected(super::command::RejectReason::NotAvailable);
+        };
+        let query = bar.query();
+        let Some(doc_id) = self.active_document() else {
+            return CommandResult::Done;
+        };
+        let Some(doc) = self.documents.get(&doc_id) else {
+            return CommandResult::Done;
+        };
+        if !doc.is_editable() {
+            self.notify_read_only();
+            return CommandResult::Done;
+        }
+        if query.matcher().is_none() {
+            self.show_message(MessageLevel::Info, "info.search.replace_empty_query", &[]);
+            return CommandResult::Done;
+        }
+        let replacement = if query.is_regex() {
+            unescape_replacement(&replacement, doc.format.default_eol.as_str())
+        } else {
+            replacement
+        };
+        let Some((range, insert)) = self.replace_target(doc_id, &query, &replacement) else {
+            self.show_message(MessageLevel::Info, "info.search.replace_no_match", &[]);
+            return CommandResult::Done;
+        };
+        let Some(doc) = self.documents.get(&doc_id) else {
+            return CommandResult::Done;
+        };
+        let after = ByteOff(range.start.0 + insert.len());
+        let Ok(changes) = eve_text::ChangeSet::from_sorted_edits(
+            doc.text(),
+            [eve_text::Edit {
+                range,
+                insert: std::sync::Arc::from(insert),
+            }],
+        ) else {
+            return CommandResult::Done;
+        };
+        let view = self.first_window().and_then(|w| self.window_view(w));
+        let sel = view.and_then(|v| self.views.get(&v).map(|v| v.selection.clone()));
+        let mut tx = Transaction::new(
+            changes,
+            Origin::Command(eve_view::CommandId::new("search.replace")),
+            self.now,
+        )
+        .with_undo_group(UndoGroupHint::Break)
+        .with_selections(sel, None);
+        if let Some(v) = view {
+            tx = tx.with_view(v);
+        }
+        if self.apply_transaction(doc_id, tx).is_err() {
+            return CommandResult::Done;
+        }
+        // 次の一致は、置換した文字列の後ろから探す。カーソルも置換の後ろに置く
+        if let Some(v) = view {
+            self.set_selection(v, Selection::point(after));
+        }
+        if let Some(bar) = &mut self.search_bar {
+            bar.anchor = after;
+        }
+        self.bar_changed();
         CommandResult::Done
     }
 

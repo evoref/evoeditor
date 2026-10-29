@@ -7,6 +7,14 @@ use super::keymap::{Keymap, Layer};
 /// 既定のキーマップを作る。
 pub(super) fn default_keymap() -> Keymap {
     let mut l = Layer::new("default");
+    // 置換欄の `enter` は 1 件置換 (検索欄の `enter` = `search.next` より先に評価する、07 §11.6)
+    l.bind(
+        "search",
+        "enter",
+        "search.replace",
+        "search.replace_focused",
+    )
+    .expect("既定キーマップの書式は正しい");
     let mut bind = |ctx: &'static str, keys: &str, cmd: &str| {
         l.bind(ctx, keys, cmd, "")
             .expect("既定キーマップの書式は正しい");
