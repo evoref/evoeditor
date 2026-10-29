@@ -237,6 +237,24 @@ fn goto_line(ctx: &mut CommandCtx<'_>) -> CommandResult {
     goto_line_command(ctx)
 }
 
+/// 行 (0 始まり) と桁 (1 始まり、書記素数) の位置。桁が行の長さを超えたら行末に丸める。
+pub(super) fn line_col_byte(t: &impl TextRead, line: usize, col: usize) -> ByteOff {
+    let (ls, le) = (
+        t.line_to_byte(LineIdx(line)),
+        t.line_end_byte(LineIdx(line)),
+    );
+    let mut p = ls;
+    for _ in 1..col {
+        let n = next_grapheme_boundary(t, p);
+        if n > le || n == p {
+            p = le;
+            break;
+        }
+        p = n;
+    }
+    p.min(le)
+}
+
 /// `cursor.goto_line` の本体 (行の指定があるとき。プロンプトの確定からも使う)。
 pub(super) fn goto_line_command(ctx: &mut CommandCtx<'_>) -> CommandResult {
     let Some((view_id, doc_id)) = active(ctx) else {
@@ -270,21 +288,8 @@ pub(super) fn goto_line_command(ctx: &mut CommandCtx<'_>) -> CommandResult {
         Some(ArgValue::Int(n)) => usize::try_from(*n).unwrap_or(1).max(1),
         Some(_) => return CommandResult::Rejected(RejectReason::InvalidArgs),
     };
-    let (ls, le) = (
-        t.line_to_byte(LineIdx(line)),
-        t.line_end_byte(LineIdx(line)),
-    );
-    let mut p = ls;
-    for _ in 1..col {
-        let n = next_grapheme_boundary(t, p);
-        if n > le || n == p {
-            p = le;
-            break;
-        }
-        p = n;
-    }
-    ctx.state
-        .set_selection(view_id, Selection::point(p.min(le)));
+    let p = line_col_byte(t, line, col);
+    ctx.state.set_selection(view_id, Selection::point(p));
     // 範囲外の行番号は最終行に丸めて通知する (FR-306 AC-1)
     if let Some(want) = clamped_from {
         ctx.state.show_message(
