@@ -184,6 +184,8 @@ pub enum JobResult {
         dirs: Vec<RecoveryDirEntry>,
         /// 他のプロセスが残したスワップ (復旧の候補、03 §10.3)。
         swaps: Vec<crate::SwapEntry>,
+        /// 置換途中の痕跡の提案 (05 §4.6)。新しい順。
+        leftovers: Vec<crate::Leftover>,
     },
     /// 存在しないパスを開いた (新規ファイル)。フォルダも無ければ `parent_missing` にそのフォルダ。
     NewFile {
@@ -375,6 +377,7 @@ pub fn run_job(
             job: req.id,
             dirs: ports.fs.list_recovery_dirs().unwrap_or_default(),
             swaps: ports.fs.list_swaps().unwrap_or_default(),
+            leftovers: crate::leftover::scan(&*ports.fs),
         },
         JobKind::Open { path, opts } => run_open(req.id, path, *opts, ports, cancel, emit),
         JobKind::Save {

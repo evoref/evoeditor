@@ -1445,11 +1445,15 @@ impl EditorState {
     /// 案内するのは最も新しい退避 (名前の `<UTC timestamp>-<pid>[-<n>]` の順)。「退避先に保存」の退避だけなら文言を分ける。
     fn finish_recovery_scan(&mut self, r: JobResult) {
         let JobResult::RecoveryFound {
-            mut dirs, swaps, ..
+            mut dirs,
+            swaps,
+            leftovers,
+            ..
         } = r
         else {
             return;
         };
+        self.leftovers = leftovers;
         self.swap_scan_done(swaps);
         if dirs.is_empty() {
             return;

@@ -1478,7 +1478,8 @@ enum JobResult {
     Materialized { job: JobId, key: SliceKey, rope: Text },                // §14.1 MR1
     SwapWritten  { job: JobId, revision: Revision },                        // v0.2
     RecoveryWritten { job: JobId, path: FsPath /*実際に書いたディレクトリ (代替の退避先を含む)*/ }, // WriteRecovery の成功。core は info.save.to_recovery で示す (03 §9.7 (e))
-    RecoveryFound   { job: JobId, dirs: Vec<RecoveryDirEntry> /*§4.5。空なら何も示さない*/ }, // RecoveryScan の結果 (io)
+    RecoveryFound   { job: JobId, dirs: Vec<RecoveryDirEntry> /*§4.5。空なら何も示さない*/,
+                      swaps: Vec<SwapEntry>, leftovers: Vec<Leftover> /*v0.2: 置換途中の痕跡の提案、新しい順。05 §4.6*/ }, // RecoveryScan の結果 (io)
     // ── 共通 ──
     Failed       { job: JobId, err: JobError },
 }
