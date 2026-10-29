@@ -217,7 +217,7 @@ impl EditorState {
         })
     }
 
-    fn open_in_progress(&self) -> bool {
+    pub(super) fn open_in_progress(&self) -> bool {
         self.pending
             .values()
             .any(|p| matches!(p, Pending::Open { .. }))
@@ -264,6 +264,10 @@ impl EditorState {
             return;
         }
         self.search_close();
+        if let Some(prev) = self.active_document() {
+            self.recent.retain(|d| *d != prev);
+            self.recent.push(prev);
+        }
         let view = match self.views.iter().find(|(_, v)| v.doc == doc) {
             Some((id, _)) => *id,
             None => self.add_view(doc),
@@ -2256,6 +2260,7 @@ impl EditorState {
                     }
                     let name = match c {
                         Continuation::Reopen(_) => "unsaved_reopen",
+                        Continuation::Close(_) => "unsaved_close",
                         _ => "unsaved_replace",
                     };
                     if !self.confirm_doc_if_dirty(doc_id, name, c.clone()) {

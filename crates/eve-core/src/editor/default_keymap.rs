@@ -91,6 +91,13 @@ pub(super) fn default_keymap() -> Keymap {
     bind("editor", "ctrl+k s", "file.save_as");
     bind("editor", "mod+o", "file.open");
     bind("editor", "mod+n", "file.new");
+    // バッファ (複数文書)
+    bind("editor", "mod+w", "buffer.close");
+    bind("editor", "ctrl+k w", "buffer.close");
+    bind("editor", "ctrl+pagedown", "buffer.next");
+    bind("editor", "ctrl+pageup", "buffer.prev");
+    bind("editor", "ctrl+k n", "buffer.next");
+    bind("editor", "ctrl+k p", "buffer.prev");
     // 編集
     bind("editor", "enter", "edit.newline");
     // クリップボード
@@ -273,6 +280,15 @@ mod tests {
 
     /// 07 §11.6 の v0.1 の行の (コマンド, キー列の表記) → 拡張キーが要るか。
     fn doc_bindings() -> BTreeMap<(String, String), bool> {
+        catalog_bindings(false)
+    }
+
+    /// 07 §11.6 の後の版 (`(v0.2)` 等) の行の割当。実装した版から置いてよい (必須ではない)。
+    fn later_bindings() -> BTreeMap<(String, String), bool> {
+        catalog_bindings(true)
+    }
+
+    fn catalog_bindings(later: bool) -> BTreeMap<(String, String), bool> {
         let doc = include_str!("../../../../docs/07-config-extensibility.md");
         let tables = read_tables(
             doc,
@@ -284,12 +300,15 @@ mod tests {
         for t in &tables {
             for row in &t.rows {
                 let id_cell = t.cell(row, "ID").unwrap_or_default();
-                if id_cell.contains("(v") {
+                if id_cell.contains("(v") != later {
                     continue;
                 }
                 let ids = identifiers(&strip_parentheticals(id_cell));
                 let keys = t.cell(row, "既定キー").unwrap_or_default();
                 for (elems, note) in groups(keys) {
+                    if elems.iter().all(|e| e.0.is_none()) {
+                        continue; // 割当が無い (`—` だけ)
+                    }
                     // 1 つだけの割当が複数 ID の行にあるときは、注記の「<ID の最後の語> のみ」で対象を決める
                     let only: Option<&String> = if elems.len() == 1 && ids.len() > 1 {
                         let word = note.split(" のみ").next().unwrap_or("").trim();
@@ -335,8 +354,13 @@ mod tests {
                 have.insert((b.command.as_str().to_owned(), format_sequence(&b.sequence)));
             }
         }
+        // 後の版の行の割当は、実装したものだけを置く (置いていなくても、置いてあってもよい)
+        let later: BTreeSet<_> = later_bindings().into_keys().collect();
         let only_doc: Vec<_> = want.difference(&have).collect();
-        let only_impl: Vec<_> = have.difference(&want).collect();
+        let only_impl: Vec<_> = have
+            .difference(&want)
+            .filter(|b| !later.contains(*b))
+            .collect();
         assert!(
             only_doc.is_empty() && only_impl.is_empty(),
             "カタログだけ: {only_doc:?}\n実装だけ: {only_impl:?}"

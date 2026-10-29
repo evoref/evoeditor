@@ -112,6 +112,18 @@ title = "Redo"
 description = "Undo the last edit."
 title = "Undo"
 
+[cmd.buffer.close]
+description = "Close the current document. Asks first if it has unsaved changes."
+title = "Close"
+
+[cmd.buffer.next]
+description = "Switch to the next document."
+title = "Next document"
+
+[cmd.buffer.prev]
+description = "Switch to the previous document."
+title = "Previous document"
+
 [cmd.file.new]
 description = "Create a new untitled document."
 title = "New"
@@ -781,6 +793,7 @@ omitted = "… ({bytes} more bytes omitted)"
 
 [ui.palette.category]
 app = "App"
+buffer = "Buffer"
 clipboard = "Clipboard"
 cursor = "Move"
 edit = "Edit"
@@ -835,6 +848,12 @@ discard = "[D] Discard and quit"
 title = "Reload"
 message = "Reloading {path} loses the unsaved changes (undo after reloading restores them)"
 reload = "[L] Reload (discard changes)"
+
+[ui.confirm.unsaved_close]
+title = "Unsaved changes"
+message = "{path} has unsaved changes"
+save = "[S] Save and close"
+discard = "[D] Discard and close"
 
 [ui.confirm.unsaved_reopen]
 title = "Unsaved changes"

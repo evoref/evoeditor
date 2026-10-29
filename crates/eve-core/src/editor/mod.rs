@@ -4,6 +4,7 @@
 //! 現在の範囲 (M1 の C2a): 文書・View・Window の集合、変更の唯一の経路 (`EditorState::apply_transaction`)、
 //! コマンドのレジストリと `execute`。編集コマンド・キーマップ・移動は後続の PR で足す。
 
+mod buffer;
 mod chrome;
 mod clipboard;
 mod command;
@@ -65,6 +66,7 @@ impl Editor {
         edit::register(&mut registry);
         motion::register(&mut registry);
         file::register(&mut registry);
+        buffer::register(&mut registry);
         overlay::register(&mut registry);
         let mut state = EditorState::new(caps, ports.jobs.clone(), ports.paths.clone());
         state.set_palette_entries(

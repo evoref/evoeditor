@@ -110,6 +110,18 @@ title = "やり直し"
 description = "直前の編集を取り消します。"
 title = "元に戻す"
 
+[cmd.buffer.close]
+description = "現在の文書を閉じます。未保存の変更があれば確認します。"
+title = "閉じる"
+
+[cmd.buffer.next]
+description = "次の文書へ切り替えます。"
+title = "次の文書"
+
+[cmd.buffer.prev]
+description = "前の文書へ切り替えます。"
+title = "前の文書"
+
 [cmd.file.new]
 description = "無題の新しい文書を作ります。"
 title = "新規作成"
@@ -779,6 +791,7 @@ omitted = "… (以下 {bytes} バイト省略)"
 
 [ui.palette.category]
 app = "アプリ"
+buffer = "バッファ"
 clipboard = "クリップボード"
 cursor = "移動"
 edit = "編集"
@@ -833,6 +846,12 @@ discard = "[D] 破棄して終了"
 title = "再読込"
 message = "{path} を読み込み直すと、保存していない変更が失われます (読み込み直した後に元に戻すで戻せます)"
 reload = "[L] 再読込 (変更を破棄)"
+
+[ui.confirm.unsaved_close]
+title = "未保存の変更"
+message = "{path} には保存されていない変更があります"
+save = "[S] 保存して閉じる"
+discard = "[D] 破棄して閉じる"
 
 [ui.confirm.unsaved_reopen]
 title = "未保存の変更"

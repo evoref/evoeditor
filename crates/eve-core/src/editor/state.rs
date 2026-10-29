@@ -78,6 +78,8 @@ pub struct EditorState {
     pub(super) overlay: Option<super::overlay::Overlay>,
     /// 保存ジョブの完了後に続ける操作。
     pub(super) continuations: BTreeMap<JobId, super::overlay::Continuation>,
+    /// 前に表示していた文書 (最近使った順。末尾が直近)。閉じた後に表示する文書を選ぶのに使う。
+    pub(super) recent: Vec<DocumentId>,
     /// 終了の連鎖 (`app.quit` で dirty な文書が 1 件以上、03 §9.8)。連鎖の外では `None`。
     pub(super) quit_chain: Option<super::overlay::QuitChain>,
     /// 表示中のメッセージ (解決済み)。
@@ -142,6 +144,7 @@ impl EditorState {
             key_seqs: BTreeMap::new(),
             overlay: None,
             continuations: BTreeMap::new(),
+            recent: Vec::new(),
             quit_chain: None,
             message: None,
             unread: 0,
