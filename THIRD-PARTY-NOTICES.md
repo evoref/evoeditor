@@ -5,7 +5,7 @@ evoeditor は、次のソフトウェアを利用しています。各ソフト�
 
 ## ライセンスの一覧
 
-- MIT License (59 件)
+- MIT License (63 件)
 - BSD 3-Clause "New" or "Revised" License (2 件)
 - Apache License 2.0 (1 件)
 - Boost Software License 1.0 (1 件)
@@ -300,6 +300,9 @@ DEALINGS IN THE SOFTWARE.
 利用している crate:
 
 - bitflags 2.13.2 (https://github.com/bitflags/bitflags)
+- regex-automata 0.4.18 (https://github.com/rust-lang/regex)
+- regex-syntax 0.8.11 (https://github.com/rust-lang/regex)
+- regex 1.13.1 (https://github.com/rust-lang/regex)
 
 ```text
 Copyright (c) 2014 The Rust Project Developers
@@ -1161,6 +1164,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 利用している crate:
 
+- aho-corasick 1.1.5 (https://github.com/BurntSushi/aho-corasick)
 - memchr 2.8.3 (https://github.com/BurntSushi/memchr)
 
 ```text

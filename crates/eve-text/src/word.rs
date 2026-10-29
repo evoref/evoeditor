@@ -95,6 +95,24 @@ fn unit_starts(line: &str) -> Vec<usize> {
     starts
 }
 
+/// 1 行の内容の単語境界 (行頭からのバイト、昇順。行頭と行末を含む)。文字種が変わる位置と、`Punct` の 1 書記素ごとの位置。
+/// 検索の「単語単位」(01 FR-402) が、一致の両端がこの境界上にあるかを調べるのに使う。
+pub fn word_boundaries(line: &str) -> Vec<usize> {
+    let mut out = vec![0];
+    let mut prev: Option<ScriptClass> = None;
+    for (i, g) in line.grapheme_indices(true) {
+        let class = classify_grapheme(g, prev);
+        if i > 0 && prev.is_some_and(|p| p != class || class == ScriptClass::Punct) {
+            out.push(i);
+        }
+        prev = Some(class);
+    }
+    if !line.is_empty() {
+        out.push(line.len());
+    }
+    out
+}
+
 fn line_of(text: &dyn TextRead, pos: Pos) -> (LineIdx, usize, usize) {
     let l = text.byte_to_line(pos);
     (l, text.line_to_byte(l).0, text.line_end_byte(l).0)
@@ -278,5 +296,22 @@ mod tests {
             "国旗は 1 書記素で記号"
         );
         assert_eq!(classify_grapheme("！", None), Punct, "全角の記号");
+    }
+}
+
+#[cfg(test)]
+mod boundary_tests {
+    use super::word_boundaries;
+
+    #[test]
+    fn 文字種が変わる位置が境界になる() {
+        assert_eq!(word_boundaries(""), vec![0]);
+        assert_eq!(word_boundaries("foo"), vec![0, 3]);
+        assert_eq!(word_boundaries("foo bar"), vec![0, 3, 4, 7]);
+        // 記号は 1 書記素ごと
+        assert_eq!(word_boundaries("a..b"), vec![0, 1, 2, 3, 4]);
+        // 漢字・かな・カタカナ・全角英数は別の単位
+        assert_eq!(word_boundaries("日本語です"), vec![0, 9, 15]);
+        assert_eq!(word_boundaries("ＡＢＣabc"), vec![0, 9, 12]);
     }
 }
