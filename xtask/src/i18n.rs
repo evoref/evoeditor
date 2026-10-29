@@ -158,11 +158,13 @@ fn read_screen_keys(doc04: &str) -> Result<BTreeSet<String>, String> {
     Ok(out)
 }
 
-/// カタログの v0.1 の行: (CommandId, title key, ヒントの文脈の集合)。
+/// カタログの行: (CommandId, title key, ヒントの文脈の集合)。
 struct Command {
     id: String,
     title_key: String,
     hint_contexts: BTreeSet<String>,
+    /// 後の版の注記 (`(v0.2)` 等) が付いた行。言語ファイルにあってもなくてもよい (実装した版で足す)。
+    later: bool,
 }
 
 fn read_catalog(doc07: &str) -> Result<Vec<Command>, String> {
@@ -183,11 +185,8 @@ fn read_catalog(doc07: &str) -> Result<Vec<Command>, String> {
     for t in &tables {
         for row in &t.rows {
             let id_cell = t.cell(row, "ID").unwrap_or_default();
-            // 版の注記は ID 列の括弧に書く。(v0.2) などが付いた行は v0.1 の検査から外す。
-            let version_note = id_cell.matches('(').count() > 0 && id_cell.contains("(v");
-            if version_note {
-                continue;
-            }
+            // 版の注記は ID 列の括弧に書く。(v0.2) などが付いた行は `later` にする (必須にしない)。
+            let later = id_cell.matches('(').count() > 0 && id_cell.contains("(v");
             let ids = identifiers(&strip_parentheticals(id_cell));
             let titles = identifiers(&strip_parentheticals(
                 t.cell(row, "title key").unwrap_or_default(),
@@ -238,6 +237,7 @@ fn read_catalog(doc07: &str) -> Result<Vec<Command>, String> {
                     id,
                     title_key,
                     hint_contexts,
+                    later,
                 });
             }
         }
@@ -277,7 +277,9 @@ pub fn run() -> Result<(), String> {
     let mut errors: Vec<String> = Vec::new();
     let messages = read_messages(&read_text(&root.join("docs/04-tui-design.md"))?)?;
     let screen_keys = read_screen_keys(&read_text(&root.join("docs/04-tui-design.md"))?)?;
-    let commands = read_catalog(&read_text(&root.join("docs/07-config-extensibility.md"))?)?;
+    let all_commands = read_catalog(&read_text(&root.join("docs/07-config-extensibility.md"))?)?;
+    // 必須なのは v0.1 の行。後の版の行は、実装した版で言語ファイルに足してよい (許すが要求しない)
+    let commands: Vec<&Command> = all_commands.iter().filter(|c| !c.later).collect();
 
     // 1. 目録の整合
     let mut seen: BTreeMap<&str, usize> = BTreeMap::new();
@@ -382,11 +384,13 @@ pub fn run() -> Result<(), String> {
                     want.insert(k.clone());
                 }
             }
-            for c in &commands {
-                want.insert(format!("cmd.{}.title", c.id));
-                want.insert(format!("cmd.{}.description", c.id));
+            let mut optional: BTreeSet<String> = BTreeSet::new();
+            for c in &all_commands {
+                let set = if c.later { &mut optional } else { &mut want };
+                set.insert(format!("cmd.{}.title", c.id));
+                set.insert(format!("cmd.{}.description", c.id));
                 if c.hint_contexts.contains("normal") || c.hint_contexts.contains("overlay") {
-                    want.insert(format!("hint.{}", c.id));
+                    set.insert(format!("hint.{}", c.id));
                 }
             }
             // 複数形の接尾辞 (.one / .other) を除いた基底キーで比べる
@@ -400,12 +404,15 @@ pub fn run() -> Result<(), String> {
             for k in want.difference(&have_keys) {
                 errors.push(format!("locales/{lang}.toml に `{k}` がありません"));
             }
-            for k in have_keys.difference(&want) {
+            for k in have_keys
+                .difference(&want)
+                .filter(|k| !optional.contains(*k))
+            {
                 errors.push(format!(
                     "locales/{lang}.toml の `{k}` は目録・カタログにありません (余剰)"
                 ));
             }
-            let known_ids: BTreeSet<&str> = commands.iter().map(|c| c.id.as_str()).collect();
+            let known_ids: BTreeSet<&str> = all_commands.iter().map(|c| c.id.as_str()).collect();
             for (k, v) in &have {
                 if v == NOT_A_STRING {
                     errors.push(format!(
@@ -544,8 +551,12 @@ mod tests {
 | `edit.undo` / `edit.redo` | `cmd.edit.undo` / `cmd.edit.redo` | Edit | — | — | `-` | `editor` | `mod+z` / `mod+y` | normal:2 (undo のみ) |\n\
 | `file.save_all` (v0.2) | `cmd.file.save_all` | File | — | — | `-` | `editor` | — | chord:3 |\n";
         let c = read_catalog(md).unwrap();
-        assert_eq!(c.len(), 2, "v0.2 の行は含めない");
+        assert_eq!(c.len(), 3);
         assert!(c[0].hint_contexts.contains("normal"), "undo はヒントを持つ");
         assert!(c[1].hint_contexts.is_empty(), "redo はヒントを持たない");
+        assert!(
+            !c[0].later && !c[1].later && c[2].later,
+            "v0.2 の行は後の版"
+        );
     }
 }
