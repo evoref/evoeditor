@@ -316,3 +316,99 @@ fn 一致が_100_万件を超えると件数は上限以上で打ち切る() {
     );
     assert!(count.contains('+') || count.contains("以上"), "{count}");
 }
+
+fn total(h: &mut Harness) -> String {
+    h.run_jobs();
+    text_of(&bar(h).count_text.expect("件数がある"))
+}
+
+#[test]
+fn alt_r_で正規表現に切り替わり_再検索する() {
+    let mut h = Harness::new().with_size(60, 10);
+    h.text("a1 b22 c333");
+    h.keys("ctrl+home");
+    h.keys("ctrl+f");
+    h.text(r"\d+");
+    assert_eq!(total(&mut h), "0 件", "リテラルでは見つからない");
+    assert!(!bar(&mut h).regex);
+    h.keys("alt+r");
+    assert!(bar(&mut h).regex);
+    assert_eq!(total(&mut h), "1/3");
+    h.keys("alt+r");
+    assert!(!bar(&mut h).regex, "もう一度で戻る");
+    assert_eq!(total(&mut h), "0 件");
+    h.keys("ctrl+k");
+    h.text("x");
+    assert!(bar(&mut h).regex, "代替キー ctrl+k x");
+}
+
+#[test]
+fn 正規表現の構文エラーは件数の代わりに理由を示し_検索しない() {
+    let mut h = Harness::new().with_size(60, 10);
+    h.text("a(b(c");
+    h.keys("ctrl+home");
+    h.keys("ctrl+f");
+    h.keys("alt+r");
+    h.text("(");
+    let b = bar(&mut h);
+    let e = text_of(&b.error.expect("構文エラー"));
+    assert!(e.starts_with("✖ 正規表現が不正: "), "{e}");
+    assert_eq!(sel(&h), (0, 0), "一致へ移らない");
+    // 直すと検索が始まる
+    h.keys("backspace");
+    h.text(r"\(");
+    assert!(bar(&mut h).error.is_none());
+    assert_eq!(total(&mut h), "1/2");
+    // リテラルに戻せば '(' は普通の文字
+    h.keys("backspace");
+    h.keys("backspace");
+    h.text("(");
+    assert!(bar(&mut h).error.is_some());
+    h.keys("alt+r");
+    assert!(
+        bar(&mut h).error.is_none(),
+        "リテラルでは構文エラーにならない"
+    );
+    assert_eq!(total(&mut h), "1/2");
+}
+
+#[test]
+fn 改行を含むパターンは未対応と示す() {
+    let mut h = Harness::new().with_size(60, 10);
+    h.text("a\nb");
+    h.keys("ctrl+f");
+    h.keys("alt+r");
+    h.text(r"a\nb");
+    let e = text_of(&bar(&mut h).error.expect("未対応"));
+    assert!(e.contains("改行を含むパターンは未対応"), "{e}");
+}
+
+#[test]
+fn alt_w_で単語単位に切り替わり_再検索する() {
+    let mut h = Harness::new().with_size(60, 10);
+    h.text("foo foobar barfoo foo");
+    h.keys("ctrl+home");
+    h.keys("ctrl+f");
+    h.text("foo");
+    assert_eq!(total(&mut h), "1/4");
+    h.keys("alt+w");
+    assert!(bar(&mut h).whole_word);
+    assert_eq!(total(&mut h), "1/2");
+    h.keys("alt+w");
+    assert_eq!(total(&mut h), "1/4");
+    h.keys("ctrl+k");
+    h.text("b");
+    assert!(bar(&mut h).whole_word, "代替キー ctrl+k b");
+}
+
+#[test]
+fn トグルはバーを開き直すと既定に戻る() {
+    let mut h = Harness::new().with_size(60, 10);
+    h.keys("ctrl+f");
+    h.keys("alt+r");
+    h.keys("alt+w");
+    h.keys("esc");
+    h.keys("ctrl+f");
+    let b = bar(&mut h);
+    assert!(!b.regex && !b.whole_word);
+}
