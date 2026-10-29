@@ -1476,7 +1476,8 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 | `msg.save_as.not_a_file` | 名前を付けて保存の保存先がフォルダ・デバイス等 (03 §9.7 (a) の 4。パスの不正は `msg.save.invalid_path`、metadata の失敗 ((a) の 7) は `msg.save.failed` / `msg.save.permission_denied` / `msg.save.busy`) | {path} はファイルではありません (フォルダ等) / 別のファイル名を入力してください |
 | `info.save.aborted` | 保存の連鎖の中止 (03 §9.7 の「中止」: 名前の入力・確認のキャンセル、保存の待ちの取消し (`JobError::Cancelled`)。後続の終了・置き換え・開き直しも行わない) | 保存を中止しました ({path} は書き換えていません) |
 | `ui.confirm.unsaved.title` | 未保存で終了する (FR-107。v0.2 からは文書を閉じるときも) | 未保存の変更 |
-| `ui.confirm.unsaved.message` | 同上。v0.2 で dirty な文書が 2 件以上のときは、終了の連鎖 (03 §9.8) で何件目かを前置する (`ui.confirm.unsaved.chain`: ({index}/{total}) {path} には保存されていない変更があります) | {path} には保存されていない変更があります |
+| `ui.confirm.unsaved.message` | 同上。v0.2 で dirty な文書が 2 件以上のときは `ui.confirm.unsaved.chain` を使う | {path} には保存されていない変更があります |
+| `ui.confirm.unsaved.chain` | v0.2 の終了の連鎖 (03 §9.8) で、dirty な文書が 2 件以上のときの本文。何件目か (`{index}` / `{total}`) を前置する | ({index}/{total}) {path} には保存されていない変更があります |
 | `ui.confirm.unsaved.save` | 同上 (既定の選択肢。アクセラレータ `S`) | [S] 保存して終了 |
 | `ui.confirm.unsaved.discard` | 同上 (破棄する選択肢。既定にしない。アクセラレータ `D`) | [D] 破棄して終了 |
 | `ui.confirm.unsaved_replace.title` | 未保存の文書を、別のファイルを開く・新規作成で置き換える (v0.1 は単一文書、§7.2) | 未保存の変更 |
