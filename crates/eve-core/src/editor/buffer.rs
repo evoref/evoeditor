@@ -95,7 +95,7 @@ impl EditorState {
 
     /// `buffer.list`: バッファ一覧を開く。直前の文書を選んでおく (`Ctrl+E` `Enter` で直前と往復できる)。
     fn open_buffer_list(&mut self) -> CommandResult {
-        if self.open_in_progress() {
+        if self.open_replacing() {
             return CommandResult::Rejected(RejectReason::NotAvailable);
         }
         let selected = usize::from(self.buffer_order().len() >= 2);
@@ -212,7 +212,7 @@ impl EditorState {
     /// 開いた順で `delta` 個先の文書へ切り替える (端で循環する)。文書が 1 件なら何もしない。
     fn switch_buffer(&mut self, delta: isize) -> CommandResult {
         // 置き換えの読込中は、読込中の文書がまだ集合に入っている。切り替えの対象にしない
-        if self.open_in_progress() {
+        if self.open_replacing() {
             return CommandResult::Rejected(RejectReason::NotAvailable);
         }
         let ids: Vec<DocumentId> = self.documents.keys().copied().collect();
@@ -229,7 +229,7 @@ impl EditorState {
 
     /// 文書を閉じる要求。dirty なら FR-107 の確認を出す (保存を選んだら保存が成功したときだけ閉じる)。
     pub(super) fn request_close(&mut self, doc: DocumentId) -> CommandResult {
-        if self.open_in_progress() {
+        if self.open_replacing() {
             return CommandResult::Rejected(RejectReason::NotAvailable);
         }
         if self.confirm_doc_if_dirty(doc, "unsaved_close", Continuation::Close(doc)) {

@@ -299,7 +299,7 @@ impl EditorState {
     }
 
     /// Window の表示を `view` に切り替え、`old` の文書を閉じる。Window がなければ作る。
-    fn show_view(&mut self, view: ViewId, old: Option<DocumentId>) {
+    pub(super) fn show_view(&mut self, view: ViewId, old: Option<DocumentId>) {
         match self.windows.first_mut() {
             Some(w) => w.root = view,
             None => {
@@ -315,6 +315,7 @@ impl EditorState {
     /// 文書を閉じる。保存ジョブが実行中なら、その保存の結果が届くまで内容を緊急退避の対象に残す
     /// (結果が失敗なら退避先に書く。03 §9.2 の閉じる手順 (a))。
     pub fn close_document(&mut self, doc: DocumentId) {
+        self.open_jumps.remove(&doc);
         self.views.retain(|_, v| v.doc != doc);
         let saving = self
             .pending
@@ -2131,6 +2132,10 @@ impl EditorState {
         if replace.is_some() {
             self.show_view(view, replace);
         }
+        // 起動時の `+行:桁` / `path:行:桁`: 読み終わった文書の位置へ移る (範囲外は丸める)
+        if let Some((line, col)) = self.open_jumps.remove(&doc) {
+            self.jump_to_line_col(view, doc, line, col);
+        }
         self.mark_snapshot_update(doc);
     }
 
@@ -2147,11 +2152,25 @@ impl EditorState {
         if replace.is_some() {
             // 今の文書はそのまま残す (FR-107 AC-3)
             self.close_document(doc);
+        } else if self.active_document() == Some(doc) || self.first_window().is_none() {
+            // 表示するはずの文書の読込に失敗: 失敗した文書は閉じ、ほかの文書があればそれを、無ければ
+            // 無題の文書で始める (再試行できる、03 §9.2 の「失敗」)
+            self.open_jumps.remove(&doc);
+            let others = self.documents.keys().copied().find(|d| *d != doc);
+            match others {
+                Some(next) => {
+                    self.activate_document(next);
+                    self.close_document(doc);
+                }
+                None => {
+                    let blank = self.blank_document();
+                    let (_, untitled) = self.add_document(blank);
+                    self.show_view(untitled, Some(doc));
+                }
+            }
         } else {
-            // 最初の文書の読込に失敗: 失敗した文書は閉じ、無題の文書で始める (再試行できる、03 §9.2 の「失敗」)
-            let blank = self.blank_document();
-            let (_, untitled) = self.add_document(blank);
-            self.show_view(untitled, Some(doc));
+            // 起動時に追加で開いた文書の読込の失敗: 表示中の文書はそのままに、閉じるだけ
+            self.close_document(doc);
         }
     }
 
