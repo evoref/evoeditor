@@ -27,6 +27,10 @@ pub(super) fn default_keymap() -> Keymap {
         ("shift+enter", "search.prev"), // [E]
         ("alt+c", "search.toggle_case"),
         ("ctrl+k c", "search.toggle_case"),
+        ("alt+r", "search.toggle_regex"),
+        ("ctrl+k x", "search.toggle_regex"),
+        ("alt+w", "search.toggle_word"),
+        ("ctrl+k b", "search.toggle_word"),
         ("alt+a", "search.replace_all"),
         ("tab", "ui.list_next"),
         ("shift+tab", "ui.list_prev"),

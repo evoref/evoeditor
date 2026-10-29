@@ -186,6 +186,14 @@ title = "置換"
 description = "検索で大文字と小文字を区別するかを切り替えます。"
 title = "大小文字の区別を切替"
 
+[cmd.search.toggle_regex]
+description = "検索語を正規表現として扱うかを切り替えます。"
+title = "正規表現を切替"
+
+[cmd.search.toggle_word]
+description = "一致の両端が単語の境界にあるものだけを探すかを切り替えます。"
+title = "単語単位を切替"
+
 [cmd.select.all]
 description = "文書全体を選択します。"
 title = "すべて選択"
@@ -598,6 +606,14 @@ text = "読み取り専用の文書は、同じファイル {path} には保存�
 [msg.save_as.target_read_only]
 hint = "別のファイル名を入力してください"
 text = "{path} は読み取り専用属性のファイルなので上書きできません"
+
+[msg.search.invalid_regex]
+hint = "( ) や [ ] の対応などを確認してください"
+text = "✖ 正規表現が不正: {reason}"
+
+[msg.search.newline_unsupported]
+hint = "行ごとに検索します。1 行の中のパターンにしてください"
+text = "✖ 改行を含むパターンは未対応です"
 
 [msg.search.replace_stale]
 hint = "入力を止めてから、もう一度実行してください"

@@ -188,6 +188,14 @@ title = "Replace"
 description = "Toggle whether search is case-sensitive."
 title = "Toggle Case Sensitivity"
 
+[cmd.search.toggle_regex]
+description = "Toggle whether the search text is a regular expression."
+title = "Toggle Regex"
+
+[cmd.search.toggle_word]
+description = "Toggle matching whole words only."
+title = "Toggle Whole Word"
+
 [cmd.select.all]
 description = "Select the whole document."
 title = "Select All"
@@ -600,6 +608,14 @@ text = "A read-only document cannot be saved to the same file {path}"
 [msg.save_as.target_read_only]
 hint = "Enter a different file name"
 text = "{path} has the read-only attribute and cannot be overwritten"
+
+[msg.search.invalid_regex]
+hint = "Check that ( ) and [ ] are balanced"
+text = "✖ Invalid regular expression: {reason}"
+
+[msg.search.newline_unsupported]
+hint = "Search works line by line. Use a pattern within one line"
+text = "✖ Patterns that contain a newline are not supported"
 
 [msg.search.replace_stale]
 hint = "Stop typing and run it again"

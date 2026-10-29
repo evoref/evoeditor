@@ -844,6 +844,7 @@ TUI では IME は端末/OS が処理し、evoeditor には **確定文字列だ
 | 次 / 前 | `search.next` / `search.prev` | 検索バー内で `Enter` / `↑` | `↓` / `Shift+Enter` [E]、`F3` / `Shift+F3` [E] | 前の一致へ移る主な手段は `↑` (`Shift+Enter` はレガシーで `Enter` と区別できず、`Shift+F3` はレガシーでカーソル位置報告と区別できない) |
 | 大小区別の切替 | `search.toggle_case` | 検索バー内で `Alt+C` | `Ctrl+K C` | FR-402。`Alt` が届かない端末 (Terminal.app 既定) のために `Ctrl+K` の代替を持つ。表示は §8.4 |
 | 正規表現の切替 (v0.2) | `search.toggle_regex` | 検索バー内で `Alt+R` | `Ctrl+K X` | FR-402 (正規表現は v0.2) |
+| 単語単位の切替 (v0.2) | `search.toggle_word` | 検索バー内で `Alt+W` | `Ctrl+K B` | FR-402 (単語単位は v0.2) |
 | 置換 (置換欄を開く) | `search.replace_open` | `Ctrl+R` | `Ctrl+H` [E] (別名) | `Ctrl+H` はレガシーで 0x08 (`Ctrl+Backspace` と同じ符号、§6.2) になり区別できないため第一にしない (区別できない端末ではこの別名は無効)。すべて置換は `search.replace_all` (バー内の `Alt+A`、または `Tab` でボタンへ移って `Enter`。§8.4)。1 件置換 `search.replace` (置換欄の `Enter`) は v0.2 |
 | 折り返し切替 (v0.2) | `view.toggle_wrap` | `Alt+Z` | `Ctrl+K O` (wrap **O**n/off。`Ctrl+K W` は閉じるで使用済み) | FR-506 |
 | ヒントバー切替 (v0.2) | `ui.toggle_hint_bar` | — | パレット | FR-504 (v0.1 は常時表示) |
@@ -1019,7 +1020,7 @@ core の意味的モデル ([02 §8.1](02-architecture.md#81-方針-adr-0008)) �
 - §3.3(c) の通り、検索バーは **クローム** として編集面の下に置き、表示中は編集面を N 行 (検索のみ 1 行、置換欄つき 2 行) 縮める (OQ-69)。編集面のテキストを隠さないため、カーソル行を避けるスクロールは core の通常のスクロール余白で足りる。サイズ変化の扱いは §3.6。
 - **モデル**: `Frame.search: Option<SearchBarModel>` (02 §8.2。`input`・`case`・`regex`・`count`・`count_text`・`error`・`labels`。v0.1 の `regex` は常に off で、トグルを描かない)。検索バーにフォーカスがある間 (`Frame.focus = SearchBar`) はキーマップのコンテキストが `search` になり (07 §7.1)、ハードウェアカーソルと IME の候補窓は検索バーの入力欄のカーソル位置に置く (§6.7 I2)。日本語で検索語を入力できる (FR-605)。
 - **行の構成** (左から): ラベル `検索:` (`labels`)、入力欄 (`InputFieldModel`、残りの幅いっぱい)、トグル `[Aa…]` (v0.2 から `[.*…]` も)、件数。幅が足りないときは件数 → トグルの順に短くし (トグルは `Aa~` 等の括弧なし)、入力欄は最低 10 セルを残す。
-- **トグルの表示** (色に頼らない): 大小区別 (`case`) は smart = `[Aa~]`、sensitive = `[Aa✓]` (反転)、insensitive = `[Aa]` (反転なし)。smart で検索語に大文字を含み、実際に区別しているときは `[Aa~]` を反転する。ASCII 縮退時 (§3.7) は `✓` を `*` にする。反転はロール `ui.search_bar.toggle_on`。切替は `search.toggle_case` (smart → sensitive → insensitive → smart の巡回。07 §11.6。キーは `Alt+C`、代替 `Ctrl+K C`) で、切り替えた時点で再検索する。バーを開くたびに既定値 (`search.case` の定数 smart。キーの公開は v0.2) から始まる。正規表現のトグル (off = `[.*]`、on = `[.*✓]` (反転)、`search.toggle_regex`、`Alt+R` / `Ctrl+K X`) は v0.2。
+- **トグルの表示** (色に頼らない): 大小区別 (`case`) は smart = `[Aa~]`、sensitive = `[Aa✓]` (反転)、insensitive = `[Aa]` (反転なし)。smart で検索語に大文字を含み、実際に区別しているときは `[Aa~]` を反転する。ASCII 縮退時 (§3.7) は `✓` を `*` にする。反転はロール `ui.search_bar.toggle_on`。切替は `search.toggle_case` (smart → sensitive → insensitive → smart の巡回。07 §11.6。キーは `Alt+C`、代替 `Ctrl+K C`) で、切り替えた時点で再検索する。バーを開くたびに既定値 (`search.case` の定数 smart。キーの公開は v0.2) から始まる。正規表現のトグル (off = `[.*]`、on = `[.*✓]` (反転)、`search.toggle_regex`、`Alt+R` / `Ctrl+K X`) と単語単位のトグル (off = `[ab]`、on = `[ab✓]` (反転)、`search.toggle_word`、`Alt+W` / `Ctrl+K B`) は v0.2。三つのトグルは `[Aa~] [.*] [ab]` の順に並べ、幅が足りないときは括弧を省く。どれもバーを開くたびに off (大小は smart) から始まる。
 - **件数の書式** (`SearchCount`、FR-404): 件数の文言は core が `SearchCount` から `ui.search.count.*` を解決して `count_text` に入れ、eve-tui はそれを描くだけ (`SearchCount` から文言を作らない)。以下は言語ファイルの設計入力: `Idle` = 表示なし、`Running { found }` = `{found}/…` (走査中)、`Exact { current, total }` = `{current}/{total}` (現在の一致が無いときは `-/{total}`)、`AtLeast { current, total }` = `{current}/{total}+` (打ち切り上限 1,000,000 に達した。例 `3/1000000+`)、`Approx { total }` = `約 {total}` / `~{total}` (編集後の目安。入力が止まると再検索される)、`NoMatch` = `0 件` / `No match`。数字に千の区切りは付けない (07 §17.3)。文言は `ui.search.count.*` (§15.1)。
 - インクリメンタル: 入力のたびに core が検索ジョブ (キャンセル付き) を投げ、最初の一致へスクロール。一致はテーマの `ui.search.match` (検索色 + **下線**。16 色/無色でも判別)。現在の一致は `ui.search.current` (無色の段では反転 + 下線)。
 - **選択との関係** (§7.5 の規則): インクリメンタル検索の現在の一致は強調だけで、選択範囲にはしない。`Enter` / `↓` / `F3` (`search.next`) と `↑` (`search.prev`) で移った一致は、その時点で主選択になる (確定)。`Esc` でバーを閉じると、確定していない現在の一致は選択として残さず、確定した選択はそのまま残る。
@@ -1585,6 +1586,8 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 | `info.search.replaced` | すべて置換した (01 FR-403 AC-2、03 §12.5) | {count} 件を置換しました (元に戻すで戻せます) |
 | `info.search.replace_no_match` | すべて置換で一致が無かった (文書は変わらない) | 置換する箇所はありません |
 | `info.search.replace_empty_query` | 検索語が空のまますべて置換を実行した (何もしない) | 検索する文字列を入力してください |
+| `msg.search.invalid_regex` | 検索欄の正規表現の構文エラー (03 §12.3。検索バーの件数の位置に出し、検索しない。上限超過もこの文言で出す) | ✖ 正規表現が不正: {reason} / ( ) や [ ] の対応などを確認してください |
+| `msg.search.newline_unsupported` | 検索欄の正規表現に改行を含むパターン (複数行は v0.3。検索バーの件数の位置に出し、検索しない) | ✖ 改行を含むパターンは未対応です / 行ごとに検索します。1 行の中のパターンにしてください |
 | `msg.search.replace_stale` | すべて置換の準備中に文書が編集され続け、作り直しても間に合わなかった (03 §12.5 の 4。文書は変わらない) | 編集が続いたため、すべて置換を中止しました / 入力を止めてから、もう一度実行してください |
 
 **起動時の引数と設定の診断** (07 §18.2 / §18.3 / §4.3。最初の Frame の後にメッセージ行に出す)

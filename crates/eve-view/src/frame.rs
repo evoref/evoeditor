@@ -394,6 +394,12 @@ pub struct SearchBarModel {
     pub case: CaseMode,
     /// 大小を実際に区別している (トグルを反転して示す)。
     pub case_on: bool,
+    /// 正規表現として探す (トグル `[.*]` を反転して示す、FR-402)。
+    pub regex: bool,
+    /// 単語単位で探す (トグル `[ab]` を反転して示す、FR-402)。
+    pub whole_word: bool,
+    /// 検索語を使えない理由 (正規表現の構文エラー・改行を含むパターン)。あれば件数の位置に描き、検索しない。
+    pub error: Option<CellText>,
     /// 件数の文言 (`ui.search.count.*`)。検索していなければ `None`。
     pub count_text: Option<CellText>,
     /// 置換欄 (開いているときだけ)。

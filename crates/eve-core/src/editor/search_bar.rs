@@ -13,13 +13,23 @@ use crate::cancel::CancelToken;
 use crate::document::{Origin, Transaction, UndoGroupHint};
 use crate::editor::command::CommandResult;
 use crate::jobs::{JobKind, JobResult};
-use crate::search::{Case, SearchQuery, build_replace_all, scan_lines};
+use crate::search::{Case, QueryError, SearchQuery, build_replace_all, scan_lines};
 use crate::time::Tick;
 
 use super::file::Pending;
 use super::layout::cell_text;
 use super::search_state::{Found, SearchCount, SearchStep};
 use super::state::EditorState;
+
+impl SearchBarState {
+    /// 今の入力とトグルから作る問い合わせ。
+    pub(super) fn query(&self) -> SearchQuery {
+        SearchQuery::literal(&self.text)
+            .with_case(self.case)
+            .with_regex(self.regex)
+            .with_whole_word(self.whole_word)
+    }
+}
 
 /// 可視行の強調で、1 行あたり検索する上限 (`SEARCH_SYNC_LINE_MAX`、03 §12.2)。これを超える行は強調しない。
 const SYNC_LINE_MAX: usize = 16 * 1024;
@@ -30,6 +40,12 @@ pub(super) struct SearchBarState {
     /// `text` 内のカーソル (バイト。書記素境界)。
     pub cursor: usize,
     pub case: Case,
+    /// 正規表現として探す (`search.toggle_regex`)。バーを開くたびに off から始まる。
+    pub regex: bool,
+    /// 単語単位 (`search.toggle_word`)。同じく off から始まる。
+    pub whole_word: bool,
+    /// 検索語をコンパイルできない理由。あれば検索しない (03 §12.3)。
+    pub error: Option<QueryError>,
     /// 入力しているときの検索の起点 (開いたときの選択の始端。一致へ移ったらその一致の始端)。
     pub anchor: ByteOff,
     /// 入力で見つかった、まだ選択していない現在の一致。
@@ -58,6 +74,9 @@ impl EditorState {
             text: String::new(),
             cursor: 0,
             case: Case::Smart,
+            regex: false,
+            whole_word: false,
+            error: None,
             anchor,
             current: None,
             replace: None,
@@ -157,13 +176,47 @@ impl EditorState {
         CommandResult::Done
     }
 
-    /// 入力欄・大小の区別が変わった: 検索をやり直し、起点から先の最初の一致を強調する。
+    /// 正規表現の ON / OFF を切り替える。切り替えたら再検索する。
+    pub fn search_toggle_regex(&mut self) -> CommandResult {
+        let Some(bar) = &mut self.search_bar else {
+            return CommandResult::Rejected(super::command::RejectReason::NotAvailable);
+        };
+        bar.regex = !bar.regex;
+        self.bar_changed();
+        CommandResult::Done
+    }
+
+    /// 単語単位の ON / OFF を切り替える。切り替えたら再検索する。
+    pub fn search_toggle_word(&mut self) -> CommandResult {
+        let Some(bar) = &mut self.search_bar else {
+            return CommandResult::Rejected(super::command::RejectReason::NotAvailable);
+        };
+        bar.whole_word = !bar.whole_word;
+        self.bar_changed();
+        CommandResult::Done
+    }
+
+    /// 入力欄・トグルが変わった: 検索をやり直し、起点から先の最初の一致を強調する。
+    /// 検索語をコンパイルできないとき (正規表現の構文エラーなど) は検索せず、理由を示す。
     pub(super) fn bar_changed(&mut self) {
         let Some(bar) = &self.search_bar else {
             return;
         };
-        let query = SearchQuery::literal(&bar.text).with_case(bar.case);
+        let query = bar.query();
         let anchor = bar.anchor;
+        let error = query.compile().err();
+        if let Some(bar) = &mut self.search_bar {
+            bar.error = error.clone();
+        }
+        if error.is_some() {
+            // 前の検索の結果を残さない
+            self.search_start(SearchQuery::literal(""));
+            if let Some(bar) = &mut self.search_bar {
+                bar.current = None;
+            }
+            self.mark_dirty_render();
+            return;
+        }
         self.search_start(query.clone());
         let found = match (self.active_document(), query.pattern().is_empty()) {
             (Some(doc), false) => match self.sync_find(doc, &query, anchor, true) {
@@ -271,7 +324,20 @@ impl EditorState {
                 &[("total", &total.to_string())],
             )),
         };
-        let query = SearchQuery::literal(&bar.text).with_case(bar.case);
+        let query = bar.query();
+        let error = bar.error.as_ref().map(|e| {
+            let text = match e {
+                QueryError::Syntax(reason) => {
+                    render("msg.search.invalid_regex.text", &[("reason", reason)])
+                }
+                QueryError::Multiline => render("msg.search.newline_unsupported.text", &[]),
+                QueryError::TooLarge => render(
+                    "msg.search.invalid_regex.text",
+                    &[("reason", "pattern too large")],
+                ),
+            };
+            cell_text(&text, CutPolicy::End)
+        });
         let replace = bar.replace.as_ref().map(|(text, cur)| {
             let cells = cell_text(text, CutPolicy::End).spans;
             let cursor = cell_text(&text[..*cur], CutPolicy::End).spans.len();
@@ -309,6 +375,9 @@ impl EditorState {
                 Case::Insensitive => CaseMode::Insensitive,
             },
             case_on: query.is_case_sensitive(),
+            regex: bar.regex,
+            whole_word: bar.whole_word,
+            error,
             count_text: count_text.map(|t| cell_text(&t, CutPolicy::End)),
         })
     }
@@ -324,10 +393,7 @@ impl EditorState {
         let Some(bar) = &self.search_bar else {
             return Vec::new();
         };
-        let Some(m) = SearchQuery::literal(&bar.text)
-            .with_case(bar.case)
-            .matcher()
-        else {
+        let Some(m) = bar.query().matcher() else {
             return Vec::new();
         };
         let Some(doc) = self.documents.get(&doc_id) else {
@@ -382,7 +448,7 @@ impl EditorState {
         let Some((replacement, _)) = bar.replace.clone() else {
             return CommandResult::Rejected(super::command::RejectReason::NotAvailable);
         };
-        let query = SearchQuery::literal(&bar.text).with_case(bar.case);
+        let query = bar.query();
         let Some(doc_id) = self.active_document() else {
             return CommandResult::Done;
         };

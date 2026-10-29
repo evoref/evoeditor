@@ -847,6 +847,14 @@ fn cmd_search_toggle_case(ctx: &mut CommandCtx<'_>) -> CommandResult {
     ctx.state.search_toggle_case()
 }
 
+fn cmd_search_toggle_regex(ctx: &mut CommandCtx<'_>) -> CommandResult {
+    ctx.state.search_toggle_regex()
+}
+
+fn cmd_search_toggle_word(ctx: &mut CommandCtx<'_>) -> CommandResult {
+    ctx.state.search_toggle_word()
+}
+
 fn cmd_search_replace_open(ctx: &mut CommandCtx<'_>) -> CommandResult {
     ctx.state.search_replace_open()
 }
@@ -939,6 +947,16 @@ pub(super) fn register(r: &mut CommandRegistry) {
             "search.toggle_case",
             "search.active",
             cmd_search_toggle_case,
+        ),
+        (
+            "search.toggle_regex",
+            "search.active",
+            cmd_search_toggle_regex,
+        ),
+        (
+            "search.toggle_word",
+            "search.active",
+            cmd_search_toggle_word,
         ),
     ] {
         r.register(
