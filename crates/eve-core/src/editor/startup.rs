@@ -42,7 +42,11 @@ impl EditorState {
 
     /// 今の文書を置き換えず、読込中のバッファとして足す。同じパスが既にあれば足さない (03 §9.8)。
     /// 足した文書を返す。
-    fn open_additional(&mut self, raw_path: &str, opts: OpenOptions) -> Option<DocumentId> {
+    pub(super) fn open_additional(
+        &mut self,
+        raw_path: &str,
+        opts: OpenOptions,
+    ) -> Option<DocumentId> {
         let opts = OpenOptions {
             default_eol: opts.default_eol.or(Some(self.config_eol())),
             ..opts

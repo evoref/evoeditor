@@ -129,6 +129,7 @@ impl EditorState {
     pub(super) fn swap_tick(&mut self) {
         self.swap_notify_large();
         self.swap_offer();
+        self.leftover_offer();
         self.swap_release_recovered();
         if self.swap.stopped {
             return;

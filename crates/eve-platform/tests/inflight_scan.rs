@@ -160,3 +160,24 @@ fn 孤児の事前バックアップを列挙する() {
     assert!(p.partial);
     assert_eq!(p.len, 2);
 }
+
+#[test]
+fn 名前の変更は既存のファイルを置き換えない() {
+    use eve_core::FsPath;
+    let e = Env::new("rename");
+    let a = e.root.join("a.bak");
+    let b = e.root.join("a.txt");
+    fs::write(&a, b"old").unwrap();
+    e.fs.rename_no_replace(&FsPath::new(&a), &FsPath::new(&b))
+        .unwrap();
+    assert!(!a.exists());
+    assert_eq!(fs::read(&b).unwrap(), b"old");
+    // 行き先が在れば失敗し、どちらも変えない
+    fs::write(&a, b"other").unwrap();
+    assert!(
+        e.fs.rename_no_replace(&FsPath::new(&a), &FsPath::new(&b))
+            .is_err()
+    );
+    assert_eq!(fs::read(&a).unwrap(), b"other");
+    assert_eq!(fs::read(&b).unwrap(), b"old");
+}

@@ -489,6 +489,20 @@ impl FileSystem for MemFs {
             .collect())
     }
 
+    fn rename_no_replace(&self, from: &FsPath, to: &FsPath) -> Result<(), FsError> {
+        let mut s = self.st();
+        if s.files.contains_key(to) {
+            return Err(FsError::new(FsErrorKind::Other));
+        }
+        match s.files.remove(from) {
+            Some(e) => {
+                s.files.insert(to.clone(), e);
+                Ok(())
+            }
+            None => Err(FsError::new(FsErrorKind::NotFound)),
+        }
+    }
+
     fn list_inflight(&self) -> Result<Vec<InflightRecord>, FsError> {
         Ok(self.st().inflight.clone())
     }

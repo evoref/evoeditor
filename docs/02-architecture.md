@@ -424,6 +424,7 @@ trait FileSystem: Send + Sync {
                                                                              // 形に合わない名前は無視。中のファイルは読まない。05 §7.5 の「recovery/ の走査と削除の規則」)。場所が無ければ空の Vec
     fn list_inflight(&self) -> Result<Vec<InflightRecord>, FsError>;         // v0.2: 保存中フラグ (recovery/inflight/) の一覧 = 置換途中のクラッシュ痕跡。書いたプロセスが動いているもの (自分を含む) は除く。
                                                                              // 解析できないフラグは malformed = true (target は空) で返す。状態ディレクトリが無ければ空
+    fn rename_no_replace(&self, from: &FsPath, to: &FsPath) -> Result<(), FsError>; // v0.2: from を to の名前に変える。to が在れば失敗する (置き換えない)。同じボリュームだけ。M6e の「退避名を元の名前に戻す」(05 §4.6)
     fn list_orphan_backups(&self) -> Result<Vec<OrphanBackup>, FsError>;     // v0.2: state_dir/backup/ 直下の in-place の事前バックアップ (*.bak / *.bak.tmp、05 §7.5)。名前の pid が動いているもの・サブディレクトリ・
                                                                              // 形に合わない名前は含めない。どのフラグが記録したかは見ない (照合は core)。OrphanBackup { path, pid, partial (.bak.tmp か), len }
     fn read_dir(&self, path: &FsPath) -> Result<Vec<DirEntry>, FsError>;    // v0.4 (ファインダ・パス補完)

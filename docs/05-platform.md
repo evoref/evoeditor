@@ -106,6 +106,7 @@ Port の trait シグネチャ・型名・エラー分類の正本は [02 §4.4]
 | `create_dir_all_private()` | §5.6 (Windows は `recovery/`・`backup/`・`swap/` を「所有者のみ」の保護付き DACL で作る。それ以外の `state_dir` 配下は継承。Unix 0700 は v0.2) |
 | `remove_file()` | スワップ・一時ファイルの後片付け。Windows の共有違反は `Busy` 再試行 (§4.2) |
 | `list_inflight()` (v0.2) | §4.6 / §7.5 (保存中フラグ `recovery/inflight/*/*.toml` の列挙と pid 判定: 書いたプロセスが動いているもの (自分を含む) は除く)。**開くたびのディレクトリ列挙は行わない** |
+| `rename_no_replace()` (v0.2) | §4.6 (退避名を元の名前に戻す。Windows は `MoveFileExW` を `MOVEFILE_REPLACE_EXISTING` なしで呼び、行き先が在れば失敗する) |
 | `list_orphan_backups()` (v0.2) | §4.6 / §7.5 (`state_dir/backup/` 直下の `*.bak` / `*.bak.tmp` の列挙。名前の pid が動いているもの・`fr119/` は含めない。フラグとの照合は core) |
 | `write_recovery(doc)` (v0.1) | §7.5 (「退避先に保存」の `rescue/<UTC timestamp>-<pid>/` を §5.6 の「所有者のみ」で新しく作る。UTC の時刻・pid は本層が std で取り、名前は §7.5 の「退避ディレクトリの名前の形」(同名があれば `-<n>` を足す) に従う。`state_dir` を使えなければ §7.5 の代替の退避先の `rescue\` に作る (`alternate = true`)。manifest の `created_at` に使う RFC 3339 の文字列は本層が作る。本文と manifest も本層が緊急退避と同じ関数で書き (`reason = "user_save"`)、書いたディレクトリを返す) |
 | `list_recovery_dirs()` (v0.1) | §7.5 の「`recovery/` の走査と削除の規則」の対象 (`recovery/` 直下と `rescue/` 直下の、§7.5 の「退避ディレクトリの名前の形」(`<UTC timestamp>-<pid>[-<n>]`) に合うディレクトリ、代替の退避先の同じ位置) だけを返す。`inflight/` と形に合わない名前は見ない。中のファイルは読まない (起動時の `RecoveryScan` ジョブが呼ぶ。02 §9.3) |

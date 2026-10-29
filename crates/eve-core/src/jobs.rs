@@ -87,6 +87,11 @@ pub enum JobKind {
     SwapRead { entry: crate::SwapEntry },
     /// 他のプロセスが残したスワップを消す (復旧の破棄・適用後)。
     SwapRemove { entry: crate::SwapEntry },
+    /// 置換途中の痕跡の提案への答え (退避名を戻す・退避名や一時ファイルを消す、05 §4.6)。
+    LeftoverAct {
+        leftover: Box<crate::Leftover>,
+        op: crate::LeftoverOp,
+    },
     /// スワップを消す (03 §10.2「削除」)。
     SwapDiscard {
         doc: DocumentId,
@@ -240,6 +245,10 @@ pub enum JobResult {
     SwapRemoved {
         job: JobId,
     },
+    /// 置換途中の痕跡の操作を終えた。
+    LeftoverDone {
+        job: JobId,
+    },
     /// 単発の検索の結果。`found` は (一致, 文書の端を越えたか)。
     FindNextDone {
         job: JobId,
@@ -297,6 +306,7 @@ impl JobResult {
             | JobResult::SwapDiscarded { job }
             | JobResult::SwapRead { job, .. }
             | JobResult::SwapRemoved { job }
+            | JobResult::LeftoverDone { job }
             | JobResult::UnmappableReplacement { job, .. }
             | JobResult::Unmappable { job, .. }
             | JobResult::ReplaceAllDone { job, .. }
@@ -514,6 +524,15 @@ pub fn run_job(
                 err: JobError::Fs(err),
             },
         },
+        JobKind::LeftoverAct { leftover, op } => {
+            match crate::leftover::act(&*ports.fs, leftover, *op) {
+                Ok(()) => JobResult::LeftoverDone { job: req.id },
+                Err(err) => JobResult::Failed {
+                    job: req.id,
+                    err: JobError::Fs(err),
+                },
+            }
+        }
         JobKind::SwapDiscard { doc, path } => match ports.fs.discard_swap(*doc, path.as_ref()) {
             Ok(()) => JobResult::SwapDiscarded { job: req.id },
             Err(err) => JobResult::Failed {

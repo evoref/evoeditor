@@ -211,6 +211,11 @@ impl FileSystem for WinFs {
             .unwrap_or_default())
     }
 
+    fn rename_no_replace(&self, from: &FsPath, to: &FsPath) -> Result<(), FsError> {
+        crate::save::rename_no_replace(from.as_path(), to.as_path())
+            .map_err(|e| map_io_error(e, to))
+    }
+
     fn list_inflight(&self) -> Result<Vec<eve_core::InflightRecord>, FsError> {
         Ok(self
             .state_dir()

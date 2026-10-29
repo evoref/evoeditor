@@ -6,7 +6,7 @@
 
 use std::collections::BTreeSet;
 
-use crate::fs::{FileSystem, FileTime, FsErrorKind, InflightRecord, SaveMethod};
+use crate::fs::{FileSystem, FileTime, FsError, FsErrorKind, InflightRecord, SaveMethod};
 use crate::fspath::FsPath;
 
 /// 提案の種類 (05 §4.6)。
@@ -20,6 +20,20 @@ pub enum LeftoverKind {
     StaleBak,
     /// 一時ファイルがある (T の有無に依らない)。
     Tmp,
+}
+
+/// 退避名と T の内容を比べるときの大きさの上限 (05 §4.6 の提案の規則 2)。これより大きければ比べない。
+const COMPARE_LIMIT: u64 = 64 * 1024 * 1024;
+
+/// 提案への答えのうち、ディスクを変える操作 (`JobKind::LeftoverAct`)。「別バッファで開く」は文書を開くだけなので含めない。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LeftoverOp {
+    /// 退避名を T の名前に戻す (T が在れば失敗して何もしない)。
+    Restore,
+    /// 退避名を消す。
+    DeleteBak,
+    /// 一時ファイルを消す。
+    DeleteTmp,
 }
 
 /// 起動時に提案する 1 件。T のパス 1 つ分。
@@ -103,6 +117,20 @@ pub(crate) fn scan(fs: &dyn FileSystem) -> Vec<Leftover> {
             Err(e) if e.kind == FsErrorKind::NotFound => false,
             Err(_) => continue,
         };
+        // T と内容が同一の退避名は、置換の成功後の削除漏れで、確認なしで消す (提案の規則 2)
+        if t_exists
+            && let Some(b) = bak.clone()
+            && identical(fs, &b, &target)
+            && fs.remove_file(&b).is_ok()
+        {
+            bak = None;
+            if tmp.is_none() {
+                for f in &flags {
+                    let _ = fs.remove_file(f);
+                }
+                continue;
+            }
+        }
         let mk = |kind, bak, tmp| Leftover {
             kind,
             target: target.clone(),
@@ -127,6 +155,51 @@ pub(crate) fn scan(fs: &dyn FileSystem) -> Vec<Leftover> {
     // 新しい順 (記録時刻の無いものは最後)
     out.sort_by_key(|l| std::cmp::Reverse(l.recorded_at.map(|t| (t.secs, t.nanos))));
     out
+}
+
+/// 2 つのファイルの内容が同じか。どちらかが上限より大きい・読めないときは `false`。
+fn identical(fs: &dyn FileSystem, a: &FsPath, b: &FsPath) -> bool {
+    let (Ok(ma), Ok(mb)) = (fs.metadata(a), fs.metadata(b)) else {
+        return false;
+    };
+    if ma.len != mb.len || ma.len > COMPARE_LIMIT {
+        return false;
+    }
+    let read_all = |p: &FsPath| -> Option<Vec<u8>> {
+        let mut r = fs.open_read(p).ok()?;
+        let mut out = Vec::new();
+        while let Some(chunk) = r.next_chunk().ok()? {
+            out.extend_from_slice(chunk);
+        }
+        Some(out)
+    };
+    match (read_all(a), read_all(b)) {
+        (Some(x), Some(y)) => x == y,
+        _ => false,
+    }
+}
+
+/// 提案への答えを実行する (ジョブ内)。終わったら、記録された痕跡が何も残っていなければ T のフラグを消す。
+pub(crate) fn act(fs: &dyn FileSystem, l: &Leftover, op: LeftoverOp) -> Result<(), FsError> {
+    let missing = || FsError::new(FsErrorKind::NotFound);
+    match op {
+        LeftoverOp::Restore => {
+            let bak = l.bak.as_ref().ok_or_else(missing)?;
+            fs.rename_no_replace(bak, &l.target)?;
+        }
+        LeftoverOp::DeleteBak => fs.remove_file(l.bak.as_ref().ok_or_else(missing)?)?,
+        LeftoverOp::DeleteTmp => fs.remove_file(l.tmp.as_ref().ok_or_else(missing)?)?,
+    }
+    let left = [l.bak.as_ref(), l.tmp.as_ref()]
+        .into_iter()
+        .flatten()
+        .any(|p| exists(fs, p));
+    if !left {
+        for f in &l.flags {
+            let _ = fs.remove_file(f);
+        }
+    }
+    Ok(())
 }
 
 /// どのフラグにも記録されていない書込途中の事前バックアップ (`*.bak.tmp`、書いたプロセスは動いていない) を消す。

@@ -62,6 +62,17 @@ const ERROR_UNABLE_TO_MOVE_REPLACEMENT_2: u32 = 1177;
 const NAME_LIMIT: usize = 255;
 
 /// Win32 の `…W` 関数に渡す NUL 終端の UTF-16。長いパスは拡張長形式 (`\\?\`) にする (`extend_long`)。
+/// 既存のファイルを置き換えない名前の変更 (`MOVEFILE_REPLACE_EXISTING` なし。`to` が在れば失敗する)。
+pub(crate) fn rename_no_replace(from: &Path, to: &Path) -> std::io::Result<()> {
+    let (wf, wt) = (wide(from), wide(to));
+    // SAFETY: NUL 終端のパス 2 つ。
+    let ok = unsafe { MoveFileExW(wf.as_ptr(), wt.as_ptr(), MOVEFILE_WRITE_THROUGH) };
+    if ok == 0 {
+        return Err(std::io::Error::last_os_error());
+    }
+    Ok(())
+}
+
 pub(crate) fn wide(p: &Path) -> Vec<u16> {
     let mut w = extend_long(p.as_os_str().encode_wide().collect());
     w.push(0);
