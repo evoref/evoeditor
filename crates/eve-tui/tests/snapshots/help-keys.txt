@@ -1,0 +1,18 @@
+ヘルプ
+キー一覧
+ 続けて押すキー (例: Ctrl+K S) は、順に押します。同じコマンドに複数のキーがある
+ アプリ
+  Ctrl+Q                     終了
+ バッファ
+  Ctrl+W, Ctrl+K W           閉じる
+  Ctrl+E                     一覧
+  Ctrl+PageDown, Ctrl+K N    次の文書
+  Ctrl+PageUp, Ctrl+K P      前の文書
+ クリップボード
+  Ctrl+C, Ctrl+Insert        コピー
+  Ctrl+X, Shift+Delete       切り取り
+↑↓ PgUp PgDn で移動、Esc で閉じる
+memo.txt                                                     行 1, 桁 1 UTF-8 LF
+
+Esc 取消
+cursor: None

@@ -328,6 +328,15 @@ pub enum OverlayModel {
         focused: ChoiceId,
         nav_hint: Option<CellText>,
     },
+    /// ヘルプ画面 (全画面、04 §8.6)。節を縦に並べた 1 本のスクロール。`lines` は全行で、`scroll` 行目から描く。
+    Help {
+        title: CellText,
+        lines: Vec<HelpLine>,
+        /// 先頭に描く行の番号。
+        scroll: usize,
+        /// 操作の案内 (`ui.help.footer`)。
+        footer: CellText,
+    },
     /// リスト選択 (コマンドパレット。バッファ一覧・ファインダと共用、FR-511)。
     /// 照合と並び順は core が決める。`items` は `first` 番目から始まる表示窓 (最大 12 行)。
     List {
@@ -343,6 +352,28 @@ pub enum OverlayModel {
         /// 0 件のときに候補の位置へ出す文言。
         no_match: CellText,
     },
+}
+
+/// ヘルプの 1 行 (04 §8.6)。
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct HelpLine {
+    pub kind: HelpLineKind,
+    /// 左の列 (キー一覧のキー、コマンド一覧の CommandId)。`Entry` のときだけ。
+    pub key: Option<CellText>,
+    pub text: CellText,
+}
+
+/// ヘルプの行の種類。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum HelpLineKind {
+    /// 節の見出し。
+    Heading,
+    /// 小見出し (キー一覧のカテゴリ)。
+    Subheading,
+    /// 説明の文。
+    Body,
+    /// 左の列 (`key`) と本文の組。
+    Entry,
 }
 
 /// リストの 1 行 (03 §14.6)。

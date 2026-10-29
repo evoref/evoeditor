@@ -29,10 +29,10 @@ pub use effect::{ClipboardTarget, ClipboardText, Effect, QuitRescue, StderrLine}
 pub use events::{EditorEvent, MessageLevel, OriginKind, OriginTag, OverlayKind};
 pub use frame::{
     BarFocus, CaseMode, CellPos, CellRect, CellText, Choice, ChoiceId, ChromeTexts, Color,
-    CursorPlacement, CursorShape, CutPolicy, Frame, HintContext, HintItem, HintModel,
-    InputFieldModel, KeyLabel, ListItem, Message, MessageModel, OverlayModel, PaneFrame, RenderRow,
-    ReplaceRowModel, RowSource, SearchBarModel, Span, StatusAlign, StatusItem, StatusKind,
-    StatusModel, Style, StyleMods,
+    CursorPlacement, CursorShape, CutPolicy, Frame, HelpLine, HelpLineKind, HintContext, HintItem,
+    HintModel, InputFieldModel, KeyLabel, ListItem, Message, MessageModel, OverlayModel, PaneFrame,
+    RenderRow, ReplaceRowModel, RowSource, SearchBarModel, Span, StatusAlign, StatusItem,
+    StatusKind, StatusModel, Style, StyleMods,
 };
 pub use ids::{
     ClipboardHandleId, ClipboardToken, DocumentId, JobId, Revision, ViewId, ViewRevision, WindowId,

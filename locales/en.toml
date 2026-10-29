@@ -164,6 +164,18 @@ title = "Set Encoding"
 description = "Convert the document's line endings to LF, CRLF or CR."
 title = "Convert Line Endings"
 
+[cmd.help.open]
+description = "Open the help screen."
+title = "Open Help"
+
+[cmd.help.keys]
+description = "Open the help screen at the list of keys."
+title = "Show Keys"
+
+[cmd.help.commands]
+description = "Open the help screen at the list of commands."
+title = "Show Commands"
+
 [cmd.search.next]
 description = "Go to the next match."
 title = "Find Next"
@@ -826,6 +838,30 @@ title = "Buffers"
 placeholder = "Filter by name"
 no_match = "No matching documents"
 
+[ui.help]
+title = "Help"
+footer = "Up/Down PgUp/PgDn to scroll, Esc to close"
+
+[ui.help.section]
+intro = "Getting started"
+keys = "Keys"
+commands = "Commands"
+terminal = "Terminal settings"
+
+[ui.help.intro]
+save = "Save with {key:file.save}, save as with {key:file.save_as}"
+quit = "Quit with {key:app.quit}"
+palette = "Find and run any command from the command palette with {key:ui.palette_open}"
+
+[ui.help.keys]
+note = "Keys written like Ctrl+K S are pressed one after another. Several keys for one command are separated by commas"
+
+[ui.help.terminal]
+ime = "While an IME is on, letter keys do not reach the confirmation dialog as accelerators. Choose with Tab or the arrow keys and Enter"
+chord = "Keys that start with Ctrl+K are pressed as Ctrl+K and then the next key. Esc cancels"
+alt = "On terminals where Alt does not reach the editor (such as the default Terminal.app), use the Ctrl+K alternatives"
+readme = "Per-terminal settings and known limitations are described in the README"
+
 [ui.long_line]
 omitted = "… ({bytes} more bytes omitted)"
 
@@ -835,6 +871,7 @@ buffer = "Buffer"
 clipboard = "Clipboard"
 cursor = "Move"
 edit = "Edit"
+help = "Help"
 file = "File"
 search = "Search"
 select = "Select"

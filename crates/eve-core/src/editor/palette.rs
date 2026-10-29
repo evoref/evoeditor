@@ -85,6 +85,10 @@ pub struct PaletteEntry {
 }
 
 impl PaletteEntry {
+    pub(super) fn id(&self) -> &str {
+        &self.id
+    }
+
     /// `hidden` のコマンドは `None`。
     pub fn new(id: &str, when: &ContextExpr) -> Option<PaletteEntry> {
         (!hidden(id)).then(|| PaletteEntry {

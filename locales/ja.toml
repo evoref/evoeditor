@@ -162,6 +162,18 @@ title = "文字コードを変更"
 description = "文書の改行コードを LF・CRLF・CR のいずれかに変換します。"
 title = "改行コードを変換"
 
+[cmd.help.open]
+description = "ヘルプ画面を開きます。"
+title = "ヘルプを開く"
+
+[cmd.help.keys]
+description = "ヘルプ画面をキー一覧の節で開きます。"
+title = "キー一覧を開く"
+
+[cmd.help.commands]
+description = "ヘルプ画面をコマンド一覧の節で開きます。"
+title = "コマンド一覧を開く"
+
 [cmd.search.next]
 description = "次の一致へ移動します。"
 title = "次を検索"
@@ -824,6 +836,30 @@ title = "バッファ"
 placeholder = "文書名で絞り込み"
 no_match = "一致する文書はありません"
 
+[ui.help]
+title = "ヘルプ"
+footer = "↑↓ PgUp PgDn で移動、Esc で閉じる"
+
+[ui.help.section]
+intro = "はじめに"
+keys = "キー一覧"
+commands = "コマンド一覧"
+terminal = "端末の設定"
+
+[ui.help.intro]
+save = "保存は {key:file.save}、名前を付けて保存は {key:file.save_as}"
+quit = "終了は {key:app.quit}"
+palette = "すべてのコマンドは {key:ui.palette_open} のコマンドパレットから探して実行できます"
+
+[ui.help.keys]
+note = "続けて押すキー (例: Ctrl+K S) は、順に押します。同じコマンドに複数のキーがあるときは、コンマで並べます"
+
+[ui.help.terminal]
+ime = "IME が ON のとき、文字キーは確認ダイアログのアクセラレータとして届きません。Tab や矢印と Enter で選んでください"
+chord = "Ctrl+K で始まるキーは、Ctrl+K を押してから次のキーを押します。Esc で取り消せます"
+alt = "Alt が届かない端末 (Terminal.app の既定など) では、Ctrl+K を使う代替のキーがあります"
+readme = "端末ごとの設定と既知の制約は README に書いてあります"
+
 [ui.long_line]
 omitted = "… (以下 {bytes} バイト省略)"
 
@@ -833,6 +869,7 @@ buffer = "バッファ"
 clipboard = "クリップボード"
 cursor = "移動"
 edit = "編集"
+help = "ヘルプ"
 file = "ファイル"
 search = "検索"
 select = "選択"
