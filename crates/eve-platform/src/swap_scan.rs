@@ -83,7 +83,7 @@ fn same_start(a: FileTime, b: FileTime) -> bool {
 }
 
 /// pid のプロセスが、記録された起動時刻のまま動いているか (05 §5.3)。起動時刻の記録が無ければ pid だけで判定する。
-fn process_alive(pid: u32, started_at: Option<FileTime>) -> bool {
+pub(crate) fn process_alive(pid: u32, started_at: Option<FileTime>) -> bool {
     use windows_sys::Win32::Foundation::{CloseHandle, FILETIME, GetLastError};
     use windows_sys::Win32::System::Threading::{
         GetExitCodeProcess, GetProcessTimes, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION,

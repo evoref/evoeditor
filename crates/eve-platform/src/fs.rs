@@ -211,6 +211,20 @@ impl FileSystem for WinFs {
             .unwrap_or_default())
     }
 
+    fn list_inflight(&self) -> Result<Vec<eve_core::InflightRecord>, FsError> {
+        Ok(self
+            .state_dir()
+            .map(crate::inflight::list_all)
+            .unwrap_or_default())
+    }
+
+    fn list_orphan_backups(&self) -> Result<Vec<eve_core::OrphanBackup>, FsError> {
+        Ok(self
+            .state_dir()
+            .map(crate::inplace::list_orphan_backups)
+            .unwrap_or_default())
+    }
+
     fn list_recovery_dirs(&self) -> Result<Vec<eve_core::RecoveryDirEntry>, FsError> {
         Ok(crate::rescue::list_recovery_dirs(self.state_dir()))
     }

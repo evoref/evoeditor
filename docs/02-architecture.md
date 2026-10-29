@@ -422,7 +422,10 @@ trait FileSystem: Send + Sync {
     fn list_recovery_dirs(&self) -> Result<Vec<RecoveryDirEntry>, FsError>;  // v0.1: 起動時の退避の案内 (msg.recovery.found / found_rescue、§9.3) 用。state_dir/recovery/ 直下と recovery/rescue/ 直下、
                                                                              // 代替の退避先の同じ位置にある、05 §7.5 の名前の形 (<UTC timestamp>-<pid>[-<n>]) に合うディレクトリだけを返す (inflight/ は見ない。
                                                                              // 形に合わない名前は無視。中のファイルは読まない。05 §7.5 の「recovery/ の走査と削除の規則」)。場所が無ければ空の Vec
-    fn list_inflight(&self) -> Result<Vec<InflightRecord>, FsError>;         // v0.2: 保存中フラグ (recovery/inflight/) の一覧 = 置換途中のクラッシュ痕跡
+    fn list_inflight(&self) -> Result<Vec<InflightRecord>, FsError>;         // v0.2: 保存中フラグ (recovery/inflight/) の一覧 = 置換途中のクラッシュ痕跡。書いたプロセスが動いているもの (自分を含む) は除く。
+                                                                             // 解析できないフラグは malformed = true (target は空) で返す。状態ディレクトリが無ければ空
+    fn list_orphan_backups(&self) -> Result<Vec<OrphanBackup>, FsError>;     // v0.2: state_dir/backup/ 直下の in-place の事前バックアップ (*.bak / *.bak.tmp、05 §7.5)。名前の pid が動いているもの・サブディレクトリ・
+                                                                             // 形に合わない名前は含めない。どのフラグが記録したかは見ない (照合は core)。OrphanBackup { path, pid, partial (.bak.tmp か), len }
     fn read_dir(&self, path: &FsPath) -> Result<Vec<DirEntry>, FsError>;    // v0.4 (ファインダ・パス補完)
 }
 

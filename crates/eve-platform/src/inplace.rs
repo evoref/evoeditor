@@ -407,3 +407,43 @@ impl WinFs {
         })
     }
 }
+
+/// `list_orphan_backups`: `state_dir/backup/` の直下の `*.bak` / `*.bak.tmp` (名前は `<hash>-<UTC timestamp>-<pid>.bak`、05 §7.5)。
+/// 名前の pid のプロセスが動いているもの (書込中・成功後の削除の前)、ディレクトリ (`fr119/`)、形に合わない名前は含めない。
+pub(crate) fn list_orphan_backups(state_dir: &Path) -> Vec<eve_core::OrphanBackup> {
+    let Ok(rd) = fs::read_dir(state_dir.join("backup")) else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    for e in rd.flatten() {
+        let Ok(meta) = e.metadata() else { continue };
+        let path = e.path();
+        let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
+            continue;
+        };
+        if !meta.is_file() {
+            continue;
+        }
+        let (stem, partial) = match name.strip_suffix(".bak.tmp") {
+            Some(s) => (s, true),
+            None => match name.strip_suffix(".bak") {
+                Some(s) => (s, false),
+                None => continue,
+            },
+        };
+        let Some(pid) = stem.rsplit('-').next().and_then(|p| p.parse::<u32>().ok()) else {
+            continue;
+        };
+        if crate::swap_scan::process_alive(pid, None) {
+            continue;
+        }
+        out.push(eve_core::OrphanBackup {
+            path: FsPath::new(path),
+            pid,
+            partial,
+            len: meta.len(),
+        });
+    }
+    out.sort_by(|a, b| a.path.as_path().cmp(b.path.as_path()));
+    out
+}
