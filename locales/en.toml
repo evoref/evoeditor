@@ -660,7 +660,6 @@ table = "a table"
 [ui.confirm]
 external_deleted = "{path} was deleted — `[K] Keep as new (saving recreates it)` ★ / `[C] Close`"
 external_modified = "{path} was changed by another program — `[L] Reload (discard my changes)` / `[I] Ignore (check again when saving)` ★"
-quit_saving = "Saving {path} has not finished — `[W] Wait` ★ / `[Q] Abort the save and quit (unsaved content will be backed up)`"
 save_failed_closed = "Could not save: (the text of `msg.save.*`) — {path} is already closed. `[R] Save to recovery folder` ★ / `[D] Discard`"
 
 nav_hint = "Tab / ←→ to select, Enter to confirm"
@@ -964,6 +963,12 @@ title = "Unsaved changes"
 message = "{path} has unsaved changes"
 save = "[S] Save and close"
 discard = "[D] Discard and close"
+
+[ui.confirm.quit_saving]
+title = "The save has not finished"
+message = "Saving {path} has not finished"
+wait = "[W] Wait"
+abort = "[Q] Abort the save and quit (unsaved content will be backed up)"
 
 [ui.confirm.save_all_failed]
 title = "Documents not saved"

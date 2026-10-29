@@ -23,6 +23,7 @@ mod motion;
 mod overlay;
 mod palette;
 mod query;
+mod quit_saving;
 mod save_all;
 mod startup;
 pub use startup::InitialFile;
@@ -133,14 +134,19 @@ impl Editor {
         self.state.now = now;
         self.state.search_tick();
         self.state.swap_tick();
+        self.state.quit_wait_tick();
     }
 
     /// 次に `tick` が要る時刻。`None` なら無期限に待ってよい。
     pub fn next_deadline(&self) -> Option<Tick> {
-        [self.state.search_deadline(), self.state.swap_deadline()]
-            .into_iter()
-            .flatten()
-            .min()
+        [
+            self.state.search_deadline(),
+            self.state.swap_deadline(),
+            self.state.quit_wait_deadline(),
+        ]
+        .into_iter()
+        .flatten()
+        .min()
     }
 
     /// キーマップを通さずにコマンドを実行する。権限判定フックを通る。

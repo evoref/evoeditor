@@ -88,6 +88,10 @@ pub struct EditorState {
     pub(super) recent: Vec<DocumentId>,
     /// 終了の連鎖 (`app.quit` で dirty な文書が 1 件以上、03 §9.8)。連鎖の外では `None`。
     pub(super) quit_chain: Option<super::overlay::QuitChain>,
+    /// 保存中に終了を求められている (03 §9.7 (f))。
+    pub(super) quit_wait: Option<super::quit_saving::QuitWait>,
+    /// 「保存を中止して終了」の最中 (保存ジョブがすべて終わったら終了する)。
+    pub(super) quit_abort: Option<super::quit_saving::QuitAbort>,
     /// 表示中のメッセージ (解決済み)。
     pub(super) message: Option<super::message::ShownMessage>,
     /// 未読のメッセージの数。
@@ -157,6 +161,8 @@ impl EditorState {
             key_all: BTreeMap::new(),
             recent: Vec::new(),
             quit_chain: None,
+            quit_wait: None,
+            quit_abort: None,
             message: None,
             unread: 0,
             trim_notified: BTreeSet::new(),

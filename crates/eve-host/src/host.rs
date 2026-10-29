@@ -458,6 +458,13 @@ impl Host {
                         let _ = self.fs.remove_swap(&entry);
                     }
                 }
+                // 「保存を中止して終了」: dirty な文書を緊急退避と同じ書き手・形式で退避してから終了する (03 §9.7 (f))。
+                // 結果の行は終了時に main が出す (`emergency.outcome()`)
+                if matches!(rescue, eve_view::QuitRescue::DirtyDocuments) {
+                    self.sync_emergency();
+                    self.emergency
+                        .run(RescueReason::QuitAbortedSave, RESCUE_BUDGET_CLOSE);
+                }
                 frontend.restore();
                 self.exit_stderr = stderr;
                 return StepOutcome::Exit(ExitCode(code));

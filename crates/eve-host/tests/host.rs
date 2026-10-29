@@ -347,3 +347,51 @@ fn 正常終了ではスワップを消し_異常終了では残す() {
     );
     assert_eq!(e.fs.swap_count(), 1, "異常終了ではスワップを残す");
 }
+
+#[test]
+fn 保存を中止して終了すると_dirty_な文書を退避してから_restore_する() {
+    let mut e = env();
+    let spy = with_spy(&mut e);
+    e.fs.set_file(&eve_core::FsPath::from("/w/a.txt"), b"hello");
+    e.start();
+    e.host.editor_mut().open_initial(Some("/w/a.txt"), false);
+    e.jobs.run_jobs();
+    for r in e.jobs.take_results() {
+        e.host.step(&mut e.fe, HostMsg::Job(Box::new(r)));
+    }
+    e.input(InputEvent::Text("x".into()));
+    let key = |c: char, m: Modifiers| InputEvent::Key(KeyEvent::press(KeyCode::Char(c), m));
+    // 保存を始める (ジョブは実行待ちのまま) → 終了 → 5 秒を超えたら確認が出る
+    e.input(key('s', Modifiers::CTRL));
+    assert_eq!(e.input(key('q', Modifiers::CTRL)), StepOutcome::Continue);
+    e.clock.advance(eve_core::Millis(5000));
+    e.host.step(&mut e.fe, HostMsg::Tick);
+    let screen = e
+        .probe
+        .last_ascii(AsciiOptions {
+            show_chrome: true,
+            ..AsciiOptions::default()
+        })
+        .unwrap();
+    assert!(
+        screen.contains("Enter 決定"),
+        "確認ダイアログが出る: {screen}"
+    );
+    // 「保存を中止して終了」: 取消しの結果を受けたら、退避してから終了する
+    e.input(key('q', Modifiers::NONE));
+    e.jobs.run_jobs();
+    let mut out = StepOutcome::Continue;
+    for r in e.jobs.take_results() {
+        out = e.host.step(&mut e.fe, HostMsg::Job(Box::new(r)));
+        if matches!(out, StepOutcome::Exit(_)) {
+            break;
+        }
+    }
+    assert_eq!(out, StepOutcome::Exit(ExitCode::OK));
+    assert_eq!(
+        *spy.calls.lock().unwrap(),
+        vec![(RescueReason::QuitAbortedSave, 1)],
+        "取り消した保存の文書は dirty のままなので退避する"
+    );
+    assert_eq!(e.probe.restore_count(), 1);
+}
