@@ -25,6 +25,13 @@ pub(super) fn default_keymap() -> Keymap {
     bind("global", "f1", "ui.palette_open");
     bind("global", "mod+shift+p", "ui.palette_open"); // [E][横]
     bind("global", "ctrl+k r", "ui.redraw");
+    bind("global", "ctrl+k h", "help.open");
+    // ヘルプ画面 (help → global): 1 行・1 画面ずつスクロール、`Esc` で閉じる
+    bind("help", "down", "ui.list_next");
+    bind("help", "up", "ui.list_prev");
+    bind("help", "pagedown", "ui.list_page_down");
+    bind("help", "pageup", "ui.list_page_up");
+    bind("help", "esc", "ui.cancel");
     // 検索バー (search → prompt → global)
     for (keys, cmd) in [
         ("enter", "search.next"),

@@ -82,6 +82,8 @@ pub struct EditorState {
     pub(super) save_all: Option<super::save_all::SaveAll>,
     /// 読込が終わったらカーソルを移す位置 (行, 桁。ともに 1 始まり。起動時の `+行:桁`、07 §18.2)。
     pub(super) open_jumps: BTreeMap<DocumentId, (usize, usize)>,
+    /// すべての割当をコマンドごとに集めたもの (ヘルプのキー一覧、04 §8.6)。
+    pub(super) key_all: BTreeMap<String, Vec<Vec<eve_view::KeyStroke>>>,
     /// 前に表示していた文書 (最近使った順。末尾が直近)。閉じた後に表示する文書を選ぶのに使う。
     pub(super) recent: Vec<DocumentId>,
     /// 終了の連鎖 (`app.quit` で dirty な文書が 1 件以上、03 §9.8)。連鎖の外では `None`。
@@ -150,6 +152,7 @@ impl EditorState {
             continuations: BTreeMap::new(),
             save_all: None,
             open_jumps: BTreeMap::new(),
+            key_all: BTreeMap::new(),
             recent: Vec::new(),
             quit_chain: None,
             message: None,

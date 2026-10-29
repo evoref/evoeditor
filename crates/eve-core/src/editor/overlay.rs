@@ -183,6 +183,8 @@ pub(super) enum Overlay {
     Confirm(Box<ConfirmState>),
     Prompt(PromptState),
     Palette(super::palette::PaletteState),
+    /// ヘルプ画面 (全画面、04 §8.6)。
+    Help(super::help::HelpState),
 }
 
 fn text_of(s: &str) -> Text {
@@ -197,6 +199,7 @@ impl EditorState {
                 Overlay::Confirm(_) => OverlayKind::Confirm,
                 Overlay::Prompt(_) => OverlayKind::Prompt,
                 Overlay::Palette(_) => OverlayKind::List,
+                Overlay::Help(_) => OverlayKind::Help,
             })
         };
         let (before, after) = (kind(&self.overlay), kind(&new));
@@ -237,6 +240,7 @@ impl EditorState {
             Some(Overlay::Prompt(_)) => "prompt",
             Some(Overlay::Palette(p)) if p.buffers => "buffer_list",
             Some(Overlay::Palette(_)) => "palette",
+            Some(Overlay::Help(_)) => "help",
         }
     }
 
@@ -722,6 +726,8 @@ impl EditorState {
             }
             Some(Overlay::Prompt(_)) => self.submit_prompt(),
             Some(Overlay::Palette(_)) => self.palette_confirm(),
+            // ヘルプは確定するものが無い (閉じるのは `Esc`)
+            Some(Overlay::Help(_)) => CommandResult::Done,
             None => CommandResult::Rejected(RejectReason::NotAvailable),
         }
     }
@@ -767,6 +773,9 @@ impl EditorState {
     pub fn ui_list_move(&mut self, forward: bool) -> CommandResult {
         if matches!(self.overlay, Some(Overlay::Palette(_))) {
             return self.palette_move(forward);
+        }
+        if matches!(self.overlay, Some(Overlay::Help(_))) {
+            return self.help_scroll(if forward { 1 } else { -1 });
         }
         if self.overlay.is_none() && self.search_bar.is_some() {
             self.bar_focus_cycle(forward);
@@ -898,10 +907,16 @@ fn reg_motion_search(r: &mut CommandRegistry) {
 }
 
 fn cmd_list_page_down(ctx: &mut CommandCtx<'_>) -> CommandResult {
+    if matches!(ctx.state.overlay, Some(Overlay::Help(_))) {
+        return ctx.state.help_page(true);
+    }
     ctx.state.palette_page(true)
 }
 
 fn cmd_list_page_up(ctx: &mut CommandCtx<'_>) -> CommandResult {
+    if matches!(ctx.state.overlay, Some(Overlay::Help(_))) {
+        return ctx.state.help_page(false);
+    }
     ctx.state.palette_page(false)
 }
 

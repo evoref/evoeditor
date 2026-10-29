@@ -1041,6 +1041,7 @@ v0.1 は単一文書で、バッファ一覧を持たない (別のファイル�
 
 - 全画面オーバーレイ (または v0.4 で右パネル)。タブを持たず、**節を縦に並べた 1 本のスクロール** にする: 「はじめに」(保存・終了・パレットの 3 行説明)、「キー一覧」(`help.keys`。現在のキーマップから逆引き、カテゴリ別。全割当を出し、この端末で届かない割当には印を付ける、§7.8)、「コマンド一覧」(`help.commands`)、「端末の設定」(§6.4 の端末別の注意と推奨設定、IME とチョード・アクセラレータの注意)。`help.open` は先頭から、`help.keys` / `help.commands` は該当の節へスクロールして開く。ヘルプ内の文字による絞り込みは v0.4 (提案中)。
 - 操作 (コンテキスト `help`、07 §11.6): `↑` / `↓` で 1 行、`PgUp` / `PgDn` で 1 画面スクロール。閉じるのは `Esc` (`q` では閉じない。将来のヘルプ内の文字入力と衝突し、モードレスの一貫性を崩すため)。
+- **M9a の実装の範囲**: キー一覧は、解決済みキーマップの全割当をコマンドごとに並べる (コンテキストは区別しない)。「この端末で届かない割当に印を付ける」(§7.8) は未実装で、`Capabilities` の拡張キー・横取りの情報をキーマップから引けるようになってから足す。開くキーは `help.open` = `Ctrl+K H` (`F1` は引き続きパレット)。見出し・節の文言は `ui.help.*` (§15.2)。下端のヒントは `Esc 取消` だけを出す。
 
 ### 8.7 ステータスバー (FR-503)
 
@@ -1368,6 +1369,7 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 | パレット (0 件。`List.no_match`) | `ui.palette.no_match` | 一致するコマンドはありません | — |
 | パレットの行のカテゴリ (CommandId の名前空間) | `ui.palette.category.app` | アプリ | — |
 | パレットの行のカテゴリ (CommandId の名前空間) | `ui.palette.category.buffer` | バッファ | — |
+| パレットの行のカテゴリ (CommandId の名前空間) | `ui.palette.category.help` | ヘルプ | — |
 | パレットの行のカテゴリ (CommandId の名前空間) | `ui.palette.category.clipboard` | クリップボード | — |
 | パレットの行のカテゴリ (CommandId の名前空間) | `ui.palette.category.cursor` | 移動 | — |
 | パレットの行のカテゴリ (CommandId の名前空間) | `ui.palette.category.edit` | 編集 | — |
@@ -1492,6 +1494,20 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 | `ui.buffer_list.title` | バッファ一覧 (`buffer.list`、§8.5。v0.2) の見出し | バッファ |
 | `ui.buffer_list.placeholder` | 同上。入力欄が空のときの案内 (名前とディレクトリで絞り込む) | 文書名で絞り込み |
 | `ui.buffer_list.no_match` | 同上。絞り込みに一致する文書が無いとき | 一致する文書はありません |
+| `ui.help.title` | ヘルプ画面の見出し (04 §8.6。v0.2) | ヘルプ |
+| `ui.help.footer` | ヘルプ画面の下端の操作の案内 | ↑↓ PgUp PgDn で移動、Esc で閉じる |
+| `ui.help.section.intro` | ヘルプの節の見出し「はじめに」 | はじめに |
+| `ui.help.section.keys` | 同「キー一覧」 | キー一覧 |
+| `ui.help.section.commands` | 同「コマンド一覧」 | コマンド一覧 |
+| `ui.help.section.terminal` | 同「端末の設定」 | 端末の設定 |
+| `ui.help.intro.save` | はじめに: 保存 (`{key:…}` は解決済みキーマップの第一割当) | 保存は {key:file.save}、名前を付けて保存は {key:file.save_as} |
+| `ui.help.intro.quit` | はじめに: 終了 | 終了は {key:app.quit} |
+| `ui.help.intro.palette` | はじめに: コマンドパレット | すべてのコマンドは {key:ui.palette_open} のコマンドパレットから探して実行できます |
+| `ui.help.keys.note` | キー一覧の注 (チョード) | 続けて押すキー (例: Ctrl+K S) は、順に押します。同じコマンドに複数のキーがあるときは、コンマで並べます |
+| `ui.help.terminal.ime` | 端末の設定: IME | IME が ON のとき、文字キーは確認ダイアログのアクセラレータとして届きません。Tab や矢印と Enter で選んでください |
+| `ui.help.terminal.chord` | 端末の設定: チョード | Ctrl+K で始まるキーは、Ctrl+K を押してから次のキーを押します。Esc で取り消せます |
+| `ui.help.terminal.alt` | 端末の設定: Alt が届かない端末 | Alt が届かない端末 (Terminal.app の既定など) では、Ctrl+K を使う代替のキーがあります |
+| `ui.help.terminal.readme` | 端末の設定: README | 端末ごとの設定と既知の制約は README に書いてあります |
 | `ui.confirm.unsaved_close.title` | 未保存の文書を閉じる (`buffer.close`、03 §9.2 の閉じる手順 (d)。v0.2) | 未保存の変更 |
 | `ui.confirm.unsaved_close.message` | 同上 | {path} には保存されていない変更があります |
 | `ui.confirm.unsaved_close.save` | 同上 (既定の選択肢。アクセラレータ `S`) | [S] 保存して閉じる |

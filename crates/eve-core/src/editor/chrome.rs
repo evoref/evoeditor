@@ -304,6 +304,7 @@ pub(super) fn overlay_models(state: &EditorState) -> Vec<OverlayModel> {
             }]
         }
         Some(Overlay::Palette(p)) => vec![state.palette_model(p)],
+        Some(Overlay::Help(h)) => vec![state.help_model(h)],
         Some(Overlay::Prompt(p)) => {
             let name = p.kind.name();
             let cells = cell_text(&p.text, CutPolicy::End).spans;
@@ -341,6 +342,30 @@ pub(super) fn overlay_models(state: &EditorState) -> Vec<OverlayModel> {
 }
 
 pub(super) fn hint_model(state: &EditorState, chord: &[KeyStroke]) -> HintModel {
+    // ヘルプ画面: 決定するものは無いので、閉じる (`Esc`) だけを案内する
+    if matches!(state.overlay, Some(super::overlay::Overlay::Help(_))) {
+        let esc = KeyLabel {
+            strokes: vec![KeyStroke {
+                mods: Modifiers::NONE,
+                key: KeyCode::Esc,
+            }],
+        };
+        let text = cell_text(
+            state
+                .catalog()
+                .get("hint.ui.cancel")
+                .unwrap_or("hint.ui.cancel"),
+            CutPolicy::Never,
+        );
+        return HintModel {
+            context: HintContext::Overlay,
+            items: vec![HintItem {
+                keys: vec![esc],
+                text,
+                priority: 5,
+            }],
+        };
+    }
     if state.overlay.is_some() || state.search_bar.is_some() {
         // オーバーレイ: 決定・取消 (確認は次へも)。キーは固定 (オーバーレイの割当は既定のまま)
         let stroke = |key| KeyLabel {

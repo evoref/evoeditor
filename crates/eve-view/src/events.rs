@@ -79,6 +79,8 @@ pub enum OverlayKind {
     List,
     Prompt,
     Confirm,
+    /// ヘルプ画面 (全画面、04 §8.6)。
+    Help,
 }
 
 #[cfg(test)]

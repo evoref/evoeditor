@@ -324,6 +324,15 @@ impl Keymap {
         out
     }
 
+    /// すべての割当 (コマンド ID, キー列)。層の順。ヘルプのキー一覧が使う。
+    pub fn all_bindings(&self) -> Vec<(String, Vec<KeyStroke>)> {
+        self.layers
+            .iter()
+            .flat_map(|l| l.bindings.iter())
+            .map(|b| (b.command.as_str().to_owned(), b.sequence.clone()))
+            .collect()
+    }
+
     /// `first_bindings` の表示表記版。
     pub fn first_labels(&self, contexts: &[&str]) -> std::collections::BTreeMap<String, String> {
         self.first_bindings(contexts)

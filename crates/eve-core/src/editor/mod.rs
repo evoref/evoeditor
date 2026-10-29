@@ -14,6 +14,7 @@ mod default_keymap;
 mod edit;
 mod eol;
 mod file;
+mod help;
 mod keymap;
 mod layout;
 mod message;
@@ -71,6 +72,7 @@ impl Editor {
         file::register(&mut registry);
         buffer::register(&mut registry);
         save_all::register(&mut registry);
+        help::register(&mut registry);
         overlay::register(&mut registry);
         let mut state = EditorState::new(caps, ports.jobs.clone(), ports.paths.clone());
         state.set_palette_entries(
@@ -94,6 +96,9 @@ impl Editor {
         let labels = self.keymap.first_labels(&Self::EDITOR_CONTEXTS);
         let seqs = self.keymap.first_bindings(&Self::EDITOR_CONTEXTS);
         self.state.set_key_bindings(labels, seqs);
+        self.state.set_all_key_bindings(help::collect_all_bindings(
+            self.keymap.all_bindings().into_iter(),
+        ));
     }
 
     pub fn state(&self) -> &EditorState {
@@ -271,6 +276,8 @@ impl Editor {
             "dialog" => &["dialog"],
             "prompt" => &["prompt", "global"],
             "palette" => &["palette", "list", "prompt", "global"],
+            // ヘルプ画面: 移動と閉じるだけ (入力欄は無い)
+            "help" => &["help", "global"],
             // バッファ一覧: `list` の割当 (一覧内の `buffer.close`) を先に見て、移動などはパレットと共通
             "buffer_list" => &["list", "palette", "prompt", "global"],
             "search" => &["search", "prompt", "global"],

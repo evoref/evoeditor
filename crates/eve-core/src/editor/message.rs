@@ -36,6 +36,14 @@ impl EditorState {
         self.key_seqs = seqs;
     }
 
+    /// すべての割当を更新する (ヘルプのキー一覧用)。
+    pub fn set_all_key_bindings(
+        &mut self,
+        all: std::collections::BTreeMap<String, Vec<Vec<eve_view::KeyStroke>>>,
+    ) {
+        self.key_all = all;
+    }
+
     pub(super) fn key_sequence(&self, command: &str) -> Option<Vec<eve_view::KeyStroke>> {
         self.key_seqs.get(command).cloned()
     }
