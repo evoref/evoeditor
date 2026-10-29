@@ -173,10 +173,6 @@ pub fn usage_error(e: &UsageError) -> Bi {
             format!("An encoding name is required. {tail_en}"),
             format!("文字コードの名前を指定してください。{tail_ja}"),
         ),
-        UsageError::MultipleFiles => Bi::new(
-            "Opening more than one file is not supported in this version.",
-            "このバージョンでは、一度に開けるファイルは 1 つだけです。",
-        ),
         UsageError::UnknownOption(o) => Bi::new(
             format!("Unknown option: {o}. {tail_en}"),
             format!("未知のオプションです: {o}。{tail_ja}"),
@@ -308,7 +304,6 @@ mod tests {
         for e in [
             UsageError::BadEncoding("x".into()),
             UsageError::BadEncoding(String::new()),
-            UsageError::MultipleFiles,
             UsageError::UnknownOption("--x".into()),
             UsageError::MissingValue("-e".into()),
         ] {

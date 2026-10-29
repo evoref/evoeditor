@@ -127,7 +127,7 @@ fn color_mode(mode: eve_config::ColorMode) -> eve_tui::caps::ColorMode {
 }
 
 fn run(
-    file: Option<String>,
+    files: Vec<eve_core::InitialFile>,
     read_only: bool,
     encoding: Option<Encoding>,
     cli_locale: Option<&str>,
@@ -310,7 +310,7 @@ fn run(
     }));
     let mut frontend = TuiFrontend::with_color_mode(color_mode(config.color_mode));
     let outcome = catch_unwind(AssertUnwindSafe(|| {
-        host.run(&mut frontend, file.as_deref(), read_only)
+        host.run(&mut frontend, &files, read_only)
     }));
     // どの経路でも端末を復元する (冪等)
     frontend.restore_terminal();
@@ -407,7 +407,10 @@ fn main() -> ProcessExit {
     #[cfg(windows)]
     let _ = eve_platform::dll::restrict_search_to_system32();
     eve_tui::trace::init();
-    let code = match cli::parse(std::env::args_os().skip(1)) {
+    // `FILE:LINE` の曖昧性の解消のための存在確認 (07 §18.2)。端末を始める前に 1 回だけ行う
+    let code = match cli::parse(std::env::args_os().skip(1), &|p| {
+        std::path::Path::new(p).exists()
+    }) {
         Ok(Cli::Help) => {
             print!("{}", texts::help());
             0
@@ -417,7 +420,7 @@ fn main() -> ProcessExit {
             0
         }
         Ok(Cli::Run {
-            file,
+            files,
             read_only,
             encoding,
             locale,
@@ -430,7 +433,14 @@ fn main() -> ProcessExit {
                 EXIT_USAGE
             }
             forced => run(
-                file,
+                files
+                    .into_iter()
+                    .map(|f| eve_core::InitialFile {
+                        path: f.path,
+                        line: f.line,
+                        col: f.col,
+                    })
+                    .collect(),
                 read_only,
                 forced.flatten(),
                 locale.as_deref(),

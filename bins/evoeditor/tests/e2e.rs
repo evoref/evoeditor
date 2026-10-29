@@ -414,6 +414,41 @@ fn 日本語のファイルを引数で開いて表示する() {
     let _ = std::fs::remove_dir_all(dir);
 }
 
+// 複数のファイル引数と `+行`: すべてバッファになり、最初のものを表示して指定の行へ移る (07 §18.2)
+#[test]
+fn 複数のファイルと_行指定で開く() {
+    let dir = temp_dir("multi");
+    let (a, b) = (dir.join("a.txt"), dir.join("b.txt"));
+    std::fs::write(
+        &a,
+        "a1
+a2
+a3
+",
+    )
+    .unwrap();
+    std::fs::write(
+        &b,
+        "b1
+b2
+b3
+",
+    )
+    .unwrap();
+    let mut s = Session::start(&["+2", a.to_str().unwrap(), b.to_str().unwrap()]);
+    s.wait_for("最初のファイルの 2 行目", |t| {
+        t.contains("a1") && t.contains("a.txt (1/2)") && t.contains("行 2, 桁 1")
+    });
+    // Ctrl+PageDown で次のバッファへ
+    s.send(b"[6;5~");
+    s.wait_for("2 つ目のバッファ", |t| {
+        t.contains("b1") && t.contains("b.txt (2/2)")
+    });
+    s.send(CTRL_Q);
+    assert_eq!(s.wait_exit(), 0, "変更なしなら確認なしで終了");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
 // (1) 起動 → 文字入力 → Ctrl+S → Ctrl+Q、ファイルの内容が一致する (無題は名前を尋ねる)
 #[test]
 fn 入力して保存して終了するとファイルの内容が一致する() {

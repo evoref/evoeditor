@@ -89,7 +89,7 @@ fn env() -> Env {
 
 impl Env {
     fn start(&mut self) {
-        self.host.start(&mut self.fe, None, false).unwrap();
+        self.host.start(&mut self.fe, &[], false).unwrap();
     }
 
     fn input(&mut self, ev: InputEvent) {
