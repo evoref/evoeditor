@@ -977,8 +977,3 @@ message = "{path} has unsaved changes"
 save = "[S] Save, then reopen"
 discard = "[D] Discard and reopen"
 
-[ui.confirm.unsaved_replace]
-title = "Unsaved changes"
-message = "{path} has unsaved changes"
-save = "[S] Save, then open"
-discard = "[D] Discard and open"

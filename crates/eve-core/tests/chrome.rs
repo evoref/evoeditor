@@ -146,7 +146,7 @@ fn ファイルの状態のステータス() {
     s.type_text("r");
     s.pump();
     let c = s.chrome();
-    assert!(c.starts_with("status: bad.txt [RO] |"), "{c}");
+    assert!(c.starts_with("status: bad.txt (3/3) [RO] |"), "{c}");
 }
 
 #[test]

@@ -717,9 +717,7 @@ impl EditorState {
         let doc = view.and_then(|v| self.documents.get(&v.doc));
         let b = |x: bool| Some(CtxValue::Bool(x));
         match name {
-            "doc.read_only" => {
-                doc.map_or(b(false), |d| b(!d.is_editable() || self.open_replacing()))
-            }
+            "doc.read_only" => doc.map_or(b(false), |d| b(!d.is_editable())),
             "doc.has_path" => b(doc.is_some_and(|d| d.path.is_some())),
             "doc.dirty" => b(doc.is_some_and(Document::is_dirty)),
             "selection.empty" => b(view.is_none_or(|v| v.selection.iter().all(|r| r.is_empty()))),

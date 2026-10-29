@@ -1512,10 +1512,6 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 | `ui.confirm.unsaved_close.message` | 同上 | {path} には保存されていない変更があります |
 | `ui.confirm.unsaved_close.save` | 同上 (既定の選択肢。アクセラレータ `S`) | [S] 保存して閉じる |
 | `ui.confirm.unsaved_close.discard` | 同上 (破棄する選択肢。既定にしない。アクセラレータ `D`) | [D] 破棄して閉じる |
-| `ui.confirm.unsaved_replace.title` | 未保存の文書を、別のファイルを開く・新規作成で置き換える (v0.1 は単一文書、§7.2) | 未保存の変更 |
-| `ui.confirm.unsaved_replace.message` | 同上 | {path} には保存されていない変更があります |
-| `ui.confirm.unsaved_replace.save` | 同上 (既定の選択肢。アクセラレータ `S`) | [S] 保存してから開く |
-| `ui.confirm.unsaved_replace.discard` | 同上 (破棄する選択肢。既定にしない。アクセラレータ `D`) | [D] 破棄して開く |
 | `ui.confirm.unsaved_reopen.title` | 未保存の文書を、文字コードを指定して開き直す (01 FR-111 AC-2) | 未保存の変更 |
 | `ui.confirm.unsaved_reopen.message` | 同上 | {path} には保存されていない変更があります |
 | `ui.confirm.unsaved_reopen.save` | 同上 (既定の選択肢。アクセラレータ `S`) | [S] 保存してから開き直す |

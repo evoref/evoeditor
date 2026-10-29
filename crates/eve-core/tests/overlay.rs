@@ -113,6 +113,11 @@ fn ct(t: &eve_view::CellText) -> String {
     t.spans.iter().map(|s| s.text.as_str()).collect()
 }
 
+/// 確認を起こす操作 (dirty な文書を閉じる。v0.2 は `file.open` / `file.new` が確認を出さないので、`buffer.close` を使う)。
+fn ask(s: &mut Env) {
+    s.run("buffer.close", Args::new());
+}
+
 /// a.txt を開いて 1 文字入力した (dirty な) 状態。
 fn dirty_env() -> Env {
     let mut s = Env::new();
@@ -125,9 +130,9 @@ fn dirty_env() -> Env {
 
 // verifies: AC-FR-107-3
 #[test]
-fn dirty_な文書を置き換えると確認が出て_キャンセルで何も変わらない() {
+fn dirty_な文書を閉じると確認が出て_キャンセルで何も変わらない() {
     let mut s = dirty_env();
-    s.open("/w/b.txt");
+    ask(&mut s);
     assert_eq!(s.overlay(), "dialog");
     let f = s.frame();
     assert_eq!(f.focus, FocusTarget::Overlay(0));
@@ -149,8 +154,8 @@ fn dirty_な文書を置き換えると確認が出て_キャンセルで何も�
     assert_eq!(
         labels,
         [
-            "[S] 保存してから開く",
-            "[D] 破棄して開く",
+            "[S] 保存して閉じる",
+            "[D] 破棄して閉じる",
             "[Esc] キャンセル"
         ]
     );
@@ -169,12 +174,12 @@ fn dirty_な文書を置き換えると確認が出て_キャンセルで何も�
 }
 
 #[test]
-fn 破棄を選ぶと_保存せずに置き換わる() {
+fn 破棄を選ぶと_保存せずに閉じる() {
     let mut s = dirty_env();
-    s.open("/w/b.txt");
+    ask(&mut s);
     s.text("D"); // アクセラレータ (大小を区別しない)
     assert_eq!(s.overlay(), "");
-    assert_eq!(s.doc_text(), "bbb");
+    assert_eq!(s.doc_text(), "");
     assert_eq!(
         s.fs.read("/w/a.txt").unwrap(),
         b"aaa",
@@ -183,19 +188,19 @@ fn 破棄を選ぶと_保存せずに置き換わる() {
 }
 
 #[test]
-fn 保存を選ぶと_保存してから置き換わる() {
+fn 保存を選ぶと_保存してから閉じる() {
     let mut s = dirty_env();
-    s.open("/w/b.txt");
+    ask(&mut s);
     s.key(KeyCode::Enter, Modifiers::NONE); // 既定のボタン = 保存
     assert_eq!(s.fs.read("/w/a.txt").unwrap(), b"xaaa");
-    assert_eq!(s.doc_text(), "bbb");
+    assert_eq!(s.doc_text(), "");
     assert_eq!(s.overlay(), "");
 }
 
 #[test]
 fn 保存が失敗したら_続きの操作はしない() {
     let mut s = dirty_env();
-    s.open("/w/b.txt");
+    ask(&mut s);
     s.fs.fail_next(
         eve_testkit::FsOp::WriteAtomic,
         eve_core::FsErrorKind::PermissionDenied,
@@ -209,7 +214,7 @@ fn 保存が失敗したら_続きの操作はしない() {
 #[test]
 fn フォーカスの移動と決定() {
     let mut s = dirty_env();
-    s.open("/w/b.txt");
+    ask(&mut s);
     s.key(KeyCode::Tab, Modifiers::NONE); // 破棄
     s.key(KeyCode::Tab, Modifiers::NONE); // キャンセル
     let f = s.frame();
@@ -230,7 +235,7 @@ fn フォーカスの移動と決定() {
 #[test]
 fn ダイアログはモーダル() {
     let mut s = dirty_env();
-    s.open("/w/b.txt");
+    ask(&mut s);
     s.text("zzz"); // 複数書記素はすべて捨てる
     s.e.handle_input(s.win, InputEvent::Paste("d".into())); // 貼り付けも選択肢を実行しない
     assert_eq!(s.overlay(), "dialog");
@@ -251,10 +256,10 @@ fn ダイアログはモーダル() {
 }
 
 #[test]
-fn 無題の新規作成は_名前の入力を経て保存してから作る() {
+fn 無題を閉じるときは_名前の入力を経て保存してから閉じる() {
     let mut s = Env::new();
     s.text("memo");
-    s.run("file.new", Args::new());
+    ask(&mut s);
     assert_eq!(s.overlay(), "dialog");
     let f = s.frame();
     let OverlayModel::Confirm { message, .. } = &f.overlays[0] else {
@@ -266,7 +271,7 @@ fn 無題の新規作成は_名前の入力を経て保存してから作る() {
     s.text("memo.txt");
     s.key(KeyCode::Enter, Modifiers::NONE);
     assert_eq!(s.fs.read("/w/memo.txt").unwrap(), b"memo");
-    assert_eq!(s.doc_text(), "", "保存の後、新しい無題の文書");
+    assert_eq!(s.doc_text(), "", "保存の後に閉じ、新しい無題の文書");
     assert_eq!(s.doc_path(), None);
     assert_eq!(s.overlay(), "");
 }
@@ -443,7 +448,7 @@ fn 名前を付けて保存のプロンプトは今のパスが初期値() {
 #[test]
 fn オーバーレイ中のヒントは決定と取消() {
     let mut s = dirty_env();
-    s.open("/w/b.txt");
+    ask(&mut s);
     let f = s.frame();
     assert_eq!(f.hints.context, eve_view::HintContext::Overlay);
     let words: Vec<String> = f.hints.items.iter().map(|h| ct(&h.text)).collect();
@@ -490,17 +495,17 @@ fn 保存の間に編集したら_続きの前にもう一度尋ねる() {
 }
 
 #[test]
-fn 明示の保存の最中に破棄で置き換えても_保存は完了する() {
+fn 明示の保存の最中に破棄で閉じても_保存は完了する() {
     let mut s = dirty_env();
     s.e.execute(CommandInvocation::new(
         "file.save",
         InvocationSource::Keymap,
     )); // ジョブはまだ
-    s.open("/w/b.txt"); // 保存中は dirty のまま → 確認
+    ask(&mut s); // 保存中は dirty のまま → 確認
     assert_eq!(s.overlay(), "dialog");
     s.e.handle_input(s.win, InputEvent::Text("d".into()));
     s.pump();
-    assert_eq!(s.doc_text(), "bbb");
+    assert_eq!(s.doc_text(), "");
     assert_eq!(
         s.fs.read("/w/a.txt").unwrap(),
         b"xaaa",
@@ -515,30 +520,34 @@ fn 保存中に確認で保存を選んでも_二重に保存しない() {
         "file.save",
         InvocationSource::Keymap,
     ));
-    s.open("/w/b.txt");
+    ask(&mut s);
     s.e.handle_input(s.win, InputEvent::Text("s".into()));
     assert_eq!(s.jobs.pending(), 1, "保存ジョブは 1 つだけ");
     s.pump();
     assert_eq!(s.fs.read("/w/a.txt").unwrap(), b"xaaa");
-    assert_eq!(s.doc_text(), "bbb", "その保存の完了後に続きの操作");
+    assert_eq!(
+        s.doc_text(),
+        "",
+        "その保存の完了後に続きの操作 (閉じて無題の文書)"
+    );
 }
 
 #[test]
 fn 全角のアクセラレータと_shift_付きのキー() {
     let mut s = dirty_env();
-    s.open("/w/b.txt");
+    ask(&mut s);
     s.text("Ｄ"); // 全角英字は半角に畳む
-    assert_eq!(s.doc_text(), "bbb");
+    assert_eq!(s.doc_text(), "");
     let mut s = dirty_env();
-    s.open("/w/b.txt");
+    ask(&mut s);
     s.key(KeyCode::Char('d'), Modifiers::SHIFT); // 大文字は shift + 小文字で届く
-    assert_eq!(s.doc_text(), "bbb");
+    assert_eq!(s.doc_text(), "");
 }
 
 #[test]
 fn オーバーレイを閉じる_esc_はメッセージを消さない() {
     let mut s = dirty_env();
-    s.open("/w/b.txt");
+    ask(&mut s);
     s.e.state_mut().show_message(
         eve_view::MessageLevel::Error,
         "msg.save.failed",

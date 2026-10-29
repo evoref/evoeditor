@@ -975,8 +975,3 @@ message = "{path} には保存されていない変更があります"
 save = "[S] 保存してから開き直す"
 discard = "[D] 破棄して開き直す"
 
-[ui.confirm.unsaved_replace]
-title = "未保存の変更"
-message = "{path} には保存されていない変更があります"
-save = "[S] 保存してから開く"
-discard = "[D] 破棄して開く"
