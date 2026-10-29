@@ -247,6 +247,8 @@ impl Editor {
             "dialog" => &["dialog"],
             "prompt" => &["prompt", "global"],
             "palette" => &["palette", "list", "prompt", "global"],
+            // バッファ一覧: `list` の割当 (一覧内の `buffer.close`) を先に見て、移動などはパレットと共通
+            "buffer_list" => &["list", "palette", "prompt", "global"],
             "search" => &["search", "prompt", "global"],
             _ => &Self::EDITOR_CONTEXTS,
         }

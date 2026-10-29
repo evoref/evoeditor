@@ -4,8 +4,8 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use eve_core::{
-    Args, CommandInvocation, CommandResult, Document, DocumentId, Editor, InvocationSource, Ports,
-    TextFormat,
+    Args, CommandInvocation, CommandResult, Document, DocumentId, Editor, FsPath, InvocationSource,
+    Ports, TextFormat,
 };
 use eve_testkit::{FixedPaths, ManualClock, ManualJobSpawner, MemFs};
 use eve_text::Text;
@@ -298,4 +298,99 @@ fn ステータスバーは文書が_2_件以上のとき何番目かを出す()
         "無題-1 (1/2)",
         "閉じると数が減り、最近使った a を表示する"
     );
+}
+
+/// a.txt, b.txt, c.txt の 3 文書 (開いた順。a が表示中)。
+fn named_three() -> (Env, [DocumentId; 3]) {
+    let (mut s, ids) = three();
+    for (id, name) in ids.iter().zip(["a.txt", "b.txt", "c.txt"]) {
+        s.e.state_mut().document_mut(*id).unwrap().path = Some(FsPath::new(format!("/w/{name}")));
+    }
+    (s, ids)
+}
+
+impl Env {
+    /// バッファ一覧の (行のラベル, 選択中の番号)。
+    fn list_rows(&mut self) -> (Vec<String>, usize) {
+        let f = self.e.frame(self.win).unwrap();
+        let OverlayModel::List {
+            items, selected, ..
+        } = &f.overlays[0]
+        else {
+            panic!("一覧が出ていない")
+        };
+        let rows = items
+            .iter()
+            .map(|i| i.label.spans.iter().map(|s| s.text.as_str()).collect())
+            .collect();
+        (rows, *selected)
+    }
+}
+
+#[test]
+fn 一覧は最近使った順で_直前の文書が_2_番目に選ばれている() {
+    let (mut s, _) = named_three();
+    s.run("buffer.next"); // b。直前は a
+    s.run("buffer.list");
+    assert_eq!(s.overlay(), "buffer_list");
+    let (rows, selected) = s.list_rows();
+    assert_eq!(rows, ["    b.txt", "    a.txt", "    c.txt"]);
+    assert_eq!(selected, 1, "直前の a が選ばれている");
+}
+
+#[test]
+fn ctrl_e_enter_で直前の文書と往復できる() {
+    let (mut s, [a, b, _c]) = named_three();
+    s.key(KeyCode::Char('e'), Modifiers::CTRL);
+    assert_eq!(s.overlay(), "buffer_list");
+    s.key(KeyCode::Enter, Modifiers::NONE);
+    assert_eq!(s.overlay(), "");
+    assert_eq!(s.active(), b, "a の直前は無いので 2 番目 (開いた順で b)");
+    s.key(KeyCode::Char('e'), Modifiers::CTRL);
+    s.key(KeyCode::Enter, Modifiers::NONE);
+    assert_eq!(s.active(), a, "もう一度で元の文書");
+}
+
+#[test]
+fn 一覧は入力で絞り込め_dirty_を印で示し_esc_で何も変えずに閉じる() {
+    let (mut s, [a, _b, _c]) = named_three();
+    s.text("x"); // a を dirty に
+    s.run("buffer.list");
+    let (rows, _) = s.list_rows();
+    assert_eq!(rows[0], "[+] a.txt", "変更マーカー");
+    s.text("c.t");
+    let (rows, selected) = s.list_rows();
+    assert_eq!(rows, ["    c.txt"]);
+    assert_eq!(selected, 0, "入力が変わると先頭を選ぶ");
+    s.key(KeyCode::Esc, Modifiers::NONE);
+    assert_eq!(s.overlay(), "");
+    assert_eq!(s.active(), a);
+    assert_eq!(s.e.state().documents_len(), 3);
+}
+
+#[test]
+fn 一覧の中の_ctrl_w_は選んでいる文書を閉じる() {
+    let (mut s, [a, b, c]) = named_three();
+    s.run("buffer.list");
+    s.key(KeyCode::Down, Modifiers::NONE); // 2 番目 (b) → 3 番目 (c)
+    s.key(KeyCode::Char('w'), Modifiers::CTRL);
+    assert!(!s.exists(c), "選んでいた c を閉じる");
+    assert!(s.exists(a) && s.exists(b));
+    assert_eq!(s.overlay(), "buffer_list", "一覧は開いたまま");
+    assert_eq!(s.active(), a, "表示中の文書は変わらない");
+    let (rows, _) = s.list_rows();
+    assert_eq!(rows, ["    a.txt", "    b.txt"]);
+}
+
+#[test]
+fn 一覧の中で_dirty_な文書を閉じると確認が出る() {
+    let (mut s, [a, b, _c]) = named_three();
+    s.text("x"); // a
+    s.run("buffer.next"); // b
+    s.run("buffer.list"); // [b, a, c]、選択は a
+    s.key(KeyCode::Char('w'), Modifiers::CTRL);
+    assert_eq!(s.overlay(), "dialog", "a は dirty なので確認");
+    s.text("d");
+    assert!(!s.exists(a) && s.exists(b));
+    assert_eq!(s.active(), b);
 }

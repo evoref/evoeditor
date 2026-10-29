@@ -116,6 +116,10 @@ title = "Undo"
 description = "Close the current document. Asks first if it has unsaved changes."
 title = "Close"
 
+[cmd.buffer.list]
+description = "Show the open documents and switch between them."
+title = "List"
+
 [cmd.buffer.next]
 description = "Switch to the next document."
 title = "Next document"
@@ -796,6 +800,11 @@ footer = "{matched}/{total}"
 placeholder = "Type a command"
 disabled = "Cannot run now: {reason}"
 no_match = "No matching commands"
+
+[ui.buffer_list]
+title = "Buffers"
+placeholder = "Filter by name"
+no_match = "No matching documents"
 
 [ui.long_line]
 omitted = "… ({bytes} more bytes omitted)"

@@ -235,6 +235,7 @@ impl EditorState {
             None => "",
             Some(Overlay::Confirm(_)) => "dialog",
             Some(Overlay::Prompt(_)) => "prompt",
+            Some(Overlay::Palette(p)) if p.buffers => "buffer_list",
             Some(Overlay::Palette(_)) => "palette",
         }
     }
@@ -520,6 +521,10 @@ impl EditorState {
         }
         let id = inv.id.as_str();
         if id.starts_with("ui.") || id == "app.quit" {
+            return None;
+        }
+        // バッファ一覧の中の `buffer.close` は、選んでいる文書を閉じる (07 §11.6 の `list` コンテキスト)
+        if id == "buffer.close" && self.overlay_name() == "buffer_list" {
             return None;
         }
         // 入力欄への貼り付け: システムクリップボードを要求し、応答は入力欄の最初の行を入れる (`on_clipboard_content`)

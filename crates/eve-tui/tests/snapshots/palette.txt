@@ -1,7 +1,8 @@
  1コマンドを入力
  2▶ アプリ: 終了                                              app.quit  Ctrl+Q
  3  バッファ: 閉じる                                      buffer.close  Ctrl+W
- 4  バッファ: 次の文書                                  buffer.next  Ctrl+PgDn
+ 4  バッファ: 一覧                                         buffer.list  Ctrl+E
+~   バッファ: 次の文書                                  buffer.next  Ctrl+PgDn
 ~   バッファ: 前の文書                                  buffer.prev  Ctrl+PgUp
 ~   クリップボード: コピー          現在は実行できません: 選択範囲がありません
 ~   クリップボード: 切り取り        現在は実行できません: 選択範囲がありません
@@ -10,7 +11,6 @@
 ~   移動: 行末へ移動                                           cursor.end  End
 ~   移動: 行へ移動                                    cursor.goto_line  Ctrl+G
 ~   移動: 行頭へ移動                                         cursor.home  Home
-~   移動: 下へ移動                                       cursor.move_down  ↓
 ~
 memo.txt                                                     行 1, 桁 1 UTF-8 LF
 

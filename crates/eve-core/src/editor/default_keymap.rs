@@ -98,6 +98,9 @@ pub(super) fn default_keymap() -> Keymap {
     bind("editor", "ctrl+pagedown", "buffer.next");
     bind("editor", "ctrl+pageup", "buffer.prev");
     bind("editor", "ctrl+k n", "buffer.next");
+    bind("editor", "mod+e", "buffer.list");
+    // バッファ一覧の中: 選択中の文書を閉じる
+    bind("list", "mod+w", "buffer.close");
     bind("editor", "ctrl+k p", "buffer.prev");
     // 編集
     bind("editor", "enter", "edit.newline");

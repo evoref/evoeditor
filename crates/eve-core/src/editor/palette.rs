@@ -14,7 +14,7 @@ use super::overlay::Overlay;
 use super::state::EditorState;
 
 /// 候補の窓の最大行数 (04 §8.1)。
-const WINDOW: usize = 12;
+pub(super) const WINDOW: usize = 12;
 
 /// パレットに出さないコマンド (オーバーレイ内専用と内部用、07 §11.6)。
 fn hidden(id: &str) -> bool {
@@ -103,6 +103,8 @@ pub(super) struct PaletteState {
     pub selected: usize,
     /// 引数を尋ねている最中のコマンド (`Esc` で 1 段戻る)。
     pub stage: Option<&'static ArgDef>,
+    /// バッファ一覧 (`buffer.list`、04 §8.5)。パレットと同じリスト部品で、候補が文書になる。
+    pub buffers: bool,
 }
 
 struct Hit {
@@ -110,7 +112,7 @@ struct Hit {
     ranges: Vec<Range<usize>>,
 }
 
-fn lower_graphemes(s: &str) -> Vec<String> {
+pub(super) fn lower_graphemes(s: &str) -> Vec<String> {
     grapheme_indices(s)
         .into_iter()
         .map(|(_, g)| g.to_lowercase())
@@ -118,7 +120,7 @@ fn lower_graphemes(s: &str) -> Vec<String> {
 }
 
 /// `hay` の中で `needle` が最初に現れる書記素番号。
-fn find(hay: &[String], needle: &[String]) -> Option<usize> {
+pub(super) fn find(hay: &[String], needle: &[String]) -> Option<usize> {
     if needle.is_empty() || needle.len() > hay.len() {
         return None;
     }
@@ -266,6 +268,7 @@ impl EditorState {
             return CommandResult::Rejected(RejectReason::NotAvailable);
         };
         let n = match p.stage {
+            _ if p.buffers => self.buffer_hits(&p.text).len(),
             Some(def) => self.arg_hits(def, &p.text).len(),
             None => self.palette_hits(&p.text).len(),
         };
@@ -295,6 +298,7 @@ impl EditorState {
             return CommandResult::Rejected(RejectReason::NotAvailable);
         };
         let n = match p.stage {
+            _ if p.buffers => self.buffer_hits(&p.text).len(),
             Some(def) => self.arg_hits(def, &p.text).len(),
             None => self.palette_hits(&p.text).len(),
         };
@@ -317,6 +321,9 @@ impl EditorState {
         let Some(Overlay::Palette(p)) = &self.overlay else {
             return CommandResult::Rejected(RejectReason::NotAvailable);
         };
+        if p.buffers {
+            return self.buffer_list_confirm();
+        }
         if let Some(def) = p.stage {
             // 引数の値を選んだ: パレットを閉じて、その値でコマンドを実行する
             let hits = self.arg_hits(def, &p.text);
@@ -418,6 +425,9 @@ impl EditorState {
     }
 
     pub(super) fn palette_model(&self, p: &PaletteState) -> OverlayModel {
+        if p.buffers {
+            return self.buffer_list_model(p);
+        }
         if let Some(def) = p.stage {
             return self.arg_model(p, def);
         }
