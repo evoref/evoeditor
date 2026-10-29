@@ -22,6 +22,8 @@ eve-encoding = { version = "0.1.0", path = "../eve-encoding" }
 eve-view = { version = "0.1.0", path = "../eve-view" }
 eve-config = { version = "0.1.0", path = "../eve-config" }
 memchr = "2.8.3"
+# 正規表現 (docs/03 §12.3)。線形時間保証。行単位で実行する。Unicode は既定で有効
+regex = { version = "1", default-features = false, features = ["std", "unicode", "perf-inline", "perf-literal"] }
 # 内容ハッシュ XXH3-64 (docs/05 §5.5)。純 Rust
 twox-hash = { version = "2.1.5", default-features = false, features = ["std", "xxhash3_64"] }
 
