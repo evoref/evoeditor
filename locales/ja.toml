@@ -14,6 +14,10 @@ title = "コピー"
 description = "選択範囲を切り取ってクリップボードに入れます。"
 title = "切り取り"
 
+[cmd.config.reload]
+description = "設定ファイル (config.toml と keymap.toml) を読み直して、再起動せずに反映します。"
+title = "設定を読み直す"
+
 [cmd.cursor.doc_end]
 description = "カーソルを文書の末尾へ動かします。"
 title = "文書の末尾へ移動"
@@ -368,6 +372,9 @@ updated = "evoeditor {version} に更新しました: {summary}"
 unsupported = "{option} はこのバージョンでは使えないため無視しました"
 
 [info.config]
+reload_restart = "次の項目は再起動すると有効になります: {keys}"
+reload_unchanged = "設定を読み直しました (変わった項目はありません)"
+reloaded = "設定を読み直しました。{count} 項目が変わりました: {keys}"
 unsupported = "{item} はこのバージョンでは未対応のため無視しました"
 
 [info.eol]
@@ -490,6 +497,10 @@ text = "設定の問題 ({file}:{line}): {detail}"
 [msg.config.problems]
 hint = "該当の項目は既定値を使っています。全件はログ ({log}) を見てください"
 text = "設定に {count} 件の問題があります。最初の 1 件: {detail}"
+
+[msg.config.reload_kept]
+hint = "エラーを直してから、もう一度読み直してください"
+text = "{file} にエラーがあるため、前の設定のままにしました"
 
 [msg.config.syntax]
 hint = "該当の行を直してください。直すまでは既定値で動きます"

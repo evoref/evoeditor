@@ -16,6 +16,10 @@ title = "Copy"
 description = "Cut the selection and put it on the clipboard."
 title = "Cut"
 
+[cmd.config.reload]
+description = "Reload the settings files (config.toml and keymap.toml) without restarting."
+title = "Reload Settings"
+
 [cmd.cursor.doc_end]
 description = "Move the cursor to the end of the document."
 title = "Go to Document End"
@@ -370,6 +374,9 @@ updated = "Updated to evoeditor {version}: {summary}"
 unsupported = "{option} is not available in this version and was ignored"
 
 [info.config]
+reload_restart = "These items take effect after a restart: {keys}"
+reload_unchanged = "Reloaded the settings (nothing changed)"
+reloaded = "Reloaded the settings. {count} items changed: {keys}"
 unsupported = "{item} is not supported in this version and was ignored"
 
 [info.eol]
@@ -492,6 +499,10 @@ text = "Configuration problem ({file}:{line}): {detail}"
 [msg.config.problems]
 hint = "The affected items use their defaults. See the log ({log}) for all of them"
 text = "There are {count} problems in the configuration. The first: {detail}"
+
+[msg.config.reload_kept]
+hint = "Fix the errors, then reload again"
+text = "{file} has errors, so the previous settings are kept"
 
 [msg.config.syntax]
 hint = "Fix the line shown. Until then the defaults are used"

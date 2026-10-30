@@ -75,6 +75,10 @@ pub struct EditorState {
     needs_render: bool,
     /// 左ボタンのドラッグ中の状態 (docs/03 §5.8.1)。
     pub(super) mouse_drag: Option<super::mouse::Drag>,
+    /// `config.reload` の途中: 解析したキーマップと、`config.toml` で変わった項目 (Editor が受け取って差し替える)。
+    pub(super) reloaded: Option<(eve_config::KeymapFile, Vec<&'static str>)>,
+    /// 今のユーザー層のキーマップの割当 (再読込で変わったかを比べる)。
+    pub(super) user_keymap_entries: Option<Vec<eve_config::KeymapEntry>>,
     /// マウスの取得が有効か (`ui.mouse` の初期値。`ui.toggle_mouse` で変わる)。
     pub(super) mouse_on: bool,
     /// ジョブの投入口 (`Ports.jobs`)。
@@ -200,6 +204,8 @@ impl EditorState {
             surface: (80, 24),
             mouse_drag: None,
             mouse_on: true,
+            reloaded: None,
+            user_keymap_entries: None,
         }
     }
 
@@ -209,17 +215,21 @@ impl EditorState {
 
     /// 設定を差し替え、持っている文書の表示設定にも写す。
     pub fn set_config(&mut self, config: eve_config::Config) {
+        let old_wrap = self.config_wrap();
         self.config = config;
         self.mouse_on = config.mouse;
         let display = self.display_settings();
         for d in self.documents.values_mut() {
             d.display = display;
         }
-        // 折り返しの設定は View ごとの状態で、設定の差し替えで既存の View にも写す
+        // 折り返しの設定は View ごとの状態で、設定の差し替えで既存の View にも写す。
+        // 変わっていなければ写さない (再読込で、`view.toggle_wrap` で切り替えた状態を戻さない)
         let wrap = self.config_wrap();
-        let views: Vec<ViewId> = self.views.keys().copied().collect();
-        for v in views {
-            self.set_wrap(v, wrap);
+        if wrap != old_wrap {
+            let views: Vec<ViewId> = self.views.keys().copied().collect();
+            for v in views {
+                self.set_wrap(v, wrap);
+            }
         }
         self.needs_render = true;
     }

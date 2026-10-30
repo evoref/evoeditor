@@ -53,6 +53,8 @@ pub struct JobRequest {
 #[derive(Clone, Debug)]
 #[non_exhaustive]
 pub enum JobKind {
+    /// 設定ディレクトリの `config.toml` と `keymap.toml` を読む (`config.reload`、07 §6)。
+    ReadConfig { dir: FsPath },
     /// ファイルの `metadata` と Stamp を調べる。
     Metadata { path: FsPath, purpose: MetaPurpose },
     /// 起動時の退避ディレクトリの走査 (02 §9.3 の `RecoveryScan`。メインスレッドでは列挙しない)。
@@ -183,6 +185,12 @@ pub enum JobResult {
         /// 残っていた保存中フラグから見つけた、中断された保存の痕跡 (直接上書きの中断など、存在するファイルでも返す)。
         interrupted_save: Option<InterruptedSave>,
     },
+    /// `ReadConfig` の結果。
+    ConfigRead {
+        job: JobId,
+        config: ConfigFile,
+        keymap: ConfigFile,
+    },
     /// 起動時の退避ディレクトリの走査の結果 (新しい順ではなく列挙した順。main が整えて案内する)。
     RecoveryFound {
         job: JobId,
@@ -300,6 +308,7 @@ impl JobResult {
             | JobResult::NewFile { job, .. }
             | JobResult::NeedsConfirm { job, .. }
             | JobResult::RecoveryFound { job, .. }
+            | JobResult::ConfigRead { job, .. }
             | JobResult::Saved { job, .. }
             | JobResult::RecoveryWritten { job, .. }
             | JobResult::SwapWritten { job }
@@ -540,6 +549,11 @@ pub fn run_job(
                 err: JobError::Fs(err),
             },
         },
+        JobKind::ReadConfig { dir } => JobResult::ConfigRead {
+            job: req.id,
+            config: read_config_file(&*ports.fs, &dir.join("config.toml")),
+            keymap: read_config_file(&*ports.fs, &dir.join("keymap.toml")),
+        },
         JobKind::Metadata { path, purpose } => match ports.fs.metadata(path) {
             Ok(meta) => {
                 if cancel.is_cancelled() {
@@ -571,6 +585,33 @@ pub fn run_job(
         },
     };
     emit(result);
+}
+
+/// 設定ファイル 1 つの読込の結果。無ければ `Ok(None)`、読めなければ理由。
+pub type ConfigFile = Result<Option<Vec<u8>>, String>;
+
+/// 設定ファイルの大きさの上限 (これを超えるものは設定ではないとみなして読まない)。
+const CONFIG_FILE_MAX: usize = 4 << 20;
+
+fn read_config_file(fs: &dyn crate::fs::FileSystem, path: &FsPath) -> ConfigFile {
+    let mut r = match fs.open_read(path) {
+        Ok(r) => r,
+        Err(e) if e.kind == crate::fs::FsErrorKind::NotFound => return Ok(None),
+        Err(e) => return Err(format!("{:?}", e.kind)),
+    };
+    let mut out = Vec::new();
+    loop {
+        match r.next_chunk() {
+            Ok(Some(c)) => {
+                out.extend_from_slice(c);
+                if out.len() > CONFIG_FILE_MAX {
+                    return Err("too large".to_owned());
+                }
+            }
+            Ok(None) => return Ok(Some(out)),
+            Err(e) => return Err(format!("{e:?}")),
+        }
+    }
 }
 
 #[cfg(test)]

@@ -525,15 +525,18 @@ impl Host {
         let provider = self.clipboard.clone();
         // OSC 52 で書く条件: 端末が対応し、`clipboard.osc52` が `never` でない。`always` と SSH 中の `auto` は
         // システムへの書込の成否に関わらず書き、それ以外はシステムに書けなかったときだけ書く (05 §8.1)
-        let osc = self.osc52_write.then_some(self.config.osc52).and_then(|p| {
-            use eve_config::Osc52Policy::{Always, Auto, Never};
-            match p {
-                Never => None,
-                Always => Some(true),
-                Auto => Some(self.ssh_session),
-            }
-        });
-        let max_b64 = self.config.osc52_max_bytes as usize;
+        let osc = self
+            .osc52_write
+            .then_some(self.editor.state().config().osc52)
+            .and_then(|p| {
+                use eve_config::Osc52Policy::{Always, Auto, Never};
+                match p {
+                    Never => None,
+                    Always => Some(true),
+                    Auto => Some(self.ssh_session),
+                }
+            });
+        let max_b64 = self.editor.state().config().osc52_max_bytes as usize;
         if provider.is_none() && osc.is_none() {
             return;
         }

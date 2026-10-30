@@ -1649,6 +1649,10 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 | `ui.config.type.bool` | `{actual}` / `{expected}` に入れる型の語 | 真偽値 (`true` か `false`) |
 | `ui.config.type.array` | `{actual}` / `{expected}` に入れる型の語 | 配列 |
 | `ui.config.type.table` | `{actual}` / `{expected}` に入れる型の語 | テーブル |
+| `info.config.reloaded` | `config.reload` で設定を読み直し、項目が変わった (07 §6 の規則 4。`{keys}` は変わったキーをコンマで並べたもの。`keymap.toml` が変わったら `keymap.toml` も入る) | 設定を読み直しました。{count} 項目が変わりました: {keys} |
+| `info.config.reload_unchanged` | 同上。変わった項目が無い | 設定を読み直しました (変わった項目はありません) |
+| `info.config.reload_restart` | 同上。変わった項目に、再起動しないと効かないもの (`theme.color_mode` / `view.ambiguous_width` / `ui.locale`) がある | 次の項目は再起動すると有効になります: {keys} |
+| `msg.config.reload_kept` | 同上。ファイルにエラー (構文エラー・読めない) があり、そのファイルは前の設定のまま (07 §6 の規則 1。診断は `msg.config.problem` で別に出す) | {file} にエラーがあるため、前の設定のままにしました / エラーを直してから、もう一度読み直してください |
 | `info.config.unsupported` (v0.2) | 公開前のキー・予約のセクション・後の版の値 (07 §5 冒頭の「このバージョンでは未対応」)。v0.1 は画面に出さず、件数にも数えず、ログにだけ書く (07 §4.3)。`config.show_diagnostics` (v0.2) の一覧で使う | {item} はこのバージョンでは未対応のため無視しました |
 
 v0.2 以降の診断 (名前だけを予約し、文言はその版で言語ファイルに加える): `msg.config.unknown_command` (キーマップの未知のコマンド ID)、`msg.config.invalid_key_notation` (キー表記の構文エラー)、`msg.config.chord_prefix` (プレフィックス衝突)、`msg.config.unknown_name` (存在しないテーマ・言語・ロケール名)、`info.config.key_conflict` (同一キーの重複)、`info.config.deprecated_key` (廃止キーの自動変換)、`info.config.ignored_workspace` (所有者検査で無視したワークスペース設定、v0.4)、`info.config.pending_trust` (信頼待ちの危険項目、v0.4)、`msg.config.unsafe_value` (安全性違反、v0.4)。

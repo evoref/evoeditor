@@ -410,3 +410,46 @@ fn clipboard_osc52_の設定を読む() {
     assert_eq!(l.config.osc52_max_bytes, 100_000, "範囲外は既定値");
     assert_eq!(l.diagnostics.len(), 2);
 }
+
+#[test]
+fn changed_keys_は変わった公開キーだけを並べ_全キーを網羅する() {
+    let a = Config::default();
+    assert!(changed_keys(&a, &a).is_empty());
+    let b = Config {
+        tab_width: 8,
+        mouse: false,
+        ..a
+    };
+    assert_eq!(changed_keys(&a, &b), ["editor.tab_width", "ui.mouse"]);
+    // 公開キーの一覧 (KEYS) と同じ数を数えている (フィールドを足して changed_keys に足し忘れていない)
+    let names: std::collections::BTreeSet<&str> = [
+        "editor.tab_width",
+        "editor.indent_unit",
+        "editor.indent_width",
+        "file.default_encoding",
+        "file.default_line_ending",
+        "view.ambiguous_width",
+        "theme.color_mode",
+        "file.swap.enabled",
+        "file.swap.interval_ms",
+        "file.swap.min_interval_ms",
+        "file.swap.max_bytes",
+        "file.swap.exclude_secret_files",
+        "ui.locale",
+        "editor.undo.total_max_bytes",
+        "editor.backspace_unit",
+        "view.wrap",
+        "view.wrap_indent",
+        "view.wrap_kinsoku",
+        "view.show_whitespace",
+        "ui.mouse",
+        "ui.mouse_wheel_lines",
+        "ui.which_key_delay_ms",
+        "clipboard.osc52",
+        "clipboard.osc52_max_bytes",
+    ]
+    .into_iter()
+    .collect();
+    let keys: std::collections::BTreeSet<&str> = KEYS.iter().copied().collect();
+    assert_eq!(names, keys);
+}
