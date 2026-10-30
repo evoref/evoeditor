@@ -51,7 +51,7 @@ impl EditorState {
     /// すべての割当を更新する (ヘルプのキー一覧用)。
     pub fn set_all_key_bindings(
         &mut self,
-        all: std::collections::BTreeMap<String, Vec<Vec<eve_view::KeyStroke>>>,
+        all: std::collections::BTreeMap<String, Vec<(Vec<eve_view::KeyStroke>, bool)>>,
     ) {
         self.key_all = all;
     }

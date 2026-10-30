@@ -16,6 +16,9 @@ use super::layout::cell_text;
 use super::overlay::Overlay;
 use super::state::EditorState;
 
+/// ヘルプのキー一覧で、この端末で届かない割当の後ろに付ける印 (04 §8.6)。
+const UNREACHABLE_MARK: &str = "*";
+
 /// ヘルプの節 (表示順)。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum HelpSection {
@@ -67,6 +70,8 @@ impl EditorState {
         // キー一覧: 割当のあるコマンドをカテゴリ別に。同じコマンドの割当はすべて並べる
         section(&mut lines, HelpSection::Keys, "ui.help.section.keys");
         lines.push(line(HelpLineKind::Body, None, render("ui.help.keys.note")));
+        let note_at = lines.len();
+        let mut any_unreachable = false;
         let mut last_ns = "";
         for id in self.palette_command_ids() {
             let Some(seqs) = self.key_all.get(id).filter(|s| !s.is_empty()) else {
@@ -81,9 +86,18 @@ impl EditorState {
                     self.category_label(ns),
                 ));
             }
+            // この端末で届かない割当には印を付ける (04 §8.6 / §7.8)
             let keys = seqs
                 .iter()
-                .map(|s| format_sequence(s))
+                .map(|(s, ok)| {
+                    let k = format_sequence(s);
+                    if *ok {
+                        k
+                    } else {
+                        any_unreachable = true;
+                        format!("{k}{UNREACHABLE_MARK}")
+                    }
+                })
                 .collect::<Vec<_>>()
                 .join(", ");
             lines.push(line(
@@ -91,6 +105,12 @@ impl EditorState {
                 Some(keys),
                 self.command_title_of(id),
             ));
+        }
+        if any_unreachable {
+            lines.insert(
+                note_at,
+                line(HelpLineKind::Body, None, render("ui.help.keys.unreachable")),
+            );
         }
         lines.push(line(HelpLineKind::Body, None, String::new()));
 
@@ -308,14 +328,16 @@ pub(super) fn register(r: &mut CommandRegistry) {
 }
 
 /// すべての割当をコマンドごとに集める (ヘルプのキー一覧用)。層の順で、同じ割当は 1 つにまとめる。
+/// 割当をコマンドごとに集める。値は (キー列, この端末で届くか)。同じキー列が複数あれば、どれかが届けば届く。
 pub(super) fn collect_all_bindings(
-    bindings: impl Iterator<Item = (String, Vec<KeyStroke>)>,
-) -> BTreeMap<String, Vec<Vec<KeyStroke>>> {
-    let mut out: BTreeMap<String, Vec<Vec<KeyStroke>>> = BTreeMap::new();
-    for (cmd, seq) in bindings {
+    bindings: impl Iterator<Item = (String, Vec<KeyStroke>, bool)>,
+) -> BTreeMap<String, Vec<(Vec<KeyStroke>, bool)>> {
+    let mut out: BTreeMap<String, Vec<(Vec<KeyStroke>, bool)>> = BTreeMap::new();
+    for (cmd, seq, ok) in bindings {
         let e = out.entry(cmd).or_default();
-        if !e.contains(&seq) {
-            e.push(seq);
+        match e.iter_mut().find(|(s, _)| *s == seq) {
+            Some(x) => x.1 |= ok,
+            None => e.push((seq, ok)),
         }
     }
     out

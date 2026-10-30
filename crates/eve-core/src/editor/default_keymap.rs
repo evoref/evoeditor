@@ -209,6 +209,15 @@ pub(super) fn default_keymap() -> Keymap {
     ] {
         bind("editor", keys, cmd);
     }
+    // 拡張キーが無いと区別できない割当 (07 §11.6 の `[E]`)。キーの表記・ヘルプの印でこの端末で届くかを判定する
+    for (ctx, keys) in [
+        ("global", "mod+shift+p"),
+        ("search", "shift+enter"),
+        ("search", "ctrl+h"),
+        ("editor", "ctrl+h"),
+    ] {
+        l.mark_enhanced(ctx, keys);
+    }
     Keymap::new(vec![l]).expect("既定キーマップに曖昧なチョードはない")
 }
 

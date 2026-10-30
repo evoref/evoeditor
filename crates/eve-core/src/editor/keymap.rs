@@ -187,6 +187,16 @@ pub struct Binding {
     pub command: CommandId,
     pub args: Args,
     pub when: ContextExpr,
+    /// 拡張キー (kitty keyboard protocol など) が無いと区別できない割当 (07 §11.6 の `[E]`)。
+    pub enhanced: bool,
+}
+
+/// 割当がこの端末で届くか (04 §7.8): 拡張キーが要る割当は拡張キーが有効なときだけ、どのストロークも横取りされないこと。
+pub fn reachable(b: &Binding, caps: &eve_view::Capabilities) -> bool {
+    (!b.enhanced || caps.enhanced_keys)
+        && b.sequence
+            .iter()
+            .all(|k| !caps.intercepted_keys.contains(k))
 }
 
 /// 層 (既定・ユーザー・ワークスペース・モード・overlay 固有)。
@@ -221,6 +231,7 @@ impl Layer {
             command: CommandId::new(command),
             args: Args::new(),
             when,
+            enhanced: false,
         };
         if let Some(old) = self
             .bindings
@@ -246,6 +257,20 @@ impl Layer {
             b.args = args;
         }
         Ok(self)
+    }
+
+    /// `context` の `keys` の割当を「拡張キーが要る」(`[E]`) にする。
+    pub fn mark_enhanced(&mut self, context: &str, keys: &str) {
+        let Ok(seq) = parse_sequence(keys) else {
+            return;
+        };
+        for b in self
+            .bindings
+            .iter_mut()
+            .filter(|b| b.context == context && b.sequence == seq)
+        {
+            b.enhanced = true;
+        }
     }
 
     /// 条件に合う割当だけ残し、外した割当を返す。
@@ -322,11 +347,20 @@ impl Keymap {
         &self,
         contexts: &[&str],
     ) -> std::collections::BTreeMap<String, Vec<KeyStroke>> {
+        self.first_bindings_where(contexts, &|_| true)
+    }
+
+    /// `first_bindings` のうち、`ok` を満たす割当だけから選ぶ (この端末で届く割当、04 §7.8)。
+    pub fn first_bindings_where(
+        &self,
+        contexts: &[&str],
+        ok: &dyn Fn(&Binding) -> bool,
+    ) -> std::collections::BTreeMap<String, Vec<KeyStroke>> {
         let mut out = std::collections::BTreeMap::new();
         for (li, layer) in self.layers.iter().enumerate() {
             for ctx in contexts {
                 for b in layer.bindings.iter().filter(|b| b.context == *ctx) {
-                    if b.command.as_str() == NONE_COMMAND || self.shadowed(li, b) {
+                    if b.command.as_str() == NONE_COMMAND || self.shadowed(li, b) || !ok(b) {
                         continue;
                     }
                     out.entry(b.command.as_str().to_owned())
@@ -337,14 +371,14 @@ impl Keymap {
         out
     }
 
-    /// すべての割当 (コマンド ID, キー列)。層の順。ヘルプのキー一覧が使う。
-    pub fn all_bindings(&self) -> Vec<(String, Vec<KeyStroke>)> {
+    /// すべての割当 (表示から外すものを除く)。層の順。ヘルプのキー一覧が使う。
+    pub fn all_bindings(&self) -> Vec<&Binding> {
         self.layers
             .iter()
             .enumerate()
             .flat_map(|(li, l)| l.bindings.iter().map(move |b| (li, b)))
             .filter(|(li, b)| b.command.as_str() != NONE_COMMAND && !self.shadowed(*li, b))
-            .map(|(_, b)| (b.command.as_str().to_owned(), b.sequence.clone()))
+            .map(|(_, b)| b)
             .collect()
     }
 

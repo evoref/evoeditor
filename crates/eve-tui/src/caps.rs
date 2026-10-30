@@ -236,7 +236,8 @@ pub fn detect(config: CapsConfig, env: &dyn Env, is_windows: bool) -> Detected {
         screen_reader: false,
         ambiguous_width_hint: hint,
         min_surface: CellSize { cols: 20, rows: 5 },
-        intercepted_keys: Vec::new(),
+        // 端末が横取りするキー (04 §7.3a)。キーの表記・ヘルプの印で「届かない割当」を除く
+        intercepted_keys: crate::intercept::intercepted_keys(kind),
     };
     Detected {
         caps,

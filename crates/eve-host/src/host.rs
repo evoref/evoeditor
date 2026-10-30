@@ -263,7 +263,7 @@ impl Host {
         };
         let caps = frontend.init(&fcfg).map_err(StartError::Init)?;
         self.osc52_write = caps.osc52_write;
-        self.editor.state_mut().set_caps(caps);
+        self.editor.set_caps(caps);
         if let Some(info) = frontend.emergency_restore_info() {
             let _ = self.restore_info.set(info);
         }

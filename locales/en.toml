@@ -964,6 +964,7 @@ palette = "Find and run any command from the command palette with {key:ui.palett
 
 [ui.help.keys]
 note = "Keys written like Ctrl+K S are pressed one after another. Several keys for one command are separated by commas"
+unreachable = "Keys marked * do not reach the editor in this terminal (use the command palette or another key)"
 
 [ui.help.terminal]
 ime = "While an IME is on, letter keys do not reach the confirmation dialog as accelerators. Choose with Tab or the arrow keys and Enter"
