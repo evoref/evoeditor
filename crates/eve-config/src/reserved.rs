@@ -152,7 +152,6 @@ pub(crate) const RESERVED_KEYS: &[&str] = &[
     "ui.toggle_mouse",
     "ui.too_small",
     "ui.visual_bell_ms",
-    "ui.which_key_delay_ms",
     "ui.whitespace",
     "view.control_char_style",
     "view.cursor_line_highlight",

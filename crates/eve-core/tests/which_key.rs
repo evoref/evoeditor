@@ -68,3 +68,20 @@ fn チョードの保留がなければ出さない() {
     h.advance_ms(2000);
     assert!(which(&mut h).is_none());
 }
+
+#[test]
+fn 出すまでの時間は_ui_which_key_delay_ms_で変えられる() {
+    let mut h = Harness::new().with_size(80, 20);
+    h.editor.state_mut().set_config(eve_config::Config {
+        which_key_delay_ms: 100,
+        ..eve_config::Config::default()
+    });
+    h.keys("ctrl+k");
+    h.advance_ms(99);
+    assert!(which(&mut h).is_none());
+    h.advance_ms(1);
+    assert!(which(&mut h).is_some());
+    let l = eve_config::load_str("[ui]\nwhich_key_delay_ms = 9999\n");
+    assert_eq!(l.config.which_key_delay_ms, 500, "範囲外は既定値");
+    assert_eq!(l.diagnostics.len(), 1);
+}

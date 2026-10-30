@@ -181,6 +181,8 @@ pub struct Config {
     pub mouse: bool,
     /// `ui.mouse_wheel_lines`: ホイール 1 目盛りのスクロール量 (表示行)。
     pub mouse_wheel_lines: u8,
+    /// `ui.which_key_delay_ms`: チョードの保留から which-key を出すまでの時間 (04 §7.4)。
+    pub which_key_delay_ms: u16,
     /// `clipboard.osc52`: OSC 52 の送出方針。
     pub osc52: Osc52Policy,
     /// `clipboard.osc52_max_bytes`: OSC 52 の本文 (base64) の上限。超えたら送らない (05 §8.4)。
@@ -210,6 +212,7 @@ impl Default for Config {
             wrap_kinsoku: true,
             mouse: true,
             mouse_wheel_lines: 3,
+            which_key_delay_ms: 500,
             osc52: Osc52Policy::Auto,
             osc52_max_bytes: 100_000,
         }
@@ -245,6 +248,7 @@ const KEYS: &[&str] = &[
     "view.wrap_kinsoku",
     "ui.mouse",
     "ui.mouse_wheel_lines",
+    "ui.which_key_delay_ms",
     "clipboard.osc52",
     "clipboard.osc52_max_bytes",
 ];
@@ -487,6 +491,11 @@ impl Cx<'_> {
                     self.out.config.mouse = b;
                 }
             }
+            "ui.which_key_delay_ms" => {
+                if let Some(n) = self.int(key, v, 0, 5_000) {
+                    self.out.config.which_key_delay_ms = n as u16;
+                }
+            }
             "ui.mouse_wheel_lines" => {
                 if let Some(n) = self.int(key, v, 1, 20) {
                     self.out.config.mouse_wheel_lines = n as u8;
@@ -685,6 +694,7 @@ pub fn default_display(key: &str) -> &'static str {
         "view.wrap_indent" => "same",
         "view.wrap_kinsoku" | "ui.mouse" => "true",
         "ui.mouse_wheel_lines" => "3",
+        "ui.which_key_delay_ms" => "500",
         "clipboard.osc52" => "auto",
         "clipboard.osc52_max_bytes" => "100000",
         "file.default_encoding" => "utf-8",
