@@ -34,11 +34,11 @@ pub use document::{
     UndoGroupHint, UndoHistory, trim_to_total_budget,
 };
 pub use editor::{
-    ArgValue, Args, Binding, CommandCtx, CommandInvocation, CommandKind, CommandRegistry,
+    Affinity, ArgValue, Args, Binding, CommandCtx, CommandInvocation, CommandKind, CommandRegistry,
     CommandResult, CommandSpec, ContextExpr, CtxValue, DocSnapshot, Editor, EditorState, Handler,
     InitialFile, InvocationSource, KeyParseError, Keymap, Layer, ParseError, Permission,
-    RejectReason, Resolution, ScrollPos, SearchCount, SearchStep, View, Window, format_stroke,
-    normalize_eol, parse_sequence, parse_stroke,
+    RejectReason, Resolution, ScrollPos, SearchCount, SearchStep, View, Window, WrapMode,
+    WrapSettings, format_stroke, normalize_eol, parse_sequence, parse_stroke,
 };
 pub use eol::build_eol_conversion;
 pub use eve_encoding::Encoding;

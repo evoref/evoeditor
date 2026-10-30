@@ -20,6 +20,10 @@ use crate::document::Document;
 
 use super::state::EditorState;
 
+mod wrap;
+pub use wrap::{Affinity, WrapMode, WrapSettings};
+use wrap::{cursor_in_rows, wrap_line};
+
 /// 記号 (制御文字・不可視文字・空白の可視化) の表示。
 const SYMBOL: Style = Style {
     fg: eve_view::Color::Default,
@@ -313,6 +317,16 @@ struct Marks<'a> {
     omit: &'a dyn Fn(usize) -> String,
 }
 
+/// 折り返した論理行のうち、作る表示行 1 本 (単位の範囲、継続行のずらし、行内の表示行の番号、最後の表示行か)。
+#[derive(Clone, Copy)]
+struct RowPart {
+    first: usize,
+    end: usize,
+    indent: usize,
+    wrap_idx: u32,
+    last: bool,
+}
+
 /// 1 行を作る。`left` は水平スクロール (表示列)、`cols` は本文の幅。`sel` は選択 (文書のバイト位置の半開区間)、
 /// `heads` はこの行にあるカーソル (文書のバイト位置)。
 #[allow(clippy::too_many_arguments)]
@@ -325,6 +339,7 @@ fn build_row(
     heads: &[usize],
     marks: &Marks<'_>,
     gutter: Vec<Span>,
+    part: Option<RowPart>,
 ) -> RowOut {
     let (ls, content, has_terminator, omitted) = line_content(doc, line);
     let body = units_for(doc, line, &content);
@@ -345,11 +360,27 @@ fn build_row(
             risky: false,
         }
     });
-    let us = body.iter().chain(marker.iter());
-    let total = marker
-        .as_ref()
-        .or(body.last())
-        .map_or(0, |u| u.col + u.width);
+    // 折り返した表示行は、その範囲の単位だけを、行内の先頭の列を 0 (+ ずらし) として並べる。省略の印は最後の表示行にだけ付く
+    let (slice, with_marker, base, shift) = match part {
+        Some(p) => {
+            let slice = &body[p.first.min(body.len())..p.end.min(body.len())];
+            let base = body
+                .get(p.first)
+                .map_or_else(|| body.last().map_or(0, |u| u.col + u.width), |u| u.col);
+            (slice, p.last, base, p.indent)
+        }
+        None => (&body[..], true, 0, 0),
+    };
+    let us = slice.iter().chain(marker.iter().filter(|_| with_marker));
+    let total_abs = if part.is_none_or(|p| p.last) {
+        marker
+            .as_ref()
+            .or(body.last())
+            .map_or(0, |u| u.col + u.width)
+    } else {
+        slice.last().map_or(base, |u| u.col + u.width)
+    };
+    let total = total_abs.saturating_sub(base) + shift;
     // 選択は start 昇順で重ならないので二分探索する
     let selected = |byte_abs: usize| {
         let i = sel.partition_point(|&(_, e)| e <= byte_abs);
@@ -377,7 +408,7 @@ fn build_row(
                 style_base = style_base | StyleMods::UNDERLINE;
             }
         }
-        let mut c = u.col;
+        let mut c = u.col - base + shift;
         for (text, w, symbol) in &u.parts {
             let (w, c0) = (*w as usize, c);
             c += w;
@@ -412,9 +443,20 @@ fn build_row(
             }
         }
     }
+    if shift > 0 {
+        spans.insert(
+            0,
+            Span {
+                text: " ".repeat(shift),
+                width: shift as u16,
+                style: Style::DEFAULT,
+            },
+        );
+    }
     // 行末の改行が選択に含まれるときは、行末に 1 セルの反転を足す
     let line_end_abs = ls + content.len();
     let eol_selected = has_terminator
+        && part.is_none_or(|p| p.last)
         && sel
             .iter()
             .any(|&(s, e)| s <= line_end_abs && e > line_end_abs);
@@ -426,7 +468,7 @@ fn build_row(
         .map(|&h| {
             let rel = h.saturating_sub(ls);
             match us.clone().find(|u| u.byte >= rel) {
-                Some(u) => u.col,
+                Some(u) => u.col - base + shift,
                 None => total,
             }
         })
@@ -435,7 +477,7 @@ fn build_row(
         row: RenderRow {
             source: RowSource::Line {
                 line: line as u32,
-                wrap_idx: 0,
+                wrap_idx: part.map_or(0, |p| p.wrap_idx),
             },
             gutter,
             spans,
@@ -526,6 +568,100 @@ fn title(doc: &Document) -> String {
     )
 }
 
+/// 折り返し ON の表示行を `rows` 本作る (03 §14.3.1)。先頭は `top` の論理行の `wrap_idx` 番目の表示行。
+/// 戻り値は (行, カーソルのセル位置, 主カーソルのセル位置)。
+#[allow(clippy::too_many_arguments)]
+fn wrapped_rows(
+    doc: &Document,
+    view: &super::state::View,
+    gw: u16,
+    text_cols: usize,
+    rows: usize,
+    sel: &[(usize, usize)],
+    heads: &[usize],
+    primary_head: usize,
+    marks: &Marks<'_>,
+) -> (Vec<RenderRow>, Vec<CellPos>, Option<CellPos>) {
+    let t = doc.text();
+    let n_lines = t.len_lines();
+    // 折り返し幅は本文の幅 − 右余白 1 (行末にぶら下げた空白がその 1 セルに入る)
+    let wrap_cols = text_cols.saturating_sub(1).max(1);
+    let mut out_rows = Vec::with_capacity(rows);
+    let mut cursors = Vec::new();
+    let mut primary: Option<CellPos> = None;
+    let mut line = t.byte_to_line(view.scroll.top).0;
+    let mut widx = view.scroll.wrap_idx as usize;
+    while out_rows.len() < rows {
+        if line >= n_lines {
+            out_rows.push(RenderRow {
+                source: RowSource::Virtual,
+                gutter: Vec::new(),
+                spans: Vec::new(),
+                clipped_left: false,
+                clipped_right: false,
+                width_risky: false,
+            });
+            continue;
+        }
+        let (ls, content, _, _) = line_content(doc, line);
+        let le = t.line_end_byte(LineIdx(line)).0;
+        let us = units_for(doc, line, &content);
+        let wrows = wrap_line(&content, &us, wrap_cols, view.wrap);
+        let here: Vec<usize> = heads
+            .iter()
+            .copied()
+            .filter(|&h| h >= ls && h <= le)
+            .collect();
+        // この論理行の表示行を、先頭 (最初の行だけ `widx` から) から画面の残りの分だけ作る
+        for (r, wr) in wrows.iter().enumerate().skip(widx) {
+            if out_rows.len() >= rows {
+                break;
+            }
+            let gutter = if r == 0 {
+                gutter_spans(line, gw)
+            } else if gw > 0 {
+                vec![Span {
+                    text: " ".repeat(gw as usize),
+                    width: gw,
+                    style: SYMBOL,
+                }]
+            } else {
+                Vec::new()
+            };
+            let part = RowPart {
+                first: wr.first,
+                end: wr.end,
+                indent: wr.indent,
+                wrap_idx: r as u32,
+                last: r + 1 == wrows.len(),
+            };
+            let ro = build_row(doc, line, 0, text_cols, sel, &[], marks, gutter, Some(part));
+            for &h in &here {
+                let aff = if h == primary_head {
+                    view.cursor_affinity
+                } else {
+                    Affinity::After
+                };
+                let (cr, cc) = cursor_in_rows(&us, &wrows, h - ls, aff);
+                if cr == r && cc < text_cols {
+                    let pos = CellPos {
+                        col: gw + cc as u16,
+                        row: out_rows.len() as u16,
+                    };
+                    cursors.push(pos);
+                    if h == primary_head {
+                        primary = Some(pos);
+                    }
+                }
+            }
+            out_rows.push(ro.row);
+        }
+        line += 1;
+        widx = 0;
+    }
+    (out_rows, cursors, primary)
+}
+
 /// Window の Frame を作る。
 pub(super) fn build_frame(
     state: &EditorState,
@@ -582,56 +718,72 @@ pub(super) fn build_frame(
         unmappable: &unmappable,
         omit: &omit,
     };
-    let mut out_rows = Vec::with_capacity(rows);
-    let mut cursors = Vec::new();
-    let mut primary: Option<CellPos> = None;
-    for r in 0..rows {
-        let line = top_line + r;
-        if line >= n_lines {
-            out_rows.push(RenderRow {
-                source: RowSource::Virtual,
-                gutter: Vec::new(),
-                spans: Vec::new(),
-                clipped_left: false,
-                clipped_right: false,
-                width_risky: false,
-            });
-            continue;
-        }
-        let (ls, le) = (
-            t.line_to_byte(LineIdx(line)).0,
-            t.line_end_byte(LineIdx(line)).0,
-        );
-        // この行にあるカーソル (行末の位置は次の行の行頭と区別する: 行の終端を含む)
-        let here: Vec<usize> = heads
-            .iter()
-            .copied()
-            .filter(|&h| h >= ls && h <= le)
-            .collect();
-        let ro = build_row(
+    let (out_rows, cursors, primary) = if view.wrap.is_on() {
+        wrapped_rows(
             doc,
-            line,
-            left,
+            view,
+            gw,
             text_cols,
+            rows,
             &sel,
-            &here,
+            &heads,
+            primary_head,
             &marks,
-            gutter_spans(line, gw),
-        );
-        for (&h, &c) in here.iter().zip(&ro.cursor_cols) {
-            if c >= left && c - left < text_cols {
-                let pos = CellPos {
-                    col: gw + (c - left) as u16,
-                    row: r as u16,
-                };
-                cursors.push(pos);
-                if h == primary_head {
-                    primary = Some(pos);
+        )
+    } else {
+        let mut out_rows = Vec::with_capacity(rows);
+        let mut cursors = Vec::new();
+        let mut primary: Option<CellPos> = None;
+        for r in 0..rows {
+            let line = top_line + r;
+            if line >= n_lines {
+                out_rows.push(RenderRow {
+                    source: RowSource::Virtual,
+                    gutter: Vec::new(),
+                    spans: Vec::new(),
+                    clipped_left: false,
+                    clipped_right: false,
+                    width_risky: false,
+                });
+                continue;
+            }
+            let (ls, le) = (
+                t.line_to_byte(LineIdx(line)).0,
+                t.line_end_byte(LineIdx(line)).0,
+            );
+            // この行にあるカーソル (行末の位置は次の行の行頭と区別する: 行の終端を含む)
+            let here: Vec<usize> = heads
+                .iter()
+                .copied()
+                .filter(|&h| h >= ls && h <= le)
+                .collect();
+            let ro = build_row(
+                doc,
+                line,
+                left,
+                text_cols,
+                &sel,
+                &here,
+                &marks,
+                gutter_spans(line, gw),
+                None,
+            );
+            for (&h, &c) in here.iter().zip(&ro.cursor_cols) {
+                if c >= left && c - left < text_cols {
+                    let pos = CellPos {
+                        col: gw + (c - left) as u16,
+                        row: r as u16,
+                    };
+                    cursors.push(pos);
+                    if h == primary_head {
+                        primary = Some(pos);
+                    }
                 }
             }
+            out_rows.push(ro.row);
         }
-        out_rows.push(ro.row);
-    }
+        (out_rows, cursors, primary)
+    };
     let pane = PaneFrame {
         view: view_id,
         rect: CellRect {
