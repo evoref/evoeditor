@@ -314,6 +314,10 @@ title = "前の項目"
 description = "これまでのメッセージを一覧で開きます。"
 title = "メッセージ履歴"
 
+[cmd.ui.message_history_copy]
+description = "メッセージ履歴の全件をクリップボードへコピーします (履歴を開いているとき)。"
+title = "メッセージ履歴をコピー"
+
 [cmd.ui.palette_open]
 description = "コマンドパレットを開きます。"
 title = "コマンドパレット"
@@ -372,6 +376,9 @@ unchanged = "改行はすでに {eol} です"
 
 [info.goto_line]
 clamped = "行 {line} はありません。最後の行 ({last}) へ移動しました"
+
+[info.history]
+copied = "{count} 件のメッセージをコピーしました"
 
 [info.mouse]
 disabled = "マウスの操作を無効にしました (端末の選択とスクロールが使えます)"
@@ -941,7 +948,7 @@ footer = "↑↓ PgUp PgDn で移動、Esc で閉じる"
 
 [ui.history]
 title = "メッセージ履歴"
-footer = "↑↓ PgUp PgDn で移動、Esc で閉じる"
+footer = "↑↓ PgUp PgDn で移動、Ctrl+C でコピー、Esc で閉じる"
 empty = "メッセージはまだありません"
 
 [ui.history.level]

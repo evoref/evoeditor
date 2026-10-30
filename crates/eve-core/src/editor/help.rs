@@ -258,6 +258,37 @@ impl EditorState {
         CommandResult::Done
     }
 
+    /// メッセージ履歴の全件を、画面と同じ「時刻 レベル 本文」の行にしてクリップボードへ写す (04 §8.9、FR-505)。
+    /// 履歴を開いていないときは使えない。
+    fn copy_message_history(&mut self) -> CommandResult {
+        if !matches!(&self.overlay, Some(Overlay::Help(h)) if h.history) {
+            return CommandResult::Rejected(super::command::RejectReason::NotAvailable);
+        }
+        if self.message_log.is_empty() {
+            return CommandResult::Done;
+        }
+        let text_of = |t: &eve_view::CellText| -> String {
+            t.spans.iter().map(|s| s.text.as_str()).collect()
+        };
+        let mut out = String::new();
+        for l in self.history_lines() {
+            if let Some(k) = &l.key {
+                out.push_str(&text_of(k));
+                out.push(' ');
+            }
+            out.push_str(&text_of(&l.text));
+            out.push('\n');
+        }
+        let count = self.message_log.len();
+        self.copy_text(&out);
+        self.show_message(
+            eve_view::MessageLevel::Info,
+            "info.history.copied",
+            &[("count", &count.to_string())],
+        );
+        CommandResult::Done
+    }
+
     /// `delta` 行スクロールする (端で止まる)。
     pub(super) fn help_scroll(&mut self, delta: isize) -> CommandResult {
         let (total, view) = (self.help_lines().0.len(), self.help_view_rows());
@@ -311,10 +342,15 @@ fn message_history(ctx: &mut CommandCtx<'_>) -> CommandResult {
     ctx.state.open_message_history()
 }
 
+fn message_history_copy(ctx: &mut CommandCtx<'_>) -> CommandResult {
+    ctx.state.copy_message_history()
+}
+
 /// v0.2 のヘルプコマンド (07 §11.6 の `help.open` / `help.keys` / `help.commands`)。
 pub(super) fn register(r: &mut CommandRegistry) {
-    let handlers: [(&str, crate::Handler); 4] = [
+    let handlers: [(&str, crate::Handler); 5] = [
         ("ui.message_history", message_history),
+        ("ui.message_history_copy", message_history_copy),
         ("help.open", help_open),
         ("help.keys", help_keys),
         ("help.commands", help_commands),

@@ -91,3 +91,46 @@ fn ヘルプは履歴ではなく従来どおり開く() {
     assert_eq!(title, "ヘルプ");
     assert_eq!(text_of(&lines[0].text), "はじめに");
 }
+
+fn clipboard_writes(h: &Harness) -> Vec<String> {
+    h.effects()
+        .iter()
+        .filter_map(|e| match e {
+            eve_view::Effect::SetClipboard {
+                content: eve_view::ClipboardText::Inline(s),
+                ..
+            } => Some(s.clone()),
+            _ => None,
+        })
+        .collect()
+}
+
+#[test]
+fn 履歴を開いている間の_ctrl_c_で全件を画面と同じ行にしてコピーする() {
+    let mut h = Harness::new().with_size(80, 20);
+    say(&mut h, MessageLevel::Info);
+    h.advance_ms(61_000);
+    say(&mut h, MessageLevel::Warn);
+    h.keys("ctrl+k m");
+    h.clear_log();
+    h.keys("ctrl+c");
+    let w = clipboard_writes(&h);
+    assert_eq!(w.len(), 1, "{:?}", h.effects());
+    let lines: Vec<&str> = w[0].lines().collect();
+    assert_eq!(lines.len(), 2, "{w:?}");
+    assert!(lines[0].starts_with("00:00 情報 "), "{lines:?}");
+    assert!(lines[1].starts_with("01:01 警告 "), "{lines:?}");
+    assert!(h.messages().iter().any(|m| m == "info.history.copied"));
+    // 履歴は開いたまま
+    assert_eq!(h.overlay(), "help");
+}
+
+#[test]
+fn ヘルプ画面では_ctrl_c_は何もしない() {
+    let mut h = Harness::new().with_size(80, 20);
+    say(&mut h, MessageLevel::Info);
+    h.keys("ctrl+k h");
+    h.clear_log();
+    h.keys("ctrl+c");
+    assert!(clipboard_writes(&h).is_empty());
+}

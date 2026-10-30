@@ -316,6 +316,10 @@ title = "Previous Item"
 description = "Open the list of past messages."
 title = "Message History"
 
+[cmd.ui.message_history_copy]
+description = "Copy all messages in the history to the clipboard (while the history is open)."
+title = "Copy Message History"
+
 [cmd.ui.palette_open]
 description = "Open the command palette."
 title = "Command Palette"
@@ -374,6 +378,9 @@ unchanged = "Line endings are already {eol}"
 
 [info.goto_line]
 clamped = "There is no line {line}. Moved to the last line ({last})"
+
+[info.history]
+copied = "Copied {count} messages"
 
 [info.mouse]
 disabled = "Mouse support is off (the terminal's own selection and scrolling work)"
@@ -943,7 +950,7 @@ footer = "Up/Down PgUp/PgDn to scroll, Esc to close"
 
 [ui.history]
 title = "Message History"
-footer = "Up/Down PgUp/PgDn to scroll, Esc to close"
+footer = "↑↓ PgUp PgDn to move, Ctrl+C to copy, Esc to close"
 empty = "No messages yet"
 
 [ui.history.level]
