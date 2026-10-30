@@ -310,6 +310,11 @@ impl EditorState {
         }
     }
 
+    /// `file.long_line_threshold` (長大行の閾値、バイト)。
+    pub(super) fn config_long_line_threshold(&self) -> usize {
+        usize::try_from(self.config.long_line_threshold).unwrap_or(usize::MAX)
+    }
+
     /// 新規文書 (無題・存在しないパス)。文字コードと新しく挿入する改行は `file.default_*` (07 §5.2)。
     pub(super) fn blank_document(&self) -> Document {
         use eve_config::DefaultEncoding;

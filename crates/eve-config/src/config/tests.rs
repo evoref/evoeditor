@@ -412,6 +412,19 @@ fn clipboard_osc52_の設定を読む() {
 }
 
 #[test]
+fn file_の閾値を読む() {
+    let l = load_str("[file]\nhuge_file_warn_bytes = 2097152\nlong_line_threshold = 65536\n");
+    assert_eq!(l.config.huge_file_warn_bytes, 2_097_152);
+    assert_eq!(l.config.long_line_threshold, 65_536);
+    assert!(l.diagnostics.is_empty(), "{:?}", l.diagnostics);
+    // 範囲外 (下限は 1 MiB と 64 KiB) は警告して既定値
+    let l = load_str("[file]\nhuge_file_warn_bytes = 1000\nlong_line_threshold = 65535\n");
+    assert_eq!(l.config.huge_file_warn_bytes, 512 * 1024 * 1024);
+    assert_eq!(l.config.long_line_threshold, 1024 * 1024);
+    assert_eq!(l.diagnostics.len(), 2);
+}
+
+#[test]
 fn changed_keys_は変わった公開キーだけを並べ_全キーを網羅する() {
     let a = Config::default();
     assert!(changed_keys(&a, &a).is_empty());
@@ -449,6 +462,8 @@ fn changed_keys_は変わった公開キーだけを並べ_全キーを網羅す
         "ui.which_key_delay_ms",
         "clipboard.osc52",
         "clipboard.osc52_max_bytes",
+        "file.huge_file_warn_bytes",
+        "file.long_line_threshold",
     ]
     .into_iter()
     .collect();

@@ -11,27 +11,27 @@ pub struct EolStats {
     pub cr: usize,
 }
 
-/// 長大行の閾値 (`file.long_line_threshold`、v0.1 は定数 1 MiB)。これを超える行を含む文書は読み取り専用で開く (NFR-106)。
+/// 長大行の閾値の既定 (`file.long_line_threshold`)。これを超える行を含む文書は読み取り専用で開く (NFR-106)。
 pub const LONG_LINE_THRESHOLD: usize = 1 << 20;
 /// 閾値を超える行のうち、表示とカーソルの対象にする先頭の大きさ (書記素の境界で切る)。
 pub const LONG_LINE_VISIBLE: usize = 64 * 1024;
 
-/// 閾値 (`LONG_LINE_THRESHOLD`) を超える行があるか。チャンクを 1 回走査する (読込ジョブで使う)。
-pub fn has_long_line(text: &dyn TextRead) -> bool {
+/// 閾値 `threshold` (バイト) を超える行があるか。チャンクを 1 回走査する (読込ジョブで使う)。
+pub fn has_long_line(text: &dyn TextRead, threshold: usize) -> bool {
     let mut run = 0usize;
     for chunk in text.chunks(eve_text::ByteRange::all(text.len_bytes())) {
         let b = chunk.as_bytes();
         let mut at = 0;
         while let Some(i) = memchr::memchr2(b'\n', b'\r', &b[at..]) {
             run += i;
-            if run > LONG_LINE_THRESHOLD {
+            if run > threshold {
                 return true;
             }
             run = 0;
             at += i + 1;
         }
         run += b.len() - at;
-        if run > LONG_LINE_THRESHOLD {
+        if run > threshold {
             return true;
         }
     }
@@ -178,6 +178,8 @@ pub struct TextFormat {
     pub pua_escape: PuaEscapeMode,
     /// 読込時の往復の検査 (03 §8.7。v0.1 は件数と先頭の位置だけ)。
     pub roundtrip: RoundtripSummary,
+    /// 開いたときの長大行の閾値 (`file.long_line_threshold`)。設定を変えても開いている文書には遡らない (07 §6)。
+    pub long_line_threshold: usize,
 }
 
 impl TextFormat {
@@ -191,6 +193,7 @@ impl TextFormat {
             invalid_bytes: 0,
             pua_escape: PuaEscapeMode::Enabled,
             roundtrip: RoundtripSummary::default(),
+            long_line_threshold: LONG_LINE_THRESHOLD,
         }
     }
 }
