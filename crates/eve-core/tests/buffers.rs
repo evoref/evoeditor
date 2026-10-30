@@ -272,6 +272,10 @@ fn 保存に失敗したら閉じない() {
 
 impl Env {
     /// ステータスバーのファイル名の項目。
+    fn title(&mut self) -> String {
+        self.e.frame(self.win).unwrap().title
+    }
+
     fn status_name(&mut self) -> String {
         let f = self.e.frame(self.win).unwrap();
         let name = &f.status.items[0];
@@ -298,6 +302,16 @@ fn ステータスバーは文書が_2_件以上のとき何番目かを出す()
         "無題-1 (1/2)",
         "閉じると数が減り、最近使った a を表示する"
     );
+}
+
+#[test]
+fn 端末のタイトルにも何番目かを出す() {
+    let mut one = Env::new();
+    assert_eq!(one.title(), "無題 - evoeditor", "1 件なら出さない");
+    let (mut s, _) = three();
+    assert_eq!(s.title(), "無題 (1/3) - evoeditor");
+    s.run("buffer.next");
+    assert_eq!(s.title(), "無題 (2/3) - evoeditor");
 }
 
 /// a.txt, b.txt, c.txt の 3 文書 (開いた順。a が表示中)。

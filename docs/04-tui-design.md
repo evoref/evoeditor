@@ -117,7 +117,7 @@
 | N+3 | ヒントバー | core: `HintModel` / TUI: 圧縮・配置 | 1 (非表示時 0) | FR-504 |
 
 - 上端にタイトル行 (nano 風) は **置かない**。ファイル名はステータスバーと端末タイトル (OSC 0/2, `Frame.title`。02 §6.3) で示す。行を節約する。
-- **`Frame.title` の内容規約**: core が `"<basename>[ ●] - evoeditor"` 形式 (無題は MessageKey `status.untitled` の文言 (`無題-1` / `Untitled-1`)、変更ありは `●` 付加。アプリ名 `evoeditor` は OQ-01) を生成し、frontend は無害化 (§4.9) と長さ制限 (256 文字) だけを行う。起動時にタイトルを退避し、終了時に復元する (§14.1 / §14.3)。**Windows (v0.1) は XTWINOPS (`CSI 22;0 t` / `CSI 23;0 t`) を使わない**: Windows のコンソール VT シーケンスの一覧に載っておらず、Windows Terminal も実装していない認識 (S-07 で確認)。代わりに起動時に `GetConsoleTitleW` で元のタイトルを退避し、終了時に `SetConsoleTitleW` で戻す (ConPTY 経由で Windows Terminal のタブ名にも伝わる)。XTWINOPS の push / pop は Unix (v0.2) だけ。パス全体は含めない (NFR-504: 端末タイトルはウィンドウ一覧等に露出する)。
+- **`Frame.title` の内容規約**: core が `"<basename>[ ●] - evoeditor"` 形式 (無題は MessageKey `status.untitled` の文言 (`無題-1` / `Untitled-1`)、変更ありは `●` 付加。アプリ名 `evoeditor` は OQ-01) を生成し (文書が 2 件以上のときは、ステータスバーと同じくファイル名の後ろに `(2/3)` を付ける。03 §9.8)、frontend は無害化 (§4.9) と長さ制限 (256 文字) だけを行う。起動時にタイトルを退避し、終了時に復元する (§14.1 / §14.3)。**Windows (v0.1) は XTWINOPS (`CSI 22;0 t` / `CSI 23;0 t`) を使わない**: Windows のコンソール VT シーケンスの一覧に載っておらず、Windows Terminal も実装していない認識 (S-07 で確認)。代わりに起動時に `GetConsoleTitleW` で元のタイトルを退避し、終了時に `SetConsoleTitleW` で戻す (ConPTY 経由で Windows Terminal のタブ名にも伝わる)。XTWINOPS の push / pop は Unix (v0.2) だけ。パス全体は含めない (NFR-504: 端末タイトルはウィンドウ一覧等に露出する)。
 - 編集面のサイズ = 端末サイズ − クローム行数 − パネル占有分。TUI がこれを計算して `InputEvent::Resize { cols, rows }` (02 §7.1) を core に送る ([§3.6](#36-レイアウト責任の分担と-2-パス描画))。すべての `InputEvent` は `Editor::handle_input(window, ev)` で渡し、TUI の `window` は常に唯一の `WindowId` (02 §5.1)。
 
 ### 3.2 v0.1 の画面モック (80×24、通常状態)
@@ -1524,6 +1524,7 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 | `ui.confirm.unsaved_reopen.discard` | 同上 (破棄する選択肢。既定にしない。アクセラレータ `D`) | [D] 破棄して開き直す |
 | `ui.confirm.quit_saving.title` | 終了の要求 (`app.quit`) の後、実行中の保存ジョブが 5 秒待っても終わらない (遷移の正本は 03 §9.7 (f)、Host の手順は 05 §11.5。5 秒の間は確認を出さずに待つ)。「待つ」は完了まで待ち、成功したら終了する (失敗したら `ui.confirm.save_failed` 等の選択へ)。「保存を中止して終了」は置換の前の保存に cancel を送り、置換中・直接上書きの書込中は完了を待ってから、保存の結果に依らず dirty な文書を緊急退避と同じ形式で退避して終了する (05 §11.5。保存が失敗していたら、失敗のパスを終了時の stderr に `stderr.quit_abort.*` で出す)。`Esc` は「待つ」と同じで、確認を閉じて保存の待ちに戻るだけ (保存は取り消さず、終了の要求も取り下げない。§7.5)。確認の表示中に保存の結果が届いたら確認を閉じ、成功なら終了、失敗なら `ui.confirm.save_failed` 等の確認に置き換える (積まない)。保存中の終了のためのキーはこの 1 つだけ | 保存が終わっていません |
 | `ui.confirm.quit_saving.message` | 同上 | {path} の保存が終わっていません |
+| `ui.confirm.quit_saving.others` | 同上。保存中の文書が 2 件以上のとき、`{path}` (先頭の 1 件) の後ろに足す。`{count}` は残りの件数 | ほか {count} 件 |
 | `ui.confirm.quit_saving.wait` | 同上 (既定の選択肢。アクセラレータ `W`。`Esc` も同じ) | [W] 待つ |
 | `ui.confirm.quit_saving.abort` | 同上 (中止する選択肢。既定にしない。アクセラレータ `Q`) | [Q] 保存を中止して終了 (保存していない内容は退避します) |
 
