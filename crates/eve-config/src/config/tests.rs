@@ -442,6 +442,8 @@ fn changed_keys_は変わった公開キーだけを並べ_全キーを網羅す
         "view.wrap_indent",
         "view.wrap_kinsoku",
         "view.show_whitespace",
+        "theme.name",
+        "theme.background",
         "ui.mouse",
         "ui.mouse_wheel_lines",
         "ui.which_key_delay_ms",

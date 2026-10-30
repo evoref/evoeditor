@@ -100,8 +100,6 @@ pub(crate) const RESERVED_KEYS: &[&str] = &[
     "session.max_entries",
     "session.remember_cursor",
     "session.restore",
-    "theme.background",
-    "theme.name",
     "theme.overrides",
     "ui.alternate_screen",
     "ui.ascii_only",

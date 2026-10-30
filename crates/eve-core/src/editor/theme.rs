@@ -1,7 +1,9 @@
 //! テーマの解決 (docs/07 §8・§8.6、04 §12.1 C1): テーマと色深度から、その段のロールの表を作る。
 //! 編集面の Span に付けるスタイルと、Frame で frontend に渡すクロームのロールは、どちらもこの表から引く。
 
-use eve_config::theme::{Depth, ThemeColor, ThemeStyle, builtin, mods, resolve_roles};
+use eve_config::theme::{
+    Depth, ThemeColor, ThemeStyle, builtin, mods, resolve_roles, with_background,
+};
 use eve_view::{Color, ColorDepth, RoleStyles, Style, StyleMods};
 
 use super::state::EditorState;
@@ -45,9 +47,11 @@ fn depth(d: ColorDepth) -> Depth {
 
 /// テーマ `name` の、色深度 `d` の段のロールの表。未知のテーマは `default`。
 pub fn resolve(name: &str, d: ColorDepth) -> RoleStyles {
-    let theme = builtin(name).or_else(|| builtin("default")).unwrap_or(&[]);
+    let Some(theme) = builtin(name).or_else(|| builtin("default")) else {
+        return RoleStyles::default();
+    };
     RoleStyles::new(
-        resolve_roles(theme, depth(d))
+        resolve_roles(&theme, depth(d))
             .into_iter()
             .map(|(n, s)| (n.to_owned(), style(s)))
             .collect(),
@@ -57,7 +61,9 @@ pub fn resolve(name: &str, d: ColorDepth) -> RoleStyles {
 impl EditorState {
     /// ロールの表を作り直す (色深度・テーマが変わったとき)。
     pub(super) fn refresh_roles(&mut self) {
-        self.roles = std::sync::Arc::new(resolve("default", self.caps.color_depth));
+        let c = self.config();
+        let name = with_background(c.theme_name.as_str(), c.theme_background).to_owned();
+        self.roles = std::sync::Arc::new(resolve(&name, self.caps.color_depth));
         self.mark_dirty_render();
     }
 }

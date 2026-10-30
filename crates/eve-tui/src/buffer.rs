@@ -253,6 +253,12 @@ pub fn render_panes(frame: &Frame, depth: ColorDepth, glyphs: &Glyphs) -> PaneRe
     let base = frame.size.rows + bar_rows(frame);
     let (cols, rows) = (frame.size.cols, base + chrome_rows_for_surface(base));
     let mut buffer = Buffer::empty(Rect::new(0, 0, cols, rows));
+    // 背景を塗るテーマ (07 §8.6) は、画面全体を本文の色で塗ってから描く (行末より右・文書末尾より下も同じ色にする)
+    let text = frame.roles.get("ui.text");
+    if text.bg != eve_view::Color::Default {
+        let (s, _) = clamp_style(text, depth);
+        buffer.set_style(Rect::new(0, 0, cols, rows), to_ratatui(s));
+    }
     let mut risky_rows = Vec::new();
     let (clamped_cells, sanitized);
     {

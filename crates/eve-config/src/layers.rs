@@ -5,7 +5,7 @@
 
 use crate::config::{
     BackspaceUnit, ColorMode, Config, DefaultEncoding, DefaultLineEnding, IndentUnit, Osc52Policy,
-    ShowWhitespace, WrapIndent, WrapMode, load_str_onto,
+    ShowWhitespace, ThemeBackground, WrapIndent, WrapMode, load_str_onto,
 };
 use crate::{DiagKind, Diagnostic, Loaded, Severity};
 
@@ -196,6 +196,15 @@ pub fn values(c: &Config) -> Vec<(&'static str, String)> {
                 ColorMode::Color256 => "256",
                 ColorMode::Color16 => "16",
                 ColorMode::None => "none",
+            }),
+        ),
+        ("theme.name", s(c.theme_name.as_str())),
+        (
+            "theme.background",
+            s(match c.theme_background {
+                ThemeBackground::Auto => "auto",
+                ThemeBackground::Dark => "dark",
+                ThemeBackground::Light => "light",
             }),
         ),
         ("ui.locale", s(c.ui_locale.map_or("auto", |l| l.code()))),

@@ -277,18 +277,105 @@ const DEFAULT_ROLES: &[Role] = &[
     },
 ];
 
+/// 組込みテーマの名前 (07 §5.4 `theme.name`)。
+pub const BUILTIN_NAMES: &[&str] = &["default", "default-dark", "default-light", "ansi"];
+
+/// 組込みテーマ (07 §8.6)。
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Theme {
+    pub roles: Vec<Role>,
+    /// 背景を塗る (`default-dark` / `default-light`)。色の段では、各ロールの端末の既定色を `ui.text` の色で置き換える。
+    pub paints: bool,
+}
+
+/// 背景を塗るテーマの本文の色 (07 §8.6 の表。`ui.text` の 3 段)。
+const DARK_TEXT: [ThemeStyle; 3] = [
+    st(rgb(0xd4d4d4), rgb(0x1e1e1e), NONE),
+    st(ansi(252), ansi(234), NONE),
+    st(ansi(7), ansi(0), NONE),
+];
+const LIGHT_TEXT: [ThemeStyle; 3] = [
+    st(rgb(0x1e1e1e), rgb(0xfafafa), NONE),
+    st(ansi(235), ansi(255), NONE),
+    st(ansi(0), ansi(15), NONE),
+];
+
 /// 組込みテーマ。名前が無ければ `None`。
-pub fn builtin(name: &str) -> Option<&'static [Role]> {
-    match name {
-        "default" => Some(DEFAULT_ROLES),
-        _ => None,
+/// `default-dark` / `default-light` は `default` の本文 (`ui.text`) に色を付けて背景を塗り、`ansi` は全段で `default` の
+/// 16 色の段の値を使う (端末の配色に馴染む)。
+pub fn builtin(name: &str) -> Option<Theme> {
+    let paint = |text: [ThemeStyle; 3]| Theme {
+        roles: DEFAULT_ROLES
+            .iter()
+            .map(|r| match r.name {
+                "ui.text" => Role {
+                    truecolor: text[0],
+                    ansi256: text[1],
+                    ansi16: text[2],
+                    ..*r
+                },
+                _ => *r,
+            })
+            .collect(),
+        paints: true,
+    };
+    Some(match name {
+        "default" => Theme {
+            roles: DEFAULT_ROLES.to_vec(),
+            paints: false,
+        },
+        "default-dark" => paint(DARK_TEXT),
+        "default-light" => paint(LIGHT_TEXT),
+        "ansi" => Theme {
+            roles: DEFAULT_ROLES
+                .iter()
+                .map(|r| Role {
+                    truecolor: r.ansi16,
+                    ansi256: r.ansi16,
+                    ..*r
+                })
+                .collect(),
+            paints: false,
+        },
+        _ => return None,
+    })
+}
+
+/// 背景を塗るテーマの明暗の切替 (`theme.background`、07 §8.6): `default-dark` / `default-light` を選んだときだけ、
+/// `dark` / `light` でその明暗に替える。`auto` と、それ以外のテーマはそのまま。
+pub fn with_background(name: &str, background: crate::ThemeBackground) -> &str {
+    use crate::ThemeBackground::{Auto, Dark, Light};
+    match (name, background) {
+        ("default-dark" | "default-light", Dark) => "default-dark",
+        ("default-dark" | "default-light", Light) => "default-light",
+        (_, Auto | Dark | Light) => name,
     }
 }
 
-/// テーマの、色深度に合う段のロールの表 (ロール名の順)。
-pub fn resolve_roles(theme: &[Role], depth: Depth) -> Vec<(&'static str, ThemeStyle)> {
-    let mut out: Vec<(&'static str, ThemeStyle)> =
-        theme.iter().map(|r| (r.name, r.at(depth))).collect();
+/// テーマの、色深度に合う段のロールの表 (ロール名の順)。背景を塗るテーマは、色の段で端末の既定色を本文の色にする。
+pub fn resolve_roles(theme: &Theme, depth: Depth) -> Vec<(&'static str, ThemeStyle)> {
+    let text = theme
+        .roles
+        .iter()
+        .find(|r| r.name == "ui.text")
+        .map_or(ThemeStyle::DEFAULT, |r| r.at(depth));
+    let fill = theme.paints && depth != Depth::Mono;
+    let mut out: Vec<(&'static str, ThemeStyle)> = theme
+        .roles
+        .iter()
+        .map(|r| {
+            let mut s = r.at(depth);
+            if fill {
+                if s.fg == ThemeColor::Default {
+                    s.fg = text.fg;
+                }
+                if s.bg == ThemeColor::Default {
+                    s.bg = text.bg;
+                }
+            }
+            (r.name, s)
+        })
+        .collect();
     out.sort_by_key(|(n, _)| *n);
     out
 }
@@ -300,7 +387,7 @@ mod tests {
     #[test]
     fn default_は無色の段では属性だけ() {
         let t = builtin("default").unwrap();
-        let roles = resolve_roles(t, Depth::Mono);
+        let roles = resolve_roles(&t, Depth::Mono);
         assert!(
             roles
                 .iter()
@@ -313,17 +400,49 @@ mod tests {
 
     #[test]
     fn 各段は端末が描ける色だけを使う() {
-        for r in builtin("default").unwrap() {
-            for c in [r.ansi16.fg, r.ansi16.bg] {
-                assert!(
-                    matches!(c, ThemeColor::Default | ThemeColor::Ansi(0..=15)),
-                    "{}",
-                    r.name
-                );
-            }
-            for c in [r.ansi256.fg, r.ansi256.bg] {
-                assert!(!matches!(c, ThemeColor::Rgb(..)), "{}", r.name);
+        for name in BUILTIN_NAMES {
+            for r in builtin(name).unwrap().roles {
+                for c in [r.ansi16.fg, r.ansi16.bg] {
+                    assert!(
+                        matches!(c, ThemeColor::Default | ThemeColor::Ansi(0..=15)),
+                        "{}",
+                        r.name
+                    );
+                }
+                for c in [r.ansi256.fg, r.ansi256.bg] {
+                    assert!(!matches!(c, ThemeColor::Rgb(..)), "{}", r.name);
+                }
             }
         }
+    }
+
+    #[test]
+    fn 背景を塗るテーマは色の段で既定色を本文の色にし_無色の段は塗らない() {
+        let t = builtin("default-dark").unwrap();
+        let tc = resolve_roles(&t, Depth::TrueColor);
+        assert!(
+            tc.iter()
+                .all(|(_, s)| s.fg != ThemeColor::Default && s.bg != ThemeColor::Default),
+            "{tc:?}"
+        );
+        let text = tc.iter().find(|(n, _)| *n == "ui.text").unwrap().1;
+        assert_eq!(text.bg, rgb(0x1e1e1e));
+        let mono = resolve_roles(&t, Depth::Mono);
+        assert!(mono.iter().all(|(_, s)| s.bg == ThemeColor::Default));
+        // ansi は 16 色の段の値だけ
+        let a = resolve_roles(&builtin("ansi").unwrap(), Depth::TrueColor);
+        assert!(
+            a.iter().all(|(_, s)| !matches!(s.fg, ThemeColor::Rgb(..))
+                && !matches!(s.bg, ThemeColor::Rgb(..)))
+        );
+    }
+
+    #[test]
+    fn 明暗の切替は塗るテーマにだけ効く() {
+        use crate::ThemeBackground::{Auto, Dark, Light};
+        assert_eq!(with_background("default-dark", Light), "default-light");
+        assert_eq!(with_background("default-light", Dark), "default-dark");
+        assert_eq!(with_background("default-light", Auto), "default-light");
+        assert_eq!(with_background("default", Light), "default");
     }
 }

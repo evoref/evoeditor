@@ -261,7 +261,7 @@ v0.1 で設定ファイル (`config.toml`、ユーザー層) から読む **公�
 | `[view]` | `ambiguous_width` | NFR-605 |
 | `[theme]` | `color_mode` | FR-513、04 §5.2a |
 
-件数の内訳: `[editor]` 3、`[file]` 2、`[view]` 1、`[theme]` 1 (計 7)。**v0.2 の M9a で `editor.undo.total_max_bytes` を公開した (計 14)**。**v0.2 の M9b で `editor.backspace_unit` (`"grapheme"` / `"codepoint"`) を公開した (計 15)**。**続けて M9b で `view.wrap` / `view.wrap_indent` / `view.wrap_kinsoku` を公開した (計 18)**。**マウスの `ui.mouse` / `ui.mouse_wheel_lines` も M9b で公開した (計 20)**。**`[clipboard]` は `osc52` / `osc52_max_bytes` の 2 個だけ M9b で公開した (計 22)**。**`ui.which_key_delay_ms` も M9b で公開した (計 23)**。**M9c で `view.show_whitespace` を公開した (計 24)**。v0.2 の M6 で `file.swap.*` の 5 個 (`enabled` / `interval_ms` / `min_interval_ms` / `max_bytes` / `exclude_secret_files`、§5.2) を公開した (計 12)**。範囲は `interval_ms` 100..=600000、`min_interval_ms` 100..=3600000、`max_bytes` 1048576..=1099511627776 (範囲外は警告して既定値)。`[file.swap]` の表でも `[file]` の中の `swap.enabled = ...` でも書ける。v0.1 で公開しないキー (定数で実装し、公開は v0.2): `editor.auto_indent` (既定 true)、`editor.undo.total_max_bytes`、`file.encoding_detection`、`file.write_bom`、`file.huge_file_warn_bytes`、`file.long_line_threshold`、`file.fsync`、`view.line_numbers`、`view.cursor_line_highlight`、`view.show_whitespace` (全角スペースとタブの可視化。v0.1 は `"minimal"` の定数で常に表示、FR-508)、`ui.hint_bar`、`ui.message_timeout_ms`、`ui.synchronized_output`、`theme.name` (v0.1 はテーマが 1 つ)、`search.case`、`keys.preset`、`log.level` (`EVE_LOG` で代える、§5.11)。**v0.2 の M8 で `ui.locale` を公開した (計 13)**: 値は `"auto"` (既定) か言語タグ (`ja` / `en`。`ja-JP`・`en_US` のように地域を付けても、地域を落として当てる。大文字小文字は区別しない)。同梱していない言語名は警告 (`InvalidValue`、許容値 `auto` / `ja` / `en`) して `auto` として扱い、選択順の次の段へ進む (§17.1)。節は `[ui]`。`[keys.*]` (ユーザーのキー割当) は v0.2 (§7.1)。`[os.*]` / `[env.*]` の条件付きセクションは v0.2 (§3.4)。ここに無いキーの公開時期は各表の P 列と §5.13。公開前のキーを書いても「このバージョンでは未対応」の情報診断で、値は使わない (§5 冒頭)。
+件数の内訳: `[editor]` 3、`[file]` 2、`[view]` 1、`[theme]` 1 (計 7)。**v0.2 の M9a で `editor.undo.total_max_bytes` を公開した (計 14)**。**v0.2 の M9b で `editor.backspace_unit` (`"grapheme"` / `"codepoint"`) を公開した (計 15)**。**続けて M9b で `view.wrap` / `view.wrap_indent` / `view.wrap_kinsoku` を公開した (計 18)**。**マウスの `ui.mouse` / `ui.mouse_wheel_lines` も M9b で公開した (計 20)**。**`[clipboard]` は `osc52` / `osc52_max_bytes` の 2 個だけ M9b で公開した (計 22)**。**`ui.which_key_delay_ms` も M9b で公開した (計 23)**。**M9c で `view.show_whitespace` を公開した (計 24)**。**`theme.name` / `theme.background` も M9c で公開した (計 26)**。v0.2 の M6 で `file.swap.*` の 5 個 (`enabled` / `interval_ms` / `min_interval_ms` / `max_bytes` / `exclude_secret_files`、§5.2) を公開した (計 12)**。範囲は `interval_ms` 100..=600000、`min_interval_ms` 100..=3600000、`max_bytes` 1048576..=1099511627776 (範囲外は警告して既定値)。`[file.swap]` の表でも `[file]` の中の `swap.enabled = ...` でも書ける。v0.1 で公開しないキー (定数で実装し、公開は v0.2): `editor.auto_indent` (既定 true)、`editor.undo.total_max_bytes`、`file.encoding_detection`、`file.write_bom`、`file.huge_file_warn_bytes`、`file.long_line_threshold`、`file.fsync`、`view.line_numbers`、`view.cursor_line_highlight`、`view.show_whitespace` (全角スペースとタブの可視化。v0.1 は `"minimal"` の定数で常に表示、FR-508)、`ui.hint_bar`、`ui.message_timeout_ms`、`ui.synchronized_output`、`theme.name` (v0.1 はテーマが 1 つ)、`search.case`、`keys.preset`、`log.level` (`EVE_LOG` で代える、§5.11)。**v0.2 の M8 で `ui.locale` を公開した (計 13)**: 値は `"auto"` (既定) か言語タグ (`ja` / `en`。`ja-JP`・`en_US` のように地域を付けても、地域を落として当てる。大文字小文字は区別しない)。同梱していない言語名は警告 (`InvalidValue`、許容値 `auto` / `ja` / `en`) して `auto` として扱い、選択順の次の段へ進む (§17.1)。節は `[ui]`。`[keys.*]` (ユーザーのキー割当) は v0.2 (§7.1)。`[os.*]` / `[env.*]` の条件付きセクションは v0.2 (§3.4)。ここに無いキーの公開時期は各表の P 列と §5.13。公開前のキーを書いても「このバージョンでは未対応」の情報診断で、値は使わない (§5 冒頭)。
 
 ### 5.1 `[editor]` — 編集動作
 
@@ -350,7 +350,7 @@ v0.1 で設定ファイル (`config.toml`、ユーザー層) から読む **公�
 |---|---|---|---|---|
 | `name` | string | **`"default"`** (**TrueColor 既定テーマ**、ADR-0027 / OQ-27 **確定 (ユーザー回答)**。本文は端末の既定色、強調ロールだけ前景・背景の RGB の組で定義し、v0.1 は truecolor と mono の段を明示する (256 / 16 は自動近似)。§8.1 / 04 §12.1 C2) | テーマ名 (組込み `default` (v0.1)、`ansi` / `default-dark` / `default-light` (v0.2)、`high-contrast-*` (v0.3)、または `themes/<name>.toml` (v0.2))。v0.1 はテーマが 1 つなので選べない | v0.1 (定数、公開 v0.2) |
 | `color_mode` | `"auto" \| "truecolor" \| "256" \| "16" \| "none"` | `"auto"` | 色深度判定の上書き。`auto` の判定は 04 §5.2a の判定表が正本 (本書は順序を再掲しない)。段の選択は core (02 §8.2) | v0.1 |
-| `background` | `"auto" \| "dark" \| "light"` | `"auto"` | 背景まで塗るテーマ (`default-dark` / `default-light`、v0.2) の明暗選択。`auto` は `COLORFGBG` ヒント (04 §5.2a、OQ-124) → 判らなければ `dark`。`default` テーマは背景非依存なので本キーを見ない | v0.2 |
+| `background` | `"auto" \| "dark" \| "light"` | `"auto"` | 背景まで塗るテーマ (`default-dark` / `default-light`、v0.2) の明暗選択。**v0.2 の M9c で公開・実装した** (扱いは §8.6 の 3 本目)。`auto` は `COLORFGBG` ヒント (04 §5.2a、OQ-124) → 判らなければ `dark`。`default` テーマは背景非依存なので本キーを見ない | v0.2 |
 | `overrides` | テーブル (スコープ → スタイル) | `{}` | テーマの部分上書き (§8.4) | v0.4 |
 
 ### 5.5 `[search]`
@@ -905,6 +905,18 @@ tree-sitter のハイライトクエリ (`@keyword.control` 等) のキャプチ
 7. **見た目の変化**: 編集面の選択・検索の一致などに色が付く (truecolor / 256 / 16 の段)。無色 (`mono`) の段は今と同じ。
 
 **2 本目の実装 (M9c)**: eve-config `theme.rs` に型と組込み `default` (§8.2 の表の全 26 ロール、4 段とも明示値。表の 256 / 16 の列から「参考」を外した) を置き、core (`editor/theme.rs`) が色深度に合う段の表を作って `Frame.roles` に載せる (色深度が変わったときだけ作り直す)。編集面は 記号 (`ui.whitespace` / `ui.control_char`) → 表現不能の文字 → 検索の一致 (`ui.search.match` / `.current`) → 選択 (`ui.selection`) の順に重ね (既定でない色は上が勝ち、属性は足す)、行番号は `ui.line_number` (主カーソルの行は `ui.line_number.active` を重ねる)。eve-tui は `Theme::from_roles` で表から引き、自前の定数は持たない。`ui.cursor_line` (現在行の帯、`view.cursor_line_highlight`) は表にあるが、描画は後の PR (設定の公開と一緒)。突合: `tests/theme_table.rs` (core、表の全ロール・4 段) と eve-tui の `theme_table` (引くロール名が表にあること)。
+
+**3 本目の実装 (M9c)**: 組込みテーマ 3 つと `theme.name` / `theme.background` の公開。
+
+| テーマ | 作り方 | `ui.text` (truecolor / 256 / 16) |
+|---|---|---|
+| `default-dark` | `default` の全ロールに、本文の色を足して背景を塗る。色の段では、各ロールの端末の既定色 (`default`) を `ui.text` の前景・背景に置き換える (無色の段は塗らない)。eve-tui は画面全体を `ui.text` で塗ってから描く | `#d4d4d4` / `#1e1e1e` (11.2) / `ansi.252` / `ansi.234` / `white` / `black` |
+| `default-light` | 同上 | `#1e1e1e` / `#fafafa` (16.0) / `ansi.235` / `ansi.255` / `black` / `bright_white` |
+| `ansi` | `default` の全ロールで、16 の段の値を全段に使う (端末の配色に馴染む。16 色端末・SSH 先向け、04 §12.1 C3) | 端末の既定色 |
+
+- 淡色の (iii) のロール (`#808080`) は、塗った背景に対しても 3.0:1 以上 (暗 4.2、明 3.8)。比は core の `tests/theme_table.rs` で確かめる。
+- `theme.background` (確定 (ユーザー回答)、2026-10-30): `default-dark` / `default-light` を選んだときだけ効き、`dark` / `light` でその明暗に替える。`auto` (既定) は名前どおりで、`COLORFGBG` による推定はしない (名前で明暗を明示しているため。OQ-124 の推定は、明暗を名前に含まないテーマを足すときに使う)。`default` と `ansi` は見ない。
+- `theme.name` の値は組込みの 4 つ。テーマファイル (`themes/<name>.toml`) は 4 本目。設定を差し替えると (`config.reload` を含む) その場で替わる。
 
 **実装の分け方 (README §3.6 の 6 を細かくする)**:
 
