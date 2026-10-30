@@ -7,12 +7,14 @@
 
 mod catalog;
 mod config;
+mod keymap;
 mod locale;
 mod reserved;
 
 pub use catalog::{Catalog, CatalogError, base_key};
 pub use config::{
     BackspaceUnit, ColorMode, Config, DefaultEncoding, DefaultLineEnding, DiagKind, Diagnostic,
-    IndentUnit, Loaded, Severity, default_display, load_str,
+    IndentUnit, KeymapProblem, Loaded, Severity, default_display, load_str,
 };
+pub use keymap::{KeyAction, KeymapEntry, KeymapFile, load_keymap_str};
 pub use locale::{Locale, LocaleChoice, LocaleSource, LocaleWarning, select_locale};

@@ -427,6 +427,34 @@ text = "システムのクリップボードを使えないため、エディタ
 hint = "使える値: {allowed}。この項目は既定値 {default} を使います"
 text = "{item} の値 {value} は使えません"
 
+[msg.config.keymap_unknown_context]
+hint = "使える名前: global, editor, search, prompt, palette, list, dialog, help。この割当は使いません"
+text = "{item} のコンテキスト名は使えません"
+
+[msg.config.keymap_unknown_command]
+hint = "コマンド名はコマンドパレットで確かめられます。この割当は使いません"
+text = "{item} のコマンド {value} はありません"
+
+[msg.config.keymap_bad_key]
+hint = "例: ctrl+shift+s、alt+up、f5。この割当は使いません"
+text = "{item} のキーの書き方が正しくありません"
+
+[msg.config.keymap_bad_when]
+hint = "書式は設定の仕様 (07 §7.3) を見てください。この割当は使いません"
+text = "{item} の when 句が正しくありません"
+
+[msg.config.keymap_printable_key]
+hint = "ctrl や alt を組み合わせたキーにしてください。この割当は使いません"
+text = "{item} は文字入力に使うキーなので割り当てられません"
+
+[msg.config.keymap_chord_prefix]
+hint = "続けて押すキーを優先し、この割当は使いません"
+text = "{item} は、既定の続けて押すキー (Ctrl+K など) の先頭です"
+
+[msg.config.keymap_escape_key]
+hint = "既定の割当を残しました。別のキーにしてください"
+text = "{item} の割当だと、終了・コマンドパレット・取消のどれかに届かなくなります"
+
 [msg.config.out_of_range]
 hint = "{range} で指定してください。この項目は {default} を使います"
 text = "{item} の値 {value} は範囲外です"

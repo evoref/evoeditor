@@ -429,6 +429,34 @@ text = "The system clipboard is not available, so the editor's own clipboard was
 hint = "Allowed values: {allowed}. This item uses the default {default}"
 text = "The value {value} of {item} cannot be used"
 
+[msg.config.keymap_unknown_context]
+hint = "Available: global, editor, search, prompt, palette, list, dialog, help. This binding is ignored"
+text = "The context in {item} is not available"
+
+[msg.config.keymap_unknown_command]
+hint = "Check command names in the command palette. This binding is ignored"
+text = "The command {value} in {item} does not exist"
+
+[msg.config.keymap_bad_key]
+hint = "Examples: ctrl+shift+s, alt+up, f5. This binding is ignored"
+text = "The key in {item} is not valid"
+
+[msg.config.keymap_bad_when]
+hint = "See the config spec (07 §7.3) for the syntax. This binding is ignored"
+text = "The when clause in {item} is not valid"
+
+[msg.config.keymap_printable_key]
+hint = "Combine it with ctrl or alt. This binding is ignored"
+text = "{item} is a text-input key and cannot be bound"
+
+[msg.config.keymap_chord_prefix]
+hint = "The key sequence wins. This binding is ignored"
+text = "{item} is the first key of a default key sequence (such as Ctrl+K)"
+
+[msg.config.keymap_escape_key]
+hint = "The default binding was kept. Choose another key"
+text = "The binding {item} would make quit, the command palette or cancel unreachable"
+
 [msg.config.out_of_range]
 hint = "Specify a value in {range}. This item uses {default}"
 text = "The value {value} of {item} is out of range"

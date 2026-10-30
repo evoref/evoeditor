@@ -83,6 +83,18 @@ impl EditorState {
                 args.push(("default", default.to_owned()));
                 "out_of_range"
             }
+            DiagKind::Keymap(p) => {
+                use eve_config::KeymapProblem as P;
+                match p {
+                    P::UnknownContext => "keymap_unknown_context",
+                    P::UnknownCommand => "keymap_unknown_command",
+                    P::BadKey => "keymap_bad_key",
+                    P::BadWhen => "keymap_bad_when",
+                    P::PrintableKey => "keymap_printable_key",
+                    P::ChordPrefix => "keymap_chord_prefix",
+                    P::EscapeKey => "keymap_escape_key",
+                }
+            }
             DiagKind::InvalidValue { allowed } => {
                 args.push(("allowed", allowed.join(", ")));
                 args.push(("default", default.to_owned()));
