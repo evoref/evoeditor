@@ -102,6 +102,17 @@ pub enum WrapIndent {
     Same,
 }
 
+/// OSC 52 でクリップボードへ書く方針 (`clipboard.osc52`、05 §8.1)。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Osc52Policy {
+    /// SSH 接続中、またはシステムのクリップボードに書けないとき (既定)。
+    Auto,
+    /// 端末が対応していれば、いつも書く。
+    Always,
+    /// 書かない。
+    Never,
+}
+
 /// 新規ファイル・判定不能時の文字コード (`file.default_encoding`)。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DefaultEncoding {
@@ -170,6 +181,10 @@ pub struct Config {
     pub mouse: bool,
     /// `ui.mouse_wheel_lines`: ホイール 1 目盛りのスクロール量 (表示行)。
     pub mouse_wheel_lines: u8,
+    /// `clipboard.osc52`: OSC 52 の送出方針。
+    pub osc52: Osc52Policy,
+    /// `clipboard.osc52_max_bytes`: OSC 52 の本文 (base64) の上限。超えたら送らない (05 §8.4)。
+    pub osc52_max_bytes: u32,
 }
 
 impl Default for Config {
@@ -195,6 +210,8 @@ impl Default for Config {
             wrap_kinsoku: true,
             mouse: true,
             mouse_wheel_lines: 3,
+            osc52: Osc52Policy::Auto,
+            osc52_max_bytes: 100_000,
         }
     }
 }
@@ -206,7 +223,7 @@ pub struct Loaded {
     pub diagnostics: Vec<Diagnostic>,
 }
 
-const SECTIONS: &[&str] = &["editor", "file", "view", "theme", "ui"];
+const SECTIONS: &[&str] = &["editor", "file", "view", "theme", "ui", "clipboard"];
 const KEYS: &[&str] = &[
     "editor.tab_width",
     "editor.indent_unit",
@@ -228,10 +245,13 @@ const KEYS: &[&str] = &[
     "view.wrap_kinsoku",
     "ui.mouse",
     "ui.mouse_wheel_lines",
+    "clipboard.osc52",
+    "clipboard.osc52_max_bytes",
 ];
 
 const INDENT_UNITS: &[&str] = &["tab", "space"];
 const BACKSPACE_UNITS: &[&str] = &["grapheme", "codepoint"];
+const OSC52_POLICIES: &[&str] = &["auto", "always", "never"];
 const WRAP_MODES: &[&str] = &["off", "soft", "word"];
 const WRAP_INDENTS: &[&str] = &["none", "same"];
 const ENCODINGS: &[&str] = &[
@@ -448,6 +468,20 @@ impl Cx<'_> {
                     };
                 }
             }
+            "clipboard.osc52" => {
+                if let Some(s) = self.string(key, v, OSC52_POLICIES) {
+                    self.out.config.osc52 = match s.as_str() {
+                        "always" => Osc52Policy::Always,
+                        "never" => Osc52Policy::Never,
+                        _ => Osc52Policy::Auto,
+                    };
+                }
+            }
+            "clipboard.osc52_max_bytes" => {
+                if let Some(n) = self.int(key, v, 1_000, 16_777_216) {
+                    self.out.config.osc52_max_bytes = n as u32;
+                }
+            }
             "ui.mouse" => {
                 if let Some(b) = self.boolean(key, v) {
                     self.out.config.mouse = b;
@@ -651,6 +685,8 @@ pub fn default_display(key: &str) -> &'static str {
         "view.wrap_indent" => "same",
         "view.wrap_kinsoku" | "ui.mouse" => "true",
         "ui.mouse_wheel_lines" => "3",
+        "clipboard.osc52" => "auto",
+        "clipboard.osc52_max_bytes" => "100000",
         "file.default_encoding" => "utf-8",
         "file.default_line_ending" => "lf",
         "view.ambiguous_width" => "1",

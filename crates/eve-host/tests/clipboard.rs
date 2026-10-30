@@ -50,6 +50,10 @@ struct Env {
 }
 
 fn env() -> Env {
+    env_with(eve_view::Capabilities::default())
+}
+
+fn env_with(caps: eve_view::Capabilities) -> Env {
     let clock = ManualClock::new();
     let fs = Arc::new(MemFs::new(Arc::new(clock.clone())));
     fs.add_dir("/w");
@@ -79,7 +83,7 @@ fn env() -> Env {
     host.set_clipboard(fake.clone());
     Env {
         host,
-        fe: HeadlessFrontend::new(40, 8),
+        fe: HeadlessFrontend::new(40, 8).with_caps(caps),
         clock,
         from_workers,
         fake,
@@ -254,4 +258,134 @@ fn 上限を超える全選択のコピーは文字列化せず内部レジス�
     e.key(KeyCode::End, Modifiers::CTRL);
     e.key(KeyCode::Char('v'), Modifiers::CTRL);
     assert!(e.pump_worker());
+}
+
+fn osc_caps() -> eve_view::Capabilities {
+    eve_view::Capabilities {
+        osc52_write: true,
+        ..eve_view::Capabilities::default()
+    }
+}
+
+fn config(policy: eve_config::Osc52Policy) -> eve_config::Config {
+    eve_config::Config {
+        osc52: policy,
+        ..eve_config::Config::default()
+    }
+}
+
+fn copy_abc(e: &mut Env) {
+    e.start();
+    e.text("abc");
+    e.key(KeyCode::Char('a'), Modifiers::CTRL);
+    e.key(KeyCode::Char('c'), Modifiers::CTRL);
+}
+
+fn message_keys(e: &mut Env) -> Vec<String> {
+    e.host
+        .take_events()
+        .into_iter()
+        .filter_map(|ev| match ev {
+            eve_view::EditorEvent::MessageShown { key, .. } => Some(key),
+            _ => None,
+        })
+        .collect()
+}
+
+// verifies: AC-FR-205-2
+#[test]
+fn システムに書けないとき_osc52_で書き_内部レジスタに切り替えたとは知らせない() {
+    let mut e = env_with(osc_caps());
+    *e.fake.write_error.lock().unwrap() = Some(ClipboardFailure::Unavailable);
+    copy_abc(&mut e);
+    assert!(e.pump_worker());
+    assert_eq!(e.fe.probe().osc52_writes(), ["abc"]);
+    assert!(!message_keys(&mut e).contains(&"msg.clipboard.fallback".to_owned()));
+}
+
+#[test]
+fn システムに書けて_ssh_でもなければ_auto_は_osc52_を送らない() {
+    let mut e = env_with(osc_caps());
+    e.host.set_ssh_session(false);
+    copy_abc(&mut e);
+    assert_eq!(
+        e.written.recv_timeout(Duration::from_secs(5)).unwrap(),
+        "abc"
+    );
+    e.clock.advance(eve_core::Millis(20));
+    e.host.step(&mut e.fe, HostMsg::Tick);
+    assert!(e.fe.probe().osc52_writes().is_empty());
+}
+
+#[test]
+fn ssh_中の_auto_と_always_は_システムに書けても_osc52_を送る() {
+    for (policy, ssh) in [
+        (eve_config::Osc52Policy::Auto, true),
+        (eve_config::Osc52Policy::Always, false),
+    ] {
+        let mut e = env_with(osc_caps());
+        e.host.set_config(config(policy), "config.toml", Vec::new());
+        e.host.set_ssh_session(ssh);
+        copy_abc(&mut e);
+        assert_eq!(
+            e.written.recv_timeout(Duration::from_secs(5)).unwrap(),
+            "abc"
+        );
+        assert!(e.pump_worker(), "{policy:?}");
+        assert_eq!(e.fe.probe().osc52_writes(), ["abc"], "{policy:?}");
+    }
+}
+
+#[test]
+fn never_と非対応の端末では_osc52_を送らず_失敗を知らせる() {
+    // never
+    let mut e = env_with(osc_caps());
+    e.host.set_config(
+        config(eve_config::Osc52Policy::Never),
+        "config.toml",
+        Vec::new(),
+    );
+    *e.fake.write_error.lock().unwrap() = Some(ClipboardFailure::Unavailable);
+    copy_abc(&mut e);
+    assert!(e.pump_worker());
+    assert!(e.fe.probe().osc52_writes().is_empty());
+    assert!(message_keys(&mut e).contains(&"msg.clipboard.fallback".to_owned()));
+    // 端末が対応していない
+    let mut e = env();
+    e.host.set_config(
+        config(eve_config::Osc52Policy::Always),
+        "config.toml",
+        Vec::new(),
+    );
+    *e.fake.write_error.lock().unwrap() = Some(ClipboardFailure::Unavailable);
+    copy_abc(&mut e);
+    assert!(e.pump_worker());
+    assert!(e.fe.probe().osc52_writes().is_empty());
+}
+
+#[test]
+fn 上限を超える本文は_osc52_では送らない() {
+    let mut e = env_with(osc_caps());
+    e.host.set_config(
+        eve_config::Config {
+            osc52_max_bytes: 1_000,
+            ..config(eve_config::Osc52Policy::Always)
+        },
+        "config.toml",
+        Vec::new(),
+    );
+    e.start();
+    e.text(&"x".repeat(800)); // base64 で 1,068 バイト
+    e.key(KeyCode::Char('a'), Modifiers::CTRL);
+    e.key(KeyCode::Char('c'), Modifiers::CTRL);
+    assert_eq!(
+        e.written
+            .recv_timeout(Duration::from_secs(5))
+            .unwrap()
+            .len(),
+        800
+    );
+    e.clock.advance(eve_core::Millis(20));
+    e.host.step(&mut e.fe, HostMsg::Tick);
+    assert!(e.fe.probe().osc52_writes().is_empty());
 }

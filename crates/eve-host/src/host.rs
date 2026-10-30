@@ -97,6 +97,10 @@ pub struct Host {
     clip_busy: Arc<std::sync::atomic::AtomicBool>,
     /// 待っている取得の token と期限 (2 秒)。
     clip_wait: Option<(eve_view::ClipboardToken, Tick)>,
+    /// 端末が OSC 52 の書込に対応する (`frontend.init` の能力、05 §8.1)。
+    osc52_write: bool,
+    /// SSH 接続中 (`SSH_TTY` / `SSH_CONNECTION`)。`clipboard.osc52 = auto` で OSC 52 を使う条件。
+    ssh_session: bool,
     /// 解決済みの設定 (07 §5.0)。
     config: eve_config::Config,
     /// 設定ファイルの診断 (名前, 診断)。最初の Frame の後にメッセージとして出す (07 §4.3、FR-703)。
@@ -138,6 +142,9 @@ impl Host {
             clipboard: None,
             clip_busy: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             clip_wait: None,
+            osc52_write: false,
+            ssh_session: std::env::var_os("SSH_TTY").is_some()
+                || std::env::var_os("SSH_CONNECTION").is_some(),
             config: eve_config::Config::default(),
             config_report: Vec::new(),
         }
@@ -178,6 +185,11 @@ impl Host {
     /// UI の言語を渡す (`start` / `run` の前に呼ぶ。選択順は `eve_config::select_locale`、07 §17.1)。
     pub fn set_locale(&mut self, locale: eve_config::Locale) {
         self.editor.state_mut().set_locale(locale);
+    }
+
+    /// SSH 接続中かを上書きする (既定は環境変数 `SSH_TTY` / `SSH_CONNECTION` から。試験用)。
+    pub fn set_ssh_session(&mut self, ssh: bool) {
+        self.ssh_session = ssh;
     }
 
     /// システムクリップボードの提供者を設定する (`start` / `run` の前に呼ぶ。無ければ内部レジスタだけ)。
@@ -250,6 +262,7 @@ impl Host {
             mouse: self.config.mouse,
         };
         let caps = frontend.init(&fcfg).map_err(StartError::Init)?;
+        self.osc52_write = caps.osc52_write;
         self.editor.state_mut().set_caps(caps);
         if let Some(info) = frontend.emergency_restore_info() {
             let _ = self.restore_info.set(info);
@@ -395,6 +408,15 @@ impl Host {
                         self.deliver_clipboard(token, text);
                     }
                 }
+                HostMsg::Osc52 {
+                    text,
+                    system_failure,
+                } => {
+                    if !frontend.write_osc52(&text) && system_failure.is_some() {
+                        self.editor
+                            .notify_clipboard_fallback("書き込めませんでした");
+                    }
+                }
                 HostMsg::ClipboardWriteFailed(_) => {
                     self.editor
                         .notify_clipboard_fallback("書き込めませんでした");
@@ -500,9 +522,21 @@ impl Host {
             eve_view::ClipboardText::Handle(id) => self.editor.take_clipboard(id),
             _ => None,
         };
-        let Some(provider) = self.clipboard.clone() else {
+        let provider = self.clipboard.clone();
+        // OSC 52 で書く条件: 端末が対応し、`clipboard.osc52` が `never` でない。`always` と SSH 中の `auto` は
+        // システムへの書込の成否に関わらず書き、それ以外はシステムに書けなかったときだけ書く (05 §8.1)
+        let osc = self.osc52_write.then_some(self.config.osc52).and_then(|p| {
+            use eve_config::Osc52Policy::{Always, Auto, Never};
+            match p {
+                Never => None,
+                Always => Some(true),
+                Auto => Some(self.ssh_session),
+            }
+        });
+        let max_b64 = self.config.osc52_max_bytes as usize;
+        if provider.is_none() && osc.is_none() {
             return;
-        };
+        }
         // 文字列化の前に総バイト数で上限と比べる
         let too_large = match (&content, &source) {
             (eve_view::ClipboardText::Inline(s), _) => s.len() > SYSTEM_MAX_BYTES,
@@ -523,8 +557,23 @@ impl Host {
                     (_, Some(src)) => src.to_text(),
                     _ => return,
                 };
-                if let Err(e) = provider.set_text(&text) {
-                    let _ = tx.send(HostMsg::ClipboardWriteFailed(e));
+                let result = match &provider {
+                    Some(p) => p.set_text(&text),
+                    None => Err(eve_platform::clipboard::ClipboardFailure::Unavailable),
+                };
+                // base64 は 3 バイトを 4 文字にする。上限を超える本文は OSC 52 では送らない (05 §8.4)
+                let fits = text.len().div_ceil(3) * 4 <= max_b64;
+                match (osc, result) {
+                    (Some(always), r) if fits && (always || r.is_err()) => {
+                        let _ = tx.send(HostMsg::Osc52 {
+                            text,
+                            system_failure: r.err(),
+                        });
+                    }
+                    (_, Err(e)) => {
+                        let _ = tx.send(HostMsg::ClipboardWriteFailed(e));
+                    }
+                    _ => {}
                 }
             });
     }

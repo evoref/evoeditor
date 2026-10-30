@@ -213,9 +213,68 @@ impl Emitter {
     }
 }
 
+const B64: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+/// 標準の base64 (パディングあり)。
+pub fn base64(data: &[u8]) -> String {
+    let mut out = String::with_capacity(data.len().div_ceil(3) * 4);
+    for c in data.chunks(3) {
+        let n = (u32::from(c[0]) << 16)
+            | (u32::from(*c.get(1).unwrap_or(&0)) << 8)
+            | u32::from(*c.get(2).unwrap_or(&0));
+        out.push(B64[(n >> 18) as usize & 63] as char);
+        out.push(B64[(n >> 12) as usize & 63] as char);
+        out.push(if c.len() > 1 {
+            B64[(n >> 6) as usize & 63] as char
+        } else {
+            '='
+        });
+        out.push(if c.len() > 2 {
+            B64[n as usize & 63] as char
+        } else {
+            '='
+        });
+    }
+    out
+}
+
+/// クリップボードへ書く OSC 52 (`c` = クリップボード)。tmux の中では DCS 透過で包む (05 §8.2)。
+pub fn osc52(text: &str, tmux: bool) -> String {
+    let seq = format!("\x1b]52;c;{}\x1b\\", base64(text.as_bytes()));
+    if tmux {
+        // DCS の中では ESC を 2 重にする
+        format!("\x1bPtmux;{}\x1b\\", seq.replace('\x1b', "\x1b\x1b"))
+    } else {
+        seq
+    }
+}
+
 /// 起動時の出力 (04 §14.1 の 4): 代替スクリーンへ、続けて自動折り返しを無効化する (§4.7 (g))。
 pub const ENTER: &str = "\x1b[?1049h\x1b[?7l";
 
 /// 復元の出力 (04 §14.3 の 1〜7): ESU → SGR リセット → カーソル形状を既定へ → カーソル表示 → 自動折り返しを有効へ
 /// → 代替スクリーンを抜ける。v0.1 はマウス・フォーカス・ブラケットペースト・拡張キーを有効にしないので送らない。
 pub const LEAVE: &str = "\x1b[?2026l\x1b[0m\x1b[0 q\x1b[?25h\x1b[?7h\x1b[?1049l";
+
+#[cfg(test)]
+mod osc52_tests {
+    use super::*;
+
+    #[test]
+    fn base64_は標準の符号化() {
+        assert_eq!(base64(b""), "");
+        assert_eq!(base64(b"f"), "Zg==");
+        assert_eq!(base64(b"fo"), "Zm8=");
+        assert_eq!(base64(b"foo"), "Zm9v");
+        assert_eq!(base64("あ".as_bytes()), "44GC");
+    }
+
+    #[test]
+    fn osc52_は_st_で閉じ_tmux_では_dcs_で包む() {
+        assert_eq!(osc52("foo", false), "\x1b]52;c;Zm9v\x1b\\");
+        assert_eq!(
+            osc52("foo", true),
+            "\x1bPtmux;\x1b\x1b]52;c;Zm9v\x1b\x1b\\\x1b\\"
+        );
+    }
+}

@@ -392,3 +392,21 @@ fn undo_total_max_bytes_は範囲つきの整数() {
     ));
     assert_eq!(l.diagnostics[0].key, "editor.undo.total_max_bytes");
 }
+
+#[test]
+fn clipboard_osc52_の設定を読む() {
+    let l =
+        load_str("[clipboard]\nosc52 = \"always\"\nosc52_max_bytes = 5000\nprovider = \"auto\"\n");
+    assert_eq!(l.config.osc52, Osc52Policy::Always);
+    assert_eq!(l.config.osc52_max_bytes, 5000);
+    // `provider` はまだ公開していない: 未対応の情報診断
+    assert!(
+        l.diagnostics.iter().all(|d| d.severity == Severity::Info),
+        "{:?}",
+        l.diagnostics
+    );
+    let l = load_str("[clipboard]\nosc52 = \"yes\"\nosc52_max_bytes = 10\n");
+    assert_eq!(l.config.osc52, Osc52Policy::Auto);
+    assert_eq!(l.config.osc52_max_bytes, 100_000, "範囲外は既定値");
+    assert_eq!(l.diagnostics.len(), 2);
+}

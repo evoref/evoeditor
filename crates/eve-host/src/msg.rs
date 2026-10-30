@@ -52,6 +52,12 @@ pub enum HostMsg {
     },
     /// システムクリップボードへの書込の失敗 (使い捨てのスレッドから)。
     ClipboardWriteFailed(eve_platform::clipboard::ClipboardFailure),
+    /// OSC 52 で書く本文 (使い捨てのスレッドから、05 §8.1)。`system_failure` はシステムのクリップボードへの書込の失敗
+    /// (OSC 52 も書けなかったときに、内部レジスタに切り替えたと知らせる)。
+    Osc52 {
+        text: String,
+        system_failure: Option<eve_platform::clipboard::ClipboardFailure>,
+    },
     /// `run()` の待機が期限で終わった (メッセージなし)。
     Tick,
 }

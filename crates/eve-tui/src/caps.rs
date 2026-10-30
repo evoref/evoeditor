@@ -228,6 +228,8 @@ pub fn detect(config: CapsConfig, env: &dyn Env, is_windows: bool) -> Detected {
         // マウスは v0.2 から (Windows は `ENABLE_MOUSE_INPUT`、04 §6.8)。拡張キー・ジョブ制御は無効 (04 §6.3)
         mouse: is_windows,
         enhanced_keys: false,
+        // Windows Terminal は OSC 52 の書込に対応する。conhost は対応しない (05 §8.1)
+        osc52_write: kind == TerminalKind::WindowsTerminal,
         can_suspend: false,
         dark_mode: None,
         ascii_only: ascii_only(ambiguous, kind),
