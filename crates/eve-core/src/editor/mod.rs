@@ -74,8 +74,6 @@ pub struct Editor {
     which_key_shown: bool,
 }
 
-/// 保留中のチョードの続きを一覧に出すまでの待ち (04 §7.4)。
-
 impl Editor {
     /// 空の EditorState を作る。I/O もジョブ投入もしない。
     pub fn new(ports: Ports, caps: Capabilities) -> Editor {
