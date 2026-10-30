@@ -81,7 +81,7 @@ impl Harness {
     }
 
     pub fn with_caps(mut self, caps: Capabilities) -> Harness {
-        self.editor.state_mut().set_caps(caps);
+        self.editor.set_caps(caps);
         self
     }
 

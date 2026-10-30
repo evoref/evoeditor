@@ -108,13 +108,31 @@ impl Editor {
     }
 
     /// `{key:<command_id>}` の解決に使うキー表記を、今のキーマップから作り直す。
+    /// キーの表記を作り直す。表記 (パレット・ヒントバー・`{key:…}`) はこの端末で届く割当から選び (04 §7.8)、
+    /// ヘルプのキー一覧は全割当を、届くかの印とともに持つ。
     fn refresh_key_labels(&mut self) {
-        let labels = self.keymap.first_labels(&Self::EDITOR_CONTEXTS);
-        let seqs = self.keymap.first_bindings(&Self::EDITOR_CONTEXTS);
+        let caps = self.state.caps.clone();
+        let ok = |b: &keymap::Binding| keymap::reachable(b, &caps);
+        let seqs = self
+            .keymap
+            .first_bindings_where(&Self::EDITOR_CONTEXTS, &ok);
+        let labels = seqs
+            .iter()
+            .map(|(k, v)| (k.clone(), keymap::format_sequence(v)))
+            .collect();
         self.state.set_key_bindings(labels, seqs);
         self.state.set_all_key_bindings(help::collect_all_bindings(
-            self.keymap.all_bindings().into_iter(),
+            self.keymap
+                .all_bindings()
+                .into_iter()
+                .map(|b| (b.command.as_str().to_owned(), b.sequence.clone(), ok(b))),
         ));
+    }
+
+    /// 端末の能力を差し替える (起動時と `CapabilitiesChanged`)。届く割当が変わるので、キーの表記も作り直す。
+    pub fn set_caps(&mut self, caps: eve_view::Capabilities) {
+        self.state.set_caps(caps);
+        self.refresh_key_labels();
     }
 
     pub fn state(&self) -> &EditorState {
@@ -307,7 +325,7 @@ impl Editor {
                 self.state.on_mouse(m);
             }
             InputEvent::Resize { cols, rows } => self.state.set_viewport(cols, rows),
-            InputEvent::CapabilitiesChanged(caps) => self.state.set_caps(caps),
+            InputEvent::CapabilitiesChanged(caps) => self.set_caps(caps),
             // システムクリップボードの読み取りの応答。最後の要求の token と違えば捨てる
             InputEvent::ClipboardContent { token, text } => {
                 self.state.on_clipboard_content(token, text);

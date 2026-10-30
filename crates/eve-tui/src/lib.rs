@@ -16,6 +16,7 @@ pub mod color;
 pub mod frontend;
 pub mod glyphs;
 pub mod input;
+pub mod intercept;
 pub mod mouse;
 pub mod sanitize;
 pub mod theme;
