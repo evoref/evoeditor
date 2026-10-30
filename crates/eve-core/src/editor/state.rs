@@ -9,6 +9,8 @@ use eve_view::{
     Capabilities, DocumentId, EditorEvent, Effect, JobId, OriginKind, Revision, ViewId, WindowId,
 };
 
+mod wrap_scroll;
+
 use super::file::Pending;
 use crate::document::{Applied, AppliedTx, ApplyError, Document, Transaction};
 use crate::jobs::JobSpawner;
@@ -308,6 +310,10 @@ impl EditorState {
             // 画面の大きさが変わっても、カーソルが見えるようにする
             let views: Vec<ViewId> = self.views.keys().copied().collect();
             for v in views {
+                // 折り返し幅が変わるので、先頭の論理行の最初の表示行に戻す (03 §14.3.1)
+                if let Some(view) = self.views.get_mut(&v) {
+                    view.scroll.wrap_idx = 0;
+                }
                 self.ensure_cursor_visible(v);
             }
         }
@@ -391,6 +397,7 @@ impl EditorState {
         };
         let text = d.text();
         v.scroll.top = text.line_to_byte(text.byte_to_line(pos));
+        v.scroll.wrap_idx = 0;
         self.needs_render = true;
     }
 
@@ -520,6 +527,7 @@ impl EditorState {
             return;
         };
         let text = document.text();
+        let viewport = self.viewport;
         for (id, view) in self.views.iter_mut().filter(|(_, v)| v.doc == doc) {
             if Some(*id) == issuer {
                 // 発行 View: 指定された Selection (なければ自分の編集として写像)。goal_dcol はクリア
@@ -532,6 +540,7 @@ impl EditorState {
                 };
                 view.selection = sel;
                 view.goal_dcol = None;
+                view.cursor_affinity = Default::default();
             } else {
                 // 他の View: 他者の編集として写像。goal_dcol は維持
                 view.selection = view
@@ -541,7 +550,18 @@ impl EditorState {
             }
             // スクロール位置は同じ関数で写像し、行頭へ丸める
             let top = a.changes.map_pos(view.scroll.top, Bias::Before);
-            view.scroll.top = text.line_to_byte(LineIdx(text.byte_to_line(top).0));
+            let top_line = text.byte_to_line(top).0;
+            view.scroll.top = text.line_to_byte(LineIdx(top_line));
+            // 折り返し: 先頭が同じ論理行のままなら表示行の番号を新しい行数に収め、動いたら行頭の表示行に戻す
+            if view.scroll.wrap_idx > 0 {
+                view.scroll.wrap_idx = if view.wrap.is_on() && top == view.scroll.top {
+                    let cols = super::layout::wrap_width(document, viewport);
+                    let n = super::layout::line_rows(document, top_line, view.wrap, cols).len();
+                    view.scroll.wrap_idx.min(n.saturating_sub(1) as u32)
+                } else {
+                    0
+                };
+            }
         }
         // 編集の後もカーソルが見えるようにする (行が短くなった・画面の右端を越えた)
         if let Some(v) = issuer {
@@ -593,6 +613,7 @@ impl EditorState {
             v.wrap = wrap;
             v.scroll.wrap_idx = 0;
             v.scroll.left_col = 0;
+            v.goal_dcol = None;
             v.cursor_affinity = Default::default();
             self.needs_render = true;
         }
@@ -616,6 +637,9 @@ impl EditorState {
 
     /// 先頭可視行を `delta` 行ずらす (文書の範囲内に収め、短い文書を画面の外へ押し出さない)。
     pub fn scroll_lines(&mut self, view: ViewId, delta: i64) {
+        if let Some(g) = self.wrap_geometry(view) {
+            return self.wrapped_scroll_lines(view, g, delta);
+        }
         let Some(doc) = self.views.get(&view).map(|v| v.doc) else {
             return;
         };
@@ -651,6 +675,16 @@ impl EditorState {
 
     /// カーソルの列が見えるよう水平スクロールを調整する (折り返しなし)。
     fn ensure_horizontal(&mut self, view: ViewId) {
+        if self.wrap_geometry(view).is_some() {
+            // 折り返し ON は水平スクロールしない
+            if let Some(v) = self.views.get_mut(&view)
+                && v.scroll.left_col != 0
+            {
+                v.scroll.left_col = 0;
+                self.needs_render = true;
+            }
+            return;
+        }
         let Some((col, cell_w)) = super::layout::primary_cursor_cell(self, view) else {
             return;
         };
@@ -684,6 +718,9 @@ impl EditorState {
     }
 
     fn ensure_vertical(&mut self, view: ViewId, margin: usize) {
+        if let Some(g) = self.wrap_geometry(view) {
+            return self.wrapped_ensure_vertical(view, g, margin);
+        }
         let rows = self.viewport.1 as usize;
         let Some(doc) = self.views.get(&view).map(|v| v.doc) else {
             return;
@@ -715,6 +752,9 @@ impl EditorState {
 
     /// カーソルを含む行をビューポートの中央に置く (指定行へ移動の後、03 §5.6)。
     pub fn center_cursor(&mut self, view: ViewId) {
+        if let Some(g) = self.wrap_geometry(view) {
+            return self.wrapped_center_cursor(view, g);
+        }
         let rows = self.viewport.1 as usize;
         let Some(doc) = self.views.get(&view).map(|v| v.doc) else {
             return;
@@ -750,6 +790,7 @@ impl EditorState {
         }
         v.selection = sel;
         v.goal_dcol = None;
+        v.cursor_affinity = Default::default();
         self.needs_render = true;
     }
 

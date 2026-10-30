@@ -126,7 +126,7 @@ fn カーソルは折り返し位置で_affinity_により上下どちらかに�
 #[test]
 fn 選択と検索の強調は表示行をまたいで付く() {
     let mut h = doc("aaaa bbbb cccc dddd eeee ffff", WrapMode::Word);
-    h.keys("shift+end");
+    h.keys("shift+end shift+end"); // 1 回目は表示行末、2 回目は論理行末
     let f = h.frame();
     for i in 0..2 {
         let r = &f.panes[0].rows[i];
