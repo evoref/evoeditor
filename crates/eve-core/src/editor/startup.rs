@@ -49,6 +49,12 @@ impl EditorState {
     ) -> Option<DocumentId> {
         let opts = OpenOptions {
             default_eol: opts.default_eol.or(Some(self.config_eol())),
+            huge_file_warn_bytes: opts
+                .huge_file_warn_bytes
+                .or(Some(self.config().huge_file_warn_bytes)),
+            long_line_threshold: opts
+                .long_line_threshold
+                .or(Some(self.config_long_line_threshold())),
             ..opts
         };
         let Ok(path) = self.paths.normalize(raw_path) else {

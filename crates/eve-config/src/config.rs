@@ -219,6 +219,10 @@ pub struct Config {
     pub osc52: Osc52Policy,
     /// `clipboard.osc52_max_bytes`: OSC 52 の本文 (base64) の上限。超えたら送らない (05 §8.4)。
     pub osc52_max_bytes: u32,
+    /// `file.huge_file_warn_bytes`: これを超えるファイルは開く前に警告する (FR-127、docs/03 §11.2)。
+    pub huge_file_warn_bytes: u64,
+    /// `file.long_line_threshold`: これを超える行を長大行として扱う (NFR-106、docs/03 §11.5)。
+    pub long_line_threshold: u64,
 }
 
 impl Default for Config {
@@ -250,6 +254,8 @@ impl Default for Config {
             which_key_delay_ms: 500,
             osc52: Osc52Policy::Auto,
             osc52_max_bytes: 100_000,
+            huge_file_warn_bytes: 512 * 1024 * 1024,
+            long_line_threshold: 1024 * 1024,
         }
     }
 }
@@ -320,6 +326,14 @@ pub fn changed_keys(a: &Config, b: &Config) -> Vec<&'static str> {
             "clipboard.osc52_max_bytes",
             a.osc52_max_bytes != b.osc52_max_bytes,
         ),
+        (
+            "file.huge_file_warn_bytes",
+            a.huge_file_warn_bytes != b.huge_file_warn_bytes,
+        ),
+        (
+            "file.long_line_threshold",
+            a.long_line_threshold != b.long_line_threshold,
+        ),
     ]
     .into_iter()
     .filter_map(|(k, changed)| changed.then_some(k))
@@ -361,6 +375,8 @@ pub(crate) const KEYS: &[&str] = &[
     "ui.which_key_delay_ms",
     "clipboard.osc52",
     "clipboard.osc52_max_bytes",
+    "file.huge_file_warn_bytes",
+    "file.long_line_threshold",
 ];
 
 const INDENT_UNITS: &[&str] = &["tab", "space"];
@@ -603,6 +619,17 @@ impl Cx<'_> {
             "clipboard.osc52_max_bytes" => {
                 if let Some(n) = self.int(key, v, 1_000, 16_777_216) {
                     self.out.config.osc52_max_bytes = n as u32;
+                }
+            }
+            "file.huge_file_warn_bytes" => {
+                if let Some(n) = self.int(key, v, 1_048_576, 1 << 40) {
+                    self.out.config.huge_file_warn_bytes = n as u64;
+                }
+            }
+            "file.long_line_threshold" => {
+                // 下限は長大行で表示する先頭 (64 KiB)
+                if let Some(n) = self.int(key, v, 65_536, 1 << 30) {
+                    self.out.config.long_line_threshold = n as u64;
                 }
             }
             "ui.mouse" => {
@@ -858,6 +885,8 @@ pub fn default_display(key: &str) -> &'static str {
         "ui.which_key_delay_ms" => "500",
         "clipboard.osc52" => "auto",
         "clipboard.osc52_max_bytes" => "100000",
+        "file.huge_file_warn_bytes" => "536870912",
+        "file.long_line_threshold" => "1048576",
         "file.default_encoding" => "utf-8",
         "file.default_line_ending" => "lf",
         "view.ambiguous_width" => "1",

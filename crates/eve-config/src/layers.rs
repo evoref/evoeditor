@@ -153,6 +153,14 @@ pub fn values(c: &Config) -> Vec<(&'static str, String)> {
                 DefaultLineEnding::Native => "native",
             }),
         ),
+        (
+            "file.huge_file_warn_bytes",
+            c.huge_file_warn_bytes.to_string(),
+        ),
+        (
+            "file.long_line_threshold",
+            c.long_line_threshold.to_string(),
+        ),
         ("file.swap.enabled", c.swap_enabled.to_string()),
         ("file.swap.interval_ms", c.swap_interval_ms.to_string()),
         (

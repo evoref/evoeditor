@@ -253,8 +253,9 @@ fn units_with(content: &str, esc: bool, ws: bool, cfg: &WidthConfig) -> Vec<Unit
 /// 長大行 (閾値超。読み取り専用で開いたもの) は先頭 64 KiB (書記素の境界) までを表示とカーソルの対象にする (NFR-106、03 §11.5)。
 /// 戻り値は表示の終端のバイト位置 (それ以外の行は行末)。
 pub(super) fn line_visible_end(doc: &Document, ls: usize, le: usize) -> usize {
-    use crate::document::{LONG_LINE_THRESHOLD, LONG_LINE_VISIBLE, ReadOnlyReason};
-    if le - ls > LONG_LINE_THRESHOLD && doc.read_only.contains(ReadOnlyReason::LongLine) {
+    use crate::document::{LONG_LINE_VISIBLE, ReadOnlyReason};
+    if le - ls > doc.format.long_line_threshold && doc.read_only.contains(ReadOnlyReason::LongLine)
+    {
         eve_text::snap_to_grapheme(
             doc.text(),
             ByteOff(ls + LONG_LINE_VISIBLE),

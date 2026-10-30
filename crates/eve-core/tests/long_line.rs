@@ -116,3 +116,37 @@ fn 閾値以下の長い行は読み取り専用にならない() {
             .contains(ReadOnlyReason::LongLine)
     );
 }
+
+// verifies: AC-NFR-106-3
+#[test]
+fn 閾値は_file_long_line_threshold_で変えられ_開いた文書は開いたときの閾値を保つ() {
+    let line = "x".repeat(100_000);
+    let mut data = line.as_bytes().to_vec();
+    data.extend_from_slice(b"\nsecond\n");
+    let mut h = Harness::new()
+        .with_file("/w/long.txt", &data)
+        .with_size(100, 10);
+    h.editor.state_mut().set_config(eve_config::Config {
+        long_line_threshold: 65_536,
+        ..eve_config::Config::default()
+    });
+    h.open("/w/long.txt");
+    h.run_jobs();
+    let id = h.doc_id();
+    let ro = |h: &Harness| {
+        h.editor
+            .state()
+            .document(id)
+            .unwrap()
+            .read_only
+            .contains(ReadOnlyReason::LongLine)
+    };
+    assert!(ro(&h), "設定した閾値 (64 KiB) を超える行");
+    // 設定を戻しても、開いている文書は開いたときの閾値で表示する (07 §6 の「新規文書から」)
+    h.editor
+        .state_mut()
+        .set_config(eve_config::Config::default());
+    h.keys("end");
+    assert!(sel(&h).1 <= LONG_LINE_VISIBLE);
+    assert!(ro(&h));
+}
