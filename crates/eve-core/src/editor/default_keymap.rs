@@ -49,6 +49,8 @@ pub(super) fn default_keymap() -> Keymap {
         ("ctrl+k x", "search.toggle_regex"),
         ("alt+w", "search.toggle_word"),
         ("ctrl+k b", "search.toggle_word"),
+        ("alt+l", "search.toggle_selection"),
+        ("ctrl+k l", "search.toggle_selection"),
         ("alt+a", "search.replace_all"),
         ("tab", "ui.list_next"),
         ("shift+tab", "ui.list_prev"),

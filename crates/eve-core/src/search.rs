@@ -9,6 +9,7 @@
 
 use std::borrow::Cow;
 use std::ops::Range;
+use std::sync::Arc;
 
 use eve_text::{ByteOff, ByteRange, LineIdx, TextRead, is_grapheme_boundary, word_boundaries};
 use eve_view::JobId;
@@ -52,6 +53,9 @@ pub struct SearchQuery {
     regex: bool,
     /// 一致の両端が単語境界 (§13.3) にあるものだけを採る (FR-402、v0.2)。
     whole_word: bool,
+    /// 選択範囲内の検索 (`scope: Selection`、§12.1 / §12.5)。この範囲 (開始位置の昇順で重ならない) の
+    /// どれかに収まる一致だけを採る。`None` は文書全体。
+    scope: Option<Arc<[ByteRange]>>,
 }
 
 /// 検索語をコンパイルできない理由 (§12.3)。入力中は赤色表示のみで、ジョブは投入しない。
@@ -76,7 +80,18 @@ impl SearchQuery {
             case: Case::Smart,
             regex: false,
             whole_word: false,
+            scope: None,
         }
+    }
+
+    /// 選択範囲内に限る (`None` は文書全体)。範囲は開始位置の昇順で重ならないこと。
+    pub fn with_scope(mut self, scope: Option<Arc<[ByteRange]>>) -> SearchQuery {
+        self.scope = scope;
+        self
+    }
+
+    pub fn scope(&self) -> Option<&[ByteRange]> {
+        self.scope.as_deref()
     }
 
     /// 正規表現として探す (既定は `false`)。
@@ -199,6 +214,7 @@ impl SearchQuery {
             chunked: false,
             regex: Some(re),
             whole_word: self.whole_word,
+            scope: self.scope.clone(),
         }))
     }
 
@@ -231,6 +247,7 @@ impl SearchQuery {
             chunked,
             regex: None,
             whole_word: self.whole_word,
+            scope: self.scope.clone(),
         }
     }
 }
@@ -291,9 +308,21 @@ pub struct Matcher {
     regex: Option<regex::Regex>,
     /// 一致の両端が単語境界にあるものだけを採る。
     whole_word: bool,
+    /// この範囲のどれかに収まる一致だけを採る (選択範囲内の検索)。
+    scope: Option<Arc<[ByteRange]>>,
 }
 
 impl Matcher {
+    /// 一致 `r` が範囲内か (範囲が無ければ常に真)。範囲の境界をまたぐ一致は採らない。
+    fn in_scope(&self, r: ByteRange) -> bool {
+        let Some(sc) = &self.scope else {
+            return true;
+        };
+        let i = sc.partition_point(|s| s.end < r.end);
+        sc.get(i)
+            .is_some_and(|s| s.start <= r.start && r.end <= s.end)
+    }
+
     /// チャンクごとに (memmem で) 走査できる。`false` は行ごとに畳み込む遅い経路 (約 50 MB/s) になる。
     pub fn is_chunked(&self) -> bool {
         self.chunked
@@ -422,7 +451,8 @@ pub fn scan_lines(
             continue;
         }
         let line = text.slice_to_string(ByteRange::new(ByteOff(ls), ByteOff(le)));
-        if !m.find_in_line(text, ls, &line, f) {
+        let ok = m.find_in_line(text, ls, &line, &mut |r| !m.in_scope(r) || f(r));
+        if !ok {
             return false;
         }
     }
@@ -447,6 +477,9 @@ pub fn scan_replacements(
         let le = text.line_end_byte(LineIdx(l)).0;
         let line = text.slice_to_string(ByteRange::new(ByteOff(ls), ByteOff(le)));
         let ok = m.find_in_line_inner(text, ls, &line, true, &mut |r, caps| {
+            if !m.in_scope(r) {
+                return true;
+            }
             let mut out = String::new();
             match caps {
                 Some(c) => c.expand(replacement, &mut out),
@@ -527,6 +560,8 @@ pub fn scan_bytes(
         };
         return scan_lines(text, m, first..last, cancel, f);
     }
+    // 範囲外の一致は渡さない (走査を止めずに読み飛ばす)
+    let f = &mut |r: ByteRange| !m.in_scope(r) || f(r);
     let n = m.len;
     // 前のチャンクの末尾のうち、まだ一致に使っていない最大 n-1 バイト (畳み込み済み)
     let mut carry: Vec<u8> = Vec::new();

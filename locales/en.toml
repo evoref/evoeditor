@@ -228,6 +228,10 @@ title = "Toggle Regex"
 description = "Toggle matching whole words only."
 title = "Toggle Whole Word"
 
+[cmd.search.toggle_selection]
+description = "Toggle searching only within the selection made before opening the search bar."
+title = "Toggle In Selection"
+
 [cmd.select.all]
 description = "Select the whole document."
 title = "Select All"
@@ -416,6 +420,7 @@ done_skipped = "Saved {saved} documents. {skipped} untitled or read-only documen
 none = "No documents to save"
 
 [info.search]
+no_selection = "There is no selection. Select text, then open the search bar"
 replace_empty_query = "Enter the text to search for"
 replace_no_match = "Nothing to replace"
 replaced = "Replaced {count} matches (undo restores them)"

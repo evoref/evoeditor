@@ -31,6 +31,7 @@ impl SearchBarState {
             .with_case(self.case)
             .with_regex(self.regex)
             .with_whole_word(self.whole_word)
+            .with_scope(self.in_selection.then(|| self.sel_ranges.clone()))
     }
 }
 
@@ -47,6 +48,10 @@ pub(super) struct SearchBarState {
     pub regex: bool,
     /// 単語単位 (`search.toggle_word`)。同じく off から始まる。
     pub whole_word: bool,
+    /// 選択範囲内だけを探す (`search.toggle_selection`)。off から始まる。
+    pub in_selection: bool,
+    /// バーを開いたときの選択 (空でない Range。開始位置の昇順)。編集に合わせて写像する (03 §12.5)。
+    pub sel_ranges: std::sync::Arc<[ByteRange]>,
     /// 検索語をコンパイルできない理由。あれば検索しない (03 §12.3)。
     pub error: Option<QueryError>,
     /// 入力しているときの検索の起点 (開いたときの選択の始端。一致へ移ったらその一致の始端)。
@@ -73,12 +78,26 @@ impl EditorState {
             return CommandResult::Done;
         }
         let anchor = self.bar_cursor(false).unwrap_or(ByteOff(0));
+        let sel_ranges: std::sync::Arc<[ByteRange]> = self
+            .first_window()
+            .and_then(|w| self.window_view(w))
+            .and_then(|v| self.view(v))
+            .map(|v| {
+                v.selection
+                    .iter()
+                    .filter(|r| !r.is_empty())
+                    .map(|r| ByteRange::new(r.start(), r.end()))
+                    .collect()
+            })
+            .unwrap_or_else(|| std::sync::Arc::from([]));
         self.search_bar = Some(SearchBarState {
             text: String::new(),
             cursor: 0,
             case: Case::Smart,
             regex: false,
             whole_word: false,
+            in_selection: false,
+            sel_ranges,
             error: None,
             anchor,
             current: None,
@@ -197,6 +216,48 @@ impl EditorState {
         bar.whole_word = !bar.whole_word;
         self.bar_changed();
         CommandResult::Done
+    }
+
+    /// 選択範囲内だけを探すかを切り替える (`search.toggle_selection`)。範囲は検索バーを開いたときの選択で、
+    /// 選択が無かったときは切り替えずに知らせる。切り替えたら再検索する。
+    pub fn search_toggle_selection(&mut self) -> CommandResult {
+        let Some(bar) = &mut self.search_bar else {
+            return CommandResult::Rejected(super::command::RejectReason::NotAvailable);
+        };
+        if bar.sel_ranges.is_empty() {
+            self.show_message(MessageLevel::Info, "info.search.no_selection", &[]);
+            return CommandResult::Done;
+        }
+        bar.in_selection = !bar.in_selection;
+        // 入力の起点は範囲の先頭にする (範囲の外から探し始めない)
+        if bar.in_selection {
+            bar.anchor = bar.sel_ranges[0].start;
+        }
+        self.bar_changed();
+        CommandResult::Done
+    }
+
+    /// 編集に合わせて、選択範囲内の検索の範囲を写像する (範囲の端での挿入は範囲に含める)。
+    pub(super) fn map_search_scope(&mut self, doc: eve_view::DocumentId, cs: &eve_text::ChangeSet) {
+        if self.active_document() != Some(doc) {
+            return;
+        }
+        let Some(bar) = &mut self.search_bar else {
+            return;
+        };
+        if bar.sel_ranges.is_empty() {
+            return;
+        }
+        bar.sel_ranges = bar
+            .sel_ranges
+            .iter()
+            .map(|r| {
+                ByteRange::new(
+                    cs.map_pos(r.start, eve_text::Bias::Before),
+                    cs.map_pos(r.end, eve_text::Bias::After),
+                )
+            })
+            .collect();
     }
 
     /// 入力欄・トグルが変わった: 検索をやり直し、起点から先の最初の一致を強調する。
@@ -380,6 +441,7 @@ impl EditorState {
             case_on: query.is_case_sensitive(),
             regex: bar.regex,
             whole_word: bar.whole_word,
+            in_selection: bar.in_selection,
             error,
             count_text: count_text.map(|t| cell_text(&t, CutPolicy::End)),
         })

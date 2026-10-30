@@ -444,6 +444,8 @@ pub struct SearchBarModel {
     pub regex: bool,
     /// 単語単位で探す (トグル `[ab]` を反転して示す、FR-402)。
     pub whole_word: bool,
+    /// 選択範囲内だけを探す (トグル `[sel]` を反転して示す、03 §12.5)。
+    pub in_selection: bool,
     /// 検索語を使えない理由 (正規表現の構文エラー・改行を含むパターン)。あれば件数の位置に描き、検索しない。
     pub error: Option<CellText>,
     /// 件数の文言 (`ui.search.count.*`)。検索していなければ `None`。

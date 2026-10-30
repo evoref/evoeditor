@@ -849,7 +849,7 @@ fn draw_input(
     cursor_x
 }
 
-/// 検索バー (04 §8.4): `検索: [入力欄] [Aa~] [.*] [ab] 1/2`。幅が足りなければ件数 → トグルの括弧の順に省き、入力欄は最低 10 セルを残す。
+/// 検索バー (04 §8.4): `検索: [入力欄] [Aa~] [.*] [ab] [sel] 1/2`。幅が足りなければ件数 → トグルの括弧の順に省き、入力欄は最低 10 セルを残す。
 fn render_search_bar(
     w: &mut Writer<'_>,
     y: u16,
@@ -868,8 +868,8 @@ fn render_search_bar(
         CaseMode::Insensitive => "",
     };
     let on_mark = if ascii { "*" } else { "\u{2713}" };
-    // トグル: 大小 `[Aa~]`、正規表現 `[.*]`、単語単位 `[ab]` (オンは ✓ を付けて反転。色に頼らない、04 §8.4)
-    let toggles: [(String, String, bool); 3] = [
+    // トグル: 大小 `[Aa~]`、正規表現 `[.*]`、単語単位 `[ab]`、選択範囲内 `[sel]` (オンは ✓ を付けて反転。色に頼らない、04 §8.4)
+    let toggles: [(String, String, bool); 4] = [
         (format!("[Aa{mark}]"), format!("Aa{mark}"), bar.case_on),
         (
             format!("[.*{}]", if bar.regex { on_mark } else { "" }),
@@ -881,13 +881,19 @@ fn render_search_bar(
             format!("ab{}", if bar.whole_word { on_mark } else { "" }),
             bar.whole_word,
         ),
+        (
+            format!("[sel{}]", if bar.in_selection { on_mark } else { "" }),
+            format!("sel{}", if bar.in_selection { on_mark } else { "" }),
+            bar.in_selection,
+        ),
     ];
     let width_of = |short: bool| -> u16 {
         toggles
             .iter()
             .map(|t| (if short { &t.1 } else { &t.0 }).chars().count() as u16)
             .sum::<u16>()
-            + 2
+            // トグルの間の空白
+            + (toggles.len() as u16 - 1)
     };
     let label_w = text_width(&bar.label.spans);
     // 右端には件数を置く。検索語を使えないときは、件数の代わりに理由を出す

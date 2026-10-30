@@ -226,6 +226,10 @@ title = "正規表現を切替"
 description = "一致の両端が単語の境界にあるものだけを探すかを切り替えます。"
 title = "単語単位を切替"
 
+[cmd.search.toggle_selection]
+description = "検索バーを開いたときの選択範囲の中だけを探すかを切り替えます。"
+title = "選択範囲内を切替"
+
 [cmd.select.all]
 description = "文書全体を選択します。"
 title = "すべて選択"
@@ -414,6 +418,7 @@ done_skipped = "{saved} 件の文書を保存しました。名前の無い・�
 none = "保存する文書はありません"
 
 [info.search]
+no_selection = "選択範囲がありません。選択してから検索バーを開いてください"
 replace_empty_query = "検索する文字列を入力してください"
 replace_no_match = "置換する箇所はありません"
 replaced = "{count} 件を置換しました (元に戻すで戻せます)"
