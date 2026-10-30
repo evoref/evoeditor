@@ -67,6 +67,36 @@ fn print_exit_lines(host: &mut Host, locale: eve_config::Locale) {
 /// 設定ファイルの名前 (設定ディレクトリの直下、07 §2)。
 const CONFIG_FILE: &str = "config.toml";
 
+/// キーマップファイルの名前 (設定ディレクトリの直下、07 §2)。
+const KEYMAP_FILE: &str = "keymap.toml";
+
+/// `keymap.toml` を読む。無ければ空。読めないときは診断を 1 件出して空。
+fn load_keymap(dir: &std::path::Path) -> eve_config::KeymapFile {
+    use eve_config::{DiagKind, Diagnostic, KeymapFile, Severity};
+    if dir.as_os_str().is_empty() {
+        return KeymapFile::default();
+    }
+    let unreadable = |message: String| KeymapFile {
+        entries: Vec::new(),
+        diagnostics: vec![Diagnostic {
+            severity: Severity::Error,
+            kind: DiagKind::Syntax { message },
+            key: String::new(),
+            value: String::new(),
+            line: 0,
+            column: 0,
+        }],
+    };
+    match std::fs::read(dir.join(KEYMAP_FILE)) {
+        Ok(bytes) => match String::from_utf8(bytes) {
+            Ok(text) => eve_config::load_keymap_str(text.strip_prefix('\u{feff}').unwrap_or(&text)),
+            Err(_) => unreadable("UTF-8 として読めません".to_owned()),
+        },
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => KeymapFile::default(),
+        Err(e) => unreadable(e.to_string()),
+    }
+}
+
 /// ユーザー層の設定ファイルを読む。無ければ既定値で、診断も出さない (FR-702)。
 /// 読めない (UTF-8 でない・権限がない等) ときは既定値で動き、診断を 1 件出す。
 fn load_config(dir: &std::path::Path) -> eve_config::Loaded {
@@ -146,6 +176,7 @@ fn run(
         }
     };
     let loaded = load_config(paths.config_dir().as_path());
+    let keymap = load_keymap(paths.config_dir().as_path());
     let clock = Arc::new(SystemClock::new());
     let state_dir = paths.state_dir();
     // UI の言語: --locale > ui.locale > EVE_LANG > OS の言語 > ja (07 §17.1)。検出は端末の初期化の前に 1 回だけ
@@ -206,6 +237,13 @@ fn run(
     host.set_initial_encoding(encoding);
     let config = loaded.config;
     host.set_config(config, CONFIG_FILE, loaded.diagnostics);
+    for d in &keymap.diagnostics {
+        logger.log(
+            log_level(d.severity),
+            &describe(d).replacen(CONFIG_FILE, KEYMAP_FILE, 1),
+        );
+    }
+    host.set_keymap(KEYMAP_FILE, &keymap);
     host.set_locale(locale);
     // 要約の対処 (hint) は省略されないので、長い絶対パスではなく末尾の `log\evoeditor.log` だけを出す
     host.set_log_path(logger.path().and_then(|p| {

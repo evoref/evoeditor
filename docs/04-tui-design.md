@@ -1626,6 +1626,13 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 |---|---|---|
 | `msg.config.syntax` | TOML 構文エラー。そのファイル全体を使わない。`{reason}` は構文エラーの短い説明 (パーサの出力を分類し無害化したもの) | この設定ファイルは書式が正しくないため使っていません: {reason} / 該当の行を直してください。直すまでは既定値で動きます |
 | `msg.config.unknown_key` | 未知のキー。`{suggestion}` は編集距離 ≤ 2 の候補 (公開キーと公開前のキー (07 §5.13) の両方から探す)。候補が無ければ 〔 〕 の文を省く | {item} という設定項目はありません / 〔{suggestion} ではありませんか?〕設定できる項目は同梱の config.example.toml を見てください |
+| `msg.config.keymap_unknown_context` | キーマップ (`keymap.toml`) の診断。知らないコンテキスト名 | {item} のコンテキスト名は使えません / 使える名前: global, editor, search, prompt, palette, list, dialog, help。この割当は使いません |
+| `msg.config.keymap_unknown_command` | キーマップ (`keymap.toml`) の診断。知らないコマンド | {item} のコマンド {value} はありません / コマンド名はコマンドパレットで確かめられます。この割当は使いません |
+| `msg.config.keymap_bad_key` | キーマップ (`keymap.toml`) の診断。キー名が読めない | {item} のキーの書き方が正しくありません / 例: ctrl+shift+s、alt+up、f5。この割当は使いません |
+| `msg.config.keymap_bad_when` | キーマップ (`keymap.toml`) の診断。`when` 句が読めない | {item} の when 句が正しくありません / 書式は設定の仕様 (07 §7.3) を見てください。この割当は使いません |
+| `msg.config.keymap_printable_key` | キーマップ (`keymap.toml`) の診断。修飾のない文字キー (07 §7.6) | {item} は文字入力に使うキーなので割り当てられません / ctrl や alt を組み合わせたキーにしてください。この割当は使いません |
+| `msg.config.keymap_chord_prefix` | キーマップ (`keymap.toml`) の診断。既定のチョードの先頭と同じ単体のキー (07 §7.6) | {item} は、既定の続けて押すキー (Ctrl+K など) の先頭です / 続けて押すキーを優先し、この割当は使いません |
+| `msg.config.keymap_escape_key` | キーマップ (`keymap.toml`) の診断。脱出キーに届かなくなる割当 (07 §7.6。既定を残す) | {item} の割当だと、終了・コマンドパレット・取消のどれかに届かなくなります / 既定の割当を残しました。別のキーにしてください |
 | `msg.config.type_mismatch` | 型不一致。`{actual}` は書かれた値の型、`{expected}` は期待する型 (どちらも下の `ui.config.type.*`)。該当項目は下位層の値 (v0.1 は既定値) に戻す | {item} の値の型が違います (書かれた型: {actual}) / {expected} で書いてください。この項目は既定値 {default} を使います |
 | `msg.config.out_of_range` | 範囲外。`{range}` は許容範囲 (例 `1〜16`)。`{default}` は戻した値 (丸める項目 (07 §4.2) は丸めた値) | {item} の値 {value} は範囲外です / {range} で指定してください。この項目は {default} を使います |
 | `msg.config.invalid_value` | 列挙値不正 (`file.default_encoding` の許容値外を含む)。`{allowed}` は許容値を `, ` で並べたもの | {item} の値 {value} は使えません / 使える値: {allowed}。この項目は既定値 {default} を使います |

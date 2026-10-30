@@ -100,7 +100,7 @@ pub struct Host {
     /// 解決済みの設定 (07 §5.0)。
     config: eve_config::Config,
     /// 設定ファイルの診断 (名前, 診断)。最初の Frame の後にメッセージとして出す (07 §4.3、FR-703)。
-    config_report: Option<(String, Vec<eve_config::Diagnostic>)>,
+    config_report: Vec<(String, Vec<eve_config::Diagnostic>)>,
 }
 
 impl Host {
@@ -139,7 +139,7 @@ impl Host {
             clip_busy: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             clip_wait: None,
             config: eve_config::Config::default(),
-            config_report: None,
+            config_report: Vec::new(),
         }
     }
 
@@ -162,7 +162,17 @@ impl Host {
     ) {
         self.config = config;
         self.editor.state_mut().set_config(config);
-        self.config_report = (!diagnostics.is_empty()).then(|| (file.to_owned(), diagnostics));
+        if !diagnostics.is_empty() {
+            self.config_report.push((file.to_owned(), diagnostics));
+        }
+    }
+
+    /// ユーザーのキーマップ (`keymap.toml`) を渡す (`start` / `run` の前に呼ぶ)。`file` は診断の表示名。
+    pub fn set_keymap(&mut self, file: &str, keymap: &eve_config::KeymapFile) {
+        let diagnostics = self.editor.set_user_keymap(keymap);
+        if !diagnostics.is_empty() {
+            self.config_report.push((file.to_owned(), diagnostics));
+        }
     }
 
     /// UI の言語を渡す (`start` / `run` の前に呼ぶ。選択順は `eve_config::select_locale`、07 §17.1)。
@@ -260,7 +270,7 @@ impl Host {
             .map_err(StartError::Frontend)?;
         self.render(frontend);
         // 設定の診断は最初の Frame の後に出す (起動を妨げない、07 §4.3)
-        if let Some((file, diagnostics)) = self.config_report.take() {
+        for (file, diagnostics) in std::mem::take(&mut self.config_report) {
             self.editor.state_mut().report_config(&file, &diagnostics);
             self.render(frontend);
         }

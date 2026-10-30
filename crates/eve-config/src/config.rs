@@ -32,6 +32,27 @@ pub enum DiagKind {
     OutOfRange { min: i64, max: i64 },
     /// 列挙値が不正。許容値を提示する。
     InvalidValue { allowed: &'static [&'static str] },
+    /// キーマップ (`keymap.toml`) の問題。`Diagnostic.key` は書かれたキー、`value` は書かれたコマンドなど。
+    Keymap(KeymapProblem),
+}
+
+/// キーマップの問題の種類 (docs/07 §7.4・§7.6)。いずれも該当の割当だけを無効にする。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum KeymapProblem {
+    /// 知らないコンテキスト名。
+    UnknownContext,
+    /// 知らないコマンド。
+    UnknownCommand,
+    /// キー名が読めない。
+    BadKey,
+    /// `when` 句が読めない。
+    BadWhen,
+    /// 修飾のない文字キー: 文字入力を奪うので割り当てられない (07 §7.6)。
+    PrintableKey,
+    /// 既定のチョードの先頭と同じ単体のキー: チョード側を優先する (07 §7.6)。
+    ChordPrefix,
+    /// 脱出キー (終了・パレット・取消) に届かなくなる割当: 既定を残す (07 §7.6)。
+    EscapeKey,
 }
 
 /// 設定の問題 1 件。`line` / `column` は 1 始まり (構文エラーで位置が無いときは 0)。

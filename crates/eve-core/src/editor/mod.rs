@@ -34,6 +34,7 @@ mod snapshot;
 mod state;
 mod swap;
 mod swap_recovery;
+mod user_keymap;
 
 use eve_view::{
     Capabilities, DocumentId, EditorEvent, Effect, InputEvent, KeyCode, KeyKind, KeyStroke,
