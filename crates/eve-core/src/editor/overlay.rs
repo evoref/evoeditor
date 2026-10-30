@@ -66,6 +66,8 @@ pub(super) enum ConfirmAction {
     Fallback(super::file::FallbackAsk),
     /// 別のバイト表現で保存される箇所がある文書の保存 (保存 / 別名で保存、03 §8.6 E2')。
     Lossy(super::file::LossyAsk),
+    /// 読み取り専用属性を解除した文書の上書き保存 (別名で保存 / 読み取り専用を解除して保存、FR-116)。
+    ClearReadOnly(super::file::LossyAsk),
     /// 保存の失敗の後の選択 (再試行 / 別名で保存 / 退避先に保存)。
     SaveFailed(super::file::SaveFailedAsk),
     /// 開くときの確認 (読み取り専用で開く / 文字コードを指定して開く / 中止、03 §9.2)。
@@ -355,6 +357,7 @@ impl EditorState {
             ConfirmAction::Notice => CommandResult::Done,
             ConfirmAction::Fallback(ask) => self.choose_fallback(ask, choice),
             ConfirmAction::Lossy(ask) => self.choose_lossy(ask, choice),
+            ConfirmAction::ClearReadOnly(ask) => self.choose_clear_readonly(ask, choice),
             ConfirmAction::SaveFailed(ask) => self.choose_save_failed(ask, id),
             ConfirmAction::Open(ask) => self.choose_open(ask, id),
             ConfirmAction::Reload => self.start_reload(),

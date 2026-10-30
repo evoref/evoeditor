@@ -148,6 +148,8 @@ pub struct EditorState {
     pub(super) leftovers: Vec<crate::Leftover>,
     /// 区分 B / D の確認を承認した (文書, Revision)。同じ Revision の保存では確認を繰り返さない。
     pub(super) lossy_ok: Option<(DocumentId, eve_view::Revision)>,
+    /// 「読み取り専用を解除して保存」を承認した (文書, Revision)。同じ Revision の保存では確認を繰り返さない。
+    pub(super) readonly_ok: Option<(DocumentId, eve_view::Revision)>,
     /// 単発の検索ジョブ (進行中の 1 つだけ)。
     pub(super) find_job: Option<eve_view::JobId>,
     /// ログファイルの場所 (設定の問題の要約に出す)。
@@ -205,6 +207,7 @@ impl EditorState {
             swap: Default::default(),
             leftovers: Vec::new(),
             lossy_ok: None,
+            readonly_ok: None,
             find_job: None,
             system_encoding: None,
             log_path: None,
@@ -874,6 +877,9 @@ impl EditorState {
         match name {
             "doc.read_only" => doc.map_or(b(false), |d| b(!d.is_editable())),
             "doc.has_path" => b(doc.is_some_and(|d| d.path.is_some())),
+            "doc.read_only_releasable" => b(doc.is_some_and(|d| {
+                d.load_state == crate::document::LoadState::Ready && d.read_only.releasable()
+            })),
             "doc.dirty" => b(doc.is_some_and(Document::is_dirty)),
             "selection.empty" => b(view.is_none_or(|v| v.selection.iter().all(|r| r.is_empty()))),
             "overlay.active" => Some(CtxValue::Str(self.overlay_name().to_owned())),

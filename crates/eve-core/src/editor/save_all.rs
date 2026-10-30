@@ -46,8 +46,12 @@ impl EditorState {
                 continue;
             };
             let expected = doc.disk_stamp.map_or(Expect::Absent, Expect::Stamp);
-            // 書く前の確認 (区分 B、03 §8.6 E2') が要る文書は保存しない
-            if doc.format.roundtrip.lossy_lines > 0 && self.lossy_ok != Some((id, doc.revision())) {
+            // 書く前の確認 (区分 B、03 §8.6 E2'・読み取り専用を解除して保存、FR-116) が要る文書は保存しない
+            let needs_readonly_ok =
+                doc.attribute_released && self.readonly_ok != Some((id, doc.revision()));
+            if (doc.format.roundtrip.lossy_lines > 0 && self.lossy_ok != Some((id, doc.revision())))
+                || needs_readonly_ok
+            {
                 let reason = self.message_text("ui.confirm.save_all_failed.needs_confirm", &[]);
                 batch.failed.push((path.display(), reason));
                 continue;

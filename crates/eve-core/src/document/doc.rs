@@ -77,6 +77,8 @@ pub struct Document {
     revision: Revision,
     history: UndoHistory,
     pub read_only: ReadOnlyReasons,
+    /// 読み取り専用属性 (`FileAttribute`) を `file.toggle_read_only` で解除した。上書き保存は「読み取り専用を解除して保存」の確認を経る (03 §9.6)。
+    pub attribute_released: bool,
     pub load_state: LoadState,
     /// 読込中の進捗 (百分率)。ステータスバーの `[読込中 n%]` に出す。
     pub load_percent: u8,
@@ -103,6 +105,7 @@ impl Document {
             revision: Revision::INITIAL,
             history: UndoHistory::default(),
             read_only: ReadOnlyReasons::default(),
+            attribute_released: false,
             load_state: LoadState::Ready,
             load_percent: 0,
             display: DisplaySettings::default(),
