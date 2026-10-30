@@ -306,6 +306,10 @@ title = "一覧の前のページ"
 description = "一覧やダイアログで前の項目へ移ります。"
 title = "前の項目"
 
+[cmd.ui.message_history]
+description = "これまでのメッセージを一覧で開きます。"
+title = "メッセージ履歴"
+
 [cmd.ui.palette_open]
 description = "コマンドパレットを開きます。"
 title = "コマンドパレット"
@@ -889,6 +893,16 @@ no_match = "一致する文書はありません"
 [ui.help]
 title = "ヘルプ"
 footer = "↑↓ PgUp PgDn で移動、Esc で閉じる"
+
+[ui.history]
+title = "メッセージ履歴"
+footer = "↑↓ PgUp PgDn で移動、Esc で閉じる"
+empty = "メッセージはまだありません"
+
+[ui.history.level]
+info = "情報"
+warn = "警告"
+error = "エラー"
 
 [ui.help.section]
 intro = "はじめに"

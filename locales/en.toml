@@ -308,6 +308,10 @@ title = "List Page Up"
 description = "Move to the previous item in a list or dialog."
 title = "Previous Item"
 
+[cmd.ui.message_history]
+description = "Open the list of past messages."
+title = "Message History"
+
 [cmd.ui.palette_open]
 description = "Open the command palette."
 title = "Command Palette"
@@ -891,6 +895,16 @@ no_match = "No matching documents"
 [ui.help]
 title = "Help"
 footer = "Up/Down PgUp/PgDn to scroll, Esc to close"
+
+[ui.history]
+title = "Message History"
+footer = "Up/Down PgUp/PgDn to scroll, Esc to close"
+empty = "No messages yet"
+
+[ui.history.level]
+info = "Info"
+warn = "Warning"
+error = "Error"
 
 [ui.help.section]
 intro = "Getting started"

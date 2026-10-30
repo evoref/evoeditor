@@ -16,6 +16,18 @@ pub(super) struct ShownMessage {
     pub shown_at: crate::time::Tick,
 }
 
+/// 履歴に残すメッセージの上限 (04 §8.9、02 §14.1 MR8)。
+pub(super) const HISTORY_MAX: usize = 1_000;
+
+/// 履歴の 1 件 (解決済みの文言)。時刻は起動からの経過 (core は壁時計を持たない)。
+#[derive(Clone, Debug)]
+pub(super) struct LoggedMessage {
+    pub level: MessageLevel,
+    pub text: String,
+    pub hint: Option<String>,
+    pub at: crate::time::Tick,
+}
+
 impl EditorState {
     /// 選択中の言語の文言カタログ。
     pub fn catalog(&self) -> &'static Catalog {
@@ -109,10 +121,19 @@ impl EditorState {
         } else {
             (cat.render(key, args, &label), None)
         };
-        // 表示中のメッセージが読まれる前に置き換わったら、未読として数える (履歴の閲覧は v0.2)
+        // 表示中のメッセージが読まれる前に置き換わったら、未読として数える (履歴は `ui.message_history` で見る)
         if self.message.is_some() {
             self.unread = self.unread.saturating_add(1);
         }
+        if self.message_log.len() >= HISTORY_MAX {
+            self.message_log.pop_front();
+        }
+        self.message_log.push_back(LoggedMessage {
+            level,
+            text: text.clone(),
+            hint: hint.clone(),
+            at: self.now,
+        });
         self.message = Some(ShownMessage {
             level,
             text,
