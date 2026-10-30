@@ -324,7 +324,8 @@ pub(crate) fn same_file_state(a: &FileMeta, b: &FileMeta) -> bool {
 }
 
 /// 保存先 T: シンボリックリンクなら最終リンク先 (ダングリングは `NotFound` + `DanglingLink`)。
-pub(crate) fn resolve_target(path: &FsPath) -> Result<PathBuf, FsError> {
+/// `create` ならダングリングのリンクのリンク先を T にする (新規作成の経路で書く。05 §4.1)。リンク先もリンク (連鎖) なら `InvalidPath`。
+pub(crate) fn resolve_target(path: &FsPath, create: bool) -> Result<PathBuf, FsError> {
     let mut target: PathBuf = path.as_path().to_path_buf();
     if let Ok(sm) = fs::symlink_metadata(&target)
         && sm.file_type().is_symlink()
@@ -332,6 +333,17 @@ pub(crate) fn resolve_target(path: &FsPath) -> Result<PathBuf, FsError> {
         match fs::canonicalize(&target) {
             Ok(t) => target = PathBuf::from(simplify_verbatim(&t.to_string_lossy())),
             Err(e) if e.kind() == io::ErrorKind::NotFound => {
+                if create && let Ok(raw) = fs::read_link(&target) {
+                    // 相対のリンク先はリンクのあるディレクトリから
+                    let t = match target.parent() {
+                        Some(dir) if raw.is_relative() => dir.join(&raw),
+                        _ => raw,
+                    };
+                    if fs::symlink_metadata(&t).is_ok() {
+                        return Err(FsError::new(FsErrorKind::InvalidPath));
+                    }
+                    return Ok(t);
+                }
                 let link_target = fs::read_link(&target).ok().map(FsPath::new);
                 return Err(FsError {
                     kind: FsErrorKind::NotFound,
@@ -474,7 +486,7 @@ impl WinFs {
         let conflict = |current| FsError::new(FsErrorKind::Conflict { current });
 
         // 0a. シンボリックリンクなら最終リンク先 T を対象にする。ダングリングは保存しない (v0.1、05 §4.1)
-        let target = resolve_target(path)?;
+        let target = resolve_target(path, opts.create_link_target)?;
         let target_path = FsPath::new(target.clone());
         let parent = target
             .parent()

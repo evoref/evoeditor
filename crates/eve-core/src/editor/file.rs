@@ -626,6 +626,11 @@ impl EditorState {
         strategy: SaveStrategy,
         fmt: Option<NewFormat>,
     ) -> CommandResult {
+        // ダングリングのリンクのリンク先への作成は、承認した保存の 1 回だけ
+        let create_link_target = self
+            .link_create_ok
+            .take_if(|(d, p)| *d == doc_id && *p == path)
+            .is_some();
         let Some(doc) = self.documents.get_mut(&doc_id) else {
             return CommandResult::Rejected(RejectReason::NoTarget);
         };
@@ -692,6 +697,7 @@ impl EditorState {
                 expected,
                 strategy,
                 clear_readonly,
+                create_link_target,
             },
         );
         if let Some(c) = cont {
@@ -1224,6 +1230,41 @@ impl EditorState {
             focused: default,
             action: ConfirmAction::SaveFailed(ask),
         });
+    }
+
+    /// 保存先がダングリングのシンボリックリンク: リンク先を示して、リンク先に作成するかを尋ねる (FR-106、05 §4.1)。
+    fn open_dangling_link(&mut self, ask: SaveFailedAsk, target: String) {
+        use super::overlay::{ChoiceDef, ConfirmAction, ConfirmState};
+        self.open_confirm(ConfirmState {
+            name: "save.dangling_link",
+            args: vec![
+                ("path".to_owned(), ask.path.display()),
+                ("target".to_owned(), target),
+            ],
+            choices: vec![ChoiceDef {
+                id: "create",
+                accel: Some('c'),
+                destructive: false,
+            }],
+            details: Vec::new(),
+            default: 0,
+            focused: 0,
+            action: ConfirmAction::DanglingLink(ask),
+        });
+    }
+
+    /// 「リンク先に作成」: 同じ保存を、リンク先を作る指定で投入し直す (キャンセルは呼び側が処理済み)。
+    pub(super) fn create_link_target(&mut self, ask: SaveFailedAsk) -> CommandResult {
+        let SaveFailedAsk {
+            doc,
+            path,
+            expected,
+            cont,
+            fmt,
+            ..
+        } = ask;
+        self.link_create_ok = Some((doc, path.clone()));
+        self.start_save_fmt(doc, path, expected, cont, fmt)
     }
 
     /// 保存の失敗の確認の選択 (キャンセルは呼び側が処理済み)。`id` は選択肢の ID。
@@ -2577,10 +2618,14 @@ impl EditorState {
                     ("reason", reason.clone()),
                     ("dir", dir),
                     ("backup", backup),
-                    ("target", link_target),
+                    ("target", link_target.clone()),
                 ];
                 let args: Vec<(&str, &str)> = args.iter().map(|(k, v)| (*k, v.as_str())).collect();
                 match ask {
+                    // リンク先が無いリンク: 失敗の選択ではなく、リンク先に作るかを尋ねる (v0.2)
+                    Some(ask) if !link_target.is_empty() => {
+                        self.open_dangling_link(ask, link_target)
+                    }
                     Some(ask) => self.report_save_failure(Some(ask), key, &args, retry),
                     None => self.show_message(level, key, &args),
                 }

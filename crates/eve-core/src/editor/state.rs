@@ -150,6 +150,8 @@ pub struct EditorState {
     pub(super) lossy_ok: Option<(DocumentId, eve_view::Revision)>,
     /// 「読み取り専用を解除して保存」を承認した (文書, Revision)。同じ Revision の保存では確認を繰り返さない。
     pub(super) readonly_ok: Option<(DocumentId, eve_view::Revision)>,
+    /// ダングリングのリンクのリンク先への作成を承認した (文書, パス)。次の 1 回の保存で使って消す。
+    pub(super) link_create_ok: Option<(DocumentId, crate::FsPath)>,
     /// 単発の検索ジョブ (進行中の 1 つだけ)。
     pub(super) find_job: Option<eve_view::JobId>,
     /// ログファイルの場所 (設定の問題の要約に出す)。
@@ -208,6 +210,7 @@ impl EditorState {
             leftovers: Vec::new(),
             lossy_ok: None,
             readonly_ok: None,
+            link_create_ok: None,
             find_job: None,
             system_encoding: None,
             log_path: None,

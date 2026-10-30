@@ -1297,7 +1297,7 @@ struct SaveChain {
 |---|---|---|
 | 1 | 入力したパスが今の文書のパスと構文的に同じ (`Paths::normalize` の後、05 §3.2)、または metadata の `file_id` が今の文書の `file_id` と同じ (別名・リンク・ハードリンクで同じファイルを指す) | **通常の上書き保存** として扱う (§9.3 手順 0 から。未編集なら書かない)。ただし `file.set_encoding` の連鎖 (連鎖の `format` が文書の format と違う) は手順 0 を飛ばして書く (§9.3 の「手順 0 の適用対象」)。ただし文書が読み取り専用なら上書き保存は無効 (§9.3 手順 1) なので、「読み取り専用の文書は同じファイルには保存できない」(`msg.save_as.same_file_read_only`) と示して `AskName` に戻る |
 | 2 | 存在しない (`NotFound`、詳細なし) | `Expect::Absent` で保存する (書くまでに他者が作れば `Conflict`、`ui.confirm.save.target_exists`、§9.5) |
-| 3 | リンク先が存在しない (`NotFound` + `DanglingLink`) | v0.1 はエラー (リンク先の絶対パスを示す、§9.3 の「シンボリックリンク」)。`AskName` に戻る |
+| 3 | リンク先が存在しない (`NotFound` + `DanglingLink`) | v0.1 はエラー (リンク先の絶対パスを示す、§9.3 の「シンボリックリンク」)。`AskName` に戻る。v0.2 もこの行は同じ (名前の入力で選んだリンクには作らない。リンク先を作る確認は、開いた文書の保存がダングリングで失敗したときだけ。下の (e) の表) |
 | 4 | ファイルでない (`FileMeta.kind` が `Dir` / `Other`)、パスが不正 (`InvalidPath`。予約名を含む) | エラー (`msg.save_as.not_a_file` / `msg.save.invalid_path`) を示して `AskName` に戻る |
 | 5 | 読み取り専用属性のファイル (`FileMeta.readonly`) | 上書きの確認を出す前に拒否する (`msg.save_as.target_read_only` を示し、`AskName` に戻る。今の文書の理由は変えない)。v0.1 は読み取り専用属性のファイルに書かない (FR-116) |
 | 6 | 既存のファイル (リンクならリンク先) | `ui.confirm.save.overwrite` (「{path} は既にあります。上書きしますか」。リンクのときはリンク先のパスも示す。既定は「別の名前を入力」で `AskName` に戻る (04 §15.2)) を出し、上書きなら metadata で取得した stamp で `Expect::Stamp(stamp)` として保存する (確認の間に変わっていれば `Conflict`)。保存は §9.3 と同じ手順で、ハードリンク等は手順 7 の確認になる |
@@ -1326,7 +1326,7 @@ struct SaveChain {
 | `InPlaceFailed { backup }` | `msg.save.in_place_failed` (`backup` が None なら `msg.save.in_place_failed_no_backup`) + `ui.confirm.save_failed` | 別名で保存 ★ → `AskName` / 退避先に保存 → `WritingRecovery` (退避の後に中止) / 中止。バックアップのパスを必ず示す (`backup` が None (バックアップなしで上書きを承認した) ならバックアップが無いことを示す)。**再試行は出さない** (途中まで書き換わったファイルは `disk_stamp` と一致しないので、同じパスへの保存は `Expect` の照合で `Conflict` になる。名前を付けて保存へ誘導する) | 同上 |
 | `ReplacedMovedToBackup { backup }` | `msg.save.moved_to_backup` + `ui.confirm.save_failed` | 同上。退避パスを必ず示す。**「元の名前に戻す」は v0.1 では出さない** (確定 (ユーザー回答)。利用者が手で戻す。05 §4.6)。再試行も出さない (元の名前のファイルが無いので `Conflict` になる) | 同上 |
 | `NotFound` + `ParentMissing` | `msg.save.parent_missing` + `ui.confirm.save_failed` | 同上。フォルダは作らない (01 FR-101 AC-2) | 同上 |
-| `NotFound` + `DanglingLink` | `msg.save.dangling_link` + `ui.confirm.save_failed` | 同上 (リンク先を作る選択肢は v0.2、`ui.confirm.save.dangling_link`) | 同上 |
+| `NotFound` + `DanglingLink` | v0.1: `msg.save.dangling_link` + `ui.confirm.save_failed`。v0.2: `ui.confirm.save.dangling_link` | v0.1 は同上。v0.2 は「リンク先に作成」★ / キャンセル (`Esc`)。作成は同じ保存を `SaveOptions.create_link_target` 付きで 1 回だけ投入し直す (05 §4.1) | 同上 |
 | その他 (`InvalidPath`、`Other`、`JobError::Panic` 等) | `msg.save.invalid_path` / `msg.save.failed` + `ui.confirm.save_failed` | 同上 | 同上 |
 | `JobError::Cancelled` | `info.save.aborted` | 選択肢なし → 中止 | 捨てる |
 
