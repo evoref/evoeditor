@@ -160,7 +160,6 @@ pub(crate) const RESERVED_KEYS: &[&str] = &[
     "view.rulers",
     "view.scroll_margin",
     "view.scroll_margin_horizontal",
-    "view.show_whitespace",
     "view.toggle_wrap",
     "view.width_risky_display",
     "view.wrapped",

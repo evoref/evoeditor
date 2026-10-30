@@ -98,35 +98,57 @@ const UNITS_CACHE_MIN: usize = 4096;
 fn units_for(doc: &Document, line: usize, content: &str) -> std::rc::Rc<Vec<Unit>> {
     use std::rc::Rc;
     let esc = esc_enabled(doc);
+    let ws = doc.display.show_whitespace;
     let cfg = doc_width_config(doc);
     if content.len() < UNITS_CACHE_MIN {
-        return Rc::new(units(content, esc, &cfg));
+        return Rc::new(units_with(content, esc, ws, &cfg));
     }
-    type Key = (eve_view::Revision, usize, bool, u8, bool);
-    let key: Key = (doc.revision(), line, esc, cfg.tab_width, cfg.ambiguous_wide);
+    type Key = (eve_view::Revision, usize, bool, u8, bool, bool);
+    let key: Key = (
+        doc.revision(),
+        line,
+        esc,
+        cfg.tab_width,
+        cfg.ambiguous_wide,
+        ws,
+    );
     if let Some(any) = doc.layout_cache.borrow().as_ref()
         && let Some((k, u)) = any.downcast_ref::<(Key, Rc<Vec<Unit>>)>()
         && *k == key
     {
         return u.clone();
     }
-    let u = Rc::new(units(content, esc, &cfg));
+    let u = Rc::new(units_with(content, esc, ws, &cfg));
     *doc.layout_cache.borrow_mut() = Some(Box::new((key, u.clone())));
     u
 }
 
 /// 1 書記素 `g` (行内のバイト位置 `off`、表示列 `col`) を表示の単位に展開する (一般の経路)。
-fn unit_slow(g: &str, off: usize, col: usize, tab: usize, esc: bool, cfg: &WidthConfig) -> Unit {
+/// `ws` は全角スペースとタブを記号で示す (`view.show_whitespace = "minimal"`)。偽なら空白のセルにする (幅は同じ)。
+fn unit_slow(
+    g: &str,
+    off: usize,
+    col: usize,
+    tab: usize,
+    esc: bool,
+    ws: bool,
+    cfg: &WidthConfig,
+) -> Unit {
     let mut parts: Vec<(String, u16, bool)> = Vec::new();
     let mut risky = false;
     if g == "\t" {
         let w = tab - col % tab;
-        parts.push((">".to_owned(), 1, true));
-        if w > 1 {
-            parts.push((" ".repeat(w - 1), (w - 1) as u16, true));
+        if ws {
+            parts.push((">".to_owned(), 1, true));
+            if w > 1 {
+                parts.push((" ".repeat(w - 1), (w - 1) as u16, true));
+            }
+        } else {
+            parts.push((" ".repeat(w), w as u16, false));
         }
     } else if g == "\u{3000}" {
-        parts.push(("[]".to_owned(), 2, true));
+        // 可視化しないときも、端末の全角の空白の描き方に頼らず ASCII の空白 2 つで描く
+        parts.push((if ws { "[]" } else { "  " }.to_owned(), 2, ws));
     } else if esc && g.chars().any(|c| unescape_char(c).is_some()) {
         // 不正バイトのエスケープ文字は 1 文字ずつ `<0xHH>` にする (結合文字などと同じ書記素になることがある)
         let mut run = String::new();
@@ -163,8 +185,14 @@ fn unit_slow(g: &str, off: usize, col: usize, tab: usize, esc: bool, cfg: &Width
     }
 }
 
-/// 行の内容を表示の単位に展開する。
+/// 行の内容を表示の単位に展開する (空白は可視化する。試験が使う)。
+#[cfg(test)]
 fn units(content: &str, esc: bool, cfg: &WidthConfig) -> Vec<Unit> {
+    units_with(content, esc, true, cfg)
+}
+
+/// `units` の本体。`ws` は空白の可視化 (`unit_slow`)。
+fn units_with(content: &str, esc: bool, ws: bool, cfg: &WidthConfig) -> Vec<Unit> {
     let tab = cfg.tab_width.max(1) as usize;
     // 印字できる ASCII だけの行 (本文の大半): 書記素の分割も表示の組み立ても要らない (1 文字 = 1 書記素 = 幅 1)
     if content.bytes().all(|b| (0x20..=0x7E).contains(&b)) {
@@ -205,7 +233,7 @@ fn units(content: &str, esc: bool, cfg: &WidthConfig) -> Vec<Unit> {
         let g = first_grapheme(rest);
         let off = at;
         at += g.len();
-        let u = unit_slow(g, off, col, tab, esc, cfg);
+        let u = unit_slow(g, off, col, tab, esc, ws, cfg);
         col += u.width;
         out.push(u);
     }
@@ -1000,7 +1028,7 @@ mod tests {
         grapheme_indices(content)
             .into_iter()
             .map(|(off, g)| {
-                let u = unit_slow(g, off, col, tab, esc, cfg);
+                let u = unit_slow(g, off, col, tab, esc, true, cfg);
                 col += u.width;
                 u
             })
