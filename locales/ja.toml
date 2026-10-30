@@ -158,6 +158,10 @@ title = "新規作成"
 description = "ファイルを開きます。"
 title = "開く"
 
+[cmd.file.check_external_changes]
+description = "ファイルが他のプログラムで変更されていないかを確かめます。"
+title = "外部変更の確認"
+
 [cmd.file.reload]
 description = "ファイルを読み込み直します。"
 title = "再読込"
@@ -409,6 +413,9 @@ first_line_only = "入力欄には最初の行だけを貼り付けました"
 
 [info.recovery]
 old = "30 日より古い退避が {count} 件あります: {dir}"
+
+[info.external]
+unchanged = "{path} は変更されていません"
 
 [info.reload]
 busy = "{path} は読み込み中です。読込が終わってから実行してください"
@@ -706,6 +713,10 @@ text = "{dir} が無いため {path} を保存できません"
 hint = "別名で保存するか、退避先に保存してください"
 text = "{path} に書き込む権限がありません"
 
+[msg.external.check_failed]
+hint = "保存するときにも、ファイルが変わっていないかを照合します"
+text = "{path} の変更を確かめられませんでした: {reason}"
+
 [msg.save.read_only_fs]
 hint = "別名で保存 ({key:file.save_as}) してください"
 text = "{path} は読み取り専用の場所にあります"
@@ -747,8 +758,6 @@ string = "文字列"
 table = "テーブル"
 
 [ui.confirm]
-external_deleted = "{path} は削除されています — `[K] 新規として保持 (保存で作り直す)` ★ / `[C] 閉じる`"
-external_modified = "{path} は他のプログラムで変更されています — `[L] 再読込 (自分の変更を破棄)` / `[I] 無視 (保存時に再確認)` ★"
 save_failed_closed = "保存できませんでした: (`msg.save.*` の text) — {path} は既に閉じています。`[R] 退避先に保存` ★ / `[D] 破棄`"
 
 nav_hint = "Tab / ←→ で選択、Enter で決定"
@@ -854,6 +863,18 @@ title = "同名のファイルがあります"
 message = "{path} は、この文書を作った後に他のプログラムによって作られています"
 overwrite = "[O] 上書き"
 alt = "[A] 別名で保存"
+
+[ui.confirm.external_modified]
+title = "外部で変更されています"
+message = "{path} は他のプログラムで変更されています"
+reload = "[L] 再読込 (自分の変更を破棄)"
+ignore = "[I] 無視 (保存時に再確認)"
+
+[ui.confirm.external_deleted]
+title = "外部で削除されています"
+message = "{path} は削除されています"
+keep = "[K] 新規として保持 (保存で作り直す)"
+close = "[C] 閉じる"
 
 [ui.confirm.save.dangling_link]
 title = "リンク先がありません"

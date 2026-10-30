@@ -608,7 +608,7 @@ OSC 11 (背景色)、DECRQM、DA1、CSI ? u 等の **応答は入力ストリー
 | ブラケットペースト | `Paste(String)` (改行は `\n` に正規化、§6.6) | |
 | マウス | `Mouse(MouseEvent)` (ヒット対象に変換、§6.8) | **v0.1 は Windows で `ENABLE_MOUSE_INPUT` を立てず、`MOUSE_EVENT` が届いても捨てる** (`Mouse` を作らない。05 §9.1) |
 | リサイズ | `Resize` (編集面サイズ、§3.6) | 連続は合体 |
-| フォーカス (v0.2) | `Focus(bool)` | v0.1 はフォーカス報告を有効化しない (§6.9)。Windows の `FOCUS_EVENT` は有効化しなくても届き得る (信頼できない) ので、**v0.1 は届いても捨てる** (`Focus` を作らない) |
+| フォーカス (v0.2) | `Focus(bool)` | v0.1 はフォーカス報告を有効化しない (§6.9)。Windows の `FOCUS_EVENT` は有効化しなくても届き得る (信頼できない) ので、**v0.1 は届いても捨てる** (`Focus` を作らない)。**v0.2 の M9d から** `FOCUS_EVENT` を `Focus(bSetFocus)` にして渡す (1 回の読込で複数届いたら最後の状態だけ)。届かない・余分に届く端末があっても、確認は表示中の文書のメタ情報を取るだけなので害は無い (03 §9.5)。実機での届き方 (Windows Terminal・conhost) は未確認 |
 
 **入力経路ごとの写像** (Windows (v0.1) の入力経路は `ReadConsoleInputW` の自前ループ (確定 (ユーザー回答)、OQ-33、§4.8)。この経路は `KEY_EVENT_RECORD` の仮想キーコード (`wVirtualKeyCode`) と `dwControlKeyState` からキーを作るため、制御文字 (0x00〜0x1F) のバイトを経由しない。Ctrl 付きのキーは `UnicodeChar` に制御文字 (0x08 等) が入って届くので、**`UnicodeChar` より仮想キーコードを優先して** キーを作る (バーストと判定した入力列は例外で、`UnicodeChar` から本文を作る。§6.6 の「バースト中の本文の作り方」)。VT 入力経路の列は、Unix (v0.2) のレガシー端末の参考として残す。実際の変換は S-07 で確認):
 
@@ -1586,8 +1586,16 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 | `ui.confirm.reload_discard.reload` | 同上 (破壊的。既定にしない。アクセラレータ `L`。既定は `[Esc] キャンセル`) | [L] 再読込 (変更を破棄) |
 | `msg.reload.missing` | `file.reload` で、ファイルが無かった (開いた後に削除・移動された。文書は変わらない) | {path} が見つからないため読み込み直せません / 今の内容を残すには、上書き保存 ({key:file.save}) でファイルを作り直すか、名前を付けて保存 ({key:file.save_as}) してください |
 | `info.reload.busy` | 読込中の文書で `file.reload` を実行した (何もしない) | {path} は読み込み中です。読込が終わってから実行してください |
-| `ui.confirm.external_modified` (v0.2) | 外部変更の検知 (フォーカス復帰・明示コマンド。dirty のとき、03 §9.5) | {path} は他のプログラムで変更されています — `[L] 再読込 (自分の変更を破棄)` / `[I] 無視 (保存時に再確認)` ★ |
-| `ui.confirm.external_deleted` (v0.2) | 外部で削除された (03 §9.5。`[C] 閉じる` は複数文書と同時。v0.1 は保存時の `ui.confirm.external_change` で扱う) | {path} は削除されています — `[K] 新規として保持 (保存で作り直す)` ★ / `[C] 閉じる` |
+| `ui.confirm.external_modified.title` (v0.2) | 外部変更の検知 (フォーカス復帰・明示コマンド。dirty のとき、または `file.reload_on_external_change = "ask"`。03 §9.5 の「M9d の実装」) | 外部で変更されています |
+| `ui.confirm.external_modified.message` | 同上 | {path} は他のプログラムで変更されています |
+| `ui.confirm.external_modified.reload` | 同上 (アクセラレータ `L`) | [L] 再読込 (自分の変更を破棄) |
+| `ui.confirm.external_modified.ignore` | 同上 (アクセラレータ `I`。既定。同じ変更ではフォーカス復帰で再び尋ねない) | [I] 無視 (保存時に再確認) |
+| `ui.confirm.external_deleted.title` (v0.2) | 外部で削除された (03 §9.5。v0.1 は保存時の `ui.confirm.save.conflict_deleted` で扱う) | 外部で削除されています |
+| `ui.confirm.external_deleted.message` | 同上 | {path} は削除されています |
+| `ui.confirm.external_deleted.keep` | 同上 (アクセラレータ `K`。既定) | [K] 新規として保持 (保存で作り直す) |
+| `ui.confirm.external_deleted.close` | 同上 (アクセラレータ `C`。`buffer.close` と同じ手順) | [C] 閉じる |
+| `info.external.unchanged` (v0.2) | `file.check_external_changes` で、ファイルが開いたとき (最後の保存・再読込) から変わっていない | {path} は変更されていません |
+| `msg.external.check_failed` (v0.2) | `file.check_external_changes` の照合に失敗した (読めない等。フォーカス復帰では出さない) | {path} の変更を確かめられませんでした: {reason} / 保存するときにも、ファイルが変わっていないかを照合します |
 | `info.undo.history_trimmed` | Undo 履歴の予算による破棄 (03 §7.5) | メモリの上限のため、古い元に戻す履歴を破棄しました |
 | `info.paste.first_line_only` | 入力欄への複数行の貼り付け (§6.6) | 入力欄には最初の行だけを貼り付けました |
 

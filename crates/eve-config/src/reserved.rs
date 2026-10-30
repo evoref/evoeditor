@@ -61,7 +61,6 @@ pub(crate) const RESERVED_KEYS: &[&str] = &[
     "file.new",
     "file.open",
     "file.reload",
-    "file.reload_on_external_change",
     "file.reopen_with_encoding",
     "file.save",
     "file.save_all",

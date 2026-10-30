@@ -160,6 +160,10 @@ title = "New"
 description = "Open a file."
 title = "Open"
 
+[cmd.file.check_external_changes]
+description = "Check whether another program changed the file."
+title = "Check for external changes"
+
 [cmd.file.reload]
 description = "Reload the file from disk."
 title = "Reload"
@@ -411,6 +415,9 @@ first_line_only = "Only the first line was pasted into the input field"
 
 [info.recovery]
 old = "{count} backups are older than 30 days: {dir}"
+
+[info.external]
+unchanged = "{path} has not changed"
 
 [info.reload]
 busy = "{path} is still loading. Run this after loading finishes"
@@ -708,6 +715,10 @@ text = "Cannot save {path} because {dir} does not exist"
 hint = "Save under another name, or save to the recovery folder"
 text = "You do not have permission to write to {path}"
 
+[msg.external.check_failed]
+hint = "The file is also checked for changes when you save"
+text = "Could not check {path} for changes: {reason}"
+
 [msg.save.read_only_fs]
 hint = "Save under another name ({key:file.save_as})"
 text = "{path} is in a read-only location"
@@ -749,8 +760,6 @@ string = "a string"
 table = "a table"
 
 [ui.confirm]
-external_deleted = "{path} was deleted — `[K] Keep as new (saving recreates it)` ★ / `[C] Close`"
-external_modified = "{path} was changed by another program — `[L] Reload (discard my changes)` / `[I] Ignore (check again when saving)` ★"
 save_failed_closed = "Could not save: (the text of `msg.save.*`) — {path} is already closed. `[R] Save to recovery folder` ★ / `[D] Discard`"
 
 nav_hint = "Tab / ←→ to select, Enter to confirm"
@@ -856,6 +865,18 @@ title = "A file with the same name exists"
 message = "{path} was created by another program after this document was created"
 overwrite = "[O] Overwrite"
 alt = "[A] Save as"
+
+[ui.confirm.external_modified]
+title = "Changed outside"
+message = "{path} was changed by another program"
+reload = "[L] Reload (discard my changes)"
+ignore = "[I] Ignore (check again when saving)"
+
+[ui.confirm.external_deleted]
+title = "Deleted outside"
+message = "{path} was deleted"
+keep = "[K] Keep as new (saving recreates it)"
+close = "[C] Close"
 
 [ui.confirm.save.dangling_link]
 title = "Link target missing"
