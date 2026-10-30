@@ -110,6 +110,10 @@ pub trait Frontend {
     fn emergency_restore_info(&self) -> Option<EmergencyRestoreInfo> {
         None
     }
+    /// OSC 52 でクリップボードへ書く (`Capabilities.osc52_write` が真の frontend だけ実装する)。書けたら `true`。
+    fn write_osc52(&mut self, _text: &str) -> bool {
+        false
+    }
     fn suspend(&mut self) {}
     fn resume(&mut self) {}
 }

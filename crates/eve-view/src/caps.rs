@@ -32,6 +32,8 @@ pub struct Capabilities {
     pub mouse: bool,
     /// kitty keyboard protocol などで修飾が区別できる。
     pub enhanced_keys: bool,
+    /// OSC 52 でクリップボードへ書ける端末 (05 §8.1)。
+    pub osc52_write: bool,
     /// Unix のジョブ制御 (`app.suspend` の when 句 `caps.can_suspend`)。
     pub can_suspend: bool,
     /// 端末背景の明暗のヒント。v0.1 は常に `None`。
@@ -55,6 +57,7 @@ impl Default for Capabilities {
             color_depth: ColorDepth::TrueColor,
             mouse: false,
             enhanced_keys: false,
+            osc52_write: false,
             can_suspend: false,
             dark_mode: None,
             ascii_only: false,

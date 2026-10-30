@@ -710,6 +710,8 @@ Host (eve-host + eve-tui) が `Effect::SetClipboard{content: ClipboardText, targ
 
 **取得のタイムアウト (2 s)**: Windows の `GetClipboardData` は、クリップボードの所有者が遅延描画 (`WM_RENDERFORMAT`) に応答しないと戻らないことがある。取得は上のクリップボード取得用の使い捨てスレッドで行い (§8.2 の所有者ウィンドウのスレッドとは別)、Host は要求から **2 s** で応答が無ければ、その要求を内部レジスタからの貼り付けに切り替えて `ClipboardContent` を返し、「システムクリップボードの取得がタイムアウトしました。エディタ内のコピーを貼り付けました」を通知する。取得中のスレッドは **放棄する** (終了を待たない・中断もしない。後から結果が届いても token が古いので捨てる)。放棄したスレッドが戻るまでの間の次の要求は、新しいスレッドを立てず、直ちに内部レジスタで応じる (スレッドを積み増さない)。
 
+**M9b の実装 (2026-10-30)**: Windows Terminal だけ `Capabilities.osc52_write` を真にする (conhost は非対応)。Host は `Frontend::write_osc52` を呼ぶ。書込は次のとおり: `clipboard.osc52 = never` は書かない。`always`、または SSH 接続中 (`SSH_TTY` / `SSH_CONNECTION`) の `auto` は、システムへの書込の成否に関わらず書く。それ以外の `auto` は、システムへ書けなかったときだけ書く (書けたら「内部レジスタに切り替えた」とは知らせない)。本文が `clipboard.osc52_max_bytes` (base64 後) を超えるときは OSC 52 を送らない。`TMUX` 環境変数があれば DCS 透過で包む。`clipboard.provider` と `command` provider は未公開。
+
 ### 8.2 OS 別の実装詳細
 
 v0.1 で実装するのは下の表の **Windows の 2 行** で、ほかの行は v0.2 (macOS / Linux 出荷時、OSC 52) の仕様。

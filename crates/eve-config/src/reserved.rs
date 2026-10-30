@@ -4,7 +4,6 @@
 /// 公開前のセクション (v0.1 の公開キーを持つ `editor` / `file` / `view` / `theme` を除く)。
 pub(crate) const RESERVED_SECTIONS: &[&str] = &[
     "ai",
-    "clipboard",
     "formatter",
     "keys",
     "language",
@@ -24,8 +23,6 @@ pub(crate) const RESERVED_KEYS: &[&str] = &[
     "ai.locality",
     "clipboard.command.copy",
     "clipboard.copy",
-    "clipboard.osc52",
-    "clipboard.osc52_max_bytes",
     "clipboard.provider",
     "clipboard.system_max_bytes",
     "clipboard.x11_exit_wait_ms",

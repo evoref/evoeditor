@@ -233,6 +233,16 @@ impl Frontend for TuiFrontend {
         }
     }
 
+    fn write_osc52(&mut self, text: &str) -> bool {
+        use crate::caps::Env;
+        if !self.detected.as_ref().is_some_and(|d| d.caps.osc52_write) {
+            return false;
+        }
+        let tmux = ProcessEnv.var("TMUX").is_some();
+        self.write(&crate::ansi::osc52(text, tmux));
+        true
+    }
+
     fn emergency_restore_info(&self) -> Option<eve_host::EmergencyRestoreInfo> {
         let (out, input) = (self.out.as_ref()?, self.input.as_ref()?);
         // 保存したモード: 出力 (u32 LE) + 入力 (u32 LE)。`eve_platform::term::emergency_restore` が解釈する

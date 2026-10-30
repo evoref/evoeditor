@@ -13,6 +13,7 @@ struct Shared {
     frames: Vec<Frame>,
     restored: u32,
     sink: Option<InputSink>,
+    osc52: Vec<String>,
 }
 
 /// テストから観察する口 (Host に渡した後も持てる)。
@@ -35,6 +36,11 @@ impl HeadlessProbe {
     /// `start_input` で渡された入力口 (別スレッドから入力を送る用。起動前は `None`)。
     pub fn sink(&self) -> Option<InputSink> {
         self.0.lock().unwrap().sink.clone()
+    }
+
+    /// `write_osc52` で書かれた本文 (古い順)。
+    pub fn osc52_writes(&self) -> Vec<String> {
+        self.0.lock().unwrap().osc52.clone()
     }
 
     /// `restore` が呼ばれた回数 (終了経路で 1 回だけ呼ばれるはず)。
@@ -62,6 +68,12 @@ impl HeadlessFrontend {
 
     pub fn probe(&self) -> HeadlessProbe {
         self.shared.clone()
+    }
+
+    /// 能力を差し替える (`init` が返す値)。
+    pub fn with_caps(mut self, caps: Capabilities) -> HeadlessFrontend {
+        self.caps = caps;
+        self
     }
 
     pub fn set_wake_after(&mut self, d: Option<Duration>) {
@@ -98,5 +110,10 @@ impl Frontend for HeadlessFrontend {
 
     fn wake_after(&self) -> Option<Duration> {
         self.wake
+    }
+
+    fn write_osc52(&mut self, text: &str) -> bool {
+        self.shared.0.lock().unwrap().osc52.push(text.to_owned());
+        true
     }
 }
