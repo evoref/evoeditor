@@ -381,6 +381,42 @@ v0.1〜v0.3 では `len() == 1` に制限するが、**編集コマンドはす�
 
 frontend から `(ViewId, RowIdx, CellCol)` が届く ([02 §7.3](02-architecture.md#73-マウス))。core は View のレイアウト結果から `RowIdx → (論理行, 折り返し番号)` を引き、`display_to_pos` でセル → `Pos` に変換する。行末より右のクリックは行末、空の最終行より下は文書末尾。全角セルの右半分は `Bias::Before` (その文字の前) に寄せる ([§23](#23-未決事項) の OQ-58)。
 
+#### 5.8.1 マウスの扱い (M9b、2026-10-30。案)
+
+M9b の 5 本目の突合。`MouseEvent` / `HitMap` は仕様にあるだけでコードにはまだ無いので、型と挙動をここで決める。
+
+**入力の型 (eve-view)**:
+
+```rust
+struct MouseEvent { kind: MouseKind, mods: Modifiers, at: MouseAt }
+enum MouseKind { Down(MouseButton), Drag(MouseButton), Up(MouseButton), WheelUp, WheelDown }
+enum MouseButton { Left, Middle, Right }
+// ヒットの結果。編集面の外 (クローム・オーバーレイ) は TUI が先に判定して core へ渡さない (04 §6.8)
+struct MouseAt { view: ViewId, row: i32, col: i32 }   // 編集面 (PaneFrame.rect) の左上を原点とするセル。ボタンを押している間は面の外 (負・はみ出し) もそのまま渡す
+```
+
+`HitMap` は**作らない** (02 §8.2 の `PaneFrame.hit` は予約のままにして中身を足さない)。v0.2 の Window は編集面 1 つで、`PaneFrame.rect` と `gutter_width` があれば TUI は (セル → `MouseAt`) を作れ、折り返し・タブ・全角を考慮した文書位置の確定は core が `ScrollPos` とレイアウトから直接引く (§14.3.1。Frame を作り直さない)。複数ペイン (v0.4) で `hit` を実体にする。
+
+**挙動 (core、`Editor::handle_input(Mouse)`)**:
+
+| 操作 | 動作 |
+|---|---|
+| 左 `Down` | カーソルをその位置へ (Selection を 1 点に)。ドラッグの起点 (anchor) を覚える。`Shift` 付きは anchor を保ったまま head だけ動かす (選択の拡張)。Undo の結合は封印する (カーソル移動と同じ) |
+| 左 `Drag` | anchor からその位置までを選択する。面の上下の外では、tick (50 ms ごと、core の deadline) で 1 表示行ずつスクロールしながら選択を伸ばす。マウスが動かなくても進む |
+| 左 `Up` | ドラッグを終える (選択は残す) |
+| `WheelUp` / `WheelDown` | `ui.mouse_wheel_lines` (既定 3) 表示行ぶんスクロール。カーソルは動かさない。`Shift` 付きは横スクロール (折り返し OFF のときだけ。1 回 = 画面幅の 1/8 を目安に 4 列。案) |
+| 中・右ボタン、`Ctrl`/`Alt` 付き | v0.2 は何もしない (中ボタンの貼り付け・右クリックメニュー・複数カーソルは後の版)。キーマップの `mouse.*` も v0.2 では既定のみ (07 §7) |
+| ダブル・トリプルクリック | v0.4 (FR-311)。v0.2 は単クリックを 2 回として扱う |
+| オーバーレイ・検索バーが開いている間 | 編集面のマウスは無視する (キー操作と同じく、フォーカスは最前面にある) |
+
+**位置の確定 (§5.8 の具体化)**: 面の行 `row` を表示行として引く — 折り返し OFF は `top` の論理行 + `row`、ON は `ScrollPos { top, wrap_idx }` から `row` 本ぶん進めた (論理行, 表示行)。列は、OFF は `left_col + (col − gutter_width)`、ON は表示行内の列 (継続行のずらしを含む。§14.3.1 の `LineRows::at_col`)。ガターの列は列 0 として扱う。画面の下の `Virtual` 行は文書末尾、表示行の幅を超えた列はその表示行の末尾 (折り返し位置では上の表示行の末尾 = `Before`)。全角セルは左右どちらの半分でも**その文字の前** (OQ-58 の推奨を採る)。長大行の読み取り専用の範囲 (§11.5) を超える位置は表示範囲の末尾に丸める (`set_selection` が行う)。
+
+**実装の分け方**:
+
+1. この節 (突合の記録)。
+2. eve-view の `MouseEvent` と core の処理 (クリック・ドラッグ・Shift・ホイール・自動スクロール。ヘッドレスの試験)。`ui.mouse_wheel_lines` の定数 3 を持つ。
+3. TUI と設定: 端末のマウス取得の有効化 / 解除 (04 §6.8)、`ui.mouse` の公開、`ui.toggle_mouse`、`Capabilities.mouse`。
+
 ---
 
 ## 6. ChangeSet と Transaction
