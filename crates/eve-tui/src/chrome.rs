@@ -8,7 +8,7 @@ use eve_view::{
     BarFocus, CaseMode, CellPos, CellSize, CellText, Choice, ColorDepth, CutPolicy, Frame,
     HelpLineKind, HintItem, HintModel, InputFieldModel, KeyCode, KeyLabel, KeyStroke, Message,
     MessageLevel, MessageModel, Modifiers, OverlayModel, SearchBarModel, Span, StatusAlign,
-    StatusItem, StatusKind, StatusModel, Style, StyleMods,
+    StatusItem, StatusKind, StatusModel, Style, StyleMods, WhichKeyModel,
 };
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
@@ -1050,6 +1050,68 @@ fn render_help(
     None
 }
 
+/// which-key (04 §7.4): チョードの保留が 500 ms を超えたときの、続けて押せるキーの一覧。編集面の左下に重ねる。
+fn render_which_key(
+    w: &mut Writer<'_>,
+    area: CellSize,
+    model: &WhichKeyModel,
+    theme: &Theme,
+    glyphs: &Glyphs,
+    ascii: bool,
+) {
+    let style = theme.overlay;
+    let bold = overlay_style(style, Style::with_mods(StyleMods::BOLD));
+    let label = |k: &KeyStroke| key_label_full(&KeyLabel { strokes: vec![*k] }, ascii);
+    let prefix = key_label_full(
+        &KeyLabel {
+            strokes: model.prefix.clone(),
+        },
+        ascii,
+    );
+    let title_text = format!("{prefix} {}", glyphs.ellipsis.text);
+    let title = CellText {
+        width: label_width(&title_text),
+        spans: vec![Span::new(
+            title_text.clone(),
+            label_width(&title_text),
+            bold,
+        )],
+        cut: eve_view::CutPolicy::End,
+    };
+    let key_w = model
+        .items
+        .iter()
+        .map(|i| label_width(&label(&i.key)))
+        .max()
+        .unwrap_or(0);
+    let want_inner =
+        (key_w + 2 + model.items.iter().map(|i| i.text.width).max().unwrap_or(0)).max(title.width);
+    let (bw, bordered) = box_width(want_inner, area.cols);
+    let pad = u16::from(bordered) * 2;
+    let rows = (model.items.len() as u16 + pad).min(area.rows);
+    if rows == 0 {
+        return;
+    }
+    let b = BoxRect {
+        x: 0,
+        y: area.rows - rows,
+        cols: bw,
+        rows,
+        bordered,
+    };
+    draw_box(w, &b, bordered.then_some(&title), style, glyphs);
+    for (i, item) in model.items.iter().take(usize::from(rows - pad)).enumerate() {
+        let k = label(&item.key);
+        let spans = [
+            Span::new(k.clone(), label_width(&k), bold),
+            ascii_span(&" ".repeat(usize::from(key_w + 2 - label_width(&k))), style),
+        ];
+        let mut line: Vec<Span> = spans.to_vec();
+        line.extend(item.text.spans.iter().cloned());
+        draw_line(w, &b, i as u16, &line, style, glyphs);
+    }
+}
+
 /// リスト選択 (コマンドパレット、04 §8.1)。上部中央。入力欄 1 行 + 候補 (最大 12 行) + 枠。
 fn render_list(
     w: &mut Writer<'_>,
@@ -1358,6 +1420,9 @@ pub fn render_screen(
             if c.is_some() {
                 cursor = c;
             }
+        }
+        if let Some(wk) = &frame.which_key {
+            render_which_key(&mut w, area, wk, &theme, glyphs, ascii);
         }
         r.clamped_cells = w.clamped;
         r.sanitized = w.sanitized;

@@ -64,7 +64,14 @@ pub struct Editor {
     keymap: Keymap,
     #[allow(dead_code)] // C4 (開く・保存) のジョブ投入で使う
     ports: Ports,
+    /// チョードの保留が始まった (最後のキーを受けた) 時刻。which-key の 500 ms を数える。
+    chord_since: Option<Tick>,
+    /// which-key を出した (出す時刻に描き直しを一度だけ要求するため)。
+    which_key_shown: bool,
 }
+
+/// 保留中のチョードの続きを一覧に出すまでの待ち (04 §7.4)。
+const WHICH_KEY_DELAY: crate::time::Millis = crate::time::Millis(500);
 
 impl Editor {
     /// 空の EditorState を作る。I/O もジョブ投入もしない。
@@ -90,6 +97,8 @@ impl Editor {
             registry,
             keymap: default_keymap::default_keymap(),
             ports,
+            chord_since: None,
+            which_key_shown: false,
         };
         editor.refresh_key_labels();
         editor
@@ -137,6 +146,19 @@ impl Editor {
         self.state.search_tick();
         self.state.swap_tick();
         self.state.quit_wait_tick();
+        if self.keymap.pending().is_empty() {
+            self.chord_since = None;
+            self.which_key_shown = false;
+        } else if !self.which_key_shown && self.which_key_due() {
+            self.which_key_shown = true;
+            self.state.mark_dirty_render();
+        }
+    }
+
+    /// which-key を出す時刻に達した。
+    fn which_key_due(&self) -> bool {
+        self.chord_since
+            .is_some_and(|t| self.state.now >= t + WHICH_KEY_DELAY)
     }
 
     /// 次に `tick` が要る時刻。`None` なら無期限に待ってよい。
@@ -145,6 +167,9 @@ impl Editor {
             self.state.search_deadline(),
             self.state.swap_deadline(),
             self.state.quit_wait_deadline(),
+            self.chord_since
+                .filter(|_| !self.which_key_shown && !self.keymap.pending().is_empty())
+                .map(|t| t + WHICH_KEY_DELAY),
         ]
         .into_iter()
         .flatten()
@@ -320,6 +345,9 @@ impl Editor {
             }
             Resolution::Pending | Resolution::Cancelled | Resolution::UnassignedInSequence => {}
         }
+        // 保留が続くなら which-key の待ちを数え直す (打つたびに 500 ms)
+        self.chord_since = (!self.keymap.pending().is_empty()).then_some(self.state.now);
+        self.which_key_shown = false;
     }
 
     fn on_text(&mut self, s: &str) {
@@ -400,9 +428,42 @@ impl Editor {
 
     /// Window の Frame を作る (可視範囲だけ。コストは文書の大きさに依存しない)。
     pub fn frame(&mut self, window: WindowId) -> Option<eve_view::Frame> {
-        let f = layout::build_frame(&self.state, window, self.keymap.pending());
+        let mut f = layout::build_frame(&self.state, window, self.keymap.pending());
+        if let Some(f) = f.as_mut() {
+            f.which_key = self.which_key_model();
+        }
         self.state.mark_rendered();
         f
+    }
+
+    /// 保留が 500 ms を超えていれば、続けて押せるキーの一覧 (04 §7.4)。
+    fn which_key_model(&self) -> Option<eve_view::WhichKeyModel> {
+        if !self.which_key_due() {
+            return None;
+        }
+        let state = &self.state;
+        let contexts = Self::contexts_for(state.input_context());
+        let cat = state.catalog();
+        let items: Vec<eve_view::WhichKeyItem> = self
+            .keymap
+            .continuations(contexts, &|n| state.context_value(n))
+            .into_iter()
+            .map(|(key, cmd)| {
+                let text = cmd
+                    .as_deref()
+                    .map(|c| cat.get(&format!("cmd.{c}.title")).unwrap_or(c).to_owned())
+                    .unwrap_or_else(|| "…".to_owned());
+                eve_view::WhichKeyItem {
+                    key,
+                    text: layout::cell_text(&text, eve_view::CutPolicy::End),
+                    more: cmd.is_none(),
+                }
+            })
+            .collect();
+        (!items.is_empty()).then(|| eve_view::WhichKeyModel {
+            prefix: self.keymap.pending().to_vec(),
+            items,
+        })
     }
 
     pub fn needs_render(&self) -> bool {

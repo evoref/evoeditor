@@ -278,6 +278,21 @@ pub struct HintModel {
     pub items: Vec<HintItem>,
 }
 
+/// which-key の 1 行: 続けて押すキーと、その動作の名前。続きがさらに続く (入れ子のチョード) ときは `more`。
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct WhichKeyItem {
+    pub key: KeyStroke,
+    pub text: CellText,
+    pub more: bool,
+}
+
+/// which-key の一覧 (04 §7.4)。`prefix` は保留中のキー。
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct WhichKeyModel {
+    pub prefix: Vec<KeyStroke>,
+    pub items: Vec<WhichKeyItem>,
+}
+
 /// 確認ダイアログの選択肢の識別子。
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub struct ChoiceId(pub u16);
@@ -459,6 +474,8 @@ pub struct Frame {
     pub hints: HintModel,
     /// 前面順。
     pub overlays: Vec<OverlayModel>,
+    /// チョードの保留が 500 ms を超えたときの、続けて押せるキーの一覧 (which-key、04 §7.4)。
+    pub which_key: Option<WhichKeyModel>,
     /// 検索バー。
     pub search: Option<SearchBarModel>,
     /// メッセージ行。
