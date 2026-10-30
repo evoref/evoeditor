@@ -96,6 +96,8 @@ pub struct EditorState {
     pub(super) message: Option<super::message::ShownMessage>,
     /// 未読のメッセージの数。
     pub(super) unread: u16,
+    /// メッセージの履歴 (古い順。上限 `message::HISTORY_MAX`、04 §8.9)。
+    pub(super) message_log: std::collections::VecDeque<super::message::LoggedMessage>,
     /// 履歴の破棄を通知した文書 (文書ごとに 1 回)。
     trim_notified: BTreeSet<DocumentId>,
     /// 内部レジスタ・ハンドルの表・貼り付けの token (クリップボード、`clipboard.rs`)。
@@ -165,6 +167,7 @@ impl EditorState {
             quit_abort: None,
             message: None,
             unread: 0,
+            message_log: std::collections::VecDeque::new(),
             trim_notified: BTreeSet::new(),
             clipboard: Default::default(),
             config: eve_config::Config::default(),

@@ -26,6 +26,7 @@ pub(super) fn default_keymap() -> Keymap {
     bind("global", "mod+shift+p", "ui.palette_open"); // [E][横]
     bind("global", "ctrl+k r", "ui.redraw");
     bind("global", "ctrl+k h", "help.open");
+    bind("global", "ctrl+k m", "ui.message_history");
     // ヘルプ画面 (help → global): 1 行・1 画面ずつスクロール、`Esc` で閉じる
     bind("help", "down", "ui.list_next");
     bind("help", "up", "ui.list_prev");

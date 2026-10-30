@@ -30,11 +30,16 @@ pub(super) enum HelpSection {
 pub(super) struct HelpState {
     /// 先頭に描く行の番号。
     pub scroll: usize,
+    /// メッセージ履歴 (`ui.message_history`、04 §8.9) を表示している。同じ画面を履歴の行で使う。
+    pub history: bool,
 }
 
 impl EditorState {
     /// ヘルプの行を節ごとに作る。戻り値の 2 つ目は各節の見出しの行番号。
     fn help_lines(&self) -> (Vec<HelpLine>, BTreeMap<u8, usize>) {
+        if matches!(&self.overlay, Some(Overlay::Help(h)) if h.history) {
+            return (self.history_lines(), BTreeMap::new());
+        }
         let cat = self.catalog();
         let render = |key: &str| cat.render(key, &[], &|c| self.key_label(c));
         let line = |kind: HelpLineKind, key: Option<String>, text: String| HelpLine {
@@ -136,6 +141,46 @@ impl EditorState {
         (lines, starts)
     }
 
+    /// メッセージ履歴の行 (古い順)。時刻は起動からの経過 `mm:ss` (core は壁時計を持たない)。
+    fn history_lines(&self) -> Vec<HelpLine> {
+        let cat = self.catalog();
+        if self.message_log.is_empty() {
+            return vec![HelpLine {
+                kind: HelpLineKind::Body,
+                key: None,
+                text: cell_text(
+                    &cat.render("ui.history.empty", &[], &|_| None),
+                    CutPolicy::End,
+                ),
+            }];
+        }
+        self.message_log
+            .iter()
+            .map(|m| {
+                let secs = m.at.0 / 1000;
+                let level = cat.render(
+                    match m.level {
+                        eve_view::MessageLevel::Info => "ui.history.level.info",
+                        eve_view::MessageLevel::Warn => "ui.history.level.warn",
+                        _ => "ui.history.level.error",
+                    },
+                    &[],
+                    &|_| None,
+                );
+                let key = format!("{:02}:{:02} {level}", secs / 60, secs % 60);
+                let text = match &m.hint {
+                    Some(h) => format!("{} {h}", m.text),
+                    None => m.text.clone(),
+                };
+                HelpLine {
+                    kind: HelpLineKind::Entry,
+                    key: Some(cell_text(&key, CutPolicy::End)),
+                    text: cell_text(&text, CutPolicy::End),
+                }
+            })
+            .collect()
+    }
+
     /// パレットに出るコマンドの ID (CommandId 順)。
     fn palette_command_ids(&self) -> Vec<&str> {
         self.palette_entries.iter().map(|e| e.id()).collect()
@@ -161,10 +206,34 @@ impl EditorState {
 
     /// 開く: `section` の見出しが先頭に来るようにスクロールする。
     fn open_help(&mut self, section: HelpSection) -> CommandResult {
+        self.set_overlay(Some(Overlay::Help(HelpState {
+            scroll: 0,
+            history: false,
+        })));
         let (lines, starts) = self.help_lines();
         let max = lines.len().saturating_sub(self.help_view_rows());
         let scroll = starts.get(&(section as u8)).copied().unwrap_or(0).min(max);
-        self.set_overlay(Some(Overlay::Help(HelpState { scroll })));
+        if let Some(Overlay::Help(h)) = &mut self.overlay {
+            h.scroll = scroll;
+        }
+        self.mark_dirty_render();
+        CommandResult::Done
+    }
+
+    /// メッセージ履歴を開く: 最新が見えるよう末尾へスクロールする (04 §8.9)。
+    fn open_message_history(&mut self) -> CommandResult {
+        self.set_overlay(Some(Overlay::Help(HelpState {
+            scroll: 0,
+            history: true,
+        })));
+        let max = self
+            .help_lines()
+            .0
+            .len()
+            .saturating_sub(self.help_view_rows());
+        if let Some(Overlay::Help(h)) = &mut self.overlay {
+            h.scroll = max;
+        }
         self.mark_dirty_render();
         CommandResult::Done
     }
@@ -192,11 +261,16 @@ impl EditorState {
         let (lines, _) = self.help_lines();
         let max = lines.len().saturating_sub(self.help_view_rows());
         let render = |key: &str| self.catalog().render(key, &[], &|c| self.key_label(c));
+        let (title, footer) = if h.history {
+            ("ui.history.title", "ui.history.footer")
+        } else {
+            ("ui.help.title", "ui.help.footer")
+        };
         OverlayModel::Help {
-            title: cell_text(&render("ui.help.title"), CutPolicy::Never),
+            title: cell_text(&render(title), CutPolicy::Never),
             lines,
             scroll: h.scroll.min(max),
-            footer: cell_text(&render("ui.help.footer"), CutPolicy::End),
+            footer: cell_text(&render(footer), CutPolicy::End),
         }
     }
 }
@@ -213,9 +287,14 @@ fn help_commands(ctx: &mut CommandCtx<'_>) -> CommandResult {
     ctx.state.open_help(HelpSection::Commands)
 }
 
+fn message_history(ctx: &mut CommandCtx<'_>) -> CommandResult {
+    ctx.state.open_message_history()
+}
+
 /// v0.2 のヘルプコマンド (07 §11.6 の `help.open` / `help.keys` / `help.commands`)。
 pub(super) fn register(r: &mut CommandRegistry) {
-    let handlers: [(&str, crate::Handler); 3] = [
+    let handlers: [(&str, crate::Handler); 4] = [
+        ("ui.message_history", message_history),
         ("help.open", help_open),
         ("help.keys", help_keys),
         ("help.commands", help_commands),
