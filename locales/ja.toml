@@ -779,7 +779,6 @@ readonly = "[R] 読み取り専用で開く"
 encoding = "[E] 文字コードを指定して開く"
 
 [ui.confirm.save]
-dangling_link = "{path} はリンクで、リンク先 {target} がありません — `[C] リンク先に作成 (リンクを保つ)` ★"
 overwrite = "{path} は既にあります。上書きしますか? — `[O] 上書き` / `[R] 別の名前を入力` ★ (既定は別の名前を入力。確定 (ユーザー回答))"
 
 [ui.confirm.swap_recovery]
@@ -855,6 +854,11 @@ title = "同名のファイルがあります"
 message = "{path} は、この文書を作った後に他のプログラムによって作られています"
 overwrite = "[O] 上書き"
 alt = "[A] 別名で保存"
+
+[ui.confirm.save.dangling_link]
+title = "リンク先がありません"
+message = "{path} はリンクで、リンク先 {target} がありません"
+create = "[C] リンク先に作成 (リンクを保つ)"
 
 [ui.confirm.save.read_only]
 title = "読み取り専用のファイル"

@@ -418,6 +418,8 @@ pub struct SaveOptions {
     pub backup: BackupPolicy,
     /// 「読み取り専用を解除して保存」(FR-116 / FR-106): 保存先の読み取り専用属性を置換の直前に外し、置換の後に付け直す (05 §4.2 の手順 5b)。
     pub clear_readonly: bool,
+    /// 保存先がダングリングのシンボリックリンクなら、リンク先に新規作成する (リンクは保つ。FR-106、05 §4.1)。確認を経た保存だけが立てる。
+    pub create_link_target: bool,
 }
 
 impl SaveOptions {
@@ -433,6 +435,7 @@ impl SaveOptions {
             hardlink: HardlinkPolicy::default(),
             backup: BackupPolicy::default(),
             clear_readonly: false,
+            create_link_target: false,
         }
     }
 }

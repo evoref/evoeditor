@@ -50,6 +50,8 @@ struct Entry {
 
 struct State {
     files: BTreeMap<FsPath, Entry>,
+    /// シンボリックリンク (リンク → リンク先)。リンク先が無ければダングリング。
+    links: BTreeMap<FsPath, FsPath>,
     dirs: BTreeSet<FsPath>,
     next_id: u128,
     seq: u32,
@@ -93,6 +95,7 @@ impl MemFs {
             state: Mutex::new(State {
                 files: BTreeMap::new(),
                 dirs: BTreeSet::new(),
+                links: BTreeMap::new(),
                 next_id: 1,
                 seq: 0,
                 chunk_size: DEFAULT_CHUNK,
@@ -286,6 +289,13 @@ impl MemFs {
         }
     }
 
+    /// シンボリックリンクを置く。開く・保存はリンク先を対象にする (リンク先が無ければダングリング)。
+    pub fn add_link(&self, link: &str, target: &str) {
+        self.st()
+            .links
+            .insert(FsPath::from(link), FsPath::from(target));
+    }
+
     pub fn set_nlink(&self, path: &str, nlink: u32) {
         if let Some(e) = self.st().files.get_mut(&FsPath::from(path)) {
             e.nlink = nlink;
@@ -388,11 +398,27 @@ fn dir_exists(s: &State, dir: &FsPath) -> bool {
 }
 
 fn not_found(s: &State, path: &FsPath) -> FsError {
+    if let Some(target) = s.links.get(path) {
+        return FsError::with_detail(
+            FsErrorKind::NotFound,
+            FsErrorDetail::DanglingLink {
+                target: target.clone(),
+            },
+        );
+    }
     match path.parent() {
         Some(dir) if !dir_exists(s, &dir) => {
             FsError::with_detail(FsErrorKind::NotFound, FsErrorDetail::ParentMissing { dir })
         }
         _ => FsError::new(FsErrorKind::NotFound),
+    }
+}
+
+/// リンクならリンク先が在るときだけリンク先 (ダングリングはリンク自身のまま。`not_found` が詳細を付ける)。
+fn link_target(s: &State, path: &FsPath) -> FsPath {
+    match s.links.get(path) {
+        Some(t) if s.files.contains_key(t) => t.clone(),
+        _ => path.clone(),
     }
 }
 
@@ -531,6 +557,7 @@ impl FileSystem for MemFs {
     fn metadata(&self, path: &FsPath) -> Result<FileMeta, FsError> {
         let mut s = self.st();
         injected(&mut s, FsOp::Metadata)?;
+        let path = &link_target(&s, path);
         if let Some(e) = s.files.get(path) {
             return Ok(meta_of(e));
         }
@@ -553,6 +580,7 @@ impl FileSystem for MemFs {
     fn open_read(&self, path: &FsPath) -> Result<Box<dyn ReadChunks + Send>, FsError> {
         let mut s = self.st();
         injected(&mut s, FsOp::OpenRead)?;
+        let path = &link_target(&s, path);
         match s.files.get(path) {
             Some(e) => Ok(Box::new(MemReader {
                 data: e.data.clone(),
@@ -577,6 +605,12 @@ impl FileSystem for MemFs {
         let mut s = self.st();
         s.steps.clear();
         injected(&mut s, FsOp::WriteAtomic)?;
+        // シンボリックリンクはリンク先に書く。ダングリングは確認を経た保存 (`create_link_target`) だけがリンク先を作る
+        let path = &match s.links.get(path).cloned() {
+            Some(t) if s.files.contains_key(&t) || opts.create_link_target => t,
+            Some(_) => return Err(not_found(&s, path)),
+            None => path.clone(),
+        };
 
         if let Some(dir) = path.parent()
             && !dir_exists(&s, &dir)

@@ -1472,8 +1472,10 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 | `ui.confirm.save.hardlink.message` | 同上 | {path} には他に {links} 個の名前 (ハードリンク) があります |
 | `ui.confirm.save.hardlink.direct` | 同上 (アクセラレータ `K`) | [K] リンクを保って直接上書き (バックアップ付き) |
 | `ui.confirm.save.hardlink.break` | 同上 (アクセラレータ `B`) | [B] このファイルだけ切り離して保存 |
-| `msg.save.dangling_link` | シンボリックリンクのリンク先が無い (05 §4.1。v0.1 は作成せずエラーにする) | {path} はリンクで、リンク先 {target} がありません。保存していません / 別名で保存 ({key:file.save_as}) するか、リンク先のフォルダを作ってから保存してください |
-| `ui.confirm.save.dangling_link` (v0.2) | 同上 (リンク先を作成する選択肢を出す版) | {path} はリンクで、リンク先 {target} がありません — `[C] リンク先に作成 (リンクを保つ)` ★ |
+| `msg.save.dangling_link` | シンボリックリンクのリンク先が無い (05 §4.1。v0.1 は作成せずエラーにする。v0.2 は開いている文書の保存では下の確認を出し、確認を出せないとき (文書が閉じている等) だけこれを示す) | {path} はリンクで、リンク先 {target} がありません。保存していません / 別名で保存 ({key:file.save_as}) するか、リンク先のフォルダを作ってから保存してください |
+| `ui.confirm.save.dangling_link.title` (v0.2) | 同上 (リンク先を作成する選択肢を出す版。選択肢は作成と `Esc` のキャンセル。承認したら同じ保存をリンク先を作る指定で 1 回だけ投入し直す) | リンク先がありません |
+| `ui.confirm.save.dangling_link.message` | 同上 | {path} はリンクで、リンク先 {target} がありません |
+| `ui.confirm.save.dangling_link.create` | 同上 (アクセラレータ `C`。既定) | [C] リンク先に作成 (リンクを保つ) |
 | `ui.confirm.save.read_only.title` (v0.2) | 読み取り専用属性を `file.toggle_read_only` で解除した文書の上書き保存 (FR-116。03 §9.3 手順 1。既定は別名で保存。承認した Revision では繰り返さない。全保存では保存せずに一覧に出す。v0.1 は読み取り専用の文書の編集を拒否するので出ない。v0.1 で読み取り専用の文書に使える保存は名前を付けて保存だけ、03 §9.6) | 読み取り専用のファイル |
 | `ui.confirm.save.read_only.message` | 同上 | {path} は読み取り専用です |
 | `ui.confirm.save.read_only.alt` | 同上 (アクセラレータ `A`。既定) | [A] 別名で保存 |

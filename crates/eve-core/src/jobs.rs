@@ -77,6 +77,8 @@ pub enum JobKind {
         strategy: SaveStrategy,
         /// 「読み取り専用を解除して保存」(FR-116)。保存先の読み取り専用属性を外して書き、書いた後に付け直す。
         clear_readonly: bool,
+        /// ダングリングのシンボリックリンクのリンク先に新規作成する (FR-106。確認を経た保存だけ)。
+        create_link_target: bool,
     },
     /// 表現不能の文字を置換する ChangeSet を作る (E3 の選択肢 2、03 §8.6)。`snapshot` は投入時の Revision のもの。
     ReplaceUnmappable {
@@ -425,6 +427,7 @@ pub fn run_job(
             expected,
             strategy,
             clear_readonly,
+            create_link_target,
         } => run_save(
             req.id,
             SaveParams {
@@ -436,6 +439,7 @@ pub fn run_job(
                 expected: *expected,
                 strategy: *strategy,
                 clear_readonly: *clear_readonly,
+                create_link_target: *create_link_target,
             },
             ports,
             cancel,

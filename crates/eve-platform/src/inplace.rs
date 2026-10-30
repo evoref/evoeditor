@@ -127,7 +127,7 @@ impl WinFs {
     ) -> Result<SaveReport, FsError> {
         let conflict = |current| FsError::new(FsErrorKind::Conflict { current });
         let source_failed = || FsError::new(FsErrorKind::SourceFailed);
-        let target = resolve_target(path)?;
+        let target = resolve_target(path, false)?;
         let target_path = FsPath::new(target.clone());
         if cancel.is_cancelled() {
             return Err(source_failed());

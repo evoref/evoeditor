@@ -781,7 +781,6 @@ readonly = "[R] Open read-only"
 encoding = "[E] Open with an encoding"
 
 [ui.confirm.save]
-dangling_link = "{path} is a link, and its target {target} does not exist — `[C] Create at the target (keep the link)` ★"
 overwrite = "{path} already exists. Overwrite it? — `[O] Overwrite` / `[R] Enter another name` ★ (default is to enter another name; decided by the product owner)"
 
 [ui.confirm.swap_recovery]
@@ -857,6 +856,11 @@ title = "A file with the same name exists"
 message = "{path} was created by another program after this document was created"
 overwrite = "[O] Overwrite"
 alt = "[A] Save as"
+
+[ui.confirm.save.dangling_link]
+title = "Link target missing"
+message = "{path} is a link, and its target {target} does not exist"
+create = "[C] Create at the target (keep the link)"
 
 [ui.confirm.save.read_only]
 title = "Read-only file"

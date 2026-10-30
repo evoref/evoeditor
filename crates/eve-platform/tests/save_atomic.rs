@@ -408,6 +408,62 @@ fn ダングリングリンクは保存しない() {
     assert!(!t.p("missing.txt").exists(), "リンク先を作らない");
 }
 
+fn save_creating_target(
+    path: &FsPath,
+    data: &[u8],
+) -> Result<eve_core::SaveReport, eve_core::FsError> {
+    let mut o = SaveOptions::user_file(Expect::Absent);
+    o.create_link_target = true;
+    WinFs::default().write_atomic(path, &mut Chunks::of(data, 4096), &o)
+}
+
+// verifies: FR-106
+#[test]
+fn ダングリングリンクは_create_link_target_ならリンク先に作りリンクを保つ() {
+    let t = Tmp::new("dangling-create");
+    // 相対のリンク先 (リンクのあるディレクトリから)
+    if !symlink_made(std::os::windows::fs::symlink_file(
+        "missing.txt",
+        t.p("link.txt"),
+    )) {
+        return;
+    }
+    let r = save_creating_target(&t.path("link.txt"), b"x").unwrap();
+    assert_eq!(r.method, SaveMethod::NewFile);
+    assert_eq!(fs::read(t.p("missing.txt")).unwrap(), b"x");
+    assert!(
+        fs::symlink_metadata(t.p("link.txt"))
+            .unwrap()
+            .file_type()
+            .is_symlink(),
+        "リンクは通常のファイルに置き換えない"
+    );
+    assert_eq!(
+        fs::read(t.p("link.txt")).unwrap(),
+        b"x",
+        "リンク経由で読める"
+    );
+}
+
+// verifies: FR-106
+#[test]
+fn ダングリングリンクのリンク先の親が無ければ作らずに_parent_missing() {
+    let t = Tmp::new("dangling-parent");
+    if !symlink_made(std::os::windows::fs::symlink_file(
+        t.p("nodir").join("missing.txt"),
+        t.p("link.txt"),
+    )) {
+        return;
+    }
+    let e = save_creating_target(&t.path("link.txt"), b"x").unwrap_err();
+    assert_eq!(e.kind, FsErrorKind::NotFound);
+    assert!(matches!(
+        e.detail,
+        Some(FsErrorDetail::ParentMissing { .. })
+    ));
+    assert!(!t.p("nodir").exists(), "フォルダを作らない");
+}
+
 #[test]
 fn 他のプロセスが_share_delete_なしで開いていると置換できず_atomic_unsupported() {
     use std::os::windows::fs::OpenOptionsExt;
