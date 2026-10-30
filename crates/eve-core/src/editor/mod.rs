@@ -8,6 +8,7 @@ mod buffer;
 mod chrome;
 mod clipboard;
 mod command;
+mod config_reload;
 mod config_report;
 mod context;
 mod default_keymap;
@@ -84,6 +85,7 @@ impl Editor {
         buffer::register(&mut registry);
         save_all::register(&mut registry);
         help::register(&mut registry);
+        config_reload::register(&mut registry);
         view_cmds::register(&mut registry);
         mouse::register(&mut registry);
         line_ops::register(&mut registry);
@@ -226,6 +228,8 @@ impl Editor {
     /// ジョブの結果を受け取る (Host が `HostMsg::Job` で呼ぶ)。
     pub fn on_job_result(&mut self, r: crate::jobs::JobResult) {
         self.state.on_job_result(r);
+        // `config.reload` の結果: キーマップは Editor が持つので、ここで差し替える
+        self.finish_reload_keymap();
     }
 
     /// 起動時の開き方 (`Host::start` が最初の `Resize` の後に呼ぶ)。パスがなければ無題の文書 (FR-124)。

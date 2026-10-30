@@ -6,11 +6,11 @@
 ~   バッファ: 前の文書                                  buffer.prev  Ctrl+PgUp
 ~   クリップボード: コピー          現在は実行できません: 選択範囲がありません
 ~   クリップボード: 切り取り        現在は実行できません: 選択範囲がありません
+~   設定を読み直す                                               config.reload
 ~   移動: 文書の末尾へ移動                            cursor.doc_end  Ctrl+End
 ~   移動: 文書の先頭へ移動                         cursor.doc_start  Ctrl+Home
 ~   移動: 行末へ移動                                           cursor.end  End
 ~   移動: 行へ移動                                    cursor.goto_line  Ctrl+G
-~   移動: 行頭へ移動                                         cursor.home  Home
 ~
 memo.txt                                                     行 1, 桁 1 UTF-8 LF
 

@@ -24,6 +24,8 @@ use super::state::EditorState;
 /// 投入したジョブと、その結果の宛先。
 #[derive(Debug)]
 pub(super) enum Pending {
+    /// `config.reload` の読込 (07 §6)。
+    ConfigReload,
     Open {
         doc: DocumentId,
         view: ViewId,
@@ -325,6 +327,7 @@ impl EditorState {
                 Pending::ConvertEol(c) => c.doc == doc,
                 // 保存ジョブは取り消さず、完了を待つ (03 §9.2 の「閉じる手順」。ユーザーが求めた保存を中断しない)
                 Pending::Save { .. }
+                | Pending::ConfigReload
                 | Pending::RecoveryScan
                 | Pending::WriteRecovery { .. }
                 | Pending::Swap { .. }
@@ -742,6 +745,7 @@ impl EditorState {
                 retried,
             } => self.finish_replace_unmappable(ask, revision, retried, r),
             Pending::RecoveryScan => self.finish_recovery_scan(r),
+            Pending::ConfigReload => self.finish_config_reload(r),
             Pending::Swap { doc } => self.finish_swap(doc, r),
             Pending::SwapDiscard { doc } => self.finish_swap_discard(doc, r),
             Pending::SwapRead {

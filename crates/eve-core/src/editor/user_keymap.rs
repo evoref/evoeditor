@@ -23,6 +23,7 @@ impl Editor {
     /// `keymap.toml` の内容でユーザー層を置き換える。戻り値は、読込の診断に検証の診断を足したもの。
     pub fn set_user_keymap(&mut self, file: &KeymapFile) -> Vec<Diagnostic> {
         let mut diags = file.diagnostics.clone();
+        self.state.user_keymap_entries = Some(file.entries.clone());
         let mut layer = Layer::new("user");
         for e in &file.entries {
             let key = format!("keys.{}.{}", e.context, e.keys);

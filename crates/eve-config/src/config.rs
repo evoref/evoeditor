@@ -231,6 +231,76 @@ impl Default for Config {
     }
 }
 
+/// `a` から `b` で値が変わった公開キー (`config.reload` の要約、07 §6 の規則 4)。並びは `Config` のフィールドの順。
+pub fn changed_keys(a: &Config, b: &Config) -> Vec<&'static str> {
+    // フィールドを足したら、ここにも足す (下の試験が既定値との差で全フィールドを確かめる)
+    [
+        ("editor.tab_width", a.tab_width != b.tab_width),
+        ("editor.indent_unit", a.indent_unit != b.indent_unit),
+        ("editor.indent_width", a.indent_width != b.indent_width),
+        (
+            "file.default_encoding",
+            a.default_encoding != b.default_encoding,
+        ),
+        (
+            "file.default_line_ending",
+            a.default_line_ending != b.default_line_ending,
+        ),
+        (
+            "view.ambiguous_width",
+            a.ambiguous_width != b.ambiguous_width,
+        ),
+        ("theme.color_mode", a.color_mode != b.color_mode),
+        ("file.swap.enabled", a.swap_enabled != b.swap_enabled),
+        (
+            "file.swap.interval_ms",
+            a.swap_interval_ms != b.swap_interval_ms,
+        ),
+        (
+            "file.swap.min_interval_ms",
+            a.swap_min_interval_ms != b.swap_min_interval_ms,
+        ),
+        ("file.swap.max_bytes", a.swap_max_bytes != b.swap_max_bytes),
+        (
+            "file.swap.exclude_secret_files",
+            a.swap_exclude_secret_files != b.swap_exclude_secret_files,
+        ),
+        ("ui.locale", a.ui_locale != b.ui_locale),
+        (
+            "editor.undo.total_max_bytes",
+            a.undo_total_max_bytes != b.undo_total_max_bytes,
+        ),
+        (
+            "editor.backspace_unit",
+            a.backspace_unit != b.backspace_unit,
+        ),
+        ("view.wrap", a.wrap != b.wrap),
+        ("view.wrap_indent", a.wrap_indent != b.wrap_indent),
+        ("view.wrap_kinsoku", a.wrap_kinsoku != b.wrap_kinsoku),
+        (
+            "view.show_whitespace",
+            a.show_whitespace != b.show_whitespace,
+        ),
+        ("ui.mouse", a.mouse != b.mouse),
+        (
+            "ui.mouse_wheel_lines",
+            a.mouse_wheel_lines != b.mouse_wheel_lines,
+        ),
+        (
+            "ui.which_key_delay_ms",
+            a.which_key_delay_ms != b.which_key_delay_ms,
+        ),
+        ("clipboard.osc52", a.osc52 != b.osc52),
+        (
+            "clipboard.osc52_max_bytes",
+            a.osc52_max_bytes != b.osc52_max_bytes,
+        ),
+    ]
+    .into_iter()
+    .filter_map(|(k, changed)| changed.then_some(k))
+    .collect()
+}
+
 /// 読込の結果。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Loaded {
