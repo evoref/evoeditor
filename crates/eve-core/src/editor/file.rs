@@ -26,6 +26,8 @@ use super::state::EditorState;
 pub(super) enum Pending {
     /// `config.reload` の読込 (07 §6)。
     ConfigReload,
+    /// テーマファイルの読込 (07 §8.6)。
+    ThemeRead,
     Open {
         doc: DocumentId,
         view: ViewId,
@@ -328,6 +330,7 @@ impl EditorState {
                 // 保存ジョブは取り消さず、完了を待つ (03 §9.2 の「閉じる手順」。ユーザーが求めた保存を中断しない)
                 Pending::Save { .. }
                 | Pending::ConfigReload
+                | Pending::ThemeRead
                 | Pending::RecoveryScan
                 | Pending::WriteRecovery { .. }
                 | Pending::Swap { .. }
@@ -746,6 +749,7 @@ impl EditorState {
             } => self.finish_replace_unmappable(ask, revision, retried, r),
             Pending::RecoveryScan => self.finish_recovery_scan(r),
             Pending::ConfigReload => self.finish_config_reload(r),
+            Pending::ThemeRead => self.finish_theme_read(r),
             Pending::Swap { doc } => self.finish_swap(doc, r),
             Pending::SwapDiscard { doc } => self.finish_swap_discard(doc, r),
             Pending::SwapRead {

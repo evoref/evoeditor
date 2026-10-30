@@ -53,6 +53,8 @@ pub struct JobRequest {
 #[derive(Clone, Debug)]
 #[non_exhaustive]
 pub enum JobKind {
+    /// テーマファイル `dir/<name>.toml` を `inherits` の親までたどって読み、テーマを組み立てる (07 §8.6)。
+    ReadTheme { dir: FsPath, name: String },
     /// 設定ファイル (ユーザー層の `config.toml` を順に) と `keymap.toml` を読む (`config.reload`、07 §6)。
     ReadConfig {
         files: Vec<FsPath>,
@@ -188,6 +190,13 @@ pub enum JobResult {
         /// 残っていた保存中フラグから見つけた、中断された保存の痕跡 (直接上書きの中断など、存在するファイルでも返す)。
         interrupted_save: Option<InterruptedSave>,
     },
+    /// `ReadTheme` の結果。`theme` が `None` なら読めなかった (組込みの `default` で動く)。
+    ThemeRead {
+        job: JobId,
+        name: String,
+        theme: Option<eve_config::theme::Theme>,
+        reports: Vec<(String, Vec<eve_config::Diagnostic>)>,
+    },
     /// `ReadConfig` の結果。
     ConfigRead {
         job: JobId,
@@ -314,6 +323,7 @@ impl JobResult {
             | JobResult::NeedsConfirm { job, .. }
             | JobResult::RecoveryFound { job, .. }
             | JobResult::ConfigRead { job, .. }
+            | JobResult::ThemeRead { job, .. }
             | JobResult::Saved { job, .. }
             | JobResult::RecoveryWritten { job, .. }
             | JobResult::SwapWritten { job }
@@ -554,6 +564,24 @@ pub fn run_job(
                 err: JobError::Fs(err),
             },
         },
+        JobKind::ReadTheme { dir, name } => {
+            let read = |n: &str| -> Result<Option<String>, String> {
+                match read_config_file(&*ports.fs, &dir.join(format!("{n}.toml"))) {
+                    Ok(Some(b)) => String::from_utf8(b)
+                        .map(Some)
+                        .map_err(|_| "UTF-8 として読めません".to_owned()),
+                    Ok(None) => Ok(None),
+                    Err(e) => Err(e),
+                }
+            };
+            let (theme, reports) = eve_config::theme_file::load_theme(name, &read);
+            JobResult::ThemeRead {
+                job: req.id,
+                name: name.clone(),
+                theme,
+                reports,
+            }
+        }
         JobKind::ReadConfig { files, keymap } => JobResult::ConfigRead {
             job: req.id,
             config: files

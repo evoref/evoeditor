@@ -418,7 +418,7 @@ fn changed_keys_は変わった公開キーだけを並べ_全キーを網羅す
     let b = Config {
         tab_width: 8,
         mouse: false,
-        ..a
+        ..a.clone()
     };
     assert_eq!(changed_keys(&a, &b), ["editor.tab_width", "ui.mouse"]);
     // 公開キーの一覧 (KEYS) と同じ数を数えている (フィールドを足して changed_keys に足し忘れていない)

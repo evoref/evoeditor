@@ -81,6 +81,8 @@ pub struct EditorState {
     pub(super) user_keymap_entries: Option<Vec<eve_config::KeymapEntry>>,
     /// テーマのロールの表 (色深度に合う段。テーマか色深度が変わったときに作り直す、07 §8.6)。
     pub(super) roles: std::sync::Arc<eve_view::RoleStyles>,
+    /// テーマファイルから読んだテーマ (名前, テーマ)。`theme.name` が組込みでないときに使う。
+    pub(super) user_theme: Option<(String, eve_config::theme::Theme)>,
     /// パレットから実行したコマンド (新しい順、直近 20 件。起動している間だけ、07 §11.4)。
     pub(super) palette_recent: Vec<String>,
     /// 設定の読込元 (`None` は設定ディレクトリの既定の 2 ファイル)。
@@ -214,6 +216,7 @@ impl EditorState {
             user_keymap_entries: None,
             config_sources: None,
             palette_recent: Vec::new(),
+            user_theme: None,
             roles: std::sync::Arc::new(super::theme::resolve(
                 "default",
                 eve_view::ColorDepth::TrueColor,
@@ -228,10 +231,10 @@ impl EditorState {
     /// 設定を差し替え、持っている文書の表示設定にも写す。
     pub fn set_config(&mut self, config: eve_config::Config) {
         let old_wrap = self.config_wrap();
-        let theme_changed = (self.config.theme_name, self.config.theme_background)
-            != (config.theme_name, config.theme_background);
-        self.config = config;
+        let theme_changed = self.config.theme_name != config.theme_name
+            || self.config.theme_background != config.theme_background;
         self.mouse_on = config.mouse;
+        self.config = config;
         let display = self.display_settings();
         for d in self.documents.values_mut() {
             d.display = display;

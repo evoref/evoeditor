@@ -95,7 +95,7 @@ fn 上限以下なら何もしない() {
 #[test]
 fn editor_は編集の後にプロセス全体の上限を守り_通知は_1_回() {
     let mut h = Harness::new();
-    let mut config = *h.editor.state().config();
+    let mut config = h.editor.state().config().clone();
     config.undo_total_max_bytes = 1_048_576; // 最小の 1 MiB
     h.editor.state_mut().set_config(config);
     h.clear_log();

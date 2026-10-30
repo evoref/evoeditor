@@ -106,7 +106,32 @@ fn config_sources(paths: &WinPaths, args: &cli::ConfigArgs) -> eve_core::ConfigS
         files,
         keymap: (!args.no_config && has_dir).then(|| dir.join(KEYMAP_FILE)),
         sets: args.sets.clone(),
+        themes: (!args.no_config && has_dir).then(|| dir.join("themes")),
     }
+}
+
+/// `theme.name` が組込みでなければ、テーマファイル (`themes/<name>.toml`、`inherits` の親も) を読む (07 §8.6)。
+/// 戻り値は (名前, テーマ (読めなければ `None`)、ファイルごとの診断)。組込みなら `None`。
+#[allow(clippy::type_complexity)]
+fn load_user_theme(
+    src: &eve_core::ConfigSources,
+    config: &eve_config::Config,
+) -> Option<(
+    String,
+    Option<eve_config::theme::Theme>,
+    Vec<(String, Vec<eve_config::Diagnostic>)>,
+)> {
+    let name =
+        eve_config::theme::with_background(&config.theme_name, config.theme_background).to_owned();
+    if eve_config::theme::builtin(&name).is_some() {
+        return None;
+    }
+    let read = |n: &str| match &src.themes {
+        Some(dir) => read_source(dir.join(format!("{n}.toml")).as_path()),
+        None => Ok(None),
+    };
+    let (theme, reports) = eve_config::theme_file::load_theme(&name, &read);
+    Some((name, theme, reports))
 }
 
 /// 読込元から設定を合成する。読めない・構文エラーのファイルは重ねずに診断にする (起動を妨げない、FR-703)。
@@ -177,6 +202,9 @@ fn check_config(args: &cli::ConfigArgs, cli_locale: Option<&str>) -> u8 {
     let mut reports = resolved.reports.clone();
     if !keymap.diagnostics.is_empty() {
         reports.push((KEYMAP_FILE.to_owned(), keymap.diagnostics.clone()));
+    }
+    if let Some((_, _, theme_reports)) = load_user_theme(&src, &resolved.config) {
+        reports.extend(theme_reports);
     }
     let mut out = std::io::stdout().lock();
     let mut shown = 0;
@@ -370,9 +398,21 @@ fn run(
     let mut host = Host::with_channel(ports, (tx.clone(), rx));
     host.set_initial_encoding(encoding);
     let config = loaded.config;
-    host.set_config(config, CONFIG_FILE, Vec::new());
+    host.set_config(config.clone(), CONFIG_FILE, Vec::new());
     for (name, diags) in loaded.reports {
         host.add_config_report(&name, diags);
+    }
+    // テーマファイル (組込みでない `theme.name`)。読めなければ default で動き、診断を出す
+    if let Some((name, theme, reports)) = load_user_theme(&sources, &config) {
+        for (file, diags) in &reports {
+            for d in diags {
+                logger.log(log_level(d.severity), &describe(file, d));
+            }
+        }
+        for (file, diags) in reports {
+            host.add_config_report(&file, diags);
+        }
+        host.set_user_theme(&name, theme);
     }
     host.set_config_sources(sources);
     for d in &keymap.diagnostics {

@@ -79,13 +79,10 @@ fn 組込みテーマ_default_は表の全ロールの_4_段と一致する() {
     assert!(errs.is_empty(), "{}", errs.join("\n"));
 }
 
-fn roles_with(
-    name: eve_config::ThemeName,
-    bg: eve_config::ThemeBackground,
-) -> eve_view::RoleStyles {
+fn roles_with(name: &str, bg: eve_config::ThemeBackground) -> eve_view::RoleStyles {
     let mut h = eve_testkit::Harness::new();
     h.editor.state_mut().set_config(eve_config::Config {
-        theme_name: name,
+        theme_name: name.to_owned(),
         theme_background: bg,
         ..eve_config::Config::default()
     });
@@ -94,21 +91,21 @@ fn roles_with(
 
 #[test]
 fn theme_name_で組込みテーマを選び_背景を塗るテーマは明暗をキーで替えられる() {
-    use eve_config::{ThemeBackground as B, ThemeName as N};
-    let dark = roles_with(N::DefaultDark, B::Auto).get("ui.text");
+    use eve_config::ThemeBackground as B;
+    let dark = roles_with("default-dark", B::Auto).get("ui.text");
     assert_eq!(dark.bg, Color::Rgb(0x1e, 0x1e, 0x1e));
     // 塗るテーマは、既定色だったロールにも本文の背景が入る
-    let info = roles_with(N::DefaultDark, B::Auto).get("ui.message.info");
+    let info = roles_with("default-dark", B::Auto).get("ui.message.info");
     assert_eq!(info.bg, dark.bg);
-    let light = roles_with(N::DefaultDark, B::Light).get("ui.text");
+    let light = roles_with("default-dark", B::Light).get("ui.text");
     assert_eq!(light.bg, Color::Rgb(0xfa, 0xfa, 0xfa), "明暗のキーで替わる");
     // default は明暗のキーを見ない
     assert_eq!(
-        roles_with(N::Default, B::Dark).get("ui.text").bg,
+        roles_with("default", B::Dark).get("ui.text").bg,
         Color::Default
     );
     // ansi は 16 色の番号だけ
-    let a = roles_with(N::Ansi, B::Auto);
+    let a = roles_with("ansi", B::Auto);
     assert!(
         a.iter()
             .all(|(_, s)| !matches!(s.fg, Color::Rgb(..)) && !matches!(s.bg, Color::Rgb(..)))
@@ -128,4 +125,57 @@ fn 背景を塗るテーマの本文はコントラストを満たす() {
     for bg in [(0x1e, 0x1e, 0x1e), (0xfa, 0xfa, 0xfa)] {
         assert!(contrast((0x80, 0x80, 0x80), bg) >= 3.0, "{bg:?}");
     }
+}
+
+fn reload_with(h: &mut eve_testkit::Harness, config: &str) {
+    h.fs.add_file("/evo/config/config.toml", config.as_bytes());
+    h.cmd("config.reload");
+    h.run_jobs();
+}
+
+#[test]
+fn テーマファイルを読み_書いたロールだけを上書きする() {
+    let mut h = eve_testkit::Harness::new();
+    h.fs.add_file(
+        "/evo/config/themes/mine.toml",
+        b"[meta]\ninherits = \"default-dark\"\n[palette]\nhot = \"#ff3366\"\n[ui]\nselection = { fg = \"#000\", bg = \"hot\" }\n",
+    );
+    reload_with(&mut h, "[theme]\nname = \"mine\"\n");
+    let roles = h.frame().roles;
+    assert_eq!(roles.get("ui.selection").bg, Color::Rgb(0xff, 0x33, 0x66));
+    assert_eq!(
+        roles.get("ui.text").bg,
+        Color::Rgb(0x1e, 0x1e, 0x1e),
+        "default-dark を継ぐ"
+    );
+    // ファイルを直して読み直すと替わる
+    h.fs.add_file(
+        "/evo/config/themes/mine.toml",
+        b"[ui]\nselection = { bg = \"#112233\" }\n",
+    );
+    h.cmd("config.reload");
+    h.run_jobs();
+    let roles = h.frame().roles;
+    assert_eq!(roles.get("ui.selection").bg, Color::Rgb(0x11, 0x22, 0x33));
+    assert_eq!(
+        roles.get("ui.text").bg,
+        Color::Default,
+        "inherits を外したので default"
+    );
+}
+
+#[test]
+fn 読めないテーマは_default_で動き_問題を知らせる() {
+    let mut h = eve_testkit::Harness::new();
+    reload_with(&mut h, "[theme]\nname = \"nothere\"\n");
+    let roles = h.frame().roles;
+    assert_eq!(
+        roles.get("ui.selection"),
+        eve_core::resolve_theme("default", ColorDepth::TrueColor).get("ui.selection")
+    );
+    assert!(
+        h.messages().iter().any(|m| m.starts_with("msg.config.")),
+        "{:?}",
+        h.messages()
+    );
 }

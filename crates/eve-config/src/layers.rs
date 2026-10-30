@@ -50,7 +50,7 @@ pub fn load_set(base: Config, arg: &str) -> Option<Loaded> {
         return None;
     }
     let value = value.trim();
-    let as_toml = load_str_onto(base, &format!("{key} = {value}\n"));
+    let as_toml = load_str_onto(base.clone(), &format!("{key} = {value}\n"));
     let syntax = as_toml
         .diagnostics
         .iter()
@@ -71,9 +71,9 @@ pub fn resolve(sources: &[Source], sets: &[String]) -> Resolved {
     for s in sources {
         let loaded = match &s.text {
             Ok(None) => continue,
-            Ok(Some(t)) => load_str_onto(config, t.strip_prefix('\u{feff}').unwrap_or(t)),
+            Ok(Some(t)) => load_str_onto(config.clone(), t.strip_prefix('\u{feff}').unwrap_or(t)),
             Err(e) => Loaded {
-                config,
+                config: config.clone(),
                 diagnostics: vec![unreadable(e.clone())],
             },
         };
@@ -91,7 +91,7 @@ pub fn resolve(sources: &[Source], sets: &[String]) -> Resolved {
     }
     let mut set_diags = Vec::new();
     for arg in sets {
-        if let Some(l) = load_set(config, arg) {
+        if let Some(l) = load_set(config.clone(), arg) {
             config = l.config;
             set_diags.extend(l.diagnostics);
         }

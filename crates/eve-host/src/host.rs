@@ -167,7 +167,7 @@ impl Host {
         file: &str,
         diagnostics: Vec<eve_config::Diagnostic>,
     ) {
-        self.config = config;
+        self.config = config.clone();
         self.editor.state_mut().set_config(config);
         if !diagnostics.is_empty() {
             self.config_report.push((file.to_owned(), diagnostics));
@@ -179,6 +179,11 @@ impl Host {
         if !diagnostics.is_empty() {
             self.config_report.push((file.to_owned(), diagnostics));
         }
+    }
+
+    /// テーマファイルから読んだテーマを渡す (`None` は読めなかった: default で動く。07 §8.6)。
+    pub fn set_user_theme(&mut self, name: &str, theme: Option<eve_config::theme::Theme>) {
+        self.editor.state_mut().set_user_theme(name, theme);
     }
 
     /// 設定の読込元を渡す (`config.reload` が同じ元を読み直す、07 §6)。

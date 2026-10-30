@@ -92,24 +92,12 @@ pub enum ThemeBackground {
     Light,
 }
 
-/// 組込みテーマ (`theme.name`、07 §5.4)。テーマファイルは後の版。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ThemeName {
-    Default,
-    DefaultDark,
-    DefaultLight,
-    Ansi,
-}
-
-impl ThemeName {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            ThemeName::Default => "default",
-            ThemeName::DefaultDark => "default-dark",
-            ThemeName::DefaultLight => "default-light",
-            ThemeName::Ansi => "ansi",
-        }
-    }
+/// テーマの名前として使える文字列か (組込みの名前、またはテーマファイル `themes/<name>.toml` の名前。
+/// 英数字・`-`・`_` だけで 1〜64 文字。パスの区切りや `..` を入れさせない)。
+pub fn is_theme_name(s: &str) -> bool {
+    (1..=64).contains(&s.len())
+        && s.bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
 }
 
 /// 空白の可視化 (`view.show_whitespace`、03 §13.2、FR-508)。
@@ -183,7 +171,7 @@ pub enum ColorMode {
 }
 
 /// 公開キー (v0.1 の 7 個 (docs/07 §5.0) と、v0.2 の M6 で足した `file.swap.*` の 5 個)。`Default` が既定値。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Config {
     pub tab_width: u8,
     pub indent_unit: IndentUnit,
@@ -218,7 +206,7 @@ pub struct Config {
     /// `view.show_whitespace`: 空白の可視化。
     pub show_whitespace: ShowWhitespace,
     /// `theme.name`: テーマ。
-    pub theme_name: ThemeName,
+    pub theme_name: String,
     /// `theme.background`: 背景を塗るテーマの明暗。
     pub theme_background: ThemeBackground,
     /// `ui.mouse`: マウスの入力を使うか (FR-307、04 §6.8)。
@@ -255,7 +243,7 @@ impl Default for Config {
             wrap_indent: WrapIndent::Same,
             wrap_kinsoku: true,
             show_whitespace: ShowWhitespace::Minimal,
-            theme_name: ThemeName::Default,
+            theme_name: "default".to_owned(),
             theme_background: ThemeBackground::Auto,
             mouse: true,
             mouse_wheel_lines: 3,
@@ -633,13 +621,13 @@ impl Cx<'_> {
                 }
             }
             "theme.name" => {
-                if let Some(s) = self.string(key, v, THEME_NAMES) {
-                    self.out.config.theme_name = match s.as_str() {
-                        "default-dark" => ThemeName::DefaultDark,
-                        "default-light" => ThemeName::DefaultLight,
-                        "ansi" => ThemeName::Ansi,
-                        _ => ThemeName::Default,
-                    };
+                // 組込みの名前か、テーマファイル (`<設定ディレクトリ>/themes/<name>.toml`) の名前。ファイルが有るかは読むときに見る
+                if let Some(s) = self.raw_string(key, v) {
+                    if is_theme_name(&s) {
+                        self.out.config.theme_name = s;
+                    } else {
+                        self.invalid(key, THEME_NAMES, v);
+                    }
                 }
             }
             "theme.background" => {
