@@ -18,6 +18,7 @@ mod help;
 mod keymap;
 mod layout;
 mod leftover_offer;
+mod line_ops;
 mod message;
 mod motion;
 mod overlay;
@@ -75,6 +76,7 @@ impl Editor {
         buffer::register(&mut registry);
         save_all::register(&mut registry);
         help::register(&mut registry);
+        line_ops::register(&mut registry);
         overlay::register(&mut registry);
         let mut state = EditorState::new(caps, ports.jobs.clone(), ports.paths.clone());
         state.set_palette_entries(

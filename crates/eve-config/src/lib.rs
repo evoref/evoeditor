@@ -12,7 +12,7 @@ mod reserved;
 
 pub use catalog::{Catalog, CatalogError, base_key};
 pub use config::{
-    ColorMode, Config, DefaultEncoding, DefaultLineEnding, DiagKind, Diagnostic, IndentUnit,
-    Loaded, Severity, default_display, load_str,
+    BackspaceUnit, ColorMode, Config, DefaultEncoding, DefaultLineEnding, DiagKind, Diagnostic,
+    IndentUnit, Loaded, Severity, default_display, load_str,
 };
 pub use locale::{Locale, LocaleChoice, LocaleSource, LocaleWarning, select_locale};

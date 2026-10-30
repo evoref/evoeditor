@@ -53,6 +53,15 @@ pub enum IndentUnit {
     Space,
 }
 
+/// Backspace の削除の単位 (`editor.backspace_unit`、03 §13.1、OQ-45)。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BackspaceUnit {
+    /// 書記素クラスタ単位 (既定)。
+    Grapheme,
+    /// コードポイント単位 (結合文字・ハングル字母を 1 つずつ消す)。
+    Codepoint,
+}
+
 /// 新規ファイル・判定不能時の文字コード (`file.default_encoding`)。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DefaultEncoding {
@@ -109,6 +118,8 @@ pub struct Config {
     pub ui_locale: Option<crate::Locale>,
     /// `editor.undo.total_max_bytes`: プロセス全体の Undo 履歴の上限 (NFR-203、docs/03 §7.5)。
     pub undo_total_max_bytes: u64,
+    /// `editor.backspace_unit`: Backspace の削除の単位 (FR-201)。
+    pub backspace_unit: BackspaceUnit,
 }
 
 impl Default for Config {
@@ -128,6 +139,7 @@ impl Default for Config {
             swap_exclude_secret_files: true,
             ui_locale: None,
             undo_total_max_bytes: 256 * 1024 * 1024,
+            backspace_unit: BackspaceUnit::Grapheme,
         }
     }
 }
@@ -155,9 +167,11 @@ const KEYS: &[&str] = &[
     "file.swap.exclude_secret_files",
     "ui.locale",
     "editor.undo.total_max_bytes",
+    "editor.backspace_unit",
 ];
 
 const INDENT_UNITS: &[&str] = &["tab", "space"];
+const BACKSPACE_UNITS: &[&str] = &["grapheme", "codepoint"];
 const ENCODINGS: &[&str] = &[
     "utf-8",
     "utf-8-bom",
@@ -347,6 +361,14 @@ impl Cx<'_> {
                     };
                 }
             }
+            "editor.backspace_unit" => {
+                if let Some(s) = self.string(key, v, BACKSPACE_UNITS) {
+                    self.out.config.backspace_unit = match s.as_str() {
+                        "codepoint" => BackspaceUnit::Codepoint,
+                        _ => BackspaceUnit::Grapheme,
+                    };
+                }
+            }
             "file.default_encoding" => {
                 let Some(s) = self.raw_string(key, v) else {
                     return;
@@ -530,6 +552,7 @@ pub fn default_display(key: &str) -> &'static str {
     match key {
         "editor.tab_width" | "editor.indent_width" => "4",
         "editor.indent_unit" => "space",
+        "editor.backspace_unit" => "grapheme",
         "file.default_encoding" => "utf-8",
         "file.default_line_ending" => "lf",
         "view.ambiguous_width" => "1",

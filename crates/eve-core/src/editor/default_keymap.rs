@@ -181,6 +181,13 @@ pub(super) fn default_keymap() -> Keymap {
         bind("editor", key, cmd);
         bind("editor", &format!("shift+{key}"), ext);
     }
+    // 行の複製・削除・上下移動 (v0.2、FR-207)。Alt+↑/↓ は横取りされる端末があるので、チョードの代替を持つ
+    bind("editor", "ctrl+k d", "edit.duplicate_line");
+    bind("editor", "ctrl+k l", "edit.delete_line");
+    bind("editor", "alt+up", "edit.move_line_up");
+    bind("editor", "alt+down", "edit.move_line_down");
+    bind("editor", "ctrl+k up", "edit.move_line_up");
+    bind("editor", "ctrl+k down", "edit.move_line_down");
     bind("editor", "alt+b", "cursor.move_word_left");
     bind("editor", "alt+f", "cursor.move_word_right");
     bind("editor", "mod+g", "cursor.goto_line");
