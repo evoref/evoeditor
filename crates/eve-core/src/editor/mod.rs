@@ -74,9 +74,6 @@ pub struct Editor {
     which_key_shown: bool,
 }
 
-/// 保留中のチョードの続きを一覧に出すまでの待ち (04 §7.4)。
-const WHICH_KEY_DELAY: crate::time::Millis = crate::time::Millis(500);
-
 impl Editor {
     /// 空の EditorState を作る。I/O もジョブ投入もしない。
     pub fn new(ports: Ports, caps: Capabilities) -> Editor {
@@ -162,10 +159,15 @@ impl Editor {
         }
     }
 
+    /// which-key を出すまでの時間 (`ui.which_key_delay_ms`、既定 500 ms)。
+    fn which_key_delay(&self) -> crate::time::Millis {
+        crate::time::Millis(u64::from(self.state.config().which_key_delay_ms))
+    }
+
     /// which-key を出す時刻に達した。
     fn which_key_due(&self) -> bool {
         self.chord_since
-            .is_some_and(|t| self.state.now >= t + WHICH_KEY_DELAY)
+            .is_some_and(|t| self.state.now >= t + self.which_key_delay())
     }
 
     /// 次に `tick` が要る時刻。`None` なら無期限に待ってよい。
@@ -177,7 +179,7 @@ impl Editor {
             self.state.mouse_deadline(),
             self.chord_since
                 .filter(|_| !self.which_key_shown && !self.keymap.pending().is_empty())
-                .map(|t| t + WHICH_KEY_DELAY),
+                .map(|t| t + self.which_key_delay()),
         ]
         .into_iter()
         .flatten()
