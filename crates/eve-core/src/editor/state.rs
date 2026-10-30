@@ -75,6 +75,8 @@ pub struct EditorState {
     needs_render: bool,
     /// 左ボタンのドラッグ中の状態 (docs/03 §5.8.1)。
     pub(super) mouse_drag: Option<super::mouse::Drag>,
+    /// マウスの取得が有効か (`ui.mouse` の初期値。`ui.toggle_mouse` で変わる)。
+    pub(super) mouse_on: bool,
     /// ジョブの投入口 (`Ports.jobs`)。
     pub(super) jobs: Rc<dyn JobSpawner>,
     pub(super) paths: Arc<dyn Paths>,
@@ -197,6 +199,7 @@ impl EditorState {
             bar_rows: 0,
             surface: (80, 24),
             mouse_drag: None,
+            mouse_on: true,
         }
     }
 
@@ -207,6 +210,7 @@ impl EditorState {
     /// 設定を差し替え、持っている文書の表示設定にも写す。
     pub fn set_config(&mut self, config: eve_config::Config) {
         self.config = config;
+        self.mouse_on = config.mouse;
         let display = self.display_settings();
         for d in self.documents.values_mut() {
             d.display = display;
@@ -842,6 +846,7 @@ impl EditorState {
                 .as_ref()
                 .is_some_and(|s| s.replace.is_some() && s.focus == eve_view::BarFocus::Replace)),
             "caps.can_suspend" => b(self.caps.can_suspend),
+            "caps.mouse" => b(self.caps.mouse),
             // 折り返し中 (設定キー `view.wrap` とは別名、07 §7.1)
             "view.wrapped" => b(view.is_some_and(|v| v.wrap.is_on())),
             "editor" => b(true),

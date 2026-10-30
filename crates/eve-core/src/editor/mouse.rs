@@ -3,14 +3,17 @@
 //! 位置は面の左上を原点とするセルで届く。折り返し・タブ・全角を考慮した文書位置の確定は、ここでスクロール位置とレイアウトから直接引く。
 
 use eve_text::{ByteOff, LineIdx, Range, Selection, TextRead};
-use eve_view::{Modifiers, MouseAt, MouseButton, MouseEvent, MouseKind, ViewId};
+use eve_view::{
+    Effect, MessageLevel, Modifiers, MouseAt, MouseButton, MouseEvent, MouseKind, ViewId,
+};
 
+use super::command::{
+    CommandCtx, CommandKind, CommandRegistry, CommandResult, CommandSpec, Permission,
+};
 use super::layout::{Affinity, line_rows, wrap_ctx};
 use super::state::EditorState;
 use crate::time::{Millis, Tick};
 
-/// ホイール 1 目盛りのスクロール量 (表示行。`ui.mouse_wheel_lines` の既定、04 §6.8)。
-const WHEEL_LINES: i64 = 3;
 /// Shift+ホイールの横スクロール量 (列)。
 const WHEEL_COLUMNS: i64 = 4;
 /// ドラッグが面の外にあるとき、1 表示行スクロールする間隔。
@@ -130,7 +133,7 @@ impl EditorState {
                 self.scroll_columns(view, dir * WHEEL_COLUMNS);
             }
         } else {
-            self.scroll_lines(view, dir * WHEEL_LINES);
+            self.scroll_lines(view, dir * i64::from(self.config().mouse_wheel_lines));
         }
     }
 
@@ -189,4 +192,35 @@ impl EditorState {
             Affinity::After,
         ))
     }
+}
+
+/// `ui.toggle_mouse`: マウスの取得の ON/OFF。OFF の間は端末のネイティブ選択・スクロールが使える (04 §6.8)。
+fn toggle_mouse(ctx: &mut CommandCtx<'_>) -> CommandResult {
+    let enabled = !ctx.state.mouse_on;
+    ctx.state.mouse_on = enabled;
+    ctx.state.mouse_drag = None;
+    ctx.state.push_effect(Effect::SetMouseCapture { enabled });
+    ctx.state.show_message(
+        MessageLevel::Info,
+        if enabled {
+            "info.mouse.enabled"
+        } else {
+            "info.mouse.disabled"
+        },
+        &[],
+    );
+    CommandResult::Done
+}
+
+pub(super) fn register(r: &mut CommandRegistry) {
+    r.register(
+        CommandSpec::new(
+            "ui.toggle_mouse",
+            CommandKind::Ui,
+            Permission::None,
+            "caps.mouse",
+            toggle_mouse,
+        )
+        .expect("カタログの when 句は構文が正しい"),
+    );
 }

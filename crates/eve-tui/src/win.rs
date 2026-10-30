@@ -22,13 +22,14 @@ use windows_sys::Win32::System::Console::{
     ENABLE_EXTENDED_FLAGS, ENABLE_LINE_INPUT, ENABLE_MOUSE_INPUT, ENABLE_PROCESSED_INPUT,
     ENABLE_QUICK_EDIT_MODE, ENABLE_VIRTUAL_TERMINAL_INPUT, ENABLE_VIRTUAL_TERMINAL_PROCESSING,
     ENABLE_WINDOW_INPUT, GetConsoleMode, GetConsoleScreenBufferInfo, GetConsoleTitleW,
-    GetNumberOfConsoleInputEvents, INPUT_RECORD, KEY_EVENT, ReadConsoleInputW, SetConsoleMode,
-    SetConsoleTitleW, WINDOW_BUFFER_SIZE_EVENT, WriteConsoleW,
+    GetNumberOfConsoleInputEvents, INPUT_RECORD, KEY_EVENT, MOUSE_EVENT, ReadConsoleInputW,
+    SetConsoleMode, SetConsoleTitleW, WINDOW_BUFFER_SIZE_EVENT, WriteConsoleW,
 };
 use windows_sys::Win32::System::Threading::{INFINITE, WaitForSingleObject};
 
 use crate::buffer::surface_rows_for_window;
 use crate::input::{BURST_T_MS, KeyRec, Normalizer, Out, Raw};
+use crate::mouse::{MouseRec, MouseTracker, SharedGeom};
 
 /// 1 回の `ReadConsoleInputW` で読む記録の上限。
 pub const READ_CHUNK: usize = 4096;
@@ -115,6 +116,27 @@ impl ConsoleInput {
         window_size(self.output.0)
     }
 
+    /// マウスの入力を有効 / 無効にする (04 §6.8)。有効の間は簡易編集モードを外す (立てたままだとマウスの記録が届かない)。
+    /// 無効にしたら、簡易編集モードは起動時の状態に戻す。
+    pub fn set_mouse(&self, on: bool) {
+        let mut mode = 0u32;
+        // SAFETY: `input` は有効なコンソール入力のハンドル、`mode` は書込先の有効な u32。
+        if unsafe { GetConsoleMode(self.input.0, &mut mode) } == 0 {
+            return;
+        }
+        if on {
+            mode |= ENABLE_MOUSE_INPUT | ENABLE_EXTENDED_FLAGS;
+            mode &= !ENABLE_QUICK_EDIT_MODE;
+        } else {
+            mode &= !ENABLE_MOUSE_INPUT;
+            if self.saved_mode & ENABLE_QUICK_EDIT_MODE != 0 {
+                mode |= ENABLE_QUICK_EDIT_MODE | ENABLE_EXTENDED_FLAGS;
+            }
+        }
+        // SAFETY: `input` は有効なコンソール入力のハンドル。失敗しても入力は続けられるので無視する。
+        unsafe { SetConsoleMode(self.input.0, mode) };
+    }
+
     /// 起動時に保存した入力のモード (緊急の端末復元に渡す)。
     pub fn saved_mode(&self) -> u32 {
         self.saved_mode
@@ -188,6 +210,7 @@ fn read_chunk(
     buf: &mut [INPUT_RECORD],
     want: u32,
     out: &mut Vec<Raw>,
+    mouse: &mut Vec<MouseRec>,
 ) -> io::Result<()> {
     let n = want.min(buf.len() as u32);
     let mut got = 0u32;
@@ -225,7 +248,20 @@ fn read_chunk(
                 })
             }
             WINDOW_BUFFER_SIZE_EVENT => Raw::Resize,
-            // マウス・フォーカス・メニューは v0.1 では捨てる (04 §6.2)
+            MOUSE_EVENT => {
+                // SAFETY: `EventType` が `MOUSE_EVENT` のとき、共用体は `MouseEvent` が有効。
+                let m = unsafe { r.Event.MouseEvent };
+                mouse.push(MouseRec {
+                    // 画面バッファの座標。ウィンドウの左上を原点にするのは送る側 (`send_mouse`)
+                    col: i32::from(m.dwMousePosition.X),
+                    row: i32::from(m.dwMousePosition.Y),
+                    buttons: m.dwButtonState,
+                    state: m.dwControlKeyState,
+                    flags: m.dwEventFlags,
+                });
+                Raw::Ignored
+            }
+            // フォーカス・メニューは捨てる (04 §6.2)
             _ => Raw::Ignored,
         });
     }
@@ -248,8 +284,39 @@ fn send(out: &dyn InputOut, outs: Vec<Out>, output: HANDLE) -> bool {
     true
 }
 
+/// マウスの記録を、ウィンドウの左上を原点とするセルにして送る (スクロールしたバッファでも合うように `srWindow` を引く)。
+fn send_mouse(
+    out: &dyn InputOut,
+    recs: &mut Vec<MouseRec>,
+    tracker: &mut MouseTracker,
+    geom: &SharedGeom,
+    output: HANDLE,
+) -> bool {
+    if recs.is_empty() {
+        return true;
+    }
+    // SAFETY: 全ビット 0 の `CONSOLE_SCREEN_BUFFER_INFO` は有効な値 (すべて整数)。
+    let mut info: CONSOLE_SCREEN_BUFFER_INFO = unsafe { std::mem::zeroed() };
+    // SAFETY: `output` は開いたコンソール出力のハンドル、`info` は書込先の有効な構造体。
+    let (left, top) = if unsafe { GetConsoleScreenBufferInfo(output, &mut info) } == 0 {
+        (0, 0)
+    } else {
+        (i32::from(info.srWindow.Left), i32::from(info.srWindow.Top))
+    };
+    for mut r in recs.drain(..) {
+        r.col -= left;
+        r.row -= top;
+        for m in tracker.feed(r, geom) {
+            if !out.event(InputEvent::Mouse(m)) {
+                return false;
+            }
+        }
+    }
+    true
+}
+
 /// 入力スレッドの本体。受け手が閉じるか入力ハンドルが失敗したら終わる。
-fn run(input: Handle, output: Handle, out: &dyn InputOut) {
+fn run(input: Handle, output: Handle, out: &dyn InputOut, geom: &SharedGeom) {
     let (h, o) = (input.0, output.0);
     let mut norm = Normalizer::new();
     let mut buf: Vec<INPUT_RECORD> = vec![
@@ -258,6 +325,8 @@ fn run(input: Handle, output: Handle, out: &dyn InputOut) {
         READ_CHUNK
     ];
     let mut raws: Vec<Raw> = Vec::with_capacity(READ_CHUNK);
+    let mut mouse_recs: Vec<MouseRec> = Vec::new();
+    let mut tracker = MouseTracker::new();
     loop {
         // バースト中は T ms だけ待つ。タイムアウトしたらバーストを閉じて送る
         let ms = if norm.in_burst() {
@@ -291,11 +360,14 @@ fn run(input: Handle, output: Handle, out: &dyn InputOut) {
                 break;
             }
             raws.clear();
-            if read_chunk(h, &mut buf, n, &mut raws).is_err() {
+            if read_chunk(h, &mut buf, n, &mut raws, &mut mouse_recs).is_err() {
                 out.died();
                 return;
             }
             if !send(out, norm.feed(&raws), o) {
+                return;
+            }
+            if !send_mouse(out, &mut mouse_recs, &mut tracker, geom, o) {
                 return;
             }
         }
@@ -305,11 +377,15 @@ fn run(input: Handle, output: Handle, out: &dyn InputOut) {
 /// 入力スレッドを起動する。コンソールのモードは `ConsoleInput` が持ち、復元は呼び出し側 (`ConsoleInput::restore`)。
 // 入力スレッドは 02 §9.1 の表のスレッド (R11 の例外。deps-policy.toml の `allowed_files` に載せている)。
 #[allow(clippy::disallowed_methods)]
-pub fn spawn_input_thread(input: &ConsoleInput, out: impl InputOut) -> io::Result<JoinHandle<()>> {
+pub fn spawn_input_thread(
+    input: &ConsoleInput,
+    out: impl InputOut,
+    geom: std::sync::Arc<SharedGeom>,
+) -> io::Result<JoinHandle<()>> {
     let (i, o) = (Handle(input.input.0), Handle(input.output.0));
     thread::Builder::new()
         .name("eve-input".to_owned())
-        .spawn(move || run(i, o, &out))
+        .spawn(move || run(i, o, &out, &geom))
 }
 
 /// コンソールの出力 (`CONOUT$`)。VT 出力を有効にし、UTF-16 に変換して `WriteConsoleW` で書く (05 §9.1。標準出力が

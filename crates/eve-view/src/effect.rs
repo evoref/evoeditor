@@ -28,6 +28,8 @@ pub enum Effect {
     },
     /// ベル。
     Bell,
+    /// マウスの取得を有効 / 無効にする (`ui.toggle_mouse`。無効の間は端末のネイティブ選択・スクロールが使える、04 §6.8)。
+    SetMouseCapture { enabled: bool },
     /// 画面の全体を描き直す (`ui.redraw`。04 §4.7 (f)。ずれた表示からの回復)。
     Redraw,
 }

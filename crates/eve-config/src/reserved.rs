@@ -131,8 +131,6 @@ pub(crate) const RESERVED_KEYS: &[&str] = &[
     "ui.message.warning",
     "ui.message_history",
     "ui.message_timeout_ms",
-    "ui.mouse",
-    "ui.mouse_wheel_lines",
     "ui.overlay",
     "ui.overlay.disabled",
     "ui.overlay.match",

@@ -225,8 +225,8 @@ pub fn detect(config: CapsConfig, env: &dyn Env, is_windows: bool) -> Detected {
     let ambiguous = effective_ambiguous_width(config.ambiguous_width, hint);
     let caps = Capabilities {
         color_depth: detect_color_depth(config.color_mode, env, is_windows),
-        // v0.1: マウス・拡張キー・ジョブ制御は無効 (04 §6.3 / §6.8、Windows)
-        mouse: false,
+        // マウスは v0.2 から (Windows は `ENABLE_MOUSE_INPUT`、04 §6.8)。拡張キー・ジョブ制御は無効 (04 §6.3)
+        mouse: is_windows,
         enhanced_keys: false,
         can_suspend: false,
         dark_mode: None,
@@ -393,7 +393,7 @@ mod tests {
         assert_eq!(d.ambiguous_width, 1);
         assert_eq!(d.caps.ambiguous_width_hint, Some(1));
         assert_eq!(d.caps.min_surface, CellSize { cols: 20, rows: 5 });
-        assert!(!d.caps.mouse && !d.caps.enhanced_keys && !d.caps.can_suspend);
+        assert!(d.caps.mouse && !d.caps.enhanced_keys && !d.caps.can_suspend);
 
         let d = detect(CapsConfig::default(), &MapEnv::new(&[]), true);
         assert_eq!(d.kind, TerminalKind::Conhost);

@@ -318,6 +318,10 @@ title = "コマンドパレット"
 description = "画面を描き直します。"
 title = "再描画"
 
+[cmd.ui.toggle_mouse]
+description = "マウスの操作を使うか、端末の選択とスクロールを使うかを切り替えます。"
+title = "マウスの切り替え"
+
 [cmd.view.toggle_wrap]
 description = "折り返し表示のオンとオフを切り替えます。"
 title = "折り返しの切り替え"
@@ -364,6 +368,10 @@ unchanged = "改行はすでに {eol} です"
 
 [info.goto_line]
 clamped = "行 {line} はありません。最後の行 ({last}) へ移動しました"
+
+[info.mouse]
+disabled = "マウスの操作を無効にしました (端末の選択とスクロールが使えます)"
+enabled = "マウスの操作を有効にしました"
 
 [info.open]
 already_open = "{path} は既に開いています"
