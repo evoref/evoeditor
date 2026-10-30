@@ -26,6 +26,8 @@ pub struct ScrollPos {
     pub top: ByteOff,
     /// 水平スクロール量 (表示列。折り返しなしのとき)。
     pub left_col: u32,
+    /// `top` の論理行の中で、先頭に描く表示行の番号 (折り返し ON のとき。OFF は常に 0)。
+    pub wrap_idx: u32,
 }
 
 /// 文書の表示と Selection の単位。
@@ -36,6 +38,10 @@ pub struct View {
     pub scroll: ScrollPos,
     /// 垂直移動の目標の表示列 (03 §5.2)。水平移動・編集・クリックでクリアし、垂直移動は維持する。
     pub goal_dcol: Option<u32>,
+    /// 折り返しの設定 (03 §14.3)。
+    pub wrap: super::layout::WrapSettings,
+    /// 折り返し位置のカーソルの帰属 (主カーソルだけ、03 §14.3.1)。
+    pub cursor_affinity: super::layout::Affinity,
 }
 
 /// frontend が持つ編集面。v0.x は 1 つで、View を 1 つ持つ。
@@ -348,6 +354,8 @@ impl EditorState {
                 selection: Selection::point(ByteOff(0)),
                 scroll: ScrollPos::default(),
                 goal_dcol: None,
+                wrap: Default::default(),
+                cursor_affinity: Default::default(),
             },
         );
         id
@@ -577,6 +585,33 @@ impl EditorState {
         self.documents
             .get(&doc)
             .map_or(0, |d| d.text().len_lines().saturating_sub(rows.max(1)))
+    }
+
+    /// 折り返しの設定を変える。スクロールは `top` (論理行) を保ち、表示行の番号と水平スクロールを戻す (03 §14.3)。
+    pub fn set_wrap(&mut self, view: ViewId, wrap: super::layout::WrapSettings) {
+        if let Some(v) = self.views.get_mut(&view) {
+            v.wrap = wrap;
+            v.scroll.wrap_idx = 0;
+            v.scroll.left_col = 0;
+            v.cursor_affinity = Default::default();
+            self.needs_render = true;
+        }
+    }
+
+    /// スクロール位置を直接置く (折り返しの表示行の番号を含む。試験と復元が使う)。
+    pub fn set_scroll(&mut self, view: ViewId, scroll: ScrollPos) {
+        if let Some(v) = self.views.get_mut(&view) {
+            v.scroll = scroll;
+            self.needs_render = true;
+        }
+    }
+
+    /// 折り返し位置のカーソルの帰属を置く (03 §14.3)。
+    pub fn set_cursor_affinity(&mut self, view: ViewId, a: super::layout::Affinity) {
+        if let Some(v) = self.views.get_mut(&view) {
+            v.cursor_affinity = a;
+            self.needs_render = true;
+        }
     }
 
     /// 先頭可視行を `delta` 行ずらす (文書の範囲内に収め、短い文書を画面の外へ押し出さない)。
