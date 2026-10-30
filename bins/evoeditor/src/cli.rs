@@ -44,6 +44,10 @@ pub enum Mode {
     CheckConfig,
     /// `--dump-config [--defaults] [--json]`: 解決済みの設定 (または既定値) を出し、終える。
     DumpConfig { defaults: bool, json: bool },
+    /// `--crash-report`: 最新のクラッシュログを表示して終える (09 §10.2)。
+    CrashReport,
+    /// `--licenses` (隠し): 同梱の第三者告知を表示して終える (05 §17.1)。
+    Licenses,
 }
 
 /// 解析の結果。
@@ -63,6 +67,8 @@ pub enum Cli {
         ignored: Vec<String>,
         config: ConfigArgs,
         mode: Mode,
+        /// `--log-level <level>`: `EVE_LOG` より優先する。値の妥当性は main が確かめる。
+        log_level: Option<String>,
     },
 }
 
@@ -75,6 +81,8 @@ pub enum UsageError {
     BadEncoding(String),
     /// `--set` の値が `key=value` の形でない。
     BadSet(String),
+    /// `--log-level` の値が水準の名前でない。
+    BadLogLevel(String),
 }
 
 fn to_string(a: OsString) -> Result<String, UsageError> {
@@ -154,6 +162,8 @@ pub fn parse(
     let mut ignored = Vec::new();
     let mut config = ConfigArgs::default();
     let (mut check, mut dump, mut defaults, mut json) = (false, false, false, false);
+    let (mut crash_report, mut licenses) = (false, false);
+    let mut log_level = None;
     let mut only_positional = false;
     let add_file =
         |files: &mut Vec<FileArg>, raw: String, pending: &mut Option<(usize, Option<usize>)>| {
@@ -220,6 +230,18 @@ pub fn parse(
             "--check-config" => check = true,
             "--dump-config" => dump = true,
             "--defaults" => defaults = true,
+            "--crash-report" => crash_report = true,
+            "--licenses" => licenses = true,
+            "--log-level" => {
+                log_level = Some(
+                    it.next()
+                        .ok_or_else(|| UsageError::MissingValue(a.clone()))
+                        .and_then(to_string)?,
+                );
+            }
+            s if s.starts_with("--log-level=") => {
+                log_level = Some(s["--log-level=".len()..].to_owned());
+            }
             "--json" => json = true,
             s if s.starts_with("--encoding=") => {
                 let v = s["--encoding=".len()..].to_owned();
@@ -252,7 +274,11 @@ pub fn parse(
         let o = if defaults { "--defaults" } else { "--json" };
         return Err(UsageError::UnknownOption(o.to_owned()));
     }
-    let mode = if check {
+    let mode = if licenses {
+        Mode::Licenses
+    } else if crash_report {
+        Mode::CrashReport
+    } else if check {
         Mode::CheckConfig
     } else if dump {
         Mode::DumpConfig { defaults, json }
@@ -267,6 +293,7 @@ pub fn parse(
         ignored,
         config,
         mode,
+        log_level,
     })
 }
 
@@ -313,6 +340,7 @@ mod tests {
             ignored: vec![],
             config: ConfigArgs::default(),
             mode: Mode::Edit,
+            log_level: None,
         }
     }
 
@@ -437,6 +465,16 @@ mod tests {
                 json: true
             }
         );
+        assert_eq!(mode(&["--crash-report"]), Mode::CrashReport);
+        assert_eq!(mode(&["--licenses"]), Mode::Licenses);
+        let Cli::Run { log_level, .. } = p(&["--log-level", "debug"]).unwrap() else {
+            panic!()
+        };
+        assert_eq!(log_level.as_deref(), Some("debug"));
+        assert_eq!(
+            p(&["--log-level"]).unwrap_err(),
+            UsageError::MissingValue("--log-level".into())
+        );
         assert_eq!(
             p(&["--defaults"]).unwrap_err(),
             UsageError::UnknownOption("--defaults".into()),
@@ -520,6 +558,7 @@ mod tests {
                 ignored: vec!["+/pat".into(), "+abc".into()],
                 config: ConfigArgs::default(),
                 mode: Mode::Edit,
+                log_level: None,
             }
         );
     }

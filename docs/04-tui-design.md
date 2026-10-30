@@ -1672,6 +1672,8 @@ v0.2 以降の診断 (名前だけを予約し、文言はその版で言語フ�
 | `cli.help.option.config` (v0.2) | `-c, --config <file>` | Read this settings file instead of config.toml (repeatable; later files win) | config.toml の代わりにこの設定ファイルを読みます (複数指定可。後のものが優先) |
 | `cli.help.option.no_config` (v0.2) | `-N, --no-config` | Do not read config.toml or keymap.toml (use the defaults) | config.toml と keymap.toml を読みません (既定値で動きます) |
 | `cli.help.option.set` (v0.2) | `-s, --set <key>=<value>` | Override one setting (e.g. --set view.wrap=soft) | 設定を 1 項目上書きします (例: --set view.wrap=soft) |
+| `cli.help.option.log_level` (v0.2) | `--log-level <level>` | Set the log level: error, warn, info, debug, or trace (overrides EVE_LOG) | ログの水準を指定します: error / warn / info / debug / trace (EVE_LOG より優先) |
+| `cli.help.option.crash_report` (v0.2) | `--crash-report` | Show the latest crash log and exit | 最新のクラッシュログを表示して終了します |
 | `cli.help.option.check_config` (v0.2) | `--check-config` | Check the settings, print the problems, and exit | 設定を確かめて問題を表示し、終了します |
 | `cli.help.option.dump_config` (v0.2) | `--dump-config [--defaults] [--json]` | Print the resolved settings (or the defaults) and exit | 解決した設定 (または既定値) を表示して終了します |
 | `cli.help.option.wait` | `--wait` | Accepted for $EDITOR compatibility; has no effect | $EDITOR に設定するときの互換用です (何もしません) |

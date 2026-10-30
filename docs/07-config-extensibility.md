@@ -1580,11 +1580,11 @@ v0.1 の公開オプションは **5 個** (ADR-0028: 引数解析と `--help` �
 | `--dump-schema` | — | JSON Schema (Could) | v0.4 |
 | `--list-commands [--json]` / `--dump-keymap [--json]` | — | §11.5 / §11.6 (CI 突合用) | v0.1 (隠し) |
 | `--dump-languages` | — | §9.1 | v0.4 |
-| `--log-level <level>` | — | `EVE_LOG` より優先 | v0.2 |
+| `--log-level <level>` | — | `EVE_LOG` より優先。**v0.2 の M9c で実装した** (値は `error` / `warn` / `info` / `debug` / `trace`。それ以外・値なしは使い方の誤り、終了コード 2) | v0.2 |
 | `--log-file <path>` | — | ログ出力先の変更 | v0.4 |
 | `--debug-commands` | — | `debug.*` をパレットに出す | v0.4 |
-| `--crash-report` | — | 最新のクラッシュログを表示 (09 §10.2) | v0.2 |
-| `--licenses` | — | 同梱の `THIRD-PARTY-NOTICES.md` (依存の帰属表示) を表示 (05 §17.1) | v0.2 (隠し) |
+| `--crash-report` | — | 最新のクラッシュログを表示 (09 §10.2)。**v0.2 の M9c で実装した**: `state_dir/log/crash-*.txt` のうち更新時刻が最新のものの場所と内容を標準出力へ出し、Issue の場所を案内する (送信はしない)。無ければその旨を出す。どちらも終了コード 0 | v0.2 |
+| `--licenses` | — | 同梱の `THIRD-PARTY-NOTICES.md` (依存の帰属表示) を表示 (05 §17.1)。**v0.2 の M9c で実装した**: 実行ファイルに埋め込み (ビルド時の `THIRD-PARTY-NOTICES.md`)、`--help` には出さない | v0.2 (隠し) |
 | `--bench-exit-after-first-frame` | — | 起動時間の計測用 (09 §5.2 の BM-101a / BM-101b)。最初の Frame を出力した直後に終了する。**配布ビルドに含めない** (`test-hooks` のビルドのみ、09 §10.3)。`--help` に出さない | v0.1 (`test-hooks` のみ) |
 | `--bench-quit-immediately` | — | 終了時間の計測用 (BM-112)。起動してすぐ `app.quit` を実行する。**配布ビルドに含めない** (`test-hooks` のビルドのみ、09 §10.3)。`--help` に出さない | v0.2 (`test-hooks` のみ) |
 | `--script <file>` | — | ヘッドレスのバッチ編集 (シナリオ DSL のファイルを実行する。02 §10.1 の X24)。**名前だけを予約** し、採るか・版・dev feature `headless` の配下に置くかは未定 (提案。採るまでは未知のオプションとして扱い、終了コード 2、§18.4) | 未定 (予約名のみ) |
