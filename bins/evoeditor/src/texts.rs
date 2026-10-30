@@ -209,11 +209,43 @@ pub fn usage_error(e: &UsageError) -> Bi {
             format!("{o} requires a value. {tail_en}"),
             format!("{o} には値が必要です。{tail_ja}"),
         ),
+        UsageError::BadLogLevel(v) => Bi::new(
+            format!("Unknown log level: {v}. Use error, warn, info, debug, or trace."),
+            format!(
+                "{v} はログの水準の名前ではありません。error / warn / info / debug / trace のどれかを指定してください。"
+            ),
+        ),
         UsageError::BadSet(v) => Bi::new(
             format!("--set needs key=value (got: {v}). {tail_en}"),
             format!("--set には key=value の形で指定してください (指定: {v})。{tail_ja}"),
         ),
     }
+}
+
+/// `--crash-report`: クラッシュログが無い。
+pub fn no_crash_log() -> Bi {
+    Bi::new("No crash logs.", "クラッシュログはありません。")
+}
+
+/// `--crash-report`: 最新のクラッシュログの場所 (本文の前に出す)。
+pub fn crash_log_header(path: &Path) -> Bi {
+    let p = path.display();
+    Bi::new(
+        format!("Latest crash log: {p}"),
+        format!("最新のクラッシュログ: {p}"),
+    )
+}
+
+/// `--crash-report`: Issue への貼り付けの案内 (本文の後に出す。貼るかどうかは利用者が決める、09 §10.2)。
+pub fn crash_report_guide(url: &str) -> Bi {
+    Bi::new(
+        format!(
+            "If you report this, check the text above and paste it into a new issue: {url} (the log contains no document text)"
+        ),
+        format!(
+            "報告するときは、上の内容を確かめてから Issue に貼り付けてください: {url} (ログに文書の内容は含まれません)"
+        ),
+    )
 }
 
 /// `--check-config` の最後の行。
@@ -239,7 +271,7 @@ pub fn ignored_args(args: &[String]) -> Bi {
 
 /// `--help` の本文 (`cli.help.*`)。オプション名の後ろに英語の説明、次の行に日本語の説明を揃えて出す。
 pub fn help() -> String {
-    const OPTIONS: [(&str, &str, &str); 12] = [
+    const OPTIONS: [(&str, &str, &str); 14] = [
         (
             "-R, --readonly",
             "Open the file read-only",
@@ -269,6 +301,16 @@ pub fn help() -> String {
             "-s, --set <key>=<value>",
             "Override one setting (e.g. --set view.wrap=soft)",
             "設定を 1 項目上書きします (例: --set view.wrap=soft)",
+        ),
+        (
+            "--log-level <level>",
+            "Set the log level: error, warn, info, debug, or trace (overrides EVE_LOG)",
+            "ログの水準を指定します: error / warn / info / debug / trace (EVE_LOG より優先)",
+        ),
+        (
+            "--crash-report",
+            "Show the latest crash log and exit",
+            "最新のクラッシュログを表示して終了します",
         ),
         (
             "--check-config",
@@ -408,6 +450,8 @@ mod tests {
             "--set",
             "--check-config",
             "--dump-config",
+            "--log-level",
+            "--crash-report",
         ] {
             assert!(h.contains(opt), "{opt}");
         }

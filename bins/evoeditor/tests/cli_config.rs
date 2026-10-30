@@ -84,3 +84,55 @@ fn set_の形の誤りは使い方の誤り() {
     assert_eq!(code, 2);
     let _ = std::fs::remove_dir_all(&d);
 }
+
+#[test]
+fn crash_report_は最新のクラッシュログを表示する() {
+    let state = dir("crash");
+    let log = state.join("log");
+    std::fs::create_dir_all(&log).unwrap();
+    let out = |state: &PathBuf| {
+        let o = Command::new(EXE)
+            .arg("--crash-report")
+            .env("EVE_STATE_DIR", state)
+            .output()
+            .expect("起動できる");
+        (
+            o.status.code().unwrap_or(-1),
+            String::from_utf8_lossy(&o.stdout).into_owned(),
+        )
+    };
+    let (code, text) = out(&state);
+    assert_eq!(code, 0);
+    assert!(text.contains("No crash logs."), "{text}");
+    std::fs::write(log.join("crash-1-100.txt"), "OLD").unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(50));
+    std::fs::write(log.join("crash-2-200.txt"), "NEWEST PANIC").unwrap();
+    std::fs::write(log.join("evoeditor.log"), "not a crash log").unwrap();
+    let (code, text) = out(&state);
+    assert_eq!(code, 0);
+    assert!(
+        text.contains("crash-2-200.txt") && text.contains("NEWEST PANIC"),
+        "{text}"
+    );
+    assert!(
+        !text.contains("OLD") && !text.contains("not a crash log"),
+        "{text}"
+    );
+    assert!(text.contains("/issues"), "{text}");
+    let _ = std::fs::remove_dir_all(&state);
+}
+
+#[test]
+fn licenses_は同梱の第三者告知を表示し_log_level_の誤りは使い方の誤り() {
+    let d = dir("lic");
+    let (code, out) = run(&d, &["--licenses"]);
+    assert_eq!(code, 0);
+    assert!(
+        out.contains("THIRD-PARTY NOTICES"),
+        "{}",
+        &out[..out.len().min(200)]
+    );
+    let (code, _) = run(&d, &["--log-level", "loud"]);
+    assert_eq!(code, 2);
+    let _ = std::fs::remove_dir_all(&d);
+}

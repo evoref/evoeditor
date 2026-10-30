@@ -202,6 +202,47 @@ fn check_config(args: &cli::ConfigArgs, cli_locale: Option<&str>) -> u8 {
     if error { EXIT_CONFIG_ERROR } else { 0 }
 }
 
+/// 同梱の第三者告知 (`cargo about` が生成する。05 §17.1)。`--licenses` で表示する。
+const THIRD_PARTY_NOTICES: &str = include_str!("../../../THIRD-PARTY-NOTICES.md");
+
+/// `--crash-report` (09 §10.2): `state_dir/log/` の最新のクラッシュログの場所と内容を表示し、Issue の場所を案内する。
+/// 送信はしない (貼り付けるかどうかは利用者が決める)。
+fn crash_report() -> u8 {
+    let paths = match WinPaths::from_process_env() {
+        Ok(p) => p,
+        Err(_) => return EXIT_ERROR,
+    };
+    let dir = paths.state_dir().as_path().join("log");
+    let latest = std::fs::read_dir(&dir).ok().and_then(|entries| {
+        entries
+            .filter_map(Result::ok)
+            .filter(|e| {
+                let n = e.file_name().to_string_lossy().into_owned();
+                n.starts_with("crash-") && n.ends_with(".txt")
+            })
+            .filter_map(|e| Some((e.metadata().ok()?.modified().ok()?, e.path())))
+            .max_by_key(|(t, _)| *t)
+            .map(|(_, p)| p)
+    });
+    let mut out = std::io::stdout().lock();
+    let Some(path) = latest else {
+        texts::no_crash_log().write_to(&mut out);
+        return 0;
+    };
+    texts::crash_log_header(&path).write_to(&mut out);
+    let _ = writeln!(out);
+    match std::fs::read(&path) {
+        Ok(bytes) => {
+            let _ = writeln!(out, "{}", String::from_utf8_lossy(&bytes).trim_end());
+        }
+        Err(_) => return EXIT_ERROR,
+    }
+    let _ = writeln!(out);
+    texts::crash_report_guide(&format!("{}/issues", env!("CARGO_PKG_REPOSITORY")))
+        .write_to(&mut out);
+    0
+}
+
 /// `--dump-config` (07 §18.3): 解決済みの設定 (`--defaults` なら既定値) を TOML (`--json` なら JSON) で出し、終える。
 fn dump_config(args: &cli::ConfigArgs, defaults: bool, json: bool) -> u8 {
     let config = if defaults {
@@ -254,6 +295,7 @@ fn run(
     cli_locale: Option<&str>,
     ignored: &[String],
     config_args: &cli::ConfigArgs,
+    cli_log_level: Option<eve_platform::log::Level>,
 ) -> u8 {
     // 作業ディレクトリ・ディレクトリ・Ports
     let paths = match WinPaths::from_process_env() {
@@ -276,7 +318,11 @@ fn run(
     let choice = choose_locale(cli_locale, &loaded.config);
     let locale = choice.locale;
     // 設定の診断は全件をログへ書く (画面には最初の 1 件か要約、07 §4.3)。ファイルは最初の書込で作る
-    let logger = eve_platform::log::Logger::new(Some(state_dir.as_path()));
+    // ログの水準: --log-level > EVE_LOG > warn (07 §18.3)
+    let logger = match cli_log_level {
+        Some(l) => eve_platform::log::Logger::with_level(Some(state_dir.as_path()), l),
+        None => eve_platform::log::Logger::new(Some(state_dir.as_path())),
+    };
     for (name, diags) in &loaded.reports {
         for d in diags {
             logger.log(log_level(d.severity), &describe(name, d));
@@ -547,6 +593,23 @@ fn main() -> ProcessExit {
             0
         }
         Ok(Cli::Run {
+            mode: cli::Mode::Licenses,
+            ..
+        }) => {
+            print!("{THIRD_PARTY_NOTICES}");
+            0
+        }
+        Ok(Cli::Run {
+            mode: cli::Mode::CrashReport,
+            ..
+        }) => crash_report(),
+        Ok(Cli::Run {
+            log_level: Some(l), ..
+        }) if eve_platform::log::Level::parse(&l).is_none() => {
+            texts::usage_error(&UsageError::BadLogLevel(l)).write_to(&mut std::io::stderr().lock());
+            EXIT_USAGE
+        }
+        Ok(Cli::Run {
             mode: cli::Mode::CheckConfig,
             config,
             locale,
@@ -564,6 +627,7 @@ fn main() -> ProcessExit {
             locale,
             ignored,
             config,
+            log_level,
             ..
         }) => match encoding.as_deref().map(Encoding::from_label) {
             // 07 §18.4: 文字コードの名前が分からないのは使い方の誤り
@@ -586,6 +650,9 @@ fn main() -> ProcessExit {
                 locale.as_deref(),
                 &ignored,
                 &config,
+                log_level
+                    .as_deref()
+                    .and_then(eve_platform::log::Level::parse),
             ),
         },
         Err(e) => {
