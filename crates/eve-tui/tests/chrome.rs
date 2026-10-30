@@ -348,6 +348,25 @@ fn 横スクロールで左右に続きがある行の端に印を出す() {
 
 // verifies: AC-FR-506-1
 #[test]
+fn 折り返しの継続行は行番号欄の右端に印を出す() {
+    let mut h = Harness::new().with_size(20, 8);
+    h.paste("aaaa bbbb cccc dddd eeee ffff\nnext");
+    h.cmd("view.toggle_wrap");
+    let (rows, _) = screen(&mut h, &Glyphs::unicode());
+    // ガター 3 桁: 最初の行は行番号、継続行は `↪` と区切り、次の論理行はまた行番号
+    assert!(rows[0].starts_with(" 1"), "{:?}", rows[0]);
+    assert!(rows[1].starts_with(" ↪│"), "{:?}", rows[1]);
+    assert!(rows[2].starts_with(" 2"), "{:?}", rows[2]);
+    let (ascii, _) = screen(&mut h, &Glyphs::ascii());
+    assert!(ascii[1].starts_with(" >|"), "{:?}", ascii[1]);
+    // OFF に戻すと継続行はなくなる
+    h.cmd("view.toggle_wrap");
+    let (rows, _) = screen(&mut h, &Glyphs::unicode());
+    assert!(!joined(&rows).contains('↪'));
+}
+
+// verifies: AC-FR-506-1
+#[test]
 fn 画面に収まる行には印を出さない() {
     let mut h = Harness::new().with_size(30, 8);
     h.text("short");

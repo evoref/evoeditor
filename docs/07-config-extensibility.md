@@ -261,7 +261,7 @@ v0.1 で設定ファイル (`config.toml`、ユーザー層) から読む **公�
 | `[view]` | `ambiguous_width` | NFR-605 |
 | `[theme]` | `color_mode` | FR-513、04 §5.2a |
 
-件数の内訳: `[editor]` 3、`[file]` 2、`[view]` 1、`[theme]` 1 (計 7)。**v0.2 の M9a で `editor.undo.total_max_bytes` を公開した (計 14)**。**v0.2 の M9b で `editor.backspace_unit` (`"grapheme"` / `"codepoint"`) を公開した (計 15)**。v0.2 の M6 で `file.swap.*` の 5 個 (`enabled` / `interval_ms` / `min_interval_ms` / `max_bytes` / `exclude_secret_files`、§5.2) を公開した (計 12)**。範囲は `interval_ms` 100..=600000、`min_interval_ms` 100..=3600000、`max_bytes` 1048576..=1099511627776 (範囲外は警告して既定値)。`[file.swap]` の表でも `[file]` の中の `swap.enabled = ...` でも書ける。v0.1 で公開しないキー (定数で実装し、公開は v0.2): `editor.auto_indent` (既定 true)、`editor.undo.total_max_bytes`、`file.encoding_detection`、`file.write_bom`、`file.huge_file_warn_bytes`、`file.long_line_threshold`、`file.fsync`、`view.line_numbers`、`view.cursor_line_highlight`、`view.show_whitespace` (全角スペースとタブの可視化。v0.1 は `"minimal"` の定数で常に表示、FR-508)、`ui.hint_bar`、`ui.message_timeout_ms`、`ui.synchronized_output`、`theme.name` (v0.1 はテーマが 1 つ)、`search.case`、`keys.preset`、`log.level` (`EVE_LOG` で代える、§5.11)。**v0.2 の M8 で `ui.locale` を公開した (計 13)**: 値は `"auto"` (既定) か言語タグ (`ja` / `en`。`ja-JP`・`en_US` のように地域を付けても、地域を落として当てる。大文字小文字は区別しない)。同梱していない言語名は警告 (`InvalidValue`、許容値 `auto` / `ja` / `en`) して `auto` として扱い、選択順の次の段へ進む (§17.1)。節は `[ui]`。`[keys.*]` (ユーザーのキー割当) は v0.2 (§7.1)。`[os.*]` / `[env.*]` の条件付きセクションは v0.2 (§3.4)。ここに無いキーの公開時期は各表の P 列と §5.13。公開前のキーを書いても「このバージョンでは未対応」の情報診断で、値は使わない (§5 冒頭)。
+件数の内訳: `[editor]` 3、`[file]` 2、`[view]` 1、`[theme]` 1 (計 7)。**v0.2 の M9a で `editor.undo.total_max_bytes` を公開した (計 14)**。**v0.2 の M9b で `editor.backspace_unit` (`"grapheme"` / `"codepoint"`) を公開した (計 15)**。**続けて M9b で `view.wrap` / `view.wrap_indent` / `view.wrap_kinsoku` を公開した (計 18)**。v0.2 の M6 で `file.swap.*` の 5 個 (`enabled` / `interval_ms` / `min_interval_ms` / `max_bytes` / `exclude_secret_files`、§5.2) を公開した (計 12)**。範囲は `interval_ms` 100..=600000、`min_interval_ms` 100..=3600000、`max_bytes` 1048576..=1099511627776 (範囲外は警告して既定値)。`[file.swap]` の表でも `[file]` の中の `swap.enabled = ...` でも書ける。v0.1 で公開しないキー (定数で実装し、公開は v0.2): `editor.auto_indent` (既定 true)、`editor.undo.total_max_bytes`、`file.encoding_detection`、`file.write_bom`、`file.huge_file_warn_bytes`、`file.long_line_threshold`、`file.fsync`、`view.line_numbers`、`view.cursor_line_highlight`、`view.show_whitespace` (全角スペースとタブの可視化。v0.1 は `"minimal"` の定数で常に表示、FR-508)、`ui.hint_bar`、`ui.message_timeout_ms`、`ui.synchronized_output`、`theme.name` (v0.1 はテーマが 1 つ)、`search.case`、`keys.preset`、`log.level` (`EVE_LOG` で代える、§5.11)。**v0.2 の M8 で `ui.locale` を公開した (計 13)**: 値は `"auto"` (既定) か言語タグ (`ja` / `en`。`ja-JP`・`en_US` のように地域を付けても、地域を落として当てる。大文字小文字は区別しない)。同梱していない言語名は警告 (`InvalidValue`、許容値 `auto` / `ja` / `en`) して `auto` として扱い、選択順の次の段へ進む (§17.1)。節は `[ui]`。`[keys.*]` (ユーザーのキー割当) は v0.2 (§7.1)。`[os.*]` / `[env.*]` の条件付きセクションは v0.2 (§3.4)。ここに無いキーの公開時期は各表の P 列と §5.13。公開前のキーを書いても「このバージョンでは未対応」の情報診断で、値は使わない (§5 冒頭)。
 
 ### 5.1 `[editor]` — 編集動作
 
@@ -320,7 +320,7 @@ v0.1 で設定ファイル (`config.toml`、ユーザー層) から読む **公�
 | キー | 型 / 値 | 既定 | 説明 | 関連 | P |
 |---|---|---|---|---|---|
 | `view.line_numbers` | `"absolute" \| "relative" \| "off"` | `"absolute"` | 行番号。`relative` は v0.4 (公開時 (v0.2) の許容値は `absolute` / `off`。`relative` を書くと列挙値不正の警告ではなく「このバージョンでは未対応」の情報診断にして `absolute` を使う) | FR-502 | v0.1 (定数、公開 v0.2) |
-| `view.wrap` | `"off" \| "soft" \| "word"` | `"off"` | 折り返し (ソフトラップは v0.2、OQ-110。v0.1 は横スクロールのみ) | FR-506 | v0.2 |
+| `view.wrap` | `"off" \| "soft" \| "word"` | `"off"` | 折り返し (ソフトラップは v0.2、OQ-110。v0.1 は横スクロールのみ)。`view.toggle_wrap` で ON にするときの方式にもなる (`off` のときは `word`)。**v0.2 の M9b で公開・実装した** | FR-506 | v0.2 |
 | `view.wrap_indent` | `"none" \| "same"` (`"plus_one"` は §5.13 のとおり後の版で値を追加) | `"same"` | 折り返し行のインデント継続。`none` = 継続しない、`same` = 論理行のインデント幅で揃える (03 §14.3)。最初から enum にしておき、値の追加は互換変更として扱う (§4.4。型を bool から変えない) (提案、OQ-175) | FR-506 | v0.2 |
 | `view.show_whitespace` | `"off" \| "minimal" \| "ideographic" \| "trailing" \| "all"` | `"minimal"` | 空白の可視化。`minimal` = 全角スペース (U+3000) とタブ文字だけを記号と属性で示す (03 §13.2、04 §6.7 I8)。`ideographic` (全角スペースのみ)、`trailing` (行末の空白) と `all` (半角の空白・改行も) は v0.4 (`ideographic` は §5.13 の表。公開時 (v0.2) の許容値は `off` / `minimal`。`ideographic` / `trailing` / `all` を書くと「このバージョンでは未対応」の情報診断にして `minimal` を使う) | FR-508 | v0.1 (定数 `"minimal"`、公開 v0.2) |
 | `view.rulers` | array of int | `[]` | 桁ガイド | — | v0.4 |
@@ -548,7 +548,7 @@ v0.1 で設定ファイル (`config.toml`、ユーザー層) から読む **公�
 | `editor.newline_keep_whitespace_only_line` | `true` | 03 §15.3 |
 | `editor.trim_trailing_whitespace_skip_cursor_line` (v0.4) | `true` | 03 §15.3 |
 | `view.wrap_indent` の値 `"plus_one"` (論理行のインデント幅 + 1 段) の追加 (公開版は未定。`"none" \| "same"` は v0.2 から公開、§5.3) | `"same"` (v0.1・v0.2 は `none` / `same` のみ) | 03 §14.3 |
-| `view.wrap_kinsoku` | `true` (禁則処理) | 03 §14.3、OQ-57 |
+| `view.wrap_kinsoku` | `true` (禁則処理)。**v0.2 の M9b で公開・実装した** (真偽値。`false` で禁則を外す) | 03 §14.3、OQ-57 |
 | `view.width_risky_display` | `"unicode"` (`"replace"`) | 04 §4.7、OQ-64 |
 | `view.show_whitespace` の値 `"ideographic"` (全角スペースのみ) (v0.4) | — | 04 |
 | `file.swap.compact_bytes` / `file.swap.large_interval_ms` (v0.4、差分ジャーナル導入時) | 8 MiB / 30000 | 03 §10.2 |

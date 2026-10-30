@@ -27,6 +27,7 @@ mod query;
 mod quit_saving;
 mod save_all;
 mod startup;
+mod view_cmds;
 pub use startup::InitialFile;
 mod search_bar;
 mod search_state;
@@ -85,6 +86,7 @@ impl Editor {
         buffer::register(&mut registry);
         save_all::register(&mut registry);
         help::register(&mut registry);
+        view_cmds::register(&mut registry);
         line_ops::register(&mut registry);
         overlay::register(&mut registry);
         let mut state = EditorState::new(caps, ports.jobs.clone(), ports.paths.clone());
