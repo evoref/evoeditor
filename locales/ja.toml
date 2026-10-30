@@ -1035,6 +1035,7 @@ discard = "[D] 破棄して閉じる"
 [ui.confirm.quit_saving]
 title = "保存が終わっていません"
 message = "{path} の保存が終わっていません"
+others = "ほか {count} 件"
 wait = "[W] 待つ"
 abort = "[Q] 保存を中止して終了 (保存していない内容は退避します)"
 

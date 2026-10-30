@@ -144,3 +144,29 @@ fn 保存中でなければ従来どおり未保存の確認を出す() {
     };
     assert_eq!(ct(title), "未保存の変更");
 }
+
+#[test]
+fn 保存中の文書が_2_件以上なら_先頭の_1_件に_ほか_n_件_を足す() {
+    let mut h = Harness::new()
+        .with_file("/w/a.txt", b"abc")
+        .with_file("/w/b.txt", b"def");
+    h.open("/w/a.txt");
+    h.open("/w/b.txt");
+    h.run_jobs();
+    for p in ["/w/a.txt", "/w/b.txt"] {
+        h.open(p);
+        h.text("x");
+        h.cmd("file.save");
+    }
+    assert_eq!(h.pending_jobs(), 2);
+    h.cmd("app.quit");
+    h.advance_ms(5000);
+    assert_eq!(h.overlay(), "dialog");
+    let f = h.frame();
+    let OverlayModel::Confirm { message, .. } = &f.overlays[0] else {
+        panic!("確認ダイアログではない");
+    };
+    let m = ct(message);
+    assert!(m.contains("ほか 1 件"), "{m}");
+    assert!(m.contains("の保存が終わっていません"), "{m}");
+}

@@ -107,6 +107,18 @@ impl EditorState {
                 self.catalog()
                     .render("status.untitled", &[("n", "1")], &|_| None)
             });
+        // 保存中の文書が 2 件以上なら、先頭の 1 件に「ほか N 件」を足す (03 §9.8)
+        let docs: std::collections::BTreeSet<_> = jobs.iter().map(|(_, d)| *d).collect();
+        let path = if docs.len() > 1 {
+            let others = self.catalog().render(
+                "ui.confirm.quit_saving.others",
+                &[("count", &(docs.len() - 1).to_string())],
+                &|_| None,
+            );
+            format!("{path} {others}")
+        } else {
+            path
+        };
         if let Some(w) = self.quit_wait.as_mut() {
             w.asked = true;
         }

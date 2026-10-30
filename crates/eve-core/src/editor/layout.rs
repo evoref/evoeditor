@@ -629,7 +629,7 @@ fn message_model(state: &EditorState) -> MessageModel {
 }
 
 /// 端末タイトル (無害化済み)。
-fn title(doc: &Document) -> String {
+fn title(state: &EditorState, doc: &Document) -> String {
     let name = doc
         .path
         .as_ref()
@@ -643,10 +643,16 @@ fn title(doc: &Document) -> String {
                 && !matches!(c, '\u{200E}' | '\u{200F}' | '\u{061C}' | '\u{202A}'..='\u{202E}' | '\u{2066}'..='\u{2069}')
         })
         .collect();
+    // 文書が 2 件以上のときは、ファイル名の後ろに何番目かを出す (03 §9.8。ステータスバーと同じ)
+    let pos = match state.buffer_position() {
+        Some((n, total)) => format!(" ({n}/{total})"),
+        None => String::new(),
+    };
     format!(
-        "{}{} - evoeditor",
+        "{}{}{} - evoeditor",
         if doc.is_dirty() { "* " } else { "" },
-        name
+        name,
+        pos
     )
 }
 
@@ -907,7 +913,7 @@ pub(super) fn build_frame(
         which_key: None,
         messages: message_model(state),
         texts: super::chrome::chrome_texts(state),
-        title: title(doc),
+        title: title(state, doc),
     })
 }
 

@@ -1037,6 +1037,7 @@ discard = "[D] Discard and close"
 [ui.confirm.quit_saving]
 title = "The save has not finished"
 message = "Saving {path} has not finished"
+others = "and {count} more"
 wait = "[W] Wait"
 abort = "[Q] Abort the save and quit (unsaved content will be backed up)"
 
