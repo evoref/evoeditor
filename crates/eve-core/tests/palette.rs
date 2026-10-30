@@ -343,3 +343,58 @@ fn ui_redraw_は_ctrl_k_r_とパレットから全画面の再描画を依頼す
     h.cmd("ui.redraw");
     assert!(h.effects().contains(&eve_view::Effect::Redraw));
 }
+
+#[test]
+fn ファジー一致で探せ_連続した一致が上に来る() {
+    let mut h = Harness::new();
+    h.keys("ctrl+p");
+    // 部分列 (`f`ile `s`ave_`a`s) でも見つかる
+    h.text("fsa");
+    let got = ids(&h.frame());
+    assert!(got.contains(&"file.save_as".to_owned()), "{got:?}");
+    h.keys("esc ctrl+p");
+    h.text("save");
+    let got = ids(&h.frame());
+    assert_eq!(got[0], "file.save", "連続した一致が最も上: {got:?}");
+}
+
+#[test]
+fn 日本語の画面でも英語のタイトルで探せる() {
+    let mut h = Harness::new();
+    h.keys("ctrl+p");
+    h.text("Message History");
+    let got = ids(&h.frame());
+    assert_eq!(got[0], "ui.message_history", "{got:?}");
+}
+
+#[test]
+fn 一致したタイトルの文字を強調する() {
+    let mut h = Harness::new();
+    h.keys("ctrl+p");
+    h.text("名保");
+    let f = h.frame();
+    let (items, _, _) = list(&f);
+    let i = items
+        .iter()
+        .find(|i| cells(i.detail.as_ref().unwrap()) == "file.save_as")
+        .expect("名前を付けて保存");
+    assert_eq!(
+        i.match_ranges.len(),
+        2,
+        "離れた 2 文字: {:?}",
+        i.match_ranges
+    );
+}
+
+#[test]
+fn 入力が空なら最近実行したものを先頭に並べる() {
+    let mut h = Harness::new();
+    for id in ["ui.redraw", "select.all"] {
+        h.keys("ctrl+p");
+        h.text(id);
+        h.keys("enter");
+    }
+    h.keys("ctrl+p");
+    let got = ids(&h.frame());
+    assert_eq!(&got[..2], ["select.all", "ui.redraw"], "新しい順");
+}
