@@ -882,6 +882,35 @@ name = "default"
 
 tree-sitter のハイライトクエリ (`@keyword.control` 等) のキャプチャ名を **そのままスコープ名** とし、Helix / nvim-treesitter で広く使われている命名に揃える (既存クエリ・テーマ資産の流用が容易。流用時のライセンスは ADR-0018 に従って管理)。正式な一覧は v0.4 着手時に `eve-syntax` の文書で固定し、本書の表は骨子とする。
 
+### 8.6 テーマを使う側の突合と実装の分け方 (M9c、2026-10-30。案)
+
+背景を塗る組込みテーマとテーマファイル (FR-707) を足す前に、ロールを使っている箇所と、本章・04 §12 の方針との食い違いを洗い出す。
+
+**現状 (v0.2 の M9b まで)**:
+
+| 箇所 | 持っているもの | 方針との食い違い |
+|---|---|---|
+| eve-tui `theme.rs` | クロームとオーバーレイの 13 ロール (`ui.status_bar`・`ui.message.*`・`ui.hint_bar*`・`ui.overlay`・`ui.input.placeholder`・`ui.dialog.button*`・`ui.eof_marker`・`ui.scroll_marker`) の truecolor と mono の定数。256 / 16 の段は描画時に `color::clamp_style` で近似 | 04 §12.1 C1 は「段の選択は core がテーマ読込時に行い、Frame には描ける色だけが載る」。いまは frontend が色と段を決めている。テーマファイルや `theme.name` を足すと、frontend が設定を知る必要が出る |
+| core `layout.rs` (編集面) | 選択 = 反転、検索の一致 = 下線、現在の一致 = 反転 + 太字 + 下線、記号 (空白・制御文字・不可視) = dim、表現不能の文字 = 反転 + 下線。**属性だけで色を付けない** | §8.2 の表の truecolor の色 (`ui.selection` の `#eef0f6` / `#3b5bb5` 等) と、`ui.cursor_line`・`ui.line_number`・`ui.control_char`・`ui.whitespace` の色が未実装 (mono の段に近い見た目)。`ui.overlay.selected` / `.match` / `.disabled`・`ui.search_bar.toggle_on` も eve-tui の固定の属性 |
+| `xtask check-themes` | §8.2 の表そのもの (形・比・mono) と、eve-tui の 13 ロールの定数との突合 | 編集面のロールは突合の対象外 |
+
+**決定 (案)**:
+
+1. **解決は core の 1 か所** (C1 のとおり)。テーマの型 (ロール → 4 段の `Style`)、組込みテーマの定義、テーマファイルの書式 (§8.2)・`inherits`・`[palette]`・縮退 (04 §12.3) は **eve-config** に置く (core と bin が使う。eve-tui は eve-config に依存しない、02 §4.3)。core は `theme.name` / `theme.background` と `Capabilities.color_depth` から **その段のロールの表** (ロール名 → `Style`) を作って持つ。
+2. **編集面**: core が Span にロールの `Style` を付ける (選択・検索の一致・現在の一致・記号・制御文字・行番号・現在の行番号・`~`・横スクロールの印)。今の属性は mono の段の値としてそのまま残る (無色の見た目は変わらない)。
+3. **クローム**: Frame に **ロールの表** (`Frame.roles`、eve-view の型。テーマが変わったときだけ差し替える) を載せ、eve-tui はロール名でそこから引く。eve-tui の定数表は捨てる。`clamp_style` は段を超える色が来たときの最終防衛線 (04 §12.3) としてだけ残す。
+4. **キー**: `theme.name` (組込み `default` / `default-dark` / `default-light` / `ansi`、または `<設定ディレクトリ>/themes/<name>.toml`) と `theme.background` (§5.4。`auto` は `COLORFGBG` → 判らなければ `dark`、OQ-124) を公開する。`theme.overrides` は v0.4 のまま。
+5. **テーマファイル**: 起動時は bin が設定と一緒に読み (端末の前)、`config.reload` は io ジョブで読む。読めない・書式の誤り・未知のテーマ名は警告して `default` を使う (FR-703)。`inherits` の循環と深さ (8) は §8.3 のとおり。ワークスペース層 (`.eve/themes/`) は v0.4。
+6. **256 / 16 の明示値**: 組込みテーマは `fallback256` / `fallback16` を書けるようにし、`default` は §8.2 の表の「参考」の列を明示値として採る (近似より端末の配色に合う)。表の列見出しの「参考」は、実装した版で外す。
+7. **見た目の変化**: 編集面の選択・検索の一致などに色が付く (truecolor / 256 / 16 の段)。無色 (`mono`) の段は今と同じ。
+
+**実装の分け方 (README §3.6 の 6 を細かくする)**:
+
+1. この節 (突合の記録)。
+2. eve-config のテーマの型と組込み `default` (§8.2 の全ロール、4 段)、core の解決と編集面への適用、`Frame.roles` と eve-tui の切替。`check-themes` を編集面のロールにも広げる。
+3. 組込みテーマ `default-dark` / `default-light` / `ansi` と、`theme.name` / `theme.background` の公開 (値の表を本節の後に足す)。
+4. テーマファイル (`themes/*.toml`、`inherits`・`[palette]`)、`config.reload` での読み直し。
+
 ---
 
 ## 9. 言語設定
