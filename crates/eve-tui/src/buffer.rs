@@ -248,7 +248,7 @@ fn render_row(
 
 /// Frame の編集面を Buffer に書く。
 pub fn render_panes(frame: &Frame, depth: ColorDepth, glyphs: &Glyphs) -> PaneRender {
-    let theme = Theme::for_depth(depth);
+    let theme = Theme::from_roles(&frame.roles);
     // 検索バーは編集面の下に 1 行取る (編集面の行数 `size.rows` はその分を引いてある)
     let base = frame.size.rows + bar_rows(frame);
     let (cols, rows) = (frame.size.cols, base + chrome_rows_for_surface(base));

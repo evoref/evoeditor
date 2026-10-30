@@ -11,6 +11,7 @@ mod keymap;
 mod layers;
 mod locale;
 mod reserved;
+pub mod theme;
 
 pub use catalog::{Catalog, CatalogError, base_key};
 pub use config::{

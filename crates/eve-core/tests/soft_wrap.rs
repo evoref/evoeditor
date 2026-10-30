@@ -128,13 +128,16 @@ fn 選択と検索の強調は表示行をまたいで付く() {
     let mut h = doc("aaaa bbbb cccc dddd eeee ffff", WrapMode::Word);
     h.keys("shift+end shift+end"); // 1 回目は表示行末、2 回目は論理行末
     let f = h.frame();
+    // 選択はテーマの `ui.selection` (色の段は背景色、無色の段は反転)
+    let sel = f.roles.get("ui.selection");
     for i in 0..2 {
         let r = &f.panes[0].rows[i];
         assert!(
-            r.spans
-                .iter()
-                .any(|s| s.style.mods.contains(StyleMods::REVERSE)),
-            "行 {i} に選択の反転: {r:?}"
+            r.spans.iter().any(
+                |s| s.style.bg == sel.bg && s.style.bg != eve_view::Color::Default
+                    || s.style.mods.contains(StyleMods::REVERSE)
+            ),
+            "行 {i} に選択: {r:?}"
         );
     }
 }

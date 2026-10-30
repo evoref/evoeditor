@@ -18,6 +18,8 @@ mod edit;
 mod eol;
 mod file;
 mod help;
+mod theme;
+pub use theme::resolve as resolve_theme;
 mod keymap;
 mod layout;
 mod leftover_offer;

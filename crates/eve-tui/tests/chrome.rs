@@ -170,11 +170,15 @@ fn 端末が小さすぎるときは文言だけを描く() {
 
 #[test]
 fn テーマのロール_ステータスバーは反転か背景色() {
-    let t = Theme::truecolor();
+    let t = Theme::from_roles(&Harness::new().frame().roles);
     assert_ne!(t.status_bar.bg, eve_view::Color::Default);
-    let m = Theme::mono();
+    let mono = eve_view::Capabilities {
+        color_depth: ColorDepth::Mono,
+        ..eve_view::Capabilities::default()
+    };
+    let m = Theme::from_roles(&Harness::new().with_caps(mono.clone()).frame().roles);
     assert!(m.status_bar.mods.contains(eve_view::StyleMods::REVERSE));
-    let mut h = Harness::new().with_size(60, 12);
+    let mut h = Harness::new().with_size(60, 12).with_caps(mono);
     let f = h.frame();
     let r = render_screen(&f, window_of(&f), ColorDepth::Mono, &Glyphs::unicode());
     let c = r.buffer.cell((0, 12)).unwrap();

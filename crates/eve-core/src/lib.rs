@@ -39,7 +39,7 @@ pub use editor::{
     Editor, EditorState, Handler, InitialFile, InvocationSource, KEYMAP_FILE, KeyParseError,
     Keymap, Layer, ParseError, Permission, RejectReason, Resolution, ScrollPos, SearchCount,
     SearchStep, View, Window, WrapMode, WrapSettings, config_diagnostic_texts, format_stroke,
-    normalize_eol, parse_sequence, parse_stroke,
+    normalize_eol, parse_sequence, parse_stroke, resolve_theme,
 };
 pub use eol::build_eol_conversion;
 pub use eve_encoding::Encoding;

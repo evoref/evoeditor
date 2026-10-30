@@ -81,7 +81,7 @@ fn 入力すると件数が出て_現在の一致は強調するだけで_選択
         "foo"
     );
     assert_eq!(text_of(&b.count_text.unwrap()), "1/2");
-    // 一致は下線、現在の一致は反転 + 太字 + 下線
+    // 一致は下線、現在の一致は下線 + 太字 (色の段。無色の段は反転 + 下線、07 §8.2)
     assert_eq!(
         marked(&f, StyleMods::UNDERLINE)
             .trim_end_matches('|')
@@ -90,7 +90,7 @@ fn 入力すると件数が出て_現在の一致は強調するだけで_選択
             .unwrap(),
         "foofoo"
     );
-    let cur = marked(&f, StyleMods::REVERSE | StyleMods::BOLD);
+    let cur = marked(&f, StyleMods::UNDERLINE | StyleMods::BOLD);
     assert!(cur.starts_with("foo"), "{cur}");
 }
 

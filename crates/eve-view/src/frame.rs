@@ -462,6 +462,35 @@ pub struct ChromeTexts {
     pub too_small: CellText,
 }
 
+/// テーマのロールの表 (ロール名 → その色深度の段のスタイル、07 §8.6)。core が解決し、frontend はクロームと
+/// オーバーレイを描くときにロール名で引く。テーマか色深度が変わったときだけ作り直す。
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct RoleStyles(Vec<(String, Style)>);
+
+impl RoleStyles {
+    /// `(ロール名, スタイル)` の列から作る (名前の順に並べ直す)。
+    pub fn new(mut roles: Vec<(String, Style)>) -> RoleStyles {
+        roles.sort_by(|a, b| a.0.cmp(&b.0));
+        RoleStyles(roles)
+    }
+
+    /// ロールのスタイル。無ければ既定 (端末の既定色・属性なし)。
+    pub fn get(&self, name: &str) -> Style {
+        self.find(name).unwrap_or(Style::DEFAULT)
+    }
+
+    pub fn find(&self, name: &str) -> Option<Style> {
+        self.0
+            .binary_search_by(|(n, _)| n.as_str().cmp(name))
+            .ok()
+            .map(|i| self.0[i].1)
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = (&str, Style)> {
+        self.0.iter().map(|(n, s)| (n.as_str(), *s))
+    }
+}
+
 /// 1 回の描画で frontend に渡すもの。
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Frame {
@@ -485,6 +514,8 @@ pub struct Frame {
     pub texts: ChromeTexts,
     /// 端末タイトル (無害化済み)。
     pub title: String,
+    /// テーマのロールの表 (クロームとオーバーレイを描くとき引く)。
+    pub roles: std::sync::Arc<RoleStyles>,
 }
 
 #[cfg(test)]

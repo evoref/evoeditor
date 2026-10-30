@@ -118,7 +118,13 @@ fn 段を超える色は近似され_制御文字は置換される() {
 
 #[test]
 fn 選択は反転で出る() {
-    let mut h = Harness::new().with_size(30, 6);
+    // 無色の段では選択は反転 (色の段は背景色、07 §8.2)
+    let mut h = Harness::new()
+        .with_size(30, 6)
+        .with_caps(eve_view::Capabilities {
+            color_depth: ColorDepth::Mono,
+            ..eve_view::Capabilities::default()
+        });
     h.text("abc");
     h.keys("shift+left");
     let f = frame_of(&mut h);
