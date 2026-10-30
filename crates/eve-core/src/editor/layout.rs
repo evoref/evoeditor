@@ -272,6 +272,88 @@ pub(super) fn byte_at_col(doc: &Document, line: usize, dcol: usize) -> usize {
         .map_or(content.len(), |u| u.byte)
 }
 
+/// 折り返し幅: 本文の幅 − 右余白 1 (行末にぶら下げた空白がその 1 セルに入る、03 §14.3.1)。
+pub(super) fn wrap_width(doc: &Document, viewport: (u16, u16)) -> usize {
+    let cols = viewport.0 as usize;
+    let gw = gutter_width(doc, cols) as usize;
+    cols.saturating_sub(gw).saturating_sub(1).max(1)
+}
+
+/// 折り返し ON の View の (設定, 折り返し幅)。OFF は `None` (移動とスクロールは論理行のまま)。
+pub(super) fn wrap_ctx(state: &EditorState, view: ViewId) -> Option<(WrapSettings, usize)> {
+    let v = state.view(view)?;
+    if !v.wrap.is_on() {
+        return None;
+    }
+    let d = state.document(v.doc)?;
+    Some((v.wrap, wrap_width(d, state.viewport())))
+}
+
+/// 1 論理行を表示行に分けた結果 (03 §14.3.1)。移動とスクロールが表示行を数えるのに使う。
+/// 位置はすべて行頭からのバイト位置 (`rel`)。
+pub(super) struct LineRows {
+    /// 行頭の絶対バイト位置。
+    pub ls: usize,
+    content_len: usize,
+    units: std::rc::Rc<Vec<Unit>>,
+    rows: Vec<wrap::WrapRow>,
+}
+
+pub(super) fn line_rows(doc: &Document, line: usize, s: WrapSettings, cols: usize) -> LineRows {
+    let (ls, content, _, _) = line_content(doc, line);
+    let units = units_for(doc, line, &content);
+    let rows = wrap_line(&content, &units, cols, s);
+    LineRows {
+        ls,
+        content_len: content.len(),
+        units,
+        rows,
+    }
+}
+
+impl LineRows {
+    /// 表示行の数 (1 以上)。
+    pub fn len(&self) -> usize {
+        self.rows.len()
+    }
+
+    fn byte_of_unit(&self, i: usize) -> usize {
+        self.units.get(i).map_or(self.content_len, |u| u.byte)
+    }
+
+    /// 表示行 `r` の先頭 / 末尾 (次の表示行の先頭と同じ位置) のバイト位置。
+    pub fn row_start(&self, r: usize) -> usize {
+        self.byte_of_unit(self.rows[r].first)
+    }
+
+    pub fn row_end(&self, r: usize) -> usize {
+        self.byte_of_unit(self.rows[r].end)
+    }
+
+    /// `rel` にあるカーソルの (表示行, 画面上の列 = 継続行のずらしを含む)。
+    pub fn locate(&self, rel: usize, affinity: Affinity) -> (usize, usize) {
+        cursor_in_rows(&self.units, &self.rows, rel, affinity)
+    }
+
+    /// 表示行 `r` の画面上の列 `col` の位置 (セルの途中は前に寄せる)。行の幅を超えたら表示行の末尾で、
+    /// 折り返し位置なら上の表示行の末尾 (`Before`) にとどめる。
+    pub fn at_col(&self, r: usize, col: usize) -> (usize, Affinity) {
+        let row = self.rows[r];
+        let base = self.units.get(row.first).map_or(0, |u| u.col);
+        let want = col.saturating_sub(row.indent) + base;
+        for u in &self.units[row.first..row.end] {
+            if want < u.col + u.width {
+                return (u.byte, Affinity::After);
+            }
+        }
+        if r + 1 == self.rows.len() {
+            (self.content_len, Affinity::After)
+        } else {
+            (self.byte_of_unit(row.end), Affinity::Before)
+        }
+    }
+}
+
 /// 行番号のガターの幅 (桁数 + 区切りの空白 1)。画面が狭くて本文が入らないときは、ガターを出さない (0)。
 pub(super) fn gutter_width(doc: &Document, cols: usize) -> u16 {
     let lines = doc.text().len_lines().max(1);

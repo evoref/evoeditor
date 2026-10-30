@@ -10,6 +10,8 @@ use eve_view::{DocumentId, ViewId};
 
 use crate::document::Document;
 
+use super::layout::{Affinity, WrapSettings, line_rows};
+
 use super::command::{
     ArgValue, CommandCtx, CommandKind, CommandRegistry, CommandResult, CommandSpec, Permission,
     RejectReason,
@@ -74,10 +76,25 @@ fn indent_end(doc: &Document, ls: usize, le: usize) -> usize {
     ls + s.bytes().take_while(|b| matches!(b, b' ' | b'\t')).count()
 }
 
+/// 折り返し ON の View の (設定, 折り返し幅)。OFF は `None`。
+type Wrap = Option<(WrapSettings, usize)>;
+
 /// 1 回の移動。`goal` は垂直移動の目標列 (未設定なら現在の表示列で初期化する)。
-fn step(doc: &Document, goal: &mut Option<u32>, p: ByteOff, m: Motion, rows: usize) -> ByteOff {
+/// 折り返し ON では、垂直移動は表示行を 1 つ動き、`goal` は表示行内の画面上の列になる (03 §14.3.1)。
+/// `aff` は折り返し位置のカーソルの帰属で、移動前の値を読み、移動後の値を書く。
+fn step(
+    doc: &Document,
+    goal: &mut Option<u32>,
+    aff: &mut Affinity,
+    p: ByteOff,
+    m: Motion,
+    rows: usize,
+    wrap: Wrap,
+) -> ByteOff {
     let t = doc.text();
     let last_line = t.len_lines().saturating_sub(1);
+    let before = *aff;
+    *aff = Affinity::After;
     match m {
         Motion::Left => prev_grapheme_boundary(t, p),
         Motion::Right => next_grapheme_boundary(t, p),
@@ -90,6 +107,9 @@ fn step(doc: &Document, goal: &mut Option<u32>, p: ByteOff, m: Motion, rows: usi
                 _ => rows.saturating_sub(1).max(1),
             };
             let going_up = matches!(m, Motion::Up | Motion::PageUp);
+            if let Some((s, cols)) = wrap {
+                return step_rows(doc, goal, aff, p, before, going_up, delta, s, cols);
+            }
             // 先頭行で上 → 文書先頭、最終行で下 → 文書末尾 (CUA 慣習)
             if going_up && line == 0 {
                 return ByteOff(0);
@@ -106,15 +126,85 @@ fn step(doc: &Document, goal: &mut Option<u32>, p: ByteOff, m: Motion, rows: usi
             pos_at_dcol(doc, target, g)
         }
         Motion::Home => {
-            let (_, ls, le) = line_of(doc, p);
+            let (line, ls, le) = line_of(doc, p);
+            if let Some((s, cols)) = wrap {
+                // 継続行では、まずその表示行の先頭へ。そこにいれば論理行のスマートホームと同じ
+                let lr = line_rows(doc, line, s, cols);
+                let (r, _) = lr.locate(p.0 - ls, before);
+                if r > 0 && p.0 != ls + lr.row_start(r) {
+                    return ByteOff(ls + lr.row_start(r));
+                }
+            }
             let ie = indent_end(doc, ls, le);
             // インデント終端以外 → インデント終端、インデント終端 → 行頭 (インデントが無ければ常に行頭)
             ByteOff(if p.0 != ie && ie != ls { ie } else { ls })
         }
-        Motion::End => ByteOff(line_of(doc, p).2),
+        Motion::End => {
+            let (line, ls, le) = line_of(doc, p);
+            if let Some((s, cols)) = wrap {
+                // まず表示行末 (折り返し位置では上の表示行の末尾)、すでに表示行末なら論理行末
+                let lr = line_rows(doc, line, s, cols);
+                let (r, _) = lr.locate(p.0 - ls, before);
+                if r + 1 < lr.len() && p.0 != ls + lr.row_end(r) {
+                    *aff = Affinity::Before;
+                    return ByteOff(ls + lr.row_end(r));
+                }
+            }
+            ByteOff(le)
+        }
         Motion::DocStart => ByteOff(0),
         Motion::DocEnd => ByteOff(t.len_bytes()),
     }
+}
+
+/// 折り返し ON の垂直移動: 表示行を `delta` 本動く。端では動けるところまで動き、すでに端なら文書の先頭 / 末尾へ。
+#[allow(clippy::too_many_arguments)]
+fn step_rows(
+    doc: &Document,
+    goal: &mut Option<u32>,
+    aff: &mut Affinity,
+    p: ByteOff,
+    before: Affinity,
+    going_up: bool,
+    delta: usize,
+    s: WrapSettings,
+    cols: usize,
+) -> ByteOff {
+    let last_line = doc.text().len_lines().saturating_sub(1);
+    let (mut line, _, _) = line_of(doc, p);
+    let mut lr = line_rows(doc, line, s, cols);
+    let (mut r, col) = lr.locate(p.0 - lr.ls, before);
+    if going_up && line == 0 && r == 0 {
+        return ByteOff(0);
+    }
+    if !going_up && line == last_line && r + 1 == lr.len() {
+        return ByteOff(doc.text().len_bytes());
+    }
+    let g = *goal.get_or_insert(u32::try_from(col).unwrap_or(u32::MAX));
+    for _ in 0..delta {
+        if going_up {
+            if r > 0 {
+                r -= 1;
+            } else if line > 0 {
+                line -= 1;
+                lr = line_rows(doc, line, s, cols);
+                r = lr.len() - 1;
+            } else {
+                break;
+            }
+        } else if r + 1 < lr.len() {
+            r += 1;
+        } else if line < last_line {
+            line += 1;
+            lr = line_rows(doc, line, s, cols);
+            r = 0;
+        } else {
+            break;
+        }
+    }
+    let (rel, a) = lr.at_col(r, g as usize);
+    *aff = a;
+    ByteOff(lr.ls + rel)
 }
 
 /// 移動を各 Range に適用する。垂直・ページ移動は目標列を維持し、移動の後にカーソルが見えるようスクロールを調整する。
@@ -134,13 +224,16 @@ fn run(ctx: &mut CommandCtx<'_>, m: Motion, extend: bool) -> CommandResult {
     // 目標列は View に 1 つ。primary がそれを使い維持する。他の Range は各自の現在の列を目標にする (03 §5.2)
     let primary = view.selection.primary_index();
     let mut primary_goal = if m.keeps_goal() { view.goal_dcol } else { None };
+    let mut primary_aff = view.cursor_affinity;
+    let wrap = super::layout::wrap_ctx(ctx.state, view_id);
     let mut out = Vec::with_capacity(view.selection.len());
     for (i, r) in view.selection.iter().enumerate() {
         let mut own_goal = None;
-        let goal = if i == primary {
-            &mut primary_goal
+        let mut own_aff = Affinity::After;
+        let (goal, aff) = if i == primary {
+            (&mut primary_goal, &mut primary_aff)
         } else {
-            &mut own_goal
+            (&mut own_goal, &mut own_aff)
         };
         let mut head = r.head;
         let mut collapsed_first = false;
@@ -152,9 +245,10 @@ fn run(ctx: &mut CommandCtx<'_>, m: Motion, extend: bool) -> CommandResult {
                 r.end()
             };
             collapsed_first = true;
+            *aff = Affinity::After;
         }
         for _ in 0..(if collapsed_first { count - 1 } else { count }) {
-            let next = step(doc, goal, head, m, rows);
+            let next = step(doc, goal, aff, head, m, rows, wrap);
             if next == head {
                 break; // これ以上動けない (大きな count で長く回らない)
             }
@@ -183,6 +277,7 @@ fn run(ctx: &mut CommandCtx<'_>, m: Motion, extend: bool) -> CommandResult {
     };
     let keep = m.keeps_goal().then_some(primary_goal).flatten();
     ctx.state.set_selection_with_goal(view_id, sel, keep);
+    ctx.state.set_cursor_affinity(view_id, primary_aff);
     if let Some(d) = page_scroll {
         // カーソルの画面上の相対位置を保つので、余白は適用しない
         ctx.state.scroll_lines(view_id, d);
