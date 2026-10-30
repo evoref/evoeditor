@@ -83,6 +83,15 @@ pub enum BackspaceUnit {
     Codepoint,
 }
 
+/// 空白の可視化 (`view.show_whitespace`、03 §13.2、FR-508)。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ShowWhitespace {
+    /// 可視化しない。
+    Off,
+    /// 全角スペース (U+3000) とタブ文字だけを記号で示す (既定)。
+    Minimal,
+}
+
 /// 折り返しの方式 (`view.wrap`、03 §14.3、07 §5.3)。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WrapMode {
@@ -177,6 +186,8 @@ pub struct Config {
     pub wrap_indent: WrapIndent,
     /// `view.wrap_kinsoku`: 禁則処理 (OQ-57)。
     pub wrap_kinsoku: bool,
+    /// `view.show_whitespace`: 空白の可視化。
+    pub show_whitespace: ShowWhitespace,
     /// `ui.mouse`: マウスの入力を使うか (FR-307、04 §6.8)。
     pub mouse: bool,
     /// `ui.mouse_wheel_lines`: ホイール 1 目盛りのスクロール量 (表示行)。
@@ -210,6 +221,7 @@ impl Default for Config {
             wrap: WrapMode::Off,
             wrap_indent: WrapIndent::Same,
             wrap_kinsoku: true,
+            show_whitespace: ShowWhitespace::Minimal,
             mouse: true,
             mouse_wheel_lines: 3,
             which_key_delay_ms: 500,
@@ -246,6 +258,7 @@ const KEYS: &[&str] = &[
     "view.wrap",
     "view.wrap_indent",
     "view.wrap_kinsoku",
+    "view.show_whitespace",
     "ui.mouse",
     "ui.mouse_wheel_lines",
     "ui.which_key_delay_ms",
@@ -255,6 +268,7 @@ const KEYS: &[&str] = &[
 
 const INDENT_UNITS: &[&str] = &["tab", "space"];
 const BACKSPACE_UNITS: &[&str] = &["grapheme", "codepoint"];
+const SHOW_WHITESPACE: &[&str] = &["off", "minimal"];
 const OSC52_POLICIES: &[&str] = &["auto", "always", "never"];
 const WRAP_MODES: &[&str] = &["off", "soft", "word"];
 const WRAP_INDENTS: &[&str] = &["none", "same"];
@@ -501,6 +515,26 @@ impl Cx<'_> {
                     self.out.config.mouse_wheel_lines = n as u8;
                 }
             }
+            "view.show_whitespace" => {
+                let Some(s) = self.raw_string(key, v) else {
+                    return;
+                };
+                match s.as_str() {
+                    "off" => self.out.config.show_whitespace = ShowWhitespace::Off,
+                    "minimal" => self.out.config.show_whitespace = ShowWhitespace::Minimal,
+                    // 後の版の値 (v0.4): 未対応の情報診断にして既定の `minimal` を使う (07 §5.3)
+                    "ideographic" | "trailing" | "all" => {
+                        self.diag(
+                            Severity::Info,
+                            DiagKind::Unsupported,
+                            key.to_owned(),
+                            v.span().start,
+                        );
+                        self.set_value(v);
+                    }
+                    _ => self.invalid(key, SHOW_WHITESPACE, v),
+                }
+            }
             "view.wrap_kinsoku" => {
                 if let Some(b) = self.boolean(key, v) {
                     self.out.config.wrap_kinsoku = b;
@@ -691,6 +725,7 @@ pub fn default_display(key: &str) -> &'static str {
         "editor.indent_unit" => "space",
         "editor.backspace_unit" => "grapheme",
         "view.wrap" => "off",
+        "view.show_whitespace" => "minimal",
         "view.wrap_indent" => "same",
         "view.wrap_kinsoku" | "ui.mouse" => "true",
         "ui.mouse_wheel_lines" => "3",

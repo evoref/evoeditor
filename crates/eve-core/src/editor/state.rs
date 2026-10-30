@@ -254,6 +254,7 @@ impl EditorState {
         crate::document::DisplaySettings {
             tab_width: self.config.tab_width,
             ambiguous_wide: self.config.ambiguous_width == 2,
+            show_whitespace: self.config.show_whitespace == eve_config::ShowWhitespace::Minimal,
         }
     }
 

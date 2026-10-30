@@ -55,6 +55,8 @@ pub enum ApplyError {
 pub struct DisplaySettings {
     pub tab_width: u8,
     pub ambiguous_wide: bool,
+    /// 全角スペースとタブを記号で示す (`view.show_whitespace = "minimal"`、03 §13.2)。
+    pub show_whitespace: bool,
 }
 
 impl Default for DisplaySettings {
@@ -62,6 +64,7 @@ impl Default for DisplaySettings {
         DisplaySettings {
             tab_width: 4,
             ambiguous_wide: false,
+            show_whitespace: true,
         }
     }
 }

@@ -14,7 +14,7 @@ mod reserved;
 pub use catalog::{Catalog, CatalogError, base_key};
 pub use config::{
     BackspaceUnit, ColorMode, Config, DefaultEncoding, DefaultLineEnding, DiagKind, Diagnostic,
-    IndentUnit, KeymapProblem, Loaded, Osc52Policy, Severity, WrapIndent, WrapMode,
+    IndentUnit, KeymapProblem, Loaded, Osc52Policy, Severity, ShowWhitespace, WrapIndent, WrapMode,
     default_display, load_str,
 };
 pub use keymap::{KeyAction, KeymapEntry, KeymapFile, load_keymap_str};
