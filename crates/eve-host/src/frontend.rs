@@ -18,6 +18,8 @@ use crate::msg::HostMsg;
 pub struct FrontendConfig {
     /// `view.ambiguous_width` (1 または 2)。0 は未設定。
     pub ambiguous_width: u8,
+    /// `ui.mouse`: 起動時にマウスの取得を有効にするか (04 §6.8)。
+    pub mouse: bool,
 }
 
 #[derive(Debug)]

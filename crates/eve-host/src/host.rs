@@ -247,6 +247,7 @@ impl Host {
     ) -> Result<(), StartError> {
         let fcfg = FrontendConfig {
             ambiguous_width: self.config.ambiguous_width,
+            mouse: self.config.mouse,
         };
         let caps = frontend.init(&fcfg).map_err(StartError::Init)?;
         self.editor.state_mut().set_caps(caps);

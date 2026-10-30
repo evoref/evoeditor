@@ -44,6 +44,8 @@ pub struct TuiFrontend {
     emitter: Emitter,
     glyphs: Glyphs,
     thread: Option<JoinHandle<()>>,
+    /// 描画が入力スレッドへ渡す編集面の位置 (マウスの座標変換、04 §6.8)。
+    geom: std::sync::Arc<crate::mouse::SharedGeom>,
     entered: bool,
     /// 「復元済み」の原子フラグ。`restore` と受信スレッドの緊急の復元が共有し、立てた側だけが復元の出力をする (02 §9.6 手順 4)。
     restored: eve_view::TermRestoredFlag,
@@ -69,6 +71,7 @@ impl TuiFrontend {
             emitter: Emitter::new(),
             glyphs: Glyphs::unicode(),
             thread: None,
+            geom: Default::default(),
             entered: false,
             restored: eve_view::TermRestoredFlag::default(),
         }
@@ -124,6 +127,9 @@ impl Frontend for TuiFrontend {
         let caps = detected.caps.clone();
         self.detected = Some(detected);
         self.out = Some(out);
+        if cfg.mouse {
+            input.set_mouse(true);
+        }
         self.input = Some(input);
         // 3〜4 代替スクリーンへ、続けて自動折り返しを無効化 (タイトルは ConsoleOut が退避済み)
         self.write(ENTER);
@@ -138,7 +144,7 @@ impl Frontend for TuiFrontend {
             ));
         };
         self.sink = Some(tx.clone());
-        let t = spawn_input_thread(input, SinkOut(tx))
+        let t = spawn_input_thread(input, SinkOut(tx), self.geom.clone())
             .map_err(|e| err("入力スレッドを起動できません", &e))?;
         self.thread = Some(t);
         Ok(())
@@ -171,6 +177,9 @@ impl Frontend for TuiFrontend {
                 });
             }
             return RenderOutcome::Done;
+        }
+        if let Some(p) = frame.panes.first() {
+            self.geom.set(p.view, p.rect.rows);
         }
         crate::trace::render_enter();
         let depth = self
@@ -207,6 +216,12 @@ impl Frontend for TuiFrontend {
         match eff {
             Effect::Bell => {
                 self.write("\x07");
+                EffectOutcome::Handled
+            }
+            Effect::SetMouseCapture { enabled } => {
+                if let Some(i) = self.input.as_ref() {
+                    i.set_mouse(*enabled);
+                }
                 EffectOutcome::Handled
             }
             Effect::Redraw => {

@@ -88,6 +88,7 @@ impl Editor {
         save_all::register(&mut registry);
         help::register(&mut registry);
         view_cmds::register(&mut registry);
+        mouse::register(&mut registry);
         line_ops::register(&mut registry);
         overlay::register(&mut registry);
         let mut state = EditorState::new(caps, ports.jobs.clone(), ports.paths.clone());

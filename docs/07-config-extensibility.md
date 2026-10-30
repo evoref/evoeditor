@@ -261,7 +261,7 @@ v0.1 で設定ファイル (`config.toml`、ユーザー層) から読む **公�
 | `[view]` | `ambiguous_width` | NFR-605 |
 | `[theme]` | `color_mode` | FR-513、04 §5.2a |
 
-件数の内訳: `[editor]` 3、`[file]` 2、`[view]` 1、`[theme]` 1 (計 7)。**v0.2 の M9a で `editor.undo.total_max_bytes` を公開した (計 14)**。**v0.2 の M9b で `editor.backspace_unit` (`"grapheme"` / `"codepoint"`) を公開した (計 15)**。**続けて M9b で `view.wrap` / `view.wrap_indent` / `view.wrap_kinsoku` を公開した (計 18)**。v0.2 の M6 で `file.swap.*` の 5 個 (`enabled` / `interval_ms` / `min_interval_ms` / `max_bytes` / `exclude_secret_files`、§5.2) を公開した (計 12)**。範囲は `interval_ms` 100..=600000、`min_interval_ms` 100..=3600000、`max_bytes` 1048576..=1099511627776 (範囲外は警告して既定値)。`[file.swap]` の表でも `[file]` の中の `swap.enabled = ...` でも書ける。v0.1 で公開しないキー (定数で実装し、公開は v0.2): `editor.auto_indent` (既定 true)、`editor.undo.total_max_bytes`、`file.encoding_detection`、`file.write_bom`、`file.huge_file_warn_bytes`、`file.long_line_threshold`、`file.fsync`、`view.line_numbers`、`view.cursor_line_highlight`、`view.show_whitespace` (全角スペースとタブの可視化。v0.1 は `"minimal"` の定数で常に表示、FR-508)、`ui.hint_bar`、`ui.message_timeout_ms`、`ui.synchronized_output`、`theme.name` (v0.1 はテーマが 1 つ)、`search.case`、`keys.preset`、`log.level` (`EVE_LOG` で代える、§5.11)。**v0.2 の M8 で `ui.locale` を公開した (計 13)**: 値は `"auto"` (既定) か言語タグ (`ja` / `en`。`ja-JP`・`en_US` のように地域を付けても、地域を落として当てる。大文字小文字は区別しない)。同梱していない言語名は警告 (`InvalidValue`、許容値 `auto` / `ja` / `en`) して `auto` として扱い、選択順の次の段へ進む (§17.1)。節は `[ui]`。`[keys.*]` (ユーザーのキー割当) は v0.2 (§7.1)。`[os.*]` / `[env.*]` の条件付きセクションは v0.2 (§3.4)。ここに無いキーの公開時期は各表の P 列と §5.13。公開前のキーを書いても「このバージョンでは未対応」の情報診断で、値は使わない (§5 冒頭)。
+件数の内訳: `[editor]` 3、`[file]` 2、`[view]` 1、`[theme]` 1 (計 7)。**v0.2 の M9a で `editor.undo.total_max_bytes` を公開した (計 14)**。**v0.2 の M9b で `editor.backspace_unit` (`"grapheme"` / `"codepoint"`) を公開した (計 15)**。**続けて M9b で `view.wrap` / `view.wrap_indent` / `view.wrap_kinsoku` を公開した (計 18)**。**マウスの `ui.mouse` / `ui.mouse_wheel_lines` も M9b で公開した (計 20)**。v0.2 の M6 で `file.swap.*` の 5 個 (`enabled` / `interval_ms` / `min_interval_ms` / `max_bytes` / `exclude_secret_files`、§5.2) を公開した (計 12)**。範囲は `interval_ms` 100..=600000、`min_interval_ms` 100..=3600000、`max_bytes` 1048576..=1099511627776 (範囲外は警告して既定値)。`[file.swap]` の表でも `[file]` の中の `swap.enabled = ...` でも書ける。v0.1 で公開しないキー (定数で実装し、公開は v0.2): `editor.auto_indent` (既定 true)、`editor.undo.total_max_bytes`、`file.encoding_detection`、`file.write_bom`、`file.huge_file_warn_bytes`、`file.long_line_threshold`、`file.fsync`、`view.line_numbers`、`view.cursor_line_highlight`、`view.show_whitespace` (全角スペースとタブの可視化。v0.1 は `"minimal"` の定数で常に表示、FR-508)、`ui.hint_bar`、`ui.message_timeout_ms`、`ui.synchronized_output`、`theme.name` (v0.1 はテーマが 1 つ)、`search.case`、`keys.preset`、`log.level` (`EVE_LOG` で代える、§5.11)。**v0.2 の M8 で `ui.locale` を公開した (計 13)**: 値は `"auto"` (既定) か言語タグ (`ja` / `en`。`ja-JP`・`en_US` のように地域を付けても、地域を落として当てる。大文字小文字は区別しない)。同梱していない言語名は警告 (`InvalidValue`、許容値 `auto` / `ja` / `en`) して `auto` として扱い、選択順の次の段へ進む (§17.1)。節は `[ui]`。`[keys.*]` (ユーザーのキー割当) は v0.2 (§7.1)。`[os.*]` / `[env.*]` の条件付きセクションは v0.2 (§3.4)。ここに無いキーの公開時期は各表の P 列と §5.13。公開前のキーを書いても「このバージョンでは未対応」の情報診断で、値は使わない (§5 冒頭)。
 
 ### 5.1 `[editor]` — 編集動作
 
@@ -335,7 +335,7 @@ v0.1 で設定ファイル (`config.toml`、ユーザー層) から読む **公�
 | `ui.tab_line` | `"auto" \| "always" \| "never"` | `"auto"` (2 バッファ以上で表示) | バッファライン | FR-510 | v0.4 |
 | `ui.locale` | string (BCP 47) / `"auto"` | `"auto"` | UI の言語 (§17.1)。`auto` は環境変数 `EVE_LANG`、OS ロケールの順で決める。`--locale` が最優先。v0.2 の M8 で公開した | NFR-603 | v0.2 |
 | `ui.message_timeout_ms` | int | `5000` | 情報メッセージの表示時間 (04 §8.9) | FR-505 | v0.1 (定数、公開 v0.2) |
-| `ui.mouse` | bool | `true` | マウス入力 (v0.2。v0.1 はマウスを捕捉せず端末の選択・スクロールをそのまま使える、04 §6.8) | FR-307 | v0.2 |
+| `ui.mouse` | bool | `true` | マウス入力 (v0.2。v0.1 はマウスを捕捉せず端末の選択・スクロールをそのまま使える、04 §6.8)。**v0.2 の M9b で公開・実装した** (`ui.toggle_mouse` で実行中に切り替えられる) | FR-307 | v0.2 |
 | `ui.bell` | `"visual" \| "audible" \| "off"` | `"visual"` | ベル | — | v0.1 (定数、公開 v0.2) |
 | `ui.synchronized_output` | `"auto" \| "always" \| "never"` | `"auto"` | 同期出力 DEC 2026 (04 §4.5。`auto` は既知の問題端末のみ送らない。`never` は表示が乱れる端末での逃げ道) | NFR-103 | v0.1 (定数、公開 v0.2) |
 | `ui.alternate_screen` | bool | `true` | 代替スクリーンを使う (04 §14.1) | — | v0.1 (定数、公開 v0.2) |
@@ -554,7 +554,7 @@ v0.1 で設定ファイル (`config.toml`、ユーザー層) から読む **公�
 | `file.swap.compact_bytes` / `file.swap.large_interval_ms` (v0.4、差分ジャーナル導入時) | 8 MiB / 30000 | 03 §10.2 |
 | `search.replace_all_select_result` | `false` (Helix 風の全選択は opt-in) | 03 §12.5 |
 | `search.regex_size_limit` | 10 MiB | 03 §12.3 |
-| `ui.mouse_wheel_lines` (v0.2) | 3 | 04 §6.8 |
+| `ui.mouse_wheel_lines` (v0.2) | 3 (**v0.2 の M9b で公開した**: int 1..=20、ホイール 1 目盛りのスクロール量 = 表示行) | 04 §6.8 |
 | `ui.which_key_delay_ms` (v0.2) | 500 | 04 §7.4 |
 | `ui.visual_bell_ms` | 100 | 04 §6.9 |
 | `process.shell` (v0.4、`ProcessRunner` と同時) | Unix: `["/bin/sh", "-c"]`、Windows: `["cmd.exe", "/D", "/C"]` (`%ComSpec%` を優先) | 05 §13.2 |
@@ -1132,7 +1132,7 @@ verb       := [a-z][a-z0-9_]*
 | `ui.message_history` (v0.2) | `cmd.ui.message_history` | Ui | — | — | `ui` | `editor` | `ctrl+k m` (alt) | - |
 | `ui.redraw` | `cmd.ui.redraw` | Ui | — | — | `-` | `global` | `ctrl+k r` (alt) | - |
 | `ui.toggle_hint_bar` (v0.2) | `cmd.ui.toggle_hint_bar` | Ui | — | — | `ui` | パレット | — | - |
-| `ui.toggle_mouse` (v0.2) | `cmd.ui.toggle_mouse` | Ui | — | `frontend == "tui"` | `-` | パレット | — | - |
+| `ui.toggle_mouse` (v0.2) | `cmd.ui.toggle_mouse` | Ui | — | `caps.mouse` | `-` | パレット | — | - |
 | `config.show_diagnostics` (v0.2) | `cmd.config.show_diagnostics` | Ui | — | — | `ui` | パレット | — | - |
 | `config.reload` (v0.2) | `cmd.config.reload` | Ui | — | — | `-` | パレット | — | - |
 

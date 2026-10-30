@@ -320,6 +320,10 @@ title = "Command Palette"
 description = "Redraw the screen."
 title = "Redraw"
 
+[cmd.ui.toggle_mouse]
+description = "Switch between mouse support and the terminal's own selection and scrolling."
+title = "Toggle Mouse"
+
 [cmd.view.toggle_wrap]
 description = "Turn word wrap on or off."
 title = "Toggle Word Wrap"
@@ -366,6 +370,10 @@ unchanged = "Line endings are already {eol}"
 
 [info.goto_line]
 clamped = "There is no line {line}. Moved to the last line ({last})"
+
+[info.mouse]
+disabled = "Mouse support is off (the terminal's own selection and scrolling work)"
+enabled = "Mouse support is on"
 
 [info.open]
 already_open = "{path} is already open"

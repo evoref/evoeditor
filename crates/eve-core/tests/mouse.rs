@@ -196,3 +196,56 @@ fn 折り返し_on_では表示行の列で位置を引く() {
     let p = f.primary_cursor.unwrap().pos;
     assert_eq!(p.row, 0, "描画も上の表示行の末尾");
 }
+
+#[test]
+fn 設定のホイール量を使う() {
+    let mut h = long_doc();
+    h.editor.state_mut().set_config(eve_config::Config {
+        mouse_wheel_lines: 5,
+        ..eve_config::Config::default()
+    });
+    h.mouse(MouseKind::WheelDown, Modifiers::NONE, 2, GW);
+    assert_eq!(scroll(&h).0, 5 * 7);
+}
+
+#[test]
+fn toggle_mouse_は取得を切り替えて_effect_とメッセージを出す() {
+    use eve_view::{Capabilities, Effect};
+    let mut h = Harness::new().with_caps(Capabilities {
+        mouse: true,
+        ..Capabilities::default()
+    });
+    h.cmd("ui.toggle_mouse");
+    assert!(
+        h.effects()
+            .iter()
+            .any(|e| matches!(e, Effect::SetMouseCapture { enabled: false })),
+        "既定は ON なので OFF にする: {:?}",
+        h.effects()
+    );
+    h.clear_log();
+    h.cmd("ui.toggle_mouse");
+    assert!(
+        h.effects()
+            .iter()
+            .any(|e| matches!(e, Effect::SetMouseCapture { enabled: true }))
+    );
+}
+
+#[test]
+fn マウスのない_frontend_では_toggle_mouse_は使えない() {
+    let mut h = Harness::new();
+    let r = h.cmd("ui.toggle_mouse");
+    assert!(!matches!(r, eve_core::CommandResult::Done), "{r:?}");
+}
+
+#[test]
+fn ui_mouse_の設定を読む() {
+    let l = eve_config::load_str("[ui]\nmouse = false\nmouse_wheel_lines = 7\n");
+    assert!(l.diagnostics.is_empty(), "{:?}", l.diagnostics);
+    assert!(!l.config.mouse);
+    assert_eq!(l.config.mouse_wheel_lines, 7);
+    let l = eve_config::load_str("[ui]\nmouse_wheel_lines = 99\n");
+    assert_eq!(l.config.mouse_wheel_lines, 3, "範囲外は既定値");
+    assert_eq!(l.diagnostics.len(), 1);
+}

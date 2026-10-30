@@ -166,6 +166,10 @@ pub struct Config {
     pub wrap_indent: WrapIndent,
     /// `view.wrap_kinsoku`: 禁則処理 (OQ-57)。
     pub wrap_kinsoku: bool,
+    /// `ui.mouse`: マウスの入力を使うか (FR-307、04 §6.8)。
+    pub mouse: bool,
+    /// `ui.mouse_wheel_lines`: ホイール 1 目盛りのスクロール量 (表示行)。
+    pub mouse_wheel_lines: u8,
 }
 
 impl Default for Config {
@@ -189,6 +193,8 @@ impl Default for Config {
             wrap: WrapMode::Off,
             wrap_indent: WrapIndent::Same,
             wrap_kinsoku: true,
+            mouse: true,
+            mouse_wheel_lines: 3,
         }
     }
 }
@@ -220,6 +226,8 @@ const KEYS: &[&str] = &[
     "view.wrap",
     "view.wrap_indent",
     "view.wrap_kinsoku",
+    "ui.mouse",
+    "ui.mouse_wheel_lines",
 ];
 
 const INDENT_UNITS: &[&str] = &["tab", "space"];
@@ -440,6 +448,16 @@ impl Cx<'_> {
                     };
                 }
             }
+            "ui.mouse" => {
+                if let Some(b) = self.boolean(key, v) {
+                    self.out.config.mouse = b;
+                }
+            }
+            "ui.mouse_wheel_lines" => {
+                if let Some(n) = self.int(key, v, 1, 20) {
+                    self.out.config.mouse_wheel_lines = n as u8;
+                }
+            }
             "view.wrap_kinsoku" => {
                 if let Some(b) = self.boolean(key, v) {
                     self.out.config.wrap_kinsoku = b;
@@ -631,7 +649,8 @@ pub fn default_display(key: &str) -> &'static str {
         "editor.backspace_unit" => "grapheme",
         "view.wrap" => "off",
         "view.wrap_indent" => "same",
-        "view.wrap_kinsoku" => "true",
+        "view.wrap_kinsoku" | "ui.mouse" => "true",
+        "ui.mouse_wheel_lines" => "3",
         "file.default_encoding" => "utf-8",
         "file.default_line_ending" => "lf",
         "view.ambiguous_width" => "1",
