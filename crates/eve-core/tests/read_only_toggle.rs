@@ -20,7 +20,7 @@ fn readonly_attr(h: &Harness, path: &str) -> bool {
         .readonly
 }
 
-// verifies: AC-FR-116-2, FR-106
+// verifies: FR-116, FR-106
 #[test]
 fn 読み取り専用属性を解除して編集し_確認を経て保存すると属性は保存前のまま() {
     let mut h = Harness::new().with_file("/w/ro.txt", b"abc\n");
@@ -48,7 +48,7 @@ fn 読み取り専用属性を解除して編集し_確認を経て保存する�
     assert_eq!(h.overlay(), "dialog");
 }
 
-// verifies: AC-FR-116-2
+// verifies: FR-116
 #[test]
 fn 確認で別名で保存を選ぶと名前の入力になり_元のファイルは変わらない() {
     let mut h = Harness::new().with_file("/w/ro.txt", b"abc\n");
@@ -65,7 +65,7 @@ fn 確認で別名で保存を選ぶと名前の入力になり_元のファイ�
     assert_eq!(h.fs_read("/w/ro.txt").unwrap(), b"abc\n");
 }
 
-// verifies: AC-FR-116-2
+// verifies: FR-116
 #[test]
 fn readonly_で開いた文書は解除でき_確認なしで保存する_もう一度で読み取り専用に戻る() {
     let mut h = Harness::new().with_file("/w/a.txt", b"abc\n");
@@ -92,7 +92,7 @@ fn readonly_で開いた文書は解除でき_確認なしで保存する_もう
     assert_eq!(h.doc_text(), "xabc\n");
 }
 
-// verifies: AC-FR-116-2
+// verifies: FR-116
 #[test]
 fn 解除できない理由ではコマンドが実行できない() {
     // 長大行 (理由 LongLine) は解除できない
