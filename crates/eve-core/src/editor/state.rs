@@ -551,6 +551,8 @@ impl EditorState {
             );
         }
         self.enforce_total_undo_budget();
+        // 選択範囲内の検索の範囲も、同じ変更で写像する (03 §12.5)
+        self.map_search_scope(doc, &a.changes);
         let Some(document) = self.documents.get(&doc) else {
             return;
         };

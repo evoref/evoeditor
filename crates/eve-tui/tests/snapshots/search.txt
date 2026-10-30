@@ -11,7 +11,7 @@
 ~
 ~
 ~
-検索: fox                                                    [Aa~] [.*] [ab] 1/1
+検索: fox                                              [Aa~] [.*] [ab] [sel] 1/1
 memo.txt                                                     行 1, 桁 1 UTF-8 LF
 
 Esc 取消  Enter 次へ  Alt+C 大小

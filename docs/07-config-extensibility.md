@@ -1180,6 +1180,7 @@ verb       := [a-z][a-z0-9_]*
 | `search.toggle_case` | `cmd.search.toggle_case` | Ui | — | `search.active` | `ui` | `search` | `alt+c`, `ctrl+k c` (alt) | overlay:2 |
 | `search.toggle_regex` (v0.2) | `cmd.search.toggle_regex` | Ui | — | `search.active` | `ui` | `search` | `alt+r`, `ctrl+k x` (alt) | search:2 |
 | `search.toggle_word` (v0.2) | `cmd.search.toggle_word` | Ui | — | `search.active` | `ui` | `search` | `alt+w`, `ctrl+k b` (alt) | - |
+| `search.toggle_selection` (v0.2) | `cmd.search.toggle_selection` | Ui | — | `search.active` | `ui` | `search` | `alt+l`, `ctrl+k l` (alt) | - |
 | `search.replace_open` | `cmd.search.replace_open` | Ui | — | `!doc.read_only` | `ui` | `editor`, `search` | `mod+r`, `ctrl+h` [E] | - |
 | `search.replace` (v0.2) | `cmd.search.replace` | Edit | — | `search.replace_active && !doc.read_only` | `propose` | `search` (置換欄) | `enter` (置換欄で。v0.1 の置換欄の `enter` は `search.next`。キーマップの `when` は `search.replace_focused`) | search:3 |
 | `search.replace_all` | `cmd.search.replace_all` | Edit | — | `search.replace_active && !doc.read_only` | `propose` | `search` | `alt+a` (`tab` で置換欄から `[A] すべて置換` のボタンへ移り `enter` でも実行できる。04 §8.4) | overlay:1 |

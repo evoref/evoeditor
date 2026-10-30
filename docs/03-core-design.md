@@ -1631,7 +1631,7 @@ pub struct Match { range: ByteRange, captures: Option<SmallVec<[Option<ByteRange
 | 1 件置換 | 現在の一致を `Edit { range, insert }` の Transaction (Origin::Command("search.replace")) で置換し、次の一致へ移動。各置換は個別の Undo 単位 |
 | すべて置換 | ジョブで Snapshot (Revision R) 上の全一致を収集 → `ChangeSet::from_sorted_edits` で 1 つの ChangeSet → メインスレッドで `Document::apply`。**適用時に Revision が R でなければ `StaleBase`** となるので、再ジョブ (または小さい文書なら同期で再計算)。1 Undo 単位 |
 | 置換文字列 | 正規表現モードでは `$1` / `${name}` の展開 (regex crate の構文)、`\n` は `default_eol` に展開。リテラルモードでは展開なし |
-| 選択範囲内 | `scope: Selection` で各 Range 内の一致のみ対象。複数 Range にも対応 |
+| 選択範囲内 | `scope: Selection` で各 Range 内の一致のみ対象。複数 Range にも対応。**M9b の実装 (確定 (ユーザー回答)、2026-10-30)**: 検索バーのトグル `search.toggle_selection` (`Alt+L` / `Ctrl+K L`)。範囲は**検索バーを開いたときの選択** (空でない Range) で、編集に合わせて写像する (範囲の端での挿入は範囲に含める)。ON の間は検索・件数・次へ / 前へ・可視範囲の強調・1 件置換・すべて置換のすべてを範囲内に限る (`SearchQuery::with_scope` → `Matcher` の走査の入口で、範囲に収まらない一致を捨てる)。一致は文書全体と同じ規則 (左から重ならずに) で選び、範囲の境界をまたぐ一致は採らない。開いたときに選択が無ければ切り替えずに `info.search.no_selection` を出す |
 | 結果 Selection | すべて置換後は primary カーソルを元位置の写像に置く (置換箇所を全選択する Helix 風は設定で選択可) |
 | 件数上限超 | `max_matches` を超える「すべて置換」はジョブ内で **ChangeSet を直接構築** する (一致を保持しない) ため上限の影響を受けない。ただし ChangeSet 自体のサイズが大きくなるので、Undo 予算 (§7.5) の例外規則 (直前 1 操作は保持) が働く |
 

@@ -876,6 +876,10 @@ fn cmd_search_toggle_word(ctx: &mut CommandCtx<'_>) -> CommandResult {
     ctx.state.search_toggle_word()
 }
 
+fn cmd_search_toggle_selection(ctx: &mut CommandCtx<'_>) -> CommandResult {
+    ctx.state.search_toggle_selection()
+}
+
 fn cmd_search_replace_open(ctx: &mut CommandCtx<'_>) -> CommandResult {
     ctx.state.search_replace_open()
 }
@@ -988,6 +992,11 @@ pub(super) fn register(r: &mut CommandRegistry) {
             "search.toggle_word",
             "search.active",
             cmd_search_toggle_word,
+        ),
+        (
+            "search.toggle_selection",
+            "search.active",
+            cmd_search_toggle_selection,
         ),
     ] {
         r.register(
