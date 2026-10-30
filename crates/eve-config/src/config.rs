@@ -309,7 +309,7 @@ pub struct Loaded {
 }
 
 const SECTIONS: &[&str] = &["editor", "file", "view", "theme", "ui", "clipboard"];
-const KEYS: &[&str] = &[
+pub(crate) const KEYS: &[&str] = &[
     "editor.tab_width",
     "editor.indent_unit",
     "editor.indent_width",
@@ -358,10 +358,16 @@ const LOCALES: &[&str] = &["auto", "ja", "en"];
 
 /// 設定ファイルの本文を読む。`text` が空でも構文エラーでも `Config` を返す。
 pub fn load_str(text: &str) -> Loaded {
+    load_str_onto(Config::default(), text)
+}
+
+/// `load_str` と同じだが、書かれていないキーは `base` の値のまま (層を重ねる、07 §3.3)。
+/// 構文エラーなら `base` のまま返す。
+pub fn load_str_onto(base: Config, text: &str) -> Loaded {
     let mut cx = Cx {
         text,
         out: Loaded {
-            config: Config::default(),
+            config: base,
             diagnostics: Vec::new(),
         },
     };

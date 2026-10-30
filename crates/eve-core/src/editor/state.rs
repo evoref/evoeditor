@@ -79,6 +79,8 @@ pub struct EditorState {
     pub(super) reloaded: Option<(eve_config::KeymapFile, Vec<&'static str>)>,
     /// 今のユーザー層のキーマップの割当 (再読込で変わったかを比べる)。
     pub(super) user_keymap_entries: Option<Vec<eve_config::KeymapEntry>>,
+    /// 設定の読込元 (`None` は設定ディレクトリの既定の 2 ファイル)。
+    pub(super) config_sources: Option<super::config_reload::ConfigSources>,
     /// マウスの取得が有効か (`ui.mouse` の初期値。`ui.toggle_mouse` で変わる)。
     pub(super) mouse_on: bool,
     /// ジョブの投入口 (`Ports.jobs`)。
@@ -206,6 +208,7 @@ impl EditorState {
             mouse_on: true,
             reloaded: None,
             user_keymap_entries: None,
+            config_sources: None,
         }
     }
 

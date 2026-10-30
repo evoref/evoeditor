@@ -209,6 +209,22 @@ pub fn usage_error(e: &UsageError) -> Bi {
             format!("{o} requires a value. {tail_en}"),
             format!("{o} には値が必要です。{tail_ja}"),
         ),
+        UsageError::BadSet(v) => Bi::new(
+            format!("--set needs key=value (got: {v}). {tail_en}"),
+            format!("--set には key=value の形で指定してください (指定: {v})。{tail_ja}"),
+        ),
+    }
+}
+
+/// `--check-config` の最後の行。
+pub fn check_config_summary(count: usize) -> Bi {
+    if count == 0 {
+        Bi::new("No problems in the settings.", "設定に問題はありません。")
+    } else {
+        Bi::new(
+            format!("{count} problem(s) in the settings."),
+            format!("設定に {count} 件の問題があります。"),
+        )
     }
 }
 
@@ -223,7 +239,7 @@ pub fn ignored_args(args: &[String]) -> Bi {
 
 /// `--help` の本文 (`cli.help.*`)。オプション名の後ろに英語の説明、次の行に日本語の説明を揃えて出す。
 pub fn help() -> String {
-    const OPTIONS: [(&str, &str, &str); 7] = [
+    const OPTIONS: [(&str, &str, &str); 12] = [
         (
             "-R, --readonly",
             "Open the file read-only",
@@ -238,6 +254,31 @@ pub fn help() -> String {
             "--locale <lang>",
             "Set the UI language: ja or en (overrides ui.locale and EVE_LANG)",
             "画面の言語を指定します: ja / en (設定 ui.locale と EVE_LANG より優先)",
+        ),
+        (
+            "-c, --config <file>",
+            "Read this settings file instead of config.toml (repeatable; later files win)",
+            "config.toml の代わりにこの設定ファイルを読みます (複数指定可。後のものが優先)",
+        ),
+        (
+            "-N, --no-config",
+            "Do not read config.toml or keymap.toml (use the defaults)",
+            "config.toml と keymap.toml を読みません (既定値で動きます)",
+        ),
+        (
+            "-s, --set <key>=<value>",
+            "Override one setting (e.g. --set view.wrap=soft)",
+            "設定を 1 項目上書きします (例: --set view.wrap=soft)",
+        ),
+        (
+            "--check-config",
+            "Check the settings, print the problems, and exit",
+            "設定を確かめて問題を表示し、終了します",
+        ),
+        (
+            "--dump-config [--defaults] [--json]",
+            "Print the resolved settings (or the defaults) and exit",
+            "解決した設定 (または既定値) を表示して終了します",
         ),
         (
             "-V, --version",
@@ -282,8 +323,8 @@ pub fn help() -> String {
         "使える文字コード名: utf-8, utf-8-bom, utf-16le, utf-16be, shift_jis, euc-jp, iso-2022-jp",
     );
     pair(
-        "Exit codes: 0 normal, 1 runtime error, 2 usage error, 5 no terminal, 70 internal error",
-        "終了コード: 0 正常、1 実行時エラー、2 使い方の誤り、5 端末なし、70 内部エラー",
+        "Exit codes: 0 normal, 1 runtime error, 2 usage error, 3 errors in the settings (--check-config), 5 no terminal, 70 internal error",
+        "終了コード: 0 正常、1 実行時エラー、2 使い方の誤り、3 設定にエラー (--check-config)、5 端末なし、70 内部エラー",
     );
     out
 }
@@ -362,6 +403,11 @@ mod tests {
             "--version",
             "--help",
             "--wait",
+            "--config",
+            "--no-config",
+            "--set",
+            "--check-config",
+            "--dump-config",
         ] {
             assert!(h.contains(opt), "{opt}");
         }

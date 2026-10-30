@@ -577,7 +577,7 @@ v0.1 で設定ファイル (`config.toml`、ユーザー層) から読む **公�
    - **再起動が必要**: `log.*` の出力先、`frontend` 固有初期化。診断で「再起動後に有効」と伝える。
 3. `ResolvedConfig` は不変で `Arc` 共有される ([02 §5.1](02-architecture.md#51-所有構造))。ジョブへ渡したスナップショットは古い設定で完走してよい。
 4. 再読込は差分を計算して「変更された項目」を情報メッセージで要約する (`3 項目が変わりました: editor.tab_width, theme.name, …`)。
-**v0.2 の M9c の実装 (案)**: `config.reload` (パレット) は、設定ディレクトリの `config.toml` と `keymap.toml` を io ジョブで読み (メインスレッドで I/O しない)、届いたらメインスレッドで解析する。ファイルごとに、エラー (重さ `Error` の診断 = 構文エラー・読めない) があれば前の設定のまま維持して診断と `msg.config.reload_kept` を出し、無ければ差し替える (警告の項目は起動時と同じく既定値)。項目の 3 分類は次のとおり: **再起動が必要** = `theme.color_mode` / `view.ambiguous_width` (端末の初期化で 1 回だけ使う) と `ui.locale` (起動時の選択順で決める)。**新規文書から** = `file.default_encoding` / `file.default_line_ending` (開いている文書の文字コード・改行は変えない)。**ほかはすべて即時** (表示の設定は開いている文書と View にも写す。折り返しは値が変わったときだけ写し、`view.toggle_wrap` で切り替えた状態を戻さない。`ui.mouse` が変わったら `Effect::SetMouseCapture` で端末にも伝える)。要約は `info.config.reloaded` (変わったキー) と `info.config.reload_restart` (そのうち再起動が必要なもの)。ワークスペース層・自動再読込 (下の 5) は v0.4。
+**v0.2 の M9c の実装 (案)**: `config.reload` (パレット) は、起動時と同じ読込元 (設定ディレクトリの `config.toml`、または `--config` のファイルを順に。`--no-config` なら読まない) と `keymap.toml` を io ジョブで読み、`--set` を最後に重ねる。読み (メインスレッドで I/O しない)、届いたらメインスレッドで解析する。ファイルごとに、エラー (重さ `Error` の診断 = 構文エラー・読めない) があれば前の設定のまま維持して診断と `msg.config.reload_kept` を出し、無ければ差し替える (警告の項目は起動時と同じく既定値)。項目の 3 分類は次のとおり: **再起動が必要** = `theme.color_mode` / `view.ambiguous_width` (端末の初期化で 1 回だけ使う) と `ui.locale` (起動時の選択順で決める)。**新規文書から** = `file.default_encoding` / `file.default_line_ending` (開いている文書の文字コード・改行は変えない)。**ほかはすべて即時** (表示の設定は開いている文書と View にも写す。折り返しは値が変わったときだけ写し、`view.toggle_wrap` で切り替えた状態を戻さない。`ui.mouse` が変わったら `Effect::SetMouseCapture` で端末にも伝える)。要約は `info.config.reloaded` (変わったキー) と `info.config.reload_restart` (そのうち再起動が必要なもの)。ワークスペース層・自動再読込 (下の 5) は v0.4。
 
 5. 自動再読込は **ワークスペース層の信頼状態を再評価** する。信頼済みワークスペースで危険項目 (§12.3) が **増えた** 場合は自動適用せず、再確認を求める (git pull で設定が書き換わる攻撃経路への対策)。
 
@@ -1562,11 +1562,11 @@ v0.1 の公開オプションは **5 個** (ADR-0028: 引数解析と `--help` �
 | `--readonly` | `-R` | 読み取り専用で開く | v0.1 |
 | `--encoding <label>` | `-e` | 文字コードを指定して開く (FR-111)。受け付けるラベルは `file.default_encoding` の許容値 (§5.2) から `system` を除いたもの。v0.2 からは全ファイルに適用。対応していないラベルは使い方の誤りで、TUI を始めずに `stderr.usage.unknown_encoding` (04 §15.2) を出して終了コード 2 | v0.1 |
 | `--line-ending <lf\|crlf>` | — | 新規ファイルの改行コード (`--set file.default_line_ending=` で代替可) | v0.4 |
-| `--config <file>` | `-c` | ユーザー層の `config.toml` を差し替える (複数可、順にマージ) | v0.2 |
+| `--config <file>` | `-c` | ユーザー層の `config.toml` を差し替える (複数可、順にマージ)。**v0.2 の M9c で実装した** (`keymap.toml` は設定ディレクトリのものを読む。読めない・構文エラーのファイルは重ねない) | v0.2 |
 | `--config-dir <dir>` | — | `EVE_CONFIG_DIR` と同じ (環境変数で代替可) | v0.4 |
-| `--no-config` | `-N` | ユーザー層・システム層・ワークスペース層を読まない (既定値のみ。トラブルシュート用。v0.1 は `EVE_CONFIG_DIR` を空のディレクトリに向けて代える) | v0.2 |
+| `--no-config` | `-N` | ユーザー層・システム層・ワークスペース層を読まない (既定値のみ。トラブルシュート用。v0.1 は `EVE_CONFIG_DIR` を空のディレクトリに向けて代える)。**v0.2 の M9c で実装した** (v0.2 はユーザー層の `config.toml` と `keymap.toml` を読まない) | v0.2 |
 | `--no-workspace-config` | — | ワークスペース層のみ読まない | v0.4 |
-| `--set <key>=<value>` | `-s` | コマンドライン層で 1 項目上書き (TOML 値として解釈。`--set view.wrap=soft`) | v0.2 |
+| `--set <key>=<value>` | `-s` | コマンドライン層で 1 項目上書き (TOML 値として解釈。`--set view.wrap=soft`)。**v0.2 の M9c で実装した**: 値を TOML の値として読めなければ文字列として読む (`soft` と書ける)。`=` が無い・キーが空は使い方の誤り (終了コード 2)。値の誤りは設定ファイルと同じ診断 (名前は `--set`)。複数可、後のものが優先 | v0.2 |
 | `--theme <name>` | — | `--set theme.name=` の短縮 | v0.4 |
 | `--keymap <preset>` | — | `--set keys.preset=` の短縮 | v0.4 |
 | `--locale <lang>` | — | UI 言語 (§17.1 の選択順の最上位)。値は `ja` / `en` (地域付きも可)。同梱していない言語名はログに警告を書いて次の段へ進む (使い方の誤りにはしない)。値が無いときは使い方の誤り (終了コード 2)。M8 で実装した | v0.2 |
@@ -1575,8 +1575,8 @@ v0.1 の公開オプションは **5 個** (ADR-0028: 引数解析と `--help` �
 | `--no-session` | — | セッション復元・保存をしない | v0.4 |
 | `--wait` | — | **受理して無視** (TUI は常にブロックする)。`$EDITOR="evoeditor --wait"` と書けるようにするための互換オプション | v0.1 (受理のみ) |
 | `--stdout` | — | 終了時に (最後にアクティブだった) バッファ内容を標準出力へ書き、ファイルには保存しない。`cmd \| evoeditor - --stdout \| next` のパイプフィルタ用 (Could、OQ-99) | v0.4 |
-| `--check-config` | — | 設定を読み診断を出力して終了 (端末初期化なし) | v0.2 |
-| `--dump-config [--defaults] [--json]` | — | 解決済み設定 (または既定値) を出力。`--annotated` (注釈付き雛形) は v0.1 は同梱の `config.example.toml`、生成は v0.4 (§4.1) | v0.2 |
+| `--check-config` | — | 設定を読み診断を出力して終了 (端末初期化なし)。**v0.2 の M9c で実装した**: 診断ごとに `ファイル:行:桁: 本文` と対処の行を標準出力へ (選択中の言語。「未対応」の情報診断も出す)、最後に件数の 1 行 (英日)。エラーがあれば終了コード 3、警告だけなら 0。キーマップは書式だけを確かめる (コマンド名などの照合は起動時の診断) | v0.2 |
+| `--dump-config [--defaults] [--json]` | — | 解決済み設定 (または既定値) を出力。**v0.2 の M9c で実装した**: TOML はセクションごとの公開キーの全項目で、そのまま設定ファイルとして読める。`--json` は平らなキーの表。`--defaults` / `--json` は `--dump-config` の修飾で、単独では使い方の誤り。`--annotated` (注釈付き雛形) は v0.1 は同梱の `config.example.toml`、生成は v0.4 (§4.1) | v0.2 |
 | `--dump-schema` | — | JSON Schema (Could) | v0.4 |
 | `--list-commands [--json]` / `--dump-keymap [--json]` | — | §11.5 / §11.6 (CI 突合用) | v0.1 (隠し) |
 | `--dump-languages` | — | §9.1 | v0.4 |

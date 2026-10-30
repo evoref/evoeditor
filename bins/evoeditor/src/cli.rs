@@ -23,6 +23,29 @@ impl FileArg {
     }
 }
 
+/// 設定の読込元の指定 (07 §18.3 の `--config` / `--no-config` / `--set`)。
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ConfigArgs {
+    /// `--config <file>`: ユーザー層の `config.toml` の代わりに、この順に重ねる。
+    pub files: Vec<String>,
+    /// `--no-config`: ユーザー層 (`config.toml` と `keymap.toml`) を読まない。
+    pub no_config: bool,
+    /// `--set <key>=<value>`: コマンドライン層。最後に重ねる。
+    pub sets: Vec<String>,
+}
+
+/// 端末を使わずに終える動作 (07 §18.3)。
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum Mode {
+    /// 編集する (通常)。
+    #[default]
+    Edit,
+    /// `--check-config`: 設定を読んで診断を出し、終える。
+    CheckConfig,
+    /// `--dump-config [--defaults] [--json]`: 解決済みの設定 (または既定値) を出し、終える。
+    DumpConfig { defaults: bool, json: bool },
+}
+
 /// 解析の結果。
 #[derive(Debug, PartialEq, Eq)]
 pub enum Cli {
@@ -38,6 +61,8 @@ pub enum Cli {
         locale: Option<String>,
         /// `+LINE` など、このバージョンでは未対応のため無視した引数 (`info.cli.unsupported` の対象)。
         ignored: Vec<String>,
+        config: ConfigArgs,
+        mode: Mode,
     },
 }
 
@@ -48,6 +73,8 @@ pub enum UsageError {
     MissingValue(String),
     /// 文字コードのラベルが空など。
     BadEncoding(String),
+    /// `--set` の値が `key=value` の形でない。
+    BadSet(String),
 }
 
 fn to_string(a: OsString) -> Result<String, UsageError> {
@@ -125,6 +152,8 @@ pub fn parse(
     let mut encoding = None;
     let mut locale = None;
     let mut ignored = Vec::new();
+    let mut config = ConfigArgs::default();
+    let (mut check, mut dump, mut defaults, mut json) = (false, false, false, false);
     let mut only_positional = false;
     let add_file =
         |files: &mut Vec<FileArg>, raw: String, pending: &mut Option<(usize, Option<usize>)>| {
@@ -171,6 +200,27 @@ pub fn parse(
                 );
             }
             s if s.starts_with("--locale=") => locale = Some(s["--locale=".len()..].to_owned()),
+            "--config" | "-c" => config.files.push(
+                it.next()
+                    .ok_or_else(|| UsageError::MissingValue(a.clone()))
+                    .and_then(to_string)?,
+            ),
+            s if s.starts_with("--config=") => config.files.push(s["--config=".len()..].to_owned()),
+            "--no-config" | "-N" => config.no_config = true,
+            "--set" | "-s" => {
+                let v = it
+                    .next()
+                    .ok_or_else(|| UsageError::MissingValue(a.clone()))
+                    .and_then(to_string)?;
+                config.sets.push(checked_set(v)?);
+            }
+            s if s.starts_with("--set=") => config
+                .sets
+                .push(checked_set(s["--set=".len()..].to_owned())?),
+            "--check-config" => check = true,
+            "--dump-config" => dump = true,
+            "--defaults" => defaults = true,
+            "--json" => json = true,
             s if s.starts_with("--encoding=") => {
                 let v = s["--encoding=".len()..].to_owned();
                 if v.is_empty() {
@@ -197,13 +247,35 @@ pub fn parse(
         last.line = Some(line);
         last.col = col;
     }
+    // `--defaults` / `--json` は `--dump-config` の修飾だけ
+    if (defaults || json) && !dump {
+        let o = if defaults { "--defaults" } else { "--json" };
+        return Err(UsageError::UnknownOption(o.to_owned()));
+    }
+    let mode = if check {
+        Mode::CheckConfig
+    } else if dump {
+        Mode::DumpConfig { defaults, json }
+    } else {
+        Mode::Edit
+    };
     Ok(Cli::Run {
         files,
         read_only,
         encoding,
         locale,
         ignored,
+        config,
+        mode,
     })
+}
+
+/// `--set` の値が `key=value` の形か (キーが空でないこと)。値の妥当性は設定の読込が診断する。
+fn checked_set(v: String) -> Result<String, UsageError> {
+    match v.split_once('=') {
+        Some((k, _)) if !k.trim().is_empty() => Ok(v),
+        _ => Err(UsageError::BadSet(v)),
+    }
 }
 
 #[cfg(test)]
@@ -239,6 +311,8 @@ mod tests {
             encoding: None,
             locale: None,
             ignored: vec![],
+            config: ConfigArgs::default(),
+            mode: Mode::Edit,
         }
     }
 
@@ -308,6 +382,65 @@ mod tests {
         assert_eq!(
             p(&["--locale"]).unwrap_err(),
             UsageError::MissingValue("--locale".into())
+        );
+    }
+
+    #[test]
+    fn 設定の読込元のオプション() {
+        let r = p(&[
+            "-c",
+            "a.toml",
+            "--config=b.toml",
+            "--set",
+            "view.wrap=soft",
+            "-s",
+            "editor.tab_width=2",
+            "x.txt",
+        ])
+        .unwrap();
+        let Cli::Run { config, files, .. } = r else {
+            panic!()
+        };
+        assert_eq!(config.files, ["a.toml", "b.toml"]);
+        assert_eq!(config.sets, ["view.wrap=soft", "editor.tab_width=2"]);
+        assert!(!config.no_config);
+        assert_eq!(files.len(), 1);
+        let Cli::Run { config, .. } = p(&["-N"]).unwrap() else {
+            panic!()
+        };
+        assert!(config.no_config);
+        assert_eq!(
+            p(&["--set", "novalue"]).unwrap_err(),
+            UsageError::BadSet("novalue".into())
+        );
+        assert_eq!(
+            p(&["--set=", "a"]).unwrap_err(),
+            UsageError::BadSet("".into())
+        );
+        assert_eq!(
+            p(&["--config"]).unwrap_err(),
+            UsageError::MissingValue("--config".into())
+        );
+    }
+
+    #[test]
+    fn 端末を使わない動作() {
+        let mode = |args: &[&str]| match p(args).unwrap() {
+            Cli::Run { mode, .. } => mode,
+            _ => panic!(),
+        };
+        assert_eq!(mode(&["--check-config"]), Mode::CheckConfig);
+        assert_eq!(
+            mode(&["--dump-config", "--defaults", "--json"]),
+            Mode::DumpConfig {
+                defaults: true,
+                json: true
+            }
+        );
+        assert_eq!(
+            p(&["--defaults"]).unwrap_err(),
+            UsageError::UnknownOption("--defaults".into()),
+            "--dump-config の修飾だけ"
         );
     }
 
@@ -385,6 +518,8 @@ mod tests {
                 encoding: None,
                 locale: None,
                 ignored: vec!["+/pat".into(), "+abc".into()],
+                config: ConfigArgs::default(),
+                mode: Mode::Edit,
             }
         );
     }

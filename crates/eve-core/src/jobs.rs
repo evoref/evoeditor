@@ -53,8 +53,11 @@ pub struct JobRequest {
 #[derive(Clone, Debug)]
 #[non_exhaustive]
 pub enum JobKind {
-    /// 設定ディレクトリの `config.toml` と `keymap.toml` を読む (`config.reload`、07 §6)。
-    ReadConfig { dir: FsPath },
+    /// 設定ファイル (ユーザー層の `config.toml` を順に) と `keymap.toml` を読む (`config.reload`、07 §6)。
+    ReadConfig {
+        files: Vec<FsPath>,
+        keymap: Option<FsPath>,
+    },
     /// ファイルの `metadata` と Stamp を調べる。
     Metadata { path: FsPath, purpose: MetaPurpose },
     /// 起動時の退避ディレクトリの走査 (02 §9.3 の `RecoveryScan`。メインスレッドでは列挙しない)。
@@ -188,8 +191,10 @@ pub enum JobResult {
     /// `ReadConfig` の結果。
     ConfigRead {
         job: JobId,
-        config: ConfigFile,
-        keymap: ConfigFile,
+        /// `files` と同じ順。
+        config: Vec<ConfigFile>,
+        /// `keymap` を読まない (`--no-config`) ときは `None`。
+        keymap: Option<ConfigFile>,
     },
     /// 起動時の退避ディレクトリの走査の結果 (新しい順ではなく列挙した順。main が整えて案内する)。
     RecoveryFound {
@@ -549,10 +554,13 @@ pub fn run_job(
                 err: JobError::Fs(err),
             },
         },
-        JobKind::ReadConfig { dir } => JobResult::ConfigRead {
+        JobKind::ReadConfig { files, keymap } => JobResult::ConfigRead {
             job: req.id,
-            config: read_config_file(&*ports.fs, &dir.join("config.toml")),
-            keymap: read_config_file(&*ports.fs, &dir.join("keymap.toml")),
+            config: files
+                .iter()
+                .map(|f| read_config_file(&*ports.fs, f))
+                .collect(),
+            keymap: keymap.as_ref().map(|k| read_config_file(&*ports.fs, k)),
         },
         JobKind::Metadata { path, purpose } => match ports.fs.metadata(path) {
             Ok(meta) => {

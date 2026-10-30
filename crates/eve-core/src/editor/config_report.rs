@@ -55,57 +55,60 @@ impl EditorState {
 
     /// 診断 1 件の種別の文言 (本文, 対処)。
     fn diagnostic_texts(&self, d: &Diagnostic) -> (String, String) {
-        let cat = self.catalog();
-        let default = default_display(&d.key);
-        let mut args: Vec<(&str, String)> =
-            vec![("item", d.key.clone()), ("value", d.value.clone())];
-        let kind = match &d.kind {
-            DiagKind::Unsupported => "unsupported",
-            DiagKind::Syntax { message } => {
-                args.push(("reason", message.clone()));
-                "syntax"
-            }
-            DiagKind::UnknownKey { suggestion } => {
-                if let Some(s) = suggestion {
-                    args.push(("suggestion", s.clone()));
-                }
-                "unknown_key"
-            }
-            DiagKind::TypeMismatch { expected, found } => {
-                let word = |t: &str| cat.render(&type_key(t), &[], &|_| None);
-                args.push(("expected", word(expected)));
-                args.push(("actual", word(found)));
-                args.push(("default", default.to_owned()));
-                "type_mismatch"
-            }
-            DiagKind::OutOfRange { min, max } => {
-                args.push(("range", format!("{min}〜{max}")));
-                args.push(("default", default.to_owned()));
-                "out_of_range"
-            }
-            DiagKind::Keymap(p) => {
-                use eve_config::KeymapProblem as P;
-                match p {
-                    P::UnknownContext => "keymap_unknown_context",
-                    P::UnknownCommand => "keymap_unknown_command",
-                    P::BadKey => "keymap_bad_key",
-                    P::BadWhen => "keymap_bad_when",
-                    P::PrintableKey => "keymap_printable_key",
-                    P::ChordPrefix => "keymap_chord_prefix",
-                    P::EscapeKey => "keymap_escape_key",
-                }
-            }
-            DiagKind::InvalidValue { allowed } => {
-                args.push(("allowed", allowed.join(", ")));
-                args.push(("default", default.to_owned()));
-                "invalid_value"
-            }
-        };
-        let refs: Vec<(&str, &str)> = args.iter().map(|(k, v)| (*k, v.as_str())).collect();
-        let key = |part: &str| format!("msg.config.{kind}.{part}");
-        (
-            cat.render(&key("text"), &refs, &|_| None),
-            cat.render(&key("hint"), &refs, &|_| None),
-        )
+        diagnostic_texts(self.catalog(), d)
     }
+}
+
+/// 診断 1 件の種別の文言 (本文, 対処)。`--check-config` (端末を使わない) も使う。
+pub fn diagnostic_texts(cat: &eve_config::Catalog, d: &Diagnostic) -> (String, String) {
+    let default = default_display(&d.key);
+    let mut args: Vec<(&str, String)> = vec![("item", d.key.clone()), ("value", d.value.clone())];
+    let kind = match &d.kind {
+        DiagKind::Unsupported => "unsupported",
+        DiagKind::Syntax { message } => {
+            args.push(("reason", message.clone()));
+            "syntax"
+        }
+        DiagKind::UnknownKey { suggestion } => {
+            if let Some(s) = suggestion {
+                args.push(("suggestion", s.clone()));
+            }
+            "unknown_key"
+        }
+        DiagKind::TypeMismatch { expected, found } => {
+            let word = |t: &str| cat.render(&type_key(t), &[], &|_| None);
+            args.push(("expected", word(expected)));
+            args.push(("actual", word(found)));
+            args.push(("default", default.to_owned()));
+            "type_mismatch"
+        }
+        DiagKind::OutOfRange { min, max } => {
+            args.push(("range", format!("{min}〜{max}")));
+            args.push(("default", default.to_owned()));
+            "out_of_range"
+        }
+        DiagKind::Keymap(p) => {
+            use eve_config::KeymapProblem as P;
+            match p {
+                P::UnknownContext => "keymap_unknown_context",
+                P::UnknownCommand => "keymap_unknown_command",
+                P::BadKey => "keymap_bad_key",
+                P::BadWhen => "keymap_bad_when",
+                P::PrintableKey => "keymap_printable_key",
+                P::ChordPrefix => "keymap_chord_prefix",
+                P::EscapeKey => "keymap_escape_key",
+            }
+        }
+        DiagKind::InvalidValue { allowed } => {
+            args.push(("allowed", allowed.join(", ")));
+            args.push(("default", default.to_owned()));
+            "invalid_value"
+        }
+    };
+    let refs: Vec<(&str, &str)> = args.iter().map(|(k, v)| (*k, v.as_str())).collect();
+    let key = |part: &str| format!("msg.config.{kind}.{part}");
+    (
+        cat.render(&key("text"), &refs, &|_| None),
+        cat.render(&key("hint"), &refs, &|_| None),
+    )
 }

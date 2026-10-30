@@ -1669,10 +1669,15 @@ v0.2 以降の診断 (名前だけを予約し、文言はその版で言語フ�
 | `cli.help.option.readonly` | `-R, --readonly` | Open the file read-only | 読み取り専用で開きます |
 | `cli.help.option.encoding` | `-e, --encoding <label>` | Open the file with the given encoding | 文字コードを指定して開きます |
 | `cli.help.option.locale` (v0.2) | `--locale <lang>` | Set the UI language: ja or en (overrides ui.locale and EVE_LANG) | 画面の言語を指定します: ja / en (設定 ui.locale と EVE_LANG より優先) |
+| `cli.help.option.config` (v0.2) | `-c, --config <file>` | Read this settings file instead of config.toml (repeatable; later files win) | config.toml の代わりにこの設定ファイルを読みます (複数指定可。後のものが優先) |
+| `cli.help.option.no_config` (v0.2) | `-N, --no-config` | Do not read config.toml or keymap.toml (use the defaults) | config.toml と keymap.toml を読みません (既定値で動きます) |
+| `cli.help.option.set` (v0.2) | `-s, --set <key>=<value>` | Override one setting (e.g. --set view.wrap=soft) | 設定を 1 項目上書きします (例: --set view.wrap=soft) |
+| `cli.help.option.check_config` (v0.2) | `--check-config` | Check the settings, print the problems, and exit | 設定を確かめて問題を表示し、終了します |
+| `cli.help.option.dump_config` (v0.2) | `--dump-config [--defaults] [--json]` | Print the resolved settings (or the defaults) and exit | 解決した設定 (または既定値) を表示して終了します |
 | `cli.help.option.wait` | `--wait` | Accepted for $EDITOR compatibility; has no effect | $EDITOR に設定するときの互換用です (何もしません) |
 | `cli.help.option.end_of_options` | `--` | Treat the rest as file names | 以降をファイル名として扱います |
 | `cli.help.encodings` | `--encoding` に渡せる名前 (07 §5.2 `file.default_encoding` の許容値から `system` を除いたもの) | Encodings: utf-8, utf-8-bom, utf-16le, utf-16be, shift_jis, euc-jp, iso-2022-jp | 使える文字コード名: utf-8, utf-8-bom, utf-16le, utf-16be, shift_jis, euc-jp, iso-2022-jp |
-| `cli.help.exit_codes` | 終了コード (07 §18.4 の v0.1 で出るもの) | Exit codes: 0 normal, 1 runtime error, 2 usage error, 5 no terminal, 70 internal error | 終了コード: 0 正常、1 実行時エラー、2 使い方の誤り、5 端末なし、70 内部エラー |
+| `cli.help.exit_codes` | 終了コード (07 §18.4 の v0.1 で出るもの) | Exit codes: 0 normal, 1 runtime error, 2 usage error, 3 errors in the settings (--check-config), 5 no terminal, 70 internal error | 終了コード: 0 正常、1 実行時エラー、2 使い方の誤り、3 設定にエラー (--check-config)、5 端末なし、70 内部エラー |
 
 **起動時の退避の案内** (02 §11.2.1、05 §7.5)
 
