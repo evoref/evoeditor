@@ -78,3 +78,54 @@ fn 組込みテーマ_default_は表の全ロールの_4_段と一致する() {
     }
     assert!(errs.is_empty(), "{}", errs.join("\n"));
 }
+
+fn roles_with(
+    name: eve_config::ThemeName,
+    bg: eve_config::ThemeBackground,
+) -> eve_view::RoleStyles {
+    let mut h = eve_testkit::Harness::new();
+    h.editor.state_mut().set_config(eve_config::Config {
+        theme_name: name,
+        theme_background: bg,
+        ..eve_config::Config::default()
+    });
+    (*h.frame().roles).clone()
+}
+
+#[test]
+fn theme_name_で組込みテーマを選び_背景を塗るテーマは明暗をキーで替えられる() {
+    use eve_config::{ThemeBackground as B, ThemeName as N};
+    let dark = roles_with(N::DefaultDark, B::Auto).get("ui.text");
+    assert_eq!(dark.bg, Color::Rgb(0x1e, 0x1e, 0x1e));
+    // 塗るテーマは、既定色だったロールにも本文の背景が入る
+    let info = roles_with(N::DefaultDark, B::Auto).get("ui.message.info");
+    assert_eq!(info.bg, dark.bg);
+    let light = roles_with(N::DefaultDark, B::Light).get("ui.text");
+    assert_eq!(light.bg, Color::Rgb(0xfa, 0xfa, 0xfa), "明暗のキーで替わる");
+    // default は明暗のキーを見ない
+    assert_eq!(
+        roles_with(N::Default, B::Dark).get("ui.text").bg,
+        Color::Default
+    );
+    // ansi は 16 色の番号だけ
+    let a = roles_with(N::Ansi, B::Auto);
+    assert!(
+        a.iter()
+            .all(|(_, s)| !matches!(s.fg, Color::Rgb(..)) && !matches!(s.bg, Color::Rgb(..)))
+    );
+}
+
+#[test]
+fn 背景を塗るテーマの本文はコントラストを満たす() {
+    use eve_docs_tables::theme::contrast;
+    for (fg, bg) in [
+        ((0xd4, 0xd4, 0xd4), (0x1e, 0x1e, 0x1e)),
+        ((0x1e, 0x1e, 0x1e), (0xfa, 0xfa, 0xfa)),
+    ] {
+        assert!(contrast(fg, bg) >= 4.5, "{fg:?} / {bg:?}");
+    }
+    // (iii) の淡色 (#808080) も、塗った背景に対して 3.0:1 以上
+    for bg in [(0x1e, 0x1e, 0x1e), (0xfa, 0xfa, 0xfa)] {
+        assert!(contrast((0x80, 0x80, 0x80), bg) >= 3.0, "{bg:?}");
+    }
+}

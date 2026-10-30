@@ -83,6 +83,35 @@ pub enum BackspaceUnit {
     Codepoint,
 }
 
+/// 背景を塗るテーマの明暗 (`theme.background`、07 §5.4・§8.6)。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ThemeBackground {
+    /// テーマの名前どおり (既定)。
+    Auto,
+    Dark,
+    Light,
+}
+
+/// 組込みテーマ (`theme.name`、07 §5.4)。テーマファイルは後の版。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ThemeName {
+    Default,
+    DefaultDark,
+    DefaultLight,
+    Ansi,
+}
+
+impl ThemeName {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            ThemeName::Default => "default",
+            ThemeName::DefaultDark => "default-dark",
+            ThemeName::DefaultLight => "default-light",
+            ThemeName::Ansi => "ansi",
+        }
+    }
+}
+
 /// 空白の可視化 (`view.show_whitespace`、03 §13.2、FR-508)。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ShowWhitespace {
@@ -188,6 +217,10 @@ pub struct Config {
     pub wrap_kinsoku: bool,
     /// `view.show_whitespace`: 空白の可視化。
     pub show_whitespace: ShowWhitespace,
+    /// `theme.name`: テーマ。
+    pub theme_name: ThemeName,
+    /// `theme.background`: 背景を塗るテーマの明暗。
+    pub theme_background: ThemeBackground,
     /// `ui.mouse`: マウスの入力を使うか (FR-307、04 §6.8)。
     pub mouse: bool,
     /// `ui.mouse_wheel_lines`: ホイール 1 目盛りのスクロール量 (表示行)。
@@ -222,6 +255,8 @@ impl Default for Config {
             wrap_indent: WrapIndent::Same,
             wrap_kinsoku: true,
             show_whitespace: ShowWhitespace::Minimal,
+            theme_name: ThemeName::Default,
+            theme_background: ThemeBackground::Auto,
             mouse: true,
             mouse_wheel_lines: 3,
             which_key_delay_ms: 500,
@@ -281,6 +316,8 @@ pub fn changed_keys(a: &Config, b: &Config) -> Vec<&'static str> {
             "view.show_whitespace",
             a.show_whitespace != b.show_whitespace,
         ),
+        ("theme.name", a.theme_name != b.theme_name),
+        ("theme.background", a.theme_background != b.theme_background),
         ("ui.mouse", a.mouse != b.mouse),
         (
             "ui.mouse_wheel_lines",
@@ -329,6 +366,8 @@ pub(crate) const KEYS: &[&str] = &[
     "view.wrap_indent",
     "view.wrap_kinsoku",
     "view.show_whitespace",
+    "theme.name",
+    "theme.background",
     "ui.mouse",
     "ui.mouse_wheel_lines",
     "ui.which_key_delay_ms",
@@ -338,6 +377,8 @@ pub(crate) const KEYS: &[&str] = &[
 
 const INDENT_UNITS: &[&str] = &["tab", "space"];
 const BACKSPACE_UNITS: &[&str] = &["grapheme", "codepoint"];
+const THEME_NAMES: &[&str] = &["default", "default-dark", "default-light", "ansi"];
+const THEME_BACKGROUNDS: &[&str] = &["auto", "dark", "light"];
 const SHOW_WHITESPACE: &[&str] = &["off", "minimal"];
 const OSC52_POLICIES: &[&str] = &["auto", "always", "never"];
 const WRAP_MODES: &[&str] = &["off", "soft", "word"];
@@ -591,6 +632,25 @@ impl Cx<'_> {
                     self.out.config.mouse_wheel_lines = n as u8;
                 }
             }
+            "theme.name" => {
+                if let Some(s) = self.string(key, v, THEME_NAMES) {
+                    self.out.config.theme_name = match s.as_str() {
+                        "default-dark" => ThemeName::DefaultDark,
+                        "default-light" => ThemeName::DefaultLight,
+                        "ansi" => ThemeName::Ansi,
+                        _ => ThemeName::Default,
+                    };
+                }
+            }
+            "theme.background" => {
+                if let Some(s) = self.string(key, v, THEME_BACKGROUNDS) {
+                    self.out.config.theme_background = match s.as_str() {
+                        "dark" => ThemeBackground::Dark,
+                        "light" => ThemeBackground::Light,
+                        _ => ThemeBackground::Auto,
+                    };
+                }
+            }
             "view.show_whitespace" => {
                 let Some(s) = self.raw_string(key, v) else {
                     return;
@@ -802,6 +862,8 @@ pub fn default_display(key: &str) -> &'static str {
         "editor.backspace_unit" => "grapheme",
         "view.wrap" => "off",
         "view.show_whitespace" => "minimal",
+        "theme.name" => "default",
+        "theme.background" => "auto",
         "view.wrap_indent" => "same",
         "view.wrap_kinsoku" | "ui.mouse" => "true",
         "ui.mouse_wheel_lines" => "3",

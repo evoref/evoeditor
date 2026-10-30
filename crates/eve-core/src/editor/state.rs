@@ -228,6 +228,8 @@ impl EditorState {
     /// 設定を差し替え、持っている文書の表示設定にも写す。
     pub fn set_config(&mut self, config: eve_config::Config) {
         let old_wrap = self.config_wrap();
+        let theme_changed = (self.config.theme_name, self.config.theme_background)
+            != (config.theme_name, config.theme_background);
         self.config = config;
         self.mouse_on = config.mouse;
         let display = self.display_settings();
@@ -242,6 +244,9 @@ impl EditorState {
             for v in views {
                 self.set_wrap(v, wrap);
             }
+        }
+        if theme_changed {
+            self.refresh_roles();
         }
         self.needs_render = true;
     }
