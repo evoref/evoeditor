@@ -35,6 +35,8 @@ pub(super) fn default_keymap() -> Keymap {
     bind("help", "pagedown", "ui.list_page_down");
     bind("help", "pageup", "ui.list_page_up");
     bind("help", "esc", "ui.cancel");
+    // メッセージ履歴の全件をコピー (履歴を開いているときだけ。ヘルプでは使えない)
+    bind("help", "mod+c", "ui.message_history_copy");
     // 検索バー (search → prompt → global)
     for (keys, cmd) in [
         ("enter", "search.next"),

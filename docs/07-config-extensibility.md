@@ -1130,6 +1130,7 @@ verb       := [a-z][a-z0-9_]*
 | `help.open` (v0.2) | `cmd.help.open` | Ui | — | — | `ui` | `global` | `ctrl+k h` (alt) (`f1` をヘルプに移すかは v0.2 で決める。提案中) | normal:5, palette:3, prompt:3, search:1, chord:3 |
 | `help.keys` / `help.commands` (v0.2) | `cmd.help.keys` / `cmd.help.commands` | Ui | — | — | `ui` | パレット (ヘルプの該当の節を開く、FR-514) | — | - |
 | `ui.message_history` (v0.2) | `cmd.ui.message_history` | Ui | — | — | `ui` | `editor` | `ctrl+k m` (alt) | - |
+| `ui.message_history_copy` (v0.2) | `cmd.ui.message_history_copy` | Ui | — | — (メッセージ履歴を開いていないときは `NotAvailable`) | `ui` | `help` | `mod+c` | - |
 | `ui.redraw` | `cmd.ui.redraw` | Ui | — | — | `-` | `global` | `ctrl+k r` (alt) | - |
 | `ui.toggle_hint_bar` (v0.2) | `cmd.ui.toggle_hint_bar` | Ui | — | — | `ui` | パレット | — | - |
 | `ui.toggle_mouse` (v0.2) | `cmd.ui.toggle_mouse` | Ui | — | `caps.mouse` | `-` | パレット | — | - |
