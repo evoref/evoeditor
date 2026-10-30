@@ -123,6 +123,77 @@ pub(super) fn lower_graphemes(s: &str) -> Vec<String> {
         .collect()
 }
 
+/// パレットから実行したコマンドを覚える数 (直近 20 件、起動している間だけ。07 §11.4)。
+pub(super) const RECENT_MAX: usize = 20;
+
+/// 書記素 `i` が語の先頭か (先頭、または直前が空白・区切り記号)。
+fn word_start(hay: &[String], i: usize) -> bool {
+    i == 0 || matches!(hay[i - 1].as_str(), " " | "." | "_" | "-" | ":" | "/")
+}
+
+/// ファジー一致 (04 §8.1、07 §11.4): `needle` の書記素が `hay` に順に現れれば (スコア, 一致した書記素番号)。
+/// 連続した部分一致を最も高くし (先頭ならさらに高く)、部分列の一致は、語頭に当たる文字・連続する文字が多く、
+/// 間が少ないほど高い。どれも一致しなければ `None`。
+pub(super) fn fuzzy(hay: &[String], needle: &[String]) -> Option<(i32, Vec<usize>)> {
+    if needle.is_empty() {
+        return None;
+    }
+    if let Some(s) = find(hay, needle) {
+        let bonus = if s == 0 {
+            200
+        } else if word_start(hay, s) {
+            100
+        } else {
+            0
+        };
+        return Some((1000 + bonus - s as i32, (s..s + needle.len()).collect()));
+    }
+    // 部分列: 前から順に当てる。語頭の文字を優先して当て、それで当てきれなければ前から最初の文字に当て直す
+    let pos = subsequence(hay, needle, true).or_else(|| subsequence(hay, needle, false))?;
+    let mut score = 500 - pos[0] as i32;
+    for (k, &i) in pos.iter().enumerate() {
+        if word_start(hay, i) {
+            score += 20;
+        }
+        if k > 0 {
+            let gap = i - pos[k - 1] - 1;
+            score += if gap == 0 { 15 } else { -(gap.min(20) as i32) };
+        }
+    }
+    Some((score, pos))
+}
+
+/// `needle` を `hay` の部分列として当てた位置。`prefer_word_start` なら、各文字をその先で最初の語頭に当てる
+/// (語頭が無ければ最初の出現)。当てきれなければ `None`。
+fn subsequence(hay: &[String], needle: &[String], prefer_word_start: bool) -> Option<Vec<usize>> {
+    let mut pos = Vec::with_capacity(needle.len());
+    let mut from = 0;
+    for g in needle {
+        let mut cand = (from..hay.len()).filter(|&i| hay[i] == *g);
+        let first = cand.next()?;
+        let pick = if prefer_word_start && !word_start(hay, first) {
+            cand.find(|&i| word_start(hay, i)).unwrap_or(first)
+        } else {
+            first
+        };
+        pos.push(pick);
+        from = pick + 1;
+    }
+    Some(pos)
+}
+
+/// 書記素番号の列を、連続する区間にまとめる。
+fn to_ranges(pos: &[usize]) -> Vec<Range<usize>> {
+    let mut out: Vec<Range<usize>> = Vec::new();
+    for &p in pos {
+        match out.last_mut() {
+            Some(r) if r.end == p => r.end = p + 1,
+            _ => out.push(p..p + 1),
+        }
+    }
+    out
+}
+
 /// `hay` の中で `needle` が最初に現れる書記素番号。
 pub(super) fn find(hay: &[String], needle: &[String]) -> Option<usize> {
     if needle.is_empty() || needle.len() > hay.len() {
@@ -197,14 +268,25 @@ impl EditorState {
             .to_owned()
     }
 
-    /// 一致した候補。空の入力は全件を CommandId 順で返す。
+    /// 一致した候補 (04 §8.1、07 §11.4)。順序は ファジー一致のスコア → 最近実行 → CommandId 順。
+    /// 照合の対象はタイトル (表示の言語) と英語のタイトルと CommandId (そのままの形と単語に分けた形)。
+    /// 空の入力は 最近実行 → CommandId 順の全件。
     fn palette_hits(&self, query: &str) -> Vec<Hit> {
         let q = lower_graphemes(query.trim());
-        let mut hits: Vec<(u8, Hit)> = Vec::new();
+        let en = eve_config::Catalog::builtin(eve_config::Locale::En);
+        // 最近実行の順位 (新しいほど小さい)。覚えていないものは最後
+        let recency = |id: &str| {
+            self.palette_recent
+                .iter()
+                .position(|r| r == id)
+                .unwrap_or(usize::MAX)
+        };
+        let mut hits: Vec<(i32, usize, Hit)> = Vec::new();
         for (i, e) in self.palette_entries.iter().enumerate() {
             if q.is_empty() {
                 hits.push((
                     0,
+                    recency(&e.id),
                     Hit {
                         entry: i,
                         ranges: Vec::new(),
@@ -213,23 +295,39 @@ impl EditorState {
                 continue;
             }
             let title = lower_graphemes(&self.command_title(&e.id));
-            // CommandId は、そのままの形 (`file.save_as`) と、単語に分けた形 (`file save as`) の両方で照合する
+            let en_title = en
+                .get(&format!("cmd.{}.title", e.id))
+                .map(lower_graphemes)
+                .unwrap_or_default();
             let id_raw = lower_graphemes(&e.id);
             let id_words = lower_graphemes(&e.id.replace(['.', '_'], " "));
-            let (t, d) = (
-                find(&title, &q),
-                find(&id_raw, &q).or_else(|| find(&id_words, &q)),
-            );
-            if t.is_none() && d.is_none() {
+            let on_title = fuzzy(&title, &q);
+            let best = [
+                on_title.as_ref().map(|(s, _)| *s),
+                fuzzy(&en_title, &q).map(|(s, _)| s),
+                fuzzy(&id_raw, &q).map(|(s, _)| s),
+                fuzzy(&id_words, &q).map(|(s, _)| s),
+            ]
+            .into_iter()
+            .flatten()
+            .max();
+            let Some(score) = best else {
                 continue;
-            }
-            let rank = u8::from(t != Some(0) && d != Some(0));
-            let ranges = t.map(|s| s..s + q.len()).into_iter().collect();
-            hits.push((rank, Hit { entry: i, ranges }));
+            };
+            // 強調するのは表示しているタイトルで一致した箇所だけ
+            let ranges = on_title.map(|(_, p)| to_ranges(&p)).unwrap_or_default();
+            hits.push((score, recency(&e.id), Hit { entry: i, ranges }));
         }
         // entries は CommandId 順。安定ソートなので同順位は CommandId 順のまま
-        hits.sort_by_key(|(r, _)| *r);
-        hits.into_iter().map(|(_, h)| h).collect()
+        hits.sort_by_key(|(score, recent, _)| (std::cmp::Reverse(*score), *recent));
+        hits.into_iter().map(|(_, _, h)| h).collect()
+    }
+
+    /// パレットから実行したコマンドを覚える (新しいものを先頭に、直近 `RECENT_MAX` 件)。
+    fn remember_palette_command(&mut self, id: &str) {
+        self.palette_recent.retain(|r| r != id);
+        self.palette_recent.insert(0, id.to_owned());
+        self.palette_recent.truncate(RECENT_MAX);
     }
 
     /// `when` が偽の理由の文言キーの末尾 (`ui.palette.reason.*`)。実行できるなら `None`。
@@ -350,6 +448,7 @@ impl EditorState {
             return CommandResult::Done;
         }
         let id = entry.id.clone();
+        self.remember_palette_command(&id);
         // 必須の列挙引数があるコマンドは、同じオーバーレイで値を尋ねる
         if let Some(def) = arg_def(&id) {
             self.set_overlay(Some(Overlay::Palette(PaletteState {
@@ -502,5 +601,40 @@ impl EditorState {
             footer: cell_text(&footer, CutPolicy::Never),
             no_match: cell_text(&render("ui.palette.no_match", &[]), CutPolicy::End),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn g(s: &str) -> Vec<String> {
+        lower_graphemes(s)
+    }
+
+    #[test]
+    fn 部分一致は部分列より高く_先頭の一致が最も高い() {
+        let (prefix, _) = fuzzy(&g("save as"), &g("save")).unwrap();
+        let (inner, _) = fuzzy(&g("file save"), &g("save")).unwrap();
+        let (sub, pos) = fuzzy(&g("select all"), &g("sa")).unwrap();
+        assert!(prefix > inner && inner > sub, "{prefix} {inner} {sub}");
+        assert_eq!(pos, [0, 7], "語頭に当てる");
+    }
+
+    #[test]
+    fn 語頭を優先して当てきれなければ前から当て直す() {
+        let (_, pos) = fuzzy(&g("xa-b a"), &g("ab")).unwrap();
+        assert_eq!(pos, [1, 3]);
+        assert!(
+            fuzzy(&g("abc"), &g("cb")).is_none(),
+            "順序が逆なら一致しない"
+        );
+        assert!(fuzzy(&g("保存"), &g("存保")).is_none());
+        assert!(fuzzy(&g("名前を付けて保存"), &g("名保")).is_some());
+    }
+
+    #[test]
+    fn 一致した位置は連続する区間にまとめる() {
+        assert_eq!(to_ranges(&[0, 1, 2, 5, 7, 8]), [0..3, 5..6, 7..9]);
     }
 }

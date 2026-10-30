@@ -79,6 +79,8 @@ pub struct EditorState {
     pub(super) reloaded: Option<(eve_config::KeymapFile, Vec<&'static str>)>,
     /// 今のユーザー層のキーマップの割当 (再読込で変わったかを比べる)。
     pub(super) user_keymap_entries: Option<Vec<eve_config::KeymapEntry>>,
+    /// パレットから実行したコマンド (新しい順、直近 20 件。起動している間だけ、07 §11.4)。
+    pub(super) palette_recent: Vec<String>,
     /// 設定の読込元 (`None` は設定ディレクトリの既定の 2 ファイル)。
     pub(super) config_sources: Option<super::config_reload::ConfigSources>,
     /// マウスの取得が有効か (`ui.mouse` の初期値。`ui.toggle_mouse` で変わる)。
@@ -209,6 +211,7 @@ impl EditorState {
             reloaded: None,
             user_keymap_entries: None,
             config_sources: None,
+            palette_recent: Vec::new(),
         }
     }
 
