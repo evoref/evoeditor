@@ -34,6 +34,8 @@ static PANIC_INFO: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None
 const EXIT_ERROR: u8 = 1;
 /// 使い方の誤り。
 const EXIT_USAGE: u8 = 2;
+/// `--check-config` でエラーの診断があった。
+const EXIT_CONFIG_ERROR: u8 = 3;
 /// 端末の初期化に失敗 (`Host::run` が返す。ここでは使わない)。
 #[allow(dead_code)]
 const EXIT_TERMINAL: u8 = 5;
@@ -64,66 +66,155 @@ fn print_exit_lines(host: &mut Host, locale: eve_config::Locale) {
     }
 }
 
-/// 設定ファイルの名前 (設定ディレクトリの直下、07 §2)。
-const CONFIG_FILE: &str = "config.toml";
+use eve_core::{CONFIG_FILE, KEYMAP_FILE};
 
-/// キーマップファイルの名前 (設定ディレクトリの直下、07 §2)。
-const KEYMAP_FILE: &str = "keymap.toml";
-
-/// `keymap.toml` を読む。無ければ空。読めないときは診断を 1 件出して空。
-fn load_keymap(dir: &std::path::Path) -> eve_config::KeymapFile {
-    use eve_config::{DiagKind, Diagnostic, KeymapFile, Severity};
-    if dir.as_os_str().is_empty() {
-        return KeymapFile::default();
-    }
-    let unreadable = |message: String| KeymapFile {
-        entries: Vec::new(),
-        diagnostics: vec![Diagnostic {
-            severity: Severity::Error,
-            kind: DiagKind::Syntax { message },
-            key: String::new(),
-            value: String::new(),
-            line: 0,
-            column: 0,
-        }],
-    };
-    match std::fs::read(dir.join(KEYMAP_FILE)) {
-        Ok(bytes) => match String::from_utf8(bytes) {
-            Ok(text) => eve_config::load_keymap_str(text.strip_prefix('\u{feff}').unwrap_or(&text)),
-            Err(_) => unreadable("UTF-8 として読めません".to_owned()),
-        },
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => KeymapFile::default(),
-        Err(e) => unreadable(e.to_string()),
+/// 設定ファイル 1 つを読む。無ければ `Ok(None)`、読めない (UTF-8 でない・権限がない等) ときは理由。
+/// 起動時は端末を始める前なので、ここで直接読む (`config.reload` は io ジョブで読む)。
+fn read_source(path: &std::path::Path) -> Result<Option<String>, String> {
+    match std::fs::read(path) {
+        Ok(bytes) => String::from_utf8(bytes)
+            .map(Some)
+            .map_err(|_| "UTF-8 として読めません".to_owned()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(e) => Err(e.to_string()),
     }
 }
 
-/// ユーザー層の設定ファイルを読む。無ければ既定値で、診断も出さない (FR-702)。
-/// 読めない (UTF-8 でない・権限がない等) ときは既定値で動き、診断を 1 件出す。
-fn load_config(dir: &std::path::Path) -> eve_config::Loaded {
-    use eve_config::{DiagKind, Diagnostic, Loaded, Severity};
-    if dir.as_os_str().is_empty() {
-        return eve_config::load_str("");
-    }
-    let unreadable = |message: String| Loaded {
-        config: eve_config::Config::default(),
-        diagnostics: vec![Diagnostic {
-            severity: Severity::Error,
-            kind: DiagKind::Syntax { message },
-            key: String::new(),
-            value: String::new(),
-            line: 0,
-            column: 0,
-        }],
+/// 設定の読込元 (07 §18.3): 既定は設定ディレクトリの `config.toml` と `keymap.toml`。`--config` はユーザー層の
+/// `config.toml` の代わりに指定のファイルを順に重ね、`--no-config` はユーザー層を読まない。`--set` は最後に重ねる。
+fn config_sources(paths: &WinPaths, args: &cli::ConfigArgs) -> eve_core::ConfigSources {
+    let dir = paths.config_dir();
+    let has_dir = !dir.as_path().as_os_str().is_empty();
+    let files = if args.no_config {
+        Vec::new()
+    } else if !args.files.is_empty() {
+        args.files
+            .iter()
+            .map(|f| {
+                let path = paths
+                    .normalize(f)
+                    .unwrap_or_else(|_| eve_core::FsPath::new(f));
+                (f.clone(), path)
+            })
+            .collect()
+    } else if has_dir {
+        vec![(CONFIG_FILE.to_owned(), dir.join(CONFIG_FILE))]
+    } else {
+        Vec::new()
     };
-    match std::fs::read(dir.join(CONFIG_FILE)) {
-        Ok(bytes) => match String::from_utf8(bytes) {
-            // メモ帳が付ける BOM は読み飛ばす
-            Ok(text) => eve_config::load_str(text.strip_prefix('\u{feff}').unwrap_or(&text)),
-            Err(_) => unreadable("UTF-8 として読めません".to_owned()),
-        },
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => eve_config::load_str(""),
-        Err(e) => unreadable(e.to_string()),
+    eve_core::ConfigSources {
+        files,
+        keymap: (!args.no_config && has_dir).then(|| dir.join(KEYMAP_FILE)),
+        sets: args.sets.clone(),
     }
+}
+
+/// 読込元から設定を合成する。読めない・構文エラーのファイルは重ねずに診断にする (起動を妨げない、FR-703)。
+fn load_config(src: &eve_core::ConfigSources) -> eve_config::Resolved {
+    let sources: Vec<eve_config::Source> = src
+        .files
+        .iter()
+        .map(|(name, path)| eve_config::Source {
+            name: name.clone(),
+            text: read_source(path.as_path()),
+        })
+        .collect();
+    eve_config::resolve(&sources, &src.sets)
+}
+
+/// `keymap.toml` を読む。無ければ空。読めないときは診断を 1 件出して空。
+fn load_keymap(src: &eve_core::ConfigSources) -> eve_config::KeymapFile {
+    use eve_config::{DiagKind, Diagnostic, KeymapFile, Severity};
+    let Some(path) = &src.keymap else {
+        return KeymapFile::default();
+    };
+    match read_source(path.as_path()) {
+        Ok(Some(text)) => {
+            eve_config::load_keymap_str(text.strip_prefix('\u{feff}').unwrap_or(&text))
+        }
+        Ok(None) => KeymapFile::default(),
+        Err(message) => KeymapFile {
+            entries: Vec::new(),
+            diagnostics: vec![Diagnostic {
+                severity: Severity::Error,
+                kind: DiagKind::Syntax { message },
+                key: String::new(),
+                value: String::new(),
+                line: 0,
+                column: 0,
+            }],
+        },
+    }
+}
+
+/// UI の言語: --locale > ui.locale > EVE_LANG > OS の言語 > ja (07 §17.1)。
+fn choose_locale(
+    cli_locale: Option<&str>,
+    config: &eve_config::Config,
+) -> eve_config::LocaleChoice {
+    let env_lang = std::env::var("EVE_LANG").ok();
+    let os_tag = eve_platform::locale::ui_language_tag();
+    eve_config::select_locale(
+        cli_locale,
+        config.ui_locale,
+        env_lang.as_deref(),
+        os_tag.as_deref(),
+    )
+}
+
+/// `--check-config` (07 §18.3): 設定を読んで診断を標準出力へ出し、終える。エラーがあれば終了コード 3、警告だけなら 0。
+/// キーマップは書式だけを確かめる (コマンド名などの照合は起動したときの診断で行う)。
+fn check_config(args: &cli::ConfigArgs, cli_locale: Option<&str>) -> u8 {
+    let paths = match WinPaths::from_process_env() {
+        Ok(p) => p,
+        Err(_) => return EXIT_ERROR,
+    };
+    let src = config_sources(&paths, args);
+    let resolved = load_config(&src);
+    let keymap = load_keymap(&src);
+    let locale = choose_locale(cli_locale, &resolved.config).locale;
+    let cat = Catalog::builtin(locale);
+    let mut reports = resolved.reports.clone();
+    if !keymap.diagnostics.is_empty() {
+        reports.push((KEYMAP_FILE.to_owned(), keymap.diagnostics.clone()));
+    }
+    let mut out = std::io::stdout().lock();
+    let mut shown = 0;
+    let mut error = resolved.has_error;
+    for (name, diags) in &reports {
+        for d in diags {
+            error |= d.severity == eve_config::Severity::Error;
+            // 「このバージョンでは未対応」の情報診断も出す (画面とは違い、確かめるための出力なので)
+            let (text, hint) = eve_core::config_diagnostic_texts(cat, d);
+            let at = if d.line > 0 {
+                format!("{name}:{}:{}", d.line, d.column)
+            } else {
+                name.clone()
+            };
+            let _ = writeln!(out, "{at}: {text}");
+            if !hint.is_empty() {
+                let _ = writeln!(out, "  {hint}");
+            }
+            shown += 1;
+        }
+    }
+    texts::check_config_summary(shown).write_to(&mut out);
+    if error { EXIT_CONFIG_ERROR } else { 0 }
+}
+
+/// `--dump-config` (07 §18.3): 解決済みの設定 (`--defaults` なら既定値) を TOML (`--json` なら JSON) で出し、終える。
+fn dump_config(args: &cli::ConfigArgs, defaults: bool, json: bool) -> u8 {
+    let config = if defaults {
+        eve_config::Config::default()
+    } else {
+        let paths = match WinPaths::from_process_env() {
+            Ok(p) => p,
+            Err(_) => return EXIT_ERROR,
+        };
+        load_config(&config_sources(&paths, args)).config
+    };
+    print!("{}", eve_config::dump(&config, json));
+    0
 }
 
 /// 診断の重さ → ログのレベル。
@@ -136,9 +227,9 @@ fn log_level(s: eve_config::Severity) -> eve_platform::log::Level {
 }
 
 /// 診断 1 件のログの行 (ログは英語のみ、05 §7.3)。
-fn describe(d: &eve_config::Diagnostic) -> String {
+fn describe(name: &str, d: &eve_config::Diagnostic) -> String {
     format!(
-        "config {CONFIG_FILE}:{}:{} {} {:?}",
+        "config {name}:{}:{} {} {:?}",
         d.line, d.column, d.key, d.kind
     )
 }
@@ -162,6 +253,7 @@ fn run(
     encoding: Option<Encoding>,
     cli_locale: Option<&str>,
     ignored: &[String],
+    config_args: &cli::ConfigArgs,
 ) -> u8 {
     // 作業ディレクトリ・ディレクトリ・Ports
     let paths = match WinPaths::from_process_env() {
@@ -175,24 +267,20 @@ fn run(
             return EXIT_ERROR;
         }
     };
-    let loaded = load_config(paths.config_dir().as_path());
-    let keymap = load_keymap(paths.config_dir().as_path());
+    let sources = config_sources(&paths, config_args);
+    let loaded = load_config(&sources);
+    let keymap = load_keymap(&sources);
     let clock = Arc::new(SystemClock::new());
     let state_dir = paths.state_dir();
-    // UI の言語: --locale > ui.locale > EVE_LANG > OS の言語 > ja (07 §17.1)。検出は端末の初期化の前に 1 回だけ
-    let env_lang = std::env::var("EVE_LANG").ok();
-    let os_tag = eve_platform::locale::ui_language_tag();
-    let choice = eve_config::select_locale(
-        cli_locale,
-        loaded.config.ui_locale,
-        env_lang.as_deref(),
-        os_tag.as_deref(),
-    );
+    // UI の言語。検出は端末の初期化の前に 1 回だけ
+    let choice = choose_locale(cli_locale, &loaded.config);
     let locale = choice.locale;
     // 設定の診断は全件をログへ書く (画面には最初の 1 件か要約、07 §4.3)。ファイルは最初の書込で作る
     let logger = eve_platform::log::Logger::new(Some(state_dir.as_path()));
-    for d in &loaded.diagnostics {
-        logger.log(log_level(d.severity), &describe(d));
+    for (name, diags) in &loaded.reports {
+        for d in diags {
+            logger.log(log_level(d.severity), &describe(name, d));
+        }
     }
     for w in &choice.warnings {
         let from = match w.source {
@@ -236,12 +324,13 @@ fn run(
     let mut host = Host::with_channel(ports, (tx.clone(), rx));
     host.set_initial_encoding(encoding);
     let config = loaded.config;
-    host.set_config(config, CONFIG_FILE, loaded.diagnostics);
+    host.set_config(config, CONFIG_FILE, Vec::new());
+    for (name, diags) in loaded.reports {
+        host.add_config_report(&name, diags);
+    }
+    host.set_config_sources(sources);
     for d in &keymap.diagnostics {
-        logger.log(
-            log_level(d.severity),
-            &describe(d).replacen(CONFIG_FILE, KEYMAP_FILE, 1),
-        );
+        logger.log(log_level(d.severity), &describe(KEYMAP_FILE, d));
     }
     host.set_keymap(KEYMAP_FILE, &keymap);
     host.set_locale(locale);
@@ -458,11 +547,24 @@ fn main() -> ProcessExit {
             0
         }
         Ok(Cli::Run {
+            mode: cli::Mode::CheckConfig,
+            config,
+            locale,
+            ..
+        }) => check_config(&config, locale.as_deref()),
+        Ok(Cli::Run {
+            mode: cli::Mode::DumpConfig { defaults, json },
+            config,
+            ..
+        }) => dump_config(&config, defaults, json),
+        Ok(Cli::Run {
             files,
             read_only,
             encoding,
             locale,
             ignored,
+            config,
+            ..
         }) => match encoding.as_deref().map(Encoding::from_label) {
             // 07 §18.4: 文字コードの名前が分からないのは使い方の誤り
             Some(None) => {
@@ -483,6 +585,7 @@ fn main() -> ProcessExit {
                 forced.flatten(),
                 locale.as_deref(),
                 &ignored,
+                &config,
             ),
         },
         Err(e) => {

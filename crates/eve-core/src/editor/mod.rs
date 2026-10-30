@@ -9,6 +9,8 @@ mod chrome;
 mod clipboard;
 mod command;
 mod config_reload;
+pub use config_reload::{CONFIG_FILE, ConfigSources, KEYMAP_FILE};
+pub use config_report::diagnostic_texts as config_diagnostic_texts;
 mod config_report;
 mod context;
 mod default_keymap;

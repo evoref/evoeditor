@@ -4,7 +4,7 @@
 //! エラー (構文エラー・読めない) のあるファイルは前の設定のまま維持し、診断だけ出す (起動時と違い、半端な状態にしない)。
 //! 変わった項目は 1 行に要約し、再起動しないと効かない項目は別の 1 行で知らせる。
 
-use eve_config::{Config, KeymapFile, Loaded, Severity};
+use eve_config::{Config, KeymapFile, Severity};
 use eve_view::{Effect, MessageLevel};
 
 use super::Editor;
@@ -20,6 +20,17 @@ pub const CONFIG_FILE: &str = "config.toml";
 /// キーマップファイルの名前。
 pub const KEYMAP_FILE: &str = "keymap.toml";
 
+/// 設定の読込元 (07 §3・§18.3)。起動時に bin が決め (`--config` / `--no-config` / `--set`)、再読込も同じ元を読む。
+#[derive(Clone, Debug, Default)]
+pub struct ConfigSources {
+    /// ユーザー層の設定ファイル (診断に出す名前, パス)。この順に重ねる。
+    pub files: Vec<(String, crate::FsPath)>,
+    /// `keymap.toml`。`None` は読まない (`--no-config`)。
+    pub keymap: Option<crate::FsPath>,
+    /// コマンドライン層 (`--set key=value`)。最後に重ねる。
+    pub sets: Vec<String>,
+}
+
 /// 再起動しないと効かない項目 (07 §6 の 3 分類の「再起動が必要」。端末の初期化・言語の選択で 1 回だけ使う)。
 const RESTART_KEYS: [&str; 3] = ["theme.color_mode", "view.ambiguous_width", "ui.locale"];
 
@@ -32,6 +43,28 @@ fn text_of(f: &ConfigFile) -> Result<Option<String>, String> {
             Err(_) => Err("UTF-8 として読めません".to_owned()),
         },
         Err(e) => Err(e.clone()),
+    }
+}
+
+impl EditorState {
+    /// 設定の読込元を置く (Host が起動時に、bin の決めたものを渡す)。置かなければ設定ディレクトリの 2 つのファイル。
+    pub fn set_config_sources(&mut self, sources: ConfigSources) {
+        self.config_sources = Some(sources);
+    }
+
+    fn config_sources(&self) -> ConfigSources {
+        if let Some(s) = &self.config_sources {
+            return s.clone();
+        }
+        let dir = self.paths.config_dir();
+        if dir.as_path().as_os_str().is_empty() {
+            return ConfigSources::default();
+        }
+        ConfigSources {
+            files: vec![(CONFIG_FILE.to_owned(), dir.join(CONFIG_FILE))],
+            keymap: Some(dir.join(KEYMAP_FILE)),
+            sets: Vec::new(),
+        }
     }
 }
 
@@ -61,15 +94,15 @@ impl EditorState {
         {
             return CommandResult::Done;
         }
-        let dir = self.paths.config_dir();
-        if dir.as_path().as_os_str().is_empty() {
-            // 設定ディレクトリが無い環境 (既定値だけで動いている)
-            self.show_message(MessageLevel::Info, "info.config.reload_unchanged", &[]);
-            return CommandResult::Done;
-        }
-        let job = self
-            .jobs
-            .spawn(None, eve_view::Revision(0), JobKind::ReadConfig { dir });
+        let src = self.config_sources();
+        let job = self.jobs.spawn(
+            None,
+            eve_view::Revision(0),
+            JobKind::ReadConfig {
+                files: src.files.iter().map(|(_, p)| p.clone()).collect(),
+                keymap: src.keymap.clone(),
+            },
+        );
         self.pending.insert(job, Pending::ConfigReload);
         CommandResult::Done
     }
@@ -79,32 +112,44 @@ impl EditorState {
         let JobResult::ConfigRead { config, keymap, .. } = r else {
             return;
         };
-        let loaded: Loaded = match text_of(&config) {
-            Ok(t) => eve_config::load_str(t.as_deref().unwrap_or("")),
-            Err(e) => Loaded {
-                config: *self.config(),
-                diagnostics: vec![unreadable(e)],
-            },
-        };
-        let keymap: KeymapFile = match text_of(&keymap) {
-            Ok(t) => eve_config::load_keymap_str(t.as_deref().unwrap_or("")),
-            Err(e) => KeymapFile {
+        let src = self.config_sources();
+        let sources: Vec<eve_config::Source> = src
+            .files
+            .iter()
+            .zip(&config)
+            .map(|((name, _), f)| eve_config::Source {
+                name: name.clone(),
+                text: text_of(f),
+            })
+            .collect();
+        let resolved = eve_config::resolve(&sources, &src.sets);
+        let keymap: KeymapFile = match keymap.as_ref().map(text_of) {
+            None | Some(Ok(None)) => KeymapFile::default(),
+            Some(Ok(Some(t))) => eve_config::load_keymap_str(&t),
+            Some(Err(e)) => KeymapFile {
                 entries: Vec::new(),
                 diagnostics: vec![unreadable(e)],
             },
         };
         let mut changed: Vec<&'static str> = Vec::new();
-        if has_error(&loaded.diagnostics) {
-            self.report_config(CONFIG_FILE, &loaded.diagnostics);
+        for (name, diags) in &resolved.reports {
+            self.report_config(name, diags);
+        }
+        if resolved.has_error {
+            let name = resolved
+                .reports
+                .iter()
+                .find(|(_, d)| has_error(d))
+                .map_or(CONFIG_FILE, |(n, _)| n.as_str())
+                .to_owned();
             self.show_message(
                 MessageLevel::Warn,
                 "msg.config.reload_kept",
-                &[("file", CONFIG_FILE)],
+                &[("file", &name)],
             );
         } else {
-            self.report_config(CONFIG_FILE, &loaded.diagnostics);
-            changed = eve_config::changed_keys(self.config(), &loaded.config);
-            self.apply_reloaded_config(loaded.config);
+            changed = eve_config::changed_keys(self.config(), &resolved.config);
+            self.apply_reloaded_config(resolved.config);
         }
         self.reloaded = Some((keymap, changed));
     }

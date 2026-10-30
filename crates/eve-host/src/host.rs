@@ -174,6 +174,18 @@ impl Host {
         }
     }
 
+    /// 設定の診断を足す (`--config` の各ファイル・`--set` の分。最初の Frame の後にメッセージとして出す)。
+    pub fn add_config_report(&mut self, file: &str, diagnostics: Vec<eve_config::Diagnostic>) {
+        if !diagnostics.is_empty() {
+            self.config_report.push((file.to_owned(), diagnostics));
+        }
+    }
+
+    /// 設定の読込元を渡す (`config.reload` が同じ元を読み直す、07 §6)。
+    pub fn set_config_sources(&mut self, sources: eve_core::ConfigSources) {
+        self.editor.state_mut().set_config_sources(sources);
+    }
+
     /// ユーザーのキーマップ (`keymap.toml`) を渡す (`start` / `run` の前に呼ぶ)。`file` は診断の表示名。
     pub fn set_keymap(&mut self, file: &str, keymap: &eve_config::KeymapFile) {
         let diagnostics = self.editor.set_user_keymap(keymap);
