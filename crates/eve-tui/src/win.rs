@@ -21,7 +21,7 @@ use windows_sys::Win32::System::Console::{
     CONSOLE_SCREEN_BUFFER_INFO, DISABLE_NEWLINE_AUTO_RETURN, ENABLE_ECHO_INPUT,
     ENABLE_EXTENDED_FLAGS, ENABLE_LINE_INPUT, ENABLE_MOUSE_INPUT, ENABLE_PROCESSED_INPUT,
     ENABLE_QUICK_EDIT_MODE, ENABLE_VIRTUAL_TERMINAL_INPUT, ENABLE_VIRTUAL_TERMINAL_PROCESSING,
-    ENABLE_WINDOW_INPUT, GetConsoleMode, GetConsoleScreenBufferInfo, GetConsoleTitleW,
+    ENABLE_WINDOW_INPUT, FOCUS_EVENT, GetConsoleMode, GetConsoleScreenBufferInfo, GetConsoleTitleW,
     GetNumberOfConsoleInputEvents, INPUT_RECORD, KEY_EVENT, MOUSE_EVENT, ReadConsoleInputW,
     SetConsoleMode, SetConsoleTitleW, WINDOW_BUFFER_SIZE_EVENT, WriteConsoleW,
 };
@@ -261,7 +261,12 @@ fn read_chunk(
                 });
                 Raw::Ignored
             }
-            // フォーカス・メニューは捨てる (04 §6.2)
+            FOCUS_EVENT => {
+                // SAFETY: `EventType` が `FOCUS_EVENT` のとき、共用体は `FocusEvent` が有効。
+                let f = unsafe { r.Event.FocusEvent };
+                Raw::Focus(f.bSetFocus != 0)
+            }
+            // メニューは捨てる (04 §6.2)
             _ => Raw::Ignored,
         });
     }

@@ -9,7 +9,7 @@ mod format;
 mod history;
 mod transaction;
 
-pub use doc::{Applied, AppliedTx, ApplyError, DisplaySettings, Document};
+pub use doc::{Applied, AppliedTx, ApplyError, DisplaySettings, Document, ExternalSeen};
 pub use format::{
     EolStats, FormatChange, FormatState, LONG_LINE_THRESHOLD, LONG_LINE_VISIBLE, LoadState,
     ReadOnlyReason, ReadOnlyReasons, TextFormat, has_long_line,

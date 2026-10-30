@@ -412,6 +412,23 @@ fn clipboard_osc52_の設定を読む() {
 }
 
 #[test]
+fn file_reload_on_external_change_を読む() {
+    let l = load_str("[file]\nreload_on_external_change = \"ask\"\n");
+    assert_eq!(
+        l.config.reload_on_external_change,
+        crate::ExternalChangePolicy::Ask
+    );
+    assert!(l.diagnostics.is_empty(), "{:?}", l.diagnostics);
+    let l = load_str("[file]\nreload_on_external_change = \"auto\"\n");
+    assert_eq!(
+        l.config.reload_on_external_change,
+        crate::ExternalChangePolicy::AutoIfUnmodified,
+        "許容値の外は既定値"
+    );
+    assert_eq!(l.diagnostics.len(), 1);
+}
+
+#[test]
 fn file_の閾値を読む() {
     let l = load_str("[file]\nhuge_file_warn_bytes = 2097152\nlong_line_threshold = 65536\n");
     assert_eq!(l.config.huge_file_warn_bytes, 2_097_152);
@@ -464,6 +481,7 @@ fn changed_keys_は変わった公開キーだけを並べ_全キーを網羅す
         "clipboard.osc52_max_bytes",
         "file.huge_file_warn_bytes",
         "file.long_line_threshold",
+        "file.reload_on_external_change",
     ]
     .into_iter()
     .collect();

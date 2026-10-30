@@ -40,6 +40,8 @@ pub(super) enum Pending {
     },
     /// 未編集の上書き保存の照合 (03 §9.3 手順 0)。
     CheckUnchanged { doc: DocumentId },
+    /// 外部変更の確認 (03 §9.5)。`explicit` は `file.check_external_changes` (フォーカス復帰でない)。
+    ExternalCheck { doc: DocumentId, explicit: bool },
     /// 文書内の全件検索。状態は `EditorState::search` にある。
     Search,
     /// 単発の検索 (保持に無く、同期検索でも見つからなかった `search.next` / `search.prev`)。
@@ -322,7 +324,9 @@ impl EditorState {
             .pending
             .iter()
             .filter(|(_, p)| match p {
-                Pending::Open { doc: d, .. } | Pending::CheckUnchanged { doc: d } => *d == doc,
+                Pending::Open { doc: d, .. }
+                | Pending::CheckUnchanged { doc: d }
+                | Pending::ExternalCheck { doc: d, .. } => *d == doc,
                 Pending::ReplaceUnmappable { ask, .. } => ask.doc == doc,
                 Pending::Search => self.search.as_ref().is_some_and(|s| s.doc() == doc),
                 Pending::FindNext { doc: d, .. } => *d == doc,
@@ -755,6 +759,9 @@ impl EditorState {
                 kind,
             } => self.finish_open(doc, view, path, replace, opts, kind, r),
             Pending::CheckUnchanged { doc } => self.finish_check(doc, r),
+            Pending::ExternalCheck { doc, explicit } => {
+                self.finish_external_check(doc, explicit, r);
+            }
             Pending::Search => {}
             Pending::FindNext {
                 doc,
@@ -2062,9 +2069,10 @@ impl EditorState {
     ) {
         use crate::document::{FormatChange, FormatState, Origin, Transaction};
         use eve_text::{ByteOff, ByteRange, ChangeSet, Edit, Selection, TextRead};
-        // 読み取り専用属性はディスクから判定し直したので、解除の記録は捨てる
+        // 読み取り専用属性はディスクから判定し直したので、解除の記録と外部変更の見送りは捨てる
         if let Some(d) = self.documents.get_mut(&doc_id) {
             d.attribute_released = false;
+            d.external_seen = None;
         }
         let Some(old) = self.documents.get(&doc_id) else {
             return;
@@ -2329,18 +2337,7 @@ impl EditorState {
         let unchanged = match &r {
             // 読んだときの Stamp と一致し、編集もなければ書き込まない
             JobResult::Meta { stamp, .. } => {
-                !doc.is_dirty()
-                    && doc.disk_stamp.is_some_and(|d| {
-                        // 内容ハッシュが双方にあれば、それで決める (mtime だけが違っても中身が同じなら変更なし、
-                        // mtime が同じでも中身が違えば変更あり。05 §5.5)
-                        let same_hash = d.hash.zip(stamp.hash).map(|(a, b)| a == b);
-                        d.len == stamp.len
-                            && d.file_id == stamp.file_id
-                            && match same_hash {
-                                Some(same) => same,
-                                None => d.mtime == stamp.mtime,
-                            }
-                    })
+                !doc.is_dirty() && doc.disk_stamp.is_some_and(|d| same_on_disk(&d, stamp))
             }
             _ => false,
         };
@@ -2677,7 +2674,20 @@ pub(super) fn reason_label(err: &JobError) -> String {
     }
 }
 
-fn fs_reason(e: &FsError) -> String {
+/// 読んだ (書いた) ときの Stamp `d` と今の Stamp `now` が同じファイルの同じ内容を指すか (03 §9.3 手順 0・§9.5)。
+pub(super) fn same_on_disk(d: &crate::FileStamp, now: &crate::FileStamp) -> bool {
+    // 内容ハッシュが双方にあれば、それで決める (mtime だけが違っても中身が同じなら変更なし、
+    // mtime が同じでも中身が違えば変更あり。05 §5.5)
+    let same_hash = d.hash.zip(now.hash).map(|(a, b)| a == b);
+    d.len == now.len
+        && d.file_id == now.file_id
+        && match same_hash {
+            Some(same) => same,
+            None => d.mtime == now.mtime,
+        }
+}
+
+pub(super) fn fs_reason(e: &FsError) -> String {
     format!("{:?}", e.kind)
         .split([' ', '{'])
         .next()

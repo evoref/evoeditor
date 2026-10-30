@@ -139,6 +139,17 @@ pub enum Osc52Policy {
     Never,
 }
 
+/// 外部変更の扱い (`file.reload_on_external_change`、03 §9.5)。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ExternalChangePolicy {
+    /// いつも確認する。
+    Ask,
+    /// dirty でなければ確認なしで再読込する (既定)。
+    AutoIfUnmodified,
+    /// フォーカス復帰で確かめない (明示のコマンドと保存時の照合は行う)。
+    Never,
+}
+
 /// 新規ファイル・判定不能時の文字コード (`file.default_encoding`)。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DefaultEncoding {
@@ -223,6 +234,8 @@ pub struct Config {
     pub huge_file_warn_bytes: u64,
     /// `file.long_line_threshold`: これを超える行を長大行として扱う (NFR-106、docs/03 §11.5)。
     pub long_line_threshold: u64,
+    /// `file.reload_on_external_change`: 外部変更の扱い (FR-117)。
+    pub reload_on_external_change: ExternalChangePolicy,
 }
 
 impl Default for Config {
@@ -256,6 +269,7 @@ impl Default for Config {
             osc52_max_bytes: 100_000,
             huge_file_warn_bytes: 512 * 1024 * 1024,
             long_line_threshold: 1024 * 1024,
+            reload_on_external_change: ExternalChangePolicy::AutoIfUnmodified,
         }
     }
 }
@@ -334,6 +348,10 @@ pub fn changed_keys(a: &Config, b: &Config) -> Vec<&'static str> {
             "file.long_line_threshold",
             a.long_line_threshold != b.long_line_threshold,
         ),
+        (
+            "file.reload_on_external_change",
+            a.reload_on_external_change != b.reload_on_external_change,
+        ),
     ]
     .into_iter()
     .filter_map(|(k, changed)| changed.then_some(k))
@@ -377,6 +395,7 @@ pub(crate) const KEYS: &[&str] = &[
     "clipboard.osc52_max_bytes",
     "file.huge_file_warn_bytes",
     "file.long_line_threshold",
+    "file.reload_on_external_change",
 ];
 
 const INDENT_UNITS: &[&str] = &["tab", "space"];
@@ -385,6 +404,7 @@ const THEME_NAMES: &[&str] = &["default", "default-dark", "default-light", "ansi
 const THEME_BACKGROUNDS: &[&str] = &["auto", "dark", "light"];
 const SHOW_WHITESPACE: &[&str] = &["off", "minimal"];
 const OSC52_POLICIES: &[&str] = &["auto", "always", "never"];
+const EXTERNAL_CHANGE_POLICIES: &[&str] = &["ask", "auto_if_unmodified", "never"];
 const WRAP_MODES: &[&str] = &["off", "soft", "word"];
 const WRAP_INDENTS: &[&str] = &["none", "same"];
 const ENCODINGS: &[&str] = &[
@@ -624,6 +644,15 @@ impl Cx<'_> {
             "file.huge_file_warn_bytes" => {
                 if let Some(n) = self.int(key, v, 1_048_576, 1 << 40) {
                     self.out.config.huge_file_warn_bytes = n as u64;
+                }
+            }
+            "file.reload_on_external_change" => {
+                if let Some(s) = self.string(key, v, EXTERNAL_CHANGE_POLICIES) {
+                    self.out.config.reload_on_external_change = match s.as_str() {
+                        "ask" => ExternalChangePolicy::Ask,
+                        "never" => ExternalChangePolicy::Never,
+                        _ => ExternalChangePolicy::AutoIfUnmodified,
+                    };
                 }
             }
             "file.long_line_threshold" => {
@@ -887,6 +916,7 @@ pub fn default_display(key: &str) -> &'static str {
         "clipboard.osc52_max_bytes" => "100000",
         "file.huge_file_warn_bytes" => "536870912",
         "file.long_line_threshold" => "1048576",
+        "file.reload_on_external_change" => "auto_if_unmodified",
         "file.default_encoding" => "utf-8",
         "file.default_line_ending" => "lf",
         "view.ambiguous_width" => "1",

@@ -106,6 +106,11 @@ impl Harness {
         }
     }
 
+    /// フォーカスの変化 (`InputEvent::Focus`)。
+    pub fn focus(&mut self, gained: bool) {
+        self.input(InputEvent::Focus(gained));
+    }
+
     /// 確定済みのテキスト入力 (`InputEvent::Text`)。
     pub fn text(&mut self, s: &str) {
         self.input(InputEvent::Text(s.to_owned()));

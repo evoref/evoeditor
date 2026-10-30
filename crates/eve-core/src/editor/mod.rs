@@ -16,6 +16,7 @@ mod context;
 mod default_keymap;
 mod edit;
 mod eol;
+mod external;
 mod file;
 mod help;
 mod theme;
@@ -86,6 +87,7 @@ impl Editor {
         edit::register(&mut registry);
         motion::register(&mut registry);
         file::register(&mut registry);
+        external::register(&mut registry);
         buffer::register(&mut registry);
         save_all::register(&mut registry);
         help::register(&mut registry);
@@ -334,6 +336,8 @@ impl Editor {
             }
             InputEvent::Resize { cols, rows } => self.state.set_viewport(cols, rows),
             InputEvent::CapabilitiesChanged(caps) => self.set_caps(caps),
+            // フォーカス復帰: 表示中の文書の外部変更を確かめる (03 §9.5)
+            InputEvent::Focus(true) => self.state.on_focus_gained(),
             // システムクリップボードの読み取りの応答。最後の要求の token と違えば捨てる
             InputEvent::ClipboardContent { token, text } => {
                 self.state.on_clipboard_content(token, text);

@@ -70,6 +70,13 @@ pub(super) enum ConfirmAction {
     ClearReadOnly(super::file::LossyAsk),
     /// 保存先がダングリングのシンボリックリンク (リンク先に作成 / キャンセル、FR-106・05 §4.1)。
     DanglingLink(super::file::SaveFailedAsk),
+    /// 外部変更の検知 (再読込 / 無視、03 §9.5)。`stamp` は見つけたときのファイルの状態。
+    ExternalModified {
+        doc: DocumentId,
+        stamp: crate::FileStamp,
+    },
+    /// 外部で削除された (新規として保持 / 閉じる、03 §9.5)。
+    ExternalDeleted(DocumentId),
     /// 保存の失敗の後の選択 (再試行 / 別名で保存 / 退避先に保存)。
     SaveFailed(super::file::SaveFailedAsk),
     /// 開くときの確認 (読み取り専用で開く / 文字コードを指定して開く / 中止、03 §9.2)。
@@ -361,6 +368,10 @@ impl EditorState {
             ConfirmAction::Lossy(ask) => self.choose_lossy(ask, choice),
             ConfirmAction::ClearReadOnly(ask) => self.choose_clear_readonly(ask, choice),
             ConfirmAction::DanglingLink(ask) => self.create_link_target(ask),
+            ConfirmAction::ExternalModified { doc, stamp } => {
+                self.choose_external_modified(doc, stamp, choice)
+            }
+            ConfirmAction::ExternalDeleted(doc) => self.choose_external_deleted(doc, choice),
             ConfirmAction::SaveFailed(ask) => self.choose_save_failed(ask, id),
             ConfirmAction::Open(ask) => self.choose_open(ask, id),
             ConfirmAction::Reload => self.start_reload(),

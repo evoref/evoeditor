@@ -606,8 +606,11 @@ pub fn run_job(
                         err: JobError::Cancelled,
                     }
                 } else {
-                    // 未変更の保存の可否は、16 MiB 以下なら内容ハッシュでも照合する (05 §5.5)。読めなければ付けない
-                    let hash = if *purpose == MetaPurpose::UnchangedSave {
+                    // 未変更の保存の可否と外部変更の確認は、16 MiB 以下なら内容ハッシュでも照合する (05 §5.5)。読めなければ付けない
+                    let hash = if matches!(
+                        purpose,
+                        MetaPurpose::UnchangedSave | MetaPurpose::ExternalCheck
+                    ) {
                         crate::content_hash::hash_file(ports.fs.as_ref(), path, meta.len)
                             .ok()
                             .flatten()

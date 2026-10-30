@@ -4,8 +4,8 @@
 //! 起動時 (bin) と `config.reload` (core) が同じ規則で合成するよう、読み込んだ本文を受け取る純関数にしている。
 
 use crate::config::{
-    BackspaceUnit, ColorMode, Config, DefaultEncoding, DefaultLineEnding, IndentUnit, Osc52Policy,
-    ShowWhitespace, ThemeBackground, WrapIndent, WrapMode, load_str_onto,
+    BackspaceUnit, ColorMode, Config, DefaultEncoding, DefaultLineEnding, ExternalChangePolicy,
+    IndentUnit, Osc52Policy, ShowWhitespace, ThemeBackground, WrapIndent, WrapMode, load_str_onto,
 };
 use crate::{DiagKind, Diagnostic, Loaded, Severity};
 
@@ -160,6 +160,14 @@ pub fn values(c: &Config) -> Vec<(&'static str, String)> {
         (
             "file.long_line_threshold",
             c.long_line_threshold.to_string(),
+        ),
+        (
+            "file.reload_on_external_change",
+            s(match c.reload_on_external_change {
+                ExternalChangePolicy::Ask => "ask",
+                ExternalChangePolicy::AutoIfUnmodified => "auto_if_unmodified",
+                ExternalChangePolicy::Never => "never",
+            }),
         ),
         ("file.swap.enabled", c.swap_enabled.to_string()),
         ("file.swap.interval_ms", c.swap_interval_ms.to_string()),
