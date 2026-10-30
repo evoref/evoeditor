@@ -119,6 +119,39 @@ impl Harness {
         });
     }
 
+    /// マウス操作 (`InputEvent::Mouse`)。`row` / `col` は編集面の左上を原点とするセル (面の外は負やはみ出しで渡す)。
+    pub fn mouse(
+        &mut self,
+        kind: eve_view::MouseKind,
+        mods: eve_view::Modifiers,
+        row: i32,
+        col: i32,
+    ) {
+        let view = self
+            .editor
+            .state()
+            .first_window()
+            .and_then(|w| self.editor.state().window_view(w))
+            .expect("View がある");
+        self.input(InputEvent::Mouse(eve_view::MouseEvent {
+            kind,
+            mods,
+            at: eve_view::MouseAt { view, row, col },
+        }));
+    }
+
+    /// 左クリック (押して離す)。
+    pub fn click(&mut self, row: i32, col: i32) {
+        use eve_view::{Modifiers, MouseButton, MouseKind};
+        self.mouse(
+            MouseKind::Down(MouseButton::Left),
+            Modifiers::NONE,
+            row,
+            col,
+        );
+        self.mouse(MouseKind::Up(MouseButton::Left), Modifiers::NONE, row, col);
+    }
+
     /// ブラケットペースト。
     pub fn paste(&mut self, s: &str) {
         self.input(InputEvent::Paste(s.to_owned()));

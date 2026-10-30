@@ -37,7 +37,10 @@ pub use frame::{
 pub use ids::{
     ClipboardHandleId, ClipboardToken, DocumentId, JobId, Revision, ViewId, ViewRevision, WindowId,
 };
-pub use input::{InputEvent, KeyCode, KeyEvent, KeyKind, KeyStroke, Modifiers};
+pub use input::{
+    InputEvent, KeyCode, KeyEvent, KeyKind, KeyStroke, Modifiers, MouseAt, MouseButton, MouseEvent,
+    MouseKind,
+};
 pub use query::{
     Answer, ByteRange, DocumentInfo, FocusTarget, LoadStateView, Query, QueryError, SelRange,
     WindowInfo,

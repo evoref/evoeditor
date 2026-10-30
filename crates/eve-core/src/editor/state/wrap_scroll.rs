@@ -10,7 +10,7 @@ use crate::document::Document;
 use crate::editor::layout::{WrapSettings, line_rows, wrap_ctx};
 
 /// (論理行, その行の中の表示行)。組の大小がそのまま文書内の前後。
-type RowPos = (usize, usize);
+pub(in crate::editor) type RowPos = (usize, usize);
 
 /// 折り返し ON の View の (折り返しの設定, 折り返し幅)。
 pub(super) type Geometry = (WrapSettings, usize);
@@ -111,6 +111,15 @@ impl EditorState {
 
     fn view_doc(&self, view: ViewId) -> Option<&Document> {
         self.documents.get(&self.views.get(&view)?.doc)
+    }
+
+    /// 面の `row` 行目 (0 始まり) の (論理行, 表示行)。文書の末尾より下の行は `None` (折り返し ON、マウスの位置の確定が使う)。
+    pub(in crate::editor) fn wrapped_row_at(&self, view: ViewId, row: usize) -> Option<RowPos> {
+        let g = self.wrap_geometry(view)?;
+        let top = self.top_pos(view)?;
+        let doc = self.view_doc(view)?;
+        let p = walk(doc, g, top, row, false);
+        (rows_between(doc, g, top, p, row) == row).then_some(p)
     }
 
     pub(super) fn wrapped_scroll_lines(&mut self, view: ViewId, g: Geometry, delta: i64) {
