@@ -352,6 +352,39 @@ impl Keymap {
         &self.pending
     }
 
+    /// 保留中のストロークに続けて押せるキー (which-key、04 §7.4)。`contexts` は参照順。
+    /// 戻り値は (次のキー, 割当のコマンド。さらに続くなら `None`)。同じキーは優先する側だけ。
+    pub fn continuations(
+        &self,
+        contexts: &[&str],
+        lookup: &dyn Fn(&str) -> Option<CtxValue>,
+    ) -> Vec<(KeyStroke, Option<String>)> {
+        let n = self.pending.len();
+        let mut out: Vec<(KeyStroke, Option<String>)> = Vec::new();
+        if n == 0 {
+            return out;
+        }
+        for ctx in contexts {
+            for layer in &self.layers {
+                for b in layer.bindings.iter().filter(|b| b.context == *ctx) {
+                    if b.sequence.len() <= n
+                        || !b.sequence.starts_with(&self.pending)
+                        || !b.when.eval(lookup)
+                    {
+                        continue;
+                    }
+                    let next = b.sequence[n];
+                    if out.iter().any(|(k, _)| *k == next) {
+                        continue;
+                    }
+                    let leaf = (b.sequence.len() == n + 1).then(|| b.command.as_str().to_owned());
+                    out.push((next, leaf));
+                }
+            }
+        }
+        out
+    }
+
     pub fn clear_pending(&mut self) {
         self.pending.clear();
     }

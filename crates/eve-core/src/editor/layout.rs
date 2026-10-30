@@ -670,6 +670,7 @@ pub(super) fn build_frame(
         status: super::chrome::status_model(state, view_id, chord),
         hints: super::chrome::hint_model(state, chord),
         overlays: super::chrome::overlay_models(state),
+        which_key: None,
         messages: message_model(state),
         texts: super::chrome::chrome_texts(state),
         title: title(doc),

@@ -396,3 +396,33 @@ fn メッセージは記号と色で区別でき_警告は対処も並べて出�
         colour_of_mark(&mut i, &Glyphs::unicode(), "ℹ").expect("情報の記号が出る");
     assert_ne!(warn_style, info_style, "警告と情報は色か属性が違う");
 }
+
+// which-key (04 §7.4): 保留が 500 ms を超えたら、編集面の左下に続きのキーと動作を重ねる
+#[test]
+fn which_key_は編集面の左下に続きのキーと動作を重ねる() {
+    let mut h = Harness::new().with_size(80, 24);
+    h.keys("ctrl+k");
+    let (rows, _) = screen(&mut h, &Glyphs::unicode());
+    assert!(
+        !joined(&rows).contains("メッセージ履歴"),
+        "500 ms 前は出ない"
+    );
+    h.advance_ms(500);
+    let (rows, _) = screen(&mut h, &Glyphs::unicode());
+    let all = joined(&rows);
+    assert!(all.contains("Ctrl+K …"), "{all}");
+    let line_of = |t: &str| {
+        rows.iter()
+            .find(|r| r.contains(t))
+            .cloned()
+            .unwrap_or_default()
+    };
+    assert!(line_of("メッセージ履歴").contains("│ M "), "{all}");
+    assert!(line_of("名前を付けて保存").contains("│ S "), "{all}");
+    // 左下: 編集面の最下行の近くにある
+    let at = rows
+        .iter()
+        .rposition(|r| r.contains("メッセージ履歴"))
+        .unwrap();
+    assert!(at >= 12, "{at}");
+}
