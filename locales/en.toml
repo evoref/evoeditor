@@ -320,6 +320,10 @@ title = "Command Palette"
 description = "Redraw the screen."
 title = "Redraw"
 
+[cmd.view.toggle_wrap]
+description = "Turn word wrap on or off."
+title = "Toggle Word Wrap"
+
 [hint.app]
 quit = "Quit"
 

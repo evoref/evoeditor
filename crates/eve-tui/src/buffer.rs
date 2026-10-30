@@ -227,6 +227,14 @@ fn render_row(
     for sp in &row.spans {
         x = w.span(x, y, limit, sp);
     }
+    // 折り返しの継続行は、行番号欄の右端 (区切りの左) に `↪` を描く (04 §10。ASCII 縮退時は `>`)
+    if let RowSource::Line { wrap_idx, .. } = row.source
+        && wrap_idx > 0
+        && gutter_w >= 2
+    {
+        let style = w.style(theme.scroll_marker);
+        w.set(r.col + gutter_w - 2, y, glyphs.wrap_cont.text, style, false);
+    }
     // 横スクロールで左右に続きがある行は、左端のテキストセルに `‹`、右端のセルに `›` を、テキストとは別の装飾として重ねる
     // (FR-506、04 §6.4。ASCII 縮退時は `<` `>`)
     let marker = w.style(theme.scroll_marker);

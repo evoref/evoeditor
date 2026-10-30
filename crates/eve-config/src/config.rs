@@ -83,6 +83,25 @@ pub enum BackspaceUnit {
     Codepoint,
 }
 
+/// 折り返しの方式 (`view.wrap`、03 §14.3、07 §5.3)。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WrapMode {
+    /// 折り返さない (水平スクロール、既定)。
+    Off,
+    /// 幅いっぱいの書記素単位で折る。
+    Soft,
+    /// 単語境界を優先して折る。
+    Word,
+}
+
+/// 折り返した継続行のインデント (`view.wrap_indent`)。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WrapIndent {
+    None,
+    /// 論理行のインデント幅で揃える (既定)。
+    Same,
+}
+
 /// 新規ファイル・判定不能時の文字コード (`file.default_encoding`)。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DefaultEncoding {
@@ -141,6 +160,12 @@ pub struct Config {
     pub undo_total_max_bytes: u64,
     /// `editor.backspace_unit`: Backspace の削除の単位 (FR-201)。
     pub backspace_unit: BackspaceUnit,
+    /// `view.wrap`: 折り返しの方式 (FR-506)。
+    pub wrap: WrapMode,
+    /// `view.wrap_indent`: 継続行のインデント。
+    pub wrap_indent: WrapIndent,
+    /// `view.wrap_kinsoku`: 禁則処理 (OQ-57)。
+    pub wrap_kinsoku: bool,
 }
 
 impl Default for Config {
@@ -161,6 +186,9 @@ impl Default for Config {
             ui_locale: None,
             undo_total_max_bytes: 256 * 1024 * 1024,
             backspace_unit: BackspaceUnit::Grapheme,
+            wrap: WrapMode::Off,
+            wrap_indent: WrapIndent::Same,
+            wrap_kinsoku: true,
         }
     }
 }
@@ -189,10 +217,15 @@ const KEYS: &[&str] = &[
     "ui.locale",
     "editor.undo.total_max_bytes",
     "editor.backspace_unit",
+    "view.wrap",
+    "view.wrap_indent",
+    "view.wrap_kinsoku",
 ];
 
 const INDENT_UNITS: &[&str] = &["tab", "space"];
 const BACKSPACE_UNITS: &[&str] = &["grapheme", "codepoint"];
+const WRAP_MODES: &[&str] = &["off", "soft", "word"];
+const WRAP_INDENTS: &[&str] = &["none", "same"];
 const ENCODINGS: &[&str] = &[
     "utf-8",
     "utf-8-bom",
@@ -390,6 +423,28 @@ impl Cx<'_> {
                     };
                 }
             }
+            "view.wrap" => {
+                if let Some(s) = self.string(key, v, WRAP_MODES) {
+                    self.out.config.wrap = match s.as_str() {
+                        "soft" => WrapMode::Soft,
+                        "word" => WrapMode::Word,
+                        _ => WrapMode::Off,
+                    };
+                }
+            }
+            "view.wrap_indent" => {
+                if let Some(s) = self.string(key, v, WRAP_INDENTS) {
+                    self.out.config.wrap_indent = match s.as_str() {
+                        "none" => WrapIndent::None,
+                        _ => WrapIndent::Same,
+                    };
+                }
+            }
+            "view.wrap_kinsoku" => {
+                if let Some(b) = self.boolean(key, v) {
+                    self.out.config.wrap_kinsoku = b;
+                }
+            }
             "file.default_encoding" => {
                 let Some(s) = self.raw_string(key, v) else {
                     return;
@@ -574,6 +629,9 @@ pub fn default_display(key: &str) -> &'static str {
         "editor.tab_width" | "editor.indent_width" => "4",
         "editor.indent_unit" => "space",
         "editor.backspace_unit" => "grapheme",
+        "view.wrap" => "off",
+        "view.wrap_indent" => "same",
+        "view.wrap_kinsoku" => "true",
         "file.default_encoding" => "utf-8",
         "file.default_line_ending" => "lf",
         "view.ambiguous_width" => "1",

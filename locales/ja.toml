@@ -318,6 +318,10 @@ title = "コマンドパレット"
 description = "画面を描き直します。"
 title = "再描画"
 
+[cmd.view.toggle_wrap]
+description = "折り返し表示のオンとオフを切り替えます。"
+title = "折り返しの切り替え"
+
 [hint.app]
 quit = "終了"
 

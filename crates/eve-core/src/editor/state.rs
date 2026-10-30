@@ -208,7 +208,28 @@ impl EditorState {
         for d in self.documents.values_mut() {
             d.display = display;
         }
+        // 折り返しの設定は View ごとの状態で、設定の差し替えで既存の View にも写す
+        let wrap = self.config_wrap();
+        let views: Vec<ViewId> = self.views.keys().copied().collect();
+        for v in views {
+            self.set_wrap(v, wrap);
+        }
         self.needs_render = true;
+    }
+
+    /// 設定 (`view.wrap` / `view.wrap_indent` / `view.wrap_kinsoku`) から作った折り返しの設定。
+    pub fn config_wrap(&self) -> super::layout::WrapSettings {
+        use super::layout::{WrapMode, WrapSettings};
+        let c = &self.config;
+        WrapSettings {
+            mode: match c.wrap {
+                eve_config::WrapMode::Off => WrapMode::Off,
+                eve_config::WrapMode::Soft => WrapMode::Soft,
+                eve_config::WrapMode::Word => WrapMode::Word,
+            },
+            indent_same: c.wrap_indent == eve_config::WrapIndent::Same,
+            kinsoku: c.wrap_kinsoku,
+        }
     }
 
     /// UI の言語を選ぶ。以後の文言はその言語のカタログで解決する。
@@ -360,7 +381,7 @@ impl EditorState {
                 selection: Selection::point(ByteOff(0)),
                 scroll: ScrollPos::default(),
                 goal_dcol: None,
-                wrap: Default::default(),
+                wrap: self.config_wrap(),
                 cursor_affinity: Default::default(),
             },
         );
@@ -818,6 +839,8 @@ impl EditorState {
                 .as_ref()
                 .is_some_and(|s| s.replace.is_some() && s.focus == eve_view::BarFocus::Replace)),
             "caps.can_suspend" => b(self.caps.can_suspend),
+            // 折り返し中 (設定キー `view.wrap` とは別名、07 §7.1)
+            "view.wrapped" => b(view.is_some_and(|v| v.wrap.is_on())),
             "editor" => b(true),
             _ => None,
         }
