@@ -29,6 +29,52 @@ pub struct ConfigSources {
     pub keymap: Option<crate::FsPath>,
     /// コマンドライン層 (`--set key=value`)。最後に重ねる。
     pub sets: Vec<String>,
+    /// テーマファイルの置き場 (`<設定ディレクトリ>/themes`)。`None` は読まない。
+    pub themes: Option<crate::FsPath>,
+}
+
+impl EditorState {
+    /// `theme.name` が組込みでなければ、テーマファイルを読むジョブを投入する (`inherits` の親も読む)。
+    fn start_theme_read(&mut self) {
+        let name = {
+            let c = self.config();
+            eve_config::theme::with_background(&c.theme_name, c.theme_background).to_owned()
+        };
+        if eve_config::theme::builtin(&name).is_some() {
+            return;
+        }
+        let Some(dir) = self.config_sources().themes else {
+            // 置き場が無い: default で動く
+            self.set_user_theme(&name, None);
+            return;
+        };
+        let job = self.jobs.spawn(
+            None,
+            eve_view::Revision(0),
+            JobKind::ReadTheme {
+                dir,
+                name: name.clone(),
+            },
+        );
+        self.pending.insert(job, Pending::ThemeRead);
+    }
+
+    /// テーマファイルの読込の結果。読めなければ `default` で動き、診断を出す。
+    pub(super) fn finish_theme_read(&mut self, r: JobResult) {
+        let JobResult::ThemeRead {
+            name,
+            theme,
+            reports,
+            ..
+        } = r
+        else {
+            return;
+        };
+        for (file, diags) in &reports {
+            self.report_config(file, diags);
+        }
+        self.set_user_theme(&name, theme);
+    }
 }
 
 /// 再起動しないと効かない項目 (07 §6 の 3 分類の「再起動が必要」。端末の初期化・言語の選択で 1 回だけ使う)。
@@ -64,6 +110,7 @@ impl EditorState {
             files: vec![(CONFIG_FILE.to_owned(), dir.join(CONFIG_FILE))],
             keymap: Some(dir.join(KEYMAP_FILE)),
             sets: Vec::new(),
+            themes: Some(dir.join("themes")),
         }
     }
 }
@@ -150,16 +197,18 @@ impl EditorState {
         } else {
             changed = eve_config::changed_keys(self.config(), &resolved.config);
             self.apply_reloaded_config(resolved.config);
+            // テーマファイルも読み直す (名前が同じでも、ファイルが変わっていることがある)
+            self.start_theme_read();
         }
         self.reloaded = Some((keymap, changed));
     }
 
     /// 新しい設定に差し替える。マウスの取得は frontend に伝える (即時に効く)。
     fn apply_reloaded_config(&mut self, new: Config) {
-        let mouse_changed = self.config().mouse != new.mouse;
+        let (mouse_changed, mouse) = (self.config().mouse != new.mouse, new.mouse);
         self.set_config(new);
         if mouse_changed {
-            self.push_effect(Effect::SetMouseCapture { enabled: new.mouse });
+            self.push_effect(Effect::SetMouseCapture { enabled: mouse });
         }
     }
 

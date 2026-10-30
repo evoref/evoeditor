@@ -136,3 +136,23 @@ fn licenses_は同梱の第三者告知を表示し_log_level_の誤りは使い
     assert_eq!(code, 2);
     let _ = std::fs::remove_dir_all(&d);
 }
+
+#[test]
+fn check_config_はテーマファイルも確かめる() {
+    let d = dir("theme");
+    std::fs::create_dir_all(d.join("themes")).unwrap();
+    std::fs::write(d.join("config.toml"), "[theme]\nname = \"mine\"\n").unwrap();
+    std::fs::write(
+        d.join("themes").join("mine.toml"),
+        "[ui]\nselection = { bg = \"nope\" }\n",
+    )
+    .unwrap();
+    let (code, out) = run(&d, &["--check-config"]);
+    assert_eq!(code, 0, "値の誤りは警告: {out}");
+    assert!(out.contains("themes/mine.toml"), "{out}");
+    // 無いテーマはエラー (default で動く)
+    std::fs::write(d.join("config.toml"), "[theme]\nname = \"gone\"\n").unwrap();
+    let (code, out) = run(&d, &["--check-config"]);
+    assert_eq!(code, 3, "{out}");
+    let _ = std::fs::remove_dir_all(&d);
+}

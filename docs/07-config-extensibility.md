@@ -918,6 +918,13 @@ tree-sitter のハイライトクエリ (`@keyword.control` 等) のキャプチ
 - `theme.background` (確定 (ユーザー回答)、2026-10-30): `default-dark` / `default-light` を選んだときだけ効き、`dark` / `light` でその明暗に替える。`auto` (既定) は名前どおりで、`COLORFGBG` による推定はしない (名前で明暗を明示しているため。OQ-124 の推定は、明暗を名前に含まないテーマを足すときに使う)。`default` と `ansi` は見ない。
 - `theme.name` の値は組込みの 4 つ。テーマファイル (`themes/<name>.toml`) は 4 本目。設定を差し替えると (`config.reload` を含む) その場で替わる。
 
+**4 本目の実装 (M9c)**: テーマファイル (FR-707)。
+
+- `theme.name` は組込みの名前か、英数字・`-`・`_` だけの 1〜64 文字 (パスの区切りや `..` は使えない。それ以外は値の誤りの警告)。組込みでなければ `<設定ディレクトリ>/themes/<name>.toml` を読む (`--no-config` のときは読まない)。`Config` は文字列を持つので `Copy` でなくなった (`Clone`)。
+- 書式は §8.2 のうち `[meta]` の `inherits`、`[palette]`、`[ui]` のロール (`fg` / `bg` / `mods` / `fallback256` / `fallback16` / `mono`)。`inherits` は親から順に重ね (深さ 8、循環はエラー)、どこにも無ければ組込みの `default` が土台 (組込みの `default-dark` 等も親にできる)。書いたロールの書いた項目だけを上書きし、色を書き換えた段の 256 / 16 は、明示が無ければ 04 §12.3 の近似で求める (前景と背景が同じ番号になったら反転)。`ui.text` に背景色があれば背景を塗るテーマとして扱う。`[meta]` の `name` / `background` / `author` / `license` は読み飛ばす。`[syntax]` と `underline` / `underline_color` は v0.4 (「未対応」の情報診断)。
+- 誤りの扱い: 読めない・無い・構文エラー・`inherits` の循環と深さはエラーで、テーマは組込みの `default` で動く。未知のロール・色の表記・パレット名・属性は警告で、その値だけ使わない。診断はファイル名 `themes/<name>.toml` で出す (`--check-config` も確かめ、エラーなら終了コード 3)。
+- 読むのは、起動時は bin (端末の前)、`config.reload` は設定を差し替えた後の io ジョブ (`JobKind::ReadTheme`。名前が同じでもファイルを読み直す)。ワークスペース層の `.eve/themes/` と `theme.overrides` (§8.4) は v0.4。
+
 **実装の分け方 (README §3.6 の 6 を細かくする)**:
 
 1. この節 (突合の記録)。
