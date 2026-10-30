@@ -823,7 +823,7 @@ diff.plus / diff.minus = { ... }                            # diff ファイル�
 - **mono の列**: 属性列か `` `none` `` だけ (`mono = { mods = [...] }` の値。`none` は `mods = []`)。
 - **形の列**: 1 ロールに 1 値 ((i) / (ii) / (iii)、§8.1)。truecolor の段の形を表し、`check-themes` は truecolor の列をこの形で検査する。mono の段は形を問わず常に属性列か `none` である。256 / 16 の参考値で形が違うものは表の下の注記に書く。
 
-| ロール | 用途 | 形 | truecolor (fg / bg) | 256 (fg / bg、参考) | 16 (fg / bg、参考) | mono |
+| ロール | 用途 | 形 | truecolor (fg / bg) | 256 (fg / bg) | 16 (fg / bg) | mono |
 |---|---|---|---|---|---|---|
 | `ui.text` | 本文・入力欄の文字・情報メッセージ以外の通常の文字 | (ii) | `default` / `default` | `default` / `default` | `default` / `default` | `none` |
 | `ui.cursor_line` | 現在行の強調 (`view.cursor_line_highlight`、既定 on。OQ-125)。行の中で他のロール (選択・検索一致等) が付いたセルはそちらが優先 | (i) | `#e8e8e8` / `#3a3d4a` (8.8) | `ansi.254` / `ansi.236` (10.4) | `none` | `none` |
@@ -903,6 +903,8 @@ tree-sitter のハイライトクエリ (`@keyword.control` 等) のキャプチ
 5. **テーマファイル**: 起動時は bin が設定と一緒に読み (端末の前)、`config.reload` は io ジョブで読む。読めない・書式の誤り・未知のテーマ名は警告して `default` を使う (FR-703)。`inherits` の循環と深さ (8) は §8.3 のとおり。ワークスペース層 (`.eve/themes/`) は v0.4。
 6. **256 / 16 の明示値**: 組込みテーマは `fallback256` / `fallback16` を書けるようにし、`default` は §8.2 の表の「参考」の列を明示値として採る (近似より端末の配色に合う)。表の列見出しの「参考」は、実装した版で外す。
 7. **見た目の変化**: 編集面の選択・検索の一致などに色が付く (truecolor / 256 / 16 の段)。無色 (`mono`) の段は今と同じ。
+
+**2 本目の実装 (M9c)**: eve-config `theme.rs` に型と組込み `default` (§8.2 の表の全 26 ロール、4 段とも明示値。表の 256 / 16 の列から「参考」を外した) を置き、core (`editor/theme.rs`) が色深度に合う段の表を作って `Frame.roles` に載せる (色深度が変わったときだけ作り直す)。編集面は 記号 (`ui.whitespace` / `ui.control_char`) → 表現不能の文字 → 検索の一致 (`ui.search.match` / `.current`) → 選択 (`ui.selection`) の順に重ね (既定でない色は上が勝ち、属性は足す)、行番号は `ui.line_number` (主カーソルの行は `ui.line_number.active` を重ねる)。eve-tui は `Theme::from_roles` で表から引き、自前の定数は持たない。`ui.cursor_line` (現在行の帯、`view.cursor_line_highlight`) は表にあるが、描画は後の PR (設定の公開と一緒)。突合: `tests/theme_table.rs` (core、表の全ロール・4 段) と eve-tui の `theme_table` (引くロール名が表にあること)。
 
 **実装の分け方 (README §3.6 の 6 を細かくする)**:
 

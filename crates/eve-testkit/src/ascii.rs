@@ -31,11 +31,13 @@ struct Cell {
     reverse: bool,
 }
 
-fn put_spans(cells: &mut Vec<Cell>, spans: &[eve_view::Span]) {
+/// `sel_bg` は選択の背景色 (テーマの `ui.selection`。色の段では選択は反転でなく背景色で示す)。
+fn put_spans(cells: &mut Vec<Cell>, spans: &[eve_view::Span], sel_bg: eve_view::Color) {
     for sp in spans {
         let w = sp.width as usize;
         let n = sp.text.chars().count();
-        let reverse = sp.style.mods.contains(StyleMods::REVERSE);
+        let reverse = sp.style.mods.contains(StyleMods::REVERSE)
+            || (sel_bg != eve_view::Color::Default && sp.style.bg == sel_bg);
         if n == w {
             // 1 文字 = 1 セル (ASCII の連続など)
             for c in sp.text.chars() {
@@ -115,14 +117,15 @@ fn chrome_lines(frame: &Frame) -> String {
 /// Frame を ASCII の文字列にする (最初の Pane だけ。複数 Pane は分割を入れる版で足す)。
 pub fn render_ascii(frame: &Frame, opts: AsciiOptions) -> String {
     let mut out = String::new();
+    let sel_bg = frame.roles.get("ui.selection").bg;
     for pane in &frame.panes {
         for row in &pane.rows {
             let mut cells: Vec<Cell> = Vec::new();
             if opts.show_gutter {
-                put_spans(&mut cells, &row.gutter);
+                put_spans(&mut cells, &row.gutter, sel_bg);
             }
             let body_start = cells.len();
-            put_spans(&mut cells, &row.spans);
+            put_spans(&mut cells, &row.spans, sel_bg);
             let mut line = String::new();
             let mut in_sel = false;
             for (i, c) in cells.iter().enumerate() {
@@ -195,6 +198,7 @@ mod tests {
             messages: Default::default(),
             texts: Default::default(),
             title: String::new(),
+            roles: Default::default(),
         }
     }
 

@@ -24,13 +24,23 @@ mod wrap;
 pub use wrap::{Affinity, WrapMode, WrapSettings};
 use wrap::{cursor_in_rows, wrap_line};
 
-/// 記号 (制御文字・不可視文字・空白の可視化) の表示。
-const SYMBOL: Style = Style {
-    fg: eve_view::Color::Default,
-    bg: eve_view::Color::Default,
-    mods: StyleMods::DIM,
-    underline_color: None,
-};
+/// `top` を `base` に重ねる: 既定でない色は `top` が勝ち、属性は足す (07 §14.5 の Decoration の合成の簡略)。
+fn over(base: Style, top: Style) -> Style {
+    let pick = |b: eve_view::Color, t: eve_view::Color| {
+        if t == eve_view::Color::Default { b } else { t }
+    };
+    Style {
+        fg: pick(base.fg, top.fg),
+        bg: pick(base.bg, top.bg),
+        mods: base.mods | top.mods,
+        underline_color: top.underline_color.or(base.underline_color),
+    }
+}
+
+/// 空白の可視化の記号 (タブの `>` と続きの空白、全角スペースの `[]`) か。それ以外の記号は制御文字・不可視文字。
+fn is_whitespace_mark(text: &str) -> bool {
+    text == ">" || text == "[]" || (!text.is_empty() && text.bytes().all(|b| b == b' '))
+}
 
 fn width_config() -> WidthConfig {
     WidthConfig {
@@ -425,6 +435,8 @@ struct Marks<'a> {
     unmappable: &'a [(usize, usize)],
     /// 長大行の省略の印の文言 (省略したバイト数 → 文字列)。
     omit: &'a dyn Fn(usize) -> String,
+    /// テーマのロールの表 (07 §8.6)。
+    roles: &'a eve_view::RoleStyles,
 }
 
 /// 折り返した論理行のうち、作る表示行 1 本 (単位の範囲、継続行のずらし、行内の表示行の番号、最後の表示行か)。
@@ -501,22 +513,24 @@ fn build_row(
     let mut spans: Vec<Span> = Vec::new();
     'units: for u in us.clone() {
         let at = ls + u.byte;
-        let mut style_base = if selected(at) {
-            StyleMods::REVERSE
-        } else {
-            StyleMods::NONE
-        };
-        // 検索の一致は下線、入力で見つけた現在の一致は反転 + 太字 + 下線 (色に頼らない、04 §8.4)
+        // 重ねる順 (低 → 高、03 §14.5): 記号 → 表現不能の文字 → 検索の一致 / 現在の一致 → 選択
+        let mut decor = Style::DEFAULT;
         if marks.unmappable.iter().any(|&(s, e)| s <= at && at < e) {
-            style_base = style_base | StyleMods::REVERSE | StyleMods::UNDERLINE;
+            decor = over(
+                decor,
+                Style::with_mods(StyleMods::REVERSE | StyleMods::UNDERLINE),
+            );
         }
         if marks.current.is_some_and(|(s, e)| s <= at && at < e) {
-            style_base = style_base | StyleMods::REVERSE | StyleMods::BOLD | StyleMods::UNDERLINE;
+            decor = over(decor, marks.roles.get("ui.search.current"));
         } else {
             let i = marks.found.partition_point(|&(_, e)| e <= at);
             if marks.found.get(i).is_some_and(|&(s, _)| s <= at) {
-                style_base = style_base | StyleMods::UNDERLINE;
+                decor = over(decor, marks.roles.get("ui.search.match"));
             }
+        }
+        if selected(at) {
+            decor = over(decor, marks.roles.get("ui.selection"));
         }
         let mut c = u.col - base + shift;
         for (text, w, symbol) in &u.parts {
@@ -525,14 +539,14 @@ fn build_row(
             if w == 0 {
                 continue;
             }
-            let style = Style::with_mods(
-                style_base
-                    | if *symbol {
-                        StyleMods::DIM
-                    } else {
-                        StyleMods::NONE
-                    },
-            );
+            let base = if !*symbol {
+                marks.roles.get("ui.text")
+            } else if is_whitespace_mark(text) {
+                marks.roles.get("ui.whitespace")
+            } else {
+                marks.roles.get("ui.control_char")
+            };
+            let style = over(base, decor);
             if c0 >= win_end {
                 clipped_right = true;
                 break 'units;
@@ -571,7 +585,7 @@ fn build_row(
             .iter()
             .any(|&(s, e)| s <= line_end_abs && e > line_end_abs);
     if eol_selected && total >= win_start && total < win_end {
-        push_span(&mut spans, " ", 1, Style::with_mods(StyleMods::REVERSE));
+        push_span(&mut spans, " ", 1, marks.roles.get("ui.selection"));
     }
     let cursor_cols = heads
         .iter()
@@ -599,16 +613,23 @@ fn build_row(
     }
 }
 
-fn gutter_spans(line: usize, width: u16) -> Vec<Span> {
+/// 行番号のガター (`ui.line_number`。主カーソルのある行は `ui.line_number.active` を重ねる)。
+fn gutter_spans(line: usize, width: u16, style: Style) -> Vec<Span> {
     if width == 0 {
         return Vec::new();
     }
     let text = format!("{:>w$} ", line + 1, w = width as usize - 1);
-    vec![Span {
-        text,
-        width,
-        style: SYMBOL,
-    }]
+    vec![Span { text, width, style }]
+}
+
+/// 行 `line` の行番号のスタイル。
+fn line_number_style(roles: &eve_view::RoleStyles, line: usize, cursor_line: usize) -> Style {
+    let base = roles.get("ui.line_number");
+    if line == cursor_line {
+        over(base, roles.get("ui.line_number.active"))
+    } else {
+        base
+    }
 }
 
 /// 文字列を `CellText` にする (INV-F1: 制御文字などは記号に展開済み。幅は core が計算する)。
@@ -700,6 +721,7 @@ fn wrapped_rows(
 ) -> (Vec<RenderRow>, Vec<CellPos>, Option<CellPos>) {
     let t = doc.text();
     let n_lines = t.len_lines();
+    let cursor_line = t.byte_to_line(eve_text::ByteOff(primary_head)).0;
     // 折り返し幅は本文の幅 − 右余白 1 (行末にぶら下げた空白がその 1 セルに入る)
     let wrap_cols = text_cols.saturating_sub(1).max(1);
     let mut out_rows = Vec::with_capacity(rows);
@@ -734,12 +756,12 @@ fn wrapped_rows(
                 break;
             }
             let gutter = if r == 0 {
-                gutter_spans(line, gw)
+                gutter_spans(line, gw, line_number_style(marks.roles, line, cursor_line))
             } else if gw > 0 {
                 vec![Span {
                     text: " ".repeat(gw as usize),
                     width: gw,
-                    style: SYMBOL,
+                    style: marks.roles.get("ui.line_number"),
                 }]
             } else {
                 Vec::new()
@@ -833,7 +855,9 @@ pub(super) fn build_frame(
         current,
         unmappable: &unmappable,
         omit: &omit,
+        roles: &state.roles,
     };
+    let cursor_line = t.byte_to_line(view.selection.primary().head).0;
     let (out_rows, cursors, primary) = if view.wrap.is_on() {
         wrapped_rows(
             doc,
@@ -881,7 +905,7 @@ pub(super) fn build_frame(
                 &sel,
                 &here,
                 &marks,
-                gutter_spans(line, gw),
+                gutter_spans(line, gw, line_number_style(&state.roles, line, cursor_line)),
                 None,
             );
             for (&h, &c) in here.iter().zip(&ro.cursor_cols) {
@@ -942,6 +966,7 @@ pub(super) fn build_frame(
         messages: message_model(state),
         texts: super::chrome::chrome_texts(state),
         title: title(state, doc),
+        roles: state.roles.clone(),
     })
 }
 

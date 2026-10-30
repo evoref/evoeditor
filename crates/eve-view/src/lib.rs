@@ -31,8 +31,8 @@ pub use frame::{
     BarFocus, CaseMode, CellPos, CellRect, CellText, Choice, ChoiceId, ChromeTexts, Color,
     CursorPlacement, CursorShape, CutPolicy, Frame, HelpLine, HelpLineKind, HintContext, HintItem,
     HintModel, InputFieldModel, KeyLabel, ListItem, Message, MessageModel, OverlayModel, PaneFrame,
-    RenderRow, ReplaceRowModel, RowSource, SearchBarModel, Span, StatusAlign, StatusItem,
-    StatusKind, StatusModel, Style, StyleMods, WhichKeyItem, WhichKeyModel,
+    RenderRow, ReplaceRowModel, RoleStyles, RowSource, SearchBarModel, Span, StatusAlign,
+    StatusItem, StatusKind, StatusModel, Style, StyleMods, WhichKeyItem, WhichKeyModel,
 };
 pub use ids::{
     ClipboardHandleId, ClipboardToken, DocumentId, JobId, Revision, ViewId, ViewRevision, WindowId,

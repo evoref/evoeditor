@@ -79,6 +79,8 @@ pub struct EditorState {
     pub(super) reloaded: Option<(eve_config::KeymapFile, Vec<&'static str>)>,
     /// 今のユーザー層のキーマップの割当 (再読込で変わったかを比べる)。
     pub(super) user_keymap_entries: Option<Vec<eve_config::KeymapEntry>>,
+    /// テーマのロールの表 (色深度に合う段。テーマか色深度が変わったときに作り直す、07 §8.6)。
+    pub(super) roles: std::sync::Arc<eve_view::RoleStyles>,
     /// パレットから実行したコマンド (新しい順、直近 20 件。起動している間だけ、07 §11.4)。
     pub(super) palette_recent: Vec<String>,
     /// 設定の読込元 (`None` は設定ディレクトリの既定の 2 ファイル)。
@@ -212,6 +214,10 @@ impl EditorState {
             user_keymap_entries: None,
             config_sources: None,
             palette_recent: Vec::new(),
+            roles: std::sync::Arc::new(super::theme::resolve(
+                "default",
+                eve_view::ColorDepth::TrueColor,
+            )),
         }
     }
 
@@ -365,7 +371,11 @@ impl EditorState {
     }
 
     pub fn set_caps(&mut self, caps: Capabilities) {
+        let depth_changed = self.caps.color_depth != caps.color_depth;
         self.caps = caps;
+        if depth_changed {
+            self.refresh_roles();
+        }
         self.needs_render = true;
     }
 

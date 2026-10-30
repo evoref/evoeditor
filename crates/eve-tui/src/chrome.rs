@@ -831,7 +831,7 @@ fn draw_input(
             let idx = input.first + s + k;
             let selected = input.selection.as_ref().is_some_and(|r| r.contains(&idx));
             let st = if selected {
-                overlay_style(style, Style::with_mods(StyleMods::REVERSE))
+                overlay_style(style, theme.selection)
             } else {
                 style
             };
@@ -927,7 +927,7 @@ fn render_search_bar(
         }
         let text = if short_toggles { short } else { full };
         let tstyle = if *on {
-            overlay_style(style, Style::with_mods(StyleMods::REVERSE))
+            overlay_style(style, theme.toggle_on)
         } else {
             style
         };
@@ -1176,9 +1176,13 @@ fn render_list(
         let y = iy + 1 + k as u16;
         let is_sel = *first + k == *selected;
         let disabled = item.disabled_reason.is_some();
-        let base = if disabled { theme.placeholder } else { style };
+        let base = if disabled {
+            overlay_style(style, theme.overlay_disabled)
+        } else {
+            style
+        };
         let base = if is_sel {
-            overlay_style(base, Style::with_mods(StyleMods::REVERSE))
+            overlay_style(base, theme.overlay_selected)
         } else {
             base
         };
@@ -1219,10 +1223,7 @@ fn render_list(
         for (i, sp) in label.iter().enumerate() {
             let hit = item.match_ranges.iter().any(|r| r.contains(&i));
             let st = if hit {
-                overlay_style(
-                    base,
-                    Style::with_mods(StyleMods::UNDERLINE | StyleMods::BOLD),
-                )
+                overlay_style(base, theme.overlay_match)
             } else {
                 base
             };
@@ -1363,7 +1364,7 @@ pub fn render_screen(
         return render_too_small(frame, window, depth);
     }
     let mut r = render_panes(frame, depth, glyphs);
-    let theme = Theme::for_depth(depth);
+    let theme = Theme::from_roles(&frame.roles);
     let ascii = glyphs.ellipsis.width == 3;
     // 検索バーの行は編集面の下。クロームはその下に続く
     let bar_row = frame.size.rows;
