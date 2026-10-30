@@ -1201,6 +1201,7 @@ file.save(doc)  [main]
 
 - 理由が複数あるときは全部を保持し、表示はこの表の上にあるものを先に出す。**名前を付けて保存** は読み取り専用の文書でも実行できる (v0.1 で読み取り専用の文書を保存する唯一の手段)。例外: `StatefulEncodingWithInvalidBytes` の文書 (不正バイトを含む ISO-2022-JP) は、ISO-2022-JP のままの名前を付けて保存・ISO-2022-JP を指定した保存を連鎖の開始時に `msg.save.encoding_unsupported_iso2022` で拒否する (保存先を尋ねない。§8.3、確定 (ユーザー回答)、OQ-207)。別の文字コードを指定した保存はエスケープ文字が表現不能 (E4) なので E3 のキャンセルだけになり、この文書を書く手段は無い (FR-111 で別の文字コードとして開き直す)。成功したら保存先について `FileAttribute` / `NoWritePermission` を判定し直し (外れれば編集できる)、それ以外の理由は残す。
 - 解除の取り消し (`file.toggle_read_only` をもう一度) は、どの文書でも `UserRequested` を付ける (v0.2)。
+- **M9d の実装 (v0.2)**: `doc.read_only_releasable` は「読込が済み、理由があり、すべてが `FileAttribute` か `UserRequested`」。`FileAttribute` を解除した文書は解除の記録 (`Document.attribute_released`) を持ち、元のパスへの上書き保存の前に `ui.confirm.save.read_only` (既定は別名で保存) を出す。承認は (文書, Revision) ごとで、同じ Revision の保存では繰り返さない。全保存では保存せず、確認が要る文書として一覧に出す。承認した保存は `SaveOptions.clear_readonly` で投入し、Port が置換の直前に属性を外して置換の後に付け直す (05 §4.2)。解除の記録は、名前を付けて保存で別のパスに書いたときと、再読込 (属性をディスクから判定し直す) で消える。直接上書き (§9.3 手順 7 の確認の後、05 §4.4) では属性を外さないので、`PermissionDenied` (理由 `NoWritePermission`) になる。
 - バイナリ判定されたファイルを「読み取り専用で開く」場合も §8.3 のエスケープで内容を表示する (NUL は `<0x00>`)。NG10 によりバイナリ編集は提供しない。
 
 ### 9.7 保存の連鎖と後続処理 (Continuation)

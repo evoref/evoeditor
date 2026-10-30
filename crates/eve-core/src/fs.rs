@@ -416,6 +416,8 @@ pub struct SaveOptions {
     pub preserve: PreserveAttrs,
     pub hardlink: HardlinkPolicy,
     pub backup: BackupPolicy,
+    /// 「読み取り専用を解除して保存」(FR-116 / FR-106): 保存先の読み取り専用属性を置換の直前に外し、置換の後に付け直す (05 §4.2 の手順 5b)。
+    pub clear_readonly: bool,
 }
 
 impl SaveOptions {
@@ -430,6 +432,7 @@ impl SaveOptions {
             preserve: PreserveAttrs::default(),
             hardlink: HardlinkPolicy::default(),
             backup: BackupPolicy::default(),
+            clear_readonly: false,
         }
     }
 }

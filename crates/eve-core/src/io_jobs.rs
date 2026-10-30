@@ -481,6 +481,7 @@ pub(crate) struct SaveParams<'a> {
     pub pua: PuaEscapeMode,
     pub expected: Expect,
     pub strategy: crate::jobs::SaveStrategy,
+    pub clear_readonly: bool,
 }
 
 /// 乾式走査: 出力は捨てて、表現不能の文字と出力のバイト長だけを集める (03 §8.6 E1・05 §4.4 手順 0。書く前に止めるため)。
@@ -544,6 +545,7 @@ pub(crate) fn run_save(
         pua,
         expected,
         strategy,
+        clear_readonly,
     } = p;
     let mut src = SnapshotSource {
         chunks: snapshot.chunks(ByteRange::all(snapshot.len_bytes())),
@@ -572,6 +574,7 @@ pub(crate) fn run_save(
         other => other,
     };
     let mut opts = SaveOptions::user_file(expected);
+    opts.clear_readonly = clear_readonly;
     let result = match strategy {
         SaveStrategy::Atomic { hardlink } => {
             opts.hardlink = hardlink;

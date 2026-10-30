@@ -265,6 +265,38 @@ fn 読み取り専用の保存先は置換できず_atomic_unsupported_で無傷
     }
 }
 
+// verifies: FR-106
+#[test]
+fn 読み取り専用を解除して保存すると内容が新しくなり_属性と_ads_は保存前と同じ() {
+    let t = Tmp::new("clear-readonly");
+    let p = t.path("a.txt");
+    fs::write(t.p("a.txt"), b"keep").unwrap();
+    let ads = format!("{}:Zone.Identifier", t.p("a.txt").display());
+    fs::write(&ads, b"[ZoneTransfer]\r\nZoneId=3\r\n").unwrap();
+    let mut perm = fs::metadata(t.p("a.txt")).unwrap().permissions();
+    perm.set_readonly(true);
+    fs::set_permissions(t.p("a.txt"), perm.clone()).unwrap();
+    let mut o = SaveOptions::user_file(Expect::Stamp(stamp(&p)));
+    o.clear_readonly = true;
+    let r = WinFs::default()
+        .write_atomic(&p, &mut Chunks::of(b"new", 4096), &o)
+        .unwrap();
+    assert_eq!(r.method, SaveMethod::Atomic);
+    assert!(r.warnings.is_empty(), "{:?}", r.warnings);
+    assert_eq!(fs::read(t.p("a.txt")).unwrap(), b"new");
+    assert!(
+        fs::metadata(t.p("a.txt")).unwrap().permissions().readonly(),
+        "置換の後に READONLY を付け直す (05 §4.2 の手順 5b)"
+    );
+    assert_eq!(fs::read(&ads).unwrap(), b"[ZoneTransfer]\r\nZoneId=3\r\n");
+    assert_eq!(t.names(), ["a.txt"], "一時ファイル・退避名を残さない");
+    #[allow(clippy::permissions_set_readonly_false)]
+    {
+        perm.set_readonly(false);
+        fs::set_permissions(t.p("a.txt"), perm).unwrap();
+    }
+}
+
 #[test]
 fn ハードリンクは_ask_で_atomic_unsupported_break_link_なら置換する() {
     let t = Tmp::new("hardlink");

@@ -156,7 +156,8 @@ pub(super) struct UnmappableAsk {
     pub fmt: Option<NewFormat>,
 }
 
-/// 区分 B / D の確認 (別のバイト表現で保存される箇所がある、03 §8.6 E2')。承認したら同じ保存を投入し直す。
+/// 区分 B / D の確認 (別のバイト表現で保存される箇所がある、03 §8.6 E2') と、「読み取り専用を解除して保存」の確認 (FR-116)。
+/// 承認したら同じ保存を投入し直す。
 #[derive(Clone, Debug)]
 pub(super) struct LossyAsk {
     pub doc: DocumentId,
@@ -628,6 +629,21 @@ impl EditorState {
         let Some(doc) = self.documents.get_mut(&doc_id) else {
             return CommandResult::Rejected(RejectReason::NoTarget);
         };
+        // 読み取り専用属性を解除した文書の上書き保存は、「読み取り専用を解除して保存」の確認を経る (FR-116、03 §9.3 手順 1)。
+        // 承認した Revision では繰り返さない
+        let clear_readonly = doc.attribute_released && doc.path.as_ref() == Some(&path);
+        if clear_readonly && self.readonly_ok != Some((doc_id, doc.revision())) {
+            let ask = LossyAsk {
+                doc: doc_id,
+                path,
+                expected,
+                cont,
+                strategy,
+                fmt,
+            };
+            self.open_clear_readonly(ask);
+            return CommandResult::Done;
+        }
         let out_encoding = fmt.map_or(doc.format.encoding, |f| f.encoding);
         // 区分 B / D: 元の文字コードのまま、別のバイト表現で保存される箇所がある文書を編集して保存するときは、
         // 書き込む前に確認する (FR-112 AC-4 (a)・NFR-303、03 §8.6 E2')。無編集の上書き保存は書き込まないので出ない。
@@ -675,6 +691,7 @@ impl EditorState {
                 pua,
                 expected,
                 strategy,
+                clear_readonly,
             },
         );
         if let Some(c) = cont {
@@ -1380,6 +1397,77 @@ impl EditorState {
         CommandResult::Done
     }
 
+    /// 「読み取り専用を解除して保存」の確認を出す。選択肢: 別名で保存 (既定) / 読み取り専用を解除して保存 (04 §15.2)。
+    fn open_clear_readonly(&mut self, ask: LossyAsk) {
+        use super::overlay::{ChoiceDef, ConfirmAction, ConfirmState};
+        let choice = |id: &'static str, accel: char| ChoiceDef {
+            id,
+            accel: Some(accel),
+            destructive: false,
+        };
+        self.open_confirm(ConfirmState {
+            name: "save.read_only",
+            args: vec![("path".to_owned(), ask.path.display())],
+            choices: vec![choice("alt", 'a'), choice("write", 'w')],
+            details: Vec::new(),
+            default: 0,
+            focused: 0,
+            action: ConfirmAction::ClearReadOnly(ask),
+        });
+    }
+
+    /// 「読み取り専用を解除して保存」の確認の選択 (キャンセルは呼び側が処理済み)。
+    pub(super) fn choose_clear_readonly(&mut self, ask: LossyAsk, choice: usize) -> CommandResult {
+        let LossyAsk {
+            doc,
+            path,
+            expected,
+            cont,
+            strategy,
+            fmt,
+        } = ask;
+        if choice == 1 {
+            if let Some(d) = self.documents.get(&doc) {
+                self.readonly_ok = Some((doc, d.revision()));
+            }
+            return self.start_save_with(doc, path, expected, cont, strategy, fmt);
+        }
+        self.open_prompt(PromptKind::SaveAs { then: cont }, String::new());
+        CommandResult::Done
+    }
+
+    /// 読み取り専用の切替 (`file.toggle_read_only`、03 §9.6)。解除できるのは `FileAttribute` と `UserRequested` だけ。
+    /// 編集できる文書では `UserRequested` を付ける。
+    pub(super) fn toggle_read_only(&mut self) -> CommandResult {
+        use crate::document::{LoadState, ReadOnlyReason};
+        let Some(doc_id) = self.active_document() else {
+            return CommandResult::Rejected(RejectReason::NoTarget);
+        };
+        let Some(doc) = self.documents.get_mut(&doc_id) else {
+            return CommandResult::Rejected(RejectReason::NoTarget);
+        };
+        if doc.load_state != LoadState::Ready {
+            return CommandResult::Rejected(RejectReason::NotAvailable);
+        }
+        let key = if doc.read_only.is_empty() {
+            doc.read_only.insert(ReadOnlyReason::UserRequested);
+            "info.read_only.set"
+        } else if doc.read_only.releasable() {
+            if doc.read_only.contains(ReadOnlyReason::FileAttribute) {
+                doc.attribute_released = true;
+            }
+            doc.read_only.remove(ReadOnlyReason::FileAttribute);
+            doc.read_only.remove(ReadOnlyReason::UserRequested);
+            "info.read_only.released"
+        } else {
+            return CommandResult::Rejected(RejectReason::NotAvailable);
+        };
+        let path = doc.path.as_ref().map(FsPath::display).unwrap_or_default();
+        self.message(MessageLevel::Info, key, &path);
+        self.mark_dirty_render();
+        CommandResult::Done
+    }
+
     /// 保存の代替の確認の選択 (キャンセルは呼び側が処理済み)。
     pub(super) fn choose_fallback(&mut self, ask: FallbackAsk, choice: usize) -> CommandResult {
         let FallbackAsk {
@@ -1933,6 +2021,10 @@ impl EditorState {
     ) {
         use crate::document::{FormatChange, FormatState, Origin, Transaction};
         use eve_text::{ByteOff, ByteRange, ChangeSet, Edit, Selection, TextRead};
+        // 読み取り専用属性はディスクから判定し直したので、解除の記録は捨てる
+        if let Some(d) = self.documents.get_mut(&doc_id) {
+            d.attribute_released = false;
+        }
         let Some(old) = self.documents.get(&doc_id) else {
             return;
         };
@@ -2269,6 +2361,7 @@ impl EditorState {
                     // (属性・書込権限なし) を外す。書き込めた保存先の文書は編集できる (FR-116 AC-4、03 §9.6)。
                     // `--readonly` と内容に由来する理由 (不正バイト・バイナリ・長大行) は残る
                     if doc.path.as_ref() != Some(path) {
+                        doc.attribute_released = false;
                         doc.read_only
                             .remove(crate::document::ReadOnlyReason::FileAttribute);
                         doc.read_only
@@ -2615,6 +2708,10 @@ fn file_reload(ctx: &mut CommandCtx<'_>) -> CommandResult {
     ctx.state.reload()
 }
 
+fn file_toggle_read_only(ctx: &mut CommandCtx<'_>) -> CommandResult {
+    ctx.state.toggle_read_only()
+}
+
 fn file_set_encoding(ctx: &mut CommandCtx<'_>) -> CommandResult {
     let enc = match ctx.args.str("encoding") {
         Some(name) => match Encoding::from_label(name) {
@@ -2686,6 +2783,13 @@ pub(super) fn register(r: &mut CommandRegistry) {
         CommandKind::File,
         "",
         file_set_encoding
+    );
+    reg!(
+        r,
+        "file.toggle_read_only",
+        CommandKind::File,
+        "doc.read_only_releasable || !doc.read_only",
+        file_toggle_read_only
     );
     reg!(
         r,

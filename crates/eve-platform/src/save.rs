@@ -36,8 +36,9 @@ use windows_sys::Win32::Security::{
 };
 use windows_sys::Win32::Storage::FileSystem::{
     CREATE_NEW, CreateFileW, DeleteFileW, FILE_ATTRIBUTE_HIDDEN, FILE_ATTRIBUTE_NORMAL,
-    FILE_ATTRIBUTE_SYSTEM, FILE_SHARE_READ, FlushFileBuffers, GetFileAttributesW,
-    INVALID_FILE_ATTRIBUTES, MOVEFILE_WRITE_THROUGH, MoveFileExW, ReplaceFileW, SetFileAttributesW,
+    FILE_ATTRIBUTE_READONLY, FILE_ATTRIBUTE_SYSTEM, FILE_SHARE_READ, FlushFileBuffers,
+    GetFileAttributesW, INVALID_FILE_ATTRIBUTES, MOVEFILE_WRITE_THROUGH, MoveFileExW, ReplaceFileW,
+    SetFileAttributesW,
 };
 use windows_sys::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
 
@@ -644,6 +645,20 @@ impl WinFs {
 
         hooks::hit("kill_before_rename");
 
+        // 「読み取り専用を解除して保存」: 置換の直前に T の READONLY を外す (置換の後に付け直す、手順 5b)
+        let readonly_attrs = match &existing {
+            Some(_) if opts.clear_readonly => {
+                attributes(&target).filter(|a| a & FILE_ATTRIBUTE_READONLY != 0)
+            }
+            _ => None,
+        };
+        if let Some(a) = readonly_attrs
+            && !set_attributes(&target, a & !FILE_ATTRIBUTE_READONLY)
+        {
+            abort(&tmp, &mut flag);
+            return Err(FsError::new(FsErrorKind::PermissionDenied));
+        }
+
         // 5. 置換 (終了の経路はここが済むまで待つ。置換の途中で終わると元のファイルが退避名に移ったままになる)
         let _replacing = self.replacing.guard(&target_path.display());
         let method;
@@ -663,6 +678,11 @@ impl WinFs {
                 let intact = self
                     .metadata(&target_path)
                     .is_ok_and(|m| same_file_state(orig, &m));
+                // 外した READONLY を戻す (T が無傷なら T に、退避名に移っていれば退避名に)
+                if let Some(a) = readonly_attrs {
+                    let at = if intact { &target } else { &bak };
+                    let _ = set_attributes(at, a);
+                }
                 return Err(match e {
                     ReplaceFailure::MovedToBackup => {
                         FsError::new(FsErrorKind::ReplacedMovedToBackup {
@@ -698,6 +718,16 @@ impl WinFs {
                     return Err(conflict(cur));
                 }
                 return Err(os_error(code, path));
+            }
+        }
+
+        // 5b. 外した READONLY を付け直す
+        if readonly_attrs.is_some() {
+            let cur = attributes(&target).unwrap_or(FILE_ATTRIBUTE_NORMAL);
+            if !set_attributes(&target, cur | FILE_ATTRIBUTE_READONLY) {
+                warnings.push(SaveWarning::AttrsNotPreserved {
+                    what: vec![AttrKind::FileAttributes],
+                });
             }
         }
 

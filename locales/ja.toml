@@ -162,6 +162,10 @@ title = "開く"
 description = "ファイルを読み込み直します。"
 title = "再読込"
 
+[cmd.file.toggle_read_only]
+description = "読み取り専用を解除します。編集できる文書では読み取り専用にします。"
+title = "読み取り専用の切替"
+
 [cmd.file.reopen_with_encoding]
 description = "文字コードを指定して、ファイルを開き直します。"
 title = "文字コードを指定して開き直す"
@@ -413,6 +417,10 @@ done_read_only = "{path} を読み込み直しました (読み取り専用の�
 
 [info.reopen]
 history_cleared = "{encoding} で開き直しました。元に戻す履歴は消えました"
+
+[info.read_only]
+released = "読み取り専用を解除しました"
+set = "読み取り専用にしました"
 
 [info.save]
 aborted = "保存を中止しました ({path} は書き換えていません)"
@@ -773,7 +781,6 @@ encoding = "[E] 文字コードを指定して開く"
 [ui.confirm.save]
 dangling_link = "{path} はリンクで、リンク先 {target} がありません — `[C] リンク先に作成 (リンクを保つ)` ★"
 overwrite = "{path} は既にあります。上書きしますか? — `[O] 上書き` / `[R] 別の名前を入力` ★ (既定は別の名前を入力。確定 (ユーザー回答))"
-read_only = "{path} は読み取り専用です — `[A] 別名で保存` ★ / `[W] 読み取り専用を解除して保存`"
 
 [ui.confirm.swap_recovery]
 title = "未保存の内容が見つかりました"
@@ -848,6 +855,12 @@ title = "同名のファイルがあります"
 message = "{path} は、この文書を作った後に他のプログラムによって作られています"
 overwrite = "[O] 上書き"
 alt = "[A] 別名で保存"
+
+[ui.confirm.save.read_only]
+title = "読み取り専用のファイル"
+message = "{path} は読み取り専用です"
+alt = "[A] 別名で保存"
+write = "[W] 読み取り専用を解除して保存"
 
 [ui.confirm.save.hardlink]
 title = "ハードリンクのファイル"

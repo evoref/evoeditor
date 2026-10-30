@@ -164,6 +164,10 @@ title = "Open"
 description = "Reload the file from disk."
 title = "Reload"
 
+[cmd.file.toggle_read_only]
+description = "Clear read-only, or make an editable document read-only."
+title = "Toggle read-only"
+
 [cmd.file.reopen_with_encoding]
 description = "Reopen the file with a specified encoding."
 title = "Reopen with Encoding"
@@ -415,6 +419,10 @@ done_read_only = "Reloaded {path} (it is read-only, so it cannot be undone)"
 
 [info.reopen]
 history_cleared = "Reopened as {encoding}. The undo history was cleared"
+
+[info.read_only]
+released = "Read-only cleared"
+set = "Made read-only"
 
 [info.save]
 aborted = "Save cancelled ({path} was not changed)"
@@ -775,7 +783,6 @@ encoding = "[E] Open with an encoding"
 [ui.confirm.save]
 dangling_link = "{path} is a link, and its target {target} does not exist — `[C] Create at the target (keep the link)` ★"
 overwrite = "{path} already exists. Overwrite it? — `[O] Overwrite` / `[R] Enter another name` ★ (default is to enter another name; decided by the product owner)"
-read_only = "{path} is read-only — `[A] Save as` ★ / `[W] Clear read-only and save`"
 
 [ui.confirm.swap_recovery]
 title = "Unsaved content found"
@@ -850,6 +857,12 @@ title = "A file with the same name exists"
 message = "{path} was created by another program after this document was created"
 overwrite = "[O] Overwrite"
 alt = "[A] Save as"
+
+[ui.confirm.save.read_only]
+title = "Read-only file"
+message = "{path} is read-only"
+alt = "[A] Save as"
+write = "[W] Clear read-only and save"
 
 [ui.confirm.save.hardlink]
 title = "Hard-linked file"

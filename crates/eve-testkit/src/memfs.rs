@@ -606,7 +606,8 @@ impl FileSystem for MemFs {
             _ => {}
         }
         if let Some(e) = &existing {
-            if e.readonly {
+            // 「読み取り専用を解除して保存」なら書き、属性は保つ (05 §4.2 の手順 5b)
+            if e.readonly && !opts.clear_readonly {
                 return Err(FsError::new(FsErrorKind::PermissionDenied));
             }
             if e.nlink > 1 && opts.hardlink == HardlinkPolicy::Ask {
@@ -644,7 +645,8 @@ impl FileSystem for MemFs {
         let entry = Entry {
             data: buf,
             mtime,
-            readonly: false,
+            // 置換は読み取り専用属性を保つ (05 §4.1 の手順 4 / 5b)
+            readonly: existing.as_ref().is_some_and(|e| e.readonly),
             id: s.next_id,
             nlink: 1,
             fake_len: None,

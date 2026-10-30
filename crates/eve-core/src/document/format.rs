@@ -252,6 +252,17 @@ impl ReadOnlyReasons {
     }
 
     /// 表示に出す 1 つ (優先順で先頭)。
+    /// `file.toggle_read_only` で解除できるか (理由があり、すべてが `FileAttribute` か `UserRequested`。03 §9.6 の表)。
+    pub fn releasable(&self) -> bool {
+        !self.is_empty()
+            && self.iter().all(|r| {
+                matches!(
+                    r,
+                    ReadOnlyReason::FileAttribute | ReadOnlyReason::UserRequested
+                )
+            })
+    }
+
     pub fn primary(&self) -> Option<ReadOnlyReason> {
         self.iter().next()
     }

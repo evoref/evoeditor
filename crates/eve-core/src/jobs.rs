@@ -75,6 +75,8 @@ pub enum JobKind {
         pua: PuaEscapeMode,
         expected: Expect,
         strategy: SaveStrategy,
+        /// 「読み取り専用を解除して保存」(FR-116)。保存先の読み取り専用属性を外して書き、書いた後に付け直す。
+        clear_readonly: bool,
     },
     /// 表現不能の文字を置換する ChangeSet を作る (E3 の選択肢 2、03 §8.6)。`snapshot` は投入時の Revision のもの。
     ReplaceUnmappable {
@@ -422,6 +424,7 @@ pub fn run_job(
             pua,
             expected,
             strategy,
+            clear_readonly,
         } => run_save(
             req.id,
             SaveParams {
@@ -432,6 +435,7 @@ pub fn run_job(
                 pua: *pua,
                 expected: *expected,
                 strategy: *strategy,
+                clear_readonly: *clear_readonly,
             },
             ports,
             cancel,
