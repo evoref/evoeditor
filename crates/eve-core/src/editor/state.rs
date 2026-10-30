@@ -73,6 +73,8 @@ pub struct EditorState {
     /// 保存の結果が届くまで緊急退避の対象に残し、保存が成功したら外し、失敗したら退避先に書く。
     pub(super) closing_snapshots: BTreeMap<DocumentId, super::snapshot::DocSnapshot>,
     needs_render: bool,
+    /// 左ボタンのドラッグ中の状態 (docs/03 §5.8.1)。
+    pub(super) mouse_drag: Option<super::mouse::Drag>,
     /// ジョブの投入口 (`Ports.jobs`)。
     pub(super) jobs: Rc<dyn JobSpawner>,
     pub(super) paths: Arc<dyn Paths>,
@@ -194,6 +196,7 @@ impl EditorState {
             log_path: None,
             bar_rows: 0,
             surface: (80, 24),
+            mouse_drag: None,
         }
     }
 

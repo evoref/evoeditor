@@ -21,6 +21,7 @@ mod leftover_offer;
 mod line_ops;
 mod message;
 mod motion;
+mod mouse;
 mod overlay;
 mod palette;
 mod query;
@@ -150,6 +151,7 @@ impl Editor {
         self.state.search_tick();
         self.state.swap_tick();
         self.state.quit_wait_tick();
+        self.state.mouse_tick();
         if self.keymap.pending().is_empty() {
             self.chord_since = None;
             self.which_key_shown = false;
@@ -171,6 +173,7 @@ impl Editor {
             self.state.search_deadline(),
             self.state.swap_deadline(),
             self.state.quit_wait_deadline(),
+            self.state.mouse_deadline(),
             self.chord_since
                 .filter(|_| !self.which_key_shown && !self.keymap.pending().is_empty())
                 .map(|t| t + WHICH_KEY_DELAY),
@@ -294,6 +297,11 @@ impl Editor {
                 } else if !self.state.prompt_paste(&s) {
                     edit::paste_text(&mut self.state, &s);
                 }
+            }
+            InputEvent::Mouse(m) => {
+                // クリックでチョードの保留は破棄する
+                self.keymap.clear_pending();
+                self.state.on_mouse(m);
             }
             InputEvent::Resize { cols, rows } => self.state.set_viewport(cols, rows),
             InputEvent::CapabilitiesChanged(caps) => self.state.set_caps(caps),
