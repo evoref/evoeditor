@@ -1,5 +1,7 @@
 # 変更履歴
 
+日本語 | [English](CHANGELOG.en.md)
+
 このファイルは、版ごとの変更を記録します。リリースノートの元になります (docs/12-licensing-distribution.md、docs/09-testing-quality.md §9)。
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に倣い、版は [Semantic Versioning](https://semver.org/lang/ja/) に従います。
 

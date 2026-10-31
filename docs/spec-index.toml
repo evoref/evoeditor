@@ -2974,7 +2974,7 @@ title = "アロケータ"
 id = "05 §18"
 file = "docs/05-platform.md"
 line = 1223
-end = 1371
+end = 1372
 title = "配布 (パッケージ・署名・公証)"
 
 [[section]]
@@ -2988,98 +2988,98 @@ title = "段階 (OQ-20)"
 id = "05 §18.2"
 file = "docs/05-platform.md"
 line = 1234
-end = 1275
+end = 1276
 title = "アーカイブ構成"
 
 [[section]]
 id = "05 §18.3"
 file = "docs/05-platform.md"
-line = 1276
-end = 1284
+line = 1277
+end = 1285
 title = "Windows コード署名"
 
 [[section]]
 id = "05 §18.4"
 file = "docs/05-platform.md"
-line = 1285
-end = 1295
+line = 1286
+end = 1296
 title = "macOS 署名と公証"
 
 [[section]]
 id = "05 §18.5"
 file = "docs/05-platform.md"
-line = 1296
-end = 1307
+line = 1297
+end = 1308
 title = "Linux パッケージ"
 
 [[section]]
 id = "05 §18.6"
 file = "docs/05-platform.md"
-line = 1308
-end = 1311
+line = 1309
+end = 1312
 title = "デバッグ情報とクラッシュログの対応付け"
 
 [[section]]
 id = "05 §18.7"
 file = "docs/05-platform.md"
-line = 1312
-end = 1315
+line = 1313
+end = 1316
 title = "再現可能ビルド (Should, v0.4)"
 
 [[section]]
 id = "05 §18.8"
 file = "docs/05-platform.md"
-line = 1316
-end = 1319
+line = 1317
+end = 1320
 title = "アンインストール (提案、OQ-164)"
 
 [[section]]
 id = "05 §18.9"
 file = "docs/05-platform.md"
-line = 1320
-end = 1323
+line = 1321
+end = 1324
 title = "minisign 署名の検証 (提案、OQ-164)"
 
 [[section]]
 id = "05 §18.10"
 file = "docs/05-platform.md"
-line = 1324
-end = 1339
+line = 1325
+end = 1340
 title = "更新の方針 (ADR-0040)"
 
 [[section]]
 id = "05 §18.11"
 file = "docs/05-platform.md"
-line = 1340
-end = 1352
+line = 1341
+end = 1353
 title = "更新とダウングレード"
 
 [[section]]
 id = "05 §18.12"
 file = "docs/05-platform.md"
-line = 1353
-end = 1361
+line = 1354
+end = 1362
 title = "直前の版に戻す (ロールバック)"
 
 [[section]]
 id = "05 §18.13"
 file = "docs/05-platform.md"
-line = 1362
-end = 1365
+line = 1363
+end = 1366
 title = "リリースチャネル"
 
 [[section]]
 id = "05 §18.14"
 file = "docs/05-platform.md"
-line = 1366
-end = 1371
+line = 1367
+end = 1372
 title = "脆弱性の通知 (OQ-164)"
 
 [[section]]
 id = "05 §19"
 file = "docs/05-platform.md"
-line = 1372
-end = 1400
+line = 1373
+end = 1401
 title = "未決事項"
 
 [[section]]
@@ -5529,7 +5529,7 @@ title = "文書索引"
 id = "README §3"
 file = "docs/README.md"
 line = 65
-end = 245
+end = 247
 title = "読む順序"
 
 [[section]]
@@ -5585,21 +5585,21 @@ title = "v0.2 の M9d (保全と外部連携) で読む節"
 id = "README §3.8"
 file = "docs/README.md"
 line = 221
-end = 245
+end = 247
 title = "v0.2 の M10 (開発基盤と文書) で読む節"
 
 [[section]]
 id = "README §4"
 file = "docs/README.md"
-line = 246
-end = 296
+line = 248
+end = 298
 title = "正本マップ"
 
 [[section]]
 id = "README §5"
 file = "docs/README.md"
-line = 297
-end = 299
+line = 299
+end = 301
 title = "用語集への導線"
 
 [[id]]
@@ -7891,139 +7891,139 @@ section = "04 §18"
 [[id]]
 id = "OQ-15"
 file = "docs/05-platform.md"
-line = 1378
+line = 1379
 section = "05 §19"
 
 [[id]]
 id = "OQ-70"
 file = "docs/05-platform.md"
-line = 1379
+line = 1380
 section = "05 §19"
 
 [[id]]
 id = "ADR-0021"
 file = "docs/05-platform.md"
-line = 1380
+line = 1381
 section = "05 §19"
 
 [[id]]
 id = "OQ-04"
 file = "docs/05-platform.md"
-line = 1381
+line = 1382
 section = "05 §19"
 
 [[id]]
 id = "OQ-71"
 file = "docs/05-platform.md"
-line = 1382
+line = 1383
 section = "05 §19"
 
 [[id]]
 id = "OQ-72"
 file = "docs/05-platform.md"
-line = 1383
+line = 1384
 section = "05 §19"
 
 [[id]]
 id = "OQ-73"
 file = "docs/05-platform.md"
-line = 1384
+line = 1385
 section = "05 §19"
 
 [[id]]
 id = "OQ-74"
 file = "docs/05-platform.md"
-line = 1385
+line = 1386
 section = "05 §19"
 
 [[id]]
 id = "OQ-75"
 file = "docs/05-platform.md"
-line = 1386
+line = 1387
 section = "05 §19"
 
 [[id]]
 id = "OQ-76"
 file = "docs/05-platform.md"
-line = 1387
+line = 1388
 section = "05 §19"
 
 [[id]]
 id = "OQ-77"
 file = "docs/05-platform.md"
-line = 1388
+line = 1389
 section = "05 §19"
 
 [[id]]
 id = "OQ-78"
 file = "docs/05-platform.md"
-line = 1389
+line = 1390
 section = "05 §19"
 
 [[id]]
 id = "OQ-79"
 file = "docs/05-platform.md"
-line = 1390
+line = 1391
 section = "05 §19"
 
 [[id]]
 id = "OQ-80"
 file = "docs/05-platform.md"
-line = 1391
+line = 1392
 section = "05 §19"
 
 [[id]]
 id = "OQ-34"
 file = "docs/05-platform.md"
-line = 1392
+line = 1393
 section = "05 §19"
 
 [[id]]
 id = "S-11"
 file = "docs/05-platform.md"
-line = 1393
+line = 1394
 section = "05 §19"
 
 [[id]]
 id = "S-09"
 file = "docs/05-platform.md"
-line = 1394
+line = 1395
 section = "05 §19"
 
 [[id]]
 id = "OQ-111"
 file = "docs/05-platform.md"
-line = 1395
+line = 1396
 section = "05 §19"
 
 [[id]]
 id = "OQ-112"
 file = "docs/05-platform.md"
-line = 1396
+line = 1397
 section = "05 §19"
 
 [[id]]
 id = "OQ-140"
 file = "docs/05-platform.md"
-line = 1397
+line = 1398
 section = "05 §19"
 
 [[id]]
 id = "OQ-163"
 file = "docs/05-platform.md"
-line = 1398
+line = 1399
 section = "05 §19"
 
 [[id]]
 id = "OQ-164"
 file = "docs/05-platform.md"
-line = 1399
+line = 1400
 section = "05 §19"
 
 [[id]]
 id = "OQ-166"
 file = "docs/05-platform.md"
-line = 1400
+line = 1401
 section = "05 §19"
 
 [[id]]

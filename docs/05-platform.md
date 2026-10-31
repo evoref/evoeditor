@@ -1240,6 +1240,7 @@ evoeditor-<version>-<target>.{zip|tar.gz}
 ├── NOTICE                         ← Apache-2.0 第 4 条の帰属表示 (12 §3.2)
 ├── THIRD-PARTY-NOTICES.md        ← v0.1 (MIT/BSD の著作権表示義務)
 ├── README.md                      ← 利用者向け (v0.1 は日本語、OQ-21)
+├── README.en.md                   ← 利用者向けの英語版 (v0.2。日本語版が正、09 §11.3)
 ├── config.example.toml           ← v0.1 (公開キーと既定値の注釈付きの例。07 §5.0 から生成し、CI で既定値と突合、09 §11.2)
 ├── completions/ (evoeditor.bash, evoeditor.zsh, evoeditor.fish, _evoeditor.ps1)   ← v0.4。lexopt のため手書き (補完対象は少ない)
 └── man/evoeditor.1 (Unix)              ← v0.4
