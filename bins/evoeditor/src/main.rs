@@ -22,7 +22,7 @@ use eve_core::{Encoding, JobPorts, Paths as _, Ports};
 use eve_host::{Host, HostMsg, SignalKind, SystemClock, ThreadJobSpawner, channel};
 use eve_platform::dirs::WinPaths;
 use eve_platform::fs::WinFs;
-use eve_platform::rescue::WinRescue;
+use eve_platform::rescue::StateRescue;
 use eve_tui::frontend::TuiFrontend;
 
 use cli::{Cli, UsageError};
@@ -433,7 +433,7 @@ fn run(
     host.set_clipboard(Arc::new(eve_platform::clipboard::WinClipboard::new()));
 
     // 緊急退避の書き手 (公開済みの DocSnapshot だけを読み、Port を通さずに書く、02 §11.2.1)
-    host.set_rescue_writer(Arc::new(WinRescue::new(Some(
+    host.set_rescue_writer(Arc::new(StateRescue::new(Some(
         state_dir.as_path().to_path_buf(),
     ))));
     let emergency = host.emergency();

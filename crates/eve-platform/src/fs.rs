@@ -204,124 +204,12 @@ fn fs_kind(path: &Path) -> FsKind {
 }
 
 impl FileSystem for WinFs {
-    fn inflight_for(&self, path: &FsPath) -> Result<Vec<eve_core::InflightRecord>, FsError> {
-        Ok(self
-            .state_dir()
-            .map(|sd| crate::inflight::read_flags(sd, path.as_path()))
-            .unwrap_or_default())
-    }
-
     fn rename_no_replace(&self, from: &FsPath, to: &FsPath) -> Result<(), FsError> {
         crate::save::rename_no_replace(from.as_path(), to.as_path())
             .map_err(|e| map_io_error(e, to))
     }
 
-    fn list_inflight(&self) -> Result<Vec<eve_core::InflightRecord>, FsError> {
-        Ok(self
-            .state_dir()
-            .map(crate::inflight::list_all)
-            .unwrap_or_default())
-    }
-
-    fn list_orphan_backups(&self) -> Result<Vec<eve_core::OrphanBackup>, FsError> {
-        Ok(self
-            .state_dir()
-            .map(crate::inplace::list_orphan_backups)
-            .unwrap_or_default())
-    }
-
-    fn list_recovery_dirs(&self) -> Result<Vec<eve_core::RecoveryDirEntry>, FsError> {
-        Ok(crate::rescue::list_recovery_dirs(self.state_dir()))
-    }
-
-    fn write_recovery(&self, doc: &eve_core::DocSnapshot) -> Result<FsPath, FsError> {
-        use eve_core::{RescueReason, RescueWriter};
-        let out = crate::rescue::WinRescue::new(self.state_dir.clone()).write(
-            &[std::sync::Arc::new(doc.clone())],
-            RescueReason::UserSave,
-            std::time::Duration::from_secs(30),
-        );
-        match out.dir {
-            Some(dir) if out.complete => Ok(FsPath::new(dir)),
-            _ => {
-                let msg = out
-                    .error
-                    .unwrap_or_else(|| "書き込めませんでした".to_owned());
-                let mut e = FsError::new(FsErrorKind::Other);
-                e.source = Some(io::Error::other(msg));
-                Err(e)
-            }
-        }
-    }
-
-    fn read_state_file(&self, name: &str) -> Result<Vec<u8>, FsError> {
-        let sd = self
-            .state_dir()
-            .ok_or_else(|| FsError::new(FsErrorKind::Unsupported))?;
-        crate::state_file::read(sd, name)
-    }
-
-    fn write_state_file(&self, name: &str, data: &[u8]) -> Result<(), FsError> {
-        let sd = self
-            .state_dir()
-            .ok_or_else(|| FsError::new(FsErrorKind::Unsupported))?;
-        crate::state_file::write(sd, name, data)
-    }
-
-    fn set_aside_state_file(&self, name: &str) -> Result<(), FsError> {
-        let sd = self
-            .state_dir()
-            .ok_or_else(|| FsError::new(FsErrorKind::Unsupported))?;
-        crate::state_file::set_aside(sd, name)
-    }
-
-    fn write_swap(&self, doc: &eve_core::DocSnapshot) -> Result<(), FsError> {
-        // 状態ディレクトリを使えないときはスワップを無効のままにする (05 §7.1)
-        let sd = self
-            .state_dir()
-            .ok_or_else(|| FsError::new(FsErrorKind::Unsupported))?;
-        crate::swap::write_swap(sd, doc)
-    }
-
-    fn discard_swap(
-        &self,
-        doc: eve_core::DocumentId,
-        path: Option<&FsPath>,
-    ) -> Result<(), FsError> {
-        let sd = self
-            .state_dir()
-            .ok_or_else(|| FsError::new(FsErrorKind::Unsupported))?;
-        crate::swap::discard_swap(sd, doc.0, path)
-    }
-
-    fn list_swaps(&self) -> Result<Vec<eve_core::SwapEntry>, FsError> {
-        Ok(self
-            .state_dir()
-            .map(crate::swap_scan::list_swaps)
-            .unwrap_or_default())
-    }
-
-    fn read_swap(&self, entry: &eve_core::SwapEntry) -> Result<eve_core::SwapBody, FsError> {
-        crate::swap_scan::read_swap(entry)
-    }
-
-    fn remove_swap(&self, entry: &eve_core::SwapEntry) -> Result<(), FsError> {
-        let sd = self
-            .state_dir()
-            .ok_or_else(|| FsError::new(FsErrorKind::Unsupported))?;
-        crate::swap_scan::remove_swap(sd, entry)
-    }
-
-    fn write_in_place(
-        &self,
-        path: &FsPath,
-        data: &mut dyn ReadChunks,
-        len: u64,
-        opts: &SaveOptions,
-        cancel: &eve_core::CancelToken,
-    ) -> Result<SaveReport, FsError> {
-        self.write_in_place_impl(path, data, len, opts, cancel)
-    }
+    state_dir_methods!();
 
     fn remove_file(&self, path: &FsPath) -> Result<(), FsError> {
         fs::remove_file(path.as_path()).map_err(|e| map_io_error(e, path))

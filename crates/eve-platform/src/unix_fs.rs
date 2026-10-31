@@ -4,8 +4,9 @@
 //! xattr (`user.*`・`trusted.*`) と POSIX ACL (`system.posix_acl_access`) の複製 → 置換の直前の照合 → `rename` (新規は
 //! 上書きしない `renameat2(RENAME_NOREPLACE)`) → ディレクトリの `fsync` → 事後の確認。
 //!
-//! まだのもの (M7 の後の PR): 保存中フラグ (状態ディレクトリ、05 §4.1 手順 0d)、直接上書き (`write_in_place`、05 §4.4)、
-//! 状態ファイル・スワップ・緊急退避。これらは既定の実装 (`Unsupported` / 空) のまま。
+//! 状態ディレクトリを持つ (`UnixFs::new`) と、保存中フラグ (05 §4.1 手順 0d) を書き、直接上書き (05 §4.4)・状態ファイル・
+//! スワップ・緊急退避の部品 (OS に依らない実装、`state_dir_methods!`) を使う。持たない (`default()`) ときは Windows と同じく
+//! フラグを書かず、状態ディレクトリの操作は `Unsupported` / 空を返す。
 
 #![allow(unsafe_code)]
 
@@ -28,7 +29,7 @@ use eve_core::{
 /// 読込のチャンク (02 §4.5: 1 MiB)。
 const READ_CHUNK_BYTES: usize = 1024 * 1024;
 
-/// Unix のファイルシステム。`state_dir` は保存中フラグ・状態ファイルのため (使うのは後の PR)。
+/// Unix のファイルシステム。`state_dir` (05 §7.5) は保存中フラグ・状態ファイル・スワップ・緊急退避の置き場所。
 #[derive(Clone, Debug, Default)]
 pub struct UnixFs {
     state_dir: Option<PathBuf>,
@@ -101,10 +102,9 @@ fn writable(p: &Path) -> bool {
     }
 }
 
-fn euid() -> u32 {
-    // SAFETY: 引数の無いシステムコール。
-    unsafe { libc::geteuid() }
-}
+use crate::hooks;
+use crate::inflight::FlagGuard;
+use crate::sys::{euid, matches, same_file_state};
 
 fn meta_of(p: &Path, meta: &fs::Metadata) -> FileMeta {
     let kind = if meta.is_file() {
@@ -144,7 +144,7 @@ fn meta_of(p: &Path, meta: &fs::Metadata) -> FileMeta {
 
 /// 保存先 T: シンボリックリンクなら最終リンク先 (ダングリングは `NotFound` + `DanglingLink`)。`create` ならダングリングの
 /// リンクのリンク先を T にする (05 §4.1)。リンク先もリンク (連鎖) なら `InvalidPath`。
-fn resolve_target(path: &FsPath, create: bool) -> Result<PathBuf, FsError> {
+pub(crate) fn resolve_target(path: &FsPath, create: bool) -> Result<PathBuf, FsError> {
     let target = path.as_path().to_path_buf();
     let Ok(sm) = fs::symlink_metadata(&target) else {
         return Ok(target);
@@ -194,15 +194,6 @@ fn sibling_name(name: &str, kind: &str) -> String {
         cut.push(c);
     }
     format!(".{cut}{suffix}")
-}
-
-/// 照合の比較 (05 §5.5。ハッシュは持たないので (mtime, len, FileId))。
-fn matches(want: &FileStamp, have: &FileStamp) -> bool {
-    want.mtime == have.mtime && want.len == have.len && want.file_id == have.file_id
-}
-
-fn same_file_state(a: &FileMeta, b: &FileMeta) -> bool {
-    a.mtime == b.mtime && a.len == b.len && a.file_id == b.file_id
 }
 
 /// 複製する xattr の名前か (05 §4.3 / §5.1: `user.*` と `trusted.*`。`security.*` と `system.*` は OS に任せる。
@@ -392,6 +383,8 @@ impl FileSystem for UnixFs {
         rename_no_replace(from.as_path(), to.as_path()).map_err(|e| map_io_error(e, to))
     }
 
+    state_dir_methods!();
+
     fn remove_file(&self, path: &FsPath) -> Result<(), FsError> {
         fs::remove_file(path.as_path()).map_err(|e| map_io_error(e, path))
     }
@@ -466,6 +459,21 @@ impl FileSystem for UnixFs {
         // 1. 一時ファイル (`O_EXCL`)。T が在る・`private` なら 0600 で作り、下で T の mode に合わせる。
         // 新規は 0666 (umask が掛かる。通常の新規ファイルと同じ)
         let tmp: PathBuf = parent.join(sibling_name(&name, "tmp"));
+        let mut warnings = Vec::new();
+        // 0d. 保存中フラグ (一時ファイルを作る前。rename は退避名を作らないので bak は無い)
+        let mut flag = FlagGuard::begin(
+            self.state_dir(),
+            opts.state_file,
+            &target,
+            if existing.is_some() {
+                SaveMethod::Atomic
+            } else {
+                SaveMethod::NewFile
+            },
+            &tmp,
+            None,
+            &mut warnings,
+        );
         let mode = if existing.is_some() || opts.private {
             0o600
         } else {
@@ -481,13 +489,19 @@ impl FileSystem for UnixFs {
             Ok(f) => f,
             // 親に書込権限がない (一時ファイルを作れない): 確認付きの直接上書きへ (05 §4.4)
             Err(e) if e.raw_os_error() == Some(libc::EACCES) => {
+                flag.remove();
                 return Err(FsError::new(FsErrorKind::AtomicUnsupported));
             }
-            Err(e) => return Err(map_io_error(e, path)),
+            Err(e) => {
+                flag.remove();
+                return Err(map_io_error(e, path));
+            }
         };
-        let abort = |file: Option<File>| {
+        hooks::hit("kill_after_tmp_alloc");
+        let abort = |file: Option<File>, flag: &mut FlagGuard| {
             drop(file);
             let _ = fs::remove_file(&tmp);
+            flag.remove();
         };
 
         // 2. 本文
@@ -495,13 +509,13 @@ impl FileSystem for UnixFs {
             match data.next_chunk() {
                 Ok(Some(chunk)) => {
                     if let Err(e) = file.write_all(chunk) {
-                        abort(Some(file));
+                        abort(Some(file), &mut flag);
                         return Err(map_io_error(e, path));
                     }
                 }
                 Ok(None) => break,
                 Err(e) => {
-                    abort(Some(file));
+                    abort(Some(file), &mut flag);
                     return Err(match e {
                         ChunkError::Io(err) => err,
                         _ => FsError::new(FsErrorKind::SourceFailed),
@@ -510,8 +524,9 @@ impl FileSystem for UnixFs {
             }
         }
 
+        hooks::hit("kill_after_tmp_write");
+
         // 3. fsync (失敗は警告。ext4 の data=ordered でも rename の前の fsync は要る)
-        let mut warnings = Vec::new();
         if opts.fsync != FsyncLevel::None && file.sync_all().is_err() {
             warnings.push(SaveWarning::FsyncFailed);
         }
@@ -560,6 +575,7 @@ impl FileSystem for UnixFs {
         }
         let tmp_meta = file.metadata().ok().map(|m| meta_of(&tmp, &m));
         drop(file);
+        hooks::hit("kill_after_flush");
 
         // 4b. 置換の直前の照合
         if opts.expected != Expect::Any {
@@ -567,7 +583,7 @@ impl FileSystem for UnixFs {
                 Ok(m) => Some(m),
                 Err(e) if e.kind == FsErrorKind::NotFound => None,
                 Err(e) => {
-                    abort(None);
+                    abort(None, &mut flag);
                     return Err(e);
                 }
             };
@@ -577,24 +593,26 @@ impl FileSystem for UnixFs {
                 _ => true,
             };
             if stale {
-                abort(None);
+                abort(None, &mut flag);
                 return Err(conflict(
                     now.as_ref().map(|m| FileStamp::from_meta(m, None)),
                 ));
             }
         }
 
+        hooks::hit("kill_before_rename");
+
         // 5. 置換 (終了の経路はここが済むまで待つ)
         let _replacing = self.replacing.guard(&target_path.display());
         let method = if existing.is_some() {
             if let Err(e) = fs::rename(&tmp, &target) {
-                abort(None);
+                abort(None, &mut flag);
                 return Err(map_io_error(e, path));
             }
             SaveMethod::Atomic
         } else {
             if let Err(e) = rename_no_replace(&tmp, &target) {
-                abort(None);
+                abort(None, &mut flag);
                 if e.kind() == io::ErrorKind::AlreadyExists {
                     let cur = self
                         .metadata(&target_path)
@@ -622,6 +640,8 @@ impl FileSystem for UnixFs {
             (Some(a), None) => FileStamp::from_meta(a, None),
             (None, _) => return Err(FsError::new(FsErrorKind::Other)),
         };
+        // 8. 成功: フラグ (と同じキーに残る他の記録) を消す
+        flag.finish_success();
         Ok(SaveReport {
             method,
             new_stamp,

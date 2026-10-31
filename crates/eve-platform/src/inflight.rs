@@ -5,7 +5,7 @@
 //! `hash(path)` は 05 §7.5 の正規形 (親を `canonicalize` + ファイル名、verbatim 接頭辞を外し、大文字小文字を畳み、`\` に揃え、
 //! 末尾の区切りを除く) を UTF-16 単位列にして XXH3-64。シンボリックリンクはリンク自身とリンク先の 2 つのキーで照会する。
 
-#![allow(unsafe_code)]
+#![cfg_attr(windows, allow(unsafe_code))]
 
 use std::collections::BTreeSet;
 use std::fs;
@@ -13,12 +13,18 @@ use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use eve_core::{FileTime, FsPath, InflightRecord, SaveMethod};
+use eve_core::{FileTime, FsPath, InflightRecord, SaveMethod, SaveWarning};
+#[cfg(windows)]
 use windows_sys::Win32::Foundation::FILETIME;
+#[cfg(windows)]
 use windows_sys::Win32::System::Threading::{GetCurrentProcess, GetProcessTimes};
 
+#[cfg(windows)]
 use crate::path::simplify_verbatim;
+#[cfg(windows)]
 use crate::save::OwnerOnly;
+#[cfg(unix)]
+use crate::sys::create_dir_private;
 
 /// フラグの版 (キーの追加は版を上げずに行ってよい。意味の変更・必須キーの追加で上げる)。
 const FORMAT_VERSION: u32 = 1;
@@ -43,10 +49,25 @@ pub(crate) fn normalized(path: &Path) -> Option<String> {
     };
     let parent = fs::canonicalize(parent).ok()?;
     let joined = parent.join(name);
-    let s = simplify_verbatim(&joined.to_string_lossy());
-    // Windows は大文字小文字を区別しない形に畳み、区切りは `\` に揃え、末尾の区切りを除く
-    let s = s.replace('/', "\\").to_uppercase();
-    Some(s.trim_end_matches('\\').to_owned())
+    Some(normal_form(&joined.to_string_lossy()))
+}
+
+/// Windows は大文字小文字を区別しない形に畳み、区切りは `\` に揃え、末尾の区切りを除く。
+#[cfg(windows)]
+fn normal_form(s: &str) -> String {
+    let s = simplify_verbatim(s).replace('/', "\\").to_uppercase();
+    s.trim_end_matches('\\').to_owned()
+}
+
+/// Unix は大文字小文字を区別する FS が既定なので畳まない (05 §2 の表)。末尾の区切りだけを除く。
+#[cfg(unix)]
+fn normal_form(s: &str) -> String {
+    let t = s.trim_end_matches('/');
+    if t.is_empty() {
+        "/".to_owned()
+    } else {
+        t.to_owned()
+    }
 }
 
 /// `hash(path)` (XXH3-64 の 16 桁の 16 進)。正規形の UTF-16 単位列 (LE) を入力にする。
@@ -126,6 +147,7 @@ pub(crate) fn toml_str(s: &str) -> String {
 }
 
 /// プロセスの作成時刻 (UNIX 紀元からの経過)。取れなければ `None`。
+#[cfg(windows)]
 pub(crate) fn process_start() -> Option<FileTime> {
     let zero = FILETIME {
         dwLowDateTime: 0,
@@ -145,6 +167,12 @@ pub(crate) fn process_start() -> Option<FileTime> {
     Some(FileTime { secs, nanos })
 }
 
+/// プロセスの作成時刻 (Unix: `/proc/self/stat`)。取れなければ `None`。
+#[cfg(unix)]
+pub(crate) fn process_start() -> Option<FileTime> {
+    crate::sys::process_start_of(std::process::id())
+}
+
 /// `state_dir/recovery/inflight/<key>/` を所有者のみの DACL で作る (中のファイルは継承で所有者のみ、05 §5.6)。
 pub(crate) fn create_flag_dir(state_dir: &Path, key: &str) -> io::Result<PathBuf> {
     fs::create_dir_all(state_dir)?;
@@ -153,10 +181,9 @@ pub(crate) fn create_flag_dir(state_dir: &Path, key: &str) -> io::Result<PathBuf
     Ok(dir)
 }
 
-/// 保護付きの DACL (所有者と SYSTEM のみ、継承を遮断・中へ継承) でディレクトリを作る。既にあれば何もしない。
+/// 所有者のみのディレクトリを親から順に作る (Windows: 所有者と SYSTEM のみの保護付き DACL で中へ継承、Unix: 0700。05 §5.6)。
+/// 既にあれば何もしない。
 pub(crate) fn create_dir_all_private(dir: &Path) -> io::Result<()> {
-    use std::os::windows::ffi::OsStrExt;
-    use windows_sys::Win32::Storage::FileSystem::CreateDirectoryW;
     if dir.is_dir() {
         return Ok(());
     }
@@ -166,6 +193,14 @@ pub(crate) fn create_dir_all_private(dir: &Path) -> io::Result<()> {
     {
         create_dir_all_private(parent)?;
     }
+    create_dir_private(dir)
+}
+
+/// 1 段だけ作る (Windows: 所有者のみの保護付き DACL)。
+#[cfg(windows)]
+fn create_dir_private(dir: &Path) -> io::Result<()> {
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::Storage::FileSystem::CreateDirectoryW;
     let sa = OwnerOnly::new_dir()?;
     let w: Vec<u16> = dir.as_os_str().encode_wide().chain(Some(0)).collect();
     // SAFETY: NUL 終端のパス、有効な `SECURITY_ATTRIBUTES`。
@@ -228,7 +263,7 @@ pub(crate) fn write_flag(state_dir: &Path, key: &str, body: &FlagBody<'_>) -> io
 fn write_replace(path: &Path, bytes: &[u8]) -> io::Result<()> {
     let tmp = path.with_extension("toml.tmp");
     {
-        let mut f = fs::File::create(&tmp)?;
+        let mut f = crate::sys::create_private(&tmp)?;
         f.write_all(bytes)?;
         f.sync_all()?;
     }
@@ -423,6 +458,120 @@ pub(crate) fn clear_others(state_dir: &Path, key: &str, mine: &Path) {
     }
 }
 
+// ---------- 保存の側のフラグ ----------
+
+/// 保存中フラグ (05 §4.1 手順 0d / 7 / 8)。状態ディレクトリが無い・状態ファイルの書込 (`state_file`) ではフラグを書かない。
+pub(crate) struct FlagGuard {
+    pub(crate) state_dir: Option<PathBuf>,
+    pub(crate) key: Option<String>,
+    pub(crate) path: Option<PathBuf>,
+}
+
+impl FlagGuard {
+    /// 一時ファイルを作る前に書く。書けなければ警告して続ける (原子的置換では T が無傷のまま残るため)。
+    pub(crate) fn begin(
+        state_dir: Option<&Path>,
+        state_file: bool,
+        target: &Path,
+        method: SaveMethod,
+        tmp: &Path,
+        bak: Option<&Path>,
+        warnings: &mut Vec<SaveWarning>,
+    ) -> FlagGuard {
+        let mut g = FlagGuard {
+            state_dir: None,
+            key: None,
+            path: None,
+        };
+        let Some(sd) = state_dir.filter(|_| !state_file) else {
+            return g;
+        };
+        g.state_dir = Some(sd.to_path_buf());
+        g.key = flag_key(target);
+        let written = g.key.as_deref().and_then(|key| {
+            write_flag(
+                sd,
+                key,
+                &FlagBody {
+                    target,
+                    method,
+                    tmp: Some(tmp),
+                    backup: bak,
+                    backup_recorded: false,
+                    backup_complete: false,
+                },
+            )
+            .ok()
+        });
+        match written {
+            Some(p) => g.path = Some(p),
+            None => warnings.push(SaveWarning::InflightFlagNotWritten),
+        }
+        g
+    }
+
+    /// 直接上書きのフラグ (05 §4.4 手順 2)。書けなければ `None` (呼び側が `BackupFailed` にするか、警告で続ける)。
+    pub(crate) fn begin_in_place(
+        state_dir: &Path,
+        target: &Path,
+        backup: Option<&Path>,
+    ) -> Option<FlagGuard> {
+        let key = flag_key(target)?;
+        let path = write_flag(
+            state_dir,
+            &key,
+            &FlagBody {
+                target,
+                method: SaveMethod::InPlace,
+                tmp: None,
+                backup,
+                backup_recorded: backup.is_some(),
+                backup_complete: false,
+            },
+        )
+        .ok()?;
+        Some(FlagGuard {
+            state_dir: Some(state_dir.to_path_buf()),
+            key: Some(key),
+            path: Some(path),
+        })
+    }
+
+    /// 事前バックアップを最終名にした後、フラグを `backup_complete = true` で書き直す。
+    pub(crate) fn mark_backup_complete(&self, target: &Path, backup: &Path) -> io::Result<()> {
+        let Some(p) = &self.path else {
+            return Ok(());
+        };
+        rewrite_flag(
+            p,
+            &FlagBody {
+                target,
+                method: SaveMethod::InPlace,
+                tmp: None,
+                backup: Some(backup),
+                backup_recorded: true,
+                backup_complete: true,
+            },
+        )
+    }
+
+    /// 自分のフラグを消す。
+    pub(crate) fn remove(&mut self) {
+        if let Some(p) = self.path.take() {
+            let _ = fs::remove_file(p);
+        }
+    }
+
+    /// 成功: 自分のフラグと、同じキーに残る他の記録 (痕跡ファイルが実在しないもの) を消す。
+    pub(crate) fn finish_success(&mut self) {
+        let mine = self.path.clone();
+        self.remove();
+        if let (Some(sd), Some(key), Some(mine)) = (&self.state_dir, &self.key, mine) {
+            clear_others(sd, key, &mine);
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -444,6 +593,40 @@ mod tests {
         assert_eq!(parse_string("no quotes"), None);
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn unix_のキーは大文字小文字を区別する() {
+        let d = tmp_dir("key-unix");
+        let k1 = flag_key(&d.join("File.TXT")).unwrap();
+        let k2 = flag_key(&d.join("file.txt")).unwrap();
+        assert_ne!(k1, k2, "区別する FS が既定なので畳まない");
+        assert_eq!(normal_form("/a/b/"), "/a/b");
+        assert_eq!(normal_form("/"), "/");
+        let _ = fs::remove_dir_all(d);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn unix_のフラグのディレクトリは_0700() {
+        use std::os::unix::fs::PermissionsExt;
+        let d = tmp_dir("mode");
+        let key = flag_key(&d.join("a.txt")).unwrap();
+        let dir = create_flag_dir(&d.join("state"), &key).unwrap();
+        for p in [
+            dir.as_path(),
+            dir.parent().unwrap(),
+            dir.parent().unwrap().parent().unwrap(),
+        ] {
+            assert_eq!(
+                fs::metadata(p).unwrap().permissions().mode() & 0o777,
+                0o700,
+                "{p:?}"
+            );
+        }
+        let _ = fs::remove_dir_all(d);
+    }
+
+    #[cfg(windows)]
     #[test]
     fn キーは綴りの違いを畳む() {
         let d = tmp_dir("key");
@@ -515,6 +698,7 @@ mod tests {
         let _ = fs::remove_dir_all(d);
     }
 
+    #[cfg(windows)]
     #[test]
     fn フラグのディレクトリは所有者のみの_dacl() {
         let d = tmp_dir("dacl");

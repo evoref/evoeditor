@@ -8,9 +8,9 @@ use std::path::Path;
 
 use eve_core::{FsError, FsPath};
 
-use crate::fs::map_io_error;
 use crate::inflight::create_dir_all_private;
 use crate::rescue::timestamp_basic;
+use crate::sys::map_io_error;
 
 fn checked(name: &str) -> io::Result<&str> {
     // 直下のファイル名だけ (区切り・親への移動を含めない)
@@ -37,7 +37,7 @@ fn write_io(state_dir: &Path, name: &str, data: &[u8]) -> io::Result<()> {
     create_dir_all_private(state_dir)?;
     let tmp = state_dir.join(format!("{name}.tmp-{}", std::process::id()));
     let result = (|| {
-        let mut f = fs::File::create(&tmp)?;
+        let mut f = crate::sys::create_private(&tmp)?;
         f.write_all(data)?;
         f.sync_all()?;
         drop(f);

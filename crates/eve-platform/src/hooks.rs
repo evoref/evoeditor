@@ -1,5 +1,5 @@
 //! テスト専用のフック (docs/09 §3.6 (6)、05 §4.4 手順 10)。cargo feature `test-hooks` のときだけ動き、環境変数
-//! `EVE_TEST_HOOK=<切断点>[=<値>]` で指した切断点に到達したら、プロセスを **後始末なしで強制終了** (`TerminateProcess`) する。
+//! `EVE_TEST_HOOK=<切断点>[=<値>]` で指した切断点に到達したら、プロセスを **後始末なしで強制終了** (Windows は `TerminateProcess`、Unix は `SIGKILL`) する。
 //! 配布ビルドには feature が無く、`hit` / `value` は何もしない (空の関数)。
 
 #![allow(unsafe_code)]
@@ -45,7 +45,17 @@ fn active(name: &str) -> Option<String> {
 }
 
 /// プロセスを今すぐ終了する (Drop も `atexit` も走らせない。`TerminateProcess` による強制終了の再現)。
-#[cfg(feature = "test-hooks")]
+#[cfg(all(feature = "test-hooks", unix))]
+pub(crate) fn kill_now() -> ! {
+    // SAFETY: 自プロセスに SIGKILL を送る (捕まえられない)。
+    unsafe {
+        libc::kill(libc::getpid(), libc::SIGKILL);
+    }
+    std::process::abort()
+}
+
+/// 同上 (Windows: `TerminateProcess`)。
+#[cfg(all(feature = "test-hooks", windows))]
 pub(crate) fn kill_now() -> ! {
     use windows_sys::Win32::System::Threading::{GetCurrentProcess, TerminateProcess};
     // SAFETY: 自プロセスのハンドルを終了させる。

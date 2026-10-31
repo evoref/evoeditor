@@ -1,15 +1,15 @@
-//! 緊急退避の書き手 (docs/02 §11.2.1、05 §7.5 / §5.6)。`eve_core::RescueWriter` の Windows 実装。
+//! 緊急退避の書き手 (docs/02 §11.2.1、05 §7.5 / §5.6)。`eve_core::RescueWriter` の実装 (Windows と Unix。OS ごとの部品は `sys`)。
 //!
 //! 公開済みの `DocSnapshot` だけを読み、`std::fs` を直接使って (Port を通さない) 退避先に書く。**小さい文書から**、1 文書書くごとに
 //! `manifest.toml` を原子的に (一時ファイル + fsync + rename) 更新し、時間予算内に書けた分が確実に残るようにする。
 //! 退避先は `state_dir/recovery/<UTC timestamp>-<pid>[-<n>]/`。状態ディレクトリに書けなければ、代替の退避先
-//! `%TEMP%\eve-recovery-<SID>\` (所有者のみの DACL、05 §7.5) に書く。作るディレクトリは所有者のみ (中のファイルは継承)。
+//! `%TEMP%\eve-recovery-<SID>\` (所有者のみの DACL) / `$TMPDIR/eve-recovery-<uid>/` (0700) (05 §7.5) に書く。作るディレクトリは所有者のみ (中のファイルは継承)。
 //!
 //! 本文は内部の UTF-8 のまま・改行を正規化せず・不正バイトの PUA エスケープを保つ (元の文字コードへの再エンコードはしない)。
 //! 書く前に空き容量を確かめ (足りなければ代替の退避先へ)、代替の退避先の既存ディレクトリは所有者が自分であることを確かめる (05 §7.5)。
 //! 範囲外 (後続): 30 日を超えた退避の案内。
 
-use std::fs::{self, File};
+use std::fs;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -19,21 +19,20 @@ use eve_core::{DocSnapshot, RescueOutcome, RescueReason, RescueWriter};
 use eve_text::{ByteRange, LineEnding, TextRead};
 
 use crate::inflight::{create_dir_all_private, toml_str};
-use crate::save::current_user_sid;
 
 /// manifest の版 (意味の変更・必須キーの追加で上げる。キーの追加は版を上げない)。
 const FORMAT_VERSION: u32 = 1;
 
 /// 緊急退避の書き手。
 #[derive(Clone, Debug, Default)]
-pub struct WinRescue {
+pub struct StateRescue {
     state_dir: Option<PathBuf>,
 }
 
-impl WinRescue {
+impl StateRescue {
     /// `state_dir` は 05 §7.5 の状態ディレクトリ (無ければ代替の退避先だけに書く)。
-    pub fn new(state_dir: Option<PathBuf>) -> WinRescue {
-        WinRescue { state_dir }
+    pub fn new(state_dir: Option<PathBuf>) -> StateRescue {
+        StateRescue { state_dir }
     }
 }
 
@@ -94,7 +93,12 @@ fn create_unique_dir(base: &Path, secs: i64) -> io::Result<PathBuf> {
             format!("{stem}-{n}")
         };
         let dir = base.join(name);
-        match fs::create_dir(&dir) {
+        // 在れば失敗する (AlreadyExists) 作り方。Unix は 0700 (Windows は親の保護付き DACL を継承する)
+        #[cfg_attr(windows, allow(unused_mut))]
+        let mut builder = fs::DirBuilder::new();
+        #[cfg(unix)]
+        std::os::unix::fs::DirBuilderExt::mode(&mut builder, 0o700);
+        match builder.create(&dir) {
             Ok(()) => return Ok(dir),
             Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {}
             Err(e) => return Err(e),
@@ -123,8 +127,8 @@ fn open_dir(
         secs,
         rescue,
         needed,
-        &crate::owner::free_bytes,
-        &crate::owner::owned_by_me,
+        &crate::sys::free_bytes,
+        &crate::sys::owned_by_me,
     )
 }
 
@@ -150,8 +154,7 @@ fn open_dir_with(
             short = Some((base, false));
         }
     }
-    let sid = current_user_sid()?;
-    let fallback = std::env::temp_dir().join(format!("eve-recovery-{sid}"));
+    let fallback = crate::sys::recovery_fallback_dir()?;
     create_dir_all_private(&fallback)?;
     // 既にある場所は所有者が自分でなければ使わない (他のユーザーが先に作った場所に書かない、05 §7.5)
     if !owned(&fallback)? {
@@ -177,6 +180,10 @@ fn open_dir_with(
 
 /// 本文のファイル名の `<basename>` に使える形にする (予約文字・制御文字を `_`、長さを制限)。
 pub(crate) fn safe_basename(name: &str) -> String {
+    // 100 文字まで。Unix はファイル名の上限が 255 バイトなので、UTF-8 で 200 バイトまでにも抑える (前後の `<n>-` と
+    // `.r<rev>.txt` の分を残す。05 §4.1 の「一時ファイル・退避名の長さ」)
+    let byte_budget = if cfg!(unix) { 200 } else { usize::MAX };
+    let mut bytes = 0;
     let cleaned: String = name
         .chars()
         .map(|c| {
@@ -187,6 +194,10 @@ pub(crate) fn safe_basename(name: &str) -> String {
             }
         })
         .take(100)
+        .take_while(|c| {
+            bytes += c.len_utf8();
+            bytes <= byte_budget
+        })
         .collect();
     let trimmed = cleaned.trim_matches(['.', ' ']);
     if trimmed.is_empty() {
@@ -248,8 +259,7 @@ pub(crate) fn list_recovery_dirs(state_dir: Option<&Path>) -> Vec<eve_core::Reco
         scan_base(&base, false, &mut out);
         scan_base(&base.join("rescue"), true, &mut out);
     }
-    if let Ok(sid) = current_user_sid() {
-        let base = std::env::temp_dir().join(format!("eve-recovery-{sid}"));
+    if let Ok(base) = crate::sys::recovery_fallback_dir() {
         scan_base(&base, false, &mut out);
         scan_base(&base.join("rescue"), true, &mut out);
     }
@@ -348,7 +358,7 @@ pub(crate) fn manifest_text(
 pub(crate) fn write_manifest(dir: &Path, text: &str) -> io::Result<()> {
     let tmp = dir.join("manifest.toml.tmp");
     {
-        let mut f = File::create(&tmp)?;
+        let mut f = crate::sys::create_private(&tmp)?;
         f.write_all(text.as_bytes())?;
         f.sync_all()?;
     }
@@ -362,7 +372,7 @@ pub(crate) fn write_manifest(dir: &Path, text: &str) -> io::Result<()> {
 pub type BodyWriter<'a> =
     &'a dyn Fn(&Path, &DocSnapshot, &dyn Fn() -> bool) -> io::Result<Option<u8>>;
 
-impl RescueWriter for WinRescue {
+impl RescueWriter for StateRescue {
     fn write(
         &self,
         docs: &[Arc<DocSnapshot>],
@@ -373,7 +383,7 @@ impl RescueWriter for WinRescue {
     }
 }
 
-impl WinRescue {
+impl StateRescue {
     /// `write` の本体。時間切れだけが中断で、1 文書の書込の失敗 (権限・ロック) はその文書を `written = false` のまま
     /// 次の文書へ進む (複数文書で、1 件の失敗が他の文書を落とさないため。03 §9.8 の不変条件 5、§10.1)。
     #[doc(hidden)]
@@ -514,7 +524,7 @@ pub(crate) fn write_body(
     d: &DocSnapshot,
     expired: &dyn Fn() -> bool,
 ) -> io::Result<Option<u8>> {
-    let mut f = File::create(path)?;
+    let mut f = crate::sys::create_private(path)?;
     let mut last = 0u8;
     for chunk in d.snapshot.chunks(ByteRange::all(d.snapshot.len_bytes())) {
         if expired() {
@@ -583,6 +593,12 @@ mod tests {
         assert_eq!(safe_basename("..."), "document");
         assert_eq!(safe_basename("日本語.txt"), "日本語.txt");
         assert!(safe_basename(&"あ".repeat(500)).chars().count() <= 100);
+        if cfg!(unix) {
+            assert!(
+                safe_basename(&"あ".repeat(500)).len() <= 200,
+                "Unix は 255 バイトの上限に収める"
+            );
+        }
     }
 
     #[test]

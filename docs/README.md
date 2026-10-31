@@ -264,7 +264,7 @@ M10 は、v0.1 で手書きの代用にしていた開発基盤 (11 §0.1 の表
 
 1. **計画** (本節、08 の M7 の行、10 の OQ-15)。
 2. **Unix の保存**: eve-platform の FileSystem の Unix 実装 `UnixFs` (読込・metadata と Stamp・rename + fsync の原子的保存・mode と所有者・xattr と POSIX ACL の保持、05 §4.3 / §5.1)。eve-platform の試験を Linux CI に足す。
-3. **状態ディレクトリと退避**: XDG のパス (05 §7)、状態ファイル・スワップ・緊急退避の書き手・ログの Unix 実装。状態ディレクトリを使う保存の部品 (保存中フラグ、直接上書き `write_in_place` とその事前バックアップ、05 §4.4) もここで入れる (2 本目の時点では `Unsupported`)。
+3. **状態ディレクトリと退避**: XDG のパス (05 §7)、状態ファイル・スワップ・緊急退避の書き手・ログの Unix 実装。状態ディレクトリを使う保存の部品 (保存中フラグ、直接上書き `write_in_place` とその事前バックアップ、05 §4.4) もここで入れる (2 本目の時点では `Unsupported`)。**実装 (2026-11-01)**: 状態ディレクトリの部品を OS に依らない形にし、`UnixFs` も同じ部品を使う (Unix で違う点は 05 §4.3 の「Linux の実装」)。eve-platform の実ファイルの結合試験 (保存中フラグ・直接上書き・スワップ・緊急退避) も Linux で走る。XDG のパス (`dirs`) は v0.1 から OS に依らない実装で、bin が Linux で起動する 5 本目で配線する。
 4. **シグナルと端末の緊急復元**: SIGINT / SIGTERM / SIGHUP (05 §11.1 / §11.4。退避を書いてから終了)、SIGTSTP / SIGCONT (サスペンド、FR-609)、端末の緊急復元。
 5. **端末の入出力**: eve-tui の Unix の入力 (crossterm のイベント・SIGWINCH・ブラケットペースト・マウス・フォーカス) と出力、Frontend。ここで bin が Linux で起動する。
 6. **クリップボード**: `wl-copy` / `xclip` / `xsel` / WSL の `clip.exe` と OSC 52 (FR-205、05 §8)。

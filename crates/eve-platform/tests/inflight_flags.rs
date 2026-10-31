@@ -1,7 +1,7 @@
 //! 保存中フラグと中断された保存の報告 (docs/05 §4.6 / §7.5、02 §4.5、01 FR-105 AC-1)。実ファイルで、
 //! 保存の開始時にフラグを書き、成功・置換前の失敗で消し、クラッシュ (パニック) で残った痕跡を開くときに報告する。
 
-#![cfg(windows)]
+#![cfg(any(windows, target_os = "linux"))]
 #![allow(clippy::result_large_err)]
 
 use std::fs;
@@ -13,8 +13,11 @@ use eve_core::{
     JobRequest, JobResult, OpenOptions, ReadChunks, SaveMethod, SaveOptions, Tick, run_job,
 };
 use eve_platform::dirs::{Dirs, WinPaths};
-use eve_platform::fs::WinFs;
+#[cfg(windows)]
+use eve_platform::fs::WinFs as NativeFs;
 use eve_platform::path::PathCtx;
+#[cfg(unix)]
+use eve_platform::unix_fs::UnixFs as NativeFs;
 use eve_view::{JobId, Revision};
 
 struct FixedClock;
@@ -28,7 +31,7 @@ impl Clock for FixedClock {
 struct Env {
     root: PathBuf,
     state: PathBuf,
-    fs: WinFs,
+    fs: NativeFs,
 }
 
 impl Env {
@@ -40,7 +43,7 @@ impl Env {
         fs::create_dir_all(&root).unwrap();
         let state = root.join("state");
         Env {
-            fs: WinFs::new(&state),
+            fs: NativeFs::new(&state),
             root,
             state,
         }
@@ -127,7 +130,12 @@ impl ReadChunks for Crash {
     }
 }
 
-fn save(fs: &WinFs, path: &FsPath, data: &[u8], expect: Expect) -> Result<(), eve_core::FsError> {
+fn save(
+    fs: &NativeFs,
+    path: &FsPath,
+    data: &[u8],
+    expect: Expect,
+) -> Result<(), eve_core::FsError> {
     fs.write_atomic(
         path,
         &mut Data(vec![data.to_vec()], 0),
@@ -136,14 +144,14 @@ fn save(fs: &WinFs, path: &FsPath, data: &[u8], expect: Expect) -> Result<(), ev
     .map(|_| ())
 }
 
-fn crash(fs: &WinFs, path: &FsPath, expect: Expect) {
+fn crash(fs: &NativeFs, path: &FsPath, expect: Expect) {
     let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         let _ = fs.write_atomic(path, &mut Crash(0), &SaveOptions::user_file(expect));
     }));
     assert!(r.is_err(), "パニックが外へ出る");
 }
 
-fn stamp(fs: &WinFs, p: &FsPath) -> FileStamp {
+fn stamp(fs: &NativeFs, p: &FsPath) -> FileStamp {
     FileStamp::from_meta(&fs.metadata(p).unwrap(), None)
 }
 
@@ -306,7 +314,11 @@ fn 壊れたフラグは上書きの可能性ありとして報告する() {
 fn シンボリックリンク経由でもリンク先のフラグを見つける() {
     let e = Env::new("link");
     fs::write(e.file("real.txt"), b"x").unwrap();
-    if std::os::windows::fs::symlink_file(e.file("real.txt"), e.file("link.txt")).is_err() {
+    #[cfg(windows)]
+    let linked = std::os::windows::fs::symlink_file(e.file("real.txt"), e.file("link.txt"));
+    #[cfg(unix)]
+    let linked = std::os::unix::fs::symlink(e.file("real.txt"), e.file("link.txt"));
+    if linked.is_err() {
         return; // 権限なし
     }
     let real = e.path("real.txt");
@@ -320,7 +332,7 @@ fn シンボリックリンク経由でもリンク先のフラグを見つけ�
 #[test]
 fn 状態ディレクトリを持たない実装はフラグを書かず空を返す() {
     let e = Env::new("nostate");
-    let fs_no_state = WinFs::default();
+    let fs_no_state = NativeFs::default();
     save(&fs_no_state, &e.path("a.txt"), b"x", Expect::Absent).unwrap();
     assert!(e.flags().is_empty());
     assert!(
