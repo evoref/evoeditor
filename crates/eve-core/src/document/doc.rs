@@ -10,7 +10,10 @@ use eve_view::Revision;
 use crate::fs::FileStamp;
 use crate::fspath::FsPath;
 
-use super::format::{EolStats, LoadState, ReadOnlyReasons, TextFormat, count_range};
+use super::format::{
+    EolStats, LoadState, ReadOnlyReasons, TextFormat, count_long_lines, count_range,
+    long_lines_touched,
+};
 use super::history::{NodeId, RecordOutcome, UndoHistory};
 use super::transaction::{Origin, Transaction};
 
@@ -89,6 +92,8 @@ pub struct Document {
     /// 長い行の表示単位の計算結果 (最後の 1 行分)。1 回の操作で同じ行を何度も展開しないための覚え。
     /// 中身の型は表示の層 (`editor::layout`) だけが知る。
     pub(crate) layout_cache: std::cell::RefCell<Option<Box<dyn std::any::Any>>>,
+    /// 長大行の列の索引 (直近の数行分、03 §11.5.1)。中身の型は `editor::layout` だけが知る。
+    pub(crate) long_cache: std::cell::RefCell<Option<Box<dyn std::any::Any>>>,
 }
 
 impl Document {
@@ -100,6 +105,7 @@ impl Document {
     /// 読込完了した文書。`format.eol_stats` は文書から数え直す。履歴の根が保存点。
     pub fn from_text(text: Text, mut format: TextFormat) -> Document {
         format.eol_stats = EolStats::count(&text);
+        format.long_lines = count_long_lines(&text, format.long_line_threshold);
         Document {
             text,
             path: None,
@@ -114,6 +120,7 @@ impl Document {
             load_percent: 0,
             display: DisplaySettings::default(),
             layout_cache: std::cell::RefCell::new(None),
+            long_cache: std::cell::RefCell::new(None),
         }
     }
 
@@ -290,7 +297,7 @@ impl Document {
         self.history.seal();
     }
 
-    /// 手順 4 の `eol_stats` の更新 (INV-D5): 変更ごとに、旧文書と新文書の窓の改行を数え直して差し替える。
+    /// 手順 4 の `eol_stats` と `long_lines` の更新 (INV-D5): 変更ごとに、旧文書と新文書の窓の改行を数え直して差し替える。
     fn update_eol_stats(&mut self, before: &Snapshot, cs: &ChangeSet) {
         let mut stats = self.format.eol_stats;
         for (old, new) in cs.changed_ranges() {
@@ -299,6 +306,16 @@ impl Document {
             stats = stats.replaced(o, n);
         }
         self.format.eol_stats = stats;
+        // 長大行の数: 変更が触れた行だけを、変更の前後で数えて差し替える
+        let th = self.format.long_line_threshold;
+        let ranges: Vec<_> = cs.changed_ranges().collect();
+        let old = long_lines_touched(before, ranges.iter().map(|(o, _)| (o.start.0, o.end.0)), th);
+        let new = long_lines_touched(
+            &self.text,
+            ranges.iter().map(|(_, n)| (n.start.0, n.end.0)),
+            th,
+        );
+        self.format.long_lines = (self.format.long_lines + new).saturating_sub(old);
     }
 
     /// 文書全体から数え直した値 (検証用)。

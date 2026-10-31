@@ -11,31 +11,43 @@ pub struct EolStats {
     pub cr: usize,
 }
 
-/// 長大行の閾値の既定 (`file.long_line_threshold`)。これを超える行を含む文書は読み取り専用で開く (NFR-106)。
+/// 長大行の閾値の既定 (`file.long_line_threshold`)。これを超える行は char 近似モードで扱う (NFR-106、03 §11.5.1)。
 pub const LONG_LINE_THRESHOLD: usize = 1 << 20;
-/// 閾値を超える行のうち、表示とカーソルの対象にする先頭の大きさ (書記素の境界で切る)。
-pub const LONG_LINE_VISIBLE: usize = 64 * 1024;
 
-/// 閾値 `threshold` (バイト) を超える行があるか。チャンクを 1 回走査する (読込ジョブで使う)。
-pub fn has_long_line(text: &dyn TextRead, threshold: usize) -> bool {
-    let mut run = 0usize;
+/// 閾値 `threshold` (バイト) を超える行の数。チャンクを 1 回走査する (読込ジョブと `Document::from_text` で使う)。
+pub fn count_long_lines(text: &dyn TextRead, threshold: usize) -> usize {
+    let (mut run, mut n) = (0usize, 0usize);
     for chunk in text.chunks(eve_text::ByteRange::all(text.len_bytes())) {
         let b = chunk.as_bytes();
         let mut at = 0;
         while let Some(i) = memchr::memchr2(b'\n', b'\r', &b[at..]) {
-            run += i;
-            if run > threshold {
-                return true;
-            }
+            n += usize::from(run + i > threshold);
             run = 0;
             at += i + 1;
         }
         run += b.len() - at;
-        if run > threshold {
-            return true;
-        }
     }
-    false
+    n + usize::from(run > threshold)
+}
+
+/// 位置の範囲 `ranges` (昇順で重ならない) が触れる行のうち、閾値を超える行の数 (同じ行は 1 回だけ数える)。
+/// 編集の前後の文書で数え、長大行の数を差分で更新するのに使う。
+pub(crate) fn long_lines_touched(
+    text: &dyn TextRead,
+    ranges: impl Iterator<Item = (usize, usize)>,
+    threshold: usize,
+) -> usize {
+    let (mut next, mut n) = (0usize, 0usize);
+    for (s, e) in ranges {
+        let a = text.byte_to_line(ByteOff(s)).0.max(next);
+        let b = text.byte_to_line(ByteOff(e)).0;
+        for l in a..=b {
+            let l = eve_text::LineIdx(l);
+            n += usize::from(text.line_end_byte(l).0 - text.line_to_byte(l).0 > threshold);
+        }
+        next = next.max(b + 1);
+    }
+    n
 }
 
 impl EolStats {
@@ -180,6 +192,8 @@ pub struct TextFormat {
     pub roundtrip: RoundtripSummary,
     /// 開いたときの長大行の閾値 (`file.long_line_threshold`)。設定を変えても開いている文書には遡らない (07 §6)。
     pub long_line_threshold: usize,
+    /// 閾値を超える行の数 (`eol_stats` と同じく文書から数え、編集で差分を更新する)。0 でなければ折り返さない (03 §11.5.1)。
+    pub long_lines: usize,
 }
 
 impl TextFormat {
@@ -194,6 +208,7 @@ impl TextFormat {
             pua_escape: PuaEscapeMode::Enabled,
             roundtrip: RoundtripSummary::default(),
             long_line_threshold: LONG_LINE_THRESHOLD,
+            long_lines: 0,
         }
     }
 }
@@ -210,10 +225,9 @@ pub enum ReadOnlyReason {
     Binary,
     LargeFileViewer,
     LoadIncomplete,
-    LongLine,
 }
 
-const ALL_REASONS: [ReadOnlyReason; 9] = [
+const ALL_REASONS: [ReadOnlyReason; 8] = [
     ReadOnlyReason::FileAttribute,
     ReadOnlyReason::UserRequested,
     ReadOnlyReason::NoWritePermission,
@@ -222,7 +236,6 @@ const ALL_REASONS: [ReadOnlyReason; 9] = [
     ReadOnlyReason::Binary,
     ReadOnlyReason::LargeFileViewer,
     ReadOnlyReason::LoadIncomplete,
-    ReadOnlyReason::LongLine,
 ];
 
 /// 理由の集合 (ビットセット)。「読込中」は理由にしない (`LoadState` から導出する)。
@@ -354,7 +367,7 @@ mod tests {
     fn 読み取り専用の理由は優先順() {
         let mut r = ReadOnlyReasons::default();
         assert!(r.is_empty() && r.primary().is_none());
-        r.insert(ReadOnlyReason::LongLine);
+        r.insert(ReadOnlyReason::LoadIncomplete);
         r.insert(ReadOnlyReason::InvalidBytes);
         r.insert(ReadOnlyReason::FileAttribute);
         assert_eq!(r.primary(), Some(ReadOnlyReason::FileAttribute));
@@ -363,7 +376,7 @@ mod tests {
             [
                 ReadOnlyReason::FileAttribute,
                 ReadOnlyReason::InvalidBytes,
-                ReadOnlyReason::LongLine
+                ReadOnlyReason::LoadIncomplete
             ]
         );
         r.remove(ReadOnlyReason::FileAttribute);

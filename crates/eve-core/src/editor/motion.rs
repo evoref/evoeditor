@@ -4,7 +4,8 @@
 //! `cursor.*` は移動先へ潰す。複数 Range には各 Range 独立に適用し、`normalized()` で併合する。
 use eve_text::{
     ByteOff, ByteRange, LineIdx, Range, Selection, TextRead, next_grapheme_boundary,
-    next_word_stop, prev_grapheme_boundary, prev_word_stop,
+    next_word_stop, next_word_stop_near, prev_grapheme_boundary, prev_word_stop,
+    prev_word_stop_near,
 };
 use eve_view::{DocumentId, ViewId};
 
@@ -68,12 +69,35 @@ fn pos_at_dcol(doc: &Document, line: usize, dcol: u32) -> ByteOff {
     ByteOff(ls + super::layout::byte_at_col(doc, line, dcol as usize))
 }
 
-/// 行頭空白の直後 (インデント終端)。
-fn indent_end(doc: &Document, ls: usize, le: usize) -> usize {
-    let s = doc
-        .text()
-        .slice_to_string(ByteRange::new(ByteOff(ls), ByteOff(le)));
-    ls + s.bytes().take_while(|b| matches!(b, b' ' | b'\t')).count()
+/// 行頭空白 (空白とタブ) の直後 (インデント終端)。空白の続く間だけを読む (長大行でも行全体を読まない)。
+pub(super) fn indent_end(doc: &Document, ls: usize, le: usize) -> usize {
+    let mut end = ls;
+    for chunk in doc.text().chunks(ByteRange::new(ByteOff(ls), ByteOff(le))) {
+        let n = chunk
+            .bytes()
+            .take_while(|b| matches!(b, b' ' | b'\t'))
+            .count();
+        end += n;
+        if n < chunk.len() {
+            break;
+        }
+    }
+    end.min(le)
+}
+
+/// 長大行の単語移動で見る窓 (バイト、03 §11.5.1)。
+const WORD_WINDOW: usize = 64 * 1024;
+
+/// 単語移動の停止位置 (`forward` は右)。長大行は行全体を読まず、窓の中だけを見る (03 §11.5.1)。
+pub(super) fn word_stop(doc: &Document, p: ByteOff, forward: bool) -> ByteOff {
+    let t = doc.text();
+    let long = super::layout::is_long_line(doc, t.byte_to_line(p).0);
+    match (forward, long) {
+        (true, false) => next_word_stop(t, p),
+        (false, false) => prev_word_stop(t, p),
+        (true, true) => next_word_stop_near(t, p, WORD_WINDOW),
+        (false, true) => prev_word_stop_near(t, p, WORD_WINDOW),
+    }
 }
 
 /// 折り返し ON の View の (設定, 折り返し幅)。OFF は `None`。
@@ -98,8 +122,8 @@ fn step(
     match m {
         Motion::Left => prev_grapheme_boundary(t, p),
         Motion::Right => next_grapheme_boundary(t, p),
-        Motion::WordLeft => prev_word_stop(t, p),
-        Motion::WordRight => next_word_stop(t, p),
+        Motion::WordLeft => word_stop(doc, p, false),
+        Motion::WordRight => word_stop(doc, p, true),
         Motion::Up | Motion::Down | Motion::PageUp | Motion::PageDown => {
             let (line, ls, _) = line_of(doc, p);
             let delta = match m {

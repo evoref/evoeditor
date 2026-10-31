@@ -95,15 +95,22 @@ fn readonly_で開いた文書は解除でき_確認なしで保存する_もう
 // verifies: FR-116
 #[test]
 fn 解除できない理由ではコマンドが実行できない() {
-    // 長大行 (理由 LongLine) は解除できない
-    let line = "x".repeat((1 << 20) + 10);
-    let mut h = Harness::new().with_file("/w/long.txt", line.as_bytes());
-    h.open("/w/long.txt");
+    // 不正バイト (理由 InvalidBytes) は解除できない (確認で「読み取り専用で開く」を選ぶので `UserRequested` も付くが、解除できない理由があれば解除しない)
+    let mut h = Harness::new().with_file("/w/bad.txt", b"ok \x9A\xFF end\n");
+    h.open("/w/bad.txt");
     h.run_jobs();
-    assert_eq!(reasons(&h), [ReadOnlyReason::LongLine]);
+    h.text("r");
+    h.run_jobs();
+    assert_eq!(
+        reasons(&h),
+        [ReadOnlyReason::UserRequested, ReadOnlyReason::InvalidBytes]
+    );
     assert!(!matches!(
         h.cmd("file.toggle_read_only"),
         CommandResult::Done
     ));
-    assert_eq!(reasons(&h), [ReadOnlyReason::LongLine]);
+    assert_eq!(
+        reasons(&h),
+        [ReadOnlyReason::UserRequested, ReadOnlyReason::InvalidBytes]
+    );
 }

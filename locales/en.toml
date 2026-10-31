@@ -405,7 +405,7 @@ enabled = "Mouse support is on"
 already_open = "{path} is already open"
 cancelled = "Cancelled loading {path}"
 guess_unsupported = "The encoding of {path} was guessed as {guess}, which is not supported in this version, so it was opened as {encoding} / If it looks wrong, choose another with Reopen with Encoding ({key:file.reopen_with_encoding})"
-long_line = "{path} has a very long line, so it was opened read-only (only the start of a long line is shown)"
+long_line = "{path} has a very long line. That line is shown approximately, one character at a time (combining marks may look separated)"
 lossy_roundtrip = "In this encoding, some characters in the edited places may be saved as different bytes ({count} places)"
 new_file = "{path} does not exist, so it was opened as a new file (saving creates it)"
 redetected = "Re-detected the encoding as {encoding}"
@@ -922,7 +922,6 @@ binary = "binary file"
 file_attribute = "file with the read-only attribute"
 invalid_bytes = "file with invalid bytes"
 large_file_viewer = "huge file (opened read-only by choice)"
-long_line = "file with a very long line"
 no_write_permission = "file without write permission"
 stateful_encoding_with_invalid_bytes = "ISO-2022-JP file with invalid bytes"
 user_requested = "opened read-only by request (`--readonly`)"
@@ -947,8 +946,8 @@ long = "[Saving]"
 short = "Saving"
 
 [status.degraded.long_line]
-long = "[Long line: partly shown]"
-short = "Part"
+long = "[Long line: approximate]"
+short = "Approx"
 
 [status.encoding]
 bom = "{encoding} BOM"
@@ -1027,9 +1026,6 @@ ime = "While an IME is on, letter keys do not reach the confirmation dialog as a
 chord = "Keys that start with Ctrl+K are pressed as Ctrl+K and then the next key. Esc cancels"
 alt = "On terminals where Alt does not reach the editor (such as the default Terminal.app), use the Ctrl+K alternatives"
 readme = "Per-terminal settings and known limitations are described in the README"
-
-[ui.long_line]
-omitted = "… ({bytes} more bytes omitted)"
 
 [ui.palette.category]
 app = "App"

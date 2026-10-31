@@ -326,7 +326,7 @@ fn open_inner(
 
     // 形式: 文字コード・BOM・不正バイト・改行の多数派 (同数・改行なしは `file.default_line_ending`)
     let eol_stats = EolStats::count(&text);
-    let format = TextFormat {
+    let mut format = TextFormat {
         encoding: enc,
         has_bom: dec.has_bom(),
         default_eol: eol_stats.majority(opts.default_eol.unwrap_or(LineEnding::Lf)),
@@ -337,12 +337,11 @@ fn open_inner(
         long_line_threshold: opts
             .long_line_threshold
             .unwrap_or(crate::document::LONG_LINE_THRESHOLD),
+        long_lines: 0,
     };
+    // 閾値 (既定 1 MiB) を超える行は char 近似モードで扱う (編集できる。NFR-106、03 §11.5.1)
+    format.long_lines = crate::document::count_long_lines(&text, format.long_line_threshold);
     let mut detected = opts.pending;
-    // 閾値 (既定 1 MiB) を超える行があれば読み取り専用 (理由 LongLine) で開く。その行は先頭 64 KiB だけを表示する (NFR-106、03 §11.5)
-    if crate::document::has_long_line(&text, format.long_line_threshold) {
-        detected.insert(ReadOnlyReason::LongLine);
-    }
     if meta.readonly {
         detected.insert(ReadOnlyReason::FileAttribute);
     }

@@ -4,9 +4,6 @@
 //! (行内のバイト位置, 表示列, char 数) を記録する。位置 ↔ 表示列は、手前の記録点からの差分走査 (64 KiB 以内) で求める。
 //! 書記素 = char とみなす: 1 char の幅は、その char だけを書記素とした通常の行の幅 (`unit_slow`) と同じ。
 
-// 呼び出し側 (Frame の生成・カーソル・移動) の切り替えは次の PR (03 §11.5.1 の「実装の分け方」の 2)
-#![cfg_attr(not(test), allow(dead_code))]
-
 use eve_encoding::unescape_char;
 use eve_text::{ByteOff, ByteRange, TextRead, WidthConfig, grapheme_width};
 

@@ -1,9 +1,10 @@
-//! 長大行 (閾値 1 MiB 超の 1 行) の縮退 (docs/03 §11.5、01 NFR-106 AC-3): 読み取り専用で開き、先頭 64 KiB だけを表示する。
+//! 長大行 (閾値 1 MiB 超の 1 行) の char 近似モード (docs/03 §11.5.1、01 NFR-106 の v0.2): 読み取り専用にせず編集でき、
+//! 行全体を展開せずに表示・カーソル・移動を行う。長大行を含む文書は折り返さない。
 
-use eve_core::{LONG_LINE_VISIBLE, ReadOnlyReason};
+use eve_core::LONG_LINE_THRESHOLD;
 use eve_testkit::Harness;
-use eve_text::TextRead as _;
-use eve_view::StatusKind;
+use eve_text::{ByteOff, Range, Selection, TextRead as _};
+use eve_view::{RowSource, StatusKind};
 
 fn opened(line: &str) -> Harness {
     let mut data = line.as_bytes().to_vec();
@@ -27,9 +28,33 @@ fn sel(h: &Harness) -> (usize, usize) {
     (r.start().0, r.end().0)
 }
 
-/// 3 種: ASCII / 日本語 / 絵文字混在 (NFR-106 AC-3)。
+fn put_cursor(h: &mut Harness, at: usize) {
+    let st = h.editor.state_mut();
+    let w = st.first_window().unwrap();
+    let v = st.window_view(w).unwrap();
+    st.set_selection(v, Selection::single(Range::point(ByteOff(at))));
+}
+
+fn long_lines(h: &Harness) -> usize {
+    h.editor
+        .state()
+        .document(h.doc_id())
+        .unwrap()
+        .format
+        .long_lines
+}
+
+fn row_text(h: &mut Harness, r: usize) -> String {
+    h.frame().panes[0].rows[r]
+        .spans
+        .iter()
+        .map(|s| s.text.to_string())
+        .collect()
+}
+
+/// 3 種: ASCII / 日本語 / 絵文字混在 (NFR-106 AC-1)。
 fn lines() -> Vec<(&'static str, String)> {
-    let n = (1 << 20) + 4096;
+    let n = LONG_LINE_THRESHOLD + 4096;
     vec![
         ("ASCII", "abcdefghij".repeat(n / 10 + 1)),
         ("日本語", "日本語のテキスト".repeat(n / 24 + 1)),
@@ -37,87 +62,150 @@ fn lines() -> Vec<(&'static str, String)> {
     ]
 }
 
-// verifies: AC-NFR-106-3
+// verifies: NFR-106
 #[test]
-fn 長大行を含む文書は読み取り専用の理由つきで開き_先頭だけを表示する() {
+fn 長大行を含む文書は編集できる文書として開き_近似の表示であることを示す() {
     for (name, line) in lines() {
         let mut h = opened(&line);
-        let id = h.doc_id();
-        let doc = h.editor.state().document(id).unwrap();
-        assert!(doc.read_only.contains(ReadOnlyReason::LongLine), "{name}");
-        assert!(!doc.is_editable(), "{name}");
+        let doc = h.editor.state().document(h.doc_id()).unwrap();
+        assert!(doc.is_editable(), "{name}");
+        assert_eq!(doc.format.long_lines, 1, "{name}");
         let f = h.frame();
-        // ステータスバーに理由が出る
         let st: Vec<_> = f.status.items.iter().map(|i| i.kind).collect();
-        assert!(
-            st.contains(&StatusKind::ReadOnly) && st.contains(&StatusKind::Degraded),
-            "{name}"
-        );
-        // 1 行目は画面の幅に収まって描かれる
-        let w: u16 = f.panes[0].rows[0].spans.iter().map(|s| s.width).sum();
-        assert!(w <= 100, "{name}");
-        // 編集操作は拒否される
-        h.text("x");
-        let doc = h.editor.state().document(id).unwrap();
-        assert_eq!(doc.text().len_bytes(), line.len() + 8, "{name}");
+        assert!(st.contains(&StatusKind::Degraded), "{name}");
+        assert!(!st.contains(&StatusKind::ReadOnly), "{name}");
+        // 1 行目は画面の幅に収まり、右が切れていることを示す
+        let row = &f.panes[0].rows[0];
+        let w: u16 = row.spans.iter().map(|s| s.width).sum();
+        assert!(w <= 100 - f.panes[0].gutter_width, "{name}: {w}");
+        assert!(row.clipped_right, "{name}");
+        assert!(h.messages().contains(&"info.open.long_line".to_owned()));
     }
 }
 
-// verifies: AC-NFR-106-3
+// verifies: NFR-106
 #[test]
-fn end_は先頭_64_kib_の書記素の境界で止まり_その先の印を出す() {
+fn end_は行末まで動き_行末の付近を表示する() {
     for (name, line) in lines() {
         let mut h = opened(&line);
         h.keys("end");
-        let (_, e) = sel(&h);
-        assert!(e <= LONG_LINE_VISIBLE, "{name}: {e}");
-        assert!(
-            e > LONG_LINE_VISIBLE - 8,
-            "{name}: 64 KiB の直前で止まる ({e})"
-        );
-        let id = h.doc_id();
-        assert!(
-            h.editor
-                .state()
-                .document(id)
-                .unwrap()
-                .text()
-                .is_char_boundary(eve_text::ByteOff(e))
-        );
-        // 行末の印 (省略した分を示す)
+        assert_eq!(sel(&h), (line.len(), line.len()), "{name}");
+        // 行末が見えていて、カーソルが画面にある
         let f = h.frame();
-        let row: String = f.panes[0].rows[0]
-            .spans
-            .iter()
-            .map(|s| s.text.to_string())
+        assert!(f.primary_cursor.is_some(), "{name}");
+        let tail: String = line
+            .chars()
+            .rev()
+            .take(3)
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev()
             .collect();
-        assert!(row.contains('…') || row.contains("省略"), "{name}: {row:?}");
-        // 右へ進んでも表示範囲を越えない
+        assert!(row_text(&mut h, 0).contains(&tail), "{name}");
+        // 左へ 1 書記素、右で行末へ戻り、さらに右で次の行へ
+        h.keys("left");
+        let last = line.chars().last().unwrap().len_utf8();
+        assert_eq!(sel(&h).1, line.len() - last, "{name}");
         h.keys("right right");
-        assert!(sel(&h).1 <= LONG_LINE_VISIBLE, "{name}");
-        // 次の行へは動ける
-        h.keys("down");
-        assert!(sel(&h).1 > line.len(), "{name}: 次の行の中");
+        assert_eq!(sel(&h).1, line.len() + 1, "{name}: 次の行の行頭");
+        // 上へ戻ると、同じ表示列 (行頭) へ
+        h.keys("up");
+        assert_eq!(sel(&h).1, 0, "{name}");
+        h.keys("home");
+        assert_eq!(sel(&h).1, 0, "{name}");
     }
 }
 
-// verifies: AC-NFR-106-3
+// verifies: NFR-106
 #[test]
-fn 閾値以下の長い行は読み取り専用にならない() {
-    let line = "x".repeat((1 << 20) - 10);
-    let h = opened(&line);
-    let id = h.doc_id();
-    assert!(
-        !h.editor
+fn 長大行の中央に挿入と削除ができる() {
+    for (name, line) in lines() {
+        let mut h = opened(&line);
+        let mid = (0..=line.len() / 2)
+            .rev()
+            .find(|&i| line.is_char_boundary(i))
+            .unwrap();
+        put_cursor(&mut h, mid);
+        h.text("XYZ");
+        let id = h.doc_id();
+        let t = h
+            .editor
             .state()
             .document(id)
             .unwrap()
-            .read_only
-            .contains(ReadOnlyReason::LongLine)
+            .text()
+            .slice_to_string(eve_text::ByteRange::new(ByteOff(mid - 1), ByteOff(mid + 4)));
+        assert!(t.contains("XYZ"), "{name}: {t:?}");
+        assert_eq!(sel(&h).1, mid + 3, "{name}");
+        // 挿入した位置が画面に入っている
+        h.frame();
+        assert!(row_text(&mut h, 0).contains("XYZ"), "{name}");
+        h.keys("backspace backspace backspace");
+        let doc = h.editor.state().document(id).unwrap();
+        assert_eq!(doc.text().len_bytes(), line.len() + 8, "{name}");
+        assert_eq!(doc.format.long_lines, 1, "{name}");
+    }
+}
+
+// verifies: NFR-106
+#[test]
+fn 長大行の単語移動は窓の端で止まる() {
+    // 区切りの無い ASCII の行: 1 回の Ctrl+→ で行全体を読まずに窓 (64 KiB) の端に止まる
+    let line = "a".repeat(LONG_LINE_THRESHOLD + 10);
+    let mut h = opened(&line);
+    h.keys("ctrl+right");
+    assert_eq!(sel(&h).1, 64 * 1024);
+    h.keys("end ctrl+left");
+    assert_eq!(sel(&h).1, line.len() - 64 * 1024);
+}
+
+// verifies: NFR-106
+#[test]
+fn 長大行の数は編集で増減し_長大行を含む間は折り返さない() {
+    let line = "x".repeat(LONG_LINE_THRESHOLD + 10);
+    let mut h = opened(&line);
+    h.cmd("view.toggle_wrap");
+    assert_eq!(long_lines(&h), 1);
+    // 折り返さない: 2 行目は文書の 2 行目
+    let f = h.frame();
+    assert!(matches!(
+        f.panes[0].rows[1].source,
+        RowSource::Line {
+            line: 1,
+            wrap_idx: 0
+        }
+    ));
+    // 行の中央で改行すると、どちらも閾値以下になる
+    put_cursor(&mut h, line.len() / 2);
+    h.keys("enter");
+    assert_eq!(long_lines(&h), 0);
+    // 長大行が無くなれば折り返しに戻る (`view.wrap` の値は変わっていない)
+    let f = h.frame();
+    assert!(
+        f.panes[0]
+            .rows
+            .iter()
+            .any(|r| matches!(r.source, RowSource::Line { wrap_idx, .. } if wrap_idx > 0))
+    );
+    h.keys("ctrl+z");
+    assert_eq!(long_lines(&h), 1);
+    // 差分で更新した数は、文書から数え直した数と同じ
+    let doc = h.editor.state().document(h.doc_id()).unwrap();
+    assert_eq!(
+        eve_core::count_long_lines(doc.text(), doc.format.long_line_threshold),
+        1
     );
 }
 
-// verifies: AC-NFR-106-3
+// verifies: NFR-106
+#[test]
+fn 閾値以下の長い行は通常の行として扱う() {
+    let line = "x".repeat(LONG_LINE_THRESHOLD - 10);
+    let h = opened(&line);
+    assert_eq!(long_lines(&h), 0);
+}
+
+// verifies: NFR-106
 #[test]
 fn 閾値は_file_long_line_threshold_で変えられ_開いた文書は開いたときの閾値を保つ() {
     let line = "x".repeat(100_000);
@@ -132,21 +220,13 @@ fn 閾値は_file_long_line_threshold_で変えられ_開いた文書は開い�
     });
     h.open("/w/long.txt");
     h.run_jobs();
-    let id = h.doc_id();
-    let ro = |h: &Harness| {
-        h.editor
-            .state()
-            .document(id)
-            .unwrap()
-            .read_only
-            .contains(ReadOnlyReason::LongLine)
-    };
-    assert!(ro(&h), "設定した閾値 (64 KiB) を超える行");
-    // 設定を戻しても、開いている文書は開いたときの閾値で表示する (07 §6 の「新規文書から」)
+    assert_eq!(long_lines(&h), 1, "設定した閾値 (64 KiB) を超える行");
+    // 設定を戻しても、開いている文書は開いたときの閾値のまま (07 §6 の「新規文書から」)
     h.editor
         .state_mut()
         .set_config(eve_config::Config::default());
     h.keys("end");
-    assert!(sel(&h).1 <= LONG_LINE_VISIBLE);
-    assert!(ro(&h));
+    h.text("x");
+    assert_eq!(sel(&h).1, line.len() + 1);
+    assert_eq!(long_lines(&h), 1);
 }

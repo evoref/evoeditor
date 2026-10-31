@@ -1159,8 +1159,6 @@ id = "AC-NFR-106-3"
 requirement = "NFR-106"
 kind = "B"
 verified_by = [
-    "長大行を含む文書は読み取り専用の理由つきで開き_先頭だけを表示する",
-    "end_は先頭_64_kib_の書記素の境界で止まり_その先の印を出す",
     "BM-106",
 ]
 status = "done"

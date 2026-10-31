@@ -5,7 +5,7 @@
 
 use eve_text::{
     Bias, ByteOff, ByteRange, ChangeSet, Edit, Range, Selection, TextRead, next_grapheme_boundary,
-    next_word_stop, prev_grapheme_boundary, prev_word_stop,
+    prev_grapheme_boundary,
 };
 use eve_text::{WidthConfig, str_display_width};
 use eve_view::{DocumentId, ViewId};
@@ -15,6 +15,7 @@ use crate::document::{Document, Origin, Transaction};
 use super::command::{
     CommandCtx, CommandKind, CommandRegistry, CommandResult, CommandSpec, Permission, RejectReason,
 };
+use super::motion::{indent_end, word_stop};
 
 /// 1 つの Range に対する編集。
 struct Plan {
@@ -220,14 +221,6 @@ fn insert_text(ctx: &mut CommandCtx<'_>) -> CommandResult {
     })
 }
 
-/// 行の先頭の空白 (空白とタブ) の終端。
-fn indent_end(doc: &Document, line_start: usize, line_end: usize) -> usize {
-    let s = doc
-        .text()
-        .slice_to_string(ByteRange::new(ByteOff(line_start), ByteOff(line_end)));
-    line_start + s.bytes().take_while(|b| matches!(b, b' ' | b'\t')).count()
-}
-
 fn newline(ctx: &mut CommandCtx<'_>) -> CommandResult {
     edit_each(ctx, |doc, r| {
         let p = r.start();
@@ -330,11 +323,11 @@ fn delete_forward(ctx: &mut CommandCtx<'_>) -> CommandResult {
 }
 
 fn delete_word_backward(ctx: &mut CommandCtx<'_>) -> CommandResult {
-    delete_with(ctx, |d, p| ByteRange::new(prev_word_stop(d.text(), p), p))
+    delete_with(ctx, |d, p| ByteRange::new(word_stop(d, p, false), p))
 }
 
 fn delete_word_forward(ctx: &mut CommandCtx<'_>) -> CommandResult {
-    delete_with(ctx, |d, p| ByteRange::new(p, next_word_stop(d.text(), p)))
+    delete_with(ctx, |d, p| ByteRange::new(p, word_stop(d, p, true)))
 }
 
 // ---------- Undo / Redo ----------
@@ -377,6 +370,11 @@ fn select_all(ctx: &mut CommandCtx<'_>) -> CommandResult {
 
 /// 行頭から `end` までの表示列 (タブは次のタブストップまで)。
 fn display_col(doc: &Document, line_start: usize, end: usize, cfg: &WidthConfig) -> usize {
+    // 長大行は行頭から文字列にしない (列の索引で数える、03 §11.5.1)
+    let line = doc.text().byte_to_line(ByteOff(line_start)).0;
+    if super::layout::is_long_line(doc, line) {
+        return super::layout::cursor_col(doc, line, end - line_start);
+    }
     let s = doc
         .text()
         .slice_to_string(ByteRange::new(ByteOff(line_start), ByteOff(end)));

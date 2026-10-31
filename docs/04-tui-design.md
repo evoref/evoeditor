@@ -1053,7 +1053,7 @@ v0.1 は単一文書で、バッファ一覧を持たない (別のファイル�
 | 左 3 | 5 | 読み取り専用 | `[RO]` | `RO` | `status.read_only.long` / `.short` |
 | 左 4 | 5 | 読込中 | `[読込中 45%]` | `45%` | `status.loading.long` / `.short` |
 | 左 5 | 5 | 保存中 (保存ジョブの完了を待つ間だけ出る。03 §9.7 の `Saving`) | `[保存中]` | `保存中` | `status.saving.long` / `.short` |
-| 左 6 | 5 | 機能縮退 (v0.1 は長い行を含む文書の一部表示。読み取り専用で開き、閾値を超える行は先頭 64 KiB だけを表示する、NFR-106) | `[長い行: 一部表示]` | `一部` | `status.degraded.long_line.long` / `.short` |
+| 左 6 | 5 | 機能縮退 (長い行を含む文書。閾値を超える行は char 近似モードで表示・編集する (書記素 = char とみなす。v0.2、NFR-106、03 §11.5.1)。v0.1 は読み取り専用で先頭 64 KiB だけを表示した) | `[長い行: 近似表示]` | `近似` | `status.degraded.long_line.long` / `.short` |
 | 左 7 | 5 | チョード保留 (保留中だけ出る) | `Ctrl+K …` (`Capabilities.ascii_only` が真のときは `Ctrl+K ...` にする案、§3.7、提案、OQ-214) | — | — (キー表記) |
 | 右 1 | 2 | 選択情報 | `(12 文字選択)` | — (省略) | `status.selection` |
 | 右 2 | 4 | カーソル位置 | `行 6, 桁 22` | `6:22` | `status.position.long` / `.short` |
@@ -1342,7 +1342,7 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 | ステータスバー | `status.loading.long` / `.short` | [読込中 {percent}%] / {percent}% | 12、3 (2 桁) |
 | ステータスバー | `status.read_only.long` / `.short` | [RO] / RO | 4、2 |
 | ステータスバー | `status.saving.long` / `.short` | [保存中] / 保存中 | 8、6 |
-| ステータスバー | `status.degraded.long_line.long` / `.short` | [長い行: 一部表示] / 一部 | 18、4 |
+| ステータスバー | `status.degraded.long_line.long` / `.short` | [長い行: 近似表示] / 近似 | 18、4 |
 | ステータスバー | `status.eol_mixed` | 混在 | 4 |
 | ステータスバー | `status.encoding.bom` | {encoding} BOM | — |
 | ステータスバー | `status.selection` | ({count} 文字選択) | 13 (2 桁) |
@@ -1570,7 +1570,7 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 | `msg.open.failed` | 分類できない失敗 (読み始める前) | {path} を開けませんでした: {reason} / パスと権限を確かめてください |
 | `msg.open.read_failed` | 読込の途中の I/O エラー (03 §9.2 の「失敗」。読めた部分は捨てる。確認ダイアログ (再試行・読めた部分を読み取り専用で開く) は v0.3 以降の予約で、v0.1 はメッセージだけ) | {path} の読込の途中で失敗しました: {reason} / もう一度開く ({key:file.open}) か、パスと接続を確かめてください |
 | `msg.open.changed_during_load` | 読み込んでいる間にファイルが変わった (`changed_during_load`、05 §4.5) | 読み込んでいる間に {path} が変更されました / 内容を確かめ、必要なら文字コードを指定して開き直す ({key:file.reopen_with_encoding}) で読み直してください |
-| `info.open.long_line` | 閾値 (1 MiB) を超える行を含む文書を開いた (NFR-106。v0.1 は読み取り専用で開き、その行は先頭 64 KiB だけを表示) | {path} には非常に長い行があるため、読み取り専用で開きました (長い行は先頭の一部だけを表示します) |
+| `info.open.long_line` | 閾値 (1 MiB) を超える行を含む文書を開いた (NFR-106。v0.2 はその行を char 近似モードで扱う、03 §11.5.1) | {path} には非常に長い行があります。その行は文字を 1 つずつ近似して表示します (結合文字が分かれて見えることがあります) |
 | `info.open.redetected` | 文字コードの再判定 (03 §8.2.1) | 文字コードを {encoding} と判定し直しました |
 | `info.open.guess_unsupported` | 推定結果が v0.1 の 7 種に無い (03 §8.2 手順 7 の (iii)。windows-1252・GBK 等)。`{guess}` は chardetng の推定名 (encoding_rs の名前)、`{encoding}` は代わりに開いた `file.default_encoding` | {path} の文字コードは {guess} と推定されましたが、この版では扱えないため {encoding} として開きました / 正しく見えないときは、文字コードを指定して開き直す ({key:file.reopen_with_encoding}) で選び直してください |
 | `info.open.lossy_roundtrip` | 区分 B の情報 (03 §8.7) | この文字コードでは、編集した箇所の一部の文字が保存時に別のバイト列になることがあります ({count} 箇所) |
@@ -1613,8 +1613,6 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 | `ui.read_only_reason.stateful_encoding_with_invalid_bytes` | 同上。`StatefulEncodingWithInvalidBytes` | 不正なバイトを含む ISO-2022-JP のファイル |
 | `ui.read_only_reason.binary` | 同上。`Binary` | バイナリファイル |
 | `ui.read_only_reason.large_file_viewer` | 同上。`LargeFileViewer` | 巨大なファイル (読み取り専用で開く指定) |
-| `ui.read_only_reason.long_line` | 同上。`LongLine` | 非常に長い行を含むファイル |
-| `ui.long_line.omitted` | 閾値 (1 MiB) を超える行の、先頭 64 KiB より後ろを省略した印 (行末に出す。NFR-106、03 §11.5)。`{bytes}` は省略したバイト数 | … (以下 {bytes} バイト省略) |
 | `ui.load_state.loading` | 読込中の文書への編集操作を拒否したときの `msg.edit.read_only` の `{reason}` (読込中は読み取り専用の理由ではなく `load_state == Loading` から導出する状態で、03 §9.6。`ui.read_only_reason.*` には入れない。ステータスバーの読込中の表示は `status.loading.long` / `.short`、§8.7) | 読込中 |
 | `info.mouse.enabled` | `ui.toggle_mouse` でマウスの取得を有効にした (04 §6.8) | マウスの操作を有効にしました |
 | `info.mouse.disabled` | 同上。無効にした (端末のネイティブ選択・スクロールが使える) | マウスの操作を無効にしました (端末の選択とスクロールが使えます) |

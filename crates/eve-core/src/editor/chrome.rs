@@ -46,11 +46,14 @@ fn render(state: &EditorState, key: &str, args: &[(&str, &str)]) -> String {
     state.catalog().render(key, args, &label)
 }
 
-/// 行頭からの書記素数 + 1 (桁。書記素数、04 の `ui.column_unit = "grapheme"`)。
+/// 行頭からの書記素数 + 1 (桁。書記素数、04 の `ui.column_unit = "grapheme"`)。長大行は char 数 (03 §11.5.1)。
 fn grapheme_column(doc: &Document, head: ByteOff) -> usize {
     let t = doc.text();
     let line = t.byte_to_line(head);
     let ls = t.line_to_byte(line);
+    if let Some(n) = super::layout::long_line_chars(doc, line.0, head.0 - ls.0) {
+        return n + 1;
+    }
     let prefix = t.slice_to_string(ByteRange::new(ls, head));
     grapheme_indices(&prefix).len() + 1
 }
@@ -111,11 +114,8 @@ pub(super) fn status_model(
             CutPolicy::Never,
         ));
     }
-    // 長い行を含む文書: 読み取り専用で、閾値を超える行は先頭 64 KiB だけを表示する (NFR-106、04 §8.7)
-    if doc
-        .read_only
-        .contains(crate::document::ReadOnlyReason::LongLine)
-    {
+    // 長い行を含む文書: 閾値を超える行は char 近似モードで表示する (NFR-106、03 §11.5.1、04 §8.7)
+    if doc.format.long_lines > 0 {
         let (long, short) = (
             render(state, "status.degraded.long_line.long", &[]),
             render(state, "status.degraded.long_line.short", &[]),

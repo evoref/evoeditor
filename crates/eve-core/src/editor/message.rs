@@ -90,7 +90,6 @@ impl EditorState {
                     R::StatefulEncodingWithInvalidBytes => "stateful_encoding_with_invalid_bytes",
                     R::Binary => "binary",
                     R::LargeFileViewer => "large_file_viewer",
-                    R::LongLine => "long_line",
                     // 読込が終わっていない (v0.3 の Partial)。理由の文言はまだ無い
                     R::LoadIncomplete => return None,
                 })
