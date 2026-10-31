@@ -233,7 +233,7 @@ M10 は、v0.1 で手書きの代用にしていた開発基盤 (11 §0.1 の表
 **進め方** (約 10 本の PR に分ける案。各 PR の前に該当する節を読み、仕様の穴は先に docs を直す):
 
 1. **`xtask spec-index`**: `docs/*.md` から節 ID (行範囲・題名) と既存の ID (FR / NFR / ADR / OQ / K1 / INV など、11 §3.1 ID-1) と規範行 ID (ID-5 の 3 形式) を拾い、行番号付きの `docs/spec-index.toml` を生成する。`--check` (生成物との差分・重複 ID・ソースの `spec:` の節の存在) と `--show <ID>`。手書きの索引を置き換え、`xtask check` に `--check` を足す。**済み** (2026-10-31、11 §3.3 の「M10 の実装」)。以後、docs の見出しを変える PR は同じ PR で索引を作り直す。
-2. **`xtask check-docs` と `docs/ownership.toml`**: 文書内の ID 参照と内部リンクの存在確認、`ownership.toml` (02 §4.6 の所有境界) と索引の整合 (09 §6.2 の `docs.yml`)。
+2. **`xtask check-docs` と `docs/ownership.toml`**: 文書内の ID 参照と内部リンクの存在確認、`ownership.toml` (02 §4.6 の所有境界) と索引の整合 (09 §6.2 の `docs.yml`)。**済み** (2026-10-31、09 §11 の「M10 の実装」、11 §2.3 の「M10 の初版」)。
 3. **`xtask trace`**: ソースの `spec:` / `verifies:`、シナリオの `verifies`、ベンチ表、チェックリストを索引と突き合わせ、存在しない ID で失敗、v0.2 の Must に紐付くのに何も無いものを警告し、`docs/traceability.md` を生成する (NFR-708 AC-2)。v0.2 の AC は v0.1 のチェックリストに無いので、ここで 01 §5.5 の AC を検査の対象に入れる。規範行 ID は全文書へ一括では付けず、参照する行と直す節にだけ付ける (確定 (ユーザー回答)、11 §3.1 ID-6)。
 4. **シナリオ DSL**: 11 §6.3 の書式の TOML、`xtask scenario run` / `scenario check` / `--print-frame`、`tests/scenarios/`。Harness の試験から代表を数本移して書式を確かめる。
 5. **`fuzz_editor`**: 09 §3.3 の入力列の fuzz (各ステップで Frame まで作り、不変条件と無害化を検査) を `fuzz/` に足し、夜間ジョブに載せる (NFR-305)。

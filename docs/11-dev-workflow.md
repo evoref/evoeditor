@@ -66,7 +66,7 @@ v0.1 は最小核 (案 L) で、開発運用も手書きの最小限にする (�
 | 仕様の参照 (§3) | `spec:` は節 ID (`03 §9.3`)、`verifies:` は AC ID (`AC-FR-105-1`)。**規範行 ID は付けない** | 設計の規範行 ID (`<文書>-<節>-<連番>`、§3.1) を付けて併用 (v0.2) |
 | 仕様の索引 (§1・§3.3) | 手書きの `docs/spec-index.toml` (節 ID → ファイルのみ、行番号なし) | `xtask spec-index` の生成物 (行番号付き)、`--show` / `--check` (v0.2。M10 で入れた) |
 | トレーサビリティ (§3.3) | AC のチェックリスト `tests/ac-checklist.toml` (人が更新、`xtask check` が軽い検査) + PR テンプレートのチェックリスト | `xtask trace` (v0.2) |
-| 担当の割当 (§2.3) | タスク (§4.2) の「触ってよい範囲」で示す | `docs/ownership.toml`・`xtask check-docs` (v0.2) |
+| 担当の割当 (§2.3) | タスク (§4.2) の「触ってよい範囲」で示す | `docs/ownership.toml`・`xtask check-docs` (v0.2。M10 で入れた) |
 | シナリオ (§6) | Rust の `Harness` (語彙を DSL と同じにする) | TOML のシナリオ DSL と `xtask scenario run` (v0.2) |
 | CI (§8.1) | PR / main = Windows x86_64 (全テスト・ConPTY の E2E 10 シナリオ) + Linux x86_64 (Linux CI の対象 crate = core 系 + `eve-host` + `eve-testkit` のビルドとヘッドレスのテスト、09 §6.4)。夜間の fuzz は `fuzz_decode` のみ | macOS の CI・Tier B・iai・soak・補助ジョブ・area-check (v0.2)。Frame JSON ゴールデン・契約変更要求の起票は TUI 完成後 |
 | UI 文言 (§8.2) | `ja` のみ。`ja` の文言の人手レビューとキー集合の検査 (`ja` とコードの MessageKey) | 英語 UI を同梱する v0.2 で訳の運用を加える (確定 (ユーザー回答)、OQ-21) |
@@ -162,6 +162,7 @@ reviewer = "human:core"                     # 承認に必要な人間
 
 - `owner = "agent:*"` の unit でも、**承認 (merge) は常に人間** (§8.2)。
 - `xtask check-docs` (v0.2) は `path` が存在し `spec` の節が索引に存在することを検査する。割当の変更は PR で行い、理由をコミットメッセージに書く。
+- **M10 の初版 (2026-10-31)**: unit は実在するパスで書く (02 §4.6 の表のモジュール名は例で、eve-core の実際の構成は `document/`・`editor/`・`editor/layout`・`jobs.rs`・`io_jobs.rs`・`search` など)。v0.2 は人間 1 名とエージェントで進めるので、`owner` はすべて `shared`、`reviewer = "human:maintainer"`。入れ子の path (`editor` と `editor/layout`) は、深いほうがその範囲を持つ。`spec` は節 ID (`"03 §9"`)・範囲 (`"02 §5.1-5.2"`)・文書全体 (`"04"`) のいずれか。
 
 ---
 
@@ -517,7 +518,7 @@ $ cargo run -p evoeditor --features headless -- --headless --rpc stdio --fake-po
 
 | 車線 | 内容 | 時間目標 | いつ |
 |---|---|---|---|
-| **速い車線** `cargo xtask check` | **v0.1 の中身 (09 §6.1・08 §2.2 と同じ。この 3 か所を同時に直す)**: (1) fmt、(2) clippy、(3) `nextest -p eve-text -p eve-encoding -p eve-core`、(4) `check-deps`、(5) `tests/ac-checklist.toml` の軽い検査 (§3.3)、(6) 変更した crate の `Harness` のシナリオテスト。v0.2 からは (5) の後に `spec-index --check` (M10 で入れた) と、変更 crate のラベルで選ぶ DSL のシナリオ | 2 分 | ローカル (エージェントの各反復。開発環境は Windows) と PR の最初のジョブ (`ci.yml` の `check` ジョブ、Windows、09 §6.2) |
+| **速い車線** `cargo xtask check` | **v0.1 の中身 (09 §6.1・08 §2.2 と同じ。この 3 か所を同時に直す)**: (1) fmt、(2) clippy、(3) `nextest -p eve-text -p eve-encoding -p eve-core`、(4) `check-deps`、(5) `tests/ac-checklist.toml` の軽い検査 (§3.3)、(6) 変更した crate の `Harness` のシナリオテスト。v0.2 からは (5) の後に `spec-index --check` と `check-docs` (M10 で入れた) と、変更 crate のラベルで選ぶ DSL のシナリオ | 2 分 | ローカル (エージェントの各反復。開発環境は Windows) と PR の最初のジョブ (`ci.yml` の `check` ジョブ、Windows、09 §6.2) |
 | **フル車線** `ci.yml` | 09 §6.2 のジョブ。v0.1 は PR / main とも **Windows x86_64** (全テスト・ConPTY の E2E 10 シナリオ) + **Linux x86_64** (Linux CI の対象 crate (core 系 + `eve-host` + `eve-testkit`) のビルドとヘッドレスのテスト。OS 非依存を守る)、依存 (`cargo deny`・`check-deps`)・`i18n` (`ja` とコードの MessageKey のキー集合・ヒント幅)・`check-themes`・`docs-tables` (docs の表と実装の突合、§8.5)・`dco`・`gitleaks`・`pr-source` (PR の head ブランチの検査)。`docs.yml` (リンク検査・生成リファレンスの最新性) も同じ宛先で走る。パスのフィルタを付けず、コードだけ・docs だけの PR でも全ジョブを回す。**v0.2**: macOS の CI、Tier B のビルド、補助ジョブ (msrv・min-features・cargo-hack・udeps・outdated・docs-rs・geiger・`area-check`)。Frame JSON ゴールデンは TUI 完成後 | 15 分 | PR / main |
 | 夜間 | 09 §6.3。v0.1 は fuzz (`fuzz_decode` のみ。M3 で導入。クラッシュ入力は `age` で暗号化した artifact)、proptest 拡張、`cargo audit` (`fuzz/` を含む)、カバレッジ報告。対象のブランチは変数 `NIGHTLY_REF` (既定 `develop`。凍結中も `develop` のまま、09 §6.1)。1 時間の soak・`docs-rs`・`fuzz_editor`・クラッシュ一貫性は v0.2 | — | スケジュール |
 | ベンチ | 09 §5。v0.1 は判定に使うベンチ (09 §5.2 の「v0.1 で判定に使うベンチ」: NFR-101〜106 / 201〜204 と BM-103b の負荷下の判定) をリリース前に基準機 (Windows) で測る。`bench.yml` は値の記録 (BM-101a・BM-103a・BM-205。v0.1 は Actions の artifact に置き、`gh-pages` は v0.2) で、iai の CI は v0.2。基準機での計測の手順と記録の形式は §1 の `docs/perf/` の行 | 20 分 | `bench.yml` は手動 (v0.2 から `develop` への push でも)。トリガの正本は 09 §6.1 |
