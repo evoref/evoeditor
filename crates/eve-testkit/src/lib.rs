@@ -14,6 +14,7 @@ mod headless;
 mod jobs;
 mod memfs;
 mod paths;
+pub mod scenario;
 mod virtual_screen;
 
 pub use ascii::{AsciiOptions, render_ascii};

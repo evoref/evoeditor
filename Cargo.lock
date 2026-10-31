@@ -387,9 +387,12 @@ dependencies = [
 name = "eve-testkit"
 version = "0.1.0"
 dependencies = [
+ "eve-config",
  "eve-core",
  "eve-host",
  "eve-view",
+ "serde",
+ "toml",
  "unicode-width",
 ]
 

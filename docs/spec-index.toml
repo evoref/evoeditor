@@ -5137,7 +5137,7 @@ title = "`CLAUDE.md` / `AGENTS.md` / `.claude/`"
 id = "11 §6"
 file = "docs/11-dev-workflow.md"
 line = 309
-end = 456
+end = 457
 title = "決定的なテストとシナリオ DSL"
 
 [[section]]
@@ -5158,161 +5158,161 @@ title = "ゴールデン / スナップショットの運用"
 id = "11 §6.3"
 file = "docs/11-dev-workflow.md"
 line = 338
-end = 416
+end = 417
 title = "シナリオ DSL の書式 (正本)"
 
 [[section]]
 id = "11 §6.4"
 file = "docs/11-dev-workflow.md"
-line = 417
-end = 423
+line = 418
+end = 424
 title = "シナリオの書き順 (エージェント向け)"
 
 [[section]]
 id = "11 §6.5"
 file = "docs/11-dev-workflow.md"
-line = 424
-end = 456
+line = 425
+end = 457
 title = "ASCII Frame の表現"
 
 [[section]]
 id = "11 §7"
 file = "docs/11-dev-workflow.md"
-line = 457
-end = 515
+line = 458
+end = 516
 title = "ヘッドレス検証ループ"
 
 [[section]]
 id = "11 §7.1"
 file = "docs/11-dev-workflow.md"
-line = 467
-end = 489
+line = 468
+end = 490
 title = "駆動 API の使い方 (エージェント向けの最小手順)"
 
 [[section]]
 id = "11 §7.2"
 file = "docs/11-dev-workflow.md"
-line = 490
-end = 499
+line = 491
+end = 500
 title = "ループの回し方 (1 タスク)"
 
 [[section]]
 id = "11 §7.3"
 file = "docs/11-dev-workflow.md"
-line = 500
-end = 515
+line = 501
+end = 516
 title = "ローカル LLM を開発ループに使う (任意)"
 
 [[section]]
 id = "11 §8"
 file = "docs/11-dev-workflow.md"
-line = 516
-end = 598
+line = 517
+end = 599
 title = "コードレビューと CI の運用"
 
 [[section]]
 id = "11 §8.1"
 file = "docs/11-dev-workflow.md"
-line = 518
-end = 529
+line = 519
+end = 530
 title = "CI の車線"
 
 [[section]]
 id = "11 §8.2"
 file = "docs/11-dev-workflow.md"
-line = 530
-end = 541
+line = 531
+end = 542
 title = "レビューの規則"
 
 [[section]]
 id = "11 §8.3"
 file = "docs/11-dev-workflow.md"
-line = 542
-end = 556
+line = 543
+end = 557
 title = "ラベル"
 
 [[section]]
 id = "11 §8.4"
 file = "docs/11-dev-workflow.md"
-line = 557
-end = 571
+line = 558
+end = 572
 title = "契約変更要求の手続き (02 §8.4 の運用面)"
 
 [[section]]
 id = "11 §8.5"
 file = "docs/11-dev-workflow.md"
-line = 572
-end = 598
+line = 573
+end = 599
 title = "docs の表を CI の入力にする規則 (機械可読の表)"
 
 [[section]]
 id = "11 §9"
 file = "docs/11-dev-workflow.md"
-line = 599
-end = 739
+line = 600
+end = 740
 title = "ブランチ・コミット・リリースの規約"
 
 [[section]]
 id = "11 §9.1"
 file = "docs/11-dev-workflow.md"
-line = 601
-end = 625
+line = 602
+end = 626
 title = "ブランチ"
 
 [[section]]
 id = "11 §9.2"
 file = "docs/11-dev-workflow.md"
-line = 626
-end = 648
+line = 627
+end = 649
 title = "コミットメッセージ"
 
 [[section]]
 id = "11 §9.3"
 file = "docs/11-dev-workflow.md"
-line = 649
-end = 656
+line = 650
+end = 657
 title = "CHANGELOG とリリース"
 
 [[section]]
 id = "11 §9.4"
 file = "docs/11-dev-workflow.md"
-line = 657
-end = 670
+line = 658
+end = 671
 title = "寄稿ポリシー (CLA / DCO)"
 
 [[section]]
 id = "11 §9.5"
 file = "docs/11-dev-workflow.md"
-line = 671
-end = 686
+line = 672
+end = 687
 title = "公開 crate と外部の消費者の運用"
 
 [[section]]
 id = "11 §9.6"
 file = "docs/11-dev-workflow.md"
-line = 687
-end = 700
+line = 688
+end = 701
 title = "ライセンス検査 (`cargo deny` と同梱資産)"
 
 [[section]]
 id = "11 §9.7"
 file = "docs/11-dev-workflow.md"
-line = 701
-end = 718
+line = 702
+end = 719
 title = "秘密情報の扱い (署名鍵・資格情報)"
 
 [[section]]
 id = "11 §9.8"
 file = "docs/11-dev-workflow.md"
-line = 719
-end = 739
+line = 720
+end = 740
 title = "脆弱性の受付・対応・開示"
 
 [[section]]
 id = "11 §10"
 file = "docs/11-dev-workflow.md"
-line = 740
-end = 759
+line = 741
+end = 760
 title = "未決事項"
 
 [[section]]
@@ -11167,97 +11167,97 @@ section = "10 §2.9"
 [[id]]
 id = "XC-1"
 file = "docs/11-dev-workflow.md"
-line = 677
+line = 678
 section = "11 §9.5"
 
 [[id]]
 id = "XC-2"
 file = "docs/11-dev-workflow.md"
-line = 678
+line = 679
 section = "11 §9.5"
 
 [[id]]
 id = "XC-3"
 file = "docs/11-dev-workflow.md"
-line = 679
+line = 680
 section = "11 §9.5"
 
 [[id]]
 id = "XC-4"
 file = "docs/11-dev-workflow.md"
-line = 680
+line = 681
 section = "11 §9.5"
 
 [[id]]
 id = "XC-5"
 file = "docs/11-dev-workflow.md"
-line = 681
+line = 682
 section = "11 §9.5"
 
 [[id]]
 id = "XC-6"
 file = "docs/11-dev-workflow.md"
-line = 682
+line = 683
 section = "11 §9.5"
 
 [[id]]
 id = "XC-7"
 file = "docs/11-dev-workflow.md"
-line = 683
+line = 684
 section = "11 §9.5"
 
 [[id]]
 id = "OQ-126"
 file = "docs/11-dev-workflow.md"
-line = 746
+line = 747
 section = "11 §10"
 
 [[id]]
 id = "OQ-127"
 file = "docs/11-dev-workflow.md"
-line = 747
+line = 748
 section = "11 §10"
 
 [[id]]
 id = "OQ-123"
 file = "docs/11-dev-workflow.md"
-line = 748
+line = 749
 section = "11 §10"
 
 [[id]]
 id = "OQ-154"
 file = "docs/11-dev-workflow.md"
-line = 749
+line = 750
 section = "11 §10"
 
 [[id]]
 id = "OQ-120"
 file = "docs/11-dev-workflow.md"
-line = 750
+line = 751
 section = "11 §10"
 
 [[id]]
 id = "OQ-147"
 file = "docs/11-dev-workflow.md"
-line = 751
+line = 752
 section = "11 §10"
 
 [[id]]
 id = "OQ-148"
 file = "docs/11-dev-workflow.md"
-line = 752
+line = 753
 section = "11 §10"
 
 [[id]]
 id = "OQ-149"
 file = "docs/11-dev-workflow.md"
-line = 753
+line = 754
 section = "11 §10"
 
 [[id]]
 id = "OQ-150"
 file = "docs/11-dev-workflow.md"
-line = 754
+line = 755
 section = "11 §10"
 
 [[id]]
