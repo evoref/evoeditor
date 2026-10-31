@@ -314,7 +314,7 @@ AI 連携はローカル LLM (`llama-server` 等) を一級市民にする (01 �
 
 | 層 | 道具 | 目的 | 実行場所 |
 |---|---|---|---|
-| マイクロ | `criterion` (wall-clock、統計) + **`iai-callgrind`** (命令数・決定的。**Valgrind が必要なため Linux 専用**。0.16.1 (2025-07) 時点。**v0.2 から**) | eve-text / ChangeSet / 幅計算 / デコード / Frame 生成の回帰検出 | ローカル (criterion)。iai の CI は v0.2 (Linux)、Windows の wall-clock の同一ジョブ A/B も v0.2 |
+| マイクロ | `criterion` (wall-clock、統計) + **命令数** (callgrind。決定的。**Valgrind が必要なため Linux 専用**。**v0.2 から**。M10 では `iai-callgrind` の crate を使わず、計測の本体 `bm_instr` を `valgrind --tool=callgrind` で直接走らせる: crate と同じ版の runner をランナーに入れる手間と依存の木が増えるのを避けるため。測るものは同じ命令数 (Ir)) | eve-text / ChangeSet / 幅計算 / デコード / Frame 生成の回帰検出 | ローカル (criterion)。命令数の CI は v0.2 (Linux)、Windows の wall-clock の同一ジョブ A/B も v0.2 (どちらも `perf.yml`、§5.4) |
 | マクロ (NFR 対応) | 自前ハーネス `eve-bench` (bin。置き場所は `crates/eve-bench/`、`publish = false`。`eve-testkit` 上でヘッドレス `Editor` + **実 Port**) + 外部計測 (`hyperfine`、Windows のプロセスのメモリ・CPU 指標) | NFR-1xx / 2xx の数値を測る | 基準環境 (Windows の開発 PC、リリース前)。CI では値を記録するだけ |
 
 CI ランナーの wall-clock は変動が大きい (共有 VM) ため、絶対値 (ms) は基準環境でのみ判定する。**v0.1 は CI で回帰を自動判定しない**: `bench.yml` を手動で実行して (マイルストーンを `develop` に取り込む前など) BM-101a・BM-103a・BM-205 の値を記録し、劣化は人が推移を見て判断する (トリガは §6.1)。自動の回帰判定 (iai-callgrind の命令数 (閾値 ±5%、主要 5 本程度) と、マクロベンチの **同一ジョブ内 A/B 比較** (main と PR を同じランナーで連続実行し比率を見る。閾値 +10%)) は **v0.2 から** (01 NFR-703)。
@@ -377,9 +377,14 @@ CI ランナーの wall-clock は変動が大きい (共有 VM) ため、絶対�
 
 ### 5.4 回帰の運用
 
+**M10 の実装 (2026-10-31)**: ワークフロー `perf.yml` が、コードを変える PR (`crates/**`・`bins/**`・`Cargo.*`) ごとに、PR の宛先の先頭 (基準) と PR のコミットを **同じランナー** で測る (`cargo xtask perf-diff --base <sha> --mode instr|time`)。基準は `git worktree` で取り出してビルドする。計測の本体は `eve-testkit` の `bm_instr` の 5 ケース (`open_1m`・`type_1m`・`undo_1m`・`open_sjis_1m`・`long_line_2m`。名前は比較のキーなので変えない)。
+- `perf (instr)` (ubuntu): 各ケースを 1 回ずつ callgrind で走らせ、命令数を比べる。+5% 超で警告。
+- `perf (time)` (windows): 基準と今を交互に 3 回ずつ (各 5 回) 測り、中央値を比べる。+10% 超で警告 (共有ランナーなので目安)。
+- 劣化は Actions の警告 (`::warning`) とジョブの要約の表に出し、**ブロックしない** (必須のチェックにしない)。PR へのコメントは、書込み権限をワークフローに与えないために使わない (要約の表を読む)。基準に `bm_instr` が無い (この仕組みの前) ときは「基準なし」と出して比べない。
+
 | 事象 | 対応 |
 |---|---|
-| iai 命令数 +5% 超 / マクロ A/B +10% 超 (v0.2 から) (NFR-703)。v0.1 は `bench.yml` の記録の推移を人が見る | PR に警告コメント (ブロックしない)。原因説明または修正を求める。意図的な劣化はベースライン更新を PR に含める |
+| 命令数 +5% 超 / マクロ A/B +10% 超 (v0.2 から) (NFR-703)。v0.1 は `bench.yml` の記録の推移を人が見る | PR に警告 (ブロックしない)。原因説明または修正を求める。意図的な劣化は PR の説明に理由を書く (基準は PR の宛先の先頭なので、別のベースラインの更新は要らない) |
 | `bench.yml` の記録で連続 3 回の劣化 | 課題起票。リリースブロッカー候補 |
 | ベンチ自体の flaky | ランナー変更 or 閾値調整を別 PR で |
 
@@ -393,6 +398,7 @@ CI ランナーの wall-clock は変動が大きい (共有 VM) ため、絶対�
 |---|---|---|---|
 | **速い車線** `cargo xtask check` | ローカル / PR の最初のジョブ (`ci.yml` の `check` ジョブ、§6.2) | **v0.1 の中身 (11 §8.1・08 §2.2 と同じ。この 3 か所を同時に直す)**: (1) fmt、(2) clippy、(3) `cargo nextest run -p eve-text -p eve-encoding -p eve-core`、(4) `check-deps`、(5) `tests/ac-checklist.toml` の軽い検査 (11 §3.3)、(6) 変更した crate の `Harness` のシナリオテスト。v0.2 の M10 から (5) の後に `spec-index --check`。ラベルによるシナリオの選択と `spec-index` の最新性は v0.2。**2 分以内** を目標 (AI エージェントの検証ループの単位。11 §8) | 2 分 |
 | `ci.yml` (フル車線) | PR (宛先が `develop`・`main`) と、これらへの push | §6.2 のジョブ群 | 15 分 (最長ジョブ) |
+| `perf.yml` (v0.2、M10) | PR (宛先が `develop`・`main`) で、`crates/**`・`bins/**`・`Cargo.*` を変えるもの | 基準 (PR の宛先の先頭) との命令数 (linux) と wall-clock の A/B (windows) の比較。劣化は警告だけで、必須のチェックにしない (§5.4) | 30 分 |
 | `nightly.yml` | 毎日 (UTC 18:00 = JST 03:00)。`schedule` は既定ブランチのワークフロー定義で動く (v0.1.0 のリリースまでは `develop`、以後は `main`。2026-10-27 に `main` に戻した。OQ-170、11 §9.1)。そこで既定ブランチには **薄いトリガ** (スケジュールと `workflow_dispatch` と、次の checkout と入口の呼出しだけを持つ定義) を置く。**対象のブランチ**: 薄いトリガは `actions/checkout` を `ref: ${{ vars.NIGHTLY_REF \|\| 'develop' }}` (リポジトリの変数 `NIGHTLY_REF`。未設定なら `develop`) で行い、チェックアウトしたコードの **`cargo xtask nightly`** を入口にして実体の手順を実行する (手順の中身は対象のブランチの `xtask` にあるので、薄いトリガを直さずに済む)。手動実行では引数で ref を上書きできる。対象は `develop` のままでよい (長命ブランチは `main` と `develop` だけで、リリース候補の期間 (凍結 (§9.2 手順 1) から publish まで) も `develop` を対象にするので、変数の切替は要らない。§8.2 の fuzz の行)。再利用ワークフロー (`uses: <owner>/<repo>/.github/workflows/nightly-impl.yml@develop` 相当) で実体を呼ぶ方式も同等とするが、`uses` の ref は変数で切り替えられないので、変数で対象を変える上の方式を既定とする | `fuzz_decode`、proptest 拡張、`cargo audit`、カバレッジ報告 (`coverage`) (§6.3)。手動実行 (`workflow_dispatch`) では対象のコミットと fuzz の時間を引数で指定でき、リリース前の 1 時間の fuzz (§8.2) に使う。`cargo outdated` 報告・1 時間の soak・`docs-rs`・`unsafe-audit` (`cargo geiger`)・最新依存での再チェック・`udeps` は v0.2 | — |
 | `bench.yml` | 手動 (`workflow_dispatch`)。`nightly.yml` と同じく既定ブランチには薄いトリガだけを置き、`ref: ${{ vars.NIGHTLY_REF \|\| 'develop' }}` (引数で上書き可) でチェックアウトしたコードの `cargo xtask bench` を入口にして実行する。v0.2 から `develop` への push でも (11 §8.1) | v0.1: BM-101a・BM-103a・BM-205 (サイズ) の値の記録 (Windows)。**記録先**: v0.1 は Actions の artifact (`xtask bench` の JSON) で、リポジトリへのコミットも `gh-pages` への push もしない (権限は `contents: read`、§6.5)。判定に使う値は基準機の記録 (`docs/perf/<version>/`、§5.3。手順は 11 §1) で、CI の値は推移を見るだけ。v0.2: iai + マクロ A/B と、`gh-pages` の `bench/` へのグラフ化 (github-action-benchmark 等) | 20 分 |
 | `release.yml` | タグ `v*` (正式版は `main` のマージコミットに、プレリリース (`-alpha.N` / `-beta.N` / `-rc.N`) は `develop` の先頭に、人間が付ける、§9.1 / §9.2) / 手動 (dry-run) | **最初のステップでタグを検証する** (11 §9.3。検証の置き場所は本ワークフローに統一する): (1) `git verify-tag` (署名の鍵はリポジトリの `.github/allowed_signers` に載る鍵だけを許す。`gpg.ssh.allowedSignersFile` に指定)、(2) 正式版のタグは `main` のマージコミットを指す (`main` から到達でき (`git merge-base --is-ancestor`)、親が 2 つあること)。プレリリースのタグは `develop` の先頭を指す、(3) タグの版と workspace の `Cargo.toml` の版が一致する (プレリリースのタグは `-rc.N` 等の接尾辞まで一致する。そのため、プレリリースの前に `develop` に `-rc.N` 等の版を付ける PR を入れる、§9.2)、(4) **内容の一致** (正式版): タグのコミットと、リリースのチェックリストに記録したゲートの判定のコミット (版上げ後の `develop` の先頭、§9.2 手順 3) の差分 (`git diff --name-only`) が許可リスト (記録の置き場所 `docs/compat/<version>/`・`docs/perf/<version>/` と、AC のチェックリスト `tests/ac-checklist.toml`) のファイルだけである。どれかが失敗したら以後のジョブを走らせない。続けて §9 のビルド・公開の準備 (署名はメンテナの手元) | 40 分 |
