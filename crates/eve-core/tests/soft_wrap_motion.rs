@@ -55,6 +55,7 @@ fn scroll(h: &Harness) -> (usize, u32) {
 /// 1 行目は 2 表示行 ("aaaa bbbb cccc " / "dddd eeee ffff")、2 行目は短い、3 行目は 2 表示行。
 const THREE: &str = "aaaa bbbb cccc dddd eeee ffff\nxy\nlonger line here ok then more";
 
+// verifies: FR-506
 #[test]
 fn 下矢印は表示行を_1_つ動き_目標列を保つ() {
     let mut h = doc(THREE);

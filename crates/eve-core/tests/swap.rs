@@ -22,6 +22,7 @@ fn opened(path: &str, bytes: &[u8]) -> Harness {
     h
 }
 
+// verifies: FR-118, NFR-307
 #[test]
 fn 最後の入力から_2_秒後にスワップが書かれる() {
     let mut h = Harness::new();
@@ -175,6 +176,7 @@ fn 上限を超える文書は対象外() {
     assert_eq!(swaps(&h), 0);
 }
 
+// verifies: FR-118, NFR-307
 #[test]
 fn 上限を超えたら_対象外であることを_1_回だけ知らせる() {
     let mut h = Harness::new();

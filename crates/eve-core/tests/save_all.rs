@@ -193,6 +193,7 @@ fn 失敗した文書は確認を出さずに記録し_最後に一覧で示す(
     assert!(s.dirty(b));
 }
 
+// verifies: FR-104
 #[test]
 fn 保存の失敗は他の文書の保存を止めない() {
     let mut s = Env::new();

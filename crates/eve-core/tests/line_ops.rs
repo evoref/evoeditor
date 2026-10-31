@@ -22,6 +22,7 @@ fn at_line(h: &mut Harness, line: usize) {
 
 // ---------- インデント ----------
 
+// verifies: FR-208
 #[test]
 fn 選択した各行にインデントを足し_空行は飛ばして_undo_は_1_回() {
     let mut h = doc("a\n\nb\n");
@@ -40,6 +41,7 @@ fn 行頭で終わる選択は最後の行を含めない() {
     assert_eq!(h.doc_text(), "    a\n    b\nc\n");
 }
 
+// verifies: FR-208
 #[test]
 fn tab_と_shift_tab_は選択があれば行単位() {
     let mut h = doc("a\nb\n");
@@ -50,6 +52,7 @@ fn tab_と_shift_tab_は選択があれば行単位() {
     assert_eq!(h.doc_text(), "a\nb\n");
 }
 
+// verifies: FR-208
 #[test]
 fn アンインデントは_width_以内に収まる行頭空白だけを各行から取る() {
     let mut h = doc("      a\n  \tb\n  c\n");

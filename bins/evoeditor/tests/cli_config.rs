@@ -29,6 +29,7 @@ fn run(cfg: &PathBuf, args: &[&str]) -> (i32, String) {
     )
 }
 
+// verifies: FR-701
 #[test]
 fn check_config_は警告なら_0_エラーなら_3() {
     let d = dir("check");
@@ -49,6 +50,7 @@ fn check_config_は警告なら_0_エラーなら_3() {
     let _ = std::fs::remove_dir_all(&d);
 }
 
+// verifies: FR-701
 #[test]
 fn dump_config_は層を重ねた結果を出す() {
     let d = dir("dump");

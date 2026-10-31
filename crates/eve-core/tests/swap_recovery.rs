@@ -80,6 +80,7 @@ fn opened(entries: Vec<(SwapEntry, Option<SwapBody>)>) -> Harness {
     h
 }
 
+// verifies: FR-118, NFR-307
 #[test]
 fn 無題で空の文書に_無題のスワップを提案し_適用すると_dirty_で_undo_できる() {
     let mut h = started(vec![(
@@ -158,6 +159,7 @@ fn 保存すれば_新しいスワップを待たずに古いスワップを消�
     assert!(h.fs.swap_entries().is_empty());
 }
 
+// verifies: FR-118, NFR-307
 #[test]
 fn パスのある文書は開いた形式のまま本文だけ置き換える() {
     let mut h = opened(vec![(

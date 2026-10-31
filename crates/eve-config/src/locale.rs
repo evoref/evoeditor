@@ -116,6 +116,7 @@ mod tests {
     use super::*;
 
     // NFR-603 AC-3 (v0.2。チェックリストは v0.2 のゲートで作る)
+    // verifies: NFR-603
     #[test]
     fn 言語タグは地域を落として当てる() {
         assert_eq!(Locale::parse("ja"), Some(Locale::Ja));
@@ -145,6 +146,7 @@ mod tests {
     }
 
     // NFR-603 AC-3 (v0.2。チェックリストは v0.2 のゲートで作る)
+    // verifies: NFR-603
     #[test]
     fn 未知の言語名は警告して次の段へ進む() {
         let c = select_locale(Some("fr"), None, Some("en"), Some("ja-JP"));

@@ -20,6 +20,7 @@ fn re(p: &str) -> SearchQuery {
     SearchQuery::literal(p).with_regex(true)
 }
 
+// verifies: FR-402
 #[test]
 fn 正規表現で数える() {
     assert_eq!(count("a1 b22 c333", re(r"\d+")), 3);
@@ -32,6 +33,7 @@ fn 正規表現で数える() {
     assert_eq!(count("foo.bar", SearchQuery::literal(".")), 1);
 }
 
+// verifies: FR-402
 #[test]
 fn 行頭と行末の記号は行ごとに働く() {
     assert_eq!(count("ab\nab\nab", re("^ab$")), 3);
@@ -54,6 +56,7 @@ fn 空の一致は数えない() {
     assert_eq!(count("aab", re("a*")), 1, "空でない一致だけ");
 }
 
+// verifies: FR-402
 #[test]
 fn 大小は_smart_で切り替わり_sensitive_insensitive_も効く() {
     assert_eq!(
@@ -90,6 +93,7 @@ fn 日本語を含むパターンと書記素の境界() {
     );
 }
 
+// verifies: FR-402
 #[test]
 fn 構文エラーと複数行は理由つきで拒否する() {
     assert!(matches!(re("(").compile(), Err(QueryError::Syntax(_))));
@@ -109,6 +113,7 @@ fn 構文エラーと複数行は理由つきで拒否する() {
     ));
 }
 
+// verifies: FR-402
 #[test]
 fn 構文エラーのときは何にも一致しない() {
     assert_eq!(count("a(b", re("(")), 0);

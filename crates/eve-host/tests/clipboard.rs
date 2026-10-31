@@ -317,6 +317,7 @@ fn システムに書けて_ssh_でもなければ_auto_は_osc52_を送らな�
     assert!(e.fe.probe().osc52_writes().is_empty());
 }
 
+// verifies: FR-205
 #[test]
 fn ssh_中の_auto_と_always_は_システムに書けても_osc52_を送る() {
     for (policy, ssh) in [
