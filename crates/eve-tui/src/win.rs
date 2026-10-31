@@ -173,11 +173,12 @@ fn window_size(output: HANDLE) -> io::Result<CellSize> {
     })
 }
 
-/// 端末のウィンドウの大きさから、編集面の `Resize` を作る (クローム行を除く、04 §3.1)。
-pub fn surface_resize(window: CellSize) -> InputEvent {
+/// 端末のウィンドウの大きさから、編集面の `Resize` を作る (クローム行を除く、04 §3.1)。`hint_bar` は最後の Frame の
+/// ヒントバーの表示 (隠していればその行も編集面に入れる、FR-504)。
+pub fn surface_resize(window: CellSize, hint_bar: bool) -> InputEvent {
     InputEvent::Resize {
         cols: window.cols,
-        rows: surface_rows_for_window(window.rows),
+        rows: surface_rows_for_window(window.rows, hint_bar),
     }
 }
 
@@ -273,12 +274,12 @@ fn read_chunk(
     Ok(())
 }
 
-fn send(out: &dyn InputOut, outs: Vec<Out>, output: HANDLE) -> bool {
+fn send(out: &dyn InputOut, outs: Vec<Out>, output: HANDLE, geom: &SharedGeom) -> bool {
     for o in outs {
         let ev = match o {
             Out::Event(e) => e,
             Out::Resize => match window_size(output) {
-                Ok(s) => surface_resize(s),
+                Ok(s) => surface_resize(s, geom.hint_bar()),
                 Err(_) => continue,
             },
         };
@@ -342,7 +343,7 @@ fn run(input: Handle, output: Handle, out: &dyn InputOut, geom: &SharedGeom) {
         match wait(h, ms) {
             Ok(Wait::Ready) => {}
             Ok(Wait::Timeout) => {
-                if !send(out, norm.close_burst(), o) {
+                if !send(out, norm.close_burst(), o, geom) {
                     return;
                 }
                 continue;
@@ -369,7 +370,7 @@ fn run(input: Handle, output: Handle, out: &dyn InputOut, geom: &SharedGeom) {
                 out.died();
                 return;
             }
-            if !send(out, norm.feed(&raws), o) {
+            if !send(out, norm.feed(&raws), o, geom) {
                 return;
             }
             if !send_mouse(out, &mut mouse_recs, &mut tracker, geom, o) {

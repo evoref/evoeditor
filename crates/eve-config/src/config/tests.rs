@@ -475,6 +475,7 @@ fn changed_keys_は変わった公開キーだけを並べ_全キーを網羅す
         "theme.name",
         "theme.background",
         "ui.mouse",
+        "ui.hint_bar",
         "ui.mouse_wheel_lines",
         "ui.which_key_delay_ms",
         "clipboard.osc52",

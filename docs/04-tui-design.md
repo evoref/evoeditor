@@ -848,7 +848,7 @@ TUI では IME は端末/OS が処理し、evoeditor には **確定文字列だ
 | 選択範囲内の切替 (v0.2) | `search.toggle_selection` | 検索バー内で `Alt+L` | `Ctrl+K L` (検索バー内。編集面の `Ctrl+K L` は行の削除) | 03 §12.5 |
 | 置換 (置換欄を開く) | `search.replace_open` | `Ctrl+R` | `Ctrl+H` [E] (別名) | `Ctrl+H` はレガシーで 0x08 (`Ctrl+Backspace` と同じ符号、§6.2) になり区別できないため第一にしない (区別できない端末ではこの別名は無効)。すべて置換は `search.replace_all` (バー内の `Alt+A`、または `Tab` でボタンへ移って `Enter`。§8.4)。1 件置換 `search.replace` (置換欄の `Enter`) は v0.2 |
 | 折り返し切替 (v0.2) | `view.toggle_wrap` | `Alt+Z` | `Ctrl+K O` (wrap **O**n/off。`Ctrl+K W` は閉じるで使用済み) | FR-506 |
-| ヒントバー切替 (v0.2) | `ui.toggle_hint_bar` | — | パレット | FR-504 (v0.1 は常時表示) |
+| ヒントバー切替 (v0.2、M10 で実装) | `ui.toggle_hint_bar` | — | パレット | FR-504 (v0.1 は常時表示) |
 | バッファ一覧 (v0.2) | `buffer.list` | `Ctrl+E` | — | FR-103 |
 | 次 / 前のバッファ (v0.2) | `buffer.next` / `buffer.prev` | `Ctrl+PgDn` / `Ctrl+PgUp` [横 GNOME] | `Ctrl+K N` / `Ctrl+K P` | |
 | マウス捕捉の切替 (v0.2) | `ui.toggle_mouse` | — | パレット | §6.8 |
@@ -1073,6 +1073,7 @@ v0.1 は単一文書で、バッファ一覧を持たない (別のファイル�
 - 圧縮段階: (1) `Ctrl+S 保存` の形で全表示 (項目の間は 2 セル) → (2) キーを `^S` 表記にし、項目の間を 1 セルにする → (3) 優先度の低い項目から落とす (同じ優先度では右から) → (4) 優先度 5 の項目 (`normal` では `^Q 終了` と `^P コマンド`、`overlay` では `Esc 取消`) は落とさない (初心者が抜け出せなくなるのを防ぐ、NFR-601)。それでも入らない幅では、優先度 5 の項目の説明の語を落としてキーだけにする。
 - チョード保留中は `Esc 取消` だけを出す。保留中に効かないキー (`Ctrl+Q` 等) は出さない (02 §7.2 の不一致の規則で捨てられるため)。
 - **v0.1 は常に表示する** (非表示の切替 `ui.toggle_hint_bar` と設定 `ui.hint_bar` は v0.2、FR-504)。行数 10 未満ではメッセージの表示中だけメッセージで上書きされる (§3.5)。
+- **v0.2 の M10 の実装**: 設定 `ui.hint_bar` (既定 `true`) と `ui.toggle_hint_bar` (パレット。切り替えるたびに `info.hint_bar.hidden` / `.shown`)。core は Frame の `hint_bar` で frontend に伝える (`eve-view` の追加)。隠すと、クロームは端末の大きさに依らずステータスバーとメッセージ行の 2 行で、ヒントバーの行を本文に回す (10 行未満でも 2 行のまま。その 1 行はメッセージの表示中だけ使う)。表示が変わった直後の 1 回は、frontend が編集面の大きさの不一致を見て `Resize` を送り、次の Frame で行数が合う (§3.6)。
 - キー部分はロール `ui.hint_bar.key` (組または反転)、説明は `ui.hint_bar` (端末既定。色に依存しない)。
 - **説明の語の長さ**: 説明 (`hint.*`) は **全角 4 文字 / 半角 8 文字 (どちらも 8 セル) 以内** (07 §17.2。CI で検査、09 §11)。語が長くなるものは短い語を選ぶ (「キャンセル」10 セルは超えるので「取消」4 にする)。キー部分は文言に書かず、解決済みキーマップから逆引きした表記 (§7.8) を core が入れる。圧縮段階 (1)〜(4) と残す項目は文言に依存させない。v0.1 の語は §15.1。
 
@@ -1614,6 +1615,8 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 | `ui.read_only_reason.binary` | 同上。`Binary` | バイナリファイル |
 | `ui.read_only_reason.large_file_viewer` | 同上。`LargeFileViewer` | 巨大なファイル (読み取り専用で開く指定) |
 | `ui.load_state.loading` | 読込中の文書への編集操作を拒否したときの `msg.edit.read_only` の `{reason}` (読込中は読み取り専用の理由ではなく `load_state == Loading` から導出する状態で、03 §9.6。`ui.read_only_reason.*` には入れない。ステータスバーの読込中の表示は `status.loading.long` / `.short`、§8.7) | 読込中 |
+| `info.hint_bar.hidden` | `ui.toggle_hint_bar` でヒントバーを隠した (FR-504、§8.5) | ヒントバーを隠しました (その行を本文に使います) |
+| `info.hint_bar.shown` | `ui.toggle_hint_bar` でヒントバーを表示した | ヒントバーを表示しました |
 | `info.mouse.enabled` | `ui.toggle_mouse` でマウスの取得を有効にした (04 §6.8) | マウスの操作を有効にしました |
 | `info.mouse.disabled` | 同上。無効にした (端末のネイティブ選択・スクロールが使える) | マウスの操作を無効にしました (端末の選択とスクロールが使えます) |
 | `info.goto_line.clamped` | 行へ移動で範囲外の番号を入れた (01 FR-306 AC-1) | 行 {line} はありません。最後の行 ({last}) へ移動しました |

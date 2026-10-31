@@ -212,7 +212,34 @@ fn toggle_mouse(ctx: &mut CommandCtx<'_>) -> CommandResult {
     CommandResult::Done
 }
 
+/// `ui.toggle_hint_bar`: ヒントバーの表示の ON/OFF (FR-504)。OFF の間はその行を本文に使う (04 §3.5)。
+fn toggle_hint_bar(ctx: &mut CommandCtx<'_>) -> CommandResult {
+    let on = !ctx.state.hint_bar_on;
+    ctx.state.hint_bar_on = on;
+    ctx.state.mark_dirty_render();
+    ctx.state.show_message(
+        MessageLevel::Info,
+        if on {
+            "info.hint_bar.shown"
+        } else {
+            "info.hint_bar.hidden"
+        },
+        &[],
+    );
+    CommandResult::Done
+}
+
 pub(super) fn register(r: &mut CommandRegistry) {
+    r.register(
+        CommandSpec::new(
+            "ui.toggle_hint_bar",
+            CommandKind::Ui,
+            Permission::Ui,
+            "",
+            toggle_hint_bar,
+        )
+        .expect("カタログの when 句は構文が正しい"),
+    );
     r.register(
         CommandSpec::new(
             "ui.toggle_mouse",

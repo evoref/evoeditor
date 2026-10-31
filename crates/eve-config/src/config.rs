@@ -222,6 +222,8 @@ pub struct Config {
     pub theme_background: ThemeBackground,
     /// `ui.mouse`: マウスの入力を使うか (FR-307、04 §6.8)。
     pub mouse: bool,
+    /// `ui.hint_bar`: 画面下のヒントバーを出すか (FR-504、04 §8.5)。`ui.toggle_hint_bar` で実行中に切り替えられる。
+    pub hint_bar: bool,
     /// `ui.mouse_wheel_lines`: ホイール 1 目盛りのスクロール量 (表示行)。
     pub mouse_wheel_lines: u8,
     /// `ui.which_key_delay_ms`: チョードの保留から which-key を出すまでの時間 (04 §7.4)。
@@ -263,6 +265,7 @@ impl Default for Config {
             theme_name: "default".to_owned(),
             theme_background: ThemeBackground::Auto,
             mouse: true,
+            hint_bar: true,
             mouse_wheel_lines: 3,
             which_key_delay_ms: 500,
             osc52: Osc52Policy::Auto,
@@ -327,6 +330,7 @@ pub fn changed_keys(a: &Config, b: &Config) -> Vec<&'static str> {
         ("theme.name", a.theme_name != b.theme_name),
         ("theme.background", a.theme_background != b.theme_background),
         ("ui.mouse", a.mouse != b.mouse),
+        ("ui.hint_bar", a.hint_bar != b.hint_bar),
         (
             "ui.mouse_wheel_lines",
             a.mouse_wheel_lines != b.mouse_wheel_lines,
@@ -389,6 +393,7 @@ pub(crate) const KEYS: &[&str] = &[
     "theme.name",
     "theme.background",
     "ui.mouse",
+    "ui.hint_bar",
     "ui.mouse_wheel_lines",
     "ui.which_key_delay_ms",
     "clipboard.osc52",
@@ -666,6 +671,11 @@ impl Cx<'_> {
                     self.out.config.mouse = b;
                 }
             }
+            "ui.hint_bar" => {
+                if let Some(b) = self.boolean(key, v) {
+                    self.out.config.hint_bar = b;
+                }
+            }
             "ui.which_key_delay_ms" => {
                 if let Some(n) = self.int(key, v, 0, 5_000) {
                     self.out.config.which_key_delay_ms = n as u16;
@@ -909,7 +919,7 @@ pub fn default_display(key: &str) -> &'static str {
         "theme.name" => "default",
         "theme.background" => "auto",
         "view.wrap_indent" => "same",
-        "view.wrap_kinsoku" | "ui.mouse" => "true",
+        "view.wrap_kinsoku" | "ui.mouse" | "ui.hint_bar" => "true",
         "ui.mouse_wheel_lines" => "3",
         "ui.which_key_delay_ms" => "500",
         "clipboard.osc52" => "auto",

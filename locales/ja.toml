@@ -338,6 +338,10 @@ title = "コマンドパレット"
 description = "画面を描き直します。"
 title = "再描画"
 
+[cmd.ui.toggle_hint_bar]
+description = "画面下のヒントバーを出すか隠すかを切り替えます。隠すと、その行を本文に使います。"
+title = "ヒントバーの切り替え"
+
 [cmd.ui.toggle_mouse]
 description = "マウスの操作を使うか、端末の選択とスクロールを使うかを切り替えます。"
 title = "マウスの切り替え"
@@ -394,6 +398,10 @@ clamped = "行 {line} はありません。最後の行 ({last}) へ移動しま
 
 [info.history]
 copied = "{count} 件のメッセージをコピーしました"
+
+[info.hint_bar]
+hidden = "ヒントバーを隠しました (その行を本文に使います)"
+shown = "ヒントバーを表示しました"
 
 [info.mouse]
 disabled = "マウスの操作を無効にしました (端末の選択とスクロールが使えます)"

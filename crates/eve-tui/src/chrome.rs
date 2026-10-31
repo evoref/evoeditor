@@ -13,7 +13,7 @@ use eve_view::{
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 
-use crate::buffer::{PaneRender, Writer, chrome_rows_for_surface, render_panes};
+use crate::buffer::{PaneRender, Writer, chrome_rows, render_panes};
 use crate::glyphs::{Glyph, Glyphs};
 use crate::theme::{Theme, overlay_style};
 
@@ -1372,7 +1372,7 @@ pub fn render_screen(
         frame.size.cols,
         frame.size.rows + crate::buffer::bar_rows(frame),
     );
-    let chrome = chrome_rows_for_surface(surface_rows);
+    let chrome = chrome_rows(surface_rows, frame.hint_bar);
     let area = CellSize {
         cols,
         rows: surface_rows,
@@ -1387,7 +1387,10 @@ pub fn render_screen(
         };
         let status_y = surface_rows;
         render_status(&mut w, status_y, cols, &frame.status, &theme, glyphs);
-        if chrome >= 3 {
+        if !frame.hint_bar {
+            // ヒントバーを隠した (FR-504): ステータスバーの下の 1 行はメッセージだけに使う (04 §3.5)
+            render_message(&mut w, status_y + 1, cols, &frame.messages, &theme, glyphs);
+        } else if chrome >= 3 {
             render_message(&mut w, status_y + 1, cols, &frame.messages, &theme, glyphs);
             render_hints(
                 &mut w,
