@@ -5529,7 +5529,7 @@ title = "文書索引"
 id = "README §3"
 file = "docs/README.md"
 line = 65
-end = 247
+end = 275
 title = "読む順序"
 
 [[section]]
@@ -5589,17 +5589,24 @@ end = 247
 title = "v0.2 の M10 (開発基盤と文書) で読む節"
 
 [[section]]
-id = "README §4"
+id = "README §3.9"
 file = "docs/README.md"
 line = 248
-end = 298
+end = 275
+title = "v0.2 の M7 (Linux の出荷) で読む節"
+
+[[section]]
+id = "README §4"
+file = "docs/README.md"
+line = 276
+end = 326
 title = "正本マップ"
 
 [[section]]
 id = "README §5"
 file = "docs/README.md"
-line = 299
-end = 301
+line = 327
+end = 329
 title = "用語集への導線"
 
 [[id]]
