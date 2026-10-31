@@ -2339,14 +2339,14 @@ impl EditorState {
         reason: &str,
     ) {
         self.show_message(level, key, &[("path", &path.display()), ("reason", reason)]);
-        if replace.is_some() {
-            // 足したバッファだけを閉じる。今の文書はそのまま残す (03 §9.8)
-            self.close_document(doc);
-        } else if self.active_document() == Some(doc) || self.first_window().is_none() {
-            // 表示するはずの文書の読込に失敗: 失敗した文書は閉じ、ほかの文書があればそれを、無ければ
-            // 無題の文書で始める (再試行できる、03 §9.2 の「失敗」)
+        if self.active_document() == Some(doc) || self.first_window().is_none() {
+            // 表示中の文書の読込に失敗 (起動時の文書、または読込中に切り替えて表示していた足したバッファ): 失敗した文書は閉じ、
+            // 開く前の文書 (残っていれば)・ほかの文書・無題の文書の順で表示する (再試行できる、03 §9.2 の「失敗」・§9.8)。
+            // 表示を移さずに閉じると、Window が消えた View を指したままになる (fuzz_editor で見つけた)
             self.open_jumps.remove(&doc);
-            let others = self.documents.keys().copied().find(|d| *d != doc);
+            let others = replace
+                .filter(|r| *r != doc && self.documents.contains_key(r))
+                .or_else(|| self.documents.keys().copied().find(|d| *d != doc));
             match others {
                 Some(next) => {
                     self.activate_document(next);
@@ -2359,7 +2359,7 @@ impl EditorState {
                 }
             }
         } else {
-            // 起動時に追加で開いた文書の読込の失敗: 表示中の文書はそのままに、閉じるだけ
+            // 表示していない文書 (足したバッファ・起動時に追加で開いた文書) の読込の失敗: 表示中の文書はそのままに、閉じるだけ
             self.close_document(doc);
         }
     }

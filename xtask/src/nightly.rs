@@ -2,7 +2,7 @@
 //! チェックアウトしたコードのこのコマンドを呼ぶ (手順の中身は対象のブランチの `xtask` にあるので、トリガを直さずに済む)。Linux 前提。
 //!
 //! v0.1 の手順 (`--only` で絞れる):
-//! - `fuzz`: `fuzz_decode` を `--fuzz-seconds` (既定 600) 秒。`-close_fd_mask=3` で入力とスタックをログに出さない。クラッシュ入力は
+//! - `fuzz`: `fuzz_decode` と `fuzz_editor` (v0.2) を、それぞれ `--fuzz-seconds` (既定 1200 秒。09 §6.3 の v0.2)。`-close_fd_mask=3` で入力とスタックをログに出さない。クラッシュ入力は
 //!   `.github/fuzz-recipients.txt` の公開鍵で `age` により暗号化し、平文は消す (artifact に上げるのは暗号化したものだけ)。
 //! - `proptest`: `PROPTEST_CASES=10000` で Linux CI の対象 crate のテスト。
 //! - `audit`: `cargo audit` と `cargo deny check advisories` (本体と `fuzz/`)。例外は `deny.toml` の `[advisories] ignore` の 1 か所。
@@ -48,7 +48,7 @@ pub fn run_all(args: &[String]) -> Result<(), String> {
                 .map_err(|_| format!("--fuzz-seconds が数ではありません: {v}"))
         })
         .transpose()?
-        .unwrap_or(600);
+        .unwrap_or(1200);
     let seed: u64 = flag(args, "--seed")
         .map(|v| {
             v.parse()
@@ -111,38 +111,53 @@ fn commit() -> String {
 /// libFuzzer が書く、失敗した入力のファイル名の接頭辞。
 const CRASH_PREFIXES: [&str; 3] = ["crash-", "oom-", "timeout-"];
 
+/// fuzz のターゲット (docs/09 §3.3)。それぞれ `--fuzz-seconds` 秒ずつ回す。
+const FUZZ_TARGETS: [&str; 2] = ["fuzz_decode", "fuzz_editor"];
+
 fn fuzz(seconds: u64, seed: u64, out_dir: &Path, summary: &mut Vec<String>) -> Result<(), String> {
     let artifacts = out_dir.join("fuzz-artifacts");
     let _ = std::fs::remove_dir_all(&artifacts);
     std::fs::create_dir_all(&artifacts).map_err(|e| format!("{}: {e}", artifacts.display()))?;
+    let host = host_triple()?;
+    let mut errs = Vec::new();
+    for target in FUZZ_TARGETS {
+        if let Err(e) = fuzz_one(target, &host, seconds, seed, &artifacts, summary) {
+            errs.push(e);
+        }
+    }
+    if errs.is_empty() {
+        Ok(())
+    } else {
+        Err(errs.join(
+            "
+",
+        ))
+    }
+}
+
+fn fuzz_one(
+    target: &str,
+    host: &str,
+    seconds: u64,
+    seed: u64,
+    artifacts: &Path,
+    summary: &mut Vec<String>,
+) -> Result<(), String> {
+    // 失敗した入力はターゲットごとの下位フォルダに受ける (暗号化した名前にはターゲット名を付ける)
+    let artifacts = &artifacts.join(target);
+    std::fs::create_dir_all(artifacts).map_err(|e| format!("{}: {e}", artifacts.display()))?;
     // ビルドの出力は見せる (入力もスタックも含まない)。失敗の原因を後から追えるようにする
     // 対象は nightly の rustc のホストにする。cargo-fuzz は既定で自分がビルドされた対象 (配布の実行ファイルは musl) を使うので、
     // 明示しないと「musl の std が無い」「sanitizer は静的リンクの libc と非互換」で失敗する
-    let host = host_triple()?;
     run(
-        "cargo +nightly fuzz build fuzz_decode",
-        Command::new("cargo").args([
-            "+nightly",
-            "fuzz",
-            "build",
-            "--target",
-            &host,
-            "fuzz_decode",
-        ]),
+        &format!("cargo +nightly fuzz build {target}"),
+        Command::new("cargo").args(["+nightly", "fuzz", "build", "--target", host, target]),
     )?;
-    println!("▶ fuzz_decode ({seconds} 秒、seed {seed})");
+    println!("▶ {target} ({seconds} 秒、seed {seed})");
     // 出力は受けて、クラッシュが見つかったときは出さない: 公開のログに入力とスタックを出さない (-close_fd_mask=3 に加えて、こちらでも受けて出さない)
     let prefix = format!("-artifact_prefix={}/", artifacts.display());
     let output = Command::new("cargo")
-        .args([
-            "+nightly",
-            "fuzz",
-            "run",
-            "--target",
-            &host,
-            "fuzz_decode",
-            "--",
-        ])
+        .args(["+nightly", "fuzz", "run", "--target", host, target, "--"])
         .arg(format!("-max_total_time={seconds}"))
         .arg("-close_fd_mask=3")
         // 1 入力あたりの上限。既定の 1200 秒だと、ハングする入力 1 件で夜間ジョブが 20 分止まる
@@ -156,9 +171,9 @@ fn fuzz(seconds: u64, seed: u64, out_dir: &Path, summary: &mut Vec<String>) -> R
         .map_err(|e| format!("cargo fuzz を実行できません: {e}"))?;
     let status = output.status;
 
-    let crashes = list_crashes(&artifacts)?;
+    let crashes = list_crashes(artifacts)?;
     summary.push(format!(
-        "fuzz: ターゲット fuzz_decode、seed {seed}、クラッシュ {} 件",
+        "fuzz: ターゲット {target}、seed {seed}、クラッシュ {} 件",
         crashes.len()
     ));
     if crashes.is_empty() {
@@ -196,7 +211,11 @@ fn fuzz(seconds: u64, seed: u64, out_dir: &Path, summary: &mut Vec<String>) -> R
             .and_then(|n| n.split('-').next())
             .unwrap_or("crash")
             .to_owned();
-        let dst = artifacts.join(format!("{kind}-{:03}.age", i + 1));
+        // 上げる artifact は `fuzz-artifacts/*.age` (nightly.yml) なので、1 つ上に置く
+        let dst = artifacts
+            .parent()
+            .unwrap_or(artifacts)
+            .join(format!("{target}-{kind}-{:03}.age", i + 1));
         let ok = Command::new("age")
             .arg("-R")
             .arg(&recipients)
@@ -222,7 +241,7 @@ fn fuzz(seconds: u64, seed: u64, out_dir: &Path, summary: &mut Vec<String>) -> R
         encrypted.join(", ")
     ));
     Err(format!(
-        "fuzz_decode のクラッシュ {} 件 (暗号化できたもの {} 件。メンテナが手元で復号して再現する、09 §6.3)",
+        "{target} のクラッシュ {} 件 (暗号化できたもの {} 件。メンテナが手元で復号して再現する、09 §6.3)",
         crashes.len(),
         encrypted.len()
     ))

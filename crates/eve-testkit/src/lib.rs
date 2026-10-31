@@ -9,6 +9,7 @@
 
 mod ascii;
 mod clock;
+pub mod fuzzing;
 mod harness;
 mod headless;
 mod jobs;
