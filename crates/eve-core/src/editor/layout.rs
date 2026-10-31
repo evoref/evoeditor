@@ -20,6 +20,7 @@ use crate::document::Document;
 
 use super::state::EditorState;
 
+mod long;
 mod wrap;
 pub use wrap::{Affinity, WrapMode, WrapSettings};
 use wrap::{cursor_in_rows, wrap_line};

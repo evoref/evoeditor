@@ -33,4 +33,7 @@ pub use width::{
     display_col_to_byte, first_grapheme, grapheme_display, grapheme_indices, grapheme_width,
     invisible_marks, invisible_marks_text, is_width_risky, str_display_width,
 };
-pub use word::{ScriptClass, classify_grapheme, next_word_stop, prev_word_stop, word_boundaries};
+pub use word::{
+    ScriptClass, classify_grapheme, next_word_stop, next_word_stop_near, prev_word_stop,
+    prev_word_stop_near, word_boundaries,
+};
