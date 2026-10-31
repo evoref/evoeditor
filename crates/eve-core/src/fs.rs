@@ -99,6 +99,23 @@ pub trait FileSystem: Send + Sync {
         Err(FsError::new(FsErrorKind::Unsupported))
     }
 
+    /// `state_dir` の直下の小さな状態ファイル (`last_version.toml` など、05 §7.1) を読む。無ければ `NotFound`、
+    /// `state_dir` を使えなければ `Unsupported`。
+    fn read_state_file(&self, _name: &str) -> Result<Vec<u8>, FsError> {
+        Err(FsError::new(FsErrorKind::Unsupported))
+    }
+
+    /// `state_dir` の直下に小さな状態ファイルを、所有者のみ・原子的な置換で書く (NFR-505、05 §7.5 (b)。最終書込勝ち)。
+    /// `state_dir` が無ければ所有者のみで作る (起動経路では呼ばない)。
+    fn write_state_file(&self, _name: &str, _data: &[u8]) -> Result<(), FsError> {
+        Err(FsError::new(FsErrorKind::Unsupported))
+    }
+
+    /// 未知の書式の版の状態ファイルを `<name>.unsupported-<ts>` へ移して退避する (05 §7.5 (a)。消さない)。
+    fn set_aside_state_file(&self, _name: &str) -> Result<(), FsError> {
+        Err(FsError::new(FsErrorKind::Unsupported))
+    }
+
     /// ファイルを 1 つ消す (保存中フラグの掃除など)。存在しなければ `NotFound`。
     fn remove_file(&self, _path: &FsPath) -> Result<(), FsError> {
         Err(FsError::new(FsErrorKind::Other))

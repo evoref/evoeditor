@@ -254,6 +254,27 @@ impl FileSystem for WinFs {
         }
     }
 
+    fn read_state_file(&self, name: &str) -> Result<Vec<u8>, FsError> {
+        let sd = self
+            .state_dir()
+            .ok_or_else(|| FsError::new(FsErrorKind::Unsupported))?;
+        crate::state_file::read(sd, name)
+    }
+
+    fn write_state_file(&self, name: &str, data: &[u8]) -> Result<(), FsError> {
+        let sd = self
+            .state_dir()
+            .ok_or_else(|| FsError::new(FsErrorKind::Unsupported))?;
+        crate::state_file::write(sd, name, data)
+    }
+
+    fn set_aside_state_file(&self, name: &str) -> Result<(), FsError> {
+        let sd = self
+            .state_dir()
+            .ok_or_else(|| FsError::new(FsErrorKind::Unsupported))?;
+        crate::state_file::set_aside(sd, name)
+    }
+
     fn write_swap(&self, doc: &eve_core::DocSnapshot) -> Result<(), FsError> {
         // 状態ディレクトリを使えないときはスワップを無効のままにする (05 §7.1)
         let sd = self

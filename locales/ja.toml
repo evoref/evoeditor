@@ -373,7 +373,7 @@ list_next = "次へ"
 palette_open = "コマンド"
 
 [info.app]
-release_summary = "(版ごとに書く)"
+release_summary = "スワップと復旧、複数の文書、正規表現の検索と置換、折り返し、マウス、テーマの切替、英語の表示などに対応しました。詳しくはリリースノートを見てください"
 updated = "evoeditor {version} に更新しました: {summary}"
 
 [info.cli]

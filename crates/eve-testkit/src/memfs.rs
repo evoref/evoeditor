@@ -263,6 +263,11 @@ impl MemFs {
         self.st().inflight.clone()
     }
 
+    /// 置いてあるファイルのパス (昇順)。
+    pub fn paths(&self) -> Vec<String> {
+        self.st().files.keys().map(FsPath::display).collect()
+    }
+
     pub fn read(&self, path: &str) -> Option<Vec<u8>> {
         self.st()
             .files
@@ -444,7 +449,39 @@ fn step(s: &mut State, st: WriteStep) -> Result<(), FsError> {
     Ok(())
 }
 
+/// 状態ファイル (`read_state_file` など) を置く場所。`FixedPaths::default()` の `state_dir` と同じ。
+pub const MEMFS_STATE_DIR: &str = "/evo/state";
+
 impl FileSystem for MemFs {
+    fn read_state_file(&self, name: &str) -> Result<Vec<u8>, FsError> {
+        self.read(&format!("{MEMFS_STATE_DIR}/{name}"))
+            .ok_or_else(|| FsError::new(FsErrorKind::NotFound))
+    }
+
+    fn write_state_file(&self, name: &str, data: &[u8]) -> Result<(), FsError> {
+        self.set_file(
+            &FsPath::from(format!("{MEMFS_STATE_DIR}/{name}").as_str()),
+            data,
+        );
+        Ok(())
+    }
+
+    fn set_aside_state_file(&self, name: &str) -> Result<(), FsError> {
+        let from = FsPath::from(format!("{MEMFS_STATE_DIR}/{name}").as_str());
+        let data = self
+            .st()
+            .files
+            .remove(&from)
+            .map(|e| e.data)
+            .ok_or_else(|| FsError::new(FsErrorKind::NotFound))?;
+        let ts = self.clock.now().0;
+        self.set_file(
+            &FsPath::from(format!("{MEMFS_STATE_DIR}/{name}.unsupported-{ts}").as_str()),
+            &data,
+        );
+        Ok(())
+    }
+
     fn list_recovery_dirs(&self) -> Result<Vec<RecoveryDirEntry>, FsError> {
         Ok(self.st().recovery.clone())
     }

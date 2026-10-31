@@ -61,6 +61,8 @@ pub(super) enum Pending {
     },
     /// 起動時の退避ディレクトリの走査。
     RecoveryScan,
+    /// 前回起動した版の記録 (FR-518)。
+    LastVersion,
     /// スワップを書くジョブ (03 §10.2)。
     Swap { doc: DocumentId },
     /// スワップを消すジョブ。
@@ -337,6 +339,7 @@ impl EditorState {
                 | Pending::ConfigReload
                 | Pending::ThemeRead
                 | Pending::RecoveryScan
+                | Pending::LastVersion
                 | Pending::WriteRecovery { .. }
                 | Pending::Swap { .. }
                 | Pending::SwapDiscard { .. }
@@ -784,6 +787,7 @@ impl EditorState {
                 retried,
             } => self.finish_replace_unmappable(ask, revision, retried, r),
             Pending::RecoveryScan => self.finish_recovery_scan(r),
+            Pending::LastVersion => self.finish_last_version(r),
             Pending::ConfigReload => self.finish_config_reload(r),
             Pending::ThemeRead => self.finish_theme_read(r),
             Pending::Swap { doc } => self.finish_swap(doc, r),
@@ -1563,12 +1567,42 @@ impl EditorState {
         }
     }
 
-    /// 起動時に退避ディレクトリを走査するジョブを投入する (`open_initial` が呼ぶ)。
+    /// 起動時に退避ディレクトリを走査するジョブを投入する (`open_initial` が呼ぶ)。前回起動した版の記録 (FR-518) の
+    /// ジョブを先に積む (`io` は直列なので、退避の案内のほうが後に出て、メッセージ行に残る)。
     pub(super) fn start_recovery_scan(&mut self) {
+        let job = self.jobs.spawn(
+            None,
+            eve_view::Revision::INITIAL,
+            JobKind::LastVersion {
+                current: env!("CARGO_PKG_VERSION").to_owned(),
+            },
+        );
+        self.pending.insert(job, Pending::LastVersion);
         let job = self
             .jobs
             .spawn(None, eve_view::Revision::INITIAL, JobKind::RecoveryScan);
         self.pending.insert(job, Pending::RecoveryScan);
+    }
+
+    /// 更新後の初回起動なら、その版の要点を 1 行で出す (`info.app.updated`、07 §18.8)。それ以外は何もしない。
+    fn finish_last_version(&mut self, r: JobResult) {
+        if let JobResult::LastVersionChecked {
+            outcome: crate::LastVersionOutcome::Updated,
+            ..
+        } = r
+        {
+            let summary = self
+                .catalog()
+                .render("info.app.release_summary", &[], &|_| None);
+            self.show_message(
+                MessageLevel::Info,
+                "info.app.updated",
+                &[
+                    ("version", env!("CARGO_PKG_VERSION")),
+                    ("summary", &summary),
+                ],
+            );
+        }
     }
 
     /// 退避が残っていれば場所を案内する (`msg.recovery.found` / `found_rescue`、02 §9.3。中身は読まない)。

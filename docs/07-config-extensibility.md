@@ -1722,6 +1722,7 @@ lexopt は補完スクリプトを生成しない。`evoeditor --list-commands` 
 | 比較 | 記録が無い → 表示せず記録を作る。記録の版 < 現在の版 → 表示して記録を更新する。同じ → 何もしない。記録の版 > 現在の版 (ダウングレード) → 表示せず記録を現在の版に書き換える。記録が壊れている・版の文字列が不正 → 表示せず書き直す |
 | 表示 | 情報メッセージ 1 行。MessageKey `info.app.updated` (例: 「evoeditor {version} に更新しました: {summary}」)。`{summary}` は同梱の `info.app.release_summary` (その版の要点の 1 文。リリースのたびに同梱する全言語を同時に書き換える。メッセージ行の幅を超える部分は省略する)。詳しくはリリースノートを見るよう促すだけで、URL を開かない・取得しない |
 | 設定 | 設定キーを設けない (版ごとに 1 回だけ表示し、メッセージ履歴 (FR-505、v0.2) から読み直せる) |
+| 実装 (M9d、2026-10-31) | core の `JobKind::LastVersion` (`io` ワーカー。比較の本体は `last_version::check_and_record`)。起動時の開き方 (`open_initial`) が、最初のファイルの読込のジョブの **後**、退避の走査 (`RecoveryScan`) の **前** に積む (`io` は直列なので、ファイルを開くのを遅らせず、退避の案内のほうが後に出てメッセージ行に残る)。非対話の起動は `open_initial` を通らないので読み書きしない。読み書きは FileSystem Port の `read_state_file` / `write_state_file` / `set_aside_state_file` (Windows は `state_dir` を所有者のみで作り、一時ファイル + 置換で書く)。記録は自前の 2 行 (`format_version` / `last_run_version`) を `key = value` の行で読み、任意の `updated_at` は書かない。版の比較は SemVer の優先順位 (プレリリースは正式版より前)。更新と判定しても記録を書けなかったときは表示しない (書けないまま毎回出さないため)。未知の `format_version` は `last_version.toml.unsupported-<ts>` へ退避してから作り直す。05 §7.5 (a) の「警告」は、この記録ではメッセージ行に出さない (上の「失敗」の行と同じく、編集に関わらない記録の不具合で利用者の注意を引かない) |
 
 ---
 
