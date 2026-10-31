@@ -38,6 +38,8 @@ mod save;
 #[cfg(windows)]
 pub mod session;
 #[cfg(windows)]
+mod state_file;
+#[cfg(windows)]
 mod swap;
 #[cfg(windows)]
 mod swap_scan;

@@ -16,6 +16,7 @@ mod fspath;
 mod interrupted;
 mod io_jobs;
 mod jobs;
+mod last_version;
 mod leftover;
 mod paths;
 mod replacing;
@@ -51,6 +52,7 @@ pub use jobs::{
     ConfirmAsk, JobError, JobKind, JobPorts, JobRequest, JobResult, JobSpawner, MetaPurpose,
     OpenNotes, Ports, SaveStrategy, run_job,
 };
+pub use last_version::{LAST_VERSION_FILE, LastVersionOutcome};
 pub use leftover::{Leftover, LeftoverKind, LeftoverOp};
 pub use paths::Paths;
 pub use replacing::{ReplacingCount, ReplacingGuard};

@@ -21,6 +21,6 @@ pub use clock::ManualClock;
 pub use harness::Harness;
 pub use headless::{HeadlessFrontend, HeadlessProbe};
 pub use jobs::ManualJobSpawner;
-pub use memfs::{BytesSource, FsOp, MemFs, SourceFailure, WriteStep};
+pub use memfs::{BytesSource, FsOp, MEMFS_STATE_DIR, MemFs, SourceFailure, WriteStep};
 pub use paths::FixedPaths;
 pub use virtual_screen::{Attr, VirtualScreen, WidthConfig};

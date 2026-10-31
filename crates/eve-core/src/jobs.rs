@@ -64,6 +64,8 @@ pub enum JobKind {
     Metadata { path: FsPath, purpose: MetaPurpose },
     /// 起動時の退避ディレクトリの走査 (02 §9.3 の `RecoveryScan`。メインスレッドでは列挙しない)。
     RecoveryScan,
+    /// 前回起動した版の記録を読み、今の版 `current` と比べて書き直す (FR-518、07 §18.8)。
+    LastVersion { current: String },
     /// ファイルを開く (03 §9.2)。文字コードは判定する (03 §8.2) か、`opts.forced` で指定する。
     Open { path: FsPath, opts: OpenOptions },
     /// Snapshot を `encoding` で原子的に保存する (03 §9.3 / §8.6)。表現不能の文字があれば何も書かず `JobResult::Unmappable`。`expected` は書く前と置換の直前に照合する。
@@ -275,6 +277,11 @@ pub enum JobResult {
     LeftoverDone {
         job: JobId,
     },
+    /// 前回起動した版との比較の結果 (`LastVersion`)。
+    LastVersionChecked {
+        job: JobId,
+        outcome: crate::LastVersionOutcome,
+    },
     /// 単発の検索の結果。`found` は (一致, 文書の端を越えたか)。
     FindNextDone {
         job: JobId,
@@ -335,6 +342,7 @@ impl JobResult {
             | JobResult::SwapRead { job, .. }
             | JobResult::SwapRemoved { job }
             | JobResult::LeftoverDone { job }
+            | JobResult::LastVersionChecked { job, .. }
             | JobResult::UnmappableReplacement { job, .. }
             | JobResult::Unmappable { job, .. }
             | JobResult::ReplaceAllDone { job, .. }
@@ -411,6 +419,10 @@ pub fn run_job(
         return;
     }
     let result = match &req.kind {
+        JobKind::LastVersion { current } => JobResult::LastVersionChecked {
+            job: req.id,
+            outcome: crate::last_version::check_and_record(&*ports.fs, current),
+        },
         JobKind::RecoveryScan => JobResult::RecoveryFound {
             job: req.id,
             dirs: ports.fs.list_recovery_dirs().unwrap_or_default(),
