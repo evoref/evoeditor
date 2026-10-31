@@ -109,6 +109,15 @@ fn シグナルと致命的エラーは_restore_して終了する() {
             .step(&mut e.fe, HostMsg::Signal(SignalKind::Interrupt)),
         StepOutcome::Exit(ExitCode::INTERRUPTED)
     );
+    // SIGHUP (Unix) も同じ非対話の終了 (05 §11.1)
+    let mut eh = env();
+    eh.start();
+    assert_eq!(
+        eh.host
+            .step(&mut eh.fe, HostMsg::Signal(SignalKind::Hangup)),
+        StepOutcome::Exit(ExitCode::INTERRUPTED)
+    );
+    assert_eq!(eh.probe.restore_count(), 1);
     let mut e2 = env();
     e2.start();
     assert_eq!(

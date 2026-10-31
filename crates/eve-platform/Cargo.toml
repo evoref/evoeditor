@@ -52,3 +52,5 @@ windows-sys = { version = "0.61", features = [
 # Unix の API (xattr・renameat2・access)。unsafe は Unix 専用のモジュール `unix_fs` に閉じる (R5)
 [target.'cfg(unix)'.dependencies]
 libc = "0.2.191"
+# シグナルを自己パイプに変えて専用スレッドで受ける (05 §11.1)
+signal-hook = { version = "0.3.18", default-features = false, features = ["iterator"] }

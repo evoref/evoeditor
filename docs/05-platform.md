@@ -876,6 +876,12 @@ TUI では IME は端末が処理し、evoeditor は **ハードウェアカー�
 
 実装: `signal-hook` (crossterm が Unix で既に依存) でシグナルをフラグ/パイプに変換し、**専用のシグナルスレッド** が受ける。シグナルハンドラ内で `EditorState` に触れない。終了系シグナル (INT / TERM / HUP) の役割分担は §11.4 の「役割分担」のとおりで、シグナルスレッドが **先に退避を書き、その後** `HostMsg::Signal` を送る。
 
+**Linux の実装 (v0.2 の M7 の 4 本目、2026-11-01。README §3.9)**: eve-platform の Host 部品として次を入れた。bin での配線 (Windows のコンソールハンドラと同じ手順) とサスペンド (§11.3) は、bin が Linux で起動する 5 本目で行う。
+- `signals::start(cb)`: SIGINT / SIGTERM / SIGHUP / SIGCONT を `signal-hook` の自己パイプで受け、シグナルスレッド `eve-signal` で `cb(UnixSignal)` を呼ぶ (登録した後は既定の終了は起きない)。eve-host の `SignalKind` に `Hangup` を足した (SIGCONT は終了要求ではないので、`HostMsg` への写像は 5 本目で決める)。
+- `signals::die_by_signal(signo)`: §11.5 の終了コードの手順 (`SIG_DFL` に戻す → マスクを外す → `raise` → 終わらなければ `_exit(128 + signo)`)。
+- `term::emergency_restore(fd, bytes, saved_mode, restored)`: Windows と同じ呼び方。`saved_mode` は起動時の termios (`term::save_mode(fd)`)。使い捨てのスレッドで `write(2)` と `tcsetattr(TCSANOW)` を行い、最大 200 ms 待つ。書込の失敗 (SIGHUP で端末が無い) は無視する。
+- `term::install_crash_restore(fd, bytes, saved_mode, restored)`: SIGSEGV / SIGBUS / SIGABRT / SIGILL / SIGFPE (表の最後の行) のハンドラ。`SA_ONSTACK` で付け、初期化済みの値だけを読んで `write(2)` と `tcsetattr` で端末を戻し、**元のハンドラに付け替えて返る** (同じ障害が再び起きて元の動作 = Rust のスタックあふれの表示・コアダンプになる。「既定動作へ再送」の具体化)。「復元済み」のフラグは frontend と共有する。
+
 ### 11.2 Windows コンソールイベント
 
 **v0.1 で実装する** (CTRL_C / CTRL_BREAK / CTRL_CLOSE。セッション終了の隠しウィンドウは v0.2)。
