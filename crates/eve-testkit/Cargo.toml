@@ -40,3 +40,8 @@ harness = false
 [[bench]]
 name = "bm_instr"
 harness = false
+
+# NFR-501 AC-2 の無通信の検査のシナリオ (cargo xtask no-network が strace の下で走らせる、docs/09 §3.6)
+[[bench]]
+name = "no_network"
+harness = false

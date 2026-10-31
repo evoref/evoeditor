@@ -189,6 +189,26 @@ jobs:
           shared-key: windows
       - run: cargo xtask check-themes
 
+  # 無通信の検査 (docs/09 §3.6、01 NFR-501 AC-2、v0.2): ヘッドレスのシナリオ (開く → 編集 → 保存 → 終了) を
+  # strace -f -e trace=network の下で走らせ、ネットワーク系のシステムコールが 0 であることを確かめる。2 段目の必須チェック候補。
+  no-network:
+    name: no-network
+    needs: check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Rust (stable)
+        run: rustup toolchain install stable --profile minimal --no-self-update && rustup default stable
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          shared-key: linux
+      - name: strace
+        run: sudo apt-get update && sudo apt-get install -y strace
+      - run: cargo xtask no-network
+
   # 配布ビルドの確認 (docs/09 §6.2 の build-release-smoke): feature・目印の文字列・隠しオプション・CRT の静的リンク。
   # exe のサイズ (BM-205) を artifact に置く。2 段目の必須チェック候補 (この PR が merge された直後に、ブランチ保護の必須に加えるかを決める)。
   build-release-smoke:

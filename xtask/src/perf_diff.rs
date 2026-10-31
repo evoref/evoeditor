@@ -18,6 +18,15 @@ const TIME_LIMIT: f64 = 10.0;
 
 /// `bm_instr` をビルドし、実行ファイルのパスを返す。`manifest` が `None` なら今の作業ツリー。
 fn build(manifest: Option<&Path>, target_dir: Option<&Path>) -> Result<Option<PathBuf>, String> {
+    build_bench("bm_instr", manifest, target_dir)
+}
+
+/// eve-testkit の bench `name` をビルドし、実行ファイルのパスを返す (`no-network` も使う)。失敗したら `None`。
+pub fn build_bench(
+    name: &str,
+    manifest: Option<&Path>,
+    target_dir: Option<&Path>,
+) -> Result<Option<PathBuf>, String> {
     let mut cmd = Command::new("cargo");
     cmd.args([
         "bench",
@@ -25,7 +34,7 @@ fn build(manifest: Option<&Path>, target_dir: Option<&Path>) -> Result<Option<Pa
         "-p",
         "eve-testkit",
         "--bench",
-        "bm_instr",
+        name,
         "--message-format=json-render-diagnostics",
     ]);
     if let Some(m) = manifest {
@@ -48,7 +57,7 @@ fn build(manifest: Option<&Path>, target_dir: Option<&Path>) -> Result<Option<Pa
             continue;
         };
         if v["reason"] == "compiler-artifact"
-            && v["target"]["name"] == "bm_instr"
+            && v["target"]["name"] == name
             && let Some(exe) = v["executable"].as_str()
         {
             return Ok(Some(PathBuf::from(exe)));
