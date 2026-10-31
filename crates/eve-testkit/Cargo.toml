@@ -17,6 +17,7 @@ eve-core = { version = "0.1.0", path = "../eve-core" }
 eve-view = { version = "0.1.0", path = "../eve-view" }
 eve-host = { version = "0.1.0", path = "../eve-host" }
 eve-config = { version = "0.1.0", path = "../eve-config" }
+eve-text = { version = "0.1.0", path = "../eve-text" }
 # シナリオ DSL (TOML) の読み込み (docs/11 §6.3、v0.2)
 serde = { version = "1.0.229", features = ["derive"] }
 toml = "1.1.8"
