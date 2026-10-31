@@ -548,7 +548,7 @@ $ cargo run -p evoeditor --features headless -- --headless --rpc stdio --fake-po
 | `agent-ok` (Issue) | エージェントに委譲してよい | `/task` で選べる |
 | `agent-pr` (PR) | エージェントが作った PR | `reviewer` エージェントの事前レビュー、人間の承認必須 |
 | `area:<frontend>` (PR、v0.2) | frontend crate の PR (`area:tui` 等) | 09 §6.2 `area-check` (v0.2) が `eve-core` / `eve-view` / `eve-config` の変更を拒否する (02 §4.3 R9)。v0.1 はレビューで確かめる |
-| `contract-change` (PR) | `eve-view` を変更する | §8.4 の手続き。v0.1 は記録のため手で付ける (`area-check` による要求は v0.2) |
+| `contract-change` (PR) | `eve-view` を変更する | §8.4 の手続き。v0.1 は記録のため手で付ける (`area-check` による要求は v0.2。M10 で `area.yml` を入れた: このラベルの無い PR が `crates/eve-view/` を変えると失敗する) |
 | `spec-change` (PR) | docs の **本編** (`docs/*.md`。`00`〜`12` と README) を変更する (人間のみ)。`docs/compat/`・`docs/perf/`・`docs/reference/` (記録と生成物) と `tests/ac-checklist.toml` だけの変更は対象外 | OQ / ADR の参照必須 (00 §7.1) |
 | `changelog: none` | ユーザー可視の変更なし | 09 §8.1 の CHANGELOG ゲートを免除 |
 | `needs-oq` | 仕様の疑義あり。PR 停止中 | §4.5 |

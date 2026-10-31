@@ -1,0 +1,47 @@
+# PR の変更ファイルとラベルの整合 (docs/09 §6.2 の `area-check`、§7 R9、docs/11 §8.3、v0.2)。
+# ラベルの付け外しでも走らせるので ci.yml とは別のワークフローにする (pull_request の labeled / unlabeled)。
+# 規則の本体は cargo xtask area-check。ラベルはイベントの内容から渡す (書込み権限は要らない)。
+name: area
+
+on:
+  pull_request:
+    branches: [develop, main]
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: area-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+# アクションはコミット SHA で固定する (docs/09 §6.5)。
+# actions/checkout v7.0.1          3d3c42e5aac5ba805825da76410c181273ba90b1
+# Swatinem/rust-cache v2.9.3       d1527c8f67ef9af357290475d4af4b0fab8f12e0
+
+jobs:
+  area-check:
+    name: area-check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Rust (stable)
+        run: rustup toolchain install stable --profile minimal --no-self-update && rustup default stable
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          shared-key: linux
+      - name: cargo xtask area-check
+        env:
+          # ラベル名は利用者の入力なので、式の展開ではなく環境変数で渡す (スクリプトへの差し込みを避ける、09 §6.5)
+          LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: cargo xtask area-check --base "$BASE" --head "$HEAD" --labels "$LABELS"

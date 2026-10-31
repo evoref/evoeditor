@@ -238,8 +238,8 @@ M10 は、v0.1 で手書きの代用にしていた開発基盤 (11 §0.1 の表
 4. **シナリオ DSL**: 11 §6.3 の書式の TOML、`xtask scenario run` / `scenario check` / `--print-frame`、`tests/scenarios/`。Harness の試験から代表を数本移して書式を確かめる。**済み** (2026-10-31、11 §6.3 の「M10 の実装」。Frame のゴールデンなどは後の PR)。
 5. **`fuzz_editor`**: 09 §3.3 の入力列の fuzz (各ステップで Frame まで作り、不変条件と無害化を検査) を `fuzz/` に足し、夜間ジョブに載せる (NFR-305)。**済み** (2026-10-31、09 §3.3 の表の `fuzz_editor` の行)。手元で回して 1 件の不具合を見つけて直した (読込中に表示したバッファの読込が失敗すると Frame を作れなくなる。回帰試験 `open_failed_while_shown.rs`)。
 6. **命令数ベンチ (iai-callgrind、Linux) と wall-clock の A/B**: 主要 5 本程度の命令数で 5% 超、`bench.yml` の同一ジョブ内 A/B で 10% 超を警告する (NFR-703)。**済み** (2026-10-31、09 §5.4 の「M10 の実装」。iai-callgrind の crate は使わず callgrind を直接呼ぶ。A/B は `bench.yml` ではなく PR ごとの `perf.yml`)。
-7. **クラッシュ一貫性の夜間ジョブ**: LazyFS を第一候補にする (OQ-143。動かなければ dm-log-writes)。保存手順の各切断点で元ファイルか新ファイルが完全に残ることを検査する (NFR-301)。
-8. **`area-check`**: frontend の PR が `eve-core` / `eve-view` / `eve-config` を変えていないかと、`eve-view` を変える PR のラベル (09 §6.2・§7 R9)。
+7. **クラッシュ一貫性の夜間ジョブ**: LazyFS を第一候補にする (OQ-143。動かなければ dm-log-writes)。保存手順の各切断点で元ファイルか新ファイルが完全に残ることを検査する (NFR-301)。**M7 へ移した** (2026-10-31): LazyFS は Linux のファイルシステムで保存手順を試す道具で、Unix の保存の実装 (rename + fsync、05 §4.3) は M7 で入る。今は試す対象が無い (08 §2.3.1 の M7 の行)。
+8. **`area-check`**: frontend の PR が `eve-core` / `eve-view` / `eve-config` を変えていないかと、`eve-view` を変える PR のラベル (09 §6.2・§7 R9)。**済み** (2026-10-31、09 §6.2 の `area-check` の行。`area.yml`)。
 9. **NFR-203 のプロセス全体の上限の判定**: 複数文書で 256 MiB を超える編集を測り、記録する。
 10. **英語の利用者向け文書と簡易テスト**: README・リリースノートの英語版 (NFR-603)。NFR-601 の 3 名の簡易テストは **人が行う** ので、手順と記録の書式 (`docs/review/` の下) を用意し、所見を受けて直す (ゲートにしない)。テストの相手は手配済み (2026-10-31)。
 
