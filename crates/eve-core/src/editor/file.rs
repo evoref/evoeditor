@@ -1650,12 +1650,13 @@ impl EditorState {
             } => {
                 let lossy = format.roundtrip.lossy_lines;
                 let encoding = format.encoding;
+                let long_lines = format.long_lines;
                 let mut d = Document::from_text(text, format);
                 d.path = Some(path.clone());
                 d.disk_stamp = Some(stamp);
                 d.read_only = detected;
                 self.put_document(doc_id, d);
-                if detected.contains(crate::document::ReadOnlyReason::LongLine) {
+                if long_lines > 0 {
                     self.message(MessageLevel::Info, "info.open.long_line", &path.display());
                 }
                 if changed_during_load {

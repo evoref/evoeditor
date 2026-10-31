@@ -29,9 +29,9 @@ mod eol;
 mod search;
 pub use document::{
     Applied, AppliedTx, ApplyError, DisplaySettings, Document, EolStats, HistoryStep,
-    LONG_LINE_THRESHOLD, LONG_LINE_VISIBLE, LoadState, NodeId, Origin, ReadOnlyReason,
-    ReadOnlyReasons, RecordOutcome, TextFormat, Transaction, TransactionMeta, UndoBudget,
-    UndoGroupHint, UndoHistory, trim_to_total_budget,
+    LONG_LINE_THRESHOLD, LoadState, NodeId, Origin, ReadOnlyReason, ReadOnlyReasons, RecordOutcome,
+    TextFormat, Transaction, TransactionMeta, UndoBudget, UndoGroupHint, UndoHistory,
+    count_long_lines, trim_to_total_budget,
 };
 pub use editor::{
     Affinity, ArgValue, Args, Binding, CONFIG_FILE, CommandCtx, CommandInvocation, CommandKind,

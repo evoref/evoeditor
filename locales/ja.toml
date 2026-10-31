@@ -403,7 +403,7 @@ enabled = "マウスの操作を有効にしました"
 already_open = "{path} は既に開いています"
 cancelled = "{path} の読込を取り消しました"
 guess_unsupported = "{path} の文字コードは {guess} と推定されましたが、この版では扱えないため {encoding} として開きました / 正しく見えないときは、文字コードを指定して開き直す ({key:file.reopen_with_encoding}) で選び直してください"
-long_line = "{path} には非常に長い行があるため、読み取り専用で開きました (長い行は先頭の一部だけを表示します)"
+long_line = "{path} には非常に長い行があります。その行は文字を 1 つずつ近似して表示します (結合文字が分かれて見えることがあります)"
 lossy_roundtrip = "この文字コードでは、編集した箇所の一部の文字が保存時に別のバイト列になることがあります ({count} 箇所)"
 new_file = "{path} は無いため、新しいファイルとして開きました (保存すると作成します)"
 redetected = "文字コードを {encoding} と判定し直しました"
@@ -920,7 +920,6 @@ binary = "バイナリファイル"
 file_attribute = "読み取り専用属性のファイル"
 invalid_bytes = "不正なバイトを含むファイル"
 large_file_viewer = "巨大なファイル (読み取り専用で開く指定)"
-long_line = "非常に長い行を含むファイル"
 no_write_permission = "書き込む権限のないファイル"
 stateful_encoding_with_invalid_bytes = "不正なバイトを含む ISO-2022-JP のファイル"
 user_requested = "読み取り専用で開く指定 (`--readonly`)"
@@ -945,8 +944,8 @@ long = "[保存中]"
 short = "保存中"
 
 [status.degraded.long_line]
-long = "[長い行: 一部表示]"
-short = "一部"
+long = "[長い行: 近似表示]"
+short = "近似"
 
 [status.encoding]
 bom = "{encoding} BOM"
@@ -1025,9 +1024,6 @@ ime = "IME が ON のとき、文字キーは確認ダイアログのアクセ�
 chord = "Ctrl+K で始まるキーは、Ctrl+K を押してから次のキーを押します。Esc で取り消せます"
 alt = "Alt が届かない端末 (Terminal.app の既定など) では、Ctrl+K を使う代替のキーがあります"
 readme = "端末ごとの設定と既知の制約は README に書いてあります"
-
-[ui.long_line]
-omitted = "… (以下 {bytes} バイト省略)"
 
 [ui.palette.category]
 app = "アプリ"

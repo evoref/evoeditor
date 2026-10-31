@@ -630,7 +630,11 @@ impl EditorState {
             view.scroll.top = text.line_to_byte(LineIdx(top_line));
             // 折り返し: 先頭が同じ論理行のままなら表示行の番号を新しい行数に収め、動いたら行頭の表示行に戻す
             if view.scroll.wrap_idx > 0 {
-                view.scroll.wrap_idx = if view.wrap.is_on() && top == view.scroll.top {
+                // 長大行を含む文書は折り返さない (03 §11.5.1)
+                view.scroll.wrap_idx = if view.wrap.is_on()
+                    && document.format.long_lines == 0
+                    && top == view.scroll.top
+                {
                     let cols = super::layout::wrap_width(document, viewport);
                     let n = super::layout::line_rows(document, top_line, view.wrap, cols).len();
                     view.scroll.wrap_idx.min(n.saturating_sub(1) as u32)
@@ -857,14 +861,7 @@ impl EditorState {
         let Some(d) = self.documents.get(&v.doc) else {
             return;
         };
-        let mut sel = sel.normalized(d.text());
-        // 長大行はカーソルと選択を表示範囲 (先頭 64 KiB) に収める (NFR-106、03 §11.5)
-        if d.read_only
-            .contains(crate::document::ReadOnlyReason::LongLine)
-        {
-            sel = clamp_to_visible(d, sel);
-        }
-        v.selection = sel;
+        v.selection = sel.normalized(d.text());
         v.goal_dcol = None;
         v.cursor_affinity = Default::default();
         self.needs_render = true;
@@ -899,31 +896,15 @@ impl EditorState {
             "caps.can_suspend" => b(self.caps.can_suspend),
             "caps.mouse" => b(self.caps.mouse),
             // 折り返し中 (設定キー `view.wrap` とは別名、07 §7.1)
-            "view.wrapped" => b(view.is_some_and(|v| v.wrap.is_on())),
+            "view.wrapped" => b(view.is_some_and(|v| {
+                v.wrap.is_on()
+                    && self
+                        .documents
+                        .get(&v.doc)
+                        .is_some_and(|d| d.format.long_lines == 0)
+            })),
             "editor" => b(true),
             _ => None,
         }
     }
-}
-
-/// 長大行の中の位置を、その行の表示の終端 (先頭 64 KiB) に収める。
-fn clamp_to_visible(d: &Document, sel: Selection) -> Selection {
-    use eve_text::{Range, TextRead};
-    let t = d.text();
-    let clamp = |p: ByteOff| {
-        let l = t.byte_to_line(p);
-        let (ls, le) = (t.line_to_byte(l).0, t.line_end_byte(l).0);
-        let ve = super::layout::line_visible_end(d, ls, le);
-        if ve < le && p.0 > ve && p.0 <= le {
-            ByteOff(ve)
-        } else {
-            p
-        }
-    };
-    let ranges: Vec<Range> = sel
-        .ranges()
-        .iter()
-        .map(|r| Range::new(clamp(r.anchor), clamp(r.head)))
-        .collect();
-    Selection::new(ranges, sel.primary_index()).unwrap_or(sel)
 }
