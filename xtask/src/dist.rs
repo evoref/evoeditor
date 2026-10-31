@@ -26,6 +26,8 @@ const FILES: &[(&str, &str)] = &[
     ("NOTICE", "NOTICE"),
     ("THIRD-PARTY-NOTICES.md", "THIRD-PARTY-NOTICES.md"),
     ("README.md", "dist/README.md"),
+    // 英語版 (v0.2、M10。日本語版が正、09 §11.3)
+    ("README.en.md", "dist/README.en.md"),
     ("config.example.toml", "dist/config.example.toml"),
 ];
 

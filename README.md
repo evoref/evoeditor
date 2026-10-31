@@ -1,5 +1,7 @@
 # evoeditor
 
+日本語 | [English](README.en.md)
+
 Rust 製のテキストエディタです。Windows の端末 (Windows Terminal / conhost) で、日本語を快適に編集することを最初の目標にしています。
 
 > **v0.1.0 (最小核) をリリースしました。** 配布物は [GitHub Releases](https://github.com/evoref/evoeditor/releases) の Windows 11 (x86_64) の zip です。インストール・更新・署名の検証・既知の制約は、同梱の README (`dist/README.md`) にあります。
