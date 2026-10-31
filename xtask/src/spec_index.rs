@@ -16,21 +16,21 @@ use crate::util::{read_text, rust_files, workspace_root};
 const INDEX: &str = "docs/spec-index.toml";
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-struct Section {
-    id: String,
-    file: String,
-    line: usize,
-    end: usize,
+pub(crate) struct Section {
+    pub(crate) id: String,
+    pub(crate) file: String,
+    pub(crate) line: usize,
+    pub(crate) end: usize,
     level: usize,
-    title: String,
+    pub(crate) title: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-struct Id {
-    id: String,
-    file: String,
-    line: usize,
-    section: String,
+pub(crate) struct Id {
+    pub(crate) id: String,
+    pub(crate) file: String,
+    pub(crate) line: usize,
+    pub(crate) section: String,
     /// 一意でなければならない種類 (規範行 ID・ADR・OQ)。
     unique: bool,
 }
@@ -98,6 +98,8 @@ fn scan_doc(file: &str, doc: &str, text: &str, sections: &mut Vec<Section>, ids:
     let mut in_fence = false;
     let mut current = String::new();
     let mut seen_plain: BTreeSet<String> = BTreeSet::new();
+    // 10 の「OQ」「ADR」の列で始まる表の中か (番号だけの行 `| 117 |`・`| [0004](#…) |` を `OQ-117`・`ADR-0004` として拾う)
+    let mut table_prefix: Option<&'static str> = None;
     let push = |ids: &mut Vec<Id>, id: &str, line: usize, section: &str, unique: bool| {
         ids.push(Id {
             id: id.to_owned(),
@@ -142,9 +144,36 @@ fn scan_doc(file: &str, doc: &str, text: &str, sections: &mut Vec<Section>, ids:
             continue;
         }
         // 表の先頭列
-        if let Some(rest) = l.trim_start().strip_prefix('|') {
+        let row = l.trim_start().strip_prefix('|');
+        if row.is_none() {
+            table_prefix = None;
+        }
+        if let Some(rest) = row {
             let cell = strip_marks(rest.split('|').next().unwrap_or(""));
-            if is_row_id(cell) {
+            match cell {
+                "OQ" => table_prefix = Some("OQ"),
+                "ADR" => table_prefix = Some("ADR"),
+                "OQ / ADR" => table_prefix = Some("OQ / ADR"),
+                _ => {}
+            }
+            let num = cell
+                .strip_prefix('[')
+                .and_then(|c| c.split_once(']'))
+                .map_or(cell, |(n, _)| n);
+            if let Some(pre) = table_prefix
+                && !num.is_empty()
+                && num.bytes().all(|b| b.is_ascii_digit())
+            {
+                let pre = match pre {
+                    "OQ / ADR" if num.len() == 4 => "ADR",
+                    "OQ / ADR" => "OQ",
+                    p => p,
+                };
+                let id = format!("{pre}-{num}");
+                if seen_plain.insert(id.clone()) {
+                    push(ids, &id, ln, &current, false);
+                }
+            } else if is_row_id(cell) {
                 push(ids, cell, ln, &current, true);
             } else if is_plain_id(cell) && seen_plain.insert(cell.to_owned()) {
                 push(ids, cell, ln, &current, false);
@@ -180,7 +209,7 @@ fn scan_doc(file: &str, doc: &str, text: &str, sections: &mut Vec<Section>, ids:
     }
 }
 
-fn doc_files(root: &Path) -> Result<Vec<(String, String)>, String> {
+pub(crate) fn doc_files(root: &Path) -> Result<Vec<(String, String)>, String> {
     let mut out = Vec::new();
     let dir = root.join("docs");
     let mut names: Vec<String> = std::fs::read_dir(&dir)
@@ -197,7 +226,7 @@ fn doc_files(root: &Path) -> Result<Vec<(String, String)>, String> {
     Ok(out)
 }
 
-fn scan(root: &Path) -> Result<(Vec<Section>, Vec<Id>), String> {
+pub(crate) fn scan(root: &Path) -> Result<(Vec<Section>, Vec<Id>), String> {
     let mut sections = Vec::new();
     let mut ids = Vec::new();
     for (name, doc) in doc_files(root)? {
@@ -297,7 +326,7 @@ fn spec_refs(root: &Path) -> Vec<(String, String)> {
 }
 
 /// 文字列中の `NN §a.b` (と `README §a.b`) を取り出す。`/ §6.2` のような文書番号の無い略記は数えない。
-fn section_refs_in(s: &str) -> Vec<String> {
+pub(crate) fn section_refs_in(s: &str) -> Vec<String> {
     let mut out = Vec::new();
     let mut rest = s;
     while let Some(p) = rest.find(" §") {

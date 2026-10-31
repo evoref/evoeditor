@@ -4647,7 +4647,7 @@ title = "テストデータ (コーパス)"
 id = "09 §5"
 file = "docs/09-testing-quality.md"
 line = 311
-end = 386
+end = 387
 title = "性能ベンチマーク"
 
 [[section]]
@@ -4661,224 +4661,224 @@ title = "二層構成"
 id = "09 §5.2"
 file = "docs/09-testing-quality.md"
 line = 322
-end = 366
+end = 367
 title = "NFR とベンチ ID の対応"
 
 [[section]]
 id = "09 §5.3"
 file = "docs/09-testing-quality.md"
-line = 367
-end = 376
+line = 368
+end = 377
 title = "基準環境 (OQ-23) と記録"
 
 [[section]]
 id = "09 §5.4"
 file = "docs/09-testing-quality.md"
-line = 377
-end = 386
+line = 378
+end = 387
 title = "回帰の運用"
 
 [[section]]
 id = "09 §6"
 file = "docs/09-testing-quality.md"
-line = 387
-end = 487
+line = 388
+end = 488
 title = "CI (GitHub Actions)"
 
 [[section]]
 id = "09 §6.1"
 file = "docs/09-testing-quality.md"
-line = 389
-end = 400
+line = 390
+end = 401
 title = "ワークフロー一覧"
 
 [[section]]
 id = "09 §6.2"
 file = "docs/09-testing-quality.md"
-line = 401
-end = 430
+line = 402
+end = 431
 title = "`ci.yml` のジョブ"
 
 [[section]]
 id = "09 §6.3"
 file = "docs/09-testing-quality.md"
-line = 431
-end = 445
+line = 432
+end = 446
 title = "夜間ジョブ"
 
 [[section]]
 id = "09 §6.4"
 file = "docs/09-testing-quality.md"
-line = 446
-end = 465
+line = 447
+end = 466
 title = "テストマトリクス (OS × アーキ)"
 
 [[section]]
 id = "09 §6.5"
 file = "docs/09-testing-quality.md"
-line = 466
-end = 487
+line = 467
+end = 488
 title = "セキュリティ (CI 自体)"
 
 [[section]]
 id = "09 §7"
 file = "docs/09-testing-quality.md"
-line = 488
-end = 525
+line = 489
+end = 526
 title = "依存規則 R1〜R11 の機械検査"
 
 [[section]]
 id = "09 §7.1"
 file = "docs/09-testing-quality.md"
-line = 509
-end = 525
+line = 510
+end = 526
 title = "外部の消費者向けの公開 API 互換とライセンス検査"
 
 [[section]]
 id = "09 §8"
 file = "docs/09-testing-quality.md"
-line = 526
-end = 653
+line = 527
+end = 654
 title = "品質ゲート"
 
 [[section]]
 id = "09 §8.1"
 file = "docs/09-testing-quality.md"
-line = 528
-end = 543
+line = 529
+end = 544
 title = "PR マージゲート (全部必須)"
 
 [[section]]
 id = "09 §8.2"
 file = "docs/09-testing-quality.md"
-line = 544
-end = 570
+line = 545
+end = 571
 title = "リリースゲート (版の完了・各リリース)"
 
 [[section]]
 id = "09 §8.3"
 file = "docs/09-testing-quality.md"
-line = 571
-end = 578
+line = 572
+end = 579
 title = "トレーサビリティ行列"
 
 [[section]]
 id = "09 §8.4"
 file = "docs/09-testing-quality.md"
-line = 579
-end = 597
+line = 580
+end = 598
 title = "レビューチェックリスト (R)"
 
 [[section]]
 id = "09 §8.5"
 file = "docs/09-testing-quality.md"
-line = 598
-end = 653
+line = 599
+end = 654
 title = "v0.1 Must の検証手段の対応 (チェックリストの初版)"
 
 [[section]]
 id = "09 §9"
 file = "docs/09-testing-quality.md"
-line = 654
-end = 722
+line = 655
+end = 723
 title = "リリース手順"
 
 [[section]]
 id = "09 §9.1"
 file = "docs/09-testing-quality.md"
-line = 656
-end = 661
+line = 657
+end = 662
 title = "バージョニングと頻度"
 
 [[section]]
 id = "09 §9.2"
 file = "docs/09-testing-quality.md"
-line = 662
-end = 710
+line = 663
+end = 711
 title = "手順"
 
 [[section]]
 id = "09 §9.3"
 file = "docs/09-testing-quality.md"
-line = 711
-end = 716
+line = 712
+end = 717
 title = "ホットフィックス"
 
 [[section]]
 id = "09 §9.4"
 file = "docs/09-testing-quality.md"
-line = 717
-end = 722
+line = 718
+end = 723
 title = "ロールバック"
 
 [[section]]
 id = "09 §10"
 file = "docs/09-testing-quality.md"
-line = 723
-end = 759
+line = 724
+end = 760
 title = "クラッシュ報告・テレメトリ"
 
 [[section]]
 id = "09 §10.1"
 file = "docs/09-testing-quality.md"
-line = 725
-end = 735
+line = 726
+end = 736
 title = "方針"
 
 [[section]]
 id = "09 §10.2"
 file = "docs/09-testing-quality.md"
-line = 736
-end = 752
+line = 737
+end = 753
 title = "クラッシュログの内容 (NFR-302 / 504)"
 
 [[section]]
 id = "09 §10.3"
 file = "docs/09-testing-quality.md"
-line = 753
-end = 759
+line = 754
+end = 760
 title = "デバッグ支援 (明示 opt-in)"
 
 [[section]]
 id = "09 §11"
 file = "docs/09-testing-quality.md"
-line = 760
-end = 801
+line = 761
+end = 802
 title = "ドキュメント運用"
 
 [[section]]
 id = "09 §11.1"
 file = "docs/09-testing-quality.md"
-line = 762
-end = 769
+line = 763
+end = 770
 title = "仕様書 (docs/00〜12)"
 
 [[section]]
 id = "09 §11.2"
 file = "docs/09-testing-quality.md"
-line = 770
-end = 785
+line = 771
+end = 786
 title = "生成ドキュメント (実装との乖離防止)"
 
 [[section]]
 id = "09 §11.3"
 file = "docs/09-testing-quality.md"
-line = 786
-end = 792
+line = 787
+end = 793
 title = "ユーザー向けドキュメント"
 
 [[section]]
 id = "09 §11.4"
 file = "docs/09-testing-quality.md"
-line = 793
-end = 801
+line = 794
+end = 802
 title = "貢献者向け"
 
 [[section]]
 id = "09 §12"
 file = "docs/09-testing-quality.md"
-line = 802
-end = 826
+line = 803
+end = 827
 title = "未決事項"
 
 [[section]]
@@ -5025,7 +5025,7 @@ title = "リポジトリ構成"
 id = "11 §2"
 file = "docs/11-dev-workflow.md"
 line = 111
-end = 167
+end = 168
 title = "crate の粒度とモジュール所有境界"
 
 [[section]]
@@ -5046,273 +5046,273 @@ title = "`eve-core` のモジュール所有境界"
 id = "11 §2.3"
 file = "docs/11-dev-workflow.md"
 line = 139
-end = 167
+end = 168
 title = "`docs/ownership.toml`"
 
 [[section]]
 id = "11 §3"
 file = "docs/11-dev-workflow.md"
-line = 168
-end = 219
+line = 169
+end = 220
 title = "規範行 ID と `spec:` / `verifies:`"
 
 [[section]]
 id = "11 §3.1"
 file = "docs/11-dev-workflow.md"
-line = 172
-end = 185
+line = 173
+end = 186
 title = "規範行 ID の付け方"
 
 [[section]]
 id = "11 §3.2"
 file = "docs/11-dev-workflow.md"
-line = 186
-end = 199
+line = 187
+end = 200
 title = "`spec:` と `verifies:` の記法"
 
 [[section]]
 id = "11 §3.3"
 file = "docs/11-dev-workflow.md"
-line = 200
-end = 219
+line = 201
+end = 220
 title = "`xtask spec-index` と `xtask trace`"
 
 [[section]]
 id = "11 §4"
 file = "docs/11-dev-workflow.md"
-line = 220
-end = 287
+line = 221
+end = 288
 title = "タスクの単位と PR の形"
 
 [[section]]
 id = "11 §4.0"
 file = "docs/11-dev-workflow.md"
-line = 222
-end = 225
+line = 223
+end = 226
 title = "最初のタスク (M1 の縦切り)"
 
 [[section]]
 id = "11 §4.1"
 file = "docs/11-dev-workflow.md"
-line = 226
-end = 237
+line = 227
+end = 238
 title = "タスクの単位"
 
 [[section]]
 id = "11 §4.2"
 file = "docs/11-dev-workflow.md"
-line = 238
-end = 258
+line = 239
+end = 259
 title = "タスクテンプレート"
 
 [[section]]
 id = "11 §4.3"
 file = "docs/11-dev-workflow.md"
-line = 259
-end = 264
+line = 260
+end = 265
 title = "バックログの持ち方"
 
 [[section]]
 id = "11 §4.4"
 file = "docs/11-dev-workflow.md"
-line = 265
-end = 276
+line = 266
+end = 277
 title = "PR の形"
 
 [[section]]
 id = "11 §4.5"
 file = "docs/11-dev-workflow.md"
-line = 277
-end = 287
+line = 278
+end = 288
 title = "仕様の変更規律"
 
 [[section]]
 id = "11 §5"
 file = "docs/11-dev-workflow.md"
-line = 288
-end = 306
+line = 289
+end = 307
 title = "`CLAUDE.md` / `AGENTS.md` / `.claude/`"
 
 [[section]]
 id = "11 §6"
 file = "docs/11-dev-workflow.md"
-line = 307
-end = 454
+line = 308
+end = 455
 title = "決定的なテストとシナリオ DSL"
 
 [[section]]
 id = "11 §6.1"
 file = "docs/11-dev-workflow.md"
-line = 311
-end = 323
+line = 312
+end = 324
 title = "決定性の規則"
 
 [[section]]
 id = "11 §6.2"
 file = "docs/11-dev-workflow.md"
-line = 324
-end = 335
+line = 325
+end = 336
 title = "ゴールデン / スナップショットの運用"
 
 [[section]]
 id = "11 §6.3"
 file = "docs/11-dev-workflow.md"
-line = 336
-end = 414
+line = 337
+end = 415
 title = "シナリオ DSL の書式 (正本)"
 
 [[section]]
 id = "11 §6.4"
 file = "docs/11-dev-workflow.md"
-line = 415
-end = 421
+line = 416
+end = 422
 title = "シナリオの書き順 (エージェント向け)"
 
 [[section]]
 id = "11 §6.5"
 file = "docs/11-dev-workflow.md"
-line = 422
-end = 454
+line = 423
+end = 455
 title = "ASCII Frame の表現"
 
 [[section]]
 id = "11 §7"
 file = "docs/11-dev-workflow.md"
-line = 455
-end = 513
+line = 456
+end = 514
 title = "ヘッドレス検証ループ"
 
 [[section]]
 id = "11 §7.1"
 file = "docs/11-dev-workflow.md"
-line = 465
-end = 487
+line = 466
+end = 488
 title = "駆動 API の使い方 (エージェント向けの最小手順)"
 
 [[section]]
 id = "11 §7.2"
 file = "docs/11-dev-workflow.md"
-line = 488
-end = 497
+line = 489
+end = 498
 title = "ループの回し方 (1 タスク)"
 
 [[section]]
 id = "11 §7.3"
 file = "docs/11-dev-workflow.md"
-line = 498
-end = 513
+line = 499
+end = 514
 title = "ローカル LLM を開発ループに使う (任意)"
 
 [[section]]
 id = "11 §8"
 file = "docs/11-dev-workflow.md"
-line = 514
-end = 596
+line = 515
+end = 597
 title = "コードレビューと CI の運用"
 
 [[section]]
 id = "11 §8.1"
 file = "docs/11-dev-workflow.md"
-line = 516
-end = 527
+line = 517
+end = 528
 title = "CI の車線"
 
 [[section]]
 id = "11 §8.2"
 file = "docs/11-dev-workflow.md"
-line = 528
-end = 539
+line = 529
+end = 540
 title = "レビューの規則"
 
 [[section]]
 id = "11 §8.3"
 file = "docs/11-dev-workflow.md"
-line = 540
-end = 554
+line = 541
+end = 555
 title = "ラベル"
 
 [[section]]
 id = "11 §8.4"
 file = "docs/11-dev-workflow.md"
-line = 555
-end = 569
+line = 556
+end = 570
 title = "契約変更要求の手続き (02 §8.4 の運用面)"
 
 [[section]]
 id = "11 §8.5"
 file = "docs/11-dev-workflow.md"
-line = 570
-end = 596
+line = 571
+end = 597
 title = "docs の表を CI の入力にする規則 (機械可読の表)"
 
 [[section]]
 id = "11 §9"
 file = "docs/11-dev-workflow.md"
-line = 597
-end = 737
+line = 598
+end = 738
 title = "ブランチ・コミット・リリースの規約"
 
 [[section]]
 id = "11 §9.1"
 file = "docs/11-dev-workflow.md"
-line = 599
-end = 623
+line = 600
+end = 624
 title = "ブランチ"
 
 [[section]]
 id = "11 §9.2"
 file = "docs/11-dev-workflow.md"
-line = 624
-end = 646
+line = 625
+end = 647
 title = "コミットメッセージ"
 
 [[section]]
 id = "11 §9.3"
 file = "docs/11-dev-workflow.md"
-line = 647
-end = 654
+line = 648
+end = 655
 title = "CHANGELOG とリリース"
 
 [[section]]
 id = "11 §9.4"
 file = "docs/11-dev-workflow.md"
-line = 655
-end = 668
+line = 656
+end = 669
 title = "寄稿ポリシー (CLA / DCO)"
 
 [[section]]
 id = "11 §9.5"
 file = "docs/11-dev-workflow.md"
-line = 669
-end = 684
+line = 670
+end = 685
 title = "公開 crate と外部の消費者の運用"
 
 [[section]]
 id = "11 §9.6"
 file = "docs/11-dev-workflow.md"
-line = 685
-end = 698
+line = 686
+end = 699
 title = "ライセンス検査 (`cargo deny` と同梱資産)"
 
 [[section]]
 id = "11 §9.7"
 file = "docs/11-dev-workflow.md"
-line = 699
-end = 716
+line = 700
+end = 717
 title = "秘密情報の扱い (署名鍵・資格情報)"
 
 [[section]]
 id = "11 §9.8"
 file = "docs/11-dev-workflow.md"
-line = 717
-end = 737
+line = 718
+end = 738
 title = "脆弱性の受付・対応・開示"
 
 [[section]]
 id = "11 §10"
 file = "docs/11-dev-workflow.md"
-line = 738
-end = 757
+line = 739
+end = 758
 title = "未決事項"
 
 [[section]]
@@ -8809,284 +8809,1286 @@ section = "09 §1"
 [[id]]
 id = "FR-105"
 file = "docs/09-testing-quality.md"
-line = 605
+line = 606
 section = "09 §8.5"
 
 [[id]]
 id = "FR-106"
 file = "docs/09-testing-quality.md"
-line = 606
+line = 607
 section = "09 §8.5"
 
 [[id]]
 id = "FR-205"
 file = "docs/09-testing-quality.md"
-line = 611
+line = 612
 section = "09 §8.5"
 
 [[id]]
 id = "FR-404"
 file = "docs/09-testing-quality.md"
-line = 614
+line = 615
 section = "09 §8.5"
 
 [[id]]
 id = "FR-501"
 file = "docs/09-testing-quality.md"
-line = 615
+line = 616
 section = "09 §8.5"
 
 [[id]]
 id = "FR-513"
 file = "docs/09-testing-quality.md"
-line = 618
+line = 619
 section = "09 §8.5"
 
 [[id]]
 id = "FR-602"
 file = "docs/09-testing-quality.md"
-line = 620
+line = 621
 section = "09 §8.5"
 
 [[id]]
 id = "FR-605"
 file = "docs/09-testing-quality.md"
-line = 621
+line = 622
 section = "09 §8.5"
 
 [[id]]
 id = "FR-606"
 file = "docs/09-testing-quality.md"
-line = 622
+line = 623
 section = "09 §8.5"
 
 [[id]]
 id = "FR-609"
 file = "docs/09-testing-quality.md"
-line = 623
+line = 624
 section = "09 §8.5"
 
 [[id]]
 id = "NFR-107"
 file = "docs/09-testing-quality.md"
-line = 626
+line = 627
 section = "09 §8.5"
 
 [[id]]
 id = "NFR-301"
 file = "docs/09-testing-quality.md"
-line = 628
+line = 629
 section = "09 §8.5"
 
 [[id]]
 id = "NFR-302"
 file = "docs/09-testing-quality.md"
-line = 629
+line = 630
 section = "09 §8.5"
 
 [[id]]
 id = "NFR-305"
 file = "docs/09-testing-quality.md"
-line = 631
+line = 632
 section = "09 §8.5"
 
 [[id]]
 id = "NFR-401"
 file = "docs/09-testing-quality.md"
-line = 632
+line = 633
 section = "09 §8.5"
 
 [[id]]
 id = "NFR-402"
 file = "docs/09-testing-quality.md"
-line = 633
+line = 634
 section = "09 §8.5"
 
 [[id]]
 id = "NFR-403"
 file = "docs/09-testing-quality.md"
-line = 634
+line = 635
 section = "09 §8.5"
 
 [[id]]
 id = "NFR-404"
 file = "docs/09-testing-quality.md"
-line = 635
+line = 636
 section = "09 §8.5"
 
 [[id]]
 id = "NFR-406"
 file = "docs/09-testing-quality.md"
-line = 636
+line = 637
 section = "09 §8.5"
 
 [[id]]
 id = "NFR-501"
 file = "docs/09-testing-quality.md"
-line = 637
+line = 638
 section = "09 §8.5"
 
 [[id]]
 id = "NFR-502"
 file = "docs/09-testing-quality.md"
-line = 638
+line = 639
 section = "09 §8.5"
 
 [[id]]
 id = "NFR-503"
 file = "docs/09-testing-quality.md"
-line = 639
+line = 640
 section = "09 §8.5"
 
 [[id]]
 id = "NFR-504"
 file = "docs/09-testing-quality.md"
-line = 640
+line = 641
 section = "09 §8.5"
 
 [[id]]
 id = "NFR-505"
 file = "docs/09-testing-quality.md"
-line = 641
+line = 642
 section = "09 §8.5"
 
 [[id]]
 id = "NFR-507"
 file = "docs/09-testing-quality.md"
-line = 642
+line = 643
 section = "09 §8.5"
 
 [[id]]
 id = "NFR-602"
 file = "docs/09-testing-quality.md"
-line = 643
+line = 644
 section = "09 §8.5"
 
 [[id]]
 id = "NFR-603"
 file = "docs/09-testing-quality.md"
-line = 644
+line = 645
 section = "09 §8.5"
 
 [[id]]
 id = "NFR-604"
 file = "docs/09-testing-quality.md"
-line = 645
+line = 646
 section = "09 §8.5"
 
 [[id]]
 id = "NFR-605"
 file = "docs/09-testing-quality.md"
-line = 646
+line = 647
 section = "09 §8.5"
 
 [[id]]
 id = "OQ-101"
 file = "docs/09-testing-quality.md"
-line = 808
+line = 809
 section = "09 §12"
 
 [[id]]
 id = "OQ-102"
 file = "docs/09-testing-quality.md"
-line = 809
+line = 810
 section = "09 §12"
 
 [[id]]
 id = "OQ-15"
 file = "docs/09-testing-quality.md"
-line = 810
+line = 811
 section = "09 §12"
 
 [[id]]
 id = "OQ-103"
 file = "docs/09-testing-quality.md"
-line = 811
+line = 812
 section = "09 §12"
 
 [[id]]
 id = "OQ-60"
 file = "docs/09-testing-quality.md"
-line = 812
+line = 813
 section = "09 §12"
 
 [[id]]
 id = "OQ-74"
 file = "docs/09-testing-quality.md"
-line = 813
+line = 814
 section = "09 §12"
 
 [[id]]
 id = "OQ-104"
 file = "docs/09-testing-quality.md"
-line = 814
+line = 815
 section = "09 §12"
 
 [[id]]
 id = "OQ-105"
 file = "docs/09-testing-quality.md"
-line = 815
+line = 816
 section = "09 §12"
 
 [[id]]
 id = "OQ-44"
 file = "docs/09-testing-quality.md"
-line = 816
+line = 817
 section = "09 §12"
 
 [[id]]
 id = "OQ-106"
 file = "docs/09-testing-quality.md"
-line = 817
+line = 818
 section = "09 §12"
 
 [[id]]
 id = "OQ-107"
 file = "docs/09-testing-quality.md"
-line = 818
+line = 819
 section = "09 §12"
 
 [[id]]
 id = "OQ-143"
 file = "docs/09-testing-quality.md"
-line = 819
+line = 820
 section = "09 §12"
 
 [[id]]
 id = "OQ-144"
 file = "docs/09-testing-quality.md"
-line = 820
+line = 821
 section = "09 §12"
 
 [[id]]
 id = "OQ-112"
 file = "docs/09-testing-quality.md"
-line = 821
+line = 822
 section = "09 §12"
 
 [[id]]
 id = "OQ-113"
 file = "docs/09-testing-quality.md"
-line = 822
+line = 823
 section = "09 §12"
 
 [[id]]
 id = "OQ-157"
 file = "docs/09-testing-quality.md"
-line = 824
+line = 825
 section = "09 §12"
 
 [[id]]
 id = "OQ-145"
 file = "docs/09-testing-quality.md"
-line = 825
+line = 826
 section = "09 §12"
 
 [[id]]
 id = "OQ-146"
 file = "docs/09-testing-quality.md"
-line = 826
+line = 827
 section = "09 §12"
+
+[[id]]
+id = "ADR-0004"
+file = "docs/10-decisions.md"
+line = 104
+section = ""
+
+[[id]]
+id = "ADR-0005"
+file = "docs/10-decisions.md"
+line = 105
+section = ""
+
+[[id]]
+id = "ADR-0016"
+file = "docs/10-decisions.md"
+line = 106
+section = ""
+
+[[id]]
+id = "ADR-0023"
+file = "docs/10-decisions.md"
+line = 107
+section = ""
+
+[[id]]
+id = "ADR-0026"
+file = "docs/10-decisions.md"
+line = 108
+section = ""
+
+[[id]]
+id = "ADR-0013"
+file = "docs/10-decisions.md"
+line = 116
+section = ""
+
+[[id]]
+id = "ADR-0014"
+file = "docs/10-decisions.md"
+line = 117
+section = ""
+
+[[id]]
+id = "ADR-0015"
+file = "docs/10-decisions.md"
+line = 118
+section = ""
+
+[[id]]
+id = "ADR-0034"
+file = "docs/10-decisions.md"
+line = 119
+section = ""
+
+[[id]]
+id = "ADR-0035"
+file = "docs/10-decisions.md"
+line = 120
+section = ""
+
+[[id]]
+id = "ADR-0041"
+file = "docs/10-decisions.md"
+line = 121
+section = ""
+
+[[id]]
+id = "OQ-68"
+file = "docs/10-decisions.md"
+line = 131
+section = ""
+
+[[id]]
+id = "OQ-163"
+file = "docs/10-decisions.md"
+line = 139
+section = ""
+
+[[id]]
+id = "OQ-77"
+file = "docs/10-decisions.md"
+line = 140
+section = ""
+
+[[id]]
+id = "OQ-01"
+file = "docs/10-decisions.md"
+line = 148
+section = ""
+
+[[id]]
+id = "OQ-06"
+file = "docs/10-decisions.md"
+line = 149
+section = ""
+
+[[id]]
+id = "OQ-12"
+file = "docs/10-decisions.md"
+line = 150
+section = ""
+
+[[id]]
+id = "OQ-17"
+file = "docs/10-decisions.md"
+line = 151
+section = ""
+
+[[id]]
+id = "OQ-18"
+file = "docs/10-decisions.md"
+line = 152
+section = ""
+
+[[id]]
+id = "OQ-21"
+file = "docs/10-decisions.md"
+line = 153
+section = ""
+
+[[id]]
+id = "OQ-22"
+file = "docs/10-decisions.md"
+line = 154
+section = ""
+
+[[id]]
+id = "OQ-25"
+file = "docs/10-decisions.md"
+line = 155
+section = ""
+
+[[id]]
+id = "OQ-35"
+file = "docs/10-decisions.md"
+line = 156
+section = ""
+
+[[id]]
+id = "OQ-36"
+file = "docs/10-decisions.md"
+line = 157
+section = ""
+
+[[id]]
+id = "OQ-41"
+file = "docs/10-decisions.md"
+line = 158
+section = ""
+
+[[id]]
+id = "OQ-43"
+file = "docs/10-decisions.md"
+line = 159
+section = ""
+
+[[id]]
+id = "OQ-44"
+file = "docs/10-decisions.md"
+line = 160
+section = ""
+
+[[id]]
+id = "OQ-45"
+file = "docs/10-decisions.md"
+line = 161
+section = ""
+
+[[id]]
+id = "OQ-48"
+file = "docs/10-decisions.md"
+line = 162
+section = ""
+
+[[id]]
+id = "OQ-53"
+file = "docs/10-decisions.md"
+line = 163
+section = ""
+
+[[id]]
+id = "OQ-54"
+file = "docs/10-decisions.md"
+line = 164
+section = ""
+
+[[id]]
+id = "OQ-56"
+file = "docs/10-decisions.md"
+line = 165
+section = ""
+
+[[id]]
+id = "OQ-57"
+file = "docs/10-decisions.md"
+line = 166
+section = ""
+
+[[id]]
+id = "OQ-58"
+file = "docs/10-decisions.md"
+line = 167
+section = ""
+
+[[id]]
+id = "OQ-60"
+file = "docs/10-decisions.md"
+line = 168
+section = ""
+
+[[id]]
+id = "OQ-61"
+file = "docs/10-decisions.md"
+line = 169
+section = ""
+
+[[id]]
+id = "OQ-64"
+file = "docs/10-decisions.md"
+line = 170
+section = ""
+
+[[id]]
+id = "OQ-66"
+file = "docs/10-decisions.md"
+line = 171
+section = ""
+
+[[id]]
+id = "OQ-70"
+file = "docs/10-decisions.md"
+line = 172
+section = ""
+
+[[id]]
+id = "OQ-72"
+file = "docs/10-decisions.md"
+line = 173
+section = ""
+
+[[id]]
+id = "OQ-74"
+file = "docs/10-decisions.md"
+line = 174
+section = ""
+
+[[id]]
+id = "OQ-75"
+file = "docs/10-decisions.md"
+line = 175
+section = ""
+
+[[id]]
+id = "OQ-76"
+file = "docs/10-decisions.md"
+line = 176
+section = ""
+
+[[id]]
+id = "OQ-78"
+file = "docs/10-decisions.md"
+line = 178
+section = ""
+
+[[id]]
+id = "OQ-79"
+file = "docs/10-decisions.md"
+line = 179
+section = ""
+
+[[id]]
+id = "OQ-80"
+file = "docs/10-decisions.md"
+line = 180
+section = ""
+
+[[id]]
+id = "OQ-81"
+file = "docs/10-decisions.md"
+line = 181
+section = ""
+
+[[id]]
+id = "OQ-82"
+file = "docs/10-decisions.md"
+line = 182
+section = ""
+
+[[id]]
+id = "OQ-83"
+file = "docs/10-decisions.md"
+line = 183
+section = ""
+
+[[id]]
+id = "OQ-84"
+file = "docs/10-decisions.md"
+line = 184
+section = ""
+
+[[id]]
+id = "OQ-85"
+file = "docs/10-decisions.md"
+line = 185
+section = ""
+
+[[id]]
+id = "OQ-86"
+file = "docs/10-decisions.md"
+line = 186
+section = ""
+
+[[id]]
+id = "OQ-87"
+file = "docs/10-decisions.md"
+line = 187
+section = ""
+
+[[id]]
+id = "OQ-88"
+file = "docs/10-decisions.md"
+line = 188
+section = ""
+
+[[id]]
+id = "OQ-89"
+file = "docs/10-decisions.md"
+line = 189
+section = ""
+
+[[id]]
+id = "OQ-90"
+file = "docs/10-decisions.md"
+line = 190
+section = ""
+
+[[id]]
+id = "OQ-91"
+file = "docs/10-decisions.md"
+line = 191
+section = ""
+
+[[id]]
+id = "OQ-92"
+file = "docs/10-decisions.md"
+line = 192
+section = ""
+
+[[id]]
+id = "OQ-93"
+file = "docs/10-decisions.md"
+line = 193
+section = ""
+
+[[id]]
+id = "OQ-94"
+file = "docs/10-decisions.md"
+line = 194
+section = ""
+
+[[id]]
+id = "OQ-95"
+file = "docs/10-decisions.md"
+line = 195
+section = ""
+
+[[id]]
+id = "OQ-96"
+file = "docs/10-decisions.md"
+line = 196
+section = ""
+
+[[id]]
+id = "OQ-98"
+file = "docs/10-decisions.md"
+line = 197
+section = ""
+
+[[id]]
+id = "OQ-99"
+file = "docs/10-decisions.md"
+line = 198
+section = ""
+
+[[id]]
+id = "OQ-103"
+file = "docs/10-decisions.md"
+line = 199
+section = ""
+
+[[id]]
+id = "OQ-104"
+file = "docs/10-decisions.md"
+line = 200
+section = ""
+
+[[id]]
+id = "OQ-105"
+file = "docs/10-decisions.md"
+line = 201
+section = ""
+
+[[id]]
+id = "OQ-107"
+file = "docs/10-decisions.md"
+line = 202
+section = ""
+
+[[id]]
+id = "OQ-108"
+file = "docs/10-decisions.md"
+line = 203
+section = ""
+
+[[id]]
+id = "OQ-109"
+file = "docs/10-decisions.md"
+line = 204
+section = ""
+
+[[id]]
+id = "OQ-112"
+file = "docs/10-decisions.md"
+line = 205
+section = ""
+
+[[id]]
+id = "OQ-120"
+file = "docs/10-decisions.md"
+line = 206
+section = ""
+
+[[id]]
+id = "OQ-123"
+file = "docs/10-decisions.md"
+line = 207
+section = ""
+
+[[id]]
+id = "OQ-124"
+file = "docs/10-decisions.md"
+line = 208
+section = ""
+
+[[id]]
+id = "OQ-127"
+file = "docs/10-decisions.md"
+line = 209
+section = ""
+
+[[id]]
+id = "OQ-128"
+file = "docs/10-decisions.md"
+line = 210
+section = ""
+
+[[id]]
+id = "OQ-130"
+file = "docs/10-decisions.md"
+line = 211
+section = ""
+
+[[id]]
+id = "OQ-131"
+file = "docs/10-decisions.md"
+line = 212
+section = ""
+
+[[id]]
+id = "OQ-133"
+file = "docs/10-decisions.md"
+line = 213
+section = ""
+
+[[id]]
+id = "OQ-134"
+file = "docs/10-decisions.md"
+line = 214
+section = ""
+
+[[id]]
+id = "OQ-137"
+file = "docs/10-decisions.md"
+line = 215
+section = ""
+
+[[id]]
+id = "OQ-138"
+file = "docs/10-decisions.md"
+line = 216
+section = ""
+
+[[id]]
+id = "OQ-140"
+file = "docs/10-decisions.md"
+line = 217
+section = ""
+
+[[id]]
+id = "OQ-141"
+file = "docs/10-decisions.md"
+line = 218
+section = ""
+
+[[id]]
+id = "OQ-142"
+file = "docs/10-decisions.md"
+line = 219
+section = ""
+
+[[id]]
+id = "OQ-143"
+file = "docs/10-decisions.md"
+line = 220
+section = ""
+
+[[id]]
+id = "OQ-144"
+file = "docs/10-decisions.md"
+line = 221
+section = ""
+
+[[id]]
+id = "OQ-145"
+file = "docs/10-decisions.md"
+line = 222
+section = ""
+
+[[id]]
+id = "OQ-146"
+file = "docs/10-decisions.md"
+line = 223
+section = ""
+
+[[id]]
+id = "OQ-148"
+file = "docs/10-decisions.md"
+line = 224
+section = ""
+
+[[id]]
+id = "OQ-149"
+file = "docs/10-decisions.md"
+line = 225
+section = ""
+
+[[id]]
+id = "OQ-150"
+file = "docs/10-decisions.md"
+line = 226
+section = ""
+
+[[id]]
+id = "OQ-151"
+file = "docs/10-decisions.md"
+line = 227
+section = ""
+
+[[id]]
+id = "OQ-164"
+file = "docs/10-decisions.md"
+line = 228
+section = ""
+
+[[id]]
+id = "OQ-167"
+file = "docs/10-decisions.md"
+line = 229
+section = ""
+
+[[id]]
+id = "OQ-169"
+file = "docs/10-decisions.md"
+line = 230
+section = ""
+
+[[id]]
+id = "OQ-170"
+file = "docs/10-decisions.md"
+line = 231
+section = ""
+
+[[id]]
+id = "OQ-171"
+file = "docs/10-decisions.md"
+line = 232
+section = ""
+
+[[id]]
+id = "OQ-165"
+file = "docs/10-decisions.md"
+line = 233
+section = ""
+
+[[id]]
+id = "OQ-166"
+file = "docs/10-decisions.md"
+line = 234
+section = ""
+
+[[id]]
+id = "OQ-172"
+file = "docs/10-decisions.md"
+line = 235
+section = ""
+
+[[id]]
+id = "OQ-173"
+file = "docs/10-decisions.md"
+line = 236
+section = ""
+
+[[id]]
+id = "OQ-174"
+file = "docs/10-decisions.md"
+line = 237
+section = ""
+
+[[id]]
+id = "OQ-175"
+file = "docs/10-decisions.md"
+line = 238
+section = ""
+
+[[id]]
+id = "OQ-176"
+file = "docs/10-decisions.md"
+line = 239
+section = ""
+
+[[id]]
+id = "OQ-177"
+file = "docs/10-decisions.md"
+line = 240
+section = ""
+
+[[id]]
+id = "OQ-178"
+file = "docs/10-decisions.md"
+line = 241
+section = ""
+
+[[id]]
+id = "OQ-179"
+file = "docs/10-decisions.md"
+line = 242
+section = ""
+
+[[id]]
+id = "OQ-180"
+file = "docs/10-decisions.md"
+line = 243
+section = ""
+
+[[id]]
+id = "OQ-181"
+file = "docs/10-decisions.md"
+line = 244
+section = ""
+
+[[id]]
+id = "OQ-182"
+file = "docs/10-decisions.md"
+line = 245
+section = ""
+
+[[id]]
+id = "OQ-183"
+file = "docs/10-decisions.md"
+line = 246
+section = ""
+
+[[id]]
+id = "OQ-184"
+file = "docs/10-decisions.md"
+line = 247
+section = ""
+
+[[id]]
+id = "OQ-190"
+file = "docs/10-decisions.md"
+line = 248
+section = ""
+
+[[id]]
+id = "OQ-191"
+file = "docs/10-decisions.md"
+line = 249
+section = ""
+
+[[id]]
+id = "OQ-192"
+file = "docs/10-decisions.md"
+line = 250
+section = ""
+
+[[id]]
+id = "OQ-193"
+file = "docs/10-decisions.md"
+line = 251
+section = ""
+
+[[id]]
+id = "OQ-194"
+file = "docs/10-decisions.md"
+line = 252
+section = ""
+
+[[id]]
+id = "OQ-195"
+file = "docs/10-decisions.md"
+line = 253
+section = ""
+
+[[id]]
+id = "OQ-196"
+file = "docs/10-decisions.md"
+line = 254
+section = ""
+
+[[id]]
+id = "OQ-197"
+file = "docs/10-decisions.md"
+line = 255
+section = ""
+
+[[id]]
+id = "OQ-198"
+file = "docs/10-decisions.md"
+line = 256
+section = ""
+
+[[id]]
+id = "OQ-199"
+file = "docs/10-decisions.md"
+line = 257
+section = ""
+
+[[id]]
+id = "OQ-200"
+file = "docs/10-decisions.md"
+line = 258
+section = ""
+
+[[id]]
+id = "OQ-201"
+file = "docs/10-decisions.md"
+line = 259
+section = ""
+
+[[id]]
+id = "OQ-202"
+file = "docs/10-decisions.md"
+line = 260
+section = ""
+
+[[id]]
+id = "OQ-203"
+file = "docs/10-decisions.md"
+line = 261
+section = ""
+
+[[id]]
+id = "OQ-204"
+file = "docs/10-decisions.md"
+line = 262
+section = ""
+
+[[id]]
+id = "OQ-205"
+file = "docs/10-decisions.md"
+line = 263
+section = ""
+
+[[id]]
+id = "OQ-209"
+file = "docs/10-decisions.md"
+line = 264
+section = ""
+
+[[id]]
+id = "OQ-210"
+file = "docs/10-decisions.md"
+line = 265
+section = ""
+
+[[id]]
+id = "OQ-211"
+file = "docs/10-decisions.md"
+line = 266
+section = ""
+
+[[id]]
+id = "OQ-212"
+file = "docs/10-decisions.md"
+line = 267
+section = ""
+
+[[id]]
+id = "OQ-213"
+file = "docs/10-decisions.md"
+line = 268
+section = ""
+
+[[id]]
+id = "OQ-214"
+file = "docs/10-decisions.md"
+line = 269
+section = ""
+
+[[id]]
+id = "OQ-215"
+file = "docs/10-decisions.md"
+line = 270
+section = ""
+
+[[id]]
+id = "OQ-216"
+file = "docs/10-decisions.md"
+line = 271
+section = ""
+
+[[id]]
+id = "ADR-0001"
+file = "docs/10-decisions.md"
+line = 302
+section = "10 §0.4"
+
+[[id]]
+id = "ADR-0002"
+file = "docs/10-decisions.md"
+line = 303
+section = "10 §0.4"
+
+[[id]]
+id = "ADR-0003"
+file = "docs/10-decisions.md"
+line = 304
+section = "10 §0.4"
+
+[[id]]
+id = "ADR-0006"
+file = "docs/10-decisions.md"
+line = 307
+section = "10 §0.4"
+
+[[id]]
+id = "ADR-0007"
+file = "docs/10-decisions.md"
+line = 308
+section = "10 §0.4"
+
+[[id]]
+id = "ADR-0008"
+file = "docs/10-decisions.md"
+line = 309
+section = "10 §0.4"
+
+[[id]]
+id = "ADR-0009"
+file = "docs/10-decisions.md"
+line = 310
+section = "10 §0.4"
+
+[[id]]
+id = "ADR-0010"
+file = "docs/10-decisions.md"
+line = 311
+section = "10 §0.4"
+
+[[id]]
+id = "ADR-0011"
+file = "docs/10-decisions.md"
+line = 312
+section = "10 §0.4"
+
+[[id]]
+id = "ADR-0012"
+file = "docs/10-decisions.md"
+line = 313
+section = "10 §0.4"
+
+[[id]]
+id = "ADR-0017"
+file = "docs/10-decisions.md"
+line = 318
+section = "10 §0.4"
+
+[[id]]
+id = "ADR-0018"
+file = "docs/10-decisions.md"
+line = 319
+section = "10 §0.4"
+
+[[id]]
+id = "ADR-0019"
+file = "docs/10-decisions.md"
+line = 320
+section = "10 §0.4"
+
+[[id]]
+id = "ADR-0020"
+file = "docs/10-decisions.md"
+line = 321
+section = "10 §0.4"
+
+[[id]]
+id = "ADR-0021"
+file = "docs/10-decisions.md"
+line = 322
+section = "10 §0.4"
+
+[[id]]
+id = "ADR-0022"
+file = "docs/10-decisions.md"
+line = 323
+section = "10 §0.4"
+
+[[id]]
+id = "ADR-0025"
+file = "docs/10-decisions.md"
+line = 325
+section = "10 §0.4"
+
+[[id]]
+id = "ADR-0027"
+file = "docs/10-decisions.md"
+line = 327
+section = "10 §0.4"
+
+[[id]]
+id = "ADR-0028"
+file = "docs/10-decisions.md"
+line = 328
+section = "10 §0.4"
+
+[[id]]
+id = "ADR-0030"
+file = "docs/10-decisions.md"
+line = 329
+section = "10 §0.4"
+
+[[id]]
+id = "ADR-0031"
+file = "docs/10-decisions.md"
+line = 330
+section = "10 §0.4"
+
+[[id]]
+id = "ADR-0032"
+file = "docs/10-decisions.md"
+line = 331
+section = "10 §0.4"
+
+[[id]]
+id = "ADR-0033"
+file = "docs/10-decisions.md"
+line = 332
+section = "10 §0.4"
+
+[[id]]
+id = "ADR-0036"
+file = "docs/10-decisions.md"
+line = 335
+section = "10 §0.4"
+
+[[id]]
+id = "ADR-0038"
+file = "docs/10-decisions.md"
+line = 336
+section = "10 §0.4"
+
+[[id]]
+id = "ADR-0039"
+file = "docs/10-decisions.md"
+line = 337
+section = "10 §0.4"
+
+[[id]]
+id = "ADR-0040"
+file = "docs/10-decisions.md"
+line = 338
+section = "10 §0.4"
+
+[[id]]
+id = "ADR-0042"
+file = "docs/10-decisions.md"
+line = 340
+section = "10 §0.4"
+
+[[id]]
+id = "ADR-0043"
+file = "docs/10-decisions.md"
+line = 341
+section = "10 §0.4"
+
+[[id]]
+id = "ADR-0044"
+file = "docs/10-decisions.md"
+line = 342
+section = "10 §0.4"
 
 [[id]]
 id = "ADR-0001"
@@ -9389,6 +10391,210 @@ line = 741
 section = "10 §1"
 
 [[id]]
+id = "OQ-02"
+file = "docs/10-decisions.md"
+line = 760
+section = "10 §2.1"
+
+[[id]]
+id = "OQ-03"
+file = "docs/10-decisions.md"
+line = 761
+section = "10 §2.1"
+
+[[id]]
+id = "OQ-04"
+file = "docs/10-decisions.md"
+line = 762
+section = "10 §2.1"
+
+[[id]]
+id = "OQ-05"
+file = "docs/10-decisions.md"
+line = 763
+section = "10 §2.1"
+
+[[id]]
+id = "OQ-09"
+file = "docs/10-decisions.md"
+line = 765
+section = "10 §2.1"
+
+[[id]]
+id = "OQ-10"
+file = "docs/10-decisions.md"
+line = 766
+section = "10 §2.1"
+
+[[id]]
+id = "OQ-11"
+file = "docs/10-decisions.md"
+line = 767
+section = "10 §2.1"
+
+[[id]]
+id = "OQ-14"
+file = "docs/10-decisions.md"
+line = 769
+section = "10 §2.1"
+
+[[id]]
+id = "OQ-15"
+file = "docs/10-decisions.md"
+line = 770
+section = "10 §2.1"
+
+[[id]]
+id = "OQ-16"
+file = "docs/10-decisions.md"
+line = 771
+section = "10 §2.1"
+
+[[id]]
+id = "OQ-19"
+file = "docs/10-decisions.md"
+line = 774
+section = "10 §2.1"
+
+[[id]]
+id = "OQ-20"
+file = "docs/10-decisions.md"
+line = 775
+section = "10 §2.1"
+
+[[id]]
+id = "OQ-23"
+file = "docs/10-decisions.md"
+line = 778
+section = "10 §2.1"
+
+[[id]]
+id = "OQ-24"
+file = "docs/10-decisions.md"
+line = 779
+section = "10 §2.1"
+
+[[id]]
+id = "OQ-26"
+file = "docs/10-decisions.md"
+line = 781
+section = "10 §2.1"
+
+[[id]]
+id = "OQ-27"
+file = "docs/10-decisions.md"
+line = 782
+section = "10 §2.1"
+
+[[id]]
+id = "OQ-28"
+file = "docs/10-decisions.md"
+line = 783
+section = "10 §2.1"
+
+[[id]]
+id = "OQ-29"
+file = "docs/10-decisions.md"
+line = 784
+section = "10 §2.1"
+
+[[id]]
+id = "OQ-30"
+file = "docs/10-decisions.md"
+line = 785
+section = "10 §2.1"
+
+[[id]]
+id = "OQ-31"
+file = "docs/10-decisions.md"
+line = 786
+section = "10 §2.1"
+
+[[id]]
+id = "OQ-32"
+file = "docs/10-decisions.md"
+line = 787
+section = "10 §2.1"
+
+[[id]]
+id = "OQ-33"
+file = "docs/10-decisions.md"
+line = 788
+section = "10 §2.1"
+
+[[id]]
+id = "OQ-34"
+file = "docs/10-decisions.md"
+line = 789
+section = "10 §2.1"
+
+[[id]]
+id = "OQ-37"
+file = "docs/10-decisions.md"
+line = 792
+section = "10 §2.1"
+
+[[id]]
+id = "OQ-38"
+file = "docs/10-decisions.md"
+line = 793
+section = "10 §2.1"
+
+[[id]]
+id = "OQ-39"
+file = "docs/10-decisions.md"
+line = 794
+section = "10 §2.1"
+
+[[id]]
+id = "OQ-40"
+file = "docs/10-decisions.md"
+line = 795
+section = "10 §2.1"
+
+[[id]]
+id = "OQ-42"
+file = "docs/10-decisions.md"
+line = 797
+section = "10 §2.1"
+
+[[id]]
+id = "OQ-110"
+file = "docs/10-decisions.md"
+line = 800
+section = "10 §2.1"
+
+[[id]]
+id = "OQ-111"
+file = "docs/10-decisions.md"
+line = 801
+section = "10 §2.1"
+
+[[id]]
+id = "OQ-113"
+file = "docs/10-decisions.md"
+line = 803
+section = "10 §2.1"
+
+[[id]]
+id = "OQ-114"
+file = "docs/10-decisions.md"
+line = 804
+section = "10 §2.1"
+
+[[id]]
+id = "OQ-115"
+file = "docs/10-decisions.md"
+line = 805
+section = "10 §2.1"
+
+[[id]]
+id = "OQ-116"
+file = "docs/10-decisions.md"
+line = 806
+section = "10 §2.1"
+
+[[id]]
 id = "OQ-01"
 file = "docs/10-decisions.md"
 line = 813
@@ -9683,6 +10889,198 @@ line = 1118
 section = "10 §2.3"
 
 [[id]]
+id = "OQ-46"
+file = "docs/10-decisions.md"
+line = 1132
+section = "10 §2.4"
+
+[[id]]
+id = "OQ-47"
+file = "docs/10-decisions.md"
+line = 1133
+section = "10 §2.4"
+
+[[id]]
+id = "OQ-49"
+file = "docs/10-decisions.md"
+line = 1135
+section = "10 §2.4"
+
+[[id]]
+id = "OQ-50"
+file = "docs/10-decisions.md"
+line = 1136
+section = "10 §2.4"
+
+[[id]]
+id = "OQ-51"
+file = "docs/10-decisions.md"
+line = 1137
+section = "10 §2.4"
+
+[[id]]
+id = "OQ-52"
+file = "docs/10-decisions.md"
+line = 1138
+section = "10 §2.4"
+
+[[id]]
+id = "OQ-55"
+file = "docs/10-decisions.md"
+line = 1141
+section = "10 §2.4"
+
+[[id]]
+id = "OQ-59"
+file = "docs/10-decisions.md"
+line = 1145
+section = "10 §2.4"
+
+[[id]]
+id = "OQ-62"
+file = "docs/10-decisions.md"
+line = 1148
+section = "10 §2.4"
+
+[[id]]
+id = "OQ-63"
+file = "docs/10-decisions.md"
+line = 1149
+section = "10 §2.4"
+
+[[id]]
+id = "OQ-65"
+file = "docs/10-decisions.md"
+line = 1151
+section = "10 §2.4"
+
+[[id]]
+id = "OQ-67"
+file = "docs/10-decisions.md"
+line = 1153
+section = "10 §2.4"
+
+[[id]]
+id = "OQ-69"
+file = "docs/10-decisions.md"
+line = 1155
+section = "10 §2.4"
+
+[[id]]
+id = "OQ-71"
+file = "docs/10-decisions.md"
+line = 1157
+section = "10 §2.4"
+
+[[id]]
+id = "OQ-73"
+file = "docs/10-decisions.md"
+line = 1159
+section = "10 §2.4"
+
+[[id]]
+id = "OQ-97"
+file = "docs/10-decisions.md"
+line = 1183
+section = "10 §2.4"
+
+[[id]]
+id = "OQ-101"
+file = "docs/10-decisions.md"
+line = 1186
+section = "10 §2.4"
+
+[[id]]
+id = "OQ-102"
+file = "docs/10-decisions.md"
+line = 1187
+section = "10 §2.4"
+
+[[id]]
+id = "OQ-106"
+file = "docs/10-decisions.md"
+line = 1191
+section = "10 §2.4"
+
+[[id]]
+id = "OQ-117"
+file = "docs/10-decisions.md"
+line = 1195
+section = "10 §2.4"
+
+[[id]]
+id = "OQ-125"
+file = "docs/10-decisions.md"
+line = 1198
+section = "10 §2.4"
+
+[[id]]
+id = "OQ-126"
+file = "docs/10-decisions.md"
+line = 1199
+section = "10 §2.4"
+
+[[id]]
+id = "OQ-129"
+file = "docs/10-decisions.md"
+line = 1209
+section = "10 §2.5"
+
+[[id]]
+id = "OQ-132"
+file = "docs/10-decisions.md"
+line = 1212
+section = "10 §2.5"
+
+[[id]]
+id = "OQ-135"
+file = "docs/10-decisions.md"
+line = 1215
+section = "10 §2.5"
+
+[[id]]
+id = "OQ-136"
+file = "docs/10-decisions.md"
+line = 1216
+section = "10 §2.5"
+
+[[id]]
+id = "OQ-139"
+file = "docs/10-decisions.md"
+line = 1226
+section = "10 §2.6"
+
+[[id]]
+id = "OQ-147"
+file = "docs/10-decisions.md"
+line = 1234
+section = "10 §2.6"
+
+[[id]]
+id = "OQ-152"
+file = "docs/10-decisions.md"
+line = 1246
+section = "10 §2.7"
+
+[[id]]
+id = "OQ-154"
+file = "docs/10-decisions.md"
+line = 1247
+section = "10 §2.7"
+
+[[id]]
+id = "OQ-157"
+file = "docs/10-decisions.md"
+line = 1248
+section = "10 §2.7"
+
+[[id]]
+id = "OQ-160"
+file = "docs/10-decisions.md"
+line = 1249
+section = "10 §2.7"
+
+[[id]]
 id = "OQ-151"
 file = "docs/10-decisions.md"
 line = 1251
@@ -9699,6 +11097,18 @@ id = "OQ-154"
 file = "docs/10-decisions.md"
 line = 1265
 section = "10 §2.7"
+
+[[id]]
+id = "OQ-162"
+file = "docs/10-decisions.md"
+line = 1278
+section = "10 §2.8"
+
+[[id]]
+id = "OQ-168"
+file = "docs/10-decisions.md"
+line = 1284
+section = "10 §2.8"
 
 [[id]]
 id = "OQ-162"
@@ -9721,6 +11131,24 @@ section = "10 §2.8"
 [[id]]
 id = "OQ-206"
 file = "docs/10-decisions.md"
+line = 1343
+section = "10 §2.9"
+
+[[id]]
+id = "OQ-207"
+file = "docs/10-decisions.md"
+line = 1344
+section = "10 §2.9"
+
+[[id]]
+id = "OQ-208"
+file = "docs/10-decisions.md"
+line = 1345
+section = "10 §2.9"
+
+[[id]]
+id = "OQ-206"
+file = "docs/10-decisions.md"
 line = 1355
 section = "10 §2.9"
 
@@ -9739,97 +11167,97 @@ section = "10 §2.9"
 [[id]]
 id = "XC-1"
 file = "docs/11-dev-workflow.md"
-line = 675
+line = 676
 section = "11 §9.5"
 
 [[id]]
 id = "XC-2"
 file = "docs/11-dev-workflow.md"
-line = 676
+line = 677
 section = "11 §9.5"
 
 [[id]]
 id = "XC-3"
 file = "docs/11-dev-workflow.md"
-line = 677
+line = 678
 section = "11 §9.5"
 
 [[id]]
 id = "XC-4"
 file = "docs/11-dev-workflow.md"
-line = 678
+line = 679
 section = "11 §9.5"
 
 [[id]]
 id = "XC-5"
 file = "docs/11-dev-workflow.md"
-line = 679
+line = 680
 section = "11 §9.5"
 
 [[id]]
 id = "XC-6"
 file = "docs/11-dev-workflow.md"
-line = 680
+line = 681
 section = "11 §9.5"
 
 [[id]]
 id = "XC-7"
 file = "docs/11-dev-workflow.md"
-line = 681
+line = 682
 section = "11 §9.5"
 
 [[id]]
 id = "OQ-126"
 file = "docs/11-dev-workflow.md"
-line = 744
+line = 745
 section = "11 §10"
 
 [[id]]
 id = "OQ-127"
 file = "docs/11-dev-workflow.md"
-line = 745
+line = 746
 section = "11 §10"
 
 [[id]]
 id = "OQ-123"
 file = "docs/11-dev-workflow.md"
-line = 746
+line = 747
 section = "11 §10"
 
 [[id]]
 id = "OQ-154"
 file = "docs/11-dev-workflow.md"
-line = 747
+line = 748
 section = "11 §10"
 
 [[id]]
 id = "OQ-120"
 file = "docs/11-dev-workflow.md"
-line = 748
+line = 749
 section = "11 §10"
 
 [[id]]
 id = "OQ-147"
 file = "docs/11-dev-workflow.md"
-line = 749
+line = 750
 section = "11 §10"
 
 [[id]]
 id = "OQ-148"
 file = "docs/11-dev-workflow.md"
-line = 750
+line = 751
 section = "11 §10"
 
 [[id]]
 id = "OQ-149"
 file = "docs/11-dev-workflow.md"
-line = 751
+line = 752
 section = "11 §10"
 
 [[id]]
 id = "OQ-150"
 file = "docs/11-dev-workflow.md"
-line = 752
+line = 753
 section = "11 §10"
 
 [[id]]

@@ -3,6 +3,7 @@
 //! 現在のサブコマンド:
 //! - `check`: 速い車線 (fmt・clippy・nextest・check-deps・AC のチェックリスト)。docs/11 §8.1
 //! - `check-deps`: 依存規則 R1〜R12 の検査。`--docs` で docs/02 §4.1 の表との突合。docs/09 §7
+//! - `check-docs`: 仕様書の ID 参照・節の参照・内部リンク・docs/ownership.toml の検査 (docs/09 §11、11 §2.3)
 //! - `check-dist`: 配布ビルドにテスト専用の経路が無いことと CRT の静的リンクの確認 (docs/09 §6.2 `build-release-smoke`)
 //! - `verify-tag`: リリースのタグの検証 (署名・位置・版・判定コミットとの差分。`release.yml` の最初のステップ。docs/09 §6.1)
 //! - `review-wording`: 日本語 UI 文言の人手レビュー用の一覧 (docs/review/ja-wording-v0.1.md) を生成する
@@ -26,6 +27,7 @@ mod bench_report;
 mod check;
 mod check_deps;
 mod check_dist;
+mod check_docs;
 mod check_themes;
 mod dist;
 mod gen_corpus;
@@ -44,6 +46,7 @@ const USAGE: &str = "\
 
   check               速い車線 (fmt・clippy・nextest・check-deps・AC のチェックリスト)
   check-deps          依存規則 R1〜R12 の検査 (--docs: docs/02 §4.1 の表との突合も行う)
+  check-docs          仕様書の参照の検査 (ID・節・内部リンク・docs/ownership.toml)
   check-dist          配布ビルドの確認 (feature・目印の文字列・隠しオプション・CRT の静的リンク。--exe PATH で既存の exe)
   verify-tag          リリースのタグの検証 (--allowed-signers FILE。タグは作らない・消さない)
   review-wording      日本語 UI 文言のレビュー用の一覧の生成 (--reviewed 日付: 全件 OK の記録)
@@ -74,6 +77,7 @@ fn main() -> ExitCode {
         Some("i18n") => i18n::run(),
         Some("gen-corpus") => gen_corpus::run(&args.collect::<Vec<_>>()),
         Some("nightly") => nightly::run_all(&args.collect::<Vec<_>>()),
+        Some("check-docs") => check_docs::run(),
         Some("spec-index") => spec_index::run(&args.collect::<Vec<_>>()),
         Some("--help" | "-h" | "help") | None => {
             println!("{USAGE}");
