@@ -368,6 +368,7 @@ dependencies = [
  "eve-core",
  "eve-text",
  "eve-view",
+ "libc",
  "memory-stats",
  "windows-sys 0.61.2",
  "xxhash-rust",
