@@ -1,14 +1,15 @@
 //! `cargo xtask check`: 速い車線 (docs/11-dev-workflow.md §8.1、docs/09-testing-quality.md §6.1、docs/08-roadmap.md §2.2)。
 //!
 //! v0.1 の中身: (1) fmt、(2) clippy、(3) nextest (eve-text・eve-encoding・eve-core)、(4) check-deps、
-//! (5) AC のチェックリストの検査、(6) 変更した crate の Harness のシナリオテスト。
+//! (5) AC のチェックリストの検査、(5b) 仕様書の索引の検査 (`spec-index --check`、v0.2 の M10)、
+//! (6) 変更した crate の Harness のシナリオテスト。
 //! この 3 か所 (11 §8.1・09 §6.1・08 §2.2) は同時に直す。
 
 use std::collections::BTreeSet;
 use std::process::Command;
 
 use crate::{
-    ac_checklist, check_deps,
+    ac_checklist, check_deps, spec_index,
     util::{run, run_capture},
 };
 
@@ -46,6 +47,7 @@ pub fn run_all() -> Result<(), String> {
     .map_err(|e| format!("{e}\n  (cargo-nextest が無ければ `cargo install cargo-nextest --locked` で入れてください)"))?;
     check_deps::run(false)?;
     ac_checklist::run()?;
+    spec_index::run(&["--check".to_owned()])?;
     scenario_tests()?;
     println!("\ncheck: すべて通りました");
     Ok(())

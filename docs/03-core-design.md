@@ -2089,7 +2089,7 @@ pub struct IndentConfig { style: Spaces | Tabs, width: u8 /*インデント 1 �
 
   テスト (v0.1): 選択がある状態で Tab / Shift+Tab を押すと、文書・選択・Undo 履歴・Revision・dirty が変わらず、メッセージも出ない。選択がある状態の文字入力・Enter・Backspace・Delete・貼り付けは、それぞれ 1 回の Undo で選択した文字列と選択が元に戻る。
 
-### 15.4 混在ファイル
+### 15.5 混在ファイル
 
 - タブと空白が混在する行は表示幅で判断し (`tab_width`)、「1 段削除」は表示幅ベースで行う。混在の自動修正は行わない (v0.1、明示コマンド `edit.convert_indentation` で変換、v0.4)。
 

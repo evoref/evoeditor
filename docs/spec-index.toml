@@ -1,3164 +1,10037 @@
-# 仕様書の節 ID -> ファイルの索引 (v0.1 の初版。手書き相当の最小の形)。
-# docs/11-dev-workflow.md §3.3、docs/08-roadmap.md M0c (c)。行番号は持たない。
-# コミットの spec: は節 ID (例 "03 §9.3") で書く。該当見出しはファイルを開いて探す。
-# xtask spec-index (行番号付きの生成と --check) は v0.2。
+# 仕様書の索引 (生成物。手で直さない: `cargo xtask spec-index` で作り直す。docs/11 §3.3)。
+# [[section]] は節 ID → ファイルと行範囲、[[id]] は規範行 ID・既存の ID → ファイルと行。
+# 読むときは `cargo xtask spec-index --show <ID>` (例: --show "03 §9.3"、--show K1)。
 
 [[section]]
 id = "00 §1"
 file = "docs/00-overview.md"
+line = 15
+end = 25
+title = "ビジョン"
 
 [[section]]
 id = "00 §2"
 file = "docs/00-overview.md"
+line = 26
+end = 40
+title = "目標 (Goals)"
 
 [[section]]
 id = "00 §3"
 file = "docs/00-overview.md"
+line = 41
+end = 58
+title = "非目標 (Non-Goals)"
 
 [[section]]
 id = "00 §4"
 file = "docs/00-overview.md"
+line = 59
+end = 73
+title = "設計原則 (優先順位付き)"
 
 [[section]]
 id = "00 §5"
 file = "docs/00-overview.md"
+line = 74
+end = 84
+title = "想定ユーザー (ペルソナ)"
 
 [[section]]
 id = "00 §6"
 file = "docs/00-overview.md"
+line = 85
+end = 252
+title = "用語集 (Glossary)"
 
 [[section]]
 id = "00 §6.1"
 file = "docs/00-overview.md"
+line = 89
+end = 110
+title = "全体・構造"
 
 [[section]]
 id = "00 §6.2"
 file = "docs/00-overview.md"
+line = 111
+end = 134
+title = "テキスト・編集"
 
 [[section]]
 id = "00 §6.3"
 file = "docs/00-overview.md"
+line = 135
+end = 156
+title = "入力・コマンド・設定"
 
 [[section]]
 id = "00 §6.4"
 file = "docs/00-overview.md"
+line = 157
+end = 178
+title = "描画・画面"
 
 [[section]]
 id = "00 §6.5"
 file = "docs/00-overview.md"
+line = 179
+end = 201
+title = "並行処理・データ保全・プラットフォーム"
 
 [[section]]
 id = "00 §6.6"
 file = "docs/00-overview.md"
+line = 202
+end = 226
+title = "AI・拡張・自動化"
 
 [[section]]
 id = "00 §6.7"
 file = "docs/00-overview.md"
+line = 227
+end = 252
+title = "品質・テスト・開発運用"
 
 [[section]]
 id = "00 §7"
 file = "docs/00-overview.md"
+line = 253
+end = 288
+title = "ドキュメント体系"
 
 [[section]]
 id = "00 §7.1"
 file = "docs/00-overview.md"
+line = 278
+end = 288
+title = "文書運用ルール"
 
 [[section]]
 id = "01 §1"
 file = "docs/01-requirements.md"
+line = 15
+end = 71
+title = "記法"
 
 [[section]]
 id = "01 §1.1"
 file = "docs/01-requirements.md"
+line = 17
+end = 37
+title = "ID 体系"
 
 [[section]]
 id = "01 §1.2"
 file = "docs/01-requirements.md"
+line = 38
+end = 46
+title = "優先度 (MoSCoW)"
 
 [[section]]
 id = "01 §1.3"
 file = "docs/01-requirements.md"
+line = 47
+end = 63
+title = "版 (フェーズ)"
 
 [[section]]
 id = "01 §1.4"
 file = "docs/01-requirements.md"
+line = 64
+end = 71
+title = "受入基準の書き方"
 
 [[section]]
 id = "01 §2"
 file = "docs/01-requirements.md"
+line = 72
+end = 245
+title = "機能要件 (Functional Requirements)"
 
 [[section]]
 id = "01 §2.1"
 file = "docs/01-requirements.md"
+line = 74
+end = 107
+title = "ファイル・文書管理 (FR-1xx)"
 
 [[section]]
 id = "01 §2.2"
 file = "docs/01-requirements.md"
+line = 108
+end = 128
+title = "編集操作 (FR-2xx)"
 
 [[section]]
 id = "01 §2.3"
 file = "docs/01-requirements.md"
+line = 129
+end = 144
+title = "カーソル・選択・移動 (FR-3xx)"
 
 [[section]]
 id = "01 §2.4"
 file = "docs/01-requirements.md"
+line = 145
+end = 156
+title = "検索・置換 (FR-4xx)"
 
 [[section]]
 id = "01 §2.5"
 file = "docs/01-requirements.md"
+line = 157
+end = 179
+title = "表示・UI (FR-5xx)"
 
 [[section]]
 id = "01 §2.6"
 file = "docs/01-requirements.md"
+line = 180
+end = 193
+title = "入力・キーマップ・コマンド (FR-6xx)"
 
 [[section]]
 id = "01 §2.7"
 file = "docs/01-requirements.md"
+line = 194
+end = 208
+title = "設定・テーマ・拡張 (FR-7xx)"
 
 [[section]]
 id = "01 §2.8"
 file = "docs/01-requirements.md"
+line = 209
+end = 218
+title = "言語支援 (FR-8xx)"
 
 [[section]]
 id = "01 §2.9"
 file = "docs/01-requirements.md"
+line = 219
+end = 245
+title = "AI 連携 (FR-9xx)"
 
 [[section]]
 id = "01 §3"
 file = "docs/01-requirements.md"
+line = 246
+end = 389
+title = "非機能要件 (Non-Functional Requirements)"
 
 [[section]]
 id = "01 §3.0"
 file = "docs/01-requirements.md"
+line = 248
+end = 283
+title = "計測条件 (基準環境)"
 
 [[section]]
 id = "01 §3.0.1"
 file = "docs/01-requirements.md"
+line = 269
+end = 283
+title = "計測範囲の定義 (NFR-101 / 103 ほか)"
 
 [[section]]
 id = "01 §3.1"
 file = "docs/01-requirements.md"
+line = 284
+end = 314
+title = "性能 (Performance, NFR-1xx)"
 
 [[section]]
 id = "01 §3.2"
 file = "docs/01-requirements.md"
+line = 315
+end = 326
+title = "資源 (NFR-2xx)"
 
 [[section]]
 id = "01 §3.3"
 file = "docs/01-requirements.md"
+line = 327
+end = 338
+title = "信頼性・データ保全 (NFR-3xx)"
 
 [[section]]
 id = "01 §3.4"
 file = "docs/01-requirements.md"
+line = 339
+end = 349
+title = "移植性 (NFR-4xx)"
 
 [[section]]
 id = "01 §3.5"
 file = "docs/01-requirements.md"
+line = 350
+end = 364
+title = "セキュリティ・プライバシー (NFR-5xx)"
 
 [[section]]
 id = "01 §3.6"
 file = "docs/01-requirements.md"
+line = 365
+end = 374
+title = "ユーザビリティ・アクセシビリティ・国際化 (NFR-6xx)"
 
 [[section]]
 id = "01 §3.7"
 file = "docs/01-requirements.md"
+line = 375
+end = 389
+title = "保守性・品質・開発基盤 (NFR-7xx)"
 
 [[section]]
 id = "01 §4"
 file = "docs/01-requirements.md"
+line = 390
+end = 541
+title = "MVP (v0.1) の範囲と段階リリース"
 
 [[section]]
 id = "01 §4.1"
 file = "docs/01-requirements.md"
+line = 392
+end = 406
+title = "v0.1 の定義"
 
 [[section]]
 id = "01 §4.2"
 file = "docs/01-requirements.md"
+line = 407
+end = 438
+title = "v0.1 に含む (Must)"
 
 [[section]]
 id = "01 §4.3"
 file = "docs/01-requirements.md"
+line = 439
+end = 452
+title = "後の版へ回すもの"
 
 [[section]]
 id = "01 §4.4"
 file = "docs/01-requirements.md"
+line = 453
+end = 476
+title = "v0.1 で残す拡張点 (先行投資)"
 
 [[section]]
 id = "01 §4.5"
 file = "docs/01-requirements.md"
+line = 477
+end = 493
+title = "データ損失防止機構の段階化"
 
 [[section]]
 id = "01 §4.6"
 file = "docs/01-requirements.md"
+line = 494
+end = 541
+title = "v0.1 の既知の制約 (リリースノートとヘルプに明記する)"
 
 [[section]]
 id = "01 §5"
 file = "docs/01-requirements.md"
+line = 542
+end = 690
+title = "受入基準 (Must 要件)"
 
 [[section]]
 id = "01 §5.1"
 file = "docs/01-requirements.md"
+line = 546
+end = 567
+title = "v0.1: ファイル・文書管理"
 
 [[section]]
 id = "01 §5.2"
 file = "docs/01-requirements.md"
+line = 568
+end = 587
+title = "v0.1: 編集・移動・検索"
 
 [[section]]
 id = "01 §5.3"
 file = "docs/01-requirements.md"
+line = 588
+end = 612
+title = "v0.1: 表示・入力・設定"
 
 [[section]]
 id = "01 §5.4"
 file = "docs/01-requirements.md"
+line = 613
+end = 655
+title = "v0.1: 非機能"
 
 [[section]]
 id = "01 §5.5"
 file = "docs/01-requirements.md"
+line = 656
+end = 690
+title = "v0.2 以降 (概要。各版の着手前に詳細化)"
 
 [[section]]
 id = "02 §1"
 file = "docs/02-architecture.md"
+line = 39
+end = 52
+title = "目的とスコープ"
 
 [[section]]
 id = "02 §2"
 file = "docs/02-architecture.md"
+line = 53
+end = 120
+title = "全体像"
 
 [[section]]
 id = "02 §2.1"
 file = "docs/02-architecture.md"
+line = 55
+end = 91
+title = "レイヤ図"
 
 [[section]]
 id = "02 §2.2"
 file = "docs/02-architecture.md"
+line = 92
+end = 120
+title = "実行時の構成要素"
 
 [[section]]
 id = "02 §3"
 file = "docs/02-architecture.md"
+line = 121
+end = 153
+title = "アーキテクチャ上の主要判断 (要約)"
 
 [[section]]
 id = "02 §4"
 file = "docs/02-architecture.md"
+line = 154
+end = 636
+title = "crate 構成 (Cargo workspace)"
 
 [[section]]
 id = "02 §4.1"
 file = "docs/02-architecture.md"
+line = 156
+end = 192
+title = "crate 一覧"
 
 [[section]]
 id = "02 §4.2"
 file = "docs/02-architecture.md"
+line = 193
+end = 229
+title = "依存グラフ"
 
 [[section]]
 id = "02 §4.3"
 file = "docs/02-architecture.md"
+line = 230
+end = 248
+title = "依存規則 (CI で機械的に検査する)"
 
 [[section]]
 id = "02 §4.4"
 file = "docs/02-architecture.md"
+line = 249
+end = 389
+title = "Ports (core が定義し、外側が実装する trait)"
 
 [[section]]
 id = "02 §4.5"
 file = "docs/02-architecture.md"
+line = 390
+end = 595
+title = "FileSystem Port (正本)"
 
 [[section]]
 id = "02 §4.6"
 file = "docs/02-architecture.md"
+line = 596
+end = 616
+title = "eve-core のモジュール所有境界"
 
 [[section]]
 id = "02 §4.7"
 file = "docs/02-architecture.md"
+line = 617
+end = 636
+title = "v0.1 の対象 OS と移植性の維持"
 
 [[section]]
 id = "02 §5"
 file = "docs/02-architecture.md"
+line = 637
+end = 766
+title = "状態モデル"
 
 [[section]]
 id = "02 §5.1"
 file = "docs/02-architecture.md"
+line = 639
+end = 686
+title = "所有構造"
 
 [[section]]
 id = "02 §5.2"
 file = "docs/02-architecture.md"
+line = 687
+end = 703
+title = "変更の唯一の経路"
 
 [[section]]
 id = "02 §5.3"
 file = "docs/02-architecture.md"
+line = 704
+end = 714
+title = "Revision とスナップショット"
 
 [[section]]
 id = "02 §5.4"
 file = "docs/02-architecture.md"
+line = 715
+end = 766
+title = "Editor の公開 API (正本)"
 
 [[section]]
 id = "02 §6"
 file = "docs/02-architecture.md"
+line = 767
+end = 891
+title = "コマンド / アクション駆動設計"
 
 [[section]]
 id = "02 §6.1"
 file = "docs/02-architecture.md"
+line = 769
+end = 808
+title = "基本方針 ([ADR-0007](10-decisions.md#adr-0007-コマンド駆動設計))"
 
 [[section]]
 id = "02 §6.2"
 file = "docs/02-architecture.md"
+line = 809
+end = 817
+title = "命名規約 (案)"
 
 [[section]]
 id = "02 §6.3"
 file = "docs/02-architecture.md"
+line = 818
+end = 878
+title = "コマンド・Transaction・Effect の関係"
 
 [[section]]
 id = "02 §6.4"
 file = "docs/02-architecture.md"
+line = 879
+end = 882
+title = "when コンテキスト"
 
 [[section]]
 id = "02 §6.5"
 file = "docs/02-architecture.md"
+line = 883
+end = 891
+title = "利点とトレードオフ"
 
 [[section]]
 id = "02 §7"
 file = "docs/02-architecture.md"
+line = 892
+end = 992
+title = "入力抽象 (Key / Mouse / Text / IME)"
 
 [[section]]
 id = "02 §7.1"
 file = "docs/02-architecture.md"
+line = 894
+end = 950
+title = "InputEvent (eve-view)"
 
 [[section]]
 id = "02 §7.2"
 file = "docs/02-architecture.md"
+line = 951
+end = 988
+title = "キーマップ解決は core で行う"
 
 [[section]]
 id = "02 §7.3"
 file = "docs/02-architecture.md"
+line = 989
+end = 992
+title = "マウス"
 
 [[section]]
 id = "02 §8"
 file = "docs/02-architecture.md"
+line = 993
+end = 1130
+title = "状態と描画の分離 (ViewModel)"
 
 [[section]]
 id = "02 §8.1"
 file = "docs/02-architecture.md"
+line = 995
+end = 1006
+title = "方針 ([ADR-0008](10-decisions.md#adr-0008-viewmodel-による描画分離))"
 
 [[section]]
 id = "02 §8.2"
 file = "docs/02-architecture.md"
+line = 1007
+end = 1097
+title = "Frame の構造 (擬似コード)"
 
 [[section]]
 id = "02 §8.3"
 file = "docs/02-architecture.md"
+line = 1098
+end = 1102
+title = "レイアウト責任"
 
 [[section]]
 id = "02 §8.4"
 file = "docs/02-architecture.md"
+line = 1103
+end = 1130
+title = "境界型の契約と凍結段階"
 
 [[section]]
 id = "02 §9"
 file = "docs/02-architecture.md"
+line = 1131
+end = 1580
+title = "イベントループとスレッドモデル"
 
 [[section]]
 id = "02 §9.1"
 file = "docs/02-architecture.md"
+line = 1133
+end = 1155
+title = "スレッド一覧 ([ADR-0006](10-decisions.md#adr-0006-スレッドモデルと-async-境界))"
 
 [[section]]
 id = "02 §9.2"
 file = "docs/02-architecture.md"
+line = 1156
+end = 1364
+title = "メインループ (擬似コード)"
 
 [[section]]
 id = "02 §9.3"
 file = "docs/02-architecture.md"
+line = 1365
+end = 1532
+title = "ジョブとキャンセル"
 
 [[section]]
 id = "02 §9.4"
 file = "docs/02-architecture.md"
+line = 1533
+end = 1539
+title = "async 境界"
 
 [[section]]
 id = "02 §9.5"
 file = "docs/02-architecture.md"
+line = 1540
+end = 1555
+title = "起動シーケンス (NFR-101 対応)"
 
 [[section]]
 id = "02 §9.6"
 file = "docs/02-architecture.md"
+line = 1556
+end = 1580
+title = "終了・シグナル"
 
 [[section]]
 id = "02 §10"
 file = "docs/02-architecture.md"
+line = 1581
+end = 1784
+title = "拡張点 (Extension Points) とプラグイン方針"
 
 [[section]]
 id = "02 §10.1"
 file = "docs/02-architecture.md"
+line = 1583
+end = 1685
+title = "MVP 時点で用意する拡張点 (内部 API)"
 
 [[section]]
 id = "02 §10.2"
 file = "docs/02-architecture.md"
+line = 1686
+end = 1744
+title = "AI 連携のアーキテクチャ上の位置づけ ([ADR-0013](10-decisions.md#adr-0013-ai-連携の基本方針))"
 
 [[section]]
 id = "02 §10.2.1"
 file = "docs/02-architecture.md"
+line = 1714
+end = 1744
+title = "Proposal モデル (正本)"
 
 [[section]]
 id = "02 §10.3"
 file = "docs/02-architecture.md"
+line = 1745
+end = 1750
+title = "外部プラグイン機構 ([ADR-0014](10-decisions.md#adr-0014-拡張プラグイン機構の方針))"
 
 [[section]]
 id = "02 §10.4"
 file = "docs/02-architecture.md"
+line = 1751
+end = 1768
+title = "権限モデル (AI・プラグイン共通、骨子)"
 
 [[section]]
 id = "02 §10.5"
 file = "docs/02-architecture.md"
+line = 1769
+end = 1784
+title = "駆動 API (Stage D)"
 
 [[section]]
 id = "02 §11"
 file = "docs/02-architecture.md"
+line = 1785
+end = 1889
+title = "エラー処理・パニック・ログ"
 
 [[section]]
 id = "02 §11.1"
 file = "docs/02-architecture.md"
+line = 1787
+end = 1797
+title = "エラー処理方針 ([ADR-0012](10-decisions.md#adr-0012-エラー処理とログ))"
 
 [[section]]
 id = "02 §11.2"
 file = "docs/02-architecture.md"
+line = 1798
+end = 1879
+title = "パニック時の扱い (NFR-302)"
 
 [[section]]
 id = "02 §11.2.1"
 file = "docs/02-architecture.md"
+line = 1806
+end = 1874
+title = "緊急退避の方式 (正本、ADR-0023)"
 
 [[section]]
 id = "02 §11.2.2"
 file = "docs/02-architecture.md"
+line = 1875
+end = 1879
+title = "メモリ不足とスタックオーバーフロー"
 
 [[section]]
 id = "02 §11.3"
 file = "docs/02-architecture.md"
+line = 1880
+end = 1889
+title = "ログ"
 
 [[section]]
 id = "02 §12"
 file = "docs/02-architecture.md"
+line = 1890
+end = 1936
+title = "後続文書との責務境界"
 
 [[section]]
 id = "02 §12.1"
 file = "docs/02-architecture.md"
+line = 1892
+end = 1905
+title = "文書と crate の対応"
 
 [[section]]
 id = "02 §12.2"
 file = "docs/02-architecture.md"
+line = 1906
+end = 1932
+title = "境界をまたぐ型の所有者"
 
 [[section]]
 id = "02 §12.3"
 file = "docs/02-architecture.md"
+line = 1933
+end = 1936
+title = "正本マップ (本書が正本の概念)"
 
 [[section]]
 id = "02 §13"
 file = "docs/02-architecture.md"
+line = 1937
+end = 2040
+title = "主要クレート選定"
 
 [[section]]
 id = "02 §13.0"
 file = "docs/02-architecture.md"
+line = 1941
+end = 1944
+title = "依存追加の評価基準"
 
 [[section]]
 id = "02 §13.1"
 file = "docs/02-architecture.md"
+line = 1945
+end = 1951
+title = "テキストバッファ"
 
 [[section]]
 id = "02 §13.2"
 file = "docs/02-architecture.md"
+line = 1952
+end = 1960
+title = "端末 / TUI"
 
 [[section]]
 id = "02 §13.3"
 file = "docs/02-architecture.md"
+line = 1961
+end = 1968
+title = "Unicode"
 
 [[section]]
 id = "02 §13.4"
 file = "docs/02-architecture.md"
+line = 1969
+end = 1997
+title = "文字コード"
 
 [[section]]
 id = "02 §13.5"
 file = "docs/02-architecture.md"
+line = 1998
+end = 2007
+title = "検索"
 
 [[section]]
 id = "02 §13.6"
 file = "docs/02-architecture.md"
+line = 2008
+end = 2016
+title = "並行処理"
 
 [[section]]
 id = "02 §13.7"
 file = "docs/02-architecture.md"
+line = 2017
+end = 2040
+title = "その他"
 
 [[section]]
 id = "02 §14"
 file = "docs/02-architecture.md"
+line = 2041
+end = 2076
+title = "性能設計の要点"
 
 [[section]]
 id = "02 §14.1"
 file = "docs/02-architecture.md"
+line = 2056
+end = 2076
+title = "メモリと安定性の規則"
 
 [[section]]
 id = "02 §15"
 file = "docs/02-architecture.md"
+line = 2077
+end = 2093
+title = "セキュリティ境界"
 
 [[section]]
 id = "02 §16"
 file = "docs/02-architecture.md"
+line = 2094
+end = 2113
+title = "frontend 境界チェックリスト"
 
 [[section]]
 id = "02 §17"
 file = "docs/02-architecture.md"
+line = 2114
+end = 2177
+title = "AI 連携に適した開発構成"
 
 [[section]]
 id = "02 §17.1"
 file = "docs/02-architecture.md"
+line = 2118
+end = 2162
+title = "リポジトリ構成 (案)"
 
 [[section]]
 id = "02 §17.2"
 file = "docs/02-architecture.md"
+line = 2163
+end = 2177
+title = "構造上の規約"
 
 [[section]]
 id = "03 §1"
 file = "docs/03-core-design.md"
+line = 52
+end = 120
+title = "目的・スコープ・設計上の視点"
 
 [[section]]
 id = "03 §1.1"
 file = "docs/03-core-design.md"
+line = 54
+end = 68
+title = "本書が満たす要件"
 
 [[section]]
 id = "03 §1.2"
 file = "docs/03-core-design.md"
+line = 69
+end = 81
+title = "設計の 5 つの視点"
 
 [[section]]
 id = "03 §1.3"
 file = "docs/03-core-design.md"
+line = 82
+end = 89
+title = "crate への配置 (本書の提案)"
 
 [[section]]
 id = "03 §1.4"
 file = "docs/03-core-design.md"
+line = 90
+end = 120
+title = "版ごとの範囲と先行投資"
 
 [[section]]
 id = "03 §2"
 file = "docs/03-core-design.md"
+line = 121
+end = 209
+title = "テキストストレージ (TextStorage)"
 
 [[section]]
 id = "03 §2.1"
 file = "docs/03-core-design.md"
+line = 123
+end = 136
+title = "要求"
 
 [[section]]
 id = "03 §2.2"
 file = "docs/03-core-design.md"
+line = 137
+end = 178
+title = "API スケッチ"
 
 [[section]]
 id = "03 §2.3"
 file = "docs/03-core-design.md"
+line = 179
+end = 189
+title = "ropey の使い方 (ADR-0004 / OQ-06)"
 
 [[section]]
 id = "03 §2.4"
 file = "docs/03-core-design.md"
+line = 190
+end = 197
+title = "行の定義"
 
 [[section]]
 id = "03 §2.5"
 file = "docs/03-core-design.md"
+line = 198
+end = 209
+title = "TextStorage の不変条件"
 
 [[section]]
 id = "03 §3"
 file = "docs/03-core-design.md"
+line = 210
+end = 250
+title = "座標系と位置変換"
 
 [[section]]
 id = "03 §3.1"
 file = "docs/03-core-design.md"
+line = 212
+end = 226
+title = "座標系の一覧"
 
 [[section]]
 id = "03 §3.2"
 file = "docs/03-core-design.md"
+line = 227
+end = 250
+title = "変換関数と計算量"
 
 [[section]]
 id = "03 §4"
 file = "docs/03-core-design.md"
+line = 251
+end = 319
+title = "位置・範囲・選択 (Pos / Range / Selection)"
 
 [[section]]
 id = "03 §4.1"
 file = "docs/03-core-design.md"
+line = 253
+end = 259
+title = "Pos の正規化"
 
 [[section]]
 id = "03 §4.2"
 file = "docs/03-core-design.md"
+line = 260
+end = 275
+title = "Range"
 
 [[section]]
 id = "03 §4.3"
 file = "docs/03-core-design.md"
+line = 276
+end = 288
+title = "Selection (複数 Range)"
 
 [[section]]
 id = "03 §4.4"
 file = "docs/03-core-design.md"
+line = 289
+end = 301
+title = "Selection の正規化規則"
 
 [[section]]
 id = "03 §4.5"
 file = "docs/03-core-design.md"
+line = 302
+end = 313
+title = "複数カーソルでの編集セマンティクス (FR-211)"
 
 [[section]]
 id = "03 §4.6"
 file = "docs/03-core-design.md"
+line = 314
+end = 319
+title = "Selection の View 間写像"
 
 [[section]]
 id = "03 §5"
 file = "docs/03-core-design.md"
+line = 320
+end = 421
+title = "カーソル移動のセマンティクス"
 
 [[section]]
 id = "03 §5.1"
 file = "docs/03-core-design.md"
+line = 324
+end = 333
+title = "水平移動 (FR-301)"
 
 [[section]]
 id = "03 §5.2"
 file = "docs/03-core-design.md"
+line = 334
+end = 340
+title = "垂直移動と目標列 (FR-301)"
 
 [[section]]
 id = "03 §5.3"
 file = "docs/03-core-design.md"
+line = 341
+end = 358
+title = "単語移動 (FR-302)"
 
 [[section]]
 id = "03 §5.4"
 file = "docs/03-core-design.md"
+line = 359
+end = 365
+title = "行頭・行末・文書端 (FR-303)"
 
 [[section]]
 id = "03 §5.5"
 file = "docs/03-core-design.md"
+line = 366
+end = 369
+title = "ページ移動 (FR-304)"
 
 [[section]]
 id = "03 §5.6"
 file = "docs/03-core-design.md"
+line = 370
+end = 374
+title = "指定行へ移動 (FR-306)"
 
 [[section]]
 id = "03 §5.7"
 file = "docs/03-core-design.md"
+line = 375
+end = 379
+title = "対応括弧・テキストオブジェクト (FR-308 / 309, v0.4)"
 
 [[section]]
 id = "03 §5.8"
 file = "docs/03-core-design.md"
+line = 380
+end = 421
+title = "マウス位置 → 文書位置"
+
+[[section]]
+id = "03 §5.8.1"
+file = "docs/03-core-design.md"
+line = 384
+end = 421
+title = "マウスの扱い (M9b、2026-10-30。案)"
 
 [[section]]
 id = "03 §6"
 file = "docs/03-core-design.md"
+line = 422
+end = 580
+title = "ChangeSet と Transaction"
 
 [[section]]
 id = "03 §6.1"
 file = "docs/03-core-design.md"
+line = 424
+end = 440
+title = "ChangeSet の形式"
 
 [[section]]
 id = "03 §6.2"
 file = "docs/03-core-design.md"
+line = 441
+end = 481
+title = "演算"
 
 [[section]]
 id = "03 §6.3"
 file = "docs/03-core-design.md"
+line = 482
+end = 514
+title = "Transaction"
 
 [[section]]
 id = "03 §6.4"
 file = "docs/03-core-design.md"
+line = 515
+end = 531
+title = "位置写像 (map) の規則"
 
 [[section]]
 id = "03 §6.5"
 file = "docs/03-core-design.md"
+line = 532
+end = 580
+title = "Document::apply の手順"
 
 [[section]]
 id = "03 §7"
 file = "docs/03-core-design.md"
+line = 581
+end = 680
+title = "Undo / Redo"
 
 [[section]]
 id = "03 §7.1"
 file = "docs/03-core-design.md"
+line = 583
+end = 617
+title = "線形か木か"
 
 [[section]]
 id = "03 §7.2"
 file = "docs/03-core-design.md"
+line = 618
+end = 629
+title = "Undo で元に戻るもの・戻らないもの"
 
 [[section]]
 id = "03 §7.3"
 file = "docs/03-core-design.md"
+line = 630
+end = 654
+title = "結合 (グループ化) 規則 (FR-203)"
 
 [[section]]
 id = "03 §7.4"
 file = "docs/03-core-design.md"
+line = 655
+end = 663
+title = "保存時点と「未変更」判定 (FR-204)"
 
 [[section]]
 id = "03 §7.5"
 file = "docs/03-core-design.md"
+line = 664
+end = 673
+title = "メモリ上限 (NFR-203)"
 
 [[section]]
 id = "03 §7.6"
 file = "docs/03-core-design.md"
+line = 674
+end = 680
+title = "Undo と複数 View・複数カーソル"
 
 [[section]]
 id = "03 §8"
 file = "docs/03-core-design.md"
+line = 681
+end = 887
+title = "文字コード・BOM・改行コード"
 
 [[section]]
 id = "03 §8.1"
 file = "docs/03-core-design.md"
+line = 683
+end = 708
+title = "Document のメタデータ"
 
 [[section]]
 id = "03 §8.2"
 file = "docs/03-core-design.md"
+line = 709
+end = 738
+title = "判定アルゴリズム (FR-108 / 109 / 115)"
 
 [[section]]
 id = "03 §8.2.1"
 file = "docs/03-core-design.md"
+line = 732
+end = 738
+title = "先頭だけで判定することの危険と再判定規則"
 
 [[section]]
 id = "03 §8.3"
 file = "docs/03-core-design.md"
+line = 739
+end = 760
+title = "不正バイト列の保持 (OQ-16 / NFR-304)"
 
 [[section]]
 id = "03 §8.4"
 file = "docs/03-core-design.md"
+line = 761
+end = 778
+title = "改行コード (OQ-04)"
 
 [[section]]
 id = "03 §8.5"
 file = "docs/03-core-design.md"
+line = 779
+end = 783
+title = "末尾改行 (FR-114)"
 
 [[section]]
 id = "03 §8.6"
 file = "docs/03-core-design.md"
+line = 784
+end = 829
+title = "エンコード (保存) と表現不能文字 (FR-112)"
 
 [[section]]
 id = "03 §8.7"
 file = "docs/03-core-design.md"
+line = 830
+end = 857
+title = "往復保証の範囲 (NFR-303)"
 
 [[section]]
 id = "03 §8.8"
 file = "docs/03-core-design.md"
+line = 858
+end = 869
+title = "文字コードの変更 (FR-111)"
 
 [[section]]
 id = "03 §8.9"
 file = "docs/03-core-design.md"
+line = 870
+end = 887
+title = "対応しない文字コード"
 
 [[section]]
 id = "03 §9"
 file = "docs/03-core-design.md"
+line = 888
+end = 1419
+title = "ファイル I/O の論理手順"
 
 [[section]]
 id = "03 §9.1"
 file = "docs/03-core-design.md"
+line = 892
+end = 913
+title = "Port に要求する操作 (05 への入力)"
 
 [[section]]
 id = "03 §9.2"
 file = "docs/03-core-design.md"
+line = 914
+end = 1024
+title = "読込 (FR-101 / 122 / NFR-104)"
 
 [[section]]
 id = "03 §9.3"
 file = "docs/03-core-design.md"
+line = 1025
+end = 1147
+title = "保存 (FR-104 / 105 / 106 / NFR-301 / NFR-107)"
 
 [[section]]
 id = "03 §9.4"
 file = "docs/03-core-design.md"
+line = 1148
+end = 1160
+title = "Windows 固有の論理上の扱い (実装は 05)"
 
 [[section]]
 id = "03 §9.5"
 file = "docs/03-core-design.md"
+line = 1161
+end = 1192
+title = "外部変更の検知と再読込 (FR-117)"
 
 [[section]]
 id = "03 §9.6"
 file = "docs/03-core-design.md"
+line = 1193
+end = 1214
+title = "読み取り専用・バイナリ (FR-115 / 116)"
 
 [[section]]
 id = "03 §9.7"
 file = "docs/03-core-design.md"
+line = 1215
+end = 1354
+title = "保存の連鎖と後続処理 (Continuation)"
+
+[[section]]
+id = "03 §9.8"
+file = "docs/03-core-design.md"
+line = 1355
+end = 1419
+title = "複数文書の操作 (v0.2 の M9a、FR-103 / FR-104 / FR-107)"
 
 [[section]]
 id = "03 §10"
 file = "docs/03-core-design.md"
+line = 1420
+end = 1485
+title = "クラッシュ復旧・スワップ・バックアップ"
 
 [[section]]
 id = "03 §10.1"
 file = "docs/03-core-design.md"
-
-[[section]]
-id = "03 §10.1a"
-file = "docs/03-core-design.md"
+line = 1432
+end = 1454
+title = "緊急退避 (v0.1, NFR-302)"
 
 [[section]]
 id = "03 §10.2"
 file = "docs/03-core-design.md"
+line = 1455
+end = 1468
+title = "スワップ (v0.2, FR-118 / NFR-307)"
 
 [[section]]
 id = "03 §10.3"
 file = "docs/03-core-design.md"
+line = 1469
+end = 1478
+title = "復旧の提案と適用 (v0.2。v0.1 は退避先の表示のみ)"
 
 [[section]]
 id = "03 §10.4"
 file = "docs/03-core-design.md"
+line = 1479
+end = 1485
+title = "バックアップ (v0.3, FR-119 Could)"
 
 [[section]]
 id = "03 §11"
 file = "docs/03-core-design.md"
+line = 1486
+end = 1593
+title = "巨大ファイル戦略"
 
 [[section]]
 id = "03 §11.1"
 file = "docs/03-core-design.md"
+line = 1488
+end = 1493
+title = "基本方針"
 
 [[section]]
 id = "03 §11.2"
 file = "docs/03-core-design.md"
+line = 1494
+end = 1507
+title = "サイズ閾値と挙動"
 
 [[section]]
 id = "03 §11.3"
 file = "docs/03-core-design.md"
+line = 1508
+end = 1513
+title = "段階的ロードと早期表示 (NFR-104)"
 
 [[section]]
 id = "03 §11.4"
 file = "docs/03-core-design.md"
+line = 1514
+end = 1519
+title = "行インデックス"
 
 [[section]]
 id = "03 §11.5"
 file = "docs/03-core-design.md"
+line = 1520
+end = 1572
+title = "長大行 (NFR-106)"
+
+[[section]]
+id = "03 §11.5.1"
+file = "docs/03-core-design.md"
+line = 1532
+end = 1572
+title = "char 近似モードを使う側の突合と実装の分け方 (M9d、2026-10-31。案)"
 
 [[section]]
 id = "03 §11.6"
 file = "docs/03-core-design.md"
+line = 1573
+end = 1576
+title = "mmap の可否"
 
 [[section]]
 id = "03 §11.7"
 file = "docs/03-core-design.md"
+line = 1577
+end = 1593
+title = "メモリ見積り (NFR-202)"
 
 [[section]]
 id = "03 §12"
 file = "docs/03-core-design.md"
+line = 1594
+end = 1701
+title = "検索・置換の基盤"
 
 [[section]]
 id = "03 §12.1"
 file = "docs/03-core-design.md"
+line = 1596
+end = 1616
+title = "検索の種類とモード"
 
 [[section]]
 id = "03 §12.2"
 file = "docs/03-core-design.md"
+line = 1617
+end = 1636
+title = "実行モデル (FR-404 / NFR-108 / 109)"
 
 [[section]]
 id = "03 §12.3"
 file = "docs/03-core-design.md"
+line = 1637
+end = 1648
+title = "正規表現"
 
 [[section]]
 id = "03 §12.4"
 file = "docs/03-core-design.md"
+line = 1649
+end = 1658
+title = "単語単位・大文字小文字"
 
 [[section]]
 id = "03 §12.5"
 file = "docs/03-core-design.md"
+line = 1659
+end = 1687
+title = "置換 (FR-403、v0.2)"
 
 [[section]]
 id = "03 §12.6"
 file = "docs/03-core-design.md"
+line = 1688
+end = 1694
+title = "クリップボードへのコピーと大きな文字列化"
 
 [[section]]
 id = "03 §12.7"
 file = "docs/03-core-design.md"
+line = 1695
+end = 1701
+title = "ワークスペース検索 (v0.4, FR-405) への接続"
 
 [[section]]
 id = "03 §13"
 file = "docs/03-core-design.md"
+line = 1702
+end = 1859
+title = "Unicode 処理"
 
 [[section]]
 id = "03 §13.1"
 file = "docs/03-core-design.md"
+line = 1704
+end = 1712
+title = "書記素クラスタ (FR-201 / 301)"
 
 [[section]]
 id = "03 §13.2"
 file = "docs/03-core-design.md"
+line = 1713
+end = 1770
+title = "表示幅 (FR-501 / NFR-605)"
 
 [[section]]
 id = "03 §13.3"
 file = "docs/03-core-design.md"
+line = 1771
+end = 1843
+title = "単語境界 (日本語補助規則)"
 
 [[section]]
 id = "03 §13.4"
 file = "docs/03-core-design.md"
+line = 1844
+end = 1847
+title = "大文字・小文字変換 (FR-214)"
 
 [[section]]
 id = "03 §13.5"
 file = "docs/03-core-design.md"
+line = 1848
+end = 1859
+title = "正規化と BiDi"
 
 [[section]]
 id = "03 §14"
 file = "docs/03-core-design.md"
+line = 1860
+end = 2026
+title = "表示幅・折り返し・レイアウト"
 
 [[section]]
 id = "03 §14.1"
 file = "docs/03-core-design.md"
+line = 1864
+end = 1874
+title = "入力と出力"
 
 [[section]]
 id = "03 §14.2"
 file = "docs/03-core-design.md"
+line = 1875
+end = 1893
+title = "1 行のレイアウト"
 
 [[section]]
 id = "03 §14.3"
 file = "docs/03-core-design.md"
+line = 1894
+end = 1961
+title = "折り返し (FR-506、ソフトラップは v0.2)"
+
+[[section]]
+id = "03 §14.3.1"
+file = "docs/03-core-design.md"
+line = 1910
+end = 1961
+title = "折り返しを使う側の突合と実装の分け方 (M9b、2026-10-30。案)"
 
 [[section]]
 id = "03 §14.4"
 file = "docs/03-core-design.md"
+line = 1962
+end = 1977
+title = "長大行の列チェックポイント"
 
 [[section]]
 id = "03 §14.5"
 file = "docs/03-core-design.md"
+line = 1978
+end = 1989
+title = "Decoration の合成"
 
 [[section]]
 id = "03 §14.6"
 file = "docs/03-core-design.md"
+line = 1990
+end = 2026
+title = "意味的 UI モデルの生成 (core 側の要件。型の正本は 02 §8.2)"
 
 [[section]]
 id = "03 §15"
 file = "docs/03-core-design.md"
+line = 2027
+end = 2097
+title = "タブとインデント"
 
 [[section]]
 id = "03 §15.1"
 file = "docs/03-core-design.md"
+line = 2029
+end = 2037
+title = "設定と検出"
 
 [[section]]
 id = "03 §15.2"
 file = "docs/03-core-design.md"
+line = 2038
+end = 2043
+title = "タブ文字の扱い"
 
 [[section]]
 id = "03 §15.3"
 file = "docs/03-core-design.md"
+line = 2044
+end = 2055
+title = "インデント操作 (FR-202 / 208)"
 
 [[section]]
 id = "03 §15.4"
 file = "docs/03-core-design.md"
+line = 2056
+end = 2091
+title = "行の複製・削除・上下移動 (FR-207、v0.2 の M9b)"
+
+[[section]]
+id = "03 §15.5"
+file = "docs/03-core-design.md"
+line = 2092
+end = 2097
+title = "混在ファイル"
 
 [[section]]
 id = "03 §16"
 file = "docs/03-core-design.md"
+line = 2098
+end = 2150
+title = "シンタックスハイライト基盤"
 
 [[section]]
 id = "03 §16.1"
 file = "docs/03-core-design.md"
+line = 2100
+end = 2104
+title = "版と本書の範囲"
 
 [[section]]
 id = "03 §16.2"
 file = "docs/03-core-design.md"
+line = 2105
+end = 2114
+title = "言語判定"
 
 [[section]]
 id = "03 §16.3"
 file = "docs/03-core-design.md"
+line = 2115
+end = 2138
+title = "SyntaxProvider trait"
 
 [[section]]
 id = "03 §16.4"
 file = "docs/03-core-design.md"
+line = 2139
+end = 2143
+title = "ハイライトの Decoration 化"
 
 [[section]]
 id = "03 §16.5"
 file = "docs/03-core-design.md"
+line = 2144
+end = 2150
+title = "括弧対応 (FR-308) の二段構え"
 
 [[section]]
 id = "03 §17"
 file = "docs/03-core-design.md"
+line = 2151
+end = 2195
+title = "Revision とジョブ結果の採否規則"
 
 [[section]]
 id = "03 §17.1"
 file = "docs/03-core-design.md"
+line = 2155
+end = 2163
+title = "Revision"
 
 [[section]]
 id = "03 §17.2"
 file = "docs/03-core-design.md"
+line = 2164
+end = 2184
+title = "ジョブ種別ごとの採否"
 
 [[section]]
 id = "03 §17.3"
 file = "docs/03-core-design.md"
+line = 2185
+end = 2195
+title = "ジョブの投入規律"
 
 [[section]]
 id = "03 §18"
 file = "docs/03-core-design.md"
+line = 2196
+end = 2235
+title = "AI 差分適用 (Proposal) との接合"
 
 [[section]]
 id = "03 §18.1"
 file = "docs/03-core-design.md"
+line = 2200
+end = 2217
+title = "core が提供する演算 (06 X3 / X5 / X9 への回答)"
 
 [[section]]
 id = "03 §18.2"
 file = "docs/03-core-design.md"
+line = 2218
+end = 2223
+title = "差分表示の素材"
 
 [[section]]
 id = "03 §18.3"
 file = "docs/03-core-design.md"
+line = 2224
+end = 2235
+title = "相性の確認 (設計視点)"
 
 [[section]]
 id = "03 §19"
 file = "docs/03-core-design.md"
+line = 2236
+end = 2314
+title = "型スケッチのまとめ"
 
 [[section]]
 id = "03 §20"
 file = "docs/03-core-design.md"
+line = 2315
+end = 2349
+title = "不変条件一覧"
 
 [[section]]
 id = "03 §21"
 file = "docs/03-core-design.md"
+line = 2350
+end = 2373
+title = "性能目標との対応"
 
 [[section]]
 id = "03 §22"
 file = "docs/03-core-design.md"
+line = 2374
+end = 2442
+title = "テスト観点"
 
 [[section]]
 id = "03 §22.1"
 file = "docs/03-core-design.md"
+line = 2378
+end = 2401
+title = "プロパティテスト (proptest)"
 
 [[section]]
 id = "03 §22.2"
 file = "docs/03-core-design.md"
+line = 2402
+end = 2405
+title = "fuzz (cargo-fuzz, NFR-305)"
 
 [[section]]
 id = "03 §22.3"
 file = "docs/03-core-design.md"
+line = 2406
+end = 2431
+title = "ヘッドレス統合テスト (eve-testkit)"
 
 [[section]]
 id = "03 §22.4"
 file = "docs/03-core-design.md"
+line = 2432
+end = 2436
+title = "ベンチマーク (criterion、09 で CI 化)"
 
 [[section]]
 id = "03 §22.5"
 file = "docs/03-core-design.md"
+line = 2437
+end = 2442
+title = "スナップショットテスト (insta)"
 
 [[section]]
 id = "03 §23"
 file = "docs/03-core-design.md"
+line = 2443
+end = 2478
+title = "未決事項"
 
 [[section]]
 id = "04 §1"
 file = "docs/04-tui-design.md"
+line = 46
+end = 86
+title = "目的と責務境界"
 
 [[section]]
 id = "04 §1.1"
 file = "docs/04-tui-design.md"
+line = 48
+end = 61
+title = "本書が決めること ([02 §12.1](02-architecture.md#121-文書と-crate-の対応) に従う)"
 
 [[section]]
 id = "04 §1.2"
 file = "docs/04-tui-design.md"
+line = 62
+end = 72
+title = "本書が決めないこと"
 
 [[section]]
 id = "04 §1.3"
 file = "docs/04-tui-design.md"
+line = 73
+end = 86
+title = "大原則 (本書全体に適用)"
 
 [[section]]
 id = "04 §2"
 file = "docs/04-tui-design.md"
+line = 87
+end = 105
+title = "本書で導入する用語"
 
 [[section]]
 id = "04 §3"
 file = "docs/04-tui-design.md"
+line = 106
+end = 349
+title = "画面レイアウト"
 
 [[section]]
 id = "04 §3.1"
 file = "docs/04-tui-design.md"
+line = 108
+end = 122
+title = "領域構成 (v0.1)"
 
 [[section]]
 id = "04 §3.2"
 file = "docs/04-tui-design.md"
+line = 123
+end = 145
+title = "v0.1 の画面モック (80×24、通常状態)"
 
 [[section]]
 id = "04 §3.3"
 file = "docs/04-tui-design.md"
+line = 146
+end = 210
+title = "状態別モック"
 
 [[section]]
 id = "04 §3.4"
 file = "docs/04-tui-design.md"
+line = 211
+end = 262
+title = "将来の拡張領域 (v0.4 以降) のモック"
 
 [[section]]
 id = "04 §3.5"
 file = "docs/04-tui-design.md"
+line = 263
+end = 274
+title = "レイアウト規則・縮退"
 
 [[section]]
 id = "04 §3.6"
 file = "docs/04-tui-design.md"
+line = 275
+end = 293
+title = "レイアウト責任の分担と 2 パス描画"
 
 [[section]]
 id = "04 §3.7"
 file = "docs/04-tui-design.md"
+line = 294
+end = 349
+title = "装飾記号・枠線の ASCII 縮退"
 
 [[section]]
 id = "04 §4"
 file = "docs/04-tui-design.md"
+line = 350
+end = 504
+title = "描画パイプライン"
 
 [[section]]
 id = "04 §4.1"
 file = "docs/04-tui-design.md"
+line = 352
+end = 374
+title = "全体フロー"
 
 [[section]]
 id = "04 §4.2"
 file = "docs/04-tui-design.md"
+line = 375
+end = 386
+title = "Frame → Buffer 変換の規則"
 
 [[section]]
 id = "04 §4.3"
 file = "docs/04-tui-design.md"
+line = 387
+end = 401
+title = "差分とダーティ領域"
 
 [[section]]
 id = "04 §4.4"
 file = "docs/04-tui-design.md"
+line = 402
+end = 416
+title = "フレームレート制御"
 
 [[section]]
 id = "04 §4.5"
 file = "docs/04-tui-design.md"
+line = 417
+end = 424
+title = "同期出力 (Synchronized Update, DEC mode 2026)"
 
 [[section]]
 id = "04 §4.6"
 file = "docs/04-tui-design.md"
+line = 425
+end = 444
+title = "カーソル出力の順序"
 
 [[section]]
 id = "04 §4.7"
 file = "docs/04-tui-design.md"
+line = 445
+end = 463
+title = "表示幅の不一致対策"
 
 [[section]]
 id = "04 §4.8"
 file = "docs/04-tui-design.md"
+line = 464
+end = 476
+title = "ratatui / crossterm の使い方と限界"
 
 [[section]]
 id = "04 §4.9"
 file = "docs/04-tui-design.md"
+line = 477
+end = 486
+title = "出力の安全性 (端末インジェクション対策・出力側)"
 
 [[section]]
 id = "04 §4.10"
 file = "docs/04-tui-design.md"
+line = 487
+end = 504
+title = "性能予算 (NFR-103: 入力受信〜出力完了 p50 2 ms / p99 8 ms / p99.9 16 ms)"
 
 [[section]]
 id = "04 §5"
 file = "docs/04-tui-design.md"
+line = 505
+end = 563
+title = "端末能力の判定"
 
 [[section]]
 id = "04 §5.1"
 file = "docs/04-tui-design.md"
+line = 507
+end = 516
+title = "方針"
 
 [[section]]
 id = "04 §5.2"
 file = "docs/04-tui-design.md"
-
-[[section]]
-id = "04 §5.2a"
-file = "docs/04-tui-design.md"
+line = 517
+end = 557
+title = "判定表"
 
 [[section]]
 id = "04 §5.3"
 file = "docs/04-tui-design.md"
+line = 558
+end = 563
+title = "問い合わせ応答の解析問題"
 
 [[section]]
 id = "04 §6"
 file = "docs/04-tui-design.md"
+line = 564
+end = 762
+title = "入力処理"
 
 [[section]]
 id = "04 §6.1"
 file = "docs/04-tui-design.md"
+line = 566
+end = 588
+title = "パイプライン"
 
 [[section]]
 id = "04 §6.2"
 file = "docs/04-tui-design.md"
+line = 589
+end = 631
+title = "正規化規則"
 
 [[section]]
 id = "04 §6.3"
 file = "docs/04-tui-design.md"
+line = 632
+end = 645
+title = "キーボードプロトコル"
 
 [[section]]
 id = "04 §6.4"
 file = "docs/04-tui-design.md"
+line = 646
+end = 670
+title = "端末ごとの差異 (TUI 挙動に影響するもの)"
 
 [[section]]
 id = "04 §6.5"
 file = "docs/04-tui-design.md"
+line = 671
+end = 680
+title = "修飾キー"
 
 [[section]]
 id = "04 §6.6"
 file = "docs/04-tui-design.md"
+line = 681
+end = 714
+title = "ペースト (ブラケットペースト)"
 
 [[section]]
 id = "04 §6.7"
 file = "docs/04-tui-design.md"
+line = 715
+end = 741
+title = "IME・日本語入力"
 
 [[section]]
 id = "04 §6.8"
 file = "docs/04-tui-design.md"
+line = 742
+end = 755
+title = "マウス"
 
 [[section]]
 id = "04 §6.9"
 file = "docs/04-tui-design.md"
+line = 756
+end = 762
+title = "フォーカスイベント・その他の入力"
 
 [[section]]
 id = "04 §7"
 file = "docs/04-tui-design.md"
+line = 763
+end = 979
+title = "キーマップ設計"
 
 [[section]]
 id = "04 §7.1"
 file = "docs/04-tui-design.md"
+line = 765
+end = 775
+title = "方針"
 
 [[section]]
 id = "04 §7.2"
 file = "docs/04-tui-design.md"
+line = 776
+end = 874
+title = "既定キーの設計 (v0.1〜v0.3)"
 
 [[section]]
 id = "04 §7.3"
 file = "docs/04-tui-design.md"
-
-[[section]]
-id = "04 §7.3a"
-file = "docs/04-tui-design.md"
+line = 875
+end = 913
+title = "区別困難キーと代替規則"
 
 [[section]]
 id = "04 §7.4"
 file = "docs/04-tui-design.md"
+line = 914
+end = 928
+title = "チョード (キーシーケンス)"
 
 [[section]]
 id = "04 §7.5"
 file = "docs/04-tui-design.md"
+line = 929
+end = 947
+title = "衝突解決"
 
 [[section]]
 id = "04 §7.6"
 file = "docs/04-tui-design.md"
+line = 948
+end = 960
+title = "将来のモーダル (Vim 風) 対応のための前提"
 
 [[section]]
 id = "04 §7.7"
 file = "docs/04-tui-design.md"
+line = 961
+end = 966
+title = "カスタマイズ (07 との分担)"
 
 [[section]]
 id = "04 §7.8"
 file = "docs/04-tui-design.md"
+line = 967
+end = 979
+title = "キー表記 (表示用)"
 
 [[section]]
 id = "04 §8"
 file = "docs/04-tui-design.md"
+line = 980
+end = 1110
+title = "UI 部品"
 
 [[section]]
 id = "04 §8.1"
 file = "docs/04-tui-design.md"
+line = 984
+end = 1000
+title = "コマンドパレット (FR-602)"
 
 [[section]]
 id = "04 §8.2"
 file = "docs/04-tui-design.md"
+line = 1001
+end = 1006
+title = "入力プロンプト"
 
 [[section]]
 id = "04 §8.3"
 file = "docs/04-tui-design.md"
+line = 1007
+end = 1017
+title = "確認ダイアログ"
 
 [[section]]
 id = "04 §8.4"
 file = "docs/04-tui-design.md"
+line = 1018
+end = 1031
+title = "検索・置換バー (FR-401〜404。置換バーは v0.2)"
 
 [[section]]
 id = "04 §8.5"
 file = "docs/04-tui-design.md"
+line = 1032
+end = 1038
+title = "バッファ一覧 (FR-103、v0.2)"
 
 [[section]]
 id = "04 §8.6"
 file = "docs/04-tui-design.md"
+line = 1039
+end = 1046
+title = "ヘルプ (FR-514、ヘルプ画面は v0.2)"
 
 [[section]]
 id = "04 §8.7"
 file = "docs/04-tui-design.md"
+line = 1047
+end = 1069
+title = "ステータスバー (FR-503)"
 
 [[section]]
 id = "04 §8.8"
 file = "docs/04-tui-design.md"
+line = 1070
+end = 1078
+title = "ヒントバー (FR-504)"
 
 [[section]]
 id = "04 §8.9"
 file = "docs/04-tui-design.md"
+line = 1079
+end = 1094
+title = "メッセージ行とエラー表示 (FR-505, NFR-602)"
 
 [[section]]
 id = "04 §8.10"
 file = "docs/04-tui-design.md"
+line = 1095
+end = 1110
+title = "AI 関連の表示 (v1.L、最小要件。モデルの正本は 06 §13.1)"
 
 [[section]]
 id = "04 §9"
 file = "docs/04-tui-design.md"
+line = 1111
+end = 1131
+title = "カーソル・選択の表示"
 
 [[section]]
 id = "04 §10"
 file = "docs/04-tui-design.md"
+line = 1132
+end = 1147
+title = "折り返しと横スクロール"
 
 [[section]]
 id = "04 §11"
 file = "docs/04-tui-design.md"
+line = 1148
+end = 1164
+title = "タブ・ペイン・分割 (版分け)"
 
 [[section]]
 id = "04 §12"
 file = "docs/04-tui-design.md"
+line = 1165
+end = 1209
+title = "テーマ・配色"
 
 [[section]]
 id = "04 §12.1"
 file = "docs/04-tui-design.md"
+line = 1167
+end = 1177
+title = "方針"
 
 [[section]]
 id = "04 §12.2"
 file = "docs/04-tui-design.md"
+line = 1178
+end = 1181
+title = "色深度の判定"
 
 [[section]]
 id = "04 §12.3"
 file = "docs/04-tui-design.md"
+line = 1182
+end = 1196
+title = "縮退アルゴリズム"
 
 [[section]]
 id = "04 §12.4"
 file = "docs/04-tui-design.md"
+line = 1197
+end = 1203
+title = "NO_COLOR と無色モード"
 
 [[section]]
 id = "04 §12.5"
 file = "docs/04-tui-design.md"
+line = 1204
+end = 1209
+title = "高コントラスト"
 
 [[section]]
 id = "04 §13"
 file = "docs/04-tui-design.md"
+line = 1210
+end = 1225
+title = "アクセシビリティ"
 
 [[section]]
 id = "04 §14"
 file = "docs/04-tui-design.md"
+line = 1226
+end = 1313
+title = "端末状態の管理 (初期化・復元・リサイズ・シグナル・パニック)"
 
 [[section]]
 id = "04 §14.1"
 file = "docs/04-tui-design.md"
+line = 1228
+end = 1250
+title = "初期化手順 (02 §9.5 の 4. を具体化)"
 
 [[section]]
 id = "04 §14.2"
 file = "docs/04-tui-design.md"
+line = 1251
+end = 1263
+title = "復元が走る経路"
 
 [[section]]
 id = "04 §14.3"
 file = "docs/04-tui-design.md"
+line = 1264
+end = 1283
+title = "復元手順 (順序が重要)"
 
 [[section]]
 id = "04 §14.4"
 file = "docs/04-tui-design.md"
+line = 1284
+end = 1297
+title = "パニック時の画面出力"
 
 [[section]]
 id = "04 §14.5"
 file = "docs/04-tui-design.md"
+line = 1298
+end = 1313
+title = "リサイズ・サスペンド・その他のシグナル"
 
 [[section]]
 id = "04 §15"
 file = "docs/04-tui-design.md"
+line = 1314
+end = 1783
+title = "日本語環境での考慮事項 (まとめ)"
 
 [[section]]
 id = "04 §15.1"
 file = "docs/04-tui-design.md"
+line = 1331
+end = 1388
+title = "v0.1 の画面文言 (ja)"
 
 [[section]]
 id = "04 §15.2"
 file = "docs/04-tui-design.md"
+line = 1389
+end = 1783
+title = "保存・読込・退避・パニックの文言目録"
 
 [[section]]
 id = "04 §16"
 file = "docs/04-tui-design.md"
+line = 1784
+end = 1822
+title = "共通化する部分 / しない部分"
 
 [[section]]
 id = "04 §17"
 file = "docs/04-tui-design.md"
+line = 1823
+end = 1866
+title = "版ごとの範囲"
 
 [[section]]
 id = "04 §17.1"
 file = "docs/04-tui-design.md"
+line = 1827
+end = 1852
+title = "v0.1 で実装する (最小核)"
 
 [[section]]
 id = "04 §17.2"
 file = "docs/04-tui-design.md"
+line = 1853
+end = 1856
+title = "v0.2 (日常の不足を埋める)"
 
 [[section]]
 id = "04 §17.3"
 file = "docs/04-tui-design.md"
+line = 1857
+end = 1860
+title = "v0.3"
 
 [[section]]
 id = "04 §17.4"
 file = "docs/04-tui-design.md"
+line = 1861
+end = 1866
+title = "v0.4 以降"
 
 [[section]]
 id = "04 §18"
 file = "docs/04-tui-design.md"
+line = 1867
+end = 1883
+title = "未決事項"
 
 [[section]]
 id = "05 §1"
 file = "docs/05-platform.md"
+line = 45
+end = 83
+title = "対象プラットフォーム"
 
 [[section]]
 id = "05 §1.1"
 file = "docs/05-platform.md"
+line = 47
+end = 64
+title = "OS・アーキテクチャ・ターゲット (NFR-401 / OQ-15)"
 
 [[section]]
 id = "05 §1.2"
 file = "docs/05-platform.md"
+line = 65
+end = 83
+title = "「対応」の定義"
 
 [[section]]
 id = "05 §2"
 file = "docs/05-platform.md"
+line = 84
+end = 222
+title = "Ports の OS 実装規則とエラー写像"
 
 [[section]]
 id = "05 §2.1"
 file = "docs/05-platform.md"
+line = 94
+end = 145
+title = "`FileSystem`"
 
 [[section]]
 id = "05 §2.2"
 file = "docs/05-platform.md"
+line = 146
+end = 151
+title = "`Paths`"
 
 [[section]]
 id = "05 §2.3"
 file = "docs/05-platform.md"
+line = 152
+end = 155
+title = "`Clock`"
 
 [[section]]
 id = "05 §2.4"
 file = "docs/05-platform.md"
+line = 156
+end = 159
+title = "`JobSpawner`"
 
 [[section]]
 id = "05 §2.5"
 file = "docs/05-platform.md"
+line = 160
+end = 173
+title = "`FileWatcher` (v0.4)"
 
 [[section]]
 id = "05 §2.6"
 file = "docs/05-platform.md"
+line = 174
+end = 202
+title = "`ProcessRunner` (v0.4)"
 
 [[section]]
 id = "05 §2.7"
 file = "docs/05-platform.md"
+line = 203
+end = 216
+title = "`SecretStore` (v1.L)"
 
 [[section]]
 id = "05 §2.8"
 file = "docs/05-platform.md"
+line = 217
+end = 222
+title = "クリップボードは Port ではなく Effect 経由 (ADR-0021)"
 
 [[section]]
 id = "05 §3"
 file = "docs/05-platform.md"
+line = 223
+end = 280
+title = "パス"
 
 [[section]]
 id = "05 §3.1"
 file = "docs/05-platform.md"
+line = 225
+end = 240
+title = "OS 差異の一覧"
 
 [[section]]
 id = "05 §3.2"
 file = "docs/05-platform.md"
+line = 241
+end = 251
+title = "正規化の規則 (`eve-platform::path`)"
 
 [[section]]
 id = "05 §3.3"
 file = "docs/05-platform.md"
+line = 252
+end = 258
+title = "canonicalize と表示"
 
 [[section]]
 id = "05 §3.4"
 file = "docs/05-platform.md"
+line = 259
+end = 262
+title = "ファイル URI (v1.L LSP 用)"
 
 [[section]]
 id = "05 §3.5"
 file = "docs/05-platform.md"
+line = 263
+end = 271
+title = "非 UTF-8 パスの永続化と表示"
 
 [[section]]
 id = "05 §3.6"
 file = "docs/05-platform.md"
+line = 272
+end = 280
+title = "ホームディレクトリの決定"
 
 [[section]]
 id = "05 §4"
 file = "docs/05-platform.md"
+line = 281
+end = 509
+title = "ファイル I/O と原子的保存"
 
 [[section]]
 id = "05 §4.1"
 file = "docs/05-platform.md"
+line = 285
+end = 369
+title = "共通手順 (ADR-0016 の具体化)"
 
 [[section]]
 id = "05 §4.2"
 file = "docs/05-platform.md"
+line = 370
+end = 390
+title = "Windows の手順"
 
 [[section]]
 id = "05 §4.3"
 file = "docs/05-platform.md"
+line = 391
+end = 408
+title = "Unix (macOS / Linux) の手順"
 
 [[section]]
 id = "05 §4.4"
 file = "docs/05-platform.md"
+line = 409
+end = 447
+title = "原子的置換を諦めて `write_in_place` にフォールバックする条件"
 
 [[section]]
 id = "05 §4.5"
 file = "docs/05-platform.md"
+line = 448
+end = 457
+title = "読込側の注意"
 
 [[section]]
 id = "05 §4.6"
 file = "docs/05-platform.md"
+line = 458
+end = 509
+title = "孤児ファイルの検出と復旧"
 
 [[section]]
 id = "05 §5"
 file = "docs/05-platform.md"
+line = 510
+end = 579
+title = "権限・属性・ロック・外部変更検知"
 
 [[section]]
 id = "05 §5.1"
 file = "docs/05-platform.md"
+line = 512
+end = 528
+title = "保存で保持する属性 (FR-106) の一覧"
 
 [[section]]
 id = "05 §5.2"
 file = "docs/05-platform.md"
+line = 529
+end = 534
+title = "読み取り専用の判定 (FR-116)"
 
 [[section]]
 id = "05 §5.3"
 file = "docs/05-platform.md"
+line = 535
+end = 539
+title = "ファイルロック"
 
 [[section]]
 id = "05 §5.4"
 file = "docs/05-platform.md"
+line = 540
+end = 548
+title = "ファイル同一性 (`FileId`)"
 
 [[section]]
 id = "05 §5.5"
 file = "docs/05-platform.md"
+line = 549
+end = 564
+title = "外部変更検知 (FR-117) の比較キー"
 
 [[section]]
 id = "05 §5.6"
 file = "docs/05-platform.md"
+line = 565
+end = 579
+title = "一時ファイル・スワップ・ログの権限 (NFR-505)"
 
 [[section]]
 id = "05 §6"
 file = "docs/05-platform.md"
+line = 580
+end = 607
+title = "改行コード・文字コードの OS 既定"
 
 [[section]]
 id = "05 §6.1"
 file = "docs/05-platform.md"
+line = 593
+end = 607
+title = "UI の言語の OS ロケール検出 (英語 UI を同梱する版)"
 
 [[section]]
 id = "05 §7"
 file = "docs/05-platform.md"
+line = 608
+end = 678
+title = "ディレクトリ (設定 / 状態 / データ / キャッシュ / ログ)"
 
 [[section]]
 id = "05 §7.1"
 file = "docs/05-platform.md"
+line = 610
+end = 628
+title = "決定: XDG 準拠 (macOS 含む) + Windows は Known Folders"
 
 [[section]]
 id = "05 §7.2"
 file = "docs/05-platform.md"
+line = 629
+end = 632
+title = "ライブラリ比較"
 
 [[section]]
 id = "05 §7.3"
 file = "docs/05-platform.md"
+line = 633
+end = 643
+title = "ログ (02 §11.3 の確定事項)"
 
 [[section]]
 id = "05 §7.4"
 file = "docs/05-platform.md"
+line = 644
+end = 647
+title = "ポータブルモード (Could, v0.4)"
 
 [[section]]
 id = "05 §7.5"
 file = "docs/05-platform.md"
+line = 648
+end = 678
+title = "スワップ・緊急退避ファイルの配置と命名"
 
 [[section]]
 id = "05 §8"
 file = "docs/05-platform.md"
+line = 679
+end = 751
+title = "クリップボード"
 
 [[section]]
 id = "05 §8.1"
 file = "docs/05-platform.md"
+line = 687
+end = 714
+title = "経路と優先順位"
 
 [[section]]
 id = "05 §8.2"
 file = "docs/05-platform.md"
+line = 715
+end = 733
+title = "OS 別の実装詳細"
 
 [[section]]
 id = "05 §8.3"
 file = "docs/05-platform.md"
+line = 734
+end = 742
+title = "`command` provider (設定で明示、既知コマンドの検出、または WSL 既定)"
 
 [[section]]
 id = "05 §8.4"
 file = "docs/05-platform.md"
+line = 743
+end = 751
+title = "サイズ上限"
 
 [[section]]
 id = "05 §9"
 file = "docs/05-platform.md"
+line = 752
+end = 823
+title = "端末の OS 固有事項と互換性マトリクス"
 
 [[section]]
 id = "05 §9.1"
 file = "docs/05-platform.md"
+line = 756
+end = 775
+title = "Windows コンソールの初期化と復元 (eve-tui)"
 
 [[section]]
 id = "05 §9.2"
 file = "docs/05-platform.md"
+line = 776
+end = 789
+title = "Unix 端末の初期化と復元"
 
 [[section]]
 id = "05 §9.3"
 file = "docs/05-platform.md"
+line = 790
+end = 799
+title = "tmux / screen / mosh"
 
 [[section]]
 id = "05 §9.4"
 file = "docs/05-platform.md"
+line = 800
+end = 823
+title = "互換性マトリクス (リリース前に手動確認。記入は 09 §3.8)"
 
 [[section]]
 id = "05 §10"
 file = "docs/05-platform.md"
+line = 824
+end = 840
+title = "IME の OS 別注意"
 
 [[section]]
 id = "05 §11"
 file = "docs/05-platform.md"
+line = 841
+end = 973
+title = "シグナル・コンソールイベント・終了"
 
 [[section]]
 id = "05 §11.1"
 file = "docs/05-platform.md"
+line = 843
+end = 861
+title = "Unix シグナル"
 
 [[section]]
 id = "05 §11.2"
 file = "docs/05-platform.md"
+line = 862
+end = 909
+title = "Windows コンソールイベント"
 
 [[section]]
 id = "05 §11.3"
 file = "docs/05-platform.md"
+line = 910
+end = 921
+title = "サスペンド (Unix、`Effect::Suspend`、v0.2)"
 
 [[section]]
 id = "05 §11.4"
 file = "docs/05-platform.md"
+line = 922
+end = 946
+title = "緊急スナップショット (NFR-302 の実装前提)"
 
 [[section]]
 id = "05 §11.5"
 file = "docs/05-platform.md"
+line = 947
+end = 973
+title = "終了シーケンスと終了コード"
 
 [[section]]
 id = "05 §12"
 file = "docs/05-platform.md"
+line = 974
+end = 994
+title = "ファイル監視"
 
 [[section]]
 id = "05 §12.1"
 file = "docs/05-platform.md"
+line = 976
+end = 983
+title = "OS 別バックエンド (notify クレート経由)"
 
 [[section]]
 id = "05 §12.2"
 file = "docs/05-platform.md"
+line = 984
+end = 994
+title = "方針"
 
 [[section]]
 id = "05 §13"
 file = "docs/05-platform.md"
+line = 995
+end = 1065
+title = "シェル・外部プロセス起動"
 
 [[section]]
 id = "05 §13.1"
 file = "docs/05-platform.md"
+line = 999
+end = 1004
+title = "原則"
 
 [[section]]
 id = "05 §13.2"
 file = "docs/05-platform.md"
+line = 1005
+end = 1015
+title = "シェルの既定"
 
 [[section]]
 id = "05 §13.3"
 file = "docs/05-platform.md"
+line = 1016
+end = 1024
+title = "Windows の引数とバッチファイル"
 
 [[section]]
 id = "05 §13.4"
 file = "docs/05-platform.md"
+line = 1025
+end = 1033
+title = "プロセス木の終了 (キャンセル・タイムアウト)"
 
 [[section]]
 id = "05 §13.5"
 file = "docs/05-platform.md"
+line = 1034
+end = 1038
+title = "環境変数と出力の文字コード"
 
 [[section]]
 id = "05 §13.6"
 file = "docs/05-platform.md"
+line = 1039
+end = 1042
+title = "`Effect::OpenUrl`"
 
 [[section]]
 id = "05 §13.7"
 file = "docs/05-platform.md"
+line = 1043
+end = 1065
+title = "ローカル LLM サーバ (`llama-server` 等) の OS 別事項 (v1.L)"
 
 [[section]]
 id = "05 §14"
 file = "docs/05-platform.md"
+line = 1066
+end = 1089
+title = "資格情報ストア (v1.L)"
 
 [[section]]
 id = "05 §14.1"
 file = "docs/05-platform.md"
+line = 1078
+end = 1089
+title = "v1.L 着手時に本書で確定する項目 (見出しのみ予約)"
 
 [[section]]
 id = "05 §15"
 file = "docs/05-platform.md"
+line = 1090
+end = 1123
+title = "WSL / SSH / コンテナ環境"
 
 [[section]]
 id = "05 §15.1"
 file = "docs/05-platform.md"
+line = 1094
+end = 1105
+title = "WSL (1 / 2)"
 
 [[section]]
 id = "05 §15.2"
 file = "docs/05-platform.md"
+line = 1106
+end = 1113
+title = "SSH 越し (NG5 の「リモート先で起動」の運用)"
 
 [[section]]
 id = "05 §15.3"
 file = "docs/05-platform.md"
+line = 1114
+end = 1123
+title = "コンテナ (Docker / devcontainer / Kubernetes exec)"
 
 [[section]]
 id = "05 §16"
 file = "docs/05-platform.md"
+line = 1124
+end = 1192
+title = "ビルド・ツールチェイン・MSRV"
 
 [[section]]
 id = "05 §16.1"
 file = "docs/05-platform.md"
+line = 1126
+end = 1135
+title = "MSRV と edition (OQ-14 の具体化)"
 
 [[section]]
 id = "05 §16.2"
 file = "docs/05-platform.md"
+line = 1136
+end = 1146
+title = "ターゲット別のビルド要件"
 
 [[section]]
 id = "05 §16.3"
 file = "docs/05-platform.md"
+line = 1147
+end = 1170
+title = "ビルドプロファイル"
 
 [[section]]
 id = "05 §16.4"
 file = "docs/05-platform.md"
+line = 1171
+end = 1192
+title = "Windows 実行ファイルのメタデータ"
 
 [[section]]
 id = "05 §17"
 file = "docs/05-platform.md"
+line = 1193
+end = 1222
+title = "依存のライセンス・ビルド時間・サイズ"
 
 [[section]]
 id = "05 §17.1"
 file = "docs/05-platform.md"
+line = 1195
+end = 1203
+title = "ライセンス運用 (ADR-0018 の具体化。検査は 09)"
 
 [[section]]
 id = "05 §17.2"
 file = "docs/05-platform.md"
+line = 1204
+end = 1216
+title = "依存数・ビルド時間の予算 (Should。計測は 09)"
 
 [[section]]
 id = "05 §17.3"
 file = "docs/05-platform.md"
+line = 1217
+end = 1222
+title = "アロケータ"
 
 [[section]]
 id = "05 §18"
 file = "docs/05-platform.md"
+line = 1223
+end = 1371
+title = "配布 (パッケージ・署名・公証)"
 
 [[section]]
 id = "05 §18.1"
 file = "docs/05-platform.md"
+line = 1225
+end = 1233
+title = "段階 (OQ-20)"
 
 [[section]]
 id = "05 §18.2"
 file = "docs/05-platform.md"
-
-[[section]]
-id = "05 §18.2a"
-file = "docs/05-platform.md"
+line = 1234
+end = 1275
+title = "アーカイブ構成"
 
 [[section]]
 id = "05 §18.3"
 file = "docs/05-platform.md"
+line = 1276
+end = 1284
+title = "Windows コード署名"
 
 [[section]]
 id = "05 §18.4"
 file = "docs/05-platform.md"
+line = 1285
+end = 1295
+title = "macOS 署名と公証"
 
 [[section]]
 id = "05 §18.5"
 file = "docs/05-platform.md"
+line = 1296
+end = 1307
+title = "Linux パッケージ"
 
 [[section]]
 id = "05 §18.6"
 file = "docs/05-platform.md"
+line = 1308
+end = 1311
+title = "デバッグ情報とクラッシュログの対応付け"
 
 [[section]]
 id = "05 §18.7"
 file = "docs/05-platform.md"
+line = 1312
+end = 1315
+title = "再現可能ビルド (Should, v0.4)"
 
 [[section]]
 id = "05 §18.8"
 file = "docs/05-platform.md"
+line = 1316
+end = 1319
+title = "アンインストール (提案、OQ-164)"
 
 [[section]]
 id = "05 §18.9"
 file = "docs/05-platform.md"
+line = 1320
+end = 1323
+title = "minisign 署名の検証 (提案、OQ-164)"
 
 [[section]]
 id = "05 §18.10"
 file = "docs/05-platform.md"
+line = 1324
+end = 1339
+title = "更新の方針 (ADR-0040)"
 
 [[section]]
 id = "05 §18.11"
 file = "docs/05-platform.md"
+line = 1340
+end = 1352
+title = "更新とダウングレード"
 
 [[section]]
 id = "05 §18.12"
 file = "docs/05-platform.md"
+line = 1353
+end = 1361
+title = "直前の版に戻す (ロールバック)"
 
 [[section]]
 id = "05 §18.13"
 file = "docs/05-platform.md"
+line = 1362
+end = 1365
+title = "リリースチャネル"
 
 [[section]]
 id = "05 §18.14"
 file = "docs/05-platform.md"
+line = 1366
+end = 1371
+title = "脆弱性の通知 (OQ-164)"
 
 [[section]]
 id = "05 §19"
 file = "docs/05-platform.md"
+line = 1372
+end = 1400
+title = "未決事項"
 
 [[section]]
 id = "06 §0"
 file = "docs/06-ai-integration.md"
+line = 46
+end = 68
+title = "本書の範囲"
 
 [[section]]
 id = "06 §1"
 file = "docs/06-ai-integration.md"
+line = 69
+end = 85
+title = "不変条件 (AI-INV)"
 
 [[section]]
 id = "06 §2"
 file = "docs/06-ai-integration.md"
+line = 86
+end = 138
+title = "ユースケースと段階分け"
 
 [[section]]
 id = "06 §2.1"
 file = "docs/06-ai-integration.md"
+line = 88
+end = 102
+title = "ユースケース一覧"
 
 [[section]]
 id = "06 §2.2"
 file = "docs/06-ai-integration.md"
+line = 103
+end = 123
+title = "段階分けの考え方"
 
 [[section]]
 id = "06 §2.3"
 file = "docs/06-ai-integration.md"
+line = 124
+end = 138
+title = "ローカル LLM 一級対応の原則と索引"
 
 [[section]]
 id = "06 §3"
 file = "docs/06-ai-integration.md"
+line = 139
+end = 274
+title = "接続方式の比較と推奨"
 
 [[section]]
 id = "06 §3.1"
 file = "docs/06-ai-integration.md"
+line = 141
+end = 158
+title = "一覧"
 
 [[section]]
 id = "06 §3.2"
 file = "docs/06-ai-integration.md"
+line = 159
+end = 171
+title = "A/B: 直接 API (クラウド、v1.L-b)"
 
 [[section]]
 id = "06 §3.3"
 file = "docs/06-ai-integration.md"
+line = 172
+end = 217
+title = "C: ローカル LLM (一級市民)"
 
 [[section]]
 id = "06 §3.3.1"
 file = "docs/06-ai-integration.md"
+line = 174
+end = 188
+title = "対象サーバと能力 (2026-10 時点の調査)"
 
 [[section]]
 id = "06 §3.3.2"
 file = "docs/06-ai-integration.md"
+line = 189
+end = 196
+title = "接続形態の比較"
 
 [[section]]
 id = "06 §3.3.3"
 file = "docs/06-ai-integration.md"
+line = 197
+end = 210
+title = "管理モード (形態 (b)、v1.L-b、オプトイン)"
 
 [[section]]
 id = "06 §3.3.4"
 file = "docs/06-ai-integration.md"
+line = 211
+end = 217
+title = "推奨と将来拡張"
 
 [[section]]
 id = "06 §3.4"
 file = "docs/06-ai-integration.md"
+line = 218
+end = 230
+title = "D: MCP クライアント"
 
 [[section]]
 id = "06 §3.5"
 file = "docs/06-ai-integration.md"
+line = 231
+end = 243
+title = "E: MCP サーバ (エディタ機能を公開)"
 
 [[section]]
 id = "06 §3.6"
 file = "docs/06-ai-integration.md"
+line = 244
+end = 257
+title = "F: ACP (Agent Client Protocol)"
 
 [[section]]
 id = "06 §3.7"
 file = "docs/06-ai-integration.md"
+line = 258
+end = 266
+title = "I/J: CLI エージェントの統合"
 
 [[section]]
 id = "06 §3.8"
 file = "docs/06-ai-integration.md"
+line = 267
+end = 274
+title = "推奨まとめ"
 
 [[section]]
 id = "06 §4"
 file = "docs/06-ai-integration.md"
+line = 275
+end = 510
+title = "構成: core / eve-ai の境界とプロバイダ抽象"
 
 [[section]]
 id = "06 §4.1"
 file = "docs/06-ai-integration.md"
+line = 277
+end = 305
+title = "全体構成"
 
 [[section]]
 id = "06 §4.2"
 file = "docs/06-ai-integration.md"
+line = 306
+end = 325
+title = "core 側の Port: `AiService`"
 
 [[section]]
 id = "06 §4.3"
 file = "docs/06-ai-integration.md"
+line = 326
+end = 345
+title = "eve-ai の内部責務"
 
 [[section]]
 id = "06 §4.4"
 file = "docs/06-ai-integration.md"
+line = 346
+end = 422
+title = "プロバイダ抽象 (eve-ai 内部): `LlmBackend` と `LlmCaps`"
 
 [[section]]
 id = "06 §4.4.1"
 file = "docs/06-ai-integration.md"
+line = 393
+end = 406
+title = "能力の検出 (probe)"
 
 [[section]]
 id = "06 §4.4.2"
 file = "docs/06-ai-integration.md"
+line = 407
+end = 422
+title = "縮退 (能力が足りないとき)"
 
 [[section]]
 id = "06 §4.5"
 file = "docs/06-ai-integration.md"
+line = 423
+end = 456
+title = "core ⇔ eve-ai のメッセージ"
 
 [[section]]
 id = "06 §4.6"
 file = "docs/06-ai-integration.md"
+line = 457
+end = 468
+title = "スレッドと非同期の境界"
 
 [[section]]
 id = "06 §4.7"
 file = "docs/06-ai-integration.md"
+line = 469
+end = 496
+title = "ツール呼出しループ (v1.X)"
 
 [[section]]
 id = "06 §4.8"
 file = "docs/06-ai-integration.md"
+line = 497
+end = 510
+title = "要求スケジューラ (1 スロット前提)"
 
 [[section]]
 id = "06 §5"
 file = "docs/06-ai-integration.md"
+line = 511
+end = 554
+title = "ストリーミングとキャンセル"
 
 [[section]]
 id = "06 §5.1"
 file = "docs/06-ai-integration.md"
+line = 513
+end = 523
+title = "ストリーミング"
 
 [[section]]
 id = "06 §5.2"
 file = "docs/06-ai-integration.md"
+line = 524
+end = 538
+title = "キャンセル"
 
 [[section]]
 id = "06 §5.3"
 file = "docs/06-ai-integration.md"
+line = 539
+end = 554
+title = "低遅延のインライン補完 (デバウンス・先読み・古い要求の破棄)"
 
 [[section]]
 id = "06 §6"
 file = "docs/06-ai-integration.md"
+line = 555
+end = 662
+title = "コンテキスト構築"
 
 [[section]]
 id = "06 §6.1"
 file = "docs/06-ai-integration.md"
+line = 557
+end = 563
+title = "原則"
 
 [[section]]
 id = "06 §6.2"
 file = "docs/06-ai-integration.md"
+line = 564
+end = 581
+title = "ContextBundle"
 
 [[section]]
 id = "06 §6.3"
 file = "docs/06-ai-integration.md"
+line = 582
+end = 592
+title = "用途別の既定収集範囲"
 
 [[section]]
 id = "06 §6.4"
 file = "docs/06-ai-integration.md"
+line = 593
+end = 599
+title = "トークン予算"
 
 [[section]]
 id = "06 §6.5"
 file = "docs/06-ai-integration.md"
+line = 600
+end = 616
+title = "除外ルール"
 
 [[section]]
 id = "06 §6.6"
 file = "docs/06-ai-integration.md"
+line = 617
+end = 623
+title = "送信プレビューと承認粒度"
 
 [[section]]
 id = "06 §6.7"
 file = "docs/06-ai-integration.md"
+line = 624
+end = 646
+title = "先頭を固定したプロンプトとキャッシュの再利用 (KV キャッシュ)"
 
 [[section]]
 id = "06 §6.8"
 file = "docs/06-ai-integration.md"
+line = 647
+end = 662
+title = "エディタの状態を LLM に渡す経路"
 
 [[section]]
 id = "06 §7"
 file = "docs/06-ai-integration.md"
+line = 663
+end = 758
+title = "編集適用モデル (Proposal)"
 
 [[section]]
 id = "06 §7.1"
 file = "docs/06-ai-integration.md"
+line = 665
+end = 684
+title = "Proposal の形式"
 
 [[section]]
 id = "06 §7.2"
 file = "docs/06-ai-integration.md"
+line = 685
+end = 706
+title = "AI に要求する出力形式"
 
 [[section]]
 id = "06 §7.3"
 file = "docs/06-ai-integration.md"
+line = 707
+end = 713
+title = "レビュー (差分プレビューと部分承認)"
 
 [[section]]
 id = "06 §7.4"
 file = "docs/06-ai-integration.md"
+line = 714
+end = 728
+title = "ユーザー編集との競合と rebase"
 
 [[section]]
 id = "06 §7.5"
 file = "docs/06-ai-integration.md"
+line = 729
+end = 738
+title = "適用と Undo"
 
 [[section]]
 id = "06 §7.6"
 file = "docs/06-ai-integration.md"
+line = 739
+end = 758
+title = "インライン補完 (UC-05) の扱い"
 
 [[section]]
 id = "06 §8"
 file = "docs/06-ai-integration.md"
+line = 759
+end = 819
+title = "承認・権限モデル"
 
 [[section]]
 id = "06 §8.1"
 file = "docs/06-ai-integration.md"
+line = 763
+end = 771
+title = "主体 (誰が要求するか)"
 
 [[section]]
 id = "06 §8.2"
 file = "docs/06-ai-integration.md"
+line = 772
+end = 786
+title = "権限レベル (02 §10.4 の具体化と追加)"
 
 [[section]]
 id = "06 §8.3"
 file = "docs/06-ai-integration.md"
+line = 787
+end = 799
+title = "付与の粒度と保存"
 
 [[section]]
 id = "06 §8.4"
 file = "docs/06-ai-integration.md"
+line = 800
+end = 805
+title = "コマンド実行 (exec) の追加規則"
 
 [[section]]
 id = "06 §8.5"
 file = "docs/06-ai-integration.md"
+line = 806
+end = 811
+title = "承認疲れへの配慮 (UX)"
 
 [[section]]
 id = "06 §8.6"
 file = "docs/06-ai-integration.md"
+line = 812
+end = 819
+title = "外部エージェントの限界 (正直な表示)"
 
 [[section]]
 id = "06 §9"
 file = "docs/06-ai-integration.md"
+line = 820
+end = 856
+title = "プロンプトインジェクション対策"
 
 [[section]]
 id = "06 §9.1"
 file = "docs/06-ai-integration.md"
+line = 822
+end = 833
+title = "脅威モデル"
 
 [[section]]
 id = "06 §9.2"
 file = "docs/06-ai-integration.md"
+line = 834
+end = 840
+title = "構造的防御 (主)"
 
 [[section]]
 id = "06 §9.3"
 file = "docs/06-ai-integration.md"
+line = 841
+end = 846
+title = "プロンプト上の防御 (補助)"
 
 [[section]]
 id = "06 §9.4"
 file = "docs/06-ai-integration.md"
+line = 847
+end = 856
+title = "応答の検査"
 
 [[section]]
 id = "06 §10"
 file = "docs/06-ai-integration.md"
+line = 857
+end = 891
+title = "秘密情報の保護"
 
 [[section]]
 id = "06 §10.1"
 file = "docs/06-ai-integration.md"
+line = 859
+end = 871
+title = "API キーの取得"
 
 [[section]]
 id = "06 §10.2"
 file = "docs/06-ai-integration.md"
+line = 872
+end = 877
+title = "メモリ上・ログでの扱い"
 
 [[section]]
 id = "06 §10.3"
 file = "docs/06-ai-integration.md"
+line = 878
+end = 891
+title = "送信前の検出とマスキング (二重防御)"
 
 [[section]]
 id = "06 §11"
 file = "docs/06-ai-integration.md"
+line = 892
+end = 942
+title = "プライバシーとオフライン動作"
 
 [[section]]
 id = "06 §11.1"
 file = "docs/06-ai-integration.md"
+line = 894
+end = 898
+title = "既定でオフ"
 
 [[section]]
 id = "06 §11.2"
 file = "docs/06-ai-integration.md"
+line = 899
+end = 909
+title = "送信内容の可視化と保持"
 
 [[section]]
 id = "06 §11.3"
 file = "docs/06-ai-integration.md"
+line = 910
+end = 918
+title = "ネットワークの扱い"
 
 [[section]]
 id = "06 §11.4"
 file = "docs/06-ai-integration.md"
+line = 919
+end = 928
+title = "オフライン動作保証"
 
 [[section]]
 id = "06 §11.5"
 file = "docs/06-ai-integration.md"
+line = 929
+end = 942
+title = "ローカル LLM サーバのセキュリティ"
 
 [[section]]
 id = "06 §12"
 file = "docs/06-ai-integration.md"
+line = 943
+end = 983
+title = "コスト・レート制限・エラー・リトライ"
 
 [[section]]
 id = "06 §12.1"
 file = "docs/06-ai-integration.md"
+line = 945
+end = 951
+title = "コスト"
 
 [[section]]
 id = "06 §12.2"
 file = "docs/06-ai-integration.md"
+line = 952
+end = 961
+title = "レート制限とリトライ"
 
 [[section]]
 id = "06 §12.3"
 file = "docs/06-ai-integration.md"
+line = 962
+end = 983
+title = "エラー分類とメッセージ"
 
 [[section]]
 id = "06 §13"
 file = "docs/06-ai-integration.md"
+line = 984
+end = 1029
+title = "UI (ViewModel)"
 
 [[section]]
 id = "06 §13.1"
 file = "docs/06-ai-integration.md"
+line = 986
+end = 1003
+title = "意味的モデル"
 
 [[section]]
 id = "06 §13.2"
 file = "docs/06-ai-integration.md"
+line = 1004
+end = 1029
+title = "コマンド一覧 (案)"
 
 [[section]]
 id = "06 §14"
 file = "docs/06-ai-integration.md"
+line = 1030
+end = 1133
+title = "設定 (意味の定義)"
 
 [[section]]
 id = "06 §15"
 file = "docs/06-ai-integration.md"
+line = 1134
+end = 1153
+title = "監査ログ"
 
 [[section]]
 id = "06 §16"
 file = "docs/06-ai-integration.md"
+line = 1154
+end = 1178
+title = "テスト"
 
 [[section]]
 id = "06 §17"
 file = "docs/06-ai-integration.md"
+line = 1179
+end = 1208
+title = "v0.1 で用意しておくべき最小の拡張点"
 
 [[section]]
 id = "06 §18"
 file = "docs/06-ai-integration.md"
+line = 1209
+end = 1237
+title = "未決事項"
 
 [[section]]
 id = "07 §1"
 file = "docs/07-config-extensibility.md"
+line = 43
+end = 100
+title = "目的と責務"
 
 [[section]]
 id = "07 §1.1"
 file = "docs/07-config-extensibility.md"
+line = 45
+end = 61
+title = "本書が決めること ([02 §12.1](02-architecture.md#121-文書と-crate-の対応))"
 
 [[section]]
 id = "07 §1.2"
 file = "docs/07-config-extensibility.md"
+line = 62
+end = 71
+title = "本書が決めないこと"
 
 [[section]]
 id = "07 §1.3"
 file = "docs/07-config-extensibility.md"
+line = 72
+end = 84
+title = "`eve-config` の責務境界 (再確認)"
 
 [[section]]
 id = "07 §1.4"
 file = "docs/07-config-extensibility.md"
+line = 85
+end = 100
+title = "用語 (本書で導入)"
 
 [[section]]
 id = "07 §2"
 file = "docs/07-config-extensibility.md"
+line = 101
+end = 120
+title = "設定ファイル形式"
 
 [[section]]
 id = "07 §2.1"
 file = "docs/07-config-extensibility.md"
+line = 103
+end = 109
+title = "決定 (ADR-0011 の具体化)"
 
 [[section]]
 id = "07 §2.2"
 file = "docs/07-config-extensibility.md"
+line = 110
+end = 120
+title = "TOML の弱点への対処"
 
 [[section]]
 id = "07 §3"
 file = "docs/07-config-extensibility.md"
+line = 121
+end = 201
+title = "設定の階層とマージ規則"
 
 [[section]]
 id = "07 §3.1"
 file = "docs/07-config-extensibility.md"
+line = 123
+end = 137
+title = "階層 (優先度の低い順)"
 
 [[section]]
 id = "07 §3.2"
 file = "docs/07-config-extensibility.md"
+line = 138
+end = 149
+title = "ファイル分割"
 
 [[section]]
 id = "07 §3.3"
 file = "docs/07-config-extensibility.md"
+line = 150
+end = 166
+title = "マージ規則"
 
 [[section]]
 id = "07 §3.4"
 file = "docs/07-config-extensibility.md"
+line = 167
+end = 195
+title = "条件付きセクション (NFR-405)"
 
 [[section]]
 id = "07 §3.5"
 file = "docs/07-config-extensibility.md"
+line = 196
+end = 201
+title = "層の起源の追跡"
 
 [[section]]
 id = "07 §4"
 file = "docs/07-config-extensibility.md"
+line = 202
+end = 248
+title = "スキーマ・検証・エラー表示"
 
 [[section]]
 id = "07 §4.1"
 file = "docs/07-config-extensibility.md"
+line = 204
+end = 213
+title = "スキーマの正の情報源"
 
 [[section]]
 id = "07 §4.2"
 file = "docs/07-config-extensibility.md"
+line = 214
+end = 232
+title = "検証規則"
 
 [[section]]
 id = "07 §4.3"
 file = "docs/07-config-extensibility.md"
+line = 233
+end = 240
+title = "エラー表示"
 
 [[section]]
 id = "07 §4.4"
 file = "docs/07-config-extensibility.md"
+line = 241
+end = 248
+title = "スキーマの互換性方針"
 
 [[section]]
 id = "07 §5"
 file = "docs/07-config-extensibility.md"
+line = 249
+end = 563
+title = "設定項目一覧 (スキーマと既定値)"
 
 [[section]]
 id = "07 §5.0"
 file = "docs/07-config-extensibility.md"
+line = 253
+end = 265
+title = "v0.1 の公開キー"
 
 [[section]]
 id = "07 §5.1"
 file = "docs/07-config-extensibility.md"
+line = 266
+end = 284
+title = "`[editor]` — 編集動作"
 
 [[section]]
 id = "07 §5.2"
 file = "docs/07-config-extensibility.md"
+line = 285
+end = 317
+title = "`[file]` — ファイル I/O"
 
 [[section]]
 id = "07 §5.3"
 file = "docs/07-config-extensibility.md"
+line = 318
+end = 346
+title = "`[view]` / `[ui]` — 表示"
 
 [[section]]
 id = "07 §5.4"
 file = "docs/07-config-extensibility.md"
+line = 347
+end = 355
+title = "`[theme]`"
 
 [[section]]
 id = "07 §5.5"
 file = "docs/07-config-extensibility.md"
+line = 356
+end = 369
+title = "`[search]`"
 
 [[section]]
 id = "07 §5.6"
 file = "docs/07-config-extensibility.md"
+line = 370
+end = 380
+title = "`[clipboard]`"
 
 [[section]]
 id = "07 §5.7"
 file = "docs/07-config-extensibility.md"
+line = 381
+end = 388
+title = "`[keys]` — §7 で定義。`[keys]` 直下はオプション、`[keys.<context>]` が割当。"
 
 [[section]]
 id = "07 §5.8"
 file = "docs/07-config-extensibility.md"
+line = 389
+end = 390
+title = "`[[language]]` と `[language-server.<name>]`, `[formatter.<name>]` — §9 で定義。"
 
 [[section]]
 id = "07 §5.9"
 file = "docs/07-config-extensibility.md"
+line = 391
+end = 399
+title = "`[workspace]`"
 
 [[section]]
 id = "07 §5.10"
 file = "docs/07-config-extensibility.md"
+line = 400
+end = 407
+title = "`[session]` — §16"
 
 [[section]]
 id = "07 §5.11"
 file = "docs/07-config-extensibility.md"
+line = 408
+end = 416
+title = "`[log]`"
 
 [[section]]
 id = "07 §5.12"
 file = "docs/07-config-extensibility.md"
+line = 417
+end = 532
+title = "`[ai]`, `[lsp]`, `[plugins]` — 書式のみ本書、意味は各文書"
 
 [[section]]
 id = "07 §5.12.1"
 file = "docs/07-config-extensibility.md"
+line = 426
+end = 516
+title = "`[ai]` のスキーマと既定値 (v1.L。ローカル LLM 向け)"
 
 [[section]]
 id = "07 §5.12.2"
 file = "docs/07-config-extensibility.md"
+line = 517
+end = 532
+title = "秘密ファイルパターン (正本)"
 
 [[section]]
 id = "07 §5.13"
 file = "docs/07-config-extensibility.md"
+line = 533
+end = 563
+title = "後続版で公開する設定項目 (v0.1 は既定値を定数として実装)"
 
 [[section]]
 id = "07 §6"
 file = "docs/07-config-extensibility.md"
+line = 564
+end = 585
+title = "再読込 (ホットリロード)"
 
 [[section]]
 id = "07 §7"
 file = "docs/07-config-extensibility.md"
+line = 586
+end = 724
+title = "キーマップ"
 
 [[section]]
 id = "07 §7.1"
 file = "docs/07-config-extensibility.md"
+line = 590
+end = 635
+title = "書式"
 
 [[section]]
 id = "07 §7.2"
 file = "docs/07-config-extensibility.md"
+line = 636
+end = 650
+title = "キー名"
 
 [[section]]
 id = "07 §7.3"
 file = "docs/07-config-extensibility.md"
+line = 651
+end = 695
+title = "`when` 句 ([02 §6.4](02-architecture.md#64-when-コンテキスト))"
 
 [[section]]
 id = "07 §7.4"
 file = "docs/07-config-extensibility.md"
+line = 696
+end = 703
+title = "層と優先順位 (書式上の宣言。意味論は 02 §7.2 K4 / K5)"
 
 [[section]]
 id = "07 §7.5"
 file = "docs/07-config-extensibility.md"
+line = 704
+end = 709
+title = "キーマップのプリセットと切替"
 
 [[section]]
 id = "07 §7.6"
 file = "docs/07-config-extensibility.md"
+line = 710
+end = 718
+title = "衝突検出 (FR-608)"
 
 [[section]]
 id = "07 §7.7"
 file = "docs/07-config-extensibility.md"
+line = 719
+end = 724
+title = "ヘルプとの連携"
 
 [[section]]
 id = "07 §8"
 file = "docs/07-config-extensibility.md"
+line = 725
+end = 936
+title = "テーマ"
 
 [[section]]
 id = "07 §8.1"
 file = "docs/07-config-extensibility.md"
+line = 727
+end = 734
+title = "方針"
 
 [[section]]
 id = "07 §8.2"
 file = "docs/07-config-extensibility.md"
+line = 735
+end = 860
+title = "書式"
 
 [[section]]
 id = "07 §8.3"
 file = "docs/07-config-extensibility.md"
+line = 861
+end = 868
+title = "解決手順"
 
 [[section]]
 id = "07 §8.4"
 file = "docs/07-config-extensibility.md"
+line = 869
+end = 880
+title = "ユーザーによる部分上書き"
 
 [[section]]
 id = "07 §8.5"
 file = "docs/07-config-extensibility.md"
+line = 881
+end = 884
+title = "シンタックススコープの命名"
+
+[[section]]
+id = "07 §8.6"
+file = "docs/07-config-extensibility.md"
+line = 885
+end = 936
+title = "テーマを使う側の突合と実装の分け方 (M9c、2026-10-30。案)"
 
 [[section]]
 id = "07 §9"
 file = "docs/07-config-extensibility.md"
+line = 937
+end = 1030
+title = "言語設定"
 
 [[section]]
 id = "07 §9.1"
 file = "docs/07-config-extensibility.md"
+line = 939
+end = 970
+title = "言語定義の書式"
 
 [[section]]
 id = "07 §9.2"
 file = "docs/07-config-extensibility.md"
+line = 971
+end = 979
+title = "言語判定の順序"
 
 [[section]]
 id = "07 §9.3"
 file = "docs/07-config-extensibility.md"
+line = 980
+end = 1000
+title = "初期対応言語 (FR-802 の確定)"
 
 [[section]]
 id = "07 §9.4"
 file = "docs/07-config-extensibility.md"
+line = 1001
+end = 1015
+title = "言語サーバ定義 (書式。意味・プロトコルは eve-lsp)"
 
 [[section]]
 id = "07 §9.5"
 file = "docs/07-config-extensibility.md"
+line = 1016
+end = 1030
+title = "フォーマッタ定義"
 
 [[section]]
 id = "07 §10"
 file = "docs/07-config-extensibility.md"
+line = 1031
+end = 1061
+title = "EditorConfig 対応"
 
 [[section]]
 id = "07 §10.1"
 file = "docs/07-config-extensibility.md"
+line = 1033
+end = 1047
+title = "対応範囲 (FR-705、v0.4)"
 
 [[section]]
 id = "07 §10.2"
 file = "docs/07-config-extensibility.md"
+line = 1048
+end = 1051
+title = "優先順位"
 
 [[section]]
 id = "07 §10.3"
 file = "docs/07-config-extensibility.md"
+line = 1052
+end = 1061
+title = "実装方針"
 
 [[section]]
 id = "07 §11"
 file = "docs/07-config-extensibility.md"
+line = 1062
+end = 1274
+title = "コマンド体系"
 
 [[section]]
 id = "07 §11.1"
 file = "docs/07-config-extensibility.md"
+line = 1064
+end = 1099
+title = "ID の命名規約 ([02 §6.2](02-architecture.md#62-命名規約-案) の具体化)"
 
 [[section]]
 id = "07 §11.2"
 file = "docs/07-config-extensibility.md"
+line = 1100
+end = 1115
+title = "引数 (`ArgSchema`)"
 
 [[section]]
 id = "07 §11.3"
 file = "docs/07-config-extensibility.md"
+line = 1116
+end = 1119
+title = "CommandSpec の公開面 (`eve-core`、[02 §6.1](02-architecture.md#61-基本方針-adr-0007))"
 
 [[section]]
 id = "07 §11.4"
 file = "docs/07-config-extensibility.md"
+line = 1120
+end = 1128
+title = "コマンドパレット (FR-602) の登録と表示"
 
 [[section]]
 id = "07 §11.5"
 file = "docs/07-config-extensibility.md"
+line = 1129
+end = 1139
+title = "ヘルプの自動生成 (FR-514)"
 
 [[section]]
 id = "07 §11.6"
 file = "docs/07-config-extensibility.md"
+line = 1140
+end = 1274
+title = "v0.1 CommandId カタログ (付録)"
 
 [[section]]
 id = "07 §12"
 file = "docs/07-config-extensibility.md"
+line = 1275
+end = 1313
+title = "ワークスペースと信頼モデル"
 
 [[section]]
 id = "07 §12.1"
 file = "docs/07-config-extensibility.md"
+line = 1277
+end = 1284
+title = "ワークスペースの概念"
 
 [[section]]
 id = "07 §12.2"
 file = "docs/07-config-extensibility.md"
+line = 1285
+end = 1292
+title = "信頼モデルの原則"
 
 [[section]]
 id = "07 §12.3"
 file = "docs/07-config-extensibility.md"
+line = 1293
+end = 1307
+title = "項目の分類"
 
 [[section]]
 id = "07 §12.4"
 file = "docs/07-config-extensibility.md"
+line = 1308
+end = 1313
+title = "コマンド"
 
 [[section]]
 id = "07 §13"
 file = "docs/07-config-extensibility.md"
+line = 1314
+end = 1400
+title = "拡張機構の段階的方針"
 
 [[section]]
 id = "07 §13.1"
 file = "docs/07-config-extensibility.md"
+line = 1316
+end = 1330
+title = "段階的方針"
 
 [[section]]
 id = "07 §13.2"
 file = "docs/07-config-extensibility.md"
+line = 1331
+end = 1392
+title = "プラグインプロトコルの骨子 (v1.X で詳細化)"
 
 [[section]]
 id = "07 §13.3"
 file = "docs/07-config-extensibility.md"
+line = 1393
+end = 1400
+title = "プラグインの発見と配置"
 
 [[section]]
 id = "07 §14"
 file = "docs/07-config-extensibility.md"
+line = 1401
+end = 1448
+title = "拡張 API 設計原則"
 
 [[section]]
 id = "07 §14.1"
 file = "docs/07-config-extensibility.md"
+line = 1403
+end = 1411
+title = "安定性とバージョニング"
 
 [[section]]
 id = "07 §14.2"
 file = "docs/07-config-extensibility.md"
+line = 1412
+end = 1419
+title = "設計規律"
 
 [[section]]
 id = "07 §14.3"
 file = "docs/07-config-extensibility.md"
+line = 1420
+end = 1439
+title = "権限 ([02 §10.4](02-architecture.md#104-権限モデル-aiプラグイン共通骨子) の具体化)"
 
 [[section]]
 id = "07 §14.4"
 file = "docs/07-config-extensibility.md"
+line = 1440
+end = 1448
+title = "サンドボックス"
 
 [[section]]
 id = "07 §15"
 file = "docs/07-config-extensibility.md"
+line = 1449
+end = 1461
+title = "LSP / DAP / フォーマッタ / リンタ統合方針"
 
 [[section]]
 id = "07 §16"
 file = "docs/07-config-extensibility.md"
+line = 1462
+end = 1490
+title = "セッション復元 (FR-121, v0.4 Could)"
 
 [[section]]
 id = "07 §16.1"
 file = "docs/07-config-extensibility.md"
+line = 1464
+end = 1474
+title = "保存する内容"
 
 [[section]]
 id = "07 §16.2"
 file = "docs/07-config-extensibility.md"
+line = 1475
+end = 1478
+title = "保存場所と形式"
 
 [[section]]
 id = "07 §16.3"
 file = "docs/07-config-extensibility.md"
+line = 1479
+end = 1490
+title = "復元の挙動"
 
 [[section]]
 id = "07 §17"
 file = "docs/07-config-extensibility.md"
+line = 1491
+end = 1577
+title = "国際化 (UI 文言)"
 
 [[section]]
 id = "07 §17.1"
 file = "docs/07-config-extensibility.md"
+line = 1493
+end = 1501
+title = "方針 ([OQ-21](10-decisions.md#oq-21-ui-文言の国際化) の具体化)"
 
 [[section]]
 id = "07 §17.2"
 file = "docs/07-config-extensibility.md"
+line = 1502
+end = 1569
+title = "書式"
 
 [[section]]
 id = "07 §17.3"
 file = "docs/07-config-extensibility.md"
+line = 1570
+end = 1577
+title = "表示上の注意"
 
 [[section]]
 id = "07 §18"
 file = "docs/07-config-extensibility.md"
+line = 1578
+end = 1728
+title = "CLI 仕様"
 
 [[section]]
 id = "07 §18.1"
 file = "docs/07-config-extensibility.md"
+line = 1580
+end = 1593
+title = "書式"
 
 [[section]]
 id = "07 §18.2"
 file = "docs/07-config-extensibility.md"
+line = 1594
+end = 1606
+title = "位置引数"
 
 [[section]]
 id = "07 §18.3"
 file = "docs/07-config-extensibility.md"
+line = 1607
+end = 1654
+title = "オプション"
 
 [[section]]
 id = "07 §18.4"
 file = "docs/07-config-extensibility.md"
+line = 1655
+end = 1669
+title = "終了コード"
 
 [[section]]
 id = "07 §18.5"
 file = "docs/07-config-extensibility.md"
+line = 1670
+end = 1676
+title = "標準入力・標準出力"
 
 [[section]]
 id = "07 §18.6"
 file = "docs/07-config-extensibility.md"
+line = 1677
+end = 1692
+title = "`$EDITOR` / `$GIT_EDITOR` / `$VISUAL` として使われたとき"
 
 [[section]]
 id = "07 §18.7"
 file = "docs/07-config-extensibility.md"
+line = 1693
+end = 1696
+title = "シェル補完"
 
 [[section]]
 id = "07 §18.8"
 file = "docs/07-config-extensibility.md"
+line = 1697
+end = 1728
+title = "更新に関わる予約 (`--check-update` と前回起動した版の記録)"
 
 [[section]]
 id = "07 §19"
 file = "docs/07-config-extensibility.md"
+line = 1729
+end = 1757
+title = "サードパーティ拡張のライセンスと信頼"
 
 [[section]]
 id = "07 §19.1"
 file = "docs/07-config-extensibility.md"
+line = 1731
+end = 1739
+title = "配布物の種類と危険度"
 
 [[section]]
 id = "07 §19.2"
 file = "docs/07-config-extensibility.md"
+line = 1740
+end = 1746
+title = "ライセンス"
 
 [[section]]
 id = "07 §19.3"
 file = "docs/07-config-extensibility.md"
+line = 1747
+end = 1757
+title = "信頼の段階"
 
 [[section]]
 id = "07 §20"
 file = "docs/07-config-extensibility.md"
+line = 1758
+end = 1774
+title = "未決事項"
 
 [[section]]
 id = "08 §1"
 file = "docs/08-roadmap.md"
+line = 16
+end = 48
+title = "版の概観"
 
 [[section]]
 id = "08 §2"
 file = "docs/08-roadmap.md"
+line = 49
+end = 178
+title = "各版の定義"
 
 [[section]]
 id = "08 §2.1"
 file = "docs/08-roadmap.md"
+line = 53
+end = 62
+title = "P0: 仕様確定・技術検証"
 
 [[section]]
 id = "08 §2.2"
 file = "docs/08-roadmap.md"
+line = 63
+end = 80
+title = "v0.1: 最小核"
 
 [[section]]
 id = "08 §2.3"
 file = "docs/08-roadmap.md"
+line = 81
+end = 127
+title = "v0.2: 日常の不足を埋める"
+
+[[section]]
+id = "08 §2.3.1"
+file = "docs/08-roadmap.md"
+line = 92
+end = 127
+title = "v0.2 の着手前の準備"
 
 [[section]]
 id = "08 §2.4"
 file = "docs/08-roadmap.md"
+line = 128
+end = 136
+title = "v0.3: 日本語と巨大ファイルの完成版"
 
 [[section]]
 id = "08 §2.5"
 file = "docs/08-roadmap.md"
+line = 137
+end = 145
+title = "v0.4: 実用化"
 
 [[section]]
 id = "08 §2.6"
 file = "docs/08-roadmap.md"
+line = 146
+end = 153
+title = "v1.0: 安定化"
 
 [[section]]
 id = "08 §2.7"
 file = "docs/08-roadmap.md"
+line = 154
+end = 166
+title = "v1.L: 言語支援・AI 基盤"
 
 [[section]]
 id = "08 §2.8"
 file = "docs/08-roadmap.md"
+line = 167
+end = 178
+title = "v1.X: 拡張"
 
 [[section]]
 id = "08 §3"
 file = "docs/08-roadmap.md"
+line = 179
+end = 243
+title = "P0 検証スパイク一覧"
 
 [[section]]
 id = "08 §3.1"
 file = "docs/08-roadmap.md"
+line = 226
+end = 243
+title = "v0.2 (macOS / Linux 出荷時) の対象"
 
 [[section]]
 id = "08 §4"
 file = "docs/08-roadmap.md"
+line = 244
+end = 261
+title = "マイルストーン"
 
 [[section]]
 id = "08 §5"
 file = "docs/08-roadmap.md"
+line = 262
+end = 309
+title = "実装着手の条件 (仕様確定のゲート)"
 
 [[section]]
 id = "08 §5.1"
 file = "docs/08-roadmap.md"
+line = 278
+end = 309
+title = "G1a の条件の状態"
 
 [[section]]
 id = "08 §6"
 file = "docs/08-roadmap.md"
+line = 310
+end = 334
+title = "依存関係とクリティカルパス"
 
 [[section]]
 id = "08 §7"
 file = "docs/08-roadmap.md"
+line = 335
+end = 346
+title = "繰り越し記録"
 
 [[section]]
 id = "08 §8"
 file = "docs/08-roadmap.md"
+line = 347
+end = 372
+title = "1.0 の判定"
 
 [[section]]
 id = "08 §8.1"
 file = "docs/08-roadmap.md"
+line = 352
+end = 372
+title = "TUI 完成の定義 (OQ-151)"
 
 [[section]]
 id = "09 §1"
 file = "docs/09-testing-quality.md"
+line = 37
+end = 52
+title = "方針"
 
 [[section]]
 id = "09 §2"
 file = "docs/09-testing-quality.md"
+line = 53
+end = 67
+title = "検証区分 (T / B / M / R) の定義"
 
 [[section]]
 id = "09 §3"
 file = "docs/09-testing-quality.md"
+line = 68
+end = 289
+title = "テスト階層"
 
 [[section]]
 id = "09 §3.1"
 file = "docs/09-testing-quality.md"
+line = 81
+end = 87
+title = "L0: 単体テスト・doctest"
 
 [[section]]
 id = "09 §3.2"
 file = "docs/09-testing-quality.md"
+line = 88
+end = 112
+title = "L1: プロパティテスト (proptest)"
 
 [[section]]
 id = "09 §3.3"
 file = "docs/09-testing-quality.md"
+line = 113
+end = 132
+title = "L2: fuzz (cargo-fuzz / libFuzzer)"
 
 [[section]]
 id = "09 §3.4"
 file = "docs/09-testing-quality.md"
+line = 133
+end = 179
+title = "L3: ヘッドレス統合テスト (`eve-testkit`)"
 
 [[section]]
 id = "09 §3.5"
 file = "docs/09-testing-quality.md"
+line = 180
+end = 198
+title = "L4: TUI 描画テスト"
 
 [[section]]
 id = "09 §3.6"
 file = "docs/09-testing-quality.md"
+line = 199
+end = 238
+title = "L5: 端末 E2E (疑似端末)"
 
 [[section]]
 id = "09 §3.7"
 file = "docs/09-testing-quality.md"
+line = 239
+end = 251
+title = "L6: 互換マトリクス (M)"
 
 [[section]]
 id = "09 §3.8"
 file = "docs/09-testing-quality.md"
+line = 252
+end = 266
+title = "L7: 手動受入 (M)"
 
 [[section]]
 id = "09 §3.9"
 file = "docs/09-testing-quality.md"
+line = 267
+end = 289
+title = "ローカル LLM 統合テスト (v1.L)"
 
 [[section]]
 id = "09 §4"
 file = "docs/09-testing-quality.md"
+line = 290
+end = 310
+title = "テストデータ (コーパス)"
 
 [[section]]
 id = "09 §5"
 file = "docs/09-testing-quality.md"
+line = 311
+end = 386
+title = "性能ベンチマーク"
 
 [[section]]
 id = "09 §5.1"
 file = "docs/09-testing-quality.md"
+line = 313
+end = 321
+title = "二層構成"
 
 [[section]]
 id = "09 §5.2"
 file = "docs/09-testing-quality.md"
+line = 322
+end = 366
+title = "NFR とベンチ ID の対応"
 
 [[section]]
 id = "09 §5.3"
 file = "docs/09-testing-quality.md"
+line = 367
+end = 376
+title = "基準環境 (OQ-23) と記録"
 
 [[section]]
 id = "09 §5.4"
 file = "docs/09-testing-quality.md"
+line = 377
+end = 386
+title = "回帰の運用"
 
 [[section]]
 id = "09 §6"
 file = "docs/09-testing-quality.md"
+line = 387
+end = 487
+title = "CI (GitHub Actions)"
 
 [[section]]
 id = "09 §6.1"
 file = "docs/09-testing-quality.md"
+line = 389
+end = 400
+title = "ワークフロー一覧"
 
 [[section]]
 id = "09 §6.2"
 file = "docs/09-testing-quality.md"
+line = 401
+end = 430
+title = "`ci.yml` のジョブ"
 
 [[section]]
 id = "09 §6.3"
 file = "docs/09-testing-quality.md"
+line = 431
+end = 445
+title = "夜間ジョブ"
 
 [[section]]
 id = "09 §6.4"
 file = "docs/09-testing-quality.md"
+line = 446
+end = 465
+title = "テストマトリクス (OS × アーキ)"
 
 [[section]]
 id = "09 §6.5"
 file = "docs/09-testing-quality.md"
+line = 466
+end = 487
+title = "セキュリティ (CI 自体)"
 
 [[section]]
 id = "09 §7"
 file = "docs/09-testing-quality.md"
+line = 488
+end = 525
+title = "依存規則 R1〜R11 の機械検査"
 
 [[section]]
 id = "09 §7.1"
 file = "docs/09-testing-quality.md"
+line = 509
+end = 525
+title = "外部の消費者向けの公開 API 互換とライセンス検査"
 
 [[section]]
 id = "09 §8"
 file = "docs/09-testing-quality.md"
+line = 526
+end = 653
+title = "品質ゲート"
 
 [[section]]
 id = "09 §8.1"
 file = "docs/09-testing-quality.md"
+line = 528
+end = 543
+title = "PR マージゲート (全部必須)"
 
 [[section]]
 id = "09 §8.2"
 file = "docs/09-testing-quality.md"
+line = 544
+end = 570
+title = "リリースゲート (版の完了・各リリース)"
 
 [[section]]
 id = "09 §8.3"
 file = "docs/09-testing-quality.md"
+line = 571
+end = 578
+title = "トレーサビリティ行列"
 
 [[section]]
 id = "09 §8.4"
 file = "docs/09-testing-quality.md"
+line = 579
+end = 597
+title = "レビューチェックリスト (R)"
 
 [[section]]
 id = "09 §8.5"
 file = "docs/09-testing-quality.md"
+line = 598
+end = 653
+title = "v0.1 Must の検証手段の対応 (チェックリストの初版)"
 
 [[section]]
 id = "09 §9"
 file = "docs/09-testing-quality.md"
+line = 654
+end = 722
+title = "リリース手順"
 
 [[section]]
 id = "09 §9.1"
 file = "docs/09-testing-quality.md"
+line = 656
+end = 661
+title = "バージョニングと頻度"
 
 [[section]]
 id = "09 §9.2"
 file = "docs/09-testing-quality.md"
+line = 662
+end = 710
+title = "手順"
 
 [[section]]
 id = "09 §9.3"
 file = "docs/09-testing-quality.md"
+line = 711
+end = 716
+title = "ホットフィックス"
 
 [[section]]
 id = "09 §9.4"
 file = "docs/09-testing-quality.md"
+line = 717
+end = 722
+title = "ロールバック"
 
 [[section]]
 id = "09 §10"
 file = "docs/09-testing-quality.md"
+line = 723
+end = 759
+title = "クラッシュ報告・テレメトリ"
 
 [[section]]
 id = "09 §10.1"
 file = "docs/09-testing-quality.md"
+line = 725
+end = 735
+title = "方針"
 
 [[section]]
 id = "09 §10.2"
 file = "docs/09-testing-quality.md"
+line = 736
+end = 752
+title = "クラッシュログの内容 (NFR-302 / 504)"
 
 [[section]]
 id = "09 §10.3"
 file = "docs/09-testing-quality.md"
+line = 753
+end = 759
+title = "デバッグ支援 (明示 opt-in)"
 
 [[section]]
 id = "09 §11"
 file = "docs/09-testing-quality.md"
+line = 760
+end = 801
+title = "ドキュメント運用"
 
 [[section]]
 id = "09 §11.1"
 file = "docs/09-testing-quality.md"
+line = 762
+end = 769
+title = "仕様書 (docs/00〜12)"
 
 [[section]]
 id = "09 §11.2"
 file = "docs/09-testing-quality.md"
+line = 770
+end = 785
+title = "生成ドキュメント (実装との乖離防止)"
 
 [[section]]
 id = "09 §11.3"
 file = "docs/09-testing-quality.md"
+line = 786
+end = 792
+title = "ユーザー向けドキュメント"
 
 [[section]]
 id = "09 §11.4"
 file = "docs/09-testing-quality.md"
+line = 793
+end = 801
+title = "貢献者向け"
 
 [[section]]
 id = "09 §12"
 file = "docs/09-testing-quality.md"
+line = 802
+end = 826
+title = "未決事項"
 
 [[section]]
 id = "10 §0"
 file = "docs/10-decisions.md"
+line = 275
+end = 357
+title = "運用ルール"
 
 [[section]]
 id = "10 §0.1"
 file = "docs/10-decisions.md"
+line = 277
+end = 286
+title = "ADR の状態"
 
 [[section]]
 id = "10 §0.2"
 file = "docs/10-decisions.md"
+line = 287
+end = 290
+title = "書式"
 
 [[section]]
 id = "10 §0.3"
 file = "docs/10-decisions.md"
+line = 291
+end = 297
+title = "確定手続き"
 
 [[section]]
 id = "10 §0.4"
 file = "docs/10-decisions.md"
+line = 298
+end = 343
+title = "ADR 一覧"
 
 [[section]]
 id = "10 §0.5"
 file = "docs/10-decisions.md"
+line = 344
+end = 357
+title = "OQ の区分と回答の扱い"
 
 [[section]]
 id = "10 §1"
 file = "docs/10-decisions.md"
+line = 358
+end = 750
+title = "決定記録 (ADR)"
 
 [[section]]
 id = "10 §2"
 file = "docs/10-decisions.md"
+line = 751
+end = 1371
+title = "未決事項 (Open Questions)"
 
 [[section]]
 id = "10 §2.1"
 file = "docs/10-decisions.md"
+line = 755
+end = 810
+title = "一覧 (個別節のある OQ)"
 
 [[section]]
 id = "10 §2.2"
 file = "docs/10-decisions.md"
+line = 811
+end = 955
+title = "既存 OQ (OQ-01〜25)"
 
 [[section]]
 id = "10 §2.3"
 file = "docs/10-decisions.md"
+line = 956
+end = 1124
+title = "OQ-26〜44、OQ-110〜116、OQ-120 (PO 決定)"
 
 [[section]]
 id = "10 §2.4"
 file = "docs/10-decisions.md"
+line = 1125
+end = 1201
+title = "OQ-45〜127 (設計者裁量・スパイク検証)"
 
 [[section]]
 id = "10 §2.5"
 file = "docs/10-decisions.md"
+line = 1202
+end = 1218
+title = "OQ-128〜137 (ローカル LLM の一級対応)"
 
 [[section]]
 id = "10 §2.6"
 file = "docs/10-decisions.md"
+line = 1219
+end = 1238
+title = "OQ-138〜150 (各文書からの追加起票)"
 
 [[section]]
 id = "10 §2.7"
 file = "docs/10-decisions.md"
+line = 1239
+end = 1271
+title = "OQ-151〜160 (TUI 完成の定義とライセンス・配布)"
 
 [[section]]
 id = "10 §2.8"
 file = "docs/10-decisions.md"
+line = 1272
+end = 1311
+title = "OQ-161 以降 (仕上げ段階の追加起票)"
 
 [[section]]
 id = "10 §2.9"
 file = "docs/10-decisions.md"
+line = 1312
+end = 1371
+title = "OQ-176 以降 (並行修正での追加起票)"
 
 [[section]]
 id = "11 §0"
 file = "docs/11-dev-workflow.md"
+line = 34
+end = 76
+title = "本書の範囲"
 
 [[section]]
 id = "11 §0.1"
 file = "docs/11-dev-workflow.md"
+line = 60
+end = 76
+title = "v0.1 の運用 (最小核) と v0.2 で足すもの"
 
 [[section]]
 id = "11 §1"
 file = "docs/11-dev-workflow.md"
+line = 77
+end = 110
+title = "リポジトリ構成"
 
 [[section]]
 id = "11 §2"
 file = "docs/11-dev-workflow.md"
+line = 111
+end = 167
+title = "crate の粒度とモジュール所有境界"
 
 [[section]]
 id = "11 §2.1"
 file = "docs/11-dev-workflow.md"
+line = 113
+end = 129
+title = "crate = 作業集合"
 
 [[section]]
 id = "11 §2.2"
 file = "docs/11-dev-workflow.md"
+line = 130
+end = 138
+title = "`eve-core` のモジュール所有境界"
 
 [[section]]
 id = "11 §2.3"
 file = "docs/11-dev-workflow.md"
+line = 139
+end = 167
+title = "`docs/ownership.toml`"
 
 [[section]]
 id = "11 §3"
 file = "docs/11-dev-workflow.md"
+line = 168
+end = 219
+title = "規範行 ID と `spec:` / `verifies:`"
 
 [[section]]
 id = "11 §3.1"
 file = "docs/11-dev-workflow.md"
+line = 172
+end = 185
+title = "規範行 ID の付け方"
 
 [[section]]
 id = "11 §3.2"
 file = "docs/11-dev-workflow.md"
+line = 186
+end = 199
+title = "`spec:` と `verifies:` の記法"
 
 [[section]]
 id = "11 §3.3"
 file = "docs/11-dev-workflow.md"
+line = 200
+end = 219
+title = "`xtask spec-index` と `xtask trace`"
 
 [[section]]
 id = "11 §4"
 file = "docs/11-dev-workflow.md"
+line = 220
+end = 287
+title = "タスクの単位と PR の形"
 
 [[section]]
 id = "11 §4.0"
 file = "docs/11-dev-workflow.md"
+line = 222
+end = 225
+title = "最初のタスク (M1 の縦切り)"
 
 [[section]]
 id = "11 §4.1"
 file = "docs/11-dev-workflow.md"
+line = 226
+end = 237
+title = "タスクの単位"
 
 [[section]]
 id = "11 §4.2"
 file = "docs/11-dev-workflow.md"
+line = 238
+end = 258
+title = "タスクテンプレート"
 
 [[section]]
 id = "11 §4.3"
 file = "docs/11-dev-workflow.md"
+line = 259
+end = 264
+title = "バックログの持ち方"
 
 [[section]]
 id = "11 §4.4"
 file = "docs/11-dev-workflow.md"
+line = 265
+end = 276
+title = "PR の形"
 
 [[section]]
 id = "11 §4.5"
 file = "docs/11-dev-workflow.md"
+line = 277
+end = 287
+title = "仕様の変更規律"
 
 [[section]]
 id = "11 §5"
 file = "docs/11-dev-workflow.md"
+line = 288
+end = 306
+title = "`CLAUDE.md` / `AGENTS.md` / `.claude/`"
 
 [[section]]
 id = "11 §6"
 file = "docs/11-dev-workflow.md"
+line = 307
+end = 454
+title = "決定的なテストとシナリオ DSL"
 
 [[section]]
 id = "11 §6.1"
 file = "docs/11-dev-workflow.md"
+line = 311
+end = 323
+title = "決定性の規則"
 
 [[section]]
 id = "11 §6.2"
 file = "docs/11-dev-workflow.md"
+line = 324
+end = 335
+title = "ゴールデン / スナップショットの運用"
 
 [[section]]
 id = "11 §6.3"
 file = "docs/11-dev-workflow.md"
+line = 336
+end = 414
+title = "シナリオ DSL の書式 (正本)"
 
 [[section]]
 id = "11 §6.4"
 file = "docs/11-dev-workflow.md"
+line = 415
+end = 421
+title = "シナリオの書き順 (エージェント向け)"
 
 [[section]]
 id = "11 §6.5"
 file = "docs/11-dev-workflow.md"
+line = 422
+end = 454
+title = "ASCII Frame の表現"
 
 [[section]]
 id = "11 §7"
 file = "docs/11-dev-workflow.md"
+line = 455
+end = 513
+title = "ヘッドレス検証ループ"
 
 [[section]]
 id = "11 §7.1"
 file = "docs/11-dev-workflow.md"
+line = 465
+end = 487
+title = "駆動 API の使い方 (エージェント向けの最小手順)"
 
 [[section]]
 id = "11 §7.2"
 file = "docs/11-dev-workflow.md"
+line = 488
+end = 497
+title = "ループの回し方 (1 タスク)"
 
 [[section]]
 id = "11 §7.3"
 file = "docs/11-dev-workflow.md"
+line = 498
+end = 513
+title = "ローカル LLM を開発ループに使う (任意)"
 
 [[section]]
 id = "11 §8"
 file = "docs/11-dev-workflow.md"
+line = 514
+end = 596
+title = "コードレビューと CI の運用"
 
 [[section]]
 id = "11 §8.1"
 file = "docs/11-dev-workflow.md"
+line = 516
+end = 527
+title = "CI の車線"
 
 [[section]]
 id = "11 §8.2"
 file = "docs/11-dev-workflow.md"
+line = 528
+end = 539
+title = "レビューの規則"
 
 [[section]]
 id = "11 §8.3"
 file = "docs/11-dev-workflow.md"
+line = 540
+end = 554
+title = "ラベル"
 
 [[section]]
 id = "11 §8.4"
 file = "docs/11-dev-workflow.md"
+line = 555
+end = 569
+title = "契約変更要求の手続き (02 §8.4 の運用面)"
 
 [[section]]
 id = "11 §8.5"
 file = "docs/11-dev-workflow.md"
+line = 570
+end = 596
+title = "docs の表を CI の入力にする規則 (機械可読の表)"
 
 [[section]]
 id = "11 §9"
 file = "docs/11-dev-workflow.md"
+line = 597
+end = 737
+title = "ブランチ・コミット・リリースの規約"
 
 [[section]]
 id = "11 §9.1"
 file = "docs/11-dev-workflow.md"
+line = 599
+end = 623
+title = "ブランチ"
 
 [[section]]
 id = "11 §9.2"
 file = "docs/11-dev-workflow.md"
+line = 624
+end = 646
+title = "コミットメッセージ"
 
 [[section]]
 id = "11 §9.3"
 file = "docs/11-dev-workflow.md"
+line = 647
+end = 654
+title = "CHANGELOG とリリース"
 
 [[section]]
 id = "11 §9.4"
 file = "docs/11-dev-workflow.md"
+line = 655
+end = 668
+title = "寄稿ポリシー (CLA / DCO)"
 
 [[section]]
 id = "11 §9.5"
 file = "docs/11-dev-workflow.md"
+line = 669
+end = 684
+title = "公開 crate と外部の消費者の運用"
 
 [[section]]
 id = "11 §9.6"
 file = "docs/11-dev-workflow.md"
+line = 685
+end = 698
+title = "ライセンス検査 (`cargo deny` と同梱資産)"
 
 [[section]]
 id = "11 §9.7"
 file = "docs/11-dev-workflow.md"
+line = 699
+end = 716
+title = "秘密情報の扱い (署名鍵・資格情報)"
 
 [[section]]
 id = "11 §9.8"
 file = "docs/11-dev-workflow.md"
+line = 717
+end = 737
+title = "脆弱性の受付・対応・開示"
 
 [[section]]
 id = "11 §10"
 file = "docs/11-dev-workflow.md"
+line = 738
+end = 757
+title = "未決事項"
 
 [[section]]
 id = "12 §1"
 file = "docs/12-licensing-distribution.md"
+line = 28
+end = 44
+title = "目的と範囲"
 
 [[section]]
 id = "12 §2"
 file = "docs/12-licensing-distribution.md"
+line = 45
+end = 65
+title = "前提と原則"
 
 [[section]]
 id = "12 §2.1"
 file = "docs/12-licensing-distribution.md"
+line = 47
+end = 56
+title = "前提"
 
 [[section]]
 id = "12 §2.2"
 file = "docs/12-licensing-distribution.md"
+line = 57
+end = 65
+title = "原則"
 
 [[section]]
 id = "12 §3"
 file = "docs/12-licensing-distribution.md"
+line = 66
+end = 161
+title = "ライセンスと公開の範囲"
 
 [[section]]
 id = "12 §3.1"
 file = "docs/12-licensing-distribution.md"
+line = 68
+end = 75
+title = "配布物"
 
 [[section]]
 id = "12 §3.2"
 file = "docs/12-licensing-distribution.md"
+line = 76
+end = 99
+title = "本体のライセンス (OQ-19)"
 
 [[section]]
 id = "12 §3.3"
 file = "docs/12-licensing-distribution.md"
+line = 100
+end = 106
+title = "OSS として公開する範囲 (OQ-152)"
 
 [[section]]
 id = "12 §3.4"
 file = "docs/12-licensing-distribution.md"
+line = 107
+end = 110
+title = "AI 機能の扱い"
 
 [[section]]
 id = "12 §3.5"
 file = "docs/12-licensing-distribution.md"
+line = 111
+end = 130
+title = "寄稿ポリシー (OQ-154)"
 
 [[section]]
 id = "12 §3.6"
 file = "docs/12-licensing-distribution.md"
+line = 131
+end = 142
+title = "依存・同梱物のライセンス方針 (公開リポジトリの依存とアセットのライセンス、ADR-0018)"
 
 [[section]]
 id = "12 §3.7"
 file = "docs/12-licensing-distribution.md"
+line = 143
+end = 148
+title = "名称と商標 (OQ-01)"
 
 [[section]]
 id = "12 §3.8"
 file = "docs/12-licensing-distribution.md"
+line = 149
+end = 161
+title = "弁護士・弁理士の確認項目 (提案)"
 
 [[section]]
 id = "12 §4"
 file = "docs/12-licensing-distribution.md"
+line = 162
+end = 193
+title = "公開 API の安定性 (外部の消費者)"
 
 [[section]]
 id = "12 §4.1"
 file = "docs/12-licensing-distribution.md"
+line = 166
+end = 177
+title = "外部の消費者が依存してよい範囲"
 
 [[section]]
 id = "12 §4.2"
 file = "docs/12-licensing-distribution.md"
+line = 178
+end = 187
+title = "互換の規則"
 
 [[section]]
 id = "12 §4.3"
 file = "docs/12-licensing-distribution.md"
+line = 188
+end = 193
+title = "下流 CI"
 
 [[section]]
 id = "12 §5"
 file = "docs/12-licensing-distribution.md"
+line = 194
+end = 249
+title = "配布と更新"
 
 [[section]]
 id = "12 §5.1"
 file = "docs/12-licensing-distribution.md"
+line = 196
+end = 200
+title = "配布経路 (TUI)"
 
 [[section]]
 id = "12 §5.2"
 file = "docs/12-licensing-distribution.md"
+line = 201
+end = 206
+title = "署名と検証"
 
 [[section]]
 id = "12 §5.3"
 file = "docs/12-licensing-distribution.md"
+line = 207
+end = 215
+title = "更新"
 
 [[section]]
 id = "12 §5.4"
 file = "docs/12-licensing-distribution.md"
+line = 216
+end = 220
+title = "第三者表示"
 
 [[section]]
 id = "12 §5.5"
 file = "docs/12-licensing-distribution.md"
+line = 221
+end = 235
+title = "公開前に用意する文書 (OQ-164)"
 
 [[section]]
 id = "12 §5.6"
 file = "docs/12-licensing-distribution.md"
+line = 236
+end = 249
+title = "公開前チェック (最初の push の前、OQ-160 / 168)"
 
 [[section]]
 id = "12 §6"
 file = "docs/12-licensing-distribution.md"
+line = 250
+end = 265
+title = "関連文書の箇所 (索引)"
 
 [[section]]
 id = "12 §7"
 file = "docs/12-licensing-distribution.md"
+line = 266
+end = 285
+title = "未決事項"
 
 [[section]]
 id = "README §1"
 file = "docs/README.md"
+line = 5
+end = 46
+title = "ステータス"
 
 [[section]]
 id = "README §1.1"
 file = "docs/README.md"
+line = 17
+end = 34
+title = "主な決定"
 
 [[section]]
 id = "README §1.2"
 file = "docs/README.md"
+line = 35
+end = 46
+title = "対象 OS"
 
 [[section]]
 id = "README §2"
 file = "docs/README.md"
+line = 47
+end = 64
+title = "文書索引"
 
 [[section]]
 id = "README §3"
 file = "docs/README.md"
+line = 65
+end = 245
+title = "読む順序"
 
 [[section]]
 id = "README §3.1"
 file = "docs/README.md"
+line = 76
+end = 95
+title = "v0.1 の実装で読む節"
+
+[[section]]
+id = "README §3.2"
+file = "docs/README.md"
+line = 96
+end = 110
+title = "v0.2 の M6 (swap-lite と復旧 UI) で読む節"
+
+[[section]]
+id = "README §3.3"
+file = "docs/README.md"
+line = 111
+end = 125
+title = "v0.2 の M8 (英語 UI) で読む節"
+
+[[section]]
+id = "README §3.4"
+file = "docs/README.md"
+line = 126
+end = 148
+title = "v0.2 の M9a (文書と検索) で読む節"
+
+[[section]]
+id = "README §3.5"
+file = "docs/README.md"
+line = 149
+end = 172
+title = "v0.2 の M9b (編集と入力) で読む節"
+
+[[section]]
+id = "README §3.6"
+file = "docs/README.md"
+line = 173
+end = 194
+title = "v0.2 の M9c (設定と表示) で読む節"
+
+[[section]]
+id = "README §3.7"
+file = "docs/README.md"
+line = 195
+end = 220
+title = "v0.2 の M9d (保全と外部連携) で読む節"
+
+[[section]]
+id = "README §3.8"
+file = "docs/README.md"
+line = 221
+end = 245
+title = "v0.2 の M10 (開発基盤と文書) で読む節"
 
 [[section]]
 id = "README §4"
 file = "docs/README.md"
+line = 246
+end = 296
+title = "正本マップ"
 
 [[section]]
 id = "README §5"
 file = "docs/README.md"
+line = 297
+end = 299
+title = "用語集への導線"
+
+[[id]]
+id = "G1"
+file = "docs/00-overview.md"
+line = 30
+section = "00 §2"
+
+[[id]]
+id = "G2"
+file = "docs/00-overview.md"
+line = 31
+section = "00 §2"
+
+[[id]]
+id = "G3"
+file = "docs/00-overview.md"
+line = 32
+section = "00 §2"
+
+[[id]]
+id = "G4"
+file = "docs/00-overview.md"
+line = 33
+section = "00 §2"
+
+[[id]]
+id = "G5"
+file = "docs/00-overview.md"
+line = 34
+section = "00 §2"
+
+[[id]]
+id = "G6"
+file = "docs/00-overview.md"
+line = 35
+section = "00 §2"
+
+[[id]]
+id = "G7"
+file = "docs/00-overview.md"
+line = 36
+section = "00 §2"
+
+[[id]]
+id = "G8"
+file = "docs/00-overview.md"
+line = 37
+section = "00 §2"
+
+[[id]]
+id = "G9"
+file = "docs/00-overview.md"
+line = 38
+section = "00 §2"
+
+[[id]]
+id = "G10"
+file = "docs/00-overview.md"
+line = 39
+section = "00 §2"
+
+[[id]]
+id = "NG1"
+file = "docs/00-overview.md"
+line = 47
+section = "00 §3"
+
+[[id]]
+id = "NG2"
+file = "docs/00-overview.md"
+line = 48
+section = "00 §3"
+
+[[id]]
+id = "NG3"
+file = "docs/00-overview.md"
+line = 49
+section = "00 §3"
+
+[[id]]
+id = "NG4"
+file = "docs/00-overview.md"
+line = 50
+section = "00 §3"
+
+[[id]]
+id = "NG12"
+file = "docs/00-overview.md"
+line = 51
+section = "00 §3"
+
+[[id]]
+id = "NG5"
+file = "docs/00-overview.md"
+line = 52
+section = "00 §3"
+
+[[id]]
+id = "NG6"
+file = "docs/00-overview.md"
+line = 53
+section = "00 §3"
+
+[[id]]
+id = "NG8"
+file = "docs/00-overview.md"
+line = 54
+section = "00 §3"
+
+[[id]]
+id = "NG9"
+file = "docs/00-overview.md"
+line = 55
+section = "00 §3"
+
+[[id]]
+id = "NG10"
+file = "docs/00-overview.md"
+line = 56
+section = "00 §3"
+
+[[id]]
+id = "NG11"
+file = "docs/00-overview.md"
+line = 57
+section = "00 §3"
+
+[[id]]
+id = "P1"
+file = "docs/00-overview.md"
+line = 65
+section = "00 §4"
+
+[[id]]
+id = "P2"
+file = "docs/00-overview.md"
+line = 66
+section = "00 §4"
+
+[[id]]
+id = "P3"
+file = "docs/00-overview.md"
+line = 67
+section = "00 §4"
+
+[[id]]
+id = "P4"
+file = "docs/00-overview.md"
+line = 68
+section = "00 §4"
+
+[[id]]
+id = "P5"
+file = "docs/00-overview.md"
+line = 69
+section = "00 §4"
+
+[[id]]
+id = "P6"
+file = "docs/00-overview.md"
+line = 70
+section = "00 §4"
+
+[[id]]
+id = "P7"
+file = "docs/00-overview.md"
+line = 71
+section = "00 §4"
+
+[[id]]
+id = "P8"
+file = "docs/00-overview.md"
+line = 72
+section = "00 §4"
+
+[[id]]
+id = "U1"
+file = "docs/00-overview.md"
+line = 78
+section = "00 §5"
+
+[[id]]
+id = "U2"
+file = "docs/00-overview.md"
+line = 79
+section = "00 §5"
+
+[[id]]
+id = "U3"
+file = "docs/00-overview.md"
+line = 80
+section = "00 §5"
+
+[[id]]
+id = "U4"
+file = "docs/00-overview.md"
+line = 81
+section = "00 §5"
+
+[[id]]
+id = "U5"
+file = "docs/00-overview.md"
+line = 82
+section = "00 §5"
+
+[[id]]
+id = "U7"
+file = "docs/00-overview.md"
+line = 83
+section = "00 §5"
+
+[[id]]
+id = "P0"
+file = "docs/01-requirements.md"
+line = 53
+section = "01 §1.3"
+
+[[id]]
+id = "FR-101"
+file = "docs/01-requirements.md"
+line = 78
+section = "01 §2.1"
+
+[[id]]
+id = "FR-102"
+file = "docs/01-requirements.md"
+line = 79
+section = "01 §2.1"
+
+[[id]]
+id = "FR-103"
+file = "docs/01-requirements.md"
+line = 80
+section = "01 §2.1"
+
+[[id]]
+id = "FR-104"
+file = "docs/01-requirements.md"
+line = 81
+section = "01 §2.1"
+
+[[id]]
+id = "FR-105"
+file = "docs/01-requirements.md"
+line = 82
+section = "01 §2.1"
+
+[[id]]
+id = "FR-106"
+file = "docs/01-requirements.md"
+line = 83
+section = "01 §2.1"
+
+[[id]]
+id = "FR-107"
+file = "docs/01-requirements.md"
+line = 84
+section = "01 §2.1"
+
+[[id]]
+id = "FR-108"
+file = "docs/01-requirements.md"
+line = 85
+section = "01 §2.1"
+
+[[id]]
+id = "FR-109"
+file = "docs/01-requirements.md"
+line = 86
+section = "01 §2.1"
+
+[[id]]
+id = "FR-110"
+file = "docs/01-requirements.md"
+line = 87
+section = "01 §2.1"
+
+[[id]]
+id = "FR-111"
+file = "docs/01-requirements.md"
+line = 88
+section = "01 §2.1"
+
+[[id]]
+id = "FR-112"
+file = "docs/01-requirements.md"
+line = 89
+section = "01 §2.1"
+
+[[id]]
+id = "FR-113"
+file = "docs/01-requirements.md"
+line = 90
+section = "01 §2.1"
+
+[[id]]
+id = "FR-114"
+file = "docs/01-requirements.md"
+line = 91
+section = "01 §2.1"
+
+[[id]]
+id = "FR-115"
+file = "docs/01-requirements.md"
+line = 92
+section = "01 §2.1"
+
+[[id]]
+id = "FR-116"
+file = "docs/01-requirements.md"
+line = 93
+section = "01 §2.1"
+
+[[id]]
+id = "FR-117"
+file = "docs/01-requirements.md"
+line = 94
+section = "01 §2.1"
+
+[[id]]
+id = "FR-118"
+file = "docs/01-requirements.md"
+line = 95
+section = "01 §2.1"
+
+[[id]]
+id = "FR-119"
+file = "docs/01-requirements.md"
+line = 96
+section = "01 §2.1"
+
+[[id]]
+id = "FR-120"
+file = "docs/01-requirements.md"
+line = 97
+section = "01 §2.1"
+
+[[id]]
+id = "FR-121"
+file = "docs/01-requirements.md"
+line = 98
+section = "01 §2.1"
+
+[[id]]
+id = "FR-122"
+file = "docs/01-requirements.md"
+line = 99
+section = "01 §2.1"
+
+[[id]]
+id = "FR-123"
+file = "docs/01-requirements.md"
+line = 100
+section = "01 §2.1"
+
+[[id]]
+id = "FR-124"
+file = "docs/01-requirements.md"
+line = 101
+section = "01 §2.1"
+
+[[id]]
+id = "FR-125"
+file = "docs/01-requirements.md"
+line = 102
+section = "01 §2.1"
+
+[[id]]
+id = "FR-126"
+file = "docs/01-requirements.md"
+line = 103
+section = "01 §2.1"
+
+[[id]]
+id = "FR-127"
+file = "docs/01-requirements.md"
+line = 104
+section = "01 §2.1"
+
+[[id]]
+id = "FR-201"
+file = "docs/01-requirements.md"
+line = 112
+section = "01 §2.2"
+
+[[id]]
+id = "FR-202"
+file = "docs/01-requirements.md"
+line = 113
+section = "01 §2.2"
+
+[[id]]
+id = "FR-203"
+file = "docs/01-requirements.md"
+line = 114
+section = "01 §2.2"
+
+[[id]]
+id = "FR-204"
+file = "docs/01-requirements.md"
+line = 115
+section = "01 §2.2"
+
+[[id]]
+id = "FR-205"
+file = "docs/01-requirements.md"
+line = 116
+section = "01 §2.2"
+
+[[id]]
+id = "FR-206"
+file = "docs/01-requirements.md"
+line = 117
+section = "01 §2.2"
+
+[[id]]
+id = "FR-207"
+file = "docs/01-requirements.md"
+line = 118
+section = "01 §2.2"
+
+[[id]]
+id = "FR-208"
+file = "docs/01-requirements.md"
+line = 119
+section = "01 §2.2"
+
+[[id]]
+id = "FR-209"
+file = "docs/01-requirements.md"
+line = 120
+section = "01 §2.2"
+
+[[id]]
+id = "FR-210"
+file = "docs/01-requirements.md"
+line = 121
+section = "01 §2.2"
+
+[[id]]
+id = "FR-211"
+file = "docs/01-requirements.md"
+line = 122
+section = "01 §2.2"
+
+[[id]]
+id = "FR-212"
+file = "docs/01-requirements.md"
+line = 123
+section = "01 §2.2"
+
+[[id]]
+id = "FR-213"
+file = "docs/01-requirements.md"
+line = 124
+section = "01 §2.2"
+
+[[id]]
+id = "FR-214"
+file = "docs/01-requirements.md"
+line = 125
+section = "01 §2.2"
+
+[[id]]
+id = "FR-215"
+file = "docs/01-requirements.md"
+line = 126
+section = "01 §2.2"
+
+[[id]]
+id = "FR-216"
+file = "docs/01-requirements.md"
+line = 127
+section = "01 §2.2"
+
+[[id]]
+id = "FR-301"
+file = "docs/01-requirements.md"
+line = 133
+section = "01 §2.3"
+
+[[id]]
+id = "FR-302"
+file = "docs/01-requirements.md"
+line = 134
+section = "01 §2.3"
+
+[[id]]
+id = "FR-303"
+file = "docs/01-requirements.md"
+line = 135
+section = "01 §2.3"
+
+[[id]]
+id = "FR-304"
+file = "docs/01-requirements.md"
+line = 136
+section = "01 §2.3"
+
+[[id]]
+id = "FR-305"
+file = "docs/01-requirements.md"
+line = 137
+section = "01 §2.3"
+
+[[id]]
+id = "FR-306"
+file = "docs/01-requirements.md"
+line = 138
+section = "01 §2.3"
+
+[[id]]
+id = "FR-307"
+file = "docs/01-requirements.md"
+line = 139
+section = "01 §2.3"
+
+[[id]]
+id = "FR-308"
+file = "docs/01-requirements.md"
+line = 140
+section = "01 §2.3"
+
+[[id]]
+id = "FR-309"
+file = "docs/01-requirements.md"
+line = 141
+section = "01 §2.3"
+
+[[id]]
+id = "FR-310"
+file = "docs/01-requirements.md"
+line = 142
+section = "01 §2.3"
+
+[[id]]
+id = "FR-311"
+file = "docs/01-requirements.md"
+line = 143
+section = "01 §2.3"
+
+[[id]]
+id = "FR-401"
+file = "docs/01-requirements.md"
+line = 149
+section = "01 §2.4"
+
+[[id]]
+id = "FR-402"
+file = "docs/01-requirements.md"
+line = 150
+section = "01 §2.4"
+
+[[id]]
+id = "FR-403"
+file = "docs/01-requirements.md"
+line = 151
+section = "01 §2.4"
+
+[[id]]
+id = "FR-404"
+file = "docs/01-requirements.md"
+line = 152
+section = "01 §2.4"
+
+[[id]]
+id = "FR-405"
+file = "docs/01-requirements.md"
+line = 153
+section = "01 §2.4"
+
+[[id]]
+id = "FR-406"
+file = "docs/01-requirements.md"
+line = 154
+section = "01 §2.4"
+
+[[id]]
+id = "FR-407"
+file = "docs/01-requirements.md"
+line = 155
+section = "01 §2.4"
+
+[[id]]
+id = "FR-501"
+file = "docs/01-requirements.md"
+line = 161
+section = "01 §2.5"
+
+[[id]]
+id = "FR-502"
+file = "docs/01-requirements.md"
+line = 162
+section = "01 §2.5"
+
+[[id]]
+id = "FR-503"
+file = "docs/01-requirements.md"
+line = 163
+section = "01 §2.5"
+
+[[id]]
+id = "FR-504"
+file = "docs/01-requirements.md"
+line = 164
+section = "01 §2.5"
+
+[[id]]
+id = "FR-505"
+file = "docs/01-requirements.md"
+line = 165
+section = "01 §2.5"
+
+[[id]]
+id = "FR-506"
+file = "docs/01-requirements.md"
+line = 166
+section = "01 §2.5"
+
+[[id]]
+id = "FR-507"
+file = "docs/01-requirements.md"
+line = 167
+section = "01 §2.5"
+
+[[id]]
+id = "FR-508"
+file = "docs/01-requirements.md"
+line = 168
+section = "01 §2.5"
+
+[[id]]
+id = "FR-509"
+file = "docs/01-requirements.md"
+line = 169
+section = "01 §2.5"
+
+[[id]]
+id = "FR-510"
+file = "docs/01-requirements.md"
+line = 170
+section = "01 §2.5"
+
+[[id]]
+id = "FR-511"
+file = "docs/01-requirements.md"
+line = 171
+section = "01 §2.5"
+
+[[id]]
+id = "FR-512"
+file = "docs/01-requirements.md"
+line = 172
+section = "01 §2.5"
+
+[[id]]
+id = "FR-513"
+file = "docs/01-requirements.md"
+line = 173
+section = "01 §2.5"
+
+[[id]]
+id = "FR-514"
+file = "docs/01-requirements.md"
+line = 174
+section = "01 §2.5"
+
+[[id]]
+id = "FR-515"
+file = "docs/01-requirements.md"
+line = 175
+section = "01 §2.5"
+
+[[id]]
+id = "FR-516"
+file = "docs/01-requirements.md"
+line = 176
+section = "01 §2.5"
+
+[[id]]
+id = "FR-517"
+file = "docs/01-requirements.md"
+line = 177
+section = "01 §2.5"
+
+[[id]]
+id = "FR-518"
+file = "docs/01-requirements.md"
+line = 178
+section = "01 §2.5"
+
+[[id]]
+id = "FR-601"
+file = "docs/01-requirements.md"
+line = 184
+section = "01 §2.6"
+
+[[id]]
+id = "FR-602"
+file = "docs/01-requirements.md"
+line = 185
+section = "01 §2.6"
+
+[[id]]
+id = "FR-603"
+file = "docs/01-requirements.md"
+line = 186
+section = "01 §2.6"
+
+[[id]]
+id = "FR-604"
+file = "docs/01-requirements.md"
+line = 187
+section = "01 §2.6"
+
+[[id]]
+id = "FR-605"
+file = "docs/01-requirements.md"
+line = 188
+section = "01 §2.6"
+
+[[id]]
+id = "FR-606"
+file = "docs/01-requirements.md"
+line = 189
+section = "01 §2.6"
+
+[[id]]
+id = "FR-607"
+file = "docs/01-requirements.md"
+line = 190
+section = "01 §2.6"
+
+[[id]]
+id = "FR-608"
+file = "docs/01-requirements.md"
+line = 191
+section = "01 §2.6"
+
+[[id]]
+id = "FR-609"
+file = "docs/01-requirements.md"
+line = 192
+section = "01 §2.6"
+
+[[id]]
+id = "FR-701"
+file = "docs/01-requirements.md"
+line = 198
+section = "01 §2.7"
+
+[[id]]
+id = "FR-702"
+file = "docs/01-requirements.md"
+line = 199
+section = "01 §2.7"
+
+[[id]]
+id = "FR-703"
+file = "docs/01-requirements.md"
+line = 200
+section = "01 §2.7"
+
+[[id]]
+id = "FR-704"
+file = "docs/01-requirements.md"
+line = 201
+section = "01 §2.7"
+
+[[id]]
+id = "FR-705"
+file = "docs/01-requirements.md"
+line = 202
+section = "01 §2.7"
+
+[[id]]
+id = "FR-706"
+file = "docs/01-requirements.md"
+line = 203
+section = "01 §2.7"
+
+[[id]]
+id = "FR-707"
+file = "docs/01-requirements.md"
+line = 204
+section = "01 §2.7"
+
+[[id]]
+id = "FR-708"
+file = "docs/01-requirements.md"
+line = 205
+section = "01 §2.7"
+
+[[id]]
+id = "FR-709"
+file = "docs/01-requirements.md"
+line = 206
+section = "01 §2.7"
+
+[[id]]
+id = "FR-710"
+file = "docs/01-requirements.md"
+line = 207
+section = "01 §2.7"
+
+[[id]]
+id = "FR-801"
+file = "docs/01-requirements.md"
+line = 213
+section = "01 §2.8"
+
+[[id]]
+id = "FR-802"
+file = "docs/01-requirements.md"
+line = 214
+section = "01 §2.8"
+
+[[id]]
+id = "FR-803"
+file = "docs/01-requirements.md"
+line = 215
+section = "01 §2.8"
+
+[[id]]
+id = "FR-804"
+file = "docs/01-requirements.md"
+line = 216
+section = "01 §2.8"
+
+[[id]]
+id = "FR-805"
+file = "docs/01-requirements.md"
+line = 217
+section = "01 §2.8"
+
+[[id]]
+id = "FR-901"
+file = "docs/01-requirements.md"
+line = 225
+section = "01 §2.9"
+
+[[id]]
+id = "FR-902"
+file = "docs/01-requirements.md"
+line = 226
+section = "01 §2.9"
+
+[[id]]
+id = "FR-903"
+file = "docs/01-requirements.md"
+line = 227
+section = "01 §2.9"
+
+[[id]]
+id = "FR-904"
+file = "docs/01-requirements.md"
+line = 228
+section = "01 §2.9"
+
+[[id]]
+id = "FR-905"
+file = "docs/01-requirements.md"
+line = 229
+section = "01 §2.9"
+
+[[id]]
+id = "FR-906"
+file = "docs/01-requirements.md"
+line = 230
+section = "01 §2.9"
+
+[[id]]
+id = "FR-907"
+file = "docs/01-requirements.md"
+line = 231
+section = "01 §2.9"
+
+[[id]]
+id = "FR-908"
+file = "docs/01-requirements.md"
+line = 232
+section = "01 §2.9"
+
+[[id]]
+id = "FR-909"
+file = "docs/01-requirements.md"
+line = 233
+section = "01 §2.9"
+
+[[id]]
+id = "FR-910"
+file = "docs/01-requirements.md"
+line = 234
+section = "01 §2.9"
+
+[[id]]
+id = "FR-911"
+file = "docs/01-requirements.md"
+line = 235
+section = "01 §2.9"
+
+[[id]]
+id = "FR-912"
+file = "docs/01-requirements.md"
+line = 236
+section = "01 §2.9"
+
+[[id]]
+id = "FR-913"
+file = "docs/01-requirements.md"
+line = 237
+section = "01 §2.9"
+
+[[id]]
+id = "FR-914"
+file = "docs/01-requirements.md"
+line = 238
+section = "01 §2.9"
+
+[[id]]
+id = "FR-915"
+file = "docs/01-requirements.md"
+line = 239
+section = "01 §2.9"
+
+[[id]]
+id = "FR-916"
+file = "docs/01-requirements.md"
+line = 240
+section = "01 §2.9"
+
+[[id]]
+id = "FR-917"
+file = "docs/01-requirements.md"
+line = 241
+section = "01 §2.9"
+
+[[id]]
+id = "FR-918"
+file = "docs/01-requirements.md"
+line = 242
+section = "01 §2.9"
+
+[[id]]
+id = "NFR-101"
+file = "docs/01-requirements.md"
+line = 288
+section = "01 §3.1"
+
+[[id]]
+id = "NFR-102"
+file = "docs/01-requirements.md"
+line = 289
+section = "01 §3.1"
+
+[[id]]
+id = "NFR-103"
+file = "docs/01-requirements.md"
+line = 290
+section = "01 §3.1"
+
+[[id]]
+id = "NFR-104"
+file = "docs/01-requirements.md"
+line = 291
+section = "01 §3.1"
+
+[[id]]
+id = "NFR-105"
+file = "docs/01-requirements.md"
+line = 292
+section = "01 §3.1"
+
+[[id]]
+id = "NFR-106"
+file = "docs/01-requirements.md"
+line = 293
+section = "01 §3.1"
+
+[[id]]
+id = "NFR-107"
+file = "docs/01-requirements.md"
+line = 294
+section = "01 §3.1"
+
+[[id]]
+id = "NFR-108"
+file = "docs/01-requirements.md"
+line = 295
+section = "01 §3.1"
+
+[[id]]
+id = "NFR-109"
+file = "docs/01-requirements.md"
+line = 296
+section = "01 §3.1"
+
+[[id]]
+id = "NFR-110"
+file = "docs/01-requirements.md"
+line = 297
+section = "01 §3.1"
+
+[[id]]
+id = "NFR-111"
+file = "docs/01-requirements.md"
+line = 298
+section = "01 §3.1"
+
+[[id]]
+id = "NFR-112"
+file = "docs/01-requirements.md"
+line = 299
+section = "01 §3.1"
+
+[[id]]
+id = "NFR-115"
+file = "docs/01-requirements.md"
+line = 300
+section = "01 §3.1"
+
+[[id]]
+id = "NFR-116"
+file = "docs/01-requirements.md"
+line = 301
+section = "01 §3.1"
+
+[[id]]
+id = "NFR-201"
+file = "docs/01-requirements.md"
+line = 319
+section = "01 §3.2"
+
+[[id]]
+id = "NFR-202"
+file = "docs/01-requirements.md"
+line = 320
+section = "01 §3.2"
+
+[[id]]
+id = "NFR-203"
+file = "docs/01-requirements.md"
+line = 321
+section = "01 §3.2"
+
+[[id]]
+id = "NFR-204"
+file = "docs/01-requirements.md"
+line = 322
+section = "01 §3.2"
+
+[[id]]
+id = "NFR-205"
+file = "docs/01-requirements.md"
+line = 323
+section = "01 §3.2"
+
+[[id]]
+id = "NFR-206"
+file = "docs/01-requirements.md"
+line = 324
+section = "01 §3.2"
+
+[[id]]
+id = "NFR-207"
+file = "docs/01-requirements.md"
+line = 325
+section = "01 §3.2"
+
+[[id]]
+id = "NFR-301"
+file = "docs/01-requirements.md"
+line = 331
+section = "01 §3.3"
+
+[[id]]
+id = "NFR-302"
+file = "docs/01-requirements.md"
+line = 332
+section = "01 §3.3"
+
+[[id]]
+id = "NFR-303"
+file = "docs/01-requirements.md"
+line = 333
+section = "01 §3.3"
+
+[[id]]
+id = "NFR-304"
+file = "docs/01-requirements.md"
+line = 334
+section = "01 §3.3"
+
+[[id]]
+id = "NFR-305"
+file = "docs/01-requirements.md"
+line = 335
+section = "01 §3.3"
+
+[[id]]
+id = "NFR-306"
+file = "docs/01-requirements.md"
+line = 336
+section = "01 §3.3"
+
+[[id]]
+id = "NFR-307"
+file = "docs/01-requirements.md"
+line = 337
+section = "01 §3.3"
+
+[[id]]
+id = "NFR-401"
+file = "docs/01-requirements.md"
+line = 343
+section = "01 §3.4"
+
+[[id]]
+id = "NFR-402"
+file = "docs/01-requirements.md"
+line = 344
+section = "01 §3.4"
+
+[[id]]
+id = "NFR-403"
+file = "docs/01-requirements.md"
+line = 345
+section = "01 §3.4"
+
+[[id]]
+id = "NFR-404"
+file = "docs/01-requirements.md"
+line = 346
+section = "01 §3.4"
+
+[[id]]
+id = "NFR-405"
+file = "docs/01-requirements.md"
+line = 347
+section = "01 §3.4"
+
+[[id]]
+id = "NFR-406"
+file = "docs/01-requirements.md"
+line = 348
+section = "01 §3.4"
+
+[[id]]
+id = "NFR-501"
+file = "docs/01-requirements.md"
+line = 354
+section = "01 §3.5"
+
+[[id]]
+id = "NFR-502"
+file = "docs/01-requirements.md"
+line = 355
+section = "01 §3.5"
+
+[[id]]
+id = "NFR-503"
+file = "docs/01-requirements.md"
+line = 356
+section = "01 §3.5"
+
+[[id]]
+id = "NFR-504"
+file = "docs/01-requirements.md"
+line = 357
+section = "01 §3.5"
+
+[[id]]
+id = "NFR-505"
+file = "docs/01-requirements.md"
+line = 358
+section = "01 §3.5"
+
+[[id]]
+id = "NFR-506"
+file = "docs/01-requirements.md"
+line = 359
+section = "01 §3.5"
+
+[[id]]
+id = "NFR-507"
+file = "docs/01-requirements.md"
+line = 360
+section = "01 §3.5"
+
+[[id]]
+id = "NFR-508"
+file = "docs/01-requirements.md"
+line = 361
+section = "01 §3.5"
+
+[[id]]
+id = "NFR-509"
+file = "docs/01-requirements.md"
+line = 362
+section = "01 §3.5"
+
+[[id]]
+id = "NFR-510"
+file = "docs/01-requirements.md"
+line = 363
+section = "01 §3.5"
+
+[[id]]
+id = "NFR-601"
+file = "docs/01-requirements.md"
+line = 369
+section = "01 §3.6"
+
+[[id]]
+id = "NFR-602"
+file = "docs/01-requirements.md"
+line = 370
+section = "01 §3.6"
+
+[[id]]
+id = "NFR-603"
+file = "docs/01-requirements.md"
+line = 371
+section = "01 §3.6"
+
+[[id]]
+id = "NFR-604"
+file = "docs/01-requirements.md"
+line = 372
+section = "01 §3.6"
+
+[[id]]
+id = "NFR-605"
+file = "docs/01-requirements.md"
+line = 373
+section = "01 §3.6"
+
+[[id]]
+id = "NFR-701"
+file = "docs/01-requirements.md"
+line = 379
+section = "01 §3.7"
+
+[[id]]
+id = "NFR-702"
+file = "docs/01-requirements.md"
+line = 380
+section = "01 §3.7"
+
+[[id]]
+id = "NFR-703"
+file = "docs/01-requirements.md"
+line = 381
+section = "01 §3.7"
+
+[[id]]
+id = "NFR-704"
+file = "docs/01-requirements.md"
+line = 382
+section = "01 §3.7"
+
+[[id]]
+id = "NFR-705"
+file = "docs/01-requirements.md"
+line = 383
+section = "01 §3.7"
+
+[[id]]
+id = "NFR-706"
+file = "docs/01-requirements.md"
+line = 384
+section = "01 §3.7"
+
+[[id]]
+id = "NFR-707"
+file = "docs/01-requirements.md"
+line = 385
+section = "01 §3.7"
+
+[[id]]
+id = "NFR-708"
+file = "docs/01-requirements.md"
+line = 386
+section = "01 §3.7"
+
+[[id]]
+id = "R1"
+file = "docs/02-architecture.md"
+line = 234
+section = "02 §4.3"
+
+[[id]]
+id = "R2"
+file = "docs/02-architecture.md"
+line = 235
+section = "02 §4.3"
+
+[[id]]
+id = "R3"
+file = "docs/02-architecture.md"
+line = 236
+section = "02 §4.3"
+
+[[id]]
+id = "R4"
+file = "docs/02-architecture.md"
+line = 237
+section = "02 §4.3"
+
+[[id]]
+id = "R5"
+file = "docs/02-architecture.md"
+line = 238
+section = "02 §4.3"
+
+[[id]]
+id = "R6"
+file = "docs/02-architecture.md"
+line = 239
+section = "02 §4.3"
+
+[[id]]
+id = "R7"
+file = "docs/02-architecture.md"
+line = 240
+section = "02 §4.3"
+
+[[id]]
+id = "R8"
+file = "docs/02-architecture.md"
+line = 241
+section = "02 §4.3"
+
+[[id]]
+id = "R9"
+file = "docs/02-architecture.md"
+line = 242
+section = "02 §4.3"
+
+[[id]]
+id = "R12"
+file = "docs/02-architecture.md"
+line = 245
+section = "02 §4.3"
+
+[[id]]
+id = "MR1"
+file = "docs/02-architecture.md"
+line = 2062
+section = "02 §14.1"
+
+[[id]]
+id = "MR2"
+file = "docs/02-architecture.md"
+line = 2063
+section = "02 §14.1"
+
+[[id]]
+id = "MR3"
+file = "docs/02-architecture.md"
+line = 2064
+section = "02 §14.1"
+
+[[id]]
+id = "MR4"
+file = "docs/02-architecture.md"
+line = 2065
+section = "02 §14.1"
+
+[[id]]
+id = "MR5"
+file = "docs/02-architecture.md"
+line = 2066
+section = "02 §14.1"
+
+[[id]]
+id = "MR6"
+file = "docs/02-architecture.md"
+line = 2067
+section = "02 §14.1"
+
+[[id]]
+id = "MR7"
+file = "docs/02-architecture.md"
+line = 2068
+section = "02 §14.1"
+
+[[id]]
+id = "MR8"
+file = "docs/02-architecture.md"
+line = 2069
+section = "02 §14.1"
+
+[[id]]
+id = "MR9"
+file = "docs/02-architecture.md"
+line = 2070
+section = "02 §14.1"
+
+[[id]]
+id = "MR10"
+file = "docs/02-architecture.md"
+line = 2071
+section = "02 §14.1"
+
+[[id]]
+id = "MR11"
+file = "docs/02-architecture.md"
+line = 2072
+section = "02 §14.1"
+
+[[id]]
+id = "MR12"
+file = "docs/02-architecture.md"
+line = 2073
+section = "02 §14.1"
+
+[[id]]
+id = "T1"
+file = "docs/03-core-design.md"
+line = 127
+section = "03 §2.1"
+
+[[id]]
+id = "T2"
+file = "docs/03-core-design.md"
+line = 128
+section = "03 §2.1"
+
+[[id]]
+id = "T3"
+file = "docs/03-core-design.md"
+line = 129
+section = "03 §2.1"
+
+[[id]]
+id = "T4"
+file = "docs/03-core-design.md"
+line = 130
+section = "03 §2.1"
+
+[[id]]
+id = "T5"
+file = "docs/03-core-design.md"
+line = 131
+section = "03 §2.1"
+
+[[id]]
+id = "T6"
+file = "docs/03-core-design.md"
+line = 132
+section = "03 §2.1"
+
+[[id]]
+id = "T7"
+file = "docs/03-core-design.md"
+line = 133
+section = "03 §2.1"
+
+[[id]]
+id = "T8"
+file = "docs/03-core-design.md"
+line = 134
+section = "03 §2.1"
+
+[[id]]
+id = "T9"
+file = "docs/03-core-design.md"
+line = 135
+section = "03 §2.1"
+
+[[id]]
+id = "INV-T1"
+file = "docs/03-core-design.md"
+line = 202
+section = "03 §2.5"
+
+[[id]]
+id = "INV-T2"
+file = "docs/03-core-design.md"
+line = 203
+section = "03 §2.5"
+
+[[id]]
+id = "INV-T3"
+file = "docs/03-core-design.md"
+line = 204
+section = "03 §2.5"
+
+[[id]]
+id = "INV-T4"
+file = "docs/03-core-design.md"
+line = 205
+section = "03 §2.5"
+
+[[id]]
+id = "INV-T5"
+file = "docs/03-core-design.md"
+line = 206
+section = "03 §2.5"
+
+[[id]]
+id = "C1"
+file = "docs/03-core-design.md"
+line = 244
+section = "03 §3.2"
+
+[[id]]
+id = "C2"
+file = "docs/03-core-design.md"
+line = 245
+section = "03 §3.2"
+
+[[id]]
+id = "C3"
+file = "docs/03-core-design.md"
+line = 246
+section = "03 §3.2"
+
+[[id]]
+id = "C4"
+file = "docs/03-core-design.md"
+line = 247
+section = "03 §3.2"
+
+[[id]]
+id = "N1"
+file = "docs/03-core-design.md"
+line = 295
+section = "03 §4.4"
+
+[[id]]
+id = "N2"
+file = "docs/03-core-design.md"
+line = 296
+section = "03 §4.4"
+
+[[id]]
+id = "N3"
+file = "docs/03-core-design.md"
+line = 297
+section = "03 §4.4"
+
+[[id]]
+id = "N4"
+file = "docs/03-core-design.md"
+line = 298
+section = "03 §4.4"
+
+[[id]]
+id = "N5"
+file = "docs/03-core-design.md"
+line = 299
+section = "03 §4.4"
+
+[[id]]
+id = "N6"
+file = "docs/03-core-design.md"
+line = 300
+section = "03 §4.4"
+
+[[id]]
+id = "CS1"
+file = "docs/03-core-design.md"
+line = 462
+section = "03 §6.2"
+
+[[id]]
+id = "CS2"
+file = "docs/03-core-design.md"
+line = 463
+section = "03 §6.2"
+
+[[id]]
+id = "CS3"
+file = "docs/03-core-design.md"
+line = 464
+section = "03 §6.2"
+
+[[id]]
+id = "CS4"
+file = "docs/03-core-design.md"
+line = 465
+section = "03 §6.2"
+
+[[id]]
+id = "CS5"
+file = "docs/03-core-design.md"
+line = 466
+section = "03 §6.2"
+
+[[id]]
+id = "CS6"
+file = "docs/03-core-design.md"
+line = 467
+section = "03 §6.2"
+
+[[id]]
+id = "R1"
+file = "docs/03-core-design.md"
+line = 639
+section = "03 §7.3"
+
+[[id]]
+id = "R2"
+file = "docs/03-core-design.md"
+line = 640
+section = "03 §7.3"
+
+[[id]]
+id = "R3"
+file = "docs/03-core-design.md"
+line = 641
+section = "03 §7.3"
+
+[[id]]
+id = "R4"
+file = "docs/03-core-design.md"
+line = 642
+section = "03 §7.3"
+
+[[id]]
+id = "R5"
+file = "docs/03-core-design.md"
+line = 643
+section = "03 §7.3"
+
+[[id]]
+id = "R6"
+file = "docs/03-core-design.md"
+line = 644
+section = "03 §7.3"
+
+[[id]]
+id = "R7"
+file = "docs/03-core-design.md"
+line = 645
+section = "03 §7.3"
+
+[[id]]
+id = "R8"
+file = "docs/03-core-design.md"
+line = 646
+section = "03 §7.3"
+
+[[id]]
+id = "R9"
+file = "docs/03-core-design.md"
+line = 647
+section = "03 §7.3"
+
+[[id]]
+id = "UTF-7"
+file = "docs/03-core-design.md"
+line = 878
+section = "03 §8.9"
+
+[[id]]
+id = "F1"
+file = "docs/03-core-design.md"
+line = 898
+section = "03 §9.1"
+
+[[id]]
+id = "F2"
+file = "docs/03-core-design.md"
+line = 899
+section = "03 §9.1"
+
+[[id]]
+id = "F3"
+file = "docs/03-core-design.md"
+line = 900
+section = "03 §9.1"
+
+[[id]]
+id = "F4"
+file = "docs/03-core-design.md"
+line = 901
+section = "03 §9.1"
+
+[[id]]
+id = "F5"
+file = "docs/03-core-design.md"
+line = 902
+section = "03 §9.1"
+
+[[id]]
+id = "F6"
+file = "docs/03-core-design.md"
+line = 903
+section = "03 §9.1"
+
+[[id]]
+id = "F7"
+file = "docs/03-core-design.md"
+line = 904
+section = "03 §9.1"
+
+[[id]]
+id = "F8"
+file = "docs/03-core-design.md"
+line = 905
+section = "03 §9.1"
+
+[[id]]
+id = "F9"
+file = "docs/03-core-design.md"
+line = 906
+section = "03 §9.1"
+
+[[id]]
+id = "F10"
+file = "docs/03-core-design.md"
+line = 907
+section = "03 §9.1"
+
+[[id]]
+id = "F11"
+file = "docs/03-core-design.md"
+line = 908
+section = "03 §9.1"
+
+[[id]]
+id = "INV-S1"
+file = "docs/03-core-design.md"
+line = 2322
+section = "03 §20"
+
+[[id]]
+id = "INV-S2"
+file = "docs/03-core-design.md"
+line = 2323
+section = "03 §20"
+
+[[id]]
+id = "INV-S3"
+file = "docs/03-core-design.md"
+line = 2324
+section = "03 §20"
+
+[[id]]
+id = "INV-C1"
+file = "docs/03-core-design.md"
+line = 2325
+section = "03 §20"
+
+[[id]]
+id = "INV-C2"
+file = "docs/03-core-design.md"
+line = 2326
+section = "03 §20"
+
+[[id]]
+id = "INV-D1"
+file = "docs/03-core-design.md"
+line = 2327
+section = "03 §20"
+
+[[id]]
+id = "INV-D2"
+file = "docs/03-core-design.md"
+line = 2328
+section = "03 §20"
+
+[[id]]
+id = "INV-D3"
+file = "docs/03-core-design.md"
+line = 2329
+section = "03 §20"
+
+[[id]]
+id = "INV-D4"
+file = "docs/03-core-design.md"
+line = 2330
+section = "03 §20"
+
+[[id]]
+id = "INV-D5"
+file = "docs/03-core-design.md"
+line = 2331
+section = "03 §20"
+
+[[id]]
+id = "INV-D6"
+file = "docs/03-core-design.md"
+line = 2332
+section = "03 §20"
+
+[[id]]
+id = "INV-D7"
+file = "docs/03-core-design.md"
+line = 2333
+section = "03 §20"
+
+[[id]]
+id = "INV-H1"
+file = "docs/03-core-design.md"
+line = 2334
+section = "03 §20"
+
+[[id]]
+id = "INV-H2"
+file = "docs/03-core-design.md"
+line = 2335
+section = "03 §20"
+
+[[id]]
+id = "INV-H3"
+file = "docs/03-core-design.md"
+line = 2336
+section = "03 §20"
+
+[[id]]
+id = "INV-H4"
+file = "docs/03-core-design.md"
+line = 2337
+section = "03 §20"
+
+[[id]]
+id = "INV-L1"
+file = "docs/03-core-design.md"
+line = 2338
+section = "03 §20"
+
+[[id]]
+id = "INV-J1"
+file = "docs/03-core-design.md"
+line = 2339
+section = "03 §20"
+
+[[id]]
+id = "INV-F1"
+file = "docs/03-core-design.md"
+line = 2340
+section = "03 §20"
+
+[[id]]
+id = "INV-F2"
+file = "docs/03-core-design.md"
+line = 2341
+section = "03 §20"
+
+[[id]]
+id = "INV-F3"
+file = "docs/03-core-design.md"
+line = 2342
+section = "03 §20"
+
+[[id]]
+id = "INV-IO1"
+file = "docs/03-core-design.md"
+line = 2343
+section = "03 §20"
+
+[[id]]
+id = "INV-IO2"
+file = "docs/03-core-design.md"
+line = 2344
+section = "03 §20"
+
+[[id]]
+id = "INV-IO3"
+file = "docs/03-core-design.md"
+line = 2345
+section = "03 §20"
+
+[[id]]
+id = "INV-IO4"
+file = "docs/03-core-design.md"
+line = 2346
+section = "03 §20"
+
+[[id]]
+id = "OQ-32"
+file = "docs/03-core-design.md"
+line = 2449
+section = "03 §23"
+
+[[id]]
+id = "OQ-45"
+file = "docs/03-core-design.md"
+line = 2450
+section = "03 §23"
+
+[[id]]
+id = "OQ-46"
+file = "docs/03-core-design.md"
+line = 2451
+section = "03 §23"
+
+[[id]]
+id = "OQ-47"
+file = "docs/03-core-design.md"
+line = 2452
+section = "03 §23"
+
+[[id]]
+id = "OQ-48"
+file = "docs/03-core-design.md"
+line = 2453
+section = "03 §23"
+
+[[id]]
+id = "OQ-49"
+file = "docs/03-core-design.md"
+line = 2454
+section = "03 §23"
+
+[[id]]
+id = "OQ-50"
+file = "docs/03-core-design.md"
+line = 2455
+section = "03 §23"
+
+[[id]]
+id = "OQ-51"
+file = "docs/03-core-design.md"
+line = 2456
+section = "03 §23"
+
+[[id]]
+id = "OQ-52"
+file = "docs/03-core-design.md"
+line = 2457
+section = "03 §23"
+
+[[id]]
+id = "OQ-05"
+file = "docs/03-core-design.md"
+line = 2458
+section = "03 §23"
+
+[[id]]
+id = "OQ-53"
+file = "docs/03-core-design.md"
+line = 2459
+section = "03 §23"
+
+[[id]]
+id = "OQ-54"
+file = "docs/03-core-design.md"
+line = 2460
+section = "03 §23"
+
+[[id]]
+id = "OQ-39"
+file = "docs/03-core-design.md"
+line = 2461
+section = "03 §23"
+
+[[id]]
+id = "OQ-55"
+file = "docs/03-core-design.md"
+line = 2462
+section = "03 §23"
+
+[[id]]
+id = "OQ-56"
+file = "docs/03-core-design.md"
+line = 2463
+section = "03 §23"
+
+[[id]]
+id = "OQ-57"
+file = "docs/03-core-design.md"
+line = 2464
+section = "03 §23"
+
+[[id]]
+id = "OQ-58"
+file = "docs/03-core-design.md"
+line = 2465
+section = "03 §23"
+
+[[id]]
+id = "OQ-59"
+file = "docs/03-core-design.md"
+line = 2466
+section = "03 §23"
+
+[[id]]
+id = "OQ-60"
+file = "docs/03-core-design.md"
+line = 2467
+section = "03 §23"
+
+[[id]]
+id = "OQ-41"
+file = "docs/03-core-design.md"
+line = 2468
+section = "03 §23"
+
+[[id]]
+id = "OQ-42"
+file = "docs/03-core-design.md"
+line = 2469
+section = "03 §23"
+
+[[id]]
+id = "OQ-139"
+file = "docs/03-core-design.md"
+line = 2470
+section = "03 §23"
+
+[[id]]
+id = "OQ-31"
+file = "docs/03-core-design.md"
+line = 2471
+section = "03 §23"
+
+[[id]]
+id = "OQ-116"
+file = "docs/03-core-design.md"
+line = 2472
+section = "03 §23"
+
+[[id]]
+id = "OQ-114"
+file = "docs/03-core-design.md"
+line = 2473
+section = "03 §23"
+
+[[id]]
+id = "OQ-03"
+file = "docs/03-core-design.md"
+line = 2474
+section = "03 §23"
+
+[[id]]
+id = "OQ-138"
+file = "docs/03-core-design.md"
+line = 2475
+section = "03 §23"
+
+[[id]]
+id = "OQ-162"
+file = "docs/03-core-design.md"
+line = 2476
+section = "03 §23"
+
+[[id]]
+id = "OQ-110"
+file = "docs/03-core-design.md"
+line = 2478
+section = "03 §23"
+
+[[id]]
+id = "T1"
+file = "docs/04-tui-design.md"
+line = 77
+section = "04 §1.3"
+
+[[id]]
+id = "T2"
+file = "docs/04-tui-design.md"
+line = 78
+section = "04 §1.3"
+
+[[id]]
+id = "T3"
+file = "docs/04-tui-design.md"
+line = 79
+section = "04 §1.3"
+
+[[id]]
+id = "T4"
+file = "docs/04-tui-design.md"
+line = 80
+section = "04 §1.3"
+
+[[id]]
+id = "T5"
+file = "docs/04-tui-design.md"
+line = 81
+section = "04 §1.3"
+
+[[id]]
+id = "T6"
+file = "docs/04-tui-design.md"
+line = 82
+section = "04 §1.3"
+
+[[id]]
+id = "T7"
+file = "docs/04-tui-design.md"
+line = 83
+section = "04 §1.3"
+
+[[id]]
+id = "A1"
+file = "docs/04-tui-design.md"
+line = 302
+section = "04 §3.7"
+
+[[id]]
+id = "A2"
+file = "docs/04-tui-design.md"
+line = 303
+section = "04 §3.7"
+
+[[id]]
+id = "A3"
+file = "docs/04-tui-design.md"
+line = 304
+section = "04 §3.7"
+
+[[id]]
+id = "A4"
+file = "docs/04-tui-design.md"
+line = 305
+section = "04 §3.7"
+
+[[id]]
+id = "I1"
+file = "docs/04-tui-design.md"
+line = 721
+section = "04 §6.7"
+
+[[id]]
+id = "I2"
+file = "docs/04-tui-design.md"
+line = 722
+section = "04 §6.7"
+
+[[id]]
+id = "I3"
+file = "docs/04-tui-design.md"
+line = 723
+section = "04 §6.7"
+
+[[id]]
+id = "I4"
+file = "docs/04-tui-design.md"
+line = 724
+section = "04 §6.7"
+
+[[id]]
+id = "I5"
+file = "docs/04-tui-design.md"
+line = 725
+section = "04 §6.7"
+
+[[id]]
+id = "I6"
+file = "docs/04-tui-design.md"
+line = 726
+section = "04 §6.7"
+
+[[id]]
+id = "I7"
+file = "docs/04-tui-design.md"
+line = 727
+section = "04 §6.7"
+
+[[id]]
+id = "I8"
+file = "docs/04-tui-design.md"
+line = 728
+section = "04 §6.7"
+
+[[id]]
+id = "KP1"
+file = "docs/04-tui-design.md"
+line = 769
+section = "04 §7.1"
+
+[[id]]
+id = "KP2"
+file = "docs/04-tui-design.md"
+line = 770
+section = "04 §7.1"
+
+[[id]]
+id = "KP3"
+file = "docs/04-tui-design.md"
+line = 771
+section = "04 §7.1"
+
+[[id]]
+id = "KP4"
+file = "docs/04-tui-design.md"
+line = 772
+section = "04 §7.1"
+
+[[id]]
+id = "KP5"
+file = "docs/04-tui-design.md"
+line = 773
+section = "04 §7.1"
+
+[[id]]
+id = "KP6"
+file = "docs/04-tui-design.md"
+line = 774
+section = "04 §7.1"
+
+[[id]]
+id = "C1"
+file = "docs/04-tui-design.md"
+line = 1171
+section = "04 §12.1"
+
+[[id]]
+id = "C2"
+file = "docs/04-tui-design.md"
+line = 1172
+section = "04 §12.1"
+
+[[id]]
+id = "C3"
+file = "docs/04-tui-design.md"
+line = 1173
+section = "04 §12.1"
+
+[[id]]
+id = "C4"
+file = "docs/04-tui-design.md"
+line = 1174
+section = "04 §12.1"
+
+[[id]]
+id = "OQ-33"
+file = "docs/04-tui-design.md"
+line = 1873
+section = "04 §18"
+
+[[id]]
+id = "OQ-61"
+file = "docs/04-tui-design.md"
+line = 1874
+section = "04 §18"
+
+[[id]]
+id = "OQ-64"
+file = "docs/04-tui-design.md"
+line = 1875
+section = "04 §18"
+
+[[id]]
+id = "OQ-66"
+file = "docs/04-tui-design.md"
+line = 1876
+section = "04 §18"
+
+[[id]]
+id = "OQ-68"
+file = "docs/04-tui-design.md"
+line = 1877
+section = "04 §18"
+
+[[id]]
+id = "OQ-180"
+file = "docs/04-tui-design.md"
+line = 1878
+section = "04 §18"
+
+[[id]]
+id = "OQ-181"
+file = "docs/04-tui-design.md"
+line = 1879
+section = "04 §18"
+
+[[id]]
+id = "OQ-182"
+file = "docs/04-tui-design.md"
+line = 1880
+section = "04 §18"
+
+[[id]]
+id = "OQ-183"
+file = "docs/04-tui-design.md"
+line = 1881
+section = "04 §18"
+
+[[id]]
+id = "OQ-184"
+file = "docs/04-tui-design.md"
+line = 1882
+section = "04 §18"
+
+[[id]]
+id = "OQ-124"
+file = "docs/04-tui-design.md"
+line = 1883
+section = "04 §18"
+
+[[id]]
+id = "OQ-15"
+file = "docs/05-platform.md"
+line = 1378
+section = "05 §19"
+
+[[id]]
+id = "OQ-70"
+file = "docs/05-platform.md"
+line = 1379
+section = "05 §19"
+
+[[id]]
+id = "ADR-0021"
+file = "docs/05-platform.md"
+line = 1380
+section = "05 §19"
+
+[[id]]
+id = "OQ-04"
+file = "docs/05-platform.md"
+line = 1381
+section = "05 §19"
+
+[[id]]
+id = "OQ-71"
+file = "docs/05-platform.md"
+line = 1382
+section = "05 §19"
+
+[[id]]
+id = "OQ-72"
+file = "docs/05-platform.md"
+line = 1383
+section = "05 §19"
+
+[[id]]
+id = "OQ-73"
+file = "docs/05-platform.md"
+line = 1384
+section = "05 §19"
+
+[[id]]
+id = "OQ-74"
+file = "docs/05-platform.md"
+line = 1385
+section = "05 §19"
+
+[[id]]
+id = "OQ-75"
+file = "docs/05-platform.md"
+line = 1386
+section = "05 §19"
+
+[[id]]
+id = "OQ-76"
+file = "docs/05-platform.md"
+line = 1387
+section = "05 §19"
+
+[[id]]
+id = "OQ-77"
+file = "docs/05-platform.md"
+line = 1388
+section = "05 §19"
+
+[[id]]
+id = "OQ-78"
+file = "docs/05-platform.md"
+line = 1389
+section = "05 §19"
+
+[[id]]
+id = "OQ-79"
+file = "docs/05-platform.md"
+line = 1390
+section = "05 §19"
+
+[[id]]
+id = "OQ-80"
+file = "docs/05-platform.md"
+line = 1391
+section = "05 §19"
+
+[[id]]
+id = "OQ-34"
+file = "docs/05-platform.md"
+line = 1392
+section = "05 §19"
+
+[[id]]
+id = "S-11"
+file = "docs/05-platform.md"
+line = 1393
+section = "05 §19"
+
+[[id]]
+id = "S-09"
+file = "docs/05-platform.md"
+line = 1394
+section = "05 §19"
+
+[[id]]
+id = "OQ-111"
+file = "docs/05-platform.md"
+line = 1395
+section = "05 §19"
+
+[[id]]
+id = "OQ-112"
+file = "docs/05-platform.md"
+line = 1396
+section = "05 §19"
+
+[[id]]
+id = "OQ-140"
+file = "docs/05-platform.md"
+line = 1397
+section = "05 §19"
+
+[[id]]
+id = "OQ-163"
+file = "docs/05-platform.md"
+line = 1398
+section = "05 §19"
+
+[[id]]
+id = "OQ-164"
+file = "docs/05-platform.md"
+line = 1399
+section = "05 §19"
+
+[[id]]
+id = "OQ-166"
+file = "docs/05-platform.md"
+line = 1400
+section = "05 §19"
+
+[[id]]
+id = "AI-INV-1"
+file = "docs/06-ai-integration.md"
+line = 75
+section = "06 §1"
+
+[[id]]
+id = "AI-INV-2"
+file = "docs/06-ai-integration.md"
+line = 76
+section = "06 §1"
+
+[[id]]
+id = "AI-INV-3"
+file = "docs/06-ai-integration.md"
+line = 77
+section = "06 §1"
+
+[[id]]
+id = "AI-INV-4"
+file = "docs/06-ai-integration.md"
+line = 78
+section = "06 §1"
+
+[[id]]
+id = "AI-INV-5"
+file = "docs/06-ai-integration.md"
+line = 79
+section = "06 §1"
+
+[[id]]
+id = "AI-INV-6"
+file = "docs/06-ai-integration.md"
+line = 80
+section = "06 §1"
+
+[[id]]
+id = "AI-INV-7"
+file = "docs/06-ai-integration.md"
+line = 81
+section = "06 §1"
+
+[[id]]
+id = "AI-INV-8"
+file = "docs/06-ai-integration.md"
+line = 82
+section = "06 §1"
+
+[[id]]
+id = "UC-01"
+file = "docs/06-ai-integration.md"
+line = 94
+section = "06 §2.1"
+
+[[id]]
+id = "UC-02"
+file = "docs/06-ai-integration.md"
+line = 95
+section = "06 §2.1"
+
+[[id]]
+id = "UC-03"
+file = "docs/06-ai-integration.md"
+line = 96
+section = "06 §2.1"
+
+[[id]]
+id = "UC-04"
+file = "docs/06-ai-integration.md"
+line = 97
+section = "06 §2.1"
+
+[[id]]
+id = "UC-05"
+file = "docs/06-ai-integration.md"
+line = 98
+section = "06 §2.1"
+
+[[id]]
+id = "UC-06"
+file = "docs/06-ai-integration.md"
+line = 99
+section = "06 §2.1"
+
+[[id]]
+id = "UC-07"
+file = "docs/06-ai-integration.md"
+line = 100
+section = "06 §2.1"
+
+[[id]]
+id = "UC-08"
+file = "docs/06-ai-integration.md"
+line = 101
+section = "06 §2.1"
+
+[[id]]
+id = "LL-1"
+file = "docs/06-ai-integration.md"
+line = 128
+section = "06 §2.3"
+
+[[id]]
+id = "LL-2"
+file = "docs/06-ai-integration.md"
+line = 129
+section = "06 §2.3"
+
+[[id]]
+id = "LL-3"
+file = "docs/06-ai-integration.md"
+line = 130
+section = "06 §2.3"
+
+[[id]]
+id = "LL-4"
+file = "docs/06-ai-integration.md"
+line = 131
+section = "06 §2.3"
+
+[[id]]
+id = "LL-5"
+file = "docs/06-ai-integration.md"
+line = 132
+section = "06 §2.3"
+
+[[id]]
+id = "LL-6"
+file = "docs/06-ai-integration.md"
+line = 133
+section = "06 §2.3"
+
+[[id]]
+id = "LL-7"
+file = "docs/06-ai-integration.md"
+line = 134
+section = "06 §2.3"
+
+[[id]]
+id = "LL-8"
+file = "docs/06-ai-integration.md"
+line = 135
+section = "06 §2.3"
+
+[[id]]
+id = "LL-9"
+file = "docs/06-ai-integration.md"
+line = 136
+section = "06 §2.3"
+
+[[id]]
+id = "LL-10"
+file = "docs/06-ai-integration.md"
+line = 137
+section = "06 §2.3"
+
+[[id]]
+id = "C1"
+file = "docs/06-ai-integration.md"
+line = 145
+section = "06 §3.1"
+
+[[id]]
+id = "C2"
+file = "docs/06-ai-integration.md"
+line = 146
+section = "06 §3.1"
+
+[[id]]
+id = "C3"
+file = "docs/06-ai-integration.md"
+line = 147
+section = "06 §3.1"
+
+[[id]]
+id = "X1"
+file = "docs/06-ai-integration.md"
+line = 1185
+section = "06 §17"
+
+[[id]]
+id = "X2"
+file = "docs/06-ai-integration.md"
+line = 1186
+section = "06 §17"
+
+[[id]]
+id = "X3"
+file = "docs/06-ai-integration.md"
+line = 1187
+section = "06 §17"
+
+[[id]]
+id = "X4"
+file = "docs/06-ai-integration.md"
+line = 1188
+section = "06 §17"
+
+[[id]]
+id = "X5"
+file = "docs/06-ai-integration.md"
+line = 1189
+section = "06 §17"
+
+[[id]]
+id = "X6"
+file = "docs/06-ai-integration.md"
+line = 1190
+section = "06 §17"
+
+[[id]]
+id = "X7"
+file = "docs/06-ai-integration.md"
+line = 1191
+section = "06 §17"
+
+[[id]]
+id = "X8"
+file = "docs/06-ai-integration.md"
+line = 1192
+section = "06 §17"
+
+[[id]]
+id = "X9"
+file = "docs/06-ai-integration.md"
+line = 1193
+section = "06 §17"
+
+[[id]]
+id = "X10"
+file = "docs/06-ai-integration.md"
+line = 1194
+section = "06 §17"
+
+[[id]]
+id = "X11"
+file = "docs/06-ai-integration.md"
+line = 1195
+section = "06 §17"
+
+[[id]]
+id = "X12"
+file = "docs/06-ai-integration.md"
+line = 1196
+section = "06 §17"
+
+[[id]]
+id = "X13"
+file = "docs/06-ai-integration.md"
+line = 1197
+section = "06 §17"
+
+[[id]]
+id = "X14"
+file = "docs/06-ai-integration.md"
+line = 1198
+section = "06 §17"
+
+[[id]]
+id = "X15"
+file = "docs/06-ai-integration.md"
+line = 1199
+section = "06 §17"
+
+[[id]]
+id = "X16"
+file = "docs/06-ai-integration.md"
+line = 1200
+section = "06 §17"
+
+[[id]]
+id = "X17"
+file = "docs/06-ai-integration.md"
+line = 1201
+section = "06 §17"
+
+[[id]]
+id = "X18"
+file = "docs/06-ai-integration.md"
+line = 1202
+section = "06 §17"
+
+[[id]]
+id = "X19"
+file = "docs/06-ai-integration.md"
+line = 1203
+section = "06 §17"
+
+[[id]]
+id = "X20"
+file = "docs/06-ai-integration.md"
+line = 1204
+section = "06 §17"
+
+[[id]]
+id = "X25"
+file = "docs/06-ai-integration.md"
+line = 1205
+section = "06 §17"
+
+[[id]]
+id = "X26"
+file = "docs/06-ai-integration.md"
+line = 1206
+section = "06 §17"
+
+[[id]]
+id = "OQ-81"
+file = "docs/06-ai-integration.md"
+line = 1215
+section = "06 §18"
+
+[[id]]
+id = "OQ-82"
+file = "docs/06-ai-integration.md"
+line = 1216
+section = "06 §18"
+
+[[id]]
+id = "OQ-83"
+file = "docs/06-ai-integration.md"
+line = 1217
+section = "06 §18"
+
+[[id]]
+id = "OQ-84"
+file = "docs/06-ai-integration.md"
+line = 1218
+section = "06 §18"
+
+[[id]]
+id = "OQ-85"
+file = "docs/06-ai-integration.md"
+line = 1219
+section = "06 §18"
+
+[[id]]
+id = "OQ-86"
+file = "docs/06-ai-integration.md"
+line = 1220
+section = "06 §18"
+
+[[id]]
+id = "OQ-25"
+file = "docs/06-ai-integration.md"
+line = 1221
+section = "06 §18"
+
+[[id]]
+id = "OQ-87"
+file = "docs/06-ai-integration.md"
+line = 1222
+section = "06 §18"
+
+[[id]]
+id = "OQ-88"
+file = "docs/06-ai-integration.md"
+line = 1223
+section = "06 §18"
+
+[[id]]
+id = "OQ-89"
+file = "docs/06-ai-integration.md"
+line = 1224
+section = "06 §18"
+
+[[id]]
+id = "OQ-90"
+file = "docs/06-ai-integration.md"
+line = 1225
+section = "06 §18"
+
+[[id]]
+id = "OQ-91"
+file = "docs/06-ai-integration.md"
+line = 1226
+section = "06 §18"
+
+[[id]]
+id = "OQ-92"
+file = "docs/06-ai-integration.md"
+line = 1227
+section = "06 §18"
+
+[[id]]
+id = "OQ-93"
+file = "docs/06-ai-integration.md"
+line = 1228
+section = "06 §18"
+
+[[id]]
+id = "OQ-36"
+file = "docs/06-ai-integration.md"
+line = 1229
+section = "06 §18"
+
+[[id]]
+id = "OQ-120"
+file = "docs/06-ai-integration.md"
+line = 1230
+section = "06 §18"
+
+[[id]]
+id = "OQ-128"
+file = "docs/06-ai-integration.md"
+line = 1231
+section = "06 §18"
+
+[[id]]
+id = "OQ-130"
+file = "docs/06-ai-integration.md"
+line = 1232
+section = "06 §18"
+
+[[id]]
+id = "OQ-131"
+file = "docs/06-ai-integration.md"
+line = 1233
+section = "06 §18"
+
+[[id]]
+id = "OQ-133"
+file = "docs/06-ai-integration.md"
+line = 1234
+section = "06 §18"
+
+[[id]]
+id = "OQ-134"
+file = "docs/06-ai-integration.md"
+line = 1235
+section = "06 §18"
+
+[[id]]
+id = "OQ-137"
+file = "docs/06-ai-integration.md"
+line = 1236
+section = "06 §18"
+
+[[id]]
+id = "OQ-165"
+file = "docs/06-ai-integration.md"
+line = 1237
+section = "06 §18"
+
+[[id]]
+id = "L0"
+file = "docs/07-config-extensibility.md"
+line = 127
+section = "07 §3.1"
+
+[[id]]
+id = "L1"
+file = "docs/07-config-extensibility.md"
+line = 128
+section = "07 §3.1"
+
+[[id]]
+id = "L2"
+file = "docs/07-config-extensibility.md"
+line = 129
+section = "07 §3.1"
+
+[[id]]
+id = "L3"
+file = "docs/07-config-extensibility.md"
+line = 130
+section = "07 §3.1"
+
+[[id]]
+id = "L4"
+file = "docs/07-config-extensibility.md"
+line = 131
+section = "07 §3.1"
+
+[[id]]
+id = "L5"
+file = "docs/07-config-extensibility.md"
+line = 132
+section = "07 §3.1"
+
+[[id]]
+id = "OQ-94"
+file = "docs/07-config-extensibility.md"
+line = 1764
+section = "07 §20"
+
+[[id]]
+id = "OQ-95"
+file = "docs/07-config-extensibility.md"
+line = 1765
+section = "07 §20"
+
+[[id]]
+id = "OQ-35"
+file = "docs/07-config-extensibility.md"
+line = 1766
+section = "07 §20"
+
+[[id]]
+id = "OQ-96"
+file = "docs/07-config-extensibility.md"
+line = 1767
+section = "07 §20"
+
+[[id]]
+id = "OQ-43"
+file = "docs/07-config-extensibility.md"
+line = 1768
+section = "07 §20"
+
+[[id]]
+id = "OQ-98"
+file = "docs/07-config-extensibility.md"
+line = 1769
+section = "07 §20"
+
+[[id]]
+id = "OQ-99"
+file = "docs/07-config-extensibility.md"
+line = 1770
+section = "07 §20"
+
+[[id]]
+id = "OQ-141"
+file = "docs/07-config-extensibility.md"
+line = 1771
+section = "07 §20"
+
+[[id]]
+id = "OQ-142"
+file = "docs/07-config-extensibility.md"
+line = 1772
+section = "07 §20"
+
+[[id]]
+id = "OQ-120"
+file = "docs/07-config-extensibility.md"
+line = 1773
+section = "07 §20"
+
+[[id]]
+id = "OQ-124"
+file = "docs/07-config-extensibility.md"
+line = 1774
+section = "07 §20"
+
+[[id]]
+id = "P0"
+file = "docs/08-roadmap.md"
+line = 38
+section = "08 §1"
+
+[[id]]
+id = "M6"
+file = "docs/08-roadmap.md"
+line = 114
+section = "08 §2.3.1"
+
+[[id]]
+id = "M7"
+file = "docs/08-roadmap.md"
+line = 116
+section = "08 §2.3.1"
+
+[[id]]
+id = "M8"
+file = "docs/08-roadmap.md"
+line = 117
+section = "08 §2.3.1"
+
+[[id]]
+id = "M10"
+file = "docs/08-roadmap.md"
+line = 122
+section = "08 §2.3.1"
+
+[[id]]
+id = "S-01"
+file = "docs/08-roadmap.md"
+line = 204
+section = "08 §3"
+
+[[id]]
+id = "S-02"
+file = "docs/08-roadmap.md"
+line = 205
+section = "08 §3"
+
+[[id]]
+id = "S-03"
+file = "docs/08-roadmap.md"
+line = 206
+section = "08 §3"
+
+[[id]]
+id = "S-04"
+file = "docs/08-roadmap.md"
+line = 207
+section = "08 §3"
+
+[[id]]
+id = "S-05"
+file = "docs/08-roadmap.md"
+line = 208
+section = "08 §3"
+
+[[id]]
+id = "S-06"
+file = "docs/08-roadmap.md"
+line = 209
+section = "08 §3"
+
+[[id]]
+id = "S-07"
+file = "docs/08-roadmap.md"
+line = 210
+section = "08 §3"
+
+[[id]]
+id = "S-08"
+file = "docs/08-roadmap.md"
+line = 211
+section = "08 §3"
+
+[[id]]
+id = "S-09"
+file = "docs/08-roadmap.md"
+line = 212
+section = "08 §3"
+
+[[id]]
+id = "S-10"
+file = "docs/08-roadmap.md"
+line = 213
+section = "08 §3"
+
+[[id]]
+id = "S-11"
+file = "docs/08-roadmap.md"
+line = 214
+section = "08 §3"
+
+[[id]]
+id = "S-12"
+file = "docs/08-roadmap.md"
+line = 215
+section = "08 §3"
+
+[[id]]
+id = "S-13"
+file = "docs/08-roadmap.md"
+line = 216
+section = "08 §3"
+
+[[id]]
+id = "S-14"
+file = "docs/08-roadmap.md"
+line = 217
+section = "08 §3"
+
+[[id]]
+id = "S-15"
+file = "docs/08-roadmap.md"
+line = 218
+section = "08 §3"
+
+[[id]]
+id = "S-20"
+file = "docs/08-roadmap.md"
+line = 219
+section = "08 §3"
+
+[[id]]
+id = "S-21"
+file = "docs/08-roadmap.md"
+line = 220
+section = "08 §3"
+
+[[id]]
+id = "S-22"
+file = "docs/08-roadmap.md"
+line = 221
+section = "08 §3"
+
+[[id]]
+id = "S-23"
+file = "docs/08-roadmap.md"
+line = 222
+section = "08 §3"
+
+[[id]]
+id = "TC-1"
+file = "docs/08-roadmap.md"
+line = 358
+section = "08 §8.1"
+
+[[id]]
+id = "TC-2"
+file = "docs/08-roadmap.md"
+line = 359
+section = "08 §8.1"
+
+[[id]]
+id = "SB-1"
+file = "docs/08-roadmap.md"
+line = 365
+section = "08 §8.1"
+
+[[id]]
+id = "SB-2"
+file = "docs/08-roadmap.md"
+line = 366
+section = "08 §8.1"
+
+[[id]]
+id = "SB-3"
+file = "docs/08-roadmap.md"
+line = 367
+section = "08 §8.1"
+
+[[id]]
+id = "SB-4"
+file = "docs/08-roadmap.md"
+line = 368
+section = "08 §8.1"
+
+[[id]]
+id = "Q1"
+file = "docs/09-testing-quality.md"
+line = 41
+section = "09 §1"
+
+[[id]]
+id = "Q2"
+file = "docs/09-testing-quality.md"
+line = 42
+section = "09 §1"
+
+[[id]]
+id = "Q3"
+file = "docs/09-testing-quality.md"
+line = 43
+section = "09 §1"
+
+[[id]]
+id = "Q4"
+file = "docs/09-testing-quality.md"
+line = 44
+section = "09 §1"
+
+[[id]]
+id = "Q5"
+file = "docs/09-testing-quality.md"
+line = 45
+section = "09 §1"
+
+[[id]]
+id = "Q6"
+file = "docs/09-testing-quality.md"
+line = 46
+section = "09 §1"
+
+[[id]]
+id = "Q7"
+file = "docs/09-testing-quality.md"
+line = 47
+section = "09 §1"
+
+[[id]]
+id = "Q8"
+file = "docs/09-testing-quality.md"
+line = 48
+section = "09 §1"
+
+[[id]]
+id = "Q9"
+file = "docs/09-testing-quality.md"
+line = 49
+section = "09 §1"
+
+[[id]]
+id = "FR-105"
+file = "docs/09-testing-quality.md"
+line = 605
+section = "09 §8.5"
+
+[[id]]
+id = "FR-106"
+file = "docs/09-testing-quality.md"
+line = 606
+section = "09 §8.5"
+
+[[id]]
+id = "FR-205"
+file = "docs/09-testing-quality.md"
+line = 611
+section = "09 §8.5"
+
+[[id]]
+id = "FR-404"
+file = "docs/09-testing-quality.md"
+line = 614
+section = "09 §8.5"
+
+[[id]]
+id = "FR-501"
+file = "docs/09-testing-quality.md"
+line = 615
+section = "09 §8.5"
+
+[[id]]
+id = "FR-513"
+file = "docs/09-testing-quality.md"
+line = 618
+section = "09 §8.5"
+
+[[id]]
+id = "FR-602"
+file = "docs/09-testing-quality.md"
+line = 620
+section = "09 §8.5"
+
+[[id]]
+id = "FR-605"
+file = "docs/09-testing-quality.md"
+line = 621
+section = "09 §8.5"
+
+[[id]]
+id = "FR-606"
+file = "docs/09-testing-quality.md"
+line = 622
+section = "09 §8.5"
+
+[[id]]
+id = "FR-609"
+file = "docs/09-testing-quality.md"
+line = 623
+section = "09 §8.5"
+
+[[id]]
+id = "NFR-107"
+file = "docs/09-testing-quality.md"
+line = 626
+section = "09 §8.5"
+
+[[id]]
+id = "NFR-301"
+file = "docs/09-testing-quality.md"
+line = 628
+section = "09 §8.5"
+
+[[id]]
+id = "NFR-302"
+file = "docs/09-testing-quality.md"
+line = 629
+section = "09 §8.5"
+
+[[id]]
+id = "NFR-305"
+file = "docs/09-testing-quality.md"
+line = 631
+section = "09 §8.5"
+
+[[id]]
+id = "NFR-401"
+file = "docs/09-testing-quality.md"
+line = 632
+section = "09 §8.5"
+
+[[id]]
+id = "NFR-402"
+file = "docs/09-testing-quality.md"
+line = 633
+section = "09 §8.5"
+
+[[id]]
+id = "NFR-403"
+file = "docs/09-testing-quality.md"
+line = 634
+section = "09 §8.5"
+
+[[id]]
+id = "NFR-404"
+file = "docs/09-testing-quality.md"
+line = 635
+section = "09 §8.5"
+
+[[id]]
+id = "NFR-406"
+file = "docs/09-testing-quality.md"
+line = 636
+section = "09 §8.5"
+
+[[id]]
+id = "NFR-501"
+file = "docs/09-testing-quality.md"
+line = 637
+section = "09 §8.5"
+
+[[id]]
+id = "NFR-502"
+file = "docs/09-testing-quality.md"
+line = 638
+section = "09 §8.5"
+
+[[id]]
+id = "NFR-503"
+file = "docs/09-testing-quality.md"
+line = 639
+section = "09 §8.5"
+
+[[id]]
+id = "NFR-504"
+file = "docs/09-testing-quality.md"
+line = 640
+section = "09 §8.5"
+
+[[id]]
+id = "NFR-505"
+file = "docs/09-testing-quality.md"
+line = 641
+section = "09 §8.5"
+
+[[id]]
+id = "NFR-507"
+file = "docs/09-testing-quality.md"
+line = 642
+section = "09 §8.5"
+
+[[id]]
+id = "NFR-602"
+file = "docs/09-testing-quality.md"
+line = 643
+section = "09 §8.5"
+
+[[id]]
+id = "NFR-603"
+file = "docs/09-testing-quality.md"
+line = 644
+section = "09 §8.5"
+
+[[id]]
+id = "NFR-604"
+file = "docs/09-testing-quality.md"
+line = 645
+section = "09 §8.5"
+
+[[id]]
+id = "NFR-605"
+file = "docs/09-testing-quality.md"
+line = 646
+section = "09 §8.5"
+
+[[id]]
+id = "OQ-101"
+file = "docs/09-testing-quality.md"
+line = 808
+section = "09 §12"
+
+[[id]]
+id = "OQ-102"
+file = "docs/09-testing-quality.md"
+line = 809
+section = "09 §12"
+
+[[id]]
+id = "OQ-15"
+file = "docs/09-testing-quality.md"
+line = 810
+section = "09 §12"
+
+[[id]]
+id = "OQ-103"
+file = "docs/09-testing-quality.md"
+line = 811
+section = "09 §12"
+
+[[id]]
+id = "OQ-60"
+file = "docs/09-testing-quality.md"
+line = 812
+section = "09 §12"
+
+[[id]]
+id = "OQ-74"
+file = "docs/09-testing-quality.md"
+line = 813
+section = "09 §12"
+
+[[id]]
+id = "OQ-104"
+file = "docs/09-testing-quality.md"
+line = 814
+section = "09 §12"
+
+[[id]]
+id = "OQ-105"
+file = "docs/09-testing-quality.md"
+line = 815
+section = "09 §12"
+
+[[id]]
+id = "OQ-44"
+file = "docs/09-testing-quality.md"
+line = 816
+section = "09 §12"
+
+[[id]]
+id = "OQ-106"
+file = "docs/09-testing-quality.md"
+line = 817
+section = "09 §12"
+
+[[id]]
+id = "OQ-107"
+file = "docs/09-testing-quality.md"
+line = 818
+section = "09 §12"
+
+[[id]]
+id = "OQ-143"
+file = "docs/09-testing-quality.md"
+line = 819
+section = "09 §12"
+
+[[id]]
+id = "OQ-144"
+file = "docs/09-testing-quality.md"
+line = 820
+section = "09 §12"
+
+[[id]]
+id = "OQ-112"
+file = "docs/09-testing-quality.md"
+line = 821
+section = "09 §12"
+
+[[id]]
+id = "OQ-113"
+file = "docs/09-testing-quality.md"
+line = 822
+section = "09 §12"
+
+[[id]]
+id = "OQ-157"
+file = "docs/09-testing-quality.md"
+line = 824
+section = "09 §12"
+
+[[id]]
+id = "OQ-145"
+file = "docs/09-testing-quality.md"
+line = 825
+section = "09 §12"
+
+[[id]]
+id = "OQ-146"
+file = "docs/09-testing-quality.md"
+line = 826
+section = "09 §12"
+
+[[id]]
+id = "ADR-0001"
+file = "docs/10-decisions.md"
+line = 360
+section = "10 §1"
+
+[[id]]
+id = "ADR-0002"
+file = "docs/10-decisions.md"
+line = 367
+section = "10 §1"
+
+[[id]]
+id = "ADR-0003"
+file = "docs/10-decisions.md"
+line = 374
+section = "10 §1"
+
+[[id]]
+id = "ADR-0004"
+file = "docs/10-decisions.md"
+line = 381
+section = "10 §1"
+
+[[id]]
+id = "ADR-0005"
+file = "docs/10-decisions.md"
+line = 391
+section = "10 §1"
+
+[[id]]
+id = "ADR-0006"
+file = "docs/10-decisions.md"
+line = 401
+section = "10 §1"
+
+[[id]]
+id = "ADR-0007"
+file = "docs/10-decisions.md"
+line = 408
+section = "10 §1"
+
+[[id]]
+id = "ADR-0008"
+file = "docs/10-decisions.md"
+line = 415
+section = "10 §1"
+
+[[id]]
+id = "ADR-0009"
+file = "docs/10-decisions.md"
+line = 421
+section = "10 §1"
+
+[[id]]
+id = "ADR-0010"
+file = "docs/10-decisions.md"
+line = 428
+section = "10 §1"
+
+[[id]]
+id = "ADR-0011"
+file = "docs/10-decisions.md"
+line = 435
+section = "10 §1"
+
+[[id]]
+id = "ADR-0012"
+file = "docs/10-decisions.md"
+line = 442
+section = "10 §1"
+
+[[id]]
+id = "ADR-0013"
+file = "docs/10-decisions.md"
+line = 448
+section = "10 §1"
+
+[[id]]
+id = "ADR-0014"
+file = "docs/10-decisions.md"
+line = 461
+section = "10 §1"
+
+[[id]]
+id = "ADR-0015"
+file = "docs/10-decisions.md"
+line = 467
+section = "10 §1"
+
+[[id]]
+id = "ADR-0016"
+file = "docs/10-decisions.md"
+line = 474
+section = "10 §1"
+
+[[id]]
+id = "ADR-0017"
+file = "docs/10-decisions.md"
+line = 484
+section = "10 §1"
+
+[[id]]
+id = "ADR-0018"
+file = "docs/10-decisions.md"
+line = 490
+section = "10 §1"
+
+[[id]]
+id = "ADR-0019"
+file = "docs/10-decisions.md"
+line = 498
+section = "10 §1"
+
+[[id]]
+id = "ADR-0020"
+file = "docs/10-decisions.md"
+line = 505
+section = "10 §1"
+
+[[id]]
+id = "ADR-0021"
+file = "docs/10-decisions.md"
+line = 512
+section = "10 §1"
+
+[[id]]
+id = "ADR-0022"
+file = "docs/10-decisions.md"
+line = 519
+section = "10 §1"
+
+[[id]]
+id = "ADR-0023"
+file = "docs/10-decisions.md"
+line = 526
+section = "10 §1"
+
+[[id]]
+id = "ADR-0025"
+file = "docs/10-decisions.md"
+line = 534
+section = "10 §1"
+
+[[id]]
+id = "ADR-0026"
+file = "docs/10-decisions.md"
+line = 541
+section = "10 §1"
+
+[[id]]
+id = "ADR-0027"
+file = "docs/10-decisions.md"
+line = 549
+section = "10 §1"
+
+[[id]]
+id = "ADR-0028"
+file = "docs/10-decisions.md"
+line = 562
+section = "10 §1"
+
+[[id]]
+id = "ADR-0030"
+file = "docs/10-decisions.md"
+line = 573
+section = "10 §1"
+
+[[id]]
+id = "ADR-0031"
+file = "docs/10-decisions.md"
+line = 584
+section = "10 §1"
+
+[[id]]
+id = "ADR-0032"
+file = "docs/10-decisions.md"
+line = 595
+section = "10 §1"
+
+[[id]]
+id = "X16"
+file = "docs/10-decisions.md"
+line = 602
+section = "10 §1"
+
+[[id]]
+id = "X17"
+file = "docs/10-decisions.md"
+line = 603
+section = "10 §1"
+
+[[id]]
+id = "X18"
+file = "docs/10-decisions.md"
+line = 604
+section = "10 §1"
+
+[[id]]
+id = "X19"
+file = "docs/10-decisions.md"
+line = 605
+section = "10 §1"
+
+[[id]]
+id = "X20"
+file = "docs/10-decisions.md"
+line = 606
+section = "10 §1"
+
+[[id]]
+id = "X21"
+file = "docs/10-decisions.md"
+line = 607
+section = "10 §1"
+
+[[id]]
+id = "X22"
+file = "docs/10-decisions.md"
+line = 608
+section = "10 §1"
+
+[[id]]
+id = "X23"
+file = "docs/10-decisions.md"
+line = 609
+section = "10 §1"
+
+[[id]]
+id = "X24"
+file = "docs/10-decisions.md"
+line = 610
+section = "10 §1"
+
+[[id]]
+id = "ADR-0033"
+file = "docs/10-decisions.md"
+line = 616
+section = "10 §1"
+
+[[id]]
+id = "ADR-0034"
+file = "docs/10-decisions.md"
+line = 630
+section = "10 §1"
+
+[[id]]
+id = "ADR-0035"
+file = "docs/10-decisions.md"
+line = 642
+section = "10 §1"
+
+[[id]]
+id = "ADR-0036"
+file = "docs/10-decisions.md"
+line = 655
+section = "10 §1"
+
+[[id]]
+id = "ADR-0038"
+file = "docs/10-decisions.md"
+line = 662
+section = "10 §1"
+
+[[id]]
+id = "ADR-0039"
+file = "docs/10-decisions.md"
+line = 675
+section = "10 §1"
+
+[[id]]
+id = "ADR-0040"
+file = "docs/10-decisions.md"
+line = 687
+section = "10 §1"
+
+[[id]]
+id = "ADR-0041"
+file = "docs/10-decisions.md"
+line = 701
+section = "10 §1"
+
+[[id]]
+id = "ADR-0042"
+file = "docs/10-decisions.md"
+line = 714
+section = "10 §1"
+
+[[id]]
+id = "ADR-0043"
+file = "docs/10-decisions.md"
+line = 727
+section = "10 §1"
+
+[[id]]
+id = "ADR-0044"
+file = "docs/10-decisions.md"
+line = 741
+section = "10 §1"
+
+[[id]]
+id = "OQ-01"
+file = "docs/10-decisions.md"
+line = 813
+section = "10 §2.2"
+
+[[id]]
+id = "OQ-02"
+file = "docs/10-decisions.md"
+line = 825
+section = "10 §2.2"
+
+[[id]]
+id = "OQ-03"
+file = "docs/10-decisions.md"
+line = 830
+section = "10 §2.2"
+
+[[id]]
+id = "OQ-04"
+file = "docs/10-decisions.md"
+line = 839
+section = "10 §2.2"
+
+[[id]]
+id = "OQ-05"
+file = "docs/10-decisions.md"
+line = 848
+section = "10 §2.2"
+
+[[id]]
+id = "OQ-06"
+file = "docs/10-decisions.md"
+line = 854
+section = "10 §2.2"
+
+[[id]]
+id = "OQ-09"
+file = "docs/10-decisions.md"
+line = 859
+section = "10 §2.2"
+
+[[id]]
+id = "OQ-10"
+file = "docs/10-decisions.md"
+line = 864
+section = "10 §2.2"
+
+[[id]]
+id = "OQ-11"
+file = "docs/10-decisions.md"
+line = 869
+section = "10 §2.2"
+
+[[id]]
+id = "OQ-12"
+file = "docs/10-decisions.md"
+line = 875
+section = "10 §2.2"
+
+[[id]]
+id = "OQ-14"
+file = "docs/10-decisions.md"
+line = 880
+section = "10 §2.2"
+
+[[id]]
+id = "OQ-15"
+file = "docs/10-decisions.md"
+line = 885
+section = "10 §2.2"
+
+[[id]]
+id = "OQ-16"
+file = "docs/10-decisions.md"
+line = 892
+section = "10 §2.2"
+
+[[id]]
+id = "OQ-17"
+file = "docs/10-decisions.md"
+line = 897
+section = "10 §2.2"
+
+[[id]]
+id = "OQ-18"
+file = "docs/10-decisions.md"
+line = 902
+section = "10 §2.2"
+
+[[id]]
+id = "OQ-19"
+file = "docs/10-decisions.md"
+line = 907
+section = "10 §2.2"
+
+[[id]]
+id = "OQ-20"
+file = "docs/10-decisions.md"
+line = 913
+section = "10 §2.2"
+
+[[id]]
+id = "OQ-21"
+file = "docs/10-decisions.md"
+line = 920
+section = "10 §2.2"
+
+[[id]]
+id = "OQ-22"
+file = "docs/10-decisions.md"
+line = 933
+section = "10 §2.2"
+
+[[id]]
+id = "OQ-23"
+file = "docs/10-decisions.md"
+line = 939
+section = "10 §2.2"
+
+[[id]]
+id = "OQ-24"
+file = "docs/10-decisions.md"
+line = 945
+section = "10 §2.2"
+
+[[id]]
+id = "OQ-25"
+file = "docs/10-decisions.md"
+line = 950
+section = "10 §2.2"
+
+[[id]]
+id = "OQ-26"
+file = "docs/10-decisions.md"
+line = 958
+section = "10 §2.3"
+
+[[id]]
+id = "OQ-27"
+file = "docs/10-decisions.md"
+line = 964
+section = "10 §2.3"
+
+[[id]]
+id = "OQ-28"
+file = "docs/10-decisions.md"
+line = 970
+section = "10 §2.3"
+
+[[id]]
+id = "OQ-29"
+file = "docs/10-decisions.md"
+line = 976
+section = "10 §2.3"
+
+[[id]]
+id = "OQ-30"
+file = "docs/10-decisions.md"
+line = 982
+section = "10 §2.3"
+
+[[id]]
+id = "OQ-31"
+file = "docs/10-decisions.md"
+line = 988
+section = "10 §2.3"
+
+[[id]]
+id = "OQ-32"
+file = "docs/10-decisions.md"
+line = 994
+section = "10 §2.3"
+
+[[id]]
+id = "OQ-33"
+file = "docs/10-decisions.md"
+line = 1000
+section = "10 §2.3"
+
+[[id]]
+id = "OQ-34"
+file = "docs/10-decisions.md"
+line = 1007
+section = "10 §2.3"
+
+[[id]]
+id = "OQ-35"
+file = "docs/10-decisions.md"
+line = 1013
+section = "10 §2.3"
+
+[[id]]
+id = "OQ-36"
+file = "docs/10-decisions.md"
+line = 1019
+section = "10 §2.3"
+
+[[id]]
+id = "OQ-37"
+file = "docs/10-decisions.md"
+line = 1026
+section = "10 §2.3"
+
+[[id]]
+id = "OQ-38"
+file = "docs/10-decisions.md"
+line = 1032
+section = "10 §2.3"
+
+[[id]]
+id = "OQ-39"
+file = "docs/10-decisions.md"
+line = 1038
+section = "10 §2.3"
+
+[[id]]
+id = "OQ-40"
+file = "docs/10-decisions.md"
+line = 1044
+section = "10 §2.3"
+
+[[id]]
+id = "OQ-41"
+file = "docs/10-decisions.md"
+line = 1050
+section = "10 §2.3"
+
+[[id]]
+id = "OQ-42"
+file = "docs/10-decisions.md"
+line = 1057
+section = "10 §2.3"
+
+[[id]]
+id = "OQ-43"
+file = "docs/10-decisions.md"
+line = 1064
+section = "10 §2.3"
+
+[[id]]
+id = "OQ-44"
+file = "docs/10-decisions.md"
+line = 1070
+section = "10 §2.3"
+
+[[id]]
+id = "OQ-110"
+file = "docs/10-decisions.md"
+line = 1076
+section = "10 §2.3"
+
+[[id]]
+id = "OQ-111"
+file = "docs/10-decisions.md"
+line = 1082
+section = "10 §2.3"
+
+[[id]]
+id = "OQ-112"
+file = "docs/10-decisions.md"
+line = 1088
+section = "10 §2.3"
+
+[[id]]
+id = "OQ-113"
+file = "docs/10-decisions.md"
+line = 1094
+section = "10 §2.3"
+
+[[id]]
+id = "OQ-114"
+file = "docs/10-decisions.md"
+line = 1100
+section = "10 §2.3"
+
+[[id]]
+id = "OQ-115"
+file = "docs/10-decisions.md"
+line = 1106
+section = "10 §2.3"
+
+[[id]]
+id = "OQ-116"
+file = "docs/10-decisions.md"
+line = 1112
+section = "10 §2.3"
+
+[[id]]
+id = "OQ-120"
+file = "docs/10-decisions.md"
+line = 1118
+section = "10 §2.3"
+
+[[id]]
+id = "OQ-151"
+file = "docs/10-decisions.md"
+line = 1251
+section = "10 §2.7"
+
+[[id]]
+id = "OQ-152"
+file = "docs/10-decisions.md"
+line = 1259
+section = "10 §2.7"
+
+[[id]]
+id = "OQ-154"
+file = "docs/10-decisions.md"
+line = 1265
+section = "10 §2.7"
+
+[[id]]
+id = "OQ-162"
+file = "docs/10-decisions.md"
+line = 1293
+section = "10 §2.8"
+
+[[id]]
+id = "OQ-167"
+file = "docs/10-decisions.md"
+line = 1299
+section = "10 §2.8"
+
+[[id]]
+id = "OQ-168"
+file = "docs/10-decisions.md"
+line = 1306
+section = "10 §2.8"
+
+[[id]]
+id = "OQ-206"
+file = "docs/10-decisions.md"
+line = 1355
+section = "10 §2.9"
+
+[[id]]
+id = "OQ-207"
+file = "docs/10-decisions.md"
+line = 1361
+section = "10 §2.9"
+
+[[id]]
+id = "OQ-208"
+file = "docs/10-decisions.md"
+line = 1367
+section = "10 §2.9"
+
+[[id]]
+id = "XC-1"
+file = "docs/11-dev-workflow.md"
+line = 675
+section = "11 §9.5"
+
+[[id]]
+id = "XC-2"
+file = "docs/11-dev-workflow.md"
+line = 676
+section = "11 §9.5"
+
+[[id]]
+id = "XC-3"
+file = "docs/11-dev-workflow.md"
+line = 677
+section = "11 §9.5"
+
+[[id]]
+id = "XC-4"
+file = "docs/11-dev-workflow.md"
+line = 678
+section = "11 §9.5"
+
+[[id]]
+id = "XC-5"
+file = "docs/11-dev-workflow.md"
+line = 679
+section = "11 §9.5"
+
+[[id]]
+id = "XC-6"
+file = "docs/11-dev-workflow.md"
+line = 680
+section = "11 §9.5"
+
+[[id]]
+id = "XC-7"
+file = "docs/11-dev-workflow.md"
+line = 681
+section = "11 §9.5"
+
+[[id]]
+id = "OQ-126"
+file = "docs/11-dev-workflow.md"
+line = 744
+section = "11 §10"
+
+[[id]]
+id = "OQ-127"
+file = "docs/11-dev-workflow.md"
+line = 745
+section = "11 §10"
+
+[[id]]
+id = "OQ-123"
+file = "docs/11-dev-workflow.md"
+line = 746
+section = "11 §10"
+
+[[id]]
+id = "OQ-154"
+file = "docs/11-dev-workflow.md"
+line = 747
+section = "11 §10"
+
+[[id]]
+id = "OQ-120"
+file = "docs/11-dev-workflow.md"
+line = 748
+section = "11 §10"
+
+[[id]]
+id = "OQ-147"
+file = "docs/11-dev-workflow.md"
+line = 749
+section = "11 §10"
+
+[[id]]
+id = "OQ-148"
+file = "docs/11-dev-workflow.md"
+line = 750
+section = "11 §10"
+
+[[id]]
+id = "OQ-149"
+file = "docs/11-dev-workflow.md"
+line = 751
+section = "11 §10"
+
+[[id]]
+id = "OQ-150"
+file = "docs/11-dev-workflow.md"
+line = 752
+section = "11 §10"
+
+[[id]]
+id = "PR-1"
+file = "docs/12-licensing-distribution.md"
+line = 51
+section = "12 §2.1"
+
+[[id]]
+id = "PR-2"
+file = "docs/12-licensing-distribution.md"
+line = 52
+section = "12 §2.1"
+
+[[id]]
+id = "PR-3"
+file = "docs/12-licensing-distribution.md"
+line = 53
+section = "12 §2.1"
+
+[[id]]
+id = "PR-4"
+file = "docs/12-licensing-distribution.md"
+line = 54
+section = "12 §2.1"
+
+[[id]]
+id = "PR-5"
+file = "docs/12-licensing-distribution.md"
+line = 55
+section = "12 §2.1"
+
+[[id]]
+id = "LP-1"
+file = "docs/12-licensing-distribution.md"
+line = 61
+section = "12 §2.2"
+
+[[id]]
+id = "LP-2"
+file = "docs/12-licensing-distribution.md"
+line = 62
+section = "12 §2.2"
+
+[[id]]
+id = "LP-3"
+file = "docs/12-licensing-distribution.md"
+line = 63
+section = "12 §2.2"
+
+[[id]]
+id = "LP-4"
+file = "docs/12-licensing-distribution.md"
+line = 64
+section = "12 §2.2"
+
+[[id]]
+id = "LR-1"
+file = "docs/12-licensing-distribution.md"
+line = 155
+section = "12 §3.8"
+
+[[id]]
+id = "LR-2"
+file = "docs/12-licensing-distribution.md"
+line = 156
+section = "12 §3.8"
+
+[[id]]
+id = "LR-3"
+file = "docs/12-licensing-distribution.md"
+line = 157
+section = "12 §3.8"
+
+[[id]]
+id = "LR-4"
+file = "docs/12-licensing-distribution.md"
+line = 158
+section = "12 §3.8"
+
+[[id]]
+id = "LR-5"
+file = "docs/12-licensing-distribution.md"
+line = 159
+section = "12 §3.8"
+
+[[id]]
+id = "LR-6"
+file = "docs/12-licensing-distribution.md"
+line = 160
+section = "12 §3.8"
+
+[[id]]
+id = "PC-1"
+file = "docs/12-licensing-distribution.md"
+line = 242
+section = "12 §5.6"
+
+[[id]]
+id = "PC-2"
+file = "docs/12-licensing-distribution.md"
+line = 243
+section = "12 §5.6"
+
+[[id]]
+id = "PC-3"
+file = "docs/12-licensing-distribution.md"
+line = 244
+section = "12 §5.6"
+
+[[id]]
+id = "PC-4"
+file = "docs/12-licensing-distribution.md"
+line = 245
+section = "12 §5.6"
+
+[[id]]
+id = "PC-5"
+file = "docs/12-licensing-distribution.md"
+line = 246
+section = "12 §5.6"
+
+[[id]]
+id = "PC-6"
+file = "docs/12-licensing-distribution.md"
+line = 247
+section = "12 §5.6"
+
+[[id]]
+id = "PC-7"
+file = "docs/12-licensing-distribution.md"
+line = 248
+section = "12 §5.6"
+
+[[id]]
+id = "OQ-151"
+file = "docs/12-licensing-distribution.md"
+line = 274
+section = "12 §7"
+
+[[id]]
+id = "OQ-152"
+file = "docs/12-licensing-distribution.md"
+line = 275
+section = "12 §7"
+
+[[id]]
+id = "OQ-154"
+file = "docs/12-licensing-distribution.md"
+line = 276
+section = "12 §7"
+
+[[id]]
+id = "OQ-157"
+file = "docs/12-licensing-distribution.md"
+line = 277
+section = "12 §7"
+
+[[id]]
+id = "OQ-160"
+file = "docs/12-licensing-distribution.md"
+line = 278
+section = "12 §7"
+
+[[id]]
+id = "OQ-164"
+file = "docs/12-licensing-distribution.md"
+line = 279
+section = "12 §7"
+
+[[id]]
+id = "OQ-167"
+file = "docs/12-licensing-distribution.md"
+line = 280
+section = "12 §7"
+
+[[id]]
+id = "OQ-168"
+file = "docs/12-licensing-distribution.md"
+line = 281
+section = "12 §7"
+
+[[id]]
+id = "OQ-169"
+file = "docs/12-licensing-distribution.md"
+line = 282
+section = "12 §7"
+
+[[id]]
+id = "OQ-170"
+file = "docs/12-licensing-distribution.md"
+line = 283
+section = "12 §7"
+
+[[id]]
+id = "OQ-171"
+file = "docs/12-licensing-distribution.md"
+line = 284
+section = "12 §7"
+
+[[id]]
+id = "OQ-174"
+file = "docs/12-licensing-distribution.md"
+line = 285
+section = "12 §7"
