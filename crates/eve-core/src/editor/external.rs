@@ -10,7 +10,7 @@ use super::file::{Pending, fs_reason, same_on_disk};
 use super::overlay::{ChoiceDef, ConfirmAction, ConfirmState};
 use super::state::EditorState;
 use crate::FsPath;
-use crate::document::{ExternalSeen, LoadState};
+use crate::document::LoadState;
 use crate::fs::FsErrorKind;
 use crate::jobs::{JobError, JobKind, JobResult, MetaPurpose};
 use eve_config::ExternalChangePolicy;
@@ -98,7 +98,7 @@ impl EditorState {
                     }
                     return;
                 }
-                if !explicit && seen == Some(ExternalSeen::Modified(stamp)) {
+                if !explicit && seen == Some(stamp) {
                     return;
                 }
                 let policy = self.config().reload_on_external_change;
@@ -117,7 +117,7 @@ impl EditorState {
                 err: JobError::Fs(e),
                 ..
             } if e.kind == FsErrorKind::NotFound => {
-                // まだ一度も書いていない新規ファイルは「削除」ではない
+                // まだ一度も書いていない新規ファイル (「新規として保持」を選んだ文書を含む) は「削除」ではない
                 if disk.is_none() {
                     if explicit {
                         self.show_message(
@@ -126,9 +126,6 @@ impl EditorState {
                             &[("path", &shown)],
                         );
                     }
-                    return;
-                }
-                if !explicit && seen == Some(ExternalSeen::Deleted) {
                     return;
                 }
                 self.open_external(
@@ -185,12 +182,13 @@ impl EditorState {
             return self.start_reload();
         }
         if let Some(d) = self.documents.get_mut(&doc) {
-            d.external_seen = Some(ExternalSeen::Modified(stamp));
+            d.external_seen = Some(stamp);
         }
         CommandResult::Done
     }
 
-    /// 「新規として保持 / 閉じる」の選択。
+    /// 「新規として保持 / 閉じる」の選択。保持は文書を新規ファイル扱いにする (読んだときの Stamp を捨てる) ので、
+    /// 次の保存は確認なしでファイルを作り直し (`Expect::Absent`)、フォーカス復帰でも再び尋ねない。
     pub(super) fn choose_external_deleted(
         &mut self,
         doc: DocumentId,
@@ -200,7 +198,8 @@ impl EditorState {
             return self.request_close(doc);
         }
         if let Some(d) = self.documents.get_mut(&doc) {
-            d.external_seen = Some(ExternalSeen::Deleted);
+            d.disk_stamp = None;
+            d.external_seen = None;
         }
         CommandResult::Done
     }

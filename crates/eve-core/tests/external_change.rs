@@ -82,21 +82,71 @@ fn 編集中なら尋ね_無視した変更はフォーカス復帰で再び尋�
 
 // verifies: FR-117
 #[test]
-fn 削除されたら新規として保持するか閉じるかを尋ねる() {
+fn 削除されたら尋ね_新規として保持すると次の保存で確認なしに作り直す() {
     let mut h = opened();
     h.fs.remove(&"/w/a.txt".into());
     focus(&mut h);
     assert_eq!(h.overlay(), "dialog");
     h.keys("k");
     assert_eq!(h.overlay(), "");
-    assert_eq!(h.doc_text(), "abc\n", "内容は保つ");
+    assert_eq!(
+        h.doc_text(),
+        "abc
+",
+        "内容は保つ"
+    );
     focus(&mut h);
-    assert_eq!(h.overlay(), "", "同じ状態では尋ねない");
-    // 閉じる: 未編集なのでそのまま閉じる
-    h.cmd("file.check_external_changes");
+    assert_eq!(h.overlay(), "", "新規ファイル扱いなので再び尋ねない");
+    // 未編集でも、保存はファイルを作り直す (保存時の照合の確認は出ない)
+    h.keys("ctrl+s");
     h.run_jobs();
+    assert_eq!(h.overlay(), "");
+    assert_eq!(
+        h.fs_read("/w/a.txt").unwrap(),
+        b"abc
+"
+    );
+    // 編集して保存しても確認は出ない
+    h.text("x");
+    h.keys("ctrl+s");
+    h.run_jobs();
+    assert_eq!(h.overlay(), "");
+    assert_eq!(
+        h.fs_read("/w/a.txt").unwrap(),
+        b"xabc
+"
+    );
+}
+
+// verifies: FR-117
+#[test]
+fn 削除されて閉じるを選ぶと_未編集なら閉じ_編集中なら未保存の確認を出す() {
+    let mut h = opened();
+    h.fs.remove(&"/w/a.txt".into());
+    focus(&mut h);
     h.keys("c");
+    assert_eq!(h.overlay(), "");
     assert_ne!(h.doc_path().as_deref(), Some("/w/a.txt"));
+
+    let mut h = opened();
+    h.text("x");
+    h.fs.remove(&"/w/a.txt".into());
+    focus(&mut h);
+    h.keys("c");
+    assert_eq!(h.overlay(), "dialog", "未保存の確認 (FR-107)");
+    assert_eq!(
+        h.doc_path().as_deref(),
+        Some("/w/a.txt"),
+        "答えるまで閉じない"
+    );
+    // キャンセルすれば内容は残る
+    h.keys("esc");
+    assert_eq!(h.overlay(), "");
+    assert_eq!(
+        h.doc_text(),
+        "xabc
+"
+    );
 }
 
 // verifies: FR-117
