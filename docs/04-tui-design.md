@@ -469,7 +469,7 @@ v0.1 で実装するのは (a)(c)(f)(g)(h) と曖昧幅の設定 (`view.ambiguou
 | ratatui ウィジェット | **使わない**。ratatui は Buffer のセルへの文字列の書込と差分出力に限る。枠線・ガター・リストの記号は eve-tui が自前で描く (§3.7) | ウィジェットは記号の幅を ratatui 自身の幅計算で数えるため、曖昧幅 2 と食い違う。テキスト領域でも使わない (T1) | §3.7 |
 | ratatui の幅計算 | — | core の幅と食い違う可能性 (§4.7) | P0 検証 |
 | 入力 (Windows、v0.1) | crossterm の `event::read()` は **使わない**。入力スレッドが自前のループで読む: `WaitForSingleObject(hIn, …)` で入力を待ち、`GetNumberOfConsoleInputEvents` で溜まっている件数を見て `ReadConsoleInputW` で読む (`ENABLE_VIRTUAL_TERMINAL_INPUT` は立てない。確定 (ユーザー回答)、OQ-33) | crossterm の `event::read()` は 1 件ずつイベントを返すので、1 回の読取で何件届いたか・次の入力までの間隔が分からず、バースト検出 (§6.6) を実装できない。VT 入力 + 自前の VT パーサは採らない | §6.1 / §6.6 |
-| 入力 (Unix、v0.2) | crossterm の `event::read()` を出発点とする (v0.2 の着手時に決める) | ブラケットペーストは VT で届く | §6.6 |
+| 入力 (Unix、v0.2) | **自前の VT 解析** (`vt_input`。決定 (ユーザー回答、2026-11-01)、ADR-0005 の改訂): 入力スレッドが `/dev/tty` を `poll` で待って読めるだけ読み (1 回の読取)、`VtParser::feed` で `InputEvent` にする。crossterm の `event::read()` は使わない | ブラケットペーストは VT で届く。依存を増やさない (NFR-207) | §6.1〜§6.9 |
 | crossterm `supports_keyboard_enhancement()` | **起動経路では使わない** | 応答待ちでブロックし (タイムアウトが長い)、NFR-101 を壊す | §5 |
 | crossterm `EnableMouseCapture` | 使わず、必要なモードを個別に送る | 全モーション報告 (1003) まで有効にするため、マウス移動のたびにイベントが来る (SSH で帯域・CPU を浪費) | §6.8 |
 | エスケープシーケンスの直接出力 | crossterm にない機能 (タイトル push/pop、OSC 52 (v0.2)、カーソル形状の細部) は eve-tui が直接書く | 直接書く文字列は定数テーブルに集約し、可変部 (タイトル・OSC 52 データ) は必ずエンコード/無害化してから埋め込む | §4.9 |
@@ -557,7 +557,7 @@ NFR-503 の主対策は core (Frame 生成前の無害化、[02 §8.2](02-archit
 
 ### 5.3 問い合わせ応答の解析問題
 
-OSC 11 (背景色)、DECRQM、DA1、CSI ? u 等の **応答は入力ストリームに混ざって届く**。入力の読取 (Windows の `ReadConsoleInputW` の自前ループ、Unix (v0.2) の crossterm) は、要求していない応答シーケンスを誤ってキー入力 (例: `Alt+]` + 文字列) として解釈する恐れがある (Windows では応答がキーイベントの列として届く想定。P0 で確認)。このため v0.1〜v0.3 では **自発的な問い合わせを行わない**。将来、背景色の明暗判定 (§12.4) や同期出力の正確な判定が必要になったら、(a) crossterm を拡張/置換して応答を認識する入力パーサを持つ、(b) 入力スレッド開始前に生の stdin を短時間読む、のいずれかを選ぶ ([OQ-61](#18-未決事項))。明示コマンドの幅プローブ (§4.7(e)) は、入力スレッドを一時停止して専用に読む方式とする (ユーザーが起動するので待ちが許容される)。
+OSC 11 (背景色)、DECRQM、DA1、CSI ? u 等の **応答は入力ストリームに混ざって届く**。入力の読取 (Windows の `ReadConsoleInputW` の自前ループ、Unix (v0.2) の自前の VT 解析 `vt_input`) は、要求していない応答シーケンスを誤ってキー入力 (例: `Alt+]` + 文字列) として解釈する恐れがある (Windows では応答がキーイベントの列として届く想定。P0 で確認)。このため v0.1〜v0.3 では **自発的な問い合わせを行わない**。将来、背景色の明暗判定 (§12.4) や同期出力の正確な判定が必要になったら、(a) crossterm を拡張/置換して応答を認識する入力パーサを持つ、(b) 入力スレッド開始前に生の stdin を短時間読む、のいずれかを選ぶ ([OQ-61](#18-未決事項))。明示コマンドの幅プローブ (§4.7(e)) は、入力スレッドを一時停止して専用に読む方式とする (ユーザーが起動するので待ちが許容される)。
 
 ---
 
@@ -575,7 +575,8 @@ OSC 11 (背景色)、DECRQM、DA1、CSI ? u 等の **応答は入力ストリー
     → 正規化 (§6.2 の表)            … 端末の癖を吸収
     → 合体: 同一の読取 (バッチ) 内の連続した印字可能文字を 1 つの Text にまとめる
     → HostMsg::Input(window, InputEvent) を mpsc で送信
-  (Unix、v0.2) crossterm::event::read() (ブロッキング) → 正規化 → 合体 → 送信
+  (Unix、v0.2) poll(/dev/tty) で待ち、読めるだけ読む (1 回の読取) → VtParser::feed (vt_input。正規化・合体) → 送信
+             (途切れたシーケンスを持ち越したまま入力が途絶えたら VtParser::flush)
 [メインスレッド]
   editor.handle_input(window, ev)  → core のキーマップ解決 (02 §7.2)
 ```
@@ -601,7 +602,7 @@ OSC 11 (背景色)、DECRQM、DA1、CSI ? u 等の **応答は入力ストリー
 | `Ctrl+[` / `Esc` (0x1B 単独) | `Key{ Esc }` | 同上 |
 | `ESC` + 文字 (レガシー) | `Key{ Char(c), ALT }` | 回線遅延で分割されると `Esc` + `Text(c)` に化ける (§6.5) |
 | `Ctrl+Space` (0x00) | `Key{ Char(' '), CTRL }` | |
-| `Ctrl+/` (0x1F が来る端末) | `Key{ Char('/'), CTRL }` | Windows は仮想キーコード (`VK_OEM_2` 等、配列依存) と `dwControlKeyState` から作る。Unix (v0.2) の crossterm は `Ctrl+7` や `Ctrl+_` として報告し得る → 表で吸収 (P0 で端末別確認) |
+| `Ctrl+/` (0x1F が来る端末) | `Key{ Char('/'), CTRL }` | Windows は仮想キーコード (`VK_OEM_2` 等、配列依存) と `dwControlKeyState` から作る。Unix (v0.2) の `vt_input` は 0x1F を `Key{ Char('/'), CTRL }` にする (`Ctrl+7` / `Ctrl+_` も同じバイトを送る端末がある) |
 | `Ctrl+\` (0x1C) / `Ctrl+]` (0x1D) | `Key{ Char('\\'), CTRL }` / `Key{ Char(']'), CTRL }` | raw モードでは SIGQUIT にならない |
 | CSI u 形式のキー (v0.2 の push 後) | 対応するキー + 修飾 | 受信した時点で `Capabilities.enhanced_keys = true` に更新 |
 | 未知のキー (変換/無変換/半角全角、メディアキー等) | 破棄 (debug ログにキーコードのみ) | 日本語キーボードの IME 制御キーは端末/OS が処理する |
@@ -674,7 +675,7 @@ OSC 11 (背景色)、DECRQM、DA1、CSI ? u 等の **応答は入力ストリー
 |---|---|
 | Ctrl | 全端末で使える主修飾。既定キーマップの第一割当は原則 `Ctrl+英字` / `Ctrl+特殊キー` |
 | Shift | 文字では大文字化 (`Text`)。特殊キー (矢印・Home 等) との組み合わせは選択拡張に使う |
-| Alt (Meta) | レガシーでは `ESC` 前置として届く。**`Alt` 単独の割当を Must 機能の唯一の手段にしない** (Terminal.app 既定で使えない)。`Esc` 押下直後の文字と区別するため、`ESC`+文字が同一 read バッチ内に来た場合のみ Alt とみなす (Unix (v0.2) の crossterm の既定挙動)。SSH 遅延で分割された場合は `Esc` → `Text` になる (既知の制約、ヘルプに記載)。Windows の `ReadConsoleInputW` 経路では `dwControlKeyState` の Alt 修飾で届くので、この曖昧さは無い |
+| Alt (Meta) | レガシーでは `ESC` 前置として届く。**`Alt` 単独の割当を Must 機能の唯一の手段にしない** (Terminal.app 既定で使えない)。`Esc` 押下直後の文字と区別するため、`ESC`+文字が同一 read バッチ内に来た場合のみ Alt とみなす (Unix (v0.2) の `vt_input` の規則。読取の末尾の単独の `ESC` は `Esc`)。SSH 遅延で分割された場合は `Esc` → `Text` になる (既知の制約、ヘルプに記載)。Windows の `ReadConsoleInputW` 経路では `dwControlKeyState` の Alt 修飾で届くので、この曖昧さは無い |
 | Super / Cmd | 端末ではほぼ届かない。既定キーマップで使わない。キーマップ書式には主修飾 `mod` の抽象がある (07 §7.2。TUI では常に `ctrl` に解決) |
 | Hyper / Meta (kitty) | 使わない |
 
@@ -683,9 +684,9 @@ OSC 11 (背景色)、DECRQM、DA1、CSI ? u 等の **応答は入力ストリー
 | 項目 | 仕様 |
 |---|---|
 | 有効化 | Unix (v0.2): 初期化時に `CSI ? 2004 h`、復元時に `CSI ? 2004 l`。有効化が `Unsupported` 等のエラーを返しても起動エラーにせず、`Capabilities.bracketed_paste = false` にして続ける。**Windows では送らない** (入力は `ReadConsoleInputW` の自前ループで読み、`ENABLE_VIRTUAL_TERMINAL_INPUT` を立てないため。02 §9.5)。Windows の貼り付けは下の「バースト検出」で `Paste` に合成する |
-| 受信 | Unix (v0.2): `Event::Paste(String)` → `InputEvent::Paste`。Windows: バースト検出で合成した `Paste` (本文はそのまま渡す。端末は貼り付け時に LF を CR に変換して送ることが多いが、改行の正規化 (`\r\n`・単独 `\r`・単独 `\n` → 文書の改行コード) は core の貼り付けの入口 1 か所で行う。03 §8.4。TUI の前処理は要らない) |
+| 受信 | Unix (v0.2): `vt_input` が `CSI 200~` 〜 `CSI 201~` の本文を読取をまたいで溜め、`InputEvent::Paste` にする。Windows: バースト検出で合成した `Paste` (本文はそのまま渡す。端末は貼り付け時に LF を CR に変換して送ることが多いが、改行の正規化 (`\r\n`・単独 `\r`・単独 `\n` → 文書の改行コード) は core の貼り付けの入口 1 か所で行う。03 §8.4。TUI の前処理は要らない) |
 | core 側 | `Origin::Paste` の 1 Transaction、自動インデント無効 (FR-206)。改行の正規化はすべての貼り付け経路 (`Paste`、システムクリップボード、内部レジスタ、バースト検出で合成した `Paste`) で core が行う (03 §8.4) |
-| 大量ペースト | 10 MB (NFR-111) を受け取れること。Windows は入力スレッドがバーストの間の入力を 1 つの String に連結し (Unix (v0.2) は crossterm が全体を String に溜める)、受信中は入力スレッドがその処理に専念する。core 側の挿入は O(log n)。表示は挿入後 1 回 |
+| 大量ペースト | 10 MB (NFR-111) を受け取れること。Windows は入力スレッドがバーストの間の入力を 1 つの String に連結し (Unix (v0.2) は `vt_input` が全体を 1 つのバッファに溜める)、受信中は入力スレッドがその処理に専念する。core 側の挿入は O(log n)。表示は挿入後 1 回 |
 | 制御文字 | ペースト本文中の ESC 等は「テキストとして」挿入される (コマンドとして解釈されない)。表示時に可視化 (FR-507)。ペースト終了シーケンス (`ESC [201~`) を本文に埋め込んだ攻撃 (paste injection、ブラケットペーストを使う Unix (v0.2) の問題) は端末側の除去に依存するが、**終了直後に続く入力バーストは下記「バースト規則」で文字として扱い**、コマンドとして解釈しない (多層防御) |
 | 入力欄 (オーバーレイ・検索バー) へのペースト | 最初の改行の手前までを欄に挿入し、残りは捨てる (捨てたときは情報メッセージ `info.paste.first_line_only`、§15.2)。欄は 1 行なので、どの欄でも同じ規則にする。改行以外の制御文字は FR-507 の可視記号として入る (欄の文字列は core が無害化して Frame に載せる、INV-F1) |
 
@@ -1233,7 +1234,7 @@ TUI ではこれ以上は端末の能力の限界。
 ```
 0. 前提確認: stdin/stdout が端末か、TERM != dumb (§5.2)
 1. 現状の保存: (Unix) termios / (Windows) 入出力コンソールモード (コードページは変えないので保存しない、05 §9.1)
-2. raw モード (Unix (v0.2): crossterm enable_raw_mode。ISIG/IXON/ICRNL 等を無効化 → Ctrl+C/Z/S/Q が届く, FR-609。
+2. raw モード (Unix (v0.2): termios を `cfmakeraw` 相当に設定。ISIG/IXON/ICRNL 等を無効化 → Ctrl+C/Z/S/Q が届く, FR-609。
    Windows: 入力のコンソールモードを 05 §9.1 の「入力モード」の値に設定 (ENABLE_VIRTUAL_TERMINAL_INPUT は立てない))
 3. 端末タイトルの退避 (Windows: GetConsoleTitleW で文字列を保存。Unix (v0.2): XTWINOPS push CSI 22;0 t、非対応端末は無視。05 §9.1)
 4. 代替スクリーンへ (CSI ? 1049 h)  … v0.2 から設定 ui.alternate_screen=false で無効化可 (v0.1 は常に使う)。続けて自動折り返しを無効化 (CSI ? 7 l、§4.7(g))
@@ -1242,7 +1243,7 @@ TUI ではこれ以上は端末の能力の限界。
 7. マウス有効 (1000/1002/1006)  … v0.2 から、設定次第
 8. 拡張キー push (CSI > 1 u)  … v0.2 から、Unix のみ
 9. カーソル形状 (DECSCUSR)
-9b. 端末サイズ取得 (crossterm::terminal::size / Windows は srWindow から再計算, 05 §9.1) → クローム行数を引いて
+9b. 端末サイズ取得 (Unix は `ioctl(TIOCGWINSZ)` / Windows は srWindow から再計算, 05 §9.1) → クローム行数を引いて
     InputEvent::Resize を core に送る (最初の Frame の前に編集面サイズを確定させる)
 10. 画面消去 → 最初の Frame を描画 (問い合わせの応答を待たない, T3)
 ```

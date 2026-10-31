@@ -188,7 +188,7 @@ L3 で必ずカバーする要件: FR-1xx (ファイル管理) の全 Must (FR-1
 - **自前の仮想画面モデル (OQ-68)**: `TestBackend` と L5 の `vt100` はいずれも unicode-width 前提で描くため、曖昧幅を 2 として描く端末や VS16 / ZWJ の扱いが異なる端末を再現できない。`eve-testkit` に **セル幅を設定で切り替えられる仮想画面モデル** (`VirtualScreen { ambiguous: 1|2, emoji: 1|2, vs16: 1|2, pua: 1|2 }`) を置き、**Frame → Buffer → 出力バイト列 → 仮想画面** の往復でカーソル・各書記素のセル位置が Frame の宣言と一致することを検査する (04 §4.7 の幅不一致対策 (a)(c) の自動検証)。曖昧幅 2 設定で 1,000 回のランダム更新後も一致すること (08 §3 S-06 の合否基準をテストとして固定)。
 - 出力バイト列のスナップショット (ratatui 差分出力は不安定なので **Buffer の比較を正**、バイト列は参考)。
 - 端末インジェクション: Span に制御文字が残っていないことを出力直前に `debug_assert` し、テストでは出力バイト列に `\x1b` が「eve-tui が生成した位置以外」に現れないことを検査 (NFR-503 の出力側)。
-- 入力の正規化 → `InputEvent` は、Windows (v0.1) は `ReadConsoleInputW` の入力レコード列 → `InputEvent` (04 §6.2 の「入力経路ごとの写像」の `ReadConsoleInputW` 経路の列。`Ctrl+H` / `Ctrl+I` / `Ctrl+M` / `Ctrl+[`、Press / Release・キーリピート、AltGr) を、入力レコードの列を直接与える単体テストで検査する (04 の表を網羅)。crossterm のイベント → `InputEvent` (Ctrl+H/Backspace、Ctrl+I/Tab、ESC 前置 Alt。kitty キーボードプロトコルの有効化を含む) は Unix を出荷する v0.2 から。
+- 入力の正規化 → `InputEvent` は、Windows (v0.1) は `ReadConsoleInputW` の入力レコード列 → `InputEvent` (04 §6.2 の「入力経路ごとの写像」の `ReadConsoleInputW` 経路の列。`Ctrl+H` / `Ctrl+I` / `Ctrl+M` / `Ctrl+[`、Press / Release・キーリピート、AltGr) を、入力レコードの列を直接与える単体テストで検査する (04 の表を網羅)。VT の入力のバイト列 → `InputEvent` (Unix の `vt_input`。Ctrl+H/Backspace、Ctrl+I/Tab、ESC 前置 Alt、CSI / SS3 のキーと修飾、CSI u、SGR マウス、フォーカス、ブラケットペーストと直後のバースト規則) は Unix を出荷する v0.2 から、バイト列を直接与える単体テストで検査する。
 
 **契約テスト (frontend-parity・Frame JSON ゴールデン・contract-export)** (02 §8.4、ADR-0030 / ADR-0039):
 

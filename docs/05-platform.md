@@ -868,13 +868,13 @@ TUI では IME は端末が処理し、evoeditor は **ハードウェアカー�
 | SIGHUP | 端末が閉じた、SSH 切断 | 端末は既に無い → **対話不可**。緊急退避 → 端末復元は失敗を無視 → 終了 | `Signal(Hangup)` |
 | SIGTSTP (Ctrl+Z) | raw モードでは発生しない。`Effect::Suspend` (コマンド `app.suspend`、v0.2) で自ら発生させる | §11.3 (v0.2) | — |
 | SIGCONT | `fg` | 端末再初期化 + 全面再描画 + サイズ再取得 | `Signal(Continue)` |
-| SIGWINCH | リサイズ | `InputEvent::Resize` (crossterm/signal-hook が処理) | 入力経路 |
+| SIGWINCH | リサイズ | `InputEvent::Resize` (入力スレッドが signal-hook の自己パイプを `/dev/tty` と一緒に `poll` で待つ) | 入力経路 |
 | SIGPIPE | stdout 切断 | Rust 既定で無視 (EPIPE エラーとして出力側に現れる) → 書込失敗は終了要求に変換 | — |
 | SIGQUIT (Ctrl+\) | raw モードで発生しない | 既定 (コアダンプ) のまま。デバッグ用に残す | — |
 | SIGUSR1/2 | — | 未使用 (将来: 設定再読込?) | — |
 | SIGSEGV/SIGBUS/SIGABRT | バグ、mmap なし設計のため SIGBUS は想定外 | ハンドラ内で **端末復元のみ** (`write(2)` で復元シーケンスを書く。メモリ確保・ロック取得をしない) → 既定動作へ再送 (コアダンプ)。緊急退避は行わない (ヒープが壊れている可能性。パニックとは違う) | — |
 
-実装: `signal-hook` (crossterm が Unix で既に依存) でシグナルをフラグ/パイプに変換し、**専用のシグナルスレッド** が受ける。シグナルハンドラ内で `EditorState` に触れない。終了系シグナル (INT / TERM / HUP) の役割分担は §11.4 の「役割分担」のとおりで、シグナルスレッドが **先に退避を書き、その後** `HostMsg::Signal` を送る。
+実装: `signal-hook` でシグナルをフラグ/パイプに変換し、**専用のシグナルスレッド** が受ける。シグナルハンドラ内で `EditorState` に触れない。終了系シグナル (INT / TERM / HUP) の役割分担は §11.4 の「役割分担」のとおりで、シグナルスレッドが **先に退避を書き、その後** `HostMsg::Signal` を送る。
 
 **Linux の実装 (v0.2 の M7 の 4 本目、2026-11-01。README §3.9)**: eve-platform の Host 部品として次を入れた。bin での配線 (Windows のコンソールハンドラと同じ手順) とサスペンド (§11.3) は、bin が Linux で起動する 5 本目で行う。
 - `signals::start(cb)`: SIGINT / SIGTERM / SIGHUP / SIGCONT を `signal-hook` の自己パイプで受け、シグナルスレッド `eve-signal` で `cb(UnixSignal)` を呼ぶ (登録した後は既定の終了は起きない)。eve-host の `SignalKind` に `Hangup` を足した (SIGCONT は終了要求ではないので、`HostMsg` への写像は 5 本目で決める)。
@@ -934,7 +934,7 @@ Windows には SIGTSTP 相当がないため `Capabilities.can_suspend = false` 
 
 ```
 1. 端末復元 (§9.2) — 入力スレッドは read をブロック中なので、復元後に stdin の読み取りをいったん止める
-   (crossterm の poll にタイムアウトを入れる、または入力スレッドにフラグを立ててから SIGCONT 後に再開)
+   (入力スレッドの poll にタイムアウトを入れる、または入力スレッドにフラグを立ててから SIGCONT 後に再開)
 2. kill(getpid(), SIGTSTP)  — 自分のプロセスグループではなく自分だけ。tmux/シェルが前面ジョブとして停止させる
 3. (停止中) …
 4. SIGCONT 受信 → 端末初期化 → サイズ再取得 → needs_render 全面
