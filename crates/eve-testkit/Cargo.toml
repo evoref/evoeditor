@@ -35,3 +35,8 @@ harness = false
 [[bench]]
 name = "bm_106"
 harness = false
+
+# 回帰の検出 (命令数と wall-clock の A/B) の計測の本体。cargo xtask perf-diff が基準と比べる (docs/09 §5.4)
+[[bench]]
+name = "bm_instr"
+harness = false
