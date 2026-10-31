@@ -31,7 +31,7 @@ fn strip_code(line: &str) -> String {
 }
 
 /// 本文から ID 参照を取り出す (前後が英数字・`-` でない語)。
-fn id_refs(text: &str) -> Vec<String> {
+pub(crate) fn id_refs(text: &str) -> Vec<String> {
     let bytes = text.as_bytes();
     let mut out = Vec::new();
     for prefix in ["NFR-", "FR-", "ADR-", "OQ-", "BM-"] {

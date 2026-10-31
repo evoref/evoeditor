@@ -15,6 +15,7 @@
 //! - `i18n`: UI 文言の検査 (docs/09 §6.2、docs/07 §17)
 //! - `gen-corpus`: 巨大・長大のコーパスの決定的な生成 (docs/09 §4)
 //! - `spec-index`: 仕様書の索引 docs/spec-index.toml の生成 (`--check` で最新性と参照の検査、`--show <ID>`。docs/11 §3.3)
+//! - `trace`: 仕様と実装・試験の対応の検査と docs/traceability.md の生成 (`--check`。docs/11 §3.3、09 §8.3)
 //! - `nightly`: 夜間ジョブの入口 (fuzz・proptest 拡張・audit・coverage。Linux。docs/09 §6.3)
 
 #![forbid(unsafe_code)]
@@ -36,6 +37,7 @@ mod i18n;
 mod nightly;
 mod review_wording;
 mod spec_index;
+mod trace;
 mod util;
 mod verify_tag;
 
@@ -59,6 +61,7 @@ const USAGE: &str = "\
   i18n                UI 文言の検査 (04 §15.2 の目録・07 §11.6 のカタログ・locales/ja.toml)
   gen-corpus          巨大・長大のコーパスの生成 (--seed N --out DIR --only a,b --with-1gb --list)
   spec-index          仕様書の索引 docs/spec-index.toml の生成 (--check: 最新性・重複・spec: の参照の検査。--show <ID>: 本文)
+  trace               仕様と試験の対応の検査と docs/traceability.md の生成 (--check: 存在しない ID と行列の最新性)
   nightly             夜間ジョブ (Linux。--only fuzz,proptest,audit,coverage --fuzz-seconds N --seed N)";
 
 fn main() -> ExitCode {
@@ -78,6 +81,7 @@ fn main() -> ExitCode {
         Some("gen-corpus") => gen_corpus::run(&args.collect::<Vec<_>>()),
         Some("nightly") => nightly::run_all(&args.collect::<Vec<_>>()),
         Some("check-docs") => check_docs::run(),
+        Some("trace") => trace::run(&args.collect::<Vec<_>>()),
         Some("spec-index") => spec_index::run(&args.collect::<Vec<_>>()),
         Some("--help" | "-h" | "help") | None => {
             println!("{USAGE}");

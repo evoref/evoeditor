@@ -2,7 +2,7 @@
 //!
 //! v0.1 の中身: (1) fmt、(2) clippy、(3) nextest (eve-text・eve-encoding・eve-core)、(4) check-deps、
 //! (5) AC のチェックリストの検査、(5b) 仕様書の索引の検査 (`spec-index --check`、v0.2 の M10)、
-//! (5c) 仕様書の参照の検査 (`check-docs`、v0.2 の M10)、
+//! (5c) 仕様書の参照の検査 (`check-docs`、v0.2 の M10)、(5d) 仕様と試験の対応の検査 (`trace --check`、v0.2 の M10)、
 //! (6) 変更した crate の Harness のシナリオテスト。
 //! この 3 か所 (11 §8.1・09 §6.1・08 §2.2) は同時に直す。
 
@@ -10,7 +10,7 @@ use std::collections::BTreeSet;
 use std::process::Command;
 
 use crate::{
-    ac_checklist, check_deps, check_docs, spec_index,
+    ac_checklist, check_deps, check_docs, spec_index, trace,
     util::{run, run_capture},
 };
 
@@ -50,6 +50,7 @@ pub fn run_all() -> Result<(), String> {
     ac_checklist::run()?;
     spec_index::run(&["--check".to_owned()])?;
     check_docs::run()?;
+    trace::run(&["--check".to_owned()])?;
     scenario_tests()?;
     println!("\ncheck: すべて通りました");
     Ok(())
