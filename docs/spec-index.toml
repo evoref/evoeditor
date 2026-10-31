@@ -4738,7 +4738,7 @@ title = "外部の消費者向けの公開 API 互換とライセンス検査"
 id = "09 §8"
 file = "docs/09-testing-quality.md"
 line = 527
-end = 654
+end = 655
 title = "品質ゲート"
 
 [[section]]
@@ -4759,126 +4759,126 @@ title = "リリースゲート (版の完了・各リリース)"
 id = "09 §8.3"
 file = "docs/09-testing-quality.md"
 line = 572
-end = 579
+end = 580
 title = "トレーサビリティ行列"
 
 [[section]]
 id = "09 §8.4"
 file = "docs/09-testing-quality.md"
-line = 580
-end = 598
+line = 581
+end = 599
 title = "レビューチェックリスト (R)"
 
 [[section]]
 id = "09 §8.5"
 file = "docs/09-testing-quality.md"
-line = 599
-end = 654
+line = 600
+end = 655
 title = "v0.1 Must の検証手段の対応 (チェックリストの初版)"
 
 [[section]]
 id = "09 §9"
 file = "docs/09-testing-quality.md"
-line = 655
-end = 723
+line = 656
+end = 724
 title = "リリース手順"
 
 [[section]]
 id = "09 §9.1"
 file = "docs/09-testing-quality.md"
-line = 657
-end = 662
+line = 658
+end = 663
 title = "バージョニングと頻度"
 
 [[section]]
 id = "09 §9.2"
 file = "docs/09-testing-quality.md"
-line = 663
-end = 711
+line = 664
+end = 712
 title = "手順"
 
 [[section]]
 id = "09 §9.3"
 file = "docs/09-testing-quality.md"
-line = 712
-end = 717
+line = 713
+end = 718
 title = "ホットフィックス"
 
 [[section]]
 id = "09 §9.4"
 file = "docs/09-testing-quality.md"
-line = 718
-end = 723
+line = 719
+end = 724
 title = "ロールバック"
 
 [[section]]
 id = "09 §10"
 file = "docs/09-testing-quality.md"
-line = 724
-end = 760
+line = 725
+end = 761
 title = "クラッシュ報告・テレメトリ"
 
 [[section]]
 id = "09 §10.1"
 file = "docs/09-testing-quality.md"
-line = 726
-end = 736
+line = 727
+end = 737
 title = "方針"
 
 [[section]]
 id = "09 §10.2"
 file = "docs/09-testing-quality.md"
-line = 737
-end = 753
+line = 738
+end = 754
 title = "クラッシュログの内容 (NFR-302 / 504)"
 
 [[section]]
 id = "09 §10.3"
 file = "docs/09-testing-quality.md"
-line = 754
-end = 760
+line = 755
+end = 761
 title = "デバッグ支援 (明示 opt-in)"
 
 [[section]]
 id = "09 §11"
 file = "docs/09-testing-quality.md"
-line = 761
-end = 802
+line = 762
+end = 803
 title = "ドキュメント運用"
 
 [[section]]
 id = "09 §11.1"
 file = "docs/09-testing-quality.md"
-line = 763
-end = 770
+line = 764
+end = 771
 title = "仕様書 (docs/00〜12)"
 
 [[section]]
 id = "09 §11.2"
 file = "docs/09-testing-quality.md"
-line = 771
-end = 786
+line = 772
+end = 787
 title = "生成ドキュメント (実装との乖離防止)"
 
 [[section]]
 id = "09 §11.3"
 file = "docs/09-testing-quality.md"
-line = 787
-end = 793
+line = 788
+end = 794
 title = "ユーザー向けドキュメント"
 
 [[section]]
 id = "09 §11.4"
 file = "docs/09-testing-quality.md"
-line = 794
-end = 802
+line = 795
+end = 803
 title = "貢献者向け"
 
 [[section]]
 id = "09 §12"
 file = "docs/09-testing-quality.md"
-line = 803
-end = 827
+line = 804
+end = 828
 title = "未決事項"
 
 [[section]]
@@ -5053,7 +5053,7 @@ title = "`docs/ownership.toml`"
 id = "11 §3"
 file = "docs/11-dev-workflow.md"
 line = 169
-end = 220
+end = 221
 title = "規範行 ID と `spec:` / `verifies:`"
 
 [[section]]
@@ -5074,245 +5074,245 @@ title = "`spec:` と `verifies:` の記法"
 id = "11 §3.3"
 file = "docs/11-dev-workflow.md"
 line = 201
-end = 220
+end = 221
 title = "`xtask spec-index` と `xtask trace`"
 
 [[section]]
 id = "11 §4"
 file = "docs/11-dev-workflow.md"
-line = 221
-end = 288
+line = 222
+end = 289
 title = "タスクの単位と PR の形"
 
 [[section]]
 id = "11 §4.0"
 file = "docs/11-dev-workflow.md"
-line = 223
-end = 226
+line = 224
+end = 227
 title = "最初のタスク (M1 の縦切り)"
 
 [[section]]
 id = "11 §4.1"
 file = "docs/11-dev-workflow.md"
-line = 227
-end = 238
+line = 228
+end = 239
 title = "タスクの単位"
 
 [[section]]
 id = "11 §4.2"
 file = "docs/11-dev-workflow.md"
-line = 239
-end = 259
+line = 240
+end = 260
 title = "タスクテンプレート"
 
 [[section]]
 id = "11 §4.3"
 file = "docs/11-dev-workflow.md"
-line = 260
-end = 265
+line = 261
+end = 266
 title = "バックログの持ち方"
 
 [[section]]
 id = "11 §4.4"
 file = "docs/11-dev-workflow.md"
-line = 266
-end = 277
+line = 267
+end = 278
 title = "PR の形"
 
 [[section]]
 id = "11 §4.5"
 file = "docs/11-dev-workflow.md"
-line = 278
-end = 288
+line = 279
+end = 289
 title = "仕様の変更規律"
 
 [[section]]
 id = "11 §5"
 file = "docs/11-dev-workflow.md"
-line = 289
-end = 307
+line = 290
+end = 308
 title = "`CLAUDE.md` / `AGENTS.md` / `.claude/`"
 
 [[section]]
 id = "11 §6"
 file = "docs/11-dev-workflow.md"
-line = 308
-end = 455
+line = 309
+end = 456
 title = "決定的なテストとシナリオ DSL"
 
 [[section]]
 id = "11 §6.1"
 file = "docs/11-dev-workflow.md"
-line = 312
-end = 324
+line = 313
+end = 325
 title = "決定性の規則"
 
 [[section]]
 id = "11 §6.2"
 file = "docs/11-dev-workflow.md"
-line = 325
-end = 336
+line = 326
+end = 337
 title = "ゴールデン / スナップショットの運用"
 
 [[section]]
 id = "11 §6.3"
 file = "docs/11-dev-workflow.md"
-line = 337
-end = 415
+line = 338
+end = 416
 title = "シナリオ DSL の書式 (正本)"
 
 [[section]]
 id = "11 §6.4"
 file = "docs/11-dev-workflow.md"
-line = 416
-end = 422
+line = 417
+end = 423
 title = "シナリオの書き順 (エージェント向け)"
 
 [[section]]
 id = "11 §6.5"
 file = "docs/11-dev-workflow.md"
-line = 423
-end = 455
+line = 424
+end = 456
 title = "ASCII Frame の表現"
 
 [[section]]
 id = "11 §7"
 file = "docs/11-dev-workflow.md"
-line = 456
-end = 514
+line = 457
+end = 515
 title = "ヘッドレス検証ループ"
 
 [[section]]
 id = "11 §7.1"
 file = "docs/11-dev-workflow.md"
-line = 466
-end = 488
+line = 467
+end = 489
 title = "駆動 API の使い方 (エージェント向けの最小手順)"
 
 [[section]]
 id = "11 §7.2"
 file = "docs/11-dev-workflow.md"
-line = 489
-end = 498
+line = 490
+end = 499
 title = "ループの回し方 (1 タスク)"
 
 [[section]]
 id = "11 §7.3"
 file = "docs/11-dev-workflow.md"
-line = 499
-end = 514
+line = 500
+end = 515
 title = "ローカル LLM を開発ループに使う (任意)"
 
 [[section]]
 id = "11 §8"
 file = "docs/11-dev-workflow.md"
-line = 515
-end = 597
+line = 516
+end = 598
 title = "コードレビューと CI の運用"
 
 [[section]]
 id = "11 §8.1"
 file = "docs/11-dev-workflow.md"
-line = 517
-end = 528
+line = 518
+end = 529
 title = "CI の車線"
 
 [[section]]
 id = "11 §8.2"
 file = "docs/11-dev-workflow.md"
-line = 529
-end = 540
+line = 530
+end = 541
 title = "レビューの規則"
 
 [[section]]
 id = "11 §8.3"
 file = "docs/11-dev-workflow.md"
-line = 541
-end = 555
+line = 542
+end = 556
 title = "ラベル"
 
 [[section]]
 id = "11 §8.4"
 file = "docs/11-dev-workflow.md"
-line = 556
-end = 570
+line = 557
+end = 571
 title = "契約変更要求の手続き (02 §8.4 の運用面)"
 
 [[section]]
 id = "11 §8.5"
 file = "docs/11-dev-workflow.md"
-line = 571
-end = 597
+line = 572
+end = 598
 title = "docs の表を CI の入力にする規則 (機械可読の表)"
 
 [[section]]
 id = "11 §9"
 file = "docs/11-dev-workflow.md"
-line = 598
-end = 738
+line = 599
+end = 739
 title = "ブランチ・コミット・リリースの規約"
 
 [[section]]
 id = "11 §9.1"
 file = "docs/11-dev-workflow.md"
-line = 600
-end = 624
+line = 601
+end = 625
 title = "ブランチ"
 
 [[section]]
 id = "11 §9.2"
 file = "docs/11-dev-workflow.md"
-line = 625
-end = 647
+line = 626
+end = 648
 title = "コミットメッセージ"
 
 [[section]]
 id = "11 §9.3"
 file = "docs/11-dev-workflow.md"
-line = 648
-end = 655
+line = 649
+end = 656
 title = "CHANGELOG とリリース"
 
 [[section]]
 id = "11 §9.4"
 file = "docs/11-dev-workflow.md"
-line = 656
-end = 669
+line = 657
+end = 670
 title = "寄稿ポリシー (CLA / DCO)"
 
 [[section]]
 id = "11 §9.5"
 file = "docs/11-dev-workflow.md"
-line = 670
-end = 685
+line = 671
+end = 686
 title = "公開 crate と外部の消費者の運用"
 
 [[section]]
 id = "11 §9.6"
 file = "docs/11-dev-workflow.md"
-line = 686
-end = 699
+line = 687
+end = 700
 title = "ライセンス検査 (`cargo deny` と同梱資産)"
 
 [[section]]
 id = "11 §9.7"
 file = "docs/11-dev-workflow.md"
-line = 700
-end = 717
+line = 701
+end = 718
 title = "秘密情報の扱い (署名鍵・資格情報)"
 
 [[section]]
 id = "11 §9.8"
 file = "docs/11-dev-workflow.md"
-line = 718
-end = 738
+line = 719
+end = 739
 title = "脆弱性の受付・対応・開示"
 
 [[section]]
 id = "11 §10"
 file = "docs/11-dev-workflow.md"
-line = 739
-end = 758
+line = 740
+end = 759
 title = "未決事項"
 
 [[section]]
@@ -8809,283 +8809,283 @@ section = "09 §1"
 [[id]]
 id = "FR-105"
 file = "docs/09-testing-quality.md"
-line = 606
+line = 607
 section = "09 §8.5"
 
 [[id]]
 id = "FR-106"
 file = "docs/09-testing-quality.md"
-line = 607
+line = 608
 section = "09 §8.5"
 
 [[id]]
 id = "FR-205"
 file = "docs/09-testing-quality.md"
-line = 612
+line = 613
 section = "09 §8.5"
 
 [[id]]
 id = "FR-404"
 file = "docs/09-testing-quality.md"
-line = 615
+line = 616
 section = "09 §8.5"
 
 [[id]]
 id = "FR-501"
 file = "docs/09-testing-quality.md"
-line = 616
+line = 617
 section = "09 §8.5"
 
 [[id]]
 id = "FR-513"
 file = "docs/09-testing-quality.md"
-line = 619
+line = 620
 section = "09 §8.5"
 
 [[id]]
 id = "FR-602"
 file = "docs/09-testing-quality.md"
-line = 621
+line = 622
 section = "09 §8.5"
 
 [[id]]
 id = "FR-605"
 file = "docs/09-testing-quality.md"
-line = 622
+line = 623
 section = "09 §8.5"
 
 [[id]]
 id = "FR-606"
 file = "docs/09-testing-quality.md"
-line = 623
+line = 624
 section = "09 §8.5"
 
 [[id]]
 id = "FR-609"
 file = "docs/09-testing-quality.md"
-line = 624
+line = 625
 section = "09 §8.5"
 
 [[id]]
 id = "NFR-107"
 file = "docs/09-testing-quality.md"
-line = 627
+line = 628
 section = "09 §8.5"
 
 [[id]]
 id = "NFR-301"
 file = "docs/09-testing-quality.md"
-line = 629
+line = 630
 section = "09 §8.5"
 
 [[id]]
 id = "NFR-302"
 file = "docs/09-testing-quality.md"
-line = 630
+line = 631
 section = "09 §8.5"
 
 [[id]]
 id = "NFR-305"
 file = "docs/09-testing-quality.md"
-line = 632
+line = 633
 section = "09 §8.5"
 
 [[id]]
 id = "NFR-401"
 file = "docs/09-testing-quality.md"
-line = 633
+line = 634
 section = "09 §8.5"
 
 [[id]]
 id = "NFR-402"
 file = "docs/09-testing-quality.md"
-line = 634
+line = 635
 section = "09 §8.5"
 
 [[id]]
 id = "NFR-403"
 file = "docs/09-testing-quality.md"
-line = 635
+line = 636
 section = "09 §8.5"
 
 [[id]]
 id = "NFR-404"
 file = "docs/09-testing-quality.md"
-line = 636
+line = 637
 section = "09 §8.5"
 
 [[id]]
 id = "NFR-406"
 file = "docs/09-testing-quality.md"
-line = 637
+line = 638
 section = "09 §8.5"
 
 [[id]]
 id = "NFR-501"
 file = "docs/09-testing-quality.md"
-line = 638
+line = 639
 section = "09 §8.5"
 
 [[id]]
 id = "NFR-502"
 file = "docs/09-testing-quality.md"
-line = 639
+line = 640
 section = "09 §8.5"
 
 [[id]]
 id = "NFR-503"
 file = "docs/09-testing-quality.md"
-line = 640
+line = 641
 section = "09 §8.5"
 
 [[id]]
 id = "NFR-504"
 file = "docs/09-testing-quality.md"
-line = 641
+line = 642
 section = "09 §8.5"
 
 [[id]]
 id = "NFR-505"
 file = "docs/09-testing-quality.md"
-line = 642
+line = 643
 section = "09 §8.5"
 
 [[id]]
 id = "NFR-507"
 file = "docs/09-testing-quality.md"
-line = 643
+line = 644
 section = "09 §8.5"
 
 [[id]]
 id = "NFR-602"
 file = "docs/09-testing-quality.md"
-line = 644
+line = 645
 section = "09 §8.5"
 
 [[id]]
 id = "NFR-603"
 file = "docs/09-testing-quality.md"
-line = 645
+line = 646
 section = "09 §8.5"
 
 [[id]]
 id = "NFR-604"
 file = "docs/09-testing-quality.md"
-line = 646
+line = 647
 section = "09 §8.5"
 
 [[id]]
 id = "NFR-605"
 file = "docs/09-testing-quality.md"
-line = 647
+line = 648
 section = "09 §8.5"
 
 [[id]]
 id = "OQ-101"
 file = "docs/09-testing-quality.md"
-line = 809
+line = 810
 section = "09 §12"
 
 [[id]]
 id = "OQ-102"
 file = "docs/09-testing-quality.md"
-line = 810
+line = 811
 section = "09 §12"
 
 [[id]]
 id = "OQ-15"
 file = "docs/09-testing-quality.md"
-line = 811
+line = 812
 section = "09 §12"
 
 [[id]]
 id = "OQ-103"
 file = "docs/09-testing-quality.md"
-line = 812
+line = 813
 section = "09 §12"
 
 [[id]]
 id = "OQ-60"
 file = "docs/09-testing-quality.md"
-line = 813
+line = 814
 section = "09 §12"
 
 [[id]]
 id = "OQ-74"
 file = "docs/09-testing-quality.md"
-line = 814
+line = 815
 section = "09 §12"
 
 [[id]]
 id = "OQ-104"
 file = "docs/09-testing-quality.md"
-line = 815
+line = 816
 section = "09 §12"
 
 [[id]]
 id = "OQ-105"
 file = "docs/09-testing-quality.md"
-line = 816
+line = 817
 section = "09 §12"
 
 [[id]]
 id = "OQ-44"
 file = "docs/09-testing-quality.md"
-line = 817
+line = 818
 section = "09 §12"
 
 [[id]]
 id = "OQ-106"
 file = "docs/09-testing-quality.md"
-line = 818
+line = 819
 section = "09 §12"
 
 [[id]]
 id = "OQ-107"
 file = "docs/09-testing-quality.md"
-line = 819
+line = 820
 section = "09 §12"
 
 [[id]]
 id = "OQ-143"
 file = "docs/09-testing-quality.md"
-line = 820
+line = 821
 section = "09 §12"
 
 [[id]]
 id = "OQ-144"
 file = "docs/09-testing-quality.md"
-line = 821
+line = 822
 section = "09 §12"
 
 [[id]]
 id = "OQ-112"
 file = "docs/09-testing-quality.md"
-line = 822
+line = 823
 section = "09 §12"
 
 [[id]]
 id = "OQ-113"
 file = "docs/09-testing-quality.md"
-line = 823
+line = 824
 section = "09 §12"
 
 [[id]]
 id = "OQ-157"
 file = "docs/09-testing-quality.md"
-line = 825
+line = 826
 section = "09 §12"
 
 [[id]]
 id = "OQ-145"
 file = "docs/09-testing-quality.md"
-line = 826
+line = 827
 section = "09 §12"
 
 [[id]]
 id = "OQ-146"
 file = "docs/09-testing-quality.md"
-line = 827
+line = 828
 section = "09 §12"
 
 [[id]]
@@ -11167,97 +11167,97 @@ section = "10 §2.9"
 [[id]]
 id = "XC-1"
 file = "docs/11-dev-workflow.md"
-line = 676
+line = 677
 section = "11 §9.5"
 
 [[id]]
 id = "XC-2"
 file = "docs/11-dev-workflow.md"
-line = 677
+line = 678
 section = "11 §9.5"
 
 [[id]]
 id = "XC-3"
 file = "docs/11-dev-workflow.md"
-line = 678
+line = 679
 section = "11 §9.5"
 
 [[id]]
 id = "XC-4"
 file = "docs/11-dev-workflow.md"
-line = 679
+line = 680
 section = "11 §9.5"
 
 [[id]]
 id = "XC-5"
 file = "docs/11-dev-workflow.md"
-line = 680
+line = 681
 section = "11 §9.5"
 
 [[id]]
 id = "XC-6"
 file = "docs/11-dev-workflow.md"
-line = 681
+line = 682
 section = "11 §9.5"
 
 [[id]]
 id = "XC-7"
 file = "docs/11-dev-workflow.md"
-line = 682
+line = 683
 section = "11 §9.5"
 
 [[id]]
 id = "OQ-126"
 file = "docs/11-dev-workflow.md"
-line = 745
+line = 746
 section = "11 §10"
 
 [[id]]
 id = "OQ-127"
 file = "docs/11-dev-workflow.md"
-line = 746
+line = 747
 section = "11 §10"
 
 [[id]]
 id = "OQ-123"
 file = "docs/11-dev-workflow.md"
-line = 747
+line = 748
 section = "11 §10"
 
 [[id]]
 id = "OQ-154"
 file = "docs/11-dev-workflow.md"
-line = 748
+line = 749
 section = "11 §10"
 
 [[id]]
 id = "OQ-120"
 file = "docs/11-dev-workflow.md"
-line = 749
+line = 750
 section = "11 §10"
 
 [[id]]
 id = "OQ-147"
 file = "docs/11-dev-workflow.md"
-line = 750
+line = 751
 section = "11 §10"
 
 [[id]]
 id = "OQ-148"
 file = "docs/11-dev-workflow.md"
-line = 751
+line = 752
 section = "11 §10"
 
 [[id]]
 id = "OQ-149"
 file = "docs/11-dev-workflow.md"
-line = 752
+line = 753
 section = "11 §10"
 
 [[id]]
 id = "OQ-150"
 file = "docs/11-dev-workflow.md"
-line = 753
+line = 754
 section = "11 §10"
 
 [[id]]
