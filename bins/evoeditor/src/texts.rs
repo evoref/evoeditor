@@ -34,6 +34,7 @@ impl Bi {
 
 /// ログオフ・シャットダウンの画面に出す、終了を待たせている理由 (`ShutdownBlockReasonCreate`、05 §11.2)。
 /// 1 行に収めるので英語と日本語を ` / ` でつなぐ。
+#[cfg(windows)]
 pub fn session_block_reason() -> String {
     "evoeditor: saving unsaved changes for recovery / 未保存の内容を退避しています".to_owned()
 }

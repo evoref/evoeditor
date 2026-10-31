@@ -32,6 +32,11 @@ windows-sys = { version = "0.61", features = [
     "Win32_System_Threading",
 ] }
 
+# Unix の端末 (termios・poll・ioctl) と SIGWINCH / SIGCONT の自己パイプ。unsafe は src/unix.rs に閉じる (R5)
+[target.'cfg(unix)'.dependencies]
+libc = "0.2.191"
+signal-hook = { version = "0.3.18", default-features = false }
+
 [dev-dependencies]
 eve-testkit = { version = "0.1.0", path = "../eve-testkit" }
 eve-docs-tables = { version = "0.1.0", path = "../eve-docs-tables" }

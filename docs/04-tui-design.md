@@ -1234,7 +1234,7 @@ TUI ではこれ以上は端末の能力の限界。
 ```
 0. 前提確認: stdin/stdout が端末か、TERM != dumb (§5.2)
 1. 現状の保存: (Unix) termios / (Windows) 入出力コンソールモード (コードページは変えないので保存しない、05 §9.1)
-2. raw モード (Unix (v0.2): termios を `cfmakeraw` 相当に設定。ISIG/IXON/ICRNL 等を無効化 → Ctrl+C/Z/S/Q が届く, FR-609。
+2. raw モード (Unix (v0.2): `/dev/tty` を開き (出力と入力で別々に。入力の側だけ非ブロック)、termios を `cfmakeraw` 相当 (VMIN = 1、VTIME = 0) に設定。代替スクリーンの後にブラケットペースト `CSI ? 2004 h`・フォーカス報告 `CSI ? 1004 h`・kitty の push `CSI > 1 u` を入れ、復元ではその逆 (`CSI < u`・1004 l・2004 l・マウスの 1006 / 1002 / 1000 l) を代替スクリーンを抜ける前に送る (eve-tui の `unix::ENTER_MODES` / `LEAVE_MODES`)。ISIG/IXON/ICRNL 等を無効化 → Ctrl+C/Z/S/Q が届く, FR-609。
    Windows: 入力のコンソールモードを 05 §9.1 の「入力モード」の値に設定 (ENABLE_VIRTUAL_TERMINAL_INPUT は立てない))
 3. 端末タイトルの退避 (Windows: GetConsoleTitleW で文字列を保存。Unix (v0.2): XTWINOPS push CSI 22;0 t、非対応端末は無視。05 §9.1)
 4. 代替スクリーンへ (CSI ? 1049 h)  … v0.2 から設定 ui.alternate_screen=false で無効化可 (v0.1 は常に使う)。続けて自動折り返しを無効化 (CSI ? 7 l、§4.7(g))

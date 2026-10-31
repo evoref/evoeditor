@@ -161,6 +161,11 @@ impl VtParser {
         VtParser::default()
     }
 
+    /// 途切れたシーケンスを持ち越している (入力が途絶えたら `flush` を呼ぶ) か。貼り付けの受信中は待たない。
+    pub fn has_pending(&self) -> bool {
+        !self.pending.is_empty() && self.paste.is_none()
+    }
+
     /// ブラケットペーストの受信中か。
     pub fn in_paste(&self) -> bool {
         self.paste.is_some()

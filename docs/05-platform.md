@@ -643,6 +643,8 @@ v0.1 で実装するのは **Windows の列** (Known Folders に当たる `%APPD
 - **作成タイミング**: `config_dir` は **ユーザーが設定を書くまで作らない**。`state_dir` とその配下 (`log/` を含む) は **起動経路では作らず、最初の書込 (ログ・退避・swap-lite・事前バックアップ・`last_version.toml`) の直前に、その書込に要るディレクトリだけを作る** (§7.3。`last_version.toml` (FR-518) は最初の描画の後に `io` ワーカーで書く、07 §18.8)。`swap/` / `recovery/` / `backup/` は必要時に §5.6 の DACL で作る。`--version` / `--help` 等の非対話の起動 (v0.2 以降は `--check-config` も) では `last_version.toml` を読み書きしない。
 - **全ディレクトリは絶対パスに解決され `Paths` に入る**。`HOME` も `XDG_*` も解決不能 (環境変数ゼロのコンテナ等) なら: 設定なし・状態なしで起動し、ログは無効、スワップ無効 (警告をメッセージ行に 1 回表示)。起動を妨げない (FR-702)。この場合と `state_dir` を作れない場合 (読み取り専用のホーム等) の緊急退避先は §7.5 の「`state_dir` を使えないとき」。
 
+**Linux の実装 (v0.2 の M7、2026-11-01)**: `eve-platform::dirs::Dirs::resolve_unix` が上表の Unix の列 (`EVE_*_DIR` > `$XDG_*_HOME/evoeditor` > `$HOME/.config` / `.local/state` / `.local/share` の下の `evoeditor`) を解決し、`UnixPaths` が `Paths` Port を実装する (`runtime_dir` は `$XDG_RUNTIME_DIR/evoeditor`、無ければ空)。ホームは §3.6 のとおり `$HOME` → `getpwuid_r(geteuid())`。パスの正規化は `path::normalize_unix` (§3.2 の手順 1・3・4。`~` と `~/` の展開、作業ディレクトリ基準の絶対化、連続の `/` と `.` の除去、末尾の `/` の除去。`..` は畳まない)。キャッシュ (`cache_dir`) は v0.4 で足す。
+
 ### 7.2 ライブラリ比較
 
 ディレクトリの解決は **本層が自前で行い、ライブラリ (etcetera・dirs 等) には依存しない**。etcetera の Windows の方式は `state_dir` を持たず (状態を置く場所を返さない)、§7.1 の `%LOCALAPPDATA%\evoeditor\state` / `data` / `cache` の分け方とも合わないため。§7.1 の規則は環境変数 (`EVE_*_DIR` → `XDG_*` → OS 既定) と既定パスの組合せだけで決まり、Windows の既定は `SHGetKnownFolderPath(FOLDERID_RoamingAppData / FOLDERID_LocalAppData)` (失敗時は `%APPDATA%` / `%LOCALAPPDATA%`)、Unix (v0.2) の既定は `$HOME` からの固定パスなので、自前の実装は小さい。`config_dir` / `state_dir` / `data_dir` / `cache_dir` のすべてを同じ関数で解決し、`Paths` (§2.2) に入れる。

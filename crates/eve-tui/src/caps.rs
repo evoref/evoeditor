@@ -225,8 +225,8 @@ pub fn detect(config: CapsConfig, env: &dyn Env, is_windows: bool) -> Detected {
     let ambiguous = effective_ambiguous_width(config.ambiguous_width, hint);
     let caps = Capabilities {
         color_depth: detect_color_depth(config.color_mode, env, is_windows),
-        // マウスは v0.2 から (Windows は `ENABLE_MOUSE_INPUT`、04 §6.8)。拡張キー・ジョブ制御は無効 (04 §6.3)
-        mouse: is_windows,
+        // マウスは v0.2 から (Windows は `ENABLE_MOUSE_INPUT`、Unix は VT の SGR マウス、04 §6.8)。拡張キー・ジョブ制御は無効 (04 §6.3)
+        mouse: true,
         enhanced_keys: false,
         // Windows Terminal は OSC 52 の書込に対応する。conhost は対応しない (05 §8.1)
         osc52_write: kind == TerminalKind::WindowsTerminal,

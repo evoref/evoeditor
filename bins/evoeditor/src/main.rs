@@ -20,12 +20,22 @@ use eve_config::Catalog;
 use eve_core::RescueReason;
 use eve_core::{Encoding, JobPorts, Paths as _, Ports};
 use eve_host::{Host, HostMsg, SignalKind, SystemClock, ThreadJobSpawner, channel};
-use eve_platform::dirs::WinPaths;
-use eve_platform::fs::WinFs;
+#[cfg(unix)]
+use eve_platform::dirs::UnixPaths as NativePaths;
+#[cfg(windows)]
+use eve_platform::dirs::WinPaths as NativePaths;
+#[cfg(windows)]
+use eve_platform::fs::WinFs as NativeFs;
 use eve_platform::rescue::StateRescue;
+#[cfg(unix)]
+use eve_platform::unix_fs::UnixFs as NativeFs;
 use eve_tui::frontend::TuiFrontend;
 
 use cli::{Cli, UsageError};
+
+/// Unix で終了を求めたシグナルの番号 (0 = なし)。メインの後始末の後、同じシグナルで終わる (05 §11.5)。
+#[cfg(unix)]
+static EXIT_SIGNAL: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(0);
 
 /// パニックの内容 (フックが書き、復元の後に出す)。メッセージ・場所・バックトレース。文書の内容は含まない。
 static PANIC_INFO: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
@@ -82,7 +92,7 @@ fn read_source(path: &std::path::Path) -> Result<Option<String>, String> {
 
 /// 設定の読込元 (07 §18.3): 既定は設定ディレクトリの `config.toml` と `keymap.toml`。`--config` はユーザー層の
 /// `config.toml` の代わりに指定のファイルを順に重ね、`--no-config` はユーザー層を読まない。`--set` は最後に重ねる。
-fn config_sources(paths: &WinPaths, args: &cli::ConfigArgs) -> eve_core::ConfigSources {
+fn config_sources(paths: &NativePaths, args: &cli::ConfigArgs) -> eve_core::ConfigSources {
     let dir = paths.config_dir();
     let has_dir = !dir.as_path().as_os_str().is_empty();
     let files = if args.no_config {
@@ -190,7 +200,7 @@ fn choose_locale(
 /// `--check-config` (07 §18.3): 設定を読んで診断を標準出力へ出し、終える。エラーがあれば終了コード 3、警告だけなら 0。
 /// キーマップは書式だけを確かめる (コマンド名などの照合は起動したときの診断で行う)。
 fn check_config(args: &cli::ConfigArgs, cli_locale: Option<&str>) -> u8 {
-    let paths = match WinPaths::from_process_env() {
+    let paths = match NativePaths::from_process_env() {
         Ok(p) => p,
         Err(_) => return EXIT_ERROR,
     };
@@ -236,7 +246,7 @@ const THIRD_PARTY_NOTICES: &str = include_str!("../../../THIRD-PARTY-NOTICES.md"
 /// `--crash-report` (09 §10.2): `state_dir/log/` の最新のクラッシュログの場所と内容を表示し、Issue の場所を案内する。
 /// 送信はしない (貼り付けるかどうかは利用者が決める)。
 fn crash_report() -> u8 {
-    let paths = match WinPaths::from_process_env() {
+    let paths = match NativePaths::from_process_env() {
         Ok(p) => p,
         Err(_) => return EXIT_ERROR,
     };
@@ -276,7 +286,7 @@ fn dump_config(args: &cli::ConfigArgs, defaults: bool, json: bool) -> u8 {
     let config = if defaults {
         eve_config::Config::default()
     } else {
-        let paths = match WinPaths::from_process_env() {
+        let paths = match NativePaths::from_process_env() {
             Ok(p) => p,
             Err(_) => return EXIT_ERROR,
         };
@@ -326,7 +336,7 @@ fn run(
     cli_log_level: Option<eve_platform::log::Level>,
 ) -> u8 {
     // 作業ディレクトリ・ディレクトリ・Ports
-    let paths = match WinPaths::from_process_env() {
+    let paths = match NativePaths::from_process_env() {
         Ok(p) => Arc::new(p),
         Err(e) => {
             texts::Bi::new(
@@ -371,7 +381,7 @@ fn run(
     }
     // 置換中の計数 (保存の置換・直接上書きの間だけ上がる)。終了の経路が下りるのを待つ (02 §9.6 手順 3)
     let replacing = eve_core::ReplacingCount::default();
-    let fs = Arc::new(WinFs::new(state_dir.as_path()).with_replacing(replacing.clone()));
+    let fs = Arc::new(NativeFs::new(state_dir.as_path()).with_replacing(replacing.clone()));
     let (tx, rx) = channel();
     let job_ports = JobPorts {
         fs: fs.clone(),
@@ -420,16 +430,17 @@ fn run(
     }
     host.set_keymap(KEYMAP_FILE, &keymap);
     host.set_locale(locale);
-    // 要約の対処 (hint) は省略されないので、長い絶対パスではなく末尾の `log\evoeditor.log` だけを出す
+    // 要約の対処 (hint) は省略されないので、長い絶対パスではなく末尾の `log\evoeditor.log` (Unix は `log/evoeditor.log`) だけを出す
     host.set_log_path(logger.path().and_then(|p| {
         let name = p.file_name()?.to_string_lossy().into_owned();
         let dir = p.parent()?.file_name()?.to_string_lossy().into_owned();
-        Some(format!("{dir}\\{name}"))
+        Some(format!("{dir}{}{name}", std::path::MAIN_SEPARATOR))
     }));
     host.set_system_encoding(
         eve_platform::locale::system_encoding().and_then(Encoding::from_label),
     );
     // システムクリップボード (所有者ウィンドウのスレッドは最初の読み書きで遅延して起こす、05 §8.1)
+    #[cfg(windows)]
     host.set_clipboard(Arc::new(eve_platform::clipboard::WinClipboard::new()));
 
     // 緊急退避の書き手 (公開済みの DocSnapshot だけを読み、Port を通さずに書く、02 §11.2.1)
@@ -440,8 +451,70 @@ fn run(
     let restore_info = host.restore_info();
     let run_finished = host.run_finished();
 
+    // Unix のシグナル (05 §11.1): シグナルスレッドが先に退避を書き (最大 2.5 s)、メインへ終了を知らせる。メインが 2 秒で
+    // 終わらなければ止まっている: 置換中フラグを受信から 4.8 s まで待ち、端末を緊急に復元して、同じシグナルで終わる。
+    // SIGCONT は入力スレッドが扱う (端末の再初期化) ので、ここでは何もしない
+    #[cfg(unix)]
+    {
+        let tx = tx.clone();
+        let emergency = emergency.clone();
+        let replacing = replacing.clone();
+        let restore_info = restore_info.clone();
+        let run_finished = run_finished.clone();
+        let _ = eve_platform::signals::start(move |sig| {
+            use eve_platform::signals::UnixSignal;
+            if !sig.is_termination() {
+                return;
+            }
+            let t0 = std::time::Instant::now();
+            let kind = match sig {
+                UnixSignal::Interrupt => SignalKind::Interrupt,
+                UnixSignal::Hangup => SignalKind::Hangup,
+                _ => SignalKind::Terminate,
+            };
+            // 最初の終了のシグナルを覚える (メインが終わった後、同じシグナルで終わる、05 §11.5)
+            let _ = EXIT_SIGNAL.compare_exchange(
+                0,
+                sig.signo(),
+                std::sync::atomic::Ordering::AcqRel,
+                std::sync::atomic::Ordering::Acquire,
+            );
+            emergency.run(RescueReason::Signal, eve_host::RESCUE_BUDGET_SIGNAL);
+            if tx.send(HostMsg::Signal(kind)).is_err() {
+                return;
+            }
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+            while std::time::Instant::now() < deadline {
+                if run_finished.load(std::sync::atomic::Ordering::Acquire) {
+                    return;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            }
+            wait_zero(
+                &replacing,
+                Some(std::time::Duration::from_millis(4800).saturating_sub(t0.elapsed())),
+            );
+            if let Some(info) = restore_info.get() {
+                eve_platform::term::emergency_restore(
+                    info.handle.0,
+                    info.bytes,
+                    &info.saved_mode.0,
+                    &info.restored.0,
+                );
+            }
+            if let Some(o) = emergency.outcome() {
+                let mut err = std::io::stderr().lock();
+                for l in texts::recovery_lines(&o) {
+                    l.write_to(&mut err);
+                }
+            }
+            eve_platform::signals::die_by_signal(sig.signo())
+        });
+    }
+
     // コンソールのコントロールイベント (Ctrl+Break・ウィンドウの閉鎖など)。ハンドラのスレッドは、メインを待たずに直ちに
     // 退避を書き (CTRL_CLOSE は最大 3.5 s、それ以外は最大 2.5 s)、その後にメインへ終了を知らせる。退避はプロセスで 1 回だけ
+    #[cfg(windows)]
     {
         let tx = tx.clone();
         let emergency = emergency.clone();
@@ -517,6 +590,7 @@ fn run(
     // ログオフ・シャットダウン (v0.2、ベストエフォート。05 §11.2 の「セッション終了の受け方」): 専用スレッドの非表示の
     // トップレベルウィンドウで受ける。問い合わせ (`WM_QUERYENDSESSION`) で退避を (使い捨てのスレッドで) 始め、終了の通知
     // (`WM_ENDSESSION`) では退避の完了と置換中フラグを待ってから、メインへ終了を知らせて戻る。取り消しでは何もしない
+    #[cfg(windows)]
     {
         let tx = tx.clone();
         let emergency = emergency.clone();
@@ -731,5 +805,14 @@ fn main() -> ProcessExit {
         }
     };
     eve_tui::trace::flush();
+    // Unix: シグナルで終わったなら、後始末 (退避・端末の復元・終了時の行) の後に同じシグナルで終わる (05 §11.5)
+    #[cfg(unix)]
+    {
+        let s = EXIT_SIGNAL.load(std::sync::atomic::Ordering::Acquire);
+        if s != 0 {
+            let _ = std::io::stderr().flush();
+            eve_platform::signals::die_by_signal(s);
+        }
+    }
     ProcessExit::from(code)
 }

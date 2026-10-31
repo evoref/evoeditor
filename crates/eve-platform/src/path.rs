@@ -1,4 +1,5 @@
-//! パスの正規化 (docs/05 §3.1〜§3.3、Windows の規則)。I/O をしない計算で、どの OS でも動く (テストのため)。
+//! パスの正規化 (docs/05 §3.1〜§3.3。Windows の規則 `normalize_windows` と Unix の規則 `normalize_unix`)。I/O をしない計算で、
+//! どの OS でも動く (テストのため)。
 //!
 //! 手順 (05 §3.2): (1) チルダ展開 (`~`、`~\`、`~/` だけ) → (3) 相対を絶対に (ドライブ相対・ルート相対を含む) →
 //! (5) Windows 固有: `/` → `\`、連続区切りの圧縮、末尾区切りの除去、**予約名・禁止文字・デバイス名前空間・
@@ -11,7 +12,7 @@ use eve_core::{FsError, FsErrorDetail, FsErrorKind, FsPath};
 pub struct PathCtx {
     /// 起動時の作業ディレクトリ (絶対パス。以後 `chdir` しない)。
     pub cwd: String,
-    /// ホームディレクトリ (`%USERPROFILE%`)。不明なら `None`。
+    /// ホームディレクトリ (Windows は `%USERPROFILE%`、Unix は `$HOME`、05 §3.6)。不明なら `None`。
     pub home: Option<String>,
 }
 
@@ -148,6 +149,33 @@ fn split_unc(unc: &str) -> Result<(Root, &str), FsError> {
     ))
 }
 
+/// Unix のパスの正規化 (05 §3.2 の手順 1・3・4)。チルダ展開 (`~` と `~/` だけ) → 相対を作業ディレクトリ基準の絶対に →
+/// 連続の `/` と `.` の要素を除き、末尾の `/` を除く (ルートは `/`)。`..` は畳まない。存在の確認はしない。
+pub fn normalize_unix(raw: &str, ctx: &PathCtx) -> Result<FsPath, FsError> {
+    if raw.is_empty() || raw.contains('\0') {
+        return Err(invalid());
+    }
+    let s = if raw == "~" || raw.starts_with("~/") {
+        let home = ctx.home.as_deref().ok_or_else(invalid)?;
+        format!("{}{}", home.trim_end_matches('/'), &raw[1..])
+    } else {
+        raw.to_owned()
+    };
+    let absolute = if s.starts_with('/') {
+        s
+    } else {
+        format!("{}/{s}", ctx.cwd.trim_end_matches('/'))
+    };
+    if !absolute.starts_with('/') {
+        return Err(invalid());
+    }
+    let comps: Vec<&str> = absolute
+        .split('/')
+        .filter(|c| !c.is_empty() && *c != ".")
+        .collect();
+    Ok(FsPath::new(format!("/{}", comps.join("/"))))
+}
+
 /// Windows のパスの正規化 (手順 1・3・5)。存在の確認はしない。
 pub fn normalize_windows(raw: &str, ctx: &PathCtx) -> Result<FsPath, FsError> {
     if raw.is_empty() || raw.contains('\0') {
@@ -215,6 +243,54 @@ pub fn simplify_verbatim(path: &str) -> String {
             c == ".." || c == "." || is_reserved_name(c) || c.ends_with('.') || c.ends_with(' ')
         });
     if bad { path.to_owned() } else { simple }
+}
+
+#[cfg(test)]
+mod unix_tests {
+    use super::*;
+
+    fn n(raw: &str) -> Result<FsPath, FsError> {
+        normalize_unix(
+            raw,
+            &PathCtx {
+                cwd: "/home/me/w".into(),
+                home: Some("/home/me/".into()),
+            },
+        )
+    }
+
+    #[test]
+    fn unix_の正規化() {
+        assert_eq!(n("a.txt").unwrap(), FsPath::new("/home/me/w/a.txt"));
+        assert_eq!(n("./x//y/").unwrap(), FsPath::new("/home/me/w/x/y"));
+        assert_eq!(n("~").unwrap(), FsPath::new("/home/me"));
+        assert_eq!(n("~/note.md").unwrap(), FsPath::new("/home/me/note.md"));
+        assert_eq!(n("/").unwrap(), FsPath::new("/"));
+        assert_eq!(
+            n("/a/../b").unwrap(),
+            FsPath::new("/a/../b"),
+            "`..` は畳まない"
+        );
+        assert_eq!(
+            n("~user/x").unwrap(),
+            FsPath::new("/home/me/w/~user/x"),
+            "`~user` は展開しない"
+        );
+        assert_eq!(
+            n("C:\\x").unwrap(),
+            FsPath::new("/home/me/w/C:\\x"),
+            "`\\` は区切りではない"
+        );
+        assert!(n("").is_err() && n("a\0b").is_err());
+        let no_home = normalize_unix(
+            "~/x",
+            &PathCtx {
+                cwd: "/".into(),
+                home: None,
+            },
+        );
+        assert!(no_home.is_err());
+    }
 }
 
 #[cfg(test)]
