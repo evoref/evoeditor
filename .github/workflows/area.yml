@@ -11,9 +11,11 @@ on:
 permissions:
   contents: read
 
+# 実行中のものは取り消さない (必須のチェックなので): ラベル付きで PR を作ると opened と labeled がほぼ同時に起き、
+# 取り消しにすると後の実行が「取り消し」で終わって PR が merge できなくなる。待っている古い方だけが新しい方に置き換わる
 concurrency:
   group: area-${{ github.event.pull_request.number }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 defaults:
   run:
