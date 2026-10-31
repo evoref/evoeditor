@@ -176,11 +176,16 @@ pub mod rescue;
 mod save;
 #[cfg(windows)]
 pub mod session;
+#[cfg(unix)]
+pub mod signals;
 mod state_file;
 mod swap;
 mod swap_scan;
 mod sys;
 #[cfg(windows)]
+pub mod term;
+#[cfg(unix)]
+#[path = "term_unix.rs"]
 pub mod term;
 #[cfg(unix)]
 pub mod unix_fs;

@@ -15,13 +15,15 @@ impl ExitCode {
     pub const FATAL: ExitCode = ExitCode(70);
 }
 
-/// シグナル・コンソールイベントの種類 (v0.1 は Windows のコンソールイベント)。
+/// シグナル・コンソールイベントの種類 (Windows のコンソールイベントと Unix のシグナル、05 §11.1 / §11.2)。どれも非対話の終了要求。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum SignalKind {
     Interrupt,
     Terminate,
     ConsoleClose,
+    /// SIGHUP (端末が閉じた・SSH の切断)。端末は既に無いので、復元の失敗は無視する。
+    Hangup,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
