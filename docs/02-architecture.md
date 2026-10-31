@@ -621,7 +621,7 @@ v0.1 は Windows 版だけを出荷する (01 NFR-401、確定 (ユーザー回�
 **用語** (09 などの他文書もこの名前で参照する):
 
 - **core 系 crate**: `eve-text` / `eve-encoding` / `eve-core` / `eve-view` / `eve-config` の 5 つ。OS 非依存で、端末クレート・tokio に依存しない (R1)。
-- **Linux CI の対象 crate**: core 系 crate + `eve-host` + `eve-testkit`。v0.1 から PR ごとに Linux x86_64 でビルドとヘッドレスのテストを通す (09 §6)。`eve-platform` の Unix の実装と `eve-tui` は含めない (macOS / Linux を出荷する版で加える)。`eve-host` が Linux でビルドできるよう、`eve-platform` は v0.1 でも Unix 向けにビルドが通る空の実装 (Port と Host 部品が「未対応」を返す) を持つ。Linux CI のヘッドレスのテストは `eve-testkit` の偽 Port で動かす。
+- **Linux CI の対象 crate**: core 系 crate + `eve-host` + `eve-testkit`。v0.1 から PR ごとに Linux x86_64 でビルドとヘッドレスのテストを通す (09 §6)。`eve-platform` の Unix の実装と `eve-tui` は含めない (macOS / Linux を出荷する版で加える)。**v0.2 の M7 (2026-11-01)**: `eve-platform` を加えた (Unix の保存 `UnixFs` の試験が Linux で走る。README §3.9 の 2 本目)。`eve-tui` と bin は Linux の端末の入出力が入ってから加える (同 7 本目)。`eve-host` が Linux でビルドできるよう、`eve-platform` は v0.1 でも Unix 向けにビルドが通る空の実装 (Port と Host 部品が「未対応」を返す) を持つ。Linux CI のヘッドレスのテストは `eve-testkit` の偽 Port で動かす。
 - **開発用の道具**: `xtask` と `eve-docs-tables` は Windows と Linux の両方でビルドでき、どちらの OS の CI ジョブからも呼べる (`cfg` で片方の OS を除外しない。09 §6.2 のジョブがどちらの OS で走っても同じ結果になる)。
 
 | 項目 | v0.1 の扱い |

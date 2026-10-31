@@ -457,7 +457,7 @@ CI ランナーの wall-clock は変動が大きい (共有 VM) ため、絶対�
 
 | ターゲット | ランナー (執筆時点の名称。変更に備え `strategy.matrix` を 1 箇所に集約) | 実行内容 | 頻度 |
 |---|---|---|---|
-| `x86_64-unknown-linux-gnu` (v0.1) | `ubuntu-24.04` | Linux CI の対象 crate のビルドとヘッドレスのテスト (L0〜L3)。カバレッジと fuzz は夜間 (§6.3)。無通信の strace 検査 (§3.6) は v0.2 の NFR-501 AC-2 (v0.1 の NFR-501 AC-1 は Windows の依存の禁止リストと R3 のレビュー) | 毎 PR |
+| `x86_64-unknown-linux-gnu` (v0.1) | `ubuntu-24.04` | Linux CI の対象 crate のビルドとヘッドレスのテスト (L0〜L3。v0.2 の M7 から `eve-platform` の Unix の実装の試験を含む、02 §4.7)。カバレッジと fuzz は夜間 (§6.3)。無通信の strace 検査 (§3.6) は v0.2 の NFR-501 AC-2 (v0.1 の NFR-501 AC-1 は Windows の依存の禁止リストと R3 のレビュー) | 毎 PR |
 | `x86_64-unknown-linux-musl` / `aarch64-unknown-linux-musl` (Linux を出荷する版) | `ubuntu-24.04` / `ubuntu-24.04-arm` + `musl-tools` | 全テスト (静的バイナリで nextest。配布物と同じターゲット) | 毎 PR / main・release |
 | `x86_64-unknown-linux-gnu` の配布物 (条件付き、OQ-112。Linux を出荷する版) | `ubuntu-24.04` (zigbuild 2.31) | ビルド + 全テスト + BM-104 / BM-202 の musl 比較 | main / 夜間 (配布物に加えた場合は release も) |
 | `aarch64-unknown-linux-gnu` (条件付き、OQ-112。Linux を出荷する版) | `ubuntu-24.04-arm` (zigbuild 2.31) | ビルド + テスト | main / 夜間 |

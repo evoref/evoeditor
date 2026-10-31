@@ -48,3 +48,7 @@ windows-sys = { version = "0.61", features = [
     "Win32_System_Threading",
     "Win32_UI_WindowsAndMessaging",
 ] }
+
+# Unix の API (xattr・renameat2・access)。unsafe は Unix 専用のモジュール `unix_fs` に閉じる (R5)
+[target.'cfg(unix)'.dependencies]
+libc = "0.2.191"

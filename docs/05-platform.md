@@ -392,6 +392,16 @@ v0.1 で実装するのは Windows の手順 (`ReplaceFileW` 系。§4.2) で、
 
 **v0.2 (macOS / Linux 出荷時) の仕様**。v0.1 では実装しない (v0.1 の CI の Linux ジョブは Linux CI の対象 crate (02 §4.7。`eve-platform` は Unix 向けの空の実装だけ) を扱い、本手順は通らない)。
 
+**Linux の実装 (v0.2 の M7、2026-11-01)**: `eve-platform::unix_fs::UnixFs` (macOS の行 (`F_FULLFSYNC`・`copyfile`・`UF_*`) は macOS の分が保留のため未実装)。次の点は表の記述を Linux で具体化したもの:
+- 一時ファイル: T が在る・`private` なら 0600 で作って下で T の mode に合わせる。新規は 0666 (umask が掛かる。通常の新規ファイルと同じ)。親に書けない (`EACCES`) なら `AtomicUnsupported` (§4.4 の 1 行目)。
+- 権限: 所有者・グループが T と違うときだけ `fchown`。他人の所有を引き継げない (`EPERM`) ときはグループだけ合わせて `AttrsNotPreserved { Security }`。mode は `mode & 01777` (setuid / setgid は落として同じ警告)。
+- POSIX ACL は `system.posix_acl_access` の xattr を `fgetxattr` / `fsetxattr` で写す (Linux では `acl_get_fd` / `acl_set_fd` と同じ内容。libacl に依存しない)。T に ACL が無く親に既定 ACL (`system.posix_acl_default`) があるときは `AttrsNotPreserved { Security }`。xattr を持たない FS (`ENOTSUP`) は複製するものが無いとみなす。
+- 新規ファイルの置換は上書きしない `renameat2(RENAME_NOREPLACE)` (使えない FS では `link` + `unlink`)。在れば `Conflict`。
+- 書込権限の無い T (`readonly`) は、rename なら置き換えられてしまうので、`SaveOptions.clear_readonly` (FR-116 の「読み取り専用を解除して保存」の確認) が無ければ `PermissionDenied` (root を除く)。解除して置換しても、mode は T のものを写すので読み取り専用のまま残る (§4.2 の手順 5b と同じ結果)。
+- 不変フラグは rename の `EPERM` を `PermissionDenied` に写すことで扱う (事前の `FS_IOC_GETFLAGS` はしない)。
+- `FileMeta.owner_is_me` は `st_uid == geteuid()` か root。`readonly` は `access(W_OK)`。`FileId` は (`st_dev`, `st_ino`)。
+- 保存中フラグ・直接上書き (§4.4)・状態ファイル・スワップ・緊急退避は M7 の 3 本目 (README §3.9) で入れる。それまでは `FileSystem` の既定 (`Unsupported` / 空) のまま。
+
 | 段階 | API | 注意 |
 |---|---|---|
 | 一時ファイル作成 | `open(O_WRONLY\|O_CREAT\|O_EXCL\|O_CLOEXEC, 0600)` | `O_TMPFILE` + `linkat` は Linux 限定かつ上書き不可なので使わない。macOS は `O_CLOEXEC` 可 |

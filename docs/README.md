@@ -263,15 +263,15 @@ M10 は、v0.1 で手書きの代用にしていた開発基盤 (11 §0.1 の表
 **進め方** (約 8 本の PR に分ける案。Linux の確認は WSL で行い、CI の ubuntu のジョブでも同じものを回す):
 
 1. **計画** (本節、08 の M7 の行、10 の OQ-15)。
-2. **Unix の保存**: eve-platform の FileSystem の Unix 実装 (読込・metadata と Stamp・rename + fsync の原子的保存・直接上書き・保存中フラグ・mode と所有者の保持、05 §4.3 / §5.1)。eve-platform の試験を Linux CI に足す。
-3. **状態ディレクトリと退避**: XDG のパス (05 §7)、状態ファイル・スワップ・緊急退避の書き手・ログの Unix 実装。
+2. **Unix の保存**: eve-platform の FileSystem の Unix 実装 `UnixFs` (読込・metadata と Stamp・rename + fsync の原子的保存・mode と所有者・xattr と POSIX ACL の保持、05 §4.3 / §5.1)。eve-platform の試験を Linux CI に足す。
+3. **状態ディレクトリと退避**: XDG のパス (05 §7)、状態ファイル・スワップ・緊急退避の書き手・ログの Unix 実装。状態ディレクトリを使う保存の部品 (保存中フラグ、直接上書き `write_in_place` とその事前バックアップ、05 §4.4) もここで入れる (2 本目の時点では `Unsupported`)。
 4. **シグナルと端末の緊急復元**: SIGINT / SIGTERM / SIGHUP (05 §11.1 / §11.4。退避を書いてから終了)、SIGTSTP / SIGCONT (サスペンド、FR-609)、端末の緊急復元。
 5. **端末の入出力**: eve-tui の Unix の入力 (crossterm のイベント・SIGWINCH・ブラケットペースト・マウス・フォーカス) と出力、Frontend。ここで bin が Linux で起動する。
 6. **クリップボード**: `wl-copy` / `xclip` / `xsel` / WSL の `clip.exe` と OSC 52 (FR-205、05 §8)。
 7. **CI と配布**: Linux CI の対象に eve-platform・eve-tui・bin を足し、e2e を Linux の pty でも回す。musl の静的版 (x86_64。aarch64 はクロスビルド) の tar.gz・`SHA256SUMS`・`release.yml`・`check-dist`。
 8. **一貫性の検査と受入**: LazyFS の夜間ジョブ (NFR-301、M10 から移した)、`no-network` を実 FS に替える、Unix の kill テスト、WSL での手動受入 (Windows Terminal + WSL、tmux。GNOME Terminal は WSLg で使えれば)、互換性マトリクス、利用者向け文書の Linux の導入・更新 (日本語・英語)。
 
-**WSL で確かめられないもの** (既知の制約に残すか、利用者の協力で確かめる): 実機のデスクトップ環境 (GNOME / KDE の Wayland・X11) のクリップボードと IME (mozc) の候補窓、`TERM=linux` のコンソール。
+**WSL で確かめられないもの** (既知の制約に残すか、利用者の協力で確かめる): 実機のデスクトップ環境 (GNOME / KDE の Wayland・X11) のクリップボードと IME (mozc) の候補窓、`TERM=linux` のコンソール。**決定 (ユーザー回答、2026-11-01)**: これらは **未確認の状態のままで先に進める** (v0.2 の互換性マトリクスと既知の制約に「未確認」と書く)。macOS は実機が無いので保留のまま。
 
 ## 4. 正本マップ
 
