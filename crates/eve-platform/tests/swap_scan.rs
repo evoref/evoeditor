@@ -1,13 +1,16 @@
 //! スワップの復旧の探索の実ファイルでの検査 (docs/03 §10.3、05 §5.3 / §7.5)。
 
-#![cfg(windows)]
+#![cfg(any(windows, target_os = "linux"))]
 
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
 use eve_core::{DocSnapshot, DocumentId, FileSystem, FsErrorKind, FsPath, SwapOwner, TextFormat};
-use eve_platform::fs::WinFs;
+#[cfg(windows)]
+use eve_platform::fs::WinFs as NativeFs;
+#[cfg(unix)]
+use eve_platform::unix_fs::UnixFs as NativeFs;
 use eve_text::Text;
 use eve_view::Revision;
 
@@ -59,10 +62,31 @@ fn as_other_process(state: &Path, pid: u32, started: bool) -> PathBuf {
     new_dir
 }
 
+/// しばらく (30 秒) 動き続ける子プロセス。
+fn sleeper() -> std::process::Child {
+    #[cfg(windows)]
+    let mut cmd = {
+        let mut c = Command::new("cmd");
+        c.args(["/c", "ping", "-n", "30", "127.0.0.1"]);
+        c
+    };
+    #[cfg(unix)]
+    let mut cmd = {
+        let mut c = Command::new("sleep");
+        c.arg("30");
+        c
+    };
+    cmd.stdout(Stdio::null()).spawn().unwrap()
+}
+
 /// 終了済みのプロセスの pid。
 fn dead_pid() -> u32 {
-    let mut c = Command::new("cmd")
-        .args(["/c", "exit", "0"])
+    let mut c = Command::new(if cfg!(windows) { "cmd" } else { "true" })
+        .args(if cfg!(windows) {
+            &["/c", "exit", "0"][..]
+        } else {
+            &[][..]
+        })
         .stdout(Stdio::null())
         .spawn()
         .unwrap();
@@ -74,7 +98,7 @@ fn dead_pid() -> u32 {
 #[test]
 fn 自分のスワップは列挙しない() {
     let state = tmp("mine");
-    let w = WinFs::new(&state);
+    let w = NativeFs::new(&state);
     w.write_swap(&doc(1, 1, "a", None)).unwrap();
     assert!(w.list_swaps().unwrap().is_empty());
     let _ = fs::remove_dir_all(state);
@@ -86,7 +110,7 @@ fn 終了したプロセスのスワップは_stale_で_要約と本文を読め
     let work = tmp("work");
     let file = work.join("a.txt");
     fs::write(&file, "x").unwrap();
-    let w = WinFs::new(&state);
+    let w = NativeFs::new(&state);
     w.write_swap(&doc(3, 9, "こんにちは\r\n世界", Some(&file)))
         .unwrap();
     let pid = dead_pid();
@@ -119,13 +143,9 @@ fn 終了したプロセスのスワップは_stale_で_要約と本文を読め
 #[test]
 fn 動いているプロセスのスワップは_alive() {
     let state = tmp("alive");
-    let w = WinFs::new(&state);
+    let w = NativeFs::new(&state);
     w.write_swap(&doc(1, 1, "a", None)).unwrap();
-    let mut child = Command::new("cmd")
-        .args(["/c", "ping", "-n", "30", "127.0.0.1"])
-        .stdout(Stdio::null())
-        .spawn()
-        .unwrap();
+    let mut child = sleeper();
     as_other_process(&state, child.id(), false);
     let v = w.list_swaps().unwrap();
     let _ = child.kill();
@@ -138,13 +158,9 @@ fn 動いているプロセスのスワップは_alive() {
 #[test]
 fn pid_が再利用されて起動時刻が違えば_stale() {
     let state = tmp("reuse");
-    let w = WinFs::new(&state);
+    let w = NativeFs::new(&state);
     w.write_swap(&doc(1, 1, "a", None)).unwrap();
-    let mut child = Command::new("cmd")
-        .args(["/c", "ping", "-n", "30", "127.0.0.1"])
-        .stdout(Stdio::null())
-        .spawn()
-        .unwrap();
+    let mut child = sleeper();
     // manifest の起動時刻は自分のもの (数秒以上前ではない) なので、子の pid に付けても「別のプロセス」になるとは限らない。
     // 起動時刻を古い値に書き換えて、再利用された pid を再現する
     let dir = as_other_process(&state, child.id(), true);
@@ -188,7 +204,7 @@ fn 未知の版と壊れた_manifest_は読めないものとして出す() {
     // 名前の形に合わないものは無視する
     fs::create_dir_all(base.join("note")).unwrap();
     fs::write(base.join("file.swp"), "x").unwrap();
-    let w = WinFs::new(&state);
+    let w = NativeFs::new(&state);
     let v = w.list_swaps().unwrap();
     assert_eq!(v.len(), 3, "{v:?}");
     assert!(v.iter().all(|e| !e.readable && e.owner == SwapOwner::Stale));
@@ -199,7 +215,7 @@ fn 未知の版と壊れた_manifest_は読めないものとして出す() {
 #[test]
 fn 書きかけの_manifest_written_false_は読めないものとして出す() {
     let state = tmp("unwritten");
-    let w = WinFs::new(&state);
+    let w = NativeFs::new(&state);
     w.write_swap(&doc(1, 1, "a", None)).unwrap();
     let dir = as_other_process(&state, dead_pid(), false);
     let m = fs::read_to_string(dir.join("manifest.toml")).unwrap();
@@ -216,7 +232,7 @@ fn 書きかけの_manifest_written_false_は読めないものとして出す()
 #[test]
 fn 消せるのは_swap_の下の_swp_だけ() {
     let state = tmp("remove");
-    let w = WinFs::new(&state);
+    let w = NativeFs::new(&state);
     w.write_swap(&doc(1, 1, "a", None)).unwrap();
     let dir = as_other_process(&state, dead_pid(), false);
     let mut e = w.list_swaps().unwrap().remove(0);
@@ -249,10 +265,14 @@ fn 消せるのは_swap_の下の_swp_だけ() {
 
 #[test]
 fn 状態ディレクトリが無ければ空_消すのは未対応() {
-    let w = WinFs::default();
+    let w = NativeFs::default();
     assert!(w.list_swaps().unwrap().is_empty());
     let e = eve_core::SwapEntry {
-        dir: FsPath::from("C:\\x\\swap\\a.swp"),
+        dir: FsPath::from(if cfg!(windows) {
+            "C:\\x\\swap\\a.swp"
+        } else {
+            "/x/swap/a.swp"
+        }),
         path: None,
         untitled_name: None,
         revision: 0,

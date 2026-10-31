@@ -16,12 +16,12 @@ use std::path::{Path, PathBuf};
 use eve_core::{DocSnapshot, FsError, FsPath, RescueReason};
 use eve_text::TextRead as _;
 
-use crate::fs::map_io_error;
 use crate::inflight::{create_dir_all_private, normalized, process_start};
 use crate::rescue::{
     ManifestDoc, Owner, eol_name, manifest_text, now_secs, safe_basename, timestamp_rfc3339,
     write_body, write_manifest,
 };
+use crate::sys::map_io_error;
 
 /// `swap/` の下の名前 (拡張子 `.swp` を含む)。
 ///

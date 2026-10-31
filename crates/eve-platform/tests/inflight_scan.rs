@@ -1,13 +1,16 @@
 //! 起動時の走査 (docs/05 §4.6、03 §10.3 手順 1b): `list_inflight` と `list_orphan_backups`。実ファイルで、
 //! 動いていないプロセスが残したフラグ・事前バックアップだけを返し、動いているプロセスのものは除く。
 
-#![cfg(windows)]
+#![cfg(any(windows, target_os = "linux"))]
 
 use std::fs;
 use std::path::{Path, PathBuf};
 
 use eve_core::{FileSystem, SaveMethod};
-use eve_platform::fs::WinFs;
+#[cfg(windows)]
+use eve_platform::fs::WinFs as NativeFs;
+#[cfg(unix)]
+use eve_platform::unix_fs::UnixFs as NativeFs;
 
 /// 動いていない pid (Windows の pid は 4 の倍数で、この値は割り当てられない)。
 const DEAD_PID: u32 = 0xFFFF_FFF0;
@@ -15,7 +18,7 @@ const DEAD_PID: u32 = 0xFFFF_FFF0;
 struct Env {
     root: PathBuf,
     state: PathBuf,
-    fs: WinFs,
+    fs: NativeFs,
 }
 
 impl Env {
@@ -27,7 +30,7 @@ impl Env {
         let state = root.join("state");
         fs::create_dir_all(&state).unwrap();
         Env {
-            fs: WinFs::new(&state),
+            fs: NativeFs::new(&state),
             root,
             state,
         }

@@ -1,7 +1,7 @@
 //! スワップの復旧の探索 (docs/03 §10.3、05 §5.3 / §7.5)。`swap/*.swp` を列挙して manifest を要約し、本文を読み、他のプロセスの残骸を消す。
-//! 書く側は `swap.rs`。pid の生存確認は `OpenProcess` + 起動時刻の一致 (05 §5.3)。
+//! 書く側は `swap.rs`。pid の生存確認は起動時刻の一致も見る (05 §5.3。Windows は `OpenProcess`、Unix は `kill(pid, 0)` と `/proc`)。
 
-#![allow(unsafe_code)]
+#![cfg_attr(windows, allow(unsafe_code))]
 
 use std::fs;
 use std::io;
@@ -9,8 +9,8 @@ use std::path::Path;
 
 use eve_core::{FileTime, FsError, FsErrorKind, FsPath, SwapBody, SwapEntry, SwapOwner};
 
-use crate::fs::map_io_error;
 use crate::inflight::{parse_string, process_start};
+use crate::sys::map_io_error;
 
 /// manifest から読んだ、復旧に要る項目。
 #[derive(Default)]
@@ -83,6 +83,19 @@ fn same_start(a: FileTime, b: FileTime) -> bool {
 }
 
 /// pid のプロセスが、記録された起動時刻のまま動いているか (05 §5.3)。起動時刻の記録が無ければ pid だけで判定する。
+#[cfg(unix)]
+pub(crate) fn process_alive(pid: u32, started_at: Option<FileTime>) -> bool {
+    if !crate::sys::pid_running(pid) {
+        return false;
+    }
+    match (started_at, crate::sys::process_start_of(pid)) {
+        (Some(want), Some(have)) => same_start(have, want),
+        _ => true,
+    }
+}
+
+/// 同上 (Windows: `OpenProcess` + `GetProcessTimes`)。
+#[cfg(windows)]
 pub(crate) fn process_alive(pid: u32, started_at: Option<FileTime>) -> bool {
     use windows_sys::Win32::Foundation::{CloseHandle, FILETIME, GetLastError};
     use windows_sys::Win32::System::Threading::{

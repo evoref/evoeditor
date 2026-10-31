@@ -7,7 +7,7 @@
 //! 現在は同期で書く (イベントは設定の診断など起動時に少数)。ログスレッドと `tracing` の購読者 (ADR-0012) は、
 //! core がイベントを出すようになる版で入れる。
 
-use std::fs::{self, OpenOptions};
+use std::fs;
 use std::io::{self, Write as _};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -112,7 +112,10 @@ impl Logger {
             timestamp_rfc3339(now_secs()),
             level.name()
         );
-        let mut f = OpenOptions::new().create(true).append(true).open(&file)?;
+        let mut f = crate::sys::private_options()
+            .create(true)
+            .append(true)
+            .open(&file)?;
         f.write_all(line.as_bytes())
     }
 }

@@ -1,12 +1,15 @@
 //! スワップ (swap-lite) の実ファイルでの検査 (docs/03 §10.2、05 §7.5、02 §11.2.1)。
 
-#![cfg(windows)]
+#![cfg(any(windows, target_os = "linux"))]
 
 use std::fs;
 use std::path::{Path, PathBuf};
 
 use eve_core::{DocSnapshot, DocumentId, FileSystem, FsErrorKind, FsPath, TextFormat};
-use eve_platform::fs::WinFs;
+#[cfg(windows)]
+use eve_platform::fs::WinFs as NativeFs;
+#[cfg(unix)]
+use eve_platform::unix_fs::UnixFs as NativeFs;
 use eve_text::Text;
 use eve_view::Revision;
 
@@ -54,7 +57,7 @@ fn names(dir: &Path) -> Vec<String> {
 #[test]
 fn 無題の文書のスワップは_untitled_で始まる名前の_swp_に本文と_manifest_を書く() {
     let state = tmp("untitled");
-    let w = WinFs::new(&state);
+    let w = NativeFs::new(&state);
     let d = doc(7, 3, "こんにちは\r\n", None);
     w.write_swap(&d).unwrap();
     let dirs = swap_dirs(&state);
@@ -94,7 +97,7 @@ fn パスのある文書は_ハッシュと_pid_の名前で_大文字小文字�
     let work = tmp("work");
     let a = work.join("Notes.txt");
     fs::write(&a, "x").unwrap();
-    let w = WinFs::new(&state);
+    let w = NativeFs::new(&state);
     w.write_swap(&doc(1, 1, "abc", Some(&a))).unwrap();
     let dirs = swap_dirs(&state);
     assert_eq!(dirs.len(), 1);
@@ -108,10 +111,15 @@ fn パスのある文書は_ハッシュと_pid_の名前で_大文字小文字�
     assert!(m.contains("1-Notes.txt.r1.txt"), "{m}");
     assert!(m.contains("Notes.txt"), "元パスを表示用に残す: {m}");
 
-    // 別の綴り (大文字小文字だけ違う) でも同じスワップ
+    // 別の綴り (大文字小文字だけ違う): Windows は同じファイルなので同じスワップ、Unix は別のファイル (畳まない)
     let b = work.join("NOTES.TXT");
     w.write_swap(&doc(2, 5, "abcd", Some(&b))).unwrap();
-    assert_eq!(swap_dirs(&state).len(), 1, "同じファイルは同じスワップ");
+    let want = if cfg!(windows) { 1 } else { 2 };
+    assert_eq!(
+        swap_dirs(&state).len(),
+        want,
+        "大文字小文字の扱いは OS に従う"
+    );
     let _ = fs::remove_dir_all(state);
     let _ = fs::remove_dir_all(work);
 }
@@ -119,7 +127,7 @@ fn パスのある文書は_ハッシュと_pid_の名前で_大文字小文字�
 #[test]
 fn 書き直すと新しい本文を指し_古い本文と一時ファイルは残らない() {
     let state = tmp("rewrite");
-    let w = WinFs::new(&state);
+    let w = NativeFs::new(&state);
     w.write_swap(&doc(1, 1, "one", None)).unwrap();
     let dir = swap_dirs(&state).remove(0);
     // 前の書込が途中で止まった名残の一時ファイル
@@ -139,7 +147,7 @@ fn 書き直すと新しい本文を指し_古い本文と一時ファイルは�
 #[test]
 fn 空の文書でも書ける() {
     let state = tmp("empty");
-    let w = WinFs::new(&state);
+    let w = NativeFs::new(&state);
     w.write_swap(&doc(1, 1, "", None)).unwrap();
     let dir = swap_dirs(&state).remove(0);
     assert_eq!(fs::read(dir.join("1-無題-1.r1.txt")).unwrap(), b"");
@@ -149,7 +157,7 @@ fn 空の文書でも書ける() {
 #[test]
 fn 秘密ファイルの文書は_sensitive_を立てる() {
     let state = tmp("sensitive");
-    let w = WinFs::new(&state);
+    let w = NativeFs::new(&state);
     let mut d = doc(1, 1, "K=1", None);
     d.sensitive = true;
     w.write_swap(&d).unwrap();
@@ -165,7 +173,7 @@ fn 秘密ファイルの文書は_sensitive_を立てる() {
 #[test]
 fn 消すのは自分の_pid_のスワップだけで_無ければ成功() {
     let state = tmp("discard");
-    let w = WinFs::new(&state);
+    let w = NativeFs::new(&state);
     w.write_swap(&doc(1, 1, "mine", None)).unwrap();
     // 他のインスタンス (別の pid) のスワップ
     let other = state.join("swap").join("untitled-1-999999.swp");
@@ -184,17 +192,44 @@ fn 消すのは自分の_pid_のスワップだけで_無ければ成功() {
 
 #[test]
 fn 状態ディレクトリが無ければ未対応を返す() {
-    let w = WinFs::default();
+    let w = NativeFs::default();
     let e = w.write_swap(&doc(1, 1, "a", None)).unwrap_err();
     assert_eq!(e.kind, FsErrorKind::Unsupported);
     let e = w.discard_swap(DocumentId(1), None).unwrap_err();
     assert_eq!(e.kind, FsErrorKind::Unsupported);
 }
 
+#[cfg(unix)]
+#[test]
+fn ディレクトリは_0700_で作る() {
+    use std::os::unix::fs::PermissionsExt;
+    let state = tmp("mode");
+    let w = NativeFs::new(&state);
+    w.write_swap(&doc(1, 1, "a", None)).unwrap();
+    let dir = swap_dirs(&state).remove(0);
+    for p in [dir.as_path(), dir.parent().unwrap()] {
+        assert_eq!(
+            fs::metadata(p).unwrap().permissions().mode() & 0o777,
+            0o700,
+            "{p:?}"
+        );
+    }
+    for e in fs::read_dir(&dir).unwrap() {
+        let p = e.unwrap().path();
+        assert_eq!(
+            fs::metadata(&p).unwrap().permissions().mode() & 0o777,
+            0o600,
+            "{p:?}"
+        );
+    }
+    let _ = fs::remove_dir_all(state);
+}
+
+#[cfg(windows)]
 #[test]
 fn ディレクトリは所有者のみの_dacl_で作る() {
     let state = tmp("dacl");
-    let w = WinFs::new(&state);
+    let w = NativeFs::new(&state);
     w.write_swap(&doc(1, 1, "a", None)).unwrap();
     let dir = swap_dirs(&state).remove(0);
     // 保護付きの DACL (継承を遮断) で作るので、親の継承による ACE が付かない。icacls の出力に「継承」の印 (I) が無いことで確かめる

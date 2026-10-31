@@ -400,7 +400,14 @@ v0.1 で実装するのは Windows の手順 (`ReplaceFileW` 系。§4.2) で、
 - 書込権限の無い T (`readonly`) は、rename なら置き換えられてしまうので、`SaveOptions.clear_readonly` (FR-116 の「読み取り専用を解除して保存」の確認) が無ければ `PermissionDenied` (root を除く)。解除して置換しても、mode は T のものを写すので読み取り専用のまま残る (§4.2 の手順 5b と同じ結果)。
 - 不変フラグは rename の `EPERM` を `PermissionDenied` に写すことで扱う (事前の `FS_IOC_GETFLAGS` はしない)。
 - `FileMeta.owner_is_me` は `st_uid == geteuid()` か root。`readonly` は `access(W_OK)`。`FileId` は (`st_dev`, `st_ino`)。
-- 保存中フラグ・直接上書き (§4.4)・状態ファイル・スワップ・緊急退避は M7 の 3 本目 (README §3.9) で入れる。それまでは `FileSystem` の既定 (`Unsupported` / 空) のまま。
+- 保存中フラグ・直接上書き (§4.4)・状態ファイル・スワップ・緊急退避 (M7 の 3 本目、README §3.9): Windows と同じ実装を使う (eve-platform の `inflight`・`inplace`・`state_file`・`swap`・`rescue`・`log` は OS に依らない)。Unix で違うのは次の点だけ:
+  - 「所有者のみ」(§5.6): ディレクトリは `mkdir(0700)`、ファイルは `open(…, 0600)` で作る (umask に依らない)。緊急退避の `<UTC timestamp>-<pid>/` も 0700。
+  - 代替の退避先 (§7.5): `$TMPDIR/eve-recovery-<uid>/`。既にあれば `lstat` でシンボリックリンクでない・所有者が自分・mode が 0700 を確かめ、満たさなければ使わない。空き容量は `statvfs` の `f_bavail`。
+  - 保存中フラグのキー `hash(path)` の正規形 (§7.5): 大文字小文字を畳まず、区切りは `/` のまま (Windows だけが畳む)。
+  - pid の生存と起動時刻 (§5.3): `kill(pid, 0)` (`EPERM` は生存) と `/proc/<pid>/stat` の starttime + `/proc/stat` の btime。
+  - 直接上書き (§4.4): 共有モードが無いので「共有違反の再試行」は無い (`EBUSY` / `ETXTBSY` は `Busy`)。領域の事前確保は `fallocate(FALLOC_FL_KEEP_SIZE)` (使えない FS は空き容量の確認)。
+  - 退避名の `<basename>` (§7.5): 100 文字に加えて UTF-8 で 200 バイトまでに切り詰める (ファイル名の上限が 255 バイトのため)。
+  - テストの切断点 (09 §3.6 (6)、feature `test-hooks`): `SIGKILL` で自分を終わらせる。
 
 | 段階 | API | 注意 |
 |---|---|---|

@@ -44,8 +44,9 @@ use windows_sys::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken}
 
 use crate::fs::{WinFs, map_io_error};
 use crate::hooks;
-use crate::inflight;
+use crate::inflight::FlagGuard;
 use crate::path::simplify_verbatim;
+use crate::sys::{matches, same_file_state};
 
 /// 共有違反の再試行の待ち (ミリ秒、05 §4.2。合計 2.55 s)。
 pub(crate) const SHARING_RETRY_MS: [u64; 6] = [50, 100, 200, 400, 800, 1000];
@@ -314,15 +315,6 @@ fn rand32() -> u32 {
     h.finish() as u32
 }
 
-/// 照合の比較 (05 §5.5。ハッシュは持たないので (mtime, len, FileId))。
-pub(crate) fn matches(want: &FileStamp, have: &FileStamp) -> bool {
-    want.mtime == have.mtime && want.len == have.len && want.file_id == have.file_id
-}
-
-pub(crate) fn same_file_state(a: &FileMeta, b: &FileMeta) -> bool {
-    a.mtime == b.mtime && a.len == b.len && a.file_id == b.file_id
-}
-
 /// 保存先 T: シンボリックリンクなら最終リンク先 (ダングリングは `NotFound` + `DanglingLink`)。
 /// `create` ならダングリングのリンクのリンク先を T にする (新規作成の経路で書く。05 §4.1)。リンク先もリンク (連鎖) なら `InvalidPath`。
 pub(crate) fn resolve_target(path: &FsPath, create: bool) -> Result<PathBuf, FsError> {
@@ -355,118 +347,6 @@ pub(crate) fn resolve_target(path: &FsPath, create: bool) -> Result<PathBuf, FsE
         }
     }
     Ok(target)
-}
-
-/// 保存中フラグ (05 §4.1 手順 0d / 7 / 8)。状態ディレクトリが無い・状態ファイルの書込 (`state_file`) ではフラグを書かない。
-pub(crate) struct FlagGuard {
-    pub(crate) state_dir: Option<PathBuf>,
-    pub(crate) key: Option<String>,
-    pub(crate) path: Option<PathBuf>,
-}
-
-impl FlagGuard {
-    /// 一時ファイルを作る前に書く。書けなければ警告して続ける (原子的置換では T が無傷のまま残るため)。
-    fn begin(
-        state_dir: Option<&Path>,
-        state_file: bool,
-        target: &Path,
-        method: SaveMethod,
-        tmp: &Path,
-        bak: Option<&Path>,
-        warnings: &mut Vec<SaveWarning>,
-    ) -> FlagGuard {
-        let mut g = FlagGuard {
-            state_dir: None,
-            key: None,
-            path: None,
-        };
-        let Some(sd) = state_dir.filter(|_| !state_file) else {
-            return g;
-        };
-        g.state_dir = Some(sd.to_path_buf());
-        g.key = inflight::flag_key(target);
-        let written = g.key.as_deref().and_then(|key| {
-            inflight::write_flag(
-                sd,
-                key,
-                &inflight::FlagBody {
-                    target,
-                    method,
-                    tmp: Some(tmp),
-                    backup: bak,
-                    backup_recorded: false,
-                    backup_complete: false,
-                },
-            )
-            .ok()
-        });
-        match written {
-            Some(p) => g.path = Some(p),
-            None => warnings.push(SaveWarning::InflightFlagNotWritten),
-        }
-        g
-    }
-
-    /// 直接上書きのフラグ (05 §4.4 手順 2)。書けなければ `None` (呼び側が `BackupFailed` にするか、警告で続ける)。
-    pub(crate) fn begin_in_place(
-        state_dir: &Path,
-        target: &Path,
-        backup: Option<&Path>,
-    ) -> Option<FlagGuard> {
-        let key = inflight::flag_key(target)?;
-        let path = inflight::write_flag(
-            state_dir,
-            &key,
-            &inflight::FlagBody {
-                target,
-                method: SaveMethod::InPlace,
-                tmp: None,
-                backup,
-                backup_recorded: backup.is_some(),
-                backup_complete: false,
-            },
-        )
-        .ok()?;
-        Some(FlagGuard {
-            state_dir: Some(state_dir.to_path_buf()),
-            key: Some(key),
-            path: Some(path),
-        })
-    }
-
-    /// 事前バックアップを最終名にした後、フラグを `backup_complete = true` で書き直す。
-    pub(crate) fn mark_backup_complete(&self, target: &Path, backup: &Path) -> io::Result<()> {
-        let Some(p) = &self.path else {
-            return Ok(());
-        };
-        inflight::rewrite_flag(
-            p,
-            &inflight::FlagBody {
-                target,
-                method: SaveMethod::InPlace,
-                tmp: None,
-                backup: Some(backup),
-                backup_recorded: true,
-                backup_complete: true,
-            },
-        )
-    }
-
-    /// 自分のフラグを消す。
-    pub(crate) fn remove(&mut self) {
-        if let Some(p) = self.path.take() {
-            let _ = fs::remove_file(p);
-        }
-    }
-
-    /// 成功: 自分のフラグと、同じキーに残る他の記録 (痕跡ファイルが実在しないもの) を消す。
-    pub(crate) fn finish_success(&mut self) {
-        let mine = self.path.clone();
-        self.remove();
-        if let (Some(sd), Some(key), Some(mine)) = (&self.state_dir, &self.key, mine) {
-            inflight::clear_others(sd, key, &mine);
-        }
-    }
 }
 
 /// 置換の前の失敗の後片付け: 一時ファイルを消せたらフラグも消す (消せなければ残す。05 §4.1 手順 8)。
