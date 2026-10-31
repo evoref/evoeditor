@@ -4,6 +4,8 @@
 //! - `area:<frontend>` (例 `area:tui`) のラベルの PR は、`crates/eve-core` / `crates/eve-view` / `crates/eve-config` を変えない
 //!   (frontend の担当は境界の型と core を自分の PR で変えない。必要なら契約変更要求を先に出す、11 §8.4)。
 //! - `crates/eve-view` を変える PR には `contract-change` のラベルが要る (11 §8.4 の手続き)。
+//!
+//! `--release` (リリースの PR、`develop` → `main`) では検査しない: 含まれる変更は、それぞれ `develop` 宛ての作業 PR で検査済み。
 
 use std::process::Command;
 
@@ -49,6 +51,10 @@ pub fn run(args: &[String]) -> Result<(), String> {
         .filter(|s| !s.is_empty())
         .map(str::to_owned)
         .collect();
+    if args.iter().any(|a| a == "--release") {
+        println!("▶ area-check: リリースの PR (develop → main) は検査しない (作業 PR で検査済み)");
+        return Ok(());
+    }
     println!("▶ area-check ({base}...{head}、ラベル {labels:?})");
     let diff = run_capture(Command::new("git").args([
         "diff",
