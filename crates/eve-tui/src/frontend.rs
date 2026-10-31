@@ -152,7 +152,7 @@ impl Frontend for TuiFrontend {
 
     fn surface_size(&self) -> CellSize {
         match self.window() {
-            Ok(w) => match surface_resize(w) {
+            Ok(w) => match surface_resize(w, self.geom.hint_bar()) {
                 InputEvent::Resize { cols, rows } => CellSize { cols, rows },
                 _ => CellSize::default(),
             },
@@ -162,7 +162,9 @@ impl Frontend for TuiFrontend {
 
     fn render(&mut self, frame: &Frame) -> RenderOutcome {
         // 編集面の大きさが Frame と違えば、出力せずに Resize を送る (04 §3.6。次の反復で正しい Frame が来る)
-        // Frame の編集面は、検索バーが開いていればその行数だけ端末の編集面より小さい (`crate::buffer::bar_rows`)
+        // Frame の編集面は、検索バーが開いていればその行数だけ端末の編集面より小さい (`crate::buffer::bar_rows`)。
+        // ヒントバーの表示が変われば (FR-504) クロームの行数が変わるので、先に覚えてから比べる (変わった直後の 1 回は Resize になる)
+        self.geom.set_hint_bar(frame.hint_bar);
         let now = self.surface_size();
         let expected = CellSize {
             cols: now.cols,

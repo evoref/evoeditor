@@ -225,6 +225,7 @@ pub fn values(c: &Config) -> Vec<(&'static str, String)> {
         ),
         ("ui.locale", s(c.ui_locale.map_or("auto", |l| l.code()))),
         ("ui.mouse", c.mouse.to_string()),
+        ("ui.hint_bar", c.hint_bar.to_string()),
         ("ui.mouse_wheel_lines", c.mouse_wheel_lines.to_string()),
         ("ui.which_key_delay_ms", c.which_key_delay_ms.to_string()),
         (

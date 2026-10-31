@@ -503,6 +503,8 @@ pub struct Frame {
     pub primary_cursor: Option<CursorPlacement>,
     pub status: StatusModel,
     pub hints: HintModel,
+    /// ヒントバーを出すか (`ui.hint_bar` / `ui.toggle_hint_bar`、FR-504)。偽なら frontend はその行を本文に回す (04 §3.5)。
+    pub hint_bar: bool,
     /// 前面順。
     pub overlays: Vec<OverlayModel>,
     /// チョードの保留が 500 ms を超えたときの、続けて押せるキーの一覧 (which-key、04 §7.4)。

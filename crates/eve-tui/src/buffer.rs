@@ -21,19 +21,25 @@ use crate::theme::Theme;
 /// 編集面の下のクロームの行数 (ステータスバー・メッセージ行・ヒントバー、04 §3.1)。
 pub const CHROME_ROWS: u16 = 3;
 
-/// 編集面が `surface_rows` 行のときのクロームの行数。端末が 10 行未満 (= 編集面が 8 行未満) のときは、メッセージ行を
-/// 確保せず 2 行にする (04 §3.5。メッセージは表示中だけヒントバーの行を使う)。
+/// 編集面が `surface_rows` 行のときのクロームの行数 (ヒントバーを出すとき)。端末が 10 行未満 (= 編集面が 8 行未満) のときは、
+/// メッセージ行を確保せず 2 行にする (04 §3.5。メッセージは表示中だけヒントバーの行を使う)。
 pub const fn chrome_rows_for_surface(surface_rows: u16) -> u16 {
-    if surface_rows < 8 {
+    chrome_rows(surface_rows, true)
+}
+
+/// `chrome_rows_for_surface` にヒントバーの表示 (`Frame.hint_bar`、FR-504) を加えたもの。ヒントバーを隠すときは、端末の
+/// 大きさに依らずステータスバーとメッセージ行の 2 行 (10 行未満でも、その 1 行をメッセージの表示中だけ使う、04 §3.5)。
+pub const fn chrome_rows(surface_rows: u16, hint_bar: bool) -> u16 {
+    if !hint_bar || surface_rows < 8 {
         CHROME_ROWS - 1
     } else {
         CHROME_ROWS
     }
 }
 
-/// 端末が `window_rows` 行のときの編集面の行数 (`chrome_rows_for_surface` の逆)。
-pub const fn surface_rows_for_window(window_rows: u16) -> u16 {
-    if window_rows < 10 {
+/// 端末が `window_rows` 行のときの編集面の行数 (`chrome_rows` の逆)。
+pub const fn surface_rows_for_window(window_rows: u16, hint_bar: bool) -> u16 {
+    if !hint_bar || window_rows < 10 {
         window_rows.saturating_sub(CHROME_ROWS - 1)
     } else {
         window_rows - CHROME_ROWS
@@ -251,7 +257,7 @@ pub fn render_panes(frame: &Frame, depth: ColorDepth, glyphs: &Glyphs) -> PaneRe
     let theme = Theme::from_roles(&frame.roles);
     // 検索バーは編集面の下に 1 行取る (編集面の行数 `size.rows` はその分を引いてある)
     let base = frame.size.rows + bar_rows(frame);
-    let (cols, rows) = (frame.size.cols, base + chrome_rows_for_surface(base));
+    let (cols, rows) = (frame.size.cols, base + chrome_rows(base, frame.hint_bar));
     let mut buffer = Buffer::empty(Rect::new(0, 0, cols, rows));
     // 背景を塗るテーマ (07 §8.6) は、画面全体を本文の色で塗ってから描く (行末より右・文書末尾より下も同じ色にする)
     let text = frame.roles.get("ui.text");

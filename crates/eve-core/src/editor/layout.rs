@@ -1016,6 +1016,7 @@ pub(super) fn build_frame(
         search: state.search_bar_model(),
         status: super::chrome::status_model(state, view_id, chord),
         hints: super::chrome::hint_model(state, chord),
+        hint_bar: state.hint_bar_on,
         overlays: super::chrome::overlay_models(state),
         which_key: None,
         messages: message_model(state),

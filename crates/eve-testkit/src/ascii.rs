@@ -193,6 +193,7 @@ mod tests {
             }),
             status: Default::default(),
             hints: Default::default(),
+            hint_bar: true,
             overlays: Vec::new(),
             which_key: None,
             messages: Default::default(),

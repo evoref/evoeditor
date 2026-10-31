@@ -111,7 +111,6 @@ pub(crate) const RESERVED_KEYS: &[&str] = &[
     "ui.dialog.button.focused",
     "ui.dialog_choose",
     "ui.eof_marker",
-    "ui.hint_bar",
     "ui.hint_bar.key",
     "ui.input.placeholder",
     "ui.line_number",

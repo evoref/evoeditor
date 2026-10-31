@@ -89,6 +89,8 @@ pub struct EditorState {
     pub(super) config_sources: Option<super::config_reload::ConfigSources>,
     /// マウスの取得が有効か (`ui.mouse` の初期値。`ui.toggle_mouse` で変わる)。
     pub(super) mouse_on: bool,
+    /// ヒントバーを出すか (`ui.hint_bar` の初期値。`ui.toggle_hint_bar` で変わる、FR-504)。
+    pub(super) hint_bar_on: bool,
     /// ジョブの投入口 (`Ports.jobs`)。
     pub(super) jobs: Rc<dyn JobSpawner>,
     pub(super) paths: Arc<dyn Paths>,
@@ -218,6 +220,7 @@ impl EditorState {
             surface: (80, 24),
             mouse_drag: None,
             mouse_on: true,
+            hint_bar_on: true,
             reloaded: None,
             user_keymap_entries: None,
             config_sources: None,
@@ -240,6 +243,7 @@ impl EditorState {
         let theme_changed = self.config.theme_name != config.theme_name
             || self.config.theme_background != config.theme_background;
         self.mouse_on = config.mouse;
+        self.hint_bar_on = config.hint_bar;
         self.config = config;
         let display = self.display_settings();
         for d in self.documents.values_mut() {

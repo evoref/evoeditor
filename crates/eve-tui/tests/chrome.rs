@@ -449,3 +449,38 @@ fn which_key_は編集面の左下に続きのキーと動作を重ねる() {
         .unwrap();
     assert!(at >= 12, "{at}");
 }
+
+// verifies: FR-504
+#[test]
+fn ヒントバーを隠すとクロームは_2_行で_メッセージ行だけを描く() {
+    use eve_tui::buffer::{chrome_rows, surface_rows_for_window};
+    // 端末の行数と編集面の行数の対応 (隠すと、10 行以上の端末でも 2 行)
+    assert_eq!(chrome_rows(20, true), 3);
+    assert_eq!(chrome_rows(20, false), 2);
+    assert_eq!(chrome_rows(5, false), 2);
+    assert_eq!(surface_rows_for_window(24, true), 21);
+    assert_eq!(surface_rows_for_window(24, false), 22);
+    assert_eq!(surface_rows_for_window(8, false), 6);
+
+    let mut h = Harness::new().with_size(80, 13);
+    h.cmd("ui.toggle_hint_bar");
+    let f = h.frame();
+    assert!(!f.hint_bar);
+    let base = f.size.rows + eve_tui::buffer::bar_rows(&f);
+    let window = CellSize {
+        cols: f.size.cols,
+        rows: base + chrome_rows(base, f.hint_bar),
+    };
+    let r = render_screen(&f, window, ColorDepth::TrueColor, &Glyphs::unicode());
+    let rows: Vec<String> = (0..r.buffer.area.height)
+        .map(|y| row_text(&r.buffer, y))
+        .collect();
+    assert_eq!(rows.len(), 15, "編集面 13 行 + ステータス + メッセージ");
+    let all = joined(&rows);
+    assert!(!all.contains("Ctrl+Q 終了"), "ヒントは描かない:\n{all}");
+    assert!(
+        rows[14].contains("ヒントバーを隠しました"),
+        "メッセージ行: {:?}",
+        rows[14]
+    );
+}

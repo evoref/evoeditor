@@ -175,7 +175,7 @@ fn 未対応の情報診断は画面に出さない() {
 #[test]
 fn 公開前の_ui_キーは未対応の情報診断になり_画面に出ない() {
     let mut h = Harness::new();
-    let l = load_str("[ui]\nhint_bar = false\n");
+    let l = load_str("[ui]\nascii_only = true\n");
     assert_eq!(l.diagnostics.len(), 1);
     assert!(
         l.diagnostics[0].key.starts_with("ui"),

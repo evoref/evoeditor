@@ -34,9 +34,20 @@ pub struct MouseRec {
 pub struct SharedGeom {
     view: AtomicU64,
     rows: AtomicU32,
+    /// 最後の Frame でヒントバーを隠していたか (`Frame.hint_bar` の否定。既定は表示)。端末の大きさから編集面の行数を
+    /// 求めるとき (Resize) に使う (FR-504、04 §3.5)。
+    hint_bar_hidden: std::sync::atomic::AtomicBool,
 }
 
 impl SharedGeom {
+    pub fn set_hint_bar(&self, shown: bool) {
+        self.hint_bar_hidden.store(!shown, Ordering::Relaxed);
+    }
+
+    pub fn hint_bar(&self) -> bool {
+        !self.hint_bar_hidden.load(Ordering::Relaxed)
+    }
+
     pub fn set(&self, view: ViewId, rows: u16) {
         self.view.store(view.0, Ordering::Relaxed);
         self.rows.store(u32::from(rows), Ordering::Relaxed);

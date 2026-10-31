@@ -340,6 +340,10 @@ title = "Command Palette"
 description = "Redraw the screen."
 title = "Redraw"
 
+[cmd.ui.toggle_hint_bar]
+description = "Show or hide the hint bar at the bottom of the screen. When hidden, its line is used for the text."
+title = "Toggle hint bar"
+
 [cmd.ui.toggle_mouse]
 description = "Switch between mouse support and the terminal's own selection and scrolling."
 title = "Toggle Mouse"
@@ -396,6 +400,10 @@ clamped = "There is no line {line}. Moved to the last line ({last})"
 
 [info.history]
 copied = "Copied {count} messages"
+
+[info.hint_bar]
+hidden = "The hint bar is hidden (its line is used for the text)"
+shown = "The hint bar is shown"
 
 [info.mouse]
 disabled = "Mouse support is off (the terminal's own selection and scrolling work)"
