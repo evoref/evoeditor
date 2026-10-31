@@ -36,6 +36,8 @@ pub mod rescue;
 #[cfg(windows)]
 mod save;
 #[cfg(windows)]
+pub mod session;
+#[cfg(windows)]
 mod swap;
 #[cfg(windows)]
 mod swap_scan;
