@@ -514,6 +514,36 @@ fn run(
         });
     }
 
+    // ログオフ・シャットダウン (v0.2、ベストエフォート。05 §11.2 の「セッション終了の受け方」): 専用スレッドの非表示の
+    // トップレベルウィンドウで受ける。問い合わせ (`WM_QUERYENDSESSION`) で退避を (使い捨てのスレッドで) 始め、終了の通知
+    // (`WM_ENDSESSION`) では退避の完了と置換中フラグを待ってから、メインへ終了を知らせて戻る。取り消しでは何もしない
+    {
+        let tx = tx.clone();
+        let emergency = emergency.clone();
+        let replacing = replacing.clone();
+        let _ = eve_platform::session::start(&texts::session_block_reason(), move |ev| {
+            use eve_host::RESCUE_BUDGET_SESSION;
+            use eve_platform::session::SessionEvent;
+            match ev {
+                // 使い捨てのスレッドで呼ばれるので、ここで書いてよい
+                SessionEvent::QueryEnd => {
+                    emergency.run(RescueReason::SessionEnd, RESCUE_BUDGET_SESSION);
+                }
+                SessionEvent::End { ending: true } => {
+                    let t0 = std::time::Instant::now();
+                    // 問い合わせで始めた退避の完了を待つ (届いていなければここで書く)。退避は 1 回だけ
+                    emergency.run(RescueReason::SessionEnd, RESCUE_BUDGET_SESSION);
+                    wait_zero(
+                        &replacing,
+                        Some(std::time::Duration::from_millis(4300).saturating_sub(t0.elapsed())),
+                    );
+                    let _ = tx.send(HostMsg::Signal(SignalKind::Terminate));
+                }
+                _ => {}
+            }
+        });
+    }
+
     // パニックの表示は端末の復元の後にする (代替スクリーン内に出すと消えるため)。フックは端末に触れない (04 §14.2)
     std::panic::set_hook(Box::new(|info| {
         if let Ok(mut m) = PANIC_INFO.lock() {

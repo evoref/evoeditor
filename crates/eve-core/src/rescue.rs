@@ -17,6 +17,8 @@ pub enum RescueReason {
     Panic,
     Signal,
     ConsoleClose,
+    /// Windows のログオフ・シャットダウン (`WM_QUERYENDSESSION` / `WM_ENDSESSION`、05 §11.2)。
+    SessionEnd,
     Fatal,
     /// 「保存を中止して終了」(ui.confirm.quit_saving、後続)。
     QuitAbortedSave,
@@ -32,6 +34,7 @@ impl RescueReason {
             RescueReason::Panic => "panic",
             RescueReason::Signal => "signal",
             RescueReason::ConsoleClose => "console_close",
+            RescueReason::SessionEnd => "session_end",
             RescueReason::Fatal => "fatal",
             RescueReason::QuitAbortedSave => "quit_aborted_save",
             RescueReason::UserSave => "user_save",

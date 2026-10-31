@@ -32,6 +32,8 @@ const MAX_EVENTS: usize = 4096;
 pub const RESCUE_BUDGET_FATAL: std::time::Duration = std::time::Duration::from_secs(5);
 pub const RESCUE_BUDGET_SIGNAL: std::time::Duration = std::time::Duration::from_millis(2500);
 pub const RESCUE_BUDGET_CLOSE: std::time::Duration = std::time::Duration::from_millis(3500);
+/// Windows のログオフ・シャットダウンの退避の上限 (対話的なアプリの猶予は既定でおよそ 5 秒。CTRL_CLOSE と同じ配分、05 §11.2)。
+pub const RESCUE_BUDGET_SESSION: std::time::Duration = std::time::Duration::from_millis(3500);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum StepOutcome {
