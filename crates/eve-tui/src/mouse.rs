@@ -6,18 +6,26 @@ use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 
 use eve_view::{Modifiers, MouseAt, MouseButton, MouseEvent, MouseKind, ViewId};
 
-/// `dwButtonState` のビット。
-const LEFT: u32 = 0x0001;
-const RIGHT: u32 = 0x0002;
-const MIDDLE: u32 = 0x0004;
-/// `dwEventFlags`。
-const MOVED: u32 = 0x0001;
-const WHEELED: u32 = 0x0004;
-const HWHEELED: u32 = 0x0008;
-/// `dwControlKeyState`。
-const SHIFT_PRESSED: u32 = 0x0010;
-const CTRL_PRESSED: u32 = 0x0008 | 0x0004;
-const ALT_PRESSED: u32 = 0x0002 | 0x0001;
+/// `MouseRec` のビット (Windows の `MOUSE_EVENT_RECORD` の値。VT の SGR マウスもこの形にして渡す、`vt_input`)。
+pub mod button_bits {
+    /// `dwButtonState` のビット。
+    pub const LEFT: u32 = 0x0001;
+    pub const RIGHT: u32 = 0x0002;
+    pub const MIDDLE: u32 = 0x0004;
+    /// `dwEventFlags`。
+    pub const MOVED: u32 = 0x0001;
+    pub const WHEELED: u32 = 0x0004;
+    pub const HWHEELED: u32 = 0x0008;
+    /// `dwControlKeyState` (Ctrl・Alt は左右のどちらか)。
+    pub const SHIFT: u32 = 0x0010;
+    pub const CTRL: u32 = 0x0008 | 0x0004;
+    pub const ALT: u32 = 0x0002 | 0x0001;
+}
+
+use button_bits::{
+    ALT as ALT_PRESSED, CTRL as CTRL_PRESSED, HWHEELED, LEFT, MIDDLE, MOVED, RIGHT,
+    SHIFT as SHIFT_PRESSED, WHEELED,
+};
 
 /// コンソールのマウスの記録 1 件 (座標は端末のウィンドウの左上を原点とするセル)。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

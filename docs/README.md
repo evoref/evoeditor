@@ -266,7 +266,7 @@ M10 は、v0.1 で手書きの代用にしていた開発基盤 (11 §0.1 の表
 2. **Unix の保存**: eve-platform の FileSystem の Unix 実装 `UnixFs` (読込・metadata と Stamp・rename + fsync の原子的保存・mode と所有者・xattr と POSIX ACL の保持、05 §4.3 / §5.1)。eve-platform の試験を Linux CI に足す。
 3. **状態ディレクトリと退避**: XDG のパス (05 §7)、状態ファイル・スワップ・緊急退避の書き手・ログの Unix 実装。状態ディレクトリを使う保存の部品 (保存中フラグ、直接上書き `write_in_place` とその事前バックアップ、05 §4.4) もここで入れる (2 本目の時点では `Unsupported`)。**実装 (2026-11-01)**: 状態ディレクトリの部品を OS に依らない形にし、`UnixFs` も同じ部品を使う (Unix で違う点は 05 §4.3 の「Linux の実装」)。eve-platform の実ファイルの結合試験 (保存中フラグ・直接上書き・スワップ・緊急退避) も Linux で走る。XDG のパス (`dirs`) は v0.1 から OS に依らない実装で、bin が Linux で起動する 5 本目で配線する。
 4. **シグナルと端末の緊急復元**: SIGINT / SIGTERM / SIGHUP (05 §11.1 / §11.4。退避を書いてから終了)、SIGTSTP / SIGCONT (サスペンド、FR-609)、端末の緊急復元。**実装 (2026-11-01)**: eve-platform の部品 (シグナルの受信・シグナルによる終了・端末の緊急復元・異常終了のシグナルでの端末の復元、05 §11.1 の「Linux の実装」) と eve-host の `SignalKind::Hangup`。bin での配線とサスペンドは端末の入出力と同時に 5 本目で行う。
-5. **端末の入出力**: eve-tui の Unix の入力 (crossterm のイベント・SIGWINCH・ブラケットペースト・マウス・フォーカス) と出力、Frontend。ここで bin が Linux で起動する。
+5. **端末の入出力**: eve-tui の Unix の入力 (自前の VT 解析 `vt_input`・SIGWINCH・ブラケットペースト・マウス・フォーカス。決定 (ユーザー回答、2026-11-01): crossterm は使わない、ADR-0005 の改訂) と出力、Frontend。2 本に分ける: 5a = VT の入力の解析器と仕様の改訂、5b = 端末の入出力・Frontend・bin・シグナルの配線・サスペンド。ここで bin が Linux で起動する。
 6. **クリップボード**: `wl-copy` / `xclip` / `xsel` / WSL の `clip.exe` と OSC 52 (FR-205、05 §8)。
 7. **CI と配布**: Linux CI の対象に eve-platform・eve-tui・bin を足し、e2e を Linux の pty でも回す。musl の静的版 (x86_64。aarch64 はクロスビルド) の tar.gz・`SHA256SUMS`・`release.yml`・`check-dist`。
 8. **一貫性の検査と受入**: LazyFS の夜間ジョブ (NFR-301、M10 から移した)、`no-network` を実 FS に替える、Unix の kill テスト、WSL での手動受入 (Windows Terminal + WSL、tmux。GNOME Terminal は WSLg で使えれば)、互換性マトリクス、利用者向け文書の Linux の導入・更新 (日本語・英語)。
