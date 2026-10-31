@@ -48,7 +48,7 @@ fn is_row_id(s: &str) -> bool {
         && p[2].bytes().all(|b| b.is_ascii_digit())
 }
 
-/// ソースのコメントの `verifies:` と、`spec:` の中の規範行 ID を集める。
+/// ソースのコメントの `verifies:` とシナリオ DSL の `verifies`、`spec:` の中の規範行 ID を集める。
 fn scan_sources(root: &Path) -> (Vec<Verify>, Vec<(String, String)>) {
     let mut verifies = Vec::new();
     let mut spec_rows = Vec::new();
@@ -110,7 +110,58 @@ fn scan_sources(root: &Path) -> (Vec<Verify>, Vec<(String, String)>) {
             }
         }
     }
+    // シナリオ DSL の `[meta] verifies` (試験名は `scenario:<id>`)
+    for (rel, path) in scenario_files(&root.join("tests/scenarios")) {
+        let Ok(text) = std::fs::read_to_string(&path) else {
+            continue;
+        };
+        let Ok(doc) = text.parse::<toml::Table>() else {
+            continue;
+        };
+        let meta = doc.get("meta").and_then(toml::Value::as_table);
+        let id = meta
+            .and_then(|m| m.get("id"))
+            .and_then(toml::Value::as_str)
+            .unwrap_or("");
+        for v in meta
+            .and_then(|m| m.get("verifies"))
+            .and_then(toml::Value::as_array)
+            .into_iter()
+            .flatten()
+            .filter_map(toml::Value::as_str)
+        {
+            verifies.push(Verify {
+                id: v.to_owned(),
+                at: format!("tests/scenarios/{rel}"),
+                test: format!("scenario:{id}"),
+            });
+        }
+    }
     (verifies, spec_rows)
+}
+
+/// `tests/scenarios` の下の `.toml` (相対パス, 絶対パス)。
+fn scenario_files(dir: &Path) -> Vec<(String, std::path::PathBuf)> {
+    fn walk(base: &Path, d: &Path, out: &mut Vec<(String, std::path::PathBuf)>) {
+        let Ok(rd) = std::fs::read_dir(d) else { return };
+        for e in rd.flatten() {
+            let p = e.path();
+            if p.is_dir() {
+                walk(base, &p, out);
+            } else if p.extension().is_some_and(|x| x == "toml") {
+                let rel = p
+                    .strip_prefix(base)
+                    .unwrap_or(&p)
+                    .to_string_lossy()
+                    .replace('\\', "/");
+                out.push((rel, p));
+            }
+        }
+    }
+    let mut out = Vec::new();
+    walk(dir, dir, &mut out);
+    out.sort();
+    out
 }
 
 /// 01 §5.5 の v0.2 の行から検証の単位を取り出す。

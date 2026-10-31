@@ -1,0 +1,49 @@
+# 3 文書を開いて切り替えても、各文書のカーソル位置と Undo 履歴が保たれる (FR-103 AC-2)。
+[meta]
+id = "buffer/switch_keeps_state"
+title = "文書を切り替えて戻ると、カーソル位置と Undo 履歴がそのまま"
+verifies = ["AC-FR-103-2"]
+since = "v0.2"
+tags = ["buffer"]
+
+[setup.fs]
+"a.txt" = { text = "alpha\n" }
+"b.txt" = { text = "beta\n" }
+"c.txt" = { text = "gamma\n" }
+
+[[step]]
+open = "a.txt"
+[[step]]
+run_jobs = true
+[[step]]
+keys = "end"
+[[step]]
+text = "1"
+[[step]]
+open = "b.txt"
+[[step]]
+open = "c.txt"
+[[step]]
+run_jobs = true
+[[step]]
+cmd = "buffer.next"
+[[step]]
+cmd = "buffer.next"
+[[step]]
+keys = "ctrl+z"
+
+[[assert]]
+at = 7
+query = { kind = "documents" }
+expect = { count = 3 }
+[[assert]]
+at = 9
+query = { kind = "document", path = "a.txt" }
+expect = { text = "alpha1\n", dirty = true }
+[[assert]]
+at = 9
+query = { kind = "selection" }
+expect = { head = 6 }
+[[assert]]
+query = { kind = "document", path = "a.txt" }
+expect = { text = "alpha\n", dirty = false }

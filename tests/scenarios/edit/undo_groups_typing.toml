@@ -1,0 +1,28 @@
+# 続けて打った文字は 1 回の Undo で消え、間を空けて打った文字は別の Undo になる (FR-203 AC-1、OQ-49 の 1 s)。
+[meta]
+id = "edit/undo_groups_typing"
+title = "続けて打った文字は 1 回の Undo で消え、1 秒より空けると別の単位になる"
+verifies = ["AC-FR-203-1"]
+since = "v0.1"
+tags = ["edit", "undo"]
+
+[[step]]
+text = "abc"
+[[step]]
+text = "def"
+[[step]]
+advance_ms = 1500
+[[step]]
+text = "ghi"
+[[step]]
+keys = "ctrl+z"
+[[step]]
+keys = "ctrl+z"
+
+[[assert]]
+at = 5
+query = { kind = "text" }
+expect = { text = "abcdef" }
+[[assert]]
+query = { kind = "text" }
+expect = { text = "" }
