@@ -1,6 +1,7 @@
 //! 開発用のタスクの入口 (`cargo xtask <サブコマンド>`)。サブコマンドの一覧と版の正本は docs/11-dev-workflow.md §1。
 //!
 //! 現在のサブコマンド:
+//! - `area-check`: PR の変更ファイルとラベルの整合 (`--base <ref> --head <ref> --labels a,b`。docs/09 §6.2、§7 R9)
 //! - `check`: 速い車線 (fmt・clippy・nextest・check-deps・AC のチェックリスト)。docs/11 §8.1
 //! - `check-deps`: 依存規則 R1〜R12 の検査。`--docs` で docs/02 §4.1 の表との突合。docs/09 §7
 //! - `check-docs`: 仕様書の ID 参照・節の参照・内部リンク・docs/ownership.toml の検査 (docs/09 §11、11 §2.3)
@@ -25,6 +26,7 @@
 #![allow(clippy::print_stdout, clippy::print_stderr)]
 
 mod ac_checklist;
+mod area_check;
 mod bench;
 mod bench_report;
 mod check;
@@ -50,6 +52,7 @@ use std::process::ExitCode;
 const USAGE: &str = "\
 使い方: cargo xtask <サブコマンド>
 
+  area-check          PR の変更ファイルとラベルの整合 (--base <ref> [--head <ref>] [--labels a,b]。09 §7 R9)
   check               速い車線 (fmt・clippy・nextest・check-deps・AC のチェックリスト)
   check-deps          依存規則 R1〜R12 の検査 (--docs: docs/02 §4.1 の表との突合も行う)
   check-docs          仕様書の参照の検査 (ID・節・内部リンク・docs/ownership.toml)
@@ -89,6 +92,7 @@ fn main() -> ExitCode {
         Some("check-docs") => check_docs::run(),
         Some("scenario") => scenario::run_cmd(&args.collect::<Vec<_>>()),
         Some("perf-diff") => perf_diff::run(&args.collect::<Vec<_>>()),
+        Some("area-check") => area_check::run(&args.collect::<Vec<_>>()),
         Some("trace") => trace::run(&args.collect::<Vec<_>>()),
         Some("spec-index") => spec_index::run(&args.collect::<Vec<_>>()),
         Some("--help" | "-h" | "help") | None => {
