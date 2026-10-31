@@ -47,6 +47,7 @@ fn ctrl_k_h_でヘルプが開き_先頭は_はじめに() {
     }
 }
 
+// verifies: FR-514
 #[test]
 fn キー一覧は割当のあるコマンドをカテゴリ別に並べ_複数の割当を並べる() {
     let mut h = Harness::new().with_size(80, 20);
@@ -75,6 +76,7 @@ fn キー一覧は割当のあるコマンドをカテゴリ別に並べ_複数�
     );
 }
 
+// verifies: FR-514
 #[test]
 fn コマンド一覧は_commandid_とタイトルと説明を出す() {
     let mut h = Harness::new().with_size(80, 20);

@@ -85,6 +85,7 @@ fn 痕跡が無ければ提案しない() {
     assert!(s.start().is_empty());
 }
 
+// verifies: NFR-301
 #[test]
 fn t_が無く_bak_だけなら_bak_を戻す提案() {
     let mut s = Env::new();
@@ -99,6 +100,7 @@ fn t_が無く_bak_だけなら_bak_を戻す提案() {
     assert_eq!(l[0].flags, vec![FsPath::from("/s/inflight/1.toml")]);
 }
 
+// verifies: NFR-301
 #[test]
 fn t_が無く_bak_と_tmp_の両方なら両方の提案() {
     let mut s = Env::new();

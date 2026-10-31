@@ -42,6 +42,7 @@ fn doc(body: &str, mode: WrapMode) -> Harness {
     h
 }
 
+// verifies: FR-506
 #[test]
 fn 長い行は表示行に分かれ_ガターの行番号は最初の行だけ() {
     let mut h = doc("aaaa bbbb cccc dddd eeee ffff\nnext", WrapMode::Word);
@@ -92,6 +93,7 @@ fn 継続行は論理行のインデントでずらす() {
     assert_eq!(r[1], "    cccc dddd", "{r:?}");
 }
 
+// verifies: FR-506
 #[test]
 fn 全角の文章は禁則を守って折る() {
     // 幅 16 に全角 8 文字: 8 文字目の次が「、」なら「、」を行頭に出さず、7 文字目から次の行へ送る
