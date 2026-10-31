@@ -1,0 +1,72 @@
+# 性能の回帰の警告 (docs/09-testing-quality.md §5.4、NFR-703、v0.2)。PR ごとに、PR の宛先の先頭 (基準) と PR のコミットを
+# 同じランナーで測って比べる。劣化は Actions の警告とジョブの要約に出すだけで、ブロックしない (必須のチェックにしない)。
+#   instr (linux):  valgrind (callgrind) の命令数。+5% 超で警告 (決定的)
+#   time (windows): 同じランナーでの wall-clock の A/B (交互に測った中央値)。+10% 超で警告 (共有ランナーなので目安)
+# 計測の本体は eve-testkit の bm_instr、比較は cargo xtask perf-diff。
+name: perf
+
+on:
+  pull_request:
+    branches: [develop, main]
+    paths:
+      - "crates/**"
+      - "bins/**"
+      - "Cargo.lock"
+      - "Cargo.toml"
+      - ".github/workflows/perf.yml"
+      - "xtask/src/perf_diff.rs"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: perf-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+env:
+  CARGO_INCREMENTAL: "0"
+  CARGO_TERM_COLOR: always
+
+defaults:
+  run:
+    shell: bash
+
+# アクションはコミット SHA で固定する (docs/09 §6.5)。
+# actions/checkout v7.0.1          3d3c42e5aac5ba805825da76410c181273ba90b1
+# Swatinem/rust-cache v2.9.3       d1527c8f67ef9af357290475d4af4b0fab8f12e0
+
+jobs:
+  perf:
+    name: perf (${{ matrix.mode }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - mode: instr
+            runner: ubuntu-24.04
+          - mode: time
+            runner: windows-2025
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # 基準 (PR の宛先の先頭) を worktree で取り出すので、履歴ごと取る
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Rust (stable)
+        run: rustup toolchain install stable --profile minimal --no-self-update && rustup default stable
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          shared-key: perf-${{ matrix.mode }}
+      - name: valgrind
+        if: matrix.mode == 'instr'
+        run: sudo apt-get update && sudo apt-get install -y valgrind
+      - name: cargo xtask perf-diff
+        run: cargo xtask perf-diff --base "${{ github.event.pull_request.base.sha }}" --mode ${{ matrix.mode }} --out target/perf-${{ matrix.mode }}.md
+      - name: 要約
+        if: always()
+        run: |
+          if [ -f target/perf-${{ matrix.mode }}.md ]; then
+            cat target/perf-${{ matrix.mode }}.md >> "$GITHUB_STEP_SUMMARY"
+          fi
