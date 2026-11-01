@@ -198,7 +198,7 @@ L3 で必ずカバーする要件: FR-1xx (ファイル管理) の全 Must (FR-1
 
 ### 3.6 L5: 端末 E2E (疑似端末)
 
-実バイナリを疑似端末 (v0.1 は Windows の ConPTY) 内で起動し、画面状態を VT パーサで解釈して検査する。**遅く不安定になりやすいので最小限** (スモーク + 端末状態の復元 + 障害時の挙動)。v0.1 は Windows だけを出荷するので、L5 は Windows のランナーだけで走らせる (Unix の pty とシグナルのシナリオは macOS / Linux を出荷する版で加える)。
+実バイナリを疑似端末 (v0.1 は Windows の ConPTY) 内で起動し、画面状態を VT パーサで解釈して検査する。**遅く不安定になりやすいので最小限** (スモーク + 端末状態の復元 + 障害時の挙動)。v0.1 は Windows だけを出荷するので、L5 は Windows のランナーだけで走らせる (Unix の pty とシグナルのシナリオは macOS / Linux を出荷する版で加える)。**Linux の実装 (v0.2 の M7、2026-11-01)**: 同じ試験 (`bins/evoeditor/tests/e2e.rs`) を Linux の `openpty` でも回す (`ci.yml` の `e2e (linux)`)。Windows 固有の経路 (コンソールイベント・DLL の探索・UNC・Win32 のクリップボード) は `cfg(windows)` で外し、Unix のシグナルの試験を `cfg(unix)` で加えた: `kill -TERM` / `-HUP` / `-INT` で退避して同じシグナルで終わる (シナリオ (8) の Unix 版。AC-NFR-302-2)、メインが止まった状態の SIGTERM で端末を緊急に復元して 5 s の内に終わる (test-hooks `main_stall`)、`kill -SEGV` で端末だけを戻して退避せずに終わる (05 §11.1 の表の最後の行)。貼り付けのシナリオ (9) は、Unix ではブラケットペーストの本文に制御文字を入れて送る。macOS は実機が無いので回さない (ファイルの `cfg` も Windows と Linux だけ)。
 
 | 項目 | 内容 |
 |---|---|
@@ -418,6 +418,7 @@ CI ランナーの wall-clock は変動が大きい (共有 VM) ため、絶対�
 | `test-min-features` (v0.2) | ubuntu | `--no-default-features` (AI/LSP/syntax を外した v0.1 相当のビルドが壊れていない) |
 | `msrv` (v0.2) | ubuntu | `cargo +<rust-version> check --workspace --all-features` (`Cargo.lock` 使用)。v0.1 は `rust-version` を `Cargo.toml` に書き、リリース前に手で確かめる |
 | `e2e` | windows | L5 (`--features test-hooks,bench-trace`、nextest profile `e2e`、retries=2。ConPTY の 10 シナリオ、§3.6。`bench-trace` はフレーム時刻 (4) と退避の各段の時刻 (8) の記録に使う) |
+| `e2e (linux)` | linux | L5 の Linux (`openpty`、v0.2 の M7)。`e2e` と同じ 3 本 (通常・`test-hooks`・`bench-trace`) を回す。Unix のシグナルの試験を含む (§3.6 の「Linux の実装」)。merge の後に 2 段目の必須に加える |
 | `build-release-smoke` | windows | `cargo build --release` (LTO、配布ビルドと同じ feature) が壊れていないこと + BM-205 のサイズを artifact に。**配布ビルドにテスト専用の経路が無いことの機械的な確認**: (1) `cargo tree -e features` (配布ビルドの feature) に `test-hooks` / `bench-trace` / `headless` が現れない、(2) 生成した `evoeditor.exe` の文字列に test-hooks と bench-trace の目印 (`EVE_TEST_HOOK`・`internal.debug_panic`・`--bench-`・`EVE_TRACE_FILE`・`EVE_TRACE_FORMAT`) が無い、(3) `evoeditor --bench-exit-after-first-frame` が未知のオプションとして終了コード 2 で終わる (§10.3)、(4) CRT を静的にリンクしている (`+crt-static`、11 §1 の `.cargo/config.toml`): `dumpbin /dependents` の出力に `VCRUNTIME*.dll`・`MSVCP*.dll`・`api-ms-win-crt-*` が無い (05 §16.4 の確かめ方 (c) の自動化) |
 | `spec-index` (v0.2) | ubuntu | `xtask spec-index --check` (`docs/spec-index.toml` が docs の規範行 ID と一致。NFR-708)。v0.1 は規範行 ID を付けず、節 ID と AC ID のチェックリスト (§8.3 / §8.5) で突合する |
 | `check-themes` | windows | `xtask check-themes` (eve-tui の近似表 (04 §12.3) と bin の定数表を読むので windows のランナーで実行する。これらの表を OS に依存しない crate に移した場合は ubuntu でもよい): 組込みテーマの truecolor と mono の段の欠落、ロールの形、truecolor の段のコントラスト基準 (07 §8.1)、近似した 256 / 16 の段の前景と背景の衝突 (§3.5)。入力の 07 §8.2 のロール表は `docs-tables` ジョブと同じ規則 (11 §8.5。段のセルの属性語彙 `bold` / `underline` / `reverse` / `dim` / `none` と ` + ` の結合は 07 §8.2 の凡例を正とする) で読む |

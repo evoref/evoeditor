@@ -1,10 +1,12 @@
-//! L5 端末 E2E (docs/09 §3.6): 実バイナリを ConPTY (portable-pty) で起動し、`vt100` で画面を解釈して検査する。
-//! 遅く不安定になりやすいので最小限。生バイト列は比較しない (ConPTY は出力を再合成するため)。
+//! L5 端末 E2E (docs/09 §3.6): 実バイナリを擬似端末 (portable-pty。Windows は ConPTY、Linux は openpty) で起動し、
+//! `vt100` で画面を解釈して検査する。遅く不安定になりやすいので最小限。生バイト列は比較しない (ConPTY は出力を再合成するため)。
+//! Windows 固有の経路 (コンソールイベント・DLL の探索・UNC・Win32 のクリップボード) は `cfg(windows)`、Unix のシグナルの経路は
+//! `cfg(unix)` の試験にする。
 //!
 //! v0.1 の M2 で成り立つシナリオ: (1) 起動と終了、(2) 未保存の終了の確認ダイアログ、(3) 制御キーがアプリに届く、
 //! (5) 端末の復元、(9) 貼り付けの安全。(7) のパニック注入は feature test-hooks のときだけ走る。
 
-#![cfg(windows)]
+#![cfg(any(windows, target_os = "linux"))]
 // 検査の失敗は panic で伝える。
 #![allow(clippy::print_stdout, clippy::print_stderr)]
 
@@ -59,7 +61,7 @@ impl Session {
                 pixel_width: 0,
                 pixel_height: 0,
             })
-            .expect("ConPTY を開けません");
+            .expect("擬似端末を開けません");
         let mut cmd = CommandBuilder::new(exe());
         cmd.args(args);
         cmd.env_remove("NO_COLOR");
@@ -202,11 +204,44 @@ enabled = {swap}
 
     /// 疑似コンソールを閉じる (ウィンドウを閉じた状態。プロセスに `CTRL_CLOSE_EVENT` が届く、09 §3.6 (8b))。
     /// 閉じる呼出し (`ClosePseudoConsole`) は版によって子の終了を待ってブロックするので、別スレッドで呼ぶ。
+    #[cfg(windows)]
     fn close_console(&mut self) {
         if let Some(m) = self.master.take() {
             #[allow(clippy::disallowed_methods)]
             thread::spawn(move || drop(m));
         }
+    }
+
+    /// プロセスにシグナルを送る (`kill -<name>`。外部からの終了要求・端末の切断の再現、09 §3.6 (8))。
+    #[cfg(unix)]
+    fn signal(&self, name: &str) {
+        let pid = self.child.process_id().expect("pid");
+        let st = std::process::Command::new("kill")
+            .args([&format!("-{name}"), &pid.to_string()])
+            .status()
+            .expect("kill を起動できません");
+        assert!(st.success(), "kill -{name}: {st:?}");
+    }
+
+    /// 外から終わらせる (Windows はコンソールを閉じる、Unix は端末の切断 = SIGHUP)。
+    fn hang_up(&mut self) {
+        #[cfg(windows)]
+        self.close_console();
+        #[cfg(unix)]
+        self.signal("HUP");
+    }
+
+    /// 終了を待つ (上限つき)。終了の状態 (シグナルで終わったときはその名前) を返す。終了しなければ `None`。
+    #[cfg(unix)]
+    fn status_within(&mut self, limit: Duration) -> Option<portable_pty::ExitStatus> {
+        let t = Instant::now();
+        while t.elapsed() < limit {
+            if let Some(st) = self.child.try_wait().expect("try_wait") {
+                return Some(st);
+            }
+            thread::sleep(Duration::from_millis(25));
+        }
+        None
     }
 
     /// 終了を待つ (上限つき)。終了しなければ `None`。
@@ -499,6 +534,7 @@ fn 設定ディレクトリが無くても使え_設定ディレクトリは作�
 // (8b ii) コンソールを閉じる (CTRL_CLOSE): 未保存の内容を退避して終了する。退避は受信スレッドがメインを待たずに書く
 // verifies: AC-FR-107-2
 // verifies: AC-NFR-302-2
+#[cfg(windows)]
 #[test]
 fn コンソールを閉じると未保存の内容を退避して終了する() {
     let mut s = Session::start(&[]);
@@ -549,7 +585,7 @@ fn 退避が残っていると起動時に場所を案内する() {
     type_slowly(&s1, "lost work");
     s1.wait_for("入力が見える", |t| t.contains("lost work"));
     let state = s1.state.clone();
-    s1.close_console();
+    s1.hang_up();
     assert!(s1.exit_within(Duration::from_secs(10)).is_some());
     // 同じ状態ディレクトリで再び起動する
     let mut s2 = Session::start_in(&[], Some(state.clone()));
@@ -672,8 +708,11 @@ fn 未知の文字コードの指定は使い方の誤り() {
 fn 貼り付けの本文の制御文字はコマンドとして実行されない() {
     let mut s = Session::start(&[]);
     s.wait_ready();
-    // 1 回の書込 (個別キーのバースト) で送る。0x13 を含む
+    // Windows: 1 回の書込 (個別キーのバースト。04 §6.6 のバースト検出で貼り付けになる) で送る。0x13 を含む。
+    // Unix: ブラケットペースト (`CSI 200~` 〜 `CSI 201~`) の本文に 0x13 を入れる
     let mut body = Vec::new();
+    #[cfg(unix)]
+    body.extend_from_slice(b"[200~");
     body.extend_from_slice(b"head-");
     body.push(0x13);
     body.extend_from_slice(b"-middle-text-that-makes-a-long-burst-");
@@ -787,7 +826,8 @@ fn パニックすると端末を戻し_未保存の内容を退避してクラ�
     let _ = std::fs::remove_dir_all(&s.state);
 }
 
-/// 補助プロセス `eve-test-helpers` の場所 (evoeditor と同じ出力ディレクトリ)。無ければ cargo で作る。
+/// 補助プロセス `eve-test-helpers` の場所 (evoeditor と同じ出力ディレクトリ)。無ければ cargo で作る。Windows だけ。
+#[cfg(windows)]
 fn helper_exe() -> PathBuf {
     let dir = std::path::Path::new(BUILT).parent().unwrap().to_path_buf();
     let exe = dir.join("eve-test-helpers.exe");
@@ -803,6 +843,7 @@ fn helper_exe() -> PathBuf {
 }
 
 /// 疑似コンソールの evoeditor に Ctrl+Break を送り (Ctrl+C は raw モードでは conhost が配らず入力になるので、ここでは扱わない)、未保存の内容を退避して終了コード 130 で終わることを確かめる (09 §3.6 (8))。
+#[cfg(windows)]
 fn コンソールイベントで退避して終了する(kind: &str) {
     let mut s = Session::start(&[]);
     s.wait_ready();
@@ -843,9 +884,126 @@ fn コンソールイベントで退避して終了する(kind: &str) {
 // 外部からの CTRL_C_EVENT は、端末を生の入力モード (ENABLE_PROCESSED_INPUT なし、04 §6.1) にしているので届かない。
 // キーの Ctrl+C はコマンドとして届く (`ctrl_c_はプロセスを殺さず_ctrl_z_は_undo_として届く`)。外部からの終了は CTRL_BREAK と CTRL_CLOSE。
 // verifies: AC-NFR-302-2
+#[cfg(windows)]
 #[test]
 fn ctrl_break_を受けると未保存の内容を退避して終了する() {
     コンソールイベントで退避して終了する("ctrl-break");
+}
+
+/// 退避のディレクトリ (`<UTC の時刻>-<pid>/`) の一覧。
+#[cfg(unix)]
+fn recovery_dirs(state: &Path) -> Vec<PathBuf> {
+    std::fs::read_dir(state.join("recovery"))
+        .map(|rd| {
+            rd.flatten()
+                .filter(|e| e.file_name().to_string_lossy().contains('Z'))
+                .map(|e| e.path())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Unix: 終了のシグナル (`name`) を外から送ると、未保存の内容を退避し、端末を戻して、同じシグナルで終わる
+/// (05 §11.1 / §11.4 / §11.5、09 §3.6 (8))。`want` は strsignal の名前。
+#[cfg(unix)]
+fn シグナルで退避して同じシグナルで終わる(name: &str, want: &str) {
+    let mut s = Session::start(&[]);
+    s.wait_ready();
+    type_slowly(&s, "unsaved text");
+    s.wait_for("入力が見える", |t| t.contains("unsaved text"));
+    s.signal(name);
+    let st = s.status_within(Duration::from_secs(5)).expect("終了する");
+    assert_eq!(st.signal(), Some(want), "同じシグナルで終わる: {st}");
+    s.wait_raw("\x1b[?1049l");
+    assert!(s.raw_text().contains("\x1b[?1049l"), "端末を戻した");
+    let dirs = recovery_dirs(&s.state);
+    assert_eq!(dirs.len(), 1, "{dirs:?}");
+    let manifest = std::fs::read_to_string(dirs[0].join("manifest.toml")).unwrap();
+    assert!(manifest.contains("reason = \"signal\""), "{manifest}");
+    assert!(manifest.contains("complete = true"), "{manifest}");
+    let body: Vec<_> = std::fs::read_dir(&dirs[0])
+        .unwrap()
+        .flatten()
+        .filter(|e| e.file_name().to_string_lossy().ends_with(".txt"))
+        .collect();
+    assert_eq!(body.len(), 1);
+    assert_eq!(
+        std::fs::read_to_string(body[0].path()).unwrap(),
+        "unsaved text"
+    );
+    let _ = std::fs::remove_dir_all(&s.state);
+}
+
+// verifies: AC-NFR-302-2
+#[cfg(unix)]
+#[test]
+fn sigterm_を受けると未保存の内容を退避して同じシグナルで終わる() {
+    シグナルで退避して同じシグナルで終わる("TERM", "Terminated");
+}
+
+// 端末が閉じた・SSH が切れた (SIGHUP)。端末は既に無い前提で、復元の書込の失敗は無視する
+// verifies: AC-NFR-302-2
+#[cfg(unix)]
+#[test]
+fn sighup_を受けると未保存の内容を退避して同じシグナルで終わる() {
+    シグナルで退避して同じシグナルで終わる("HUP", "Hangup");
+}
+
+// raw モードでは Ctrl+C は SIGINT にならない (キーとして届く)。外からの `kill -INT` は終了要求
+#[cfg(unix)]
+#[test]
+fn 外からの_sigint_を受けると未保存の内容を退避して同じシグナルで終わる() {
+    シグナルで退避して同じシグナルで終わる("INT", "Interrupt");
+}
+
+// (8) Unix: メインが止まった状態の SIGTERM (test-hooks `main_stall`): シグナルスレッドが退避を書き、2 秒待ってもメインが
+// 終わらないので、端末を緊急に復元して同じシグナルで終わる (02 §9.6 手順 4、受信から 5 s の内)
+#[cfg(all(unix, feature = "test-hooks"))]
+#[test]
+fn メインが止まっていても_sigterm_で端末を戻して同じシグナルで終わる() {
+    let mut s = Session::start_with(&[], None, &[("EVE_TEST_HOOK", "main_stall")]);
+    s.wait_ready();
+    type_slowly(&s, "unsaved text");
+    s.wait_for("入力が見える", |t| t.contains("unsaved text"));
+    let before = Instant::now();
+    s.signal("TERM");
+    let after = Instant::now();
+    let st = s.status_within(Duration::from_secs(8)).expect("終了する");
+    let end = Instant::now();
+    assert_eq!(st.signal(), Some("Terminated"), "{st}");
+    assert!(
+        end - before >= Duration::from_secs(2) && end - after < Duration::from_millis(5500),
+        "メインの終了を 2 秒待ち、合計 5 秒の内で終わる: {:?} 〜 {:?}",
+        end - after,
+        end - before
+    );
+    s.wait_raw("\x1b[?1049l");
+    assert!(s.raw_text().contains("\x1b[?1049l"), "端末を戻した");
+    let dirs = recovery_dirs(&s.state);
+    assert_eq!(dirs.len(), 1, "{dirs:?}");
+    let manifest = std::fs::read_to_string(dirs[0].join("manifest.toml")).unwrap();
+    assert!(manifest.contains("complete = true"), "{manifest}");
+    let _ = std::fs::remove_dir_all(&s.state);
+}
+
+// Unix: 異常終了のシグナル (SIGSEGV など) では端末の復元だけを行い (CAN で書きかけの列を打ち切ってから)、退避はせずに
+// 同じシグナルで終わる (05 §11.1 の表の最後の行)。外から送った SIGSEGV で確かめる
+#[cfg(unix)]
+#[test]
+fn 異常終了のシグナルでは端末だけを戻して同じシグナルで終わる() {
+    let mut s = Session::start(&[]);
+    s.wait_ready();
+    type_slowly(&s, "unsaved text");
+    s.wait_for("入力が見える", |t| t.contains("unsaved text"));
+    s.signal("SEGV");
+    let st = s.status_within(Duration::from_secs(5)).expect("終了する");
+    assert_eq!(st.signal(), Some("Segmentation fault"), "{st}");
+    s.wait_raw("\x1b[?1049l");
+    let raw = s.raw_text();
+    let can = raw.rfind('\x18').expect("CAN を書く");
+    assert!(raw[can..].contains("\x1b[?1049l"), "CAN の後に復元の列");
+    assert!(recovery_dirs(&s.state).is_empty(), "退避はしない");
+    let _ = std::fs::remove_dir_all(&s.state);
 }
 
 // (7) recovery_timeout (test-hooks): 退避の段の予算が尽きても、打ち切りの manifest (complete = false) を残し、
@@ -885,7 +1043,7 @@ fn パニックの退避が時間切れでも終了コードとクラッシュ�
 
 // (8) メインが止まった状態の Ctrl+Break (test-hooks `main_stall`): 受信スレッドが退避を書き、2 秒待ってもメインが終わらないので
 // 端末を緊急に復元して終了コード 130 で終わる (02 §9.6 手順 4、合計 5 s の内)。
-#[cfg(feature = "test-hooks")]
+#[cfg(all(windows, feature = "test-hooks"))]
 #[test]
 fn メインが止まっていても_ctrl_break_で端末を戻して終了する() {
     let mut s = Session::start_with(&[], None, &[("EVE_TEST_HOOK", "main_stall")]);
@@ -928,7 +1086,7 @@ fn メインが止まっていても_ctrl_break_で端末を戻して終了す�
 // (8b iii) メインが止まった状態のコンソールの閉鎖 (test-hooks `main_stall`): 受信スレッドが退避を書く。メインを待たずに
 // 書き終えるので、CTRL_CLOSE の強制終了 (約 5 秒) の内に本文が残る (02 §9.6 手順 2)。
 // verifies: AC-NFR-302-3
-#[cfg(feature = "test-hooks")]
+#[cfg(all(windows, feature = "test-hooks"))]
 #[test]
 fn メインが止まっていてもコンソールを閉じると未保存の内容を退避して終了する() {
     let mut s = Session::start_with(&[], None, &[("EVE_TEST_HOOK", "main_stall")]);
@@ -1011,13 +1169,14 @@ case = \"smart\"
     let _ = std::fs::remove_dir_all(&cfg);
 }
 
-// ---- システムクリップボード (05 §8、09 §3.6 / §3.4 の clip-delay)。実クリップボードを使うので、プロセスをまたいで直列にする ----
+// ---- システムクリップボード (05 §8、09 §3.6 / §3.4 の clip-delay)。実クリップボードを使うので、プロセスをまたいで直列にする。
+// Win32 のクリップボードを補助プロセスで握る・読むので Windows だけ (Linux の外部コマンドの経路は eve-platform の試験) ----
 
 /// クリップボードを使うテストの排他 (ファイルの排他作成。nextest の別プロセスの間でも直列にする)。
-#[cfg(feature = "test-hooks")]
+#[cfg(all(windows, feature = "test-hooks"))]
 struct ClipLock(PathBuf);
 
-#[cfg(feature = "test-hooks")]
+#[cfg(all(windows, feature = "test-hooks"))]
 impl ClipLock {
     fn acquire() -> ClipLock {
         let path = std::env::temp_dir().join("evo-e2e-clipboard.lock");
@@ -1049,7 +1208,7 @@ impl ClipLock {
     }
 }
 
-#[cfg(feature = "test-hooks")]
+#[cfg(all(windows, feature = "test-hooks"))]
 impl Drop for ClipLock {
     fn drop(&mut self) {
         let _ = std::fs::remove_file(&self.0);
@@ -1057,7 +1216,7 @@ impl Drop for ClipLock {
 }
 
 /// 補助プロセスを起動し、`ready` の行が出るまで待つ。
-#[cfg(feature = "test-hooks")]
+#[cfg(all(windows, feature = "test-hooks"))]
 fn spawn_clip_helper(args: &[&str]) -> std::process::Child {
     use std::io::BufRead;
     use std::process::Stdio;
@@ -1074,7 +1233,7 @@ fn spawn_clip_helper(args: &[&str]) -> std::process::Child {
 }
 
 /// `clip-read` の出力 (読めるまで 3 秒待つ)。
-#[cfg(feature = "test-hooks")]
+#[cfg(all(windows, feature = "test-hooks"))]
 fn clip_read() -> String {
     let t = Instant::now();
     loop {
@@ -1093,7 +1252,7 @@ fn clip_read() -> String {
     }
 }
 
-#[cfg(feature = "test-hooks")]
+#[cfg(all(windows, feature = "test-hooks"))]
 // verifies: AC-FR-603-1
 #[test]
 fn コピーは実際のクリップボードに入り_貼り付けはそこから読む() {
@@ -1125,7 +1284,7 @@ fn コピーは実際のクリップボードに入り_貼り付けはそこか�
     let _ = std::fs::remove_dir_all(&s.state);
 }
 
-#[cfg(feature = "test-hooks")]
+#[cfg(all(windows, feature = "test-hooks"))]
 #[test]
 fn 取得が遅くても入力は止まらず_2_秒で内部レジスタに切り替わる() {
     let _lock = ClipLock::acquire();
@@ -1170,7 +1329,7 @@ fn 取得が遅くても入力は止まらず_2_秒で内部レジスタに切�
     let _ = std::fs::remove_dir_all(&s.state);
 }
 
-#[cfg(feature = "test-hooks")]
+#[cfg(all(windows, feature = "test-hooks"))]
 #[test]
 fn クリップボードを他のプロセスが握っていると内部レジスタに切り替える() {
     let _lock = ClipLock::acquire();
@@ -1316,6 +1475,7 @@ fn 連続してリサイズしても最後の大きさの画面は全再描画�
 }
 
 // verifies: AC-NFR-502-2
+#[cfg(windows)]
 #[test]
 fn 同じフォルダとカレントに置いた偽の_dll_は読み込まれない() {
     // 実行ファイルが起動時に取り込む System32 の DLL (KnownDLLs でないもの) と同じ名前の偽の DLL を、
@@ -1396,6 +1556,7 @@ fn 同じフォルダとカレントに置いた偽の_dll_は読み込まれな
 }
 
 // verifies: AC-NFR-502-2
+#[cfg(windows)]
 #[test]
 fn 到達できない_unc_パスを開いている間も_ui_は止まらず終了できる() {
     // 名前が引けない UNC パス (OS が応答を待つ)。読込はワーカーで行うので、画面は出て、キーも効く
