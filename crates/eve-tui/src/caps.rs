@@ -201,6 +201,26 @@ pub fn ascii_only(effective_ambiguous: u8, kind: TerminalKind) -> bool {
     effective_ambiguous == 2 || kind == TerminalKind::Conhost
 }
 
+/// OSC 52 の書込に対応する端末か (05 §8.1 / §9.2)。Windows は Windows Terminal だけ。Unix は対応する端末が多いので既定で真とし、
+/// 黙って捨てると分かっている端末だけ偽にする: VTE 系 (`VTE_VERSION`。GNOME Terminal 等)、Terminal.app、Linux のコンソール
+/// (`TERM=linux`)、screen。tmux の中 (`TMUX`) は外側の端末を知り得ないので真 (`set-clipboard on` で外側へ渡る)。
+pub fn osc52_write(env: &dyn Env, kind: TerminalKind) -> bool {
+    match kind {
+        TerminalKind::WindowsTerminal => true,
+        TerminalKind::Conhost => false,
+        TerminalKind::Other => {
+            let term = env.var("TERM").unwrap_or_default();
+            if env.var("TMUX").is_some() {
+                return true;
+            }
+            env.var("VTE_VERSION").is_none()
+                && env.var("TERM_PROGRAM").as_deref() != Some("Apple_Terminal")
+                && term != "linux"
+                && !term.starts_with("screen")
+        }
+    }
+}
+
 /// `Frontend::init` に渡す設定 (04 §5.2a)。
 #[derive(Clone, Copy, Debug, Default)]
 pub struct CapsConfig {
@@ -228,8 +248,8 @@ pub fn detect(config: CapsConfig, env: &dyn Env, is_windows: bool) -> Detected {
         // マウスは v0.2 から (Windows は `ENABLE_MOUSE_INPUT`、Unix は VT の SGR マウス、04 §6.8)。拡張キーは無効 (04 §6.3)
         mouse: true,
         enhanced_keys: false,
-        // Windows Terminal は OSC 52 の書込に対応する。conhost は対応しない (05 §8.1)
-        osc52_write: kind == TerminalKind::WindowsTerminal,
+        // Windows Terminal は OSC 52 の書込に対応する。conhost は対応しない。Unix は VTE 系などを除いて対応する (05 §8.1)
+        osc52_write: osc52_write(env, kind),
         // ジョブ制御 (`app.suspend`) は Unix だけ (05 §11.2 / §11.3)
         can_suspend: !is_windows,
         dark_mode: None,
@@ -386,6 +406,29 @@ mod tests {
         assert!(ascii_only(1, TerminalKind::Conhost));
         // 縮退しないのは、曖昧幅 1 の Windows Terminal だけ
         assert!(!ascii_only(1, TerminalKind::WindowsTerminal));
+    }
+
+    #[test]
+    fn osc52_は_vte_terminal_app_コンソール_screen_を除く() {
+        let w = |pairs: &[(&str, &str)]| osc52_write(&MapEnv::new(pairs), TerminalKind::Other);
+        assert!(w(&[("TERM", "xterm-256color")]));
+        // WSL の Windows Terminal (WT_SESSION が届かなくても既定で真)
+        assert!(w(&[]));
+        assert!(!w(&[("VTE_VERSION", "7600"), ("TERM", "xterm-256color")]));
+        assert!(!w(&[("TERM_PROGRAM", "Apple_Terminal")]));
+        assert!(!w(&[("TERM", "linux")]));
+        assert!(!w(&[("TERM", "screen-256color")]));
+        // tmux の中は外側次第 (tmux の TERM は screen-* のことがある)
+        assert!(w(&[
+            ("TMUX", "/tmp/tmux-1000/default,1,0"),
+            ("TERM", "screen-256color")
+        ]));
+        assert!(w(&[("TMUX", "x"), ("VTE_VERSION", "7600")]));
+        assert!(osc52_write(
+            &MapEnv::new(&[]),
+            TerminalKind::WindowsTerminal
+        ));
+        assert!(!osc52_write(&MapEnv::new(&[]), TerminalKind::Conhost));
     }
 
     #[test]

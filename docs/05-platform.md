@@ -731,6 +731,8 @@ Host (eve-host + eve-tui) が `Effect::SetClipboard{content: ClipboardText, targ
 
 **M9b の実装 (2026-10-30)**: Windows Terminal だけ `Capabilities.osc52_write` を真にする (conhost は非対応)。Host は `Frontend::write_osc52` を呼ぶ。書込は次のとおり: `clipboard.osc52 = never` は書かない。`always`、または SSH 接続中 (`SSH_TTY` / `SSH_CONNECTION`) の `auto` は、システムへの書込の成否に関わらず書く。それ以外の `auto` は、システムへ書けなかったときだけ書く (書けたら「内部レジスタに切り替えた」とは知らせない)。本文が `clipboard.osc52_max_bytes` (base64 後) を超えるときは OSC 52 を送らない。`TMUX` 環境変数があれば DCS 透過で包む。`clipboard.provider` と `command` provider は未公開。
 
+**Linux の実装 (v0.2 の M7 の 6 本目、2026-11-01)**: eve-platform の `clipboard_cmd::UnixClipboard` (§8.2 の Linux・WSL の行と §8.3 の `command` provider。設定キー `clipboard.provider` / `clipboard.command.*` は未公開のまま、検出だけを定数で行う)。最初の読み書きで 1 回だけ検出し、結果を覚える (起動経路では検出しない)。検出の順: SSH 接続中 (`SSH_TTY` / `SSH_CONNECTION`) は検出しない → `WAYLAND_DISPLAY` があり `wl-copy` と `wl-paste` がある → `DISPLAY` があり `xclip` → 同じく `xsel` → WSL (`WSL_DISTRO_NAME` / `WSL_INTEROP`) で `powershell.exe` がある → 無し。`/usr/bin`・`/bin` のコマンドは、root が持ちグループと他人が書けない実行ファイルのときだけ使う。手段が無いときの `msg.clipboard.fallback` の理由は、SSH・画面が無い・コマンドが無い (「wl-clipboard または xclip を入れるとシステムのクリップボードが使えます」) の 3 つを分ける (`ClipboardProvider::unsupported_reason`)。`Capabilities.osc52_write` は Unix では既定で真とし、黙って捨てると分かっている端末だけ偽にする: VTE 系 (`VTE_VERSION`)、Terminal.app、`TERM=linux`、screen (`TERM=screen*`。tmux の中 (`TMUX`) は外側次第なので真)。WSL (Windows Terminal) で、`wl-copy` の無い WSLg の環境の書込・取得の往復 (漢字だけの短い文・絵文字・LF / CRLF。Windows 側に BOM が残らないこと) を確かめた (書込 約 0.4 s、取得 約 0.4 s)。
+
 ### 8.2 OS 別の実装詳細
 
 v0.1 で実装するのは下の表の **Windows の 2 行** で、ほかの行は v0.2 (macOS / Linux 出荷時、OSC 52) の仕様。
@@ -744,7 +746,7 @@ v0.1 で実装するのは下の表の **Windows の 2 行** で、ほかの行�
 | macOS (v0.2) | `/usr/bin/pbcopy` / `/usr/bin/pbpaste` を **絶対パス** で起動 (§8.3 の `command` provider と同じ経路。承認不要) | Terminal.app は OSC 52 非対応だが pbcopy で足りる。pbcopy / pbpaste はロケールで文字コードを決めるので、`LANG` が無い環境 (SSH・launchd から起動) では日本語が化ける (S-14 で再現を確認) | 子プロセスの環境に `LANG=en_US.UTF-8` と `__CF_USER_TEXT_ENCODING=0x<uid>:0x8000100:0x0` (UTF-8) を明示して渡す。タイムアウト 2 s |
 | Linux (X11 / Wayland) (v0.2) | **OSC 52 + 内部レジスタ** を基本とし、加えて **root しか書けないディレクトリ (`/usr/bin`、`/bin`) に限って** `wl-copy` / `wl-paste` (Wayland)、`xclip` / `xsel` (X11) を検出して `command` provider として使う (§8.3)。PATH は見ない | `wl-copy` は GNOME (Mutter) でもフォーカスがあれば書ける。X11 の所有権モデル (コピー元プロセスが終了すると内容が消える) は `xclip` / `xsel` がデーモン化して保持する | コマンドが無ければ OSC 52 のみ。初回にヒント「`wl-clipboard` または `xclip` を入れるとシステムクリップボードが使えます」 |
 | Linux ヘッドレス (`DISPLAY`/`WAYLAND_DISPLAY` 未設定) (v0.2) | コマンド検出をしない | — | OSC 52 / 内部レジスタ |
-| WSL (v0.2) | WSLg があれば上記 Linux と同じ。無ければヘッドレス | WSL1 / WSLg 無効 | `command` provider の既定を WSL 検出時に、copy = `/mnt/c/Windows/System32/clip.exe` (本文は **UTF-16LE (BOM 付き)** に変換して標準入力へ渡す。UTF-8 のまま渡すと日本語が化ける)、paste = `/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe -NoProfile -Command "[Console]::OutputEncoding=[Text.Encoding]::UTF8; Get-Clipboard"` (**絶対パス**。出力の文字コードを UTF-8 に固定する) にする (§15.1。キーと既定値の正本は 07 §5.6。文字化けの有無は S-14 で確認)。または OSC 52 (Windows Terminal は対応) |
+| WSL (v0.2) | WSLg があり `wl-copy` / `xclip` があれば上記 Linux と同じ。無ければ下の `powershell.exe` | WSL1 / WSLg 無効。WSLg でも `wl-clipboard` は既定で入っていない | `command` provider の既定を WSL 検出時に、copy = `/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe -NoProfile -NonInteractive -Command "[Console]::InputEncoding=[Text.UTF8Encoding]::new($false); Set-Clipboard -Value ([Console]::In.ReadToEnd())"` (本文を UTF-8 で標準入力へ渡す)、paste = `/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe -NoProfile -NonInteractive -Command "[Console]::OutputEncoding=[Text.Encoding]::UTF8; [Console]::Out.Write((Get-Clipboard -Raw))"` (**絶対パス**。入出力の文字コードを UTF-8 に固定し、`-Raw` と `Out.Write` で末尾に改行を足さない) にする (§15.1。キーと既定値の正本は 07 §5.6)。**`clip.exe` は使わない** (訂正 (2026-11-01、WSL で実測)。UTF-16LE の BOM 付きで渡すと BOM (U+FEFF) がクリップボードに残り、BOM 無しでは漢字だけの短い文を UTF-16 と判定できずに化ける。UTF-8 は BOM の有無に関わらず化ける)。または OSC 52 (Windows Terminal は対応) |
 | SSH 越し (v0.2) | リモートに X11 があっても外部コマンドは「リモートの」クリップボードに書く (無意味) | `SSH_CONNECTION`/`SSH_TTY` あり | `SSH_TTY` が設定されていれば **既定で OSC 52 のみ** とし、外部コマンドは `clipboard.provider = system` の明示時のみ |
 | tmux / screen (v0.2) | OSC 52 は tmux の `set-clipboard on` + 外側端末の対応が必要。screen は OSC 52 を透過しない | 伝わらないことが多い | `TMUX` 環境変数検出時は tmux の DCS 透過ラッパ (`\ePtmux;\e...\e\\`) で送る (04 の出力側で実装。本層は方針のみ)。失敗検知はできないので「送った」ことにする |
 
@@ -754,10 +756,11 @@ v0.1 で実装するのは下の表の **Windows の 2 行** で、ほかの行�
 
 **v0.2 (macOS / Linux 出荷時) の仕様**。v0.1 (Windows のみ) には `command` provider が無い。
 
-`clipboard.command.copy = ["/mnt/c/Windows/System32/clip.exe"]` / `clipboard.command.paste = ["/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe", "-NoProfile", "-Command", "[Console]::OutputEncoding=[Text.Encoding]::UTF8; Get-Clipboard"]` の形 (argv 配列。シェル解釈なし。キー名と既定値の正本は 07 §5.6 で、**設定キーの公開は v0.2**。公開前は WSL 既定と既知コマンドの検出だけを定数で行う)。`ProcessRunner` (v0.4) が無い間は eve-host が `std::process::Command` で直接起動する (stdin に本文、タイムアウト 2 s、ワーカー上)。**クリップボード用コマンドは「設定で明示したもの」または「root しか書けないディレクトリで検出した既知のもの」なので毎回の承認は不要** とする (P2 原則の例外。設定ファイルは信頼入力、[02 §15](02-architecture.md#15-セキュリティ境界))。**PATH 上の自動検出はしない** (PATH 汚染による任意コード実行面)。検出対象は `/usr/bin` と `/bin` の `wl-copy` / `wl-paste` / `xclip` / `xsel`、macOS の `/usr/bin/pbcopy` / `pbpaste` に限り、ユーザーが `clipboard.command.*` を書いたらそれを優先する。
+`clipboard.command.copy = ["/usr/bin/xclip", "-selection", "clipboard", "-in"]` / `clipboard.command.paste = ["/usr/bin/xclip", "-selection", "clipboard", "-out"]` の形 (argv 配列。シェル解釈なし。キー名と既定値の正本は 07 §5.6 で、**設定キーの公開は v0.2**。公開前は WSL 既定と既知コマンドの検出だけを定数で行う)。`ProcessRunner` (v0.4) が無い間は eve-host が `std::process::Command` で直接起動する (stdin に本文、タイムアウト 2 s、ワーカー上)。**クリップボード用コマンドは「設定で明示したもの」または「root しか書けないディレクトリで検出した既知のもの」なので毎回の承認は不要** とする (P2 原則の例外。設定ファイルは信頼入力、[02 §15](02-architecture.md#15-セキュリティ境界))。**PATH 上の自動検出はしない** (PATH 汚染による任意コード実行面)。検出対象は `/usr/bin` と `/bin` の `wl-copy` / `wl-paste` / `xclip` / `xsel`、macOS の `/usr/bin/pbcopy` / `pbpaste` に限り、ユーザーが `clipboard.command.*` を書いたらそれを優先する。
 
 - **copy 側の標準出力・標準エラー**: `xclip` / `xsel` (と一部の `wl-copy`) は内容を保持するためにデーモンとして残り、親から受け継いだ stdout / stderr を握ったままにする。パイプにしていると読み手が EOF を待ち続け、毎回 2 s のタイムアウトになる。copy 側は stdout / stderr を `Stdio::null()` にし、待つのは起動した子プロセスの終了 (`wait`) だけにする。paste 側は stdout をパイプで読む (デーモン化しない)。
-- **文字コード**: 子プロセスへの入出力は UTF-8 とし、例外は WSL の `clip.exe` (UTF-16LE) と macOS の `LANG` の明示 (§8.2)。
+- **文字コード**: 子プロセスへの入出力は UTF-8 とする (WSL の `powershell.exe` はスクリプトの中で入出力を UTF-8 に固定する。macOS は `LANG` を明示する、§8.2)。
+- **paste の失敗**: `wl-paste` と `xclip -out` はクリップボードが空でも失敗の終了コードを返すので、出力が空の失敗は「テキストが無い」とする。出力がある失敗と copy の失敗は失敗として知らせる。
 
 ### 8.4 サイズ上限
 
@@ -1125,7 +1128,7 @@ AI 連携 (06) は **ローカル LLM を一級市民** とし (01 §2.9、ADR-0
 | 検出 | `WSL_DISTRO_NAME` / `WSL_INTEROP` 環境変数、`/proc/sys/fs/binfmt_misc/WSLInterop` | ログと既定値 (クリップボード) にのみ使う |
 | `/mnt/c` (DrvFs, 9p) | inotify が **機能しない** (WSL2)、`chmod` は metadata オプションがないと無視、`rename` は原子的だが遅い、大文字小文字非区別、ファイル ID は NTFS 由来 | `FsKind::Network` 相当として扱い、監視はフォーカス時確認に縮退 (§12.2)。保存の fsync 失敗は警告 |
 | 改行 | Windows 側で作られた CRLF ファイルが多い | FR-113 のとおり保持。既定は変えない |
-| クリップボード | WSLg あり: `wl-copy` / `xclip` (§8.2) が Windows クリップボードと同期。なし: 絶対パスの `clip.exe` (UTF-16LE で渡す) / `powershell.exe` (`/mnt/c/Windows/System32/WindowsPowerShell/v1.0/`、出力を UTF-8 に固定) | §8.2 / §8.3 |
+| クリップボード | WSLg あり: `wl-copy` / `xclip` (§8.2) が Windows クリップボードと同期。なし (WSLg に `wl-clipboard` が入っていない場合を含む): 絶対パスの `powershell.exe` (`/mnt/c/Windows/System32/WindowsPowerShell/v1.0/`) の `Set-Clipboard` / `Get-Clipboard -Raw` (入出力を UTF-8 に固定)。`clip.exe` は BOM の扱いで化けるので使わない | §8.2 / §8.3 |
 | ローカル LLM (v1.L) | GPU は Windows 側にあることが多く、`llama-server` を Windows で動かし WSL 内の evoeditor から `localhost` に接続する構成が一般的。`localhost` のホスト転送が無効な環境では Windows 側のアドレスが LAN 扱いになる | §13.7 (WSL 行)、06 §11.3 |
 | 端末 | Windows Terminal (ConPTY) 経由。Linux バイナリから見ると普通の pty | — |
 | パス変換 | `wslpath` で `C:\…` ⇔ `/mnt/c/…`。Windows 側から `wsl evoeditor file` で渡された Windows パスは Linux では無効 | CLI 引数が `X:\` 形式なら **WSL 検出時のみ** `wslpath -u` 相当の変換を試みる (Could) |

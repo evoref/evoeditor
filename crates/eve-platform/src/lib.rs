@@ -154,6 +154,7 @@ macro_rules! state_dir_methods {
 }
 
 pub mod clipboard;
+pub mod clipboard_cmd;
 #[cfg(all(windows, feature = "test-hooks"))]
 pub mod clipboard_test;
 #[cfg(windows)]
