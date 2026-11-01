@@ -149,9 +149,8 @@ extern "C" fn on_crash(signo: i32, info: *mut libc::siginfo_t, _: *mut libc::c_v
         // 障害の命令がもう一度起きないとき (SIGABRT、または `kill` などで外から送られた) は、既定の動作に戻して送り直す。
         // ハンドラの間はこのシグナルが止められているので、戻った後に既定の動作で届く
         // SAFETY: カーネルが渡した siginfo を読むだけ (null なら読まない)
-        if signo == libc::SIGABRT
-            || (!info.is_null() && sent_by_process(unsafe { (*info).si_code }))
-        {
+        let external = !info.is_null() && sent_by_process(unsafe { (*info).si_code });
+        if signo == libc::SIGABRT || external {
             // SAFETY: どちらも非同期シグナル安全
             unsafe {
                 libc::signal(signo, libc::SIG_DFL);
