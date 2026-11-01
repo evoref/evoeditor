@@ -283,6 +283,9 @@ impl EditorState {
         };
         let mut hits: Vec<(i32, usize, Hit)> = Vec::new();
         for (i, e) in self.palette_entries.iter().enumerate() {
+            if !self.supported_here(e) {
+                continue;
+            }
             if q.is_empty() {
                 hits.push((
                     0,
@@ -328,6 +331,13 @@ impl EditorState {
         self.palette_recent.retain(|r| r != id);
         self.palette_recent.insert(0, id.to_owned());
         self.palette_recent.truncate(RECENT_MAX);
+    }
+
+    /// この frontend で使えるコマンドか。when 句が `caps.*` を参照して偽なら (例: Windows の `app.suspend`)、端末の能力が足りない
+    /// ので「現在は実行できません」とも出さず、パレットとヘルプの一覧から外す (05 §11.2、04 §14.5)。
+    pub(super) fn supported_here(&self, e: &PaletteEntry) -> bool {
+        !e.when.vars().iter().any(|v| v.starts_with("caps."))
+            || self.disabled_reason_key(e).is_none()
     }
 
     /// `when` が偽の理由の文言キーの末尾 (`ui.palette.reason.*`)。実行できるなら `None`。
@@ -580,7 +590,12 @@ impl EditorState {
             .is_empty()
             .then(|| cell_text(&render("ui.palette.placeholder", &[]), CutPolicy::End));
         let matched = hits.len().to_string();
-        let total = self.palette_entries.len().to_string();
+        let total = self
+            .palette_entries
+            .iter()
+            .filter(|e| self.supported_here(e))
+            .count()
+            .to_string();
         let footer = render(
             "ui.palette.footer",
             &[("matched", &matched), ("total", &total)],

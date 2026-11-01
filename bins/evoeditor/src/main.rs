@@ -625,6 +625,14 @@ fn run(
             *m = Some(format!("{info}\n\n{bt}"));
         }
     }));
+    // Unix: バックグラウンドのジョブで起動されたら、端末に触れずに終わる (05 §11.3。終了コードは端末の初期化失敗と同じ 5)
+    #[cfg(unix)]
+    if eve_tui::unix::is_background_job() {
+        if let Some(l) = texts::stderr_line("stderr.background_job", &[]) {
+            l.write_to(&mut std::io::stderr().lock());
+        }
+        return 5;
+    }
     let mut frontend = TuiFrontend::with_color_mode(color_mode(config.color_mode));
     let outcome = catch_unwind(AssertUnwindSafe(|| {
         host.run(&mut frontend, &files, read_only)

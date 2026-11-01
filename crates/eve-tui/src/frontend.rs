@@ -132,6 +132,17 @@ impl TuiFrontend {
         self.emitter.invalidate();
     }
 
+    /// Unix: `app.suspend` (05 §11.3)。端末を復元してから自分に SIGTSTP を送って止まる。`fg` で再開したら (SIGCONT)、
+    /// 再初期化の印を立てる (入力スレッドも SIGCONT で立てる。`wake_after` が描画を起こし、`reinit_if_continued` が入れ直す)。
+    #[cfg(unix)]
+    fn suspend(&mut self) {
+        self.restore();
+        crate::unix::stop_self();
+        if let Some(i) = self.input.as_ref() {
+            i.request_reinit();
+        }
+    }
+
     fn window(&self) -> io::Result<CellSize> {
         match (&self.out, &self.input) {
             (Some(o), _) => o.window_size(),
@@ -270,6 +281,11 @@ impl Frontend for TuiFrontend {
             Effect::Redraw => {
                 // 次の Frame を全画面の再描画にする (差分の基準を捨てる)
                 self.emitter.invalidate();
+                EffectOutcome::Handled
+            }
+            #[cfg(unix)]
+            Effect::Suspend => {
+                self.suspend();
                 EffectOutcome::Handled
             }
             _ => EffectOutcome::Unhandled,

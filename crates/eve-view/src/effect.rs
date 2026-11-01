@@ -32,6 +32,9 @@ pub enum Effect {
     SetMouseCapture { enabled: bool },
     /// 画面の全体を描き直す (`ui.redraw`。04 §4.7 (f)。ずれた表示からの回復)。
     Redraw,
+    /// 自分を停止する (`app.suspend`。Unix のジョブ制御、05 §11.3)。frontend が端末を戻して止まり、再開したら全面を描き直す。
+    /// `Capabilities.can_suspend` が偽の frontend には届かない (コマンドの when 句で無効)。
+    Suspend,
 }
 
 /// 終了時に未保存の文書を退避するか。

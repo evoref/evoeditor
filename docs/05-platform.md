@@ -942,7 +942,9 @@ Windows には SIGTSTP 相当がないため `Capabilities.can_suspend = false` 
 4. SIGCONT 受信 → 端末初期化 → サイズ再取得 → needs_render 全面
 ```
 
-evoeditor が **非対話で起動された (バックグラウンドジョブ)** 場合、SIGTTIN/SIGTTOU で停止するのが Unix の通常挙動。起動時に `tcgetpgrp(STDIN) != getpgrp()` なら「前面で起動してください」と終了する。
+evoeditor が **非対話で起動された (バックグラウンドジョブ)** 場合、SIGTTIN/SIGTTOU で停止するのが Unix の通常挙動。起動時 (端末を raw にする前) に、描画先の `/dev/tty` の前面のプロセスグループが自分のでない (`tcgetpgrp(tty) != getpgrp()`。標準入力はリダイレクトされ得るので `/dev/tty` で調べる) なら、端末に触れずに `stderr.background_job` (04 §15.2) を出して終了コード 5 で終わる。
+
+**Linux の実装 (v0.2 の M7、2026-11-01)**: core のコマンド `app.suspend` (when 句 `caps.can_suspend`。既定キー `Ctrl+K Z`) が `Effect::Suspend` を出す。eve-tui の `TuiFrontend` が扱い (Host には届かない)、上の手順 1 = `Frontend::restore` と同じ復元、2 = `unix::stop_self` (`kill(getpid(), SIGTSTP)`。SIGTSTP は受信を登録しないので既定の動作で止まる)、4 = 再開したら再初期化の印を立て、`Frontend::wake_after` が描画を起こし、描画の先頭で raw モード・代替スクリーン・各モード・マウスを入れ直して全面を描く (外からの SIGCONT と同じ経路、§11.1)。入力スレッドは止めない (停止中はプロセス全体が止まっている)。`Capabilities.can_suspend` は Unix で真 (eve-tui の `caps::detect`)。起動時の確認は bin の `eve_tui::unix::is_background_job`。親が SIGTSTP を無視させて起動した (ジョブ制御の無いシェル) ときは止まらずにすぐ戻り、画面を描き直すだけになる。**既知の制約**: 外から送られた SIGTSTP (`kill -TSTP`。raw モードでは `Ctrl+Z` からは発生しない) は受信を登録しないので、端末を戻さずに止まる (SIGSTOP と同じ。再開すれば描き直す)。
 
 ### 11.4 緊急スナップショット (NFR-302 の実装前提)
 

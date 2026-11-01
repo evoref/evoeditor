@@ -27,6 +27,8 @@ pub(super) fn default_keymap() -> Keymap {
     bind("global", "ctrl+k r", "ui.redraw");
     bind("global", "ctrl+k h", "help.open");
     bind("global", "ctrl+k m", "ui.message_history");
+    // サスペンド (Unix。`ctrl+z` は Undo のため、04 §7.2)
+    bind("editor", "ctrl+k z", "app.suspend");
     bind("editor", "alt+z", "view.toggle_wrap");
     bind("editor", "ctrl+k o", "view.toggle_wrap");
     // ヘルプ画面 (help → global): 1 行・1 画面ずつスクロール、`Esc` で閉じる

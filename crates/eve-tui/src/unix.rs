@@ -9,6 +9,7 @@
 //!   (1 回の読取) `VtParser::feed` に渡す。途切れたシーケンスを持ち越したまま入力が途絶えたら `ESC_WAIT` で `flush` する。
 //!   SIGWINCH は `Resize`。SIGCONT (外から止められて `fg` で再開した) は「端末の再初期化が要る」印を立てて `Resize` を送る
 //!   (次の描画で raw モード・代替スクリーン・各モードを入れ直して全面を描く)。
+//! - サスペンド (`app.suspend`、05 §11.3): frontend が端末を復元してから `stop_self` で止まる。再開は上の SIGCONT と同じ経路。
 
 #![allow(unsafe_code)]
 
@@ -178,6 +179,11 @@ impl ConsoleInput {
         self.reinit.load(Ordering::Acquire)
     }
 
+    /// 再初期化の印を立てる (サスペンドから戻った直後。SIGCONT の自己パイプより先に描画が来ても入れ直すため)。
+    pub fn request_reinit(&self) {
+        self.reinit.store(true, Ordering::Release);
+    }
+
     /// SIGCONT の後の再初期化が要るか (立っていたら下ろして `true`)。
     pub fn take_reinit(&self) -> bool {
         self.reinit.swap(false, Ordering::AcqRel)
@@ -239,6 +245,31 @@ impl Drop for ConsoleOut {
     fn drop(&mut self) {
         // SAFETY: 自分が開いた fd を閉じる。
         unsafe { libc::close(self.fd) };
+    }
+}
+
+/// 自分だけに SIGTSTP を送って止まる (プロセスグループには送らない。シェル・tmux が前面のジョブとして止める、05 §11.3)。
+/// SIGTSTP は受信を登録しないので既定の動作 (停止) になり、再開 (SIGCONT) まで戻らない。親が SIGTSTP を無視させて起動した
+/// (ジョブ制御の無いシェル) ときは止まらずにすぐ戻る (呼び側は再開と同じに扱う)。
+pub fn stop_self() {
+    // SAFETY: 自分のプロセスにシグナルを送るだけ。
+    unsafe {
+        libc::kill(libc::getpid(), libc::SIGTSTP);
+    }
+}
+
+/// バックグラウンドのジョブとして起動されたか (端末の前面のプロセスグループが自分のでない、05 §11.3)。端末を raw にする前に
+/// 確かめる (バックグラウンドから termios を変えると SIGTTOU で止まるため)。`/dev/tty` を開けない・前面を調べられないときは
+/// `false` (端末が無い場合は `Frontend::init` が扱う)。
+pub fn is_background_job() -> bool {
+    let Ok(fd) = open_tty(true) else {
+        return false;
+    };
+    // SAFETY: 開いた fd を調べて閉じる。
+    unsafe {
+        let fg = libc::tcgetpgrp(fd);
+        libc::close(fd);
+        fg >= 0 && fg != libc::getpgrp()
     }
 }
 
