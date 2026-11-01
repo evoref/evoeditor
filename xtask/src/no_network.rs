@@ -1,7 +1,7 @@
 //! `cargo xtask no-network`: NFR-501 AC-2 の検査 (docs/09 §3.6 の「無通信」、v0.2、Linux)。eve-testkit の `no_network`
 //! (ヘッドレスのシナリオ: 開く → 編集 → 保存 → 終了。Host の実行ループ・本物の時計とワーカースレッド) を
 //! `strace -f -e trace=network` の下で走らせ、ネットワーク系のシステムコールが 0 であること (と、シナリオが成功すること) を確かめる。
-//! FS は偽物 (Linux の実 FS は M7 で入る)。
+//! FS は本物 (eve-platform の `UnixFs`。一時ディレクトリのファイルを開いて保存する)。
 
 use std::process::Command;
 

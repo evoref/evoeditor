@@ -1,8 +1,8 @@
-//! 保存の途中で強制終了 (`TerminateProcess`) したときのディスクの状態と、次に開いたときの報告 (docs/09 §3.6 (6)、05 §4.4 手順 10、
+//! 保存の途中で強制終了 (Windows は `TerminateProcess`、Unix は `SIGKILL`) したときのディスクの状態と、次に開いたときの報告 (docs/09 §3.6 (6)、05 §4.4 手順 10、
 //! §4.6、02 §4.5「中断の痕跡の写像」、01 FR-105 AC-1 / NFR-301)。補助プロセス `eve-test-helpers save` を `EVE_TEST_HOOK=<切断点>` で
 //! 起動し、切断点で後始末なしに終了させる。
 
-#![cfg(windows)]
+#![cfg(any(windows, target_os = "linux"))]
 #![allow(clippy::result_large_err)]
 
 use std::fs;
@@ -14,9 +14,16 @@ use eve_core::{
     CancelToken, Clock, FsPath, InterruptedSave, JobKind, JobPorts, JobRequest, JobResult,
     Leftover, LeftoverKind, LeftoverOp, OpenOptions, SaveMethod, Tick, run_job,
 };
-use eve_platform::dirs::{Dirs, WinPaths};
-use eve_platform::fs::WinFs;
+use eve_platform::dirs::Dirs;
+#[cfg(unix)]
+use eve_platform::dirs::UnixPaths as NativePaths;
+#[cfg(windows)]
+use eve_platform::dirs::WinPaths as NativePaths;
+#[cfg(windows)]
+use eve_platform::fs::WinFs as NativeFs;
 use eve_platform::path::PathCtx;
+#[cfg(unix)]
+use eve_platform::unix_fs::UnixFs as NativeFs;
 use eve_view::{JobId, Revision};
 
 const EXE: &str = env!("CARGO_BIN_EXE_eve-test-helpers");
@@ -71,11 +78,31 @@ impl Env {
             None => cmd.env_remove("EVE_TEST_HOOK"),
         };
         let st = cmd.status().expect("補助プロセスを起動できない");
-        Run { code: st.code() }
+        // Unix の SIGKILL は終了コードが無いので、Windows の TerminateProcess(137) と同じく 137 (128 + 9) に写す
+        #[cfg(unix)]
+        let code = {
+            use std::os::unix::process::ExitStatusExt;
+            st.code().or_else(|| st.signal().map(|s| 128 + s))
+        };
+        #[cfg(windows)]
+        let code = st.code();
+        Run { code }
     }
 
-    fn fs(&self) -> WinFs {
-        WinFs::new(&self.state)
+    fn fs(&self) -> NativeFs {
+        NativeFs::new(&self.state)
+    }
+
+    /// 環境変数を読まない (開発者の設定に依らない) `Paths`。
+    fn paths(&self) -> NativePaths {
+        let ctx = PathCtx {
+            cwd: self.root.to_string_lossy().into_owned(),
+            home: None,
+        };
+        #[cfg(windows)]
+        return NativePaths::new(Dirs::resolve(&|_| None), ctx);
+        #[cfg(unix)]
+        return NativePaths::new(Dirs::resolve_unix(&|_| None, None), ctx, None);
     }
 
     /// 開くジョブの結果から、中断の痕跡の報告を得る。
@@ -83,13 +110,7 @@ impl Env {
         let ports = JobPorts {
             fs: Arc::new(self.fs()),
             clock: Arc::new(FixedClock),
-            paths: Arc::new(WinPaths::new(
-                Dirs::resolve(&|_| None),
-                PathCtx {
-                    cwd: self.root.to_string_lossy().into_owned(),
-                    home: None,
-                },
-            )),
+            paths: Arc::new(self.paths()),
         };
         let req = JobRequest {
             id: JobId(1),
@@ -217,6 +238,9 @@ fn 原子的保存の切断点では_t_は無傷で一時ファイルが残り_�
 }
 
 // verifies: AC-FR-105-1, AC-NFR-301-1
+// 置換の途中の状態 (`kill_after_replace_begin`) は Windows の置換 (T を退避名に移してから一時ファイルを移す) だけにある。
+// Unix は rename 1 回で置き換わるので、この状態が無い (05 §4.3)
+#[cfg(windows)]
 #[test]
 fn 置換の途中の状態では_t_が無く退避名に元が完全に残り_開くと案内する() {
     let e = Env::new("replace-begin");
@@ -433,13 +457,7 @@ impl Env {
         let ports = JobPorts {
             fs: Arc::new(self.fs()),
             clock: Arc::new(FixedClock),
-            paths: Arc::new(WinPaths::new(
-                Dirs::resolve(&|_| None),
-                PathCtx {
-                    cwd: self.root.to_string_lossy().into_owned(),
-                    home: None,
-                },
-            )),
+            paths: Arc::new(self.paths()),
         };
         let req = JobRequest {
             id: JobId(1),
@@ -472,6 +490,9 @@ impl Env {
     }
 }
 
+// 置換の途中の状態 (`kill_after_replace_begin`) は Windows の置換 (T を退避名に移してから一時ファイルを移す) だけにある。
+// Unix は rename 1 回で置き換わるので、この状態が無い (05 §4.3)
+#[cfg(windows)]
 #[test]
 fn 置換の途中の強制終了は_走査で_bak_と_tmp_の両方の提案になり_戻して_tmp_を片付けられる() {
     let e = Env::new("scan-both");
@@ -496,6 +517,9 @@ fn 置換の途中の強制終了は_走査で_bak_と_tmp_の両方の提案に
     assert!(e.scan().is_empty());
 }
 
+// 置換の途中の状態 (`kill_after_replace_begin`) は Windows の置換 (T を退避名に移してから一時ファイルを移す) だけにある。
+// Unix は rename 1 回で置き換わるので、この状態が無い (05 §4.3)
+#[cfg(windows)]
 #[test]
 fn 戻す先に_t_が作られていたら置き換えずに失敗し_退避名を残す() {
     let e = Env::new("scan-conflict");
@@ -522,6 +546,12 @@ fn 置換の前の強制終了は_走査で_tmp_の提案で_t_は無傷() {
         assert_eq!(l.len(), 1, "{hook}: {l:?}");
         assert_eq!(l[0].kind, LeftoverKind::Tmp, "{hook}");
         assert!(l[0].bak.is_none() && l[0].tmp.is_some());
+        assert_eq!(fs::read(e.file("a.txt")).unwrap(), ORIG);
+        // tmp を消すと痕跡もフラグも無くなり、T は無傷のまま
+        e.act(&l[0], LeftoverOp::DeleteTmp).expect("消せる");
+        assert_eq!(e.flags(), 0, "{hook}");
+        assert_eq!(e.names(), ["a.txt"], "{hook}");
+        assert!(e.scan().is_empty(), "{hook}");
         assert_eq!(fs::read(e.file("a.txt")).unwrap(), ORIG);
     }
 }
