@@ -145,9 +145,10 @@ jobs:
             target/nightly/lcov.info
             target/nightly/summary.txt
           if-no-files-found: ignore
-      # 失敗の起票: 書くのはジョブの失敗とクラッシュの件数 (要約) だけ。入力・スタック・原因の推測は書かない
+      # 失敗の起票: 書くのはジョブの失敗とクラッシュの件数 (要約) だけ。入力・スタック・原因の推測は書かない。
+      # 起票するのは定時の実行だけ (手動の実行は起動した人が結果を見る。作業ブランチでの試しの実行で課題を増やさない)
       - name: 失敗の起票
-        if: failure()
+        if: failure() && github.event_name == 'schedule'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |

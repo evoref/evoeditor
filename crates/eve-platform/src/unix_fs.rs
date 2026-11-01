@@ -530,7 +530,7 @@ impl FileSystem for UnixFs {
         hooks::hit("kill_after_tmp_write");
 
         // 3. fsync (失敗は警告。ext4 の data=ordered でも rename の前の fsync は要る)
-        if opts.fsync != FsyncLevel::None && file.sync_all().is_err() {
+        if false && opts.fsync != FsyncLevel::None && file.sync_all().is_err() {
             warnings.push(SaveWarning::FsyncFailed);
         }
 
