@@ -2,9 +2,9 @@
 
 [日本語](README.md) | English
 
-A text editor written in Rust. It aims to let you edit and save Japanese text safely in Windows terminals (Windows Terminal / the console host), keeping the original encoding and line endings.
+A text editor written in Rust. It aims to let you edit and save Japanese text safely in Windows terminals (Windows Terminal / the console host) and Linux terminals, keeping the original encoding and line endings.
 
-This is **v0.1 (the minimal core)**. It supports only Windows 11 (x86_64) and a Japanese user interface.
+Supported operating systems are **Windows 11 (x86_64)** and **Linux (x86_64 / aarch64, from v0.2)**.
 
 - License: Apache License 2.0 ([LICENSE](LICENSE), [NOTICE](NOTICE))
 - Notices for other software used: [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)
@@ -31,6 +31,8 @@ Main keys (the command palette is `F1` or `Ctrl+P`; it shows the key assigned to
 ## Installation
 
 There is no installer. It writes nothing to the registry or system settings. Administrator rights are not required.
+
+### Windows
 
 1. **Download**: from the page of the version on GitHub Releases, download these three files into the same folder:
    - `evoeditor-<version>-x86_64-pc-windows-msvc.zip`
@@ -72,9 +74,42 @@ There is no installer. It writes nothing to the registry or system settings. Adm
 
 If you have a Rust development environment, you can also install with `cargo install --locked --git <repository> --tag v<version> evoeditor`. In that case, set the environment variable `RUSTFLAGS` to `-C target-feature=+crt-static` before running it, to link the C runtime statically.
 
+### Linux
+
+The Linux build is a statically linked executable (musl) that runs on any distribution. The same steps work in WSL.
+
+1. **Download**: from the page of the version on GitHub Releases, download these three files into the same directory. Check `x86_64` or `aarch64` with `uname -m`. The `.debug` file is for investigating bugs and is not needed.
+   - `evoeditor-<version>-x86_64-unknown-linux-musl.tar.gz` (or `aarch64-unknown-linux-musl`)
+   - `SHA256SUMS`
+   - `SHA256SUMS.minisig`
+2. **Verify** (do not continue if they do not match): verify the signature with minisign (on Debian / Ubuntu, `sudo apt install minisign`) and check the hash of the archive. The archive matches when its line shows `OK`.
+
+   ```sh
+   minisign -Vm SHA256SUMS -P RWRtkrzH70nKORpBFPEtLy6elo0xP5XsEli9SU/OaxnBmNM8o14GKMhv
+   sha256sum -c SHA256SUMS --ignore-missing
+   ```
+
+3. **Extract**: extract into a per-user directory. The archive has no top-level directory, so always give the destination.
+
+   ```sh
+   mkdir -p ~/.local/opt/evoeditor
+   tar -xzf evoeditor-<version>-x86_64-unknown-linux-musl.tar.gz -C ~/.local/opt/evoeditor
+   ```
+
+4. **PATH**: put a link in `~/.local/bin`. On Debian / Ubuntu, `~/.local/bin` is added to `PATH` when you **log in again** after creating it. If `command -v evoeditor` does not find it, add `export PATH="$HOME/.local/bin:$PATH"` to `~/.profile` (`~/.zprofile` for zsh) and log in again.
+
+   ```sh
+   mkdir -p ~/.local/bin
+   ln -sf ~/.local/opt/evoeditor/evoeditor ~/.local/bin/evoeditor
+   ```
+
+5. **Check**: in a new terminal, run `evoeditor --version` and check that the version is shown.
+
+If you have a Rust development environment, you can also install with `cargo install --locked --git <repository> --tag v<version> evoeditor` (this builds an executable dynamically linked to glibc).
+
 ### Starting
 
-```powershell
+```sh
 evoeditor                 # a new untitled document
 evoeditor memo.txt        # open a file (only one)
 evoeditor --readonly a.txt
@@ -84,15 +119,15 @@ evoeditor --help
 
 ### Configuration
 
-A configuration file is not required. To change settings, copy the bundled [config.example.toml](config.example.toml) to `%APPDATA%\evoeditor\config.toml` and edit it (create the folder if it does not exist). Mistakes do not stop startup; only the affected item falls back to its default, and you are told about it.
+A configuration file is not required. To change settings, copy the bundled [config.example.toml](config.example.toml) to `%APPDATA%\evoeditor\config.toml` on Windows, or to `~/.config/evoeditor/config.toml` on Linux (under `XDG_CONFIG_HOME` if you set it), and edit it (create the folder if it does not exist). Mistakes do not stop startup; only the affected item falls back to its default, and you are told about it.
 
 ## Updating
 
 The editor has no built-in update function and does not communicate over the network. Learn about new versions with GitHub Watch (Releases and Security alerts).
 
 1. Download the archive of the new version with `SHA256SUMS` and `SHA256SUMS.minisig`, and **verify the signature and the hash** as in step 2 of "Installation".
-2. **Quit all** evoeditor processes (Windows cannot replace a running exe).
-3. Replace the contents of `%LOCALAPPDATA%\Programs\evoeditor` with the files from the extracted folder.
+2. **Quit all** evoeditor processes (Windows cannot replace a running exe; on Linux, quit first as well so that the version in use is replaced cleanly).
+3. Replace the contents of `%LOCALAPPDATA%\Programs\evoeditor` with the files from the extracted folder. On Linux, extract the new archive again into the same destination (`tar -xzf <new archive> -C ~/.local/opt/evoeditor`); the link keeps working.
 4. Check the version with `evoeditor --version`.
 
 Keep the archive, `SHA256SUMS` and `SHA256SUMS.minisig` of the version you were using, in case you need to go back.
@@ -111,6 +146,10 @@ There is no automatic way. The steps are the same as updating: verify the signat
 ## Uninstalling
 
 Delete the extracted folder (`%LOCALAPPDATA%\Programs\evoeditor`) and remove that folder from the environment variable `Path`. With `cargo install`, run `cargo uninstall evoeditor`. Delete the configuration and state folders (`%APPDATA%\evoeditor`, `%LOCALAPPDATA%\evoeditor`, and the emergency rescues `%TEMP%\eve-recovery-*`) by hand if you no longer need them.
+
+On Linux, delete the destination (`~/.local/opt/evoeditor`) and the link (`~/.local/bin/evoeditor`). Delete the configuration and state directories (`~/.config/evoeditor`, `~/.local/state/evoeditor`, and the emergency rescues `$TMPDIR/eve-recovery-<uid>`) by hand if you no longer need them.
+
+The `recovery/` and `swap/` folders in the state directory may still hold unsaved edits. Check their contents before deleting them.
 
 ## Verifying the signature
 
@@ -140,3 +179,12 @@ RWRtkrzH70nKORpBFPEtLy6elo0xP5XsEli9SU/OaxnBmNM8o14GKMhv
 ---
 
 The Japanese version ([README.md](README.md)) is authoritative. If the two differ, the Japanese version applies.
+
+## Known limitations (Linux)
+
+- **The environments checked are Windows Terminal on WSL2 (Ubuntu) and tmux inside it.** The clipboard and the position of the Japanese input (mozc and others) candidate window on desktop environments such as GNOME or KDE (Wayland / X11) have not been checked yet. Please report what you notice in Issues. The Linux console (`TERM=linux`) is not supported. macOS is not supported.
+- **Clipboard**: evoeditor uses `wl-copy` / `wl-paste` (Wayland), `xclip` or `xsel` (X11), and `powershell.exe` on WSL. When connected over SSH (the commands would write on the remote side) or when none of them is available, it writes to the terminal clipboard with OSC 52 if the terminal supports it (VTE-based terminals such as GNOME Terminal do not). Otherwise, the clipboard works only inside evoeditor.
+- **`Ctrl+Z` is undo.** To go back to the shell temporarily, press `Ctrl+K Z`, and return with `fg`.
+- **When the terminal is closed or on `kill` (SIGTERM / SIGHUP / SIGINT), evoeditor rescues unsaved content before quitting.** It cannot rescue on `kill -9` (SIGKILL) or power loss. Files on disk are not damaged, thanks to atomic saving.
+- **Inside tmux**, we recommend `set -s escape-time 10`, `set -g set-clipboard on`, `set -s extended-keys on` and `set -g focus-events on` in `~/.tmux.conf` (for `Esc` responsiveness, the clipboard, and telling keys with `Ctrl+Shift` apart). Inside tmux, when the outer terminal is unknown, evoeditor draws with 256 colors (override with `color_mode = "truecolor"` under `[theme]`).
+- **On WSL, edit files on the Linux side (under `~`).** Files on Windows drives (under `/mnt/c`) can be opened too, but are slower.

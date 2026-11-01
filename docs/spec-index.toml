@@ -2708,7 +2708,7 @@ title = "サイズ上限"
 id = "05 §9"
 file = "docs/05-platform.md"
 line = 774
-end = 845
+end = 848
 title = "端末の OS 固有事項と互換性マトリクス"
 
 [[section]]
@@ -2736,350 +2736,350 @@ title = "tmux / screen / mosh"
 id = "05 §9.4"
 file = "docs/05-platform.md"
 line = 822
-end = 845
+end = 848
 title = "互換性マトリクス (リリース前に手動確認。記入は 09 §3.8)"
 
 [[section]]
 id = "05 §10"
 file = "docs/05-platform.md"
-line = 846
-end = 862
+line = 849
+end = 865
 title = "IME の OS 別注意"
 
 [[section]]
 id = "05 §11"
 file = "docs/05-platform.md"
-line = 863
-end = 1003
+line = 866
+end = 1006
 title = "シグナル・コンソールイベント・終了"
 
 [[section]]
 id = "05 §11.1"
 file = "docs/05-platform.md"
-line = 865
-end = 889
+line = 868
+end = 892
 title = "Unix シグナル"
 
 [[section]]
 id = "05 §11.2"
 file = "docs/05-platform.md"
-line = 890
-end = 937
+line = 893
+end = 940
 title = "Windows コンソールイベント"
 
 [[section]]
 id = "05 §11.3"
 file = "docs/05-platform.md"
-line = 938
-end = 951
+line = 941
+end = 954
 title = "サスペンド (Unix、`Effect::Suspend`、v0.2)"
 
 [[section]]
 id = "05 §11.4"
 file = "docs/05-platform.md"
-line = 952
-end = 976
+line = 955
+end = 979
 title = "緊急スナップショット (NFR-302 の実装前提)"
 
 [[section]]
 id = "05 §11.5"
 file = "docs/05-platform.md"
-line = 977
-end = 1003
+line = 980
+end = 1006
 title = "終了シーケンスと終了コード"
 
 [[section]]
 id = "05 §12"
 file = "docs/05-platform.md"
-line = 1004
-end = 1024
+line = 1007
+end = 1027
 title = "ファイル監視"
 
 [[section]]
 id = "05 §12.1"
 file = "docs/05-platform.md"
-line = 1006
-end = 1013
+line = 1009
+end = 1016
 title = "OS 別バックエンド (notify クレート経由)"
 
 [[section]]
 id = "05 §12.2"
 file = "docs/05-platform.md"
-line = 1014
-end = 1024
+line = 1017
+end = 1027
 title = "方針"
 
 [[section]]
 id = "05 §13"
 file = "docs/05-platform.md"
-line = 1025
-end = 1095
+line = 1028
+end = 1098
 title = "シェル・外部プロセス起動"
 
 [[section]]
 id = "05 §13.1"
 file = "docs/05-platform.md"
-line = 1029
-end = 1034
+line = 1032
+end = 1037
 title = "原則"
 
 [[section]]
 id = "05 §13.2"
 file = "docs/05-platform.md"
-line = 1035
-end = 1045
+line = 1038
+end = 1048
 title = "シェルの既定"
 
 [[section]]
 id = "05 §13.3"
 file = "docs/05-platform.md"
-line = 1046
-end = 1054
+line = 1049
+end = 1057
 title = "Windows の引数とバッチファイル"
 
 [[section]]
 id = "05 §13.4"
 file = "docs/05-platform.md"
-line = 1055
-end = 1063
+line = 1058
+end = 1066
 title = "プロセス木の終了 (キャンセル・タイムアウト)"
 
 [[section]]
 id = "05 §13.5"
 file = "docs/05-platform.md"
-line = 1064
-end = 1068
+line = 1067
+end = 1071
 title = "環境変数と出力の文字コード"
 
 [[section]]
 id = "05 §13.6"
 file = "docs/05-platform.md"
-line = 1069
-end = 1072
+line = 1072
+end = 1075
 title = "`Effect::OpenUrl`"
 
 [[section]]
 id = "05 §13.7"
 file = "docs/05-platform.md"
-line = 1073
-end = 1095
+line = 1076
+end = 1098
 title = "ローカル LLM サーバ (`llama-server` 等) の OS 別事項 (v1.L)"
 
 [[section]]
 id = "05 §14"
 file = "docs/05-platform.md"
-line = 1096
-end = 1119
+line = 1099
+end = 1122
 title = "資格情報ストア (v1.L)"
 
 [[section]]
 id = "05 §14.1"
 file = "docs/05-platform.md"
-line = 1108
-end = 1119
+line = 1111
+end = 1122
 title = "v1.L 着手時に本書で確定する項目 (見出しのみ予約)"
 
 [[section]]
 id = "05 §15"
 file = "docs/05-platform.md"
-line = 1120
-end = 1153
+line = 1123
+end = 1156
 title = "WSL / SSH / コンテナ環境"
 
 [[section]]
 id = "05 §15.1"
 file = "docs/05-platform.md"
-line = 1124
-end = 1135
+line = 1127
+end = 1138
 title = "WSL (1 / 2)"
 
 [[section]]
 id = "05 §15.2"
 file = "docs/05-platform.md"
-line = 1136
-end = 1143
+line = 1139
+end = 1146
 title = "SSH 越し (NG5 の「リモート先で起動」の運用)"
 
 [[section]]
 id = "05 §15.3"
 file = "docs/05-platform.md"
-line = 1144
-end = 1153
+line = 1147
+end = 1156
 title = "コンテナ (Docker / devcontainer / Kubernetes exec)"
 
 [[section]]
 id = "05 §16"
 file = "docs/05-platform.md"
-line = 1154
-end = 1222
+line = 1157
+end = 1225
 title = "ビルド・ツールチェイン・MSRV"
 
 [[section]]
 id = "05 §16.1"
 file = "docs/05-platform.md"
-line = 1156
-end = 1165
+line = 1159
+end = 1168
 title = "MSRV と edition (OQ-14 の具体化)"
 
 [[section]]
 id = "05 §16.2"
 file = "docs/05-platform.md"
-line = 1166
-end = 1176
+line = 1169
+end = 1179
 title = "ターゲット別のビルド要件"
 
 [[section]]
 id = "05 §16.3"
 file = "docs/05-platform.md"
-line = 1177
-end = 1200
+line = 1180
+end = 1203
 title = "ビルドプロファイル"
 
 [[section]]
 id = "05 §16.4"
 file = "docs/05-platform.md"
-line = 1201
-end = 1222
+line = 1204
+end = 1225
 title = "Windows 実行ファイルのメタデータ"
 
 [[section]]
 id = "05 §17"
 file = "docs/05-platform.md"
-line = 1223
-end = 1252
+line = 1226
+end = 1255
 title = "依存のライセンス・ビルド時間・サイズ"
 
 [[section]]
 id = "05 §17.1"
 file = "docs/05-platform.md"
-line = 1225
-end = 1233
+line = 1228
+end = 1236
 title = "ライセンス運用 (ADR-0018 の具体化。検査は 09)"
 
 [[section]]
 id = "05 §17.2"
 file = "docs/05-platform.md"
-line = 1234
-end = 1246
+line = 1237
+end = 1249
 title = "依存数・ビルド時間の予算 (Should。計測は 09)"
 
 [[section]]
 id = "05 §17.3"
 file = "docs/05-platform.md"
-line = 1247
-end = 1252
+line = 1250
+end = 1255
 title = "アロケータ"
 
 [[section]]
 id = "05 §18"
 file = "docs/05-platform.md"
-line = 1253
-end = 1402
+line = 1256
+end = 1423
 title = "配布 (パッケージ・署名・公証)"
 
 [[section]]
 id = "05 §18.1"
 file = "docs/05-platform.md"
-line = 1255
-end = 1263
+line = 1258
+end = 1266
 title = "段階 (OQ-20)"
 
 [[section]]
 id = "05 §18.2"
 file = "docs/05-platform.md"
-line = 1264
-end = 1306
+line = 1267
+end = 1327
 title = "アーカイブ構成"
 
 [[section]]
 id = "05 §18.3"
 file = "docs/05-platform.md"
-line = 1307
-end = 1315
+line = 1328
+end = 1336
 title = "Windows コード署名"
 
 [[section]]
 id = "05 §18.4"
 file = "docs/05-platform.md"
-line = 1316
-end = 1326
+line = 1337
+end = 1347
 title = "macOS 署名と公証"
 
 [[section]]
 id = "05 §18.5"
 file = "docs/05-platform.md"
-line = 1327
-end = 1338
+line = 1348
+end = 1359
 title = "Linux パッケージ"
 
 [[section]]
 id = "05 §18.6"
 file = "docs/05-platform.md"
-line = 1339
-end = 1342
+line = 1360
+end = 1363
 title = "デバッグ情報とクラッシュログの対応付け"
 
 [[section]]
 id = "05 §18.7"
 file = "docs/05-platform.md"
-line = 1343
-end = 1346
+line = 1364
+end = 1367
 title = "再現可能ビルド (Should, v0.4)"
 
 [[section]]
 id = "05 §18.8"
 file = "docs/05-platform.md"
-line = 1347
-end = 1350
+line = 1368
+end = 1371
 title = "アンインストール (提案、OQ-164)"
 
 [[section]]
 id = "05 §18.9"
 file = "docs/05-platform.md"
-line = 1351
-end = 1354
+line = 1372
+end = 1375
 title = "minisign 署名の検証 (提案、OQ-164)"
 
 [[section]]
 id = "05 §18.10"
 file = "docs/05-platform.md"
-line = 1355
-end = 1370
+line = 1376
+end = 1391
 title = "更新の方針 (ADR-0040)"
 
 [[section]]
 id = "05 §18.11"
 file = "docs/05-platform.md"
-line = 1371
-end = 1383
+line = 1392
+end = 1404
 title = "更新とダウングレード"
 
 [[section]]
 id = "05 §18.12"
 file = "docs/05-platform.md"
-line = 1384
-end = 1392
+line = 1405
+end = 1413
 title = "直前の版に戻す (ロールバック)"
 
 [[section]]
 id = "05 §18.13"
 file = "docs/05-platform.md"
-line = 1393
-end = 1396
+line = 1414
+end = 1417
 title = "リリースチャネル"
 
 [[section]]
 id = "05 §18.14"
 file = "docs/05-platform.md"
-line = 1397
-end = 1402
+line = 1418
+end = 1423
 title = "脆弱性の通知 (OQ-164)"
 
 [[section]]
 id = "05 §19"
 file = "docs/05-platform.md"
-line = 1403
-end = 1431
+line = 1424
+end = 1452
 title = "未決事項"
 
 [[section]]
@@ -4884,120 +4884,120 @@ title = "未決事項"
 [[section]]
 id = "10 §0"
 file = "docs/10-decisions.md"
-line = 275
-end = 357
+line = 274
+end = 356
 title = "運用ルール"
 
 [[section]]
 id = "10 §0.1"
 file = "docs/10-decisions.md"
-line = 277
-end = 286
+line = 276
+end = 285
 title = "ADR の状態"
 
 [[section]]
 id = "10 §0.2"
 file = "docs/10-decisions.md"
-line = 287
-end = 290
+line = 286
+end = 289
 title = "書式"
 
 [[section]]
 id = "10 §0.3"
 file = "docs/10-decisions.md"
-line = 291
-end = 297
+line = 290
+end = 296
 title = "確定手続き"
 
 [[section]]
 id = "10 §0.4"
 file = "docs/10-decisions.md"
-line = 298
-end = 343
+line = 297
+end = 342
 title = "ADR 一覧"
 
 [[section]]
 id = "10 §0.5"
 file = "docs/10-decisions.md"
-line = 344
-end = 357
+line = 343
+end = 356
 title = "OQ の区分と回答の扱い"
 
 [[section]]
 id = "10 §1"
 file = "docs/10-decisions.md"
-line = 358
-end = 750
+line = 357
+end = 749
 title = "決定記録 (ADR)"
 
 [[section]]
 id = "10 §2"
 file = "docs/10-decisions.md"
-line = 751
-end = 1371
+line = 750
+end = 1370
 title = "未決事項 (Open Questions)"
 
 [[section]]
 id = "10 §2.1"
 file = "docs/10-decisions.md"
-line = 755
-end = 810
+line = 754
+end = 809
 title = "一覧 (個別節のある OQ)"
 
 [[section]]
 id = "10 §2.2"
 file = "docs/10-decisions.md"
-line = 811
-end = 955
+line = 810
+end = 954
 title = "既存 OQ (OQ-01〜25)"
 
 [[section]]
 id = "10 §2.3"
 file = "docs/10-decisions.md"
-line = 956
-end = 1124
+line = 955
+end = 1123
 title = "OQ-26〜44、OQ-110〜116、OQ-120 (PO 決定)"
 
 [[section]]
 id = "10 §2.4"
 file = "docs/10-decisions.md"
-line = 1125
-end = 1201
+line = 1124
+end = 1200
 title = "OQ-45〜127 (設計者裁量・スパイク検証)"
 
 [[section]]
 id = "10 §2.5"
 file = "docs/10-decisions.md"
-line = 1202
-end = 1218
+line = 1201
+end = 1217
 title = "OQ-128〜137 (ローカル LLM の一級対応)"
 
 [[section]]
 id = "10 §2.6"
 file = "docs/10-decisions.md"
-line = 1219
-end = 1238
+line = 1218
+end = 1237
 title = "OQ-138〜150 (各文書からの追加起票)"
 
 [[section]]
 id = "10 §2.7"
 file = "docs/10-decisions.md"
-line = 1239
-end = 1271
+line = 1238
+end = 1270
 title = "OQ-151〜160 (TUI 完成の定義とライセンス・配布)"
 
 [[section]]
 id = "10 §2.8"
 file = "docs/10-decisions.md"
-line = 1272
-end = 1311
+line = 1271
+end = 1310
 title = "OQ-161 以降 (仕上げ段階の追加起票)"
 
 [[section]]
 id = "10 §2.9"
 file = "docs/10-decisions.md"
-line = 1312
-end = 1371
+line = 1311
+end = 1370
 title = "OQ-176 以降 (並行修正での追加起票)"
 
 [[section]]
@@ -7898,139 +7898,139 @@ section = "04 §18"
 [[id]]
 id = "OQ-15"
 file = "docs/05-platform.md"
-line = 1409
+line = 1430
 section = "05 §19"
 
 [[id]]
 id = "OQ-70"
 file = "docs/05-platform.md"
-line = 1410
+line = 1431
 section = "05 §19"
 
 [[id]]
 id = "ADR-0021"
 file = "docs/05-platform.md"
-line = 1411
+line = 1432
 section = "05 §19"
 
 [[id]]
 id = "OQ-04"
 file = "docs/05-platform.md"
-line = 1412
+line = 1433
 section = "05 §19"
 
 [[id]]
 id = "OQ-71"
 file = "docs/05-platform.md"
-line = 1413
+line = 1434
 section = "05 §19"
 
 [[id]]
 id = "OQ-72"
 file = "docs/05-platform.md"
-line = 1414
+line = 1435
 section = "05 §19"
 
 [[id]]
 id = "OQ-73"
 file = "docs/05-platform.md"
-line = 1415
+line = 1436
 section = "05 §19"
 
 [[id]]
 id = "OQ-74"
 file = "docs/05-platform.md"
-line = 1416
+line = 1437
 section = "05 §19"
 
 [[id]]
 id = "OQ-75"
 file = "docs/05-platform.md"
-line = 1417
+line = 1438
 section = "05 §19"
 
 [[id]]
 id = "OQ-76"
 file = "docs/05-platform.md"
-line = 1418
+line = 1439
 section = "05 §19"
 
 [[id]]
 id = "OQ-77"
 file = "docs/05-platform.md"
-line = 1419
+line = 1440
 section = "05 §19"
 
 [[id]]
 id = "OQ-78"
 file = "docs/05-platform.md"
-line = 1420
+line = 1441
 section = "05 §19"
 
 [[id]]
 id = "OQ-79"
 file = "docs/05-platform.md"
-line = 1421
+line = 1442
 section = "05 §19"
 
 [[id]]
 id = "OQ-80"
 file = "docs/05-platform.md"
-line = 1422
+line = 1443
 section = "05 §19"
 
 [[id]]
 id = "OQ-34"
 file = "docs/05-platform.md"
-line = 1423
+line = 1444
 section = "05 §19"
 
 [[id]]
 id = "S-11"
 file = "docs/05-platform.md"
-line = 1424
+line = 1445
 section = "05 §19"
 
 [[id]]
 id = "S-09"
 file = "docs/05-platform.md"
-line = 1425
+line = 1446
 section = "05 §19"
 
 [[id]]
 id = "OQ-111"
 file = "docs/05-platform.md"
-line = 1426
+line = 1447
 section = "05 §19"
 
 [[id]]
 id = "OQ-112"
 file = "docs/05-platform.md"
-line = 1427
+line = 1448
 section = "05 §19"
 
 [[id]]
 id = "OQ-140"
 file = "docs/05-platform.md"
-line = 1428
+line = 1449
 section = "05 §19"
 
 [[id]]
 id = "OQ-163"
 file = "docs/05-platform.md"
-line = 1429
+line = 1450
 section = "05 §19"
 
 [[id]]
 id = "OQ-164"
 file = "docs/05-platform.md"
-line = 1430
+line = 1451
 section = "05 §19"
 
 [[id]]
 id = "OQ-166"
 file = "docs/05-platform.md"
-line = 1431
+line = 1452
 section = "05 §19"
 
 [[id]]
@@ -9606,1569 +9606,1569 @@ line = 219
 section = ""
 
 [[id]]
-id = "OQ-143"
+id = "OQ-144"
 file = "docs/10-decisions.md"
 line = 220
 section = ""
 
 [[id]]
-id = "OQ-144"
+id = "OQ-145"
 file = "docs/10-decisions.md"
 line = 221
 section = ""
 
 [[id]]
-id = "OQ-145"
+id = "OQ-146"
 file = "docs/10-decisions.md"
 line = 222
 section = ""
 
 [[id]]
-id = "OQ-146"
+id = "OQ-148"
 file = "docs/10-decisions.md"
 line = 223
 section = ""
 
 [[id]]
-id = "OQ-148"
+id = "OQ-149"
 file = "docs/10-decisions.md"
 line = 224
 section = ""
 
 [[id]]
-id = "OQ-149"
+id = "OQ-150"
 file = "docs/10-decisions.md"
 line = 225
 section = ""
 
 [[id]]
-id = "OQ-150"
+id = "OQ-151"
 file = "docs/10-decisions.md"
 line = 226
 section = ""
 
 [[id]]
-id = "OQ-151"
+id = "OQ-164"
 file = "docs/10-decisions.md"
 line = 227
 section = ""
 
 [[id]]
-id = "OQ-164"
+id = "OQ-167"
 file = "docs/10-decisions.md"
 line = 228
 section = ""
 
 [[id]]
-id = "OQ-167"
+id = "OQ-169"
 file = "docs/10-decisions.md"
 line = 229
 section = ""
 
 [[id]]
-id = "OQ-169"
+id = "OQ-170"
 file = "docs/10-decisions.md"
 line = 230
 section = ""
 
 [[id]]
-id = "OQ-170"
+id = "OQ-171"
 file = "docs/10-decisions.md"
 line = 231
 section = ""
 
 [[id]]
-id = "OQ-171"
+id = "OQ-165"
 file = "docs/10-decisions.md"
 line = 232
 section = ""
 
 [[id]]
-id = "OQ-165"
+id = "OQ-166"
 file = "docs/10-decisions.md"
 line = 233
 section = ""
 
 [[id]]
-id = "OQ-166"
+id = "OQ-172"
 file = "docs/10-decisions.md"
 line = 234
 section = ""
 
 [[id]]
-id = "OQ-172"
+id = "OQ-173"
 file = "docs/10-decisions.md"
 line = 235
 section = ""
 
 [[id]]
-id = "OQ-173"
+id = "OQ-174"
 file = "docs/10-decisions.md"
 line = 236
 section = ""
 
 [[id]]
-id = "OQ-174"
+id = "OQ-175"
 file = "docs/10-decisions.md"
 line = 237
 section = ""
 
 [[id]]
-id = "OQ-175"
+id = "OQ-176"
 file = "docs/10-decisions.md"
 line = 238
 section = ""
 
 [[id]]
-id = "OQ-176"
+id = "OQ-177"
 file = "docs/10-decisions.md"
 line = 239
 section = ""
 
 [[id]]
-id = "OQ-177"
+id = "OQ-178"
 file = "docs/10-decisions.md"
 line = 240
 section = ""
 
 [[id]]
-id = "OQ-178"
+id = "OQ-179"
 file = "docs/10-decisions.md"
 line = 241
 section = ""
 
 [[id]]
-id = "OQ-179"
+id = "OQ-180"
 file = "docs/10-decisions.md"
 line = 242
 section = ""
 
 [[id]]
-id = "OQ-180"
+id = "OQ-181"
 file = "docs/10-decisions.md"
 line = 243
 section = ""
 
 [[id]]
-id = "OQ-181"
+id = "OQ-182"
 file = "docs/10-decisions.md"
 line = 244
 section = ""
 
 [[id]]
-id = "OQ-182"
+id = "OQ-183"
 file = "docs/10-decisions.md"
 line = 245
 section = ""
 
 [[id]]
-id = "OQ-183"
+id = "OQ-184"
 file = "docs/10-decisions.md"
 line = 246
 section = ""
 
 [[id]]
-id = "OQ-184"
+id = "OQ-190"
 file = "docs/10-decisions.md"
 line = 247
 section = ""
 
 [[id]]
-id = "OQ-190"
+id = "OQ-191"
 file = "docs/10-decisions.md"
 line = 248
 section = ""
 
 [[id]]
-id = "OQ-191"
+id = "OQ-192"
 file = "docs/10-decisions.md"
 line = 249
 section = ""
 
 [[id]]
-id = "OQ-192"
+id = "OQ-193"
 file = "docs/10-decisions.md"
 line = 250
 section = ""
 
 [[id]]
-id = "OQ-193"
+id = "OQ-194"
 file = "docs/10-decisions.md"
 line = 251
 section = ""
 
 [[id]]
-id = "OQ-194"
+id = "OQ-195"
 file = "docs/10-decisions.md"
 line = 252
 section = ""
 
 [[id]]
-id = "OQ-195"
+id = "OQ-196"
 file = "docs/10-decisions.md"
 line = 253
 section = ""
 
 [[id]]
-id = "OQ-196"
+id = "OQ-197"
 file = "docs/10-decisions.md"
 line = 254
 section = ""
 
 [[id]]
-id = "OQ-197"
+id = "OQ-198"
 file = "docs/10-decisions.md"
 line = 255
 section = ""
 
 [[id]]
-id = "OQ-198"
+id = "OQ-199"
 file = "docs/10-decisions.md"
 line = 256
 section = ""
 
 [[id]]
-id = "OQ-199"
+id = "OQ-200"
 file = "docs/10-decisions.md"
 line = 257
 section = ""
 
 [[id]]
-id = "OQ-200"
+id = "OQ-201"
 file = "docs/10-decisions.md"
 line = 258
 section = ""
 
 [[id]]
-id = "OQ-201"
+id = "OQ-202"
 file = "docs/10-decisions.md"
 line = 259
 section = ""
 
 [[id]]
-id = "OQ-202"
+id = "OQ-203"
 file = "docs/10-decisions.md"
 line = 260
 section = ""
 
 [[id]]
-id = "OQ-203"
+id = "OQ-204"
 file = "docs/10-decisions.md"
 line = 261
 section = ""
 
 [[id]]
-id = "OQ-204"
+id = "OQ-205"
 file = "docs/10-decisions.md"
 line = 262
 section = ""
 
 [[id]]
-id = "OQ-205"
+id = "OQ-209"
 file = "docs/10-decisions.md"
 line = 263
 section = ""
 
 [[id]]
-id = "OQ-209"
+id = "OQ-210"
 file = "docs/10-decisions.md"
 line = 264
 section = ""
 
 [[id]]
-id = "OQ-210"
+id = "OQ-211"
 file = "docs/10-decisions.md"
 line = 265
 section = ""
 
 [[id]]
-id = "OQ-211"
+id = "OQ-212"
 file = "docs/10-decisions.md"
 line = 266
 section = ""
 
 [[id]]
-id = "OQ-212"
+id = "OQ-213"
 file = "docs/10-decisions.md"
 line = 267
 section = ""
 
 [[id]]
-id = "OQ-213"
+id = "OQ-214"
 file = "docs/10-decisions.md"
 line = 268
 section = ""
 
 [[id]]
-id = "OQ-214"
+id = "OQ-215"
 file = "docs/10-decisions.md"
 line = 269
 section = ""
 
 [[id]]
-id = "OQ-215"
+id = "OQ-216"
 file = "docs/10-decisions.md"
 line = 270
 section = ""
 
 [[id]]
-id = "OQ-216"
+id = "ADR-0001"
 file = "docs/10-decisions.md"
-line = 271
-section = ""
+line = 301
+section = "10 §0.4"
 
 [[id]]
-id = "ADR-0001"
+id = "ADR-0002"
 file = "docs/10-decisions.md"
 line = 302
 section = "10 §0.4"
 
 [[id]]
-id = "ADR-0002"
+id = "ADR-0003"
 file = "docs/10-decisions.md"
 line = 303
 section = "10 §0.4"
 
 [[id]]
-id = "ADR-0003"
+id = "ADR-0006"
 file = "docs/10-decisions.md"
-line = 304
+line = 306
 section = "10 §0.4"
 
 [[id]]
-id = "ADR-0006"
+id = "ADR-0007"
 file = "docs/10-decisions.md"
 line = 307
 section = "10 §0.4"
 
 [[id]]
-id = "ADR-0007"
+id = "ADR-0008"
 file = "docs/10-decisions.md"
 line = 308
 section = "10 §0.4"
 
 [[id]]
-id = "ADR-0008"
+id = "ADR-0009"
 file = "docs/10-decisions.md"
 line = 309
 section = "10 §0.4"
 
 [[id]]
-id = "ADR-0009"
+id = "ADR-0010"
 file = "docs/10-decisions.md"
 line = 310
 section = "10 §0.4"
 
 [[id]]
-id = "ADR-0010"
+id = "ADR-0011"
 file = "docs/10-decisions.md"
 line = 311
 section = "10 §0.4"
 
 [[id]]
-id = "ADR-0011"
+id = "ADR-0012"
 file = "docs/10-decisions.md"
 line = 312
 section = "10 §0.4"
 
 [[id]]
-id = "ADR-0012"
+id = "ADR-0017"
 file = "docs/10-decisions.md"
-line = 313
+line = 317
 section = "10 §0.4"
 
 [[id]]
-id = "ADR-0017"
+id = "ADR-0018"
 file = "docs/10-decisions.md"
 line = 318
 section = "10 §0.4"
 
 [[id]]
-id = "ADR-0018"
+id = "ADR-0019"
 file = "docs/10-decisions.md"
 line = 319
 section = "10 §0.4"
 
 [[id]]
-id = "ADR-0019"
+id = "ADR-0020"
 file = "docs/10-decisions.md"
 line = 320
 section = "10 §0.4"
 
 [[id]]
-id = "ADR-0020"
+id = "ADR-0021"
 file = "docs/10-decisions.md"
 line = 321
 section = "10 §0.4"
 
 [[id]]
-id = "ADR-0021"
+id = "ADR-0022"
 file = "docs/10-decisions.md"
 line = 322
 section = "10 §0.4"
 
 [[id]]
-id = "ADR-0022"
-file = "docs/10-decisions.md"
-line = 323
-section = "10 §0.4"
-
-[[id]]
 id = "ADR-0025"
 file = "docs/10-decisions.md"
-line = 325
+line = 324
 section = "10 §0.4"
 
 [[id]]
 id = "ADR-0027"
+file = "docs/10-decisions.md"
+line = 326
+section = "10 §0.4"
+
+[[id]]
+id = "ADR-0028"
 file = "docs/10-decisions.md"
 line = 327
 section = "10 §0.4"
 
 [[id]]
-id = "ADR-0028"
+id = "ADR-0030"
 file = "docs/10-decisions.md"
 line = 328
 section = "10 §0.4"
 
 [[id]]
-id = "ADR-0030"
+id = "ADR-0031"
 file = "docs/10-decisions.md"
 line = 329
 section = "10 §0.4"
 
 [[id]]
-id = "ADR-0031"
+id = "ADR-0032"
 file = "docs/10-decisions.md"
 line = 330
 section = "10 §0.4"
 
 [[id]]
-id = "ADR-0032"
+id = "ADR-0033"
 file = "docs/10-decisions.md"
 line = 331
 section = "10 §0.4"
 
 [[id]]
-id = "ADR-0033"
+id = "ADR-0036"
 file = "docs/10-decisions.md"
-line = 332
+line = 334
 section = "10 §0.4"
 
 [[id]]
-id = "ADR-0036"
+id = "ADR-0038"
 file = "docs/10-decisions.md"
 line = 335
 section = "10 §0.4"
 
 [[id]]
-id = "ADR-0038"
+id = "ADR-0039"
 file = "docs/10-decisions.md"
 line = 336
 section = "10 §0.4"
 
 [[id]]
-id = "ADR-0039"
+id = "ADR-0040"
 file = "docs/10-decisions.md"
 line = 337
 section = "10 §0.4"
 
 [[id]]
-id = "ADR-0040"
+id = "ADR-0042"
 file = "docs/10-decisions.md"
-line = 338
+line = 339
 section = "10 §0.4"
 
 [[id]]
-id = "ADR-0042"
+id = "ADR-0043"
 file = "docs/10-decisions.md"
 line = 340
 section = "10 §0.4"
 
 [[id]]
-id = "ADR-0043"
+id = "ADR-0044"
 file = "docs/10-decisions.md"
 line = 341
 section = "10 §0.4"
 
 [[id]]
-id = "ADR-0044"
-file = "docs/10-decisions.md"
-line = 342
-section = "10 §0.4"
-
-[[id]]
 id = "ADR-0001"
 file = "docs/10-decisions.md"
-line = 360
+line = 359
 section = "10 §1"
 
 [[id]]
 id = "ADR-0002"
 file = "docs/10-decisions.md"
-line = 367
+line = 366
 section = "10 §1"
 
 [[id]]
 id = "ADR-0003"
 file = "docs/10-decisions.md"
-line = 374
+line = 373
 section = "10 §1"
 
 [[id]]
 id = "ADR-0004"
 file = "docs/10-decisions.md"
-line = 381
+line = 380
 section = "10 §1"
 
 [[id]]
 id = "ADR-0005"
 file = "docs/10-decisions.md"
-line = 391
+line = 390
 section = "10 §1"
 
 [[id]]
 id = "ADR-0006"
 file = "docs/10-decisions.md"
-line = 401
+line = 400
 section = "10 §1"
 
 [[id]]
 id = "ADR-0007"
 file = "docs/10-decisions.md"
-line = 408
+line = 407
 section = "10 §1"
 
 [[id]]
 id = "ADR-0008"
 file = "docs/10-decisions.md"
-line = 415
+line = 414
 section = "10 §1"
 
 [[id]]
 id = "ADR-0009"
 file = "docs/10-decisions.md"
-line = 421
+line = 420
 section = "10 §1"
 
 [[id]]
 id = "ADR-0010"
 file = "docs/10-decisions.md"
-line = 428
+line = 427
 section = "10 §1"
 
 [[id]]
 id = "ADR-0011"
 file = "docs/10-decisions.md"
-line = 435
+line = 434
 section = "10 §1"
 
 [[id]]
 id = "ADR-0012"
 file = "docs/10-decisions.md"
-line = 442
+line = 441
 section = "10 §1"
 
 [[id]]
 id = "ADR-0013"
 file = "docs/10-decisions.md"
-line = 448
+line = 447
 section = "10 §1"
 
 [[id]]
 id = "ADR-0014"
 file = "docs/10-decisions.md"
-line = 461
+line = 460
 section = "10 §1"
 
 [[id]]
 id = "ADR-0015"
 file = "docs/10-decisions.md"
-line = 467
+line = 466
 section = "10 §1"
 
 [[id]]
 id = "ADR-0016"
 file = "docs/10-decisions.md"
-line = 474
+line = 473
 section = "10 §1"
 
 [[id]]
 id = "ADR-0017"
 file = "docs/10-decisions.md"
-line = 484
+line = 483
 section = "10 §1"
 
 [[id]]
 id = "ADR-0018"
 file = "docs/10-decisions.md"
-line = 490
+line = 489
 section = "10 §1"
 
 [[id]]
 id = "ADR-0019"
 file = "docs/10-decisions.md"
-line = 498
+line = 497
 section = "10 §1"
 
 [[id]]
 id = "ADR-0020"
 file = "docs/10-decisions.md"
-line = 505
+line = 504
 section = "10 §1"
 
 [[id]]
 id = "ADR-0021"
 file = "docs/10-decisions.md"
-line = 512
+line = 511
 section = "10 §1"
 
 [[id]]
 id = "ADR-0022"
 file = "docs/10-decisions.md"
-line = 519
+line = 518
 section = "10 §1"
 
 [[id]]
 id = "ADR-0023"
 file = "docs/10-decisions.md"
-line = 526
+line = 525
 section = "10 §1"
 
 [[id]]
 id = "ADR-0025"
 file = "docs/10-decisions.md"
-line = 534
+line = 533
 section = "10 §1"
 
 [[id]]
 id = "ADR-0026"
 file = "docs/10-decisions.md"
-line = 541
+line = 540
 section = "10 §1"
 
 [[id]]
 id = "ADR-0027"
 file = "docs/10-decisions.md"
-line = 549
+line = 548
 section = "10 §1"
 
 [[id]]
 id = "ADR-0028"
 file = "docs/10-decisions.md"
-line = 562
+line = 561
 section = "10 §1"
 
 [[id]]
 id = "ADR-0030"
 file = "docs/10-decisions.md"
-line = 573
+line = 572
 section = "10 §1"
 
 [[id]]
 id = "ADR-0031"
 file = "docs/10-decisions.md"
-line = 584
+line = 583
 section = "10 §1"
 
 [[id]]
 id = "ADR-0032"
 file = "docs/10-decisions.md"
-line = 595
+line = 594
 section = "10 §1"
 
 [[id]]
 id = "X16"
 file = "docs/10-decisions.md"
-line = 602
+line = 601
 section = "10 §1"
 
 [[id]]
 id = "X17"
 file = "docs/10-decisions.md"
-line = 603
+line = 602
 section = "10 §1"
 
 [[id]]
 id = "X18"
 file = "docs/10-decisions.md"
-line = 604
+line = 603
 section = "10 §1"
 
 [[id]]
 id = "X19"
 file = "docs/10-decisions.md"
-line = 605
+line = 604
 section = "10 §1"
 
 [[id]]
 id = "X20"
 file = "docs/10-decisions.md"
-line = 606
+line = 605
 section = "10 §1"
 
 [[id]]
 id = "X21"
 file = "docs/10-decisions.md"
-line = 607
+line = 606
 section = "10 §1"
 
 [[id]]
 id = "X22"
 file = "docs/10-decisions.md"
-line = 608
+line = 607
 section = "10 §1"
 
 [[id]]
 id = "X23"
 file = "docs/10-decisions.md"
-line = 609
+line = 608
 section = "10 §1"
 
 [[id]]
 id = "X24"
 file = "docs/10-decisions.md"
-line = 610
+line = 609
 section = "10 §1"
 
 [[id]]
 id = "ADR-0033"
 file = "docs/10-decisions.md"
-line = 616
+line = 615
 section = "10 §1"
 
 [[id]]
 id = "ADR-0034"
 file = "docs/10-decisions.md"
-line = 630
+line = 629
 section = "10 §1"
 
 [[id]]
 id = "ADR-0035"
 file = "docs/10-decisions.md"
-line = 642
+line = 641
 section = "10 §1"
 
 [[id]]
 id = "ADR-0036"
 file = "docs/10-decisions.md"
-line = 655
+line = 654
 section = "10 §1"
 
 [[id]]
 id = "ADR-0038"
 file = "docs/10-decisions.md"
-line = 662
+line = 661
 section = "10 §1"
 
 [[id]]
 id = "ADR-0039"
 file = "docs/10-decisions.md"
-line = 675
+line = 674
 section = "10 §1"
 
 [[id]]
 id = "ADR-0040"
 file = "docs/10-decisions.md"
-line = 687
+line = 686
 section = "10 §1"
 
 [[id]]
 id = "ADR-0041"
 file = "docs/10-decisions.md"
-line = 701
+line = 700
 section = "10 §1"
 
 [[id]]
 id = "ADR-0042"
 file = "docs/10-decisions.md"
-line = 714
+line = 713
 section = "10 §1"
 
 [[id]]
 id = "ADR-0043"
 file = "docs/10-decisions.md"
-line = 727
+line = 726
 section = "10 §1"
 
 [[id]]
 id = "ADR-0044"
 file = "docs/10-decisions.md"
-line = 741
+line = 740
 section = "10 §1"
 
 [[id]]
 id = "OQ-02"
 file = "docs/10-decisions.md"
-line = 760
+line = 759
 section = "10 §2.1"
 
 [[id]]
 id = "OQ-03"
+file = "docs/10-decisions.md"
+line = 760
+section = "10 §2.1"
+
+[[id]]
+id = "OQ-04"
 file = "docs/10-decisions.md"
 line = 761
 section = "10 §2.1"
 
 [[id]]
-id = "OQ-04"
+id = "OQ-05"
 file = "docs/10-decisions.md"
 line = 762
 section = "10 §2.1"
 
 [[id]]
-id = "OQ-05"
+id = "OQ-09"
 file = "docs/10-decisions.md"
-line = 763
+line = 764
 section = "10 §2.1"
 
 [[id]]
-id = "OQ-09"
+id = "OQ-10"
 file = "docs/10-decisions.md"
 line = 765
 section = "10 §2.1"
 
 [[id]]
-id = "OQ-10"
+id = "OQ-11"
 file = "docs/10-decisions.md"
 line = 766
 section = "10 §2.1"
 
 [[id]]
-id = "OQ-11"
+id = "OQ-14"
 file = "docs/10-decisions.md"
-line = 767
+line = 768
 section = "10 §2.1"
 
 [[id]]
-id = "OQ-14"
+id = "OQ-15"
 file = "docs/10-decisions.md"
 line = 769
 section = "10 §2.1"
 
 [[id]]
-id = "OQ-15"
+id = "OQ-16"
 file = "docs/10-decisions.md"
 line = 770
 section = "10 §2.1"
 
 [[id]]
-id = "OQ-16"
+id = "OQ-19"
 file = "docs/10-decisions.md"
-line = 771
+line = 773
 section = "10 §2.1"
 
 [[id]]
-id = "OQ-19"
+id = "OQ-20"
 file = "docs/10-decisions.md"
 line = 774
 section = "10 §2.1"
 
 [[id]]
-id = "OQ-20"
+id = "OQ-23"
 file = "docs/10-decisions.md"
-line = 775
+line = 777
 section = "10 §2.1"
 
 [[id]]
-id = "OQ-23"
+id = "OQ-24"
 file = "docs/10-decisions.md"
 line = 778
 section = "10 §2.1"
 
 [[id]]
-id = "OQ-24"
+id = "OQ-26"
 file = "docs/10-decisions.md"
-line = 779
+line = 780
 section = "10 §2.1"
 
 [[id]]
-id = "OQ-26"
+id = "OQ-27"
 file = "docs/10-decisions.md"
 line = 781
 section = "10 §2.1"
 
 [[id]]
-id = "OQ-27"
+id = "OQ-28"
 file = "docs/10-decisions.md"
 line = 782
 section = "10 §2.1"
 
 [[id]]
-id = "OQ-28"
+id = "OQ-29"
 file = "docs/10-decisions.md"
 line = 783
 section = "10 §2.1"
 
 [[id]]
-id = "OQ-29"
+id = "OQ-30"
 file = "docs/10-decisions.md"
 line = 784
 section = "10 §2.1"
 
 [[id]]
-id = "OQ-30"
+id = "OQ-31"
 file = "docs/10-decisions.md"
 line = 785
 section = "10 §2.1"
 
 [[id]]
-id = "OQ-31"
+id = "OQ-32"
 file = "docs/10-decisions.md"
 line = 786
 section = "10 §2.1"
 
 [[id]]
-id = "OQ-32"
+id = "OQ-33"
 file = "docs/10-decisions.md"
 line = 787
 section = "10 §2.1"
 
 [[id]]
-id = "OQ-33"
+id = "OQ-34"
 file = "docs/10-decisions.md"
 line = 788
 section = "10 §2.1"
 
 [[id]]
-id = "OQ-34"
+id = "OQ-37"
 file = "docs/10-decisions.md"
-line = 789
+line = 791
 section = "10 §2.1"
 
 [[id]]
-id = "OQ-37"
+id = "OQ-38"
 file = "docs/10-decisions.md"
 line = 792
 section = "10 §2.1"
 
 [[id]]
-id = "OQ-38"
+id = "OQ-39"
 file = "docs/10-decisions.md"
 line = 793
 section = "10 §2.1"
 
 [[id]]
-id = "OQ-39"
+id = "OQ-40"
 file = "docs/10-decisions.md"
 line = 794
 section = "10 §2.1"
 
 [[id]]
-id = "OQ-40"
-file = "docs/10-decisions.md"
-line = 795
-section = "10 §2.1"
-
-[[id]]
 id = "OQ-42"
 file = "docs/10-decisions.md"
-line = 797
+line = 796
 section = "10 §2.1"
 
 [[id]]
 id = "OQ-110"
+file = "docs/10-decisions.md"
+line = 799
+section = "10 §2.1"
+
+[[id]]
+id = "OQ-111"
 file = "docs/10-decisions.md"
 line = 800
 section = "10 §2.1"
 
 [[id]]
-id = "OQ-111"
+id = "OQ-113"
 file = "docs/10-decisions.md"
-line = 801
+line = 802
 section = "10 §2.1"
 
 [[id]]
-id = "OQ-113"
+id = "OQ-114"
 file = "docs/10-decisions.md"
 line = 803
 section = "10 §2.1"
 
 [[id]]
-id = "OQ-114"
+id = "OQ-115"
 file = "docs/10-decisions.md"
 line = 804
 section = "10 §2.1"
 
 [[id]]
-id = "OQ-115"
+id = "OQ-116"
 file = "docs/10-decisions.md"
 line = 805
 section = "10 §2.1"
 
 [[id]]
-id = "OQ-116"
-file = "docs/10-decisions.md"
-line = 806
-section = "10 §2.1"
-
-[[id]]
 id = "OQ-01"
 file = "docs/10-decisions.md"
-line = 813
+line = 812
 section = "10 §2.2"
 
 [[id]]
 id = "OQ-02"
 file = "docs/10-decisions.md"
-line = 825
+line = 824
 section = "10 §2.2"
 
 [[id]]
 id = "OQ-03"
 file = "docs/10-decisions.md"
-line = 830
+line = 829
 section = "10 §2.2"
 
 [[id]]
 id = "OQ-04"
 file = "docs/10-decisions.md"
-line = 839
+line = 838
 section = "10 §2.2"
 
 [[id]]
 id = "OQ-05"
 file = "docs/10-decisions.md"
-line = 848
+line = 847
 section = "10 §2.2"
 
 [[id]]
 id = "OQ-06"
 file = "docs/10-decisions.md"
-line = 854
+line = 853
 section = "10 §2.2"
 
 [[id]]
 id = "OQ-09"
 file = "docs/10-decisions.md"
-line = 859
+line = 858
 section = "10 §2.2"
 
 [[id]]
 id = "OQ-10"
 file = "docs/10-decisions.md"
-line = 864
+line = 863
 section = "10 §2.2"
 
 [[id]]
 id = "OQ-11"
 file = "docs/10-decisions.md"
-line = 869
+line = 868
 section = "10 §2.2"
 
 [[id]]
 id = "OQ-12"
 file = "docs/10-decisions.md"
-line = 875
+line = 874
 section = "10 §2.2"
 
 [[id]]
 id = "OQ-14"
 file = "docs/10-decisions.md"
-line = 880
+line = 879
 section = "10 §2.2"
 
 [[id]]
 id = "OQ-15"
 file = "docs/10-decisions.md"
-line = 885
+line = 884
 section = "10 §2.2"
 
 [[id]]
 id = "OQ-16"
 file = "docs/10-decisions.md"
-line = 892
+line = 891
 section = "10 §2.2"
 
 [[id]]
 id = "OQ-17"
 file = "docs/10-decisions.md"
-line = 897
+line = 896
 section = "10 §2.2"
 
 [[id]]
 id = "OQ-18"
 file = "docs/10-decisions.md"
-line = 902
+line = 901
 section = "10 §2.2"
 
 [[id]]
 id = "OQ-19"
 file = "docs/10-decisions.md"
-line = 907
+line = 906
 section = "10 §2.2"
 
 [[id]]
 id = "OQ-20"
 file = "docs/10-decisions.md"
-line = 913
+line = 912
 section = "10 §2.2"
 
 [[id]]
 id = "OQ-21"
 file = "docs/10-decisions.md"
-line = 920
+line = 919
 section = "10 §2.2"
 
 [[id]]
 id = "OQ-22"
 file = "docs/10-decisions.md"
-line = 933
+line = 932
 section = "10 §2.2"
 
 [[id]]
 id = "OQ-23"
 file = "docs/10-decisions.md"
-line = 939
+line = 938
 section = "10 §2.2"
 
 [[id]]
 id = "OQ-24"
 file = "docs/10-decisions.md"
-line = 945
+line = 944
 section = "10 §2.2"
 
 [[id]]
 id = "OQ-25"
 file = "docs/10-decisions.md"
-line = 950
+line = 949
 section = "10 §2.2"
 
 [[id]]
 id = "OQ-26"
 file = "docs/10-decisions.md"
-line = 958
+line = 957
 section = "10 §2.3"
 
 [[id]]
 id = "OQ-27"
 file = "docs/10-decisions.md"
-line = 964
+line = 963
 section = "10 §2.3"
 
 [[id]]
 id = "OQ-28"
 file = "docs/10-decisions.md"
-line = 970
+line = 969
 section = "10 §2.3"
 
 [[id]]
 id = "OQ-29"
 file = "docs/10-decisions.md"
-line = 976
+line = 975
 section = "10 §2.3"
 
 [[id]]
 id = "OQ-30"
 file = "docs/10-decisions.md"
-line = 982
+line = 981
 section = "10 §2.3"
 
 [[id]]
 id = "OQ-31"
 file = "docs/10-decisions.md"
-line = 988
+line = 987
 section = "10 §2.3"
 
 [[id]]
 id = "OQ-32"
 file = "docs/10-decisions.md"
-line = 994
+line = 993
 section = "10 §2.3"
 
 [[id]]
 id = "OQ-33"
 file = "docs/10-decisions.md"
-line = 1000
+line = 999
 section = "10 §2.3"
 
 [[id]]
 id = "OQ-34"
 file = "docs/10-decisions.md"
-line = 1007
+line = 1006
 section = "10 §2.3"
 
 [[id]]
 id = "OQ-35"
 file = "docs/10-decisions.md"
-line = 1013
+line = 1012
 section = "10 §2.3"
 
 [[id]]
 id = "OQ-36"
 file = "docs/10-decisions.md"
-line = 1019
+line = 1018
 section = "10 §2.3"
 
 [[id]]
 id = "OQ-37"
 file = "docs/10-decisions.md"
-line = 1026
+line = 1025
 section = "10 §2.3"
 
 [[id]]
 id = "OQ-38"
 file = "docs/10-decisions.md"
-line = 1032
+line = 1031
 section = "10 §2.3"
 
 [[id]]
 id = "OQ-39"
 file = "docs/10-decisions.md"
-line = 1038
+line = 1037
 section = "10 §2.3"
 
 [[id]]
 id = "OQ-40"
 file = "docs/10-decisions.md"
-line = 1044
+line = 1043
 section = "10 §2.3"
 
 [[id]]
 id = "OQ-41"
 file = "docs/10-decisions.md"
-line = 1050
+line = 1049
 section = "10 §2.3"
 
 [[id]]
 id = "OQ-42"
 file = "docs/10-decisions.md"
-line = 1057
+line = 1056
 section = "10 §2.3"
 
 [[id]]
 id = "OQ-43"
 file = "docs/10-decisions.md"
-line = 1064
+line = 1063
 section = "10 §2.3"
 
 [[id]]
 id = "OQ-44"
 file = "docs/10-decisions.md"
-line = 1070
+line = 1069
 section = "10 §2.3"
 
 [[id]]
 id = "OQ-110"
 file = "docs/10-decisions.md"
-line = 1076
+line = 1075
 section = "10 §2.3"
 
 [[id]]
 id = "OQ-111"
 file = "docs/10-decisions.md"
-line = 1082
+line = 1081
 section = "10 §2.3"
 
 [[id]]
 id = "OQ-112"
 file = "docs/10-decisions.md"
-line = 1088
+line = 1087
 section = "10 §2.3"
 
 [[id]]
 id = "OQ-113"
 file = "docs/10-decisions.md"
-line = 1094
+line = 1093
 section = "10 §2.3"
 
 [[id]]
 id = "OQ-114"
 file = "docs/10-decisions.md"
-line = 1100
+line = 1099
 section = "10 §2.3"
 
 [[id]]
 id = "OQ-115"
 file = "docs/10-decisions.md"
-line = 1106
+line = 1105
 section = "10 §2.3"
 
 [[id]]
 id = "OQ-116"
 file = "docs/10-decisions.md"
-line = 1112
+line = 1111
 section = "10 §2.3"
 
 [[id]]
 id = "OQ-120"
 file = "docs/10-decisions.md"
-line = 1118
+line = 1117
 section = "10 §2.3"
 
 [[id]]
 id = "OQ-46"
 file = "docs/10-decisions.md"
-line = 1132
+line = 1131
 section = "10 §2.4"
 
 [[id]]
 id = "OQ-47"
 file = "docs/10-decisions.md"
-line = 1133
+line = 1132
 section = "10 §2.4"
 
 [[id]]
 id = "OQ-49"
 file = "docs/10-decisions.md"
-line = 1135
+line = 1134
 section = "10 §2.4"
 
 [[id]]
 id = "OQ-50"
 file = "docs/10-decisions.md"
-line = 1136
+line = 1135
 section = "10 §2.4"
 
 [[id]]
 id = "OQ-51"
 file = "docs/10-decisions.md"
-line = 1137
+line = 1136
 section = "10 §2.4"
 
 [[id]]
 id = "OQ-52"
 file = "docs/10-decisions.md"
-line = 1138
+line = 1137
 section = "10 §2.4"
 
 [[id]]
 id = "OQ-55"
 file = "docs/10-decisions.md"
-line = 1141
+line = 1140
 section = "10 §2.4"
 
 [[id]]
 id = "OQ-59"
 file = "docs/10-decisions.md"
-line = 1145
+line = 1144
 section = "10 §2.4"
 
 [[id]]
 id = "OQ-62"
 file = "docs/10-decisions.md"
-line = 1148
+line = 1147
 section = "10 §2.4"
 
 [[id]]
 id = "OQ-63"
 file = "docs/10-decisions.md"
-line = 1149
+line = 1148
 section = "10 §2.4"
 
 [[id]]
 id = "OQ-65"
 file = "docs/10-decisions.md"
-line = 1151
+line = 1150
 section = "10 §2.4"
 
 [[id]]
 id = "OQ-67"
 file = "docs/10-decisions.md"
-line = 1153
+line = 1152
 section = "10 §2.4"
 
 [[id]]
 id = "OQ-69"
 file = "docs/10-decisions.md"
-line = 1155
+line = 1154
 section = "10 §2.4"
 
 [[id]]
 id = "OQ-71"
 file = "docs/10-decisions.md"
-line = 1157
+line = 1156
 section = "10 §2.4"
 
 [[id]]
 id = "OQ-73"
 file = "docs/10-decisions.md"
-line = 1159
+line = 1158
 section = "10 §2.4"
 
 [[id]]
 id = "OQ-97"
 file = "docs/10-decisions.md"
-line = 1183
+line = 1182
 section = "10 §2.4"
 
 [[id]]
 id = "OQ-101"
 file = "docs/10-decisions.md"
-line = 1186
+line = 1185
 section = "10 §2.4"
 
 [[id]]
 id = "OQ-102"
 file = "docs/10-decisions.md"
-line = 1187
+line = 1186
 section = "10 §2.4"
 
 [[id]]
 id = "OQ-106"
 file = "docs/10-decisions.md"
-line = 1191
+line = 1190
 section = "10 §2.4"
 
 [[id]]
 id = "OQ-117"
 file = "docs/10-decisions.md"
-line = 1195
+line = 1194
 section = "10 §2.4"
 
 [[id]]
 id = "OQ-125"
 file = "docs/10-decisions.md"
-line = 1198
+line = 1197
 section = "10 §2.4"
 
 [[id]]
 id = "OQ-126"
 file = "docs/10-decisions.md"
-line = 1199
+line = 1198
 section = "10 §2.4"
 
 [[id]]
 id = "OQ-129"
 file = "docs/10-decisions.md"
-line = 1209
+line = 1208
 section = "10 §2.5"
 
 [[id]]
 id = "OQ-132"
 file = "docs/10-decisions.md"
-line = 1212
+line = 1211
 section = "10 §2.5"
 
 [[id]]
 id = "OQ-135"
 file = "docs/10-decisions.md"
-line = 1215
+line = 1214
 section = "10 §2.5"
 
 [[id]]
 id = "OQ-136"
 file = "docs/10-decisions.md"
-line = 1216
+line = 1215
 section = "10 §2.5"
 
 [[id]]
 id = "OQ-139"
 file = "docs/10-decisions.md"
-line = 1226
+line = 1225
+section = "10 §2.6"
+
+[[id]]
+id = "OQ-143"
+file = "docs/10-decisions.md"
+line = 1229
 section = "10 §2.6"
 
 [[id]]
 id = "OQ-147"
 file = "docs/10-decisions.md"
-line = 1234
+line = 1233
 section = "10 §2.6"
 
 [[id]]
 id = "OQ-152"
 file = "docs/10-decisions.md"
-line = 1246
+line = 1245
 section = "10 §2.7"
 
 [[id]]
 id = "OQ-154"
 file = "docs/10-decisions.md"
-line = 1247
+line = 1246
 section = "10 §2.7"
 
 [[id]]
 id = "OQ-157"
 file = "docs/10-decisions.md"
-line = 1248
+line = 1247
 section = "10 §2.7"
 
 [[id]]
 id = "OQ-160"
 file = "docs/10-decisions.md"
-line = 1249
+line = 1248
 section = "10 §2.7"
 
 [[id]]
 id = "OQ-151"
 file = "docs/10-decisions.md"
-line = 1251
+line = 1250
 section = "10 §2.7"
 
 [[id]]
 id = "OQ-152"
 file = "docs/10-decisions.md"
-line = 1259
+line = 1258
 section = "10 §2.7"
 
 [[id]]
 id = "OQ-154"
 file = "docs/10-decisions.md"
-line = 1265
+line = 1264
 section = "10 §2.7"
 
 [[id]]
 id = "OQ-162"
 file = "docs/10-decisions.md"
-line = 1278
+line = 1277
 section = "10 §2.8"
 
 [[id]]
 id = "OQ-168"
 file = "docs/10-decisions.md"
-line = 1284
+line = 1283
 section = "10 §2.8"
 
 [[id]]
 id = "OQ-162"
 file = "docs/10-decisions.md"
-line = 1293
+line = 1292
 section = "10 §2.8"
 
 [[id]]
 id = "OQ-167"
 file = "docs/10-decisions.md"
-line = 1299
+line = 1298
 section = "10 §2.8"
 
 [[id]]
 id = "OQ-168"
 file = "docs/10-decisions.md"
-line = 1306
+line = 1305
 section = "10 §2.8"
 
 [[id]]
 id = "OQ-206"
 file = "docs/10-decisions.md"
-line = 1343
+line = 1342
 section = "10 §2.9"
 
 [[id]]
 id = "OQ-207"
+file = "docs/10-decisions.md"
+line = 1343
+section = "10 §2.9"
+
+[[id]]
+id = "OQ-208"
 file = "docs/10-decisions.md"
 line = 1344
 section = "10 §2.9"
 
 [[id]]
-id = "OQ-208"
-file = "docs/10-decisions.md"
-line = 1345
-section = "10 §2.9"
-
-[[id]]
 id = "OQ-206"
 file = "docs/10-decisions.md"
-line = 1355
+line = 1354
 section = "10 §2.9"
 
 [[id]]
 id = "OQ-207"
 file = "docs/10-decisions.md"
-line = 1361
+line = 1360
 section = "10 §2.9"
 
 [[id]]
 id = "OQ-208"
 file = "docs/10-decisions.md"
-line = 1367
+line = 1366
 section = "10 §2.9"
 
 [[id]]
