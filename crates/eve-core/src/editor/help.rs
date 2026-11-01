@@ -201,9 +201,13 @@ impl EditorState {
             .collect()
     }
 
-    /// パレットに出るコマンドの ID (CommandId 順)。
+    /// パレットに出るコマンドの ID (CommandId 順。この frontend で使えないものを除く)。
     fn palette_command_ids(&self) -> Vec<&str> {
-        self.palette_entries.iter().map(|e| e.id()).collect()
+        self.palette_entries
+            .iter()
+            .filter(|e| self.supported_here(e))
+            .map(|e| e.id())
+            .collect()
     }
 
     fn category_label(&self, ns: &str) -> String {

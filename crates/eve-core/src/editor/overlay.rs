@@ -966,6 +966,11 @@ fn cmd_quit(ctx: &mut CommandCtx<'_>) -> CommandResult {
     ctx.state.request_quit()
 }
 
+fn cmd_suspend(ctx: &mut CommandCtx<'_>) -> CommandResult {
+    ctx.state.push_effect(Effect::Suspend);
+    CommandResult::Done
+}
+
 macro_rules! reg_ui {
     ($r:expr, $id:expr, $when:expr, $h:expr) => {
         $r.register(
@@ -975,7 +980,7 @@ macro_rules! reg_ui {
     };
 }
 
-/// オーバーレイ内のコマンドと `app.quit` (07 §11.6)。
+/// オーバーレイ内のコマンドと `app.quit`・`app.suspend` (07 §11.6)。
 pub(super) fn register(r: &mut CommandRegistry) {
     let active = "overlay.active != \"\" || search.active";
     reg_ui!(r, "ui.confirm", active, cmd_confirm);
@@ -1054,6 +1059,7 @@ pub(super) fn register(r: &mut CommandRegistry) {
         .expect("カタログの when 句は構文が正しい"),
     );
     reg_ui!(r, "app.quit", "", cmd_quit);
+    reg_ui!(r, "app.suspend", "caps.can_suspend", cmd_suspend);
     #[cfg(feature = "test-hooks")]
     if test_hook_panic_command() {
         reg_ui!(r, "internal.debug_panic", "", cmd_debug_panic);

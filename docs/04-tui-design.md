@@ -990,7 +990,7 @@ core の意味的モデル ([02 §8.1](02-architecture.md#81-方針-adr-0008)) �
 | 位置 | 上部中央。幅 = min(80, 端末幅 − 4)、高さ = 入力 1 行 + 候補最大 12 行 + 枠 |
 | 候補行 | `カテゴリ: タイトル` (MessageKey `cmd.*`) + 右寄せで `CommandId` (薄色、狭いと省略) + キー表記 (§7.8)。**v0.1 ではヘルプ画面の代わり** で、全コマンドとその割当キーをここで見られる (FR-514) |
 | 照合・順序 | core が行う。タイトル (日本語) **と** CommandId **と** 英語タイトル (定数表、07 §11.4) の全てを対象にする (日本語 UI でも `save` で見つかる)。順序は、**v0.1: 前方一致 → 部分一致 → アルファベット順** (ファジー一致・最近実行は使わない。FR-602)、**v0.2 から: ファジー一致スコア → 最近実行 → アルファベット順** (07 §11.4。スコアの規則と最近実行の範囲は 07 §11.4 の M9c の実装)。一致箇所は下線 + 太字で示す (色だけに頼らない)。照合位置はモデル (`items[i].match_ranges`、03 §14.6) が返す |
-| 実行不可のコマンド | `when` が偽のものは **表示するが淡色** にし、「現在は実行できません: <理由>」(`disabled_reason`) を示す (07 §11.4 / OQ-38。隠すと「存在しない」と誤解する、P7)。上級者向けの非表示設定 `ui.palette.hide_unavailable` は Could |
+| 実行不可のコマンド | `when` が偽のものは **表示するが淡色** にし、「現在は実行できません: <理由>」(`disabled_reason`) を示す (07 §11.4 / OQ-38。隠すと「存在しない」と誤解する、P7)。**例外 (v0.2)**: `when` が `caps.*` を参照して偽のもの (この端末・OS では使えない。例: Windows の `app.suspend`) は、状況が変われば実行できるものではないので、パレットとヘルプ (FR-514) の一覧から外し、件数にも数えない (05 §11.2)。上級者向けの非表示設定 `ui.palette.hide_unavailable` は Could |
 | 引数付きコマンド | **既定値の無い必須引数** があるコマンドを選ぶと、同じオーバーレイで順に尋ねる (v0.1 から。07 §11.2)。列挙値の引数は値のリスト (例: 「文字コードを指定して開き直す」→ `UTF-8` / `UTF-16LE` / … / `ISO-2022-JP` の一覧)、それ以外は入力プロンプト。`Esc` で 1 段戻る。省略可能な引数のコマンド (例: Go to line、開く) は、そのコマンドの既定の動作 (行番号やパスを尋ねるプロンプト) になる |
 | 出すコマンド | `hidden` でない全コマンド (07 §11.6。オーバーレイ内専用の `ui.confirm` / `ui.list_*` / `ui.dialog_choose` と `internal.*` は出さない) |
 | プレフィックス記法 | **導入しない** (`>` `:` `@` 等で種類を切り替えない。07 §11.4)。行移動は `cursor.goto_line` の専用オーバーレイ、シンボルは v1.L の専用オーバーレイ |
@@ -1303,7 +1303,7 @@ TUI ではこれ以上は端末の能力の限界。
 |---|---|
 | リサイズ (Unix: SIGWINCH、Windows: コンソールのバッファサイズ変更イベント) | 入力スレッドが受ける (Windows: 自前ループが `WINDOW_BUFFER_SIZE_EVENT` を受け、`srWindow` からウィンドウサイズを求める。Unix (v0.2): crossterm が `Resize` を報告) → 入力スレッドで連続イベントを合体 (最後の値のみ) → 編集面サイズを計算して `InputEvent::Resize` → 全画面再描画 (§4.3)。端末がリフロー (折り返し再配置) で残した残骸を消すため、リサイズ後最初のフレームは画面消去から描く |
 | conhost のリサイズ | ウィンドウサイズとバッファサイズが異なる場合がある。`WINDOW_BUFFER_SIZE_EVENT` の値 (バッファサイズ) は使わず、`GetConsoleScreenBufferInfo().srWindow` から求めたウィンドウサイズを使う (05 §9.1)。P0 で検証 |
-| サスペンド (v0.2。`app.suspend` → `Effect::Suspend`、または外部からの SIGTSTP) | 復元手順 (§14.3) を実行 → 既定ハンドラで自プロセスを停止 (SIGTSTP を再送) → **SIGCONT** で再開したら初期化手順 (§14.1 の 2〜9) を再実行 → 端末サイズを再取得 (停止中に変わり得る) → `Resize` → 全画面再描画。Windows では `app.suspend` は「この OS では利用できません」メッセージ (コマンドは存在し、`when` で非表示) |
+| サスペンド (v0.2。`app.suspend` → `Effect::Suspend`。外部からの SIGTSTP は v0.2 では端末を戻さずに止まる、05 §11.3 の既知の制約) | 復元手順 (§14.3) を実行 → 既定ハンドラで自プロセスを停止 (SIGTSTP を再送) → **SIGCONT** で再開したら初期化手順 (§14.1 の 2〜9) を再実行 → 端末サイズを再取得 (停止中に変わり得る) → `Resize` → 全画面再描画。Windows では `app.suspend` は「この OS では利用できません」メッセージ (コマンドは存在し、`when` で非表示) |
 | SIGINT (外部から kill -INT。Unix、macOS / Linux を出荷する版) | raw モード中は `Ctrl+C` では発生しない。外部から届いた場合は **対話なしで緊急退避 → 端末復元 → 終了** (正本は [02 §9.6](02-architecture.md#96-終了シグナル)、OS 別の受信は 05 §11.1。送信者は停止を期待しているので未保存確認は出さない。FR-107 の確認はユーザー操作による終了のみ) |
 | SIGTERM / SIGHUP (Unix、同上) | 同上 (02 §9.6)。SIGHUP は端末喪失のため復元の失敗を無視 |
 | SIGQUIT (Unix、同上) | 05 §11.1 (既定動作。緊急退避しない) |
@@ -1760,6 +1760,7 @@ v0.2 以降の診断 (名前だけを予約し、文言はその版で言語フ�
 | `stderr.recovery.next` | 退避した後の案内 (v0.1 の復旧は「起動時に退避の場所を示し、利用者が手で開く」、02 §11.2.1・上の `msg.recovery.found`) | (v0.2) You can recover them the next time you start evoeditor. | (v0.1) 次に evoeditor を起動したときに退避の場所を表示します。そのファイルを開いて内容を確かめてください。 (v0.2 の復旧 UI から) 次に evoeditor を起動したときに取り戻せます。 |
 | `stderr.not_a_terminal` | stdin が端末でなく `-` も無い・`TERM=dumb`・描画先の端末を得られない (Unix で `/dev/tty`、Windows で `CONOUT$` を開けない) (起動前、§5.2a、05 §9.1。終了コード 5。stdout だけが端末でない場合は出さない) | evoeditor must be run in a terminal. | evoeditor は端末の中で起動してください。 |
 | `stderr.unsupported_console` | Windows でコンソールが VT モードを受け付けない (起動前、05 §9.1。終了コード 5) | This console is not supported. Please use Windows Terminal. | この端末は非対応です。Windows Terminal をご利用ください。 |
+| `stderr.background_job` | Unix でバックグラウンドのジョブとして起動された (起動前、端末に触れずに。05 §11.3。終了コード 5。v0.2) | evoeditor cannot run as a background job. Start it in the foreground. | evoeditor はバックグラウンドのジョブでは起動できません。前面 (フォアグラウンド) で起動してください。 |
 | `stderr.quit.waiting_save` | 通常終了 (`app.quit` / `Effect::Quit`) で、端末を復元した後に置換中フラグが上がっていた (保存の完了を待つ前に Host が 1 行出す。待たずに済むときは出さない。複数の保存先があれば 1 行ずつ。02 §9.6、05 §11) | Waiting for the save to finish: {path} | 保存の完了を待っています: {path} |
 | `stderr.quit_abort.save_failed` | `ui.confirm.quit_saving` で「保存を中止して終了」を選び、保存ジョブが失敗で終わった (下の 3 つ以外の失敗。03 §9.7 (f)。元のファイルは変えていないか、失敗の種類による。端末を復元した後、退避の結果 (`stderr.recovery.*`) の次に出す) | Saving {path} failed before exit: {reason} | 終了の前に {path} の保存が失敗しました: {reason} |
 | `stderr.quit_abort.moved_to_backup` | 同上で、保存が `ReplacedMovedToBackup { backup }` で終わった (元のファイルは退避名に移っている) | Saving {path} failed before exit. The original file was moved to: {backup} | 終了の前に {path} の保存が失敗し、元のファイルは {backup} に移っています。名前を元に戻してください |

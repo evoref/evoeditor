@@ -115,6 +115,10 @@ pub fn stderr_line(key: &str, args: &[(String, String)]) -> Option<Bi> {
             "evoeditor must be run in a terminal.",
             "evoeditor は端末の中で起動してください。",
         ),
+        "stderr.background_job" => Bi::new(
+            "evoeditor cannot run as a background job. Start it in the foreground.",
+            "evoeditor はバックグラウンドのジョブでは起動できません。前面 (フォアグラウンド) で起動してください。",
+        ),
         "stderr.unsupported_console" => Bi::new(
             "This console is not supported. Please use Windows Terminal.",
             "この端末は非対応です。Windows Terminal をご利用ください。",
@@ -403,6 +407,7 @@ mod tests {
         all.push(ignored_args(&["+1".into()]));
         for k in [
             "stderr.not_a_terminal",
+            "stderr.background_job",
             "stderr.unsupported_console",
             "stderr.fatal",
         ] {

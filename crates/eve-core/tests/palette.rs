@@ -345,6 +345,44 @@ fn ui_redraw_は_ctrl_k_r_とパレットから全画面の再描画を依頼す
 }
 
 #[test]
+fn app_suspend_は_ジョブ制御のある_frontend_でだけ_ctrl_k_z_とパレットから停止を依頼する() {
+    // Windows (can_suspend = false): when 句で無効。キーでも実行できず、パレットの候補にも出さない
+    let mut h = Harness::new();
+    h.keys("ctrl+p");
+    h.text("suspend");
+    assert!(!ids(&h.frame()).iter().any(|i| i == "app.suspend"));
+    h.keys("esc");
+    h.clear_log();
+    h.keys("ctrl+k z");
+    h.cmd("app.suspend");
+    assert!(
+        !h.effects().contains(&eve_view::Effect::Suspend),
+        "{:?}",
+        h.effects()
+    );
+    // Unix (can_suspend = true)
+    let caps = eve_view::Capabilities {
+        can_suspend: true,
+        ..eve_view::Capabilities::default()
+    };
+    let mut h = Harness::new().with_caps(caps);
+    h.keys("ctrl+p");
+    h.text("suspend");
+    assert!(ids(&h.frame()).iter().any(|i| i == "app.suspend"));
+    h.keys("esc");
+    h.clear_log();
+    h.keys("ctrl+k z");
+    assert!(
+        h.effects().contains(&eve_view::Effect::Suspend),
+        "{:?}",
+        h.effects()
+    );
+    h.clear_log();
+    h.cmd("app.suspend");
+    assert!(h.effects().contains(&eve_view::Effect::Suspend));
+}
+
+#[test]
 fn ファジー一致で探せ_連続した一致が上に来る() {
     let mut h = Harness::new();
     h.keys("ctrl+p");

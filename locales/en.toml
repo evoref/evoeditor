@@ -8,6 +8,10 @@ language = "en"
 description = "Quit the editor."
 title = "Quit"
 
+[cmd.app.suspend]
+description = "Suspend the editor and return to the shell. Resume it with the shell's fg."
+title = "Suspend"
+
 [cmd.clipboard.copy]
 description = "Copy the selection to the clipboard."
 title = "Copy"

@@ -6,6 +6,10 @@ language = "ja"
 description = "エディタを終了します。"
 title = "終了"
 
+[cmd.app.suspend]
+description = "エディタを一時停止してシェルに戻ります。シェルの fg で再開します。"
+title = "一時停止 (サスペンド)"
+
 [cmd.clipboard.copy]
 description = "選択範囲をクリップボードにコピーします。"
 title = "コピー"

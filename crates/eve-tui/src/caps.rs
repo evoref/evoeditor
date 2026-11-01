@@ -225,12 +225,13 @@ pub fn detect(config: CapsConfig, env: &dyn Env, is_windows: bool) -> Detected {
     let ambiguous = effective_ambiguous_width(config.ambiguous_width, hint);
     let caps = Capabilities {
         color_depth: detect_color_depth(config.color_mode, env, is_windows),
-        // マウスは v0.2 から (Windows は `ENABLE_MOUSE_INPUT`、Unix は VT の SGR マウス、04 §6.8)。拡張キー・ジョブ制御は無効 (04 §6.3)
+        // マウスは v0.2 から (Windows は `ENABLE_MOUSE_INPUT`、Unix は VT の SGR マウス、04 §6.8)。拡張キーは無効 (04 §6.3)
         mouse: true,
         enhanced_keys: false,
         // Windows Terminal は OSC 52 の書込に対応する。conhost は対応しない (05 §8.1)
         osc52_write: kind == TerminalKind::WindowsTerminal,
-        can_suspend: false,
+        // ジョブ制御 (`app.suspend`) は Unix だけ (05 §11.2 / §11.3)
+        can_suspend: !is_windows,
         dark_mode: None,
         ascii_only: ascii_only(ambiguous, kind),
         screen_reader: false,
@@ -397,6 +398,11 @@ mod tests {
         assert_eq!(d.caps.ambiguous_width_hint, Some(1));
         assert_eq!(d.caps.min_surface, CellSize { cols: 20, rows: 5 });
         assert!(d.caps.mouse && !d.caps.enhanced_keys && !d.caps.can_suspend);
+        assert!(
+            detect(CapsConfig::default(), &MapEnv::new(&[]), false)
+                .caps
+                .can_suspend
+        );
 
         let d = detect(CapsConfig::default(), &MapEnv::new(&[]), true);
         assert_eq!(d.kind, TerminalKind::Conhost);
