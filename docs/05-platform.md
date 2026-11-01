@@ -834,12 +834,15 @@ v0.1 で実装するのは下の表の **Windows の 2 行** で、ほかの行�
 | kitty | mac/Linux | ○ | ○ (kitty protocol) | ○ | ○ (確認あり) | ○ | ○ | ○ (Linux は `GLFW_IM_MODULE=ibus` 要) | ○ | `Ctrl+Shift+*` 系は端末ショートカット | スモーク (出荷時)。全項目の記入は v0.4 |
 | WezTerm | 全 | ○ | ○ (kitty protocol、設定要の版あり) | ○ | ○ | ○ | ○ | ○ | ○ | 少ない | スモーク (出荷時)。全項目の記入は v0.4 |
 | Alacritty | 全 | ○ | △ (0.13+) | ○ | ○ | ○ (0.13+) | ○ | △ (版依存) | ○ | 少ない | スモーク (出荷時)。全項目の記入は v0.4 |
-| GNOME Terminal (VTE) | Linux | ○ | × | ○ | × (VTE は非対応) | ? (対応版は要確認) | ○ | ○ | ○ | `Ctrl+Shift+C/V/T/W/N/Q`、`Ctrl+PgUp/PgDn`、`F1`、`F10`、`F11`、`Shift+PgUp/PgDn` (スクロールバックに使われる。到達性検査では横取りとして扱う) | Must (v0.2) |
-| tmux (内側) | 全 | △ (`terminal-features` 設定) | △ (3.3+ `extended-keys`。CSI u 形式で、kitty プロトコルは透過しない) | ○ | △ (`set-clipboard on`) | △ (3.4+) | ○ | 外側次第 | ○ (tmux kill-session で SIGHUP) | プレフィックス `Ctrl+B`。推奨設定: `escape-time 10`、`extended-keys on`、`set-clipboard on`、`focus-events on` | Must (v0.2) |
+| GNOME Terminal (VTE) | Linux | ○ | × | ○ | × (VTE は非対応) | ? (対応版は要確認) | ○ | ○ | ○ | `Ctrl+Shift+C/V/T/W/N/Q`、`Ctrl+PgUp/PgDn`、`F1`、`F10`、`F11`、`Shift+PgUp/PgDn` (スクロールバックに使われる。到達性検査では横取りとして扱う) | Must (v0.2)。**v0.2 は未確認のまま出荷** (実機のデスクトップ環境が無い。決定 (ユーザー回答)、2026-11-01。下の注記) |
+| Windows Terminal + WSL2 | Linux (WSL) | ○ (`WT_SESSION` を引き継ぐ) | ? (L7。VT の入力) | ○ (e2e (linux) の擬似端末で確認。手での確認は L5) | ○ (ただし WSL のクリップボードは `powershell.exe` を先に使う、§8) | △ (Windows Terminal の版に依存) | ? (09 §3.8 の FR-307) | ? (L6) | ? (タブを閉じたとき。L2。`kill -HUP` での退避は e2e で確認) | Windows Terminal と同じ (上の行) | **v0.2 の Linux の受入の環境** (docs/README §3.9 の M7)。手順は `docs/compat/checklist.md` の L、記録は `docs/compat/<版>/linux-wsl.md`。README の Linux の導入手順を一時的な HOME で手順どおりに通した (自動、2026-11-01) |
+| tmux (内側) | 全 | △ (`terminal-features` 設定) | △ (3.3+ `extended-keys`。CSI u 形式で、kitty プロトコルは透過しない) | ○ | △ (`set-clipboard on`) | △ (3.4+) | ○ | 外側次第 | ○ (tmux kill-session で SIGHUP) | プレフィックス `Ctrl+B`。推奨設定: `escape-time 10`、`extended-keys on`、`set-clipboard on`、`focus-events on` | Must (v0.2)。WSL の Windows Terminal の中の tmux 3.6 で、起動・日本語の表示・入力・リサイズ・保存・終了と、kill-session (SIGHUP) での退避を確かめた (自動、2026-11-01)。手動の項目は `docs/compat/checklist.md` の L7 / L8 |
 | screen (内側) | Unix | × | × | △ | × | × | △ | 外側次第 | ○ | プレフィックス `Ctrl+A` | スモーク (出荷時。動作のみ) |
 | Linux console (tty) | Linux | × | × | × | × | × | × (gpm) | × | ○ | — | 非対象 |
 
 (○ = 対応、△ = 条件付き/版依存、× = 非対応、? = 08 §3 のスパイクで検証)
+
+**v0.2 の Linux の記入 (M7、2026-11-01)**: Linux の受入は開発 PC の WSL2 (Ubuntu) の Windows Terminal と、その中の tmux で行う (上の「Windows Terminal + WSL2」と「tmux」の行)。**実機のデスクトップ環境** (GNOME Terminal・KDE の Konsole など、Wayland / X11) のクリップボード (`wl-copy` / `xclip` / `xsel`。検出と起動の試験だけ) と IME (mozc など) の候補窓、`TERM=linux` のコンソールは **未確認のまま出荷** し、README の既知の制約 (Linux) に書く (決定 (ユーザー回答)、2026-11-01、docs/README §3.9)。利用者からの報告で確かめたら、この表に記入する。
 
 ---
 
@@ -1304,6 +1307,24 @@ evoeditor-<version>-<target>.{zip|tar.gz}
 
 - 更新は §18.10、直前の版に戻すのは §18.12。どちらも手順 2〜4 を使う (展開先は同じフォルダで、evoeditor をすべて終了してから置き換える)。
 
+### 18.2b v0.2 のインストール手順 (Linux)
+
+利用者向け README の「インストール」節の Linux の部分 (日本語・英語) の正本 (v0.2 の M7、2026-11-01)。対象は Linux の x86_64 と aarch64 の musl 静的版 (§18.2。glibc の版に依らず動く)。インストーラを持たず、管理者権限 (`sudo`) を要らない手順にする。システムの場所 (`/usr/local` 等) に置く手順は書かない (更新のたびに昇格が要る。パッケージは §18.5、v0.4)。
+
+| # | 手順 | 内容 |
+|---|---|---|
+| 1 | 取得 | GitHub Releases の該当の版のページから、`evoeditor-<版>-<x86_64|aarch64>-unknown-linux-musl.tar.gz`・`SHA256SUMS`・`SHA256SUMS.minisig` の 3 つを同じディレクトリにダウンロードする (`uname -m` で `x86_64` か `aarch64` かを確かめる)。分割デバッグ情報の `.debug` は不具合の調査に使うもので、利用者は要らない (§18.6) |
+| 2 | 検証 | §18.9 の手順で、(1) `minisign -Vm SHA256SUMS -P <公開鍵>` で署名を検証し、(2) `sha256sum -c SHA256SUMS --ignore-missing` でアーカイブのハッシュを確かめる (ダウンロードしたものだけが `OK` になる)。minisign は Debian / Ubuntu なら `sudo apt install minisign` (Ubuntu 26.04 の universe で確認、2026-11-01)、他のディストリビューションはそのパッケージか作者の公式の配布から入手する。**一致しなければ以降の手順に進まない** |
+| 3 | 展開先 | 利用者ごとのディレクトリ **`~/.local/opt/evoeditor/`** に展開する: `mkdir -p ~/.local/opt/evoeditor && tar -xzf evoeditor-<版>-<三つ組>.tar.gz -C ~/.local/opt/evoeditor`。アーカイブはトップのディレクトリを持たない (§18.2) ので、展開先を必ず指す。展開した `LICENSE`・`NOTICE`・`THIRD-PARTY-NOTICES.md` は消さずに置いておく |
+| 4 | PATH | `~/.local/bin` にシンボリックリンクを置く: `mkdir -p ~/.local/bin && ln -sf ~/.local/opt/evoeditor/evoeditor ~/.local/bin/evoeditor`。Debian / Ubuntu の既定の `~/.profile` は、`~/.local/bin` があればログインのときに `PATH` に加える (作ったばかりなら **ログインし直す**)。`command -v evoeditor` で見つからなければ、`~/.profile` (zsh なら `~/.zprofile`) に `export PATH="$HOME/.local/bin:$PATH"` を加えてログインし直す |
+| 5 | 確認 | 新しい端末で `evoeditor --version` を実行し、版が表示されることを確かめる |
+| 6 | 設定 | 設定ファイルは必須ではない。変えたいときは、同梱の `config.example.toml` を `~/.config/evoeditor/config.toml` (`$XDG_CONFIG_HOME` を設定していればその下) に写して編集する (§7.1。evoeditor はディレクトリを作らない) |
+| 7 | `cargo install` の経路 | 第二の経路 (Rust の開発環境がある利用者向け)。`cargo install --locked --git <repo> --tag v<版> evoeditor` で `~/.cargo/bin` に入る。この経路は glibc に動的にリンクした実行ファイルになる (配布の musl 静的版とは別物。動作は同じ) |
+| 8 | アンインストール | §18.8 |
+
+- WSL (Windows Subsystem for Linux) でも同じ手順で使える。WSL の中のファイル (`~` の下) を編集するのが速く、`/mnt/c` の下 (Windows のドライブ) は遅い。WSL では Windows のクリップボードを `powershell.exe` で使う (§8)。
+- 更新は §18.10、直前の版に戻すのは §18.12。どちらも手順 2〜3 を使う (展開先は同じディレクトリで、evoeditor をすべて終了してから展開し直す)。
+
 ### 18.3 Windows コード署名
 
 | 方式 | 費用 / 条件 | 方針 |
@@ -1346,7 +1367,7 @@ evoeditor-<version>-<target>.{zip|tar.gz}
 
 ### 18.8 アンインストール (提案、OQ-164)
 
-evoeditor はインストーラを持たず、**レジストリ・システム設定・サービスを書かない** (Windows も含む)。したがってアンインストールは「実行ファイルを消す」(`cargo install` なら `cargo uninstall evoeditor`、アーカイブなら §18.2a の展開先のフォルダ (`%LOCALAPPDATA%\Programs\evoeditor\`) を削除し、利用者の環境変数 `Path` からそのフォルダを外す) と、必要なら次のディレクトリを手で消すことである。v0.1 (Windows) の既定の場所は `%APPDATA%\evoeditor` (`config_dir`) と `%LOCALAPPDATA%\evoeditor` (`state_dir` / `data_dir` / `cache_dir` の親) で、内訳は: `config_dir` (設定)、`state_dir` (`log/`・`recovery/`・`swap/`・`backup/`・`session/`・検索履歴・`last_version.toml` (前回起動した版の記録、v0.2、07 §18.8))、`data_dir`・`cache_dir` (v0.4 以降)、§7.5 の代替の退避先 (`%TEMP%\eve-recovery-<SID>\`。macOS / Linux 出荷時は `$TMPDIR/eve-recovery-<uid>/`)、ポータブルモードの `<exe_dir>/data/`、v1.L 以降は資格情報ストアに保存した API キー (§14)。macOS / Linux の実パス (v0.2) を含め、各 OS の実パスは §7.1 (環境変数で上書きしていればその場所)。**`recovery/` と `swap/` には未保存の編集内容が残っていることがある** ので、消す前に中を確認するよう README の手順に書く。evoeditor 自身にディレクトリを消すコマンドは設けない (誤操作で退避を失わないため)。
+evoeditor はインストーラを持たず、**レジストリ・システム設定・サービスを書かない** (Windows も含む)。したがってアンインストールは「実行ファイルを消す」(`cargo install` なら `cargo uninstall evoeditor`、アーカイブなら §18.2a の展開先のフォルダ (`%LOCALAPPDATA%\Programs\evoeditor\`) を削除し、利用者の環境変数 `Path` からそのフォルダを外す。Linux (v0.2) は §18.2b の展開先 `~/.local/opt/evoeditor/` と、シンボリックリンク `~/.local/bin/evoeditor` を削除する) と、必要なら次のディレクトリを手で消すことである。v0.1 (Windows) の既定の場所は `%APPDATA%\evoeditor` (`config_dir`) と `%LOCALAPPDATA%\evoeditor` (`state_dir` / `data_dir` / `cache_dir` の親)、Linux (v0.2) は `~/.config/evoeditor` (`config_dir`) と `~/.local/state/evoeditor` (`state_dir`。`data_dir` / `cache_dir` は `~/.local/share/evoeditor` / `~/.cache/evoeditor`、v0.4 以降) で、内訳は: `config_dir` (設定)、`state_dir` (`log/`・`recovery/`・`swap/`・`backup/`・`session/`・検索履歴・`last_version.toml` (前回起動した版の記録、v0.2、07 §18.8))、`data_dir`・`cache_dir` (v0.4 以降)、§7.5 の代替の退避先 (`%TEMP%\eve-recovery-<SID>\`。macOS / Linux 出荷時は `$TMPDIR/eve-recovery-<uid>/`)、ポータブルモードの `<exe_dir>/data/`、v1.L 以降は資格情報ストアに保存した API キー (§14)。macOS / Linux の実パス (v0.2) を含め、各 OS の実パスは §7.1 (環境変数で上書きしていればその場所)。**`recovery/` と `swap/` には未保存の編集内容が残っていることがある** ので、消す前に中を確認するよう README の手順に書く。evoeditor 自身にディレクトリを消すコマンドは設けない (誤操作で退避を失わないため)。
 
 ### 18.9 minisign 署名の検証 (提案、OQ-164)
 
@@ -1358,7 +1379,7 @@ evoeditor (TUI) は **エディタ内に更新機能を持たない** ([ADR-0040
 
 | 配布経路 | 更新の手順 | 版 |
 |---|---|---|
-| GitHub Releases (アーカイブ) | (1) 新しい版のアーカイブ (v0.1 は `evoeditor-<version>-x86_64-pc-windows-msvc.zip`) と `SHA256SUMS`・`SHA256SUMS.minisig` をダウンロードする (2) §18.9 の手順で署名とハッシュを検証する (3) evoeditor をすべて終了してから、展開した `evoeditor.exe` で古い実行ファイルを置き換える (Windows は実行中の exe を置き換えられない。macOS / Linux 出荷時は `evoeditor` を同様に置き換える) (4) `evoeditor --version` で版を確かめる。使っていた版のアーカイブは §18.12 のために残しておく | v0.1〜 |
+| GitHub Releases (アーカイブ) | (1) 新しい版のアーカイブ (v0.1 は `evoeditor-<version>-x86_64-pc-windows-msvc.zip`。Linux (v0.2) は `evoeditor-<version>-<x86_64|aarch64>-unknown-linux-musl.tar.gz`) と `SHA256SUMS`・`SHA256SUMS.minisig` をダウンロードする (2) §18.9 の手順で署名とハッシュを検証する (3) evoeditor をすべて終了してから、展開した `evoeditor.exe` で古い実行ファイルを置き換える (Windows は実行中の exe を置き換えられない。macOS / Linux 出荷時は `evoeditor` を同様に置き換える。Linux は §18.2b の展開先に展開し直す) (4) `evoeditor --version` で版を確かめる。使っていた版のアーカイブは §18.12 のために残しておく | v0.1〜 |
 | `cargo install --git` | `cargo install --locked --git <repo> --tag <新しい版> evoeditor` を再実行する (同じ名前の実行ファイルを置き換える。cargo が求めれば `--force` を付ける) | v0.1〜 |
 | crates.io | `cargo install --locked evoeditor` を再実行する。**crates.io に公開した時点から** の経路 (時期は OQ-20 で確定 (ユーザー回答): 1.0 の前)。公開するまで README には書かない | 公開後 |
 | パッケージマネージャ | (macOS / Linux 向けはその OS の出荷後) Homebrew (`brew upgrade evoeditor`)、Scoop (`scoop update evoeditor`)、winget (`winget upgrade <発行者>.evoeditor`)、AUR (AUR ヘルパーでの更新)、deb / rpm (Release に添付した新しいパッケージを `apt install ./<ファイル>.deb` / `dnf install ./<ファイル>.rpm`)、`cargo binstall evoeditor` の再実行。各チャネルの正確なコマンドは登録したときに README に書く | v0.4〜 |

@@ -239,7 +239,7 @@ L3 で必ずカバーする要件: FR-1xx (ファイル管理) の全 Must (FR-1
 
 ### 3.7 L6: 互換マトリクス (M)
 
-05 §9.4 の表をリリースごとに **実機で記入** する。v0.1 の対象は **Windows 11 の Windows Terminal と conhost** だけ (確定 (ユーザー回答)、01 NFR-402)。手順書 `docs/compat/checklist.md` に端末ごとの確認項目 (起動、日本語入力と候補位置 (Microsoft IME・Google 日本語入力)、全角・絵文字表示、Ctrl+Shift の区別、貼り付け、端末の範囲選択でのコピー、リサイズ、終了後の端末状態) を列挙し、結果を `docs/compat/<version>/windows-<terminal>.md` に記録 (Windows と端末のバージョンも記載)。OSC 52・マウスの項目は v0.2、macOS / Linux の端末はそれらを出荷する版で加える。
+05 §9.4 の表をリリースごとに **実機で記入** する。v0.1 の対象は **Windows 11 の Windows Terminal と conhost** だけ (確定 (ユーザー回答)、01 NFR-402)。手順書 `docs/compat/checklist.md` に端末ごとの確認項目 (起動、日本語入力と候補位置 (Microsoft IME・Google 日本語入力)、全角・絵文字表示、Ctrl+Shift の区別、貼り付け、端末の範囲選択でのコピー、リサイズ、終了後の端末状態) を列挙し、結果を `docs/compat/<version>/windows-<terminal>.md` に記録 (Windows と端末のバージョンも記載)。OSC 52・マウスの項目は v0.2、macOS / Linux の端末はそれらを出荷する版で加える。**Linux (v0.2、M7 で追加、2026-11-01)**: 開発 PC の WSL2 (Ubuntu) の Windows Terminal と tmux で、手順書の A〜G と Linux の節 L (導入・SIGHUP の退避・サスペンド・WSL のクリップボード・ブラケットペースト・tmux) を行い、`docs/compat/<version>/linux-wsl.md` (雛形 `_template/linux-wsl.md`) に記録する。実機のデスクトップ環境は未確認のまま出荷する (05 §9.4 の注記)。
 
 **対象 OS** (正本は [01 §4.6](01-requirements.md#46-v01-の既知の制約-リリースノートとヘルプに明記する)、確定 (ユーザー回答)):
 
@@ -248,7 +248,7 @@ L3 で必ずカバーする要件: FR-1xx (ファイル管理) の全 Must (FR-1
 | Windows 11 | **出荷する** | 開発機 (01 §3.0 の基準機) で実機の動作確認と性能の判定を行う。CI でも全テストを行う (CI のランナーは Windows Server 系なので、実機の確認は基準機で行う) |
 | Windows 10 | **出荷しない** (公式には対応しない) | 実機の確認環境が無いため対象にしない (確定 (ユーザー回答)、2026-10-25)。対象に加える版で、L6 の環境と 1809〜2004 の ConPTY の不具合の確認 (05 §1.1) を加える |
 | macOS | **出荷しない** (v0.2 で出荷) | CI も行わない (macOS の CI ジョブは v0.2) |
-| Linux | **出荷しない** (v0.2 で出荷) | CI は Linux CI の対象 crate (§6.4) のビルドとヘッドレスのテストだけ |
+| Linux | **出荷しない** (v0.2 で出荷) | CI は Linux CI の対象 crate (§6.4) のビルドとヘッドレスのテストだけ。v0.2 の受入は WSL2 の Windows Terminal と tmux (上の段落) |
 
 ### 3.8 L7: 手動受入 (M)
 
@@ -450,7 +450,7 @@ CI ランナーの wall-clock は変動が大きい (共有 VM) ため、絶対�
 - `coverage`: Linux の夜間ジョブで `cargo llvm-cov nextest --lcov` を **Linux CI の対象 crate** (§6.4: core 系 + `eve-host` + `eve-testkit`。`eve-testkit` は測定の対象から除き、テストの実行にだけ使う) に対して実行し → artifact。`eve-platform` / `eve-tui` / `evoeditor` bin と L5 は v0.1 の測定の範囲に入らない (Windows の `llvm-cov` は遅い、§6.4 の落とし穴 (9))。§8.1 の `eve-platform` / `eve-tui` の目安を測る Windows の測定は、ゲートにする v0.4 で加える。**v0.1 は報告のみ** (OQ-101)、`--fail-under-lines` の crate 別閾値 (§8.1) は v0.4 からゲート (毎 PR で走らせるかは v0.4 で判断)。
 - (v0.2) `docs-rs`: `RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --workspace` (NFR-705。`-D missing_docs` を加えるのは v0.3 から)。
 - (v0.2) `unsafe-audit`: `eve-platform` / `eve-tui` の `cargo geiger` の数を記録 (情報。R5 の `forbid` の存在検査は毎 PR の `deps` ジョブ)。
-- **クラッシュ一貫性 (NFR-301 の「電源断」、v0.2)**: プロセス kill や `MemFs` の障害注入では fsync の順序 (一時ファイルの fsync → rename → ディレクトリ fsync) の欠落を検出できない (kill テストでは必ず合格してしまう)。Linux の夜間ジョブで **LazyFS** (FUSE ベース、fsync されていない書込を落とす) または **dm-log-writes** (書込順序を記録・再生) を使い、保存手順の各切断点で「元ファイルまたは新ファイルが完全な状態で残る」ことを検査する (08 §3 S-10 の合否基準を自動化)。ext4 / xfs / btrfs をループバックで用意。道具の選定は OQ-143 (§12、未決)。**M7 の実装 (2026-11-01、LazyFS)**: `cargo xtask crash-consistency` (`xtask nightly` の手順 `crash`)。`nightly.yml` が LazyFS (MIT。版をコミットで固定してビルドする) と ext4 / xfs / btrfs のループバックを用意し、それぞれの FS の上に LazyFS をマウントして、`eve-test-helpers save` を切断点 (§3.6 の test-hooks。原子的保存の `kill_after_tmp_write` / `kill_after_flush` / `kill_before_rename` / `kill_after_rename` と完了、新規の保存、直接上書きの `kill_after_inflight_flag` / `kill_mid_backup` / `kill_after_backup` / `kill_mid_inplace_write` と完了) で強制終了させてから `lazyfs::clear-cache` で fsync されていない書込を落とす。合格の条件: 原子的保存は対象が元の内容か新しい内容 (新規は無いか新しい内容)、保存が成功を返した後は新しい内容、直接上書きは元か新しい内容、または完全なバックアップ (`backup/*.bak`) と保存中フラグが残る (起動時の走査が復旧を提案できる)。**対照**: 最初に、fsync せずに rename したファイルの内容がキャッシュを落とすと失われることを確かめる (道具が効いている証拠)。一時ファイルの fsync を抜いた変異で、この検査が落ちることも確かめた。**限界**: LazyFS が落とすのはデータだけで、メタデータ (作成・rename) は下の FS にすぐ反映される。そこでディレクトリの fsync の欠落は見つけられない (dm-log-writes なら書込順序ごと再生できる。必要になったら加える)。手元 (WSL) では `--no-lazyfs` の空回し (電源断を模擬しない。切断点と判定の組み立ての確認) だけを行う。
+- **クラッシュ一貫性 (NFR-301 の「電源断」、v0.2)**: プロセス kill や `MemFs` の障害注入では fsync の順序 (一時ファイルの fsync → rename → ディレクトリ fsync) の欠落を検出できない (kill テストでは必ず合格してしまう)。Linux の夜間ジョブで **LazyFS** (FUSE ベース、fsync されていない書込を落とす) または **dm-log-writes** (書込順序を記録・再生) を使い、保存手順の各切断点で「元ファイルまたは新ファイルが完全な状態で残る」ことを検査する (08 §3 S-10 の合否基準を自動化)。ext4 / xfs / btrfs をループバックで用意。道具は LazyFS (OQ-143 で確定 (ユーザー回答)、2026-11-01)。**M7 の実装 (2026-11-01、LazyFS)**: `cargo xtask crash-consistency` (`xtask nightly` の手順 `crash`)。`nightly.yml` が LazyFS (MIT。版をコミットで固定してビルドする) と ext4 / xfs / btrfs のループバックを用意し、それぞれの FS の上に LazyFS をマウントして、`eve-test-helpers save` を切断点 (§3.6 の test-hooks。原子的保存の `kill_after_tmp_write` / `kill_after_flush` / `kill_before_rename` / `kill_after_rename` と完了、新規の保存、直接上書きの `kill_after_inflight_flag` / `kill_mid_backup` / `kill_after_backup` / `kill_mid_inplace_write` と完了) で強制終了させてから `lazyfs::clear-cache` で fsync されていない書込を落とす。合格の条件: 原子的保存は対象が元の内容か新しい内容 (新規は無いか新しい内容)、保存が成功を返した後は新しい内容、直接上書きは元か新しい内容、または完全なバックアップ (`backup/*.bak`) と保存中フラグが残る (起動時の走査が復旧を提案できる)。**対照**: 最初に、fsync せずに rename したファイルの内容がキャッシュを落とすと失われることを確かめる (道具が効いている証拠)。一時ファイルの fsync を抜いた変異で、この検査が落ちることも確かめた。**限界**: LazyFS が落とすのはデータだけで、メタデータ (作成・rename) は下の FS にすぐ反映される。そこでディレクトリの fsync の欠落は見つけられない (dm-log-writes なら書込順序ごと再生できる。必要になったら加える)。手元 (WSL) では `--no-lazyfs` の空回し (電源断を模擬しない。切断点と判定の組み立ての確認) だけを行う。
 - BM-306 soak: **v0.2〜v0.4 は夜間に 1 時間** (傾向の観察)。v0.1 では行わない。8 時間の判定は **v1.0** のリリース前に行う (ホストランナーは最長 6 時間なので、セルフホストランナーか基準機で実行する)。
 - 週次 (v1.L から、任意): `ai-local.yml` (実 `llama-server` との契約テスト、§3.9)。失敗は Issue を起票するだけで PR をブロックしない。v1.L からは soak に AI 有効 (模擬サーバ) の 1 時間を加え、要求の繰り返しで RSS・`AiSession` の履歴が増え続けないこと (MR8) を見る。
 
@@ -828,7 +828,7 @@ bugfix リリースはパッチ版 (`0.y.z` の z、§9.1) で出し、`hotfix/*
 | OQ-44 | 1.0 の判定条件 | **確定 (ユーザー回答、2026-10-28)**: v1.0 (安定化の版) を 1.0 とする (01 §1.3 / 08)。v0.4 (実用化) の後に NFR-601 / NFR-306 のゲートを満たした時点 | PO / v0.2 着手前 (確定済み) |
 | OQ-106 | NFR-601 ユーザーテストの協力者確保方法と判定 | **確定 (ユーザー回答)**: v0.2 で 3 名の所見のみ (ゲートにしない。v0.1 では行わない、§3.8)、v1.0 のゲートで 5 名中 5 名 (失敗時の所見を記録し 04 ヒントバーへフィードバック) | PO / 回答済み |
 | OQ-107 | Miri の導入 | **未決**: 導入しない (eve-text は unsafe なし、R5 対象 crate の FFI は Miri で実行不能) | 裁量 / — |
-| OQ-143 | クラッシュ一貫性テストの道具 (§6.3) | **未決**: LazyFS (FUSE、セットアップが軽い) を第一候補とし、夜間ジョブの Linux ランナーで実行できなければ dm-log-writes (夜間ジョブは v0.2)。**実装 (2026-11-01)**: LazyFS が GitHub のホストランナーで動くことを確かめ、LazyFS で実装した (§6.3) | 裁量 / v0.2 着手時 |
+| OQ-143 | クラッシュ一貫性テストの道具 (§6.3) | **確定 (ユーザー回答、2026-11-01)**: LazyFS。メタデータ (作成・rename) の損失は模擬しない限界を受け入れ、dm-log-writes は必要になったときに足す補助とする (見直しの条件は 10 の OQ-143) | 裁量 / 回答済み |
 | OQ-144 | 自前仮想画面モデル (§3.5) の範囲 | **未決**: 曖昧幅・絵文字・VS16・PUA の 4 軸を設定可能にし、`vt100` は L5 の読取用途に限定 | 裁量 / v0.1 中 |
 | OQ-112 | Linux の配布物 (musl のみ) の判定材料 | **未決**: musl 静的のみ。BM-104 / BM-202 を musl 版と gnu 版で測り、1.5 倍 / 1.3 倍を超えたら gnu 版を追加 (§5.2、05 §17.3)。Linux を出荷する版で判断する (v0.1 は Windows のみ) | PO / Linux を出荷する版のリリース前 |
 | OQ-113 | 数値目標の統計量 (p50 / p99、p99.9 は参考値) と測定条件 | **確定 (ユーザー回答)**: 01 §3 の値。BM-103b は 1,000 回で p50 / p99 を判定し、p99.9 は参考値として記録する (ゲートにしない。01 §3.0 の「統計」。v0.1 は Windows の基準機)。条件は 01 §3.0.1 | PO / 回答済み |

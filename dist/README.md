@@ -2,9 +2,9 @@
 
 日本語 | [English](README.en.md)
 
-Rust 製のテキストエディタです。Windows の端末 (Windows Terminal / コンソールホスト) で、日本語のテキストを元の文字コードと改行コードのまま安全に編集・保存できることを目指しています。
+Rust 製のテキストエディタです。Windows の端末 (Windows Terminal / コンソールホスト) と Linux の端末で、日本語のテキストを元の文字コードと改行コードのまま安全に編集・保存できることを目指しています。
 
-この版は **v0.1 (最小核)** です。Windows 11 (x86_64) と日本語の画面だけに対応します。
+対応する OS は **Windows 11 (x86_64)** と **Linux (x86_64 / aarch64。v0.2 から)** です。
 
 - ライセンス: Apache License 2.0 ([LICENSE](LICENSE)、[NOTICE](NOTICE))
 - 利用している他のソフトウェアの告知: [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)
@@ -31,6 +31,8 @@ Rust 製のテキストエディタです。Windows の端末 (Windows Terminal 
 ## インストール
 
 インストーラはありません。レジストリやシステムの設定も書きません。管理者権限は要りません。
+
+### Windows
 
 1. **取得**: GitHub Releases の該当の版のページから、次の 3 つを同じフォルダにダウンロードします。
    - `evoeditor-<版>-x86_64-pc-windows-msvc.zip`
@@ -72,9 +74,42 @@ Rust 製のテキストエディタです。Windows の端末 (Windows Terminal 
 
 Rust の開発環境がある方は、`cargo install --locked --git <リポジトリ> --tag v<版> evoeditor` でもインストールできます。その場合は、C ランタイムを静的にリンクするため、環境変数 `RUSTFLAGS` に `-C target-feature=+crt-static` を設定してから実行してください。
 
+### Linux
+
+Linux 向けは、どのディストリビューションでも動く静的リンクの実行ファイル (musl) です。WSL でも同じ手順で使えます。
+
+1. **取得**: GitHub Releases の該当の版のページから、次の 3 つを同じディレクトリにダウンロードします。`x86_64` か `aarch64` かは `uname -m` で確かめます。`.debug` のファイルは不具合の調査に使うもので、要りません。
+   - `evoeditor-<版>-x86_64-unknown-linux-musl.tar.gz` (または `aarch64-unknown-linux-musl`)
+   - `SHA256SUMS`
+   - `SHA256SUMS.minisig`
+2. **検証** (一致しなければ、以降に進みません): minisign (Debian / Ubuntu は `sudo apt install minisign`) で署名を検証し、アーカイブのハッシュを確かめます。ダウンロードしたアーカイブの行が `OK` になれば一致しています。
+
+   ```sh
+   minisign -Vm SHA256SUMS -P RWRtkrzH70nKORpBFPEtLy6elo0xP5XsEli9SU/OaxnBmNM8o14GKMhv
+   sha256sum -c SHA256SUMS --ignore-missing
+   ```
+
+3. **展開**: 利用者ごとのディレクトリに展開します。アーカイブはトップのディレクトリを持たないので、展開先を必ず指してください。
+
+   ```sh
+   mkdir -p ~/.local/opt/evoeditor
+   tar -xzf evoeditor-<版>-x86_64-unknown-linux-musl.tar.gz -C ~/.local/opt/evoeditor
+   ```
+
+4. **PATH**: `~/.local/bin` にリンクを置きます。Debian / Ubuntu では、`~/.local/bin` を作ったあと **ログインし直す** と `PATH` に入ります。`command -v evoeditor` で見つからなければ、`~/.profile` (zsh なら `~/.zprofile`) に `export PATH="$HOME/.local/bin:$PATH"` を加えてログインし直してください。
+
+   ```sh
+   mkdir -p ~/.local/bin
+   ln -sf ~/.local/opt/evoeditor/evoeditor ~/.local/bin/evoeditor
+   ```
+
+5. **確認**: 新しい端末で `evoeditor --version` を実行し、版が表示されることを確かめます。
+
+Rust の開発環境がある方は、`cargo install --locked --git <リポジトリ> --tag v<版> evoeditor` でもインストールできます (glibc に動的にリンクした実行ファイルになります)。
+
 ### 起動
 
-```powershell
+```sh
 evoeditor                 # 名前の無い新しい文書
 evoeditor memo.txt        # ファイルを開く (1 つだけ)
 evoeditor --readonly a.txt
@@ -84,15 +119,15 @@ evoeditor --help
 
 ### 設定
 
-設定ファイルは必須ではありません。変えたいときは、同梱の [config.example.toml](config.example.toml) を `%APPDATA%\evoeditor\config.toml` に写して編集します (フォルダが無ければ作ってください)。書き間違いがあっても起動は止まらず、その項目だけ既定値に戻して知らせます。
+設定ファイルは必須ではありません。変えたいときは、同梱の [config.example.toml](config.example.toml) を、Windows は `%APPDATA%\evoeditor\config.toml`、Linux は `~/.config/evoeditor/config.toml` (`XDG_CONFIG_HOME` を設定していればその下) に写して編集します (フォルダが無ければ作ってください)。書き間違いがあっても起動は止まらず、その項目だけ既定値に戻して知らせます。
 
 ## 更新
 
 エディタの中に更新の機能はありません。通信もしません。新しい版は、GitHub の Watch (Releases と Security alerts) で知ってください。
 
 1. 新しい版のアーカイブと `SHA256SUMS`・`SHA256SUMS.minisig` をダウンロードし、「インストール」の手順 2 のとおり **署名とハッシュを検証** します。
-2. evoeditor を **すべて終了** します (Windows は実行中の exe を置き換えられません)。
-3. 展開したフォルダのファイルで、`%LOCALAPPDATA%\Programs\evoeditor` の中身を置き換えます。
+2. evoeditor を **すべて終了** します (Windows は実行中の exe を置き換えられません。Linux も、使用中の版を確実に入れ替えるため終了してから行います)。
+3. 展開したフォルダのファイルで、`%LOCALAPPDATA%\Programs\evoeditor` の中身を置き換えます。Linux は、新しいアーカイブを同じ展開先に展開し直します (`tar -xzf <新しいアーカイブ> -C ~/.local/opt/evoeditor`)。リンクはそのまま使えます。
 4. `evoeditor --version` で版を確かめます。
 
 使っていた版のアーカイブと `SHA256SUMS`・`SHA256SUMS.minisig` は、戻すときのために残しておいてください。
@@ -111,6 +146,10 @@ evoeditor --help
 ## アンインストール
 
 展開したフォルダ (`%LOCALAPPDATA%\Programs\evoeditor`) を削除し、環境変数 `Path` からそのフォルダを外します。`cargo install` なら `cargo uninstall evoeditor` です。設定と状態のフォルダ (`%APPDATA%\evoeditor`、`%LOCALAPPDATA%\evoeditor`、緊急退避の `%TEMP%\eve-recovery-*`) は、必要なら手で削除してください。
+
+Linux は、展開先 (`~/.local/opt/evoeditor`) とリンク (`~/.local/bin/evoeditor`) を削除します。設定と状態のディレクトリ (`~/.config/evoeditor`、`~/.local/state/evoeditor`、緊急退避の `$TMPDIR/eve-recovery-<uid>`) は、必要なら手で削除してください。
+
+状態のディレクトリの `recovery/` と `swap/` には、未保存の編集内容が残っていることがあります。消す前に中を確かめてください。
 
 ## 署名の検証
 
@@ -136,3 +175,12 @@ RWRtkrzH70nKORpBFPEtLy6elo0xP5XsEli9SU/OaxnBmNM8o14GKMhv
 - **UNC パス (`\\server\share\…`) のファイルを開くと、Windows が認証情報をそのサーバーへ送ることがあります。** これは OS の動作で、evoeditor からは制御できません。信頼できないサーバーのパスは開かないでください。
 - 端末が 256 色・16 色のときは、色を自動で近似します。区別は記号と属性で保ちます。
 - 日本語の入力 (IME) の変換中の表示や、キーの組み合わせは、端末と IME の組み合わせで差が出ることがあります。気づいた点は Issues で知らせてください。
+
+## 既知の制約 (Linux)
+
+- **確かめた環境は、WSL2 (Ubuntu) の Windows Terminal と、その中の tmux です。** GNOME や KDE などのデスクトップ環境 (Wayland / X11) でのクリップボードと、日本語入力 (mozc など) の候補の位置は、まだ確かめていません。気づいた点は Issues で知らせてください。Linux のコンソール (`TERM=linux`) は対象外です。macOS は対象外です。
+- **クリップボード** は、`wl-copy` / `wl-paste` (Wayland)、`xclip` または `xsel` (X11)、WSL では `powershell.exe` を使います。SSH で接続しているとき (リモート側のコマンドに書いてしまうため) と、どれも無いときは、対応する端末なら OSC 52 で端末のクリップボードに書きます (GNOME Terminal などの VTE 系の端末は OSC 52 に対応しません)。それもできないときは、evoeditor の中だけのクリップボードになります。
+- **`Ctrl+Z` は「元に戻す」です。** シェルに一時的に戻るときは `Ctrl+K Z` を押し、`fg` で戻ります。
+- **端末を閉じたとき・`kill` (SIGTERM / SIGHUP / SIGINT) のときは、未保存の内容を退避してから終了します。** `kill -9` (SIGKILL) と電源断のときは退避できません。ディスク上のファイルは、原子的な保存により壊れません。
+- **tmux の中で使うとき** は、`~/.tmux.conf` に `set -s escape-time 10`、`set -g set-clipboard on`、`set -s extended-keys on`、`set -g focus-events on` を勧めます (`Esc` の反応の遅れ、クリップボード、`Ctrl+Shift` を含むキーの区別のため)。tmux の中で外側の端末が分からないときは、256 色で描きます (`[theme]` の `color_mode = "truecolor"` で上書きできます)。
+- **WSL では、Linux 側のファイル (`~` の下) を編集してください。** Windows のドライブ (`/mnt/c` の下) のファイルも開けますが、遅くなります。
