@@ -85,8 +85,8 @@ jobs:
             args: --workspace --all-targets --all-features
           - name: linux
             runner: ubuntu-24.04
-            # Linux CI の対象 crate (core 系 + eve-platform (Unix の実装の分) + eve-host + eve-testkit) と開発用ツール (docs/02 §4.7)
-            args: -p eve-text -p eve-encoding -p eve-view -p eve-config -p eve-core -p eve-platform -p eve-host -p eve-testkit -p eve-docs-tables -p xtask --all-targets --all-features
+            # Linux CI の対象 crate (core 系 + eve-platform + eve-host + eve-tui + evoeditor (bin) + eve-testkit) と開発用ツール (docs/02 §4.7)
+            args: -p eve-text -p eve-encoding -p eve-view -p eve-config -p eve-core -p eve-platform -p eve-host -p eve-tui -p evoeditor -p eve-testkit -p eve-docs-tables -p xtask --all-targets --all-features
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -112,7 +112,7 @@ jobs:
             args: --workspace
           - name: linux
             runner: ubuntu-24.04
-            args: -p eve-text -p eve-encoding -p eve-view -p eve-config -p eve-core -p eve-platform -p eve-host -p eve-testkit -p eve-docs-tables -p xtask
+            args: -p eve-text -p eve-encoding -p eve-view -p eve-config -p eve-core -p eve-platform -p eve-host -p eve-tui -p evoeditor -p eve-testkit -p eve-docs-tables -p xtask
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

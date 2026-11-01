@@ -21,7 +21,7 @@
 //! cargo bench -p evoeditor --bench bm_pty -- --only 103,107        # 一部だけ (101 102 103 107)
 //! ```
 
-#![cfg(windows)]
+#![cfg_attr(not(windows), allow(dead_code, unused_imports))]
 #![allow(clippy::print_stdout, clippy::print_stderr)]
 // 計測の駆動側の読み取りスレッド (製品のスレッドではない。R11 の対象外)
 #![allow(clippy::disallowed_methods)]

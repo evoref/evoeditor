@@ -1,4 +1,5 @@
-//! 設定・状態・データのディレクトリの解決 (docs/05 §7.1、Windows)。環境変数だけで決める純粋な計算 (I/O をしない。
+//! 設定・状態・データのディレクトリの解決 (docs/05 §7.1。Windows は `Dirs::resolve`・`WinPaths`、Unix は `Dirs::resolve_unix`・
+//! `UnixPaths`)。環境変数だけで決める純粋な計算 (I/O をしない。
 //! ディレクトリは作らない。作るのは最初の書込の直前、05 §7.1「作成タイミング」)。
 //!
 //! 優先順位: `EVE_*_DIR` > `XDG_*_HOME` (明示されているときだけ。dotfile 管理ツール向け) > Windows の既定
@@ -6,7 +7,7 @@
 
 use eve_core::{FsError, FsPath, Paths};
 
-use crate::path::{PathCtx, normalize_windows};
+use crate::path::{PathCtx, normalize_unix, normalize_windows};
 
 const APP: &str = "evoeditor";
 
@@ -65,9 +66,104 @@ impl Dirs {
         }
     }
 
-    /// プロセスの環境変数から解決する。
+    /// Unix の解決 (05 §7.1 の表): `EVE_*_DIR` > `$XDG_*_HOME/evoeditor` > `$HOME/.config` / `.local/state` / `.local/share`
+    /// の下の `evoeditor`。`home` は 05 §3.6 で決めたホーム (無ければ既定は解決できない)。
+    pub fn resolve_unix(env: &dyn Fn(&str) -> Option<String>, home: Option<&str>) -> Dirs {
+        let pick = |over: &str, xdg: &str, fallback: &str| -> Option<FsPath> {
+            if let Some(v) = nonempty(env, over) {
+                return Some(FsPath::new(v));
+            }
+            let base = match nonempty(env, xdg) {
+                Some(v) => v.trim_end_matches('/').to_owned(),
+                None => format!(
+                    "{}/{fallback}",
+                    home.filter(|h| !h.is_empty())?.trim_end_matches('/')
+                ),
+            };
+            Some(FsPath::new(format!("{base}/{APP}")))
+        };
+        Dirs {
+            config: pick("EVE_CONFIG_DIR", "XDG_CONFIG_HOME", ".config"),
+            state: pick("EVE_STATE_DIR", "XDG_STATE_HOME", ".local/state"),
+            data: pick("EVE_DATA_DIR", "XDG_DATA_HOME", ".local/share"),
+        }
+    }
+
+    /// プロセスの環境変数から解決する (OS の規則で)。
     pub fn from_process_env() -> Dirs {
-        Dirs::resolve(&|k| std::env::var(k).ok())
+        #[cfg(unix)]
+        {
+            Dirs::resolve_unix(&|k| std::env::var(k).ok(), unix_home().as_deref())
+        }
+        #[cfg(not(unix))]
+        {
+            Dirs::resolve(&|k| std::env::var(k).ok())
+        }
+    }
+}
+
+/// Unix のホーム (05 §3.6): `$HOME` → パスワードデータベース (`getpwuid_r(geteuid())`)。
+#[cfg(unix)]
+pub fn unix_home() -> Option<String> {
+    std::env::var("HOME")
+        .ok()
+        .filter(|h| !h.is_empty())
+        .or_else(crate::sys::passwd_home)
+}
+
+/// `Paths` Port の Unix 実装 (05 §7.1)。解決済みの値を持つだけで、I/O をしない。
+pub struct UnixPaths {
+    dirs: Dirs,
+    ctx: PathCtx,
+    runtime: Option<FsPath>,
+}
+
+impl UnixPaths {
+    /// `runtime` は `$XDG_RUNTIME_DIR/evoeditor` (無ければ `None`)。
+    pub fn new(dirs: Dirs, ctx: PathCtx, runtime: Option<FsPath>) -> UnixPaths {
+        UnixPaths { dirs, ctx, runtime }
+    }
+
+    /// 起動時の環境から作る (作業ディレクトリは起動時に 1 回だけ読む)。
+    #[cfg(unix)]
+    pub fn from_process_env() -> std::io::Result<UnixPaths> {
+        let cwd = std::env::current_dir()?.to_string_lossy().into_owned();
+        let home = unix_home();
+        let runtime = std::env::var("XDG_RUNTIME_DIR")
+            .ok()
+            .filter(|v| !v.is_empty())
+            .map(|v| FsPath::new(format!("{}/{APP}", v.trim_end_matches('/'))));
+        Ok(UnixPaths::new(
+            Dirs::from_process_env(),
+            PathCtx { cwd, home },
+            runtime,
+        ))
+    }
+
+    pub fn dirs(&self) -> &Dirs {
+        &self.dirs
+    }
+}
+
+impl Paths for UnixPaths {
+    fn config_dir(&self) -> FsPath {
+        or_empty(&self.dirs.config)
+    }
+
+    fn state_dir(&self) -> FsPath {
+        or_empty(&self.dirs.state)
+    }
+
+    fn data_dir(&self) -> FsPath {
+        or_empty(&self.dirs.data)
+    }
+
+    fn runtime_dir(&self) -> FsPath {
+        or_empty(&self.runtime)
+    }
+
+    fn normalize(&self, raw: &str) -> Result<FsPath, FsError> {
+        normalize_unix(raw, &self.ctx)
     }
 }
 
@@ -196,6 +292,28 @@ mod tests {
                 data: None
             }
         );
+    }
+
+    #[test]
+    fn unix_の既定と_xdg_と_eve() {
+        let e = env(&[("XDG_STATE_HOME", "/x/state/"), ("EVE_DATA_DIR", "/d")]);
+        let d = Dirs::resolve_unix(&e, Some("/home/me"));
+        assert_eq!(d.config, p("/home/me/.config/evoeditor"));
+        assert_eq!(d.state, p("/x/state/evoeditor"));
+        assert_eq!(d.data, p("/d"));
+        let none = Dirs::resolve_unix(&env(&[("XDG_CONFIG_HOME", "")]), None);
+        assert_eq!(none.config, None, "ホームが無ければ既定は解決できない");
+        let paths = UnixPaths::new(
+            Dirs::resolve_unix(&env(&[]), Some("/h")),
+            PathCtx {
+                cwd: "/w".into(),
+                home: Some("/h".into()),
+            },
+            None,
+        );
+        assert_eq!(paths.state_dir(), FsPath::new("/h/.local/state/evoeditor"));
+        assert_eq!(paths.runtime_dir(), FsPath::new(""));
+        assert_eq!(paths.normalize("~/a").unwrap(), FsPath::new("/h/a"));
     }
 
     #[test]

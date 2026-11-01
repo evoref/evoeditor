@@ -4,7 +4,7 @@
 //! `Frame` → ratatui `Buffer` の変換 (`buffer`)、入力の正規化 (`input`)、`ReadConsoleInputW` の入力スレッド (`win`)、VT の入力の解析 (`vt_input`、Unix)。
 //! 差分出力 (`ansi`)、`Frontend` の実装 (`frontend`)、クロームとオーバーレイ (`chrome`)、ロールのスタイル (`theme`)。
 
-// unsafe は Windows のコンソール API を呼ぶ `win` だけに許す (R5)。他のモジュールは unsafe を書けない。
+// unsafe は OS の API を呼ぶ `win` (Windows のコンソール) と `unix` (端末) だけに許す (R5)。他のモジュールは unsafe を書けない。
 #![deny(unsafe_code)]
 
 pub mod ansi;
@@ -12,7 +12,6 @@ pub mod buffer;
 pub mod caps;
 pub mod chrome;
 pub mod color;
-#[cfg(windows)]
 pub mod frontend;
 pub mod glyphs;
 pub mod input;
@@ -21,6 +20,8 @@ pub mod mouse;
 pub mod sanitize;
 pub mod theme;
 pub mod trace;
+#[cfg(unix)]
+pub mod unix;
 pub mod vt_input;
 #[cfg(windows)]
 pub mod win;

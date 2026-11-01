@@ -131,6 +131,31 @@ pub(crate) fn process_start_of(pid: u32) -> Option<FileTime> {
     Some(FileTime { secs, nanos })
 }
 
+/// パスワードデータベースの自分 (`geteuid()`) のホーム (`getpwuid_r`)。引けなければ `None`。
+#[cfg(unix)]
+pub(crate) fn passwd_home() -> Option<String> {
+    let mut buf = vec![0u8; 4096];
+    // SAFETY: ゼロ初期化した passwd に、`buf` を作業領域として書かせる。結果のポインタは `buf` か `pw` を指す。
+    unsafe {
+        let mut pw: libc::passwd = std::mem::zeroed();
+        let mut out: *mut libc::passwd = std::ptr::null_mut();
+        let r = libc::getpwuid_r(
+            euid(),
+            &mut pw,
+            buf.as_mut_ptr().cast(),
+            buf.len(),
+            &mut out,
+        );
+        if r != 0 || out.is_null() || pw.pw_dir.is_null() {
+            return None;
+        }
+        let dir = std::ffi::CStr::from_ptr(pw.pw_dir)
+            .to_string_lossy()
+            .into_owned();
+        (!dir.is_empty()).then_some(dir)
+    }
+}
+
 /// pid のプロセスが動いているか (`kill(pid, 0)`。`EPERM` は「いるが送れない」)。
 #[cfg(unix)]
 pub(crate) fn pid_running(pid: u32) -> bool {

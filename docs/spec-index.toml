@@ -2631,455 +2631,455 @@ title = "UI の言語の OS ロケール検出 (英語 UI を同梱する版)"
 id = "05 §7"
 file = "docs/05-platform.md"
 line = 625
-end = 695
+end = 697
 title = "ディレクトリ (設定 / 状態 / データ / キャッシュ / ログ)"
 
 [[section]]
 id = "05 §7.1"
 file = "docs/05-platform.md"
 line = 627
-end = 645
+end = 647
 title = "決定: XDG 準拠 (macOS 含む) + Windows は Known Folders"
 
 [[section]]
 id = "05 §7.2"
 file = "docs/05-platform.md"
-line = 646
-end = 649
+line = 648
+end = 651
 title = "ライブラリ比較"
 
 [[section]]
 id = "05 §7.3"
 file = "docs/05-platform.md"
-line = 650
-end = 660
+line = 652
+end = 662
 title = "ログ (02 §11.3 の確定事項)"
 
 [[section]]
 id = "05 §7.4"
 file = "docs/05-platform.md"
-line = 661
-end = 664
+line = 663
+end = 666
 title = "ポータブルモード (Could, v0.4)"
 
 [[section]]
 id = "05 §7.5"
 file = "docs/05-platform.md"
-line = 665
-end = 695
+line = 667
+end = 697
 title = "スワップ・緊急退避ファイルの配置と命名"
 
 [[section]]
 id = "05 §8"
 file = "docs/05-platform.md"
-line = 696
-end = 768
+line = 698
+end = 770
 title = "クリップボード"
 
 [[section]]
 id = "05 §8.1"
 file = "docs/05-platform.md"
-line = 704
-end = 731
+line = 706
+end = 733
 title = "経路と優先順位"
 
 [[section]]
 id = "05 §8.2"
 file = "docs/05-platform.md"
-line = 732
-end = 750
+line = 734
+end = 752
 title = "OS 別の実装詳細"
 
 [[section]]
 id = "05 §8.3"
 file = "docs/05-platform.md"
-line = 751
-end = 759
+line = 753
+end = 761
 title = "`command` provider (設定で明示、既知コマンドの検出、または WSL 既定)"
 
 [[section]]
 id = "05 §8.4"
 file = "docs/05-platform.md"
-line = 760
-end = 768
+line = 762
+end = 770
 title = "サイズ上限"
 
 [[section]]
 id = "05 §9"
 file = "docs/05-platform.md"
-line = 769
-end = 840
+line = 771
+end = 842
 title = "端末の OS 固有事項と互換性マトリクス"
 
 [[section]]
 id = "05 §9.1"
 file = "docs/05-platform.md"
-line = 773
-end = 792
+line = 775
+end = 794
 title = "Windows コンソールの初期化と復元 (eve-tui)"
 
 [[section]]
 id = "05 §9.2"
 file = "docs/05-platform.md"
-line = 793
-end = 806
+line = 795
+end = 808
 title = "Unix 端末の初期化と復元"
 
 [[section]]
 id = "05 §9.3"
 file = "docs/05-platform.md"
-line = 807
-end = 816
+line = 809
+end = 818
 title = "tmux / screen / mosh"
 
 [[section]]
 id = "05 §9.4"
 file = "docs/05-platform.md"
-line = 817
-end = 840
+line = 819
+end = 842
 title = "互換性マトリクス (リリース前に手動確認。記入は 09 §3.8)"
 
 [[section]]
 id = "05 §10"
 file = "docs/05-platform.md"
-line = 841
-end = 857
+line = 843
+end = 859
 title = "IME の OS 別注意"
 
 [[section]]
 id = "05 §11"
 file = "docs/05-platform.md"
-line = 858
-end = 996
+line = 860
+end = 998
 title = "シグナル・コンソールイベント・終了"
 
 [[section]]
 id = "05 §11.1"
 file = "docs/05-platform.md"
-line = 860
-end = 884
+line = 862
+end = 886
 title = "Unix シグナル"
 
 [[section]]
 id = "05 §11.2"
 file = "docs/05-platform.md"
-line = 885
-end = 932
+line = 887
+end = 934
 title = "Windows コンソールイベント"
 
 [[section]]
 id = "05 §11.3"
 file = "docs/05-platform.md"
-line = 933
-end = 944
+line = 935
+end = 946
 title = "サスペンド (Unix、`Effect::Suspend`、v0.2)"
 
 [[section]]
 id = "05 §11.4"
 file = "docs/05-platform.md"
-line = 945
-end = 969
+line = 947
+end = 971
 title = "緊急スナップショット (NFR-302 の実装前提)"
 
 [[section]]
 id = "05 §11.5"
 file = "docs/05-platform.md"
-line = 970
-end = 996
+line = 972
+end = 998
 title = "終了シーケンスと終了コード"
 
 [[section]]
 id = "05 §12"
 file = "docs/05-platform.md"
-line = 997
-end = 1017
+line = 999
+end = 1019
 title = "ファイル監視"
 
 [[section]]
 id = "05 §12.1"
 file = "docs/05-platform.md"
-line = 999
-end = 1006
+line = 1001
+end = 1008
 title = "OS 別バックエンド (notify クレート経由)"
 
 [[section]]
 id = "05 §12.2"
 file = "docs/05-platform.md"
-line = 1007
-end = 1017
+line = 1009
+end = 1019
 title = "方針"
 
 [[section]]
 id = "05 §13"
 file = "docs/05-platform.md"
-line = 1018
-end = 1088
+line = 1020
+end = 1090
 title = "シェル・外部プロセス起動"
 
 [[section]]
 id = "05 §13.1"
 file = "docs/05-platform.md"
-line = 1022
-end = 1027
+line = 1024
+end = 1029
 title = "原則"
 
 [[section]]
 id = "05 §13.2"
 file = "docs/05-platform.md"
-line = 1028
-end = 1038
+line = 1030
+end = 1040
 title = "シェルの既定"
 
 [[section]]
 id = "05 §13.3"
 file = "docs/05-platform.md"
-line = 1039
-end = 1047
+line = 1041
+end = 1049
 title = "Windows の引数とバッチファイル"
 
 [[section]]
 id = "05 §13.4"
 file = "docs/05-platform.md"
-line = 1048
-end = 1056
+line = 1050
+end = 1058
 title = "プロセス木の終了 (キャンセル・タイムアウト)"
 
 [[section]]
 id = "05 §13.5"
 file = "docs/05-platform.md"
-line = 1057
-end = 1061
+line = 1059
+end = 1063
 title = "環境変数と出力の文字コード"
 
 [[section]]
 id = "05 §13.6"
 file = "docs/05-platform.md"
-line = 1062
-end = 1065
+line = 1064
+end = 1067
 title = "`Effect::OpenUrl`"
 
 [[section]]
 id = "05 §13.7"
 file = "docs/05-platform.md"
-line = 1066
-end = 1088
+line = 1068
+end = 1090
 title = "ローカル LLM サーバ (`llama-server` 等) の OS 別事項 (v1.L)"
 
 [[section]]
 id = "05 §14"
 file = "docs/05-platform.md"
-line = 1089
-end = 1112
+line = 1091
+end = 1114
 title = "資格情報ストア (v1.L)"
 
 [[section]]
 id = "05 §14.1"
 file = "docs/05-platform.md"
-line = 1101
-end = 1112
+line = 1103
+end = 1114
 title = "v1.L 着手時に本書で確定する項目 (見出しのみ予約)"
 
 [[section]]
 id = "05 §15"
 file = "docs/05-platform.md"
-line = 1113
-end = 1146
+line = 1115
+end = 1148
 title = "WSL / SSH / コンテナ環境"
 
 [[section]]
 id = "05 §15.1"
 file = "docs/05-platform.md"
-line = 1117
-end = 1128
+line = 1119
+end = 1130
 title = "WSL (1 / 2)"
 
 [[section]]
 id = "05 §15.2"
 file = "docs/05-platform.md"
-line = 1129
-end = 1136
+line = 1131
+end = 1138
 title = "SSH 越し (NG5 の「リモート先で起動」の運用)"
 
 [[section]]
 id = "05 §15.3"
 file = "docs/05-platform.md"
-line = 1137
-end = 1146
+line = 1139
+end = 1148
 title = "コンテナ (Docker / devcontainer / Kubernetes exec)"
 
 [[section]]
 id = "05 §16"
 file = "docs/05-platform.md"
-line = 1147
-end = 1215
+line = 1149
+end = 1217
 title = "ビルド・ツールチェイン・MSRV"
 
 [[section]]
 id = "05 §16.1"
 file = "docs/05-platform.md"
-line = 1149
-end = 1158
+line = 1151
+end = 1160
 title = "MSRV と edition (OQ-14 の具体化)"
 
 [[section]]
 id = "05 §16.2"
 file = "docs/05-platform.md"
-line = 1159
-end = 1169
+line = 1161
+end = 1171
 title = "ターゲット別のビルド要件"
 
 [[section]]
 id = "05 §16.3"
 file = "docs/05-platform.md"
-line = 1170
-end = 1193
+line = 1172
+end = 1195
 title = "ビルドプロファイル"
 
 [[section]]
 id = "05 §16.4"
 file = "docs/05-platform.md"
-line = 1194
-end = 1215
+line = 1196
+end = 1217
 title = "Windows 実行ファイルのメタデータ"
 
 [[section]]
 id = "05 §17"
 file = "docs/05-platform.md"
-line = 1216
-end = 1245
+line = 1218
+end = 1247
 title = "依存のライセンス・ビルド時間・サイズ"
 
 [[section]]
 id = "05 §17.1"
 file = "docs/05-platform.md"
-line = 1218
-end = 1226
+line = 1220
+end = 1228
 title = "ライセンス運用 (ADR-0018 の具体化。検査は 09)"
 
 [[section]]
 id = "05 §17.2"
 file = "docs/05-platform.md"
-line = 1227
-end = 1239
+line = 1229
+end = 1241
 title = "依存数・ビルド時間の予算 (Should。計測は 09)"
 
 [[section]]
 id = "05 §17.3"
 file = "docs/05-platform.md"
-line = 1240
-end = 1245
+line = 1242
+end = 1247
 title = "アロケータ"
 
 [[section]]
 id = "05 §18"
 file = "docs/05-platform.md"
-line = 1246
-end = 1395
+line = 1248
+end = 1397
 title = "配布 (パッケージ・署名・公証)"
 
 [[section]]
 id = "05 §18.1"
 file = "docs/05-platform.md"
-line = 1248
-end = 1256
+line = 1250
+end = 1258
 title = "段階 (OQ-20)"
 
 [[section]]
 id = "05 §18.2"
 file = "docs/05-platform.md"
-line = 1257
-end = 1299
+line = 1259
+end = 1301
 title = "アーカイブ構成"
 
 [[section]]
 id = "05 §18.3"
 file = "docs/05-platform.md"
-line = 1300
-end = 1308
+line = 1302
+end = 1310
 title = "Windows コード署名"
 
 [[section]]
 id = "05 §18.4"
 file = "docs/05-platform.md"
-line = 1309
-end = 1319
+line = 1311
+end = 1321
 title = "macOS 署名と公証"
 
 [[section]]
 id = "05 §18.5"
 file = "docs/05-platform.md"
-line = 1320
-end = 1331
+line = 1322
+end = 1333
 title = "Linux パッケージ"
 
 [[section]]
 id = "05 §18.6"
 file = "docs/05-platform.md"
-line = 1332
-end = 1335
+line = 1334
+end = 1337
 title = "デバッグ情報とクラッシュログの対応付け"
 
 [[section]]
 id = "05 §18.7"
 file = "docs/05-platform.md"
-line = 1336
-end = 1339
+line = 1338
+end = 1341
 title = "再現可能ビルド (Should, v0.4)"
 
 [[section]]
 id = "05 §18.8"
 file = "docs/05-platform.md"
-line = 1340
-end = 1343
+line = 1342
+end = 1345
 title = "アンインストール (提案、OQ-164)"
 
 [[section]]
 id = "05 §18.9"
 file = "docs/05-platform.md"
-line = 1344
-end = 1347
+line = 1346
+end = 1349
 title = "minisign 署名の検証 (提案、OQ-164)"
 
 [[section]]
 id = "05 §18.10"
 file = "docs/05-platform.md"
-line = 1348
-end = 1363
+line = 1350
+end = 1365
 title = "更新の方針 (ADR-0040)"
 
 [[section]]
 id = "05 §18.11"
 file = "docs/05-platform.md"
-line = 1364
-end = 1376
+line = 1366
+end = 1378
 title = "更新とダウングレード"
 
 [[section]]
 id = "05 §18.12"
 file = "docs/05-platform.md"
-line = 1377
-end = 1385
+line = 1379
+end = 1387
 title = "直前の版に戻す (ロールバック)"
 
 [[section]]
 id = "05 §18.13"
 file = "docs/05-platform.md"
-line = 1386
-end = 1389
+line = 1388
+end = 1391
 title = "リリースチャネル"
 
 [[section]]
 id = "05 §18.14"
 file = "docs/05-platform.md"
-line = 1390
-end = 1395
+line = 1392
+end = 1397
 title = "脆弱性の通知 (OQ-164)"
 
 [[section]]
 id = "05 §19"
 file = "docs/05-platform.md"
-line = 1396
-end = 1424
+line = 1398
+end = 1426
 title = "未決事項"
 
 [[section]]
@@ -7898,139 +7898,139 @@ section = "04 §18"
 [[id]]
 id = "OQ-15"
 file = "docs/05-platform.md"
-line = 1402
+line = 1404
 section = "05 §19"
 
 [[id]]
 id = "OQ-70"
 file = "docs/05-platform.md"
-line = 1403
+line = 1405
 section = "05 §19"
 
 [[id]]
 id = "ADR-0021"
 file = "docs/05-platform.md"
-line = 1404
+line = 1406
 section = "05 §19"
 
 [[id]]
 id = "OQ-04"
 file = "docs/05-platform.md"
-line = 1405
+line = 1407
 section = "05 §19"
 
 [[id]]
 id = "OQ-71"
 file = "docs/05-platform.md"
-line = 1406
+line = 1408
 section = "05 §19"
 
 [[id]]
 id = "OQ-72"
 file = "docs/05-platform.md"
-line = 1407
+line = 1409
 section = "05 §19"
 
 [[id]]
 id = "OQ-73"
 file = "docs/05-platform.md"
-line = 1408
+line = 1410
 section = "05 §19"
 
 [[id]]
 id = "OQ-74"
 file = "docs/05-platform.md"
-line = 1409
+line = 1411
 section = "05 §19"
 
 [[id]]
 id = "OQ-75"
 file = "docs/05-platform.md"
-line = 1410
+line = 1412
 section = "05 §19"
 
 [[id]]
 id = "OQ-76"
 file = "docs/05-platform.md"
-line = 1411
+line = 1413
 section = "05 §19"
 
 [[id]]
 id = "OQ-77"
 file = "docs/05-platform.md"
-line = 1412
+line = 1414
 section = "05 §19"
 
 [[id]]
 id = "OQ-78"
 file = "docs/05-platform.md"
-line = 1413
+line = 1415
 section = "05 §19"
 
 [[id]]
 id = "OQ-79"
 file = "docs/05-platform.md"
-line = 1414
+line = 1416
 section = "05 §19"
 
 [[id]]
 id = "OQ-80"
 file = "docs/05-platform.md"
-line = 1415
+line = 1417
 section = "05 §19"
 
 [[id]]
 id = "OQ-34"
 file = "docs/05-platform.md"
-line = 1416
+line = 1418
 section = "05 §19"
 
 [[id]]
 id = "S-11"
 file = "docs/05-platform.md"
-line = 1417
+line = 1419
 section = "05 §19"
 
 [[id]]
 id = "S-09"
 file = "docs/05-platform.md"
-line = 1418
+line = 1420
 section = "05 §19"
 
 [[id]]
 id = "OQ-111"
 file = "docs/05-platform.md"
-line = 1419
+line = 1421
 section = "05 §19"
 
 [[id]]
 id = "OQ-112"
 file = "docs/05-platform.md"
-line = 1420
+line = 1422
 section = "05 §19"
 
 [[id]]
 id = "OQ-140"
 file = "docs/05-platform.md"
-line = 1421
+line = 1423
 section = "05 §19"
 
 [[id]]
 id = "OQ-163"
 file = "docs/05-platform.md"
-line = 1422
+line = 1424
 section = "05 §19"
 
 [[id]]
 id = "OQ-164"
 file = "docs/05-platform.md"
-line = 1423
+line = 1425
 section = "05 §19"
 
 [[id]]
 id = "OQ-166"
 file = "docs/05-platform.md"
-line = 1424
+line = 1426
 section = "05 §19"
 
 [[id]]
