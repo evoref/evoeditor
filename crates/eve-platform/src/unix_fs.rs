@@ -285,16 +285,19 @@ fn copy_xattrs(src: &File, dst: &File) -> Vec<AttrKind> {
 }
 
 /// 上書きしない移動 (`renameat2(RENAME_NOREPLACE)`。使えない FS ではハードリンク + 削除)。在れば `AlreadyExists`。
+/// libc の関数ではなくシステムコールで呼ぶ (musl 1.2.5 (Rust の musl ターゲットが同梱する版) には `renameat2` の関数が無い)。
 fn rename_no_replace(from: &Path, to: &Path) -> io::Result<()> {
     let (f, t) = (c_path(from)?, c_path(to)?);
-    // SAFETY: NUL 終端のパス 2 つ。`AT_FDCWD` は相対パスを作業ディレクトリから解く。
+    // SAFETY: NUL 終端のパス 2 つ。`AT_FDCWD` は相対パスを作業ディレクトリから解く。引数はカーネルの renameat2 と同じ並び
     let r = unsafe {
-        libc::renameat2(
-            libc::AT_FDCWD,
+        // 可変長の引数は long として渡す (libc の syscall の作法)
+        libc::syscall(
+            libc::SYS_renameat2,
+            libc::c_long::from(libc::AT_FDCWD),
             f.as_ptr(),
-            libc::AT_FDCWD,
+            libc::c_long::from(libc::AT_FDCWD),
             t.as_ptr(),
-            libc::RENAME_NOREPLACE,
+            libc::c_long::from(libc::RENAME_NOREPLACE),
         )
     };
     if r == 0 {

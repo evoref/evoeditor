@@ -231,6 +231,30 @@ jobs:
           name: bm-205-size
           path: target/dist/size.json
 
+  # Linux の musl 静的版の配布ビルドの確認 (v0.2 の M7、docs/05 §16.2): 同じ検査に加え、ELF に PT_INTERP と DT_NEEDED が無いこと。
+  # 配布物 (tar.gz) は release.yml が作る。ここでは PR ごとに musl のビルドが壊れていないことを見る
+  build-release-smoke-linux:
+    name: build-release-smoke (linux)
+    needs: check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Rust (stable) と musl のターゲット
+        run: |
+          rustup toolchain install stable --profile minimal --no-self-update && rustup default stable
+          rustup target add x86_64-unknown-linux-musl
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          shared-key: linux-release-x86_64
+      - run: cargo xtask check-dist --target x86_64-unknown-linux-musl
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: bm-205-size-linux
+          path: target/dist/size.json
+
   # L5 端末 E2E (docs/09 §3.6): 実バイナリを ConPTY で起動して画面を検査する。nextest の profile e2e (retries = 2)。
   # 2 本目は test-hooks のビルド (パニック注入 internal.debug_panic など。配布ビルドには無い、docs/09 §3.6)。
   # 2 段目の必須チェック。この PR が merge された直後に、ブランチ保護の必須に加える (docs/09 §6.2)。

@@ -2,8 +2,10 @@
 # 起動: タグ `v*` の push (人間が署名付きタグを付ける。このワークフローはタグを作らない・消さない) と、手動 (dry-run)。
 # 手動 (workflow_dispatch) は dry-run: 指定した ref (空なら develop) で、ビルド → 配布 zip の作成 → 展開後の検査まで行い、
 # Release は作らない。
-# 流れ: verify-tag (タグの検証。最初のステップ) → build (zip / .pdb / SHA256SUMS) → smoke (展開 → 内容物の検査 →
-# --version → L5 スモーク S1〜S3) → draft-release (draft の GitHub Release を作る。publish は人間)。
+# 流れ: verify-tag (タグの検証。最初のステップ) → build (Windows の zip / .pdb / SHA256SUMS) と build-linux (musl 静的版の
+# tar.gz / .debug / SHA256SUMS。x86_64 と aarch64、docs/05 §18.1 の v0.2) → smoke / smoke-linux (展開 → 内容物の検査 →
+# --version → L5 スモーク S1〜S3) → draft-release (各ターゲットの SHA256SUMS を 1 つにまとめ、draft の GitHub Release を作る。
+# publish は人間)。
 # 署名 (SHA256SUMS.minisig) はメンテナの手元 (オフライン鍵) で付ける。CI に秘密鍵は置かない (docs/05 §18.9、docs/11 §9.7)。
 # 失敗したら draft のまま原因を直して同じタグで再実行してよい (docs/09 §9.2 手順 4)。publish した後は成果物を差し替えない。
 name: release
@@ -94,10 +96,67 @@ jobs:
           fi
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: dist
+          name: dist-windows
           path: |
             target/dist/*.zip
             target/dist/*.pdb
+            target/dist/SHA256SUMS
+            target/dist/size.json
+          if-no-files-found: error
+
+  # Linux の musl 静的版 (docs/05 §16.2 / §18.2、OQ-112)。aarch64 は Arm のランナーで作る (クロスビルドにしない。同じランナーで
+  # L5 スモークも回せる)。分割デバッグ情報 (.debug) は別アセット (docs/05 §18.6)
+  build-linux:
+    name: build-linux (${{ matrix.arch }})
+    needs: verify-tag
+    if: ${{ !cancelled() && (needs.verify-tag.result == 'success' || needs.verify-tag.result == 'skipped') }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-24.04
+            target: x86_64-unknown-linux-musl
+          - arch: aarch64
+            runner: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-musl
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event_name == 'push' && github.ref || inputs.ref || 'develop' }}
+          persist-credentials: false
+      - name: Rust (stable) と musl のターゲット
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          rustup toolchain install stable --profile minimal --no-self-update && rustup default stable
+          rustup target add "$TARGET"
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          shared-key: linux-release-${{ matrix.arch }}
+      - uses: taiki-e/install-action@1e29709c0ec63babbe8f266397a465f29a825f91 # v2.87.31
+        with:
+          tool: cargo-about@0.9.2
+      - name: 配布物を作る (cargo xtask dist --target)
+        env:
+          EVENT: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+          TARGET: ${{ matrix.target }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT" = "push" ]; then
+            cargo xtask dist --target "$TARGET" --version "${REF_NAME#v}"
+          else
+            cargo xtask dist --target "$TARGET"
+          fi
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: dist-linux-${{ matrix.arch }}
+          path: |
+            target/dist/*.tar.gz
+            target/dist/*.debug
             target/dist/SHA256SUMS
             target/dist/size.json
           if-no-files-found: error
@@ -125,7 +184,7 @@ jobs:
           tool: cargo-nextest@0.9.148
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: dist
+          name: dist-windows
           path: dl
       - name: SHA256SUMS と照合し、zip を検査する
         shell: pwsh
@@ -155,20 +214,81 @@ jobs:
         shell: pwsh
         run: cargo nextest run --profile e2e -p evoeditor --test e2e -E 'test(~起動して最初の画面が出て) | test(~version_は版を出して) | test(~日本語のファイルを開いて編集して保存する)'
 
+  # Linux の検証 (docs/09 §9.2 手順 6): smoke と同じ手順を、作ったのと同じアーキのランナーで行う
+  smoke-linux:
+    name: smoke-linux (${{ matrix.arch }})
+    needs: build-linux
+    if: ${{ !cancelled() && needs.build-linux.result == 'success' }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-24.04
+          - arch: aarch64
+            runner: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event_name == 'push' && github.ref || inputs.ref || 'develop' }}
+          persist-credentials: false
+      - name: Rust (stable)
+        run: rustup toolchain install stable --profile minimal --no-self-update && rustup default stable
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          shared-key: linux-${{ matrix.arch }}
+      - uses: taiki-e/install-action@1e29709c0ec63babbe8f266397a465f29a825f91 # v2.87.31
+        with:
+          tool: cargo-nextest@0.9.148
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: dist-linux-${{ matrix.arch }}
+          path: dl
+      - name: SHA256SUMS と照合し、tar.gz を検査する
+        run: |
+          set -euo pipefail
+          (cd dl && sha256sum --check --strict SHA256SUMS)
+          cargo xtask dist --verify dl/*.tar.gz
+      - name: 展開して --version がタグ (または Cargo.toml の版) と一致することを確かめる
+        env:
+          EVENT: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          mkdir unpacked
+          tar -xzf dl/*.tar.gz -C unpacked
+          out="$(./unpacked/evoeditor --version)"
+          if [ "$EVENT" = "push" ]; then want="evoeditor ${REF_NAME#v}"
+          else want="evoeditor $(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n1)"; fi
+          if [ "$out" != "$want" ]; then echo "--version が想定と違います: '$out' / '$want'"; exit 1; fi
+          echo "EVE_EXE=$PWD/unpacked/evoeditor" >> "$GITHUB_ENV"
+      - name: L5 スモーク S1〜S3 (展開した exe を EVE_EXE で渡す)
+        run: cargo nextest run --profile e2e -p evoeditor --test e2e -E 'test(~起動して最初の画面が出て) | test(~version_は版を出して) | test(~日本語のファイルを開いて編集して保存する)'
+
   # draft の Release を作る。publish は人間 (CHANGELOG 本文・更新手順の文書・リリースのチェックリストを確かめてから、docs/09 §9.2 手順 9)。
   draft-release:
     name: draft-release
-    needs: smoke
-    if: ${{ !cancelled() && needs.smoke.result == 'success' && github.event_name == 'push' }}
+    needs: [smoke, smoke-linux]
+    if: ${{ !cancelled() && needs.smoke.result == 'success' && needs.smoke-linux.result == 'success' && github.event_name == 'push' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
       contents: write
     steps:
+      # ターゲットごとの成果物を dl/<成果物名>/ に置き、SHA256SUMS を 1 つにまとめる (名前の順)
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: dist
+          pattern: dist-*
           path: dl
+      - name: SHA256SUMS をまとめる
+        run: |
+          set -euo pipefail
+          mkdir assets
+          cp dl/*/*.zip dl/*/*.pdb dl/*/*.tar.gz dl/*/*.debug assets/
+          cat dl/*/SHA256SUMS | sort -k2 > assets/SHA256SUMS
+          (cd assets && sha256sum --check --strict SHA256SUMS)
       - name: draft の Release を作る
         env:
           GH_TOKEN: ${{ github.token }}
@@ -191,7 +311,7 @@ jobs:
             echo "## 検証"
             echo
             echo "- release.yml の実行: $RUN_URL"
-            echo "- タグの検証 (署名・位置・版・判定コミットとの内容の一致)、zip の内容物、テスト専用の経路が無いこと、--version、L5 スモーク S1〜S3: 通過"
+            echo "- タグの検証 (署名・位置・版・判定コミットとの内容の一致)、zip / tar.gz (Linux x86_64・aarch64 の musl 静的版) の内容物、テスト専用の経路が無いこと、--version、L5 スモーク S1〜S3: 通過"
             echo "- 手動の配布経路の検証 (cargo install の経路・クリーンな Windows 11・Smart App Control): (人が追記する)"
             echo
             echo "## 署名"
@@ -201,7 +321,7 @@ jobs:
             echo "## SHA256SUMS"
             echo
             echo '```text'
-            cat dl/SHA256SUMS
+            cat assets/SHA256SUMS
             echo '```'
           } > notes.md
-          gh release create "$TAG" "${flags[@]}" --notes-file notes.md dl/*.zip dl/*.pdb dl/SHA256SUMS
+          gh release create "$TAG" "${flags[@]}" --notes-file notes.md assets/*

@@ -5,10 +5,10 @@
 //! - `check`: 速い車線 (fmt・clippy・nextest・check-deps・AC のチェックリスト)。docs/11 §8.1
 //! - `check-deps`: 依存規則 R1〜R12 の検査。`--docs` で docs/02 §4.1 の表との突合。docs/09 §7
 //! - `check-docs`: 仕様書の ID 参照・節の参照・内部リンク・docs/ownership.toml の検査 (docs/09 §11、11 §2.3)
-//! - `check-dist`: 配布ビルドにテスト専用の経路が無いことと CRT の静的リンクの確認 (docs/09 §6.2 `build-release-smoke`)
+//! - `check-dist`: 配布ビルドにテスト専用の経路が無いことと静的リンクの確認 (docs/09 §6.2 `build-release-smoke`)
 //! - `verify-tag`: リリースのタグの検証 (署名・位置・版・判定コミットとの差分。`release.yml` の最初のステップ。docs/09 §6.1)
 //! - `review-wording`: 日本語 UI 文言の人手レビュー用の一覧 (docs/review/ja-wording-v0.1.md) を生成する
-//! - `dist`: 配布 zip と SHA256SUMS の作成・検査 (`--verify ZIP` で検査だけ。docs/05 §18.2)
+//! - `dist`: 配布 zip / tar.gz と SHA256SUMS の作成・検査 (`--verify ARCHIVE` で検査だけ。docs/05 §18.2)
 //! - `gen-notices`: THIRD-PARTY-NOTICES.md の生成 (`--check` で最新性の検査。docs/05 §17.1)
 //! - `check-ac-checklist`: `tests/ac-checklist.toml` の検査 (docs/11 §3.3)
 //! - `bench`: ベンチの記録 (docs/09 §5.2)
@@ -58,10 +58,10 @@ const USAGE: &str = "\
   check               速い車線 (fmt・clippy・nextest・check-deps・AC のチェックリスト)
   check-deps          依存規則 R1〜R12 の検査 (--docs: docs/02 §4.1 の表との突合も行う)
   check-docs          仕様書の参照の検査 (ID・節・内部リンク・docs/ownership.toml)
-  check-dist          配布ビルドの確認 (feature・目印の文字列・隠しオプション・CRT の静的リンク。--exe PATH で既存の exe)
+  check-dist          配布ビルドの確認 (feature・目印の文字列・隠しオプション・静的リンク。--exe PATH で既存の exe、--target T)
   verify-tag          リリースのタグの検証 (--allowed-signers FILE。タグは作らない・消さない)
   review-wording      日本語 UI 文言のレビュー用の一覧の生成 (--reviewed 日付: 全件 OK の記録)
-  dist                配布 zip と SHA256SUMS の作成と検査 (--verify ZIP: 検査だけ。--exe / --version)
+  dist                配布 zip / tar.gz と SHA256SUMS の作成と検査 (--verify ARCHIVE: 検査だけ。--target T (Linux の musl 版) / --exe / --version)
   gen-notices         THIRD-PARTY-NOTICES.md の生成 (cargo-about。--check: 最新性の検査)
   check-ac-checklist  tests/ac-checklist.toml の検査 (check の一部)
   bench               ベンチの記録 (BM-103a・BM-205 → target/bench/bench.json。--quick は動作確認用。
