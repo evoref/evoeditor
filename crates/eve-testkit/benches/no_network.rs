@@ -3,7 +3,8 @@
 //! がこのプログラムを `strace -f -e trace=network` の下で走らせ、ネットワーク系のシステムコールが 0 であることを確かめる
 //! (docs/09 §3.6 の「無通信」)。
 //!
-//! FS は偽物 (`MemFs`): Linux の実 FS (eve-platform の Unix 実装) は M7 で入るので、それまでは FS の経路を除いた範囲を確かめる。
+//! FS とパスは本物 (Linux は eve-platform の `UnixFs` / `UnixPaths`、Windows は `WinFs` / `WinPaths`): 一時ディレクトリの
+//! ファイルを開いて、原子的保存で書く (v0.2 の M7。それまでは偽物の `MemFs` で FS の経路を除いていた)。
 //!
 //! ```text
 //! cargo bench -p eve-testkit --bench no_network        # シナリオだけを実行 (成功で終了コード 0)
@@ -18,7 +19,17 @@ use std::time::{Duration, Instant};
 
 use eve_core::{InitialFile, JobPorts, Ports};
 use eve_host::{ExitCode, Host, SystemClock, ThreadJobSpawner};
-use eve_testkit::{AsciiOptions, FixedPaths, HeadlessFrontend, MemFs};
+use eve_platform::dirs::Dirs;
+#[cfg(unix)]
+use eve_platform::dirs::UnixPaths as NativePaths;
+#[cfg(windows)]
+use eve_platform::dirs::WinPaths as NativePaths;
+#[cfg(windows)]
+use eve_platform::fs::WinFs as NativeFs;
+use eve_platform::path::PathCtx;
+#[cfg(unix)]
+use eve_platform::unix_fs::UnixFs as NativeFs;
+use eve_testkit::{AsciiOptions, HeadlessFrontend};
 use eve_view::{InputEvent, KeyCode, KeyEvent, Modifiers};
 
 /// `cond` が真になるまで待つ (最大 `limit`)。間に合わなければ偽。
@@ -36,10 +47,26 @@ fn wait_until(limit: Duration, cond: impl Fn() -> bool) -> bool {
 // verifies: NFR-501
 fn main() {
     let clock = Arc::new(SystemClock::new());
-    let fs = Arc::new(MemFs::new(clock.clone()));
-    fs.add_dir("/w");
-    fs.add_file("/w/a.txt", b"hello\n");
-    let paths = Arc::new(FixedPaths::default());
+    // 作業ディレクトリ (開くファイル) と状態ディレクトリ (保存中フラグ) は一時ディレクトリの下に作る
+    let work = std::env::temp_dir().join(format!("eve-no-network-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&work);
+    std::fs::create_dir_all(&work).expect("作業ディレクトリを作れる");
+    let file = work.join("a.txt");
+    std::fs::write(&file, b"hello\n").expect("ファイルを書ける");
+    let fs = Arc::new(NativeFs::new(work.join("state")));
+    // パスも本物 (Windows のパスを解釈できる)。環境変数は読まない (開発者の設定に依らない)
+    let ctx = PathCtx {
+        cwd: work.to_string_lossy().into_owned(),
+        home: None,
+    };
+    #[cfg(windows)]
+    let paths = Arc::new(NativePaths::new(Dirs::resolve(&|_| None), ctx));
+    #[cfg(unix)]
+    let paths = Arc::new(NativePaths::new(
+        Dirs::resolve_unix(&|_| None, None),
+        ctx,
+        None,
+    ));
     let (tx, rx) = eve_host::channel();
     let jobs = ThreadJobSpawner::new(
         JobPorts {
@@ -69,32 +96,45 @@ fn main() {
                 .last_ascii(AsciiOptions::default())
                 .unwrap_or_default()
         };
-        assert!(
-            wait_until(Duration::from_secs(10), || probe.sink().is_some()
-                && ascii().contains("hello")),
-            "文書が描かれない"
+        let chrome = || {
+            probe
+                .last_ascii(AsciiOptions {
+                    show_chrome: true,
+                    ..AsciiOptions::default()
+                })
+                .unwrap_or_default()
+        };
+        // 待ちが間に合わなければ、最後の画面を出して終わる (panic ではメインの実行ループが終わらず、止まったままになる)
+        let expect = |ok: bool, what: &str| {
+            if !ok {
+                eprintln!("{what}。最後の画面:\n{}", chrome());
+                std::process::exit(1);
+            }
+        };
+        expect(
+            wait_until(Duration::from_secs(10), || {
+                probe.sink().is_some() && ascii().contains("hello")
+            }),
+            "文書が描かれない",
         );
         let sink = probe.sink().expect("入力の口");
         sink.send(InputEvent::Text("x".into()));
-        assert!(
+        expect(
             wait_until(Duration::from_secs(10), || ascii().contains("xhello")),
-            "入力が描かれない"
+            "入力が描かれない",
         );
         sink.send(InputEvent::Key(KeyEvent::press(
             KeyCode::Char('s'),
             Modifiers::CTRL,
         )));
         // 保存の完了 (未保存の印が消える) を待ってから終了する
-        let saved = wait_until(Duration::from_secs(10), || {
-            let s = probe
-                .last_ascii(AsciiOptions {
-                    show_chrome: true,
-                    ..AsciiOptions::default()
-                })
-                .unwrap_or_default();
-            s.contains("a.txt") && !s.contains("[+]")
-        });
-        assert!(saved, "保存が終わらない");
+        expect(
+            wait_until(Duration::from_secs(10), || {
+                let s = chrome();
+                s.contains("a.txt") && !s.contains("[+]")
+            }),
+            "保存が終わらない",
+        );
         sink.send(InputEvent::Key(KeyEvent::press(
             KeyCode::Char('q'),
             Modifiers::CTRL,
@@ -102,7 +142,7 @@ fn main() {
     });
 
     let files = [InitialFile {
-        path: "/w/a.txt".to_owned(),
+        path: file.to_string_lossy().into_owned(),
         line: None,
         col: None,
     }];
@@ -110,9 +150,10 @@ fn main() {
     driver.join().expect("入力を送る側が失敗した");
     assert_eq!(code, ExitCode::OK, "正常に終了する");
     assert_eq!(
-        fs.read("/w/a.txt").as_deref(),
-        Some(&b"xhello\n"[..]),
+        std::fs::read(&file).expect("保存したファイルを読める"),
+        b"xhello\n",
         "保存した内容"
     );
+    let _ = std::fs::remove_dir_all(&work);
     println!("no_network のシナリオ: 開く → 編集 → 保存 → 終了 (成功)");
 }

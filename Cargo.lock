@@ -392,6 +392,7 @@ dependencies = [
  "eve-config",
  "eve-core",
  "eve-host",
+ "eve-platform",
  "eve-text",
  "eve-view",
  "serde",
