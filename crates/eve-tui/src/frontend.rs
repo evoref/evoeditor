@@ -122,10 +122,11 @@ impl TuiFrontend {
         if !i.take_reinit() {
             return;
         }
-        i.reenter_raw();
+        // 先にフラグを下ろす (raw に戻した直後に異常終了しても、ハンドラが端末を戻せるように)
         self.restored
             .0
             .store(false, std::sync::atomic::Ordering::Release);
+        i.reenter_raw();
         self.enter_screen();
         let mouse = self.mouse;
         self.set_mouse(mouse);

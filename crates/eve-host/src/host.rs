@@ -284,6 +284,17 @@ impl Host {
         self.osc52_write = caps.osc52_write;
         self.editor.set_caps(caps);
         if let Some(info) = frontend.emergency_restore_info() {
+            // Unix: 異常終了のシグナル (SIGSEGV など) で端末だけを戻すハンドラを付ける (05 §11.1 の表の最後の行)。
+            // 「復元済み」のフラグは frontend の `restore` と共有する。付けられなくても起動は続ける
+            #[cfg(unix)]
+            if let Ok(fd) = i32::try_from(info.handle.0) {
+                let _ = eve_platform::term::install_crash_restore(
+                    fd,
+                    info.bytes,
+                    &info.saved_mode.0,
+                    Arc::clone(&info.restored.0),
+                );
+            }
             let _ = self.restore_info.set(info);
         }
         let size = frontend.surface_size();

@@ -6,7 +6,8 @@
 //!   いても戻れるように)、呼び側は最大 `WAIT` だけ待つ。SIGHUP では端末が既に無いので、書込の失敗は無視する。
 //! - `install_crash_restore`: SIGSEGV / SIGBUS / SIGABRT / SIGILL / SIGFPE のハンドラで **端末の復元だけ** を行い (`write(2)` と
 //!   `tcsetattr`。メモリの確保もロックの取得もしない)、元のハンドラに戻して返る。障害の命令がもう一度起きて元の動作
-//!   (Rust のスタックあふれの表示・コアダンプ) になる。緊急退避はしない (ヒープが壊れているかもしれない。05 §11.1)。
+//!   (Rust のスタックあふれの表示・コアダンプ) になる。外から送られたシグナル (`kill`。障害が再び起きない) は、既定の
+//!   動作に戻して送り直す。緊急退避はしない (ヒープが壊れているかもしれない。05 §11.1)。Host が `Frontend::init` の直後に付ける。
 //!
 //! どちらも frontend の `restore` と「復元済み」のフラグを共有し、`false → true` に立てた側だけが復元する。
 
@@ -116,11 +117,46 @@ struct Crash {
 static CRASH: OnceLock<Crash> = OnceLock::new();
 static CRASH_FD: AtomicI32 = AtomicI32::new(-1);
 
-extern "C" fn on_crash(signo: i32, _: *mut libc::siginfo_t, _: *mut libc::c_void) {
+/// `si_code` が、障害ではなくプロセスから送られた (`kill`・`sigqueue`・`raise` など) ことを表すか。Linux は 0 以下
+/// (SI_USER = 0、SI_QUEUE = -1、SI_TKILL = -6。障害は正)。macOS は SI_USER = 0x10001 から始まる正の値 (未確認、05 §11.1)。
+fn sent_by_process(code: i32) -> bool {
+    if cfg!(target_vendor = "apple") {
+        code <= 0 || code >= 0x10000
+    } else {
+        code <= 0
+    }
+}
+
+extern "C" fn on_crash(signo: i32, info: *mut libc::siginfo_t, _: *mut libc::c_void) {
     // ハンドラの中: 初期化済みの値を読むだけ (確保もロックもしない)
     if let Some(c) = CRASH.get() {
         if !c.restored.swap(true, Ordering::AcqRel) {
-            restore_now(CRASH_FD.load(Ordering::Acquire), c.bytes, c.mode.as_ref());
+            let fd = CRASH_FD.load(Ordering::Acquire);
+            // 非ブロッキングで 1 回だけ試す (端末が止まっていても、ハンドラが詰まらずに終われるように。02 §9.6 手順 4)。
+            // フラグは同じファイル記述を使うシェルのために戻す
+            // SAFETY: fcntl は非同期シグナル安全。fd が無効なら失敗を返すだけ
+            let fl = unsafe { libc::fcntl(fd, libc::F_GETFL) };
+            if fl >= 0 {
+                // SAFETY: 同上
+                unsafe { libc::fcntl(fd, libc::F_SETFL, fl | libc::O_NONBLOCK) };
+            }
+            restore_now(fd, c.bytes, c.mode.as_ref());
+            if fl >= 0 {
+                // SAFETY: 同上
+                unsafe { libc::fcntl(fd, libc::F_SETFL, fl) };
+            }
+        }
+        // 障害の命令がもう一度起きないとき (SIGABRT、または `kill` などで外から送られた) は、既定の動作に戻して送り直す。
+        // ハンドラの間はこのシグナルが止められているので、戻った後に既定の動作で届く
+        // SAFETY: カーネルが渡した siginfo を読むだけ (null なら読まない)
+        let external = !info.is_null() && sent_by_process(unsafe { (*info).si_code });
+        if signo == libc::SIGABRT || external {
+            // SAFETY: どちらも非同期シグナル安全
+            unsafe {
+                libc::signal(signo, libc::SIG_DFL);
+                libc::raise(signo);
+            }
+            return;
         }
         if let Some(i) = CRASH_SIGNALS.iter().position(|&s| s == signo) {
             // SAFETY: 起動時に保存した元のハンドラに戻す。戻った後、同じ障害がもう一度起きて元の動作になる
@@ -224,6 +260,16 @@ mod tests {
         t.c_lflag & libc::ECHO != 0
     }
 
+    /// 子のコアダンプを止める (CI の収集に時間を取られないように)。
+    fn no_core_dump() {
+        let r = libc::rlimit {
+            rlim_cur: 0,
+            rlim_max: 0,
+        };
+        // SAFETY: 有効な rlimit。
+        unsafe { libc::setrlimit(libc::RLIMIT_CORE, &r) };
+    }
+
     fn set_raw(fd: i32) {
         let mut t = parse_mode(&save_mode(fd).unwrap()).unwrap();
         // SAFETY: 有効な termios。
@@ -281,6 +327,7 @@ mod tests {
         let pid = unsafe { libc::fork() };
         assert!(pid >= 0);
         if pid == 0 {
+            no_core_dump();
             set_raw(s);
             let _ =
                 install_crash_restore(s, b"\x18RESTORED", &saved, Arc::new(AtomicBool::new(false)));
@@ -295,6 +342,39 @@ mod tests {
             libc::SIGABRT,
             "元の動作 (既定) で終わる"
         );
+        assert!(echo_on(s), "子が termios を戻した");
+        let out = read_all(m);
+        assert!(out.windows(8).any(|w| w == b"RESTORED"), "{out:?}");
+        // SAFETY: 開いた fd を閉じる。
+        unsafe {
+            libc::close(m);
+            libc::close(s);
+        }
+    }
+
+    #[test]
+    fn 外から送られた異常終了のシグナルでも端末を戻して終わる() {
+        let (m, s) = pty();
+        let saved = save_mode(s).unwrap();
+        // SAFETY: 子は端末の設定・ハンドラの付け替え・自分への kill だけを行う。
+        let pid = unsafe { libc::fork() };
+        assert!(pid >= 0);
+        if pid == 0 {
+            no_core_dump();
+            set_raw(s);
+            let _ =
+                install_crash_restore(s, b"\x18RESTORED", &saved, Arc::new(AtomicBool::new(false)));
+            // SAFETY: 自分に SIGSEGV を送る (障害の命令ではないので、ハンドラから戻っても再び起きない)。
+            unsafe { libc::kill(libc::getpid(), libc::SIGSEGV) };
+            // ハンドラが送り直さなければここへ来る
+            // SAFETY: 子を区別できる終了コードで終える。
+            unsafe { libc::_exit(42) };
+        }
+        let mut status = 0;
+        // SAFETY: 自分の子を待つ。
+        assert_eq!(unsafe { libc::waitpid(pid, &mut status, 0) }, pid);
+        assert!(libc::WIFSIGNALED(status), "{status:#x}");
+        assert_eq!(libc::WTERMSIG(status), libc::SIGSEGV, "既定の動作で終わる");
         assert!(echo_on(s), "子が termios を戻した");
         let out = read_all(m);
         assert!(out.windows(8).any(|w| w == b"RESTORED"), "{out:?}");
