@@ -396,7 +396,7 @@ v0.1 で実装するのは Windows の手順 (`ReplaceFileW` 系。§4.2) で、
 - 一時ファイル: T が在る・`private` なら 0600 で作って下で T の mode に合わせる。新規は 0666 (umask が掛かる。通常の新規ファイルと同じ)。親に書けない (`EACCES`) なら `AtomicUnsupported` (§4.4 の 1 行目)。
 - 権限: 所有者・グループが T と違うときだけ `fchown`。他人の所有を引き継げない (`EPERM`) ときはグループだけ合わせて `AttrsNotPreserved { Security }`。mode は `mode & 01777` (setuid / setgid は落として同じ警告)。
 - POSIX ACL は `system.posix_acl_access` の xattr を `fgetxattr` / `fsetxattr` で写す (Linux では `acl_get_fd` / `acl_set_fd` と同じ内容。libacl に依存しない)。T に ACL が無く親に既定 ACL (`system.posix_acl_default`) があるときは `AttrsNotPreserved { Security }`。xattr を持たない FS (`ENOTSUP`) は複製するものが無いとみなす。
-- 新規ファイルの置換は上書きしない `renameat2(RENAME_NOREPLACE)` (使えない FS では `link` + `unlink`)。在れば `Conflict`。
+- 新規ファイルの置換は上書きしない `renameat2(RENAME_NOREPLACE)` (使えない FS では `link` + `unlink`)。在れば `Conflict`。Linux ではシステムコール (`SYS_renameat2`) で直接呼ぶ (musl 1.2.5 に `renameat2` の関数が無いため。glibc でも同じ呼び方にする、§16.2)。
 - 書込権限の無い T (`readonly`) は、rename なら置き換えられてしまうので、`SaveOptions.clear_readonly` (FR-116 の「読み取り専用を解除して保存」の確認) が無ければ `PermissionDenied` (root を除く)。解除して置換しても、mode は T のものを写すので読み取り専用のまま残る (§4.2 の手順 5b と同じ結果)。
 - 不変フラグは rename の `EPERM` を `PermissionDenied` に写すことで扱う (事前の `FS_IOC_GETFLAGS` はしない)。
 - `FileMeta.owner_is_me` は `st_uid == geteuid()` か root。`readonly` は `access(W_OK)`。`FileId` は (`st_dev`, `st_ino`)。
@@ -1172,7 +1172,7 @@ v0.1 の配布ビルドは `x86_64-pc-windows-msvc` だけ。CI の Linux ジョ
 | `*-pc-windows-msvc` (v0.1 は x86_64。aarch64 は v0.2 以降) | Visual Studio Build Tools (MSVC + Windows SDK)。`windows-sys` は純 Rust なのでそれ以上の SDK 依存なし | tree-sitter (v0.4) の C ソースは `cc` クレートが MSVC `cl.exe` でビルド。ARM64 はクロスコンパイル可 (`cl.exe` の arm64 ツールセット) |
 | `*-apple-darwin` (macOS 出荷時) | Xcode Command Line Tools。最小デプロイ `MACOSX_DEPLOYMENT_TARGET` は Rust の既定 (aarch64: 11.0、x86_64: 10.12) で十分 (NFR-401 の 3 メジャーより古い) | ユニバーサル化は `lipo -create` |
 | `*-unknown-linux-gnu` (Linux 出荷時、条件付き、OQ-112) | glibc 2.31 を保証するため **`cargo-zigbuild --target x86_64-unknown-linux-gnu.2.31`** でビルド (ホストの glibc に依存しない) | 新しいランナー (Ubuntu 24.04, glibc 2.39) で素直にビルドすると 2.31 環境で動かない。追加する場合は 09 の CI に zigbuild ジョブを足す |
-| `*-unknown-linux-musl` (**Linux 出荷時の配布物**、v0.2) | `musl-tools` または zigbuild。**完全静的** (`-C target-feature=+crt-static` は musl で既定) | `getaddrinfo` 等の DNS は v1.L (reqwest) で musl 固有の制約 (nsswitch なし)。アロケータ §17.3 |
+| `*-unknown-linux-musl` (**Linux 出荷時の配布物**、v0.2) | `musl-tools` または zigbuild。**完全静的** (`-C target-feature=+crt-static` は musl で既定)。**実装 (v0.2 の M7、2026-11-01)**: どちらも要らない (Rust の musl ターゲットが同梱する musl と crt で静的にリンクする)。生成物は static-pie (`PT_INTERP` なし、`DT_NEEDED` 0 件。`check-dist` の (4) で検査する、09 §6.2)。同梱の musl は 1.2.5 で `renameat2` の関数が無いので、上書きしない rename はシステムコール (`SYS_renameat2`) で呼ぶ (§4.3) | `getaddrinfo` 等の DNS は v1.L (reqwest) で musl 固有の制約 (nsswitch なし)。アロケータ §17.3 |
 
 ### 16.3 ビルドプロファイル
 
@@ -1229,7 +1229,7 @@ opt-level = 2        # 依存は最適化 (ropey/regex のデバッグビルド�
 | 許可リスト (`deny.toml`) | **本表が公開リポジトリの許可リストの正本。確定 (ユーザー回答、2026-10-20)** (12 §3.6・ADR-0018・09・11 §9.6 は参照だけで再掲しない)。`MIT`, `Apache-2.0`, `Apache-2.0 WITH LLVM-exception`, `BSD-2-Clause`, `BSD-3-Clause`, `ISC`, `Zlib`, `Unicode-3.0`, `Unicode-DFS-2016` (古い版の unicode-ident 等), `0BSD`, `BSL-1.0` (Boost Software License。Business Source License とは別物。バイナリでの配布に表示義務が無い寛容ライセンス。例: arboard の退路を採った場合の clipboard-win), `CC0-1.0` (データ・小規模クレート限定)、`MPL-2.0` (個別承認)、`OpenSSL`/`ISC` (`ring`/`aws-lc-rs`、v1.L で個別承認)。`OR` で結ばれた表記は、いずれかが許可リストにあれば通る。**fuzz/ に限る追加 (確定)**: `libfuzzer-sys` (cargo-fuzz) のライセンス表記は `(MIT OR Apache-2.0) AND NCSA` の見込み (**要確認**。導入の時点で crate の表記を確かめる) で、`AND` の NCSA が許可リストに無いと通らない。`fuzz/` は本体の workspace に含めない独立の workspace で配布物に入らない (02 §17.1) ので、`fuzz/` 側の `deny.toml` (または検査の例外) に限って `NCSA` を許す (本体の許可リストには足さない。確定 (ユーザー回答、2026-10-20)。表記の確認は上の **要確認** のとおり導入の時点で行う) |
 | 既知の注意点 | **notify** のライセンス表記は最新版 (8.2.0 / 9.0.0-rc) では **`CC0-1.0` のみ** (それより前の版は `CC0-1.0 OR Artistic-2.0`) → CC0-1.0 を許可リストに含める (上の行)。**tree-sitter 文法** は MIT が多いが Apache-2.0/独自もあり、`queries/*.scm` の流用元 (nvim-treesitter は Apache-2.0、Helix は MPL-2.0!) に注意 → ハイライトクエリは **自前作成または MIT/Apache 由来のみ**。**unicode-width / unicode-segmentation** は Unicode データライセンスを含む。**ring** (rustls 既定) は複合ライセンス → TLS の暗号バックエンドは v1.L で決める (未決。候補は `aws-lc-rs` / `rustls-rustcrypto`)。**依存の保守状況**: `regex-cursor` は v0.1 では使わない (03 §12 の検索は行単位。採否は v0.3 の S-04)。プロセス木の終了の実装手段は §13.4 (未決、v0.4) |
 | CI で使う道具 | 配布物に入らない CI の道具も、導入するときに上の許可リストと照らす (`deny.toml` の検査は Cargo の依存だけが対象なので、手で確かめて導入の PR に記録する)。**age** (fuzz のクラッシュ入力の暗号化、09 §6.3 / 11 §9.7) のライセンスは BSD-3-Clause の想定 (**要確認**。導入の時点で配布元のライセンスを確かめる) で、この確認の対象に含める |
-| 第三者告知 | MIT/BSD は著作権表示の複製が義務 → `cargo about` で `THIRD-PARTY-NOTICES.md` を生成し **配布アーカイブに同梱** する (v0.1)。`evoeditor --licenses` (同梱ファイルの表示) は v0.2 (v0.1 はアーカイブに同梱した `THIRD-PARTY-NOTICES.md` で足りる。07 §18.3) |
+| 第三者告知 | MIT/BSD は著作権表示の複製が義務 → `cargo about` で `THIRD-PARTY-NOTICES.md` を生成し **配布アーカイブに同梱** する (v0.1)。**Linux の版 (v0.2 の M7、2026-11-01)**: 対象は配布する全ターゲット (Windows x86_64、Linux x86_64 / aarch64 の musl) の依存の和で (`about.toml` の `targets`、`deny.toml` も同じ三つ組を見る)、どの配布物にも同じファイルを同梱する。crate ではなく静的にリンクする **musl libc** (MIT) の表示は、配布元の `COPYRIGHT` (v1.2.5) を `dist/notices/musl-COPYRIGHT` にそのまま置き、`gen-notices` が末尾に足す。Rust の musl ターゲットが同梱する libunwind (LLVM、Apache-2.0 WITH LLVM-exception) は、例外の条項 (オブジェクトの形に埋め込まれた部分は表示の条件を免除する) に当たるものとして表示に加えない (Windows の版で Rust の実行時の部品を加えていないのと同じ扱い。解釈が変われば見直す)。`evoeditor --licenses` (同梱ファイルの表示) は v0.2 (v0.1 はアーカイブに同梱した `THIRD-PARTY-NOTICES.md` で足りる。07 §18.3) |
 | 本体 (公開コア) | **Apache-2.0 単独** (確定 (ユーザー回答)、OQ-19 / 152)。既存の `LICENSE` と `NOTICE` を配布物に同梱し、各 crate は `license = "Apache-2.0"`。TUI は公開・OSS。Apache-2.0 の含意 (特許条項・NOTICE) は 12 §3.2 が正本 |
 ### 17.2 依存数・ビルド時間の予算 (Should。計測は 09)
 
@@ -1277,7 +1277,7 @@ evoeditor-<version>-<target>.{zip|tar.gz}
 ```
 
 - Windows (v0.1): `x86_64` の zip のみ (aarch64 は v0.2 の Tier B)。
-- Linux (v0.2、Linux 出荷時): `x86_64` / `aarch64` の `-musl` を基本にする (OQ-112)。gnu 版 (glibc 2.31、zigbuild) は OQ-112 の条件が成立したとき、または deb / rpm を作る v0.4 に追加し、deb / rpm は gnu 版から生成する。
+- Linux (v0.2、Linux 出荷時): `x86_64` / `aarch64` の `-musl` を基本にする (OQ-112)。**実装 (v0.2 の M7、2026-11-01)**: `cargo xtask dist --target <三つ組>` が `evoeditor-<版>-<三つ組>.tar.gz` を作る。内容物は zip と同じ 7 ファイルで、アーカイブの直下に置く (上の図。zip と同じくトップのディレクトリを作らない)。`evoeditor` は 0755、他は 0644、所有者は 0/0、時刻は 0 に固定し、GNU tar と `gzip -n` で同じ入力から同じバイト列にする。テキストは LF に揃える。gnu 版 (glibc 2.31、zigbuild) は OQ-112 の条件が成立したとき、または deb / rpm を作る v0.4 に追加し、deb / rpm は gnu 版から生成する。
 - macOS (v0.2、macOS 出荷時): `aarch64` のアーカイブだけを出す (ad-hoc 署名。Developer ID 署名と公証の時期は未決、OQ-76)。`x86_64` は Tier B (ビルドのみ) でアーカイブを出さない (§18.1。ユニバーサルは §19)。
 - Windows: zip のみ (MSI/MSIX は不要。winget は portable 型で zip を扱える)。実行ファイルは `evoeditor.exe`。
 - パッケージ名 (v0.4 以降のチャネル): Homebrew / Scoop は `evoeditor`、AUR は `evoeditor` と `evoeditor-bin`、deb / rpm は `evoeditor`、winget の識別子は `<発行者>.evoeditor` (OQ-01)。執筆時点 (2026-10) でこれらの名前は各チャネルで未使用 (調査は 10 の OQ-01)。
@@ -1338,7 +1338,7 @@ evoeditor-<version>-<target>.{zip|tar.gz}
 
 ### 18.6 デバッグ情報とクラッシュログの対応付け
 
-配布バイナリは strip するが、各リリースの **分割デバッグ情報** (v0.1 は Windows の `.pdb`。macOS / Linux 出荷時に `.dSYM.zip` / `.debug` (DWARF `objcopy --only-keep-debug`)) を GitHub Release に別アセットとして添付し、クラッシュログ (09 §10) のバックトレースをメンテナが `addr2line` 等で解決できるようにする。ビルド ID (`.note.gnu.build-id` / PDB GUID / Mach-O UUID) をクラッシュログに記録する。`--remap-path-prefix` でビルドパスを消す (再現ビルド・プライバシー)。
+配布バイナリは strip するが、各リリースの **分割デバッグ情報** (v0.1 は Windows の `.pdb`。macOS / Linux 出荷時に `.dSYM.zip` / `.debug` (DWARF `objcopy --only-keep-debug`)) を GitHub Release に別アセットとして添付し、クラッシュログ (09 §10) のバックトレースをメンテナが `addr2line` 等で解決できるようにする。ビルド ID (`.note.gnu.build-id` / PDB GUID / Mach-O UUID) をクラッシュログに記録する。 **Linux の実装 (v0.2 の M7、2026-11-01)**: `cargo xtask dist --target` が、デバッグ情報を残して作った exe から `objcopy --only-keep-debug` で `evoeditor-<版>-<三つ組>.debug` を取り出し、配る exe は `objcopy --strip-all --add-gnu-debuglink` で strip する (Windows の `strip = "symbols"` と同じく、配る exe にはシンボルを残さない)。`.debug` は `SHA256SUMS` に入れて Release の別アセットにする。ビルド ID は ELF の `.note.gnu.build-id` に入る (リンカの既定。WSL の Ubuntu で確かめた)。まだのもの: クラッシュログへのビルド ID の記録、`--remap-path-prefix` (ビルドのパスは `.debug` と exe の行番号表に残る)。`--remap-path-prefix` でビルドパスを消す (再現ビルド・プライバシー)。
 
 ### 18.7 再現可能ビルド (Should, v0.4)
 
