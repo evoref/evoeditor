@@ -885,7 +885,7 @@ TUI では IME は端末が処理し、evoeditor は **ハードウェアカー�
 - `signals::start(cb)`: SIGINT / SIGTERM / SIGHUP / SIGCONT を `signal-hook` の自己パイプで受け、シグナルスレッド `eve-signal` で `cb(UnixSignal)` を呼ぶ (登録した後は既定の終了は起きない)。eve-host の `SignalKind` に `Hangup` を足した (SIGCONT は終了要求ではないので、`HostMsg` への写像は 5 本目で決める)。
 - `signals::die_by_signal(signo)`: §11.5 の終了コードの手順 (`SIG_DFL` に戻す → マスクを外す → `raise` → 終わらなければ `_exit(128 + signo)`)。
 - `term::emergency_restore(fd, bytes, saved_mode, restored)`: Windows と同じ呼び方。`saved_mode` は起動時の termios (`term::save_mode(fd)`)。使い捨てのスレッドで `write(2)` と `tcsetattr(TCSANOW)` を行い、最大 200 ms 待つ。書込の失敗 (SIGHUP で端末が無い) は無視する。
-- `term::install_crash_restore(fd, bytes, saved_mode, restored)`: SIGSEGV / SIGBUS / SIGABRT / SIGILL / SIGFPE (表の最後の行) のハンドラ。`SA_ONSTACK` で付け、初期化済みの値だけを読んで `write(2)` と `tcsetattr` で端末を戻し、**元のハンドラに付け替えて返る** (同じ障害が再び起きて元の動作 = Rust のスタックあふれの表示・コアダンプになる。「既定動作へ再送」の具体化)。「復元済み」のフラグは frontend と共有する。
+- `term::install_crash_restore(fd, bytes, saved_mode, restored)`: SIGSEGV / SIGBUS / SIGABRT / SIGILL / SIGFPE (表の最後の行) のハンドラ。`SA_ONSTACK` で付け、初期化済みの値だけを読んで `write(2)` と `tcsetattr` で端末を戻し、**元のハンドラに付け替えて返る** (同じ障害が再び起きて元の動作 = Rust のスタックあふれの表示・コアダンプになる。「既定動作へ再送」の具体化)。「復元済み」のフラグは frontend と共有する。**外から送られたシグナル** (`kill -SEGV` など。Linux は `si_code <= 0`、macOS は加えて `si_code >= 0x10000` (SI_USER 以降。macOS の実機では未確認)) と **SIGABRT** は障害の命令が無く再び起きないので、元のハンドラではなく `SIG_DFL` に戻して `raise` で送り直す (ハンドラの間はそのシグナルが止められているので、戻った後に既定の動作で届く)。復元の書込は、ハンドラの中で fd を一時的に非ブロッキングにして 1 回だけ試す (フロー制御などで端末が止まっていても詰まらない。フラグは戻す)。既知の制約: Rust の外で作られたスレッド (代替のシグナルスタックが無い) でのスタックあふれでは、ハンドラが動けずに端末を戻さないまま既定の動作で終わる。**配線** (2026-11-01): Host の `start` が `Frontend::init` の後に `emergency_restore_info()` を受け取った直後に呼ぶ (02 §9.5 の手順 4)。付けられなくても起動は続ける。
 
 ### 11.2 Windows コンソールイベント
 
