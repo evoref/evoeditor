@@ -1,7 +1,8 @@
 # 夜間ジョブ (docs/09-testing-quality.md §6.1 / §6.3、docs/11 §1)。毎日 UTC 18:00 (JST 03:00) と手動 (workflow_dispatch)。
 # `schedule` は既定ブランチのワークフロー定義で動くので、ここは薄いトリガだけ: 対象のブランチ (変数 NIGHTLY_REF、未設定なら develop。
 # 手動実行では引数 ref で上書き) をチェックアウトし、そのコードの `cargo xtask nightly` を入口にする (手順の中身は xtask にある)。
-# 中身: fuzz_decode と fuzz_editor (v0.2。各 20 分)・proptest 拡張 (PROPTEST_CASES=10000)・cargo audit / deny advisories (本体と fuzz/)・coverage (報告のみ)。
+# 中身: fuzz_decode と fuzz_editor (v0.2。各 20 分)・proptest 拡張 (PROPTEST_CASES=10000)・cargo audit / deny advisories (本体と fuzz/)・coverage (報告のみ)・
+# 保存のクラッシュ一貫性 (v0.2。LazyFS で電源断を模擬する、NFR-301)。
 # fuzz のクラッシュ入力は `.github/fuzz-recipients.txt` の公開鍵で age により暗号化したものだけを artifact に上げる (平文は消す)。
 name: nightly
 
@@ -19,7 +20,7 @@ on:
         required: false
         default: "600"
       only:
-        description: "実行する手順を絞る (fuzz,proptest,audit,coverage のカンマ区切り。空なら全部)"
+        description: "実行する手順を絞る (fuzz,proptest,audit,coverage,crash のカンマ区切り。空なら全部)"
         required: false
         default: ""
 
@@ -83,6 +84,37 @@ jobs:
           key: fuzz-corpus-${{ github.run_id }}
           restore-keys: |
             fuzz-corpus-
+      # 保存のクラッシュ一貫性 (crash の手順、docs/09 §6.3、OQ-143) の道具: LazyFS (MIT。版をコミットで固定してビルドする。CI の道具で
+      # 配布物に入らない) と、その下の FS (ext4 / xfs / btrfs のループバック)。xtask へは LAZYFS_BIN と EVE_CRASH_ROOTS で渡す
+      - name: LazyFS と下の FS の用意
+        if: inputs.only == '' || contains(inputs.only, 'crash')
+        env:
+          LAZYFS_REV: 045a0b3a1126725e693934e29d3ba15e08cc39ec # 0.3.1
+        run: |
+          sudo apt-get install -y fuse3 libfuse3-dev cmake xfsprogs btrfs-progs
+          src="$RUNNER_TEMP/lazyfs"
+          git clone -q https://github.com/dsrhaslab/lazyfs "$src"
+          git -C "$src" checkout -q "$LAZYFS_REV"
+          (cd "$src/libs/libpcache" && ./build.sh > /dev/null)
+          (cd "$src/lazyfs" && ./build.sh > /dev/null)
+          test -x "$src/lazyfs/build/lazyfs"
+          echo "LAZYFS_BIN=$src/lazyfs/build/lazyfs" >> "$GITHUB_ENV"
+          roots=""
+          for fs in ext4 xfs btrfs; do
+            img="$RUNNER_TEMP/$fs.img"
+            mnt="/mnt/eve-$fs"
+            truncate -s 512M "$img"
+            case "$fs" in
+              ext4) sudo mkfs.ext4 -F -q "$img" ;;
+              xfs) sudo mkfs.xfs -f -q "$img" ;;
+              btrfs) sudo mkfs.btrfs -f -q "$img" ;;
+            esac
+            sudo mkdir -p "$mnt"
+            sudo mount -o loop "$img" "$mnt"
+            sudo chown "$(id -u):$(id -g)" "$mnt"
+            roots="$roots:$mnt"
+          done
+          echo "EVE_CRASH_ROOTS=${roots#:}" >> "$GITHUB_ENV"
       - name: cargo xtask nightly
         id: nightly
         run: |
@@ -113,9 +145,10 @@ jobs:
             target/nightly/lcov.info
             target/nightly/summary.txt
           if-no-files-found: ignore
-      # 失敗の起票: 書くのはジョブの失敗とクラッシュの件数 (要約) だけ。入力・スタック・原因の推測は書かない
+      # 失敗の起票: 書くのはジョブの失敗とクラッシュの件数 (要約) だけ。入力・スタック・原因の推測は書かない。
+      # 起票するのは定時の実行だけ (手動の実行は起動した人が結果を見る。作業ブランチでの試しの実行で課題を増やさない)
       - name: 失敗の起票
-        if: failure()
+        if: failure() && github.event_name == 'schedule'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |

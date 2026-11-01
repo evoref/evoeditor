@@ -7,6 +7,8 @@
 //! - `proptest`: `PROPTEST_CASES=10000` で Linux CI の対象 crate のテスト。
 //! - `audit`: `cargo audit` と `cargo deny check advisories` (本体と `fuzz/`)。例外は `deny.toml` の `[advisories] ignore` の 1 か所。
 //! - `coverage`: `cargo llvm-cov nextest --lcov` (報告のみ、OQ-101)。
+//! - `crash` (v0.2): 保存のクラッシュ一貫性 (`cargo xtask crash-consistency`。LazyFS は環境変数 `LAZYFS_BIN`、下の FS は
+//!   `EVE_CRASH_ROOTS`。nightly.yml が LazyFS をビルドし、ext4 / xfs / btrfs のループバックを用意する。NFR-301、09 §6.3)。
 //!
 //! 結果の要約は `target/nightly/summary.txt` (ターゲット名・コミット・seed・クラッシュの件数・暗号化した artifact の名前だけ。
 //! 入力の内容・ハッシュ・スタックは書かない)。
@@ -29,7 +31,7 @@ const LINUX_CRATES: [&str; 9] = [
     "xtask",
 ];
 
-const STEPS: [&str; 4] = ["fuzz", "proptest", "audit", "coverage"];
+const STEPS: [&str; 5] = ["fuzz", "proptest", "audit", "coverage", "crash"];
 
 pub fn run_all(args: &[String]) -> Result<(), String> {
     let only: Vec<String> = flag(args, "--only")
@@ -38,7 +40,7 @@ pub fn run_all(args: &[String]) -> Result<(), String> {
     for o in &only {
         if !STEPS.contains(&o.as_str()) {
             return Err(format!(
-                "知らない手順です: {o} (fuzz / proptest / audit / coverage)"
+                "知らない手順です: {o} (fuzz / proptest / audit / coverage / crash)"
             ));
         }
     }
@@ -68,7 +70,8 @@ pub fn run_all(args: &[String]) -> Result<(), String> {
             "fuzz" => fuzz(fuzz_seconds, seed, &out_dir, &mut summary),
             "proptest" => proptest(),
             "audit" => audit(),
-            _ => coverage(&out_dir),
+            "coverage" => coverage(&out_dir),
+            _ => crate::crash_consistency::run_cmd(&[]),
         };
         match r {
             Ok(()) => summary.push(format!("{step}: 成功")),
@@ -368,8 +371,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn 手順の名前は_4_つ() {
-        assert_eq!(STEPS.len(), 4);
+    fn 手順の名前は_5_つ() {
+        assert_eq!(STEPS.len(), 5);
     }
 
     #[test]
