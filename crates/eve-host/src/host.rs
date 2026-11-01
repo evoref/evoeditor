@@ -418,9 +418,9 @@ impl Host {
                         self.clip_wait = None;
                         let text = match result {
                             Ok(t) => t,
-                            Err(_) => {
-                                self.editor
-                                    .notify_clipboard_fallback("取得できませんでした");
+                            Err(e) => {
+                                let reason = self.clipboard_reason(e, "取得できませんでした");
+                                self.editor.notify_clipboard_fallback(reason);
                                 None
                             }
                         };
@@ -431,14 +431,16 @@ impl Host {
                     text,
                     system_failure,
                 } => {
-                    if !frontend.write_osc52(&text) && system_failure.is_some() {
-                        self.editor
-                            .notify_clipboard_fallback("書き込めませんでした");
+                    if !frontend.write_osc52(&text)
+                        && let Some(e) = system_failure
+                    {
+                        let reason = self.clipboard_reason(e, "書き込めませんでした");
+                        self.editor.notify_clipboard_fallback(reason);
                     }
                 }
-                HostMsg::ClipboardWriteFailed(_) => {
-                    self.editor
-                        .notify_clipboard_fallback("書き込めませんでした");
+                HostMsg::ClipboardWriteFailed(e) => {
+                    let reason = self.clipboard_reason(e, "書き込めませんでした");
+                    self.editor.notify_clipboard_fallback(reason);
                 }
                 HostMsg::Signal(kind) => {
                     // test-hooks: メインが止まった状態の再現 (受信スレッドの緊急の端末復元を検査する、09 §3.6)
@@ -531,6 +533,25 @@ impl Host {
             .wake_after()
             .map(|d| self.clock.now() + (Millis(u64::try_from(d.as_millis()).unwrap_or(u64::MAX))));
         StepOutcome::Continue
+    }
+
+    /// クリップボードの失敗の理由 (`msg.clipboard.fallback` の `{reason}`)。手段が無いときは提供者が理由を持つ
+    /// (Linux の「wl-clipboard または xclip を入れると…」等、05 §8.2)。
+    fn clipboard_reason(
+        &self,
+        e: eve_platform::clipboard::ClipboardFailure,
+        otherwise: &'static str,
+    ) -> &'static str {
+        use eve_platform::clipboard::ClipboardFailure::{TooLarge, Unsupported};
+        match e {
+            Unsupported => self
+                .clipboard
+                .as_ref()
+                .and_then(|p| p.unsupported_reason())
+                .unwrap_or(otherwise),
+            TooLarge => "大きすぎてシステムのクリップボードに入りません",
+            _ => otherwise,
+        }
     }
 
     /// `Effect::SetClipboard`: 提供者があれば、使い捨てのスレッドで文字列化して書く。上限 (64 MiB) を超えたら書かずに知らせる。

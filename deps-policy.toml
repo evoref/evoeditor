@@ -26,6 +26,7 @@ allowed_files = [
     { crate = "eve-tui", file = "src/unix.rs" },
     { crate = "eve-platform", file = "src/term.rs" },
     { crate = "eve-platform", file = "src/clipboard.rs" },
+    { crate = "eve-platform", file = "src/clipboard_cmd.rs" },
     { crate = "eve-platform", file = "src/session.rs" },
     { crate = "eve-platform", file = "src/signals.rs" },
     { crate = "eve-platform", file = "src/term_unix.rs" },

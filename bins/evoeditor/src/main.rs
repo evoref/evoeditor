@@ -442,6 +442,9 @@ fn run(
     // システムクリップボード (所有者ウィンドウのスレッドは最初の読み書きで遅延して起こす、05 §8.1)
     #[cfg(windows)]
     host.set_clipboard(Arc::new(eve_platform::clipboard::WinClipboard::new()));
+    // Unix は外部コマンド (wl-copy / xclip / xsel / WSL の clip.exe)。検出も最初の読み書きで行う (05 §8.2 / §8.3)
+    #[cfg(unix)]
+    host.set_clipboard(Arc::new(eve_platform::clipboard_cmd::UnixClipboard::new()));
 
     // 緊急退避の書き手 (公開済みの DocSnapshot だけを読み、Port を通さずに書く、02 §11.2.1)
     host.set_rescue_writer(Arc::new(StateRescue::new(Some(
