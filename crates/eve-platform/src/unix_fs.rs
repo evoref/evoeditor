@@ -627,6 +627,7 @@ impl FileSystem for UnixFs {
             }
             SaveMethod::NewFile
         };
+        hooks::hit("kill_after_rename");
         // 6. ディレクトリの fsync (失敗は警告)
         if opts.fsync != FsyncLevel::None && !fsync_dir(&parent) {
             warnings.push(SaveWarning::FsyncFailed);

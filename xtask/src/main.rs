@@ -18,6 +18,7 @@
 //! - `scenario`: シナリオ DSL の実行と検証 (`run [<部分一致>] [--print-frame]` / `check`。docs/11 §6.3)
 //! - `spec-index`: 仕様書の索引 docs/spec-index.toml の生成 (`--check` で最新性と参照の検査、`--show <ID>`。docs/11 §3.3)
 //! - `trace`: 仕様と実装・試験の対応の検査と docs/traceability.md の生成 (`--check`。docs/11 §3.3、09 §8.3)
+//! - `crash-consistency`: 保存のクラッシュ一貫性の検査 (NFR-301 の電源断。LazyFS の上で切断点ごとに fsync されていない書込を落とす。Linux。docs/09 §6.3)
 //! - `no-network`: NFR-501 AC-2 の無通信の検査 (ヘッドレスのシナリオを strace の下で走らせる。Linux。docs/09 §3.6)
 //! - `perf-diff`: 基準のコミットとの性能の比較 (`--base <ref> --mode instr|time`。命令数 +5% / A/B +10% で警告。docs/09 §5.4)
 //! - `nightly`: 夜間ジョブの入口 (fuzz・proptest 拡張・audit・coverage。Linux。docs/09 §6.3)
@@ -35,6 +36,7 @@ mod check_deps;
 mod check_dist;
 mod check_docs;
 mod check_themes;
+mod crash_consistency;
 mod dist;
 mod gen_corpus;
 mod gen_notices;
@@ -72,9 +74,10 @@ const USAGE: &str = "\
   scenario            シナリオ DSL (tests/scenarios) の実行 (run [<部分一致>] [--print-frame]) と検証 (check)
   spec-index          仕様書の索引 docs/spec-index.toml の生成 (--check: 最新性・重複・spec: の参照の検査。--show <ID>: 本文)
   trace               仕様と試験の対応の検査と docs/traceability.md の生成 (--check: 存在しない ID と行列の最新性)
+  crash-consistency   保存のクラッシュ一貫性の検査 (NFR-301。LazyFS で電源断を模擬。--lazyfs BIN --root DIR、--no-lazyfs は空回し。Linux)
   no-network          無通信の検査 (NFR-501 AC-2。シナリオを strace -e trace=network の下で走らせる。Linux)
   perf-diff           基準との性能の比較 (--base <ref> --mode instr|time --out FILE。劣化は警告だけ)
-  nightly             夜間ジョブ (Linux。--only fuzz,proptest,audit,coverage --fuzz-seconds N --seed N)";
+  nightly             夜間ジョブ (Linux。--only fuzz,proptest,audit,coverage,crash --fuzz-seconds N --seed N)";
 
 fn main() -> ExitCode {
     let mut args = std::env::args().skip(1);
@@ -94,6 +97,7 @@ fn main() -> ExitCode {
         Some("nightly") => nightly::run_all(&args.collect::<Vec<_>>()),
         Some("check-docs") => check_docs::run(),
         Some("scenario") => scenario::run_cmd(&args.collect::<Vec<_>>()),
+        Some("crash-consistency") => crash_consistency::run_cmd(&args.collect::<Vec<_>>()),
         Some("no-network") => no_network::run(),
         Some("perf-diff") => perf_diff::run(&args.collect::<Vec<_>>()),
         Some("area-check") => area_check::run(&args.collect::<Vec<_>>()),

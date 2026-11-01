@@ -222,6 +222,7 @@ L3 で必ずカバーする要件: FR-1xx (ファイル管理) の全 Must (FR-1
 | 名前 | 挙動 | 使うテスト |
 |---|---|---|
 | `kill_after_tmp_alloc` / `kill_after_tmp_write` / `kill_after_flush` / `kill_before_rename` | 原子的保存の各切断点 (一時ファイルの領域確保の直後 / 一時ファイルに書いた直後 / flush 直後 / 置換直前) で自プロセスを `TerminateProcess` する | (6) |
+| `kill_after_rename` | 置換の直後 (rename の後、ディレクトリの fsync の前) で `SIGKILL` する。**Unix だけ** | §6.3 のクラッシュ一貫性 |
 | `kill_after_replace_begin` | 置換の途中 (T を退避名 `.eve-bak-*` に移した後、一時ファイルを T に移す前) の状態を作って `TerminateProcess` する。**Windows だけ** (Unix の置換は `rename` 1 回で、この途中の状態が無い。05 §4.3) | (6) (ii) |
 | `kill_after_inflight_flag` / `kill_mid_backup` / `kill_after_backup` / `kill_after_inplace_alloc` / `kill_mid_inplace_write=<バイト数>` | in-place の各切断点 (05 §4.4 の手順の順。保存中フラグの作成直後 (バックアップの前) / バックアップの一時名 `<最終名>.tmp` を書いている途中 (最終名に変える前) / バックアップの作成直後 (`backup_complete` の記録の後) / 領域確保の直後 / 指定バイト数を上書きした直後) で `TerminateProcess` する | (6) (iii) |
 | `inplace_backup_fail` | in-place の事前バックアップ (05 §4.4 手順 4) を、何も書かずに失敗させる (`BackupFailed` → 「バックアップなしで上書き」の確認) | (6) (iv) |
