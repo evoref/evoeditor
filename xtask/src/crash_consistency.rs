@@ -17,7 +17,7 @@
 //! ext4 / xfs / btrfs のループバックを渡す)、それも無ければ `target/crash-consistency/root` を使う。
 
 use std::fs;
-use std::io::Write;
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, ExitStatus, Stdio};
 use std::time::{Duration, Instant};
@@ -401,6 +401,9 @@ struct Lazy {
     mnt: PathBuf,
     fifo: PathBuf,
     done: PathBuf,
+    /// 完了の FIFO の読み口 (マウントの間ずっと開いておく。LazyFS は書き口を開いたまま使い回すので、
+    /// 1 回ごとに閉じると次の通知の書込が失敗する)
+    notice: Option<fs::File>,
     log: PathBuf,
 }
 
@@ -433,10 +436,11 @@ impl Lazy {
             mnt: mnt.to_owned(),
             fifo,
             done,
+            notice: None,
             log,
         };
         let end = Instant::now() + Duration::from_secs(30);
-        while !(is_mounted(mnt) && lz.fifo.exists()) {
+        while !(is_mounted(mnt) && lz.fifo.exists() && lz.done.exists()) {
             if let Ok(Some(st)) = lz.child.try_wait() {
                 return Err(format!("LazyFS が起動直後に終わった ({st})\n{}", lz.tail()));
             }
@@ -446,13 +450,20 @@ impl Lazy {
             }
             std::thread::sleep(Duration::from_millis(100));
         }
+        match open_nonblocking(&lz.done) {
+            Ok(f) => lz.notice = Some(f),
+            Err(e) => {
+                let msg = format!("{}: {e}", lz.done.display());
+                lz.unmount();
+                return Err(msg);
+            }
+        }
         Ok(lz)
     }
 
     /// fsync されていない書込を落とす (電源断の模擬)。完了の通知 (`fifo_path_completed`) を待つ。
     fn clear_cache(&self) -> Result<(), String> {
-        // FIFO の open は相手が開くまで止まるので、どちらも `timeout` の下の外部コマンドで行う (LazyFS が止まっても戻る)。
-        // LazyFS は完了の FIFO を読み手が開くまで待って書くので、コマンドを送ってから読みに行ってよい
+        // 送る側の FIFO の open は LazyFS が開くまで止まるので、`timeout` の下の外部コマンドで行う (LazyFS が止まっても戻る)
         let send = Command::new("timeout")
             .args([
                 "30",
@@ -467,18 +478,30 @@ impl Lazy {
         if !send.success() {
             return Err(format!("clear-cache を送れない ({send})\n{}", self.tail()));
         }
-        let out = Command::new("timeout")
-            .args(["30", "head", "-n", "1"])
-            .arg(&self.done)
-            .output()
-            .map_err(|e| format!("timeout を実行できません: {e}"))?;
-        let line = String::from_utf8_lossy(&out.stdout);
-        if out.status.success() && line.contains("clear-cache") {
+        let Some(notice) = &self.notice else {
+            return Err("完了の FIFO を開いていない".into());
+        };
+        // 非ブロッキングの読み口を、通知の 1 行が届くまで (最大 30 秒) 読む
+        let mut got: Vec<u8> = Vec::new();
+        let end = Instant::now() + Duration::from_secs(30);
+        let mut buf = [0u8; 256];
+        while !got.contains(&b'\n') {
+            match (&*notice).read(&mut buf) {
+                Ok(n) => got.extend_from_slice(&buf[..n]),
+                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {}
+                Err(e) => return Err(format!("{}: {e}", self.done.display())),
+            }
+            if Instant::now() >= end {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        let line = String::from_utf8_lossy(&got);
+        if line.contains("clear-cache") {
             Ok(())
         } else {
             Err(format!(
-                "clear-cache の完了の通知が来ない ({}: {line:?})\n{}",
-                out.status,
+                "clear-cache の完了の通知が 30 秒で来ない ({line:?})\n{}",
                 self.tail()
             ))
         }
@@ -499,21 +522,15 @@ impl Lazy {
 
     /// LazyFS の出力の末尾 (失敗の手掛かり)。
     fn tail(&self) -> String {
+        // ログのファイル (無ければ標準出力の写し) の最後の 10 行
         let out = self.log.with_file_name("lazyfs.out");
-        [&self.log, &out]
+        let text = [&self.log, &out]
             .iter()
             .filter_map(|p| fs::read_to_string(p).ok())
-            .flat_map(|t| {
-                t.lines()
-                    .rev()
-                    .take(10)
-                    .map(str::to_owned)
-                    .collect::<Vec<_>>()
-                    .into_iter()
-                    .rev()
-            })
-            .collect::<Vec<_>>()
-            .join("\n")
+            .find(|t| !t.is_empty())
+            .unwrap_or_default();
+        let lines: Vec<&str> = text.lines().collect();
+        lines[lines.len().saturating_sub(10)..].join("\n")
     }
 }
 
@@ -524,6 +541,23 @@ fn config_toml(fifo: &Path, done: &Path, log: &Path) -> String {
         done.display(),
         log.display()
     )
+}
+
+/// 読み書き両用・非ブロッキングで開く (FIFO を読み書き両用で開くと、相手を待たずに開ける。Linux)。
+#[cfg(unix)]
+fn open_nonblocking(path: &Path) -> std::io::Result<fs::File> {
+    use std::os::unix::fs::OpenOptionsExt;
+    // O_NONBLOCK (Linux の x86_64 / aarch64 は 0o4000。xtask は libc に依存しない)
+    fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .custom_flags(0o4000)
+        .open(path)
+}
+
+#[cfg(not(unix))]
+fn open_nonblocking(_: &Path) -> std::io::Result<fs::File> {
+    Err(std::io::Error::from(std::io::ErrorKind::Unsupported))
 }
 
 /// `/proc/self/mountinfo` に `mnt` がマウント点として載っているか。
