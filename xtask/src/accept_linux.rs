@@ -1564,7 +1564,10 @@ fn g1_big_cancel(ctx: &Ctx) -> CheckResult {
     }
     let t1 = Instant::now();
     p.keys(&["Escape"])?;
-    p.wait("取り消し", 2_000, |s| s.contains("の読込を取り消し"))?;
+    // メッセージはパスの長さで省略される (「…の読込を取り…」) ので、読込中の表示が消えて無題に戻ったことを見る
+    p.wait("取り消し", 2_000, |s| {
+        s.contains("の読込を") && !s.contains("読込中") && s.contains("無題-1")
+    })?;
     let ms = t1.elapsed().as_millis();
     p.quit()?;
     pass(format!("[読込中 n%] が出て、Esc から {ms} ms で取り消す"))
