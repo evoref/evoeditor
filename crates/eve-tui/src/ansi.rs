@@ -4,7 +4,8 @@
 //!
 //! 1 フレームの出力: BSU (同期開始) → 変化したセル (CUP + SGR + 文字) → カーソル形状 → カーソル位置 → カーソル表示 → ESU。
 //! 幅 2 以上の書記素と非 ASCII の直後は、次のセルの前に必ず CUP で絶対位置を指定する (§4.7 (a))。`width_risky` の行が
-//! 変化したときは行全体を再出力する (§4.7 (c): EL で残骸を消し、全書記素の前で CUP)。
+//! 変化したときと、前のフレームの全角の後続セルが単独のセルに変わる行 (全角を空白などで上書きする) も、行全体を
+//! 再出力する (§4.7 (c): EL で残骸を消し、全書記素の前で CUP)。
 
 use eve_view::{CursorShape, Frame};
 use ratatui::buffer::{Buffer, Cell, CellDiffOption};
@@ -152,7 +153,16 @@ impl Emitter {
             if !row_changed {
                 continue;
             }
-            if r.risky_rows.contains(&y) {
+            // 全角の後続セルが単独のセルに変わる行: 先頭セルだけを上書きすると、tmux は後続セルも消えたとみなして
+            // 書かず (カーソルを送るだけ)、Windows Terminal は後続セルの色・反転を残す (§4.7 (c))
+            let split_wide = prev.is_some_and(|p| {
+                (0..area.width).any(|x| {
+                    p.cell((x, y))
+                        .is_some_and(|pc| pc.diff_option == CellDiffOption::Skip)
+                        && cur.cell((x, y)).expect("範囲内").diff_option != CellDiffOption::Skip
+                })
+            });
+            if r.risky_rows.contains(&y) || split_wide {
                 // 行全体を再出力: 行頭へ CUP し、EL で残骸を消し、全書記素の前で CUP
                 o.s.push_str(&cup(0, y));
                 o.s.push_str(RESET);
