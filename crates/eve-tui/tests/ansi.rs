@@ -123,6 +123,41 @@ fn 幅危険行は変化したとき行全体を再出力する() {
 }
 
 #[test]
+fn 全角の後続セルが単独のセルに変わる行は行全体を再出力する() {
+    // tmux は全角の先頭セルの上書きで後続セルも消えたとみなし、Windows Terminal は後続セルの色を残す (§4.7 (c))
+    let mut h = Harness::new().with_size(30, 6);
+    h.text("あい");
+    let f = h.frame();
+    let r = render(&f);
+    assert!(r.risky_rows.is_empty());
+    let mut e = Emitter::new();
+    let mut s = screen(30, r.buffer.area.height as usize);
+    s.feed(&e.frame(&r, &f, true));
+    h.keys("backspace backspace");
+    h.text("abcd");
+    let f2 = h.frame();
+    let r2 = render(&f2);
+    let out = e.frame(&r2, &f2, true);
+    assert!(out.contains("[0K"), "EL で行の残骸を消す: {out:?}");
+    s.feed(&out);
+    assert_eq!(s.lines(), buffer_rows(&r2));
+    // 全角を全角で置き換えるだけなら (後続セルは後続セルのまま) セル差分のまま
+    h.keys("backspace backspace backspace backspace");
+    h.text("かき");
+    let f3 = h.frame();
+    let r3 = render(&f3);
+    s.feed(&e.frame(&r3, &f3, true));
+    h.keys("backspace backspace");
+    h.text("さし");
+    let f4 = h.frame();
+    let r4 = render(&f4);
+    let out4 = e.frame(&r4, &f4, true);
+    assert!(!out4.contains("[0K"), "{out4:?}");
+    s.feed(&out4);
+    assert_eq!(s.lines(), buffer_rows(&r4));
+}
+
+#[test]
 fn 全角の後は_cup_で絶対位置を指定する() {
     let mut h = Harness::new().with_size(30, 6);
     h.text("あb");
