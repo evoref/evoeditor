@@ -642,7 +642,9 @@ OSC 11 (背景色)、DECRQM、DA1、CSI ? u 等の **応答は入力ストリー
 
 **push を無条件に送る理由 (v0.2)**: 対応判定の問い合わせ (§5.3) を避けるため。非対応端末は `CSI > … u` を無視するのが通例 (v0.2 着手時に Must 端末を全確認。表示が乱れる端末があれば除外リスト)。
 
-**tmux / screen**: tmux は kitty の push を外側の端末に中継しない。tmux 3.x の `extended-keys` (`set -s extended-keys on`、新しい版では `extended-keys-format csi-u`) を有効にすると一部の修飾キーが区別可能になる。ヘルプとトラブルシュート文書に推奨設定 (`escape-time` 短縮を含む) を載せる。
+**xterm の modifyOtherKeys (v0.2、M7 の受入で追加、2026-11-02)**: kitty の push に続けて `CSI > 4 ; 2 m` (modifyOtherKeys の段階 2) も無条件に送り、終了・サスペンド・緊急の復元で `CSI > 4 m` (既定へ) を送る。これを要求された端末は、修飾付きのキーを `CSI 27 ; <修飾> ; <コード> ~` で送るので、`<コード>` (Unicode のコードポイント) と `<修飾>` を CSI u と同じ規則で読む (13 = Enter、9 = Tab、27 = Esc、127 / 8 = Backspace、ほかは文字。英大文字は小文字 + Shift)。kitty の方式にも対応する端末では、kitty の方式が優先される想定で、どちらの形で届いても同じキーになる。
+
+**tmux / screen**: tmux は kitty の push を外側の端末に中継しない (tmux 3.6 で確認)。tmux は `extended-keys` (`set -s extended-keys on`) のとき、アプリが modifyOtherKeys を要求すると、修飾キーを既定の形式 `CSI 27 ; <修飾> ; <コード> ~` (`extended-keys-format csi-u` なら CSI u) で送る。evoeditor は上の要求を送り、どちらの形式も読むので、`extended-keys on` で `Ctrl+Shift+Z`・`Shift+Enter` などが区別される (`cargo xtask accept-linux` の C2 で確認)。外側の端末から tmux に修飾キーが区別されて届くかは、外側の端末と tmux の設定による。ヘルプとトラブルシュート文書に推奨設定 (`escape-time` 短縮を含む) を載せる。
 
 ### 6.4 端末ごとの差異 (TUI 挙動に影響するもの)
 
@@ -664,7 +666,7 @@ OSC 11 (背景色)、DECRQM、DA1、CSI ? u 等の **応答は入力ストリー
 | macOS Terminal.app | `Cmd+*` は端末アプリが使用 (アプリへ届かない)。`Ctrl+←/→` は既定で Mission Control (操作スペースの切替)。Option は既定で Meta として送られない (`Option+文字` は特殊文字になる)。`Home`/`End`/`PgUp`/`PgDn` は既定でスクロールバック操作 (アプリに届かない)。True Color 非対応 (256 色) と想定 | 単語移動に `Alt+←/→` と `Alt+B/F` (readline 互換。Option を Meta にしていなくても Terminal.app は Option+矢印で `ESC b`/`ESC f` を送る想定) を別名割当。行頭/行末は `Ctrl+K ←/→`、その選択拡張は `Ctrl+K Shift+←/→`、ページは `Ctrl+K ,` / `Ctrl+K .`、その選択拡張は `Ctrl+K <` / `Ctrl+K >` を代替割当 (横取りの一覧は §7.3a)。ヘルプに「プロファイル > キーボード」の設定案内 |
 | iTerm2 | Option の扱いはプロファイル設定次第 (既定 Normal)。CSI u / kitty は設定で有効化。True Color 対応 | Terminal.app と同じ代替割当で吸収 |
 | GNOME Terminal (VTE) | `Ctrl+Shift+C/V/T/W/N/Q`、`Ctrl+PgUp/PgDn` (タブ切替)、`F1` (ヘルプ)、`F10` (メニュー)、`F11`、`Shift+PgUp/PgDn` (スクロールバック、代替スクリーン時の扱いは P0 で確認) を横取り | パレットは `Ctrl+P` (`F1` は届かない)。バッファ切替 (v0.2) は `Ctrl+E` (一覧) を主に。ページ単位の選択は `Ctrl+K <` / `Ctrl+K >` |
-| Konsole / xterm | xterm は `modifyOtherKeys` 設定次第。Konsole は `Shift+PgUp` 等を横取り | レガシー扱い |
+| Konsole / xterm | xterm は起動時の `CSI > 4 ; 2 m` で modifyOtherKeys の段階 2 になる (§6.3。v0.2 から)。Konsole は `Shift+PgUp` 等を横取り | xterm は修飾キーを区別できる。Konsole はレガシー扱い |
 | Alacritty / kitty / WezTerm / foot / Ghostty | 拡張キー対応。横取りは少ない (kitty の `Ctrl+Shift+*` 系は端末ショートカット) | 拡張キーの恩恵を受ける |
 | tmux / screen | プレフィックスキー (`Ctrl+B` / `Ctrl+A`) を横取り。`escape-time` (既定 500 ms) で `Esc` が遅れる。拡張キーは要設定 | 既定キーマップで `Ctrl+B` を使わない。`Ctrl+A` (全選択) は screen 利用者向けに代替 (パレット) を案内 |
 | Linux コンソール (`TERM=linux`) | 16 色、CJK フォントなし、マウスは gpm 次第 | ASCII 罫線、警告表示。「最低限動く」水準 (NFR-402 の Must 外) |
@@ -1234,14 +1236,14 @@ TUI ではこれ以上は端末の能力の限界。
 ```
 0. 前提確認: stdin/stdout が端末か、TERM != dumb (§5.2)
 1. 現状の保存: (Unix) termios / (Windows) 入出力コンソールモード (コードページは変えないので保存しない、05 §9.1)
-2. raw モード (Unix (v0.2): `/dev/tty` を開き (出力と入力で別々に。入力の側だけ非ブロック)、termios を `cfmakeraw` 相当 (VMIN = 1、VTIME = 0) に設定。代替スクリーンの後にブラケットペースト `CSI ? 2004 h`・フォーカス報告 `CSI ? 1004 h`・kitty の push `CSI > 1 u` を入れ、復元ではその逆 (`CSI < u`・1004 l・2004 l・マウスの 1006 / 1002 / 1000 l) を代替スクリーンを抜ける前に送る (eve-tui の `unix::ENTER_MODES` / `LEAVE_MODES`)。ISIG/IXON/ICRNL 等を無効化 → Ctrl+C/Z/S/Q が届く, FR-609。
+2. raw モード (Unix (v0.2): `/dev/tty` を開き (出力と入力で別々に。入力の側だけ非ブロック)、termios を `cfmakeraw` 相当 (VMIN = 1、VTIME = 0) に設定。代替スクリーンの後にブラケットペースト `CSI ? 2004 h`・フォーカス報告 `CSI ? 1004 h`・kitty の push `CSI > 1 u`・modifyOtherKeys `CSI > 4 ; 2 m` を入れ、復元ではその逆 (`CSI > 4 m`・`CSI < u`・1004 l・2004 l・マウスの 1006 / 1002 / 1000 l) を代替スクリーンを抜ける前に送る (eve-tui の `unix::ENTER_MODES` / `LEAVE_MODES`)。ISIG/IXON/ICRNL 等を無効化 → Ctrl+C/Z/S/Q が届く, FR-609。
    Windows: 入力のコンソールモードを 05 §9.1 の「入力モード」の値に設定 (ENABLE_VIRTUAL_TERMINAL_INPUT は立てない))
 3. 端末タイトルの退避 (Windows: GetConsoleTitleW で文字列を保存。Unix (v0.2): XTWINOPS push CSI 22;0 t、非対応端末は無視。05 §9.1)
 4. 代替スクリーンへ (CSI ? 1049 h)  … v0.2 から設定 ui.alternate_screen=false で無効化可 (v0.1 は常に使う)。続けて自動折り返しを無効化 (CSI ? 7 l、§4.7(g))
 5. ブラケットペースト有効 (CSI ? 2004 h)  … Unix (v0.2) だけ。Windows は送らない (§6.6)。失敗しても続け、bracketed_paste = false
 6. フォーカス報告有効 (CSI ? 1004 h)  … v0.2 から
 7. マウス有効 (1000/1002/1006)  … v0.2 から、設定次第
-8. 拡張キー push (CSI > 1 u)  … v0.2 から、Unix のみ
+8. 拡張キー push (CSI > 1 u) と modifyOtherKeys (CSI > 4 ; 2 m)  … v0.2 から、Unix のみ (§6.3)
 9. カーソル形状 (DECSCUSR)
 9b. 端末サイズ取得 (Unix は `ioctl(TIOCGWINSZ)` / Windows は srWindow から再計算, 05 §9.1) → クローム行数を引いて
     InputEvent::Resize を core に送る (最初の Frame の前に編集面サイズを確定させる)
@@ -1268,7 +1270,7 @@ TUI ではこれ以上は端末の能力の限界。
 ```
 1. ESU (CSI ? 2026 l)          … 描画途中でも端末の保留を解除 (§4.5)
 2. SGR リセット (CSI 0 m)
-3. 拡張キー pop (CSI < u)
+3. modifyOtherKeys を既定へ (CSI > 4 m)、拡張キー pop (CSI < u)  … Unix
 4. マウス無効 (1006/1002/1000 l)
 5. フォーカス報告無効、ブラケットペースト無効
 6. カーソル形状を既定へ (CSI 0 SP q)、カーソル表示 (CSI ? 25 h)、自動折り返しを有効へ (CSI ? 7 h)

@@ -34,10 +34,11 @@ const ESC_WAIT_MS: i32 = 50;
 const MOUSE_ON: &str = "\x1b[?1000h\x1b[?1002h\x1b[?1006h";
 const MOUSE_OFF: &str = "\x1b[?1006l\x1b[?1002l\x1b[?1000l";
 /// 初期化で入れるモード (ENTER の後): ブラケットペースト (04 §6.6)・フォーカス報告 (§6.9)・kitty キーボードの
-/// DISAMBIGUATE の push (§6.3)。
-pub const ENTER_MODES: &str = "\x1b[?2004h\x1b[?1004h\x1b[>1u";
-/// 復元で外すモード (LEAVE の前): kitty の pop・フォーカス・ブラケットペースト・マウス。
-pub const LEAVE_MODES: &str = "\x1b[<u\x1b[?1004l\x1b[?2004l\x1b[?1006l\x1b[?1002l\x1b[?1000l";
+/// DISAMBIGUATE の push と xterm の modifyOtherKeys の段階 2 (tmux の `extended-keys` と xterm 向け。§6.3)。
+pub const ENTER_MODES: &str = "\x1b[?2004h\x1b[?1004h\x1b[>1u\x1b[>4;2m";
+/// 復元で外すモード (LEAVE の前): modifyOtherKeys を既定へ・kitty の pop・フォーカス・ブラケットペースト・マウス。
+pub const LEAVE_MODES: &str =
+    "\x1b[>4m\x1b[<u\x1b[?1004l\x1b[?2004l\x1b[?1006l\x1b[?1002l\x1b[?1000l";
 
 /// 入力の送り先 (本番は `eve_host::InputSink`)。
 pub trait InputOut: Send + 'static {

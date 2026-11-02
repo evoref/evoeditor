@@ -377,7 +377,7 @@ impl Drop for TuiFrontend {
 const EMERGENCY_BYTES: &[u8] = b"\x18\x1b[?2026l\x1b[0m\x1b[0 q\x1b[?25h\x1b[?7h\x1b[?1049l";
 /// 同上 (Unix は先に `unix::LEAVE_MODES` と同じモードを外す)。
 #[cfg(unix)]
-const EMERGENCY_BYTES: &[u8] = b"\x18\x1b[<u\x1b[?1004l\x1b[?2004l\x1b[?1006l\x1b[?1002l\x1b[?1000l\x1b[?2026l\x1b[0m\x1b[0 q\x1b[?25h\x1b[?7h\x1b[?1049l";
+const EMERGENCY_BYTES: &[u8] = b"\x18\x1b[>4m\x1b[<u\x1b[?1004l\x1b[?2004l\x1b[?1006l\x1b[?1002l\x1b[?1000l\x1b[?2026l\x1b[0m\x1b[0 q\x1b[?25h\x1b[?7h\x1b[?1049l";
 
 /// 編集面の下のクローム行数 (`surface_size` の計算に使う)。
 pub const fn chrome_rows() -> u16 {
