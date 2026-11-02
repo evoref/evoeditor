@@ -9,6 +9,8 @@
 //! - `coverage`: `cargo llvm-cov nextest --lcov` (報告のみ、OQ-101)。
 //! - `crash` (v0.2): 保存のクラッシュ一貫性 (`cargo xtask crash-consistency`。LazyFS は環境変数 `LAZYFS_BIN`、下の FS は
 //!   `EVE_CRASH_ROOTS`。nightly.yml が LazyFS をビルドし、ext4 / xfs / btrfs のループバックを用意する。NFR-301、09 §6.3)。
+//!   `--only` を付けない実行で `LAZYFS_BIN` が無いときは、失敗にせず飛ばして要約に書く (定時の実行は既定ブランチ (main) の
+//!   nightly.yml で動き、LazyFS を用意するステップを持たない版がある。`--only crash` と明示したら失敗にする)。
 //!
 //! 結果の要約は `target/nightly/summary.txt` (ターゲット名・コミット・seed・クラッシュの件数・暗号化した artifact の名前だけ。
 //! 入力の内容・ハッシュ・スタックは書かない)。
@@ -34,6 +36,7 @@ const LINUX_CRATES: [&str; 9] = [
 const STEPS: [&str; 5] = ["fuzz", "proptest", "audit", "coverage", "crash"];
 
 pub fn run_all(args: &[String]) -> Result<(), String> {
+    let explicit = flag(args, "--only").is_some();
     let only: Vec<String> = flag(args, "--only")
         .map(|v| v.split(',').map(str::to_owned).collect())
         .unwrap_or_else(|| STEPS.iter().map(|s| (*s).to_owned()).collect());
@@ -66,6 +69,16 @@ pub fn run_all(args: &[String]) -> Result<(), String> {
     summary.push(format!("commit: {}", commit()));
 
     for step in STEPS.iter().filter(|s| only.iter().any(|o| o == *s)) {
+        if *step == "crash" && skip_crash(explicit, std::env::var_os("LAZYFS_BIN").is_some()) {
+            println!(
+                "▶ crash: LAZYFS_BIN が無いので飛ばします (--only crash で明示すると失敗にします)"
+            );
+            summary.push(
+                "crash: 飛ばした (LAZYFS_BIN が無い。nightly.yml が LazyFS を用意していない版)"
+                    .to_owned(),
+            );
+            continue;
+        }
         let r = match *step {
             "fuzz" => fuzz(fuzz_seconds, seed, &out_dir, &mut summary),
             "proptest" => proptest(),
@@ -366,9 +379,22 @@ fn coverage(out_dir: &Path) -> Result<(), String> {
     run("coverage (報告のみ)", &mut cmd)
 }
 
+/// `crash` を飛ばすか: 手順を明示せず (`--only` なし)、LazyFS が用意されていないとき。
+fn skip_crash(explicit: bool, has_lazyfs: bool) -> bool {
+    !explicit && !has_lazyfs
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn lazyfs_が無ければ_crash_を飛ばすのは明示しないときだけ() {
+        assert!(skip_crash(false, false));
+        assert!(!skip_crash(true, false));
+        assert!(!skip_crash(false, true));
+        assert!(!skip_crash(true, true));
+    }
 
     #[test]
     fn 手順の名前は_5_つ() {
