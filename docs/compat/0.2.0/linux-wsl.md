@@ -14,7 +14,7 @@
 
 ○ = 期待どおり、△ = 動くが気になる点あり、× = 期待どおりでない。△ と × は Issue 番号を備考に。「自動 ○」は accept-linux で ○ (IME の 2 列は同じ結果)。「手:」の後ろは、まだ手で確かめていない部分。
 
-- accept-linux の結果 (`target/accept-linux/result.md`) の先頭のコミットと SHA-256: `ff61a068a40d` / `2cc9a76b367e` (`1a3cd49` に、この記録の PR の accept-linux の G1 の判定の修正だけを当てたもの。tar.gz は `1a3cd49` で作ったものと同じバイト列)
+- accept-linux の結果 (`target/accept-linux/result.md`) の先頭のコミットと SHA-256: `ff61a068a40d` / `2cc9a76b367e` (`1a3cd49` に、この記録の PR の accept-linux の G1 の判定の修正だけを当てた作業中のコミット。squash の後は残らない。tar.gz は `1a3cd49` で作ったものと同じバイト列)
 
 | 項目 | Microsoft IME | Google 日本語入力 | 備考 |
 |---|---|---|---|
