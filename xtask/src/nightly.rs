@@ -11,6 +11,10 @@
 //!   `EVE_CRASH_ROOTS`。nightly.yml が LazyFS をビルドし、ext4 / xfs / btrfs のループバックを用意する。NFR-301、09 §6.3)。
 //!   `--only` を付けない実行で `LAZYFS_BIN` が無いときは、失敗にせず飛ばして要約に書く (定時の実行は既定ブランチ (main) の
 //!   nightly.yml で動き、LazyFS を用意するステップを持たない版がある。`--only crash` と明示したら失敗にする)。
+//! - `soak` (v0.2): NFR-306 の長時間の soak (BM-306、`cargo bench -p eve-testkit --bench bm_306`)。`--soak-minutes N` を
+//!   渡したときだけ走らせる (nightly.yml が 60 を渡す。定時の実行が古い nightly.yml (時間の上限が足りない) で動くときは
+//!   飛ばす)。RSS と入力の遅延の推移を `target/nightly/soak.jsonl` に書き、要約に傾向を 1 行で出す。**観察のみで失敗にしない**
+//!   (09 §6.3、§8.2 の v0.2 の表)。`--only soak` と明示して `--soak-minutes` が無ければ 60 分。
 //!
 //! 結果の要約は `target/nightly/summary.txt` (ターゲット名・コミット・seed・クラッシュの件数・暗号化した artifact の名前だけ。
 //! 入力の内容・ハッシュ・スタックは書かない)。
@@ -33,7 +37,7 @@ const LINUX_CRATES: [&str; 9] = [
     "xtask",
 ];
 
-const STEPS: [&str; 5] = ["fuzz", "proptest", "audit", "coverage", "crash"];
+const STEPS: [&str; 6] = ["fuzz", "proptest", "audit", "coverage", "crash", "soak"];
 
 pub fn run_all(args: &[String]) -> Result<(), String> {
     let explicit = flag(args, "--only").is_some();
@@ -43,7 +47,7 @@ pub fn run_all(args: &[String]) -> Result<(), String> {
     for o in &only {
         if !STEPS.contains(&o.as_str()) {
             return Err(format!(
-                "知らない手順です: {o} (fuzz / proptest / audit / coverage / crash)"
+                "知らない手順です: {o} (fuzz / proptest / audit / coverage / crash / soak)"
             ));
         }
     }
@@ -61,6 +65,13 @@ pub fn run_all(args: &[String]) -> Result<(), String> {
         })
         .transpose()?
         .unwrap_or_else(default_seed);
+    let soak_minutes: Option<u64> = flag(args, "--soak-minutes")
+        .map(|v| {
+            v.parse()
+                .map_err(|_| format!("--soak-minutes が数ではありません: {v}"))
+        })
+        .transpose()?
+        .or(explicit.then_some(60));
 
     let out_dir = workspace_root().join("target").join("nightly");
     std::fs::create_dir_all(&out_dir).map_err(|e| format!("{}: {e}", out_dir.display()))?;
@@ -79,8 +90,17 @@ pub fn run_all(args: &[String]) -> Result<(), String> {
             );
             continue;
         }
+        if *step == "soak" && soak_minutes.is_none() {
+            println!("▶ soak: --soak-minutes が無いので飛ばします");
+            summary.push(
+                "soak: 飛ばした (--soak-minutes が無い。nightly.yml が soak を渡さない版)"
+                    .to_owned(),
+            );
+            continue;
+        }
         let r = match *step {
             "fuzz" => fuzz(fuzz_seconds, seed, &out_dir, &mut summary),
+            "soak" => soak(soak_minutes.unwrap_or(60), &out_dir, &mut summary),
             "proptest" => proptest(),
             "audit" => audit(),
             "coverage" => coverage(&out_dir),
@@ -379,6 +399,59 @@ fn coverage(out_dir: &Path) -> Result<(), String> {
     run("coverage (報告のみ)", &mut cmd)
 }
 
+/// BM-306 の soak を回し、要約に傾向を 1 行で書く。傾向が平坦でなくても失敗にしない (観察のみ、09 §6.3)。
+fn soak(minutes: u64, out_dir: &Path, summary: &mut Vec<String>) -> Result<(), String> {
+    let out = out_dir.join("soak.jsonl");
+    let minutes_s = minutes.to_string();
+    let out_s = out.display().to_string();
+    run(
+        &format!("soak (BM-306、{minutes} 分)"),
+        Command::new("cargo").args([
+            "bench",
+            "-q",
+            "-p",
+            "eve-testkit",
+            "--bench",
+            "bm_306",
+            "--",
+            "--minutes",
+            &minutes_s,
+            "--out",
+            &out_s,
+        ]),
+    )?;
+    let text = std::fs::read_to_string(&out).map_err(|e| format!("{}: {e}", out.display()))?;
+    let line = text
+        .lines()
+        .rev()
+        .find(|l| l.contains("\"kind\":\"summary\""))
+        .ok_or("soak.jsonl に要約の行がありません")?;
+    let v: serde_json::Value =
+        serde_json::from_str(line).map_err(|e| format!("soak の要約を読めません: {e}"))?;
+    summary.push(soak_line(&v));
+    Ok(())
+}
+
+/// soak の要約の JSON を 1 行の所見にする。
+fn soak_line(v: &serde_json::Value) -> String {
+    let num = |k: &str| v.get(k).and_then(serde_json::Value::as_f64);
+    let mib = |k: &str| num(k).map_or("-".to_owned(), |x| format!("{x:.1}"));
+    format!(
+        "soak (観察): {:.0} 分、RSS {}→{} MiB (増加 {:.1} MiB)、p99 {:.3}→{:.3} ms、{}",
+        num("minutes").unwrap_or(0.0),
+        mib("rss_first_mib"),
+        mib("rss_last_mib"),
+        num("rss_growth_mib").unwrap_or(0.0),
+        num("p99_first_ms").unwrap_or(0.0),
+        num("p99_last_ms").unwrap_or(0.0),
+        if v.get("flat").and_then(serde_json::Value::as_bool) == Some(true) {
+            "平坦"
+        } else {
+            "要確認 (右肩上がりか、遅延が 1.5 倍を超えた)"
+        }
+    )
+}
+
 /// `crash` を飛ばすか: 手順を明示せず (`--only` なし)、LazyFS が用意されていないとき。
 fn skip_crash(explicit: bool, has_lazyfs: bool) -> bool {
     !explicit && !has_lazyfs
@@ -397,8 +470,24 @@ mod tests {
     }
 
     #[test]
-    fn 手順の名前は_5_つ() {
-        assert_eq!(STEPS.len(), 5);
+    fn 手順の名前は_6_つ() {
+        assert_eq!(STEPS.len(), 6);
+    }
+
+    #[test]
+    fn soak_の要約を_1_行にする() {
+        let v: serde_json::Value = serde_json::from_str(
+            r#"{"kind":"summary","minutes":60.0,"rss_first_mib":19.4,"rss_last_mib":19.6,"rss_growth_mib":0.2,"p99_first_ms":0.3,"p99_last_ms":0.31,"flat":true}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            soak_line(&v),
+            "soak (観察): 60 分、RSS 19.4→19.6 MiB (増加 0.2 MiB)、p99 0.300→0.310 ms、平坦"
+        );
+        let w: serde_json::Value =
+            serde_json::from_str(r#"{"minutes":1,"rss_first_mib":null,"flat":false}"#).unwrap();
+        assert!(soak_line(&w).contains("RSS -→- MiB"));
+        assert!(soak_line(&w).ends_with("要確認 (右肩上がりか、遅延が 1.5 倍を超えた)"));
     }
 
     #[test]

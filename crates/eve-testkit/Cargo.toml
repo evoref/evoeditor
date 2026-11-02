@@ -49,3 +49,8 @@ harness = false
 [[bench]]
 name = "no_network"
 harness = false
+
+# BM-306 の長時間の soak (NFR-306。cargo xtask nightly の soak の手順が回す。傾向の観察のみ、docs/09 §6.3)
+[[bench]]
+name = "bm_306"
+harness = false
