@@ -1,7 +1,7 @@
 # フル車線 (docs/09-testing-quality.md §6.1 / §6.2、docs/11-dev-workflow.md §8.1)。
 # 必須のステータスチェックの名前は、ジョブの表示名そのもの (docs/11 §9.1 の固定名):
 #   check / fmt / clippy (windows) / clippy (linux) / test (windows) / test (linux) / deps / dco / gitleaks / pr-source
-# 2 段目 (ジョブを足す PR の merge 後に必須に加える): i18n / e2e / check-themes / e2e (linux)
+# 2 段目 (ジョブを足す PR の merge 後に必須に加える): i18n / e2e / check-themes / e2e (linux) / msrv
 # 表示名を変えるときは、ブランチ保護の必須チェックの名前も同じ手順で差し替える。
 # パスのフィルタは付けない (docs だけ・コードだけの PR でも全ジョブを回す)。
 name: ci
@@ -303,6 +303,28 @@ jobs:
       - run: cargo nextest run --profile e2e -p evoeditor --test e2e
       - run: cargo nextest run --profile e2e -p evoeditor --features test-hooks --test e2e
       - run: cargo nextest run --profile e2e -p evoeditor --features bench-trace --test e2e -E 'test(~計測用ビルド)'
+
+  # MSRV (docs/05 §16.1、docs/09 §6.2 / §8.2 の v0.2): workspace の `rust-version` のツールチェーンで、Cargo.lock のまま
+  # 全 crate・全 feature を check する。版は Cargo.toml から読む (引き上げのたびにここを直さない)。
+  msrv:
+    name: msrv
+    needs: check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Rust (rust-version)
+        run: |
+          v=$(sed -n 's/^rust-version = "\(.*\)"/\1/p' Cargo.toml)
+          test -n "$v"
+          echo "MSRV=$v" >> "$GITHUB_ENV"
+          rustup toolchain install "$v" --profile minimal --no-self-update
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          shared-key: msrv
+      - run: cargo +"$MSRV" check --workspace --all-features --locked
 
   # DCO: PR の全コミットに Signed-off-by があること (docs/11 §9.4、OQ-154)。
   # 対象外 (ジョブの if で飛ばす。飛ばしたジョブは必須のチェックとして成功扱い):
