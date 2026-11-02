@@ -1162,7 +1162,7 @@ AI 連携 (06) は **ローカル LLM を一級市民** とし (01 §2.9、ADR-0
 |---|---|
 | edition | 2024 (Rust 1.85 以上が必須) |
 | MSRV | 「リリース時点の最新安定版 − 2 マイナー」を **下限の目安** とし、`[workspace.package] rust-version` に明記。依存が要求すれば引き上げる (マイナーリリースでのみ。パッチリリースでは上げない) |
-| 検証 | CI に MSRV ジョブ (`cargo +<MSRV> check --workspace --all-features`。補助ジョブとして v0.2 から。v0.1 は `rust-version` の明記と `Cargo.lock` のコミットまで)。`Cargo.lock` をコミット (bin があるため) し、`resolver.incompatible-rust-versions = "fallback"` (Cargo 1.84+) で MSRV 互換の依存版を選ばせる |
+| 検証 | CI に MSRV ジョブ (`cargo +<MSRV> check --workspace --all-features`。補助ジョブとして v0.2 から。2026-11-03 に `ci.yml` の `msrv` ジョブとして入れた。v0.1 は `rust-version` の明記と `Cargo.lock` のコミットまで)。`Cargo.lock` をコミット (bin があるため) し、`resolver.incompatible-rust-versions = "fallback"` (Cargo 1.84+) で MSRV 互換の依存版を選ばせる |
 | ツールチェイン固定 | `rust-toolchain.toml` は **置かない** (貢献者の環境を縛らない)。CI は `stable` + MSRV + (nightly は fuzz/udeps のみ) |
 | ディストリビューションのパッケージ化 | Debian/Fedora の Rust は古い → MSRV を極端に新しくしない動機。ただし 2 マイナー遅れが限界 (ratatui/crossterm の MSRV も同程度) |
 
