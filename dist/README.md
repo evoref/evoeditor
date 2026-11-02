@@ -181,6 +181,7 @@ RWRtkrzH70nKORpBFPEtLy6elo0xP5XsEli9SU/OaxnBmNM8o14GKMhv
 - **確かめた環境は、WSL2 (Ubuntu) の Windows Terminal と、その中の tmux です。** GNOME や KDE などのデスクトップ環境 (Wayland / X11) でのクリップボードと、日本語入力 (mozc など) の候補の位置は、まだ確かめていません。気づいた点は Issues で知らせてください。Linux のコンソール (`TERM=linux`) は対象外です。macOS は対象外です。
 - **クリップボード** は、`wl-copy` / `wl-paste` (Wayland)、`xclip` または `xsel` (X11)、WSL では `powershell.exe` を使います。SSH で接続しているとき (リモート側のコマンドに書いてしまうため) と、どれも無いときは、対応する端末なら OSC 52 で端末のクリップボードに書きます (GNOME Terminal などの VTE 系の端末は OSC 52 に対応しません)。それもできないときは、evoeditor の中だけのクリップボードになります。
 - **`Ctrl+Z` は「元に戻す」です。** シェルに一時的に戻るときは `Ctrl+K Z` を押し、`fg` で戻ります。
+- **WSL の Windows Terminal では、`Ctrl+Shift+Z` などの `Ctrl+Shift+<文字>` が `Ctrl+<文字>` と区別されません** (Windows Terminal が同じキーとして送るため。tmux の中でも同じです)。やり直しは `Ctrl+Y` を使ってください。
 - **端末を閉じたとき・`kill` (SIGTERM / SIGHUP / SIGINT) のときは、未保存の内容を退避してから終了します。** `kill -9` (SIGKILL) と電源断のときは退避できません。ディスク上のファイルは、原子的な保存により壊れません。
 - **tmux の中で使うとき** は、`~/.tmux.conf` に `set -s escape-time 10`、`set -g set-clipboard on`、`set -s extended-keys on`、`set -g focus-events on` を勧めます (`Esc` の反応の遅れ、クリップボード、`Ctrl+Shift` を含むキーの区別のため)。tmux の中で外側の端末が分からないときは、256 色で描きます (`[theme]` の `color_mode = "truecolor"` で上書きできます)。
 - **WSL では、Linux 側のファイル (`~` の下) を編集してください。** Windows のドライブ (`/mnt/c` の下) のファイルも開けますが、遅くなります。
