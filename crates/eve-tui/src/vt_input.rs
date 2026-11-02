@@ -5,7 +5,7 @@
 //! - 印字可能文字 (UTF-8) は `Text` にまとめる (最大 64 KiB、§6.1 の合体)。制御バイトは §6.2 の表のキーにする。
 //! - Alt は `ESC` 前置。**`ESC` + 文字が同じ読取に来たときだけ** Alt とみなし、読取の末尾の単独の `ESC` は `Esc` にする (§6.5)。
 //! - CSI / SS3 のキー (矢印・Home/End・PageUp/Down・Insert/Delete・F1〜F12、修飾の引数 `;m`)、CSI u (kitty の
-//!   DISAMBIGUATE)、SGR マウス (`CSI < b ; x ; y M/m`)、フォーカス (`CSI I` / `CSI O`)、ブラケットペースト (`CSI 200~` 〜 `CSI 201~`)。
+//!   DISAMBIGUATE)、xterm の modifyOtherKeys の `CSI 27 ; 修飾 ; コード ~` (tmux の `extended-keys` の既定の形式)、SGR マウス (`CSI < b ; x ; y M/m`)、フォーカス (`CSI I` / `CSI O`)、ブラケットペースト (`CSI 200~` 〜 `CSI 201~`)。
 //! - ブラケットペーストの本文は読取をまたいで溜め、終わりで `Paste` にする。終了の直後の同じ読取の入力は §6.6 の
 //!   「バースト規則」で本文として扱う (制御文字・Ctrl 付きキーをコマンドにしない。矢印などの文字にならないキーは捨てる)。
 //! - 読取の末尾で途切れた CSI / SS3 / UTF-8 は次の読取へ持ち越す。持ち越したまま入力が途絶えたら `flush` で捨てる。
@@ -100,6 +100,18 @@ fn control_key(b: u8) -> (KeyCode, Modifiers) {
         0x1F => (KeyCode::Char('/'), Modifiers::CTRL),
         // 0x01〜0x1A: Ctrl + 英字 (0x0A は Ctrl+J。raw モードの Enter は 0x0D)
         b => (KeyCode::Char(char::from(b'a' + b - 1)), Modifiers::CTRL),
+    }
+}
+
+/// CSI u と modifyOtherKeys のコード (Unicode のコードポイント) のキー。
+fn code_key(code: Option<u32>, mods: Modifiers) -> Option<(KeyCode, Modifiers)> {
+    match code.and_then(char::from_u32)? {
+        '\r' => Some((KeyCode::Enter, mods)),
+        '\t' => Some((KeyCode::Tab, mods)),
+        '\u{1b}' => Some((KeyCode::Esc, mods)),
+        '\u{7f}' | '\u{8}' => Some((KeyCode::Backspace, mods)),
+        c if !c.is_control() => Some(char_key(c, mods)),
+        _ => None,
     }
 }
 
@@ -402,6 +414,11 @@ impl VtParser {
         match fin {
             b'~' => match first {
                 Some(200) => Unit::PasteStart(n),
+                // modifyOtherKeys (`CSI 27 ; 修飾 ; コード ~`): コードと修飾は CSI u と同じ意味 (§6.3)
+                Some(27) => match code_key(p.get(2).copied().flatten(), mods) {
+                    Some((k, m)) => Unit::Key(n, k, m),
+                    None => Unit::Skip(n),
+                },
                 Some(201) => Unit::Skip(n),
                 Some(k) => match tilde_key(k) {
                     Some(code) => Unit::Key(n, code, mods),
@@ -413,16 +430,9 @@ impl VtParser {
             b'I' if body.is_empty() => Unit::Focus(n, true),
             b'O' if body.is_empty() => Unit::Focus(n, false),
             // CSI u (kitty keyboard protocol の DISAMBIGUATE_ESCAPE_CODES、§6.3)
-            b'u' => match first.and_then(char::from_u32) {
-                Some('\r') => Unit::Key(n, KeyCode::Enter, mods),
-                Some('\t') => Unit::Key(n, KeyCode::Tab, mods),
-                Some('\u{1b}') => Unit::Key(n, KeyCode::Esc, mods),
-                Some('\u{7f}') => Unit::Key(n, KeyCode::Backspace, mods),
-                Some(c) if !c.is_control() => {
-                    let (k, m) = char_key(c, mods);
-                    Unit::Key(n, k, m)
-                }
-                _ => Unit::Skip(n),
+            b'u' => match code_key(first, mods) {
+                Some((k, m)) => Unit::Key(n, k, m),
+                None => Unit::Skip(n),
             },
             f => match final_key(f) {
                 Some(code) => Unit::Key(n, code, mods),
@@ -634,6 +644,27 @@ mod tests {
                 k(K::Char('s'), M::CTRL | M::SHIFT),
             ]
         );
+    }
+
+    #[test]
+    fn modify_other_keys_の形式も_csi_u_と同じキーになる() {
+        use Modifiers as M;
+        // tmux 3.6 の `extended-keys on` (形式は既定の xterm) が Ctrl+Shift+Z・Ctrl+Z・Shift+Enter・Ctrl+Q などで送る列
+        assert_eq!(
+            parse(
+                b"\x1b[27;6;122~\x1b[27;5;122~\x1b[27;2;13~\x1b[27;5;113~\x1b[27;5;8~\x1b[27;3;65~"
+            ),
+            vec![
+                k(K::Char('z'), M::CTRL | M::SHIFT),
+                k(K::Char('z'), M::CTRL),
+                k(K::Enter, M::SHIFT),
+                k(K::Char('q'), M::CTRL),
+                k(K::Backspace, M::CTRL),
+                k(K::Char('a'), M::ALT | M::SHIFT),
+            ]
+        );
+        // コードが無い・制御文字の 27 の列は捨てる (前後の文字は残る)
+        assert_eq!(parse(b"a\x1b[27;5~\x1b[27;5;1~b"), vec![text("ab")]);
     }
 
     #[test]
