@@ -22,7 +22,7 @@
 //! - `no-network`: NFR-501 AC-2 の無通信の検査 (ヘッドレスのシナリオを strace の下で走らせる。Linux。docs/09 §3.6)
 //! - `perf-diff`: 基準のコミットとの性能の比較 (`--base <ref> --mode instr|time`。命令数 +5% / A/B +10% で警告。docs/09 §5.4)
 //! - `accept-linux`: Linux の受入の手順の自動の部分 (tmux を擬似端末にする。WSL では Windows のクリップボードとの往復も。docs/09 §3.7)
-//! - `nightly`: 夜間ジョブの入口 (fuzz・proptest 拡張・audit・coverage。Linux。docs/09 §6.3)
+//! - `nightly`: 夜間ジョブの入口 (fuzz・proptest 拡張・audit・coverage・crash・soak。Linux。docs/09 §6.3)
 
 #![forbid(unsafe_code)]
 // 開発用ツールなので、標準出力・標準エラーへの出力は許す。
@@ -80,7 +80,7 @@ const USAGE: &str = "\
   no-network          無通信の検査 (NFR-501 AC-2。シナリオを strace -e trace=network の下で走らせる。Linux)
   perf-diff           基準との性能の比較 (--base <ref> --mode instr|time --out FILE。劣化は警告だけ)
   accept-linux        Linux の受入の自動の部分 (docs/compat/checklist.md の A〜G と L。tmux。--archive TGZ --only A1,C2 --keep。Linux)
-  nightly             夜間ジョブ (Linux。--only fuzz,proptest,audit,coverage,crash --fuzz-seconds N --seed N)";
+  nightly             夜間ジョブ (Linux。--only fuzz,proptest,audit,coverage,crash,soak --fuzz-seconds N --soak-minutes N --seed N)";
 
 fn main() -> ExitCode {
     let mut args = std::env::args().skip(1);
