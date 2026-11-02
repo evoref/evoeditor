@@ -106,6 +106,8 @@ v0.2 の Linux の受入は、開発 PC の **WSL2 (Ubuntu)** を **Windows Term
 
 **準備**: Linux の musl 静的版の tar.gz (`cargo xtask dist --target x86_64-unknown-linux-musl` で作ったもの、またはリリースの候補) を使う (開発ビルドではない)。手順 L1 で README の Linux の手順どおりに入れたものを、以降の項目で使う。作業のファイルは WSL の中 (`~` の下) に作る。
 
+**自動の部分**: 最初に WSL の中で `cargo xtask accept-linux` を実行する (候補の tar.gz があれば `--archive <tar.gz>`。隣に `SHA256SUMS` を置く)。L1 と、A1〜A5・C1・C2・C5・D1・D3・D4・D6・E1〜E3・F1〜F6・G1〜G3・L2〜L5・L7・L8 の端末の中の動作を tmux で確かめ、`target/accept-linux/result.md` に結果を書く (L4 は Windows のクリップボードを一時的に書き換え、終わると元に戻す)。○ の項目は記録に「自動」と書いて写してよい。× は Issue にする。**手で行うのは** 次の項目だけ: B1〜B5・L6 (日本語入力)、C2 と L8 の Windows Terminal から押した `Ctrl+Shift` のキー、C3、C4 (色の見た目)、D2 (右クリックの貼り付け)、D5 (端末の範囲選択)、L2 の Windows Terminal のタブを閉じる操作、L5 の `Ctrl+Shift+V` と右クリック、L7 の推奨設定の tmux を Windows Terminal で開いた見た目。
+
 **A〜G**: 上の A〜G を WSL の中で同じ手順で行う。読み替え: 設定は `~/.config/evoeditor/config.toml`、PowerShell の例は sh に読み替える (`NO_COLOR=1 evoeditor`)、D の「他のアプリ」は Windows のアプリ (メモ帳など)、G のコーパスは WSL の中で作る。
 
 | # | 手順 | 期待 |

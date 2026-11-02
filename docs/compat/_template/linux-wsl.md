@@ -10,7 +10,9 @@
 - tmux: <例: 3.6>
 - 日本語入力: <Microsoft IME の版 / Google 日本語入力の版>
 
-○ = 期待どおり、△ = 動くが気になる点あり、× = 期待どおりでない。△ と × は Issue 番号を備考に。自動の試験 (e2e (linux)・CI) で確かめた項目も、手で確かめたら書く。
+○ = 期待どおり、△ = 動くが気になる点あり、× = 期待どおりでない。△ と × は Issue 番号を備考に。`cargo xtask accept-linux` (checklist の L の「自動の部分」) で ○ になった項目は、備考に「自動」と書いて写してよい (IME の 2 列は同じ結果)。手で確かめる項目は、自動の結果が ○ でも手で埋める。
+
+- accept-linux の結果 (`target/accept-linux/result.md`) の先頭のコミットと SHA-256: <>
 
 | 項目 | Microsoft IME | Google 日本語入力 | 備考 |
 |---|---|---|---|
