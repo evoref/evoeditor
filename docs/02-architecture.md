@@ -173,7 +173,7 @@ crate の接頭辞 `eve-` と bin の名前 `evoeditor` は [OQ-01](10-decisions
 | `eve-testkit` | lib (公開。テスト用で、本番コードは依存しない) | v0.1 | ヘッドレス駆動ハーネス、Fake Ports (`MemFs`、偽クリップボード、`ManualClock`、`ManualJobSpawner`、§4.4)、Frame のスナップショット比較、`VirtualScreen` (TUI)、**ヘッドレス参照レンダラ** (`HeadlessFrontend`: `Frontend` trait のテスト用実装。Frame から直接 `CellOccupancy` を作り、TUI との parity の比較相手になる、§8.4)、`CellOccupancy` の比較、シナリオ DSL ランナー (v0.2。v0.1 は Rust の Harness)、`ThreadGuard` を使う検査モード (§4.4)。外部の消費者も正確な版で固定して使える公開 crate として publish する (§4.1 の注、12 §4.1) | insta, proptest, serde・toml (シナリオ DSL の読み込み、v0.2) | 本番コードからの依存 | — |
 | `eve-docs-tables` | lib (dev、`publish = false`) | v0.1 | docs の Markdown の表を 11 §8.5 の機械可読の規則 (見出し・列名・列の順) で読む小さな lib。利用者は **`xtask`、`eve-tui` の dev 依存、`eve-core` の dev 依存** の 3 つ (`xtask` は `check-deps --docs`・`i18n`・`check-themes`、`eve-tui` は横取り表の到達性検査、`eve-core` はコマンドカタログ等の表との突合。09 §6.2 の `docs-tables`) | なし (std のみ) | 本番コードからの依存、他の `eve-*` crate への依存 | `eve-text`, `eve-encoding`, `eve-view`, `eve-config`, `eve-core`, `eve-platform`, `eve-host`, `eve-tui`, `eve-protocol`, `eve-syntax`, `eve-lsp`, `eve-ai`, `eve-testkit` |
 | `eve-test-helpers` | bin (dev、`publish = false`、feature なし) | v0.1 | テスト用の補助プロセス: `console-event` (別コンソールから CTRL_C / CTRL_BREAK を送る) と `clip-delay` (クリップボードの応答を遅らせる)。feature `test-hooks` のビルドのテスト (09 §3.4 / §3.6) からだけ使い、配布物に入れない | windows-sys (補助プロセスの中だけ) | 本番コードからの依存、配布物への同梱 | — |
-| `xtask` | bin (dev、`publish = false`) | v0.1 | 開発用のタスクの入口 (`cargo xtask <サブコマンド>`。サブコマンドの一覧と版の正本は 11 §1)。依存規則の検査 (`check-deps`、§4.3)、docs の表の突合 (`i18n` / `check-themes`)、コーパスと生成リファレンスの生成、ベンチ (`eve-bench`) と夜間ジョブの起動。Windows と Linux の両方でビルドする (§4.7) | eve-docs-tables、`cargo metadata` の出力の解析、配布 zip の作成・検査 (`dist`) のための `zip`・`sha2` | 本番コードからの依存、配布物への同梱 | — |
+| `xtask` | bin (dev、`publish = false`) | v0.1 | 開発用のタスクの入口 (`cargo xtask <サブコマンド>`。サブコマンドの一覧と版の正本は 11 §1)。依存規則の検査 (`check-deps`、§4.3)、docs の表の突合 (`i18n` / `check-themes`)、コーパスと生成リファレンス (v0.3) の生成、ベンチ (`eve-bench`) と夜間ジョブの起動。Windows と Linux の両方でビルドする (§4.7) | eve-docs-tables、`cargo metadata` の出力の解析、配布 zip の作成・検査 (`dist`) のための `zip`・`sha2` | 本番コードからの依存、配布物への同梱 | — |
 | `eve-syntax` | lib | v0.4 | tree-sitter による解析・ハイライト・インデント・構文選択。core の `SyntaxProvider` trait を実装 | tree-sitter, 各言語文法 | frontend 依存 | `ratatui`, `crossterm`, `eve-tui`, `eve-lsp`, `eve-ai`, `eve-testkit`, `eve-docs-tables` |
 | `eve-lsp` | lib | v1.L | LSP クライアント (プロセス管理・JSON-RPC・位置変換)。core の `LanguageService` trait を実装 | tokio, lsp-types (案) | frontend 依存 | `ratatui`, `crossterm`, `eve-tui`, `eve-syntax`, `eve-ai`, `eve-testkit`, `eve-docs-tables` |
 | `eve-ai` | lib | v1.L | AI プロバイダ抽象と **ローカル LLM アダプタ** (`llama-server` ネイティブ / OpenAI 互換。能力検出・サーバのトークナイザでの予算計算・キャッシュを活かすプロンプト構築・FIM・制約付き出力・要求スケジューラ)、管理モードのサーバ起動要求 (実行は `ProcessRunner`)、プロンプト構築、秘密情報の伏字化、Proposal 生成 (差分計算)、監査ログ。詳細は 06 | tokio, HTTP クライアント (feature `ai`: TLS なしのループバック HTTP、`ai-remote`: rustls を追加), serde_json, eve-protocol (外部プロセス系 (ACP クライアント・MCP クライアント、v1.X) の JSON-RPC の配管とフレーミングを共用する。06 §3) | frontend 依存、文書の直接変更、`std::fs` / `std::process` (R7)、推論エンジン (llama.cpp 等) へのリンク (ADR-0034) | `ratatui`, `crossterm`, `eve-tui`, `eve-syntax`, `eve-lsp`, `eve-testkit`, `eve-docs-tables` |
@@ -813,7 +813,7 @@ enum Permission {                   // CommandSpec.permission の値 = User 以�
 - **ID は公開 API** (キーマップ設定・マクロ・AI ツール・駆動 API から参照される) なので一度公開した ID は互換性を維持し、廃止は別名 (alias) で移行する。互換性維持の義務は 1.0 から (OQ-44)。
 - **CommandId カタログの正本は 07 の付録** (ADR-0025、確定)。カタログは ID・title (MessageKey)・kind・args・when・permission・既定キー・ヒント表示文脈を持つ。04 は「既定キー」列の設計を担い、03/05/06 は ID をカタログから引用するだけで独自 ID を作らない。**v0.1 で実装するコマンドだけを確定し、後続の版のコマンドは名前空間だけを予約する**。
 - **設定キー名と既定値の正本は 07 §5**。03/04/05/06 が設定可能と書く項目は 07 §5 に載ったものだけが設定キーになる (載せないものは定数)。v0.1 の公開キーは 7 個 (一覧と個数の正本は 07 §5.0) とし、03 由来の多くの調整項目は定数にして後の版で公開する。
-- 生成物 (`--list-commands` / `--dump-keymap` (v0.1 は CI 照合用の隠しオプション)、`--dump-config` (v0.2)) はカタログ・スキーマから生成し、CI で仕様表と突合する。差分が出たら **どちらを直すか判断** する (生成物が自動的に仕様を上書きするのではない)。
+- 生成物 (`--list-commands` / `--dump-keymap` (CI 照合用の隠しオプション。v0.3)、`--dump-config` (v0.2)) はカタログ・スキーマから生成し、CI で仕様表と突合する。差分が出たら **どちらを直すか判断** する (生成物が自動的に仕様を上書きするのではない)。
 
 ### 6.3 コマンド・Transaction・Effect の関係
 
@@ -2148,7 +2148,7 @@ evoeditor/                    # 公開リポジトリ (案、12 §3.3)
 │  └─ <crate>/tests/         # v0.1 のヘッドレス統合テスト (Rust の Harness) は各 crate の tests/ に置く
 ├─ bins/  evoeditor/
 ├─ xtask/                    # bin、publish = false (§4.1)。Windows / Linux の両方でビルドする (§4.7)。サブコマンドの正本は 11 §1。
-│                            # v0.1: check, check-deps, check-themes, i18n, gen-corpus, gen-reference (M2 から), nightly, bench。
+│                            # v0.1: check, check-deps, check-themes, i18n, gen-corpus, gen-reference (v0.3 に送った), nightly, bench。
 │                            # v0.2: spec-index (生成), trace, scenario run / scenario check, screenshot, check-docs, check-assets (同梱資産の台帳。最初の同梱資産と同時)。
 │                            # v1.L: ai-mock / ai-record
 ├─ fuzz/                     # cargo-fuzz の独立したワークスペース (本体の workspace に含めない。夜間 CI、09)
