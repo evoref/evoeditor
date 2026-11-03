@@ -585,7 +585,7 @@ v0.1 の公開側で用意するのは `eve-view` の型の規則 (`#[non_exhaus
 | 性能 | 合否は **基準機 (Windows の開発 PC) の BM** で決める (v0.1 と同じ)。CI の `perf (instr)` / `perf (time)` (`cargo xtask perf-diff`、§5.4) で前の版からの劣化の警告が無いか、あれば理由を書く。**Linux の BM は報告のみ** (WSL と CI は基準機ではない。前の版と比べて記録するだけで、合否に使わない。Linux の実機を基準機に加える版で判定に入れる。確定 (ユーザー回答、2026-11-03)) | `docs/perf/<version>/` |
 | 互換 (Linux) | **リリース候補の tar.gz** で、WSL2 の Windows Terminal と tmux の受入 (`docs/compat/checklist.md` の A〜G と L) が合格。端末の中の動作は `cargo xtask accept-linux --archive <tar.gz>` で確かめ、手の項目 (日本語入力・Windows Terminal から押すキー・タブを閉じる操作など) は人が行う。既知の制約 (Windows Terminal (WSL) では `Ctrl+Shift+<文字>` を区別できない等) が README と 05 §9.4 に書いてある | `docs/compat/<version>/linux-wsl.md` |
 | 互換 (英語 UI) | `cargo xtask i18n` (言語間のキー集合の差分とヒント幅) が通り、`--locale en` で起動の画面・ヘルプ・ダイアログに日本語が残らない (NFR-603。手で一巡する) | `docs/compat/<version>/acceptance.md` |
-| 受入 | NFR-601 の **3 名** の簡易テストの所見がある (上の表の受入の行。人が行う) | `docs/compat/<version>/acceptance.md` |
+| 受入 | NFR-601 の **3 名** の簡易テストの所見がある (上の表の受入の行。人が行う。手順は `docs/review/usability-v0.2.md` の §1〜§2) | 所見は `docs/review/usability-v0.2.md` の §3 に書き、`docs/compat/<version>/acceptance.md` の NFR-601 の欄から参照する |
 | データ保全 | 上の表の行 (Windows) に加えて、**Unix の kill テスト** (`eve-test-helpers` の切断点、§3.6) が Linux CI で通り、**LazyFS のクラッシュ一貫性** (§6.3) が判定コミットで ext4 / xfs / btrfs のすべて合格 (`nightly.yml` を `only=crash` で手動実行)。スワップと復旧 (FR-118 / NFR-307) のシナリオと kill テストが通る | CI と夜間ジョブの実行 |
 | fuzz | 判定コミットで `fuzz_decode` と `fuzz_editor` を **それぞれ 1 時間** (`nightly.yml` の手動実行で `fuzz_seconds=3600`) 回してクラッシュ 0 | Release のノート |
 | 長時間 (観察) | NFR-306 の 1 時間の soak (BM-306、夜間ジョブ) の RSS と入力遅延の推移を見て、右肩上がりが無いことを所見に書く。**ゲートにはしない** (8 時間の判定は v1.0) | リリースのチェックリストの所見 |
