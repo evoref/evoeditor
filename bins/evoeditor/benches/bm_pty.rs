@@ -193,15 +193,36 @@ impl Term {
     }
 
     /// 終了を待つ。終了コード (待ちきれなければ `None`)。
+    /// 終了コードは、プロセスの後始末より先に取れる。後始末の間はシステムの CreateProcess が止まることがあり
+    /// (exe が exFAT の上にあると約 225 ms)、続けて起動すると BM-101b に入る。プロセスのハンドルが signaled に
+    /// なる (後始末が終わる) まで待ってから戻る (portable-pty の `wait` は終了コードが取れるとすぐ戻るので使わない)
     fn wait_exit(&mut self, limit: Duration) -> Option<u32> {
         let t = Instant::now();
         while t.elapsed() < limit {
             if let Ok(Some(st)) = self.child.try_wait() {
+                self.wait_gone(limit.saturating_sub(t.elapsed()));
                 return Some(st.exit_code());
             }
             thread::sleep(Duration::from_millis(1));
         }
         None
+    }
+
+    /// 終了した (または kill した) 子のプロセスが消える (ハンドルが signaled になる) まで最大 `limit` 待つ。
+    fn wait_gone(&self, limit: Duration) {
+        #[cfg(windows)]
+        if let Some(h) = self.child.as_raw_handle() {
+            // SAFETY: `child` が持つ、生きているプロセスのハンドル
+            #[allow(unsafe_code)]
+            unsafe {
+                windows_sys::Win32::System::Threading::WaitForSingleObject(
+                    h,
+                    u32::try_from(limit.as_millis()).unwrap_or(u32::MAX),
+                )
+            };
+        }
+        #[cfg(not(windows))]
+        let _ = limit;
     }
 
     /// `a` を 1 つ送り、画面に現れるまでの時間。
@@ -219,6 +240,8 @@ impl Term {
 impl Drop for Term {
     fn drop(&mut self) {
         let _ = self.child.kill();
+        // 次の起動が、この子の後始末と重ならないようにする (`wait_exit` の説明)
+        self.wait_gone(WAIT);
         let _ = std::fs::remove_dir_all(&self.state);
     }
 }
