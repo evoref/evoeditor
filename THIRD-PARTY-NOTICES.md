@@ -99,7 +99,7 @@ limitations under the License.
 
 利用している crate:
 
-- encoding_rs 0.8.42 (https://github.com/hsivonen/encoding_rs)
+- encoding_rs 0.8.44 (https://github.com/hsivonen/encoding_rs)
 
 ```text
 // Copyright © WHATWG (Apple, Google, Mozilla, Microsoft).
@@ -163,7 +163,7 @@ pub(crate) static GB18030_2022_OVERRIDE_BYTES: [[u8; 2]; 18] = [
 
 利用している crate:
 
-- encoding_rs 0.8.42 (https://github.com/hsivonen/encoding_rs)
+- encoding_rs 0.8.44 (https://github.com/hsivonen/encoding_rs)
 
 ```text
 Copyright © WHATWG (Apple, Google, Mozilla, Microsoft).
@@ -410,7 +410,7 @@ DEALINGS IN THE SOFTWARE.
 
 - heck 0.5.0 (https://github.com/withoutboats/heck)
 - unicode-segmentation 1.13.3 (https://github.com/unicode-rs/unicode-segmentation)
-- unicode-width 0.2.2 (https://github.com/unicode-rs/unicode-width)
+- unicode-width 0.2.3 (https://github.com/unicode-rs/unicode-width)
 
 ```text
 Copyright (c) 2015 The Rust Project Developers
@@ -824,7 +824,7 @@ DEALINGS IN THE SOFTWARE.
 利用している crate:
 
 - chardetng 1.0.0 (https://github.com/hsivonen/chardetng)
-- encoding_rs 0.8.42 (https://github.com/hsivonen/encoding_rs)
+- encoding_rs 0.8.44 (https://github.com/hsivonen/encoding_rs)
 - multiversion_no_op 1.0.0 (https://github.com/hsivonen/multiversion_no_op)
 
 ```text
