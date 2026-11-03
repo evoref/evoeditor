@@ -1,0 +1,158 @@
+{
+  "commit": "ced9f04",
+  "env": "ENV-W1",
+  "id": "BM-106",
+  "quick": false,
+  "results": [
+    {
+      "case": "ascii",
+      "id": "BM-106",
+      "max_ms": 33.29,
+      "n": 100,
+      "op": "open",
+      "p50_ms": 30.01,
+      "p99_ms": 31.71,
+      "quick": false
+    },
+    {
+      "case": "ascii",
+      "id": "BM-106",
+      "max_ms": 0.31,
+      "n": 200,
+      "op": "end",
+      "p50_ms": 0.15,
+      "p99_ms": 0.27,
+      "quick": false
+    },
+    {
+      "case": "ascii",
+      "id": "BM-106",
+      "max_ms": 0.08,
+      "n": 200,
+      "op": "hscroll",
+      "p50_ms": 0.04,
+      "p99_ms": 0.07,
+      "quick": false
+    },
+    {
+      "case": "ascii",
+      "id": "BM-106",
+      "max_ms": 0.1,
+      "n": 200,
+      "op": "vscroll",
+      "p50_ms": 0.04,
+      "p99_ms": 0.06,
+      "quick": false
+    },
+    {
+      "case": "ascii",
+      "id": "BM-106",
+      "max_ms": 24.27,
+      "n": 200,
+      "op": "insert_mid",
+      "p50_ms": 16.75,
+      "p99_ms": 21.63,
+      "quick": false
+    },
+    {
+      "case": "japanese",
+      "id": "BM-106",
+      "max_ms": 35.48,
+      "n": 100,
+      "op": "open",
+      "p50_ms": 27.89,
+      "p99_ms": 34.04,
+      "quick": false
+    },
+    {
+      "case": "japanese",
+      "id": "BM-106",
+      "max_ms": 0.23,
+      "n": 200,
+      "op": "end",
+      "p50_ms": 0.11,
+      "p99_ms": 0.22,
+      "quick": false
+    },
+    {
+      "case": "japanese",
+      "id": "BM-106",
+      "max_ms": 0.12,
+      "n": 200,
+      "op": "hscroll",
+      "p50_ms": 0.05,
+      "p99_ms": 0.1,
+      "quick": false
+    },
+    {
+      "case": "japanese",
+      "id": "BM-106",
+      "max_ms": 0.25,
+      "n": 200,
+      "op": "vscroll",
+      "p50_ms": 0.05,
+      "p99_ms": 0.22,
+      "quick": false
+    },
+    {
+      "case": "japanese",
+      "id": "BM-106",
+      "max_ms": 17.87,
+      "n": 200,
+      "op": "insert_mid",
+      "p50_ms": 11.68,
+      "p99_ms": 17.62,
+      "quick": false
+    },
+    {
+      "case": "emoji",
+      "id": "BM-106",
+      "max_ms": 33.04,
+      "n": 100,
+      "op": "open",
+      "p50_ms": 27.29,
+      "p99_ms": 33.03,
+      "quick": false
+    },
+    {
+      "case": "emoji",
+      "id": "BM-106",
+      "max_ms": 0.39,
+      "n": 200,
+      "op": "end",
+      "p50_ms": 0.12,
+      "p99_ms": 0.18,
+      "quick": false
+    },
+    {
+      "case": "emoji",
+      "id": "BM-106",
+      "max_ms": 0.08,
+      "n": 200,
+      "op": "hscroll",
+      "p50_ms": 0.05,
+      "p99_ms": 0.07,
+      "quick": false
+    },
+    {
+      "case": "emoji",
+      "id": "BM-106",
+      "max_ms": 0.07,
+      "n": 200,
+      "op": "vscroll",
+      "p50_ms": 0.05,
+      "p99_ms": 0.06,
+      "quick": false
+    },
+    {
+      "case": "emoji",
+      "id": "BM-106",
+      "max_ms": 21.38,
+      "n": 200,
+      "op": "insert_mid",
+      "p50_ms": 12.66,
+      "p99_ms": 14.86,
+      "quick": false
+    }
+  ]
+}
