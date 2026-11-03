@@ -18,7 +18,7 @@ docs/09 §8.2 の「リリースのチェックリスト」(v0.2 の判定の表
 | ゲート | 条件の正本 | 判定 | 根拠 | 確認者 | 日付 |
 |---|---|---|---|---|---|
 | 要件充足 | 09 §8.2 (v0.2): 01 §5.5 の v0.2 の Must の AC が `cargo xtask trace --check` で揃い、`docs/traceability.md` に未対応が無い。v0.1 の Must は `tests/ac-checklist.toml` | 合格 | `cargo xtask trace --check`: OK (警告 0 件、判定コミット)。`docs/traceability.md` の v0.2 の Must の AC 26 件すべてに試験がある (「なし」は Should の FR-307・FR-403 だけ)。`tests/ac-checklist.toml` (v0.1 の Must): done 169 件、todo 0 件 | Claude (下書き) | 2026-11-03 |
-| 性能 | 09 §8.2。BM-1xx/2xx の Must が基準機で目標内 (p50/p99)。v0.2: CI の `perf (instr)` / `perf (time)` に劣化の警告が無い。Linux の BM は報告のみ | **不合格 (例外 1 件)** | [`docs/perf/0.2.0-rc.1/summary.md`](../../perf/0.2.0-rc.1/summary.md) (基準機 ENV-W1、判定コミット)。**BM-101b** (spawn → 最初の Frame) の p99 218.57 ms が目標 80 ms を超えた (p50 23.69 ms は目標内)。原因はログオフ検知の非表示のトップレベルウィンドウで、前の回の終了の直後に起動したときだけ約 0.2 秒遅れる (切り分けは summary.md の所見)。**PO 判断 (2026-11-03): rc.1 は例外として続け、v0.2.0 の前に直して測り直す**。BM-103b-clip100 は測り直しで合格 (所見)。ほかの判定の行はすべて合格。CI の perf: 版上げの PR #318 で `perf (instr)` / `perf (time)` 成功 (<https://github.com/evoref/evoeditor/actions/runs/41567479053>)。BM-104p はベンチの手順だけを直して測った (所見) | Claude (下書き)、PO の判断 | 2026-11-03 |
+| 性能 | 09 §8.2。BM-1xx/2xx の Must が基準機で目標内 (p50/p99)。v0.2: CI の `perf (instr)` / `perf (time)` に劣化の警告が無い。Linux の BM は報告のみ | **不合格 (例外 1 件)** | [`docs/perf/0.2.0-rc.1/summary.md`](../../perf/0.2.0-rc.1/summary.md) (基準機 ENV-W1、判定コミット)。**BM-101b** (spawn → 最初の Frame) の p99 218.57 ms が目標 80 ms を超えた (p50 23.69 ms は目標内)。原因は製品ではなく計測の仕方 (exFAT の上の exe の終了の後始末と、次の起動が重なっていた。2026-11-04 に訂正。判定の日の「ログオフ検知の非表示のウィンドウが原因」は誤り。summary.md の所見)。**PO 判断 (2026-11-03): rc.1 は例外として続け、v0.2.0 の前に直して測り直す**。BM-103b-clip100 は測り直しで合格 (所見)。ほかの判定の行はすべて合格。CI の perf: 版上げの PR #318 で `perf (instr)` / `perf (time)` 成功 (<https://github.com/evoref/evoeditor/actions/runs/41567479053>)。BM-104p はベンチの手順だけを直して測った (所見) | Claude (下書き)、PO の判断 | 2026-11-03 |
 | 互換 (Windows) | 09 §8.2。Windows Terminal と conhost で手動シナリオ (開く・日本語入力 (Microsoft IME・Google 日本語入力)・検索・保存・終了) | 合格 | [`windows-terminal.md`](windows-terminal.md)・[`windows-conhost.md`](windows-conhost.md): 公開した zip (`4e1975fa461b`) で PO が確認し、手動の項目はすべて OK | Claude (下書き)、PO の報告 | 2026-11-03 |
 | 互換 (Linux、v0.2 から) | 09 §8.2 の v0.2 の表。リリース候補の tar.gz で WSL2 の Windows Terminal と tmux の受入 | 合格 | [`linux-wsl.md`](linux-wsl.md): 公開した tar.gz (`0b9961fe586b`) で `accept-linux --archive` が 26 項目すべて ○、手の項目は PO の確認ですべて OK。C2 の △ は既知の制約 (README と 05 §9.4) | Claude (下書き)、PO の報告 | 2026-11-03 |
 | 互換 (英語 UI、v0.2 から) | `cargo xtask i18n` が通り、`--locale en` で日本語が残らない | 合格 | 判定コミットの CI の `i18n` ジョブ (<https://github.com/evoref/evoeditor/actions/runs/41569572044>)。`--locale en` の一巡は [`acceptance.md`](acceptance.md) の「英語 UI」 | Claude | 2026-11-03 |
@@ -38,7 +38,7 @@ docs/09 §8.2 の「リリースのチェックリスト」(v0.2 の判定の表
 
 ## 所見・例外
 
-- **性能 (BM-101b)**: 上の行と [`summary.md`](../../perf/0.2.0-rc.1/summary.md) の所見のとおり。v0.2.0 の前に `fix/` の PR で直し、基準機で測り直す。
+- **性能 (BM-101b)**: 上の行と [`summary.md`](../../perf/0.2.0-rc.1/summary.md) の所見のとおり。ベンチを直し (#326)、v0.2.0 の判定で基準機で測り直す。
 - **ベンチの手順の修正**: BM-104p は v0.2 の複数の文書に合わせてベンチだけを直して測った。ベンチの修正は判定の後に `develop` へ入れる。
 - **凍結中に止めている PR**: Dependabot の #319・#320・#321。#321 (`unicode-width` 0.2.3) は半角カナの濁点の幅が二重に数えられる (試験 `半角カナの濁点は基底に足して数える` が失敗) ので、判定の後に `eve-text` の幅の計算と一緒に直す。
 - **OQ-112**: 上の「未決事項の解消」の行のとおり。計測の結果で閾値を超えたら、v0.2.0 に glibc 版を足す (05 §17.3 の判断規則)。
