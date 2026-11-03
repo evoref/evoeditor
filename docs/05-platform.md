@@ -55,7 +55,7 @@
 | macOS | 同上 | x86_64 | `x86_64-apple-darwin` | Tier 2 (host tools。Rust 1.90 で降格) | tar.gz | v0.2 (macOS / Linux 出荷時) | Intel Mac。出荷時は **Tier B (ビルドのみ)** (CI の x86_64 macOS ランナーの減少・有料化) |
 | Linux | 任意のディストリビューション (静的リンク。カーネル 3.2 以降) | x86_64 | `x86_64-unknown-linux-musl` | Tier 2 | tar.gz | v0.2 (macOS / Linux 出荷時) | **Linux を出荷するときの配布物はこれを基本にする** (OQ-112、NFR-206)。完全静的で glibc の版に依存せず、Alpine・古い環境・コンテナでそのまま動く。アロケータは §17.3。v0.1 の CI の Linux ジョブ (ビルドとヘッドレスのテストのみ、§1.2) はこのターゲットではなくランナーのホスト (`x86_64-unknown-linux-gnu`) で行い、配布物は作らない |
 | Linux | 任意のディストリビューション (静的リンク。カーネル 4.1 以降) | aarch64 | `aarch64-unknown-linux-musl` | Tier 2 | tar.gz | v0.2 (macOS / Linux 出荷時) | Raspberry Pi 4+ (64bit OS)、AWS Graviton、Ampere |
-| Linux | glibc 2.31 以降 (Ubuntu 20.04 / Debian 11 / RHEL 9 相当) | x86_64 / aarch64 | `*-unknown-linux-gnu` | Tier 1 | tar.gz (v0.4: deb, rpm) | v0.2 以降 (条件付き) | **条件付き追加** (OQ-112): Linux を出荷するとき、musl 版が BM-104 で gnu 版比 1.5 倍以上遅い、または BM-202 が 1.3 倍以上なら同時に追加する。そうでなければ deb / rpm を作る v0.4 で追加。ビルドは §16.2 (zigbuild で glibc 2.31 に固定) |
+| Linux | glibc 2.31 以降 (Ubuntu 20.04 / Debian 11 / RHEL 9 相当) | x86_64 / aarch64 | `*-unknown-linux-gnu` | Tier 1 | tar.gz (v0.4: deb, rpm) | v0.2 以降 (条件付き) | **v0.4 で追加** (OQ-112、確定 (ユーザー回答、2026-11-04)): deb / rpm を作る v0.4 で追加する。それより前でも、musl 版が BM-104 / BM-202 の目標を超えた版では同時に追加する (§17.3)。ビルドは §16.2 (zigbuild で glibc 2.31 に固定) |
 
 - **非対応 (ビルドできれば歓迎、CI 非保証)**: FreeBSD / OpenBSD / NetBSD、illumos、Android (Termux)、32bit OS 全般、Windows 7/8.1 (Rust 1.78 以降が非対応)、Windows 10 1809 未満 (ConPTY / VT が無い)、`x86_64-pc-windows-gnu`。v0.1 の Windows 10 (1809 以降) は「非対応」ではなく「対象外 (未確認)」で、起動を拒まない (§9.1 の VT の確認に通れば動く) が、動作を保証しない。
 - **Windows 10 を対象に加えるときの確認事項 (公式には対応しないので、PO が指示したときだけ使う)**: (1) 1809〜2004 の ConPTY は代替スクリーンのスクロールバックとリサイズに不具合がある (§9.1 の ConPTY の癖)。対象にする最小の版を決め、それより前の版の扱い (既知の制約にするか、対象外にするか) を決める。(2) その時点の Windows Terminal が動く最小の Windows 10 の版を確かめる (**要確認**)。(3) S-06 / S-07 / S-08 / S-11 / S-20 と互換性マトリクス (§9.4) の Windows Terminal・conhost の行を Windows 10 の環境 (実機または VM) で確かめる。Microsoft による Windows 10 の通常のサポートは 2025-10 に終了している (LTSC と拡張セキュリティ更新を除く) ので、加えるかどうか自体をその版の着手前に決める (検証環境の確保は OQ-23 (d) と同じ扱い)。
@@ -1174,7 +1174,7 @@ v0.1 の配布ビルドは `x86_64-pc-windows-msvc` だけ。CI の Linux ジョ
 |---|---|---|
 | `*-pc-windows-msvc` (v0.1 は x86_64。aarch64 は v0.2 以降) | Visual Studio Build Tools (MSVC + Windows SDK)。`windows-sys` は純 Rust なのでそれ以上の SDK 依存なし | tree-sitter (v0.4) の C ソースは `cc` クレートが MSVC `cl.exe` でビルド。ARM64 はクロスコンパイル可 (`cl.exe` の arm64 ツールセット) |
 | `*-apple-darwin` (macOS 出荷時) | Xcode Command Line Tools。最小デプロイ `MACOSX_DEPLOYMENT_TARGET` は Rust の既定 (aarch64: 11.0、x86_64: 10.12) で十分 (NFR-401 の 3 メジャーより古い) | ユニバーサル化は `lipo -create` |
-| `*-unknown-linux-gnu` (Linux 出荷時、条件付き、OQ-112) | glibc 2.31 を保証するため **`cargo-zigbuild --target x86_64-unknown-linux-gnu.2.31`** でビルド (ホストの glibc に依存しない) | 新しいランナー (Ubuntu 24.04, glibc 2.39) で素直にビルドすると 2.31 環境で動かない。追加する場合は 09 の CI に zigbuild ジョブを足す |
+| `*-unknown-linux-gnu` (v0.4、OQ-112) | glibc 2.31 を保証するため **`cargo-zigbuild --target x86_64-unknown-linux-gnu.2.31`** でビルド (ホストの glibc に依存しない) | 新しいランナー (Ubuntu 24.04, glibc 2.39) で素直にビルドすると 2.31 環境で動かない。追加する場合は 09 の CI に zigbuild ジョブを足す |
 | `*-unknown-linux-musl` (**Linux 出荷時の配布物**、v0.2) | `musl-tools` または zigbuild。**完全静的** (`-C target-feature=+crt-static` は musl で既定)。**実装 (v0.2 の M7、2026-11-01)**: どちらも要らない (Rust の musl ターゲットが同梱する musl と crt で静的にリンクする)。生成物は static-pie (`PT_INTERP` なし、`DT_NEEDED` 0 件。`check-dist` の (4) で検査する、09 §6.2)。同梱の musl は 1.2.5 で `renameat2` の関数が無いので、上書きしない rename はシステムコール (`SYS_renameat2`) で呼ぶ (§4.3) | `getaddrinfo` 等の DNS は v1.L (reqwest) で musl 固有の制約 (nsswitch なし)。アロケータ §17.3 |
 
 ### 16.3 ビルドプロファイル
@@ -1249,7 +1249,7 @@ opt-level = 2        # 依存は最適化 (ropey/regex のデバッグビルド�
 
 ### 17.3 アロケータ
 
-既定はシステムアロケータ (02 §13.7)。v0.1 (Windows のみ) では判断は要らない。**Linux を出荷するとき (v0.2) の判断規則** を次に決めておく (OQ-112 / OQ-80): musl の malloc は遅い (ロック競合・断片化) が、Linux の配布物は musl 版を基本にするので (§1.1)、 BM-104 (大きなファイルを開く) が gnu 版比 **1.5 倍以上** 遅い、または BM-202 (開いた後のメモリ) が **1.3 倍以上** なら、アロケータを替えるのではなく **gnu 版 (zigbuild、glibc 2.31) を配布物に追加** する。C 依存のアロケータは使わない (NFR-207)。純 Rust のアロケータへの変更は未決 (v0.4)。
+既定はシステムアロケータ (02 §13.7)。v0.1 (Windows のみ) では判断は要らない。**Linux を出荷するときの判断規則** (OQ-112 / OQ-80。確定 (ユーザー回答、2026-11-04)): musl の malloc は遅い (ロック競合・断片化) が、Linux の配布物は musl 版を基本にするので (§1.1)、musl 版の BM-104 (大きなファイルを開く) または BM-202 (開いた後のメモリ) が **目標 (01 NFR-104 / NFR-202) を超えたら**、アロケータを替えるのではなく **gnu 版 (zigbuild、glibc 2.31) を配布物に追加** する。gnu 版との比は記録する (v0.2.0-rc.1 の後の計測で BM-104 は 1.30〜2.06 倍、BM-202 は 1.13 倍以下。目標の 1/4 以下だったので musl 版だけを配る、`docs/perf/0.2.0-rc.1/oq-112-musl-gnu.md`)。C 依存のアロケータは使わない (NFR-207)。純 Rust のアロケータへの変更は未決 (v0.4)。
 
 ---
 
@@ -1280,7 +1280,7 @@ evoeditor-<version>-<target>.{zip|tar.gz}
 ```
 
 - Windows (v0.1): `x86_64` の zip のみ (aarch64 は v0.2 の Tier B)。
-- Linux (v0.2、Linux 出荷時): `x86_64` / `aarch64` の `-musl` を基本にする (OQ-112)。**実装 (v0.2 の M7、2026-11-01)**: `cargo xtask dist --target <三つ組>` が `evoeditor-<版>-<三つ組>.tar.gz` を作る。内容物は zip と同じ 7 ファイルで、アーカイブの直下に置く (上の図。zip と同じくトップのディレクトリを作らない)。`evoeditor` は 0755、他は 0644、所有者は 0/0、時刻は 0 に固定し、GNU tar と `gzip -n` で同じ入力から同じバイト列にする。テキストは LF に揃える。gnu 版 (glibc 2.31、zigbuild) は OQ-112 の条件が成立したとき、または deb / rpm を作る v0.4 に追加し、deb / rpm は gnu 版から生成する。
+- Linux (v0.2、Linux 出荷時): `x86_64` / `aarch64` の `-musl` を基本にする (OQ-112)。**実装 (v0.2 の M7、2026-11-01)**: `cargo xtask dist --target <三つ組>` が `evoeditor-<版>-<三つ組>.tar.gz` を作る。内容物は zip と同じ 7 ファイルで、アーカイブの直下に置く (上の図。zip と同じくトップのディレクトリを作らない)。`evoeditor` は 0755、他は 0644、所有者は 0/0、時刻は 0 に固定し、GNU tar と `gzip -n` で同じ入力から同じバイト列にする。テキストは LF に揃える。gnu 版 (glibc 2.31、zigbuild) は deb / rpm を作る v0.4 に追加し (musl 版が目標を超えた版ではその版から、OQ-112)、deb / rpm は gnu 版から生成する。
 - macOS (v0.2、macOS 出荷時): `aarch64` のアーカイブだけを出す (ad-hoc 署名。Developer ID 署名と公証の時期は未決、OQ-76)。`x86_64` は Tier B (ビルドのみ) でアーカイブを出さない (§18.1。ユニバーサルは §19)。
 - Windows: zip のみ (MSI/MSIX は不要。winget は portable 型で zip を扱える)。実行ファイルは `evoeditor.exe`。
 - パッケージ名 (v0.4 以降のチャネル): Homebrew / Scoop は `evoeditor`、AUR は `evoeditor` と `evoeditor-bin`、deb / rpm は `evoeditor`、winget の識別子は `<発行者>.evoeditor` (OQ-01)。執筆時点 (2026-10) でこれらの名前は各チャネルで未使用 (調査は 10 の OQ-01)。
@@ -1440,12 +1440,12 @@ v0.x の間は **stable 1 本** (ADR-0040 決定 6)。プレリリース (`-alph
 | OQ-77 | `FsyncLevel` の既定を全環境 Full にするか、`FsKind::Network` では FileOnly にするか | Full (P1 原則。遅ければ設定 `file.fsync` で緩める) | 裁量 / G1c (v0.1 の M3 中。S-10 は v0.2 なので待たない) |
 | OQ-78 | ファイル監視不可 FS でのポーリングを設定で許可するか (NFR-204 との整合) | 明示設定時のみ許可、最小 2 s | 裁量 / v0.4 着手前 |
 | OQ-79 | X11 クリップボード所有権の終了時待機 (既定 200 ms) | v0.1 は外部コマンド (`xclip` / `xsel` がデーモン化して保持) に委ねるので **不要**。arboard を退路として採った場合 (OQ-111) のみ 200 ms、設定可 | 裁量 / arboard 採用時 |
-| OQ-80 | musl 版でのアロケータ (`mimalloc` は C 依存) | システム既定のまま。遅ければアロケータではなく gnu 版を追加 (§17.3、OQ-112 の判断規則) | 裁量 / v0.2 着手前 (Linux 出荷前) |
+| OQ-80 | musl 版でのアロケータ (`mimalloc` は C 依存) | システム既定のまま。目標を超えたらアロケータではなく gnu 版を追加 (§17.3、OQ-112 の判断規則) | 裁量 / v0.2 着手前 (Linux 出荷前) |
 | OQ-34 | 一時ファイル (`$TMPDIR` 直下、`crontab` / `kubectl edit` 等) の in-place フォールバック規則 | **確定 (ユーザー回答)**: §4.4 の判定規則 (正準化後の一時ディレクトリの **直下** だけを対象にし、ファイル名をパターン表 `file.in_place_patterns` と照合)。確認なし | 確定 (ユーザー回答) |
 | S-11 | Windows の終了イベントでの退避 | v0.1 は CTRL_CLOSE・パニック・メインがブロックした状態の CTRL_CLOSE の 3 経路で退避の到達を確かめる (§11.2)。CTRL_CLOSE の猶予 (約 5 秒) が利用者設定に依らない固定値であることと、§11.2 の時系列表 (受信から ≤ 4.5 s で `TRUE`) で間に合うことも確かめる。ログオフ / シャットダウンは隠しウィンドウ (`WM_QUERYENDSESSION` / `WM_ENDSESSION`) で受ける方式を v0.2 で実装し、v0.1 は「Windows のログオフ・シャットダウン時は未保存の内容が退避されないことがある」を既知の制約 (01 §4.6・リリースノート) にする (確定 (ユーザー回答))。Unix のシグナル分は v0.2 (macOS / Linux 出荷時) | スパイク / G1c (v0.1 M3。08 §3 S-11) |
 | S-09 | Windows の置換 API (`SetFileInformationByHandle(FileRenameInfoEx, POSIX_SEMANTICS)` を採るか) | 未決。ACL / ADS / 属性保持と中間状態の有無で判断 (§4.2)。それまでは `ReplaceFileW` (退避名を必須で渡す) + §4.6 の復旧で、`ReplaceFileW` が失敗して T が無傷なら `AtomicUnsupported` → 確認 → in-place (`MoveFileExW` で置き換えない。確定 (ユーザー回答))。kill テストの切断点は 09 §3.6 (6) (原子的保存の 4 点・置換の途中・in-place の `kill_after_inflight_flag` / `kill_mid_backup` / `kill_after_backup` / `kill_after_inplace_alloc` / `kill_mid_inplace_write`、§4.4 手順 10)。同じスパイクで XXH3-64 (§5.5) の速度だけを計測する。`cargo install --git` の経路でリポジトリの `.cargo/config.toml` (`+crt-static`) が効くかも同じ検証環境で確かめる (§16.4) | スパイク / G1c (v0.1 M3。08 §3 S-09) |
 | OQ-111 | クリップボードの実装方式 (v0.1) | **確定 (ユーザー回答)**: OS 付属の手段で実装し arboard を使わない。**v0.1 は Windows = `windows-sys` の Win32 API 直接 (+ 内部レジスタ) のみ**。OSC 52 と、macOS = `/usr/bin/pbcopy` / `pbpaste`、Linux = `/usr/bin` 配下の `wl-copy` / `wl-paste` / `xclip` / `xsel` の検出、WSL の `command` provider は v0.2 (macOS / Linux 出荷時。§8.2 / §8.3)。S-14 (v0.1 は Win32 のみ) で不成立なら arboard が退路 | 確定 (ユーザー回答) |
-| OQ-112 | Linux の配布物 | v0.1 は Linux を出荷しない。Linux 出荷時 (v0.2) は **musl 静的を基本** (§1.1 / §18)。BM-104 が gnu 版比 1.5 倍以上遅い、または BM-202 が 1.3 倍以上なら gnu 版 (zigbuild 2.31) を追加 (§17.3) | PO / v0.2 着手前 (Linux 出荷前) |
+| OQ-112 | Linux の配布物 | **確定 (ユーザー回答、2026-11-04)**: v0.2 は **musl 静的版だけ** (§1.1 / §18)。gnu 版 (zigbuild 2.31) は deb / rpm の v0.4 で追加。musl 版が BM-104 / BM-202 の目標を超えた版では同時に追加 (§17.3) | PO / 確定 |
 | OQ-140 | 管理モードのローカル LLM サーバ (§13.7) のポート取得と待受 | Unix ドメインソケット / 名前付きパイプが使えるサーバではそれを使い、不可なら evoeditor が `127.0.0.1:0` を bind して空きポートを選びサーバに渡す (競合の窓は 1 回の再試行で吸収)。対応状況は S-22 (h) / S-23 で確認 | スパイク (S-23) / v1.L-b 着手前 |
 | OQ-163 | `state_dir` を使えないときの緊急退避先 | v0.1 (Windows) は `%TEMP%\eve-recovery-<SID>\` (所有者のみの DACL)、v0.2 の Unix は `$TMPDIR/eve-recovery-<uid>/` (0700) に退避し、終了時表示でそのパスを示す (02 §11.2.1。OS 別の実体は §7.5) | 提案中 (裁量) / G1c |
 | OQ-164 | 公開前の文書のうち本書の分 (インストール手順、アンインストール手順、minisign 鍵の公開場所と検証手順、脆弱性の通知と `SECURITY.md` の更新方法の案内) | §18.2a / §18.8 / §18.9 / §18.14 の案 | 提案中 (裁量) / `SECURITY.md` の最小の版は最初の push の前、インストール・アンインストールの手順と minisign の検証手順と `SECURITY.md` の更新方法の案内は v0.1 リリース前 |
