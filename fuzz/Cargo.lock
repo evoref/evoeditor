@@ -82,15 +82,25 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "00d174d5400e5e8fd687ad1049e2f578285fa914201b1af7e8b112a4546bd826"
 
 [[package]]
+name = "errno"
+version = "0.3.14"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
+dependencies = [
+ "libc",
+ "windows-sys",
+]
+
+[[package]]
 name = "eve-config"
-version = "0.1.0"
+version = "0.2.0-rc.1"
 dependencies = [
  "toml",
 ]
 
 [[package]]
 name = "eve-core"
-version = "0.1.0"
+version = "0.2.0-rc.1"
 dependencies = [
  "eve-config",
  "eve-encoding",
@@ -103,7 +113,7 @@ dependencies = [
 
 [[package]]
 name = "eve-encoding"
-version = "0.1.0"
+version = "0.2.0-rc.1"
 dependencies = [
  "chardetng",
  "encoding_rs",
@@ -120,7 +130,7 @@ dependencies = [
 
 [[package]]
 name = "eve-host"
-version = "0.1.0"
+version = "0.2.0-rc.1"
 dependencies = [
  "arc-swap",
  "eve-config",
@@ -131,17 +141,19 @@ dependencies = [
 
 [[package]]
 name = "eve-platform"
-version = "0.1.0"
+version = "0.2.0-rc.1"
 dependencies = [
  "eve-core",
  "eve-text",
+ "libc",
+ "signal-hook",
  "windows-sys",
  "xxhash-rust",
 ]
 
 [[package]]
 name = "eve-testkit"
-version = "0.1.0"
+version = "0.2.0-rc.1"
 dependencies = [
  "eve-config",
  "eve-core",
@@ -155,7 +167,7 @@ dependencies = [
 
 [[package]]
 name = "eve-text"
-version = "0.1.0"
+version = "0.2.0-rc.1"
 dependencies = [
  "ropey",
  "unicode-segmentation",
@@ -164,7 +176,7 @@ dependencies = [
 
 [[package]]
 name = "eve-view"
-version = "0.1.0"
+version = "0.2.0-rc.1"
 
 [[package]]
 name = "find-msvc-tools"
@@ -356,6 +368,26 @@ name = "shlex"
 version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f8fadd59c855ef2080decdef8ff161eb6661b86933c9d82e5ba29dc602a55aba"
+
+[[package]]
+name = "signal-hook"
+version = "0.3.18"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d881a16cf4426aa584979d30bd82cb33429027e42122b169753d6ef1085ed6e2"
+dependencies = [
+ "libc",
+ "signal-hook-registry",
+]
+
+[[package]]
+name = "signal-hook-registry"
+version = "1.4.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c4db69cba1110affc0e9f7bcd48bbf87b3f4fc7c61fc9155afd4c469eb3d6c1b"
+dependencies = [
+ "errno",
+ "libc",
+]
 
 [[package]]
 name = "simdutf8"
