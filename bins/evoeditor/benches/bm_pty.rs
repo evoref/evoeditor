@@ -615,6 +615,9 @@ fn open_progress(dir: &Path, a: &Path, b: &Path, runs: usize, warmup: usize) -> 
             thread::sleep(Duration::from_millis(5));
         }
         thread::sleep(Duration::from_millis(150));
+        // 開いている文書を開き直すと切り替えになり読み込まない (複数の文書、v0.2)。毎回閉じて次を読み込ませる
+        t.send(b"\x17"); // Ctrl+W
+        thread::sleep(Duration::from_millis(150));
     }
     t.send(b"\x11");
     assert_eq!(t.wait_exit(WAIT), Some(0), "正常に終了しません");
