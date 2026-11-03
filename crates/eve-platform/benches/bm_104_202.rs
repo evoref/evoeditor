@@ -1,20 +1,23 @@
 //! BM-104 / BM-202: サイズ別オープンの時間とメモリ (docs/09-testing-quality.md §5.2、01 NFR-104 / NFR-202、S-02 の最終判定の材料)。
-//! 実ファイル (`WinFs`) を core の読込ジョブ (`run_job`) で開く。測るのは (2) 「開く」→ 読込完了 (`Ready` 相当) の区間で、
-//! UTF-8 の 1 MB / 10 MB / 100 MB と Shift_JIS の 100 MB。メモリは読込完了から 1 秒アイドルの後の物理メモリ (ワーキングセット) の
-//! 増分を、基準 (デコード後の UTF-8 サイズ × 1.5 + 15 MB、許容 ×2.5) と並べて示す。
+//! 実ファイル (Windows は `WinFs`、Unix は `UnixFs`) を core の読込ジョブ (`run_job`) で開く。測るのは (2) 「開く」→ 読込完了
+//! (`Ready` 相当) の区間で、UTF-8 の 1 MB / 10 MB / 100 MB と Shift_JIS の 100 MB。メモリは読込完了から 1 秒アイドルの後の
+//! 物理メモリ (Windows はワーキングセット、Linux は VmRSS。01 NFR-201) の増分を、基準 (デコード後の UTF-8 サイズ × 1.5 + 15 MB、
+//! 許容 ×2.5) と並べて示す。
 //!
 //! **診断と記録用**: 判定は基準機 (内蔵 NVMe、09 §5.1 / OQ-23) の値で行う。ここは開発機・CI ランナーの値で、目安にしかならない。
 //! (1) の「開く → 最初の進捗の Frame」は進捗表示の Frame がまだ無いので測らない。
+//! Linux の musl 版と gnu 版の比較 (OQ-112、05 §17.3) は、同じ機械で `--target` だけを替えて測る。
 //!
 //! ```text
 //! cargo bench -p eve-platform --bench bm_104_202
 //! cargo bench -p eve-platform --bench bm_104_202 -- --quick   # 回数を減らす動作確認 (記録には使わない)
 //! cargo bench -p eve-platform --bench bm_104_202 -- --json    # 1 行ずつの JSON (xtask bench が集める)
+//! cargo bench -p eve-platform --bench bm_104_202 --target x86_64-unknown-linux-musl   # OQ-112 の musl 版
 //! ```
 
 #![allow(clippy::print_stdout, clippy::print_stderr)]
 
-#[cfg(windows)]
+#[cfg(any(windows, unix))]
 mod imp {
     use std::path::{Path, PathBuf};
     use std::sync::Arc;
@@ -24,8 +27,7 @@ mod imp {
         CancelToken, Clock, FsPath, JobKind, JobPorts, JobRequest, JobResult, OpenOptions, Tick,
         run_job,
     };
-    use eve_platform::dirs::{Dirs, WinPaths};
-    use eve_platform::fs::WinFs;
+    use eve_platform::dirs::Dirs;
     use eve_platform::path::PathCtx;
     use eve_view::{JobId, Revision};
 
@@ -37,7 +39,10 @@ mod imp {
         }
     }
 
+    #[cfg(windows)]
     fn ports() -> JobPorts {
+        use eve_platform::dirs::WinPaths;
+        use eve_platform::fs::WinFs;
         JobPorts {
             fs: Arc::new(WinFs::default()),
             clock: Arc::new(FixedClock),
@@ -47,6 +52,24 @@ mod imp {
                     cwd: "C:\\".to_owned(),
                     home: None,
                 },
+            )),
+        }
+    }
+
+    #[cfg(unix)]
+    fn ports() -> JobPorts {
+        use eve_platform::dirs::UnixPaths;
+        use eve_platform::unix_fs::UnixFs;
+        JobPorts {
+            fs: Arc::new(UnixFs::default()),
+            clock: Arc::new(FixedClock),
+            paths: Arc::new(UnixPaths::new(
+                Dirs::resolve(&|_| None),
+                PathCtx {
+                    cwd: "/".to_owned(),
+                    home: None,
+                },
+                None,
             )),
         }
     }
@@ -260,8 +283,8 @@ mod imp {
     }
 }
 
-// Windows 以外では何もしない (実ファイルの `WinFs` は Windows 専用)
+// Windows と Unix 以外では何もしない (実ファイルの Fs が無い)
 fn main() {
-    #[cfg(windows)]
+    #[cfg(any(windows, unix))]
     imp::main();
 }
