@@ -264,19 +264,26 @@ fn base_width(g: &str, rest: &str, cfg: &WidthConfig) -> usize {
             EmojiWidth::Two | EmojiWidth::Auto => 2,
         };
     }
-    let w = if cfg.ambiguous_wide {
-        UnicodeWidthStr::width_cjk(rest)
+    // 半角カナの濁点・半濁点は、書記素では基底に結合するが、端末は別に 1 セル進めて描く (03 §13.2、S-06)。
+    // unicode-width は版によって幅 0 にも 1 にも数えるので、除いた残りを測ってから 1 ずつ足す
+    let is_voiced = |c: char| matches!(c, '\u{FF9E}' | '\u{FF9F}');
+    let voiced = rest.chars().filter(|&c| is_voiced(c)).count();
+    let stripped;
+    let measured = if voiced == 0 {
+        rest
     } else {
-        UnicodeWidthStr::width(rest)
+        stripped = rest.chars().filter(|&c| !is_voiced(c)).collect::<String>();
+        stripped.as_str()
+    };
+    let w = if cfg.ambiguous_wide {
+        UnicodeWidthStr::width_cjk(measured)
+    } else {
+        UnicodeWidthStr::width(measured)
     };
     if w == 0 && is_combining(first) {
         return 1; // 孤立結合文字: ◌ + 結合
     }
-    // 半角カナの濁点・半濁点は、書記素では基底に結合するが、端末は別に 1 セル進めて描く (03 §13.2、S-06)
-    w + rest
-        .chars()
-        .filter(|c| matches!(c, '\u{FF9E}' | '\u{FF9F}'))
-        .count()
+    w + voiced
 }
 
 /// 1 行の文字列の表示幅 (セル数)。タブは次のタブストップまで進める。改行は含めない行の内容を渡す。
@@ -436,6 +443,8 @@ mod tests {
     fn 半角カナの濁点は基底に足して数える() {
         assert_eq!(w("ｶﾞ"), 2);
         assert_eq!(w("ﾊﾟ"), 2);
+        assert_eq!(w("ﾞ"), 1, "基底の無い濁点");
+        assert_eq!(w("あﾞ"), 3, "全角の基底");
         assert_eq!(w("ｶ"), 1);
         assert!(is_width_risky("ｶﾞ"));
         assert!(!is_width_risky("ｶ"));
