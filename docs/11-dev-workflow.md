@@ -68,9 +68,9 @@ v0.1 は最小核 (案 L) で、開発運用も手書きの最小限にする (�
 | トレーサビリティ (§3.3) | AC のチェックリスト `tests/ac-checklist.toml` (人が更新、`xtask check` が軽い検査) + PR テンプレートのチェックリスト | `xtask trace` (v0.2。M10 で入れた。範囲は 09 §8.3 の「M10 の実装」) |
 | 担当の割当 (§2.3) | タスク (§4.2) の「触ってよい範囲」で示す | `docs/ownership.toml`・`xtask check-docs` (v0.2。M10 で入れた) |
 | シナリオ (§6) | Rust の `Harness` (語彙を DSL と同じにする) | TOML のシナリオ DSL と `xtask scenario run` (v0.2) |
-| CI (§8.1) | PR / main = Windows x86_64 (全テスト・ConPTY の E2E 10 シナリオ) + Linux x86_64 (Linux CI の対象 crate = core 系 + `eve-host` + `eve-testkit` のビルドとヘッドレスのテスト、09 §6.4)。夜間の fuzz は `fuzz_decode` のみ | macOS の CI・Tier B・iai・soak・補助ジョブ・area-check (v0.2)。Frame JSON ゴールデン・契約変更要求の起票は TUI 完成後 |
+| CI (§8.1) | PR / main = Windows x86_64 (全テスト・ConPTY の E2E 10 シナリオ) + Linux x86_64 (Linux CI の対象 crate = core 系 + `eve-host` + `eve-testkit` のビルドとヘッドレスのテスト、09 §6.4)。夜間の fuzz は `fuzz_decode` のみ | macOS の CI (1.0 の後、ADR-0045)・Tier B・iai・soak・補助ジョブ・area-check (v0.2)。Frame JSON ゴールデン・契約変更要求の起票は TUI 完成後 |
 | UI 文言 (§8.2) | `ja` のみ。`ja` の文言の人手レビューとキー集合の検査 (`ja` とコードの MessageKey) | 英語 UI を同梱する v0.2 で訳の運用を加える (確定 (ユーザー回答)、OQ-21) |
-| 出荷と開発環境 | Windows のみ出荷 (Windows 11 の Windows Terminal と conhost。Windows 10 は公式には対応しない)。開発環境は Windows | macOS / Linux の出荷 (v0.2、確定 (ユーザー回答)。macOS の CI ジョブと Unix の実装を加える) |
+| 出荷と開発環境 | Windows のみ出荷 (Windows 11 の Windows Terminal と conhost。Windows 10 は公式には対応しない)。開発環境は Windows | Linux の出荷 (v0.2、確定 (ユーザー回答)。Unix の実装を加える。macOS の出荷と CI ジョブは 1.0 の後、ADR-0045) |
 
 ---
 
@@ -521,7 +521,7 @@ $ cargo run -p evoeditor --features headless -- --headless --rpc stdio --fake-po
 | 車線 | 内容 | 時間目標 | いつ |
 |---|---|---|---|
 | **速い車線** `cargo xtask check` | **v0.1 の中身 (09 §6.1・08 §2.2 と同じ。この 3 か所を同時に直す)**: (1) fmt、(2) clippy、(3) `nextest -p eve-text -p eve-encoding -p eve-core`、(4) `check-deps`、(5) `tests/ac-checklist.toml` の軽い検査 (§3.3)、(6) 変更した crate の `Harness` のシナリオテスト。v0.2 からは (5) の後に `spec-index --check`・`check-docs`・`trace --check` (M10 で入れた) と、変更 crate のラベルで選ぶ DSL のシナリオ | 2 分 | ローカル (エージェントの各反復。開発環境は Windows) と PR の最初のジョブ (`ci.yml` の `check` ジョブ、Windows、09 §6.2) |
-| **フル車線** `ci.yml` | 09 §6.2 のジョブ。v0.1 は PR / main とも **Windows x86_64** (全テスト・ConPTY の E2E 10 シナリオ) + **Linux x86_64** (Linux CI の対象 crate (core 系 + `eve-host` + `eve-testkit`) のビルドとヘッドレスのテスト。OS 非依存を守る)、依存 (`cargo deny`・`check-deps`)・`i18n` (`ja` とコードの MessageKey のキー集合・ヒント幅)・`check-themes`・`docs-tables` (docs の表と実装の突合、§8.5)・`dco`・`gitleaks`・`pr-source` (PR の head ブランチの検査)。`docs.yml` (リンク検査。生成リファレンスの最新性は v0.3 から) も同じ宛先で走る。パスのフィルタを付けず、コードだけ・docs だけの PR でも全ジョブを回す。**v0.2**: macOS の CI、Tier B のビルド、補助ジョブ (msrv・min-features・cargo-hack・udeps・outdated・docs-rs・geiger・`area-check`)。Frame JSON ゴールデンは TUI 完成後 | 15 分 | PR / main |
+| **フル車線** `ci.yml` | 09 §6.2 のジョブ。v0.1 は PR / main とも **Windows x86_64** (全テスト・ConPTY の E2E 10 シナリオ) + **Linux x86_64** (Linux CI の対象 crate (core 系 + `eve-host` + `eve-testkit`) のビルドとヘッドレスのテスト。OS 非依存を守る)、依存 (`cargo deny`・`check-deps`)・`i18n` (`ja` とコードの MessageKey のキー集合・ヒント幅)・`check-themes`・`docs-tables` (docs の表と実装の突合、§8.5)・`dco`・`gitleaks`・`pr-source` (PR の head ブランチの検査)。`docs.yml` (リンク検査。生成リファレンスの最新性は v0.3 から) も同じ宛先で走る。パスのフィルタを付けず、コードだけ・docs だけの PR でも全ジョブを回す。**v0.2**: macOS の CI (1.0 の後、ADR-0045)、Tier B のビルド、補助ジョブ (msrv・min-features・cargo-hack・udeps・outdated・docs-rs・geiger・`area-check`)。Frame JSON ゴールデンは TUI 完成後 | 15 分 | PR / main |
 | 夜間 | 09 §6.3。v0.1 は fuzz (`fuzz_decode` のみ。M3 で導入。クラッシュ入力は `age` で暗号化した artifact)、proptest 拡張、`cargo audit` (`fuzz/` を含む)、カバレッジ報告。対象のブランチは変数 `NIGHTLY_REF` (既定 `develop`。凍結中も `develop` のまま、09 §6.1)。1 時間の soak・`docs-rs`・`fuzz_editor`・クラッシュ一貫性は v0.2 | — | スケジュール |
 | ベンチ | 09 §5。v0.1 は判定に使うベンチ (09 §5.2 の「v0.1 で判定に使うベンチ」: NFR-101〜106 / 201〜204 と BM-103b の負荷下の判定) をリリース前に基準機 (Windows) で測る。`bench.yml` は値の記録 (BM-101a・BM-103a・BM-205。v0.1 は Actions の artifact に置き、`gh-pages` は v0.2) で、命令数と A/B の CI は v0.2 (M10 で `perf.yml` を入れた。09 §5.4)。基準機での計測の手順と記録の形式は §1 の `docs/perf/` の行 | 20 分 | `bench.yml` は手動 (v0.2 から `develop` への push でも)。トリガの正本は 09 §6.1 |
 
@@ -650,7 +650,7 @@ Closes #123
 ### 9.3 CHANGELOG とリリース
 
 - `CHANGELOG.md` は Keep a Changelog 形式、PR ごとに Unreleased へ 1 行 (09 §8.1)。ユーザー可視でない変更は `changelog: none`。
-- 版・タグ・公開手順は 09 §9 が正本。本書は「版の名前は 01 §1.3 (v0.1 / v0.2 / v0.3 / v0.4 / v1.0 / v1.L (v1.L-a / v1.L-b) / v1.X)」を使うことだけを定める。
+- 版・タグ・公開手順は 09 §9 が正本。本書は「版の名前は 01 §1.3 (v0.1 / v0.2 / v0.3 / v0.4 / v0.5 / v0.6 / v1.0 / v1.L (v1.L-a / v1.L-b) / v1.X)」を使うことだけを定める。
 - 版上げと CHANGELOG の確定は、`develop` に対するリリース PR (`chore/…`、squash) で、**リリースゲートの判定の前に** 行う (ゲートは版上げ後の `develop` の先頭で判定する、09 §9.2 手順 2 / 3)。**v0.1 は bot を使わない**: リリース PR・昇格の PR (`develop` → `main`)・リリースの後の `main` → `develop` の取り込み PR は人間が作る (`release-plz` は v0.2 以降の候補、OQ-74。使う場合も対象のブランチは `develop`)。その後 §9.1 の流れで `develop` → `main` に入れ (パッチ版も同じ経路)、`main` のマージコミットに人間がタグを付ける。リリース PR と `main` への PR は人間が merge する。**タグの検証** (置き場所は 09 §6.1 の `release.yml` に統一する。手元の確認や `ci.yml` には置かない): `release.yml` の最初のステップで (1) `git verify-tag` (`.github/allowed_signers` に載る鍵の署名だけを許す)、(2) タグが `main` のマージコミットを指す (プレリリースのタグは `develop` の先頭)、(3) タグの版と `Cargo.toml` の版が一致する (プレリリースは `-rc.N` 等の接尾辞まで一致する。プレリリースの前に `develop` に `-rc.N` 等の版を付ける PR を入れる、09 §9.2 手順 1a)、(4) タグのコミットの内容が、リリースのチェックリストに記録したゲートの判定のコミット (版上げ後の `develop` の先頭) と一致する (差分が許可リスト `docs/compat/<version>/`・`docs/perf/<version>/`・`tests/ac-checklist.toml` だけ)、を確かめ、どれかが失敗したら以後を走らせない。タグの検証の結果は Release のノートの「検証」の節に書く (リリースのチェックリストには載せない。リポジトリには戻さない、09 §8.2)。エージェントは版上げ・タグ・publish を行わない。
 - `develop` → `main`・`main` → `develop` の PR は merge commit で取り込み、1 行目は `chore(release): v0.1.0` / `chore(release): v0.1.1` / `chore(release): merge main into develop (v0.1.0)` の形にする (§9.2 の type と scope の規則のまま)。マイルストーンの取り込み (`0.0.x` の x を上げる PR、§9.1) は作業ブランチの PR (squash) で、`chore(release): 0.0.2 (M2)` の形にする。作業ブランチの PR は squash (1 PR = 1 コミットで、`spec:` / `verifies:` フッタと `Signed-off-by:` がそのコミットに残る。§9.4)。
 - **リリースの前の文書の確認** (ADR-0040。エディタ内に更新機能を持たないため): 人間がリリースを publish する前に、(1) リリースノートの「更新の方法」(配布経路ごとの手順・その版で要る移行手順)、(2) 利用者向け README の「更新」節 (更新とダウングレード・直前の版に戻す手順。05 §18.10〜§18.12) がその版と合っているか、(3) `SECURITY.md` の更新方法の案内と、脆弱性の修正を含む版では GitHub Security Advisory の下書き (05 §18.14、OQ-164) を確認する。確認項目の正本は 09 §8.2 の「更新手順の文書」。エージェントはこれらの文書の下書きを PR で出してよい (publish は人間)。
@@ -675,7 +675,7 @@ Closes #123
 
 | # | 規則 | 補足 |
 |---|---|---|
-| XC-1 | **公開 API** = 外部の消費者が依存してよい範囲 ([12 §4.1](12-licensing-distribution.md#41-外部の消費者が依存してよい範囲): `eve-host` の `Frontend` / `Host` / `HostMsg` 公開部分、`eve-view` の境界型と `CONTRACT_VERSION`、`eve-config` の解決済み設定の型、`eve-core` の `Editor` ファサード) と、契約版、設定キー・CommandId (07)、シナリオ DSL の書式 (§6.3)。これらは **semver** で管理し、破壊的変更は `0.y` の間は `y` 上げ + 契約版の並行期間 (直近 2 版受理)、1.0 以降はメジャー上げ。範囲外の `pub` は「安定性の保証なし」と crate 文書に明記。`cargo semver-checks` で検査 (v0.1 リリースから報告、v0.4 からゲート。09 §7.1、OQ-157) | 駆動 API のクライアント・プラグイン作者も同じ API の消費者 |
+| XC-1 | **公開 API** = 外部の消費者が依存してよい範囲 ([12 §4.1](12-licensing-distribution.md#41-外部の消費者が依存してよい範囲): `eve-host` の `Frontend` / `Host` / `HostMsg` 公開部分、`eve-view` の境界型と `CONTRACT_VERSION`、`eve-config` の解決済み設定の型、`eve-core` の `Editor` ファサード) と、契約版、設定キー・CommandId (07)、シナリオ DSL の書式 (§6.3)。これらは **semver** で管理し、破壊的変更は `0.y` の間は `y` 上げ + 契約版の並行期間 (直近 2 版受理)、1.0 以降はメジャー上げ。範囲外の `pub` は「安定性の保証なし」と crate 文書に明記。`cargo semver-checks` で検査 (v0.1 リリースから報告、v0.6 からゲート。09 §7.1、OQ-157) | 駆動 API のクライアント・プラグイン作者も同じ API の消費者 |
 | XC-2 | 別リポジトリの外部の消費者 は公開 crate を **正確な版 (`=0.y.z`、crates.io) または git タグで固定** して消費し、公開リポジトリをサブモジュール・path 依存で参照しない。公開 crate の未リリース (タグ無し) の変更に依存する作業はできない (先に公開側をリリースまたはタグ付けする) | 公開側の品質ゲート (09 §8) を迂回させないため。12 §4.2 (OQ-157) |
 | XC-3 | 外部の消費者で見つかった公開 API / 契約の不足は、**公開リポジトリの Issue (契約変更要求、§8.4)** として起票する。必要な型・フィールドと理由を書く | 契約の議論を公開側に集める |
 | XC-4 | 公開 crate のリリースは公開側の `release.yml` (09 §9) | 秘密情報の扱いは §9.7 |
@@ -683,7 +683,7 @@ Closes #123
 | XC-6 | 公開側のテスト部品 (`HeadlessFrontend` / `CellOccupancy` / シナリオランナー / `xtask` の関数) は外部のリポジトリからも使える形で公開する (`eve-testkit`)。外部のリポジトリに複製しない | 二重保守の禁止 |
 | XC-7 | core に **frontend の種類による分岐・型・設定を入れない**。レビューチェックリスト (09 §8.4 契約) で検査 | core が frontend を知らない境界の機械的な支え |
 
-- 公開 crate の配置は v0.1 のリリース後に決める。XC-1 の semver の管理と `cargo semver-checks` の **報告** は公開側の v0.1 リリースから行い (ゲートは v0.4 から、09 §7.1)、XC-5 の `contract-export` は TUI 完成後に始める。v0.1 は `HeadlessFrontend` (ASCII の Frame) だけを置き、Frame JSON ゴールデンも TUI 完成後に作る (ADR-0039 / 0042)。
+- 公開 crate の配置は v0.1 のリリース後に決める。XC-1 の semver の管理と `cargo semver-checks` の **報告** は公開側の v0.1 リリースから行い (ゲートは v0.6 から、09 §7.1)、XC-5 の `contract-export` は TUI 完成後に始める。v0.1 は `HeadlessFrontend` (ASCII の Frame) だけを置き、Frame JSON ゴールデンも TUI 完成後に作る (ADR-0039 / 0042)。
 
 ### 9.6 ライセンス検査 (`cargo deny` と同梱資産)
 
@@ -706,7 +706,7 @@ ADR-0018 の運用 (05 §17.1、09 §7 R6) をプロファイルとして管理�
 | リリース署名鍵 (minisign) | **CI に置かない**。メンテナの手元 (オフライン、パスフレーズ付き) に置き、手元で `SHA256SUMS` に署名する (05 §18.9。minisign は鍵を持たない署名 (OIDC) に対応しない)。公開鍵は README・`minisign.pub` とリポジトリの外の経路で公開 | リポジトリ (`.github/`、`xtask`、`.claude/`) と CI のシークレットに置かない |
 | タグの署名鍵 (リリースのタグ `vX.Y.Z` に付ける署名。**minisign の鍵とは別の鍵**) | 種類は **Git の SSH 署名** (`gpg.format = ssh`、ed25519 の鍵)。メンテナの手元に置き (パスフレーズ付き。ハードウェアキーでもよい)、CI とリポジトリに置かない。公開は (1) GitHub のアカウントに **Signing key** として登録する (タグが「Verified」と表示される)、(2) 公開鍵をリポジトリの `.github/allowed_signers` (`git verify-tag` に使う `gpg.ssh.allowedSignersFile` の形式) に置く。鍵を替えたら古い鍵の行を消さずに有効期限を付けて残す (過去のタグの検証のため) | minisign の鍵を兼ねない (用途と失効の手順を分ける)。CI のシークレットに置かない |
 | fuzz のクラッシュ入力の復号鍵 (`age` の秘密鍵) | メンテナの手元 (パスフレーズ付き)。公開鍵だけを `.github/fuzz-recipients.txt` に置く (09 §6.3)。メンテナが替わったら recipients の行を更新し、古い鍵の行を消す | CI のシークレット・リポジトリに置かない。復号した入力を公開の場 (Issue・PR・ログ) に貼らない (公開の可否は 09 §6.3 の起票の規則) |
-| コード署名 (Windows Authenticode は v0.4 から (OQ-75)、macOS の Developer ID 署名・公証は未決 (OQ-76。v0.2 の macOS 版は ad-hoc 署名)) の証明書・API キー | CI シークレット (保護された `environment`: 承認者と、`main` ブランチ・`v*` タグへの制限) | 開発者のローカルに証明書を配らない (署名はリリース CI だけ)。ログに出さない |
+| コード署名 (Windows Authenticode は v0.6 から (OQ-75)、macOS の Developer ID 署名・公証は未決 (OQ-76。macOS 版は 1.0 の後、ADR-0045)) の証明書・API キー | CI シークレット (保護された `environment`: 承認者と、`main` ブランチ・`v*` タグへの制限) | 開発者のローカルに証明書を配らない (署名はリリース CI だけ)。ログに出さない |
 | エージェント (Claude Code 等) の実行環境 | `.claude/settings.json` の許可コマンドに署名・publish・鍵を扱うコマンドを含めない (§5)。エージェントはシークレットを読めない環境で動かす | `cargo publish`、`codesign`、`notarytool`、`signtool` を許可しない |
 | 基準機・開発機の固有情報 (機種名、CPU や SSD の型番・容量、OS のビルド番号、ウイルス対策ソフトの製品名、ユーザー名を含むパス) | リポジトリの外の非公開のメモ (git 管理外。基準機の詳細の記録) | docs・コード・コミットメッセージ・計測結果に書かない。計測結果には環境 ID (例 `ENV-W1`、01 §3.0) だけを書く |
 
@@ -715,7 +715,7 @@ ADR-0018 の運用 (05 §17.1、09 §7 R6) をプロファイルとして管理�
 - **最初の push の前** (08 §4 の M0e、OQ-160 / 168): [12 §5.6](12-licensing-distribution.md#56-公開前チェック-最初の-push-の前oq-160--168) の公開前チェック (PC-1〜PC-7: 基準機の情報の一般化・履歴を含む再 grep・README の状態・`NOTICE`・`SECURITY.md`・`CONTRIBUTING.md`・GitHub の設定・著者情報とテストデータと fuzz の成果物 (暗号化した artifact)・報告窓口) を行う。push した内容は全ブランチの履歴とともに直ちに公開され、後から消しても複製に残り得るので、検索は作業ツリーだけでなく push する履歴全体に対して行う。最初の push の後も、各 push の前に PC-2 の対象 (秘密情報・基準機の固有情報・個人の情報) が入っていないことを確かめる。
 - **テストデータ** (確定 (ユーザー回答)、09 §4): コーパス・テスト用のファイルは合成データか再配布が許されるデータだけを使い、実際の個人の文書を使わない。fuzz のクラッシュ入力は、メンテナの公開鍵 (`.github/fuzz-recipients.txt`) で `age` により暗号化した artifact としてだけ上げ、メンテナが手元で復号して再現する (09 §6.3)。
 - **再 grep の検索手順** (PC-2): 製品名・型番などの語は **単語境界で** 検索する (`rg -w -i <語>`、履歴は `git grep -w -i <語> $(git rev-list --all)` と `git log --all --format='%an %ae %s %b'` の出力)。部分一致で探すと、ロケール用語の `CODESET` のような無関係な語に当たって確認が漏れやすくなる。検索語の一覧はリポジトリの外の非公開のメモに置く (本表の最下行と同じ扱い)。秘密情報の形 (鍵・トークン) の検索は部分一致のまま行う。
-- 公開リポジトリの Actions では、外部の寄稿者 (fork) からの PR のワークフローの実行に承認を要する設定にし、`GITHUB_TOKEN` の既定の権限を読み取りにする (12 §5.6 の PC-5)。シークレットを使うジョブを fork の PR で動かさない。v0.1 の間は CI にシークレットを置かない (リリースの署名は手元の minisign だけで、コード署名は v0.4 から)。
+- 公開リポジトリの Actions では、外部の寄稿者 (fork) からの PR のワークフローの実行に承認を要する設定にし、`GITHUB_TOKEN` の既定の権限を読み取りにする (12 §5.6 の PC-5)。シークレットを使うジョブを fork の PR で動かさない。v0.1 の間は CI にシークレットを置かない (リリースの署名は手元の minisign だけで、コード署名は v0.6 から)。
 
 ### 9.8 脆弱性の受付・対応・開示
 
@@ -745,10 +745,10 @@ ADR-0018 の運用 (05 §17.1、09 §7 R6) をプロファイルとして管理�
 | OQ | 件名 | 推奨 | 区分 / 決定期限 |
 |---|---|---|---|
 | OQ-126 | `docs/ownership.toml` の形式と、CODEOWNERS との関係 | **確定 (ユーザー回答)**: モジュールは 02 §4.6 の 10 個、`ownership.toml` は §2.3 の形式の手書きの割当表。CODEOWNERS は `ownership.toml` から `xtask` で生成する (二重保守しない)。置くのは v0.2 から (ADR-0042) | 裁量 / 回答済み (初版は v0.2) |
-| OQ-127 | 03 (コア設計) の分割 | 03 は長大で `eve-core` の複数モジュールにまたがるが、当面 **分割しない**。§2.2 の所有節と spec-index で該当節だけを読む運用で足りるかを見て、v0.4 の文書改訂で再検討する | 裁量 / v0.4 |
+| OQ-127 | 03 (コア設計) の分割 | 03 は長大で `eve-core` の複数モジュールにまたがるが、当面 **分割しない**。§2.2 の所有節と spec-index で該当節だけを読む運用で足りるかを見て、v0.5 の文書改訂で再検討する | 裁量 / v0.5 |
 | OQ-123 | 契約の凍結時期 (C2 の時点) | M2 の完了時 (M3 の端末に依存する部分を始める時点、08 §2.2・02 §8.4)。C1 の二重消費は TUI + ヘッドレスの Frame 消費者 + テスト用 Frontend。本書 §8.4 の手続きは段階に依存しない。確定 (ユーザー回答、2026-10-21): M2 の完了をもって C2 | 裁量 (確定) / v0.1 の M2 |
 | OQ-154 | 寄稿ポリシー: DCO か CLA か (§9.4) | **確定 (ユーザー回答)**: **DCO を既定** (公開リポジトリのライセンスは 12 §3.2 (Apache-2.0 単独、OQ-19))。CLA は再ライセンスが必要になった場合のみ。本書の運用: DCO チェックを CI に置き、エージェントの PR にも `Signed-off-by:` を要求する | PO / 12 §3.5、11 §9.4 / 回答済み (`CONTRIBUTING.md` は外部寄稿の受付開始前) |
-| OQ-120 | ヘッドレス RPC (駆動 API) を配布ビルドに同梱するか | v0.x は dev feature。S-21 の計測後に v0.4 で判断する (配布ビルドで `--headless` 系を予約名として終了コード 2 で終えることと、`eve-view` の公開 feature を `serde` の 1 つにすることは確定 (ユーザー回答))。本書の運用は dev feature で足りる (エージェントはソースからビルドする) | PO / v0.4 着手前 |
+| OQ-120 | ヘッドレス RPC (駆動 API) を配布ビルドに同梱するか | v0.x は dev feature。S-21 の計測後に v0.5 で判断する (配布ビルドで `--headless` 系を予約名として終了コード 2 で終えることと、`eve-view` の公開 feature を `serde` の 1 つにすることは確定 (ユーザー回答))。本書の運用は dev feature で足りる (エージェントはソースからビルドする) | PO / v0.5 着手前 |
 | OQ-147 | 規範行 ID の全文書への付与時期 | **確定 (ユーザー回答)**: 段階的に付け、全文書は v0.2 まで。付与は人間が行い、エージェントは提案だけ。**v0.1 では規範行 ID を付けない** (確定 (ユーザー回答)、[ADR-0042](10-decisions.md#adr-0042-v01-の最小核-案-lwindows-のみの出荷日本語のみの-ui)): M0c は手書きの最小限で、`spec:` は節 ID (`03 §9.3`)、`verifies:` は AC ID (`AC-FR-105-1`)。設計の規範行 ID は v0.2 から、各タスクの着手前にそのタスクが参照する節へ付ける (ID-6、08 §4) | 裁量 / 回答済み |
 | OQ-148 | `CLAUDE.md` と `AGENTS.md` の生成元 1 本化 | M0c は手書きの `CLAUDE.md` だけを置く (ADR-0039)。`AGENTS.md` が必要になった時点 (遅くとも v0.2) で `.claude/agent-entry.md` から `xtask` で両方を出す (§5)。製品固有の記述 (`.claude/` のパス) は条件付きブロックで | 裁量 / v0.2 |
 | OQ-149 | エージェントの PR に対する `reviewer` エージェントの事前レビューを必須にするか | 任意 (`agent-pr` ラベルで自動実行、結果は参考)。人間のレビューを置き換えない | 裁量 / v0.1 の M2 末 |

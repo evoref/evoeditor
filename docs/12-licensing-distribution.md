@@ -195,13 +195,13 @@ evoeditor を OSS として公開・配布するときに決めておくこと�
 
 ### 5.1 配布経路 (TUI)
 
-- TUI 版の配布は [05 §18](05-platform.md#18-配布-パッケージ署名公証) のとおり: **v0.1 は Windows x86_64 のみ** で、GitHub Releases (Windows x86_64 の zip (`THIRD-PARTY-NOTICES` 等を同梱、§5.4) + `SHA256SUMS` + minisign 署名) と `cargo install --locked --git <repo> --tag v0.1.0 evoeditor` (確定 (ユーザー回答)、[ADR-0042](10-decisions.md#adr-0042-v01-の最小核-案-lwindows-のみの出荷日本語のみの-ui))。macOS / Linux のアーカイブ (Linux の musl 静的版を含む) と macOS の署名・公証は、macOS / Linux を出荷する v0.2 (確定 (ユーザー回答)、OQ-15。macOS は ad-hoc 署名で出し、Developer ID と公証の適用は OQ-76) から。Windows aarch64 のアーカイブは v0.2 以降。v0.4 で各パッケージマネージャ (Homebrew / Scoop / winget / AUR / apt 等。macOS / Linux 向けはその OS を出荷していることが前提) と `cargo binstall`。crates.io への公開の時期は OQ-20 (10 の残件 #1。確定 (ユーザー回答): 1.0 の前。§4.2)。
+- TUI 版の配布は [05 §18](05-platform.md#18-配布-パッケージ署名公証) のとおり: **v0.1 は Windows x86_64 のみ** で、GitHub Releases (Windows x86_64 の zip (`THIRD-PARTY-NOTICES` 等を同梱、§5.4) + `SHA256SUMS` + minisign 署名) と `cargo install --locked --git <repo> --tag v0.1.0 evoeditor` (確定 (ユーザー回答)、[ADR-0042](10-decisions.md#adr-0042-v01-の最小核-案-lwindows-のみの出荷日本語のみの-ui))。Linux のアーカイブ (musl 静的版を含む) は Linux を出荷する v0.2 (確定 (ユーザー回答)、OQ-15) から。macOS のアーカイブと署名・公証は macOS を出荷する 1.0 の後 (v1.x、ADR-0045。ad-hoc 署名で出し、Developer ID と公証の適用は OQ-76)。Windows aarch64 のアーカイブは v0.2 以降。v0.6 で各パッケージマネージャ (Homebrew / Scoop / winget / AUR / apt 等。macOS / Linux 向けはその OS を出荷していることが前提) と `cargo binstall`。crates.io への公開の時期は OQ-20 (10 の残件 #1。確定 (ユーザー回答): 1.0 の前。§4.2)。
 - **対象 OS と動作確認の状況**: v0.1 の対象は Windows 11 の Windows Terminal と conhost (確定 (ユーザー回答)、OQ-15。Windows 10 は公式には対応しない)。開発環境は Windows のみで、Windows は開発機で動作確認する。macOS / Linux は **v0.1 では出荷しない** (実機で確かめられない OS を出荷しない、ADR-0042)。core 系 crate は OS に依存しないまま保ち、CI の Linux で Linux CI の対象 crate (core 系 + `eve-host` + `eve-testkit`、09 §6.4) のビルドとヘッドレスのテストを行う (配布物は作らない)。既知の制約の正本は [01 §4.6](01-requirements.md#46-v01-の既知の制約-リリースノートとヘルプに明記する) で、リリースノートと README にも載せる。
 
 ### 5.2 署名と検証
 
 - TUI のリリースは minisign で `SHA256SUMS` に署名し、公開鍵をリポジトリの `README.md` とリポジトリ直下の `minisign.pub` (と、リポジトリの外の経路) に置く ([05 §18.9](05-platform.md#189-minisign-署名の検証-提案oq-164))。minisign の秘密鍵は CI に置かず、メンテナの手元で署名する (11 §9.7)。
-- OS のコード署名 (Windows の Authenticode、macOS の Developer ID 署名 + 公証) は 05 §18.3 / §18.4 (OQ-75 / 76)。v0.1 の Windows の zip はコード署名なし (minisign のみ。Windows の署名は v0.4、OQ-75)。macOS は v0.2 から ad-hoc 署名で出し、Developer ID 署名と公証の取得時期と適用は未決 (OQ-76、05 §18.4)。Windows の署名の第一候補は SignPath Foundation (Azure Artifact Signing は個人では米国・カナダの在住者に限られる)。
+- OS のコード署名 (Windows の Authenticode、macOS の Developer ID 署名 + 公証) は 05 §18.3 / §18.4 (OQ-75 / 76)。v0.1 の Windows の zip はコード署名なし (minisign のみ。Windows の署名は v0.6、OQ-75)。macOS は 1.0 の後 (v1.x、ADR-0045) に ad-hoc 署名で出し、Developer ID 署名と公証の取得時期と適用は未決 (OQ-76、05 §18.4)。Windows の署名の第一候補は SignPath Foundation (Azure Artifact Signing は個人では米国・カナダの在住者に限られる)。
 - コード署名の資格情報は CI の保護された秘密情報にだけ置く (11 §9.7)。
 
 ### 5.3 更新
