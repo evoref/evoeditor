@@ -923,7 +923,7 @@ file.open(path)
            (ネットワーク FS で stat が数秒ブロックしても UI は止まらない: ADR-0020)
   2. [job]  metadata(path)。**結果に依らず** (T = path が存在してもしなくても) inflight_for(path) で保存中フラグのディレクトリ
            `recovery/inflight/<hash(path)>/` だけを 1 回調べる (O(1)。ディレクトリ全体は列挙しない。05 §4.6 / §7.5。v0.1)。返った記録 (Vec<InflightRecord>) から
-           interrupted_save: Option<InterruptedSave { method: InterruptedMethod /*NewFile | Atomic | InPlace*/, backup: Option<FsPath>, tmp: Option<FsPath>, complete: bool }>
+           interrupted_save: Option<InterruptedSave { method: SaveMethod /*NewFile | Atomic | InPlace*/, backup: Option<FsPath>, tmp: Option<FsPath>, complete: bool }>
            を作る (02 §4.5 / §9.3)。記録から InterruptedSave への写像と MessageKey は下の「中断された保存の写像」の表が正本。
              v0.1 は pid の生存確認をしない (他インスタンスが保存中の記録でも報告する。誤報は害が小さい側、05 §4.6)。
              main は interrupted_save が Some なら表の MessageKey (04 §15.2) で場所を示して警告する。
@@ -935,7 +935,7 @@ file.open(path)
              (len 以下でも、デコード後の見積り・読込中に伸びた分で閾値を超えれば手順 3 の「読込中のメモリ検査」で同じ確認を出す)。
              main は回答 (読み取り専用で開く / 中止。FR-127) を得たら、「読み取り専用で開く」なら OpenOptions { confirmed_large: true, read_only_requested: true, .. } で
              読込ジョブを再投入する (下の「確認からの再投入」)。確認中に io ワーカー (02 §9.1 の 1 本) を占有せず、他の文書の保存を止めない。回答待ちの状態は Document 側に持つ
-  2b.[job]  meta.file_id と canonicalize(path) を取得 → JobResult::Identity { job, file_id, canonical }
+  2b.[job]  meta.file_id と canonicalize(path) を取得 (v0.2.0 の実装は Identity の中間結果を送らない。二重オープンは開く前のパスの比較だけ、02 §9.3)
            main: 既に同じ FileId の Document があれば、新 Document を閉じて既存をアクティブにし、ジョブをキャンセル
                  (二重に開かない。判定は FileId が正: ハードリンク・大文字小文字非区別に強い。05 §5.4。v0.1 の単一文書では、
                   既存 = 今の文書なので、新 Document を閉じて今の文書を残す (下の「置き換えの手順」))
@@ -1076,7 +1076,7 @@ file.save(doc)  [main]
           **確認を出さずに同じジョブで** 手順 5' (乾式走査 → write_in_place) へ進む (02 §4.5、OQ-34)。他の AtomicUnsupported はそのまま main へ返す (手順 7)
   5'. method = InPlace (承認済み、または save_strategy = "in_place")、または 5d のとき:
        a. **乾式走査 (必須)**: Snapshot 全体を、保存と同じエンコーダで encode + 照合だけ行い、書き出さない (`SaveEncoder::dry_scan`、下の「乾式走査と出力長」)。
-          表現不能が 1 件でもあれば **Port を呼ばずに** JobError::Unmappable { positions, total } を返す (元ファイルに一切触れない。§8.6 E3 へ)
+          表現不能が 1 件でもあれば **Port を呼ばずに** JobResult::Unmappable { total, recorded, encoding } を返す (元ファイルに一切触れない。§8.6 E3 へ)
        b. 乾式走査で確定した出力バイト長 len を渡して write_in_place(path, 同じエンコーダのストリーム (2 回目), len, opts, cancel) を呼ぶ (cancel はジョブの CancelToken) (02 §4.5、05 §4.4 手順 0〜9)。
           05 §4.4 の手順 6 (元ファイルへの書き始め) 以降は CancelToken を見ず、本書込のエンコーダは `Aborted` を返さない (5d から来た場合も同じ。手順 7 の `Cancelled` の箇条)
   6. JobResult::Saved { job, node, report: SaveReport { method, new_stamp, warnings }, canonical, meta } / JobResult::Failed { job, err: JobError }
@@ -1087,7 +1087,7 @@ file.save(doc)  [main]
      report.method == InPlace なら `info.save.in_place` (04 §15.2) のメッセージで直接上書きで保存したことを 1 回示す (ステータスの項目にはしない。05 §4.4)。report.warnings (権限複製失敗、EscapeMerge §8.3 等) をメッセージで提示
      失敗: Document は dirty のまま。JobError と FsError.kind (と detail) で分類し、**§9.7 (e) の「保存失敗の後の選択肢」の表** (MessageKey・選択肢・次の状態・後続処理) に従って提示する。
        分類の要点 (選択肢は §9.7 (e) の表が正本):
-       - JobError::Unmappable → §8.6 E3 の選択肢
+       - JobResult::Unmappable → §8.6 E3 の選択肢
        - Conflict (外部変更) → §9.5
        - AtomicUnsupported + detail Hardlink { nlink } (HardlinkPolicy::Ask) → 選んだ HardlinkPolicy を SaveOptions.hardlink に入れて再投入する (WriteInPlace は method = InPlace)
        - AtomicUnsupported (上記以外: 他ユーザー所有、ディレクトリに書込権限なし、FS が非対応、Windows で ReplaceFileW が元ファイルを変えずに失敗した) →
@@ -1168,7 +1168,7 @@ file.save(doc)  [main]
 - **明示の再読込 (`file.reload`、v0.1。FR-117 の Should の部分、確定 (ユーザー回答))**: 読込の経路は「文字コードを指定して開き直す」(§8.8) と同じで、適用だけが違う (開き直しは履歴を消すが、再読込は Undo できる下の「再読込の実現」)。
   1. when は `doc.has_path` (07 §11.6)。パスを持たない文書 (無題) ではパレットに淡色と理由で出て実行できない。読込中 (`load_state == Loading`) の文書では何もせず `info.reload.busy` を出す。保存ジョブの実行中は、その完了を待ってから 2. の判定をする (§8.8 と同じ)。読み取り専用の文書でも実行できる (再読込は利用者の編集ではなく、`Origin::Reload` は §6.5 の拒否の例外。エディタの外で属性を外したファイルを読み直す手段になる)。
   2. dirty なら、読み込む前に `ui.confirm.reload_discard` (04 §15.2) で確認する。選択肢は「`[L]` 再読込 (変更を破棄)」と `[Esc]` キャンセル で、既定はキャンセル (破壊的な選択肢は既定にしない)。キャンセルでは何も変わらない。dirty でなければ確認しない。
-  3. 読込ジョブ (`JobKind::Open`) を同じ `DocumentId` で投入する。`OpenOptions.forced_encoding` に今の文書の文字コードを入れ (§8.2 手順 2。判定し直さず、バイナリ・UTF-32 の BOM の確認もしない。BOM は手順 2 の規則で読み飛ばして `has_bom` を決める)、今の文書が `LargeFileViewer` なら `confirmed_large` と `read_only_requested` を立てて巨大ファイルの確認を繰り返さない。それ以外の開く前の確認 (512 MiB 超・不正バイトの比率) は通常の読込 (§9.2) と同じ規則で出し、「中止」はキャンセルと同じ。二重オープンの判定 (`Identity`) は同じ文書なので行わない。読込中は `load_state = Loading` で **旧本文を表示し続け** (編集はできない。ステータスバーは `[読込中 n%]`)、`ui.cancel` で取り消せる。
+  3. 読込ジョブ (`JobKind::Open`) を同じ `DocumentId` で投入する。`OpenOptions.forced` に今の文書の文字コードを入れ (§8.2 手順 2。判定し直さず、バイナリ・UTF-32 の BOM の確認もしない。BOM は手順 2 の規則で読み飛ばして `has_bom` を決める)、今の文書が `LargeFileViewer` なら `confirmed_large` と `read_only_requested` を立てて巨大ファイルの確認を繰り返さない。それ以外の開く前の確認 (512 MiB 超・不正バイトの比率) は通常の読込 (§9.2) と同じ規則で出し、「中止」はキャンセルと同じ。二重オープンの判定 (`Identity`) は同じ文書なので行わない。読込中は `load_state = Loading` で **旧本文を表示し続け** (編集はできない。ステータスバーは `[読込中 n%]`)、`ui.cancel` で取り消せる。
   4. 取消し・失敗 (ファイルが無い・読めない等) では、旧本文・`TextFormat`・読み取り専用の理由・履歴をそのまま保って `load_state = Ready` に戻し、失敗は理由を示す (ファイルが無いときは `msg.reload.missing`、それ以外は読込と同じ `msg.open.*`。取消しは `info.open.cancelled`)。
   5. `Complete` を受けたら、下の「再読込の実現」で `Origin::Reload` の Transaction として適用し、`info.reload.done` を出す。読み取り専用の理由は §8.8 の「読み取り専用の理由の差し替え」(再読込の規則。`Binary` と `LargeFileViewer` は保つ) で付け直す。再読込の後に読み取り専用の文書では `info.reload.done` の代わりに `info.reload.done_read_only` を出す (Undo で戻せないため。下の「再読込の実現」、提案、OQ-216)。ステータスバーの文字コード・改行コード・読み取り専用の表示は新しい内容に合わせて変わる。
 - **状態** (v0.2): `external_modified: Option<FileStamp>` を Document に持ち、ステータスバーに表示。
@@ -1232,7 +1232,7 @@ struct SaveChain {
     format: TextFormat,                  // このチェーンで書く format (§8.8)。確定するのは完了のときだけ
     opts: SaveOptions,                   // 投入する SaveOptions。expected / hardlink / in_place_backup は投入のたびに expect / hardlink / in_place_backup の値で上書きし、
                                          // それ以外 (fsync・private・preserve・backup) は連鎖の開始時に決めて変えない
-    method: SaveMethodRequest,           // Atomic | InPlace (§9.3 手順 4)
+    strategy: SaveStrategy,              // Atomic { hardlink } | InPlace { backup } (§9.3 手順 4、02 §9.3)
     hardlink: HardlinkPolicy,            // Ask (既定、07 §5.2 file.hardlink_policy) | BreakLink | WriteInPlace
     in_place_backup: InPlaceBackup,      // Required (既定) | SkipConfirmed
     state: SaveChainState,
@@ -1323,7 +1323,7 @@ struct SaveChain {
 
 | 失敗 (§9.3 手順 7) | MessageKey | 選択肢 → 次の状態 | 後続 (`cont`) |
 |---|---|---|---|
-| `JobError::Unmappable` | `ui.confirm.save.unmappable` | UTF-8 で保存 → `Saving` (連鎖の `format` を UTF-8 に) / 置換して保存 → `BuildingReplacement` / キャンセル ★ → 中止 (最初の該当位置へ移動)。出す条件は §8.6 の「E3 の選択肢」 | 保存を続ける選択では保つ。キャンセルで捨てる |
+| `JobResult::Unmappable` | `ui.confirm.save.unmappable` | UTF-8 で保存 → `Saving` (連鎖の `format` を UTF-8 に) / 置換して保存 → `BuildingReplacement` / キャンセル ★ → 中止 (最初の該当位置へ移動)。出す条件は §8.6 の「E3 の選択肢」 | 保存を続ける選択では保つ。キャンセルで捨てる |
 | `Conflict` (開いた後に変更・削除された) | `ui.confirm.external_change` | 上書き → `Saving` (`Expect` は `Conflict { current }` から決める: `Some(stamp)` → `Stamp(stamp)`、`None` (不在) → `Absent`) / 別名で保存 ★ → `AskName` / 中止 | 上書き・別名で保存では保つ |
 | `Conflict` (新規の保存先に同名のファイルができた) | `ui.confirm.save.target_exists` | 同上 | 同上 |
 | `AtomicUnsupported` + `Hardlink` (`HardlinkPolicy::Ask`) | `ui.confirm.save.hardlink` | リンクを保って直接上書き → `Saving` (`WriteInPlace`、method = InPlace) / このファイルだけ切り離して保存 → `Saving` (`BreakLink`) / キャンセル ★ → 中止 | 保存を続ける選択では保つ |
