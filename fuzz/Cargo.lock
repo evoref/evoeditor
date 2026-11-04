@@ -93,14 +93,14 @@ dependencies = [
 
 [[package]]
 name = "eve-config"
-version = "0.2.0-rc.1"
+version = "0.2.0"
 dependencies = [
  "toml",
 ]
 
 [[package]]
 name = "eve-core"
-version = "0.2.0-rc.1"
+version = "0.2.0"
 dependencies = [
  "eve-config",
  "eve-encoding",
@@ -113,7 +113,7 @@ dependencies = [
 
 [[package]]
 name = "eve-encoding"
-version = "0.2.0-rc.1"
+version = "0.2.0"
 dependencies = [
  "chardetng",
  "encoding_rs",
@@ -130,7 +130,7 @@ dependencies = [
 
 [[package]]
 name = "eve-host"
-version = "0.2.0-rc.1"
+version = "0.2.0"
 dependencies = [
  "arc-swap",
  "eve-config",
@@ -141,7 +141,7 @@ dependencies = [
 
 [[package]]
 name = "eve-platform"
-version = "0.2.0-rc.1"
+version = "0.2.0"
 dependencies = [
  "eve-core",
  "eve-text",
@@ -153,7 +153,7 @@ dependencies = [
 
 [[package]]
 name = "eve-testkit"
-version = "0.2.0-rc.1"
+version = "0.2.0"
 dependencies = [
  "eve-config",
  "eve-core",
@@ -167,7 +167,7 @@ dependencies = [
 
 [[package]]
 name = "eve-text"
-version = "0.2.0-rc.1"
+version = "0.2.0"
 dependencies = [
  "ropey",
  "unicode-segmentation",
@@ -176,7 +176,7 @@ dependencies = [
 
 [[package]]
 name = "eve-view"
-version = "0.2.0-rc.1"
+version = "0.2.0"
 
 [[package]]
 name = "find-msvc-tools"
@@ -371,9 +371,9 @@ checksum = "f8fadd59c855ef2080decdef8ff161eb6661b86933c9d82e5ba29dc602a55aba"
 
 [[package]]
 name = "signal-hook"
-version = "0.3.18"
+version = "0.4.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d881a16cf4426aa584979d30bd82cb33429027e42122b169753d6ef1085ed6e2"
+checksum = "49f7447afd772ca79ad17ae0a3972a6b0df0cb4b80990fd82707593e9e012a74"
 dependencies = [
  "libc",
  "signal-hook-registry",

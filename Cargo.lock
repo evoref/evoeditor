@@ -311,14 +311,14 @@ dependencies = [
 
 [[package]]
 name = "eve-config"
-version = "0.2.0-rc.1"
+version = "0.2.0"
 dependencies = [
  "toml",
 ]
 
 [[package]]
 name = "eve-core"
-version = "0.2.0-rc.1"
+version = "0.2.0"
 dependencies = [
  "encoding_rs",
  "eve-config",
@@ -336,11 +336,11 @@ dependencies = [
 
 [[package]]
 name = "eve-docs-tables"
-version = "0.2.0-rc.1"
+version = "0.2.0"
 
 [[package]]
 name = "eve-encoding"
-version = "0.2.0-rc.1"
+version = "0.2.0"
 dependencies = [
  "chardetng",
  "encoding_rs",
@@ -349,7 +349,7 @@ dependencies = [
 
 [[package]]
 name = "eve-host"
-version = "0.2.0-rc.1"
+version = "0.2.0"
 dependencies = [
  "arc-swap",
  "eve-config",
@@ -362,7 +362,7 @@ dependencies = [
 
 [[package]]
 name = "eve-platform"
-version = "0.2.0-rc.1"
+version = "0.2.0"
 dependencies = [
  "encoding_rs",
  "eve-core",
@@ -377,7 +377,7 @@ dependencies = [
 
 [[package]]
 name = "eve-test-helpers"
-version = "0.2.0-rc.1"
+version = "0.2.0"
 dependencies = [
  "eve-core",
  "eve-platform",
@@ -387,7 +387,7 @@ dependencies = [
 
 [[package]]
 name = "eve-testkit"
-version = "0.2.0-rc.1"
+version = "0.2.0"
 dependencies = [
  "eve-config",
  "eve-core",
@@ -402,7 +402,7 @@ dependencies = [
 
 [[package]]
 name = "eve-text"
-version = "0.2.0-rc.1"
+version = "0.2.0"
 dependencies = [
  "memory-stats",
  "proptest",
@@ -413,7 +413,7 @@ dependencies = [
 
 [[package]]
 name = "eve-tui"
-version = "0.2.0-rc.1"
+version = "0.2.0"
 dependencies = [
  "eve-docs-tables",
  "eve-host",
@@ -428,11 +428,11 @@ dependencies = [
 
 [[package]]
 name = "eve-view"
-version = "0.2.0-rc.1"
+version = "0.2.0"
 
 [[package]]
 name = "evoeditor"
-version = "0.2.0-rc.1"
+version = "0.2.0"
 dependencies = [
  "encoding_rs",
  "eve-config",
@@ -1486,7 +1486,7 @@ dependencies = [
 
 [[package]]
 name = "xtask"
-version = "0.2.0-rc.1"
+version = "0.2.0"
 dependencies = [
  "eve-docs-tables",
  "serde",
