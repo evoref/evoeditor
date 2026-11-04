@@ -718,7 +718,7 @@ literal:= '"' ... '"' | number | true | false
 
 ### 7.7 ヘルプとの連携
 
-`--dump-keymap` (v0.1 は隠しオプション) / `help.keys` (v0.2) は解決後のキーマップを「コンテキスト × キー → コマンド (タイトル・由来の層)」で出力する。コマンドパレットはコマンド ID から現在のキーを逆引きして併記する (FR-602。v0.1 はこれがヘルプ画面の代用、FR-514)。
+`--dump-keymap` (隠しオプション。v0.3) / `help.keys` (v0.2) は解決後のキーマップを「コンテキスト × キー → コマンド (タイトル・由来の層)」で出力する。コマンドパレットはコマンド ID から現在のキーを逆引きして併記する (FR-602。v0.1 はこれがヘルプ画面の代用、FR-514)。
 
 ---
 
@@ -1133,13 +1133,13 @@ verb       := [a-z][a-z0-9_]*
 | コマンドパレットの各行 (タイトル・CommandId・届く割当キー、04 §8.1)。v0.1 のヘルプ画面の代用 (FR-514) | 解決済みキーマップ + CommandRegistry | v0.1 |
 | `help.keys`: 現在のコンテキストで有効なキー一覧 (キー → タイトル) | 解決済みキーマップ + CommandSpec.title | v0.2 |
 | `help.commands`: 全コマンドの一覧 (名前空間ごと、タイトル・説明・キー・`since`) | CommandRegistry | v0.2 |
-| `evoeditor --list-commands [--json]` / `--dump-keymap [--json]` | 同上。ドキュメント生成・シェル補完・外部ツール用 | v0.1 |
-| ユーザーガイドのキー一覧表 (リポジトリ docs) | `--list-commands --json` から CI で生成し、§11.6 カタログと差分が出たら CI 失敗 (どちらを直すかは判断、09 §11.2) | v0.1 (09) |
+| `evoeditor --list-commands [--json]` / `--dump-keymap [--json]` | 同上。ドキュメント生成・シェル補完・外部ツール用 | v0.3 (v0.1 の予定から送った、09 §11.2) |
+| ユーザーガイドのキー一覧表 (リポジトリ docs) | `--list-commands --json` から CI で生成し、§11.6 カタログと差分が出たら CI 失敗 (どちらを直すかは判断、09 §11.2) | v0.3 (09 §11.2) |
 | 設定リファレンス | §4.1 のメタ表 | v0.4 |
 
 ### 11.6 v0.1 CommandId カタログ (付録)
 
-**本表が CommandId・既定キー割当・コンテキスト・ヒントの正本** (ADR-0025)。**title key** 列の MessageKey (`cmd.<command_id>`) は、同梱の `ja` の言語ファイルに `title` と `description` を持つ (§17。CommandId 自体は翻訳しない。パレットの照合用の英語の title は定数表に持つ、§11.4)。04 §7.2 は本表の「既定キー」列の設計入力 (端末上の癖・代替割当の根拠)、04 §7.3a は端末の横取り表、03 は ID を引用する。`evoeditor --list-commands` / `--dump-keymap` の生成物と CI で突合する (09 §11.2)。**v0.1 で実装するのは本表の ID のうち「(v0.2)」等の注記が無いもの** だけで、注記付きの ID は名前空間を予約し実装は当該版 (ADR-0028、ADR-0039)。v0.1 で実装する ID は **63 個** (確定 (ユーザー回答)、v0.1 の範囲は案 L で、再読込・改行コードの変換・リテラルのすべて置換 (置換欄を開くコマンドを含む) を含む。下の表の合計。ファイル・アプリ 11、編集 14、移動・選択 26、検索・表示 6、オーバーレイ内 6。テストビルド専用の `internal.debug_panic` は数えない)。このうちパレットに出るのは `hidden` の 6 個を除く 57 個。版注記付きの ID は 25 個。版注記付きの行の「既定キー」「ヒント」列は、その版での割当と文脈を示す (予約。v0.1 ではそのキーを他の機能に使わない)。
+**本表が CommandId・既定キー割当・コンテキスト・ヒントの正本** (ADR-0025)。**title key** 列の MessageKey (`cmd.<command_id>`) は、同梱の `ja` の言語ファイルに `title` と `description` を持つ (§17。CommandId 自体は翻訳しない。パレットの照合用の英語の title は定数表に持つ、§11.4)。04 §7.2 は本表の「既定キー」列の設計入力 (端末上の癖・代替割当の根拠)、04 §7.3a は端末の横取り表、03 は ID を引用する。CI で実装と突合する (09 §11.2。`evoeditor --list-commands` / `--dump-keymap` の生成物との突合は v0.3)。**v0.1 で実装するのは本表の ID のうち「(v0.2)」等の注記が無いもの** だけで、注記付きの ID は名前空間を予約し実装は当該版 (ADR-0028、ADR-0039)。v0.1 で実装する ID は **63 個** (確定 (ユーザー回答)、v0.1 の範囲は案 L で、再読込・改行コードの変換・リテラルのすべて置換 (置換欄を開くコマンドを含む) を含む。下の表の合計。ファイル・アプリ 11、編集 14、移動・選択 26、検索・表示 6、オーバーレイ内 6。テストビルド専用の `internal.debug_panic` は数えない)。このうちパレットに出るのは `hidden` の 6 個を除く 57 個。版注記付きの ID は 25 個。版注記付きの行の「既定キー」「ヒント」列は、その版での割当と文脈を示す (予約。v0.1 ではそのキーを他の機能に使わない)。
 
 凡例:
 
@@ -1584,7 +1584,7 @@ evoeditor [OPTIONS] [--] [FILE]                                               # 
 evoeditor [OPTIONS] [--] [FILE | DIR | -]...                                  # 複数の FILE は v0.2、DIR は v0.4
 evoeditor [OPTIONS] +LINE[:COL] FILE                                          # v0.2
 evoeditor --version | --help
-evoeditor --check-config | --dump-config | --list-commands | --dump-keymap   # v0.2 (--list-commands / --dump-keymap は v0.1 から隠しオプション)
+evoeditor --check-config | --dump-config | --list-commands | --dump-keymap   # v0.2 (--list-commands / --dump-keymap は v0.3 の隠しオプション)
 evoeditor -                                                                   # 標準入力 (FR-120、v0.3)
 evoeditor --headless --rpc stdio [--fake-ports] [--allow-write]              # dev feature `headless`、v0.2 以降 (02 §10.5)。配布ビルドでは予約名 (未対応と表示して終了コード 2)
 ```
@@ -1606,7 +1606,7 @@ evoeditor --headless --rpc stdio [--fake-ports] [--allow-write]              # d
 
 ### 18.3 オプション
 
-v0.1 の公開オプションは **5 個** (ADR-0028: 引数解析と `--help` 文の保守を減らす。確定 (ユーザー回答)、v0.1 の範囲は案 L): `--version` `--help` `--readonly` `--encoding` `--` (+ 受理して無視する `--wait`)。**隠しオプションは 2 個** (`--help` に出さない): CI 照合用の `--list-commands` / `--dump-keymap`。計測用の `--bench-*` (`--bench-exit-after-first-frame` 等) は **配布ビルドに含めない** テスト専用のフラグで、cargo feature `test-hooks` を有効にしたビルドだけが受け付ける (09 §5.2 / §10.3。配布ビルドでは未知のオプションとして終了コード 2)。隠しオプションの数には入れない。`--config` `--no-config` `--log-level` `--set` `--check-config` `--dump-config` `--crash-report` `--licenses` と位置引数 `+LINE` は v0.2 (`--licenses` が無い間は、アーカイブに同梱する `THIRD-PARTY-NOTICES.md` が帰属表示の正、05 §17.1。ログの水準は環境変数 `EVE_LOG` で変える)。駆動 API の `--headless` `--rpc` `--fake-ports` `--allow-write` は dev feature `headless` のみ (v0.2 以降) で実装し、配布ビルドには機能が無い (OQ-120)。**配布ビルド (v0.1 から) はこの 4 個を予約名として受け付け**、どれかが渡されると TUI を始めずに stderr へ「このビルドでは未対応です (v0.2 以降の開発版機能)」(`stderr.usage.dev_only`、04 §15.2) を出し、**終了コード 2** で終わる (確定 (ユーザー回答)、[OQ-120](10-decisions.md#oq-120-ヘッドレス-rpc-を配布ビルドに同梱するか))。これらをファイル名の位置引数とは解釈しない (`--headless` という名前のファイルは `evoeditor -- --headless` で開く)。下の「未対応と知らせて無視する」扱いの例外である。後続版のもの (下表で版を持つもの) は書式を予約し、v0.1 では使い方エラーにせず「このバージョンでは未対応」と知らせて無視する (最初の Frame の後に `info.cli.unsupported`。端末を初期化しない `--version` / `--help` と一緒に渡された場合は無視するだけ)。採否が未定の `--check-update` はこれに含めず、採るまでは未知のオプションとして扱う (§18.8)。
+v0.1 の公開オプションは **5 個** (ADR-0028: 引数解析と `--help` 文の保守を減らす。確定 (ユーザー回答)、v0.1 の範囲は案 L): `--version` `--help` `--readonly` `--encoding` `--` (+ 受理して無視する `--wait`)。**隠しオプションは 2 個** (`--help` に出さない): CI 照合用の `--list-commands` / `--dump-keymap` (v0.3 に送った。v0.1 / v0.2 では未実装、09 §11.2)。計測用の `--bench-*` (`--bench-exit-after-first-frame` 等) は **配布ビルドに含めない** テスト専用のフラグで、cargo feature `test-hooks` を有効にしたビルドだけが受け付ける (09 §5.2 / §10.3。配布ビルドでは未知のオプションとして終了コード 2)。隠しオプションの数には入れない。`--config` `--no-config` `--log-level` `--set` `--check-config` `--dump-config` `--crash-report` `--licenses` と位置引数 `+LINE` は v0.2 (`--licenses` が無い間は、アーカイブに同梱する `THIRD-PARTY-NOTICES.md` が帰属表示の正、05 §17.1。ログの水準は環境変数 `EVE_LOG` で変える)。駆動 API の `--headless` `--rpc` `--fake-ports` `--allow-write` は dev feature `headless` のみ (v0.2 以降) で実装し、配布ビルドには機能が無い (OQ-120)。**配布ビルド (v0.1 から) はこの 4 個を予約名として受け付け**、どれかが渡されると TUI を始めずに stderr へ「このビルドでは未対応です (v0.2 以降の開発版機能)」(`stderr.usage.dev_only`、04 §15.2) を出し、**終了コード 2** で終わる (確定 (ユーザー回答)、[OQ-120](10-decisions.md#oq-120-ヘッドレス-rpc-を配布ビルドに同梱するか))。これらをファイル名の位置引数とは解釈しない (`--headless` という名前のファイルは `evoeditor -- --headless` で開く)。下の「未対応と知らせて無視する」扱いの例外である。後続版のもの (下表で版を持つもの) は書式を予約し、v0.1 では使い方エラーにせず「このバージョンでは未対応」と知らせて無視する (最初の Frame の後に `info.cli.unsupported`。端末を初期化しない `--version` / `--help` と一緒に渡された場合は無視するだけ)。採否が未定の `--check-update` はこれに含めず、採るまでは未知のオプションとして扱う (§18.8)。
 
 | オプション | 短 | 意味 | P |
 |---|---|---|---|
@@ -1629,7 +1629,7 @@ v0.1 の公開オプションは **5 個** (ADR-0028: 引数解析と `--help` �
 | `--check-config` | — | 設定を読み診断を出力して終了 (端末初期化なし)。**v0.2 の M9c で実装した**: 診断ごとに `ファイル:行:桁: 本文` と対処の行を標準出力へ (選択中の言語。「未対応」の情報診断も出す)、最後に件数の 1 行 (英日)。エラーがあれば終了コード 3、警告だけなら 0。キーマップは書式だけを確かめる (コマンド名などの照合は起動時の診断) | v0.2 |
 | `--dump-config [--defaults] [--json]` | — | 解決済み設定 (または既定値) を出力。**v0.2 の M9c で実装した**: TOML はセクションごとの公開キーの全項目で、そのまま設定ファイルとして読める。`--json` は平らなキーの表。`--defaults` / `--json` は `--dump-config` の修飾で、単独では使い方の誤り。`--annotated` (注釈付き雛形) は v0.1 は同梱の `config.example.toml`、生成は v0.4 (§4.1) | v0.2 |
 | `--dump-schema` | — | JSON Schema (Could) | v0.4 |
-| `--list-commands [--json]` / `--dump-keymap [--json]` | — | §11.5 / §11.6 (CI 突合用) | v0.1 (隠し) |
+| `--list-commands [--json]` / `--dump-keymap [--json]` | — | §11.5 / §11.6 (CI 突合用) | v0.3 (隠し。v0.1 の予定から送った) |
 | `--dump-languages` | — | §9.1 | v0.4 |
 | `--log-level <level>` | — | `EVE_LOG` より優先。**v0.2 の M9c で実装した** (値は `error` / `warn` / `info` / `debug` / `trace`。それ以外・値なしは使い方の誤り、終了コード 2) | v0.2 |
 | `--log-file <path>` | — | ログ出力先の変更 | v0.4 |
@@ -1644,7 +1644,7 @@ v0.1 の公開オプションは **5 個** (ADR-0028: 引数解析と `--help` �
 | `--help` | `-h` | ヘルプ | v0.1 |
 | `--` | — | 以降は位置引数 (`-` で始まるファイル名用) | v0.1 |
 
-v0.1 の 5 個: `--version` `--help` `--readonly` `--encoding` `--` (+ 受理のみの `--wait`、隠しの 2 個 `--list-commands` / `--dump-keymap`)。`test-hooks` のビルドだけの `--bench-*` は数えない。dev feature の `--headless` 系は v0.2 以降 (配布ビルドでは v0.1 から予約名で、終了コード 2。5 個には数えない)。更新の確認 `--check-update` は §18.8 で名前だけを予約する (名前は確定 (ユーザー回答)、採るかどうかは v0.4 以降に ADR-0041 で判断。5 個には数えない)。
+v0.1 の 5 個: `--version` `--help` `--readonly` `--encoding` `--` (+ 受理のみの `--wait`、隠しの 2 個 `--list-commands` / `--dump-keymap` は v0.3 に送った)。`test-hooks` のビルドだけの `--bench-*` は数えない。dev feature の `--headless` 系は v0.2 以降 (配布ビルドでは v0.1 から予約名で、終了コード 2。5 個には数えない)。更新の確認 `--check-update` は §18.8 で名前だけを予約する (名前は確定 (ユーザー回答)、採るかどうかは v0.4 以降に ADR-0041 で判断。5 個には数えない)。
 
 **命名規則**: 実行して結果を出力し終了する操作や値の指定はサブコマンドにせず、`--check-config` / `--dump-config` / `--crash-report` / `--set` と同系統の `--` で始まる小文字・ハイフン区切りのオプションにする (位置引数 `FILE` と衝突させない。`--check-update` もこれに従う)。
 
