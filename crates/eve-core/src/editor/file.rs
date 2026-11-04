@@ -678,10 +678,10 @@ impl EditorState {
             );
             return CommandResult::Rejected(RejectReason::NotAvailable);
         }
-        let (encoding, bom, pua) = (
+        let (encoding, bom, escape) = (
             out_encoding,
             fmt.map_or(doc.format.has_bom, |f| f.bom),
-            doc.format.pua_escape,
+            doc.format.save_escape_policy(out_encoding),
         );
         let revision = doc.revision();
         let (snapshot, at) = doc.begin_save();
@@ -693,7 +693,7 @@ impl EditorState {
                 snapshot,
                 encoding,
                 bom,
-                pua,
+                escape,
                 expected,
                 strategy,
                 clear_readonly,
@@ -963,7 +963,7 @@ impl EditorState {
             JobKind::ReplaceUnmappable {
                 snapshot: doc.snapshot(),
                 encoding: ask.encoding,
-                pua: doc.format.pua_escape,
+                escape: doc.format.save_escape_policy(ask.encoding),
             },
         );
         self.pending.insert(

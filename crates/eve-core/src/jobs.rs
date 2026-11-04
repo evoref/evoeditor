@@ -9,7 +9,7 @@ use std::sync::Arc;
 use eve_view::{DocumentId, JobId, Revision};
 
 use crate::cancel::CancelToken;
-use eve_encoding::{Encoding, PuaEscapeMode, UnsupportedBom};
+use eve_encoding::{Encoding, EscapePolicy, UnsupportedBom};
 use eve_text::{Snapshot, Text};
 
 use crate::document::{ReadOnlyReasons, TextFormat};
@@ -74,7 +74,8 @@ pub enum JobKind {
         snapshot: Snapshot,
         encoding: Encoding,
         bom: bool,
-        pua: PuaEscapeMode,
+        /// 不正バイトのエスケープ文字の扱い。core が `TextFormat::save_escape_policy` で決める (03 §8.3)。
+        escape: EscapePolicy,
         expected: Expect,
         strategy: SaveStrategy,
         /// 「読み取り専用を解除して保存」(FR-116)。保存先の読み取り専用属性を外して書き、書いた後に付け直す。
@@ -86,7 +87,7 @@ pub enum JobKind {
     ReplaceUnmappable {
         snapshot: Snapshot,
         encoding: Encoding,
-        pua: PuaEscapeMode,
+        escape: EscapePolicy,
     },
     /// 保存の失敗の後の「退避先に保存」(03 §9.7 (e))。`doc` の公開物を退避ディレクトリへ書く。
     WriteRecovery {
@@ -435,7 +436,7 @@ pub fn run_job(
             snapshot,
             encoding,
             bom,
-            pua,
+            escape,
             expected,
             strategy,
             clear_readonly,
@@ -447,7 +448,7 @@ pub fn run_job(
                 snapshot,
                 encoding: *encoding,
                 bom: *bom,
-                pua: *pua,
+                escape: *escape,
                 expected: *expected,
                 strategy: *strategy,
                 clear_readonly: *clear_readonly,
@@ -459,8 +460,8 @@ pub fn run_job(
         JobKind::ReplaceUnmappable {
             snapshot,
             encoding,
-            pua,
-        } => match crate::unmap::build_replacement(snapshot, *encoding, *pua, cancel) {
+            escape,
+        } => match crate::unmap::build_replacement(snapshot, *encoding, *escape, cancel) {
             Ok(Some((changes, targets, counts))) => JobResult::UnmappableReplacement {
                 job: req.id,
                 changes,

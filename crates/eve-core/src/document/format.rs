@@ -1,6 +1,6 @@
 //! 文書の形式情報 (docs/02 §5.1、docs/03 §8.1 / §9.6): 改行の統計、`TextFormat`、読み取り専用の理由、読込状態。
 
-use eve_encoding::{Encoding, PuaEscapeMode, RoundtripSummary};
+use eve_encoding::{Encoding, EscapePolicy, PuaEscapeMode, RoundtripSummary};
 use eve_text::{ByteOff, LineEnding, TextRead};
 
 /// 改行の種類別の数。`CRLF` は 1 つと数える (03 §2.4)。
@@ -209,6 +209,25 @@ impl TextFormat {
             roundtrip: RoundtripSummary::default(),
             long_line_threshold: LONG_LINE_THRESHOLD,
             long_lines: 0,
+        }
+    }
+
+    /// 文字コード `out` で保存するときの、不正バイトのエスケープ文字の扱い (03 §8.3、E4)。
+    ///
+    /// - 元の文字コードのまま保存し、文書が不正バイトを持つとき: エスケープ文字を元のバイトに戻す (読込時の方式のまま)。
+    /// - 別の文字コードへ保存するとき: エスケープ文字は元の文字コードのバイトなので、別の文字コードの中には書けない
+    ///   (書くと前後のバイトとずれる・結合する)。表現不能として報告する。元のテキストが真にその範囲の文字を
+    ///   含む (`DisabledCollision`) ときは通常の文字として書く。
+    /// - 不正バイトの無い文書: エスケープ文字は読込で作ったものではない (他の文書から貼り付けた等) ので、
+    ///   元のバイトに戻さず表現不能として報告する (docs/review/v0.3-findings.md の SAF-02b。貼り付けの時点で
+    ///   `<0xNN>` の表記に変える 03 §8.3 の「編集」の行の実装までの暫定)。
+    pub fn save_escape_policy(&self, out: Encoding) -> EscapePolicy {
+        match self.pua_escape {
+            PuaEscapeMode::DisabledCollision => EscapePolicy::AsText,
+            PuaEscapeMode::Enabled if out == self.encoding && self.invalid_bytes > 0 => {
+                EscapePolicy::Restore
+            }
+            _ => EscapePolicy::Reject,
         }
     }
 }

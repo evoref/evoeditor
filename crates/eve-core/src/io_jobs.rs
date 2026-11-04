@@ -7,7 +7,7 @@
 
 use eve_encoding::{
     Confidence, Decoder, DetectOptions, DetectedKind, Detection, EncodeReport, Encoder, Encoding,
-    EscapePolicy, PuaEscapeMode, RoundtripChecker, detect, find_iso_switch, redetect_window,
+    EscapePolicy, RoundtripChecker, detect, find_iso_switch, redetect_window,
 };
 use eve_text::{ByteRange, LineEnding, Snapshot, TextBuilder, TextRead};
 use eve_view::JobId;
@@ -477,7 +477,7 @@ pub(crate) struct SaveParams<'a> {
     pub snapshot: &'a Snapshot,
     pub encoding: Encoding,
     pub bom: bool,
-    pub pua: PuaEscapeMode,
+    pub escape: EscapePolicy,
     pub expected: Expect,
     pub strategy: crate::jobs::SaveStrategy,
     pub clear_readonly: bool,
@@ -486,7 +486,7 @@ pub(crate) struct SaveParams<'a> {
 
 /// 乾式走査: 出力は捨てて、表現不能の文字と出力のバイト長だけを集める (03 §8.6 E1・05 §4.4 手順 0。書く前に止めるため)。
 fn dry_run(p: &SaveParams<'_>, cancel: &CancelToken) -> Option<(EncodeReport, u64)> {
-    let mut enc = Encoder::new(p.encoding, p.bom, EscapePolicy::from_mode(p.pua));
+    let mut enc = Encoder::new(p.encoding, p.bom, p.escape);
     let mut report = EncodeReport::default();
     let mut sink = Vec::new();
     let mut out_len = 0u64;
@@ -517,7 +517,7 @@ pub(crate) fn run_save(
     let mut out_len = 0u64;
     if in_place
         || !(p.encoding == Encoding::Utf8 || p.encoding.is_utf16())
-        || EscapePolicy::from_mode(p.pua) == EscapePolicy::Reject
+        || p.escape == EscapePolicy::Reject
     {
         match dry_run(&p, cancel) {
             None => {
@@ -542,7 +542,7 @@ pub(crate) fn run_save(
         snapshot,
         encoding,
         bom,
-        pua,
+        escape,
         expected,
         strategy,
         clear_readonly,
@@ -550,7 +550,7 @@ pub(crate) fn run_save(
     } = p;
     let mut src = SnapshotSource {
         chunks: snapshot.chunks(ByteRange::all(snapshot.len_bytes())),
-        enc: Encoder::new(encoding, bom, EscapePolicy::from_mode(pua)),
+        enc: Encoder::new(encoding, bom, escape),
         buf: Vec::new(),
         report: EncodeReport::default(),
         cancel,
