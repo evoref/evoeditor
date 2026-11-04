@@ -1,15 +1,17 @@
-//! L5 端末 E2E (docs/09 §3.6): 実バイナリを ConPTY (portable-pty) で起動し、`vt100` で画面を解釈して検査する。
-//! 遅く不安定になりやすいので最小限。生バイト列は比較しない (ConPTY は出力を再合成するため)。
+//! L5 端末 E2E (docs/09 §3.6): 実バイナリを擬似端末 (portable-pty。Windows は ConPTY、Linux は openpty) で起動し、
+//! `vt100` で画面を解釈して検査する。遅く不安定になりやすいので最小限。生バイト列は比較しない (ConPTY は出力を再合成するため)。
+//! Windows 固有の経路 (コンソールイベント・DLL の探索・UNC・Win32 のクリップボード) は `cfg(windows)`、Unix のシグナルの経路は
+//! `cfg(unix)` の試験にする。
 //!
 //! v0.1 の M2 で成り立つシナリオ: (1) 起動と終了、(2) 未保存の終了の確認ダイアログ、(3) 制御キーがアプリに届く、
 //! (5) 端末の復元、(9) 貼り付けの安全。(7) のパニック注入は feature test-hooks のときだけ走る。
 
-#![cfg(windows)]
+#![cfg(any(windows, target_os = "linux"))]
 // 検査の失敗は panic で伝える。
 #![allow(clippy::print_stdout, clippy::print_stderr)]
 
 use std::io::{Read, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -59,7 +61,7 @@ impl Session {
                 pixel_width: 0,
                 pixel_height: 0,
             })
-            .expect("ConPTY を開けません");
+            .expect("擬似端末を開けません");
         let mut cmd = CommandBuilder::new(exe());
         cmd.args(args);
         cmd.env_remove("NO_COLOR");
@@ -74,15 +76,41 @@ impl Session {
             ))
         });
         cmd.env("EVE_STATE_DIR", &state);
+        // OS の言語に依らず日本語で始める (言語の選択を試すテストは `envs` や引数で上書きする)
+        cmd.env("EVE_LANG", "ja");
+        // 開発者の実際の設定 (%APPDATA%) を読まない。設定ディレクトリを指定しない試験は、スワップを切った空に近い設定で動かす
+        // (スワップの書込・復旧の提案は負荷で時機が揺れ、無関係の試験を邪魔する)。スワップを試す試験は `E2E_SWAP` を渡す
+        // (この変数は製品へは渡さない、試験側の目印)。
+        if !envs.iter().any(|(k, _)| *k == "EVE_CONFIG_DIR") {
+            let swap = envs.iter().any(|(k, _)| *k == "E2E_SWAP");
+            let cfg = state.join("e2e-config");
+            std::fs::create_dir_all(&cfg).expect("設定ディレクトリを作れません");
+            std::fs::write(
+                cfg.join("config.toml"),
+                format!(
+                    "[file.swap]
+enabled = {swap}
+"
+                ),
+            )
+            .expect("設定を書けません");
+            cmd.env("EVE_CONFIG_DIR", &cfg);
+        }
         for (k, v) in envs {
-            cmd.env(k, v);
+            if *k != "E2E_SWAP" {
+                cmd.env(k, v);
+            }
         }
         let child = pty.slave.spawn_command(cmd).expect("起動できません");
         drop(pty.slave);
         let mut reader = pty.master.try_clone_reader().expect("reader");
         let writer: Arc<Mutex<Box<dyn Write + Send>>> =
             Arc::new(Mutex::new(pty.master.take_writer().expect("writer")));
-        let parser = Arc::new(Mutex::new(vt100::Parser::new(ROWS, COLS, 0)));
+        let parser = Arc::new(Mutex::new(vt100::Parser::new(
+            std::num::NonZeroU16::new(ROWS).expect("ROWS は 1 以上"),
+            std::num::NonZeroU16::new(COLS).expect("COLS は 1 以上"),
+            0,
+        )));
         let raw = Arc::new(Mutex::new(Vec::new()));
         {
             let (parser, raw, writer) = (parser.clone(), raw.clone(), writer.clone());
@@ -135,11 +163,10 @@ impl Session {
                 pixel_height: 0,
             })
             .expect("リサイズ");
-        self.parser
-            .lock()
-            .unwrap()
-            .screen_mut()
-            .set_size(rows, cols);
+        self.parser.lock().unwrap().screen_mut().set_size(
+            std::num::NonZeroU16::new(rows).expect("rows は 1 以上"),
+            std::num::NonZeroU16::new(cols).expect("cols は 1 以上"),
+        );
     }
 
     fn screen(&self) -> String {
@@ -177,11 +204,44 @@ impl Session {
 
     /// 疑似コンソールを閉じる (ウィンドウを閉じた状態。プロセスに `CTRL_CLOSE_EVENT` が届く、09 §3.6 (8b))。
     /// 閉じる呼出し (`ClosePseudoConsole`) は版によって子の終了を待ってブロックするので、別スレッドで呼ぶ。
+    #[cfg(windows)]
     fn close_console(&mut self) {
         if let Some(m) = self.master.take() {
             #[allow(clippy::disallowed_methods)]
             thread::spawn(move || drop(m));
         }
+    }
+
+    /// プロセスにシグナルを送る (`kill -<name>`。外部からの終了要求・端末の切断の再現、09 §3.6 (8))。
+    #[cfg(unix)]
+    fn signal(&self, name: &str) {
+        let pid = self.child.process_id().expect("pid");
+        let st = std::process::Command::new("kill")
+            .args([&format!("-{name}"), &pid.to_string()])
+            .status()
+            .expect("kill を起動できません");
+        assert!(st.success(), "kill -{name}: {st:?}");
+    }
+
+    /// 外から終わらせる (Windows はコンソールを閉じる、Unix は端末の切断 = SIGHUP)。
+    fn hang_up(&mut self) {
+        #[cfg(windows)]
+        self.close_console();
+        #[cfg(unix)]
+        self.signal("HUP");
+    }
+
+    /// 終了を待つ (上限つき)。終了の状態 (シグナルで終わったときはその名前) を返す。終了しなければ `None`。
+    #[cfg(unix)]
+    fn status_within(&mut self, limit: Duration) -> Option<portable_pty::ExitStatus> {
+        let t = Instant::now();
+        while t.elapsed() < limit {
+            if let Some(st) = self.child.try_wait().expect("try_wait") {
+                return Some(st);
+            }
+            thread::sleep(Duration::from_millis(25));
+        }
+        None
     }
 
     /// 終了を待つ (上限つき)。終了しなければ `None`。
@@ -217,7 +277,9 @@ impl Session {
 
     /// 最初の画面 (ステータスバーが出る) まで待つ。
     fn wait_ready(&self) {
-        self.wait_for("最初の画面", |s| s.contains("無題-1"));
+        self.wait_for("最初の画面", |s| {
+            s.contains("無題-1") || s.contains("Untitled-1")
+        });
     }
 }
 
@@ -387,6 +449,41 @@ fn 日本語のファイルを引数で開いて表示する() {
     let _ = std::fs::remove_dir_all(dir);
 }
 
+// 複数のファイル引数と `+行`: すべてバッファになり、最初のものを表示して指定の行へ移る (07 §18.2)
+#[test]
+fn 複数のファイルと_行指定で開く() {
+    let dir = temp_dir("multi");
+    let (a, b) = (dir.join("a.txt"), dir.join("b.txt"));
+    std::fs::write(
+        &a,
+        "a1
+a2
+a3
+",
+    )
+    .unwrap();
+    std::fs::write(
+        &b,
+        "b1
+b2
+b3
+",
+    )
+    .unwrap();
+    let mut s = Session::start(&["+2", a.to_str().unwrap(), b.to_str().unwrap()]);
+    s.wait_for("最初のファイルの 2 行目", |t| {
+        t.contains("a1") && t.contains("a.txt (1/2)") && t.contains("行 2, 桁 1")
+    });
+    // Ctrl+PageDown で次のバッファへ
+    s.send(b"[6;5~");
+    s.wait_for("2 つ目のバッファ", |t| {
+        t.contains("b1") && t.contains("b.txt (2/2)")
+    });
+    s.send(CTRL_Q);
+    assert_eq!(s.wait_exit(), 0, "変更なしなら確認なしで終了");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
 // (1) 起動 → 文字入力 → Ctrl+S → Ctrl+Q、ファイルの内容が一致する (無題は名前を尋ねる)
 #[test]
 fn 入力して保存して終了するとファイルの内容が一致する() {
@@ -437,6 +534,7 @@ fn 設定ディレクトリが無くても使え_設定ディレクトリは作�
 // (8b ii) コンソールを閉じる (CTRL_CLOSE): 未保存の内容を退避して終了する。退避は受信スレッドがメインを待たずに書く
 // verifies: AC-FR-107-2
 // verifies: AC-NFR-302-2
+#[cfg(windows)]
 #[test]
 fn コンソールを閉じると未保存の内容を退避して終了する() {
     let mut s = Session::start(&[]);
@@ -487,7 +585,7 @@ fn 退避が残っていると起動時に場所を案内する() {
     type_slowly(&s1, "lost work");
     s1.wait_for("入力が見える", |t| t.contains("lost work"));
     let state = s1.state.clone();
-    s1.close_console();
+    s1.hang_up();
     assert!(s1.exit_within(Duration::from_secs(10)).is_some());
     // 同じ状態ディレクトリで再び起動する
     let mut s2 = Session::start_in(&[], Some(state.clone()));
@@ -610,8 +708,11 @@ fn 未知の文字コードの指定は使い方の誤り() {
 fn 貼り付けの本文の制御文字はコマンドとして実行されない() {
     let mut s = Session::start(&[]);
     s.wait_ready();
-    // 1 回の書込 (個別キーのバースト) で送る。0x13 を含む
+    // Windows: 1 回の書込 (個別キーのバースト。04 §6.6 のバースト検出で貼り付けになる) で送る。0x13 を含む。
+    // Unix: ブラケットペースト (`CSI 200~` 〜 `CSI 201~`) の本文に 0x13 を入れる
     let mut body = Vec::new();
+    #[cfg(unix)]
+    body.extend_from_slice(b"[200~");
     body.extend_from_slice(b"head-");
     body.push(0x13);
     body.extend_from_slice(b"-middle-text-that-makes-a-long-burst-");
@@ -725,7 +826,8 @@ fn パニックすると端末を戻し_未保存の内容を退避してクラ�
     let _ = std::fs::remove_dir_all(&s.state);
 }
 
-/// 補助プロセス `eve-test-helpers` の場所 (evoeditor と同じ出力ディレクトリ)。無ければ cargo で作る。
+/// 補助プロセス `eve-test-helpers` の場所 (evoeditor と同じ出力ディレクトリ)。無ければ cargo で作る。Windows だけ。
+#[cfg(windows)]
 fn helper_exe() -> PathBuf {
     let dir = std::path::Path::new(BUILT).parent().unwrap().to_path_buf();
     let exe = dir.join("eve-test-helpers.exe");
@@ -741,6 +843,7 @@ fn helper_exe() -> PathBuf {
 }
 
 /// 疑似コンソールの evoeditor に Ctrl+Break を送り (Ctrl+C は raw モードでは conhost が配らず入力になるので、ここでは扱わない)、未保存の内容を退避して終了コード 130 で終わることを確かめる (09 §3.6 (8))。
+#[cfg(windows)]
 fn コンソールイベントで退避して終了する(kind: &str) {
     let mut s = Session::start(&[]);
     s.wait_ready();
@@ -781,9 +884,126 @@ fn コンソールイベントで退避して終了する(kind: &str) {
 // 外部からの CTRL_C_EVENT は、端末を生の入力モード (ENABLE_PROCESSED_INPUT なし、04 §6.1) にしているので届かない。
 // キーの Ctrl+C はコマンドとして届く (`ctrl_c_はプロセスを殺さず_ctrl_z_は_undo_として届く`)。外部からの終了は CTRL_BREAK と CTRL_CLOSE。
 // verifies: AC-NFR-302-2
+#[cfg(windows)]
 #[test]
 fn ctrl_break_を受けると未保存の内容を退避して終了する() {
     コンソールイベントで退避して終了する("ctrl-break");
+}
+
+/// 退避のディレクトリ (`<UTC の時刻>-<pid>/`) の一覧。
+#[cfg(unix)]
+fn recovery_dirs(state: &Path) -> Vec<PathBuf> {
+    std::fs::read_dir(state.join("recovery"))
+        .map(|rd| {
+            rd.flatten()
+                .filter(|e| e.file_name().to_string_lossy().contains('Z'))
+                .map(|e| e.path())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Unix: 終了のシグナル (`name`) を外から送ると、未保存の内容を退避し、端末を戻して、同じシグナルで終わる
+/// (05 §11.1 / §11.4 / §11.5、09 §3.6 (8))。`want` は strsignal の名前。
+#[cfg(unix)]
+fn シグナルで退避して同じシグナルで終わる(name: &str, want: &str) {
+    let mut s = Session::start(&[]);
+    s.wait_ready();
+    type_slowly(&s, "unsaved text");
+    s.wait_for("入力が見える", |t| t.contains("unsaved text"));
+    s.signal(name);
+    let st = s.status_within(Duration::from_secs(5)).expect("終了する");
+    assert_eq!(st.signal(), Some(want), "同じシグナルで終わる: {st}");
+    s.wait_raw("\x1b[?1049l");
+    assert!(s.raw_text().contains("\x1b[?1049l"), "端末を戻した");
+    let dirs = recovery_dirs(&s.state);
+    assert_eq!(dirs.len(), 1, "{dirs:?}");
+    let manifest = std::fs::read_to_string(dirs[0].join("manifest.toml")).unwrap();
+    assert!(manifest.contains("reason = \"signal\""), "{manifest}");
+    assert!(manifest.contains("complete = true"), "{manifest}");
+    let body: Vec<_> = std::fs::read_dir(&dirs[0])
+        .unwrap()
+        .flatten()
+        .filter(|e| e.file_name().to_string_lossy().ends_with(".txt"))
+        .collect();
+    assert_eq!(body.len(), 1);
+    assert_eq!(
+        std::fs::read_to_string(body[0].path()).unwrap(),
+        "unsaved text"
+    );
+    let _ = std::fs::remove_dir_all(&s.state);
+}
+
+// verifies: AC-NFR-302-2
+#[cfg(unix)]
+#[test]
+fn sigterm_を受けると未保存の内容を退避して同じシグナルで終わる() {
+    シグナルで退避して同じシグナルで終わる("TERM", "Terminated");
+}
+
+// 端末が閉じた・SSH が切れた (SIGHUP)。端末は既に無い前提で、復元の書込の失敗は無視する
+// verifies: AC-NFR-302-2
+#[cfg(unix)]
+#[test]
+fn sighup_を受けると未保存の内容を退避して同じシグナルで終わる() {
+    シグナルで退避して同じシグナルで終わる("HUP", "Hangup");
+}
+
+// raw モードでは Ctrl+C は SIGINT にならない (キーとして届く)。外からの `kill -INT` は終了要求
+#[cfg(unix)]
+#[test]
+fn 外からの_sigint_を受けると未保存の内容を退避して同じシグナルで終わる() {
+    シグナルで退避して同じシグナルで終わる("INT", "Interrupt");
+}
+
+// (8) Unix: メインが止まった状態の SIGTERM (test-hooks `main_stall`): シグナルスレッドが退避を書き、2 秒待ってもメインが
+// 終わらないので、端末を緊急に復元して同じシグナルで終わる (02 §9.6 手順 4、受信から 5 s の内)
+#[cfg(all(unix, feature = "test-hooks"))]
+#[test]
+fn メインが止まっていても_sigterm_で端末を戻して同じシグナルで終わる() {
+    let mut s = Session::start_with(&[], None, &[("EVE_TEST_HOOK", "main_stall")]);
+    s.wait_ready();
+    type_slowly(&s, "unsaved text");
+    s.wait_for("入力が見える", |t| t.contains("unsaved text"));
+    let before = Instant::now();
+    s.signal("TERM");
+    let after = Instant::now();
+    let st = s.status_within(Duration::from_secs(8)).expect("終了する");
+    let end = Instant::now();
+    assert_eq!(st.signal(), Some("Terminated"), "{st}");
+    assert!(
+        end - before >= Duration::from_secs(2) && end - after < Duration::from_millis(5500),
+        "メインの終了を 2 秒待ち、合計 5 秒の内で終わる: {:?} 〜 {:?}",
+        end - after,
+        end - before
+    );
+    s.wait_raw("\x1b[?1049l");
+    assert!(s.raw_text().contains("\x1b[?1049l"), "端末を戻した");
+    let dirs = recovery_dirs(&s.state);
+    assert_eq!(dirs.len(), 1, "{dirs:?}");
+    let manifest = std::fs::read_to_string(dirs[0].join("manifest.toml")).unwrap();
+    assert!(manifest.contains("complete = true"), "{manifest}");
+    let _ = std::fs::remove_dir_all(&s.state);
+}
+
+// Unix: 異常終了のシグナル (SIGSEGV など) では端末の復元だけを行い (CAN で書きかけの列を打ち切ってから)、退避はせずに
+// 同じシグナルで終わる (05 §11.1 の表の最後の行)。外から送った SIGSEGV で確かめる
+#[cfg(unix)]
+#[test]
+fn 異常終了のシグナルでは端末だけを戻して同じシグナルで終わる() {
+    let mut s = Session::start(&[]);
+    s.wait_ready();
+    type_slowly(&s, "unsaved text");
+    s.wait_for("入力が見える", |t| t.contains("unsaved text"));
+    s.signal("SEGV");
+    let st = s.status_within(Duration::from_secs(5)).expect("終了する");
+    assert_eq!(st.signal(), Some("Segmentation fault"), "{st}");
+    s.wait_raw("\x1b[?1049l");
+    let raw = s.raw_text();
+    let can = raw.rfind('\x18').expect("CAN を書く");
+    assert!(raw[can..].contains("\x1b[?1049l"), "CAN の後に復元の列");
+    assert!(recovery_dirs(&s.state).is_empty(), "退避はしない");
+    let _ = std::fs::remove_dir_all(&s.state);
 }
 
 // (7) recovery_timeout (test-hooks): 退避の段の予算が尽きても、打ち切りの manifest (complete = false) を残し、
@@ -823,7 +1043,7 @@ fn パニックの退避が時間切れでも終了コードとクラッシュ�
 
 // (8) メインが止まった状態の Ctrl+Break (test-hooks `main_stall`): 受信スレッドが退避を書き、2 秒待ってもメインが終わらないので
 // 端末を緊急に復元して終了コード 130 で終わる (02 §9.6 手順 4、合計 5 s の内)。
-#[cfg(feature = "test-hooks")]
+#[cfg(all(windows, feature = "test-hooks"))]
 #[test]
 fn メインが止まっていても_ctrl_break_で端末を戻して終了する() {
     let mut s = Session::start_with(&[], None, &[("EVE_TEST_HOOK", "main_stall")]);
@@ -831,18 +1051,23 @@ fn メインが止まっていても_ctrl_break_で端末を戻して終了す�
     type_slowly(&s, "unsaved text");
     s.wait_for("入力が見える", |t| t.contains("unsaved text"));
     let pid = s.child.process_id().expect("pid");
-    let sent = Instant::now();
+    // イベントが届いた時刻は、補助プロセスの起動前 (`before`) と終了後 (`after`) の間のどこか。補助プロセスの起動は負荷で
+    // 秒単位で遅れ得るので、製品の時間の下限は `before` から (保守的に長く)、上限は `after` から (保守的に短く) 測る
+    let before = Instant::now();
     let st = std::process::Command::new(helper_exe())
         .args(["console-event", &pid.to_string(), "ctrl-break"])
         .status()
         .unwrap();
     assert!(st.success(), "console-event: {st:?}");
+    let after = Instant::now();
     let code = s.exit_within(Duration::from_secs(8));
-    let elapsed = sent.elapsed();
-    assert_eq!(code, Some(130), "{elapsed:?}");
+    let end = Instant::now();
+    assert_eq!(code, Some(130), "{:?}", end - before);
     assert!(
-        elapsed >= Duration::from_secs(2) && elapsed < Duration::from_millis(5500),
-        "メインの終了を 2 秒待ち、合計 5 秒の内で終わる: {elapsed:?}"
+        end - before >= Duration::from_secs(2) && end - after < Duration::from_millis(5500),
+        "メインの終了を 2 秒待ち、合計 5 秒の内で終わる: {:?} 〜 {:?}",
+        end - after,
+        end - before
     );
     s.wait_raw("\x1b[?1049l");
     assert!(s.raw_text().contains("\x1b[?1049l"), "端末を戻した");
@@ -861,7 +1086,7 @@ fn メインが止まっていても_ctrl_break_で端末を戻して終了す�
 // (8b iii) メインが止まった状態のコンソールの閉鎖 (test-hooks `main_stall`): 受信スレッドが退避を書く。メインを待たずに
 // 書き終えるので、CTRL_CLOSE の強制終了 (約 5 秒) の内に本文が残る (02 §9.6 手順 2)。
 // verifies: AC-NFR-302-3
-#[cfg(feature = "test-hooks")]
+#[cfg(all(windows, feature = "test-hooks"))]
 #[test]
 fn メインが止まっていてもコンソールを閉じると未保存の内容を退避して終了する() {
     let mut s = Session::start_with(&[], None, &[("EVE_TEST_HOOK", "main_stall")]);
@@ -944,13 +1169,14 @@ case = \"smart\"
     let _ = std::fs::remove_dir_all(&cfg);
 }
 
-// ---- システムクリップボード (05 §8、09 §3.6 / §3.4 の clip-delay)。実クリップボードを使うので、プロセスをまたいで直列にする ----
+// ---- システムクリップボード (05 §8、09 §3.6 / §3.4 の clip-delay)。実クリップボードを使うので、プロセスをまたいで直列にする。
+// Win32 のクリップボードを補助プロセスで握る・読むので Windows だけ (Linux の外部コマンドの経路は eve-platform の試験) ----
 
 /// クリップボードを使うテストの排他 (ファイルの排他作成。nextest の別プロセスの間でも直列にする)。
-#[cfg(feature = "test-hooks")]
+#[cfg(all(windows, feature = "test-hooks"))]
 struct ClipLock(PathBuf);
 
-#[cfg(feature = "test-hooks")]
+#[cfg(all(windows, feature = "test-hooks"))]
 impl ClipLock {
     fn acquire() -> ClipLock {
         let path = std::env::temp_dir().join("evo-e2e-clipboard.lock");
@@ -982,7 +1208,7 @@ impl ClipLock {
     }
 }
 
-#[cfg(feature = "test-hooks")]
+#[cfg(all(windows, feature = "test-hooks"))]
 impl Drop for ClipLock {
     fn drop(&mut self) {
         let _ = std::fs::remove_file(&self.0);
@@ -990,7 +1216,7 @@ impl Drop for ClipLock {
 }
 
 /// 補助プロセスを起動し、`ready` の行が出るまで待つ。
-#[cfg(feature = "test-hooks")]
+#[cfg(all(windows, feature = "test-hooks"))]
 fn spawn_clip_helper(args: &[&str]) -> std::process::Child {
     use std::io::BufRead;
     use std::process::Stdio;
@@ -1007,7 +1233,7 @@ fn spawn_clip_helper(args: &[&str]) -> std::process::Child {
 }
 
 /// `clip-read` の出力 (読めるまで 3 秒待つ)。
-#[cfg(feature = "test-hooks")]
+#[cfg(all(windows, feature = "test-hooks"))]
 fn clip_read() -> String {
     let t = Instant::now();
     loop {
@@ -1026,7 +1252,7 @@ fn clip_read() -> String {
     }
 }
 
-#[cfg(feature = "test-hooks")]
+#[cfg(all(windows, feature = "test-hooks"))]
 // verifies: AC-FR-603-1
 #[test]
 fn コピーは実際のクリップボードに入り_貼り付けはそこから読む() {
@@ -1058,7 +1284,7 @@ fn コピーは実際のクリップボードに入り_貼り付けはそこか�
     let _ = std::fs::remove_dir_all(&s.state);
 }
 
-#[cfg(feature = "test-hooks")]
+#[cfg(all(windows, feature = "test-hooks"))]
 #[test]
 fn 取得が遅くても入力は止まらず_2_秒で内部レジスタに切り替わる() {
     let _lock = ClipLock::acquire();
@@ -1103,7 +1329,7 @@ fn 取得が遅くても入力は止まらず_2_秒で内部レジスタに切�
     let _ = std::fs::remove_dir_all(&s.state);
 }
 
-#[cfg(feature = "test-hooks")]
+#[cfg(all(windows, feature = "test-hooks"))]
 #[test]
 fn クリップボードを他のプロセスが握っていると内部レジスタに切り替える() {
     let _lock = ClipLock::acquire();
@@ -1249,6 +1475,7 @@ fn 連続してリサイズしても最後の大きさの画面は全再描画�
 }
 
 // verifies: AC-NFR-502-2
+#[cfg(windows)]
 #[test]
 fn 同じフォルダとカレントに置いた偽の_dll_は読み込まれない() {
     // 実行ファイルが起動時に取り込む System32 の DLL (KnownDLLs でないもの) と同じ名前の偽の DLL を、
@@ -1329,6 +1556,7 @@ fn 同じフォルダとカレントに置いた偽の_dll_は読み込まれな
 }
 
 // verifies: AC-NFR-502-2
+#[cfg(windows)]
 #[test]
 fn 到達できない_unc_パスを開いている間も_ui_は止まらず終了できる() {
     // 名前が引けない UNC パス (OS が応答を待つ)。読込はワーカーで行うので、画面は出て、キーも効く
@@ -1339,4 +1567,338 @@ fn 到達できない_unc_パスを開いている間も_ui_は止まらず終�
     let code = s.wait_exit();
     assert!(code == 0 || code == 1, "終了コード {code}\n{}", s.screen());
     assert!(t.elapsed() < WAIT, "Ctrl+Q の後も終了しない");
+}
+
+// ---- スワップ (swap-lite、FR-118 / NFR-307、docs/03 §10.2 / §10.3) ----
+
+/// `swap/` の下の、書き終えた (manifest がある) スワップのディレクトリ。
+fn swap_dirs(state: &Path) -> Vec<PathBuf> {
+    std::fs::read_dir(state.join("swap"))
+        .map(|rd| {
+            rd.flatten()
+                .map(|e| e.path())
+                .filter(|p| p.join("manifest.toml").exists())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// スワップが書かれるまで待つ。最後の入力からの時間を返す。
+fn wait_for_swap(s: &Session, since: Instant) -> Duration {
+    let t = Instant::now();
+    while t.elapsed() < WAIT {
+        if !swap_dirs(&s.state).is_empty() {
+            return since.elapsed();
+        }
+        thread::sleep(Duration::from_millis(25));
+    }
+    panic!("スワップが書かれない。画面:\n{}", s.screen());
+}
+
+// FR-118 / NFR-307: 最後の入力から 2 秒後にスワップが書かれ、強制終了 (TerminateProcess) の後の起動で復旧が提案され、
+// 適用した内容が強制終了の直前と一致する。無題の文書。
+#[test]
+fn 強制終了してもスワップから復旧できる_無題() {
+    let mut s1 = Session::start_with(&[], None, &[("E2E_SWAP", "1")]);
+    s1.wait_ready();
+    type_slowly(&s1, "kill me");
+    let last_input = Instant::now();
+    s1.wait_for("入力が見える", |t| t.contains("kill me"));
+    let took = wait_for_swap(&s1, last_input);
+    assert!(
+        took < Duration::from_secs(6),
+        "最後の入力から約 2 秒で書かれる: {took:?}"
+    );
+    let state = s1.state.clone();
+    // 強制終了 (TerminateProcess)。正常終了の後始末も、緊急退避も行われない
+    s1.child.kill().expect("kill");
+    let _ = s1.exit_within(Duration::from_secs(10));
+    assert!(!swap_dirs(&state).is_empty(), "強制終了後もスワップが残る");
+
+    let mut s2 = Session::start_with(&[], Some(state.clone()), &[("E2E_SWAP", "1")]);
+    s2.wait_for("復旧の提案", |t| {
+        t.contains("未保存の内容が見つかりました")
+    });
+    s2.send(b"a"); // [A] 復旧内容を適用
+    s2.wait_for("復旧した内容", |t| {
+        t.contains("kill me") && t.contains("復旧内容を適用しました")
+    });
+    // 適用しても保存するまで dirty。破棄して終了すれば、古いスワップも自分のスワップも残らない
+    s2.send(CTRL_Q);
+    s2.wait_for("未保存の確認", |t| t.contains("[D]"));
+    s2.send(b"d");
+    assert_eq!(s2.wait_exit(), 0);
+    assert!(
+        swap_dirs(&state).is_empty(),
+        "正常終了ではスワップを残さない: {:?}",
+        swap_dirs(&state)
+    );
+    let _ = std::fs::remove_dir_all(&state);
+}
+
+// 開いているファイルのスワップ: 強制終了の後に同じファイルを開くと復旧が提案され、適用してもファイルは保存するまで変わらない。
+#[test]
+fn 強制終了してもスワップから復旧できる_ファイル() {
+    let dir = temp_dir("swap-file");
+    let file = dir.join("memo.txt");
+    std::fs::write(&file, "original\n").unwrap();
+    let mut s1 = Session::start_with(&[file.to_str().unwrap()], None, &[("E2E_SWAP", "1")]);
+    s1.wait_for("開く", |t| t.contains("original"));
+    type_slowly(&s1, "EDIT");
+    let last_input = Instant::now();
+    wait_for_swap(&s1, last_input);
+    let state = s1.state.clone();
+    s1.child.kill().expect("kill");
+    let _ = s1.exit_within(Duration::from_secs(10));
+    assert_eq!(
+        std::fs::read_to_string(&file).unwrap(),
+        "original\n",
+        "保存していないのでファイルは変わらない"
+    );
+
+    let mut s2 = Session::start_with(
+        &[file.to_str().unwrap()],
+        Some(state.clone()),
+        &[("E2E_SWAP", "1")],
+    );
+    s2.wait_for("復旧の提案", |t| {
+        t.contains("未保存の内容が見つかりました")
+    });
+    s2.send(b"a");
+    s2.wait_for("復旧した内容", |t| t.contains("EDIToriginal"));
+    assert_eq!(
+        std::fs::read_to_string(&file).unwrap(),
+        "original\n",
+        "適用しても保存するまでファイルは変わらない"
+    );
+    // 保存すると、スワップが片付く
+    s2.send(CTRL_S);
+    s2.wait_for("保存した", |t| t.contains("保存しました"));
+    let t = Instant::now();
+    while t.elapsed() < Duration::from_secs(10) && !swap_dirs(&state).is_empty() {
+        thread::sleep(Duration::from_millis(50));
+    }
+    assert!(
+        swap_dirs(&state).is_empty(),
+        "保存したのでスワップは要らない"
+    );
+    s2.send(CTRL_Q);
+    assert_eq!(s2.wait_exit(), 0);
+    assert_eq!(
+        std::fs::read_to_string(&file).unwrap(),
+        "EDIToriginal\n",
+        "保存した内容"
+    );
+    let _ = std::fs::remove_dir_all(&state);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+// 置換途中の痕跡 (M6e、05 §4.6): 保存の途中 (置換の直前) で強制終了すると一時ファイルが残り、次の起動で提案が出る。
+// 「別バッファで開く」は読み取り専用で開き、次の起動の「削除」で一時ファイルもフラグも無くなる。
+// 実行: cargo test -p evoeditor --features test-hooks --test e2e
+#[cfg(feature = "test-hooks")]
+#[test]
+fn 保存の途中の強制終了の後の起動で一時ファイルの提案が出て_開いて確認し_削除できる() {
+    let dir = temp_dir("leftover");
+    let file = dir.join("memo.txt");
+    std::fs::write(&file, "original\n").unwrap();
+    let mut s1 = Session::start_with(
+        &[file.to_str().unwrap()],
+        None,
+        &[("EVE_TEST_HOOK", "kill_before_rename")],
+    );
+    s1.wait_for("開く", |t| t.contains("original"));
+    type_slowly(&s1, "EDIT");
+    s1.send(CTRL_S);
+    assert!(
+        s1.exit_within(Duration::from_secs(10)).is_some(),
+        "置換の直前で強制終了する"
+    );
+    let state = s1.state.clone();
+    let tmps = |dir: &Path| -> Vec<PathBuf> {
+        std::fs::read_dir(dir)
+            .unwrap()
+            .flatten()
+            .map(|e| e.path())
+            .filter(|p| {
+                p.file_name()
+                    .and_then(|n| n.to_str())
+                    .is_some_and(|n| n.starts_with(".memo.txt.eve-tmp-"))
+            })
+            .collect()
+    };
+    assert_eq!(tmps(&dir).len(), 1, "一時ファイルが残る");
+    assert_eq!(std::fs::read_to_string(&file).unwrap(), "original\n");
+
+    // 次の起動: 提案が出る。「別バッファで開く」で中身が見え、読み取り専用で、元のファイルは変わらない
+    let mut s2 = Session::start_in(&[], Some(state.clone()));
+    s2.wait_for("提案", |t| {
+        t.contains("保存の途中の一時ファイルが残っています")
+    });
+    s2.send(b"o");
+    s2.wait_for("一時ファイルの内容", |t| {
+        t.contains("EDIToriginal")
+    });
+    type_slowly(&s2, "zzz");
+    thread::sleep(Duration::from_millis(300));
+    assert!(
+        !s2.screen().contains("zzz"),
+        "読み取り専用なので編集できない"
+    );
+    s2.send(CTRL_Q);
+    assert_eq!(s2.wait_exit(), 0);
+    assert_eq!(tmps(&dir).len(), 1, "開くだけでは消さない");
+
+    // その次の起動: 削除を選ぶと一時ファイルも保存中フラグも無くなる
+    let mut s3 = Session::start_in(&[], Some(state.clone()));
+    s3.wait_for("提案", |t| {
+        t.contains("保存の途中の一時ファイルが残っています")
+    });
+    s3.send(b"d");
+    s3.wait_for("削除した", |t| t.contains("後始末として削除しました"));
+    s3.send(CTRL_Q);
+    assert_eq!(s3.wait_exit(), 0);
+    assert!(tmps(&dir).is_empty(), "一時ファイルを消した");
+    let inflight = state.join("recovery").join("inflight");
+    let flags = std::fs::read_dir(&inflight)
+        .map(|rd| {
+            rd.flatten()
+                .flat_map(|d| std::fs::read_dir(d.path()).into_iter().flatten().flatten())
+                .count()
+        })
+        .unwrap_or(0);
+    assert_eq!(flags, 0, "保存中フラグも消える");
+    let _ = std::fs::remove_dir_all(&state);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+// 正常終了ではスワップを残さない (破棄して終了)。
+#[test]
+fn 正常終了ではスワップを消す() {
+    let mut s = Session::start_with(&[], None, &[("E2E_SWAP", "1")]);
+    s.wait_ready();
+    type_slowly(&s, "bye");
+    let last_input = Instant::now();
+    wait_for_swap(&s, last_input);
+    s.send(CTRL_Q);
+    s.wait_for("未保存の確認", |t| t.contains("[D]"));
+    s.send(b"d");
+    assert_eq!(s.wait_exit(), 0);
+    assert!(swap_dirs(&s.state).is_empty());
+    let _ = std::fs::remove_dir_all(&s.state);
+}
+
+// ---- UI の言語の選択 (07 §17.1: --locale > ui.locale > EVE_LANG > OS ロケール > ja) ----
+
+/// ヒントバーの終了の項目が英語になる。
+fn assert_english_ui(s: &Session) {
+    s.wait_for("英語のヒントバー", |t| t.contains("Quit"));
+    assert!(!s.screen().contains("終了"), "{}", s.screen());
+}
+
+// NFR-603 AC-3 (v0.2。チェックリストは v0.2 のゲートで作る)
+#[test]
+fn locale_オプションで画面が英語になる() {
+    let mut s = Session::start(&["--locale", "en"]);
+    s.wait_ready();
+    assert_english_ui(&s);
+    s.send(CTRL_Q);
+    assert_eq!(s.wait_exit(), 0);
+}
+
+// NFR-603 AC-3 (v0.2。チェックリストは v0.2 のゲートで作る)
+#[test]
+fn eve_lang_で画面が英語になり_locale_オプションが優先する() {
+    let mut s = Session::start_with(&[], None, &[("EVE_LANG", "en_US")]);
+    s.wait_ready();
+    assert_english_ui(&s);
+    s.send(CTRL_Q);
+    assert_eq!(s.wait_exit(), 0);
+
+    let mut s = Session::start_with(&["--locale=ja"], None, &[("EVE_LANG", "en")]);
+    s.wait_ready();
+    s.wait_for("日本語のヒントバー", |t| t.contains("終了"));
+    s.send(CTRL_Q);
+    assert_eq!(s.wait_exit(), 0);
+}
+
+// NFR-603 AC-3 (v0.2。チェックリストは v0.2 のゲートで作る)
+#[test]
+fn 設定の_ui_locale_は環境変数より優先し_未知の言語は次の段へ進む() {
+    let cfg = temp_dir("cfg-locale");
+    std::fs::create_dir_all(&cfg).unwrap();
+    std::fs::write(cfg.join("config.toml"), "[ui]\nlocale = \"en\"\n").unwrap();
+    let envs = [
+        ("EVE_CONFIG_DIR", cfg.to_str().unwrap()),
+        ("EVE_LANG", "ja"),
+    ];
+    let mut s = Session::start_with(&[], None, &envs);
+    s.wait_ready();
+    assert_english_ui(&s);
+    s.send(CTRL_Q);
+    assert_eq!(s.wait_exit(), 0);
+    let _ = std::fs::remove_dir_all(&s.state);
+
+    // 未知の言語名の --locale は警告して (ログ)、次の段の ui.locale = "en" に進む
+    let mut s = Session::start_with(&["--locale", "fr"], None, &envs);
+    s.wait_ready();
+    assert_english_ui(&s);
+    s.send(CTRL_Q);
+    assert_eq!(s.wait_exit(), 0);
+    let log =
+        std::fs::read_to_string(s.state.join("log").join("evoeditor.log")).unwrap_or_default();
+    assert!(log.contains("--locale") && log.contains("\"fr\""), "{log}");
+    let _ = std::fs::remove_dir_all(&s.state);
+    let _ = std::fs::remove_dir_all(&cfg);
+}
+
+// ---- 起動前の文言の英日併記 (04 §14.4 / §15.2、OQ-67): 英語 (ASCII) の行を先に、日本語の行を 2 字下げで次に ----
+
+/// 英語の行の次の行が、2 字下げの日本語の行になっている。
+fn assert_bilingual(text: &str, en_prefix: &str, ja_part: &str) {
+    let lines: Vec<&str> = text.lines().collect();
+    let i = lines
+        .iter()
+        .position(|l| l.starts_with(en_prefix))
+        .unwrap_or_else(|| panic!("{en_prefix} が無い: {text}"));
+    assert!(lines[i].is_ascii(), "{}", lines[i]);
+    assert!(
+        lines[i + 1].starts_with("  ") && lines[i + 1].contains(ja_part),
+        "{text}"
+    );
+}
+
+#[test]
+fn help_は英語の行の次に日本語の行を出す() {
+    let out = std::process::Command::new(exe())
+        .arg("--help")
+        .output()
+        .expect("起動");
+    assert!(out.status.success());
+    let text = String::from_utf8_lossy(&out.stdout);
+    assert_bilingual(&text, "Usage: evoeditor", "使い方:");
+    assert!(
+        text.contains("--locale") && text.contains("--readonly"),
+        "{text}"
+    );
+}
+
+#[test]
+fn 使い方の誤りは英語の行の次に日本語の行を出す() {
+    let out = std::process::Command::new(exe())
+        .args(["--encoding", "latin1", "x.txt"])
+        .output()
+        .expect("起動");
+    assert_eq!(out.status.code(), Some(2));
+    let text = String::from_utf8_lossy(&out.stderr);
+    assert_bilingual(&text, "Unknown encoding: latin1", "latin1 は対応していない");
+    let out = std::process::Command::new(exe())
+        .arg("--nope")
+        .output()
+        .expect("起動");
+    assert_bilingual(
+        &String::from_utf8_lossy(&out.stderr),
+        "Unknown option: --nope",
+        "未知のオプション",
+    );
 }

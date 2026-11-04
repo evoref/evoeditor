@@ -1,0 +1,40 @@
+# CRLF の文書の 1 行を置き換え、LF を含む貼り付けをして保存すると、編集していない行も貼り付けた改行も CRLF のまま (FR-113)。
+[meta]
+id = "file/save_crlf"
+title = "CRLF 文書の 1 行を置き換え、LF の貼り付けを含めて保存すると CRLF が保たれる"
+verifies = ["AC-FR-113-1", "AC-FR-113-3"]
+since = "v0.1"
+tags = ["file", "eol"]
+
+[setup]
+size = [80, 24]
+
+[setup.fs]
+"a.txt" = { text = "hello\r\nworld\r\nend\r\n" }
+
+[[step]]
+open = "a.txt"
+[[step]]
+run_jobs = true
+[[step]]
+keys = "ctrl+home down shift+end"
+[[step]]
+text = "日本語"
+[[step]]
+paste = "\nx"
+[[step]]
+cmd = "file.save"
+[[step]]
+run_jobs = true
+
+[[assert]]
+at = 4
+query = { kind = "selection" }
+expect = { empty = true }
+[[assert]]
+fs = { "a.txt" = { text = "hello\r\n日本語\r\nx\r\nend\r\n" } }
+[[assert]]
+query = { kind = "document", path = "a.txt" }
+expect = { dirty = false, eol = "crlf", encoding = "utf-8" }
+[[assert]]
+frame_contains = ["a.txt"]

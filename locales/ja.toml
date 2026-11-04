@@ -6,6 +6,10 @@ language = "ja"
 description = "エディタを終了します。"
 title = "終了"
 
+[cmd.app.suspend]
+description = "エディタを一時停止してシェルに戻ります。シェルの fg で再開します。"
+title = "一時停止 (サスペンド)"
+
 [cmd.clipboard.copy]
 description = "選択範囲をクリップボードにコピーします。"
 title = "コピー"
@@ -13,6 +17,10 @@ title = "コピー"
 [cmd.clipboard.cut]
 description = "選択範囲を切り取ってクリップボードに入れます。"
 title = "切り取り"
+
+[cmd.config.reload]
+description = "設定ファイル (config.toml と keymap.toml) を読み直して、再起動せずに反映します。"
+title = "設定を読み直す"
 
 [cmd.cursor.doc_end]
 description = "カーソルを文書の末尾へ動かします。"
@@ -82,6 +90,22 @@ title = "前の単語を削除"
 description = "カーソルの後ろの単語を削除します。"
 title = "後ろの単語を削除"
 
+[cmd.edit.delete_line]
+description = "現在の行を削除します。"
+title = "行を削除"
+
+[cmd.edit.duplicate_line]
+description = "現在の行 (選択した行) を下に複製します。"
+title = "行を複製"
+
+[cmd.edit.move_line_down]
+description = "現在の行 (選択した行) を 1 行下へ動かします。"
+title = "行を下へ移動"
+
+[cmd.edit.move_line_up]
+description = "現在の行 (選択した行) を 1 行上へ動かします。"
+title = "行を上へ移動"
+
 [cmd.edit.indent]
 description = "行頭にインデントを入れます。"
 title = "インデント"
@@ -110,6 +134,26 @@ title = "やり直し"
 description = "直前の編集を取り消します。"
 title = "元に戻す"
 
+[cmd.buffer.close]
+description = "現在の文書を閉じます。未保存の変更があれば確認します。"
+title = "閉じる"
+
+[cmd.buffer.list]
+description = "開いている文書の一覧を出して、切り替えます。"
+title = "一覧"
+
+[cmd.buffer.next]
+description = "次の文書へ切り替えます。"
+title = "次の文書"
+
+[cmd.buffer.prev]
+description = "前の文書へ切り替えます。"
+title = "前の文書"
+
+[cmd.file.save_all]
+description = "未保存の変更がある文書をすべて保存します。名前の無い文書と読み取り専用の文書は飛ばします。"
+title = "すべて保存"
+
 [cmd.file.new]
 description = "無題の新しい文書を作ります。"
 title = "新規作成"
@@ -118,9 +162,17 @@ title = "新規作成"
 description = "ファイルを開きます。"
 title = "開く"
 
+[cmd.file.check_external_changes]
+description = "ファイルが他のプログラムで変更されていないかを確かめます。"
+title = "外部変更の確認"
+
 [cmd.file.reload]
 description = "ファイルを読み込み直します。"
 title = "再読込"
+
+[cmd.file.toggle_read_only]
+description = "読み取り専用を解除します。編集できる文書では読み取り専用にします。"
+title = "読み取り専用の切替"
 
 [cmd.file.reopen_with_encoding]
 description = "文字コードを指定して、ファイルを開き直します。"
@@ -142,6 +194,18 @@ title = "文字コードを変更"
 description = "文書の改行コードを LF・CRLF・CR のいずれかに変換します。"
 title = "改行コードを変換"
 
+[cmd.help.open]
+description = "ヘルプ画面を開きます。"
+title = "ヘルプを開く"
+
+[cmd.help.keys]
+description = "ヘルプ画面をキー一覧の節で開きます。"
+title = "キー一覧を開く"
+
+[cmd.help.commands]
+description = "ヘルプ画面をコマンド一覧の節で開きます。"
+title = "コマンド一覧を開く"
+
 [cmd.search.next]
 description = "次の一致へ移動します。"
 title = "次を検索"
@@ -154,6 +218,10 @@ title = "検索"
 description = "前の一致へ移動します。"
 title = "前を検索"
 
+[cmd.search.replace]
+description = "現在の一致を置換欄の文字列に置き換えて、次の一致へ進みます。"
+title = "置換"
+
 [cmd.search.replace_all]
 description = "一致した箇所をすべて置換します。"
 title = "すべて置換"
@@ -165,6 +233,18 @@ title = "置換"
 [cmd.search.toggle_case]
 description = "検索で大文字と小文字を区別するかを切り替えます。"
 title = "大小文字の区別を切替"
+
+[cmd.search.toggle_regex]
+description = "検索語を正規表現として扱うかを切り替えます。"
+title = "正規表現を切替"
+
+[cmd.search.toggle_word]
+description = "一致の両端が単語の境界にあるものだけを探すかを切り替えます。"
+title = "単語単位を切替"
+
+[cmd.search.toggle_selection]
+description = "検索バーを開いたときの選択範囲の中だけを探すかを切り替えます。"
+title = "選択範囲内を切替"
 
 [cmd.select.all]
 description = "文書全体を選択します。"
@@ -246,6 +326,14 @@ title = "一覧の前のページ"
 description = "一覧やダイアログで前の項目へ移ります。"
 title = "前の項目"
 
+[cmd.ui.message_history]
+description = "これまでのメッセージを一覧で開きます。"
+title = "メッセージ履歴"
+
+[cmd.ui.message_history_copy]
+description = "メッセージ履歴の全件をクリップボードへコピーします (履歴を開いているとき)。"
+title = "メッセージ履歴をコピー"
+
 [cmd.ui.palette_open]
 description = "コマンドパレットを開きます。"
 title = "コマンドパレット"
@@ -253,6 +341,18 @@ title = "コマンドパレット"
 [cmd.ui.redraw]
 description = "画面を描き直します。"
 title = "再描画"
+
+[cmd.ui.toggle_hint_bar]
+description = "画面下のヒントバーを出すか隠すかを切り替えます。隠すと、その行を本文に使います。"
+title = "ヒントバーの切り替え"
+
+[cmd.ui.toggle_mouse]
+description = "マウスの操作を使うか、端末の選択とスクロールを使うかを切り替えます。"
+title = "マウスの切り替え"
+
+[cmd.view.toggle_wrap]
+description = "折り返し表示のオンとオフを切り替えます。"
+title = "折り返しの切り替え"
 
 [hint.app]
 quit = "終了"
@@ -281,13 +381,16 @@ list_next = "次へ"
 palette_open = "コマンド"
 
 [info.app]
-release_summary = "(版ごとに書く)"
+release_summary = "スワップと復旧、複数の文書、正規表現の検索と置換、折り返し、マウス、テーマの切替、英語の表示などに対応しました。詳しくはリリースノートを見てください"
 updated = "evoeditor {version} に更新しました: {summary}"
 
 [info.cli]
 unsupported = "{option} はこのバージョンでは使えないため無視しました"
 
 [info.config]
+reload_restart = "次の項目は再起動すると有効になります: {keys}"
+reload_unchanged = "設定を読み直しました (変わった項目はありません)"
+reloaded = "設定を読み直しました。{count} 項目が変わりました: {keys}"
 unsupported = "{item} はこのバージョンでは未対応のため無視しました"
 
 [info.eol]
@@ -297,11 +400,22 @@ unchanged = "改行はすでに {eol} です"
 [info.goto_line]
 clamped = "行 {line} はありません。最後の行 ({last}) へ移動しました"
 
+[info.history]
+copied = "{count} 件のメッセージをコピーしました"
+
+[info.hint_bar]
+hidden = "ヒントバーを隠しました (その行を本文に使います)"
+shown = "ヒントバーを表示しました"
+
+[info.mouse]
+disabled = "マウスの操作を無効にしました (端末の選択とスクロールが使えます)"
+enabled = "マウスの操作を有効にしました"
+
 [info.open]
 already_open = "{path} は既に開いています"
 cancelled = "{path} の読込を取り消しました"
 guess_unsupported = "{path} の文字コードは {guess} と推定されましたが、この版では扱えないため {encoding} として開きました / 正しく見えないときは、文字コードを指定して開き直す ({key:file.reopen_with_encoding}) で選び直してください"
-long_line = "{path} には非常に長い行があるため、読み取り専用で開きました (長い行は先頭の一部だけを表示します)"
+long_line = "{path} には非常に長い行があります。その行は文字を 1 つずつ近似して表示します (結合文字が分かれて見えることがあります)"
 lossy_roundtrip = "この文字コードでは、編集した箇所の一部の文字が保存時に別のバイト列になることがあります ({count} 箇所)"
 new_file = "{path} は無いため、新しいファイルとして開きました (保存すると作成します)"
 redetected = "文字コードを {encoding} と判定し直しました"
@@ -312,6 +426,9 @@ first_line_only = "入力欄には最初の行だけを貼り付けました"
 [info.recovery]
 old = "30 日より古い退避が {count} 件あります: {dir}"
 
+[info.external]
+unchanged = "{path} は変更されていません"
+
 [info.reload]
 busy = "{path} は読み込み中です。読込が終わってから実行してください"
 done = "{path} を読み込み直しました (元に戻すで戻せます)"
@@ -319,6 +436,10 @@ done_read_only = "{path} を読み込み直しました (読み取り専用の�
 
 [info.reopen]
 history_cleared = "{encoding} で開き直しました。元に戻す履歴は消えました"
+
+[info.read_only]
+released = "読み取り専用を解除しました"
+set = "読み取り専用にしました"
 
 [info.save]
 aborted = "保存を中止しました ({path} は書き換えていません)"
@@ -328,12 +449,26 @@ in_progress = "保存中です"
 to_recovery = "退避先 {target} に保存しました。元のファイル {path} は変更していません"
 unchanged = "変更はありません (ファイルは書き換えていません)"
 
+[info.leftover]
+deleted = "{path} の後始末として削除しました"
+restored = "{path} を元に戻しました"
+
+[info.save_all]
+done = "{saved} 件の文書を保存しました"
+done_skipped = "{saved} 件の文書を保存しました。名前の無い・読み取り専用の {skipped} 件は保存していません"
+none = "保存する文書はありません"
+
 [info.search]
+no_selection = "選択範囲がありません。選択してから検索バーを開いてください"
 replace_empty_query = "検索する文字列を入力してください"
 replace_no_match = "置換する箇所はありません"
 replaced = "{count} 件を置換しました (元に戻すで戻せます)"
 wrapped_backward = "文書の先頭に達したので、末尾から検索しました"
 wrapped_forward = "文書の末尾に達したので、先頭から検索しました"
+
+[info.swap]
+discarded = "スワップを破棄しました"
+recovered = "復旧内容を適用しました。保存するまで {path} は変わりません"
 
 [info.undo]
 history_trimmed = "メモリの上限のため、古い元に戻す履歴を破棄しました"
@@ -350,6 +485,34 @@ text = "システムのクリップボードを使えないため、エディタ
 hint = "使える値: {allowed}。この項目は既定値 {default} を使います"
 text = "{item} の値 {value} は使えません"
 
+[msg.config.keymap_unknown_context]
+hint = "使える名前: global, editor, search, prompt, palette, list, dialog, help。この割当は使いません"
+text = "{item} のコンテキスト名は使えません"
+
+[msg.config.keymap_unknown_command]
+hint = "コマンド名はコマンドパレットで確かめられます。この割当は使いません"
+text = "{item} のコマンド {value} はありません"
+
+[msg.config.keymap_bad_key]
+hint = "例: ctrl+shift+s、alt+up、f5。この割当は使いません"
+text = "{item} のキーの書き方が正しくありません"
+
+[msg.config.keymap_bad_when]
+hint = "書式は設定の仕様 (07 §7.3) を見てください。この割当は使いません"
+text = "{item} の when 句が正しくありません"
+
+[msg.config.keymap_printable_key]
+hint = "ctrl や alt を組み合わせたキーにしてください。この割当は使いません"
+text = "{item} は文字入力に使うキーなので割り当てられません"
+
+[msg.config.keymap_chord_prefix]
+hint = "続けて押すキーを優先し、この割当は使いません"
+text = "{item} は、既定の続けて押すキー (Ctrl+K など) の先頭です"
+
+[msg.config.keymap_escape_key]
+hint = "既定の割当を残しました。別のキーにしてください"
+text = "{item} の割当だと、終了・コマンドパレット・取消のどれかに届かなくなります"
+
 [msg.config.out_of_range]
 hint = "{range} で指定してください。この項目は {default} を使います"
 text = "{item} の値 {value} は範囲外です"
@@ -361,6 +524,10 @@ text = "設定の問題 ({file}:{line}): {detail}"
 [msg.config.problems]
 hint = "該当の項目は既定値を使っています。全件はログ ({log}) を見てください"
 text = "設定に {count} 件の問題があります。最初の 1 件: {detail}"
+
+[msg.config.reload_kept]
+hint = "エラーを直してから、もう一度読み直してください"
+text = "{file} にエラーがあるため、前の設定のままにしました"
 
 [msg.config.syntax]
 hint = "該当の行を直してください。直すまでは既定値で動きます"
@@ -454,6 +621,42 @@ text = "「退避先に保存」で書いた内容が残っています: {dir} (
 hint = "新しい版の evoeditor で開いてください"
 text = "{dir} の退避は新しい版の形式なので読みません (移動も削除もしていません)"
 
+[msg.leftover.failed]
+hint = "パスと権限を確認してください"
+text = "{path} の後始末に失敗しました: {reason}"
+
+[msg.leftover.tmp_opened]
+hint = "不要なら次の起動で削除を選んでください"
+text = "一時ファイルを読み取り専用で開きました。{path} の保存の途中の内容で、末尾が切れている可能性があります"
+
+[msg.swap.found]
+hint = "該当のファイルを開くと復旧を提案します。要らなければ .swp フォルダを削除してください"
+text = "前回の異常終了で保存されていなかった内容のスワップが {count} 件あります: {dir}"
+
+[msg.swap.other_instance]
+hint = "同じファイルを 2 か所で編集すると、後から保存した内容で上書きされます"
+text = "{path} は他の evoeditor (pid {pid}) でも開かれています"
+
+[msg.swap.unreadable]
+hint = "新しい版の evoeditor で開いてください。このフォルダは移動も削除もしていません"
+text = "読めないスワップが {count} 件あります: {dir}"
+
+[msg.swap.too_large]
+hint = "こまめに保存してください"
+text = "{path} は {mib} MiB を超えるので、未保存の内容の自動保存 (スワップ) の対象外です"
+
+[msg.swap.read_failed]
+hint = "スワップは残してあります。もう一度開いて試してください"
+text = "スワップを読めませんでした: {dir}"
+
+[msg.swap.changed_since_offer]
+hint = "スワップは残してあります。もう一度提案します"
+text = "復旧の提案の後で文書が変わったので、適用しませんでした"
+
+[msg.swap.remove_failed]
+hint = "手で削除してください"
+text = "スワップを削除できませんでした: {dir}"
+
 [msg.reload.missing]
 hint = "今の内容を残すには、上書き保存 ({key:file.save}) でファイルを作り直すか、名前を付けて保存 ({key:file.save_as}) してください"
 text = "{path} が見つからないため読み込み直せません"
@@ -522,6 +725,10 @@ text = "{dir} が無いため {path} を保存できません"
 hint = "別名で保存するか、退避先に保存してください"
 text = "{path} に書き込む権限がありません"
 
+[msg.external.check_failed]
+hint = "保存するときにも、ファイルが変わっていないかを照合します"
+text = "{path} の変更を確かめられませんでした: {reason}"
+
 [msg.save.read_only_fs]
 hint = "別名で保存 ({key:file.save_as}) してください"
 text = "{path} は読み取り専用の場所にあります"
@@ -542,6 +749,14 @@ text = "読み取り専用の文書は、同じファイル {path} には保存�
 hint = "別のファイル名を入力してください"
 text = "{path} は読み取り専用属性のファイルなので上書きできません"
 
+[msg.search.invalid_regex]
+hint = "( ) や [ ] の対応などを確認してください"
+text = "✖ 正規表現が不正: {reason}"
+
+[msg.search.newline_unsupported]
+hint = "行ごとに検索します。1 行の中のパターンにしてください"
+text = "✖ 改行を含むパターンは未対応です"
+
 [msg.search.replace_stale]
 hint = "入力を止めてから、もう一度実行してください"
 text = "編集が続いたため、すべて置換を中止しました"
@@ -555,9 +770,6 @@ string = "文字列"
 table = "テーブル"
 
 [ui.confirm]
-external_deleted = "{path} は削除されています — `[K] 新規として保持 (保存で作り直す)` ★ / `[C] 閉じる`"
-external_modified = "{path} は他のプログラムで変更されています — `[L] 再読込 (自分の変更を破棄)` / `[I] 無視 (保存時に再確認)` ★"
-quit_saving = "{path} の保存が終わっていません — `[W] 待つ` ★ / `[Q] 保存を中止して終了 (保存していない内容は退避します)`"
 save_failed_closed = "保存できませんでした: (`msg.save.*` の text) — {path} は既に閉じています。`[R] 退避先に保存` ★ / `[D] 破棄`"
 
 nav_hint = "Tab / ←→ で選択、Enter で決定"
@@ -588,9 +800,38 @@ readonly = "[R] 読み取り専用で開く"
 encoding = "[E] 文字コードを指定して開く"
 
 [ui.confirm.save]
-dangling_link = "{path} はリンクで、リンク先 {target} がありません — `[C] リンク先に作成 (リンクを保つ)` ★"
 overwrite = "{path} は既にあります。上書きしますか? — `[O] 上書き` / `[R] 別の名前を入力` ★ (既定は別の名前を入力。確定 (ユーザー回答))"
-read_only = "{path} は読み取り専用です — `[A] 別名で保存` ★ / `[W] 読み取り専用を解除して保存`"
+
+[ui.confirm.swap_recovery]
+title = "未保存の内容が見つかりました"
+message = "{path} の保存されていない内容が、前回の異常終了で残っています ({len} バイト)"
+apply = "[A] 復旧内容を適用"
+discard = "[D] スワップを破棄"
+changed = "{path} は、スワップを書いた後で変更されています。適用しても保存するまでファイルは変わりませんが、保存するとその変更を上書きします"
+sensitive = "秘密を含み得るファイルです。要らなくなったら、スワップを削除してください"
+
+[ui.confirm.leftover_both]
+title = "保存の途中で中断された痕跡があります"
+message = "{path} の保存が途中で止まり、元のファイルが退避名 {bak} に移ったまま、新しい内容が {tmp} に残っています"
+both = "[B] 元に戻して、新しい内容を別バッファで開く"
+restore = "[R] 元に戻すだけ"
+
+[ui.confirm.leftover_bak]
+title = "保存の途中で中断された痕跡があります"
+message = "{path} の保存が途中で止まり、元のファイルが退避名 {bak} に移ったままです"
+restore = "[R] 元に戻す"
+delete = "[D] 退避名を削除"
+
+[ui.confirm.leftover_stale]
+title = "保存の後に退避名が残っています"
+message = "{path} の保存は終わっていますが、置換前の退避名 {bak} が残っています"
+delete = "[D] 退避名を削除"
+
+[ui.confirm.leftover_tmp]
+title = "保存の途中の一時ファイルが残っています"
+message = "{path} の保存の途中の内容が {tmp} に残っています。末尾が切れている可能性があります"
+open = "[O] 別バッファで開いて確認"
+delete = "[D] 一時ファイルを削除"
 
 [ui.confirm.save_failed]
 title = "保存できません"
@@ -635,6 +876,29 @@ message = "{path} は、この文書を作った後に他のプログラムに�
 overwrite = "[O] 上書き"
 alt = "[A] 別名で保存"
 
+[ui.confirm.external_modified]
+title = "外部で変更されています"
+message = "{path} は他のプログラムで変更されています"
+reload = "[L] 再読込 (自分の変更を破棄)"
+ignore = "[I] 無視 (保存時に再確認)"
+
+[ui.confirm.external_deleted]
+title = "外部で削除されています"
+message = "{path} は削除されています"
+keep = "[K] 新規として保持 (保存で作り直す)"
+close = "[C] 閉じる"
+
+[ui.confirm.save.dangling_link]
+title = "リンク先がありません"
+message = "{path} はリンクで、リンク先 {target} がありません"
+create = "[C] リンク先に作成 (リンクを保つ)"
+
+[ui.confirm.save.read_only]
+title = "読み取り専用のファイル"
+message = "{path} は読み取り専用です"
+alt = "[A] 別名で保存"
+write = "[W] 読み取り専用を解除して保存"
+
 [ui.confirm.save.hardlink]
 title = "ハードリンクのファイル"
 message = "{path} には他に {links} 個の名前 (ハードリンク) があります"
@@ -668,7 +932,6 @@ binary = "バイナリファイル"
 file_attribute = "読み取り専用属性のファイル"
 invalid_bytes = "不正なバイトを含むファイル"
 large_file_viewer = "巨大なファイル (読み取り専用で開く指定)"
-long_line = "非常に長い行を含むファイル"
 no_write_permission = "書き込む権限のないファイル"
 stateful_encoding_with_invalid_bytes = "不正なバイトを含む ISO-2022-JP のファイル"
 user_requested = "読み取り専用で開く指定 (`--readonly`)"
@@ -693,8 +956,8 @@ long = "[保存中]"
 short = "保存中"
 
 [status.degraded.long_line]
-long = "[長い行: 一部表示]"
-short = "一部"
+long = "[長い行: 近似表示]"
+short = "近似"
 
 [status.encoding]
 bom = "{encoding} BOM"
@@ -734,14 +997,53 @@ placeholder = "コマンドを入力"
 disabled = "現在は実行できません: {reason}"
 no_match = "一致するコマンドはありません"
 
-[ui.long_line]
-omitted = "… (以下 {bytes} バイト省略)"
+[ui.buffer_list]
+title = "バッファ"
+placeholder = "文書名で絞り込み"
+no_match = "一致する文書はありません"
+
+[ui.help]
+title = "ヘルプ"
+footer = "↑↓ PgUp PgDn で移動、Esc で閉じる"
+
+[ui.history]
+title = "メッセージ履歴"
+footer = "↑↓ PgUp PgDn で移動、Ctrl+C でコピー、Esc で閉じる"
+empty = "メッセージはまだありません"
+
+[ui.history.level]
+info = "情報"
+warn = "警告"
+error = "エラー"
+
+[ui.help.section]
+intro = "はじめに"
+keys = "キー一覧"
+commands = "コマンド一覧"
+terminal = "端末の設定"
+
+[ui.help.intro]
+save = "保存は {key:file.save}、名前を付けて保存は {key:file.save_as}"
+quit = "終了は {key:app.quit}"
+palette = "すべてのコマンドは {key:ui.palette_open} のコマンドパレットから探して実行できます"
+
+[ui.help.keys]
+note = "続けて押すキー (例: Ctrl+K S) は、順に押します。同じコマンドに複数のキーがあるときは、コンマで並べます"
+unreachable = "* の付いたキーは、この端末では届きません (コマンドパレットか、ほかのキーで実行できます)"
+
+[ui.help.terminal]
+ime = "IME が ON のとき、文字キーは確認ダイアログのアクセラレータとして届きません。Tab や矢印と Enter で選んでください"
+chord = "Ctrl+K で始まるキーは、Ctrl+K を押してから次のキーを押します。Esc で取り消せます"
+alt = "Alt が届かない端末 (Terminal.app の既定など) では、Ctrl+K を使う代替のキーがあります"
+readme = "端末ごとの設定と既知の制約は README に書いてあります"
 
 [ui.palette.category]
 app = "アプリ"
+buffer = "バッファ"
 clipboard = "クリップボード"
 cursor = "移動"
 edit = "編集"
+help = "ヘルプ"
 file = "ファイル"
 search = "検索"
 select = "選択"
@@ -785,6 +1087,7 @@ too_small = "端末が小さすぎます ({cols}x{rows} 以上が必要)"
 [ui.confirm.unsaved]
 title = "未保存の変更"
 message = "{path} には保存されていない変更があります"
+chain = "({index}/{total}) {path} には保存されていない変更があります"
 save = "[S] 保存して終了"
 discard = "[D] 破棄して終了"
 
@@ -793,14 +1096,28 @@ title = "再読込"
 message = "{path} を読み込み直すと、保存していない変更が失われます (読み込み直した後に元に戻すで戻せます)"
 reload = "[L] 再読込 (変更を破棄)"
 
+[ui.confirm.unsaved_close]
+title = "未保存の変更"
+message = "{path} には保存されていない変更があります"
+save = "[S] 保存して閉じる"
+discard = "[D] 破棄して閉じる"
+
+[ui.confirm.quit_saving]
+title = "保存が終わっていません"
+message = "{path} の保存が終わっていません"
+others = "ほか {count} 件"
+wait = "[W] 待つ"
+abort = "[Q] 保存を中止して終了 (保存していない内容は退避します)"
+
+[ui.confirm.save_all_failed]
+title = "保存できなかった文書"
+message = "{count} 件の文書を保存できませんでした。個別に保存して確認してください"
+abort = "[C] 閉じる"
+needs_confirm = "確認が必要です"
+
 [ui.confirm.unsaved_reopen]
 title = "未保存の変更"
 message = "{path} には保存されていない変更があります"
 save = "[S] 保存してから開き直す"
 discard = "[D] 破棄して開き直す"
 
-[ui.confirm.unsaved_replace]
-title = "未保存の変更"
-message = "{path} には保存されていない変更があります"
-save = "[S] 保存してから開く"
-discard = "[D] 破棄して開く"

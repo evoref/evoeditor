@@ -50,7 +50,7 @@ fn env() -> Env {
 
 impl Env {
     fn start(&mut self) {
-        self.host.start(&mut self.fe, None, false).unwrap();
+        self.host.start(&mut self.fe, &[], false).unwrap();
     }
 
     fn input(&mut self, ev: InputEvent) -> StepOutcome {
@@ -109,6 +109,15 @@ fn シグナルと致命的エラーは_restore_して終了する() {
             .step(&mut e.fe, HostMsg::Signal(SignalKind::Interrupt)),
         StepOutcome::Exit(ExitCode::INTERRUPTED)
     );
+    // SIGHUP (Unix) も同じ非対話の終了 (05 §11.1)
+    let mut eh = env();
+    eh.start();
+    assert_eq!(
+        eh.host
+            .step(&mut eh.fe, HostMsg::Signal(SignalKind::Hangup)),
+        StepOutcome::Exit(ExitCode::INTERRUPTED)
+    );
+    assert_eq!(eh.probe.restore_count(), 1);
     let mut e2 = env();
     e2.start();
     assert_eq!(
@@ -174,14 +183,14 @@ fn 未保存の文書は退避用のスロットに公開される() {
 }
 
 #[test]
-fn 破棄して置き換えた文書のスロットは消える() {
+fn 破棄して閉じた文書のスロットは消える() {
     let mut e = env();
     e.start();
     e.input(InputEvent::Text("x".into()));
     assert_eq!(e.host.emergency_slots().len(), 1);
-    // file.new → 未保存の確認で「破棄」
+    // buffer.close → 未保存の確認で「破棄」
     e.input(InputEvent::Key(KeyEvent::press(
-        KeyCode::Char('n'),
+        KeyCode::Char('w'),
         Modifiers::CTRL,
     )));
     e.input(InputEvent::Key(KeyEvent::press(
@@ -302,4 +311,96 @@ fn 設定の診断は最初の_frame_の後にメッセージとして出す() {
         })
         .unwrap();
     assert!(screen.contains("config.toml:2"), "{screen}");
+}
+
+/// 時計を進めて期限の tick を処理し、積まれたジョブを実行して結果を Host に返す。
+fn advance_and_run(e: &mut Env, ms: u64) {
+    e.clock.advance(eve_core::Millis(ms));
+    e.host.step(&mut e.fe, HostMsg::Tick);
+    e.jobs.run_jobs();
+    for r in e.jobs.take_results() {
+        e.host.step(&mut e.fe, HostMsg::Job(Box::new(r)));
+    }
+}
+
+#[test]
+fn 正常終了ではスワップを消し_異常終了では残す() {
+    // 正常終了 (破棄して終了): 消す
+    let mut e = env();
+    e.start();
+    e.input(InputEvent::Text("abc".into()));
+    advance_and_run(&mut e, 2000);
+    assert_eq!(e.fs.swap_count(), 1, "最後の入力から 2 秒後に書かれる");
+    e.input(InputEvent::Key(KeyEvent::press(
+        KeyCode::Char('q'),
+        Modifiers::CTRL,
+    )));
+    assert_eq!(
+        e.input(InputEvent::Key(KeyEvent::press(
+            KeyCode::Char('d'),
+            Modifiers::NONE
+        ))),
+        StepOutcome::Exit(ExitCode::OK)
+    );
+    assert_eq!(e.fs.swap_count(), 0, "正常終了ではスワップを消す");
+
+    // 割り込み (異常終了): 復旧の材料なので残す
+    let mut e = env();
+    e.start();
+    e.input(InputEvent::Text("abc".into()));
+    advance_and_run(&mut e, 2000);
+    assert_eq!(
+        e.host
+            .step(&mut e.fe, HostMsg::Signal(SignalKind::Interrupt)),
+        StepOutcome::Exit(ExitCode::INTERRUPTED)
+    );
+    assert_eq!(e.fs.swap_count(), 1, "異常終了ではスワップを残す");
+}
+
+#[test]
+fn 保存を中止して終了すると_dirty_な文書を退避してから_restore_する() {
+    let mut e = env();
+    let spy = with_spy(&mut e);
+    e.fs.set_file(&eve_core::FsPath::from("/w/a.txt"), b"hello");
+    e.start();
+    e.host.editor_mut().open_initial(Some("/w/a.txt"), false);
+    e.jobs.run_jobs();
+    for r in e.jobs.take_results() {
+        e.host.step(&mut e.fe, HostMsg::Job(Box::new(r)));
+    }
+    e.input(InputEvent::Text("x".into()));
+    let key = |c: char, m: Modifiers| InputEvent::Key(KeyEvent::press(KeyCode::Char(c), m));
+    // 保存を始める (ジョブは実行待ちのまま) → 終了 → 5 秒を超えたら確認が出る
+    e.input(key('s', Modifiers::CTRL));
+    assert_eq!(e.input(key('q', Modifiers::CTRL)), StepOutcome::Continue);
+    e.clock.advance(eve_core::Millis(5000));
+    e.host.step(&mut e.fe, HostMsg::Tick);
+    let screen = e
+        .probe
+        .last_ascii(AsciiOptions {
+            show_chrome: true,
+            ..AsciiOptions::default()
+        })
+        .unwrap();
+    assert!(
+        screen.contains("Enter 決定"),
+        "確認ダイアログが出る: {screen}"
+    );
+    // 「保存を中止して終了」: 取消しの結果を受けたら、退避してから終了する
+    e.input(key('q', Modifiers::NONE));
+    e.jobs.run_jobs();
+    let mut out = StepOutcome::Continue;
+    for r in e.jobs.take_results() {
+        out = e.host.step(&mut e.fe, HostMsg::Job(Box::new(r)));
+        if matches!(out, StepOutcome::Exit(_)) {
+            break;
+        }
+    }
+    assert_eq!(out, StepOutcome::Exit(ExitCode::OK));
+    assert_eq!(
+        *spy.calls.lock().unwrap(),
+        vec![(RescueReason::QuitAbortedSave, 1)],
+        "取り消した保存の文書は dirty のままなので退避する"
+    );
+    assert_eq!(e.probe.restore_count(), 1);
 }

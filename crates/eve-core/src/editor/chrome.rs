@@ -46,11 +46,14 @@ fn render(state: &EditorState, key: &str, args: &[(&str, &str)]) -> String {
     state.catalog().render(key, args, &label)
 }
 
-/// 行頭からの書記素数 + 1 (桁。書記素数、04 の `ui.column_unit = "grapheme"`)。
+/// 行頭からの書記素数 + 1 (桁。書記素数、04 の `ui.column_unit = "grapheme"`)。長大行は char 数 (03 §11.5.1)。
 fn grapheme_column(doc: &Document, head: ByteOff) -> usize {
     let t = doc.text();
     let line = t.byte_to_line(head);
     let ls = t.line_to_byte(line);
+    if let Some(n) = super::layout::long_line_chars(doc, line.0, head.0 - ls.0) {
+        return n + 1;
+    }
     let prefix = t.slice_to_string(ByteRange::new(ls, head));
     grapheme_indices(&prefix).len() + 1
 }
@@ -73,6 +76,11 @@ pub(super) fn status_model(
     let name = match doc.path.as_ref().and_then(|p| p.file_name()) {
         Some(n) => n,
         None => render(state, "status.untitled", &[("n", "1")]),
+    };
+    // 文書が 2 件以上のときは、ファイル名の後ろに何番目かを出す (03 §9.8)
+    let name = match state.buffer_position() {
+        Some((n, total)) => format!("{name} ({n}/{total})"),
+        None => name,
     };
     items.push(item(
         StatusKind::Path,
@@ -106,11 +114,8 @@ pub(super) fn status_model(
             CutPolicy::Never,
         ));
     }
-    // 長い行を含む文書: 読み取り専用で、閾値を超える行は先頭 64 KiB だけを表示する (NFR-106、04 §8.7)
-    if doc
-        .read_only
-        .contains(crate::document::ReadOnlyReason::LongLine)
-    {
+    // 長い行を含む文書: 閾値を超える行は char 近似モードで表示する (NFR-106、03 §11.5.1、04 §8.7)
+    if doc.format.long_lines > 0 {
         let (long, short) = (
             render(state, "status.degraded.long_line.long", &[]),
             render(state, "status.degraded.long_line.short", &[]),
@@ -253,6 +258,12 @@ pub(super) fn overlay_models(state: &EditorState) -> Vec<OverlayModel> {
                 .iter()
                 .map(|(k, v)| (k.as_str(), v.as_str()))
                 .collect();
+            // 終了の連鎖 (03 §9.8) は何件目かを前置した本文を使う
+            let message_leaf = if c.args.iter().any(|(k, _)| k == "index") {
+                "chain"
+            } else {
+                "message"
+            };
             let mut choices: Vec<Choice> = c
                 .choices
                 .iter()
@@ -276,7 +287,7 @@ pub(super) fn overlay_models(state: &EditorState) -> Vec<OverlayModel> {
             }
             vec![OverlayModel::Confirm {
                 title: cell_text(&render(state, &key("title"), &[]), CutPolicy::Never),
-                message: cell_text(&render(state, &key("message"), &args), CutPolicy::End),
+                message: cell_text(&render(state, &key(message_leaf), &args), CutPolicy::End),
                 details: (!c.details.is_empty()).then(|| {
                     c.details
                         .iter()
@@ -293,6 +304,7 @@ pub(super) fn overlay_models(state: &EditorState) -> Vec<OverlayModel> {
             }]
         }
         Some(Overlay::Palette(p)) => vec![state.palette_model(p)],
+        Some(Overlay::Help(h)) => vec![state.help_model(h)],
         Some(Overlay::Prompt(p)) => {
             let name = p.kind.name();
             let cells = cell_text(&p.text, CutPolicy::End).spans;
@@ -330,6 +342,30 @@ pub(super) fn overlay_models(state: &EditorState) -> Vec<OverlayModel> {
 }
 
 pub(super) fn hint_model(state: &EditorState, chord: &[KeyStroke]) -> HintModel {
+    // ヘルプ画面: 決定するものは無いので、閉じる (`Esc`) だけを案内する
+    if matches!(state.overlay, Some(super::overlay::Overlay::Help(_))) {
+        let esc = KeyLabel {
+            strokes: vec![KeyStroke {
+                mods: Modifiers::NONE,
+                key: KeyCode::Esc,
+            }],
+        };
+        let text = cell_text(
+            state
+                .catalog()
+                .get("hint.ui.cancel")
+                .unwrap_or("hint.ui.cancel"),
+            CutPolicy::Never,
+        );
+        return HintModel {
+            context: HintContext::Overlay,
+            items: vec![HintItem {
+                keys: vec![esc],
+                text,
+                priority: 5,
+            }],
+        };
+    }
     if state.overlay.is_some() || state.search_bar.is_some() {
         // オーバーレイ: 決定・取消 (確認は次へも)。キーは固定 (オーバーレイの割当は既定のまま)
         let stroke = |key| KeyLabel {

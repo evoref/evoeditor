@@ -32,7 +32,7 @@ fn main() -> std::io::Result<()> {
 
     let mut console = ConsoleInput::open()?;
     let (tx, rx) = mpsc::channel();
-    let _thread = spawn_input_thread(&console, Tx(tx))?;
+    let _thread = spawn_input_thread(&console, Tx(tx), Default::default())?;
     println!("input_echo: キーを押してください (F12 で終了)");
     if let Ok(size) = console.window_size() {
         println!("window size = {}x{}", size.cols, size.rows);

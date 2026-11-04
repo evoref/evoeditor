@@ -1,6 +1,6 @@
-//! `WinFs::write_in_place` の実ファイルでの検査 (docs/05 §4.4 の手順 1〜9、09 §3.6 の in-place の項)。
+//! `NativeFs::write_in_place` の実ファイルでの検査 (docs/05 §4.4 の手順 1〜9、09 §3.6 の in-place の項)。
 
-#![cfg(windows)]
+#![cfg(any(windows, target_os = "linux"))]
 #![allow(clippy::result_large_err, clippy::print_stderr)]
 
 use std::cell::Cell;
@@ -11,12 +11,15 @@ use eve_core::{
     CancelToken, ChunkError, Expect, FileStamp, FileSystem, FsErrorDetail, FsErrorKind, FsPath,
     InPlaceBackup, ReadChunks, SaveMethod, SaveOptions,
 };
-use eve_platform::fs::WinFs;
+#[cfg(windows)]
+use eve_platform::fs::WinFs as NativeFs;
+#[cfg(unix)]
+use eve_platform::unix_fs::UnixFs as NativeFs;
 
 struct Env {
     root: PathBuf,
     state: PathBuf,
-    fs: WinFs,
+    fs: NativeFs,
 }
 
 impl Env {
@@ -29,7 +32,7 @@ impl Env {
         fs::create_dir_all(&root).unwrap();
         let state = root.join("state");
         Env {
-            fs: WinFs::new(&state),
+            fs: NativeFs::new(&state),
             root,
             state,
         }
@@ -241,7 +244,7 @@ fn バックアップなしの承認ではバックアップを作らずフラ�
 fn 状態ディレクトリが無いと_backup_failed_で何も書かない() {
     let e = Env::new("nostate");
     fs::write(e.file("a.txt"), b"keep").unwrap();
-    let no_state = WinFs::default();
+    let no_state = NativeFs::default();
     let o = SaveOptions::user_file(Expect::Stamp(e.stamp("a.txt")));
     let err = no_state
         .write_in_place(
@@ -326,6 +329,8 @@ fn ハードリンクの両方に書いた内容が見える() {
     );
 }
 
+// Windows の共有モード・ADS・属性
+#[cfg(windows)]
 #[test]
 fn 他のプロセスが書込アクセスで開いていると_busy() {
     use std::os::windows::fs::OpenOptionsExt;
@@ -361,6 +366,8 @@ fn 元のファイルが無いときは_not_found() {
     assert_eq!(err.kind, FsErrorKind::NotFound);
 }
 
+// Windows の共有モード・ADS・属性
+#[cfg(windows)]
 #[test]
 fn ads_と_hidden_属性はそのまま残る() {
     let e = Env::new("ads");
@@ -410,7 +417,7 @@ impl ReadChunks for Probe {
 fn 直接上書きの書込の間だけ置換中の計数が上がる() {
     let mut e = Env::new("replacing");
     let count = eve_core::ReplacingCount::default();
-    e.fs = WinFs::new(&e.state).with_replacing(count.clone());
+    e.fs = NativeFs::new(&e.state).with_replacing(count.clone());
     fs::write(e.file("a.txt"), b"old").unwrap();
     let opts = SaveOptions::user_file(Expect::Stamp(e.stamp("a.txt")));
     let seen = std::rc::Rc::new(Cell::new(None));

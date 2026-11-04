@@ -300,18 +300,14 @@ fn tab_とシフトタブ() {
 }
 
 #[test]
-fn 選択があるときの_tab_は何も変えない() {
-    for id in ["edit.indent", "edit.outdent"] {
-        let mut s = Scene::new("  «ab»c");
-        let rev = s.revision();
-        assert_eq!(s.run(id), CommandResult::Done);
-        assert_eq!(
-            (s.shown(), s.revision()),
-            ("  «ab»c".to_owned(), rev),
-            "{id}"
-        );
-        assert!(!s.e.state().document(s.doc).unwrap().is_dirty());
-    }
+fn 選択があるときの_tab_は触れる行のインデント() {
+    // v0.2 (FR-208): 選択がある `edit.indent` / `edit.outdent` は、触れる各行を対象にする (v0.1 は何も変えなかった)
+    let mut s = Scene::new("  «ab»c");
+    assert_eq!(s.run("edit.indent"), CommandResult::Done);
+    assert_eq!(s.shown(), "      «ab»c");
+    let mut s = Scene::new("  «ab»c");
+    assert_eq!(s.run("edit.outdent"), CommandResult::Done);
+    assert_eq!(s.shown(), "«ab»c");
 }
 
 #[test]
@@ -421,11 +417,11 @@ fn 複数のカーソルで同じ行をシフトタブしても_1_回だけ() {
 }
 
 #[test]
-fn 編集のない_range_は他の挿入位置で前に留まる() {
-    // 選択 [0,4) と、その端の primary カーソル 4 (N4 で残る)。Tab はカーソルだけが挿入する
+fn 選択と同じ行のカーソルがあっても行は_1_回だけインデントされる() {
+    // 選択 [0,4) と、その端のカーソル 4。v0.2 は触れる行を 1 度だけインデントする (カーソルが重ねて挿入しない)
     let mut s = scene_with("abcdefgh", vec![(0, 4), (4, 4)], 1);
     assert_eq!(s.run("edit.indent"), CommandResult::Done);
     let (text, sel) = all(&s);
-    assert_eq!(text, "abcd    efgh");
-    assert_eq!(sel[0], (0, 4), "選択は挿入した空白を覆わない");
+    assert_eq!(text, "    abcdefgh");
+    assert_eq!(sel[0], (0, 8), "選択は挿入した空白を覆ったまま");
 }

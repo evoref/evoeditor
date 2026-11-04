@@ -1,7 +1,8 @@
 # 夜間ジョブ (docs/09-testing-quality.md §6.1 / §6.3、docs/11 §1)。毎日 UTC 18:00 (JST 03:00) と手動 (workflow_dispatch)。
 # `schedule` は既定ブランチのワークフロー定義で動くので、ここは薄いトリガだけ: 対象のブランチ (変数 NIGHTLY_REF、未設定なら develop。
 # 手動実行では引数 ref で上書き) をチェックアウトし、そのコードの `cargo xtask nightly` を入口にする (手順の中身は xtask にある)。
-# v0.1 の中身: fuzz_decode (10 分)・proptest 拡張 (PROPTEST_CASES=10000)・cargo audit / deny advisories (本体と fuzz/)・coverage (報告のみ)。
+# 中身: fuzz_decode と fuzz_editor (v0.2。各 20 分)・proptest 拡張 (PROPTEST_CASES=10000)・cargo audit / deny advisories (本体と fuzz/)・coverage (報告のみ)・
+# 保存のクラッシュ一貫性 (v0.2。LazyFS で電源断を模擬する、NFR-301)・長時間の soak (v0.2。BM-306 を 60 分。観察のみ、NFR-306)。
 # fuzz のクラッシュ入力は `.github/fuzz-recipients.txt` の公開鍵で age により暗号化したものだけを artifact に上げる (平文は消す)。
 name: nightly
 
@@ -15,13 +16,17 @@ on:
         required: false
         default: ""
       fuzz_seconds:
-        description: "fuzz_decode の時間 (秒)。リリース前の 1 時間の fuzz は 3600 (docs/09 §8.2)"
+        description: "fuzz の各ターゲットの時間 (秒。既定 1200)。リリース前の 1 時間の fuzz は 3600 (docs/09 §8.2)"
         required: false
         default: "600"
       only:
-        description: "実行する手順を絞る (fuzz,proptest,audit,coverage のカンマ区切り。空なら全部)"
+        description: "実行する手順を絞る (fuzz,proptest,audit,coverage,crash,soak のカンマ区切り。空なら全部)"
         required: false
         default: ""
+      soak_minutes:
+        description: "soak (BM-306) の時間 (分。既定 60)"
+        required: false
+        default: "60"
 
 permissions:
   contents: read
@@ -53,7 +58,7 @@ jobs:
   nightly:
     name: nightly (linux)
     runs-on: ubuntu-24.04
-    timeout-minutes: 150
+    timeout-minutes: 240
     # 起票 (ジョブの失敗とクラッシュの件数だけを書く、09 §6.3) のために issues: write をこのジョブに限って足す
     permissions:
       contents: read
@@ -68,10 +73,10 @@ jobs:
           rustup toolchain install stable --profile minimal --component llvm-tools-preview --no-self-update
           rustup default stable
           rustup toolchain install nightly --profile minimal --no-self-update
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           shared-key: linux-nightly
-      - uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2.87.29
+      - uses: taiki-e/install-action@68a389c788b2cd04016ce8c80ee23b80d2ab3d68 # v2.88.1
         with:
           tool: cargo-nextest@0.9.148,cargo-fuzz@0.13.2,cargo-audit@0.22.2,cargo-deny@0.20.2,cargo-llvm-cov@0.9.1
       - name: age (クラッシュ入力の暗号化)
@@ -83,14 +88,45 @@ jobs:
           key: fuzz-corpus-${{ github.run_id }}
           restore-keys: |
             fuzz-corpus-
+      # 保存のクラッシュ一貫性 (crash の手順、docs/09 §6.3、OQ-143) の道具: LazyFS (MIT。版をコミットで固定してビルドする。CI の道具で
+      # 配布物に入らない) と、その下の FS (ext4 / xfs / btrfs のループバック)。xtask へは LAZYFS_BIN と EVE_CRASH_ROOTS で渡す
+      - name: LazyFS と下の FS の用意
+        if: inputs.only == '' || contains(inputs.only, 'crash')
+        env:
+          LAZYFS_REV: 045a0b3a1126725e693934e29d3ba15e08cc39ec # 0.3.1
+        run: |
+          sudo apt-get install -y fuse3 libfuse3-dev cmake xfsprogs btrfs-progs
+          src="$RUNNER_TEMP/lazyfs"
+          git clone -q https://github.com/dsrhaslab/lazyfs "$src"
+          git -C "$src" checkout -q "$LAZYFS_REV"
+          (cd "$src/libs/libpcache" && ./build.sh > /dev/null)
+          (cd "$src/lazyfs" && ./build.sh > /dev/null)
+          test -x "$src/lazyfs/build/lazyfs"
+          echo "LAZYFS_BIN=$src/lazyfs/build/lazyfs" >> "$GITHUB_ENV"
+          roots=""
+          for fs in ext4 xfs btrfs; do
+            img="$RUNNER_TEMP/$fs.img"
+            mnt="/mnt/eve-$fs"
+            truncate -s 512M "$img"
+            case "$fs" in
+              ext4) sudo mkfs.ext4 -F -q "$img" ;;
+              xfs) sudo mkfs.xfs -f -q "$img" ;;
+              btrfs) sudo mkfs.btrfs -f -q "$img" ;;
+            esac
+            sudo mkdir -p "$mnt"
+            sudo mount -o loop "$img" "$mnt"
+            sudo chown "$(id -u):$(id -g)" "$mnt"
+            roots="$roots:$mnt"
+          done
+          echo "EVE_CRASH_ROOTS=${roots#:}" >> "$GITHUB_ENV"
       - name: cargo xtask nightly
         id: nightly
         run: |
           only="${{ inputs.only }}"
           if [ -n "$only" ]; then
-            cargo xtask nightly --fuzz-seconds "${{ inputs.fuzz_seconds || '600' }}" --only "$only"
+            cargo xtask nightly --fuzz-seconds "${{ inputs.fuzz_seconds || '1200' }}" --soak-minutes "${{ inputs.soak_minutes || '60' }}" --only "$only"
           else
-            cargo xtask nightly --fuzz-seconds "${{ inputs.fuzz_seconds || '600' }}"
+            cargo xtask nightly --fuzz-seconds "${{ inputs.fuzz_seconds || '1200' }}" --soak-minutes "${{ inputs.soak_minutes || '60' }}"
           fi
       - name: 要約
         if: always()
@@ -112,10 +148,12 @@ jobs:
           path: |
             target/nightly/lcov.info
             target/nightly/summary.txt
+            target/nightly/soak.jsonl
           if-no-files-found: ignore
-      # 失敗の起票: 書くのはジョブの失敗とクラッシュの件数 (要約) だけ。入力・スタック・原因の推測は書かない
+      # 失敗の起票: 書くのはジョブの失敗とクラッシュの件数 (要約) だけ。入力・スタック・原因の推測は書かない。
+      # 起票するのは定時の実行だけ (手動の実行は起動した人が結果を見る。作業ブランチでの試しの実行で課題を増やさない)
       - name: 失敗の起票
-        if: failure()
+        if: failure() && github.event_name == 'schedule'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |

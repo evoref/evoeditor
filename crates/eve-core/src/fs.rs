@@ -31,6 +31,27 @@ pub trait FileSystem: Send + Sync {
         Ok(Vec::new())
     }
 
+    /// 起動時の走査 (v0.2、03 §10.3 手順 1b、05 §4.6): `recovery/inflight/*/*.toml` の保存中フラグをすべて読む。
+    /// 書いたプロセスが今も動いているもの (pid と起動時刻が一致。自分のプロセスを含む) は除く (保存中のフラグを孤児にしない)。
+    /// 解析できないフラグは `malformed = true` で返す (その `target` は空)。ディレクトリが無ければ空。
+    /// 状態ディレクトリを持たない実装は常に空を返す。
+    fn list_inflight(&self) -> Result<Vec<InflightRecord>, FsError> {
+        Ok(Vec::new())
+    }
+
+    /// `from` を `to` の名前に変える。**`to` が既に在れば失敗する** (置き換えない。M6e の「退避名を元の名前に戻す」、05 §4.6)。
+    /// 同じボリューム内の移動だけ。実装していない Port は `Unsupported`。
+    fn rename_no_replace(&self, _from: &FsPath, _to: &FsPath) -> Result<(), FsError> {
+        Err(FsError::new(FsErrorKind::Unsupported))
+    }
+
+    /// 起動時の走査 (v0.2、05 §4.6): `state_dir/backup/` の直下にある、in-place の事前バックアップ (`*.bak` / `*.bak.tmp`、05 §7.5)
+    /// を列挙する。名前の pid のプロセスが動いているもの、`fr119/` などのサブディレクトリ、形に合わない名前は含めない。
+    /// どのフラグが記録したものかは見ない (照合は core)。場所が無ければ空。状態ディレクトリを持たない実装は常に空。
+    fn list_orphan_backups(&self) -> Result<Vec<OrphanBackup>, FsError> {
+        Ok(Vec::new())
+    }
+
     /// 起動時の退避の案内 (`msg.recovery.found` / `found_rescue`) 用に、退避ディレクトリを列挙する (05 §7.5 の「`recovery/` の走査と
     /// 削除の規則」)。`state_dir/recovery/` 直下と `recovery/rescue/` 直下、代替の退避先の同じ位置にある、名前の形
     /// (`<UTC timestamp>-<pid>[-<n>]`) に合うディレクトリだけを返す (`inflight/` は見ない。形に合わない名前は無視。中のファイルは読まない)。
@@ -44,6 +65,55 @@ pub trait FileSystem: Send + Sync {
     /// 代替の退避先に書く。元のファイルには触れない。書けなければ `FsError`。
     fn write_recovery(&self, _doc: &crate::DocSnapshot) -> Result<FsPath, FsError> {
         Err(FsError::new(FsErrorKind::Other))
+    }
+
+    /// スワップ (swap-lite、03 §10.2 / FR-118) を書く。`doc` の全文を緊急退避と同じ形式で、`state_dir/swap/` の `doc` に対応する
+    /// ファイルへ原子的に置き換える (配置・命名は 05 §7.5)。`doc.path` が無ければ無題の文書。実装していない Port は
+    /// `FsErrorKind::Unsupported` を返し、core はそのセッションのスワップを止める。
+    fn write_swap(&self, _doc: &crate::DocSnapshot) -> Result<(), FsError> {
+        Err(FsError::new(FsErrorKind::Unsupported))
+    }
+
+    /// `doc` のスワップを消す (保存の成功・文書を閉じた・正常終了)。無ければ何もしない (成功)。`path` は文書のパス (無題なら `None`)。
+    fn discard_swap(
+        &self,
+        _doc: eve_view::DocumentId,
+        _path: Option<&FsPath>,
+    ) -> Result<(), FsError> {
+        Err(FsError::new(FsErrorKind::Unsupported))
+    }
+
+    /// 他のプロセスが残したスワップを列挙する (復旧の探索、03 §10.3 手順 1)。`state_dir/swap/*.swp` の manifest だけを読む。
+    /// 自分のプロセスのものは含めない。`swap/` が無ければ空。状態ディレクトリを持たない実装は常に空。
+    fn list_swaps(&self) -> Result<Vec<SwapEntry>, FsError> {
+        Ok(Vec::new())
+    }
+
+    /// スワップの本文と形式を読む。`entry.readable` でないものは呼ばない。
+    fn read_swap(&self, _entry: &SwapEntry) -> Result<SwapBody, FsError> {
+        Err(FsError::new(FsErrorKind::Unsupported))
+    }
+
+    /// 他のプロセスが残したスワップを消す (復旧の適用の後・破棄の選択)。`swap/` の下の `.swp` 以外は消さない。無ければ成功。
+    fn remove_swap(&self, _entry: &SwapEntry) -> Result<(), FsError> {
+        Err(FsError::new(FsErrorKind::Unsupported))
+    }
+
+    /// `state_dir` の直下の小さな状態ファイル (`last_version.toml` など、05 §7.1) を読む。無ければ `NotFound`、
+    /// `state_dir` を使えなければ `Unsupported`。
+    fn read_state_file(&self, _name: &str) -> Result<Vec<u8>, FsError> {
+        Err(FsError::new(FsErrorKind::Unsupported))
+    }
+
+    /// `state_dir` の直下に小さな状態ファイルを、所有者のみ・原子的な置換で書く (NFR-505、05 §7.5 (b)。最終書込勝ち)。
+    /// `state_dir` が無ければ所有者のみで作る (起動経路では呼ばない)。
+    fn write_state_file(&self, _name: &str, _data: &[u8]) -> Result<(), FsError> {
+        Err(FsError::new(FsErrorKind::Unsupported))
+    }
+
+    /// 未知の書式の版の状態ファイルを `<name>.unsupported-<ts>` へ移して退避する (05 §7.5 (a)。消さない)。
+    fn set_aside_state_file(&self, _name: &str) -> Result<(), FsError> {
+        Err(FsError::new(FsErrorKind::Unsupported))
     }
 
     /// ファイルを 1 つ消す (保存中フラグの掃除など)。存在しなければ `NotFound`。
@@ -191,6 +261,51 @@ pub struct RecoveryDirEntry {
     pub rescue: bool,
 }
 
+// ---------- スワップの候補 (復旧の材料、03 §10.3、05 §7.5) ----------
+
+/// スワップの書き手 (プロセス) の状態。pid の生存確認 (05 §5.3: `OpenProcess` + 起動時刻の一致) で決める。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SwapOwner {
+    /// 書いたプロセスがまだ動いている。他のインスタンスが同じ文書を開いているということ。
+    Alive,
+    /// 書いたプロセスはもういない (異常終了の残骸)。復旧の対象。
+    Stale,
+}
+
+/// `swap/` の下の 1 つのスワップ (manifest だけを読んだ要約)。自分のプロセスのものは含まない。
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SwapEntry {
+    /// スワップのディレクトリ (`swap/<名前>.swp`)。
+    pub dir: FsPath,
+    /// 元のファイルのパス。無題の文書は `None`。
+    pub path: Option<FsPath>,
+    /// 無題の文書の表示名。
+    pub untitled_name: Option<String>,
+    /// 書いた時点の文書の Revision。
+    pub revision: u64,
+    /// 本文のバイト数 (manifest の `len`)。
+    pub len: u64,
+    /// 書いたプロセスの pid。
+    pub pid: u32,
+    pub owner: SwapOwner,
+    /// 秘密ファイルパターンに一致した文書 (復旧の案内で削除を促す)。
+    pub sensitive: bool,
+    /// スワップを最後に書いた時刻 (manifest の更新時刻)。元のファイルがその後に変わったかの判定に使う (比べるだけ)。
+    pub modified: Option<FileTime>,
+    /// 本文を読める。未知の `format_version`・壊れた manifest・書きかけ (`written = false`) は `false`
+    /// (その場合 core は適用を提案せず、場所だけを示す。移動も削除もしない、05 §7.5)。
+    pub readable: bool,
+}
+
+/// スワップの本文と、元の形式 (無題の文書に適用するとき、開いている文書に写す)。本文は内部の UTF-8 のまま (PUA エスケープ保持)。
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SwapBody {
+    pub text: String,
+    pub encoding: crate::Encoding,
+    pub has_bom: bool,
+    pub default_eol: eve_text::LineEnding,
+}
+
 // ---------- 保存中フラグと中断の痕跡 (02 §4.5、05 §4.6 / §7.5) ----------
 
 /// 保存中フラグ 1 つ分。
@@ -215,6 +330,17 @@ pub struct InflightRecord {
     pub flag: FsPath,
     /// フラグを解析できなかった (未知の版・必須キーの欠落・値の不正)。true のとき意味を持つのは `target`・`pid`・`flag` と読めた `tmp` だけ。
     pub malformed: bool,
+}
+
+/// `state_dir/backup/` の直下に残る、事前バックアップのファイル (`list_orphan_backups` の要素)。
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct OrphanBackup {
+    pub path: FsPath,
+    /// ファイル名の末尾の pid (書いたプロセス。動いていないものだけが列挙される)。
+    pub pid: u32,
+    /// `.bak.tmp` (書込中に中断した、完全でない写し) なら true。`.bak` は完全な写し。
+    pub partial: bool,
+    pub len: u64,
 }
 
 /// 開くジョブが見つけた中断された保存の痕跡 (`JobResult::Complete` / `NewFile` の `interrupted_save`)。
@@ -307,6 +433,10 @@ pub struct SaveOptions {
     pub preserve: PreserveAttrs,
     pub hardlink: HardlinkPolicy,
     pub backup: BackupPolicy,
+    /// 「読み取り専用を解除して保存」(FR-116 / FR-106): 保存先の読み取り専用属性を置換の直前に外し、置換の後に付け直す (05 §4.2 の手順 5b)。
+    pub clear_readonly: bool,
+    /// 保存先がダングリングのシンボリックリンクなら、リンク先に新規作成する (リンクは保つ。FR-106、05 §4.1)。確認を経た保存だけが立てる。
+    pub create_link_target: bool,
 }
 
 impl SaveOptions {
@@ -321,6 +451,8 @@ impl SaveOptions {
             preserve: PreserveAttrs::default(),
             hardlink: HardlinkPolicy::default(),
             backup: BackupPolicy::default(),
+            clear_readonly: false,
+            create_link_target: false,
         }
     }
 }
@@ -410,6 +542,8 @@ pub enum FsErrorKind {
     DiskFull,
     ReadOnlyFs,
     Other,
+    /// この Port はその操作を実装していない (スワップの `write_swap` など)。呼び側は以後その機能を使わない。
+    Unsupported,
     // ── 保存 ──
     /// `SaveOptions::expected` と不一致。何も書いていない。`current` は照合の時点の保存先の Stamp で、
     /// `None` は保存先が存在しない (開いた後に削除された)。

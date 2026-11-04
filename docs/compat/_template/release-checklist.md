@@ -25,6 +25,12 @@ minisign の検証) は GitHub Release のノートの「検証」の節に書�
 | セキュリティ (依存) | `cargo audit` / `deny advisories` がクリーン (例外は `deny.toml` に期限と理由つき) | | | | |
 | セキュリティ (リリース前の確認) | 09 §8.2 の (a)〜。結果をここに書く | | | | |
 | fuzz | 判定コミットで `fuzz_decode` を 1 時間 (`nightly.yml` の手動実行) してクラッシュ 0。夜間 fuzz の観測 (正式版は 5 日、v0.5.0 以降は 7 日。rc は 2 日) | | | | |
+| 互換 (Linux、v0.2 から) | 09 §8.2 の v0.2 の表。リリース候補の tar.gz で WSL2 の Windows Terminal と tmux の受入 (`cargo xtask accept-linux --archive` と手の項目)。記録は `docs/compat/<版>/linux-wsl.md` | | | | |
+| 互換 (英語 UI、v0.2 から) | `cargo xtask i18n` が通り、`--locale en` で日本語が残らない | | | | |
+| データ保全 (Unix、v0.2 から) | Unix の kill テスト (Linux CI) と、判定コミットでの LazyFS のクラッシュ一貫性 (`nightly.yml` の `only=crash`) が ext4 / xfs / btrfs で合格 | | | | |
+| 長時間 (観察、v0.2 から) | BM-306 の 1 時間の soak の推移を所見に書く (ゲートにしない) | | | | |
+| MSRV (v0.2 から) | CI の `msrv` ジョブが判定コミットで通る | | | | |
+| 配布物 (Linux、v0.2 から) | `release.yml` の `build-linux` / `smoke-linux` (x86_64・aarch64) が通り、`SHA256SUMS.minisig` が検証できる | | | | |
 | 契約 | `eve-view` の型が `#[non_exhaustive]` で `CONTRACT_VERSION` を持つ | | | | |
 | 依存 | C を含む依存 0 (`cargo xtask check-deps`) | | | | |
 | ドキュメント | README (`dist/README.md`)・CHANGELOG・生成リファレンスが最新。端末の設定・IME とチョードの注意・既知の制約 (01 §4.6) が README にある | | | | |

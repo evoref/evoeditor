@@ -21,8 +21,8 @@ pub use frontend::{
     RenderOutcome,
 };
 pub use host::{
-    Host, RESCUE_BUDGET_CLOSE, RESCUE_BUDGET_FATAL, RESCUE_BUDGET_SIGNAL, StartError, StepOutcome,
-    channel,
+    Host, RESCUE_BUDGET_CLOSE, RESCUE_BUDGET_FATAL, RESCUE_BUDGET_SESSION, RESCUE_BUDGET_SIGNAL,
+    StartError, StepOutcome, channel,
 };
 pub use msg::{ExitCode, FatalReason, HostMsg, SignalKind};
 pub use workers::ThreadJobSpawner;

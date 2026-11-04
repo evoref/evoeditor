@@ -271,6 +271,13 @@ fn ロールの色は出力に載り_色なしでは属性だけになる() {
     t.draw(&mut h);
     let a = t.screen.attr_at(0, 12);
     assert_eq!(a.bg.as_deref(), Some("rgb(47,51,64)"), "{a:?}");
+    // 色深度は core が段を選ぶ (Frame のロールの表)。無色の端末の能力で作る
+    let mut h = Harness::new()
+        .with_size(60, 12)
+        .with_caps(eve_view::Capabilities {
+            color_depth: ColorDepth::Mono,
+            ..eve_view::Capabilities::default()
+        });
     let mut t = Term::new(60, 12, WidthConfig::default(), false, ColorDepth::Mono);
     t.draw(&mut h);
     let a = t.screen.attr_at(0, 12);

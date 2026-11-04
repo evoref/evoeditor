@@ -10,7 +10,10 @@ use eve_view::Revision;
 use crate::fs::FileStamp;
 use crate::fspath::FsPath;
 
-use super::format::{EolStats, LoadState, ReadOnlyReasons, TextFormat, count_range};
+use super::format::{
+    EolStats, LoadState, ReadOnlyReasons, TextFormat, count_long_lines, count_range,
+    long_lines_touched,
+};
 use super::history::{NodeId, RecordOutcome, UndoHistory};
 use super::transaction::{Origin, Transaction};
 
@@ -55,6 +58,8 @@ pub enum ApplyError {
 pub struct DisplaySettings {
     pub tab_width: u8,
     pub ambiguous_wide: bool,
+    /// 全角スペースとタブを記号で示す (`view.show_whitespace = "minimal"`、03 §13.2)。
+    pub show_whitespace: bool,
 }
 
 impl Default for DisplaySettings {
@@ -62,6 +67,7 @@ impl Default for DisplaySettings {
         DisplaySettings {
             tab_width: 4,
             ambiguous_wide: false,
+            show_whitespace: true,
         }
     }
 }
@@ -74,6 +80,11 @@ pub struct Document {
     revision: Revision,
     history: UndoHistory,
     pub read_only: ReadOnlyReasons,
+    /// 読み取り専用属性 (`FileAttribute`) を `file.toggle_read_only` で解除した。上書き保存は「読み取り専用を解除して保存」の確認を経る (03 §9.6)。
+    pub attribute_released: bool,
+    /// 外部変更の確認で「無視」を選んだときのファイルの状態 (03 §9.5)。フォーカス復帰で同じ状態を見つけても、もう尋ねない。
+    /// 保存の成功・再読込で忘れる。
+    pub external_seen: Option<FileStamp>,
     pub load_state: LoadState,
     /// 読込中の進捗 (百分率)。ステータスバーの `[読込中 n%]` に出す。
     pub load_percent: u8,
@@ -81,6 +92,8 @@ pub struct Document {
     /// 長い行の表示単位の計算結果 (最後の 1 行分)。1 回の操作で同じ行を何度も展開しないための覚え。
     /// 中身の型は表示の層 (`editor::layout`) だけが知る。
     pub(crate) layout_cache: std::cell::RefCell<Option<Box<dyn std::any::Any>>>,
+    /// 長大行の列の索引 (直近の数行分、03 §11.5.1)。中身の型は `editor::layout` だけが知る。
+    pub(crate) long_cache: std::cell::RefCell<Option<Box<dyn std::any::Any>>>,
 }
 
 impl Document {
@@ -92,6 +105,7 @@ impl Document {
     /// 読込完了した文書。`format.eol_stats` は文書から数え直す。履歴の根が保存点。
     pub fn from_text(text: Text, mut format: TextFormat) -> Document {
         format.eol_stats = EolStats::count(&text);
+        format.long_lines = count_long_lines(&text, format.long_line_threshold);
         Document {
             text,
             path: None,
@@ -100,10 +114,13 @@ impl Document {
             revision: Revision::INITIAL,
             history: UndoHistory::default(),
             read_only: ReadOnlyReasons::default(),
+            attribute_released: false,
+            external_seen: None,
             load_state: LoadState::Ready,
             load_percent: 0,
             display: DisplaySettings::default(),
             layout_cache: std::cell::RefCell::new(None),
+            long_cache: std::cell::RefCell::new(None),
         }
     }
 
@@ -266,7 +283,13 @@ impl Document {
         self.history.mark_saved_at(at);
         if stamp.is_some() {
             self.disk_stamp = stamp;
+            self.external_seen = None;
         }
+    }
+
+    /// プロセス全体の Undo の上限のために、最も古い履歴を 1 つ破棄する。解放した会計値を返す。dirty 表示は変わらない。
+    pub fn trim_history_oldest(&mut self) -> Option<usize> {
+        self.history.trim_oldest()
     }
 
     /// 履歴の封印 (カーソル移動など)。
@@ -274,7 +297,7 @@ impl Document {
         self.history.seal();
     }
 
-    /// 手順 4 の `eol_stats` の更新 (INV-D5): 変更ごとに、旧文書と新文書の窓の改行を数え直して差し替える。
+    /// 手順 4 の `eol_stats` と `long_lines` の更新 (INV-D5): 変更ごとに、旧文書と新文書の窓の改行を数え直して差し替える。
     fn update_eol_stats(&mut self, before: &Snapshot, cs: &ChangeSet) {
         let mut stats = self.format.eol_stats;
         for (old, new) in cs.changed_ranges() {
@@ -283,6 +306,16 @@ impl Document {
             stats = stats.replaced(o, n);
         }
         self.format.eol_stats = stats;
+        // 長大行の数: 変更が触れた行だけを、変更の前後で数えて差し替える
+        let th = self.format.long_line_threshold;
+        let ranges: Vec<_> = cs.changed_ranges().collect();
+        let old = long_lines_touched(before, ranges.iter().map(|(o, _)| (o.start.0, o.end.0)), th);
+        let new = long_lines_touched(
+            &self.text,
+            ranges.iter().map(|(_, n)| (n.start.0, n.end.0)),
+            th,
+        );
+        self.format.long_lines = (self.format.long_lines + new).saturating_sub(old);
     }
 
     /// 文書全体から数え直した値 (検証用)。

@@ -176,6 +176,9 @@ pub fn format_sequence(seq: &[KeyStroke]) -> String {
 
 // ---------- 割当と層 ----------
 
+/// 割当の解除を表すコマンド名 (`"none"`、07 §7.1)。レジストリには無く、解決では何も実行しない。
+pub const NONE_COMMAND: &str = "none";
+
 /// 1 つの割当。
 #[derive(Clone, Debug)]
 pub struct Binding {
@@ -184,6 +187,16 @@ pub struct Binding {
     pub command: CommandId,
     pub args: Args,
     pub when: ContextExpr,
+    /// 拡張キー (kitty keyboard protocol など) が無いと区別できない割当 (07 §11.6 の `[E]`)。
+    pub enhanced: bool,
+}
+
+/// 割当がこの端末で届くか (04 §7.8): 拡張キーが要る割当は拡張キーが有効なときだけ、どのストロークも横取りされないこと。
+pub fn reachable(b: &Binding, caps: &eve_view::Capabilities) -> bool {
+    (!b.enhanced || caps.enhanced_keys)
+        && b.sequence
+            .iter()
+            .all(|k| !caps.intercepted_keys.contains(k))
 }
 
 /// 層 (既定・ユーザー・ワークスペース・モード・overlay 固有)。
@@ -218,6 +231,7 @@ impl Layer {
             command: CommandId::new(command),
             args: Args::new(),
             when,
+            enhanced: false,
         };
         if let Some(old) = self
             .bindings
@@ -243,6 +257,27 @@ impl Layer {
             b.args = args;
         }
         Ok(self)
+    }
+
+    /// `context` の `keys` の割当を「拡張キーが要る」(`[E]`) にする。
+    pub fn mark_enhanced(&mut self, context: &str, keys: &str) {
+        let Ok(seq) = parse_sequence(keys) else {
+            return;
+        };
+        for b in self
+            .bindings
+            .iter_mut()
+            .filter(|b| b.context == context && b.sequence == seq)
+        {
+            b.enhanced = true;
+        }
+    }
+
+    /// 条件に合う割当だけ残し、外した割当を返す。
+    pub(super) fn retain(&mut self, keep: impl Fn(&Binding) -> bool) -> Vec<Binding> {
+        let (kept, dropped): (Vec<_>, Vec<_>) = self.bindings.drain(..).partition(|b| keep(b));
+        self.bindings = kept;
+        dropped
     }
 
     pub fn bindings(&self) -> &[Binding] {
@@ -312,16 +347,109 @@ impl Keymap {
         &self,
         contexts: &[&str],
     ) -> std::collections::BTreeMap<String, Vec<KeyStroke>> {
+        self.first_bindings_where(contexts, &|_| true)
+    }
+
+    /// `first_bindings` のうち、`ok` を満たす割当だけから選ぶ (この端末で届く割当、04 §7.8)。
+    pub fn first_bindings_where(
+        &self,
+        contexts: &[&str],
+        ok: &dyn Fn(&Binding) -> bool,
+    ) -> std::collections::BTreeMap<String, Vec<KeyStroke>> {
         let mut out = std::collections::BTreeMap::new();
-        for ctx in contexts {
-            for layer in &self.layers {
+        for (li, layer) in self.layers.iter().enumerate() {
+            for ctx in contexts {
                 for b in layer.bindings.iter().filter(|b| b.context == *ctx) {
+                    if b.command.as_str() == NONE_COMMAND || self.shadowed(li, b) || !ok(b) {
+                        continue;
+                    }
                     out.entry(b.command.as_str().to_owned())
                         .or_insert_with(|| b.sequence.clone());
                 }
             }
         }
         out
+    }
+
+    /// すべての割当 (表示から外すものを除く)。層の順。ヘルプのキー一覧が使う。
+    pub fn all_bindings(&self) -> Vec<&Binding> {
+        self.layers
+            .iter()
+            .enumerate()
+            .flat_map(|(li, l)| l.bindings.iter().map(move |b| (li, b)))
+            .filter(|(li, b)| b.command.as_str() != NONE_COMMAND && !self.shadowed(*li, b))
+            .map(|(_, b)| b)
+            .collect()
+    }
+
+    /// 上位の層に、同じキーを無条件で奪う割当がある (表示から外す。`"none"` や付け替えで届かなくなった既定の割当)。
+    fn shadowed(&self, layer_index: usize, b: &Binding) -> bool {
+        self.layers[..layer_index].iter().any(|l| {
+            l.bindings.iter().any(|o| {
+                o.sequence == b.sequence
+                    && o.when == ContextExpr::always()
+                    && (o.context == b.context
+                        || (o.context == "global" && b.context != "dialog")
+                        || (o.context == "editor" && b.context == "global"))
+            })
+        })
+    }
+
+    /// ユーザー層より下の層に、`ctx` で `first` から始まる 2 ストローク以上の割当がある (単体との衝突、07 §7.6)。
+    pub(super) fn has_chord_starting_with(&self, ctx: &str, first: KeyStroke) -> bool {
+        self.layers.iter().filter(|l| l.name != "user").any(|l| {
+            l.bindings
+                .iter()
+                .any(|b| b.context == ctx && b.sequence.len() > 1 && b.sequence[0] == first)
+        })
+    }
+
+    /// 既定の層にある `command` の割当 (コンテキスト, キー列)。
+    pub(super) fn default_sequences(&self, command: &str) -> Vec<(&'static str, Vec<KeyStroke>)> {
+        self.layers
+            .iter()
+            .filter(|l| l.name == "default")
+            .flat_map(|l| l.bindings.iter())
+            .filter(|b| b.command.as_str() == command)
+            .map(|b| (b.context, b.sequence.clone()))
+            .collect()
+    }
+
+    /// `command` の既定の割当のどれかが、今のキーマップで `command` に届く (脱出キーの検査、07 §7.6)。
+    pub(super) fn escape_reachable(&self, command: &str) -> bool {
+        let defaults = self.default_sequences(command);
+        defaults.is_empty()
+            || defaults.iter().any(|(ctx, seq)| {
+                // `global` の割当は、編集面 (`editor` → `global`) から届くかで見る
+                let contexts: &[&str] = match *ctx {
+                    "dialog" => &["dialog"],
+                    "global" => &["editor", "global"],
+                    c => &[c, "global"],
+                };
+                self.effective(contexts, seq) == Some(command)
+            })
+    }
+
+    /// 無条件の割当だけを見て、`seq` に当たるコマンド (`"none"` の遮蔽は `None`)。
+    fn effective(&self, contexts: &[&str], seq: &[KeyStroke]) -> Option<&str> {
+        for layer in &self.layers {
+            for ctx in contexts {
+                let hit = layer.bindings.iter().find(|b| {
+                    b.context == *ctx && b.sequence == seq && b.when == ContextExpr::always()
+                });
+                if let Some(b) = hit {
+                    return (b.command.as_str() != NONE_COMMAND).then(|| b.command.as_str());
+                }
+            }
+        }
+        None
+    }
+
+    /// ユーザー層を置き換える (最優先に置く)。同じ名前 (`user`) の層があれば取り除く。
+    pub fn set_user_layer(&mut self, layer: Layer) {
+        self.layers.retain(|l| l.name != layer.name);
+        self.layers.insert(0, layer);
+        self.pending.clear();
     }
 
     /// `first_bindings` の表示表記版。
@@ -343,6 +471,39 @@ impl Keymap {
         &self.pending
     }
 
+    /// 保留中のストロークに続けて押せるキー (which-key、04 §7.4)。`contexts` は参照順。
+    /// 戻り値は (次のキー, 割当のコマンド。さらに続くなら `None`)。同じキーは優先する側だけ。
+    pub fn continuations(
+        &self,
+        contexts: &[&str],
+        lookup: &dyn Fn(&str) -> Option<CtxValue>,
+    ) -> Vec<(KeyStroke, Option<String>)> {
+        let n = self.pending.len();
+        let mut out: Vec<(KeyStroke, Option<String>)> = Vec::new();
+        if n == 0 {
+            return out;
+        }
+        for layer in &self.layers {
+            for ctx in contexts {
+                for b in layer.bindings.iter().filter(|b| b.context == *ctx) {
+                    if b.sequence.len() <= n
+                        || !b.sequence.starts_with(&self.pending)
+                        || !b.when.eval(lookup)
+                    {
+                        continue;
+                    }
+                    let next = b.sequence[n];
+                    if out.iter().any(|(k, _)| *k == next) {
+                        continue;
+                    }
+                    let leaf = (b.sequence.len() == n + 1).then(|| b.command.as_str().to_owned());
+                    out.push((next, leaf));
+                }
+            }
+        }
+        out
+    }
+
     pub fn clear_pending(&mut self) {
         self.pending.clear();
     }
@@ -362,13 +523,18 @@ impl Keymap {
         let mut seq = std::mem::take(&mut self.pending);
         seq.push(key);
         let mut prefix_seen = false;
-        for ctx in contexts {
-            for layer in &self.layers {
+        // 層の優先が先 (ユーザー層の `global` は既定層の `editor` より優先、07 §7.4)、同じ層の中でコンテキストの参照順
+        for layer in &self.layers {
+            for ctx in contexts {
                 for b in layer.bindings.iter().filter(|b| b.context == *ctx) {
                     if !b.sequence.starts_with(&seq) || !b.when.eval(lookup) {
                         continue;
                     }
                     if b.sequence.len() == seq.len() {
+                        // `"none"` はこの層で下位の割当を遮蔽する (単一ストロークのみ)
+                        if b.command.as_str() == NONE_COMMAND {
+                            return Resolution::Unbound;
+                        }
                         return Resolution::Run(CommandInvocation {
                             id: b.command.clone(),
                             args: b.args.clone(),

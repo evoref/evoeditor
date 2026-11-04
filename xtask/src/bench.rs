@@ -89,7 +89,7 @@ pub fn run_all(args: &[String]) -> Result<(), String> {
     }
 
     if out_dir.is_some() {
-        // BM-106 (長大行。3 種 × 4 操作)
+        // BM-106 (長大行。3 種 × 5 操作)
         println!("▶ BM-106 (長大行)");
         let mut cmd = Command::new("cargo");
         cmd.args([

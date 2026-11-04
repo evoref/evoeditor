@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc bba954537cda2519891a2ee38388b6b39e48d858c1f42765b9d0842e5352d312 # 空の範囲 (lo == hi) が char の途中のとき、期待値が char を返していた (期待値の誤り)

@@ -74,6 +74,30 @@ fn 閾値未満のファイルは警告なしで開く() {
     assert_eq!(h.doc_path().as_deref(), Some("/w/a.txt"));
 }
 
+// verifies: FR-127
+#[test]
+fn 警告の閾値は_file_huge_file_warn_bytes_で変えられる() {
+    let mut h = Harness::new()
+        .with_size(80, 6)
+        .with_file("/w/a.txt", b"abc\n")
+        .with_file("/w/b.txt", b"abc\n");
+    h.editor.state_mut().set_config(eve_config::Config {
+        huge_file_warn_bytes: 2 * 1024 * 1024,
+        ..eve_config::Config::default()
+    });
+    h.fs.set_fake_len("/w/a.txt", Some(2 * 1024 * 1024));
+    h.open("/w/a.txt");
+    h.run_jobs();
+    assert_eq!(h.overlay(), "dialog", "設定した閾値で警告する");
+    h.keys("esc");
+    h.run_jobs();
+    h.fs.set_fake_len("/w/b.txt", Some(2 * 1024 * 1024 - 1));
+    h.open("/w/b.txt");
+    h.run_jobs();
+    assert_eq!(h.overlay(), "");
+    assert_eq!(h.doc_path().as_deref(), Some("/w/b.txt"));
+}
+
 // verifies: AC-FR-127-2
 #[test]
 fn 不正バイトが_1_パーセントを超えると見込みを示して_3_択を出す() {

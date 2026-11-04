@@ -265,6 +265,38 @@ fn 読み取り専用の保存先は置換できず_atomic_unsupported_で無傷
     }
 }
 
+// verifies: FR-106
+#[test]
+fn 読み取り専用を解除して保存すると内容が新しくなり_属性と_ads_は保存前と同じ() {
+    let t = Tmp::new("clear-readonly");
+    let p = t.path("a.txt");
+    fs::write(t.p("a.txt"), b"keep").unwrap();
+    let ads = format!("{}:Zone.Identifier", t.p("a.txt").display());
+    fs::write(&ads, b"[ZoneTransfer]\r\nZoneId=3\r\n").unwrap();
+    let mut perm = fs::metadata(t.p("a.txt")).unwrap().permissions();
+    perm.set_readonly(true);
+    fs::set_permissions(t.p("a.txt"), perm.clone()).unwrap();
+    let mut o = SaveOptions::user_file(Expect::Stamp(stamp(&p)));
+    o.clear_readonly = true;
+    let r = WinFs::default()
+        .write_atomic(&p, &mut Chunks::of(b"new", 4096), &o)
+        .unwrap();
+    assert_eq!(r.method, SaveMethod::Atomic);
+    assert!(r.warnings.is_empty(), "{:?}", r.warnings);
+    assert_eq!(fs::read(t.p("a.txt")).unwrap(), b"new");
+    assert!(
+        fs::metadata(t.p("a.txt")).unwrap().permissions().readonly(),
+        "置換の後に READONLY を付け直す (05 §4.2 の手順 5b)"
+    );
+    assert_eq!(fs::read(&ads).unwrap(), b"[ZoneTransfer]\r\nZoneId=3\r\n");
+    assert_eq!(t.names(), ["a.txt"], "一時ファイル・退避名を残さない");
+    #[allow(clippy::permissions_set_readonly_false)]
+    {
+        perm.set_readonly(false);
+        fs::set_permissions(t.p("a.txt"), perm).unwrap();
+    }
+}
+
 #[test]
 fn ハードリンクは_ask_で_atomic_unsupported_break_link_なら置換する() {
     let t = Tmp::new("hardlink");
@@ -374,6 +406,62 @@ fn ダングリングリンクは保存しない() {
     assert_eq!(e.kind, FsErrorKind::NotFound);
     assert!(matches!(e.detail, Some(FsErrorDetail::DanglingLink { .. })));
     assert!(!t.p("missing.txt").exists(), "リンク先を作らない");
+}
+
+fn save_creating_target(
+    path: &FsPath,
+    data: &[u8],
+) -> Result<eve_core::SaveReport, eve_core::FsError> {
+    let mut o = SaveOptions::user_file(Expect::Absent);
+    o.create_link_target = true;
+    WinFs::default().write_atomic(path, &mut Chunks::of(data, 4096), &o)
+}
+
+// verifies: FR-106
+#[test]
+fn ダングリングリンクは_create_link_target_ならリンク先に作りリンクを保つ() {
+    let t = Tmp::new("dangling-create");
+    // 相対のリンク先 (リンクのあるディレクトリから)
+    if !symlink_made(std::os::windows::fs::symlink_file(
+        "missing.txt",
+        t.p("link.txt"),
+    )) {
+        return;
+    }
+    let r = save_creating_target(&t.path("link.txt"), b"x").unwrap();
+    assert_eq!(r.method, SaveMethod::NewFile);
+    assert_eq!(fs::read(t.p("missing.txt")).unwrap(), b"x");
+    assert!(
+        fs::symlink_metadata(t.p("link.txt"))
+            .unwrap()
+            .file_type()
+            .is_symlink(),
+        "リンクは通常のファイルに置き換えない"
+    );
+    assert_eq!(
+        fs::read(t.p("link.txt")).unwrap(),
+        b"x",
+        "リンク経由で読める"
+    );
+}
+
+// verifies: FR-106
+#[test]
+fn ダングリングリンクのリンク先の親が無ければ作らずに_parent_missing() {
+    let t = Tmp::new("dangling-parent");
+    if !symlink_made(std::os::windows::fs::symlink_file(
+        t.p("nodir").join("missing.txt"),
+        t.p("link.txt"),
+    )) {
+        return;
+    }
+    let e = save_creating_target(&t.path("link.txt"), b"x").unwrap_err();
+    assert_eq!(e.kind, FsErrorKind::NotFound);
+    assert!(matches!(
+        e.detail,
+        Some(FsErrorDetail::ParentMissing { .. })
+    ));
+    assert!(!t.p("nodir").exists(), "フォルダを作らない");
 }
 
 #[test]

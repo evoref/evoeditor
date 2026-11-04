@@ -118,7 +118,13 @@ fn 段を超える色は近似され_制御文字は置換される() {
 
 #[test]
 fn 選択は反転で出る() {
-    let mut h = Harness::new().with_size(30, 6);
+    // 無色の段では選択は反転 (色の段は背景色、07 §8.2)
+    let mut h = Harness::new()
+        .with_size(30, 6)
+        .with_caps(eve_view::Capabilities {
+            color_depth: ColorDepth::Mono,
+            ..eve_view::Capabilities::default()
+        });
     h.text("abc");
     h.keys("shift+left");
     let f = frame_of(&mut h);
@@ -151,4 +157,29 @@ fn 全角が矩形の端をまたぐときは空白で埋める() {
     ];
     let r = render_panes(&f, ColorDepth::TrueColor, &Glyphs::unicode());
     assert_eq!(r.buffer.cell((last, 0)).unwrap().symbol(), " ");
+}
+
+#[test]
+fn 背景を塗るテーマは行末より右と文書末尾より下も塗る() {
+    let mut h = Harness::new().with_size(30, 6);
+    // テーマは設定ファイルから (eve-tui は設定の型を知らない)
+    h.fs.add_file(
+        "/evo/config/config.toml",
+        b"[theme]
+name = \"default-dark\"
+",
+    );
+    h.cmd("config.reload");
+    h.run_jobs();
+    h.text("ab");
+    let f = frame_of(&mut h);
+    let r = render_panes(&f, ColorDepth::TrueColor, &Glyphs::unicode());
+    for (x, y) in [(20, 0), (10, 4)] {
+        let c = r.buffer.cell((x, y)).unwrap();
+        assert_eq!(
+            c.bg,
+            ratatui::style::Color::Rgb(0x1e, 0x1e, 0x1e),
+            "({x},{y})"
+        );
+    }
 }

@@ -41,6 +41,8 @@ pub enum Raw {
     Key(KeyRec),
     /// `WINDOW_BUFFER_SIZE_EVENT`。大きさは呼び側が `GetConsoleScreenBufferInfo` から求める。
     Resize,
+    /// `FOCUS_EVENT` (真 = フォーカスを得た)。v0.2 から core に渡す (04 §6.2、03 §9.5)。
+    Focus(bool),
     Ignored,
 }
 
@@ -183,6 +185,8 @@ impl Normalizer {
     pub fn feed(&mut self, batch: &[Raw]) -> Vec<Out> {
         let mut out = Vec::new();
         let mut resized = false;
+        // フォーカスは 1 回の読込の中で最後の状態だけを渡す (切替を連続で受けても確認を何度も始めない)
+        let mut focus = None;
         let chars = batch
             .iter()
             .filter(|r| matches!(r, Raw::Key(k) if k.makes_char()))
@@ -196,6 +200,7 @@ impl Normalizer {
         for raw in batch {
             match raw {
                 Raw::Resize => resized = true,
+                Raw::Focus(f) => focus = Some(*f),
                 Raw::Ignored => {}
                 Raw::Key(k) => {
                     if self.burst.is_some() {
@@ -208,6 +213,9 @@ impl Normalizer {
         }
         if resized {
             out.push(Out::Resize);
+        }
+        if let Some(f) = focus {
+            out.push(Out::Event(InputEvent::Focus(f)));
         }
         out
     }
@@ -586,8 +594,10 @@ mod tests {
     }
 
     #[test]
-    fn リサイズは合体しマウスとフォーカスは捨てる() {
+    fn リサイズは合体し_フォーカスは最後の状態だけを渡す() {
         let mut n = Normalizer::new();
+        let o = n.feed(&[Raw::Focus(false), Raw::Focus(true), Raw::Focus(true)]);
+        assert_eq!(o, [Out::Event(InputEvent::Focus(true))], "最後の状態だけ");
         let o = n.feed(&[Raw::Resize, Raw::Ignored, Raw::Resize]);
         assert_eq!(o, vec![Out::Resize]);
     }

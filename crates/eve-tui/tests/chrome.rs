@@ -170,11 +170,15 @@ fn 端末が小さすぎるときは文言だけを描く() {
 
 #[test]
 fn テーマのロール_ステータスバーは反転か背景色() {
-    let t = Theme::truecolor();
+    let t = Theme::from_roles(&Harness::new().frame().roles);
     assert_ne!(t.status_bar.bg, eve_view::Color::Default);
-    let m = Theme::mono();
+    let mono = eve_view::Capabilities {
+        color_depth: ColorDepth::Mono,
+        ..eve_view::Capabilities::default()
+    };
+    let m = Theme::from_roles(&Harness::new().with_caps(mono.clone()).frame().roles);
     assert!(m.status_bar.mods.contains(eve_view::StyleMods::REVERSE));
-    let mut h = Harness::new().with_size(60, 12);
+    let mut h = Harness::new().with_size(60, 12).with_caps(mono);
     let f = h.frame();
     let r = render_screen(&f, window_of(&f), ColorDepth::Mono, &Glyphs::unicode());
     let c = r.buffer.cell((0, 12)).unwrap();
@@ -348,6 +352,25 @@ fn 横スクロールで左右に続きがある行の端に印を出す() {
 
 // verifies: AC-FR-506-1
 #[test]
+fn 折り返しの継続行は行番号欄の右端に印を出す() {
+    let mut h = Harness::new().with_size(20, 8);
+    h.paste("aaaa bbbb cccc dddd eeee ffff\nnext");
+    h.cmd("view.toggle_wrap");
+    let (rows, _) = screen(&mut h, &Glyphs::unicode());
+    // ガター 3 桁: 最初の行は行番号、継続行は `↪` と区切り、次の論理行はまた行番号
+    assert!(rows[0].starts_with(" 1"), "{:?}", rows[0]);
+    assert!(rows[1].starts_with(" ↪│"), "{:?}", rows[1]);
+    assert!(rows[2].starts_with(" 2"), "{:?}", rows[2]);
+    let (ascii, _) = screen(&mut h, &Glyphs::ascii());
+    assert!(ascii[1].starts_with(" >|"), "{:?}", ascii[1]);
+    // OFF に戻すと継続行はなくなる
+    h.cmd("view.toggle_wrap");
+    let (rows, _) = screen(&mut h, &Glyphs::unicode());
+    assert!(!joined(&rows).contains('↪'));
+}
+
+// verifies: AC-FR-506-1
+#[test]
 fn 画面に収まる行には印を出さない() {
     let mut h = Harness::new().with_size(30, 8);
     h.text("short");
@@ -395,4 +418,69 @@ fn メッセージは記号と色で区別でき_警告は対処も並べて出�
     let (_, info_style) =
         colour_of_mark(&mut i, &Glyphs::unicode(), "ℹ").expect("情報の記号が出る");
     assert_ne!(warn_style, info_style, "警告と情報は色か属性が違う");
+}
+
+// which-key (04 §7.4): 保留が 500 ms を超えたら、編集面の左下に続きのキーと動作を重ねる
+#[test]
+fn which_key_は編集面の左下に続きのキーと動作を重ねる() {
+    let mut h = Harness::new().with_size(80, 24);
+    h.keys("ctrl+k");
+    let (rows, _) = screen(&mut h, &Glyphs::unicode());
+    assert!(
+        !joined(&rows).contains("メッセージ履歴"),
+        "500 ms 前は出ない"
+    );
+    h.advance_ms(500);
+    let (rows, _) = screen(&mut h, &Glyphs::unicode());
+    let all = joined(&rows);
+    assert!(all.contains("Ctrl+K …"), "{all}");
+    let line_of = |t: &str| {
+        rows.iter()
+            .find(|r| r.contains(t))
+            .cloned()
+            .unwrap_or_default()
+    };
+    assert!(line_of("メッセージ履歴").contains("│ M "), "{all}");
+    assert!(line_of("名前を付けて保存").contains("│ S "), "{all}");
+    // 左下: 編集面の最下行の近くにある
+    let at = rows
+        .iter()
+        .rposition(|r| r.contains("メッセージ履歴"))
+        .unwrap();
+    assert!(at >= 12, "{at}");
+}
+
+// verifies: FR-504
+#[test]
+fn ヒントバーを隠すとクロームは_2_行で_メッセージ行だけを描く() {
+    use eve_tui::buffer::{chrome_rows, surface_rows_for_window};
+    // 端末の行数と編集面の行数の対応 (隠すと、10 行以上の端末でも 2 行)
+    assert_eq!(chrome_rows(20, true), 3);
+    assert_eq!(chrome_rows(20, false), 2);
+    assert_eq!(chrome_rows(5, false), 2);
+    assert_eq!(surface_rows_for_window(24, true), 21);
+    assert_eq!(surface_rows_for_window(24, false), 22);
+    assert_eq!(surface_rows_for_window(8, false), 6);
+
+    let mut h = Harness::new().with_size(80, 13);
+    h.cmd("ui.toggle_hint_bar");
+    let f = h.frame();
+    assert!(!f.hint_bar);
+    let base = f.size.rows + eve_tui::buffer::bar_rows(&f);
+    let window = CellSize {
+        cols: f.size.cols,
+        rows: base + chrome_rows(base, f.hint_bar),
+    };
+    let r = render_screen(&f, window, ColorDepth::TrueColor, &Glyphs::unicode());
+    let rows: Vec<String> = (0..r.buffer.area.height)
+        .map(|y| row_text(&r.buffer, y))
+        .collect();
+    assert_eq!(rows.len(), 15, "編集面 13 行 + ステータス + メッセージ");
+    let all = joined(&rows);
+    assert!(!all.contains("Ctrl+Q 終了"), "ヒントは描かない:\n{all}");
+    assert!(
+        rows[14].contains("ヒントバーを隠しました"),
+        "メッセージ行: {:?}",
+        rows[14]
+    );
 }

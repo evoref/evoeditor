@@ -6,14 +6,14 @@
 
 use eve_view::{
     BarFocus, CaseMode, CellPos, CellSize, CellText, Choice, ColorDepth, CutPolicy, Frame,
-    HintItem, HintModel, InputFieldModel, KeyCode, KeyLabel, KeyStroke, Message, MessageLevel,
-    MessageModel, Modifiers, OverlayModel, SearchBarModel, Span, StatusAlign, StatusItem,
-    StatusKind, StatusModel, Style, StyleMods,
+    HelpLineKind, HintItem, HintModel, InputFieldModel, KeyCode, KeyLabel, KeyStroke, Message,
+    MessageLevel, MessageModel, Modifiers, OverlayModel, SearchBarModel, Span, StatusAlign,
+    StatusItem, StatusKind, StatusModel, Style, StyleMods, WhichKeyModel,
 };
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 
-use crate::buffer::{PaneRender, Writer, chrome_rows_for_surface, render_panes};
+use crate::buffer::{PaneRender, Writer, chrome_rows, render_panes};
 use crate::glyphs::{Glyph, Glyphs};
 use crate::theme::{Theme, overlay_style};
 
@@ -831,7 +831,7 @@ fn draw_input(
             let idx = input.first + s + k;
             let selected = input.selection.as_ref().is_some_and(|r| r.contains(&idx));
             let st = if selected {
-                overlay_style(style, Style::with_mods(StyleMods::REVERSE))
+                overlay_style(style, theme.selection)
             } else {
                 style
             };
@@ -849,7 +849,7 @@ fn draw_input(
     cursor_x
 }
 
-/// 検索バー (04 §8.4): `検索: [入力欄] [Aa~] 1/2`。幅が足りなければ件数 → トグルの括弧の順に省き、入力欄は最低 10 セルを残す。
+/// 検索バー (04 §8.4): `検索: [入力欄] [Aa~] [.*] [ab] [sel] 1/2`。幅が足りなければ件数 → トグルの括弧の順に省き、入力欄は最低 10 セルを残す。
 fn render_search_bar(
     w: &mut Writer<'_>,
     y: u16,
@@ -867,47 +867,81 @@ fn render_search_bar(
         CaseMode::Sensitive => "\u{2713}",
         CaseMode::Insensitive => "",
     };
-    let toggle_full = format!("[Aa{mark}]");
-    let toggle_short = format!("Aa{mark}");
+    let on_mark = if ascii { "*" } else { "\u{2713}" };
+    // トグル: 大小 `[Aa~]`、正規表現 `[.*]`、単語単位 `[ab]`、選択範囲内 `[sel]` (オンは ✓ を付けて反転。色に頼らない、04 §8.4)
+    let toggles: [(String, String, bool); 4] = [
+        (format!("[Aa{mark}]"), format!("Aa{mark}"), bar.case_on),
+        (
+            format!("[.*{}]", if bar.regex { on_mark } else { "" }),
+            format!(".*{}", if bar.regex { on_mark } else { "" }),
+            bar.regex,
+        ),
+        (
+            format!("[ab{}]", if bar.whole_word { on_mark } else { "" }),
+            format!("ab{}", if bar.whole_word { on_mark } else { "" }),
+            bar.whole_word,
+        ),
+        (
+            format!("[sel{}]", if bar.in_selection { on_mark } else { "" }),
+            format!("sel{}", if bar.in_selection { on_mark } else { "" }),
+            bar.in_selection,
+        ),
+    ];
+    let width_of = |short: bool| -> u16 {
+        toggles
+            .iter()
+            .map(|t| (if short { &t.1 } else { &t.0 }).chars().count() as u16)
+            .sum::<u16>()
+            // トグルの間の空白
+            + (toggles.len() as u16 - 1)
+    };
     let label_w = text_width(&bar.label.spans);
-    let count_w = bar.count_text.as_ref().map_or(0, |c| text_width(&c.spans));
+    // 右端には件数を置く。検索語を使えないときは、件数の代わりに理由を出す
+    let right_text = bar.error.as_ref().or(bar.count_text.as_ref());
+    let count_w = right_text.map_or(0, |c| text_width(&c.spans));
     // 入力欄の最低幅を残して、入る構成を選ぶ
-    let fits = |toggle: &str, count: u16| {
-        let need = label_w
-            + 1
-            + 10
-            + 1
-            + toggle.chars().count() as u16
-            + if count > 0 { 1 + count } else { 0 };
+    let fits = |toggles_w: u16, count: u16| {
+        let need = label_w + 1 + 10 + 1 + toggles_w + if count > 0 { 1 + count } else { 0 };
         need <= cols
     };
-    let (toggle, show_count) = if fits(&toggle_full, count_w) {
-        (toggle_full, true)
-    } else if fits(&toggle_full, 0) {
-        (toggle_full, false)
+    let (short_toggles, show_count) = if fits(width_of(false), count_w) {
+        (false, true)
+    } else if fits(width_of(false), 0) {
+        (false, false)
     } else {
-        (toggle_short, false)
+        (true, false)
     };
-    let toggle_w = toggle.chars().count() as u16;
+    let toggles_w = width_of(short_toggles);
     let mut x = put(w, 0, y, cols, &bar.label.spans, style);
     x = w.span(x, y, cols, &ascii_span(" ", style));
-    let right_w = 1 + toggle_w + if show_count { 1 + count_w } else { 0 };
+    let right_w = 1 + toggles_w + if show_count { 1 + count_w } else { 0 };
     let iw = cols.saturating_sub(x + right_w).max(1);
     let ix = x;
     let cursor_x = draw_input(w, &bar.input, ix, y, iw, theme, glyphs);
-    // 右側: トグル (大小を区別しているときは反転) と件数
+    // 右側: トグル (有効なものは反転) と件数 / 理由
     let mut rx = ix + iw;
     rx = w.span(rx, y, cols, &ascii_span(" ", style));
-    let tstyle = if bar.case_on {
-        overlay_style(style, Style::with_mods(StyleMods::REVERSE))
-    } else {
-        style
-    };
-    let ts = Span::new(toggle.as_str(), toggle_w, tstyle);
-    rx = w.span(rx, y, cols, &ts);
-    if show_count && let Some(c) = &bar.count_text {
+    for (i, (full, short, on)) in toggles.iter().enumerate() {
+        if i > 0 {
+            rx = w.span(rx, y, cols, &ascii_span(" ", style));
+        }
+        let text = if short_toggles { short } else { full };
+        let tstyle = if *on {
+            overlay_style(style, theme.toggle_on)
+        } else {
+            style
+        };
+        let ts = Span::new(text.as_str(), text.chars().count() as u16, tstyle);
+        rx = w.span(rx, y, cols, &ts);
+    }
+    if show_count && let Some(c) = right_text {
         rx = w.span(rx, y, cols, &ascii_span(" ", style));
-        put(w, rx, y, cols, &c.spans, style);
+        let cstyle = if bar.error.is_some() {
+            theme.message_error
+        } else {
+            style
+        };
+        put(w, rx, y, cols, &c.spans, cstyle);
     }
     let search_cursor = CellPos {
         col: ix + cursor_x.min(iw.saturating_sub(1)),
@@ -950,6 +984,138 @@ fn render_search_bar(
         },
         BarFocus::Button => CellPos { col: bx, row: y2 },
     })
+}
+
+/// ヘルプ画面 (04 §8.6)。編集面いっぱいに描く: 1 行目に見出し、最後の行に操作の案内、間に `scroll` 行目からの本文。
+/// 節の見出しは太字 + 下線、小見出しは太字。キー一覧・コマンド一覧の行は、左に固定幅の列 (キー / CommandId)、右に説明。
+fn render_help(
+    w: &mut Writer<'_>,
+    area: CellSize,
+    overlay: &OverlayModel,
+    theme: &Theme,
+) -> Option<CellPos> {
+    let OverlayModel::Help {
+        title,
+        lines,
+        scroll,
+        footer,
+    } = overlay
+    else {
+        return None;
+    };
+    let style = theme.overlay;
+    let (cols, rows) = (area.cols, area.rows);
+    if rows < 3 || cols < 10 {
+        return None;
+    }
+    for y in 0..rows {
+        fill(w, 0, y, cols, style);
+    }
+    let bold = overlay_style(style, Style::with_mods(StyleMods::BOLD));
+    put(w, 0, 0, cols, &title.spans, bold);
+    // 左の列の幅: 狭い画面では全体の 1/3 まで
+    let key_w = (cols / 3).clamp(8, 28);
+    let body_rows = usize::from(rows) - 2;
+    let max = lines.len().saturating_sub(body_rows);
+    let first = (*scroll).min(max);
+    for (i, line) in lines.iter().skip(first).take(body_rows).enumerate() {
+        let y = 1 + i as u16;
+        match line.kind {
+            HelpLineKind::Heading => {
+                let st = overlay_style(
+                    style,
+                    Style::with_mods(StyleMods::BOLD | StyleMods::UNDERLINE),
+                );
+                put(w, 0, y, cols, &line.text.spans, st);
+            }
+            HelpLineKind::Subheading => {
+                put(w, 1, y, cols, &line.text.spans, bold);
+            }
+            HelpLineKind::Body => {
+                put(w, 1, y, cols, &line.text.spans, style);
+            }
+            HelpLineKind::Entry => {
+                let mut x = 2;
+                if let Some(k) = &line.key {
+                    put(w, x, y, x + key_w, &k.spans, bold);
+                }
+                x += key_w + 1;
+                put(w, x, y, cols, &line.text.spans, style);
+            }
+        }
+    }
+    // 下端: 操作の案内と位置
+    put(
+        w,
+        0,
+        rows - 1,
+        cols,
+        &footer.spans,
+        overlay_style(style, Style::with_mods(StyleMods::DIM)),
+    );
+    None
+}
+
+/// which-key (04 §7.4): チョードの保留が 500 ms を超えたときの、続けて押せるキーの一覧。編集面の左下に重ねる。
+fn render_which_key(
+    w: &mut Writer<'_>,
+    area: CellSize,
+    model: &WhichKeyModel,
+    theme: &Theme,
+    glyphs: &Glyphs,
+    ascii: bool,
+) {
+    let style = theme.overlay;
+    let bold = overlay_style(style, Style::with_mods(StyleMods::BOLD));
+    let label = |k: &KeyStroke| key_label_full(&KeyLabel { strokes: vec![*k] }, ascii);
+    let prefix = key_label_full(
+        &KeyLabel {
+            strokes: model.prefix.clone(),
+        },
+        ascii,
+    );
+    let title_text = format!("{prefix} {}", glyphs.ellipsis.text);
+    let title = CellText {
+        width: label_width(&title_text),
+        spans: vec![Span::new(
+            title_text.clone(),
+            label_width(&title_text),
+            bold,
+        )],
+        cut: eve_view::CutPolicy::End,
+    };
+    let key_w = model
+        .items
+        .iter()
+        .map(|i| label_width(&label(&i.key)))
+        .max()
+        .unwrap_or(0);
+    let want_inner =
+        (key_w + 2 + model.items.iter().map(|i| i.text.width).max().unwrap_or(0)).max(title.width);
+    let (bw, bordered) = box_width(want_inner, area.cols);
+    let pad = u16::from(bordered) * 2;
+    let rows = (model.items.len() as u16 + pad).min(area.rows);
+    if rows == 0 {
+        return;
+    }
+    let b = BoxRect {
+        x: 0,
+        y: area.rows - rows,
+        cols: bw,
+        rows,
+        bordered,
+    };
+    draw_box(w, &b, bordered.then_some(&title), style, glyphs);
+    for (i, item) in model.items.iter().take(usize::from(rows - pad)).enumerate() {
+        let k = label(&item.key);
+        let spans = [
+            Span::new(k.clone(), label_width(&k), bold),
+            ascii_span(&" ".repeat(usize::from(key_w + 2 - label_width(&k))), style),
+        ];
+        let mut line: Vec<Span> = spans.to_vec();
+        line.extend(item.text.spans.iter().cloned());
+        draw_line(w, &b, i as u16, &line, style, glyphs);
+    }
 }
 
 /// リスト選択 (コマンドパレット、04 §8.1)。上部中央。入力欄 1 行 + 候補 (最大 12 行) + 枠。
@@ -1010,9 +1176,13 @@ fn render_list(
         let y = iy + 1 + k as u16;
         let is_sel = *first + k == *selected;
         let disabled = item.disabled_reason.is_some();
-        let base = if disabled { theme.placeholder } else { style };
+        let base = if disabled {
+            overlay_style(style, theme.overlay_disabled)
+        } else {
+            style
+        };
         let base = if is_sel {
-            overlay_style(base, Style::with_mods(StyleMods::REVERSE))
+            overlay_style(base, theme.overlay_selected)
         } else {
             base
         };
@@ -1053,10 +1223,7 @@ fn render_list(
         for (i, sp) in label.iter().enumerate() {
             let hit = item.match_ranges.iter().any(|r| r.contains(&i));
             let st = if hit {
-                overlay_style(
-                    base,
-                    Style::with_mods(StyleMods::UNDERLINE | StyleMods::BOLD),
-                )
+                overlay_style(base, theme.overlay_match)
             } else {
                 base
             };
@@ -1197,7 +1364,7 @@ pub fn render_screen(
         return render_too_small(frame, window, depth);
     }
     let mut r = render_panes(frame, depth, glyphs);
-    let theme = Theme::for_depth(depth);
+    let theme = Theme::from_roles(&frame.roles);
     let ascii = glyphs.ellipsis.width == 3;
     // 検索バーの行は編集面の下。クロームはその下に続く
     let bar_row = frame.size.rows;
@@ -1205,7 +1372,7 @@ pub fn render_screen(
         frame.size.cols,
         frame.size.rows + crate::buffer::bar_rows(frame),
     );
-    let chrome = chrome_rows_for_surface(surface_rows);
+    let chrome = chrome_rows(surface_rows, frame.hint_bar);
     let area = CellSize {
         cols,
         rows: surface_rows,
@@ -1220,7 +1387,10 @@ pub fn render_screen(
         };
         let status_y = surface_rows;
         render_status(&mut w, status_y, cols, &frame.status, &theme, glyphs);
-        if chrome >= 3 {
+        if !frame.hint_bar {
+            // ヒントバーを隠した (FR-504): ステータスバーの下の 1 行はメッセージだけに使う (04 §3.5)
+            render_message(&mut w, status_y + 1, cols, &frame.messages, &theme, glyphs);
+        } else if chrome >= 3 {
             render_message(&mut w, status_y + 1, cols, &frame.messages, &theme, glyphs);
             render_hints(
                 &mut w,
@@ -1254,11 +1424,15 @@ pub fn render_screen(
                 OverlayModel::Confirm { .. } => render_confirm(&mut w, area, ov, &theme, glyphs),
                 OverlayModel::Prompt { .. } => render_prompt(&mut w, area, ov, &theme, glyphs),
                 OverlayModel::List { .. } => render_list(&mut w, area, ov, &theme, glyphs),
+                OverlayModel::Help { .. } => render_help(&mut w, area, ov, &theme),
                 _ => None,
             };
             if c.is_some() {
                 cursor = c;
             }
+        }
+        if let Some(wk) = &frame.which_key {
+            render_which_key(&mut w, area, wk, &theme, glyphs, ascii);
         }
         r.clamped_cells = w.clamped;
         r.sanitized = w.sanitized;

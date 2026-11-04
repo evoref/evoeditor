@@ -115,3 +115,22 @@ fn 警告メッセージの画面() {
     h.run_jobs();
     check("warning", &mut h);
 }
+
+// verifies: AC-NFR-603-6
+#[test]
+fn ヘルプ画面の先頭() {
+    let mut h = with_file();
+    h.keys("ctrl+k h");
+    check("help", &mut h);
+}
+
+// verifies: AC-NFR-603-6
+#[test]
+fn ヘルプ画面のキー一覧() {
+    let mut h = with_file();
+    // パレットから「キー一覧を開く」を実行する
+    h.keys("ctrl+p");
+    h.text("help.keys");
+    h.keys("enter");
+    check("help-keys", &mut h);
+}

@@ -278,6 +278,21 @@ pub struct HintModel {
     pub items: Vec<HintItem>,
 }
 
+/// which-key の 1 行: 続けて押すキーと、その動作の名前。続きがさらに続く (入れ子のチョード) ときは `more`。
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct WhichKeyItem {
+    pub key: KeyStroke,
+    pub text: CellText,
+    pub more: bool,
+}
+
+/// which-key の一覧 (04 §7.4)。`prefix` は保留中のキー。
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct WhichKeyModel {
+    pub prefix: Vec<KeyStroke>,
+    pub items: Vec<WhichKeyItem>,
+}
+
 /// 確認ダイアログの選択肢の識別子。
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub struct ChoiceId(pub u16);
@@ -328,6 +343,15 @@ pub enum OverlayModel {
         focused: ChoiceId,
         nav_hint: Option<CellText>,
     },
+    /// ヘルプ画面 (全画面、04 §8.6)。節を縦に並べた 1 本のスクロール。`lines` は全行で、`scroll` 行目から描く。
+    Help {
+        title: CellText,
+        lines: Vec<HelpLine>,
+        /// 先頭に描く行の番号。
+        scroll: usize,
+        /// 操作の案内 (`ui.help.footer`)。
+        footer: CellText,
+    },
     /// リスト選択 (コマンドパレット。バッファ一覧・ファインダと共用、FR-511)。
     /// 照合と並び順は core が決める。`items` は `first` 番目から始まる表示窓 (最大 12 行)。
     List {
@@ -343,6 +367,28 @@ pub enum OverlayModel {
         /// 0 件のときに候補の位置へ出す文言。
         no_match: CellText,
     },
+}
+
+/// ヘルプの 1 行 (04 §8.6)。
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct HelpLine {
+    pub kind: HelpLineKind,
+    /// 左の列 (キー一覧のキー、コマンド一覧の CommandId)。`Entry` のときだけ。
+    pub key: Option<CellText>,
+    pub text: CellText,
+}
+
+/// ヘルプの行の種類。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum HelpLineKind {
+    /// 節の見出し。
+    Heading,
+    /// 小見出し (キー一覧のカテゴリ)。
+    Subheading,
+    /// 説明の文。
+    Body,
+    /// 左の列 (`key`) と本文の組。
+    Entry,
 }
 
 /// リストの 1 行 (03 §14.6)。
@@ -394,6 +440,14 @@ pub struct SearchBarModel {
     pub case: CaseMode,
     /// 大小を実際に区別している (トグルを反転して示す)。
     pub case_on: bool,
+    /// 正規表現として探す (トグル `[.*]` を反転して示す、FR-402)。
+    pub regex: bool,
+    /// 単語単位で探す (トグル `[ab]` を反転して示す、FR-402)。
+    pub whole_word: bool,
+    /// 選択範囲内だけを探す (トグル `[sel]` を反転して示す、03 §12.5)。
+    pub in_selection: bool,
+    /// 検索語を使えない理由 (正規表現の構文エラー・改行を含むパターン)。あれば件数の位置に描き、検索しない。
+    pub error: Option<CellText>,
     /// 件数の文言 (`ui.search.count.*`)。検索していなければ `None`。
     pub count_text: Option<CellText>,
     /// 置換欄 (開いているときだけ)。
@@ -408,6 +462,35 @@ pub struct ChromeTexts {
     pub too_small: CellText,
 }
 
+/// テーマのロールの表 (ロール名 → その色深度の段のスタイル、07 §8.6)。core が解決し、frontend はクロームと
+/// オーバーレイを描くときにロール名で引く。テーマか色深度が変わったときだけ作り直す。
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct RoleStyles(Vec<(String, Style)>);
+
+impl RoleStyles {
+    /// `(ロール名, スタイル)` の列から作る (名前の順に並べ直す)。
+    pub fn new(mut roles: Vec<(String, Style)>) -> RoleStyles {
+        roles.sort_by(|a, b| a.0.cmp(&b.0));
+        RoleStyles(roles)
+    }
+
+    /// ロールのスタイル。無ければ既定 (端末の既定色・属性なし)。
+    pub fn get(&self, name: &str) -> Style {
+        self.find(name).unwrap_or(Style::DEFAULT)
+    }
+
+    pub fn find(&self, name: &str) -> Option<Style> {
+        self.0
+            .binary_search_by(|(n, _)| n.as_str().cmp(name))
+            .ok()
+            .map(|i| self.0[i].1)
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = (&str, Style)> {
+        self.0.iter().map(|(n, s)| (n.as_str(), *s))
+    }
+}
+
 /// 1 回の描画で frontend に渡すもの。
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Frame {
@@ -420,8 +503,12 @@ pub struct Frame {
     pub primary_cursor: Option<CursorPlacement>,
     pub status: StatusModel,
     pub hints: HintModel,
+    /// ヒントバーを出すか (`ui.hint_bar` / `ui.toggle_hint_bar`、FR-504)。偽なら frontend はその行を本文に回す (04 §3.5)。
+    pub hint_bar: bool,
     /// 前面順。
     pub overlays: Vec<OverlayModel>,
+    /// チョードの保留が 500 ms を超えたときの、続けて押せるキーの一覧 (which-key、04 §7.4)。
+    pub which_key: Option<WhichKeyModel>,
     /// 検索バー。
     pub search: Option<SearchBarModel>,
     /// メッセージ行。
@@ -429,6 +516,8 @@ pub struct Frame {
     pub texts: ChromeTexts,
     /// 端末タイトル (無害化済み)。
     pub title: String,
+    /// テーマのロールの表 (クロームとオーバーレイを描くとき引く)。
+    pub roles: std::sync::Arc<RoleStyles>,
 }
 
 #[cfg(test)]

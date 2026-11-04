@@ -215,3 +215,123 @@ fn バーを閉じると置換のジョブは取り消される() {
     h.run_jobs();
     assert!(h.doc_text().starts_with("foo bar"));
 }
+
+// ---- v0.2: 正規表現・単語単位の置換、1 件置換 (03 §12.5) ----
+
+#[test]
+fn 正規表現の置換は_キャプチャを展開する() {
+    let mut h = Harness::new().with_size(60, 10);
+    h.text("foo=1 bar=2");
+    h.keys("ctrl+r");
+    h.keys("alt+r");
+    h.text(r"(\w+)=(\d)");
+    h.keys("tab");
+    h.text("$2:${1}!");
+    h.keys("alt+a");
+    assert_eq!(h.doc_text(), "1:foo! 2:bar!");
+    assert_eq!(message(&mut h), "2 件を置換しました (元に戻すで戻せます)");
+    h.keys("esc");
+    h.keys("ctrl+z");
+    assert_eq!(h.doc_text(), "foo=1 bar=2", "1 回の Undo で戻る");
+}
+
+#[test]
+fn 正規表現の置換は_改行と_ドルを扱う() {
+    let mut h = Harness::new().with_size(60, 10);
+    h.text("a,b,c");
+    h.keys("ctrl+r");
+    h.keys("alt+r");
+    h.text(",");
+    h.keys("tab");
+    h.text(r"\n");
+    h.keys("alt+a");
+    assert_eq!(h.doc_text(), "a\nb\nc", "\n は既定の改行 (LF)");
+
+    let mut h = Harness::new().with_size(60, 10);
+    h.text("price 5");
+    h.keys("ctrl+r");
+    h.keys("alt+r");
+    h.text(r"\d");
+    h.keys("tab");
+    h.text("$$ 100");
+    h.keys("alt+a");
+    assert_eq!(h.doc_text(), "price $ 100", "$$ は $");
+
+    let mut h = Harness::new().with_size(60, 10);
+    h.text("a-b");
+    h.keys("ctrl+r");
+    h.keys("alt+r");
+    h.text("-");
+    h.keys("tab");
+    h.text(r"\\n"); // バックスラッシュ 2 つと n
+    h.keys("alt+a");
+    assert_eq!(
+        h.doc_text(),
+        r"a\nb",
+        "バックスラッシュ 2 つは 1 つになり、n は文字のまま"
+    );
+}
+
+#[test]
+fn 単語単位のすべて置換() {
+    let mut h = Harness::new().with_size(60, 10);
+    h.text("foo foobar barfoo foo");
+    h.keys("ctrl+r");
+    h.keys("alt+w");
+    h.text("foo");
+    h.keys("tab");
+    h.text("X");
+    h.keys("alt+a");
+    assert_eq!(h.doc_text(), "X foobar barfoo X");
+}
+
+#[test]
+fn 置換欄の_enter_は_1_件置換で_次の一致へ進み_置換ごとに_undo_できる() {
+    let mut h = Harness::new().with_size(60, 10);
+    h.text("a a a");
+    h.keys("ctrl+home");
+    setup(&mut h, "a", "b");
+    h.keys("enter");
+    assert_eq!(h.doc_text(), "b a a");
+    h.keys("enter");
+    assert_eq!(h.doc_text(), "b b a");
+    h.keys("enter");
+    assert_eq!(h.doc_text(), "b b b");
+    assert_eq!(h.frame().search.unwrap().focus, BarFocus::Replace);
+    h.keys("enter");
+    assert_eq!(message(&mut h), "置換する箇所はありません");
+    h.keys("esc");
+    h.keys("ctrl+z");
+    assert_eq!(h.doc_text(), "b b a", "1 件ずつ戻る");
+    h.keys("ctrl+z");
+    assert_eq!(h.doc_text(), "b a a");
+}
+
+#[test]
+fn 検索欄の_enter_は従来どおり次の一致へ移るだけ() {
+    let mut h = Harness::new().with_size(60, 10);
+    h.text("a a");
+    h.keys("ctrl+home");
+    setup(&mut h, "a", "b");
+    h.keys("shift+tab");
+    h.keys("enter");
+    assert_eq!(h.doc_text(), "a a", "検索欄では置換しない");
+}
+
+#[test]
+fn 選択した一致を置換し_正規表現ではキャプチャを展開する() {
+    let mut h = Harness::new().with_size(60, 10);
+    h.text("k1=v1 k2=v2");
+    h.keys("ctrl+home");
+    h.keys("ctrl+r");
+    h.keys("alt+r");
+    h.text(r"(\w+)=(\w+)");
+    h.keys("tab");
+    h.text("$2=$1");
+    h.keys("shift+tab");
+    h.keys("enter"); // 1 つ目の一致を選択
+    h.keys("enter"); // 2 つ目へ (選択)
+    h.keys("tab");
+    h.keys("enter"); // 選択している 2 つ目を置換
+    assert_eq!(h.doc_text(), "k1=v1 v2=k2");
+}

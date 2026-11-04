@@ -93,6 +93,19 @@ impl EditorState {
             snapshot: doc.snapshot(),
             range,
         };
+        self.put_clipboard(source);
+        true
+    }
+
+    /// 文字列をコピーする (文書の外の文字列。メッセージ履歴など)。内部レジスタへ書き、`SetClipboard` を積む。
+    pub(super) fn copy_text(&mut self, text: &str) {
+        let snapshot = eve_text::Text::from(text).snapshot();
+        let range = ByteRange::new(eve_text::ByteOff(0), eve_text::ByteOff(text.len()));
+        self.put_clipboard(ClipboardSource { snapshot, range });
+    }
+
+    /// 内部レジスタへ書き、システムへの書込を依頼する。64 KiB 未満は文字列、それ以上はハンドルで渡す。
+    fn put_clipboard(&mut self, source: ClipboardSource) {
         let content = if source.len_bytes() < INLINE_MAX_BYTES {
             ClipboardText::Inline(source.to_text())
         } else {
@@ -108,7 +121,6 @@ impl EditorState {
             content,
             target: ClipboardTarget::System,
         });
-        true
     }
 
     /// Host が `Effect::SetClipboard` の `Handle` を実行するときに中身を取り出す (02 §4.4)。

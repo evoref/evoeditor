@@ -4,26 +4,45 @@
 //! 現在の範囲 (M1 の C2a): 文書・View・Window の集合、変更の唯一の経路 (`EditorState::apply_transaction`)、
 //! コマンドのレジストリと `execute`。編集コマンド・キーマップ・移動は後続の PR で足す。
 
+mod buffer;
 mod chrome;
 mod clipboard;
 mod command;
+mod config_reload;
+pub use config_reload::{CONFIG_FILE, ConfigSources, KEYMAP_FILE};
+pub use config_report::diagnostic_texts as config_diagnostic_texts;
 mod config_report;
 mod context;
 mod default_keymap;
 mod edit;
 mod eol;
+mod external;
 mod file;
+mod help;
+mod theme;
+pub use theme::resolve as resolve_theme;
 mod keymap;
 mod layout;
+mod leftover_offer;
+mod line_ops;
 mod message;
 mod motion;
+mod mouse;
 mod overlay;
 mod palette;
 mod query;
+mod quit_saving;
+mod save_all;
+mod startup;
+mod view_cmds;
+pub use startup::InitialFile;
 mod search_bar;
 mod search_state;
 mod snapshot;
 mod state;
+mod swap;
+mod swap_recovery;
+mod user_keymap;
 
 use eve_view::{
     Capabilities, DocumentId, EditorEvent, Effect, InputEvent, KeyCode, KeyKind, KeyStroke,
@@ -40,6 +59,7 @@ pub use edit::normalize_eol;
 pub use keymap::{
     Binding, KeyParseError, Keymap, Layer, Resolution, format_stroke, parse_sequence, parse_stroke,
 };
+pub use layout::{Affinity, WrapMode, WrapSettings};
 pub use search_state::{SearchCount, SearchStep};
 pub use snapshot::DocSnapshot;
 pub use state::{EditorState, ScrollPos, View, Window};
@@ -54,6 +74,10 @@ pub struct Editor {
     keymap: Keymap,
     #[allow(dead_code)] // C4 (開く・保存) のジョブ投入で使う
     ports: Ports,
+    /// チョードの保留が始まった (最後のキーを受けた) 時刻。which-key の 500 ms を数える。
+    chord_since: Option<Tick>,
+    /// which-key を出した (出す時刻に描き直しを一度だけ要求するため)。
+    which_key_shown: bool,
 }
 
 impl Editor {
@@ -63,6 +87,14 @@ impl Editor {
         edit::register(&mut registry);
         motion::register(&mut registry);
         file::register(&mut registry);
+        external::register(&mut registry);
+        buffer::register(&mut registry);
+        save_all::register(&mut registry);
+        help::register(&mut registry);
+        config_reload::register(&mut registry);
+        view_cmds::register(&mut registry);
+        mouse::register(&mut registry);
+        line_ops::register(&mut registry);
         overlay::register(&mut registry);
         let mut state = EditorState::new(caps, ports.jobs.clone(), ports.paths.clone());
         state.set_palette_entries(
@@ -76,16 +108,39 @@ impl Editor {
             registry,
             keymap: default_keymap::default_keymap(),
             ports,
+            chord_since: None,
+            which_key_shown: false,
         };
         editor.refresh_key_labels();
         editor
     }
 
     /// `{key:<command_id>}` の解決に使うキー表記を、今のキーマップから作り直す。
+    /// キーの表記を作り直す。表記 (パレット・ヒントバー・`{key:…}`) はこの端末で届く割当から選び (04 §7.8)、
+    /// ヘルプのキー一覧は全割当を、届くかの印とともに持つ。
     fn refresh_key_labels(&mut self) {
-        let labels = self.keymap.first_labels(&Self::EDITOR_CONTEXTS);
-        let seqs = self.keymap.first_bindings(&Self::EDITOR_CONTEXTS);
+        let caps = self.state.caps.clone();
+        let ok = |b: &keymap::Binding| keymap::reachable(b, &caps);
+        let seqs = self
+            .keymap
+            .first_bindings_where(&Self::EDITOR_CONTEXTS, &ok);
+        let labels = seqs
+            .iter()
+            .map(|(k, v)| (k.clone(), keymap::format_sequence(v)))
+            .collect();
         self.state.set_key_bindings(labels, seqs);
+        self.state.set_all_key_bindings(help::collect_all_bindings(
+            self.keymap
+                .all_bindings()
+                .into_iter()
+                .map(|b| (b.command.as_str().to_owned(), b.sequence.clone(), ok(b))),
+        ));
+    }
+
+    /// 端末の能力を差し替える (起動時と `CapabilitiesChanged`)。届く割当が変わるので、キーの表記も作り直す。
+    pub fn set_caps(&mut self, caps: eve_view::Capabilities) {
+        self.state.set_caps(caps);
+        self.refresh_key_labels();
     }
 
     pub fn state(&self) -> &EditorState {
@@ -118,11 +173,43 @@ impl Editor {
     pub fn tick(&mut self, now: Tick) {
         self.state.now = now;
         self.state.search_tick();
+        self.state.swap_tick();
+        self.state.quit_wait_tick();
+        self.state.mouse_tick();
+        if self.keymap.pending().is_empty() {
+            self.chord_since = None;
+            self.which_key_shown = false;
+        } else if !self.which_key_shown && self.which_key_due() {
+            self.which_key_shown = true;
+            self.state.mark_dirty_render();
+        }
+    }
+
+    /// which-key を出すまでの時間 (`ui.which_key_delay_ms`、既定 500 ms)。
+    fn which_key_delay(&self) -> crate::time::Millis {
+        crate::time::Millis(u64::from(self.state.config().which_key_delay_ms))
+    }
+
+    /// which-key を出す時刻に達した。
+    fn which_key_due(&self) -> bool {
+        self.chord_since
+            .is_some_and(|t| self.state.now >= t + self.which_key_delay())
     }
 
     /// 次に `tick` が要る時刻。`None` なら無期限に待ってよい。
     pub fn next_deadline(&self) -> Option<Tick> {
-        self.state.search_deadline()
+        [
+            self.state.search_deadline(),
+            self.state.swap_deadline(),
+            self.state.quit_wait_deadline(),
+            self.state.mouse_deadline(),
+            self.chord_since
+                .filter(|_| !self.which_key_shown && !self.keymap.pending().is_empty())
+                .map(|t| t + self.which_key_delay()),
+        ]
+        .into_iter()
+        .flatten()
+        .min()
     }
 
     /// キーマップを通さずにコマンドを実行する。権限判定フックを通る。
@@ -147,11 +234,35 @@ impl Editor {
     /// ジョブの結果を受け取る (Host が `HostMsg::Job` で呼ぶ)。
     pub fn on_job_result(&mut self, r: crate::jobs::JobResult) {
         self.state.on_job_result(r);
+        // `config.reload` の結果: キーマップは Editor が持つので、ここで差し替える
+        self.finish_reload_keymap();
     }
 
     /// 起動時の開き方 (`Host::start` が最初の `Resize` の後に呼ぶ)。パスがなければ無題の文書 (FR-124)。
     pub fn open_initial(&mut self, path: Option<&str>, read_only: bool) {
         self.open_initial_with(path, read_only, None);
+    }
+
+    /// 起動時に複数のファイルを開く (FR-101、07 §18.2)。最初のファイルを表示し、残りは読込中のバッファとして足す。
+    /// `read_only` と `forced` は全ファイルに掛かる。`files` が空なら無題の文書。
+    pub fn open_initial_files(
+        &mut self,
+        files: &[InitialFile],
+        read_only: bool,
+        forced: Option<crate::Encoding>,
+    ) {
+        match files.first() {
+            None => self.open_initial_with(None, read_only, forced),
+            Some(_) => {
+                let opts = crate::OpenOptions {
+                    user_read_only: read_only,
+                    forced,
+                    ..Default::default()
+                };
+                self.state.open_initial_files(files, opts);
+                self.state.start_recovery_scan();
+            }
+        }
     }
 
     /// `open_initial` に文字コードの指定 (`--encoding`、FR-111) を加えたもの。
@@ -218,8 +329,15 @@ impl Editor {
                     edit::paste_text(&mut self.state, &s);
                 }
             }
+            InputEvent::Mouse(m) => {
+                // クリックでチョードの保留は破棄する
+                self.keymap.clear_pending();
+                self.state.on_mouse(m);
+            }
             InputEvent::Resize { cols, rows } => self.state.set_viewport(cols, rows),
-            InputEvent::CapabilitiesChanged(caps) => self.state.set_caps(caps),
+            InputEvent::CapabilitiesChanged(caps) => self.set_caps(caps),
+            // フォーカス復帰: 表示中の文書の外部変更を確かめる (03 §9.5)
+            InputEvent::Focus(true) => self.state.on_focus_gained(),
             // システムクリップボードの読み取りの応答。最後の要求の token と違えば捨てる
             InputEvent::ClipboardContent { token, text } => {
                 self.state.on_clipboard_content(token, text);
@@ -237,6 +355,10 @@ impl Editor {
             "dialog" => &["dialog"],
             "prompt" => &["prompt", "global"],
             "palette" => &["palette", "list", "prompt", "global"],
+            // ヘルプ画面: 移動と閉じるだけ (入力欄は無い)
+            "help" => &["help", "global"],
+            // バッファ一覧: `list` の割当 (一覧内の `buffer.close`) を先に見て、移動などはパレットと共通
+            "buffer_list" => &["list", "palette", "prompt", "global"],
             "search" => &["search", "prompt", "global"],
             _ => &Self::EDITOR_CONTEXTS,
         }
@@ -268,6 +390,9 @@ impl Editor {
             }
             Resolution::Pending | Resolution::Cancelled | Resolution::UnassignedInSequence => {}
         }
+        // 保留が続くなら which-key の待ちを数え直す (打つたびに 500 ms)
+        self.chord_since = (!self.keymap.pending().is_empty()).then_some(self.state.now);
+        self.which_key_shown = false;
     }
 
     fn on_text(&mut self, s: &str) {
@@ -326,15 +451,64 @@ impl Editor {
         self.state.take_clipboard(id)
     }
 
+    /// ディスクにスワップが残っている文書と、書いたときのパス (無題は `None`)。Host が **正常終了のとき** に消す (03 §10.2「削除」)。
+    /// 異常終了・緊急退避の終了では消さない (復旧の材料)。
+    pub fn swap_leftovers(&self) -> Vec<(DocumentId, Option<crate::FsPath>)> {
+        self.state.swap_leftovers()
+    }
+
+    /// 起動時の走査が見つけた置換途中の痕跡の提案 (新しい順。05 §4.6)。
+    pub fn leftovers(&self) -> &[crate::Leftover] {
+        &self.state.leftovers
+    }
+
+    /// 復旧で適用した古いスワップのうち、まだ消していないもの。Host が正常終了のときに消す。
+    pub fn swap_recovered_leftovers(&self) -> Vec<crate::SwapEntry> {
+        self.state.swap_recovered_leftovers()
+    }
+
     pub fn take_snapshot_updates(&mut self) -> Vec<DocumentId> {
         self.state.take_snapshot_updates()
     }
 
     /// Window の Frame を作る (可視範囲だけ。コストは文書の大きさに依存しない)。
     pub fn frame(&mut self, window: WindowId) -> Option<eve_view::Frame> {
-        let f = layout::build_frame(&self.state, window, self.keymap.pending());
+        let mut f = layout::build_frame(&self.state, window, self.keymap.pending());
+        if let Some(f) = f.as_mut() {
+            f.which_key = self.which_key_model();
+        }
         self.state.mark_rendered();
         f
+    }
+
+    /// 保留が 500 ms を超えていれば、続けて押せるキーの一覧 (04 §7.4)。
+    fn which_key_model(&self) -> Option<eve_view::WhichKeyModel> {
+        if !self.which_key_due() {
+            return None;
+        }
+        let state = &self.state;
+        let contexts = Self::contexts_for(state.input_context());
+        let cat = state.catalog();
+        let items: Vec<eve_view::WhichKeyItem> = self
+            .keymap
+            .continuations(contexts, &|n| state.context_value(n))
+            .into_iter()
+            .map(|(key, cmd)| {
+                let text = cmd
+                    .as_deref()
+                    .map(|c| cat.get(&format!("cmd.{c}.title")).unwrap_or(c).to_owned())
+                    .unwrap_or_else(|| "…".to_owned());
+                eve_view::WhichKeyItem {
+                    key,
+                    text: layout::cell_text(&text, eve_view::CutPolicy::End),
+                    more: cmd.is_none(),
+                }
+            })
+            .collect();
+        (!items.is_empty()).then(|| eve_view::WhichKeyModel {
+            prefix: self.keymap.pending().to_vec(),
+            items,
+        })
     }
 
     pub fn needs_render(&self) -> bool {

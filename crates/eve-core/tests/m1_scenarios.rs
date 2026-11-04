@@ -184,23 +184,19 @@ fn 新規バッファを作り_保存すると名前を尋ねられる() {
 
 // verifies: AC-FR-107-3
 #[test]
-fn 新規バッファの作成でも_dirty_なら確認が出て_キャンセルで何も変わらない() {
+fn 新規バッファの作成は確認なしで足され_dirty_な文書はそのまま残る() {
     let mut h = opened("/w/a.txt", b"abc");
     h.text("X");
     h.keys("ctrl+n");
-    assert_eq!(h.overlay(), "dialog");
-    h.answer(2); // キャンセル
-    assert_eq!(h.overlay(), "");
-    assert_eq!(h.doc_text(), "Xabc");
-    assert!(h.is_dirty());
-    assert_eq!(h.doc_path().as_deref(), Some("/w/a.txt"));
-    // 破棄すると無題の空の文書に置き換わる
-    h.keys("ctrl+n");
-    h.answer(1);
-    assert_eq!(h.overlay(), "");
+    assert_eq!(h.overlay(), "", "何も捨てないので確認は出ない");
     assert_eq!(h.doc_text(), "");
     assert_eq!(h.doc_path(), None);
     assert!(!h.is_dirty());
+    // 元の文書は編集も dirty も残っている
+    h.cmd("buffer.prev");
+    assert_eq!(h.doc_text(), "Xabc");
+    assert!(h.is_dirty());
+    assert_eq!(h.doc_path().as_deref(), Some("/w/a.txt"));
 }
 
 // verifies: AC-FR-107-3
@@ -208,15 +204,14 @@ fn 新規バッファの作成でも_dirty_なら確認が出て_キャンセル
 fn 読込が失敗したら今の文書がそのまま残る() {
     let mut h = opened("/w/a.txt", b"abc");
     h.text("X");
-    // dirty な文書を破棄して別のファイルを開く: 読込が失敗しても、置き換えは読込の完了まで行われない
+    // 別のファイルを開く: 読込が失敗しても、今の文書は変わらない
     h.fs.add_file("/w/b.txt", b"bbb");
     h.fs.fail_next(
         eve_testkit::FsOp::OpenRead,
         eve_core::FsErrorKind::PermissionDenied,
     );
     h.cmd_with("file.open", Args::new().with_str("path", "/w/b.txt"));
-    assert_eq!(h.overlay(), "dialog");
-    h.answer(1); // 破棄して開く
+    assert_eq!(h.overlay(), "", "確認は出ない");
     h.run_jobs();
     assert_eq!(
         h.doc_path().as_deref(),

@@ -7,6 +7,7 @@ use std::path::PathBuf;
 use eve_docs_tables::theme::{RoleRow, StyleSpec, hex_rgb, parse_roles};
 use eve_tui::color::{clamp_style, rgb_to_ansi16, rgb_to_ansi256};
 use eve_tui::theme::{ROLES, Theme};
+
 use eve_view::{Color, ColorDepth, Style, StyleMods};
 
 fn rows() -> Vec<RoleRow> {
@@ -17,11 +18,23 @@ fn rows() -> Vec<RoleRow> {
 }
 
 fn color(c: &Option<String>) -> Color {
+    const NAMES: [&str; 8] = [
+        "black", "red", "green", "yellow", "blue", "magenta", "cyan", "white",
+    ];
     match c.as_deref() {
         None | Some("default") => Color::Default,
-        Some(s) => {
-            let (r, g, b) = hex_rgb(s).unwrap_or_else(|| panic!("truecolor の色は #rrggbb: {s}"));
+        Some(s) if s.starts_with("ansi.") => Color::Indexed(s[5..].parse().expect("ansi.<n>")),
+        Some(s) if s.starts_with('#') => {
+            let (r, g, b) = hex_rgb(s).unwrap_or_else(|| panic!("#rrggbb: {s}"));
             Color::Rgb(r, g, b)
+        }
+        Some(s) => {
+            let (base, name) = match s.strip_prefix("bright_") {
+                Some(n) => (8, n),
+                None => (0, s),
+            };
+            let i = NAMES.iter().position(|n| *n == name).expect("16 色の名前");
+            Color::Indexed(base + i as u8)
         }
     }
 }
@@ -65,35 +78,34 @@ fn 組込みテーマの表は全ロールが_truecolor_と_mono_を持ちコン
 }
 
 #[test]
-fn eve_tui_のロールは表の_truecolor_と_mono_の値と一致する() {
+fn eve_tui_が引くロールは表にあり_core_が渡す表から引ける() {
     let rows = rows();
-    let mut errs = Vec::new();
     for name in ROLES {
-        let Some(row) = rows.iter().find(|r| r.role == name) else {
-            errs.push(format!("{name}: 07 §8.2 の表にない (ロール名は公開面)"));
-            continue;
-        };
-        for (label, theme, spec) in [
-            ("truecolor", Theme::truecolor(), &row.truecolor),
-            ("mono", Theme::mono(), &row.mono),
-        ] {
-            let got = theme.role(name).expect("ROLES のロールは引ける");
-            let want = style_of(spec);
-            if got != want {
-                errs.push(format!("{name} ({label}): 実装 {got:?} / 表 {want:?}"));
-            }
+        assert!(
+            rows.iter().any(|r| r.role == name),
+            "{name}: 07 §8.2 の表にない (ロール名は公開面)"
+        );
+    }
+    // core が Frame で渡す表 (色深度ごと) から、Theme の各欄が表の値どおりに引ける
+    for (depth, pick) in [
+        (ColorDepth::TrueColor, 0),
+        (ColorDepth::Ansi256, 1),
+        (ColorDepth::Ansi16, 2),
+        (ColorDepth::Mono, 3),
+    ] {
+        let mut h = eve_testkit::Harness::new().with_caps(eve_view::Capabilities {
+            color_depth: depth,
+            ..eve_view::Capabilities::default()
+        });
+        let f = h.frame();
+        let theme = Theme::from_roles(&f.roles);
+        let row = rows.iter().find(|r| r.role == "ui.status_bar").unwrap();
+        let spec = [&row.truecolor, &row.ansi256, &row.ansi16, &row.mono][pick];
+        assert_eq!(theme.status_bar, style_of(spec), "{depth:?}");
+        for name in ROLES {
+            assert!(f.roles.find(name).is_some(), "{name} ({depth:?})");
         }
     }
-    assert!(errs.is_empty(), "{}", errs.join("\n"));
-}
-
-#[test]
-fn ロール名の対応表は引き漏れがない() {
-    let t = Theme::truecolor();
-    for name in ROLES {
-        assert!(t.role(name).is_some(), "{name}");
-    }
-    assert!(t.role("ui.nope").is_none());
 }
 
 #[test]

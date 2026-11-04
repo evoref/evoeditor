@@ -1,6 +1,7 @@
-//! BM-106: 長大行 (1 行 10 MB、改行なし) の表示・`End`・横スクロール・垂直スクロール (docs/09-testing-quality.md §5.2、
-//! 01 NFR-106 AC-3)。v0.1 の判定: 閾値 (1 MiB) を超える行を含む文書は読み取り専用で開き、その行は先頭 64 KiB だけを
-//! 表示する経路で、各操作の p99 ≤ 100 ms (S-03)。ASCII / 日本語 / 絵文字混在の 3 種を別のケースとして測る。
+//! BM-106: 長大行 (1 行 10 MB、改行なし) の表示・`End`・横スクロール・垂直スクロール・中央挿入 (docs/09-testing-quality.md §5.2、
+//! 01 NFR-106 AC-1)。v0.2 の判定: 閾値 (1 MiB) を超える行は char 近似モード (03 §11.5.1) で扱い、各操作の p99 ≤ 100 ms。
+//! 中央挿入は Revision が変わるので、列の索引の作り直し (行の 1 回の走査) を含む。ASCII / 日本語 / 絵文字混在の 3 種を
+//! 別のケースとして測る。
 //! ヘッドレス (core の区間)。**開発機の値は目安で、判定は基準機で行う**。
 //!
 //! ```text
@@ -13,6 +14,7 @@
 
 use std::time::{Duration, Instant};
 
+use eve_core::Args;
 use eve_testkit::Harness;
 
 const LINE_BYTES: usize = 10 * 1024 * 1024;
@@ -91,11 +93,29 @@ fn main() {
             vscroll.push(t.elapsed());
             std::hint::black_box(&f);
         }
+        // 中央挿入 (行の中央に 1 文字) → Frame。挿入のたびに Revision が変わり、列の索引を作り直す
+        // 行の中央の桁 (書記素数。単位の繰り返しの境目)へ移る (ここは測らない)
+        let per_unit = unit.chars().count() as i64;
+        let mid_col = (LINE_BYTES / 2 / unit.len()) as i64 * per_unit + 1;
+        h.cmd_with(
+            "cursor.goto_line",
+            Args::new().with_int("line", 1).with_int("col", mid_col),
+        );
+        let _ = h.frame();
+        let mut insert = Vec::new();
+        for _ in 0..runs {
+            let t = Instant::now();
+            h.text("x");
+            let f = h.frame();
+            insert.push(t.elapsed());
+            std::hint::black_box(&f);
+        }
         for (op, mut v) in [
             ("open", open),
             ("end", end),
             ("hscroll", hscroll),
             ("vscroll", vscroll),
+            ("insert_mid", insert),
         ] {
             v.sort();
             let (p50, p99, max) = (percentile(&v, 0.5), percentile(&v, 0.99), v[v.len() - 1]);

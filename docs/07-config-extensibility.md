@@ -252,7 +252,7 @@ provider = "osc52"
 
 ### 5.0 v0.1 の公開キー
 
-v0.1 で設定ファイル (`config.toml`、ユーザー層) から読む **公開キーの全集合** (ADR-0028。**7 個**、確定 (ユーザー回答)。v0.1 の範囲は案 L)。これ以外は定数。選定基準: (a) 環境や利用者によって既定値が合わないことがあり、ファイルの中身に直接効く (新規ファイルの文字コード・改行、タブ幅・インデント)、(b) 端末の設定と合わせないと表示が崩れる (曖昧幅)、(c) 端末の色深度の判定を手で上書きする唯一の手段 (`theme.color_mode`)。UI は `ja` 固定なので `ui.locale` は無い (言語の選択は v0.2、§17.1)。クリップボードは OS 付属の手段 (Win32) で実装する方式が確定しており (OQ-111、確定 (ユーザー回答))、v0.1 に設定は要らないため `[clipboard]` の公開は v0.2。
+v0.1 で設定ファイル (`config.toml`、ユーザー層) から読む **公開キーの全集合** (ADR-0028。**7 個**、確定 (ユーザー回答)。v0.1 の範囲は案 L)。これ以外は定数。選定基準: (a) 環境や利用者によって既定値が合わないことがあり、ファイルの中身に直接効く (新規ファイルの文字コード・改行、タブ幅・インデント)、(b) 端末の設定と合わせないと表示が崩れる (曖昧幅)、(c) 端末の色深度の判定を手で上書きする唯一の手段 (`theme.color_mode`)。`ui.locale` は v0.2 の M8 で公開した (§5.12、§17.1)。クリップボードは OS 付属の手段 (Win32) で実装する方式が確定しており (OQ-111、確定 (ユーザー回答))、v0.1 に設定は要らないため `[clipboard]` の公開は v0.2。
 
 | セクション | v0.1 公開キー | 根拠 |
 |---|---|---|
@@ -261,7 +261,7 @@ v0.1 で設定ファイル (`config.toml`、ユーザー層) から読む **公�
 | `[view]` | `ambiguous_width` | NFR-605 |
 | `[theme]` | `color_mode` | FR-513、04 §5.2a |
 
-件数の内訳: `[editor]` 3、`[file]` 2、`[view]` 1、`[theme]` 1 (計 7)。v0.1 で公開しないキー (定数で実装し、公開は v0.2): `editor.auto_indent` (既定 true)、`editor.undo.total_max_bytes`、`file.encoding_detection`、`file.write_bom`、`file.huge_file_warn_bytes`、`file.long_line_threshold`、`file.fsync`、`view.line_numbers`、`view.cursor_line_highlight`、`view.show_whitespace` (全角スペースとタブの可視化。v0.1 は `"minimal"` の定数で常に表示、FR-508)、`ui.hint_bar`、`ui.message_timeout_ms`、`ui.synchronized_output`、`theme.name` (v0.1 はテーマが 1 つ)、`search.case`、`keys.preset`、`log.level` (`EVE_LOG` で代える、§5.11)。`ui.locale` は英語 UI と同時 (v0.2)。`[keys.*]` (ユーザーのキー割当) は v0.2 (§7.1)。`[os.*]` / `[env.*]` の条件付きセクションは v0.2 (§3.4)。ここに無いキーの公開時期は各表の P 列と §5.13。公開前のキーを書いても「このバージョンでは未対応」の情報診断で、値は使わない (§5 冒頭)。
+件数の内訳: `[editor]` 3、`[file]` 2、`[view]` 1、`[theme]` 1 (計 7)。**v0.2 の M9a で `editor.undo.total_max_bytes` を公開した (計 14)**。**v0.2 の M9b で `editor.backspace_unit` (`"grapheme"` / `"codepoint"`) を公開した (計 15)**。**続けて M9b で `view.wrap` / `view.wrap_indent` / `view.wrap_kinsoku` を公開した (計 18)**。**マウスの `ui.mouse` / `ui.mouse_wheel_lines` も M9b で公開した (計 20)**。**`[clipboard]` は `osc52` / `osc52_max_bytes` の 2 個だけ M9b で公開した (計 22)**。**`ui.which_key_delay_ms` も M9b で公開した (計 23)**。**M9c で `view.show_whitespace` を公開した (計 24)**。**`theme.name` / `theme.background` も M9c で公開した (計 26)**。**M9d で `file.huge_file_warn_bytes` / `file.long_line_threshold` を公開した (計 28)**。**`file.reload_on_external_change` も M9d で公開した (計 29)**。**M10 で `ui.hint_bar` を公開した (計 30)**。v0.2 の M6 で `file.swap.*` の 5 個 (`enabled` / `interval_ms` / `min_interval_ms` / `max_bytes` / `exclude_secret_files`、§5.2) を公開した (計 12)**。範囲は `interval_ms` 100..=600000、`min_interval_ms` 100..=3600000、`max_bytes` 1048576..=1099511627776 (範囲外は警告して既定値)。`[file.swap]` の表でも `[file]` の中の `swap.enabled = ...` でも書ける。v0.1 で公開しないキー (定数で実装し、公開は v0.2): `editor.auto_indent` (既定 true)、`editor.undo.total_max_bytes`、`file.encoding_detection`、`file.write_bom`、`file.huge_file_warn_bytes`、`file.long_line_threshold`、`file.fsync`、`view.line_numbers`、`view.cursor_line_highlight`、`view.show_whitespace` (全角スペースとタブの可視化。v0.1 は `"minimal"` の定数で常に表示、FR-508)、`ui.hint_bar`、`ui.message_timeout_ms`、`ui.synchronized_output`、`theme.name` (v0.1 はテーマが 1 つ)、`search.case`、`keys.preset`、`log.level` (`EVE_LOG` で代える、§5.11)。**v0.2 の M8 で `ui.locale` を公開した (計 13)**: 値は `"auto"` (既定) か言語タグ (`ja` / `en`。`ja-JP`・`en_US` のように地域を付けても、地域を落として当てる。大文字小文字は区別しない)。同梱していない言語名は警告 (`InvalidValue`、許容値 `auto` / `ja` / `en`) して `auto` として扱い、選択順の次の段へ進む (§17.1)。節は `[ui]`。`[keys.*]` (ユーザーのキー割当) は v0.2 (§7.1)。`[os.*]` / `[env.*]` の条件付きセクションは v0.2 (§3.4)。ここに無いキーの公開時期は各表の P 列と §5.13。公開前のキーを書いても「このバージョンでは未対応」の情報診断で、値は使わない (§5 冒頭)。
 
 ### 5.1 `[editor]` — 編集動作
 
@@ -275,7 +275,7 @@ v0.1 で設定ファイル (`config.toml`、ユーザー層) から読む **公�
 | `word_separators` | string | ASCII の空白・タブ・括弧・句読点・演算子記号 (`( ) [ ] { } < > , ; : . ! ? / = + - * & ^ % $ # @ ~`) と、引用符・バッククォート・バックスラッシュ・縦棒 | 単語境界の追加区切り。v0.1 の単語移動は **文字種の遷移規則** (03 §13.3、OQ-117) だけで、本キーは v0.2 で公開 | FR-302 | v0.1 (定数、公開 v0.2) |
 | `undo.max_steps` | int | `10000` | 文書あたり Undo 上限 (いずれか一方に達したら古い側から破棄。03 §7.5) | NFR-203 | v0.1 (定数、公開 v0.2) |
 | `undo.max_bytes` | int (bytes) | `67108864` (64 MiB) | 同上 (メモリ) | NFR-203 | v0.1 (定数、公開 v0.2) |
-| `undo.total_max_bytes` | int (bytes) | `268435456` (256 MiB) | **プロセス全体** の Undo 履歴上限 (02 §14.1 MR2、03 §7.5)。超えたら履歴の最も大きい文書から古い順に破棄。v0.1 は単一文書なので文書あたりの上限 (`undo.max_bytes`) と合わせて定数で守る | NFR-203 | v0.1 (定数、公開 v0.2) |
+| `undo.total_max_bytes` | int (bytes) | `268435456` (256 MiB) | **プロセス全体** の Undo 履歴上限 (02 §14.1 MR2、03 §7.5)。超えたら履歴の最も大きい文書から古い順に破棄 (直前の 1 操作は残す。破棄しても dirty 表示は変わらない)。範囲 1048576..=1099511627776 (範囲外は警告して既定値)。**v0.2 の M9a で公開・実装した** (`[editor.undo]` の表でも `[editor]` の `undo.total_max_bytes` でも書ける) | NFR-203 | v0.2 |
 | `undo.group_timeout_ms` | int | `1000` | 連続入力を 1 Undo にまとめる無入力時間 (03 §7.3、OQ-49) | FR-203 | v0.1 (定数、公開 v0.2) |
 | `pending_changes_max_bytes` | int (bytes) | `16777216` (16 MiB) | 未決ジョブ・AI 提案の写像用に保持する ChangeSet の合計上限 (02 §5.3 / 03 §17.1)。**v1.L より前には `pending_changes` 自体が無い** (ジョブは Revision 照合で破棄)。写像は v1.L (Proposal の生成と同時、01 §4.3) | NFR-306 | v1.L |
 | `trim_trailing_whitespace_on_save` | bool | `false` | 保存時に末尾空白除去 | FR-216 | v0.4 |
@@ -294,11 +294,11 @@ v0.1 で設定ファイル (`config.toml`、ユーザー層) から読む **公�
 | `default_line_ending` | `"lf" \| "crlf" \| "cr" \| "native"` | **`"lf"`** (全 OS。P6 / NFR-405、05 §6、OQ-04) | 新規ファイルの改行コード。`native` は選択肢として残す | FR-113 | v0.1 |
 | `write_bom` | `"preserve" \| "never"` | `"preserve"` | UTF-8 BOM の扱い | FR-108 | v0.1 (定数、公開 v0.2) |
 | `large_file_threshold` | int (bytes) | `20971520` (20 MiB) | 重い機能を無効化する閾値 (03 §11.2) | FR-123 | v0.4 |
-| `huge_file_warn_bytes` | int (bytes) | `536870912` (512 MiB) | 開く前に警告する固定閾値 (03 §11.2、OQ-05 確定 (ユーザー回答))。閾値を設定で変えられるのは v0.2 (FR-127) | OQ-05 | v0.1 (定数、公開 v0.2) |
+| `huge_file_warn_bytes` | int (bytes) | `536870912` (512 MiB) | 開く前に警告する固定閾値 (03 §11.2、OQ-05 確定 (ユーザー回答))。閾値を設定で変えられるのは v0.2 (FR-127)。範囲 1048576..=1099511627776 (範囲外は警告して既定値)。**v0.2 の M9d で公開・実装した**。開くときの判定なので、変えても開いている文書には遡らず、次に開くファイル (再読込を含む) から効く (§6 の「新規文書から」) | OQ-05 | v0.2 |
 | `huge_file_refuse_bytes` | int (bytes) / `0` | `0` (上限なし) | 開かない上限 | OQ-05 | v0.1 (定数、公開 v0.2) |
 | `huge_file_warn_ratio` | float 0..1 | `0.5` | 利用可能メモリに対する警告比率 (`SystemInfo` Port 導入後。v0.1 は `huge_file_warn_bytes` のみ) | OQ-05 | v0.4 |
-| `long_line_threshold` | int (bytes) | `1048576` (1 MiB) | 長大行の閾値。v0.1 はこれを超える行を含む文書を **読み取り専用** で開き、その行は先頭 64 KiB だけを表示する (03 §11.5、NFR-106。表示・End・スクロールが p99 ≤ 100 ms)。長大行を編集できる縮退 (char 近似モード) は v0.2 | NFR-106 | v0.1 (定数、公開 v0.2) |
-| `reload_on_external_change` | `"ask" \| "auto_if_unmodified" \| "never"` | `"auto_if_unmodified"` | 外部変更の扱い (保存時 (v0.1)・フォーカス復帰時 (v0.2)・監視 (v0.4)) | FR-117 | v0.1 (定数、公開 v0.2) |
+| `long_line_threshold` | int (bytes) | `1048576` (1 MiB) | 長大行の閾値。これを超える行は char 近似モードで表示・編集し、その行を含む文書は折り返さない (v0.2、03 §11.5.1、NFR-106)。v0.1 はこれを超える行を含む文書を読み取り専用で開き、その行は先頭 64 KiB だけを表示した。範囲 65536..=1073741824 (下限は表示する先頭 64 KiB。範囲外は警告して既定値)。**v0.2 の M9d で公開・実装した**。開くときの判定で、文書は開いたときの閾値を持ち続ける (変えても次に開くファイル (再読込を含む) から効く。§6 の「新規文書から」) | NFR-106 | v0.2 |
+| `reload_on_external_change` | `"ask" \| "auto_if_unmodified" \| "never"` | `"auto_if_unmodified"` | 外部変更の扱い (保存時 (v0.1)・フォーカス復帰時 (v0.2)・監視 (v0.4))。**v0.2 の M9d で公開・実装した** (03 §9.5 の「M9d の実装」): `auto_if_unmodified` は dirty でなければ確認なしで再読込、`ask` は常に確認、`never` はフォーカス復帰で確かめない (`file.check_external_changes` は設定に関わらず確かめて尋ねる)。保存時の照合の確認はどの値でも出る | FR-117 | v0.2 |
 | `watch.enabled` | bool | `true` | ファイル監視 | FR-117 | v0.4 |
 | `watch.poll_interval_ms` | int / `0` | `0` (ポーリングしない) | 監視不可 FS での低頻度ポーリング。明示設定時のみ、最小 2000 (05 §12.2、OQ-78) | NFR-204 | v0.4 |
 | `save_strategy` | `"atomic" \| "in_place"` | `"atomic"` | 常に直接上書きにする設定 (05 §4.4)。`in_place` では core が最初から直接上書き (method = InPlace) を選び、乾式走査の後に `write_in_place` を呼ぶ (`write_atomic` を経由しない)。起動時に警告 1 回。ワークスペース層では `in_place` は危険の分類 (§12.3) | ADR-0016 | v0.1 (定数、公開 v0.2) |
@@ -320,9 +320,9 @@ v0.1 で設定ファイル (`config.toml`、ユーザー層) から読む **公�
 | キー | 型 / 値 | 既定 | 説明 | 関連 | P |
 |---|---|---|---|---|---|
 | `view.line_numbers` | `"absolute" \| "relative" \| "off"` | `"absolute"` | 行番号。`relative` は v0.4 (公開時 (v0.2) の許容値は `absolute` / `off`。`relative` を書くと列挙値不正の警告ではなく「このバージョンでは未対応」の情報診断にして `absolute` を使う) | FR-502 | v0.1 (定数、公開 v0.2) |
-| `view.wrap` | `"off" \| "soft" \| "word"` | `"off"` | 折り返し (ソフトラップは v0.2、OQ-110。v0.1 は横スクロールのみ) | FR-506 | v0.2 |
+| `view.wrap` | `"off" \| "soft" \| "word"` | `"off"` | 折り返し (ソフトラップは v0.2、OQ-110。v0.1 は横スクロールのみ)。`view.toggle_wrap` で ON にするときの方式にもなる (`off` のときは `word`)。**v0.2 の M9b で公開・実装した** | FR-506 | v0.2 |
 | `view.wrap_indent` | `"none" \| "same"` (`"plus_one"` は §5.13 のとおり後の版で値を追加) | `"same"` | 折り返し行のインデント継続。`none` = 継続しない、`same` = 論理行のインデント幅で揃える (03 §14.3)。最初から enum にしておき、値の追加は互換変更として扱う (§4.4。型を bool から変えない) (提案、OQ-175) | FR-506 | v0.2 |
-| `view.show_whitespace` | `"off" \| "minimal" \| "ideographic" \| "trailing" \| "all"` | `"minimal"` | 空白の可視化。`minimal` = 全角スペース (U+3000) とタブ文字だけを記号と属性で示す (03 §13.2、04 §6.7 I8)。`ideographic` (全角スペースのみ)、`trailing` (行末の空白) と `all` (半角の空白・改行も) は v0.4 (`ideographic` は §5.13 の表。公開時 (v0.2) の許容値は `off` / `minimal`。`ideographic` / `trailing` / `all` を書くと「このバージョンでは未対応」の情報診断にして `minimal` を使う) | FR-508 | v0.1 (定数 `"minimal"`、公開 v0.2) |
+| `view.show_whitespace` | `"off" \| "minimal" \| "ideographic" \| "trailing" \| "all"` | `"minimal"` | 空白の可視化。`minimal` = 全角スペース (U+3000) とタブ文字だけを記号と属性で示す (03 §13.2、04 §6.7 I8)。`ideographic` (全角スペースのみ)、`trailing` (行末の空白) と `all` (半角の空白・改行も) は v0.4 (`ideographic` は §5.13 の表。公開時 (v0.2) の許容値は `off` / `minimal`。`ideographic` / `trailing` / `all` を書くと「このバージョンでは未対応」の情報診断にして `minimal` を使う)。**v0.2 の M9c で公開・実装した**: `off` ではタブを空白のセル、全角スペースを ASCII の空白 2 セルで描く (幅とカーソルの列は変えない) | FR-508 | v0.1 (定数 `"minimal"`、公開 v0.2) |
 | `view.rulers` | array of int | `[]` | 桁ガイド | — | v0.4 |
 | `view.scroll_margin` | int | `3` | カーソル周辺の余白行 (04 §10) | — | v0.1 (定数、公開 v0.2) |
 | `view.scroll_margin_horizontal` | int | `8` | 横スクロール時の左右余白列 (04 §10) | FR-506 | v0.1 (定数、公開 v0.2) |
@@ -330,12 +330,12 @@ v0.1 で設定ファイル (`config.toml`、ユーザー層) から読む **公�
 | `view.ambiguous_width` | `1 \| 2` | `1` | East Asian Ambiguous の幅。`2` のときは eve-tui が描く罫線・記号が ASCII に縮退する (04 §3.7) | NFR-605 | v0.1 |
 | `view.emoji_width` | `"auto" \| 1 \| 2` | `"auto"` | 絵文字幅の補正。core の `EmojiWidth::{Auto, One, Two}` に写す (`"auto"` → `Auto` = 04 の端末補正 (幅プローブ・端末種別の表) が決めた値、決まらなければ 2。`1` → `One`、`2` → `Two`。03 §13.2) | FR-501 | v0.1 (定数、公開 v0.2) |
 | `view.control_char_style` | `"caret" \| "hex"` | `"hex"` | 制御文字の可視化表記 (`caret` = `^X`、`hex` = `<U+001B>`。C0 と DEL にだけ効き、C1 は常に `<U+0085>` の形。復号できないバイトの `<0xHH>` とは別物、03 §13.2)。空白の可視化 (`view.show_whitespace` の `"minimal"` = 全角スペースとタブ) とは独立で、この値では変わらない | FR-507 | v0.1 (定数、公開 v0.2) |
-| `ui.hint_bar` | bool | `true` | ヒントバー (v0.1 は常時表示) | FR-504 | v0.1 (定数、公開 v0.2) |
+| `ui.hint_bar` | bool | `true` | ヒントバー (v0.1 は常時表示)。**v0.2 の M10 で公開・実装した** (`ui.toggle_hint_bar` で実行中に切り替えられる。隠すとその行を本文に使う、04 §3.5 / §8.5。`config.reload` で即時に効く) | FR-504 | v0.1 (定数、公開 v0.2) |
 | `ui.status_bar` | bool | `true` | ステータスバー | FR-503 | v0.1 (定数、公開 v0.2) |
 | `ui.tab_line` | `"auto" \| "always" \| "never"` | `"auto"` (2 バッファ以上で表示) | バッファライン | FR-510 | v0.4 |
-| `ui.locale` | string (BCP 47) / `"auto"` | `"auto"` | UI の言語 (§17.1)。v0.1 は `ja` 固定で、本キーは英語 UI を同梱する v0.2 で公開する | NFR-603 | v0.2 |
+| `ui.locale` | string (BCP 47) / `"auto"` | `"auto"` | UI の言語 (§17.1)。`auto` は環境変数 `EVE_LANG`、OS ロケールの順で決める。`--locale` が最優先。v0.2 の M8 で公開した | NFR-603 | v0.2 |
 | `ui.message_timeout_ms` | int | `5000` | 情報メッセージの表示時間 (04 §8.9) | FR-505 | v0.1 (定数、公開 v0.2) |
-| `ui.mouse` | bool | `true` | マウス入力 (v0.2。v0.1 はマウスを捕捉せず端末の選択・スクロールをそのまま使える、04 §6.8) | FR-307 | v0.2 |
+| `ui.mouse` | bool | `true` | マウス入力 (v0.2。v0.1 はマウスを捕捉せず端末の選択・スクロールをそのまま使える、04 §6.8)。**v0.2 の M9b で公開・実装した** (`ui.toggle_mouse` で実行中に切り替えられる) | FR-307 | v0.2 |
 | `ui.bell` | `"visual" \| "audible" \| "off"` | `"visual"` | ベル | — | v0.1 (定数、公開 v0.2) |
 | `ui.synchronized_output` | `"auto" \| "always" \| "never"` | `"auto"` | 同期出力 DEC 2026 (04 §4.5。`auto` は既知の問題端末のみ送らない。`never` は表示が乱れる端末での逃げ道) | NFR-103 | v0.1 (定数、公開 v0.2) |
 | `ui.alternate_screen` | bool | `true` | 代替スクリーンを使う (04 §14.1) | — | v0.1 (定数、公開 v0.2) |
@@ -350,7 +350,7 @@ v0.1 で設定ファイル (`config.toml`、ユーザー層) から読む **公�
 |---|---|---|---|---|
 | `name` | string | **`"default"`** (**TrueColor 既定テーマ**、ADR-0027 / OQ-27 **確定 (ユーザー回答)**。本文は端末の既定色、強調ロールだけ前景・背景の RGB の組で定義し、v0.1 は truecolor と mono の段を明示する (256 / 16 は自動近似)。§8.1 / 04 §12.1 C2) | テーマ名 (組込み `default` (v0.1)、`ansi` / `default-dark` / `default-light` (v0.2)、`high-contrast-*` (v0.3)、または `themes/<name>.toml` (v0.2))。v0.1 はテーマが 1 つなので選べない | v0.1 (定数、公開 v0.2) |
 | `color_mode` | `"auto" \| "truecolor" \| "256" \| "16" \| "none"` | `"auto"` | 色深度判定の上書き。`auto` の判定は 04 §5.2a の判定表が正本 (本書は順序を再掲しない)。段の選択は core (02 §8.2) | v0.1 |
-| `background` | `"auto" \| "dark" \| "light"` | `"auto"` | 背景まで塗るテーマ (`default-dark` / `default-light`、v0.2) の明暗選択。`auto` は `COLORFGBG` ヒント (04 §5.2a、OQ-124) → 判らなければ `dark`。`default` テーマは背景非依存なので本キーを見ない | v0.2 |
+| `background` | `"auto" \| "dark" \| "light"` | `"auto"` | 背景まで塗るテーマ (`default-dark` / `default-light`、v0.2) の明暗選択。**v0.2 の M9c で公開・実装した** (扱いは §8.6 の 3 本目)。`auto` は `COLORFGBG` ヒント (04 §5.2a、OQ-124) → 判らなければ `dark`。`default` テーマは背景非依存なので本キーを見ない | v0.2 |
 | `overrides` | テーブル (スコープ → スタイル) | `{}` | テーマの部分上書き (§8.4) | v0.4 |
 
 ### 5.5 `[search]`
@@ -372,9 +372,9 @@ v0.1 で設定ファイル (`config.toml`、ユーザー層) から読む **公�
 | キー | 型 / 値 | 既定 | 説明 | P |
 |---|---|---|---|---|
 | `provider` | `"auto" \| "system" \| "osc52" \| "command" \| "none"` | `"auto"` | システム (OS 付属の手段: Win32 API / pbcopy・pbpaste / wl-copy・xclip・xsel。専用ライブラリは使わない。OQ-111 確定 (ユーザー回答)、05 §8.2) → OSC 52 (v0.2) → 内部レジスタ の順で試す (05 §8.1)。v0.1 は Windows の Win32 API → 内部レジスタ。ワークスペース層の `"command"` は危険の分類 (§12.3) | v0.1 (定数、公開 v0.2) |
-| `osc52` | `"auto" \| "always" \| "never"` | `"auto"` | OSC 52 の送出方針 (`auto` は SSH 接続中またはシステム provider 不可時。04 §5.2 / 05 §8.1)。v0.1 は OSC 52 を使わない | v0.2 |
-| `osc52_max_bytes` | int | `100000` | OSC 52 送出上限 (端末制限対策。05 §8.4) | v0.2 |
-| `command.copy` / `command.paste` | array of string (argv) | `[]` (WSL 検出時は copy = `/mnt/c/Windows/System32/clip.exe` (UTF-16LE の BOM 付きで渡す、05 §8.3) / paste = `/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe -NoProfile -Command "[Console]::OutputEncoding=[Text.Encoding]::UTF8; Get-Clipboard"` (どちらも絶対パス)。Linux / macOS は root しか書けないディレクトリで検出した `wl-copy` / `xclip` / `xsel` / `pbcopy` 等、05 §8.3) | 外部コマンド (シェル解釈なし、PATH 自動検出なし)。明示すれば検出より優先。ワークスペース層の `provider = "command"` と `command.*` は危険の分類 (§12.3)。WSL・Linux・macOS 向けなので、それらを出荷する v0.2 から | v0.2 |
+| `osc52` | `"auto" \| "always" \| "never"` | `"auto"` | OSC 52 の送出方針 (`auto` は SSH 接続中またはシステム provider 不可時。04 §5.2 / 05 §8.1)。v0.1 は OSC 52 を使わない。**v0.2 の M9b で公開・実装した** (端末が対応するときだけ。Windows は Windows Terminal) | v0.2 |
+| `osc52_max_bytes` | int | `100000` | OSC 52 送出上限 (端末制限対策。05 §8.4)。base64 後のバイト数で、範囲 1,000..=16,777,216。**v0.2 の M9b で公開・実装した** | v0.2 |
+| `command.copy` / `command.paste` | array of string (argv) | `[]` (WSL 検出時は copy = `/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe -NoProfile -NonInteractive -Command "[Console]::InputEncoding=[Text.UTF8Encoding]::new($false); Set-Clipboard -Value ([Console]::In.ReadToEnd())"` / paste = `/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe -NoProfile -NonInteractive -Command "[Console]::OutputEncoding=[Text.Encoding]::UTF8; [Console]::Out.Write((Get-Clipboard -Raw))"` (どちらも絶対パスで、本文は UTF-8。`clip.exe` は BOM の扱いで化けるので使わない、05 §8.2)。Linux / macOS は root しか書けないディレクトリで検出した `wl-copy` / `xclip` / `xsel` / `pbcopy` 等、05 §8.3) | 外部コマンド (シェル解釈なし、PATH 自動検出なし)。明示すれば検出より優先。ワークスペース層の `provider = "command"` と `command.*` は危険の分類 (§12.3)。WSL・Linux・macOS 向けなので、それらを出荷する v0.2 から | v0.2 |
 | `system_max_bytes` | int (bytes) | `67108864` (64 MiB) | システムクリップボードへ渡す上限 (02 §14.1 MR5 / 05 §8.4)。超えたら内部レジスタのみ + 通知 | v0.1 (定数、公開 v0.2) |
 | `x11_exit_wait_ms` | int | `200` | 終了時の X11 クリップボード所有権の待機 (05 §8.2、OQ-79)。S-14 が不成立で arboard を退路として採用した場合のみ意味を持つ | v0.2 |
 
@@ -538,7 +538,7 @@ v0.1 で設定ファイル (`config.toml`、ユーザー層) から読む **公�
 
 | キー (公開版) | 既定 (v0.1 の定数) | 由来 |
 |---|---|---|
-| `editor.backspace_unit` | `"grapheme"` (`"codepoint"` に切替可) | 03 §13.1、OQ-45、FR-201 |
+| `editor.backspace_unit` | `"grapheme"` (`"codepoint"` に切替可。**v0.2 の M9b で公開・実装した**) | 03 §13.1、OQ-45、FR-201 |
 | `editor.backspace_unindent` | `false` | 03 §15.3 |
 | `editor.undo.break_on_word` | `false` | 03 §7.3、OQ-50 |
 | `editor.word_attach_hiragana` (v0.4) | `false` (v0.1 の規則は全文字種共通の遷移で、漢字→ひらがなも境界。OQ-117) | 03 §13.3 |
@@ -548,14 +548,14 @@ v0.1 で設定ファイル (`config.toml`、ユーザー層) から読む **公�
 | `editor.newline_keep_whitespace_only_line` | `true` | 03 §15.3 |
 | `editor.trim_trailing_whitespace_skip_cursor_line` (v0.4) | `true` | 03 §15.3 |
 | `view.wrap_indent` の値 `"plus_one"` (論理行のインデント幅 + 1 段) の追加 (公開版は未定。`"none" \| "same"` は v0.2 から公開、§5.3) | `"same"` (v0.1・v0.2 は `none` / `same` のみ) | 03 §14.3 |
-| `view.wrap_kinsoku` | `true` (禁則処理) | 03 §14.3、OQ-57 |
+| `view.wrap_kinsoku` | `true` (禁則処理)。**v0.2 の M9b で公開・実装した** (真偽値。`false` で禁則を外す) | 03 §14.3、OQ-57 |
 | `view.width_risky_display` | `"unicode"` (`"replace"`) | 04 §4.7、OQ-64 |
 | `view.show_whitespace` の値 `"ideographic"` (全角スペースのみ) (v0.4) | — | 04 |
 | `file.swap.compact_bytes` / `file.swap.large_interval_ms` (v0.4、差分ジャーナル導入時) | 8 MiB / 30000 | 03 §10.2 |
 | `search.replace_all_select_result` | `false` (Helix 風の全選択は opt-in) | 03 §12.5 |
 | `search.regex_size_limit` | 10 MiB | 03 §12.3 |
-| `ui.mouse_wheel_lines` (v0.2) | 3 | 04 §6.8 |
-| `ui.which_key_delay_ms` (v0.2) | 500 | 04 §7.4 |
+| `ui.mouse_wheel_lines` (v0.2) | 3 (**v0.2 の M9b で公開した**: int 1..=20、ホイール 1 目盛りのスクロール量 = 表示行) | 04 §6.8 |
+| `ui.which_key_delay_ms` (v0.2) | 500 (**v0.2 の M9b で公開した**: int 0..=5000) | 04 §7.4 |
 | `ui.visual_bell_ms` | 100 | 04 §6.9 |
 | `process.shell` (v0.4、`ProcessRunner` と同時) | Unix: `["/bin/sh", "-c"]`、Windows: `["cmd.exe", "/D", "/C"]` (`%ComSpec%` を優先) | 05 §13.2 |
 
@@ -573,10 +573,12 @@ v0.1 で設定ファイル (`config.toml`、ユーザー層) から読む **公�
 1. 再読込に **エラーがあれば旧設定を維持** し診断のみ表示する (半端な状態にしない)。構文エラーでファイルが無視される場合も同様に旧設定を維持する (起動時とは異なる。起動時は「無いもの」として扱うしかない)。
 2. 項目は 3 種に分類し、メタ表で宣言する:
    - **即時**: 表示・キーマップ・テーマ・検索オプション等。差し替えた瞬間から適用。
-   - **新規文書から**: `file.default_encoding`、`[[language]]` の `file_types` 等。開いている Document には遡及しない (遡及すると「開いたときの判定」と食い違う)。再適用したいときは `lang.redetect` コマンド。
+   - **新規文書から**: `file.default_encoding`、`file.huge_file_warn_bytes` / `file.long_line_threshold` (開くときの判定)、`[[language]]` の `file_types` 等。開いている Document には遡及しない (遡及すると「開いたときの判定」と食い違う)。再適用したいときは `lang.redetect` コマンド。
    - **再起動が必要**: `log.*` の出力先、`frontend` 固有初期化。診断で「再起動後に有効」と伝える。
 3. `ResolvedConfig` は不変で `Arc` 共有される ([02 §5.1](02-architecture.md#51-所有構造))。ジョブへ渡したスナップショットは古い設定で完走してよい。
 4. 再読込は差分を計算して「変更された項目」を情報メッセージで要約する (`3 項目が変わりました: editor.tab_width, theme.name, …`)。
+**v0.2 の M9c の実装 (案)**: `config.reload` (パレット) は、起動時と同じ読込元 (設定ディレクトリの `config.toml`、または `--config` のファイルを順に。`--no-config` なら読まない) と `keymap.toml` を io ジョブで読み、`--set` を最後に重ねる。読み (メインスレッドで I/O しない)、届いたらメインスレッドで解析する。ファイルごとに、エラー (重さ `Error` の診断 = 構文エラー・読めない) があれば前の設定のまま維持して診断と `msg.config.reload_kept` を出し、無ければ差し替える (警告の項目は起動時と同じく既定値)。項目の 3 分類は次のとおり: **再起動が必要** = `theme.color_mode` / `view.ambiguous_width` (端末の初期化で 1 回だけ使う) と `ui.locale` (起動時の選択順で決める)。**新規文書から** = `file.default_encoding` / `file.default_line_ending` (開いている文書の文字コード・改行は変えない)。**ほかはすべて即時** (表示の設定は開いている文書と View にも写す。折り返しは値が変わったときだけ写し、`view.toggle_wrap` で切り替えた状態を戻さない。`ui.mouse` が変わったら `Effect::SetMouseCapture` で端末にも伝える)。要約は `info.config.reloaded` (変わったキー) と `info.config.reload_restart` (そのうち再起動が必要なもの)。ワークスペース層・自動再読込 (下の 5) は v0.4。
+
 5. 自動再読込は **ワークスペース層の信頼状態を再評価** する。信頼済みワークスペースで危険項目 (§12.3) が **増えた** 場合は自動適用せず、再確認を求める (git pull で設定が書き換わる攻撃経路への対策)。
 
 ---
@@ -629,6 +631,8 @@ v0.1 で設定ファイル (`config.toml`、ユーザー層) から読む **公�
 - `prompt` は入力欄の編集 (`edit.*` / `cursor.*` / `select.all` / `edit.paste` の欄内版) と `ui.confirm` / `ui.cancel` を持つ。`search` は `enter` / `up` / `down` を検索の移動に、`palette` と `list` は `up` / `down` を候補の移動に使うので、`prompt` より先に参照する (同じキーが衝突しない)。
 - **チョードの 2 打目と文字キー**: 端末からは修飾なしの文字が `Text` で届く。チョードの保留中と、組込みの `dialog` 層 (アクセラレータの照合のため `captures_text` を宣言する) では、単一書記素の `Text` を `Key{Char(c)}` として照合する (02 §7.2 K1 / K2)。複数書記素の `Text` (IME 確定・高速タイプ) は、チョードの保留中は **先頭の書記素だけ** を照合して残りを捨て、`dialog` では先頭も照合せず **すべて捨てる** (`Paste` も同じ。貼り付けや高速タイプで選択肢が実行されないように。提案、02 §7.2 K1 / K2、OQ-180)。IME が ON のときは文字が前編集に入って届かないので、チョードとアクセラレータは IME を OFF にして使う (ダイアログは `tab` / 矢印 + `enter` でも選べる)。
 
+**v0.2 の実装範囲 (案、M9b)**: 読むのは `keymap.toml` の `[keys.<コンテキスト>]` だけで、`config.toml` の `[keys]` / `[keys.*]` と `keys.preset` は引き続き「このバージョンでは未対応」の情報診断にする (`keymap.toml` が正本の入口になるため)。解決するのは **単一ストロークの上書き・追加・解除 (`"none"`)・`when` 付き**。2 ストローク以上、`args`、`finder` / `panel.*` は未対応の情報診断で使わない。問題のある割当 (未知のコンテキスト・未知のコマンド・読めないキー・読めない `when`・修飾のない文字キー・既定のチョードの先頭と同じ単体のキー) は、その割当だけを無効にして警告し (`msg.config.keymap_*`)、ほかは使う。終了・コマンドパレット・取消に届かなくなる割当はエラーとして外し、既定を残す (§7.6)。層の優先は「層が先、同じ層の中でコンテキストの参照順」(ユーザー層の `global` は既定層の `editor` に勝つ、§7.4)。`{key:…}` とヘルプのキー一覧は、上書き後の割当を表示する (遮蔽された既定の割当は出さない)。再読込 (`config.reload`、FR-706) は後続。
+
 ### 7.2 キー名
 
 | 分類 | 表記 (小文字) | 備考 |
@@ -680,6 +684,7 @@ literal:= '"' ... '"' | number | true | false
 | `doc.has_path` / `doc.read_only_releasable` | bool | パス付き文書か / 読み取り専用の理由が解除可能か (03 §9.6。解除のコマンドは v0.2 なので、v0.1 では常に false) |
 | `search.active` | bool | 検索バーが開いている |
 | `search.replace_active` | bool | 検索バーの置換欄が開いている (`search.replace_open` で開く。04 §8.4) |
+| `search.replace_focused` | bool | 検索バーの置換欄にフォーカスがある (v0.2。置換欄の `enter` を `search.replace` にするキーマップの `when` に使う。04 §8.4) |
 | `has.lsp` | bool | 言語サーバが接続済み |
 | `has.ai` | bool | AI が有効 |
 | `ai.busy` / `ai.ghost_visible` / `ai.review_active` / `ai.chat_focus` (v1.L) | bool | AI 要求が進行中 (`Esc` → `ai.cancel`、04 §8.10) / ゴーストテキスト表示中 (`tab` → `ai.complete_accept`) / 差分承認オーバーレイ表示中 / チャットパネルにフォーカス (06 §13.2) |
@@ -713,7 +718,7 @@ literal:= '"' ... '"' | number | true | false
 
 ### 7.7 ヘルプとの連携
 
-`--dump-keymap` (v0.1 は隠しオプション) / `help.keys` (v0.2) は解決後のキーマップを「コンテキスト × キー → コマンド (タイトル・由来の層)」で出力する。コマンドパレットはコマンド ID から現在のキーを逆引きして併記する (FR-602。v0.1 はこれがヘルプ画面の代用、FR-514)。
+`--dump-keymap` (隠しオプション。v0.3) / `help.keys` (v0.2) は解決後のキーマップを「コンテキスト × キー → コマンド (タイトル・由来の層)」で出力する。コマンドパレットはコマンド ID から現在のキーを逆引きして併記する (FR-602。v0.1 はこれがヘルプ画面の代用、FR-514)。
 
 ---
 
@@ -818,7 +823,7 @@ diff.plus / diff.minus = { ... }                            # diff ファイル�
 - **mono の列**: 属性列か `` `none` `` だけ (`mono = { mods = [...] }` の値。`none` は `mods = []`)。
 - **形の列**: 1 ロールに 1 値 ((i) / (ii) / (iii)、§8.1)。truecolor の段の形を表し、`check-themes` は truecolor の列をこの形で検査する。mono の段は形を問わず常に属性列か `none` である。256 / 16 の参考値で形が違うものは表の下の注記に書く。
 
-| ロール | 用途 | 形 | truecolor (fg / bg) | 256 (fg / bg、参考) | 16 (fg / bg、参考) | mono |
+| ロール | 用途 | 形 | truecolor (fg / bg) | 256 (fg / bg) | 16 (fg / bg) | mono |
 |---|---|---|---|---|---|---|
 | `ui.text` | 本文・入力欄の文字・情報メッセージ以外の通常の文字 | (ii) | `default` / `default` | `default` / `default` | `default` / `default` | `none` |
 | `ui.cursor_line` | 現在行の強調 (`view.cursor_line_highlight`、既定 on。OQ-125)。行の中で他のロール (選択・検索一致等) が付いたセルはそちらが優先 | (i) | `#e8e8e8` / `#3a3d4a` (8.8) | `ansi.254` / `ansi.236` (10.4) | `none` | `none` |
@@ -876,6 +881,56 @@ name = "default"
 ### 8.5 シンタックススコープの命名
 
 tree-sitter のハイライトクエリ (`@keyword.control` 等) のキャプチャ名を **そのままスコープ名** とし、Helix / nvim-treesitter で広く使われている命名に揃える (既存クエリ・テーマ資産の流用が容易。流用時のライセンスは ADR-0018 に従って管理)。正式な一覧は v0.4 着手時に `eve-syntax` の文書で固定し、本書の表は骨子とする。
+
+### 8.6 テーマを使う側の突合と実装の分け方 (M9c、2026-10-30。案)
+
+背景を塗る組込みテーマとテーマファイル (FR-707) を足す前に、ロールを使っている箇所と、本章・04 §12 の方針との食い違いを洗い出す。
+
+**現状 (v0.2 の M9b まで)**:
+
+| 箇所 | 持っているもの | 方針との食い違い |
+|---|---|---|
+| eve-tui `theme.rs` | クロームとオーバーレイの 13 ロール (`ui.status_bar`・`ui.message.*`・`ui.hint_bar*`・`ui.overlay`・`ui.input.placeholder`・`ui.dialog.button*`・`ui.eof_marker`・`ui.scroll_marker`) の truecolor と mono の定数。256 / 16 の段は描画時に `color::clamp_style` で近似 | 04 §12.1 C1 は「段の選択は core がテーマ読込時に行い、Frame には描ける色だけが載る」。いまは frontend が色と段を決めている。テーマファイルや `theme.name` を足すと、frontend が設定を知る必要が出る |
+| core `layout.rs` (編集面) | 選択 = 反転、検索の一致 = 下線、現在の一致 = 反転 + 太字 + 下線、記号 (空白・制御文字・不可視) = dim、表現不能の文字 = 反転 + 下線。**属性だけで色を付けない** | §8.2 の表の truecolor の色 (`ui.selection` の `#eef0f6` / `#3b5bb5` 等) と、`ui.cursor_line`・`ui.line_number`・`ui.control_char`・`ui.whitespace` の色が未実装 (mono の段に近い見た目)。`ui.overlay.selected` / `.match` / `.disabled`・`ui.search_bar.toggle_on` も eve-tui の固定の属性 |
+| `xtask check-themes` | §8.2 の表そのもの (形・比・mono) と、eve-tui の 13 ロールの定数との突合 | 編集面のロールは突合の対象外 |
+
+**決定 (案)**:
+
+1. **解決は core の 1 か所** (C1 のとおり)。テーマの型 (ロール → 4 段の `Style`)、組込みテーマの定義、テーマファイルの書式 (§8.2)・`inherits`・`[palette]`・縮退 (04 §12.3) は **eve-config** に置く (core と bin が使う。eve-tui は eve-config に依存しない、02 §4.3)。core は `theme.name` / `theme.background` と `Capabilities.color_depth` から **その段のロールの表** (ロール名 → `Style`) を作って持つ。
+2. **編集面**: core が Span にロールの `Style` を付ける (選択・検索の一致・現在の一致・記号・制御文字・行番号・現在の行番号・`~`・横スクロールの印)。今の属性は mono の段の値としてそのまま残る (無色の見た目は変わらない)。
+3. **クローム**: Frame に **ロールの表** (`Frame.roles`、eve-view の型。テーマが変わったときだけ差し替える) を載せ、eve-tui はロール名でそこから引く。eve-tui の定数表は捨てる。`clamp_style` は段を超える色が来たときの最終防衛線 (04 §12.3) としてだけ残す。
+4. **キー**: `theme.name` (組込み `default` / `default-dark` / `default-light` / `ansi`、または `<設定ディレクトリ>/themes/<name>.toml`) と `theme.background` (§5.4。`auto` は `COLORFGBG` → 判らなければ `dark`、OQ-124) を公開する。`theme.overrides` は v0.4 のまま。
+5. **テーマファイル**: 起動時は bin が設定と一緒に読み (端末の前)、`config.reload` は io ジョブで読む。読めない・書式の誤り・未知のテーマ名は警告して `default` を使う (FR-703)。`inherits` の循環と深さ (8) は §8.3 のとおり。ワークスペース層 (`.eve/themes/`) は v0.4。
+6. **256 / 16 の明示値**: 組込みテーマは `fallback256` / `fallback16` を書けるようにし、`default` は §8.2 の表の「参考」の列を明示値として採る (近似より端末の配色に合う)。表の列見出しの「参考」は、実装した版で外す。
+7. **見た目の変化**: 編集面の選択・検索の一致などに色が付く (truecolor / 256 / 16 の段)。無色 (`mono`) の段は今と同じ。
+
+**2 本目の実装 (M9c)**: eve-config `theme.rs` に型と組込み `default` (§8.2 の表の全 26 ロール、4 段とも明示値。表の 256 / 16 の列から「参考」を外した) を置き、core (`editor/theme.rs`) が色深度に合う段の表を作って `Frame.roles` に載せる (色深度が変わったときだけ作り直す)。編集面は 記号 (`ui.whitespace` / `ui.control_char`) → 表現不能の文字 → 検索の一致 (`ui.search.match` / `.current`) → 選択 (`ui.selection`) の順に重ね (既定でない色は上が勝ち、属性は足す)、行番号は `ui.line_number` (主カーソルの行は `ui.line_number.active` を重ねる)。eve-tui は `Theme::from_roles` で表から引き、自前の定数は持たない。`ui.cursor_line` (現在行の帯、`view.cursor_line_highlight`) は表にあるが、描画は後の PR (設定の公開と一緒)。突合: `tests/theme_table.rs` (core、表の全ロール・4 段) と eve-tui の `theme_table` (引くロール名が表にあること)。
+
+**3 本目の実装 (M9c)**: 組込みテーマ 3 つと `theme.name` / `theme.background` の公開。
+
+| テーマ | 作り方 | `ui.text` (truecolor / 256 / 16) |
+|---|---|---|
+| `default-dark` | `default` の全ロールに、本文の色を足して背景を塗る。色の段では、各ロールの端末の既定色 (`default`) を `ui.text` の前景・背景に置き換える (無色の段は塗らない)。eve-tui は画面全体を `ui.text` で塗ってから描く | `#d4d4d4` / `#1e1e1e` (11.2) / `ansi.252` / `ansi.234` / `white` / `black` |
+| `default-light` | 同上 | `#1e1e1e` / `#fafafa` (16.0) / `ansi.235` / `ansi.255` / `black` / `bright_white` |
+| `ansi` | `default` の全ロールで、16 の段の値を全段に使う (端末の配色に馴染む。16 色端末・SSH 先向け、04 §12.1 C3) | 端末の既定色 |
+
+- 淡色の (iii) のロール (`#808080`) は、塗った背景に対しても 3.0:1 以上 (暗 4.2、明 3.8)。比は core の `tests/theme_table.rs` で確かめる。
+- `theme.background` (確定 (ユーザー回答)、2026-10-30): `default-dark` / `default-light` を選んだときだけ効き、`dark` / `light` でその明暗に替える。`auto` (既定) は名前どおりで、`COLORFGBG` による推定はしない (名前で明暗を明示しているため。OQ-124 の推定は、明暗を名前に含まないテーマを足すときに使う)。`default` と `ansi` は見ない。
+- `theme.name` の値は組込みの 4 つ。テーマファイル (`themes/<name>.toml`) は 4 本目。設定を差し替えると (`config.reload` を含む) その場で替わる。
+
+**4 本目の実装 (M9c)**: テーマファイル (FR-707)。
+
+- `theme.name` は組込みの名前か、英数字・`-`・`_` だけの 1〜64 文字 (パスの区切りや `..` は使えない。それ以外は値の誤りの警告)。組込みでなければ `<設定ディレクトリ>/themes/<name>.toml` を読む (`--no-config` のときは読まない)。`Config` は文字列を持つので `Copy` でなくなった (`Clone`)。
+- 書式は §8.2 のうち `[meta]` の `inherits`、`[palette]`、`[ui]` のロール (`fg` / `bg` / `mods` / `fallback256` / `fallback16` / `mono`)。`inherits` は親から順に重ね (深さ 8、循環はエラー)、どこにも無ければ組込みの `default` が土台 (組込みの `default-dark` 等も親にできる)。書いたロールの書いた項目だけを上書きし、色を書き換えた段の 256 / 16 は、明示が無ければ 04 §12.3 の近似で求める (前景と背景が同じ番号になったら反転)。`ui.text` に背景色があれば背景を塗るテーマとして扱う。`[meta]` の `name` / `background` / `author` / `license` は読み飛ばす。`[syntax]` と `underline` / `underline_color` は v0.4 (「未対応」の情報診断)。
+- 誤りの扱い: 読めない・無い・構文エラー・`inherits` の循環と深さはエラーで、テーマは組込みの `default` で動く。未知のロール・色の表記・パレット名・属性は警告で、その値だけ使わない。診断はファイル名 `themes/<name>.toml` で出す (`--check-config` も確かめ、エラーなら終了コード 3)。
+- 読むのは、起動時は bin (端末の前)、`config.reload` は設定を差し替えた後の io ジョブ (`JobKind::ReadTheme`。名前が同じでもファイルを読み直す)。ワークスペース層の `.eve/themes/` と `theme.overrides` (§8.4) は v0.4。
+
+**実装の分け方 (README §3.6 の 6 を細かくする)**:
+
+1. この節 (突合の記録)。
+2. eve-config のテーマの型と組込み `default` (§8.2 の全ロール、4 段)、core の解決と編集面への適用、`Frame.roles` と eve-tui の切替。`check-themes` を編集面のロールにも広げる。
+3. 組込みテーマ `default-dark` / `default-light` / `ansi` と、`theme.name` / `theme.background` の公開 (値の表を本節の後に足す)。
+4. テーマファイル (`themes/*.toml`、`inherits`・`[palette]`)、`config.reload` での読み直し。
 
 ---
 
@@ -1067,7 +1122,8 @@ verb       := [a-z][a-z0-9_]*
 - 登録 = `CommandRegistry::register`。組込みは起動時に定数表から、プラグインは接続時に manifest から (v1.X)。
 - 照合の対象: title とローカライズ前の英語 title と ID の 3 つ (日本語 UI でも英語名で探せる)。
 - 表示順: **v0.1** は前方一致 → 部分一致 → アルファベット順 (CommandId 順。ファジー一致・最近実行は使わない。入力欄が空のときは全コマンドをアルファベット順。01 FR-602、04 §8.1)。**v0.2 から** ファジー一致スコア → 最近実行 (直近 20 件をセッション内で記憶。入力欄が空のときは最近実行 → アルファベット順) → アルファベット順。
-- 各行: `タイトル    (id)    キー`。`when` が偽のコマンドは **表示するが淡色** にして「現在は実行できません: <理由>」を示す (隠すと「存在しない」と誤解する。P7)。
+- **v0.2 の M9c の実装 (案)**: ファジー一致は書記素単位の部分列一致。スコアは、連続した部分一致 (1000 点台。先頭なら +200、語頭なら +100、始まりが後ろほど低い) > 部分列の一致 (500 点台。語頭に当たる文字 +20、続く文字 +15、間の書記素ごとに −1 (1 か所で最大 −20)、始まりが後ろほど低い)。部分列は各文字をその先の語頭 (先頭、または直前が空白・`.` `_` `-` `:` `/`) に優先して当て、当てきれなければ前から最初の出現に当て直す。照合の対象 (表示の言語のタイトル・英語のタイトル (`en` のカタログ)・CommandId のそのままの形と単語に分けた形) のうち最も高いスコアを採り、強調 (`match_ranges`) は表示しているタイトルで一致した文字だけ。最近実行は **パレットから実行した** コマンドを新しい順に 20 件、起動している間だけ覚える (永続化は v0.4 のセッション復元と一緒)。
+- 各行: `タイトル    (id)    キー`。`when` が偽のコマンドは **表示するが淡色** にして「現在は実行できません: <理由>」を示す (隠すと「存在しない」と誤解する。P7)。ただし `when` が `caps.*` を参照して偽のもの (frontend の能力が足りない。例: Windows の `app.suspend`) は一覧から外す (04 §8.1 の例外、v0.2)。
 - プレフィックス記法は導入しない (`>` でコマンド、`:` で行番号などの VS Code 風)。行番号移動は `cursor.goto_line` を別オーバーレイで提供。
 
 ### 11.5 ヘルプの自動生成 (FR-514)
@@ -1077,13 +1133,13 @@ verb       := [a-z][a-z0-9_]*
 | コマンドパレットの各行 (タイトル・CommandId・届く割当キー、04 §8.1)。v0.1 のヘルプ画面の代用 (FR-514) | 解決済みキーマップ + CommandRegistry | v0.1 |
 | `help.keys`: 現在のコンテキストで有効なキー一覧 (キー → タイトル) | 解決済みキーマップ + CommandSpec.title | v0.2 |
 | `help.commands`: 全コマンドの一覧 (名前空間ごと、タイトル・説明・キー・`since`) | CommandRegistry | v0.2 |
-| `evoeditor --list-commands [--json]` / `--dump-keymap [--json]` | 同上。ドキュメント生成・シェル補完・外部ツール用 | v0.1 |
-| ユーザーガイドのキー一覧表 (リポジトリ docs) | `--list-commands --json` から CI で生成し、§11.6 カタログと差分が出たら CI 失敗 (どちらを直すかは判断、09 §11.2) | v0.1 (09) |
+| `evoeditor --list-commands [--json]` / `--dump-keymap [--json]` | 同上。ドキュメント生成・シェル補完・外部ツール用 | v0.3 (v0.1 の予定から送った、09 §11.2) |
+| ユーザーガイドのキー一覧表 (リポジトリ docs) | `--list-commands --json` から CI で生成し、§11.6 カタログと差分が出たら CI 失敗 (どちらを直すかは判断、09 §11.2) | v0.3 (09 §11.2) |
 | 設定リファレンス | §4.1 のメタ表 | v0.4 |
 
 ### 11.6 v0.1 CommandId カタログ (付録)
 
-**本表が CommandId・既定キー割当・コンテキスト・ヒントの正本** (ADR-0025)。**title key** 列の MessageKey (`cmd.<command_id>`) は、同梱の `ja` の言語ファイルに `title` と `description` を持つ (§17。CommandId 自体は翻訳しない。パレットの照合用の英語の title は定数表に持つ、§11.4)。04 §7.2 は本表の「既定キー」列の設計入力 (端末上の癖・代替割当の根拠)、04 §7.3a は端末の横取り表、03 は ID を引用する。`evoeditor --list-commands` / `--dump-keymap` の生成物と CI で突合する (09 §11.2)。**v0.1 で実装するのは本表の ID のうち「(v0.2)」等の注記が無いもの** だけで、注記付きの ID は名前空間を予約し実装は当該版 (ADR-0028、ADR-0039)。v0.1 で実装する ID は **63 個** (確定 (ユーザー回答)、v0.1 の範囲は案 L で、再読込・改行コードの変換・リテラルのすべて置換 (置換欄を開くコマンドを含む) を含む。下の表の合計。ファイル・アプリ 11、編集 14、移動・選択 26、検索・表示 6、オーバーレイ内 6。テストビルド専用の `internal.debug_panic` は数えない)。このうちパレットに出るのは `hidden` の 6 個を除く 57 個。版注記付きの ID は 25 個。版注記付きの行の「既定キー」「ヒント」列は、その版での割当と文脈を示す (予約。v0.1 ではそのキーを他の機能に使わない)。
+**本表が CommandId・既定キー割当・コンテキスト・ヒントの正本** (ADR-0025)。**title key** 列の MessageKey (`cmd.<command_id>`) は、同梱の `ja` の言語ファイルに `title` と `description` を持つ (§17。CommandId 自体は翻訳しない。パレットの照合用の英語の title は定数表に持つ、§11.4)。04 §7.2 は本表の「既定キー」列の設計入力 (端末上の癖・代替割当の根拠)、04 §7.3a は端末の横取り表、03 は ID を引用する。CI で実装と突合する (09 §11.2。`evoeditor --list-commands` / `--dump-keymap` の生成物との突合は v0.3)。**v0.1 で実装するのは本表の ID のうち「(v0.2)」等の注記が無いもの** だけで、注記付きの ID は名前空間を予約し実装は当該版 (ADR-0028、ADR-0039)。v0.1 で実装する ID は **63 個** (確定 (ユーザー回答)、v0.1 の範囲は案 L で、再読込・改行コードの変換・リテラルのすべて置換 (置換欄を開くコマンドを含む) を含む。下の表の合計。ファイル・アプリ 11、編集 14、移動・選択 26、検索・表示 6、オーバーレイ内 6。テストビルド専用の `internal.debug_panic` は数えない)。このうちパレットに出るのは `hidden` の 6 個を除く 57 個。版注記付きの ID は 25 個。版注記付きの行の「既定キー」「ヒント」列は、その版での割当と文脈を示す (予約。v0.1 ではそのキーを他の機能に使わない)。
 
 凡例:
 
@@ -1092,7 +1148,7 @@ verb       := [a-z][a-z0-9_]*
 - **既定キー** は §7.2 の設定表記 (`mod` = TUI では `ctrl`)。英字との組は `mod` (例 `mod+s`)、特殊キー (`home` / `end` / `insert` / `pageup` / `pagedown` / 矢印 / `backspace` / `delete` / `tab` 等) との組は `ctrl` 固定 (例 `ctrl+home`、`ctrl+insert`)。**`ctrl` を直書きする英字との組 (上の規則の例外。`mod` に解決せず、どの frontend / OS でも物理 Ctrl のまま)**: (1) `ctrl+k` を先頭ストロークとするチョードの代替割当 (`ctrl+k s` 等。`(alt)`)、(2) `list` コンテキストの `ctrl+n` / `ctrl+p` (候補の移動。Emacs / readline 由来の端末の慣習)、(3) `ctrl+h` (`search.replace_open` の別名。レガシー VT の端末では `ctrl+backspace` と同じ符号 (0x08) で、`[E]` のときだけ区別できる。正規化で畳まれて届かない端末ではこの割当は無効、04 §6.2)。これら以外で英字と `ctrl` を直書きする既定キーは作らない (CI の突合で検出する)。コンテキストごとに割当が違う行は `コンテキスト: キー` の形で書く。`[E]` = 拡張キーボードプロトコル (v0.2 から push) または Windows のコンソール API でのみ区別できる。`[横]` = 04 §7.3a の横取り表で、対象端末のどれかが横取りする (その端末では届かない)。`(alt)` = 代替割当 (全端末で届く。04 §7.3a の横取り表を考慮済み)。既定キー列にはキーだけを書き、キーでない手段 (パレットからの実行、別のコマンドを使った案内) は括弧の注記で書く。**キーの記載順** は、ヒントバーと `{key:<command_id>}` (§17.2) に出す割当を選ぶ順でもある: 端末で届くと分かっている割当のうち最初のものを出す (拡張キーが無ければ `[E]` を除き、端末の横取り表に載るキーを除く。02 §7.1 `Capabilities.intercepted_keys`)。
 - **ヒント** = ヒントバーに出す文脈と優先度 (`文脈:優先度`)。**v0.1 の文脈は `normal` (編集面) と `overlay` (パレット・入力プロンプト・確認ダイアログ・検索バー・チョード保留中で共通) の 2 つ** (04 §8.8)。`overlay` では、`when` が偽の項目と、その場面のコンテキスト (§7.1) で届く割当が無い項目を出さないので、場面ごとに出る項目は変わる。版注記付きの行に書いた `palette` / `prompt` / `confirm` / `search` / `chord` / `help` は v0.2 で細分する文脈。優先度は **大きいほど残る** (5 = 常に残す。02 §8.2 `HintItem.priority`)。表示順は優先度の降順、同じ優先度は本表の行順。各文脈で抜け出す手段 (`normal` は終了とパレット、`overlay` は `Esc`) を 5 にする。ヒントの語は `hint.<command_id>` (§17.2、8 セル以内。語は 04 §15.1)。`-` = 出さない。
 - **表の記法 (機械可読。11 §8.5 のパーサが読む規則)**: 本表は 11 §8.5 の規則 (識別子はバッククォート、1 つのバッククォートに 1 つの完全な識別子、ワイルドカード・略記なし) に加え、次の記法に従う。
-  - **版の注記は ID 列だけに、行全体の版として書く** (`(v0.2)` 等。読む側はその版の行として扱う)。行の一部の機能だけが後の版になる場合 (例 `edit.indent` の選択範囲) は ID 列に書かず、既定キー列の括弧の注記 (`(版の注記: …)`) に書く。
+  - **版の注記は ID 列だけに、行全体の版として書く** (`(v0.2)` 等。読む側はその版の行として扱う)。**版の注記付きの行は、実装した版から登録してよい**: 登録済みのコマンドはカタログのどれかの行に載っている (注記付きでもよい)ことを検査し、注記の無い行 (v0.1) は必ず登録されていることを検査する。注記付きの行の言語ファイルの `cmd.*` / `hint.*` は、あっても余剰とせず、無くてもよい (`xtask i18n`)。注記は、その版を出荷するときに外す。行の一部の機能だけが後の版になる場合 (例 `edit.indent` の選択範囲) は ID 列に書かず、既定キー列の括弧の注記 (`(版の注記: …)`) に書く。
   - **複数 ID の行**: ID 列で ` / ` で区切った ID と、title key 列・既定キー列で ` / ` で区切った値は、左から順に 1 対 1 で対応する (`` `mod+z` / `mod+y` `` は `edit.undo` / `edit.redo`)。
   - **既定キー列**: 1 つのキーは設定表記をバッククォートで囲んだもの。キーの直後に付く `[E]`・`[横]`・`(alt)` はそのキーの属性で、複数あるときは `[E][横]` の順に空白なしで続ける。**対 (` / ` でつないだ複数 ID の割当) の属性**: 対の最後のキーの直後にだけ属性があるときは、その属性は **対のすべてのキーに及ぶ** (`` `alt+up` / `alt+down` [横] `` は両方が `[横]`、`` `ctrl+k left` / `ctrl+k right` (alt) `` は両方が `(alt)`)。対の途中のキーにも属性があるときは、各キーが自分の直後の属性だけを持つ (`` `ctrl+insert` [横] / `shift+delete` (alt) `` は前が `[横]`、後ろが `(alt)`)。**片方の ID にだけ付く割当** (対の 2 つ目だけに別名のキーがある等) は、その割当の直後に `(<ID の最後の語> のみ)` を付けて示し、対の位置では数えない (`` `mod+shift+z` [E] (redo のみ) `` は `edit.redo` だけの割当で、`[E]` もそのキーの属性)。同じ ID (または同じ位置の ID の組) の割当の間は `, ` で区切り、記載順は上の「キーの記載順」。コンテキストごとに割当が違う行は、`` `<コンテキスト>`: `` で始まる組を `、` (読点) で区切って並べる (例 `` `list`: `down` / `up`, `ctrl+n` / `ctrl+p`、`dialog`: `tab` / `shift+tab` ``)。`` `<コンテキスト>`: `` の無い行の割当は、コンテキスト列のすべてのコンテキストに属する。
   - **括弧書きは注記**: どの列でも `(…)` の中は説明で、読む側は中のバッククォートも識別子として読まない (例外は `(alt)` だけ。上の属性)。`—` は「無い」。
@@ -1127,9 +1183,10 @@ verb       := [a-z][a-z0-9_]*
 | `help.open` (v0.2) | `cmd.help.open` | Ui | — | — | `ui` | `global` | `ctrl+k h` (alt) (`f1` をヘルプに移すかは v0.2 で決める。提案中) | normal:5, palette:3, prompt:3, search:1, chord:3 |
 | `help.keys` / `help.commands` (v0.2) | `cmd.help.keys` / `cmd.help.commands` | Ui | — | — | `ui` | パレット (ヘルプの該当の節を開く、FR-514) | — | - |
 | `ui.message_history` (v0.2) | `cmd.ui.message_history` | Ui | — | — | `ui` | `editor` | `ctrl+k m` (alt) | - |
+| `ui.message_history_copy` (v0.2) | `cmd.ui.message_history_copy` | Ui | — | — (メッセージ履歴を開いていないときは `NotAvailable`) | `ui` | `help` | `mod+c` | - |
 | `ui.redraw` | `cmd.ui.redraw` | Ui | — | — | `-` | `global` | `ctrl+k r` (alt) | - |
-| `ui.toggle_hint_bar` (v0.2) | `cmd.ui.toggle_hint_bar` | Ui | — | — | `ui` | パレット | — | - |
-| `ui.toggle_mouse` (v0.2) | `cmd.ui.toggle_mouse` | Ui | — | `frontend == "tui"` | `-` | パレット | — | - |
+| `ui.toggle_hint_bar` (v0.2、M10 で実装) | `cmd.ui.toggle_hint_bar` | Ui | — | — | `ui` | パレット | — | - |
+| `ui.toggle_mouse` (v0.2) | `cmd.ui.toggle_mouse` | Ui | — | `caps.mouse` | `-` | パレット | — | - |
 | `config.show_diagnostics` (v0.2) | `cmd.config.show_diagnostics` | Ui | — | — | `ui` | パレット | — | - |
 | `config.reload` (v0.2) | `cmd.config.reload` | Ui | — | — | `-` | パレット | — | - |
 
@@ -1176,8 +1233,10 @@ verb       := [a-z][a-z0-9_]*
 | `search.prev` | `cmd.search.prev` | Motion | — | `search.active` | `read` | `search` | `up`, `shift+enter` [E], `shift+f3` [E] | overlay:3 |
 | `search.toggle_case` | `cmd.search.toggle_case` | Ui | — | `search.active` | `ui` | `search` | `alt+c`, `ctrl+k c` (alt) | overlay:2 |
 | `search.toggle_regex` (v0.2) | `cmd.search.toggle_regex` | Ui | — | `search.active` | `ui` | `search` | `alt+r`, `ctrl+k x` (alt) | search:2 |
+| `search.toggle_word` (v0.2) | `cmd.search.toggle_word` | Ui | — | `search.active` | `ui` | `search` | `alt+w`, `ctrl+k b` (alt) | - |
+| `search.toggle_selection` (v0.2) | `cmd.search.toggle_selection` | Ui | — | `search.active` | `ui` | `search` | `alt+l`, `ctrl+k l` (alt) | - |
 | `search.replace_open` | `cmd.search.replace_open` | Ui | — | `!doc.read_only` | `ui` | `editor`, `search` | `mod+r`, `ctrl+h` [E] | - |
-| `search.replace` (v0.2) | `cmd.search.replace` | Edit | — | `search.replace_active && !doc.read_only` | `propose` | `search` (置換欄) | `enter` (置換欄で。v0.1 の置換欄の `enter` は `search.next`) | search:3 |
+| `search.replace` (v0.2) | `cmd.search.replace` | Edit | — | `search.replace_active && !doc.read_only` | `propose` | `search` (置換欄) | `enter` (置換欄で。v0.1 の置換欄の `enter` は `search.next`。キーマップの `when` は `search.replace_focused`) | search:3 |
 | `search.replace_all` | `cmd.search.replace_all` | Edit | — | `search.replace_active && !doc.read_only` | `propose` | `search` | `alt+a` (`tab` で置換欄から `[A] すべて置換` のボタンへ移り `enter` でも実行できる。04 §8.4) | overlay:1 |
 | `view.toggle_wrap` (v0.2、OQ-110) | `cmd.view.toggle_wrap` | Ui | — | — | `ui` | `editor` | `alt+z`, `ctrl+k o` (alt) | - |
 
@@ -1436,7 +1495,7 @@ Stage 3 (WASM、§13.1) に移行した場合は `declares.*` を能力ベース
 - 文言はすべて **MessageKey** 経由。コードに英語文字列を直接書かない (lint で検出、09)。
 - **v0.1 の UI 文言は日本語 (`ja`) のみ** (OQ-21、確定 (ユーザー回答))。言語ファイル `locales/ja.toml` をソースツリーに置き、`include_str!` で埋め込む (実行時のファイル読込なし)。**MessageKey による外部化は v0.1 から行う** (コードに文言を直接書かない) ので、後の版で言語を足すときにコードを変えずに済む。キー集合の正は「コードの MessageKey 一覧」で、`ja` はそれと過不足なく一致させる (§17.3)。
 - **言語ファイルに入れる文言** (その版に存在するもの): コマンドの名前と説明 (`cmd.*`)、エラー・警告・情報のメッセージ (`msg.*` の `text` と `hint`、`info.*`)、ヒントバー (`hint.*`)、ステータスバー (`status.*`)、ダイアログ・ラベル (`ui.*`)。設定項目の説明 (`config.*`) とヘルプ画面 (`help.*` の見出しと説明) は、それを画面に出す版 (v0.2 以降) で加える。**言語ファイルに入れないもの**: 識別子 (CommandId、CLI オプション名、設定キー名、テーマのロール名、MessageKey 自体)、ログ (英語のみ)、パレットの照合用の英語の title (定数表、§11.4)、`--help` / `--version` の出力、パニック時・起動前のメッセージと、端末を復元した後に stderr へ出す文言。最後の 3 つは **v0.1 は日本語の行だけ** を出し、**v0.2 (英語 UI と同時) から英語 (ASCII) の行と日本語の行を併記する** (確定 (ユーザー回答)、04 §14.4 / §15.2、OQ-67、01 §4.6)。日本語の行はコンソールなら `WriteConsoleW` (コードページに依らない)、リダイレクト先なら UTF-8 で書く (リダイレクト先を出力コードページ 932 で解釈する環境では化ける。v0.1 の既知の制約で、v0.2 の英語の行はコードページやリダイレクト先によらず読める)。これらも MessageKey (`stderr.*` / `panic.*` / `cli.*`) で識別し、eve-host / bin の定数表に置く (パニックの経路で言語ファイルを引かないため)。目録は 04 §15.2。core が出す stderr の行 (終了時の `Effect::Quit.stderr`) も core は文言を解決せず、キーと引数 (`StderrLine`) で eve-host に渡し、eve-host が定数表から解決する (02 §6.3)。v0.2 の英日併記も eve-host が 1 つの `StderrLine` から英語の行と日本語の行を引いて作る。
-- **v0.2** (確定 (ユーザー回答)、OQ-21): 英語 UI (`en`。`locales/en.toml` を `ja` と同じく `include_str!` で埋め込む)、言語の選択 (`--locale` > `ui.locale` > 環境変数 `EVE_LANG` > OS ロケール (05 §6.1) > 既定 `ja`)、言語の切替、言語間のキー集合の差分の CI 検査 (§17.3)、設定項目の説明 (`config.*`)、起動前・パニック時の英語 (ASCII) の行の併記 (OQ-67)。**v0.2 以降の候補 (提案中。推奨は v0.3)**: ユーザー層 `locales/<lang>.toml` による上書き・追加言語。同梱の言語ファイルとユーザーの言語ファイルは同じ書式 (§17.2) なので、v0.1 で書式を確定する。v0.1 は `ui.locale`・`--locale`・`EVE_LANG` を持たず、`EVE_LANG` を設定しても読まない (`ui.locale` を書くと「このバージョンでは未対応」の情報診断)。
+- **v0.2** (確定 (ユーザー回答)、OQ-21。**`locales/en.toml` は M8 で同梱済み**: キー集合・プレースホルダ・`[X]` のアクセラレータ・`〔 〕` の有無が `ja` と一致し、`en` にかな・漢字が無いことを `cargo xtask i18n` が検査する): 英語 UI (`en`。`locales/en.toml` を `ja` と同じく `include_str!` で埋め込む)、言語の選択 (`--locale` > `ui.locale` > 環境変数 `EVE_LANG` > OS ロケール (05 §6.1) > 既定 `ja`。**M8 の 2 本目で実装済み**: 選択は `eve_config::select_locale`。`auto`・空の値は未指定として飛ばし、`--locale` と `EVE_LANG` が同梱の言語に当たらなければログに警告して次の段へ進む。OS ロケールの候補が当たらないときは黙って次の段へ進む。言語は起動時に 1 回だけ決める)、言語の切替、言語間のキー集合の差分の CI 検査 (§17.3)、設定項目の説明 (`config.*`)、起動前・パニック時の英語 (ASCII) の行の併記 (OQ-67)。**v0.2 以降の候補 (提案中。推奨は v0.3)**: ユーザー層 `locales/<lang>.toml` による上書き・追加言語。同梱の言語ファイルとユーザーの言語ファイルは同じ書式 (§17.2) なので、v0.1 で書式を確定する。v0.1 は `ui.locale`・`--locale`・`EVE_LANG` を持たず、`EVE_LANG` を設定しても読まなかった (`ui.locale` を書くと「このバージョンでは未対応」の情報診断)。
 - フォールバック: `ja` にキーがなければ **キー名そのもの** を表示する (空白や例外にしない)。同梱の `ja` とコードの MessageKey 一覧の差分ゼロを CI で保証するので (09 §11)、この経路は開発中のビルドのためにある。開発ビルドでは欠落キーを警告ログ。
 - **サイズと起動時間**: 同梱分は `ja` で約 50 KB (TOML 原文。v0.1 の文言の規模から見込み) で、NFR-205 (8 MB) への影響は小さい。起動時のデシリアライズが NFR-101 の起動の予算 (プロセス内 8 ms) に入るかを BM-101a で確かめる (09 §5)。目安は 1 ms 以下。超えるならビルド時に TOML を静的な表 (キー → 文字列の配列) に変換して埋め込む方式に切り替える (書式は変えない)。
 
@@ -1525,7 +1584,7 @@ evoeditor [OPTIONS] [--] [FILE]                                               # 
 evoeditor [OPTIONS] [--] [FILE | DIR | -]...                                  # 複数の FILE は v0.2、DIR は v0.4
 evoeditor [OPTIONS] +LINE[:COL] FILE                                          # v0.2
 evoeditor --version | --help
-evoeditor --check-config | --dump-config | --list-commands | --dump-keymap   # v0.2 (--list-commands / --dump-keymap は v0.1 から隠しオプション)
+evoeditor --check-config | --dump-config | --list-commands | --dump-keymap   # v0.2 (--list-commands / --dump-keymap は v0.3 の隠しオプション)
 evoeditor -                                                                   # 標準入力 (FR-120、v0.3)
 evoeditor --headless --rpc stdio [--fake-ports] [--allow-write]              # dev feature `headless`、v0.2 以降 (02 §10.5)。配布ビルドでは予約名 (未対応と表示して終了コード 2)
 ```
@@ -1536,7 +1595,7 @@ evoeditor --headless --rpc stdio [--fake-ports] [--allow-write]              # d
 
 | 形 | 意味 | 備考 |
 |---|---|---|
-| `FILE` | ファイルを開く (存在しなければ新規、FR-101) | **v0.1 は 0 個か 1 個** (単一文書)。2 つ以上渡すと TUI を始めずに stderr へ `stderr.usage.multiple_files` (04 §15.2) を出し、終了コード 2 (使い方の誤り) で終わる (01 FR-101 AC-1)。複数を Document として開き最初のものを表示するのは v0.2 (FR-103) |
+| `FILE` | ファイルを開く (存在しなければ新規、FR-101) | **v0.1 は 0 個か 1 個** (単一文書。2 つ以上渡すと TUI を始めずに stderr へ `stderr.usage.multiple_files` (04 §15.2) を出し、終了コード 2 (使い方の誤り) で終わる、01 FR-101 AC-1)。**v0.2 は複数** (FR-103): すべてを開いた順にバッファとして開き、最初のものを表示する。`--readonly` と `--encoding` は全 FILE に掛かる。同じパスは 1 つのバッファだけ開く。2 つ目以降は読込中のバッファとして足し、読込を待たない (03 §9.8) |
 | `DIR` | ワークスペースルートとして開き、ファインダを開く (v0.4) / v0.1 では無題の文書を開き、最初の Frame の後に `msg.cli.directory` (「フォルダなので開けません。無題の文書を開きました」、04 §15.2) を出す | 使い方の誤りにはしない (終了コード 0 の通常の起動)。ファイルを開くプロンプト (`file.open`) でフォルダを指定した場合は `msg.open.not_a_file` |
 | `-` | 標準入力を無題バッファとして読む (FR-120、v0.3) | §18.5 |
 | `FILE:LINE[:COL]` | 開いてその位置へ (FR-102、**v0.2**。v0.1 は `FILE:LINE` の形の引数を常にファイル名として扱う) | **曖昧性の解消**: まず `FILE:LINE:COL` 全体が存在するファイルなら位置指定なしで開く → 末尾の `:数字(:数字)?` を剥がしたものが存在すれば位置指定とみなす → どちらも無ければ **全体を新規ファイル名** とする。Windows の `C:\path` はドライブレター (`^[A-Za-z]:[\\/]`) を先に除外 |
@@ -1547,36 +1606,36 @@ evoeditor --headless --rpc stdio [--fake-ports] [--allow-write]              # d
 
 ### 18.3 オプション
 
-v0.1 の公開オプションは **5 個** (ADR-0028: 引数解析と `--help` 文の保守を減らす。確定 (ユーザー回答)、v0.1 の範囲は案 L): `--version` `--help` `--readonly` `--encoding` `--` (+ 受理して無視する `--wait`)。**隠しオプションは 2 個** (`--help` に出さない): CI 照合用の `--list-commands` / `--dump-keymap`。計測用の `--bench-*` (`--bench-exit-after-first-frame` 等) は **配布ビルドに含めない** テスト専用のフラグで、cargo feature `test-hooks` を有効にしたビルドだけが受け付ける (09 §5.2 / §10.3。配布ビルドでは未知のオプションとして終了コード 2)。隠しオプションの数には入れない。`--config` `--no-config` `--log-level` `--set` `--check-config` `--dump-config` `--crash-report` `--licenses` と位置引数 `+LINE` は v0.2 (`--licenses` が無い間は、アーカイブに同梱する `THIRD-PARTY-NOTICES.md` が帰属表示の正、05 §17.1。ログの水準は環境変数 `EVE_LOG` で変える)。駆動 API の `--headless` `--rpc` `--fake-ports` `--allow-write` は dev feature `headless` のみ (v0.2 以降) で実装し、配布ビルドには機能が無い (OQ-120)。**配布ビルド (v0.1 から) はこの 4 個を予約名として受け付け**、どれかが渡されると TUI を始めずに stderr へ「このビルドでは未対応です (v0.2 以降の開発版機能)」(`stderr.usage.dev_only`、04 §15.2) を出し、**終了コード 2** で終わる (確定 (ユーザー回答)、[OQ-120](10-decisions.md#oq-120-ヘッドレス-rpc-を配布ビルドに同梱するか))。これらをファイル名の位置引数とは解釈しない (`--headless` という名前のファイルは `evoeditor -- --headless` で開く)。下の「未対応と知らせて無視する」扱いの例外である。後続版のもの (下表で版を持つもの) は書式を予約し、v0.1 では使い方エラーにせず「このバージョンでは未対応」と知らせて無視する (最初の Frame の後に `info.cli.unsupported`。端末を初期化しない `--version` / `--help` と一緒に渡された場合は無視するだけ)。採否が未定の `--check-update` はこれに含めず、採るまでは未知のオプションとして扱う (§18.8)。
+v0.1 の公開オプションは **5 個** (ADR-0028: 引数解析と `--help` 文の保守を減らす。確定 (ユーザー回答)、v0.1 の範囲は案 L): `--version` `--help` `--readonly` `--encoding` `--` (+ 受理して無視する `--wait`)。**隠しオプションは 2 個** (`--help` に出さない): CI 照合用の `--list-commands` / `--dump-keymap` (v0.3 に送った。v0.1 / v0.2 では未実装、09 §11.2)。計測用の `--bench-*` (`--bench-exit-after-first-frame` 等) は **配布ビルドに含めない** テスト専用のフラグで、cargo feature `test-hooks` を有効にしたビルドだけが受け付ける (09 §5.2 / §10.3。配布ビルドでは未知のオプションとして終了コード 2)。隠しオプションの数には入れない。`--config` `--no-config` `--log-level` `--set` `--check-config` `--dump-config` `--crash-report` `--licenses` と位置引数 `+LINE` は v0.2 (`--licenses` が無い間は、アーカイブに同梱する `THIRD-PARTY-NOTICES.md` が帰属表示の正、05 §17.1。ログの水準は環境変数 `EVE_LOG` で変える)。駆動 API の `--headless` `--rpc` `--fake-ports` `--allow-write` は dev feature `headless` のみ (v0.2 以降) で実装し、配布ビルドには機能が無い (OQ-120)。**配布ビルド (v0.1 から) はこの 4 個を予約名として受け付け**、どれかが渡されると TUI を始めずに stderr へ「このビルドでは未対応です (v0.2 以降の開発版機能)」(`stderr.usage.dev_only`、04 §15.2) を出し、**終了コード 2** で終わる (確定 (ユーザー回答)、[OQ-120](10-decisions.md#oq-120-ヘッドレス-rpc-を配布ビルドに同梱するか))。これらをファイル名の位置引数とは解釈しない (`--headless` という名前のファイルは `evoeditor -- --headless` で開く)。下の「未対応と知らせて無視する」扱いの例外である。後続版のもの (下表で版を持つもの) は書式を予約し、v0.1 では使い方エラーにせず「このバージョンでは未対応」と知らせて無視する (最初の Frame の後に `info.cli.unsupported`。端末を初期化しない `--version` / `--help` と一緒に渡された場合は無視するだけ)。採否が未定の `--check-update` はこれに含めず、採るまでは未知のオプションとして扱う (§18.8)。
 
 | オプション | 短 | 意味 | P |
 |---|---|---|---|
 | `--readonly` | `-R` | 読み取り専用で開く | v0.1 |
 | `--encoding <label>` | `-e` | 文字コードを指定して開く (FR-111)。受け付けるラベルは `file.default_encoding` の許容値 (§5.2) から `system` を除いたもの。v0.2 からは全ファイルに適用。対応していないラベルは使い方の誤りで、TUI を始めずに `stderr.usage.unknown_encoding` (04 §15.2) を出して終了コード 2 | v0.1 |
 | `--line-ending <lf\|crlf>` | — | 新規ファイルの改行コード (`--set file.default_line_ending=` で代替可) | v0.4 |
-| `--config <file>` | `-c` | ユーザー層の `config.toml` を差し替える (複数可、順にマージ) | v0.2 |
+| `--config <file>` | `-c` | ユーザー層の `config.toml` を差し替える (複数可、順にマージ)。**v0.2 の M9c で実装した** (`keymap.toml` は設定ディレクトリのものを読む。読めない・構文エラーのファイルは重ねない) | v0.2 |
 | `--config-dir <dir>` | — | `EVE_CONFIG_DIR` と同じ (環境変数で代替可) | v0.4 |
-| `--no-config` | `-N` | ユーザー層・システム層・ワークスペース層を読まない (既定値のみ。トラブルシュート用。v0.1 は `EVE_CONFIG_DIR` を空のディレクトリに向けて代える) | v0.2 |
+| `--no-config` | `-N` | ユーザー層・システム層・ワークスペース層を読まない (既定値のみ。トラブルシュート用。v0.1 は `EVE_CONFIG_DIR` を空のディレクトリに向けて代える)。**v0.2 の M9c で実装した** (v0.2 はユーザー層の `config.toml` と `keymap.toml` を読まない) | v0.2 |
 | `--no-workspace-config` | — | ワークスペース層のみ読まない | v0.4 |
-| `--set <key>=<value>` | `-s` | コマンドライン層で 1 項目上書き (TOML 値として解釈。`--set view.wrap=soft`) | v0.2 |
+| `--set <key>=<value>` | `-s` | コマンドライン層で 1 項目上書き (TOML 値として解釈。`--set view.wrap=soft`)。**v0.2 の M9c で実装した**: 値を TOML の値として読めなければ文字列として読む (`soft` と書ける)。`=` が無い・キーが空は使い方の誤り (終了コード 2)。値の誤りは設定ファイルと同じ診断 (名前は `--set`)。複数可、後のものが優先 | v0.2 |
 | `--theme <name>` | — | `--set theme.name=` の短縮 | v0.4 |
 | `--keymap <preset>` | — | `--set keys.preset=` の短縮 | v0.4 |
-| `--locale <lang>` | — | UI 言語 (§17.1 の選択順の最上位)。英語 UI を同梱する v0.2 で加える | v0.2 |
+| `--locale <lang>` | — | UI 言語 (§17.1 の選択順の最上位)。値は `ja` / `en` (地域付きも可)。同梱していない言語名はログに警告を書いて次の段へ進む (使い方の誤りにはしない)。値が無いときは使い方の誤り (終了コード 2)。M8 で実装した | v0.2 |
 | `--workspace <dir>` | `-w` | ワークスペースルートを明示 | v0.4 |
 | `--trust` | — | このワークスペースを信頼して起動 (スクリプト用。警告表示) | v0.4 |
 | `--no-session` | — | セッション復元・保存をしない | v0.4 |
 | `--wait` | — | **受理して無視** (TUI は常にブロックする)。`$EDITOR="evoeditor --wait"` と書けるようにするための互換オプション | v0.1 (受理のみ) |
 | `--stdout` | — | 終了時に (最後にアクティブだった) バッファ内容を標準出力へ書き、ファイルには保存しない。`cmd \| evoeditor - --stdout \| next` のパイプフィルタ用 (Could、OQ-99) | v0.4 |
-| `--check-config` | — | 設定を読み診断を出力して終了 (端末初期化なし) | v0.2 |
-| `--dump-config [--defaults] [--json]` | — | 解決済み設定 (または既定値) を出力。`--annotated` (注釈付き雛形) は v0.1 は同梱の `config.example.toml`、生成は v0.4 (§4.1) | v0.2 |
+| `--check-config` | — | 設定を読み診断を出力して終了 (端末初期化なし)。**v0.2 の M9c で実装した**: 診断ごとに `ファイル:行:桁: 本文` と対処の行を標準出力へ (選択中の言語。「未対応」の情報診断も出す)、最後に件数の 1 行 (英日)。エラーがあれば終了コード 3、警告だけなら 0。キーマップは書式だけを確かめる (コマンド名などの照合は起動時の診断) | v0.2 |
+| `--dump-config [--defaults] [--json]` | — | 解決済み設定 (または既定値) を出力。**v0.2 の M9c で実装した**: TOML はセクションごとの公開キーの全項目で、そのまま設定ファイルとして読める。`--json` は平らなキーの表。`--defaults` / `--json` は `--dump-config` の修飾で、単独では使い方の誤り。`--annotated` (注釈付き雛形) は v0.1 は同梱の `config.example.toml`、生成は v0.4 (§4.1) | v0.2 |
 | `--dump-schema` | — | JSON Schema (Could) | v0.4 |
-| `--list-commands [--json]` / `--dump-keymap [--json]` | — | §11.5 / §11.6 (CI 突合用) | v0.1 (隠し) |
+| `--list-commands [--json]` / `--dump-keymap [--json]` | — | §11.5 / §11.6 (CI 突合用) | v0.3 (隠し。v0.1 の予定から送った) |
 | `--dump-languages` | — | §9.1 | v0.4 |
-| `--log-level <level>` | — | `EVE_LOG` より優先 | v0.2 |
+| `--log-level <level>` | — | `EVE_LOG` より優先。**v0.2 の M9c で実装した** (値は `error` / `warn` / `info` / `debug` / `trace`。それ以外・値なしは使い方の誤り、終了コード 2) | v0.2 |
 | `--log-file <path>` | — | ログ出力先の変更 | v0.4 |
 | `--debug-commands` | — | `debug.*` をパレットに出す | v0.4 |
-| `--crash-report` | — | 最新のクラッシュログを表示 (09 §10.2) | v0.2 |
-| `--licenses` | — | 同梱の `THIRD-PARTY-NOTICES.md` (依存の帰属表示) を表示 (05 §17.1) | v0.2 (隠し) |
+| `--crash-report` | — | 最新のクラッシュログを表示 (09 §10.2)。**v0.2 の M9c で実装した**: `state_dir/log/crash-*.txt` のうち更新時刻が最新のものの場所と内容を標準出力へ出し、Issue の場所を案内する (送信はしない)。無ければその旨を出す。どちらも終了コード 0 | v0.2 |
+| `--licenses` | — | 同梱の `THIRD-PARTY-NOTICES.md` (依存の帰属表示) を表示 (05 §17.1)。**v0.2 の M9c で実装した**: 実行ファイルに埋め込み (ビルド時の `THIRD-PARTY-NOTICES.md`)、`--help` には出さない | v0.2 (隠し) |
 | `--bench-exit-after-first-frame` | — | 起動時間の計測用 (09 §5.2 の BM-101a / BM-101b)。最初の Frame を出力した直後に終了する。**配布ビルドに含めない** (`test-hooks` のビルドのみ、09 §10.3)。`--help` に出さない | v0.1 (`test-hooks` のみ) |
 | `--bench-quit-immediately` | — | 終了時間の計測用 (BM-112)。起動してすぐ `app.quit` を実行する。**配布ビルドに含めない** (`test-hooks` のビルドのみ、09 §10.3)。`--help` に出さない | v0.2 (`test-hooks` のみ) |
 | `--script <file>` | — | ヘッドレスのバッチ編集 (シナリオ DSL のファイルを実行する。02 §10.1 の X24)。**名前だけを予約** し、採るか・版・dev feature `headless` の配下に置くかは未定 (提案。採るまでは未知のオプションとして扱い、終了コード 2、§18.4) | 未定 (予約名のみ) |
@@ -1585,11 +1644,11 @@ v0.1 の公開オプションは **5 個** (ADR-0028: 引数解析と `--help` �
 | `--help` | `-h` | ヘルプ | v0.1 |
 | `--` | — | 以降は位置引数 (`-` で始まるファイル名用) | v0.1 |
 
-v0.1 の 5 個: `--version` `--help` `--readonly` `--encoding` `--` (+ 受理のみの `--wait`、隠しの 2 個 `--list-commands` / `--dump-keymap`)。`test-hooks` のビルドだけの `--bench-*` は数えない。dev feature の `--headless` 系は v0.2 以降 (配布ビルドでは v0.1 から予約名で、終了コード 2。5 個には数えない)。更新の確認 `--check-update` は §18.8 で名前だけを予約する (名前は確定 (ユーザー回答)、採るかどうかは v0.4 以降に ADR-0041 で判断。5 個には数えない)。
+v0.1 の 5 個: `--version` `--help` `--readonly` `--encoding` `--` (+ 受理のみの `--wait`、隠しの 2 個 `--list-commands` / `--dump-keymap` は v0.3 に送った)。`test-hooks` のビルドだけの `--bench-*` は数えない。dev feature の `--headless` 系は v0.2 以降 (配布ビルドでは v0.1 から予約名で、終了コード 2。5 個には数えない)。更新の確認 `--check-update` は §18.8 で名前だけを予約する (名前は確定 (ユーザー回答)、採るかどうかは v0.4 以降に ADR-0041 で判断。5 個には数えない)。
 
 **命名規則**: 実行して結果を出力し終了する操作や値の指定はサブコマンドにせず、`--check-config` / `--dump-config` / `--crash-report` / `--set` と同系統の `--` で始まる小文字・ハイフン区切りのオプションにする (位置引数 `FILE` と衝突させない。`--check-update` もこれに従う)。
 
-環境変数: `EVE_CONFIG_DIR`, `EVE_STATE_DIR`, `EVE_DATA_DIR`, `EVE_CACHE_DIR` (ディレクトリの個別上書き、05 §7.1), `EVE_LOG` (ログの水準。v0.1 で水準を変える唯一の手段), `EVE_LOG_STDERR` (`1` でログを stderr にも出す。ヘッドレス・テスト用、05 §7.3), `NO_COLOR` (色なし = `theme.color_mode = "none"` 相当。各ロールの `mono` 段を使う、04 §12.4), `COLORTERM` / `TERM` (04/05 が解釈), `EVE_LANG` (UI 言語。v0.2、§17.1。v0.1 は読まない), `EVE_NO_SESSION` (`1` で `--no-session` と同じ: セッションの復元も保存もしない。v0.4、§16)。**子プロセスに渡す変数 (予約名。evoeditor が書く側で、読む側ではない)**: `EVE_FILE` (編集中の文書のパス)、`EVE_LINE` (カーソル行、1 始まり)。`ProcessRunner` で起動するフォーマッタ・外部フィルタ (§15。v0.4) の子プロセスにだけ設定する。無題の文書では `EVE_FILE` を設定しない。`EVE_LOG` 等の自前変数は子に渡さない (05 §13.5)。
+環境変数: `EVE_CONFIG_DIR`, `EVE_STATE_DIR`, `EVE_DATA_DIR`, `EVE_CACHE_DIR` (ディレクトリの個別上書き、05 §7.1), `EVE_LOG` (ログの水準。v0.1 で水準を変える唯一の手段), `EVE_LOG_STDERR` (`1` でログを stderr にも出す。ヘッドレス・テスト用、05 §7.3), `NO_COLOR` (色なし = `theme.color_mode = "none"` 相当。各ロールの `mono` 段を使う、04 §12.4), `COLORTERM` / `TERM` (04/05 が解釈), `EVE_LANG` (UI 言語。`ja` / `en`、地域付きも可。v0.2、§17.1。v0.1 は読まない), `EVE_NO_SESSION` (`1` で `--no-session` と同じ: セッションの復元も保存もしない。v0.4、§16)。**子プロセスに渡す変数 (予約名。evoeditor が書く側で、読む側ではない)**: `EVE_FILE` (編集中の文書のパス)、`EVE_LINE` (カーソル行、1 始まり)。`ProcessRunner` で起動するフォーマッタ・外部フィルタ (§15。v0.4) の子プロセスにだけ設定する。無題の文書では `EVE_FILE` を設定しない。`EVE_LOG` 等の自前変数は子に渡さない (05 §13.5)。
 
 テスト・計測用のビルドだけが読む環境変数 (配布ビルドは読まず、実行ファイルに名前も含まない。09 §3.6 / §5、検査は 09 の `build-release-smoke`): `EVE_TEST_HOOK` / `EVE_TEST_HOOK_LOG` (障害注入のフックとその記録。cargo feature `test-hooks` のビルドのみ、09 §3.6)、`EVE_TRACE_FILE` / `EVE_TRACE_FORMAT` (`tracing` の span の記録。cargo feature `bench-trace` を加えた計測用ビルド (release + `test-hooks` + `bench-trace`) のみ、09 §5)。`--help` と利用者向けの文書には出さない。
 
@@ -1663,6 +1722,7 @@ lexopt は補完スクリプトを生成しない。`evoeditor --list-commands` 
 | 比較 | 記録が無い → 表示せず記録を作る。記録の版 < 現在の版 → 表示して記録を更新する。同じ → 何もしない。記録の版 > 現在の版 (ダウングレード) → 表示せず記録を現在の版に書き換える。記録が壊れている・版の文字列が不正 → 表示せず書き直す |
 | 表示 | 情報メッセージ 1 行。MessageKey `info.app.updated` (例: 「evoeditor {version} に更新しました: {summary}」)。`{summary}` は同梱の `info.app.release_summary` (その版の要点の 1 文。リリースのたびに同梱する全言語を同時に書き換える。メッセージ行の幅を超える部分は省略する)。詳しくはリリースノートを見るよう促すだけで、URL を開かない・取得しない |
 | 設定 | 設定キーを設けない (版ごとに 1 回だけ表示し、メッセージ履歴 (FR-505、v0.2) から読み直せる) |
+| 実装 (M9d、2026-10-31) | core の `JobKind::LastVersion` (`io` ワーカー。比較の本体は `last_version::check_and_record`)。起動時の開き方 (`open_initial`) が、最初のファイルの読込のジョブの **後**、退避の走査 (`RecoveryScan`) の **前** に積む (`io` は直列なので、ファイルを開くのを遅らせず、退避の案内のほうが後に出てメッセージ行に残る)。非対話の起動は `open_initial` を通らないので読み書きしない。読み書きは FileSystem Port の `read_state_file` / `write_state_file` / `set_aside_state_file` (Windows は `state_dir` を所有者のみで作り、一時ファイル + 置換で書く)。記録は自前の 2 行 (`format_version` / `last_run_version`) を `key = value` の行で読み、任意の `updated_at` は書かない。版の比較は SemVer の優先順位 (プレリリースは正式版より前)。更新と判定しても記録を書けなかったときは表示しない (書けないまま毎回出さないため)。未知の `format_version` は `last_version.toml.unsupported-<ts>` へ退避してから作り直す。05 §7.5 (a) の「警告」は、この記録では出さない (確定 (ユーザー回答)、2026-10-31。上の「失敗」の行と同じく、編集に関わらない記録の不具合で利用者の注意を引かない) |
 
 ---
 

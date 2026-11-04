@@ -81,7 +81,7 @@ impl Harness {
     }
 
     pub fn with_caps(mut self, caps: Capabilities) -> Harness {
-        self.editor.state_mut().set_caps(caps);
+        self.editor.set_caps(caps);
         self
     }
 
@@ -106,6 +106,11 @@ impl Harness {
         }
     }
 
+    /// フォーカスの変化 (`InputEvent::Focus`)。
+    pub fn focus(&mut self, gained: bool) {
+        self.input(InputEvent::Focus(gained));
+    }
+
     /// 確定済みのテキスト入力 (`InputEvent::Text`)。
     pub fn text(&mut self, s: &str) {
         self.input(InputEvent::Text(s.to_owned()));
@@ -117,6 +122,39 @@ impl Harness {
             token,
             text: text.map(str::to_owned),
         });
+    }
+
+    /// マウス操作 (`InputEvent::Mouse`)。`row` / `col` は編集面の左上を原点とするセル (面の外は負やはみ出しで渡す)。
+    pub fn mouse(
+        &mut self,
+        kind: eve_view::MouseKind,
+        mods: eve_view::Modifiers,
+        row: i32,
+        col: i32,
+    ) {
+        let view = self
+            .editor
+            .state()
+            .first_window()
+            .and_then(|w| self.editor.state().window_view(w))
+            .expect("View がある");
+        self.input(InputEvent::Mouse(eve_view::MouseEvent {
+            kind,
+            mods,
+            at: eve_view::MouseAt { view, row, col },
+        }));
+    }
+
+    /// 左クリック (押して離す)。
+    pub fn click(&mut self, row: i32, col: i32) {
+        use eve_view::{Modifiers, MouseButton, MouseKind};
+        self.mouse(
+            MouseKind::Down(MouseButton::Left),
+            Modifiers::NONE,
+            row,
+            col,
+        );
+        self.mouse(MouseKind::Up(MouseButton::Left), Modifiers::NONE, row, col);
     }
 
     /// ブラケットペースト。

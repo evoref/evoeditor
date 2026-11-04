@@ -2,11 +2,19 @@
 //! チェックアウトしたコードのこのコマンドを呼ぶ (手順の中身は対象のブランチの `xtask` にあるので、トリガを直さずに済む)。Linux 前提。
 //!
 //! v0.1 の手順 (`--only` で絞れる):
-//! - `fuzz`: `fuzz_decode` を `--fuzz-seconds` (既定 600) 秒。`-close_fd_mask=3` で入力とスタックをログに出さない。クラッシュ入力は
+//! - `fuzz`: `fuzz_decode` と `fuzz_editor` (v0.2) を、それぞれ `--fuzz-seconds` (既定 1200 秒。09 §6.3 の v0.2)。`-close_fd_mask=3` で入力とスタックをログに出さない。クラッシュ入力は
 //!   `.github/fuzz-recipients.txt` の公開鍵で `age` により暗号化し、平文は消す (artifact に上げるのは暗号化したものだけ)。
 //! - `proptest`: `PROPTEST_CASES=10000` で Linux CI の対象 crate のテスト。
 //! - `audit`: `cargo audit` と `cargo deny check advisories` (本体と `fuzz/`)。例外は `deny.toml` の `[advisories] ignore` の 1 か所。
 //! - `coverage`: `cargo llvm-cov nextest --lcov` (報告のみ、OQ-101)。
+//! - `crash` (v0.2): 保存のクラッシュ一貫性 (`cargo xtask crash-consistency`。LazyFS は環境変数 `LAZYFS_BIN`、下の FS は
+//!   `EVE_CRASH_ROOTS`。nightly.yml が LazyFS をビルドし、ext4 / xfs / btrfs のループバックを用意する。NFR-301、09 §6.3)。
+//!   `--only` を付けない実行で `LAZYFS_BIN` が無いときは、失敗にせず飛ばして要約に書く (定時の実行は既定ブランチ (main) の
+//!   nightly.yml で動き、LazyFS を用意するステップを持たない版がある。`--only crash` と明示したら失敗にする)。
+//! - `soak` (v0.2): NFR-306 の長時間の soak (BM-306、`cargo bench -p eve-testkit --bench bm_306`)。`--soak-minutes N` を
+//!   渡したときだけ走らせる (nightly.yml が 60 を渡す。定時の実行が古い nightly.yml (時間の上限が足りない) で動くときは
+//!   飛ばす)。RSS と入力の遅延の推移を `target/nightly/soak.jsonl` に書き、要約に傾向を 1 行で出す。**観察のみで失敗にしない**
+//!   (09 §6.3、§8.2 の v0.2 の表)。`--only soak` と明示して `--soak-minutes` が無ければ 60 分。
 //!
 //! 結果の要約は `target/nightly/summary.txt` (ターゲット名・コミット・seed・クラッシュの件数・暗号化した artifact の名前だけ。
 //! 入力の内容・ハッシュ・スタックは書かない)。
@@ -29,16 +37,17 @@ const LINUX_CRATES: [&str; 9] = [
     "xtask",
 ];
 
-const STEPS: [&str; 4] = ["fuzz", "proptest", "audit", "coverage"];
+const STEPS: [&str; 6] = ["fuzz", "proptest", "audit", "coverage", "crash", "soak"];
 
 pub fn run_all(args: &[String]) -> Result<(), String> {
+    let explicit = flag(args, "--only").is_some();
     let only: Vec<String> = flag(args, "--only")
         .map(|v| v.split(',').map(str::to_owned).collect())
         .unwrap_or_else(|| STEPS.iter().map(|s| (*s).to_owned()).collect());
     for o in &only {
         if !STEPS.contains(&o.as_str()) {
             return Err(format!(
-                "知らない手順です: {o} (fuzz / proptest / audit / coverage)"
+                "知らない手順です: {o} (fuzz / proptest / audit / coverage / crash / soak)"
             ));
         }
     }
@@ -48,7 +57,7 @@ pub fn run_all(args: &[String]) -> Result<(), String> {
                 .map_err(|_| format!("--fuzz-seconds が数ではありません: {v}"))
         })
         .transpose()?
-        .unwrap_or(600);
+        .unwrap_or(1200);
     let seed: u64 = flag(args, "--seed")
         .map(|v| {
             v.parse()
@@ -56,6 +65,13 @@ pub fn run_all(args: &[String]) -> Result<(), String> {
         })
         .transpose()?
         .unwrap_or_else(default_seed);
+    let soak_minutes: Option<u64> = flag(args, "--soak-minutes")
+        .map(|v| {
+            v.parse()
+                .map_err(|_| format!("--soak-minutes が数ではありません: {v}"))
+        })
+        .transpose()?
+        .or(explicit.then_some(60));
 
     let out_dir = workspace_root().join("target").join("nightly");
     std::fs::create_dir_all(&out_dir).map_err(|e| format!("{}: {e}", out_dir.display()))?;
@@ -64,11 +80,31 @@ pub fn run_all(args: &[String]) -> Result<(), String> {
     summary.push(format!("commit: {}", commit()));
 
     for step in STEPS.iter().filter(|s| only.iter().any(|o| o == *s)) {
+        if *step == "crash" && skip_crash(explicit, std::env::var_os("LAZYFS_BIN").is_some()) {
+            println!(
+                "▶ crash: LAZYFS_BIN が無いので飛ばします (--only crash で明示すると失敗にします)"
+            );
+            summary.push(
+                "crash: 飛ばした (LAZYFS_BIN が無い。nightly.yml が LazyFS を用意していない版)"
+                    .to_owned(),
+            );
+            continue;
+        }
+        if *step == "soak" && soak_minutes.is_none() {
+            println!("▶ soak: --soak-minutes が無いので飛ばします");
+            summary.push(
+                "soak: 飛ばした (--soak-minutes が無い。nightly.yml が soak を渡さない版)"
+                    .to_owned(),
+            );
+            continue;
+        }
         let r = match *step {
             "fuzz" => fuzz(fuzz_seconds, seed, &out_dir, &mut summary),
+            "soak" => soak(soak_minutes.unwrap_or(60), &out_dir, &mut summary),
             "proptest" => proptest(),
             "audit" => audit(),
-            _ => coverage(&out_dir),
+            "coverage" => coverage(&out_dir),
+            _ => crate::crash_consistency::run_cmd(&[]),
         };
         match r {
             Ok(()) => summary.push(format!("{step}: 成功")),
@@ -111,38 +147,53 @@ fn commit() -> String {
 /// libFuzzer が書く、失敗した入力のファイル名の接頭辞。
 const CRASH_PREFIXES: [&str; 3] = ["crash-", "oom-", "timeout-"];
 
+/// fuzz のターゲット (docs/09 §3.3)。それぞれ `--fuzz-seconds` 秒ずつ回す。
+const FUZZ_TARGETS: [&str; 2] = ["fuzz_decode", "fuzz_editor"];
+
 fn fuzz(seconds: u64, seed: u64, out_dir: &Path, summary: &mut Vec<String>) -> Result<(), String> {
     let artifacts = out_dir.join("fuzz-artifacts");
     let _ = std::fs::remove_dir_all(&artifacts);
     std::fs::create_dir_all(&artifacts).map_err(|e| format!("{}: {e}", artifacts.display()))?;
+    let host = host_triple()?;
+    let mut errs = Vec::new();
+    for target in FUZZ_TARGETS {
+        if let Err(e) = fuzz_one(target, &host, seconds, seed, &artifacts, summary) {
+            errs.push(e);
+        }
+    }
+    if errs.is_empty() {
+        Ok(())
+    } else {
+        Err(errs.join(
+            "
+",
+        ))
+    }
+}
+
+fn fuzz_one(
+    target: &str,
+    host: &str,
+    seconds: u64,
+    seed: u64,
+    artifacts: &Path,
+    summary: &mut Vec<String>,
+) -> Result<(), String> {
+    // 失敗した入力はターゲットごとの下位フォルダに受ける (暗号化した名前にはターゲット名を付ける)
+    let artifacts = &artifacts.join(target);
+    std::fs::create_dir_all(artifacts).map_err(|e| format!("{}: {e}", artifacts.display()))?;
     // ビルドの出力は見せる (入力もスタックも含まない)。失敗の原因を後から追えるようにする
     // 対象は nightly の rustc のホストにする。cargo-fuzz は既定で自分がビルドされた対象 (配布の実行ファイルは musl) を使うので、
     // 明示しないと「musl の std が無い」「sanitizer は静的リンクの libc と非互換」で失敗する
-    let host = host_triple()?;
     run(
-        "cargo +nightly fuzz build fuzz_decode",
-        Command::new("cargo").args([
-            "+nightly",
-            "fuzz",
-            "build",
-            "--target",
-            &host,
-            "fuzz_decode",
-        ]),
+        &format!("cargo +nightly fuzz build {target}"),
+        Command::new("cargo").args(["+nightly", "fuzz", "build", "--target", host, target]),
     )?;
-    println!("▶ fuzz_decode ({seconds} 秒、seed {seed})");
+    println!("▶ {target} ({seconds} 秒、seed {seed})");
     // 出力は受けて、クラッシュが見つかったときは出さない: 公開のログに入力とスタックを出さない (-close_fd_mask=3 に加えて、こちらでも受けて出さない)
     let prefix = format!("-artifact_prefix={}/", artifacts.display());
     let output = Command::new("cargo")
-        .args([
-            "+nightly",
-            "fuzz",
-            "run",
-            "--target",
-            &host,
-            "fuzz_decode",
-            "--",
-        ])
+        .args(["+nightly", "fuzz", "run", "--target", host, target, "--"])
         .arg(format!("-max_total_time={seconds}"))
         .arg("-close_fd_mask=3")
         // 1 入力あたりの上限。既定の 1200 秒だと、ハングする入力 1 件で夜間ジョブが 20 分止まる
@@ -156,9 +207,9 @@ fn fuzz(seconds: u64, seed: u64, out_dir: &Path, summary: &mut Vec<String>) -> R
         .map_err(|e| format!("cargo fuzz を実行できません: {e}"))?;
     let status = output.status;
 
-    let crashes = list_crashes(&artifacts)?;
+    let crashes = list_crashes(artifacts)?;
     summary.push(format!(
-        "fuzz: ターゲット fuzz_decode、seed {seed}、クラッシュ {} 件",
+        "fuzz: ターゲット {target}、seed {seed}、クラッシュ {} 件",
         crashes.len()
     ));
     if crashes.is_empty() {
@@ -196,7 +247,11 @@ fn fuzz(seconds: u64, seed: u64, out_dir: &Path, summary: &mut Vec<String>) -> R
             .and_then(|n| n.split('-').next())
             .unwrap_or("crash")
             .to_owned();
-        let dst = artifacts.join(format!("{kind}-{:03}.age", i + 1));
+        // 上げる artifact は `fuzz-artifacts/*.age` (nightly.yml) なので、1 つ上に置く
+        let dst = artifacts
+            .parent()
+            .unwrap_or(artifacts)
+            .join(format!("{target}-{kind}-{:03}.age", i + 1));
         let ok = Command::new("age")
             .arg("-R")
             .arg(&recipients)
@@ -222,7 +277,7 @@ fn fuzz(seconds: u64, seed: u64, out_dir: &Path, summary: &mut Vec<String>) -> R
         encrypted.join(", ")
     ));
     Err(format!(
-        "fuzz_decode のクラッシュ {} 件 (暗号化できたもの {} 件。メンテナが手元で復号して再現する、09 §6.3)",
+        "{target} のクラッシュ {} 件 (暗号化できたもの {} 件。メンテナが手元で復号して再現する、09 §6.3)",
         crashes.len(),
         encrypted.len()
     ))
@@ -344,13 +399,95 @@ fn coverage(out_dir: &Path) -> Result<(), String> {
     run("coverage (報告のみ)", &mut cmd)
 }
 
+/// BM-306 の soak を回し、要約に傾向を 1 行で書く。傾向が平坦でなくても失敗にしない (観察のみ、09 §6.3)。
+fn soak(minutes: u64, out_dir: &Path, summary: &mut Vec<String>) -> Result<(), String> {
+    let out = out_dir.join("soak.jsonl");
+    let minutes_s = minutes.to_string();
+    let out_s = out.display().to_string();
+    run(
+        &format!("soak (BM-306、{minutes} 分)"),
+        Command::new("cargo").args([
+            "bench",
+            "-q",
+            "-p",
+            "eve-testkit",
+            "--bench",
+            "bm_306",
+            "--",
+            "--minutes",
+            &minutes_s,
+            "--out",
+            &out_s,
+        ]),
+    )?;
+    let text = std::fs::read_to_string(&out).map_err(|e| format!("{}: {e}", out.display()))?;
+    let line = text
+        .lines()
+        .rev()
+        .find(|l| l.contains("\"kind\":\"summary\""))
+        .ok_or("soak.jsonl に要約の行がありません")?;
+    let v: serde_json::Value =
+        serde_json::from_str(line).map_err(|e| format!("soak の要約を読めません: {e}"))?;
+    summary.push(soak_line(&v));
+    Ok(())
+}
+
+/// soak の要約の JSON を 1 行の所見にする。
+fn soak_line(v: &serde_json::Value) -> String {
+    let num = |k: &str| v.get(k).and_then(serde_json::Value::as_f64);
+    let mib = |k: &str| num(k).map_or("-".to_owned(), |x| format!("{x:.1}"));
+    format!(
+        "soak (観察): {:.0} 分、RSS {}→{} MiB (増加 {:.1} MiB)、p99 {:.3}→{:.3} ms、{}",
+        num("minutes").unwrap_or(0.0),
+        mib("rss_first_mib"),
+        mib("rss_last_mib"),
+        num("rss_growth_mib").unwrap_or(0.0),
+        num("p99_first_ms").unwrap_or(0.0),
+        num("p99_last_ms").unwrap_or(0.0),
+        if v.get("flat").and_then(serde_json::Value::as_bool) == Some(true) {
+            "平坦"
+        } else {
+            "要確認 (右肩上がりか、遅延が 1.5 倍を超えた)"
+        }
+    )
+}
+
+/// `crash` を飛ばすか: 手順を明示せず (`--only` なし)、LazyFS が用意されていないとき。
+fn skip_crash(explicit: bool, has_lazyfs: bool) -> bool {
+    !explicit && !has_lazyfs
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn 手順の名前は_4_つ() {
-        assert_eq!(STEPS.len(), 4);
+    fn lazyfs_が無ければ_crash_を飛ばすのは明示しないときだけ() {
+        assert!(skip_crash(false, false));
+        assert!(!skip_crash(true, false));
+        assert!(!skip_crash(false, true));
+        assert!(!skip_crash(true, true));
+    }
+
+    #[test]
+    fn 手順の名前は_6_つ() {
+        assert_eq!(STEPS.len(), 6);
+    }
+
+    #[test]
+    fn soak_の要約を_1_行にする() {
+        let v: serde_json::Value = serde_json::from_str(
+            r#"{"kind":"summary","minutes":60.0,"rss_first_mib":19.4,"rss_last_mib":19.6,"rss_growth_mib":0.2,"p99_first_ms":0.3,"p99_last_ms":0.31,"flat":true}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            soak_line(&v),
+            "soak (観察): 60 分、RSS 19.4→19.6 MiB (増加 0.2 MiB)、p99 0.300→0.310 ms、平坦"
+        );
+        let w: serde_json::Value =
+            serde_json::from_str(r#"{"minutes":1,"rss_first_mib":null,"flat":false}"#).unwrap();
+        assert!(soak_line(&w).contains("RSS -→- MiB"));
+        assert!(soak_line(&w).ends_with("要確認 (右肩上がりか、遅延が 1.5 倍を超えた)"));
     }
 
     #[test]

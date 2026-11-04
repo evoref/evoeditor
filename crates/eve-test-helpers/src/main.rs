@@ -6,10 +6,11 @@
 //! (09 §3.4、実クリップボードの失敗と遅延の検査)。
 //!
 //! `console-event <pid> <ctrl-c|ctrl-break>` は、別プロセスのコンソールにコントロールイベントを送る (09 §3.6 (8))。
+//! `clip-*` と `console-event` は Windows だけ。`save` は Windows (`WinFs`) と Linux (`UnixFs`) の両方で動く。
 //!
 //! 使い方: `eve-test-helpers save <state_dir> <path> <atomic|inplace|inplace-skip> <content_file>`
 //! 終了コード: 0 = 保存した (`SaveReport` の method を標準出力へ)、3 = 保存の失敗 (`FsErrorKind` を標準エラーへ)、2 = 使い方の誤り、
-//! 137 = 切断点で強制終了。
+//! 137 = 切断点で強制終了 (Unix は SIGKILL で終わるので、終了コードではなくシグナル 9)。
 
 #![forbid(unsafe_code)]
 #![allow(clippy::print_stdout, clippy::print_stderr)]
@@ -20,7 +21,10 @@ use eve_core::{
     CancelToken, ChunkError, Expect, FileStamp, FileSystem, FsPath, InPlaceBackup, ReadChunks,
     SaveOptions,
 };
-use eve_platform::fs::WinFs;
+#[cfg(windows)]
+use eve_platform::fs::WinFs as NativeFs;
+#[cfg(unix)]
+use eve_platform::unix_fs::UnixFs as NativeFs;
 
 /// 内容を一定の大きさのチャンクで返す。
 struct Chunks {
@@ -44,8 +48,11 @@ impl ReadChunks for Chunks {
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     match args.first().map(String::as_str) {
+        #[cfg(windows)]
         Some("console-event") => return console_event(&args[1..]),
+        #[cfg(windows)]
         Some("clip-delay") => return clip_delay(&args[1..]),
+        #[cfg(windows)]
         Some("clip-read") => return clip_read(),
         _ => {}
     }
@@ -66,7 +73,7 @@ fn main() -> ExitCode {
             return ExitCode::from(2);
         }
     };
-    let fs = WinFs::new(state);
+    let fs = NativeFs::new(state);
     let target = FsPath::from(path.as_str());
     let expected = fs.metadata(&target).map_or(Expect::Absent, |m| {
         Expect::Stamp(FileStamp::from_meta(&m, None))
@@ -104,6 +111,7 @@ fn main() -> ExitCode {
 }
 
 /// `console-event <pid> <ctrl-c|ctrl-break>`: 0 = 送った、2 = 使い方の誤り、3 = 送れなかった。
+#[cfg(windows)]
 fn console_event(args: &[String]) -> ExitCode {
     use eve_platform::console::{CtrlEvent, send_ctrl_event};
     let [pid, kind] = args else {
@@ -134,6 +142,7 @@ fn console_event(args: &[String]) -> ExitCode {
 }
 
 /// `clip-delay --hold <ms>` / `clip-delay --delay-render <ms> --text <文字列> [--lifetime <ms>]`。
+#[cfg(windows)]
 fn clip_delay(args: &[String]) -> ExitCode {
     use eve_platform::clipboard_test::{hold, serve_delayed};
     let flag = |name: &str| {
@@ -172,6 +181,7 @@ fn clip_delay(args: &[String]) -> ExitCode {
 }
 
 /// `clip-read`: 今のクリップボードのテキストを標準出力へ (無ければ空、終了コード 3)。
+#[cfg(windows)]
 fn clip_read() -> ExitCode {
     match eve_platform::clipboard_test::read_text() {
         Some(t) => {

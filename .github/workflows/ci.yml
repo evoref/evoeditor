@@ -1,7 +1,8 @@
 # フル車線 (docs/09-testing-quality.md §6.1 / §6.2、docs/11-dev-workflow.md §8.1)。
 # 必須のステータスチェックの名前は、ジョブの表示名そのもの (docs/11 §9.1 の固定名):
 #   check / fmt / clippy (windows) / clippy (linux) / test (windows) / test (linux) / deps / dco / gitleaks / pr-source
-# 2 段目 (ジョブを足す PR の merge 後に必須に加える): i18n / e2e / check-themes
+# 2 段目 (ジョブを足す PR の merge 後に必須に加える。2026-11-03 にここまで加えた): i18n / area-check / no-network / msrv /
+#   build-release-smoke / build-release-smoke (linux) / check-themes / e2e / e2e (linux)
 # 表示名を変えるときは、ブランチ保護の必須チェックの名前も同じ手順で差し替える。
 # パスのフィルタは付けない (docs だけ・コードだけの PR でも全ジョブを回す)。
 name: ci
@@ -48,10 +49,10 @@ jobs:
           persist-credentials: false
       - name: Rust (stable)
         run: rustup toolchain install stable --profile minimal --component rustfmt,clippy --no-self-update && rustup default stable
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           shared-key: windows
-      - uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2.87.29
+      - uses: taiki-e/install-action@68a389c788b2cd04016ce8c80ee23b80d2ab3d68 # v2.88.1
         with:
           tool: cargo-nextest@0.9.148
       - run: cargo xtask check
@@ -85,15 +86,15 @@ jobs:
             args: --workspace --all-targets --all-features
           - name: linux
             runner: ubuntu-24.04
-            # Linux CI の対象 crate (core 系 + eve-host + eve-testkit) と開発用ツール (docs/02 §4.7)
-            args: -p eve-text -p eve-encoding -p eve-view -p eve-config -p eve-core -p eve-host -p eve-testkit -p eve-docs-tables -p xtask --all-targets --all-features
+            # Linux CI の対象 crate (core 系 + eve-platform + eve-host + eve-tui + evoeditor (bin) + eve-testkit + eve-test-helpers) と開発用ツール (docs/02 §4.7)
+            args: -p eve-text -p eve-encoding -p eve-view -p eve-config -p eve-core -p eve-platform -p eve-host -p eve-tui -p evoeditor -p eve-testkit -p eve-test-helpers -p eve-docs-tables -p xtask --all-targets --all-features
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - name: Rust (stable)
         run: rustup toolchain install stable --profile minimal --component clippy --no-self-update && rustup default stable
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           shared-key: ${{ matrix.name }}
       - run: cargo clippy ${{ matrix.args }} -- -D warnings
@@ -112,17 +113,17 @@ jobs:
             args: --workspace
           - name: linux
             runner: ubuntu-24.04
-            args: -p eve-text -p eve-encoding -p eve-view -p eve-config -p eve-core -p eve-host -p eve-testkit -p eve-docs-tables -p xtask
+            args: -p eve-text -p eve-encoding -p eve-view -p eve-config -p eve-core -p eve-platform -p eve-host -p eve-tui -p evoeditor -p eve-testkit -p eve-test-helpers -p eve-docs-tables -p xtask
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - name: Rust (stable)
         run: rustup toolchain install stable --profile minimal --no-self-update && rustup default stable
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           shared-key: ${{ matrix.name }}
-      - uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2.87.29
+      - uses: taiki-e/install-action@68a389c788b2cd04016ce8c80ee23b80d2ab3d68 # v2.88.1
         with:
           tool: cargo-nextest@0.9.148
       # テストがまだ無い crate があっても通す (--no-tests=pass)。シナリオ (Harness) も nextest で実行する。
@@ -140,10 +141,10 @@ jobs:
           persist-credentials: false
       - name: Rust (stable)
         run: rustup toolchain install stable --profile minimal --no-self-update && rustup default stable
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           shared-key: linux
-      - uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2.87.29
+      - uses: taiki-e/install-action@68a389c788b2cd04016ce8c80ee23b80d2ab3d68 # v2.88.1
         with:
           tool: cargo-deny@0.20.2,cargo-about@0.9.2
       - name: cargo deny (licenses / bans / advisories / sources)
@@ -166,7 +167,7 @@ jobs:
           persist-credentials: false
       - name: Rust (stable)
         run: rustup toolchain install stable --profile minimal --no-self-update && rustup default stable
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           shared-key: windows
       - run: cargo xtask i18n
@@ -184,10 +185,30 @@ jobs:
           persist-credentials: false
       - name: Rust (stable)
         run: rustup toolchain install stable --profile minimal --no-self-update && rustup default stable
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           shared-key: windows
       - run: cargo xtask check-themes
+
+  # 無通信の検査 (docs/09 §3.6、01 NFR-501 AC-2、v0.2): ヘッドレスのシナリオ (開く → 編集 → 保存 → 終了) を
+  # strace -f -e trace=network の下で走らせ、ネットワーク系のシステムコールが 0 であることを確かめる。2 段目の必須チェック候補。
+  no-network:
+    name: no-network
+    needs: check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Rust (stable)
+        run: rustup toolchain install stable --profile minimal --no-self-update && rustup default stable
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          shared-key: linux
+      - name: strace
+        run: sudo apt-get update && sudo apt-get install -y strace
+      - run: cargo xtask no-network
 
   # 配布ビルドの確認 (docs/09 §6.2 の build-release-smoke): feature・目印の文字列・隠しオプション・CRT の静的リンク。
   # exe のサイズ (BM-205) を artifact に置く。2 段目の必須チェック候補 (この PR が merge された直後に、ブランチ保護の必須に加えるかを決める)。
@@ -202,13 +223,37 @@ jobs:
           persist-credentials: false
       - name: Rust (stable)
         run: rustup toolchain install stable --profile minimal --no-self-update && rustup default stable
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           shared-key: windows-release
       - run: cargo xtask check-dist
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: bm-205-size
+          path: target/dist/size.json
+
+  # Linux の musl 静的版の配布ビルドの確認 (v0.2 の M7、docs/05 §16.2): 同じ検査に加え、ELF に PT_INTERP と DT_NEEDED が無いこと。
+  # 配布物 (tar.gz) は release.yml が作る。ここでは PR ごとに musl のビルドが壊れていないことを見る
+  build-release-smoke-linux:
+    name: build-release-smoke (linux)
+    needs: check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Rust (stable) と musl のターゲット
+        run: |
+          rustup toolchain install stable --profile minimal --no-self-update && rustup default stable
+          rustup target add x86_64-unknown-linux-musl
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          shared-key: linux-release-x86_64
+      - run: cargo xtask check-dist --target x86_64-unknown-linux-musl
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: bm-205-size-linux
           path: target/dist/size.json
 
   # L5 端末 E2E (docs/09 §3.6): 実バイナリを ConPTY で起動して画面を検査する。nextest の profile e2e (retries = 2)。
@@ -225,16 +270,62 @@ jobs:
           persist-credentials: false
       - name: Rust (stable)
         run: rustup toolchain install stable --profile minimal --no-self-update && rustup default stable
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           shared-key: windows
-      - uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2.87.29
+      - uses: taiki-e/install-action@68a389c788b2cd04016ce8c80ee23b80d2ab3d68 # v2.88.1
         with:
           tool: cargo-nextest@0.9.148
       - run: cargo nextest run --profile e2e -p evoeditor --test e2e
       - run: cargo nextest run --profile e2e -p evoeditor --features test-hooks --test e2e
       # 計測用ビルド (bench-trace、docs/09 §3.6): 隠しオプションと区間の記録が動くこと
       - run: cargo nextest run --profile e2e -p evoeditor --features bench-trace --test e2e -E 'test(~計測用ビルド)'
+
+  # L5 端末 E2E の Linux (v0.2 の M7、docs/09 §3.6): 同じ試験を openpty で回す。Windows 固有の経路 (コンソールイベント・
+  # DLL・UNC・Win32 のクリップボード) は cfg(windows) で外れ、Unix のシグナル (SIGTERM / SIGHUP / SIGINT / SIGSEGV) の試験が入る。
+  # 必須チェックの `e2e` (Windows) とは別の名前にする。merge の後に 2 段目の必須に加える (docs/09 §6.2)。
+  e2e-linux:
+    name: e2e (linux)
+    needs: check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Rust (stable)
+        run: rustup toolchain install stable --profile minimal --no-self-update && rustup default stable
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          shared-key: linux
+      - uses: taiki-e/install-action@68a389c788b2cd04016ce8c80ee23b80d2ab3d68 # v2.88.1
+        with:
+          tool: cargo-nextest@0.9.148
+      - run: cargo nextest run --profile e2e -p evoeditor --test e2e
+      - run: cargo nextest run --profile e2e -p evoeditor --features test-hooks --test e2e
+      - run: cargo nextest run --profile e2e -p evoeditor --features bench-trace --test e2e -E 'test(~計測用ビルド)'
+
+  # MSRV (docs/05 §16.1、docs/09 §6.2 / §8.2 の v0.2): workspace の `rust-version` のツールチェーンで、Cargo.lock のまま
+  # 全 crate・全 feature を check する。版は Cargo.toml から読む (引き上げのたびにここを直さない)。
+  msrv:
+    name: msrv
+    needs: check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Rust (rust-version)
+        run: |
+          v=$(sed -n 's/^rust-version = "\(.*\)"/\1/p' Cargo.toml)
+          test -n "$v"
+          echo "MSRV=$v" >> "$GITHUB_ENV"
+          rustup toolchain install "$v" --profile minimal --no-self-update
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          shared-key: msrv
+      - run: cargo +"$MSRV" check --workspace --all-features --locked
 
   # DCO: PR の全コミットに Signed-off-by があること (docs/11 §9.4、OQ-154)。
   # 対象外 (ジョブの if で飛ばす。飛ばしたジョブは必須のチェックとして成功扱い):

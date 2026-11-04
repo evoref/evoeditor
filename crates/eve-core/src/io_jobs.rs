@@ -51,6 +51,10 @@ pub struct OpenOptions {
     pub default_eol: Option<LineEnding>,
     /// 確認の回答で決まった読み取り専用の理由 (ジョブは読まずに引き継ぐ、03 §9.2)。
     pub pending: ReadOnlyReasons,
+    /// 開く前に警告する大きさ (`file.huge_file_warn_bytes`、FR-127)。`None` は既定 (512 MiB)。
+    pub huge_file_warn_bytes: Option<u64>,
+    /// 長大行の閾値 (`file.long_line_threshold`、NFR-106)。`None` は既定 (1 MiB)。
+    pub long_line_threshold: Option<usize>,
 }
 
 pub(crate) fn run_open(
@@ -138,7 +142,7 @@ fn open_inner(
         return cancelled();
     }
     // 巨大ファイル (FR-127): 読み始める前に確認する
-    if !opts.confirmed_large && meta.len >= HUGE_FILE_WARN {
+    if !opts.confirmed_large && meta.len >= opts.huge_file_warn_bytes.unwrap_or(HUGE_FILE_WARN) {
         return JobResult::NeedsConfirm {
             job: id,
             ask: ConfirmAsk::HugeFile { len: meta.len },
@@ -322,7 +326,7 @@ fn open_inner(
 
     // 形式: 文字コード・BOM・不正バイト・改行の多数派 (同数・改行なしは `file.default_line_ending`)
     let eol_stats = EolStats::count(&text);
-    let format = TextFormat {
+    let mut format = TextFormat {
         encoding: enc,
         has_bom: dec.has_bom(),
         default_eol: eol_stats.majority(opts.default_eol.unwrap_or(LineEnding::Lf)),
@@ -330,12 +334,14 @@ fn open_inner(
         invalid_bytes: dec.invalid_bytes(),
         pua_escape: dec.pua_mode(),
         roundtrip: chk.finish(),
+        long_line_threshold: opts
+            .long_line_threshold
+            .unwrap_or(crate::document::LONG_LINE_THRESHOLD),
+        long_lines: 0,
     };
+    // 閾値 (既定 1 MiB) を超える行は char 近似モードで扱う (編集できる。NFR-106、03 §11.5.1)
+    format.long_lines = crate::document::count_long_lines(&text, format.long_line_threshold);
     let mut detected = opts.pending;
-    // 閾値 (1 MiB) を超える行があれば読み取り専用 (理由 LongLine) で開く。その行は先頭 64 KiB だけを表示する (NFR-106、03 §11.5)
-    if crate::document::has_long_line(&text) {
-        detected.insert(ReadOnlyReason::LongLine);
-    }
     if meta.readonly {
         detected.insert(ReadOnlyReason::FileAttribute);
     }
@@ -474,6 +480,8 @@ pub(crate) struct SaveParams<'a> {
     pub pua: PuaEscapeMode,
     pub expected: Expect,
     pub strategy: crate::jobs::SaveStrategy,
+    pub clear_readonly: bool,
+    pub create_link_target: bool,
 }
 
 /// 乾式走査: 出力は捨てて、表現不能の文字と出力のバイト長だけを集める (03 §8.6 E1・05 §4.4 手順 0。書く前に止めるため)。
@@ -537,6 +545,8 @@ pub(crate) fn run_save(
         pua,
         expected,
         strategy,
+        clear_readonly,
+        create_link_target,
     } = p;
     let mut src = SnapshotSource {
         chunks: snapshot.chunks(ByteRange::all(snapshot.len_bytes())),
@@ -565,6 +575,8 @@ pub(crate) fn run_save(
         other => other,
     };
     let mut opts = SaveOptions::user_file(expected);
+    opts.clear_readonly = clear_readonly;
+    opts.create_link_target = create_link_target;
     let result = match strategy {
         SaveStrategy::Atomic { hardlink } => {
             opts.hardlink = hardlink;

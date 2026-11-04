@@ -24,6 +24,10 @@ use super::state::EditorState;
 /// 投入したジョブと、その結果の宛先。
 #[derive(Debug)]
 pub(super) enum Pending {
+    /// `config.reload` の読込 (07 §6)。
+    ConfigReload,
+    /// テーマファイルの読込 (07 §8.6)。
+    ThemeRead,
     Open {
         doc: DocumentId,
         view: ViewId,
@@ -36,6 +40,8 @@ pub(super) enum Pending {
     },
     /// 未編集の上書き保存の照合 (03 §9.3 手順 0)。
     CheckUnchanged { doc: DocumentId },
+    /// 外部変更の確認 (03 §9.5)。`explicit` は `file.check_external_changes` (フォーカス復帰でない)。
+    ExternalCheck { doc: DocumentId, explicit: bool },
     /// 文書内の全件検索。状態は `EditorState::search` にある。
     Search,
     /// 単発の検索 (保持に無く、同期検索でも見つからなかった `search.next` / `search.prev`)。
@@ -55,8 +61,31 @@ pub(super) enum Pending {
     },
     /// 起動時の退避ディレクトリの走査。
     RecoveryScan,
+    /// 前回起動した版の記録 (FR-518)。
+    LastVersion,
+    /// スワップを書くジョブ (03 §10.2)。
+    Swap { doc: DocumentId },
+    /// スワップを消すジョブ。
+    SwapDiscard { doc: DocumentId },
+    /// 他のプロセスのスワップの本文を読むジョブ (復旧の適用)。`revision` は提案の時点の文書の Revision。
+    SwapRead {
+        doc: DocumentId,
+        revision: eve_view::Revision,
+        entry: Box<crate::SwapEntry>,
+    },
+    /// 置換途中の痕跡の操作のジョブ (05 §4.6)。
+    Leftover(Box<super::leftover_offer::LeftoverAsk>),
+    /// 他のプロセスのスワップを消すジョブ。`notify` なら結果を知らせる (利用者が選んだ破棄)。
+    SwapRemove {
+        entry: Box<crate::SwapEntry>,
+        notify: bool,
+    },
     /// 「退避先に保存」(03 §9.7 (e))。`path` は元のファイル。
-    WriteRecovery { path: FsPath },
+    /// `release`: 閉じた文書の保存の失敗で書くとき、書き終えるまで緊急退避に残している公開物の文書。
+    WriteRecovery {
+        path: FsPath,
+        release: Option<DocumentId>,
+    },
     /// 表現不能の文字の置換の ChangeSet を作るジョブ (E3 の選択肢 2)。`revision` は投入時の文書の Revision。
     ReplaceUnmappable {
         ask: UnmappableAsk,
@@ -131,7 +160,8 @@ pub(super) struct UnmappableAsk {
     pub fmt: Option<NewFormat>,
 }
 
-/// 区分 B / D の確認 (別のバイト表現で保存される箇所がある、03 §8.6 E2')。承認したら同じ保存を投入し直す。
+/// 区分 B / D の確認 (別のバイト表現で保存される箇所がある、03 §8.6 E2') と、「読み取り専用を解除して保存」の確認 (FR-116)。
+/// 承認したら同じ保存を投入し直す。
 #[derive(Clone, Debug)]
 pub(super) struct LossyAsk {
     pub doc: DocumentId,
@@ -186,25 +216,13 @@ impl EditorState {
 
     /// 読込を待っている間、置き換え対象の今の文書は編集を受け付けない (03 §9.2 の置き換えの手順)。
     /// 編集は読込の完了で黙って捨てられてしまうため。
-    pub(super) fn open_replacing(&self) -> bool {
-        self.pending.values().any(|p| {
-            matches!(
-                p,
-                Pending::Open {
-                    replace: Some(_),
-                    ..
-                }
-            )
-        })
-    }
-
-    fn open_in_progress(&self) -> bool {
+    pub(super) fn open_in_progress(&self) -> bool {
         self.pending
             .values()
             .any(|p| matches!(p, Pending::Open { .. }))
     }
 
-    fn save_in_progress(&self, doc_id: DocumentId) -> bool {
+    pub(super) fn save_in_progress(&self, doc_id: DocumentId) -> bool {
         self.pending
             .values()
             .any(|p| matches!(p, Pending::Save { doc, .. } | Pending::CheckUnchanged { doc } if *doc == doc_id))
@@ -238,28 +256,38 @@ impl EditorState {
         self.view(self.window_view(w)?).map(|v| v.doc)
     }
 
-    /// 無題の新規文書を作る (FR-124)。今の文書があれば置き換える。dirty なら保存・破棄・キャンセルの確認を出す。
-    pub fn new_untitled(&mut self) -> CommandResult {
-        if self.open_in_progress() {
-            return CommandResult::Rejected(RejectReason::NotAvailable);
+    /// `doc` を表示する (最初の Window の View をその文書のものにする)。文書の View が無ければ作る。
+    /// 検索バーは文書ごとには持たないので、切り替える前に閉じる (03 §9.8)。
+    pub(super) fn activate_document(&mut self, doc: DocumentId) {
+        if self.active_document() == Some(doc) || !self.documents.contains_key(&doc) {
+            return;
         }
-        if self.confirm_if_dirty("unsaved_replace", Continuation::New) {
-            return CommandResult::Done;
+        self.search_close();
+        if let Some(prev) = self.active_document() {
+            self.recent.retain(|d| *d != prev);
+            self.recent.push(prev);
         }
-        self.new_untitled_forced()
+        let view = match self.views.iter().find(|(_, v)| v.doc == doc) {
+            Some((id, _)) => *id,
+            None => self.add_view(doc),
+        };
+        if let Some(w) = self.windows.first_mut() {
+            w.root = view;
+        }
+        self.mark_dirty_render();
     }
 
-    /// 確認を済ませた (破棄または保存した) 後の新規作成。
-    pub(super) fn new_untitled_forced(&mut self) -> CommandResult {
-        let replace = self.active_document();
+    /// 無題の新規文書を作る (FR-124)。今の文書があれば置き換える。dirty なら保存・破棄・キャンセルの確認を出す。
+    pub fn new_untitled(&mut self) -> CommandResult {
+        // 今の文書は置き換えず、無題のバッファを足して切り替える (03 §9.8)。何も捨てないので確認は要らない
         let doc = self.blank_document();
-        let (_, view) = self.add_document(doc);
-        self.show_view(view, replace);
+        let (id, _) = self.add_document(doc);
+        self.activate_document(id);
         CommandResult::Done
     }
 
     /// Window の表示を `view` に切り替え、`old` の文書を閉じる。Window がなければ作る。
-    fn show_view(&mut self, view: ViewId, old: Option<DocumentId>) {
+    pub(super) fn show_view(&mut self, view: ViewId, old: Option<DocumentId>) {
         match self.windows.first_mut() {
             Some(w) => w.root = view,
             None => {
@@ -272,10 +300,21 @@ impl EditorState {
         self.mark_dirty_render();
     }
 
-    fn close_document(&mut self, doc: DocumentId) {
+    /// 文書を閉じる。保存ジョブが実行中なら、その保存の結果が届くまで内容を緊急退避の対象に残す
+    /// (結果が失敗なら退避先に書く。03 §9.2 の閉じる手順 (a))。
+    pub fn close_document(&mut self, doc: DocumentId) {
+        self.open_jumps.remove(&doc);
         self.views.retain(|_, v| v.doc != doc);
+        let saving = self
+            .pending
+            .values()
+            .any(|p| matches!(p, Pending::Save { doc: d, .. } if *d == doc));
+        let retained = saving.then(|| self.rescue_snapshot(doc, true)).flatten();
         if self.documents.remove(&doc).is_some() {
-            // 退避用の公開物から外す (破棄した内容を緊急退避に残さない)
+            if let Some(snap) = retained {
+                self.closing_snapshots.insert(doc, snap);
+            }
+            // 退避用の公開物から外す (破棄した内容を緊急退避に残さない。保存中の文書は上で残している)
             self.mark_snapshot_update(doc);
             self.push_event(EditorEvent::DocumentClosed { doc });
             self.take_pending_for(doc);
@@ -287,16 +326,26 @@ impl EditorState {
             .pending
             .iter()
             .filter(|(_, p)| match p {
-                Pending::Open { doc: d, .. } | Pending::CheckUnchanged { doc: d } => *d == doc,
+                Pending::Open { doc: d, .. }
+                | Pending::CheckUnchanged { doc: d }
+                | Pending::ExternalCheck { doc: d, .. } => *d == doc,
                 Pending::ReplaceUnmappable { ask, .. } => ask.doc == doc,
                 Pending::Search => self.search.as_ref().is_some_and(|s| s.doc() == doc),
                 Pending::FindNext { doc: d, .. } => *d == doc,
                 Pending::ReplaceAll { doc: d, .. } => *d == doc,
                 Pending::ConvertEol(c) => c.doc == doc,
                 // 保存ジョブは取り消さず、完了を待つ (03 §9.2 の「閉じる手順」。ユーザーが求めた保存を中断しない)
-                Pending::Save { .. } | Pending::RecoveryScan | Pending::WriteRecovery { .. } => {
-                    false
-                }
+                Pending::Save { .. }
+                | Pending::ConfigReload
+                | Pending::ThemeRead
+                | Pending::RecoveryScan
+                | Pending::LastVersion
+                | Pending::WriteRecovery { .. }
+                | Pending::Swap { .. }
+                | Pending::SwapDiscard { .. }
+                | Pending::SwapRead { .. }
+                | Pending::SwapRemove { .. }
+                | Pending::Leftover(_) => false,
             })
             .map(|(id, _)| *id)
             .collect();
@@ -313,23 +362,16 @@ impl EditorState {
     /// ファイルを開く (03 §9.2)。Loading の文書を作ってすぐ読込ジョブを投入する。
     /// すでに文書があるときは、読込が終わるまで今の文書を表示し続け、完了で置き換える。
     pub fn open_path(&mut self, raw_path: &str, opts: OpenOptions) -> CommandResult {
-        self.open_path_inner(raw_path, opts, false)
-    }
-
-    /// 確認を済ませた (破棄または保存した) 後に開く。
-    pub(super) fn open_path_forced(&mut self, raw_path: &str, opts: OpenOptions) -> CommandResult {
-        self.open_path_inner(raw_path, opts, true)
-    }
-
-    fn open_path_inner(&mut self, raw_path: &str, opts: OpenOptions, force: bool) -> CommandResult {
         let opts = OpenOptions {
             default_eol: opts.default_eol.or(Some(self.config_eol())),
+            huge_file_warn_bytes: opts
+                .huge_file_warn_bytes
+                .or(Some(self.config().huge_file_warn_bytes)),
+            long_line_threshold: opts
+                .long_line_threshold
+                .or(Some(self.config_long_line_threshold())),
             ..opts
         };
-        // 読込の途中の置き換えの重なりは受け付けない (置き換え対象の文書が孤立しないように)
-        if self.open_in_progress() {
-            return CommandResult::Rejected(RejectReason::NotAvailable);
-        }
         let Ok(path) = self.paths.normalize(raw_path) else {
             self.show_message(
                 MessageLevel::Error,
@@ -338,24 +380,26 @@ impl EditorState {
             );
             return CommandResult::Rejected(RejectReason::InvalidArgs);
         };
+        // 今の文書は置き換えない (03 §9.8)。同じパスが既に開いていれば、そのバッファへ切り替える
+        let existing = self
+            .documents
+            .iter()
+            .find(|(_, d)| d.path.as_ref() == Some(&path))
+            .map(|(id, _)| *id);
+        if let Some(id) = existing {
+            if self.active_document() == Some(id) {
+                self.message(
+                    MessageLevel::Info,
+                    "info.open.already_open",
+                    &path.display(),
+                );
+            } else {
+                self.activate_document(id);
+            }
+            return CommandResult::Done;
+        }
+        // 読込が終わったとき、その間に別の文書へ切り替えていなければ新しいバッファへ切り替える
         let replace = self.active_document();
-        if replace
-            .and_then(|d| self.document(d))
-            .is_some_and(|cur| cur.path.as_ref() == Some(&path))
-        {
-            self.message(
-                MessageLevel::Info,
-                "info.open.already_open",
-                &path.display(),
-            );
-            return CommandResult::Done;
-        }
-        // 未保存の変更があれば、保存・破棄・キャンセルを尋ねる (FR-107 AC-3)
-        if !force
-            && self.confirm_if_dirty("unsaved_replace", Continuation::Open(raw_path.to_owned()))
-        {
-            return CommandResult::Done;
-        }
         let mut doc = Document::new_untitled();
         doc.path = Some(path.clone());
         doc.load_state = crate::document::LoadState::Loading;
@@ -425,6 +469,15 @@ impl EditorState {
         let Some(doc_id) = self.active_document() else {
             return CommandResult::Rejected(RejectReason::NoTarget);
         };
+        self.save_doc_then(doc_id, cont)
+    }
+
+    /// `save_then` を、アクティブ文書ではなく `doc_id` に対して行う (保存の連鎖は保存した文書に属する、03 §9.8)。
+    pub(super) fn save_doc_then(
+        &mut self,
+        doc_id: DocumentId,
+        cont: Continuation,
+    ) -> CommandResult {
         let Some(doc) = self.document(doc_id) else {
             return CommandResult::Rejected(RejectReason::NoTarget);
         };
@@ -548,7 +601,7 @@ impl EditorState {
         }
     }
 
-    fn start_save(
+    pub(super) fn start_save(
         &mut self,
         doc_id: DocumentId,
         path: FsPath,
@@ -580,9 +633,29 @@ impl EditorState {
         strategy: SaveStrategy,
         fmt: Option<NewFormat>,
     ) -> CommandResult {
+        // ダングリングのリンクのリンク先への作成は、承認した保存の 1 回だけ
+        let create_link_target = self
+            .link_create_ok
+            .take_if(|(d, p)| *d == doc_id && *p == path)
+            .is_some();
         let Some(doc) = self.documents.get_mut(&doc_id) else {
             return CommandResult::Rejected(RejectReason::NoTarget);
         };
+        // 読み取り専用属性を解除した文書の上書き保存は、「読み取り専用を解除して保存」の確認を経る (FR-116、03 §9.3 手順 1)。
+        // 承認した Revision では繰り返さない
+        let clear_readonly = doc.attribute_released && doc.path.as_ref() == Some(&path);
+        if clear_readonly && self.readonly_ok != Some((doc_id, doc.revision())) {
+            let ask = LossyAsk {
+                doc: doc_id,
+                path,
+                expected,
+                cont,
+                strategy,
+                fmt,
+            };
+            self.open_clear_readonly(ask);
+            return CommandResult::Done;
+        }
         let out_encoding = fmt.map_or(doc.format.encoding, |f| f.encoding);
         // 区分 B / D: 元の文字コードのまま、別のバイト表現で保存される箇所がある文書を編集して保存するときは、
         // 書き込む前に確認する (FR-112 AC-4 (a)・NFR-303、03 §8.6 E2')。無編集の上書き保存は書き込まないので出ない。
@@ -630,6 +703,8 @@ impl EditorState {
                 pua,
                 expected,
                 strategy,
+                clear_readonly,
+                create_link_target,
             },
         );
         if let Some(c) = cont {
@@ -687,6 +762,9 @@ impl EditorState {
                 kind,
             } => self.finish_open(doc, view, path, replace, opts, kind, r),
             Pending::CheckUnchanged { doc } => self.finish_check(doc, r),
+            Pending::ExternalCheck { doc, explicit } => {
+                self.finish_external_check(doc, explicit, r);
+            }
             Pending::Search => {}
             Pending::FindNext {
                 doc,
@@ -696,13 +774,31 @@ impl EditorState {
             } => self.finish_find_next(doc, revision, cursor, forward, r),
             Pending::ConvertEol(c) => self.finish_eol_conversion(c, r),
             Pending::ReplaceAll { doc, revision } => self.finish_replace_all(doc, revision, r),
-            Pending::WriteRecovery { path } => self.finish_write_recovery(&path, r),
+            Pending::WriteRecovery { path, release } => {
+                self.finish_write_recovery(&path, r);
+                if let Some(doc) = release {
+                    self.closing_snapshots.remove(&doc);
+                    self.mark_snapshot_update(doc);
+                }
+            }
             Pending::ReplaceUnmappable {
                 ask,
                 revision,
                 retried,
             } => self.finish_replace_unmappable(ask, revision, retried, r),
             Pending::RecoveryScan => self.finish_recovery_scan(r),
+            Pending::LastVersion => self.finish_last_version(r),
+            Pending::ConfigReload => self.finish_config_reload(r),
+            Pending::ThemeRead => self.finish_theme_read(r),
+            Pending::Swap { doc } => self.finish_swap(doc, r),
+            Pending::SwapDiscard { doc } => self.finish_swap_discard(doc, r),
+            Pending::SwapRead {
+                doc,
+                revision,
+                entry,
+            } => self.finish_swap_read(doc, revision, *entry, r),
+            Pending::SwapRemove { entry, notify } => self.finish_swap_remove(&entry, notify, r),
+            Pending::Leftover(ask) => self.finish_leftover(*ask, r),
             Pending::Save {
                 doc,
                 at,
@@ -710,9 +806,61 @@ impl EditorState {
                 path,
                 expected,
                 fmt,
-            } => self.finish_save(doc, at, revision, &path, expected, fmt, cont, r),
+            } => {
+                let saved = matches!(r, JobResult::Saved { .. });
+                // 「保存を中止して終了」の最中: 成功は採用し、失敗は終了時の stderr に残す。確認も後続も出さない
+                if self.quit_abort.is_some() {
+                    if !self.quit_abort_save_result(&path, &r) {
+                        self.finish_save(doc, at, revision, &path, expected, fmt, None, r);
+                    }
+                    self.release_closing_snapshot(doc, &path, saved);
+                    self.quit_abort_check();
+                    self.mark_dirty_render();
+                    return;
+                }
+                // 全保存の 1 件の失敗は、確認を出さず記録するだけ (03 §9.8)
+                let in_batch = self.save_all_failed(job, doc, &path, &r);
+                if in_batch != Some(true) {
+                    self.finish_save(doc, at, revision, &path, expected, fmt, cont, r);
+                }
+                self.release_closing_snapshot(doc, &path, saved);
+                if in_batch.is_some() {
+                    self.finish_save_all_if_done();
+                }
+            }
         }
         self.mark_dirty_render();
+    }
+
+    /// 閉じた文書の保存の結果が届いた: 公開物を外す。保存が成功していなければ、内容を失わないよう退避先に書く
+    /// (閉じた文書なので確認は出さない。書いた場所は `finish_write_recovery` のメッセージで示す)。
+    fn release_closing_snapshot(&mut self, doc: DocumentId, path: &FsPath, saved: bool) {
+        if self.documents.contains_key(&doc) {
+            return;
+        }
+        if saved {
+            self.closing_snapshots.remove(&doc);
+            self.mark_snapshot_update(doc);
+            return;
+        }
+        // 失敗: 退避先への書込が終わるまで、公開物は緊急退避に残す
+        let Some(snapshot) = self.closing_snapshots.get(&doc).cloned() else {
+            return;
+        };
+        let job = self.jobs.spawn(
+            Some(doc),
+            snapshot.revision,
+            JobKind::WriteRecovery {
+                doc: std::sync::Arc::new(snapshot),
+            },
+        );
+        self.pending.insert(
+            job,
+            Pending::WriteRecovery {
+                path: path.clone(),
+                release: Some(doc),
+            },
+        );
     }
 
     /// 表現不能の文字の確認を出す。選択肢: UTF-8 で保存 (エスケープ文字を含まないとき) / キャンセル (既定、`Esc`)。
@@ -1044,6 +1192,8 @@ impl EditorState {
         fmt: Option<NewFormat>,
         cont: Option<Continuation>,
     ) -> Option<SaveFailedAsk> {
+        // 閉じた文書には確認を出さない (保存の結果の処理が退避先に書く)
+        self.document(doc)?;
         let snapshot = self.rescue_snapshot(doc, false)?;
         Some(SaveFailedAsk {
             doc,
@@ -1093,6 +1243,41 @@ impl EditorState {
         });
     }
 
+    /// 保存先がダングリングのシンボリックリンク: リンク先を示して、リンク先に作成するかを尋ねる (FR-106、05 §4.1)。
+    fn open_dangling_link(&mut self, ask: SaveFailedAsk, target: String) {
+        use super::overlay::{ChoiceDef, ConfirmAction, ConfirmState};
+        self.open_confirm(ConfirmState {
+            name: "save.dangling_link",
+            args: vec![
+                ("path".to_owned(), ask.path.display()),
+                ("target".to_owned(), target),
+            ],
+            choices: vec![ChoiceDef {
+                id: "create",
+                accel: Some('c'),
+                destructive: false,
+            }],
+            details: Vec::new(),
+            default: 0,
+            focused: 0,
+            action: ConfirmAction::DanglingLink(ask),
+        });
+    }
+
+    /// 「リンク先に作成」: 同じ保存を、リンク先を作る指定で投入し直す (キャンセルは呼び側が処理済み)。
+    pub(super) fn create_link_target(&mut self, ask: SaveFailedAsk) -> CommandResult {
+        let SaveFailedAsk {
+            doc,
+            path,
+            expected,
+            cont,
+            fmt,
+            ..
+        } = ask;
+        self.link_create_ok = Some((doc, path.clone()));
+        self.start_save_fmt(doc, path, expected, cont, fmt)
+    }
+
     /// 保存の失敗の確認の選択 (キャンセルは呼び側が処理済み)。`id` は選択肢の ID。
     pub(super) fn choose_save_failed(&mut self, ask: SaveFailedAsk, id: &str) -> CommandResult {
         let SaveFailedAsk {
@@ -1112,7 +1297,13 @@ impl EditorState {
                     snapshot.revision,
                     JobKind::WriteRecovery { doc: snapshot },
                 );
-                self.pending.insert(job, Pending::WriteRecovery { path });
+                self.pending.insert(
+                    job,
+                    Pending::WriteRecovery {
+                        path,
+                        release: None,
+                    },
+                );
                 CommandResult::Pending(job)
             }
             // 別名で保存: 名前の入力へ (保存の後に続ける操作は引き継ぐ)
@@ -1258,6 +1449,77 @@ impl EditorState {
         CommandResult::Done
     }
 
+    /// 「読み取り専用を解除して保存」の確認を出す。選択肢: 別名で保存 (既定) / 読み取り専用を解除して保存 (04 §15.2)。
+    fn open_clear_readonly(&mut self, ask: LossyAsk) {
+        use super::overlay::{ChoiceDef, ConfirmAction, ConfirmState};
+        let choice = |id: &'static str, accel: char| ChoiceDef {
+            id,
+            accel: Some(accel),
+            destructive: false,
+        };
+        self.open_confirm(ConfirmState {
+            name: "save.read_only",
+            args: vec![("path".to_owned(), ask.path.display())],
+            choices: vec![choice("alt", 'a'), choice("write", 'w')],
+            details: Vec::new(),
+            default: 0,
+            focused: 0,
+            action: ConfirmAction::ClearReadOnly(ask),
+        });
+    }
+
+    /// 「読み取り専用を解除して保存」の確認の選択 (キャンセルは呼び側が処理済み)。
+    pub(super) fn choose_clear_readonly(&mut self, ask: LossyAsk, choice: usize) -> CommandResult {
+        let LossyAsk {
+            doc,
+            path,
+            expected,
+            cont,
+            strategy,
+            fmt,
+        } = ask;
+        if choice == 1 {
+            if let Some(d) = self.documents.get(&doc) {
+                self.readonly_ok = Some((doc, d.revision()));
+            }
+            return self.start_save_with(doc, path, expected, cont, strategy, fmt);
+        }
+        self.open_prompt(PromptKind::SaveAs { then: cont }, String::new());
+        CommandResult::Done
+    }
+
+    /// 読み取り専用の切替 (`file.toggle_read_only`、03 §9.6)。解除できるのは `FileAttribute` と `UserRequested` だけ。
+    /// 編集できる文書では `UserRequested` を付ける。
+    pub(super) fn toggle_read_only(&mut self) -> CommandResult {
+        use crate::document::{LoadState, ReadOnlyReason};
+        let Some(doc_id) = self.active_document() else {
+            return CommandResult::Rejected(RejectReason::NoTarget);
+        };
+        let Some(doc) = self.documents.get_mut(&doc_id) else {
+            return CommandResult::Rejected(RejectReason::NoTarget);
+        };
+        if doc.load_state != LoadState::Ready {
+            return CommandResult::Rejected(RejectReason::NotAvailable);
+        }
+        let key = if doc.read_only.is_empty() {
+            doc.read_only.insert(ReadOnlyReason::UserRequested);
+            "info.read_only.set"
+        } else if doc.read_only.releasable() {
+            if doc.read_only.contains(ReadOnlyReason::FileAttribute) {
+                doc.attribute_released = true;
+            }
+            doc.read_only.remove(ReadOnlyReason::FileAttribute);
+            doc.read_only.remove(ReadOnlyReason::UserRequested);
+            "info.read_only.released"
+        } else {
+            return CommandResult::Rejected(RejectReason::NotAvailable);
+        };
+        let path = doc.path.as_ref().map(FsPath::display).unwrap_or_default();
+        self.message(MessageLevel::Info, key, &path);
+        self.mark_dirty_render();
+        CommandResult::Done
+    }
+
     /// 保存の代替の確認の選択 (キャンセルは呼び側が処理済み)。
     pub(super) fn choose_fallback(&mut self, ask: FallbackAsk, choice: usize) -> CommandResult {
         let FallbackAsk {
@@ -1305,20 +1567,58 @@ impl EditorState {
         }
     }
 
-    /// 起動時に退避ディレクトリを走査するジョブを投入する (`open_initial` が呼ぶ)。
+    /// 起動時に退避ディレクトリを走査するジョブを投入する (`open_initial` が呼ぶ)。前回起動した版の記録 (FR-518) の
+    /// ジョブを先に積む (`io` は直列なので、退避の案内のほうが後に出て、メッセージ行に残る)。
     pub(super) fn start_recovery_scan(&mut self) {
+        let job = self.jobs.spawn(
+            None,
+            eve_view::Revision::INITIAL,
+            JobKind::LastVersion {
+                current: env!("CARGO_PKG_VERSION").to_owned(),
+            },
+        );
+        self.pending.insert(job, Pending::LastVersion);
         let job = self
             .jobs
             .spawn(None, eve_view::Revision::INITIAL, JobKind::RecoveryScan);
         self.pending.insert(job, Pending::RecoveryScan);
     }
 
+    /// 更新後の初回起動なら、その版の要点を 1 行で出す (`info.app.updated`、07 §18.8)。それ以外は何もしない。
+    fn finish_last_version(&mut self, r: JobResult) {
+        if let JobResult::LastVersionChecked {
+            outcome: crate::LastVersionOutcome::Updated,
+            ..
+        } = r
+        {
+            let summary = self
+                .catalog()
+                .render("info.app.release_summary", &[], &|_| None);
+            self.show_message(
+                MessageLevel::Info,
+                "info.app.updated",
+                &[
+                    ("version", env!("CARGO_PKG_VERSION")),
+                    ("summary", &summary),
+                ],
+            );
+        }
+    }
+
     /// 退避が残っていれば場所を案内する (`msg.recovery.found` / `found_rescue`、02 §9.3。中身は読まない)。
     /// 案内するのは最も新しい退避 (名前の `<UTC timestamp>-<pid>[-<n>]` の順)。「退避先に保存」の退避だけなら文言を分ける。
     fn finish_recovery_scan(&mut self, r: JobResult) {
-        let JobResult::RecoveryFound { mut dirs, .. } = r else {
+        let JobResult::RecoveryFound {
+            mut dirs,
+            swaps,
+            leftovers,
+            ..
+        } = r
+        else {
             return;
         };
+        self.leftovers = leftovers;
+        self.swap_scan_done(swaps);
         if dirs.is_empty() {
             return;
         }
@@ -1384,12 +1684,13 @@ impl EditorState {
             } => {
                 let lossy = format.roundtrip.lossy_lines;
                 let encoding = format.encoding;
+                let long_lines = format.long_lines;
                 let mut d = Document::from_text(text, format);
                 d.path = Some(path.clone());
                 d.disk_stamp = Some(stamp);
                 d.read_only = detected;
                 self.put_document(doc_id, d);
-                if detected.contains(crate::document::ReadOnlyReason::LongLine) {
+                if long_lines > 0 {
                     self.message(MessageLevel::Info, "info.open.long_line", &path.display());
                 }
                 if changed_during_load {
@@ -1721,6 +2022,8 @@ impl EditorState {
             // 巨大ファイルとして開いた文書は、確認を繰り返さない
             confirmed_large,
             default_eol: Some(self.config_eol()),
+            huge_file_warn_bytes: Some(self.config().huge_file_warn_bytes),
+            long_line_threshold: Some(self.config_long_line_threshold()),
             ..OpenOptions::default()
         };
         self.mark_dirty_render();
@@ -1801,6 +2104,11 @@ impl EditorState {
     ) {
         use crate::document::{FormatChange, FormatState, Origin, Transaction};
         use eve_text::{ByteOff, ByteRange, ChangeSet, Edit, Selection, TextRead};
+        // 読み取り専用属性はディスクから判定し直したので、解除の記録と外部変更の見送りは捨てる
+        if let Some(d) = self.documents.get_mut(&doc_id) {
+            d.attribute_released = false;
+            d.external_seen = None;
+        }
         let Some(old) = self.documents.get(&doc_id) else {
             return;
         };
@@ -1997,8 +2305,26 @@ impl EditorState {
     }
 
     fn complete_open(&mut self, doc: DocumentId, view: ViewId, replace: Option<DocumentId>) {
-        if replace.is_some() {
-            self.show_view(view, replace);
+        // 読込の間に別の文書へ切り替えていなければ、新しいバッファへ切り替える (03 §9.8)
+        if let Some(from) = replace
+            && self.active_document() == Some(from)
+        {
+            // 何も入力していない無題のバッファは、開いたファイルで置き換える (何も失わない。起動直後の Ctrl+O で空のバッファが残らない)
+            let pristine = self.documents.get(&from).is_some_and(|d| {
+                d.path.is_none()
+                    && !d.is_dirty()
+                    && d.len_bytes() == 0
+                    && d.load_state == crate::document::LoadState::Ready
+            });
+            if pristine {
+                self.show_view(view, Some(from));
+            } else {
+                self.activate_document(doc);
+            }
+        }
+        // 起動時の `+行:桁` / `path:行:桁`: 読み終わった文書の位置へ移る (範囲外は丸める)
+        if let Some((line, col)) = self.open_jumps.remove(&doc) {
+            self.jump_to_line_col(view, doc, line, col);
         }
         self.mark_snapshot_update(doc);
     }
@@ -2013,14 +2339,28 @@ impl EditorState {
         reason: &str,
     ) {
         self.show_message(level, key, &[("path", &path.display()), ("reason", reason)]);
-        if replace.is_some() {
-            // 今の文書はそのまま残す (FR-107 AC-3)
-            self.close_document(doc);
+        if self.active_document() == Some(doc) || self.first_window().is_none() {
+            // 表示中の文書の読込に失敗 (起動時の文書、または読込中に切り替えて表示していた足したバッファ): 失敗した文書は閉じ、
+            // 開く前の文書 (残っていれば)・ほかの文書・無題の文書の順で表示する (再試行できる、03 §9.2 の「失敗」・§9.8)。
+            // 表示を移さずに閉じると、Window が消えた View を指したままになる (fuzz_editor で見つけた)
+            self.open_jumps.remove(&doc);
+            let others = replace
+                .filter(|r| *r != doc && self.documents.contains_key(r))
+                .or_else(|| self.documents.keys().copied().find(|d| *d != doc));
+            match others {
+                Some(next) => {
+                    self.activate_document(next);
+                    self.close_document(doc);
+                }
+                None => {
+                    let blank = self.blank_document();
+                    let (_, untitled) = self.add_document(blank);
+                    self.show_view(untitled, Some(doc));
+                }
+            }
         } else {
-            // 最初の文書の読込に失敗: 失敗した文書は閉じ、無題の文書で始める (再試行できる、03 §9.2 の「失敗」)
-            let blank = self.blank_document();
-            let (_, untitled) = self.add_document(blank);
-            self.show_view(untitled, Some(doc));
+            // 表示していない文書 (足したバッファ・起動時に追加で開いた文書) の読込の失敗: 表示中の文書はそのままに、閉じるだけ
+            self.close_document(doc);
         }
     }
 
@@ -2032,18 +2372,7 @@ impl EditorState {
         let unchanged = match &r {
             // 読んだときの Stamp と一致し、編集もなければ書き込まない
             JobResult::Meta { stamp, .. } => {
-                !doc.is_dirty()
-                    && doc.disk_stamp.is_some_and(|d| {
-                        // 内容ハッシュが双方にあれば、それで決める (mtime だけが違っても中身が同じなら変更なし、
-                        // mtime が同じでも中身が違えば変更あり。05 §5.5)
-                        let same_hash = d.hash.zip(stamp.hash).map(|(a, b)| a == b);
-                        d.len == stamp.len
-                            && d.file_id == stamp.file_id
-                            && match same_hash {
-                                Some(same) => same,
-                                None => d.mtime == stamp.mtime,
-                            }
-                    })
+                !doc.is_dirty() && doc.disk_stamp.is_some_and(|d| same_on_disk(&d, stamp))
             }
             _ => false,
         };
@@ -2105,6 +2434,7 @@ impl EditorState {
                     // (属性・書込権限なし) を外す。書き込めた保存先の文書は編集できる (FR-116 AC-4、03 §9.6)。
                     // `--readonly` と内容に由来する理由 (不正バイト・バイナリ・長大行) は残る
                     if doc.path.as_ref() != Some(path) {
+                        doc.attribute_released = false;
                         doc.read_only
                             .remove(crate::document::ReadOnlyReason::FileAttribute);
                         doc.read_only
@@ -2129,12 +2459,17 @@ impl EditorState {
                 // 保存の後に続ける操作 (開く・新規作成・終了)。保存が失敗したときは続けない
                 // 保存の間に編集されていたら、続きの操作の前にもう一度尋ねる (03 §9.7。編集を捨てない)
                 if let Some(c) = cont {
+                    if c == Continuation::Quit {
+                        // 終了の連鎖: 保存した文書が clean なら次の文書へ、保存中の編集で dirty なら同じ文書をもう一度尋ねる
+                        self.advance_quit_chain();
+                        return;
+                    }
                     let name = match c {
-                        Continuation::Quit => "unsaved",
                         Continuation::Reopen(_) => "unsaved_reopen",
-                        _ => "unsaved_replace",
+                        Continuation::Close(_) => "unsaved_close",
+                        _ => "unsaved",
                     };
-                    if !self.confirm_if_dirty(name, c.clone()) {
+                    if !self.confirm_doc_if_dirty(doc_id, name, c.clone()) {
                         self.run_continuation(c);
                     }
                 }
@@ -2315,10 +2650,14 @@ impl EditorState {
                     ("reason", reason.clone()),
                     ("dir", dir),
                     ("backup", backup),
-                    ("target", link_target),
+                    ("target", link_target.clone()),
                 ];
                 let args: Vec<(&str, &str)> = args.iter().map(|(k, v)| (*k, v.as_str())).collect();
                 match ask {
+                    // リンク先が無いリンク: 失敗の選択ではなく、リンク先に作るかを尋ねる (v0.2)
+                    Some(ask) if !link_target.is_empty() => {
+                        self.open_dangling_link(ask, link_target)
+                    }
                     Some(ask) => self.report_save_failure(Some(ask), key, &args, retry),
                     None => self.show_message(level, key, &args),
                 }
@@ -2361,7 +2700,7 @@ fn human_size(n: u64) -> String {
 }
 
 /// `{reason}` に入れる短い分類名 (技術的な識別子。OS のエラーの分類文言 `ui.reason.*` は目録ができてから)。
-fn reason_label(err: &JobError) -> String {
+pub(super) fn reason_label(err: &JobError) -> String {
     match err {
         JobError::Fs(e) => fs_reason(e),
         JobError::Panic => "panic".to_owned(),
@@ -2370,7 +2709,20 @@ fn reason_label(err: &JobError) -> String {
     }
 }
 
-fn fs_reason(e: &FsError) -> String {
+/// 読んだ (書いた) ときの Stamp `d` と今の Stamp `now` が同じファイルの同じ内容を指すか (03 §9.3 手順 0・§9.5)。
+pub(super) fn same_on_disk(d: &crate::FileStamp, now: &crate::FileStamp) -> bool {
+    // 内容ハッシュが双方にあれば、それで決める (mtime だけが違っても中身が同じなら変更なし、
+    // mtime が同じでも中身が違えば変更あり。05 §5.5)
+    let same_hash = d.hash.zip(now.hash).map(|(a, b)| a == b);
+    d.len == now.len
+        && d.file_id == now.file_id
+        && match same_hash {
+            Some(same) => same,
+            None => d.mtime == now.mtime,
+        }
+}
+
+pub(super) fn fs_reason(e: &FsError) -> String {
     format!("{:?}", e.kind)
         .split([' ', '{'])
         .next()
@@ -2446,6 +2798,10 @@ fn file_reload(ctx: &mut CommandCtx<'_>) -> CommandResult {
     ctx.state.reload()
 }
 
+fn file_toggle_read_only(ctx: &mut CommandCtx<'_>) -> CommandResult {
+    ctx.state.toggle_read_only()
+}
+
 fn file_set_encoding(ctx: &mut CommandCtx<'_>) -> CommandResult {
     let enc = match ctx.args.str("encoding") {
         Some(name) => match Encoding::from_label(name) {
@@ -2517,6 +2873,13 @@ pub(super) fn register(r: &mut CommandRegistry) {
         CommandKind::File,
         "",
         file_set_encoding
+    );
+    reg!(
+        r,
+        "file.toggle_read_only",
+        CommandKind::File,
+        "doc.read_only_releasable || !doc.read_only",
+        file_toggle_read_only
     );
     reg!(
         r,

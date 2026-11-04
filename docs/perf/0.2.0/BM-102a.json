@@ -1,0 +1,17 @@
+{
+  "commit": "6728fde",
+  "env": "ENV-W1",
+  "id": "BM-102a",
+  "quick": false,
+  "results": [
+    {
+      "id": "BM-102a",
+      "max_ms": 9.7,
+      "n": 1000,
+      "p50_ms": 7.81,
+      "p999_ms": 9.49,
+      "p99_ms": 9.22,
+      "quick": false
+    }
+  ]
+}

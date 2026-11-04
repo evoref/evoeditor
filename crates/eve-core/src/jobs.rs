@@ -53,10 +53,19 @@ pub struct JobRequest {
 #[derive(Clone, Debug)]
 #[non_exhaustive]
 pub enum JobKind {
+    /// テーマファイル `dir/<name>.toml` を `inherits` の親までたどって読み、テーマを組み立てる (07 §8.6)。
+    ReadTheme { dir: FsPath, name: String },
+    /// 設定ファイル (ユーザー層の `config.toml` を順に) と `keymap.toml` を読む (`config.reload`、07 §6)。
+    ReadConfig {
+        files: Vec<FsPath>,
+        keymap: Option<FsPath>,
+    },
     /// ファイルの `metadata` と Stamp を調べる。
     Metadata { path: FsPath, purpose: MetaPurpose },
     /// 起動時の退避ディレクトリの走査 (02 §9.3 の `RecoveryScan`。メインスレッドでは列挙しない)。
     RecoveryScan,
+    /// 前回起動した版の記録を読み、今の版 `current` と比べて書き直す (FR-518、07 §18.8)。
+    LastVersion { current: String },
     /// ファイルを開く (03 §9.2)。文字コードは判定する (03 §8.2) か、`opts.forced` で指定する。
     Open { path: FsPath, opts: OpenOptions },
     /// Snapshot を `encoding` で原子的に保存する (03 §9.3 / §8.6)。表現不能の文字があれば何も書かず `JobResult::Unmappable`。`expected` は書く前と置換の直前に照合する。
@@ -68,6 +77,10 @@ pub enum JobKind {
         pua: PuaEscapeMode,
         expected: Expect,
         strategy: SaveStrategy,
+        /// 「読み取り専用を解除して保存」(FR-116)。保存先の読み取り専用属性を外して書き、書いた後に付け直す。
+        clear_readonly: bool,
+        /// ダングリングのシンボリックリンクのリンク先に新規作成する (FR-106。確認を経た保存だけ)。
+        create_link_target: bool,
     },
     /// 表現不能の文字を置換する ChangeSet を作る (E3 の選択肢 2、03 §8.6)。`snapshot` は投入時の Revision のもの。
     ReplaceUnmappable {
@@ -78,6 +91,24 @@ pub enum JobKind {
     /// 保存の失敗の後の「退避先に保存」(03 §9.7 (e))。`doc` の公開物を退避ディレクトリへ書く。
     WriteRecovery {
         doc: std::sync::Arc<crate::DocSnapshot>,
+    },
+    /// スワップを書く (03 §10.2)。`doc` は投入時の公開物で、書込中の文書は変わらない。同じ文書の Swap は同時に 1 つだけ。
+    Swap {
+        doc: std::sync::Arc<crate::DocSnapshot>,
+    },
+    /// 他のプロセスが残したスワップの本文を読む (復旧の適用、03 §10.3)。
+    SwapRead { entry: crate::SwapEntry },
+    /// 他のプロセスが残したスワップを消す (復旧の破棄・適用後)。
+    SwapRemove { entry: crate::SwapEntry },
+    /// 置換途中の痕跡の提案への答え (退避名を戻す・退避名や一時ファイルを消す、05 §4.6)。
+    LeftoverAct {
+        leftover: Box<crate::Leftover>,
+        op: crate::LeftoverOp,
+    },
+    /// スワップを消す (03 §10.2「削除」)。
+    SwapDiscard {
+        doc: DocumentId,
+        path: Option<FsPath>,
     },
     /// 文書内の全件検索 (03 §12.2)。`from` の行から末尾まで、続けて先頭から走査し、一致を `SearchBatch` で順に返して
     /// `SearchDone` で終わる。保持するのは `max_matches` 件まで、数えるのは `count_limit` 件まで。
@@ -165,10 +196,29 @@ pub enum JobResult {
         /// 残っていた保存中フラグから見つけた、中断された保存の痕跡 (直接上書きの中断など、存在するファイルでも返す)。
         interrupted_save: Option<InterruptedSave>,
     },
+    /// `ReadTheme` の結果。`theme` が `None` なら読めなかった (組込みの `default` で動く)。
+    ThemeRead {
+        job: JobId,
+        name: String,
+        theme: Option<eve_config::theme::Theme>,
+        reports: Vec<(String, Vec<eve_config::Diagnostic>)>,
+    },
+    /// `ReadConfig` の結果。
+    ConfigRead {
+        job: JobId,
+        /// `files` と同じ順。
+        config: Vec<ConfigFile>,
+        /// `keymap` を読まない (`--no-config`) ときは `None`。
+        keymap: Option<ConfigFile>,
+    },
     /// 起動時の退避ディレクトリの走査の結果 (新しい順ではなく列挙した順。main が整えて案内する)。
     RecoveryFound {
         job: JobId,
         dirs: Vec<RecoveryDirEntry>,
+        /// 他のプロセスが残したスワップ (復旧の候補、03 §10.3)。
+        swaps: Vec<crate::SwapEntry>,
+        /// 置換途中の痕跡の提案 (05 §4.6)。新しい順。
+        leftovers: Vec<crate::Leftover>,
     },
     /// 存在しないパスを開いた (新規ファイル)。フォルダも無ければ `parent_missing` にそのフォルダ。
     NewFile {
@@ -205,6 +255,32 @@ pub enum JobResult {
     RecoveryWritten {
         job: JobId,
         path: FsPath,
+    },
+    /// スワップを書いた。
+    SwapWritten {
+        job: JobId,
+    },
+    /// スワップを消した。
+    SwapDiscarded {
+        job: JobId,
+    },
+    /// 他のプロセスのスワップの本文を読んだ。
+    SwapRead {
+        job: JobId,
+        body: crate::SwapBody,
+    },
+    /// 他のプロセスのスワップを消した。
+    SwapRemoved {
+        job: JobId,
+    },
+    /// 置換途中の痕跡の操作を終えた。
+    LeftoverDone {
+        job: JobId,
+    },
+    /// 前回起動した版との比較の結果 (`LastVersion`)。
+    LastVersionChecked {
+        job: JobId,
+        outcome: crate::LastVersionOutcome,
     },
     /// 単発の検索の結果。`found` は (一致, 文書の端を越えたか)。
     FindNextDone {
@@ -257,8 +333,16 @@ impl JobResult {
             | JobResult::NewFile { job, .. }
             | JobResult::NeedsConfirm { job, .. }
             | JobResult::RecoveryFound { job, .. }
+            | JobResult::ConfigRead { job, .. }
+            | JobResult::ThemeRead { job, .. }
             | JobResult::Saved { job, .. }
             | JobResult::RecoveryWritten { job, .. }
+            | JobResult::SwapWritten { job }
+            | JobResult::SwapDiscarded { job }
+            | JobResult::SwapRead { job, .. }
+            | JobResult::SwapRemoved { job }
+            | JobResult::LeftoverDone { job }
+            | JobResult::LastVersionChecked { job, .. }
             | JobResult::UnmappableReplacement { job, .. }
             | JobResult::Unmappable { job, .. }
             | JobResult::ReplaceAllDone { job, .. }
@@ -335,9 +419,15 @@ pub fn run_job(
         return;
     }
     let result = match &req.kind {
+        JobKind::LastVersion { current } => JobResult::LastVersionChecked {
+            job: req.id,
+            outcome: crate::last_version::check_and_record(&*ports.fs, current),
+        },
         JobKind::RecoveryScan => JobResult::RecoveryFound {
             job: req.id,
             dirs: ports.fs.list_recovery_dirs().unwrap_or_default(),
+            swaps: ports.fs.list_swaps().unwrap_or_default(),
+            leftovers: crate::leftover::scan(&*ports.fs),
         },
         JobKind::Open { path, opts } => run_open(req.id, path, *opts, ports, cancel, emit),
         JobKind::Save {
@@ -348,6 +438,8 @@ pub fn run_job(
             pua,
             expected,
             strategy,
+            clear_readonly,
+            create_link_target,
         } => run_save(
             req.id,
             SaveParams {
@@ -358,6 +450,8 @@ pub fn run_job(
                 pua: *pua,
                 expected: *expected,
                 strategy: *strategy,
+                clear_readonly: *clear_readonly,
+                create_link_target: *create_link_target,
             },
             ports,
             cancel,
@@ -453,6 +547,69 @@ pub fn run_job(
                 err: JobError::Fs(err),
             },
         },
+        JobKind::Swap { doc } => match ports.fs.write_swap(doc) {
+            Ok(()) => JobResult::SwapWritten { job: req.id },
+            Err(err) => JobResult::Failed {
+                job: req.id,
+                err: JobError::Fs(err),
+            },
+        },
+        JobKind::SwapRead { entry } => match ports.fs.read_swap(entry) {
+            Ok(body) => JobResult::SwapRead { job: req.id, body },
+            Err(err) => JobResult::Failed {
+                job: req.id,
+                err: JobError::Fs(err),
+            },
+        },
+        JobKind::SwapRemove { entry } => match ports.fs.remove_swap(entry) {
+            Ok(()) => JobResult::SwapRemoved { job: req.id },
+            Err(err) => JobResult::Failed {
+                job: req.id,
+                err: JobError::Fs(err),
+            },
+        },
+        JobKind::LeftoverAct { leftover, op } => {
+            match crate::leftover::act(&*ports.fs, leftover, *op) {
+                Ok(()) => JobResult::LeftoverDone { job: req.id },
+                Err(err) => JobResult::Failed {
+                    job: req.id,
+                    err: JobError::Fs(err),
+                },
+            }
+        }
+        JobKind::SwapDiscard { doc, path } => match ports.fs.discard_swap(*doc, path.as_ref()) {
+            Ok(()) => JobResult::SwapDiscarded { job: req.id },
+            Err(err) => JobResult::Failed {
+                job: req.id,
+                err: JobError::Fs(err),
+            },
+        },
+        JobKind::ReadTheme { dir, name } => {
+            let read = |n: &str| -> Result<Option<String>, String> {
+                match read_config_file(&*ports.fs, &dir.join(format!("{n}.toml"))) {
+                    Ok(Some(b)) => String::from_utf8(b)
+                        .map(Some)
+                        .map_err(|_| "UTF-8 として読めません".to_owned()),
+                    Ok(None) => Ok(None),
+                    Err(e) => Err(e),
+                }
+            };
+            let (theme, reports) = eve_config::theme_file::load_theme(name, &read);
+            JobResult::ThemeRead {
+                job: req.id,
+                name: name.clone(),
+                theme,
+                reports,
+            }
+        }
+        JobKind::ReadConfig { files, keymap } => JobResult::ConfigRead {
+            job: req.id,
+            config: files
+                .iter()
+                .map(|f| read_config_file(&*ports.fs, f))
+                .collect(),
+            keymap: keymap.as_ref().map(|k| read_config_file(&*ports.fs, k)),
+        },
         JobKind::Metadata { path, purpose } => match ports.fs.metadata(path) {
             Ok(meta) => {
                 if cancel.is_cancelled() {
@@ -461,8 +618,11 @@ pub fn run_job(
                         err: JobError::Cancelled,
                     }
                 } else {
-                    // 未変更の保存の可否は、16 MiB 以下なら内容ハッシュでも照合する (05 §5.5)。読めなければ付けない
-                    let hash = if *purpose == MetaPurpose::UnchangedSave {
+                    // 未変更の保存の可否と外部変更の確認は、16 MiB 以下なら内容ハッシュでも照合する (05 §5.5)。読めなければ付けない
+                    let hash = if matches!(
+                        purpose,
+                        MetaPurpose::UnchangedSave | MetaPurpose::ExternalCheck
+                    ) {
                         crate::content_hash::hash_file(ports.fs.as_ref(), path, meta.len)
                             .ok()
                             .flatten()
@@ -484,6 +644,33 @@ pub fn run_job(
         },
     };
     emit(result);
+}
+
+/// 設定ファイル 1 つの読込の結果。無ければ `Ok(None)`、読めなければ理由。
+pub type ConfigFile = Result<Option<Vec<u8>>, String>;
+
+/// 設定ファイルの大きさの上限 (これを超えるものは設定ではないとみなして読まない)。
+const CONFIG_FILE_MAX: usize = 4 << 20;
+
+fn read_config_file(fs: &dyn crate::fs::FileSystem, path: &FsPath) -> ConfigFile {
+    let mut r = match fs.open_read(path) {
+        Ok(r) => r,
+        Err(e) if e.kind == crate::fs::FsErrorKind::NotFound => return Ok(None),
+        Err(e) => return Err(format!("{:?}", e.kind)),
+    };
+    let mut out = Vec::new();
+    loop {
+        match r.next_chunk() {
+            Ok(Some(c)) => {
+                out.extend_from_slice(c);
+                if out.len() > CONFIG_FILE_MAX {
+                    return Err("too large".to_owned());
+                }
+            }
+            Ok(None) => return Ok(Some(out)),
+            Err(e) => return Err(format!("{e:?}")),
+        }
+    }
 }
 
 #[cfg(test)]

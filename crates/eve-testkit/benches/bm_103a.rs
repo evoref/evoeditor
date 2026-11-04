@@ -8,6 +8,7 @@
 //! cargo bench -p eve-testkit --bench bm_103a
 //! cargo bench -p eve-testkit --bench bm_103a -- --quick   # 動作確認 (回数を減らす。記録には使わない)
 //! cargo bench -p eve-testkit --bench bm_103a -- --json    # 1 行の JSON (xtask bench が集める)
+//! cargo bench -p eve-testkit --bench bm_103a -- --wrap    # 折り返し ON (`view.wrap = word`) で測る (03 §14.3.1)
 //! ```
 
 #![allow(clippy::print_stdout, clippy::print_stderr)]
@@ -42,6 +43,7 @@ fn main() {
     let args: Vec<String> = std::env::args().collect();
     let quick = args.iter().any(|a| a == "--quick");
     let json = args.iter().any(|a| a == "--json");
+    let wrap = args.iter().any(|a| a == "--wrap");
     let (runs, warmup) = if quick { (1_000, 100) } else { (10_000, 1_000) };
 
     let data = corpus(1024 * 1024);
@@ -52,6 +54,9 @@ fn main() {
     drop(data);
     h.open("/w/doc.txt");
     h.run_jobs();
+    if wrap {
+        h.cmd("view.toggle_wrap");
+    }
     h.cmd_with(
         "cursor.goto_line",
         Args::new().with_int("line", (lines / 2) as i64 + 1),

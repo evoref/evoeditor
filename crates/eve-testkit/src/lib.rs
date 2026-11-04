@@ -9,11 +9,13 @@
 
 mod ascii;
 mod clock;
+pub mod fuzzing;
 mod harness;
 mod headless;
 mod jobs;
 mod memfs;
 mod paths;
+pub mod scenario;
 mod virtual_screen;
 
 pub use ascii::{AsciiOptions, render_ascii};
@@ -21,6 +23,6 @@ pub use clock::ManualClock;
 pub use harness::Harness;
 pub use headless::{HeadlessFrontend, HeadlessProbe};
 pub use jobs::ManualJobSpawner;
-pub use memfs::{BytesSource, FsOp, MemFs, SourceFailure, WriteStep};
+pub use memfs::{BytesSource, FsOp, MEMFS_STATE_DIR, MemFs, SourceFailure, WriteStep};
 pub use paths::FixedPaths;
 pub use virtual_screen::{Attr, VirtualScreen, WidthConfig};

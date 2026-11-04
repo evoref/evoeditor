@@ -11,7 +11,7 @@
 | 決めないこと | Port の trait シグネチャ・型名・エラー分類 (02 §4.4 / §4.5)、緊急退避の方式と manifest の形式 (02 §11.2.1)、文字コード変換アルゴリズム (03)、描画・端末能力判定の実装 (04)、設定項目の書式・既定値 (07 §5)、終了コード (07 §18.4)、テスト手順 (09) |
 | v0.1 で読む節 | §1〜§10 (§2.5〜§2.7 を除く) と §11 の **Windows の部分** (§4.3・§9.2・§9.3・§11.1・§11.3 と、§11.2 の「セッション終了の受け方」を除く)、§16・§17、§18.1〜§18.3、§18.6、§18.8〜§18.14 (利用者向け文書の内容。Windows の手順) (一覧の正本は [README §3.1](README.md#31-v01-の実装で読む節)) |
 
-> **v0.1 の実装範囲は Windows のみ** (確定 (ユーザー回答)、ADR-0042、OQ-15): 対象は Windows 11 の Windows Terminal と conhost (Windows 10 は検証環境が無いので v0.2 以降の候補、§1.1) で、macOS / Linux は v0.1 では出荷せず、**v0.2 で出荷する** (確定 (ユーザー回答)。出荷には実機確認の手段 (基準機の追加、10 OQ-23 (d)) の確保が前提で、確保できない OS は次の版に延期する (確定 (ユーザー回答)、10 の残件 #3))。本書の Unix / macOS / Linux の記述 (rename + fsync の保存手順、モード・所有者、シグナル、XDG のパス、`pbcopy` / `wl-copy` / `xclip` / `xsel`・OSC 52 のクリップボード、WSL・SSH、musl 静的ビルド、macOS の署名・公証、Linux パッケージ等) は **v0.2 (macOS / Linux 出荷時) の仕様** として、各節の冒頭または行に明記する。core 系 crate (OS に触れない crate) は OS 非依存を保ち、CI の Linux x86_64 ジョブ (Linux CI の対象 crate (02 §4.7) のコンパイルとヘッドレスのテスト) で移植性を守る (§1.2)。
+> **v0.1 の実装範囲は Windows のみ** (確定 (ユーザー回答)、ADR-0042、OQ-15): 対象は Windows 11 の Windows Terminal と conhost (Windows 10 は公式には対応しない、§1.1) で、macOS / Linux は v0.1 では出荷せず、**v0.2 で出荷する** (確定 (ユーザー回答)。出荷には実機確認の手段 (基準機の追加、10 OQ-23 (d)) の確保が前提で、確保できない OS は次の版に延期する (確定 (ユーザー回答)、10 の残件 #3))。本書の Unix / macOS / Linux の記述 (rename + fsync の保存手順、モード・所有者、シグナル、XDG のパス、`pbcopy` / `wl-copy` / `xclip` / `xsel`・OSC 52 のクリップボード、WSL・SSH、musl 静的ビルド、macOS の署名・公証、Linux パッケージ等) は **v0.2 (macOS / Linux 出荷時) の仕様** として、各節の冒頭または行に明記する。core 系 crate (OS に触れない crate) は OS 非依存を保ち、CI の Linux x86_64 ジョブ (Linux CI の対象 crate (02 §4.7) のコンパイルとヘッドレスのテスト) で移植性を守る (§1.2)。
 >
 > 本書のコード片は仕様説明のための擬似コード (Rust 風) であり、そのまま実装する API ではない。
 > 設計原則の優先順位 ([00 §4](00-overview.md#4-設計原則-優先順位付き)) に従い、本書では **P1 (データを失わない) > P2 (同意なく外へ出さない) > P6 (どの OS でも同じ体験)** を判断軸にする。OS 固有の便利機能は platform 層の「任意機能」として扱い、core は Port 以外の手段で OS に触れない (NFR-406, R3)。
@@ -49,16 +49,16 @@
 | OS | バージョン | アーキ | Rust ターゲット triple | Rust ティア (執筆時点) | 配布形態 | 版 | 備考 |
 |---|---|---|---|---|---|---|---|
 | Windows | 11 | x86_64 | `x86_64-pc-windows-msvc` | Tier 1 | zip (単一 exe) | **v0.1** (唯一の出荷対象) | 確定 (ユーザー回答)、OQ-15。基準機 (01 §3.0) と同じ Windows 11 で確かめる。MSVC ツールチェインを採用 (GNU 版は配布しない) |
-| Windows | 10 (1809 以降、サポート中の版) | x86_64 | `x86_64-pc-windows-msvc` | Tier 1 | zip (v0.1 と同じ) | **v0.2 以降の候補** (検証環境を用意できた版で対象に加える) | v0.1 の対象にしない (確定 (ユーザー回答)、OQ-15。検証環境が無い)。下の「Windows 10 を対象に加えるときの確認事項」 |
+| Windows | 10 (1809 以降、サポート中の版) | x86_64 | `x86_64-pc-windows-msvc` | Tier 1 | zip (v0.1 と同じ) | **公式には対応しない** (確定 (ユーザー回答)、2026-10-25。PO が指示するまで対象に加えない) | v0.1 の対象にしない (確定 (ユーザー回答)、OQ-15。検証環境が無い)。下の「Windows 10 を対象に加えるときの確認事項」 |
 | Windows | 10 / 11 on ARM | aarch64 | `aarch64-pc-windows-msvc` | Tier 1 (Rust 1.91 で昇格) | zip | v0.2 以降 (Tier B のビルドは v0.2) | **Tier B (ビルドのみ)**。Rust のティアとは別の、本プロジェクトの配布上の区分。実機テストは [09 §6](09-testing-quality.md) のランナー可用性に依存 |
 | macOS | 直近 3 メジャー (執筆 2026-10 時点: 26 / 15 / 14) | aarch64 | `aarch64-apple-darwin` | Tier 1 | tar.gz | v0.2 (macOS / Linux 出荷時) | Apple Silicon。ad-hoc 署名必須 (§18.4) |
 | macOS | 同上 | x86_64 | `x86_64-apple-darwin` | Tier 2 (host tools。Rust 1.90 で降格) | tar.gz | v0.2 (macOS / Linux 出荷時) | Intel Mac。出荷時は **Tier B (ビルドのみ)** (CI の x86_64 macOS ランナーの減少・有料化) |
 | Linux | 任意のディストリビューション (静的リンク。カーネル 3.2 以降) | x86_64 | `x86_64-unknown-linux-musl` | Tier 2 | tar.gz | v0.2 (macOS / Linux 出荷時) | **Linux を出荷するときの配布物はこれを基本にする** (OQ-112、NFR-206)。完全静的で glibc の版に依存せず、Alpine・古い環境・コンテナでそのまま動く。アロケータは §17.3。v0.1 の CI の Linux ジョブ (ビルドとヘッドレスのテストのみ、§1.2) はこのターゲットではなくランナーのホスト (`x86_64-unknown-linux-gnu`) で行い、配布物は作らない |
 | Linux | 任意のディストリビューション (静的リンク。カーネル 4.1 以降) | aarch64 | `aarch64-unknown-linux-musl` | Tier 2 | tar.gz | v0.2 (macOS / Linux 出荷時) | Raspberry Pi 4+ (64bit OS)、AWS Graviton、Ampere |
-| Linux | glibc 2.31 以降 (Ubuntu 20.04 / Debian 11 / RHEL 9 相当) | x86_64 / aarch64 | `*-unknown-linux-gnu` | Tier 1 | tar.gz (v0.4: deb, rpm) | v0.2 以降 (条件付き) | **条件付き追加** (OQ-112): Linux を出荷するとき、musl 版が BM-104 で gnu 版比 1.5 倍以上遅い、または BM-202 が 1.3 倍以上なら同時に追加する。そうでなければ deb / rpm を作る v0.4 で追加。ビルドは §16.2 (zigbuild で glibc 2.31 に固定) |
+| Linux | glibc 2.31 以降 (Ubuntu 20.04 / Debian 11 / RHEL 9 相当) | x86_64 / aarch64 | `*-unknown-linux-gnu` | Tier 1 | tar.gz (v0.4: deb, rpm) | v0.2 以降 (条件付き) | **v0.4 で追加** (OQ-112、確定 (ユーザー回答、2026-11-04)): deb / rpm を作る v0.4 で追加する。それより前でも、musl 版が BM-104 / BM-202 の目標を超えた版では同時に追加する (§17.3)。ビルドは §16.2 (zigbuild で glibc 2.31 に固定) |
 
 - **非対応 (ビルドできれば歓迎、CI 非保証)**: FreeBSD / OpenBSD / NetBSD、illumos、Android (Termux)、32bit OS 全般、Windows 7/8.1 (Rust 1.78 以降が非対応)、Windows 10 1809 未満 (ConPTY / VT が無い)、`x86_64-pc-windows-gnu`。v0.1 の Windows 10 (1809 以降) は「非対応」ではなく「対象外 (未確認)」で、起動を拒まない (§9.1 の VT の確認に通れば動く) が、動作を保証しない。
-- **Windows 10 を対象に加えるときの確認事項 (v0.2 以降の候補)**: (1) 1809〜2004 の ConPTY は代替スクリーンのスクロールバックとリサイズに不具合がある (§9.1 の ConPTY の癖)。対象にする最小の版を決め、それより前の版の扱い (既知の制約にするか、対象外にするか) を決める。(2) その時点の Windows Terminal が動く最小の Windows 10 の版を確かめる (**要確認**)。(3) S-06 / S-07 / S-08 / S-11 / S-20 と互換性マトリクス (§9.4) の Windows Terminal・conhost の行を Windows 10 の環境 (実機または VM) で確かめる。Microsoft による Windows 10 の通常のサポートは 2025-10 に終了している (LTSC と拡張セキュリティ更新を除く) ので、加えるかどうか自体をその版の着手前に決める (検証環境の確保は OQ-23 (d) と同じ扱い)。
+- **Windows 10 を対象に加えるときの確認事項 (公式には対応しないので、PO が指示したときだけ使う)**: (1) 1809〜2004 の ConPTY は代替スクリーンのスクロールバックとリサイズに不具合がある (§9.1 の ConPTY の癖)。対象にする最小の版を決め、それより前の版の扱い (既知の制約にするか、対象外にするか) を決める。(2) その時点の Windows Terminal が動く最小の Windows 10 の版を確かめる (**要確認**)。(3) S-06 / S-07 / S-08 / S-11 / S-20 と互換性マトリクス (§9.4) の Windows Terminal・conhost の行を Windows 10 の環境 (実機または VM) で確かめる。Microsoft による Windows 10 の通常のサポートは 2025-10 に終了している (LTSC と拡張セキュリティ更新を除く) ので、加えるかどうか自体をその版の着手前に決める (検証環境の確保は OQ-23 (d) と同じ扱い)。
 - **ユニバーサルバイナリ (macOS、macOS 出荷時)**: `lipo` で結合した 1 ファイルを Homebrew 向けに提供するか否かは §19。
 - **判定方法**: 実行時に OS バージョンを調べて機能を切り替えることは原則しない (P6)。Windows のみ、ConPTY 由来の挙動差を補うため `RtlGetVersion` 相当でビルド番号を取得し、**ログに記録するだけ** に使う (分岐には使わない)。
 
@@ -105,7 +105,9 @@ Port の trait シグネチャ・型名・エラー分類の正本は [02 §4.4]
 | `inflight_for()` (v0.1) | §4.6 / §7.5 (開くパス 1 つ分の保存中フラグ `recovery/inflight/<hash(path)>/` だけを読み、残っているフラグを **すべて** `Vec<InflightRecord>` で返す (複数のインスタンス・複数回の中断で 1 つのキーに複数の `<pid>.toml` があり得る。無ければ空)。シンボリックリンクならリンクとリンク先の 2 キー。ディレクトリ全体は列挙しない。開くたびに呼ぶ (T の有無に依らない、§4.6)。解析できないフラグ (未知の版・必須キーの欠落・値の不正) も捨てずに `malformed = true` の記録として返す (§4.6 の「上書きの可能性あり」の行。フラグは消さない)) |
 | `create_dir_all_private()` | §5.6 (Windows は `recovery/`・`backup/`・`swap/` を「所有者のみ」の保護付き DACL で作る。それ以外の `state_dir` 配下は継承。Unix 0700 は v0.2) |
 | `remove_file()` | スワップ・一時ファイルの後片付け。Windows の共有違反は `Busy` 再試行 (§4.2) |
-| `list_inflight()` (v0.2) | §4.6 / §7.5 (保存中フラグ `recovery/inflight/*.toml` の列挙と pid 判定)。**開くたびのディレクトリ列挙は行わない** |
+| `list_inflight()` (v0.2) | §4.6 / §7.5 (保存中フラグ `recovery/inflight/*/*.toml` の列挙と pid 判定: 書いたプロセスが動いているもの (自分を含む) は除く)。**開くたびのディレクトリ列挙は行わない** |
+| `rename_no_replace()` (v0.2) | §4.6 (退避名を元の名前に戻す。Windows は `MoveFileExW` を `MOVEFILE_REPLACE_EXISTING` なしで呼び、行き先が在れば失敗する) |
+| `list_orphan_backups()` (v0.2) | §4.6 / §7.5 (`state_dir/backup/` 直下の `*.bak` / `*.bak.tmp` の列挙。名前の pid が動いているもの・`fr119/` は含めない。フラグとの照合は core) |
 | `write_recovery(doc)` (v0.1) | §7.5 (「退避先に保存」の `rescue/<UTC timestamp>-<pid>/` を §5.6 の「所有者のみ」で新しく作る。UTC の時刻・pid は本層が std で取り、名前は §7.5 の「退避ディレクトリの名前の形」(同名があれば `-<n>` を足す) に従う。`state_dir` を使えなければ §7.5 の代替の退避先の `rescue\` に作る (`alternate = true`)。manifest の `created_at` に使う RFC 3339 の文字列は本層が作る。本文と manifest も本層が緊急退避と同じ関数で書き (`reason = "user_save"`)、書いたディレクトリを返す) |
 | `list_recovery_dirs()` (v0.1) | §7.5 の「`recovery/` の走査と削除の規則」の対象 (`recovery/` 直下と `rescue/` 直下の、§7.5 の「退避ディレクトリの名前の形」(`<UTC timestamp>-<pid>[-<n>]`) に合うディレクトリ、代替の退避先の同じ位置) だけを返す。`inflight/` と形に合わない名前は見ない。中のファイルは読まない (起動時の `RecoveryScan` ジョブが呼ぶ。02 §9.3) |
 | `read_dir()` (v0.4) | ファインダ・パス補完。v0.1 では使わない |
@@ -362,7 +364,7 @@ v0.1 で実装するのは Windows の手順 (`ReplaceFileW` 系。§4.2) で、
 - **保存中の編集は許可** ([02 §9.3](02-architecture.md#93-ジョブとキャンセル))。Snapshot を書くため競合しない。同じ Document に対する保存ジョブは直列化する (後続は待つ)。
 - **状態ファイルの書込** (スワップ・manifest 等): 呼び出し側が `SaveOptions { state_file: true, expected: Expect::Any, private: true, .. }` を渡す。`state_file = true` で保存中フラグ (手順 0d・7・8) を書かず、`Expect::Any` で照合 (手順 0b・4b) を省く (書き手は evoeditor 自身だけで、外部変更を守る対象ではない)。3 つの欄はそれぞれ独立に効く: 照合を省くかは `expected` だけ、フラグを省くかは `state_file` だけ、`private` は「新しく作るファイルを所有者のみで作る」だけを意味する (利用者のファイルを `private = true` で保存しても、フラグと照合は省かない)。保存中フラグ自身は `write_atomic` を通さず、本層の下位関数 (一時ファイル + 置換の同じ手順を、フラグと照合なしで行う内部関数) で直接書く。これで「フラグを書くためにフラグを書く」循環を断つ。手順 1 の所有者のみの作成 (§5.6) と fsync は省かない。
 - **新規ファイル** (T が存在しない): 親ディレクトリが無ければ **作らずに** `NotFound` (detail = `ParentMissing`) を返す (何も書かない。01 FR-101 AC-2、04 の `msg.save.parent_missing`)。一時ファイルに書く手順は同じ (部分書込ファイルを残さないため)。`SaveMethod::NewFile`。§4.4 の一時ファイル規則と `file.save_strategy = "in_place"` は T が存在するときだけ効き、この経路には効かない (上書きする元ファイルが無いので in-place の意味が無い)。置換は **既存のファイルを上書きしない操作** で行う: Windows (v0.1) は `MoveFileExW` (`MOVEFILE_REPLACE_EXISTING` を付けない。ReplaceFileW は置換される側が無いと使えない)。v0.2 (macOS / Linux 出荷時) は Linux が `renameat2(RENAME_NOREPLACE)` (使えない FS では `link` + `unlink`)、macOS が `renamex_np(RENAME_EXCL)`。照合の後に同名のファイルが作られていたら `Conflict` を返す (02 §4.5 `Expect::Absent`)。
-- **ダングリングシンボリックリンク** (開いたパスがシンボリックリンクで、リンク先が存在しない。01 FR-106): **v0.1 はリンク先を作らず、保存をエラーにする** (`FsErrorKind::NotFound`、`FsError.detail` = `DanglingLink`)。文言にリンク先の絶対パスを示し、「名前を付けて保存」を案内する。何も書かず、リンクも変えない。リンク先への新規作成は v0.2 で、仕様は次のとおり。v0.2: **確認のうえリンク先に新規作成** する。確認文言にリンク先の絶対パスを示し、選択肢は「リンク先に作成 (リンクを維持)」/「キャンセル」。リンク自体を通常ファイルで置き換えることはしない (リンクを壊さない)。承認後は、リンク先パスを T として新規ファイルの手順で書く (一時ファイルはリンク先のディレクトリに作る)。リンク先の親ディレクトリが無い場合は作らずに `NotFound` を返す (リンクの誤りの可能性が高い)。リンク先がさらにダングリングなリンクの連鎖である場合や、解決が循環する場合 (ELOOP) は `InvalidPath` を返す。確認を出すのは core (03 §9.3) で、本層は `FileMeta.link` で dangling を報告し、承認後の保存ジョブでリンク先を解決して書く。
+- **ダングリングシンボリックリンク** (開いたパスがシンボリックリンクで、リンク先が存在しない。01 FR-106): **v0.1 はリンク先を作らず、保存をエラーにする** (`FsErrorKind::NotFound`、`FsError.detail` = `DanglingLink`)。文言にリンク先の絶対パスを示し、「名前を付けて保存」を案内する。何も書かず、リンクも変えない。リンク先への新規作成は v0.2 で、仕様は次のとおり。v0.2: **確認のうえリンク先に新規作成** する。確認文言にリンク先の絶対パスを示し、選択肢は「リンク先に作成 (リンクを維持)」/「キャンセル」。リンク自体を通常ファイルで置き換えることはしない (リンクを壊さない)。承認後は、リンク先パスを T として新規ファイルの手順で書く (一時ファイルはリンク先のディレクトリに作る)。リンク先の親ディレクトリが無い場合は作らずに `NotFound` を返す (リンクの誤りの可能性が高い)。リンク先がさらにダングリングなリンクの連鎖である場合や、解決が循環する場合 (ELOOP) は `InvalidPath` を返す。確認を出すのは core (03 §9.3) で、本層は `FileMeta.link` で dangling を報告し、承認後の保存ジョブでリンク先を解決して書く。**v0.2 の M9d の実装**: 本層はダングリングを `NotFound` + `DanglingLink` で返し (確認の前の保存はこれまでどおり何も書かない)、core はそれを受けて確認を出す。承認後の保存は `SaveOptions.create_link_target` を立て、本層はリンクの中身 (`read_link`。相対ならリンクのあるディレクトリから) を T として新規ファイルの手順で書く。T がリンクなど何かとして在れば (連鎖) `InvalidPath`、T の親が無ければ `NotFound` + `ParentMissing`。
 - **`FsyncLevel::None`** は設定で明示した場合のみ (遅いネットワークドライブ用)。既定は Full (P1 原則。NFR-107 の保存時間目標は fsync 込みで定義されている)。
 
 ### 4.2 Windows の手順
@@ -389,6 +391,23 @@ v0.1 で実装するのは Windows の手順 (`ReplaceFileW` 系。§4.2) で、
 ### 4.3 Unix (macOS / Linux) の手順
 
 **v0.2 (macOS / Linux 出荷時) の仕様**。v0.1 では実装しない (v0.1 の CI の Linux ジョブは Linux CI の対象 crate (02 §4.7。`eve-platform` は Unix 向けの空の実装だけ) を扱い、本手順は通らない)。
+
+**Linux の実装 (v0.2 の M7、2026-11-01)**: `eve-platform::unix_fs::UnixFs` (macOS の行 (`F_FULLFSYNC`・`copyfile`・`UF_*`) は macOS の分が保留のため未実装)。次の点は表の記述を Linux で具体化したもの:
+- 一時ファイル: T が在る・`private` なら 0600 で作って下で T の mode に合わせる。新規は 0666 (umask が掛かる。通常の新規ファイルと同じ)。親に書けない (`EACCES`) なら `AtomicUnsupported` (§4.4 の 1 行目)。
+- 権限: 所有者・グループが T と違うときだけ `fchown`。他人の所有を引き継げない (`EPERM`) ときはグループだけ合わせて `AttrsNotPreserved { Security }`。mode は `mode & 01777` (setuid / setgid は落として同じ警告)。
+- POSIX ACL は `system.posix_acl_access` の xattr を `fgetxattr` / `fsetxattr` で写す (Linux では `acl_get_fd` / `acl_set_fd` と同じ内容。libacl に依存しない)。T に ACL が無く親に既定 ACL (`system.posix_acl_default`) があるときは `AttrsNotPreserved { Security }`。xattr を持たない FS (`ENOTSUP`) は複製するものが無いとみなす。
+- 新規ファイルの置換は上書きしない `renameat2(RENAME_NOREPLACE)` (使えない FS では `link` + `unlink`)。在れば `Conflict`。Linux ではシステムコール (`SYS_renameat2`) で直接呼ぶ (musl 1.2.5 に `renameat2` の関数が無いため。glibc でも同じ呼び方にする、§16.2)。
+- 書込権限の無い T (`readonly`) は、rename なら置き換えられてしまうので、`SaveOptions.clear_readonly` (FR-116 の「読み取り専用を解除して保存」の確認) が無ければ `PermissionDenied` (root を除く)。解除して置換しても、mode は T のものを写すので読み取り専用のまま残る (§4.2 の手順 5b と同じ結果)。
+- 不変フラグは rename の `EPERM` を `PermissionDenied` に写すことで扱う (事前の `FS_IOC_GETFLAGS` はしない)。
+- `FileMeta.owner_is_me` は `st_uid == geteuid()` か root。`readonly` は `access(W_OK)`。`FileId` は (`st_dev`, `st_ino`)。
+- 保存中フラグ・直接上書き (§4.4)・状態ファイル・スワップ・緊急退避 (M7 の 3 本目、README §3.9): Windows と同じ実装を使う (eve-platform の `inflight`・`inplace`・`state_file`・`swap`・`rescue`・`log` は OS に依らない)。Unix で違うのは次の点だけ:
+  - 「所有者のみ」(§5.6): ディレクトリは `mkdir(0700)`、ファイルは `open(…, 0600)` で作る (umask に依らない)。緊急退避の `<UTC timestamp>-<pid>/` も 0700。
+  - 代替の退避先 (§7.5): `$TMPDIR/eve-recovery-<uid>/`。既にあれば `lstat` でシンボリックリンクでない・所有者が自分・mode が 0700 を確かめ、満たさなければ使わない。空き容量は `statvfs` の `f_bavail`。
+  - 保存中フラグのキー `hash(path)` の正規形 (§7.5): 大文字小文字を畳まず、区切りは `/` のまま (Windows だけが畳む)。
+  - pid の生存と起動時刻 (§5.3): `kill(pid, 0)` (`EPERM` は生存) と `/proc/<pid>/stat` の starttime + `/proc/stat` の btime。
+  - 直接上書き (§4.4): 共有モードが無いので「共有違反の再試行」は無い (`EBUSY` / `ETXTBSY` は `Busy`)。領域の事前確保は `fallocate(FALLOC_FL_KEEP_SIZE)` (使えない FS は空き容量の確認)。
+  - 退避名の `<basename>` (§7.5): 100 文字に加えて UTF-8 で 200 バイトまでに切り詰める (ファイル名の上限が 255 バイトのため)。
+  - テストの切断点 (09 §3.6 (6)、feature `test-hooks`): `SIGKILL` で自分を終わらせる。
 
 | 段階 | API | 注意 |
 |---|---|---|
@@ -487,6 +506,19 @@ v0.1 で実装するのは Windows の行と、OS に依らない行 (ハード�
 | tmp と bak の両方 | 置換の途中 | bak を T に戻し、tmp を別名で開いて確認 |
 
 - 復旧の適用は 03 §10.3 の「Transaction(Origin::Recovery) で全置換、dirty = true」経路または「bak → T へのリネーム」(ディスク操作、確認必須) のどちらか。削除は確認を求める。
+**起動時の提案の規則** (v0.2 の M6e。**(案)**: PO の確認前。上の表の曖昧な点を、実装の前に決める):
+
+1. **提案の単位は T のパス 1 つ**。同じ T に当たるフラグ・`.eve-tmp-*`・`.eve-bak-*` はまとめて 1 件の提案にする。上の表は次の順で当てはめ、最初に当たる行を提案にする: (i) T なし・bak あり・tmp あり → **「tmp と bak の両方」**、(ii) T なし・bak あり、(iii) T あり・bak あり (tmp が同時にあれば、(iv) の提案を続けて出す)、(iv) tmp あり。「両方」は **T が無いときだけ** で、T があるときは bak と tmp を別々に扱う。
+2. **操作の定義**:
+   - 「bak を T に戻す」= `bak` を T の名前に rename する (ディスク操作。確認が要る。T が既にあれば失敗させて何もしない)。戻した後は、その文書を通常どおり開ける。
+   - 「bak を削除」= bak を消す。T と bak の内容が同一 (サイズが同じで、ジョブ内の全文比較が一致。**両方が 64 MiB 以下のときだけ比べる**) なら確認なしで消し、それ以外は確認を求める。
+   - 「tmp を別バッファで開く」= tmp を **読み取り専用の文書として追加で開く** (M9a の `buffer.*` に加える。T の文書の内容は変えない)。末尾が切れている可能性を、開いたときのメッセージで示す。保存はできない。tmp の削除は別の操作で、確認を求める。
+   - 「tmp と bak の両方」= 「bak を T に戻す」を先に行い、成功したら tmp を別バッファで開く。bak を戻せなかったら tmp は開かない。
+3. **既定**: (i) は「両方」、(ii) は「bak を T に戻す」、(iii) は「bak を削除」、(iv) は「別バッファで開く」。Esc は何もせず閉じ、痕跡は残す (次回の起動でまた提案する)。
+4. **出す順と時機**: 起動時の走査 (ジョブ) の結果を、03 §10.3 手順 5 のスワップの提案と同じ待ち行列に入れる。**スワップの提案を先に**、その後に置換途中の提案を新しい順 (フラグの記録時刻) に 1 件ずつ出す。確認ダイアログの表示中は保留する。
+5. **フラグの扱い**: 提案を片付けた (戻した・消した・開いて「削除」した) とき、その T のフラグを消す。Esc で何も選ばなかったときは残す。pid が生存しているフラグは対象にしない (§5.3)。
+6. **孤児の `state_dir/backup/`** (M6e の実装で改めた。**(案)**): どのフラグにも記録されていない、pid が生存していない **`.bak.tmp`** (事前バックアップの書込途中の不完全な写し) は、提案にせず **無確認で消す**。完全な **`.bak`** は消さず、提案にもしない: 名前は `<hash(path)>-<UTC timestamp>-<pid>.bak` で、元の T のパスが名前から分からず (ハッシュ)、写しが「保存の成功後の削除漏れ」か「上書き中の中断の唯一の旧版」かをフラグ無しには区別できないため。フラグが記録している `.bak` は、そのフラグの記録として扱う (上の 3 の「直接上書き」は M6e の提案の対象外で、開くときの警告のまま)。フラグの無い `.bak` が溜まる問題は、容量と保持の規則 (OQ-200) で扱う。
+
 - `.eve-tmp-*` / `.eve-bak-*` とフラグのファイル名には **pid** を含め (起動時刻はフラグの中に書く)。pid をファイル名に含めるのは一時ファイル・退避名・フラグの名前の衝突を避けるためで、フラグの名前にはさらにプロセス内の保存の通し番号 `<seq>` を付ける (`<pid>-<seq>.toml`、§7.5。同じプロセスが同じ T を続けて保存したとき、前の保存が残したフラグ (一時ファイル・退避名を消せなかった記録) を次の保存のフラグで上書きして痕跡を失わないため)。フラグは同じ T への保存の成功で自分の今回の記録以外の分も消える (痕跡ファイルが実在する記録は残す。§4.1 手順 7、02 §4.5 の「報告した記録を消す時機」)。pid と起動時刻が一致する生存プロセスがあるもの (他インスタンスが保存中) は孤児とみなさない (§5.3 の生存確認。v0.2、起動時の走査と同時)。フラグの列挙は 02 §4.5 の `list_inflight()` (v0.2)。
 - テスト: 09 §3.4 の `MemFs` で各中間状態を生成し、09 §3.6 で Windows の `TerminateProcess` による実 FS 試験を行う。01 FR-105 AC-1 の対象。
 
@@ -579,7 +611,7 @@ v0.1 (Windows) で本層が自ら複製するのは READONLY・HIDDEN・SYSTEM �
 
 **v0.1 では使わない**。v0.1 の UI 文言は日本語 (`ja`) のみを同梱し、言語は `ja` に固定する ([OQ-21](10-decisions.md#oq-21-ui-文言の国際化)、確定 (ユーザー回答)、NFR-603)。MessageKey による文言の外部化は残す (07 §17)。英語 UI は v0.2 (確定 (ユーザー回答)) で、本節の OS ロケール検出は v0.2 で使う (OS 別の行のうち macOS / Linux は、その OS を出荷している場合に限る)。ユーザー追加の言語ファイルは v0.2 以降の候補 (提案中)。
 
-その版では、本層は 07 §17.1 の選択順の「OS ロケール」段に渡す **言語タグの候補** (例 `ja-JP`) を 1 つ返す。照合 (地域を落として同梱の言語に一致させる) と、`ui.locale` / `EVE_LANG` との優先順位は core (eve-config) が行う。検出は起動時に 1 回だけ、端末の初期化前に同期で行う (`--help` も同じ結果を使う)。
+**v0.2 の M8 で実装した** (`eve_platform::locale::ui_language_tag`。Windows は UI 言語、それ以外は下表の環境変数。環境変数の解釈は OS を呼ばない純粋な関数 `tag_from_posix_env` で試験している)。その版では、本層は 07 §17.1 の選択順の「OS ロケール」段に渡す **言語タグの候補** (例 `ja-JP`) を 1 つ返す。照合 (地域を落として同梱の言語に一致させる) と、`ui.locale` / `EVE_LANG` との優先順位は core (eve-config) が行う。検出は起動時に 1 回だけ、端末の初期化前に同期で行う (`--help` も同じ結果を使う)。
 
 | OS | 検出の手順 | 注意 |
 |---|---|---|
@@ -611,6 +643,8 @@ v0.1 で実装するのは **Windows の列** (Known Folders に当たる `%APPD
 - **作成タイミング**: `config_dir` は **ユーザーが設定を書くまで作らない**。`state_dir` とその配下 (`log/` を含む) は **起動経路では作らず、最初の書込 (ログ・退避・swap-lite・事前バックアップ・`last_version.toml`) の直前に、その書込に要るディレクトリだけを作る** (§7.3。`last_version.toml` (FR-518) は最初の描画の後に `io` ワーカーで書く、07 §18.8)。`swap/` / `recovery/` / `backup/` は必要時に §5.6 の DACL で作る。`--version` / `--help` 等の非対話の起動 (v0.2 以降は `--check-config` も) では `last_version.toml` を読み書きしない。
 - **全ディレクトリは絶対パスに解決され `Paths` に入る**。`HOME` も `XDG_*` も解決不能 (環境変数ゼロのコンテナ等) なら: 設定なし・状態なしで起動し、ログは無効、スワップ無効 (警告をメッセージ行に 1 回表示)。起動を妨げない (FR-702)。この場合と `state_dir` を作れない場合 (読み取り専用のホーム等) の緊急退避先は §7.5 の「`state_dir` を使えないとき」。
 
+**Linux の実装 (v0.2 の M7、2026-11-01)**: `eve-platform::dirs::Dirs::resolve_unix` が上表の Unix の列 (`EVE_*_DIR` > `$XDG_*_HOME/evoeditor` > `$HOME/.config` / `.local/state` / `.local/share` の下の `evoeditor`) を解決し、`UnixPaths` が `Paths` Port を実装する (`runtime_dir` は `$XDG_RUNTIME_DIR/evoeditor`、無ければ空)。ホームは §3.6 のとおり `$HOME` → `getpwuid_r(geteuid())`。パスの正規化は `path::normalize_unix` (§3.2 の手順 1・3・4。`~` と `~/` の展開、作業ディレクトリ基準の絶対化、連続の `/` と `.` の除去、末尾の `/` の除去。`..` は畳まない)。キャッシュ (`cache_dir`) は v0.4 で足す。
+
 ### 7.2 ライブラリ比較
 
 ディレクトリの解決は **本層が自前で行い、ライブラリ (etcetera・dirs 等) には依存しない**。etcetera の Windows の方式は `state_dir` を持たず (状態を置く場所を返さない)、§7.1 の `%LOCALAPPDATA%\evoeditor\state` / `data` / `cache` の分け方とも合わないため。§7.1 の規則は環境変数 (`EVE_*_DIR` → `XDG_*` → OS 既定) と既定パスの組合せだけで決まり、Windows の既定は `SHGetKnownFolderPath(FOLDERID_RoamingAppData / FOLDERID_LocalAppData)` (失敗時は `%APPDATA%` / `%LOCALAPPDATA%`)、Unix (v0.2) の既定は `$HOME` からの固定パスなので、自前の実装は小さい。`config_dir` / `state_dir` / `data_dir` / `cache_dir` のすべてを同じ関数で解決し、`Paths` (§2.2) に入れる。
@@ -634,7 +668,7 @@ v0.1 で実装するのは **Windows の列** (Known Folders に当たる `%APPD
 
 | 種別 | 場所 | 名前 | 中身の形式 |
 |---|---|---|---|
-| スワップ (FR-118、**swap-lite v0.2**) | `state_dir/swap/` | `<hash(canonical path)[..16]>-<pid>.swp` (ハッシュ関数は §5.5 と同じ XXH3-64。入力の正規形は下の「`hash(path)` の入力」)。無題は `untitled-<DocumentId>-<pid>.swp`。復旧時はハッシュ前方一致で探し、pid の生存確認 (§5.3) で残骸を判定 | **緊急退避と同じ形式・同じシリアライズ関数** (書き手は `bg` ワーカーのジョブ (`JobKind::Swap`) が `FileSystem` Port を `SaveOptions { private: true, state_file: true, expected: Expect::Any, .. }` で使うもので、Port を通さない緊急退避の書き手とは別。02 §11.2.1): 本文は UTF-8 のまま全文 (改行非変換・PUA エスケープ保持)、形式情報は同じ `manifest.toml` (形式は 02 §11.2.1)。差分ジャーナル (03 §10.2) は必要が出たら v0.4 以降。対象は **64 MiB 以下** の dirty 文書 (`file.swap.max_bytes`)、最後の入力から 2 秒後、以後最短 10 秒間隔 (`file.swap.min_interval_ms`) に `bg` ワーカーで原子的に書く。64 MiB 超の文書は「スワップ対象外」をステータスに表示。秘密ファイルパターン (06 §6.5) の文書は既定で対象外 |
+| スワップ (FR-118、**swap-lite v0.2**) | `state_dir/swap/` | `<hash(canonical path)[..16]>-<pid>.swp` (ハッシュ関数は §5.5 と同じ XXH3-64。入力の正規形は下の「`hash(path)` の入力」)。無題は `untitled-<DocumentId>-<pid>.swp`。**`.swp` は 1 文書のディレクトリ**で、中に本文 `1-<basename>.r<Revision>.txt` と `manifest.toml` (`reason = "swap"`、`pid`、`started_at_*`) を置く。書込は、新しい Revision の名前の本文を一時ファイル + fsync + 名前の変更で作り、manifest を一時ファイル + fsync + rename で置き換えてから古い本文を消す (止まっても manifest が指す本文は常に完全)。ディレクトリは所有者のみの DACL (§5.6)。正常終了のときは Host が消し、異常終了・緊急退避を伴う終了では残す。**復旧の探索** (`FileSystem::list_swaps` / `read_swap` / `remove_swap`): `swap/*.swp` の manifest を読んで要約し (元のパス・Revision・本文の長さ・`sensitive`・pid)、書いたプロセスが動いているか (`OpenProcess` + 起動時刻の一致、§5.3。pid が再利用されて起動時刻が違えば別のプロセス) で `Alive` (他のインスタンスが開いている) と `Stale` (残骸) を分ける。自分のプロセスのものは返さない。未知の `format_version`・壊れた manifest・`written = false` は `readable = false` で返し、適用は提案せず場所だけを示す (移動も削除もしない)。`remove_swap` は `swap/` の直下の `.swp` だけを消す。復旧時はハッシュ前方一致で探し、pid の生存確認 (§5.3) で残骸を判定 | **緊急退避と同じ形式・同じシリアライズ関数** (書き手は `bg` ワーカーのジョブ (`JobKind::Swap`) が `FileSystem` Port を `SaveOptions { private: true, state_file: true, expected: Expect::Any, .. }` で使うもので、Port を通さない緊急退避の書き手とは別。02 §11.2.1): 本文は UTF-8 のまま全文 (改行非変換・PUA エスケープ保持)、形式情報は同じ `manifest.toml` (形式は 02 §11.2.1)。差分ジャーナル (03 §10.2) は必要が出たら v0.4 以降。対象は **64 MiB 以下** の dirty 文書 (`file.swap.max_bytes`)、最後の入力から 2 秒後、以後最短 10 秒間隔 (`file.swap.min_interval_ms`) に `bg` ワーカーで原子的に書く。64 MiB 超の文書は「スワップ対象外」をステータスに表示。秘密ファイルパターン (06 §6.5) の文書は既定で対象外 |
 | 緊急退避 (NFR-302) | `state_dir/recovery/<UTC timestamp>-<pid>/` | `<n>-<basename>.txt` + `manifest.toml` (長い basename は §4.1 の「一時ファイル・退避名の長さ」の規則で切り詰める。manifest の更新は一時ファイル + 置換で行う、02 §11.2.1) | 本文の形式 (UTF-8 のまま・改行非変換・PUA エスケープ保持) と `manifest.toml` の形式 (キー・型・必須・形式の版・未知の版の扱い) は **[02 §11.2.1](02-architecture.md#1121-緊急退避の方式-正本adr-0023) が正本**。本書は配置・命名・権限だけを定める。元パスの非 UTF-8 部分の永続化は §3.5 の規則による。元の文字コードへの再エンコードはパニック中には行わない。復旧は 03 §10.3 (v0.1 は起動時の案内 + 手動、復旧 UI は v0.2) か、ユーザーが手で `.txt` を使う。swap-lite と復旧 UI (いずれも v0.2) は同じ形式・同じシリアライズ関数を使う (スワップの書き手は別。上の行)。**30 日を超えた退避** は起動時に一覧で知らせ、確認を得て削除する (v0.2。自動削除しない。02 §14.1 MR11) |
 | 退避先に保存 (03 §9.7 (e) の「退避先に保存」) | `state_dir/recovery/rescue/<UTC timestamp>-<pid>/` | 緊急退避と同じ (`<n>-<basename>.txt` + `manifest.toml`) | 緊急退避と同じ形式・同じシリアライズ関数 (書き手は `bg` ワーカーのジョブ `JobKind::WriteRecovery`、02 §9.3 / 03 §9.7 (e))。ディレクトリは本層の `create_recovery_dir()` (§2.1) が作り、名前の UTC timestamp・pid と manifest の `created_at` は本層が決める (core は壁時計・pid を持たない、02 §4.4)。`state_dir` を使えないときは下の「`state_dir` を使えないとき」の代替の退避先に書く。緊急退避のディレクトリとは別にし、利用者の操作で書いたものと異常終了で書いたものを区別する。起動時の案内 (緊急退避が無いときは文言を分けた `msg.recovery.found_rescue`、02 §9.3)・30 日の規則 (v0.2) は緊急退避と同じ扱い |
 | 保存中フラグ | `state_dir/recovery/inflight/<hash(path)>/` (`hash(path)` の入力は下記) | `<pid>-<seq>.toml` (`<seq>` はプロセス内で保存ジョブごとに 1 ずつ増やす 10 進の通し番号。同じプロセスの前の保存が残したフラグを上書きしない。§4.6)。保存ジョブ開始時 (一時ファイルを作る前) に T のパスと保存方式 (`Atomic` / `InPlace` / `NewFile`)、tmp / bak の実際の名前・pid・起動時刻 (`InflightRecord.started_at`。OS のプロセス作成時刻) を書き、in-place では `backup_recorded` と `backup_complete` も書く (`in_place_backup = Required` のときだけ事前バックアップの最終名を bak として記録して `backup_recorded = true`、`SkipConfirmed` では bak を記録せず `backup_recorded = false`。`backup_complete` は事前バックアップを最終名に変えたら `true` に書き換える (`Required` のときだけ)、§4.4 手順 2 / 4)。成功時に削除 (退避名・一時ファイルを消せなかったときは残す。§4.1 手順 7 / 8、§4.6 の「フラグを消す条件」。開くときの記録 × T の有無から `InterruptedSave` を作る規則は §4.6 の「開くときの写像」。pid が生きている記録 (他インスタンスが保存中) も v0.1 は生存確認をせずに同じ写像で扱い、掃除してもフラグしか消さない。生存確認 (§5.3) で除くのは v0.2 の起動時の走査。開くときの確認 `inflight_for()` は v0.1、起動時の走査 `list_inflight()` は v0.2)。原子的置換では書けないときは警告して保存を続け、in-place では書けなければ `BackupFailed` と同じ確認を経る (§4.4 手順 2)。フラグ自身は `write_atomic` を通さず、本層の下位関数で直接書く (フラグの書込でフラグを書かない。§4.1 の「状態ファイルの書込」) | TOML、版付き |
@@ -646,7 +680,7 @@ v0.1 で実装するのは **Windows の列** (Known Folders に当たる `%APPD
 **`recovery/` の走査と削除の規則**: `state_dir/recovery/` の直下にあるのは、緊急退避のディレクトリ (上の「退避ディレクトリの名前の形」)、`rescue/` (退避先に保存)、`inflight/` (保存中フラグ) の 3 種類だけである。起動時の退避の案内 (v0.1)・復旧 UI (v0.2)・30 日を超えた退避の一覧と削除 (v0.2) は、その形の緊急退避のディレクトリと `rescue/` の中の同じ形のディレクトリだけを対象にし、**`inflight/` は走査も削除もしない** (保存中フラグは §4.6 の規則 (`inflight_for` / `list_inflight`) だけが扱う。他インスタンスが保存中のフラグを消すと中断の痕跡を失う)。それ以外の名前のエントリは無視する (03 §10.1 の「復旧」)。v0.1 の起動時の案内の走査はこの規則の範囲を本層の `list_recovery_dirs()` (§2.1) が返し、`io` のジョブ (`RecoveryScan`、02 §9.3) が呼ぶ (メインスレッドでは列挙しない)。
 
 **`hash(path)` の入力 (正規形)**: 保存中フラグ・スワップ・事前バックアップの名前に使う `hash(path)` は、同じファイルが別の綴りで指されても同じ値になるよう、次の正規形にしてから XXH3-64 (§5.5) を計算する。(1) 親ディレクトリを `canonicalize` し (存在しないファイル名は付け直す。§3.2 手順 6)、§3.3 の表示用パス (verbatim 接頭辞を外せる場合は外す) にする。(2) Windows では全体を大文字小文字を区別しない形に畳む (Unicode の単純大文字化。NTFS の既定に合わせる。§3.1 の「畳み込まない」の例外で、このキーにだけ使う)。Unix (v0.2) は畳まない。(3) 区切り文字は OS ネイティブ (`\` / `/`) に揃え、末尾の区切りを除く。(4) 入力のバイト列は §3.5 の永続化と同じ形 (Windows は UTF-16 単位列、Unix はバイト列) にする。**シンボリックリンク** の場合は、リンク自体のパスとリンク先 (最終リンク先 T) のパスの両方を正規形にし、フラグは T のキーで書き、照会 (`inflight_for` / 開くときの確認) は **両方のキー** で行う (リンク経由で開いた場合も、T を直接開いた場合も、中断した保存の痕跡を見つけるため)。**ダングリングリンク** (リンク先が存在しない。T が無い状態で開く場合を含む) では、リンク全体の `canonicalize` は失敗するので、リンクの読み取り (`readlink` 相当。Windows は `GetFinalPathNameByHandle` ではなくリパースポイントの読み取り) でリンク先のパスを得て (相対ならリンクの親ディレクトリから解決する)、その **親ディレクトリ** を `canonicalize` し、ファイル名を付け直して (1)〜(4) の正規形にする (リンク先が不在でも親ディレクトリが在れば失敗しない)。親ディレクトリも無い・リンクの連鎖が循環する場合はリンク先のキーを作らない。照会はこのリンク先のキーと **リンクのパス自体のキー** の両方で行う。
-**状態ファイル共通の規約**: (a) スワップ・セッション・`trust.toml`・`history`・`last_version.toml` (v0.2)・監査ログ (v1.L)・manifest のすべてに **マジック (またはキー) とフォーマット版** を持たせ、未知の版は読まずに `<name>.unsupported-<ts>` へ退避して警告する (OQ-48)。**ダウングレード** (新しい版の evoeditor が書いた状態ファイルを古い版が読む) も未知の版として同じ扱いにする。ただし緊急退避とスワップは利用者のデータなので移動・削除せず、パスと「この退避は新しい版の evoeditor で書かれています。新しい版で開くか、`.txt` を直接開いてください」を案内するだけにする (この案内は manifest を読む v0.2 の復旧 UI のもの。v0.1 の起動時の案内は manifest を読まず、版に依らず場所だけを示す。manifest 側の規定は 02 §11.2.1。利用者向けの説明は §18.11)。(b) 複数インスタンスの同時書込に備え、状態ファイルは **一時ファイル + 原子的置換 (`write_atomic` に `SaveOptions { private: true, state_file: true, expected: Expect::Any, .. }`) で書き、最終書込勝ち** とする (ログは追記、§7.3)。保存中フラグは `state_file = true` で、照合は `Expect::Any` で省く (保存中フラグ自身は下位関数で直接書く。§4.1 の「状態ファイルの書込」)。(c) 権限は §5.6 (`create_dir_all_private`)。
+**状態ファイル共通の規約**: (a) スワップ・セッション・`trust.toml`・`history`・`last_version.toml` (v0.2)・監査ログ (v1.L)・manifest のすべてに **マジック (またはキー) とフォーマット版** を持たせ、未知の版は読まずに `<name>.unsupported-<ts>` へ退避して警告する (OQ-48。ただし `last_version.toml` は退避だけで警告しない (確定 (ユーザー回答)、2026-10-31、07 §18.8): 編集に関わらない記録の不具合で利用者の注意を引かないため)。**ダウングレード** (新しい版の evoeditor が書いた状態ファイルを古い版が読む) も未知の版として同じ扱いにする。ただし緊急退避とスワップは利用者のデータなので移動・削除せず、パスと「この退避は新しい版の evoeditor で書かれています。新しい版で開くか、`.txt` を直接開いてください」を案内するだけにする (この案内は manifest を読む v0.2 の復旧 UI のもの。v0.1 の起動時の案内は manifest を読まず、版に依らず場所だけを示す。manifest 側の規定は 02 §11.2.1。利用者向けの説明は §18.11)。(b) 複数インスタンスの同時書込に備え、状態ファイルは **一時ファイル + 原子的置換 (`write_atomic` に `SaveOptions { private: true, state_file: true, expected: Expect::Any, .. }`) で書き、最終書込勝ち** とする (ログは追記、§7.3)。保存中フラグは `state_file = true` で、照合は `Expect::Any` で省く (保存中フラグ自身は下位関数で直接書く。§4.1 の「状態ファイルの書込」)。(c) 権限は §5.6 (`create_dir_all_private`)。
 
 **`state_dir` を使えないとき** (解決できない、作成できない、書込めない。退避先を変えること自体と終了時表示の要否は 02 §11.2.1、OQ-163 提案中。in-place の事前バックアップ (§4.4) は代替の場所に書かず、`BackupFailed` として確認に回す): 緊急退避と「退避先に保存」だけは代替の場所に書く (ログ・スワップは無効のまま、§7.1)。OS 別の実体は次のとおり。
 
@@ -695,6 +729,10 @@ Host (eve-host + eve-tui) が `Effect::SetClipboard{content: ClipboardText, targ
 
 **取得のタイムアウト (2 s)**: Windows の `GetClipboardData` は、クリップボードの所有者が遅延描画 (`WM_RENDERFORMAT`) に応答しないと戻らないことがある。取得は上のクリップボード取得用の使い捨てスレッドで行い (§8.2 の所有者ウィンドウのスレッドとは別)、Host は要求から **2 s** で応答が無ければ、その要求を内部レジスタからの貼り付けに切り替えて `ClipboardContent` を返し、「システムクリップボードの取得がタイムアウトしました。エディタ内のコピーを貼り付けました」を通知する。取得中のスレッドは **放棄する** (終了を待たない・中断もしない。後から結果が届いても token が古いので捨てる)。放棄したスレッドが戻るまでの間の次の要求は、新しいスレッドを立てず、直ちに内部レジスタで応じる (スレッドを積み増さない)。
 
+**M9b の実装 (2026-10-30)**: Windows Terminal だけ `Capabilities.osc52_write` を真にする (conhost は非対応)。Host は `Frontend::write_osc52` を呼ぶ。書込は次のとおり: `clipboard.osc52 = never` は書かない。`always`、または SSH 接続中 (`SSH_TTY` / `SSH_CONNECTION`) の `auto` は、システムへの書込の成否に関わらず書く。それ以外の `auto` は、システムへ書けなかったときだけ書く (書けたら「内部レジスタに切り替えた」とは知らせない)。本文が `clipboard.osc52_max_bytes` (base64 後) を超えるときは OSC 52 を送らない。`TMUX` 環境変数があれば DCS 透過で包む。`clipboard.provider` と `command` provider は未公開。
+
+**Linux の実装 (v0.2 の M7 の 6 本目、2026-11-01)**: eve-platform の `clipboard_cmd::UnixClipboard` (§8.2 の Linux・WSL の行と §8.3 の `command` provider。設定キー `clipboard.provider` / `clipboard.command.*` は未公開のまま、検出だけを定数で行う)。最初の読み書きで 1 回だけ検出し、結果を覚える (起動経路では検出しない)。検出の順: SSH 接続中 (`SSH_TTY` / `SSH_CONNECTION`) は検出しない → `WAYLAND_DISPLAY` があり `wl-copy` と `wl-paste` がある → `DISPLAY` があり `xclip` → 同じく `xsel` → WSL (`WSL_DISTRO_NAME` / `WSL_INTEROP`) で `powershell.exe` がある → 無し。`/usr/bin`・`/bin` のコマンドは、root が持ちグループと他人が書けない実行ファイルのときだけ使う。手段が無いときの `msg.clipboard.fallback` の理由は、SSH・画面が無い・コマンドが無い (「wl-clipboard または xclip を入れるとシステムのクリップボードが使えます」) の 3 つを分ける (`ClipboardProvider::unsupported_reason`)。`Capabilities.osc52_write` は Unix では既定で真とし、黙って捨てると分かっている端末だけ偽にする: VTE 系 (`VTE_VERSION`)、Terminal.app、`TERM=linux`、screen (`TERM=screen*`。tmux の中 (`TMUX`) は外側次第なので真)。WSL (Windows Terminal) で、`wl-copy` の無い WSLg の環境の書込・取得の往復 (漢字だけの短い文・絵文字・LF / CRLF。Windows 側に BOM が残らないこと) を確かめた (書込 約 0.4 s、取得 約 0.4 s)。
+
 ### 8.2 OS 別の実装詳細
 
 v0.1 で実装するのは下の表の **Windows の 2 行** で、ほかの行は v0.2 (macOS / Linux 出荷時、OSC 52) の仕様。
@@ -708,7 +746,7 @@ v0.1 で実装するのは下の表の **Windows の 2 行** で、ほかの行�
 | macOS (v0.2) | `/usr/bin/pbcopy` / `/usr/bin/pbpaste` を **絶対パス** で起動 (§8.3 の `command` provider と同じ経路。承認不要) | Terminal.app は OSC 52 非対応だが pbcopy で足りる。pbcopy / pbpaste はロケールで文字コードを決めるので、`LANG` が無い環境 (SSH・launchd から起動) では日本語が化ける (S-14 で再現を確認) | 子プロセスの環境に `LANG=en_US.UTF-8` と `__CF_USER_TEXT_ENCODING=0x<uid>:0x8000100:0x0` (UTF-8) を明示して渡す。タイムアウト 2 s |
 | Linux (X11 / Wayland) (v0.2) | **OSC 52 + 内部レジスタ** を基本とし、加えて **root しか書けないディレクトリ (`/usr/bin`、`/bin`) に限って** `wl-copy` / `wl-paste` (Wayland)、`xclip` / `xsel` (X11) を検出して `command` provider として使う (§8.3)。PATH は見ない | `wl-copy` は GNOME (Mutter) でもフォーカスがあれば書ける。X11 の所有権モデル (コピー元プロセスが終了すると内容が消える) は `xclip` / `xsel` がデーモン化して保持する | コマンドが無ければ OSC 52 のみ。初回にヒント「`wl-clipboard` または `xclip` を入れるとシステムクリップボードが使えます」 |
 | Linux ヘッドレス (`DISPLAY`/`WAYLAND_DISPLAY` 未設定) (v0.2) | コマンド検出をしない | — | OSC 52 / 内部レジスタ |
-| WSL (v0.2) | WSLg があれば上記 Linux と同じ。無ければヘッドレス | WSL1 / WSLg 無効 | `command` provider の既定を WSL 検出時に、copy = `/mnt/c/Windows/System32/clip.exe` (本文は **UTF-16LE (BOM 付き)** に変換して標準入力へ渡す。UTF-8 のまま渡すと日本語が化ける)、paste = `/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe -NoProfile -Command "[Console]::OutputEncoding=[Text.Encoding]::UTF8; Get-Clipboard"` (**絶対パス**。出力の文字コードを UTF-8 に固定する) にする (§15.1。キーと既定値の正本は 07 §5.6。文字化けの有無は S-14 で確認)。または OSC 52 (Windows Terminal は対応) |
+| WSL (v0.2) | WSLg があり `wl-copy` / `xclip` があれば上記 Linux と同じ。無ければ下の `powershell.exe` | WSL1 / WSLg 無効。WSLg でも `wl-clipboard` は既定で入っていない | `command` provider の既定を WSL 検出時に、copy = `/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe -NoProfile -NonInteractive -Command "[Console]::InputEncoding=[Text.UTF8Encoding]::new($false); Set-Clipboard -Value ([Console]::In.ReadToEnd())"` (本文を UTF-8 で標準入力へ渡す)、paste = `/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe -NoProfile -NonInteractive -Command "[Console]::OutputEncoding=[Text.Encoding]::UTF8; [Console]::Out.Write((Get-Clipboard -Raw))"` (**絶対パス**。入出力の文字コードを UTF-8 に固定し、`-Raw` と `Out.Write` で末尾に改行を足さない) にする (§15.1。キーと既定値の正本は 07 §5.6)。**`clip.exe` は使わない** (訂正 (2026-11-01、WSL で実測)。UTF-16LE の BOM 付きで渡すと BOM (U+FEFF) がクリップボードに残り、BOM 無しでは漢字だけの短い文を UTF-16 と判定できずに化ける。UTF-8 は BOM の有無に関わらず化ける)。または OSC 52 (Windows Terminal は対応) |
 | SSH 越し (v0.2) | リモートに X11 があっても外部コマンドは「リモートの」クリップボードに書く (無意味) | `SSH_CONNECTION`/`SSH_TTY` あり | `SSH_TTY` が設定されていれば **既定で OSC 52 のみ** とし、外部コマンドは `clipboard.provider = system` の明示時のみ |
 | tmux / screen (v0.2) | OSC 52 は tmux の `set-clipboard on` + 外側端末の対応が必要。screen は OSC 52 を透過しない | 伝わらないことが多い | `TMUX` 環境変数検出時は tmux の DCS 透過ラッパ (`\ePtmux;\e...\e\\`) で送る (04 の出力側で実装。本層は方針のみ)。失敗検知はできないので「送った」ことにする |
 
@@ -718,10 +756,11 @@ v0.1 で実装するのは下の表の **Windows の 2 行** で、ほかの行�
 
 **v0.2 (macOS / Linux 出荷時) の仕様**。v0.1 (Windows のみ) には `command` provider が無い。
 
-`clipboard.command.copy = ["/mnt/c/Windows/System32/clip.exe"]` / `clipboard.command.paste = ["/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe", "-NoProfile", "-Command", "[Console]::OutputEncoding=[Text.Encoding]::UTF8; Get-Clipboard"]` の形 (argv 配列。シェル解釈なし。キー名と既定値の正本は 07 §5.6 で、**設定キーの公開は v0.2**。公開前は WSL 既定と既知コマンドの検出だけを定数で行う)。`ProcessRunner` (v0.4) が無い間は eve-host が `std::process::Command` で直接起動する (stdin に本文、タイムアウト 2 s、ワーカー上)。**クリップボード用コマンドは「設定で明示したもの」または「root しか書けないディレクトリで検出した既知のもの」なので毎回の承認は不要** とする (P2 原則の例外。設定ファイルは信頼入力、[02 §15](02-architecture.md#15-セキュリティ境界))。**PATH 上の自動検出はしない** (PATH 汚染による任意コード実行面)。検出対象は `/usr/bin` と `/bin` の `wl-copy` / `wl-paste` / `xclip` / `xsel`、macOS の `/usr/bin/pbcopy` / `pbpaste` に限り、ユーザーが `clipboard.command.*` を書いたらそれを優先する。
+`clipboard.command.copy = ["/usr/bin/xclip", "-selection", "clipboard", "-in"]` / `clipboard.command.paste = ["/usr/bin/xclip", "-selection", "clipboard", "-out"]` の形 (argv 配列。シェル解釈なし。キー名と既定値の正本は 07 §5.6 で、**設定キーの公開は v0.2**。公開前は WSL 既定と既知コマンドの検出だけを定数で行う)。`ProcessRunner` (v0.4) が無い間は eve-host が `std::process::Command` で直接起動する (stdin に本文、タイムアウト 2 s、ワーカー上)。**クリップボード用コマンドは「設定で明示したもの」または「root しか書けないディレクトリで検出した既知のもの」なので毎回の承認は不要** とする (P2 原則の例外。設定ファイルは信頼入力、[02 §15](02-architecture.md#15-セキュリティ境界))。**PATH 上の自動検出はしない** (PATH 汚染による任意コード実行面)。検出対象は `/usr/bin` と `/bin` の `wl-copy` / `wl-paste` / `xclip` / `xsel`、macOS の `/usr/bin/pbcopy` / `pbpaste` に限り、ユーザーが `clipboard.command.*` を書いたらそれを優先する。
 
 - **copy 側の標準出力・標準エラー**: `xclip` / `xsel` (と一部の `wl-copy`) は内容を保持するためにデーモンとして残り、親から受け継いだ stdout / stderr を握ったままにする。パイプにしていると読み手が EOF を待ち続け、毎回 2 s のタイムアウトになる。copy 側は stdout / stderr を `Stdio::null()` にし、待つのは起動した子プロセスの終了 (`wait`) だけにする。paste 側は stdout をパイプで読む (デーモン化しない)。
-- **文字コード**: 子プロセスへの入出力は UTF-8 とし、例外は WSL の `clip.exe` (UTF-16LE) と macOS の `LANG` の明示 (§8.2)。
+- **文字コード**: 子プロセスへの入出力は UTF-8 とする (WSL の `powershell.exe` はスクリプトの中で入出力を UTF-8 に固定する。macOS は `LANG` を明示する、§8.2)。
+- **paste の失敗**: `wl-paste` と `xclip -out` はクリップボードが空でも失敗の終了コードを返すので、出力が空の失敗は「テキストが無い」とする。出力がある失敗と copy の失敗は失敗として知らせる。
 
 ### 8.4 サイズ上限
 
@@ -795,12 +834,15 @@ v0.1 で実装するのは下の表の **Windows の 2 行** で、ほかの行�
 | kitty | mac/Linux | ○ | ○ (kitty protocol) | ○ | ○ (確認あり) | ○ | ○ | ○ (Linux は `GLFW_IM_MODULE=ibus` 要) | ○ | `Ctrl+Shift+*` 系は端末ショートカット | スモーク (出荷時)。全項目の記入は v0.4 |
 | WezTerm | 全 | ○ | ○ (kitty protocol、設定要の版あり) | ○ | ○ | ○ | ○ | ○ | ○ | 少ない | スモーク (出荷時)。全項目の記入は v0.4 |
 | Alacritty | 全 | ○ | △ (0.13+) | ○ | ○ | ○ (0.13+) | ○ | △ (版依存) | ○ | 少ない | スモーク (出荷時)。全項目の記入は v0.4 |
-| GNOME Terminal (VTE) | Linux | ○ | × | ○ | × (VTE は非対応) | ? (対応版は要確認) | ○ | ○ | ○ | `Ctrl+Shift+C/V/T/W/N/Q`、`Ctrl+PgUp/PgDn`、`F1`、`F10`、`F11`、`Shift+PgUp/PgDn` (スクロールバックに使われる。到達性検査では横取りとして扱う) | Must (v0.2) |
-| tmux (内側) | 全 | △ (`terminal-features` 設定) | △ (3.3+ `extended-keys`。CSI u 形式で、kitty プロトコルは透過しない) | ○ | △ (`set-clipboard on`) | △ (3.4+) | ○ | 外側次第 | ○ (tmux kill-session で SIGHUP) | プレフィックス `Ctrl+B`。推奨設定: `escape-time 10`、`extended-keys on`、`set-clipboard on`、`focus-events on` | Must (v0.2) |
+| GNOME Terminal (VTE) | Linux | ○ | × | ○ | × (VTE は非対応) | ? (対応版は要確認) | ○ | ○ | ○ | `Ctrl+Shift+C/V/T/W/N/Q`、`Ctrl+PgUp/PgDn`、`F1`、`F10`、`F11`、`Shift+PgUp/PgDn` (スクロールバックに使われる。到達性検査では横取りとして扱う) | Must (v0.2)。**v0.2 は未確認のまま出荷** (実機のデスクトップ環境が無い。決定 (ユーザー回答)、2026-11-01。下の注記) |
+| Windows Terminal + WSL2 | Linux (WSL) | ○ (`WT_SESSION` を引き継ぐ) | **×** (Windows Terminal は `Ctrl+Shift+Z` を `Ctrl+Z` と同じ 0x1A で送る。modifyOtherKeys・kitty の要求の後も。tmux の中でも同じ。やり直しは `Ctrl+Y`。M7 の受入、2026-11-03) | ○ (e2e (linux) の擬似端末と、手での確認 L5) | ○ (ただし WSL のクリップボードは `powershell.exe` を先に使う、§8) | △ (Windows Terminal の版に依存) | ? (09 §3.8 の FR-307) | ○ (L6、Microsoft IME と Google 日本語入力) | ○ (タブを閉じたとき。L2。`kill -HUP` での退避は e2e でも確認) | Windows Terminal と同じ (上の行) | **v0.2 の Linux の受入の環境** (docs/README §3.9 の M7)。手順は `docs/compat/checklist.md` の L、記録は `docs/compat/<版>/linux-wsl.md`。README の Linux の導入手順を一時的な HOME で手順どおりに通した (自動、2026-11-01)。**M7 の受入は合格** (2026-11-03、`docs/compat/0.2.0/linux-wsl.md`。自動の部分は `cargo xtask accept-linux`)。tmux の中では、ダイアログを閉じた跡に全角の後続セルの色が残る不具合を直した (04 §4.7 (c)) |
+| tmux (内側) | 全 | △ (`terminal-features` 設定) | △ (3.3+ `extended-keys`。CSI u 形式で、kitty プロトコルは透過しない) | ○ | △ (`set-clipboard on`) | △ (3.4+) | ○ | 外側次第 | ○ (tmux kill-session で SIGHUP) | プレフィックス `Ctrl+B`。推奨設定: `escape-time 10`、`extended-keys on`、`set-clipboard on`、`focus-events on` | Must (v0.2)。WSL の Windows Terminal の中の tmux 3.6 で、起動・日本語の表示・入力・リサイズ・保存・終了と、kill-session (SIGHUP) での退避を確かめた (自動、2026-11-01)。手動の項目は `docs/compat/checklist.md` の L7 / L8 |
 | screen (内側) | Unix | × | × | △ | × | × | △ | 外側次第 | ○ | プレフィックス `Ctrl+A` | スモーク (出荷時。動作のみ) |
 | Linux console (tty) | Linux | × | × | × | × | × | × (gpm) | × | ○ | — | 非対象 |
 
 (○ = 対応、△ = 条件付き/版依存、× = 非対応、? = 08 §3 のスパイクで検証)
+
+**v0.2 の Linux の記入 (M7、2026-11-01)**: Linux の受入は開発 PC の WSL2 (Ubuntu) の Windows Terminal と、その中の tmux で行う (上の「Windows Terminal + WSL2」と「tmux」の行)。**実機のデスクトップ環境** (GNOME Terminal・KDE の Konsole など、Wayland / X11) のクリップボード (`wl-copy` / `xclip` / `xsel`。検出と起動の試験だけ) と IME (mozc など) の候補窓、`TERM=linux` のコンソールは **未確認のまま出荷** し、README の既知の制約 (Linux) に書く (決定 (ユーザー回答)、2026-11-01、docs/README §3.9)。利用者からの報告で確かめたら、この表に記入する。
 
 ---
 
@@ -834,13 +876,19 @@ TUI では IME は端末が処理し、evoeditor は **ハードウェアカー�
 | SIGHUP | 端末が閉じた、SSH 切断 | 端末は既に無い → **対話不可**。緊急退避 → 端末復元は失敗を無視 → 終了 | `Signal(Hangup)` |
 | SIGTSTP (Ctrl+Z) | raw モードでは発生しない。`Effect::Suspend` (コマンド `app.suspend`、v0.2) で自ら発生させる | §11.3 (v0.2) | — |
 | SIGCONT | `fg` | 端末再初期化 + 全面再描画 + サイズ再取得 | `Signal(Continue)` |
-| SIGWINCH | リサイズ | `InputEvent::Resize` (crossterm/signal-hook が処理) | 入力経路 |
+| SIGWINCH | リサイズ | `InputEvent::Resize` (入力スレッドが signal-hook の自己パイプを `/dev/tty` と一緒に `poll` で待つ) | 入力経路 |
 | SIGPIPE | stdout 切断 | Rust 既定で無視 (EPIPE エラーとして出力側に現れる) → 書込失敗は終了要求に変換 | — |
 | SIGQUIT (Ctrl+\) | raw モードで発生しない | 既定 (コアダンプ) のまま。デバッグ用に残す | — |
 | SIGUSR1/2 | — | 未使用 (将来: 設定再読込?) | — |
 | SIGSEGV/SIGBUS/SIGABRT | バグ、mmap なし設計のため SIGBUS は想定外 | ハンドラ内で **端末復元のみ** (`write(2)` で復元シーケンスを書く。メモリ確保・ロック取得をしない) → 既定動作へ再送 (コアダンプ)。緊急退避は行わない (ヒープが壊れている可能性。パニックとは違う) | — |
 
-実装: `signal-hook` (crossterm が Unix で既に依存) でシグナルをフラグ/パイプに変換し、**専用のシグナルスレッド** が受ける。シグナルハンドラ内で `EditorState` に触れない。終了系シグナル (INT / TERM / HUP) の役割分担は §11.4 の「役割分担」のとおりで、シグナルスレッドが **先に退避を書き、その後** `HostMsg::Signal` を送る。
+実装: `signal-hook` でシグナルをフラグ/パイプに変換し、**専用のシグナルスレッド** が受ける。シグナルハンドラ内で `EditorState` に触れない。終了系シグナル (INT / TERM / HUP) の役割分担は §11.4 の「役割分担」のとおりで、シグナルスレッドが **先に退避を書き、その後** `HostMsg::Signal` を送る。
+
+**Linux の実装 (v0.2 の M7 の 4 本目、2026-11-01。README §3.9)**: eve-platform の Host 部品として次を入れた。bin での配線 (Windows のコンソールハンドラと同じ手順) とサスペンド (§11.3) は、bin が Linux で起動する 5 本目で行う。
+- `signals::start(cb)`: SIGINT / SIGTERM / SIGHUP / SIGCONT を `signal-hook` の自己パイプで受け、シグナルスレッド `eve-signal` で `cb(UnixSignal)` を呼ぶ (登録した後は既定の終了は起きない)。eve-host の `SignalKind` に `Hangup` を足した (SIGCONT は終了要求ではないので、`HostMsg` への写像は 5 本目で決める)。
+- `signals::die_by_signal(signo)`: §11.5 の終了コードの手順 (`SIG_DFL` に戻す → マスクを外す → `raise` → 終わらなければ `_exit(128 + signo)`)。
+- `term::emergency_restore(fd, bytes, saved_mode, restored)`: Windows と同じ呼び方。`saved_mode` は起動時の termios (`term::save_mode(fd)`)。使い捨てのスレッドで `write(2)` と `tcsetattr(TCSANOW)` を行い、最大 200 ms 待つ。書込の失敗 (SIGHUP で端末が無い) は無視する。
+- `term::install_crash_restore(fd, bytes, saved_mode, restored)`: SIGSEGV / SIGBUS / SIGABRT / SIGILL / SIGFPE (表の最後の行) のハンドラ。`SA_ONSTACK` で付け、初期化済みの値だけを読んで `write(2)` と `tcsetattr` で端末を戻し、**元のハンドラに付け替えて返る** (同じ障害が再び起きて元の動作 = Rust のスタックあふれの表示・コアダンプになる。「既定動作へ再送」の具体化)。「復元済み」のフラグは frontend と共有する。**外から送られたシグナル** (`kill -SEGV` など。Linux は `si_code <= 0`、macOS は加えて `si_code >= 0x10000` (SI_USER 以降。macOS の実機では未確認)) と **SIGABRT** は障害の命令が無く再び起きないので、元のハンドラではなく `SIG_DFL` に戻して `raise` で送り直す (ハンドラの間はそのシグナルが止められているので、戻った後に既定の動作で届く)。復元の書込は、ハンドラの中で fd を一時的に非ブロッキングにして 1 回だけ試す (フロー制御などで端末が止まっていても詰まらない。フラグは戻す)。既知の制約: Rust の外で作られたスレッド (代替のシグナルスタックが無い) でのスタックあふれでは、ハンドラが動けずに端末を戻さないまま既定の動作で終わる。**配線** (2026-11-01): Host の `start` が `Frontend::init` の後に `emergency_restore_info()` を受け取った直後に呼ぶ (02 §9.5 の手順 4)。付けられなくても起動は続ける。
 
 ### 11.2 Windows コンソールイベント
 
@@ -880,6 +928,13 @@ TUI では IME は端末が処理し、evoeditor は **ハードウェアカー�
 - **方式**: 起動時にセッション終了通知の専用スレッド (02 §9.1) を立て、そこで **非表示のトップレベルウィンドウ** (`WS_VISIBLE` を付けない通常のウィンドウ。`HWND_MESSAGE` ではない) を作ってメッセージループを回す。作成は起動経路をブロックしない (スレッドを立てるだけで先へ進む。コストは BM-101a で計測)。`WM_QUERYENDSESSION` を受けたら §11.4 の退避を開始し (`ShutdownBlockReasonCreate` で「未保存の内容を退避しています」を示す)、`TRUE` を返す。`WM_ENDSESSION` (`wParam = TRUE`) を受けたら、退避の完了 (または時間予算の満了、§11.4) を待ってから戻る。§8.2 のクリップボードの所有者 (v0.1 はメッセージ専用ウィンドウ) をこのウィンドウにまとめるかは実装時に決める。猶予の長さは OS の設定に依存する (既定でおよそ 5 秒。v0.2 の S-11 で実測)。
 - **Windows Terminal / ConPTY**: ログオフ時に、端末側がコンソールに CTRL_CLOSE_EVENT を送るか (送れば上の表の経路で退避される) を v0.2 の S-11 で確かめる。
 - **確認できなかった場合**: 隠しウィンドウで到達を確認できなければ、方式を増やさず、v0.1 の既知の制約をそのまま残す。確認できた経路もリリースノートに書く。
+- **M9d の実装 (2026-10-31)**: eve-platform の `session::start` (専用スレッド `eve-session` の非表示のトップレベルウィンドウとメッセージループ。通知をコールバックへ渡すだけ) と、bin の配線。
+  - `WM_QUERYENDSESSION`: `ShutdownBlockReasonCreate` で理由 (英語と日本語を ` / ` でつないだ 1 行。bin の `texts::session_block_reason`) を示し、退避 (`reason = "session_end"`、上限 3.5 s) を使い捨てのスレッド (`eve-session-query`、02 §9.1) で始めて、待たずに `TRUE` を返す。
+  - `WM_ENDSESSION` (`wParam = TRUE`): 退避の完了を待ち (問い合わせが届いていなければここで書く。退避は 1 回だけ)、置換中フラグを受信から 4.3 s まで待ち (CTRL_CLOSE と同じ配分)、メインへ `Signal(Terminate)` を送って戻る (`ShutdownBlockReasonDestroy`)。
+  - **取り消し** (`wParam = FALSE`。利用者が終了の画面で取り消した、ほかのアプリが拒んだ): 何もしない。問い合わせで書いた退避は残り、次の起動で復旧が提案される (内容は退避の時点のもの)。退避は 1 回だけの規則のため、このプロセスでは以後の緊急退避を書かない (以後の異常終了に備えるのはスワップ、03 §10.2)。
+  - クリップボードの所有者 (§8.2、メッセージ専用ウィンドウ。最初の読み書きで遅延して起こす) は、このウィンドウにまとめない (起動の時期と役目が違うため)。
+  - 試験: ウィンドウへ `SendMessageW` で通知を送り、コールバックに順に届き `WM_QUERYENDSESSION` が 1 を返すことだけを確かめる (eve-platform の単体試験)。OS からの実際の到達と猶予の長さ、Windows Terminal がログオフ時に CTRL_CLOSE_EVENT を送るかは **S-11 (実機) で確かめる**。確かめるまでは 01 §4.6 の既知の制約を残す。
+  - **S-11 の実機確認 (2026-10-31、v0.2 のログオフ)**: 未保存の文書を開いたまま **サインアウト** し、再ログオン後の起動で復旧が提案されることを、Windows Terminal と conhost の両方で確かめた。manifest の `reason` はどちらも `session_end` (`complete = true`、`written = true`) で、隠しウィンドウの経路で退避が書かれた (端末の CTRL_CLOSE の経路 (`console_close`) より先、または代わりに届いた)。続けて **シャットダウンと再起動** でも、Windows Terminal・conhost の両方で次の起動で復旧が提案されることを確かめた (manifest の `reason` は `session_end`)。ログオフ・シャットダウン・再起動のいずれも隠しウィンドウの経路で到達するので、01 §4.6 の既知の制約から外す (ベストエフォートの扱いは変えない: 大きな文書は猶予の中で書き切れないことがある)。猶予の長さと `ShutdownBlockReasonCreate` の表示は測っていない。
 
 Windows には SIGTSTP 相当がないため `Capabilities.can_suspend = false` とし、`app.suspend` コマンド (v0.2) は when 句で無効になる (パレットに出さない)。
 
@@ -887,13 +942,15 @@ Windows には SIGTSTP 相当がないため `Capabilities.can_suspend = false` 
 
 ```
 1. 端末復元 (§9.2) — 入力スレッドは read をブロック中なので、復元後に stdin の読み取りをいったん止める
-   (crossterm の poll にタイムアウトを入れる、または入力スレッドにフラグを立ててから SIGCONT 後に再開)
+   (入力スレッドの poll にタイムアウトを入れる、または入力スレッドにフラグを立ててから SIGCONT 後に再開)
 2. kill(getpid(), SIGTSTP)  — 自分のプロセスグループではなく自分だけ。tmux/シェルが前面ジョブとして停止させる
 3. (停止中) …
 4. SIGCONT 受信 → 端末初期化 → サイズ再取得 → needs_render 全面
 ```
 
-evoeditor が **非対話で起動された (バックグラウンドジョブ)** 場合、SIGTTIN/SIGTTOU で停止するのが Unix の通常挙動。起動時に `tcgetpgrp(STDIN) != getpgrp()` なら「前面で起動してください」と終了する。
+evoeditor が **非対話で起動された (バックグラウンドジョブ)** 場合、SIGTTIN/SIGTTOU で停止するのが Unix の通常挙動。起動時 (端末を raw にする前) に、描画先の `/dev/tty` の前面のプロセスグループが自分のでない (`tcgetpgrp(tty) != getpgrp()`。標準入力はリダイレクトされ得るので `/dev/tty` で調べる) なら、端末に触れずに `stderr.background_job` (04 §15.2) を出して終了コード 5 で終わる。
+
+**Linux の実装 (v0.2 の M7、2026-11-01)**: core のコマンド `app.suspend` (when 句 `caps.can_suspend`。既定キー `Ctrl+K Z`) が `Effect::Suspend` を出す。eve-tui の `TuiFrontend` が扱い (Host には届かない)、上の手順 1 = `Frontend::restore` と同じ復元、2 = `unix::stop_self` (`kill(getpid(), SIGTSTP)`。SIGTSTP は受信を登録しないので既定の動作で止まる)、4 = 再開したら再初期化の印を立て、`Frontend::wake_after` が描画を起こし、描画の先頭で raw モード・代替スクリーン・各モード・マウスを入れ直して全面を描く (外からの SIGCONT と同じ経路、§11.1)。入力スレッドは止めない (停止中はプロセス全体が止まっている)。`Capabilities.can_suspend` は Unix で真 (eve-tui の `caps::detect`)。起動時の確認は bin の `eve_tui::unix::is_background_job`。親が SIGTSTP を無視させて起動した (ジョブ制御の無いシェル) ときは止まらずにすぐ戻り、画面を描き直すだけになる。**既知の制約**: 外から送られた SIGTSTP (`kill -TSTP`。raw モードでは `Ctrl+Z` からは発生しない) は受信を登録しないので、端末を戻さずに止まる (SIGSTOP と同じ。再開すれば描き直す)。
 
 ### 11.4 緊急スナップショット (NFR-302 の実装前提)
 
@@ -1074,7 +1131,7 @@ AI 連携 (06) は **ローカル LLM を一級市民** とし (01 §2.9、ADR-0
 | 検出 | `WSL_DISTRO_NAME` / `WSL_INTEROP` 環境変数、`/proc/sys/fs/binfmt_misc/WSLInterop` | ログと既定値 (クリップボード) にのみ使う |
 | `/mnt/c` (DrvFs, 9p) | inotify が **機能しない** (WSL2)、`chmod` は metadata オプションがないと無視、`rename` は原子的だが遅い、大文字小文字非区別、ファイル ID は NTFS 由来 | `FsKind::Network` 相当として扱い、監視はフォーカス時確認に縮退 (§12.2)。保存の fsync 失敗は警告 |
 | 改行 | Windows 側で作られた CRLF ファイルが多い | FR-113 のとおり保持。既定は変えない |
-| クリップボード | WSLg あり: `wl-copy` / `xclip` (§8.2) が Windows クリップボードと同期。なし: 絶対パスの `clip.exe` (UTF-16LE で渡す) / `powershell.exe` (`/mnt/c/Windows/System32/WindowsPowerShell/v1.0/`、出力を UTF-8 に固定) | §8.2 / §8.3 |
+| クリップボード | WSLg あり: `wl-copy` / `xclip` (§8.2) が Windows クリップボードと同期。なし (WSLg に `wl-clipboard` が入っていない場合を含む): 絶対パスの `powershell.exe` (`/mnt/c/Windows/System32/WindowsPowerShell/v1.0/`) の `Set-Clipboard` / `Get-Clipboard -Raw` (入出力を UTF-8 に固定)。`clip.exe` は BOM の扱いで化けるので使わない | §8.2 / §8.3 |
 | ローカル LLM (v1.L) | GPU は Windows 側にあることが多く、`llama-server` を Windows で動かし WSL 内の evoeditor から `localhost` に接続する構成が一般的。`localhost` のホスト転送が無効な環境では Windows 側のアドレスが LAN 扱いになる | §13.7 (WSL 行)、06 §11.3 |
 | 端末 | Windows Terminal (ConPTY) 経由。Linux バイナリから見ると普通の pty | — |
 | パス変換 | `wslpath` で `C:\…` ⇔ `/mnt/c/…`。Windows 側から `wsl evoeditor file` で渡された Windows パスは Linux では無効 | CLI 引数が `X:\` 形式なら **WSL 検出時のみ** `wslpath -u` 相当の変換を試みる (Could) |
@@ -1105,7 +1162,7 @@ AI 連携 (06) は **ローカル LLM を一級市民** とし (01 §2.9、ADR-0
 |---|---|
 | edition | 2024 (Rust 1.85 以上が必須) |
 | MSRV | 「リリース時点の最新安定版 − 2 マイナー」を **下限の目安** とし、`[workspace.package] rust-version` に明記。依存が要求すれば引き上げる (マイナーリリースでのみ。パッチリリースでは上げない) |
-| 検証 | CI に MSRV ジョブ (`cargo +<MSRV> check --workspace --all-features`。補助ジョブとして v0.2 から。v0.1 は `rust-version` の明記と `Cargo.lock` のコミットまで)。`Cargo.lock` をコミット (bin があるため) し、`resolver.incompatible-rust-versions = "fallback"` (Cargo 1.84+) で MSRV 互換の依存版を選ばせる |
+| 検証 | CI に MSRV ジョブ (`cargo +<MSRV> check --workspace --all-features`。補助ジョブとして v0.2 から。2026-11-03 に `ci.yml` の `msrv` ジョブとして入れた。v0.1 は `rust-version` の明記と `Cargo.lock` のコミットまで)。`Cargo.lock` をコミット (bin があるため) し、`resolver.incompatible-rust-versions = "fallback"` (Cargo 1.84+) で MSRV 互換の依存版を選ばせる |
 | ツールチェイン固定 | `rust-toolchain.toml` は **置かない** (貢献者の環境を縛らない)。CI は `stable` + MSRV + (nightly は fuzz/udeps のみ) |
 | ディストリビューションのパッケージ化 | Debian/Fedora の Rust は古い → MSRV を極端に新しくしない動機。ただし 2 マイナー遅れが限界 (ratatui/crossterm の MSRV も同程度) |
 
@@ -1117,8 +1174,8 @@ v0.1 の配布ビルドは `x86_64-pc-windows-msvc` だけ。CI の Linux ジョ
 |---|---|---|
 | `*-pc-windows-msvc` (v0.1 は x86_64。aarch64 は v0.2 以降) | Visual Studio Build Tools (MSVC + Windows SDK)。`windows-sys` は純 Rust なのでそれ以上の SDK 依存なし | tree-sitter (v0.4) の C ソースは `cc` クレートが MSVC `cl.exe` でビルド。ARM64 はクロスコンパイル可 (`cl.exe` の arm64 ツールセット) |
 | `*-apple-darwin` (macOS 出荷時) | Xcode Command Line Tools。最小デプロイ `MACOSX_DEPLOYMENT_TARGET` は Rust の既定 (aarch64: 11.0、x86_64: 10.12) で十分 (NFR-401 の 3 メジャーより古い) | ユニバーサル化は `lipo -create` |
-| `*-unknown-linux-gnu` (Linux 出荷時、条件付き、OQ-112) | glibc 2.31 を保証するため **`cargo-zigbuild --target x86_64-unknown-linux-gnu.2.31`** でビルド (ホストの glibc に依存しない) | 新しいランナー (Ubuntu 24.04, glibc 2.39) で素直にビルドすると 2.31 環境で動かない。追加する場合は 09 の CI に zigbuild ジョブを足す |
-| `*-unknown-linux-musl` (**Linux 出荷時の配布物**、v0.2) | `musl-tools` または zigbuild。**完全静的** (`-C target-feature=+crt-static` は musl で既定) | `getaddrinfo` 等の DNS は v1.L (reqwest) で musl 固有の制約 (nsswitch なし)。アロケータ §17.3 |
+| `*-unknown-linux-gnu` (v0.4、OQ-112) | glibc 2.31 を保証するため **`cargo-zigbuild --target x86_64-unknown-linux-gnu.2.31`** でビルド (ホストの glibc に依存しない) | 新しいランナー (Ubuntu 24.04, glibc 2.39) で素直にビルドすると 2.31 環境で動かない。追加する場合は 09 の CI に zigbuild ジョブを足す |
+| `*-unknown-linux-musl` (**Linux 出荷時の配布物**、v0.2) | `musl-tools` または zigbuild。**完全静的** (`-C target-feature=+crt-static` は musl で既定)。**実装 (v0.2 の M7、2026-11-01)**: どちらも要らない (Rust の musl ターゲットが同梱する musl と crt で静的にリンクする)。生成物は static-pie (`PT_INTERP` なし、`DT_NEEDED` 0 件。`check-dist` の (4) で検査する、09 §6.2)。同梱の musl は 1.2.5 で `renameat2` の関数が無いので、上書きしない rename はシステムコール (`SYS_renameat2`) で呼ぶ (§4.3) | `getaddrinfo` 等の DNS は v1.L (reqwest) で musl 固有の制約 (nsswitch なし)。アロケータ §17.3 |
 
 ### 16.3 ビルドプロファイル
 
@@ -1174,8 +1231,8 @@ opt-level = 2        # 依存は最適化 (ropey/regex のデバッグビルド�
 |---|---|
 | 許可リスト (`deny.toml`) | **本表が公開リポジトリの許可リストの正本。確定 (ユーザー回答、2026-10-20)** (12 §3.6・ADR-0018・09・11 §9.6 は参照だけで再掲しない)。`MIT`, `Apache-2.0`, `Apache-2.0 WITH LLVM-exception`, `BSD-2-Clause`, `BSD-3-Clause`, `ISC`, `Zlib`, `Unicode-3.0`, `Unicode-DFS-2016` (古い版の unicode-ident 等), `0BSD`, `BSL-1.0` (Boost Software License。Business Source License とは別物。バイナリでの配布に表示義務が無い寛容ライセンス。例: arboard の退路を採った場合の clipboard-win), `CC0-1.0` (データ・小規模クレート限定)、`MPL-2.0` (個別承認)、`OpenSSL`/`ISC` (`ring`/`aws-lc-rs`、v1.L で個別承認)。`OR` で結ばれた表記は、いずれかが許可リストにあれば通る。**fuzz/ に限る追加 (確定)**: `libfuzzer-sys` (cargo-fuzz) のライセンス表記は `(MIT OR Apache-2.0) AND NCSA` の見込み (**要確認**。導入の時点で crate の表記を確かめる) で、`AND` の NCSA が許可リストに無いと通らない。`fuzz/` は本体の workspace に含めない独立の workspace で配布物に入らない (02 §17.1) ので、`fuzz/` 側の `deny.toml` (または検査の例外) に限って `NCSA` を許す (本体の許可リストには足さない。確定 (ユーザー回答、2026-10-20)。表記の確認は上の **要確認** のとおり導入の時点で行う) |
 | 既知の注意点 | **notify** のライセンス表記は最新版 (8.2.0 / 9.0.0-rc) では **`CC0-1.0` のみ** (それより前の版は `CC0-1.0 OR Artistic-2.0`) → CC0-1.0 を許可リストに含める (上の行)。**tree-sitter 文法** は MIT が多いが Apache-2.0/独自もあり、`queries/*.scm` の流用元 (nvim-treesitter は Apache-2.0、Helix は MPL-2.0!) に注意 → ハイライトクエリは **自前作成または MIT/Apache 由来のみ**。**unicode-width / unicode-segmentation** は Unicode データライセンスを含む。**ring** (rustls 既定) は複合ライセンス → TLS の暗号バックエンドは v1.L で決める (未決。候補は `aws-lc-rs` / `rustls-rustcrypto`)。**依存の保守状況**: `regex-cursor` は v0.1 では使わない (03 §12 の検索は行単位。採否は v0.3 の S-04)。プロセス木の終了の実装手段は §13.4 (未決、v0.4) |
-| CI で使う道具 | 配布物に入らない CI の道具も、導入するときに上の許可リストと照らす (`deny.toml` の検査は Cargo の依存だけが対象なので、手で確かめて導入の PR に記録する)。**age** (fuzz のクラッシュ入力の暗号化、09 §6.3 / 11 §9.7) のライセンスは BSD-3-Clause の想定 (**要確認**。導入の時点で配布元のライセンスを確かめる) で、この確認の対象に含める |
-| 第三者告知 | MIT/BSD は著作権表示の複製が義務 → `cargo about` で `THIRD-PARTY-NOTICES.md` を生成し **配布アーカイブに同梱** する (v0.1)。`evoeditor --licenses` (同梱ファイルの表示) は v0.2 (v0.1 はアーカイブに同梱した `THIRD-PARTY-NOTICES.md` で足りる。07 §18.3) |
+| CI で使う道具 | 配布物に入らない CI の道具も、導入するときに上の許可リストと照らす (`deny.toml` の検査は Cargo の依存だけが対象なので、手で確かめて導入の PR に記録する)。**age** (fuzz のクラッシュ入力の暗号化、09 §6.3 / 11 §9.7) のライセンスは BSD-3-Clause の想定 (**要確認**。導入の時点で配布元のライセンスを確かめる) で、この確認の対象に含める。**LazyFS** (保存のクラッシュ一貫性の夜間ジョブ、09 §6.3) は MIT License (配布元の LICENSE で確認済み、2026-11-01。版 0.3.1 のコミットで固定してビルドする) |
+| 第三者告知 | MIT/BSD は著作権表示の複製が義務 → `cargo about` で `THIRD-PARTY-NOTICES.md` を生成し **配布アーカイブに同梱** する (v0.1)。**Linux の版 (v0.2 の M7、2026-11-01)**: 対象は配布する全ターゲット (Windows x86_64、Linux x86_64 / aarch64 の musl) の依存の和で (`about.toml` の `targets`、`deny.toml` も同じ三つ組を見る)、どの配布物にも同じファイルを同梱する。crate ではなく静的にリンクする **musl libc** (MIT) の表示は、配布元の `COPYRIGHT` (v1.2.5) を `dist/notices/musl-COPYRIGHT` にそのまま置き、`gen-notices` が末尾に足す。Rust の musl ターゲットが同梱する libunwind (LLVM、Apache-2.0 WITH LLVM-exception) は、例外の条項 (オブジェクトの形に埋め込まれた部分は表示の条件を免除する) に当たるものとして表示に加えない (Windows の版で Rust の実行時の部品を加えていないのと同じ扱い。解釈が変われば見直す)。`evoeditor --licenses` (同梱ファイルの表示) は v0.2 (v0.1 はアーカイブに同梱した `THIRD-PARTY-NOTICES.md` で足りる。07 §18.3) |
 | 本体 (公開コア) | **Apache-2.0 単独** (確定 (ユーザー回答)、OQ-19 / 152)。既存の `LICENSE` と `NOTICE` を配布物に同梱し、各 crate は `license = "Apache-2.0"`。TUI は公開・OSS。Apache-2.0 の含意 (特許条項・NOTICE) は 12 §3.2 が正本 |
 ### 17.2 依存数・ビルド時間の予算 (Should。計測は 09)
 
@@ -1192,7 +1249,7 @@ opt-level = 2        # 依存は最適化 (ropey/regex のデバッグビルド�
 
 ### 17.3 アロケータ
 
-既定はシステムアロケータ (02 §13.7)。v0.1 (Windows のみ) では判断は要らない。**Linux を出荷するとき (v0.2) の判断規則** を次に決めておく (OQ-112 / OQ-80): musl の malloc は遅い (ロック競合・断片化) が、Linux の配布物は musl 版を基本にするので (§1.1)、 BM-104 (大きなファイルを開く) が gnu 版比 **1.5 倍以上** 遅い、または BM-202 (開いた後のメモリ) が **1.3 倍以上** なら、アロケータを替えるのではなく **gnu 版 (zigbuild、glibc 2.31) を配布物に追加** する。C 依存のアロケータは使わない (NFR-207)。純 Rust のアロケータへの変更は未決 (v0.4)。
+既定はシステムアロケータ (02 §13.7)。v0.1 (Windows のみ) では判断は要らない。**Linux を出荷するときの判断規則** (OQ-112 / OQ-80。確定 (ユーザー回答、2026-11-04)): musl の malloc は遅い (ロック競合・断片化) が、Linux の配布物は musl 版を基本にするので (§1.1)、musl 版の BM-104 (大きなファイルを開く) または BM-202 (開いた後のメモリ) が **目標 (01 NFR-104 / NFR-202) を超えたら**、アロケータを替えるのではなく **gnu 版 (zigbuild、glibc 2.31) を配布物に追加** する。gnu 版との比は記録する (v0.2.0-rc.1 の後の計測で BM-104 は 1.30〜2.06 倍、BM-202 は 1.13 倍以下。目標の 1/4 以下だったので musl 版だけを配る、`docs/perf/0.2.0-rc.1/oq-112-musl-gnu.md`)。C 依存のアロケータは使わない (NFR-207)。純 Rust のアロケータへの変更は未決 (v0.4)。
 
 ---
 
@@ -1216,13 +1273,14 @@ evoeditor-<version>-<target>.{zip|tar.gz}
 ├── NOTICE                         ← Apache-2.0 第 4 条の帰属表示 (12 §3.2)
 ├── THIRD-PARTY-NOTICES.md        ← v0.1 (MIT/BSD の著作権表示義務)
 ├── README.md                      ← 利用者向け (v0.1 は日本語、OQ-21)
+├── README.en.md                   ← 利用者向けの英語版 (v0.2。日本語版が正、09 §11.3)
 ├── config.example.toml           ← v0.1 (公開キーと既定値の注釈付きの例。07 §5.0 から生成し、CI で既定値と突合、09 §11.2)
 ├── completions/ (evoeditor.bash, evoeditor.zsh, evoeditor.fish, _evoeditor.ps1)   ← v0.4。lexopt のため手書き (補完対象は少ない)
 └── man/evoeditor.1 (Unix)              ← v0.4
 ```
 
 - Windows (v0.1): `x86_64` の zip のみ (aarch64 は v0.2 の Tier B)。
-- Linux (v0.2、Linux 出荷時): `x86_64` / `aarch64` の `-musl` を基本にする (OQ-112)。gnu 版 (glibc 2.31、zigbuild) は OQ-112 の条件が成立したとき、または deb / rpm を作る v0.4 に追加し、deb / rpm は gnu 版から生成する。
+- Linux (v0.2、Linux 出荷時): `x86_64` / `aarch64` の `-musl` を基本にする (OQ-112)。**実装 (v0.2 の M7、2026-11-01)**: `cargo xtask dist --target <三つ組>` が `evoeditor-<版>-<三つ組>.tar.gz` を作る。内容物は zip と同じ 7 ファイルで、アーカイブの直下に置く (上の図。zip と同じくトップのディレクトリを作らない)。`evoeditor` は 0755、他は 0644、所有者は 0/0、時刻は 0 に固定し、GNU tar と `gzip -n` で同じ入力から同じバイト列にする。テキストは LF に揃える。gnu 版 (glibc 2.31、zigbuild) は deb / rpm を作る v0.4 に追加し (musl 版が目標を超えた版ではその版から、OQ-112)、deb / rpm は gnu 版から生成する。
 - macOS (v0.2、macOS 出荷時): `aarch64` のアーカイブだけを出す (ad-hoc 署名。Developer ID 署名と公証の時期は未決、OQ-76)。`x86_64` は Tier B (ビルドのみ) でアーカイブを出さない (§18.1。ユニバーサルは §19)。
 - Windows: zip のみ (MSI/MSIX は不要。winget は portable 型で zip を扱える)。実行ファイルは `evoeditor.exe`。
 - パッケージ名 (v0.4 以降のチャネル): Homebrew / Scoop は `evoeditor`、AUR は `evoeditor` と `evoeditor-bin`、deb / rpm は `evoeditor`、winget の識別子は `<発行者>.evoeditor` (OQ-01)。執筆時点 (2026-10) でこれらの名前は各チャネルで未使用 (調査は 10 の OQ-01)。
@@ -1248,6 +1306,24 @@ evoeditor-<version>-<target>.{zip|tar.gz}
 | 11 | アンインストール | §18.8 |
 
 - 更新は §18.10、直前の版に戻すのは §18.12。どちらも手順 2〜4 を使う (展開先は同じフォルダで、evoeditor をすべて終了してから置き換える)。
+
+### 18.2b v0.2 のインストール手順 (Linux)
+
+利用者向け README の「インストール」節の Linux の部分 (日本語・英語) の正本 (v0.2 の M7、2026-11-01)。対象は Linux の x86_64 と aarch64 の musl 静的版 (§18.2。glibc の版に依らず動く)。インストーラを持たず、管理者権限 (`sudo`) を要らない手順にする。システムの場所 (`/usr/local` 等) に置く手順は書かない (更新のたびに昇格が要る。パッケージは §18.5、v0.4)。
+
+| # | 手順 | 内容 |
+|---|---|---|
+| 1 | 取得 | GitHub Releases の該当の版のページから、`evoeditor-<版>-<x86_64|aarch64>-unknown-linux-musl.tar.gz`・`SHA256SUMS`・`SHA256SUMS.minisig` の 3 つを同じディレクトリにダウンロードする (`uname -m` で `x86_64` か `aarch64` かを確かめる)。分割デバッグ情報の `.debug` は不具合の調査に使うもので、利用者は要らない (§18.6) |
+| 2 | 検証 | §18.9 の手順で、(1) `minisign -Vm SHA256SUMS -P <公開鍵>` で署名を検証し、(2) `sha256sum -c SHA256SUMS --ignore-missing` でアーカイブのハッシュを確かめる (ダウンロードしたものだけが `OK` になる)。minisign は Debian / Ubuntu なら `sudo apt install minisign` (Ubuntu 26.04 の universe で確認、2026-11-01)、他のディストリビューションはそのパッケージか作者の公式の配布から入手する。**一致しなければ以降の手順に進まない** |
+| 3 | 展開先 | 利用者ごとのディレクトリ **`~/.local/opt/evoeditor/`** に展開する: `mkdir -p ~/.local/opt/evoeditor && tar -xzf evoeditor-<版>-<三つ組>.tar.gz -C ~/.local/opt/evoeditor`。アーカイブはトップのディレクトリを持たない (§18.2) ので、展開先を必ず指す。展開した `LICENSE`・`NOTICE`・`THIRD-PARTY-NOTICES.md` は消さずに置いておく |
+| 4 | PATH | `~/.local/bin` にシンボリックリンクを置く: `mkdir -p ~/.local/bin && ln -sf ~/.local/opt/evoeditor/evoeditor ~/.local/bin/evoeditor`。Debian / Ubuntu の既定の `~/.profile` は、`~/.local/bin` があればログインのときに `PATH` に加える (作ったばかりなら **ログインし直す**)。`command -v evoeditor` で見つからなければ、`~/.profile` (zsh なら `~/.zprofile`) に `export PATH="$HOME/.local/bin:$PATH"` を加えてログインし直す |
+| 5 | 確認 | 新しい端末で `evoeditor --version` を実行し、版が表示されることを確かめる |
+| 6 | 設定 | 設定ファイルは必須ではない。変えたいときは、同梱の `config.example.toml` を `~/.config/evoeditor/config.toml` (`$XDG_CONFIG_HOME` を設定していればその下) に写して編集する (§7.1。evoeditor はディレクトリを作らない) |
+| 7 | `cargo install` の経路 | 第二の経路 (Rust の開発環境がある利用者向け)。`cargo install --locked --git <repo> --tag v<版> evoeditor` で `~/.cargo/bin` に入る。この経路は glibc に動的にリンクした実行ファイルになる (配布の musl 静的版とは別物。動作は同じ) |
+| 8 | アンインストール | §18.8 |
+
+- WSL (Windows Subsystem for Linux) でも同じ手順で使える。WSL の中のファイル (`~` の下) を編集するのが速く、`/mnt/c` の下 (Windows のドライブ) は遅い。WSL では Windows のクリップボードを `powershell.exe` で使う (§8)。
+- 更新は §18.10、直前の版に戻すのは §18.12。どちらも手順 2〜3 を使う (展開先は同じディレクトリで、evoeditor をすべて終了してから展開し直す)。
 
 ### 18.3 Windows コード署名
 
@@ -1283,7 +1359,7 @@ evoeditor-<version>-<target>.{zip|tar.gz}
 
 ### 18.6 デバッグ情報とクラッシュログの対応付け
 
-配布バイナリは strip するが、各リリースの **分割デバッグ情報** (v0.1 は Windows の `.pdb`。macOS / Linux 出荷時に `.dSYM.zip` / `.debug` (DWARF `objcopy --only-keep-debug`)) を GitHub Release に別アセットとして添付し、クラッシュログ (09 §10) のバックトレースをメンテナが `addr2line` 等で解決できるようにする。ビルド ID (`.note.gnu.build-id` / PDB GUID / Mach-O UUID) をクラッシュログに記録する。`--remap-path-prefix` でビルドパスを消す (再現ビルド・プライバシー)。
+配布バイナリは strip するが、各リリースの **分割デバッグ情報** (v0.1 は Windows の `.pdb`。macOS / Linux 出荷時に `.dSYM.zip` / `.debug` (DWARF `objcopy --only-keep-debug`)) を GitHub Release に別アセットとして添付し、クラッシュログ (09 §10) のバックトレースをメンテナが `addr2line` 等で解決できるようにする。ビルド ID (`.note.gnu.build-id` / PDB GUID / Mach-O UUID) をクラッシュログに記録する。 **Linux の実装 (v0.2 の M7、2026-11-01)**: `cargo xtask dist --target` が、デバッグ情報を残して作った exe から `objcopy --only-keep-debug` で `evoeditor-<版>-<三つ組>.debug` を取り出し、配る exe は `objcopy --strip-all --add-gnu-debuglink` で strip する (Windows の `strip = "symbols"` と同じく、配る exe にはシンボルを残さない)。`.debug` は `SHA256SUMS` に入れて Release の別アセットにする。ビルド ID は ELF の `.note.gnu.build-id` に入る (リンカの既定。WSL の Ubuntu で確かめた)。まだのもの: クラッシュログへのビルド ID の記録、`--remap-path-prefix` (ビルドのパスは `.debug` と exe の行番号表に残る)。`--remap-path-prefix` でビルドパスを消す (再現ビルド・プライバシー)。
 
 ### 18.7 再現可能ビルド (Should, v0.4)
 
@@ -1291,7 +1367,7 @@ evoeditor-<version>-<target>.{zip|tar.gz}
 
 ### 18.8 アンインストール (提案、OQ-164)
 
-evoeditor はインストーラを持たず、**レジストリ・システム設定・サービスを書かない** (Windows も含む)。したがってアンインストールは「実行ファイルを消す」(`cargo install` なら `cargo uninstall evoeditor`、アーカイブなら §18.2a の展開先のフォルダ (`%LOCALAPPDATA%\Programs\evoeditor\`) を削除し、利用者の環境変数 `Path` からそのフォルダを外す) と、必要なら次のディレクトリを手で消すことである。v0.1 (Windows) の既定の場所は `%APPDATA%\evoeditor` (`config_dir`) と `%LOCALAPPDATA%\evoeditor` (`state_dir` / `data_dir` / `cache_dir` の親) で、内訳は: `config_dir` (設定)、`state_dir` (`log/`・`recovery/`・`swap/`・`backup/`・`session/`・検索履歴・`last_version.toml` (前回起動した版の記録、v0.2、07 §18.8))、`data_dir`・`cache_dir` (v0.4 以降)、§7.5 の代替の退避先 (`%TEMP%\eve-recovery-<SID>\`。macOS / Linux 出荷時は `$TMPDIR/eve-recovery-<uid>/`)、ポータブルモードの `<exe_dir>/data/`、v1.L 以降は資格情報ストアに保存した API キー (§14)。macOS / Linux の実パス (v0.2) を含め、各 OS の実パスは §7.1 (環境変数で上書きしていればその場所)。**`recovery/` と `swap/` には未保存の編集内容が残っていることがある** ので、消す前に中を確認するよう README の手順に書く。evoeditor 自身にディレクトリを消すコマンドは設けない (誤操作で退避を失わないため)。
+evoeditor はインストーラを持たず、**レジストリ・システム設定・サービスを書かない** (Windows も含む)。したがってアンインストールは「実行ファイルを消す」(`cargo install` なら `cargo uninstall evoeditor`、アーカイブなら §18.2a の展開先のフォルダ (`%LOCALAPPDATA%\Programs\evoeditor\`) を削除し、利用者の環境変数 `Path` からそのフォルダを外す。Linux (v0.2) は §18.2b の展開先 `~/.local/opt/evoeditor/` と、シンボリックリンク `~/.local/bin/evoeditor` を削除する) と、必要なら次のディレクトリを手で消すことである。v0.1 (Windows) の既定の場所は `%APPDATA%\evoeditor` (`config_dir`) と `%LOCALAPPDATA%\evoeditor` (`state_dir` / `data_dir` / `cache_dir` の親)、Linux (v0.2) は `~/.config/evoeditor` (`config_dir`) と `~/.local/state/evoeditor` (`state_dir`。`data_dir` / `cache_dir` は `~/.local/share/evoeditor` / `~/.cache/evoeditor`、v0.4 以降) で、内訳は: `config_dir` (設定)、`state_dir` (`log/`・`recovery/`・`swap/`・`backup/`・`session/`・検索履歴・`last_version.toml` (前回起動した版の記録、v0.2、07 §18.8))、`data_dir`・`cache_dir` (v0.4 以降)、§7.5 の代替の退避先 (`%TEMP%\eve-recovery-<SID>\`。macOS / Linux 出荷時は `$TMPDIR/eve-recovery-<uid>/`)、ポータブルモードの `<exe_dir>/data/`、v1.L 以降は資格情報ストアに保存した API キー (§14)。macOS / Linux の実パス (v0.2) を含め、各 OS の実パスは §7.1 (環境変数で上書きしていればその場所)。**`recovery/` と `swap/` には未保存の編集内容が残っていることがある** ので、消す前に中を確認するよう README の手順に書く。evoeditor 自身にディレクトリを消すコマンドは設けない (誤操作で退避を失わないため)。
 
 ### 18.9 minisign 署名の検証 (提案、OQ-164)
 
@@ -1303,7 +1379,7 @@ evoeditor (TUI) は **エディタ内に更新機能を持たない** ([ADR-0040
 
 | 配布経路 | 更新の手順 | 版 |
 |---|---|---|
-| GitHub Releases (アーカイブ) | (1) 新しい版のアーカイブ (v0.1 は `evoeditor-<version>-x86_64-pc-windows-msvc.zip`) と `SHA256SUMS`・`SHA256SUMS.minisig` をダウンロードする (2) §18.9 の手順で署名とハッシュを検証する (3) evoeditor をすべて終了してから、展開した `evoeditor.exe` で古い実行ファイルを置き換える (Windows は実行中の exe を置き換えられない。macOS / Linux 出荷時は `evoeditor` を同様に置き換える) (4) `evoeditor --version` で版を確かめる。使っていた版のアーカイブは §18.12 のために残しておく | v0.1〜 |
+| GitHub Releases (アーカイブ) | (1) 新しい版のアーカイブ (v0.1 は `evoeditor-<version>-x86_64-pc-windows-msvc.zip`。Linux (v0.2) は `evoeditor-<version>-<x86_64|aarch64>-unknown-linux-musl.tar.gz`) と `SHA256SUMS`・`SHA256SUMS.minisig` をダウンロードする (2) §18.9 の手順で署名とハッシュを検証する (3) evoeditor をすべて終了してから、展開した `evoeditor.exe` で古い実行ファイルを置き換える (Windows は実行中の exe を置き換えられない。macOS / Linux 出荷時は `evoeditor` を同様に置き換える。Linux は §18.2b の展開先に展開し直す) (4) `evoeditor --version` で版を確かめる。使っていた版のアーカイブは §18.12 のために残しておく | v0.1〜 |
 | `cargo install --git` | `cargo install --locked --git <repo> --tag <新しい版> evoeditor` を再実行する (同じ名前の実行ファイルを置き換える。cargo が求めれば `--force` を付ける) | v0.1〜 |
 | crates.io | `cargo install --locked evoeditor` を再実行する。**crates.io に公開した時点から** の経路 (時期は OQ-20 で確定 (ユーザー回答): 1.0 の前)。公開するまで README には書かない | 公開後 |
 | パッケージマネージャ | (macOS / Linux 向けはその OS の出荷後) Homebrew (`brew upgrade evoeditor`)、Scoop (`scoop update evoeditor`)、winget (`winget upgrade <発行者>.evoeditor`)、AUR (AUR ヘルパーでの更新)、deb / rpm (Release に添付した新しいパッケージを `apt install ./<ファイル>.deb` / `dnf install ./<ファイル>.rpm`)、`cargo binstall evoeditor` の再実行。各チャネルの正確なコマンドは登録したときに README に書く | v0.4〜 |
@@ -1351,7 +1427,7 @@ v0.x の間は **stable 1 本** (ADR-0040 決定 6)。プレリリース (`-alph
 
 | OQ | 件名 | 結論 / 結論案 | 区分 / 決定期限 |
 |---|---|---|---|
-| OQ-15 | 対応 OS/端末の範囲 (Intel Mac を Must のままにするか Tier B に下げるか、を含む) | **v0.1 の対象は Windows 11 の Windows Terminal と conhost** (確定 (ユーザー回答)。§1.2 / §9.4。Windows 10 は検証環境が無いので v0.2 以降の候補、§1.1)。macOS / Linux は v0.1 では出荷せず、**v0.2 で出荷する** (確定 (ユーザー回答))。v0.2 では Intel Mac (`x86_64-apple-darwin`) と Windows aarch64 を **Tier B (ビルドのみ)** にする (CI の x86_64 macOS ランナーが減少・有料化傾向。Tier B のビルドは v0.2) | 確定 (ユーザー回答) |
+| OQ-15 | 対応 OS/端末の範囲 (Intel Mac を Must のままにするか Tier B に下げるか、を含む) | **v0.1 の対象は Windows 11 の Windows Terminal と conhost** (確定 (ユーザー回答)。§1.2 / §9.4。Windows 10 は公式には対応しない、§1.1)。macOS / Linux は v0.1 では出荷せず、**v0.2 で出荷する** (確定 (ユーザー回答))。v0.2 では Intel Mac (`x86_64-apple-darwin`) と Windows aarch64 を **Tier B (ビルドのみ)** にする (CI の x86_64 macOS ランナーが減少・有料化傾向。Tier B のビルドは v0.2) | 確定 (ユーザー回答) |
 | OQ-70 | macOS ユニバーサルバイナリを追加提供するか | Homebrew 向けのみ提供 (v0.4)、GitHub Release はアーキ別 | 裁量 / v0.2 着手前 (macOS 出荷前) |
 | ADR-0021 | クリップボードを Port ではなく Effect 経路で扱う | Effect 経路 (§2.8、02 §4.4 / §6.3)。`ClipboardText::Handle` (`Editor::take_clipboard` で取り出す `ClipboardSource`) の文字列化はワーカー | 確定 (ユーザー回答) |
 | OQ-04 | 新規文書の既定改行を `lf` 固定にするか `native` にするか | `lf` (P6 / NFR-405。07 §5.2) | 確定 (ユーザー回答) |
@@ -1364,12 +1440,12 @@ v0.x の間は **stable 1 本** (ADR-0040 決定 6)。プレリリース (`-alph
 | OQ-77 | `FsyncLevel` の既定を全環境 Full にするか、`FsKind::Network` では FileOnly にするか | Full (P1 原則。遅ければ設定 `file.fsync` で緩める) | 裁量 / G1c (v0.1 の M3 中。S-10 は v0.2 なので待たない) |
 | OQ-78 | ファイル監視不可 FS でのポーリングを設定で許可するか (NFR-204 との整合) | 明示設定時のみ許可、最小 2 s | 裁量 / v0.4 着手前 |
 | OQ-79 | X11 クリップボード所有権の終了時待機 (既定 200 ms) | v0.1 は外部コマンド (`xclip` / `xsel` がデーモン化して保持) に委ねるので **不要**。arboard を退路として採った場合 (OQ-111) のみ 200 ms、設定可 | 裁量 / arboard 採用時 |
-| OQ-80 | musl 版でのアロケータ (`mimalloc` は C 依存) | システム既定のまま。遅ければアロケータではなく gnu 版を追加 (§17.3、OQ-112 の判断規則) | 裁量 / v0.2 着手前 (Linux 出荷前) |
+| OQ-80 | musl 版でのアロケータ (`mimalloc` は C 依存) | システム既定のまま。目標を超えたらアロケータではなく gnu 版を追加 (§17.3、OQ-112 の判断規則) | 裁量 / v0.2 着手前 (Linux 出荷前) |
 | OQ-34 | 一時ファイル (`$TMPDIR` 直下、`crontab` / `kubectl edit` 等) の in-place フォールバック規則 | **確定 (ユーザー回答)**: §4.4 の判定規則 (正準化後の一時ディレクトリの **直下** だけを対象にし、ファイル名をパターン表 `file.in_place_patterns` と照合)。確認なし | 確定 (ユーザー回答) |
 | S-11 | Windows の終了イベントでの退避 | v0.1 は CTRL_CLOSE・パニック・メインがブロックした状態の CTRL_CLOSE の 3 経路で退避の到達を確かめる (§11.2)。CTRL_CLOSE の猶予 (約 5 秒) が利用者設定に依らない固定値であることと、§11.2 の時系列表 (受信から ≤ 4.5 s で `TRUE`) で間に合うことも確かめる。ログオフ / シャットダウンは隠しウィンドウ (`WM_QUERYENDSESSION` / `WM_ENDSESSION`) で受ける方式を v0.2 で実装し、v0.1 は「Windows のログオフ・シャットダウン時は未保存の内容が退避されないことがある」を既知の制約 (01 §4.6・リリースノート) にする (確定 (ユーザー回答))。Unix のシグナル分は v0.2 (macOS / Linux 出荷時) | スパイク / G1c (v0.1 M3。08 §3 S-11) |
 | S-09 | Windows の置換 API (`SetFileInformationByHandle(FileRenameInfoEx, POSIX_SEMANTICS)` を採るか) | 未決。ACL / ADS / 属性保持と中間状態の有無で判断 (§4.2)。それまでは `ReplaceFileW` (退避名を必須で渡す) + §4.6 の復旧で、`ReplaceFileW` が失敗して T が無傷なら `AtomicUnsupported` → 確認 → in-place (`MoveFileExW` で置き換えない。確定 (ユーザー回答))。kill テストの切断点は 09 §3.6 (6) (原子的保存の 4 点・置換の途中・in-place の `kill_after_inflight_flag` / `kill_mid_backup` / `kill_after_backup` / `kill_after_inplace_alloc` / `kill_mid_inplace_write`、§4.4 手順 10)。同じスパイクで XXH3-64 (§5.5) の速度だけを計測する。`cargo install --git` の経路でリポジトリの `.cargo/config.toml` (`+crt-static`) が効くかも同じ検証環境で確かめる (§16.4) | スパイク / G1c (v0.1 M3。08 §3 S-09) |
 | OQ-111 | クリップボードの実装方式 (v0.1) | **確定 (ユーザー回答)**: OS 付属の手段で実装し arboard を使わない。**v0.1 は Windows = `windows-sys` の Win32 API 直接 (+ 内部レジスタ) のみ**。OSC 52 と、macOS = `/usr/bin/pbcopy` / `pbpaste`、Linux = `/usr/bin` 配下の `wl-copy` / `wl-paste` / `xclip` / `xsel` の検出、WSL の `command` provider は v0.2 (macOS / Linux 出荷時。§8.2 / §8.3)。S-14 (v0.1 は Win32 のみ) で不成立なら arboard が退路 | 確定 (ユーザー回答) |
-| OQ-112 | Linux の配布物 | v0.1 は Linux を出荷しない。Linux 出荷時 (v0.2) は **musl 静的を基本** (§1.1 / §18)。BM-104 が gnu 版比 1.5 倍以上遅い、または BM-202 が 1.3 倍以上なら gnu 版 (zigbuild 2.31) を追加 (§17.3) | PO / v0.2 着手前 (Linux 出荷前) |
+| OQ-112 | Linux の配布物 | **確定 (ユーザー回答、2026-11-04)**: v0.2 は **musl 静的版だけ** (§1.1 / §18)。gnu 版 (zigbuild 2.31) は deb / rpm の v0.4 で追加。musl 版が BM-104 / BM-202 の目標を超えた版では同時に追加 (§17.3) | PO / 確定 |
 | OQ-140 | 管理モードのローカル LLM サーバ (§13.7) のポート取得と待受 | Unix ドメインソケット / 名前付きパイプが使えるサーバではそれを使い、不可なら evoeditor が `127.0.0.1:0` を bind して空きポートを選びサーバに渡す (競合の窓は 1 回の再試行で吸収)。対応状況は S-22 (h) / S-23 で確認 | スパイク (S-23) / v1.L-b 着手前 |
 | OQ-163 | `state_dir` を使えないときの緊急退避先 | v0.1 (Windows) は `%TEMP%\eve-recovery-<SID>\` (所有者のみの DACL)、v0.2 の Unix は `$TMPDIR/eve-recovery-<uid>/` (0700) に退避し、終了時表示でそのパスを示す (02 §11.2.1。OS 別の実体は §7.5) | 提案中 (裁量) / G1c |
 | OQ-164 | 公開前の文書のうち本書の分 (インストール手順、アンインストール手順、minisign 鍵の公開場所と検証手順、脆弱性の通知と `SECURITY.md` の更新方法の案内) | §18.2a / §18.8 / §18.9 / §18.14 の案 | 提案中 (裁量) / `SECURITY.md` の最小の版は最初の push の前、インストール・アンインストールの手順と minisign の検証手順と `SECURITY.md` の更新方法の案内は v0.1 リリース前 |

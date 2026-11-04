@@ -292,6 +292,9 @@ mod tests {
     fn 製品のコードは外部のプロセスを起動しない() {
         // モードラインやワークスペース設定に外部コマンドがあっても起動されない (v0.1 はそもそも起動する経路が無い)。
         // 試験・ベンチ・補助の crate を除いた製品のソースに、プロセスを起動する呼出しが無いことを確かめる。
+        // 例外は Unix のクリップボードのコマンド (`clipboard_cmd`): コピー・貼り付けの操作でだけ、root しか書けない場所で
+        // 検出した既知のコマンドか WSL の絶対パスの `powershell.exe` を起こす。ファイルの中身からは起動しない (05 §8.3)
+        const ALLOWED: &[&str] = &["crates/eve-platform/src/clipboard_cmd.rs"];
         let root = crate::util::workspace_root();
         let mut found = Vec::new();
         for dir in ["crates", "bins"] {
@@ -301,6 +304,7 @@ mod tests {
                     || p.contains("/benches/")
                     || p.contains("/eve-test-helpers/")
                     || p.contains("/eve-testkit/")
+                    || ALLOWED.iter().any(|a| p.ends_with(a))
                 {
                     continue;
                 }

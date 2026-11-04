@@ -1,5 +1,7 @@
 # cargo-about の設定 (docs/05 §17.1、docs/11 §9.6)。THIRD-PARTY-NOTICES.md を生成する: cargo xtask gen-notices
-# 許可リストは deny.toml と同じ (正本は 05 §17.1)。配布する Windows x86_64 の exe の依存だけを対象にする。
+# 許可リストは deny.toml と同じ (正本は 05 §17.1)。配布する exe (Windows x86_64、Linux x86_64 / aarch64 の musl 静的版) の依存を
+# 対象にする。全ターゲットの和を 1 つのファイルにし、どの配布物にも同じものを同梱する。静的にリンクする musl の表示は
+# crate ではないので、gen-notices が dist/notices/musl-COPYRIGHT を末尾に足す
 accepted = [
     "MIT",
     "Apache-2.0",
@@ -14,7 +16,11 @@ accepted = [
     "BSL-1.0",
     "CC0-1.0",
 ]
-targets = ["x86_64-pc-windows-msvc"]
+targets = [
+    "x86_64-pc-windows-msvc",
+    "x86_64-unknown-linux-musl",
+    "aarch64-unknown-linux-musl",
+]
 # このリポジトリの crate (publish = false) は一覧に含めない (本体のライセンスは LICENSE / NOTICE)
 private = { ignore = true }
 ignore-dev-dependencies = true

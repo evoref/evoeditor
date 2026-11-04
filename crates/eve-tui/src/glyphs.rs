@@ -46,6 +46,8 @@ pub struct Glyphs {
     pub toggle_on: Glyph,
     /// 文書末尾より後の行。
     pub eof_line: Glyph,
+    /// 折り返しの継続行の印 (行番号欄の右端、04 §10)。
+    pub wrap_cont: Glyph,
 }
 
 impl Glyphs {
@@ -75,6 +77,7 @@ impl Glyphs {
             error: g("✖", 1),
             toggle_on: g("✓", 1),
             eof_line: g("~", 1),
+            wrap_cont: g("↪", 1),
         }
     }
 
@@ -104,6 +107,7 @@ impl Glyphs {
             error: g("x", 1),
             toggle_on: g("*", 1),
             eof_line: g("~", 1),
+            wrap_cont: g(">", 1),
         }
     }
 
@@ -116,7 +120,7 @@ impl Glyphs {
     }
 
     #[cfg(test)]
-    fn all(&self) -> [Glyph; 24] {
+    fn all(&self) -> [Glyph; 25] {
         [
             self.boxed.horizontal,
             self.boxed.vertical,
@@ -139,6 +143,7 @@ impl Glyphs {
             self.error,
             self.toggle_on,
             self.eof_line,
+            self.wrap_cont,
             self.boxed.horizontal,
             self.boxed.vertical,
             self.gutter_sep,
@@ -170,6 +175,7 @@ mod tests {
     fn 対応表の主な行() {
         let (u, a) = (Glyphs::unicode(), Glyphs::ascii());
         assert_eq!((u.gutter_sep.text, a.gutter_sep.text), ("│", "|"));
+        assert_eq!((u.wrap_cont.text, a.wrap_cont.text), ("↪", ">"));
         assert_eq!((u.modified.text, a.modified.text), ("●", "*"));
         assert_eq!((u.focus.text, a.focus.text), ("▶", ">"));
         assert_eq!((u.ellipsis.text, a.ellipsis.text), ("…", "..."));

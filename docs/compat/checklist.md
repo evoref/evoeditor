@@ -100,6 +100,27 @@
 | I2 | README の「インストール」の手順どおりに、zip を展開して PATH を通し、`evoeditor --version` を実行する (クリーンな Windows 11 でできれば最良。Visual C++ の再頒布パッケージが無い環境) | 手順どおりに進み、起動できる |
 | I3 | SmartScreen・Smart App Control の表示 | README の説明どおりか。表示の有無を記録する |
 
+## L. Linux (v0.2): WSL の Windows Terminal と tmux (記録は `linux-wsl.md`)
+
+v0.2 の Linux の受入は、開発 PC の **WSL2 (Ubuntu)** を **Windows Terminal** で開いて行う (docs/README §3.9 の M7。実機のデスクトップ環境 (GNOME / KDE) は未確認のまま出荷する決定、05 §9.4)。雛形は [`_template/linux-wsl.md`](_template/linux-wsl.md)。
+
+**準備**: Linux の musl 静的版の tar.gz (`cargo xtask dist --target x86_64-unknown-linux-musl` で作ったもの、またはリリースの候補) を使う (開発ビルドではない)。手順 L1 で README の Linux の手順どおりに入れたものを、以降の項目で使う。作業のファイルは WSL の中 (`~` の下) に作る。
+
+**自動の部分**: 最初に WSL の中で `cargo xtask accept-linux` を実行する (候補の tar.gz があれば `--archive <tar.gz>`。隣に `SHA256SUMS` を置く)。L1 と、A1〜A5・C1・C2・C5・D1・D3・D4・D6・E1〜E3・F1〜F6・G1〜G3・L2〜L5・L7・L8 の端末の中の動作を tmux で確かめ、`target/accept-linux/result.md` に結果を書く (L4 は Windows のクリップボードを一時的に書き換え、終わると元に戻す)。○ の項目は記録に「自動」と書いて写してよい。× は Issue にする。**手で行うのは** 次の項目だけ: B1〜B5・L6 (日本語入力)、C2 と L8 の Windows Terminal から押した `Ctrl+Shift` のキー、C3、C4 (色の見た目)、D2 (右クリックの貼り付け)、D5 (端末の範囲選択)、L2 の Windows Terminal のタブを閉じる操作、L5 の `Ctrl+Shift+V` と右クリック、L7 の推奨設定の tmux を Windows Terminal で開いた見た目。
+
+**A〜G**: 上の A〜G を WSL の中で同じ手順で行う。読み替え: 設定は `~/.config/evoeditor/config.toml`、PowerShell の例は sh に読み替える (`NO_COLOR=1 evoeditor`)、D の「他のアプリ」は Windows のアプリ (メモ帳など)、G のコーパスは WSL の中で作る。
+
+| # | 手順 | 期待 |
+|---|---|---|
+| L1 | README の「インストール」の Linux の手順どおりに、署名とハッシュを検証し (`sha256sum -c SHA256SUMS --ignore-missing`)、`~/.local/opt/evoeditor` に展開し、`~/.local/bin` にリンクを置き、ログインし直して `evoeditor --version` を実行する | 手順どおりにでき、版が出る |
+| L2 | 編集して未保存のまま、Windows Terminal の WSL のタブを閉じる (SIGHUP)。もう一度起動する | 未保存の内容が `~/.local/state/evoeditor/recovery/<日時>-<pid>/` に退避され、起動時に案内される |
+| L3 | `Ctrl+K Z` でシェルに戻り、`fg` で戻る。戻る前に端末の大きさを変えておく | シェルに戻るときに端末が元に戻る。`fg` で代替スクリーンに戻り、今の大きさで描き直される |
+| L4 | エディタで選択して `Ctrl+C` し、Windows のアプリに貼る。Windows のアプリでコピーしてエディタに `Ctrl+V` で貼る (日本語・改行を含む) | 内容が一致する (WSL では `powershell.exe` 経由。1 回目は少し待つことがある) |
+| L5 | 端末の貼り付け (`Ctrl+Shift+V` か右クリック) で、D1 の 100 行と D3 の `paste-injection.txt` を貼る | D1・D3 と同じ (Linux はブラケットペーストで届く) |
+| L6 | B1〜B4 を WSL の中で行う (Microsoft IME と Google 日本語入力) | B1〜B4 と同じ |
+| L7 | tmux (README の推奨設定あり) の中で A1・A2・C1・C2・F1 を行い、未保存のまま `tmux kill-session` する | 動作は tmux の外と同じ。kill-session で L2 と同じく退避される |
+| L8 | tmux の推奨設定なし (`tmux -f /dev/null`) で `Esc` と `Ctrl+Shift` を含むキーを押す | 動く (`Esc` の反応が遅いのは tmux の `escape-time` のため。README の既知の制約のとおり) |
+
 ## 記録の書き方
 
 - 項目ごとに ○ / △ / × と備考を書く。

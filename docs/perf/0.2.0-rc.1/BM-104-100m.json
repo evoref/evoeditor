@@ -1,0 +1,19 @@
+{
+  "commit": "ced9f04",
+  "env": "ENV-W1",
+  "id": "BM-104-100m",
+  "quick": false,
+  "results": [
+    {
+      "id": "BM-104-100m",
+      "max_ms": 145.9,
+      "mem_delta_bytes": 121565184,
+      "mem_limit_bytes": 173015172,
+      "p50_ms": 139.2,
+      "p99_ms": 145.9,
+      "quick": false,
+      "runs": 30,
+      "size_bytes": 104857688
+    }
+  ]
+}

@@ -80,7 +80,15 @@ fn 実スレッドで開き_編集し_保存して_終了する() {
         thread::sleep(Duration::from_secs(20));
         let _ = sender.send(HostMsg::Signal(eve_host::SignalKind::Interrupt));
     });
-    let code = host.run(&mut fe, Some("/w/a.txt"), false);
+    let code = host.run(
+        &mut fe,
+        &[eve_core::InitialFile {
+            path: "/w/a.txt".into(),
+            line: None,
+            col: None,
+        }],
+        false,
+    );
     driver.join().unwrap();
     assert_eq!(code, ExitCode::OK);
     assert_eq!(probe.restore_count(), 1);

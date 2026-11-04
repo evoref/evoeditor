@@ -2,7 +2,7 @@
 //! 端末の癖 (Ctrl+H ⇔ Backspace など) は frontend が吸収し、core は正規化済みのキーだけを見る。
 
 use crate::caps::Capabilities;
-use crate::ids::ClipboardToken;
+use crate::ids::{ClipboardToken, ViewId};
 
 /// frontend から core に届く入力。宛先の Window は `Editor::handle_input` の引数で渡す。
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -14,6 +14,8 @@ pub enum InputEvent {
     Text(String),
     /// ブラケットペースト。本文の制御文字はコマンドとして解釈せず、文字として扱う。
     Paste(String),
+    /// マウス (docs/03 §5.8.1)。編集面の外 (クローム・オーバーレイ) は frontend が先に判定し、ここへは渡さない。
+    Mouse(MouseEvent),
     /// Window の編集面のサイズ (セル単位)。
     Resize { cols: u16, rows: u16 },
     /// フォーカスの有無。
@@ -25,6 +27,41 @@ pub enum InputEvent {
     },
     /// 実行中に判明・変化した能力 (拡張キーの検出など)。
     CapabilitiesChanged(Capabilities),
+}
+
+/// マウスの操作 1 つ (docs/03 §5.8.1、02 §7.3)。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct MouseEvent {
+    pub kind: MouseKind,
+    pub mods: Modifiers,
+    pub at: MouseAt,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum MouseKind {
+    Down(MouseButton),
+    /// ボタンを押したままの移動。
+    Drag(MouseButton),
+    Up(MouseButton),
+    WheelUp,
+    WheelDown,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum MouseButton {
+    Left,
+    Middle,
+    Right,
+}
+
+/// 編集面 (`PaneFrame.rect`) の左上を原点とするセル。ボタンを押している間は面の外 (負・はみ出し) もそのまま渡す。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct MouseAt {
+    pub view: ViewId,
+    pub row: i32,
+    pub col: i32,
 }
 
 /// キー 1 つの押下・リピート・解放。

@@ -57,6 +57,38 @@ fn cells(s: &str) -> usize {
         .sum()
 }
 
+/// かな・漢字 (半角カナを含む)。〔 〕・矢印・★・… などの記号は含めない。
+fn is_cjk_text(c: char) -> bool {
+    matches!(c as u32, 0x3041..=0x30FF | 0x3400..=0x9FFF | 0xFF66..=0xFF9F)
+}
+
+/// 文言の `{name}` と `{key:id}` の名前の集合 (`{{` は除く)。
+fn placeholders(s: &str) -> BTreeSet<String> {
+    let mut out = BTreeSet::new();
+    let mut it = s.chars().peekable();
+    while let Some(c) = it.next() {
+        if c != '{' {
+            continue;
+        }
+        if it.peek() == Some(&'{') {
+            it.next();
+            continue;
+        }
+        let name: String = it.by_ref().take_while(|c| *c != '}').collect();
+        out.insert(name);
+    }
+    out
+}
+
+/// 文言の `[X]` (大文字 1 字の角括弧) の並び。確認ダイアログのアクセラレータ。
+fn accelerators(s: &str) -> Vec<char> {
+    let cs: Vec<char> = s.chars().collect();
+    cs.windows(3)
+        .filter(|w| w[0] == '[' && w[2] == ']' && w[1].is_ascii_uppercase())
+        .map(|w| w[1])
+        .collect()
+}
+
 fn braces_balanced(s: &str) -> bool {
     let mut depth = 0i32;
     let mut it = s.chars().peekable();
@@ -126,11 +158,13 @@ fn read_screen_keys(doc04: &str) -> Result<BTreeSet<String>, String> {
     Ok(out)
 }
 
-/// カタログの v0.1 の行: (CommandId, title key, ヒントの文脈の集合)。
+/// カタログの行: (CommandId, title key, ヒントの文脈の集合)。
 struct Command {
     id: String,
     title_key: String,
     hint_contexts: BTreeSet<String>,
+    /// 後の版の注記 (`(v0.2)` 等) が付いた行。言語ファイルにあってもなくてもよい (実装した版で足す)。
+    later: bool,
 }
 
 fn read_catalog(doc07: &str) -> Result<Vec<Command>, String> {
@@ -151,11 +185,8 @@ fn read_catalog(doc07: &str) -> Result<Vec<Command>, String> {
     for t in &tables {
         for row in &t.rows {
             let id_cell = t.cell(row, "ID").unwrap_or_default();
-            // 版の注記は ID 列の括弧に書く。(v0.2) などが付いた行は v0.1 の検査から外す。
-            let version_note = id_cell.matches('(').count() > 0 && id_cell.contains("(v");
-            if version_note {
-                continue;
-            }
+            // 版の注記は ID 列の括弧に書く。(v0.2) などが付いた行は `later` にする (必須にしない)。
+            let later = id_cell.matches('(').count() > 0 && id_cell.contains("(v");
             let ids = identifiers(&strip_parentheticals(id_cell));
             let titles = identifiers(&strip_parentheticals(
                 t.cell(row, "title key").unwrap_or_default(),
@@ -206,6 +237,7 @@ fn read_catalog(doc07: &str) -> Result<Vec<Command>, String> {
                     id,
                     title_key,
                     hint_contexts,
+                    later,
                 });
             }
         }
@@ -245,7 +277,9 @@ pub fn run() -> Result<(), String> {
     let mut errors: Vec<String> = Vec::new();
     let messages = read_messages(&read_text(&root.join("docs/04-tui-design.md"))?)?;
     let screen_keys = read_screen_keys(&read_text(&root.join("docs/04-tui-design.md"))?)?;
-    let commands = read_catalog(&read_text(&root.join("docs/07-config-extensibility.md"))?)?;
+    let all_commands = read_catalog(&read_text(&root.join("docs/07-config-extensibility.md"))?)?;
+    // 必須なのは v0.1 の行。後の版の行は、実装した版で言語ファイルに足してよい (許すが要求しない)
+    let commands: Vec<&Command> = all_commands.iter().filter(|c| !c.later).collect();
 
     // 1. 目録の整合
     let mut seen: BTreeMap<&str, usize> = BTreeMap::new();
@@ -315,92 +349,136 @@ pub fn run() -> Result<(), String> {
         commands.len()
     );
 
-    // 3. 言語ファイル
-    let locale_path = root.join("locales/ja.toml");
-    if locale_path.exists() {
-        let value: toml::Value = toml::from_str(&read_text(&locale_path)?)
-            .map_err(|e| format!("locales/ja.toml を読めません: {e}"))?;
-        let mut have = BTreeMap::new();
-        flatten("", &value, &mut have);
-        // `[meta]` は文言ではない
-        have.retain(|k, _| !k.starts_with("meta."));
-        let mut want: BTreeSet<String> = BTreeSet::new();
-        for e in messages
-            .iter()
-            .filter(|e| !NOT_IN_LOCALE.iter().any(|p| e.key.starts_with(p)))
-        {
-            // 目録の `msg.<domain>.<name>` は言語ファイルでは `.text` と `.hint` の 2 つ (07 §17.2)
-            if e.key.starts_with("msg.") && !e.key.ends_with(".text") && !e.key.ends_with(".hint") {
-                want.insert(format!("{}.text", e.key));
-                want.insert(format!("{}.hint", e.key));
-            } else {
-                want.insert(e.key.clone());
+    // 3. 言語ファイル (同梱の ja と en。キー集合は目録・カタログと一致し、en は ja とも一致する)
+    let mut haves: BTreeMap<&str, BTreeMap<String, String>> = BTreeMap::new();
+    for lang in ["ja", "en"] {
+        let locale_path = root.join(format!("locales/{lang}.toml"));
+        if locale_path.exists() {
+            let value: toml::Value = toml::from_str(&read_text(&locale_path)?)
+                .map_err(|e| format!("locales/{lang}.toml を読めません: {e}"))?;
+            let mut have = BTreeMap::new();
+            flatten("", &value, &mut have);
+            // `[meta]` は文言ではない
+            have.retain(|k, _| !k.starts_with("meta."));
+            let mut want: BTreeSet<String> = BTreeSet::new();
+            for e in messages
+                .iter()
+                .filter(|e| !NOT_IN_LOCALE.iter().any(|p| e.key.starts_with(p)))
+            {
+                // 目録の `msg.<domain>.<name>` は言語ファイルでは `.text` と `.hint` の 2 つ (07 §17.2)
+                if e.key.starts_with("msg.")
+                    && !e.key.ends_with(".text")
+                    && !e.key.ends_with(".hint")
+                {
+                    want.insert(format!("{}.text", e.key));
+                    want.insert(format!("{}.hint", e.key));
+                } else {
+                    want.insert(e.key.clone());
+                }
             }
-        }
-        for k in screen_keys
-            .iter()
-            .filter(|k| !NOT_IN_LOCALE.iter().any(|p| k.starts_with(p)))
-        {
-            if !k.starts_with("hint.") {
-                want.insert(k.clone());
+            for k in screen_keys
+                .iter()
+                .filter(|k| !NOT_IN_LOCALE.iter().any(|p| k.starts_with(p)))
+            {
+                if !k.starts_with("hint.") {
+                    want.insert(k.clone());
+                }
             }
-        }
-        for c in &commands {
-            want.insert(format!("cmd.{}.title", c.id));
-            want.insert(format!("cmd.{}.description", c.id));
-            if c.hint_contexts.contains("normal") || c.hint_contexts.contains("overlay") {
-                want.insert(format!("hint.{}", c.id));
+            let mut optional: BTreeSet<String> = BTreeSet::new();
+            for c in &all_commands {
+                let set = if c.later { &mut optional } else { &mut want };
+                set.insert(format!("cmd.{}.title", c.id));
+                set.insert(format!("cmd.{}.description", c.id));
+                if c.hint_contexts.contains("normal") || c.hint_contexts.contains("overlay") {
+                    set.insert(format!("hint.{}", c.id));
+                }
             }
-        }
-        // 複数形の接尾辞 (.one / .other) を除いた基底キーで比べる
-        let base = |k: &str| {
-            k.strip_suffix(".one")
-                .or_else(|| k.strip_suffix(".other"))
-                .unwrap_or(k)
-                .to_owned()
-        };
-        let have_keys: BTreeSet<String> = have.keys().map(|k| base(k)).collect();
-        for k in want.difference(&have_keys) {
-            errors.push(format!("locales/ja.toml に `{k}` がありません"));
-        }
-        for k in have_keys.difference(&want) {
-            errors.push(format!(
-                "locales/ja.toml の `{k}` は目録・カタログにありません (余剰)"
-            ));
-        }
-        let known_ids: BTreeSet<&str> = commands.iter().map(|c| c.id.as_str()).collect();
-        for (k, v) in &have {
-            if v == NOT_A_STRING {
+            // 複数形の接尾辞 (.one / .other) を除いた基底キーで比べる
+            let base = |k: &str| {
+                k.strip_suffix(".one")
+                    .or_else(|| k.strip_suffix(".other"))
+                    .unwrap_or(k)
+                    .to_owned()
+            };
+            let have_keys: BTreeSet<String> = have.keys().map(|k| base(k)).collect();
+            for k in want.difference(&have_keys) {
+                errors.push(format!("locales/{lang}.toml に `{k}` がありません"));
+            }
+            for k in have_keys
+                .difference(&want)
+                .filter(|k| !optional.contains(*k))
+            {
                 errors.push(format!(
-                    "locales/ja.toml: `{k}` は文字列でもテーブルでもありません"
+                    "locales/{lang}.toml の `{k}` は目録・カタログにありません (余剰)"
                 ));
-                continue;
             }
-            // `{key:<command_id>}` の CommandId は 07 §11.6 のカタログにあるもの (07 §17.3)
-            let mut rest = v.as_str();
-            while let Some(i) = rest.find("{key:") {
-                let tail = &rest[i + 5..];
-                let end = tail.find('}').unwrap_or(tail.len());
-                let id = &tail[..end];
-                if !known_ids.contains(id) {
+            let known_ids: BTreeSet<&str> = all_commands.iter().map(|c| c.id.as_str()).collect();
+            for (k, v) in &have {
+                if v == NOT_A_STRING {
                     errors.push(format!(
-                        "locales/ja.toml: `{k}` の `{{key:{id}}}` はカタログにない CommandId です"
+                        "locales/{lang}.toml: `{k}` は文字列でもテーブルでもありません"
+                    ));
+                    continue;
+                }
+                // `{key:<command_id>}` の CommandId は 07 §11.6 のカタログにあるもの (07 §17.3)
+                let mut rest = v.as_str();
+                while let Some(i) = rest.find("{key:") {
+                    let tail = &rest[i + 5..];
+                    let end = tail.find('}').unwrap_or(tail.len());
+                    let id = &tail[..end];
+                    if !known_ids.contains(id) {
+                        errors.push(format!(
+                        "locales/{lang}.toml: `{k}` の `{{key:{id}}}` はカタログにない CommandId です"
+                    ));
+                    }
+                    rest = &tail[end..];
+                }
+                // 言語ごとの文字の規則: en にかな・漢字を入れない (〔 〕・矢印・★ などの記号は可)
+                if lang == "en" && v.chars().any(is_cjk_text) {
+                    errors.push(format!(
+                        "locales/{lang}.toml: `{k}` に日本語の文字があります ({v})"
                     ));
                 }
-                rest = &tail[end..];
+                if k.starts_with("hint.") && cells(v) > HINT_MAX_CELLS {
+                    errors.push(format!("locales/{lang}.toml: `{k}` のヒントが表示幅 {HINT_MAX_CELLS} セルを超えています ({v})"));
+                }
             }
-            if k.starts_with("hint.") && cells(v) > HINT_MAX_CELLS {
-                errors.push(format!("locales/ja.toml: `{k}` のヒントが表示幅 {HINT_MAX_CELLS} セルを超えています ({v})"));
+            println!(
+                "  locales/{lang}.toml: {} キーを目録・カタログと突合",
+                have.len()
+            );
+            haves.insert(lang, have);
+        } else {
+            println!(
+                "  locales/{lang}.toml: まだありません (MessageKey を実装するマイルストーンで作る)。言語ファイルとの突合は飛ばしました"
+            );
+        }
+    }
+
+    // 同梱の言語の間: 同じキーは同じプレースホルダ (`{name}`・`{key:id}`) を持つ。位置の違いは言語の自由 (07 §17.2)
+    if let (Some(ja), Some(en)) = (haves.get("ja"), haves.get("en")) {
+        for (k, jv) in ja {
+            if let Some(ev) = en.get(k) {
+                let (pj, pe) = (placeholders(jv), placeholders(ev));
+                if pj != pe {
+                    errors.push(format!(
+                        "locales/en.toml: `{k}` のプレースホルダが ja と違います (ja: {pj:?} / en: {pe:?})"
+                    ));
+                }
+                // 〔 〕 (条件付きの文) の有無も揃える
+                if jv.contains('〔') != ev.contains('〔') {
+                    errors.push(format!(
+                        "locales/en.toml: `{k}` の 〔 〕 が ja と揃っていません"
+                    ));
+                }
+                // 確認ダイアログの選択肢の `[X]` (アクセラレータ) の文字は言語で変えない (コードが決めている)
+                if accelerators(jv) != accelerators(ev) {
+                    errors.push(format!(
+                        "locales/en.toml: `{k}` の `[X]` のアクセラレータが ja と違います"
+                    ));
+                }
             }
         }
-        println!(
-            "  locales/ja.toml: {} キーを目録・カタログと突合",
-            have.len()
-        );
-    } else {
-        println!(
-            "  locales/ja.toml: まだありません (MessageKey を実装するマイルストーンで作る)。言語ファイルとの突合は飛ばしました"
-        );
     }
 
     if errors.is_empty() {
@@ -417,6 +495,30 @@ pub fn run() -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn プレースホルダの集合() {
+        let p = placeholders("{path} を {{ 開く }} {key:file.save} {count}");
+        let v: Vec<&str> = p.iter().map(String::as_str).collect();
+        assert_eq!(v, ["count", "key:file.save", "path"]);
+        assert!(placeholders("なし").is_empty());
+    }
+
+    #[test]
+    fn アクセラレータの並び() {
+        assert_eq!(accelerators("[S] 保存して終了"), ['S']);
+        assert_eq!(accelerators("`[K] a` ★ / `[C] b`"), ['K', 'C']);
+        assert!(accelerators("[Esc] Cancel").is_empty());
+        assert!(accelerators("[a] x").is_empty());
+    }
+
+    #[test]
+    fn かな漢字の判定() {
+        assert!(is_cjk_text('あ') && is_cjk_text('漢') && is_cjk_text('ｱ'));
+        for c in ['a', '〔', '〕', '→', '★', '…', 'é'] {
+            assert!(!is_cjk_text(c), "{c}");
+        }
+    }
+
     use super::*;
 
     // verifies: AC-NFR-603-1
@@ -449,8 +551,12 @@ mod tests {
 | `edit.undo` / `edit.redo` | `cmd.edit.undo` / `cmd.edit.redo` | Edit | — | — | `-` | `editor` | `mod+z` / `mod+y` | normal:2 (undo のみ) |\n\
 | `file.save_all` (v0.2) | `cmd.file.save_all` | File | — | — | `-` | `editor` | — | chord:3 |\n";
         let c = read_catalog(md).unwrap();
-        assert_eq!(c.len(), 2, "v0.2 の行は含めない");
+        assert_eq!(c.len(), 3);
         assert!(c[0].hint_contexts.contains("normal"), "undo はヒントを持つ");
         assert!(c[1].hint_contexts.is_empty(), "redo はヒントを持たない");
+        assert!(
+            !c[0].later && !c[1].later && c[2].later,
+            "v0.2 の行は後の版"
+        );
     }
 }

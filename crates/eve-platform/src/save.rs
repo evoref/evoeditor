@@ -36,15 +36,17 @@ use windows_sys::Win32::Security::{
 };
 use windows_sys::Win32::Storage::FileSystem::{
     CREATE_NEW, CreateFileW, DeleteFileW, FILE_ATTRIBUTE_HIDDEN, FILE_ATTRIBUTE_NORMAL,
-    FILE_ATTRIBUTE_SYSTEM, FILE_SHARE_READ, FlushFileBuffers, GetFileAttributesW,
-    INVALID_FILE_ATTRIBUTES, MOVEFILE_WRITE_THROUGH, MoveFileExW, ReplaceFileW, SetFileAttributesW,
+    FILE_ATTRIBUTE_READONLY, FILE_ATTRIBUTE_SYSTEM, FILE_SHARE_READ, FlushFileBuffers,
+    GetFileAttributesW, INVALID_FILE_ATTRIBUTES, MOVEFILE_WRITE_THROUGH, MoveFileExW, ReplaceFileW,
+    SetFileAttributesW,
 };
 use windows_sys::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
 
 use crate::fs::{WinFs, map_io_error};
 use crate::hooks;
-use crate::inflight;
+use crate::inflight::FlagGuard;
 use crate::path::simplify_verbatim;
+use crate::sys::{matches, same_file_state};
 
 /// 共有違反の再試行の待ち (ミリ秒、05 §4.2。合計 2.55 s)。
 pub(crate) const SHARING_RETRY_MS: [u64; 6] = [50, 100, 200, 400, 800, 1000];
@@ -62,6 +64,17 @@ const ERROR_UNABLE_TO_MOVE_REPLACEMENT_2: u32 = 1177;
 const NAME_LIMIT: usize = 255;
 
 /// Win32 の `…W` 関数に渡す NUL 終端の UTF-16。長いパスは拡張長形式 (`\\?\`) にする (`extend_long`)。
+/// 既存のファイルを置き換えない名前の変更 (`MOVEFILE_REPLACE_EXISTING` なし。`to` が在れば失敗する)。
+pub(crate) fn rename_no_replace(from: &Path, to: &Path) -> std::io::Result<()> {
+    let (wf, wt) = (wide(from), wide(to));
+    // SAFETY: NUL 終端のパス 2 つ。
+    let ok = unsafe { MoveFileExW(wf.as_ptr(), wt.as_ptr(), MOVEFILE_WRITE_THROUGH) };
+    if ok == 0 {
+        return Err(std::io::Error::last_os_error());
+    }
+    Ok(())
+}
+
 pub(crate) fn wide(p: &Path) -> Vec<u16> {
     let mut w = extend_long(p.as_os_str().encode_wide().collect());
     w.push(0);
@@ -302,17 +315,9 @@ fn rand32() -> u32 {
     h.finish() as u32
 }
 
-/// 照合の比較 (05 §5.5。ハッシュは持たないので (mtime, len, FileId))。
-pub(crate) fn matches(want: &FileStamp, have: &FileStamp) -> bool {
-    want.mtime == have.mtime && want.len == have.len && want.file_id == have.file_id
-}
-
-pub(crate) fn same_file_state(a: &FileMeta, b: &FileMeta) -> bool {
-    a.mtime == b.mtime && a.len == b.len && a.file_id == b.file_id
-}
-
 /// 保存先 T: シンボリックリンクなら最終リンク先 (ダングリングは `NotFound` + `DanglingLink`)。
-pub(crate) fn resolve_target(path: &FsPath) -> Result<PathBuf, FsError> {
+/// `create` ならダングリングのリンクのリンク先を T にする (新規作成の経路で書く。05 §4.1)。リンク先もリンク (連鎖) なら `InvalidPath`。
+pub(crate) fn resolve_target(path: &FsPath, create: bool) -> Result<PathBuf, FsError> {
     let mut target: PathBuf = path.as_path().to_path_buf();
     if let Ok(sm) = fs::symlink_metadata(&target)
         && sm.file_type().is_symlink()
@@ -320,6 +325,17 @@ pub(crate) fn resolve_target(path: &FsPath) -> Result<PathBuf, FsError> {
         match fs::canonicalize(&target) {
             Ok(t) => target = PathBuf::from(simplify_verbatim(&t.to_string_lossy())),
             Err(e) if e.kind() == io::ErrorKind::NotFound => {
+                if create && let Ok(raw) = fs::read_link(&target) {
+                    // 相対のリンク先はリンクのあるディレクトリから
+                    let t = match target.parent() {
+                        Some(dir) if raw.is_relative() => dir.join(&raw),
+                        _ => raw,
+                    };
+                    if fs::symlink_metadata(&t).is_ok() {
+                        return Err(FsError::new(FsErrorKind::InvalidPath));
+                    }
+                    return Ok(t);
+                }
                 let link_target = fs::read_link(&target).ok().map(FsPath::new);
                 return Err(FsError {
                     kind: FsErrorKind::NotFound,
@@ -331,118 +347,6 @@ pub(crate) fn resolve_target(path: &FsPath) -> Result<PathBuf, FsError> {
         }
     }
     Ok(target)
-}
-
-/// 保存中フラグ (05 §4.1 手順 0d / 7 / 8)。状態ディレクトリが無い・状態ファイルの書込 (`state_file`) ではフラグを書かない。
-pub(crate) struct FlagGuard {
-    pub(crate) state_dir: Option<PathBuf>,
-    pub(crate) key: Option<String>,
-    pub(crate) path: Option<PathBuf>,
-}
-
-impl FlagGuard {
-    /// 一時ファイルを作る前に書く。書けなければ警告して続ける (原子的置換では T が無傷のまま残るため)。
-    fn begin(
-        state_dir: Option<&Path>,
-        state_file: bool,
-        target: &Path,
-        method: SaveMethod,
-        tmp: &Path,
-        bak: Option<&Path>,
-        warnings: &mut Vec<SaveWarning>,
-    ) -> FlagGuard {
-        let mut g = FlagGuard {
-            state_dir: None,
-            key: None,
-            path: None,
-        };
-        let Some(sd) = state_dir.filter(|_| !state_file) else {
-            return g;
-        };
-        g.state_dir = Some(sd.to_path_buf());
-        g.key = inflight::flag_key(target);
-        let written = g.key.as_deref().and_then(|key| {
-            inflight::write_flag(
-                sd,
-                key,
-                &inflight::FlagBody {
-                    target,
-                    method,
-                    tmp: Some(tmp),
-                    backup: bak,
-                    backup_recorded: false,
-                    backup_complete: false,
-                },
-            )
-            .ok()
-        });
-        match written {
-            Some(p) => g.path = Some(p),
-            None => warnings.push(SaveWarning::InflightFlagNotWritten),
-        }
-        g
-    }
-
-    /// 直接上書きのフラグ (05 §4.4 手順 2)。書けなければ `None` (呼び側が `BackupFailed` にするか、警告で続ける)。
-    pub(crate) fn begin_in_place(
-        state_dir: &Path,
-        target: &Path,
-        backup: Option<&Path>,
-    ) -> Option<FlagGuard> {
-        let key = inflight::flag_key(target)?;
-        let path = inflight::write_flag(
-            state_dir,
-            &key,
-            &inflight::FlagBody {
-                target,
-                method: SaveMethod::InPlace,
-                tmp: None,
-                backup,
-                backup_recorded: backup.is_some(),
-                backup_complete: false,
-            },
-        )
-        .ok()?;
-        Some(FlagGuard {
-            state_dir: Some(state_dir.to_path_buf()),
-            key: Some(key),
-            path: Some(path),
-        })
-    }
-
-    /// 事前バックアップを最終名にした後、フラグを `backup_complete = true` で書き直す。
-    pub(crate) fn mark_backup_complete(&self, target: &Path, backup: &Path) -> io::Result<()> {
-        let Some(p) = &self.path else {
-            return Ok(());
-        };
-        inflight::rewrite_flag(
-            p,
-            &inflight::FlagBody {
-                target,
-                method: SaveMethod::InPlace,
-                tmp: None,
-                backup: Some(backup),
-                backup_recorded: true,
-                backup_complete: true,
-            },
-        )
-    }
-
-    /// 自分のフラグを消す。
-    pub(crate) fn remove(&mut self) {
-        if let Some(p) = self.path.take() {
-            let _ = fs::remove_file(p);
-        }
-    }
-
-    /// 成功: 自分のフラグと、同じキーに残る他の記録 (痕跡ファイルが実在しないもの) を消す。
-    pub(crate) fn finish_success(&mut self) {
-        let mine = self.path.clone();
-        self.remove();
-        if let (Some(sd), Some(key), Some(mine)) = (&self.state_dir, &self.key, mine) {
-            inflight::clear_others(sd, key, &mine);
-        }
-    }
 }
 
 /// 置換の前の失敗の後片付け: 一時ファイルを消せたらフラグも消す (消せなければ残す。05 §4.1 手順 8)。
@@ -462,7 +366,7 @@ impl WinFs {
         let conflict = |current| FsError::new(FsErrorKind::Conflict { current });
 
         // 0a. シンボリックリンクなら最終リンク先 T を対象にする。ダングリングは保存しない (v0.1、05 §4.1)
-        let target = resolve_target(path)?;
+        let target = resolve_target(path, opts.create_link_target)?;
         let target_path = FsPath::new(target.clone());
         let parent = target
             .parent()
@@ -633,6 +537,20 @@ impl WinFs {
 
         hooks::hit("kill_before_rename");
 
+        // 「読み取り専用を解除して保存」: 置換の直前に T の READONLY を外す (置換の後に付け直す、手順 5b)
+        let readonly_attrs = match &existing {
+            Some(_) if opts.clear_readonly => {
+                attributes(&target).filter(|a| a & FILE_ATTRIBUTE_READONLY != 0)
+            }
+            _ => None,
+        };
+        if let Some(a) = readonly_attrs
+            && !set_attributes(&target, a & !FILE_ATTRIBUTE_READONLY)
+        {
+            abort(&tmp, &mut flag);
+            return Err(FsError::new(FsErrorKind::PermissionDenied));
+        }
+
         // 5. 置換 (終了の経路はここが済むまで待つ。置換の途中で終わると元のファイルが退避名に移ったままになる)
         let _replacing = self.replacing.guard(&target_path.display());
         let method;
@@ -652,6 +570,11 @@ impl WinFs {
                 let intact = self
                     .metadata(&target_path)
                     .is_ok_and(|m| same_file_state(orig, &m));
+                // 外した READONLY を戻す (T が無傷なら T に、退避名に移っていれば退避名に)
+                if let Some(a) = readonly_attrs {
+                    let at = if intact { &target } else { &bak };
+                    let _ = set_attributes(at, a);
+                }
                 return Err(match e {
                     ReplaceFailure::MovedToBackup => {
                         FsError::new(FsErrorKind::ReplacedMovedToBackup {
@@ -687,6 +610,16 @@ impl WinFs {
                     return Err(conflict(cur));
                 }
                 return Err(os_error(code, path));
+            }
+        }
+
+        // 5b. 外した READONLY を付け直す
+        if readonly_attrs.is_some() {
+            let cur = attributes(&target).unwrap_or(FILE_ATTRIBUTE_NORMAL);
+            if !set_attributes(&target, cur | FILE_ATTRIBUTE_READONLY) {
+                warnings.push(SaveWarning::AttrsNotPreserved {
+                    what: vec![AttrKind::FileAttributes],
+                });
             }
         }
 

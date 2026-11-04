@@ -23,6 +23,10 @@ pub fn run_all() -> Result<(), String> {
         rows.len()
     );
     run(
+        "組込みテーマ (eve-config) と core の解決の、表の全ロール・4 段との突合",
+        Command::new("cargo").args(["test", "-p", "eve-core", "--test", "theme_table"]),
+    )?;
+    run(
         "実装 (eve-tui) と表の突合・256/16 の近似",
         Command::new("cargo").args(["test", "-p", "eve-tui", "--test", "theme_table"]),
     )?;

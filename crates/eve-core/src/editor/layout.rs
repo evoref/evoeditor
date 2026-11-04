@@ -20,13 +20,29 @@ use crate::document::Document;
 
 use super::state::EditorState;
 
-/// 記号 (制御文字・不可視文字・空白の可視化) の表示。
-const SYMBOL: Style = Style {
-    fg: eve_view::Color::Default,
-    bg: eve_view::Color::Default,
-    mods: StyleMods::DIM,
-    underline_color: None,
-};
+mod long;
+mod wrap;
+use long::{CharWidth, ColIndex};
+pub use wrap::{Affinity, WrapMode, WrapSettings};
+use wrap::{cursor_in_rows, wrap_line};
+
+/// `top` を `base` に重ねる: 既定でない色は `top` が勝ち、属性は足す (07 §14.5 の Decoration の合成の簡略)。
+fn over(base: Style, top: Style) -> Style {
+    let pick = |b: eve_view::Color, t: eve_view::Color| {
+        if t == eve_view::Color::Default { b } else { t }
+    };
+    Style {
+        fg: pick(base.fg, top.fg),
+        bg: pick(base.bg, top.bg),
+        mods: base.mods | top.mods,
+        underline_color: top.underline_color.or(base.underline_color),
+    }
+}
+
+/// 空白の可視化の記号 (タブの `>` と続きの空白、全角スペースの `[]`) か。それ以外の記号は制御文字・不可視文字。
+fn is_whitespace_mark(text: &str) -> bool {
+    text == ">" || text == "[]" || (!text.is_empty() && text.bytes().all(|b| b == b' '))
+}
 
 fn width_config() -> WidthConfig {
     WidthConfig {
@@ -89,40 +105,62 @@ fn flush_run(run: &mut String, parts: &mut Vec<(String, u16, bool)>, cfg: &Width
 /// 展開の覚えを使う行の大きさ (これ未満は毎回展開する)。
 const UNITS_CACHE_MIN: usize = 4096;
 
-/// `units` の結果。長い行 (長大行の表示範囲 64 KiB など) は、Revision・行・幅の設定が同じ間は覚えを使う
+/// `units` の結果。長い行 (閾値以下で 4 KiB 以上) は、Revision・行・幅の設定が同じ間は覚えを使う
 /// (1 回の操作で `cursor_cell` と Frame の生成が同じ行を何度も展開するのを避ける、NFR-106)。
 fn units_for(doc: &Document, line: usize, content: &str) -> std::rc::Rc<Vec<Unit>> {
     use std::rc::Rc;
     let esc = esc_enabled(doc);
+    let ws = doc.display.show_whitespace;
     let cfg = doc_width_config(doc);
     if content.len() < UNITS_CACHE_MIN {
-        return Rc::new(units(content, esc, &cfg));
+        return Rc::new(units_with(content, esc, ws, &cfg));
     }
-    type Key = (eve_view::Revision, usize, bool, u8, bool);
-    let key: Key = (doc.revision(), line, esc, cfg.tab_width, cfg.ambiguous_wide);
+    type Key = (eve_view::Revision, usize, bool, u8, bool, bool);
+    let key: Key = (
+        doc.revision(),
+        line,
+        esc,
+        cfg.tab_width,
+        cfg.ambiguous_wide,
+        ws,
+    );
     if let Some(any) = doc.layout_cache.borrow().as_ref()
         && let Some((k, u)) = any.downcast_ref::<(Key, Rc<Vec<Unit>>)>()
         && *k == key
     {
         return u.clone();
     }
-    let u = Rc::new(units(content, esc, &cfg));
+    let u = Rc::new(units_with(content, esc, ws, &cfg));
     *doc.layout_cache.borrow_mut() = Some(Box::new((key, u.clone())));
     u
 }
 
 /// 1 書記素 `g` (行内のバイト位置 `off`、表示列 `col`) を表示の単位に展開する (一般の経路)。
-fn unit_slow(g: &str, off: usize, col: usize, tab: usize, esc: bool, cfg: &WidthConfig) -> Unit {
+/// `ws` は全角スペースとタブを記号で示す (`view.show_whitespace = "minimal"`)。偽なら空白のセルにする (幅は同じ)。
+fn unit_slow(
+    g: &str,
+    off: usize,
+    col: usize,
+    tab: usize,
+    esc: bool,
+    ws: bool,
+    cfg: &WidthConfig,
+) -> Unit {
     let mut parts: Vec<(String, u16, bool)> = Vec::new();
     let mut risky = false;
     if g == "\t" {
         let w = tab - col % tab;
-        parts.push((">".to_owned(), 1, true));
-        if w > 1 {
-            parts.push((" ".repeat(w - 1), (w - 1) as u16, true));
+        if ws {
+            parts.push((">".to_owned(), 1, true));
+            if w > 1 {
+                parts.push((" ".repeat(w - 1), (w - 1) as u16, true));
+            }
+        } else {
+            parts.push((" ".repeat(w), w as u16, false));
         }
     } else if g == "\u{3000}" {
-        parts.push(("[]".to_owned(), 2, true));
+        // 可視化しないときも、端末の全角の空白の描き方に頼らず ASCII の空白 2 つで描く
+        parts.push((if ws { "[]" } else { "  " }.to_owned(), 2, ws));
     } else if esc && g.chars().any(|c| unescape_char(c).is_some()) {
         // 不正バイトのエスケープ文字は 1 文字ずつ `<0xHH>` にする (結合文字などと同じ書記素になることがある)
         let mut run = String::new();
@@ -159,8 +197,14 @@ fn unit_slow(g: &str, off: usize, col: usize, tab: usize, esc: bool, cfg: &Width
     }
 }
 
-/// 行の内容を表示の単位に展開する。
+/// 行の内容を表示の単位に展開する (空白は可視化する。試験が使う)。
+#[cfg(test)]
 fn units(content: &str, esc: bool, cfg: &WidthConfig) -> Vec<Unit> {
+    units_with(content, esc, true, cfg)
+}
+
+/// `units` の本体。`ws` は空白の可視化 (`unit_slow`)。
+fn units_with(content: &str, esc: bool, ws: bool, cfg: &WidthConfig) -> Vec<Unit> {
     let tab = cfg.tab_width.max(1) as usize;
     // 印字できる ASCII だけの行 (本文の大半): 書記素の分割も表示の組み立ても要らない (1 文字 = 1 書記素 = 幅 1)
     if content.bytes().all(|b| (0x20..=0x7E).contains(&b)) {
@@ -201,43 +245,93 @@ fn units(content: &str, esc: bool, cfg: &WidthConfig) -> Vec<Unit> {
         let g = first_grapheme(rest);
         let off = at;
         at += g.len();
-        let u = unit_slow(g, off, col, tab, esc, cfg);
+        let u = unit_slow(g, off, col, tab, esc, ws, cfg);
         col += u.width;
         out.push(u);
     }
     out
 }
 
-/// 長大行 (閾値超。読み取り専用で開いたもの) は先頭 64 KiB (書記素の境界) までを表示とカーソルの対象にする (NFR-106、03 §11.5)。
-/// 戻り値は表示の終端のバイト位置 (それ以外の行は行末)。
-pub(super) fn line_visible_end(doc: &Document, ls: usize, le: usize) -> usize {
-    use crate::document::{LONG_LINE_THRESHOLD, LONG_LINE_VISIBLE, ReadOnlyReason};
-    if le - ls > LONG_LINE_THRESHOLD && doc.read_only.contains(ReadOnlyReason::LongLine) {
-        eve_text::snap_to_grapheme(
-            doc.text(),
-            ByteOff(ls + LONG_LINE_VISIBLE),
-            eve_text::Bias::Before,
-        )
-        .0
-        .max(ls)
-    } else {
-        le
-    }
-}
-
-/// (行頭, 表示する内容, 改行があるか, 省略したバイト数)。
-fn line_content(doc: &Document, line: usize) -> (usize, String, bool, usize) {
+/// (行頭, 行の内容)。長大行には使わない (行全体を文字列にする。長大行は `long_index`)。
+fn line_content(doc: &Document, line: usize) -> (usize, String) {
     let t = doc.text();
     let l = LineIdx(line);
     let (ls, le) = (t.line_to_byte(l).0, t.line_end_byte(l).0);
-    let has_terminator = t.line_terminator(l).is_some();
-    let ve = line_visible_end(doc, ls, le);
     (
         ls,
-        t.slice_to_string(ByteRange::new(ByteOff(ls), ByteOff(ve))),
-        has_terminator,
-        le - ve,
+        t.slice_to_string(ByteRange::new(ByteOff(ls), ByteOff(le))),
     )
+}
+
+/// 行 `line` が長大行 (バイト長が文書の `format.long_line_threshold` を超える、03 §11.5.1) か。行インデックスから O(1)。
+pub(super) fn is_long_line(doc: &Document, line: usize) -> bool {
+    let t = doc.text();
+    let l = LineIdx(line);
+    t.line_end_byte(l).0 - t.line_to_byte(l).0 > doc.format.long_line_threshold
+}
+
+/// 覚えておく長大行の索引の数 (画面に複数の長大行が見えていても、Frame の生成とカーソルの計算で作り直さない)。
+const LONG_CACHE_LINES: usize = 4;
+
+/// 行 `line` が長大行 (バイト長が文書の閾値を超える、03 §11.5.1) なら、その (行頭, 列の索引)。
+/// 索引は Revision・行・幅の設定が同じ間は覚えを使う (編集のたびに 1 回走査し直す)。
+fn long_index(doc: &Document, line: usize) -> Option<(usize, std::rc::Rc<ColIndex>)> {
+    use std::rc::Rc;
+    if !is_long_line(doc, line) {
+        return None;
+    }
+    let t = doc.text();
+    let l = LineIdx(line);
+    let (ls, le) = (t.line_to_byte(l).0, t.line_end_byte(l).0);
+    let esc = esc_enabled(doc);
+    let cfg = doc_width_config(doc);
+    type Key = (eve_view::Revision, usize, bool, u8, bool);
+    type Entries = Vec<(Key, Rc<ColIndex>)>;
+    let key: Key = (doc.revision(), line, esc, cfg.tab_width, cfg.ambiguous_wide);
+    let mut cache = doc.long_cache.borrow_mut();
+    let entries = cache.get_or_insert_with(|| Box::new(Entries::new()));
+    let entries = entries.downcast_mut::<Entries>()?;
+    // 古い Revision の索引は使えないので捨てる
+    entries.retain(|(k, _)| k.0 == key.0);
+    if let Some((_, ix)) = entries.iter().find(|(k, _)| *k == key) {
+        return Some((ls, ix.clone()));
+    }
+    let ix = Rc::new(ColIndex::build(t, ls, le, CharWidth::new(esc, cfg)));
+    if entries.len() >= LONG_CACHE_LINES {
+        entries.remove(0);
+    }
+    entries.push((key, ix.clone()));
+    Some((ls, ix))
+}
+
+/// 長大行の、表示列 `left` から `left + cols` までにかかる char の表示の単位 (行全体は展開しない)。
+/// 1 char を 1 書記素として `unit_slow` で展開する (幅は索引と同じ)。
+fn long_units(doc: &Document, ls: usize, ix: &ColIndex, left: usize, cols: usize) -> Vec<Unit> {
+    let cfg = doc_width_config(doc);
+    let (esc, ws) = (esc_enabled(doc), doc.display.show_whitespace);
+    let tab = cfg.tab_width.max(1) as usize;
+    let t = doc.text();
+    let mut out = Vec::new();
+    let mut buf = [0u8; 4];
+    // 右端の列にかかる単位まで (その次の単位で、右が切れていることが分かる)
+    ix.walk(t, ls, ix.at_col(t, ls, left), |at, c, w| {
+        if at.col > left + cols {
+            return false;
+        }
+        out.push(if (' '..='~').contains(&c) {
+            Unit {
+                col: at.col,
+                parts: vec![(c.to_string(), 1, false)],
+                width: w,
+                byte: at.byte,
+                risky: false,
+            }
+        } else {
+            unit_slow(c.encode_utf8(&mut buf), at.byte, at.col, tab, esc, ws, &cfg)
+        });
+        true
+    });
+    out
 }
 
 fn esc_enabled(doc: &Document) -> bool {
@@ -246,12 +340,22 @@ fn esc_enabled(doc: &Document) -> bool {
 
 /// 行内のバイト位置 `byte` にあるカーソルの (表示列, そのセルの幅)。行末では (行の幅, 1)。
 pub(super) fn cursor_cell(doc: &Document, line: usize, byte: usize) -> (usize, usize) {
-    let (_, content, _, _) = line_content(doc, line);
+    if let Some((ls, ix)) = long_index(doc, line) {
+        let (p, w) = ix.at_byte(doc.text(), ls, byte);
+        return (p.col, w);
+    }
+    let (_, content) = line_content(doc, line);
     let us = units_for(doc, line, &content);
     match us.iter().find(|u| u.byte >= byte) {
         Some(u) => (u.col, u.width.max(1)),
         None => (us.last().map_or(0, |u| u.col + u.width), 1),
     }
+}
+
+/// 長大行なら、行内の位置 `byte` より前の char 数 (ステータスバーの桁。書記素 = char とみなす、03 §11.5.1)。
+pub(super) fn long_line_chars(doc: &Document, line: usize, byte: usize) -> Option<usize> {
+    let (ls, ix) = long_index(doc, line)?;
+    Some(ix.at_byte(doc.text(), ls, byte).0.chars)
 }
 
 /// 行内のバイト位置 `byte` にあるカーソルの表示列 (行頭から)。移動の目標列もこの表示と同じ幅で数える。
@@ -261,11 +365,100 @@ pub(super) fn cursor_col(doc: &Document, line: usize, byte: usize) -> usize {
 
 /// 表示列 `dcol` に対応する行内のバイト位置。セルの途中は、その単位の前に寄せる (`Bias::Before`)。行の幅を超えれば行末。
 pub(super) fn byte_at_col(doc: &Document, line: usize, dcol: usize) -> usize {
-    let (_, content, _, _) = line_content(doc, line);
+    if let Some((ls, ix)) = long_index(doc, line) {
+        return ix.at_col(doc.text(), ls, dcol).byte;
+    }
+    let (_, content) = line_content(doc, line);
     let us = units_for(doc, line, &content);
     us.iter()
         .find(|u| dcol < u.col + u.width)
         .map_or(content.len(), |u| u.byte)
+}
+
+/// 折り返し幅: 本文の幅 − 右余白 1 (行末にぶら下げた空白がその 1 セルに入る、03 §14.3.1)。
+pub(super) fn wrap_width(doc: &Document, viewport: (u16, u16)) -> usize {
+    let cols = viewport.0 as usize;
+    let gw = gutter_width(doc, cols) as usize;
+    cols.saturating_sub(gw).saturating_sub(1).max(1)
+}
+
+/// 折り返し ON の View の (設定, 折り返し幅)。OFF は `None` (移動とスクロールは論理行のまま)。
+/// 長大行を含む文書は、`view.wrap` の値に依らず折り返さない (03 §11.5.1)。
+pub(super) fn wrap_ctx(state: &EditorState, view: ViewId) -> Option<(WrapSettings, usize)> {
+    let v = state.view(view)?;
+    if !v.wrap.is_on() {
+        return None;
+    }
+    let d = state.document(v.doc)?;
+    if d.format.long_lines > 0 {
+        return None;
+    }
+    Some((v.wrap, wrap_width(d, state.viewport())))
+}
+
+/// 1 論理行を表示行に分けた結果 (03 §14.3.1)。移動とスクロールが表示行を数えるのに使う。
+/// 位置はすべて行頭からのバイト位置 (`rel`)。
+pub(super) struct LineRows {
+    /// 行頭の絶対バイト位置。
+    pub ls: usize,
+    content_len: usize,
+    units: std::rc::Rc<Vec<Unit>>,
+    rows: Vec<wrap::WrapRow>,
+}
+
+pub(super) fn line_rows(doc: &Document, line: usize, s: WrapSettings, cols: usize) -> LineRows {
+    let (ls, content) = line_content(doc, line);
+    let units = units_for(doc, line, &content);
+    let rows = wrap_line(&content, &units, cols, s);
+    LineRows {
+        ls,
+        content_len: content.len(),
+        units,
+        rows,
+    }
+}
+
+impl LineRows {
+    /// 表示行の数 (1 以上)。
+    pub fn len(&self) -> usize {
+        self.rows.len()
+    }
+
+    fn byte_of_unit(&self, i: usize) -> usize {
+        self.units.get(i).map_or(self.content_len, |u| u.byte)
+    }
+
+    /// 表示行 `r` の先頭 / 末尾 (次の表示行の先頭と同じ位置) のバイト位置。
+    pub fn row_start(&self, r: usize) -> usize {
+        self.byte_of_unit(self.rows[r].first)
+    }
+
+    pub fn row_end(&self, r: usize) -> usize {
+        self.byte_of_unit(self.rows[r].end)
+    }
+
+    /// `rel` にあるカーソルの (表示行, 画面上の列 = 継続行のずらしを含む)。
+    pub fn locate(&self, rel: usize, affinity: Affinity) -> (usize, usize) {
+        cursor_in_rows(&self.units, &self.rows, rel, affinity)
+    }
+
+    /// 表示行 `r` の画面上の列 `col` の位置 (セルの途中は前に寄せる)。行の幅を超えたら表示行の末尾で、
+    /// 折り返し位置なら上の表示行の末尾 (`Before`) にとどめる。
+    pub fn at_col(&self, r: usize, col: usize) -> (usize, Affinity) {
+        let row = self.rows[r];
+        let base = self.units.get(row.first).map_or(0, |u| u.col);
+        let want = col.saturating_sub(row.indent) + base;
+        for u in &self.units[row.first..row.end] {
+            if want < u.col + u.width {
+                return (u.byte, Affinity::After);
+            }
+        }
+        if r + 1 == self.rows.len() {
+            (self.content_len, Affinity::After)
+        } else {
+            (self.byte_of_unit(row.end), Affinity::Before)
+        }
+    }
 }
 
 /// 行番号のガターの幅 (桁数 + 区切りの空白 1)。画面が狭くて本文が入らないときは、ガターを出さない (0)。
@@ -309,8 +502,18 @@ struct Marks<'a> {
     current: Option<(usize, usize)>,
     /// 保存先の文字コードで表せない文字 (E3、03 §8.6)。
     unmappable: &'a [(usize, usize)],
-    /// 長大行の省略の印の文言 (省略したバイト数 → 文字列)。
-    omit: &'a dyn Fn(usize) -> String,
+    /// テーマのロールの表 (07 §8.6)。
+    roles: &'a eve_view::RoleStyles,
+}
+
+/// 折り返した論理行のうち、作る表示行 1 本 (単位の範囲、継続行のずらし、行内の表示行の番号、最後の表示行か)。
+#[derive(Clone, Copy)]
+struct RowPart {
+    first: usize,
+    end: usize,
+    indent: usize,
+    wrap_idx: u32,
+    last: bool,
 }
 
 /// 1 行を作る。`left` は水平スクロール (表示列)、`cols` は本文の幅。`sel` は選択 (文書のバイト位置の半開区間)、
@@ -325,31 +528,40 @@ fn build_row(
     heads: &[usize],
     marks: &Marks<'_>,
     gutter: Vec<Span>,
+    part: Option<RowPart>,
 ) -> RowOut {
-    let (ls, content, has_terminator, omitted) = line_content(doc, line);
-    let body = units_for(doc, line, &content);
-    // 省略した分は行末に印を出す (「… (以下 N バイト省略)」。表示だけで、残りは文書に保たれている)
-    let marker: Option<Unit> = (omitted > 0).then(|| {
-        let col = body.last().map_or(0, |u| u.col + u.width);
-        let parts: Vec<(String, u16, bool)> = cell_text(&(marks.omit)(omitted), CutPolicy::Never)
-            .spans
-            .into_iter()
-            .map(|sp| (sp.text.to_string(), sp.width, true))
-            .collect();
-        let width = parts.iter().map(|p| p.1 as usize).sum();
-        Unit {
-            col,
-            parts,
-            width,
-            byte: content.len(),
-            risky: false,
+    let t = doc.text();
+    let (ls, le) = (
+        t.line_to_byte(LineIdx(line)).0,
+        t.line_end_byte(LineIdx(line)).0,
+    );
+    let has_terminator = t.line_terminator(LineIdx(line)).is_some();
+    // 長大行 (折り返さない) は、見える範囲の char だけを単位にする (03 §11.5.1)
+    let long = long_index(doc, line);
+    let body = match &long {
+        Some((_, ix)) => std::rc::Rc::new(long_units(doc, ls, ix, left, cols)),
+        None => units_for(doc, line, &line_content(doc, line).1),
+    };
+    let line_width = match &long {
+        Some((_, ix)) => ix.end().col,
+        None => body.last().map_or(0, |u| u.col + u.width),
+    };
+    // 折り返した表示行は、その範囲の単位だけを、行内の先頭の列を 0 (+ ずらし) として並べる
+    let (slice, base, shift) = match part {
+        Some(p) => {
+            let slice = &body[p.first.min(body.len())..p.end.min(body.len())];
+            let base = body.get(p.first).map_or(line_width, |u| u.col);
+            (slice, base, p.indent)
         }
-    });
-    let us = body.iter().chain(marker.iter());
-    let total = marker
-        .as_ref()
-        .or(body.last())
-        .map_or(0, |u| u.col + u.width);
+        None => (&body[..], 0, 0),
+    };
+    let us = slice.iter();
+    let total_abs = if part.is_none_or(|p| p.last) {
+        line_width
+    } else {
+        slice.last().map_or(base, |u| u.col + u.width)
+    };
+    let total = total_abs.saturating_sub(base) + shift;
     // 選択は start 昇順で重ならないので二分探索する
     let selected = |byte_abs: usize| {
         let i = sel.partition_point(|&(_, e)| e <= byte_abs);
@@ -360,38 +572,40 @@ fn build_row(
     let mut spans: Vec<Span> = Vec::new();
     'units: for u in us.clone() {
         let at = ls + u.byte;
-        let mut style_base = if selected(at) {
-            StyleMods::REVERSE
-        } else {
-            StyleMods::NONE
-        };
-        // 検索の一致は下線、入力で見つけた現在の一致は反転 + 太字 + 下線 (色に頼らない、04 §8.4)
+        // 重ねる順 (低 → 高、03 §14.5): 記号 → 表現不能の文字 → 検索の一致 / 現在の一致 → 選択
+        let mut decor = Style::DEFAULT;
         if marks.unmappable.iter().any(|&(s, e)| s <= at && at < e) {
-            style_base = style_base | StyleMods::REVERSE | StyleMods::UNDERLINE;
+            decor = over(
+                decor,
+                Style::with_mods(StyleMods::REVERSE | StyleMods::UNDERLINE),
+            );
         }
         if marks.current.is_some_and(|(s, e)| s <= at && at < e) {
-            style_base = style_base | StyleMods::REVERSE | StyleMods::BOLD | StyleMods::UNDERLINE;
+            decor = over(decor, marks.roles.get("ui.search.current"));
         } else {
             let i = marks.found.partition_point(|&(_, e)| e <= at);
             if marks.found.get(i).is_some_and(|&(s, _)| s <= at) {
-                style_base = style_base | StyleMods::UNDERLINE;
+                decor = over(decor, marks.roles.get("ui.search.match"));
             }
         }
-        let mut c = u.col;
+        if selected(at) {
+            decor = over(decor, marks.roles.get("ui.selection"));
+        }
+        let mut c = u.col - base + shift;
         for (text, w, symbol) in &u.parts {
             let (w, c0) = (*w as usize, c);
             c += w;
             if w == 0 {
                 continue;
             }
-            let style = Style::with_mods(
-                style_base
-                    | if *symbol {
-                        StyleMods::DIM
-                    } else {
-                        StyleMods::NONE
-                    },
-            );
+            let base = if !*symbol {
+                marks.roles.get("ui.text")
+            } else if is_whitespace_mark(text) {
+                marks.roles.get("ui.whitespace")
+            } else {
+                marks.roles.get("ui.control_char")
+            };
+            let style = over(base, decor);
             if c0 >= win_end {
                 clipped_right = true;
                 break 'units;
@@ -412,21 +626,35 @@ fn build_row(
             }
         }
     }
+    if shift > 0 {
+        spans.insert(
+            0,
+            Span {
+                text: " ".repeat(shift),
+                width: shift as u16,
+                style: Style::DEFAULT,
+            },
+        );
+    }
     // 行末の改行が選択に含まれるときは、行末に 1 セルの反転を足す
-    let line_end_abs = ls + content.len();
+    let line_end_abs = le;
     let eol_selected = has_terminator
+        && part.is_none_or(|p| p.last)
         && sel
             .iter()
             .any(|&(s, e)| s <= line_end_abs && e > line_end_abs);
     if eol_selected && total >= win_start && total < win_end {
-        push_span(&mut spans, " ", 1, Style::with_mods(StyleMods::REVERSE));
+        push_span(&mut spans, " ", 1, marks.roles.get("ui.selection"));
     }
     let cursor_cols = heads
         .iter()
         .map(|&h| {
             let rel = h.saturating_sub(ls);
+            if let Some((_, ix)) = &long {
+                return ix.at_byte(t, ls, rel).0.col;
+            }
             match us.clone().find(|u| u.byte >= rel) {
-                Some(u) => u.col,
+                Some(u) => u.col - base + shift,
                 None => total,
             }
         })
@@ -435,7 +663,7 @@ fn build_row(
         row: RenderRow {
             source: RowSource::Line {
                 line: line as u32,
-                wrap_idx: 0,
+                wrap_idx: part.map_or(0, |p| p.wrap_idx),
             },
             gutter,
             spans,
@@ -447,16 +675,23 @@ fn build_row(
     }
 }
 
-fn gutter_spans(line: usize, width: u16) -> Vec<Span> {
+/// 行番号のガター (`ui.line_number`。主カーソルのある行は `ui.line_number.active` を重ねる)。
+fn gutter_spans(line: usize, width: u16, style: Style) -> Vec<Span> {
     if width == 0 {
         return Vec::new();
     }
     let text = format!("{:>w$} ", line + 1, w = width as usize - 1);
-    vec![Span {
-        text,
-        width,
-        style: SYMBOL,
-    }]
+    vec![Span { text, width, style }]
+}
+
+/// 行 `line` の行番号のスタイル。
+fn line_number_style(roles: &eve_view::RoleStyles, line: usize, cursor_line: usize) -> Style {
+    let base = roles.get("ui.line_number");
+    if line == cursor_line {
+        over(base, roles.get("ui.line_number.active"))
+    } else {
+        base
+    }
 }
 
 /// 文字列を `CellText` にする (INV-F1: 制御文字などは記号に展開済み。幅は core が計算する)。
@@ -505,7 +740,7 @@ fn message_model(state: &EditorState) -> MessageModel {
 }
 
 /// 端末タイトル (無害化済み)。
-fn title(doc: &Document) -> String {
+fn title(state: &EditorState, doc: &Document) -> String {
     let name = doc
         .path
         .as_ref()
@@ -519,11 +754,112 @@ fn title(doc: &Document) -> String {
                 && !matches!(c, '\u{200E}' | '\u{200F}' | '\u{061C}' | '\u{202A}'..='\u{202E}' | '\u{2066}'..='\u{2069}')
         })
         .collect();
+    // 文書が 2 件以上のときは、ファイル名の後ろに何番目かを出す (03 §9.8。ステータスバーと同じ)
+    let pos = match state.buffer_position() {
+        Some((n, total)) => format!(" ({n}/{total})"),
+        None => String::new(),
+    };
     format!(
-        "{}{} - evoeditor",
+        "{}{}{} - evoeditor",
         if doc.is_dirty() { "* " } else { "" },
-        name
+        name,
+        pos
     )
+}
+
+/// 折り返し ON の表示行を `rows` 本作る (03 §14.3.1)。先頭は `top` の論理行の `wrap_idx` 番目の表示行。
+/// 戻り値は (行, カーソルのセル位置, 主カーソルのセル位置)。
+#[allow(clippy::too_many_arguments)]
+fn wrapped_rows(
+    doc: &Document,
+    view: &super::state::View,
+    gw: u16,
+    text_cols: usize,
+    rows: usize,
+    sel: &[(usize, usize)],
+    heads: &[usize],
+    primary_head: usize,
+    marks: &Marks<'_>,
+) -> (Vec<RenderRow>, Vec<CellPos>, Option<CellPos>) {
+    let t = doc.text();
+    let n_lines = t.len_lines();
+    let cursor_line = t.byte_to_line(eve_text::ByteOff(primary_head)).0;
+    // 折り返し幅は本文の幅 − 右余白 1 (行末にぶら下げた空白がその 1 セルに入る)
+    let wrap_cols = text_cols.saturating_sub(1).max(1);
+    let mut out_rows = Vec::with_capacity(rows);
+    let mut cursors = Vec::new();
+    let mut primary: Option<CellPos> = None;
+    let mut line = t.byte_to_line(view.scroll.top).0;
+    let mut widx = view.scroll.wrap_idx as usize;
+    while out_rows.len() < rows {
+        if line >= n_lines {
+            out_rows.push(RenderRow {
+                source: RowSource::Virtual,
+                gutter: Vec::new(),
+                spans: Vec::new(),
+                clipped_left: false,
+                clipped_right: false,
+                width_risky: false,
+            });
+            continue;
+        }
+        let (ls, content) = line_content(doc, line);
+        let le = t.line_end_byte(LineIdx(line)).0;
+        let us = units_for(doc, line, &content);
+        let wrows = wrap_line(&content, &us, wrap_cols, view.wrap);
+        let here: Vec<usize> = heads
+            .iter()
+            .copied()
+            .filter(|&h| h >= ls && h <= le)
+            .collect();
+        // この論理行の表示行を、先頭 (最初の行だけ `widx` から) から画面の残りの分だけ作る
+        for (r, wr) in wrows.iter().enumerate().skip(widx) {
+            if out_rows.len() >= rows {
+                break;
+            }
+            let gutter = if r == 0 {
+                gutter_spans(line, gw, line_number_style(marks.roles, line, cursor_line))
+            } else if gw > 0 {
+                vec![Span {
+                    text: " ".repeat(gw as usize),
+                    width: gw,
+                    style: marks.roles.get("ui.line_number"),
+                }]
+            } else {
+                Vec::new()
+            };
+            let part = RowPart {
+                first: wr.first,
+                end: wr.end,
+                indent: wr.indent,
+                wrap_idx: r as u32,
+                last: r + 1 == wrows.len(),
+            };
+            let ro = build_row(doc, line, 0, text_cols, sel, &[], marks, gutter, Some(part));
+            for &h in &here {
+                let aff = if h == primary_head {
+                    view.cursor_affinity
+                } else {
+                    Affinity::After
+                };
+                let (cr, cc) = cursor_in_rows(&us, &wrows, h - ls, aff);
+                if cr == r && cc < text_cols {
+                    let pos = CellPos {
+                        col: gw + cc as u16,
+                        row: out_rows.len() as u16,
+                    };
+                    cursors.push(pos);
+                    if h == primary_head {
+                        primary = Some(pos);
+                    }
+                }
+            }
+            out_rows.push(ro.row);
+        }
+        line += 1;
+        widx = 0;
+    }
+    (out_rows, cursors, primary)
 }
 
 /// Window の Frame を作る。
@@ -569,69 +905,80 @@ pub(super) fn build_frame(
     let found = state.visible_matches(view.doc, top_line, rows);
     let current = state.bar_current();
     let unmappable = state.unmappable_marks_for(view.doc);
-    let omit = |n: usize| {
-        state.catalog().render(
-            "ui.long_line.omitted",
-            &[("bytes", &n.to_string())],
-            &|_| None,
-        )
-    };
     let marks = Marks {
         found: &found,
         current,
         unmappable: &unmappable,
-        omit: &omit,
+        roles: &state.roles,
     };
-    let mut out_rows = Vec::with_capacity(rows);
-    let mut cursors = Vec::new();
-    let mut primary: Option<CellPos> = None;
-    for r in 0..rows {
-        let line = top_line + r;
-        if line >= n_lines {
-            out_rows.push(RenderRow {
-                source: RowSource::Virtual,
-                gutter: Vec::new(),
-                spans: Vec::new(),
-                clipped_left: false,
-                clipped_right: false,
-                width_risky: false,
-            });
-            continue;
-        }
-        let (ls, le) = (
-            t.line_to_byte(LineIdx(line)).0,
-            t.line_end_byte(LineIdx(line)).0,
-        );
-        // この行にあるカーソル (行末の位置は次の行の行頭と区別する: 行の終端を含む)
-        let here: Vec<usize> = heads
-            .iter()
-            .copied()
-            .filter(|&h| h >= ls && h <= le)
-            .collect();
-        let ro = build_row(
+    let cursor_line = t.byte_to_line(view.selection.primary().head).0;
+    // 長大行を含む文書は折り返さない (`view.wrap` の値は変えない。03 §11.5.1)
+    let (out_rows, cursors, primary) = if view.wrap.is_on() && doc.format.long_lines == 0 {
+        wrapped_rows(
             doc,
-            line,
-            left,
+            view,
+            gw,
             text_cols,
+            rows,
             &sel,
-            &here,
+            &heads,
+            primary_head,
             &marks,
-            gutter_spans(line, gw),
-        );
-        for (&h, &c) in here.iter().zip(&ro.cursor_cols) {
-            if c >= left && c - left < text_cols {
-                let pos = CellPos {
-                    col: gw + (c - left) as u16,
-                    row: r as u16,
-                };
-                cursors.push(pos);
-                if h == primary_head {
-                    primary = Some(pos);
+        )
+    } else {
+        let mut out_rows = Vec::with_capacity(rows);
+        let mut cursors = Vec::new();
+        let mut primary: Option<CellPos> = None;
+        for r in 0..rows {
+            let line = top_line + r;
+            if line >= n_lines {
+                out_rows.push(RenderRow {
+                    source: RowSource::Virtual,
+                    gutter: Vec::new(),
+                    spans: Vec::new(),
+                    clipped_left: false,
+                    clipped_right: false,
+                    width_risky: false,
+                });
+                continue;
+            }
+            let (ls, le) = (
+                t.line_to_byte(LineIdx(line)).0,
+                t.line_end_byte(LineIdx(line)).0,
+            );
+            // この行にあるカーソル (行末の位置は次の行の行頭と区別する: 行の終端を含む)
+            let here: Vec<usize> = heads
+                .iter()
+                .copied()
+                .filter(|&h| h >= ls && h <= le)
+                .collect();
+            let ro = build_row(
+                doc,
+                line,
+                left,
+                text_cols,
+                &sel,
+                &here,
+                &marks,
+                gutter_spans(line, gw, line_number_style(&state.roles, line, cursor_line)),
+                None,
+            );
+            for (&h, &c) in here.iter().zip(&ro.cursor_cols) {
+                if c >= left && c - left < text_cols {
+                    let pos = CellPos {
+                        col: gw + (c - left) as u16,
+                        row: r as u16,
+                    };
+                    cursors.push(pos);
+                    if h == primary_head {
+                        primary = Some(pos);
+                    }
                 }
             }
+            out_rows.push(ro.row);
         }
-        out_rows.push(ro.row);
-    }
+        (out_rows, cursors, primary)
+    };
     let pane = PaneFrame {
         view: view_id,
         rect: CellRect {
@@ -669,10 +1016,13 @@ pub(super) fn build_frame(
         search: state.search_bar_model(),
         status: super::chrome::status_model(state, view_id, chord),
         hints: super::chrome::hint_model(state, chord),
+        hint_bar: state.hint_bar_on,
         overlays: super::chrome::overlay_models(state),
+        which_key: None,
         messages: message_model(state),
         texts: super::chrome::chrome_texts(state),
-        title: title(doc),
+        title: title(state, doc),
+        roles: state.roles.clone(),
     })
 }
 
@@ -759,7 +1109,7 @@ mod tests {
         grapheme_indices(content)
             .into_iter()
             .map(|(off, g)| {
-                let u = unit_slow(g, off, col, tab, esc, cfg);
+                let u = unit_slow(g, off, col, tab, esc, true, cfg);
                 col += u.width;
                 u
             })

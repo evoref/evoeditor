@@ -5,7 +5,7 @@
 
 use eve_text::{
     Bias, ByteOff, ByteRange, ChangeSet, Edit, Range, Selection, TextRead, next_grapheme_boundary,
-    next_word_stop, prev_grapheme_boundary, prev_word_stop,
+    prev_grapheme_boundary,
 };
 use eve_text::{WidthConfig, str_display_width};
 use eve_view::{DocumentId, ViewId};
@@ -15,6 +15,7 @@ use crate::document::{Document, Origin, Transaction};
 use super::command::{
     CommandCtx, CommandKind, CommandRegistry, CommandResult, CommandSpec, Permission, RejectReason,
 };
+use super::motion::{indent_end, word_stop};
 
 /// 1 つの Range に対する編集。
 struct Plan {
@@ -220,14 +221,6 @@ fn insert_text(ctx: &mut CommandCtx<'_>) -> CommandResult {
     })
 }
 
-/// 行の先頭の空白 (空白とタブ) の終端。
-fn indent_end(doc: &Document, line_start: usize, line_end: usize) -> usize {
-    let s = doc
-        .text()
-        .slice_to_string(ByteRange::new(ByteOff(line_start), ByteOff(line_end)));
-    line_start + s.bytes().take_while(|b| matches!(b, b' ' | b'\t')).count()
-}
-
 fn newline(ctx: &mut CommandCtx<'_>) -> CommandResult {
     edit_each(ctx, |doc, r| {
         let p = r.start();
@@ -304,8 +297,22 @@ fn delete_with(
 }
 
 fn delete_backward(ctx: &mut CommandCtx<'_>) -> CommandResult {
-    delete_with(ctx, |d, p| {
-        ByteRange::new(prev_grapheme_boundary(d.text(), p), p)
+    let unit = ctx.state.config().backspace_unit;
+    delete_with(ctx, move |d, p| {
+        let g = prev_grapheme_boundary(d.text(), p);
+        match unit {
+            eve_config::BackspaceUnit::Grapheme => ByteRange::new(g, p),
+            // コードポイント単位: 書記素の最後の 1 文字だけを消す (結合文字・ハングル字母を 1 つずつ戻す)
+            eve_config::BackspaceUnit::Codepoint => {
+                let last = d
+                    .text()
+                    .slice_to_string(ByteRange::new(g, p))
+                    .chars()
+                    .last()
+                    .map_or(0, char::len_utf8);
+                ByteRange::new(ByteOff(p.0 - last), p)
+            }
+        }
     })
 }
 
@@ -316,11 +323,11 @@ fn delete_forward(ctx: &mut CommandCtx<'_>) -> CommandResult {
 }
 
 fn delete_word_backward(ctx: &mut CommandCtx<'_>) -> CommandResult {
-    delete_with(ctx, |d, p| ByteRange::new(prev_word_stop(d.text(), p), p))
+    delete_with(ctx, |d, p| ByteRange::new(word_stop(d, p, false), p))
 }
 
 fn delete_word_forward(ctx: &mut CommandCtx<'_>) -> CommandResult {
-    delete_with(ctx, |d, p| ByteRange::new(p, next_word_stop(d.text(), p)))
+    delete_with(ctx, |d, p| ByteRange::new(p, word_stop(d, p, true)))
 }
 
 // ---------- Undo / Redo ----------
@@ -363,6 +370,11 @@ fn select_all(ctx: &mut CommandCtx<'_>) -> CommandResult {
 
 /// 行頭から `end` までの表示列 (タブは次のタブストップまで)。
 fn display_col(doc: &Document, line_start: usize, end: usize, cfg: &WidthConfig) -> usize {
+    // 長大行は行頭から文字列にしない (列の索引で数える、03 §11.5.1)
+    let line = doc.text().byte_to_line(ByteOff(line_start)).0;
+    if super::layout::is_long_line(doc, line) {
+        return super::layout::cursor_col(doc, line, end - line_start);
+    }
     let s = doc
         .text()
         .slice_to_string(ByteRange::new(ByteOff(line_start), ByteOff(end)));
@@ -370,21 +382,33 @@ fn display_col(doc: &Document, line_start: usize, end: usize, cfg: &WidthConfig)
 }
 
 /// Tab キー (選択なし): 次のインデント停止位置までの空白を挿入する。選択があるときは何もしない (v0.1、OQ-193)。
+/// 選択がある (空でない Range が 1 つ以上ある)。
+fn has_selection(ctx: &CommandCtx<'_>) -> bool {
+    active(ctx)
+        .and_then(|(v, _)| ctx.state.view(v))
+        .is_some_and(|v| v.selection.iter().any(|r| !r.is_empty()))
+}
+
 fn indent(ctx: &mut CommandCtx<'_>) -> CommandResult {
     let (unit, width) = {
         let c = ctx.state.config();
         (c.indent_unit, c.indent_width.max(1) as usize)
     };
+    // 選択範囲のインデント (v0.2、03 §15.3): 触れる各行の行頭に 1 段足す
+    if has_selection(ctx) {
+        let step = match unit {
+            eve_config::IndentUnit::Tab => "\t".to_owned(),
+            eve_config::IndentUnit::Space => " ".repeat(width),
+        };
+        return super::line_ops::indent_lines(ctx, &step);
+    }
     edit_each(ctx, move |doc, r| {
-        if !r.is_empty() {
-            return None;
-        }
         let text = doc.text();
         let line = text.byte_to_line(r.head);
         let ls = text.line_to_byte(line).0;
         let col = display_col(doc, ls, r.head.0, &super::layout::doc_width_config(doc));
         let ins = match unit {
-            eve_config::IndentUnit::Tab => "	".to_owned(),
+            eve_config::IndentUnit::Tab => "\t".to_owned(),
             eve_config::IndentUnit::Space => " ".repeat(width - col % width),
         };
         Some(Plan {
@@ -395,44 +419,53 @@ fn indent(ctx: &mut CommandCtx<'_>) -> CommandResult {
     })
 }
 
-/// Shift+Tab (選択なし): 行頭空白のうち、表示幅が `editor.indent_width` 以内に収まる部分を削除する。選択があるときは何もしない。
+/// Shift+Tab: 行頭空白のうち、表示幅が `editor.indent_width` 以内に収まる部分を削除する。
+/// 選択があれば、触れる各行に同じ規則を適用する (v0.2、03 §15.3)。
 fn outdent(ctx: &mut CommandCtx<'_>) -> CommandResult {
     let width = ctx.state.config().indent_width.max(1) as usize;
+    if has_selection(ctx) {
+        return super::line_ops::outdent_lines(ctx, move |doc, ls, le| {
+            outdent_bytes(doc, ls, le, width)
+        });
+    }
     edit_each(ctx, move |doc, r| {
-        if !r.is_empty() {
-            return None;
-        }
-        let tab = doc.display.tab_width.max(1) as usize;
         let text = doc.text();
         let line = text.byte_to_line(r.head);
         let (ls, le) = (text.line_to_byte(line).0, text.line_end_byte(line).0);
-        let lead = text.slice_to_string(ByteRange::new(
-            ByteOff(ls),
-            ByteOff(indent_end(doc, ls, le)),
-        ));
-        let (mut col, mut bytes) = (0usize, 0usize);
-        for ch in lead.chars() {
-            let next = if ch == '\t' {
-                col + tab - col % tab
-            } else {
-                col + 1
-            };
-            if next > width {
-                // 先頭の 1 文字が幅を超えるタブなら、そのタブ 1 つを削除する (何も起きない状態を避ける)
-                if bytes == 0 && ch == '\t' {
-                    bytes = 1;
-                }
-                break;
-            }
-            col = next;
-            bytes += ch.len_utf8();
-        }
+        let bytes = outdent_bytes(doc, ls, le, width);
         (bytes > 0).then(|| Plan {
             del: ByteRange::new(ByteOff(ls), ByteOff(ls + bytes)),
             ins: String::new(),
             cursor: CursorRule::Keep,
         })
     })
+}
+
+/// 行 `[ls, le)` の行頭空白のうち、表示幅が `width` 以内に収まる部分のバイト数 (03 §15.3 の Shift+Tab)。
+fn outdent_bytes(doc: &Document, ls: usize, le: usize, width: usize) -> usize {
+    let tab = doc.display.tab_width.max(1) as usize;
+    let lead = doc.text().slice_to_string(ByteRange::new(
+        ByteOff(ls),
+        ByteOff(indent_end(doc, ls, le)),
+    ));
+    let (mut col, mut bytes) = (0usize, 0usize);
+    for ch in lead.chars() {
+        let next = if ch == '\t' {
+            col + tab - col % tab
+        } else {
+            col + 1
+        };
+        if next > width {
+            // 先頭の 1 文字が幅を超えるタブなら、そのタブ 1 つを削除する (何も起きない状態を避ける)
+            if bytes == 0 && ch == '\t' {
+                bytes = 1;
+            }
+            break;
+        }
+        col = next;
+        bytes += ch.len_utf8();
+    }
+    bytes
 }
 
 // ---------- 登録 ----------

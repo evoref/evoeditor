@@ -16,9 +16,12 @@ mod fspath;
 mod interrupted;
 mod io_jobs;
 mod jobs;
+mod last_version;
+mod leftover;
 mod paths;
 mod replacing;
 mod rescue;
+mod secret;
 mod time;
 mod unmap;
 
@@ -27,19 +30,21 @@ mod eol;
 mod search;
 pub use document::{
     Applied, AppliedTx, ApplyError, DisplaySettings, Document, EolStats, HistoryStep,
-    LONG_LINE_THRESHOLD, LONG_LINE_VISIBLE, LoadState, NodeId, Origin, ReadOnlyReason,
-    ReadOnlyReasons, RecordOutcome, TextFormat, Transaction, TransactionMeta, UndoBudget,
-    UndoGroupHint, UndoHistory,
+    LONG_LINE_THRESHOLD, LoadState, NodeId, Origin, ReadOnlyReason, ReadOnlyReasons, RecordOutcome,
+    TextFormat, Transaction, TransactionMeta, UndoBudget, UndoGroupHint, UndoHistory,
+    count_long_lines, trim_to_total_budget,
 };
 pub use editor::{
-    ArgValue, Args, Binding, CommandCtx, CommandInvocation, CommandKind, CommandRegistry,
-    CommandResult, CommandSpec, ContextExpr, CtxValue, DocSnapshot, Editor, EditorState, Handler,
-    InvocationSource, KeyParseError, Keymap, Layer, ParseError, Permission, RejectReason,
-    Resolution, ScrollPos, SearchCount, SearchStep, View, Window, format_stroke, normalize_eol,
-    parse_sequence, parse_stroke,
+    Affinity, ArgValue, Args, Binding, CONFIG_FILE, CommandCtx, CommandInvocation, CommandKind,
+    CommandRegistry, CommandResult, CommandSpec, ConfigSources, ContextExpr, CtxValue, DocSnapshot,
+    Editor, EditorState, Handler, InitialFile, InvocationSource, KEYMAP_FILE, KeyParseError,
+    Keymap, Layer, ParseError, Permission, RejectReason, Resolution, ScrollPos, SearchCount,
+    SearchStep, View, Window, WrapMode, WrapSettings, config_diagnostic_texts, format_stroke,
+    normalize_eol, parse_sequence, parse_stroke, resolve_theme,
 };
 pub use eol::build_eol_conversion;
 pub use eve_encoding::Encoding;
+pub use eve_view::DocumentId;
 pub use fs::*;
 pub use fspath::FsPath;
 pub use io_jobs::OpenOptions;
@@ -47,12 +52,15 @@ pub use jobs::{
     ConfirmAsk, JobError, JobKind, JobPorts, JobRequest, JobResult, JobSpawner, MetaPurpose,
     OpenNotes, Ports, SaveStrategy, run_job,
 };
+pub use last_version::{LAST_VERSION_FILE, LastVersionOutcome};
+pub use leftover::{Leftover, LeftoverKind, LeftoverOp};
 pub use paths::Paths;
 pub use replacing::{ReplacingCount, ReplacingGuard};
 pub use rescue::{RescueOutcome, RescueReason, RescueWriter};
 pub use search::{
-    Case, Matcher, SearchJob, SearchQuery, build_replace_all, find_next, run_search, scan_bytes,
-    scan_lines,
+    Case, Matcher, QueryError, SearchJob, SearchQuery, build_replace_all, find_next,
+    replacement_for, run_search, scan_bytes, scan_lines, unescape_replacement,
 };
+pub use secret::is_secret_path;
 pub use time::{Clock, Millis, Tick};
 pub use unmap::{ReplaceCounts, ReplaceTarget};

@@ -9,6 +9,8 @@ use eve_view::{
     Capabilities, DocumentId, EditorEvent, Effect, JobId, OriginKind, Revision, ViewId, WindowId,
 };
 
+mod wrap_scroll;
+
 use super::file::Pending;
 use crate::document::{Applied, AppliedTx, ApplyError, Document, Transaction};
 use crate::jobs::JobSpawner;
@@ -26,6 +28,8 @@ pub struct ScrollPos {
     pub top: ByteOff,
     /// 水平スクロール量 (表示列。折り返しなしのとき)。
     pub left_col: u32,
+    /// `top` の論理行の中で、先頭に描く表示行の番号 (折り返し ON のとき。OFF は常に 0)。
+    pub wrap_idx: u32,
 }
 
 /// 文書の表示と Selection の単位。
@@ -36,6 +40,10 @@ pub struct View {
     pub scroll: ScrollPos,
     /// 垂直移動の目標の表示列 (03 §5.2)。水平移動・編集・クリックでクリアし、垂直移動は維持する。
     pub goal_dcol: Option<u32>,
+    /// 折り返しの設定 (03 §14.3)。
+    pub wrap: super::layout::WrapSettings,
+    /// 折り返し位置のカーソルの帰属 (主カーソルだけ、03 §14.3.1)。
+    pub cursor_affinity: super::layout::Affinity,
 }
 
 /// frontend が持つ編集面。v0.x は 1 つで、View を 1 つ持つ。
@@ -61,7 +69,28 @@ pub struct EditorState {
     effects: Vec<Effect>,
     events: Vec<EditorEvent>,
     snapshot_updates: BTreeSet<DocumentId>,
+    /// 閉じた文書のうち、保存ジョブが実行中のものの退避用の公開物 (03 §9.2 の閉じる手順 (a)、§9.8 の不変条件 4)。
+    /// 保存の結果が届くまで緊急退避の対象に残し、保存が成功したら外し、失敗したら退避先に書く。
+    pub(super) closing_snapshots: BTreeMap<DocumentId, super::snapshot::DocSnapshot>,
     needs_render: bool,
+    /// 左ボタンのドラッグ中の状態 (docs/03 §5.8.1)。
+    pub(super) mouse_drag: Option<super::mouse::Drag>,
+    /// `config.reload` の途中: 解析したキーマップと、`config.toml` で変わった項目 (Editor が受け取って差し替える)。
+    pub(super) reloaded: Option<(eve_config::KeymapFile, Vec<&'static str>)>,
+    /// 今のユーザー層のキーマップの割当 (再読込で変わったかを比べる)。
+    pub(super) user_keymap_entries: Option<Vec<eve_config::KeymapEntry>>,
+    /// テーマのロールの表 (色深度に合う段。テーマか色深度が変わったときに作り直す、07 §8.6)。
+    pub(super) roles: std::sync::Arc<eve_view::RoleStyles>,
+    /// テーマファイルから読んだテーマ (名前, テーマ)。`theme.name` が組込みでないときに使う。
+    pub(super) user_theme: Option<(String, eve_config::theme::Theme)>,
+    /// パレットから実行したコマンド (新しい順、直近 20 件。起動している間だけ、07 §11.4)。
+    pub(super) palette_recent: Vec<String>,
+    /// 設定の読込元 (`None` は設定ディレクトリの既定の 2 ファイル)。
+    pub(super) config_sources: Option<super::config_reload::ConfigSources>,
+    /// マウスの取得が有効か (`ui.mouse` の初期値。`ui.toggle_mouse` で変わる)。
+    pub(super) mouse_on: bool,
+    /// ヒントバーを出すか (`ui.hint_bar` の初期値。`ui.toggle_hint_bar` で変わる、FR-504)。
+    pub(super) hint_bar_on: bool,
     /// ジョブの投入口 (`Ports.jobs`)。
     pub(super) jobs: Rc<dyn JobSpawner>,
     pub(super) paths: Arc<dyn Paths>,
@@ -75,16 +104,34 @@ pub struct EditorState {
     pub(super) overlay: Option<super::overlay::Overlay>,
     /// 保存ジョブの完了後に続ける操作。
     pub(super) continuations: BTreeMap<JobId, super::overlay::Continuation>,
+    /// 実行中の全保存 (`file.save_all`、03 §9.8)。無ければ `None`。
+    pub(super) save_all: Option<super::save_all::SaveAll>,
+    /// 読込が終わったらカーソルを移す位置 (行, 桁。ともに 1 始まり。起動時の `+行:桁`、07 §18.2)。
+    pub(super) open_jumps: BTreeMap<DocumentId, (usize, usize)>,
+    /// すべての割当をコマンドごとに集めたもの (ヘルプのキー一覧、04 §8.6)。
+    pub(super) key_all: BTreeMap<String, Vec<(Vec<eve_view::KeyStroke>, bool)>>,
+    /// 前に表示していた文書 (最近使った順。末尾が直近)。閉じた後に表示する文書を選ぶのに使う。
+    pub(super) recent: Vec<DocumentId>,
+    /// 終了の連鎖 (`app.quit` で dirty な文書が 1 件以上、03 §9.8)。連鎖の外では `None`。
+    pub(super) quit_chain: Option<super::overlay::QuitChain>,
+    /// 保存中に終了を求められている (03 §9.7 (f))。
+    pub(super) quit_wait: Option<super::quit_saving::QuitWait>,
+    /// 「保存を中止して終了」の最中 (保存ジョブがすべて終わったら終了する)。
+    pub(super) quit_abort: Option<super::quit_saving::QuitAbort>,
     /// 表示中のメッセージ (解決済み)。
     pub(super) message: Option<super::message::ShownMessage>,
     /// 未読のメッセージの数。
     pub(super) unread: u16,
+    /// メッセージの履歴 (古い順。上限 `message::HISTORY_MAX`、04 §8.9)。
+    pub(super) message_log: std::collections::VecDeque<super::message::LoggedMessage>,
     /// 履歴の破棄を通知した文書 (文書ごとに 1 回)。
     trim_notified: BTreeSet<DocumentId>,
     /// 内部レジスタ・ハンドルの表・貼り付けの token (クリップボード、`clipboard.rs`)。
     pub(super) clipboard: super::clipboard::ClipboardState,
     /// 解決済みの設定 (07 §5.0 の公開キー)。起動時に Host が `Editor::set_config` で渡す。
     pub(super) config: eve_config::Config,
+    /// 選択済みの UI の言語 (07 §17.1)。起動時に Host が `Editor::set_locale` で渡す。
+    pub(super) locale: eve_config::Locale,
     /// パレットの候補 (`hidden` を除く登録済みコマンド。CommandId 順)。
     pub(super) palette_entries: Vec<super::palette::PaletteEntry>,
     /// パレットで選ばれ、Editor が次に実行するコマンド。
@@ -97,8 +144,16 @@ pub struct EditorState {
     pub(super) unmappable_marks: Option<UnmappableMarks>,
     /// 編集で検索の結果が無効になった (Revision, 気づいた時刻)。入力が止まって 300 ms 後に再検索する (03 §12.2)。
     pub(super) research: Option<(eve_view::Revision, Tick)>,
+    /// swap-lite の予約 (03 §10.2)。
+    pub(super) swap: super::swap::SwapState,
+    /// 起動時の走査が見つけた置換途中の痕跡の提案 (新しい順。05 §4.6)。
+    pub(super) leftovers: Vec<crate::Leftover>,
     /// 区分 B / D の確認を承認した (文書, Revision)。同じ Revision の保存では確認を繰り返さない。
     pub(super) lossy_ok: Option<(DocumentId, eve_view::Revision)>,
+    /// 「読み取り専用を解除して保存」を承認した (文書, Revision)。同じ Revision の保存では確認を繰り返さない。
+    pub(super) readonly_ok: Option<(DocumentId, eve_view::Revision)>,
+    /// ダングリングのリンクのリンク先への作成を承認した (文書, パス)。次の 1 回の保存で使って消す。
+    pub(super) link_create_ok: Option<(DocumentId, crate::FsPath)>,
     /// 単発の検索ジョブ (進行中の 1 つだけ)。
     pub(super) find_job: Option<eve_view::JobId>,
     /// ログファイルの場所 (設定の問題の要約に出す)。
@@ -124,6 +179,7 @@ impl EditorState {
             effects: Vec::new(),
             events: Vec::new(),
             snapshot_updates: BTreeSet::new(),
+            closing_snapshots: BTreeMap::new(),
             needs_render: true,
             jobs,
             paths,
@@ -132,23 +188,48 @@ impl EditorState {
             key_seqs: BTreeMap::new(),
             overlay: None,
             continuations: BTreeMap::new(),
+            save_all: None,
+            open_jumps: BTreeMap::new(),
+            key_all: BTreeMap::new(),
+            recent: Vec::new(),
+            quit_chain: None,
+            quit_wait: None,
+            quit_abort: None,
             message: None,
             unread: 0,
+            message_log: std::collections::VecDeque::new(),
             trim_notified: BTreeSet::new(),
             clipboard: Default::default(),
             config: eve_config::Config::default(),
+            locale: eve_config::Locale::default(),
             palette_entries: Vec::new(),
             deferred_command: None,
             search: None,
             search_bar: None,
             unmappable_marks: None,
             research: None,
+            swap: Default::default(),
+            leftovers: Vec::new(),
             lossy_ok: None,
+            readonly_ok: None,
+            link_create_ok: None,
             find_job: None,
             system_encoding: None,
             log_path: None,
             bar_rows: 0,
             surface: (80, 24),
+            mouse_drag: None,
+            mouse_on: true,
+            hint_bar_on: true,
+            reloaded: None,
+            user_keymap_entries: None,
+            config_sources: None,
+            palette_recent: Vec::new(),
+            user_theme: None,
+            roles: std::sync::Arc::new(super::theme::resolve(
+                "default",
+                eve_view::ColorDepth::TrueColor,
+            )),
         }
     }
 
@@ -158,18 +239,62 @@ impl EditorState {
 
     /// 設定を差し替え、持っている文書の表示設定にも写す。
     pub fn set_config(&mut self, config: eve_config::Config) {
+        let old_wrap = self.config_wrap();
+        let theme_changed = self.config.theme_name != config.theme_name
+            || self.config.theme_background != config.theme_background;
+        self.mouse_on = config.mouse;
+        self.hint_bar_on = config.hint_bar;
         self.config = config;
         let display = self.display_settings();
         for d in self.documents.values_mut() {
             d.display = display;
         }
+        // 折り返しの設定は View ごとの状態で、設定の差し替えで既存の View にも写す。
+        // 変わっていなければ写さない (再読込で、`view.toggle_wrap` で切り替えた状態を戻さない)
+        let wrap = self.config_wrap();
+        if wrap != old_wrap {
+            let views: Vec<ViewId> = self.views.keys().copied().collect();
+            for v in views {
+                self.set_wrap(v, wrap);
+            }
+        }
+        if theme_changed {
+            self.refresh_roles();
+        }
         self.needs_render = true;
+    }
+
+    /// 設定 (`view.wrap` / `view.wrap_indent` / `view.wrap_kinsoku`) から作った折り返しの設定。
+    pub fn config_wrap(&self) -> super::layout::WrapSettings {
+        use super::layout::{WrapMode, WrapSettings};
+        let c = &self.config;
+        WrapSettings {
+            mode: match c.wrap {
+                eve_config::WrapMode::Off => WrapMode::Off,
+                eve_config::WrapMode::Soft => WrapMode::Soft,
+                eve_config::WrapMode::Word => WrapMode::Word,
+            },
+            indent_same: c.wrap_indent == eve_config::WrapIndent::Same,
+            kinsoku: c.wrap_kinsoku,
+        }
+    }
+
+    /// UI の言語を選ぶ。以後の文言はその言語のカタログで解決する。
+    pub fn set_locale(&mut self, locale: eve_config::Locale) {
+        self.locale = locale;
+        self.needs_render = true;
+    }
+
+    /// 選択中の UI の言語。
+    pub fn locale(&self) -> eve_config::Locale {
+        self.locale
     }
 
     fn display_settings(&self) -> crate::document::DisplaySettings {
         crate::document::DisplaySettings {
             tab_width: self.config.tab_width,
             ambiguous_wide: self.config.ambiguous_width == 2,
+            show_whitespace: self.config.show_whitespace == eve_config::ShowWhitespace::Minimal,
         }
     }
 
@@ -193,6 +318,11 @@ impl EditorState {
             DefaultLineEnding::Native if cfg!(windows) => eve_text::LineEnding::Crlf,
             DefaultLineEnding::Native => eve_text::LineEnding::Lf,
         }
+    }
+
+    /// `file.long_line_threshold` (長大行の閾値、バイト)。
+    pub(super) fn config_long_line_threshold(&self) -> usize {
+        usize::try_from(self.config.long_line_threshold).unwrap_or(usize::MAX)
     }
 
     /// 新規文書 (無題・存在しないパス)。文字コードと新しく挿入する改行は `file.default_*` (07 §5.2)。
@@ -254,13 +384,21 @@ impl EditorState {
             // 画面の大きさが変わっても、カーソルが見えるようにする
             let views: Vec<ViewId> = self.views.keys().copied().collect();
             for v in views {
+                // 折り返し幅が変わるので、先頭の論理行の最初の表示行に戻す (03 §14.3.1)
+                if let Some(view) = self.views.get_mut(&v) {
+                    view.scroll.wrap_idx = 0;
+                }
                 self.ensure_cursor_visible(v);
             }
         }
     }
 
     pub fn set_caps(&mut self, caps: Capabilities) {
+        let depth_changed = self.caps.color_depth != caps.color_depth;
         self.caps = caps;
+        if depth_changed {
+            self.refresh_roles();
+        }
         self.needs_render = true;
     }
 
@@ -300,6 +438,8 @@ impl EditorState {
                 selection: Selection::point(ByteOff(0)),
                 scroll: ScrollPos::default(),
                 goal_dcol: None,
+                wrap: self.config_wrap(),
+                cursor_affinity: Default::default(),
             },
         );
         id
@@ -335,6 +475,7 @@ impl EditorState {
         };
         let text = d.text();
         v.scroll.top = text.line_to_byte(text.byte_to_line(pos));
+        v.scroll.wrap_idx = 0;
         self.needs_render = true;
     }
 
@@ -432,6 +573,24 @@ impl EditorState {
         Ok(applied.map(|a| self.after_change(doc, &a, view)).is_some())
     }
 
+    /// プロセス全体の Undo 履歴の上限 (`editor.undo.total_max_bytes`、NFR-203) を守る: 超えていたら、履歴が最も大きい文書から
+    /// 古い順に破棄する。利用者が編集していない文書の履歴も削るが、dirty 表示は変わらない。破棄した文書ごとに 1 回通知する。
+    pub(super) fn enforce_total_undo_budget(&mut self) {
+        let limit = usize::try_from(self.config.undo_total_max_bytes).unwrap_or(usize::MAX);
+        let mut docs: Vec<(DocumentId, &mut crate::Document)> =
+            self.documents.iter_mut().map(|(id, d)| (*id, d)).collect();
+        let trimmed = crate::trim_to_total_budget(&mut docs, limit);
+        for doc in trimmed {
+            if self.trim_notified.insert(doc) {
+                self.show_message(
+                    eve_view::MessageLevel::Info,
+                    "info.undo.history_trimmed",
+                    &[],
+                );
+            }
+        }
+    }
+
     fn after_change(&mut self, doc: DocumentId, a: &Applied, issuer: Option<ViewId>) {
         // 履歴の予算による破棄は、文書ごとに 1 回だけ通知する (03 §7.5)
         if a.record.as_ref().is_some_and(|r| r.pruned) && self.trim_notified.insert(doc) {
@@ -441,10 +600,14 @@ impl EditorState {
                 &[],
             );
         }
+        self.enforce_total_undo_budget();
+        // 選択範囲内の検索の範囲も、同じ変更で写像する (03 §12.5)
+        self.map_search_scope(doc, &a.changes);
         let Some(document) = self.documents.get(&doc) else {
             return;
         };
         let text = document.text();
+        let viewport = self.viewport;
         for (id, view) in self.views.iter_mut().filter(|(_, v)| v.doc == doc) {
             if Some(*id) == issuer {
                 // 発行 View: 指定された Selection (なければ自分の編集として写像)。goal_dcol はクリア
@@ -457,6 +620,7 @@ impl EditorState {
                 };
                 view.selection = sel;
                 view.goal_dcol = None;
+                view.cursor_affinity = Default::default();
             } else {
                 // 他の View: 他者の編集として写像。goal_dcol は維持
                 view.selection = view
@@ -466,7 +630,22 @@ impl EditorState {
             }
             // スクロール位置は同じ関数で写像し、行頭へ丸める
             let top = a.changes.map_pos(view.scroll.top, Bias::Before);
-            view.scroll.top = text.line_to_byte(LineIdx(text.byte_to_line(top).0));
+            let top_line = text.byte_to_line(top).0;
+            view.scroll.top = text.line_to_byte(LineIdx(top_line));
+            // 折り返し: 先頭が同じ論理行のままなら表示行の番号を新しい行数に収め、動いたら行頭の表示行に戻す
+            if view.scroll.wrap_idx > 0 {
+                // 長大行を含む文書は折り返さない (03 §11.5.1)
+                view.scroll.wrap_idx = if view.wrap.is_on()
+                    && document.format.long_lines == 0
+                    && top == view.scroll.top
+                {
+                    let cols = super::layout::wrap_width(document, viewport);
+                    let n = super::layout::line_rows(document, top_line, view.wrap, cols).len();
+                    view.scroll.wrap_idx.min(n.saturating_sub(1) as u32)
+                } else {
+                    0
+                };
+            }
         }
         // 編集の後もカーソルが見えるようにする (行が短くなった・画面の右端を越えた)
         if let Some(v) = issuer {
@@ -512,8 +691,39 @@ impl EditorState {
             .map_or(0, |d| d.text().len_lines().saturating_sub(rows.max(1)))
     }
 
+    /// 折り返しの設定を変える。スクロールは `top` (論理行) を保ち、表示行の番号と水平スクロールを戻す (03 §14.3)。
+    pub fn set_wrap(&mut self, view: ViewId, wrap: super::layout::WrapSettings) {
+        if let Some(v) = self.views.get_mut(&view) {
+            v.wrap = wrap;
+            v.scroll.wrap_idx = 0;
+            v.scroll.left_col = 0;
+            v.goal_dcol = None;
+            v.cursor_affinity = Default::default();
+            self.needs_render = true;
+        }
+    }
+
+    /// スクロール位置を直接置く (折り返しの表示行の番号を含む。試験と復元が使う)。
+    pub fn set_scroll(&mut self, view: ViewId, scroll: ScrollPos) {
+        if let Some(v) = self.views.get_mut(&view) {
+            v.scroll = scroll;
+            self.needs_render = true;
+        }
+    }
+
+    /// 折り返し位置のカーソルの帰属を置く (03 §14.3)。
+    pub fn set_cursor_affinity(&mut self, view: ViewId, a: super::layout::Affinity) {
+        if let Some(v) = self.views.get_mut(&view) {
+            v.cursor_affinity = a;
+            self.needs_render = true;
+        }
+    }
+
     /// 先頭可視行を `delta` 行ずらす (文書の範囲内に収め、短い文書を画面の外へ押し出さない)。
     pub fn scroll_lines(&mut self, view: ViewId, delta: i64) {
+        if let Some(g) = self.wrap_geometry(view) {
+            return self.wrapped_scroll_lines(view, g, delta);
+        }
         let Some(doc) = self.views.get(&view).map(|v| v.doc) else {
             return;
         };
@@ -549,6 +759,16 @@ impl EditorState {
 
     /// カーソルの列が見えるよう水平スクロールを調整する (折り返しなし)。
     fn ensure_horizontal(&mut self, view: ViewId) {
+        if self.wrap_geometry(view).is_some() {
+            // 折り返し ON は水平スクロールしない
+            if let Some(v) = self.views.get_mut(&view)
+                && v.scroll.left_col != 0
+            {
+                v.scroll.left_col = 0;
+                self.needs_render = true;
+            }
+            return;
+        }
         let Some((col, cell_w)) = super::layout::primary_cursor_cell(self, view) else {
             return;
         };
@@ -582,6 +802,9 @@ impl EditorState {
     }
 
     fn ensure_vertical(&mut self, view: ViewId, margin: usize) {
+        if let Some(g) = self.wrap_geometry(view) {
+            return self.wrapped_ensure_vertical(view, g, margin);
+        }
         let rows = self.viewport.1 as usize;
         let Some(doc) = self.views.get(&view).map(|v| v.doc) else {
             return;
@@ -613,6 +836,9 @@ impl EditorState {
 
     /// カーソルを含む行をビューポートの中央に置く (指定行へ移動の後、03 §5.6)。
     pub fn center_cursor(&mut self, view: ViewId) {
+        if let Some(g) = self.wrap_geometry(view) {
+            return self.wrapped_center_cursor(view, g);
+        }
         let rows = self.viewport.1 as usize;
         let Some(doc) = self.views.get(&view).map(|v| v.doc) else {
             return;
@@ -639,15 +865,9 @@ impl EditorState {
         let Some(d) = self.documents.get(&v.doc) else {
             return;
         };
-        let mut sel = sel.normalized(d.text());
-        // 長大行はカーソルと選択を表示範囲 (先頭 64 KiB) に収める (NFR-106、03 §11.5)
-        if d.read_only
-            .contains(crate::document::ReadOnlyReason::LongLine)
-        {
-            sel = clamp_to_visible(d, sel);
-        }
-        v.selection = sel;
+        v.selection = sel.normalized(d.text());
         v.goal_dcol = None;
+        v.cursor_affinity = Default::default();
         self.needs_render = true;
     }
 
@@ -659,10 +879,11 @@ impl EditorState {
         let doc = view.and_then(|v| self.documents.get(&v.doc));
         let b = |x: bool| Some(CtxValue::Bool(x));
         match name {
-            "doc.read_only" => {
-                doc.map_or(b(false), |d| b(!d.is_editable() || self.open_replacing()))
-            }
+            "doc.read_only" => doc.map_or(b(false), |d| b(!d.is_editable())),
             "doc.has_path" => b(doc.is_some_and(|d| d.path.is_some())),
+            "doc.read_only_releasable" => b(doc.is_some_and(|d| {
+                d.load_state == crate::document::LoadState::Ready && d.read_only.releasable()
+            })),
             "doc.dirty" => b(doc.is_some_and(Document::is_dirty)),
             "selection.empty" => b(view.is_none_or(|v| v.selection.iter().all(|r| r.is_empty()))),
             "overlay.active" => Some(CtxValue::Str(self.overlay_name().to_owned())),
@@ -671,31 +892,23 @@ impl EditorState {
                 .search_bar
                 .as_ref()
                 .is_some_and(|s| s.replace.is_some())),
+            // 置換欄にフォーカスがある (`Enter` が 1 件置換になる、07 §11.6)
+            "search.replace_focused" => b(self
+                .search_bar
+                .as_ref()
+                .is_some_and(|s| s.replace.is_some() && s.focus == eve_view::BarFocus::Replace)),
             "caps.can_suspend" => b(self.caps.can_suspend),
+            "caps.mouse" => b(self.caps.mouse),
+            // 折り返し中 (設定キー `view.wrap` とは別名、07 §7.1)
+            "view.wrapped" => b(view.is_some_and(|v| {
+                v.wrap.is_on()
+                    && self
+                        .documents
+                        .get(&v.doc)
+                        .is_some_and(|d| d.format.long_lines == 0)
+            })),
             "editor" => b(true),
             _ => None,
         }
     }
-}
-
-/// 長大行の中の位置を、その行の表示の終端 (先頭 64 KiB) に収める。
-fn clamp_to_visible(d: &Document, sel: Selection) -> Selection {
-    use eve_text::{Range, TextRead};
-    let t = d.text();
-    let clamp = |p: ByteOff| {
-        let l = t.byte_to_line(p);
-        let (ls, le) = (t.line_to_byte(l).0, t.line_end_byte(l).0);
-        let ve = super::layout::line_visible_end(d, ls, le);
-        if ve < le && p.0 > ve && p.0 <= le {
-            ByteOff(ve)
-        } else {
-            p
-        }
-    };
-    let ranges: Vec<Range> = sel
-        .ranges()
-        .iter()
-        .map(|r| Range::new(clamp(r.anchor), clamp(r.head)))
-        .collect();
-    Selection::new(ranges, sel.primary_index()).unwrap_or(sel)
 }

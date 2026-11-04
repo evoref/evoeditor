@@ -21,7 +21,7 @@
 //! cargo bench -p evoeditor --bench bm_pty -- --only 103,107        # 一部だけ (101 102 103 107)
 //! ```
 
-#![cfg(windows)]
+#![cfg_attr(not(windows), allow(dead_code, unused_imports))]
 #![allow(clippy::print_stdout, clippy::print_stderr)]
 // 計測の駆動側の読み取りスレッド (製品のスレッドではない。R11 の対象外)
 #![allow(clippy::disallowed_methods)]
@@ -82,6 +82,8 @@ impl Term {
         cmd.env_remove("WT_SESSION");
         cmd.env_remove("TERM_PROGRAM");
         cmd.env("EVE_STATE_DIR", &state);
+        // OS の言語に依らず日本語で計測する
+        cmd.env("EVE_LANG", "ja");
         // 設定ディレクトリは無い (設定ファイルなし)
         cmd.env("EVE_CONFIG_DIR", state.join("no-config"));
         if let Some(t) = trace {
@@ -89,7 +91,11 @@ impl Term {
         }
         let mut reader = pty.master.try_clone_reader().expect("reader");
         let writer = Arc::new(Mutex::new(pty.master.take_writer().expect("writer")));
-        let parser = Arc::new(Mutex::new(vt100::Parser::new(ROWS, COLS, 0)));
+        let parser = Arc::new(Mutex::new(vt100::Parser::new(
+            std::num::NonZeroU16::new(ROWS).expect("ROWS は 1 以上"),
+            std::num::NonZeroU16::new(COLS).expect("COLS は 1 以上"),
+            0,
+        )));
         let a_count = Arc::new(AtomicUsize::new(0));
         let ready = Arc::new(AtomicBool::new(false));
         let marker_flag = Arc::new(AtomicBool::new(false));
@@ -187,15 +193,36 @@ impl Term {
     }
 
     /// 終了を待つ。終了コード (待ちきれなければ `None`)。
+    /// 終了コードは、プロセスの後始末より先に取れる。後始末の間はシステムの CreateProcess が止まることがあり
+    /// (exe が exFAT の上にあると約 225 ms)、続けて起動すると BM-101b に入る。プロセスのハンドルが signaled に
+    /// なる (後始末が終わる) まで待ってから戻る (portable-pty の `wait` は終了コードが取れるとすぐ戻るので使わない)
     fn wait_exit(&mut self, limit: Duration) -> Option<u32> {
         let t = Instant::now();
         while t.elapsed() < limit {
             if let Ok(Some(st)) = self.child.try_wait() {
+                self.wait_gone(limit.saturating_sub(t.elapsed()));
                 return Some(st.exit_code());
             }
             thread::sleep(Duration::from_millis(1));
         }
         None
+    }
+
+    /// 終了した (または kill した) 子のプロセスが消える (ハンドルが signaled になる) まで最大 `limit` 待つ。
+    fn wait_gone(&self, limit: Duration) {
+        #[cfg(windows)]
+        if let Some(h) = self.child.as_raw_handle() {
+            // SAFETY: `child` が持つ、生きているプロセスのハンドル
+            #[allow(unsafe_code)]
+            unsafe {
+                windows_sys::Win32::System::Threading::WaitForSingleObject(
+                    h,
+                    u32::try_from(limit.as_millis()).unwrap_or(u32::MAX),
+                )
+            };
+        }
+        #[cfg(not(windows))]
+        let _ = limit;
     }
 
     /// `a` を 1 つ送り、画面に現れるまでの時間。
@@ -213,6 +240,8 @@ impl Term {
 impl Drop for Term {
     fn drop(&mut self) {
         let _ = self.child.kill();
+        // 次の起動が、この子の後始末と重ならないようにする (`wait_exit` の説明)
+        self.wait_gone(WAIT);
         let _ = std::fs::remove_dir_all(&self.state);
     }
 }
@@ -546,6 +575,45 @@ fn clip_window(dir: &Path, mb: usize, id: &str, json: bool, quick: bool) {
     );
 }
 
+/// スワップの書出し中のキー入力 (NFR-307: 書出しは UI を止めない)。`mb` MB (64 MiB 以下) の文書を開いて 1 文字入れ (dirty)、
+/// 続けて 30 ms ごとにカーソルを左右へ動かす。最後の入力から約 2 秒後に全文のスワップが書かれ、その間のキー入力を測る
+/// (入力の読取完了 → 描画の `write`)。書き終えたらまた 1 文字入れ、最短 10 秒の間隔で次の書出しを起こす。
+fn swap_window(dir: &Path, mb: usize, id: &str, json: bool, quick: bool) {
+    const VK_LEFT: u64 = 0x25;
+    const VK_RIGHT: u64 = 0x27;
+    let path = make_big(dir, &format!("big_{mb}mb.txt"), mb);
+    let trace = dir.join(format!("swap-{mb}.jsonl"));
+    let (mut t, _) = Term::start(&[path.to_str().unwrap()], "quick brown", Some(&trace));
+    t.wait("開く", || t.marker.load(Ordering::Acquire));
+    thread::sleep(Duration::from_millis(4000));
+    let rounds = if quick { 2 } else { 5 };
+    for _ in 0..rounds {
+        t.send(b"a"); // 変更して dirty にする (最後の入力から 2 秒後にスワップを書く)
+        // 書出しの前後を含めて 12 秒、30 ms ごとに左右へ動かす (前の書出しから 10 秒以上空く)
+        for i in 0..400 {
+            t.send(if i % 2 == 0 { b"\x1b[C" } else { b"\x1b[D" });
+            thread::sleep(Duration::from_millis(30));
+        }
+    }
+    t.send(b"\x11"); // Ctrl+Q (未保存の確認が出る)
+    thread::sleep(Duration::from_millis(300));
+    t.send(b"d"); // 破棄して終了
+    assert_eq!(t.wait_exit(WAIT), Some(0), "正常に終了しません");
+    let spans: Vec<Duration> = read_spans(&trace)
+        .into_iter()
+        .filter(|s| s.name == "input.to_flush" && matches!(s.vk, Some(VK_LEFT | VK_RIGHT)))
+        .map(|s| ns_dur(s.end_ns - s.start_ns))
+        .collect();
+    let _ = std::fs::remove_file(&trace);
+    report(
+        id,
+        &format!("{mb} MB の文書のスワップ書出し中のキー入力 (入力の読取完了 → 描画の write)"),
+        spans,
+        json,
+        quick,
+    );
+}
+
 /// 「開く → 進捗」(01 §3.0.1): `Ctrl+O` → パス → `Enter` の、`Enter` の読取完了 → 進捗を含む最初の Frame の `write`。
 /// 2 つのファイルを交互に開く (同じファイルの再読込と区別するため)。
 fn open_progress(dir: &Path, a: &Path, b: &Path, runs: usize, warmup: usize) -> Vec<Duration> {
@@ -569,6 +637,9 @@ fn open_progress(dir: &Path, a: &Path, b: &Path, runs: usize, warmup: usize) -> 
         while t.loading.load(Ordering::Acquire) && w.elapsed() < WAIT {
             thread::sleep(Duration::from_millis(5));
         }
+        thread::sleep(Duration::from_millis(150));
+        // 開いている文書を開き直すと切り替えになり読み込まない (複数の文書、v0.2)。毎回閉じて次を読み込ませる
+        t.send(b"\x17"); // Ctrl+W
         thread::sleep(Duration::from_millis(150));
     }
     t.send(b"\x11");
@@ -881,6 +952,10 @@ fn main() {
     }
     if traced && want("117") {
         save_window(&dir, 15, "BM-103b-reconcile", traced, json, quick);
+    }
+    if traced && want("307") {
+        // NFR-307: 60 MB の dirty な文書のスワップ書出し中のキー入力 (64 MiB 以下なので全文を書く)
+        swap_window(&dir, 60, "BM-103b-swap60", json, quick);
     }
     if traced && want("205") {
         // FR-205 AC-4: 60 MB (システムへ書く) と 100 MB (上限超過で内部レジスタだけ) の全選択のコピー中のキー入力

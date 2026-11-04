@@ -204,47 +204,12 @@ fn fs_kind(path: &Path) -> FsKind {
 }
 
 impl FileSystem for WinFs {
-    fn inflight_for(&self, path: &FsPath) -> Result<Vec<eve_core::InflightRecord>, FsError> {
-        Ok(self
-            .state_dir()
-            .map(|sd| crate::inflight::read_flags(sd, path.as_path()))
-            .unwrap_or_default())
+    fn rename_no_replace(&self, from: &FsPath, to: &FsPath) -> Result<(), FsError> {
+        crate::save::rename_no_replace(from.as_path(), to.as_path())
+            .map_err(|e| map_io_error(e, to))
     }
 
-    fn list_recovery_dirs(&self) -> Result<Vec<eve_core::RecoveryDirEntry>, FsError> {
-        Ok(crate::rescue::list_recovery_dirs(self.state_dir()))
-    }
-
-    fn write_recovery(&self, doc: &eve_core::DocSnapshot) -> Result<FsPath, FsError> {
-        use eve_core::{RescueReason, RescueWriter};
-        let out = crate::rescue::WinRescue::new(self.state_dir.clone()).write(
-            &[std::sync::Arc::new(doc.clone())],
-            RescueReason::UserSave,
-            std::time::Duration::from_secs(30),
-        );
-        match out.dir {
-            Some(dir) if out.complete => Ok(FsPath::new(dir)),
-            _ => {
-                let msg = out
-                    .error
-                    .unwrap_or_else(|| "書き込めませんでした".to_owned());
-                let mut e = FsError::new(FsErrorKind::Other);
-                e.source = Some(io::Error::other(msg));
-                Err(e)
-            }
-        }
-    }
-
-    fn write_in_place(
-        &self,
-        path: &FsPath,
-        data: &mut dyn ReadChunks,
-        len: u64,
-        opts: &SaveOptions,
-        cancel: &eve_core::CancelToken,
-    ) -> Result<SaveReport, FsError> {
-        self.write_in_place_impl(path, data, len, opts, cancel)
-    }
+    state_dir_methods!();
 
     fn remove_file(&self, path: &FsPath) -> Result<(), FsError> {
         fs::remove_file(path.as_path()).map_err(|e| map_io_error(e, path))

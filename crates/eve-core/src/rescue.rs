@@ -17,11 +17,15 @@ pub enum RescueReason {
     Panic,
     Signal,
     ConsoleClose,
+    /// Windows のログオフ・シャットダウン (`WM_QUERYENDSESSION` / `WM_ENDSESSION`、05 §11.2)。
+    SessionEnd,
     Fatal,
     /// 「保存を中止して終了」(ui.confirm.quit_saving、後続)。
     QuitAbortedSave,
     /// 「退避先に保存」(後続)。
     UserSave,
+    /// スワップ (swap-lite、03 §10.2)。
+    Swap,
 }
 
 impl RescueReason {
@@ -30,9 +34,11 @@ impl RescueReason {
             RescueReason::Panic => "panic",
             RescueReason::Signal => "signal",
             RescueReason::ConsoleClose => "console_close",
+            RescueReason::SessionEnd => "session_end",
             RescueReason::Fatal => "fatal",
             RescueReason::QuitAbortedSave => "quit_aborted_save",
             RescueReason::UserSave => "user_save",
+            RescueReason::Swap => "swap",
         }
     }
 }

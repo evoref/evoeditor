@@ -23,6 +23,8 @@ pub enum FsOp {
     WriteAtomic,
     WriteInPlace,
     WriteRecovery,
+    WriteSwap,
+    DiscardSwap,
 }
 
 /// `write_atomic` のステップ (失敗を注入でき、到達したステップは `MemFs::steps` に残る)。
@@ -48,6 +50,8 @@ struct Entry {
 
 struct State {
     files: BTreeMap<FsPath, Entry>,
+    /// シンボリックリンク (リンク → リンク先)。リンク先が無ければダングリング。
+    links: BTreeMap<FsPath, FsPath>,
     dirs: BTreeSet<FsPath>,
     next_id: u128,
     seq: u32,
@@ -60,10 +64,20 @@ struct State {
     steps: Vec<WriteStep>,
     /// 保存中フラグ (テストが `add_inflight` で積む)。
     inflight: Vec<InflightRecord>,
+    /// 事前バックアップのファイル (テストが `add_orphan_backup` で積む)。
+    orphan_backups: Vec<eve_core::OrphanBackup>,
     /// 退避ディレクトリ (テストが `add_recovery_dir` で積む)。
     recovery: Vec<RecoveryDirEntry>,
     /// 「退避先に保存」で書いた本文。
     recovered: Vec<(FsPath, Vec<u8>)>,
+    /// スワップ (文書 → 書いたときのパスと本文)。
+    swaps: BTreeMap<eve_view::DocumentId, (Option<FsPath>, Vec<u8>)>,
+    /// `write_swap` が成功した回数。
+    swap_writes: u32,
+    /// スワップを実装していない Port のふり (`Unsupported` を返す)。
+    swap_unsupported: bool,
+    /// 他のプロセスが残したスワップ (テストが `add_swap_entry` で積む)。復旧の探索が返す。
+    swap_entries: Vec<(eve_core::SwapEntry, Option<eve_core::SwapBody>)>,
 }
 
 pub struct MemFs {
@@ -81,6 +95,7 @@ impl MemFs {
             state: Mutex::new(State {
                 files: BTreeMap::new(),
                 dirs: BTreeSet::new(),
+                links: BTreeMap::new(),
                 next_id: 1,
                 seq: 0,
                 chunk_size: DEFAULT_CHUNK,
@@ -91,8 +106,13 @@ impl MemFs {
                 read_fail_after: None,
                 steps: Vec::new(),
                 inflight: Vec::new(),
+                orphan_backups: Vec::new(),
                 recovery: Vec::new(),
                 recovered: Vec::new(),
+                swaps: BTreeMap::new(),
+                swap_writes: 0,
+                swap_unsupported: false,
+                swap_entries: Vec::new(),
             }),
         }
     }
@@ -167,6 +187,25 @@ impl MemFs {
         self.st().inflight.push(record);
     }
 
+    /// 孤児の事前バックアップを積む (`list_orphan_backups` が返す。`remove_file` で消える)。
+    pub fn add_orphan_backup(&self, path: &str, partial: bool, len: u64) {
+        self.st().orphan_backups.push(eve_core::OrphanBackup {
+            path: FsPath::from(path),
+            pid: 1,
+            partial,
+            len,
+        });
+    }
+
+    /// 残っている孤児の事前バックアップのパス。
+    pub fn orphan_backup_paths(&self) -> Vec<FsPath> {
+        self.st()
+            .orphan_backups
+            .iter()
+            .map(|o| o.path.clone())
+            .collect()
+    }
+
     /// 退避ディレクトリを積む (起動時の案内の再現)。`rescue` は「退避先に保存」の退避。
     pub fn add_recovery_dir(&self, path: &str, rescue: bool) {
         self.st().recovery.push(RecoveryDirEntry {
@@ -180,9 +219,53 @@ impl MemFs {
         self.st().recovered.iter().map(|(_, b)| b.clone()).collect()
     }
 
+    /// 文書のスワップの本文 (無ければ `None`)。
+    pub fn swap_of(&self, doc: eve_view::DocumentId) -> Option<Vec<u8>> {
+        self.st().swaps.get(&doc).map(|(_, b)| b.clone())
+    }
+
+    /// 文書のスワップを書いたときのパス (`Some(None)` は無題)。
+    pub fn swap_path_of(&self, doc: eve_view::DocumentId) -> Option<Option<FsPath>> {
+        self.st().swaps.get(&doc).map(|(p, _)| p.clone())
+    }
+
+    /// 残っているスワップの数。
+    pub fn swap_count(&self) -> usize {
+        self.st().swaps.len()
+    }
+
+    /// `write_swap` が成功した回数 (書出しの間隔の検査用)。
+    pub fn swap_writes(&self) -> u32 {
+        self.st().swap_writes
+    }
+
+    /// スワップを実装していない Port のふりをする (`write_swap` / `discard_swap` が `Unsupported`)。
+    pub fn set_swap_unsupported(&self, on: bool) {
+        self.st().swap_unsupported = on;
+    }
+
+    /// 他のプロセスが残したスワップを積む (復旧の探索の再現)。`body` が `None` なら本文を読めない (`read_swap` が失敗する)。
+    pub fn add_swap_entry(&self, entry: eve_core::SwapEntry, body: Option<eve_core::SwapBody>) {
+        self.st().swap_entries.push((entry, body));
+    }
+
+    /// 残っている他のプロセスのスワップ (消した後の確認用)。
+    pub fn swap_entries(&self) -> Vec<eve_core::SwapEntry> {
+        self.st()
+            .swap_entries
+            .iter()
+            .map(|(e, _)| e.clone())
+            .collect()
+    }
+
     /// 残っている保存中フラグ。
     pub fn inflight_records(&self) -> Vec<InflightRecord> {
         self.st().inflight.clone()
+    }
+
+    /// 置いてあるファイルのパス (昇順)。
+    pub fn paths(&self) -> Vec<String> {
+        self.st().files.keys().map(FsPath::display).collect()
     }
 
     pub fn read(&self, path: &str) -> Option<Vec<u8>> {
@@ -209,6 +292,13 @@ impl MemFs {
         if let Some(e) = self.st().files.get_mut(&FsPath::from(path)) {
             e.readonly = readonly;
         }
+    }
+
+    /// シンボリックリンクを置く。開く・保存はリンク先を対象にする (リンク先が無ければダングリング)。
+    pub fn add_link(&self, link: &str, target: &str) {
+        self.st()
+            .links
+            .insert(FsPath::from(link), FsPath::from(target));
     }
 
     pub fn set_nlink(&self, path: &str, nlink: u32) {
@@ -313,11 +403,27 @@ fn dir_exists(s: &State, dir: &FsPath) -> bool {
 }
 
 fn not_found(s: &State, path: &FsPath) -> FsError {
+    if let Some(target) = s.links.get(path) {
+        return FsError::with_detail(
+            FsErrorKind::NotFound,
+            FsErrorDetail::DanglingLink {
+                target: target.clone(),
+            },
+        );
+    }
     match path.parent() {
         Some(dir) if !dir_exists(s, &dir) => {
             FsError::with_detail(FsErrorKind::NotFound, FsErrorDetail::ParentMissing { dir })
         }
         _ => FsError::new(FsErrorKind::NotFound),
+    }
+}
+
+/// リンクならリンク先が在るときだけリンク先 (ダングリングはリンク自身のまま。`not_found` が詳細を付ける)。
+fn link_target(s: &State, path: &FsPath) -> FsPath {
+    match s.links.get(path) {
+        Some(t) if s.files.contains_key(t) => t.clone(),
+        _ => path.clone(),
     }
 }
 
@@ -343,7 +449,39 @@ fn step(s: &mut State, st: WriteStep) -> Result<(), FsError> {
     Ok(())
 }
 
+/// 状態ファイル (`read_state_file` など) を置く場所。`FixedPaths::default()` の `state_dir` と同じ。
+pub const MEMFS_STATE_DIR: &str = "/evo/state";
+
 impl FileSystem for MemFs {
+    fn read_state_file(&self, name: &str) -> Result<Vec<u8>, FsError> {
+        self.read(&format!("{MEMFS_STATE_DIR}/{name}"))
+            .ok_or_else(|| FsError::new(FsErrorKind::NotFound))
+    }
+
+    fn write_state_file(&self, name: &str, data: &[u8]) -> Result<(), FsError> {
+        self.set_file(
+            &FsPath::from(format!("{MEMFS_STATE_DIR}/{name}").as_str()),
+            data,
+        );
+        Ok(())
+    }
+
+    fn set_aside_state_file(&self, name: &str) -> Result<(), FsError> {
+        let from = FsPath::from(format!("{MEMFS_STATE_DIR}/{name}").as_str());
+        let data = self
+            .st()
+            .files
+            .remove(&from)
+            .map(|e| e.data)
+            .ok_or_else(|| FsError::new(FsErrorKind::NotFound))?;
+        let ts = self.clock.now().0;
+        self.set_file(
+            &FsPath::from(format!("{MEMFS_STATE_DIR}/{name}.unsupported-{ts}").as_str()),
+            &data,
+        );
+        Ok(())
+    }
+
     fn list_recovery_dirs(&self) -> Result<Vec<RecoveryDirEntry>, FsError> {
         Ok(self.st().recovery.clone())
     }
@@ -358,6 +496,53 @@ impl FileSystem for MemFs {
         Ok(dir)
     }
 
+    fn list_swaps(&self) -> Result<Vec<eve_core::SwapEntry>, FsError> {
+        Ok(self.swap_entries())
+    }
+
+    fn read_swap(&self, entry: &eve_core::SwapEntry) -> Result<eve_core::SwapBody, FsError> {
+        let s = self.st();
+        s.swap_entries
+            .iter()
+            .find(|(e, _)| e.dir == entry.dir)
+            .and_then(|(_, b)| b.clone())
+            .ok_or_else(|| FsError::new(FsErrorKind::NotFound))
+    }
+
+    fn remove_swap(&self, entry: &eve_core::SwapEntry) -> Result<(), FsError> {
+        let mut s = self.st();
+        if s.swap_unsupported {
+            return Err(FsError::new(FsErrorKind::Unsupported));
+        }
+        s.swap_entries.retain(|(e, _)| e.dir != entry.dir);
+        Ok(())
+    }
+
+    fn write_swap(&self, doc: &eve_core::DocSnapshot) -> Result<(), FsError> {
+        let mut s = self.st();
+        if s.swap_unsupported {
+            return Err(FsError::new(FsErrorKind::Unsupported));
+        }
+        injected(&mut s, FsOp::WriteSwap)?;
+        s.swaps.insert(doc.doc, (doc.path.clone(), doc.to_vec()));
+        s.swap_writes += 1;
+        Ok(())
+    }
+
+    fn discard_swap(
+        &self,
+        doc: eve_view::DocumentId,
+        _path: Option<&FsPath>,
+    ) -> Result<(), FsError> {
+        let mut s = self.st();
+        if s.swap_unsupported {
+            return Err(FsError::new(FsErrorKind::Unsupported));
+        }
+        injected(&mut s, FsOp::DiscardSwap)?;
+        s.swaps.remove(&doc);
+        Ok(())
+    }
+
     fn inflight_for(&self, path: &FsPath) -> Result<Vec<InflightRecord>, FsError> {
         let s = self.st();
         Ok(s.inflight
@@ -367,8 +552,35 @@ impl FileSystem for MemFs {
             .collect())
     }
 
+    fn rename_no_replace(&self, from: &FsPath, to: &FsPath) -> Result<(), FsError> {
+        let mut s = self.st();
+        if s.files.contains_key(to) {
+            return Err(FsError::new(FsErrorKind::Other));
+        }
+        match s.files.remove(from) {
+            Some(e) => {
+                s.files.insert(to.clone(), e);
+                Ok(())
+            }
+            None => Err(FsError::new(FsErrorKind::NotFound)),
+        }
+    }
+
+    fn list_inflight(&self) -> Result<Vec<InflightRecord>, FsError> {
+        Ok(self.st().inflight.clone())
+    }
+
+    fn list_orphan_backups(&self) -> Result<Vec<eve_core::OrphanBackup>, FsError> {
+        Ok(self.st().orphan_backups.clone())
+    }
+
     fn remove_file(&self, path: &FsPath) -> Result<(), FsError> {
         let mut s = self.st();
+        let n = s.orphan_backups.len();
+        s.orphan_backups.retain(|o| &o.path != path);
+        if s.orphan_backups.len() != n {
+            return Ok(());
+        }
         // 保存中フラグのファイル、または通常のファイル
         let before = s.inflight.len();
         s.inflight.retain(|r| &r.flag != path);
@@ -382,6 +594,7 @@ impl FileSystem for MemFs {
     fn metadata(&self, path: &FsPath) -> Result<FileMeta, FsError> {
         let mut s = self.st();
         injected(&mut s, FsOp::Metadata)?;
+        let path = &link_target(&s, path);
         if let Some(e) = s.files.get(path) {
             return Ok(meta_of(e));
         }
@@ -404,6 +617,7 @@ impl FileSystem for MemFs {
     fn open_read(&self, path: &FsPath) -> Result<Box<dyn ReadChunks + Send>, FsError> {
         let mut s = self.st();
         injected(&mut s, FsOp::OpenRead)?;
+        let path = &link_target(&s, path);
         match s.files.get(path) {
             Some(e) => Ok(Box::new(MemReader {
                 data: e.data.clone(),
@@ -428,6 +642,12 @@ impl FileSystem for MemFs {
         let mut s = self.st();
         s.steps.clear();
         injected(&mut s, FsOp::WriteAtomic)?;
+        // シンボリックリンクはリンク先に書く。ダングリングは確認を経た保存 (`create_link_target`) だけがリンク先を作る
+        let path = &match s.links.get(path).cloned() {
+            Some(t) if s.files.contains_key(&t) || opts.create_link_target => t,
+            Some(_) => return Err(not_found(&s, path)),
+            None => path.clone(),
+        };
 
         if let Some(dir) = path.parent()
             && !dir_exists(&s, &dir)
@@ -457,7 +677,8 @@ impl FileSystem for MemFs {
             _ => {}
         }
         if let Some(e) = &existing {
-            if e.readonly {
+            // 「読み取り専用を解除して保存」なら書き、属性は保つ (05 §4.2 の手順 5b)
+            if e.readonly && !opts.clear_readonly {
                 return Err(FsError::new(FsErrorKind::PermissionDenied));
             }
             if e.nlink > 1 && opts.hardlink == HardlinkPolicy::Ask {
@@ -495,7 +716,8 @@ impl FileSystem for MemFs {
         let entry = Entry {
             data: buf,
             mtime,
-            readonly: false,
+            // 置換は読み取り専用属性を保つ (05 §4.1 の手順 4 / 5b)
+            readonly: existing.as_ref().is_some_and(|e| e.readonly),
             id: s.next_id,
             nlink: 1,
             fake_len: None,

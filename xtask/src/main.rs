@@ -1,37 +1,55 @@
 //! 開発用のタスクの入口 (`cargo xtask <サブコマンド>`)。サブコマンドの一覧と版の正本は docs/11-dev-workflow.md §1。
 //!
 //! 現在のサブコマンド:
+//! - `area-check`: PR の変更ファイルとラベルの整合 (`--base <ref> --head <ref> --labels a,b`。docs/09 §6.2、§7 R9)
 //! - `check`: 速い車線 (fmt・clippy・nextest・check-deps・AC のチェックリスト)。docs/11 §8.1
 //! - `check-deps`: 依存規則 R1〜R12 の検査。`--docs` で docs/02 §4.1 の表との突合。docs/09 §7
-//! - `check-dist`: 配布ビルドにテスト専用の経路が無いことと CRT の静的リンクの確認 (docs/09 §6.2 `build-release-smoke`)
+//! - `check-docs`: 仕様書の ID 参照・節の参照・内部リンク・docs/ownership.toml の検査 (docs/09 §11、11 §2.3)
+//! - `check-dist`: 配布ビルドにテスト専用の経路が無いことと静的リンクの確認 (docs/09 §6.2 `build-release-smoke`)
 //! - `verify-tag`: リリースのタグの検証 (署名・位置・版・判定コミットとの差分。`release.yml` の最初のステップ。docs/09 §6.1)
 //! - `review-wording`: 日本語 UI 文言の人手レビュー用の一覧 (docs/review/ja-wording-v0.1.md) を生成する
-//! - `dist`: 配布 zip と SHA256SUMS の作成・検査 (`--verify ZIP` で検査だけ。docs/05 §18.2)
+//! - `dist`: 配布 zip / tar.gz と SHA256SUMS の作成・検査 (`--verify ARCHIVE` で検査だけ。docs/05 §18.2)
 //! - `gen-notices`: THIRD-PARTY-NOTICES.md の生成 (`--check` で最新性の検査。docs/05 §17.1)
 //! - `check-ac-checklist`: `tests/ac-checklist.toml` の検査 (docs/11 §3.3)
 //! - `bench`: ベンチの記録 (docs/09 §5.2)
 //! - `check-themes`: 組込みテーマのロール表の検査 (docs/09 §3.5、docs/07 §8.2)
 //! - `i18n`: UI 文言の検査 (docs/09 §6.2、docs/07 §17)
 //! - `gen-corpus`: 巨大・長大のコーパスの決定的な生成 (docs/09 §4)
-//! - `nightly`: 夜間ジョブの入口 (fuzz・proptest 拡張・audit・coverage。Linux。docs/09 §6.3)
+//! - `scenario`: シナリオ DSL の実行と検証 (`run [<部分一致>] [--print-frame]` / `check`。docs/11 §6.3)
+//! - `spec-index`: 仕様書の索引 docs/spec-index.toml の生成 (`--check` で最新性と参照の検査、`--show <ID>`。docs/11 §3.3)
+//! - `trace`: 仕様と実装・試験の対応の検査と docs/traceability.md の生成 (`--check`。docs/11 §3.3、09 §8.3)
+//! - `crash-consistency`: 保存のクラッシュ一貫性の検査 (NFR-301 の電源断。LazyFS の上で切断点ごとに fsync されていない書込を落とす。Linux。docs/09 §6.3)
+//! - `no-network`: NFR-501 AC-2 の無通信の検査 (ヘッドレスのシナリオを strace の下で走らせる。Linux。docs/09 §3.6)
+//! - `perf-diff`: 基準のコミットとの性能の比較 (`--base <ref> --mode instr|time`。命令数 +5% / A/B +10% で警告。docs/09 §5.4)
+//! - `accept-linux`: Linux の受入の手順の自動の部分 (tmux を擬似端末にする。WSL では Windows のクリップボードとの往復も。docs/09 §3.7)
+//! - `nightly`: 夜間ジョブの入口 (fuzz・proptest 拡張・audit・coverage・crash・soak。Linux。docs/09 §6.3)
 
 #![forbid(unsafe_code)]
 // 開発用ツールなので、標準出力・標準エラーへの出力は許す。
 #![allow(clippy::print_stdout, clippy::print_stderr)]
 
 mod ac_checklist;
+mod accept_linux;
+mod area_check;
 mod bench;
 mod bench_report;
 mod check;
 mod check_deps;
 mod check_dist;
+mod check_docs;
 mod check_themes;
+mod crash_consistency;
 mod dist;
 mod gen_corpus;
 mod gen_notices;
 mod i18n;
 mod nightly;
+mod no_network;
+mod perf_diff;
 mod review_wording;
+mod scenario;
+mod spec_index;
+mod trace;
 mod util;
 mod verify_tag;
 
@@ -40,12 +58,14 @@ use std::process::ExitCode;
 const USAGE: &str = "\
 使い方: cargo xtask <サブコマンド>
 
+  area-check          PR の変更ファイルとラベルの整合 (--base <ref> [--head <ref>] [--labels a,b]。09 §7 R9)
   check               速い車線 (fmt・clippy・nextest・check-deps・AC のチェックリスト)
   check-deps          依存規則 R1〜R12 の検査 (--docs: docs/02 §4.1 の表との突合も行う)
-  check-dist          配布ビルドの確認 (feature・目印の文字列・隠しオプション・CRT の静的リンク。--exe PATH で既存の exe)
+  check-docs          仕様書の参照の検査 (ID・節・内部リンク・docs/ownership.toml)
+  check-dist          配布ビルドの確認 (feature・目印の文字列・隠しオプション・静的リンク。--exe PATH で既存の exe、--target T)
   verify-tag          リリースのタグの検証 (--allowed-signers FILE。タグは作らない・消さない)
   review-wording      日本語 UI 文言のレビュー用の一覧の生成 (--reviewed 日付: 全件 OK の記録)
-  dist                配布 zip と SHA256SUMS の作成と検査 (--verify ZIP: 検査だけ。--exe / --version)
+  dist                配布 zip / tar.gz と SHA256SUMS の作成と検査 (--verify ARCHIVE: 検査だけ。--target T (Linux の musl 版) / --exe / --version)
   gen-notices         THIRD-PARTY-NOTICES.md の生成 (cargo-about。--check: 最新性の検査)
   check-ac-checklist  tests/ac-checklist.toml の検査 (check の一部)
   bench               ベンチの記録 (BM-103a・BM-205 → target/bench/bench.json。--quick は動作確認用。
@@ -53,7 +73,14 @@ const USAGE: &str = "\
   check-themes        組込みテーマのロール表の検査 (07 §8.2。truecolor と mono・コントラスト・実装との突合)
   i18n                UI 文言の検査 (04 §15.2 の目録・07 §11.6 のカタログ・locales/ja.toml)
   gen-corpus          巨大・長大のコーパスの生成 (--seed N --out DIR --only a,b --with-1gb --list)
-  nightly             夜間ジョブ (Linux。--only fuzz,proptest,audit,coverage --fuzz-seconds N --seed N)";
+  scenario            シナリオ DSL (tests/scenarios) の実行 (run [<部分一致>] [--print-frame]) と検証 (check)
+  spec-index          仕様書の索引 docs/spec-index.toml の生成 (--check: 最新性・重複・spec: の参照の検査。--show <ID>: 本文)
+  trace               仕様と試験の対応の検査と docs/traceability.md の生成 (--check: 存在しない ID と行列の最新性)
+  crash-consistency   保存のクラッシュ一貫性の検査 (NFR-301。LazyFS で電源断を模擬。--lazyfs BIN --root DIR、--no-lazyfs は空回し。Linux)
+  no-network          無通信の検査 (NFR-501 AC-2。シナリオを strace -e trace=network の下で走らせる。Linux)
+  perf-diff           基準との性能の比較 (--base <ref> --mode instr|time --out FILE。劣化は警告だけ)
+  accept-linux        Linux の受入の自動の部分 (docs/compat/checklist.md の A〜G と L。tmux。--archive TGZ --only A1,C2 --keep。Linux)
+  nightly             夜間ジョブ (Linux。--only fuzz,proptest,audit,coverage,crash,soak --fuzz-seconds N --soak-minutes N --seed N)";
 
 fn main() -> ExitCode {
     let mut args = std::env::args().skip(1);
@@ -71,6 +98,15 @@ fn main() -> ExitCode {
         Some("i18n") => i18n::run(),
         Some("gen-corpus") => gen_corpus::run(&args.collect::<Vec<_>>()),
         Some("nightly") => nightly::run_all(&args.collect::<Vec<_>>()),
+        Some("check-docs") => check_docs::run(),
+        Some("scenario") => scenario::run_cmd(&args.collect::<Vec<_>>()),
+        Some("crash-consistency") => crash_consistency::run_cmd(&args.collect::<Vec<_>>()),
+        Some("accept-linux") => accept_linux::run_cmd(&args.collect::<Vec<_>>()),
+        Some("no-network") => no_network::run(),
+        Some("perf-diff") => perf_diff::run(&args.collect::<Vec<_>>()),
+        Some("area-check") => area_check::run(&args.collect::<Vec<_>>()),
+        Some("trace") => trace::run(&args.collect::<Vec<_>>()),
+        Some("spec-index") => spec_index::run(&args.collect::<Vec<_>>()),
         Some("--help" | "-h" | "help") | None => {
             println!("{USAGE}");
             return ExitCode::SUCCESS;

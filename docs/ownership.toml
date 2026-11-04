@@ -1,0 +1,145 @@
+# 人間とエージェントへの割当表 (docs/11 §2.3、02 §4.6。手書き)。
+# エージェントが自分の担当範囲を判定するために読む (GitHub の CODEOWNERS ではない)。
+# `cargo xtask check-docs` が path の存在と spec の節が索引にあることを検査する。割当の変更は PR で行い、理由をコミットメッセージに書く。
+#
+# owner: human:<役割> | agent:<名前> | shared。v0.2 は人間 1 名とエージェントで進めるので、すべて shared にしている。
+# owner がだれでも、承認 (merge) は常に人間 (reviewer)。
+
+version = 1
+
+# ---------- core 系 crate ----------
+
+[[unit]]
+path = "crates/eve-text"
+spec = ["03 §2", "03 §3", "03 §4", "03 §6", "03 §13"]
+owner = "shared"
+reviewer = "human:maintainer"
+
+[[unit]]
+path = "crates/eve-encoding"
+spec = ["03 §8"]
+owner = "shared"
+reviewer = "human:maintainer"
+
+[[unit]]
+path = "crates/eve-view"
+spec = ["02 §8"]
+owner = "shared"
+reviewer = "human:maintainer"
+stage = "C1"
+notes = "境界型。変更は契約変更の手続き (11 §8.4、ラベル contract-change)"
+
+[[unit]]
+path = "crates/eve-config"
+spec = ["07"]
+owner = "shared"
+reviewer = "human:maintainer"
+
+# eve-core はモジュールごと (02 §4.6。実際の構成に合わせる)
+
+[[unit]]
+path = "crates/eve-core/src/document"
+spec = ["02 §5.1-5.2", "03 §6", "03 §7"]
+owner = "shared"
+reviewer = "human:maintainer"
+notes = "線形 Undo (03 §7.1) と保存点"
+
+[[unit]]
+path = "crates/eve-core/src/editor/layout"
+spec = ["02 §8", "03 §14"]
+owner = "shared"
+reviewer = "human:maintainer"
+notes = "editor/layout.rs と editor/layout/ (折り返し・長大行の列の索引)"
+
+[[unit]]
+path = "crates/eve-core/src/editor/file.rs"
+spec = ["03 §9"]
+owner = "shared"
+reviewer = "human:maintainer"
+notes = "開く・保存・再読込の論理手順 (I/O は io_jobs.rs のジョブ)"
+
+[[unit]]
+path = "crates/eve-core/src/io_jobs.rs"
+spec = ["03 §8", "03 §9"]
+owner = "shared"
+reviewer = "human:maintainer"
+
+[[unit]]
+path = "crates/eve-core/src/jobs.rs"
+spec = ["02 §9.3"]
+owner = "shared"
+reviewer = "human:maintainer"
+
+[[unit]]
+path = "crates/eve-core/src/search"
+spec = ["03 §12"]
+owner = "shared"
+reviewer = "human:maintainer"
+notes = "search.rs と search/"
+
+[[unit]]
+path = "crates/eve-core/src/editor"
+spec = ["02 §5", "02 §6", "02 §7", "03 §5"]
+owner = "shared"
+reviewer = "human:maintainer"
+notes = "上で別に挙げたもの以外の editor/ (Editor ファサード・コマンド・キーマップ・移動・UI モデル)"
+
+# ---------- Host・platform・frontend ----------
+
+[[unit]]
+path = "crates/eve-host"
+spec = ["02 §9", "02 §11"]
+owner = "shared"
+reviewer = "human:maintainer"
+
+[[unit]]
+path = "crates/eve-platform"
+spec = ["05"]
+owner = "shared"
+reviewer = "human:maintainer"
+
+[[unit]]
+path = "crates/eve-tui"
+spec = ["04"]
+owner = "shared"
+reviewer = "human:maintainer"
+notes = "frontend。eve-core / eve-view / eve-config を変更しない (09 §7 R9)"
+
+[[unit]]
+path = "bins/evoeditor"
+spec = ["02 §11", "07 §18"]
+owner = "shared"
+reviewer = "human:maintainer"
+
+# ---------- 試験・開発基盤・文言・文書 ----------
+
+[[unit]]
+path = "crates/eve-testkit"
+spec = ["09 §3.4"]
+owner = "shared"
+reviewer = "human:maintainer"
+
+[[unit]]
+path = "crates/eve-docs-tables"
+spec = ["11 §8.5"]
+owner = "shared"
+reviewer = "human:maintainer"
+
+[[unit]]
+path = "xtask"
+spec = ["11 §1", "09 §6"]
+owner = "shared"
+reviewer = "human:maintainer"
+
+[[unit]]
+path = "locales"
+spec = ["04 §15", "07 §17"]
+owner = "shared"
+reviewer = "human:maintainer"
+
+[[unit]]
+path = "docs"
+spec = ["README"]
+owner = "shared"
+reviewer = "human:maintainer"
+notes = "仕様 (正本)。仕様の変更規律は 11 §4.5"

@@ -444,24 +444,34 @@ fn フォルダは開けない() {
 }
 
 #[test]
-fn clean_な文書は置き換わり_同じファイルは既に開いている() {
+fn 別のファイルを開くとバッファが増え_同じファイルは既に開いている() {
     let mut s = Env::new();
     s.fs.add_file("/w/a.txt", b"aaa");
     s.fs.add_file("/w/b.txt", b"bbb");
     s.open("/w/a.txt");
+    assert_eq!(
+        s.e.state().documents_len(),
+        1,
+        "何も入力していない無題のバッファは、開いたファイルで置き換わる"
+    );
     s.e.drain_events();
     s.open("/w/b.txt");
-    assert_eq!(s.text(), "bbb");
+    assert_eq!(s.text(), "bbb", "読込が終わると新しいバッファへ切り替わる");
     assert!(
-        s.e.drain_events()
+        !s.e.drain_events()
             .iter()
-            .any(|e| matches!(e, EditorEvent::DocumentClosed { .. }))
+            .any(|e| matches!(e, EditorEvent::DocumentClosed { .. })),
+        "今の文書は閉じない"
     );
-    assert_eq!(s.e.state().documents_len(), 1, "文書は 1 つだけ");
-    // 同じファイルを開き直そうとすると既に開いている
+    assert_eq!(s.e.state().documents_len(), 2, "a.txt が残る");
+    // 表示中のファイルを開き直そうとすると既に開いている
     s.messages();
     s.open("/w/b.txt");
     assert!(s.messages().contains(&"info.open.already_open".to_owned()));
+    // 別のバッファで開いているファイルは、そのバッファへ切り替わる
+    s.open("/w/a.txt");
+    assert_eq!(s.text(), "aaa");
+    assert_eq!(s.e.state().documents_len(), 2);
 }
 
 #[test]
@@ -514,7 +524,7 @@ fn 読込中は編集できず_完了すると編集できる() {
 }
 
 #[test]
-fn 読込を待つ間は今の文書を編集できず_重ねた置き換えも拒否する() {
+fn 読込を待つ間も今の文書を編集でき_重ねて開いてもよい() {
     let mut s = Env::new();
     s.fs.add_file("/w/a.txt", b"aaa");
     s.fs.add_file("/w/b.txt", b"bbb");
@@ -526,23 +536,16 @@ fn 読込を待つ間は今の文書を編集できず_重ねた置き換えも�
             .with_args(Args::new().with_str("path", "/w/b.txt")),
     );
     assert!(matches!(r, CommandResult::Pending(_)));
-    s.type_text("x"); // 読込の完了で捨てられる編集は受け付けない
-    assert_eq!(s.text(), "aaa");
-    for (id, args) in [
-        ("file.open", Args::new().with_str("path", "/w/c.txt")),
-        ("file.new", Args::new()),
-    ] {
-        let r =
-            s.e.execute(CommandInvocation::new(id, InvocationSource::Keymap).with_args(args));
-        assert_eq!(
-            r,
-            CommandResult::Rejected(RejectReason::NotAvailable),
-            "{id}"
-        );
-    }
+    s.type_text("x"); // 何も置き換えないので、読込の間も今の文書を編集できる
+    assert_eq!(s.text(), "xaaa");
+    let r = s.e.execute(
+        CommandInvocation::new("file.open", InvocationSource::Keymap)
+            .with_args(Args::new().with_str("path", "/w/c.txt")),
+    );
+    assert!(matches!(r, CommandResult::Pending(_)), "重ねて開いてもよい");
     s.pump();
-    assert_eq!(s.text(), "bbb");
-    assert_eq!(s.e.state().documents_len(), 1, "孤立した文書はない");
+    assert_eq!(s.e.state().documents_len(), 3, "a・b・c の 3 つ");
+    assert_eq!(s.text(), "bbb", "最初に読み終えた b へ切り替わる");
     s.type_text("y");
     assert_eq!(s.text(), "ybbb", "完了後は編集できる");
 }

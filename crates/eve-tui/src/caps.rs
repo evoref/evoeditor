@@ -201,6 +201,26 @@ pub fn ascii_only(effective_ambiguous: u8, kind: TerminalKind) -> bool {
     effective_ambiguous == 2 || kind == TerminalKind::Conhost
 }
 
+/// OSC 52 の書込に対応する端末か (05 §8.1 / §9.2)。Windows は Windows Terminal だけ。Unix は対応する端末が多いので既定で真とし、
+/// 黙って捨てると分かっている端末だけ偽にする: VTE 系 (`VTE_VERSION`。GNOME Terminal 等)、Terminal.app、Linux のコンソール
+/// (`TERM=linux`)、screen。tmux の中 (`TMUX`) は外側の端末を知り得ないので真 (`set-clipboard on` で外側へ渡る)。
+pub fn osc52_write(env: &dyn Env, kind: TerminalKind) -> bool {
+    match kind {
+        TerminalKind::WindowsTerminal => true,
+        TerminalKind::Conhost => false,
+        TerminalKind::Other => {
+            let term = env.var("TERM").unwrap_or_default();
+            if env.var("TMUX").is_some() {
+                return true;
+            }
+            env.var("VTE_VERSION").is_none()
+                && env.var("TERM_PROGRAM").as_deref() != Some("Apple_Terminal")
+                && term != "linux"
+                && !term.starts_with("screen")
+        }
+    }
+}
+
 /// `Frontend::init` に渡す設定 (04 §5.2a)。
 #[derive(Clone, Copy, Debug, Default)]
 pub struct CapsConfig {
@@ -225,16 +245,20 @@ pub fn detect(config: CapsConfig, env: &dyn Env, is_windows: bool) -> Detected {
     let ambiguous = effective_ambiguous_width(config.ambiguous_width, hint);
     let caps = Capabilities {
         color_depth: detect_color_depth(config.color_mode, env, is_windows),
-        // v0.1: マウス・拡張キー・ジョブ制御は無効 (04 §6.3 / §6.8、Windows)
-        mouse: false,
+        // マウスは v0.2 から (Windows は `ENABLE_MOUSE_INPUT`、Unix は VT の SGR マウス、04 §6.8)。拡張キーは無効 (04 §6.3)
+        mouse: true,
         enhanced_keys: false,
-        can_suspend: false,
+        // Windows Terminal は OSC 52 の書込に対応する。conhost は対応しない。Unix は VTE 系などを除いて対応する (05 §8.1)
+        osc52_write: osc52_write(env, kind),
+        // ジョブ制御 (`app.suspend`) は Unix だけ (05 §11.2 / §11.3)
+        can_suspend: !is_windows,
         dark_mode: None,
         ascii_only: ascii_only(ambiguous, kind),
         screen_reader: false,
         ambiguous_width_hint: hint,
         min_surface: CellSize { cols: 20, rows: 5 },
-        intercepted_keys: Vec::new(),
+        // 端末が横取りするキー (04 §7.3a)。キーの表記・ヘルプの印で「届かない割当」を除く
+        intercepted_keys: crate::intercept::intercepted_keys(kind),
     };
     Detected {
         caps,
@@ -385,6 +409,29 @@ mod tests {
     }
 
     #[test]
+    fn osc52_は_vte_terminal_app_コンソール_screen_を除く() {
+        let w = |pairs: &[(&str, &str)]| osc52_write(&MapEnv::new(pairs), TerminalKind::Other);
+        assert!(w(&[("TERM", "xterm-256color")]));
+        // WSL の Windows Terminal (WT_SESSION が届かなくても既定で真)
+        assert!(w(&[]));
+        assert!(!w(&[("VTE_VERSION", "7600"), ("TERM", "xterm-256color")]));
+        assert!(!w(&[("TERM_PROGRAM", "Apple_Terminal")]));
+        assert!(!w(&[("TERM", "linux")]));
+        assert!(!w(&[("TERM", "screen-256color")]));
+        // tmux の中は外側次第 (tmux の TERM は screen-* のことがある)
+        assert!(w(&[
+            ("TMUX", "/tmp/tmux-1000/default,1,0"),
+            ("TERM", "screen-256color")
+        ]));
+        assert!(w(&[("TMUX", "x"), ("VTE_VERSION", "7600")]));
+        assert!(osc52_write(
+            &MapEnv::new(&[]),
+            TerminalKind::WindowsTerminal
+        ));
+        assert!(!osc52_write(&MapEnv::new(&[]), TerminalKind::Conhost));
+    }
+
+    #[test]
     fn 能力の組み立て() {
         let wt = MapEnv::new(&[("WT_SESSION", "g")]);
         let d = detect(CapsConfig::default(), &wt, true);
@@ -393,7 +440,12 @@ mod tests {
         assert_eq!(d.ambiguous_width, 1);
         assert_eq!(d.caps.ambiguous_width_hint, Some(1));
         assert_eq!(d.caps.min_surface, CellSize { cols: 20, rows: 5 });
-        assert!(!d.caps.mouse && !d.caps.enhanced_keys && !d.caps.can_suspend);
+        assert!(d.caps.mouse && !d.caps.enhanced_keys && !d.caps.can_suspend);
+        assert!(
+            detect(CapsConfig::default(), &MapEnv::new(&[]), false)
+                .caps
+                .can_suspend
+        );
 
         let d = detect(CapsConfig::default(), &MapEnv::new(&[]), true);
         assert_eq!(d.kind, TerminalKind::Conhost);

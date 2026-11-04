@@ -95,6 +95,24 @@ fn unit_starts(line: &str) -> Vec<usize> {
     starts
 }
 
+/// 1 行の内容の単語境界 (行頭からのバイト、昇順。行頭と行末を含む)。文字種が変わる位置と、`Punct` の 1 書記素ごとの位置。
+/// 検索の「単語単位」(01 FR-402) が、一致の両端がこの境界上にあるかを調べるのに使う。
+pub fn word_boundaries(line: &str) -> Vec<usize> {
+    let mut out = vec![0];
+    let mut prev: Option<ScriptClass> = None;
+    for (i, g) in line.grapheme_indices(true) {
+        let class = classify_grapheme(g, prev);
+        if i > 0 && prev.is_some_and(|p| p != class || class == ScriptClass::Punct) {
+            out.push(i);
+        }
+        prev = Some(class);
+    }
+    if !line.is_empty() {
+        out.push(line.len());
+    }
+    out
+}
+
 fn line_of(text: &dyn TextRead, pos: Pos) -> (LineIdx, usize, usize) {
     let l = text.byte_to_line(pos);
     (l, text.line_to_byte(l).0, text.line_end_byte(l).0)
@@ -140,6 +158,56 @@ pub fn prev_word_stop(text: &dyn TextRead, pos: Pos) -> Pos {
     ByteOff(if i == 0 { ls } else { ls + starts[i - 1] })
 }
 
+fn floor_char(text: &dyn TextRead, mut b: usize) -> usize {
+    while !text.is_char_boundary(ByteOff(b)) {
+        b -= 1;
+    }
+    b
+}
+
+fn ceil_char(text: &dyn TextRead, mut b: usize) -> usize {
+    while !text.is_char_boundary(ByteOff(b)) {
+        b += 1;
+    }
+    b
+}
+
+/// 前の文字種を決めるために `next_word_stop_near` が `pos` の手前から読むバイト数 (長音・踊り字の継承に使う)。
+const NEAR_CONTEXT: usize = 16;
+
+/// `next_word_stop` の窓付きの版 (長大行の char 近似モード、03 §11.5.1)。行全体を読まず、`pos` の後ろ `window` バイト
+/// (char の境界へ広げる) と手前の数バイト (前の文字種) だけを見る。窓の中に停止位置が無ければ窓の端に止まる (窓が行末に届いていれば行末)。
+pub fn next_word_stop_near(text: &dyn TextRead, pos: Pos, window: usize) -> Pos {
+    let pos = ByteOff(pos.0.min(text.len_bytes()));
+    let (_, ls, le) = line_of(text, pos);
+    if pos.0 >= le {
+        return next_word_stop(text, pos);
+    }
+    let from = floor_char(text, pos.0.saturating_sub(NEAR_CONTEXT).max(ls));
+    let s = line_text(text, from, ceil_char(text, (pos.0 + window).min(le)));
+    let starts = unit_starts(&s);
+    let rel = pos.0 - from;
+    let i = starts.partition_point(|&st| st <= rel);
+    ByteOff(starts.get(i).map_or(from + s.len(), |st| from + st))
+}
+
+/// `prev_word_stop` の窓付きの版 (03 §11.5.1)。`pos` の手前 `window` バイトだけを見る。窓の中に停止位置が無ければ窓の端
+/// (窓が行頭に届いていれば行頭) に止まる。
+pub fn prev_word_stop_near(text: &dyn TextRead, pos: Pos, window: usize) -> Pos {
+    let pos = ByteOff(pos.0.min(text.len_bytes()));
+    let (_, ls, le) = line_of(text, pos);
+    if pos.0 <= ls {
+        return prev_word_stop(text, pos);
+    }
+    let end = pos.0.min(le);
+    let from = floor_char(text, end.saturating_sub(window).max(ls));
+    let s = line_text(text, from, end);
+    let starts = unit_starts(&s);
+    let rel = end - from;
+    let i = starts.partition_point(|&st| st < rel);
+    ByteOff(if i == 0 { from } else { from + starts[i - 1] })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -175,6 +243,52 @@ mod tests {
             p = n;
         }
         out
+    }
+
+    // verifies: FR-302
+    #[test]
+    fn near_matches_full_within_window_and_stops_at_edge() {
+        for s in [
+            "日本語を勉強する abc",
+            "foo_bar.baz() コーヒー",
+            "😀😀abc ｱｲｳ",
+        ] {
+            let t = Text::from(
+                format!(
+                    "x
+{s}
+y"
+                )
+                .as_str(),
+            );
+            let ls = 2;
+            for (i, _) in s.char_indices().chain([(s.len(), ' ')]) {
+                let p = ByteOff(ls + i);
+                assert_eq!(
+                    next_word_stop_near(&t, p, 1 << 20),
+                    next_word_stop(&t, p),
+                    "→ {s} {i}"
+                );
+                assert_eq!(
+                    prev_word_stop_near(&t, p, 1 << 20),
+                    prev_word_stop(&t, p),
+                    "← {s} {i}"
+                );
+            }
+        }
+        // 窓の中に停止位置が無い: 窓の端 (char の境界へ広げる)
+        let long = "a".repeat(100);
+        let t = Text::from(long.as_str());
+        assert_eq!(next_word_stop_near(&t, ByteOff(10), 30), ByteOff(40));
+        assert_eq!(prev_word_stop_near(&t, ByteOff(90), 30), ByteOff(60));
+        let wide = "あ".repeat(100);
+        let t = Text::from(wide.as_str());
+        assert_eq!(next_word_stop_near(&t, ByteOff(0), 10), ByteOff(12));
+        assert_eq!(prev_word_stop_near(&t, ByteOff(300), 10), ByteOff(288));
+        // 窓の中に境界があれば、そこに止まる
+        let t = Text::from(format!("{} b{}", "a".repeat(50), "c".repeat(50)).as_str());
+        assert_eq!(next_word_stop_near(&t, ByteOff(45), 30), ByteOff(51));
+        assert_eq!(prev_word_stop_near(&t, ByteOff(60), 30), ByteOff(51));
     }
 
     /// 03 §13.3 の期待結果の表 (FR-302 の受入条件)。
@@ -278,5 +392,22 @@ mod tests {
             "国旗は 1 書記素で記号"
         );
         assert_eq!(classify_grapheme("！", None), Punct, "全角の記号");
+    }
+}
+
+#[cfg(test)]
+mod boundary_tests {
+    use super::word_boundaries;
+
+    #[test]
+    fn 文字種が変わる位置が境界になる() {
+        assert_eq!(word_boundaries(""), vec![0]);
+        assert_eq!(word_boundaries("foo"), vec![0, 3]);
+        assert_eq!(word_boundaries("foo bar"), vec![0, 3, 4, 7]);
+        // 記号は 1 書記素ごと
+        assert_eq!(word_boundaries("a..b"), vec![0, 1, 2, 3, 4]);
+        // 漢字・かな・カタカナ・全角英数は別の単位
+        assert_eq!(word_boundaries("日本語です"), vec![0, 9, 15]);
+        assert_eq!(word_boundaries("ＡＢＣabc"), vec![0, 9, 12]);
     }
 }

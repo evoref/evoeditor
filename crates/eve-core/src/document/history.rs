@@ -403,16 +403,29 @@ impl UndoHistory {
         while self.undo.len() > 1
             && (self.undo.len() > self.budget.max_nodes || total > self.budget.max_bytes)
         {
-            if let Some(n) = self.undo.pop_front() {
-                total = total.saturating_sub(n.bytes);
-                self.base = n.id;
-                pruned = true;
-            }
-        }
-        if pruned && self.saved.is_some_and(|s| s < self.base) {
-            self.saved = None;
+            total = total.saturating_sub(self.drop_oldest());
+            pruned = true;
         }
         pruned
+    }
+
+    /// 最も古いノードを破棄して、解放した会計値を返す。呼び出し側が `undo.len() > 1` を確かめる。
+    /// `base` を進め、保存点が破棄された範囲に入ったら `None` にする (03 §7.1)。
+    fn drop_oldest(&mut self) -> usize {
+        let Some(n) = self.undo.pop_front() else {
+            return 0;
+        };
+        self.base = n.id;
+        if self.saved.is_some_and(|s| s < self.base) {
+            self.saved = None;
+        }
+        n.bytes
+    }
+
+    /// プロセス全体の上限 (NFR-203) のために、最も古いノードを 1 つ破棄する。最低 1 ノードは残す
+    /// (直前の 1 操作は上限より優先、03 §7.5)。破棄したら解放した会計値を返す。
+    pub fn trim_oldest(&mut self) -> Option<usize> {
+        (self.undo.len() > 1).then(|| self.drop_oldest())
     }
 
     /// Undo: `undo` の末尾のノードを `redo` へ移し、適用する変更を返す。呼び出し側が適用する。
