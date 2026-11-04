@@ -17,7 +17,7 @@ pub struct DocSnapshot {
     pub revision: Revision,
     /// 保存点がある (= ディスク上に保存済みの版がある)。復旧の案内に使う。
     pub saved_node_exists: bool,
-    /// 秘密ファイルのパターンに一致する (パターンの正本は 07。v0.1 は未実装で常に `false`)。
+    /// 秘密ファイルのパターンに一致する (パターンの正本は 07。`is_secret_path` で判定する)。
     pub sensitive: bool,
     pub path: Option<FsPath>,
     pub untitled_name: Option<String>,

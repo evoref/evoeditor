@@ -59,7 +59,7 @@ pub enum Cli {
         /// 開くファイル (0 個なら無題。複数は v0.2、最初のものを表示する)。
         files: Vec<FileArg>,
         read_only: bool,
-        /// `--encoding` の値 (M3 で使う。v0.1 の M2 では受け取るだけ)。
+        /// `--encoding` の値 (開く文書の文字コードの指定)。
         encoding: Option<String>,
         /// `--locale` の値 (UI の言語。選択順の最上位、07 §17.1)。同梱の言語に当たるかは `eve_config::select_locale` が見る。
         locale: Option<String>,
@@ -256,7 +256,7 @@ pub fn parse(
                 None => ignored.push(s.to_owned()),
             },
             s if s.starts_with('-') && s != "-" => return Err(UsageError::UnknownOption(a)),
-            // `-` (標準入力) は v0.3。いまはファイル名として扱わず未対応として無視する
+            // `-` (標準入力) は v0.4。いまはファイル名として扱わず未対応として無視する
             "-" => ignored.push(a),
             _ => add_file(&mut files, a, &mut pending),
         }

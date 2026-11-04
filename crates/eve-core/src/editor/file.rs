@@ -1,8 +1,8 @@
-//! ファイルの開く・保存 (docs/03 §9.2 / §9.3 の M1 の範囲)。ジョブを投入し、結果で Document を更新する。
+//! ファイルの開く・保存 (docs/03 §9.2 / §9.3)。ジョブを投入し、結果で Document を更新する。
 //!
-//! M1 の範囲: UTF-8、原子的保存、未編集の保存の照合 (手順 0)。次は後続: 確認ダイアログ (dirty の置き換え、
-//! 保存の失敗の選択肢、バイナリ・巨大ファイル)、名前の入力プロンプト、保存の連鎖 (Continuation)、保存中フラグ、
-//! 外部変更の再読込。確認が要る場面は、確認の UI ができるまで `RejectReason::NeedsInput` で拒否する。
+//! 開く (文字コードの判定・巨大ファイルやバイナリの確認)、原子的保存と直接上書き、未編集の保存の照合 (手順 0)、
+//! 保存の失敗の選択肢、名前の入力プロンプト、保存の連鎖 (Continuation)、外部変更の再読込を扱う。
+//! 確認が要る場面は確認ダイアログ (`overlay`) を出す。
 
 use eve_view::{DocumentId, EditorEvent, MessageLevel, ViewId};
 
@@ -547,7 +547,7 @@ impl EditorState {
             return CommandResult::Rejected(RejectReason::ReadOnly);
         }
         // 同じファイルなら読んだときの Stamp で照合する。別のファイルへは存在しないことを期待する
-        // (既存なら Conflict。上書きの確認は確認ダイアログ (後続) の仕事)。パスと Stamp は成功してから更新する
+        // (既存なら Conflict。上書きの確認は確認ダイアログの仕事)。パスと Stamp は成功してから更新する
         let expected = if same {
             doc.disk_stamp.map_or(Expect::Absent, Expect::Stamp)
         } else {
@@ -864,7 +864,7 @@ impl EditorState {
     }
 
     /// 表現不能の文字の確認を出す。選択肢: UTF-8 で保存 (エスケープ文字を含まないとき) / キャンセル (既定、`Esc`)。
-    /// 「置換して保存」は後続。
+    /// 「置換して保存」(`replace`) は置換のジョブを投入する。
     fn open_unmappable(
         &mut self,
         ask: UnmappableAsk,
@@ -2601,7 +2601,7 @@ impl EditorState {
                     self.mark_dirty_render();
                 }
                 let ask = self.save_failed_ask(doc_id, path, expected, fmt, cont);
-                // 照合の失敗 (Conflict) は別の経路 (外部変更の確認、後続)。取消しは確認なしで示す
+                // 照合の失敗 (Conflict) は別の経路 (外部変更の確認)。取消しは確認なしで示す
                 let ask = ask.filter(|_| {
                     !matches!(
                         err,
@@ -2741,7 +2741,7 @@ fn open_error_key(e: &FsError) -> &'static str {
     }
 }
 
-/// 保存失敗の MessageKey (04 §15.2)。失敗の後の選択肢 (確認ダイアログ) は後続。
+/// 保存失敗の MessageKey (04 §15.2)。失敗の後の選択肢 (確認ダイアログ) は別に出す。
 fn save_error_key(e: &FsError) -> &'static str {
     match (&e.kind, &e.detail) {
         (FsErrorKind::PermissionDenied, _) => "msg.save.permission_denied",

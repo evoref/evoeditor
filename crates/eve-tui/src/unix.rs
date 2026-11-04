@@ -1,4 +1,4 @@
-//! Unix の端末の入出力 (docs/04 §6.1 / §14、05 §9 / §11.1。v0.2 の M7)。`win` と同じ形の部品 (`ConsoleInput`・`ConsoleOut`・
+//! Unix の端末の入出力 (docs/04 §6.1 / §14、05 §9 / §11.1。v0.2)。`win` と同じ形の部品 (`ConsoleInput`・`ConsoleOut`・
 //! `spawn_input_thread`) で、`frontend` は OS に依らずこれらを呼ぶ。OS を呼ぶのはこのファイルだけ (R5)。
 //!
 //! - 描画先と入力は **`/dev/tty`** (標準入出力がリダイレクトされていても端末に描く。05 §9.1)。出力と入力で別々に開く

@@ -1,8 +1,8 @@
 //! `Editor`: eve-core の唯一の入口 (docs/02 §4.6 / §5.4)。Host・frontend・テストのハーネスはこれだけを使う。
 //! すべてメインスレッドから呼び、どのメソッドも I/O をせずブロックしない (ADR-0020)。
 //!
-//! 現在の範囲 (M1 の C2a): 文書・View・Window の集合、変更の唯一の経路 (`EditorState::apply_transaction`)、
-//! コマンドのレジストリと `execute`。編集コマンド・キーマップ・移動は後続の PR で足す。
+//! 持つもの: 文書・View・Window の集合、変更の唯一の経路 (`EditorState::apply_transaction`)、
+//! コマンドのレジストリと `execute`、キーマップ、編集・移動・検索・ファイル操作のコマンド。
 
 mod buffer;
 mod chrome;
@@ -72,7 +72,7 @@ pub struct Editor {
     state: EditorState,
     registry: CommandRegistry,
     keymap: Keymap,
-    #[allow(dead_code)] // C4 (開く・保存) のジョブ投入で使う
+    #[allow(dead_code)] // Port の束を保持する (今は読まない)
     ports: Ports,
     /// チョードの保留が始まった (最後のキーを受けた) 時刻。which-key の 500 ms を数える。
     chord_since: Option<Tick>,

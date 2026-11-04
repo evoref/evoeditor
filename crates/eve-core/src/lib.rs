@@ -1,7 +1,7 @@
 //! Editor ファサード、Document / View、Transaction / Undo、コマンド、検索、Job、Frame 生成、Ports の定義 (docs/02 §4.1、docs/03)。
 //!
-//! 現在は Ports とジョブの型 (docs/02 §4.4 / §4.5 / §9.3) だけがある。残りは docs/08-roadmap.md §2.2 の
-//! 「最初の縦切り」の順に入れる。
+//! 入口は `Editor` (`editor`)。文書は `document`、検索は `search`、Ports とジョブの型は `fs`・`jobs`・`paths`・`time` などにある
+//! (docs/02 §4.4 / §4.5 / §9.3)。
 
 #![forbid(unsafe_code)]
 // FsError は詳細 (Conflict の Stamp など) を持つ大きな型。エラーは稀な経路なので、Box で包まず値で返す。

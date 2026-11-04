@@ -1,4 +1,4 @@
-//! VT (xterm 形式) の入力の解析 (docs/04 §6.1〜§6.9、Unix の入力経路。v0.2 の M7)。端末から読んだバイト列を `InputEvent` と
+//! VT (xterm 形式) の入力の解析 (docs/04 §6.1〜§6.9、Unix の入力経路。v0.2)。端末から読んだバイト列を `InputEvent` と
 //! マウスの記録 (`MouseRec`、Windows と同じ形にして `MouseTracker` に渡す) にする。OS を呼ばない純粋な状態機械で、
 //! 1 回の読取 (待ちなしで読める分) ごとに `feed` を呼ぶ。
 //!

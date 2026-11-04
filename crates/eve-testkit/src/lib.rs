@@ -1,7 +1,7 @@
 //! ヘッドレス駆動ハーネス (Harness)、偽 Port (MemFs・ManualClock・ManualJobSpawner)、HeadlessFrontend (docs/02 §4.1、docs/09 §3.4)。
 //!
 //! 現在は偽 Port (`ManualClock` / `FixedPaths` / `MemFs` / `ManualJobSpawner`)、`Harness`、`HeadlessFrontend`、ASCII の Frame
-//! がある。`ThreadGuard` の検査モードは eve-core 側の印と一緒に足す。
+//! がある。
 
 #![forbid(unsafe_code)]
 // eve-core の FsError は大きい型 (エラーは稀な経路)。値で返す。

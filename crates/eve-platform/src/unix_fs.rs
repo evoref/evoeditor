@@ -1,4 +1,4 @@
-//! Unix (Linux) のファイルシステム (docs/05 §4.1 / §4.3 / §5.1、v0.2 の M7)。
+//! Unix (Linux) のファイルシステム (docs/05 §4.1 / §4.3 / §5.1、v0.2)。
 //!
 //! 原子的保存の手順: 照合 → 一時ファイル (`O_EXCL`、0600) → 本文 → `fsync` → 所有者と mode の複製 (`fchown` → `fchmod` の順) →
 //! xattr (`user.*`・`trusted.*`) と POSIX ACL (`system.posix_acl_access`) の複製 → 置換の直前の照合 → `rename` (新規は

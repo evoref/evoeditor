@@ -1,5 +1,5 @@
 # evoeditor の workspace (docs/02-architecture.md §17.1、docs/11-dev-workflow.md §1)。
-# 着手してよい crate だけを置く (docs/08-roadmap.md §5)。G1b を通過したので eve-tui と eve-platform を足した。bins/evoeditor は後続の PR。
+# 着手してよい crate だけを置く (docs/08-roadmap.md §5)。
 [workspace]
 resolver = "3"
 members = [
@@ -28,6 +28,25 @@ license = "Apache-2.0"
 publish = false
 repository = "https://github.com/evoref/evoeditor"
 authors = ["hiroyuki.ogawa"]
+
+# Linux CI の対象 crate (docs/09-testing-quality.md §6.4)。xtask nightly (proptest・coverage) はここを読む。
+# .github/workflows/ci.yml の clippy (linux) / test (linux) の -p の並びと一致することを xtask の試験で確かめる。
+[workspace.metadata.evoeditor]
+linux-ci-crates = [
+    "eve-text",
+    "eve-encoding",
+    "eve-view",
+    "eve-config",
+    "eve-core",
+    "eve-platform",
+    "eve-host",
+    "eve-tui",
+    "evoeditor",
+    "eve-testkit",
+    "eve-test-helpers",
+    "eve-docs-tables",
+    "xtask",
+]
 
 # 全 crate が [lints] workspace = true で継承する (docs/09-testing-quality.md §6.2: clippy 警告 0、-D warnings)。
 # pedantic の採用リントと missing_docs (公開 crate) は v0.3 から (NFR-705)。

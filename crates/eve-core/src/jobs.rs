@@ -1,7 +1,7 @@
 //! ジョブの型と `JobSpawner` Port (docs/02-architecture.md §4.4 / §9.3)。
 //!
 //! ジョブはワーカーで動き、結果を `JobResult` で返す。結果は `base` (投入時の Revision) を持ち、受け取る側が
-//! 古い結果を捨てる (ADR-0020)。M1 の変種は `Metadata`・`Open`・`Save`。検索などは、その最初の利用者の版で足す。
+//! 古い結果を捨てる (ADR-0020)。変種は `JobKind` を参照。
 
 use std::rc::Rc;
 use std::sync::Arc;

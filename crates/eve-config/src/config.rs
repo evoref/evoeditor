@@ -1,6 +1,6 @@
 //! ユーザー層の設定ファイル (`config.toml`) の読込と検証 (docs/07 §4.2・§5.0、01 FR-701〜703)。
 //!
-//! 公開キーは v0.1 の 7 個と、v0.2 の M6 で足した `file.swap.*` の 5 個。ファイルが無い・壊れている・値が不正なときも `Config` は必ず返り、
+//! 公開キーは v0.1 の 7 個と、v0.2 で足した `file.swap.*` の 5 個。ファイルが無い・壊れている・値が不正なときも `Config` は必ず返り、
 //! 問題は `Diagnostic` の列として返す (最初のエラーで止まらない)。不正な項目は既定値に戻す。
 
 use toml::Spanned;
@@ -181,7 +181,7 @@ pub enum ColorMode {
     None,
 }
 
-/// 公開キー (v0.1 の 7 個 (docs/07 §5.0) と、v0.2 の M6 で足した `file.swap.*` の 5 個)。`Default` が既定値。
+/// 公開キー (v0.1 の 7 個 (docs/07 §5.0) と、v0.2 で足した `file.swap.*` の 5 個)。`Default` が既定値。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Config {
     pub tab_width: u8,
@@ -712,7 +712,7 @@ impl Cx<'_> {
                 match s.as_str() {
                     "off" => self.out.config.show_whitespace = ShowWhitespace::Off,
                     "minimal" => self.out.config.show_whitespace = ShowWhitespace::Minimal,
-                    // 後の版の値 (v0.4): 未対応の情報診断にして既定の `minimal` を使う (07 §5.3)
+                    // 後の版の値 (v0.5): 未対応の情報診断にして既定の `minimal` を使う (07 §5.3)
                     "ideographic" | "trailing" | "all" => {
                         self.diag(
                             Severity::Info,

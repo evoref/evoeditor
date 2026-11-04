@@ -1,4 +1,4 @@
-//! Ports の OS 実装 (docs/02 §4.1、docs/05)。Windows (`fs::WinFs` ほか) と Unix (`unix_fs::UnixFs`、v0.2 の M7。Linux で確かめる)。
+//! Ports の OS 実装 (docs/02 §4.1、docs/05)。Windows (`fs::WinFs` ほか) と Unix (`unix_fs::UnixFs`、v0.2。Linux で確かめる)。
 //! 純粋な計算 (パスの正規化・ディレクトリの解決) はどの OS でもテストできるようにしてある。
 //!
 //! 状態ディレクトリの部品 (保存中フラグ `inflight`・直接上書き `inplace`・状態ファイル・スワップ・緊急退避 `rescue`・ログ) は

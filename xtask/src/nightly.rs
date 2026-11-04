@@ -22,20 +22,26 @@
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
-use crate::util::{run, run_capture, workspace_root};
+use crate::util::{read_text, run, run_capture, workspace_root};
 
-/// Linux CI の対象 crate (ci.yml の test (linux) と同じ、09 §6.4)。
-const LINUX_CRATES: [&str; 9] = [
-    "eve-text",
-    "eve-encoding",
-    "eve-view",
-    "eve-config",
-    "eve-core",
-    "eve-host",
-    "eve-testkit",
-    "eve-docs-tables",
-    "xtask",
-];
+/// Linux CI の対象 crate (`Cargo.toml` の `[workspace.metadata.evoeditor] linux-ci-crates`、09 §6.4)。
+/// ci.yml の clippy (linux) / test (linux) の `-p` の並びと同じ (試験で確かめる)。
+fn linux_crates() -> Result<Vec<String>, String> {
+    let text = read_text(&workspace_root().join("Cargo.toml"))?;
+    let v: toml::Value = toml::from_str(&text).map_err(|e| format!("Cargo.toml: {e}"))?;
+    let list = v["workspace"]["metadata"]["evoeditor"]["linux-ci-crates"]
+        .as_array()
+        .ok_or_else(|| {
+            "Cargo.toml に workspace.metadata.evoeditor.linux-ci-crates がありません".to_owned()
+        })?;
+    list.iter()
+        .map(|c| {
+            c.as_str()
+                .map(str::to_owned)
+                .ok_or_else(|| "linux-ci-crates の要素は文字列にしてください".to_owned())
+        })
+        .collect()
+}
 
 const STEPS: [&str; 6] = ["fuzz", "proptest", "audit", "coverage", "crash", "soak"];
 
@@ -317,8 +323,8 @@ fn proptest() -> Result<(), String> {
         "nightly",
         "--no-tests=pass",
     ]);
-    for c in LINUX_CRATES {
-        cmd.args(["-p", c]);
+    for c in linux_crates()? {
+        cmd.args(["-p", &c]);
     }
     run("proptest 拡張 (PROPTEST_CASES=10000)", &mut cmd)
 }
@@ -392,10 +398,10 @@ fn coverage(out_dir: &Path) -> Result<(), String> {
     ])
     .arg(&lcov)
     .args(["--ignore-filename-regex", "crates/eve-testkit"]);
-    for c in LINUX_CRATES {
-        cmd.args(["-p", c]);
+    for c in linux_crates()? {
+        cmd.args(["-p", &c]);
     }
-    // v0.1 は報告のみ (OQ-101)。閾値のゲートは v0.4 から
+    // 報告のみ (OQ-101)。閾値のゲートは v0.5 から (NFR-702)
     run("coverage (報告のみ)", &mut cmd)
 }
 
@@ -467,6 +473,36 @@ mod tests {
         assert!(!skip_crash(true, false));
         assert!(!skip_crash(false, true));
         assert!(!skip_crash(true, true));
+    }
+
+    #[test]
+    fn linux_ci_の対象_crate_は_ci_yml_の_p_の並びと同じ() {
+        let want = linux_crates().unwrap();
+        let ci = read_text(&workspace_root().join(".github/workflows/ci.yml")).unwrap();
+        // clippy (linux) と test (linux) の `args: -p ...` の行
+        let lines: Vec<&str> = ci
+            .lines()
+            .map(str::trim)
+            .filter(|l| l.starts_with("args: -p "))
+            .collect();
+        assert_eq!(
+            lines.len(),
+            2,
+            "ci.yml の `args: -p` の行は 2 つ (clippy と test)"
+        );
+        for l in lines {
+            let mut got = Vec::new();
+            let mut words = l.split_whitespace();
+            while let Some(w) = words.next() {
+                if w == "-p" {
+                    got.push(words.next().unwrap().to_owned());
+                }
+            }
+            assert_eq!(
+                got, want,
+                "ci.yml と Cargo.toml の linux-ci-crates が違う: {l}"
+            );
+        }
     }
 
     #[test]

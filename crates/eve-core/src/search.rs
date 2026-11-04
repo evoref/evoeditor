@@ -63,7 +63,7 @@ pub struct SearchQuery {
 pub enum QueryError {
     /// 正規表現の構文エラー (`regex` の文言を整形したもの)。
     Syntax(String),
-    /// 改行にまたがるパターン (`\n` など)。複数行の正規表現は v0.3 (v0.2 では未対応)。
+    /// 改行にまたがるパターン (`\n` など)。複数行の正規表現は v0.4 (v0.3 までは未対応)。
     Multiline,
     /// コンパイル後の大きさが上限 (10 MiB) を超える。
     TooLarge,
@@ -176,7 +176,7 @@ impl SearchQuery {
         if self.pattern.is_empty() {
             return Ok(None);
         }
-        // 複数行の正規表現は v0.3。改行そのものと、`\n` `\r` のエスケープは未対応 (§12.3)
+        // 複数行の正規表現は v0.4。改行そのものと、`\n` `\r` のエスケープは未対応 (§12.3)
         let escapes_newline = {
             let mut escaped = false;
             let mut found = false;
