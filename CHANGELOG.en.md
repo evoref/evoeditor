@@ -11,7 +11,7 @@ The Japanese version ([CHANGELOG.md](CHANGELOG.md)) is authoritative. Both are u
 
 ## [Unreleased]
 
-## [0.2.0] - TBD
+## [0.2.0] - 2026-11-04
 
 The first release of v0.2. The only product changes from [0.2.0-rc.1] are dependency updates (`signal-hook` 0.4, `unicode-width` 0.2.3, `encoding_rs` 0.8.44) and an adjustment that keeps the width of the half-width katakana voiced and semi-voiced marks (`ﾞ` / `ﾟ`) at 1 regardless of the `unicode-width` version; there is no user-visible difference. This release fills everyday gaps and **adds Linux (x86_64 / aarch64)**. It adds automatic saving of unsaved content and recovery, multiple documents, regular-expression search and replace, soft wrap, mouse, themes, an English user interface and more. Downloads are the Windows zip and the Linux tar.gz on GitHub Releases; installation, updating and known limitations are in the bundled `README.md` (English: `README.en.md`). When updating from v0.1.0, settings and rescued files keep working as they are.
 
