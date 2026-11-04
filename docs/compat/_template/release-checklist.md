@@ -31,7 +31,7 @@ minisign の検証) は GitHub Release のノートの「検証」の節に書�
 | 長時間 (観察、v0.2 から) | BM-306 の 1 時間の soak の推移を所見に書く (ゲートにしない) | | | | |
 | MSRV (v0.2 から) | CI の `msrv` ジョブが判定コミットで通る | | | | |
 | 配布物 (Linux、v0.2 から) | `release.yml` の `build-linux` / `smoke-linux` (x86_64・aarch64) が通り、`SHA256SUMS.minisig` が検証できる | | | | |
-| 契約 | `eve-view` の型が `#[non_exhaustive]` で `CONTRACT_VERSION` を持つ | | | | |
+| 契約 | `eve-view` の型が `#[non_exhaustive]` で `CONTRACT_VERSION` (C3 まで 0) を持ち、前の版からの境界型の変更が `CHANGELOG.md` に `eve-view:` の行で記録されている | | | | |
 | 依存 | C を含む依存 0 (`cargo xtask check-deps`) | | | | |
 | ドキュメント | README (`dist/README.md`)・CHANGELOG・生成リファレンスが最新。端末の設定・IME とチョードの注意・既知の制約 (01 §4.6) が README にある | | | | |
 | ライセンス・名称 | 12 §3.8 の LR-1 (Apache-2.0 の特許条項と NOTICE の運用) と LR-4 (名称の商標の簡易照会)。結果は 10 の OQ-01 | | | | |

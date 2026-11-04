@@ -316,7 +316,7 @@ AI 連携はローカル LLM (`llama-server` 等) を一級市民にする (01 �
 | 層 | 道具 | 目的 | 実行場所 |
 |---|---|---|---|
 | マイクロ | `criterion` (wall-clock、統計) + **命令数** (callgrind。決定的。**Valgrind が必要なため Linux 専用**。**v0.2 から**。M10 では `iai-callgrind` の crate を使わず、計測の本体 `bm_instr` を `valgrind --tool=callgrind` で直接走らせる: crate と同じ版の runner をランナーに入れる手間と依存の木が増えるのを避けるため。測るものは同じ命令数 (Ir)) | eve-text / ChangeSet / 幅計算 / デコード / Frame 生成の回帰検出 | ローカル (criterion)。命令数の CI は v0.2 (Linux)、Windows の wall-clock の同一ジョブ A/B も v0.2 (どちらも `perf.yml`、§5.4) |
-| マクロ (NFR 対応) | 自前ハーネス `eve-bench` (bin。置き場所は `crates/eve-bench/`、`publish = false`。`eve-testkit` 上でヘッドレス `Editor` + **実 Port**) + 外部計測 (`hyperfine`、Windows のプロセスのメモリ・CPU 指標) | NFR-1xx / 2xx の数値を測る | 基準環境 (Windows の開発 PC、リリース前)。CI では値を記録するだけ |
+| マクロ (NFR 対応) | 自前ハーネス (crate は作らない。`eve-testkit/benches/bm_*` がヘッドレス `Editor` + **実 Port**、`evoeditor/benches/bm_pty` が疑似端末越しに測る。`xtask bench` が回す。下の表の `eve-bench <サブコマンド>` は、これらのベンチのモードを指す) + 外部計測 (`hyperfine`、Windows のプロセスのメモリ・CPU 指標) | NFR-1xx / 2xx の数値を測る | 基準環境 (Windows の開発 PC、リリース前)。CI では値を記録するだけ |
 
 CI ランナーの wall-clock は変動が大きい (共有 VM) ため、絶対値 (ms) は基準環境でのみ判定する。**v0.1 は CI で回帰を自動判定しない**: `bench.yml` を手動で実行して (マイルストーンを `develop` に取り込む前など) BM-101a・BM-103a・BM-205 の値を記録し、劣化は人が推移を見て判断する (トリガは §6.1)。自動の回帰判定 (iai-callgrind の命令数 (閾値 ±5%、主要 5 本程度) と、マクロベンチの **同一ジョブ内 A/B 比較** (main と PR を同じランナーで連続実行し比率を見る。閾値 +10%)) は **v0.2 から** (01 NFR-703)。
 

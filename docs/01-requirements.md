@@ -466,7 +466,7 @@ Must の要件 ID は **87 件** (FR 52 件・NFR 35 件)。括弧内は v0.1 �
 | 複数カーソル (FR-211) | Selection を「Range の配列」として実装 (要素数 1 に制限) | 後から複数にすると全コマンドの書き直し |
 | 画面分割 (FR-509) | Document と View の分離、`WindowId` 引数 | 分割の前提。`LayoutTree` は v0.5 で導入 (内部) |
 | frontend 境界 (TUI・ヘッドレス) | `Frame` / `OverlayModel` / `Capabilities` / `Color::Rgb` / `Effect` / `InputEvent` (Paste・Focus・ClipboardContent)、主修飾 `mod`、`#[non_exhaustive]` + `CONTRACT_VERSION`、`Frontend` trait (02 §8.4 / §9.2) | 境界型。v0.1 では TUI とヘッドレスの Frame 消費者 (ASCII / JSON・ヘッドレス参照レンダラ) の二重消費と 02 §16 のチェックリストで検証し、足りない型は追加か契約版 2 で入れる (02 §8.4) |
-| マウス・差分描画 | `HitMap`・`DirtyMask` はフィールドだけ (空 / None) | 境界型の互換性のため |
+| マウス・差分描画 | `HitMap`・`DirtyMask` は型を置かない (v0.2 のマウスは frontend の位置変換で足りた)。必要になった版で、C2 の追加 (`Option` 付きのフィールド) として入れる (02 §8.4。2026-11-04 に実装に合わせた) | 追加なら境界型の互換を壊さない |
 | シンタックスハイライト (FR-801) | Span にスタイルを持たせる。Decoration Provider の trait は v0.6 で定義 (v0.1 は選択と検索一致を Frame 生成で直接合成) | 内部 |
 | スワップ (FR-118) | 緊急退避の manifest を版付き形式として確定 | 公開面 (ファイル形式) |
 | 外部からの操作・自動化 | `EditorEvent` と `Editor::drain_events()` (**実装**。発火は Document / Message / Overlay 系のみ、06 X17。編集範囲の要約 `EditSummary` は型の予約のみ。検証は NFR-707 AC-5)、`Query` API (**実装** はシナリオの検査に要る範囲 (文書一覧・テキスト範囲・選択・ステータス・オーバーレイ) だけで、他の変種は名前の予約、06 X18。検証は NFR-707 AC-4)、シナリオ DSL の書式。駆動 API はメソッド名と Frame JSON の形の予約のみ (実装は v0.2 以降)。bin の cargo feature `headless` は **feature の枠 (名前) だけ** を v0.1 で置き、中身 (駆動 API の配管) は v0.2 (06 X23)。`Query` のテキスト範囲の決定性 (06 X26) は v0.1 で保証する (検証は NFR-707 AC-6) | ADR-0032 / 0033 / 0039 |

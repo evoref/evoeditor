@@ -26,7 +26,7 @@ path = "crates/eve-view"
 spec = ["02 §8"]
 owner = "shared"
 reviewer = "human:maintainer"
-stage = "C1"
+stage = "C2"
 notes = "境界型。変更は契約変更の手続き (11 §8.4、ラベル contract-change)"
 
 [[unit]]

@@ -95,7 +95,7 @@ v0.1 は最小核 (案 L) で、開発運用も手書きの最小限にする (�
 | `.github/` | ワークフロー (09 §6。M1 のタスク (0) から)・Issue と PR のテンプレート (最初の push の前)・`dependabot.yml` (cargo と GitHub Actions、週 1・グループ化。最初の push の準備で置く、09 §6.3・12 §5.6 の PC-5 (8))・`allowed_signers` (リリースのタグの SSH 署名の公開鍵。`release.yml` の `git verify-tag` 用、§9.3 / §9.7)・`fuzz-recipients.txt` (fuzz のクラッシュ入力を暗号化する `age` の受取人の公開鍵。メンテナの数だけ 1 行 1 鍵。秘密鍵は置かない、09 §6.3) | メンテナ | ワークフローの権限は 09 §6.5 の表に従う。fork の PR では変更を読んでから実行を承認する (§9.4) |
 | `crates/<name>/` | ライブラリ crate (02 §4.1) | crate ごとの所有者 (§2) | 所有者以外は PR で提案。`eve-view` は core の所有者だけが変更する (§8.4) |
 | `bins/evoeditor/` | 引数解析と `Host` の起動だけ | eve-host の所有者 | ビジネスロジックを置かない (02 §4.1) |
-| `crates/eve-bench/` | マクロベンチの bin (09 §5.1、`publish = false`)。Windows だけでビルドする | メンテナ | ベンチ ID (09 §5.2) を変えるときは 09 を同じ PR で更新 |
+| `crates/*/benches/`・`bins/evoeditor/benches/` | ベンチ (09 §5.1)。crate は作らない (02 §4.1)。`xtask bench` が回す | メンテナ | ベンチ ID (09 §5.2) を変えるときは 09 を同じ PR で更新 |
 | `crates/eve-docs-tables/` | docs の Markdown の表を §8.5 の規則で読む lib (`publish = false`)。`xtask` と、eve-tui・eve-core のテスト (dev 依存) が使う。Windows と Linux の両方でビルドする | メンテナ | 表の規則 (§8.5) を変える `spec-change` の PR で同時に直す |
 | `crates/eve-test-helpers/` | テスト用の補助プロセスの bin crate (`console-event`・`clip-delay`、09 §3.4 / §3.6。`publish = false`、feature なし)。test-hooks のビルドのテストからだけ使い、配布物に入れない | メンテナ | — |
 | `tests/ac-checklist.toml` | v0.1 の AC のチェックリスト (§3.3。M0c で作る) | 人間 | 人が更新する。`docs/` の外に置くので、`.claude/settings.json` の docs 本編への書込み拒否と `spec-change` ラベルの対象外 (エージェントは PR 本文に AC ID とテスト名を書き、更新は人間) |
@@ -559,12 +559,12 @@ $ cargo run -p evoeditor --features headless -- --headless --rpc stdio --fake-po
 
 境界型 (`eve-view`) の変更は「契約変更要求」として扱う。規則の内容 (段階 C0〜C3、許す変更) は 02 §8.4 が正本で、ここは手順だけ。
 
-**v0.1 の手続き** (確定 (ユーザー回答)、ADR-0042、10 #43): 外部の消費者は TUI 完成まで存在しないので、Issue テンプレート「契約変更要求」の起票・Frame JSON ゴールデンは **TUI 完成後に作る**。v0.1 では、core の所有者 (人間) だけが `eve-view` を変更し、**同じ PR で全消費者 (eve-tui・`HeadlessFrontend`・テストの ASCII Frame のスナップショット) を更新** する。PR には `contract-change` ラベルを手で付け、本文に変更する型・理由・`CONTRACT_VERSION` の増分を書く。段階ごとに許す変更 (02 §8.4。C2 以降は追加のみ) は v0.1 でも守る。下の表の Issue の起票と Frame JSON ゴールデンの更新は TUI 完成後の手続き。
+**v0.1 の手続き** (確定 (ユーザー回答)、ADR-0042、10 #43): 外部の消費者は TUI 完成まで存在しないので、Issue テンプレート「契約変更要求」の起票・Frame JSON ゴールデンは **TUI 完成後に作る**。v0.1 では、core の所有者 (人間) だけが `eve-view` を変更し、**同じ PR で全消費者 (eve-tui・`HeadlessFrontend`・テストの ASCII Frame のスナップショット) を更新** する。PR には `contract-change` ラベルを手で付け、本文に変更する型・理由を書き、`CHANGELOG.md` の Unreleased に `eve-view:` で始まる 1 行を書く (`CONTRACT_VERSION` は C3 まで 0 に固定、02 §8.4)。段階ごとに許す変更 (02 §8.4。C2 以降は追加のみ) は v0.1 でも守る。下の表の Issue の起票と Frame JSON ゴールデンの更新は TUI 完成後の手続き。
 
 | 段階 | 手続き |
 |---|---|
 | C0 (M1 まで) | core の所有者が自由に変更。PR に `contract-change` ラベルだけ付ける (記録のため) |
-| C1 (M2。二重消費の相手は TUI + ヘッドレスの Frame 消費者 + テスト用 Frontend (`HeadlessFrontend`)。外部の消費者は無い) | v0.1 は上の手続き。TUI 完成後は Issue テンプレート「契約変更要求」(変更する型、理由、全消費者 (eve-tui・ASCII Frame・Frame JSON ゴールデン・`HeadlessFrontend`。駆動 API を実装した版からはその JSON Frame も) への影響、`CONTRACT_VERSION` の増分) を 1 件起票する。どちらも core の所有者が `eve-view` を変更し、**同じ PR で全消費者を更新** → `CONTRACT_VERSION` +1、`docs/contract-changes.md` に 1 行。型の不足は M2 の設計レビュー (02 §8.4 の C1 候補表 + 02 §16) で先に潰す |
+| C1 (M2。二重消費の相手は TUI + ヘッドレスの Frame 消費者 + テスト用 Frontend (`HeadlessFrontend`)。外部の消費者は無い) | v0.1 は上の手続き。TUI 完成後は Issue テンプレート「契約変更要求」(変更する型、理由、全消費者 (eve-tui・ASCII Frame・Frame JSON ゴールデン・`HeadlessFrontend`。駆動 API を実装した版からはその JSON Frame も) への影響) を 1 件起票する。どちらも core の所有者が `eve-view` を変更し、**同じ PR で全消費者を更新** → `CHANGELOG.md` に `eve-view:` の 1 行 (`CONTRACT_VERSION` は C3 まで 0)。型の不足は M2 の設計レビュー (02 §8.4 の C1 候補表 + 02 §16) で先に潰す |
 | C2 (M2 の完了時〜) | 追加のみ。削除・意味変更は RFC (Issue に `rfc` ラベル、該当 crate の担当の合意) → ADR または 02 §8.4 の改訂を伴う |
 | C3 (契約版 1 の固定は TUI 完成後のレビューで行う、02 §8.4。v0.1 は C2 のまま) | C2 と同じ + 契約版 +1 を立てる場合は 02 §8.4 の並行期間。**外部の消費者 (駆動 API のクライアント、プラグイン作者) で見つかった不足は「追加 (Option / Default 付き、`#[non_exhaustive]` 型への変種)」で入れるのを既定とし、追加で表せないときだけ契約版 +1** (直近 2 版を受理)。手続きは「**公開リポジトリの消費者 (TUI とヘッドレス参照レンダラ) を同一 PR で更新し、外部の消費者は契約版の並行期間内に追従する**」(ADR-0030 決定 3 を外部の消費者に当てはめたもの、ADR-0038 決定 4)。外部の消費者からの要求は公開リポジトリの Issue として起票し (§9.5)、公開 crate の新版 (タグ) として出してから外部の消費者が取り込む |
 
@@ -649,7 +649,7 @@ Closes #123
 
 ### 9.3 CHANGELOG とリリース
 
-- `CHANGELOG.md` は Keep a Changelog 形式、PR ごとに Unreleased へ 1 行 (09 §8.1)。ユーザー可視でない変更は `changelog: none`。
+- `CHANGELOG.md` は Keep a Changelog 形式、PR ごとに Unreleased へ 1 行 (09 §8.1)。ユーザー可視でない変更は `changelog: none`。ただし境界型 (`eve-view`) の変更は、利用者に見えなくても `eve-view:` で始まる 1 行を書く (02 §8.4 の C3 までの運用)。
 - 版・タグ・公開手順は 09 §9 が正本。本書は「版の名前は 01 §1.3 (v0.1 / v0.2 / v0.3 / v0.4 / v0.5 / v0.6 / v1.0 / v1.L (v1.L-a / v1.L-b) / v1.X)」を使うことだけを定める。
 - 版上げと CHANGELOG の確定は、`develop` に対するリリース PR (`chore/…`、squash) で、**リリースゲートの判定の前に** 行う (ゲートは版上げ後の `develop` の先頭で判定する、09 §9.2 手順 2 / 3)。**v0.1 は bot を使わない**: リリース PR・昇格の PR (`develop` → `main`)・リリースの後の `main` → `develop` の取り込み PR は人間が作る (`release-plz` は v0.2 以降の候補、OQ-74。使う場合も対象のブランチは `develop`)。その後 §9.1 の流れで `develop` → `main` に入れ (パッチ版も同じ経路)、`main` のマージコミットに人間がタグを付ける。リリース PR と `main` への PR は人間が merge する。**タグの検証** (置き場所は 09 §6.1 の `release.yml` に統一する。手元の確認や `ci.yml` には置かない): `release.yml` の最初のステップで (1) `git verify-tag` (`.github/allowed_signers` に載る鍵の署名だけを許す)、(2) タグが `main` のマージコミットを指す (プレリリースのタグは `develop` の先頭)、(3) タグの版と `Cargo.toml` の版が一致する (プレリリースは `-rc.N` 等の接尾辞まで一致する。プレリリースの前に `develop` に `-rc.N` 等の版を付ける PR を入れる、09 §9.2 手順 1a)、(4) タグのコミットの内容が、リリースのチェックリストに記録したゲートの判定のコミット (版上げ後の `develop` の先頭) と一致する (差分が許可リスト `docs/compat/<version>/`・`docs/perf/<version>/`・`tests/ac-checklist.toml` だけ)、を確かめ、どれかが失敗したら以後を走らせない。タグの検証の結果は Release のノートの「検証」の節に書く (リリースのチェックリストには載せない。リポジトリには戻さない、09 §8.2)。エージェントは版上げ・タグ・publish を行わない。
 - `develop` → `main`・`main` → `develop` の PR は merge commit で取り込み、1 行目は `chore(release): v0.1.0` / `chore(release): v0.1.1` / `chore(release): merge main into develop (v0.1.0)` の形にする (§9.2 の type と scope の規則のまま)。マイルストーンの取り込み (`0.0.x` の x を上げる PR、§9.1) は作業ブランチの PR (squash) で、`chore(release): 0.0.2 (M2)` の形にする。作業ブランチの PR は squash (1 PR = 1 コミットで、`spec:` / `verifies:` フッタと `Signed-off-by:` がそのコミットに残る。§9.4)。
