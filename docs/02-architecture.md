@@ -169,7 +169,6 @@ crate の接頭辞 `eve-` と bin の名前 `evoeditor` は [OQ-01](10-decisions
 | `eve-tui` | lib | v0.1 | `Frontend` の TUI 実装: 端末の初期化/復元、入力の正規化 (Unix は自前の VT 解析 `vt_input`、Windows は自前の `ReadConsoleInputW` ループ → `InputEvent`、連続 Text の集約。ADR-0005 の改訂)、`Frame` → ratatui Buffer 描画、端末能力と色深度の判定、256 / 16 段への色の近似表 (04 §12.3)、OSC 52 書込 (v0.2) | ratatui, crossterm | 編集ロジック (core にあるべきもの) | `eve-testkit`, `eve-docs-tables` |
 | `evoeditor` (bin) | bin | v0.1 | 引数解析と `eve_host::Host::new(args)?.run(&mut TuiFrontend::new())` だけ (`Host::new(args)` は本番の部品で組み立てる `HostBuilder::new(args).build()` の短縮、§9.2。設定読込は `Host::new`、`Frontend::init` → Editor 構築 → 入力開始の順序は `Host::start` の中、§9.2 / §9.5) | lexopt (案), anyhow | ビジネスロジック | `eve-testkit`, `eve-docs-tables` |
 | `eve-protocol` | lib (dev) | v0.2 以降 (dev。ADR-0039) | 駆動 API ([§10.5](#105-駆動-api-stage-d)) の JSON-RPC の型とフレーミング (`Content-Length`)。eve-view の serde 型を運ぶ。sidecar モードと、その上の MCP サーバの写像 (v1.L-b 候補、06 §3.5)。外部プラグインのプロトコル (v1.X、§10.3) も本 crate に足す (プラグイン用に別の crate を作らない)。配布同梱は OQ-120 | eve-view (feature `serde`), serde, serde_json | 編集ロジック | `ratatui`, `crossterm`, `eve-core`, `eve-platform`, `eve-host`, `eve-tui`, `eve-testkit`, `eve-docs-tables` |
-| `eve-bench` | bin (dev) | v0.1 | ベンチマークの実行と集計 (09 §5 の BM-xxx。`xtask bench` が呼ぶ)。計測対象は公開 crate と `evoeditor` の隠しフラグ (`--bench-*`) で、本体からは依存しない | eve-testkit, 公開 crate | 本番コードからの依存 | — |
 | `eve-testkit` | lib (公開。テスト用で、本番コードは依存しない) | v0.1 | ヘッドレス駆動ハーネス、Fake Ports (`MemFs`、偽クリップボード、`ManualClock`、`ManualJobSpawner`、§4.4)、Frame のスナップショット比較、`VirtualScreen` (TUI)、**ヘッドレス参照レンダラ** (`HeadlessFrontend`: `Frontend` trait のテスト用実装。Frame から直接 `CellOccupancy` を作り、TUI との parity の比較相手になる、§8.4)、`CellOccupancy` の比較、シナリオ DSL ランナー (v0.2。v0.1 は Rust の Harness)、`ThreadGuard` を使う検査モード (§4.4)。外部の消費者も正確な版で固定して使える公開 crate として publish する (§4.1 の注、12 §4.1) | insta, proptest, serde・toml (シナリオ DSL の読み込み、v0.2) | 本番コードからの依存 | — |
 | `eve-docs-tables` | lib (dev、`publish = false`) | v0.1 | docs の Markdown の表を 11 §8.5 の機械可読の規則 (見出し・列名・列の順) で読む小さな lib。利用者は **`xtask`、`eve-tui` の dev 依存、`eve-core` の dev 依存** の 3 つ (`xtask` は `check-deps --docs`・`i18n`・`check-themes`、`eve-tui` は横取り表の到達性検査、`eve-core` はコマンドカタログ等の表との突合。09 §6.2 の `docs-tables`) | なし (std のみ) | 本番コードからの依存、他の `eve-*` crate への依存 | `eve-text`, `eve-encoding`, `eve-view`, `eve-config`, `eve-core`, `eve-platform`, `eve-host`, `eve-tui`, `eve-protocol`, `eve-syntax`, `eve-lsp`, `eve-ai`, `eve-testkit` |
 | `eve-test-helpers` | bin (dev、`publish = false`、feature なし) | v0.1 | テスト用の補助プロセス: `console-event` (別コンソールから CTRL_C / CTRL_BREAK を送る) と `clip-delay` (クリップボードの応答を遅らせる)。feature `test-hooks` のビルドのテスト (09 §3.4 / §3.6) からだけ使い、配布物に入れない | windows-sys (補助プロセスの中だけ) | 本番コードからの依存、配布物への同梱 | — |
@@ -177,6 +176,8 @@ crate の接頭辞 `eve-` と bin の名前 `evoeditor` は [OQ-01](10-decisions
 | `eve-syntax` | lib | v0.6 | tree-sitter による解析・ハイライト・インデント・構文選択。core の `SyntaxProvider` trait を実装 | tree-sitter, 各言語文法 | frontend 依存 | `ratatui`, `crossterm`, `eve-tui`, `eve-lsp`, `eve-ai`, `eve-testkit`, `eve-docs-tables` |
 | `eve-lsp` | lib | v1.L | LSP クライアント (プロセス管理・JSON-RPC・位置変換)。core の `LanguageService` trait を実装 | tokio, lsp-types (案) | frontend 依存 | `ratatui`, `crossterm`, `eve-tui`, `eve-syntax`, `eve-ai`, `eve-testkit`, `eve-docs-tables` |
 | `eve-ai` | lib | v1.L | AI プロバイダ抽象と **ローカル LLM アダプタ** (`llama-server` ネイティブ / OpenAI 互換。能力検出・サーバのトークナイザでの予算計算・キャッシュを活かすプロンプト構築・FIM・制約付き出力・要求スケジューラ)、管理モードのサーバ起動要求 (実行は `ProcessRunner`)、プロンプト構築、秘密情報の伏字化、Proposal 生成 (差分計算)、監査ログ。詳細は 06 | tokio, HTTP クライアント (feature `ai`: TLS なしのループバック HTTP、`ai-remote`: rustls を追加), serde_json, eve-protocol (外部プロセス系 (ACP クライアント・MCP クライアント、v1.X) の JSON-RPC の配管とフレーミングを共用する。06 §3) | frontend 依存、文書の直接変更、`std::fs` / `std::process` (R7)、推論エンジン (llama.cpp 等) へのリンク (ADR-0034) | `ratatui`, `crossterm`, `eve-tui`, `eve-syntax`, `eve-lsp`, `eve-testkit`, `eve-docs-tables` |
+
+> **ベンチ**: ベンチマーク (09 §5 の BM-xxx) は **crate を作らず**、各 crate の `benches/` に置く (`eve-testkit/benches/bm_*` = ヘッドレスの core、`evoeditor/benches/bm_pty` = 疑似端末越しの計測、`eve-text` / `eve-platform` の `benches/`)。実行と集計は `xtask bench` (11 §1)。本体からは依存しない。v0.1 の計画の `eve-bench` crate は作らなかった (2026-11-04 に仕様を実装に合わせた)。
 
 > **禁止 crate 列**: その crate から (推移的にも) 到達してはならない crate を完全な crate 名で列挙した機械可読の列で、リポジトリ直下の `deps-policy.toml` の禁止リストと 1:1 に対応する (書式は 11 §8.5、検査は 09 §7 の `xtask check-deps --docs`)。`ratatui` / `crossterm` / `tokio` / `reqwest` / `hyper` / `windows-sys` / `libc` を持たない core 系は `eve-text` / `eve-encoding` / `eve-view` / `eve-config` / `eve-core` の 5 つ (R1)。**対象は normal 依存だけ** で、dev 依存 (`[dev-dependencies]`) は対象外とする (`eve-testkit` / `eve-docs-tables` を禁止 crate に載せた crate も、dev 依存としては使ってよい。例: `eve-core` と `eve-tui` の dev 依存の `eve-docs-tables`、§4.2 の点線)。§4.3 の R1〜R11 の依存の検査も同じ (09 §7)。`禁止事項` 列は説明の文で、突合しない。workspace 内で依存してよい crate (§4.2 の辺) は `deps-policy.toml` の許可リストで別に検査する (09 §7)。
 
@@ -213,7 +214,7 @@ flowchart TD
     ai --> core
     ai --> proto
     proto -- "feature serde" --> view
-    bench["eve-bench (bin, dev)"] -. "dev" .-> testkit["eve-testkit (dev)"]
+    bench["ベンチ (各 crate の benches/、dev)"] -. "dev" .-> testkit["eve-testkit (dev)"]
     testkit -. "dev" .-> host
     xtask["xtask (dev)"] -. "dev" .-> doctables["eve-docs-tables (dev, publish=false)"]
     tui -. "dev-dependencies" .-> doctables
@@ -597,6 +598,8 @@ enum FsErrorDetail {
 
 `eve-core` は最大の crate であり、複数の作業者 (人間・AI エージェント) が同時に触ると衝突しやすい。crate を割らずに、内部モジュールの所有境界で衝突を防ぐ (ADR-0003 (c)、ADR-0033、OQ-126。いずれも確定)。
 
+**実装との関係** (2026-11-04、確定 (ユーザー回答)): 下の表が eve-core のモジュール構成の **正本** である。v0.2 までの実装は表と違い、`editor/` の下に約 40 のファイルが平らに並ぶ (検索・io・ジョブ・意味的 UI モデルの論理が `editor/` に混在し、ジョブ表 (`Pending`) とジョブの結果の振り分けが `editor/file.rs` にある)。**実装を表に合わせる** (仕様を実装に合わせない)。移動は v0.3 の M14 (08 §2.4) で行い、最初の PR でファイルごとの移す先の計画を作る。表に無い役割 (編集コマンド・行操作・クリップボード・設定の再読込・スワップ・起動時の処理など) の置き場所は、その計画で決めて本表に行を足す。移動の途中は、移した分だけを表のとおりにする。
+
 | モジュール | 所有するもの | 所有する仕様節 (例) |
 |---|---|---|
 | `document/` | Document、Transaction の適用、Undo 履歴、保存点 | 02 §5.1〜5.2、03 §6〜7 |
@@ -611,7 +614,7 @@ enum FsErrorDetail {
 | `editor.rs` | `Editor` ファサード、`Query` 応答、`EditorEvent` の発行 | 02 §5、§10.1 |
 
 - 各モジュールは `pub(crate)` の API だけを隣に見せる。`eve-core` の `pub` は `Editor` と境界型の再公開に限る。
-- 各モジュールの `mod.rs` 冒頭に「所有する仕様節」を `//! spec: 03 §6–7, 02 §5` の形で書く ([§17](#17-ai-連携に適した開発構成))。
+- 各モジュールの `mod.rs` 冒頭に「所有する仕様節」を `//! spec: 03 §6–7, 02 §5` の形で書く ([§17](#17-ai-連携に適した開発構成))。v0.2 までの実装には無い (表の構成になっていないため)。M14 でモジュールを作るときに書く。
 - 人間とエージェントへの割当表 (`docs/ownership.toml`) の形と運用は 11-dev-workflow。
 
 ### 4.7 v0.1 の対象 OS と移植性の維持
@@ -988,7 +991,7 @@ InputEvent::Text ─▶ チョード保留中、または captures_text を宣�
 
 ### 7.3 マウス
 
-frontend はセル座標を **Frame のヒットマップ** (各 Pane の矩形・行→文書位置の対応) を使って `(ViewId, 表示行, 表示列)` などのヒット対象に変換して渡す。座標→文書位置の確定 (折り返し・タブ・全角を考慮) は core が行う。TUI のマウス (FR-307) は v0.2 (v0.1 はマウスを取得せず、端末の選択とスクロールをそのまま使えるようにする、OQ-63)。**v0.2 で決めた型は 03 §5.8.1**: `MouseEvent { kind, mods, at: MouseAt { view, row, col } }` (編集面の左上を原点とするセル。ボタン押下中は面の外も渡す)。`HitMap` は v0.2 では実体を作らず (`PaneFrame.hit` は予約のまま)、TUI は `PaneFrame.rect` と `gutter_width` で (セル → `MouseAt`) を作る。
+frontend はセル座標を **Frame のヒットマップ** (各 Pane の矩形・行→文書位置の対応) を使って `(ViewId, 表示行, 表示列)` などのヒット対象に変換して渡す。座標→文書位置の確定 (折り返し・タブ・全角を考慮) は core が行う。TUI のマウス (FR-307) は v0.2 (v0.1 はマウスを取得せず、端末の選択とスクロールをそのまま使えるようにする、OQ-63)。**v0.2 で決めた型は 03 §5.8.1**: `MouseEvent { kind, mods, at: MouseAt { view, row, col } }` (編集面の左上を原点とするセル。ボタン押下中は面の外も渡す)。`HitMap` は v0.2 では型もフィールドも置かず (`PaneFrame.hit` は §8.2 で注記した将来の追加)、TUI は `PaneFrame.rect` と `gutter_width` で (セル → `MouseAt`) を作る。複数ペイン (v0.5) で要るなら C2 の追加として入れる。
 
 ## 8. 状態と描画の分離 (ViewModel)
 
@@ -1023,7 +1026,7 @@ struct Frame {
                                             // 入力欄 (オーバーレイ・検索バー) にフォーカスがあるときは None で、frontend が欄の配置と InputFieldModel から求める
     title: String,                          // 端末タイトル。内容規約は 04 §3.1。タイトルの経路はこれだけ (Effect にしない、§6.3)
     texts: ChromeTexts,                     // frontend が自分の判断で出す場面の、core が解決済みの文言
-    dirty: Option<DirtyMask>,               // 型のみ予約。v0.x は None (frontend はセル差分で足りる)
+    // dirty: Option<DirtyMask>             // 未実装 (型も置かない)。frontend はセル差分で足りる。要るようになったら C2 の追加で入れる
 }
 struct ChromeTexts { too_small: CellText /*ui.too_small。端末が frontend の描ける最小より小さいときに frontend が出す。{cols}x{rows} は Capabilities.min_surface*/ }
 // ── クローム・オーバーレイの文字列 (幅は core が計算済み。frontend は幅関数を持たない) ──
@@ -1058,7 +1061,7 @@ struct PaneFrame {
     gutter_width: u16,
     rows: Vec<RenderRow>,                    // 可視行
     cursors: Vec<CellPos>, focused: bool,
-    hit: HitMap,                             // セル → 文書位置 の逆引き情報 (v0.1 は空でよい)
+    // hit: Option<HitMap>                  // セル → 文書位置 の逆引き情報。未実装 (v0.2 のマウスは frontend の位置変換で足りた)。要るようになったら C2 の追加で入れる
 }
 struct RenderRow { source: RowSource /*doc line + wrap index (折り返しは v0.2) | virtual*/,
                    gutter: Vec<Span>, spans: Vec<Span>,
@@ -1104,13 +1107,13 @@ enum Color { Default, Rgb(u8,u8,u8), Indexed(u8) }
 
 TUI と、ヘッドレスの消費者 (シナリオ・駆動 API・ヘッドレス参照レンダラ) が同じ境界型 (`eve-view`) を消費し、公開 crate の外部の消費者もあり得るため、境界型を **契約** として扱う (ADR-0030、確定)。**本節が契約規則の正本**。契約変更要求の運用 (Issue テンプレート等) は 11-dev-workflow。
 
-**v0.1 の運用**: 型レベルの防御 (下記) と `CONTRACT_VERSION` は v0.1 から入れ、下表の C0〜C2 の段階 (C2 の「追加のみ」の制限は M2 の完了時から、OQ-123) も v0.1 から守る。手続きと成果物のうち、契約変更要求の起票 (Issue・RFC)・Frame JSON ゴールデン・frontend-parity の CI ジョブは **v0.1 には入れず、後の版で作る**。それまでは、境界型を変える PR が TUI と `HeadlessFrontend` (ASCII の Frame) を同じ PR で更新し、`CONTRACT_VERSION` を上げて `docs/contract-changes.md` に 1 行記録する。
+**C3 までの運用** (2026-11-04 に改めた、確定 (ユーザー回答)。ADR-0030 の運用): 型レベルの防御 (下記) と `CONTRACT_VERSION` は v0.1 から入れ、下表の C0〜C2 の段階 (C2 の「追加のみ」の制限は M2 の完了時から、OQ-123) も守る。**`CONTRACT_VERSION` は C3 まで 0 に固定する** (変更ごとに上げない)。境界型を変える PR は、TUI と `HeadlessFrontend` (ASCII の Frame) を同じ PR で更新し、**`CHANGELOG.md` の Unreleased に `eve-view:` で始まる 1 行** で変更 (型と変更の種類) を記録する (利用者に見えない変更でも `changelog: none` にしない、11 §9.3)。`docs/contract-changes.md` は作らない。手続きと成果物のうち、契約変更要求の起票 (Issue・RFC)・Frame JSON ゴールデン・frontend-parity の CI ジョブは C3 までに作る。**改めた理由**: v0.1〜v0.2 で境界型を変えた PR は 14 件以上あったが、`CONTRACT_VERSION` は 0 のままで `docs/contract-changes.md` も作られず、版を上げる運用は守られていなかった。外部の消費者は C3 まで存在しない (同じリポジトリの消費者は同じ PR で直す) ので、版の番号を上げる利点は無く、変更の記録だけを残す。**現在の段階は C2** (v0.1 の M2 の完了時から)。`docs/ownership.toml` の `eve-view` の `stage` も C2 にする。
 
 **型レベルの防御 (v0.1 から)**
 
 - `eve-view` の enum は v0.1 から `#[non_exhaustive]` にする (frontend の `match` に既定の腕を強制し、変種の追加を非破壊にする)。**struct は C3 で付ける** (提案、OQ-177): 外部の消費者は C3 (TUI 完成時のレビュー) まで存在せず、それまでの消費者 (eve-tui・`eve-testkit`・`eve-host`) は同じリポジトリにあって、フィールドの追加は §8.4 の C1 / C2 の手続きで同じ PR で直せる。struct に v0.1 から付けると、他 crate からの構築がすべて `Default` / ビルダー経由になり、テストの組み立て (Frame の期待値、`Capabilities` のプリセット等) の手間が C3 まで続く。C3 では全 struct に付け、構築を `Default` / ビルダー経由に切り替える。例外は緊急の端末復元に渡す平文の型のうち `RawTermHandle` と `TermRestoredFlag` で、C3 の後も公開フィールドのタプル struct のまま他 crate (eve-tui) から直接作る (§9.2)。`eve-view` 以外の公開型 (`eve-host` の `HostMsg` 等) も同じ規則に従う。
 - frontend は `match` に必ず既定描画 (`_ =>`) を持つ。意味的 UI モデルに新しい変種を足すときは、公開リポジトリの消費者 (TUI とヘッドレス参照レンダラ) の描画を同じ PR に含めるか、未知の変種を Confirm / List に退化させる既定描画で受ける。
-- `pub const CONTRACT_VERSION: u32` を置き、契約の変更ごとに上げる。Frame JSON (と、実装後は駆動 API の `initialize`) に含める。
+- `pub const CONTRACT_VERSION: u32` を置く。C3 で 1 にし、以降の契約の変更ごとに上げる (C3 までは 0 に固定。上の「C3 までの運用」)。Frame JSON (と、実装後は駆動 API の `initialize`) に含める。
 - frontend 固有の挙動は `Capabilities` か `[frontend.<name>]` 設定で表現し、core に「TUI なら」のような frontend 別の分岐を書かない。TUI 固有の表現 (罫線・記号) は 04 に置き、core の文書に書かない。
 
 **凍結段階**
@@ -1118,9 +1121,9 @@ TUI と、ヘッドレスの消費者 (シナリオ・駆動 API・ヘッドレ�
 | 段階 | 時期 | 許す変更 | 必要な手続き | 成果物 |
 |---|---|---|---|---|
 | **C0 流動** | v0.1 の M1 (ヘッドレス core) 完了まで | 何でも (ただし §8.2 の骨格は維持) | core 内で完結 | — |
-| **C1 二重消費** | v0.1 の M2 (TUI 表示)。消費者は TUI とヘッドレスの Frame 消費者 (シナリオの ASCII Frame・ヘッドレス参照レンダラ。契約テストの Frame JSON は後の版、駆動 API は v0.2 以降) | 追加・変更可。ただし **すべての消費者を同一 PR で更新** | v0.1 は PR の説明に変更内容を書く (契約変更要求の Issue の起票は後の版、上の「v0.1 の運用」) | 変更ごとに `CONTRACT_VERSION` +1 と `docs/contract-changes.md` に変更記録 1 行 |
+| **C1 二重消費** | v0.1 の M2 (TUI 表示)。消費者は TUI とヘッドレスの Frame 消費者 (シナリオの ASCII Frame・ヘッドレス参照レンダラ。契約テストの Frame JSON は後の版、駆動 API は v0.2 以降) | 追加・変更可。ただし **すべての消費者を同一 PR で更新** | PR の説明に変更内容を書く (契約変更要求の Issue の起票は C3 までに作る、上の「C3 までの運用」) | 変更ごとに `CHANGELOG.md` に `eve-view:` の 1 行 (`CONTRACT_VERSION` は C3 まで 0) |
 | **C2 ソフト凍結** | v0.1 の M2 の完了時 (M3 の端末に依存する部分を始める時点。08 §2.2、OQ-123) | **追加のみ** (`#[non_exhaustive]` 型への変種・`Option` / `Default` 付きフィールドの追加)。削除・意味の変更は不可 | 破壊的変更は PR で core と各消費者の担当が合意する (RFC の手続きは後の版) | 全シナリオの ASCII Frame のスナップショット。後の版で Frame JSON ゴールデンを全シナリオで固定 (契約テスト) |
-| **C3 契約版 1** | **TUI 完成時のレビュー** (OQ-151。v0.1 のリリースゲートにしない、ADR-0039。v0.1〜v1.0 は C2 を維持し、`CONTRACT_VERSION` の値はリリースごとに報告する) | C2 と同じ。`CONTRACT_VERSION = 1` を固定し、以降の追加はマイナー扱い | 破壊的変更は契約版 2 として並行期間を置く (直近 2 版を eve-host / 駆動 API が受理。外部の消費者があるときは公開側のリリース 2 回分以上、12 §4.2) | — |
+| **C3 契約版 1** | **TUI 完成時のレビュー** (OQ-151。v0.1 のリリースゲートにしない、ADR-0039。v0.1〜v1.0 は C2 を維持し、`CONTRACT_VERSION` は 0 のまま) | C2 と同じ。`CONTRACT_VERSION = 1` を固定し、以降の追加はマイナー扱い | 破壊的変更は契約版 2 として並行期間を置く (直近 2 版を eve-host / 駆動 API が受理。外部の消費者があるときは公開側のリリース 2 回分以上、12 §4.2) | — |
 
 - **C2 を M2 の完了時にする理由**: M2 で TUI が v0.1 のすべての UI 部品 (パレット・プロンプト・確認・検索バー・メッセージ行。バッファ一覧とヘルプは v0.2) を一度描くので意味的モデルの不足は M2 で出尽くす。その後の M3 以降は文字コード・保存・検索で Frame は変わらない。
 - **予約型を C2 の対象から外す** (提案、OQ-178): v0.1 で生成も発火もしない予約の型と変種 (`Proposal` / `ProposalItem` / `Hunk` / `HunkState` / `HunkFlags` (§10.2.1)、`EditSummary` / `EditDelta` (§10.1)、`EditorEvent` と `Query` の予約の変種 (§10.1)、`OverlayModel::Diff`、パネルのモデル (§8.2)) は、最初の利用者 (v1.L の AI・LSP、v0.2 以降の駆動 API) の前に形を検証できないのに、M2 の完了時の C2 で「追加のみ」に凍結されると、形の誤りを直すのに破壊的変更の手続きが要る。そこで、予約の型は `eve_view::unstable` モジュール (`#[doc(hidden)]`) に置き、C2 / C3 の凍結の対象外とする (`CONTRACT_VERSION` も上げずに変えてよい)。既存の型の予約の変種 (`EditorEvent::SelectionChanged` 等・`OverlayKind::Diff`) は変種名だけを残し、中身の型は `unstable` の型を指す。最初の利用者の版でその型を `unstable` から通常の位置に移し、そこから凍結の対象にする。代替は「型を置かず名前だけを予約する」(本文の型の定義を文書だけに残し、コードには最初の利用者の版で入れる。10 の OQ-178)。
@@ -2108,7 +2111,7 @@ sensitive = false                     # 任意 (無ければ false)。秘密フ�
 - [ ] 時間は Clock Port 経由
 - [ ] frontend の差は `Capabilities` (§7.1) だけで core に伝わる。core に「TUI なら」の分岐がない
 - [ ] 既定キーマップが主修飾 `mod` で書かれている (§7.2 K6)
-- [ ] 境界型の変更が §8.4 の段階と手続きに従い、`CONTRACT_VERSION` が更新されている
+- [ ] 境界型の変更が §8.4 の段階と手続きに従い、`CHANGELOG.md` に `eve-view:` の 1 行がある (`CONTRACT_VERSION` は C3 まで 0)
 - [ ] 意味的 UI モデルの新しい変種に TUI とヘッドレス参照レンダラの描画 (または既定描画) がある
 - [ ] 公開 crate に frontend 別の分岐がない (ADR-0038)
 
@@ -2141,7 +2144,7 @@ evoeditor/                    # 公開リポジトリ (案、12 §3.3)
 ├─ crates/
 │  ├─ eve-text/  eve-encoding/  eve-view/  eve-config/  eve-core/
 │  ├─ eve-platform/  eve-host/  eve-tui/
-│  ├─ eve-protocol/ (v0.2 以降)  eve-testkit/ (公開)  eve-bench/ (bin、dev。09 のベンチ)
+│  ├─ eve-protocol/ (v0.2 以降)  eve-testkit/ (公開。benches/ に 09 のベンチ)
 │  ├─ eve-docs-tables/        # docs の表を読む lib (publish = false。xtask、eve-tui と eve-core の dev 依存、§4.1)
 │  ├─ eve-test-helpers/       # テスト用の補助プロセスの bin (console-event・clip-delay。publish = false、feature なし。test-hooks のビルドのテストだけが使う、§4.1)
 │  ├─ eve-syntax/ (v0.6)  eve-lsp/ (v1.L)  eve-ai/ (v1.L)  # 後の版。その版で作る (§4.1)

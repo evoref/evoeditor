@@ -578,6 +578,7 @@ OQ の番号は本書で一意に振り、各文書は OQ 番号で参照する�
   2. 境界型 (`eve-view`) は全型 `#[non_exhaustive]`、構築は `Default` / ビルダー経由、`CONTRACT_VERSION` を持つ。凍結段階 **C0 流動 → C1 二重消費 → C2 ソフト凍結 (追加のみ) → C3 契約版 1** を踏む ([02 §8.4](02-architecture.md#84-境界型の契約と凍結段階))。C1 の二重消費は TUI とヘッドレスの Frame 消費者 (ASCII / JSON) で行い、C2 の時期は v0.1 の **M2 の完了時** (M3 の端末に依存する部分を始める時点) を推奨とし、[OQ-123](#24-oq-45127-設計者裁量スパイク検証) で確定する。C3 (契約版 1 の固定) は v0.1 のリリースゲートにせず、TUI 完成時のレビュー ([OQ-151](#oq-151-tui-完成の定義)) で行う ([ADR-0039](#adr-0039-v01-の範囲の整合と先行投資の縮小))。
   3. frontend の PR は core / `eve-view` / `eve-config` を変更しない。境界型の変更は契約変更要求として起票し、**公開リポジトリの消費者 (TUI とヘッドレス参照レンダラ) を同一 PR で更新** する。外部の消費者は契約版の並行期間 (直近 2 版の受理) の範囲で追従する ([ADR-0038](#adr-0038-公開-crate-の外部の消費者と寄稿の方針)、[12 §4](12-licensing-distribution.md#4-公開-api-の安定性-外部の消費者))。
   4. v0.1 は `eve-testkit` の **ヘッドレス参照レンダラ** (`HeadlessFrontend`。`Frontend` trait のテスト用実装で、Frame から直接セル占有を作る) を持つ。Frame JSON ゴールデン (契約テスト) は TUI 完成時のレビューで作る ([v0.1 の範囲から外した項目](#v01-の範囲から外した項目) の #43)。
+- **運用の改訂** (2026-11-04、確定 (ユーザー回答)): `CONTRACT_VERSION` は C3 まで 0 に固定し、境界型の変更は `CHANGELOG.md` に `eve-view:` の 1 行で記録する (`docs/contract-changes.md` は作らない)。理由と手続きは [02 §8.4](02-architecture.md#84-境界型の契約と凍結段階) の「C3 までの運用」。決定 2 の凍結段階は変えない。
 - **根拠**: P4、P5。Composition Root を bin に直書きすると、TUI とヘッドレス (テストのハーネス・駆動 API) で重複する。
 - **影響**: 02 §4 / §8 / §9、09 (CI)。境界型への追加 (`Effect` の型、`Frontend::wake_after`、`Paths::normalize`、`FileSystem` の `create_recovery_dir` / `list_recovery_dirs`、`TermRestoredFlag`、`ReplacingCount`、`FsPath`) は、02 §8.4 の C0〜C1 の手続きで承認する対象である。
 
