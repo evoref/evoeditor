@@ -20,8 +20,9 @@ use super::state::EditorState;
 pub(super) enum Continuation {
     /// 終了する。
     Quit,
-    /// 文字コードを指定して開き直す (`file.reopen_with_encoding`、未保存の確認の後)。
-    Reopen(eve_encoding::Encoding),
+    /// 文書を文字コードを指定して開き直す (`file.reopen_with_encoding`、未保存の確認の後)。
+    /// 対象の文書を持つ (保存の完了の時点でアクティブな文書とは限らない、03 §9.7)。
+    Reopen(DocumentId, eve_encoding::Encoding),
     /// 文書を閉じる (`buffer.close`、03 §9.2 の閉じる手順と共通)。
     Close(DocumentId),
 }
@@ -82,7 +83,7 @@ pub(super) enum ConfirmAction {
     /// 開くときの確認 (読み取り専用で開く / 文字コードを指定して開く / 中止、03 §9.2)。
     Open(super::file::OpenAsk),
     /// dirty な文書の再読込 (変更を破棄、03 §9.5)。
-    Reload,
+    Reload(DocumentId),
     /// 表現不能の文字があって保存を中止した後の選択 (UTF-8 で保存 / キャンセル、03 §8.6)。
     Unmappable(super::file::UnmappableAsk),
     /// スワップの復旧の提案 (適用 / 破棄 / キャンセル、03 §10.3)。`revision` は提案の時点の文書の Revision。
@@ -269,14 +270,6 @@ impl EditorState {
 
     // ---------- 未保存の確認 ----------
 
-    /// 今の文書が dirty なら確認を出して `true`。`name` は `unsaved` (終了)・`unsaved_close` など。
-    pub(super) fn confirm_if_dirty(&mut self, name: &'static str, cont: Continuation) -> bool {
-        match self.active_document() {
-            Some(doc) => self.confirm_doc_if_dirty(doc, name, cont),
-            None => false,
-        }
-    }
-
     /// `doc_id` が dirty なら確認を出して `true`。保存の後続は保存した文書に属するので、アクティブ文書ではなく文書を指す。
     pub(super) fn confirm_doc_if_dirty(
         &mut self,
@@ -355,12 +348,10 @@ impl EditorState {
                 _ => self.quit_discard_head(),
             },
             // 保存の後続は保存する文書に属する (アクティブ文書とは限らない、03 §9.8)
-            ConfirmAction::Unsaved(cont @ Continuation::Close(doc)) => match choice {
+            ConfirmAction::Unsaved(
+                cont @ (Continuation::Close(doc) | Continuation::Reopen(doc, _)),
+            ) => match choice {
                 0 => self.save_doc_then(doc, cont),
-                _ => self.run_continuation(cont),
-            },
-            ConfirmAction::Unsaved(cont) => match choice {
-                0 => self.save_then(cont),
                 _ => self.run_continuation(cont),
             },
             ConfirmAction::Notice => CommandResult::Done,
@@ -374,7 +365,7 @@ impl EditorState {
             ConfirmAction::ExternalDeleted(doc) => self.choose_external_deleted(doc, choice),
             ConfirmAction::SaveFailed(ask) => self.choose_save_failed(ask, id),
             ConfirmAction::Open(ask) => self.choose_open(ask, id),
-            ConfirmAction::Reload => self.start_reload(),
+            ConfirmAction::Reload(doc) => self.start_reload(doc),
             ConfirmAction::SwapRecovery {
                 entry,
                 doc,
@@ -394,7 +385,7 @@ impl EditorState {
     /// 破棄または保存の後に続ける操作を実行する。
     pub(super) fn run_continuation(&mut self, cont: Continuation) -> CommandResult {
         match cont {
-            Continuation::Reopen(enc) => self.start_reopen(enc),
+            Continuation::Reopen(doc, enc) => self.start_reopen(doc, enc),
             Continuation::Close(doc) => self.close_buffer(doc),
             Continuation::Quit => {
                 self.push_effect(Effect::Quit {

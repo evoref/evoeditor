@@ -103,7 +103,7 @@ impl EditorState {
                 }
                 let policy = self.config().reload_on_external_change;
                 if !dirty && disk.is_some() && policy == ExternalChangePolicy::AutoIfUnmodified {
-                    self.start_reload();
+                    self.start_reload(doc_id);
                     return;
                 }
                 self.open_external(
@@ -179,7 +179,7 @@ impl EditorState {
             if self.active_document() != Some(doc) {
                 return CommandResult::Rejected(RejectReason::NotAvailable);
             }
-            return self.start_reload();
+            return self.start_reload(doc);
         }
         if let Some(d) = self.documents.get_mut(&doc) {
             d.external_seen = Some(stamp);
