@@ -615,7 +615,7 @@ DEALINGS IN THE SOFTWARE.
 利用している crate:
 
 - signal-hook-registry 1.4.8 (https://github.com/vorner/signal-hook)
-- signal-hook 0.3.18 (https://github.com/vorner/signal-hook)
+- signal-hook 0.4.6 (https://github.com/vorner/signal-hook)
 
 ```text
 Copyright (c) 2017 tokio-jsonrpc developers

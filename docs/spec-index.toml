@@ -4843,7 +4843,7 @@ title = "デバッグ支援 (明示 opt-in)"
 id = "09 §11"
 file = "docs/09-testing-quality.md"
 line = 789
-end = 830
+end = 832
 title = "ドキュメント運用"
 
 [[section]]
@@ -4857,28 +4857,28 @@ title = "仕様書 (docs/00〜12)"
 id = "09 §11.2"
 file = "docs/09-testing-quality.md"
 line = 799
-end = 814
+end = 816
 title = "生成ドキュメント (実装との乖離防止)"
 
 [[section]]
 id = "09 §11.3"
 file = "docs/09-testing-quality.md"
-line = 815
-end = 821
+line = 817
+end = 823
 title = "ユーザー向けドキュメント"
 
 [[section]]
 id = "09 §11.4"
 file = "docs/09-testing-quality.md"
-line = 822
-end = 830
+line = 824
+end = 832
 title = "貢献者向け"
 
 [[section]]
 id = "09 §12"
 file = "docs/09-testing-quality.md"
-line = 831
-end = 855
+line = 833
+end = 857
 title = "未決事項"
 
 [[section]]
@@ -8990,109 +8990,109 @@ section = "09 §8.5"
 [[id]]
 id = "OQ-101"
 file = "docs/09-testing-quality.md"
-line = 837
+line = 839
 section = "09 §12"
 
 [[id]]
 id = "OQ-102"
 file = "docs/09-testing-quality.md"
-line = 838
+line = 840
 section = "09 §12"
 
 [[id]]
 id = "OQ-15"
 file = "docs/09-testing-quality.md"
-line = 839
+line = 841
 section = "09 §12"
 
 [[id]]
 id = "OQ-103"
 file = "docs/09-testing-quality.md"
-line = 840
+line = 842
 section = "09 §12"
 
 [[id]]
 id = "OQ-60"
 file = "docs/09-testing-quality.md"
-line = 841
+line = 843
 section = "09 §12"
 
 [[id]]
 id = "OQ-74"
 file = "docs/09-testing-quality.md"
-line = 842
+line = 844
 section = "09 §12"
 
 [[id]]
 id = "OQ-104"
 file = "docs/09-testing-quality.md"
-line = 843
+line = 845
 section = "09 §12"
 
 [[id]]
 id = "OQ-105"
 file = "docs/09-testing-quality.md"
-line = 844
+line = 846
 section = "09 §12"
 
 [[id]]
 id = "OQ-44"
 file = "docs/09-testing-quality.md"
-line = 845
+line = 847
 section = "09 §12"
 
 [[id]]
 id = "OQ-106"
 file = "docs/09-testing-quality.md"
-line = 846
+line = 848
 section = "09 §12"
 
 [[id]]
 id = "OQ-107"
 file = "docs/09-testing-quality.md"
-line = 847
+line = 849
 section = "09 §12"
 
 [[id]]
 id = "OQ-143"
 file = "docs/09-testing-quality.md"
-line = 848
+line = 850
 section = "09 §12"
 
 [[id]]
 id = "OQ-144"
 file = "docs/09-testing-quality.md"
-line = 849
+line = 851
 section = "09 §12"
 
 [[id]]
 id = "OQ-112"
 file = "docs/09-testing-quality.md"
-line = 850
+line = 852
 section = "09 §12"
 
 [[id]]
 id = "OQ-113"
 file = "docs/09-testing-quality.md"
-line = 851
+line = 853
 section = "09 §12"
 
 [[id]]
 id = "OQ-157"
 file = "docs/09-testing-quality.md"
-line = 853
+line = 855
 section = "09 §12"
 
 [[id]]
 id = "OQ-145"
 file = "docs/09-testing-quality.md"
-line = 854
+line = 856
 section = "09 §12"
 
 [[id]]
 id = "OQ-146"
 file = "docs/09-testing-quality.md"
-line = 855
+line = 857
 section = "09 §12"
 
 [[id]]
