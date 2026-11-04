@@ -11,9 +11,9 @@ The Japanese version ([CHANGELOG.md](CHANGELOG.md)) is authoritative. Both are u
 
 ## [Unreleased]
 
-## [0.2.0-rc.1] - TBD
+## [0.2.0] - TBD
 
-The release candidate of v0.2. This release fills everyday gaps and **adds Linux (x86_64 / aarch64)**. It adds automatic saving of unsaved content and recovery, multiple documents, regular-expression search and replace, soft wrap, mouse, themes, an English user interface and more. Downloads are the Windows zip and the Linux tar.gz on GitHub Releases; installation, updating and known limitations are in the bundled `README.md` (English: `README.en.md`). When updating from v0.1.0, settings and rescued files keep working as they are.
+The first release of v0.2. The only product changes from [0.2.0-rc.1] are dependency updates (`signal-hook` 0.4, `unicode-width` 0.2.3, `encoding_rs` 0.8.44) and an adjustment that keeps the width of the half-width katakana voiced and semi-voiced marks (`ﾞ` / `ﾟ`) at 1 regardless of the `unicode-width` version; there is no user-visible difference. This release fills everyday gaps and **adds Linux (x86_64 / aarch64)**. It adds automatic saving of unsaved content and recovery, multiple documents, regular-expression search and replace, soft wrap, mouse, themes, an English user interface and more. Downloads are the Windows zip and the Linux tar.gz on GitHub Releases; installation, updating and known limitations are in the bundled `README.md` (English: `README.en.md`). When updating from v0.1.0, settings and rescued files keep working as they are.
 
 ### Added
 
@@ -37,6 +37,10 @@ See "Known limitations" in the bundled `README.md`. Main ones: macOS is not supp
 - **Secret-file marker of emergency rescues**: when a document whose file name may contain secrets (`.env`, `*.pem`, `id_rsa*`, `.ssh/**`, and so on, docs/07 §5.12.2) was rescued, `sensitive = true` in the manifest and the "please delete it" note on exit were missing. They are now shown. The rescue itself already happened in v0.1.0, and no data was lost.
 - **Emergency rescue gave up the rest after one failed write**: with several documents to rescue, a failed write of one (permissions, locking) ended the rescue without the documents after it. Now only the failed document is marked `written = false`, and the rescue continues for the rest (only a timeout stops it). This prepares for multiple documents in v0.2; it could not happen in v0.1.0 with a single document.
 - **Keep the content of a closed document that is being saved in the emergency rescue**: closing a document while its save was running removed its content from the rescue targets. It is now kept until the result of the save arrives, and written to the rescue location if the save fails.
+
+## [0.2.0-rc.1] - 2026-11-03
+
+The release candidate of v0.2.0. Its contents are included in [0.2.0].
 
 ## [0.1.0] - 2026-10-27
 
