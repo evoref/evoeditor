@@ -1,8 +1,8 @@
 //! シナリオ DSL (TOML) のランナー (docs/11 §6.3、NFR-707、v0.2)。`Harness` の薄い写像で、DSL にできることは Harness にもできる。
 //!
-//! M10 で入れた範囲: `[meta]`・`[setup]` (`size`・`caps = "tui_default"`・`config`・`fs` の `text`)・`[[step]]` (`open`・`run_jobs`・
+//! 対応する範囲: `[meta]`・`[setup]` (`size`・`caps = "tui_default"`・`config`・`fs` の `text`)・`[[step]]` (`open`・`run_jobs`・
 //! `keys`・`text`・`paste`・`advance_ms`・`resize`・`cmd` + `args`)・`[[assert]]` (`at`・`fs`・`query` + `expect`・`frame_contains`・
-//! `events`・`overlay`・`no_panic`)。まだのもの (Frame のゴールデン `frame`、`effects`、`status`、`fs` の `bytes` / `file`、
+//! `events`・`overlay`・`no_panic`)。未対応のもの (Frame のゴールデン `frame`、`effects`、`status`、`fs` の `bytes` / `file`、
 //! `locale`・`caps` の他のプリセット) は読み込むと「未対応」で失敗する。`now`・`seed` は受け付けるが、今のハーネスは時刻 0 から始まり
 //! 乱数を使わないので効果がない。
 //!

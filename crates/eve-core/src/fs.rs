@@ -1,9 +1,8 @@
 //! `FileSystem` Port とその型 (docs/02-architecture.md §4.5 が **唯一の正本**)。eve-core が定義し、本番は eve-platform、
 //! テストは `MemFs` (eve-testkit、障害注入つき) が実装する。**全メソッドはジョブの中からだけ呼ぶ** (ADR-0020: メインスレッドで I/O をしない)。
 //!
-//! 「trait は最初の利用者と同時に定義する」(ADR-0028) ので、今は M1 (開く・保存を `MemFs` で) に要る操作
-//! (`metadata` / `canonicalize` / `open_read` / `write_atomic`) だけを置く。直接上書き (`write_in_place`)・退避ディレクトリ・
-//! 保存中フラグ (`inflight_*`) は、M3 (G1c) で保存・退避を本実装するときに足す。
+//! 「trait は最初の利用者と同時に定義する」(ADR-0028) ので、使う操作だけを置く。読み取り (`metadata` / `canonicalize` / `open_read`)、
+//! 原子的保存 (`write_atomic`)、直接上書き (`write_in_place`)、保存中フラグ (`inflight_*`)、スワップ、退避名の操作などがある。
 
 use std::fmt;
 use std::io;
@@ -39,7 +38,7 @@ pub trait FileSystem: Send + Sync {
         Ok(Vec::new())
     }
 
-    /// `from` を `to` の名前に変える。**`to` が既に在れば失敗する** (置き換えない。M6e の「退避名を元の名前に戻す」、05 §4.6)。
+    /// `from` を `to` の名前に変える。**`to` が既に在れば失敗する** (置き換えない。「退避名を元の名前に戻す」、05 §4.6)。
     /// 同じボリューム内の移動だけ。実装していない Port は `Unsupported`。
     fn rename_no_replace(&self, _from: &FsPath, _to: &FsPath) -> Result<(), FsError> {
         Err(FsError::new(FsErrorKind::Unsupported))
@@ -377,7 +376,7 @@ pub enum FsyncLevel {
     Full,
 }
 
-/// `write_in_place` の事前バックアップの扱い (直接上書きは M3 で足す。型だけ先に置く)。
+/// `write_in_place` の事前バックアップの扱い。
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum InPlaceBackup {
     #[default]
@@ -412,7 +411,7 @@ impl Default for PreserveAttrs {
     }
 }
 
-/// 予約 (v0.3、FR-119)。v0.1 / v0.2 は常に `None`。
+/// 予約 (v0.4、FR-119)。v0.1 / v0.2 / v0.3 は常に `None`。
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum BackupPolicy {

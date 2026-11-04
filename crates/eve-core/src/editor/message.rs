@@ -1,5 +1,5 @@
 //! メッセージ行 (docs/04 §8.9、docs/07 §17、01 FR-505)。MessageKey と引数を選択中の言語で文字列に解決し、
-//! 現在のメッセージとして持つ。Frame の `MessageModel` は `layout` がこれから作る。
+//! 現在のメッセージとして持つ。Frame の `MessageModel` は `layout` が作る。
 
 use eve_config::Catalog;
 use eve_view::{EditorEvent, MessageLevel};
@@ -90,7 +90,7 @@ impl EditorState {
                     R::StatefulEncodingWithInvalidBytes => "stateful_encoding_with_invalid_bytes",
                     R::Binary => "binary",
                     R::LargeFileViewer => "large_file_viewer",
-                    // 読込が終わっていない (v0.3 の Partial)。理由の文言はまだ無い
+                    // 読込が終わっていない (v0.4 の Partial)。理由の文言は無い
                     R::LoadIncomplete => return None,
                 })
             })

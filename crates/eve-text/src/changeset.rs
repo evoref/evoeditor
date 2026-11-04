@@ -3,7 +3,7 @@
 //! xi-editor / Helix / CodeMirror 6 と同じ族の表現で、合成 (`compose`)・逆変換 (`invert`)・位置写像 (`map_pos`) が
 //! 代数的に定義できる。位置はすべて **適用前の文書のバイト位置**。
 //!
-//! 現在は `InsertText::Str` だけ。`Slice` / `Rope` は Undo のメモリ会計と一緒に入れる (03 §6.5、後のタスク)。
+//! 現在は `InsertText::Str` だけ。`Slice` / `Rope` は Undo のメモリ会計と一緒に入れる (03 §6.5)。
 
 use std::fmt;
 use std::sync::Arc;

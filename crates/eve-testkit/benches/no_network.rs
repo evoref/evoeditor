@@ -4,7 +4,7 @@
 //! (docs/09 §3.6 の「無通信」)。
 //!
 //! FS とパスは本物 (Linux は eve-platform の `UnixFs` / `UnixPaths`、Windows は `WinFs` / `WinPaths`): 一時ディレクトリの
-//! ファイルを開いて、原子的保存で書く (v0.2 の M7。それまでは偽物の `MemFs` で FS の経路を除いていた)。
+//! ファイルを開いて、原子的保存で書く (偽物の `MemFs` では FS の経路を通らないため)。
 //!
 //! ```text
 //! cargo bench -p eve-testkit --bench no_network        # シナリオだけを実行 (成功で終了コード 0)

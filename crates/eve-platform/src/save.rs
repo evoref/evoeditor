@@ -5,7 +5,7 @@
 //! 失敗では一時ファイルを消し、元のファイルは無傷に保つ。置換は `ReplaceFileW` だけで、フラグは 0 (ACL・ADS・作成日時は
 //! `ReplaceFileW` が保つ)。置換に失敗して T が無傷なら `AtomicUnsupported` (確認付きの直接上書きは core 側)。
 //!
-//! 範囲外 (後続): 保存中フラグ (05 §4.6 / §7.5)、置換中の計数 (`ReplacingGuard`)、`write_in_place`、一時ファイルの規則 (`InPlacePattern`)、内容ハッシュ。
+//! 直接上書き (`write_in_place`) は `inplace` にある。
 
 #![allow(unsafe_code)]
 

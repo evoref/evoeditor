@@ -1,8 +1,8 @@
 //! 文字コードの判定、チャンク単位のデコード / エンコード、encode→decode 照合 (docs/02 §4.1、docs/03 §8)。
 //!
-//! 現在は M1 の範囲の UTF-8 だけ: `detect` (BOM・バイナリ・UTF-8 の判定)、`Utf8Decoder` / `Utf8Encoder`
-//! (不正バイトの私用文字エスケープと、保存時の復元)。他の文字コード (UTF-16・Shift_JIS・EUC-JP・ISO-2022-JP) は
-//! それぞれの版で足す。他の `eve-*` crate に依存しない。I/O をしない。
+//! `detect` (BOM・バイナリ・文字コードの判定)、`Decoder` / `Encoder` (UTF-8・UTF-16・Shift_JIS・EUC-JP・ISO-2022-JP)、
+//! `Utf8Decoder` / `Utf8Encoder` (不正バイトの私用文字エスケープと、保存時の復元)、往復の検査 (`RoundtripChecker`)。
+//! 他の `eve-*` crate に依存しない。I/O をしない。
 
 #![forbid(unsafe_code)]
 

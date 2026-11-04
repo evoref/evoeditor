@@ -2,7 +2,7 @@
 //!
 //! 位置は `NodeId` (文書ごとの単調増加の通番) で表し、スタック上の深さでは表さない (§7.1)。
 //! 結合規則 R1〜R9 (§7.3) は `UndoHistory::record` が上から順に評価する。
-//! `FormatChange` (Reload が `TextFormat` と読み取り専用の理由を本文と一緒に戻す)。改行コード変換の利用者は後続。
+//! `FormatChange` (Reload が `TextFormat` と読み取り専用の理由を本文と一緒に戻す。改行コード変換も使う)。
 
 use std::collections::VecDeque;
 

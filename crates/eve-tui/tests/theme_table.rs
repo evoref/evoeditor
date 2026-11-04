@@ -1,6 +1,6 @@
 //! 組込みテーマ `default` の実装と、docs/07 §8.2 のロール表の突合 (docs/09 §3.5 の `xtask check-themes` の (e)(f))。
 //! eve-tui が描く領域のロール (`theme::ROLES`) は、表の truecolor と mono の段と値まで一致すること。表にあって eve-tui に
-//! ないロールは core が解決する編集面のロールで、core の実装 (M3 以降) で別に突合する。
+//! ないロールは core が解決する編集面のロールで、core の側で別に突合する。
 
 use std::path::PathBuf;
 

@@ -1,8 +1,7 @@
 //! `Frontend` の TUI 実装 (docs/02 §9.2、docs/04 §14)。端末の初期化と復元、入力スレッドの起動、描画。OS ごとの端末の部品は
 //! `win` (Windows のコンソール) と `unix` (`/dev/tty`) で、同じ形 (`ConsoleInput`・`ConsoleOut`・`spawn_input_thread`) をしている。
 //!
-//! 現在の範囲 (M2 の E5): 編集面・クローム・オーバーレイの描画。マウス・フォーカス・ブラケットペースト・拡張キーは
-//! v0.1 では有効にしない (04 §14.1)。復元は冪等で、どの終了経路でも `restore` (または `Drop`) で行う。
+//! 編集面・クローム・オーバーレイを描画する。復元は冪等で、どの終了経路でも `restore` (または `Drop`) で行う。
 
 use std::io;
 use std::thread::JoinHandle;

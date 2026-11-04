@@ -85,7 +85,7 @@ impl MapPolicy {
 }
 
 /// 複数の `Range`。非空で、`primary` はそのうちの 1 つを指す。
-/// v0.1〜v0.3 は 1 つに制限されるが、編集コマンドは複数を前提に書く (03 §4.5)。
+/// v0.1〜v0.4 は 1 つに制限されるが、編集コマンドは複数を前提に書く (03 §4.5)。
 /// 内部は `Vec` (仕様の `SmallVec` は依存を増やすので使わない。1 要素の確保は View ごとの低頻度)。
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Selection {

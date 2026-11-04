@@ -387,7 +387,7 @@ fn parse(text: &str) -> (Option<Parsed>, Vec<Diagnostic>) {
                     }
                 }
             }
-            // シンタックスのスコープは v0.4 (tree-sitter と一緒)
+            // シンタックスのスコープは v0.6 (tree-sitter と一緒)
             ("syntax", _) => cx.info(name, k.span().start),
             _ => cx.warn(
                 DiagKind::UnknownKey { suggestion: None },
