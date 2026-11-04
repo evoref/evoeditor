@@ -989,6 +989,51 @@ fn busy_のときだけ再試行でき_照合を通って保存される() {
     assert!(dialog_open(&s));
 }
 
+// 03 §9.7: 開き直しの「保存」の後続は、保存した文書に属する。保存の完了までに別の dirty な文書へ
+// 切り替えても、その文書を開き直さない (未保存の編集と履歴を失わない)。docs/review/v0.3-findings.md の SAF-01
+#[test]
+fn 開き直しの保存中に別の文書へ切り替えても_その文書は開き直さない() {
+    let mut s = Env::new();
+    s.fs.add_file("/w/a.txt", b"aaa\n");
+    s.fs.add_file("/w/b.txt", b"bbb\n");
+    s.open("/w/a.txt");
+    let (a, _) = s.doc();
+    s.type_text("x");
+    s.open("/w/b.txt");
+    let (b, _) = s.doc();
+    assert_ne!(a, b);
+    s.type_text("y");
+    let b_text = s.text();
+    s.run("buffer.prev", Args::new());
+    assert_eq!(s.doc().0, a);
+    // A を開き直す → 未保存の確認で「保存」(s)。保存ジョブはまだ走らせない
+    s.e.execute(
+        CommandInvocation::new("file.reopen_with_encoding", InvocationSource::Keymap)
+            .with_args(Args::new().with_str("encoding", "shift_jis")),
+    );
+    assert!(dialog_open(&s), "未保存の確認 (ui.confirm.unsaved_reopen)");
+    s.type_text("s");
+    // 保存の完了の前に B へ切り替える
+    s.e.execute(CommandInvocation::new(
+        "buffer.next",
+        InvocationSource::Keymap,
+    ));
+    assert_eq!(s.doc().0, b);
+    s.pump();
+    // B は開き直されず、未保存の編集と履歴が残る
+    let bd = s.e.state().document(b).unwrap();
+    assert!(bd.is_dirty(), "B の未保存の編集が残る");
+    assert_eq!(bd.to_string_lossy(), b_text);
+    assert!(!dialog_open(&s));
+    s.run("edit.undo", Args::new());
+    assert_eq!(s.text(), "bbb\n", "B の履歴が残る");
+    // A は保存されてから Shift_JIS で開き直された
+    let ad = s.e.state().document(a).unwrap();
+    assert_eq!(ad.format.encoding, eve_core::Encoding::ShiftJis);
+    assert_eq!(ad.to_string_lossy(), "xaaa\n");
+    assert!(!ad.is_dirty());
+}
+
 fn sjis_bytes(s: &str) -> Vec<u8> {
     let (b, _, _) = encoding_rs::SHIFT_JIS.encode(s);
     b.into_owned()

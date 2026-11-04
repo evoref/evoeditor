@@ -464,15 +464,8 @@ impl EditorState {
         self.start_save(doc_id, path, expected, None)
     }
 
-    /// 確認で「保存」を選んだ後: 保存し、成功したら `cont` を続ける。パスがなければ名前を尋ねてから保存する。
-    pub(super) fn save_then(&mut self, cont: Continuation) -> CommandResult {
-        let Some(doc_id) = self.active_document() else {
-            return CommandResult::Rejected(RejectReason::NoTarget);
-        };
-        self.save_doc_then(doc_id, cont)
-    }
-
-    /// `save_then` を、アクティブ文書ではなく `doc_id` に対して行う (保存の連鎖は保存した文書に属する、03 §9.8)。
+    /// 確認で「保存」を選んだ後: `doc_id` を保存し、成功したら `cont` を続ける。パスがなければ名前を尋ねてから保存する。
+    /// 対象はアクティブ文書ではなく `doc_id` (保存の連鎖は保存した文書に属する、03 §9.8)。
     pub(super) fn save_doc_then(
         &mut self,
         doc_id: DocumentId,
@@ -1950,16 +1943,17 @@ impl EditorState {
             self.open_prompt(PromptKind::ReopenEncoding, String::new());
             return CommandResult::Done;
         };
-        if self.confirm_if_dirty("unsaved_reopen", Continuation::Reopen(enc)) {
+        if self.confirm_doc_if_dirty(doc_id, "unsaved_reopen", Continuation::Reopen(doc_id, enc)) {
             return CommandResult::Done;
         }
-        self.start_reopen(enc)
+        self.start_reopen(doc_id, enc)
     }
 
     /// 確認を済ませた (または dirty でない) 開き直しの開始。同じ `DocumentId` で読込ジョブを投入し、読込中は旧本文を表示し続ける。
-    pub(super) fn start_reopen(&mut self, enc: Encoding) -> CommandResult {
+    pub(super) fn start_reopen(&mut self, doc_id: DocumentId, enc: Encoding) -> CommandResult {
         // 利用者の指定と書込権限の理由は開き直しでも保つ (03 §8.8 の「読み取り専用の理由の差し替え」)
         self.start_in_place(
+            doc_id,
             OpenKind::Reopen,
             &[
                 crate::document::ReadOnlyReason::UserRequested,
@@ -1970,9 +1964,10 @@ impl EditorState {
     }
 
     /// 確認を済ませた (または dirty でない) 再読込の開始 (03 §9.5)。文字コードは今のものを明示指定して判定し直さない。
-    pub(super) fn start_reload(&mut self) -> CommandResult {
+    pub(super) fn start_reload(&mut self, doc_id: DocumentId) -> CommandResult {
         // 再読込は `Binary` と `LargeFileViewer` も保つ (明示指定の読込ではバイナリの判定をしない)
         self.start_in_place(
+            doc_id,
             OpenKind::Reload,
             &[
                 crate::document::ReadOnlyReason::UserRequested,
@@ -1984,22 +1979,29 @@ impl EditorState {
         )
     }
 
-    /// 同じ文書・View の中身を差し替える読込ジョブの投入。`keep` は今の文書から引き継ぐ読み取り専用の理由。
-    /// `enc` が無ければ今の文書の文字コードを明示指定する。
+    /// 文書 `doc_id` の中身を同じ文書・View のまま差し替える読込ジョブの投入。`keep` は今の文書から引き継ぐ
+    /// 読み取り専用の理由。`enc` が無ければ今の文書の文字コードを明示指定する。対象はアクティブな文書とは
+    /// 限らない (保存の後続・外部変更の確認の結果は、その文書に属する、03 §9.7)。
     fn start_in_place(
         &mut self,
+        doc_id: DocumentId,
         kind: OpenKind,
         keep: &[crate::document::ReadOnlyReason],
         enc: Option<Encoding>,
     ) -> CommandResult {
-        let Some(doc_id) = self.active_document() else {
-            return CommandResult::Rejected(RejectReason::NoTarget);
-        };
-        let Some(w) = self.first_window() else {
-            return CommandResult::Rejected(RejectReason::NoTarget);
-        };
-        let Some(view) = self.window_view(w) else {
-            return CommandResult::Rejected(RejectReason::NoTarget);
+        // その文書を表示している View (Window が表示していれば、その View)
+        let shown = self
+            .first_window()
+            .and_then(|w| self.window_view(w))
+            .filter(|v| self.views.get(v).is_some_and(|v| v.doc == doc_id));
+        let view = match shown.or_else(|| {
+            self.views
+                .iter()
+                .find(|(_, v)| v.doc == doc_id)
+                .map(|(id, _)| *id)
+        }) {
+            Some(v) => v,
+            None => return CommandResult::Rejected(RejectReason::NoTarget),
         };
         let Some(doc) = self.documents.get_mut(&doc_id) else {
             return CommandResult::Rejected(RejectReason::NoTarget);
@@ -2082,11 +2084,11 @@ impl EditorState {
                 details: Vec::new(),
                 default: 1,
                 focused: 1,
-                action: ConfirmAction::Reload,
+                action: ConfirmAction::Reload(doc_id),
             });
             return CommandResult::Done;
         }
-        self.start_reload()
+        self.start_reload(doc_id)
     }
 
     /// 再読込の適用 (03 §9.5 手順 5): 新しい内容を全置換の `Origin::Reload` の Transaction として適用する。
@@ -2465,7 +2467,7 @@ impl EditorState {
                         return;
                     }
                     let name = match c {
-                        Continuation::Reopen(_) => "unsaved_reopen",
+                        Continuation::Reopen(..) => "unsaved_reopen",
                         Continuation::Close(_) => "unsaved_close",
                         _ => "unsaved",
                     };
