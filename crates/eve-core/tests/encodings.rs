@@ -510,3 +510,87 @@ fn euc_jp_の補助漢字を含む文書は編集して保存すると何も書�
     assert_eq!(s.e.state().overlay_kind(), "dialog", "E3 の選択肢が出る");
     assert_eq!(s.fs.read("/w/a.txt").unwrap(), bytes, "何も書かれない");
 }
+
+// ---------- 不正バイトのエスケープ文字の書き方 (03 §8.3、E4。docs/review/v0.3-findings.md の SAF-02 / 02b) ----------
+
+/// 入力欄を空にしてから `text` を打ち、Enter で確定する (名前を付けて保存のプロンプト)。
+fn submit_prompt(s: &mut Env, text: &str) {
+    let w = s.win();
+    for _ in 0..256 {
+        s.e.handle_input(
+            w,
+            InputEvent::Key(eve_view::KeyEvent::press(
+                eve_view::KeyCode::Backspace,
+                eve_view::Modifiers::NONE,
+            )),
+        );
+    }
+    s.type_text(text);
+    s.e.handle_input(
+        w,
+        InputEvent::Key(eve_view::KeyEvent::press(
+            eve_view::KeyCode::Enter,
+            eve_view::Modifiers::NONE,
+        )),
+    );
+    s.pump();
+}
+
+#[test]
+fn 不正バイトを含む文書を別の文字コードで別名保存すると_元のバイトを書かずに表現不能として止める() {
+    let mut s = Env::new();
+    s.fs.add_file("/w/a.txt", b"a\x80bc\n");
+    s.open("/w/a.txt");
+    s.accept_read_only();
+    assert!(s.doc().format.invalid_bytes > 0);
+    s.run(
+        "file.set_encoding",
+        Args::new().with_str("encoding", "utf-16le"),
+    );
+    assert_eq!(
+        s.e.state().overlay_kind(),
+        "prompt",
+        "読み取り専用の文書は名前を付けて保存の流れ"
+    );
+    submit_prompt(&mut s, "/w/u16.txt");
+    // UTF-16LE の中に元の 1 バイト (0x80) を書くと、以降のすべての文字が 1 バイトずれる
+    assert!(s.fs.read("/w/u16.txt").is_none(), "何も書かれない");
+    assert_eq!(s.e.state().overlay_kind(), "dialog", "表現不能の確認が出る");
+    assert_eq!(
+        s.fs.read("/w/a.txt").unwrap(),
+        b"a\x80bc\n",
+        "元のファイルは変わらない"
+    );
+}
+
+#[test]
+fn 不正バイトを含む文書を同じ文字コードで別名保存すると_元のバイトに戻して書く() {
+    let mut s = Env::new();
+    s.fs.add_file("/w/a.txt", b"a\x80bc\n");
+    s.open("/w/a.txt");
+    s.accept_read_only();
+    s.run("file.save_as", Args::new().with_str("path", "/w/copy.txt"));
+    s.pump();
+    assert_eq!(
+        s.fs.read("/w/copy.txt").unwrap(),
+        b"a\x80bc\n",
+        "バイト一致 (NFR-303)"
+    );
+}
+
+#[test]
+fn 不正バイトの無い文書に貼ったエスケープ文字は_元のバイトに戻さず表現不能として止める() {
+    let mut s = Env::new();
+    s.fs.add_file("/w/b.txt", b"xyz\n");
+    s.open("/w/b.txt");
+    assert_eq!(s.doc().format.invalid_bytes, 0);
+    // 他の文書からエスケープ文字 (U+10FF80 = 0x80 の印) を貼り付けた
+    s.type_text("\u{10FF80}");
+    s.save();
+    assert_eq!(s.e.state().overlay_kind(), "dialog", "表現不能の確認が出る");
+    assert_eq!(
+        s.fs.read("/w/b.txt").unwrap(),
+        b"xyz\n",
+        "生のバイト 0x80 を書かない"
+    );
+}

@@ -14,6 +14,7 @@ The Japanese version ([CHANGELOG.md](CHANGELOG.md)) is authoritative. Both are u
 ### Fixed
 
 - **Reopening with another encoding could lose another document's unsaved changes**: after choosing "Reopen with Encoding" on a document with unsaved changes and choosing "Save" in the confirmation, switching to another document with unsaved changes before the save finished made evoeditor reopen the document you switched to, without asking, discarding its unsaved edits and undo history. Only the saved document is reopened now.
+- **Saving a file with invalid bytes in another encoding produced a broken file**: when a file containing invalid bytes was saved in another encoding (such as UTF-16) with "Save with Encoding", evoeditor wrote the original invalid bytes as they were, producing a file in which the following characters were shifted (or merged with the neighboring bytes), and reported that the file was saved. Invalid bytes are now treated as characters that cannot be represented when saving in another encoding: nothing is written and a confirmation is shown. Invalid-byte markers pasted from another file are handled the same way.
 
 ## [0.2.0] - 2026-11-04
 

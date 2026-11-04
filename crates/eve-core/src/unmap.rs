@@ -4,7 +4,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use eve_encoding::{EncodeReport, Encoder, Encoding, EscapePolicy, PuaEscapeMode};
+use eve_encoding::{EncodeReport, Encoder, Encoding, EscapePolicy};
 use eve_text::{ByteOff, ByteRange, ChangeSet, Edit, Snapshot, TextRead};
 
 use crate::cancel::CancelToken;
@@ -86,8 +86,8 @@ fn replacement(enc: Encoding, ch: char) -> (char, Kind) {
 }
 
 /// `ch` 1 文字が保存先の文字コードで表現不能か (黙って別の文字に写される場合を含む、E1)。
-fn is_unmappable(enc: Encoding, pua: PuaEscapeMode, ch: char) -> bool {
-    let mut e = Encoder::new(enc, false, EscapePolicy::from_mode(pua));
+fn is_unmappable(enc: Encoding, escape: EscapePolicy, ch: char) -> bool {
+    let mut e = Encoder::new(enc, false, escape);
     let mut report = EncodeReport::default();
     let mut sink = Vec::new();
     let mut buf = [0u8; 4];
@@ -100,7 +100,7 @@ fn is_unmappable(enc: Encoding, pua: PuaEscapeMode, ch: char) -> bool {
 pub fn build_replacement(
     snapshot: &Snapshot,
     enc: Encoding,
-    pua: PuaEscapeMode,
+    escape: EscapePolicy,
     cancel: &CancelToken,
 ) -> Result<Option<(ChangeSet, Vec<ReplaceTarget>, ReplaceCounts)>, ()> {
     let body = snapshot.slice_to_string(ByteRange::all(snapshot.len_bytes()));
@@ -117,7 +117,7 @@ pub fn build_replacement(
         }
         let bad = *cache
             .entry(ch)
-            .or_insert_with(|| is_unmappable(enc, pua, ch));
+            .or_insert_with(|| is_unmappable(enc, escape, ch));
         if !bad {
             continue;
         }
@@ -188,8 +188,8 @@ mod tests {
 
     #[test]
     fn 表現不能の判定() {
-        let pua = PuaEscapeMode::Enabled;
-        assert!(is_unmappable(Encoding::ShiftJis, pua, '😀'));
-        assert!(!is_unmappable(Encoding::ShiftJis, pua, 'あ'));
+        let escape = EscapePolicy::Reject;
+        assert!(is_unmappable(Encoding::ShiftJis, escape, '😀'));
+        assert!(!is_unmappable(Encoding::ShiftJis, escape, 'あ'));
     }
 }
