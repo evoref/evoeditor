@@ -800,4 +800,96 @@ mod tests {
             }
         ));
     }
+
+    /// `write_atomic` の途中で取消しが届き (利用者が「保存を中止して終了」を選んだ)、そのあと Port が `kind` で失敗する FS。
+    struct CancelledMidSave {
+        cancel: CancelToken,
+        kind: FsErrorKind,
+    }
+    impl FileSystem for CancelledMidSave {
+        fn metadata(&self, _: &FsPath) -> Result<FileMeta, FsError> {
+            Ok(meta())
+        }
+        fn canonicalize(&self, p: &FsPath) -> Result<FsPath, FsError> {
+            Ok(p.clone())
+        }
+        fn open_read(&self, _: &FsPath) -> Result<Box<dyn ReadChunks + Send>, FsError> {
+            Err(FsError::new(FsErrorKind::Other))
+        }
+        fn write_atomic(
+            &self,
+            _: &FsPath,
+            _: &mut dyn ReadChunks,
+            _: &SaveOptions,
+        ) -> Result<SaveReport, FsError> {
+            self.cancel.cancel();
+            Err(FsError::new(self.kind.clone()))
+        }
+    }
+
+    fn save_cancelled_mid(kind: FsErrorKind) -> JobResult {
+        let cancel = CancelToken::new();
+        let p = JobPorts {
+            fs: Arc::new(CancelledMidSave {
+                cancel: cancel.clone(),
+                kind,
+            }),
+            clock: Arc::new(StubClock),
+            paths: Arc::new(StubPaths),
+        };
+        let r = JobRequest {
+            id: JobId(9),
+            doc: None,
+            base: Revision(0),
+            kind: JobKind::Save {
+                path: FsPath::from("/a"),
+                snapshot: Text::from("abc").snapshot(),
+                encoding: Encoding::Utf8,
+                bom: false,
+                escape: EscapePolicy::Restore,
+                expected: Expect::Any,
+                strategy: SaveStrategy::default(),
+                clear_readonly: false,
+                create_link_target: false,
+            },
+        };
+        let mut out = Vec::new();
+        run_job(&r, &p, &cancel, &mut |x| out.push(x));
+        out.pop().expect("終端の結果")
+    }
+
+    // 05 §4.1 手順 5、NFR-301 AC-2 (docs/review/v0.3-findings.md の SAF-04)
+    #[test]
+    fn 置換を始めた後の失敗は_取消しが届いていても失敗のまま返す() {
+        let backup = FsPath::from("/.a.eve-bak-1");
+        let r = save_cancelled_mid(FsErrorKind::ReplacedMovedToBackup {
+            backup: backup.clone(),
+        });
+        assert!(
+            matches!(&r, JobResult::Failed { err: JobError::Fs(e), .. }
+                if e.kind == FsErrorKind::ReplacedMovedToBackup { backup: backup.clone() }),
+            "{r:?}"
+        );
+        let r = save_cancelled_mid(FsErrorKind::InPlaceFailed { backup: None });
+        assert!(
+            matches!(&r, JobResult::Failed { err: JobError::Fs(e), .. }
+                if matches!(e.kind, FsErrorKind::InPlaceFailed { .. })),
+            "{r:?}"
+        );
+    }
+
+    #[test]
+    fn 何も書いていない失敗は_取消しが届いていれば取消しとして返す() {
+        let r = save_cancelled_mid(FsErrorKind::Conflict { current: None });
+        assert!(
+            matches!(
+                r,
+                JobResult::Failed {
+                    err: JobError::Cancelled,
+                    ..
+                }
+            ),
+            "{r:?}"
+        );
+    }
 }

@@ -471,6 +471,14 @@ impl SnapshotSource<'_> {
     }
 }
 
+/// 保存先 T に手を付けた後の失敗か (元のファイルが退避名に移った・直接上書きの途中で失敗した)。
+fn wrote_target(e: &crate::FsError) -> bool {
+    matches!(
+        e.kind,
+        crate::FsErrorKind::ReplacedMovedToBackup { .. } | crate::FsErrorKind::InPlaceFailed { .. }
+    )
+}
+
 /// 保存ジョブの引数。
 pub(crate) struct SaveParams<'a> {
     pub path: &'a FsPath,
@@ -597,7 +605,10 @@ pub(crate) fn run_save(
             }
             JobResult::Saved { job: id, report }
         }
-        Err(_) if cancel.is_cancelled() => JobResult::Failed {
+        // 取消しを優先するのは、何も書いていない失敗だけ。置換を始めた後の失敗 (元のファイルが退避名に移った・
+        // 直接上書きの途中で壊れた) は、取消しを送った後でも必ずそのまま返し、退避先を利用者に示す
+        // (05 §4.1 手順 5、NFR-301 AC-2。docs/review/v0.3-findings.md の SAF-04)
+        Err(e) if cancel.is_cancelled() && !wrote_target(&e) => JobResult::Failed {
             job: id,
             err: JobError::Cancelled,
         },

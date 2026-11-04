@@ -209,3 +209,24 @@ fn 保存の失敗は他の文書の保存を止めない() {
     assert_eq!(s.fs.read("/w/b.txt").unwrap(), b"bbb!");
     assert_eq!(s.overlay(), "dialog");
 }
+
+// NFR-301 AC-2: 元のファイルが退避名に移った失敗は、一覧に退避名を出す (docs/review/v0.3-findings.md の SAF-16)
+#[test]
+fn 置換の途中で失敗した文書は_一覧に退避名を出す() {
+    let mut s = Env::new();
+    s.add_dirty(Some("/w/a.txt"), "aaa");
+    s.fs.fail_next(
+        eve_testkit::FsOp::WriteAtomic,
+        eve_core::FsErrorKind::ReplacedMovedToBackup {
+            backup: "/w/.a.txt.eve-bak-1".into(),
+        },
+    );
+    s.run("file.save_all");
+    assert_eq!(s.overlay(), "dialog");
+    let (_, details) = s.dialog();
+    assert_eq!(details.len(), 1, "{details:?}");
+    assert!(
+        details[0].starts_with("/w/a.txt: ") && details[0].contains("/w/.a.txt.eve-bak-1"),
+        "{details:?}"
+    );
+}

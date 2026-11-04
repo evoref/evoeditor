@@ -196,6 +196,17 @@ impl EditorState {
                 });
                 true
             }
+            // ワーカーのパニック・メモリ不足: 保存できたかが分からないので、失敗の行を出す (黙って終わらない)
+            JobResult::Failed {
+                err: err @ (JobError::Panic | JobError::OutOfMemory { .. }),
+                ..
+            } => {
+                abort.stderr.push(line(
+                    "stderr.quit_abort.save_failed",
+                    vec![("path", p), ("reason", super::file::reason_label(err))],
+                ));
+                true
+            }
             // 取り消された (何も書いていない) ・採用する成功は通常の経路 (`Saved` は呼び出し側が採用する)
             JobResult::Failed { .. } => true,
             _ => false,
