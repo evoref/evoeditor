@@ -299,3 +299,71 @@ fn 期限は_dirty_な文書があるときだけ出る() {
     typed(&mut h, "a");
     assert!(h.editor.next_deadline().is_some());
 }
+
+// ---------- 消してよいのは、未保存の内容を失わないと確定したときだけ (03 §10.2。docs/review/v0.3-findings.md の SAF-03 / 21) ----------
+
+/// スワップを 1 つ書いた状態 (`/w/a.txt` に未保存の編集)。
+fn with_swap() -> Harness {
+    let mut h = opened("/w/a.txt", b"x");
+    typed(&mut h, "y");
+    h.advance_ms(2000);
+    h.run_jobs();
+    assert_eq!(h.fs.swap_count(), 1);
+    h
+}
+
+#[test]
+fn 上書き保存に失敗して読み取り専用になった_dirty_な文書のスワップは消さない() {
+    let mut h = with_swap();
+    h.fs.fail_next(FsOp::WriteAtomic, FsErrorKind::PermissionDenied);
+    h.keys("ctrl+s");
+    h.run_jobs();
+    h.keys("esc");
+    h.advance_ms(0);
+    h.run_jobs();
+    h.advance_ms(60_000);
+    h.run_jobs();
+    assert!(h.is_dirty());
+    assert_eq!(
+        h.fs.swap_count(),
+        1,
+        "強制終了・電源断に備えて、最後のスワップを残す"
+    );
+}
+
+#[test]
+fn dirty_な文書を読み取り専用に切り替えてもスワップは消さない() {
+    let mut h = with_swap();
+    h.cmd("file.toggle_read_only");
+    h.advance_ms(0);
+    h.run_jobs();
+    h.advance_ms(60_000);
+    h.run_jobs();
+    assert!(h.is_dirty());
+    assert_eq!(h.fs.swap_count(), 1);
+}
+
+#[test]
+fn 名前を付けて保存でパスが変わったら_新しい名前で書く前に旧パスのスワップを消す() {
+    let mut h = with_swap();
+    let doc = h.doc_id();
+    // 保存の完了の前に編集する (保存の後も dirty のまま、新しいパスで書き直す)
+    h.cmd_with(
+        "file.save_as",
+        eve_core::Args::new().with_str("path", "/w/b.txt"),
+    );
+    typed(&mut h, "z");
+    h.run_jobs();
+    assert!(h.is_dirty());
+    assert_eq!(h.doc_path().as_deref(), Some("/w/b.txt"));
+    for _ in 0..3 {
+        h.advance_ms(10_000);
+        h.run_jobs();
+    }
+    assert_eq!(h.fs.swap_count(), 1, "旧パスの名前のスワップを残さない");
+    assert_eq!(
+        h.fs.swap_path_of(doc),
+        Some(Some(eve_core::FsPath::from("/w/b.txt")))
+    );
+    assert_eq!(h.fs.swap_of(doc).unwrap(), b"yzx");
+}

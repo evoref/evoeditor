@@ -109,6 +109,21 @@ impl EditorState {
         Some(d.revision())
     }
 
+    /// ディスクのスワップが要らなくなったか (消してよいか)。消すのは、未保存の内容を失わないと確定したときだけ
+    /// (03 §10.2): 保存や破棄で clean になった、閉じて破棄が確定した (保存中に閉じた文書は、保存が終わって
+    /// 公開物を外すまで残す)、スワップを使わない設定にした。読み取り専用になった・読込中・上限を超えた・
+    /// 秘密ファイルの除外に当たるようになっただけの dirty な文書のスワップは、書き足さないが消さない
+    /// (残したスワップは、正常終了の片付けか次の起動の復旧の提案で扱う。docs/review/v0.3-findings.md の SAF-03)。
+    fn swap_obsolete(&self, id: DocumentId) -> bool {
+        if !self.config.swap_enabled {
+            return true;
+        }
+        match self.documents.get(&id) {
+            Some(d) => !d.is_dirty(),
+            None => !self.closing_snapshots.contains_key(&id),
+        }
+    }
+
     /// 次に書く時刻。気づいていない (`seen` が無い) ときは `None`。
     fn swap_due(&self, e: &SwapDoc) -> Option<Tick> {
         let (_, seen_at) = e.seen?;
@@ -150,17 +165,12 @@ impl EditorState {
         let busy = e.inflight.is_some() || e.discarding.is_some();
         let Some(rev) = eligible else {
             // 書込中・削除中は完了を待つ (結果の処理の後の tick で見直す)
-            if !busy && e.on_disk && e.discard_retry_at.is_none_or(|t| now >= t) {
-                let job = self.jobs.spawn(
-                    Some(id),
-                    Revision(0),
-                    JobKind::SwapDiscard {
-                        doc: id,
-                        path: e.path.clone(),
-                    },
-                );
-                self.pending.insert(job, Pending::SwapDiscard { doc: id });
-                e.discarding = Some(job);
+            if !busy
+                && e.on_disk
+                && self.swap_obsolete(id)
+                && e.discard_retry_at.is_none_or(|t| now >= t)
+            {
+                self.spawn_swap_discard(id, &mut e);
             }
             // 書いていなければ記録は要らない
             if e.on_disk {
@@ -168,6 +178,16 @@ impl EditorState {
             }
             return;
         };
+        // 名前を付けて保存などで文書のパスが変わった: スワップの名前はパスから作るので、新しい名前で書く前に
+        // 旧パスの名前のスワップを消す (残すと、次の起動で古い内容を旧パスの復旧として提案する、03 §9.3。SAF-21)
+        let cur_path = self.documents.get(&id).and_then(|d| d.path.clone());
+        if e.on_disk && e.path != cur_path {
+            if !busy && e.discard_retry_at.is_none_or(|t| now >= t) {
+                self.spawn_swap_discard(id, &mut e);
+            }
+            self.swap.docs.insert(id, e);
+            return;
+        }
         // 書込中の Snapshot より後の変更も、気づいた時刻を記録する (完了後に最新で 1 回、期限どおりに書くため)
         let covered = e.inflight.map(|(_, r)| r).or(e.written);
         if covered == Some(rev) {
@@ -200,6 +220,20 @@ impl EditorState {
         self.swap.docs.insert(id, e);
     }
 
+    /// 文書 `id` のディスクのスワップ (書いたときのパスの名前) を消すジョブを投入する。
+    fn spawn_swap_discard(&mut self, id: DocumentId, e: &mut SwapDoc) {
+        let job = self.jobs.spawn(
+            Some(id),
+            Revision(0),
+            JobKind::SwapDiscard {
+                doc: id,
+                path: e.path.clone(),
+            },
+        );
+        self.pending.insert(job, Pending::SwapDiscard { doc: id });
+        e.discarding = Some(job);
+    }
+
     /// 次に `tick` が要る時刻 (スワップを書く・消す時刻)。
     pub(super) fn swap_deadline(&self) -> Option<Tick> {
         if self.swap.stopped {
@@ -210,11 +244,18 @@ impl EditorState {
             .iter()
             .filter(|(_, e)| e.inflight.is_none() && e.discarding.is_none())
             .filter_map(|(id, e)| {
-                if self.swap_eligible(*id).is_some() {
-                    self.swap_due(e)
-                } else if e.on_disk {
+                // 消すもの (swap_step と同じ条件): 要らなくなったスワップと、パスが変わった後の旧パスのスワップ
+                let path_changed =
+                    e.on_disk && e.path != self.documents.get(id).and_then(|d| d.path.clone());
+                let eligible = self.swap_eligible(*id).is_some();
+                if e.on_disk
+                    && ((!eligible && self.swap_obsolete(*id)) || (eligible && path_changed))
+                {
                     Some(e.discard_retry_at.unwrap_or(self.now))
+                } else if eligible {
+                    self.swap_due(e)
                 } else {
+                    // 書けなくなった dirty な文書のスワップは残す (tick は要らない)
                     None
                 }
             })

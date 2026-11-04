@@ -27,6 +27,16 @@ pub enum FsOp {
     DiscardSwap,
 }
 
+/// このプロセスのスワップの鍵 (パス、無題なら文書)。
+type SwapKey = (Option<FsPath>, Option<eve_view::DocumentId>);
+
+fn swap_key(path: Option<&FsPath>, doc: eve_view::DocumentId) -> SwapKey {
+    match path {
+        Some(p) => (Some(p.clone()), None),
+        None => (None, Some(doc)),
+    }
+}
+
 /// `write_atomic` のステップ (失敗を注入でき、到達したステップは `MemFs::steps` に残る)。
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum WriteStep {
@@ -71,7 +81,9 @@ struct State {
     /// 「退避先に保存」で書いた本文。
     recovered: Vec<(FsPath, Vec<u8>)>,
     /// スワップ (文書 → 書いたときのパスと本文)。
-    swaps: BTreeMap<eve_view::DocumentId, (Option<FsPath>, Vec<u8>)>,
+    /// このプロセスのスワップ。鍵は本番の名前の付け方 (eve-platform の `swap_name`) と同じく、パスがあればパス、
+    /// 無題なら文書。パスが変わった後に書くと別のスワップになる (旧パスのものは消すまで残る)。値は (文書, 本文)。
+    swaps: BTreeMap<SwapKey, (eve_view::DocumentId, Vec<u8>)>,
     /// `write_swap` が成功した回数。
     swap_writes: u32,
     /// スワップを実装していない Port のふり (`Unsupported` を返す)。
@@ -221,12 +233,20 @@ impl MemFs {
 
     /// 文書のスワップの本文 (無ければ `None`)。
     pub fn swap_of(&self, doc: eve_view::DocumentId) -> Option<Vec<u8>> {
-        self.st().swaps.get(&doc).map(|(_, b)| b.clone())
+        self.st()
+            .swaps
+            .values()
+            .find(|(d, _)| *d == doc)
+            .map(|(_, b)| b.clone())
     }
 
     /// 文書のスワップを書いたときのパス (`Some(None)` は無題)。
     pub fn swap_path_of(&self, doc: eve_view::DocumentId) -> Option<Option<FsPath>> {
-        self.st().swaps.get(&doc).map(|(p, _)| p.clone())
+        self.st()
+            .swaps
+            .iter()
+            .find(|(_, (d, _))| *d == doc)
+            .map(|(k, _)| k.0.clone())
     }
 
     /// 残っているスワップの数。
@@ -524,7 +544,10 @@ impl FileSystem for MemFs {
             return Err(FsError::new(FsErrorKind::Unsupported));
         }
         injected(&mut s, FsOp::WriteSwap)?;
-        s.swaps.insert(doc.doc, (doc.path.clone(), doc.to_vec()));
+        s.swaps.insert(
+            swap_key(doc.path.as_ref(), doc.doc),
+            (doc.doc, doc.to_vec()),
+        );
         s.swap_writes += 1;
         Ok(())
     }
@@ -532,14 +555,14 @@ impl FileSystem for MemFs {
     fn discard_swap(
         &self,
         doc: eve_view::DocumentId,
-        _path: Option<&FsPath>,
+        path: Option<&FsPath>,
     ) -> Result<(), FsError> {
         let mut s = self.st();
         if s.swap_unsupported {
             return Err(FsError::new(FsErrorKind::Unsupported));
         }
         injected(&mut s, FsOp::DiscardSwap)?;
-        s.swaps.remove(&doc);
+        s.swaps.remove(&swap_key(path, doc));
         Ok(())
     }
 
