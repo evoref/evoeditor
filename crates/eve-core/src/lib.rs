@@ -19,8 +19,8 @@ mod ui_model;
 mod view;
 
 pub use jobs::cancel::CancelToken;
-mod eol;
 mod search;
+pub use document::eol::build_eol_conversion;
 pub use document::{
     Applied, AppliedTx, ApplyError, DisplaySettings, Document, EolStats, HistoryStep,
     LONG_LINE_THRESHOLD, LoadState, NodeId, Origin, ReadOnlyReason, ReadOnlyReasons, RecordOutcome,
@@ -35,7 +35,6 @@ pub use editor::{
     SearchStep, View, Window, WrapMode, WrapSettings, config_diagnostic_texts, format_stroke,
     normalize_eol, parse_sequence, parse_stroke, resolve_theme,
 };
-pub use eol::build_eol_conversion;
 pub use eve_encoding::Encoding;
 pub use eve_view::DocumentId;
 pub use io::fs::*;

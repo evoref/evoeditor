@@ -1,15 +1,19 @@
 //! 改行コードの変換の実行 (docs/03 §8.4、01 FR-113)。`file.set_line_ending` の手順 (3)〜(5)。
 //! 文書が 1 MiB 以下ならメインスレッドで ChangeSet を作り、超えればジョブ (`JobKind::ConvertEol`) で作る。
 
+// document/ の中に置くが、文書テキストを直接変える経路 (`eve_text::Text::apply`) は使わない
+// (document/mod.rs の許可を受け継がない。変更は Transaction を通す、02 §5.2)
+#![deny(clippy::disallowed_methods)]
+
 use eve_text::{ChangeSet, LineEnding, TextRead};
 use eve_view::{CommandId, DocumentId, MessageLevel, Revision, ViewId};
 
+use crate::document::eol::build_eol_conversion;
 use crate::document::{EolStats, FormatChange, FormatState, Origin, Transaction, UndoGroupHint};
-use crate::eol::build_eol_conversion;
 use crate::jobs::cancel::CancelToken;
 use crate::jobs::{JobKind, JobResult};
 
-use super::state::EditorState;
+use crate::editor::state::EditorState;
 use crate::io::file::Pending;
 
 /// ジョブにする境界 (`SEARCH_SYNC_STEP_BYTES`、03 §12.2)。

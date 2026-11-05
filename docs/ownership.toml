@@ -42,7 +42,7 @@ path = "crates/eve-core/src/document"
 spec = ["02 §5.1-5.2", "03 §6", "03 §7"]
 owner = "shared"
 reviewer = "human:maintainer"
-notes = "線形 Undo (03 §7.1) と保存点"
+notes = "線形 Undo (03 §7.1) と保存点、改行コードの変換 (eol.rs・eol_cmd.rs。v0.3 の M14 で crate の直下と editor/ から移した)"
 
 [[unit]]
 path = "crates/eve-core/src/keymap"

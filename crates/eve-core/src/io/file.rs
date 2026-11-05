@@ -53,7 +53,7 @@ pub(crate) enum Pending {
         forward: bool,
     },
     /// 改行コードの変換の ChangeSet を作るジョブ (03 §8.4)。
-    ConvertEol(crate::editor::eol::EolConvert),
+    ConvertEol(crate::document::eol_cmd::EolConvert),
     /// すべて置換の ChangeSet を作るジョブ (03 §12.5)。
     ReplaceAll {
         doc: DocumentId,

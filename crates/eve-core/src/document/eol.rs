@@ -3,6 +3,10 @@
 //! 文書の全区切りのうち `eol` と異なるものを `eol` に置き換える。チャンクをまたぐ CRLF を 1 つの区切りとして扱う。
 //! すべての区切りを同じ `eol` にするので、置き換えで隣り合った CR と LF が新しい CRLF に結合することはない。
 
+// document/ の中に置くが、文書テキストを直接変える経路 (`eve_text::Text::apply`) は使わない
+// (document/mod.rs の許可を受け継がない。変更は Transaction を通す、02 §5.2)
+#![deny(clippy::disallowed_methods)]
+
 use eve_text::{ByteOff, ByteRange, ChangeSet, Edit, LineEnding, TextRead};
 
 use crate::jobs::cancel::CancelToken;

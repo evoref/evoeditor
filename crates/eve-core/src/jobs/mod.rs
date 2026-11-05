@@ -497,7 +497,7 @@ pub fn run_job(
             },
         },
         JobKind::ConvertEol { snapshot, eol } => {
-            match crate::eol::build_eol_conversion(snapshot, *eol, cancel) {
+            match crate::document::eol::build_eol_conversion(snapshot, *eol, cancel) {
                 Some(changes) => JobResult::ConvertEolDone {
                     job: req.id,
                     changes,
