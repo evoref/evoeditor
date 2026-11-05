@@ -641,6 +641,22 @@ enum FsErrorDetail {
 - 各モジュールの `mod.rs` 冒頭に「所有する仕様節」を `//! spec: 03 §6–7, 02 §5` の形で書く ([§17](#17-ai-連携に適した開発構成))。v0.2 までの実装には無い (表の構成になっていないため)。M14 でモジュールを作るときに書く。
 - 人間とエージェントへの割当表 (`docs/ownership.toml`) の形と運用は 11-dev-workflow。
 
+**v0.2 までのファイルの割当 (v0.3 の M14、2026-11-05、docs/review/v0.3-findings.md の STR-A2)**: 移動は区分ごとに 1 本の PR で行い、各 PR で M13 のゴールデン・スナップショットとすべての試験が変わらないことを確かめる。移すときに `pub(super)` は `pub(crate)` にし、各モジュールの `mod.rs` の冒頭に `//! spec:` を書く。大きいファイルの分割 (`file.rs` → `io/` の各ファイル、STR-B1。overlay・layout・search、STR-B6) は、移動の後に別の PR で行う。
+
+| 区分 | 移すファイル (v0.2 の場所) |
+|---|---|
+| `document/` | `document/*`、`eol.rs` (改行コードの変換の ChangeSet)、`editor/eol.rs` (`file.set_line_ending` の実行) |
+| `view/` | `editor/motion.rs`・`editor/mouse.rs`・`editor/view_cmds.rs` |
+| `command/` | `editor/command.rs`・`editor/context.rs` (`when` の式)・`editor/edit.rs`・`editor/line_ops.rs`・`editor/clipboard.rs` |
+| `keymap/` | `editor/keymap.rs`・`editor/default_keymap.rs`・`editor/user_keymap.rs` |
+| `layout/` | `editor/layout.rs` と `editor/layout/`・`editor/theme.rs` (テーマ段の適用)・`editor/state/wrap_scroll.rs` |
+| `search/` | `search.rs` と `search/`・`editor/search_state.rs` |
+| `io/` | `editor/file.rs`・`editor/external.rs`・`editor/swap.rs`・`editor/swap_recovery.rs`・`editor/save_all.rs`・`editor/startup.rs`・`editor/leftover_offer.rs`・`editor/snapshot.rs`・`editor/config_reload.rs`、crate の直下の `io_jobs.rs`・`fs.rs`・`fspath.rs`・`content_hash.rs`・`interrupted.rs`・`last_version.rs`・`leftover.rs`・`paths.rs`・`replacing.rs`・`rescue.rs`・`secret.rs`・`unmap.rs` |
+| `jobs/` | `jobs.rs`・`cancel.rs` |
+| `ui_model/` | `editor/overlay.rs`・`editor/palette.rs`・`editor/message.rs`・`editor/chrome.rs`・`editor/help.rs`・`editor/config_report.rs`・`editor/search_bar.rs`・`editor/quit_saving.rs` |
+| `editor` (ファサード) | `editor/mod.rs`・`editor/state.rs`・`editor/query.rs`・`editor/buffer.rs` (文書の集合)。上の表の `editor.rs` は、`EditorState` が大きいので 1 ファイルにせず `editor/` のフォルダのままにする |
+| crate の直下 | `time.rs` (`Clock` の Port と `Tick`。どの区分からも使う境界の型)・`lib.rs` |
+
 ### 4.7 v0.1 の対象 OS と移植性の維持
 
 v0.1 は Windows 版だけを出荷する (01 NFR-401、確定 (ユーザー回答))。Linux は v0.2 で出荷し、macOS は 1.0 の後 (v1.x) に出荷する (実機の確保が前提。確定 (ユーザー回答)、OQ-15、ADR-0045) ので、そのときに構造を作り直さないよう、次を守る。
