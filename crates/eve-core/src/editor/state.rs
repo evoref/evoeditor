@@ -17,7 +17,7 @@ use crate::jobs::JobSpawner;
 use crate::paths::Paths;
 use crate::time::Tick;
 
-use super::context::CtxValue;
+use crate::command::context::CtxValue;
 
 /// 上下の余白の既定 (行)。
 const SCROLL_MARGIN: usize = 3;
@@ -127,7 +127,7 @@ pub struct EditorState {
     /// 履歴の破棄を通知した文書 (文書ごとに 1 回)。
     trim_notified: BTreeSet<DocumentId>,
     /// 内部レジスタ・ハンドルの表・貼り付けの token (クリップボード、`clipboard.rs`)。
-    pub(crate) clipboard: super::clipboard::ClipboardState,
+    pub(crate) clipboard: crate::command::clipboard::ClipboardState,
     /// 解決済みの設定 (07 §5.0 の公開キー)。起動時に Host が `Editor::set_config` で渡す。
     pub(crate) config: eve_config::Config,
     /// 選択済みの UI の言語 (07 §17.1)。起動時に Host が `Editor::set_locale` で渡す。
@@ -135,7 +135,7 @@ pub struct EditorState {
     /// パレットの候補 (`hidden` を除く登録済みコマンド。CommandId 順)。
     pub(crate) palette_entries: Vec<super::palette::PaletteEntry>,
     /// パレットで選ばれ、Editor が次に実行するコマンド。
-    pub(crate) deferred_command: Option<(String, super::command::Args)>,
+    pub(crate) deferred_command: Option<(String, crate::command::Args)>,
     /// 文書内検索の状態 (検索バーが開いている間)。
     pub(crate) search: Option<super::search_state::SearchState>,
     /// 検索バー (開いている間)。

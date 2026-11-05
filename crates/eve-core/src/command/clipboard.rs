@@ -11,8 +11,8 @@ use eve_view::{
     ClipboardHandleId, ClipboardTarget, ClipboardText, ClipboardToken, Effect, MessageLevel,
 };
 
-use super::command::{CommandCtx, CommandResult, RejectReason};
-use super::state::EditorState;
+use crate::command::{CommandCtx, CommandResult, RejectReason};
+use crate::editor::state::EditorState;
 
 /// `Inline` にする上限 (これ未満は core が文字列化する)。
 pub const INLINE_MAX_BYTES: usize = 64 * 1024;
@@ -181,7 +181,7 @@ impl EditorState {
                 }
             }
         };
-        super::edit::paste_text(self, &text);
+        crate::command::edit::paste_text(self, &text);
     }
 }
 

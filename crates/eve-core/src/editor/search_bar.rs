@@ -10,8 +10,8 @@ use eve_view::{
 };
 
 use crate::cancel::CancelToken;
+use crate::command::CommandResult;
 use crate::document::{Origin, Transaction, UndoGroupHint};
-use crate::editor::command::CommandResult;
 use crate::jobs::{JobKind, JobResult};
 use crate::search::{
     Case, QueryError, SearchQuery, build_replace_all, replacement_for, scan_lines,
@@ -191,7 +191,7 @@ impl EditorState {
     /// 大小の区別を巡回する (Smart → Sensitive → Insensitive → Smart) 。切り替えたら再検索する。
     pub fn search_toggle_case(&mut self) -> CommandResult {
         let Some(bar) = &mut self.search_bar else {
-            return CommandResult::Rejected(super::command::RejectReason::NotAvailable);
+            return CommandResult::Rejected(crate::command::RejectReason::NotAvailable);
         };
         bar.case = bar.case.next();
         self.bar_changed();
@@ -201,7 +201,7 @@ impl EditorState {
     /// 正規表現の ON / OFF を切り替える。切り替えたら再検索する。
     pub fn search_toggle_regex(&mut self) -> CommandResult {
         let Some(bar) = &mut self.search_bar else {
-            return CommandResult::Rejected(super::command::RejectReason::NotAvailable);
+            return CommandResult::Rejected(crate::command::RejectReason::NotAvailable);
         };
         bar.regex = !bar.regex;
         self.bar_changed();
@@ -211,7 +211,7 @@ impl EditorState {
     /// 単語単位の ON / OFF を切り替える。切り替えたら再検索する。
     pub fn search_toggle_word(&mut self) -> CommandResult {
         let Some(bar) = &mut self.search_bar else {
-            return CommandResult::Rejected(super::command::RejectReason::NotAvailable);
+            return CommandResult::Rejected(crate::command::RejectReason::NotAvailable);
         };
         bar.whole_word = !bar.whole_word;
         self.bar_changed();
@@ -222,7 +222,7 @@ impl EditorState {
     /// 選択が無かったときは切り替えずに知らせる。切り替えたら再検索する。
     pub fn search_toggle_selection(&mut self) -> CommandResult {
         let Some(bar) = &mut self.search_bar else {
-            return CommandResult::Rejected(super::command::RejectReason::NotAvailable);
+            return CommandResult::Rejected(crate::command::RejectReason::NotAvailable);
         };
         if bar.sel_ranges.is_empty() {
             self.show_message(MessageLevel::Info, "info.search.no_selection", &[]);
@@ -508,10 +508,10 @@ impl EditorState {
     /// 文書が 1 MiB 以下ならメインスレッドで、超えればジョブで ChangeSet を作る。
     pub fn search_replace_all(&mut self) -> CommandResult {
         let Some(bar) = &self.search_bar else {
-            return CommandResult::Rejected(super::command::RejectReason::NotAvailable);
+            return CommandResult::Rejected(crate::command::RejectReason::NotAvailable);
         };
         let Some((replacement, _)) = bar.replace.clone() else {
-            return CommandResult::Rejected(super::command::RejectReason::NotAvailable);
+            return CommandResult::Rejected(crate::command::RejectReason::NotAvailable);
         };
         let query = bar.query();
         let Some(doc_id) = self.active_document() else {
@@ -599,10 +599,10 @@ impl EditorState {
     /// 正規表現では `$1` / `${name}` を展開し、`\n` を既定の改行にする。
     pub fn search_replace(&mut self) -> CommandResult {
         let Some(bar) = &self.search_bar else {
-            return CommandResult::Rejected(super::command::RejectReason::NotAvailable);
+            return CommandResult::Rejected(crate::command::RejectReason::NotAvailable);
         };
         let Some((replacement, _)) = bar.replace.clone() else {
-            return CommandResult::Rejected(super::command::RejectReason::NotAvailable);
+            return CommandResult::Rejected(crate::command::RejectReason::NotAvailable);
         };
         let query = bar.query();
         let Some(doc_id) = self.active_document() else {

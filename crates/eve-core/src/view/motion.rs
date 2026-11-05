@@ -13,7 +13,7 @@ use crate::document::Document;
 
 use crate::editor::layout::{Affinity, WrapSettings, line_rows};
 
-use crate::editor::command::{
+use crate::command::{
     ArgValue, CommandCtx, CommandKind, CommandRegistry, CommandResult, CommandSpec, Permission,
     RejectReason,
 };

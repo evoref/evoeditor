@@ -1,6 +1,6 @@
 //! View の表示属性のコマンド (docs/07 §11.6 の `view.*`、04 §7.2)。
 
-use crate::editor::command::{
+use crate::command::{
     CommandCtx, CommandKind, CommandRegistry, CommandResult, CommandSpec, Permission, RejectReason,
 };
 use crate::editor::layout::WrapMode;

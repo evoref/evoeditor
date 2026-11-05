@@ -8,6 +8,7 @@
 #![allow(clippy::result_large_err)]
 
 mod cancel;
+mod command;
 mod content_hash;
 mod document;
 mod editor;

@@ -52,6 +52,13 @@ reviewer = "human:maintainer"
 notes = "キーマップの解決 (K1〜K8)・既定のキーマップ・ユーザーのキーマップ (v0.3 の M14 で editor/ から移した)"
 
 [[unit]]
+path = "crates/eve-core/src/command"
+spec = ["02 §6", "07 §11.6", "03 §15"]
+owner = "shared"
+reviewer = "human:maintainer"
+notes = "コマンドの型とレジストリ・when の式・編集・行の操作・クリップボード (v0.3 の M14 で editor/ から移した)"
+
+[[unit]]
 path = "crates/eve-core/src/view"
 spec = ["03 §4", "03 §5"]
 owner = "shared"

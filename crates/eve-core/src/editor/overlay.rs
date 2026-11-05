@@ -7,7 +7,7 @@
 use eve_text::{ByteOff, Text, next_grapheme_boundary, prev_grapheme_boundary};
 use eve_view::{DocumentId, EditorEvent, Effect, MessageLevel, OverlayKind, QuitRescue, Revision};
 
-use crate::editor::command::{
+use crate::command::{
     ArgValue, Args, CommandCtx, CommandInvocation, CommandKind, CommandRegistry, CommandResult,
     CommandSpec, Permission, RejectReason,
 };
@@ -628,7 +628,7 @@ impl EditorState {
             return false;
         }
         let inv =
-            CommandInvocation::new("edit.insert_text", super::command::InvocationSource::Keymap)
+            CommandInvocation::new("edit.insert_text", crate::command::InvocationSource::Keymap)
                 .with_args(Args::new().with_str("text", s));
         self.overlay_intercept(&inv);
         true

@@ -14,8 +14,8 @@ use std::fmt;
 
 use eve_view::{CommandId, KeyCode, KeyStroke, Modifiers};
 
-use crate::editor::command::{Args, CommandInvocation, InvocationSource};
-use crate::editor::context::{ContextExpr, CtxValue};
+use crate::command::context::{ContextExpr, CtxValue};
+use crate::command::{Args, CommandInvocation, InvocationSource};
 
 // ---------- ストロークの書式 (07 §7.2) ----------
 

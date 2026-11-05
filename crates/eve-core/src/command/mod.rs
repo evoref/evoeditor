@@ -1,12 +1,19 @@
 //! コマンドの型とレジストリ (docs/02 §6.1〜§6.3)。すべての操作は `CommandInvocation` に正規化されて実行される。
 //! カタログ (ID・when・perm・既定キー) の正本は docs/07 §11.6。
+//!
+//! spec: 02 §6, 07 §11.6 (カタログ), 03 §15 (編集・クリップボード)
+
+pub(crate) mod clipboard;
+pub(crate) mod context;
+pub(crate) mod edit;
+pub(crate) mod line_ops;
 
 use std::collections::BTreeMap;
 
 use eve_view::{CommandId, JobId};
 
-use super::context::{ContextExpr, ParseError};
-use super::state::EditorState;
+use crate::command::context::{ContextExpr, ParseError};
+use crate::editor::state::EditorState;
 
 /// 引数の値。
 #[derive(Clone, Debug, PartialEq, Eq)]

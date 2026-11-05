@@ -8,8 +8,8 @@ use eve_config::{DiagKind, Diagnostic, KeyAction, KeymapFile, KeymapProblem, Sev
 use eve_view::{CommandId, KeyCode, KeyStroke, Modifiers};
 
 use super::{Layer, NONE_COMMAND, format_sequence, parse_sequence};
+use crate::command::context::ContextExpr;
 use crate::editor::Editor;
-use crate::editor::context::ContextExpr;
 
 /// ユーザーが書けるコンテキスト (07 §7.1)。core が公開する固定集合。
 const CONTEXTS: [&str; 8] = [

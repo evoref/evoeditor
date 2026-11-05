@@ -8,12 +8,12 @@ use std::collections::BTreeMap;
 
 use eve_view::{CutPolicy, HelpLine, HelpLineKind, KeyStroke, OverlayModel};
 
-use super::command::{
-    CommandCtx, CommandKind, CommandRegistry, CommandResult, CommandSpec, Permission, RejectReason,
-};
 use super::layout::cell_text;
 use super::overlay::Overlay;
 use super::state::EditorState;
+use crate::command::{
+    CommandCtx, CommandKind, CommandRegistry, CommandResult, CommandSpec, Permission, RejectReason,
+};
 use crate::keymap::format_sequence;
 
 /// ヘルプのキー一覧で、この端末で届かない割当の後ろに付ける印 (04 §8.6)。
@@ -266,7 +266,7 @@ impl EditorState {
     /// 履歴を開いていないときは使えない。
     fn copy_message_history(&mut self) -> CommandResult {
         if !matches!(&self.overlay, Some(Overlay::Help(h)) if h.history) {
-            return CommandResult::Rejected(super::command::RejectReason::NotAvailable);
+            return CommandResult::Rejected(crate::command::RejectReason::NotAvailable);
         }
         if self.message_log.is_empty() {
             return CommandResult::Done;

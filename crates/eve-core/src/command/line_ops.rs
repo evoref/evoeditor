@@ -9,7 +9,7 @@ use eve_view::{CommandId, DocumentId, ViewId};
 
 use crate::document::{Document, Origin, Transaction};
 
-use super::command::{
+use crate::command::{
     CommandCtx, CommandKind, CommandRegistry, CommandResult, CommandSpec, Permission, RejectReason,
 };
 

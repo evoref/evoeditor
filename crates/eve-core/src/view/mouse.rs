@@ -7,7 +7,7 @@ use eve_view::{
     Effect, MessageLevel, Modifiers, MouseAt, MouseButton, MouseEvent, MouseKind, ViewId,
 };
 
-use crate::editor::command::{
+use crate::command::{
     CommandCtx, CommandKind, CommandRegistry, CommandResult, CommandSpec, Permission,
 };
 use crate::editor::layout::{Affinity, line_rows, wrap_ctx};
