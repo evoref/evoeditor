@@ -10,6 +10,7 @@
 
 use std::collections::BTreeMap;
 
+use eve_core::Args;
 use eve_view::{Answer, DocumentId, Frame, Query};
 
 use crate::Harness;
@@ -147,8 +148,50 @@ fn check_state(h: &Harness, revs: &mut BTreeMap<DocumentId, u64>, step: usize) {
     }
 }
 
-/// 1 つの入力を流す。先頭: [0..2] 初期文書の長さ (下位 12 ビット)、続いて文書の本文、[次の 2 バイト] ビューポートの大きさ、
-/// 残りが操作の列 (操作の種類 1 バイト + 引数)。
+const ENCODINGS: [&str; 6] = [
+    "utf-8",
+    "shift_jis",
+    "euc-jp",
+    "iso-2022-jp",
+    "utf-16le",
+    "utf-16be",
+];
+
+/// 引数付きのコマンドを 1 つ選ぶ (07 §11.6 の `args` 列のあるもの)。
+fn command_with_args(b: &mut Bytes<'_>) -> (&'static str, Args) {
+    match b.u8() % 6 {
+        0 => (
+            "file.set_line_ending",
+            Args::new().with_str("eol", ["lf", "crlf", "cr"][usize::from(b.u8() % 3)]),
+        ),
+        1 => (
+            "edit.insert_text",
+            Args::new().with_str("text", &b.text(32)),
+        ),
+        2 => (
+            "file.reopen_with_encoding",
+            Args::new().with_str("encoding", ENCODINGS[usize::from(b.u8()) % ENCODINGS.len()]),
+        ),
+        3 => (
+            "file.set_encoding",
+            Args::new().with_str("encoding", ENCODINGS[usize::from(b.u8()) % ENCODINGS.len()]),
+        ),
+        4 => (
+            "cursor.goto_line",
+            Args::new().with_int("line", i64::from(b.u8()) - 8),
+        ),
+        _ => (
+            "cursor.move_right",
+            Args::new().with_int("count", i64::from(b.u8()) * 4),
+        ),
+    }
+}
+
+/// 1 つの入力を流す。先頭: [0..2] 初期文書の長さ (下位 12 ビット)、続いて文書の本文、[次の 2 バイト] ビューポートの大きさ
+/// (行の数のバイトの最上位ビットが立っていれば、長大行の閾値を 64 バイトに下げた設定で起動する。長大行とジョブの経路に届かせる)、
+/// 残りが操作の列 (操作の種類 1 バイト + 引数)。操作は 16 種類: 文字・キー・貼り付け・大きさ・引数なしのコマンド・ジョブ・時刻・
+/// 確認への答え・クリック・引数付きのコマンド・外部の変更・ジョブを 1 周だけ・ジョブの取消し・マウスのドラッグ・再読込と外部の変更の確認
+/// (docs/review/v0.3-findings.md の §2.7 の 10)。
 pub fn editor_sequence(data: &[u8]) {
     let mut b = Bytes { data, at: 0 };
     let doc_len = usize::from(u16::from_le_bytes([b.u8(), b.u8()]) & 0x0FFF);
@@ -156,10 +199,16 @@ pub fn editor_sequence(data: &[u8]) {
     let body = data[b.at.min(end)..end].to_vec();
     b.at = end;
     let cols = 1 + u16::from(b.u8()) % 200;
-    let rows = 1 + u16::from(b.u8()) % 60;
-    let mut h = Harness::new()
-        .with_size(cols, rows)
-        .with_file("/w/f.txt", &body);
+    let rows_byte = b.u8();
+    let rows = 1 + u16::from(rows_byte & 0x7F) % 60;
+    let mut builder = Harness::builder().size(cols, rows).file("/w/f.txt", &body);
+    if rows_byte & 0x80 != 0 {
+        builder = builder.config(eve_config::Config {
+            long_line_threshold: 64,
+            ..eve_config::Config::default()
+        });
+    }
+    let mut h = builder.build();
     h.open("/w/f.txt");
     h.run_jobs();
     let commands: Vec<String> = h
@@ -182,7 +231,7 @@ pub fn editor_sequence(data: &[u8]) {
     };
     while !b.done() && step < 200 {
         step += 1;
-        match b.u8() % 10 {
+        match b.u8() % 16 {
             0 => {
                 let t = b.text(16);
                 log(step, &format!("text {t:?}"));
@@ -225,11 +274,57 @@ pub fn editor_sequence(data: &[u8]) {
                 log(step, &format!("answer {c} (overlay {:?})", h.overlay()));
                 let _ = h.answer(c);
             }
-            _ => {
+            9 => {
                 let r = i32::from(b.u8() % 70);
                 let c = i32::from(b.u8());
                 log(step, &format!("click {r},{c}"));
                 h.click(r, c);
+            }
+            10 => {
+                let (id, args) = command_with_args(&mut b);
+                log(step, &format!("cmd {id} {args:?}"));
+                h.cmd_with(id, args);
+            }
+            11 => {
+                // 外部の変更: 本文を書き換える (更新時刻を進めるか保つか)
+                let t = b.text(32);
+                let bump = b.u8() & 1 == 1;
+                log(step, &format!("external {t:?} bump {bump}"));
+                if bump {
+                    h.fs.add_file("/w/f.txt", t.as_bytes());
+                    h.fs.bump_mtime("/w/f.txt", 1);
+                } else {
+                    h.fs.set_data_keep_mtime("/w/f.txt", t.as_bytes());
+                }
+            }
+            12 => {
+                log(step, "run_jobs_once");
+                h.run_jobs_once();
+            }
+            13 => {
+                log(step, "cancel_jobs");
+                h.cancel_jobs();
+            }
+            14 => {
+                use eve_view::{Modifiers, MouseButton, MouseKind};
+                let (r0, c0) = (i32::from(b.u8() % 70), i32::from(b.u8()));
+                let (r1, c1) = (i32::from(b.u8() % 70), i32::from(b.u8()));
+                log(step, &format!("drag {r0},{c0} → {r1},{c1}"));
+                h.mouse(MouseKind::Down(MouseButton::Left), Modifiers::NONE, r0, c0);
+                h.mouse(MouseKind::Drag(MouseButton::Left), Modifiers::NONE, r1, c1);
+                h.mouse(MouseKind::Up(MouseButton::Left), Modifiers::NONE, r1, c1);
+            }
+            _ => {
+                let id = if b.u8() & 1 == 0 {
+                    "file.reload"
+                } else {
+                    "file.check_external_changes"
+                };
+                log(step, id);
+                h.cmd(id);
+                if b.u8() & 1 == 0 {
+                    h.focus(true);
+                }
             }
         }
         if trace {
