@@ -26,6 +26,7 @@ mod replacing;
 mod rescue;
 mod secret;
 mod time;
+mod ui_model;
 mod unmap;
 mod view;
 

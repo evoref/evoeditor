@@ -4,7 +4,7 @@
 use eve_config::Catalog;
 use eve_view::{EditorEvent, MessageLevel};
 
-use super::state::EditorState;
+use crate::editor::state::EditorState;
 
 /// 表示中のメッセージ (解決済みの文言)。
 #[derive(Clone, Debug)]

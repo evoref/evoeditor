@@ -7,9 +7,9 @@
 use eve_view::MessageLevel;
 
 use super::file::Pending;
-use super::overlay::{ChoiceDef, ConfirmAction, ConfirmState};
 use super::state::EditorState;
 use crate::io_jobs::OpenOptions;
+use crate::ui_model::overlay::{ChoiceDef, ConfirmAction, ConfirmState};
 use crate::{CommandResult, JobError, JobKind, JobResult, Leftover, LeftoverKind, LeftoverOp};
 
 const fn choice(id: &'static str, accel: char, destructive: bool) -> ChoiceDef {

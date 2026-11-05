@@ -15,11 +15,11 @@ use crate::io_jobs::OpenOptions;
 use crate::jobs::{ConfirmAsk, JobError, JobKind, JobResult, MetaPurpose, SaveStrategy};
 use eve_encoding::Encoding;
 
-use super::overlay::{Continuation, PromptKind};
 use super::state::EditorState;
 use crate::command::{
     CommandCtx, CommandKind, CommandRegistry, CommandResult, CommandSpec, Permission, RejectReason,
 };
+use crate::ui_model::overlay::{Continuation, PromptKind};
 
 /// 投入したジョブと、その結果の宛先。
 #[derive(Debug)]
@@ -882,7 +882,7 @@ impl EditorState {
         encoding: Encoding,
         has_escape: bool,
     ) {
-        use super::overlay::{ChoiceDef, ConfirmAction, ConfirmState};
+        use crate::ui_model::overlay::{ChoiceDef, ConfirmAction, ConfirmState};
         let (line, col) = self
             .char_pos(ask.doc, ask.first_char)
             .map_or((1, 1), |(_, l, c)| (l, c));
@@ -1002,7 +1002,7 @@ impl EditorState {
         retried: bool,
         r: JobResult,
     ) {
-        use super::overlay::{ChoiceDef, ConfirmAction, ConfirmState};
+        use crate::ui_model::overlay::{ChoiceDef, ConfirmAction, ConfirmState};
         match r {
             JobResult::UnmappableReplacement {
                 changes,
@@ -1234,7 +1234,7 @@ impl EditorState {
         args: &[(&str, &str)],
         retry: bool,
     ) {
-        use super::overlay::{ChoiceDef, ConfirmAction, ConfirmState};
+        use crate::ui_model::overlay::{ChoiceDef, ConfirmAction, ConfirmState};
         let Some(ask) = ask else {
             self.show_message(MessageLevel::Error, key, args);
             return;
@@ -1265,7 +1265,7 @@ impl EditorState {
 
     /// 保存先がダングリングのシンボリックリンク: リンク先を示して、リンク先に作成するかを尋ねる (FR-106、05 §4.1)。
     fn open_dangling_link(&mut self, ask: SaveFailedAsk, target: String) {
-        use super::overlay::{ChoiceDef, ConfirmAction, ConfirmState};
+        use crate::ui_model::overlay::{ChoiceDef, ConfirmAction, ConfirmState};
         self.open_confirm(ConfirmState {
             name: "save.dangling_link",
             args: vec![
@@ -1356,7 +1356,7 @@ impl EditorState {
 
     /// 保存の代替の確認を出す。
     fn open_fallback(&mut self, ask: FallbackAsk, reason: &str, links: &str) {
-        use super::overlay::{ChoiceDef, ConfirmAction, ConfirmState};
+        use crate::ui_model::overlay::{ChoiceDef, ConfirmAction, ConfirmState};
         let choice = |id: &'static str, accel: char| ChoiceDef {
             id,
             accel: Some(accel),
@@ -1412,7 +1412,7 @@ impl EditorState {
     /// 区分 B (ISO-2022-JP は区分 D のエスケープの書き方) の確認を出す。選択肢: 保存 / 別名で保存。
     /// 区分 B は別名が既定、区分 D は文字が変わらないので保存が既定 (04 §15.2)。
     fn open_lossy(&mut self, ask: LossyAsk) {
-        use super::overlay::{ChoiceDef, ConfirmAction, ConfirmState};
+        use crate::ui_model::overlay::{ChoiceDef, ConfirmAction, ConfirmState};
         let Some(doc) = self.documents.get(&ask.doc) else {
             return;
         };
@@ -1471,7 +1471,7 @@ impl EditorState {
 
     /// 「読み取り専用を解除して保存」の確認を出す。選択肢: 別名で保存 (既定) / 読み取り専用を解除して保存 (04 §15.2)。
     fn open_clear_readonly(&mut self, ask: LossyAsk) {
-        use super::overlay::{ChoiceDef, ConfirmAction, ConfirmState};
+        use crate::ui_model::overlay::{ChoiceDef, ConfirmAction, ConfirmState};
         let choice = |id: &'static str, accel: char| ChoiceDef {
             id,
             accel: Some(accel),
@@ -1812,7 +1812,7 @@ impl EditorState {
 
     /// 開くときの確認 (`ui.confirm.open.*`) を出す。
     fn open_open_confirm(&mut self, ask: OpenAsk) {
-        use super::overlay::{ChoiceDef, ConfirmAction, ConfirmState};
+        use crate::ui_model::overlay::{ChoiceDef, ConfirmAction, ConfirmState};
         let choice = |id: &'static str, accel: char| ChoiceDef {
             id,
             accel: Some(accel),
@@ -2098,7 +2098,7 @@ impl EditorState {
             return CommandResult::Rejected(RejectReason::NotAvailable);
         }
         if doc.is_dirty() {
-            use super::overlay::{ChoiceDef, ConfirmAction, ConfirmState};
+            use crate::ui_model::overlay::{ChoiceDef, ConfirmAction, ConfirmState};
             self.open_confirm(ConfirmState {
                 name: "reload_discard",
                 args: vec![("path".to_owned(), path.display())],

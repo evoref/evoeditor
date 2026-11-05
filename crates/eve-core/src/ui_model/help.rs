@@ -8,13 +8,13 @@ use std::collections::BTreeMap;
 
 use eve_view::{CutPolicy, HelpLine, HelpLineKind, KeyStroke, OverlayModel};
 
-use super::overlay::Overlay;
-use super::state::EditorState;
 use crate::command::{
     CommandCtx, CommandKind, CommandRegistry, CommandResult, CommandSpec, Permission, RejectReason,
 };
+use crate::editor::state::EditorState;
 use crate::keymap::format_sequence;
 use crate::layout::cell_text;
+use crate::ui_model::overlay::Overlay;
 
 /// ヘルプのキー一覧で、この端末で届かない割当の後ろに付ける印 (04 §8.6)。
 const UNREACHABLE_MARK: &str = "*";

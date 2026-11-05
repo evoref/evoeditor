@@ -82,7 +82,7 @@ pub(crate) fn default_keymap() -> Keymap {
     bind("palette", "pageup", "ui.list_page_up");
     // テスト専用: パニックの注入 (本来キー割当なし。E2E が端末から送れるよう、フックがあるときだけ割り当てる)
     #[cfg(feature = "test-hooks")]
-    if crate::editor::overlay::test_hook_panic_command() {
+    if crate::ui_model::overlay::test_hook_panic_command() {
         bind("global", "f12", "internal.debug_panic");
     }
     // 確認ダイアログ (モーダル。dialog のみを参照する)

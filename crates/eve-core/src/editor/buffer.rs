@@ -7,13 +7,13 @@ use std::ops::Range;
 use eve_view::{CutPolicy, DocumentId, InputFieldModel, ListItem, OverlayModel};
 
 use super::file::Pending;
-use super::overlay::{Continuation, Overlay};
-use super::palette::{PaletteState, WINDOW, find, lower_graphemes};
 use super::state::EditorState;
 use crate::command::{
     CommandCtx, CommandKind, CommandRegistry, CommandResult, CommandSpec, Permission, RejectReason,
 };
 use crate::layout::cell_text;
+use crate::ui_model::overlay::{Continuation, Overlay};
+use crate::ui_model::palette::{PaletteState, WINDOW, find, lower_graphemes};
 
 /// 一覧の行頭の変更マーカーの幅 (`[+] `)。照合した箇所の位置を合わせるのに使う。
 const MARKER_WIDTH: usize = 4;

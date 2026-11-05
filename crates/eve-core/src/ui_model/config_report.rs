@@ -3,7 +3,7 @@
 use eve_config::{DiagKind, Diagnostic, default_display};
 use eve_view::MessageLevel;
 
-use super::state::EditorState;
+use crate::editor::state::EditorState;
 
 /// 型の語 (`ui.config.type.*`) のキー。toml の型名から。
 fn type_key(toml_type: &str) -> String {
