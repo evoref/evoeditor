@@ -3,14 +3,14 @@
 //! 最初のファイルは今までどおり表示する文書として開く。残りは読込中のバッファとして足し、読込が
 //! 終わるのを待たない (一覧には載り、切替はできるが、編集はできない)。
 
-use eve_view::{DocumentId, ViewId};
+use eve_view::{DocumentId, MessageLevel, ViewId};
 
 use crate::document::{Document, LoadState};
 use crate::editor::state::EditorState;
 use crate::io::io_jobs::OpenOptions;
 use crate::io::open::OpenKind;
 use crate::io::pending::Pending;
-use crate::jobs::JobKind;
+use crate::jobs::{JobKind, JobResult};
 use crate::view::motion::line_col_byte;
 use eve_text::{Selection, TextRead};
 
@@ -129,5 +129,96 @@ impl EditorState {
         let p = line_col_byte(t, line.saturating_sub(1).min(last), col.max(1));
         self.set_selection(view, Selection::point(p));
         self.center_cursor(view);
+    }
+}
+
+// ---- (v0.3 の M14、STR-B1 で io/ から移した) ----
+impl EditorState {
+    /// 起動時に退避ディレクトリを走査するジョブを投入する (`open_initial` が呼ぶ)。前回起動した版の記録 (FR-518) の
+    /// ジョブを先に積む (`io` は直列なので、退避の案内のほうが後に出て、メッセージ行に残る)。
+    pub(crate) fn start_recovery_scan(&mut self) {
+        let job = self.jobs.spawn(
+            None,
+            eve_view::Revision::INITIAL,
+            JobKind::LastVersion {
+                current: env!("CARGO_PKG_VERSION").to_owned(),
+            },
+        );
+        self.pending.insert(job, Pending::LastVersion);
+        let job = self
+            .jobs
+            .spawn(None, eve_view::Revision::INITIAL, JobKind::RecoveryScan);
+        self.pending.insert(job, Pending::RecoveryScan);
+    }
+
+    /// 退避が残っていれば場所を案内する (`msg.recovery.found` / `found_rescue`、02 §9.3。中身は読まない)。
+    /// 案内するのは最も新しい退避 (名前の `<UTC timestamp>-<pid>[-<n>]` の順)。「退避先に保存」の退避だけなら文言を分ける。
+    pub(crate) fn finish_recovery_scan(&mut self, r: JobResult) {
+        let JobResult::RecoveryFound {
+            mut dirs,
+            swaps,
+            leftovers,
+            ..
+        } = r
+        else {
+            return;
+        };
+        self.leftovers = leftovers;
+        self.swap_scan_done(swaps);
+        if dirs.is_empty() {
+            return;
+        }
+        let only_rescue = dirs.iter().all(|d| d.rescue);
+        // 異常終了の退避があれば、その中で最も新しいものを示す (無ければ「退避先に保存」の中で最も新しいもの)
+        if !only_rescue {
+            dirs.retain(|d| !d.rescue);
+        }
+        let key = |d: &crate::io::fs::RecoveryDirEntry| {
+            d.path
+                .as_path()
+                .file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_default()
+        };
+        // 同じ時刻は `-<n>` の大きい方が新しい。名前の長さ → 辞書順で比べる (`-2` は `-` なしより後)
+        dirs.sort_by(|a, b| {
+            let (ka, kb) = (key(a), key(b));
+            ka.get(..16)
+                .cmp(&kb.get(..16))
+                .then(ka.len().cmp(&kb.len()))
+                .then(ka.cmp(&kb))
+        });
+        let count = dirs.len().to_string();
+        let newest = dirs.last().map(|d| d.path.display()).unwrap_or_default();
+        self.show_message(
+            MessageLevel::Warn,
+            if only_rescue {
+                "msg.recovery.found_rescue"
+            } else {
+                "msg.recovery.found"
+            },
+            &[("dir", &newest), ("count", &count)],
+        );
+    }
+
+    /// 更新後の初回起動なら、その版の要点を 1 行で出す (`info.app.updated`、07 §18.8)。それ以外は何もしない。
+    pub(crate) fn finish_last_version(&mut self, r: JobResult) {
+        if let JobResult::LastVersionChecked {
+            outcome: crate::LastVersionOutcome::Updated,
+            ..
+        } = r
+        {
+            let summary = self
+                .catalog()
+                .render("info.app.release_summary", &[], &|_| None);
+            self.show_message(
+                MessageLevel::Info,
+                "info.app.updated",
+                &[
+                    ("version", env!("CARGO_PKG_VERSION")),
+                    ("summary", &summary),
+                ],
+            );
+        }
     }
 }

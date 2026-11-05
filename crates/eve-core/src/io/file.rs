@@ -1,10 +1,10 @@
-//! ファイルの開く・保存の共通の補助 (docs/03 §9.2 / §9.3): 保存中・読込中の問い合わせ、読込の取消し、文書の表示の切り替え、
-//! 失敗の理由の文言、ディスクの状態の比較。
+//! ファイルの開く・保存の共通の補助 (docs/03 §9.2 / §9.3): 保存中・読込中の問い合わせ、読込の取消し、
+//! 失敗の理由の文言、ディスクの状態の比較 (文書の表示の切り替えは editor/buffer.rs、起動時の走査は io/startup.rs)。
 //!
 //! 本体は STR-B1 (docs/review/v0.3-findings.md) で分けた: ジョブの表と結果の振り分けは `pending`、開くは `open`、保存は `save`、
 //! 表現できない文字は `unmappable`、開き直し・再読込は `reload`、`file.*` のコマンドは `file_cmds`。
 
-use eve_view::{DocumentId, EditorEvent, MessageLevel, ViewId};
+use eve_view::{DocumentId, EditorEvent, MessageLevel};
 
 use crate::document::Document;
 use crate::io::fs::{Expect, FsError};
@@ -74,27 +74,6 @@ impl EditorState {
         self.view(self.window_view(w)?).map(|v| v.doc)
     }
 
-    /// `doc` を表示する (最初の Window の View をその文書のものにする)。文書の View が無ければ作る。
-    /// 検索バーは文書ごとには持たないので、切り替える前に閉じる (03 §9.8)。
-    pub(crate) fn activate_document(&mut self, doc: DocumentId) {
-        if self.active_document() == Some(doc) || !self.documents.contains_key(&doc) {
-            return;
-        }
-        self.search_close();
-        if let Some(prev) = self.active_document() {
-            self.recent.retain(|d| *d != prev);
-            self.recent.push(prev);
-        }
-        let view = match self.views.iter().find(|(_, v)| v.doc == doc) {
-            Some((id, _)) => *id,
-            None => self.add_view(doc),
-        };
-        if let Some(w) = self.windows.first_mut() {
-            w.root = view;
-        }
-        self.mark_dirty_render();
-    }
-
     /// 無題の新規文書を作る (FR-124)。今の文書があれば置き換える。dirty なら保存・破棄・キャンセルの確認を出す。
     pub fn new_untitled(&mut self) -> CommandResult {
         // 今の文書は置き換えず、無題のバッファを足して切り替える (03 §9.8)。何も捨てないので確認は要らない
@@ -102,20 +81,6 @@ impl EditorState {
         let (id, _) = self.add_document(doc);
         self.activate_document(id);
         CommandResult::Done
-    }
-
-    /// Window の表示を `view` に切り替え、`old` の文書を閉じる。Window がなければ作る。
-    pub(crate) fn show_view(&mut self, view: ViewId, old: Option<DocumentId>) {
-        match self.windows.first_mut() {
-            Some(w) => w.root = view,
-            None => {
-                self.add_window(view);
-            }
-        }
-        if let Some(old) = old {
-            self.close_document(old);
-        }
-        self.mark_dirty_render();
     }
 
     /// 文書を閉じる。保存ジョブが実行中なら、その保存の結果が届くまで内容を緊急退避の対象に残す
