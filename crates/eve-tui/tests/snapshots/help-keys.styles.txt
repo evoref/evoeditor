@@ -1,0 +1,14 @@
+0: 0-5 Reset Reset BOLD
+1: 0-7 Reset Reset BOLD | UNDERLINED
+4: 1-6 Reset Reset BOLD
+5: 2-7 Reset Reset BOLD
+6: 1-8 Reset Reset BOLD
+7: 2-17 Reset Reset BOLD
+8: 2-7 Reset Reset BOLD
+9: 2-24 Reset Reset BOLD
+10: 2-22 Reset Reset BOLD
+11: 1-14 Reset Reset BOLD
+12: 2-20 Reset Reset BOLD
+13: 0-32 Reset Reset DIM
+14: 0-79 Rgb(232, 232, 232) Rgb(47, 51, 64) NONE
+16: 0-2 Rgb(26, 26, 26) Rgb(143, 208, 255) NONE

@@ -1,0 +1,4 @@
+0: 0-2 Reset Reset BOLD | 3-8 Reset Reset REVERSED
+2: 3-6 Reset Reset DIM | 13-14 Reset Reset DIM
+14: 0-79 Reset Reset REVERSED
+16: 0-1 Reset Reset REVERSED | 8-9 Reset Reset REVERSED | 20-21 Reset Reset REVERSED | 28-29 Reset Reset REVERSED | 36-37 Reset Reset REVERSED | 44-45 Reset Reset REVERSED | 56-57 Reset Reset REVERSED

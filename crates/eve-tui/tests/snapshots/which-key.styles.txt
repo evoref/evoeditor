@@ -1,0 +1,15 @@
+0: 0-10 Reset Reset BOLD
+1: 2-2 Reset Reset BOLD
+2: 2-2 Reset Reset BOLD
+3: 2-2 Reset Reset BOLD
+4: 2-2 Reset Reset BOLD
+5: 2-2 Reset Reset BOLD
+6: 2-2 Reset Reset BOLD
+7: 2-2 Reset Reset BOLD
+8: 2-2 Reset Reset BOLD
+9: 2-2 Reset Reset BOLD
+10: 2-2 Reset Reset BOLD
+11: 2-2 Reset Reset BOLD
+12: 2-2 Reset Reset BOLD
+14: 0-8 Rgb(232, 232, 232) Rgb(47, 51, 64) NONE | 9-16 Rgb(232, 232, 232) Rgb(47, 51, 64) BOLD | 17-79 Rgb(232, 232, 232) Rgb(47, 51, 64) NONE
+16: 0-2 Rgb(26, 26, 26) Rgb(143, 208, 255) NONE

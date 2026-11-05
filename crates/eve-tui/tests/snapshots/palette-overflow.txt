@@ -1,0 +1,14 @@
+ 1e
+ 2▶ 編集: 前の文字を削除                       edit.delete_backward  Backspace
+ 3  編集: 後ろの文字を削除                            edit.delete_forward  Del
+ 4  編集: 行を削除                                  edit.delete_line  Ctrl+K L
+~   編集: 前の単語を削除             edit.delete_word_backward  Ctrl+Backspace
+~   編集: 後ろの単語を削除                  edit.delete_word_forward  Ctrl+Del
+~   編集: 行を複製                               edit.duplicate_line  Ctrl+K D
+~   編集: インデント                                          edit.indent  Tab
+~   編集: 文字を挿入                                          edit.insert_text
+~   編集: 行を下へ移動                            edit.move_line_down  Alt+↓
+memo.txt                                                     行 1, 桁 1 UTF-8 LF
+
+Esc 取消  Enter 決定
+cursor: Some(CellPos { col: 3, row: 0 })

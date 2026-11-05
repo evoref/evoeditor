@@ -2435,9 +2435,9 @@ enum Continuation { Quit, Replace(ReplaceTarget), Reopen { encoding: EncodingNam
 - NFR-103〜111 を §21 の手段ごとに分解したマイクロベンチ: `apply` (100 MB 中央)、`layout_line` (10 MB 行の先頭 64 KiB (v0.1) / char 近似モード (v0.2) / 通常)、`snap_to_grapheme` (チャンク跨ぎ)、decode (UTF-8 / Shift_JIS 100 MB)、encode + 書き出し、検索 全件 (100 MB、リテラル `memmem` / 行単位の正規表現 `(?i)`)、ChangeSet compose (10,000 edits)、Undo 10,000 回。
 - メモリ: 1 MB / 100 MB / 1 GB 読込後の RSS (NFR-202、デコード後サイズ基準、OS 別指標)、Undo 10,000 ステップ後の履歴サイズと RSS (NFR-203、会計との比)。
 
-### 22.5 スナップショットテスト (insta)
+### 22.5 スナップショットテスト
 
-- 代表的なテキスト (全角・絵文字・タブ・制御文字・不正バイト・長大行の先頭・折り返し) の `Frame` をシリアライズして比較。WidthConfig の `ambiguous_wide` 両方を網羅。
+- 代表的なテキスト (全角・絵文字・タブ・制御文字・不正バイト・長大行の先頭・折り返し) の `Frame` をシリアライズして比較 (`eve_testkit::golden::check`、09 §3.4)。WidthConfig の `ambiguous_wide` 両方を網羅。
 
 ---
 

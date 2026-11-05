@@ -21,6 +21,8 @@ mod virtual_screen;
 
 pub use ascii::{AsciiOptions, render_ascii};
 pub use clock::ManualClock;
+/// `Harness::with_locale` に渡す言語 (eve-config に依存しない crate の試験からも使えるように)。
+pub use eve_config::Locale;
 pub use harness::Harness;
 pub use headless::{HeadlessFrontend, HeadlessProbe};
 pub use jobs::ManualJobSpawner;

@@ -1785,7 +1785,7 @@ id = "03 §22.5"
 file = "docs/03-core-design.md"
 line = 2438
 end = 2443
-title = "スナップショットテスト (insta)"
+title = "スナップショットテスト"
 
 [[section]]
 id = "03 §23"
