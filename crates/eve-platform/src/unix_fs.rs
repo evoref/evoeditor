@@ -260,7 +260,10 @@ fn set_xattr(fd: i32, name: &[u8], value: &[u8]) -> io::Result<()> {
 }
 
 /// T の xattr と POSIX ACL を tmp に写す。写せなかった種類を返す。
-fn copy_xattrs(src: &File, dst: &File) -> Vec<AttrKind> {
+/// `with_acl` が偽なら、アクセス ACL (`system.posix_acl_access`) は写さずに `Security` を失ったとする
+/// (グループを合わせられないとき。写すと、ACL が mode のグループのビット (mask) と other のビットを
+/// 書き直し、元の mode を別のグループに当てたのと同じになる。05 §4.1 手順 4)。
+fn copy_xattrs(src: &File, dst: &File, with_acl: bool) -> Vec<AttrKind> {
     let mut lost = Vec::new();
     let names = match list_xattrs(src.as_raw_fd()) {
         Ok(n) => n,
@@ -268,6 +271,12 @@ fn copy_xattrs(src: &File, dst: &File) -> Vec<AttrKind> {
     };
     for name in names {
         let kind = if name == ACL_ACCESS {
+            if !with_acl {
+                if !lost.contains(&AttrKind::Security) {
+                    lost.push(AttrKind::Security);
+                }
+                continue;
+            }
             AttrKind::Security
         } else if copy_xattr_name(&name) {
             AttrKind::StreamsXattr
@@ -305,11 +314,30 @@ fn rename_no_replace(from: &Path, to: &Path) -> io::Result<()> {
     }
     let e = io::Error::last_os_error();
     match e.raw_os_error() {
-        Some(libc::ENOSYS | libc::EINVAL) => {
+        // 上書きしない移動を使えない FS: ENOSYS (古いカーネル) と EINVAL (FUSE の ntfs-3g など) に加えて、
+        // ENOTSUP / EOPNOTSUPP を返す FS もある (docs/review/v0.3-findings.md の REF-07)
+        Some(c) if [libc::ENOSYS, libc::EINVAL, libc::ENOTSUP, libc::EOPNOTSUPP].contains(&c) => {
             fs::hard_link(from, to)?;
             fs::remove_file(from)
         }
         _ => Err(e),
+    }
+}
+
+/// 既存の T を置き換える rename の失敗の写像。FUSE・特殊な FS で rename が `EXDEV` / `ENOTSUP` で、取り直した T が無傷
+/// (`intact`) なら、原子的な置換ができないだけなので `AtomicUnsupported` にする (core が確認の後に直接上書きへ進む、
+/// 05 §4.4 の表。docs/review/v0.3-findings.md の SAF-23)。新規ファイル (T が無い) には使わない (直接上書きは T があるときだけ)。
+/// それ以外は `map_io_error` (他の操作の `EXDEV` は 05 §4.4 の表のとおり `Other`)。
+fn rename_error(e: io::Error, path: &FsPath, intact: bool) -> FsError {
+    match e.raw_os_error() {
+        Some(c) if intact && [libc::EXDEV, libc::ENOTSUP, libc::EOPNOTSUPP].contains(&c) => {
+            FsError {
+                kind: FsErrorKind::AtomicUnsupported,
+                detail: None,
+                source: Some(e),
+            }
+        }
+        _ => map_io_error(e, path),
     }
 }
 
@@ -501,10 +529,15 @@ impl FileSystem for UnixFs {
             }
         };
         hooks::hit("kill_after_tmp_alloc");
+        // 中断の後片付け: 一時ファイルを消せた (または既に無い) ときだけ保存中フラグを消す。消せなければフラグを残し、
+        // 次の起動の走査が一時ファイルを見つけられるようにする (05 §4.1 手順 8、§4.6 の「記録の一時ファイルが実在しない
+        // 記録は消す」。Windows の save.rs は不在でもフラグを残す。docs/review/v0.3-findings.md の SAF-10)
         let abort = |file: Option<File>, flag: &mut FlagGuard| {
             drop(file);
-            let _ = fs::remove_file(&tmp);
-            flag.remove();
+            match fs::remove_file(&tmp) {
+                Err(e) if e.kind() != io::ErrorKind::NotFound => {}
+                _ => flag.remove(),
+            }
         };
 
         // 2. 本文
@@ -542,18 +575,27 @@ impl FileSystem for UnixFs {
                     lost.push(k);
                 }
             };
+            let m = om.permissions().mode();
+            // 一時ファイルのグループが T と同じか (同じでなければ、元の mode や ACL を当てると別のグループに読める)
+            let mut same_group = true;
             if opts.preserve.security {
                 let (uid, gid) = (om.uid(), om.gid());
-                if uid != euid() || gid != file.metadata().map_or(gid, |m| m.gid()) {
+                let gid_is = |f: &File| f.metadata().is_ok_and(|x| x.gid() == gid);
+                same_group = gid_is(&file);
+                if uid != euid() || !same_group {
                     // 他人の所有を自分が引き継げない (EPERM) ときは、グループだけでも合わせて警告する
                     if std::os::unix::fs::fchown(&file, Some(uid), Some(gid)).is_err() {
                         let _ = std::os::unix::fs::fchown(&file, None, Some(gid));
                         lose(AttrKind::Security);
                     }
+                    // chown を黙って何もしない FS (vfat の quiet・unix 拡張の無い CIFS 等) があるので、結果は fstat で見る
+                    same_group = gid_is(&file);
                 }
-                let m = om.permissions().mode();
+                // グループを合わせられなかったら、元の mode を別のグループに当てない。所有者のビットだけにする
+                // (05 §4.1 手順 4。docs/review/v0.3-findings.md の SAF-09)
+                let mode = if same_group { m & 0o1777 } else { m & 0o700 };
                 let chmod_failed = file
-                    .set_permissions(fs::Permissions::from_mode(m & 0o1777))
+                    .set_permissions(fs::Permissions::from_mode(mode))
                     .is_err();
                 if chmod_failed || m & 0o6000 != 0 {
                     lose(AttrKind::Security);
@@ -562,7 +604,9 @@ impl FileSystem for UnixFs {
             if (opts.preserve.streams_xattr || opts.preserve.security)
                 && let Ok(src) = File::open(&target)
             {
-                copy_xattrs(&src, &file).into_iter().for_each(&mut lose);
+                copy_xattrs(&src, &file, same_group)
+                    .into_iter()
+                    .for_each(&mut lose);
                 // T に ACL が無いのに親の既定 ACL を tmp が継承すると、元と違う相手に読める (05 §4.3)
                 if opts.preserve.security
                     && get_xattr(src.as_raw_fd(), ACL_ACCESS).is_err()
@@ -572,8 +616,17 @@ impl FileSystem for UnixFs {
                     lose(AttrKind::Security);
                 }
             }
+            if opts.preserve.security && !same_group {
+                // xattr の複製の後にもう一度当てる (ACL が付いていれば mask を 0 にして、名前付きの項目も効かなくする)
+                let _ = file.set_permissions(fs::Permissions::from_mode(m & 0o700));
+            }
             if !lost.is_empty() {
                 warnings.push(SaveWarning::AttrsNotPreserved { what: lost });
+            }
+            // 他の利用者からの権限が元より狭くなったか (グループを合わせられなかった・chmod に失敗した)。最後の mode で判定する
+            let final_mode = file.metadata().map_or(0, |x| x.permissions().mode());
+            if opts.preserve.security && (m & 0o077) & !final_mode != 0 {
+                warnings.push(SaveWarning::PermissionNarrowed);
             }
         }
         let tmp_meta = file.metadata().ok().map(|m| meta_of(&tmp, &m));
@@ -609,8 +662,13 @@ impl FileSystem for UnixFs {
         let _replacing = self.replacing.guard(&target_path.display());
         let method = if existing.is_some() {
             if let Err(e) = fs::rename(&tmp, &target) {
+                // T が無傷か (手順 0b の値と同じか) を取り直して確かめる。無傷でなければ AtomicUnsupported にしない
+                let intact = matches!(
+                    (&existing, self.metadata(&target_path).ok()),
+                    (Some(a), Some(b)) if same_file_state(a, &b)
+                );
                 abort(None, &mut flag);
-                return Err(map_io_error(e, path));
+                return Err(rename_error(e, path, intact));
             }
             SaveMethod::Atomic
         } else {
