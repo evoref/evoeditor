@@ -549,3 +549,45 @@ fn 一つの文書の書込が失敗しても_他の文書は退避する() {
     assert_eq!(m.matches("written = false").count(), 1, "{m}");
     let _ = fs::remove_dir_all(state);
 }
+
+// Issue #342 (SAF-35): 遅い退避は、各段の経過時間を状態ディレクトリのログに残す (途中で終わっても、どこまで進んだかが分かる)。
+// 速い退避では何も書かない。
+#[test]
+fn 遅い退避は各段の時間をログに残し_速い退避は書かない() {
+    let state = tmp("slow-stages");
+    let sd = state.join("s");
+    let w = StateRescue::new(Some(sd.clone()));
+    let log = sd.join("log").join("evoeditor.log");
+    let docs = [doc(1, "unsaved text", None, |_| {})];
+    let fast = w.write(&docs, RescueReason::ConsoleClose, Duration::from_secs(10));
+    assert!(fast.complete);
+    assert!(
+        !fs::read_to_string(&log)
+            .unwrap_or_default()
+            .contains("退避の段の時間"),
+        "速い退避ではログに書かない"
+    );
+    let slow_body = |path: &Path, d: &DocSnapshot, expired: &dyn Fn() -> bool| {
+        std::thread::sleep(Duration::from_millis(600));
+        eve_platform::rescue::write_body_for_test(path, d, expired)
+    };
+    let out = w.write_with(
+        &docs,
+        RescueReason::ConsoleClose,
+        Duration::from_secs(10),
+        &slow_body,
+    );
+    assert!(out.complete);
+    let text = fs::read_to_string(&log).unwrap();
+    let line = text
+        .lines()
+        .find(|l| l.contains("退避の段の時間 (console_close、遅い)"))
+        .unwrap_or_else(|| panic!("遅い段のログがある: {text}"));
+    assert!(
+        line.contains("ディレクトリ")
+            && line.contains("manifest 1")
+            && line.contains("本文 1 (12 B)"),
+        "{line}"
+    );
+    let _ = fs::remove_dir_all(state);
+}

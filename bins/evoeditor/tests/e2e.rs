@@ -531,6 +531,13 @@ fn 設定ディレクトリが無くても使え_設定ディレクトリは作�
     let _ = std::fs::remove_dir_all(dir);
 }
 
+/// 状態ディレクトリのログ (`log/evoeditor.log`)。退避の試験が落ちたときに、退避の段の時間 (遅いときだけ書く) を見るため
+/// (Issue #342)。
+fn state_log(s: &Session) -> String {
+    std::fs::read_to_string(s.state.join("log").join("evoeditor.log"))
+        .unwrap_or_else(|_| "(ログなし)".to_owned())
+}
+
 // (8b ii) コンソールを閉じる (CTRL_CLOSE): 未保存の内容を退避して終了する。退避は受信スレッドがメインを待たずに書く
 // verifies: AC-FR-107-2
 // verifies: AC-NFR-302-2
@@ -557,13 +564,22 @@ fn コンソールを閉じると未保存の内容を退避して終了する()
                 .collect()
         })
         .unwrap_or_default();
-    assert_eq!(dirs.len(), 1, "退避は 1 件: {dirs:?} ({recovery:?})");
+    assert_eq!(
+        dirs.len(),
+        1,
+        "退避は 1 件: {dirs:?} ({recovery:?})\n--- log\n{}",
+        state_log(&s)
+    );
     let manifest = std::fs::read_to_string(dirs[0].join("manifest.toml")).unwrap();
     assert!(
         manifest.contains("reason = \"console_close\""),
         "{manifest}"
     );
-    assert!(manifest.contains("complete = true"), "{manifest}");
+    assert!(
+        manifest.contains("complete = true"),
+        "{manifest}\n--- log\n{}",
+        state_log(&s)
+    );
     let body: Vec<_> = std::fs::read_dir(&dirs[0])
         .unwrap()
         .flatten()
@@ -799,7 +815,11 @@ fn パニックすると端末を戻し_未保存の内容を退避してクラ�
     assert_eq!(dirs.len(), 1, "{dirs:?}");
     let manifest = std::fs::read_to_string(dirs[0].join("manifest.toml")).unwrap();
     assert!(manifest.contains("reason = \"panic\""), "{manifest}");
-    assert!(manifest.contains("complete = true"), "{manifest}");
+    assert!(
+        manifest.contains("complete = true"),
+        "{manifest}\n--- log\n{}",
+        state_log(&s)
+    );
     let body: Vec<_> = std::fs::read_dir(&dirs[0])
         .unwrap()
         .flatten()
@@ -866,7 +886,11 @@ fn コンソールイベントで退避して終了する(kind: &str) {
     assert_eq!(dirs.len(), 1, "{dirs:?}");
     let manifest = std::fs::read_to_string(dirs[0].join("manifest.toml")).unwrap();
     assert!(manifest.contains("reason = \"signal\""), "{manifest}");
-    assert!(manifest.contains("complete = true"), "{manifest}");
+    assert!(
+        manifest.contains("complete = true"),
+        "{manifest}\n--- log\n{}",
+        state_log(&s)
+    );
     let body: Vec<_> = std::fs::read_dir(&dirs[0])
         .unwrap()
         .flatten()
@@ -920,7 +944,11 @@ fn シグナルで退避して同じシグナルで終わる(name: &str, want: &
     assert_eq!(dirs.len(), 1, "{dirs:?}");
     let manifest = std::fs::read_to_string(dirs[0].join("manifest.toml")).unwrap();
     assert!(manifest.contains("reason = \"signal\""), "{manifest}");
-    assert!(manifest.contains("complete = true"), "{manifest}");
+    assert!(
+        manifest.contains("complete = true"),
+        "{manifest}\n--- log\n{}",
+        state_log(&s)
+    );
     let body: Vec<_> = std::fs::read_dir(&dirs[0])
         .unwrap()
         .flatten()
@@ -982,7 +1010,11 @@ fn メインが止まっていても_sigterm_で端末を戻して同じシグ�
     let dirs = recovery_dirs(&s.state);
     assert_eq!(dirs.len(), 1, "{dirs:?}");
     let manifest = std::fs::read_to_string(dirs[0].join("manifest.toml")).unwrap();
-    assert!(manifest.contains("complete = true"), "{manifest}");
+    assert!(
+        manifest.contains("complete = true"),
+        "{manifest}\n--- log\n{}",
+        state_log(&s)
+    );
     let _ = std::fs::remove_dir_all(&s.state);
 }
 
@@ -1079,7 +1111,11 @@ fn メインが止まっていても_ctrl_break_で端末を戻して終了す�
         .collect();
     assert_eq!(dirs.len(), 1, "{dirs:?}");
     let manifest = std::fs::read_to_string(dirs[0].join("manifest.toml")).unwrap();
-    assert!(manifest.contains("complete = true"), "{manifest}");
+    assert!(
+        manifest.contains("complete = true"),
+        "{manifest}\n--- log\n{}",
+        state_log(&s)
+    );
     let _ = std::fs::remove_dir_all(&s.state);
 }
 
@@ -1115,13 +1151,22 @@ fn メインが止まっていてもコンソールを閉じると未保存の�
                 .collect()
         })
         .unwrap_or_default();
-    assert_eq!(dirs.len(), 1, "退避は 1 件: {dirs:?}");
+    assert_eq!(
+        dirs.len(),
+        1,
+        "退避は 1 件: {dirs:?}\n--- log\n{}",
+        state_log(&s)
+    );
     let manifest = std::fs::read_to_string(dirs[0].join("manifest.toml")).unwrap();
     assert!(
         manifest.contains("reason = \"console_close\""),
         "{manifest}"
     );
-    assert!(manifest.contains("complete = true"), "{manifest}");
+    assert!(
+        manifest.contains("complete = true"),
+        "{manifest}\n--- log\n{}",
+        state_log(&s)
+    );
     let body: Vec<_> = std::fs::read_dir(&dirs[0])
         .unwrap()
         .flatten()
