@@ -16,6 +16,7 @@ mod fspath;
 mod interrupted;
 mod io_jobs;
 mod jobs;
+mod keymap;
 mod last_version;
 mod leftover;
 mod paths;
