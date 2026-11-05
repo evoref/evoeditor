@@ -3,16 +3,6 @@
 use eve_core::{Case, SearchCount, SearchQuery, SearchStep};
 use eve_testkit::Harness;
 
-fn sel(h: &Harness) -> (usize, usize) {
-    let id = h.doc_id();
-    let _ = id;
-    let st = h.editor.state();
-    let w = st.first_window().unwrap();
-    let v = st.view(st.window_view(w).unwrap()).unwrap();
-    let r = v.selection.primary();
-    (r.start().0, r.end().0)
-}
-
 fn start(h: &mut Harness, q: &str) {
     h.editor.state_mut().search_start(SearchQuery::literal(q));
 }
@@ -37,7 +27,7 @@ fn 全件を数えて_次へ_前へ_で移り_端で折り返す() {
         }
     );
     assert_eq!(step(&mut h, true), SearchStep::Moved { wrapped: false });
-    assert_eq!(sel(&h), (0, 2));
+    assert_eq!(h.selection_range(), (0, 2));
     assert_eq!(
         h.editor.state().search_count(),
         SearchCount::Exact {
@@ -46,15 +36,15 @@ fn 全件を数えて_次へ_前へ_で移り_端で折り返す() {
         }
     );
     step(&mut h, true);
-    assert_eq!(sel(&h), (3, 5));
+    assert_eq!(h.selection_range(), (3, 5));
     step(&mut h, true);
-    assert_eq!(sel(&h), (6, 8));
+    assert_eq!(h.selection_range(), (6, 8));
     assert_eq!(step(&mut h, true), SearchStep::Moved { wrapped: true });
-    assert_eq!(sel(&h), (0, 2));
+    assert_eq!(h.selection_range(), (0, 2));
     assert_eq!(step(&mut h, false), SearchStep::Moved { wrapped: true });
-    assert_eq!(sel(&h), (6, 8));
+    assert_eq!(h.selection_range(), (6, 8));
     step(&mut h, false);
-    assert_eq!(sel(&h), (3, 5));
+    assert_eq!(h.selection_range(), (3, 5));
 }
 
 #[test]
@@ -68,13 +58,13 @@ fn 走査が終わる前でも_次へ_は同期検索で動く() {
         SearchCount::Running { .. }
     ));
     assert_eq!(step(&mut h, true), SearchStep::Moved { wrapped: false });
-    assert_eq!(sel(&h), (2, 5));
+    assert_eq!(h.selection_range(), (2, 5));
     step(&mut h, true);
-    assert_eq!(sel(&h), (8, 11));
+    assert_eq!(h.selection_range(), (8, 11));
     assert_eq!(step(&mut h, true), SearchStep::Moved { wrapped: true });
-    assert_eq!(sel(&h), (2, 5));
+    assert_eq!(h.selection_range(), (2, 5));
     assert_eq!(step(&mut h, false), SearchStep::Moved { wrapped: true });
-    assert_eq!(sel(&h), (8, 11));
+    assert_eq!(h.selection_range(), (8, 11));
 }
 
 // verifies: AC-FR-401-3
@@ -84,9 +74,9 @@ fn 一致が無ければ_nomatch_で選択を変えない() {
     h.text("abc");
     start(&mut h, "zzz");
     h.run_jobs();
-    let before = sel(&h);
+    let before = h.selection_range();
     assert_eq!(step(&mut h, true), SearchStep::NoMatch);
-    assert_eq!(sel(&h), before);
+    assert_eq!(h.selection_range(), before);
     assert_eq!(
         h.editor.state().search_count(),
         SearchCount::Exact {
@@ -147,7 +137,7 @@ fn 編集すると件数は約表示に落ち_次へ_は再検索して動く() 
     );
     h.keys("ctrl+home");
     assert_eq!(step(&mut h, true), SearchStep::Moved { wrapped: false });
-    assert_eq!(sel(&h), (0, 2));
+    assert_eq!(h.selection_range(), (0, 2));
     h.run_jobs();
     assert_eq!(
         h.editor.state().search_count(),
@@ -201,7 +191,7 @@ fn 日本語と書記素境界() {
         }
     );
     assert_eq!(step(&mut h, true), SearchStep::Moved { wrapped: false });
-    let (s, e) = sel(&h);
+    let (s, e) = h.selection_range();
     assert_eq!(e - s, 1);
     assert_eq!(s, 12);
 }
@@ -221,10 +211,10 @@ fn 同期検索で届かない一致は単発のジョブで見つけて移る()
     h.keys("ctrl+home");
     start(&mut h, "needle");
     assert_eq!(step(&mut h, true), SearchStep::NotYet);
-    assert_eq!(sel(&h), (0, 0), "まだ動かない");
+    assert_eq!(h.selection_range(), (0, 0), "まだ動かない");
     h.run_jobs();
     let want = 12 * 100_000;
-    assert_eq!(sel(&h), (want, want + 6));
+    assert_eq!(h.selection_range(), (want, want + 6));
 }
 
 #[test]
@@ -237,7 +227,7 @@ fn 後ろ向きでも単発のジョブで見つけ_端を越えると折り返�
     assert_eq!(step(&mut h, false), SearchStep::NotYet);
     h.run_jobs();
     let want = 12 * 100_000;
-    assert_eq!(sel(&h), (want, want + 6));
+    assert_eq!(h.selection_range(), (want, want + 6));
 }
 
 #[test]
@@ -249,5 +239,9 @@ fn 単発のジョブの間に選択が変わったら結果を捨てる() {
     assert_eq!(step(&mut h, true), SearchStep::NotYet);
     h.keys("right");
     h.run_jobs();
-    assert_eq!(sel(&h), (1, 1), "利用者が動かしたので動かさない");
+    assert_eq!(
+        h.selection_range(),
+        (1, 1),
+        "利用者が動かしたので動かさない"
+    );
 }

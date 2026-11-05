@@ -2,6 +2,7 @@
 
 use eve_config::{DiagKind, KeymapProblem, load_keymap_str};
 use eve_testkit::Harness;
+use eve_testkit::helpers::cell_text;
 
 /// `keymap.toml` の本文を読ませて、診断の種類の列を返す。
 fn load(h: &mut Harness, text: &str) -> Vec<(String, DiagKind)> {
@@ -48,14 +49,10 @@ fn 既定の割当を別のコマンドに付け替えると_ラベルとヘル�
     let key_of = |title: &str| {
         lines
             .iter()
-            .find(|l| l.kind == eve_view::HelpLineKind::Entry && text_of(&l.text) == title)
-            .and_then(|l| l.key.as_ref().map(text_of))
+            .find(|l| l.kind == eve_view::HelpLineKind::Entry && cell_text(&l.text) == title)
+            .and_then(|l| l.key.as_ref().map(cell_text))
     };
     assert!(key_of("名前を付けて保存").unwrap().contains("Ctrl+S"));
-}
-
-fn text_of(t: &eve_view::CellText) -> String {
-    t.spans.iter().map(|s| s.text.to_string()).collect()
 }
 
 #[test]

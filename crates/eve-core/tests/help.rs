@@ -1,11 +1,8 @@
 //! ヘルプ画面 (docs/04 §8.6、01 FR-514): 節を縦に並べた 1 本のスクロール、キー一覧とコマンド一覧は現在のキーマップとコマンドから作る。
 
 use eve_testkit::Harness;
+use eve_testkit::helpers::cell_text;
 use eve_view::{HelpLine, HelpLineKind, OverlayModel};
-
-fn text_of(t: &eve_view::CellText) -> String {
-    t.spans.iter().map(|s| s.text.to_string()).collect()
-}
 
 /// (全行, 先頭に描く行の番号)。
 fn help(h: &mut Harness) -> (Vec<HelpLine>, usize) {
@@ -21,11 +18,11 @@ fn help(h: &mut Harness) -> (Vec<HelpLine>, usize) {
 fn find<'a>(lines: &'a [HelpLine], kind: HelpLineKind, text: &str) -> Option<&'a HelpLine> {
     lines
         .iter()
-        .find(|l| l.kind == kind && text_of(&l.text) == text)
+        .find(|l| l.kind == kind && cell_text(&l.text) == text)
 }
 
 fn key_of(l: &HelpLine) -> String {
-    l.key.as_ref().map(text_of).unwrap_or_default()
+    l.key.as_ref().map(cell_text).unwrap_or_default()
 }
 
 #[test]
@@ -36,8 +33,8 @@ fn ctrl_k_h_でヘルプが開き_先頭は_はじめに() {
     let (lines, scroll) = help(&mut h);
     assert_eq!(scroll, 0);
     assert_eq!(lines[0].kind, HelpLineKind::Heading);
-    assert_eq!(text_of(&lines[0].text), "はじめに");
-    let intro = text_of(&lines[1].text);
+    assert_eq!(cell_text(&lines[0].text), "はじめに");
+    let intro = cell_text(&lines[1].text);
     assert!(
         intro.contains("Ctrl+S"),
         "{{key:…}} がキーマップから解決される: {intro}"
@@ -62,11 +59,11 @@ fn キー一覧は割当のあるコマンドをカテゴリ別に並べ_複数�
     // 割当のないコマンド (バッファ一覧の `list` など以外) はキー一覧に出ない: パレットだけのコマンド
     let keys_start = lines
         .iter()
-        .position(|l| text_of(&l.text) == "キー一覧")
+        .position(|l| cell_text(&l.text) == "キー一覧")
         .unwrap();
     let cmds_start = lines
         .iter()
-        .position(|l| text_of(&l.text) == "コマンド一覧")
+        .position(|l| cell_text(&l.text) == "コマンド一覧")
         .unwrap();
     assert!(
         lines[keys_start..cmds_start]
@@ -84,20 +81,20 @@ fn コマンド一覧は_commandid_とタイトルと説明を出す() {
     let (lines, _) = help(&mut h);
     let cmds_start = lines
         .iter()
-        .position(|l| text_of(&l.text) == "コマンド一覧")
+        .position(|l| cell_text(&l.text) == "コマンド一覧")
         .unwrap();
     let e = lines[cmds_start..]
         .iter()
-        .find(|l| l.key.as_ref().is_some_and(|k| text_of(k) == "file.save"))
+        .find(|l| l.key.as_ref().is_some_and(|k| cell_text(k) == "file.save"))
         .expect("file.save");
-    let t = text_of(&e.text);
+    let t = cell_text(&e.text);
     assert!(t.starts_with("保存"), "{t}");
     assert!(t.contains('—'), "説明が続く: {t}");
     // 専用の内部コマンドは出ない
     assert!(!lines.iter().any(|l| {
         l.key
             .as_ref()
-            .is_some_and(|k| text_of(k).starts_with("internal."))
+            .is_some_and(|k| cell_text(k).starts_with("internal."))
     }));
 }
 
@@ -143,14 +140,14 @@ fn キー一覧とコマンド一覧は該当の節へスクロールして開�
         eve_core::InvocationSource::Palette,
     ));
     let (lines, scroll) = help(&mut h);
-    assert_eq!(text_of(&lines[scroll].text), "キー一覧");
+    assert_eq!(cell_text(&lines[scroll].text), "キー一覧");
     h.keys("esc");
     h.editor.execute(eve_core::CommandInvocation::new(
         "help.commands",
         eve_core::InvocationSource::Palette,
     ));
     let (lines, scroll) = help(&mut h);
-    assert_eq!(text_of(&lines[scroll].text), "コマンド一覧");
+    assert_eq!(cell_text(&lines[scroll].text), "コマンド一覧");
 }
 
 #[test]

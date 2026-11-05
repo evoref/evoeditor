@@ -1,11 +1,8 @@
 //! この端末で届く割当 (docs/04 §7.8・§7.3a・§8.6): キーの表記は届く割当から選び、ヘルプのキー一覧は届かない割当に印を付ける。
 
 use eve_testkit::Harness;
+use eve_testkit::helpers::cell_text;
 use eve_view::{Capabilities, HelpLine, HelpLineKind, KeyCode, KeyStroke, Modifiers, OverlayModel};
-
-fn text_of(t: &eve_view::CellText) -> String {
-    t.spans.iter().map(|s| s.text.to_string()).collect()
-}
 
 fn stroke(mods: Modifiers, key: KeyCode) -> KeyStroke {
     KeyStroke { mods, key }
@@ -40,8 +37,8 @@ fn entry_keys(lines: &[HelpLine], title: &str) -> String {
 fn entry_keys_with(lines: &[HelpLine], title: &str, has: &str) -> String {
     lines
         .iter()
-        .filter(|l| l.kind == HelpLineKind::Entry && text_of(&l.text) == title)
-        .filter_map(|l| l.key.as_ref().map(text_of))
+        .filter(|l| l.kind == HelpLineKind::Entry && cell_text(&l.text) == title)
+        .filter_map(|l| l.key.as_ref().map(cell_text))
         .find(|k| k.contains(has))
         .unwrap_or_else(|| panic!("{title} の行"))
 }
@@ -57,7 +54,7 @@ fn ヘルプのキー一覧は届かない割当に印を付け_注記を出す(
     assert!(
         lines
             .iter()
-            .any(|l| text_of(&l.text).starts_with("* の付いたキーは")),
+            .any(|l| cell_text(&l.text).starts_with("* の付いたキーは")),
         "注記がある"
     );
 }
@@ -80,7 +77,7 @@ fn 拡張キーが要る割当は拡張キーが無ければ届かない() {
     assert!(
         !lines
             .iter()
-            .any(|l| text_of(&l.text).starts_with("* の付いたキーは")),
+            .any(|l| cell_text(&l.text).starts_with("* の付いたキーは")),
         "届かない割当が無ければ注記も出さない"
     );
 }

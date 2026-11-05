@@ -4,6 +4,7 @@
 
 use eve_core::Args;
 use eve_testkit::Harness;
+use eve_testkit::helpers::opened;
 use eve_view::{Answer, Query};
 
 /// 主 Range の (anchor, head)。
@@ -18,13 +19,6 @@ fn sel(h: &Harness) -> (u64, u64) {
         } => (ranges[primary].anchor, ranges[primary].head),
         a => panic!("{a:?}"),
     }
-}
-
-fn opened(path: &str, data: &[u8]) -> Harness {
-    let mut h = Harness::new().with_file(path, data);
-    h.open(path);
-    h.run_jobs();
-    h
 }
 
 // verifies: AC-FR-201-1

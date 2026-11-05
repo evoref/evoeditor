@@ -3,6 +3,7 @@
 
 use eve_config::Config;
 use eve_core::FsErrorKind;
+use eve_testkit::helpers::opened;
 use eve_testkit::{FsOp, Harness};
 
 /// 打った後の `tick` (Host は各 step の最後に呼ぶ)。
@@ -13,13 +14,6 @@ fn typed(h: &mut Harness, s: &str) {
 
 fn swaps(h: &Harness) -> u32 {
     h.fs.swap_writes()
-}
-
-fn opened(path: &str, bytes: &[u8]) -> Harness {
-    let mut h = Harness::new().with_file(path, bytes);
-    h.open(path);
-    h.run_jobs();
-    h
 }
 
 // verifies: FR-118, NFR-307

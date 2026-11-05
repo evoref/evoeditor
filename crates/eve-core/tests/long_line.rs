@@ -17,17 +17,6 @@ fn opened(line: &str) -> Harness {
     h
 }
 
-fn sel(h: &Harness) -> (usize, usize) {
-    let st = h.editor.state();
-    let w = st.first_window().unwrap();
-    let r = *st
-        .view(st.window_view(w).unwrap())
-        .unwrap()
-        .selection
-        .primary();
-    (r.start().0, r.end().0)
-}
-
 fn put_cursor(h: &mut Harness, at: usize) {
     let st = h.editor.state_mut();
     let w = st.first_window().unwrap();
@@ -89,7 +78,7 @@ fn end_は行末まで動き_行末の付近を表示する() {
     for (name, line) in lines() {
         let mut h = opened(&line);
         h.keys("end");
-        assert_eq!(sel(&h), (line.len(), line.len()), "{name}");
+        assert_eq!(h.selection_range(), (line.len(), line.len()), "{name}");
         // 行末が見えていて、カーソルが画面にある
         let f = h.frame();
         assert!(f.primary_cursor.is_some(), "{name}");
@@ -105,14 +94,18 @@ fn end_は行末まで動き_行末の付近を表示する() {
         // 左へ 1 書記素、右で行末へ戻り、さらに右で次の行へ
         h.keys("left");
         let last = line.chars().last().unwrap().len_utf8();
-        assert_eq!(sel(&h).1, line.len() - last, "{name}");
+        assert_eq!(h.selection_range().1, line.len() - last, "{name}");
         h.keys("right right");
-        assert_eq!(sel(&h).1, line.len() + 1, "{name}: 次の行の行頭");
+        assert_eq!(
+            h.selection_range().1,
+            line.len() + 1,
+            "{name}: 次の行の行頭"
+        );
         // 上へ戻ると、同じ表示列 (行頭) へ
         h.keys("up");
-        assert_eq!(sel(&h).1, 0, "{name}");
+        assert_eq!(h.selection_range().1, 0, "{name}");
         h.keys("home");
-        assert_eq!(sel(&h).1, 0, "{name}");
+        assert_eq!(h.selection_range().1, 0, "{name}");
     }
 }
 
@@ -136,7 +129,7 @@ fn 長大行の中央に挿入と削除ができる() {
             .text()
             .slice_to_string(eve_text::ByteRange::new(ByteOff(mid - 1), ByteOff(mid + 4)));
         assert!(t.contains("XYZ"), "{name}: {t:?}");
-        assert_eq!(sel(&h).1, mid + 3, "{name}");
+        assert_eq!(h.selection_range().1, mid + 3, "{name}");
         // 挿入した位置が画面に入っている
         h.frame();
         assert!(row_text(&mut h, 0).contains("XYZ"), "{name}");
@@ -154,9 +147,9 @@ fn 長大行の単語移動は窓の端で止まる() {
     let line = "a".repeat(LONG_LINE_THRESHOLD + 10);
     let mut h = opened(&line);
     h.keys("ctrl+right");
-    assert_eq!(sel(&h).1, 64 * 1024);
+    assert_eq!(h.selection_range().1, 64 * 1024);
     h.keys("end ctrl+left");
-    assert_eq!(sel(&h).1, line.len() - 64 * 1024);
+    assert_eq!(h.selection_range().1, line.len() - 64 * 1024);
 }
 
 // verifies: NFR-106
@@ -227,6 +220,6 @@ fn 閾値は_file_long_line_threshold_で変えられ_開いた文書は開い�
         .set_config(eve_config::Config::default());
     h.keys("end");
     h.text("x");
-    assert_eq!(sel(&h).1, line.len() + 1);
+    assert_eq!(h.selection_range().1, line.len() + 1);
     assert_eq!(long_lines(&h), 1);
 }
