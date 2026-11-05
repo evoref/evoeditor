@@ -164,7 +164,7 @@ pub(super) fn status_model(
         ));
     }
     if !chord.is_empty() {
-        let text = format!("{} …", super::keymap::format_sequence(chord));
+        let text = format!("{} …", crate::keymap::format_sequence(chord));
         items.push(item(
             StatusKind::Chord,
             &text,

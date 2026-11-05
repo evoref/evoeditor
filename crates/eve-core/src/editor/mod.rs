@@ -7,13 +7,12 @@
 mod buffer;
 mod chrome;
 mod clipboard;
-mod command;
+pub(crate) mod command;
 mod config_reload;
 pub use config_reload::{CONFIG_FILE, ConfigSources, KEYMAP_FILE};
 pub use config_report::diagnostic_texts as config_diagnostic_texts;
 mod config_report;
-mod context;
-mod default_keymap;
+pub(crate) mod context;
 mod edit;
 mod eol;
 mod external;
@@ -21,14 +20,13 @@ mod file;
 mod help;
 mod theme;
 pub use theme::resolve as resolve_theme;
-mod keymap;
 mod layout;
 mod leftover_offer;
 mod line_ops;
 mod message;
 mod motion;
 mod mouse;
-mod overlay;
+pub(crate) mod overlay;
 mod palette;
 mod query;
 mod quit_saving;
@@ -42,13 +40,15 @@ mod snapshot;
 mod state;
 mod swap;
 mod swap_recovery;
-mod user_keymap;
 
 use eve_view::{
     Capabilities, DocumentId, EditorEvent, Effect, InputEvent, KeyCode, KeyKind, KeyStroke,
     Modifiers, ViewId, WindowId,
 };
 
+pub use crate::keymap::{
+    Binding, KeyParseError, Keymap, Layer, Resolution, format_stroke, parse_sequence, parse_stroke,
+};
 pub use clipboard::ClipboardSource;
 pub use command::{
     ArgValue, Args, CommandCtx, CommandInvocation, CommandKind, CommandRegistry, CommandResult,
@@ -56,9 +56,6 @@ pub use command::{
 };
 pub use context::{ContextExpr, CtxValue, ParseError};
 pub use edit::normalize_eol;
-pub use keymap::{
-    Binding, KeyParseError, Keymap, Layer, Resolution, format_stroke, parse_sequence, parse_stroke,
-};
 pub use layout::{Affinity, WrapMode, WrapSettings};
 pub use search_state::{SearchCount, SearchStep};
 pub use snapshot::DocSnapshot;
@@ -69,9 +66,9 @@ use crate::jobs::Ports;
 use crate::time::Tick;
 
 pub struct Editor {
-    state: EditorState,
-    registry: CommandRegistry,
-    keymap: Keymap,
+    pub(crate) state: EditorState,
+    pub(crate) registry: CommandRegistry,
+    pub(crate) keymap: Keymap,
     #[allow(dead_code)] // Port の束を保持する (今は読まない)
     ports: Ports,
     /// チョードの保留が始まった (最後のキーを受けた) 時刻。which-key の 500 ms を数える。
@@ -106,7 +103,7 @@ impl Editor {
         let mut editor = Editor {
             state,
             registry,
-            keymap: default_keymap::default_keymap(),
+            keymap: crate::keymap::default_keymap::default_keymap(),
             ports,
             chord_since: None,
             which_key_shown: false,
@@ -118,15 +115,15 @@ impl Editor {
     /// `{key:<command_id>}` の解決に使うキー表記を、今のキーマップから作り直す。
     /// キーの表記を作り直す。表記 (パレット・ヒントバー・`{key:…}`) はこの端末で届く割当から選び (04 §7.8)、
     /// ヘルプのキー一覧は全割当を、届くかの印とともに持つ。
-    fn refresh_key_labels(&mut self) {
+    pub(crate) fn refresh_key_labels(&mut self) {
         let caps = self.state.caps.clone();
-        let ok = |b: &keymap::Binding| keymap::reachable(b, &caps);
+        let ok = |b: &crate::keymap::Binding| crate::keymap::reachable(b, &caps);
         let seqs = self
             .keymap
             .first_bindings_where(&Self::EDITOR_CONTEXTS, &ok);
         let labels = seqs
             .iter()
-            .map(|(k, v)| (k.clone(), keymap::format_sequence(v)))
+            .map(|(k, v)| (k.clone(), crate::keymap::format_sequence(v)))
             .collect();
         self.state.set_key_bindings(labels, seqs);
         self.state.set_all_key_bindings(help::collect_all_bindings(

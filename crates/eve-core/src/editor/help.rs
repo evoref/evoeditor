@@ -11,10 +11,10 @@ use eve_view::{CutPolicy, HelpLine, HelpLineKind, KeyStroke, OverlayModel};
 use super::command::{
     CommandCtx, CommandKind, CommandRegistry, CommandResult, CommandSpec, Permission, RejectReason,
 };
-use super::keymap::format_sequence;
 use super::layout::cell_text;
 use super::overlay::Overlay;
 use super::state::EditorState;
+use crate::keymap::format_sequence;
 
 /// ヘルプのキー一覧で、この端末で届かない割当の後ろに付ける印 (04 §8.6)。
 const UNREACHABLE_MARK: &str = "*";
