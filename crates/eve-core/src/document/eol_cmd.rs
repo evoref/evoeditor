@@ -14,7 +14,7 @@ use crate::jobs::cancel::CancelToken;
 use crate::jobs::{JobKind, JobResult};
 
 use crate::editor::state::EditorState;
-use crate::io::file::Pending;
+use crate::io::pending::Pending;
 
 /// ジョブにする境界 (`SEARCH_SYNC_STEP_BYTES`、03 §12.2)。
 const SYNC_BYTES: usize = 1 << 20;

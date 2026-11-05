@@ -12,7 +12,7 @@ use crate::command::{
 };
 use crate::editor::Editor;
 use crate::editor::state::EditorState;
-use crate::io::file::Pending;
+use crate::io::pending::Pending;
 use crate::jobs::{ConfigFile, JobKind, JobResult};
 
 /// 設定ファイルの名前 (設定ディレクトリの直下、07 §2)。

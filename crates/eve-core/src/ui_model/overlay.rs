@@ -64,13 +64,13 @@ pub(crate) enum ConfirmAction {
     /// 知らせるだけの確認 (全保存で保存できなかった文書の一覧)。どの選択肢でも何もしない。
     Notice,
     /// 保存の代替 (原子的置換ができない・ハードリンク・バックアップを作れない)。選択肢の意味は `SaveFallback` の種類による。
-    Fallback(crate::io::file::FallbackAsk),
+    Fallback(crate::io::save::FallbackAsk),
     /// 別のバイト表現で保存される箇所がある文書の保存 (保存 / 別名で保存、03 §8.6 E2')。
-    Lossy(crate::io::file::LossyAsk),
+    Lossy(crate::io::open::LossyAsk),
     /// 読み取り専用属性を解除した文書の上書き保存 (別名で保存 / 読み取り専用を解除して保存、FR-116)。
-    ClearReadOnly(crate::io::file::LossyAsk),
+    ClearReadOnly(crate::io::open::LossyAsk),
     /// 保存先がダングリングのシンボリックリンク (リンク先に作成 / キャンセル、FR-106・05 §4.1)。
-    DanglingLink(crate::io::file::SaveFailedAsk),
+    DanglingLink(crate::io::save::SaveFailedAsk),
     /// 外部変更の検知 (再読込 / 無視、03 §9.5)。`stamp` は見つけたときのファイルの状態。
     ExternalModified {
         doc: DocumentId,
@@ -79,13 +79,13 @@ pub(crate) enum ConfirmAction {
     /// 外部で削除された (新規として保持 / 閉じる、03 §9.5)。
     ExternalDeleted(DocumentId),
     /// 保存の失敗の後の選択 (再試行 / 別名で保存 / 退避先に保存)。
-    SaveFailed(crate::io::file::SaveFailedAsk),
+    SaveFailed(crate::io::save::SaveFailedAsk),
     /// 開くときの確認 (読み取り専用で開く / 文字コードを指定して開く / 中止、03 §9.2)。
-    Open(crate::io::file::OpenAsk),
+    Open(crate::io::open::OpenAsk),
     /// dirty な文書の再読込 (変更を破棄、03 §9.5)。
     Reload(DocumentId),
     /// 表現不能の文字があって保存を中止した後の選択 (UTF-8 で保存 / キャンセル、03 §8.6)。
-    Unmappable(crate::io::file::UnmappableAsk),
+    Unmappable(crate::io::unmappable::UnmappableAsk),
     /// スワップの復旧の提案 (適用 / 破棄 / キャンセル、03 §10.3)。`revision` は提案の時点の文書の Revision。
     SwapRecovery {
         entry: Box<crate::SwapEntry>,
@@ -98,7 +98,7 @@ pub(crate) enum ConfirmAction {
     Leftover(Box<crate::Leftover>),
     /// 置換の一覧の確認 (置換して保存 / キャンセル、03 §8.6)。`revision` は ChangeSet を作った時点の文書の Revision。
     UnmappableReplace {
-        ask: crate::io::file::UnmappableAsk,
+        ask: crate::io::unmappable::UnmappableAsk,
         changes: eve_text::ChangeSet,
         revision: eve_view::Revision,
     },
@@ -150,7 +150,7 @@ pub(crate) enum PromptKind {
     GotoLine,
     /// 開くときの確認で「文字コードを指定して開く」を選んだ後の文字コードの入力 (03 §9.2)。
     Encoding {
-        ask: crate::io::file::OpenAsk,
+        ask: crate::io::open::OpenAsk,
     },
     /// `file.reopen_with_encoding` に引数が無いときの文字コードの入力 (03 §8.8)。
     ReopenEncoding,
@@ -160,7 +160,7 @@ pub(crate) enum PromptKind {
     },
     /// `file.set_encoding` で、パスのない・読み取り専用の文書の名前の入力 (名前を付けて保存へ新しい書式を渡す)。
     SaveAsFormat {
-        fmt: crate::io::file::NewFormat,
+        fmt: crate::io::pending::NewFormat,
     },
 }
 

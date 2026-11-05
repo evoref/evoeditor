@@ -13,7 +13,7 @@ use crate::time::{Millis, Tick};
 use crate::ui_model::overlay::{ChoiceDef, ConfirmAction, ConfirmState, Continuation};
 use crate::{CommandResult, FsErrorKind, FsPath, JobError, JobResult};
 
-use crate::io::file::Pending;
+use crate::io::pending::Pending;
 
 /// 保存を待つ時間。これを超えたら確認を出す。
 const WAIT: Millis = Millis(5_000);

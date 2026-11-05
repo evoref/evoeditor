@@ -12,7 +12,7 @@ use crate::jobs::{JobKind, JobResult};
 use crate::search::{SearchQuery, scan_bytes};
 
 use crate::editor::state::EditorState;
-use crate::io::file::Pending;
+use crate::io::pending::Pending;
 
 /// 保持する一致の上限 (`search.max_matches`、07 §5.5)。
 const MAX_MATCHES: usize = 10_000;

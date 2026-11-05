@@ -9,8 +9,9 @@ use crate::command::{
 };
 use crate::document::LoadState;
 use crate::editor::state::EditorState;
-use crate::io::file::{Pending, fs_reason, same_on_disk};
+use crate::io::file::{fs_reason, same_on_disk};
 use crate::io::fs::FsErrorKind;
+use crate::io::pending::Pending;
 use crate::jobs::{JobError, JobKind, JobResult, MetaPurpose};
 use crate::ui_model::overlay::{ChoiceDef, ConfirmAction, ConfirmState};
 use eve_config::ExternalChangePolicy;

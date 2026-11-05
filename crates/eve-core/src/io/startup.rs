@@ -7,8 +7,9 @@ use eve_view::{DocumentId, ViewId};
 
 use crate::document::{Document, LoadState};
 use crate::editor::state::EditorState;
-use crate::io::file::{OpenKind, Pending};
 use crate::io::io_jobs::OpenOptions;
+use crate::io::open::OpenKind;
+use crate::io::pending::Pending;
 use crate::jobs::JobKind;
 use crate::view::motion::line_col_byte;
 use eve_text::{Selection, TextRead};

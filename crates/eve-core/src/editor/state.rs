@@ -10,8 +10,8 @@ use eve_view::{
 };
 
 use crate::document::{Applied, AppliedTx, ApplyError, Document, Transaction};
-use crate::io::file::Pending;
 use crate::io::paths::Paths;
+use crate::io::pending::Pending;
 use crate::jobs::JobSpawner;
 use crate::time::Tick;
 
