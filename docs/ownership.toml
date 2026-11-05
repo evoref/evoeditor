@@ -100,8 +100,8 @@ owner = "shared"
 reviewer = "human:maintainer"
 
 [[unit]]
-path = "crates/eve-core/src/jobs.rs"
-spec = ["02 §9.3"]
+path = "crates/eve-core/src/jobs"
+spec = ["02 §4.4", "02 §9.3"]
 owner = "shared"
 reviewer = "human:maintainer"
 

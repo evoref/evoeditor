@@ -4,9 +4,9 @@
 use eve_text::{ChangeSet, LineEnding, TextRead};
 use eve_view::{CommandId, DocumentId, MessageLevel, Revision, ViewId};
 
-use crate::cancel::CancelToken;
 use crate::document::{EolStats, FormatChange, FormatState, Origin, Transaction, UndoGroupHint};
 use crate::eol::build_eol_conversion;
+use crate::jobs::cancel::CancelToken;
 use crate::jobs::{JobKind, JobResult};
 
 use super::file::Pending;

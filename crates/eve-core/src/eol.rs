@@ -5,7 +5,7 @@
 
 use eve_text::{ByteOff, ByteRange, ChangeSet, Edit, LineEnding, TextRead};
 
-use crate::cancel::CancelToken;
+use crate::jobs::cancel::CancelToken;
 
 /// 変換の ChangeSet。取り消されたら `None`。
 pub fn build_eol_conversion(

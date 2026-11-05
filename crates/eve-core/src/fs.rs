@@ -130,7 +130,7 @@ pub trait FileSystem: Send + Sync {
         _data: &mut dyn ReadChunks,
         _len: u64,
         _opts: &SaveOptions,
-        _cancel: &crate::cancel::CancelToken,
+        _cancel: &crate::jobs::cancel::CancelToken,
     ) -> Result<SaveReport, FsError> {
         Err(FsError::new(FsErrorKind::Other))
     }

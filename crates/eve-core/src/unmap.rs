@@ -7,7 +7,7 @@ use std::sync::Arc;
 use eve_encoding::{EncodeReport, Encoder, Encoding, EscapePolicy};
 use eve_text::{ByteOff, ByteRange, ChangeSet, Edit, Snapshot, TextRead};
 
-use crate::cancel::CancelToken;
+use crate::jobs::cancel::CancelToken;
 
 /// 一覧に載せる対象の上限 (03 §8.6 の「置換の一覧」)。
 pub const MAX_TARGETS: usize = 100;
