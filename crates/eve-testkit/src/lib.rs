@@ -10,6 +10,7 @@
 mod ascii;
 mod clock;
 pub mod fuzzing;
+pub mod golden;
 mod harness;
 mod headless;
 mod jobs;

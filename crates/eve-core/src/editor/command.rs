@@ -157,6 +157,8 @@ pub struct CommandSpec {
     pub kind: CommandKind,
     pub permission: Permission,
     pub when: ContextExpr,
+    /// `when` の元の文字列 (07 §11.6 のカタログの書き方のまま。一覧の出力と突合に使う)。
+    pub when_src: String,
     pub handler: Handler,
 }
 
@@ -174,6 +176,7 @@ impl CommandSpec {
             kind,
             permission,
             when: ContextExpr::parse(when)?,
+            when_src: when.to_owned(),
             handler,
         })
     }
