@@ -675,6 +675,10 @@ text = "Some permissions and attributes of {path} could not be carried over: {re
 hint = "Choose in the next prompt"
 text = "Could not make the backup before overwriting in place. Nothing was written"
 
+[msg.save.backup_not_removed]
+hint = "Delete {backup} if you do not need it"
+text = "Saved {path}, but {backup}, where the original file was moved, could not be deleted"
+
 [msg.save.busy]
 hint = "Close that program and retry with {key:file.save}, or save under another name"
 text = "Could not save because another program is using {path}"
@@ -703,6 +707,10 @@ text = "This document cannot be saved as ISO-2022-JP because it contains invalid
 hint = "Save under another name ({key:file.save_as}), or check the permissions"
 text = "Could not save {path}: {reason}"
 
+[msg.save.fsync_failed]
+hint = "On network or removable drives, the content may be lost by a power failure or removal. Eject the drive safely before removing it"
+text = "Saved {path}, but the write to the disk could not be confirmed"
+
 [msg.save.in_place_failed]
 hint = "Save under another name ({key:file.save_as}) and compare it with the backup"
 text = "Overwriting {path} in place failed partway. The file may be damaged. Content before writing: {backup}"
@@ -710,6 +718,10 @@ text = "Overwriting {path} in place failed partway. The file may be damaged. Con
 [msg.save.in_place_failed_no_backup]
 hint = "Save under another name ({key:file.save_as}) to keep the current content"
 text = "Overwriting {path} in place failed partway. The file may be damaged, and there is no backup"
+
+[msg.save.inflight_flag_not_written]
+hint = "If evoeditor is killed during a save, the traces may not be found at the next start"
+text = "Saved {path}, but the in-progress mark could not be written"
 
 [msg.save.invalid_path]
 hint = "Save under a different file name"
@@ -730,6 +742,10 @@ text = "You do not have permission to write to {path}"
 [msg.external.check_failed]
 hint = "The file is also checked for changes when you save"
 text = "Could not check {path} for changes: {reason}"
+
+[msg.save.permission_narrowed]
+hint = "Set the permissions again in the OS if needed"
+text = "Saved {path}, but the permissions for other users became narrower than before"
 
 [msg.save.read_only_fs]
 hint = "Save under another name ({key:file.save_as})"

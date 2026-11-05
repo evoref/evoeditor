@@ -1760,3 +1760,45 @@ fn 置換の途中の失敗は元のファイルの退避先のパスを示す()
     let text: String = message.spans.iter().map(|sp| sp.text.to_string()).collect();
     assert!(text.contains(".a.txt.bak123"), "{text}");
 }
+
+// 03 §9.3 手順 6、02 §4.5: 保存は成功したが知らせること (`SaveReport.warnings`) を黙って捨てない。
+// 最も重い 1 つを、保存の完了のメッセージの後に警告として出す (docs/review/v0.3-findings.md の SAF-05)
+#[test]
+fn 保存の警告は最も重い_1_つを完了の後に出す() {
+    let mut s = Env::new();
+    s.fs.add_file("/w/a.txt", b"abc\n");
+    s.open("/w/a.txt");
+    s.type_text("x");
+    s.messages();
+    s.fs.warn_next(vec![
+        eve_core::SaveWarning::AttrsNotPreserved {
+            what: vec![eve_core::AttrKind::Security],
+        },
+        eve_core::SaveWarning::FsyncFailed,
+    ]);
+    s.run("file.save", Args::new());
+    let m = s.messages();
+    assert!(!s.doc().1.is_dirty(), "保存は成功のまま");
+    let done = m.iter().position(|k| k == "info.save.done").expect("{m:?}");
+    let warn = m
+        .iter()
+        .position(|k| k == "msg.save.fsync_failed")
+        .expect("fsync の失敗を知らせる");
+    assert!(done < warn, "完了の後に出す: {m:?}");
+    assert!(
+        !m.contains(&"msg.save.attributes_not_copied".to_owned()),
+        "出すのは最も重い 1 つ: {m:?}"
+    );
+}
+
+#[test]
+fn 警告の無い保存は完了だけを出す() {
+    let mut s = Env::new();
+    s.fs.add_file("/w/a.txt", b"abc\n");
+    s.open("/w/a.txt");
+    s.type_text("x");
+    s.messages();
+    s.run("file.save", Args::new());
+    let m = s.messages();
+    assert_eq!(m, vec!["info.save.done".to_owned()], "{m:?}");
+}

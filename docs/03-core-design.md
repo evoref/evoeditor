@@ -1084,7 +1084,7 @@ file.save(doc)  [main]
   7. 成功: history.saved = node; disk_stamp = report.new_stamp (置換の後の T の FileId が書いた一時ファイルのものと違えば、Port は書いた内容の stamp を入れて警告を積む。
      ディスクの T とは一致しないので次の保存は照合で Conflict になり、外部変更として扱われる。05 §4.1 手順 7); path 確定 (新規ファイル・名前を付けて保存の場合);
      canonical = Saved.canonical; file_id = Saved.meta.file_id; 名前を付けて保存では読み取り専用の理由 (FileAttribute / NoWritePermission、§9.6) を Saved.meta から付け直す; dirty 再計算; DocumentSaved 通知; スワップを削除 (§10.2)
-     report.method == InPlace なら `info.save.in_place` (04 §15.2) のメッセージで直接上書きで保存したことを 1 回示す (ステータスの項目にはしない。05 §4.4)。report.warnings (権限複製失敗、EscapeMerge §8.3 等) をメッセージで提示
+     report.method == InPlace なら `info.save.in_place` (04 §15.2) のメッセージで直接上書きで保存したことを 1 回示す (ステータスの項目にはしない。05 §4.4)。report.warnings (権限複製失敗、EscapeMerge §8.3 等) をメッセージで提示 (保存の完了のメッセージの後に、最も重い 1 つを警告として出す。重さの順は FsyncFailed → ChangedAfterSave → BackupNotRemoved → PermissionNarrowed → AttrsNotPreserved → InflightFlagNotWritten。文言は 04 §15.2)
      失敗: Document は dirty のまま。JobError と FsError.kind (と detail) で分類し、**§9.7 (e) の「保存失敗の後の選択肢」の表** (MessageKey・選択肢・次の状態・後続処理) に従って提示する。
        分類の要点 (選択肢は §9.7 (e) の表が正本):
        - JobResult::Unmappable → §8.6 E3 の選択肢
