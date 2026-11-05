@@ -182,6 +182,119 @@ pub fn read_acs(markdown_01: &str) -> Result<Vec<Ac>, Error> {
     Ok(all)
 }
 
+/// 01 §5.5 (v0.2 以降の概要) の見出し (固定)。
+pub const LATER_HEADING: &str = "### 5.5 v0.2 以降 (概要。各版の着手前に詳細化)";
+
+/// §5.5 の検証の単位: 番号付きの AC か、AC を持たない要件。
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Unit {
+    /// `FR-101` の形。
+    pub requirement: String,
+    /// 番号付きの AC があればその ID (`AC-FR-101-1`)。無ければ要件だけ。
+    pub ac: Option<String>,
+}
+
+/// セルの中の要件 ID (`FR-123` / `NFR-123`) を、書かれた順に取り出す (`NFR-` の中の `FR-` は数えない)。
+/// §5.5 の `要件` 列は `FR-103 / FR-101 (v0.2)`・`NFR-106 長大行の編集 (v0.2)` のように説明の語を挟むので、
+/// `requirement_ids` (区切りが `,` / `、` だけ) とは別に読む。
+fn requirement_refs(cell: &str) -> Vec<String> {
+    let bytes = cell.as_bytes();
+    let mut out: Vec<(usize, String)> = Vec::new();
+    for prefix in ["NFR-", "FR-"] {
+        let mut from = 0;
+        while let Some(p) = cell[from..].find(prefix) {
+            let at = from + p;
+            from = at + prefix.len();
+            let before_ok = at == 0 || {
+                let b = bytes[at - 1];
+                !(b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+            };
+            let digits: String = cell[from..]
+                .chars()
+                .take_while(char::is_ascii_digit)
+                .collect();
+            if before_ok && !digits.is_empty() {
+                out.push((at, format!("{prefix}{digits}")));
+            }
+        }
+    }
+    out.sort();
+    out.into_iter().map(|(_, id)| id).collect()
+}
+
+/// 受入基準のセルの `AC-<n>:` (間に括弧の注記を許す) と、その直前に書かれた要件 ID (`FR-101 AC-1:`)。
+fn later_heads(cell: &str) -> Vec<(Option<String>, u32)> {
+    let mut out = Vec::new();
+    let mut from = 0;
+    while let Some(p) = cell[from..].find("AC-") {
+        let at = from + p;
+        from = at + 3;
+        let digits: String = cell[from..]
+            .chars()
+            .take_while(char::is_ascii_digit)
+            .collect();
+        let Ok(n) = digits.parse::<u32>() else {
+            continue;
+        };
+        let mut rest = cell[from + digits.len()..].trim_start();
+        if rest.starts_with('(') {
+            match rest.find(')') {
+                Some(q) => rest = rest[q + 1..].trim_start(),
+                None => continue,
+            }
+        }
+        if !rest.starts_with([':', '：']) {
+            continue;
+        }
+        // 直前の語が要件 ID なら、その要件の AC
+        let before = cell[..at].trim_end();
+        let last = before.rsplit([' ', '。', '、', '(']).next().unwrap_or("");
+        let req = (last.starts_with("FR-") || last.starts_with("NFR-")).then(|| last.to_owned());
+        out.push((req, n));
+    }
+    out
+}
+
+/// 01 §5.5 の、`要件` 列に `version` (`v0.2` など) を含む行から検証の単位を読む。
+/// その版の行で要件 ID を読めないものは失敗にする (黙って読み飛ばさない、docs/11 §8.5)。
+pub fn read_later_units(markdown_01: &str, version: &str) -> Result<Vec<Unit>, Error> {
+    let mut out = std::collections::BTreeSet::new();
+    for table in read_tables(markdown_01, LATER_HEADING, &["要件", "受入基準 (概要)"])? {
+        for row in &table.rows {
+            let req_cell = table.cell(row, "要件").unwrap_or_default();
+            if !req_cell.contains(version) {
+                continue;
+            }
+            let reqs: Vec<String> = requirement_refs(req_cell);
+            let Some(first) = reqs.first().cloned() else {
+                return Err(Error::BadRow {
+                    line: row.line,
+                    reason: format!("要件 ID を読めません: {req_cell}"),
+                });
+            };
+            let mut with_ac = std::collections::BTreeSet::new();
+            for (req, n) in later_heads(table.cell(row, "受入基準 (概要)").unwrap_or_default())
+            {
+                let req = req.unwrap_or_else(|| first.clone());
+                with_ac.insert(req.clone());
+                out.insert(Unit {
+                    ac: Some(format!("AC-{req}-{n}")),
+                    requirement: req,
+                });
+            }
+            for r in reqs {
+                if !with_ac.contains(&r) {
+                    out.insert(Unit {
+                        requirement: r,
+                        ac: None,
+                    });
+                }
+            }
+        }
+    }
+    Ok(out.into_iter().collect())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -235,5 +348,57 @@ mod tests {
     fn 読めない行は失敗する() {
         assert!(extract_row("説明", "AC-1: x").is_err());
         assert!(extract_row("FR-101", "AC なし").is_err());
+    }
+    #[test]
+    fn 後の版の受入基準の_ac_の頭を読む() {
+        assert_eq!(
+            later_heads("FR-101 AC-1: 起動する。FR-103 AC-1: 一覧。AC-2 (v0.3): 後。AC-3 は本文"),
+            [
+                (Some("FR-101".to_owned()), 1),
+                (Some("FR-103".to_owned()), 1),
+                (None, 2)
+            ]
+        );
+    }
+
+    #[test]
+    fn 後の版の単位を取り出す() {
+        let doc = "### 5.5 v0.2 以降 (概要。各版の着手前に詳細化)
+| 要件 | 受入基準 (概要) |
+|---|---|
+| FR-103 / FR-101 (v0.2) | FR-101 AC-1: a。FR-103 AC-2: b |
+| NFR-106 長大行 (v0.2) | AC-1: c。AC-2: d |
+| FR-518 (v0.2、Could) | 文だけ |
+| FR-122 (v0.3) | AC-1: 後の版 |
+## 6. 次
+";
+        let got: Vec<_> = read_later_units(doc, "v0.2")
+            .unwrap()
+            .into_iter()
+            .map(|u| format!("{} {}", u.requirement, u.ac.unwrap_or_default()))
+            .collect();
+        assert_eq!(
+            got,
+            [
+                "FR-101 AC-FR-101-1",
+                "FR-103 AC-FR-103-2",
+                "FR-518 ",
+                "NFR-106 AC-NFR-106-1",
+                "NFR-106 AC-NFR-106-2",
+            ]
+        );
+    }
+
+    #[test]
+    fn 後の版の行で要件_id_を読めなければ失敗する() {
+        let doc = "### 5.5 v0.2 以降 (概要。各版の着手前に詳細化)
+| 要件 | 受入基準 (概要) |
+|---|---|
+| 複数文書 (v0.2) | AC-1: a |
+";
+        assert!(matches!(
+            read_later_units(doc, "v0.2"),
+            Err(Error::BadRow { line: 4, .. })
+        ));
     }
 }

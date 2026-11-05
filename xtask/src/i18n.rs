@@ -17,12 +17,10 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use eve_docs_tables::{identifiers, read_tables, strip_parentheticals};
+use eve_docs_tables::strip_parentheticals;
 
 use crate::util::{read_text, workspace_root};
 
-const MESSAGE_HEADING: &str = "### 15.2 保存・読込・退避・パニックの文言目録";
-const SCREEN_HEADING: &str = "### 15.1 v0.1 の画面文言 (ja)";
 /// 言語ファイルに入れない (eve-host の定数表に置く) キーの接頭辞。
 const NOT_IN_LOCALE: [&str; 3] = ["stderr.", "panic.", "cli."];
 /// ヒントの幅の上限 (表示幅 8 セル = 全角 4 文字 / 半角 8 文字、NFR-603)。
@@ -109,52 +107,23 @@ fn braces_balanced(s: &str) -> bool {
 }
 
 fn read_messages(doc04: &str) -> Result<Vec<Entry>, String> {
-    let tables = read_tables(doc04, MESSAGE_HEADING, &["MessageKey", "ja"])
+    let list = eve_docs_tables::messages::read_catalog(doc04)
         .map_err(|e| format!("04 §15.2 の目録を読めません: {e}"))?;
-    let mut out = Vec::new();
-    for t in &tables {
-        for row in &t.rows {
-            let keys = identifiers(t.cell(row, "MessageKey").unwrap_or_default());
-            if keys.len() != 1 {
-                return Err(format!(
-                    "04 §15.2 行 {}: `MessageKey` 列には MessageKey を 1 つだけバッククォートで書きます (略記・複数は不可): {:?}",
-                    row.line,
-                    t.cell(row, "MessageKey")
-                ));
-            }
-            out.push(Entry {
-                key: keys.into_iter().next().unwrap_or_default(),
-                ja: t.cell(row, "ja").unwrap_or_default().to_owned(),
-                line: row.line,
-            });
-        }
-    }
-    Ok(out)
+    Ok(list
+        .into_iter()
+        .map(|m| Entry {
+            key: m.key,
+            ja: m.ja,
+            line: m.line,
+        })
+        .collect())
 }
 
-/// 04 §15.1 の画面文言の MessageKey。`MessageKey` 列は `a.b.long` / `.short` のように、後ろの項目が
-/// 直前のキーの最後の語を置き換える略記を使う。
+/// 04 §15.1 の画面文言の MessageKey (`a.b.long` / `.short` の略記は展開したもの)。
 fn read_screen_keys(doc04: &str) -> Result<BTreeSet<String>, String> {
-    let tables = read_tables(doc04, SCREEN_HEADING, &["MessageKey", "ja"])
+    let list = eve_docs_tables::messages::read_screen(doc04)
         .map_err(|e| format!("04 §15.1 の画面文言を読めません: {e}"))?;
-    let mut out = BTreeSet::new();
-    for t in &tables {
-        for row in &t.rows {
-            let mut prev: Option<String> = None;
-            for id in identifiers(t.cell(row, "MessageKey").unwrap_or_default()) {
-                let key = match (id.strip_prefix('.'), &prev) {
-                    (Some(tail), Some(p)) => {
-                        let base = p.rsplit_once('.').map_or(p.as_str(), |(b, _)| b);
-                        format!("{base}.{tail}")
-                    }
-                    _ => id,
-                };
-                prev = Some(key.clone());
-                out.insert(key);
-            }
-        }
-    }
-    Ok(out)
+    Ok(list.into_iter().map(|m| m.key).collect())
 }
 
 /// カタログの行: (CommandId, title key, ヒントの文脈の集合)。
