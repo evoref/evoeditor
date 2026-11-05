@@ -11,12 +11,12 @@
 
 use eve_text::{ByteRange, Edit};
 
-use super::state::EditorState;
 use crate::document::{LoadState, Origin, Transaction};
+use crate::editor::state::EditorState;
 use crate::ui_model::overlay::{ChoiceDef, ConfirmAction, ConfirmState};
 use crate::{DocumentId, FsPath, JobError, JobKind, JobResult, SwapEntry, SwapOwner};
 
-use super::file::Pending;
+use crate::io::file::Pending;
 use eve_view::MessageLevel;
 
 /// 同じパスか。Windows は大文字小文字を区別しない (05 §3.1)。

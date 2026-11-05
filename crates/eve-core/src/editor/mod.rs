@@ -5,22 +5,13 @@
 //! コマンドのレジストリと `execute`、キーマップ、編集・移動・検索・ファイル操作のコマンド。
 
 pub(crate) mod buffer;
-pub(crate) mod config_reload;
+pub use crate::io::config_reload::{CONFIG_FILE, ConfigSources, KEYMAP_FILE};
 pub use crate::ui_model::config_report::diagnostic_texts as config_diagnostic_texts;
-pub use config_reload::{CONFIG_FILE, ConfigSources, KEYMAP_FILE};
 pub(crate) mod eol;
-pub(crate) mod external;
-pub(crate) mod file;
 pub use crate::layout::theme::resolve as resolve_theme;
-pub(crate) mod leftover_offer;
 pub(crate) mod query;
-pub(crate) mod save_all;
-pub(crate) mod startup;
-pub use startup::InitialFile;
-pub(crate) mod snapshot;
+pub use crate::io::startup::InitialFile;
 pub(crate) mod state;
-pub(crate) mod swap;
-pub(crate) mod swap_recovery;
 
 use eve_view::{
     Capabilities, DocumentId, EditorEvent, Effect, InputEvent, KeyCode, KeyKind, KeyStroke,
@@ -34,12 +25,12 @@ pub use crate::command::{
     ArgValue, Args, CommandCtx, CommandInvocation, CommandKind, CommandRegistry, CommandResult,
     CommandSpec, Handler, InvocationSource, Permission, RejectReason,
 };
+pub use crate::io::snapshot::DocSnapshot;
 pub use crate::keymap::{
     Binding, KeyParseError, Keymap, Layer, Resolution, format_stroke, parse_sequence, parse_stroke,
 };
 pub use crate::layout::{Affinity, WrapMode, WrapSettings};
 pub use crate::search::search_state::{SearchCount, SearchStep};
-pub use snapshot::DocSnapshot;
 pub use state::{EditorState, ScrollPos, View, Window};
 
 use crate::document::Document;
@@ -64,12 +55,12 @@ impl Editor {
         let mut registry = CommandRegistry::new();
         crate::command::edit::register(&mut registry);
         crate::view::motion::register(&mut registry);
-        file::register(&mut registry);
-        external::register(&mut registry);
+        crate::io::file::register(&mut registry);
+        crate::io::external::register(&mut registry);
         buffer::register(&mut registry);
-        save_all::register(&mut registry);
+        crate::io::save_all::register(&mut registry);
         crate::ui_model::help::register(&mut registry);
-        config_reload::register(&mut registry);
+        crate::io::config_reload::register(&mut registry);
         crate::view::view_cmds::register(&mut registry);
         crate::view::mouse::register(&mut registry);
         crate::command::line_ops::register(&mut registry);

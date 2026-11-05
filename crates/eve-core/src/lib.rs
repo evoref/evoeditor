@@ -8,25 +8,14 @@
 #![allow(clippy::result_large_err)]
 
 mod command;
-mod content_hash;
 mod document;
 mod editor;
-mod fs;
-mod fspath;
-mod interrupted;
-mod io_jobs;
+mod io;
 mod jobs;
 mod keymap;
-mod last_version;
 mod layout;
-mod leftover;
-mod paths;
-mod replacing;
-mod rescue;
-mod secret;
 mod time;
 mod ui_model;
-mod unmap;
 mod view;
 
 pub use jobs::cancel::CancelToken;
@@ -49,22 +38,22 @@ pub use editor::{
 pub use eol::build_eol_conversion;
 pub use eve_encoding::Encoding;
 pub use eve_view::DocumentId;
-pub use fs::*;
-pub use fspath::FsPath;
-pub use io_jobs::OpenOptions;
+pub use io::fs::*;
+pub use io::fspath::FsPath;
+pub use io::io_jobs::OpenOptions;
+pub use io::last_version::{LAST_VERSION_FILE, LastVersionOutcome};
+pub use io::leftover::{Leftover, LeftoverKind, LeftoverOp};
+pub use io::paths::Paths;
+pub use io::replacing::{ReplacingCount, ReplacingGuard};
+pub use io::rescue::{RescueOutcome, RescueReason, RescueWriter};
+pub use io::secret::is_secret_path;
+pub use io::unmap::{ReplaceCounts, ReplaceTarget};
 pub use jobs::{
     ConfirmAsk, JobError, JobKind, JobPorts, JobRequest, JobResult, JobSpawner, MetaPurpose,
     OpenNotes, Ports, SaveStrategy, run_job,
 };
-pub use last_version::{LAST_VERSION_FILE, LastVersionOutcome};
-pub use leftover::{Leftover, LeftoverKind, LeftoverOp};
-pub use paths::Paths;
-pub use replacing::{ReplacingCount, ReplacingGuard};
-pub use rescue::{RescueOutcome, RescueReason, RescueWriter};
 pub use search::{
     Case, Matcher, QueryError, SearchJob, SearchQuery, build_replace_all, find_next,
     replacement_for, run_search, scan_bytes, scan_lines, unescape_replacement,
 };
-pub use secret::is_secret_path;
 pub use time::{Clock, Millis, Tick};
-pub use unmap::{ReplaceCounts, ReplaceTarget};

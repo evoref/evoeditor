@@ -6,8 +6,8 @@ use std::hash::Hasher;
 
 use twox_hash::XxHash3_64;
 
-use crate::fs::{ContentHash, FileStamp, FileSystem, FsError, FsErrorKind};
-use crate::fspath::FsPath;
+use crate::io::fs::{ContentHash, FileStamp, FileSystem, FsError, FsErrorKind};
+use crate::io::fspath::FsPath;
 
 /// ハッシュを持つファイルの大きさの上限 (バイト)。これを超えるファイルは `(mtime, len, FileId)` だけで比べる。
 pub(crate) const HASH_MAX_LEN: u64 = 16 * 1024 * 1024;
@@ -51,7 +51,7 @@ pub(crate) fn hash_file(
                 hasher.update(c);
             }
             Ok(None) => break,
-            Err(crate::fs::ChunkError::Io(e)) => return Err(e),
+            Err(crate::io::fs::ChunkError::Io(e)) => return Err(e),
             Err(_) => return Err(FsError::new(FsErrorKind::Other)),
         }
     }

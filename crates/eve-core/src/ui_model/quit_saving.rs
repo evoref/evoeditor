@@ -13,7 +13,7 @@ use crate::time::{Millis, Tick};
 use crate::ui_model::overlay::{ChoiceDef, ConfirmAction, ConfirmState, Continuation};
 use crate::{CommandResult, FsErrorKind, FsPath, JobError, JobResult};
 
-use crate::editor::file::Pending;
+use crate::io::file::Pending;
 
 /// 保存を待つ時間。これを超えたら確認を出す。
 const WAIT: Millis = Millis(5_000);
@@ -203,10 +203,7 @@ impl EditorState {
             } => {
                 abort.stderr.push(line(
                     "stderr.quit_abort.save_failed",
-                    vec![
-                        ("path", p),
-                        ("reason", crate::editor::file::reason_label(err)),
-                    ],
+                    vec![("path", p), ("reason", crate::io::file::reason_label(err))],
                 ));
                 true
             }

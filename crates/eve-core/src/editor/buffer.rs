@@ -6,11 +6,11 @@ use std::ops::Range;
 
 use eve_view::{CutPolicy, DocumentId, InputFieldModel, ListItem, OverlayModel};
 
-use super::file::Pending;
 use super::state::EditorState;
 use crate::command::{
     CommandCtx, CommandKind, CommandRegistry, CommandResult, CommandSpec, Permission, RejectReason,
 };
+use crate::io::file::Pending;
 use crate::layout::cell_text;
 use crate::ui_model::overlay::{Continuation, Overlay};
 use crate::ui_model::palette::{PaletteState, WINDOW, find, lower_graphemes};

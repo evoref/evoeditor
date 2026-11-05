@@ -14,9 +14,9 @@ use std::sync::Arc;
 
 use eve_view::{DocumentId, JobId, Revision};
 
-use super::file::Pending;
-use super::state::EditorState;
 use crate::document::LoadState;
+use crate::editor::state::EditorState;
+use crate::io::file::Pending;
 use crate::time::{Millis, Tick};
 use crate::{FsErrorKind, FsPath, JobError, JobKind, JobResult};
 

@@ -3,14 +3,14 @@
 
 use eve_view::{DocumentId, MessageLevel};
 
-use super::file::{Pending, fs_reason, same_on_disk};
-use super::state::EditorState;
 use crate::FsPath;
 use crate::command::{
     CommandCtx, CommandKind, CommandRegistry, CommandResult, CommandSpec, Permission, RejectReason,
 };
 use crate::document::LoadState;
-use crate::fs::FsErrorKind;
+use crate::editor::state::EditorState;
+use crate::io::file::{Pending, fs_reason, same_on_disk};
+use crate::io::fs::FsErrorKind;
 use crate::jobs::{JobError, JobKind, JobResult, MetaPurpose};
 use crate::ui_model::overlay::{ChoiceDef, ConfirmAction, ConfirmState};
 use eve_config::ExternalChangePolicy;
