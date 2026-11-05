@@ -15,7 +15,7 @@ use crate::document::{Document, Origin, Transaction};
 use super::command::{
     CommandCtx, CommandKind, CommandRegistry, CommandResult, CommandSpec, Permission, RejectReason,
 };
-use super::motion::{indent_end, word_stop};
+use crate::view::motion::{indent_end, word_stop};
 
 /// 1 つの Range に対する編集。
 struct Plan {
@@ -263,7 +263,7 @@ pub fn normalize_eol(text: &str, eol: eve_text::LineEnding) -> String {
 
 /// `InputEvent::Paste` の本文を挿入する。改行を文書の `default_eol` に正規化し、自動インデントは適用しない。
 /// 本文の制御文字はコマンドとして解釈せず文字として入れる。Origin は `Paste` (1 操作 = 1 Undo)。
-pub(super) fn paste_text(state: &mut super::state::EditorState, text: &str) -> CommandResult {
+pub(crate) fn paste_text(state: &mut super::state::EditorState, text: &str) -> CommandResult {
     let args = super::command::Args::new();
     let mut ctx = CommandCtx { state, args: &args };
     edit_each_as(&mut ctx, Origin::Paste, |doc, r| {
@@ -480,7 +480,7 @@ macro_rules! reg {
 }
 
 /// v0.1 の編集コマンド (07 §11.6 の「編集」。カタログが正本)。
-pub(super) fn register(r: &mut CommandRegistry) {
+pub(crate) fn register(r: &mut CommandRegistry) {
     use CommandKind::{Edit, Motion};
     use Permission::{None as NoPerm, Propose, Read};
     let w = "!doc.read_only";

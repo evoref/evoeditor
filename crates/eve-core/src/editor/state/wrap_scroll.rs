@@ -10,10 +10,10 @@ use crate::document::Document;
 use crate::editor::layout::{WrapSettings, line_rows, wrap_ctx};
 
 /// (論理行, その行の中の表示行)。組の大小がそのまま文書内の前後。
-pub(in crate::editor) type RowPos = (usize, usize);
+pub(crate) type RowPos = (usize, usize);
 
 /// 折り返し ON の View の (折り返しの設定, 折り返し幅)。
-pub(super) type Geometry = (WrapSettings, usize);
+pub(crate) type Geometry = (WrapSettings, usize);
 
 fn rows_in(doc: &Document, line: usize, g: Geometry) -> usize {
     line_rows(doc, line, g.0, g.1).len()
@@ -70,7 +70,7 @@ fn rows_between(doc: &Document, g: Geometry, from: RowPos, to: RowPos, cap: usiz
 
 impl EditorState {
     /// 折り返し ON の View の幾何。OFF なら `None`。
-    pub(super) fn wrap_geometry(&self, view: ViewId) -> Option<Geometry> {
+    pub(crate) fn wrap_geometry(&self, view: ViewId) -> Option<Geometry> {
         wrap_ctx(self, view)
     }
 
@@ -114,7 +114,7 @@ impl EditorState {
     }
 
     /// 面の `row` 行目 (0 始まり) の (論理行, 表示行)。文書の末尾より下の行は `None` (折り返し ON、マウスの位置の確定が使う)。
-    pub(in crate::editor) fn wrapped_row_at(&self, view: ViewId, row: usize) -> Option<RowPos> {
+    pub(crate) fn wrapped_row_at(&self, view: ViewId, row: usize) -> Option<RowPos> {
         let g = self.wrap_geometry(view)?;
         let top = self.top_pos(view)?;
         let doc = self.view_doc(view)?;
@@ -122,7 +122,7 @@ impl EditorState {
         (rows_between(doc, g, top, p, row) == row).then_some(p)
     }
 
-    pub(super) fn wrapped_scroll_lines(&mut self, view: ViewId, g: Geometry, delta: i64) {
+    pub(crate) fn wrapped_scroll_lines(&mut self, view: ViewId, g: Geometry, delta: i64) {
         let (Some(top), Some(doc)) = (self.top_pos(view), self.view_doc(view)) else {
             return;
         };
@@ -138,7 +138,7 @@ impl EditorState {
         self.place_top(view, new);
     }
 
-    pub(super) fn wrapped_ensure_vertical(&mut self, view: ViewId, g: Geometry, margin: usize) {
+    pub(crate) fn wrapped_ensure_vertical(&mut self, view: ViewId, g: Geometry, margin: usize) {
         let rows = self.viewport.1 as usize;
         let (Some(top), Some(cur), Some(doc)) = (
             self.top_pos(view),
@@ -166,7 +166,7 @@ impl EditorState {
         self.place_top(view, new);
     }
 
-    pub(super) fn wrapped_center_cursor(&mut self, view: ViewId, g: Geometry) {
+    pub(crate) fn wrapped_center_cursor(&mut self, view: ViewId, g: Geometry) {
         let rows = self.viewport.1 as usize;
         let (Some(cur), Some(doc)) = (self.cursor_pos(view, g), self.view_doc(view)) else {
             return;

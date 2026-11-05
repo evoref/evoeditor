@@ -21,7 +21,7 @@ const UNREACHABLE_MARK: &str = "*";
 
 /// ヘルプの節 (表示順)。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) enum HelpSection {
+pub(crate) enum HelpSection {
     Intro,
     Keys,
     Commands,
@@ -30,7 +30,7 @@ pub(super) enum HelpSection {
 
 /// 開いているヘルプ画面。
 #[derive(Clone, Debug)]
-pub(super) struct HelpState {
+pub(crate) struct HelpState {
     /// 先頭に描く行の番号。
     pub scroll: usize,
     /// メッセージ履歴 (`ui.message_history`、04 §8.9) を表示している。同じ画面を履歴の行で使う。
@@ -294,7 +294,7 @@ impl EditorState {
     }
 
     /// `delta` 行スクロールする (端で止まる)。
-    pub(super) fn help_scroll(&mut self, delta: isize) -> CommandResult {
+    pub(crate) fn help_scroll(&mut self, delta: isize) -> CommandResult {
         let (total, view) = (self.help_lines().0.len(), self.help_view_rows());
         let max = total.saturating_sub(view);
         if let Some(Overlay::Help(h)) = &mut self.overlay {
@@ -307,12 +307,12 @@ impl EditorState {
     }
 
     /// 1 画面ぶんスクロールする。
-    pub(super) fn help_page(&mut self, forward: bool) -> CommandResult {
+    pub(crate) fn help_page(&mut self, forward: bool) -> CommandResult {
         let page = self.help_view_rows().saturating_sub(1).max(1) as isize;
         self.help_scroll(if forward { page } else { -page })
     }
 
-    pub(super) fn help_model(&self, h: &HelpState) -> OverlayModel {
+    pub(crate) fn help_model(&self, h: &HelpState) -> OverlayModel {
         let (lines, _) = self.help_lines();
         let max = lines.len().saturating_sub(self.help_view_rows());
         let render = |key: &str| self.catalog().render(key, &[], &|c| self.key_label(c));
@@ -351,7 +351,7 @@ fn message_history_copy(ctx: &mut CommandCtx<'_>) -> CommandResult {
 }
 
 /// v0.2 のヘルプコマンド (07 §11.6 の `help.open` / `help.keys` / `help.commands`)。
-pub(super) fn register(r: &mut CommandRegistry) {
+pub(crate) fn register(r: &mut CommandRegistry) {
     let handlers: [(&str, crate::Handler); 5] = [
         ("ui.message_history", message_history),
         ("ui.message_history_copy", message_history_copy),
@@ -369,7 +369,7 @@ pub(super) fn register(r: &mut CommandRegistry) {
 
 /// すべての割当をコマンドごとに集める (ヘルプのキー一覧用)。層の順で、同じ割当は 1 つにまとめる。
 /// 割当をコマンドごとに集める。値は (キー列, この端末で届くか)。同じキー列が複数あれば、どれかが届けば届く。
-pub(super) fn collect_all_bindings(
+pub(crate) fn collect_all_bindings(
     bindings: impl Iterator<Item = (String, Vec<KeyStroke>, bool)>,
 ) -> BTreeMap<String, Vec<(Vec<KeyStroke>, bool)>> {
     let mut out: BTreeMap<String, Vec<(Vec<KeyStroke>, bool)>> = BTreeMap::new();

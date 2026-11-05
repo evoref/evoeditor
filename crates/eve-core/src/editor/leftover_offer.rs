@@ -41,7 +41,7 @@ fn dialog(kind: LeftoverKind) -> (&'static str, Vec<ChoiceDef>) {
 
 /// 提案への答えの後に続ける動作。
 #[derive(Clone, Debug)]
-pub(super) struct LeftoverAsk {
+pub(crate) struct LeftoverAsk {
     pub leftover: Leftover,
     pub op: LeftoverOp,
     /// 操作が成功したら、一時ファイルを別バッファで開く (「両方」)。
@@ -51,7 +51,7 @@ pub(super) struct LeftoverAsk {
 impl EditorState {
     /// 次の提案を出す。ダイアログなどが出ている間、提案が無いときは何もしない。
     /// 呼ぶのは `swap_offer` の後 (スワップの提案が先)。
-    pub(super) fn leftover_offer(&mut self) {
+    pub(crate) fn leftover_offer(&mut self) {
         if self.leftovers.is_empty() || self.overlay_kind() != "" {
             return;
         }
@@ -80,7 +80,7 @@ impl EditorState {
     }
 
     /// 提案への答え。
-    pub(super) fn choose_leftover(&mut self, l: Leftover, id: &str) -> CommandResult {
+    pub(crate) fn choose_leftover(&mut self, l: Leftover, id: &str) -> CommandResult {
         let (op, then_open_tmp) = match (l.kind, id) {
             (LeftoverKind::BakAndTmp, "both") => (LeftoverOp::Restore, true),
             (LeftoverKind::BakAndTmp | LeftoverKind::Bak, "restore") => {
@@ -135,7 +135,7 @@ impl EditorState {
     }
 
     /// 操作のジョブの結果。
-    pub(super) fn finish_leftover(&mut self, ask: LeftoverAsk, r: JobResult) {
+    pub(crate) fn finish_leftover(&mut self, ask: LeftoverAsk, r: JobResult) {
         let path = ask.leftover.target.display();
         match r {
             JobResult::LeftoverDone { .. } => {

@@ -14,7 +14,7 @@ pub enum CtxValue {
 }
 
 impl CtxValue {
-    pub(super) fn truthy(&self) -> bool {
+    pub(crate) fn truthy(&self) -> bool {
         match self {
             CtxValue::Bool(b) => *b,
             CtxValue::Str(s) => !s.is_empty(),

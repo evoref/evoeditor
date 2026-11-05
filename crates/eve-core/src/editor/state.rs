@@ -54,7 +54,7 @@ pub struct Window {
 }
 
 /// 表現不能の文字の強調 (文書, 作った Revision, 文書内のバイト範囲)。
-pub(super) type UnmappableMarks = (DocumentId, eve_view::Revision, Vec<(usize, usize)>);
+pub(crate) type UnmappableMarks = (DocumentId, eve_view::Revision, Vec<(usize, usize)>);
 
 pub struct EditorState {
     pub(crate) documents: BTreeMap<DocumentId, Document>,
@@ -71,99 +71,99 @@ pub struct EditorState {
     snapshot_updates: BTreeSet<DocumentId>,
     /// 閉じた文書のうち、保存ジョブが実行中のものの退避用の公開物 (03 §9.2 の閉じる手順 (a)、§9.8 の不変条件 4)。
     /// 保存の結果が届くまで緊急退避の対象に残し、保存が成功したら外し、失敗したら退避先に書く。
-    pub(super) closing_snapshots: BTreeMap<DocumentId, super::snapshot::DocSnapshot>,
+    pub(crate) closing_snapshots: BTreeMap<DocumentId, super::snapshot::DocSnapshot>,
     needs_render: bool,
     /// 左ボタンのドラッグ中の状態 (docs/03 §5.8.1)。
-    pub(super) mouse_drag: Option<super::mouse::Drag>,
+    pub(crate) mouse_drag: Option<crate::view::mouse::Drag>,
     /// `config.reload` の途中: 解析したキーマップと、`config.toml` で変わった項目 (Editor が受け取って差し替える)。
-    pub(super) reloaded: Option<(eve_config::KeymapFile, Vec<&'static str>)>,
+    pub(crate) reloaded: Option<(eve_config::KeymapFile, Vec<&'static str>)>,
     /// 今のユーザー層のキーマップの割当 (再読込で変わったかを比べる)。
     pub(crate) user_keymap_entries: Option<Vec<eve_config::KeymapEntry>>,
     /// テーマのロールの表 (色深度に合う段。テーマか色深度が変わったときに作り直す、07 §8.6)。
-    pub(super) roles: std::sync::Arc<eve_view::RoleStyles>,
+    pub(crate) roles: std::sync::Arc<eve_view::RoleStyles>,
     /// テーマファイルから読んだテーマ (名前, テーマ)。`theme.name` が組込みでないときに使う。
-    pub(super) user_theme: Option<(String, eve_config::theme::Theme)>,
+    pub(crate) user_theme: Option<(String, eve_config::theme::Theme)>,
     /// パレットから実行したコマンド (新しい順、直近 20 件。起動している間だけ、07 §11.4)。
-    pub(super) palette_recent: Vec<String>,
+    pub(crate) palette_recent: Vec<String>,
     /// 設定の読込元 (`None` は設定ディレクトリの既定の 2 ファイル)。
-    pub(super) config_sources: Option<super::config_reload::ConfigSources>,
+    pub(crate) config_sources: Option<super::config_reload::ConfigSources>,
     /// マウスの取得が有効か (`ui.mouse` の初期値。`ui.toggle_mouse` で変わる)。
-    pub(super) mouse_on: bool,
+    pub(crate) mouse_on: bool,
     /// ヒントバーを出すか (`ui.hint_bar` の初期値。`ui.toggle_hint_bar` で変わる、FR-504)。
-    pub(super) hint_bar_on: bool,
+    pub(crate) hint_bar_on: bool,
     /// ジョブの投入口 (`Ports.jobs`)。
-    pub(super) jobs: Rc<dyn JobSpawner>,
-    pub(super) paths: Arc<dyn Paths>,
+    pub(crate) jobs: Rc<dyn JobSpawner>,
+    pub(crate) paths: Arc<dyn Paths>,
     /// 未完了のジョブと、その結果の宛先。
-    pub(super) pending: BTreeMap<JobId, Pending>,
+    pub(crate) pending: BTreeMap<JobId, Pending>,
     /// `{key:<command_id>}` の解決用のキー表記 (コマンド → 第一割当)。
-    pub(super) key_labels: BTreeMap<String, String>,
+    pub(crate) key_labels: BTreeMap<String, String>,
     /// コマンド → 第一割当のストローク列 (ヒントバーの逆引き)。
-    pub(super) key_seqs: BTreeMap<String, Vec<eve_view::KeyStroke>>,
+    pub(crate) key_seqs: BTreeMap<String, Vec<eve_view::KeyStroke>>,
     /// 出ているオーバーレイ (確認・入力プロンプト)。モーダル。
-    pub(super) overlay: Option<super::overlay::Overlay>,
+    pub(crate) overlay: Option<super::overlay::Overlay>,
     /// 保存ジョブの完了後に続ける操作。
-    pub(super) continuations: BTreeMap<JobId, super::overlay::Continuation>,
+    pub(crate) continuations: BTreeMap<JobId, super::overlay::Continuation>,
     /// 実行中の全保存 (`file.save_all`、03 §9.8)。無ければ `None`。
-    pub(super) save_all: Option<super::save_all::SaveAll>,
+    pub(crate) save_all: Option<super::save_all::SaveAll>,
     /// 読込が終わったらカーソルを移す位置 (行, 桁。ともに 1 始まり。起動時の `+行:桁`、07 §18.2)。
-    pub(super) open_jumps: BTreeMap<DocumentId, (usize, usize)>,
+    pub(crate) open_jumps: BTreeMap<DocumentId, (usize, usize)>,
     /// すべての割当をコマンドごとに集めたもの (ヘルプのキー一覧、04 §8.6)。
-    pub(super) key_all: BTreeMap<String, Vec<(Vec<eve_view::KeyStroke>, bool)>>,
+    pub(crate) key_all: BTreeMap<String, Vec<(Vec<eve_view::KeyStroke>, bool)>>,
     /// 前に表示していた文書 (最近使った順。末尾が直近)。閉じた後に表示する文書を選ぶのに使う。
-    pub(super) recent: Vec<DocumentId>,
+    pub(crate) recent: Vec<DocumentId>,
     /// 終了の連鎖 (`app.quit` で dirty な文書が 1 件以上、03 §9.8)。連鎖の外では `None`。
-    pub(super) quit_chain: Option<super::overlay::QuitChain>,
+    pub(crate) quit_chain: Option<super::overlay::QuitChain>,
     /// 保存中に終了を求められている (03 §9.7 (f))。
-    pub(super) quit_wait: Option<super::quit_saving::QuitWait>,
+    pub(crate) quit_wait: Option<super::quit_saving::QuitWait>,
     /// 「保存を中止して終了」の最中 (保存ジョブがすべて終わったら終了する)。
-    pub(super) quit_abort: Option<super::quit_saving::QuitAbort>,
+    pub(crate) quit_abort: Option<super::quit_saving::QuitAbort>,
     /// 表示中のメッセージ (解決済み)。
-    pub(super) message: Option<super::message::ShownMessage>,
+    pub(crate) message: Option<super::message::ShownMessage>,
     /// 未読のメッセージの数。
-    pub(super) unread: u16,
+    pub(crate) unread: u16,
     /// メッセージの履歴 (古い順。上限 `message::HISTORY_MAX`、04 §8.9)。
-    pub(super) message_log: std::collections::VecDeque<super::message::LoggedMessage>,
+    pub(crate) message_log: std::collections::VecDeque<super::message::LoggedMessage>,
     /// 履歴の破棄を通知した文書 (文書ごとに 1 回)。
     trim_notified: BTreeSet<DocumentId>,
     /// 内部レジスタ・ハンドルの表・貼り付けの token (クリップボード、`clipboard.rs`)。
-    pub(super) clipboard: super::clipboard::ClipboardState,
+    pub(crate) clipboard: super::clipboard::ClipboardState,
     /// 解決済みの設定 (07 §5.0 の公開キー)。起動時に Host が `Editor::set_config` で渡す。
-    pub(super) config: eve_config::Config,
+    pub(crate) config: eve_config::Config,
     /// 選択済みの UI の言語 (07 §17.1)。起動時に Host が `Editor::set_locale` で渡す。
-    pub(super) locale: eve_config::Locale,
+    pub(crate) locale: eve_config::Locale,
     /// パレットの候補 (`hidden` を除く登録済みコマンド。CommandId 順)。
-    pub(super) palette_entries: Vec<super::palette::PaletteEntry>,
+    pub(crate) palette_entries: Vec<super::palette::PaletteEntry>,
     /// パレットで選ばれ、Editor が次に実行するコマンド。
-    pub(super) deferred_command: Option<(String, super::command::Args)>,
+    pub(crate) deferred_command: Option<(String, super::command::Args)>,
     /// 文書内検索の状態 (検索バーが開いている間)。
-    pub(super) search: Option<super::search_state::SearchState>,
+    pub(crate) search: Option<super::search_state::SearchState>,
     /// 検索バー (開いている間)。
-    pub(super) search_bar: Option<super::search_bar::SearchBarState>,
+    pub(crate) search_bar: Option<super::search_bar::SearchBarState>,
     /// 表現不能の文字の強調 (文書, 作った Revision, 位置)。Revision が変わる (次の編集) まで残る。
-    pub(super) unmappable_marks: Option<UnmappableMarks>,
+    pub(crate) unmappable_marks: Option<UnmappableMarks>,
     /// 編集で検索の結果が無効になった (Revision, 気づいた時刻)。入力が止まって 300 ms 後に再検索する (03 §12.2)。
-    pub(super) research: Option<(eve_view::Revision, Tick)>,
+    pub(crate) research: Option<(eve_view::Revision, Tick)>,
     /// swap-lite の予約 (03 §10.2)。
-    pub(super) swap: super::swap::SwapState,
+    pub(crate) swap: super::swap::SwapState,
     /// 起動時の走査が見つけた置換途中の痕跡の提案 (新しい順。05 §4.6)。
-    pub(super) leftovers: Vec<crate::Leftover>,
+    pub(crate) leftovers: Vec<crate::Leftover>,
     /// 区分 B / D の確認を承認した (文書, Revision)。同じ Revision の保存では確認を繰り返さない。
-    pub(super) lossy_ok: Option<(DocumentId, eve_view::Revision)>,
+    pub(crate) lossy_ok: Option<(DocumentId, eve_view::Revision)>,
     /// 「読み取り専用を解除して保存」を承認した (文書, Revision)。同じ Revision の保存では確認を繰り返さない。
-    pub(super) readonly_ok: Option<(DocumentId, eve_view::Revision)>,
+    pub(crate) readonly_ok: Option<(DocumentId, eve_view::Revision)>,
     /// ダングリングのリンクのリンク先への作成を承認した (文書, パス)。次の 1 回の保存で使って消す。
-    pub(super) link_create_ok: Option<(DocumentId, crate::FsPath)>,
+    pub(crate) link_create_ok: Option<(DocumentId, crate::FsPath)>,
     /// 単発の検索ジョブ (進行中の 1 つだけ)。
-    pub(super) find_job: Option<eve_view::JobId>,
+    pub(crate) find_job: Option<eve_view::JobId>,
     /// ログファイルの場所 (設定の問題の要約に出す)。
-    pub(super) log_path: Option<String>,
+    pub(crate) log_path: Option<String>,
     /// OS のロケール由来の文字コードのヒント。
-    pub(super) system_encoding: Option<crate::Encoding>,
+    pub(crate) system_encoding: Option<crate::Encoding>,
     /// 検索バーが取る行数 (0 か 1)。編集面はその分だけ縮む。
-    pub(super) bar_rows: u16,
+    pub(crate) bar_rows: u16,
     /// ホストが渡した編集面の大きさ (検索バーの分を引く前)。
-    pub(super) surface: (u16, u16),
+    pub(crate) surface: (u16, u16),
 }
 
 impl EditorState {
@@ -309,7 +309,7 @@ impl EditorState {
     }
 
     /// `file.default_line_ending` の実際の改行 (`native` は OS に従う)。
-    pub(super) fn config_eol(&self) -> eve_text::LineEnding {
+    pub(crate) fn config_eol(&self) -> eve_text::LineEnding {
         use eve_config::DefaultLineEnding;
         match self.config.default_line_ending {
             DefaultLineEnding::Lf => eve_text::LineEnding::Lf,
@@ -321,12 +321,12 @@ impl EditorState {
     }
 
     /// `file.long_line_threshold` (長大行の閾値、バイト)。
-    pub(super) fn config_long_line_threshold(&self) -> usize {
+    pub(crate) fn config_long_line_threshold(&self) -> usize {
         usize::try_from(self.config.long_line_threshold).unwrap_or(usize::MAX)
     }
 
     /// 新規文書 (無題・存在しないパス)。文字コードと新しく挿入する改行は `file.default_*` (07 §5.2)。
-    pub(super) fn blank_document(&self) -> Document {
+    pub(crate) fn blank_document(&self) -> Document {
         use eve_config::DefaultEncoding;
         let mut doc = Document::new_untitled();
         let (encoding, has_bom) = match self.config.default_encoding {
@@ -350,7 +350,7 @@ impl EditorState {
     }
 
     /// 読込の完了などで、既に採番した文書の中身を差し替える。表示設定を写す。
-    pub(super) fn put_document(&mut self, id: DocumentId, mut doc: Document) {
+    pub(crate) fn put_document(&mut self, id: DocumentId, mut doc: Document) {
         doc.display = self.display_settings();
         // 同じ文書を差し替える (読込の完了・開き直し) ときは、Revision を旧文書の続きから振る。文書ごとに単調増加にして
         // (03 §17.1)、差し替えの前に投入したジョブの結果を Revision の照合で必ず古いと判定する
@@ -362,7 +362,7 @@ impl EditorState {
     }
 
     /// 退避用の公開物が変わった文書として記録する (03 §6.5 手順 12。保存の完了・読込の完了)。
-    pub(super) fn mark_snapshot_update(&mut self, doc: DocumentId) {
+    pub(crate) fn mark_snapshot_update(&mut self, doc: DocumentId) {
         self.snapshot_updates.insert(doc);
     }
 
@@ -382,7 +382,7 @@ impl EditorState {
     }
 
     /// 編集面の大きさを、検索バーの分を引いて反映する。
-    pub(super) fn apply_viewport(&mut self, cols: u16, rows: u16) {
+    pub(crate) fn apply_viewport(&mut self, cols: u16, rows: u16) {
         let rows = rows.saturating_sub(self.bar_rows).max(1);
         if self.viewport != (cols, rows) {
             self.viewport = (cols, rows);
@@ -581,7 +581,7 @@ impl EditorState {
 
     /// プロセス全体の Undo 履歴の上限 (`editor.undo.total_max_bytes`、NFR-203) を守る: 超えていたら、履歴が最も大きい文書から
     /// 古い順に破棄する。利用者が編集していない文書の履歴も削るが、dirty 表示は変わらない。破棄した文書ごとに 1 回通知する。
-    pub(super) fn enforce_total_undo_budget(&mut self) {
+    pub(crate) fn enforce_total_undo_budget(&mut self) {
         let limit = usize::try_from(self.config.undo_total_max_bytes).unwrap_or(usize::MAX);
         let mut docs: Vec<(DocumentId, &mut crate::Document)> =
             self.documents.iter_mut().map(|(id, d)| (*id, d)).collect();

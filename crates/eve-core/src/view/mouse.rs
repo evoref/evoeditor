@@ -7,11 +7,11 @@ use eve_view::{
     Effect, MessageLevel, Modifiers, MouseAt, MouseButton, MouseEvent, MouseKind, ViewId,
 };
 
-use super::command::{
+use crate::editor::command::{
     CommandCtx, CommandKind, CommandRegistry, CommandResult, CommandSpec, Permission,
 };
-use super::layout::{Affinity, line_rows, wrap_ctx};
-use super::state::EditorState;
+use crate::editor::layout::{Affinity, line_rows, wrap_ctx};
+use crate::editor::state::EditorState;
 use crate::time::{Millis, Tick};
 
 /// Shift+ホイールの横スクロール量 (列)。
@@ -21,7 +21,7 @@ const AUTO_SCROLL_INTERVAL: Millis = Millis(50);
 
 /// 左ボタンのドラッグ中の状態。
 #[derive(Clone, Copy, Debug)]
-pub(super) struct Drag {
+pub(crate) struct Drag {
     view: ViewId,
     /// 選択の起点 (動かさない側)。
     anchor: ByteOff,
@@ -32,7 +32,7 @@ pub(super) struct Drag {
 }
 
 impl EditorState {
-    pub(super) fn on_mouse(&mut self, m: MouseEvent) {
+    pub(crate) fn on_mouse(&mut self, m: MouseEvent) {
         // オーバーレイ・検索バーが開いている間は、編集面のマウスを無視する
         if self.overlay.is_some()
             || self.search_bar.is_some()
@@ -105,7 +105,7 @@ impl EditorState {
     }
 
     /// 面の外へドラッグしている間、時間が来たら 1 表示行スクロールして選択を伸ばす。
-    pub(super) fn mouse_tick(&mut self) {
+    pub(crate) fn mouse_tick(&mut self) {
         let Some(mut drag) = self.mouse_drag else {
             return;
         };
@@ -122,7 +122,7 @@ impl EditorState {
         self.drag_select(drag);
     }
 
-    pub(super) fn mouse_deadline(&self) -> Option<Tick> {
+    pub(crate) fn mouse_deadline(&self) -> Option<Tick> {
         self.mouse_drag.and_then(|d| d.next_scroll)
     }
 
@@ -150,7 +150,7 @@ impl EditorState {
         let top = t.byte_to_line(v.scroll.top).0;
         let last = t.len_lines().saturating_sub(1);
         let widest = (top..=(top + rows).min(last))
-            .map(|l| super::layout::cursor_cell(d, l, usize::MAX).0)
+            .map(|l| crate::editor::layout::cursor_cell(d, l, usize::MAX).0)
             .max()
             .unwrap_or(0);
         let left = i64::from(v.scroll.left_col);
@@ -168,7 +168,7 @@ impl EditorState {
         let v = self.views.get(&at.view)?;
         let d = self.documents.get(&v.doc)?;
         let (cols, rows) = self.viewport();
-        let gw = i32::from(super::layout::gutter_width(d, cols as usize));
+        let gw = i32::from(crate::editor::layout::gutter_width(d, cols as usize));
         let row = at.row.clamp(0, (i32::from(rows) - 1).max(0)) as usize;
         let text_col = (at.col - gw).max(0) as usize;
         let t = d.text();
@@ -188,7 +188,7 @@ impl EditorState {
         let ls = t.line_to_byte(LineIdx(line)).0;
         let col = v.scroll.left_col as usize + text_col;
         Some((
-            ByteOff(ls + super::layout::byte_at_col(d, line, col)),
+            ByteOff(ls + crate::editor::layout::byte_at_col(d, line, col)),
             Affinity::After,
         ))
     }
@@ -229,7 +229,7 @@ fn toggle_hint_bar(ctx: &mut CommandCtx<'_>) -> CommandResult {
     CommandResult::Done
 }
 
-pub(super) fn register(r: &mut CommandRegistry) {
+pub(crate) fn register(r: &mut CommandRegistry) {
     r.register(
         CommandSpec::new(
             "ui.toggle_hint_bar",

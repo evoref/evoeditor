@@ -31,7 +31,7 @@ fn same_path(a: &FsPath, b: &FsPath) -> bool {
 
 impl EditorState {
     /// 起動時の走査の結果を受ける。候補を覚え、読めないもの・他のインスタンスのものを知らせる。
-    pub(super) fn swap_scan_done(&mut self, swaps: Vec<SwapEntry>) {
+    pub(crate) fn swap_scan_done(&mut self, swaps: Vec<SwapEntry>) {
         if swaps.is_empty() {
             return;
         }
@@ -75,7 +75,7 @@ impl EditorState {
     }
 
     /// 今の文書に該当する候補があれば、復旧を提案する。何かが開いていれば、閉じるまで待つ。
-    pub(super) fn swap_offer(&mut self) {
+    pub(crate) fn swap_offer(&mut self) {
         self.swap_warn_alive();
         if self.swap.candidates.is_empty() || self.overlay_kind() != "" {
             return;
@@ -199,7 +199,7 @@ impl EditorState {
     }
 
     /// 提案への答え。`apply` は本文を読むジョブを投入し、`discard` はスワップを消す (この選択が破棄の確認)。
-    pub(super) fn choose_swap_recovery(
+    pub(crate) fn choose_swap_recovery(
         &mut self,
         entry: SwapEntry,
         doc: DocumentId,
@@ -243,7 +243,7 @@ impl EditorState {
     }
 
     /// スワップの本文を読んだ。文書が提案の時点のままなら、全置換の Transaction で適用する。
-    pub(super) fn finish_swap_read(
+    pub(crate) fn finish_swap_read(
         &mut self,
         doc: DocumentId,
         revision: eve_view::Revision,
@@ -323,7 +323,7 @@ impl EditorState {
     }
 
     /// 他のプロセスのスワップを消したジョブの結果。
-    pub(super) fn finish_swap_remove(&mut self, entry: &SwapEntry, notify: bool, r: JobResult) {
+    pub(crate) fn finish_swap_remove(&mut self, entry: &SwapEntry, notify: bool, r: JobResult) {
         match r {
             JobResult::SwapRemoved { .. } => {
                 if notify {
@@ -343,7 +343,7 @@ impl EditorState {
     }
 
     /// 適用した古いスワップを、新しいスワップが書けた・文書が保存された (dirty でなくなった)・文書が閉じられたときに消す。
-    pub(super) fn swap_release_recovered(&mut self) {
+    pub(crate) fn swap_release_recovered(&mut self) {
         if self.swap.recovered.is_empty() {
             return;
         }
@@ -377,7 +377,7 @@ impl EditorState {
     }
 
     /// 正常終了のとき、Host が消す古いスワップ (適用したが、まだ消していないもの)。
-    pub(super) fn swap_recovered_leftovers(&self) -> Vec<SwapEntry> {
+    pub(crate) fn swap_recovered_leftovers(&self) -> Vec<SwapEntry> {
         self.swap.recovered.values().flatten().cloned().collect()
     }
 }

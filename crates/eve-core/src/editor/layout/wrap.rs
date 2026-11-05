@@ -53,7 +53,7 @@ pub enum Affinity {
 
 /// 表示行 1 本: 単位の範囲 `first..end` と、行頭のずらし (継続行のインデント)。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) struct WrapRow {
+pub(crate) struct WrapRow {
     pub first: usize,
     pub end: usize,
     pub indent: usize,
@@ -94,7 +94,7 @@ fn continuation_indent(content: &str, units: &[Unit], cols: usize) -> usize {
 }
 
 /// 1 論理行を表示行に分ける。`cols` は折り返し幅 (本文の幅 − 右余白 1)。
-pub(super) fn wrap_line(
+pub(crate) fn wrap_line(
     content: &str,
     units: &[Unit],
     cols: usize,
@@ -175,7 +175,7 @@ pub(super) fn wrap_line(
 
 /// カーソル (行内のバイト位置 `rel`) がある表示行と、その行内の列 (継続行のずらしを含む)。
 /// 折り返し位置では `affinity` で上の行の末尾か下の行の先頭かを決める。行末は最後の表示行の末尾。
-pub(super) fn cursor_in_rows(
+pub(crate) fn cursor_in_rows(
     units: &[Unit],
     rows: &[WrapRow],
     rel: usize,

@@ -14,7 +14,7 @@ use super::overlay::Overlay;
 use super::state::EditorState;
 
 /// 候補の窓の最大行数 (04 §8.1)。
-pub(super) const WINDOW: usize = 12;
+pub(crate) const WINDOW: usize = 12;
 
 /// パレットに出さないコマンド (オーバーレイ内専用と内部用、07 §11.6)。
 fn hidden(id: &str) -> bool {
@@ -33,7 +33,7 @@ fn hidden(id: &str) -> bool {
 /// 既定値の無い必須の列挙引数を持つコマンド (07 §11.2)。パレットで選ぶと、同じオーバーレイで値の一覧を尋ねる。
 /// 省略可能な引数 (`path?` など) は尋ねず、各コマンドの既定の動作 (プロンプトを開く等) に任せる。
 #[derive(Debug)]
-pub(super) struct ArgDef {
+pub(crate) struct ArgDef {
     command: &'static str,
     /// 引数名。
     arg: &'static str,
@@ -85,7 +85,7 @@ pub struct PaletteEntry {
 }
 
 impl PaletteEntry {
-    pub(super) fn id(&self) -> &str {
+    pub(crate) fn id(&self) -> &str {
         &self.id
     }
 
@@ -99,7 +99,7 @@ impl PaletteEntry {
 }
 
 #[derive(Clone, Debug, Default)]
-pub(super) struct PaletteState {
+pub(crate) struct PaletteState {
     pub text: String,
     /// `text` 内のカーソル (バイト。書記素境界)。
     pub cursor: usize,
@@ -116,7 +116,7 @@ struct Hit {
     ranges: Vec<Range<usize>>,
 }
 
-pub(super) fn lower_graphemes(s: &str) -> Vec<String> {
+pub(crate) fn lower_graphemes(s: &str) -> Vec<String> {
     grapheme_indices(s)
         .into_iter()
         .map(|(_, g)| g.to_lowercase())
@@ -124,7 +124,7 @@ pub(super) fn lower_graphemes(s: &str) -> Vec<String> {
 }
 
 /// パレットから実行したコマンドを覚える数 (直近 20 件、起動している間だけ。07 §11.4)。
-pub(super) const RECENT_MAX: usize = 20;
+pub(crate) const RECENT_MAX: usize = 20;
 
 /// 書記素 `i` が語の先頭か (先頭、または直前が空白・区切り記号)。
 fn word_start(hay: &[String], i: usize) -> bool {
@@ -134,7 +134,7 @@ fn word_start(hay: &[String], i: usize) -> bool {
 /// ファジー一致 (04 §8.1、07 §11.4): `needle` の書記素が `hay` に順に現れれば (スコア, 一致した書記素番号)。
 /// 連続した部分一致を最も高くし (先頭ならさらに高く)、部分列の一致は、語頭に当たる文字・連続する文字が多く、
 /// 間が少ないほど高い。どれも一致しなければ `None`。
-pub(super) fn fuzzy(hay: &[String], needle: &[String]) -> Option<(i32, Vec<usize>)> {
+pub(crate) fn fuzzy(hay: &[String], needle: &[String]) -> Option<(i32, Vec<usize>)> {
     if needle.is_empty() {
         return None;
     }
@@ -195,7 +195,7 @@ fn to_ranges(pos: &[usize]) -> Vec<Range<usize>> {
 }
 
 /// `hay` の中で `needle` が最初に現れる書記素番号。
-pub(super) fn find(hay: &[String], needle: &[String]) -> Option<usize> {
+pub(crate) fn find(hay: &[String], needle: &[String]) -> Option<usize> {
     if needle.is_empty() || needle.len() > hay.len() {
         return None;
     }
@@ -250,7 +250,7 @@ impl EditorState {
     }
 
     /// 引数を尋ねている途中なら 1 段戻って `true` (コマンドの一覧に戻る)。
-    pub(super) fn palette_back(&mut self) -> bool {
+    pub(crate) fn palette_back(&mut self) -> bool {
         if let Some(Overlay::Palette(p)) = &mut self.overlay
             && p.stage.is_some()
         {
@@ -335,7 +335,7 @@ impl EditorState {
 
     /// この frontend で使えるコマンドか。when 句が `caps.*` を参照して偽なら (例: Windows の `app.suspend`)、端末の能力が足りない
     /// ので「現在は実行できません」とも出さず、パレットとヘルプの一覧から外す (05 §11.2、04 §14.5)。
-    pub(super) fn supported_here(&self, e: &PaletteEntry) -> bool {
+    pub(crate) fn supported_here(&self, e: &PaletteEntry) -> bool {
         !e.when.vars().iter().any(|v| v.starts_with("caps."))
             || self.disabled_reason_key(e).is_none()
     }
@@ -368,14 +368,14 @@ impl EditorState {
         Some(key)
     }
 
-    pub(super) fn open_palette(&mut self) -> CommandResult {
+    pub(crate) fn open_palette(&mut self) -> CommandResult {
         self.set_overlay(Some(Overlay::Palette(PaletteState::default())));
         self.mark_dirty_render();
         CommandResult::Done
     }
 
     /// `ui.list_page_down` / `ui.list_page_up`: 表示窓の行数ぶん動かす (端で止まる)。
-    pub(super) fn palette_page(&mut self, forward: bool) -> CommandResult {
+    pub(crate) fn palette_page(&mut self, forward: bool) -> CommandResult {
         let Some(Overlay::Palette(p)) = &self.overlay else {
             return CommandResult::Rejected(RejectReason::NotAvailable);
         };
@@ -398,14 +398,14 @@ impl EditorState {
     }
 
     /// 入力が変わったら先頭の候補を選ぶ。
-    pub(super) fn palette_reset_selection(&mut self) {
+    pub(crate) fn palette_reset_selection(&mut self) {
         if let Some(Overlay::Palette(p)) = &mut self.overlay {
             p.selected = 0;
         }
     }
 
     /// `ui.list_next` / `ui.list_prev` (折り返す)。
-    pub(super) fn palette_move(&mut self, forward: bool) -> CommandResult {
+    pub(crate) fn palette_move(&mut self, forward: bool) -> CommandResult {
         let Some(Overlay::Palette(p)) = &self.overlay else {
             return CommandResult::Rejected(RejectReason::NotAvailable);
         };
@@ -429,7 +429,7 @@ impl EditorState {
 
     /// `ui.confirm`: 選択中のコマンドを閉じてから実行する (実行は Editor が行う)。
     /// 候補が無い・実行できないコマンドのときは、パレットを閉じない。
-    pub(super) fn palette_confirm(&mut self) -> CommandResult {
+    pub(crate) fn palette_confirm(&mut self) -> CommandResult {
         let Some(Overlay::Palette(p)) = &self.overlay else {
             return CommandResult::Rejected(RejectReason::NotAvailable);
         };
@@ -537,7 +537,7 @@ impl EditorState {
         }
     }
 
-    pub(super) fn palette_model(&self, p: &PaletteState) -> OverlayModel {
+    pub(crate) fn palette_model(&self, p: &PaletteState) -> OverlayModel {
         if p.buffers {
             return self.buffer_list_model(p);
         }

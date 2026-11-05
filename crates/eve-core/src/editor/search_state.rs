@@ -24,7 +24,7 @@ const SYNC_STEP_BYTES: usize = 1 << 18;
 const SYNC_BATCH_BYTES: usize = 64 << 10;
 
 #[derive(Debug)]
-pub(super) struct SearchState {
+pub(crate) struct SearchState {
     doc: DocumentId,
     /// 結果が属する文書の Revision。違えば保持は無効 (`Approx`)。
     revision: Revision,
@@ -66,14 +66,14 @@ pub enum SearchStep {
     NoQuery,
 }
 
-pub(super) enum Found {
+pub(crate) enum Found {
     Hit(ByteRange, bool),
     None,
     Incomplete,
 }
 
 impl SearchState {
-    pub(super) fn doc(&self) -> DocumentId {
+    pub(crate) fn doc(&self) -> DocumentId {
         self.doc
     }
 }
@@ -152,7 +152,7 @@ impl EditorState {
         Some(if forward { r.end() } else { r.start() })
     }
 
-    pub(super) fn search_fresh(&self) -> bool {
+    pub(crate) fn search_fresh(&self) -> bool {
         self.search.as_ref().is_some_and(|s| {
             self.documents
                 .get(&s.doc)
@@ -166,7 +166,7 @@ impl EditorState {
     }
 
     /// `search_count` と同じだが、現在の一致の番号を `probe` (選択していない強調中の一致) から求める。
-    pub(super) fn search_count_for(&self, probe: Option<ByteRange>) -> SearchCount {
+    pub(crate) fn search_count_for(&self, probe: Option<ByteRange>) -> SearchCount {
         let Some(s) = &self.search else {
             return SearchCount::Idle;
         };
@@ -299,7 +299,7 @@ impl EditorState {
     }
 
     /// 単発の検索の結果。文書の Revision と選択が投入時のままなら移る (違えば捨てる)。
-    pub(super) fn finish_find_next(
+    pub(crate) fn finish_find_next(
         &mut self,
         doc_id: DocumentId,
         revision: Revision,
@@ -338,7 +338,7 @@ impl EditorState {
     }
 
     /// カーソルから同期検索する (最大 `SYNC_STEP_BYTES`)。文書の端を越えたら反対側から続ける。
-    pub(super) fn sync_find(
+    pub(crate) fn sync_find(
         &self,
         doc_id: DocumentId,
         query: &SearchQuery,
@@ -453,7 +453,7 @@ impl EditorState {
     }
 
     /// 検索ジョブの途中経過と終わり。古いジョブの結果は捨てる。
-    pub(super) fn on_search_result(&mut self, r: JobResult) {
+    pub(crate) fn on_search_result(&mut self, r: JobResult) {
         let job = r.job();
         let Some(s) = self.search.as_mut().filter(|s| s.job == Some(job)) else {
             // 取り消した検索の結果。終わりなら待ちの記録を消す

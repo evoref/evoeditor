@@ -26,7 +26,7 @@ use super::state::EditorState;
 
 impl SearchBarState {
     /// 今の入力とトグルから作る問い合わせ。
-    pub(super) fn query(&self) -> SearchQuery {
+    pub(crate) fn query(&self) -> SearchQuery {
         SearchQuery::literal(&self.text)
             .with_case(self.case)
             .with_regex(self.regex)
@@ -39,7 +39,7 @@ impl SearchBarState {
 const SYNC_LINE_MAX: usize = 16 * 1024;
 
 #[derive(Clone, Debug)]
-pub(super) struct SearchBarState {
+pub(crate) struct SearchBarState {
     pub text: String,
     /// `text` 内のカーソル (バイト。書記素境界)。
     pub cursor: usize,
@@ -134,7 +134,7 @@ impl EditorState {
     }
 
     /// `Tab` / `Shift+Tab`: 検索欄 → 置換欄 → ボタン → 検索欄 (置換欄が開いているときだけ)。
-    pub(super) fn bar_focus_cycle(&mut self, forward: bool) {
+    pub(crate) fn bar_focus_cycle(&mut self, forward: bool) {
         let Some(bar) = &mut self.search_bar else {
             return;
         };
@@ -148,7 +148,7 @@ impl EditorState {
     }
 
     /// 入力欄を編集した: 検索欄なら検索をやり直す。
-    pub(super) fn bar_edited(&mut self) {
+    pub(crate) fn bar_edited(&mut self) {
         if self
             .search_bar
             .as_ref()
@@ -238,7 +238,7 @@ impl EditorState {
     }
 
     /// 編集に合わせて、選択範囲内の検索の範囲を写像する (範囲の端での挿入は範囲に含める)。
-    pub(super) fn map_search_scope(&mut self, doc: eve_view::DocumentId, cs: &eve_text::ChangeSet) {
+    pub(crate) fn map_search_scope(&mut self, doc: eve_view::DocumentId, cs: &eve_text::ChangeSet) {
         if self.active_document() != Some(doc) {
             return;
         }
@@ -262,7 +262,7 @@ impl EditorState {
 
     /// 入力欄・トグルが変わった: 検索をやり直し、起点から先の最初の一致を強調する。
     /// 検索語をコンパイルできないとき (正規表現の構文エラーなど) は検索せず、理由を示す。
-    pub(super) fn bar_changed(&mut self) {
+    pub(crate) fn bar_changed(&mut self) {
         let Some(bar) = &self.search_bar else {
             return;
         };
@@ -351,7 +351,7 @@ impl EditorState {
     }
 
     /// 検索バーの表示モデル。
-    pub(super) fn search_bar_model(&self) -> Option<SearchBarModel> {
+    pub(crate) fn search_bar_model(&self) -> Option<SearchBarModel> {
         let bar = self.search_bar.as_ref()?;
         let render = |key: &str, args: &[(&str, &str)]| {
             self.catalog().render(key, args, &|c| self.key_label(c))
@@ -449,7 +449,7 @@ impl EditorState {
 
     /// 可視行の一致 (強調する範囲)。保持した一致ではなく、可視行だけを同期検索する (03 §12.2 の「可視範囲のハイライト」)。
     /// 1 行が `SYNC_LINE_MAX` を超える行は強調しない。検索バーが開いていなければ空。
-    pub(super) fn visible_matches(
+    pub(crate) fn visible_matches(
         &self,
         doc_id: eve_view::DocumentId,
         top_line: usize,
@@ -482,7 +482,7 @@ impl EditorState {
     }
 
     /// 入力で強調している現在の一致 (文書内のバイト範囲)。
-    pub(super) fn bar_current(&self) -> Option<(usize, usize)> {
+    pub(crate) fn bar_current(&self) -> Option<(usize, usize)> {
         self.search_bar
             .as_ref()?
             .current
@@ -668,7 +668,7 @@ impl EditorState {
     }
 
     /// すべて置換のジョブの結果。作った Revision が古ければ適用せず中止を知らせる。
-    pub(super) fn finish_replace_all(
+    pub(crate) fn finish_replace_all(
         &mut self,
         doc_id: eve_view::DocumentId,
         revision: eve_view::Revision,
@@ -729,7 +729,7 @@ const RESEARCH_DELAY: u64 = 300;
 
 impl EditorState {
     /// 編集で検索の結果が無効になったら、入力が止まって 300 ms 後に再検索する。`Editor::tick` から呼ぶ。
-    pub(super) fn search_tick(&mut self) {
+    pub(crate) fn search_tick(&mut self) {
         let stale = self.search_bar.is_some() && self.search.is_some() && !self.search_fresh();
         let cur = self
             .search
@@ -752,7 +752,7 @@ impl EditorState {
     }
 
     /// 次に `tick` が要る時刻 (再検索の期限)。
-    pub(super) fn search_deadline(&self) -> Option<Tick> {
+    pub(crate) fn search_deadline(&self) -> Option<Tick> {
         self.research.map(|(_, at)| Tick(at.0 + RESEARCH_DELAY))
     }
 }

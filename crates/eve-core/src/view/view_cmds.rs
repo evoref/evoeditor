@@ -1,9 +1,9 @@
 //! View の表示属性のコマンド (docs/07 §11.6 の `view.*`、04 §7.2)。
 
-use super::command::{
+use crate::editor::command::{
     CommandCtx, CommandKind, CommandRegistry, CommandResult, CommandSpec, Permission, RejectReason,
 };
-use super::layout::WrapMode;
+use crate::editor::layout::WrapMode;
 
 /// `view.toggle_wrap`: 折り返しの ON/OFF。ON にするときの方式は設定 `view.wrap` (`off` なら `word`)。
 fn toggle_wrap(ctx: &mut CommandCtx<'_>) -> CommandResult {
@@ -25,7 +25,7 @@ fn toggle_wrap(ctx: &mut CommandCtx<'_>) -> CommandResult {
     CommandResult::Done
 }
 
-pub(super) fn register(r: &mut CommandRegistry) {
+pub(crate) fn register(r: &mut CommandRegistry) {
     r.register(
         CommandSpec::new(
             "view.toggle_wrap",

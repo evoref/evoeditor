@@ -48,7 +48,7 @@ fn line_span(doc: &Document, l: usize) -> (usize, usize) {
 }
 
 /// 対象の行のブロック。
-pub(super) fn target_blocks(doc: &Document, sel: &Selection) -> Vec<Block> {
+pub(crate) fn target_blocks(doc: &Document, sel: &Selection) -> Vec<Block> {
     let t = doc.text();
     let mut lines: Vec<Block> = sel
         .iter()
@@ -123,7 +123,7 @@ fn map_range(r: &Range, cs: &ChangeSet) -> Range {
 // ---------- インデント / アンインデント ----------
 
 /// 選択が触れる各行にインデントを足す (空行は飛ばす)。選択が無ければ `false` (呼び出し側が 1 カーソルの経路に進む)。
-pub(super) fn indent_lines(ctx: &mut CommandCtx<'_>, unit: &str) -> CommandResult {
+pub(crate) fn indent_lines(ctx: &mut CommandCtx<'_>, unit: &str) -> CommandResult {
     let Some((view_id, doc_id)) = active(ctx) else {
         return CommandResult::Rejected(RejectReason::NoTarget);
     };
@@ -150,7 +150,7 @@ pub(super) fn indent_lines(ctx: &mut CommandCtx<'_>, unit: &str) -> CommandResul
 }
 
 /// 選択が触れる各行から、`width` 以内に収まる行頭空白を取り除く (03 §15.3 の規則)。
-pub(super) fn outdent_lines(
+pub(crate) fn outdent_lines(
     ctx: &mut CommandCtx<'_>,
     leading_removal: impl Fn(&Document, usize, usize) -> usize,
 ) -> CommandResult {
@@ -360,7 +360,7 @@ fn move_line_down(ctx: &mut CommandCtx<'_>) -> CommandResult {
 }
 
 /// v0.2 の行操作のコマンド (07 §11.6 の「編集」)。
-pub(super) fn register(r: &mut CommandRegistry) {
+pub(crate) fn register(r: &mut CommandRegistry) {
     let handlers: [(&str, crate::Handler); 4] = [
         ("edit.duplicate_line", duplicate_line),
         ("edit.delete_line", delete_line),

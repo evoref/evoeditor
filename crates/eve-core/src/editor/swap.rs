@@ -24,18 +24,18 @@ use crate::{FsErrorKind, FsPath, JobError, JobKind, JobResult};
 const DISCARD_RETRY: Millis = Millis(10_000);
 
 #[derive(Default)]
-pub(super) struct SwapState {
+pub(crate) struct SwapState {
     docs: BTreeMap<DocumentId, SwapDoc>,
     /// Port がスワップを実装していない。以後このセッションでは何もしない。
     stopped: bool,
     /// 復旧の候補 (他のプロセスが残した、読めるスワップ)。該当する文書が開いたら提案する (`swap_recovery.rs`)。
-    pub(super) candidates: Vec<crate::SwapEntry>,
+    pub(crate) candidates: Vec<crate::SwapEntry>,
     /// 動いている別のプロセスのスワップ (同じファイルを開いたら警告する)。
-    pub(super) alive: Vec<crate::SwapEntry>,
+    pub(crate) alive: Vec<crate::SwapEntry>,
     /// 「スワップの対象外」を知らせた文書 (1 文書につき 1 回)。
     notified_large: std::collections::BTreeSet<DocumentId>,
     /// 復旧を適用した古いスワップ。新しいスワップが書けるか、文書が保存されるまで消さない。
-    pub(super) recovered: BTreeMap<DocumentId, Vec<crate::SwapEntry>>,
+    pub(crate) recovered: BTreeMap<DocumentId, Vec<crate::SwapEntry>>,
 }
 
 #[derive(Default)]
@@ -141,7 +141,7 @@ impl EditorState {
     }
 
     /// `Editor::tick` から呼ぶ。期限が来た文書のスワップを書くジョブを投入し、要らなくなったスワップを消すジョブを投入する。
-    pub(super) fn swap_tick(&mut self) {
+    pub(crate) fn swap_tick(&mut self) {
         self.swap_notify_large();
         self.swap_offer();
         self.leftover_offer();
@@ -235,7 +235,7 @@ impl EditorState {
     }
 
     /// 次に `tick` が要る時刻 (スワップを書く・消す時刻)。
-    pub(super) fn swap_deadline(&self) -> Option<Tick> {
+    pub(crate) fn swap_deadline(&self) -> Option<Tick> {
         if self.swap.stopped {
             return None;
         }
@@ -263,7 +263,7 @@ impl EditorState {
     }
 
     /// ディスクにスワップがある文書 (正常終了のとき、Host が消す。書込中のものを含む)。
-    pub(super) fn swap_leftovers(&self) -> Vec<(DocumentId, Option<FsPath>)> {
+    pub(crate) fn swap_leftovers(&self) -> Vec<(DocumentId, Option<FsPath>)> {
         self.swap
             .docs
             .iter()
@@ -273,12 +273,12 @@ impl EditorState {
     }
 
     /// 文書の新しいスワップを書き終えている (古いスワップを消してよい)。
-    pub(super) fn swap_written(&self, id: DocumentId) -> bool {
+    pub(crate) fn swap_written(&self, id: DocumentId) -> bool {
         self.swap.docs.get(&id).is_some_and(|e| e.written.is_some())
     }
 
     /// スワップを書くジョブの結果。
-    pub(super) fn finish_swap(&mut self, doc: DocumentId, r: JobResult) {
+    pub(crate) fn finish_swap(&mut self, doc: DocumentId, r: JobResult) {
         let Some(e) = self.swap.docs.get_mut(&doc) else {
             return;
         };
@@ -299,7 +299,7 @@ impl EditorState {
     }
 
     /// スワップを消すジョブの結果。
-    pub(super) fn finish_swap_discard(&mut self, doc: DocumentId, r: JobResult) {
+    pub(crate) fn finish_swap_discard(&mut self, doc: DocumentId, r: JobResult) {
         let now = self.now;
         let Some(e) = self.swap.docs.get_mut(&doc) else {
             return;

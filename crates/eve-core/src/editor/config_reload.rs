@@ -60,7 +60,7 @@ impl EditorState {
     }
 
     /// テーマファイルの読込の結果。読めなければ `default` で動き、診断を出す。
-    pub(super) fn finish_theme_read(&mut self, r: JobResult) {
+    pub(crate) fn finish_theme_read(&mut self, r: JobResult) {
         let JobResult::ThemeRead {
             name,
             theme,
@@ -155,7 +155,7 @@ impl EditorState {
     }
 
     /// 読込の結果。`config.toml` はここで差し替え、`keymap.toml` は解析の結果を Editor に渡す (キーマップは Editor が持つ)。
-    pub(super) fn finish_config_reload(&mut self, r: JobResult) {
+    pub(crate) fn finish_config_reload(&mut self, r: JobResult) {
         let JobResult::ConfigRead { config, keymap, .. } = r else {
             return;
         };
@@ -244,7 +244,7 @@ impl EditorState {
 
 impl Editor {
     /// 再読込の結果が届いていれば、キーマップを差し替えて要約を出す (`on_job_result` の後に呼ぶ)。
-    pub(super) fn finish_reload_keymap(&mut self) {
+    pub(crate) fn finish_reload_keymap(&mut self) {
         let Some((keymap, changed)) = self.state.reloaded.take() else {
             return;
         };
@@ -271,7 +271,7 @@ fn config_reload(ctx: &mut CommandCtx<'_>) -> CommandResult {
     ctx.state.start_config_reload()
 }
 
-pub(super) fn register(r: &mut CommandRegistry) {
+pub(crate) fn register(r: &mut CommandRegistry) {
     r.register(
         CommandSpec::new(
             "config.reload",

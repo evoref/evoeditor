@@ -17,7 +17,7 @@ use crate::jobs::{JobError, JobResult};
 
 /// 実行中の全保存。
 #[derive(Debug, Default)]
-pub(super) struct SaveAll {
+pub(crate) struct SaveAll {
     /// 結果を待っている保存ジョブ。
     jobs: BTreeSet<JobId>,
     saved: usize,
@@ -72,7 +72,7 @@ impl EditorState {
 
     /// 保存ジョブ `job` の結果を全保存の 1 件として数える。全保存の保存でなければ `None`。
     /// 失敗は確認を出さずに記録して `Some(true)`、成功は `Some(false)` (通常どおり文書に反映する)。
-    pub(super) fn save_all_failed(
+    pub(crate) fn save_all_failed(
         &mut self,
         job: JobId,
         doc: DocumentId,
@@ -131,7 +131,7 @@ impl EditorState {
     }
 
     /// 全部の保存ジョブが終わったら 1 回だけ知らせる (失敗があれば一覧の確認)。
-    pub(super) fn finish_save_all_if_done(&mut self) {
+    pub(crate) fn finish_save_all_if_done(&mut self) {
         if self.save_all.as_ref().is_none_or(|b| !b.jobs.is_empty()) {
             return;
         }
@@ -178,7 +178,7 @@ fn file_save_all(ctx: &mut CommandCtx<'_>) -> CommandResult {
 }
 
 /// v0.2 の `file.save_all` (07 §11.6)。
-pub(super) fn register(r: &mut CommandRegistry) {
+pub(crate) fn register(r: &mut CommandRegistry) {
     r.register(
         CommandSpec::new(
             "file.save_all",
