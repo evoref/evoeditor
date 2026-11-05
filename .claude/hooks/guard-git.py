@@ -5,15 +5,26 @@
 - main / develop 上での commit / merge / rebase 等を拒否 (作業ブランチ → PR で入れる)
 - リリースタグ (v*) の作成・push を拒否 (署名付きタグは人間が付ける)
 - git stash を拒否 (作業ツリーを動かす操作)。reset --hard / clean -f / restore / checkout -- は確認を求める
-- gh pr merge は確認を求める (merge は人間)
+- gh pr merge は確認を求める (merge は人間)。ただし人間が自己マージの許可 (merge-permit.py grant) を
+  出していて、develop 宛ての PR を --squash で入れるときだけは確認なしで通す
+- 自己マージの許可を出す操作 (merge-permit.py grant、許可のファイルへの直接の書き込み) は必ず確認を求める
+- GitHub MCP の merge_pull_request は、許可を見ずに確認を求める (gh pr merge を使う)
 
-標準入力の JSON から tool_input.command を読み、deny / ask のときだけ JSON を出力する。
+標準入力の JSON から tool_name / tool_input を読み、deny / ask / allow のときだけ JSON を出力する。
 """
+import importlib.util
 import json
 import os
 import re
+import shlex
 import subprocess
 import sys
+
+sys.dont_write_bytecode = True  # .claude/hooks/__pycache__ を作らない
+_spec = importlib.util.spec_from_file_location(
+    "merge_permit", os.path.join(os.path.dirname(os.path.abspath(__file__)), "merge-permit.py"))
+merge_permit = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(merge_permit)
 
 PROTECTED = {"main", "develop"}
 TAG_RE = re.compile(r"^(refs/tags/)?v\d")
@@ -67,6 +78,61 @@ def git_args(segment):
     return None, [], None
 
 
+# gh pr merge の、値を取るオプション
+GH_MERGE_VALUE_OPTS = {"-R", "--repo", "-t", "--subject", "-b", "--body", "-F", "--body-file",
+                       "-A", "--author-email", "--match-head-commit"}
+MERGE_ASK = "PR の merge は人間が行います (docs/11 §9.1)。実行してよいか確認してください。"
+
+
+def check_gh_merge(seg, cwd):
+    """自己マージの許可があり、develop 宛ての PR を --squash で入れるときだけ allow。それ以外は ask。"""
+    permit = merge_permit.load(cwd)
+    if not permit:
+        decide("ask", MERGE_ASK)
+    try:
+        args = shlex.split(seg)[3:]  # `gh pr merge` の後
+    except ValueError:
+        decide("ask", MERGE_ASK)
+    if any(a in ("--admin", "--merge", "-m", "--rebase", "-r", "--disable-auto") for a in args) or \
+            not any(a in ("--squash", "-s") for a in args):
+        decide("ask", MERGE_ASK + " (自己マージの許可は --squash にだけ効きます)")
+    selector, repo, i = [], [], 0
+    while i < len(args):
+        a = args[i]
+        if a in GH_MERGE_VALUE_OPTS:
+            if a in ("-R", "--repo") and i + 1 < len(args):
+                repo = ["-R", args[i + 1]]
+            i += 2
+            continue
+        if not a.startswith("-"):
+            selector.append(a)
+        i += 1
+    try:
+        out = subprocess.run(["gh", "pr", "view", *selector[:1], *repo, "--json", "baseRefName",
+                              "-q", ".baseRefName"], cwd=cwd or None,
+                             capture_output=True, text=True, timeout=20)
+        base = out.stdout.strip() if out.returncode == 0 else ""
+    except Exception:
+        base = ""
+    if base != permit.get("base", "develop"):
+        decide("ask", MERGE_ASK + f" (宛て先が {base or '不明'} のため、自己マージの許可は効きません)")
+    # allow は、同じコマンドの残りの部分を調べ終えてから main() で出す
+    return f"自己マージの許可 ({permit['until']} まで) により、develop 宛ての squash マージを通します。"
+
+
+def check_permit_command(seg):
+    """自己マージの許可を出す操作は必ず確認。revoke / status は通す。"""
+    if "merge-permit.py" in seg:
+        toks = seg.split()
+        if "grant" in toks:
+            until = toks[toks.index("--until") + 1] if "--until" in toks[:-1] else "?"
+            decide("ask", f"PR の自己マージを許可します ({until} まで、develop 宛ての PR の squash マージ)。"
+                          "許可してよいか確認してください。")
+        return
+    if merge_permit.FLAG_NAME in seg:
+        decide("ask", "自己マージの許可のファイルを直接扱う操作です。実行してよいか確認してください。")
+
+
 def check_push(args, branch):
     flags = [a for a in args if a.startswith("-")]
     pos = [a for a in args if not a.startswith("-")]
@@ -102,18 +168,35 @@ def main():
         payload = json.load(sys.stdin)
     except Exception:
         return
-    cmd = (payload.get("tool_input") or {}).get("command") or ""
+    tool = payload.get("tool_name") or ""
+    tool_input = payload.get("tool_input") or {}
+    if tool.endswith("merge_pull_request"):
+        decide("ask", MERGE_ASK + " (MCP の merge は自己マージの許可を見ません)")
+    if tool in ("Write", "Edit", "MultiEdit", "NotebookEdit"):
+        target = tool_input.get("file_path") or tool_input.get("notebook_path") or ""
+        if merge_permit.FLAG_NAME in target:
+            decide("ask", "自己マージの許可のファイルを直接書き換えます。許可してよいか確認してください。")
+        return
+    cmd = tool_input.get("command") or ""
+    if merge_permit.FLAG_NAME in cmd or "merge-permit.py" in cmd:
+        for seg in SPLIT_RE.split(cmd):
+            check_permit_command(seg.strip())
     if not re.search(r"\bgit\b|\bgh\b", cmd):
         return
     cwd = payload.get("cwd")
+    allow_reason, other = None, False
     for seg in SPLIT_RE.split(cmd):
         seg = seg.strip()
+        if not seg:
+            continue
         m = re.match(r"^cd\s+(?:/d\s+)?(\S+)", seg)
         if m:  # `cd <path> && git ...` は、以降の git の対象ディレクトリを変える
             cwd = resolve(cwd, m.group(1))
             continue
-        if re.match(r"^gh\s+pr\s+merge\b", seg):
-            decide("ask", "PR の merge は人間が行います (docs/11 §9.1)。実行してよいか確認してください。")
+        if re.match(r"^gh(\.exe)?\s+pr\s+merge\b", seg):
+            allow_reason = check_gh_merge(seg, cwd)
+            continue
+        other = True
         sub, args, dash_c = git_args(seg)
         if sub is None:
             continue
@@ -147,6 +230,11 @@ def main():
                 decide("deny", "main へ直接コミット・マージはしません。main はリリース専用です (develop → main の PR)。")
             if branch == "develop":
                 decide("deny", "develop へ直接コミット・マージはしません。作業ブランチを切って PR (squash) で入れてください (docs/11 §9.1)。")
+    if allow_reason:
+        # allow はコマンド全体の確認を飛ばすので、gh pr merge (と cd) だけのコマンドに限る
+        if other or re.search(r"\$\(|`|[<>]", cmd):
+            decide("ask", MERGE_ASK + " (ほかのコマンドと一緒のときは、自己マージの許可は効きません)")
+        decide("allow", allow_reason)
 
 
 if __name__ == "__main__":
