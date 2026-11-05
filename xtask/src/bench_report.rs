@@ -90,6 +90,11 @@ pub(crate) fn verdict(v: &Value) -> Verdict {
             "端末込み (ConPTY の出力の周期 約 16 ms を含む)",
         ),
         // 負荷の下のキー入力 (BM-103b と同じ区間・同じ目標)
+        "BM-103b-search-1m" => t(
+            "NFR-103 を維持 (p50 2 ms / p99 8 ms)",
+            limits(v, 2.0, 8.0),
+            "1 MB の文書の検索欄への入力 (一致を強調し直す)",
+        ),
         "BM-103b-search" => t(
             "NFR-103 を維持 (p50 2 ms / p99 8 ms)",
             limits(v, 2.0, 8.0),
