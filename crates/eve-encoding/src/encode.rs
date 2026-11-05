@@ -503,8 +503,11 @@ mod tests {
     fn 表現不能と黙示の置換は本文の順に報告する() {
         for e in [Encoding::ShiftJis, Encoding::EucJp] {
             let (_, rep) = enc(e, false, EscapePolicy::Reject, &["a\u{a5}b\u{652}c"]);
-            let got: Vec<(u64, UnmappableKind)> =
-                rep.recorded.iter().map(|u| (u.char_index, u.kind)).collect();
+            let got: Vec<(u64, UnmappableKind)> = rep
+                .recorded
+                .iter()
+                .map(|u| (u.char_index, u.kind))
+                .collect();
             assert_eq!(
                 got,
                 [
