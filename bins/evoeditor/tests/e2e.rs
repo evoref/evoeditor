@@ -531,8 +531,6 @@ fn 設定ディレクトリが無くても使え_設定ディレクトリは作�
     let _ = std::fs::remove_dir_all(dir);
 }
 
-// (8b ii) コンソールを閉じる (CTRL_CLOSE): 未保存の内容を退避して終了する。退避は受信スレッドがメインを待たずに書く
-// verifies: AC-FR-107-2
 /// 状態ディレクトリのログ (`log/evoeditor.log`)。退避の試験が落ちたときに、退避の段の時間 (遅いときだけ書く) を見るため
 /// (Issue #342)。
 fn state_log(s: &Session) -> String {
@@ -540,6 +538,8 @@ fn state_log(s: &Session) -> String {
         .unwrap_or_else(|_| "(ログなし)".to_owned())
 }
 
+// (8b ii) コンソールを閉じる (CTRL_CLOSE): 未保存の内容を退避して終了する。退避は受信スレッドがメインを待たずに書く
+// verifies: AC-FR-107-2
 // verifies: AC-NFR-302-2
 #[cfg(windows)]
 #[test]
