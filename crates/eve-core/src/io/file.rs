@@ -7,18 +7,18 @@
 use eve_view::{DocumentId, EditorEvent, MessageLevel, ViewId};
 
 use crate::document::{Document, NodeId};
-use crate::fs::{
+use crate::io::fs::{
     Expect, FsError, FsErrorDetail, FsErrorKind, HardlinkPolicy, InPlaceBackup, SaveMethod,
 };
-use crate::fspath::FsPath;
-use crate::io_jobs::OpenOptions;
+use crate::io::fspath::FsPath;
+use crate::io::io_jobs::OpenOptions;
 use crate::jobs::{ConfirmAsk, JobError, JobKind, JobResult, MetaPurpose, SaveStrategy};
 use eve_encoding::Encoding;
 
-use super::state::EditorState;
 use crate::command::{
     CommandCtx, CommandKind, CommandRegistry, CommandResult, CommandSpec, Permission, RejectReason,
 };
+use crate::editor::state::EditorState;
 use crate::ui_model::overlay::{Continuation, PromptKind};
 
 /// 投入したジョブと、その結果の宛先。
@@ -53,7 +53,7 @@ pub(crate) enum Pending {
         forward: bool,
     },
     /// 改行コードの変換の ChangeSet を作るジョブ (03 §8.4)。
-    ConvertEol(super::eol::EolConvert),
+    ConvertEol(crate::editor::eol::EolConvert),
     /// すべて置換の ChangeSet を作るジョブ (03 §12.5)。
     ReplaceAll {
         doc: DocumentId,
@@ -74,7 +74,7 @@ pub(crate) enum Pending {
         entry: Box<crate::SwapEntry>,
     },
     /// 置換途中の痕跡の操作のジョブ (05 §4.6)。
-    Leftover(Box<super::leftover_offer::LeftoverAsk>),
+    Leftover(Box<crate::io::leftover_offer::LeftoverAsk>),
     /// 他のプロセスのスワップを消すジョブ。`notify` なら結果を知らせる (利用者が選んだ破棄)。
     SwapRemove {
         entry: Box<crate::SwapEntry>,
@@ -1647,7 +1647,7 @@ impl EditorState {
         if !only_rescue {
             dirs.retain(|d| !d.rescue);
         }
-        let key = |d: &crate::fs::RecoveryDirEntry| {
+        let key = |d: &crate::io::fs::RecoveryDirEntry| {
             d.path
                 .as_path()
                 .file_name()
@@ -2128,7 +2128,7 @@ impl EditorState {
         path: &FsPath,
         text: eve_text::Text,
         mut format: crate::document::TextFormat,
-        stamp: crate::fs::FileStamp,
+        stamp: crate::io::fs::FileStamp,
         detected: crate::document::ReadOnlyReasons,
     ) {
         use crate::document::{FormatChange, FormatState, Origin, Transaction};
@@ -2312,8 +2312,8 @@ impl EditorState {
     }
 
     /// 中断された保存の痕跡の案内 (04 §15.2 の `msg.open.interrupted_*`、02 §4.5 の写像)。
-    fn show_interrupted(&mut self, path: &FsPath, is: &crate::fs::InterruptedSave) {
-        use crate::fs::SaveMethod;
+    fn show_interrupted(&mut self, path: &FsPath, is: &crate::io::fs::InterruptedSave) {
+        use crate::io::fs::SaveMethod;
         let key = match (is.method, is.backup.is_some(), is.complete) {
             (SaveMethod::NewFile, _, _) => "msg.open.interrupted_new",
             (_, true, true) => "msg.open.interrupted_save",

@@ -87,17 +87,11 @@ reviewer = "human:maintainer"
 notes = "Frame の生成・折り返し・長大行の列の索引・テーマ段の適用・折り返しのスクロール (v0.3 の M14 で editor/ から移した)"
 
 [[unit]]
-path = "crates/eve-core/src/editor/file.rs"
-spec = ["03 §9"]
+path = "crates/eve-core/src/io"
+spec = ["03 §8", "03 §9", "03 §10", "02 §4.5"]
 owner = "shared"
 reviewer = "human:maintainer"
-notes = "開く・保存・再読込の論理手順 (I/O は io_jobs.rs のジョブ)"
-
-[[unit]]
-path = "crates/eve-core/src/io_jobs.rs"
-spec = ["03 §8", "03 §9"]
-owner = "shared"
-reviewer = "human:maintainer"
+notes = "開く・保存・再読込・外部変更の確認の論理手順 (file.rs)、読込・保存のジョブの本体 (io_jobs.rs)、FileSystem / Paths の Port、スワップ・退避・起動時の走査 (v0.3 の M14 で editor/ と crate の直下から移した。file.rs の分割は STR-B1)"
 
 [[unit]]
 path = "crates/eve-core/src/jobs"

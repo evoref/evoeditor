@@ -17,13 +17,13 @@ use eve_encoding::{Encoding, EscapePolicy, UnsupportedBom};
 use eve_text::{Snapshot, Text};
 
 use crate::document::{ReadOnlyReasons, TextFormat};
-use crate::fs::{
+use crate::io::fs::{
     Expect, FileMeta, FileStamp, FileSystem, FsError, HardlinkPolicy, InPlaceBackup,
     InterruptedSave, RecoveryDirEntry, SaveReport,
 };
-use crate::fspath::FsPath;
-use crate::io_jobs::{OpenOptions, SaveParams, run_open, run_save};
-use crate::paths::Paths;
+use crate::io::fspath::FsPath;
+use crate::io::io_jobs::{OpenOptions, SaveParams, run_open, run_save};
+use crate::io::paths::Paths;
 use crate::time::Clock;
 
 /// 保存の方式 (03 §9.3)。既定は原子的保存。確認 (`AtomicUnsupported` / ハードリンク / `BackupFailed`) の後で直接上書きにする。
@@ -253,8 +253,8 @@ pub enum JobResult {
     UnmappableReplacement {
         job: JobId,
         changes: eve_text::ChangeSet,
-        targets: Vec<crate::unmap::ReplaceTarget>,
-        counts: crate::unmap::ReplaceCounts,
+        targets: Vec<crate::io::unmap::ReplaceTarget>,
+        counts: crate::io::unmap::ReplaceCounts,
     },
     /// 「退避先に保存」の成功。`path` は実際に書いたディレクトリ (代替の退避先を含む)。
     RecoveryWritten {
@@ -426,13 +426,13 @@ pub fn run_job(
     let result = match &req.kind {
         JobKind::LastVersion { current } => JobResult::LastVersionChecked {
             job: req.id,
-            outcome: crate::last_version::check_and_record(&*ports.fs, current),
+            outcome: crate::io::last_version::check_and_record(&*ports.fs, current),
         },
         JobKind::RecoveryScan => JobResult::RecoveryFound {
             job: req.id,
             dirs: ports.fs.list_recovery_dirs().unwrap_or_default(),
             swaps: ports.fs.list_swaps().unwrap_or_default(),
-            leftovers: crate::leftover::scan(&*ports.fs),
+            leftovers: crate::io::leftover::scan(&*ports.fs),
         },
         JobKind::Open { path, opts } => run_open(req.id, path, *opts, ports, cancel, emit),
         JobKind::Save {
@@ -465,7 +465,7 @@ pub fn run_job(
             snapshot,
             encoding,
             escape,
-        } => match crate::unmap::build_replacement(snapshot, *encoding, *escape, cancel) {
+        } => match crate::io::unmap::build_replacement(snapshot, *encoding, *escape, cancel) {
             Ok(Some((changes, targets, counts))) => JobResult::UnmappableReplacement {
                 job: req.id,
                 changes,
@@ -477,7 +477,7 @@ pub fn run_job(
                 job: req.id,
                 changes: eve_text::ChangeSet::identity(eve_text::TextRead::len_bytes(snapshot)),
                 targets: Vec::new(),
-                counts: crate::unmap::ReplaceCounts::default(),
+                counts: crate::io::unmap::ReplaceCounts::default(),
             },
             Err(()) => JobResult::Failed {
                 job: req.id,
@@ -574,7 +574,7 @@ pub fn run_job(
             },
         },
         JobKind::LeftoverAct { leftover, op } => {
-            match crate::leftover::act(&*ports.fs, leftover, *op) {
+            match crate::io::leftover::act(&*ports.fs, leftover, *op) {
                 Ok(()) => JobResult::LeftoverDone { job: req.id },
                 Err(err) => JobResult::Failed {
                     job: req.id,
@@ -628,7 +628,7 @@ pub fn run_job(
                         purpose,
                         MetaPurpose::UnchangedSave | MetaPurpose::ExternalCheck
                     ) {
-                        crate::content_hash::hash_file(ports.fs.as_ref(), path, meta.len)
+                        crate::io::content_hash::hash_file(ports.fs.as_ref(), path, meta.len)
                             .ok()
                             .flatten()
                     } else {
@@ -657,10 +657,10 @@ pub type ConfigFile = Result<Option<Vec<u8>>, String>;
 /// 設定ファイルの大きさの上限 (これを超えるものは設定ではないとみなして読まない)。
 const CONFIG_FILE_MAX: usize = 4 << 20;
 
-fn read_config_file(fs: &dyn crate::fs::FileSystem, path: &FsPath) -> ConfigFile {
+fn read_config_file(fs: &dyn crate::io::fs::FileSystem, path: &FsPath) -> ConfigFile {
     let mut r = match fs.open_read(path) {
         Ok(r) => r,
-        Err(e) if e.kind == crate::fs::FsErrorKind::NotFound => return Ok(None),
+        Err(e) if e.kind == crate::io::fs::FsErrorKind::NotFound => return Ok(None),
         Err(e) => return Err(format!("{:?}", e.kind)),
     };
     let mut out = Vec::new();
@@ -681,7 +681,7 @@ fn read_config_file(fs: &dyn crate::fs::FileSystem, path: &FsPath) -> ConfigFile
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::fs::*;
+    use crate::io::fs::*;
     use crate::time::Tick;
 
     struct StubFs(Result<FileMeta, FsErrorKind>);

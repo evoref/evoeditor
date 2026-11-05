@@ -6,8 +6,8 @@
 
 use std::collections::BTreeSet;
 
-use crate::fs::{FileSystem, FileTime, FsError, FsErrorKind, InflightRecord, SaveMethod};
-use crate::fspath::FsPath;
+use crate::io::fs::{FileSystem, FileTime, FsError, FsErrorKind, InflightRecord, SaveMethod};
+use crate::io::fspath::FsPath;
 
 /// 提案の種類 (05 §4.6)。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

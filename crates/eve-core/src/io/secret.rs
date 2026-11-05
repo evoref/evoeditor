@@ -1,7 +1,7 @@
 //! 秘密ファイルパターン (docs/07 §5.12.2 が一覧と照合規則の正本)。名前だけで「秘密を含み得るファイル」を判定する固定の関数で、
 //! 設定キーにしない。スワップの除外 (`file.swap.exclude_secret_files`、OQ-109) が使う。
 
-use crate::fspath::FsPath;
+use crate::io::fspath::FsPath;
 
 /// ファイル名 (最後の要素) に照合するパターン。`*` は 0 文字以上。大文字小文字は区別しない (比較は小文字にしてから)。
 const NAME_PATTERNS: &[&str] = &[

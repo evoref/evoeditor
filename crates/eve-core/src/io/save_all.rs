@@ -7,11 +7,11 @@ use std::collections::BTreeSet;
 
 use eve_view::{DocumentId, JobId, MessageLevel};
 
-use super::state::EditorState;
 use crate::command::{
     CommandCtx, CommandKind, CommandRegistry, CommandResult, CommandSpec, Permission, RejectReason,
 };
-use crate::fs::Expect;
+use crate::editor::state::EditorState;
+use crate::io::fs::Expect;
 use crate::jobs::{JobError, JobResult};
 use crate::ui_model::overlay::{ChoiceDef, ConfirmAction, ConfirmState};
 
@@ -100,9 +100,9 @@ impl EditorState {
                 crate::FsErrorKind::InPlaceFailed { backup: None } => {
                     self.message_text("msg.save.in_place_failed_no_backup", &[("path", &shown)])
                 }
-                _ => super::file::fs_reason(e),
+                _ => crate::io::file::fs_reason(e),
             },
-            JobResult::Failed { err, .. } => super::file::reason_label(err),
+            JobResult::Failed { err, .. } => crate::io::file::reason_label(err),
             JobResult::Unmappable { .. } => "unmappable".to_owned(),
             _ => "failed".to_owned(),
         };

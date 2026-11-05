@@ -2,8 +2,8 @@
 //! 保存先 T の有無とバックアップの実在から `InterruptedSave` にする。「報告しない」記録のうち、一時ファイル・退避名がどれも
 //! 実在しないものは、フラグだけを黙って消す (一時ファイル・バックアップは消さない)。
 
-use crate::fs::{FileSystem, InflightRecord, InterruptedSave, SaveMethod};
-use crate::fspath::FsPath;
+use crate::io::fs::{FileSystem, InflightRecord, InterruptedSave, SaveMethod};
+use crate::io::fspath::FsPath;
 
 /// `<最終名>.tmp` (事前バックアップの書込中の名前)。
 fn partial_name(backup: &FsPath) -> FsPath {
@@ -107,7 +107,7 @@ mod tests {
     use std::sync::Mutex;
 
     use super::*;
-    use crate::fs::{
+    use crate::io::fs::{
         FileKind, FileMeta, FileTime, FsError, FsErrorKind, FsKind, ReadChunks, SaveOptions,
         SaveReport,
     };

@@ -9,10 +9,10 @@ use eve_view::{
     Capabilities, DocumentId, EditorEvent, Effect, JobId, OriginKind, Revision, ViewId, WindowId,
 };
 
-use super::file::Pending;
 use crate::document::{Applied, AppliedTx, ApplyError, Document, Transaction};
+use crate::io::file::Pending;
+use crate::io::paths::Paths;
 use crate::jobs::JobSpawner;
-use crate::paths::Paths;
 use crate::time::Tick;
 
 use crate::command::context::CtxValue;
@@ -69,7 +69,7 @@ pub struct EditorState {
     pub(crate) snapshot_updates: BTreeSet<DocumentId>,
     /// 閉じた文書のうち、保存ジョブが実行中のものの退避用の公開物 (03 §9.2 の閉じる手順 (a)、§9.8 の不変条件 4)。
     /// 保存の結果が届くまで緊急退避の対象に残し、保存が成功したら外し、失敗したら退避先に書く。
-    pub(crate) closing_snapshots: BTreeMap<DocumentId, super::snapshot::DocSnapshot>,
+    pub(crate) closing_snapshots: BTreeMap<DocumentId, crate::io::snapshot::DocSnapshot>,
     pub(crate) needs_render: bool,
     /// 左ボタンのドラッグ中の状態 (docs/03 §5.8.1)。
     pub(crate) mouse_drag: Option<crate::view::mouse::Drag>,
@@ -84,7 +84,7 @@ pub struct EditorState {
     /// パレットから実行したコマンド (新しい順、直近 20 件。起動している間だけ、07 §11.4)。
     pub(crate) palette_recent: Vec<String>,
     /// 設定の読込元 (`None` は設定ディレクトリの既定の 2 ファイル)。
-    pub(crate) config_sources: Option<super::config_reload::ConfigSources>,
+    pub(crate) config_sources: Option<crate::io::config_reload::ConfigSources>,
     /// マウスの取得が有効か (`ui.mouse` の初期値。`ui.toggle_mouse` で変わる)。
     pub(crate) mouse_on: bool,
     /// ヒントバーを出すか (`ui.hint_bar` の初期値。`ui.toggle_hint_bar` で変わる、FR-504)。
@@ -103,7 +103,7 @@ pub struct EditorState {
     /// 保存ジョブの完了後に続ける操作。
     pub(crate) continuations: BTreeMap<JobId, crate::ui_model::overlay::Continuation>,
     /// 実行中の全保存 (`file.save_all`、03 §9.8)。無ければ `None`。
-    pub(crate) save_all: Option<super::save_all::SaveAll>,
+    pub(crate) save_all: Option<crate::io::save_all::SaveAll>,
     /// 読込が終わったらカーソルを移す位置 (行, 桁。ともに 1 始まり。起動時の `+行:桁`、07 §18.2)。
     pub(crate) open_jumps: BTreeMap<DocumentId, (usize, usize)>,
     /// すべての割当をコマンドごとに集めたもの (ヘルプのキー一覧、04 §8.6)。
@@ -143,7 +143,7 @@ pub struct EditorState {
     /// 編集で検索の結果が無効になった (Revision, 気づいた時刻)。入力が止まって 300 ms 後に再検索する (03 §12.2)。
     pub(crate) research: Option<(eve_view::Revision, Tick)>,
     /// swap-lite の予約 (03 §10.2)。
-    pub(crate) swap: super::swap::SwapState,
+    pub(crate) swap: crate::io::swap::SwapState,
     /// 起動時の走査が見つけた置換途中の痕跡の提案 (新しい順。05 §4.6)。
     pub(crate) leftovers: Vec<crate::Leftover>,
     /// 区分 B / D の確認を承認した (文書, Revision)。同じ Revision の保存では確認を繰り返さない。

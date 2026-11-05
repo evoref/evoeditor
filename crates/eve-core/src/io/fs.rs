@@ -7,7 +7,7 @@
 use std::fmt;
 use std::io;
 
-use crate::fspath::FsPath;
+use crate::io::fspath::FsPath;
 
 // ---------- trait ----------
 

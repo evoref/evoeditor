@@ -9,8 +9,8 @@ use crate::eol::build_eol_conversion;
 use crate::jobs::cancel::CancelToken;
 use crate::jobs::{JobKind, JobResult};
 
-use super::file::Pending;
 use super::state::EditorState;
+use crate::io::file::Pending;
 
 /// ジョブにする境界 (`SEARCH_SYNC_STEP_BYTES`、03 §12.2)。
 const SYNC_BYTES: usize = 1 << 20;

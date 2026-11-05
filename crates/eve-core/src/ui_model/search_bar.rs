@@ -19,8 +19,8 @@ use crate::search::{
 };
 use crate::time::Tick;
 
-use crate::editor::file::Pending;
 use crate::editor::state::EditorState;
+use crate::io::file::Pending;
 use crate::layout::cell_text;
 use crate::search::search_state::{Found, SearchCount, SearchStep};
 

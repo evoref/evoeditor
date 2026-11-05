@@ -5,7 +5,7 @@ use eve_text::Snapshot;
 use eve_view::{DocumentId, Revision};
 
 use crate::document::TextFormat;
-use crate::fspath::FsPath;
+use crate::io::fspath::FsPath;
 
 /// 1 つの文書の退避用の公開物。`Send + Sync`。
 #[derive(Clone, Debug)]
@@ -38,7 +38,7 @@ impl DocSnapshot {
     }
 }
 
-impl super::state::EditorState {
+impl crate::editor::state::EditorState {
     /// 文書の公開物を作る。`dirty_only` なら dirty でない文書は `None` (緊急退避)。読込中・閉じた文書は常に `None`。
     /// 「退避先に保存」は保存に失敗した文書 (dirty でないこともある) を `dirty_only = false` で作る。
     pub(crate) fn rescue_snapshot(&self, doc: DocumentId, dirty_only: bool) -> Option<DocSnapshot> {

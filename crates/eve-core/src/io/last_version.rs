@@ -3,7 +3,7 @@
 //!
 //! 書式は自分で書く 2〜3 行の TOML だけなので、TOML の crate を使わずに `key = value` の行で読む。
 
-use crate::fs::{FileSystem, FsErrorKind};
+use crate::io::fs::{FileSystem, FsErrorKind};
 
 /// 記録のファイル名 (`state_dir` の直下)。
 pub const LAST_VERSION_FILE: &str = "last_version.toml";

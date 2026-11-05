@@ -5,10 +5,10 @@
 
 use eve_view::{DocumentId, ViewId};
 
-use super::file::{OpenKind, Pending};
-use super::state::EditorState;
 use crate::document::{Document, LoadState};
-use crate::io_jobs::OpenOptions;
+use crate::editor::state::EditorState;
+use crate::io::file::{OpenKind, Pending};
+use crate::io::io_jobs::OpenOptions;
 use crate::jobs::JobKind;
 use crate::view::motion::line_col_byte;
 use eve_text::{Selection, TextRead};

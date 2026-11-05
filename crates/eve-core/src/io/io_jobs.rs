@@ -13,12 +13,12 @@ use eve_text::{ByteRange, LineEnding, Snapshot, TextBuilder, TextRead};
 use eve_view::JobId;
 
 use crate::document::{EolStats, ReadOnlyReason, ReadOnlyReasons, TextFormat};
-use crate::fs::{
+use crate::io::fs::{
     ChunkError, Expect, FileKind, FileStamp, FsError, FsErrorDetail, FsErrorKind, ReadChunks,
     SaveOptions,
 };
-use crate::fspath::FsPath;
-use crate::interrupted::map_interrupted;
+use crate::io::fspath::FsPath;
+use crate::io::interrupted::map_interrupted;
 use crate::jobs::cancel::CancelToken;
 use crate::jobs::{ConfirmAsk, JobError, JobPorts, JobResult, OpenNotes};
 
@@ -173,8 +173,8 @@ fn open_inner(
     });
     let mut last_progress = ports.clock.now();
     // 内容ハッシュ (16 MiB 以下。読み込みながら計算する、05 §5.5)
-    let mut hasher = (meta.len <= crate::content_hash::HASH_MAX_LEN)
-        .then(crate::content_hash::ContentHasher::new);
+    let mut hasher = (meta.len <= crate::io::content_hash::HASH_MAX_LEN)
+        .then(crate::io::content_hash::ContentHasher::new);
     loop {
         if cancel.is_cancelled() {
             return cancelled();
@@ -393,22 +393,22 @@ struct SnapshotSource<'a> {
     started: bool,
     finished: bool,
     /// 書いた内容のハッシュ (16 MiB 以下だけ。超えたら `None` にして計算をやめる、05 §5.5)
-    hasher: Option<crate::content_hash::ContentHasher>,
+    hasher: Option<crate::io::content_hash::ContentHasher>,
     written: u64,
 }
 
 impl SnapshotSource<'_> {
     /// 書き終えた内容のハッシュ (上限を超えたら `None`)。
-    fn content_hash(&self) -> Option<crate::fs::ContentHash> {
+    fn content_hash(&self) -> Option<crate::io::fs::ContentHash> {
         self.hasher
             .as_ref()
-            .map(crate::content_hash::ContentHasher::finish)
+            .map(crate::io::content_hash::ContentHasher::finish)
     }
 
     /// 返すチャンクを数え、ハッシュに入れる。
     fn track(&mut self) {
         self.written += self.buf.len() as u64;
-        if self.written > crate::content_hash::HASH_MAX_LEN {
+        if self.written > crate::io::content_hash::HASH_MAX_LEN {
             self.hasher = None;
         } else if let Some(h) = self.hasher.as_mut() {
             h.update(&self.buf);
@@ -564,13 +564,13 @@ pub(crate) fn run_save(
         cancel,
         started: false,
         finished: false,
-        hasher: Some(crate::content_hash::ContentHasher::new()),
+        hasher: Some(crate::io::content_hash::ContentHasher::new()),
         written: 0,
     };
     // 書き始める前の照合 (内容ハッシュ。05 §5.5): mtime が同じで中身が違えば Conflict、中身が同じで mtime だけが違えば新しい Stamp で続ける
     let expected = match expected {
         Expect::Stamp(want) => {
-            match crate::content_hash::reconcile(ports.fs.as_ref(), path, want) {
+            match crate::io::content_hash::reconcile(ports.fs.as_ref(), path, want) {
                 Ok(s) => Expect::Stamp(s),
                 Err(e) => {
                     return JobResult::Failed {

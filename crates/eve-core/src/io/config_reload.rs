@@ -7,12 +7,12 @@
 use eve_config::{Config, KeymapFile, Severity};
 use eve_view::{Effect, MessageLevel};
 
-use super::Editor;
-use super::file::Pending;
-use super::state::EditorState;
 use crate::command::{
     CommandCtx, CommandKind, CommandRegistry, CommandResult, CommandSpec, Permission,
 };
+use crate::editor::Editor;
+use crate::editor::state::EditorState;
+use crate::io::file::Pending;
 use crate::jobs::{ConfigFile, JobKind, JobResult};
 
 /// 設定ファイルの名前 (設定ディレクトリの直下、07 §2)。

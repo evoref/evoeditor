@@ -7,8 +7,8 @@ use std::sync::Arc;
 use eve_text::{ByteOff, ChangeSet, ChangeSetError, Selection, Snapshot, Text, TextRead};
 use eve_view::Revision;
 
-use crate::fs::FileStamp;
-use crate::fspath::FsPath;
+use crate::io::fs::FileStamp;
+use crate::io::fspath::FsPath;
 
 use super::format::{
     EolStats, LoadState, ReadOnlyReasons, TextFormat, count_long_lines, count_range,
