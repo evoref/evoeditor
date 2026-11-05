@@ -4584,7 +4584,7 @@ title = "検証区分 (T / B / M / R) の定義"
 id = "09 §3"
 file = "docs/09-testing-quality.md"
 line = 68
-end = 290
+end = 291
 title = "テスト階層"
 
 [[section]]
@@ -4605,294 +4605,294 @@ title = "L1: プロパティテスト (proptest)"
 id = "09 §3.3"
 file = "docs/09-testing-quality.md"
 line = 113
-end = 132
+end = 133
 title = "L2: fuzz (cargo-fuzz / libFuzzer)"
 
 [[section]]
 id = "09 §3.4"
 file = "docs/09-testing-quality.md"
-line = 133
-end = 179
+line = 134
+end = 180
 title = "L3: ヘッドレス統合テスト (`eve-testkit`)"
 
 [[section]]
 id = "09 §3.5"
 file = "docs/09-testing-quality.md"
-line = 180
-end = 198
+line = 181
+end = 199
 title = "L4: TUI 描画テスト"
 
 [[section]]
 id = "09 §3.6"
 file = "docs/09-testing-quality.md"
-line = 199
-end = 239
+line = 200
+end = 240
 title = "L5: 端末 E2E (疑似端末)"
 
 [[section]]
 id = "09 §3.7"
 file = "docs/09-testing-quality.md"
-line = 240
-end = 252
+line = 241
+end = 253
 title = "L6: 互換マトリクス (M)"
 
 [[section]]
 id = "09 §3.8"
 file = "docs/09-testing-quality.md"
-line = 253
-end = 267
+line = 254
+end = 268
 title = "L7: 手動受入 (M)"
 
 [[section]]
 id = "09 §3.9"
 file = "docs/09-testing-quality.md"
-line = 268
-end = 290
+line = 269
+end = 291
 title = "ローカル LLM 統合テスト (v1.L)"
 
 [[section]]
 id = "09 §4"
 file = "docs/09-testing-quality.md"
-line = 291
-end = 311
+line = 292
+end = 312
 title = "テストデータ (コーパス)"
 
 [[section]]
 id = "09 §5"
 file = "docs/09-testing-quality.md"
-line = 312
-end = 394
+line = 313
+end = 395
 title = "性能ベンチマーク"
 
 [[section]]
 id = "09 §5.1"
 file = "docs/09-testing-quality.md"
-line = 314
-end = 322
+line = 315
+end = 323
 title = "二層構成"
 
 [[section]]
 id = "09 §5.2"
 file = "docs/09-testing-quality.md"
-line = 323
-end = 368
+line = 324
+end = 369
 title = "NFR とベンチ ID の対応"
 
 [[section]]
 id = "09 §5.3"
 file = "docs/09-testing-quality.md"
-line = 369
-end = 379
+line = 370
+end = 380
 title = "基準環境 (OQ-23) と記録"
 
 [[section]]
 id = "09 §5.4"
 file = "docs/09-testing-quality.md"
-line = 380
-end = 394
+line = 381
+end = 395
 title = "回帰の運用"
 
 [[section]]
 id = "09 §6"
 file = "docs/09-testing-quality.md"
-line = 395
-end = 499
+line = 396
+end = 500
 title = "CI (GitHub Actions)"
 
 [[section]]
 id = "09 §6.1"
 file = "docs/09-testing-quality.md"
-line = 397
-end = 410
+line = 398
+end = 411
 title = "ワークフロー一覧"
 
 [[section]]
 id = "09 §6.2"
 file = "docs/09-testing-quality.md"
-line = 411
-end = 442
+line = 412
+end = 443
 title = "`ci.yml` のジョブ"
 
 [[section]]
 id = "09 §6.3"
 file = "docs/09-testing-quality.md"
-line = 443
-end = 457
+line = 444
+end = 458
 title = "夜間ジョブ"
 
 [[section]]
 id = "09 §6.4"
 file = "docs/09-testing-quality.md"
-line = 458
-end = 477
+line = 459
+end = 478
 title = "テストマトリクス (OS × アーキ)"
 
 [[section]]
 id = "09 §6.5"
 file = "docs/09-testing-quality.md"
-line = 478
-end = 499
+line = 479
+end = 500
 title = "セキュリティ (CI 自体)"
 
 [[section]]
 id = "09 §7"
 file = "docs/09-testing-quality.md"
-line = 500
-end = 537
+line = 501
+end = 538
 title = "依存規則 R1〜R11 の機械検査"
 
 [[section]]
 id = "09 §7.1"
 file = "docs/09-testing-quality.md"
-line = 521
-end = 537
+line = 522
+end = 538
 title = "外部の消費者向けの公開 API 互換とライセンス検査"
 
 [[section]]
 id = "09 §8"
 file = "docs/09-testing-quality.md"
-line = 538
-end = 682
+line = 539
+end = 683
 title = "品質ゲート"
 
 [[section]]
 id = "09 §8.1"
 file = "docs/09-testing-quality.md"
-line = 540
-end = 555
+line = 541
+end = 556
 title = "PR マージゲート (全部必須)"
 
 [[section]]
 id = "09 §8.2"
 file = "docs/09-testing-quality.md"
-line = 556
-end = 598
+line = 557
+end = 599
 title = "リリースゲート (版の完了・各リリース)"
 
 [[section]]
 id = "09 §8.3"
 file = "docs/09-testing-quality.md"
-line = 599
-end = 607
+line = 600
+end = 608
 title = "トレーサビリティ行列"
 
 [[section]]
 id = "09 §8.4"
 file = "docs/09-testing-quality.md"
-line = 608
-end = 626
+line = 609
+end = 627
 title = "レビューチェックリスト (R)"
 
 [[section]]
 id = "09 §8.5"
 file = "docs/09-testing-quality.md"
-line = 627
-end = 682
+line = 628
+end = 683
 title = "v0.1 Must の検証手段の対応 (チェックリストの初版)"
 
 [[section]]
 id = "09 §9"
 file = "docs/09-testing-quality.md"
-line = 683
-end = 751
+line = 684
+end = 752
 title = "リリース手順"
 
 [[section]]
 id = "09 §9.1"
 file = "docs/09-testing-quality.md"
-line = 685
-end = 690
+line = 686
+end = 691
 title = "バージョニングと頻度"
 
 [[section]]
 id = "09 §9.2"
 file = "docs/09-testing-quality.md"
-line = 691
-end = 739
+line = 692
+end = 740
 title = "手順"
 
 [[section]]
 id = "09 §9.3"
 file = "docs/09-testing-quality.md"
-line = 740
-end = 745
+line = 741
+end = 746
 title = "ホットフィックス"
 
 [[section]]
 id = "09 §9.4"
 file = "docs/09-testing-quality.md"
-line = 746
-end = 751
+line = 747
+end = 752
 title = "ロールバック"
 
 [[section]]
 id = "09 §10"
 file = "docs/09-testing-quality.md"
-line = 752
-end = 788
+line = 753
+end = 789
 title = "クラッシュ報告・テレメトリ"
 
 [[section]]
 id = "09 §10.1"
 file = "docs/09-testing-quality.md"
-line = 754
-end = 764
+line = 755
+end = 765
 title = "方針"
 
 [[section]]
 id = "09 §10.2"
 file = "docs/09-testing-quality.md"
-line = 765
-end = 781
+line = 766
+end = 782
 title = "クラッシュログの内容 (NFR-302 / 504)"
 
 [[section]]
 id = "09 §10.3"
 file = "docs/09-testing-quality.md"
-line = 782
-end = 788
+line = 783
+end = 789
 title = "デバッグ支援 (明示 opt-in)"
 
 [[section]]
 id = "09 §11"
 file = "docs/09-testing-quality.md"
-line = 789
-end = 832
+line = 790
+end = 833
 title = "ドキュメント運用"
 
 [[section]]
 id = "09 §11.1"
 file = "docs/09-testing-quality.md"
-line = 791
-end = 798
+line = 792
+end = 799
 title = "仕様書 (docs/00〜12)"
 
 [[section]]
 id = "09 §11.2"
 file = "docs/09-testing-quality.md"
-line = 799
-end = 816
+line = 800
+end = 817
 title = "生成ドキュメント (実装との乖離防止)"
 
 [[section]]
 id = "09 §11.3"
 file = "docs/09-testing-quality.md"
-line = 817
-end = 823
+line = 818
+end = 824
 title = "ユーザー向けドキュメント"
 
 [[section]]
 id = "09 §11.4"
 file = "docs/09-testing-quality.md"
-line = 824
-end = 832
+line = 825
+end = 833
 title = "貢献者向け"
 
 [[section]]
 id = "09 §12"
 file = "docs/09-testing-quality.md"
-line = 833
-end = 857
+line = 834
+end = 858
 title = "未決事項"
 
 [[section]]
@@ -8884,283 +8884,283 @@ section = "09 §1"
 [[id]]
 id = "FR-105"
 file = "docs/09-testing-quality.md"
-line = 634
+line = 635
 section = "09 §8.5"
 
 [[id]]
 id = "FR-106"
 file = "docs/09-testing-quality.md"
-line = 635
+line = 636
 section = "09 §8.5"
 
 [[id]]
 id = "FR-205"
 file = "docs/09-testing-quality.md"
-line = 640
+line = 641
 section = "09 §8.5"
 
 [[id]]
 id = "FR-404"
 file = "docs/09-testing-quality.md"
-line = 643
+line = 644
 section = "09 §8.5"
 
 [[id]]
 id = "FR-501"
 file = "docs/09-testing-quality.md"
-line = 644
+line = 645
 section = "09 §8.5"
 
 [[id]]
 id = "FR-513"
 file = "docs/09-testing-quality.md"
-line = 647
+line = 648
 section = "09 §8.5"
 
 [[id]]
 id = "FR-602"
 file = "docs/09-testing-quality.md"
-line = 649
+line = 650
 section = "09 §8.5"
 
 [[id]]
 id = "FR-605"
 file = "docs/09-testing-quality.md"
-line = 650
+line = 651
 section = "09 §8.5"
 
 [[id]]
 id = "FR-606"
 file = "docs/09-testing-quality.md"
-line = 651
+line = 652
 section = "09 §8.5"
 
 [[id]]
 id = "FR-609"
 file = "docs/09-testing-quality.md"
-line = 652
+line = 653
 section = "09 §8.5"
 
 [[id]]
 id = "NFR-107"
 file = "docs/09-testing-quality.md"
-line = 655
+line = 656
 section = "09 §8.5"
 
 [[id]]
 id = "NFR-301"
 file = "docs/09-testing-quality.md"
-line = 657
+line = 658
 section = "09 §8.5"
 
 [[id]]
 id = "NFR-302"
 file = "docs/09-testing-quality.md"
-line = 658
+line = 659
 section = "09 §8.5"
 
 [[id]]
 id = "NFR-305"
 file = "docs/09-testing-quality.md"
-line = 660
+line = 661
 section = "09 §8.5"
 
 [[id]]
 id = "NFR-401"
 file = "docs/09-testing-quality.md"
-line = 661
+line = 662
 section = "09 §8.5"
 
 [[id]]
 id = "NFR-402"
 file = "docs/09-testing-quality.md"
-line = 662
+line = 663
 section = "09 §8.5"
 
 [[id]]
 id = "NFR-403"
 file = "docs/09-testing-quality.md"
-line = 663
+line = 664
 section = "09 §8.5"
 
 [[id]]
 id = "NFR-404"
 file = "docs/09-testing-quality.md"
-line = 664
+line = 665
 section = "09 §8.5"
 
 [[id]]
 id = "NFR-406"
 file = "docs/09-testing-quality.md"
-line = 665
+line = 666
 section = "09 §8.5"
 
 [[id]]
 id = "NFR-501"
 file = "docs/09-testing-quality.md"
-line = 666
+line = 667
 section = "09 §8.5"
 
 [[id]]
 id = "NFR-502"
 file = "docs/09-testing-quality.md"
-line = 667
+line = 668
 section = "09 §8.5"
 
 [[id]]
 id = "NFR-503"
 file = "docs/09-testing-quality.md"
-line = 668
+line = 669
 section = "09 §8.5"
 
 [[id]]
 id = "NFR-504"
 file = "docs/09-testing-quality.md"
-line = 669
+line = 670
 section = "09 §8.5"
 
 [[id]]
 id = "NFR-505"
 file = "docs/09-testing-quality.md"
-line = 670
+line = 671
 section = "09 §8.5"
 
 [[id]]
 id = "NFR-507"
 file = "docs/09-testing-quality.md"
-line = 671
+line = 672
 section = "09 §8.5"
 
 [[id]]
 id = "NFR-602"
 file = "docs/09-testing-quality.md"
-line = 672
+line = 673
 section = "09 §8.5"
 
 [[id]]
 id = "NFR-603"
 file = "docs/09-testing-quality.md"
-line = 673
+line = 674
 section = "09 §8.5"
 
 [[id]]
 id = "NFR-604"
 file = "docs/09-testing-quality.md"
-line = 674
+line = 675
 section = "09 §8.5"
 
 [[id]]
 id = "NFR-605"
 file = "docs/09-testing-quality.md"
-line = 675
+line = 676
 section = "09 §8.5"
 
 [[id]]
 id = "OQ-101"
 file = "docs/09-testing-quality.md"
-line = 839
+line = 840
 section = "09 §12"
 
 [[id]]
 id = "OQ-102"
 file = "docs/09-testing-quality.md"
-line = 840
+line = 841
 section = "09 §12"
 
 [[id]]
 id = "OQ-15"
 file = "docs/09-testing-quality.md"
-line = 841
+line = 842
 section = "09 §12"
 
 [[id]]
 id = "OQ-103"
 file = "docs/09-testing-quality.md"
-line = 842
+line = 843
 section = "09 §12"
 
 [[id]]
 id = "OQ-60"
 file = "docs/09-testing-quality.md"
-line = 843
+line = 844
 section = "09 §12"
 
 [[id]]
 id = "OQ-74"
 file = "docs/09-testing-quality.md"
-line = 844
+line = 845
 section = "09 §12"
 
 [[id]]
 id = "OQ-104"
 file = "docs/09-testing-quality.md"
-line = 845
+line = 846
 section = "09 §12"
 
 [[id]]
 id = "OQ-105"
 file = "docs/09-testing-quality.md"
-line = 846
+line = 847
 section = "09 §12"
 
 [[id]]
 id = "OQ-44"
 file = "docs/09-testing-quality.md"
-line = 847
+line = 848
 section = "09 §12"
 
 [[id]]
 id = "OQ-106"
 file = "docs/09-testing-quality.md"
-line = 848
+line = 849
 section = "09 §12"
 
 [[id]]
 id = "OQ-107"
 file = "docs/09-testing-quality.md"
-line = 849
+line = 850
 section = "09 §12"
 
 [[id]]
 id = "OQ-143"
 file = "docs/09-testing-quality.md"
-line = 850
+line = 851
 section = "09 §12"
 
 [[id]]
 id = "OQ-144"
 file = "docs/09-testing-quality.md"
-line = 851
+line = 852
 section = "09 §12"
 
 [[id]]
 id = "OQ-112"
 file = "docs/09-testing-quality.md"
-line = 852
+line = 853
 section = "09 §12"
 
 [[id]]
 id = "OQ-113"
 file = "docs/09-testing-quality.md"
-line = 853
+line = 854
 section = "09 §12"
 
 [[id]]
 id = "OQ-157"
 file = "docs/09-testing-quality.md"
-line = 855
+line = 856
 section = "09 §12"
 
 [[id]]
 id = "OQ-145"
 file = "docs/09-testing-quality.md"
-line = 856
+line = 857
 section = "09 §12"
 
 [[id]]
 id = "OQ-146"
 file = "docs/09-testing-quality.md"
-line = 857
+line = 858
 section = "09 §12"
 
 [[id]]

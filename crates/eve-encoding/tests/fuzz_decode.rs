@@ -59,3 +59,31 @@ fn fuzz_が見つけた_utf16_の_timeout_は終わる() {
         "decode_pipeline が 10 秒たっても終わらない"
     );
 }
+
+// ---- fuzz_encode の本体 (docs/review/v0.3-findings.md の §2.7 の 9) ----
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(1000))]
+
+    #[test]
+    fn 符号化は_チャンク分割でも乾式走査でも同じで_報告_0_件なら戻る(
+        head in proptest::collection::vec(any::<u8>(), 4..5),
+        body in proptest::collection::vec(prop_oneof![
+            0x20u8..0x7F, Just(b'\n'), Just(b'\r'), 0x80u8..0xFF,
+        ], 0..300),
+    ) {
+        let mut data = head;
+        data.extend(body);
+        eve_encoding::fuzzing::encode_pipeline(&data);
+    }
+
+    #[test]
+    fn 日本語の文字列の符号化(
+        head in proptest::collection::vec(any::<u8>(), 4..5),
+        s in "[ -~あ-んア-ン一-龠ｱ-ﾝ①-⑳\u{e000}-\u{e010}\u{1f600}-\u{1f610}\r\n]{0,80}",
+    ) {
+        let mut data = head;
+        data.extend(s.as_bytes());
+        eve_encoding::fuzzing::encode_pipeline(&data);
+    }
+}

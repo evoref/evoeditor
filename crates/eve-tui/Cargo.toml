@@ -41,3 +41,4 @@ signal-hook = { version = "0.4.6", default-features = false }
 eve-testkit = { version = "0.2.0", path = "../eve-testkit" }
 eve-docs-tables = { version = "0.2.0", path = "../eve-docs-tables" }
 unicode-width = "0.2"
+proptest = "1.12.0"

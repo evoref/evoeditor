@@ -2,7 +2,7 @@
 //! チェックアウトしたコードのこのコマンドを呼ぶ (手順の中身は対象のブランチの `xtask` にあるので、トリガを直さずに済む)。Linux 前提。
 //!
 //! v0.1 の手順 (`--only` で絞れる):
-//! - `fuzz`: `fuzz_decode` と `fuzz_editor` (v0.2) を、それぞれ `--fuzz-seconds` (既定 1200 秒。09 §6.3 の v0.2)。`-close_fd_mask=3` で入力とスタックをログに出さない。クラッシュ入力は
+//! - `fuzz`: `fuzz_decode`・`fuzz_editor` (v0.2)・`fuzz_encode`・`fuzz_vt_input` (v0.3) を、それぞれ `--fuzz-seconds` (既定 1200 秒。09 §6.3 の v0.2)。`-close_fd_mask=3` で入力とスタックをログに出さない。クラッシュ入力は
 //!   `.github/fuzz-recipients.txt` の公開鍵で `age` により暗号化し、平文は消す (artifact に上げるのは暗号化したものだけ)。
 //! - `proptest`: `PROPTEST_CASES=10000` で Linux CI の対象 crate のテスト。
 //! - `audit`: `cargo audit` と `cargo deny check advisories` (本体と `fuzz/`)。例外は `deny.toml` の `[advisories] ignore` の 1 か所。
@@ -154,7 +154,7 @@ fn commit() -> String {
 const CRASH_PREFIXES: [&str; 3] = ["crash-", "oom-", "timeout-"];
 
 /// fuzz のターゲット (docs/09 §3.3)。それぞれ `--fuzz-seconds` 秒ずつ回す。
-const FUZZ_TARGETS: [&str; 2] = ["fuzz_decode", "fuzz_editor"];
+const FUZZ_TARGETS: [&str; 4] = ["fuzz_decode", "fuzz_editor", "fuzz_encode", "fuzz_vt_input"];
 
 fn fuzz(seconds: u64, seed: u64, out_dir: &Path, summary: &mut Vec<String>) -> Result<(), String> {
     let artifacts = out_dir.join("fuzz-artifacts");
