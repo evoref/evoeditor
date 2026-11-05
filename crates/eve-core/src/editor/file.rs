@@ -487,6 +487,16 @@ impl EditorState {
             self.open_prompt(PromptKind::SaveAs { then: Some(cont) }, String::new());
             return CommandResult::Done;
         };
+        if doc.load_state != crate::document::LoadState::Ready {
+            self.message(MessageLevel::Info, "info.reload.busy", &path.display());
+            return CommandResult::Rejected(RejectReason::NotAvailable);
+        }
+        // 読み取り専用 (`--readonly`・書込権限なし・不正バイト等) の文書は同じパスへ書かず、名前を尋ねる
+        // (03 §9.7 の AskUnsaved の行。docs/review/v0.3-findings.md の SAF-18)
+        if !doc.read_only.is_empty() {
+            self.open_prompt(PromptKind::SaveAs { then: Some(cont) }, path.display());
+            return CommandResult::Done;
+        }
         let expected = doc.disk_stamp.map_or(Expect::Absent, Expect::Stamp);
         self.start_save(doc_id, path, expected, Some(cont))
     }
@@ -634,6 +644,13 @@ impl EditorState {
         let Some(doc) = self.documents.get_mut(&doc_id) else {
             return CommandResult::Rejected(RejectReason::NoTarget);
         };
+        // 読込中 (開き直し・再読込の途中を含む) は保存しない。旧本文の保存の結果が新しい文書の保存点と照合を狂わせる
+        // (保存の経路はすべてここを通る。コマンドの when 句を経ない確認の「保存」からも。docs/review/v0.3-findings.md の SAF-17)
+        if doc.load_state != crate::document::LoadState::Ready {
+            let shown = path.display();
+            self.message(MessageLevel::Info, "info.reload.busy", &shown);
+            return CommandResult::Rejected(RejectReason::NotAvailable);
+        }
         // 読み取り専用属性を解除した文書の上書き保存は、「読み取り専用を解除して保存」の確認を経る (FR-116、03 §9.3 手順 1)。
         // 承認した Revision では繰り返さない
         let clear_readonly = doc.attribute_released && doc.path.as_ref() == Some(&path);
@@ -1103,7 +1120,17 @@ impl EditorState {
         if doc.revision() != revision {
             return self.spawn_replace(ask, true);
         }
-        let view = self.first_window().and_then(|w| self.window_view(w));
+        // 置換する文書を表示している View の選択を履歴に入れる (別の文書の View を使うと Undo でカーソルが飛ぶ、SAF-19)
+        let view = self
+            .first_window()
+            .and_then(|w| self.window_view(w))
+            .filter(|v| self.views.get(v).is_some_and(|v| v.doc == ask.doc))
+            .or_else(|| {
+                self.views
+                    .iter()
+                    .find(|(_, v)| v.doc == ask.doc)
+                    .map(|(id, _)| *id)
+            });
         let sel = view.and_then(|v| self.views.get(&v).map(|v| v.selection.clone()));
         let mut tx = Transaction::new(changes, Origin::System, self.now)
             .with_undo_group(UndoGroupHint::Break)

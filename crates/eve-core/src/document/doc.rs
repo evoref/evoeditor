@@ -97,6 +97,11 @@ pub struct Document {
 }
 
 impl Document {
+    /// 同じ `DocumentId` の旧文書を差し替えるとき、Revision を旧文書の続き (`prev` の次) にする (03 §17.1: 文書ごとに単調増加)。
+    pub(crate) fn continue_revision(&mut self, prev: Revision) {
+        self.revision = prev.next();
+    }
+
     /// 新規文書 (無題)。履歴の根が保存点。
     pub fn new_untitled() -> Document {
         Document::from_text(Text::new(), TextFormat::new_document())

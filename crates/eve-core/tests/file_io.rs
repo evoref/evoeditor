@@ -1802,3 +1802,51 @@ fn 警告の無い保存は完了だけを出す() {
     let m = s.messages();
     assert_eq!(m, vec!["info.save.done".to_owned()], "{m:?}");
 }
+
+// 03 §17.1: Revision は文書ごとに単調増加。開き直し (同じ DocumentId の差し替え) で 0 に戻さない。戻ると、開き直しの
+// 前に投入したジョブ (すべて置換など) の古い結果を新しいと取り違え得る (docs/review/v0.3-findings.md の SAF-06)
+#[test]
+fn 開き直しても_revision_は戻らない() {
+    let mut s = Env::new();
+    s.fs.add_file("/w/a.txt", b"abc\n");
+    s.open("/w/a.txt");
+    s.type_text("x");
+    s.type_text("y");
+    s.run("file.save", Args::new());
+    let (id, d) = s.doc();
+    let before = d.revision();
+    assert!(before.0 > 0);
+    s.run(
+        "file.reopen_with_encoding",
+        Args::new().with_str("encoding", "shift_jis"),
+    );
+    let (id2, d) = s.doc();
+    assert_eq!(id2, id);
+    assert!(
+        d.revision() > before,
+        "開き直しの後の Revision ({:?}) は前 ({before:?}) より大きい",
+        d.revision()
+    );
+}
+
+// 03 §9.7 の AskUnsaved の行: 読み取り専用の dirty な文書の「保存」は同じパスへ書かず、名前を尋ねる
+// (docs/review/v0.3-findings.md の SAF-18)
+#[test]
+fn 読み取り専用の文書の未保存の確認で保存を選ぶと_同じパスに書かずに名前を尋ねる() {
+    let mut s = Env::new();
+    s.fs.add_file("/w/a.txt", b"abc\n");
+    s.open("/w/a.txt");
+    s.type_text("x");
+    s.run("file.toggle_read_only", Args::new());
+    assert!(!s.doc().1.read_only.is_empty());
+    s.run("app.quit", Args::new());
+    assert!(dialog_open(&s), "未保存の確認");
+    s.type_text("s");
+    s.pump();
+    assert_eq!(s.e.state().overlay_kind(), "prompt", "名前を尋ねる");
+    assert_eq!(
+        s.fs.read("/w/a.txt").unwrap(),
+        b"abc\n",
+        "同じパスに書かない"
+    );
+}
