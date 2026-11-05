@@ -62,6 +62,12 @@ pub(crate) fn verdict(v: &Value) -> Verdict {
             "spawn → 本文の最初の Frame の write (1 MB、壁時計)",
         ),
         "BM-103a" => t("(診断用)", None, "core 区間のみ。判定は BM-103b"),
+        "BM-103a-wrap" => t(
+            "(診断用)",
+            None,
+            "core 区間のみ。折り返し ON (view.wrap = word)",
+        ),
+        "BM-103a-200x60" => t("(診断用)", None, "core 区間のみ。端末 200x60"),
         "BM-103b" => t(
             "p50 2 ms / p99 8 ms",
             limits(v, 2.0, 8.0),
