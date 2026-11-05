@@ -7,11 +7,11 @@ use std::collections::BTreeSet;
 
 use eve_view::{DocumentId, JobId, MessageLevel};
 
-use super::command::{
-    CommandCtx, CommandKind, CommandRegistry, CommandResult, CommandSpec, Permission, RejectReason,
-};
 use super::overlay::{ChoiceDef, ConfirmAction, ConfirmState};
 use super::state::EditorState;
+use crate::command::{
+    CommandCtx, CommandKind, CommandRegistry, CommandResult, CommandSpec, Permission, RejectReason,
+};
 use crate::fs::Expect;
 use crate::jobs::{JobError, JobResult};
 

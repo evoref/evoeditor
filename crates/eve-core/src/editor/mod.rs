@@ -6,14 +6,10 @@
 
 mod buffer;
 mod chrome;
-mod clipboard;
-pub(crate) mod command;
 mod config_reload;
 pub use config_reload::{CONFIG_FILE, ConfigSources, KEYMAP_FILE};
 pub use config_report::diagnostic_texts as config_diagnostic_texts;
 mod config_report;
-pub(crate) mod context;
-mod edit;
 mod eol;
 mod external;
 mod file;
@@ -22,7 +18,6 @@ mod theme;
 pub use theme::resolve as resolve_theme;
 pub(crate) mod layout;
 mod leftover_offer;
-mod line_ops;
 mod message;
 pub(crate) mod overlay;
 mod palette;
@@ -43,16 +38,16 @@ use eve_view::{
     Modifiers, ViewId, WindowId,
 };
 
-pub use crate::keymap::{
-    Binding, KeyParseError, Keymap, Layer, Resolution, format_stroke, parse_sequence, parse_stroke,
-};
-pub use clipboard::ClipboardSource;
-pub use command::{
+pub use crate::command::clipboard::ClipboardSource;
+pub use crate::command::context::{ContextExpr, CtxValue, ParseError};
+pub use crate::command::edit::normalize_eol;
+pub use crate::command::{
     ArgValue, Args, CommandCtx, CommandInvocation, CommandKind, CommandRegistry, CommandResult,
     CommandSpec, Handler, InvocationSource, Permission, RejectReason,
 };
-pub use context::{ContextExpr, CtxValue, ParseError};
-pub use edit::normalize_eol;
+pub use crate::keymap::{
+    Binding, KeyParseError, Keymap, Layer, Resolution, format_stroke, parse_sequence, parse_stroke,
+};
 pub use layout::{Affinity, WrapMode, WrapSettings};
 pub use search_state::{SearchCount, SearchStep};
 pub use snapshot::DocSnapshot;
@@ -78,7 +73,7 @@ impl Editor {
     /// 空の EditorState を作る。I/O もジョブ投入もしない。
     pub fn new(ports: Ports, caps: Capabilities) -> Editor {
         let mut registry = CommandRegistry::new();
-        edit::register(&mut registry);
+        crate::command::edit::register(&mut registry);
         crate::view::motion::register(&mut registry);
         file::register(&mut registry);
         external::register(&mut registry);
@@ -88,7 +83,7 @@ impl Editor {
         config_reload::register(&mut registry);
         crate::view::view_cmds::register(&mut registry);
         crate::view::mouse::register(&mut registry);
-        line_ops::register(&mut registry);
+        crate::command::line_ops::register(&mut registry);
         overlay::register(&mut registry);
         let mut state = EditorState::new(caps, ports.jobs.clone(), ports.paths.clone());
         state.set_palette_entries(
@@ -325,7 +320,7 @@ impl Editor {
                 if self.state.is_dialog() {
                     // 確認ダイアログでは貼り付けを捨てる (選択肢が実行されないように)
                 } else if !self.state.prompt_paste(&s) {
-                    edit::paste_text(&mut self.state, &s);
+                    crate::command::edit::paste_text(&mut self.state, &s);
                 }
             }
             InputEvent::Mouse(m) => {

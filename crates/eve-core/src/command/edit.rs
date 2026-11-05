@@ -12,7 +12,7 @@ use eve_view::{DocumentId, ViewId};
 
 use crate::document::{Document, Origin, Transaction};
 
-use super::command::{
+use crate::command::{
     CommandCtx, CommandKind, CommandRegistry, CommandResult, CommandSpec, Permission, RejectReason,
 };
 use crate::view::motion::{indent_end, word_stop};
@@ -263,8 +263,11 @@ pub fn normalize_eol(text: &str, eol: eve_text::LineEnding) -> String {
 
 /// `InputEvent::Paste` の本文を挿入する。改行を文書の `default_eol` に正規化し、自動インデントは適用しない。
 /// 本文の制御文字はコマンドとして解釈せず文字として入れる。Origin は `Paste` (1 操作 = 1 Undo)。
-pub(crate) fn paste_text(state: &mut super::state::EditorState, text: &str) -> CommandResult {
-    let args = super::command::Args::new();
+pub(crate) fn paste_text(
+    state: &mut crate::editor::state::EditorState,
+    text: &str,
+) -> CommandResult {
+    let args = crate::command::Args::new();
     let mut ctx = CommandCtx { state, args: &args };
     edit_each_as(&mut ctx, Origin::Paste, |doc, r| {
         let ins = normalize_eol(text, doc.format.default_eol);
@@ -372,8 +375,8 @@ fn select_all(ctx: &mut CommandCtx<'_>) -> CommandResult {
 fn display_col(doc: &Document, line_start: usize, end: usize, cfg: &WidthConfig) -> usize {
     // 長大行は行頭から文字列にしない (列の索引で数える、03 §11.5.1)
     let line = doc.text().byte_to_line(ByteOff(line_start)).0;
-    if super::layout::is_long_line(doc, line) {
-        return super::layout::cursor_col(doc, line, end - line_start);
+    if crate::editor::layout::is_long_line(doc, line) {
+        return crate::editor::layout::cursor_col(doc, line, end - line_start);
     }
     let s = doc
         .text()
@@ -400,13 +403,18 @@ fn indent(ctx: &mut CommandCtx<'_>) -> CommandResult {
             eve_config::IndentUnit::Tab => "\t".to_owned(),
             eve_config::IndentUnit::Space => " ".repeat(width),
         };
-        return super::line_ops::indent_lines(ctx, &step);
+        return crate::command::line_ops::indent_lines(ctx, &step);
     }
     edit_each(ctx, move |doc, r| {
         let text = doc.text();
         let line = text.byte_to_line(r.head);
         let ls = text.line_to_byte(line).0;
-        let col = display_col(doc, ls, r.head.0, &super::layout::doc_width_config(doc));
+        let col = display_col(
+            doc,
+            ls,
+            r.head.0,
+            &crate::editor::layout::doc_width_config(doc),
+        );
         let ins = match unit {
             eve_config::IndentUnit::Tab => "\t".to_owned(),
             eve_config::IndentUnit::Space => " ".repeat(width - col % width),
@@ -424,7 +432,7 @@ fn indent(ctx: &mut CommandCtx<'_>) -> CommandResult {
 fn outdent(ctx: &mut CommandCtx<'_>) -> CommandResult {
     let width = ctx.state.config().indent_width.max(1) as usize;
     if has_selection(ctx) {
-        return super::line_ops::outdent_lines(ctx, move |doc, ls, le| {
+        return crate::command::line_ops::outdent_lines(ctx, move |doc, ls, le| {
             outdent_bytes(doc, ls, le, width)
         });
     }
@@ -491,7 +499,7 @@ pub(crate) fn register(r: &mut CommandRegistry) {
         CommandKind::Ui,
         NoPerm,
         "!selection.empty",
-        super::clipboard::copy
+        crate::command::clipboard::copy
     );
     reg!(
         r,
@@ -501,7 +509,14 @@ pub(crate) fn register(r: &mut CommandRegistry) {
         "!selection.empty && !doc.read_only",
         clipboard_cut
     );
-    reg!(r, "edit.paste", Edit, NoPerm, w, super::clipboard::paste);
+    reg!(
+        r,
+        "edit.paste",
+        Edit,
+        NoPerm,
+        w,
+        crate::command::clipboard::paste
+    );
     reg!(r, "edit.insert_text", Edit, Propose, w, insert_text);
     reg!(r, "edit.newline", Edit, Propose, w, newline);
     reg!(r, "edit.undo", Edit, NoPerm, w, undo);

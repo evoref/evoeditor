@@ -3,13 +3,13 @@
 
 use eve_view::{DocumentId, MessageLevel};
 
-use super::command::{
-    CommandCtx, CommandKind, CommandRegistry, CommandResult, CommandSpec, Permission, RejectReason,
-};
 use super::file::{Pending, fs_reason, same_on_disk};
 use super::overlay::{ChoiceDef, ConfirmAction, ConfirmState};
 use super::state::EditorState;
 use crate::FsPath;
+use crate::command::{
+    CommandCtx, CommandKind, CommandRegistry, CommandResult, CommandSpec, Permission, RejectReason,
+};
 use crate::document::LoadState;
 use crate::fs::FsErrorKind;
 use crate::jobs::{JobError, JobKind, JobResult, MetaPurpose};

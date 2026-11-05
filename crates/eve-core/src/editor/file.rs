@@ -15,11 +15,11 @@ use crate::io_jobs::OpenOptions;
 use crate::jobs::{ConfirmAsk, JobError, JobKind, JobResult, MetaPurpose, SaveStrategy};
 use eve_encoding::Encoding;
 
-use super::command::{
-    CommandCtx, CommandKind, CommandRegistry, CommandResult, CommandSpec, Permission, RejectReason,
-};
 use super::overlay::{Continuation, PromptKind};
 use super::state::EditorState;
+use crate::command::{
+    CommandCtx, CommandKind, CommandRegistry, CommandResult, CommandSpec, Permission, RejectReason,
+};
 
 /// 投入したジョブと、その結果の宛先。
 #[derive(Debug)]
@@ -2906,7 +2906,7 @@ fn file_set_encoding(ctx: &mut CommandCtx<'_>) -> CommandResult {
         None => None,
     };
     let bom = match ctx.args.get("bom") {
-        Some(super::command::ArgValue::Bool(b)) => Some(*b),
+        Some(crate::command::ArgValue::Bool(b)) => Some(*b),
         _ => None,
     };
     ctx.state.set_encoding(enc, bom)
