@@ -229,7 +229,7 @@ pub(super) fn default_keymap() -> Keymap {
 mod tests {
     use super::super::keymap::{format_sequence, parse_sequence};
     use super::*;
-    use eve_docs_tables::{catalog, identifiers, strip_parentheticals};
+    use eve_docs_tables::{catalog, identifiers};
     use eve_view::KeyStroke;
     use std::collections::{BTreeMap, BTreeSet};
 
