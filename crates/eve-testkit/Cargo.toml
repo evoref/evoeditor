@@ -60,3 +60,7 @@ harness = false
 [[bench]]
 name = "bm_306"
 harness = false
+
+[[bench]]
+name = "bm_109"
+harness = false
