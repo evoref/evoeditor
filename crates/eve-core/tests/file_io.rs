@@ -1828,3 +1828,25 @@ fn 開き直しても_revision_は戻らない() {
         d.revision()
     );
 }
+
+// 03 §9.7 の AskUnsaved の行: 読み取り専用の dirty な文書の「保存」は同じパスへ書かず、名前を尋ねる
+// (docs/review/v0.3-findings.md の SAF-18)
+#[test]
+fn 読み取り専用の文書の未保存の確認で保存を選ぶと_同じパスに書かずに名前を尋ねる() {
+    let mut s = Env::new();
+    s.fs.add_file("/w/a.txt", b"abc\n");
+    s.open("/w/a.txt");
+    s.type_text("x");
+    s.run("file.toggle_read_only", Args::new());
+    assert!(!s.doc().1.read_only.is_empty());
+    s.run("app.quit", Args::new());
+    assert!(dialog_open(&s), "未保存の確認");
+    s.type_text("s");
+    s.pump();
+    assert_eq!(s.e.state().overlay_kind(), "prompt", "名前を尋ねる");
+    assert_eq!(
+        s.fs.read("/w/a.txt").unwrap(),
+        b"abc\n",
+        "同じパスに書かない"
+    );
+}

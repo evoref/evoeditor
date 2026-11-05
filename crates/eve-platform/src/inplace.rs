@@ -472,11 +472,21 @@ pub(crate) fn write_in_place(
         });
     }
 
-    // 事後: FileId は変わらない。自分の書いたものか確かめる
-    let after = fsys.metadata(&target_path)?;
-    if after.file_id != orig.file_id {
-        warnings.push(SaveWarning::ChangedAfterSave);
-    }
+    // 事後: FileId は変わらない。自分の書いたものか確かめる。書込はもう済んでフラグもバックアップも消したので、
+    // metadata の失敗で保存の失敗にしない (失敗にすると利用者が書けたファイルを別名で保存し直す)。確かめられなかったことを
+    // 警告にし、Stamp は元のもので返す (次の保存は外部変更の確認になる、安全側。docs/review/v0.3-findings.md の SAF-20)
+    let after = match fsys.metadata(&target_path) {
+        Ok(after) => {
+            if after.file_id != orig.file_id {
+                warnings.push(SaveWarning::ChangedAfterSave);
+            }
+            after
+        }
+        Err(_) => {
+            warnings.push(SaveWarning::ChangedAfterSave);
+            orig
+        }
+    };
     Ok(SaveReport {
         method: SaveMethod::InPlace,
         new_stamp: FileStamp::from_meta(&after, None),
