@@ -384,6 +384,7 @@ CI ランナーの wall-clock は変動が大きい (共有 VM) ため、絶対�
 **M10 の実装 (2026-10-31)**: ワークフロー `perf.yml` が、コードを変える PR (`crates/**`・`bins/**`・`Cargo.*`) ごとに、PR の宛先の先頭 (基準) と PR のコミットを **同じランナー** で測る (`cargo xtask perf-diff --base <sha> --mode instr|time`)。基準は `git worktree` で取り出してビルドする。計測の本体は `eve-testkit` の `bm_instr` の 7 ケース (`open_1m`・`type_1m`・`undo_1m`・`open_sjis_1m`・`long_line_2m`、v0.3 の M13 で `search_32m` (32 MB のリテラルの全件検索、ヘッドレス)・`wrap_frame_1m` (折り返し ON の Frame) を足した。名前は比較のキーなので変えない。基準に無いケースは今の値だけを出す)。
 - `perf (instr)` (ubuntu): 各ケースを 1 回ずつ callgrind で走らせ、命令数を比べる。+5% 超で警告。
 - `perf (time)` (windows): 基準と今を交互に 3 回ずつ (各 5 回) 測り、中央値を比べる。+10% 超で警告 (共有ランナーなので目安)。
+- `perf (allocs)` (ubuntu、v0.3 の M13): 各ケースを 1 回ずつ `bm_allocs` (同じケース。dev 依存の `stats_alloc` の allocator で、ヒープの確保の回数 (alloc + realloc) とバイト数を数える。数える処理を命令数・時間に混ぜないよう `bm_instr` とは別のバイナリ) で走らせ、確保の回数を比べる。決定的なので +5% 超で警告。
 - 劣化は Actions の警告 (`::warning`) とジョブの要約の表に出し、**ブロックしない** (必須のチェックにしない)。PR へのコメントは、書込み権限をワークフローに与えないために使わない (要約の表を読む)。基準に `bm_instr` が無い (この仕組みの前) ときは「基準なし」と出して比べない。
 
 | 事象 | 対応 |

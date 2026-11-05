@@ -26,6 +26,8 @@ unicode-width = "0.2"
 [dev-dependencies]
 # no_network の実 FS (bench だけが使う。ライブラリの本体は eve-platform に依存しない)
 eve-platform = { version = "0.2.0", path = "../eve-platform" }
+# 確保の回数の計測 (bench の bm_allocs だけ。自前の unsafe を書かずに GlobalAlloc を数える。2026-11-05 PO、02 §13.0)
+stats_alloc = "0.1.10"
 
 # 自前のハーネス (p50 / p99 を出すため criterion は使わない)。cargo bench -p eve-testkit --bench bm_105
 [[bench]]
@@ -43,6 +45,10 @@ harness = false
 # 回帰の検出 (命令数と wall-clock の A/B) の計測の本体。cargo xtask perf-diff が基準と比べる (docs/09 §5.4)
 [[bench]]
 name = "bm_instr"
+harness = false
+
+[[bench]]
+name = "bm_allocs"
 harness = false
 
 # NFR-501 AC-2 の無通信の検査のシナリオ (cargo xtask no-network が strace の下で走らせる、docs/09 §3.6)

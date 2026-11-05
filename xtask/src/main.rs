@@ -20,7 +20,7 @@
 //! - `trace`: 仕様と実装・試験の対応の検査と docs/traceability.md の生成 (`--check`。docs/11 §3.3、09 §8.3)
 //! - `crash-consistency`: 保存のクラッシュ一貫性の検査 (NFR-301 の電源断。LazyFS の上で切断点ごとに fsync されていない書込を落とす。Linux。docs/09 §6.3)
 //! - `no-network`: NFR-501 AC-2 の無通信の検査 (ヘッドレスのシナリオを strace の下で走らせる。Linux。docs/09 §3.6)
-//! - `perf-diff`: 基準のコミットとの性能の比較 (`--base <ref> --mode instr|time`。命令数 +5% / A/B +10% で警告。docs/09 §5.4)
+//! - `perf-diff`: 基準のコミットとの性能の比較 (`--base <ref> --mode instr|time|allocs`。命令数 +5% / A/B +10% / 確保の回数 +5% で警告。docs/09 §5.4)
 //! - `accept-linux`: Linux の受入の手順の自動の部分 (tmux を擬似端末にする。WSL では Windows のクリップボードとの往復も。docs/09 §3.7)
 //! - `nightly`: 夜間ジョブの入口 (fuzz・proptest 拡張・audit・coverage・crash・soak。Linux。docs/09 §6.3)
 
@@ -78,7 +78,7 @@ const USAGE: &str = "\
   trace               仕様と試験の対応の検査と docs/traceability.md の生成 (--check: 存在しない ID と行列の最新性)
   crash-consistency   保存のクラッシュ一貫性の検査 (NFR-301。LazyFS で電源断を模擬。--lazyfs BIN --root DIR、--no-lazyfs は空回し。Linux)
   no-network          無通信の検査 (NFR-501 AC-2。シナリオを strace -e trace=network の下で走らせる。Linux)
-  perf-diff           基準との性能の比較 (--base <ref> --mode instr|time --out FILE。劣化は警告だけ)
+  perf-diff           基準との性能の比較 (--base <ref> --mode instr|time|allocs --out FILE。劣化は警告だけ)
   accept-linux        Linux の受入の自動の部分 (docs/compat/checklist.md の A〜G と L。tmux。--archive TGZ --only A1,C2 --keep。Linux)
   nightly             夜間ジョブ (Linux。--only fuzz,proptest,audit,coverage,crash,soak --fuzz-seconds N --soak-minutes N --seed N)";
 

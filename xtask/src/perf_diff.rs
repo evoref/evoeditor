@@ -15,11 +15,8 @@ use crate::util::{run_capture, workspace_root};
 
 const INSTR_LIMIT: f64 = 5.0;
 const TIME_LIMIT: f64 = 10.0;
-
-/// `bm_instr` をビルドし、実行ファイルのパスを返す。`manifest` が `None` なら今の作業ツリー。
-fn build(manifest: Option<&Path>, target_dir: Option<&Path>) -> Result<Option<PathBuf>, String> {
-    build_bench("bm_instr", manifest, target_dir)
-}
+/// 確保の回数の警告の閾値 (%)。決定的なので小さく取る。
+const ALLOCS_LIMIT: f64 = 5.0;
 
 /// eve-testkit の bench `name` をビルドし、実行ファイルのパスを返す (`no-network` も使う)。失敗したら `None`。
 pub fn build_bench(
@@ -106,6 +103,15 @@ fn instructions(exe: &Path, case: &str, tmp: &Path) -> Result<u64, String> {
         .ok_or_else(|| format!("{case}: callgrind の出力に命令数がありません"))
 }
 
+/// `bm_allocs <ケース>` の確保の回数。
+fn allocs(exe: &Path, case: &str) -> Result<u64, String> {
+    let out = run_capture(Command::new(exe).arg(case))?;
+    out.lines()
+        .rev()
+        .find_map(|l| l.split('\t').next().and_then(|v| v.trim().parse().ok()))
+        .ok_or_else(|| format!("{case}: 確保の回数がありません"))
+}
+
 /// `--time` の 1 回ごとの時間 (ns)。
 fn times(exe: &Path, case: &str, n: usize) -> Result<Vec<u64>, String> {
     let out = run_capture(Command::new(exe).args(["--time", case, &n.to_string()]))?;
@@ -140,9 +146,17 @@ pub fn run(args: &[String]) -> Result<(), String> {
     };
     let base_ref = flag("--base").ok_or("--base <ref> を指定してください")?;
     let mode = flag("--mode").unwrap_or_else(|| "instr".to_owned());
-    if mode != "instr" && mode != "time" {
-        return Err(format!("--mode は instr か time です: {mode}"));
+    if !["instr", "time", "allocs"].contains(&mode.as_str()) {
+        return Err(format!(
+            "--mode は instr / time / allocs のどれかです: {mode}"
+        ));
     }
+    // 確保の回数は別のバイナリ (bm_allocs) で数える (数える処理を命令数・時間に混ぜない)
+    let bench = if mode == "allocs" {
+        "bm_allocs"
+    } else {
+        "bm_instr"
+    };
     let out_file = flag("--out");
     let root = workspace_root();
     let work = root.join("target").join("perf-base");
@@ -156,7 +170,8 @@ pub fn run(args: &[String]) -> Result<(), String> {
     std::fs::create_dir_all(&work).map_err(|e| format!("{}: {e}", work.display()))?;
 
     println!("▶ 今の作業ツリーの bm_instr をビルド");
-    let cur = build(None, None)?.ok_or("今の作業ツリーで bm_instr をビルドできません")?;
+    let cur = build_bench(bench, None, None)?
+        .ok_or_else(|| format!("今の作業ツリーで {bench} をビルドできません"))?;
     println!("▶ 基準 {base_ref} を取り出してビルド");
     let added = Command::new("git")
         .args(["worktree", "add", "--detach"])
@@ -171,7 +186,11 @@ pub fn run(args: &[String]) -> Result<(), String> {
         ));
     }
     let _guard = Base { dir: src.clone() };
-    let base = build(Some(&src.join("Cargo.toml")), Some(&work.join("target")))?;
+    let base = build_bench(
+        bench,
+        Some(&src.join("Cargo.toml")),
+        Some(&work.join("target")),
+    )?;
 
     let names = cases(&cur)?;
     let base_names = match &base {
@@ -180,10 +199,10 @@ pub fn run(args: &[String]) -> Result<(), String> {
     };
     let tmp = work.join("tmp");
     std::fs::create_dir_all(&tmp).map_err(|e| format!("{}: {e}", tmp.display()))?;
-    let (unit, limit) = if mode == "instr" {
-        ("命令数 (Ir)", INSTR_LIMIT)
-    } else {
-        ("時間 (ms、中央値)", TIME_LIMIT)
+    let (unit, limit) = match mode.as_str() {
+        "instr" => ("命令数 (Ir)", INSTR_LIMIT),
+        "allocs" => ("確保の回数", ALLOCS_LIMIT),
+        _ => ("時間 (ms、中央値)", TIME_LIMIT),
     };
     let mut md = format!(
         "## 性能の比較 ({mode}、基準 `{base_ref}`)\n\n{unit}。+{limit}% を超えたら警告 (ブロックしない、docs/09 §5.4)。\n\n| ケース | 基準 | 今 | 差 | 判定 |\n|---|---|---|---|---|\n"
@@ -191,7 +210,14 @@ pub fn run(args: &[String]) -> Result<(), String> {
     let mut warnings = Vec::new();
     for c in &names {
         let has_base = base.is_some() && base_names.contains(c);
-        let (b, n) = if mode == "instr" {
+        let (b, n) = if mode == "allocs" {
+            let n = allocs(&cur, c)?;
+            let b = match (&base, has_base) {
+                (Some(b), true) => Some(allocs(b, c)?),
+                _ => None,
+            };
+            (b, n)
+        } else if mode == "instr" {
             let n = instructions(&cur, c, &tmp)?;
             let b = if has_base {
                 Some(instructions(base.as_ref().unwrap_or(&cur), c, &tmp)?)
@@ -211,7 +237,7 @@ pub fn run(args: &[String]) -> Result<(), String> {
             ((!bv.is_empty()).then(|| median(bv)), median(nv))
         };
         let fmt = |v: u64| {
-            if mode == "instr" {
+            if mode != "time" {
                 v.to_string()
             } else {
                 format!("{:.2}", v as f64 / 1e6)
