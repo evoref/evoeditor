@@ -62,6 +62,11 @@ pub(crate) fn verdict(v: &Value) -> Verdict {
             "spawn → 本文の最初の Frame の write (1 MB、壁時計)",
         ),
         "BM-103a" => t("(診断用)", None, "core 区間のみ。判定は BM-103b"),
+        id if id.starts_with("BM-109-") => t(
+            "(参考)",
+            None,
+            "100 MB のリテラル検索の全件の走査 (ヘッドレス。NFR-109)",
+        ),
         "BM-103a-wrap" => t(
             "(診断用)",
             None,
