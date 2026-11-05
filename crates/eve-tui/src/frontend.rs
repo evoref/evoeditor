@@ -413,6 +413,86 @@ mod tests {
         assert!(!died.get());
     }
 
+    /// 入力スレッドの panic を、本物の送り先 (`SinkOut`) と Host の待ち受けのループまで通す (SAF-07、
+    /// docs/review/v0.3-findings.md の §2.7 の 6)。Frontend は HeadlessFrontend に任せ、`start_input` だけを
+    /// 「panic する入力スレッドの本体」に差し替える (`run_guarded` は入力スレッドの本体そのもの。スレッドを作るのは
+    /// R11 で win.rs / unix.rs だけなので、ここでは同じスレッドで走らせる)。Host は `Fatal(InputThreadDied)` を受けて、
+    /// 端末を 1 回だけ復元して FATAL で終わる。
+    #[test]
+    fn 入力スレッドが_panic_すると_host_が受けて端末を復元して終わる() {
+        use std::rc::Rc;
+        use std::sync::Arc;
+
+        use eve_core::{JobPorts, Ports};
+        use eve_host::{
+            EffectOutcome, ExitCode, Frontend, FrontendConfig, FrontendError, Host, InputSink,
+            RenderOutcome,
+        };
+        use eve_testkit::{FixedPaths, HeadlessFrontend, ManualClock, ManualJobSpawner, MemFs};
+        use eve_view::{Capabilities, CellSize, Effect, Frame};
+
+        struct PanickingInput {
+            inner: HeadlessFrontend,
+            died: bool,
+        }
+
+        impl Frontend for PanickingInput {
+            fn init(&mut self, cfg: &FrontendConfig) -> Result<Capabilities, FrontendError> {
+                self.inner.init(cfg)
+            }
+            fn start_input(&mut self, tx: InputSink) -> Result<(), FrontendError> {
+                use super::term_io::InputOut as _;
+                let out = super::SinkOut(tx);
+                let mut died = false;
+                run_guarded(
+                    || panic!("入力の解析の不具合 (試験)"),
+                    || {
+                        out.died();
+                        died = true;
+                    },
+                );
+                self.died = died;
+                Ok(())
+            }
+            fn surface_size(&self) -> CellSize {
+                self.inner.surface_size()
+            }
+            fn render(&mut self, frame: &Frame) -> RenderOutcome {
+                self.inner.render(frame)
+            }
+            fn apply_effect(&mut self, eff: &Effect) -> EffectOutcome {
+                self.inner.apply_effect(eff)
+            }
+            fn restore(&mut self) {
+                self.inner.restore();
+            }
+        }
+
+        let clock = ManualClock::new();
+        let fs = Arc::new(MemFs::new(Arc::new(clock.clone())));
+        fs.add_dir("/w");
+        let paths = Arc::new(FixedPaths::default());
+        let jobs = ManualJobSpawner::new(JobPorts {
+            fs: fs.clone(),
+            clock: Arc::new(clock.clone()),
+            paths: paths.clone(),
+        });
+        let ports = Ports {
+            fs,
+            clock: Arc::new(clock),
+            jobs: Rc::clone(&jobs) as Rc<dyn eve_core::JobSpawner>,
+            paths,
+        };
+        let inner = HeadlessFrontend::new(40, 8);
+        let probe = inner.probe();
+        let mut fe = PanickingInput { inner, died: false };
+        let mut host = Host::new(ports);
+        let code = host.run(&mut fe, &[], false);
+        assert_eq!(code, ExitCode::FATAL);
+        assert_eq!(probe.restore_count(), 1, "端末を 1 回だけ復元する");
+        assert!(fe.died, "panic は run_guarded の中で捕まえて died を呼ぶ");
+    }
+
     /// 緊急の復元の列は、通常の復元 (`ansi::LEAVE`、Unix は先に `unix::LEAVE_MODES`) と同じ並びに CAN を前置したもの
     /// (04 §14.3。docs/review/v0.3-findings.md の STR-T9)。片方だけを直すとずれるので、ここで突き合わせる。
     #[test]

@@ -415,6 +415,7 @@ dependencies = [
 name = "eve-tui"
 version = "0.2.0"
 dependencies = [
+ "eve-core",
  "eve-docs-tables",
  "eve-host",
  "eve-testkit",
