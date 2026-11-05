@@ -13,7 +13,7 @@ Rust 製テキストエディタ。**仕様書駆動** ([ADR-0001](docs/10-decis
 - **1 タスク = 1 作業ブランチ = 1 PR**。PR は `develop` 宛て、squash で入れる (develop 上で 1 作業 = 1 コミット)。マージ後に作業ブランチを削除する。rebase は作業ブランチ内でだけ自由。
 - `dev/<版>`、`release/*`、`hotfix/*` ブランチは使わない。
 - merge は人間が行う。`gh pr merge` は実行前に確認が出る。
-  - 例外: 人間がチャットで自己マージを許可したら、作業の前に `python .claude/hooks/merge-permit.py grant --until <YYYY-MM-DD> --note "<根拠>"` で期限付きの許可を出す (このときに 1 回だけ確認が出る。期限は最長 31 日先)。許可がある間は、`develop` 宛ての PR を `gh pr merge --squash` で入れるときだけ確認が出ない。
+  - 例外は [docs/11 §8.2](docs/11-dev-workflow.md) の「自己マージの許可」。人間がチャットで許可したら、作業の前に `python .claude/hooks/merge-permit.py grant --until <YYYY-MM-DD> --note "<根拠>"` を実行する (このときに 1 回だけ確認が出る)。許可がある間は、`develop` 宛ての PR を `gh pr merge <番号> --squash` を単独で実行して入れるときだけ、確認が出ない。
   - 人間が許可を取り消したら `merge-permit.py revoke` を実行する。今の状態は `merge-permit.py status` で見る。許可は `.git/eve-allow-pr-merge` にあり、commit されない。
 
 ## リリースと版
