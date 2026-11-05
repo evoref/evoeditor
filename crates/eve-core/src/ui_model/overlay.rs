@@ -217,7 +217,7 @@ impl EditorState {
         let (before, after) = (kind(&self.overlay), kind(&new));
         self.overlay = new;
         if before != after
-            && let Some(window) = self.first_window()
+            && let Some(window) = self.focused_window()
         {
             self.push_event(EditorEvent::OverlayChanged {
                 window,
@@ -229,7 +229,7 @@ impl EditorState {
     fn take_overlay(&mut self) -> Option<Overlay> {
         let old = self.overlay.take();
         if old.is_some()
-            && let Some(window) = self.first_window()
+            && let Some(window) = self.focused_window()
         {
             self.push_event(EditorEvent::OverlayChanged {
                 window,

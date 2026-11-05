@@ -40,8 +40,6 @@ pub struct Editor {
     pub(crate) state: EditorState,
     pub(crate) registry: CommandRegistry,
     pub(crate) keymap: Keymap,
-    #[allow(dead_code)] // Port の束を保持する (今は読まない)
-    ports: Ports,
     /// チョードの保留が始まった (最後のキーを受けた) 時刻。which-key の 500 ms を数える。
     chord_since: Option<Tick>,
     /// which-key を出した (出す時刻に描き直しを一度だけ要求するため)。
@@ -75,7 +73,6 @@ impl Editor {
             state,
             registry,
             keymap: crate::keymap::default_keymap::default_keymap(),
-            ports,
             chord_since: None,
             which_key_shown: false,
         };
@@ -131,7 +128,7 @@ impl Editor {
     /// 文書を追加して表示する。Window がなければ作る。ヘッドレスのテストと、読込完了後の経路が使う。
     pub fn open_document(&mut self, doc: Document) -> (DocumentId, ViewId, WindowId) {
         let (doc_id, view_id) = self.state.add_document(doc);
-        let window = match self.state.first_window() {
+        let window = match self.state.focused_window() {
             Some(w) => w,
             None => self.state.add_window(view_id),
         };
@@ -250,7 +247,7 @@ impl Editor {
             None => {
                 let doc = self.state.blank_document();
                 let (_, view) = self.state.add_document(doc);
-                if self.state.first_window().is_none() {
+                if self.state.focused_window().is_none() {
                     self.state.add_window(view);
                 }
             }

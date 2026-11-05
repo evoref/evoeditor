@@ -147,7 +147,7 @@ impl EditorState {
 
     /// 選択の端 (次へは終端、前へは始端)。
     fn search_cursor(&self, forward: bool) -> Option<ByteOff> {
-        let v = self.view(self.window_view(self.first_window()?)?)?;
+        let v = self.view(self.focused_view()?)?;
         let r = v.selection.primary();
         Some(if forward { r.end() } else { r.start() })
     }
@@ -201,10 +201,7 @@ impl EditorState {
         let (a, b) = match probe {
             Some(r) => (r.start, r.end),
             None => {
-                let sel = self
-                    .view(self.window_view(self.first_window()?)?)?
-                    .selection
-                    .primary();
+                let sel = self.view(self.focused_view()?)?.selection.primary();
                 (sel.start(), sel.end())
             }
         };
@@ -436,7 +433,7 @@ impl EditorState {
     }
 
     fn search_select(&mut self, m: ByteRange, wrapped: bool, forward: bool) {
-        let Some(view) = self.first_window().and_then(|w| self.window_view(w)) else {
+        let Some(view) = self.focused_view() else {
             return;
         };
         self.set_selection(view, Selection::single(Range::new(m.start, m.end)));

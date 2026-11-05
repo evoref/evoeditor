@@ -57,7 +57,7 @@ impl EditorState {
     ) -> CommandResult {
         // その文書を表示している View (Window が表示していれば、その View)
         let shown = self
-            .first_window()
+            .focused_window()
             .and_then(|w| self.window_view(w))
             .filter(|v| self.views.get(v).is_some_and(|v| v.doc == doc_id));
         let view = match shown.or_else(|| {

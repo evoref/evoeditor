@@ -79,7 +79,7 @@ impl EditorState {
         }
         let anchor = self.bar_cursor(false).unwrap_or(ByteOff(0));
         let sel_ranges: std::sync::Arc<[ByteRange]> = self
-            .first_window()
+            .focused_window()
             .and_then(|w| self.window_view(w))
             .and_then(|v| self.view(v))
             .map(|v| {
@@ -183,7 +183,7 @@ impl EditorState {
 
     /// 選択の端 (`end` が偽なら始端)。
     fn bar_cursor(&self, end: bool) -> Option<ByteOff> {
-        let v = self.view(self.window_view(self.first_window()?)?)?;
+        let v = self.view(self.focused_view()?)?;
         let r = v.selection.primary();
         Some(if end { r.end() } else { r.start() })
     }
@@ -300,7 +300,7 @@ impl EditorState {
 
     /// 選択を動かさずに、`pos` が見えるようスクロールする。
     fn reveal(&mut self, pos: ByteOff) {
-        let Some(view) = self.first_window().and_then(|w| self.window_view(w)) else {
+        let Some(view) = self.focused_view() else {
             return;
         };
         let Some(saved) = self.view(view).map(|v| v.selection.clone()) else {
@@ -325,7 +325,7 @@ impl EditorState {
         }
         if forward
             && let Some(cur) = bar.current
-            && let Some(view) = self.first_window().and_then(|w| self.window_view(w))
+            && let Some(view) = self.focused_view()
         {
             self.set_selection(
                 view,
@@ -581,7 +581,7 @@ impl EditorState {
         let doc = self.documents.get(&doc_id)?;
         let text = doc.text();
         let sel = self
-            .first_window()
+            .focused_window()
             .and_then(|w| self.window_view(w))
             .and_then(|v| self.view(v))
             .map(|v| *v.selection.primary())?;
@@ -641,7 +641,7 @@ impl EditorState {
         ) else {
             return CommandResult::Done;
         };
-        let view = self.first_window().and_then(|w| self.window_view(w));
+        let view = self.focused_view();
         let sel = view.and_then(|v| self.views.get(&v).map(|v| v.selection.clone()));
         let mut tx = Transaction::new(
             changes,
@@ -698,7 +698,7 @@ impl EditorState {
             self.show_message(MessageLevel::Info, "info.search.replace_no_match", &[]);
             return;
         }
-        let view = self.first_window().and_then(|w| self.window_view(w));
+        let view = self.focused_view();
         let sel = view.and_then(|v| self.views.get(&v).map(|v| v.selection.clone()));
         let mut tx = Transaction::new(
             changes,

@@ -480,7 +480,7 @@ impl EditorState {
         reason: &str,
     ) {
         self.show_message(level, key, &[("path", &path.display()), ("reason", reason)]);
-        if self.active_document() == Some(doc) || self.first_window().is_none() {
+        if self.active_document() == Some(doc) || self.focused_window().is_none() {
             // 表示中の文書の読込に失敗 (起動時の文書、または読込中に切り替えて表示していた足したバッファ): 失敗した文書は閉じ、
             // 開く前の文書 (残っていれば)・ほかの文書・無題の文書の順で表示する (再試行できる、03 §9.2 の「失敗」・§9.8)。
             // 表示を移さずに閉じると、Window が消えた View を指したままになる (fuzz_editor で見つけた)

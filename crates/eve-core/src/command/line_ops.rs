@@ -30,7 +30,7 @@ type Block = (usize, usize);
 
 /// 操作の対象 (Window の View とその文書)。
 fn active(ctx: &CommandCtx<'_>) -> Option<(ViewId, DocumentId)> {
-    let w = ctx.state.first_window()?;
+    let w = ctx.state.focused_window()?;
     let v = ctx.state.window_view(w)?;
     Some((v, ctx.state.view(v)?.doc))
 }

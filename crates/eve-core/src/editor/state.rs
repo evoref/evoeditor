@@ -501,6 +501,17 @@ impl EditorState {
         self.windows.first().map(|w| w.id)
     }
 
+    /// 入力と表示の対象の Window。今は Window が 1 つだけなので最初の Window。分割ウィンドウを入れるときは
+    /// ここ (と `focused_view`) を変える (docs/review/v0.3-findings.md の STR-B2: 単一 Window の前提をここに集める)。
+    pub(crate) fn focused_window(&self) -> Option<WindowId> {
+        self.first_window()
+    }
+
+    /// `focused_window` が表示している View。
+    pub(crate) fn focused_view(&self) -> Option<ViewId> {
+        self.focused_window().and_then(|w| self.window_view(w))
+    }
+
     // ---------- 出力 ----------
 
     pub fn push_effect(&mut self, e: Effect) {
