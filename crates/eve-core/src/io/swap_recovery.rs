@@ -16,7 +16,7 @@ use crate::editor::state::EditorState;
 use crate::ui_model::overlay::{ChoiceDef, ConfirmAction, ConfirmState};
 use crate::{DocumentId, FsPath, JobError, JobKind, JobResult, SwapEntry, SwapOwner};
 
-use crate::io::file::Pending;
+use crate::io::pending::Pending;
 use eve_view::MessageLevel;
 
 /// 同じパスか。Windows は大文字小文字を区別しない (05 §3.1)。

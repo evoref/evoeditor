@@ -7,8 +7,8 @@
 use eve_view::MessageLevel;
 
 use crate::editor::state::EditorState;
-use crate::io::file::Pending;
 use crate::io::io_jobs::OpenOptions;
+use crate::io::pending::Pending;
 use crate::ui_model::overlay::{ChoiceDef, ConfirmAction, ConfirmState};
 use crate::{CommandResult, JobError, JobKind, JobResult, Leftover, LeftoverKind, LeftoverOp};
 

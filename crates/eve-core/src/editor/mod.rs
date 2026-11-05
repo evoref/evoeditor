@@ -54,7 +54,7 @@ impl Editor {
         let mut registry = CommandRegistry::new();
         crate::command::edit::register(&mut registry);
         crate::view::motion::register(&mut registry);
-        crate::io::file::register(&mut registry);
+        crate::io::file_cmds::register(&mut registry);
         crate::io::external::register(&mut registry);
         buffer::register(&mut registry);
         crate::io::save_all::register(&mut registry);
