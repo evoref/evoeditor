@@ -79,20 +79,40 @@ impl EditorState {
         path: &crate::FsPath,
         r: &JobResult,
     ) -> Option<bool> {
-        let batch = self.save_all.as_mut()?;
-        if !batch.jobs.remove(&job) {
+        if !self.save_all.as_ref()?.jobs.contains(&job) {
             return None;
         }
-        if matches!(r, JobResult::Saved { .. }) {
-            batch.saved += 1;
-            return Some(false);
-        }
+        // 元のファイルが退避名に移った・直接上書きの途中で失敗したときは、その場所を一覧に出す
+        // (NFR-301 AC-2。docs/review/v0.3-findings.md の SAF-16)
+        let shown = path.display();
         let reason = match r {
+            JobResult::Failed {
+                err: JobError::Fs(e),
+                ..
+            } => match &e.kind {
+                crate::FsErrorKind::ReplacedMovedToBackup { backup } => {
+                    self.message_text("msg.save.moved_to_backup", &[("backup", &backup.display())])
+                }
+                crate::FsErrorKind::InPlaceFailed { backup: Some(b) } => self.message_text(
+                    "msg.save.in_place_failed",
+                    &[("path", &shown), ("backup", &b.display())],
+                ),
+                crate::FsErrorKind::InPlaceFailed { backup: None } => {
+                    self.message_text("msg.save.in_place_failed_no_backup", &[("path", &shown)])
+                }
+                _ => super::file::fs_reason(e),
+            },
             JobResult::Failed { err, .. } => super::file::reason_label(err),
             JobResult::Unmappable { .. } => "unmappable".to_owned(),
             _ => "failed".to_owned(),
         };
-        batch.failed.push((path.display(), reason));
+        let batch = self.save_all.as_mut()?;
+        batch.jobs.remove(&job);
+        if matches!(r, JobResult::Saved { .. }) {
+            batch.saved += 1;
+            return Some(false);
+        }
+        batch.failed.push((shown, reason));
         // 上書き保存が権限エラーで失敗したら書込権限なしにする (FR-116 AC-3、通常の保存と同じ)
         let denied = matches!(
             r,
