@@ -412,7 +412,7 @@ v0.1 で実装するのは Windows の手順 (`ReplaceFileW` 系。§4.2) で、
 | 段階 | API | 注意 |
 |---|---|---|
 | 一時ファイル作成 | `open(O_WRONLY\|O_CREAT\|O_EXCL\|O_CLOEXEC, 0600)` | `O_TMPFILE` + `linkat` は Linux 限定かつ上書き不可なので使わない。macOS は `O_CLOEXEC` 可 |
-| 権限複製 | `fchown(tmp, uid, gid)` (必要時のみ。失敗 EPERM は §4.4 で事前判定) → `fchmod(tmp, mode & 07777)` の順 (逆順だと、0640 のファイルが所有グループを合わせる前に利用者の既定グループから一瞬読める) | setuid/setgid ビットは **保持しない** (安全側。警告) |
+| 権限複製 | `fchown(tmp, uid, gid)` (必要時のみ。失敗 EPERM は §4.4 で事前判定) → `fchmod(tmp, mode & 01777)` の順 (逆順だと、0640 のファイルが所有グループを合わせる前に利用者の既定グループから一瞬読める) | setuid/setgid ビットは **保持しない** (安全側。警告) |
 | xattr / ACL の検出 (複製より先に出荷する場合の最低限) | `flistxattr(T)` で T に xattr・POSIX ACL (`system.posix_acl_access`)・macOS の ACL / Finder タグが付いているかだけを調べる | 付いていれば「拡張属性 / ACL は保存で保たれません」を SaveWarning で知らせる (黙って失わない)。親ディレクトリに既定 ACL がある場合 (`system.posix_acl_default`)、tmp がそれを継承して元のファイルと違う相手に読める状態になり得るので、同じ警告を出す。どちらも下の複製で解消する |
 | xattr / ACL の複製 (FR-106) | Linux: `flistxattr`/`fgetxattr`/`fsetxattr` で **`user.*` と `trusted.*` (権限があれば) を複製し、`security.*` と `system.*` は複製しない** (§5.1 と一致)。POSIX ACL (`system.posix_acl_access`) は xattr としてではなく `acl_get_fd` / `acl_set_fd` 相当で別処理する (`system.*` を一律除外しても ACL が落ちないようにする)。macOS: `copyfile(T, tmp, NULL, COPYFILE_XATTR \| COPYFILE_ACL)` (`com.apple.quarantine` はコピーしない: 新しい内容に検疫を付け直す理由がない) | 失敗は警告。`security.selinux` は新規ファイルのラベルを OS に任せる (restorecon 相当) |
 | 不変フラグ | Linux `FS_IMMUTABLE_FL` / macOS `UF_IMMUTABLE` (chflags uchg) が立っていると rename に失敗 → `PermissionDenied` で「ファイルがロック (不変) されています」 | |
