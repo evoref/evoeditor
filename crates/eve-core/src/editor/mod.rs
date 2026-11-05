@@ -25,7 +25,6 @@ pub(crate) mod save_all;
 pub(crate) mod startup;
 pub use startup::InitialFile;
 pub(crate) mod search_bar;
-pub(crate) mod search_state;
 pub(crate) mod snapshot;
 pub(crate) mod state;
 pub(crate) mod swap;
@@ -47,7 +46,7 @@ pub use crate::keymap::{
     Binding, KeyParseError, Keymap, Layer, Resolution, format_stroke, parse_sequence, parse_stroke,
 };
 pub use crate::layout::{Affinity, WrapMode, WrapSettings};
-pub use search_state::{SearchCount, SearchStep};
+pub use crate::search::search_state::{SearchCount, SearchStep};
 pub use snapshot::DocSnapshot;
 pub use state::{EditorState, ScrollPos, View, Window};
 

@@ -59,6 +59,13 @@ reviewer = "human:maintainer"
 notes = "コマンドの型とレジストリ・when の式・編集・行の操作・クリップボード (v0.3 の M14 で editor/ から移した)"
 
 [[unit]]
+path = "crates/eve-core/src/search"
+spec = ["03 §12"]
+owner = "shared"
+reviewer = "human:maintainer"
+notes = "リテラル検索の基盤・検索ジョブ・文書内検索の状態 (v0.3 の M14 で crate の直下と editor/ から移した)"
+
+[[unit]]
 path = "crates/eve-core/src/view"
 spec = ["03 §4", "03 §5"]
 owner = "shared"
@@ -90,13 +97,6 @@ path = "crates/eve-core/src/jobs.rs"
 spec = ["02 §9.3"]
 owner = "shared"
 reviewer = "human:maintainer"
-
-[[unit]]
-path = "crates/eve-core/src/search"
-spec = ["03 §12"]
-owner = "shared"
-reviewer = "human:maintainer"
-notes = "search.rs と search/"
 
 [[unit]]
 path = "crates/eve-core/src/editor"

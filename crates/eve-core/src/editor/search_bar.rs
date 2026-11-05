@@ -20,9 +20,9 @@ use crate::search::{
 use crate::time::Tick;
 
 use super::file::Pending;
-use super::search_state::{Found, SearchCount, SearchStep};
 use super::state::EditorState;
 use crate::layout::cell_text;
+use crate::search::search_state::{Found, SearchCount, SearchStep};
 
 impl SearchBarState {
     /// 今の入力とトグルから作る問い合わせ。
