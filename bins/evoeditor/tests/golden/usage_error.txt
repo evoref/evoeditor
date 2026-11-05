@@ -1,0 +1,2 @@
+Unknown option: --no-such-option. Run 'evoeditor --help' for usage.
+  未知のオプションです: --no-such-option。使い方は evoeditor --help で確認してください。

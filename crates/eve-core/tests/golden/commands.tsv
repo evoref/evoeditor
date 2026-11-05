@@ -1,0 +1,89 @@
+# id	kind	permission	when
+app.quit	Ui	None	—
+app.suspend	Ui	None	caps.can_suspend
+buffer.close	Ui	None	—
+buffer.list	Ui	Ui	—
+buffer.next	Ui	Ui	—
+buffer.prev	Ui	Ui	—
+clipboard.copy	Ui	None	!selection.empty
+clipboard.cut	Edit	None	!selection.empty && !doc.read_only
+config.reload	Ui	None	—
+cursor.doc_end	Motion	Read	—
+cursor.doc_start	Motion	Read	—
+cursor.end	Motion	Read	—
+cursor.goto_line	Motion	Read	—
+cursor.home	Motion	Read	—
+cursor.move_down	Motion	Read	—
+cursor.move_left	Motion	Read	—
+cursor.move_right	Motion	Read	—
+cursor.move_up	Motion	Read	—
+cursor.move_word_left	Motion	Read	—
+cursor.move_word_right	Motion	Read	—
+cursor.page_down	Motion	Read	—
+cursor.page_up	Motion	Read	—
+edit.delete_backward	Edit	Propose	!doc.read_only
+edit.delete_forward	Edit	Propose	!doc.read_only
+edit.delete_line	Edit	Propose	!doc.read_only
+edit.delete_word_backward	Edit	Propose	!doc.read_only
+edit.delete_word_forward	Edit	Propose	!doc.read_only
+edit.duplicate_line	Edit	Propose	!doc.read_only
+edit.indent	Edit	Propose	!doc.read_only
+edit.insert_text	Edit	Propose	!doc.read_only
+edit.move_line_down	Edit	Propose	!doc.read_only
+edit.move_line_up	Edit	Propose	!doc.read_only
+edit.newline	Edit	Propose	!doc.read_only
+edit.outdent	Edit	Propose	!doc.read_only
+edit.paste	Edit	None	!doc.read_only
+edit.redo	Edit	None	!doc.read_only
+edit.undo	Edit	None	!doc.read_only
+file.check_external_changes	File	None	doc.has_path
+file.new	File	None	—
+file.open	File	None	—
+file.reload	File	None	doc.has_path
+file.reopen_with_encoding	File	None	doc.has_path
+file.save	File	None	!doc.read_only
+file.save_all	File	None	—
+file.save_as	File	None	—
+file.set_encoding	File	None	—
+file.set_line_ending	Edit	Propose	!doc.read_only
+file.toggle_read_only	File	None	doc.read_only_releasable || !doc.read_only
+help.commands	Ui	Ui	—
+help.keys	Ui	Ui	—
+help.open	Ui	Ui	—
+search.next	Motion	Read	search.active
+search.open	Ui	Ui	—
+search.prev	Motion	Read	search.active
+search.replace	Edit	Propose	search.replace_active && !doc.read_only
+search.replace_all	Edit	Propose	search.replace_active && !doc.read_only
+search.replace_open	Ui	Ui	!doc.read_only
+search.toggle_case	Ui	Ui	search.active
+search.toggle_regex	Ui	Ui	search.active
+search.toggle_selection	Ui	Ui	search.active
+search.toggle_word	Ui	Ui	search.active
+select.all	Motion	Read	—
+select.extend_down	Motion	Read	—
+select.extend_end	Motion	Read	—
+select.extend_home	Motion	Read	—
+select.extend_left	Motion	Read	—
+select.extend_page_down	Motion	Read	—
+select.extend_page_up	Motion	Read	—
+select.extend_right	Motion	Read	—
+select.extend_to_doc_end	Motion	Read	—
+select.extend_to_doc_start	Motion	Read	—
+select.extend_up	Motion	Read	—
+select.extend_word_left	Motion	Read	—
+select.extend_word_right	Motion	Read	—
+ui.cancel	Ui	None	—
+ui.confirm	Ui	None	overlay.active != "" || search.active
+ui.dialog_choose	Ui	None	overlay.active == "dialog"
+ui.list_next	Ui	None	overlay.active != "" || search.active
+ui.list_page_down	Ui	None	overlay.active != "" || search.active
+ui.list_page_up	Ui	None	overlay.active != "" || search.active
+ui.list_prev	Ui	None	overlay.active != "" || search.active
+ui.message_history	Ui	Ui	—
+ui.message_history_copy	Ui	Ui	—
+ui.palette_open	Ui	None	—
+ui.redraw	Ui	None	—
+ui.toggle_hint_bar	Ui	Ui	—
+ui.toggle_mouse	Ui	None	caps.mouse
+view.toggle_wrap	Ui	Ui	—

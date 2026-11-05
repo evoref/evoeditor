@@ -226,6 +226,11 @@ impl Editor {
     }
 
     /// キーマップを差し替える (層を足した設定の反映、テスト)。保留中のストロークは破棄する。
+    /// 今のキーマップ (既定とユーザーの層。一覧の出力と試験に使う。読み取りだけ)。
+    pub fn keymap(&self) -> &Keymap {
+        &self.keymap
+    }
+
     pub fn set_keymap(&mut self, keymap: Keymap) {
         self.keymap = keymap;
         self.refresh_key_labels();
