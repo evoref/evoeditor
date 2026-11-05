@@ -17,7 +17,7 @@ use std::time::Instant;
 use eve_testkit::Harness;
 
 /// ケース (名前, 説明)。名前は比較の表のキーなので変えない (変えたら基準と比べられない)。
-const CASES: [(&str, &str); 5] = [
+const CASES: [(&str, &str); 7] = [
     (
         "open_1m",
         "1 MB の日本語混在の文書を開き、最初の Frame を作る",
@@ -35,6 +35,14 @@ const CASES: [(&str, &str); 5] = [
         "1 MB の Shift_JIS の文書を判定・復号して開く",
     ),
     ("long_line_2m", "2 MB の 1 行を開き、End・挿入・Frame"),
+    (
+        "search_32m",
+        "32 MB の文書で、末尾近くにだけある語をリテラルで全件検索する (ヘッドレス)",
+    ),
+    (
+        "wrap_frame_1m",
+        "1 MB の文書を折り返し ON で開き、PageDown を 20 回して毎回 Frame を作る",
+    ),
 ];
 
 fn japanese_1m() -> Vec<u8> {
@@ -103,6 +111,34 @@ fn run(case: &str) {
             // 挿入は Revision を変えるので、列の索引の作り直し (行の 1 回の走査) を含む
             h.text("x");
             std::hint::black_box(h.frame());
+        }
+        "search_32m" => {
+            let mut data = Vec::with_capacity(33 << 20);
+            while data.len() < 32 << 20 {
+                data.extend_from_slice(&japanese_1m());
+            }
+            data.extend_from_slice(
+                "末尾の目印 needle_at_end
+"
+                .as_bytes(),
+            );
+            let mut h = opened(&data);
+            drop(data);
+            h.keys("ctrl+f");
+            h.text("needle_at_end");
+            h.run_jobs();
+            h.keys("enter");
+            h.run_jobs();
+            std::hint::black_box(h.frame());
+        }
+        "wrap_frame_1m" => {
+            let mut h = opened(&japanese_1m());
+            h.cmd("view.toggle_wrap");
+            std::hint::black_box(h.frame());
+            for _ in 0..20 {
+                h.keys("pagedown");
+                std::hint::black_box(h.frame());
+            }
         }
         other => {
             eprintln!("知らないケースです: {other} (--list で一覧)");

@@ -57,6 +57,35 @@ pub fn run_all(args: &[String]) -> Result<(), String> {
         .ok_or("BM-103a の結果の行が見つかりません")?;
     println!("  {line}");
     results.push(line.to_owned());
+    // 条件を変えた BM-103a (折り返し ON・200x60)。docs/review/v0.3-findings.md の §3.3 の 6・9
+    for (what, extra) in [
+        ("折り返し ON", &["--wrap"][..]),
+        ("200x60", &["--size", "200x60"][..]),
+    ] {
+        println!("▶ BM-103a ({what})");
+        let mut cmd = Command::new("cargo");
+        cmd.args([
+            "bench",
+            "-p",
+            "eve-testkit",
+            "--bench",
+            "bm_103a",
+            "--",
+            "--json",
+        ]);
+        cmd.args(extra);
+        if quick {
+            cmd.arg("--quick");
+        }
+        let out = run_capture(&mut cmd)?;
+        let line = out
+            .lines()
+            .rev()
+            .find(|l| l.starts_with("{\"id\":\"BM-103a-"))
+            .ok_or_else(|| format!("BM-103a ({what}) の結果の行が見つかりません"))?;
+        println!("  {line}");
+        results.push(line.to_owned());
+    }
 
     // BM-104 / BM-202 (サイズ別オープンの時間とメモリ。実ファイル、Windows)。S-02 の最終判定の材料 (09 §5.2)
     if cfg!(windows) {
