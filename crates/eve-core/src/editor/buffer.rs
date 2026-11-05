@@ -4,7 +4,7 @@
 
 use std::ops::Range;
 
-use eve_view::{CutPolicy, DocumentId, InputFieldModel, ListItem, OverlayModel};
+use eve_view::{CutPolicy, DocumentId, InputFieldModel, ListItem, OverlayModel, ViewId};
 
 use super::state::EditorState;
 use crate::command::{
@@ -292,4 +292,42 @@ pub(crate) fn register(r: &mut CommandRegistry) {
     r.register(spec("buffer.list", Permission::Ui, buffer_list));
     r.register(spec("buffer.next", Permission::Ui, buffer_next));
     r.register(spec("buffer.prev", Permission::Ui, buffer_prev));
+}
+
+// ---- (v0.3 の M14、STR-B1 で io/ から移した) ----
+impl EditorState {
+    /// `doc` を表示する (最初の Window の View をその文書のものにする)。文書の View が無ければ作る。
+    /// 検索バーは文書ごとには持たないので、切り替える前に閉じる (03 §9.8)。
+    pub(crate) fn activate_document(&mut self, doc: DocumentId) {
+        if self.active_document() == Some(doc) || !self.documents.contains_key(&doc) {
+            return;
+        }
+        self.search_close();
+        if let Some(prev) = self.active_document() {
+            self.recent.retain(|d| *d != prev);
+            self.recent.push(prev);
+        }
+        let view = match self.views.iter().find(|(_, v)| v.doc == doc) {
+            Some((id, _)) => *id,
+            None => self.add_view(doc),
+        };
+        if let Some(w) = self.windows.first_mut() {
+            w.root = view;
+        }
+        self.mark_dirty_render();
+    }
+
+    /// Window の表示を `view` に切り替え、`old` の文書を閉じる。Window がなければ作る。
+    pub(crate) fn show_view(&mut self, view: ViewId, old: Option<DocumentId>) {
+        match self.windows.first_mut() {
+            Some(w) => w.root = view,
+            None => {
+                self.add_window(view);
+            }
+        }
+        if let Some(old) = old {
+            self.close_document(old);
+        }
+        self.mark_dirty_render();
+    }
 }
