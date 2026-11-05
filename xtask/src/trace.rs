@@ -39,9 +39,20 @@ fn is_row_id(s: &str) -> bool {
         && p[2].bytes().all(|b| b.is_ascii_digit())
 }
 
-/// ソースのコメントの `verifies:` とシナリオ DSL の `verifies`、`spec:` の中の規範行 ID を集める。
-fn scan_sources(root: &Path) -> (Vec<Verify>, Vec<(String, String)>) {
-    let mut verifies = Vec::new();
+/// ソースのコメントの `verifies:` (`crate::verifies` の走査) とシナリオ DSL の `verifies`、`spec:` の中の規範行 ID を集める。
+/// 3 つ目は `verifies:` の規則に合わないものの説明 (`--check` で誤りにする)。
+fn scan_sources(root: &Path) -> (Vec<Verify>, Vec<(String, String)>, Vec<String>) {
+    let (found, scan_errors) = crate::verifies::scan(root);
+    let mut verifies: Vec<Verify> = found
+        .iter()
+        .flat_map(|v| {
+            v.ids.iter().map(|id| Verify {
+                id: id.clone(),
+                at: v.at(),
+                test: v.test.clone(),
+            })
+        })
+        .collect();
     let mut spec_rows = Vec::new();
     for dir in ["crates", "bins", "xtask"] {
         for f in rust_files(&root.join(dir)) {
@@ -53,8 +64,7 @@ fn scan_sources(root: &Path) -> (Vec<Verify>, Vec<(String, String)>) {
                 .unwrap_or(&f)
                 .to_string_lossy()
                 .replace('\\', "/");
-            let lines: Vec<&str> = text.lines().collect();
-            for (i, l) in lines.iter().enumerate() {
+            for (i, l) in text.lines().enumerate() {
                 let t = l.trim_start();
                 if !t.starts_with("//") {
                     continue;
@@ -63,33 +73,8 @@ fn scan_sources(root: &Path) -> (Vec<Verify>, Vec<(String, String)>) {
                     .trim_start_matches('/')
                     .trim_start_matches('!')
                     .trim_start();
-                let at = format!("{rel}:{}", i + 1);
-                if let Some(rest) = body.strip_prefix("verifies:") {
-                    // 直後 5 行以内の `fn <名前>` が対象の試験
-                    let test = lines[i + 1..lines.len().min(i + 6)]
-                        .iter()
-                        .find_map(|n| {
-                            let n = n.trim_start();
-                            let n = n.strip_prefix("pub ").unwrap_or(n);
-                            n.strip_prefix("fn ")
-                                .map(|r| r.split(['(', '<']).next().unwrap_or("").to_owned())
-                        })
-                        .unwrap_or_default();
-                    for tok in rest.split([',', '、']) {
-                        let id = tok
-                            .split_whitespace()
-                            .next()
-                            .unwrap_or("")
-                            .trim_end_matches(['.', '。']);
-                        if !id.is_empty() {
-                            verifies.push(Verify {
-                                id: id.to_owned(),
-                                at: at.clone(),
-                                test: test.clone(),
-                            });
-                        }
-                    }
-                } else if let Some(rest) = body.strip_prefix("spec:") {
+                if let Some(rest) = body.strip_prefix("spec:") {
+                    let at = format!("{rel}:{}", i + 1);
                     for w in rest.split(|c: char| {
                         c.is_whitespace() || matches!(c, ',' | '、' | '(' | ')' | '/')
                     }) {
@@ -128,7 +113,7 @@ fn scan_sources(root: &Path) -> (Vec<Verify>, Vec<(String, String)>) {
             });
         }
     }
-    (verifies, spec_rows)
+    (verifies, spec_rows, scan_errors)
 }
 
 /// `tests/scenarios` の下の `.toml` (相対パス, 絶対パス)。
@@ -189,7 +174,7 @@ struct Report {
     matrix: String,
 }
 
-fn build(root: &Path) -> Result<Report, String> {
+fn build(root: &Path, version: &str) -> Result<Report, String> {
     let doc01 = read_text(&root.join("docs/01-requirements.md"))?;
     let (_, ids) = scan(root)?;
     let known: BTreeSet<String> = ids.iter().map(|i| i.id.clone()).collect();
@@ -198,16 +183,21 @@ fn build(root: &Path) -> Result<Report, String> {
         .into_iter()
         .map(|a| a.id)
         .collect();
-    let units = eve_docs_tables::ac::read_later_units(&doc01, "v0.2")
+    let units = eve_docs_tables::ac::read_later_units(&doc01, version)
         .map_err(|e| format!("01 §5.5 の表を読めません: {e}"))?;
-    let v02_acs: BTreeSet<String> = units.iter().filter_map(|u| u.ac.clone()).collect();
+    // AC ID が実在するかは、§5.5 のすべての版の行で見る (行列に並べるのは `version` の行だけ)
+    let later_acs: BTreeSet<String> = eve_docs_tables::ac::read_later_units(&doc01, "(v")
+        .map_err(|e| format!("01 §5.5 の表を読めません: {e}"))?
+        .into_iter()
+        .filter_map(|u| u.ac)
+        .collect();
     let prio = priorities(&doc01);
-    let (verifies, spec_rows) = scan_sources(root);
+    let (verifies, spec_rows, scan_errors) = scan_sources(root);
 
-    let mut errors = Vec::new();
+    let mut errors = scan_errors;
     for v in &verifies {
         let ok = if v.id.starts_with("AC-") {
-            v01.contains(&v.id) || v02_acs.contains(&v.id)
+            v01.contains(&v.id) || later_acs.contains(&v.id)
         } else if v.id.starts_with("FR-") || v.id.starts_with("NFR-") || is_row_id(&v.id) {
             known.contains(&v.id)
         } else {
@@ -240,8 +230,8 @@ fn build(root: &Path) -> Result<Report, String> {
     }
     let mut warnings = Vec::new();
     let mut m = String::new();
-    m.push_str("# トレーサビリティ行列 (v0.2)\n\n");
-    m.push_str("生成物 (`cargo xtask trace` で作り直す。手で直さない。docs/11 §3.3、09 §8.3)。01 §5.5 の v0.2 の受入基準ごとに、それを確かめる試験 (`// verifies:` の直後の関数) を並べる。試験が要件 ID を指していれば、その要件の AC すべてを確かめたと数える。v0.1 の AC は `tests/ac-checklist.toml` を見る。\n\n");
+    m.push_str(&format!("# トレーサビリティ行列 ({version})\n\n"));
+    m.push_str(&format!("生成物 (`cargo xtask trace` で作り直す。手で直さない。docs/11 §3.3、09 §8.3)。01 §5.5 の {version} の受入基準ごとに、それを確かめる試験 (`// verifies:` の直後の関数) を並べる。試験が要件 ID を指していれば、その要件の AC すべてを確かめたと数える。v0.1 の AC は `tests/ac-checklist.toml` を見る。\n\n"));
     m.push_str("| 要件 | AC | 優先度 | 試験 |\n|---|---|---|---|\n");
     let (mut covered, mut total) = (0usize, 0usize);
     for u in &units {
@@ -288,7 +278,13 @@ fn build(root: &Path) -> Result<Report, String> {
 
 pub fn run(args: &[String]) -> Result<(), String> {
     let root = workspace_root();
-    let r = build(&root)?;
+    // 対象の版 (01 §5.5 の行の版の注記)。既定は v0.2 (行列 docs/traceability.md は v0.2 の受入基準を並べる)
+    let version = args
+        .iter()
+        .position(|a| a == "--version")
+        .and_then(|i| args.get(i + 1))
+        .map_or("v0.2", String::as_str);
+    let r = build(&root, version)?;
     let check = args.iter().any(|a| a == "--check");
     println!("▶ trace{}", if check { " --check" } else { "" });
     for w in &r.warnings {

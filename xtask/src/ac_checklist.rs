@@ -3,16 +3,16 @@
 //! (1) 01 §5.1〜§5.4 の v0.1 の AC がすべてチェックリストにあり、チェックリストに余計な項目がない。
 //! (2) テストの `verifies:` に書かれた AC ID がすべて 01 に存在する (打ち間違いの検出)。
 //! (3) `status = "done"` の項目は、`verified_by` に実在する検証の実体が 1 つ以上ある:
-//!     - テスト関数名: その関数の直前 (5 行以内) に同じ AC ID の `verifies:` がある
+//!     - テスト関数名: その試験に同じ AC ID の `verifies:` がある (走査の規則は `crate::verifies`)。`<fn>` か `<file>::<fn>` で書く。
+//!       関数名だけで書いて、同じ名前の試験が別のファイルにもあれば誤り
 //!     - ベンチ ID (`BM-…`): docs/09 に載っている
 //!     - 手順の記録: `docs/compat/` の下の実在するファイルのパス。人手のレビューの記録は `docs/review/` の下
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::path::Path;
 
 use serde::Deserialize;
 
-use crate::util::{read_text, rust_files, workspace_root};
+use crate::util::{read_text, workspace_root};
 
 #[derive(Debug, Deserialize)]
 struct File {
@@ -29,44 +29,6 @@ struct Entry {
     #[serde(default)]
     verified_by: Vec<String>,
     status: String,
-}
-
-/// ソースの中の `verifies:` 行から (AC ID, その直後の関数名) を集める。
-fn scan_verifies(root: &Path) -> (Vec<(String, String)>, BTreeSet<String>) {
-    let mut pairs = Vec::new();
-    let mut mentioned = BTreeSet::new();
-    for dir in ["crates", "xtask", "bins"] {
-        for file in rust_files(&root.join(dir)) {
-            let Ok(text) = read_text(&file) else { continue };
-            let lines: Vec<&str> = text.lines().collect();
-            for (i, l) in lines.iter().enumerate() {
-                let Some(pos) = l.find("verifies:") else {
-                    continue;
-                };
-                let ids: Vec<String> = ac_ids_in(&l[pos + "verifies:".len()..]);
-                for id in &ids {
-                    mentioned.insert(id.clone());
-                }
-                // 直後 5 行以内の `fn <name>` を、この verifies: の対象とする
-                let name = lines[i + 1..lines.len().min(i + 6)].iter().find_map(|n| {
-                    let n = n.trim_start();
-                    let n = n.strip_prefix("pub ").unwrap_or(n);
-                    let n = n.strip_prefix("async ").unwrap_or(n);
-                    n.strip_prefix("fn ").map(|rest| {
-                        rest.chars()
-                            .take_while(|c| c.is_alphanumeric() || *c == '_')
-                            .collect::<String>()
-                    })
-                });
-                if let Some(name) = name {
-                    for id in ids {
-                        pairs.push((id, name.clone()));
-                    }
-                }
-            }
-        }
-    }
-    (pairs, mentioned)
 }
 
 /// 文字列の中の `AC-FR-105-1` / `AC-NFR-203-2` の形をすべて取り出す。
@@ -126,7 +88,12 @@ pub fn run() -> Result<(), String> {
     }
 
     // (2) verifies: の打ち間違い
-    let (pairs, mentioned) = scan_verifies(&root);
+    let (found, scan_errors) = crate::verifies::scan(&root);
+    errors.extend(scan_errors.into_iter().map(|e| format!("(2) {e}")));
+    let mentioned: BTreeSet<String> = found
+        .iter()
+        .flat_map(|v| v.ids.iter().flat_map(|i| ac_ids_in(i)))
+        .collect();
     for id in &mentioned {
         if !in_docs.contains(id.as_str()) {
             errors.push(format!(
@@ -144,9 +111,30 @@ pub fn run() -> Result<(), String> {
             } else if v.starts_with("docs/compat/") || v.starts_with("docs/review/") {
                 root.join(v.split('#').next().unwrap_or(v)).exists()
             } else {
-                pairs.iter().any(|(id, name)| id == &e.id && name == v)
+                found
+                    .iter()
+                    .any(|f| f.matches(v) && f.ids.iter().any(|i| i == &e.id))
             }
         });
+        // 関数名だけで書いたとき、同じ名前の試験が別のファイルにもあれば `<file>::<fn>` で書かせる
+        for v in e
+            .verified_by
+            .iter()
+            .filter(|v| !v.contains("::") && !v.starts_with("BM-") && !v.starts_with("docs/"))
+        {
+            let files: BTreeSet<&str> = found
+                .iter()
+                .filter(|f| f.test == *v)
+                .map(|f| f.file.as_str())
+                .collect();
+            if files.len() > 1 {
+                errors.push(format!(
+                    "(3) `{}` の verified_by `{v}` は {} 個のファイルにある同じ名前の試験です。`<file>::<fn>` で書いてください: {files:?}",
+                    e.id,
+                    files.len()
+                ));
+            }
+        }
         if !backed {
             errors.push(format!("(3) `{}` は done ですが、verified_by に実在する検証 (テスト関数・ベンチ ID・docs/compat/ または docs/review/ の記録) がありません", e.id));
         }
@@ -182,7 +170,7 @@ mod tests {
         let root = workspace_root();
         let list: File = toml::from_str(&read_text(&root.join("tests/ac-checklist.toml")).unwrap())
             .expect("チェックリストを読める");
-        let (pairs, _) = scan_verifies(&root);
+        let (found, _) = crate::verifies::scan(&root);
         // 試験関数でなく別の裏づけを使う T の AC (理由つき。増やさない)
         let others = [
             "AC-FR-117-2",  // 性能の判定 (BM-103b-reconcile)
@@ -198,7 +186,7 @@ mod tests {
             .filter(|e| {
                 !e.verified_by
                     .iter()
-                    .any(|v| pairs.iter().any(|(id, name)| id == &e.id && name == v))
+                    .any(|v| found.iter().any(|f| f.matches(v) && f.ids.contains(&e.id)))
             })
             .map(|e| e.id.as_str())
             .collect();

@@ -51,6 +51,7 @@ mod scenario;
 mod spec_index;
 mod trace;
 mod util;
+mod verifies;
 mod verify_tag;
 
 use std::process::ExitCode;
