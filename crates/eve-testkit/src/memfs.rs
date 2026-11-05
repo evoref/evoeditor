@@ -67,6 +67,8 @@ struct State {
     seq: u32,
     chunk_size: usize,
     fail_next: Vec<(FsOp, FsErrorKind)>,
+    /// 次の保存の成功 (`write_atomic` / `write_in_place`) に付ける警告。
+    warn_next: Vec<eve_core::SaveWarning>,
     busy: BTreeMap<FsOp, u32>,
     fail_step: Vec<(WriteStep, FsErrorKind)>,
     disk_full_after: Option<u64>,
@@ -112,6 +114,7 @@ impl MemFs {
                 seq: 0,
                 chunk_size: DEFAULT_CHUNK,
                 fail_next: Vec::new(),
+                warn_next: Vec::new(),
                 busy: BTreeMap::new(),
                 fail_step: Vec::new(),
                 disk_full_after: None,
@@ -333,6 +336,11 @@ impl MemFs {
         if let Some(e) = self.st().files.get_mut(&FsPath::from(path)) {
             e.data = data.to_vec();
         }
+    }
+
+    /// 次の保存の成功に `warnings` を付ける (保存は成功のまま。`SaveReport.warnings` の扱いを試す)。
+    pub fn warn_next(&self, warnings: Vec<eve_core::SaveWarning>) {
+        self.st().warn_next = warnings;
     }
 
     /// 内容を変えずに更新時刻だけを `secs` 秒進める (同期ソフト・ウイルス対策による mtime だけの更新を再現する)。
@@ -758,7 +766,7 @@ impl FileSystem for MemFs {
         Ok(SaveReport {
             method,
             new_stamp,
-            warnings: Vec::new(),
+            warnings: std::mem::take(&mut s.warn_next),
         })
     }
 
@@ -807,7 +815,7 @@ impl FileSystem for MemFs {
         Ok(SaveReport {
             method: SaveMethod::InPlace,
             new_stamp,
-            warnings: Vec::new(),
+            warnings: std::mem::take(&mut s.warn_next),
         })
     }
 }

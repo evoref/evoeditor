@@ -1434,6 +1434,10 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 | `msg.save.recovery_failed` | 上の確認で「退避先に保存」を選んだが書けなかった (`state_dir` も代替の退避先 (05 §7.5) も使えない、容量不足等。03 §9.7 の `WritingRecovery`。文書は dirty のまま、後続は中止) | 退避先に保存できませんでした: {reason}。元のファイル {path} は変更していません / 別名で保存 ({key:file.save_as}) してください |
 | `ui.confirm.save_failed_closed` | 閉じた文書 (v0.1 は置き換えで閉じた旧文書) の保存ジョブが失敗した。閉じた文書なので別名で保存・再試行は出さず、保持している `DocSnapshot` から「退避先に保存」か「破棄」の 2 択にする (03 §9.2 の「閉じる手順」(a)。本文には失敗の種類に対応する `msg.save.*` の text を入れる。`Esc` の扱いは 03 の手順に従う。提案、OQ-199。03 の同項と同じ扱い) | 保存できませんでした: (`msg.save.*` の text) — {path} は既に閉じています。`[R] 退避先に保存` ★ / `[D] 破棄` |
 | `msg.save.changed_after_save` | 警告 (`SaveWarning`: 置換の後の T が自分の書いたものと確認できず、保存の直後に他のプログラムが変更した可能性がある。05 §4.1 手順 7。保存自体は成功のまま。次の保存は外部変更として確認される) | {path} を保存しましたが、保存の直後に他のプログラムが変更した可能性があります / 次に保存するときに内容を確認します。必要なら再読込 ({key:file.reload}) で確かめてください |
+| `msg.save.fsync_failed` | 警告 (`SaveWarning::FsyncFailed`: fsync に失敗した。ネットワーク FS・リムーバブル。保存自体は成功のまま。05 §4.1 手順 3) | {path} を保存しましたが、ディスクへの書き込みの完了を確かめられませんでした / ネットワーク上やリムーバブルのドライブでは、電源断や取り外しで内容を失うことがあります。取り外す前に安全な取り外しを行ってください |
+| `msg.save.permission_narrowed` | 警告 (`SaveWarning::PermissionNarrowed`: 置換で他の利用者からの権限が元より狭くなった。05 §4.1 手順 4) | {path} を保存しましたが、他の利用者からの権限が元より狭くなりました / 必要なら OS で権限を設定し直してください |
+| `msg.save.backup_not_removed` | 警告 (`SaveWarning::BackupNotRemoved`: Windows。置換の成功後に退避名を消せなかった。保存先は新しい内容で完全。05 §4.1 手順 7) | {path} を保存しましたが、元のファイルを移した {backup} を消せませんでした / 要らなければ {backup} を消してください |
+| `msg.save.inflight_flag_not_written` | 警告 (`SaveWarning::InflightFlagNotWritten`: 原子的保存で保存中フラグを書けなかった。保存自体は成功のまま。02 §4.5) | {path} を保存しましたが、保存中の印を書けませんでした / 保存の途中で強制終了したときに、次の起動で痕跡を見つけられないことがあります |
 | `ui.confirm.save.unmappable.title` | E3 表現不能 (03 §8.6 の「E3 の選択肢」。選択肢と出す条件の正本は 03) | 表現できない文字 |
 | `ui.confirm.save.unmappable.message` | 同上 | {count} 個の文字は {encoding} で表せません (最初: 行 {line}, 桁 {col}) |
 | `ui.confirm.save.unmappable.utf8` | 同上 (アクセラレータ `U`。表現不能の文字にエスケープ文字 (03 §8.3) を含むとき・保存先が UTF-8 のときは出さない) | [U] UTF-8 で保存 |

@@ -673,6 +673,10 @@ text = "{path} の権限・属性の一部を引き継げませんでした: {re
 hint = "続く確認で選んでください"
 text = "直接上書きの前のバックアップを作れませんでした。何も書き込んでいません"
 
+[msg.save.backup_not_removed]
+hint = "要らなければ {backup} を消してください"
+text = "{path} を保存しましたが、元のファイルを移した {backup} を消せませんでした"
+
 [msg.save.busy]
 hint = "そのプログラムを閉じて {key:file.save} で再試行するか、別名で保存してください"
 text = "他のプログラムが {path} を使用中のため保存できませんでした"
@@ -701,6 +705,10 @@ text = "不正なバイトを含むため、この文書は ISO-2022-JP では�
 hint = "別名で保存 ({key:file.save_as}) するか、権限を確認してください"
 text = "{path} を保存できませんでした: {reason}"
 
+[msg.save.fsync_failed]
+hint = "ネットワーク上やリムーバブルのドライブでは、電源断や取り外しで内容を失うことがあります。取り外す前に安全な取り外しを行ってください"
+text = "{path} を保存しましたが、ディスクへの書き込みの完了を確かめられませんでした"
+
 [msg.save.in_place_failed]
 hint = "別名で保存 ({key:file.save_as}) してから、バックアップと見比べてください"
 text = "{path} の直接上書きの途中で失敗しました。ファイルが壊れている可能性があります。書き込む前の内容: {backup}"
@@ -708,6 +716,10 @@ text = "{path} の直接上書きの途中で失敗しました。ファイル�
 [msg.save.in_place_failed_no_backup]
 hint = "別名で保存 ({key:file.save_as}) して、今の内容を残してください"
 text = "{path} の直接上書きの途中で失敗しました。ファイルが壊れている可能性があり、バックアップはありません"
+
+[msg.save.inflight_flag_not_written]
+hint = "保存の途中で強制終了したときに、次の起動で痕跡を見つけられないことがあります"
+text = "{path} を保存しましたが、保存中の印を書けませんでした"
 
 [msg.save.invalid_path]
 hint = "別のファイル名で保存してください"
@@ -728,6 +740,10 @@ text = "{path} に書き込む権限がありません"
 [msg.external.check_failed]
 hint = "保存するときにも、ファイルが変わっていないかを照合します"
 text = "{path} の変更を確かめられませんでした: {reason}"
+
+[msg.save.permission_narrowed]
+hint = "必要なら OS で権限を設定し直してください"
+text = "{path} を保存しましたが、他の利用者からの権限が元より狭くなりました"
 
 [msg.save.read_only_fs]
 hint = "別名で保存 ({key:file.save_as}) してください"

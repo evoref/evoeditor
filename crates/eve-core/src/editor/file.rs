@@ -2457,6 +2457,7 @@ impl EditorState {
                     "info.save.done"
                 };
                 self.message(MessageLevel::Info, key, &path.display());
+                self.show_save_warning(path, &report.warnings);
                 self.mark_snapshot_update(doc_id);
                 // 保存の後に続ける操作 (開く・新規作成・終了)。保存が失敗したときは続けない
                 // 保存の間に編集されていたら、続きの操作の前にもう一度尋ねる (03 §9.7。編集を捨てない)
@@ -2730,6 +2731,71 @@ pub(super) fn fs_reason(e: &FsError) -> String {
         .next()
         .unwrap_or("unknown")
         .to_lowercase()
+}
+
+impl EditorState {
+    /// 保存は成功したが知らせること (`SaveReport.warnings`) のうち、最も重い 1 つを警告として出す (03 §9.3 手順 6、04 §15.2)。
+    /// 黙って失わない (02 §4.5。docs/review/v0.3-findings.md の SAF-05)。
+    fn show_save_warning(&mut self, path: &FsPath, warnings: &[crate::SaveWarning]) {
+        use crate::SaveWarning as W;
+        let rank = |w: &W| match w {
+            W::FsyncFailed => 0,
+            W::ChangedAfterSave => 1,
+            W::BackupNotRemoved { .. } => 2,
+            W::PermissionNarrowed => 3,
+            W::AttrsNotPreserved { .. } => 4,
+            W::InflightFlagNotWritten => 5,
+        };
+        let Some(w) = warnings.iter().min_by_key(|w| rank(w)) else {
+            return;
+        };
+        let p = path.display();
+        match w {
+            W::FsyncFailed => {
+                self.show_message(MessageLevel::Warn, "msg.save.fsync_failed", &[("path", &p)])
+            }
+            W::ChangedAfterSave => {
+                self.show_message(
+                    MessageLevel::Warn,
+                    "msg.save.changed_after_save",
+                    &[("path", &p)],
+                );
+            }
+            W::BackupNotRemoved { path: backup } => self.show_message(
+                MessageLevel::Warn,
+                "msg.save.backup_not_removed",
+                &[("path", &p), ("backup", &backup.display())],
+            ),
+            W::PermissionNarrowed => {
+                self.show_message(
+                    MessageLevel::Warn,
+                    "msg.save.permission_narrowed",
+                    &[("path", &p)],
+                );
+            }
+            W::AttrsNotPreserved { what } => {
+                let reason = what
+                    .iter()
+                    .map(|k| match k {
+                        crate::AttrKind::FileAttributes => "attributes",
+                        crate::AttrKind::Security => "security",
+                        crate::AttrKind::StreamsXattr => "streams/xattr",
+                    })
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                self.show_message(
+                    MessageLevel::Warn,
+                    "msg.save.attributes_not_copied",
+                    &[("path", &p), ("reason", &reason)],
+                );
+            }
+            W::InflightFlagNotWritten => self.show_message(
+                MessageLevel::Warn,
+                "msg.save.inflight_flag_not_written",
+                &[("path", &p)],
+            ),
+        }
+    }
 }
 
 /// 開く失敗の MessageKey (04 §15.2)。
