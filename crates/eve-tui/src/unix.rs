@@ -459,7 +459,13 @@ pub fn spawn_input_thread(
     let reinit = input.reinit.clone();
     thread::Builder::new()
         .name("eve-input".to_owned())
-        .spawn(move || run(fd, &out, &geom, winch, cont, &reinit))
+        .spawn(move || {
+            // panic したら Host に Fatal を送る (端末を raw のまま操作できなくしない、SAF-07)
+            crate::frontend::run_guarded(
+                || run(fd, &out, &geom, winch, cont, &reinit),
+                || out.died(),
+            );
+        })
 }
 
 #[cfg(all(test, target_os = "linux"))]
