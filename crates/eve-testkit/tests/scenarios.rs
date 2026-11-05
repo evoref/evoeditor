@@ -35,7 +35,7 @@ fn シナリオはすべて検証を通り_期待どおりに動く() {
         if check_only {
             continue;
         }
-        match scenario::run(&sc) {
+        match scenario::run_at(&sc, path.parent()) {
             Ok(out) => {
                 if print {
                     println!("── {rel}\n{}", out.frame);
@@ -64,7 +64,9 @@ text = "b"
 [[step]]
 cmd = "no.such_command"
 [[assert]]
-frame = "golden"
+frame = "../golden"
+[[assert]]
+effects = []
 "#;
     let errs = scenario::load(bad, "x/bad.toml").unwrap_err();
     let all = errs.join("\n");
@@ -72,6 +74,7 @@ frame = "golden"
     assert!(all.contains("1 種類"), "{all}");
     assert!(all.contains("no.such_command"), "{all}");
     assert!(all.contains("未対応"), "{all}");
+    assert!(all.contains("英数字"), "{all}");
     // 未知のキーは型で落ちる
     assert!(
         scenario::load(

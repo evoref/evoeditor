@@ -26,3 +26,5 @@ expect = { text = "abcdef" }
 [[assert]]
 query = { kind = "text" }
 expect = { text = "" }
+[[assert]]
+frame = "undo_groups_typing"
