@@ -383,6 +383,63 @@ impl RescueWriter for StateRescue {
     }
 }
 
+/// 退避の各段の経過時間 (Issue #342、docs/review/v0.3-findings.md の SAF-35)。退避の始まりから `SLOW_STAGE` を過ぎた後の各段と、
+/// 書き終えられなかったときに、それまでの段の時刻を状態ディレクトリのログ (`log/evoeditor.log`) に 1 行ずつ書く。
+/// 段ごとに書くのは、途中で OS に終了させられても、どの段まで進んだかを残すため。速く終わる普段の退避では何も書かない。
+struct Stages {
+    start: Instant,
+    reason: RescueReason,
+    log: crate::log::Logger,
+    done: String,
+}
+
+/// これより遅い退避の段をログに書く。
+const SLOW_STAGE: Duration = Duration::from_millis(500);
+
+impl Stages {
+    fn new(reason: RescueReason, state_dir: Option<&Path>, start: Instant) -> Stages {
+        Stages {
+            start,
+            reason,
+            log: crate::log::Logger::with_level(state_dir, crate::log::Level::Warn),
+            done: String::new(),
+        }
+    }
+
+    /// 段 `name` を終えた。遅ければ、ここまでの段をログに書く。
+    fn mark(&mut self, name: &str) {
+        let ms = self.start.elapsed().as_millis();
+        if !self.done.is_empty() {
+            self.done.push_str(", ");
+        }
+        self.done.push_str(&format!("{name} {ms} ms"));
+        if self.start.elapsed() >= SLOW_STAGE {
+            self.write("遅い");
+        }
+    }
+
+    /// 終わった。書き終えられなかったら、ここまでの段をログに書く。
+    fn finish(&mut self, out: &RescueOutcome) {
+        if !out.complete {
+            self.write(&format!(
+                "書き終えられなかった ({}/{} 件)",
+                out.written, out.total
+            ));
+        }
+    }
+
+    fn write(&self, what: &str) {
+        self.log.log(
+            crate::log::Level::Warn,
+            &format!(
+                "退避の段の時間 ({}、{what}): {}",
+                self.reason.as_str(),
+                self.done
+            ),
+        );
+    }
+}
+
 impl StateRescue {
     /// `write` の本体。時間切れだけが中断で、1 文書の書込の失敗 (権限・ロック) はその文書を `written = false` のまま
     /// 次の文書へ進む (複数文書で、1 件の失敗が他の文書を落とさないため。03 §9.8 の不変条件 5、§10.1)。
@@ -399,6 +456,7 @@ impl StateRescue {
             .map_or(budget, |ms| budget.min(Duration::from_millis(ms)));
         let start = Instant::now();
         let expired = || start.elapsed() >= budget;
+        let mut stages = Stages::new(reason, self.state_dir.as_deref(), start);
         let mut out = RescueOutcome {
             total: docs.len(),
             sensitive: docs.iter().any(|d| d.sensitive),
@@ -424,9 +482,12 @@ impl StateRescue {
             Ok(x) => x,
             Err(e) => {
                 out.error = Some(e.to_string());
+                stages.mark("ディレクトリ (失敗)");
+                stages.finish(&out);
                 return out;
             }
         };
+        stages.mark("ディレクトリ");
         out.dir = Some(dir.clone());
         out.fallback = fallback;
         let created_at = timestamp_rfc3339(secs);
@@ -471,10 +532,14 @@ impl StateRescue {
             // 書く前に written = false の項目を載せる (途中で止まっても、書きかけの本文があることが分かる)
             entries.push(entry_clone(&entry));
             if publish(&entries, false).is_err() {
+                stages.mark(&format!("manifest {} (失敗)", i + 1));
                 entries.pop();
                 continue;
             }
-            match body(&dir.join(&file), d, &expired) {
+            stages.mark(&format!("manifest {}", i + 1));
+            let result = body(&dir.join(&file), d, &expired);
+            stages.mark(&format!("本文 {} ({} B)", i + 1, d.snapshot.len_bytes()));
+            match result {
                 Ok(Some(last)) => {
                     entry.final_newline = matches!(last, b'\n' | b'\r');
                     entry.written = true;
@@ -493,6 +558,8 @@ impl StateRescue {
         }
         out.complete = out.written == out.total;
         let _ = publish(&entries, out.complete);
+        stages.mark("完了の manifest");
+        stages.finish(&out);
         if out.written == 0 && out.total > 0 && out.error.is_none() {
             out.error = Some("書き込めませんでした".to_owned());
         }
