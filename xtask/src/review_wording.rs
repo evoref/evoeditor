@@ -7,15 +7,8 @@
 
 use std::collections::BTreeMap;
 
-use eve_docs_tables::{identifiers, read_tables};
-
 use crate::util::{read_text, workspace_root};
 
-const HEADINGS: [&str; 2] = [
-    "### 15.1 v0.1 の画面文言 (ja)",
-    "### 15.2 保存・読込・退避・パニックの文言目録",
-];
-const SCENE_COLUMNS: [&str; 3] = ["出す場面", "出す場面 (07 §4.2)", "内容"];
 const OUT: &str = "docs/review/ja-wording-v0.1.md";
 
 fn flatten(prefix: &str, v: &toml::Value, out: &mut BTreeMap<String, String>) {
@@ -38,32 +31,26 @@ fn flatten(prefix: &str, v: &toml::Value, out: &mut BTreeMap<String, String>) {
 }
 
 /// 目録のキー → 出す場面。`msg.<x>` の略記は `.text` / `.hint` の両方に同じ場面を引く。
-fn scenes(doc04: &str) -> BTreeMap<String, String> {
+/// 表は `eve_docs_tables::messages` で読む (読めなければ失敗にする)。場面の列が無い表のキーは載せない。
+fn scenes(doc04: &str) -> Result<BTreeMap<String, String>, String> {
+    use eve_docs_tables::messages::{read_catalog, read_screen};
+    let screen = read_screen(doc04).map_err(|e| format!("04 §15.1 を読めません: {e}"))?;
+    let catalog = read_catalog(doc04).map_err(|e| format!("04 §15.2 を読めません: {e}"))?;
     let mut out = BTreeMap::new();
-    for h in HEADINGS {
-        let Ok(tables) = read_tables(doc04, h, &["MessageKey"]) else {
+    for m in screen.into_iter().chain(catalog) {
+        if m.scene.is_empty() {
             continue;
-        };
-        for t in &tables {
-            let Some(col) = SCENE_COLUMNS.iter().find(|c| t.column(c).is_some()) else {
-                continue;
-            };
-            for row in &t.rows {
-                let scene = t.cell(row, col).unwrap_or_default().trim().to_owned();
-                for key in identifiers(t.cell(row, "MessageKey").unwrap_or_default()) {
-                    out.entry(key.clone()).or_insert_with(|| scene.clone());
-                    if key.starts_with("msg.") && !key.ends_with(".text") && !key.ends_with(".hint")
-                    {
-                        out.entry(format!("{key}.text"))
-                            .or_insert_with(|| scene.clone());
-                        out.entry(format!("{key}.hint"))
-                            .or_insert_with(|| scene.clone());
-                    }
-                }
-            }
+        }
+        let key = m.key;
+        out.entry(key.clone()).or_insert_with(|| m.scene.clone());
+        if key.starts_with("msg.") && !key.ends_with(".text") && !key.ends_with(".hint") {
+            out.entry(format!("{key}.text"))
+                .or_insert_with(|| m.scene.clone());
+            out.entry(format!("{key}.hint"))
+                .or_insert_with(|| m.scene.clone());
         }
     }
-    out
+    Ok(out)
 }
 
 fn group_of(key: &str) -> (&'static str, u8) {
@@ -98,7 +85,7 @@ pub fn run(args: &[String]) -> Result<(), String> {
     let mut texts = BTreeMap::new();
     flatten("", &value, &mut texts);
     texts.retain(|k, _| !k.starts_with("meta."));
-    let scenes = scenes(&read_text(&root.join("docs/04-tui-design.md"))?);
+    let scenes = scenes(&read_text(&root.join("docs/04-tui-design.md"))?)?;
 
     let mut groups: BTreeMap<(u8, &'static str), Vec<(&String, &String)>> = BTreeMap::new();
     for (k, v) in &texts {

@@ -13,7 +13,6 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 use std::path::Path;
 
-use crate::check_docs::id_refs;
 use crate::spec_index::scan;
 use crate::util::{read_text, rust_files, workspace_root};
 
@@ -25,14 +24,6 @@ struct Verify {
     id: String,
     at: String,
     test: String,
-}
-
-/// v0.2 の検証の単位。
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
-struct Unit {
-    requirement: String,
-    /// 番号付きの AC があればその ID (`AC-FR-101-1`)。無ければ要件だけ。
-    ac: Option<String>,
 }
 
 /// 規範行 ID の形 (`04-4.2-3`)。
@@ -164,88 +155,6 @@ fn scenario_files(dir: &Path) -> Vec<(String, std::path::PathBuf)> {
     out
 }
 
-/// 01 §5.5 の v0.2 の行から検証の単位を取り出す。
-fn v02_units(doc01: &str) -> Vec<Unit> {
-    let mut out = BTreeSet::new();
-    let mut inside = false;
-    for l in doc01.lines() {
-        if l.starts_with("## ") || l.starts_with("### ") {
-            inside = l.starts_with("### 5.5 ");
-            continue;
-        }
-        if !inside || !l.trim_start().starts_with('|') || l.contains("---") {
-            continue;
-        }
-        let cells: Vec<&str> = l
-            .trim()
-            .trim_matches('|')
-            .split('|')
-            .map(str::trim)
-            .collect();
-        if cells.len() < 2 || cells[0] == "要件" || !cells[0].contains("v0.2") {
-            continue;
-        }
-        let reqs: Vec<String> = id_refs(cells[0])
-            .into_iter()
-            .filter(|r| r.starts_with("FR-") || r.starts_with("NFR-"))
-            .collect();
-        let Some(first) = reqs.first().cloned() else {
-            continue;
-        };
-        let mut with_ac: BTreeSet<String> = BTreeSet::new();
-        for (req, n) in ac_heads(cells[1]) {
-            let req = req.unwrap_or_else(|| first.clone());
-            with_ac.insert(req.clone());
-            out.insert(Unit {
-                ac: Some(format!("AC-{req}-{n}")),
-                requirement: req,
-            });
-        }
-        for r in reqs {
-            if !with_ac.contains(&r) {
-                out.insert(Unit {
-                    requirement: r,
-                    ac: None,
-                });
-            }
-        }
-    }
-    out.into_iter().collect()
-}
-
-/// 受入基準のセルの `AC-<n>:` (間に括弧の注記を許す) と、その直前に書かれた要件 ID (`FR-101 AC-1:`)。
-fn ac_heads(cell: &str) -> Vec<(Option<String>, u32)> {
-    let mut out = Vec::new();
-    let mut from = 0;
-    while let Some(p) = cell[from..].find("AC-") {
-        let at = from + p;
-        from = at + 3;
-        let digits: String = cell[from..]
-            .chars()
-            .take_while(char::is_ascii_digit)
-            .collect();
-        let Ok(n) = digits.parse::<u32>() else {
-            continue;
-        };
-        let mut rest = cell[from + digits.len()..].trim_start();
-        if rest.starts_with('(') {
-            match rest.find(')') {
-                Some(q) => rest = rest[q + 1..].trim_start(),
-                None => continue,
-            }
-        }
-        if !rest.starts_with([':', '：']) {
-            continue;
-        }
-        // 直前の語が要件 ID なら、その要件の AC
-        let before = cell[..at].trim_end();
-        let last = before.rsplit([' ', '。', '、', '(']).next().unwrap_or("");
-        let req = (last.starts_with("FR-") || last.starts_with("NFR-")).then(|| last.to_owned());
-        out.push((req, n));
-    }
-    out
-}
-
 /// 要件の優先度 (01 の要件の表の行の `Must` / `Should` / `Could` で始まるセル)。
 fn priorities(doc01: &str) -> BTreeMap<String, String> {
     let mut out = BTreeMap::new();
@@ -289,7 +198,8 @@ fn build(root: &Path) -> Result<Report, String> {
         .into_iter()
         .map(|a| a.id)
         .collect();
-    let units = v02_units(&doc01);
+    let units = eve_docs_tables::ac::read_later_units(&doc01, "v0.2")
+        .map_err(|e| format!("01 §5.5 の表を読めません: {e}"))?;
     let v02_acs: BTreeSet<String> = units.iter().filter_map(|u| u.ac.clone()).collect();
     let prio = priorities(&doc01);
     let (verifies, spec_rows) = scan_sources(root);
@@ -411,46 +321,6 @@ pub fn run(args: &[String]) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn 受入基準の_ac_の頭を読む() {
-        assert_eq!(
-            ac_heads("FR-101 AC-1: 起動する。FR-103 AC-1: 一覧。AC-2 (v0.3): 後。AC-3 は本文"),
-            [
-                (Some("FR-101".to_owned()), 1),
-                (Some("FR-103".to_owned()), 1),
-                (None, 2)
-            ]
-        );
-    }
-
-    #[test]
-    fn v02_の単位を取り出す() {
-        let doc = "\
-### 5.5 v0.2 以降
-| 要件 | 受入基準 (概要) |
-|---|---|
-| FR-103 / FR-101 (v0.2) | FR-101 AC-1: a。FR-103 AC-2: b |
-| NFR-106 長大行 (v0.2) | AC-1: c。AC-2: d |
-| FR-518 (v0.2、Could) | 文だけ |
-| FR-122 (v0.3) | AC-1: 後の版 |
-## 6. 次
-";
-        let got: Vec<_> = v02_units(doc)
-            .into_iter()
-            .map(|u| format!("{} {}", u.requirement, u.ac.unwrap_or_default()))
-            .collect();
-        assert_eq!(
-            got,
-            [
-                "FR-101 AC-FR-101-1",
-                "FR-103 AC-FR-103-2",
-                "FR-518 ",
-                "NFR-106 AC-NFR-106-1",
-                "NFR-106 AC-NFR-106-2",
-            ]
-        );
-    }
 
     /// リポジトリの `verifies:` / `spec:` が存在する ID を指し、行列が最新 (CI の検査と同じ)。
     // verifies: NFR-708

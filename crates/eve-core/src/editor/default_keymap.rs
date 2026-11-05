@@ -229,7 +229,7 @@ pub(super) fn default_keymap() -> Keymap {
 mod tests {
     use super::super::keymap::{format_sequence, parse_sequence};
     use super::*;
-    use eve_docs_tables::{catalog, identifiers, strip_parentheticals};
+    use eve_docs_tables::{catalog, identifiers};
     use eve_view::KeyStroke;
     use std::collections::{BTreeMap, BTreeSet};
 
@@ -405,22 +405,14 @@ mod tests {
     /// 04 §7.3a の端末の横取り表から、その端末が横取りするキーの集合 (完全な形のキー表記だけが書いてある)。
     fn intercepted(terminal: &str) -> BTreeSet<String> {
         let doc = include_str!("../../../../docs/04-tui-design.md");
-        let start = doc.find("### 7.3a ").expect("7.3a がある");
-        let section = &doc[start..];
-        let row = section
-            .lines()
-            .find(|l| l.starts_with(&format!("| {terminal} |")))
-            .unwrap_or_else(|| panic!("{terminal} の行がある"));
-        let cell = row.split(" | ").nth(1).expect("横取りするキーの列");
-        let cell = strip_parentheticals(cell);
-        let mut out = BTreeSet::new();
-        for (i, part) in cell.split('`').enumerate() {
-            if i % 2 == 1 {
-                let seq = parse_sequence(part).unwrap_or_else(|e| panic!("{part}: {e:?}"));
-                out.insert(format_sequence(&seq));
-            }
-        }
-        out
+        eve_docs_tables::intercept::keys_of(doc, terminal)
+            .expect("04 §7.3a を読める")
+            .iter()
+            .map(|k| {
+                let seq = parse_sequence(k).unwrap_or_else(|e| panic!("{k}: {e:?}"));
+                format_sequence(&seq)
+            })
+            .collect()
     }
 
     /// 07 §11.6 末尾の「FR-606 の到達性検査」の頻出操作リスト (箇条書きの CommandId)。

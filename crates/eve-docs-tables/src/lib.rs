@@ -10,6 +10,8 @@ use std::fmt;
 pub mod ac;
 pub mod catalog;
 pub mod crates;
+pub mod intercept;
+pub mod messages;
 pub mod theme;
 
 /// 表の 1 行。
