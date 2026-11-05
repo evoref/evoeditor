@@ -78,7 +78,7 @@ pub struct EditorState {
     /// `config.reload` の途中: 解析したキーマップと、`config.toml` で変わった項目 (Editor が受け取って差し替える)。
     pub(super) reloaded: Option<(eve_config::KeymapFile, Vec<&'static str>)>,
     /// 今のユーザー層のキーマップの割当 (再読込で変わったかを比べる)。
-    pub(super) user_keymap_entries: Option<Vec<eve_config::KeymapEntry>>,
+    pub(crate) user_keymap_entries: Option<Vec<eve_config::KeymapEntry>>,
     /// テーマのロールの表 (色深度に合う段。テーマか色深度が変わったときに作り直す、07 §8.6)。
     pub(super) roles: std::sync::Arc<eve_view::RoleStyles>,
     /// テーマファイルから読んだテーマ (名前, テーマ)。`theme.name` が組込みでないときに使う。

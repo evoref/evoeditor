@@ -1,16 +1,21 @@
 //! キーマップ解決 (docs/02 §7.2 の K1〜K8、docs/07 §7)。frontend ではなく core が行う。
 //!
+//! spec: 02 §7.2, 07 §7, 07 §11.6 (既定キー), 04 §7.2
+//!
 //! 範囲: 層の優先、コンテキストの参照順、ストロークの列 (チョード) の保留と取消、`when` による有効判定、`mod` の解決。
 //! 層は組込みの既定キーマップとユーザーのキーマップ (`user_keymap`、07 §7.1)。曖昧なチョード
 //! (`chord_timeout_ms`、K3) と `captures_text` の層 (dialog、K1) は、それを使う層ができるまで使わない。
+
+pub(crate) mod default_keymap;
+mod user_keymap;
 
 use std::collections::HashMap;
 use std::fmt;
 
 use eve_view::{CommandId, KeyCode, KeyStroke, Modifiers};
 
-use super::command::{Args, CommandInvocation, InvocationSource};
-use super::context::{ContextExpr, CtxValue};
+use crate::editor::command::{Args, CommandInvocation, InvocationSource};
+use crate::editor::context::{ContextExpr, CtxValue};
 
 // ---------- ストロークの書式 (07 §7.2) ----------
 
@@ -274,7 +279,7 @@ impl Layer {
     }
 
     /// 条件に合う割当だけ残し、外した割当を返す。
-    pub(super) fn retain(&mut self, keep: impl Fn(&Binding) -> bool) -> Vec<Binding> {
+    pub(crate) fn retain(&mut self, keep: impl Fn(&Binding) -> bool) -> Vec<Binding> {
         let (kept, dropped): (Vec<_>, Vec<_>) = self.bindings.drain(..).partition(|b| keep(b));
         self.bindings = kept;
         dropped
@@ -396,7 +401,7 @@ impl Keymap {
     }
 
     /// ユーザー層より下の層に、`ctx` で `first` から始まる 2 ストローク以上の割当がある (単体との衝突、07 §7.6)。
-    pub(super) fn has_chord_starting_with(&self, ctx: &str, first: KeyStroke) -> bool {
+    pub(crate) fn has_chord_starting_with(&self, ctx: &str, first: KeyStroke) -> bool {
         self.layers.iter().filter(|l| l.name != "user").any(|l| {
             l.bindings
                 .iter()
@@ -405,7 +410,7 @@ impl Keymap {
     }
 
     /// 既定の層にある `command` の割当 (コンテキスト, キー列)。
-    pub(super) fn default_sequences(&self, command: &str) -> Vec<(&'static str, Vec<KeyStroke>)> {
+    pub(crate) fn default_sequences(&self, command: &str) -> Vec<(&'static str, Vec<KeyStroke>)> {
         self.layers
             .iter()
             .filter(|l| l.name == "default")
@@ -416,7 +421,7 @@ impl Keymap {
     }
 
     /// `command` の既定の割当のどれかが、今のキーマップで `command` に届く (脱出キーの検査、07 §7.6)。
-    pub(super) fn escape_reachable(&self, command: &str) -> bool {
+    pub(crate) fn escape_reachable(&self, command: &str) -> bool {
         let defaults = self.default_sequences(command);
         defaults.is_empty()
             || defaults.iter().any(|(ctx, seq)| {
@@ -462,7 +467,7 @@ impl Keymap {
 
     /// 層 (試験が既定の割当を列挙する)。
     #[cfg(test)]
-    pub(super) fn layers(&self) -> &[Layer] {
+    pub(crate) fn layers(&self) -> &[Layer] {
         &self.layers
     }
 

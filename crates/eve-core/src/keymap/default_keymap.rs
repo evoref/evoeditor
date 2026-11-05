@@ -2,10 +2,10 @@
 //! 登録済みのコマンドの割当だけを置く。コマンドを足す PR が、そのコマンドの割当を足す。
 //! `mod` は TUI では `ctrl` に解決する。`(alt)` の割当 (チョード・代替キー) はそのコマンドの PR で足す。
 
-use super::keymap::{Keymap, Layer};
+use super::{Keymap, Layer};
 
 /// 既定のキーマップを作る。
-pub(super) fn default_keymap() -> Keymap {
+pub(crate) fn default_keymap() -> Keymap {
     let mut l = Layer::new("default");
     // 置換欄の `enter` は 1 件置換 (検索欄の `enter` = `search.next` より先に評価する、07 §11.6)
     l.bind(
@@ -82,7 +82,7 @@ pub(super) fn default_keymap() -> Keymap {
     bind("palette", "pageup", "ui.list_page_up");
     // テスト専用: パニックの注入 (本来キー割当なし。E2E が端末から送れるよう、フックがあるときだけ割り当てる)
     #[cfg(feature = "test-hooks")]
-    if super::overlay::test_hook_panic_command() {
+    if crate::editor::overlay::test_hook_panic_command() {
         bind("global", "f12", "internal.debug_panic");
     }
     // 確認ダイアログ (モーダル。dialog のみを参照する)
@@ -227,7 +227,7 @@ pub(super) fn default_keymap() -> Keymap {
 
 #[cfg(test)]
 mod tests {
-    use super::super::keymap::{format_sequence, parse_sequence};
+    use super::super::{format_sequence, parse_sequence};
     use super::*;
     use eve_docs_tables::{catalog, identifiers};
     use eve_view::KeyStroke;

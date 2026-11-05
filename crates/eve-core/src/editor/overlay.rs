@@ -1059,7 +1059,7 @@ pub(super) fn register(r: &mut CommandRegistry) {
 
 /// `EVE_TEST_HOOK` に `panic_command` があるか (09 §3.6。無ければ `internal.debug_panic` を登録しない)。
 #[cfg(feature = "test-hooks")]
-pub(super) fn test_hook_panic_command() -> bool {
+pub(crate) fn test_hook_panic_command() -> bool {
     std::env::var("EVE_TEST_HOOK").is_ok_and(|v| {
         v.split(',')
             .any(|h| h.split('=').next() == Some("panic_command"))
