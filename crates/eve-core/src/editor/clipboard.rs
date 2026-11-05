@@ -37,7 +37,7 @@ impl ClipboardSource {
 
 /// 内部レジスタ・ハンドルの表・貼り付け要求の状態。
 #[derive(Debug, Default)]
-pub(super) struct ClipboardState {
+pub(crate) struct ClipboardState {
     register: Option<ClipboardSource>,
     handles: BTreeMap<ClipboardHandleId, ClipboardSource>,
     next_handle: u64,
@@ -50,7 +50,7 @@ pub(super) struct ClipboardState {
 
 impl EditorState {
     /// 今の文書が編集できるか。
-    pub(super) fn active_document_editable(&self) -> bool {
+    pub(crate) fn active_document_editable(&self) -> bool {
         self.active_document()
             .and_then(|d| self.documents.get(&d))
             .is_some_and(|d| d.is_editable())
@@ -70,7 +70,7 @@ impl EditorState {
     }
 
     /// 選択をコピーする。選択が空なら何もしない (`false`)。内部レジスタへ書き、`SetClipboard` を積む。
-    pub(super) fn copy_selection(&mut self) -> bool {
+    pub(crate) fn copy_selection(&mut self) -> bool {
         let Some(doc_id) = self.active_document() else {
             return false;
         };
@@ -98,7 +98,7 @@ impl EditorState {
     }
 
     /// 文字列をコピーする (文書の外の文字列。メッセージ履歴など)。内部レジスタへ書き、`SetClipboard` を積む。
-    pub(super) fn copy_text(&mut self, text: &str) {
+    pub(crate) fn copy_text(&mut self, text: &str) {
         let snapshot = eve_text::Text::from(text).snapshot();
         let range = ByteRange::new(eve_text::ByteOff(0), eve_text::ByteOff(text.len()));
         self.put_clipboard(ClipboardSource { snapshot, range });
@@ -129,7 +129,7 @@ impl EditorState {
     }
 
     /// `edit.paste`: システムクリップボードの読み取りを要求する。応答は `on_clipboard_content`。
-    pub(super) fn request_paste(&mut self) -> CommandResult {
+    pub(crate) fn request_paste(&mut self) -> CommandResult {
         self.clipboard.next_token += 1;
         let token = ClipboardToken(self.clipboard.next_token);
         self.clipboard.token = Some(token);
@@ -185,13 +185,13 @@ impl EditorState {
     }
 }
 
-pub(super) fn copy(ctx: &mut CommandCtx<'_>) -> CommandResult {
+pub(crate) fn copy(ctx: &mut CommandCtx<'_>) -> CommandResult {
     // 選択が空なら何もしない (通知もしない、03 §15.3)
     ctx.state.copy_selection();
     CommandResult::Done
 }
 
-pub(super) fn paste(ctx: &mut CommandCtx<'_>) -> CommandResult {
+pub(crate) fn paste(ctx: &mut CommandCtx<'_>) -> CommandResult {
     if !ctx.state.active_document_editable() {
         return CommandResult::Rejected(RejectReason::ReadOnly);
     }

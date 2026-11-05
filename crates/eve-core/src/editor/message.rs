@@ -8,7 +8,7 @@ use super::state::EditorState;
 
 /// 表示中のメッセージ (解決済みの文言)。
 #[derive(Clone, Debug)]
-pub(super) struct ShownMessage {
+pub(crate) struct ShownMessage {
     pub level: MessageLevel,
     pub text: String,
     pub hint: Option<String>,
@@ -17,11 +17,11 @@ pub(super) struct ShownMessage {
 }
 
 /// 履歴に残すメッセージの上限 (04 §8.9、02 §14.1 MR8)。
-pub(super) const HISTORY_MAX: usize = 1_000;
+pub(crate) const HISTORY_MAX: usize = 1_000;
 
 /// 履歴の 1 件 (解決済みの文言)。時刻は起動からの経過 (core は壁時計を持たない)。
 #[derive(Clone, Debug)]
-pub(super) struct LoggedMessage {
+pub(crate) struct LoggedMessage {
     pub level: MessageLevel,
     pub text: String,
     pub hint: Option<String>,
@@ -35,7 +35,7 @@ impl EditorState {
     }
 
     /// `{key:<command_id>}` のキー表記を引く (解決済みキーマップの第一割当)。`Editor` がキーマップの変更ごとに更新する。
-    pub(super) fn key_label(&self, command: &str) -> Option<String> {
+    pub(crate) fn key_label(&self, command: &str) -> Option<String> {
         self.key_labels.get(command).cloned()
     }
 
@@ -56,14 +56,14 @@ impl EditorState {
         self.key_all = all;
     }
 
-    pub(super) fn key_sequence(&self, command: &str) -> Option<Vec<eve_view::KeyStroke>> {
+    pub(crate) fn key_sequence(&self, command: &str) -> Option<Vec<eve_view::KeyStroke>> {
         self.key_seqs.get(command).cloned()
     }
 
     /// MessageKey を解決して表示する。`msg.*` は `.text` と `.hint`、それ以外は 1 つの文。
     /// 外向きには `EditorEvent::MessageShown` (キーだけ) も積む。
     /// メッセージ `key` の本文だけを解決する (確認ダイアログの本文に入れる。`hint` は含めない)。
-    pub(super) fn message_text(&self, key: &str, args: &[(&str, &str)]) -> String {
+    pub(crate) fn message_text(&self, key: &str, args: &[(&str, &str)]) -> String {
         let cat = self.catalog();
         let label = |c: &str| self.key_label(c);
         let text_key = format!("{key}.text");
@@ -75,7 +75,7 @@ impl EditorState {
     }
 
     /// 読み取り専用の文書を編集しようとした: 理由つきで拒否したことを示す (`msg.edit.read_only`、FR-116 AC-1)。
-    pub(super) fn notify_read_only(&mut self) {
+    pub(crate) fn notify_read_only(&mut self) {
         use crate::document::ReadOnlyReason as R;
         let reason = self
             .active_document()
@@ -148,7 +148,7 @@ impl EditorState {
 
     /// キー入力でメッセージを消す (04 §8.9): Info は次のキー入力で、Warning は `Esc` または (最低 1 秒表示した後の)
     /// 次のキー入力で、Error は `Esc` で消える。`Esc` の優先順位 (オーバーレイ・チョード・読込の取消が先) は呼び出し側が決める。
-    pub(super) fn dismiss_message_on_key(&mut self, is_esc: bool) {
+    pub(crate) fn dismiss_message_on_key(&mut self, is_esc: bool) {
         let now = self.now;
         let dismiss = match &self.message {
             Some(m) => match m.level {
@@ -168,7 +168,7 @@ impl EditorState {
     }
 
     /// 編集などのコマンドを実行したら Error を消す (カーソル移動では消えない)。
-    pub(super) fn dismiss_error_on_command(&mut self) {
+    pub(crate) fn dismiss_error_on_command(&mut self) {
         if self
             .message
             .as_ref()
@@ -180,11 +180,11 @@ impl EditorState {
         }
     }
 
-    pub(super) fn unread_messages(&self) -> u16 {
+    pub(crate) fn unread_messages(&self) -> u16 {
         self.unread
     }
 
-    pub(super) fn current_message(&self) -> Option<&ShownMessage> {
+    pub(crate) fn current_message(&self) -> Option<&ShownMessage> {
         self.message.as_ref()
     }
 }

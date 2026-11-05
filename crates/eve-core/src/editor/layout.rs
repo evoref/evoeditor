@@ -55,7 +55,7 @@ fn width_config() -> WidthConfig {
 }
 
 /// 本文の表示幅の設定 (文書ごとの `display` を反映する)。
-pub(super) fn doc_width_config(doc: &Document) -> WidthConfig {
+pub(crate) fn doc_width_config(doc: &Document) -> WidthConfig {
     WidthConfig {
         tab_width: doc.display.tab_width,
         ambiguous_wide: doc.display.ambiguous_wide,
@@ -264,7 +264,7 @@ fn line_content(doc: &Document, line: usize) -> (usize, String) {
 }
 
 /// 行 `line` が長大行 (バイト長が文書の `format.long_line_threshold` を超える、03 §11.5.1) か。行インデックスから O(1)。
-pub(super) fn is_long_line(doc: &Document, line: usize) -> bool {
+pub(crate) fn is_long_line(doc: &Document, line: usize) -> bool {
     let t = doc.text();
     let l = LineIdx(line);
     t.line_end_byte(l).0 - t.line_to_byte(l).0 > doc.format.long_line_threshold
@@ -339,7 +339,7 @@ fn esc_enabled(doc: &Document) -> bool {
 }
 
 /// 行内のバイト位置 `byte` にあるカーソルの (表示列, そのセルの幅)。行末では (行の幅, 1)。
-pub(super) fn cursor_cell(doc: &Document, line: usize, byte: usize) -> (usize, usize) {
+pub(crate) fn cursor_cell(doc: &Document, line: usize, byte: usize) -> (usize, usize) {
     if let Some((ls, ix)) = long_index(doc, line) {
         let (p, w) = ix.at_byte(doc.text(), ls, byte);
         return (p.col, w);
@@ -353,18 +353,18 @@ pub(super) fn cursor_cell(doc: &Document, line: usize, byte: usize) -> (usize, u
 }
 
 /// 長大行なら、行内の位置 `byte` より前の char 数 (ステータスバーの桁。書記素 = char とみなす、03 §11.5.1)。
-pub(super) fn long_line_chars(doc: &Document, line: usize, byte: usize) -> Option<usize> {
+pub(crate) fn long_line_chars(doc: &Document, line: usize, byte: usize) -> Option<usize> {
     let (ls, ix) = long_index(doc, line)?;
     Some(ix.at_byte(doc.text(), ls, byte).0.chars)
 }
 
 /// 行内のバイト位置 `byte` にあるカーソルの表示列 (行頭から)。移動の目標列もこの表示と同じ幅で数える。
-pub(super) fn cursor_col(doc: &Document, line: usize, byte: usize) -> usize {
+pub(crate) fn cursor_col(doc: &Document, line: usize, byte: usize) -> usize {
     cursor_cell(doc, line, byte).0
 }
 
 /// 表示列 `dcol` に対応する行内のバイト位置。セルの途中は、その単位の前に寄せる (`Bias::Before`)。行の幅を超えれば行末。
-pub(super) fn byte_at_col(doc: &Document, line: usize, dcol: usize) -> usize {
+pub(crate) fn byte_at_col(doc: &Document, line: usize, dcol: usize) -> usize {
     if let Some((ls, ix)) = long_index(doc, line) {
         return ix.at_col(doc.text(), ls, dcol).byte;
     }
@@ -376,7 +376,7 @@ pub(super) fn byte_at_col(doc: &Document, line: usize, dcol: usize) -> usize {
 }
 
 /// 折り返し幅: 本文の幅 − 右余白 1 (行末にぶら下げた空白がその 1 セルに入る、03 §14.3.1)。
-pub(super) fn wrap_width(doc: &Document, viewport: (u16, u16)) -> usize {
+pub(crate) fn wrap_width(doc: &Document, viewport: (u16, u16)) -> usize {
     let cols = viewport.0 as usize;
     let gw = gutter_width(doc, cols) as usize;
     cols.saturating_sub(gw).saturating_sub(1).max(1)
@@ -384,7 +384,7 @@ pub(super) fn wrap_width(doc: &Document, viewport: (u16, u16)) -> usize {
 
 /// 折り返し ON の View の (設定, 折り返し幅)。OFF は `None` (移動とスクロールは論理行のまま)。
 /// 長大行を含む文書は、`view.wrap` の値に依らず折り返さない (03 §11.5.1)。
-pub(super) fn wrap_ctx(state: &EditorState, view: ViewId) -> Option<(WrapSettings, usize)> {
+pub(crate) fn wrap_ctx(state: &EditorState, view: ViewId) -> Option<(WrapSettings, usize)> {
     let v = state.view(view)?;
     if !v.wrap.is_on() {
         return None;
@@ -398,7 +398,7 @@ pub(super) fn wrap_ctx(state: &EditorState, view: ViewId) -> Option<(WrapSetting
 
 /// 1 論理行を表示行に分けた結果 (03 §14.3.1)。移動とスクロールが表示行を数えるのに使う。
 /// 位置はすべて行頭からのバイト位置 (`rel`)。
-pub(super) struct LineRows {
+pub(crate) struct LineRows {
     /// 行頭の絶対バイト位置。
     pub ls: usize,
     content_len: usize,
@@ -406,7 +406,7 @@ pub(super) struct LineRows {
     rows: Vec<wrap::WrapRow>,
 }
 
-pub(super) fn line_rows(doc: &Document, line: usize, s: WrapSettings, cols: usize) -> LineRows {
+pub(crate) fn line_rows(doc: &Document, line: usize, s: WrapSettings, cols: usize) -> LineRows {
     let (ls, content) = line_content(doc, line);
     let units = units_for(doc, line, &content);
     let rows = wrap_line(&content, &units, cols, s);
@@ -462,7 +462,7 @@ impl LineRows {
 }
 
 /// 行番号のガターの幅 (桁数 + 区切りの空白 1)。画面が狭くて本文が入らないときは、ガターを出さない (0)。
-pub(super) fn gutter_width(doc: &Document, cols: usize) -> u16 {
+pub(crate) fn gutter_width(doc: &Document, cols: usize) -> u16 {
     let lines = doc.text().len_lines().max(1);
     let w = lines.to_string().len().max(2) + 1;
     if cols >= w + 2 { w as u16 } else { 0 }
@@ -696,7 +696,7 @@ fn line_number_style(roles: &eve_view::RoleStyles, line: usize, cursor_line: usi
 
 /// 文字列を `CellText` にする (INV-F1: 制御文字などは記号に展開済み。幅は core が計算する)。
 /// `cut` が `Never` 以外のときは 1 書記素 = 1 `Span` で渡す。
-pub(super) fn cell_text(s: &str, cut: CutPolicy) -> CellText {
+pub(crate) fn cell_text(s: &str, cut: CutPolicy) -> CellText {
     let cfg = width_config();
     let mut spans = Vec::new();
     let mut width = 0u16;
@@ -863,7 +863,7 @@ fn wrapped_rows(
 }
 
 /// Window の Frame を作る。
-pub(super) fn build_frame(
+pub(crate) fn build_frame(
     state: &EditorState,
     window: WindowId,
     chord: &[eve_view::KeyStroke],
@@ -1027,7 +1027,7 @@ pub(super) fn build_frame(
 }
 
 /// 水平スクロールの調整に使う、primary のカーソルの (表示列, セルの幅)。
-pub(super) fn primary_cursor_cell(state: &EditorState, view: ViewId) -> Option<(usize, usize)> {
+pub(crate) fn primary_cursor_cell(state: &EditorState, view: ViewId) -> Option<(usize, usize)> {
     let v = state.view(view)?;
     let d = state.document(v.doc)?;
     let head = v.selection.primary().head;

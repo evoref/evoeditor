@@ -65,7 +65,7 @@ pub fn resolve_theme(theme: &Theme, d: ColorDepth) -> RoleStyles {
 
 impl EditorState {
     /// ロールの表を作り直す (色深度・テーマが変わったとき)。
-    pub(super) fn refresh_roles(&mut self) {
+    pub(crate) fn refresh_roles(&mut self) {
         let c = self.config();
         let name = with_background(c.theme_name.as_str(), c.theme_background).to_owned();
         // 組込みでなければテーマファイル (読めていればそれ、読めていなければ default、07 §8.6)

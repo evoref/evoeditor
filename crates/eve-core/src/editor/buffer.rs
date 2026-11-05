@@ -21,7 +21,7 @@ const MARKER_WIDTH: usize = 4;
 impl EditorState {
     /// 表示中の文書の、開いた順での番号 (1 始まり) と文書の数。文書が 1 件なら `None`
     /// (ステータスバーの `(2/3)`、03 §9.8)。置き換えの読込中の文書は数えない。
-    pub(super) fn buffer_position(&self) -> Option<(usize, usize)> {
+    pub(crate) fn buffer_position(&self) -> Option<(usize, usize)> {
         let active = self.active_document()?;
         let ids: Vec<DocumentId> = self
             .documents
@@ -74,7 +74,7 @@ impl EditorState {
     }
 
     /// 入力に合うバッファ (文書, 名前の中で照合した書記素の範囲)。空の入力は全件を並び順のまま返す。
-    pub(super) fn buffer_hits(&self, query: &str) -> Vec<(DocumentId, Vec<Range<usize>>)> {
+    pub(crate) fn buffer_hits(&self, query: &str) -> Vec<(DocumentId, Vec<Range<usize>>)> {
         let q = lower_graphemes(query.trim());
         self.buffer_order()
             .into_iter()
@@ -116,7 +116,7 @@ impl EditorState {
     }
 
     /// `ui.confirm`: 選んだ文書に切り替えて一覧を閉じる。候補が無ければ閉じない。
-    pub(super) fn buffer_list_confirm(&mut self) -> CommandResult {
+    pub(crate) fn buffer_list_confirm(&mut self) -> CommandResult {
         let Some(doc) = self.buffer_list_selected() else {
             return CommandResult::Done;
         };
@@ -135,7 +135,7 @@ impl EditorState {
     }
 
     /// 一覧の表示 (パレットと同じ `OverlayModel::List`)。行: 変更マーカー・名前、右に ディレクトリ と文字コード。
-    pub(super) fn buffer_list_model(&self, p: &PaletteState) -> OverlayModel {
+    pub(crate) fn buffer_list_model(&self, p: &PaletteState) -> OverlayModel {
         let render = |key: &str, args: &[(&str, &str)]| {
             self.catalog().render(key, args, &|c| self.key_label(c))
         };
@@ -221,7 +221,7 @@ impl EditorState {
     }
 
     /// 文書を閉じる要求。dirty なら FR-107 の確認を出す (保存を選んだら保存が成功したときだけ閉じる)。
-    pub(super) fn request_close(&mut self, doc: DocumentId) -> CommandResult {
+    pub(crate) fn request_close(&mut self, doc: DocumentId) -> CommandResult {
         if self.confirm_doc_if_dirty(doc, "unsaved_close", Continuation::Close(doc)) {
             return CommandResult::Done;
         }
@@ -230,7 +230,7 @@ impl EditorState {
 
     /// 確認を済ませた (破棄または保存した) 後に文書を閉じる。表示中の文書なら、最近使った順で次の文書を表示する。
     /// 最後の 1 件なら無題の文書を新しく作る (終了はしない、03 §9.8)。
-    pub(super) fn close_buffer(&mut self, doc: DocumentId) -> CommandResult {
+    pub(crate) fn close_buffer(&mut self, doc: DocumentId) -> CommandResult {
         if self.active_document() == Some(doc) {
             let next = self
                 .recent
@@ -283,7 +283,7 @@ fn buffer_prev(ctx: &mut CommandCtx<'_>) -> CommandResult {
 }
 
 /// v0.2 のバッファコマンド (07 §11.6 の `buffer.close` / `buffer.next` / `buffer.prev`)。
-pub(super) fn register(r: &mut CommandRegistry) {
+pub(crate) fn register(r: &mut CommandRegistry) {
     let spec = |id, perm, h| {
         CommandSpec::new(id, CommandKind::Ui, perm, "", h)
             .expect("カタログの when 句は構文が正しい")

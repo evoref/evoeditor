@@ -11,9 +11,9 @@ use eve_view::{DocumentId, ViewId};
 
 use crate::document::Document;
 
-use super::layout::{Affinity, WrapSettings, line_rows};
+use crate::editor::layout::{Affinity, WrapSettings, line_rows};
 
-use super::command::{
+use crate::editor::command::{
     ArgValue, CommandCtx, CommandKind, CommandRegistry, CommandResult, CommandSpec, Permission,
     RejectReason,
 };
@@ -60,17 +60,17 @@ fn line_of(doc: &Document, p: ByteOff) -> (usize, usize, usize) {
 fn display_col(doc: &Document, ls: usize, p: usize) -> u32 {
     // 表示 (Frame) と同じ幅で数える: タブ・記号・不正バイトの `<0xHH>` を含む
     let line = doc.text().byte_to_line(ByteOff(p)).0;
-    u32::try_from(super::layout::cursor_col(doc, line, p - ls)).unwrap_or(u32::MAX)
+    u32::try_from(crate::editor::layout::cursor_col(doc, line, p - ls)).unwrap_or(u32::MAX)
 }
 
 /// 行 `line` の表示列 `dcol` の位置 (セルの途中は前に寄せる)。
 fn pos_at_dcol(doc: &Document, line: usize, dcol: u32) -> ByteOff {
     let ls = doc.text().line_to_byte(LineIdx(line)).0;
-    ByteOff(ls + super::layout::byte_at_col(doc, line, dcol as usize))
+    ByteOff(ls + crate::editor::layout::byte_at_col(doc, line, dcol as usize))
 }
 
 /// 行頭空白 (空白とタブ) の直後 (インデント終端)。空白の続く間だけを読む (長大行でも行全体を読まない)。
-pub(super) fn indent_end(doc: &Document, ls: usize, le: usize) -> usize {
+pub(crate) fn indent_end(doc: &Document, ls: usize, le: usize) -> usize {
     let mut end = ls;
     for chunk in doc.text().chunks(ByteRange::new(ByteOff(ls), ByteOff(le))) {
         let n = chunk
@@ -89,9 +89,9 @@ pub(super) fn indent_end(doc: &Document, ls: usize, le: usize) -> usize {
 const WORD_WINDOW: usize = 64 * 1024;
 
 /// 単語移動の停止位置 (`forward` は右)。長大行は行全体を読まず、窓の中だけを見る (03 §11.5.1)。
-pub(super) fn word_stop(doc: &Document, p: ByteOff, forward: bool) -> ByteOff {
+pub(crate) fn word_stop(doc: &Document, p: ByteOff, forward: bool) -> ByteOff {
     let t = doc.text();
-    let long = super::layout::is_long_line(doc, t.byte_to_line(p).0);
+    let long = crate::editor::layout::is_long_line(doc, t.byte_to_line(p).0);
     match (forward, long) {
         (true, false) => next_word_stop(t, p),
         (false, false) => prev_word_stop(t, p),
@@ -249,7 +249,7 @@ fn run(ctx: &mut CommandCtx<'_>, m: Motion, extend: bool) -> CommandResult {
     let primary = view.selection.primary_index();
     let mut primary_goal = if m.keeps_goal() { view.goal_dcol } else { None };
     let mut primary_aff = view.cursor_affinity;
-    let wrap = super::layout::wrap_ctx(ctx.state, view_id);
+    let wrap = crate::editor::layout::wrap_ctx(ctx.state, view_id);
     let mut out = Vec::with_capacity(view.selection.len());
     for (i, r) in view.selection.iter().enumerate() {
         let mut own_goal = None;
@@ -350,14 +350,14 @@ fn goto_line(ctx: &mut CommandCtx<'_>) -> CommandResult {
     // 行の指定がないとき (Ctrl+G) は、行番号を尋ねる入力プロンプトを出す
     if ctx.args.get("line").is_none() {
         ctx.state
-            .open_prompt(super::overlay::PromptKind::GotoLine, String::new());
+            .open_prompt(crate::editor::overlay::PromptKind::GotoLine, String::new());
         return CommandResult::Done;
     }
     goto_line_command(ctx)
 }
 
 /// 行 (0 始まり) と桁 (1 始まり、書記素数) の位置。桁が行の長さを超えたら行末に丸める。
-pub(super) fn line_col_byte(t: &impl TextRead, line: usize, col: usize) -> ByteOff {
+pub(crate) fn line_col_byte(t: &impl TextRead, line: usize, col: usize) -> ByteOff {
     let (ls, le) = (
         t.line_to_byte(LineIdx(line)),
         t.line_end_byte(LineIdx(line)),
@@ -375,7 +375,7 @@ pub(super) fn line_col_byte(t: &impl TextRead, line: usize, col: usize) -> ByteO
 }
 
 /// `cursor.goto_line` の本体 (行の指定があるとき。プロンプトの確定からも使う)。
-pub(super) fn goto_line_command(ctx: &mut CommandCtx<'_>) -> CommandResult {
+pub(crate) fn goto_line_command(ctx: &mut CommandCtx<'_>) -> CommandResult {
     let Some((view_id, doc_id)) = active(ctx) else {
         return CommandResult::Rejected(RejectReason::NoTarget);
     };
@@ -435,7 +435,7 @@ macro_rules! reg {
 }
 
 /// v0.1 の移動・選択コマンド (07 §11.6。`ui.cancel` はオーバーレイと同時)。
-pub(super) fn register(r: &mut CommandRegistry) {
+pub(crate) fn register(r: &mut CommandRegistry) {
     reg!(r, "cursor.move_left", move_left);
     reg!(r, "cursor.move_right", move_right);
     reg!(r, "cursor.move_up", move_up);

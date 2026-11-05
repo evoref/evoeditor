@@ -23,7 +23,7 @@ use super::state::EditorState;
 
 /// 投入したジョブと、その結果の宛先。
 #[derive(Debug)]
-pub(super) enum Pending {
+pub(crate) enum Pending {
     /// `config.reload` の読込 (07 §6)。
     ConfigReload,
     /// テーマファイルの読込 (07 §8.6)。
@@ -106,14 +106,14 @@ pub(super) enum Pending {
 
 /// `file.set_encoding` が保存に渡す新しい書式 (保存が成功するまで文書の書式は変えない、03 §8.8)。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) struct NewFormat {
+pub(crate) struct NewFormat {
     pub encoding: Encoding,
     pub bom: bool,
 }
 
 /// 読込ジョブの用途。`Reopen` / `Reload` は同じ文書の中身を差し替える (03 §8.8 / §9.5)。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) enum OpenKind {
+pub(crate) enum OpenKind {
     Open,
     /// 文字コードを指定して開き直す: 履歴を消して差し替える (Undo できない)。
     Reopen,
@@ -123,7 +123,7 @@ pub(super) enum OpenKind {
 
 /// 開くときの確認 (`ui.confirm.open.*`、03 §9.2) に答えるための材料。読込中の文書 (Loading) は確認の間も残す。
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(super) struct OpenAsk {
+pub(crate) struct OpenAsk {
     pub doc: DocumentId,
     pub view: ViewId,
     pub path: FsPath,
@@ -136,7 +136,7 @@ pub(super) struct OpenAsk {
 
 /// 保存の失敗の後の選択 (`ui.confirm.save_failed`、03 §9.7 (e))。
 #[derive(Clone, Debug)]
-pub(super) struct SaveFailedAsk {
+pub(crate) struct SaveFailedAsk {
     pub doc: DocumentId,
     pub path: FsPath,
     pub expected: Expect,
@@ -148,7 +148,7 @@ pub(super) struct SaveFailedAsk {
 
 /// 表現不能の文字があって保存を中止した後の選択 (`ui.confirm.save.unmappable`、03 §8.6 の「E3 の選択肢」)。
 #[derive(Clone, Debug)]
-pub(super) struct UnmappableAsk {
+pub(crate) struct UnmappableAsk {
     pub doc: DocumentId,
     pub path: FsPath,
     pub expected: Expect,
@@ -163,7 +163,7 @@ pub(super) struct UnmappableAsk {
 /// 区分 B / D の確認 (別のバイト表現で保存される箇所がある、03 §8.6 E2') と、「読み取り専用を解除して保存」の確認 (FR-116)。
 /// 承認したら同じ保存を投入し直す。
 #[derive(Clone, Debug)]
-pub(super) struct LossyAsk {
+pub(crate) struct LossyAsk {
     pub doc: DocumentId,
     pub path: FsPath,
     pub expected: Expect,
@@ -174,7 +174,7 @@ pub(super) struct LossyAsk {
 
 /// 保存の代替の確認 (`AtomicUnsupported` / ハードリンク / `BackupFailed`、03 §9.3 手順 7・05 §4.4)。
 #[derive(Clone, Debug)]
-pub(super) struct FallbackAsk {
+pub(crate) struct FallbackAsk {
     pub kind: FallbackKind,
     pub doc: DocumentId,
     pub path: FsPath,
@@ -186,7 +186,7 @@ pub(super) struct FallbackAsk {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) enum FallbackKind {
+pub(crate) enum FallbackKind {
     /// 開いた後に既存のファイルが外部で変更された (`ui.confirm.save.conflict_changed`、03 §9.5)。選択肢: 上書き / 別名で保存 (既定)。
     ConflictChanged,
     /// 開いた後に既存のファイルが外部で削除された (`ui.confirm.save.conflict_deleted`)。「上書き」はファイルを作り直す。
@@ -208,7 +208,7 @@ impl EditorState {
     }
 
     /// 保存ジョブの完了を待っているか (ステータスバーの `[保存中]`)。
-    pub(super) fn is_saving(&self, doc: DocumentId) -> bool {
+    pub(crate) fn is_saving(&self, doc: DocumentId) -> bool {
         self.pending
             .values()
             .any(|p| matches!(p, Pending::Save { doc: d, .. } if *d == doc))
@@ -216,20 +216,20 @@ impl EditorState {
 
     /// 読込を待っている間、置き換え対象の今の文書は編集を受け付けない (03 §9.2 の置き換えの手順)。
     /// 編集は読込の完了で黙って捨てられてしまうため。
-    pub(super) fn open_in_progress(&self) -> bool {
+    pub(crate) fn open_in_progress(&self) -> bool {
         self.pending
             .values()
             .any(|p| matches!(p, Pending::Open { .. }))
     }
 
-    pub(super) fn save_in_progress(&self, doc_id: DocumentId) -> bool {
+    pub(crate) fn save_in_progress(&self, doc_id: DocumentId) -> bool {
         self.pending
             .values()
             .any(|p| matches!(p, Pending::Save { doc, .. } | Pending::CheckUnchanged { doc } if *doc == doc_id))
     }
 
     /// 進行中の読込 (開く・開き直し・再読込) の進捗 (百分率)。無ければ `None`。
-    pub(super) fn loading_percent(&self) -> Option<u8> {
+    pub(crate) fn loading_percent(&self) -> Option<u8> {
         self.pending.values().find_map(|p| match p {
             Pending::Open { doc, .. } => self.documents.get(doc).map(|d| d.load_percent),
             _ => None,
@@ -237,7 +237,7 @@ impl EditorState {
     }
 
     /// 読込中の文書の読込ジョブを取り消す。取り消すものがあれば `true`。
-    pub(super) fn cancel_loading(&mut self) -> bool {
+    pub(crate) fn cancel_loading(&mut self) -> bool {
         let ids: Vec<_> = self
             .pending
             .iter()
@@ -258,7 +258,7 @@ impl EditorState {
 
     /// `doc` を表示する (最初の Window の View をその文書のものにする)。文書の View が無ければ作る。
     /// 検索バーは文書ごとには持たないので、切り替える前に閉じる (03 §9.8)。
-    pub(super) fn activate_document(&mut self, doc: DocumentId) {
+    pub(crate) fn activate_document(&mut self, doc: DocumentId) {
         if self.active_document() == Some(doc) || !self.documents.contains_key(&doc) {
             return;
         }
@@ -287,7 +287,7 @@ impl EditorState {
     }
 
     /// Window の表示を `view` に切り替え、`old` の文書を閉じる。Window がなければ作る。
-    pub(super) fn show_view(&mut self, view: ViewId, old: Option<DocumentId>) {
+    pub(crate) fn show_view(&mut self, view: ViewId, old: Option<DocumentId>) {
         match self.windows.first_mut() {
             Some(w) => w.root = view,
             None => {
@@ -466,7 +466,7 @@ impl EditorState {
 
     /// 確認で「保存」を選んだ後: `doc_id` を保存し、成功したら `cont` を続ける。パスがなければ名前を尋ねてから保存する。
     /// 対象はアクティブ文書ではなく `doc_id` (保存の連鎖は保存した文書に属する、03 §9.8)。
-    pub(super) fn save_doc_then(
+    pub(crate) fn save_doc_then(
         &mut self,
         doc_id: DocumentId,
         cont: Continuation,
@@ -502,7 +502,7 @@ impl EditorState {
     }
 
     /// 名前を付けて保存 (パスを指定する)。
-    pub(super) fn request_save_as(
+    pub(crate) fn request_save_as(
         &mut self,
         raw_path: &str,
         cont: Option<Continuation>,
@@ -511,7 +511,7 @@ impl EditorState {
     }
 
     /// `request_save_as` に新しい書式を渡す版 (`file.set_encoding` の無題・読み取り専用の文書、03 §8.8)。
-    pub(super) fn request_save_as_fmt(
+    pub(crate) fn request_save_as_fmt(
         &mut self,
         raw_path: &str,
         cont: Option<Continuation>,
@@ -604,7 +604,7 @@ impl EditorState {
         }
     }
 
-    pub(super) fn start_save(
+    pub(crate) fn start_save(
         &mut self,
         doc_id: DocumentId,
         path: FsPath,
@@ -939,7 +939,7 @@ impl EditorState {
     }
 
     /// 表現不能の確認の選択 (キャンセルは `unmappable_cancelled`)。
-    pub(super) fn choose_unmappable(&mut self, ask: UnmappableAsk, id: &str) -> CommandResult {
+    pub(crate) fn choose_unmappable(&mut self, ask: UnmappableAsk, id: &str) -> CommandResult {
         // 保存へ進む選択では強調は要らない (キャンセルのときだけ次の編集まで残す)
         self.unmappable_marks = None;
         if id == "replace" {
@@ -1107,7 +1107,7 @@ impl EditorState {
 
     /// 置換の確認で「置換して保存」: ChangeSet を 1 つの Transaction (`Origin::System`、Undo で戻せる) として適用し、
     /// 同じ文字コードで保存し直す (03 §8.6)。作った Revision が古ければ作り直す。
-    pub(super) fn apply_replacement_and_save(
+    pub(crate) fn apply_replacement_and_save(
         &mut self,
         ask: UnmappableAsk,
         changes: eve_text::ChangeSet,
@@ -1178,7 +1178,7 @@ impl EditorState {
     }
 
     /// 強調する表現不能の文字 (文書が変わっていなければ)。
-    pub(super) fn unmappable_marks_for(&self, doc: DocumentId) -> Vec<(usize, usize)> {
+    pub(crate) fn unmappable_marks_for(&self, doc: DocumentId) -> Vec<(usize, usize)> {
         match &self.unmappable_marks {
             Some((d, rev, marks))
                 if *d == doc && self.documents.get(d).is_some_and(|x| x.revision() == *rev) =>
@@ -1190,7 +1190,7 @@ impl EditorState {
     }
 
     /// 表現不能の確認のキャンセル: 保存しない (後続も中止)。カーソルを最初の表現不能の位置へ移す。
-    pub(super) fn unmappable_cancelled(&mut self, ask: &UnmappableAsk) {
+    pub(crate) fn unmappable_cancelled(&mut self, ask: &UnmappableAsk) {
         if let Some((off, _, _)) = self.char_pos(ask.doc, ask.first_char)
             && let Some(view) = self
                 .first_window()
@@ -1285,7 +1285,7 @@ impl EditorState {
     }
 
     /// 「リンク先に作成」: 同じ保存を、リンク先を作る指定で投入し直す (キャンセルは呼び側が処理済み)。
-    pub(super) fn create_link_target(&mut self, ask: SaveFailedAsk) -> CommandResult {
+    pub(crate) fn create_link_target(&mut self, ask: SaveFailedAsk) -> CommandResult {
         let SaveFailedAsk {
             doc,
             path,
@@ -1299,7 +1299,7 @@ impl EditorState {
     }
 
     /// 保存の失敗の確認の選択 (キャンセルは呼び側が処理済み)。`id` は選択肢の ID。
-    pub(super) fn choose_save_failed(&mut self, ask: SaveFailedAsk, id: &str) -> CommandResult {
+    pub(crate) fn choose_save_failed(&mut self, ask: SaveFailedAsk, id: &str) -> CommandResult {
         let SaveFailedAsk {
             doc,
             path,
@@ -1449,7 +1449,7 @@ impl EditorState {
     }
 
     /// 区分 B / D の確認の選択 (キャンセルは呼び側が処理済み)。保存は、この Revision では確認を繰り返さずに投入し直す。
-    pub(super) fn choose_lossy(&mut self, ask: LossyAsk, choice: usize) -> CommandResult {
+    pub(crate) fn choose_lossy(&mut self, ask: LossyAsk, choice: usize) -> CommandResult {
         let LossyAsk {
             doc,
             path,
@@ -1489,7 +1489,7 @@ impl EditorState {
     }
 
     /// 「読み取り専用を解除して保存」の確認の選択 (キャンセルは呼び側が処理済み)。
-    pub(super) fn choose_clear_readonly(&mut self, ask: LossyAsk, choice: usize) -> CommandResult {
+    pub(crate) fn choose_clear_readonly(&mut self, ask: LossyAsk, choice: usize) -> CommandResult {
         let LossyAsk {
             doc,
             path,
@@ -1510,7 +1510,7 @@ impl EditorState {
 
     /// 読み取り専用の切替 (`file.toggle_read_only`、03 §9.6)。解除できるのは `FileAttribute` と `UserRequested` だけ。
     /// 編集できる文書では `UserRequested` を付ける。
-    pub(super) fn toggle_read_only(&mut self) -> CommandResult {
+    pub(crate) fn toggle_read_only(&mut self) -> CommandResult {
         use crate::document::{LoadState, ReadOnlyReason};
         let Some(doc_id) = self.active_document() else {
             return CommandResult::Rejected(RejectReason::NoTarget);
@@ -1541,7 +1541,7 @@ impl EditorState {
     }
 
     /// 保存の代替の確認の選択 (キャンセルは呼び側が処理済み)。
-    pub(super) fn choose_fallback(&mut self, ask: FallbackAsk, choice: usize) -> CommandResult {
+    pub(crate) fn choose_fallback(&mut self, ask: FallbackAsk, choice: usize) -> CommandResult {
         let FallbackAsk {
             kind,
             doc,
@@ -1589,7 +1589,7 @@ impl EditorState {
 
     /// 起動時に退避ディレクトリを走査するジョブを投入する (`open_initial` が呼ぶ)。前回起動した版の記録 (FR-518) の
     /// ジョブを先に積む (`io` は直列なので、退避の案内のほうが後に出て、メッセージ行に残る)。
-    pub(super) fn start_recovery_scan(&mut self) {
+    pub(crate) fn start_recovery_scan(&mut self) {
         let job = self.jobs.spawn(
             None,
             eve_view::Revision::INITIAL,
@@ -1869,7 +1869,7 @@ impl EditorState {
     }
 
     /// 開くときの確認の選択 (キャンセルは呼び側が `open_aborted` を呼ぶ)。`id` は選択肢の ID。
-    pub(super) fn choose_open(&mut self, ask: OpenAsk, id: &str) -> CommandResult {
+    pub(crate) fn choose_open(&mut self, ask: OpenAsk, id: &str) -> CommandResult {
         match id {
             "readonly" => {
                 let mut opts = ask.opts;
@@ -1899,7 +1899,7 @@ impl EditorState {
     }
 
     /// 開くのを中止した (確認の `Esc` / 中止、文字コードの入力の `Esc`)。読込中の文書を捨てる。
-    pub(super) fn open_aborted(&mut self, ask: &OpenAsk) {
+    pub(crate) fn open_aborted(&mut self, ask: &OpenAsk) {
         if ask.kind != OpenKind::Open {
             // 開き直し・再読込の中止: 旧本文・書式・履歴をそのまま保つ (03 §8.8 / §9.5)
             self.reopen_restore(ask.doc);
@@ -1921,7 +1921,7 @@ impl EditorState {
     }
 
     /// 確認の回答の後、同じ読込中の文書へ `opts` で先頭から読み直すジョブを投入する。
-    pub(super) fn respawn_open(&mut self, ask: OpenAsk, opts: OpenOptions) -> CommandResult {
+    pub(crate) fn respawn_open(&mut self, ask: OpenAsk, opts: OpenOptions) -> CommandResult {
         let job = self.jobs.spawn(
             Some(ask.doc),
             eve_view::Revision::INITIAL,
@@ -1977,7 +1977,7 @@ impl EditorState {
     }
 
     /// 確認を済ませた (または dirty でない) 開き直しの開始。同じ `DocumentId` で読込ジョブを投入し、読込中は旧本文を表示し続ける。
-    pub(super) fn start_reopen(&mut self, doc_id: DocumentId, enc: Encoding) -> CommandResult {
+    pub(crate) fn start_reopen(&mut self, doc_id: DocumentId, enc: Encoding) -> CommandResult {
         // 利用者の指定と書込権限の理由は開き直しでも保つ (03 §8.8 の「読み取り専用の理由の差し替え」)
         self.start_in_place(
             doc_id,
@@ -1991,7 +1991,7 @@ impl EditorState {
     }
 
     /// 確認を済ませた (または dirty でない) 再読込の開始 (03 §9.5)。文字コードは今のものを明示指定して判定し直さない。
-    pub(super) fn start_reload(&mut self, doc_id: DocumentId) -> CommandResult {
+    pub(crate) fn start_reload(&mut self, doc_id: DocumentId) -> CommandResult {
         // 再読込は `Binary` と `LargeFileViewer` も保つ (明示指定の読込ではバイナリの判定をしない)
         self.start_in_place(
             doc_id,
@@ -2730,7 +2730,7 @@ fn human_size(n: u64) -> String {
 }
 
 /// `{reason}` に入れる短い分類名 (技術的な識別子。OS のエラーの分類文言 `ui.reason.*` は目録ができてから)。
-pub(super) fn reason_label(err: &JobError) -> String {
+pub(crate) fn reason_label(err: &JobError) -> String {
     match err {
         JobError::Fs(e) => fs_reason(e),
         JobError::Panic => "panic".to_owned(),
@@ -2740,7 +2740,7 @@ pub(super) fn reason_label(err: &JobError) -> String {
 }
 
 /// 読んだ (書いた) ときの Stamp `d` と今の Stamp `now` が同じファイルの同じ内容を指すか (03 §9.3 手順 0・§9.5)。
-pub(super) fn same_on_disk(d: &crate::FileStamp, now: &crate::FileStamp) -> bool {
+pub(crate) fn same_on_disk(d: &crate::FileStamp, now: &crate::FileStamp) -> bool {
     // 内容ハッシュが双方にあれば、それで決める (mtime だけが違っても中身が同じなら変更なし、
     // mtime が同じでも中身が違えば変更あり。05 §5.5)
     let same_hash = d.hash.zip(now.hash).map(|(a, b)| a == b);
@@ -2752,7 +2752,7 @@ pub(super) fn same_on_disk(d: &crate::FileStamp, now: &crate::FileStamp) -> bool
         }
 }
 
-pub(super) fn fs_reason(e: &FsError) -> String {
+pub(crate) fn fs_reason(e: &FsError) -> String {
     format!("{:?}", e.kind)
         .split([' ', '{'])
         .next()
@@ -2944,7 +2944,7 @@ macro_rules! reg {
 }
 
 /// v0.1 のファイルコマンドのうち、確認 UI なしで動くもの (07 §11.6 の「ファイル・アプリ」)。
-pub(super) fn register(r: &mut CommandRegistry) {
+pub(crate) fn register(r: &mut CommandRegistry) {
     reg!(r, "file.new", CommandKind::File, "", file_new);
     reg!(r, "file.open", CommandKind::File, "", file_open);
     reg!(

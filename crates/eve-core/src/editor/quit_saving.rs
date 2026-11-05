@@ -20,7 +20,7 @@ const WAIT: Millis = Millis(5_000);
 
 /// 保存中に終了を求められている。
 #[derive(Clone, Copy, Debug)]
-pub(super) struct QuitWait {
+pub(crate) struct QuitWait {
     /// 確認を出す時刻。
     pub deadline: Tick,
     /// 確認を出した (自動では出し直さない)。
@@ -29,7 +29,7 @@ pub(super) struct QuitWait {
 
 /// 「保存を中止して終了」を選んだ後の状態。保存ジョブがすべて終わったら終了する。
 #[derive(Debug, Default)]
-pub(super) struct QuitAbort {
+pub(crate) struct QuitAbort {
     /// 終了時の stderr に出す行 (失敗した保存のもの)。
     pub stderr: Vec<StderrLine>,
 }
@@ -47,7 +47,7 @@ impl EditorState {
     }
 
     /// `app.quit` の入口: 保存ジョブが実行中なら待つ。待つ場合は `Some`。
-    pub(super) fn quit_while_saving(&mut self, user: bool) -> Option<CommandResult> {
+    pub(crate) fn quit_while_saving(&mut self, user: bool) -> Option<CommandResult> {
         if self.quit_abort.is_some() {
             // 中止して終了の最中: 終了は取り消せない
             return Some(CommandResult::Done);
@@ -76,12 +76,12 @@ impl EditorState {
     }
 
     /// 次に確認を出す時刻。
-    pub(super) fn quit_wait_deadline(&self) -> Option<Tick> {
+    pub(crate) fn quit_wait_deadline(&self) -> Option<Tick> {
         self.quit_wait.filter(|w| !w.asked).map(|w| w.deadline)
     }
 
     /// `Editor::tick` から: 待ちが終わっていれば片付け、5 秒を超えていれば確認を出す。
-    pub(super) fn quit_wait_tick(&mut self) {
+    pub(crate) fn quit_wait_tick(&mut self) {
         let Some(w) = self.quit_wait else {
             return;
         };
@@ -145,7 +145,7 @@ impl EditorState {
     }
 
     /// 確認への答え。「待つ」は何もしない (`Esc` も同じ)。「中止して終了」は取消しを送り、全部の保存が終わるのを待つ。
-    pub(super) fn choose_quit_saving(&mut self, id: &str) -> CommandResult {
+    pub(crate) fn choose_quit_saving(&mut self, id: &str) -> CommandResult {
         if id != "abort" {
             return CommandResult::Done;
         }
@@ -162,7 +162,7 @@ impl EditorState {
 
     /// 「中止して終了」の最中に保存ジョブの結果が届いた。採用する (成功) か、失敗の行を覚える。
     /// 取り扱った (通常の完了の規則に進まない) ときは `true`。
-    pub(super) fn quit_abort_save_result(&mut self, path: &FsPath, r: &JobResult) -> bool {
+    pub(crate) fn quit_abort_save_result(&mut self, path: &FsPath, r: &JobResult) -> bool {
         let Some(abort) = self.quit_abort.as_mut() else {
             return false;
         };
@@ -214,7 +214,7 @@ impl EditorState {
     }
 
     /// 保存ジョブがすべて終わっていれば、dirty な文書の退避を伴う終了を要求する。
-    pub(super) fn quit_abort_check(&mut self) {
+    pub(crate) fn quit_abort_check(&mut self) {
         if self.quit_abort.is_none() || !self.saving_jobs().is_empty() {
             return;
         }

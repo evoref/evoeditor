@@ -25,6 +25,7 @@ mod rescue;
 mod secret;
 mod time;
 mod unmap;
+mod view;
 
 pub use cancel::CancelToken;
 mod eol;

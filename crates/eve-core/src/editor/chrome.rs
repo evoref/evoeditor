@@ -58,7 +58,7 @@ fn grapheme_column(doc: &Document, head: ByteOff) -> usize {
     grapheme_indices(&prefix).len() + 1
 }
 
-pub(super) fn status_model(
+pub(crate) fn status_model(
     state: &EditorState,
     view_id: ViewId,
     chord: &[KeyStroke],
@@ -247,7 +247,7 @@ pub(super) fn status_model(
 }
 
 /// オーバーレイのモデル (確認・入力プロンプト)。文言は core が解決して `CellText` で渡す。
-pub(super) fn overlay_models(state: &EditorState) -> Vec<OverlayModel> {
+pub(crate) fn overlay_models(state: &EditorState) -> Vec<OverlayModel> {
     use super::overlay::Overlay;
     match &state.overlay {
         None => Vec::new(),
@@ -341,7 +341,7 @@ pub(super) fn overlay_models(state: &EditorState) -> Vec<OverlayModel> {
     }
 }
 
-pub(super) fn hint_model(state: &EditorState, chord: &[KeyStroke]) -> HintModel {
+pub(crate) fn hint_model(state: &EditorState, chord: &[KeyStroke]) -> HintModel {
     // ヘルプ画面: 決定するものは無いので、閉じる (`Esc`) だけを案内する
     if matches!(state.overlay, Some(super::overlay::Overlay::Help(_))) {
         let esc = KeyLabel {
@@ -481,7 +481,7 @@ pub(super) fn hint_model(state: &EditorState, chord: &[KeyStroke]) -> HintModel 
     }
 }
 
-pub(super) fn chrome_texts(state: &EditorState) -> ChromeTexts {
+pub(crate) fn chrome_texts(state: &EditorState) -> ChromeTexts {
     let min = state.caps.min_surface;
     let (cols, rows) = (min.cols.to_string(), min.rows.to_string());
     let text = render(state, "ui.too_small", &[("cols", &cols), ("rows", &rows)]);

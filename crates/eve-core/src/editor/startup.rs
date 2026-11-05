@@ -6,11 +6,11 @@
 use eve_view::{DocumentId, ViewId};
 
 use super::file::{OpenKind, Pending};
-use super::motion::line_col_byte;
 use super::state::EditorState;
 use crate::document::{Document, LoadState};
 use crate::io_jobs::OpenOptions;
 use crate::jobs::JobKind;
+use crate::view::motion::line_col_byte;
 use eve_text::{Selection, TextRead};
 
 /// 起動時に開くファイル 1 つ。
@@ -26,7 +26,7 @@ pub struct InitialFile {
 
 impl EditorState {
     /// 先頭のファイルを表示する文書として開き、残りを読込中のバッファとして足す。
-    pub(super) fn open_initial_files(&mut self, files: &[InitialFile], opts: OpenOptions) {
+    pub(crate) fn open_initial_files(&mut self, files: &[InitialFile], opts: OpenOptions) {
         for (i, f) in files.iter().enumerate() {
             let doc = if i == 0 {
                 self.open_path(&f.path, opts);
@@ -42,7 +42,7 @@ impl EditorState {
 
     /// 今の文書を置き換えず、読込中のバッファとして足す。同じパスが既にあれば足さない (03 §9.8)。
     /// 足した文書を返す。
-    pub(super) fn open_additional(
+    pub(crate) fn open_additional(
         &mut self,
         raw_path: &str,
         opts: OpenOptions,
@@ -113,7 +113,7 @@ impl EditorState {
     }
 
     /// 読み終わった文書の行・桁へカーソルを移す。範囲外は行末・最終行に丸める。
-    pub(super) fn jump_to_line_col(
+    pub(crate) fn jump_to_line_col(
         &mut self,
         view: ViewId,
         doc: DocumentId,

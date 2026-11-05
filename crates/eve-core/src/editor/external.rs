@@ -17,7 +17,7 @@ use eve_config::ExternalChangePolicy;
 
 impl EditorState {
     /// フォーカス復帰。設定が `never` でなく、オーバーレイが出ていなければ表示中の文書を確かめる。
-    pub(super) fn on_focus_gained(&mut self) {
+    pub(crate) fn on_focus_gained(&mut self) {
         if self.config().reload_on_external_change == ExternalChangePolicy::Never
             || !self.overlay_name().is_empty()
         {
@@ -67,7 +67,7 @@ impl EditorState {
 
     /// 確認の結果。変わっていなければ何もしない (コマンドなら知らせる)。変わっていれば、dirty でなく既定の設定なら再読込し、
     /// そうでなければ尋ねる。削除されていれば「新規として保持 / 閉じる」を尋ねる。
-    pub(super) fn finish_external_check(
+    pub(crate) fn finish_external_check(
         &mut self,
         doc_id: DocumentId,
         explicit: bool,
@@ -168,7 +168,7 @@ impl EditorState {
     }
 
     /// 「再読込 / 無視」の選択 (キャンセルは呼び側が処理済み。次のフォーカス復帰でまた尋ねる)。
-    pub(super) fn choose_external_modified(
+    pub(crate) fn choose_external_modified(
         &mut self,
         doc: DocumentId,
         stamp: crate::FileStamp,
@@ -189,7 +189,7 @@ impl EditorState {
 
     /// 「新規として保持 / 閉じる」の選択。保持は文書を新規ファイル扱いにする (読んだときの Stamp を捨てる) ので、
     /// 次の保存は確認なしでファイルを作り直し (`Expect::Absent`)、フォーカス復帰でも再び尋ねない。
-    pub(super) fn choose_external_deleted(
+    pub(crate) fn choose_external_deleted(
         &mut self,
         doc: DocumentId,
         choice: usize,
@@ -217,7 +217,7 @@ fn file_check_external_changes(ctx: &mut CommandCtx<'_>) -> CommandResult {
     ctx.state.start_external_check(true)
 }
 
-pub(super) fn register(r: &mut CommandRegistry) {
+pub(crate) fn register(r: &mut CommandRegistry) {
     r.register(
         CommandSpec::new(
             "file.check_external_changes",

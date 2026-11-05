@@ -25,7 +25,7 @@ fn name(eol: LineEnding) -> &'static str {
 
 /// 変換を実行するときの材料 (ジョブの結果を受けるときまで持つ)。
 #[derive(Clone, Copy, Debug)]
-pub(super) struct EolConvert {
+pub(crate) struct EolConvert {
     pub doc: DocumentId,
     pub view: ViewId,
     pub eol: LineEnding,
@@ -39,7 +39,7 @@ pub(super) struct EolConvert {
 
 impl EditorState {
     /// 変換を始める。`count` は変える区切りの数 (> 0)。
-    pub(super) fn convert_eol(
+    pub(crate) fn convert_eol(
         &mut self,
         doc: DocumentId,
         view: ViewId,
@@ -88,7 +88,7 @@ impl EditorState {
     }
 
     /// ジョブの結果。作った Revision が古ければ今の Snapshot で 1 回だけ作り直し、それも古ければ中止を知らせる。
-    pub(super) fn finish_eol_conversion(&mut self, c: EolConvert, r: JobResult) {
+    pub(crate) fn finish_eol_conversion(&mut self, c: EolConvert, r: JobResult) {
         let JobResult::ConvertEolDone { changes, .. } = r else {
             return;
         };

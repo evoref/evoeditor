@@ -17,7 +17,7 @@ use super::state::EditorState;
 
 /// 保存や破棄の後に続ける操作 (03 §9.7 の連鎖の後続)。
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(super) enum Continuation {
+pub(crate) enum Continuation {
     /// 終了する。
     Quit,
     /// 文書を文字コードを指定して開き直す (`file.reopen_with_encoding`、未保存の確認の後)。
@@ -30,7 +30,7 @@ pub(super) enum Continuation {
 /// 終了の連鎖 (`app.quit` で dirty な文書が 1 件以上、03 §9.8)。保存の連鎖 (`SaveChain`) の外に 1 つだけ持つ。
 /// 破棄は印を付けるだけで、文書の内容は終了が確定するまで残す。
 #[derive(Debug)]
-pub(super) struct QuitChain {
+pub(crate) struct QuitChain {
     /// 未確認の文書。先頭が確認中。
     remaining: Vec<DocumentId>,
     /// 破棄を選んだ文書と、そのときの Revision。後で編集された文書の印は無効 (もう一度尋ねる)。
@@ -48,7 +48,7 @@ impl QuitChain {
 
 /// 確認ダイアログの選択肢 1 つ。文言は `ui.confirm.<name>.<id>`。キャンセル (`ui.confirm.cancel`、`Esc`) は選択肢の最後に自動で付く。
 #[derive(Clone, Copy, Debug)]
-pub(super) struct ChoiceDef {
+pub(crate) struct ChoiceDef {
     pub id: &'static str,
     /// アクセラレータ (小文字。大小は区別しない)。
     pub accel: Option<char>,
@@ -58,7 +58,7 @@ pub(super) struct ChoiceDef {
 
 /// 選択肢を選んだときの動作 (確認の種類ごと)。
 #[derive(Clone, Debug)]
-pub(super) enum ConfirmAction {
+pub(crate) enum ConfirmAction {
     /// 未保存の変更 (終了・置き換え): 選択肢 0 = 保存して続ける、1 = 破棄して続ける。
     Unsaved(Continuation),
     /// 知らせるだけの確認 (全保存で保存できなかった文書の一覧)。どの選択肢でも何もしない。
@@ -106,7 +106,7 @@ pub(super) enum ConfirmAction {
 
 /// 確認ダイアログ。選択肢は `choices` (+ 最後にキャンセル)。
 #[derive(Clone, Debug)]
-pub(super) struct ConfirmState {
+pub(crate) struct ConfirmState {
     /// `ui.confirm.<name>` の名前 (`unsaved` / `save.atomic_unsupported` など)。
     pub name: &'static str,
     /// 文言の引数 (`{path}` など)。`index` があるときの本文は `message` ではなく `chain` (終了の連鎖、03 §9.8)。
@@ -122,13 +122,13 @@ pub(super) struct ConfirmState {
 
 impl ConfirmState {
     /// キャンセルの番号 (選択肢の数)。
-    pub(super) fn cancel_index(&self) -> usize {
+    pub(crate) fn cancel_index(&self) -> usize {
         self.choices.len()
     }
 }
 
 /// 未保存の確認の選択肢 (既定は保存)。
-pub(super) const UNSAVED_CHOICES: [ChoiceDef; 2] = [
+pub(crate) const UNSAVED_CHOICES: [ChoiceDef; 2] = [
     ChoiceDef {
         id: "save",
         accel: Some('s'),
@@ -142,7 +142,7 @@ pub(super) const UNSAVED_CHOICES: [ChoiceDef; 2] = [
 ];
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(super) enum PromptKind {
+pub(crate) enum PromptKind {
     Open,
     SaveAs {
         then: Option<Continuation>,
@@ -166,7 +166,7 @@ pub(super) enum PromptKind {
 
 impl PromptKind {
     /// `ui.prompt.<name>` の名前。
-    pub(super) fn name(&self) -> &'static str {
+    pub(crate) fn name(&self) -> &'static str {
         match self {
             PromptKind::Open => "open",
             PromptKind::SaveAs { .. } => "save_as",
@@ -180,7 +180,7 @@ impl PromptKind {
 }
 
 #[derive(Clone, Debug)]
-pub(super) struct PromptState {
+pub(crate) struct PromptState {
     pub kind: PromptKind,
     pub text: String,
     /// `text` 内のカーソル (バイト。書記素境界)。
@@ -190,7 +190,7 @@ pub(super) struct PromptState {
 }
 
 #[derive(Clone, Debug)]
-pub(super) enum Overlay {
+pub(crate) enum Overlay {
     // 大きいので Box にする (clippy::large_enum_variant。Prompt との差が大きい)
     Confirm(Box<ConfirmState>),
     Prompt(PromptState),
@@ -205,7 +205,7 @@ fn text_of(s: &str) -> Text {
 
 impl EditorState {
     /// オーバーレイを置き換える。種類が変わる (開く・閉じる・種類が替わる) ときは `OverlayChanged` を積む。
-    pub(super) fn set_overlay(&mut self, new: Option<Overlay>) {
+    pub(crate) fn set_overlay(&mut self, new: Option<Overlay>) {
         let kind = |o: &Option<Overlay>| {
             o.as_ref().map(|o| match o {
                 Overlay::Confirm(_) => OverlayKind::Confirm,
@@ -245,7 +245,7 @@ impl EditorState {
     }
 
     /// 条件式 `overlay.active` の値: 出ていなければ空、確認は `dialog`、プロンプトは `prompt`。
-    pub(super) fn overlay_name(&self) -> &'static str {
+    pub(crate) fn overlay_name(&self) -> &'static str {
         match &self.overlay {
             None => "",
             Some(Overlay::Confirm(_)) => "dialog",
@@ -257,21 +257,21 @@ impl EditorState {
     }
 
     /// キー入力のコンテキスト名: オーバーレイ、無ければ検索バー (`search`)、無ければ空 (編集面)。
-    pub(super) fn input_context(&self) -> &'static str {
+    pub(crate) fn input_context(&self) -> &'static str {
         match self.overlay_name() {
             "" if self.search_bar.is_some() => "search",
             n => n,
         }
     }
 
-    pub(super) fn is_dialog(&self) -> bool {
+    pub(crate) fn is_dialog(&self) -> bool {
         matches!(self.overlay, Some(Overlay::Confirm(_)))
     }
 
     // ---------- 未保存の確認 ----------
 
     /// `doc_id` が dirty なら確認を出して `true`。保存の後続は保存した文書に属するので、アクティブ文書ではなく文書を指す。
-    pub(super) fn confirm_doc_if_dirty(
+    pub(crate) fn confirm_doc_if_dirty(
         &mut self,
         doc_id: DocumentId,
         name: &'static str,
@@ -310,7 +310,7 @@ impl EditorState {
     }
 
     /// 確認ダイアログを出す (種類は `action`)。
-    pub(super) fn open_confirm(&mut self, c: ConfirmState) {
+    pub(crate) fn open_confirm(&mut self, c: ConfirmState) {
         self.set_overlay(Some(Overlay::Confirm(Box::new(c))));
         self.mark_dirty_render();
     }
@@ -383,7 +383,7 @@ impl EditorState {
     }
 
     /// 破棄または保存の後に続ける操作を実行する。
-    pub(super) fn run_continuation(&mut self, cont: Continuation) -> CommandResult {
+    pub(crate) fn run_continuation(&mut self, cont: Continuation) -> CommandResult {
         match cont {
             Continuation::Reopen(doc, enc) => self.start_reopen(doc, enc),
             Continuation::Close(doc) => self.close_buffer(doc),
@@ -439,7 +439,7 @@ impl EditorState {
 
     /// 終了の連鎖を次へ進める: 次の dirty な文書をアクティブにして確認を出す。全部済んで、
     /// 確認の間に変わった文書も無ければ終了する。
-    pub(super) fn advance_quit_chain(&mut self) -> CommandResult {
+    pub(crate) fn advance_quit_chain(&mut self) -> CommandResult {
         let Some(mut chain) = self.quit_chain.take() else {
             if let Some(r) = self.quit_while_saving(false) {
                 return r;
@@ -497,7 +497,7 @@ impl EditorState {
 
     // ---------- 入力プロンプト ----------
 
-    pub(super) fn open_prompt(&mut self, kind: PromptKind, initial: String) {
+    pub(crate) fn open_prompt(&mut self, kind: PromptKind, initial: String) {
         let cursor = initial.len();
         self.set_overlay(Some(Overlay::Prompt(PromptState {
             kind,
@@ -516,7 +516,7 @@ impl EditorState {
     }
 
     /// 貼り付けを受けられる入力欄があるか。
-    pub(super) fn input_mut_available(&mut self) -> bool {
+    pub(crate) fn input_mut_available(&mut self) -> bool {
         self.input_mut().is_some()
     }
 
@@ -539,7 +539,7 @@ impl EditorState {
 
     /// プロンプトの入力欄を編集するコマンドを横取りする (オーバーレイの間は文書を編集しない)。
     /// オーバーレイが出ていて、オーバーレイ用でも編集用でもないコマンドは拒否する (モーダル)。
-    pub(super) fn overlay_intercept(&mut self, inv: &CommandInvocation) -> Option<CommandResult> {
+    pub(crate) fn overlay_intercept(&mut self, inv: &CommandInvocation) -> Option<CommandResult> {
         if self.overlay.is_none() && self.search_bar.is_none() {
             return None;
         }
@@ -623,7 +623,7 @@ impl EditorState {
     }
 
     /// 貼り付けを入力欄へ (改行は取り除く)。
-    pub(super) fn prompt_paste(&mut self, s: &str) -> bool {
+    pub(crate) fn prompt_paste(&mut self, s: &str) -> bool {
         if self.input_mut().is_none() {
             return false;
         }
@@ -696,7 +696,7 @@ impl EditorState {
                         state: self,
                         args: &args,
                     };
-                    super::motion::goto_line_command(&mut ctx)
+                    crate::view::motion::goto_line_command(&mut ctx)
                 }
                 None => self.prompt_error("invalid"),
             },
@@ -972,7 +972,7 @@ macro_rules! reg_ui {
 }
 
 /// オーバーレイ内のコマンドと `app.quit`・`app.suspend` (07 §11.6)。
-pub(super) fn register(r: &mut CommandRegistry) {
+pub(crate) fn register(r: &mut CommandRegistry) {
     let active = "overlay.active != \"\" || search.active";
     reg_ui!(r, "ui.confirm", active, cmd_confirm);
     reg_ui!(r, "ui.cancel", "", cmd_cancel);
@@ -1073,7 +1073,7 @@ fn cmd_debug_panic(_ctx: &mut CommandCtx<'_>) -> CommandResult {
 }
 
 /// 行へ移動の入力 (`12` / `12:5` / `$` / `$:3`) を `cursor.goto_line` の引数にする。
-pub(super) fn parse_goto(s: &str) -> Option<Args> {
+pub(crate) fn parse_goto(s: &str) -> Option<Args> {
     let (line, col) = match s.split_once(':') {
         Some((l, c)) => (l.trim(), Some(c.trim())),
         None => (s.trim(), None),
