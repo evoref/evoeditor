@@ -3,6 +3,7 @@
 
 use eve_core::{Args, Encoding, ReadOnlyReason};
 use eve_testkit::Harness;
+use eve_testkit::helpers::opened;
 use eve_text::LineEnding;
 use eve_view::{ClipboardToken, Effect, StatusKind};
 
@@ -19,13 +20,6 @@ fn status_text(h: &mut Harness, kind: StatusKind) -> String {
 fn default_eol(h: &Harness) -> LineEnding {
     let id = h.doc_id();
     h.editor.state().document(id).unwrap().format.default_eol
-}
-
-fn opened(path: &str, bytes: &[u8]) -> Harness {
-    let mut h = Harness::new().with_file(path, bytes);
-    h.open(path);
-    h.run_jobs();
-    h
 }
 
 fn request_token(h: &Harness) -> ClipboardToken {

@@ -28,8 +28,79 @@ pub struct Harness {
     pub clock: ManualClock,
     jobs: Rc<ManualJobSpawner>,
     window: WindowId,
+    /// 組み立てのときの画面の大きさ (`started` で渡す)。
+    size: (u16, u16),
     events: Vec<EditorEvent>,
     effects: Vec<Effect>,
+}
+
+/// `Harness::builder()` の組み立て。起動の前に効かせたいもの (端末の能力・設定・言語・偽 FS のファイル) を置く。
+///
+/// ```ignore
+/// let mut h = Harness::builder()
+///     .size(100, 30)
+///     .file("/w/a.txt", b"aaa\n")
+///     .locale(Locale::En)
+///     .build();
+/// ```
+#[derive(Default)]
+pub struct HarnessBuilder {
+    size: Option<(u16, u16)>,
+    caps: Option<Capabilities>,
+    config: Option<eve_config::Config>,
+    locale: Option<eve_config::Locale>,
+    files: Vec<(String, Vec<u8>)>,
+    dirs: Vec<String>,
+    defer_start: bool,
+}
+
+impl HarnessBuilder {
+    /// 画面の大きさ (既定は 80×24)。
+    pub fn size(mut self, cols: u16, rows: u16) -> Self {
+        self.size = Some((cols, rows));
+        self
+    }
+
+    /// 端末の能力 (`Editor::new` に渡す。既定は `Capabilities::default()`)。
+    pub fn caps(mut self, caps: Capabilities) -> Self {
+        self.caps = Some(caps);
+        self
+    }
+
+    /// 設定 (起動の前に `set_config` する)。
+    pub fn config(mut self, config: eve_config::Config) -> Self {
+        self.config = Some(config);
+        self
+    }
+
+    /// UI の言語 (既定は `ja`)。
+    pub fn locale(mut self, locale: eve_config::Locale) -> Self {
+        self.locale = Some(locale);
+        self
+    }
+
+    /// 偽 FS にファイルを置く (`/w` は常にある)。
+    pub fn file(mut self, path: &str, data: &[u8]) -> Self {
+        self.files.push((path.to_owned(), data.to_vec()));
+        self
+    }
+
+    /// 偽 FS にディレクトリを置く。
+    pub fn dir(mut self, path: &str) -> Self {
+        self.dirs.push(path.to_owned());
+        self
+    }
+
+    /// 起動 (`open_initial`) をしない。試験の側で `h.editor.open_initial*` を呼び、続けて `h.started()` を呼ぶ
+    /// (起動の引数・起動時の走査を確かめる試験)。
+    pub fn defer_start(mut self) -> Self {
+        self.defer_start = true;
+        self
+    }
+
+    pub fn build(self) -> Harness {
+        Harness::assemble(self)
+    }
 }
 
 impl Default for Harness {
@@ -41,9 +112,24 @@ impl Default for Harness {
 impl Harness {
     /// 無題の文書が 1 つ開いた状態。保存先の `/w` があり、画面は 80×24。
     pub fn new() -> Harness {
+        Harness::builder().build()
+    }
+
+    /// 組み立て方を変えた Harness (起動の前に置く設定・言語・端末の能力・ファイル、起動を遅らせるか)。
+    pub fn builder() -> HarnessBuilder {
+        HarnessBuilder::default()
+    }
+
+    fn assemble(b: HarnessBuilder) -> Harness {
         let clock = ManualClock::new();
         let fs = Arc::new(MemFs::new(Arc::new(clock.clone())));
         fs.add_dir("/w");
+        for d in &b.dirs {
+            fs.add_dir(d);
+        }
+        for (p, data) in &b.files {
+            fs.add_file(p, data);
+        }
         let paths = Arc::new(FixedPaths::default());
         let jobs = ManualJobSpawner::new(JobPorts {
             fs: fs.clone(),
@@ -56,20 +142,47 @@ impl Harness {
             jobs: Rc::clone(&jobs) as Rc<dyn eve_core::JobSpawner>,
             paths,
         };
-        let mut editor = Editor::new(ports, Capabilities::default());
-        editor.open_initial(None, false);
-        let window = editor.state().first_window().expect("起動時の Window");
+        let mut editor = Editor::new(ports, b.caps.unwrap_or_default());
+        if let Some(config) = b.config {
+            editor.state_mut().set_config(config);
+        }
+        if let Some(locale) = b.locale {
+            editor.state_mut().set_locale(locale);
+        }
         let mut h = Harness {
             editor,
             fs,
             clock,
             jobs,
-            window,
+            window: WindowId::default(),
+            size: b.size.unwrap_or((80, 24)),
             events: Vec::new(),
             effects: Vec::new(),
         };
-        h.resize(80, 24);
+        if !b.defer_start {
+            h.editor.open_initial(None, false);
+            h.started();
+        }
         h
+    }
+
+    /// 起動 (`Editor::open_initial` / `open_initial_files`) を試験の側で呼んだ後に呼ぶ。最初の Window を覚え、
+    /// 組み立てのときの大きさを渡す。`HarnessBuilder::defer_start` のときに使う。
+    pub fn started(&mut self) {
+        self.window = self.editor.state().first_window().expect("起動時の Window");
+        let (cols, rows) = self.size;
+        self.resize(cols, rows);
+    }
+
+    /// 入力を渡す Window (起動時の Window)。
+    /// `defer_start` で `started` をまだ呼んでいなければ、Editor の最初の Window (起動の後なら有る)。
+    pub fn window(&self) -> WindowId {
+        if self.window == WindowId::default()
+            && let Some(w) = self.editor.state().first_window()
+        {
+            return w;
+        }
+        self.window
     }
 
     // ---- 初期状態 ----
@@ -237,7 +350,8 @@ impl Harness {
 
     fn input(&mut self, ev: InputEvent) {
         self.editor.tick(self.clock.now());
-        self.editor.handle_input(self.window, ev);
+        let w = self.window();
+        self.editor.handle_input(w, ev);
         self.collect();
     }
 
@@ -293,7 +407,7 @@ impl Harness {
     }
 
     pub fn frame(&mut self) -> Frame {
-        self.editor.frame(self.window).expect("Frame が作れる")
+        self.editor.frame(self.window()).expect("Frame が作れる")
     }
 
     /// ASCII の Frame (クロームと選択とカーソルつき。11 §6.5)。

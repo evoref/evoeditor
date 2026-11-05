@@ -2,116 +2,69 @@
 //! バイト列 → 開く → 先頭に 1 文字入力 → 保存 で、入力した 1 文字を除いて元のバイト列に戻ること (区分 A: バイト一致)、
 //! 区分 B は検出されること、不正バイトは読み取り専用で、名前を付けて保存でバイト一致することを、表の全件で確かめる。
 
-use std::rc::Rc;
-use std::sync::Arc;
+use eve_core::{Args, Document, Encoding, OpenOptions, ReadOnlyReason};
+use eve_testkit::Harness;
+use eve_view::InputEvent;
 
-use eve_core::{
-    Args, CommandInvocation, Document, Editor, Encoding, InvocationSource, OpenOptions, Ports,
-    ReadOnlyReason,
-};
-use eve_testkit::{FixedPaths, ManualClock, ManualJobSpawner, MemFs};
-use eve_view::{Capabilities, InputEvent};
-
-struct Env {
-    e: Editor,
-    fs: Arc<MemFs>,
-    jobs: Rc<ManualJobSpawner>,
+/// 起動していない Harness (文書は `open_as` で開く)。
+fn env() -> Harness {
+    Harness::builder().defer_start().build()
 }
 
-impl Env {
-    fn new() -> Env {
-        let clock = ManualClock::new();
-        let fs = Arc::new(MemFs::new(Arc::new(clock.clone())));
-        fs.add_dir("/w");
-        let paths = Arc::new(FixedPaths::default());
-        let jp = eve_core::JobPorts {
-            fs: fs.clone(),
-            clock: Arc::new(clock.clone()),
-            paths: paths.clone(),
-        };
-        let jobs = ManualJobSpawner::new(jp);
-        let ports = Ports {
-            fs: fs.clone(),
-            clock: Arc::new(clock),
-            jobs: Rc::clone(&jobs) as Rc<dyn eve_core::JobSpawner>,
-            paths,
-        };
-        Env {
-            e: Editor::new(ports, Capabilities::default()),
-            fs,
-            jobs,
-        }
-    }
+fn run(h: &mut Harness, id: &str, args: Args) {
+    h.cmd_with(id, args);
+    h.run_jobs();
+}
 
-    fn pump(&mut self) {
-        loop {
-            self.jobs.run_jobs();
-            let rs = self.jobs.take_results();
-            if rs.is_empty() {
-                break;
-            }
-            for r in rs {
-                self.e.on_job_result(r);
-            }
-        }
+/// 文字コードを指定して開く。確認ダイアログ (不正バイトが多い等) が出たら読み取り専用で開く。
+fn open_as(h: &mut Harness, path: &str, enc: Option<Encoding>) {
+    h.editor.state_mut().open_path(
+        path,
+        OpenOptions {
+            forced: enc,
+            ..OpenOptions::default()
+        },
+    );
+    h.run_jobs();
+    if h.overlay() == "dialog" {
+        let w = h.editor.state().first_window().unwrap();
+        h.editor.handle_input(w, InputEvent::Text("r".into()));
+        h.run_jobs();
     }
+}
 
-    fn run(&mut self, id: &str, args: Args) {
-        self.e
-            .execute(CommandInvocation::new(id, InvocationSource::Keymap).with_args(args));
-        self.pump();
-    }
+fn doc(h: &Harness) -> &Document {
+    let id = h.editor.state().active_document().expect("文書がある");
+    h.editor.state().document(id).unwrap()
+}
 
-    /// 文字コードを指定して開く。確認ダイアログ (不正バイトが多い等) が出たら読み取り専用で開く。
-    fn open_as(&mut self, path: &str, enc: Option<Encoding>) {
-        self.e.state_mut().open_path(
-            path,
-            OpenOptions {
-                forced: enc,
-                ..OpenOptions::default()
-            },
-        );
-        self.pump();
-        if self.e.state().overlay_kind() == "dialog" {
-            let w = self.e.state().first_window().unwrap();
-            self.e.handle_input(w, InputEvent::Text("r".into()));
-            self.pump();
-        }
-    }
-
-    fn doc(&self) -> &Document {
-        let id = self.e.state().active_document().expect("文書がある");
-        self.e.state().document(id).unwrap()
-    }
-
-    fn type_text(&mut self, s: &str) {
-        let w = self.e.state().first_window().unwrap();
-        self.e.handle_input(w, InputEvent::Text(s.into()));
-    }
+fn type_text(h: &mut Harness, s: &str) {
+    let w = h.editor.state().first_window().unwrap();
+    h.editor.handle_input(w, InputEvent::Text(s.into()));
 }
 
 /// 区分 A: 開いて 1 文字足して保存すると、足した 1 文字以外は元のバイト列のまま。
 fn assert_lossless(enc: Encoding, orig: &[u8], label: &str) {
-    let mut s = Env::new();
+    let mut s = env();
     let mut bytes = b"a".to_vec();
     bytes.extend_from_slice(orig);
     bytes.extend_from_slice(b"b");
     s.fs.add_file("/w/c.txt", &bytes);
-    s.open_as("/w/c.txt", Some(enc));
-    assert_eq!(s.doc().format.encoding, enc, "{label}");
+    open_as(&mut s, "/w/c.txt", Some(enc));
+    assert_eq!(doc(&s).format.encoding, enc, "{label}");
     assert_eq!(
-        s.doc().format.invalid_bytes,
+        doc(&s).format.invalid_bytes,
         0,
         "{label}: 不正バイトにならない"
     );
     assert_eq!(
-        s.doc().format.roundtrip.lossy_lines,
+        doc(&s).format.roundtrip.lossy_lines,
         0,
         "{label}: 区分 B に数えない"
     );
-    assert!(s.doc().is_editable(), "{label}");
-    s.type_text("x");
-    s.run("file.save", Args::new());
+    assert!(doc(&s).is_editable(), "{label}");
+    type_text(&mut s, "x");
+    run(&mut s, "file.save", Args::new());
     let mut want = b"x".to_vec();
     want.extend_from_slice(&bytes);
     assert_eq!(s.fs.read("/w/c.txt").unwrap(), want, "{label}");
@@ -158,13 +111,13 @@ fn shift_jis_の_cp932_外字は往復し_外字以外の編集でも不変() {
 fn shift_jis_の重複符号化は区分_b_として検出される() {
     // NEC/IBM 拡張の重複 (¬ の 0xEEF9 / 0xFA54): 再エンコードで別のバイトになる
     for dup in [[0xEEu8, 0xF9], [0xFA, 0x54]] {
-        let mut s = Env::new();
+        let mut s = env();
         let mut bytes = b"a".to_vec();
         bytes.extend_from_slice(&dup);
         s.fs.add_file("/w/c.txt", &bytes);
-        s.open_as("/w/c.txt", Some(Encoding::ShiftJis));
+        open_as(&mut s, "/w/c.txt", Some(Encoding::ShiftJis));
         assert!(
-            s.doc().format.roundtrip.lossy_lines > 0,
+            doc(&s).format.roundtrip.lossy_lines > 0,
             "{dup:02X?} は区分 B"
         );
     }
@@ -174,15 +127,19 @@ fn shift_jis_の重複符号化は区分_b_として検出される() {
 fn 単独バイトは不正バイトとして読み取り専用で_名前を付けて保存でバイト一致する() {
     // 0xA0 / 0xFD / 0xFE / 0xFF は Shift_JIS の単独バイトとして不正
     for b in [0xA0u8, 0xFD, 0xFE, 0xFF] {
-        let mut s = Env::new();
+        let mut s = env();
         let bytes = vec![b'a', b, b'b'];
         s.fs.add_file("/w/c.txt", &bytes);
-        s.open_as("/w/c.txt", Some(Encoding::ShiftJis));
+        open_as(&mut s, "/w/c.txt", Some(Encoding::ShiftJis));
         assert!(
-            s.doc().read_only.contains(ReadOnlyReason::InvalidBytes),
+            doc(&s).read_only.contains(ReadOnlyReason::InvalidBytes),
             "{b:#04X}: 読み取り専用"
         );
-        s.run("file.save_as", Args::new().with_str("path", "/w/copy.txt"));
+        run(
+            &mut s,
+            "file.save_as",
+            Args::new().with_str("path", "/w/copy.txt"),
+        );
         assert_eq!(s.fs.read("/w/copy.txt").unwrap(), bytes, "{b:#04X}");
     }
     // 0x80 は U+0080 で往復する
@@ -207,12 +164,12 @@ fn euc_jp_の互換文字は区分_a_でバイト一致する() {
 #[test]
 fn iso_2022_jp_の正規形は往復する() {
     let (orig, _, _) = encoding_rs::ISO_2022_JP.encode("日本語abc\n二行目\n");
-    let mut s = Env::new();
+    let mut s = env();
     s.fs.add_file("/w/c.txt", &orig);
-    s.open_as("/w/c.txt", Some(Encoding::Iso2022Jp));
-    assert_eq!(s.doc().format.invalid_bytes, 0);
-    s.type_text("x");
-    s.run("file.save", Args::new());
+    open_as(&mut s, "/w/c.txt", Some(Encoding::Iso2022Jp));
+    assert_eq!(doc(&s).format.invalid_bytes, 0);
+    type_text(&mut s, "x");
+    run(&mut s, "file.save", Args::new());
     let (want, _, _) = encoding_rs::ISO_2022_JP.encode("x日本語abc\n二行目\n");
     assert_eq!(s.fs.read("/w/c.txt").unwrap(), want.as_ref());
 }
@@ -227,13 +184,13 @@ fn bom_付きの_utf8_と_utf16_は_bom_ごと往復する() {
         (Encoding::Utf16Be, [&[0xFE, 0xFF][..], &be].concat()),
     ];
     for (enc, orig) in cases {
-        let mut s = Env::new();
+        let mut s = env();
         s.fs.add_file("/w/c.txt", &orig);
-        s.open_as("/w/c.txt", None);
-        assert_eq!(s.doc().format.encoding, enc);
-        assert!(s.doc().format.has_bom);
-        s.type_text("x");
-        s.run("file.save", Args::new());
+        open_as(&mut s, "/w/c.txt", None);
+        assert_eq!(doc(&s).format.encoding, enc);
+        assert!(doc(&s).format.has_bom);
+        type_text(&mut s, "x");
+        run(&mut s, "file.save", Args::new());
         let saved = s.fs.read("/w/c.txt").unwrap();
         let bom_len = if enc == Encoding::Utf8 { 3 } else { 2 };
         assert_eq!(&saved[..bom_len], &orig[..bom_len], "{enc:?}: BOM が残る");
@@ -255,11 +212,11 @@ fn 改行の種類はそのまま往復する() {
         ("CRLF 混在の末尾なし", b"x\r\ny\nz"),
     ];
     for (name, orig) in cases {
-        let mut s = Env::new();
+        let mut s = env();
         s.fs.add_file("/w/c.txt", orig);
-        s.open_as("/w/c.txt", None);
-        s.type_text("x");
-        s.run("file.save", Args::new());
+        open_as(&mut s, "/w/c.txt", None);
+        type_text(&mut s, "x");
+        run(&mut s, "file.save", Args::new());
         let mut want = b"x".to_vec();
         want.extend_from_slice(orig);
         assert_eq!(s.fs.read("/w/c.txt").unwrap(), want, "{name}");

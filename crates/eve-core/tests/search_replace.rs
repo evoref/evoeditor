@@ -1,17 +1,14 @@
 //! すべて置換 (docs/03 §12.5、01 FR-403、04 §8.4): 置換欄・1 Undo 単位・大きな文書のジョブ。
 
 use eve_testkit::Harness;
+use eve_testkit::helpers::cell_text;
 use eve_view::BarFocus;
-
-fn text_of(t: &eve_view::CellText) -> String {
-    t.spans.iter().map(|s| s.text.to_string()).collect()
-}
 
 fn message(h: &mut Harness) -> String {
     h.frame()
         .messages
         .current
-        .map(|m| text_of(&m.text))
+        .map(|m| cell_text(&m.text))
         .unwrap_or_default()
 }
 
@@ -145,7 +142,7 @@ fn 置換の後も検索バーは開いたままで_再検索する() {
     h.run_jobs();
     assert_eq!(h.doc_text(), "abab abab");
     let b = h.frame().search.unwrap();
-    assert!(text_of(&b.count_text.unwrap()).ends_with("/4"));
+    assert!(cell_text(&b.count_text.unwrap()).ends_with("/4"));
 }
 
 fn big_doc() -> String {

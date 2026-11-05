@@ -1,11 +1,8 @@
 //! which-key (docs/04 §7.4): チョードの保留が 500 ms を超えたら、続けて押せるキーと動作の一覧を出す。
 
 use eve_testkit::Harness;
+use eve_testkit::helpers::cell_text;
 use eve_view::{KeyCode, WhichKeyModel};
-
-fn text_of(t: &eve_view::CellText) -> String {
-    t.spans.iter().map(|s| s.text.to_string()).collect()
-}
 
 fn which(h: &mut Harness) -> Option<WhichKeyModel> {
     h.frame().which_key
@@ -25,7 +22,7 @@ fn 保留が五百ミリ秒を超えたら続きの一覧を出す() {
         m.items
             .iter()
             .find(|i| i.key.key == KeyCode::Char(c))
-            .map(|i| text_of(&i.text))
+            .map(|i| cell_text(&i.text))
     };
     assert_eq!(find('s').as_deref(), Some("名前を付けて保存"));
     assert_eq!(find('m').as_deref(), Some("メッセージ履歴"));

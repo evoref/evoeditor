@@ -1,25 +1,11 @@
 //! 検索バー (docs/04 §8.4、01 FR-401〜404): 開閉・入力による検索・確定・大小の切替・強調。
 
 use eve_testkit::Harness;
+use eve_testkit::helpers::cell_text;
 use eve_view::{CaseMode, FocusTarget, Frame, StyleMods};
-
-fn text_of(t: &eve_view::CellText) -> String {
-    t.spans.iter().map(|s| s.text.to_string()).collect()
-}
 
 fn bar(h: &mut Harness) -> eve_view::SearchBarModel {
     h.frame().search.expect("検索バーが開いている")
-}
-
-fn sel(h: &Harness) -> (usize, usize) {
-    let st = h.editor.state();
-    let w = st.first_window().unwrap();
-    let r = *st
-        .view(st.window_view(w).unwrap())
-        .unwrap()
-        .selection
-        .primary();
-    (r.start().0, r.end().0)
 }
 
 /// 描かれた行の中で、`mods` を持つセルの文字列。
@@ -47,7 +33,7 @@ fn ctrl_f_で開き_編集面が_1_行縮み_esc_で戻る() {
     assert_eq!(f.size.rows, rows - 1);
     assert_eq!(f.focus, FocusTarget::SearchBar);
     assert!(f.primary_cursor.is_none(), "カーソルは検索バーにある");
-    assert_eq!(text_of(&f.search.unwrap().label), "検索:");
+    assert_eq!(cell_text(&f.search.unwrap().label), "検索:");
     h.keys("esc");
     let f = h.frame();
     assert!(f.search.is_none());
@@ -61,15 +47,15 @@ fn 入力すると件数が出て_現在の一致は強調するだけで_選択
     let mut h = Harness::new().with_size(40, 10);
     h.text("foo bar foo");
     h.keys("ctrl+home");
-    let before = sel(&h);
+    let before = h.selection_range();
     h.keys("ctrl+f");
     h.text("foo");
     h.run_jobs();
-    assert_eq!(sel(&h), before, "入力では選択しない");
+    assert_eq!(h.selection_range(), before, "入力では選択しない");
     let f = h.frame();
     let b = f.search.clone().unwrap();
     assert_eq!(
-        text_of(
+        cell_text(
             &b.input
                 .cells
                 .iter()
@@ -80,7 +66,7 @@ fn 入力すると件数が出て_現在の一致は強調するだけで_選択
         ),
         "foo"
     );
-    assert_eq!(text_of(&b.count_text.unwrap()), "1/2");
+    assert_eq!(cell_text(&b.count_text.unwrap()), "1/2");
     // 一致は下線、現在の一致は下線 + 太字 (色の段。無色の段は反転 + 下線、07 §8.2)
     assert_eq!(
         marked(&f, StyleMods::UNDERLINE)
@@ -104,15 +90,19 @@ fn enter_で現在の一致を選択し_次の_enter_で次へ_esc_で選択は�
     h.text("foo");
     h.run_jobs();
     h.keys("enter");
-    assert_eq!(sel(&h), (0, 3), "最初の Enter は強調中の一致を確定する");
+    assert_eq!(
+        h.selection_range(),
+        (0, 3),
+        "最初の Enter は強調中の一致を確定する"
+    );
     h.keys("enter");
-    assert_eq!(sel(&h), (8, 11));
+    assert_eq!(h.selection_range(), (8, 11));
     h.keys("up");
-    assert_eq!(sel(&h), (0, 3));
+    assert_eq!(h.selection_range(), (0, 3));
     h.keys("f3");
-    assert_eq!(sel(&h), (8, 11));
+    assert_eq!(h.selection_range(), (8, 11));
     h.keys("esc");
-    assert_eq!(sel(&h), (8, 11), "確定した選択は残る");
+    assert_eq!(h.selection_range(), (8, 11), "確定した選択は残る");
 }
 
 #[test]
@@ -120,12 +110,12 @@ fn esc_で閉じると未確定の一致は選択に残らない() {
     let mut h = Harness::new().with_size(40, 10);
     h.text("foo bar foo");
     h.keys("ctrl+home");
-    let before = sel(&h);
+    let before = h.selection_range();
     h.keys("ctrl+f");
     h.text("bar");
     h.run_jobs();
     h.keys("esc");
-    assert_eq!(sel(&h), before);
+    assert_eq!(h.selection_range(), before);
 }
 
 // verifies: AC-FR-402-4
@@ -138,12 +128,12 @@ fn alt_c_で大小の区別が巡回し_再検索する() {
     h.run_jobs();
     let b = bar(&mut h);
     assert_eq!((b.case, b.case_on), (CaseMode::Smart, false));
-    assert_eq!(text_of(&b.count_text.unwrap()), "1/2");
+    assert_eq!(cell_text(&b.count_text.unwrap()), "1/2");
     h.keys("alt+c");
     h.run_jobs();
     let b = bar(&mut h);
     assert_eq!((b.case, b.case_on), (CaseMode::Sensitive, true));
-    assert_eq!(text_of(&b.count_text.unwrap()), "1/1");
+    assert_eq!(cell_text(&b.count_text.unwrap()), "1/1");
     h.keys("alt+c");
     assert_eq!(bar(&mut h).case, CaseMode::Insensitive);
     h.keys("alt+c");
@@ -167,7 +157,7 @@ fn 一致が無ければ_0_件で_欄を消すと件数も消える() {
     h.keys("ctrl+f");
     h.text("zzz");
     h.run_jobs();
-    assert_eq!(text_of(&bar(&mut h).count_text.unwrap()), "0 件");
+    assert_eq!(cell_text(&bar(&mut h).count_text.unwrap()), "0 件");
     h.keys("backspace backspace backspace");
     assert!(bar(&mut h).count_text.is_none());
 }
@@ -179,9 +169,9 @@ fn 日本語を入力して検索できる() {
     h.keys("ctrl+home ctrl+f");
     h.text("日本");
     h.run_jobs();
-    assert_eq!(text_of(&bar(&mut h).count_text.unwrap()), "1/2");
+    assert_eq!(cell_text(&bar(&mut h).count_text.unwrap()), "1/2");
     h.keys("enter");
-    assert_eq!(sel(&h), (0, 6));
+    assert_eq!(h.selection_range(), (0, 6));
 }
 
 #[test]
@@ -232,7 +222,7 @@ fn クリップボードの最初の行を検索欄へ貼り付ける() {
     paste_into_field(&mut h, "bar\nignored");
     h.run_jobs();
     let b = bar(&mut h);
-    assert_eq!(text_of(&b.count_text.unwrap()), "1/1");
+    assert_eq!(cell_text(&b.count_text.unwrap()), "1/1");
     assert_eq!(h.doc_text(), "foo bar", "文書には貼り付けない");
 }
 
@@ -264,7 +254,7 @@ fn 編集で結果が無効になっても_300_ms_待って自動で再検索す
     h.keys("ctrl+home ctrl+f");
     h.text("ab");
     h.run_jobs();
-    assert_eq!(text_of(&bar(&mut h).count_text.unwrap()), "1/1");
+    assert_eq!(cell_text(&bar(&mut h).count_text.unwrap()), "1/1");
     // 検索バーを通さずに文書を変える
     let doc = h.doc_id();
     let cs = {
@@ -284,15 +274,15 @@ fn 編集で結果が無効になっても_300_ms_待って自動で再検索す
         .unwrap();
     h.advance_ms(1);
     assert!(
-        text_of(&bar(&mut h).count_text.unwrap()).starts_with('約'),
+        cell_text(&bar(&mut h).count_text.unwrap()).starts_with('約'),
         "約表示"
     );
     assert!(h.editor.next_deadline().is_some(), "期限を Host に知らせる");
     h.advance_ms(299);
-    assert!(text_of(&bar(&mut h).count_text.unwrap()).starts_with('約'));
+    assert!(cell_text(&bar(&mut h).count_text.unwrap()).starts_with('約'));
     h.advance_ms(1);
     h.run_jobs();
-    assert_eq!(text_of(&bar(&mut h).count_text.unwrap()), "1/2");
+    assert_eq!(cell_text(&bar(&mut h).count_text.unwrap()), "1/2");
     assert!(h.editor.next_deadline().is_none());
 }
 
@@ -309,7 +299,7 @@ fn 一致が_100_万件を超えると件数は上限以上で打ち切る() {
     h.keys("ctrl+f");
     h.text("a");
     h.run_jobs();
-    let count = text_of(&bar(&mut h).count_text.unwrap());
+    let count = cell_text(&bar(&mut h).count_text.unwrap());
     assert!(
         count.contains("1000000") || count.contains("1,000,000"),
         "{count}"
@@ -319,7 +309,7 @@ fn 一致が_100_万件を超えると件数は上限以上で打ち切る() {
 
 fn total(h: &mut Harness) -> String {
     h.run_jobs();
-    text_of(&bar(h).count_text.expect("件数がある"))
+    cell_text(&bar(h).count_text.expect("件数がある"))
 }
 
 #[test]
@@ -351,9 +341,9 @@ fn 正規表現の構文エラーは件数の代わりに理由を示し_検索�
     h.keys("alt+r");
     h.text("(");
     let b = bar(&mut h);
-    let e = text_of(&b.error.expect("構文エラー"));
+    let e = cell_text(&b.error.expect("構文エラー"));
     assert!(e.starts_with("✖ 正規表現が不正: "), "{e}");
-    assert_eq!(sel(&h), (0, 0), "一致へ移らない");
+    assert_eq!(h.selection_range(), (0, 0), "一致へ移らない");
     // 直すと検索が始まる
     h.keys("backspace");
     h.text(r"\(");
@@ -379,7 +369,7 @@ fn 改行を含むパターンは未対応と示す() {
     h.keys("ctrl+f");
     h.keys("alt+r");
     h.text(r"a\nb");
-    let e = text_of(&bar(&mut h).error.expect("未対応"));
+    let e = cell_text(&bar(&mut h).error.expect("未対応"));
     assert!(e.contains("改行を含むパターンは未対応"), "{e}");
 }
 
