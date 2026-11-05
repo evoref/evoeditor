@@ -3,7 +3,7 @@
 use crate::command::{
     CommandCtx, CommandKind, CommandRegistry, CommandResult, CommandSpec, Permission, RejectReason,
 };
-use crate::editor::layout::WrapMode;
+use crate::layout::WrapMode;
 
 /// `view.toggle_wrap`: 折り返しの ON/OFF。ON にするときの方式は設定 `view.wrap` (`off` なら `word`)。
 fn toggle_wrap(ctx: &mut CommandCtx<'_>) -> CommandResult {

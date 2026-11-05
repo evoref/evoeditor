@@ -7,11 +7,11 @@ use std::ops::Range;
 use eve_text::grapheme_indices;
 use eve_view::{CutPolicy, InputFieldModel, KeyLabel, ListItem, OverlayModel};
 
-use super::layout::cell_text;
 use super::overlay::Overlay;
 use super::state::EditorState;
 use crate::command::context::{ContextExpr, CtxValue};
 use crate::command::{Args, CommandResult, RejectReason};
+use crate::layout::cell_text;
 
 /// 候補の窓の最大行数 (04 §8.1)。
 pub(crate) const WINDOW: usize = 12;

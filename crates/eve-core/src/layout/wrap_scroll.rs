@@ -5,9 +5,9 @@
 use eve_text::{LineIdx, TextRead};
 use eve_view::ViewId;
 
-use super::EditorState;
 use crate::document::Document;
-use crate::editor::layout::{WrapSettings, line_rows, wrap_ctx};
+use crate::editor::state::EditorState;
+use crate::layout::{WrapSettings, line_rows, wrap_ctx};
 
 /// (論理行, その行の中の表示行)。組の大小がそのまま文書内の前後。
 pub(crate) type RowPos = (usize, usize);

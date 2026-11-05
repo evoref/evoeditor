@@ -11,7 +11,7 @@ use eve_view::{DocumentId, ViewId};
 
 use crate::document::Document;
 
-use crate::editor::layout::{Affinity, WrapSettings, line_rows};
+use crate::layout::{Affinity, WrapSettings, line_rows};
 
 use crate::command::{
     ArgValue, CommandCtx, CommandKind, CommandRegistry, CommandResult, CommandSpec, Permission,
@@ -60,13 +60,13 @@ fn line_of(doc: &Document, p: ByteOff) -> (usize, usize, usize) {
 fn display_col(doc: &Document, ls: usize, p: usize) -> u32 {
     // 表示 (Frame) と同じ幅で数える: タブ・記号・不正バイトの `<0xHH>` を含む
     let line = doc.text().byte_to_line(ByteOff(p)).0;
-    u32::try_from(crate::editor::layout::cursor_col(doc, line, p - ls)).unwrap_or(u32::MAX)
+    u32::try_from(crate::layout::cursor_col(doc, line, p - ls)).unwrap_or(u32::MAX)
 }
 
 /// 行 `line` の表示列 `dcol` の位置 (セルの途中は前に寄せる)。
 fn pos_at_dcol(doc: &Document, line: usize, dcol: u32) -> ByteOff {
     let ls = doc.text().line_to_byte(LineIdx(line)).0;
-    ByteOff(ls + crate::editor::layout::byte_at_col(doc, line, dcol as usize))
+    ByteOff(ls + crate::layout::byte_at_col(doc, line, dcol as usize))
 }
 
 /// 行頭空白 (空白とタブ) の直後 (インデント終端)。空白の続く間だけを読む (長大行でも行全体を読まない)。
@@ -91,7 +91,7 @@ const WORD_WINDOW: usize = 64 * 1024;
 /// 単語移動の停止位置 (`forward` は右)。長大行は行全体を読まず、窓の中だけを見る (03 §11.5.1)。
 pub(crate) fn word_stop(doc: &Document, p: ByteOff, forward: bool) -> ByteOff {
     let t = doc.text();
-    let long = crate::editor::layout::is_long_line(doc, t.byte_to_line(p).0);
+    let long = crate::layout::is_long_line(doc, t.byte_to_line(p).0);
     match (forward, long) {
         (true, false) => next_word_stop(t, p),
         (false, false) => prev_word_stop(t, p),
@@ -249,7 +249,7 @@ fn run(ctx: &mut CommandCtx<'_>, m: Motion, extend: bool) -> CommandResult {
     let primary = view.selection.primary_index();
     let mut primary_goal = if m.keeps_goal() { view.goal_dcol } else { None };
     let mut primary_aff = view.cursor_affinity;
-    let wrap = crate::editor::layout::wrap_ctx(ctx.state, view_id);
+    let wrap = crate::layout::wrap_ctx(ctx.state, view_id);
     let mut out = Vec::with_capacity(view.selection.len());
     for (i, r) in view.selection.iter().enumerate() {
         let mut own_goal = None;

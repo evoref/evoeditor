@@ -3,6 +3,8 @@
 //! 範囲: 折り返し (`wrap`)、水平スクロール、行番号のガター、タブの展開、全角・結合文字・絵文字の幅、不可視文字・制御文字・
 //! 不正バイトのエスケープの可視化、全角スペースとタブの可視化 (FR-508 の最小)、選択、カーソル。
 //! スタイルはロール (`RoleStyles`) で引く。
+//!
+//! spec: 02 §8, 03 §14, 07 §8 (テーマ段の適用)
 
 use eve_text::{
     ByteOff, ByteRange, ControlStyle, EmojiWidth, LineIdx, TextRead, WidthConfig, first_grapheme,
@@ -18,10 +20,12 @@ use eve_encoding::{PuaEscapeMode, unescape_char};
 
 use crate::document::Document;
 
-use super::state::EditorState;
+use crate::editor::state::EditorState;
 
 mod long;
+pub(crate) mod theme;
 mod wrap;
+mod wrap_scroll;
 use long::{CharWidth, ColIndex};
 pub use wrap::{Affinity, WrapMode, WrapSettings};
 use wrap::{cursor_in_rows, wrap_line};
@@ -772,7 +776,7 @@ fn title(state: &EditorState, doc: &Document) -> String {
 #[allow(clippy::too_many_arguments)]
 fn wrapped_rows(
     doc: &Document,
-    view: &super::state::View,
+    view: &crate::editor::state::View,
     gw: u16,
     text_cols: usize,
     rows: usize,
@@ -1014,13 +1018,13 @@ pub(crate) fn build_frame(
                 shape: CursorShape::Bar,
             }),
         search: state.search_bar_model(),
-        status: super::chrome::status_model(state, view_id, chord),
-        hints: super::chrome::hint_model(state, chord),
+        status: crate::editor::chrome::status_model(state, view_id, chord),
+        hints: crate::editor::chrome::hint_model(state, chord),
         hint_bar: state.hint_bar_on,
-        overlays: super::chrome::overlay_models(state),
+        overlays: crate::editor::chrome::overlay_models(state),
         which_key: None,
         messages: message_model(state),
-        texts: super::chrome::chrome_texts(state),
+        texts: crate::editor::chrome::chrome_texts(state),
         title: title(state, doc),
         roles: state.roles.clone(),
     })
