@@ -135,7 +135,7 @@ pub struct EditorState {
     /// パレットで選ばれ、Editor が次に実行するコマンド。
     pub(crate) deferred_command: Option<(String, crate::command::Args)>,
     /// 文書内検索の状態 (検索バーが開いている間)。
-    pub(crate) search: Option<super::search_state::SearchState>,
+    pub(crate) search: Option<crate::search::search_state::SearchState>,
     /// 検索バー (開いている間)。
     pub(crate) search_bar: Option<super::search_bar::SearchBarState>,
     /// 表現不能の文字の強調 (文書, 作った Revision, 位置)。Revision が変わる (次の編集) まで残る。
