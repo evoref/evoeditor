@@ -7,7 +7,6 @@
 // FsError は詳細 (Conflict の Stamp など) を持つ大きな型。エラーは稀な経路なので、Box で包まず値で返す。
 #![allow(clippy::result_large_err)]
 
-mod cancel;
 mod command;
 mod content_hash;
 mod document;
@@ -30,7 +29,7 @@ mod ui_model;
 mod unmap;
 mod view;
 
-pub use cancel::CancelToken;
+pub use jobs::cancel::CancelToken;
 mod eol;
 mod search;
 pub use document::{

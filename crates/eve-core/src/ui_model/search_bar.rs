@@ -9,9 +9,9 @@ use eve_view::{
     BarFocus, CaseMode, CutPolicy, InputFieldModel, MessageLevel, ReplaceRowModel, SearchBarModel,
 };
 
-use crate::cancel::CancelToken;
 use crate::command::CommandResult;
 use crate::document::{Origin, Transaction, UndoGroupHint};
+use crate::jobs::cancel::CancelToken;
 use crate::jobs::{JobKind, JobResult};
 use crate::search::{
     Case, QueryError, SearchQuery, build_replace_all, replacement_for, scan_lines,

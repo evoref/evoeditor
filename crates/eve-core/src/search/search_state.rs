@@ -7,7 +7,7 @@
 use eve_text::{ByteOff, ByteRange, LineIdx, Range, Selection, TextRead};
 use eve_view::{DocumentId, JobId, MessageLevel, Revision};
 
-use crate::cancel::CancelToken;
+use crate::jobs::cancel::CancelToken;
 use crate::jobs::{JobKind, JobResult};
 use crate::search::{SearchQuery, scan_bytes};
 

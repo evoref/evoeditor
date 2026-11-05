@@ -12,7 +12,6 @@ use eve_encoding::{
 use eve_text::{ByteRange, LineEnding, Snapshot, TextBuilder, TextRead};
 use eve_view::JobId;
 
-use crate::cancel::CancelToken;
 use crate::document::{EolStats, ReadOnlyReason, ReadOnlyReasons, TextFormat};
 use crate::fs::{
     ChunkError, Expect, FileKind, FileStamp, FsError, FsErrorDetail, FsErrorKind, ReadChunks,
@@ -20,6 +19,7 @@ use crate::fs::{
 };
 use crate::fspath::FsPath;
 use crate::interrupted::map_interrupted;
+use crate::jobs::cancel::CancelToken;
 use crate::jobs::{ConfirmAsk, JobError, JobPorts, JobResult, OpenNotes};
 
 /// 先頭の判定に使うバイト数 (03 §8.2 の `sniff_len`)。

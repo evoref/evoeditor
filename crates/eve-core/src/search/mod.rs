@@ -19,7 +19,7 @@ use eve_text::{ByteOff, ByteRange, LineIdx, TextRead, is_grapheme_boundary, word
 use eve_view::JobId;
 use memchr::memmem;
 
-use crate::cancel::CancelToken;
+use crate::jobs::cancel::CancelToken;
 use crate::jobs::{JobError, JobResult};
 use crate::time::{Clock, Millis};
 
