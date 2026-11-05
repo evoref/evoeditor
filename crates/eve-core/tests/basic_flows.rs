@@ -1,4 +1,5 @@
-//! M1 の受入基準 (AC) のシナリオ (docs/08 §2.2「M1 で通す AC」、01 §5)。`Harness` (eve-testkit) で書く。
+//! 基本の操作の流れ (書記素の削除・移動・選択・新規・読込の失敗・保存・undo と未変更の表示・終了の確認) の受入基準 (AC)
+//! のシナリオ (もとは M1 の AC、docs/08 §2.2「M1 で通す AC」、01 §5)。`Harness` (eve-testkit) で書く。
 //! 各テストの直前の `// verifies:` が、`tests/ac-checklist.toml` の `verified_by` に書く AC の ID。
 //! 既存の単体・結合テストが検証している AC は、ここには重ねず ac-checklist から直接それを指す。
 
