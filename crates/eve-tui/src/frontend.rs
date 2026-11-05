@@ -412,4 +412,15 @@ mod tests {
         run_guarded(|| {}, || died.set(true));
         assert!(!died.get());
     }
+
+    /// 緊急の復元の列は、通常の復元 (`ansi::LEAVE`、Unix は先に `unix::LEAVE_MODES`) と同じ並びに CAN を前置したもの
+    /// (04 §14.3。docs/review/v0.3-findings.md の STR-T9)。片方だけを直すとずれるので、ここで突き合わせる。
+    #[test]
+    fn 緊急の復元の列は通常の復元と同じ並び() {
+        #[cfg(windows)]
+        let expected = format!("\x18{}", crate::ansi::LEAVE);
+        #[cfg(unix)]
+        let expected = format!("\x18{}{}", crate::unix::LEAVE_MODES, crate::ansi::LEAVE);
+        assert_eq!(super::EMERGENCY_BYTES, expected.as_bytes());
+    }
 }
