@@ -420,6 +420,7 @@ dependencies = [
  "eve-testkit",
  "eve-view",
  "libc",
+ "proptest",
  "ratatui",
  "signal-hook",
  "unicode-width",

@@ -544,6 +544,40 @@ fn partial_suffix(s: &[u8], pat: &[u8]) -> usize {
         .unwrap_or(0)
 }
 
+/// `fuzz_vt_input` の本体 (docs/review/v0.3-findings.md の §2.7 の 8)。cargo-fuzz のターゲット
+/// (`fuzz/fuzz_targets/fuzz_vt_input.rs`) と、どの OS の CI でも回す proptest (`tests/fuzz_vt_input.rs`) が同じ関数を使う。
+///
+/// 入力の先頭 1 バイトを分割の数、続く分割の数だけのバイトを分割の位置にして、残りの本文を任意の位置で区切った読取の列として
+/// `feed` する (途中で `flush` も挟む)。パニックしない (算術のあふれも含む。fuzz は overflow-checks を有効にして回す)ことと、
+/// 最後の `flush` の後に、貼り付けの受信中でなければ持ち越しが残らないことを確かめる。
+pub fn fuzz_pipeline(data: &[u8]) {
+    let Some((&n, rest)) = data.split_first() else {
+        return;
+    };
+    let n = usize::from(n % 16).min(rest.len());
+    let (cuts, body) = rest.split_at(n);
+    let mut points: Vec<usize> = cuts
+        .iter()
+        .map(|&c| usize::from(c) * body.len() / 256)
+        .collect();
+    points.sort_unstable();
+    let mut p = VtParser::new();
+    let mut start = 0;
+    for (i, &at) in points.iter().enumerate() {
+        let _ = p.feed(&body[start..at.max(start)]);
+        start = at.max(start);
+        // 分割の位置の下位ビットが立っていれば、入力が途絶えたことにする
+        if cuts[i] & 1 == 1 {
+            let _ = p.flush();
+        }
+    }
+    let _ = p.feed(&body[start..]);
+    let _ = p.flush();
+    if !p.in_paste() {
+        assert!(!p.has_pending(), "flush の後に持ち越しが残っている");
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -90,3 +90,97 @@ pub fn decode_pipeline(data: &[u8]) {
     // 区分 B の検出は復号と独立に数えるだけ (件数が上限を超えない)
     assert!(summary.first_offsets.len() <= crate::MAX_POSITIONS);
 }
+
+/// `fuzz_encode` の本体 (docs/review/v0.3-findings.md の §2.7 の 9)。入力の先頭 4 バイトで文字コード (6 個)・
+/// エスケープの方針 (3 個)・BOM・チャンクの大きさを決め、残りから文字列を作る (不正な UTF-8 の列はエスケープ文字にする:
+/// 不正バイトを含む文書を保存するのと同じ形)。検査する性質:
+///
+/// - パニックしない。
+/// - 一括の符号化とチャンクに分けた符号化で、出力と報告が同じ (保存はチャンクごとに符号化する、03 §9.3)。
+/// - 同じ入力を 2 回符号化すると同じ結果 (乾式走査 (書かずに数える) と本番の書き込みが一致する、03 §8.6 E1)。
+/// - UTF-16 では、報告が 0 件なら `utf16_len` (乾式走査の出力長) + BOM が出力の長さと一致する。
+/// - 報告が 0 件で、エスケープ文字を含まなければ、復号すると元の文字列に戻る。
+pub fn encode_pipeline(data: &[u8]) {
+    let (head, body) = if data.len() >= 4 {
+        data.split_at(4)
+    } else {
+        (&[0u8, 0, 0, 0][..], data)
+    };
+    let enc = Encoding::ALL[usize::from(head[0]) % Encoding::ALL.len()];
+    let policy = [
+        EscapePolicy::Restore,
+        EscapePolicy::AsText,
+        EscapePolicy::Reject,
+    ][usize::from(head[1]) % 3];
+    let bom = head[2] & 1 == 1 && (enc == Encoding::Utf8 || enc.is_utf16());
+    let chunk_chars = usize::from(head[3] % 32);
+
+    // 文字列: 正しい UTF-8 の部分はそのまま、不正なバイトはエスケープ文字 (復号と同じ表現)
+    let mut text = String::new();
+    for piece in body.utf8_chunks() {
+        text.push_str(piece.valid());
+        text.extend(piece.invalid().iter().map(|&b| crate::escape_byte(b)));
+    }
+
+    let run = |pieces: &[&str]| {
+        let mut e = Encoder::new(enc, bom, policy);
+        let (mut out, mut rep) = (Vec::new(), EncodeReport::default());
+        for p in pieces {
+            e.encode(p, &mut out, &mut rep);
+        }
+        e.finish(&mut out, &mut rep);
+        (out, rep)
+    };
+    let (whole, whole_rep) = run(&[text.as_str()]);
+
+    // チャンクに分ける (文字の境界で。0 は分けない)
+    let pieces: Vec<&str> = if chunk_chars == 0 {
+        vec![text.as_str()]
+    } else {
+        let mut v = Vec::new();
+        let mut start = 0;
+        for (n, (i, _)) in text.char_indices().enumerate() {
+            if n > 0 && n % chunk_chars == 0 {
+                v.push(&text[start..i]);
+                start = i;
+            }
+        }
+        v.push(&text[start..]);
+        v
+    };
+    let (chunked, chunked_rep) = run(&pieces);
+    assert_eq!(
+        chunked,
+        whole,
+        "チャンクに分けても同じ出力 ({})",
+        enc.name()
+    );
+    assert_eq!(
+        chunked_rep,
+        whole_rep,
+        "チャンクに分けても同じ報告 ({})",
+        enc.name()
+    );
+
+    let (again, again_rep) = run(&[text.as_str()]);
+    assert_eq!(
+        (&again, &again_rep),
+        (&whole, &whole_rep),
+        "乾式走査と本番が一致"
+    );
+
+    if !whole_rep.is_empty() {
+        assert!(whole_rep.recorded.len() as u64 <= whole_rep.total);
+        return;
+    }
+    if enc.is_utf16() {
+        let want = crate::encode::utf16_len(&text, policy) + if bom { 2 } else { 0 };
+        assert_eq!(whole.len(), want, "UTF-16 の乾式走査の出力長");
+    }
+    if !text.chars().any(|c| unescape_char(c).is_some()) {
+        let mut dec = Decoder::new(enc, bom);
+        let mut back = String::new();
+        dec.decode(&whole, true, &mut back);
+        assert_eq!(back, text, "報告 0 件なら復号で元に戻る ({})", enc.name());
+    }
+}
