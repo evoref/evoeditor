@@ -297,28 +297,33 @@ fn copy_xattrs(src: &File, dst: &File, with_acl: bool) -> Vec<AttrKind> {
 /// libc の関数ではなくシステムコールで呼ぶ (musl 1.2.5 (Rust の musl ターゲットが同梱する版) には `renameat2` の関数が無い)。
 fn rename_no_replace(from: &Path, to: &Path) -> io::Result<()> {
     let (f, t) = (c_path(from)?, c_path(to)?);
-    // SAFETY: NUL 終端のパス 2 つ。`AT_FDCWD` は相対パスを作業ディレクトリから解く。引数はカーネルの renameat2 と同じ並び
-    let r = unsafe {
-        // 可変長の引数は long として渡す (libc の syscall の作法)
-        libc::syscall(
-            libc::SYS_renameat2,
-            libc::c_long::from(libc::AT_FDCWD),
-            f.as_ptr(),
-            libc::c_long::from(libc::AT_FDCWD),
-            t.as_ptr(),
-            libc::c_long::from(libc::RENAME_NOREPLACE),
-        )
+    let e = match hooks::fail("rename_noreplace") {
+        Some(e) => e,
+        None => {
+            // SAFETY: NUL 終端のパス 2 つ。`AT_FDCWD` は相対パスを作業ディレクトリから解く。引数はカーネルの renameat2 と同じ並び
+            let r = unsafe {
+                // 可変長の引数は long として渡す (libc の syscall の作法)
+                libc::syscall(
+                    libc::SYS_renameat2,
+                    libc::c_long::from(libc::AT_FDCWD),
+                    f.as_ptr(),
+                    libc::c_long::from(libc::AT_FDCWD),
+                    t.as_ptr(),
+                    libc::c_long::from(libc::RENAME_NOREPLACE),
+                )
+            };
+            if r == 0 {
+                return Ok(());
+            }
+            io::Error::last_os_error()
+        }
     };
-    if r == 0 {
-        return Ok(());
-    }
-    let e = io::Error::last_os_error();
     match e.raw_os_error() {
         // 上書きしない移動を使えない FS: ENOSYS (古いカーネル) と EINVAL (FUSE の ntfs-3g など) に加えて、
         // ENOTSUP / EOPNOTSUPP を返す FS もある (docs/review/v0.3-findings.md の REF-07)
         Some(c) if [libc::ENOSYS, libc::EINVAL, libc::ENOTSUP, libc::EOPNOTSUPP].contains(&c) => {
-            fs::hard_link(from, to)?;
-            fs::remove_file(from)
+            hooked("link", || fs::hard_link(from, to))?;
+            hooked("unlink_after_link", || fs::remove_file(from))
         }
         _ => Err(e),
     }
@@ -341,8 +346,16 @@ fn rename_error(e: io::Error, path: &FsPath, intact: bool) -> FsError {
     }
 }
 
+/// システムコールの呼び出し `f` の前に、試験の差し替え (`hooks::fail`) を見る。配布ビルドでは `f()` そのもの。
+fn hooked<T>(point: &str, f: impl FnOnce() -> io::Result<T>) -> io::Result<T> {
+    match hooks::fail(point) {
+        Some(e) => Err(e),
+        None => f(),
+    }
+}
+
 fn fsync_dir(dir: &Path) -> bool {
-    File::open(dir).and_then(|d| d.sync_all()).is_ok()
+    hooked("fsync_dir", || File::open(dir).and_then(|d| d.sync_all())).is_ok()
 }
 
 struct FileChunks {
@@ -563,7 +576,7 @@ impl FileSystem for UnixFs {
         hooks::hit("kill_after_tmp_write");
 
         // 3. fsync (失敗は警告。ext4 の data=ordered でも rename の前の fsync は要る)
-        if opts.fsync != FsyncLevel::None && file.sync_all().is_err() {
+        if opts.fsync != FsyncLevel::None && hooked("fsync", || file.sync_all()).is_err() {
             warnings.push(SaveWarning::FsyncFailed);
         }
 
@@ -584,7 +597,11 @@ impl FileSystem for UnixFs {
                 same_group = gid_is(&file);
                 if uid != euid() || !same_group {
                     // 他人の所有を自分が引き継げない (EPERM) ときは、グループだけでも合わせて警告する
-                    if std::os::unix::fs::fchown(&file, Some(uid), Some(gid)).is_err() {
+                    if hooked("fchown", || {
+                        std::os::unix::fs::fchown(&file, Some(uid), Some(gid))
+                    })
+                    .is_err()
+                    {
                         let _ = std::os::unix::fs::fchown(&file, None, Some(gid));
                         lose(AttrKind::Security);
                     }
@@ -661,7 +678,7 @@ impl FileSystem for UnixFs {
         // 5. 置換 (終了の経路はここが済むまで待つ)
         let _replacing = self.replacing.guard(&target_path.display());
         let method = if existing.is_some() {
-            if let Err(e) = fs::rename(&tmp, &target) {
+            if let Err(e) = hooked("replace", || fs::rename(&tmp, &target)) {
                 // T が無傷か (手順 0b の値と同じか) を取り直して確かめる。無傷でなければ AtomicUnsupported にしない
                 let intact = matches!(
                     (&existing, self.metadata(&target_path).ok()),
@@ -928,5 +945,176 @@ true
             &FsPath::new(t.p("x")),
         );
         assert_eq!(e.kind, FsErrorKind::DiskFull);
+    }
+
+    // ---- システムコールの失敗の差し替え (hooks::inject_errno、docs/review/v0.3-findings.md の STR-T10) ----
+    // `inject_errno` の戻り値は、落とすときにその点を通ったかを確かめる (通らずに試験が通るのを防ぐ)。
+
+    fn stamp_of(ufs: &UnixFs, p: &Path) -> Expect {
+        Expect::Stamp(FileStamp::from_meta(
+            &ufs.metadata(&FsPath::new(p.to_path_buf())).unwrap(),
+            None,
+        ))
+    }
+
+    /// 保存中フラグを書く UnixFs (状態ディレクトリは `t` の下の `state`)。中断の後にフラグが残らないことを確かめる (05 §4.1 手順 8)。
+    fn with_state(t: &Tmp) -> UnixFs {
+        let sd = t.p("state");
+        fs::create_dir_all(&sd).unwrap();
+        UnixFs::new(sd)
+    }
+
+    fn leftovers_outside_state(t: &Tmp) -> Vec<String> {
+        leftovers(t).into_iter().filter(|n| n != "state").collect()
+    }
+
+    // SAF-23: 置換の rename が EXDEV / ENOTSUP で、取り直した T が無傷なら AtomicUnsupported (core が確認の後に直接上書きへ進む、
+    // 05 §4.4 の表)。T・一時ファイル・保存中フラグも、本物の失敗と同じく片付く
+    #[test]
+    fn 置換の_rename_が_exdev_や_enotsup_で_t_が無傷なら_atomic_unsupported() {
+        for errno in [libc::EXDEV, libc::ENOTSUP, libc::EOPNOTSUPP] {
+            let t = Tmp::new(&format!("xdev{errno}"));
+            let ufs = with_state(&t);
+            let a = t.p("a.txt");
+            fs::write(&a, b"old\n").unwrap();
+            let expect = stamp_of(&ufs, &a);
+            let _g = hooks::inject_errno("replace", errno);
+            let e = save(&ufs, &a, b"new\n", expect).unwrap_err();
+            assert_eq!(e.kind, FsErrorKind::AtomicUnsupported, "errno {errno}");
+            assert_eq!(fs::read(&a).unwrap(), b"old\n", "T は無傷");
+            assert!(
+                leftovers_outside_state(&t).is_empty(),
+                "一時ファイルを片付ける: {:?}",
+                leftovers(&t)
+            );
+            assert!(
+                ufs.list_inflight().unwrap().is_empty(),
+                "保存中フラグを消す"
+            );
+        }
+    }
+
+    // SAF-23 の守り: T が無傷でない (誰かが変えた) なら、EXDEV でも AtomicUnsupported にしない (直接上書きで他人の変更を潰さない)
+    #[test]
+    fn t_が無傷でなければ_exdev_でも_atomic_unsupported_にしない() {
+        let p = FsPath::new(PathBuf::from("/x/a.txt"));
+        let e = rename_error(io::Error::from_raw_os_error(libc::EXDEV), &p, false);
+        assert_ne!(e.kind, FsErrorKind::AtomicUnsupported);
+        let e = rename_error(io::Error::from_raw_os_error(libc::EXDEV), &p, true);
+        assert_eq!(e.kind, FsErrorKind::AtomicUnsupported);
+    }
+
+    // 置換の rename の他の失敗 (EIO) は AtomicUnsupported にしない (直接上書きへ進めない)
+    #[test]
+    fn 置換の_rename_が_eio_なら_atomic_unsupported_にしない() {
+        let t = Tmp::new("eio");
+        let ufs = with_state(&t);
+        let a = t.p("a.txt");
+        fs::write(&a, b"old\n").unwrap();
+        let expect = stamp_of(&ufs, &a);
+        let _g = hooks::inject_errno("replace", libc::EIO);
+        let e = save(&ufs, &a, b"new\n", expect).unwrap_err();
+        assert_ne!(e.kind, FsErrorKind::AtomicUnsupported);
+        assert_eq!(fs::read(&a).unwrap(), b"old\n");
+        assert!(
+            leftovers_outside_state(&t).is_empty(),
+            "{:?}",
+            leftovers(&t)
+        );
+        assert!(ufs.list_inflight().unwrap().is_empty());
+    }
+
+    // REF-07: 上書きしない移動 (Linux は renameat2) を使えない FS では、ハードリンク + 削除で新規ファイルを作る
+    #[test]
+    fn 上書きしない移動が使えなければハードリンクで新規ファイルを作る() {
+        for errno in [libc::ENOSYS, libc::EINVAL, libc::ENOTSUP, libc::EOPNOTSUPP] {
+            let t = Tmp::new(&format!("noreplace{errno}"));
+            let ufs = UnixFs::default();
+            let a = t.p("a.txt");
+            let _g = hooks::inject_errno("rename_noreplace", errno);
+            let r = save(&ufs, &a, b"one\n", Expect::Absent).unwrap();
+            assert_eq!(r.method, SaveMethod::NewFile, "errno {errno}");
+            assert_eq!(fs::read(&a).unwrap(), b"one\n");
+            assert!(
+                leftovers(&t).is_empty(),
+                "errno {errno}: {:?}",
+                leftovers(&t)
+            );
+        }
+    }
+
+    // ハードリンクの退路も上書きしない: その間に T ができていたら (link が EEXIST) Conflict で、T に触れない
+    #[test]
+    fn 退路の_link_が_eexist_なら_conflict_で_t_に触れない() {
+        let t = Tmp::new("linkexist");
+        let ufs = UnixFs::default();
+        let a = t.p("a.txt");
+        let _g1 = hooks::inject_errno("rename_noreplace", libc::ENOSYS);
+        let _g2 = hooks::inject_errno("link", libc::EEXIST);
+        let e = save(&ufs, &a, b"one\n", Expect::Absent).unwrap_err();
+        assert!(
+            matches!(e.kind, FsErrorKind::Conflict { .. }),
+            "{:?}",
+            e.kind
+        );
+        assert!(leftovers(&t).is_empty(), "{:?}", leftovers(&t));
+    }
+
+    // 退路の link がほかの理由で失敗したら、何も作らずにエラー (T は作られず、一時ファイルも残さない)。
+    // エラーの種類は確かめない (EPERM が PermissionDenied に写るのは誤解を招く、SAF-39。REF-07 の扱いと合わせて v0.4 以降に決める)
+    #[test]
+    fn 退路の_link_も失敗したら何も作らない() {
+        let t = Tmp::new("nolink");
+        let ufs = with_state(&t);
+        let a = t.p("a.txt");
+        let _g1 = hooks::inject_errno("rename_noreplace", libc::ENOSYS);
+        let _g2 = hooks::inject_errno("link", libc::EPERM);
+        assert!(save(&ufs, &a, b"one\n", Expect::Absent).is_err());
+        assert!(!a.exists(), "T を作らない");
+        assert!(
+            leftovers_outside_state(&t).is_empty(),
+            "{:?}",
+            leftovers(&t)
+        );
+        assert!(ufs.list_inflight().unwrap().is_empty());
+    }
+
+    // 05 §4.1 手順 3: 一時ファイルの fsync を FS が受け付けない (EINVAL。ネットワーク FS など) ときは警告にして保存を続ける。
+    // EIO (データが届いていない恐れ) の扱いは仕様に無いので、ここでは固めない (docs/review/v0.3-findings.md の SAF-46)
+    #[test]
+    fn 一時ファイルの_fsync_を受け付けない_fs_では警告にして保存する() {
+        let t = Tmp::new("fsync");
+        let ufs = UnixFs::default();
+        let a = t.p("a.txt");
+        fs::write(&a, b"old\n").unwrap();
+        let expect = stamp_of(&ufs, &a);
+        let _g = hooks::inject_errno("fsync", libc::EINVAL);
+        let r = save(&ufs, &a, b"new\n", expect).unwrap();
+        assert_eq!(fs::read(&a).unwrap(), b"new\n");
+        assert!(
+            r.warnings.contains(&SaveWarning::FsyncFailed),
+            "{:?}",
+            r.warnings
+        );
+    }
+
+    // 05 §4.1 手順 6・§4.3: ディレクトリの fsync の失敗は (置換の後なので) 警告にする
+    #[test]
+    fn ディレクトリの_fsync_の失敗は警告にする() {
+        for errno in [libc::EINVAL, libc::EIO] {
+            let t = Tmp::new(&format!("fsyncdir{errno}"));
+            let ufs = UnixFs::default();
+            let a = t.p("a.txt");
+            fs::write(&a, b"old\n").unwrap();
+            let expect = stamp_of(&ufs, &a);
+            let _g = hooks::inject_errno("fsync_dir", errno);
+            let r = save(&ufs, &a, b"new\n", expect).unwrap();
+            assert_eq!(fs::read(&a).unwrap(), b"new\n");
+            assert!(
+                r.warnings.contains(&SaveWarning::FsyncFailed),
+                "errno {errno}: {:?}",
+                r.warnings
+            );
+        }
     }
 }
