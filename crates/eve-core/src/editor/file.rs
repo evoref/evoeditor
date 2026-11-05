@@ -634,6 +634,13 @@ impl EditorState {
         let Some(doc) = self.documents.get_mut(&doc_id) else {
             return CommandResult::Rejected(RejectReason::NoTarget);
         };
+        // 読込中 (開き直し・再読込の途中を含む) は保存しない。旧本文の保存の結果が新しい文書の保存点と照合を狂わせる
+        // (保存の経路はすべてここを通る。コマンドの when 句を経ない確認の「保存」からも。docs/review/v0.3-findings.md の SAF-17)
+        if doc.load_state != crate::document::LoadState::Ready {
+            let shown = path.display();
+            self.message(MessageLevel::Info, "info.reload.busy", &shown);
+            return CommandResult::Rejected(RejectReason::NotAvailable);
+        }
         // 読み取り専用属性を解除した文書の上書き保存は、「読み取り専用を解除して保存」の確認を経る (FR-116、03 §9.3 手順 1)。
         // 承認した Revision では繰り返さない
         let clear_readonly = doc.attribute_released && doc.path.as_ref() == Some(&path);

@@ -352,6 +352,12 @@ impl EditorState {
     /// 読込の完了などで、既に採番した文書の中身を差し替える。表示設定を写す。
     pub(super) fn put_document(&mut self, id: DocumentId, mut doc: Document) {
         doc.display = self.display_settings();
+        // 同じ文書を差し替える (読込の完了・開き直し) ときは、Revision を旧文書の続きから振る。文書ごとに単調増加にして
+        // (03 §17.1)、差し替えの前に投入したジョブの結果を Revision の照合で必ず古いと判定する
+        // (docs/review/v0.3-findings.md の SAF-06)
+        if let Some(old) = self.documents.get(&id) {
+            doc.continue_revision(old.revision());
+        }
         self.documents.insert(id, doc);
     }
 
