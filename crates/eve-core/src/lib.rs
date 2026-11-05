@@ -19,6 +19,7 @@ mod io_jobs;
 mod jobs;
 mod keymap;
 mod last_version;
+mod layout;
 mod leftover;
 mod paths;
 mod replacing;

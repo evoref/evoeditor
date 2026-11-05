@@ -10,8 +10,8 @@ use eve_view::{
 
 use crate::document::{Document, LoadState};
 
-use super::layout::cell_text;
 use super::state::EditorState;
+use crate::layout::cell_text;
 
 /// ヒントバーの `normal` 文脈の項目 (07 §11.6 の「ヒント」列。CommandId と優先度)。
 const NORMAL_HINTS: [(&str, u8); 7] = [
@@ -51,7 +51,7 @@ fn grapheme_column(doc: &Document, head: ByteOff) -> usize {
     let t = doc.text();
     let line = t.byte_to_line(head);
     let ls = t.line_to_byte(line);
-    if let Some(n) = super::layout::long_line_chars(doc, line.0, head.0 - ls.0) {
+    if let Some(n) = crate::layout::long_line_chars(doc, line.0, head.0 - ls.0) {
         return n + 1;
     }
     let prefix = t.slice_to_string(ByteRange::new(ls, head));

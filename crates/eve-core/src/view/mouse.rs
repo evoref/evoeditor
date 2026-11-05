@@ -10,8 +10,8 @@ use eve_view::{
 use crate::command::{
     CommandCtx, CommandKind, CommandRegistry, CommandResult, CommandSpec, Permission,
 };
-use crate::editor::layout::{Affinity, line_rows, wrap_ctx};
 use crate::editor::state::EditorState;
+use crate::layout::{Affinity, line_rows, wrap_ctx};
 use crate::time::{Millis, Tick};
 
 /// Shift+ホイールの横スクロール量 (列)。
@@ -150,7 +150,7 @@ impl EditorState {
         let top = t.byte_to_line(v.scroll.top).0;
         let last = t.len_lines().saturating_sub(1);
         let widest = (top..=(top + rows).min(last))
-            .map(|l| crate::editor::layout::cursor_cell(d, l, usize::MAX).0)
+            .map(|l| crate::layout::cursor_cell(d, l, usize::MAX).0)
             .max()
             .unwrap_or(0);
         let left = i64::from(v.scroll.left_col);
@@ -168,7 +168,7 @@ impl EditorState {
         let v = self.views.get(&at.view)?;
         let d = self.documents.get(&v.doc)?;
         let (cols, rows) = self.viewport();
-        let gw = i32::from(crate::editor::layout::gutter_width(d, cols as usize));
+        let gw = i32::from(crate::layout::gutter_width(d, cols as usize));
         let row = at.row.clamp(0, (i32::from(rows) - 1).max(0)) as usize;
         let text_col = (at.col - gw).max(0) as usize;
         let t = d.text();
@@ -188,7 +188,7 @@ impl EditorState {
         let ls = t.line_to_byte(LineIdx(line)).0;
         let col = v.scroll.left_col as usize + text_col;
         Some((
-            ByteOff(ls + crate::editor::layout::byte_at_col(d, line, col)),
+            ByteOff(ls + crate::layout::byte_at_col(d, line, col)),
             Affinity::After,
         ))
     }

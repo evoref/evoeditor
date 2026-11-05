@@ -9,8 +9,6 @@ use eve_view::{
     Capabilities, DocumentId, EditorEvent, Effect, JobId, OriginKind, Revision, ViewId, WindowId,
 };
 
-mod wrap_scroll;
-
 use super::file::Pending;
 use crate::document::{Applied, AppliedTx, ApplyError, Document, Transaction};
 use crate::jobs::JobSpawner;
@@ -41,9 +39,9 @@ pub struct View {
     /// 垂直移動の目標の表示列 (03 §5.2)。水平移動・編集・クリックでクリアし、垂直移動は維持する。
     pub goal_dcol: Option<u32>,
     /// 折り返しの設定 (03 §14.3)。
-    pub wrap: super::layout::WrapSettings,
+    pub wrap: crate::layout::WrapSettings,
     /// 折り返し位置のカーソルの帰属 (主カーソルだけ、03 §14.3.1)。
-    pub cursor_affinity: super::layout::Affinity,
+    pub cursor_affinity: crate::layout::Affinity,
 }
 
 /// frontend が持つ編集面。v0.x は 1 つで、View を 1 つ持つ。
@@ -60,19 +58,19 @@ pub struct EditorState {
     pub(crate) documents: BTreeMap<DocumentId, Document>,
     pub(crate) views: BTreeMap<ViewId, View>,
     pub(crate) windows: Vec<Window>,
-    next_id: u64,
+    pub(crate) next_id: u64,
     /// Editor の「今」。Host が各メッセージの処理の前に `tick` で渡した値で、コマンドの実行中に読み直さない。
     pub(crate) now: Tick,
     pub(crate) caps: Capabilities,
     /// Window の編集面の大きさ (セル)。ページ移動などが使う。
-    viewport: (u16, u16),
-    effects: Vec<Effect>,
-    events: Vec<EditorEvent>,
-    snapshot_updates: BTreeSet<DocumentId>,
+    pub(crate) viewport: (u16, u16),
+    pub(crate) effects: Vec<Effect>,
+    pub(crate) events: Vec<EditorEvent>,
+    pub(crate) snapshot_updates: BTreeSet<DocumentId>,
     /// 閉じた文書のうち、保存ジョブが実行中のものの退避用の公開物 (03 §9.2 の閉じる手順 (a)、§9.8 の不変条件 4)。
     /// 保存の結果が届くまで緊急退避の対象に残し、保存が成功したら外し、失敗したら退避先に書く。
     pub(crate) closing_snapshots: BTreeMap<DocumentId, super::snapshot::DocSnapshot>,
-    needs_render: bool,
+    pub(crate) needs_render: bool,
     /// 左ボタンのドラッグ中の状態 (docs/03 §5.8.1)。
     pub(crate) mouse_drag: Option<crate::view::mouse::Drag>,
     /// `config.reload` の途中: 解析したキーマップと、`config.toml` で変わった項目 (Editor が受け取って差し替える)。
@@ -125,7 +123,7 @@ pub struct EditorState {
     /// メッセージの履歴 (古い順。上限 `message::HISTORY_MAX`、04 §8.9)。
     pub(crate) message_log: std::collections::VecDeque<super::message::LoggedMessage>,
     /// 履歴の破棄を通知した文書 (文書ごとに 1 回)。
-    trim_notified: BTreeSet<DocumentId>,
+    pub(crate) trim_notified: BTreeSet<DocumentId>,
     /// 内部レジスタ・ハンドルの表・貼り付けの token (クリップボード、`clipboard.rs`)。
     pub(crate) clipboard: crate::command::clipboard::ClipboardState,
     /// 解決済みの設定 (07 §5.0 の公開キー)。起動時に Host が `Editor::set_config` で渡す。
@@ -226,7 +224,7 @@ impl EditorState {
             config_sources: None,
             palette_recent: Vec::new(),
             user_theme: None,
-            roles: std::sync::Arc::new(super::theme::resolve(
+            roles: std::sync::Arc::new(crate::layout::theme::resolve(
                 "default",
                 eve_view::ColorDepth::TrueColor,
             )),
@@ -265,8 +263,8 @@ impl EditorState {
     }
 
     /// 設定 (`view.wrap` / `view.wrap_indent` / `view.wrap_kinsoku`) から作った折り返しの設定。
-    pub fn config_wrap(&self) -> super::layout::WrapSettings {
-        use super::layout::{WrapMode, WrapSettings};
+    pub fn config_wrap(&self) -> crate::layout::WrapSettings {
+        use crate::layout::{WrapMode, WrapSettings};
         let c = &self.config;
         WrapSettings {
             mode: match c.wrap {
@@ -645,8 +643,8 @@ impl EditorState {
                     && document.format.long_lines == 0
                     && top == view.scroll.top
                 {
-                    let cols = super::layout::wrap_width(document, viewport);
-                    let n = super::layout::line_rows(document, top_line, view.wrap, cols).len();
+                    let cols = crate::layout::wrap_width(document, viewport);
+                    let n = crate::layout::line_rows(document, top_line, view.wrap, cols).len();
                     view.scroll.wrap_idx.min(n.saturating_sub(1) as u32)
                 } else {
                     0
@@ -698,7 +696,7 @@ impl EditorState {
     }
 
     /// 折り返しの設定を変える。スクロールは `top` (論理行) を保ち、表示行の番号と水平スクロールを戻す (03 §14.3)。
-    pub fn set_wrap(&mut self, view: ViewId, wrap: super::layout::WrapSettings) {
+    pub fn set_wrap(&mut self, view: ViewId, wrap: crate::layout::WrapSettings) {
         if let Some(v) = self.views.get_mut(&view) {
             v.wrap = wrap;
             v.scroll.wrap_idx = 0;
@@ -718,7 +716,7 @@ impl EditorState {
     }
 
     /// 折り返し位置のカーソルの帰属を置く (03 §14.3)。
-    pub fn set_cursor_affinity(&mut self, view: ViewId, a: super::layout::Affinity) {
+    pub fn set_cursor_affinity(&mut self, view: ViewId, a: crate::layout::Affinity) {
         if let Some(v) = self.views.get_mut(&view) {
             v.cursor_affinity = a;
             self.needs_render = true;
@@ -775,7 +773,7 @@ impl EditorState {
             }
             return;
         }
-        let Some((col, cell_w)) = super::layout::primary_cursor_cell(self, view) else {
+        let Some((col, cell_w)) = crate::layout::primary_cursor_cell(self, view) else {
             return;
         };
         let Some(doc) = self
@@ -786,7 +784,7 @@ impl EditorState {
             return;
         };
         let text_cols = (self.viewport.0 as usize)
-            .saturating_sub(super::layout::gutter_width(doc, self.viewport.0 as usize) as usize);
+            .saturating_sub(crate::layout::gutter_width(doc, self.viewport.0 as usize) as usize);
         let Some(v) = self.views.get_mut(&view) else {
             return;
         };

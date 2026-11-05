@@ -6,7 +6,7 @@ use eve_config::theme::{
 };
 use eve_view::{Color, ColorDepth, RoleStyles, Style, StyleMods};
 
-use super::state::EditorState;
+use crate::editor::state::EditorState;
 
 fn color(c: ThemeColor) -> Color {
     match c {

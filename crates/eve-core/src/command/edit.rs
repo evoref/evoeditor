@@ -375,8 +375,8 @@ fn select_all(ctx: &mut CommandCtx<'_>) -> CommandResult {
 fn display_col(doc: &Document, line_start: usize, end: usize, cfg: &WidthConfig) -> usize {
     // 長大行は行頭から文字列にしない (列の索引で数える、03 §11.5.1)
     let line = doc.text().byte_to_line(ByteOff(line_start)).0;
-    if crate::editor::layout::is_long_line(doc, line) {
-        return crate::editor::layout::cursor_col(doc, line, end - line_start);
+    if crate::layout::is_long_line(doc, line) {
+        return crate::layout::cursor_col(doc, line, end - line_start);
     }
     let s = doc
         .text()
@@ -409,12 +409,7 @@ fn indent(ctx: &mut CommandCtx<'_>) -> CommandResult {
         let text = doc.text();
         let line = text.byte_to_line(r.head);
         let ls = text.line_to_byte(line).0;
-        let col = display_col(
-            doc,
-            ls,
-            r.head.0,
-            &crate::editor::layout::doc_width_config(doc),
-        );
+        let col = display_col(doc, ls, r.head.0, &crate::layout::doc_width_config(doc));
         let ins = match unit {
             eve_config::IndentUnit::Tab => "\t".to_owned(),
             eve_config::IndentUnit::Space => " ".repeat(width - col % width),

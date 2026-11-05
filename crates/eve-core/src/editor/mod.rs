@@ -4,34 +4,32 @@
 //! 持つもの: 文書・View・Window の集合、変更の唯一の経路 (`EditorState::apply_transaction`)、
 //! コマンドのレジストリと `execute`、キーマップ、編集・移動・検索・ファイル操作のコマンド。
 
-mod buffer;
-mod chrome;
-mod config_reload;
+pub(crate) mod buffer;
+pub(crate) mod chrome;
+pub(crate) mod config_reload;
 pub use config_reload::{CONFIG_FILE, ConfigSources, KEYMAP_FILE};
 pub use config_report::diagnostic_texts as config_diagnostic_texts;
-mod config_report;
-mod eol;
-mod external;
-mod file;
-mod help;
-mod theme;
-pub use theme::resolve as resolve_theme;
-pub(crate) mod layout;
-mod leftover_offer;
-mod message;
+pub(crate) mod config_report;
+pub(crate) mod eol;
+pub(crate) mod external;
+pub(crate) mod file;
+pub(crate) mod help;
+pub use crate::layout::theme::resolve as resolve_theme;
+pub(crate) mod leftover_offer;
+pub(crate) mod message;
 pub(crate) mod overlay;
-mod palette;
-mod query;
-mod quit_saving;
-mod save_all;
-mod startup;
+pub(crate) mod palette;
+pub(crate) mod query;
+pub(crate) mod quit_saving;
+pub(crate) mod save_all;
+pub(crate) mod startup;
 pub use startup::InitialFile;
-mod search_bar;
-mod search_state;
-mod snapshot;
+pub(crate) mod search_bar;
+pub(crate) mod search_state;
+pub(crate) mod snapshot;
 pub(crate) mod state;
-mod swap;
-mod swap_recovery;
+pub(crate) mod swap;
+pub(crate) mod swap_recovery;
 
 use eve_view::{
     Capabilities, DocumentId, EditorEvent, Effect, InputEvent, KeyCode, KeyKind, KeyStroke,
@@ -48,7 +46,7 @@ pub use crate::command::{
 pub use crate::keymap::{
     Binding, KeyParseError, Keymap, Layer, Resolution, format_stroke, parse_sequence, parse_stroke,
 };
-pub use layout::{Affinity, WrapMode, WrapSettings};
+pub use crate::layout::{Affinity, WrapMode, WrapSettings};
 pub use search_state::{SearchCount, SearchStep};
 pub use snapshot::DocSnapshot;
 pub use state::{EditorState, ScrollPos, View, Window};
@@ -467,7 +465,7 @@ impl Editor {
 
     /// Window の Frame を作る (可視範囲だけ。コストは文書の大きさに依存しない)。
     pub fn frame(&mut self, window: WindowId) -> Option<eve_view::Frame> {
-        let mut f = layout::build_frame(&self.state, window, self.keymap.pending());
+        let mut f = crate::layout::build_frame(&self.state, window, self.keymap.pending());
         if let Some(f) = f.as_mut() {
             f.which_key = self.which_key_model();
         }
@@ -494,7 +492,7 @@ impl Editor {
                     .unwrap_or_else(|| "…".to_owned());
                 eve_view::WhichKeyItem {
                     key,
-                    text: layout::cell_text(&text, eve_view::CutPolicy::End),
+                    text: crate::layout::cell_text(&text, eve_view::CutPolicy::End),
                     more: cmd.is_none(),
                 }
             })
