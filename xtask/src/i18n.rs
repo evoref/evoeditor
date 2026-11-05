@@ -23,7 +23,6 @@ use crate::util::{read_text, workspace_root};
 
 const MESSAGE_HEADING: &str = "### 15.2 保存・読込・退避・パニックの文言目録";
 const SCREEN_HEADING: &str = "### 15.1 v0.1 の画面文言 (ja)";
-const CATALOG_HEADING: &str = "### 11.6 v0.1 CommandId カタログ (付録)";
 /// 言語ファイルに入れない (eve-host の定数表に置く) キーの接頭辞。
 const NOT_IN_LOCALE: [&str; 3] = ["stderr.", "panic.", "cli."];
 /// ヒントの幅の上限 (表示幅 8 セル = 全角 4 文字 / 半角 8 文字、NFR-603)。
@@ -168,78 +167,50 @@ struct Command {
 }
 
 fn read_catalog(doc07: &str) -> Result<Vec<Command>, String> {
-    let cols = [
-        "ID",
-        "title key",
-        "kind",
-        "args",
-        "when",
-        "perm",
-        "コンテキスト",
-        "既定キー",
-        "ヒント",
-    ];
-    let tables = read_tables(doc07, CATALOG_HEADING, &cols)
+    let rows = eve_docs_tables::catalog::read(doc07)
         .map_err(|e| format!("07 §11.6 のカタログを読めません: {e}"))?;
     let mut out = Vec::new();
-    for t in &tables {
-        for row in &t.rows {
-            let id_cell = t.cell(row, "ID").unwrap_or_default();
-            // 版の注記は ID 列の括弧に書く。(v0.2) などが付いた行は `later` にする (必須にしない)。
-            let later = id_cell.matches('(').count() > 0 && id_cell.contains("(v");
-            let ids = identifiers(&strip_parentheticals(id_cell));
-            let titles = identifiers(&strip_parentheticals(
-                t.cell(row, "title key").unwrap_or_default(),
-            ));
-            if ids.is_empty() || ids.len() != titles.len() {
-                return Err(format!(
-                    "07 §11.6 行 {}: `ID` 列 ({}) と `title key` 列 ({}) の個数が合いません",
-                    row.line,
-                    ids.len(),
-                    titles.len()
-                ));
+    for row in rows {
+        // ヒント列: `文脈:優先度` を `, ` で区切る。`(<ID の最後の語> のみ)` は一部の ID に限る。
+        let mut all_contexts = BTreeSet::new();
+        let mut per_id: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+        for part in row.hints.split(", ") {
+            let (body, only) = match part.split_once(" (") {
+                Some((b, rest)) => (b, rest.strip_suffix(" のみ)").map(str::to_owned)),
+                None => (part, None),
+            };
+            let ctx = body
+                .trim()
+                .split(':')
+                .next()
+                .unwrap_or_default()
+                .trim()
+                .to_owned();
+            if ctx.is_empty() || ctx == "-" || ctx == "—" {
+                continue;
             }
-            // ヒント列: `文脈:優先度` を `, ` で区切る。`(<ID の最後の語> のみ)` は一部の ID に限る。
-            let hint_cell = t.cell(row, "ヒント").unwrap_or_default();
-            let mut all_contexts = BTreeSet::new();
-            let mut per_id: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
-            for part in hint_cell.split(", ") {
-                let (body, only) = match part.split_once(" (") {
-                    Some((b, rest)) => (b, rest.strip_suffix(" のみ)").map(str::to_owned)),
-                    None => (part, None),
-                };
-                let ctx = body
-                    .trim()
-                    .split(':')
-                    .next()
-                    .unwrap_or_default()
-                    .trim()
-                    .to_owned();
-                if ctx.is_empty() || ctx == "-" || ctx == "—" {
-                    continue;
+            match only {
+                Some(word) => {
+                    per_id.entry(word).or_default().insert(ctx);
                 }
-                match only {
-                    Some(word) => {
-                        per_id.entry(word).or_default().insert(ctx);
-                    }
-                    None => {
-                        all_contexts.insert(ctx);
-                    }
+                None => {
+                    all_contexts.insert(ctx);
                 }
             }
-            for (id, title_key) in ids.into_iter().zip(titles) {
-                let last = id.rsplit(['.', '_']).next().unwrap_or(&id).to_owned();
-                let mut hint_contexts = all_contexts.clone();
-                if let Some(extra) = per_id.get(&last) {
+        }
+        for (i, (id, title_key)) in row.ids.iter().zip(&row.title_keys).enumerate() {
+            let mut hint_contexts = all_contexts.clone();
+            for (word, extra) in &per_id {
+                if row.id_index_by_last_word(word) == Some(i) {
                     hint_contexts.extend(extra.iter().cloned());
                 }
-                out.push(Command {
-                    id,
-                    title_key,
-                    hint_contexts,
-                    later,
-                });
             }
+            out.push(Command {
+                id: id.clone(),
+                title_key: title_key.clone(),
+                hint_contexts,
+                later: row.later,
+            });
         }
     }
     Ok(out)

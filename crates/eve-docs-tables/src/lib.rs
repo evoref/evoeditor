@@ -8,6 +8,7 @@
 use std::fmt;
 
 pub mod ac;
+pub mod catalog;
 pub mod crates;
 pub mod theme;
 

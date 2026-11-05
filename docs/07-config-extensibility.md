@@ -1246,9 +1246,9 @@ verb       := [a-z][a-z0-9_]*
 
 | ID | title key | kind | args | when | perm | コンテキスト | 既定キー | ヒント |
 |---|---|---|---|---|---|---|---|---|
-| `ui.confirm` | `cmd.ui.confirm` | Ui | — | `overlay.active != ""` | `-` | `prompt`, `dialog` | `enter` (`dialog` ではフォーカス中のボタンを実行) | overlay:4 |
-| `ui.list_next` / `ui.list_prev` | `cmd.ui.list_next` / `cmd.ui.list_prev` | Ui | — | `overlay.active != ""` | `-` | `list`, `dialog` (v0.2 から `help`) | `list`: `down` / `up`, `ctrl+n` / `ctrl+p`、`dialog`: `tab` / `shift+tab`, `right` / `left`, `down` / `up` | overlay:3 (next のみ) |
-| `ui.list_page_down` / `ui.list_page_up` | `cmd.ui.list_page_down` / `cmd.ui.list_page_up` | Ui | — | `overlay.active != ""` | `-` | `list` (v0.2 から `help`) | `pagedown` / `pageup` | - |
+| `ui.confirm` | `cmd.ui.confirm` | Ui | — | `overlay.active != "" \|\| search.active` | `-` | `prompt`, `dialog` | `enter` (`dialog` ではフォーカス中のボタンを実行) | overlay:4 |
+| `ui.list_next` / `ui.list_prev` | `cmd.ui.list_next` / `cmd.ui.list_prev` | Ui | — | `overlay.active != "" \|\| search.active` | `-` | `list`, `dialog` (v0.2 から `help`) | `list`: `down` / `up`, `ctrl+n` / `ctrl+p`、`dialog`: `tab` / `shift+tab`, `right` / `left`, `down` / `up` | overlay:3 (next のみ) |
+| `ui.list_page_down` / `ui.list_page_up` | `cmd.ui.list_page_down` / `cmd.ui.list_page_up` | Ui | — | `overlay.active != "" \|\| search.active` | `-` | `list` (v0.2 から `help`) | `pagedown` / `pageup` | - |
 | `ui.dialog_choose` | `cmd.ui.dialog_choose` | Ui | `choice` | `overlay.active == "dialog"` | `-` | `dialog` | (選択肢のアクセラレータ 1 文字。組込みの dialog 層が `Text` を照合する、§7.1。複数書記素の `Text` と `Paste` は先頭の書記素も照合せずすべて捨てる (提案、02 §7.2 K1、OQ-180)) | - |
 
 - `list` では `ctrl+p` = 前、`ctrl+n` = 次。
