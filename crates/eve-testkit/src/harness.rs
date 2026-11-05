@@ -90,6 +90,12 @@ impl Harness {
         self
     }
 
+    /// UI の言語を選ぶ (既定は `ja`)。
+    pub fn with_locale(mut self, locale: eve_config::Locale) -> Harness {
+        self.editor.state_mut().set_locale(locale);
+        self
+    }
+
     // ---- 入力 ----
 
     /// `file.open`。ジョブは `run_jobs` で完了する。

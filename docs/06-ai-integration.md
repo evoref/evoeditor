@@ -1170,7 +1170,7 @@ FR-909。目的は「いつ・どこに・何を送ったか」をユーザー�
 | rebase の性質テスト | ランダムなユーザー編集列に対し、Proposal のハンク写像が「重ならない編集では適用結果が (ユーザー編集を先に適用 → ハンク適用) と一致」「重なる編集では Stale」になることを検査 | なし |
 | パーサ fuzz | SSE・JSON・区切り抽出・ツール呼出し引数 (NFR-305) | なし |
 | インジェクション回帰コーパス | 既知の攻撃文字列を含むファイルで、(a) 承認なしに副作用が起きない、(b) 不可視文字フラグが立つ、ことを検査 (モデルの応答品質ではなく **構造的防御** を検査する) | なし |
-| UI スナップショット | SendPreview / ProposalReview / PermissionPrompt の Frame を insta で比較 | なし |
+| UI スナップショット | SendPreview / ProposalReview / PermissionPrompt の Frame をスナップショット (`eve_testkit::golden::check`) で比較 | なし |
 | 実機契約テスト | 小さな FIM 対応モデル (数百 MB 級) と最新の `llama-server` (および Ollama) を CI の任意ジョブで起動し、能力検出・`/tokenize`・`/infill`・構造化出力・キャンセルの往復を確認する。**決定性**: `seed` 固定・`temperature = 0`・`top_k = 1` で比較するが、llama-server はバッチの大きさでキャッシュ利用時の結果が揺れ得る (`cache_prompt` の注記) ので、出力の完全一致ではなく「スキーマに合う」「停止条件で止まる」を判定する。サーバの版を記録し、API の変化を早く検知する (§4.4.1)。クラウドは手動実行のみ (CI の既定ではネットワークなし) | 任意 (ループバック) |
 | 実機の性能計測 (S-22 / 09) | 基準条件 (NFR-116) で補完の TTFT・キャッシュ再利用率・キャンセルからスロット解放までの時間を計測し記録 | 任意 |
 | 駆動 API 経由のシナリオ (v1.L-b) | MCP サーバの各ツールを `evoeditor --headless --rpc stdio --fake-ports` 上で呼び、`editor/query` の除外適用・`edit/propose` の承認待ち・`--allow-write` 無しでの保存拒否を検査 (AI-INV-2 の External 一般化)。シナリオ DSL (11-dev-workflow) で記述 | なし |

@@ -148,7 +148,7 @@ h.clock.advance(ms(3000));            // Undo 結合の境界を越える
 h.cmd("file.save");
 h.run_jobs();                         // ManualJobSpawner のキューに積まれたジョブを実行する
 assert_eq!(h.fs.read("/w/a.txt"), b"hello\r\n");
-assert_snapshot!(h.frame_text());     // insta: Frame をテキストグリッド化
+golden::check(&path, &h.frame_text()); // Frame をテキストグリッド化
 ```
 
 | 構成要素 | 内容 |
@@ -169,7 +169,7 @@ assert_snapshot!(h.frame_text());     // insta: Frame をテキストグリッ�
 | **`ManagedServerSim`** (v1.L-b) | 管理モード (FR-918、05 §13.7) の子プロセスを模擬する **実行ファイル** (`eve-testkit` の bin)。引数で「`/health` が OK になるまでの遅延」「起動直後にクラッシュ」「`--host` を無視して 0.0.0.0 に bind しようとする (evoeditor 側が拒否することの検査)」「SIGTERM を無視する (強制終了経路の検査)」を切り替える。`RecordingProcessRunner` と組み合わせ、承認前に起動されないこと・終了時に残らないことを 3 OS で検査 |
 | シナリオ (**一級成果物**、NFR-707) | **v0.1 は Rust の `Harness` のテスト** (各 crate の `tests/` に置く。例 `crates/eve-core/tests/undo.rs`。リポジトリ直下の `tests/scenarios/` は DSL と同時の v0.2、11 §1)。1 つのテストが 1 つのシナリオで、`verifies:` (AC ID) を関数の直前に書き、初期状態 (偽 FS の内容、設定、Capabilities、画面サイズ)・操作 (キー列は 07 §7.2 の設定表記、コマンドは CommandId、時計の進行、ジョブ実行)・検査 (`Query` の結果、ASCII の Frame、`EditorEvent` 列、偽 FS の内容) をこの順に書く。frontend を知らない。**TOML のシナリオ DSL** (`tests/scenarios/**/*.toml`、`[meta]` / `[setup]` / `[[step]]` / `[[assert]]`。書式の正本は 11 §6) と `xtask scenario run` は **v0.2** で、そのとき v0.1 の Rust のシナリオを DSL に移せるよう Harness の語彙を DSL と同じにしておく。手動確認手順 (M) と同じ記法で書けるようにして M→T への昇格を容易にする |
 | UI の文言 (NFR-603) | v0.1 の UI は `ja` だけなので、全シナリオを `ja` で実行する (言語の切替は無い)。シナリオの検査は文言ではなく `Query` が返す MessageKey と引数で行う (11 §6。後の版で言語が増えてもシナリオを直さずに済む)。文言そのものを見るのは **スナップショット** だけ: 主要画面の各 1 枚以上 (通常画面、コマンドパレット (各行の割当キーを含む。ヘルプ画面の代用、FR-514)、確認ダイアログ (未保存の終了・置き換え)、検索バー、エラーメッセージ (保存失敗)、狭い端末 (40 列) のステータスバーとヒントバー)。クローム (ステータスバー・ヒントバー・検索バー) の省略と圧縮は TUI の仕事なので、そのスナップショットは L4 の VirtualScreen で撮る (§3.5)。ヘッドレスの ASCII Frame のクロームは省略しない参照表示で、TUI と差があってよい。スナップショットの名前は v0.1 から言語を含む `<名前>.ja.snap` にする (11 §6。v0.1 の言語は `ja` だけ)。英語 UI を同梱する v0.2 (確定 (ユーザー回答)、OQ-21) で、`<名前>.en.snap` と全シナリオの言語別の実行を加える (v0.1 のスナップショットの名前は変えない) |
-| Frame スナップショット | `Frame` を幅固定のテキストグリッド (文字 + 別レイヤでスタイル記号) にシリアライズし `insta` で比較 (`h.frame_text()`。v0.2 の `--print-frame` と同じ ASCII 表現)。`eve-view` の型は `#[non_exhaustive]` と `CONTRACT_VERSION` の定数を v0.1 から持つ。insta の `accept` は人間のレビュア (11 §4) |
+| Frame スナップショット | `Frame` を幅固定のテキストグリッド (文字 + 別レイヤでスタイル記号) にシリアライズし、`eve_testkit::golden::check` (テキストのゴールデン。`EVE_UPDATE_GOLDEN=1` で作る・書き換える。insta は入れない、2026-11-05) で比較 (`h.frame_text()`。eve-tui の画面は `tests/snapshots/<name>.txt` (文字) と `<name>.styles.txt` (スタイル) の 2 層。v0.2 の `--print-frame` と同じ ASCII 表現)。`eve-view` の型は `#[non_exhaustive]` と `CONTRACT_VERSION` の定数を v0.1 から持つ。既にあるスナップショットの書き換えは人間のレビュア (11 §4・§6.2) |
 
 **保存・読込の競合と痕跡のシナリオ (L3、v0.1)**: `MemFs` の障害注入と `ManualJobSpawner` で次を検査する。(1) **保存キューと失敗** (03 §9.3 手順 4): 単独の保存の実行中に `file.save` をもう一度実行して要求を積み、前の保存に `Conflict` / `Busy` / `JobError::Unmappable` / `Cancelled` を注入すると、積んだ要求が再実行されず (2 つ目の保存ジョブが投入されない)、`AfterFailure` の確認だけが出る (`Cancelled` では確認も出ない)。確認で「上書き」/「再試行」を選ぶと、その時点の最新の Snapshot (積んだ時点の後の編集を含む) で 1 回だけ投入される。`AfterFailure` の表示中の `file.save` が積まれない。前の保存が `Saved` なら積んだ要求が `Expect::Stamp(new_stamp)` で 1 回だけ再実行される。(2) **保存中の置き換え** (03 §9.7 の全状態の遷移表の `file.open` / `file.new` の列): 単独の保存の実行中に `file.open` を実行すると、保存の完了まで新しい文書の読込ジョブが投入されず、`Saved` で dirty でなければ置き換えが進み、保存中に編集して dirty なら `ui.confirm.unsaved_replace` が出る。保存が失敗すると `AfterFailure` が出て、置き換えは確認で保存を続けて成功したときだけ行われる。置き換えの読込中に旧文書を編集しようとすると `msg.edit.read_only` で拒否される。`AskUnsaved` で「破棄」を選んだ置き換えで、旧文書を閉じるときに FR-107 の確認が 2 回目に出ない。保存ジョブの実行中に閉じた文書の保存が失敗すると、保持した Snapshot から「退避先に保存」ができ、その間は緊急退避のスロットが空にならない (`EmergencySnapshot` を読んで確かめる。03 §9.2 の「閉じる手順」、§10.1)。(3) **読込中の伸長・膨張** (03 §9.2 手順 3 の「読込中のメモリ検査」と「読む量の上限」): `MemFs` で読込の途中にファイルを伸ばす注入 (metadata の len は閾値未満、読込中に閾値を超える) で `ConfirmAsk::HugeFile` が出て本文が捨てられること、閾値を小さくした試験設定で、len は閾値未満でも Shift_JIS の倍率・不正バイトの比率から求めた見積りが閾値を超えると本文の構築の前に `HugeFile` が出ること、伸び続けるファイルが len + 余裕で打ち切られて `changed_during_load` が付き、そのまま上書き保存すると `Conflict` になって読んだ分だけでファイルが切り詰められないこと。(4) **一時ファイル・退避名の残存** (05 §4.1 手順 7 / 8、§4.6): 置換の成功の後に退避名 (`.eve-bak-*`) の削除を失敗させると、保存は成功して警告が積まれ、保存中フラグが残り、開いても報告されず (T がある)、フラグは開くジョブにも次の保存の成功にも消されない。置換の前の失敗で一時ファイルの削除を失敗させた場合も同じ。同じプロセスが同じファイルを続けて 2 回保存し、1 回目のフラグが残る状態で 2 回目のフラグが別の名前 (`<pid>-<seq>.toml` の `<seq>` が違う) で書かれ、1 回目の記録を上書きしない。in-place の成功の後、フラグを消してからバックアップを消す前に止めた状態 (フラグの無いバックアップ) が、v0.2 の起動時の走査で `state_dir/backup/` の列挙から孤児として見つかる (v0.2 の検査)。
 
@@ -529,7 +529,7 @@ CI ランナーの wall-clock は変動が大きい (共有 VM) ため、絶対�
 | ライセンス検査 | `cargo deny` (許可リストの正本は 05 §17.1 の表。GPL / AGPL / LGPL 禁止 = 12 §3.6 の「公開リポジトリ」の層) |
 | 署名・配布物 | minisign、TUI のアーカイブ (§9) |
 | 秘密情報 | 無し (minisign の署名はメンテナの手元。§6.5) |
-| 共通の規則 | 11 の運用 (タスク単位、`spec:` / `verifies:`、シナリオ DSL、`insta accept` は人間) をそのまま適用。`xtask` の処理本体は公開 crate から使えるようにする |
+| 共通の規則 | 11 の運用 (タスク単位、`spec:` / `verifies:`、シナリオ DSL、既にあるスナップショットの書き換えは人間) をそのまま適用。`xtask` の処理本体は公開 crate から使えるようにする |
 
 v0.1 の公開側で用意するのは `eve-view` の型の規則 (`#[non_exhaustive]`・`CONTRACT_VERSION` の定数) と `HeadlessFrontend` の ASCII Frame のテストで、契約版 1 の固定 (02 §8.4 C3) は v0.1 のゲートにしない (ADR-0039)。`cargo semver-checks` は上の表のとおり v0.1 リリースから報告する。
 

@@ -1,0 +1,18 @@
+ 1│
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+Untitled-1                                                  Ln 1, Col 1 UTF-8 LF
+
+^Q Quit ^P Commands ^S Save ^F Find ^O Open ^Z Undo ^G Goto
+cursor: Some(CellPos { col: 3, row: 0 })
