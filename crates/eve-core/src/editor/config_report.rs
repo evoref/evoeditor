@@ -64,7 +64,14 @@ pub fn diagnostic_texts(cat: &eve_config::Catalog, d: &Diagnostic) -> (String, S
     let default = default_display(&d.key);
     let mut args: Vec<(&str, String)> = vec![("item", d.key.clone()), ("value", d.value.clone())];
     let kind = match &d.kind {
-        DiagKind::Unsupported => "unsupported",
+        // 「このバージョンでは未対応」は情報の 1 文だけ (`info.config.unsupported`、07 §4.3。対処は無い)
+        DiagKind::Unsupported => {
+            let item = [("item", d.key.as_str())];
+            return (
+                cat.render("info.config.unsupported", &item, &|_| None),
+                String::new(),
+            );
+        }
         DiagKind::Syntax { message } => {
             args.push(("reason", message.clone()));
             "syntax"
@@ -111,4 +118,28 @@ pub fn diagnostic_texts(cat: &eve_config::Catalog, d: &Diagnostic) -> (String, S
         cat.render(&key("text"), &refs, &|_| None),
         cat.render(&key("hint"), &refs, &|_| None),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::diagnostic_texts;
+    use eve_config::{Catalog, DiagKind, Diagnostic, Severity};
+
+    #[test]
+    fn 未対応の診断は情報の文言で対処は空() {
+        let d = Diagnostic {
+            severity: Severity::Info,
+            kind: DiagKind::Unsupported,
+            key: "ai".to_owned(),
+            value: String::new(),
+            line: 1,
+            column: 2,
+        };
+        for cat in [Catalog::builtin_ja(), Catalog::builtin_en()] {
+            let (text, hint) = diagnostic_texts(cat, &d);
+            assert!(text.starts_with("ai "), "{text}");
+            assert!(!text.contains("msg.config"), "{text}");
+            assert_eq!(hint, "");
+        }
+    }
 }
