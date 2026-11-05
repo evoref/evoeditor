@@ -1,0 +1,27 @@
+alpha
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+status: a.txt (1/3) | 行 1, 桁 6 UTF-8 LF
+hints: Ctrl+Q 終了 | Ctrl+P コマンド | Ctrl+S 保存 | Ctrl+F 検索 | Ctrl+O 開く | Ctrl+Z 元に戻す | Ctrl+G 行へ移動
+cursor: (8,0)

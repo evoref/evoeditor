@@ -1,0 +1,28 @@
+hello
+日本語
+x
+end
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+status: a.txt | 行 3, 桁 2 UTF-8 CRLF
+hints: Ctrl+Q 終了 | Ctrl+P コマンド | Ctrl+S 保存 | Ctrl+F 検索 | Ctrl+O 開く | Ctrl+Z 元に戻す | Ctrl+G 行へ移動
+message[Info]: /w/a.txt を保存しました
+cursor: (4,2)

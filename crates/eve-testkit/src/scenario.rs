@@ -2,7 +2,7 @@
 //!
 //! 対応する範囲: `[meta]`・`[setup]` (`size`・`caps = "tui_default"`・`config`・`fs` の `text`)・`[[step]]` (`open`・`run_jobs`・
 //! `keys`・`text`・`paste`・`advance_ms`・`resize`・`cmd` + `args`)・`[[assert]]` (`at`・`fs`・`query` + `expect`・`frame_contains`・
-//! `events`・`overlay`・`no_panic`)。未対応のもの (Frame のゴールデン `frame`、`effects`、`status`、`fs` の `bytes` / `file`、
+//! `events`・`overlay`・`no_panic`・Frame のゴールデン `frame`)。未対応のもの (`effects`、`status`、`fs` の `bytes` / `file`、
 //! `locale`・`caps` の他のプリセット) は読み込むと「未対応」で失敗する。`now`・`seed` は受け付けるが、今のハーネスは時刻 0 から始まり
 //! 乱数を使わないので効果がない。
 //!
@@ -190,9 +190,19 @@ pub fn validate(sc: &Scenario, rel: &str) -> Vec<String> {
     }
     for (i, a) in sc.asserts.iter().enumerate() {
         let k = i + 1;
-        if a.frame.is_some() || a.effects.is_some() || a.status.is_some() {
+        if a.effects.is_some() || a.status.is_some() {
             e.push(format!(
-                "{rel}: assert {k} の frame / effects / status はまだ未対応です"
+                "{rel}: assert {k} の effects / status はまだ未対応です"
+            ));
+        }
+        if let Some(name) = &a.frame
+            && (name.is_empty()
+                || !name
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-'))
+        {
+            e.push(format!(
+                "{rel}: assert {k} の frame `{name}` は英数字・`_`・`-` だけの名前にします (シナリオと同じディレクトリの <name>.frame.<lang>.txt)"
             ));
         }
         if a.query.is_some() != a.expect.is_some() {
@@ -324,7 +334,7 @@ fn check_expect(h: &Harness, q: &QuerySpec, expect: &toml::Table) -> Result<(), 
     }
 }
 
-fn check_assert(h: &mut Harness, a: &Assert, k: usize) -> Vec<String> {
+fn check_assert(h: &mut Harness, a: &Assert, k: usize, dir: Option<&Path>) -> Vec<String> {
     let mut out = Vec::new();
     let mut fail = |m: String| out.push(format!("assert {k}: {m}"));
     if let Some(fs) = &a.fs {
@@ -353,6 +363,20 @@ fn check_assert(h: &mut Harness, a: &Assert, k: usize) -> Vec<String> {
             }
         }
     }
+    if let Some(name) = &a.frame {
+        let lang = h.editor.state().locale().code();
+        match dir {
+            Some(d) => {
+                let path = d.join(format!("{name}.frame.{lang}.txt"));
+                if let Err(m) = crate::golden::compare(&path, &h.frame_text()) {
+                    fail(format!("frame: {m}"));
+                }
+            }
+            None => fail(format!(
+                "frame `{name}`: シナリオの置き場所が分からないので比べられません (`run_at` で実行する)"
+            )),
+        }
+    }
     if let Some(want) = &a.events {
         let got: Vec<String> = h.events().iter().map(event_name).collect();
         let mut it = got.iter();
@@ -376,8 +400,15 @@ pub struct Outcome {
 }
 
 /// シナリオを実行し、失敗した assert を返す。パニックは `no_panic` の失敗として扱う。
+/// `frame` (Frame のゴールデン) を使うシナリオは `run_at` で置き場所を渡す。
 pub fn run(sc: &Scenario) -> Result<Outcome, Vec<String>> {
-    let res = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| run_inner(sc)));
+    run_at(sc, None)
+}
+
+/// `run` と同じ。`dir` はシナリオのファイルのあるディレクトリで、`frame = "<name>"` のゴールデン
+/// `<dir>/<name>.frame.<lang>.txt` (docs/11 §6.2 / §6.5) をそこから読む。
+pub fn run_at(sc: &Scenario, dir: Option<&Path>) -> Result<Outcome, Vec<String>> {
+    let res = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| run_inner(sc, dir)));
     match res {
         Ok(r) => r,
         Err(p) => {
@@ -397,7 +428,7 @@ pub fn run(sc: &Scenario) -> Result<Outcome, Vec<String>> {
     }
 }
 
-fn run_inner(sc: &Scenario) -> Result<Outcome, Vec<String>> {
+fn run_inner(sc: &Scenario, dir: Option<&Path>) -> Result<Outcome, Vec<String>> {
     let mut h = Harness::new();
     if let Some([c, r]) = sc.setup.size {
         h = h.with_size(c, r);
@@ -419,7 +450,7 @@ fn run_inner(sc: &Scenario) -> Result<Outcome, Vec<String>> {
     let run_asserts = |h: &mut Harness, at: Option<usize>, errs: &mut Vec<String>| {
         for (i, a) in sc.asserts.iter().enumerate() {
             if a.at == at {
-                errs.extend(check_assert(h, a, i + 1));
+                errs.extend(check_assert(h, a, i + 1, dir));
             }
         }
     };
