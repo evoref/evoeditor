@@ -6,6 +6,7 @@
 //! - **BM-101b / 102b**: 計測ハーネスが spawn した時刻 → 同じ終点 (起動 (b) spawn から。壁時計で比べる)。
 //! - **BM-103b**: 入力スレッドが入力を読み終えた時刻 → 描画の `write` が戻るまで (判定区間 (b))。打鍵間隔 30 ms。
 //! - **BM-107**: 100 MB の文書の保存中のカーソル移動の同じ区間 (01 NFR-107 AC-1。NFR-103 の値を維持するか)。
+//! - **BM-103b-search-1m**: 1 MB の文書の検索欄への入力 (一致を強調し直す) の同じ区間 (`--only 103s`)。
 //!
 //! どのビルドでも測る、端末込みの参考値 (ConPTY を挟むので実際の Windows Terminal より遅めに出る。判定には使わない):
 //! - **BM-101c / 102c**: spawn → 最初の画面 (ステータスバーの `無題-1` / ファイルの先頭) が端末に届くまで。
@@ -710,6 +711,38 @@ fn proc_stat(pid: u32) -> (u64, f64) {
 }
 
 /// 100 MB の文書の検索バーで文字を打ち続け (1 文字ごとに全件の検索が走る)、その間のキー入力の判定区間 (FR-404 AC-1)。
+/// BM-103b-search-1m: 1 MB の文書で検索バーを開き、検索欄に `o` と BackSpace を交互に 30 ms ごとに打つ。`o` のたびに
+/// 一致 (画面の中に多数) を強調し直す。測るのは `o` の打鍵 (入力の読取完了 → 描画の write)。NFR-103 の条件から外した
+/// 「検索一致のハイライト有効」の代わりに、検索欄への入力の遅延を別に測る (docs/review/v0.3-findings.md の §3.3 の 1、2026-11-05 PO)。
+fn search_typing_1m(dir: &Path, file: &Path, runs: usize, warmup: usize) -> Vec<Duration> {
+    const VK_O: u64 = 0x4F;
+    let trace = dir.join("search1m.jsonl");
+    let (mut t, _) = Term::start(&[file.to_str().unwrap()], "00000000", Some(&trace));
+    t.wait("ファイルの先頭", || t.marker.load(Ordering::Acquire));
+    t.send(b"\x06"); // Ctrl+F
+    thread::sleep(Duration::from_millis(300));
+    for _ in 0..runs + warmup {
+        t.send(b"o");
+        thread::sleep(Duration::from_millis(30));
+        t.send(b"\x7f"); // BackSpace
+        thread::sleep(Duration::from_millis(30));
+    }
+    t.send(b"\x1b"); // 検索バーを閉じる
+    thread::sleep(Duration::from_millis(300));
+    t.send(b"\x11");
+    assert_eq!(t.wait_exit(WAIT), Some(0), "正常に終了しません");
+    let spans: Vec<Span> = read_spans(&trace)
+        .into_iter()
+        .filter(|s| s.name == "input.to_flush" && s.vk == Some(VK_O))
+        .collect();
+    let _ = std::fs::remove_file(&trace);
+    spans
+        .iter()
+        .skip(warmup)
+        .map(|s| ns_dur(s.end_ns - s.start_ns))
+        .collect()
+}
+
 fn search_load(dir: &Path, runs: usize, warmup: usize) -> Vec<Duration> {
     let path = make_big(dir, "big_100mb.txt", 100);
     let trace = dir.join("search.jsonl");
@@ -945,6 +978,17 @@ fn main() {
         report(
             "BM-103b-search",
             "100 MB の全件検索中のキー入力 (入力の読取完了 → 描画の write)",
+            v,
+            json,
+            quick,
+        );
+    }
+    if traced && want("103s") {
+        let file = make_one_mb(&dir);
+        let v = search_typing_1m(&dir, &file, runs, warmup);
+        report(
+            "BM-103b-search-1m",
+            "1 MB の文書の検索欄への入力 (一致を強調し直す。入力の読取完了 → 描画の write)",
             v,
             json,
             quick,
