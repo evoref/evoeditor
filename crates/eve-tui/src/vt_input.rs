@@ -158,12 +158,30 @@ fn utf8_len(b: u8) -> Option<usize> {
     }
 }
 
+/// 解析する引数の数の上限。超えた分は読み飛ばす。
+const MAX_PARAMS: usize = 32;
+
 /// `;` 区切りの数の引数 (空は `None`)。`:` の副引数は先頭だけを使う。
+///
+/// 解析の層で無害にする (端末やパイプから届く任意のバイト列で、使う側が溢れない。docs/review/v0.3-findings.md の
+/// SAF-08 / REF-06): 値は `u16` の上限で止め (`u32` に収まらない桁数も上限にする)、数は先頭の `MAX_PARAMS` 個まで。
 fn params(p: &[u8]) -> Vec<Option<u32>> {
     p.split(|&b| b == b';')
+        .take(MAX_PARAMS)
         .map(|s| {
             let s = s.split(|&b| b == b':').next().unwrap_or(&[]);
-            std::str::from_utf8(s).ok().and_then(|t| t.parse().ok())
+            if s.is_empty() || !s.iter().all(u8::is_ascii_digit) {
+                return None;
+            }
+            let max = u32::from(u16::MAX);
+            Some(
+                s.iter()
+                    .try_fold(0u32, |v, &d| {
+                        let v = v * 10 + u32::from(d - b'0');
+                        (v <= max).then_some(v)
+                    })
+                    .unwrap_or(max),
+            )
         })
         .collect()
 }
@@ -463,6 +481,7 @@ impl VtParser {
         if b & 16 != 0 {
             state |= button_bits::CTRL;
         }
+        // 座標は 1 始まり。`params` が u16 の上限で止めるので、i32 で溢れない (SAF-08)
         let (col, row) = (x as i32 - 1, y as i32 - 1);
         let rec = |buttons, flags| MouseRec {
             col,
@@ -724,6 +743,28 @@ mod tests {
         let mut p = VtParser::new();
         let _ = p.feed(b"\x1b[200~x\x1b[201~");
         assert_eq!(ev(p.feed(b"\x13")), vec![k(K::Char('s'), Modifiers::CTRL)]);
+    }
+
+    // 任意のバイト列で溢れない (docs/review/v0.3-findings.md の SAF-08 / REF-06)
+    #[test]
+    fn 引数は_u16_の上限で止め_数は上限まで読む() {
+        assert_eq!(
+            params(b"2147483648;99999999999999999999;7"),
+            vec![Some(65535), Some(65535), Some(7)]
+        );
+        assert_eq!(params(b";x;3"), vec![None, None, Some(3)]);
+        let many = vec!["1"; 100].join(";");
+        assert_eq!(params(many.as_bytes()).len(), MAX_PARAMS);
+        let mut p = VtParser::new();
+        let recs: Vec<MouseRec> = p
+            .feed(b"\x1b[<0;2147483648;4294967295M")
+            .into_iter()
+            .filter_map(|o| match o {
+                VtOut::Mouse(m) => Some(m),
+                VtOut::Event(_) => None,
+            })
+            .collect();
+        assert_eq!((recs[0].col, recs[0].row), (65534, 65534));
     }
 
     #[test]

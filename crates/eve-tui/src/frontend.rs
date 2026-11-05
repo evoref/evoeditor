@@ -382,3 +382,34 @@ const EMERGENCY_BYTES: &[u8] = b"\x18\x1b[>4m\x1b[<u\x1b[?1004l\x1b[?2004l\x1b[?
 pub const fn chrome_rows() -> u16 {
     CHROME_ROWS
 }
+
+/// 入力スレッドの本体 `body` を走らせ、panic したら `on_panic` を呼ぶ (Windows と Unix の入力スレッドで共有する)。
+///
+/// 入力スレッドが panic したまま黙って終わると、端末は raw のまま入力を受け付けず、退避も走らない。`on_panic` で
+/// Host に `Fatal(InputThreadDied)` を送り、Host が退避と端末の復元をして終える (04 §14.2・05 §11.4。
+/// docs/review/v0.3-findings.md の SAF-07)。panic の内容はパニックフック (bin) が記録する。
+pub(crate) fn run_guarded(body: impl FnOnce(), on_panic: impl FnOnce()) {
+    if std::panic::catch_unwind(std::panic::AssertUnwindSafe(body)).is_err() {
+        on_panic();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::run_guarded;
+    use std::cell::Cell;
+
+    #[test]
+    fn 入力スレッドの本体が_panic_したら知らせる() {
+        let died = Cell::new(false);
+        run_guarded(|| panic!("入力の解析の不具合"), || died.set(true));
+        assert!(died.get());
+    }
+
+    #[test]
+    fn 本体が普通に終われば知らせない() {
+        let died = Cell::new(false);
+        run_guarded(|| {}, || died.set(true));
+        assert!(!died.get());
+    }
+}

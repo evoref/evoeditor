@@ -391,7 +391,10 @@ pub fn spawn_input_thread(
     let (i, o) = (Handle(input.input.0), Handle(input.output.0));
     thread::Builder::new()
         .name("eve-input".to_owned())
-        .spawn(move || run(i, o, &out, &geom))
+        .spawn(move || {
+            // panic したら Host に Fatal を送る (端末を raw のまま操作できなくしない、SAF-07)
+            crate::frontend::run_guarded(|| run(i, o, &out, &geom), || out.died());
+        })
 }
 
 /// コンソールの出力 (`CONOUT$`)。VT 出力を有効にし、UTF-16 に変換して `WriteConsoleW` で書く (05 §9.1。標準出力が
