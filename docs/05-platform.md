@@ -657,7 +657,7 @@ v0.1 で実装するのは **Windows の列** (Known Folders に当たる `%APPD
 - **起動経路で `state_dir` を作らない** (NFR-101): ディレクトリは最初の書込 (ログ・退避・swap-lite・事前バックアップ・`last_version.toml`) の直前に `create_dir_all_private` する (`state_dir/log` も最初のログの書込の直前)。作成の範囲は §7.1 (`config_dir` はユーザーが設定を書くまで作らない)。
 - 権限: §5.6。
 - 複数インスタンス同時起動: 同一ファイルに append (`O_APPEND` は行単位なら実用上安全。Windows は `FILE_APPEND_DATA`)。ローテーション競合は「サイズ超過を検出したプロセスが rename を試み、失敗したら無視」。他のインスタンスの改名・削除を妨げないよう、Windows ではログファイルを `FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE` で開く (`FILE_SHARE_DELETE` が無いと改名が共有違反で失敗する)。**書き込む前に**、開いているハンドルのファイルの同一性 (ファイル ID。Unix は dev + inode) とログのパスが指すファイルの同一性を比べ、違えば (他のインスタンスがローテーションした) 開き直してから書く (改名後の古いファイルに書き続けない。書くのは warn 以上だけなので頻度は低い。02 §11.3)。
-- クラッシュログ: `state_dir/log/crash-<UTC timestamp>-<pid>.log` (NFR-302、内容は 09 §10)。**最新 20 件** を保ち、超過分は次の起動時に古い順に削除する (02 §14.1 MR11)。
+- クラッシュログ: `state_dir/log/crash-<pid>-<UNIX 秒>.txt` (NFR-302、内容は 09 §10。`--crash-report` はこの名前のうち更新時刻が最新のものを出す、07 §18.3)。状態ディレクトリの他のファイルと同じく所有者のみで作る (§5.6)。**最新 20 件** を保ち、書いたときに超過分を古い順 (更新時刻) に削除する (02 §14.1 MR11)。名前と削除の時期は 2026-11-05 に実装 (v0.2) に合わせた (docs/review/v0.3-findings.md の SAF-11。v0.1 の案は `crash-<UTC timestamp>-<pid>.log` を次の起動時に削除)。
 - レベルの変更は v0.1 では `EVE_LOG` 環境変数だけ。CLI `--log-level` と設定 `log.level` (07) は v0.2 (優先順は 07)。`EVE_LOG_STDERR=1` で TUI 外 (ヘッドレス/テスト) に stderr 出力。
 
 ### 7.4 ポータブルモード (Could, v0.6)

@@ -716,18 +716,12 @@ fn wait_replacing(replacing: &eve_core::ReplacingCount, limit: Option<std::time:
 /// 文書の内容は含まない。書けなければ `None`。
 fn write_crash_log(state_dir: &std::path::Path) -> Option<std::path::PathBuf> {
     let info = PANIC_INFO.lock().ok()?.clone()?;
-    let dir = state_dir.join("log");
-    std::fs::create_dir_all(&dir).ok()?;
-    let secs = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_or(0, |d| d.as_secs());
-    let path = dir.join(format!("crash-{}-{secs}.txt", std::process::id()));
     let body = format!(
         "evoeditor {} のクラッシュログ (文書の内容は含みません)\n\n{info}\n",
         env!("CARGO_PKG_VERSION")
     );
-    std::fs::write(&path, body).ok()?;
-    Some(path)
+    // 所有者のみで作り、最新 20 件を残す (05 §7.3。docs/review/v0.3-findings.md の SAF-11)
+    eve_platform::log::write_crash_log(state_dir, &body).ok()
 }
 
 fn main() -> ProcessExit {

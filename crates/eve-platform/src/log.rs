@@ -18,6 +18,53 @@ use crate::rescue::{now_secs, timestamp_rfc3339};
 /// ローテーションの大きさと世代 (05 §7.3 の定数)。
 const MAX_BYTES: u64 = 5 * 1024 * 1024;
 const GENERATIONS: u32 = 3;
+/// 残すクラッシュログの数 (02 §14.1 MR11、05 §7.3)。
+pub const CRASH_LOGS_KEPT: usize = 20;
+
+/// クラッシュログを `state_dir/log/crash-<pid>-<UNIX 秒>.txt` に書き、そのパスを返す (05 §7.3、09 §10)。
+///
+/// 状態ディレクトリの他のファイルと同じく所有者のみで作る (パニックの文言にパスが入り得る、05 §5.6)。書いた後に、
+/// 最新 `CRASH_LOGS_KEPT` 件を超えた分を古い順 (更新時刻、同じなら名前) に消す (docs/review/v0.3-findings.md の SAF-11)。
+pub fn write_crash_log(state_dir: &Path, body: &str) -> io::Result<PathBuf> {
+    let dir = state_dir.join("log");
+    create_dir_all_private(&dir)?;
+    let path = dir.join(format!("crash-{}-{}.txt", std::process::id(), now_secs()));
+    let mut f = crate::sys::private_options()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .open(&path)?;
+    f.write_all(body.as_bytes())?;
+    drop(f);
+    prune_crash_logs(&dir, CRASH_LOGS_KEPT);
+    Ok(path)
+}
+
+/// `dir` のクラッシュログ (`crash-*.txt`) を、新しい `keep` 件だけ残して消す。失敗は無視する (次に書くときにやり直す)。
+fn prune_crash_logs(dir: &Path, keep: usize) {
+    let Ok(rd) = fs::read_dir(dir) else {
+        return;
+    };
+    let mut logs: Vec<(std::time::SystemTime, PathBuf)> = rd
+        .flatten()
+        .filter(|e| {
+            let n = e.file_name();
+            let n = n.to_string_lossy();
+            n.starts_with("crash-") && n.ends_with(".txt")
+        })
+        .filter_map(|e| {
+            let t = e.metadata().ok()?.modified().ok()?;
+            Some((t, e.path()))
+        })
+        .collect();
+    if logs.len() <= keep {
+        return;
+    }
+    logs.sort();
+    for (_, p) in &logs[..logs.len() - keep] {
+        let _ = fs::remove_file(p);
+    }
+}
 
 /// ログのレベル。小さいほど重い。
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -193,5 +240,42 @@ mod tests {
                 .contains("WARN new")
         );
         let _ = fs::remove_dir_all(&d);
+    }
+
+    // 05 §7.3: 最新 20 件を残す (SAF-11)
+    #[test]
+    fn クラッシュログは最新の_20_件だけ残す() {
+        let dir = std::env::temp_dir().join(format!("eve-crash-test-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        let log = dir.join("log");
+        fs::create_dir_all(&log).unwrap();
+        for i in 0..25 {
+            fs::write(log.join(format!("crash-1-{i:03}.txt")), b"x").unwrap();
+            // 更新時刻を分けるため、古いものほど前の時刻にする
+            let t = std::time::SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(1_000 + i);
+            fs::File::options()
+                .write(true)
+                .open(log.join(format!("crash-1-{i:03}.txt")))
+                .unwrap()
+                .set_modified(t)
+                .unwrap();
+        }
+        fs::write(log.join("evoeditor.log"), b"keep").unwrap();
+        let p = write_crash_log(&dir, "panic").unwrap();
+        let mut left: Vec<String> = fs::read_dir(&log)
+            .unwrap()
+            .flatten()
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .filter(|n| n.starts_with("crash-"))
+            .collect();
+        left.sort();
+        assert_eq!(left.len(), CRASH_LOGS_KEPT, "{left:?}");
+        assert!(p.exists(), "書いたものは残る");
+        assert!(!log.join("crash-1-000.txt").exists(), "古いものから消す");
+        assert!(
+            log.join("evoeditor.log").exists(),
+            "クラッシュログ以外は消さない"
+        );
+        let _ = fs::remove_dir_all(&dir);
     }
 }
