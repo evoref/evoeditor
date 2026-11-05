@@ -1,17 +1,16 @@
-//! 組込みコマンドの `CommandSpec.permission` が 07 §11.6 のカタログの `perm` 列と一致すること
-//! (01 FR-601 AC-2、docs/09 §6.2 の `docs-tables` の (3))。docs の表を `eve-docs-tables` で読む。
+//! 組込みコマンドの `CommandSpec` (ID・`permission`・`kind`・`when`) が 07 §11.6 のカタログと一致すること
+//! (01 FR-601 AC-1 / AC-2、docs/09 §6.2 の `docs-tables` の (3)、docs/review/v0.3-findings.md の STR-B4 (1))。
+//! カタログは `eve_docs_tables::catalog` で読む (読み手は 1 か所、STR-E1)。
 //! 「コマンドの実行は権限判定フックを必ず通る」は `Editor::execute` が唯一の入口であることのレビュー項目 (09 §8.4)。
 
 use std::collections::BTreeMap;
 
-use eve_core::Permission;
-use eve_docs_tables::{identifiers, read_tables, strip_parentheticals};
+use eve_core::{CommandKind, Permission};
+use eve_docs_tables::{catalog, identifiers, strip_parentheticals};
 use eve_testkit::Harness;
 
-const CATALOG_HEADING: &str = "### 11.6 v0.1 CommandId カタログ (付録)";
-
 fn perm_of(cell: &str) -> Permission {
-    match cell.trim().trim_matches('`') {
+    match cell {
         "-" => Permission::None,
         "read" => Permission::Read,
         "propose" => Permission::Propose,
@@ -20,30 +19,103 @@ fn perm_of(cell: &str) -> Permission {
     }
 }
 
-/// カタログの CommandId → (perm, 後の版の行か)。後の版の行は、実装した版から登録してよい (07 §11.6)。
-fn catalog() -> BTreeMap<String, (Permission, bool)> {
+fn kind_of(cell: &str) -> CommandKind {
+    match cell {
+        "Edit" => CommandKind::Edit,
+        "Motion" => CommandKind::Motion,
+        "Ui" => CommandKind::Ui,
+        "File" => CommandKind::File,
+        other => panic!("07 §11.6 の kind 列の値が不明: {other:?}"),
+    }
+}
+
+/// カタログの CommandId 1 個分。
+struct Entry {
+    line: usize,
+    perm: String,
+    kind: String,
+    /// `when` 列 (行のまま)。
+    when: String,
+    /// 後の版の行。実装した版から登録してよい (07 §11.6)。
+    later: bool,
+    /// 複数の ID をまとめた行。
+    shared: bool,
+}
+
+/// カタログの CommandId → その行の内容 (`eve_docs_tables::catalog` で読む)。
+fn catalog() -> BTreeMap<String, Entry> {
     let doc = include_str!("../../../docs/07-config-extensibility.md");
-    let tables = read_tables(doc, CATALOG_HEADING, &["ID", "perm"]).expect("カタログを読める");
+    let rows = catalog::read(doc).expect("カタログを読める");
     let mut out = BTreeMap::new();
-    for t in &tables {
-        for row in &t.rows {
-            let id_cell = t.cell(row, "ID").unwrap_or_default();
-            let later = id_cell.contains("(v");
-            let ids = identifiers(&strip_parentheticals(id_cell));
-            let perm_cell = strip_parentheticals(t.cell(row, "perm").unwrap_or_default());
-            let perms: Vec<&str> = perm_cell.split('/').collect();
-            assert!(
-                perms.len() == 1 || perms.len() == ids.len(),
-                "行 {}: ID と perm の個数が合いません",
-                row.line
+    for r in rows {
+        for (i, id) in r.ids.iter().enumerate() {
+            out.insert(
+                id.clone(),
+                Entry {
+                    line: r.line,
+                    perm: r.perms[i].clone(),
+                    kind: r.kinds[i].clone(),
+                    when: r.when.clone(),
+                    later: r.later,
+                    shared: r.ids.len() > 1,
+                },
             );
-            for (i, id) in ids.iter().enumerate() {
-                let p = perm_of(if perms.len() == 1 { perms[0] } else { perms[i] });
-                out.insert(id.clone(), (p, later));
-            }
         }
     }
     out
+}
+
+/// `when` 列の、全コンテキスト・全 ID に共通の 1 つの式 (`` `!doc.read_only` `` → `!doc.read_only`、`—` → 空)。
+/// コンテキストごとの書き分け (`` `editor`: … / `list`: … ``) や、複数 ID の行の括弧の注記 (ID ごとの違い) は
+/// `None` (突合しない)。
+fn plain_when(cell: &str, shared: bool) -> Option<String> {
+    if shared && cell.contains('(') {
+        return None;
+    }
+    let body = strip_parentheticals(cell);
+    let body = body.split('。').next().unwrap_or_default().trim();
+    if body == "—" {
+        return Some(String::new());
+    }
+    let ids = identifiers(body);
+    let only_code = body.starts_with('`') && body.ends_with('`') && ids.len() == 1;
+    (only_code && !cell.contains("`:")).then(|| ids[0].clone())
+}
+
+// verifies: AC-FR-601-1
+#[test]
+fn 登録済みのコマンドの_kind_と_when_がカタログと一致する() {
+    let cat = catalog();
+    let h = Harness::new();
+    let mut errors = Vec::new();
+    let mut when_checked = 0;
+    for spec in h.editor.registry().iter() {
+        let id = spec.id.as_str();
+        let Some(e) = cat.get(id) else {
+            continue; // カタログに無いものは下の試験が報告する
+        };
+        if spec.kind != kind_of(&e.kind) {
+            errors.push(format!(
+                "{id} (07 行 {}): kind {:?} / カタログ {}",
+                e.line, spec.kind, e.kind
+            ));
+        }
+        if let Some(want) = plain_when(&e.when, e.shared) {
+            when_checked += 1;
+            if spec.when_src != want {
+                errors.push(format!(
+                    "{id} (07 行 {}): when `{}` / カタログ `{want}`",
+                    e.line, spec.when_src
+                ));
+            }
+        }
+    }
+    assert!(errors.is_empty(), "{}", errors.join("\n"));
+    // 88 個のうち 85 個 (2026-11 の時点)。書き分けのある行・注記の付いた複数 ID の行だけを除く
+    assert!(
+        when_checked >= 80,
+        "when を突合した数が少なすぎる: {when_checked}"
+    );
 }
 
 // verifies: AC-FR-601-2
@@ -51,7 +123,7 @@ fn catalog() -> BTreeMap<String, (Permission, bool)> {
 fn 登録済みの全コマンドの_permission_がカタログの_perm_列と一致する() {
     let cat = catalog();
     assert!(
-        cat.values().filter(|(_, later)| !later).count() >= 60,
+        cat.values().filter(|e| !e.later).count() >= 60,
         "v0.1 のカタログは 63 個: {}",
         cat.len()
     );
@@ -63,7 +135,7 @@ fn 登録済みの全コマンドの_permission_がカタログの_perm_列と�
         let want = cat
             .get(id)
             .unwrap_or_else(|| panic!("登録済みの `{id}` が 07 §11.6 のカタログにありません"));
-        assert_eq!(spec.permission, want.0, "{id} の permission");
+        assert_eq!(spec.permission, perm_of(&want.perm), "{id} の permission");
         checked += 1;
     }
     assert!(checked >= 30, "登録済みのコマンドが少なすぎる: {checked}");
@@ -97,7 +169,7 @@ fn 登録済みのコマンドの_id_はカタログと一致する_v0_1_の行�
     let doc: std::collections::BTreeSet<String> = cat.keys().cloned().collect();
     let v01: std::collections::BTreeSet<String> = cat
         .iter()
-        .filter(|(_, (_, later))| !later)
+        .filter(|(_, e)| !e.later)
         .map(|(id, _)| id.clone())
         .collect();
     let only_reg: Vec<_> = reg.difference(&doc).collect();

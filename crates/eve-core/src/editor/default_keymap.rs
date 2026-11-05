@@ -229,7 +229,7 @@ pub(super) fn default_keymap() -> Keymap {
 mod tests {
     use super::super::keymap::{format_sequence, parse_sequence};
     use super::*;
-    use eve_docs_tables::{identifiers, read_tables, strip_parentheticals};
+    use eve_docs_tables::{catalog, identifiers, strip_parentheticals};
     use eve_view::KeyStroke;
     use std::collections::{BTreeMap, BTreeSet};
 
@@ -338,35 +338,22 @@ mod tests {
 
     fn catalog_bindings(later: bool) -> BTreeMap<(String, String), bool> {
         let doc = include_str!("../../../../docs/07-config-extensibility.md");
-        let tables = read_tables(
-            doc,
-            "### 11.6 v0.1 CommandId カタログ (付録)",
-            &["ID", "既定キー"],
-        )
-        .expect("カタログを読める");
+        let rows = catalog::read(doc).expect("カタログを読める");
         let mut want = BTreeMap::new();
-        for t in &tables {
-            for row in &t.rows {
-                let id_cell = t.cell(row, "ID").unwrap_or_default();
-                if id_cell.contains("(v") != later {
-                    continue;
-                }
-                let ids = identifiers(&strip_parentheticals(id_cell));
-                let keys = t.cell(row, "既定キー").unwrap_or_default();
-                for (elems, note) in groups(keys) {
+        {
+            for row in rows.iter().filter(|r| r.later == later) {
+                let ids = &row.ids;
+                for (elems, note) in groups(&row.keys) {
                     if elems.iter().all(|e| e.0.is_none()) {
                         continue; // 割当が無い (`—` だけ)
                     }
                     // 1 つだけの割当が複数 ID の行にあるときは、注記の「<ID の最後の語> のみ」で対象を決める
                     let only: Option<&String> = if elems.len() == 1 && ids.len() > 1 {
-                        let word = note.split(" のみ").next().unwrap_or("").trim();
-                        Some(
-                            ids.iter()
-                                .find(|id| id.ends_with(word) && !word.is_empty())
-                                .unwrap_or_else(|| {
-                                    panic!("行 {}: 割当 1 個の対象が決まらない: {note}", row.line)
-                                }),
-                        )
+                        let word = note.split(" のみ").next().unwrap_or("");
+                        let i = row.id_index_by_last_word(word).unwrap_or_else(|| {
+                            panic!("行 {}: 割当 1 個の対象が決まらない: {note}", row.line)
+                        });
+                        Some(&ids[i])
                     } else {
                         None
                     };
