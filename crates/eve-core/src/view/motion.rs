@@ -349,8 +349,10 @@ motion_fns! {
 fn goto_line(ctx: &mut CommandCtx<'_>) -> CommandResult {
     // 行の指定がないとき (Ctrl+G) は、行番号を尋ねる入力プロンプトを出す
     if ctx.args.get("line").is_none() {
-        ctx.state
-            .open_prompt(crate::editor::overlay::PromptKind::GotoLine, String::new());
+        ctx.state.open_prompt(
+            crate::ui_model::overlay::PromptKind::GotoLine,
+            String::new(),
+        );
         return CommandResult::Done;
     }
     goto_line_command(ctx)

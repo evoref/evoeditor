@@ -4,7 +4,6 @@
 use eve_view::{DocumentId, MessageLevel};
 
 use super::file::{Pending, fs_reason, same_on_disk};
-use super::overlay::{ChoiceDef, ConfirmAction, ConfirmState};
 use super::state::EditorState;
 use crate::FsPath;
 use crate::command::{
@@ -13,6 +12,7 @@ use crate::command::{
 use crate::document::LoadState;
 use crate::fs::FsErrorKind;
 use crate::jobs::{JobError, JobKind, JobResult, MetaPurpose};
+use crate::ui_model::overlay::{ChoiceDef, ConfirmAction, ConfirmState};
 use eve_config::ExternalChangePolicy;
 
 impl EditorState {

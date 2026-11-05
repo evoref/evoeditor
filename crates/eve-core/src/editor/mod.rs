@@ -5,26 +5,18 @@
 //! コマンドのレジストリと `execute`、キーマップ、編集・移動・検索・ファイル操作のコマンド。
 
 pub(crate) mod buffer;
-pub(crate) mod chrome;
 pub(crate) mod config_reload;
+pub use crate::ui_model::config_report::diagnostic_texts as config_diagnostic_texts;
 pub use config_reload::{CONFIG_FILE, ConfigSources, KEYMAP_FILE};
-pub use config_report::diagnostic_texts as config_diagnostic_texts;
-pub(crate) mod config_report;
 pub(crate) mod eol;
 pub(crate) mod external;
 pub(crate) mod file;
-pub(crate) mod help;
 pub use crate::layout::theme::resolve as resolve_theme;
 pub(crate) mod leftover_offer;
-pub(crate) mod message;
-pub(crate) mod overlay;
-pub(crate) mod palette;
 pub(crate) mod query;
-pub(crate) mod quit_saving;
 pub(crate) mod save_all;
 pub(crate) mod startup;
 pub use startup::InitialFile;
-pub(crate) mod search_bar;
 pub(crate) mod snapshot;
 pub(crate) mod state;
 pub(crate) mod swap;
@@ -76,17 +68,17 @@ impl Editor {
         external::register(&mut registry);
         buffer::register(&mut registry);
         save_all::register(&mut registry);
-        help::register(&mut registry);
+        crate::ui_model::help::register(&mut registry);
         config_reload::register(&mut registry);
         crate::view::view_cmds::register(&mut registry);
         crate::view::mouse::register(&mut registry);
         crate::command::line_ops::register(&mut registry);
-        overlay::register(&mut registry);
+        crate::ui_model::overlay::register(&mut registry);
         let mut state = EditorState::new(caps, ports.jobs.clone(), ports.paths.clone());
         state.set_palette_entries(
             registry
                 .iter()
-                .filter_map(|s| palette::PaletteEntry::new(s.id.as_str(), &s.when))
+                .filter_map(|s| crate::ui_model::palette::PaletteEntry::new(s.id.as_str(), &s.when))
                 .collect(),
         );
         let mut editor = Editor {
@@ -115,12 +107,13 @@ impl Editor {
             .map(|(k, v)| (k.clone(), crate::keymap::format_sequence(v)))
             .collect();
         self.state.set_key_bindings(labels, seqs);
-        self.state.set_all_key_bindings(help::collect_all_bindings(
-            self.keymap
-                .all_bindings()
-                .into_iter()
-                .map(|b| (b.command.as_str().to_owned(), b.sequence.clone(), ok(b))),
-        ));
+        self.state
+            .set_all_key_bindings(crate::ui_model::help::collect_all_bindings(
+                self.keymap
+                    .all_bindings()
+                    .into_iter()
+                    .map(|b| (b.command.as_str().to_owned(), b.sequence.clone(), ok(b))),
+            ));
     }
 
     /// 端末の能力を差し替える (起動時と `CapabilitiesChanged`)。届く割当が変わるので、キーの表記も作り直す。

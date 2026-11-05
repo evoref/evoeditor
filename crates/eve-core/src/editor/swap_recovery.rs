@@ -11,9 +11,9 @@
 
 use eve_text::{ByteRange, Edit};
 
-use super::overlay::{ChoiceDef, ConfirmAction, ConfirmState};
 use super::state::EditorState;
 use crate::document::{LoadState, Origin, Transaction};
+use crate::ui_model::overlay::{ChoiceDef, ConfirmAction, ConfirmState};
 use crate::{DocumentId, FsPath, JobError, JobKind, JobResult, SwapEntry, SwapOwner};
 
 use super::file::Pending;

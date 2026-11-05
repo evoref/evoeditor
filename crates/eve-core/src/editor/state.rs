@@ -99,9 +99,9 @@ pub struct EditorState {
     /// コマンド → 第一割当のストローク列 (ヒントバーの逆引き)。
     pub(crate) key_seqs: BTreeMap<String, Vec<eve_view::KeyStroke>>,
     /// 出ているオーバーレイ (確認・入力プロンプト)。モーダル。
-    pub(crate) overlay: Option<super::overlay::Overlay>,
+    pub(crate) overlay: Option<crate::ui_model::overlay::Overlay>,
     /// 保存ジョブの完了後に続ける操作。
-    pub(crate) continuations: BTreeMap<JobId, super::overlay::Continuation>,
+    pub(crate) continuations: BTreeMap<JobId, crate::ui_model::overlay::Continuation>,
     /// 実行中の全保存 (`file.save_all`、03 §9.8)。無ければ `None`。
     pub(crate) save_all: Option<super::save_all::SaveAll>,
     /// 読込が終わったらカーソルを移す位置 (行, 桁。ともに 1 始まり。起動時の `+行:桁`、07 §18.2)。
@@ -111,17 +111,17 @@ pub struct EditorState {
     /// 前に表示していた文書 (最近使った順。末尾が直近)。閉じた後に表示する文書を選ぶのに使う。
     pub(crate) recent: Vec<DocumentId>,
     /// 終了の連鎖 (`app.quit` で dirty な文書が 1 件以上、03 §9.8)。連鎖の外では `None`。
-    pub(crate) quit_chain: Option<super::overlay::QuitChain>,
+    pub(crate) quit_chain: Option<crate::ui_model::overlay::QuitChain>,
     /// 保存中に終了を求められている (03 §9.7 (f))。
-    pub(crate) quit_wait: Option<super::quit_saving::QuitWait>,
+    pub(crate) quit_wait: Option<crate::ui_model::quit_saving::QuitWait>,
     /// 「保存を中止して終了」の最中 (保存ジョブがすべて終わったら終了する)。
-    pub(crate) quit_abort: Option<super::quit_saving::QuitAbort>,
+    pub(crate) quit_abort: Option<crate::ui_model::quit_saving::QuitAbort>,
     /// 表示中のメッセージ (解決済み)。
-    pub(crate) message: Option<super::message::ShownMessage>,
+    pub(crate) message: Option<crate::ui_model::message::ShownMessage>,
     /// 未読のメッセージの数。
     pub(crate) unread: u16,
     /// メッセージの履歴 (古い順。上限 `message::HISTORY_MAX`、04 §8.9)。
-    pub(crate) message_log: std::collections::VecDeque<super::message::LoggedMessage>,
+    pub(crate) message_log: std::collections::VecDeque<crate::ui_model::message::LoggedMessage>,
     /// 履歴の破棄を通知した文書 (文書ごとに 1 回)。
     pub(crate) trim_notified: BTreeSet<DocumentId>,
     /// 内部レジスタ・ハンドルの表・貼り付けの token (クリップボード、`clipboard.rs`)。
@@ -131,13 +131,13 @@ pub struct EditorState {
     /// 選択済みの UI の言語 (07 §17.1)。起動時に Host が `Editor::set_locale` で渡す。
     pub(crate) locale: eve_config::Locale,
     /// パレットの候補 (`hidden` を除く登録済みコマンド。CommandId 順)。
-    pub(crate) palette_entries: Vec<super::palette::PaletteEntry>,
+    pub(crate) palette_entries: Vec<crate::ui_model::palette::PaletteEntry>,
     /// パレットで選ばれ、Editor が次に実行するコマンド。
     pub(crate) deferred_command: Option<(String, crate::command::Args)>,
     /// 文書内検索の状態 (検索バーが開いている間)。
     pub(crate) search: Option<crate::search::search_state::SearchState>,
     /// 検索バー (開いている間)。
-    pub(crate) search_bar: Option<super::search_bar::SearchBarState>,
+    pub(crate) search_bar: Option<crate::ui_model::search_bar::SearchBarState>,
     /// 表現不能の文字の強調 (文書, 作った Revision, 位置)。Revision が変わる (次の編集) まで残る。
     pub(crate) unmappable_marks: Option<UnmappableMarks>,
     /// 編集で検索の結果が無効になった (Revision, 気づいた時刻)。入力が止まって 300 ms 後に再検索する (03 §12.2)。

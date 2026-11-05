@@ -9,7 +9,8 @@ use eve_view::{
 
 use crate::document::{LoadState, ReadOnlyReason};
 
-use super::{Editor, chrome};
+use super::Editor;
+use crate::ui_model::chrome;
 
 impl Editor {
     pub fn query(&self, q: &Query) -> Result<Answer, QueryError> {

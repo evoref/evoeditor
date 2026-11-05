@@ -10,7 +10,7 @@ use eve_view::{
 
 use crate::document::{Document, LoadState};
 
-use super::state::EditorState;
+use crate::editor::state::EditorState;
 use crate::layout::cell_text;
 
 /// ヒントバーの `normal` 文脈の項目 (07 §11.6 の「ヒント」列。CommandId と優先度)。
@@ -248,7 +248,7 @@ pub(crate) fn status_model(
 
 /// オーバーレイのモデル (確認・入力プロンプト)。文言は core が解決して `CellText` で渡す。
 pub(crate) fn overlay_models(state: &EditorState) -> Vec<OverlayModel> {
-    use super::overlay::Overlay;
+    use crate::ui_model::overlay::Overlay;
     match &state.overlay {
         None => Vec::new(),
         Some(Overlay::Confirm(c)) => {
@@ -343,7 +343,10 @@ pub(crate) fn overlay_models(state: &EditorState) -> Vec<OverlayModel> {
 
 pub(crate) fn hint_model(state: &EditorState, chord: &[KeyStroke]) -> HintModel {
     // ヘルプ画面: 決定するものは無いので、閉じる (`Esc`) だけを案内する
-    if matches!(state.overlay, Some(super::overlay::Overlay::Help(_))) {
+    if matches!(
+        state.overlay,
+        Some(crate::ui_model::overlay::Overlay::Help(_))
+    ) {
         let esc = KeyLabel {
             strokes: vec![KeyStroke {
                 mods: Modifiers::NONE,

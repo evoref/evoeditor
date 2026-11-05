@@ -7,13 +7,13 @@ use std::collections::BTreeSet;
 
 use eve_view::{DocumentId, JobId, MessageLevel};
 
-use super::overlay::{ChoiceDef, ConfirmAction, ConfirmState};
 use super::state::EditorState;
 use crate::command::{
     CommandCtx, CommandKind, CommandRegistry, CommandResult, CommandSpec, Permission, RejectReason,
 };
 use crate::fs::Expect;
 use crate::jobs::{JobError, JobResult};
+use crate::ui_model::overlay::{ChoiceDef, ConfirmAction, ConfirmState};
 
 /// 実行中の全保存。
 #[derive(Debug, Default)]
