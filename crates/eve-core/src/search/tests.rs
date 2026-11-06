@@ -37,6 +37,25 @@ fn 一致は重ならないものを左から取る() {
 }
 
 #[test]
+fn コンパイルの結果は複製と共有し_条件を変えると作り直す() {
+    let q = lit("abc").with_regex(true).with_case(Case::Sensitive);
+    let m = q.matcher().unwrap();
+    // 複製 (検索ジョブに渡すもの) は同じ照合器を使う
+    assert!(std::sync::Arc::ptr_eq(&m, &q.clone().matcher().unwrap()));
+    assert!(std::sync::Arc::ptr_eq(&m, &q.matcher().unwrap()));
+    // 条件を変えた問い合わせは作り直す。比べるのは条件だけ
+    let insensitive = q.clone().with_case(Case::Insensitive);
+    assert!(!std::sync::Arc::ptr_eq(&m, &insensitive.matcher().unwrap()));
+    assert_eq!(q, lit("abc").with_regex(true).with_case(Case::Sensitive));
+    assert_ne!(q, insensitive);
+    assert_eq!(find_all("ABC abc", &insensitive), [(0, 3), (4, 7)]);
+    assert_eq!(find_all("ABC abc", &q), [(4, 7)]);
+    // 誤りも覚える
+    let bad = lit("(").with_regex(true);
+    assert!(bad.compile().is_err() && bad.clone().compile().is_err());
+}
+
+#[test]
 fn 空の検索語は何にも一致しない() {
     assert!(lit("").matcher().is_none());
     assert!(find_all("abc", &lit("")).is_empty());
