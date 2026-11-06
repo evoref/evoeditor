@@ -22,7 +22,9 @@ pub(crate) fn can_write(p: &Path) -> bool {
     }
 }
 
-/// ファイルの fsync (`sync_all`)。差し替え点 (05 §4.1 の macOS の `F_FULLFSYNC` は v1.x)。
+/// ファイルの fsync (`sync_all`)。差し替え点: std の `sync_all` は Apple ではすでに `F_FULLFSYNC` を呼ぶが、FS が受け付けない
+/// (ENOTSUP / EINVAL) ときに `fsync` へ戻して警告にする部分 (05 §4.1 手順 3) は v1.x。今これを通るのは `unix_fs` の一時ファイルと
+/// ディレクトリだけで、`inplace`・`inflight`・`state_file`・`rescue` は `sync_all` を直に呼ぶ (macOS へ移すときにここへ寄せる)。
 pub(crate) fn fsync(f: &File) -> io::Result<()> {
     f.sync_all()
 }
@@ -52,7 +54,8 @@ pub(crate) fn rename_noreplace(from: &Path, to: &Path) -> io::Result<()> {
     Err(io::Error::last_os_error())
 }
 
-/// Linux 以外: `ENOSYS` (呼び側はハードリンク + 削除に進む)。
+/// Linux 以外: `ENOSYS` (呼び側はハードリンク + 削除に進む)。macOS へ移すときは `renamex_np(RENAME_EXCL)` にする (05 §4.1。
+/// ハードリンクの無い FS (exFAT・一部の SMB) では、今の代替の経路だと新規ファイルを保存できない)。
 #[cfg(not(target_os = "linux"))]
 pub(crate) fn rename_noreplace(from: &Path, to: &Path) -> io::Result<()> {
     let (_f, _t) = (c_path(from)?, c_path(to)?);
@@ -141,7 +144,8 @@ pub(crate) fn set_xattr(f: &File, name: &[u8], value: &[u8]) -> io::Result<()> {
     Ok(())
 }
 
-/// Linux 以外: 対応しない FS と同じ (空)。
+/// Linux 以外: 対応しない FS と同じ (空)。**注意**: 呼び側 (`copy_xattrs`) は失った属性が無いとみなすので、macOS などでは
+/// 拡張属性 (Finder のタグ・`com.apple.*`) を黙って失う (05 §4.1 の「黙って失わない」に反する)。移すときに実装する (v1.x)。
 #[cfg(not(target_os = "linux"))]
 pub(crate) fn list_xattrs(_: &File) -> io::Result<Vec<Vec<u8>>> {
     Ok(Vec::new())
