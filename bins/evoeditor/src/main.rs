@@ -20,8 +20,8 @@ use eve_config::Catalog;
 use eve_core::RescueReason;
 use eve_core::{Encoding, JobPorts, Paths as _, Ports};
 use eve_host::{
-    Host, NonInteractiveShutdown, ShutdownEnd, ShutdownParts, ShutdownTrigger, SignalKind,
-    SystemClock, ThreadJobSpawner, channel,
+    Host, HostInit, NonInteractiveShutdown, ShutdownEnd, ShutdownParts, ShutdownTrigger,
+    SignalKind, SystemClock, ThreadJobSpawner, channel,
 };
 #[cfg(unix)]
 use eve_platform::dirs::UnixPaths as NativePaths;
@@ -408,51 +408,53 @@ fn run(
         jobs: Rc::new(spawner),
         paths,
     };
-    let mut host = Host::with_channel(ports, (tx.clone(), rx));
-    host.set_initial_encoding(encoding);
     let config = loaded.config;
-    host.set_config(config.clone(), CONFIG_FILE, Vec::new());
-    for (name, diags) in loaded.reports {
-        host.add_config_report(&name, diags);
-    }
+    let mut config_reports = loaded.reports;
     // テーマファイル (組込みでない `theme.name`)。読めなければ default で動き、診断を出す
-    if let Some((name, theme, reports)) = load_user_theme(&sources, &config) {
+    let user_theme = load_user_theme(&sources, &config).map(|(name, theme, reports)| {
         for (file, diags) in &reports {
             for d in diags {
                 logger.log(log_level(d.severity), &describe(file, d));
             }
         }
-        for (file, diags) in reports {
-            host.add_config_report(&file, diags);
-        }
-        host.set_user_theme(&name, theme);
-    }
-    host.set_config_sources(sources);
+        config_reports.extend(reports);
+        (name, theme)
+    });
     for d in &keymap.diagnostics {
         logger.log(log_level(d.severity), &describe(KEYMAP_FILE, d));
     }
-    host.set_keymap(KEYMAP_FILE, &keymap);
-    host.set_locale(locale);
     // 要約の対処 (hint) は省略されないので、長い絶対パスではなく末尾の `log\evoeditor.log` (Unix は `log/evoeditor.log`) だけを出す
-    host.set_log_path(logger.path().and_then(|p| {
+    let log_path = logger.path().and_then(|p| {
         let name = p.file_name()?.to_string_lossy().into_owned();
         let dir = p.parent()?.file_name()?.to_string_lossy().into_owned();
         Some(format!("{dir}{}{name}", std::path::MAIN_SEPARATOR))
-    }));
-    host.set_system_encoding(
-        eve_platform::locale::system_encoding().and_then(Encoding::from_label),
-    );
+    });
     // システムクリップボード (所有者ウィンドウのスレッドは最初の読み書きで遅延して起こす、05 §8.1)
     #[cfg(windows)]
-    host.set_clipboard(Arc::new(eve_platform::clipboard::WinClipboard::new()));
+    let clipboard: Arc<dyn eve_host::ClipboardProvider> =
+        Arc::new(eve_platform::clipboard::WinClipboard::new());
     // Unix は外部コマンド (wl-copy / xclip / xsel / WSL の clip.exe)。検出も最初の読み書きで行う (05 §8.2 / §8.3)
     #[cfg(unix)]
-    host.set_clipboard(Arc::new(eve_platform::clipboard_cmd::UnixClipboard::new()));
-
-    // 緊急退避の書き手 (公開済みの DocSnapshot だけを読み、Port を通さずに書く、02 §11.2.1)
-    host.set_rescue_writer(Arc::new(StateRescue::new(Some(
-        state_dir.as_path().to_path_buf(),
-    ))));
+    let clipboard: Arc<dyn eve_host::ClipboardProvider> =
+        Arc::new(eve_platform::clipboard_cmd::UnixClipboard::new());
+    let host_init = HostInit {
+        initial_encoding: encoding,
+        config: Some(config.clone()),
+        config_reports,
+        user_theme,
+        config_sources: Some(sources),
+        keymap: Some((KEYMAP_FILE.to_owned(), keymap)),
+        locale: Some(locale),
+        log_path,
+        system_encoding: eve_platform::locale::system_encoding().and_then(Encoding::from_label),
+        clipboard: Some(clipboard),
+        // 緊急退避の書き手 (公開済みの DocSnapshot だけを読み、Port を通さずに書く、02 §11.2.1)
+        rescue_writer: Some(Arc::new(StateRescue::new(Some(
+            state_dir.as_path().to_path_buf(),
+        )))),
+        ssh_session: None,
+    };
+    let mut host = Host::with_channel(ports, (tx.clone(), rx), host_init);
     let emergency = host.emergency();
     // 非対話の終了の手順 (退避 → メインへの通知と終了待ち → 置換中の計数の待ち → 端末の緊急復元 → 退避の結果の行、
     // 02 §9.6 / §11.2.1)。手順と予算は eve-host が持ち、ここでは OS のコールバックへの登録と終わり方だけを書く
