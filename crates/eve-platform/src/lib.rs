@@ -8,7 +8,7 @@
 
 // unsafe は OS の API の包み `sys::windows`・`sys::unix` と、OS の API そのものを扱うモジュール `clipboard`・`clipboard_test`・
 // `console`・`dll`・`locale`・`session`・`signals`・`term` だけに許す (R5)。アルゴリズムのモジュール (`save`・`unix_fs`・`fs`・
-// `inplace`・`inflight`・`swap_scan`・`hooks` など) には許さない。
+// `fs_common`・`inplace`・`inflight`・`swap_scan`・`hooks` など) には許さない。
 #![deny(unsafe_code)]
 // eve-core の `FsError` は大きい型 (エラーは稀な経路)。値で返す。
 #![allow(clippy::result_large_err)]
@@ -167,6 +167,7 @@ pub mod dirs;
 pub mod dll;
 #[cfg(windows)]
 pub mod fs;
+mod fs_common;
 mod hooks;
 mod inflight;
 mod inplace;

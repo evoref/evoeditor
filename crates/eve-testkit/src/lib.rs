@@ -9,6 +9,7 @@
 
 mod ascii;
 mod clock;
+pub mod fs_contract;
 pub mod fuzzing;
 pub mod golden;
 mod harness;

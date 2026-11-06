@@ -11,18 +11,17 @@
 use std::collections::hash_map::RandomState;
 use std::fs::{self, File, OpenOptions};
 use std::hash::{BuildHasher, Hasher};
-use std::io::{self, Read, Write};
+use std::io::{self, Write};
 use std::os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 
 use eve_core::{
     AttrKind, ChunkError, Expect, FileId, FileKind, FileMeta, FileStamp, FileSystem, FileTime,
-    FsError, FsErrorDetail, FsErrorKind, FsKind, FsPath, FsyncLevel, HardlinkPolicy, LinkInfo,
-    LinkKind, ReadChunks, SaveMethod, SaveOptions, SaveReport, SaveWarning,
+    FsError, FsErrorDetail, FsErrorKind, FsKind, FsPath, FsyncLevel, HardlinkPolicy, ReadChunks,
+    SaveMethod, SaveOptions, SaveReport, SaveWarning,
 };
 
-/// 読込のチャンク (02 §4.5: 1 MiB)。
-const READ_CHUNK_BYTES: usize = 1024 * 1024;
+use crate::fs_common::{file_kind, link_info, metadata_error};
 
 /// Unix のファイルシステム。`state_dir` (05 §7.5) は保存中フラグ・状態ファイル・スワップ・緊急退避の置き場所。
 #[derive(Clone, Debug, Default)]
@@ -92,21 +91,7 @@ use crate::sys::{
 };
 
 fn meta_of(p: &Path, meta: &fs::Metadata) -> FileMeta {
-    let kind = if meta.is_file() {
-        FileKind::File
-    } else if meta.is_dir() {
-        FileKind::Dir
-    } else {
-        FileKind::Other
-    };
-    let link = fs::symlink_metadata(p)
-        .ok()
-        .filter(|sm| sm.file_type().is_symlink())
-        .map(|_| LinkInfo {
-            kind: LinkKind::Symlink,
-            target: fs::read_link(p).ok().map(FsPath::new),
-            dangling: false,
-        });
+    let kind = file_kind(meta);
     FileMeta {
         kind,
         len: meta.len(),
@@ -120,7 +105,7 @@ fn meta_of(p: &Path, meta: &fs::Metadata) -> FileMeta {
             index: u128::from(meta.ino()),
         }),
         nlink: u32::try_from(meta.nlink()).unwrap_or(u32::MAX),
-        link,
+        link: link_info(p),
         fs_kind: FsKind::Unknown,
         // root は他人のファイルの所有者も保てるので「自分の」として扱う (05 §4.4)
         owner_is_me: Some(meta.uid() == euid() || euid() == 0),
@@ -272,46 +257,12 @@ fn fsync_dir(dir: &Path) -> bool {
     hooked("fsync_dir", || File::open(dir).and_then(|d| fsync(&d))).is_ok()
 }
 
-struct FileChunks {
-    file: File,
-    buf: Vec<u8>,
-    path: FsPath,
-}
-
-impl ReadChunks for FileChunks {
-    fn next_chunk(&mut self) -> Result<Option<&[u8]>, ChunkError> {
-        loop {
-            match self.file.read(&mut self.buf) {
-                Ok(0) => return Ok(None),
-                Ok(n) => return Ok(Some(&self.buf[..n])),
-                Err(e) if e.kind() == io::ErrorKind::Interrupted => {}
-                Err(e) => return Err(ChunkError::Io(map_io_error(e, &self.path))),
-            }
-        }
-    }
-}
-
 impl FileSystem for UnixFs {
     fn metadata(&self, path: &FsPath) -> Result<FileMeta, FsError> {
         let p = path.as_path();
-        match fs::metadata(p) {
-            Ok(m) => Ok(meta_of(p, &m)),
-            Err(e) => {
-                // リンクは在るがリンク先が無い (ダングリング)
-                if e.kind() == io::ErrorKind::NotFound
-                    && let Ok(sm) = fs::symlink_metadata(p)
-                    && sm.file_type().is_symlink()
-                {
-                    let target = fs::read_link(p).ok().map(FsPath::new);
-                    return Err(FsError {
-                        kind: FsErrorKind::NotFound,
-                        detail: target.map(|target| FsErrorDetail::DanglingLink { target }),
-                        source: Some(e),
-                    });
-                }
-                Err(map_io_error(e, path))
-            }
-        }
+        fs::metadata(p)
+            .map(|m| meta_of(p, &m))
+            .map_err(|e| metadata_error(e, path))
     }
 
     fn canonicalize(&self, path: &FsPath) -> Result<FsPath, FsError> {
@@ -321,20 +272,7 @@ impl FileSystem for UnixFs {
     }
 
     fn open_read(&self, path: &FsPath) -> Result<Box<dyn ReadChunks + Send>, FsError> {
-        let f = File::open(path.as_path()).map_err(|e| map_io_error(e, path))?;
-        if let Ok(m) = f.metadata()
-            && !m.is_file()
-        {
-            return Err(FsError::with_detail(
-                FsErrorKind::InvalidPath,
-                FsErrorDetail::NotAFile,
-            ));
-        }
-        Ok(Box::new(FileChunks {
-            file: f,
-            buf: vec![0u8; READ_CHUNK_BYTES],
-            path: path.clone(),
-        }))
+        crate::fs_common::open_read(path)
     }
 
     fn rename_no_replace(&self, from: &FsPath, to: &FsPath) -> Result<(), FsError> {
