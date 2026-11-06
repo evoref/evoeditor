@@ -429,19 +429,6 @@ mod tests {
     use super::run_guarded;
     use std::cell::Cell;
 
-    /// 緊急の復元のバイト列は、通常の復元と同じ列を同じ順に並べたもの (手書きの複製なので一致を縛る。
-    /// docs/review/v0.3-findings.md の STR-C5)。
-    #[test]
-    fn 緊急の復元のバイト列は通常の復元の列と一致する() {
-        let mut want = String::from("\x18");
-        #[cfg(unix)]
-        want.push_str(crate::unix::LEAVE_MODES);
-        want.push_str(crate::ansi::LEAVE);
-        #[cfg(unix)]
-        want.push_str(crate::unix::TITLE_POP);
-        assert_eq!(super::EMERGENCY_BYTES, want.as_bytes());
-    }
-
     #[test]
     fn 入力スレッドの本体が_panic_したら知らせる() {
         let died = Cell::new(false);
@@ -536,14 +523,19 @@ mod tests {
         assert!(fe.died, "panic は run_guarded の中で捕まえて died を呼ぶ");
     }
 
-    /// 緊急の復元の列は、通常の復元 (`ansi::LEAVE`、Unix は先に `unix::LEAVE_MODES`) と同じ並びに CAN を前置したもの
-    /// (04 §14.3。docs/review/v0.3-findings.md の STR-T9)。片方だけを直すとずれるので、ここで突き合わせる。
+    /// 緊急の復元の列は、通常の復元 (`ansi::LEAVE`、Unix は先に `unix::LEAVE_MODES`、最後に `unix::TITLE_POP`) と同じ並びに
+    /// CAN を前置したもの (04 §14.3。docs/review/v0.3-findings.md の STR-T9)。片方だけを直すとずれるので、ここで突き合わせる。
     #[test]
     fn 緊急の復元の列は通常の復元と同じ並び() {
         #[cfg(windows)]
         let expected = format!("\x18{}", crate::ansi::LEAVE);
         #[cfg(unix)]
-        let expected = format!("\x18{}{}", crate::unix::LEAVE_MODES, crate::ansi::LEAVE);
+        let expected = format!(
+            "\x18{}{}{}",
+            crate::unix::LEAVE_MODES,
+            crate::ansi::LEAVE,
+            crate::unix::TITLE_POP
+        );
         assert_eq!(super::EMERGENCY_BYTES, expected.as_bytes());
     }
 }
