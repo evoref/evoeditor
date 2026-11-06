@@ -1666,6 +1666,7 @@ pub struct Match { range: ByteRange, captures: Option<SmallVec<[Option<ByteRange
 
 - **すべて置換の問い合わせ**: 検索バーの現在の `SearchQuery` をそのまま使う (大小区別・正規表現・単語単位。下の手順 2 の「`kind = Literal`・`whole_word = false`」は v0.1 の定数で、v0.2 は検索バーのトグルに従う)。選択範囲内 (`scope`) は未実装。
 - **置換文字列**: リテラルでは従来どおり展開しない。**正規表現では** `$1` / `${name}` を一致ごとに展開し (`regex` crate の構文。`$$` は `$`)、`\n` は文書の既定の改行 (`default_eol`) に、`\\` は `\` 1 つに直す (ほかの `\` はそのまま)。存在しないグループは空文字列になる。
+- **大量のすべて置換の Undo の記録 (v0.3 の M15、REF-05)**: 一致が `REPLACE_COARSE_UNDO_MIN` (10,000) 件以上で、最初の一致の始端から最後の一致の終端までの旧本文のバイト数が、一致ごとの逆変換の見積り (削除する本文のバイト数 + 1 件あたり 128 バイト) 以下のときは、Undo の記録 (逆変換) を「その範囲を旧本文で置き換える」1 件の編集にする (Redo と適用は一致ごとの ChangeSet のまま。メモリは一致ごとの逆変換より増えない)。この Undo では、ほかの View のカーソル・選択のうちその範囲の中にあったものは範囲の始端に寄る (発行 View は `selection_before` を戻すので変わらない)。
 - **1 件置換 (`search.replace`、置換欄の `Enter`)**: when は `search.replace_active && !doc.read_only`。対象は、**選択範囲がちょうど 1 つの一致ならその一致** (`search.next` で確定した一致)、そうでなければ **入力で強調している現在の一致**。その範囲を置換文字列 (正規表現では展開後) に置き換える 1 つの Transaction (`Origin::Command("search.replace")`、`UndoGroupHint::Break` で **置換ごとに別の Undo 単位**) として適用し、カーソルを置換の後ろに置いて、そこから先の最初の一致を強調する (終端で折り返さない。起点は置換の後ろ)。対象が無ければ `info.search.replace_no_match`、検索語が空なら `info.search.replace_empty_query`。検索欄の `Enter` (`search.next`) は変わらない。
 
 **v0.1 のすべて置換の手順**:
