@@ -556,10 +556,12 @@ fn 一つの文書の書込が失敗しても_他の文書は退避する() {
 fn 遅い退避は各段の時間をログに残し_速い退避は書かない() {
     let state = tmp("slow-stages");
     let sd = state.join("s");
-    let w = StateRescue::new(Some(sd.clone()));
     let log = sd.join("log").join("evoeditor.log");
     let docs = [doc(1, "unsaved text", None, |_| {})];
-    let fast = w.write(&docs, RescueReason::ConsoleClose, Duration::from_secs(10));
+    // 時間に依らないよう、しきい値を差し替える: 速い退避は 60 秒より速く、遅い退避 (本文の書込で 600 ms 待つ) は 100 ms より遅い
+    // (既定の 500 ms のままだと、負荷の高い機械で速い退避がしきい値を超えて落ちた)
+    let fast_w = StateRescue::new(Some(sd.clone())).with_slow_stage(Duration::from_secs(60));
+    let fast = fast_w.write(&docs, RescueReason::ConsoleClose, Duration::from_secs(10));
     assert!(fast.complete);
     assert!(
         !fs::read_to_string(&log)
@@ -571,6 +573,7 @@ fn 遅い退避は各段の時間をログに残し_速い退避は書かない(
         std::thread::sleep(Duration::from_millis(600));
         eve_platform::rescue::write_body_for_test(path, d, expired)
     };
+    let w = StateRescue::new(Some(sd.clone())).with_slow_stage(Duration::from_millis(100));
     let out = w.write_with(
         &docs,
         RescueReason::ConsoleClose,

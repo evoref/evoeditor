@@ -27,12 +27,23 @@ const FORMAT_VERSION: u32 = 1;
 #[derive(Clone, Debug, Default)]
 pub struct StateRescue {
     state_dir: Option<PathBuf>,
+    /// これより遅い退避の段をログに書く (既定は `SLOW_STAGE`)。
+    slow_stage: Duration,
 }
 
 impl StateRescue {
     /// `state_dir` は 05 §7.5 の状態ディレクトリ (無ければ代替の退避先だけに書く)。
     pub fn new(state_dir: Option<PathBuf>) -> StateRescue {
-        StateRescue { state_dir }
+        StateRescue {
+            state_dir,
+            slow_stage: SLOW_STAGE,
+        }
+    }
+
+    /// 段の時間をログに書くしきい値を変える (試験用。時間に依らずに「速い」「遅い」を確かめるため)。
+    pub fn with_slow_stage(mut self, slow_stage: Duration) -> StateRescue {
+        self.slow_stage = slow_stage;
+        self
     }
 }
 
@@ -388,6 +399,7 @@ impl RescueWriter for StateRescue {
 /// 段ごとに書くのは、途中で OS に終了させられても、どの段まで進んだかを残すため。速く終わる普段の退避では何も書かない。
 struct Stages {
     start: Instant,
+    slow_stage: Duration,
     reason: RescueReason,
     log: crate::log::Logger,
     done: String,
@@ -397,9 +409,15 @@ struct Stages {
 const SLOW_STAGE: Duration = Duration::from_millis(500);
 
 impl Stages {
-    fn new(reason: RescueReason, state_dir: Option<&Path>, start: Instant) -> Stages {
+    fn new(
+        reason: RescueReason,
+        state_dir: Option<&Path>,
+        start: Instant,
+        slow_stage: Duration,
+    ) -> Stages {
         Stages {
             start,
+            slow_stage,
             reason,
             log: crate::log::Logger::with_level(state_dir, crate::log::Level::Warn),
             done: String::new(),
@@ -413,7 +431,7 @@ impl Stages {
             self.done.push_str(", ");
         }
         self.done.push_str(&format!("{name} {ms} ms"));
-        if self.start.elapsed() >= SLOW_STAGE {
+        if self.start.elapsed() >= self.slow_stage {
             self.write("遅い");
         }
     }
@@ -456,7 +474,7 @@ impl StateRescue {
             .map_or(budget, |ms| budget.min(Duration::from_millis(ms)));
         let start = Instant::now();
         let expired = || start.elapsed() >= budget;
-        let mut stages = Stages::new(reason, self.state_dir.as_deref(), start);
+        let mut stages = Stages::new(reason, self.state_dir.as_deref(), start, self.slow_stage);
         let mut out = RescueOutcome {
             total: docs.len(),
             sensitive: docs.iter().any(|d| d.sensitive),
