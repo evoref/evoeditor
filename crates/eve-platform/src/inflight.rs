@@ -5,8 +5,6 @@
 //! `hash(path)` は 05 §7.5 の正規形 (親を `canonicalize` + ファイル名、verbatim 接頭辞を外し、大文字小文字を畳み、`\` に揃え、
 //! 末尾の区切りを除く) を UTF-16 単位列にして XXH3-64。シンボリックリンクはリンク自身とリンク先の 2 つのキーで照会する。
 
-#![cfg_attr(windows, allow(unsafe_code))]
-
 use std::collections::BTreeSet;
 use std::fs;
 use std::io::{self, Write};
@@ -14,16 +12,9 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use eve_core::{FileTime, FsPath, InflightRecord, SaveMethod, SaveWarning};
-#[cfg(windows)]
-use windows_sys::Win32::Foundation::FILETIME;
-#[cfg(windows)]
-use windows_sys::Win32::System::Threading::{GetCurrentProcess, GetProcessTimes};
 
 #[cfg(windows)]
 use crate::path::simplify_verbatim;
-#[cfg(windows)]
-use crate::save::OwnerOnly;
-#[cfg(unix)]
 use crate::sys::create_dir_private;
 
 /// フラグの版 (キーの追加は版を上げずに行ってよい。意味の変更・必須キーの追加で上げる)。
@@ -146,25 +137,10 @@ pub(crate) fn toml_str(s: &str) -> String {
     out
 }
 
-/// プロセスの作成時刻 (UNIX 紀元からの経過)。取れなければ `None`。
+/// プロセスの作成時刻 (UNIX 紀元からの経過、Windows: `GetProcessTimes`)。取れなければ `None`。
 #[cfg(windows)]
 pub(crate) fn process_start() -> Option<FileTime> {
-    let zero = FILETIME {
-        dwLowDateTime: 0,
-        dwHighDateTime: 0,
-    };
-    let (mut c, mut e, mut k, mut u) = (zero, zero, zero, zero);
-    // SAFETY: 自プロセスのハンドルと、書込先の有効な `FILETIME` 4 つ。
-    let ok = unsafe { GetProcessTimes(GetCurrentProcess(), &mut c, &mut e, &mut k, &mut u) };
-    if ok == 0 {
-        return None;
-    }
-    let ticks = (u64::from(c.dwHighDateTime) << 32) | u64::from(c.dwLowDateTime);
-    // 100 ns 単位、1601-01-01 起点 → UNIX 紀元
-    const EPOCH_DIFF_SECS: i64 = 11_644_473_600;
-    let secs = (ticks / 10_000_000) as i64 - EPOCH_DIFF_SECS;
-    let nanos = ((ticks % 10_000_000) * 100) as u32;
-    Some(FileTime { secs, nanos })
+    crate::sys::process_start()
 }
 
 /// プロセスの作成時刻 (Unix: `/proc/self/stat`)。取れなければ `None`。
@@ -194,26 +170,6 @@ pub(crate) fn create_dir_all_private(dir: &Path) -> io::Result<()> {
         create_dir_all_private(parent)?;
     }
     create_dir_private(dir)
-}
-
-/// 1 段だけ作る (Windows: 所有者のみの保護付き DACL)。
-#[cfg(windows)]
-fn create_dir_private(dir: &Path) -> io::Result<()> {
-    use std::os::windows::ffi::OsStrExt;
-    use windows_sys::Win32::Storage::FileSystem::CreateDirectoryW;
-    let sa = OwnerOnly::new_dir()?;
-    let w: Vec<u16> = dir.as_os_str().encode_wide().chain(Some(0)).collect();
-    // SAFETY: NUL 終端のパス、有効な `SECURITY_ATTRIBUTES`。
-    let ok = unsafe { CreateDirectoryW(w.as_ptr(), sa.as_ptr()) };
-    if ok == 0 {
-        let e = io::Error::last_os_error();
-        // 並行して作られた
-        if dir.is_dir() {
-            return Ok(());
-        }
-        return Err(e);
-    }
-    Ok(())
 }
 
 /// 書いたフラグを同じパスのまま書き直す (一時名 + 名前の変更。05 §4.4 手順 4 の `backup_complete = true`)。

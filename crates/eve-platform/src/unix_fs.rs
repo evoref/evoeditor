@@ -8,16 +8,11 @@
 //! スワップ・緊急退避の部品 (OS に依らない実装、`state_dir_methods!`) を使う。持たない (`default()`) ときは Windows と同じく
 //! フラグを書かず、状態ディレクトリの操作は `Unsupported` / 空を返す。
 
-#![allow(unsafe_code)]
-
 use std::collections::hash_map::RandomState;
-use std::ffi::CString;
 use std::fs::{self, File, OpenOptions};
 use std::hash::{BuildHasher, Hasher};
 use std::io::{self, Read, Write};
-use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt};
-use std::os::unix::io::AsRawFd;
 use std::path::{Path, PathBuf};
 
 use eve_core::{
@@ -89,22 +84,12 @@ pub fn map_io_error(e: io::Error, path: &FsPath) -> FsError {
     }
 }
 
-fn c_path(p: &Path) -> io::Result<CString> {
-    CString::new(p.as_os_str().as_bytes()).map_err(|_| io::Error::from(io::ErrorKind::InvalidInput))
-}
-
-/// 自分 (実効ユーザー) が書けるか (`access(W_OK)`)。
-fn writable(p: &Path) -> bool {
-    match c_path(p) {
-        // SAFETY: NUL 終端のパス。
-        Ok(c) => unsafe { libc::access(c.as_ptr(), libc::W_OK) == 0 },
-        Err(_) => false,
-    }
-}
-
 use crate::hooks;
 use crate::inflight::FlagGuard;
-use crate::sys::{euid, matches, same_file_state};
+use crate::sys::{
+    can_write, euid, fsync, get_xattr, list_xattrs, matches, rename_noreplace, same_file_state,
+    set_xattr,
+};
 
 fn meta_of(p: &Path, meta: &fs::Metadata) -> FileMeta {
     let kind = if meta.is_file() {
@@ -129,7 +114,7 @@ fn meta_of(p: &Path, meta: &fs::Metadata) -> FileMeta {
             secs: meta.mtime(),
             nanos: u32::try_from(meta.mtime_nsec()).unwrap_or(0),
         },
-        readonly: kind == FileKind::File && !writable(p),
+        readonly: kind == FileKind::File && !can_write(p),
         file_id: Some(FileId {
             volume: meta.dev(),
             index: u128::from(meta.ino()),
@@ -206,66 +191,13 @@ const ACL_ACCESS: &[u8] = b"system.posix_acl_access";
 /// ディレクトリの既定 ACL (一時ファイルが継承する)。
 const ACL_DEFAULT: &[u8] = b"system.posix_acl_default";
 
-/// `fd` の xattr の名前の一覧。対応しない FS (ENOTSUP) は空。
-fn list_xattrs(fd: i32) -> io::Result<Vec<Vec<u8>>> {
-    // SAFETY: 長さを問い合わせるだけ (バッファなし)。
-    let n = unsafe { libc::flistxattr(fd, std::ptr::null_mut(), 0) };
-    if n < 0 {
-        let e = io::Error::last_os_error();
-        return if e.raw_os_error() == Some(libc::ENOTSUP) {
-            Ok(Vec::new())
-        } else {
-            Err(e)
-        };
-    }
-    let mut buf = vec![0u8; n as usize];
-    // SAFETY: `buf` は `n` バイト。
-    let n = unsafe { libc::flistxattr(fd, buf.as_mut_ptr().cast(), buf.len()) };
-    if n < 0 {
-        return Err(io::Error::last_os_error());
-    }
-    buf.truncate(n as usize);
-    Ok(buf
-        .split(|b| *b == 0)
-        .filter(|s| !s.is_empty())
-        .map(<[u8]>::to_vec)
-        .collect())
-}
-
-fn get_xattr(fd: i32, name: &[u8]) -> io::Result<Vec<u8>> {
-    let c = CString::new(name).map_err(|_| io::Error::from(io::ErrorKind::InvalidInput))?;
-    // SAFETY: NUL 終端の名前、長さの問い合わせ。
-    let n = unsafe { libc::fgetxattr(fd, c.as_ptr(), std::ptr::null_mut(), 0) };
-    if n < 0 {
-        return Err(io::Error::last_os_error());
-    }
-    let mut buf = vec![0u8; n as usize];
-    // SAFETY: `buf` は `n` バイト。
-    let n = unsafe { libc::fgetxattr(fd, c.as_ptr(), buf.as_mut_ptr().cast(), buf.len()) };
-    if n < 0 {
-        return Err(io::Error::last_os_error());
-    }
-    buf.truncate(n as usize);
-    Ok(buf)
-}
-
-fn set_xattr(fd: i32, name: &[u8], value: &[u8]) -> io::Result<()> {
-    let c = CString::new(name).map_err(|_| io::Error::from(io::ErrorKind::InvalidInput))?;
-    // SAFETY: NUL 終端の名前と、長さ付きの値。
-    let r = unsafe { libc::fsetxattr(fd, c.as_ptr(), value.as_ptr().cast(), value.len(), 0) };
-    if r != 0 {
-        return Err(io::Error::last_os_error());
-    }
-    Ok(())
-}
-
 /// T の xattr と POSIX ACL を tmp に写す。写せなかった種類を返す。
 /// `with_acl` が偽なら、アクセス ACL (`system.posix_acl_access`) は写さずに `Security` を失ったとする
 /// (グループを合わせられないとき。写すと、ACL が mode のグループのビット (mask) と other のビットを
 /// 書き直し、元の mode を別のグループに当てたのと同じになる。05 §4.1 手順 4)。
 fn copy_xattrs(src: &File, dst: &File, with_acl: bool) -> Vec<AttrKind> {
     let mut lost = Vec::new();
-    let names = match list_xattrs(src.as_raw_fd()) {
+    let names = match list_xattrs(src) {
         Ok(n) => n,
         Err(_) => return vec![AttrKind::StreamsXattr],
     };
@@ -283,8 +215,8 @@ fn copy_xattrs(src: &File, dst: &File, with_acl: bool) -> Vec<AttrKind> {
         } else {
             continue;
         };
-        let ok = get_xattr(src.as_raw_fd(), &name)
-            .and_then(|v| set_xattr(dst.as_raw_fd(), &name, &v))
+        let ok = get_xattr(src, &name)
+            .and_then(|v| set_xattr(dst, &name, &v))
             .is_ok();
         if !ok && !lost.contains(&kind) {
             lost.push(kind);
@@ -294,29 +226,11 @@ fn copy_xattrs(src: &File, dst: &File, with_acl: bool) -> Vec<AttrKind> {
 }
 
 /// 上書きしない移動 (`renameat2(RENAME_NOREPLACE)`。使えない FS ではハードリンク + 削除)。在れば `AlreadyExists`。
-/// libc の関数ではなくシステムコールで呼ぶ (musl 1.2.5 (Rust の musl ターゲットが同梱する版) には `renameat2` の関数が無い)。
+/// Linux 以外では `renameat2` を使わない (`ENOSYS` として代替の経路へ。`sys::unix`)。
 fn rename_no_replace(from: &Path, to: &Path) -> io::Result<()> {
-    let (f, t) = (c_path(from)?, c_path(to)?);
-    let e = match hooks::fail("rename_noreplace") {
-        Some(e) => e,
-        None => {
-            // SAFETY: NUL 終端のパス 2 つ。`AT_FDCWD` は相対パスを作業ディレクトリから解く。引数はカーネルの renameat2 と同じ並び
-            let r = unsafe {
-                // 可変長の引数は long として渡す (libc の syscall の作法)
-                libc::syscall(
-                    libc::SYS_renameat2,
-                    libc::c_long::from(libc::AT_FDCWD),
-                    f.as_ptr(),
-                    libc::c_long::from(libc::AT_FDCWD),
-                    t.as_ptr(),
-                    libc::c_long::from(libc::RENAME_NOREPLACE),
-                )
-            };
-            if r == 0 {
-                return Ok(());
-            }
-            io::Error::last_os_error()
-        }
+    let e = match hooked("rename_noreplace", || rename_noreplace(from, to)) {
+        Ok(()) => return Ok(()),
+        Err(e) => e,
     };
     match e.raw_os_error() {
         // 上書きしない移動を使えない FS: ENOSYS (古いカーネル) と EINVAL (FUSE の ntfs-3g など) に加えて、
@@ -355,7 +269,7 @@ fn hooked<T>(point: &str, f: impl FnOnce() -> io::Result<T>) -> io::Result<T> {
 }
 
 fn fsync_dir(dir: &Path) -> bool {
-    hooked("fsync_dir", || File::open(dir).and_then(|d| d.sync_all())).is_ok()
+    hooked("fsync_dir", || File::open(dir).and_then(|d| fsync(&d))).is_ok()
 }
 
 struct FileChunks {
@@ -576,7 +490,7 @@ impl FileSystem for UnixFs {
         hooks::hit("kill_after_tmp_write");
 
         // 3. fsync (失敗は警告。ext4 の data=ordered でも rename の前の fsync は要る)
-        if opts.fsync != FsyncLevel::None && hooked("fsync", || file.sync_all()).is_err() {
+        if opts.fsync != FsyncLevel::None && hooked("fsync", || fsync(&file)).is_err() {
             warnings.push(SaveWarning::FsyncFailed);
         }
 
@@ -626,9 +540,8 @@ impl FileSystem for UnixFs {
                     .for_each(&mut lose);
                 // T に ACL が無いのに親の既定 ACL を tmp が継承すると、元と違う相手に読める (05 §4.3)
                 if opts.preserve.security
-                    && get_xattr(src.as_raw_fd(), ACL_ACCESS).is_err()
-                    && File::open(&parent)
-                        .is_ok_and(|d| get_xattr(d.as_raw_fd(), ACL_DEFAULT).is_ok())
+                    && get_xattr(&src, ACL_ACCESS).is_err()
+                    && File::open(&parent).is_ok_and(|d| get_xattr(&d, ACL_DEFAULT).is_ok())
                 {
                     lose(AttrKind::Security);
                 }
@@ -920,7 +833,7 @@ true
         let a = t.p("a.txt");
         fs::write(&a, b"a").unwrap();
         let f = File::open(&a).unwrap();
-        if set_xattr(f.as_raw_fd(), b"user.eve_test", b"v1").is_err() {
+        if set_xattr(&f, b"user.eve_test", b"v1").is_err() {
             // この FS は user xattr に対応しない: 試験を省く
             return;
         }
@@ -928,7 +841,7 @@ true
         let r = save(&ufs, &a, b"b", Expect::Any).unwrap();
         assert!(r.warnings.is_empty(), "{:?}", r.warnings);
         let f = File::open(&a).unwrap();
-        assert_eq!(get_xattr(f.as_raw_fd(), b"user.eve_test").unwrap(), b"v1");
+        assert_eq!(get_xattr(&f, b"user.eve_test").unwrap(), b"v1");
     }
 
     #[test]

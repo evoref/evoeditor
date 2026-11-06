@@ -1,8 +1,6 @@
 //! スワップの復旧の探索 (docs/03 §10.3、05 §5.3 / §7.5)。`swap/*.swp` を列挙して manifest を要約し、本文を読み、他のプロセスの残骸を消す。
 //! 書く側は `swap.rs`。pid の生存確認は起動時刻の一致も見る (05 §5.3。Windows は `OpenProcess`、Unix は `kill(pid, 0)` と `/proc`)。
 
-#![cfg_attr(windows, allow(unsafe_code))]
-
 use std::fs;
 use std::io;
 use std::path::Path;
@@ -97,40 +95,18 @@ pub(crate) fn process_alive(pid: u32, started_at: Option<FileTime>) -> bool {
 /// 同上 (Windows: `OpenProcess` + `GetProcessTimes`)。
 #[cfg(windows)]
 pub(crate) fn process_alive(pid: u32, started_at: Option<FileTime>) -> bool {
-    use windows_sys::Win32::Foundation::{CloseHandle, FILETIME, GetLastError};
-    use windows_sys::Win32::System::Threading::{
-        GetExitCodeProcess, GetProcessTimes, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION,
-    };
-    const STILL_ACTIVE: u32 = 259;
-    const ERROR_ACCESS_DENIED: u32 = 5;
-    // SAFETY: 有効な引数。返ったハンドルは下で閉じる。
-    let h = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid) };
-    if h.is_null() {
+    use crate::sys::ProcessState;
+    match crate::sys::process_state(pid, started_at.is_some()) {
         // アクセス拒否は「いるが開けない」。それ以外 (無効な pid) はいない
-        // SAFETY: 直前の呼出しのエラーを読むだけ。
-        return unsafe { GetLastError() } == ERROR_ACCESS_DENIED;
-    }
-    let mut code = 0u32;
-    // SAFETY: 有効なハンドルと書込先。
-    let running = unsafe { GetExitCodeProcess(h, &mut code) } != 0 && code == STILL_ACTIVE;
-    let mut matches = true;
-    if running && let Some(want) = started_at {
-        let zero = FILETIME {
-            dwLowDateTime: 0,
-            dwHighDateTime: 0,
-        };
-        let (mut c, mut e, mut k, mut u) = (zero, zero, zero, zero);
-        // SAFETY: 有効なハンドルと書込先の `FILETIME` 4 つ。
-        if unsafe { GetProcessTimes(h, &mut c, &mut e, &mut k, &mut u) } != 0 {
-            let ticks = (u64::from(c.dwHighDateTime) << 32) | u64::from(c.dwLowDateTime);
-            const EPOCH_DIFF_SECS: i64 = 11_644_473_600;
-            let secs = (ticks / 10_000_000) as i64 - EPOCH_DIFF_SECS;
-            matches = same_start(FileTime { secs, nanos: 0 }, want);
+        ProcessState::NotOpened { denied } => denied,
+        ProcessState::Opened { running, started } => {
+            let matches = match (started_at, started) {
+                (Some(want), Some(have)) => same_start(have, want),
+                _ => true,
+            };
+            running && matches
         }
     }
-    // SAFETY: `OpenProcess` が返したハンドル。
-    unsafe { CloseHandle(h) };
-    running && matches
 }
 
 /// 自分のプロセスが書いたものか (pid と起動時刻が一致する)。
