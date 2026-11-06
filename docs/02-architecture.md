@@ -1227,7 +1227,7 @@ TUI と、ヘッドレスの消費者 (シナリオ・駆動 API・ヘッドレ�
 | シグナル / コンソールハンドラ | eve-host (受信の OS API は eve-platform の Host 部品。コンソールハンドラのスレッドは OS が作る) | シグナル・コンソールイベントを受け、緊急退避を直接書いてからメインへ通知し、必要なら置換中フラグを待って端末を緊急復元する (§9.6、時間は §11.2.1) | 起動時 (OS 依存) | v0.1 (Windows のコンソールハンドラ)。Unix のシグナルは macOS / Linux を出荷する版 (Linux の受信スレッド `eve-signal` は eve-platform の `signals` が作る。v0.2 の M7、05 §11.1) |
 | クリップボード取得 (使い捨て) | eve-host | `Effect::RequestClipboard` ごとに作り、`ClipboardProvider` の取得 (ブロックし得る) を呼んで `InputEvent::ClipboardContent` を送って終わる (§6.3)。所有者ウィンドウのスレッドとは別 | `RequestClipboard` ごと | v0.1 |
 | クリップボードの所有者ウィンドウ (Windows) | eve-platform | メッセージ専用ウィンドウ (`HWND_MESSAGE`) を作ってメッセージループを回し、`WM_DESTROYCLIPBOARD` 等を処理する (05 §8.2) | 最初の `SetClipboard` / `RequestClipboard` で遅延生成 | v0.1 |
-| クリップボードのコマンドの入出力 (使い捨て、Unix) | eve-platform (`clipboard_cmd`) | クリップボードの書込・取得のスレッドの中で外部コマンド (`wl-copy` 等) を起こしたとき、その標準入力へ書き・標準出力を読む (05 §8.3)。呼び出し側は子プロセスの終了を 2 s まで待ち、過ぎたら子を止める | 外部コマンドの起動ごと | v0.2 (M7) |
+| クリップボードのコマンドの入出力 (使い捨て、Unix) | eve-platform (`clipboard::cmd`) | クリップボードの書込・取得のスレッドの中で外部コマンド (`wl-copy` 等) を起こしたとき、その標準入力へ書き・標準出力を読む (05 §8.3)。呼び出し側は子プロセスの終了を 2 s まで待ち、過ぎたら子を止める | 外部コマンドの起動ごと | v0.2 (M7) |
 | 緊急の端末復元 (使い捨て) | eve-platform (`emergency_restore` の中) | 受信スレッドの代わりに描画先へ復元のバイト列を書き、コンソールのモードを戻す (§9.6)。書込が止まっても受信スレッドは最大 200 ms で先へ進む | 非対話終了でメインが終わらなかったとき (プロセスで 1 回) | v0.1 |
 | セッション終了通知 (Windows) | eve-platform | **非表示のトップレベルウィンドウ** (メッセージ専用ウィンドウではない) で `WM_QUERYENDSESSION` / `WM_ENDSESSION` を受け、緊急退避を起動する (ベストエフォート、§11.2.1)。`WM_QUERYENDSESSION` ごとに使い捨てのスレッド (`eve-session-query`) を作り、そこで退避を書く (メッセージループは待たずに戻る。05 §11.2) | 起動時 (専用スレッドで作り、起動経路をブロックしない) | v0.2 (M9d) |
 | ファイル監視 | eve-platform (notify) | 変更通知を `HostMsg::Fs` へ (デバウンス済み) | 必要時 | v0.5 |

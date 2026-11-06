@@ -30,14 +30,17 @@
 // 計測の駆動側の読み取りスレッド (製品のスレッドではない。R11 の対象外)
 #![allow(clippy::disallowed_methods)]
 
-use std::io::{Read, Write};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, UNIX_EPOCH};
 
-use portable_pty::{Child, CommandBuilder, MasterPty, PtySize, native_pty_system};
+use portable_pty::{Child, MasterPty, PtySize};
+
+#[path = "../tests/common/pty.rs"]
+mod pty;
 
 const EXE: &str = env!("CARGO_BIN_EXE_evoeditor");
 const COLS: u16 = 120;
@@ -82,22 +85,7 @@ impl Term {
             std::process::id(),
             SEQ.fetch_add(1, Ordering::Relaxed)
         ));
-        let pty = native_pty_system()
-            .openpty(PtySize {
-                rows: ROWS,
-                cols: COLS,
-                pixel_width: 0,
-                pixel_height: 0,
-            })
-            .expect("ConPTY を開けません");
-        let mut cmd = CommandBuilder::new(EXE);
-        cmd.args(args);
-        cmd.env_remove("NO_COLOR");
-        cmd.env_remove("WT_SESSION");
-        cmd.env_remove("TERM_PROGRAM");
-        cmd.env("EVE_STATE_DIR", &state);
-        // OS の言語に依らず日本語で計測する
-        cmd.env("EVE_LANG", "ja");
+        let mut cmd = pty::command(EXE, args, &state);
         // 設定ディレクトリは無い (設定ファイルなし)
         cmd.env("EVE_CONFIG_DIR", state.join("no-config"));
         if let Some(t) = trace {
@@ -106,65 +94,46 @@ impl Term {
         for (k, v) in env {
             cmd.env(k, v);
         }
-        let mut reader = pty.master.try_clone_reader().expect("reader");
-        let writer = Arc::new(Mutex::new(pty.master.take_writer().expect("writer")));
-        let parser = Arc::new(Mutex::new(vt100::Parser::new(
-            std::num::NonZeroU16::new(ROWS).expect("ROWS は 1 以上"),
-            std::num::NonZeroU16::new(COLS).expect("COLS は 1 以上"),
-            0,
-        )));
+        let parser = pty::parser(COLS, ROWS);
         let a_count = Arc::new(AtomicUsize::new(0));
         let ready = Arc::new(AtomicBool::new(false));
         let marker_flag = Arc::new(AtomicBool::new(false));
         let saving = Arc::new(AtomicBool::new(false));
         let loading = Arc::new(AtomicBool::new(false));
-        let loading_t = loading.clone();
-        let t0 = Instant::now();
-        let spawn_unix_ns = unix_ns();
-        let child = pty.slave.spawn_command(cmd).expect("起動できません");
-        drop(pty.slave);
-        {
-            let (parser, a_count, ready, marker_flag, saving) = (
+        let on_chunk = {
+            let (parser, a_count, ready, marker_flag, saving, loading) = (
                 parser.clone(),
                 a_count.clone(),
                 ready.clone(),
                 marker_flag.clone(),
                 saving.clone(),
+                loading.clone(),
             );
-            let answer = writer.clone();
-            thread::spawn(move || {
-                let mut buf = [0u8; 16384];
-                while let Ok(n) = reader.read(&mut buf) {
-                    if n == 0 {
-                        break;
-                    }
-                    let chunk = &buf[..n];
-                    // ConPTY は起動時にカーソル位置を尋ねる (DSR)。端末として答える
-                    if chunk.windows(4).any(|w| w == b"\x1b[6n") {
-                        let mut w = answer.lock().unwrap();
-                        let _ = w.write_all(b"\x1b[1;1R");
-                        let _ = w.flush();
-                    }
-                    let mut p = parser.lock().unwrap();
-                    p.process(chunk);
-                    let s = p.screen();
-                    let all = s.contents();
-                    a_count.store(all.matches('a').count(), Ordering::Release);
-                    if all.contains("無題-1") || all.contains(".txt") {
-                        ready.store(true, Ordering::Release);
-                    }
-                    if !marker.is_empty() && all.contains(marker) {
-                        marker_flag.store(true, Ordering::Release);
-                    }
-                    saving.store(all.contains("[+]"), Ordering::Release);
-                    loading_t.store(all.contains("読込中"), Ordering::Release);
+            move |chunk: &[u8]| {
+                let mut p = parser.lock().unwrap();
+                p.process(chunk);
+                let s = p.screen();
+                let all = s.contents();
+                a_count.store(all.matches('a').count(), Ordering::Release);
+                if all.contains("無題-1") || all.contains(".txt") {
+                    ready.store(true, Ordering::Release);
                 }
-            });
-        }
+                if !marker.is_empty() && all.contains(marker) {
+                    marker_flag.store(true, Ordering::Release);
+                }
+                saving.store(all.contains("[+]"), Ordering::Release);
+                loading.store(all.contains("読込中"), Ordering::Release);
+            }
+        };
+        let pty = pty::spawn(cmd, COLS, ROWS, 16384, on_chunk);
+        let spawn_unix_ns = pty
+            .spawned_wall
+            .duration_since(UNIX_EPOCH)
+            .map_or(0, |d| d.as_nanos());
         (
             Term {
-                child,
-                writer,
+                child: pty.child,
+                writer: pty.writer,
                 parser,
                 a_count,
                 ready,
@@ -175,7 +144,7 @@ impl Term {
                 state,
                 spawn_unix_ns,
             },
-            t0,
+            pty.spawned_at,
         )
     }
 
@@ -261,12 +230,6 @@ impl Drop for Term {
         self.wait_gone(WAIT);
         let _ = std::fs::remove_dir_all(&self.state);
     }
-}
-
-fn unix_ns() -> u128 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_or(0, |d| d.as_nanos())
 }
 
 /// 区間の記録 (eve-tui の `trace`) の 1 行。

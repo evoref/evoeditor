@@ -7,8 +7,9 @@ use std::path::Path;
 
 use eve_core::{FileTime, FsError, FsErrorKind, FsPath, SwapBody, SwapEntry, SwapOwner};
 
-use crate::inflight::{parse_string, process_start};
+use crate::inflight::process_start;
 use crate::sys::map_io_error;
+use crate::toml_lite::{self, parse_basic_string};
 
 /// manifest から読んだ、復旧に要る項目。
 #[derive(Default)]
@@ -46,21 +47,20 @@ fn parse_manifest(text: &str) -> Parsed {
             in_doc = true;
             continue;
         }
-        let Some((k, v)) = l.split_once(" = ") else {
+        let Some((k, v)) = toml_lite::key_value(l) else {
             continue;
         };
-        let v = v.trim();
-        match (in_doc, k.trim()) {
+        match (in_doc, k) {
             (false, "format_version") => p.version = v.parse().ok(),
             (false, "pid") => p.pid = v.parse().ok(),
             (false, "started_at_secs") => secs = v.parse().ok(),
             (false, "started_at_nanos") => nanos = v.parse().ok(),
-            (true, "file") => p.file = parse_string(v),
-            (true, "path") => p.path = parse_string(v),
-            (true, "untitled_name") => p.untitled_name = parse_string(v),
-            (true, "encoding") => p.encoding = parse_string(v),
+            (true, "file") => p.file = parse_basic_string(v),
+            (true, "path") => p.path = parse_basic_string(v),
+            (true, "untitled_name") => p.untitled_name = parse_basic_string(v),
+            (true, "encoding") => p.encoding = parse_basic_string(v),
             (true, "bom") => p.bom = v == "true",
-            (true, "default_eol") => p.default_eol = parse_string(v),
+            (true, "default_eol") => p.default_eol = parse_basic_string(v),
             (true, "revision") => p.revision = v.parse().ok(),
             (true, "len") => p.len = v.parse().ok(),
             (true, "written") => p.written = v.parse().ok(),
@@ -252,6 +252,19 @@ mod tests {
             (Some(3), Some(10), Some(true))
         );
         assert!(p.sensitive);
+    }
+
+    // STR-D5: 読み手を toml_lite にまとめても同じに読む。行は前後の空白を除いてから見るので、空の値の行 (`pid = `) は
+    // 無視して前の値が残る。2 つ目の `[[document]]` 以降は読まない
+    #[test]
+    fn manifest_の読みは空白と空の値と_2_つ目の文書を同じに扱う() {
+        let t = "  format_version = 1\npid = 42\npid = \npid=7\n  [[document]]  \nfile = \"a\"  \nbom = true\nlen = x\n\n[[document]]\nfile = \"b\"\n";
+        let p = parse_manifest(t);
+        assert_eq!((p.version, p.pid), (Some(1), Some(42)));
+        assert_eq!(p.file.as_deref(), Some("a"));
+        assert!(p.bom);
+        assert_eq!(p.len, None);
+        assert_eq!(p.started_at, None);
     }
 
     #[test]
