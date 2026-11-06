@@ -1826,7 +1826,7 @@ core が frontend を知らない境界設計を保つため、**線引きと型
 **frontend 間 (TUI・ヘッドレス参照レンダラ) で衝突しないための規則** (正本は 02。本書は TUI 側の守り方):
 
 1. eve-tui の PR は `eve-core` / `eve-view` / `eve-config` のファイルを変更しない。必要なら PR の説明に必要な型・フィールドと代替案を書いて先に合意する 。`eve-view` の変更 PR は全消費者のビルドとテストを通す (相手は TUI + ヘッドレス参照レンダラ (`HeadlessFrontend`) の ASCII Frame)。
-2. `eve-view` の enum は v0.1 から、struct は C3 から `#[non_exhaustive]` にする (`RawTermHandle` / `TermRestoredFlag` は例外で付けない。02 §8.4、提案、OQ-177)。eve-tui の `match` は必ず `_ =>` の既定描画を持つ。意味的 UI モデルに新しい変種が足されたとき、eve-tui が未対応でも **未知の変種を `Confirm` / `List` に退化させて描く** (パニックしない。eve-tui の単体テストで検査)。
+2. `eve-view` の enum は v0.1 から、struct は C3 から `#[non_exhaustive]` にする (`RawTermHandle` / `TermRestoredFlag` は例外で付けない。02 §8.4、提案、OQ-177)。eve-tui の `match` は必ず `_ =>` の既定描画を持つ。意味的 UI モデルに新しい変種を足す PR は、eve-tui の描画を同じ PR に含める (02 §8.4)。それでも eve-tui が知らない変種が来たときは、既定の腕が **何も描かず、カーソルも動かさない** (パニックしない。下の編集面・クロームはそのまま見える。`chrome::render_unknown_overlay`)。`#[non_exhaustive]` の変種の中身は eve-tui から読めず作れもしないので、`Confirm` / `List` に退化させて描くことも、未知の変種を作って試験することもできない (v0.3 の M16 で改めた。docs/review/v0.3-findings.md の STR-C6)。
 3. 新しい `Effect` は、TUI とヘッドレス参照レンダラの双方で意味があるか、一方は no-op と明記する。`Suspend` は TUI 専用の既存例。
 4. TUI 固有の挙動は `Capabilities` か `[frontend.tui]` 設定で表現する。
 
