@@ -8,7 +8,7 @@
 
 use eve_view::{CellSize, InputEvent};
 
-use crate::buffer::surface_rows_for_window;
+use crate::chrome::ScreenLayout;
 
 pub mod normalize;
 #[cfg(unix)]
@@ -33,9 +33,10 @@ pub trait InputOut: Send + 'static {
 /// 端末のウィンドウの大きさから、編集面の `Resize` を作る (クローム行を除く、04 §3.1)。`hint_bar` は最後の Frame の
 /// ヒントバーの表示 (隠していればその行も編集面に入れる、FR-504)。
 pub fn surface_resize(window: CellSize, hint_bar: bool) -> InputEvent {
+    let s = ScreenLayout::compute(window, hint_bar, 0).surface();
     InputEvent::Resize {
-        cols: window.cols,
-        rows: surface_rows_for_window(window.rows, hint_bar),
+        cols: s.cols,
+        rows: s.rows,
     }
 }
 
