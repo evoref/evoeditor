@@ -195,7 +195,7 @@ impl Document {
         Ok(AppliedTx::Changed(Applied {
             old_revision,
             revision: self.revision,
-            changes: Arc::new(tx.changes.clone()),
+            changes: Arc::clone(&tx.changes),
             origin: tx.origin.clone(),
             is_undo: tx.is_undo,
             selection: tx.selection_after.clone(),
@@ -238,7 +238,7 @@ impl Document {
 
     fn apply_step(
         &mut self,
-        changes: ChangeSet,
+        changes: Arc<ChangeSet>,
         origin: Origin,
         selection: Option<Selection>,
         format: Option<super::format::FormatState>,
@@ -257,7 +257,7 @@ impl Document {
         Ok(Applied {
             old_revision,
             revision: self.revision,
-            changes: Arc::new(changes),
+            changes,
             origin,
             is_undo: true,
             selection,
