@@ -13,15 +13,15 @@ use eve_host::{
 use eve_view::{Capabilities, CellSize, Effect, Frame, InputEvent};
 
 use crate::ansi::{ENTER, Emitter, LEAVE};
-use crate::buffer::CHROME_ROWS;
+use crate::buffer::{CHROME_ROWS, bar_rows};
 use crate::caps::{CapsConfig, ColorMode, Detected, ProcessEnv, check_usable, detect};
-use crate::chrome::render_screen;
+use crate::chrome::{ScreenLayout, render_screen};
 use crate::glyphs::Glyphs;
+use crate::input::InputOut;
 #[cfg(unix)]
 use crate::input::unix as term_io;
 #[cfg(windows)]
 use crate::input::win as term_io;
-use crate::input::{InputOut, surface_resize};
 use term_io::{ConsoleInput, ConsoleOut, spawn_input_thread};
 
 /// `eve_host::InputSink` を入力スレッドの送り先にする。
@@ -213,27 +213,23 @@ impl Frontend for TuiFrontend {
 
     fn surface_size(&self) -> CellSize {
         match self.window() {
-            Ok(w) => match surface_resize(w, self.geom.hint_bar()) {
-                InputEvent::Resize { cols, rows } => CellSize { cols, rows },
-                _ => CellSize::default(),
-            },
+            Ok(w) => ScreenLayout::compute(w, self.geom.hint_bar(), 0).surface(),
             Err(_) => CellSize::default(),
         }
     }
 
     fn render(&mut self, frame: &Frame) -> RenderOutcome {
         // 編集面の大きさが Frame と違えば、出力せずに Resize を送る (04 §3.6。次の反復で正しい Frame が来る)
-        // Frame の編集面は、検索バーが開いていればその行数だけ端末の編集面より小さい (`crate::buffer::bar_rows`)。
+        // Frame の編集面は、検索バーが開いていればその行数だけ端末の編集面より小さい (`ScreenLayout::frame_size`)。
         // ヒントバーの表示が変われば (FR-504) クロームの行数が変わるので、先に覚えてから比べる (変わった直後の 1 回は Resize になる)
         #[cfg(unix)]
         self.reinit_if_continued();
         self.geom.set_hint_bar(frame.hint_bar);
-        let now = self.surface_size();
-        let expected = CellSize {
-            cols: now.cols,
-            rows: now.rows.saturating_sub(crate::buffer::bar_rows(frame)),
-        };
-        if expected != frame.size {
+        // 大きさを取れなければ 0×0 (`surface_size` と同じ)
+        let window = self.window().unwrap_or_default();
+        let layout = ScreenLayout::compute(window, self.geom.hint_bar(), bar_rows(frame));
+        let now = layout.surface();
+        if layout.frame_size() != frame.size {
             self.emitter.invalidate();
             if let Some(s) = &self.sink {
                 s.send(InputEvent::Resize {
