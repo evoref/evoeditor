@@ -60,7 +60,18 @@ pub(crate) fn metadata_error(e: io::Error, path: &FsPath) -> FsError {
 /// `open_read` の本体。ディレクトリ・デバイスは開かない (`InvalidPath` + `NotAFile`、05 §4.5。Windows の `File::open` は
 /// ディレクトリで成功しないので、ここに来るのは Unix)。
 pub(crate) fn open_read(path: &FsPath) -> Result<Box<dyn ReadChunks + Send>, FsError> {
-    let f = File::open(path.as_path()).map_err(|e| map_io_error(e, path))?;
+    let f = match File::open(path.as_path()) {
+        Ok(f) => f,
+        // Windows はディレクトリを開くと `ERROR_ACCESS_DENIED` になる。ディレクトリなら権限の問題ではなく
+        // `InvalidPath` (05 §2.1 の写像の表、§4.5)
+        Err(_) if std::fs::metadata(path.as_path()).is_ok_and(|m| m.is_dir()) => {
+            return Err(FsError::with_detail(
+                FsErrorKind::InvalidPath,
+                FsErrorDetail::NotAFile,
+            ));
+        }
+        Err(e) => return Err(map_io_error(e, path)),
+    };
     if let Ok(m) = f.metadata()
         && !m.is_file()
     {

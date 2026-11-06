@@ -45,10 +45,6 @@ fn names(dir: &FsPath) -> Vec<String> {
 fn caps(state_dir: bool) -> Caps {
     Caps {
         state_dir,
-        // WinFs の `open_read` はディレクトリを `PermissionDenied` で返す (05 §2.1 は `InvalidPath`。既知の差)
-        open_dir_is_invalid_path: !cfg!(windows),
-        // 保存の供給側の `ChunkError::Io` は `SourceFailed` にせず中の `FsError` を返す (WinFs・UnixFs。既知の差)
-        source_io_is_source_failed: false,
         ..Caps::default()
     }
 }
