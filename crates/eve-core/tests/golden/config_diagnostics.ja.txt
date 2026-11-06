@@ -17,7 +17,7 @@
 ## config: 節が表でない
 1:10	Warning	editor	""
   editor の値の型が違います (書かれた型: 整数)
-  テーブル で書いてください。この項目は既定値  を使います
+  テーブル で書いてください。この項目は使いません
 ## config: 範囲の外
 2:13	Warning	editor.tab_width	"0"
   editor.tab_width の値 0 は範囲外です
@@ -78,7 +78,7 @@
   syntax はこのバージョンでは未対応のため無視しました
 2:20	Warning	ui.selection.fg	"nope"
   ui.selection.fg の値 nope は使えません
-  使える値: #rrggbb, #rgb, ansi.<name>, ansi.<0-255>, default。この項目は既定値  を使います
+  使える値: #rrggbb, #rgb, ansi.<name>, ansi.<0-255>, default。この項目は使いません
 0:0	Warning	ui.not_a_role	""
   ui.not_a_role という設定項目はありません
   設定できる項目は同梱の config.example.toml を見てください

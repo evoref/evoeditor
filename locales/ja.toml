@@ -485,6 +485,10 @@ text = "システムのクリップボードを使えないため、エディタ
 hint = "使える値: {allowed}。この項目は既定値 {default} を使います"
 text = "{item} の値 {value} は使えません"
 
+[msg.config.invalid_value_no_default]
+hint = "使える値: {allowed}。この項目は使いません"
+text = "{item} の値 {value} は使えません"
+
 [msg.config.keymap_unknown_context]
 hint = "使える名前: global, editor, search, prompt, palette, list, dialog, help。この割当は使いません"
 text = "{item} のコンテキスト名は使えません"
@@ -539,6 +543,10 @@ text = "この設定ファイルは書式が正しくないため使っていま
 
 [msg.config.type_mismatch]
 hint = "{expected} で書いてください。この項目は既定値 {default} を使います"
+text = "{item} の値の型が違います (書かれた型: {actual})"
+
+[msg.config.type_mismatch_no_default]
+hint = "{expected} で書いてください。この項目は使いません"
 text = "{item} の値の型が違います (書かれた型: {actual})"
 
 [msg.config.unknown_key]
