@@ -84,6 +84,9 @@ pub fn stderr_line(key: &str, args: &[(String, String)]) -> Option<Bi> {
             .map_or("", |(_, v)| v.as_str())
     };
     let (reason, path, backup) = (arg("reason"), arg("path"), arg("backup"));
+    // Host の起動の失敗は、理由を文言のキーと OS の詳細で渡す (STR-C2)。無ければ `reason` をそのまま使う
+    let start =
+        start_reason(arg("reason_key"), arg("detail")).unwrap_or_else(|| Bi::new(reason, reason));
     Some(match key {
         "stderr.quit_abort.save_failed" => Bi::new(
             format!("Saving {path} failed before exit: {reason}"),
@@ -124,11 +127,70 @@ pub fn stderr_line(key: &str, args: &[(String, String)]) -> Option<Bi> {
             "この端末は非対応です。Windows Terminal をご利用ください。",
         ),
         "stderr.fatal" => Bi::new(
-            format!("evoeditor stopped due to an error: {reason}"),
-            format!("エラーのため evoeditor を終了しました: {reason}"),
+            format!("evoeditor stopped due to an error: {}", start.en),
+            format!("エラーのため evoeditor を終了しました: {}", start.ja),
         ),
         _ => return None,
     })
+}
+
+/// Host の起動の失敗の理由 (`StartError::reason_key` のキー) の文。`detail` (OS の誤りの文) があれば後ろに付ける。
+/// 知らないキーなら `None`。
+fn start_reason(key: &str, detail: &str) -> Option<Bi> {
+    let (en, ja) = match key {
+        "frontend.unusable_terminal" => (
+            "this terminal cannot be used (TERM=dumb)",
+            "この端末では起動できません (TERM=dumb)",
+        ),
+        "frontend.console_output" => (
+            "the console output could not be set up (VT mode)",
+            "コンソールの出力を VT モードにできません",
+        ),
+        "frontend.console_input" => (
+            "the console input could not be set up",
+            "コンソールの入力を設定できません",
+        ),
+        "frontend.input_before_init" => (
+            "internal error: input was started before initialization",
+            "内部の誤り: 初期化の前に入力を始めました",
+        ),
+        "frontend.input_thread" => (
+            "the input thread could not be started",
+            "入力スレッドを起動できません",
+        ),
+        "frontend.other" => (
+            "the terminal could not be initialized",
+            "端末を初期化できません",
+        ),
+        "start.no_window" => (
+            "the window could not be created at startup",
+            "起動時に Window を作れませんでした",
+        ),
+        _ => return None,
+    };
+    Some(if detail.is_empty() {
+        Bi::new(en, ja)
+    } else {
+        Bi::new(format!("{en}: {detail}"), format!("{ja}: {detail}"))
+    })
+}
+
+/// 退避できなかった理由の文 (英語と日本語)。OS の誤りの文は OS が作ったもので、両方の行にそのまま入れる。
+fn rescue_reason(e: Option<&eve_core::RescueError>) -> Bi {
+    use eve_core::RescueError as E;
+    match e {
+        Some(E::Io(s)) => Bi::new(s.clone(), s.clone()),
+        Some(E::NotWritten) => Bi::new(
+            "nothing could be written in time",
+            "時間内に書けませんでした",
+        ),
+        Some(E::WriterPanicked) => Bi::new(
+            "the rescue writer stopped unexpectedly",
+            "退避の書き手が異常終了しました",
+        ),
+        Some(E::NoWriter) => Bi::new("there is no rescue writer", "退避の書き手がありません"),
+        _ => Bi::new("unknown reason", "理由は不明です"),
+    }
 }
 
 /// 退避の結果の行 (`stderr.recovery.*`)。退避する文書が無かったときは空。
@@ -169,16 +231,10 @@ pub fn recovery_lines(o: &RescueOutcome) -> Vec<Bi> {
             ));
         }
         _ => {
-            let reason = o.error.as_deref();
+            let reason = rescue_reason(o.error.as_ref());
             lines.push(Bi::new(
-                format!(
-                    "Unsaved changes could NOT be saved: {}",
-                    reason.unwrap_or("unknown reason")
-                ),
-                format!(
-                    "保存されていない変更を退避できませんでした: {}",
-                    reason.unwrap_or("理由は不明です")
-                ),
+                format!("Unsaved changes could NOT be saved: {}", reason.en),
+                format!("保存されていない変更を退避できませんでした: {}", reason.ja),
             ));
         }
     }
@@ -424,6 +480,31 @@ mod tests {
         ] {
             all.extend(recovery_lines(&o));
         }
+        // Host の起動の失敗の理由と、退避できなかった理由 (STR-C2: 英語の行に日本語の理由が混ざらない)
+        for key in [
+            "frontend.unusable_terminal",
+            "frontend.console_output",
+            "frontend.console_input",
+            "frontend.input_before_init",
+            "frontend.input_thread",
+            "frontend.other",
+            "start.no_window",
+        ] {
+            let args = [("reason_key".to_owned(), key.to_owned())];
+            let b = stderr_line("stderr.fatal", &args).unwrap();
+            assert!(!b.ja.ends_with(": "), "{key}: {}", b.ja);
+            all.push(b);
+        }
+        for e in [
+            eve_core::RescueError::NotWritten,
+            eve_core::RescueError::WriterPanicked,
+            eve_core::RescueError::NoWriter,
+        ] {
+            let mut o = outcome(1, 0, false, false);
+            o.dir = None;
+            o.error = Some(e);
+            all.extend(recovery_lines(&o));
+        }
         for e in [
             UsageError::BadEncoding("x".into()),
             UsageError::BadEncoding(String::new()),
@@ -516,7 +597,7 @@ mod tests {
     fn 退避できなかった() {
         let mut o = outcome(1, 0, false, false);
         o.dir = None;
-        o.error = Some("アクセスが拒否されました".into());
+        o.error = Some(eve_core::RescueError::Io("アクセスが拒否されました".into()));
         let l = recovery_lines(&o);
         assert!(
             l[0].ja

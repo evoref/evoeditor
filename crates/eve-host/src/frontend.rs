@@ -22,12 +22,68 @@ pub struct FrontendConfig {
     pub mouse: bool,
 }
 
+/// `Frontend::init` / `start_input` の失敗。利用者への文言は bin が `kind` から UI の言語で作る (日本語の文字列を運ばない、
+/// 01 NFR-603。docs/review/v0.3-findings.md の STR-C2)。`detail` は OS の誤りの文 (OS が作ったもの)。
 #[derive(Debug)]
-pub struct FrontendError(pub String);
+pub struct FrontendError {
+    pub kind: FrontendErrorKind,
+    pub detail: Option<String>,
+}
+
+/// `FrontendError` の種類。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum FrontendErrorKind {
+    /// `TERM=dumb` など、使えない端末 (04 §5.2)。
+    UnusableTerminal,
+    /// 描画先のコンソール・端末を開けない、または VT モードにできない。
+    ConsoleOutput,
+    /// 入力のコンソール・端末を設定できない。
+    ConsoleInput,
+    /// `init` の前に `start_input` が呼ばれた (呼び側の誤り)。
+    InputBeforeInit,
+    /// 入力スレッドを起動できない。
+    InputThread,
+    /// そのほか (外部の frontend の実装が使う)。
+    Other,
+}
+
+impl FrontendErrorKind {
+    /// 文言のキーの末尾 (bin の stderr の表で `stderr.reason.frontend.<key>`)。
+    pub fn key(self) -> &'static str {
+        match self {
+            FrontendErrorKind::UnusableTerminal => "unusable_terminal",
+            FrontendErrorKind::ConsoleOutput => "console_output",
+            FrontendErrorKind::ConsoleInput => "console_input",
+            FrontendErrorKind::InputBeforeInit => "input_before_init",
+            FrontendErrorKind::InputThread => "input_thread",
+            FrontendErrorKind::Other => "other",
+        }
+    }
+}
+
+impl FrontendError {
+    pub fn new(kind: FrontendErrorKind) -> FrontendError {
+        FrontendError { kind, detail: None }
+    }
+
+    /// OS の誤りを詳細に持つ。
+    pub fn io(kind: FrontendErrorKind, e: &std::io::Error) -> FrontendError {
+        FrontendError {
+            kind,
+            detail: Some(e.to_string()),
+        }
+    }
+}
 
 impl fmt::Display for FrontendError {
+    /// ログのための英語の短い文 (利用者への文言は bin)。
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "frontend の初期化に失敗しました: {}", self.0)
+        write!(f, "frontend error ({})", self.kind.key())?;
+        if let Some(d) = &self.detail {
+            write!(f, ": {d}")?;
+        }
+        Ok(())
     }
 }
 

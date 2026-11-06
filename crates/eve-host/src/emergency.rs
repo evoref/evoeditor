@@ -95,13 +95,13 @@ impl EmergencyCtl {
                 Some(w) => catch_unwind(AssertUnwindSafe(|| w.write(&docs, reason, budget)))
                     .unwrap_or_else(|_| RescueOutcome {
                         total: docs.len(),
-                        error: Some("退避の書き手が異常終了しました".to_owned()),
+                        error: Some(eve_core::RescueError::WriterPanicked),
                         ..RescueOutcome::default()
                     }),
                 None => RescueOutcome {
                     total: docs.len(),
                     complete: docs.is_empty(),
-                    error: (!docs.is_empty()).then(|| "退避の書き手がありません".to_owned()),
+                    error: (!docs.is_empty()).then_some(eve_core::RescueError::NoWriter),
                     ..RescueOutcome::default()
                 },
             };

@@ -7,8 +7,8 @@ use std::io;
 use std::thread::JoinHandle;
 
 use eve_host::{
-    EffectOutcome, FatalReason, Frontend, FrontendConfig, FrontendError, HostMsg, InputSink,
-    RenderOutcome,
+    EffectOutcome, FatalReason, Frontend, FrontendConfig, FrontendError, FrontendErrorKind,
+    HostMsg, InputSink, RenderOutcome,
 };
 use eve_view::{Capabilities, CellSize, Effect, Frame, InputEvent};
 
@@ -61,8 +61,8 @@ pub struct TuiFrontend {
     restored: eve_view::TermRestoredFlag,
 }
 
-fn err(what: &str, e: &io::Error) -> FrontendError {
-    FrontendError(format!("{what}: {e}"))
+fn err(kind: FrontendErrorKind, e: &io::Error) -> FrontendError {
+    FrontendError::io(kind, e)
 }
 
 impl TuiFrontend {
@@ -174,12 +174,10 @@ impl Frontend for TuiFrontend {
     fn init(&mut self, cfg: &FrontendConfig) -> Result<Capabilities, FrontendError> {
         // 0 前提確認: TERM=dumb は起動しない
         check_usable(&ProcessEnv)
-            .map_err(|_| FrontendError("TERM=dumb の端末では起動できません".to_owned()))?;
+            .map_err(|_| FrontendError::new(FrontendErrorKind::UnusableTerminal))?;
         // 1〜2 コンソールモード (出力は VT、入力は自前のループ向け)。VT を拒否するコンソールは起動エラー
-        let out =
-            ConsoleOut::open().map_err(|e| err("コンソールの出力を VT モードにできません", &e))?;
-        let input =
-            ConsoleInput::open().map_err(|e| err("コンソールの入力を設定できません", &e))?;
+        let out = ConsoleOut::open().map_err(|e| err(FrontendErrorKind::ConsoleOutput, &e))?;
+        let input = ConsoleInput::open().map_err(|e| err(FrontendErrorKind::ConsoleInput, &e))?;
         let ambiguous = matches!(cfg.ambiguous_width, 1 | 2).then_some(cfg.ambiguous_width);
         let detected = detect(
             CapsConfig {
@@ -203,13 +201,11 @@ impl Frontend for TuiFrontend {
 
     fn start_input(&mut self, tx: InputSink) -> Result<(), FrontendError> {
         let Some(input) = self.input.as_ref() else {
-            return Err(FrontendError(
-                "init の前に start_input が呼ばれました".to_owned(),
-            ));
+            return Err(FrontendError::new(FrontendErrorKind::InputBeforeInit));
         };
         self.sink = Some(tx.clone());
         let t = spawn_input_thread(input, SinkOut(tx), self.geom.clone())
-            .map_err(|e| err("入力スレッドを起動できません", &e))?;
+            .map_err(|e| err(FrontendErrorKind::InputThread, &e))?;
         self.thread = Some(t);
         Ok(())
     }
