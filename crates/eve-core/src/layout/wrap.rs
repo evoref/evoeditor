@@ -119,8 +119,8 @@ pub(crate) fn wrap_line(
     // 折れる位置 (b の直前で折る): 空白の直後、または CJK などの幅 2 の書記素の前後
     let opportunity = |b: usize| {
         is_space(ch(b - 1))
-            || (units[b - 1].width == 2 && !units[b - 1].parts.first().is_some_and(|p| p.2))
-            || (units[b].width == 2 && !units[b].parts.first().is_some_and(|p| p.2))
+            || (units[b - 1].width == 2 && !units[b - 1].starts_with_symbol())
+            || (units[b].width == 2 && !units[b].starts_with_symbol())
     };
     let mut rows: Vec<WrapRow> = Vec::new();
     let mut start = 0;

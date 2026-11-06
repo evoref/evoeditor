@@ -43,12 +43,66 @@ pub(crate) fn doc_width_config(doc: &Document) -> WidthConfig {
 pub(super) struct Unit {
     /// 行頭からの表示列。
     pub(super) col: usize,
-    /// 描く Span (文字列, 幅, 記号か)。
-    pub(super) parts: Vec<(String, u16, bool)>,
+    /// 描く Span。
+    pub(super) parts: Parts,
     pub(super) width: usize,
     /// 行内のバイト位置。
     pub(super) byte: usize,
     pub(super) risky: bool,
+}
+
+/// 表示の単位が描く Span の列。本文の大半 (印字できる ASCII・幅 2 の通常の文字) は、その 1 文字をそのまま描くので、
+/// 文字列を確保せずに持つ (PRF-02)。
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) enum Parts {
+    /// その 1 文字を記号でない文字として描く。幅は `Unit::width`。
+    Char(char),
+    /// 一般の経路で組み立てた (文字列, 幅, 記号か) の列。
+    List(Vec<(String, u16, bool)>),
+}
+
+/// `Unit::parts` の (文字列, 幅, 記号か) の列。
+pub(super) enum PartsIter<'a> {
+    One(Option<(&'a str, u16, bool)>),
+    Many(std::slice::Iter<'a, (String, u16, bool)>),
+}
+
+impl<'a> Iterator for PartsIter<'a> {
+    type Item = (&'a str, u16, bool);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self {
+            PartsIter::One(p) => p.take(),
+            PartsIter::Many(it) => it.next().map(|(t, w, s)| (t.as_str(), *w, *s)),
+        }
+    }
+}
+
+impl Unit {
+    /// 描く (文字列, 幅, 記号か) の列。`buf` は 1 文字の単位の文字列を置く場所。
+    pub(super) fn parts<'a>(&'a self, buf: &'a mut [u8; 4]) -> PartsIter<'a> {
+        match &self.parts {
+            Parts::Char(c) => PartsIter::One(Some((c.encode_utf8(buf), self.width as u16, false))),
+            Parts::List(v) => PartsIter::Many(v.iter()),
+        }
+    }
+
+    /// 最初の Span が記号 (制御文字・不可視文字・空白の可視化) か。
+    pub(super) fn starts_with_symbol(&self) -> bool {
+        match &self.parts {
+            Parts::Char(_) => false,
+            Parts::List(v) => v.first().is_some_and(|p| p.2),
+        }
+    }
+
+    /// 試験で経路の違う展開を比べるための、確保した形の列。
+    #[cfg(test)]
+    pub(super) fn parts_vec(&self) -> Vec<(String, u16, bool)> {
+        let mut buf = [0u8; 4];
+        self.parts(&mut buf)
+            .map(|(t, w, s)| (t.to_owned(), w, s))
+            .collect()
+    }
 }
 
 /// 単独で幅 2・記号でない・不可視のマークなし・幅の危険なし、の通常の文字か (かな・漢字・全角の英数と主な句読点)。
@@ -164,7 +218,7 @@ pub(super) fn unit_slow(
     let width: usize = parts.iter().map(|p| p.1 as usize).sum();
     Unit {
         col,
-        parts,
+        parts: Parts::List(parts),
         width,
         byte: off,
         risky,
@@ -187,7 +241,7 @@ pub(super) fn units_with(content: &str, esc: bool, ws: bool, cfg: &WidthConfig) 
             .enumerate()
             .map(|(i, b)| Unit {
                 col: i,
-                parts: vec![((b as char).to_string(), 1, false)],
+                parts: Parts::Char(b as char),
                 width: 1,
                 byte: i,
                 risky: false,
@@ -207,7 +261,7 @@ pub(super) fn units_with(content: &str, esc: bool, ws: bool, cfg: &WidthConfig) 
             let w: u16 = if c.is_ascii() { 1 } else { 2 };
             out.push(Unit {
                 col,
-                parts: vec![(c.to_string(), w, false)],
+                parts: Parts::Char(c),
                 width: usize::from(w),
                 byte: at,
                 risky: false,
@@ -298,7 +352,7 @@ pub(super) fn long_units(
         out.push(if (' '..='~').contains(&c) {
             Unit {
                 col: at.col,
-                parts: vec![(c.to_string(), 1, false)],
+                parts: Parts::Char(c),
                 width: w,
                 byte: at.byte,
                 risky: false,
@@ -413,8 +467,8 @@ mod tests {
         assert_eq!(fast.len() + 1, mixed.len());
         for (a, b) in fast.iter().zip(&mixed) {
             assert_eq!(
-                (a.col, a.width, a.byte, a.risky, &a.parts),
-                (b.col, b.width, b.byte, b.risky, &b.parts)
+                (a.col, a.width, a.byte, a.risky, a.parts_vec()),
+                (b.col, b.width, b.byte, b.risky, b.parts_vec())
             );
         }
         assert!(units("", false, &cfg).is_empty());
@@ -486,8 +540,8 @@ mod tests {
                     assert_eq!(fast.len(), slow.len(), "{line:?}");
                     for (a, b) in fast.iter().zip(&slow) {
                         assert_eq!(
-                            (a.col, a.width, a.byte, a.risky, &a.parts),
-                            (b.col, b.width, b.byte, b.risky, &b.parts),
+                            (a.col, a.width, a.byte, a.risky, a.parts_vec()),
+                            (b.col, b.width, b.byte, b.risky, b.parts_vec()),
                             "{line:?}"
                         );
                     }
