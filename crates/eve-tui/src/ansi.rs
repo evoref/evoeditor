@@ -7,6 +7,8 @@
 //! 変化したときと、前のフレームの全角の後続セルが単独のセルに変わる行 (全角を空白などで上書きする) も、行全体を
 //! 再出力する (§4.7 (c): EL で残骸を消し、全書記素の前で CUP)。
 
+use std::fmt::Write as _;
+
 use eve_view::{CursorShape, Frame};
 use ratatui::buffer::{Buffer, Cell, CellDiffOption};
 use ratatui::style::{Color, Modifier};
@@ -26,50 +28,50 @@ pub struct Emitter {
     title: Option<String>,
     /// 次のフレームを全画面再描画にする (リサイズ後・`ui.redraw`)。
     force_full: bool,
+    /// 前のフレームの出力の長さ (次の出力の確保の目安)。
+    last_len: usize,
 }
 
-/// 色の SGR 部分。
-fn color_params(c: Color, fg: bool) -> Option<String> {
+/// 色の SGR 部分 (`;` から) を `s` に書く。
+fn push_color(s: &mut String, c: Color, fg: bool) {
     let base = if fg { 38 } else { 48 };
-    match c {
-        Color::Reset => None,
-        Color::Rgb(r, g, b) => Some(format!("{base};2;{r};{g};{b}")),
-        Color::Indexed(i) => Some(format!("{base};5;{i}")),
-        // 名前付きの色は eve-tui では作らない (core は Default / Rgb / Indexed だけ)。作られたら既定色として扱う
-        _ => None,
-    }
+    // String への書込は失敗しない
+    let _ = match c {
+        Color::Rgb(r, g, b) => write!(s, ";{base};2;{r};{g};{b}"),
+        Color::Indexed(i) => write!(s, ";{base};5;{i}"),
+        // 既定色。名前付きの色は eve-tui では作らない (core は Default / Rgb / Indexed だけ)。作られたら既定色として扱う
+        _ => Ok(()),
+    };
 }
 
-/// セルのスタイルの SGR (先頭に `0` を付けて、直前のスタイルを消す)。既定のスタイルなら `\x1b[0m` だけ。
-fn sgr(cell: &Cell) -> String {
-    let mut p: Vec<String> = vec!["0".into()];
+/// セルのスタイルの SGR (先頭に `0` を付けて、直前のスタイルを消す) を `s` に書く。既定のスタイルなら `\x1b[0m` だけ。
+/// 作業用の String を作らずに出力へ直接書く (REF-03)。
+fn push_sgr(s: &mut String, cell: &Cell) {
+    s.push_str("\x1b[0");
     let m = cell.modifier;
     for (flag, code) in [
-        (Modifier::BOLD, "1"),
-        (Modifier::DIM, "2"),
-        (Modifier::ITALIC, "3"),
-        (Modifier::UNDERLINED, "4"),
-        (Modifier::REVERSED, "7"),
+        (Modifier::BOLD, ";1"),
+        (Modifier::DIM, ";2"),
+        (Modifier::ITALIC, ";3"),
+        (Modifier::UNDERLINED, ";4"),
+        (Modifier::REVERSED, ";7"),
     ] {
         if m.contains(flag) {
-            p.push(code.into());
+            s.push_str(code);
         }
     }
-    if let Some(s) = color_params(cell.fg, true) {
-        p.push(s);
-    }
-    if let Some(s) = color_params(cell.bg, false) {
-        p.push(s);
-    }
-    format!("\x1b[{}m", p.join(";"))
+    push_color(s, cell.fg, true);
+    push_color(s, cell.bg, false);
+    s.push('m');
 }
 
 fn style_key(cell: &Cell) -> (Color, Color, Modifier) {
     (cell.fg, cell.bg, cell.modifier)
 }
 
-fn cup(x: u16, y: u16) -> String {
-    format!("\x1b[{};{}H", y + 1, x + 1)
+/// カーソルの絶対位置 (CUP) を `s` に書く。
+fn push_cup(s: &mut String, x: u16, y: u16) {
+    let _ = write!(s, "\x1b[{};{}H", y + 1, x + 1);
 }
 
 fn cell_changed(prev: Option<&Cell>, cur: &Cell) -> bool {
@@ -93,10 +95,10 @@ struct Out {
 impl Out {
     fn put(&mut self, x: u16, y: u16, cell: &Cell, force_cup: bool) {
         if force_cup || self.next != Some((x, y)) {
-            self.s.push_str(&cup(x, y));
+            push_cup(&mut self.s, x, y);
         }
         if self.style != Some(style_key(cell)) {
-            self.s.push_str(&sgr(cell));
+            push_sgr(&mut self.s, cell);
             self.style = Some(style_key(cell));
         }
         self.s.push_str(cell.symbol());
@@ -117,7 +119,8 @@ impl Emitter {
     }
 
     /// 1 フレームの出力を作る。`sync` が真なら BSU / ESU で囲む (04 §4.5。常に送る)。
-    pub fn frame(&mut self, r: &PaneRender, frame: &Frame, sync: bool) -> String {
+    /// `r` のバッファは次のフレームとの差分のために覚える (複製せずに移す、PRF-07)。
+    pub fn frame(&mut self, r: PaneRender, frame: &Frame, sync: bool) -> String {
         let cur = &r.buffer;
         let area = cur.area;
         let full = self.force_full
@@ -126,7 +129,7 @@ impl Emitter {
                 .as_ref()
                 .is_none_or(|p| p.area.width != area.width || p.area.height != area.height);
         let mut o = Out {
-            s: String::new(),
+            s: String::with_capacity(self.last_len),
             next: None,
             style: None,
         };
@@ -164,7 +167,7 @@ impl Emitter {
             });
             if r.risky_rows.contains(&y) || split_wide {
                 // 行全体を再出力: 行頭へ CUP し、EL で残骸を消し、全書記素の前で CUP
-                o.s.push_str(&cup(0, y));
+                push_cup(&mut o.s, 0, y);
                 o.s.push_str(RESET);
                 o.style = Some((Color::Reset, Color::Reset, Modifier::empty()));
                 o.s.push_str("\x1b[0K");
@@ -192,7 +195,7 @@ impl Emitter {
         // 端末タイトル (変化したときだけ。BEL / ST を含めない)
         let title = sanitize_title(&frame.title);
         if self.title.as_deref() != Some(title.as_str()) {
-            o.s.push_str(&format!("\x1b]0;{title}\x1b\\"));
+            let _ = write!(o.s, "\x1b]0;{title}\x1b\\");
             self.title = Some(title);
         }
         // カーソル: 形状 (変わったときだけ) → 位置 → 表示 (§4.6)。描画中は隠さない
@@ -205,10 +208,10 @@ impl Emitter {
                         CursorShape::Underline => 4,
                         _ => 6,
                     };
-                    o.s.push_str(&format!("\x1b[{n} q"));
+                    let _ = write!(o.s, "\x1b[{n} q");
                     self.shape = Some(shape);
                 }
-                o.s.push_str(&cup(pos.col, pos.row));
+                push_cup(&mut o.s, pos.col, pos.row);
                 o.s.push_str("\x1b[?25h");
             }
             // 編集面にフォーカスが無い (オーバーレイの入力欄の位置は後の版)
@@ -217,8 +220,9 @@ impl Emitter {
         if sync {
             o.s.push_str(ESU);
         }
-        self.prev = Some(cur.clone());
+        self.prev = Some(r.buffer);
         self.force_full = false;
+        self.last_len = o.s.len();
         o.s
     }
 }
