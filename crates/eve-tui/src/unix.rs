@@ -35,6 +35,10 @@ const MOUSE_ON: &str = "\x1b[?1000h\x1b[?1002h\x1b[?1006h";
 const MOUSE_OFF: &str = "\x1b[?1006l\x1b[?1002l\x1b[?1000l";
 /// 初期化で入れるモード (ENTER の後): ブラケットペースト (04 §6.6)・フォーカス報告 (§6.9)・kitty キーボードの
 /// DISAMBIGUATE の push と xterm の modifyOtherKeys の段階 2 (tmux の `extended-keys` と xterm 向け。§6.3)。
+/// 端末タイトルの退避と復元 (XTWINOPS。04 §14.1 の 3・§14.3 の 8)。非対応の端末は無視する。
+pub const TITLE_PUSH: &str = "\x1b[22;0t";
+pub const TITLE_POP: &str = "\x1b[23;0t";
+
 pub const ENTER_MODES: &str = "\x1b[?2004h\x1b[?1004h\x1b[>1u\x1b[>4;2m";
 /// 復元で外すモード (LEAVE の前): modifyOtherKeys を既定へ・kitty の pop・フォーカス・ブラケットペースト・マウス。
 pub const LEAVE_MODES: &str =
