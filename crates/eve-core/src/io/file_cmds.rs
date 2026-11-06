@@ -20,7 +20,7 @@ impl EditorState {
         let Some(doc_id) = self.active_document() else {
             return CommandResult::Rejected(RejectReason::NoTarget);
         };
-        let Some(doc) = self.documents.get_mut(&doc_id) else {
+        let Some(doc) = self.docs.documents.get_mut(&doc_id) else {
             return CommandResult::Rejected(RejectReason::NoTarget);
         };
         if doc.load_state != LoadState::Ready {

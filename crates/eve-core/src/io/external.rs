@@ -32,14 +32,14 @@ impl EditorState {
         let Some(doc_id) = self.active_document() else {
             return CommandResult::Rejected(RejectReason::NoTarget);
         };
-        let busy = self.pending.values().any(|p| {
+        let busy = self.io.pending.values().any(|p| {
             matches!(p,
                 Pending::Open { doc, .. }
                 | Pending::Save { doc, .. }
                 | Pending::CheckUnchanged { doc }
                 | Pending::ExternalCheck { doc, .. } if *doc == doc_id)
         });
-        let Some(doc) = self.documents.get(&doc_id) else {
+        let Some(doc) = self.docs.documents.get(&doc_id) else {
             return CommandResult::Rejected(RejectReason::NoTarget);
         };
         let Some(path) = doc.path.clone() else {
@@ -56,7 +56,7 @@ impl EditorState {
                 purpose: MetaPurpose::ExternalCheck,
             },
         );
-        self.pending.insert(
+        self.io.pending.insert(
             job,
             Pending::ExternalCheck {
                 doc: doc_id,
@@ -79,7 +79,7 @@ impl EditorState {
         {
             return;
         }
-        let Some(doc) = self.documents.get(&doc_id) else {
+        let Some(doc) = self.docs.documents.get(&doc_id) else {
             return;
         };
         if doc.load_state != LoadState::Ready {
@@ -182,7 +182,7 @@ impl EditorState {
             }
             return self.start_reload(doc);
         }
-        if let Some(d) = self.documents.get_mut(&doc) {
+        if let Some(d) = self.docs.documents.get_mut(&doc) {
             d.external_seen = Some(stamp);
         }
         CommandResult::Done
@@ -198,7 +198,7 @@ impl EditorState {
         if choice == 1 {
             return self.request_close(doc);
         }
-        if let Some(d) = self.documents.get_mut(&doc) {
+        if let Some(d) = self.docs.documents.get_mut(&doc) {
             d.disk_stamp = None;
             d.external_seen = None;
         }

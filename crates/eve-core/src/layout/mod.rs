@@ -904,8 +904,8 @@ pub(crate) fn build_frame(
     let heads: Vec<usize> = visible.iter().map(|r| r.head.0).collect();
     let primary_head = view.selection.primary().head.0;
 
-    let overlay_open = state.overlay.is_some();
-    let bar_open = state.search_bar.is_some();
+    let overlay_open = state.ui.overlay.is_some();
+    let bar_open = state.find.search_bar.is_some();
     let found = state.visible_matches(view.doc, top_line, rows);
     let current = state.bar_current();
     let unmappable = state.unmappable_marks_for(view.doc);
@@ -913,7 +913,7 @@ pub(crate) fn build_frame(
         found: &found,
         current,
         unmappable: &unmappable,
-        roles: &state.roles,
+        roles: &state.settings.roles,
     };
     let cursor_line = t.byte_to_line(view.selection.primary().head).0;
     // 長大行を含む文書は折り返さない (`view.wrap` の値は変えない。03 §11.5.1)
@@ -964,7 +964,11 @@ pub(crate) fn build_frame(
                 &sel,
                 &here,
                 &marks,
-                gutter_spans(line, gw, line_number_style(&state.roles, line, cursor_line)),
+                gutter_spans(
+                    line,
+                    gw,
+                    line_number_style(&state.settings.roles, line, cursor_line),
+                ),
                 None,
             );
             for (&h, &c) in here.iter().zip(&ro.cursor_cols) {
@@ -1020,13 +1024,13 @@ pub(crate) fn build_frame(
         search: state.search_bar_model(),
         status: crate::ui_model::chrome::status_model(state, view_id, chord),
         hints: crate::ui_model::chrome::hint_model(state, chord),
-        hint_bar: state.hint_bar_on,
+        hint_bar: state.term.hint_bar_on,
         overlays: crate::ui_model::chrome::overlay_models(state),
         which_key: None,
         messages: message_model(state),
         texts: crate::ui_model::chrome::chrome_texts(state),
         title: title(state, doc),
-        roles: state.roles.clone(),
+        roles: state.settings.roles.clone(),
     })
 }
 

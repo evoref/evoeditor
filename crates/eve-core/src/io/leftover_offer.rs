@@ -52,10 +52,10 @@ impl EditorState {
     /// 次の提案を出す。ダイアログなどが出ている間、提案が無いときは何もしない。
     /// 呼ぶのは `swap_offer` の後 (スワップの提案が先)。
     pub(crate) fn leftover_offer(&mut self) {
-        if self.leftovers.is_empty() || self.overlay_kind() != "" {
+        if self.io.leftovers.is_empty() || self.overlay_kind() != "" {
             return;
         }
-        let l = self.leftovers.remove(0);
+        let l = self.io.leftovers.remove(0);
         let (name, choices) = dialog(l.kind);
         let path = l.target.display();
         self.open_confirm(ConfirmState {
@@ -104,7 +104,7 @@ impl EditorState {
                 op,
             },
         );
-        self.pending.insert(
+        self.io.pending.insert(
             job,
             Pending::Leftover(Box::new(LeftoverAsk {
                 leftover: l,

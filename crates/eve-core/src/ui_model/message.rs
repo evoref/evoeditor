@@ -31,12 +31,12 @@ pub(crate) struct LoggedMessage {
 impl EditorState {
     /// 選択中の言語の文言カタログ。
     pub fn catalog(&self) -> &'static Catalog {
-        Catalog::builtin(self.locale)
+        Catalog::builtin(self.settings.locale)
     }
 
     /// `{key:<command_id>}` のキー表記を引く (解決済みキーマップの第一割当)。`Editor` がキーマップの変更ごとに更新する。
     pub(crate) fn key_label(&self, command: &str) -> Option<String> {
-        self.key_labels.get(command).cloned()
+        self.keys.key_labels.get(command).cloned()
     }
 
     pub fn set_key_bindings(
@@ -44,8 +44,8 @@ impl EditorState {
         labels: std::collections::BTreeMap<String, String>,
         seqs: std::collections::BTreeMap<String, Vec<eve_view::KeyStroke>>,
     ) {
-        self.key_labels = labels;
-        self.key_seqs = seqs;
+        self.keys.key_labels = labels;
+        self.keys.key_seqs = seqs;
     }
 
     /// すべての割当を更新する (ヘルプのキー一覧用)。
@@ -53,11 +53,11 @@ impl EditorState {
         &mut self,
         all: std::collections::BTreeMap<String, Vec<(Vec<eve_view::KeyStroke>, bool)>>,
     ) {
-        self.key_all = all;
+        self.keys.key_all = all;
     }
 
     pub(crate) fn key_sequence(&self, command: &str) -> Option<Vec<eve_view::KeyStroke>> {
-        self.key_seqs.get(command).cloned()
+        self.keys.key_seqs.get(command).cloned()
     }
 
     /// MessageKey を解決して表示する。`msg.*` は `.text` と `.hint`、それ以外は 1 つの文。
@@ -121,19 +121,19 @@ impl EditorState {
             (cat.render(key, args, &label), None)
         };
         // 表示中のメッセージが読まれる前に置き換わったら、未読として数える (履歴は `ui.message_history` で見る)
-        if self.message.is_some() {
-            self.unread = self.unread.saturating_add(1);
+        if self.ui.message.is_some() {
+            self.ui.unread = self.ui.unread.saturating_add(1);
         }
-        if self.message_log.len() >= HISTORY_MAX {
-            self.message_log.pop_front();
+        if self.ui.message_log.len() >= HISTORY_MAX {
+            self.ui.message_log.pop_front();
         }
-        self.message_log.push_back(LoggedMessage {
+        self.ui.message_log.push_back(LoggedMessage {
             level,
             text: text.clone(),
             hint: hint.clone(),
             at: self.now,
         });
-        self.message = Some(ShownMessage {
+        self.ui.message = Some(ShownMessage {
             level,
             text,
             hint,
@@ -150,7 +150,7 @@ impl EditorState {
     /// 次のキー入力で、Error は `Esc` で消える。`Esc` の優先順位 (オーバーレイ・チョード・読込の取消が先) は呼び出し側が決める。
     pub(crate) fn dismiss_message_on_key(&mut self, is_esc: bool) {
         let now = self.now;
-        let dismiss = match &self.message {
+        let dismiss = match &self.ui.message {
             Some(m) => match m.level {
                 MessageLevel::Info => true,
                 MessageLevel::Warn => {
@@ -161,8 +161,8 @@ impl EditorState {
             None => false,
         };
         if dismiss {
-            self.message = None;
-            self.unread = 0;
+            self.ui.message = None;
+            self.ui.unread = 0;
             self.mark_dirty_render();
         }
     }
@@ -170,21 +170,22 @@ impl EditorState {
     /// 編集などのコマンドを実行したら Error を消す (カーソル移動では消えない)。
     pub(crate) fn dismiss_error_on_command(&mut self) {
         if self
+            .ui
             .message
             .as_ref()
             .is_some_and(|m| m.level == MessageLevel::Error)
         {
-            self.message = None;
-            self.unread = 0;
+            self.ui.message = None;
+            self.ui.unread = 0;
             self.mark_dirty_render();
         }
     }
 
     pub(crate) fn unread_messages(&self) -> u16 {
-        self.unread
+        self.ui.unread
     }
 
     pub(crate) fn current_message(&self) -> Option<&ShownMessage> {
-        self.message.as_ref()
+        self.ui.message.as_ref()
     }
 }

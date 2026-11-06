@@ -52,7 +52,7 @@ impl EditorState {
     /// 今の文書が編集できるか。
     pub(crate) fn active_document_editable(&self) -> bool {
         self.active_document()
-            .and_then(|d| self.documents.get(&d))
+            .and_then(|d| self.docs.documents.get(&d))
             .is_some_and(|d| d.is_editable())
     }
 
@@ -77,7 +77,7 @@ impl EditorState {
         let Some(view) = self
             .focused_window()
             .and_then(|w| self.window_view(w))
-            .and_then(|v| self.views.get(&v))
+            .and_then(|v| self.docs.views.get(&v))
         else {
             return false;
         };
@@ -86,7 +86,7 @@ impl EditorState {
             return false;
         }
         let range = ByteRange::new(r.start(), r.end());
-        let Some(doc) = self.documents.get(&doc_id) else {
+        let Some(doc) = self.docs.documents.get(&doc_id) else {
             return false;
         };
         let source = ClipboardSource {
@@ -165,7 +165,7 @@ impl EditorState {
         }
         let editable = self
             .active_document()
-            .and_then(|d| self.documents.get(&d))
+            .and_then(|d| self.docs.documents.get(&d))
             .is_some_and(|d| d.is_editable());
         if !editable {
             self.notify_read_only();

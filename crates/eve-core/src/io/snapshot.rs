@@ -44,7 +44,7 @@ impl crate::editor::state::EditorState {
     pub(crate) fn rescue_snapshot(&self, doc: DocumentId, dirty_only: bool) -> Option<DocSnapshot> {
         let Some(d) = self.document(doc) else {
             // 閉じたが保存ジョブが実行中の文書は、保存の結果が届くまで公開物を残す
-            return self.closing_snapshots.get(&doc).cloned();
+            return self.io.closing_snapshots.get(&doc).cloned();
         };
         if (dirty_only && !d.is_dirty()) || d.load_state != crate::document::LoadState::Ready {
             return None;

@@ -40,7 +40,7 @@ pub(crate) struct HelpState {
 impl EditorState {
     /// ヘルプの行を節ごとに作る。戻り値の 2 つ目は各節の見出しの行番号。
     fn help_lines(&self) -> (Vec<HelpLine>, BTreeMap<u8, usize>) {
-        if matches!(&self.overlay, Some(Overlay::Help(h)) if h.history) {
+        if matches!(&self.ui.overlay, Some(Overlay::Help(h)) if h.history) {
             return (self.history_lines(), BTreeMap::new());
         }
         let cat = self.catalog();
@@ -74,7 +74,7 @@ impl EditorState {
         let mut any_unreachable = false;
         let mut last_ns = "";
         for id in self.palette_command_ids() {
-            let Some(seqs) = self.key_all.get(id).filter(|s| !s.is_empty()) else {
+            let Some(seqs) = self.keys.key_all.get(id).filter(|s| !s.is_empty()) else {
                 continue;
             };
             let ns = id.split('.').next().unwrap_or(id);
@@ -164,7 +164,7 @@ impl EditorState {
     /// メッセージ履歴の行 (古い順)。時刻は起動からの経過 `mm:ss` (core は壁時計を持たない)。
     fn history_lines(&self) -> Vec<HelpLine> {
         let cat = self.catalog();
-        if self.message_log.is_empty() {
+        if self.ui.message_log.is_empty() {
             return vec![HelpLine {
                 kind: HelpLineKind::Body,
                 key: None,
@@ -174,7 +174,8 @@ impl EditorState {
                 ),
             }];
         }
-        self.message_log
+        self.ui
+            .message_log
             .iter()
             .map(|m| {
                 let secs = m.at.0 / 1000;
@@ -203,7 +204,8 @@ impl EditorState {
 
     /// パレットに出るコマンドの ID (CommandId 順。この frontend で使えないものを除く)。
     fn palette_command_ids(&self) -> Vec<&str> {
-        self.palette_entries
+        self.ui
+            .palette_entries
             .iter()
             .filter(|e| self.supported_here(e))
             .map(|e| e.id())
@@ -225,7 +227,7 @@ impl EditorState {
 
     /// 本文を描ける行数 (見出しの行と操作の案内の行を除く)。
     fn help_view_rows(&self) -> usize {
-        usize::from(self.surface.1).saturating_sub(2).max(1)
+        usize::from(self.term.surface.1).saturating_sub(2).max(1)
     }
 
     /// 開く: `section` の見出しが先頭に来るようにスクロールする。
@@ -237,7 +239,7 @@ impl EditorState {
         let (lines, starts) = self.help_lines();
         let max = lines.len().saturating_sub(self.help_view_rows());
         let scroll = starts.get(&(section as u8)).copied().unwrap_or(0).min(max);
-        if let Some(Overlay::Help(h)) = &mut self.overlay {
+        if let Some(Overlay::Help(h)) = &mut self.ui.overlay {
             h.scroll = scroll;
         }
         self.mark_dirty_render();
@@ -255,7 +257,7 @@ impl EditorState {
             .0
             .len()
             .saturating_sub(self.help_view_rows());
-        if let Some(Overlay::Help(h)) = &mut self.overlay {
+        if let Some(Overlay::Help(h)) = &mut self.ui.overlay {
             h.scroll = max;
         }
         self.mark_dirty_render();
@@ -265,10 +267,10 @@ impl EditorState {
     /// メッセージ履歴の全件を、画面と同じ「時刻 レベル 本文」の行にしてクリップボードへ写す (04 §8.9、FR-505)。
     /// 履歴を開いていないときは使えない。
     fn copy_message_history(&mut self) -> CommandResult {
-        if !matches!(&self.overlay, Some(Overlay::Help(h)) if h.history) {
+        if !matches!(&self.ui.overlay, Some(Overlay::Help(h)) if h.history) {
             return CommandResult::Rejected(crate::command::RejectReason::NotAvailable);
         }
-        if self.message_log.is_empty() {
+        if self.ui.message_log.is_empty() {
             return CommandResult::Done;
         }
         let text_of = |t: &eve_view::CellText| -> String {
@@ -283,7 +285,7 @@ impl EditorState {
             out.push_str(&text_of(&l.text));
             out.push('\n');
         }
-        let count = self.message_log.len();
+        let count = self.ui.message_log.len();
         self.copy_text(&out);
         self.show_message(
             eve_view::MessageLevel::Info,
@@ -297,7 +299,7 @@ impl EditorState {
     pub(crate) fn help_scroll(&mut self, delta: isize) -> CommandResult {
         let (total, view) = (self.help_lines().0.len(), self.help_view_rows());
         let max = total.saturating_sub(view);
-        if let Some(Overlay::Help(h)) = &mut self.overlay {
+        if let Some(Overlay::Help(h)) = &mut self.ui.overlay {
             h.scroll = h.scroll.saturating_add_signed(delta).min(max);
         } else {
             return CommandResult::Rejected(RejectReason::NotAvailable);

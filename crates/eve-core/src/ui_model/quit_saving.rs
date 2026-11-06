@@ -37,7 +37,8 @@ pub(crate) struct QuitAbort {
 impl EditorState {
     /// 実行中の保存ジョブ (ジョブ, 文書)。
     fn saving_jobs(&self) -> Vec<(JobId, DocumentId)> {
-        self.pending
+        self.io
+            .pending
             .iter()
             .filter_map(|(j, p)| match p {
                 Pending::Save { doc, .. } => Some((*j, *doc)),
@@ -48,25 +49,25 @@ impl EditorState {
 
     /// `app.quit` の入口: 保存ジョブが実行中なら待つ。待つ場合は `Some`。
     pub(crate) fn quit_while_saving(&mut self, user: bool) -> Option<CommandResult> {
-        if self.quit_abort.is_some() {
+        if self.ui.quit_abort.is_some() {
             // 中止して終了の最中: 終了は取り消せない
             return Some(CommandResult::Done);
         }
         let jobs = self.saving_jobs();
         let Some(&(first, _)) = jobs.first() else {
-            self.quit_wait = None;
+            self.ui.quit_wait = None;
             return None;
         };
         // 終了で置き換える (置き換え・開き直しなどの後続は終了に統合する)
         for (j, _) in &jobs {
-            self.continuations.insert(*j, Continuation::Quit);
+            self.ui.continuations.insert(*j, Continuation::Quit);
         }
-        match self.quit_wait {
+        match self.ui.quit_wait {
             // もう一度 `app.quit`: 確認をすぐに出す
             Some(_) if user => self.open_quit_saving(),
             Some(_) => {}
             None => {
-                self.quit_wait = Some(QuitWait {
+                self.ui.quit_wait = Some(QuitWait {
                     deadline: self.now + WAIT,
                     asked: false,
                 });
@@ -77,16 +78,16 @@ impl EditorState {
 
     /// 次に確認を出す時刻。
     pub(crate) fn quit_wait_deadline(&self) -> Option<Tick> {
-        self.quit_wait.filter(|w| !w.asked).map(|w| w.deadline)
+        self.ui.quit_wait.filter(|w| !w.asked).map(|w| w.deadline)
     }
 
     /// `Editor::tick` から: 待ちが終わっていれば片付け、5 秒を超えていれば確認を出す。
     pub(crate) fn quit_wait_tick(&mut self) {
-        let Some(w) = self.quit_wait else {
+        let Some(w) = self.ui.quit_wait else {
             return;
         };
         if self.saving_jobs().is_empty() {
-            self.quit_wait = None;
+            self.ui.quit_wait = None;
             return;
         }
         if !w.asked && self.now >= w.deadline && self.overlay_kind().is_empty() {
@@ -101,7 +102,7 @@ impl EditorState {
         let jobs = self.saving_jobs();
         let path = jobs
             .iter()
-            .find_map(|(_, d)| self.documents.get(d).and_then(|d| d.path.as_ref()))
+            .find_map(|(_, d)| self.docs.documents.get(d).and_then(|d| d.path.as_ref()))
             .map(FsPath::display)
             .unwrap_or_else(|| {
                 self.catalog()
@@ -119,7 +120,7 @@ impl EditorState {
         } else {
             path
         };
-        if let Some(w) = self.quit_wait.as_mut() {
+        if let Some(w) = self.ui.quit_wait.as_mut() {
             w.asked = true;
         }
         self.open_confirm(ConfirmState {
@@ -149,11 +150,11 @@ impl EditorState {
         if id != "abort" {
             return CommandResult::Done;
         }
-        self.quit_abort = Some(QuitAbort::default());
-        self.quit_wait = None;
+        self.ui.quit_abort = Some(QuitAbort::default());
+        self.ui.quit_wait = None;
         let jobs = self.saving_jobs();
         for (j, _) in &jobs {
-            self.continuations.remove(j);
+            self.ui.continuations.remove(j);
             self.jobs.cancel(*j);
         }
         self.quit_abort_check();
@@ -163,7 +164,7 @@ impl EditorState {
     /// 「中止して終了」の最中に保存ジョブの結果が届いた。採用する (成功) か、失敗の行を覚える。
     /// 取り扱った (通常の完了の規則に進まない) ときは `true`。
     pub(crate) fn quit_abort_save_result(&mut self, path: &FsPath, r: &JobResult) -> bool {
-        let Some(abort) = self.quit_abort.as_mut() else {
+        let Some(abort) = self.ui.quit_abort.as_mut() else {
             return false;
         };
         let line = |key: &str, args: Vec<(&str, String)>| StderrLine {
@@ -215,10 +216,15 @@ impl EditorState {
 
     /// 保存ジョブがすべて終わっていれば、dirty な文書の退避を伴う終了を要求する。
     pub(crate) fn quit_abort_check(&mut self) {
-        if self.quit_abort.is_none() || !self.saving_jobs().is_empty() {
+        if self.ui.quit_abort.is_none() || !self.saving_jobs().is_empty() {
             return;
         }
-        let stderr = self.quit_abort.take().map(|a| a.stderr).unwrap_or_default();
+        let stderr = self
+            .ui
+            .quit_abort
+            .take()
+            .map(|a| a.stderr)
+            .unwrap_or_default();
         self.push_effect(Effect::Quit {
             code: 0,
             rescue: QuitRescue::DirtyDocuments,

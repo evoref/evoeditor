@@ -36,7 +36,7 @@ impl EditorState {
                 self.open_additional(&f.path, opts)
             };
             if let (Some(doc), Some(line)) = (doc, f.line) {
-                self.open_jumps.insert(doc, (line, f.col.unwrap_or(1)));
+                self.io.open_jumps.insert(doc, (line, f.col.unwrap_or(1)));
             }
         }
     }
@@ -67,6 +67,7 @@ impl EditorState {
             return None;
         };
         if self
+            .docs
             .documents
             .values()
             .any(|d| d.path.as_ref() == Some(&path))
@@ -100,7 +101,7 @@ impl EditorState {
                 opts,
             },
         );
-        self.pending.insert(
+        self.io.pending.insert(
             job,
             Pending::Open {
                 doc: doc_id,
@@ -121,7 +122,7 @@ impl EditorState {
         line: usize,
         col: usize,
     ) {
-        let Some(d) = self.documents.get(&doc) else {
+        let Some(d) = self.docs.documents.get(&doc) else {
             return;
         };
         let t = d.text();
@@ -144,11 +145,11 @@ impl EditorState {
                 current: env!("CARGO_PKG_VERSION").to_owned(),
             },
         );
-        self.pending.insert(job, Pending::LastVersion);
+        self.io.pending.insert(job, Pending::LastVersion);
         let job = self
             .jobs
             .spawn(None, eve_view::Revision::INITIAL, JobKind::RecoveryScan);
-        self.pending.insert(job, Pending::RecoveryScan);
+        self.io.pending.insert(job, Pending::RecoveryScan);
     }
 
     /// 退避が残っていれば場所を案内する (`msg.recovery.found` / `found_rescue`、02 §9.3。中身は読まない)。
@@ -163,7 +164,7 @@ impl EditorState {
         else {
             return;
         };
-        self.leftovers = leftovers;
+        self.io.leftovers = leftovers;
         self.swap_scan_done(swaps);
         if dirs.is_empty() {
             return;

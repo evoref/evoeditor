@@ -86,11 +86,11 @@ impl EditorState {
             return;
         };
         if query.pattern().is_empty() {
-            self.search = None;
+            self.find.search = None;
             self.mark_dirty_render();
             return;
         }
-        let Some(doc) = self.documents.get(&doc_id) else {
+        let Some(doc) = self.docs.documents.get(&doc_id) else {
             return;
         };
         let revision = doc.revision();
@@ -107,8 +107,8 @@ impl EditorState {
                 count_limit: COUNT_LIMIT,
             },
         );
-        self.pending.insert(job, Pending::Search);
-        self.search = Some(SearchState {
+        self.io.pending.insert(job, Pending::Search);
+        self.find.search = Some(SearchState {
             doc: doc_id,
             revision,
             query,
@@ -124,24 +124,24 @@ impl EditorState {
     /// 検索を終える (検索バーを閉じる)。
     pub fn search_stop(&mut self) {
         self.search_cancel_job();
-        if self.search.take().is_some() {
+        if self.find.search.take().is_some() {
             self.mark_dirty_render();
         }
     }
 
     /// 今の検索語。
     pub fn search_query(&self) -> Option<&SearchQuery> {
-        self.search.as_ref().map(|s| &s.query)
+        self.find.search.as_ref().map(|s| &s.query)
     }
 
     fn search_cancel_job(&mut self) {
-        if let Some(old) = self.find_job.take() {
+        if let Some(old) = self.find.find_job.take() {
             self.jobs.cancel(old);
-            self.pending.remove(&old);
+            self.io.pending.remove(&old);
         }
-        if let Some(job) = self.search.as_mut().and_then(|s| s.job.take()) {
+        if let Some(job) = self.find.search.as_mut().and_then(|s| s.job.take()) {
             self.jobs.cancel(job);
-            self.pending.remove(&job);
+            self.io.pending.remove(&job);
         }
     }
 
@@ -153,8 +153,9 @@ impl EditorState {
     }
 
     pub(crate) fn search_fresh(&self) -> bool {
-        self.search.as_ref().is_some_and(|s| {
-            self.documents
+        self.find.search.as_ref().is_some_and(|s| {
+            self.docs
+                .documents
                 .get(&s.doc)
                 .is_some_and(|d| d.revision() == s.revision)
         })
@@ -167,7 +168,7 @@ impl EditorState {
 
     /// `search_count` と同じだが、現在の一致の番号を `probe` (選択していない強調中の一致) から求める。
     pub(crate) fn search_count_for(&self, probe: Option<ByteRange>) -> SearchCount {
-        let Some(s) = &self.search else {
+        let Some(s) = &self.find.search else {
             return SearchCount::Idle;
         };
         if !self.search_fresh() {
@@ -194,7 +195,7 @@ impl EditorState {
 
     /// 選択が保持した一致のどれかと一致していれば、その位置。一部しか持っていないときは求めない。
     fn search_current_index(&self, probe: Option<ByteRange>) -> Option<usize> {
-        let s = self.search.as_ref()?;
+        let s = self.find.search.as_ref()?;
         if s.truncated || s.count_limited {
             return None;
         }
@@ -213,7 +214,7 @@ impl EditorState {
 
     /// 次の一致 (`forward`) か前の一致へ選択を移す。
     pub fn search_step(&mut self, forward: bool) -> SearchStep {
-        let Some(s) = &self.search else {
+        let Some(s) = &self.find.search else {
             return SearchStep::NoQuery;
         };
         let (doc_id, query) = (s.doc, s.query.clone());
@@ -228,13 +229,14 @@ impl EditorState {
         // 保持した一致を使えるのは、走査が終わり、上限にも達していないとき (全件を持っているとき) だけ
         let complete = fresh
             && self
+                .find
                 .search
                 .as_ref()
                 .is_some_and(|s| s.job.is_none() && !s.truncated && !s.count_limited);
         let found = if complete {
             match self.find_retained(cursor, forward) {
                 Some(h) => h,
-                None => match self.search.as_ref().map(|s| &s.matches[..]) {
+                None => match self.find.search.as_ref().map(|s| &s.matches[..]) {
                     Some([]) | None => Found::None,
                     // 端を越えて反対側の端へ
                     Some(m) => Found::Hit(if forward { m[0] } else { m[m.len() - 1] }, true),
@@ -265,11 +267,11 @@ impl EditorState {
         cursor: ByteOff,
         forward: bool,
     ) {
-        if let Some(old) = self.find_job.take() {
+        if let Some(old) = self.find.find_job.take() {
             self.jobs.cancel(old);
-            self.pending.remove(&old);
+            self.io.pending.remove(&old);
         }
-        let Some(doc) = self.documents.get(&doc_id) else {
+        let Some(doc) = self.docs.documents.get(&doc_id) else {
             return;
         };
         let revision = doc.revision();
@@ -283,7 +285,7 @@ impl EditorState {
                 forward,
             },
         );
-        self.pending.insert(
+        self.io.pending.insert(
             job,
             Pending::FindNext {
                 doc: doc_id,
@@ -292,7 +294,7 @@ impl EditorState {
                 forward,
             },
         );
-        self.find_job = Some(job);
+        self.find.find_job = Some(job);
     }
 
     /// 単発の検索の結果。文書の Revision と選択が投入時のままなら移る (違えば捨てる)。
@@ -304,11 +306,12 @@ impl EditorState {
         forward: bool,
         r: JobResult,
     ) {
-        self.find_job = None;
+        self.find.find_job = None;
         let JobResult::FindNextDone { found, .. } = r else {
             return;
         };
         let same = self
+            .docs
             .documents
             .get(&doc_id)
             .is_some_and(|d| d.revision() == revision)
@@ -323,7 +326,7 @@ impl EditorState {
 
     /// 保持した一致から、`cursor` より先 (前) の最初の一致。
     fn find_retained(&self, cursor: ByteOff, forward: bool) -> Option<Found> {
-        let s = self.search.as_ref()?;
+        let s = self.find.search.as_ref()?;
         let m = &s.matches;
         if forward {
             let i = m.partition_point(|r| r.start < cursor);
@@ -345,7 +348,7 @@ impl EditorState {
         let Some(m) = query.matcher() else {
             return Found::None;
         };
-        let Some(doc) = self.documents.get(&doc_id) else {
+        let Some(doc) = self.docs.documents.get(&doc_id) else {
             return Found::None;
         };
         let t = doc.text();
@@ -452,10 +455,10 @@ impl EditorState {
     /// 検索ジョブの途中経過と終わり。古いジョブの結果は捨てる。
     pub(crate) fn on_search_result(&mut self, r: JobResult) {
         let job = r.job();
-        let Some(s) = self.search.as_mut().filter(|s| s.job == Some(job)) else {
+        let Some(s) = self.find.search.as_mut().filter(|s| s.job == Some(job)) else {
             // 取り消した検索の結果。終わりなら待ちの記録を消す
             if !matches!(r, JobResult::SearchBatch { .. }) {
-                self.pending.remove(&job);
+                self.io.pending.remove(&job);
             }
             return;
         };
@@ -472,12 +475,12 @@ impl EditorState {
                 s.count_limited = count_limited;
                 s.truncated = truncated;
                 s.matches.sort_by_key(|m| m.start);
-                self.pending.remove(&job);
+                self.io.pending.remove(&job);
             }
             // 失敗・取り消し: 件数は出さずに終える
             _ => {
                 s.job = None;
-                self.pending.remove(&job);
+                self.io.pending.remove(&job);
             }
         }
         self.mark_dirty_render();

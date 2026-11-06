@@ -75,8 +75,8 @@ impl EditorState {
     }
 
     fn top_pos(&self, view: ViewId) -> Option<RowPos> {
-        let v = self.views.get(&view)?;
-        let d = self.documents.get(&v.doc)?;
+        let v = self.docs.views.get(&view)?;
+        let d = self.docs.documents.get(&v.doc)?;
         Some((
             d.text().byte_to_line(v.scroll.top).0,
             v.scroll.wrap_idx as usize,
@@ -85,8 +85,8 @@ impl EditorState {
 
     /// 主カーソルの (論理行, 表示行)。
     fn cursor_pos(&self, view: ViewId, g: Geometry) -> Option<RowPos> {
-        let v = self.views.get(&view)?;
-        let d = self.documents.get(&v.doc)?;
+        let v = self.docs.views.get(&view)?;
+        let d = self.docs.documents.get(&v.doc)?;
         let head = v.selection.primary().head;
         let line = d.text().byte_to_line(head).0;
         let lr = line_rows(d, line, g.0, g.1);
@@ -94,10 +94,10 @@ impl EditorState {
     }
 
     fn place_top(&mut self, view: ViewId, pos: RowPos) {
-        let Some(v) = self.views.get_mut(&view) else {
+        let Some(v) = self.docs.views.get_mut(&view) else {
             return;
         };
-        let Some(d) = self.documents.get(&v.doc) else {
+        let Some(d) = self.docs.documents.get(&v.doc) else {
             return;
         };
         let top = d.text().line_to_byte(LineIdx(pos.0));
@@ -105,12 +105,12 @@ impl EditorState {
         if v.scroll.top != top || v.scroll.wrap_idx != widx {
             v.scroll.top = top;
             v.scroll.wrap_idx = widx;
-            self.needs_render = true;
+            self.out.needs_render = true;
         }
     }
 
     fn view_doc(&self, view: ViewId) -> Option<&Document> {
-        self.documents.get(&self.views.get(&view)?.doc)
+        self.docs.documents.get(&self.docs.views.get(&view)?.doc)
     }
 
     /// 面の `row` 行目 (0 始まり) の (論理行, 表示行)。文書の末尾より下の行は `None` (折り返し ON、マウスの位置の確定が使う)。
@@ -126,7 +126,7 @@ impl EditorState {
         let (Some(top), Some(doc)) = (self.top_pos(view), self.view_doc(view)) else {
             return;
         };
-        let rows = self.viewport.1 as usize;
+        let rows = self.term.viewport.1 as usize;
         let moved = walk(
             doc,
             g,
@@ -139,7 +139,7 @@ impl EditorState {
     }
 
     pub(crate) fn wrapped_ensure_vertical(&mut self, view: ViewId, g: Geometry, margin: usize) {
-        let rows = self.viewport.1 as usize;
+        let rows = self.term.viewport.1 as usize;
         let (Some(top), Some(cur), Some(doc)) = (
             self.top_pos(view),
             self.cursor_pos(view, g),
@@ -167,7 +167,7 @@ impl EditorState {
     }
 
     pub(crate) fn wrapped_center_cursor(&mut self, view: ViewId, g: Geometry) {
-        let rows = self.viewport.1 as usize;
+        let rows = self.term.viewport.1 as usize;
         let (Some(cur), Some(doc)) = (self.cursor_pos(view, g), self.view_doc(view)) else {
             return;
         };

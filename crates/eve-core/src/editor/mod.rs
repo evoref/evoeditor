@@ -84,7 +84,7 @@ impl Editor {
     /// キーの表記を作り直す。表記 (パレット・ヒントバー・`{key:…}`) はこの端末で届く割当から選び (04 §7.8)、
     /// ヘルプのキー一覧は全割当を、届くかの印とともに持つ。
     pub(crate) fn refresh_key_labels(&mut self) {
-        let caps = self.state.caps.clone();
+        let caps = self.state.term.caps.clone();
         let ok = |b: &crate::keymap::Binding| crate::keymap::reachable(b, &caps);
         let seqs = self
             .keymap
@@ -430,7 +430,7 @@ impl Editor {
 
     /// 起動時の走査が見つけた置換途中の痕跡の提案 (新しい順。05 §4.6)。
     pub fn leftovers(&self) -> &[crate::Leftover] {
-        &self.state.leftovers
+        &self.state.io.leftovers
     }
 
     /// 復旧で適用した古いスワップのうち、まだ消していないもの。Host が正常終了のときに消す。

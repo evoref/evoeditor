@@ -69,12 +69,12 @@ const REPLACE_SYNC_BYTES: usize = 1 << 20;
 impl EditorState {
     /// 検索バーが開いているか (条件式 `search.active`)。
     pub fn search_bar_open(&self) -> bool {
-        self.search_bar.is_some()
+        self.find.search_bar.is_some()
     }
 
     /// 検索バーを開く。開いていれば何もしない (欄はそのまま)。
     pub fn search_open(&mut self) -> CommandResult {
-        if self.search_bar.is_some() {
+        if self.find.search_bar.is_some() {
             return CommandResult::Done;
         }
         let anchor = self.bar_cursor(false).unwrap_or(ByteOff(0));
@@ -90,7 +90,7 @@ impl EditorState {
                     .collect()
             })
             .unwrap_or_else(|| std::sync::Arc::from([]));
-        self.search_bar = Some(SearchBarState {
+        self.find.search_bar = Some(SearchBarState {
             text: String::new(),
             cursor: 0,
             case: Case::Smart,
@@ -110,15 +110,18 @@ impl EditorState {
 
     /// `search.replace_open`: 置換欄つきで開く (開いていれば置換欄を足す)。読み取り専用の文書では開かない。
     pub fn search_replace_open(&mut self) -> CommandResult {
-        let read_only = self
-            .active_document()
-            .is_some_and(|d| self.documents.get(&d).is_some_and(|d| !d.is_editable()));
+        let read_only = self.active_document().is_some_and(|d| {
+            self.docs
+                .documents
+                .get(&d)
+                .is_some_and(|d| !d.is_editable())
+        });
         if read_only {
             self.notify_read_only();
             return CommandResult::Done;
         }
         self.search_open();
-        if let Some(bar) = &mut self.search_bar {
+        if let Some(bar) = &mut self.find.search_bar {
             if bar.replace.is_none() {
                 bar.replace = Some((String::new(), 0));
             }
@@ -135,7 +138,7 @@ impl EditorState {
 
     /// `Tab` / `Shift+Tab`: 検索欄 → 置換欄 → ボタン → 検索欄 (置換欄が開いているときだけ)。
     pub(crate) fn bar_focus_cycle(&mut self, forward: bool) {
-        let Some(bar) = &mut self.search_bar else {
+        let Some(bar) = &mut self.find.search_bar else {
             return;
         };
         if bar.replace.is_none() {
@@ -150,6 +153,7 @@ impl EditorState {
     /// 入力欄を編集した: 検索欄なら検索をやり直す。
     pub(crate) fn bar_edited(&mut self) {
         if self
+            .find
             .search_bar
             .as_ref()
             .is_some_and(|b| b.focus == BarFocus::Search)
@@ -162,7 +166,7 @@ impl EditorState {
 
     /// 検索バーを閉じる。確定していない現在の一致は選択として残さない。
     pub fn search_close(&mut self) {
-        if self.search_bar.take().is_none() {
+        if self.find.search_bar.take().is_none() {
             return;
         }
         self.search_stop();
@@ -172,11 +176,12 @@ impl EditorState {
 
     /// 検索バーの行数 (検索欄 1 行 + 置換欄があれば 1 行、閉じていれば 0)。編集面はその分だけ縮む。
     fn set_bar_rows(&mut self) {
-        self.bar_rows = self
+        self.term.bar_rows = self
+            .find
             .search_bar
             .as_ref()
             .map_or(0, |b| 1 + u16::from(b.replace.is_some()));
-        let (cols, rows) = self.surface;
+        let (cols, rows) = self.term.surface;
         self.apply_viewport(cols, rows);
         self.mark_dirty_render();
     }
@@ -190,7 +195,7 @@ impl EditorState {
 
     /// 大小の区別を巡回する (Smart → Sensitive → Insensitive → Smart) 。切り替えたら再検索する。
     pub fn search_toggle_case(&mut self) -> CommandResult {
-        let Some(bar) = &mut self.search_bar else {
+        let Some(bar) = &mut self.find.search_bar else {
             return CommandResult::Rejected(crate::command::RejectReason::NotAvailable);
         };
         bar.case = bar.case.next();
@@ -200,7 +205,7 @@ impl EditorState {
 
     /// 正規表現の ON / OFF を切り替える。切り替えたら再検索する。
     pub fn search_toggle_regex(&mut self) -> CommandResult {
-        let Some(bar) = &mut self.search_bar else {
+        let Some(bar) = &mut self.find.search_bar else {
             return CommandResult::Rejected(crate::command::RejectReason::NotAvailable);
         };
         bar.regex = !bar.regex;
@@ -210,7 +215,7 @@ impl EditorState {
 
     /// 単語単位の ON / OFF を切り替える。切り替えたら再検索する。
     pub fn search_toggle_word(&mut self) -> CommandResult {
-        let Some(bar) = &mut self.search_bar else {
+        let Some(bar) = &mut self.find.search_bar else {
             return CommandResult::Rejected(crate::command::RejectReason::NotAvailable);
         };
         bar.whole_word = !bar.whole_word;
@@ -221,7 +226,7 @@ impl EditorState {
     /// 選択範囲内だけを探すかを切り替える (`search.toggle_selection`)。範囲は検索バーを開いたときの選択で、
     /// 選択が無かったときは切り替えずに知らせる。切り替えたら再検索する。
     pub fn search_toggle_selection(&mut self) -> CommandResult {
-        let Some(bar) = &mut self.search_bar else {
+        let Some(bar) = &mut self.find.search_bar else {
             return CommandResult::Rejected(crate::command::RejectReason::NotAvailable);
         };
         if bar.sel_ranges.is_empty() {
@@ -242,7 +247,7 @@ impl EditorState {
         if self.active_document() != Some(doc) {
             return;
         }
-        let Some(bar) = &mut self.search_bar else {
+        let Some(bar) = &mut self.find.search_bar else {
             return;
         };
         if bar.sel_ranges.is_empty() {
@@ -263,19 +268,19 @@ impl EditorState {
     /// 入力欄・トグルが変わった: 検索をやり直し、起点から先の最初の一致を強調する。
     /// 検索語をコンパイルできないとき (正規表現の構文エラーなど) は検索せず、理由を示す。
     pub(crate) fn bar_changed(&mut self) {
-        let Some(bar) = &self.search_bar else {
+        let Some(bar) = &self.find.search_bar else {
             return;
         };
         let query = bar.query();
         let anchor = bar.anchor;
         let error = query.compile().err();
-        if let Some(bar) = &mut self.search_bar {
+        if let Some(bar) = &mut self.find.search_bar {
             bar.error = error.clone();
         }
         if error.is_some() {
             // 前の検索の結果を残さない
             self.search_start(SearchQuery::literal(""));
-            if let Some(bar) = &mut self.search_bar {
+            if let Some(bar) = &mut self.find.search_bar {
                 bar.current = None;
             }
             self.mark_dirty_render();
@@ -289,7 +294,7 @@ impl EditorState {
             },
             _ => None,
         };
-        if let Some(bar) = &mut self.search_bar {
+        if let Some(bar) = &mut self.find.search_bar {
             bar.current = found;
         }
         if let Some(m) = found {
@@ -308,14 +313,14 @@ impl EditorState {
         };
         self.set_selection(view, Selection::point(pos));
         self.ensure_cursor_visible(view);
-        if let Some(v) = self.views.get_mut(&view) {
+        if let Some(v) = self.docs.views.get_mut(&view) {
             v.selection = saved;
         }
     }
 
     /// `Enter` / `↓` / `F3` (`search.next`) と `↑` (`search.prev`)。入力で強調した一致があれば、まずそれを選択する。
     pub fn search_move(&mut self, forward: bool) -> SearchStep {
-        let Some(bar) = &self.search_bar else {
+        let Some(bar) = &self.find.search_bar else {
             return SearchStep::NoQuery;
         };
         // ボタンにフォーカスがあるときの Enter はすべて置換 (Alt が使えない端末向け、04 §8.4)
@@ -332,7 +337,7 @@ impl EditorState {
                 Selection::single(eve_text::Range::new(cur.start, cur.end)),
             );
             self.ensure_cursor_visible(view);
-            if let Some(bar) = &mut self.search_bar {
+            if let Some(bar) = &mut self.find.search_bar {
                 bar.current = None;
                 bar.anchor = cur.start;
             }
@@ -342,7 +347,7 @@ impl EditorState {
         let r = self.search_step(forward);
         if matches!(r, SearchStep::Moved { .. }) {
             let a = self.bar_cursor(false);
-            if let (Some(bar), Some(a)) = (&mut self.search_bar, a) {
+            if let (Some(bar), Some(a)) = (&mut self.find.search_bar, a) {
                 bar.current = None;
                 bar.anchor = a;
             }
@@ -352,7 +357,7 @@ impl EditorState {
 
     /// 検索バーの表示モデル。
     pub(crate) fn search_bar_model(&self) -> Option<SearchBarModel> {
-        let bar = self.search_bar.as_ref()?;
+        let bar = self.find.search_bar.as_ref()?;
         let render = |key: &str, args: &[(&str, &str)]| {
             self.catalog().render(key, args, &|c| self.key_label(c))
         };
@@ -455,13 +460,13 @@ impl EditorState {
         top_line: usize,
         rows: usize,
     ) -> Vec<(usize, usize)> {
-        let Some(bar) = &self.search_bar else {
+        let Some(bar) = &self.find.search_bar else {
             return Vec::new();
         };
         let Some(m) = bar.query().matcher() else {
             return Vec::new();
         };
-        let Some(doc) = self.documents.get(&doc_id) else {
+        let Some(doc) = self.docs.documents.get(&doc_id) else {
             return Vec::new();
         };
         let t = doc.text();
@@ -483,7 +488,8 @@ impl EditorState {
 
     /// 入力で強調している現在の一致 (文書内のバイト範囲)。
     pub(crate) fn bar_current(&self) -> Option<(usize, usize)> {
-        self.search_bar
+        self.find
+            .search_bar
             .as_ref()?
             .current
             .map(|r| (r.start.0, r.end.0))
@@ -493,13 +499,14 @@ impl EditorState {
 impl EditorState {
     fn cancel_replace_job(&mut self) {
         let ids: Vec<_> = self
+            .io
             .pending
             .iter()
             .filter(|(_, p)| matches!(p, Pending::ReplaceAll { .. }))
             .map(|(id, _)| *id)
             .collect();
         for id in ids {
-            self.pending.remove(&id);
+            self.io.pending.remove(&id);
             self.jobs.cancel(id);
         }
     }
@@ -507,7 +514,7 @@ impl EditorState {
     /// `search.replace_all` (03 §12.5): 検索欄の検索語・大小の区別で、置換欄の文字列にすべて置き換える。1 つの Undo 単位。
     /// 文書が 1 MiB 以下ならメインスレッドで、超えればジョブで ChangeSet を作る。
     pub fn search_replace_all(&mut self) -> CommandResult {
-        let Some(bar) = &self.search_bar else {
+        let Some(bar) = &self.find.search_bar else {
             return CommandResult::Rejected(crate::command::RejectReason::NotAvailable);
         };
         let Some((replacement, _)) = bar.replace.clone() else {
@@ -517,7 +524,7 @@ impl EditorState {
         let Some(doc_id) = self.active_document() else {
             return CommandResult::Done;
         };
-        let Some(doc) = self.documents.get(&doc_id) else {
+        let Some(doc) = self.docs.documents.get(&doc_id) else {
             return CommandResult::Done;
         };
         if !doc.is_editable() {
@@ -536,6 +543,7 @@ impl EditorState {
         }
         // 実行中のすべて置換があれば二重に始めない
         if self
+            .io
             .pending
             .values()
             .any(|p| matches!(p, Pending::ReplaceAll { .. }))
@@ -560,7 +568,7 @@ impl EditorState {
                 replacement,
             },
         );
-        self.pending.insert(
+        self.io.pending.insert(
             job,
             Pending::ReplaceAll {
                 doc: doc_id,
@@ -578,7 +586,7 @@ impl EditorState {
         query: &SearchQuery,
         replacement: &str,
     ) -> Option<(ByteRange, String)> {
-        let doc = self.documents.get(&doc_id)?;
+        let doc = self.docs.documents.get(&doc_id)?;
         let text = doc.text();
         let sel = self
             .focused_window()
@@ -591,14 +599,14 @@ impl EditorState {
         {
             return Some((selected, s));
         }
-        let cur = self.search_bar.as_ref()?.current?;
+        let cur = self.find.search_bar.as_ref()?.current?;
         replacement_for(text, query, cur, replacement).map(|s| (cur, s))
     }
 
     /// `search.replace` (03 §12.5): 現在の一致を置換欄の文字列に置き換え、次の一致を強調する。置換ごとに別の Undo 単位。
     /// 正規表現では `$1` / `${name}` を展開し、`\n` を既定の改行にする。
     pub fn search_replace(&mut self) -> CommandResult {
-        let Some(bar) = &self.search_bar else {
+        let Some(bar) = &self.find.search_bar else {
             return CommandResult::Rejected(crate::command::RejectReason::NotAvailable);
         };
         let Some((replacement, _)) = bar.replace.clone() else {
@@ -608,7 +616,7 @@ impl EditorState {
         let Some(doc_id) = self.active_document() else {
             return CommandResult::Done;
         };
-        let Some(doc) = self.documents.get(&doc_id) else {
+        let Some(doc) = self.docs.documents.get(&doc_id) else {
             return CommandResult::Done;
         };
         if !doc.is_editable() {
@@ -628,7 +636,7 @@ impl EditorState {
             self.show_message(MessageLevel::Info, "info.search.replace_no_match", &[]);
             return CommandResult::Done;
         };
-        let Some(doc) = self.documents.get(&doc_id) else {
+        let Some(doc) = self.docs.documents.get(&doc_id) else {
             return CommandResult::Done;
         };
         let after = ByteOff(range.start.0 + insert.len());
@@ -642,7 +650,7 @@ impl EditorState {
             return CommandResult::Done;
         };
         let view = self.focused_view();
-        let sel = view.and_then(|v| self.views.get(&v).map(|v| v.selection.clone()));
+        let sel = view.and_then(|v| self.docs.views.get(&v).map(|v| v.selection.clone()));
         let mut tx = Transaction::new(
             changes,
             Origin::Command(eve_view::CommandId::new("search.replace")),
@@ -660,7 +668,7 @@ impl EditorState {
         if let Some(v) = view {
             self.set_selection(v, Selection::point(after));
         }
-        if let Some(bar) = &mut self.search_bar {
+        if let Some(bar) = &mut self.find.search_bar {
             bar.anchor = after;
         }
         self.bar_changed();
@@ -676,6 +684,7 @@ impl EditorState {
     ) {
         if let JobResult::ReplaceAllDone { changes, count, .. } = r {
             let fresh = self
+                .docs
                 .documents
                 .get(&doc_id)
                 .is_some_and(|d| d.revision() == revision);
@@ -699,7 +708,7 @@ impl EditorState {
             return;
         }
         let view = self.focused_view();
-        let sel = view.and_then(|v| self.views.get(&v).map(|v| v.selection.clone()));
+        let sel = view.and_then(|v| self.docs.views.get(&v).map(|v| v.selection.clone()));
         let mut tx = Transaction::new(
             changes,
             Origin::Command(eve_view::CommandId::new("search.replace_all")),
@@ -730,29 +739,33 @@ const RESEARCH_DELAY: u64 = 300;
 impl EditorState {
     /// 編集で検索の結果が無効になったら、入力が止まって 300 ms 後に再検索する。`Editor::tick` から呼ぶ。
     pub(crate) fn search_tick(&mut self) {
-        let stale = self.search_bar.is_some() && self.search.is_some() && !self.search_fresh();
+        let stale =
+            self.find.search_bar.is_some() && self.find.search.is_some() && !self.search_fresh();
         let cur = self
+            .find
             .search
             .as_ref()
-            .and_then(|s| self.documents.get(&s.doc()).map(|d| d.revision()));
+            .and_then(|s| self.docs.documents.get(&s.doc()).map(|d| d.revision()));
         let (true, Some(cur)) = (stale, cur) else {
-            self.research = None;
+            self.find.research = None;
             return;
         };
-        match self.research {
+        match self.find.research {
             Some((rev, at)) if rev == cur => {
                 if self.now.saturating_sub(at) >= crate::time::Millis(RESEARCH_DELAY) {
-                    self.research = None;
+                    self.find.research = None;
                     self.bar_changed();
                 }
             }
             // 初めて気づいた、または気づいた後にまた編集された: 待ち直す
-            _ => self.research = Some((cur, self.now)),
+            _ => self.find.research = Some((cur, self.now)),
         }
     }
 
     /// 次に `tick` が要る時刻 (再検索の期限)。
     pub(crate) fn search_deadline(&self) -> Option<Tick> {
-        self.research.map(|(_, at)| Tick(at.0 + RESEARCH_DELAY))
+        self.find
+            .research
+            .map(|(_, at)| Tick(at.0 + RESEARCH_DELAY))
     }
 }

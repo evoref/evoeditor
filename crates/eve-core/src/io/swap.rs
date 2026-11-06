@@ -63,21 +63,21 @@ struct SwapDoc {
 impl EditorState {
     /// 上限 (`file.swap.max_bytes`) を超える dirty な文書があれば、スワップの対象外であることを 1 回だけ知らせる (FR-118 AC)。
     fn swap_notify_large(&mut self) {
-        if !self.config.swap_enabled {
+        if !self.settings.config.swap_enabled {
             return;
         }
-        let max = self.config.swap_max_bytes;
-        let hit = self.documents.iter().find_map(|(id, d)| {
+        let max = self.settings.config.swap_max_bytes;
+        let hit = self.docs.documents.iter().find_map(|(id, d)| {
             (d.is_dirty()
                 && d.load_state == LoadState::Ready
                 && d.len_bytes() as u64 > max
-                && !self.swap.notified_large.contains(id))
+                && !self.io.swap.notified_large.contains(id))
             .then(|| (*id, d.path.as_ref().map(FsPath::display)))
         });
         let Some((id, path)) = hit else {
             return;
         };
-        self.swap.notified_large.insert(id);
+        self.io.swap.notified_large.insert(id);
         let name = path.unwrap_or_else(|| {
             self.catalog()
                 .render("status.untitled", &[("n", "1")], &|_| None)
@@ -92,11 +92,11 @@ impl EditorState {
 
     /// 書いてよい文書なら、その Revision。dirty で読込済み・編集可・上限以下で、秘密ファイルの除外に当たらないもの。
     fn swap_eligible(&self, id: DocumentId) -> Option<Revision> {
-        let cfg = &self.config;
+        let cfg = &self.settings.config;
         if !cfg.swap_enabled {
             return None;
         }
-        let d = self.documents.get(&id)?;
+        let d = self.docs.documents.get(&id)?;
         if !d.is_dirty() || d.load_state != LoadState::Ready || !d.read_only.is_empty() {
             return None;
         }
@@ -115,12 +115,12 @@ impl EditorState {
     /// 秘密ファイルの除外に当たるようになっただけの dirty な文書のスワップは、書き足さないが消さない
     /// (残したスワップは、正常終了の片付けか次の起動の復旧の提案で扱う。docs/review/v0.3-findings.md の SAF-03)。
     fn swap_obsolete(&self, id: DocumentId) -> bool {
-        if !self.config.swap_enabled {
+        if !self.settings.config.swap_enabled {
             return true;
         }
-        match self.documents.get(&id) {
+        match self.docs.documents.get(&id) {
             Some(d) => !d.is_dirty(),
-            None => !self.closing_snapshots.contains_key(&id),
+            None => !self.io.closing_snapshots.contains_key(&id),
         }
     }
 
@@ -128,7 +128,7 @@ impl EditorState {
     fn swap_due(&self, e: &SwapDoc) -> Option<Tick> {
         let (_, seen_at) = e.seen?;
         let first = e.first_change?;
-        let cfg = &self.config;
+        let cfg = &self.settings.config;
         let min_interval = Millis(u64::from(cfg.swap_min_interval_ms));
         let base = min(
             seen_at + Millis(u64::from(cfg.swap_interval_ms)),
@@ -146,11 +146,11 @@ impl EditorState {
         self.swap_offer();
         self.leftover_offer();
         self.swap_release_recovered();
-        if self.swap.stopped {
+        if self.io.swap.stopped {
             return;
         }
-        let mut ids: Vec<DocumentId> = self.documents.keys().copied().collect();
-        ids.extend(self.swap.docs.keys().copied());
+        let mut ids: Vec<DocumentId> = self.docs.documents.keys().copied().collect();
+        ids.extend(self.io.swap.docs.keys().copied());
         ids.sort();
         ids.dedup();
         for id in ids {
@@ -161,7 +161,7 @@ impl EditorState {
     fn swap_step(&mut self, id: DocumentId) {
         let now = self.now;
         let eligible = self.swap_eligible(id);
-        let mut e = self.swap.docs.remove(&id).unwrap_or_default();
+        let mut e = self.io.swap.docs.remove(&id).unwrap_or_default();
         let busy = e.inflight.is_some() || e.discarding.is_some();
         let Some(rev) = eligible else {
             // 書込中・削除中は完了を待つ (結果の処理の後の tick で見直す)
@@ -174,18 +174,18 @@ impl EditorState {
             }
             // 書いていなければ記録は要らない
             if e.on_disk {
-                self.swap.docs.insert(id, e);
+                self.io.swap.docs.insert(id, e);
             }
             return;
         };
         // 名前を付けて保存などで文書のパスが変わった: スワップの名前はパスから作るので、新しい名前で書く前に
         // 旧パスの名前のスワップを消す (残すと、次の起動で古い内容を旧パスの復旧として提案する、03 §9.3。SAF-21)
-        let cur_path = self.documents.get(&id).and_then(|d| d.path.clone());
+        let cur_path = self.docs.documents.get(&id).and_then(|d| d.path.clone());
         if e.on_disk && e.path != cur_path {
             if !busy && e.discard_retry_at.is_none_or(|t| now >= t) {
                 self.spawn_swap_discard(id, &mut e);
             }
-            self.swap.docs.insert(id, e);
+            self.io.swap.docs.insert(id, e);
             return;
         }
         // 書込中の Snapshot より後の変更も、気づいた時刻を記録する (完了後に最新で 1 回、期限どおりに書くため)
@@ -209,7 +209,7 @@ impl EditorState {
                     doc: Arc::new(snap),
                 },
             );
-            self.pending.insert(job, Pending::Swap { doc: id });
+            self.io.pending.insert(job, Pending::Swap { doc: id });
             e.inflight = Some((job, rev));
             e.on_disk = true;
             e.path = path;
@@ -217,7 +217,7 @@ impl EditorState {
             e.seen = None;
             e.first_change = None;
         }
-        self.swap.docs.insert(id, e);
+        self.io.swap.docs.insert(id, e);
     }
 
     /// 文書 `id` のディスクのスワップ (書いたときのパスの名前) を消すジョブを投入する。
@@ -230,23 +230,26 @@ impl EditorState {
                 path: e.path.clone(),
             },
         );
-        self.pending.insert(job, Pending::SwapDiscard { doc: id });
+        self.io
+            .pending
+            .insert(job, Pending::SwapDiscard { doc: id });
         e.discarding = Some(job);
     }
 
     /// 次に `tick` が要る時刻 (スワップを書く・消す時刻)。
     pub(crate) fn swap_deadline(&self) -> Option<Tick> {
-        if self.swap.stopped {
+        if self.io.swap.stopped {
             return None;
         }
-        self.swap
+        self.io
+            .swap
             .docs
             .iter()
             .filter(|(_, e)| e.inflight.is_none() && e.discarding.is_none())
             .filter_map(|(id, e)| {
                 // 消すもの (swap_step と同じ条件): 要らなくなったスワップと、パスが変わった後の旧パスのスワップ
                 let path_changed =
-                    e.on_disk && e.path != self.documents.get(id).and_then(|d| d.path.clone());
+                    e.on_disk && e.path != self.docs.documents.get(id).and_then(|d| d.path.clone());
                 let eligible = self.swap_eligible(*id).is_some();
                 if e.on_disk
                     && ((!eligible && self.swap_obsolete(*id)) || (eligible && path_changed))
@@ -264,7 +267,8 @@ impl EditorState {
 
     /// ディスクにスワップがある文書 (正常終了のとき、Host が消す。書込中のものを含む)。
     pub(crate) fn swap_leftovers(&self) -> Vec<(DocumentId, Option<FsPath>)> {
-        self.swap
+        self.io
+            .swap
             .docs
             .iter()
             .filter(|(_, e)| e.on_disk)
@@ -274,12 +278,16 @@ impl EditorState {
 
     /// 文書の新しいスワップを書き終えている (古いスワップを消してよい)。
     pub(crate) fn swap_written(&self, id: DocumentId) -> bool {
-        self.swap.docs.get(&id).is_some_and(|e| e.written.is_some())
+        self.io
+            .swap
+            .docs
+            .get(&id)
+            .is_some_and(|e| e.written.is_some())
     }
 
     /// スワップを書くジョブの結果。
     pub(crate) fn finish_swap(&mut self, doc: DocumentId, r: JobResult) {
-        let Some(e) = self.swap.docs.get_mut(&doc) else {
+        let Some(e) = self.io.swap.docs.get_mut(&doc) else {
             return;
         };
         let inflight = e.inflight.take();
@@ -301,13 +309,13 @@ impl EditorState {
     /// スワップを消すジョブの結果。
     pub(crate) fn finish_swap_discard(&mut self, doc: DocumentId, r: JobResult) {
         let now = self.now;
-        let Some(e) = self.swap.docs.get_mut(&doc) else {
+        let Some(e) = self.io.swap.docs.get_mut(&doc) else {
             return;
         };
         e.discarding = None;
         match r {
             JobResult::SwapDiscarded { .. } => {
-                self.swap.docs.remove(&doc);
+                self.io.swap.docs.remove(&doc);
             }
             JobResult::Failed {
                 err: JobError::Fs(err),
@@ -318,7 +326,7 @@ impl EditorState {
     }
 
     fn swap_stop(&mut self) {
-        self.swap.stopped = true;
-        self.swap.docs.clear();
+        self.io.swap.stopped = true;
+        self.io.swap.docs.clear();
     }
 }

@@ -59,9 +59,10 @@ impl EditorState {
         let shown = self
             .focused_window()
             .and_then(|w| self.window_view(w))
-            .filter(|v| self.views.get(v).is_some_and(|v| v.doc == doc_id));
+            .filter(|v| self.docs.views.get(v).is_some_and(|v| v.doc == doc_id));
         let view = match shown.or_else(|| {
-            self.views
+            self.docs
+                .views
                 .iter()
                 .find(|(_, v)| v.doc == doc_id)
                 .map(|(id, _)| *id)
@@ -69,7 +70,7 @@ impl EditorState {
             Some(v) => v,
             None => return CommandResult::Rejected(RejectReason::NoTarget),
         };
-        let Some(doc) = self.documents.get_mut(&doc_id) else {
+        let Some(doc) = self.docs.documents.get_mut(&doc_id) else {
             return CommandResult::Rejected(RejectReason::NoTarget);
         };
         let Some(path) = doc.path.clone() else {
@@ -103,7 +104,7 @@ impl EditorState {
                 opts,
             },
         );
-        self.pending.insert(
+        self.io.pending.insert(
             job,
             Pending::Open {
                 doc: doc_id,
@@ -133,11 +134,11 @@ impl EditorState {
         use crate::document::{FormatChange, FormatState, Origin, Transaction};
         use eve_text::{ByteOff, ByteRange, ChangeSet, Edit, Selection, TextRead};
         // 読み取り専用属性はディスクから判定し直したので、解除の記録と外部変更の見送りは捨てる
-        if let Some(d) = self.documents.get_mut(&doc_id) {
+        if let Some(d) = self.docs.documents.get_mut(&doc_id) {
             d.attribute_released = false;
             d.external_seen = None;
         }
-        let Some(old) = self.documents.get(&doc_id) else {
+        let Some(old) = self.docs.documents.get(&doc_id) else {
             return;
         };
         format.eol_stats = crate::document::EolStats::count(&text);
@@ -165,7 +166,7 @@ impl EditorState {
             return;
         };
         // カーソルは同じ位置を目安にし (新しい内容の範囲に収める)、Undo では元の Selection に戻す
-        let before_sel = self.views.get(&view).map(|v| v.selection.clone());
+        let before_sel = self.docs.views.get(&view).map(|v| v.selection.clone());
         let head = before_sel.as_ref().map_or(0, |s| s.primary().head.0);
         let after_sel = Selection::point(ByteOff(head.min(new_len))).normalized(&text);
         let tx = Transaction::new(cs, Origin::Reload, self.now)
@@ -173,7 +174,7 @@ impl EditorState {
             .with_view(view)
             .with_format_change(change);
         let applied = self.apply_transaction(doc_id, tx);
-        if let Some(d) = self.documents.get_mut(&doc_id) {
+        if let Some(d) = self.docs.documents.get_mut(&doc_id) {
             d.finish_reload(stamp);
         }
         self.mark_dirty_render();
@@ -186,6 +187,7 @@ impl EditorState {
             return;
         }
         let read_only = self
+            .docs
             .documents
             .get(&doc_id)
             .is_some_and(|d| !d.read_only.is_empty());
@@ -199,7 +201,7 @@ impl EditorState {
 
     /// 開き直しの取消し・失敗: 旧本文・書式・履歴をそのまま保って `Ready` に戻す。
     pub(crate) fn reopen_restore(&mut self, doc: DocumentId) {
-        if let Some(d) = self.documents.get_mut(&doc) {
+        if let Some(d) = self.docs.documents.get_mut(&doc) {
             d.load_state = crate::document::LoadState::Ready;
         }
         self.mark_dirty_render();
@@ -247,7 +249,7 @@ impl EditorState {
                 d.read_only = detected;
                 // 本文・書式・理由を一括で差し替え、履歴は新しい根 (保存点 = 根)。開き直しは Undo できない (03 §8.8)
                 self.put_document(doc_id, d);
-                if let Some(v) = self.views.get_mut(&view) {
+                if let Some(v) = self.docs.views.get_mut(&view) {
                     v.selection = eve_text::Selection::point(eve_text::ByteOff(0));
                     v.scroll = Default::default();
                     v.goal_dcol = None;
