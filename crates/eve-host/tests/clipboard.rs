@@ -151,6 +151,19 @@ fn 貼り付けはシステムのクリップボードから読む() {
     assert!(e.screen().contains("SYS"), "{}", e.screen());
 }
 
+// 貼り付けの結果は入力の結果なので、直前の描画から 16 ms 未満でも間引かずに描く (02 §9.2、04 §4.4)
+#[test]
+fn 貼り付けの結果は時計を進めなくても即時に描く() {
+    let mut e = env();
+    e.start();
+    e.key(KeyCode::Char('v'), Modifiers::CTRL);
+    let before = e.fe.probe().render_count();
+    assert!(e.pump_worker(), "取得の結果が届く");
+    assert!(e.fe.probe().render_count() > before, "取得の結果で描く");
+    let screen = e.fe.probe().last_ascii(AsciiOptions::default()).unwrap();
+    assert!(screen.contains("SYS"), "{screen}");
+}
+
 // verifies: AC-FR-205-3
 #[test]
 fn 取得が_2_秒かかると内部レジスタに切り替え_遅れて届いた結果は捨てる() {
