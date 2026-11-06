@@ -134,20 +134,31 @@ fn rs_encode_with(
 ) -> Vec<(usize, char)> {
     let mut bad = Vec::new();
     let mut pos = 0;
+    // 書いた末尾。`out` は `end` より後ろを作業の領域として確保しておき、最後に切り詰める。表現不能の文字のたびに
+    // 残り全体の大きさで確保し直す (ゼロで埋める) と、表現不能の多い行で O(n²) になる (SAF-22)
+    let mut end = out.len();
+    let mut grow = true;
     loop {
         let rest = &text[pos..];
-        let want = e
-            .max_buffer_length_from_utf8_if_no_unmappables(rest.len())
-            .unwrap_or(rest.len() * 4 + 16);
-        let at = out.len();
-        out.resize(at + want, 0);
+        if grow {
+            let want = e
+                .max_buffer_length_from_utf8_if_no_unmappables(rest.len())
+                .unwrap_or(rest.len() * 4 + 16);
+            if out.len() < end + want {
+                out.resize(end + want, 0);
+            }
+            grow = false;
+        }
         let (res, read, written) =
-            e.encode_from_utf8_without_replacement(rest, &mut out[at..], last);
-        out.truncate(at + written);
+            e.encode_from_utf8_without_replacement(rest, &mut out[end..], last);
+        end += written;
         pos += read;
         match res {
-            EncoderResult::InputEmpty => return bad,
-            EncoderResult::OutputFull => {}
+            EncoderResult::InputEmpty => {
+                out.truncate(end);
+                return bad;
+            }
+            EncoderResult::OutputFull => grow = true,
             EncoderResult::Unmappable(ch) => {
                 // ISO-2022-JP のエンコーダは U+000E / U+000F / U+001B を、元の文字ではなく U+FFFD として返す。
                 // 位置と文字は、読み終えた位置の直前の文字から求める
@@ -305,12 +316,18 @@ impl Encoder {
         let bad = rs_encode(self.enc, run, true, out);
         // 表現不能 (encoding_rs が返したもの) と、照合で見つけた黙示の置換を、本文の順に合わせて報告する
         // (報告の先頭は「最初の表現不能の文字」として UI が使う。docs/review/v0.3-findings.md の SAF-47)
+        // 文字の通し番号は、前の表現不能の文字からの差分だけを数える (表現不能ごとに先頭から数えない、SAF-22)
+        let (mut counted_to, mut chars) = (0usize, 0u64);
         let unmappable: Vec<Unmappable> = bad
             .iter()
-            .map(|&(bi, ch)| Unmappable {
-                char_index: first_idx + run[..bi].chars().count() as u64,
-                ch,
-                kind: UnmappableKind::Unmappable,
+            .map(|&(bi, ch)| {
+                chars += run[counted_to..bi].chars().count() as u64;
+                counted_to = bi;
+                Unmappable {
+                    char_index: first_idx + chars,
+                    ch,
+                    kind: UnmappableKind::Unmappable,
+                }
             })
             .collect();
         // 表現できた文字だけの文字列 (照合の期待値)
@@ -361,12 +378,13 @@ impl Encoder {
         if got == expected {
             return found;
         }
-        // 文字ごとに対応づける (黙示の置換は 1 文字を 1 文字に写す)。表現不能で飛ばした文字は原文の側で飛ばす
-        let bad_bytes: Vec<usize> = bad.iter().map(|b| b.0).collect();
+        // 文字ごとに対応づける (黙示の置換は 1 文字を 1 文字に写す)。表現不能で飛ばした文字は原文の側で飛ばす。
+        // `bad` は位置の昇順なので、先頭から順に突き合わせる (文字ごとに全件を引かない、SAF-22)
+        let mut bad_it = bad.iter().map(|b| b.0).peekable();
         let mut got_it = got.chars();
         let mut idx = first_idx;
         for (bi, c) in original.char_indices() {
-            if bad_bytes.contains(&bi) {
+            if bad_it.next_if_eq(&bi).is_some() {
                 idx += 1;
                 continue;
             }
@@ -494,6 +512,30 @@ mod tests {
         }
         en.finish(&mut out, &mut rep);
         (out, rep)
+    }
+
+    // 表現不能と黙示の置換が 1 行に多数あっても、通し番号と種類は本文の順 (SAF-22 で数え方を差分にした)。
+    // 出力は表現できた文字だけで、表現不能の文字は飛ばす
+    #[test]
+    fn 表現不能と黙示の置換が多数並んでも位置は本文の順() {
+        let text = "x\u{a5}\u{1F600}".repeat(40);
+        let (out, rep) = enc(Encoding::ShiftJis, false, EscapePolicy::Reject, &[&text]);
+        assert_eq!(rep.total, 80);
+        let got: Vec<(u64, UnmappableKind)> = rep
+            .recorded
+            .iter()
+            .map(|u| (u.char_index, u.kind))
+            .collect();
+        let want: Vec<(u64, UnmappableKind)> = (0..40u64)
+            .flat_map(|i| {
+                [
+                    (3 * i + 1, UnmappableKind::Substituted),
+                    (3 * i + 2, UnmappableKind::Unmappable),
+                ]
+            })
+            .collect();
+        assert_eq!(got, want);
+        assert_eq!(out, b"x\\".repeat(40));
     }
 
     // fuzz_encode (#366) が CI で見つけた: 1 区間の中で、照合で見つけた黙示の置換 (Shift_JIS の ¥ は 0x5C に写り、
