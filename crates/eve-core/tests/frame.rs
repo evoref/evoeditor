@@ -371,3 +371,34 @@ fn 多数のカーソルでも可視範囲の分だけを作る() {
         "可視行にあるカーソルだけ"
     );
 }
+
+// Span の契約 (eve_view::Span): 幅の同じ書記素の連続は 1 つの Span にしてよい。core は印字できる ASCII の連続と、
+// 通常の幅 2 の文字 (かな・漢字など) の連続をまとめる。スタイルが変わるところと、幅の違う文字の境では分ける
+#[test]
+fn 通常の幅_2_の文字の連続は_1_つの_span_にまとめる() {
+    let mut s = Scene::new("ab日本語の行cd漢字«選択»|", 40, 4);
+    let f = s.frame();
+    let row = &f.panes[0].rows[0];
+    let texts: Vec<(&str, u16)> = row
+        .spans
+        .iter()
+        .map(|sp| (sp.text.as_str(), sp.width))
+        .collect();
+    assert_eq!(
+        texts,
+        [
+            ("ab", 2),
+            ("日本語の行", 10),
+            ("cd", 2),
+            ("漢字", 4),
+            ("選択", 4)
+        ],
+        "{texts:?}"
+    );
+    // 文字の格子 (ゴールデンの元) は 1 書記素ずつのまま
+    assert!(
+        s.ascii().contains("ab日本語の行cd漢字«選択»"),
+        "{}",
+        s.ascii()
+    );
+}
