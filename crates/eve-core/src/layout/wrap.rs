@@ -60,14 +60,69 @@ pub(crate) struct WrapRow {
 }
 
 /// 行頭に来てはならない書記素 (行頭禁則の最小集合、OQ-57)。
+/// 文字列の `contains` ではなく `matches!` で引く (REF-08)。集合は試験で `NO_LINE_START` と照らす。
 fn no_line_start(c: char) -> bool {
-    "、。，．・：；！？）］｝〕〉》」』】゛゜ー々ゝゞヽヾぁぃぅぇぉっゃゅょゎァィゥェォッャュョヮヵヶ"
-        .contains(c)
+    if c.is_ascii() {
+        return false;
+    }
+    matches!(
+        c,
+        '、' | '。'
+            | '，'
+            | '．'
+            | '・'
+            | '：'
+            | '；'
+            | '！'
+            | '？'
+            | '）'
+            | '］'
+            | '｝'
+            | '〕'
+            | '〉'
+            | '》'
+            | '」'
+            | '』'
+            | '】'
+            | '゛'
+            | '゜'
+            | 'ー'
+            | '々'
+            | 'ゝ'
+            | 'ゞ'
+            | 'ヽ'
+            | 'ヾ'
+            | 'ぁ'
+            | 'ぃ'
+            | 'ぅ'
+            | 'ぇ'
+            | 'ぉ'
+            | 'っ'
+            | 'ゃ'
+            | 'ゅ'
+            | 'ょ'
+            | 'ゎ'
+            | 'ァ'
+            | 'ィ'
+            | 'ゥ'
+            | 'ェ'
+            | 'ォ'
+            | 'ッ'
+            | 'ャ'
+            | 'ュ'
+            | 'ョ'
+            | 'ヮ'
+            | 'ヵ'
+            | 'ヶ'
+    )
 }
 
-/// 行末に来てはならない書記素 (行末禁則の最小集合、OQ-57)。
+/// 行末に来てはならない書記素 (行末禁則の最小集合、OQ-57)。集合は試験で `NO_LINE_END` と照らす。
 fn no_line_end(c: char) -> bool {
-    "（［｛〔〈《「『【([{".contains(c)
+    matches!(
+        c,
+        '（' | '［' | '｛' | '〔' | '〈' | '《' | '「' | '『' | '【' | '(' | '[' | '{'
+    )
 }
 
 fn is_space(c: char) -> bool {
@@ -150,18 +205,22 @@ pub(crate) fn wrap_line(
         let b = if i == start {
             start + 1
         } else {
-            let pick = |need_opportunity: bool| {
-                (start + 1..=i)
-                    .rev()
-                    .find(|&b| kinsoku_ok(b) && (!need_opportunity || opportunity(b)))
-            };
-            let preferred = if s.mode == WrapMode::Word {
-                pick(true)
-            } else {
-                pick(false)
-            };
-            // 単語境界で折れないときは書記素単位で、それも禁則で折れないなら禁則を破って i で折る
-            preferred.or_else(|| pick(false)).unwrap_or(i)
+            // 後ろから 1 回だけ走査する。単語境界で折れないときは書記素単位 (禁則を守る最も後ろ) で、
+            // それも禁則で折れないなら禁則を破って i で折る
+            let word = s.mode == WrapMode::Word;
+            let mut by_grapheme = None;
+            let mut preferred = None;
+            for b in (start + 1..=i).rev() {
+                if !kinsoku_ok(b) {
+                    continue;
+                }
+                if !word || opportunity(b) {
+                    preferred = Some(b);
+                    break;
+                }
+                by_grapheme.get_or_insert(b);
+            }
+            preferred.or(by_grapheme).unwrap_or(i)
         };
         rows.push(WrapRow {
             first: start,
@@ -208,6 +267,19 @@ pub(crate) fn cursor_in_rows(
 mod tests {
     use super::super::{units, width_config};
     use super::*;
+
+    /// 行頭禁則・行末禁則の集合 (OQ-57 の最小集合)。表引きの実装と全文字で照らす。
+    const NO_LINE_START: &str = "、。，．・：；！？）］｝〕〉》」』】゛゜ー々ゝゞヽヾぁぃぅぇぉっゃゅょゎァィゥェォッャュョヮヵヶ";
+    const NO_LINE_END: &str = "（［｛〔〈《「『【([{";
+
+    #[test]
+    fn 禁則の表引きは集合の文字列と全文字で一致する() {
+        for v in 0..=0x10FFFFu32 {
+            let Some(c) = char::from_u32(v) else { continue };
+            assert_eq!(no_line_start(c), NO_LINE_START.contains(c), "{v:#x}");
+            assert_eq!(no_line_end(c), NO_LINE_END.contains(c), "{v:#x}");
+        }
+    }
 
     fn rows_of(text: &str, cols: usize, mode: WrapMode) -> Vec<String> {
         let us = units(text, false, &width_config());
