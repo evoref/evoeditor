@@ -19,7 +19,10 @@ use std::sync::Arc;
 use eve_config::Catalog;
 use eve_core::RescueReason;
 use eve_core::{Encoding, JobPorts, Paths as _, Ports};
-use eve_host::{Host, HostMsg, SignalKind, SystemClock, ThreadJobSpawner, channel};
+use eve_host::{
+    Host, NonInteractiveShutdown, ShutdownEnd, ShutdownParts, ShutdownTrigger, SignalKind,
+    SystemClock, ThreadJobSpawner, channel,
+};
 #[cfg(unix)]
 use eve_platform::dirs::UnixPaths as NativePaths;
 #[cfg(windows)]
@@ -451,25 +454,32 @@ fn run(
         state_dir.as_path().to_path_buf(),
     ))));
     let emergency = host.emergency();
-    let restore_info = host.restore_info();
-    let run_finished = host.run_finished();
+    // 非対話の終了の手順 (退避 → メインへの通知と終了待ち → 置換中の計数の待ち → 端末の緊急復元 → 退避の結果の行、
+    // 02 §9.6 / §11.2.1)。手順と予算は eve-host が持ち、ここでは OS のコールバックへの登録と終わり方だけを書く
+    let shutdown = NonInteractiveShutdown::new(ShutdownParts {
+        emergency: emergency.clone(),
+        replacing: replacing.clone(),
+        restore_info: host.restore_info(),
+        run_finished: host.run_finished(),
+        tx: tx.clone(),
+    })
+    .with_report(|o| {
+        let mut err = std::io::stderr().lock();
+        for l in texts::recovery_lines(o) {
+            l.write_to(&mut err);
+        }
+    });
 
-    // Unix のシグナル (05 §11.1): シグナルスレッドが先に退避を書き (最大 2.5 s)、メインへ終了を知らせる。メインが 2 秒で
-    // 終わらなければ止まっている: 置換中フラグを受信から 4.8 s まで待ち、端末を緊急に復元して、同じシグナルで終わる。
+    // Unix のシグナル (05 §11.1): 受信スレッドが手順を行い、メインが終わらなければ同じシグナルで終わる (05 §11.5)。
     // SIGCONT は入力スレッドが扱う (端末の再初期化) ので、ここでは何もしない
     #[cfg(unix)]
     {
-        let tx = tx.clone();
-        let emergency = emergency.clone();
-        let replacing = replacing.clone();
-        let restore_info = restore_info.clone();
-        let run_finished = run_finished.clone();
+        let shutdown = shutdown.clone();
         let _ = eve_platform::signals::start(move |sig| {
             use eve_platform::signals::UnixSignal;
             if !sig.is_termination() {
                 return;
             }
-            let t0 = std::time::Instant::now();
             let kind = match sig {
                 UnixSignal::Interrupt => SignalKind::Interrupt,
                 UnixSignal::Hangup => SignalKind::Hangup,
@@ -482,139 +492,50 @@ fn run(
                 std::sync::atomic::Ordering::AcqRel,
                 std::sync::atomic::Ordering::Acquire,
             );
-            emergency.run(RescueReason::Signal, eve_host::RESCUE_BUDGET_SIGNAL);
-            if tx.send(HostMsg::Signal(kind)).is_err() {
-                return;
+            if shutdown.run(ShutdownTrigger::Signal(kind)) == ShutdownEnd::Exit {
+                eve_platform::signals::die_by_signal(sig.signo())
             }
-            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
-            while std::time::Instant::now() < deadline {
-                if run_finished.load(std::sync::atomic::Ordering::Acquire) {
-                    return;
-                }
-                std::thread::sleep(std::time::Duration::from_millis(10));
-            }
-            wait_zero(
-                &replacing,
-                Some(std::time::Duration::from_millis(4800).saturating_sub(t0.elapsed())),
-            );
-            if let Some(info) = restore_info.get() {
-                eve_platform::term::emergency_restore(
-                    info.handle.0,
-                    info.bytes,
-                    &info.saved_mode.0,
-                    &info.restored.0,
-                );
-            }
-            if let Some(o) = emergency.outcome() {
-                let mut err = std::io::stderr().lock();
-                for l in texts::recovery_lines(&o) {
-                    l.write_to(&mut err);
-                }
-            }
-            eve_platform::signals::die_by_signal(sig.signo())
         });
     }
 
-    // コンソールのコントロールイベント (Ctrl+Break・ウィンドウの閉鎖など)。ハンドラのスレッドは、メインを待たずに直ちに
-    // 退避を書き (CTRL_CLOSE は最大 3.5 s、それ以外は最大 2.5 s)、その後にメインへ終了を知らせる。退避はプロセスで 1 回だけ
+    // コンソールのコントロールイベント (Ctrl+Break・ウィンドウの閉鎖など、05 §11.2)。ハンドラのスレッドは OS が作る。
+    // CTRL_CLOSE は手順の後にハンドラから戻る (プロセスは OS が終わらせる)。CTRL_C / CTRL_BREAK は、メインが終わらなければ 130 で終わる
     #[cfg(windows)]
     {
-        let tx = tx.clone();
-        let emergency = emergency.clone();
-        let replacing = replacing.clone();
+        let shutdown = shutdown.clone();
         let _ = eve_platform::console::install_handler(move |ev| {
-            let t0 = std::time::Instant::now();
-            use eve_host::{RESCUE_BUDGET_CLOSE, RESCUE_BUDGET_SIGNAL};
             use eve_platform::console::CtrlEvent;
-            let (kind, reason, budget) = match ev {
-                CtrlEvent::Close => (
-                    SignalKind::ConsoleClose,
-                    RescueReason::ConsoleClose,
-                    RESCUE_BUDGET_CLOSE,
-                ),
-                CtrlEvent::CtrlC | CtrlEvent::CtrlBreak => (
-                    SignalKind::Interrupt,
-                    RescueReason::Signal,
-                    RESCUE_BUDGET_SIGNAL,
-                ),
-                _ => (
-                    SignalKind::Terminate,
-                    RescueReason::Signal,
-                    RESCUE_BUDGET_SIGNAL,
-                ),
+            let trigger = match ev {
+                CtrlEvent::Close => ShutdownTrigger::ConsoleClose,
+                CtrlEvent::CtrlC | CtrlEvent::CtrlBreak => {
+                    ShutdownTrigger::Signal(SignalKind::Interrupt)
+                }
+                _ => ShutdownTrigger::Signal(SignalKind::Terminate),
             };
-            emergency.run(reason, budget);
-            let sent = tx.send(HostMsg::Signal(kind)).is_ok();
-            // CTRL_CLOSE は送るだけで戻る (ハンドラから戻るとプロセスが終わる。端末はコンソールごと閉じられる、02 §9.6 手順 2)
-            if !sent {
-                return false;
-            }
-            if matches!(ev, CtrlEvent::Close) {
-                // 置換中フラグが下りるのを、受信から 4.3 s まで待ってから戻る (残りの 0.2 s は復帰の余裕、02 §11.2.1)
-                wait_zero(
-                    &replacing,
-                    Some(std::time::Duration::from_millis(4300).saturating_sub(t0.elapsed())),
-                );
-                return true;
-            }
-            // CTRL_C / CTRL_BREAK: 戻らずに最大 2 秒、メインの終了を待つ (戻るとプロセスが続行する)。
-            // 終わらなければメインが止まっている: 受信スレッドが端末を復元して終了する (02 §9.6 手順 4)
-            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
-            while std::time::Instant::now() < deadline {
-                if run_finished.load(std::sync::atomic::Ordering::Acquire) {
-                    return true;
+            match shutdown.run(trigger) {
+                ShutdownEnd::NotSent => false,
+                ShutdownEnd::Exit => {
+                    std::process::exit(i32::from(eve_host::ExitCode::INTERRUPTED.0))
                 }
-                std::thread::sleep(std::time::Duration::from_millis(10));
+                _ => true,
             }
-            // 置換中フラグが下りるのを、受信から 4.8 s まで (復元の 200 ms を残して) 待つ
-            wait_zero(
-                &replacing,
-                Some(std::time::Duration::from_millis(4800).saturating_sub(t0.elapsed())),
-            );
-            if let Some(info) = restore_info.get() {
-                eve_platform::term::emergency_restore(
-                    info.handle.0,
-                    info.bytes,
-                    &info.saved_mode.0,
-                    &info.restored.0,
-                );
-            }
-            // 退避の結果はベストエフォートで 1 回出す (端末の復元の後)
-            if let Some(o) = emergency.outcome() {
-                let mut err = std::io::stderr().lock();
-                for l in texts::recovery_lines(&o) {
-                    l.write_to(&mut err);
-                }
-            }
-            std::process::exit(130)
         });
     }
 
     // ログオフ・シャットダウン (v0.2、ベストエフォート。05 §11.2 の「セッション終了の受け方」): 専用スレッドの非表示の
-    // トップレベルウィンドウで受ける。問い合わせ (`WM_QUERYENDSESSION`) で退避を (使い捨てのスレッドで) 始め、終了の通知
-    // (`WM_ENDSESSION`) では退避の完了と置換中フラグを待ってから、メインへ終了を知らせて戻る。取り消しでは何もしない
+    // トップレベルウィンドウで受ける。問い合わせ (`WM_QUERYENDSESSION`、使い捨てのスレッドで呼ばれる) で退避を始め、
+    // 終了の通知 (`WM_ENDSESSION`) で手順を行って戻る。取り消しでは何もしない
     #[cfg(windows)]
     {
-        let tx = tx.clone();
-        let emergency = emergency.clone();
-        let replacing = replacing.clone();
+        let shutdown = shutdown.clone();
         let _ = eve_platform::session::start(&texts::session_block_reason(), move |ev| {
-            use eve_host::RESCUE_BUDGET_SESSION;
             use eve_platform::session::SessionEvent;
             match ev {
-                // 使い捨てのスレッドで呼ばれるので、ここで書いてよい
                 SessionEvent::QueryEnd => {
-                    emergency.run(RescueReason::SessionEnd, RESCUE_BUDGET_SESSION);
+                    let _ = shutdown.run(ShutdownTrigger::SessionQuery);
                 }
                 SessionEvent::End { ending: true } => {
-                    let t0 = std::time::Instant::now();
-                    // 問い合わせで始めた退避の完了を待つ (届いていなければここで書く)。退避は 1 回だけ
-                    emergency.run(RescueReason::SessionEnd, RESCUE_BUDGET_SESSION);
-                    wait_zero(
-                        &replacing,
-                        Some(std::time::Duration::from_millis(4300).saturating_sub(t0.elapsed())),
-                    );
-                    let _ = tx.send(HostMsg::Signal(SignalKind::Terminate));
+                    let _ = shutdown.run(ShutdownTrigger::SessionEnd);
                 }
                 _ => {}
             }
@@ -644,7 +565,7 @@ fn run(
     frontend.restore_terminal();
     // 保存の置換・直接上書きの最中なら、終わるまで待つ (途中で終わると元のファイルが壊れる、02 §9.6 手順 3)。端末は復元済みで
     // 画面に何も出ないので、待つ前に stderr で知らせる
-    wait_replacing(&replacing, None);
+    wait_replacing(&shutdown, &replacing);
     // コンソールのハンドラが退避を書いている最中なら、終わるまで待つ (先にメインが終わると書込が打ち切られる)
     emergency.wait_if_writing(eve_host::RESCUE_BUDGET_CLOSE);
     match outcome {
@@ -666,7 +587,7 @@ fn run(
             // パニック: 退避 (最大 5 s。メインの catch_unwind の後) → 端末の復元は済み → panic.header → 退避の結果 → クラッシュログ → 報告先
             let rescued = emergency.run(RescueReason::Panic, eve_host::RESCUE_BUDGET_FATAL);
             // 退避の後、置換中フラグを最大 1 s 待つ (合計 5 s の内、02 §11.2.1)
-            wait_zero(&replacing, Some(std::time::Duration::from_secs(1)));
+            shutdown.wait_replacing(Some(eve_host::REPLACING_WAIT_FATAL));
             let mut err = std::io::stderr().lock();
             texts::panic_header().write_to(&mut err);
             if let Some(o) = rescued {
@@ -684,22 +605,8 @@ fn run(
     }
 }
 
-/// 置換中フラグが下りるまで待つ。`limit` が `None` なら無期限。下りたら `true`。
-fn wait_zero(replacing: &eve_core::ReplacingCount, limit: Option<std::time::Duration>) -> bool {
-    let start = std::time::Instant::now();
-    loop {
-        if replacing.is_zero() {
-            return true;
-        }
-        if limit.is_some_and(|l| start.elapsed() >= l) {
-            return false;
-        }
-        std::thread::sleep(std::time::Duration::from_millis(5));
-    }
-}
-
-/// 置換中フラグが下りるまで待つ。上がっていたら、待ち始める前に stderr へ 1 行ずつ知らせる。
-fn wait_replacing(replacing: &eve_core::ReplacingCount, limit: Option<std::time::Duration>) {
+/// 置換中フラグが下りるまで (期限なしで) 待つ。上がっていたら、待ち始める前に stderr へ 1 行ずつ知らせる (02 §9.6)。
+fn wait_replacing(shutdown: &NonInteractiveShutdown, replacing: &eve_core::ReplacingCount) {
     if replacing.is_zero() {
         return;
     }
@@ -709,7 +616,7 @@ fn wait_replacing(replacing: &eve_core::ReplacingCount, limit: Option<std::time:
             texts::waiting_save(&p).write_to(&mut err);
         }
     }
-    wait_zero(replacing, limit);
+    shutdown.wait_replacing(None);
 }
 
 /// クラッシュログを `state_dir/log/crash-<pid>-<秒>.txt` に書く (09 §10)。パニックのメッセージ・場所・バックトレースだけで、
