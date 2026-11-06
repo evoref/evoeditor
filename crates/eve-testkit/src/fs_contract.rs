@@ -28,13 +28,6 @@ pub struct Caps {
     /// `write_recovery` で書いた退避が `list_recovery_dirs` に `rescue = true` で現れる (02 §4.5)。MemFs はテストが積んだ
     /// ものだけを返すので `false` (既知の差)。
     pub recovery_listing_reflects_writes: bool,
-    /// ディレクトリの `open_read` が `InvalidPath` を返す (05 §2.1 の写像の表、§4.5)。WinFs は `File::open` が
-    /// `ERROR_ACCESS_DENIED` で失敗し `PermissionDenied` になるので `false` (既知の差)。
-    pub open_dir_is_invalid_path: bool,
-    /// `write_atomic` の供給側が `ChunkError::Io` を返したら `SourceFailed` にする (02 §4.5 の write_atomic の注は「data の失敗
-    /// (ChunkError) で SourceFailed」)。WinFs・UnixFs は中の `FsError` をそのまま返すので `false` (既知の差。`Io` は 02 §4.5 では
-    /// 読込側の変種で、core のエンコーダは返さない)。
-    pub source_io_is_source_failed: bool,
 }
 
 impl Default for Caps {
@@ -42,8 +35,6 @@ impl Default for Caps {
         Caps {
             state_dir: true,
             recovery_listing_reflects_writes: true,
-            open_dir_is_invalid_path: true,
-            source_io_is_source_failed: true,
         }
     }
 }
@@ -283,11 +274,7 @@ fn read_after_write(s: &Subject) {
 // 05 §2.1 の写像の表 (ディレクトリは InvalidPath)、§4.5
 fn open_read_dir(s: &Subject) {
     let e = s.fs.open_read(&s.root).map(|_| ()).unwrap_err();
-    if s.caps.open_dir_is_invalid_path {
-        assert_eq!(e.kind, FsErrorKind::InvalidPath);
-    } else {
-        assert_eq!(e.kind, FsErrorKind::PermissionDenied, "既知の差が変わった");
-    }
+    assert_eq!(e.kind, FsErrorKind::InvalidPath);
 }
 
 // 05 §3.3 (canonicalize)、§5.4 (同一性の判定に使う)。無いパスは NotFound (05 §2.1)
@@ -415,8 +402,8 @@ fn source_failure_keeps_original(s: &Subject) {
     let names = s.names();
     let q = s.p("n.txt");
     for how in [How::Unmappable, How::Aborted, How::OutOfMemory, How::Io] {
-        // `Io` は 02 §4.5 では読込側の変種。保存の供給側が返したときの扱いは実装の差 (`Caps`)
-        let want = if how == How::Io && !s.caps.source_io_is_source_failed {
+        // `Io` (読込側の変種) を保存の供給側が返したら、中の `FsError` をそのまま返す (02 §4.5 の write_atomic の注)
+        let want = if how == How::Io {
             FsErrorKind::Other
         } else {
             FsErrorKind::SourceFailed

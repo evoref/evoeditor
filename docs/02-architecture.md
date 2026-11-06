@@ -409,7 +409,7 @@ trait FileSystem: Send + Sync {
     fn canonicalize(&self, path: &FsPath) -> Result<FsPath, FsError>;
     fn open_read(&self, path: &FsPath) -> Result<Box<dyn ReadChunks + Send>, FsError>; // チャンク読込 (既定 1 MiB)。キャンセルはジョブが next_chunk の間で CancelToken を見る (§4.4)。
                                                                              // NotFound の区別は metadata と同じ (親フォルダが無ければ ParentMissing)
-    fn write_atomic(&self, path: &FsPath, data: &mut dyn ReadChunks, opts: &SaveOptions) -> Result<SaveReport, FsError>; // data の失敗 (ChunkError) で書込を止め、一時ファイルを消して SourceFailed を返す
+    fn write_atomic(&self, path: &FsPath, data: &mut dyn ReadChunks, opts: &SaveOptions) -> Result<SaveReport, FsError>; // data の失敗 (ChunkError) で書込を止め、一時ファイルを消して SourceFailed を返す。ただし ChunkError::Io(e) (読込側の変種。core のエンコーダは返さない) を受けたときは中の e をそのまま返す (v0.3 の M16 で実装に合わせて明記)
         // 取消し: data (core のエンコーダ) が一時ファイルへの書込の間に CancelToken を見て ChunkError::Aborted を返せる。
         // ReplaceFileW (新規ファイルは MoveFileExW、Unix は rename) の呼出しを始めた後は取消しを見ず、完了まで進めて結果 (Saved になる SaveReport、または失敗) を返す (下表「取消し」)
     fn write_in_place(&self, path: &FsPath, data: &mut dyn ReadChunks, len: u64, opts: &SaveOptions, cancel: &CancelToken) -> Result<SaveReport, FsError>;

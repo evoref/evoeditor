@@ -736,7 +736,8 @@ impl FileSystem for MemFs {
                     buf.extend_from_slice(chunk);
                 }
                 Ok(None) => break,
-                // 供給側の失敗: 一時ファイルは消え、元ファイルは無傷
+                // 供給側の失敗: 一時ファイルは消え、元ファイルは無傷。`Io` は中の FsError のまま (02 §4.5、実 FS と同じ)
+                Err(ChunkError::Io(e)) => return Err(e),
                 Err(_) => return Err(FsError::new(FsErrorKind::SourceFailed)),
             }
         }
