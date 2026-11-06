@@ -55,7 +55,19 @@ impl fmt::Display for StartError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             StartError::Init(e) | StartError::Frontend(e) => e.fmt(f),
-            StartError::NoWindow => write!(f, "起動時に Window を作れませんでした"),
+            StartError::NoWindow => write!(f, "could not create the window at startup"),
+        }
+    }
+}
+
+impl StartError {
+    /// stderr の理由の文言のキー (bin の表 `stderr.reason.*`) と、OS の誤りの詳細。
+    pub fn reason_key(&self) -> (String, Option<String>) {
+        match self {
+            StartError::Init(e) | StartError::Frontend(e) => {
+                (format!("frontend.{}", e.kind.key()), e.detail.clone())
+            }
+            StartError::NoWindow => ("start.no_window".to_owned(), None),
         }
     }
 }
@@ -375,9 +387,13 @@ impl Host {
                 frontend.restore();
                 ("stderr.fatal", ExitCode(1))
             };
+            // 理由は文言のキーと OS の詳細で渡す (bin が UI の言語の文にする。STR-C2)
+            let (reason_key, detail) = e.reason_key();
+            let mut args = vec![("reason_key".to_owned(), reason_key)];
+            args.extend(detail.map(|d| ("detail".to_owned(), d)));
             self.exit_stderr.push(StderrLine {
                 key: key.to_owned(),
-                args: vec![("reason".to_owned(), e.to_string())],
+                args,
             });
             return code;
         }

@@ -499,7 +499,7 @@ impl StateRescue {
         ) {
             Ok(x) => x,
             Err(e) => {
-                out.error = Some(e.to_string());
+                out.error = Some(eve_core::RescueError::Io(e.to_string()));
                 stages.mark("ディレクトリ (失敗)");
                 stages.finish(&out);
                 return out;
@@ -569,7 +569,7 @@ impl StateRescue {
                 Ok(None) => break,
                 // 書込の失敗: この文書は `written = false` のまま、次の文書へ (時間切れでなければ続ける)
                 Err(e) => {
-                    out.error = Some(e.to_string());
+                    out.error = Some(eve_core::RescueError::Io(e.to_string()));
                     let _ = publish(&entries, false);
                 }
             }
@@ -579,7 +579,7 @@ impl StateRescue {
         stages.mark("完了の manifest");
         stages.finish(&out);
         if out.written == 0 && out.total > 0 && out.error.is_none() {
-            out.error = Some("書き込めませんでした".to_owned());
+            out.error = Some(eve_core::RescueError::NotWritten);
         }
         out
     }

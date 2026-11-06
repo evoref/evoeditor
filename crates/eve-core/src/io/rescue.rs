@@ -59,7 +59,34 @@ pub struct RescueOutcome {
     /// 秘密を含み得る文書 (`sensitive`) を退避した。
     pub sensitive: bool,
     /// 退避できなかった理由 (何も書けなかったとき)。
-    pub error: Option<String>,
+    pub error: Option<RescueError>,
+}
+
+/// 退避できなかった理由。stderr の文言は bin が UI の言語に合わせて作る (日本語の文字列を運ばない、01 NFR-603。
+/// docs/review/v0.3-findings.md の STR-C2)。
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum RescueError {
+    /// OS の入出力の誤り (文は OS が作ったもの)。
+    Io(String),
+    /// 時間内に 1 件も書けなかった。
+    NotWritten,
+    /// 退避の書き手が panic した (内部の誤り)。
+    WriterPanicked,
+    /// 退避の書き手が設定されていない (内部の誤り)。
+    NoWriter,
+}
+
+impl std::fmt::Display for RescueError {
+    /// ログとエラーの連鎖のための英語の短い文 (利用者への文言は bin の `texts`)。
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            RescueError::Io(s) => f.write_str(s),
+            RescueError::NotWritten => f.write_str("nothing could be written in time"),
+            RescueError::WriterPanicked => f.write_str("the rescue writer panicked"),
+            RescueError::NoWriter => f.write_str("no rescue writer is set"),
+        }
+    }
 }
 
 impl RescueOutcome {

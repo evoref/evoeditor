@@ -65,7 +65,8 @@ macro_rules! state_dir_methods {
                 _ => {
                     let msg = out
                         .error
-                        .unwrap_or_else(|| "書き込めませんでした".to_owned());
+                        .unwrap_or(::eve_core::RescueError::NotWritten)
+                        .to_string();
                     let mut e = ::eve_core::FsError::new(::eve_core::FsErrorKind::Other);
                     e.source = Some(::std::io::Error::other(msg));
                     Err(e)

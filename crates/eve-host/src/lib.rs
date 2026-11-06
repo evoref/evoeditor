@@ -17,8 +17,8 @@ pub use clock::SystemClock;
 pub use emergency::{EmergencyCtl, EmergencyState};
 pub use eve_platform::clipboard::{ClipboardFailure, ClipboardProvider};
 pub use frontend::{
-    EffectOutcome, EmergencyRestoreInfo, Frontend, FrontendConfig, FrontendError, InputSink,
-    RenderOutcome,
+    EffectOutcome, EmergencyRestoreInfo, Frontend, FrontendConfig, FrontendError,
+    FrontendErrorKind, InputSink, RenderOutcome,
 };
 pub use host::{
     Host, RESCUE_BUDGET_CLOSE, RESCUE_BUDGET_FATAL, RESCUE_BUDGET_SESSION, RESCUE_BUDGET_SIGNAL,

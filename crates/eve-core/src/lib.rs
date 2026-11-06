@@ -46,7 +46,7 @@ pub use io::last_version::{LAST_VERSION_FILE, LastVersionOutcome};
 pub use io::leftover::{Leftover, LeftoverKind, LeftoverOp};
 pub use io::paths::Paths;
 pub use io::replacing::{ReplacingCount, ReplacingGuard};
-pub use io::rescue::{RescueOutcome, RescueReason, RescueWriter};
+pub use io::rescue::{RescueError, RescueOutcome, RescueReason, RescueWriter};
 pub use io::secret::is_secret_path;
 pub use io::unmap::{ReplaceCounts, ReplaceTarget};
 pub use jobs::{
