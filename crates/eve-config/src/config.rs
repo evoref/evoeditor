@@ -405,7 +405,6 @@ pub struct Loaded {
 /// 公開キーを持つセクション (公開キーの先頭の名前。並びは `--dump-config` の出力の順、07 §5 の表の順)。
 const SECTIONS: &[&str] = &["editor", "file", "view", "theme", "ui", "clipboard"];
 
-const THEME_NAMES: &[&str] = &["default", "default-dark", "default-light", "ansi"];
 const LOCALES: &[&str] = &["auto", "ja", "en"];
 
 /// `--dump-config` の並びの順位: セクション (`SECTIONS` の順)、セクションの直下のキー、入れ子のキー (`file.swap.*`)。
@@ -693,7 +692,7 @@ fn read_theme_name(cx: &mut Cx<'_>, key: &str, v: &Spanned<DeValue<'_>>) -> Opti
     if is_theme_name(&s) {
         Some(s)
     } else {
-        cx.invalid(key, THEME_NAMES, v);
+        cx.invalid(key, crate::theme::BUILTIN_NAMES, v);
         None
     }
 }

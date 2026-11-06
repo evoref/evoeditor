@@ -14,7 +14,7 @@ pub mod reserved;
 pub mod theme;
 pub mod theme_file;
 
-pub use catalog::{Catalog, CatalogError, base_key};
+pub use catalog::{Catalog, CatalogError, base_key, placeholders};
 pub use config::{
     BackspaceUnit, ColorMode, Config, DefaultEncoding, DefaultLineEnding, DiagKind, Diagnostic,
     ExternalChangePolicy, IndentUnit, KeymapProblem, Loaded, Osc52Policy, Severity, ShowWhitespace,

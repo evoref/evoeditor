@@ -44,5 +44,7 @@ eve-testkit = { version = "0.2.0", path = "../eve-testkit" }
 # 入力スレッドの panic を Host まで通す試験 (frontend.rs) で Host を組む (Ports)
 eve-core = { version = "0.2.0", path = "../eve-core" }
 eve-docs-tables = { version = "0.2.0", path = "../eve-docs-tables" }
+# 色の近似を eve-config の同じ近似と突合する (tests/color_cross.rs、STR-E4)
+eve-config = { version = "0.2.0", path = "../eve-config" }
 unicode-width = "0.2"
 proptest = "1.12.0"
