@@ -1809,10 +1809,14 @@ struct DocumentInfo {
     revision: Revision,
     dirty: bool,
     load_state: LoadStateView,                     // eve-view 用の列挙 (eve-core の load_state を写したもの)
-    read_only: Vec<String>,                        // ReadOnlyReason (§5.1) の変種名を PascalCase のまま優先順に (例 "FileAttribute", "InvalidBytes")
+    read_only: Vec<ReadOnlyReasonView>,            // 読み取り専用の理由を優先順に (空なら理由なし)。v0.3 で Vec<String> (変種名の文字列) から型に改めた (STR-C6)
     views: Vec<ViewId>,                            // この文書を表示している View (v0.1 は 1 つ)
 }
 enum LoadStateView { Loading, Ready, Failed }      // Partial は v0.4 で足す (§5.1 の予約)
+enum ReadOnlyReasonView {                          // eve-core の ReadOnlyReason (§5.1、03 §9.6) を 1 対 1 に写したもの。変換は eve-core
+    FileAttribute, UserRequested, NoWritePermission, InvalidBytes, StatefulEncodingWithInvalidBytes,
+    Binary, LargeFileViewer, LoadIncomplete,
+}
 struct WindowInfo { window: WindowId, views: Vec<ViewId>, focus: FocusTarget /*§8.2*/ }
 struct ByteRange { start: u64, end: u64 }          // eve-view の位置の範囲 (バイトオフセット、ADR-0010)。eve-text の同名の型 (ByteOff (usize) の組、03 §19) とは別の型で、
                                                    // eve-view は他の eve-* に依存しないので別に持つ。所有と変換規則は §12.2
@@ -2042,7 +2046,7 @@ sensitive = false                     # 任意 (無ければ false)。秘密フ�
 
 | 型 / 概念 | 定義する crate | 詳細を書く文書 |
 |---|---|---|
-| `InputEvent`, `KeyEvent`, `Frame`, `Style`, `Effect`, `Capabilities`, `EditorEvent` / `OriginKind`, `Query` / `Answer` / `QueryError` / `DocumentInfo` / `WindowInfo` / `LoadStateView`, `ByteRange`, `CONTRACT_VERSION`、緊急の端末復元に渡す平文の型 (`RawTermHandle` / `SavedTermMode` / `TermRestoredFlag`、§9.2)、`Effect` の付属型 (`QuitRescue` / `ClipboardTarget` / `StderrLine`、§6.3)、境界型が使う ID 型 (`DocumentId` / `ViewId` / `WindowId` / `Revision` / `ViewRevision` (§8.2) / `ProposalId` / `AiRequestId` / `HunkId` (§10.2.1) / `ChoiceId` (§8.2) / `ClipboardHandleId` / `ClipboardToken` (§6.3) / `ClientId` / `PluginId` (v1.X の予約) / `JobId`)、`SpanText` | eve-view | 02 (骨格・正本) → 04 (TUI 解釈) / 03 (意味的 UI モデルの詳細・生成側) |
+| `InputEvent`, `KeyEvent`, `Frame`, `Style`, `Effect`, `Capabilities`, `EditorEvent` / `OriginKind`, `Query` / `Answer` / `QueryError` / `DocumentInfo` / `WindowInfo` / `LoadStateView` / `ReadOnlyReasonView`, `ByteRange`, `CONTRACT_VERSION`、緊急の端末復元に渡す平文の型 (`RawTermHandle` / `SavedTermMode` / `TermRestoredFlag`、§9.2)、`Effect` の付属型 (`QuitRescue` / `ClipboardTarget` / `StderrLine`、§6.3)、境界型が使う ID 型 (`DocumentId` / `ViewId` / `WindowId` / `Revision` / `ViewRevision` (§8.2) / `ProposalId` / `AiRequestId` / `HunkId` (§10.2.1) / `ChoiceId` (§8.2) / `ClipboardHandleId` / `ClipboardToken` (§6.3) / `ClientId` / `PluginId` (v1.X の予約) / `JobId`)、`SpanText` | eve-view | 02 (骨格・正本) → 04 (TUI 解釈) / 03 (意味的 UI モデルの詳細・生成側) |
 | `CommandId`, `CommandSpec`, `ContextExpr`, `InvocationSource` | eve-core (`CommandId` は eve-view) | 02 (骨格) → 07 (カタログ・when 変数・参照書式) |
 | `Transaction`, `ChangeSet`, `Origin` | eve-text / eve-core (`Revision` の型は eve-view。eve-text の `Snapshot` は Revision を持たず、対にするのは Document、§5.3) | 03 |
 | `ClipboardText` (`Effect::SetClipboard` の中身) | eve-view (`Inline(String)` / `Handle(ClipboardHandleId)` の serde 可能な列挙) / eve-core (ハンドルの表と `Editor::take_clipboard`) | 02 §6.3 |

@@ -113,8 +113,8 @@ pub struct DocumentInfo {
     pub revision: Revision,
     pub dirty: bool,
     pub load_state: LoadStateView,
-    /// 読み取り専用の理由 (eve-core の `ReadOnlyReason` の変種名を PascalCase のまま、優先順に)。
-    pub read_only: Vec<String>,
+    /// 読み取り専用の理由 (優先順。空なら理由なし)。読込中かどうかは `load_state` で見る。
+    pub read_only: Vec<ReadOnlyReasonView>,
     /// この文書を表示している View (v0.1 は 1 つ)。
     pub views: Vec<ViewId>,
 }
@@ -126,6 +126,29 @@ pub enum LoadStateView {
     Loading,
     Ready,
     Failed,
+}
+
+/// 読み取り専用の理由 (eve-core の `ReadOnlyReason` (03 §9.6) を写したもの。宣言順が表示の優先順)。
+/// eve-view は eve-core に依存しないので、同じ変種を持つ別の型にし、変換は eve-core が行う (02 §12.2)。
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum ReadOnlyReasonView {
+    /// ファイルの読み取り専用属性 (`file.toggle_read_only` で解除できる)。
+    FileAttribute,
+    /// 利用者の指定 (`--readonly`・`file.toggle_read_only`)。
+    UserRequested,
+    /// 書込み権限が無い。
+    NoWritePermission,
+    /// 不正なバイトを含む。
+    InvalidBytes,
+    /// 状態を持つ文字コード (ISO-2022-JP など) で、不正なバイトを含む。
+    StatefulEncodingWithInvalidBytes,
+    /// バイナリとして開いた。
+    Binary,
+    /// 巨大ファイルの閲覧モード。
+    LargeFileViewer,
+    /// 読込を最後まで終えていない。
+    LoadIncomplete,
 }
 
 /// Window の情報。

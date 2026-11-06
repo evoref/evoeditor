@@ -1124,6 +1124,14 @@ fn render_which_key(
     }
 }
 
+/// eve-tui が知らないオーバーレイの既定描画 (02 §8.4 の「frontend は既定描画を持つ」)。何も描かず、カーソルも動かさない
+/// (下の編集面・クロームはそのまま見える。パニックしない)。変種の中身は `#[non_exhaustive]` の外から読めないので、
+/// 04 §16 の「`Confirm` / `List` に退化させて描く」はこの層だけではできない。変種を足す PR が TUI の描画を同時に足す
+/// (02 §8.4 の前者)。今の変種 (`Confirm` / `Prompt` / `List` / `Help`) はすべて上の腕で描くので、ここへは来ない。
+fn render_unknown_overlay() -> Option<CellPos> {
+    None
+}
+
 /// リスト選択 (コマンドパレット、04 §8.1)。上部中央。入力欄 1 行 + 候補 (最大 12 行) + 枠。
 fn render_list(
     w: &mut Writer<'_>,
@@ -1431,7 +1439,7 @@ pub fn render_screen(
                 OverlayModel::Prompt { .. } => render_prompt(&mut w, area, ov, &theme, glyphs),
                 OverlayModel::List { .. } => render_list(&mut w, area, ov, &theme, glyphs),
                 OverlayModel::Help { .. } => render_help(&mut w, area, ov, &theme),
-                _ => None,
+                _ => render_unknown_overlay(),
             };
             if c.is_some() {
                 cursor = c;
