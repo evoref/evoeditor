@@ -13,7 +13,6 @@ use crate::command::{
     CommandCtx, CommandKind, CommandRegistry, CommandResult, Permission, RejectReason,
 };
 use crate::editor::state::EditorState;
-use crate::keymap::format_sequence;
 use crate::layout::cell_text;
 use crate::ui_model::keys;
 use crate::ui_model::overlay::Overlay;
@@ -96,7 +95,7 @@ impl EditorState {
             let keys = seqs
                 .iter()
                 .map(|(s, ok)| {
-                    let k = format_sequence(s);
+                    let k = eve_view::key_notation(s, self.term.caps.ascii_only);
                     if *ok {
                         k
                     } else {

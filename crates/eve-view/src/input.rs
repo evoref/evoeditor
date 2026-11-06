@@ -162,9 +162,90 @@ pub struct KeyStroke {
     pub key: KeyCode,
 }
 
+/// キーの表示用の表記 (04 §7.8)。core (`{key:…}`・ヘルプのキー一覧・チョードの表示) と frontend (パレット・ヒントバー) が
+/// 共有する唯一の関数。`Ctrl+Shift+S` の形で、チョードは空白区切り (`Ctrl+K S`)。修飾は `Ctrl` `Alt` `Shift` `Super` の順。
+/// キー名は先頭を大文字にする (`Delete` `Insert` `PrintScreen`)。例外は `PgUp` / `PgDn` と矢印 (`↑` `↓` `←` `→`。
+/// `ascii` (`Capabilities.ascii_only`) が真なら `Up` `Down` `Left` `Right`)。言語に依存しない。
+/// ヒントバーの圧縮表記 (`^S`) は frontend が作る。
+pub fn key_notation(strokes: &[KeyStroke], ascii: bool) -> String {
+    let mut out = String::new();
+    for (i, k) in strokes.iter().enumerate() {
+        if i > 0 {
+            out.push(' ');
+        }
+        for (m, name) in [
+            (Modifiers::CTRL, "Ctrl"),
+            (Modifiers::ALT, "Alt"),
+            (Modifiers::SHIFT, "Shift"),
+            (Modifiers::SUPER, "Super"),
+        ] {
+            if k.mods.contains(m) {
+                out.push_str(name);
+                out.push('+');
+            }
+        }
+        let arrow = |sym: &'static str, word: &'static str| if ascii { word } else { sym };
+        let name = match k.key {
+            KeyCode::Char(' ') => "Space",
+            KeyCode::Char(c) => {
+                out.extend(c.to_uppercase());
+                continue;
+            }
+            KeyCode::F(n) => {
+                out.push_str(&format!("F{n}"));
+                continue;
+            }
+            KeyCode::Enter => "Enter",
+            KeyCode::Tab => "Tab",
+            KeyCode::Esc => "Esc",
+            KeyCode::Backspace => "Backspace",
+            KeyCode::Delete => "Delete",
+            KeyCode::Insert => "Insert",
+            KeyCode::Home => "Home",
+            KeyCode::End => "End",
+            KeyCode::PageUp => "PgUp",
+            KeyCode::PageDown => "PgDn",
+            KeyCode::Up => arrow("↑", "Up"),
+            KeyCode::Down => arrow("↓", "Down"),
+            KeyCode::Left => arrow("←", "Left"),
+            KeyCode::Right => arrow("→", "Right"),
+            KeyCode::Menu => "Menu",
+            KeyCode::CapsLock => "CapsLock",
+            KeyCode::PrintScreen => "PrintScreen",
+        };
+        out.push_str(name);
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn キーの表示の表記() {
+        let k = |mods, key| KeyStroke { mods, key };
+        let seq = [
+            k(Modifiers::CTRL, KeyCode::Char('k')),
+            k(Modifiers::NONE, KeyCode::Char('s')),
+        ];
+        assert_eq!(key_notation(&seq, false), "Ctrl+K S");
+        let up = [k(Modifiers::CTRL | Modifiers::SHIFT, KeyCode::Up)];
+        assert_eq!(key_notation(&up, false), "Ctrl+Shift+↑");
+        assert_eq!(key_notation(&up, true), "Ctrl+Shift+Up");
+        for (key, want) in [
+            (KeyCode::PageDown, "PgDn"),
+            (KeyCode::PageUp, "PgUp"),
+            (KeyCode::Delete, "Delete"),
+            (KeyCode::Insert, "Insert"),
+            (KeyCode::PrintScreen, "PrintScreen"),
+            (KeyCode::Char(' '), "Space"),
+            (KeyCode::F(12), "F12"),
+        ] {
+            assert_eq!(key_notation(&[k(Modifiers::NONE, key)], false), want);
+        }
+        assert_eq!(key_notation(&[], false), "");
+    }
 
     #[test]
     fn 修飾の集合() {

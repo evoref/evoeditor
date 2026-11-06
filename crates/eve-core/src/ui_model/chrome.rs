@@ -166,7 +166,10 @@ pub(crate) fn status_model(
         ));
     }
     if !chord.is_empty() {
-        let text = format!("{} …", crate::keymap::format_sequence(chord));
+        let text = format!(
+            "{} …",
+            eve_view::key_notation(chord, state.term.caps.ascii_only)
+        );
         items.push(item(
             StatusKind::Chord,
             &text,

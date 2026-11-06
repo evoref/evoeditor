@@ -131,7 +131,8 @@ pub fn parse_sequence(s: &str) -> Result<Vec<KeyStroke>, KeyParseError> {
     }
 }
 
-/// ストロークの表示表記 (`Ctrl+S`。04 §7.8。TUI は全 OS で `Ctrl`)。言語に依存しない ASCII。
+/// ストロークの機械向けの表記 (`Ctrl+S`、`PageDown`、`Up`)。設定の診断のキー (`keys.<context>.<keys>`) と
+/// ゴールデンの `default_keymap.tsv` に使う。**画面に出す表記は `eve_view::key_notation`** (04 §7.8。`PgDn`、`↑`)。
 pub fn format_stroke(k: KeyStroke) -> String {
     let mut s = String::new();
     for (m, name) in [
@@ -171,7 +172,7 @@ pub fn format_stroke(k: KeyStroke) -> String {
     s
 }
 
-/// チョードを含むストローク列の表記 (`Ctrl+K S`)。
+/// チョードを含むストローク列の機械向けの表記 (`Ctrl+K S`)。画面には `eve_view::key_notation` を使う。
 pub fn format_sequence(seq: &[KeyStroke]) -> String {
     seq.iter()
         .map(|k| format_stroke(*k))
@@ -457,7 +458,7 @@ impl Keymap {
         self.pending.clear();
     }
 
-    /// `first_bindings` の表示表記版。
+    /// `first_bindings` の機械向けの表記版 (試験用)。
     pub fn first_labels(&self, contexts: &[&str]) -> std::collections::BTreeMap<String, String> {
         self.first_bindings(contexts)
             .into_iter()

@@ -5,8 +5,8 @@
 6: 1-8 Reset Reset BOLD
 7: 2-17 Reset Reset BOLD
 8: 2-7 Reset Reset BOLD
-9: 2-24 Reset Reset BOLD
-10: 2-22 Reset Reset BOLD
+9: 2-20 Reset Reset BOLD
+10: 2-20 Reset Reset BOLD
 11: 1-14 Reset Reset BOLD
 12: 2-20 Reset Reset BOLD
 13: 0-32 Reset Reset DIM

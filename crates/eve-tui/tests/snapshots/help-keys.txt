@@ -7,8 +7,8 @@
  バッファ
   Ctrl+W, Ctrl+K W           閉じる
   Ctrl+E                     一覧
-  Ctrl+PageDown, Ctrl+K N    次の文書
-  Ctrl+PageUp, Ctrl+K P      前の文書
+  Ctrl+PgDn, Ctrl+K N        次の文書
+  Ctrl+PgUp, Ctrl+K P        前の文書
  クリップボード
   Ctrl+C, Ctrl+Insert        コピー
 ↑↓ PgUp PgDn で移動、Esc で閉じる
