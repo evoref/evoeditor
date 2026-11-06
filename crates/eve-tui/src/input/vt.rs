@@ -13,7 +13,7 @@
 
 use eve_view::{InputEvent, KeyCode, KeyEvent, Modifiers};
 
-use crate::input::MAX_TEXT_BYTES;
+use super::{TextItem, push_text};
 use crate::mouse::{MouseRec, button_bits};
 
 /// 解析の結果。
@@ -206,7 +206,6 @@ impl VtParser {
         let mut data = std::mem::take(&mut self.pending);
         data.extend_from_slice(bytes);
         let mut out = Vec::new();
-        let mut text = String::new();
         let mut i = 0;
         // ブラケットペーストの終了の後ろ (同じ読取の中) か
         let mut after_paste = false;
@@ -218,7 +217,6 @@ impl VtParser {
                         body.extend_from_slice(&data[i..i + at]);
                         i += at + PASTE_END.len();
                         let body = self.paste.take().unwrap_or_default();
-                        flush_text(&mut text, &mut out);
                         out.push(VtOut::Event(InputEvent::Paste(
                             String::from_utf8_lossy(&body).into_owned(),
                         )));
@@ -230,7 +228,6 @@ impl VtParser {
                         let keep = partial_suffix(rest, PASTE_END);
                         body.extend_from_slice(&rest[..rest.len() - keep]);
                         self.pending = rest[rest.len() - keep..].to_vec();
-                        flush_text(&mut text, &mut out);
                         return out;
                     }
                 }
@@ -241,14 +238,7 @@ impl VtParser {
                 Unit::Incomplete => {
                     // 読取の末尾で途切れた。単独の ESC は (同じ読取に続きが無いので) Esc にする
                     if data[i] == ESC && data.len() - i == 1 {
-                        self.push_key(
-                            KeyCode::Esc,
-                            Modifiers::NONE,
-                            0x1B,
-                            after_paste,
-                            &mut text,
-                            &mut out,
-                        );
+                        self.push_key(KeyCode::Esc, Modifiers::NONE, 0x1B, after_paste, &mut out);
                         i += 1;
                         continue;
                     }
@@ -257,35 +247,31 @@ impl VtParser {
                 }
                 Unit::Skip(n) => i += n,
                 Unit::Char(n, c) => {
-                    push_char(&mut text, &mut out, c);
+                    push_char(&mut out, c);
                     i += n;
                 }
                 Unit::Key(n, code, mods) => {
                     // 制御バイト 1 つのキーなら、そのバイト (バースト規則で本文にするとき使う)
                     let raw = if n == 1 { data[i] } else { 0 };
-                    self.push_key(code, mods, raw, after_paste, &mut text, &mut out);
+                    self.push_key(code, mods, raw, after_paste, &mut out);
                     i += n;
                 }
                 Unit::Mouse(n, rec) => {
                     if !after_paste {
-                        flush_text(&mut text, &mut out);
                         out.push(VtOut::Mouse(rec));
                     }
                     i += n;
                 }
                 Unit::Focus(n, f) => {
-                    flush_text(&mut text, &mut out);
                     out.push(VtOut::Event(InputEvent::Focus(f)));
                     i += n;
                 }
                 Unit::PasteStart(n) => {
-                    flush_text(&mut text, &mut out);
                     self.paste = Some(Vec::new());
                     i += n;
                 }
             }
         }
-        flush_text(&mut text, &mut out);
         out
     }
 
@@ -308,27 +294,25 @@ impl VtParser {
         mods: Modifiers,
         raw: u8,
         after_paste: bool,
-        text: &mut String,
         out: &mut Vec<VtOut>,
     ) {
         if after_paste {
             if raw != 0 {
-                push_char(text, out, char::from(raw));
+                push_char(out, char::from(raw));
             } else if let KeyCode::Char(c) = code {
                 // Alt + 文字 (ESC 前置) は ESC と文字の 2 つ
                 if mods.contains(Modifiers::ALT) {
-                    push_char(text, out, '\u{1b}');
+                    push_char(out, '\u{1b}');
                 }
                 let c = if mods.contains(Modifiers::SHIFT) {
                     c.to_ascii_uppercase()
                 } else {
                     c
                 };
-                push_char(text, out, c);
+                push_char(out, c);
             }
             return;
         }
-        flush_text(text, out);
         out.push(VtOut::Event(key(code, mods)));
     }
 
@@ -519,17 +503,21 @@ impl VtParser {
     }
 }
 
-fn push_char(text: &mut String, out: &mut Vec<VtOut>, c: char) {
-    if text.len() + c.len_utf8() > MAX_TEXT_BYTES {
-        flush_text(text, out);
+impl TextItem for VtOut {
+    fn text_mut(&mut self) -> Option<&mut String> {
+        match self {
+            VtOut::Event(InputEvent::Text(t)) => Some(t),
+            _ => None,
+        }
     }
-    text.push(c);
+    fn from_text(s: String) -> VtOut {
+        VtOut::Event(InputEvent::Text(s))
+    }
 }
 
-fn flush_text(text: &mut String, out: &mut Vec<VtOut>) {
-    if !text.is_empty() {
-        out.push(VtOut::Event(InputEvent::Text(std::mem::take(text))));
-    }
+/// 印字可能文字を足す (連続は 1 つの `Text`、64 KiB まで)。
+fn push_char(out: &mut Vec<VtOut>, c: char) {
+    push_text(out, c.encode_utf8(&mut [0u8; 4]));
 }
 
 fn find(hay: &[u8], needle: &[u8]) -> Option<usize> {
@@ -581,6 +569,7 @@ pub fn fuzz_pipeline(data: &[u8]) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::input::MAX_TEXT_BYTES;
     use eve_view::KeyCode as K;
 
     fn ev(o: Vec<VtOut>) -> Vec<InputEvent> {

@@ -1,7 +1,7 @@
 //! Windows のコンソール入力 (docs/04 §6.1、05 §9.1)。自前の `WaitForSingleObject` + `ReadConsoleInputW` のループ
 //! (確定 (ユーザー回答)、OQ-33)。crossterm の `event::read()` は使わない。OS を呼ぶのはこのファイルだけ (R5)。
 //!
-//! 正規化とバースト検出は `input::Normalizer` (OS を呼ばない)。ここは読む・待つ・送るだけを行う (入力スレッドの責務の上限)。
+//! 正規化とバースト検出は `input::normalize::Normalizer` (OS を呼ばない)。ここは読む・待つ・送るだけを行う (入力スレッドの責務の上限)。
 //! 実測 (S-07) に基づき、**1 回の `ReadConsoleInputW` は `READ_CHUNK` 件まで** にする (10 MB の貼り付けで 1 回の
 //! `GetNumberOfConsoleInputEvents` が約 1,400 万件を返した。全体を 1 本の配列に読まない)。
 
@@ -27,20 +27,11 @@ use windows_sys::Win32::System::Console::{
 };
 use windows_sys::Win32::System::Threading::{INFINITE, WaitForSingleObject};
 
-use crate::buffer::surface_rows_for_window;
-use crate::input::{BURST_T_MS, KeyRec, Normalizer, Out, Raw};
+use super::{BURST_T_MS, InputOut, KeyRec, Normalizer, Out, Raw, surface_resize};
 use crate::mouse::{MouseRec, MouseTracker, SharedGeom};
 
 /// 1 回の `ReadConsoleInputW` で読む記録の上限。
 pub const READ_CHUNK: usize = 4096;
-
-/// 入力の送り先 (本番は `eve_host::InputSink`、テストや診断は別の実装)。
-pub trait InputOut: Send + 'static {
-    /// `InputEvent` を送る。受け手が閉じていれば `false`。
-    fn event(&self, ev: InputEvent) -> bool;
-    /// 入力スレッドが続けられなくなった (入力ハンドルの失敗)。
-    fn died(&self);
-}
 
 /// コンソールのハンドル (`Send` にするための包み。ハンドルは OS が管理するスレッド間で使える値)。
 struct Handle(HANDLE);
@@ -171,15 +162,6 @@ fn window_size(output: HANDLE) -> io::Result<CellSize> {
         cols: u16::try_from(w.max(0)).unwrap_or(0),
         rows: u16::try_from(h.max(0)).unwrap_or(0),
     })
-}
-
-/// 端末のウィンドウの大きさから、編集面の `Resize` を作る (クローム行を除く、04 §3.1)。`hint_bar` は最後の Frame の
-/// ヒントバーの表示 (隠していればその行も編集面に入れる、FR-504)。
-pub fn surface_resize(window: CellSize, hint_bar: bool) -> InputEvent {
-    InputEvent::Resize {
-        cols: window.cols,
-        rows: surface_rows_for_window(window.rows, hint_bar),
-    }
 }
 
 enum Wait {

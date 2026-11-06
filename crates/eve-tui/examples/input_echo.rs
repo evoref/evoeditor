@@ -9,7 +9,8 @@ fn main() -> std::io::Result<()> {
     use std::io::Write as _;
     use std::sync::mpsc;
 
-    use eve_tui::win::{ConsoleInput, InputOut, spawn_input_thread};
+    use eve_tui::input::InputOut;
+    use eve_tui::input::win::{ConsoleInput, spawn_input_thread};
     use eve_view::{InputEvent, KeyCode};
 
     struct Tx(mpsc::Sender<Option<InputEvent>>);
