@@ -30,10 +30,11 @@ pub use document::{
 pub use editor::{
     Affinity, ArgValue, Args, Binding, CONFIG_FILE, CommandCtx, CommandInvocation, CommandKind,
     CommandRegistry, CommandResult, CommandSpec, ConfigSources, ContextExpr, CtxValue, DocSnapshot,
-    Editor, EditorState, Handler, InitialFile, InvocationSource, KEYMAP_FILE, KeyParseError,
-    Keymap, Layer, ParseError, Permission, RejectReason, Resolution, ScrollPos, SearchCount,
-    SearchStep, View, Window, WrapMode, WrapSettings, config_diagnostic_texts, format_stroke,
-    normalize_eol, parse_sequence, parse_stroke, resolve_theme,
+    Editor, EditorState, Handler, HostReport, InitialFile, InvocationSource, KEYMAP_FILE,
+    KeyParseError, Keymap, Layer, ParseError, Permission, RejectReason, Resolution, ScrollPos,
+    SearchCount, SearchStep, StartupConfig, View, Window, WrapMode, WrapSettings,
+    config_diagnostic_texts, format_stroke, normalize_eol, parse_sequence, parse_stroke,
+    resolve_theme,
 };
 pub use eve_encoding::Encoding;
 pub use eve_view::DocumentId;

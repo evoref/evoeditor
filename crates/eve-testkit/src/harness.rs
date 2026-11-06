@@ -144,10 +144,16 @@ impl Harness {
         };
         let mut editor = Editor::new(ports, b.caps.unwrap_or_default());
         if let Some(config) = b.config {
-            editor.state_mut().set_config(config);
+            editor.configure(eve_core::StartupConfig {
+                config: Some(config),
+                ..Default::default()
+            });
         }
         if let Some(locale) = b.locale {
-            editor.state_mut().set_locale(locale);
+            editor.configure(eve_core::StartupConfig {
+                locale: Some(locale),
+                ..Default::default()
+            });
         }
         let mut h = Harness {
             editor,
@@ -205,7 +211,10 @@ impl Harness {
 
     /// UI の言語を選ぶ (既定は `ja`)。
     pub fn with_locale(mut self, locale: eve_config::Locale) -> Harness {
-        self.editor.state_mut().set_locale(locale);
+        self.editor.configure(eve_core::StartupConfig {
+            locale: Some(locale),
+            ..Default::default()
+        });
         self
     }
 

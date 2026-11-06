@@ -5,9 +5,11 @@
 //! コマンドのレジストリと `execute`、キーマップ、編集・移動・検索・ファイル操作のコマンド。
 
 pub(crate) mod buffer;
+mod host_api;
 pub use crate::io::config_reload::{CONFIG_FILE, ConfigSources, KEYMAP_FILE};
 pub use crate::layout::theme::resolve as resolve_theme;
 pub use crate::ui_model::config_report::diagnostic_texts as config_diagnostic_texts;
+pub use host_api::{HostReport, StartupConfig};
 pub(crate) mod query;
 pub use crate::io::startup::InitialFile;
 pub(crate) mod state;

@@ -8,4 +8,5 @@
 disallowed-methods = [
     { path = "std::thread::spawn", reason = "R11: スレッドを作ってよいのは eve-host だけ。作業は JobSpawner の固定 2 本を使う (docs/02 §4.3)" },
     { path = "std::thread::Builder::spawn", reason = "R11: スレッドを作ってよいのは eve-host だけ (docs/02 §4.3)" },
+    { path = "eve_core::Editor::state_mut", reason = "STR-B3: Host・frontend・bin は EditorState に直接触らない。起動の前の設定は Editor::configure、Host が知った事実は Editor::report (docs/02 §5.4)。試験と testkit だけが許可して使う" },
 ]

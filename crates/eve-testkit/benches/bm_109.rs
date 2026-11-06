@@ -17,6 +17,8 @@
 //! ```
 
 #![allow(clippy::print_stdout, clippy::print_stderr)]
+// 検索を始める・止めるのに EditorState を直接使う (試験と計測だけに許す Editor::state_mut、STR-B3)
+#![allow(clippy::disallowed_methods)]
 
 use std::time::{Duration, Instant};
 
