@@ -18,7 +18,6 @@
 #![allow(unsafe_code)]
 
 use std::io;
-use std::net::Shutdown;
 use std::os::fd::{AsFd, AsRawFd, BorrowedFd, FromRawFd, OwnedFd};
 use std::os::unix::net::UnixStream;
 use std::sync::Arc;
@@ -207,8 +206,9 @@ impl ConsoleInput {
 impl Drop for ConsoleInput {
     fn drop(&mut self) {
         self.restore();
-        // 入力スレッドを止める (端末の fd は、スレッドが持つ `Arc` を手放したときに閉じる)
-        let _ = self.stop.0.shutdown(Shutdown::Both);
+        // 入力スレッドを止める: この後に `stop` の書き端 (複製していない) が drop で閉じ、読み端を `poll` するスレッドが
+        // 切断 (POLLHUP) を見て終わる。端末の fd は、スレッドが持つ `Arc` を手放したときに閉じる。`shutdown` は使わない
+        // (ネットワークの API の型を製品のコードに入れない。ネットワーク通信の無いことの検査、AC-NFR-502-1)
     }
 }
 
