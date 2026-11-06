@@ -82,7 +82,7 @@ pub struct Host {
     /// `Frontend::wake_after` の期限。
     wake_at: Option<Tick>,
     /// 退避用の公開物 (文書ごとのスロット。緊急退避の書き手が読む)。
-    slots: BTreeMap<DocumentId, DocSnapshot>,
+    slots: BTreeMap<DocumentId, Arc<DocSnapshot>>,
     events: Vec<EditorEvent>,
     exit_stderr: Vec<StderrLine>,
     /// 起動時に開くファイルの文字コードの指定 (`--encoding`)。
@@ -282,7 +282,7 @@ impl Host {
     }
 
     /// 退避用の公開物 (dirty な文書だけがある)。
-    pub fn emergency_slots(&self) -> &BTreeMap<DocumentId, DocSnapshot> {
+    pub fn emergency_slots(&self) -> &BTreeMap<DocumentId, Arc<DocSnapshot>> {
         &self.slots
     }
 
@@ -743,7 +743,9 @@ impl Host {
         for doc in self.editor.take_snapshot_updates() {
             match self.editor.emergency_snapshot(doc) {
                 Some(s) => {
-                    self.emergency.publish(doc, Some(s.clone()));
+                    // 退避の書き手のスロットと Host の写しで 1 つの公開物を共有する (複製しない、PRF-19)
+                    let s = Arc::new(s);
+                    self.emergency.publish(doc, Some(Arc::clone(&s)));
                     self.slots.insert(doc, s);
                 }
                 None => {
