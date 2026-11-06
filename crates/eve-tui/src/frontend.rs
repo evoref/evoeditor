@@ -260,7 +260,19 @@ impl Frontend for TuiFrontend {
                 .items
                 .iter()
                 .any(|i| i.kind == eve_view::StatusKind::Loading);
-        if crate::trace::render_done(content, progress) {
+        // 検索で一致へ移った: 計測ハーネスが決めた語が編集面の行に出ている (BM-108)
+        let matched = crate::trace::match_text().is_some_and(|m| {
+            frame.panes.first().is_some_and(|p| {
+                p.rows.iter().any(|r| {
+                    r.spans
+                        .iter()
+                        .map(|s| s.text.as_str())
+                        .collect::<String>()
+                        .contains(m)
+                })
+            })
+        });
+        if crate::trace::render_done(content, progress, matched) {
             self.restore();
             crate::trace::flush();
             std::process::exit(0);

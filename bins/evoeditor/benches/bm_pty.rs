@@ -6,7 +6,10 @@
 //! - **BM-101b / 102b**: 計測ハーネスが spawn した時刻 → 同じ終点 (起動 (b) spawn から。壁時計で比べる)。
 //! - **BM-103b**: 入力スレッドが入力を読み終えた時刻 → 描画の `write` が戻るまで (判定区間 (b))。打鍵間隔 30 ms。
 //! - **BM-107**: 100 MB の文書の保存中のカーソル移動の同じ区間 (01 NFR-107 AC-1。NFR-103 の値を維持するか)。
-//! - **BM-103b-search-1m**: 1 MB の文書の検索欄への入力 (一致を強調し直す) の同じ区間 (`--only 103s`)。
+//! - **BM-103b-search-1m**: 1 MB の文書の検索欄への入力 (一致を強調し直す) の同じ区間 (`--only 103s`)。正規表現のモードは
+//!   **BM-103b-search-1m-regex** (`--only 103r`)。
+//! - **BM-108**: 100 MB の文書の中ほどにだけある語を検索欄に打って `Enter` し、読取完了 → 一致の行が編集面に出た最初の
+//!   Frame の `write` まで (`--only 108`。区間の記録 `search.first_match`)。
 //!
 //! どのビルドでも測る、端末込みの参考値 (ConPTY を挟むので実際の Windows Terminal より遅めに出る。判定には使わない):
 //! - **BM-101c / 102c**: spawn → 最初の画面 (ステータスバーの `無題-1` / ファイルの先頭) が端末に届くまで。
@@ -63,6 +66,16 @@ struct Term {
 impl Term {
     /// spawn の直前の時刻を返す。`trace` があれば、区間の記録をそのファイルに出させる (計測用ビルドのとき)。
     fn start(args: &[&str], marker: &'static str, trace: Option<&Path>) -> (Term, Instant) {
+        Term::start_env(args, marker, trace, &[])
+    }
+
+    /// `start` に、子プロセスの環境変数 `env` を足したもの。
+    fn start_env(
+        args: &[&str],
+        marker: &'static str,
+        trace: Option<&Path>,
+        env: &[(&str, &str)],
+    ) -> (Term, Instant) {
         static SEQ: AtomicUsize = AtomicUsize::new(0);
         let state = std::env::temp_dir().join(format!(
             "evo-bench-state-{}-{}",
@@ -89,6 +102,9 @@ impl Term {
         cmd.env("EVE_CONFIG_DIR", state.join("no-config"));
         if let Some(t) = trace {
             cmd.env("EVE_TRACE_FILE", t);
+        }
+        for (k, v) in env {
+            cmd.env(k, v);
         }
         let mut reader = pty.master.try_clone_reader().expect("reader");
         let writer = Arc::new(Mutex::new(pty.master.take_writer().expect("writer")));
@@ -714,13 +730,28 @@ fn proc_stat(pid: u32) -> (u64, f64) {
 /// BM-103b-search-1m: 1 MB の文書で検索バーを開き、検索欄に `o` と BackSpace を交互に 30 ms ごとに打つ。`o` のたびに
 /// 一致 (画面の中に多数) を強調し直す。測るのは `o` の打鍵 (入力の読取完了 → 描画の write)。NFR-103 の条件から外した
 /// 「検索一致のハイライト有効」の代わりに、検索欄への入力の遅延を別に測る (docs/review/v0.3-findings.md の §3.3 の 1、2026-11-05 PO)。
-fn search_typing_1m(dir: &Path, file: &Path, runs: usize, warmup: usize) -> Vec<Duration> {
+/// `regex` なら正規表現のモード (`Ctrl+K X`) で同じことをする (BM-103b-search-1m-regex。照合器のコンパイルを含む経路)。
+fn search_typing_1m(
+    dir: &Path,
+    file: &Path,
+    runs: usize,
+    warmup: usize,
+    regex: bool,
+) -> Vec<Duration> {
     const VK_O: u64 = 0x4F;
-    let trace = dir.join("search1m.jsonl");
+    let trace = dir.join(if regex {
+        "search1m-re.jsonl"
+    } else {
+        "search1m.jsonl"
+    });
     let (mut t, _) = Term::start(&[file.to_str().unwrap()], "00000000", Some(&trace));
     t.wait("ファイルの先頭", || t.marker.load(Ordering::Acquire));
     t.send(b"\x06"); // Ctrl+F
     thread::sleep(Duration::from_millis(300));
+    if regex {
+        t.send(b"\x0bx"); // Ctrl+K X (search.toggle_regex)
+        thread::sleep(Duration::from_millis(300));
+    }
     for _ in 0..runs + warmup {
         t.send(b"o");
         thread::sleep(Duration::from_millis(30));
@@ -736,6 +767,69 @@ fn search_typing_1m(dir: &Path, file: &Path, runs: usize, warmup: usize) -> Vec<
         .filter(|s| s.name == "input.to_flush" && s.vk == Some(VK_O))
         .collect();
     let _ = std::fs::remove_file(&trace);
+    spans
+        .iter()
+        .skip(warmup)
+        .map(|s| ns_dur(s.end_ns - s.start_ns))
+        .collect()
+}
+
+/// BM-108 の語。100 MB の文書の中ほどの 1 行にだけある (`k` `s` を含めない: 含むと行ごとに畳み込む経路になる、03 §12.4)。
+const FIRST_MATCH_WORD: &str = "zebra";
+
+/// 100 MB の文書の中ほどの 1 行にだけ `FIRST_MATCH_WORD` がある文書。
+fn make_big_mid_word(dir: &Path) -> PathBuf {
+    let path = dir.join("big_100mb_mid.txt");
+    if !path.exists() {
+        let line = "0123456789 the quick brown fox 日本語の行です。0123456789\n";
+        let half = line.repeat(50 * 1024 * 1024 / line.len());
+        let body = format!("{half}0123456789 the {FIRST_MATCH_WORD} line\n{half}");
+        std::fs::write(&path, body).expect("大きいファイル");
+    }
+    path
+}
+
+/// BM-108 (01 NFR-108、09 §5.2): 100 MB を開き、先頭から検索バーで `FIRST_MATCH_WORD` と `Enter` を一度に送る。同期の検索の
+/// 範囲 (1 MiB) より遠いので、単発の検索ジョブが一致を見つけて一致へ移る。`Esc` → `Ctrl+Home` で先頭に戻して繰り返す。
+/// 区間は `search.first_match` (読取完了 → 一致の行が編集面に出た Frame の `write`)。
+fn first_match_100m(dir: &Path, runs: usize, warmup: usize) -> Vec<Duration> {
+    let path = make_big_mid_word(dir);
+    let trace = dir.join("first-match.jsonl");
+    let (mut t, _) = Term::start_env(
+        &[path.to_str().unwrap()],
+        "quick brown",
+        Some(&trace),
+        &[("EVE_TRACE_MATCH", FIRST_MATCH_WORD)],
+    );
+    t.wait("開く", || t.marker.load(Ordering::Acquire));
+    thread::sleep(Duration::from_millis(4000));
+    for _ in 0..runs + warmup {
+        t.send(b"\x06"); // Ctrl+F
+        thread::sleep(Duration::from_millis(300));
+        t.send(format!("{FIRST_MATCH_WORD}\r").as_bytes());
+        thread::sleep(Duration::from_millis(700));
+        t.send(b"\x1b"); // 検索バーを閉じる
+        thread::sleep(Duration::from_millis(200));
+        t.send(b"\x1b[1;5H"); // Ctrl+Home
+        thread::sleep(Duration::from_millis(300));
+    }
+    t.send(b"\x11");
+    assert_eq!(t.wait_exit(WAIT), Some(0), "正常に終了しません");
+    // 検索語・Enter の読取から始まる区間だけを採る (Esc / Ctrl+Home の読取の後の Frame にも語が出ていることがある)
+    let spans: Vec<Span> = read_spans(&trace)
+        .into_iter()
+        .filter(|s| {
+            s.name == "search.first_match"
+                && s.vk
+                    .is_some_and(|v| v == 0x0D || (0x41..=0x5A).contains(&v))
+        })
+        .collect();
+    let _ = std::fs::remove_file(&trace);
+    assert!(
+        spans.len() >= runs + warmup,
+        "search.first_match が足りません ({} 件)",
+        spans.len()
+    );
     spans
         .iter()
         .skip(warmup)
@@ -985,10 +1079,32 @@ fn main() {
     }
     if traced && want("103s") {
         let file = make_one_mb(&dir);
-        let v = search_typing_1m(&dir, &file, runs, warmup);
+        let v = search_typing_1m(&dir, &file, runs, warmup, false);
         report(
             "BM-103b-search-1m",
             "1 MB の文書の検索欄への入力 (一致を強調し直す。入力の読取完了 → 描画の write)",
+            v,
+            json,
+            quick,
+        );
+    }
+    if traced && want("103r") {
+        let file = make_one_mb(&dir);
+        let v = search_typing_1m(&dir, &file, runs, warmup, true);
+        report(
+            "BM-103b-search-1m-regex",
+            "1 MB の文書の検索欄への正規表現の入力 (一致を強調し直す。入力の読取完了 → 描画の write)",
+            v,
+            json,
+            quick,
+        );
+    }
+    if traced && want("108") {
+        let n = if quick { 5 } else { 30 };
+        let v = first_match_100m(&dir, n, 2);
+        report(
+            "BM-108",
+            "100 MB の文書の最初の一致の表示 (検索語と Enter の読取完了 → 一致の行が出た Frame の write。30 回)",
             v,
             json,
             quick,
