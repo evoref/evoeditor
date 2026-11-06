@@ -258,11 +258,20 @@ fn render_row(
     }
 }
 
-/// Frame の編集面を Buffer に書く。
+/// Frame の編集面を Buffer に書く (端末の大きさが分からないとき。行の割り当ては `ScreenLayout::for_frame` で推す)。
 pub fn render_panes(frame: &Frame, depth: ColorDepth, glyphs: &Glyphs) -> PaneRender {
+    render_panes_in(frame, ScreenLayout::for_frame(frame), depth, glyphs)
+}
+
+/// `render_panes` の本体。行の割り当て `layout` (`render_screen` は端末の大きさから求めたもの) の大きさの Buffer に書く。
+pub fn render_panes_in(
+    frame: &Frame,
+    layout: ScreenLayout,
+    depth: ColorDepth,
+    glyphs: &Glyphs,
+) -> PaneRender {
     let theme = Theme::from_roles(&frame.roles);
     // 検索バーは編集面の下に 1 行取る (編集面の行数 `size.rows` はその分を引いてある)
-    let layout = ScreenLayout::for_frame(frame);
     let (cols, rows) = (layout.cols, layout.rows());
     let mut buffer = Buffer::empty(Rect::new(0, 0, cols, rows));
     // 背景を塗るテーマ (07 §8.6) は、画面全体を本文の色で塗ってから描く (行末より右・文書末尾より下も同じ色にする)

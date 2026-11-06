@@ -8,7 +8,7 @@ use std::fmt::Write as _;
 use std::path::PathBuf;
 
 use eve_testkit::{Harness, Locale, golden};
-use eve_tui::buffer::{chrome_rows_for_surface, row_text};
+use eve_tui::buffer::row_text;
 use eve_tui::chrome::render_screen;
 use eve_tui::glyphs::Glyphs;
 use eve_view::{Capabilities, CellSize, ColorDepth};
@@ -35,7 +35,8 @@ fn screen(h: &mut Harness, look: Look) -> (String, String) {
     let base = f.size.rows + eve_tui::buffer::bar_rows(&f);
     let window = CellSize {
         cols: f.size.cols,
-        rows: base + chrome_rows_for_surface(base),
+        // ヒントバーの表示に合わせた端末の大きさ (本物の frontend なら食い違いで Resize を送る)
+        rows: base + eve_tui::buffer::chrome_rows(base, f.hint_bar),
     };
     let r = render_screen(&f, window, look.depth, &look.glyphs);
     let mut text: Vec<String> = (0..r.buffer.area.height)

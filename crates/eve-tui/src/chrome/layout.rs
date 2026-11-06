@@ -63,16 +63,26 @@ pub struct ScreenLayout {
 impl ScreenLayout {
     /// 端末の大きさ `window` から求める (04 §3.1 / §3.5)。`hint_bar` は最後の Frame のヒントバーの表示、`bar_rows` は
     /// 検索バーの行数 (端末の編集面だけが要るときは 0)。
+    /// クロームの行数は端末の行数から決める (04 §3.5: 10 行未満なら 2 行)。編集面の行数からは決めない: 端末 9 行 (2 行) と
+    /// 10 行 (3 行) はどちらも編集面が 7 行になり、編集面からは区別できない (前は 10 行で最後の 1 行が空いた)。
     pub const fn compute(window: CellSize, hint_bar: bool, bar_rows: u16) -> ScreenLayout {
-        ScreenLayout::from_surface(
-            window.cols,
-            surface_rows_for_window(window.rows, hint_bar),
-            hint_bar,
+        let surface_rows = surface_rows_for_window(window.rows, hint_bar);
+        ScreenLayout {
+            cols: window.cols,
+            surface_rows,
             bar_rows,
-        )
+            chrome_rows: window.rows.saturating_sub(surface_rows),
+            hint_bar,
+        }
     }
 
-    /// Frame から求める (描画用。Frame の編集面に検索バーの行を足したものを端末の編集面とする)。
+    /// 端末の大きさ `window` と Frame から求める (描画用。端末の大きさが分かるときはこちらを使う)。
+    pub fn for_frame_in(frame: &Frame, window: CellSize) -> ScreenLayout {
+        ScreenLayout::compute(window, frame.hint_bar, bar_rows(frame))
+    }
+
+    /// Frame だけから求める (端末の大きさが分からないとき。Frame の編集面に検索バーの行を足したものを端末の編集面とし、
+    /// クロームの行数は `chrome_rows` で推す。端末 10 行の境目では `for_frame_in` と違い得る)。
     pub fn for_frame(frame: &Frame) -> ScreenLayout {
         let bar = bar_rows(frame);
         ScreenLayout::from_surface(frame.size.cols, frame.size.rows + bar, frame.hint_bar, bar)
@@ -186,10 +196,12 @@ mod tests {
     }
 
     #[test]
-    fn 十行ちょうどは_編集面_7_行で_クロームを_2_行と数える() {
-        // 今の値を固定する: 端末の編集面は 10 − 3 = 7 行だが、7 行の編集面のクロームは `chrome_rows` で 2 行 (< 8) になり、
-        // 描く画面は 9 行 (最後の 1 行は空)。04 §3.5 (< 10 行で 2 行) とは端末 10 行のところで食い違う
+    fn 十行ちょうどは編集面_7_行とクローム_3_行で画面を埋める() {
+        // 04 §3.5: 10 行未満なら 2 行。端末 10 行は 3 行で、編集面とクロームで全行を使う (前は 7 + 2 で最後の 1 行が空いた)
         let l = ScreenLayout::compute(size(80, 10), true, 0);
+        assert_eq!((l.surface_rows, l.chrome_rows, l.rows()), (7, 3, 10));
+        // 9 行は 2 行 (編集面は同じ 7 行。編集面からは区別できないので、端末の行数から決める)
+        let l = ScreenLayout::compute(size(80, 9), true, 0);
         assert_eq!((l.surface_rows, l.chrome_rows, l.rows()), (7, 2, 9));
     }
 
