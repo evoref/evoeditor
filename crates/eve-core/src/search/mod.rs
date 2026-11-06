@@ -15,7 +15,9 @@ mod scan;
 
 pub use matcher::{Case, Matcher, QueryError, SearchQuery};
 pub use replace::{build_replace_all, replacement_for, unescape_replacement};
-pub use scan::{SearchJob, find_next, run_search, scan_bytes, scan_lines};
+#[cfg(test)]
+use scan::scan_lines;
+pub use scan::{SearchJob, find_next, run_search, scan_bytes};
 
 pub(crate) mod search_state;
 

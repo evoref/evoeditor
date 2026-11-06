@@ -1,4 +1,9 @@
-//! 文書の走査 (一致を集める・次の一致を探す・検索のジョブ、docs/03 §12.1・§12.2)。どの経路も行単位。
+//! 文書の走査 (一致を集める・次の一致を探す・検索のジョブ、docs/03 §12.1・§12.2)。
+//!
+//! 走査の入口は `scan_bytes` (範囲を受ける) の 1 つ (03 §12.3 の「走査の境界」)。中の経路は 2 つで、どちらも一致は
+//! 行をまたがない: チャンクごとの memmem (改行を含まないリテラル) と、行ごとに切り出して照合する `LineScan`
+//! (`scan_lines`)。複数行の正規表現 (v0.4、OQ-60) は、この入口の中に 3 つ目の経路 (`StreamScan`) として足し、
+//! 呼び出し側は変えない。
 
 use std::ops::Range;
 
@@ -16,8 +21,9 @@ const BATCH_MATCHES: usize = 256;
 
 const BATCH_MILLIS: Millis = Millis(20);
 
-/// 行 `lines` (半開区間) を順に走査し、一致を `f` へ渡す。`f` が `false` を返すか取り消されたら止めて `false`。
-pub fn scan_lines(
+/// `LineScan`: 行 `lines` (半開区間) を順に走査し、一致を `f` へ渡す。`f` が `false` を返すか取り消されたら止めて `false`。
+/// 外からは `scan_bytes` を通して使う (走査の境界、03 §12.3)。
+pub(super) fn scan_lines(
     text: &dyn TextRead,
     m: &Matcher,
     lines: Range<usize>,
@@ -42,7 +48,7 @@ pub fn scan_lines(
     true
 }
 
-/// `range` (行頭と行末に揃った範囲) を走査し、一致を `f` へ渡す。チャンクごとに走査できる検索語は、行に切り出さずに
+/// 走査の入口。`range` (行頭と行末に揃った範囲) を走査し、一致を `f` へ渡す。チャンクごとに走査できる検索語は、行に切り出さずに
 /// memmem で探す (1 GB/s 級、NFR-108 / 109)。`f` が `false` を返すか取り消されたら止めて `false`。
 pub fn scan_bytes(
     text: &dyn TextRead,
