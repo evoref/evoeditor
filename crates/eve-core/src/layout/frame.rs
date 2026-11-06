@@ -204,7 +204,7 @@ pub(crate) fn build_frame(
     let unmappable = state.unmappable_marks_for(view.doc);
     let styles = RowStyles::new(&state.settings.roles);
     let marks = Marks {
-        found: &found,
+        found: found.as_deref().unwrap_or(&[]),
         current,
         unmappable: &unmappable,
         styles: &styles,

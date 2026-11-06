@@ -27,14 +27,43 @@ use crate::layout::cell_text;
 use crate::search::search_state::{Found, SearchCount, SearchStep};
 
 impl SearchBarState {
-    /// 今の入力とトグルから作る問い合わせ。
+    /// 今の入力とトグルから作る問い合わせ。条件が前と同じなら前のもの (コンパイル済みの照合器を共有する) を返す (PRF-09)。
     pub(crate) fn query(&self) -> SearchQuery {
-        SearchQuery::literal(&self.text)
+        let q = SearchQuery::literal(&self.text)
             .with_case(self.case)
             .with_regex(self.regex)
             .with_whole_word(self.whole_word)
-            .with_scope(self.in_selection.then(|| self.sel_ranges.clone()))
+            .with_scope(self.in_selection.then(|| self.sel_ranges.clone()));
+        let mut last = self.memo.query.borrow_mut();
+        match &*last {
+            Some(prev) if *prev == q => prev.clone(),
+            _ => {
+                *last = Some(q.clone());
+                q
+            }
+        }
     }
+}
+
+/// 可視行の一致 (文書のバイト位置の半開区間、開始位置の昇順)。
+pub(crate) type VisibleMatches = std::rc::Rc<[(usize, usize)]>;
+
+/// 可視行の一致の覚えのキー (文書, Revision, 先頭の行, 行数, 問い合わせ)。
+type VisibleKey = (
+    eve_view::DocumentId,
+    eve_view::Revision,
+    usize,
+    usize,
+    SearchQuery,
+);
+
+/// 検索バーの、Frame を作るたびに同じ結果になる計算の覚え (PRF-09 / REF-04)。
+#[derive(Clone, Debug, Default)]
+pub(crate) struct SearchBarMemo {
+    /// 最後に作った問い合わせ (コンパイル済みの照合器を持つ)。
+    query: std::cell::RefCell<Option<SearchQuery>>,
+    /// 最後に求めた可視行の一致。検索の途中経過の再描画などで、条件が同じ間は可視行を走査し直さない。
+    visible: std::cell::RefCell<Option<(VisibleKey, VisibleMatches)>>,
 }
 
 /// 可視行の強調で、1 行あたり検索する上限 (`SEARCH_SYNC_LINE_MAX`、03 §12.2)。これを超える行は強調しない。
@@ -63,6 +92,8 @@ pub(crate) struct SearchBarState {
     /// 置換欄 (開いているとき。テキストとカーソル)。
     pub replace: Option<(String, usize)>,
     pub focus: BarFocus,
+    /// Frame を作るたびの計算の覚え。
+    pub memo: SearchBarMemo,
 }
 
 /// すべて置換をジョブで作るときの境界 (`SEARCH_SYNC_STEP_BYTES`、03 §12.2)。これ以下の文書はメインスレッドで作る。
@@ -105,6 +136,7 @@ impl EditorState {
             current: None,
             replace: None,
             focus: BarFocus::Search,
+            memo: SearchBarMemo::default(),
         });
         self.set_bar_rows();
         CommandResult::Done
@@ -458,22 +490,37 @@ impl EditorState {
     }
 
     /// 可視行の一致 (強調する範囲)。保持した一致ではなく、可視行だけを同期検索する (03 §12.2 の「可視範囲のハイライト」)。
-    /// 1 行が `SYNC_LINE_MAX` を超える行は強調しない。検索バーが開いていなければ空。
+    /// 1 行が `SYNC_LINE_MAX` を超える行は強調しない。検索バーが開いていなければ `None`。
+    /// (文書, Revision, 範囲, 問い合わせ) が前と同じなら、前の結果を返す (REF-04)。
     pub(crate) fn visible_matches(
         &self,
         doc_id: eve_view::DocumentId,
         top_line: usize,
         rows: usize,
+    ) -> Option<VisibleMatches> {
+        let bar = self.find.search_bar.as_ref()?;
+        let query = bar.query();
+        let doc = self.docs.documents.get(&doc_id)?;
+        let key: VisibleKey = (doc_id, doc.revision(), top_line, rows, query);
+        if let Some((k, v)) = &*bar.memo.visible.borrow()
+            && *k == key
+        {
+            return Some(v.clone());
+        }
+        let m = key.4.matcher()?;
+        let found: std::rc::Rc<[(usize, usize)]> =
+            self.scan_visible(doc, &m, top_line, rows).into();
+        *bar.memo.visible.borrow_mut() = Some((key, found.clone()));
+        Some(found)
+    }
+
+    fn scan_visible(
+        &self,
+        doc: &crate::document::Document,
+        m: &crate::search::Matcher,
+        top_line: usize,
+        rows: usize,
     ) -> Vec<(usize, usize)> {
-        let Some(bar) = &self.find.search_bar else {
-            return Vec::new();
-        };
-        let Some(m) = bar.query().matcher() else {
-            return Vec::new();
-        };
-        let Some(doc) = self.docs.documents.get(&doc_id) else {
-            return Vec::new();
-        };
         let t = doc.text();
         let n = t.len_lines();
         let mut out = Vec::new();
@@ -490,7 +537,7 @@ impl EditorState {
                 ByteOff(t.len_bytes())
             };
             let range = ByteRange::new(t.line_to_byte(LineIdx(l)), end);
-            scan_bytes(t, &m, range, &cancel, &mut |r| {
+            scan_bytes(t, m, range, &cancel, &mut |r| {
                 out.push((r.start.0, r.end.0));
                 true
             });

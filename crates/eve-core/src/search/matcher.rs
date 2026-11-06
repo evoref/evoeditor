@@ -4,7 +4,7 @@
 //! `Matcher` に閉じる。
 
 use std::borrow::Cow;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 use eve_text::{ByteOff, ByteRange, TextRead, is_grapheme_boundary, word_boundaries};
 use memchr::memmem;
@@ -42,6 +42,30 @@ pub struct SearchQuery {
     /// 選択範囲内の検索 (`scope: Selection`、§12.1 / §12.5)。この範囲 (開始位置の昇順で重ならない) の
     /// どれかに収まる一致だけを採る。`None` は文書全体。
     scope: Option<Arc<[ByteRange]>>,
+    /// コンパイルの結果の覚え。複製 (検索ジョブに渡すものを含む) と共有し、条件を変えると捨てる (PRF-09)。
+    compiled: Compiled,
+}
+
+/// `SearchQuery` のコンパイルの結果の覚え。比較と表示では無視する (問い合わせの同一性は条件だけで決まる)。
+#[derive(Clone, Default)]
+struct Compiled(Arc<OnceLock<Result<Option<Arc<Matcher>>, QueryError>>>);
+
+impl PartialEq for Compiled {
+    fn eq(&self, _: &Compiled) -> bool {
+        true
+    }
+}
+
+impl Eq for Compiled {}
+
+impl std::fmt::Debug for Compiled {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(if self.0.get().is_some() {
+            "Compiled"
+        } else {
+            "NotCompiled"
+        })
+    }
 }
 
 /// 検索語をコンパイルできない理由 (§12.3)。入力中は赤色表示のみで、ジョブは投入しない。
@@ -67,12 +91,14 @@ impl SearchQuery {
             regex: false,
             whole_word: false,
             scope: None,
+            compiled: Compiled::default(),
         }
     }
 
     /// 選択範囲内に限る (`None` は文書全体)。範囲は開始位置の昇順で重ならないこと。
     pub fn with_scope(mut self, scope: Option<Arc<[ByteRange]>>) -> SearchQuery {
         self.scope = scope;
+        self.compiled = Compiled::default();
         self
     }
 
@@ -83,12 +109,14 @@ impl SearchQuery {
     /// 正規表現として探す (既定は `false`)。
     pub fn with_regex(mut self, regex: bool) -> SearchQuery {
         self.regex = regex;
+        self.compiled = Compiled::default();
         self
     }
 
     /// 一致の両端が単語境界にあるものだけを採る (既定は `false`)。
     pub fn with_whole_word(mut self, whole_word: bool) -> SearchQuery {
         self.whole_word = whole_word;
+        self.compiled = Compiled::default();
         self
     }
 
@@ -102,6 +130,7 @@ impl SearchQuery {
 
     pub fn with_case(mut self, case: Case) -> SearchQuery {
         self.case = case;
+        self.compiled = Compiled::default();
         self
     }
 
@@ -142,12 +171,20 @@ impl SearchQuery {
 
     /// 照合器。検索語が空・コンパイルできない・改行にまたがるなら `None` (何にも一致しない)。
     /// 理由が要るときは `compile` を使う。
-    pub fn matcher(&self) -> Option<Matcher> {
+    pub fn matcher(&self) -> Option<Arc<Matcher>> {
         self.compile().ok().flatten()
     }
 
     /// 照合器を作る。検索語が空なら `Ok(None)`。正規表現の構文エラーなどは `Err`。
-    pub fn compile(&self) -> Result<Option<Matcher>, QueryError> {
+    /// 結果は覚えて、この問い合わせとその複製で使い回す (同じ条件でコンパイルし直さない、PRF-09)。
+    pub fn compile(&self) -> Result<Option<Arc<Matcher>>, QueryError> {
+        self.compiled
+            .0
+            .get_or_init(|| self.compile_uncached().map(|m| m.map(Arc::new)))
+            .clone()
+    }
+
+    fn compile_uncached(&self) -> Result<Option<Matcher>, QueryError> {
         if self.regex {
             return self.compile_regex();
         }
