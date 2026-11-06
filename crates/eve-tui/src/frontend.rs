@@ -1,5 +1,5 @@
 //! `Frontend` の TUI 実装 (docs/02 §9.2、docs/04 §14)。端末の初期化と復元、入力スレッドの起動、描画。OS ごとの端末の部品は
-//! `win` (Windows のコンソール) と `unix` (`/dev/tty`) で、同じ形 (`ConsoleInput`・`ConsoleOut`・`spawn_input_thread`) をしている。
+//! `input::win` (Windows のコンソール) と `input::unix` (`/dev/tty`) で、同じ形 (`ConsoleInput`・`ConsoleOut`・`spawn_input_thread`) をしている。
 //!
 //! 編集面・クローム・オーバーレイを描画する。復元は冪等で、どの終了経路でも `restore` (または `Drop`) で行う。
 
@@ -18,10 +18,11 @@ use crate::caps::{CapsConfig, ColorMode, Detected, ProcessEnv, check_usable, det
 use crate::chrome::render_screen;
 use crate::glyphs::Glyphs;
 #[cfg(unix)]
-use crate::unix as term_io;
+use crate::input::unix as term_io;
 #[cfg(windows)]
-use crate::win as term_io;
-use term_io::{ConsoleInput, ConsoleOut, InputOut, spawn_input_thread, surface_resize};
+use crate::input::win as term_io;
+use crate::input::{InputOut, surface_resize};
+use term_io::{ConsoleInput, ConsoleOut, spawn_input_thread};
 
 /// `eve_host::InputSink` を入力スレッドの送り先にする。
 struct SinkOut(InputSink);
@@ -108,11 +109,11 @@ impl TuiFrontend {
         #[cfg(unix)]
         if !self.title_pushed {
             self.title_pushed = true;
-            self.write(crate::unix::TITLE_PUSH);
+            self.write(crate::input::unix::TITLE_PUSH);
         }
         self.write(ENTER);
         #[cfg(unix)]
-        self.write(crate::unix::ENTER_MODES);
+        self.write(crate::input::unix::ENTER_MODES);
         self.entered = true;
     }
 
@@ -149,7 +150,7 @@ impl TuiFrontend {
     #[cfg(unix)]
     fn suspend(&mut self) {
         self.restore();
-        crate::unix::stop_self();
+        crate::input::unix::stop_self();
         if let Some(i) = self.input.as_ref() {
             i.request_reinit();
         }
@@ -365,7 +366,7 @@ impl Frontend for TuiFrontend {
                 .swap(true, std::sync::atomic::Ordering::AcqRel)
             {
                 #[cfg(unix)]
-                self.write(crate::unix::LEAVE_MODES);
+                self.write(crate::input::unix::LEAVE_MODES);
                 self.write(LEAVE);
             }
         }
@@ -373,7 +374,7 @@ impl Frontend for TuiFrontend {
         #[cfg(unix)]
         if self.title_pushed {
             self.title_pushed = false;
-            self.write(crate::unix::TITLE_POP);
+            self.write(crate::input::unix::TITLE_POP);
         }
         if let Some(o) = self.out.as_mut() {
             o.restore();
@@ -467,7 +468,7 @@ mod tests {
                 self.inner.init(cfg)
             }
             fn start_input(&mut self, tx: InputSink) -> Result<(), FrontendError> {
-                use super::term_io::InputOut as _;
+                use crate::input::InputOut as _;
                 let out = super::SinkOut(tx);
                 let mut died = false;
                 run_guarded(
@@ -528,9 +529,9 @@ mod tests {
         #[cfg(unix)]
         let expected = format!(
             "\x18{}{}{}",
-            crate::unix::LEAVE_MODES,
+            crate::input::unix::LEAVE_MODES,
             crate::ansi::LEAVE,
-            crate::unix::TITLE_POP
+            crate::input::unix::TITLE_POP
         );
         assert_eq!(super::EMERGENCY_BYTES, expected.as_bytes());
     }

@@ -2,18 +2,23 @@
 //! `spawn_input_thread`) で、`frontend` は OS に依らずこれらを呼ぶ。OS を呼ぶのはこのファイルだけ (R5)。
 //!
 //! - 描画先と入力は **`/dev/tty`** (標準入出力がリダイレクトされていても端末に描く。05 §9.1)。出力と入力で別々に開く
-//!   (入力の側だけを非ブロックにするため)。
+//!   (入力の側だけを非ブロックにするため)。fd は `OwnedFd` で持ち、閉じるのは drop だけ。
 //! - raw モード: termios を `cfmakeraw` 相当にする (ISIG / IXON / ICRNL などを落とす。Ctrl+C / Z / S / Q がキーとして届く、
 //!   FR-609)。起動時の termios を保存し、`restore` と緊急の端末復元 (`eve_platform::term`) で戻す。
-//! - 入力スレッド: 端末と、SIGWINCH / SIGCONT の自己パイプを `poll` で待つ。端末が読めたら **待ちなしで読める分を読み切って**
-//!   (1 回の読取) `VtParser::feed` に渡す。途切れたシーケンスを持ち越したまま入力が途絶えたら `ESC_WAIT` で `flush` する。
-//!   SIGWINCH は `Resize`。SIGCONT (外から止められて `fg` で再開した) は「端末の再初期化が要る」印を立てて `Resize` を送る
-//!   (次の描画で raw モード・代替スクリーン・各モードを入れ直して全面を描く)。
+//! - 入力スレッド: 端末と、SIGWINCH / SIGCONT の自己パイプと、停止の自己パイプを `poll` で待つ。端末が読めたら
+//!   **待ちなしで読める分を読み切って** (1 回の読取) `VtParser::feed` に渡す。途切れたシーケンスを持ち越したまま入力が
+//!   途絶えたら `ESC_WAIT` で `flush` する。SIGWINCH は `Resize`。SIGCONT (外から止められて `fg` で再開した) は
+//!   「端末の再初期化が要る」印を立てて `Resize` を送る (次の描画で raw モード・代替スクリーン・各モードを入れ直して全面を描く)。
+//! - 入力スレッドの停止 (docs/review/v0.3-findings.md の SAF-30): `ConsoleInput` の drop で停止の自己パイプの書き端を閉じ、
+//!   スレッドは `poll` で気づいて終わる。端末の fd は `Arc<OwnedFd>` でスレッドと共有し、スレッドが終わるまで閉じない
+//!   (閉じた fd の番号が別のファイルに再利用されても、それを読まない)。
 //! - サスペンド (`app.suspend`、05 §11.3): frontend が端末を復元してから `stop_self` で止まる。再開は上の SIGCONT と同じ経路。
+//!   入力スレッドは止めない (`restore` は停止を伴わない)。
 
 #![allow(unsafe_code)]
 
 use std::io;
+use std::os::fd::{AsFd, AsRawFd, BorrowedFd, FromRawFd, OwnedFd};
 use std::os::unix::net::UnixStream;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -21,9 +26,9 @@ use std::thread::{self, JoinHandle};
 
 use eve_view::{CellSize, InputEvent};
 
-use crate::buffer::surface_rows_for_window;
+use super::vt::{VtOut, VtParser};
+use super::{InputOut, surface_resize};
 use crate::mouse::{MouseTracker, SharedGeom};
-use crate::vt_input::{VtOut, VtParser};
 
 /// 1 回の `read` の大きさ。
 const READ_CHUNK: usize = 64 * 1024;
@@ -44,15 +49,7 @@ pub const ENTER_MODES: &str = "\x1b[?2004h\x1b[?1004h\x1b[>1u\x1b[>4;2m";
 pub const LEAVE_MODES: &str =
     "\x1b[>4m\x1b[<u\x1b[?1004l\x1b[?2004l\x1b[?1006l\x1b[?1002l\x1b[?1000l";
 
-/// 入力の送り先 (本番は `eve_host::InputSink`)。
-pub trait InputOut: Send + 'static {
-    /// `InputEvent` を送る。受け手が閉じていれば `false`。
-    fn event(&self, ev: InputEvent) -> bool;
-    /// 入力スレッドが続けられなくなった。
-    fn died(&self);
-}
-
-fn open_tty(nonblock: bool) -> io::Result<i32> {
+fn open_tty(nonblock: bool) -> io::Result<OwnedFd> {
     let mut flags = libc::O_RDWR | libc::O_CLOEXEC | libc::O_NOCTTY;
     if nonblock {
         flags |= libc::O_NONBLOCK;
@@ -62,32 +59,33 @@ fn open_tty(nonblock: bool) -> io::Result<i32> {
     if fd < 0 {
         return Err(io::Error::last_os_error());
     }
-    Ok(fd)
+    // SAFETY: `open` が返した、ほかに持ち主の無い fd。
+    Ok(unsafe { OwnedFd::from_raw_fd(fd) })
 }
 
-fn termios_of(fd: i32) -> io::Result<libc::termios> {
+fn termios_of(fd: BorrowedFd<'_>) -> io::Result<libc::termios> {
     // SAFETY: ゼロ初期化した termios (整数と配列だけ) に書かせる。
     let mut t: libc::termios = unsafe { std::mem::zeroed() };
-    // SAFETY: 有効な書込先。
-    if unsafe { libc::tcgetattr(fd, &mut t) } != 0 {
+    // SAFETY: 開いている fd と有効な書込先。
+    if unsafe { libc::tcgetattr(fd.as_raw_fd(), &mut t) } != 0 {
         return Err(io::Error::last_os_error());
     }
     Ok(t)
 }
 
-fn set_termios(fd: i32, t: &libc::termios) -> io::Result<()> {
-    // SAFETY: 有効な termios。
-    if unsafe { libc::tcsetattr(fd, libc::TCSANOW, t) } != 0 {
+fn set_termios(fd: BorrowedFd<'_>, t: &libc::termios) -> io::Result<()> {
+    // SAFETY: 開いている fd と有効な termios。
+    if unsafe { libc::tcsetattr(fd.as_raw_fd(), libc::TCSANOW, t) } != 0 {
         return Err(io::Error::last_os_error());
     }
     Ok(())
 }
 
-fn window_size(fd: i32) -> io::Result<CellSize> {
+fn window_size(fd: BorrowedFd<'_>) -> io::Result<CellSize> {
     // SAFETY: ゼロ初期化した winsize に書かせる。
     let mut ws: libc::winsize = unsafe { std::mem::zeroed() };
-    // SAFETY: TIOCGWINSZ は winsize へ書く。
-    if unsafe { libc::ioctl(fd, libc::TIOCGWINSZ, &mut ws) } != 0 {
+    // SAFETY: 開いている fd。TIOCGWINSZ は winsize へ書く。
+    if unsafe { libc::ioctl(fd.as_raw_fd(), libc::TIOCGWINSZ, &mut ws) } != 0 {
         return Err(io::Error::last_os_error());
     }
     if ws.ws_col == 0 || ws.ws_row == 0 {
@@ -99,10 +97,10 @@ fn window_size(fd: i32) -> io::Result<CellSize> {
     })
 }
 
-fn write_all(fd: i32, mut b: &[u8]) -> io::Result<()> {
+fn write_all(fd: BorrowedFd<'_>, mut b: &[u8]) -> io::Result<()> {
     while !b.is_empty() {
-        // SAFETY: `b` は有効な領域。
-        let n = unsafe { libc::write(fd, b.as_ptr().cast(), b.len()) };
+        // SAFETY: 開いている fd。`b` は有効な領域。
+        let n = unsafe { libc::write(fd.as_raw_fd(), b.as_ptr().cast(), b.len()) };
         if n < 0 {
             let e = io::Error::last_os_error();
             if e.kind() == io::ErrorKind::Interrupted {
@@ -115,56 +113,52 @@ fn write_all(fd: i32, mut b: &[u8]) -> io::Result<()> {
     Ok(())
 }
 
-/// 端末の入力。`open` で raw モードにし、`restore` (または drop) で起動時の termios に戻す。
+/// 端末の入力。`open` で raw モードにし、`restore` (または drop) で起動時の termios に戻す。drop は入力スレッドも止める。
 pub struct ConsoleInput {
-    fd: i32,
+    /// 入力スレッドと共有する (スレッドが終わるまで閉じない、SAF-30)。
+    fd: Arc<OwnedFd>,
     saved: libc::termios,
     raw: libc::termios,
     restored: bool,
     /// SIGCONT を受けて、端末の再初期化 (`reinit`) が要る。入力スレッドが立て、描画が下ろす。
     reinit: Arc<AtomicBool>,
+    /// 入力スレッドの停止の自己パイプ (書き端, 読み端)。書き端を閉じると、読み端の複製を `poll` するスレッドが終わる。
+    stop: (UnixStream, UnixStream),
 }
-
-// SAFETY: fd と termios (平文の構造体) だけを持つ。
-unsafe impl Send for ConsoleInput {}
 
 impl ConsoleInput {
     pub fn open() -> io::Result<ConsoleInput> {
-        let fd = open_tty(true)?;
-        let saved = match termios_of(fd) {
-            Ok(t) => t,
-            Err(e) => {
-                // SAFETY: 開いた fd を閉じる。
-                unsafe { libc::close(fd) };
-                return Err(e);
-            }
-        };
+        ConsoleInput::with_fd(open_tty(true)?)
+    }
+
+    /// 開いた端末 (非ブロック) を raw モードにして持つ。失敗したら `fd` は drop で閉じる。
+    fn with_fd(fd: OwnedFd) -> io::Result<ConsoleInput> {
+        let saved = termios_of(fd.as_fd())?;
         let mut raw = saved;
         // SAFETY: 有効な termios を raw に書き換える。
         unsafe { libc::cfmakeraw(&mut raw) };
         raw.c_cc[libc::VMIN] = 1;
         raw.c_cc[libc::VTIME] = 0;
-        if let Err(e) = set_termios(fd, &raw) {
-            // SAFETY: 開いた fd を閉じる。
-            unsafe { libc::close(fd) };
-            return Err(e);
-        }
+        set_termios(fd.as_fd(), &raw)?;
+        let stop = UnixStream::pair()?;
         Ok(ConsoleInput {
-            fd,
+            fd: Arc::new(fd),
             saved,
             raw,
             restored: false,
             reinit: Arc::new(AtomicBool::new(false)),
+            stop,
         })
     }
 
     pub fn window_size(&self) -> io::Result<CellSize> {
-        window_size(self.fd)
+        window_size(self.fd.as_fd())
     }
 
     /// マウスの報告を入れる・外す (04 §6.8)。
     pub fn set_mouse(&self, on: bool) {
-        let _ = write_all(self.fd, if on { MOUSE_ON } else { MOUSE_OFF }.as_bytes());
+        let seq = if on { MOUSE_ON } else { MOUSE_OFF };
+        let _ = write_all(self.fd.as_fd(), seq.as_bytes());
     }
 
     /// 起動時の termios (緊急の端末復元に渡す。`eve_platform::term::save_mode` と同じ形のバイト列)。
@@ -196,7 +190,7 @@ impl ConsoleInput {
 
     /// raw モードを入れ直す (SIGCONT の後。止めたシェルが termios を戻しているため)。
     pub fn reenter_raw(&mut self) {
-        let _ = set_termios(self.fd, &self.raw);
+        let _ = set_termios(self.fd.as_fd(), &self.raw);
         self.restored = false;
     }
 
@@ -205,21 +199,22 @@ impl ConsoleInput {
             return;
         }
         self.restored = true;
-        let _ = set_termios(self.fd, &self.saved);
+        let _ = set_termios(self.fd.as_fd(), &self.saved);
     }
 }
 
 impl Drop for ConsoleInput {
     fn drop(&mut self) {
         self.restore();
-        // SAFETY: 自分が開いた fd を閉じる。
-        unsafe { libc::close(self.fd) };
+        // 入力スレッドを止める: この後に `stop` の書き端 (複製していない) が drop で閉じ、読み端を `poll` するスレッドが
+        // 切断 (POLLHUP) を見て終わる。端末の fd は、スレッドが持つ `Arc` を手放したときに閉じる。`shutdown` は使わない
+        // (ネットワークの API の型を製品のコードに入れない。ネットワーク通信の無いことの検査、AC-NFR-502-1)
     }
 }
 
 /// 端末の出力 (`/dev/tty`、ブロックする書込)。
 pub struct ConsoleOut {
-    fd: i32,
+    fd: OwnedFd,
 }
 
 impl ConsoleOut {
@@ -230,27 +225,20 @@ impl ConsoleOut {
     }
 
     pub fn write_str(&mut self, s: &str) -> io::Result<()> {
-        write_all(self.fd, s.as_bytes())
+        write_all(self.fd.as_fd(), s.as_bytes())
     }
 
     pub fn window_size(&self) -> io::Result<CellSize> {
-        window_size(self.fd)
+        window_size(self.fd.as_fd())
     }
 
     /// 描画先の fd (緊急の端末復元に渡す)。
     pub fn raw_handle(&self) -> usize {
-        self.fd as usize
+        self.fd.as_raw_fd() as usize
     }
 
     /// 出力の側には戻すモードが無い (termios は入力の側が戻す)。
     pub fn restore(&mut self) {}
-}
-
-impl Drop for ConsoleOut {
-    fn drop(&mut self) {
-        // SAFETY: 自分が開いた fd を閉じる。
-        unsafe { libc::close(self.fd) };
-    }
 }
 
 /// 自分だけに SIGTSTP を送って止まる (プロセスグループには送らない。シェル・tmux が前面のジョブとして止める、05 §11.3)。
@@ -270,28 +258,32 @@ pub fn is_background_job() -> bool {
     let Ok(fd) = open_tty(true) else {
         return false;
     };
-    // SAFETY: 開いた fd を調べて閉じる。
+    // SAFETY: 開いている fd を調べる (閉じるのは drop)。`getpgrp` は引数の無い問い合わせ。
     unsafe {
-        let fg = libc::tcgetpgrp(fd);
-        libc::close(fd);
+        let fg = libc::tcgetpgrp(fd.as_raw_fd());
         fg >= 0 && fg != libc::getpgrp()
     }
 }
 
-/// 端末のウィンドウの大きさから、編集面の `Resize` を作る (クローム行を除く、04 §3.1)。
-pub fn surface_resize(window: CellSize, hint_bar: bool) -> InputEvent {
-    InputEvent::Resize {
-        cols: window.cols,
-        rows: surface_rows_for_window(window.rows, hint_bar),
+/// シグナルの自己パイプ (読み端を非ブロックにする)。drop で受信の登録を外す (入力スレッドが終わった後に書かせない)。
+struct SignalPipe {
+    rd: UnixStream,
+    id: signal_hook::SigId,
+}
+
+impl SignalPipe {
+    fn new(signo: i32) -> io::Result<SignalPipe> {
+        let (rd, wr) = UnixStream::pair()?;
+        rd.set_nonblocking(true)?;
+        let id = signal_hook::low_level::pipe::register(signo, wr)?;
+        Ok(SignalPipe { rd, id })
     }
 }
 
-/// シグナルの自己パイプ (読み端を非ブロックにする)。
-fn signal_pipe(signo: i32) -> io::Result<UnixStream> {
-    let (rd, wr) = UnixStream::pair()?;
-    rd.set_nonblocking(true)?;
-    signal_hook::low_level::pipe::register(signo, wr)?;
-    Ok(rd)
+impl Drop for SignalPipe {
+    fn drop(&mut self) {
+        signal_hook::low_level::unregister(self.id);
+    }
 }
 
 fn drain(s: &UnixStream) {
@@ -300,8 +292,16 @@ fn drain(s: &UnixStream) {
     while matches!((&*s).read(&mut b), Ok(n) if n > 0) {}
 }
 
+/// 入力スレッドが端末と一緒に `poll` で待つもの。
+struct Wakers {
+    winch: SignalPipe,
+    cont: SignalPipe,
+    /// 停止の自己パイプの読み端 (書き端が閉じたら終わる)。
+    stop: UnixStream,
+}
+
 struct Loop<'a> {
-    fd: i32,
+    fd: BorrowedFd<'a>,
     out: &'a dyn InputOut,
     geom: &'a SharedGeom,
     parser: VtParser,
@@ -341,8 +341,9 @@ impl Loop<'_> {
         buf.clear();
         let mut chunk = vec![0u8; READ_CHUNK];
         loop {
-            // SAFETY: `chunk` は有効な書込先。
-            let n = unsafe { libc::read(self.fd, chunk.as_mut_ptr().cast(), chunk.len()) };
+            // SAFETY: 開いている fd (`BorrowedFd` の間は閉じない)。`chunk` は有効な書込先。
+            let n =
+                unsafe { libc::read(self.fd.as_raw_fd(), chunk.as_mut_ptr().cast(), chunk.len()) };
             if n > 0 {
                 buf.extend_from_slice(&chunk[..n as usize]);
                 continue;
@@ -361,15 +362,15 @@ impl Loop<'_> {
     }
 }
 
-fn run(
-    fd: i32,
-    out: &dyn InputOut,
-    geom: &SharedGeom,
-    winch: UnixStream,
-    cont: UnixStream,
-    reinit: &AtomicBool,
-) {
-    use std::os::unix::io::AsRawFd;
+fn pollin(fd: BorrowedFd<'_>) -> libc::pollfd {
+    libc::pollfd {
+        fd: fd.as_raw_fd(),
+        events: libc::POLLIN,
+        revents: 0,
+    }
+}
+
+fn run(fd: BorrowedFd<'_>, out: &dyn InputOut, geom: &SharedGeom, w: &Wakers, reinit: &AtomicBool) {
     let mut l = Loop {
         fd,
         out,
@@ -380,34 +381,27 @@ fn run(
     let mut batch = Vec::new();
     loop {
         let mut fds = [
-            libc::pollfd {
-                fd,
-                events: libc::POLLIN,
-                revents: 0,
-            },
-            libc::pollfd {
-                fd: winch.as_raw_fd(),
-                events: libc::POLLIN,
-                revents: 0,
-            },
-            libc::pollfd {
-                fd: cont.as_raw_fd(),
-                events: libc::POLLIN,
-                revents: 0,
-            },
+            pollin(fd),
+            pollin(w.winch.rd.as_fd()),
+            pollin(w.cont.rd.as_fd()),
+            pollin(w.stop.as_fd()),
         ];
         let timeout = if l.parser.has_pending() {
             ESC_WAIT_MS
         } else {
             -1
         };
-        // SAFETY: 有効な pollfd の配列。
+        // SAFETY: 有効な pollfd の配列 (どの fd もこの関数の間は開いている)。
         let r = unsafe { libc::poll(fds.as_mut_ptr(), fds.len() as libc::nfds_t, timeout) };
         if r < 0 {
             if io::Error::last_os_error().kind() == io::ErrorKind::Interrupted {
                 continue;
             }
             out.died();
+            return;
+        }
+        // 停止の指示 (書き端が閉じた) を先に見る。端末はもう読まない
+        if fds[3].revents != 0 {
             return;
         }
         if r == 0 {
@@ -418,14 +412,14 @@ fn run(
             continue;
         }
         if fds[2].revents & libc::POLLIN != 0 {
-            drain(&cont);
+            drain(&w.cont.rd);
             reinit.store(true, Ordering::Release);
             if !l.resize() {
                 return;
             }
         }
         if fds[1].revents & libc::POLLIN != 0 {
-            drain(&winch);
+            drain(&w.winch.rd);
             if !l.resize() {
                 return;
             }
@@ -450,6 +444,7 @@ fn run(
 }
 
 /// 入力スレッドを起動する。termios は `ConsoleInput` が持ち、復元は呼び出し側 (`ConsoleInput::restore`)。
+/// スレッドは `ConsoleInput` の drop で止まる (SAF-30)。
 // 入力スレッドは 02 §9.1 の表のスレッド (R11 の例外。deps-policy.toml の `allowed_files` に載せている)。
 #[allow(clippy::disallowed_methods)]
 pub fn spawn_input_thread(
@@ -457,16 +452,19 @@ pub fn spawn_input_thread(
     out: impl InputOut,
     geom: Arc<SharedGeom>,
 ) -> io::Result<JoinHandle<()>> {
-    let winch = signal_pipe(libc::SIGWINCH)?;
-    let cont = signal_pipe(libc::SIGCONT)?;
-    let fd = input.fd;
+    let wakers = Wakers {
+        winch: SignalPipe::new(libc::SIGWINCH)?,
+        cont: SignalPipe::new(libc::SIGCONT)?,
+        stop: input.stop.1.try_clone()?,
+    };
+    let fd = input.fd.clone();
     let reinit = input.reinit.clone();
     thread::Builder::new()
         .name("eve-input".to_owned())
         .spawn(move || {
             // panic したら Host に Fatal を送る (端末を raw のまま操作できなくしない、SAF-07)
             crate::frontend::run_guarded(
-                || run(fd, &out, &geom, winch, cont, &reinit),
+                || run(fd.as_fd(), &out, &geom, &wakers, &reinit),
                 || out.died(),
             );
         })
@@ -477,6 +475,7 @@ mod tests {
     use super::*;
     use std::sync::Mutex;
     use std::sync::mpsc;
+    use std::time::Duration;
 
     struct Chan(Mutex<mpsc::Sender<InputEvent>>);
 
@@ -487,8 +486,8 @@ mod tests {
         fn died(&self) {}
     }
 
-    /// 擬似端末 (主, 従)。
-    fn pty() -> (i32, i32) {
+    /// 擬似端末 (主, 従)。従の側は非ブロックにする (`ConsoleInput::open` と同じ)。
+    fn pty() -> (OwnedFd, OwnedFd) {
         let (mut m, mut s) = (-1, -1);
         let ws = libc::winsize {
             ws_row: 24,
@@ -500,46 +499,34 @@ mod tests {
         let r =
             unsafe { libc::openpty(&mut m, &mut s, std::ptr::null_mut(), std::ptr::null(), &ws) };
         assert_eq!(r, 0);
-        (m, s)
+        // SAFETY: `openpty` が返した、ほかに持ち主の無い fd。従の側を非ブロックにする。
+        unsafe {
+            let fl = libc::fcntl(s, libc::F_GETFL);
+            libc::fcntl(s, libc::F_SETFL, fl | libc::O_NONBLOCK);
+            (OwnedFd::from_raw_fd(m), OwnedFd::from_raw_fd(s))
+        }
     }
 
     #[test]
     fn 擬似端末の入力を読んで_input_event_にし_sigwinch_で_resize() {
         let (m, s) = pty();
         // 従の側を raw にする (`ConsoleInput::open` と同じ。行単位のままだと改行まで読めない)
-        let mut raw = termios_of(s).unwrap();
-        // SAFETY: 有効な termios。
-        unsafe { libc::cfmakeraw(&mut raw) };
-        set_termios(s, &raw).unwrap();
-        // SAFETY: 従の側を非ブロックにする (`ConsoleInput::open` と同じ)。
-        unsafe {
-            let fl = libc::fcntl(s, libc::F_GETFL);
-            libc::fcntl(s, libc::F_SETFL, fl | libc::O_NONBLOCK);
-        }
+        let input = ConsoleInput::with_fd(s).unwrap();
         let (tx, rx) = mpsc::channel();
         let geom = Arc::new(SharedGeom::default());
-        let winch = signal_pipe(libc::SIGWINCH).unwrap();
-        let cont = signal_pipe(libc::SIGCONT).unwrap();
-        let reinit = Arc::new(AtomicBool::new(false));
-        let r2 = reinit.clone();
-        let out = Chan(Mutex::new(tx));
-        #[allow(clippy::disallowed_methods)]
-        std::thread::spawn(move || run(s, &out, &geom, winch, cont, &r2));
-        write_all(m, "aあ\x1b[A\x13".as_bytes()).unwrap();
+        let _t = spawn_input_thread(&input, Chan(Mutex::new(tx)), geom).unwrap();
+        write_all(m.as_fd(), "aあ\x1b[A\x13".as_bytes()).unwrap();
         let mut got = Vec::new();
         while got.len() < 3 {
-            got.push(
-                rx.recv_timeout(std::time::Duration::from_secs(5))
-                    .expect("届く"),
-            );
+            got.push(rx.recv_timeout(Duration::from_secs(5)).expect("届く"));
         }
         assert_eq!(got[0], InputEvent::Text("aあ".to_owned()));
         assert!(matches!(got[1], InputEvent::Key(k) if k.code == eve_view::KeyCode::Up));
         // 単独の ESC は同じ読取に続きが無いので Esc
-        write_all(m, b"\x1b").unwrap();
-        let mut esc = rx.recv_timeout(std::time::Duration::from_secs(5)).unwrap();
+        write_all(m.as_fd(), b"\x1b").unwrap();
+        let mut esc = rx.recv_timeout(Duration::from_secs(5)).unwrap();
         if !matches!(esc, InputEvent::Key(k) if k.code == eve_view::KeyCode::Esc) {
-            esc = rx.recv_timeout(std::time::Duration::from_secs(5)).unwrap();
+            esc = rx.recv_timeout(Duration::from_secs(5)).unwrap();
         }
         assert!(
             matches!(esc, InputEvent::Key(k) if k.code == eve_view::KeyCode::Esc),
@@ -554,18 +541,48 @@ mod tests {
         };
         // SAFETY: 主の側の大きさを変え、自分に SIGWINCH を送る。
         unsafe {
-            libc::ioctl(m, libc::TIOCSWINSZ, &ws);
+            libc::ioctl(m.as_raw_fd(), libc::TIOCSWINSZ, &ws);
             libc::raise(libc::SIGWINCH);
         }
-        let ev = rx.recv_timeout(std::time::Duration::from_secs(5)).unwrap();
+        let ev = rx.recv_timeout(Duration::from_secs(5)).unwrap();
         assert!(matches!(ev, InputEvent::Resize { cols: 100, .. }), "{ev:?}");
         // SIGCONT: 再初期化の印と Resize
         // SAFETY: 自分に SIGCONT を送る (止まっていないので何も起きない)。
         unsafe { libc::raise(libc::SIGCONT) };
-        let ev = rx.recv_timeout(std::time::Duration::from_secs(5)).unwrap();
+        let ev = rx.recv_timeout(Duration::from_secs(5)).unwrap();
         assert!(matches!(ev, InputEvent::Resize { .. }), "{ev:?}");
-        assert!(reinit.load(Ordering::Acquire));
-        // SAFETY: 主の側を閉じる (従は入力スレッドが読み続ける)。
-        unsafe { libc::close(m) };
+        assert!(input.reinit_pending());
+    }
+
+    /// SAF-30: `ConsoleInput` を drop すると、入力が無くても入力スレッドはすぐ止まり、その後に端末の fd を閉じる
+    /// (閉じた fd の番号を読み続けない)。
+    #[test]
+    fn console_input_を_drop_すると入力スレッドはすぐ止まる() {
+        let (m, s) = pty();
+        let input = ConsoleInput::with_fd(s).unwrap();
+        let (tx, rx) = mpsc::channel();
+        let geom = Arc::new(SharedGeom::default());
+        let t = spawn_input_thread(&input, Chan(Mutex::new(tx)), geom).unwrap();
+        write_all(m.as_fd(), b"a").unwrap();
+        assert_eq!(
+            rx.recv_timeout(Duration::from_secs(5)).unwrap(),
+            InputEvent::Text("a".to_owned())
+        );
+        let fd = Arc::downgrade(&input.fd);
+        drop(input);
+        // スレッドが終われば送り先 (`Chan`) も drop され、受け手は切断を知る。並行に走る試験の raise(SIGWINCH) は
+        // signal-hook がすべての登録に配るので、止まる前に Resize が届くことがある。切断までの受信は読み捨てる
+        loop {
+            match rx.recv_timeout(Duration::from_secs(2)) {
+                Ok(_) => continue,
+                Err(mpsc::RecvTimeoutError::Disconnected) => break,
+                Err(e) => panic!("入力スレッドが止まらない: {e:?}"),
+            }
+        }
+        t.join().unwrap();
+        assert!(
+            fd.upgrade().is_none(),
+            "スレッドが終われば端末の fd を閉じる"
+        );
     }
 }

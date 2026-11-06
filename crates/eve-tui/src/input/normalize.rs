@@ -11,12 +11,12 @@ use std::collections::BTreeSet;
 
 use eve_view::{InputEvent, KeyCode, KeyEvent, KeyKind, Modifiers};
 
+use super::{TextItem, push_text};
+
 /// バーストの開始に必要な、文字を生成する KeyDown の件数 (04 §6.6。S-07 で確定)。
 pub const BURST_N: usize = 16;
 /// バースト中の無入力の待ち (ms)。
 pub const BURST_T_MS: u32 = 16;
-/// 連続する `Text` を 1 メッセージにまとめる上限 (バイト)。
-pub const MAX_TEXT_BYTES: usize = 64 * 1024;
 
 const LEFT_ALT: u32 = 0x0002;
 const RIGHT_ALT: u32 = 0x0001;
@@ -158,17 +158,16 @@ pub struct Normalizer {
     burst: Option<Burst>,
 }
 
-fn push_text(out: &mut Vec<Out>, s: &str) {
-    if s.is_empty() {
-        return;
+impl TextItem for Out {
+    fn text_mut(&mut self) -> Option<&mut String> {
+        match self {
+            Out::Event(InputEvent::Text(t)) => Some(t),
+            _ => None,
+        }
     }
-    if let Some(Out::Event(InputEvent::Text(last))) = out.last_mut()
-        && last.len() + s.len() <= MAX_TEXT_BYTES
-    {
-        last.push_str(s);
-        return;
+    fn from_text(s: String) -> Out {
+        Out::Event(InputEvent::Text(s))
     }
-    out.push(Out::Event(InputEvent::Text(s.to_owned())));
 }
 
 impl Normalizer {
@@ -241,15 +240,7 @@ impl Normalizer {
             let s = String::from_utf16_lossy(&b.body);
             if b.plain {
                 // Text は 1 メッセージ 64 KiB まで
-                let mut rest = s.as_str();
-                while !rest.is_empty() {
-                    let mut cut = rest.len().min(MAX_TEXT_BYTES);
-                    while !rest.is_char_boundary(cut) {
-                        cut -= 1;
-                    }
-                    out.push(Out::Event(InputEvent::Text(rest[..cut].to_owned())));
-                    rest = &rest[cut..];
-                }
+                push_text(&mut out, &s);
             } else {
                 out.push(Out::Event(InputEvent::Paste(s)));
             }
@@ -363,6 +354,7 @@ impl Normalizer {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::input::MAX_TEXT_BYTES;
 
     fn key(down: bool, vk: u16, ch: u16, state: u32) -> Raw {
         Raw::Key(KeyRec {
