@@ -40,6 +40,8 @@ pub trait FileSystem: Send + Sync {
 
     /// `from` を `to` の名前に変える。**`to` が既に在れば失敗する** (置き換えない。「退避名を元の名前に戻す」、05 §4.6)。
     /// 同じボリューム内の移動だけ。実装していない Port は `Unsupported`。
+    /// Unix の退路 (`link` + `unlink`) で link の後に `from` を消せなかったときは `Err` を返す。`to` は作られ、`from` も残る
+    /// (呼び側は `to` の有無で確かめる。docs/review/v0.3-findings.md の SAF-40)。
     fn rename_no_replace(&self, _from: &FsPath, _to: &FsPath) -> Result<(), FsError> {
         Err(FsError::new(FsErrorKind::Unsupported))
     }
@@ -476,12 +478,17 @@ pub enum SaveWarning {
     AttrsNotPreserved { what: Vec<AttrKind> },
     /// 置換で他の利用者からの権限が元より狭くなった。
     PermissionNarrowed,
-    /// `fsync` に失敗した (ネットワーク FS・リムーバブル)。保存は続けた (05 §4.1 手順 3)。
+    /// 一時ファイル・ディレクトリの `fsync` を FS が受け付けなかった (ネットワーク FS・リムーバブル)。保存は続けた (05 §4.1 手順 3 / 6)。
+    /// 一時ファイルの `fsync` の EIO・ENOSPC 等 (Unix) は警告ではなくエラー (docs/review/v0.3-findings.md の SAF-46)。
     FsyncFailed,
     /// 置換の直後に他のプログラムが保存先を変更した可能性がある (FileId が一致しない)。次の保存は照合で Conflict になる (05 §4.1 手順 7)。
     ChangedAfterSave,
     /// 退避名 (`.<name>.eve-bak-*`) を消せなかった。保存先は新しい内容で完全 (05 §4.1 手順 7)。
     BackupNotRemoved { path: FsPath },
+    /// 一時ファイル (`.<name>.eve-tmp-*`) を消せなかった。保存先は新しい内容で完全で、一時ファイルは保存先と同じ実体
+    /// (Unix の新規ファイルの `link` + `unlink` の退路。消すまでは次の保存がハードリンクの確認になる。05 §4.1「新規ファイル」、
+    /// docs/review/v0.3-findings.md の SAF-40)。
+    TempNotRemoved { path: FsPath },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

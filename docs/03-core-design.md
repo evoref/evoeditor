@@ -1084,13 +1084,14 @@ file.save(doc)  [main]
   7. 成功: history.saved = node; disk_stamp = report.new_stamp (置換の後の T の FileId が書いた一時ファイルのものと違えば、Port は書いた内容の stamp を入れて警告を積む。
      ディスクの T とは一致しないので次の保存は照合で Conflict になり、外部変更として扱われる。05 §4.1 手順 7); path 確定 (新規ファイル・名前を付けて保存の場合);
      canonical = Saved.canonical; file_id = Saved.meta.file_id; 名前を付けて保存では読み取り専用の理由 (FileAttribute / NoWritePermission、§9.6) を Saved.meta から付け直す; dirty 再計算; DocumentSaved 通知; スワップを削除 (§10.2)
-     report.method == InPlace なら `info.save.in_place` (04 §15.2) のメッセージで直接上書きで保存したことを 1 回示す (ステータスの項目にはしない。05 §4.4)。report.warnings (権限複製失敗、EscapeMerge §8.3 等) をメッセージで提示 (保存の完了のメッセージの後に、最も重い 1 つを警告として出す。重さの順は FsyncFailed → ChangedAfterSave → BackupNotRemoved → PermissionNarrowed → AttrsNotPreserved → InflightFlagNotWritten。文言は 04 §15.2)
+     report.method == InPlace なら `info.save.in_place` (04 §15.2) のメッセージで直接上書きで保存したことを 1 回示す (ステータスの項目にはしない。05 §4.4)。report.warnings (権限複製失敗、EscapeMerge §8.3 等) をメッセージで提示 (保存の完了のメッセージの後に、最も重い 1 つを警告として出す。重さの順は TempNotRemoved → FsyncFailed → ChangedAfterSave → BackupNotRemoved → PermissionNarrowed → AttrsNotPreserved → InflightFlagNotWritten。文言は 04 §15.2)
      失敗: Document は dirty のまま。JobError と FsError.kind (と detail) で分類し、**§9.7 (e) の「保存失敗の後の選択肢」の表** (MessageKey・選択肢・次の状態・後続処理) に従って提示する。
        分類の要点 (選択肢は §9.7 (e) の表が正本):
        - JobResult::Unmappable → §8.6 E3 の選択肢
        - Conflict (外部変更) → §9.5
        - AtomicUnsupported + detail Hardlink { nlink } (HardlinkPolicy::Ask) → 選んだ HardlinkPolicy を SaveOptions.hardlink に入れて再投入する (WriteInPlace は method = InPlace)
-       - AtomicUnsupported (上記以外: 他ユーザー所有、ディレクトリに書込権限なし、FS が非対応、Windows で ReplaceFileW が元ファイルを変えずに失敗した) →
+       - AtomicUnsupported (上記以外。条件は 05 §4.4 の表が正本: 他ユーザー所有、root で所有者を保てない (Unix)、ディレクトリに書込権限なし、FS が非対応、
+         既存の T の rename の EBUSY (Unix。1 ファイルの bind mount ほか)、Windows で ReplaceFileW が元ファイルを変えずに失敗した) →
          `file.atomic_save_fallback` (下の「ハードリンク…」) が ask なら確認を出す (既定の選択肢は「別名で保存」)。ADR-0016 のフォールバックは利用者の承認を要し、
          承認後に method = InPlace で再投入する (手順 5'。乾式走査を必ず行う)。ReplaceFileW の失敗で MoveFileExW などの別の置換手段へ切り替えることはしない (02 §4.5)
        - BackupFailed (in-place の事前バックアップに失敗、または in-place の保存中フラグを書けない (detail = InflightFlag)。**何も書いていない**) →

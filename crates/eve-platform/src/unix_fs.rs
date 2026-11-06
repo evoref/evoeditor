@@ -108,8 +108,18 @@ fn meta_of(p: &Path, meta: &fs::Metadata) -> FileMeta {
         link: link_info(p),
         fs_kind: FsKind::Unknown,
         // root は他人のファイルの所有者も保てるので「自分の」として扱う (05 §4.4)
-        owner_is_me: Some(meta.uid() == euid() || euid() == 0),
+        owner_is_me: Some(meta.uid() == my_euid() || my_euid() == 0),
     }
+}
+
+/// 実効 uid (単体試験では `hooks::pretend_uid("euid", ..)` で差し替えられる。SAF-36 / 37 の分岐の試験)。
+fn my_euid() -> u32 {
+    hooks::uid_override("euid").unwrap_or_else(euid)
+}
+
+/// 一時ファイルの所有者 (fstat の st_uid。単体試験では `hooks::pretend_uid("tmp_uid", ..)` で差し替えられる)。
+fn tmp_owner(f: &File) -> Option<u32> {
+    hooks::uid_override("tmp_uid").or_else(|| f.metadata().ok().map(|m| m.uid()))
 }
 
 /// 保存先 T: シンボリックリンクなら最終リンク先 (ダングリングは `NotFound` + `DanglingLink`)。`create` ならダングリングの
@@ -212,9 +222,11 @@ fn copy_xattrs(src: &File, dst: &File, with_acl: bool) -> Vec<AttrKind> {
 
 /// 上書きしない移動 (`renameat2(RENAME_NOREPLACE)`。使えない FS ではハードリンク + 削除)。在れば `AlreadyExists`。
 /// Linux 以外では `renameat2` を使わない (`ENOSYS` として代替の経路へ。`sys::unix`)。
-fn rename_no_replace(from: &Path, to: &Path) -> io::Result<()> {
+/// 退路で link が成功した後に `from` を消せなかったら `Ok(Some(e))` (`to` は完成している。`from` は `to` のハードリンクとして残る。
+/// 05 §4.1「新規ファイル」、docs/review/v0.3-findings.md の SAF-40)。
+fn rename_no_replace(from: &Path, to: &Path) -> io::Result<Option<io::Error>> {
     let e = match hooked("rename_noreplace", || rename_noreplace(from, to)) {
-        Ok(()) => return Ok(()),
+        Ok(()) => return Ok(None),
         Err(e) => e,
     };
     match e.raw_os_error() {
@@ -222,7 +234,7 @@ fn rename_no_replace(from: &Path, to: &Path) -> io::Result<()> {
         // ENOTSUP / EOPNOTSUPP を返す FS もある (docs/review/v0.3-findings.md の REF-07)
         Some(c) if [libc::ENOSYS, libc::EINVAL, libc::ENOTSUP, libc::EOPNOTSUPP].contains(&c) => {
             hooked("link", || fs::hard_link(from, to))?;
-            hooked("unlink_after_link", || fs::remove_file(from))
+            Ok(hooked("unlink_after_link", || fs::remove_file(from)).err())
         }
         _ => Err(e),
     }
@@ -230,11 +242,15 @@ fn rename_no_replace(from: &Path, to: &Path) -> io::Result<()> {
 
 /// 既存の T を置き換える rename の失敗の写像。FUSE・特殊な FS で rename が `EXDEV` / `ENOTSUP` で、取り直した T が無傷
 /// (`intact`) なら、原子的な置換ができないだけなので `AtomicUnsupported` にする (core が確認の後に直接上書きへ進む、
-/// 05 §4.4 の表。docs/review/v0.3-findings.md の SAF-23)。新規ファイル (T が無い) には使わない (直接上書きは T があるときだけ)。
+/// 05 §4.4 の表。docs/review/v0.3-findings.md の SAF-23)。1 ファイルだけの bind mount の `EBUSY` も同じ (SAF-38)。
+/// 新規ファイル (T が無い) には使わない (直接上書きは T があるときだけ)。
 /// それ以外は `map_io_error` (他の操作の `EXDEV` は 05 §4.4 の表のとおり `Other`)。
 fn rename_error(e: io::Error, path: &FsPath, intact: bool) -> FsError {
     match e.raw_os_error() {
-        Some(c) if intact && [libc::EXDEV, libc::ENOTSUP, libc::EOPNOTSUPP].contains(&c) => {
+        Some(c)
+            if intact
+                && [libc::EXDEV, libc::ENOTSUP, libc::EOPNOTSUPP, libc::EBUSY].contains(&c) =>
+        {
             FsError {
                 kind: FsErrorKind::AtomicUnsupported,
                 detail: None,
@@ -251,6 +267,12 @@ fn hooked<T>(point: &str, f: impl FnOnce() -> io::Result<T>) -> io::Result<T> {
         Some(e) => Err(e),
         None => f(),
     }
+}
+
+/// 一時ファイルの fsync の失敗のうち、FS が受け付けないだけのもの (警告で続ける。05 §4.1 手順 3、SAF-46)。
+fn fsync_unsupported(e: &io::Error) -> bool {
+    e.raw_os_error()
+        .is_some_and(|c| [libc::EINVAL, libc::ENOTSUP, libc::EOPNOTSUPP, libc::ENOSYS].contains(&c))
 }
 
 fn fsync_dir(dir: &Path) -> bool {
@@ -276,7 +298,11 @@ impl FileSystem for UnixFs {
     }
 
     fn rename_no_replace(&self, from: &FsPath, to: &FsPath) -> Result<(), FsError> {
-        rename_no_replace(from.as_path(), to.as_path()).map_err(|e| map_io_error(e, to))
+        // link の後に from を消せなかったときは従来どおり失敗として返す (呼び側は from が残っているのを前提にできる)
+        match rename_no_replace(from.as_path(), to.as_path()) {
+            Ok(None) => Ok(()),
+            Ok(Some(e)) | Err(e) => Err(map_io_error(e, to)),
+        }
     }
 
     state_dir_methods!();
@@ -347,7 +373,7 @@ impl FileSystem for UnixFs {
         }
         // 書込権限の無い T: rename は置き換えてしまうので、「読み取り専用を解除して保存」(FR-116) の確認を経たときだけ置換する
         // (mode は下で T のものを写すので、解除は置換の間だけになる。Windows の手順 5b と同じ結果)
-        if existing.as_ref().is_some_and(|m| m.readonly) && !opts.clear_readonly && euid() != 0 {
+        if existing.as_ref().is_some_and(|m| m.readonly) && !opts.clear_readonly && my_euid() != 0 {
             return Err(FsError::new(FsErrorKind::PermissionDenied));
         }
         let orig_meta = existing.as_ref().and_then(|_| fs::metadata(&target).ok());
@@ -406,6 +432,28 @@ impl FileSystem for UnixFs {
             }
         };
 
+        // 1b. 他ユーザー所有の判定 (本文を書く前): 一時ファイルの所有者が T と違えば、置換すると所有者が変わる。
+        // root (所有者を写す preserve.security のとき) は、ここで fchown(uid, gid) して fstat で確かめる (SAF-37。root_squash・
+        // 名前空間に写っていない uid・黙って何もしない FS では合わない)。合わなければ、または root でなければ、空の一時ファイルと
+        // フラグを消して確認付きの直接上書きへ (本文を他人の所有のファイルに書かない)。uid を固定・写像して見せる FS
+        // (sshfs・CIFS・all_squash 等) では同じ uid に見えるので置換を続ける (05 §4.1 手順 1b・§4.4 の表。
+        // docs/review/v0.3-findings.md の SAF-36)
+        if let Some(om) = &orig_meta
+            && tmp_owner(&file) != Some(om.uid())
+        {
+            let fixed = my_euid() == 0
+                && opts.preserve.security
+                && hooked("fchown", || {
+                    std::os::unix::fs::fchown(&file, Some(om.uid()), Some(om.gid()))
+                })
+                .is_ok()
+                && tmp_owner(&file) == Some(om.uid());
+            if !fixed {
+                abort(Some(file), &mut flag);
+                return Err(FsError::new(FsErrorKind::AtomicUnsupported));
+            }
+        }
+
         // 2. 本文
         loop {
             match data.next_chunk() {
@@ -428,12 +476,20 @@ impl FileSystem for UnixFs {
 
         hooks::hit("kill_after_tmp_write");
 
-        // 3. fsync (失敗は警告。ext4 の data=ordered でも rename の前の fsync は要る)
-        if opts.fsync != FsyncLevel::None && hooked("fsync", || fsync(&file)).is_err() {
-            warnings.push(SaveWarning::FsyncFailed);
+        // 3. fsync (ext4 の data=ordered でも rename の前の fsync は要る)。警告で続けるのは FS が受け付けないときだけで、
+        // EIO・ENOSPC 等 (データが届いていない恐れ) は置換に進まず T を残す (05 §4.1 手順 3。docs/review/v0.3-findings.md の SAF-46)
+        if opts.fsync != FsyncLevel::None
+            && let Err(e) = hooked("fsync", || fsync(&file))
+        {
+            if fsync_unsupported(&e) {
+                warnings.push(SaveWarning::FsyncFailed);
+            } else {
+                abort(Some(file), &mut flag);
+                return Err(map_io_error(e, path));
+            }
         }
 
-        // 4. 所有者と mode (fchown → fchmod の順。setuid / setgid は保たない)、xattr と POSIX ACL
+        // 4. グループと mode (fchown → fchmod の順。所有者は手順 1b で合わせてある。setuid / setgid は保たない)、xattr と POSIX ACL
         if let Some(om) = &orig_meta {
             let mut lost: Vec<AttrKind> = Vec::new();
             let mut lose = |k: AttrKind| {
@@ -445,17 +501,17 @@ impl FileSystem for UnixFs {
             // 一時ファイルのグループが T と同じか (同じでなければ、元の mode や ACL を当てると別のグループに読める)
             let mut same_group = true;
             if opts.preserve.security {
-                let (uid, gid) = (om.uid(), om.gid());
+                let gid = om.gid();
                 let gid_is = |f: &File| f.metadata().is_ok_and(|x| x.gid() == gid);
                 same_group = gid_is(&file);
-                if uid != euid() || !same_group {
-                    // 他人の所有を自分が引き継げない (EPERM) ときは、グループだけでも合わせて警告する
-                    if hooked("fchown", || {
-                        std::os::unix::fs::fchown(&file, Some(uid), Some(gid))
+                // 所有者は手順 1b で T と同じと確かめてある。ここで合わせるのはグループだけで、所属していないグループ (EPERM)
+                // ならグループのビットを落として警告する
+                if !same_group {
+                    if hooked("fchown_group", || {
+                        std::os::unix::fs::fchown(&file, None, Some(gid))
                     })
                     .is_err()
                     {
-                        let _ = std::os::unix::fs::fchown(&file, None, Some(gid));
                         lose(AttrKind::Security);
                     }
                     // chown を黙って何もしない FS (vfat の quiet・unix 拡張の無い CIFS 等) があるので、結果は fstat で見る
@@ -529,6 +585,7 @@ impl FileSystem for UnixFs {
 
         // 5. 置換 (終了の経路はここが済むまで待つ)
         let _replacing = self.replacing.guard(&target_path.display());
+        let mut leftover_tmp = false;
         let method = if existing.is_some() {
             if let Err(e) = hooked("replace", || fs::rename(&tmp, &target)) {
                 // T が無傷か (手順 0b の値と同じか) を取り直して確かめる。無傷でなければ AtomicUnsupported にしない
@@ -541,16 +598,28 @@ impl FileSystem for UnixFs {
             }
             SaveMethod::Atomic
         } else {
-            if let Err(e) = rename_no_replace(&tmp, &target) {
-                abort(None, &mut flag);
-                if e.kind() == io::ErrorKind::AlreadyExists {
-                    let cur = self
-                        .metadata(&target_path)
-                        .ok()
-                        .map(|m| FileStamp::from_meta(&m, None));
-                    return Err(conflict(cur));
+            match rename_no_replace(&tmp, &target) {
+                Ok(None) => {}
+                // link で T は完成している: 成功として返す。一時ファイル (T のハードリンク) は消さずに名前をログに残し、
+                // 保存中フラグを残して起動時の走査に片付けを任せる (05 §4.1「新規ファイル」。docs/review/v0.3-findings.md の SAF-40)
+                Ok(Some(e)) => {
+                    flag.log_leftover_tmp(&tmp, &e);
+                    warnings.push(SaveWarning::TempNotRemoved {
+                        path: FsPath::new(tmp.clone()),
+                    });
+                    leftover_tmp = true;
                 }
-                return Err(map_io_error(e, path));
+                Err(e) => {
+                    abort(None, &mut flag);
+                    if e.kind() == io::ErrorKind::AlreadyExists {
+                        let cur = self
+                            .metadata(&target_path)
+                            .ok()
+                            .map(|m| FileStamp::from_meta(&m, None));
+                        return Err(conflict(cur));
+                    }
+                    return Err(map_io_error(e, path));
+                }
             }
             SaveMethod::NewFile
         };
@@ -571,8 +640,10 @@ impl FileSystem for UnixFs {
             (Some(a), None) => FileStamp::from_meta(a, None),
             (None, _) => return Err(FsError::new(FsErrorKind::Other)),
         };
-        // 8. 成功: フラグ (と同じキーに残る他の記録) を消す
-        flag.finish_success();
+        // 8. 成功: フラグ (と同じキーに残る他の記録) を消す。一時ファイルが残ったときは自分のフラグを残す (SAF-40)
+        if !leftover_tmp {
+            flag.finish_success();
+        }
         Ok(SaveReport {
             method,
             new_stamp,
@@ -977,23 +1048,253 @@ true
         assert!(ufs.list_inflight().unwrap().is_empty());
     }
 
-    // 05 §4.1 手順 3: 一時ファイルの fsync を FS が受け付けない (EINVAL。ネットワーク FS など) ときは警告にして保存を続ける。
-    // EIO (データが届いていない恐れ) の扱いは仕様に無いので、ここでは固めない (docs/review/v0.3-findings.md の SAF-46)
+    // 05 §4.1 手順 3: 一時ファイルの fsync を FS が受け付けない (EINVAL / ENOTSUP / EOPNOTSUPP / ENOSYS。ネットワーク FS など) ときは警告にして保存を続ける
     #[test]
     fn 一時ファイルの_fsync_を受け付けない_fs_では警告にして保存する() {
-        let t = Tmp::new("fsync");
+        for errno in [libc::EINVAL, libc::ENOTSUP, libc::EOPNOTSUPP, libc::ENOSYS] {
+            let t = Tmp::new(&format!("fsync{errno}"));
+            let ufs = UnixFs::default();
+            let a = t.p("a.txt");
+            fs::write(&a, b"old\n").unwrap();
+            let expect = stamp_of(&ufs, &a);
+            let _g = hooks::inject_errno("fsync", errno);
+            let r = save(&ufs, &a, b"new\n", expect).unwrap();
+            assert_eq!(fs::read(&a).unwrap(), b"new\n");
+            assert!(
+                r.warnings.contains(&SaveWarning::FsyncFailed),
+                "errno {errno}: {:?}",
+                r.warnings
+            );
+        }
+    }
+
+    // SAF-46: 一時ファイルの fsync が EIO・ENOSPC (データが届いていない恐れ) なら置換に進まず、一時ファイルを消して T を残す
+    // (05 §4.1 手順 3)
+    #[test]
+    fn 一時ファイルの_fsync_が_eio_や_enospc_なら置換せずに_t_を残す() {
+        for (errno, kind) in [
+            (libc::EIO, FsErrorKind::Other),
+            (libc::ENOSPC, FsErrorKind::DiskFull),
+        ] {
+            let t = Tmp::new(&format!("fsyncfail{errno}"));
+            let ufs = with_state(&t);
+            let a = t.p("a.txt");
+            fs::write(&a, b"old\n").unwrap();
+            let expect = stamp_of(&ufs, &a);
+            let _g = hooks::inject_errno("fsync", errno);
+            let e = save(&ufs, &a, b"new\n", expect).unwrap_err();
+            assert_eq!(e.kind, kind, "errno {errno}");
+            assert_eq!(fs::read(&a).unwrap(), b"old\n", "T は無傷");
+            assert!(
+                leftovers_outside_state(&t).is_empty(),
+                "errno {errno}: {:?}",
+                leftovers(&t)
+            );
+            assert_eq!(flag_files(&t), 0, "保存中フラグを消す");
+        }
+    }
+
+    /// 状態ディレクトリに残る保存中フラグのファイルの数 (自分のプロセスの記録は list_inflight に出ないので、ファイルを数える)。
+    fn flag_files(t: &Tmp) -> usize {
+        let Ok(rd) = fs::read_dir(t.p("state").join("recovery").join("inflight")) else {
+            return 0;
+        };
+        rd.flatten()
+            .flat_map(|k| fs::read_dir(k.path()).into_iter().flatten().flatten())
+            .filter(|e| e.path().extension().is_some_and(|x| x == "toml"))
+            .count()
+    }
+
+    // SAF-36: 一時ファイルの所有者が T と違う (他ユーザー所有で root でない) なら、本文を書く前に空の一時ファイルとフラグを消して
+    // AtomicUnsupported (core が確認の後に直接上書きし、所有者を保つ。05 §4.1 手順 1b・§4.4 の表)。uid は変えられないので、
+    // 実効 uid と一時ファイルの st_uid を「T の所有者でも root でもない」に差し替える
+    #[test]
+    fn 一時ファイルの所有者が_t_と違えば本文を書く前に_atomic_unsupported() {
+        let t = Tmp::new("other-owner");
+        let ufs = with_state(&t);
+        let a = t.p("a.txt");
+        fs::write(&a, b"old\n").unwrap();
+        let other = fs::metadata(&a).unwrap().uid().wrapping_add(1).max(1);
+        let _e = hooks::pretend_uid("euid", other);
+        let _u = hooks::pretend_uid("tmp_uid", other);
+        let expect = stamp_of(&ufs, &a);
+        let e = save(&ufs, &a, b"secret\n", expect).unwrap_err();
+        assert_eq!(e.kind, FsErrorKind::AtomicUnsupported);
+        assert!(
+            e.detail.is_none(),
+            "確認付きの直接上書き (ハードリンク・一時ファイル規則ではない): {:?}",
+            e.detail
+        );
+        assert_eq!(fs::read(&a).unwrap(), b"old\n");
+        assert!(
+            leftovers_outside_state(&t).is_empty(),
+            "一時ファイルを消す: {:?}",
+            leftovers(&t)
+        );
+        assert_eq!(flag_files(&t), 0, "保存中フラグを消す");
+    }
+
+    // SAF-36 の守り: uid を固定・写像して見せる FS (sshfs の idmap=none・CIFS・all_squash 等) では、他ユーザー所有に見えても
+    // 一時ファイルが T と同じ uid になるので、置換を続ける (毎回直接上書きに落とさない)
+    #[test]
+    fn 一時ファイルの所有者が_t_と同じなら他ユーザー所有に見えても置換する() {
+        let t = Tmp::new("idmap");
         let ufs = UnixFs::default();
         let a = t.p("a.txt");
         fs::write(&a, b"old\n").unwrap();
-        let expect = stamp_of(&ufs, &a);
-        let _g = hooks::inject_errno("fsync", libc::EINVAL);
-        let r = save(&ufs, &a, b"new\n", expect).unwrap();
-        assert_eq!(fs::read(&a).unwrap(), b"new\n");
-        assert!(
-            r.warnings.contains(&SaveWarning::FsyncFailed),
-            "{:?}",
-            r.warnings
+        let owner = fs::metadata(&a).unwrap().uid();
+        let _e = hooks::pretend_uid("euid", owner.wrapping_add(1).max(1));
+        assert_eq!(
+            ufs.metadata(&FsPath::new(a.clone())).unwrap().owner_is_me,
+            Some(false)
         );
+        let expect = stamp_of(&ufs, &a);
+        let r = save(&ufs, &a, b"new\n", expect).unwrap();
+        assert_eq!(r.method, SaveMethod::Atomic);
+        assert_eq!(fs::read(&a).unwrap(), b"new\n");
+        assert_eq!(fs::metadata(&a).unwrap().uid(), owner);
+        assert!(leftovers(&t).is_empty(), "{:?}", leftovers(&t));
+    }
+
+    // SAF-37 の残り: root で fchown が黙って何もしない FS (一時ファイルの st_uid が変わらない) と、所有者を写さない
+    // (preserve.security = false) 保存でも、所有者の違う一時ファイルで置換しない (05 §4.1 手順 1b・4)
+    #[test]
+    fn root_でも一時ファイルの所有者を_t_に合わせられなければ置換しない() {
+        for security in [true, false] {
+            let t = Tmp::new(&format!("root-noop{security}"));
+            let ufs = with_state(&t);
+            let a = t.p("a.txt");
+            fs::write(&a, b"old\n").unwrap();
+            let other = fs::metadata(&a).unwrap().uid().wrapping_add(1).max(1);
+            let _e = hooks::pretend_uid("euid", 0);
+            let _u = hooks::pretend_uid("tmp_uid", other);
+            let mut opts = SaveOptions::user_file(stamp_of(&ufs, &a));
+            opts.preserve.security = security;
+            let mut body = Bytes(Some(b"new\n"));
+            let e = ufs
+                .write_atomic(&FsPath::new(a.clone()), &mut body, &opts)
+                .unwrap_err();
+            assert_eq!(
+                e.kind,
+                FsErrorKind::AtomicUnsupported,
+                "security {security}"
+            );
+            assert!(body.0.is_some(), "本文を書く前に中止する");
+            assert_eq!(fs::read(&a).unwrap(), b"old\n");
+            assert!(
+                leftovers_outside_state(&t).is_empty(),
+                "{:?}",
+                leftovers(&t)
+            );
+            assert_eq!(flag_files(&t), 0);
+        }
+    }
+
+    // SAF-37: root で fchown(uid) が失敗したら (root_squash 等)、置換の前に一時ファイルを消して AtomicUnsupported
+    // (05 §4.1 手順 4・§4.4 の表)。root でなければ実効 uid を 0 に差し替え、root なら T を別の uid に渡してから試す
+    #[test]
+    fn root_で所有者を合わせられなければ一時ファイルを消して_atomic_unsupported() {
+        let t = Tmp::new("root-chown");
+        let ufs = with_state(&t);
+        let a = t.p("a.txt");
+        fs::write(&a, b"old\n").unwrap();
+        // root でなければ実効 uid を 0 に、一時ファイルの所有者を T と別の uid に差し替える (root が作った一時ファイルを再現する)
+        let other = fs::metadata(&a).unwrap().uid().wrapping_add(1).max(1);
+        let _p = if euid() == 0 {
+            std::os::unix::fs::chown(&a, Some(12345), None).unwrap();
+            None
+        } else {
+            Some((
+                hooks::pretend_uid("euid", 0),
+                hooks::pretend_uid("tmp_uid", other),
+            ))
+        };
+        let owner = fs::metadata(&a).unwrap().uid();
+        let expect = stamp_of(&ufs, &a);
+        let _g = hooks::inject_errno("fchown", libc::EPERM);
+        let mut body = Bytes(Some(b"new\n"));
+        let e = ufs
+            .write_atomic(
+                &FsPath::new(a.clone()),
+                &mut body,
+                &SaveOptions::user_file(expect),
+            )
+            .unwrap_err();
+        assert_eq!(e.kind, FsErrorKind::AtomicUnsupported);
+        assert!(
+            body.0.is_some(),
+            "本文を書く前に中止する (他人の所有の一時ファイルに書かない)"
+        );
+        assert_eq!(fs::read(&a).unwrap(), b"old\n", "T は無傷");
+        assert_eq!(fs::metadata(&a).unwrap().uid(), owner, "所有者を変えない");
+        assert!(
+            leftovers_outside_state(&t).is_empty(),
+            "一時ファイルを消す: {:?}",
+            leftovers(&t)
+        );
+        assert_eq!(flag_files(&t), 0, "保存中フラグを消す");
+    }
+
+    // SAF-38: 1 ファイルだけの bind mount では置換の rename が EBUSY になる。T が無傷なら AtomicUnsupported (05 §4.4 の表)
+    #[test]
+    fn 置換の_rename_が_ebusy_で_t_が無傷なら_atomic_unsupported() {
+        let t = Tmp::new("ebusy");
+        let ufs = with_state(&t);
+        let a = t.p("a.txt");
+        fs::write(&a, b"old\n").unwrap();
+        let expect = stamp_of(&ufs, &a);
+        let _g = hooks::inject_errno("replace", libc::EBUSY);
+        let e = save(&ufs, &a, b"new\n", expect).unwrap_err();
+        assert_eq!(e.kind, FsErrorKind::AtomicUnsupported);
+        assert_eq!(fs::read(&a).unwrap(), b"old\n");
+        assert!(
+            leftovers_outside_state(&t).is_empty(),
+            "{:?}",
+            leftovers(&t)
+        );
+        assert_eq!(flag_files(&t), 0);
+        // T が無傷でなければ EBUSY でも直接上書きへ進めない
+        let p = FsPath::new(PathBuf::from("/x/a.txt"));
+        let e = rename_error(io::Error::from_raw_os_error(libc::EBUSY), &p, false);
+        assert_eq!(e.kind, FsErrorKind::Busy);
+    }
+
+    // SAF-40: 退路の link が成功した後に一時ファイルを消せなくても、T は完成しているので成功を返す。一時ファイル (T のハードリンク)
+    // は残し、名前をログに残して保存中フラグも残す (05 §4.1「新規ファイル」)。次の保存は nlink = 2 のハードリンクの確認になる
+    #[test]
+    fn 退路の_link_の後に一時ファイルを消せなくても保存は成功しフラグを残す() {
+        let t = Tmp::new("unlink-after-link");
+        let ufs = with_state(&t);
+        let a = t.p("a.txt");
+        let _g1 = hooks::inject_errno("rename_noreplace", libc::ENOSYS);
+        let _g2 = hooks::inject_errno("unlink_after_link", libc::EIO);
+        let r = save(&ufs, &a, b"one\n", Expect::Absent).unwrap();
+        assert_eq!(r.method, SaveMethod::NewFile);
+        assert_eq!(fs::read(&a).unwrap(), b"one\n");
+        let tmp = leftovers_outside_state(&t)
+            .into_iter()
+            .find(|n| n.contains(".eve-tmp-"))
+            .expect("一時ファイルが残る");
+        assert_eq!(
+            r.warnings,
+            vec![SaveWarning::TempNotRemoved {
+                path: FsPath::new(t.p(&tmp))
+            }],
+            "利用者に知らせる"
+        );
+        assert_eq!(
+            fs::metadata(t.p(&tmp)).unwrap().ino(),
+            fs::metadata(&a).unwrap().ino()
+        );
+        let log = fs::read_to_string(t.p("state").join("log").join("evoeditor.log")).unwrap();
+        assert!(log.contains(&tmp), "{log}");
+        assert_eq!(flag_files(&t), 1, "フラグは残る");
+        // 次の保存: 照合は合い (Conflict にならない)、ハードリンクの確認になる
+        let e = save(&ufs, &a, b"two\n", stamp_of(&ufs, &a)).unwrap_err();
+        assert!(matches!(
+            e.detail,
+            Some(FsErrorDetail::Hardlink { nlink: 2 })
+        ));
     }
 
     // 05 §4.1 手順 6・§4.3: ディレクトリの fsync の失敗は (置換の後なので) 警告にする

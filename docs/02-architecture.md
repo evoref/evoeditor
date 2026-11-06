@@ -434,7 +434,8 @@ trait FileSystem: Send + Sync {
                                                                              // 形に合わない名前は無視。中のファイルは読まない。05 §7.5 の「recovery/ の走査と削除の規則」)。場所が無ければ空の Vec
     fn list_inflight(&self) -> Result<Vec<InflightRecord>, FsError>;         // v0.2: 保存中フラグ (recovery/inflight/) の一覧 = 置換途中のクラッシュ痕跡。書いたプロセスが動いているもの (自分を含む) は除く。
                                                                              // 解析できないフラグは malformed = true (target は空) で返す。状態ディレクトリが無ければ空
-    fn rename_no_replace(&self, from: &FsPath, to: &FsPath) -> Result<(), FsError>; // v0.2: from を to の名前に変える。to が在れば失敗する (置き換えない)。同じボリュームだけ。M6e の「退避名を元の名前に戻す」(05 §4.6)
+    fn rename_no_replace(&self, from: &FsPath, to: &FsPath) -> Result<(), FsError>; // v0.2: from を to の名前に変える。to が在れば失敗する (置き換えない)。同じボリュームだけ。M6e の「退避名を元の名前に戻す」(05 §4.6)。
+                                                                             // Unix の退路 (link + unlink) で link の後に from を消せなかったときは Err を返す。to は作られ、from も残る (呼び側は to の有無で確かめる。SAF-40)
     fn list_orphan_backups(&self) -> Result<Vec<OrphanBackup>, FsError>;     // v0.2: state_dir/backup/ 直下の in-place の事前バックアップ (*.bak / *.bak.tmp、05 §7.5)。名前の pid が動いているもの・サブディレクトリ・
                                                                              // 形に合わない名前は含めない。どのフラグが記録したかは見ない (照合は core)。OrphanBackup { path, pid, partial (.bak.tmp か), len }
     // ── スワップ (v0.2、FR-118、03 §10.2。置き場所と形式は 05 §7.5。実装が置き場所を決める) ──
@@ -524,10 +525,13 @@ enum SaveWarning {                 // 保存は成功したが知らせること
                                    // 例外は in_place_backup = SkipConfirmed の再投入で、利用者は痕跡なしの上書きを承認済みなので、この警告を付けて続ける
     AttrsNotPreserved { what: Vec<AttrKind> /*FileAttributes | Security | StreamsXattr*/ }, // PreserveAttrs で求めた属性の一部を保てなかった
     PermissionNarrowed,            // 置換で他の利用者からの権限が元より狭くなった (05 §4.1)
-    FsyncFailed,                   // fsync に失敗した (ネットワーク FS・リムーバブル)。保存は続けた (05 §4.1 手順 3)
+    FsyncFailed,                   // FS が fsync を受け付けなかった (ネットワーク FS・リムーバブル。Unix の一時ファイルは EINVAL / ENOTSUP / EOPNOTSUPP / ENOSYS だけ)。保存は続けた。
+                                   // Unix の一時ファイルの EIO・ENOSPC 等は警告ではなくエラー (05 §4.1 手順 3。docs/review/v0.3-findings.md の SAF-46)。ディレクトリの fsync (手順 6) の失敗は警告
     AclNarrowed,                   // (Windows。S-09 の結果次第で置く) 置換のあと DACL が元より狭くなった。PermissionNarrowed との統合も含めて S-09 で決める
     ChangedAfterSave,              // (v0.1 の案の名前は FileIdMismatch) 置換のあとの T の FileId が自分の書いた tmp のものと違う (保存の直後に他のプログラムが変更した可能性、05 §4.1 手順 7 の FileId の確認)。new_stamp には自分の書いた値を入れる
     BackupNotRemoved { path: FsPath }, // Windows。置換の成功後に退避名を消せなかった (保存は成功。フラグを残す、05 §4.1 手順 7)
+    TempNotRemoved { path: FsPath },   // Unix。新規ファイルの link + unlink の退路で、link の後に一時ファイルを消せなかった (保存は成功。一時ファイルは T と同じ実体。フラグを残す、
+                                   // 05 §4.1「新規ファイル」・手順 7。docs/review/v0.3-findings.md の SAF-40)
     EscapeMerge { positions: Vec<Pos> /*先頭 100 件*/ }, // v0.4 (03 §8.3 の隣接エスケープ)。v0.1 では出さない
 }
 struct InflightRecord {            // 保存中フラグ 1 つ分 (recovery/inflight/<hash(key)>/<pid>-<seq>.toml、キーは下表「保存中フラグのキー」、配置と書式は 05 §7.5)
@@ -566,8 +570,10 @@ enum FsErrorKind {
     Conflict { current: Option<FileStamp> } /*SaveOptions.expected と不一致。何も書いていない。current は照合の時点の保存先 T の Stamp で、
                                        None = T が存在しない (開いた後に削除された。Expect::Stamp を期待していて T が無い場合で、NotFound ではなくこれを返す)。
                                        Expect::Absent を期待していて T が存在すれば Some(その Stamp)。core は確認の後の再投入で Some なら Stamp(current)、None なら Absent を使う (03 §9.3)*/,
-    AtomicUnsupported                /*原子的置換ができない・意味が変わる (ハードリンクの Ask、他ユーザー所有、ディレクトリに書込権限なし、FS が非対応、
-                                       ReplaceFileW が元ファイルを変えずに失敗)。何も書いていない。core は利用者の確認を経て write_in_place へ (ADR-0016)*/,
+    AtomicUnsupported                /*原子的置換ができない・意味が変わる (ハードリンクの Ask、他ユーザー所有 (Unix: 作った一時ファイルの所有者が T と違い root でない)、
+                                       root で所有者を保てない (Unix)、ディレクトリに書込権限なし、FS が非対応、既存の T の rename の EBUSY (Unix。1 ファイルの bind mount ほか)、
+                                       ReplaceFileW が元ファイルを変えずに失敗。条件は 05 §4.4 の表が正本)。元のファイルは無傷 (作った一時ファイルは消した)。
+                                       core は利用者の確認を経て write_in_place へ (ADR-0016)*/,
     SourceFailed                     /*ReadChunks の供給側の失敗。元ファイルは無傷 (詳細は ChunkError で core が持つ)*/,
     ReplacedMovedToBackup { backup: FsPath } /*Windows の置換途中失敗: 元ファイルは退避名に完全に残る。core は退避パスを必ず提示し復旧を促す (03 §9.3)*/,
     BackupFailed                     /*write_in_place の事前バックアップ、または保存中フラグの書込に失敗 (後者は detail = InflightFlag)。何も書いていない (元ファイルは無傷)*/,

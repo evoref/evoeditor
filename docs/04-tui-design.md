@@ -1437,6 +1437,7 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 | `msg.save.fsync_failed` | 警告 (`SaveWarning::FsyncFailed`: fsync に失敗した。ネットワーク FS・リムーバブル。保存自体は成功のまま。05 §4.1 手順 3) | {path} を保存しましたが、ディスクへの書き込みの完了を確かめられませんでした / ネットワーク上やリムーバブルのドライブでは、電源断や取り外しで内容を失うことがあります。取り外す前に安全な取り外しを行ってください |
 | `msg.save.permission_narrowed` | 警告 (`SaveWarning::PermissionNarrowed`: 置換で他の利用者からの権限が元より狭くなった。05 §4.1 手順 4) | {path} を保存しましたが、他の利用者からの権限が元より狭くなりました / 必要なら OS で権限を設定し直してください |
 | `msg.save.backup_not_removed` | 警告 (`SaveWarning::BackupNotRemoved`: Windows。置換の成功後に退避名を消せなかった。保存先は新しい内容で完全。05 §4.1 手順 7) | {path} を保存しましたが、元のファイルを移した {backup} を消せませんでした / 要らなければ {backup} を消してください |
+| `msg.save.tmp_not_removed` | 警告 (`SaveWarning::TempNotRemoved`: Unix。新規ファイルの link + unlink の退路で、link の後に一時ファイルを消せなかった。保存先は新しい内容で完全で、一時ファイルは同じ実体。05 §4.1「新規ファイル」、docs/review/v0.3-findings.md の SAF-40) | {path} を保存しましたが、一時ファイル {tmp} を消せませんでした (保存したファイルと同じ実体です) / 要らなければ {tmp} を消してください。消すまでは次の保存でハードリンクの確認が出ます |
 | `msg.save.inflight_flag_not_written` | 警告 (`SaveWarning::InflightFlagNotWritten`: 原子的保存で保存中フラグを書けなかった。保存自体は成功のまま。02 §4.5) | {path} を保存しましたが、保存中の印を書けませんでした / 保存の途中で強制終了したときに、次の起動で痕跡を見つけられないことがあります |
 | `ui.confirm.save.unmappable.title` | E3 表現不能 (03 §8.6 の「E3 の選択肢」。選択肢と出す条件の正本は 03) | 表現できない文字 |
 | `ui.confirm.save.unmappable.message` | 同上 | {count} 個の文字は {encoding} で表せません (最初: 行 {line}, 桁 {col}) |

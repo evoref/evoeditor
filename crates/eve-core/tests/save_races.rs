@@ -117,6 +117,30 @@ fn 保存の直後に他のプログラムが変えた可能性を知らせる()
     );
 }
 
+// SAF-40: Unix の新規ファイルの退路で一時ファイルを消せなかった (`TempNotRemoved`) ことを、そのパスとともに知らせる
+#[test]
+fn 一時ファイルを消せなかったことをパスとともに知らせる() {
+    let mut h = Harness::new().with_file("/w/a.txt", b"x");
+    h.open("/w/a.txt");
+    h.run_jobs();
+    h.text("y");
+    // fsync の警告と重なっても隠れない (重さの順の先頭)
+    h.fs.warn_next(vec![
+        SaveWarning::FsyncFailed,
+        SaveWarning::TempNotRemoved {
+            path: eve_core::FsPath::from("/w/.a.txt.eve-tmp-1-00000000"),
+        },
+    ]);
+    h.cmd("file.save");
+    h.run_jobs();
+    let m = message(&mut h);
+    assert!(!h.is_dirty());
+    assert!(
+        m.contains("一時ファイル") && m.contains(".a.txt.eve-tmp-1-00000000"),
+        "警告を出す: {m}"
+    );
+}
+
 // SAF-06 / 17: すべて置換のジョブの最中に開き直すと、古い結果を適用せず、Revision も戻らない
 #[test]
 fn すべて置換のジョブの最中に開き直すと_古い結果を適用しない() {

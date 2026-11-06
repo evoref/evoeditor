@@ -44,7 +44,8 @@ pub(crate) fn value(name: &str) -> Option<u64> {
 ///
 /// Unix の保存 (`unix_fs.rs`) だけが使う。呼び出し点 (名前は OS に依らない):
 /// `replace` (既存の T の置換の rename)・`rename_noreplace` (新規ファイルの上書きしない移動。Linux は `renameat2`)・
-/// `link` / `unlink_after_link` (その退路)・`fsync` (一時ファイル)・`fsync_dir` (ディレクトリ)・`fchown` (所有者の複製)。
+/// `link` / `unlink_after_link` (その退路)・`fsync` (一時ファイル)・`fsync_dir` (ディレクトリ)・`fchown` (root の所有者の複製。本文を書く前)・`fchown_group` (グループの複製)・
+/// `unlink_tmp` (中断の後片付けの一時ファイルの削除)。
 /// 注意: 差し替えるのはその点の 1 回の呼び出しだけで、中断の後片付け (`abort` の一時ファイルの削除) は本物のまま走る
 /// (`unlink_after_link` を失敗させても、後片付けの削除は成功する。本物の失敗では後片付けも失敗し得る)。
 #[cfg(unix)]
@@ -107,6 +108,53 @@ fn take_injected(point: &str) -> Option<i32> {
         let i = v.iter().position(|(p, _)| p == point)?;
         Some(v.remove(i).1)
     })
+}
+
+/// uid の差し替え (単体試験だけ)。他人の所有・root の分岐 (05 §4.1 手順 1・4、SAF-36 / 37) を、uid を変えずに確かめる。
+/// 点は `euid` (実効 uid) と `tmp_uid` (一時ファイルの fstat の st_uid)。配布ビルドと別プロセスの試験では常に `None` (本物の値)。
+#[cfg(unix)]
+#[inline]
+pub(crate) fn uid_override(point: &str) -> Option<u32> {
+    #[cfg(test)]
+    if let Some(u) = UIDS.with(|v| {
+        v.borrow()
+            .iter()
+            .rev()
+            .find(|(p, _)| p == point)
+            .map(|(_, u)| *u)
+    }) {
+        return Some(u);
+    }
+    let _ = point;
+    None
+}
+
+#[cfg(all(test, unix))]
+thread_local! {
+    static UIDS: std::cell::RefCell<Vec<(String, u32)>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// `pretend_uid` の結果。落とすと差し替えを戻す。
+#[cfg(all(test, unix))]
+#[must_use = "落とすと差し替えを戻す"]
+pub(crate) struct PretendUid {
+    point: String,
+}
+
+#[cfg(all(test, unix))]
+impl Drop for PretendUid {
+    fn drop(&mut self) {
+        UIDS.with(|v| v.borrow_mut().retain(|(p, _)| *p != self.point));
+    }
+}
+
+/// このスレッドで、点 `point` (`euid` / `tmp_uid`) の uid を `uid` とみなす (落とすまで)。
+#[cfg(all(test, unix))]
+pub(crate) fn pretend_uid(point: &str, uid: u32) -> PretendUid {
+    UIDS.with(|v| v.borrow_mut().push((point.to_owned(), uid)));
+    PretendUid {
+        point: point.to_owned(),
+    }
 }
 
 /// フックが `name` を指していれば、その値の文字列 (値なしは空)。
