@@ -903,12 +903,14 @@ impl EditorState {
     pub(crate) fn show_save_warning(&mut self, path: &FsPath, warnings: &[crate::SaveWarning]) {
         use crate::SaveWarning as W;
         let rank = |w: &W| match w {
-            W::FsyncFailed => 0,
-            W::ChangedAfterSave => 1,
-            W::BackupNotRemoved { .. } => 2,
-            W::PermissionNarrowed => 3,
-            W::AttrsNotPreserved { .. } => 4,
-            W::InflightFlagNotWritten => 5,
+            // 一時ファイルの残りは次の保存のハードリンクの確認の原因になるので、隠さない (docs/review/v0.3-findings.md の SAF-40)
+            W::TempNotRemoved { .. } => 0,
+            W::FsyncFailed => 1,
+            W::ChangedAfterSave => 2,
+            W::BackupNotRemoved { .. } => 3,
+            W::PermissionNarrowed => 4,
+            W::AttrsNotPreserved { .. } => 5,
+            W::InflightFlagNotWritten => 6,
         };
         let Some(w) = warnings.iter().min_by_key(|w| rank(w)) else {
             return;
@@ -931,6 +933,11 @@ impl EditorState {
                 MessageLevel::Warn,
                 keys::MSG_SAVE_BACKUP_NOT_REMOVED,
                 &[("path", &p), ("backup", &backup.display())],
+            ),
+            W::TempNotRemoved { path: tmp } => self.show_message(
+                MessageLevel::Warn,
+                keys::MSG_SAVE_TMP_NOT_REMOVED,
+                &[("path", &p), ("tmp", &tmp.display())],
             ),
             W::PermissionNarrowed => {
                 self.show_message(

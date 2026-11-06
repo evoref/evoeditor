@@ -87,50 +87,51 @@ pub(crate) fn scan(fs: &dyn FileSystem) -> Vec<Leftover> {
     let mut out = Vec::new();
     for (_, recs) in groups {
         let target = recs[0].target.clone();
-        let mut bak: Option<FsPath> = None;
-        let mut tmp: Option<FsPath> = None;
-        let mut flags = Vec::new();
-        let mut recorded_at: Option<FileTime> = None;
-        for r in &recs {
-            let b = r.backup.as_ref().filter(|b| exists(fs, b));
-            let t = r.tmp.as_ref().filter(|t| exists(fs, t));
-            if b.is_none() && t.is_none() {
-                // 痕跡が何も残っていない記録: フラグだけを消す
-                let _ = fs.remove_file(&r.flag);
-                continue;
-            }
-            bak = bak.or_else(|| b.cloned());
-            tmp = tmp.or_else(|| t.cloned());
-            flags.push(r.flag.clone());
-            if let Some(at) = r.started_at
-                && recorded_at.is_none_or(|c| newer(at, c))
-            {
-                recorded_at = Some(at);
-            }
-        }
-        if bak.is_none() && tmp.is_none() {
+        let Some(mut t) = Traces::collect(fs, &recs) else {
             continue;
-        }
+        };
         // T の有無。調べられない (ネットワークの不通など) ときは、状態が分からないので提案しない
         let t_exists = match fs.metadata(&target) {
             Ok(_) => true,
             Err(e) if e.kind == FsErrorKind::NotFound => false,
             Err(_) => continue,
         };
+        // T のハードリンクとして残った新規ファイルの一時ファイル (退路で link の後に消せなかった) は、確認なしで消す
+        // (提案の規則 2。docs/review/v0.3-findings.md の SAF-40)。消した後は記録ごとに痕跡を見直す (別の記録の tmp を隠さない)
+        if t_exists {
+            let mut removed = false;
+            for r in recs.iter().filter(|r| r.method == SaveMethod::NewFile) {
+                if let Some(tmp) = r.tmp.as_ref().filter(|p| exists(fs, p))
+                    && hard_link_of(fs, tmp, &target)
+                    && fs.remove_file(tmp).is_ok()
+                {
+                    removed = true;
+                }
+            }
+            if removed {
+                match Traces::collect(fs, &recs) {
+                    Some(n) => t = n,
+                    None => continue,
+                }
+            }
+        }
         // T と内容が同一の退避名は、置換の成功後の削除漏れで、確認なしで消す (提案の規則 2)
         if t_exists
-            && let Some(b) = bak.clone()
+            && let Some(b) = t.bak.clone()
             && identical(fs, &b, &target)
             && fs.remove_file(&b).is_ok()
         {
-            bak = None;
-            if tmp.is_none() {
-                for f in &flags {
-                    let _ = fs.remove_file(f);
-                }
-                continue;
+            match Traces::collect(fs, &recs) {
+                Some(n) => t = n,
+                None => continue,
             }
         }
+        let Traces {
+            bak,
+            tmp,
+            flags,
+            recorded_at,
+        } = t;
         let mk = |kind, bak, tmp| Leftover {
             kind,
             target: target.clone(),
@@ -155,6 +156,58 @@ pub(crate) fn scan(fs: &dyn FileSystem) -> Vec<Leftover> {
     // 新しい順 (記録時刻の無いものは最後)
     out.sort_by_key(|l| std::cmp::Reverse(l.recorded_at.map(|t| (t.secs, t.nanos))));
     out
+}
+
+/// 1 つの T の記録から集めた、実在する痕跡と、それを記録したフラグ。
+struct Traces {
+    bak: Option<FsPath>,
+    tmp: Option<FsPath>,
+    flags: Vec<FsPath>,
+    recorded_at: Option<FileTime>,
+}
+
+impl Traces {
+    /// 記録ごとに一時ファイル・退避名の実在を見る。痕跡が何も残っていない記録はフラグだけを消す (`clear_others` と同じ考え方)。
+    /// どの記録にも痕跡が無ければ `None`。
+    fn collect(fs: &dyn FileSystem, recs: &[&InflightRecord]) -> Option<Traces> {
+        let mut t = Traces {
+            bak: None,
+            tmp: None,
+            flags: Vec::new(),
+            recorded_at: None,
+        };
+        for r in recs {
+            let b = r.backup.as_ref().filter(|b| exists(fs, b));
+            let tm = r.tmp.as_ref().filter(|p| exists(fs, p));
+            if b.is_none() && tm.is_none() {
+                let _ = fs.remove_file(&r.flag);
+                continue;
+            }
+            t.bak = t.bak.or_else(|| b.cloned());
+            t.tmp = t.tmp.or_else(|| tm.cloned());
+            t.flags.push(r.flag.clone());
+            if let Some(at) = r.started_at
+                && t.recorded_at.is_none_or(|c| newer(at, c))
+            {
+                t.recorded_at = Some(at);
+            }
+        }
+        (t.bak.is_some() || t.tmp.is_some()).then_some(t)
+    }
+}
+
+/// `tmp` が T のハードリンクか。FileId は FS によって 0 や同じ値を返し得る (Windows のネットワークのリダイレクタ・WebDAV・
+/// ReFS など) ので、FileId の一致に加えて両方の `nlink >= 2` と、index が 0 でないことを求める (外れたら提案に回す)。
+fn hard_link_of(fs: &dyn FileSystem, tmp: &FsPath, target: &FsPath) -> bool {
+    match (fs.metadata(tmp), fs.metadata(target)) {
+        (Ok(a), Ok(b)) => {
+            a.nlink >= 2
+                && b.nlink >= 2
+                && a.file_id.is_some_and(|id| id.index != 0)
+                && a.file_id == b.file_id
+        }
+        _ => false,
+    }
 }
 
 /// 2 つのファイルの内容が同じか。どちらかが上限より大きい・読めないときは `false`。
@@ -219,5 +272,171 @@ fn cleanup_partial_backups(fs: &dyn FileSystem, records: &[InflightRecord]) {
         if !referenced.contains(final_name) {
             let _ = fs.remove_file(&o.path);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::io::fs::{FileId, FileKind, FileMeta, FsKind, ReadChunks};
+    use std::sync::Mutex;
+
+    /// 名前ごとに FileId を持つだけの FileSystem (ハードリンク = 同じ FileId の 2 つの名前)。MemFs はハードリンクを作れない。
+    struct Links {
+        /// (名前, FileId の index, nlink)
+        files: Mutex<Vec<(FsPath, u128, u32)>>,
+        records: Vec<InflightRecord>,
+    }
+
+    impl Links {
+        fn has(&self, p: &str) -> bool {
+            let p = FsPath::from(p);
+            self.files.lock().unwrap().iter().any(|(n, _, _)| *n == p)
+        }
+    }
+
+    impl FileSystem for Links {
+        fn metadata(&self, path: &FsPath) -> Result<FileMeta, FsError> {
+            let files = self.files.lock().unwrap();
+            let (_, id, nlink) = files
+                .iter()
+                .find(|(n, _, _)| n == path)
+                .ok_or_else(|| FsError::new(FsErrorKind::NotFound))?;
+            Ok(FileMeta {
+                kind: FileKind::File,
+                len: 1,
+                mtime: FileTime::default(),
+                readonly: false,
+                file_id: Some(FileId {
+                    volume: 1,
+                    index: *id,
+                }),
+                nlink: *nlink,
+                link: None,
+                fs_kind: FsKind::Local,
+                owner_is_me: Some(true),
+            })
+        }
+        fn canonicalize(&self, path: &FsPath) -> Result<FsPath, FsError> {
+            Ok(path.clone())
+        }
+        fn open_read(&self, _path: &FsPath) -> Result<Box<dyn ReadChunks + Send>, FsError> {
+            Err(FsError::new(FsErrorKind::Other))
+        }
+        fn list_inflight(&self) -> Result<Vec<InflightRecord>, FsError> {
+            Ok(self.records.clone())
+        }
+        fn remove_file(&self, path: &FsPath) -> Result<(), FsError> {
+            self.files.lock().unwrap().retain(|(n, _, _)| n != path);
+            Ok(())
+        }
+        fn write_atomic(
+            &self,
+            _path: &FsPath,
+            _data: &mut dyn ReadChunks,
+            _opts: &crate::io::fs::SaveOptions,
+        ) -> Result<crate::io::fs::SaveReport, FsError> {
+            Err(FsError::new(FsErrorKind::Unsupported))
+        }
+    }
+
+    fn rec(method: SaveMethod, seq: u32) -> InflightRecord {
+        InflightRecord {
+            target: FsPath::from("/w/a.txt"),
+            pid: 100,
+            started_at: None,
+            method,
+            tmp: Some(FsPath::from(format!("/w/.a.txt.eve-tmp-{seq}").as_str())),
+            backup: None,
+            backup_recorded: false,
+            backup_complete: false,
+            flag: FsPath::from(format!("/s/{seq}.toml").as_str()),
+            malformed: false,
+        }
+    }
+
+    /// T (index 1) と一時ファイル 1 つ (index `tmp_id`、nlink `nlink`。T も同じ nlink)、記録 1 件 (`method`)。
+    fn env(method: SaveMethod, tmp_id: u128, nlink: u32) -> Links {
+        Links {
+            files: Mutex::new(vec![
+                (FsPath::from("/w/a.txt"), 1, nlink),
+                (FsPath::from("/w/.a.txt.eve-tmp-1"), tmp_id, nlink),
+                (FsPath::from("/s/1.toml"), 9, 1),
+            ]),
+            records: vec![rec(method, 1)],
+        }
+    }
+
+    // SAF-40: T のハードリンクとして残った新規ファイルの一時ファイルは、提案せずに消してフラグも消す
+    // (05 §4.6 の表の「T のハードリンクとして残った新規ファイルの tmp」の行)
+    #[test]
+    fn t_のハードリンクとして残った一時ファイルは確認なしで消す() {
+        let fs = env(SaveMethod::NewFile, 1, 2);
+        assert!(scan(&fs).is_empty());
+        assert!(!fs.has("/w/.a.txt.eve-tmp-1"), "一時ファイルを消す");
+        assert!(fs.has("/w/a.txt"), "T は残す");
+        assert!(!fs.has("/s/1.toml"), "フラグを消す");
+    }
+
+    /// 消さずに「別名で開いて確認」の提案にする (一時ファイルもフラグも残る)。
+    fn assert_offered(fs: &Links) {
+        let l = scan(fs);
+        assert_eq!(l.len(), 1, "{l:?}");
+        assert_eq!(l[0].kind, LeftoverKind::Tmp);
+        assert!(fs.has("/w/.a.txt.eve-tmp-1") && fs.has("/s/1.toml"));
+    }
+
+    #[test]
+    fn 別の実体の一時ファイルは提案にする() {
+        assert_offered(&env(SaveMethod::NewFile, 2, 2));
+    }
+
+    // FileId が一致しても nlink が 1 なら、FileId を信用できない FS (Windows のリダイレクタ・ReFS など) とみなして消さない
+    #[test]
+    fn file_id_が一致しても_nlink_が_1_なら消さずに提案() {
+        assert_offered(&env(SaveMethod::NewFile, 1, 1));
+    }
+
+    // 既存の T の置換 (Atomic) の記録の一時ファイルは、置換の前の完全な新しい内容かもしれないので消さない
+    #[test]
+    fn 新規ファイル以外の記録の一時ファイルは消さない() {
+        assert_offered(&env(SaveMethod::Atomic, 1, 2));
+    }
+
+    // FileId の index が 0 (FS が FileId を持たない) なら消さない
+    #[test]
+    fn file_id_の_index_が_0_なら消さない() {
+        let fs = Links {
+            files: Mutex::new(vec![
+                (FsPath::from("/w/a.txt"), 0, 2),
+                (FsPath::from("/w/.a.txt.eve-tmp-1"), 0, 2),
+                (FsPath::from("/s/1.toml"), 9, 1),
+            ]),
+            records: vec![rec(SaveMethod::NewFile, 1)],
+        };
+        assert_offered(&fs);
+    }
+
+    // 同じ T の記録が 2 件 (SAF-40 の残りと、その後の保存の中断の一時ファイル) なら、消すのは 1 件目の一時ファイルとフラグだけで、
+    // 2 件目の一時ファイルは提案を続ける (記録の無い隠しファイルにしない)
+    #[test]
+    fn 消した後も別の記録の一時ファイルは提案を続ける() {
+        let fs = Links {
+            files: Mutex::new(vec![
+                (FsPath::from("/w/a.txt"), 1, 2),
+                (FsPath::from("/w/.a.txt.eve-tmp-1"), 1, 2),
+                (FsPath::from("/w/.a.txt.eve-tmp-2"), 3, 1),
+                (FsPath::from("/s/1.toml"), 9, 1),
+                (FsPath::from("/s/2.toml"), 9, 1),
+            ]),
+            records: vec![rec(SaveMethod::NewFile, 1), rec(SaveMethod::Atomic, 2)],
+        };
+        let l = scan(&fs);
+        assert_eq!(l.len(), 1, "{l:?}");
+        assert_eq!(l[0].kind, LeftoverKind::Tmp);
+        assert_eq!(l[0].tmp, Some(FsPath::from("/w/.a.txt.eve-tmp-2")));
+        assert_eq!(l[0].flags, vec![FsPath::from("/s/2.toml")]);
+        assert!(!fs.has("/w/.a.txt.eve-tmp-1") && !fs.has("/s/1.toml"));
+        assert!(fs.has("/w/.a.txt.eve-tmp-2") && fs.has("/s/2.toml"));
     }
 }

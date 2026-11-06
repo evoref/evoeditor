@@ -759,6 +759,10 @@ text = "{path} is in a read-only location"
 hint = "Save under another name ({key:file.save_as})"
 text = "Could not save to the recovery folder: {reason}. The original file {path} was not changed"
 
+[msg.save.tmp_not_removed]
+hint = "Delete {tmp} if you do not need it. Until then, the next save asks about a hard link"
+text = "Saved {path}, but the temporary file {tmp} could not be deleted (it is the same file as the saved one)"
+
 [msg.save_as.not_a_file]
 hint = "Enter a different file name"
 text = "{path} is not a file (it may be a folder)"

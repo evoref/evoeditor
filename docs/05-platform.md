@@ -302,7 +302,9 @@ v0.1 で実装するのは Windows の手順 (`ReplaceFileW` 系。§4.2) で、
       Expect::Stamp を期待していて T が無い (開いた後に削除された) ときは NotFound ではなく Conflict { current: None } を返す
       (core は確認の後に Expect::Absent で再投入できる)。Expect::Absent を期待していて T が在るときは Conflict { current: Some(T の Stamp) }。
       T も親フォルダも無いときは Expect に依らず NotFound (detail = ParentMissing) を返す (下記「新規ファイル」)
-   c. 原子的置換の可否判定 (§4.4)。不可なら AtomicUnsupported を返す (core が file.atomic_save_fallback に従い、承認後に乾式走査 → write_in_place を呼ぶ)
+   c. 原子的置換の可否判定 (§4.4)。不可なら AtomicUnsupported を返す (core が file.atomic_save_fallback に従い、承認後に乾式走査 → write_in_place を呼ぶ)。
+      判定の順: ハードリンク (nlink > 1) → 読み取り専用 (Unix。FR-116) → 他ユーザー所有 (Unix。手順 1b で一時ファイルを作った後に判定する。
+      一時ファイルの所有者を見ないと、uid を固定・写像して見せる FS で誤って当たるため)
    d. 保存中フラグ (§4.6 / §7.5) を書く (一時ファイルを作る前)。書けなければ SaveWarning に積んで保存は続ける
       (原子的置換では T が無傷のまま残るため。in-place では続けない、§4.4 手順 2)。
       SaveOptions.state_file = true の書込ではこの手順 (と手順 7・8 のフラグの削除) を行わない (下記「状態ファイルの書込」)。
@@ -315,20 +317,29 @@ v0.1 で実装するのは Windows の手順 (`ReplaceFileW` 系。§4.2) で、
      (所有者のみの DACL のまま T になって ACL を黙って狭める経路を作らない。§4.2)。
      新規ファイル (T が存在しない) の tmp は、SaveOptions.private = false なら親ディレクトリの継承 ACL で作る
      (守るべき T の ACL が無く、移動後のファイルが通常の新規ファイルと同じ ACL を持つようにするため)。private = true なら所有者のみ
+1b. 他ユーザー所有の判定 (Unix、T が存在するとき。本文を書く前): 一時ファイルの fstat の st_uid が T の st_uid と同じなら続ける
+   (uid を固定・写像して見せる FS (sshfs の idmap=none・unix 拡張なしの CIFS・NFS の all_squash・vfat) では同じに見え、置換しても所有者は変わらない)。
+   違うときは、root (euid 0) で SaveOptions.preserve.security なら、その場で (本文を書く前に) fchown(uid, gid) して fstat で st_uid を確かめる。
+   合わなければ (fchown の失敗、または黙って何もしない FS。NFS の root_squash・名前空間に写っていない uid・unix 拡張の無い CIFS)、
+   root でなければ、または preserve.security = false (所有者は設定に依らず黙って変えない) なら、空の一時ファイルとフラグを消して AtomicUnsupported を返す
+   (置換すると所有者が保存した人に変わる。本文を書く前なので、他人の所有の一時ファイルに本文が書かれない。§4.4 の表。
+   docs/review/v0.3-findings.md の SAF-36 / SAF-37)
 2. 本文をチャンク書込 (エンコードは 03。ここはバイト列を受け取るだけ)。取消しはチャンク毎に core のエンコーダが CancelToken を見て
    ChunkError::Aborted を返す形で届き、本層は tmp を削除して SourceFailed を返す (手順 8)。取消しを見るのはここまで (置換の前) の段だけ (下記「取消し」)
 3. fsync(一時ファイル)  — FsyncLevel::Full / FileOnly のとき
    - macOS (1.0 の後): eve-platform が自分で fcntl(F_FULLFSYNC) を呼び、失敗 (ENOTSUP / EINVAL 等。SMB・外部ドライブ) したら fsync() にフォールバックして警告する。
      std の File::sync_all は Apple ターゲットで F_FULLFSYNC を呼ぶだけでフォールバックしないので、sync_all は使わない
    - Windows: FlushFileBuffers (std の sync_all)
-   - ネットワーク FS: 失敗 (ENOTSUP/EINVAL) は警告として SaveReport に積み、保存は続行
+   - 失敗の扱い (Unix): 警告 (SaveWarning::FsyncFailed) として SaveReport に積み、保存を続けるのは FS が fsync を受け付けない
+     (EINVAL / ENOTSUP / EOPNOTSUPP / ENOSYS。ネットワーク FS 等) ときだけ。それ以外 (EIO・ENOSPC・EDQUOT 等。データがディスクに届いていない恐れ) は
+     置換に進まず、一時ファイルを消して T を残したまま FsError を返す (手順 8。docs/review/v0.3-findings.md の SAF-46)
 3b. **一時ファイルのハンドルを閉じる** (Windows では開いたまま ReplaceFileW を呼ぶと共有違反になる。Unix でも fd を閉じてから rename する)
-4. 権限・属性の複製 (§5.1)  — 失敗は警告 (所有者複製失敗は 0c で事前に検出済み)。
+4. 権限・属性の複製 (§5.1)  — 失敗は警告。所有者は手順 1b で T と同じにしてある (保てなければ 1b で AtomicUnsupported) ので、ここではグループと mode だけを扱う。
    v0.1 (Windows) は READONLY・HIDDEN・SYSTEM 属性のみ (所有者・ACL・ADS は ReplaceFileW が保つ分)。Unix の mode / 所有者は v0.2 (macOS / Linux 出荷時)。
    Unix の xattr・ACL と macOS の UF_HIDDEN の明示的な複製は v0.2 (FR-106)
-   - Unix (v0.2): fchown → fchmod の順 (所有グループを合わせる前に mode を広げない)。fchown が失敗した (所属していないグループ等) 場合は、
+   - Unix (v0.2): グループの fchown → fchmod の順 (所有グループを合わせる前に mode を広げない)。fchown が失敗した (所属していないグループ等) 場合は、
      元の mode を **別のグループに適用しない** (意図しない相手に読まれる)。group / other ビットを落として所有者ビットのみ適用し、
-     SaveWarning::PermissionNarrowed で知らせる (または §4.4 の確認フローへ)
+     SaveWarning::PermissionNarrowed で知らせる (または §4.4 の確認フローへ)。グループと mode を写すのは SaveOptions.preserve.security のときだけ
    - Windows: HIDDEN / SYSTEM は置換の前に tmp へ付ける。READONLY は付けない (置換の失敗時に tmp を消せなくなるため。手順 5b)
 4b. 置換の直前の照合: metadata(T) を取り直し、手順 0b の値と **(mtime, len, FileId) だけ** で比べる (内容ハッシュは計算しない。
     ここで T を読み直すと置換までの窓が広がり、大きなファイルでは保存が遅くなるため)。不一致なら tmp を削除して Conflict を返す
@@ -348,6 +359,7 @@ v0.1 で実装するのは Windows の手順 (`ReplaceFileW` 系。§4.2) で、
    Windows で backup 引数に渡した .<name>.eve-bak-<pid>-<rand8> を削除する。削除できたら保存中フラグを削除する。
    **退避名を削除できなかったら (他のプロセスが開いている等) フラグを消さずに残し** (T は新内容で完全なので、開くときの写像では報告しない行になる。§4.6)、
    SaveWarning (退避名を消せなかったこととそのパス) を積む。フラグを残すのは、v0.2 の起動時の走査が残った退避名を見つける手掛かりにするため (§4.6)。
+   Unix の新規ファイルの link + unlink の退路で一時ファイルを消せなかったときも、同じくフラグを残し SaveWarning::TempNotRemoved を積む (下記「新規ファイル」。SAF-40)。
    同じキーのディレクトリに残る自分の今回の記録以外の記録 (他の pid と同じ pid の前の保存の記録。前の中断の痕跡) も消す (一時ファイル・退避名・バックアップは消さない。
    ただし記録された一時ファイル・退避名が実在する記録は消さずに残す (§4.6 の「フラグを消す条件」)。02 §4.5 の「報告した記録を消す時機」。
    in-place の成功後の後片付け (§4.4) も同じ)。v0.1 は pid の生存確認をしないので、同じ T を同時に保存中の他インスタンスの記録も消え、
@@ -363,7 +375,7 @@ v0.1 で実装するのは Windows の手順 (`ReplaceFileW` 系。§4.2) で、
 
 - **保存中の編集は許可** ([02 §9.3](02-architecture.md#93-ジョブとキャンセル))。Snapshot を書くため競合しない。同じ Document に対する保存ジョブは直列化する (後続は待つ)。
 - **状態ファイルの書込** (スワップ・manifest 等): 呼び出し側が `SaveOptions { state_file: true, expected: Expect::Any, private: true, .. }` を渡す。`state_file = true` で保存中フラグ (手順 0d・7・8) を書かず、`Expect::Any` で照合 (手順 0b・4b) を省く (書き手は evoeditor 自身だけで、外部変更を守る対象ではない)。3 つの欄はそれぞれ独立に効く: 照合を省くかは `expected` だけ、フラグを省くかは `state_file` だけ、`private` は「新しく作るファイルを所有者のみで作る」だけを意味する (利用者のファイルを `private = true` で保存しても、フラグと照合は省かない)。保存中フラグ自身は `write_atomic` を通さず、本層の下位関数 (一時ファイル + 置換の同じ手順を、フラグと照合なしで行う内部関数) で直接書く。これで「フラグを書くためにフラグを書く」循環を断つ。手順 1 の所有者のみの作成 (§5.6) と fsync は省かない。
-- **新規ファイル** (T が存在しない): 親ディレクトリが無ければ **作らずに** `NotFound` (detail = `ParentMissing`) を返す (何も書かない。01 FR-101 AC-2、04 の `msg.save.parent_missing`)。一時ファイルに書く手順は同じ (部分書込ファイルを残さないため)。`SaveMethod::NewFile`。§4.4 の一時ファイル規則と `file.save_strategy = "in_place"` は T が存在するときだけ効き、この経路には効かない (上書きする元ファイルが無いので in-place の意味が無い)。置換は **既存のファイルを上書きしない操作** で行う: Windows (v0.1) は `MoveFileExW` (`MOVEFILE_REPLACE_EXISTING` を付けない。ReplaceFileW は置換される側が無いと使えない)。v0.2 (macOS / Linux 出荷時) は Linux が `renameat2(RENAME_NOREPLACE)` (使えない FS では `link` + `unlink`)、macOS が `renamex_np(RENAME_EXCL)`。照合の後に同名のファイルが作られていたら `Conflict` を返す (02 §4.5 `Expect::Absent`)。
+- **新規ファイル** (T が存在しない): 親ディレクトリが無ければ **作らずに** `NotFound` (detail = `ParentMissing`) を返す (何も書かない。01 FR-101 AC-2、04 の `msg.save.parent_missing`)。一時ファイルに書く手順は同じ (部分書込ファイルを残さないため)。`SaveMethod::NewFile`。§4.4 の一時ファイル規則と `file.save_strategy = "in_place"` は T が存在するときだけ効き、この経路には効かない (上書きする元ファイルが無いので in-place の意味が無い)。置換は **既存のファイルを上書きしない操作** で行う: Windows (v0.1) は `MoveFileExW` (`MOVEFILE_REPLACE_EXISTING` を付けない。ReplaceFileW は置換される側が無いと使えない)。v0.2 (macOS / Linux 出荷時) は Linux が `renameat2(RENAME_NOREPLACE)` (使えない FS では `link` + `unlink`)、macOS が `renamex_np(RENAME_EXCL)`。照合の後に同名のファイルが作られていたら `Conflict` を返す (02 §4.5 `Expect::Absent`)。`link` + `unlink` の退路では `link` が成功した時点で T は完成しているので、`unlink(tmp)` が失敗しても保存は成功として返し、`SaveWarning::TempNotRemoved { path }` (04 の `msg.save.tmp_not_removed`) で知らせ、一時ファイル (T のハードリンク) の名前をログに残して保存中フラグを消さずに残す (起動時の走査が §4.6 の「tmp が T のハードリンク」の行で確認なしで消す。保存のジョブは後から自動では消さない。それまでの保存は `nlink = 2` のハードリンクの確認になる。docs/review/v0.3-findings.md の SAF-40)。
 - **ダングリングシンボリックリンク** (開いたパスがシンボリックリンクで、リンク先が存在しない。01 FR-106): **v0.1 はリンク先を作らず、保存をエラーにする** (`FsErrorKind::NotFound`、`FsError.detail` = `DanglingLink`)。文言にリンク先の絶対パスを示し、「名前を付けて保存」を案内する。何も書かず、リンクも変えない。リンク先への新規作成は v0.2 で、仕様は次のとおり。v0.2: **確認のうえリンク先に新規作成** する。確認文言にリンク先の絶対パスを示し、選択肢は「リンク先に作成 (リンクを維持)」/「キャンセル」。リンク自体を通常ファイルで置き換えることはしない (リンクを壊さない)。承認後は、リンク先パスを T として新規ファイルの手順で書く (一時ファイルはリンク先のディレクトリに作る)。リンク先の親ディレクトリが無い場合は作らずに `NotFound` を返す (リンクの誤りの可能性が高い)。リンク先がさらにダングリングなリンクの連鎖である場合や、解決が循環する場合 (ELOOP) は `InvalidPath` を返す。確認を出すのは core (03 §9.3) で、本層は `FileMeta.link` で dangling を報告し、承認後の保存ジョブでリンク先を解決して書く。**v0.2 の M9d の実装**: 本層はダングリングを `NotFound` + `DanglingLink` で返し (確認の前の保存はこれまでどおり何も書かない)、core はそれを受けて確認を出す。承認後の保存は `SaveOptions.create_link_target` を立て、本層はリンクの中身 (`read_link`。相対ならリンクのあるディレクトリから) を T として新規ファイルの手順で書く。T がリンクなど何かとして在れば (連鎖) `InvalidPath`、T の親が無ければ `NotFound` + `ParentMissing`。
 - **`FsyncLevel::None`** は設定で明示した場合のみ (遅いネットワークドライブ用)。既定は Full (P1 原則。NFR-107 の保存時間目標は fsync 込みで定義されている)。
 
@@ -394,7 +406,7 @@ v0.1 で実装するのは Windows の手順 (`ReplaceFileW` 系。§4.2) で、
 
 **Linux の実装 (v0.2 の M7、2026-11-01)**: `eve-platform::unix_fs::UnixFs` (macOS の行 (`F_FULLFSYNC`・`copyfile`・`UF_*`) は macOS の分が保留のため未実装)。次の点は表の記述を Linux で具体化したもの:
 - 一時ファイル: T が在る・`private` なら 0600 で作って下で T の mode に合わせる。新規は 0666 (umask が掛かる。通常の新規ファイルと同じ)。親に書けない (`EACCES`) なら `AtomicUnsupported` (§4.4 の 1 行目)。
-- 権限: 所有者・グループが T と違うときだけ `fchown`。他人の所有を引き継げない (`EPERM`) ときはグループだけ合わせて `AttrsNotPreserved { Security }`。mode は `mode & 01777` (setuid / setgid は落として同じ警告)。
+- 権限: 一時ファイルの所有者が T と違えば、root でない (または `preserve.security` でない) ときは本文を書く前に `AtomicUnsupported` (§4.1 手順 1b、SAF-36)。root は本文を書く前に `fchown(uid, gid)` で合わせ、fstat で合わなければ `AtomicUnsupported` (§4.1 手順 1b、SAF-37)。手順 4 で `fchown` するのはグループが違うときだけで、所属していないグループ (`EPERM`) ならグループのビットを落として `AttrsNotPreserved { Security }` と `PermissionNarrowed`。mode は `mode & 01777` (setuid / setgid は落として同じ警告)。
 - POSIX ACL は `system.posix_acl_access` の xattr を `fgetxattr` / `fsetxattr` で写す (Linux では `acl_get_fd` / `acl_set_fd` と同じ内容。libacl に依存しない)。T に ACL が無く親に既定 ACL (`system.posix_acl_default`) があるときは `AttrsNotPreserved { Security }`。xattr を持たない FS (`ENOTSUP`) は複製するものが無いとみなす。
 - 新規ファイルの置換は上書きしない `renameat2(RENAME_NOREPLACE)` (使えない FS では `link` + `unlink`)。在れば `Conflict`。Linux ではシステムコール (`SYS_renameat2`) で直接呼ぶ (musl 1.2.5 に `renameat2` の関数が無いため。glibc でも同じ呼び方にする、§16.2)。
 - 書込権限の無い T (`readonly`) は、rename なら置き換えられてしまうので、`SaveOptions.clear_readonly` (FR-116 の「読み取り専用を解除して保存」の確認) が無ければ `PermissionDenied` (root を除く)。解除して置換しても、mode は T のものを写すので読み取り専用のまま残る (§4.2 の手順 5b と同じ結果)。
@@ -412,12 +424,12 @@ v0.1 で実装するのは Windows の手順 (`ReplaceFileW` 系。§4.2) で、
 | 段階 | API | 注意 |
 |---|---|---|
 | 一時ファイル作成 | `open(O_WRONLY\|O_CREAT\|O_EXCL\|O_CLOEXEC, 0600)` | `O_TMPFILE` + `linkat` は Linux 限定かつ上書き不可なので使わない。macOS は `O_CLOEXEC` 可 |
-| 権限複製 | `fchown(tmp, uid, gid)` (必要時のみ。失敗 EPERM は §4.4 で事前判定) → `fchmod(tmp, mode & 01777)` の順 (逆順だと、0640 のファイルが所有グループを合わせる前に利用者の既定グループから一瞬読める) | setuid/setgid ビットは **保持しない** (安全側。警告) |
+| 権限複製 | `fchown(tmp, uid, gid)` (所有者が違うときは本文を書く前、§4.1 手順 1b。root でない・合わせられないときは `AtomicUnsupported`、§4.4。グループだけが違うときは手順 4 で `fchown(tmp, -1, gid)`) → `fchmod(tmp, mode & 01777)` の順 (逆順だと、0640 のファイルが所有グループを合わせる前に利用者の既定グループから一瞬読める) | setuid/setgid ビットは **保持しない** (安全側。警告) |
 | xattr / ACL の検出 (複製より先に出荷する場合の最低限) | `flistxattr(T)` で T に xattr・POSIX ACL (`system.posix_acl_access`)・macOS の ACL / Finder タグが付いているかだけを調べる | 付いていれば「拡張属性 / ACL は保存で保たれません」を SaveWarning で知らせる (黙って失わない)。親ディレクトリに既定 ACL がある場合 (`system.posix_acl_default`)、tmp がそれを継承して元のファイルと違う相手に読める状態になり得るので、同じ警告を出す。どちらも下の複製で解消する |
 | xattr / ACL の複製 (FR-106) | Linux: `flistxattr`/`fgetxattr`/`fsetxattr` で **`user.*` と `trusted.*` (権限があれば) を複製し、`security.*` と `system.*` は複製しない** (§5.1 と一致)。POSIX ACL (`system.posix_acl_access`) は xattr としてではなく `acl_get_fd` / `acl_set_fd` 相当で別処理する (`system.*` を一律除外しても ACL が落ちないようにする)。macOS: `copyfile(T, tmp, NULL, COPYFILE_XATTR \| COPYFILE_ACL)` (`com.apple.quarantine` はコピーしない: 新しい内容に検疫を付け直す理由がない) | 失敗は警告。`security.selinux` は新規ファイルのラベルを OS に任せる (restorecon 相当) |
 | 不変フラグ | Linux `FS_IMMUTABLE_FL` / macOS `UF_IMMUTABLE` (chflags uchg) が立っていると rename に失敗 → `PermissionDenied` で「ファイルがロック (不変) されています」 | |
-| fsync (一時ファイル) | Linux `fsync`、macOS `fcntl(F_FULLFSYNC)` (遅い: 数〜数十 ms。SSD では NFR-107 内)。F_FULLFSYNC が失敗したら `fsync` にフォールバックして警告 (§4.1 手順 3。std はフォールバックしない) | ext4 `data=ordered` でも rename 前の fsync は必須 (省略すると 0 バイトファイル事故) |
-| 置換 | `rename(tmp, T)` (POSIX で原子的) | — |
+| fsync (一時ファイル) | Linux `fsync`、macOS `fcntl(F_FULLFSYNC)` (遅い: 数〜数十 ms。SSD では NFR-107 内)。F_FULLFSYNC が失敗したら `fsync` にフォールバックして警告 (§4.1 手順 3。std はフォールバックしない) | ext4 `data=ordered` でも rename 前の fsync は必須 (省略すると 0 バイトファイル事故)。`EINVAL` / `ENOTSUP` / `EOPNOTSUPP` / `ENOSYS` は警告で続け、`EIO`・`ENOSPC` 等は一時ファイルを消してエラー (§4.1 手順 3、SAF-46) |
+| 置換 | `rename(tmp, T)` (POSIX で原子的) | `EXDEV` / `ENOTSUP` / `EBUSY` (1 ファイルだけの bind mount) で T が無傷なら `AtomicUnsupported` (§4.4) |
 | ディレクトリ fsync | `open(dir, O_RDONLY\|O_DIRECTORY)` → `fsync` | 失敗 (EINVAL on some FS) は警告 |
 | 作成日時 (macOS birthtime) | 保持できない (rename で新 inode)。Finder の「作成日」が変わるのは **仕様とする** | |
 | Finder タグ・カラー | xattr (`com.apple.metadata:_kMDItemUserTags`) として複製される (複製を実装するまでは上の検出で警告するだけ) | |
@@ -431,9 +443,11 @@ v0.1 で実装するのは Windows の行と、OS に依らない行 (ハード�
 |---|---|---|
 | 親ディレクトリに書込権限がない (ファイル自身は書ける) | `access(dir, W_OK)` 失敗 / Windows: 一時ファイル作成が `ERROR_ACCESS_DENIED` | 確認ダイアログ → 承認で in-place |
 | ハードリンク (`nlink > 1`) | `FileMeta.nlink` | **確認** (`HardlinkPolicy::Ask`。確定 (ユーザー回答)、OQ-73)。選択肢: リンクを切って置換 (`BreakLink`。通常の原子的置換) / 直接上書き (`WriteInPlace`。リンク維持) / キャンセル。設定 `file.hardlink_policy` (07 §5.2) で `BreakLink` / `WriteInPlace` に固定可 |
-| 他ユーザー所有で root でない (Unix、v0.2) | `FileMeta.owner_is_me == Some(false)` (Unix: `st_uid != geteuid()` かつ `geteuid() != 0`。判定できない OS・FS は `None` で、置換を試みる) | 確認 → in-place (所有者を保てないため)。sudo 経由なら通常の置換 |
+| 他ユーザー所有で root でない (Unix、v0.2) | `write_atomic` は §4.1 手順 1b で、作った一時ファイルの st_uid が T の st_uid と違うかで判定する (本文を書く前。uid を固定・写像して見せる FS では同じに見えて置換を続ける。docs/review/v0.3-findings.md の SAF-36)。`FileMeta.owner_is_me` (Unix: `st_uid == geteuid()` か root。判定できない OS・FS は `None`) は表示などの目安で、この判定には使わない | 確認 → in-place (所有者を保てないため)。sudo 経由なら通常の置換 |
+| root で所有者を保てない (Unix) | euid 0 で `fchown(uid)` が失敗、または fstat の `st_uid` が T と違う (NFS の root_squash 等、§4.1 手順 1b。本文を書く前) | 確認 → in-place (一時ファイルを消してから返す。docs/review/v0.3-findings.md の SAF-37) |
 | Windows で ReplaceFileW が ERROR_ACCESS_DENIED (T 無傷) | ACL でディレクトリの削除権限がない等 | 確認 → in-place |
 | FUSE / 特殊 FS で rename が `EXDEV`/`ENOTSUP` (Unix、v0.2)、Windows で置換失敗かつ T 無傷 (§4.2) | 置換失敗 | 確認 → in-place |
+| 既存の T の置換の rename が `EBUSY` で T が無傷 (Unix。1 ファイルだけの bind mount: Docker / Kubernetes の `-v file:file`・ConfigMap、コンテナの中の `/etc/hosts` 等。§15.3) | 置換失敗かつ取り直した T が手順 0b と一致。CIFS / SMB で Windows 側が T を開いているときの共有違反も `EBUSY` になり、同じ扱い (確認と事前バックアップで守る) | 確認 → in-place (docs/review/v0.3-findings.md の SAF-38) |
 | **一時ファイル (`visudo` / `crontab -e` / `kubectl edit` 等、呼び出し元が同一 inode を期待)** | 下記の判定規則 (T が存在するときだけ。存在しない T は §4.1 の「新規ファイル」の経路) | **確認なしで in-place** (確定 (ユーザー回答)、OQ-34。`write_atomic` は書かずに `AtomicUnsupported` (detail = `InPlacePattern`) を返し、core が同じジョブで乾式走査 → `write_in_place` に進む。結果は `SaveMethod::InPlace`。事前バックアップは下の手順のとおり省略しない。07 §18.6) |
 | ユーザー設定 `file.save_strategy = "in_place"` (07 §5.2) | 設定 | T が存在するときは常に in-place (警告は起動時 1 回)。`write_atomic` を経由せず、core が最初から method = InPlace を選び、乾式走査の後に `write_in_place` を呼ぶ。T が存在しなければ設定に依らず §4.1 の「新規ファイル」の経路 (`write_atomic`、`SaveMethod::NewFile`) |
 
@@ -478,7 +492,7 @@ v0.1 で実装するのは Windows の行と、OS に依らない行 (ハード�
 
 | 契機 | 版 | 内容 |
 |---|---|---|
-| 保存ジョブ自身 | v0.1 | 置換途中で失敗したら **その場で** 退避パス付きで報告する (`ReplacedMovedToBackup { backup }`、§2.1、03 §9.3)。フラグは保存ジョブ開始時 (一時ファイルを作る前、§4.1 手順 0d) に書き、成功時に消す |
+| 保存ジョブ自身 | v0.1 | 置換途中で失敗したら **その場で** 退避パス付きで報告する (`ReplacedMovedToBackup { backup }`、§2.1、03 §9.3)。フラグは保存ジョブ開始時 (一時ファイルを作る前、§4.1 手順 0d) に書き、成功時に消す (退避名を消せなかったとき、Unix の新規ファイルの link + unlink の退路で一時ファイルを消せなかったとき (SAF-40) は残す。§4.1 手順 7) |
 | 開くとき (T の有無に依らない) | v0.1 | 読込ジョブ内で、開くたびに `inflight_for(path)` により `inflight/<hash(path)>/` だけを 1 回調べ、残っている記録をすべて (`Vec<InflightRecord>`) 受け取る (ディレクトリ全体は列挙しない。O(1)。シンボリックリンクならリンクとリンク先の 2 つのキー、§7.5)。記録と T の有無から 02 §4.5 の `InterruptedSave { method: InterruptedMethod, backup, tmp, complete }` (`JobResult` の `interrupted_save`) を作る規則は下の「開くときの写像」の表 (正本は 02 §4.5 の「中断の痕跡の写像」) による。T が無いときに黙って空の新規文書として開かず (03 §9.2)、T があるときも文書は通常どおり開いて場所を示すだけにする。`inflight_for` が複数の記録を返したら、表の上の行に当たるもの (in-place の記録が先) を 1 つ示す。v0.1 は pid の生存確認 (§5.3) をしないので、他インスタンスが保存中の記録でも警告する (誤報は害が小さい側に倒す)。復旧の操作 (下の表) は v0.2 で、v0.1 は場所の案内だけ |
 | 起動時の inflight 走査 (03 §10.3) | v0.2 | `list_inflight()` で残っているフラグを列挙し、記録された T のパスについてだけ `.<basename>.eve-tmp-*` / `.eve-bak-*` の有無を調べる (ジョブ内)。開いていないファイルの痕跡も見つかる。pid の生存確認 (§5.3) で他インスタンスが保存中のものを除く。加えて **`state_dir/backup/` の直下** (in-place の事前バックアップ専用の場所。evoeditor 自身の小さなディレクトリなので列挙してよい。`fr119/` は対象外) を列挙し、どのフラグにも記録されていない `.bak` / `.bak.tmp` (in-place の成功後の削除の前に中断した、または削除に失敗したもの。§4.4 手順 9) を、名前の pid が生存していなければ孤児として片付けの提案に加える |
 
@@ -502,13 +516,14 @@ v0.1 で実装するのは Windows の行と、OS に依らない行 (ハード�
 |---|---|---|
 | T なし、bak あり | `ReplaceFileW` の中間状態で T が退避名に移った後に新内容の配置に失敗 | **bak を T にリネームして復旧** / bak を別名で開いて確認 / 削除 |
 | T あり、bak あり | 置換成功後の bak 削除漏れ (手順 7)、または T が別プロセスにより再作成された | **bak を削除** (内容が T と同一なら無確認で削除可) / bak を別名で開いて比較 |
+| T あり、tmp が T のハードリンク (記録の `method = NewFile`、tmp と T の両方の `nlink >= 2`、FileId が一致し index が 0 でない。すべてを満たすときだけ) | Unix の新規ファイルの link + unlink の退路で、link の後に tmp を消せなかった (§4.1「新規ファイル」。docs/review/v0.3-findings.md の SAF-40)。FileId だけでは判定しない (Windows のネットワークのリダイレクタ・WebDAV・一部の FS は 0 や同じ値を返し、ReFS は一意でない) | **tmp を削除** (同じ実体なので確認なしで消す。提案にしない)。条件を 1 つでも満たさなければ下の「tmp あり」の行 |
 | tmp あり (T の有無に関わらず) | 書込途中、または fsync 後に置換前で中断 (tmp は完全な新内容の可能性もある) | **別名で開いて確認** (完全かどうかは判定できない。末尾が切れている可能性を明示) / 削除 |
 | tmp と bak の両方 | 置換の途中 | bak を T に戻し、tmp を別名で開いて確認 |
 
 - 復旧の適用は 03 §10.3 の「Transaction(Origin::Recovery) で全置換、dirty = true」経路または「bak → T へのリネーム」(ディスク操作、確認必須) のどちらか。削除は確認を求める。
 **起動時の提案の規則** (v0.2 の M6e。**(案)**: PO の確認前。上の表の曖昧な点を、実装の前に決める):
 
-1. **提案の単位は T のパス 1 つ**。同じ T に当たるフラグ・`.eve-tmp-*`・`.eve-bak-*` はまとめて 1 件の提案にする。上の表は次の順で当てはめ、最初に当たる行を提案にする: (i) T なし・bak あり・tmp あり → **「tmp と bak の両方」**、(ii) T なし・bak あり、(iii) T あり・bak あり (tmp が同時にあれば、(iv) の提案を続けて出す)、(iv) tmp あり。「両方」は **T が無いときだけ** で、T があるときは bak と tmp を別々に扱う。
+1. **提案の単位は T のパス 1 つ**。同じ T に当たるフラグ・`.eve-tmp-*`・`.eve-bak-*` はまとめて 1 件の提案にする。上の表は次の順で当てはめ、最初に当たる行を提案にする: (i) T なし・bak あり・tmp あり → **「tmp と bak の両方」**、(ii) T なし・bak あり、(iii) T あり・bak あり (tmp が同時にあれば、(iv) の提案を続けて出す)、(iv) tmp あり。ただし T があり tmp が T のハードリンク (上の表の条件をすべて満たす) なら、(iv) の前にその tmp を確認なしで消す (提案にしない)。消した後は記録ごとに自分の tmp と bak の実在を見直し、痕跡が無くなった記録のフラグだけを消す (同じ T の別の記録の tmp が残っていれば、その提案を続ける。bak を確認なしで消したときも同じ)。「両方」は **T が無いときだけ** で、T があるときは bak と tmp を別々に扱う。
 2. **操作の定義**:
    - 「bak を T に戻す」= `bak` を T の名前に rename する (ディスク操作。確認が要る。T が既にあれば失敗させて何もしない)。戻した後は、その文書を通常どおり開ける。
    - 「bak を削除」= bak を消す。T と bak の内容が同一 (サイズが同じで、ジョブ内の全文比較が一致。**両方が 64 MiB 以下のときだけ比べる**) なら確認なしで消し、それ以外は確認を求める。
@@ -1151,6 +1166,7 @@ AI 連携 (06) は **ローカル LLM を一級市民** とし (01 §2.9、ADR-0
 - musl 静的バイナリで `docker cp` して動かす用途 (NFR-206)。
 - PID 1 で動かすとシグナル既定が変わる (SIGTERM 無視) → evoeditor はハンドラを明示登録するので問題ない。
 - 読み取り専用ルート FS → `state_dir` 作成失敗 → ログ/スワップ無効で起動 (§7.1)。緊急退避は §7.5 の代替の退避先に書く。
+- 1 ファイルだけを bind mount したもの (`-v file:file`・ConfigMap・`/etc/hosts`) は rename が `EBUSY` になる → §4.4 の確認付きの直接上書き (docs/review/v0.3-findings.md の SAF-38)。
 
 ---
 
