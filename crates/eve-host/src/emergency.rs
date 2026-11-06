@@ -52,9 +52,8 @@ impl EmergencyCtl {
         let _ = self.writer.set(w);
     }
 
-    /// 文書のスロットを更新する (`None` で空にする)。ロックを取らない (`rcu`)。
-    pub fn publish(&self, doc: DocumentId, snap: Option<DocSnapshot>) {
-        let new = snap.map(Arc::new);
+    /// 文書のスロットを更新する (`None` で空にする)。ロックを取らない (`rcu`)。公開物は Host の写しと共有する (PRF-19)。
+    pub fn publish(&self, doc: DocumentId, new: Option<Arc<DocSnapshot>>) {
         self.slots.rcu(|cur| {
             let mut v: Vec<Arc<DocSnapshot>> =
                 cur.iter().filter(|s| s.doc != doc).cloned().collect();
@@ -251,9 +250,9 @@ mod tests {
             path: None,
             untitled_name: None,
         };
-        c.publish(DocumentId(1), Some(snap(1)));
-        c.publish(DocumentId(2), Some(snap(2)));
-        c.publish(DocumentId(1), Some(snap(1))); // 更新は置き換え
+        c.publish(DocumentId(1), Some(Arc::new(snap(1))));
+        c.publish(DocumentId(2), Some(Arc::new(snap(2))));
+        c.publish(DocumentId(1), Some(Arc::new(snap(1)))); // 更新は置き換え
         assert_eq!(c.docs().len(), 2);
         c.publish(DocumentId(1), None);
         assert_eq!(c.docs().len(), 1);
@@ -268,7 +267,7 @@ mod tests {
         let c = EmergencyCtl::new();
         c.publish(
             DocumentId(1),
-            Some(DocSnapshot {
+            Some(Arc::new(DocSnapshot {
                 doc: DocumentId(1),
                 snapshot: eve_text::Text::from("x").snapshot(),
                 format: eve_core::TextFormat::new_document(),
@@ -277,7 +276,7 @@ mod tests {
                 sensitive: false,
                 path: None,
                 untitled_name: None,
-            }),
+            })),
         );
         let o = c.run(RescueReason::Signal, Duration::from_secs(1)).unwrap();
         assert!(o.error.is_some());
