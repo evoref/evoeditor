@@ -123,6 +123,12 @@ pub(crate) fn resolve_target(path: &FsPath, create: bool) -> Result<PathBuf, FsE
 fn abort(tmp: &Path, flag: &mut FlagGuard) {
     if delete(tmp) {
         flag.remove();
+    } else {
+        // 消せなければフラグを残し、名前をログに残す (05 §4.1 手順 8)。既に無いときは書かない
+        let e = io::Error::last_os_error();
+        if e.kind() != io::ErrorKind::NotFound {
+            flag.log_leftover_tmp(tmp, &e);
+        }
     }
 }
 
