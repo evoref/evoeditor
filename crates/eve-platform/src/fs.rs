@@ -111,89 +111,9 @@ fn file_time(t: io::Result<std::time::SystemTime>) -> FileTime {
     }
 }
 
-#[cfg(windows)]
-#[allow(unsafe_code)]
-pub(crate) mod winapi {
-    use std::fs::File;
-    use std::io;
-    use std::os::windows::io::AsRawHandle;
-    use std::path::Path;
-
-    use windows_sys::Win32::Storage::FileSystem::{
-        BY_HANDLE_FILE_INFORMATION, GetDriveTypeW, GetFileInformationByHandle,
-    };
-
-    /// `GetDriveTypeW` の戻り値 `DRIVE_REMOTE`。
-    const DRIVE_REMOTE: u32 = 4;
-
-    /// ボリューム番号・ファイルインデックス・ハードリンク数。
-    pub struct HandleInfo {
-        pub volume: u64,
-        pub index: u128,
-        pub nlink: u32,
-    }
-
-    pub fn file_info(f: &File) -> io::Result<HandleInfo> {
-        // SAFETY: 全ビット 0 の `BY_HANDLE_FILE_INFORMATION` は有効な値 (すべて整数)。
-        let mut info: BY_HANDLE_FILE_INFORMATION = unsafe { std::mem::zeroed() };
-        // SAFETY: `f` は開いているファイルのハンドル、`info` は書込先の有効な構造体。
-        if unsafe { GetFileInformationByHandle(f.as_raw_handle(), &mut info) } == 0 {
-            return Err(io::Error::last_os_error());
-        }
-        Ok(HandleInfo {
-            volume: u64::from(info.dwVolumeSerialNumber),
-            index: (u128::from(info.nFileIndexHigh) << 32) | u128::from(info.nFileIndexLow),
-            nlink: info.nNumberOfLinks,
-        })
-    }
-
-    /// ネットワーク上か (UNC、またはドライブがリモート)。判定できなければ `false`。
-    pub fn is_remote(path: &Path) -> bool {
-        let s = path.to_string_lossy();
-        let s = s.strip_prefix("\\\\?\\").unwrap_or(&s);
-        if s.starts_with("UNC\\") || (s.starts_with("\\\\") && !s.starts_with("\\\\.\\")) {
-            return true;
-        }
-        let mut it = s.chars();
-        let (Some(d), Some(':')) = (it.next(), it.next()) else {
-            return false;
-        };
-        if !d.is_ascii_alphabetic() {
-            return false;
-        }
-        let root: Vec<u16> = format!("{}:\\", d.to_ascii_uppercase())
-            .encode_utf16()
-            .chain(Some(0))
-            .collect();
-        // SAFETY: `root` は NUL 終端の UTF-16。
-        unsafe { GetDriveTypeW(root.as_ptr()) == DRIVE_REMOTE }
-    }
-}
-
-#[cfg(not(windows))]
-mod winapi {
-    use std::fs::File;
-    use std::io;
-    use std::path::Path;
-
-    pub struct HandleInfo {
-        pub volume: u64,
-        pub index: u128,
-        pub nlink: u32,
-    }
-
-    pub fn file_info(_: &File) -> io::Result<HandleInfo> {
-        Err(io::Error::from(io::ErrorKind::Unsupported))
-    }
-
-    pub fn is_remote(_: &Path) -> bool {
-        false
-    }
-}
-
 fn fs_kind(path: &Path) -> FsKind {
     if cfg!(windows) {
-        if winapi::is_remote(path) {
+        if crate::sys::is_remote(path) {
             FsKind::Network
         } else {
             FsKind::Local
@@ -205,8 +125,7 @@ fn fs_kind(path: &Path) -> FsKind {
 
 impl FileSystem for WinFs {
     fn rename_no_replace(&self, from: &FsPath, to: &FsPath) -> Result<(), FsError> {
-        crate::save::rename_no_replace(from.as_path(), to.as_path())
-            .map_err(|e| map_io_error(e, to))
+        crate::sys::rename_no_replace(from.as_path(), to.as_path()).map_err(|e| map_io_error(e, to))
     }
 
     state_dir_methods!();
@@ -253,7 +172,7 @@ impl FileSystem for WinFs {
             });
         // ファイルの識別とハードリンク数 (開けなければ分からないものとして続ける)
         let (file_id, nlink) = if kind == FileKind::File {
-            match File::open(p).and_then(|f| winapi::file_info(&f)) {
+            match File::open(p).and_then(|f| crate::sys::file_info(&f)) {
                 Ok(i) => (
                     Some(eve_core::FileId {
                         volume: i.volume,

@@ -6,8 +6,6 @@
 //! - `fail` (Unix): システムコールの失敗の差し替え (errno)。単体試験は `inject_errno`、別プロセスの試験は
 //!   `EVE_TEST_HOOK=fail_<点>=<errno>` (docs/review/v0.3-findings.md の STR-T10)。
 
-#![allow(unsafe_code)]
-
 /// 切断点 `name` に到達した。環境変数が `name` (または `name=<値>`) なら、ここでプロセスを終了する。
 #[inline]
 pub(crate) fn hit(name: &str) {
@@ -127,26 +125,10 @@ fn lookup(spec: &str, name: &str) -> Option<String> {
     })
 }
 
-/// プロセスを今すぐ終了する (Drop も `atexit` も走らせない。`TerminateProcess` による強制終了の再現)。
-#[cfg(all(feature = "test-hooks", unix))]
+/// プロセスを今すぐ終了する (Drop も `atexit` も走らせない。`TerminateProcess` による強制終了の再現。Unix は `SIGKILL`)。
+#[cfg(feature = "test-hooks")]
 pub(crate) fn kill_now() -> ! {
-    // SAFETY: 自プロセスに SIGKILL を送る (捕まえられない)。
-    unsafe {
-        libc::kill(libc::getpid(), libc::SIGKILL);
-    }
-    std::process::abort()
-}
-
-/// 同上 (Windows: `TerminateProcess`)。
-#[cfg(all(feature = "test-hooks", windows))]
-pub(crate) fn kill_now() -> ! {
-    use windows_sys::Win32::System::Threading::{GetCurrentProcess, TerminateProcess};
-    // SAFETY: 自プロセスのハンドルを終了させる。
-    unsafe {
-        TerminateProcess(GetCurrentProcess(), 137);
-    }
-    // 戻らないはずだが、型のために
-    std::process::abort()
+    crate::sys::kill_self()
 }
 
 #[cfg(test)]

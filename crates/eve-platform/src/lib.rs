@@ -3,9 +3,12 @@
 //!
 //! 状態ディレクトリの部品 (保存中フラグ `inflight`・直接上書き `inplace`・状態ファイル・スワップ・緊急退避 `rescue`・ログ) は
 //! OS に依らず、OS ごとに違う小さな部品 (所有者のみの作成・プロセスの生存と起動時刻・空き容量・代替の退避先) だけを `sys` から呼ぶ。
-//! OS の API を直接呼ぶ部分 (Windows のコンソール・セッション・クリップボード・`ReplaceFileW`、Unix の xattr など) は `cfg` のモジュールに閉じる。
+//! OS の API を直接呼ぶ部分は `cfg` のモジュールに閉じる。保存・直接上書き・保存中フラグ・スワップの走査などのアルゴリズムが使う
+//! API (`ReplaceFileW`・DACL・SID、Unix の xattr・`renameat2` など) は `sys::windows` / `sys::unix` の安全な関数にする。
 
-// unsafe は OS の API を呼ぶ `fs::winapi`・`console`・`dll`・`save` など (Windows) と `unix_fs`・`sys`・`inplace`・`hooks` (Unix) だけに許す (R5)。
+// unsafe は OS の API の包み `sys::windows`・`sys::unix` と、OS の API そのものを扱うモジュール `clipboard`・`clipboard_test`・
+// `console`・`dll`・`locale`・`session`・`signals`・`term` だけに許す (R5)。アルゴリズムのモジュール (`save`・`unix_fs`・`fs`・
+// `inplace`・`inflight`・`swap_scan`・`hooks` など) には許さない。
 #![deny(unsafe_code)]
 // eve-core の `FsError` は大きい型 (エラーは稀な経路)。値で返す。
 #![allow(clippy::result_large_err)]
@@ -169,8 +172,6 @@ mod inflight;
 mod inplace;
 pub mod locale;
 pub mod log;
-#[cfg(windows)]
-mod owner;
 pub mod path;
 pub mod rescue;
 #[cfg(windows)]

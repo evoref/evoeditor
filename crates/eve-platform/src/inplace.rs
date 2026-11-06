@@ -9,17 +9,11 @@
 //!
 //! 範囲外: 領域の確保を使えない FS の細かい分岐の実測 (S-09)。
 
-#![allow(unsafe_code)]
-
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Read, Seek, SeekFrom, Write};
 #[cfg(windows)]
 use std::os::windows::fs::OpenOptionsExt;
-#[cfg(windows)]
-use std::os::windows::io::AsRawHandle;
 use std::path::{Path, PathBuf};
-#[cfg(windows)]
-use std::ptr;
 #[cfg(windows)]
 use std::thread;
 #[cfg(windows)]
@@ -31,20 +25,13 @@ use eve_core::{
     SaveOptions, SaveReport, SaveWarning,
 };
 #[cfg(windows)]
-use windows_sys::Win32::Storage::FileSystem::{
-    FILE_ALLOCATION_INFO, FILE_SHARE_READ, FileAllocationInfo, GetDiskFreeSpaceExW,
-    SetFileInformationByHandle,
-};
+use windows_sys::Win32::Storage::FileSystem::FILE_SHARE_READ;
 
-#[cfg(windows)]
-use crate::fs::winapi;
 use crate::hooks;
 use crate::inflight::{FlagGuard, create_dir_all_private};
 use crate::rescue::timestamp_basic;
 #[cfg(windows)]
-use crate::save::{
-    ERROR_LOCK_VIOLATION, ERROR_SHARING_VIOLATION, SHARING_RETRY_MS, last_error, wide,
-};
+use crate::save::{ERROR_LOCK_VIOLATION, ERROR_SHARING_VIOLATION, SHARING_RETRY_MS};
 use crate::sys::{delete, map_io_error, matches, resolve_target, same_file_state};
 
 #[cfg(windows)]
@@ -94,31 +81,14 @@ fn open_shared_read(target: &Path) -> io::Result<File> {
 /// 領域の事前確保 (`FileAllocationInfo` だけ。EOF は延ばさない)。使えない FS では空き容量の確認にする。
 #[cfg(windows)]
 fn preallocate(file: &File, dir: &Path, extra: u64, new_alloc: u64) -> Result<(), FsError> {
-    let info = FILE_ALLOCATION_INFO {
-        AllocationSize: i64::try_from(new_alloc).unwrap_or(i64::MAX),
-    };
-    // SAFETY: 開いているファイルのハンドルと、有効な `FILE_ALLOCATION_INFO`。
-    let ok = unsafe {
-        SetFileInformationByHandle(
-            file.as_raw_handle(),
-            FileAllocationInfo,
-            ptr::from_ref(&info).cast(),
-            std::mem::size_of::<FILE_ALLOCATION_INFO>() as u32,
-        )
-    };
-    if ok != 0 {
+    let Err(code) =
+        crate::sys::set_allocation_size(file, i64::try_from(new_alloc).unwrap_or(i64::MAX))
+    else {
         return Ok(());
-    }
-    let code = last_error();
+    };
     if code == ERROR_INVALID_FUNCTION || code == ERROR_NOT_SUPPORTED {
         // 確保を使えない FS: 呼び出し元の空き容量 (クォータ込み) が増える分を上回ることだけを確かめて進む
-        let w = wide(dir);
-        let mut avail = 0u64;
-        // SAFETY: NUL 終端のパスと、書込先の有効なポインタ。
-        let ok = unsafe {
-            GetDiskFreeSpaceExW(w.as_ptr(), &mut avail, ptr::null_mut(), ptr::null_mut())
-        };
-        if ok != 0 && avail >= extra {
+        if crate::sys::free_bytes(dir).is_some_and(|avail| avail >= extra) {
             return Ok(());
         }
         return Err(FsError::new(FsErrorKind::DiskFull));
@@ -141,7 +111,7 @@ fn is_sharing_violation(e: &io::Error) -> bool {
 /// 開いたハンドルの FileId。
 #[cfg(windows)]
 fn handle_file_id(file: &File) -> Option<eve_core::FileId> {
-    winapi::file_info(file).ok().map(|i| eve_core::FileId {
+    crate::sys::file_info(file).ok().map(|i| eve_core::FileId {
         volume: i.volume,
         index: i.index,
     })
@@ -171,21 +141,14 @@ fn handle_file_id(file: &File) -> Option<eve_core::FileId> {
 /// 領域の事前確保 (Linux: `fallocate(FALLOC_FL_KEEP_SIZE)`。長さは延ばさない)。使えない FS では空き容量の確認にする。
 #[cfg(unix)]
 fn preallocate(file: &File, dir: &Path, extra: u64, new_alloc: u64) -> Result<(), FsError> {
-    #[cfg(target_os = "linux")]
-    {
-        use std::os::unix::io::AsRawFd;
-        let len = libc::off_t::try_from(new_alloc).unwrap_or(libc::off_t::MAX);
-        // SAFETY: 開いているファイルの記述子。長さは変えない (KEEP_SIZE)。
-        let r = unsafe { libc::fallocate(file.as_raw_fd(), libc::FALLOC_FL_KEEP_SIZE, 0, len) };
-        if r == 0 {
-            return Ok(());
-        }
-        let e = io::Error::last_os_error();
-        if !matches!(e.raw_os_error(), Some(libc::EOPNOTSUPP | libc::ENOSYS)) {
+    // Linux 以外は `ENOSYS` が返り、空き容量の確認に進む
+    match crate::sys::fallocate_keep_size(file, new_alloc) {
+        Ok(()) => return Ok(()),
+        Err(e) if !matches!(e.raw_os_error(), Some(libc::EOPNOTSUPP | libc::ENOSYS)) => {
             return Err(map_io_error(e, &FsPath::new(dir)));
         }
+        Err(_) => {}
     }
-    let _ = (file, new_alloc);
     // 確保を使えない FS: 呼び出し元の空き容量が増える分を上回ることだけを確かめて進む (調べられなければ進む)
     if crate::sys::free_bytes(dir).is_none_or(|avail| avail >= extra) {
         Ok(())

@@ -7,16 +7,11 @@
 //!
 //! 直接上書き (`write_in_place`) は `inplace` にある。
 
-#![allow(unsafe_code)]
-
 use std::collections::hash_map::RandomState;
-use std::fs::{self, File};
+use std::fs;
 use std::hash::{BuildHasher, Hasher};
 use std::io::{self, Write};
-use std::os::windows::ffi::OsStrExt;
-use std::os::windows::io::FromRawHandle;
 use std::path::{Path, PathBuf};
-use std::ptr;
 use std::thread;
 use std::time::Duration;
 
@@ -25,28 +20,18 @@ use eve_core::{
     FsErrorDetail, FsErrorKind, FsPath, FsyncLevel, HardlinkPolicy, ReadChunks, SaveMethod,
     SaveOptions, SaveReport, SaveWarning,
 };
-use windows_sys::Win32::Foundation::{
-    CloseHandle, GENERIC_WRITE, GetLastError, HANDLE, INVALID_HANDLE_VALUE, LocalFree,
-};
-use windows_sys::Win32::Security::Authorization::{
-    ConvertSidToStringSidW, ConvertStringSecurityDescriptorToSecurityDescriptorW, SDDL_REVISION_1,
-};
-use windows_sys::Win32::Security::{
-    GetTokenInformation, SECURITY_ATTRIBUTES, TOKEN_QUERY, TOKEN_USER, TokenUser,
-};
 use windows_sys::Win32::Storage::FileSystem::{
-    CREATE_NEW, CreateFileW, DeleteFileW, FILE_ATTRIBUTE_HIDDEN, FILE_ATTRIBUTE_NORMAL,
-    FILE_ATTRIBUTE_READONLY, FILE_ATTRIBUTE_SYSTEM, FILE_SHARE_READ, FlushFileBuffers,
-    GetFileAttributesW, INVALID_FILE_ATTRIBUTES, MOVEFILE_WRITE_THROUGH, MoveFileExW, ReplaceFileW,
-    SetFileAttributesW,
+    FILE_ATTRIBUTE_HIDDEN, FILE_ATTRIBUTE_NORMAL, FILE_ATTRIBUTE_READONLY, FILE_ATTRIBUTE_SYSTEM,
 };
-use windows_sys::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
 
 use crate::fs::{WinFs, map_io_error};
 use crate::hooks;
 use crate::inflight::FlagGuard;
 use crate::path::simplify_verbatim;
-use crate::sys::{matches, same_file_state};
+use crate::sys::{
+    OwnerOnly, attributes, create_new, delete, flush, matches, move_no_replace, replace_file_once,
+    same_file_state, set_attributes,
+};
 
 /// 共有違反の再試行の待ち (ミリ秒、05 §4.2。合計 2.55 s)。
 pub(crate) const SHARING_RETRY_MS: [u64; 6] = [50, 100, 200, 400, 800, 1000];
@@ -63,223 +48,8 @@ const ERROR_UNABLE_TO_MOVE_REPLACEMENT_2: u32 = 1177;
 /// Windows のファイル名の上限 (UTF-16 単位)。
 const NAME_LIMIT: usize = 255;
 
-/// Win32 の `…W` 関数に渡す NUL 終端の UTF-16。長いパスは拡張長形式 (`\\?\`) にする (`extend_long`)。
-/// 既存のファイルを置き換えない名前の変更 (`MOVEFILE_REPLACE_EXISTING` なし。`to` が在れば失敗する)。
-pub(crate) fn rename_no_replace(from: &Path, to: &Path) -> std::io::Result<()> {
-    let (wf, wt) = (wide(from), wide(to));
-    // SAFETY: NUL 終端のパス 2 つ。
-    let ok = unsafe { MoveFileExW(wf.as_ptr(), wt.as_ptr(), MOVEFILE_WRITE_THROUGH) };
-    if ok == 0 {
-        return Err(std::io::Error::last_os_error());
-    }
-    Ok(())
-}
-
-pub(crate) fn wide(p: &Path) -> Vec<u16> {
-    let mut w = extend_long(p.as_os_str().encode_wide().collect());
-    w.push(0);
-    w
-}
-
-/// `MAX_PATH` に近い長さのパスを、`\\?\C:\…` / `\\?\UNC\server\share\…` の形にする (NFR-404)。
-/// Rust の `std::fs` は自動でこの形にするが、`ReplaceFileW` などの直接の呼出しは自動では変換されない。
-/// 短いパス・相対パス・すでに `\\?\` / `\\.\` のものは変えない (拡張長形式は `.` `..` `/` を解釈しないため、必要なときだけ使う)。
-pub(crate) fn extend_long(w: Vec<u16>) -> Vec<u16> {
-    // MAX_PATH (260) から、ファイル名と NUL の余裕を引いた値 (ディレクトリの作成の上限 248 より手前)
-    const LIMIT: usize = 240;
-    let bs = u16::from(b'\\');
-    let is_alpha = |c: u16| u8::try_from(c).is_ok_and(|b| b.is_ascii_alphabetic());
-    if w.len() < LIMIT {
-        return w;
-    }
-    let unc = w.len() >= 3 && w[0] == bs && w[1] == bs;
-    let mut out: Vec<u16> = if unc {
-        if w[2] == u16::from(b'?') || w[2] == u16::from(b'.') {
-            return w;
-        }
-        r"\\?\UNC\"
-            .encode_utf16()
-            .chain(w[2..].iter().copied())
-            .collect()
-    } else if w.len() >= 3
-        && is_alpha(w[0])
-        && w[1] == u16::from(b':')
-        && (w[2] == bs || w[2] == u16::from(b'/'))
-    {
-        r"\\?\".encode_utf16().chain(w.iter().copied()).collect()
-    } else {
-        return w;
-    };
-    for c in &mut out {
-        if *c == u16::from(b'/') {
-            *c = bs;
-        }
-    }
-    out
-}
-
-pub(crate) fn last_error() -> u32 {
-    // SAFETY: スレッドの最後のエラーを読むだけ。
-    unsafe { GetLastError() }
-}
-
 pub(crate) fn os_error(code: u32, path: &FsPath) -> FsError {
     map_io_error(io::Error::from_raw_os_error(code as i32), path)
-}
-
-// ---------- 所有者のみの DACL (05 §5.6) ----------
-
-/// 「所有者のみ」の `SECURITY_ATTRIBUTES` (現在のユーザーと SYSTEM だけにフルアクセス、継承を遮断)。
-pub(crate) struct OwnerOnly {
-    descriptor: *mut core::ffi::c_void,
-    attrs: SECURITY_ATTRIBUTES,
-}
-
-impl OwnerOnly {
-    /// ファイル用 (継承は遮断)。
-    pub(crate) fn new() -> io::Result<OwnerOnly> {
-        OwnerOnly::with_aces("")
-    }
-
-    /// ディレクトリ用 (中のファイルとディレクトリへ継承させる)。
-    pub(crate) fn new_dir() -> io::Result<OwnerOnly> {
-        OwnerOnly::with_aces("OICI")
-    }
-
-    fn with_aces(inherit: &str) -> io::Result<OwnerOnly> {
-        let sid = current_user_sid()?;
-        let sddl: Vec<u16> = format!("O:{sid}D:P(A;{inherit};FA;;;{sid})(A;{inherit};FA;;;SY)")
-            .encode_utf16()
-            .chain(Some(0))
-            .collect();
-        let mut descriptor: *mut core::ffi::c_void = ptr::null_mut();
-        // SAFETY: `sddl` は NUL 終端の有効な文字列、`descriptor` は書込先の有効なポインタ。
-        let ok = unsafe {
-            ConvertStringSecurityDescriptorToSecurityDescriptorW(
-                sddl.as_ptr(),
-                SDDL_REVISION_1,
-                &mut descriptor,
-                ptr::null_mut(),
-            )
-        };
-        if ok == 0 {
-            return Err(io::Error::last_os_error());
-        }
-        Ok(OwnerOnly {
-            descriptor,
-            attrs: SECURITY_ATTRIBUTES {
-                nLength: std::mem::size_of::<SECURITY_ATTRIBUTES>() as u32,
-                lpSecurityDescriptor: descriptor,
-                bInheritHandle: 0,
-            },
-        })
-    }
-
-    pub(crate) fn as_ptr(&self) -> *const SECURITY_ATTRIBUTES {
-        &self.attrs
-    }
-}
-
-impl Drop for OwnerOnly {
-    fn drop(&mut self) {
-        // SAFETY: `descriptor` は `ConvertStringSecurityDescriptorToSecurityDescriptorW` が `LocalAlloc` で確保したもの。
-        unsafe {
-            LocalFree(self.descriptor);
-        }
-    }
-}
-
-/// 現在のユーザーの SID の文字列 (`S-1-5-21-…`)。
-pub(crate) fn current_user_sid() -> io::Result<String> {
-    let mut token: HANDLE = ptr::null_mut();
-    // SAFETY: 自プロセスのトークンを問い合わせ用に開く。
-    if unsafe { OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut token) } == 0 {
-        return Err(io::Error::last_os_error());
-    }
-    let result = (|| {
-        let mut len = 0u32;
-        // SAFETY: 長さの問い合わせ (バッファなし)。失敗 (ERROR_INSUFFICIENT_BUFFER) が正常。
-        unsafe { GetTokenInformation(token, TokenUser, ptr::null_mut(), 0, &mut len) };
-        let mut buf = vec![0u8; len as usize];
-        // SAFETY: `buf` は `len` バイトの書込先。
-        if unsafe { GetTokenInformation(token, TokenUser, buf.as_mut_ptr().cast(), len, &mut len) }
-            == 0
-        {
-            return Err(io::Error::last_os_error());
-        }
-        // SAFETY: `GetTokenInformation(TokenUser)` は `TOKEN_USER` を書く (先頭に置かれ、アラインは確保時の `Vec<u8>` に依らず
-        // `read_unaligned` で読む)。
-        let user: TOKEN_USER = unsafe { ptr::read_unaligned(buf.as_ptr().cast()) };
-        let mut s: *mut u16 = ptr::null_mut();
-        // SAFETY: `user.User.Sid` は `buf` の中の有効な SID。
-        if unsafe { ConvertSidToStringSidW(user.User.Sid, &mut s) } == 0 {
-            return Err(io::Error::last_os_error());
-        }
-        // SAFETY: `s` は NUL 終端の UTF-16 (`LocalAlloc` で確保)。読んでから `LocalFree` する。
-        let text = unsafe {
-            let mut n = 0;
-            while *s.add(n) != 0 {
-                n += 1;
-            }
-            let t = String::from_utf16_lossy(std::slice::from_raw_parts(s, n));
-            LocalFree(s.cast());
-            t
-        };
-        Ok(text)
-    })();
-    // SAFETY: 上で開いたトークンのハンドル。
-    unsafe { CloseHandle(token) };
-    result
-}
-
-// ---------- 一時ファイル ----------
-
-/// 一時ファイルを `CREATE_NEW`・`FILE_SHARE_READ` で作る (所有者のみの DACL を渡せる)。
-fn create_new(path: &Path, owner_only: Option<&OwnerOnly>) -> io::Result<File> {
-    let w = wide(path);
-    let sa = owner_only.map_or(ptr::null(), OwnerOnly::as_ptr);
-    // SAFETY: `w` は NUL 終端、`sa` は null または有効な `SECURITY_ATTRIBUTES`。
-    let h = unsafe {
-        CreateFileW(
-            w.as_ptr(),
-            GENERIC_WRITE,
-            FILE_SHARE_READ,
-            sa,
-            CREATE_NEW,
-            FILE_ATTRIBUTE_NORMAL,
-            ptr::null_mut(),
-        )
-    };
-    if h == INVALID_HANDLE_VALUE {
-        return Err(io::Error::last_os_error());
-    }
-    // SAFETY: `h` は有効なファイルハンドルで、`File` が所有する (閉じるのは `File` の Drop)。
-    Ok(unsafe { File::from_raw_handle(h) })
-}
-
-pub(crate) fn delete(path: &Path) -> bool {
-    let w = wide(path);
-    // SAFETY: NUL 終端のパス。
-    unsafe { DeleteFileW(w.as_ptr()) != 0 }
-}
-
-fn flush(f: &File) -> bool {
-    use std::os::windows::io::AsRawHandle;
-    // SAFETY: 開いているファイルのハンドル。
-    unsafe { FlushFileBuffers(f.as_raw_handle()) != 0 }
-}
-
-fn attributes(path: &Path) -> Option<u32> {
-    let w = wide(path);
-    // SAFETY: NUL 終端のパス。
-    let a = unsafe { GetFileAttributesW(w.as_ptr()) };
-    (a != INVALID_FILE_ATTRIBUTES).then_some(a)
-}
-
-fn set_attributes(path: &Path, attrs: u32) -> bool {
-    let w = wide(path);
-    // SAFETY: NUL 終端のパス。
-    unsafe { SetFileAttributesW(w.as_ptr(), attrs) != 0 }
 }
 
 /// `.<name>.eve-<kind>-<pid>-<rand8>`。全体が 255 UTF-16 単位を超えるときは `<name>` を文字境界で切り詰め、`~<hash8>` を付ける (05 §4.1)。
@@ -596,11 +366,7 @@ impl WinFs {
             method = SaveMethod::NewFile;
             backup = None;
             // 既存のファイルを上書きしない移動 (`MOVEFILE_REPLACE_EXISTING` なし)。同名のファイルが作られていたら Conflict
-            let (wt, wd) = (wide(&tmp), wide(&target));
-            // SAFETY: NUL 終端のパス 2 つ。
-            let ok = unsafe { MoveFileExW(wt.as_ptr(), wd.as_ptr(), MOVEFILE_WRITE_THROUGH) };
-            if ok == 0 {
-                let code = last_error();
+            if let Err(code) = move_no_replace(&tmp, &target) {
                 abort(&tmp, &mut flag);
                 if code == ERROR_ALREADY_EXISTS || code == ERROR_FILE_EXISTS {
                     let cur = self
@@ -667,24 +433,11 @@ enum ReplaceFailure {
 
 /// `ReplaceFileW(T, tmp, backup, 0)`。共有違反は指数バックオフで再試行する (05 §4.2。待つ間も取消しは見ない)。
 fn replace_file(target: &Path, tmp: &Path, backup: &Path) -> Result<(), ReplaceFailure> {
-    let (wt, wr, wb) = (wide(target), wide(tmp), wide(backup));
     let mut attempt = 0;
     loop {
-        // SAFETY: NUL 終端のパス 3 つ。フラグ 0 (`IGNORE_MERGE_ERRORS` / `IGNORE_ACL_ERRORS` は付けない)。
-        let ok = unsafe {
-            ReplaceFileW(
-                wt.as_ptr(),
-                wr.as_ptr(),
-                wb.as_ptr(),
-                0,
-                ptr::null(),
-                ptr::null(),
-            )
-        };
-        if ok != 0 {
+        let Err(code) = replace_file_once(target, tmp, backup) else {
             return Ok(());
-        }
-        let code = last_error();
+        };
         if code == ERROR_UNABLE_TO_MOVE_REPLACEMENT_2 {
             return Err(ReplaceFailure::MovedToBackup);
         }
@@ -719,58 +472,5 @@ mod tests {
         assert!(n.contains('~') && n.contains(".eve-bak-"), "{n}");
         // 文字の途中で切らない (有効な UTF-8 のまま)
         assert!(n.chars().all(|c| c != '\u{FFFD}'));
-    }
-
-    #[test]
-    fn 所有者のみの_dacl_を作れる() {
-        assert!(OwnerOnly::new().is_ok());
-        let sid = current_user_sid().unwrap();
-        // ローカル (S-1-5-21-…)・Microsoft アカウント / Entra ID (S-1-12-1-…) のどれでも SID の形
-        assert!(sid.starts_with("S-1-"), "{sid}");
-    }
-}
-
-#[cfg(test)]
-mod long_path_tests {
-    use super::*;
-
-    fn w(s: &str) -> Vec<u16> {
-        s.encode_utf16().collect()
-    }
-
-    #[test]
-    fn 短いパスは変えない() {
-        assert_eq!(extend_long(w(r"C:\a\b.txt")), w(r"C:\a\b.txt"));
-        assert_eq!(
-            extend_long(w(r"\\srv\share\a.txt")),
-            w(r"\\srv\share\a.txt")
-        );
-    }
-
-    #[test]
-    fn 長いパスは拡張長形式にする() {
-        let tail = r"d\".repeat(130);
-        assert_eq!(
-            extend_long(w(&format!(r"C:\{tail}f.txt"))),
-            w(&format!(r"\\?\C:\{tail}f.txt"))
-        );
-        assert_eq!(
-            extend_long(w(&format!(r"\\srv\share\{tail}f.txt"))),
-            w(&format!(r"\\?\UNC\srv\share\{tail}f.txt"))
-        );
-        // `/` は `\` にする
-        assert_eq!(
-            extend_long(w(&format!("C:/{}f.txt", "d/".repeat(130)))),
-            w(&format!(r"\\?\C:\{tail}f.txt"))
-        );
-    }
-
-    #[test]
-    fn すでに拡張長形式や相対パスは変えない() {
-        let tail = r"d\".repeat(130);
-        let v = w(&format!(r"\\?\C:\{tail}f.txt"));
-        assert_eq!(extend_long(v.clone()), v);
-        let r = w(&format!("{tail}f.txt"));
-        assert_eq!(extend_long(r.clone()), r);
     }
 }
