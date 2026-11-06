@@ -323,22 +323,19 @@ impl Document {
 
     /// 手順 4 の `eol_stats` と `long_lines` の更新 (INV-D5): 窓ごとに、旧文書と新文書の改行を数え直して差し替える。
     fn update_eol_stats(&mut self, before: &Snapshot, cs: &ChangeSet) {
+        let windows = eol_windows(cs);
         let mut stats = self.format.eol_stats;
-        for (old, new) in eol_windows(cs) {
+        for (old, new) in &windows {
             let o = count_range(before, old.0, old.1);
             let n = count_range(&self.text, new.0, new.1);
             stats = stats.replaced(o, n);
         }
         self.format.eol_stats = stats;
-        // 長大行の数: 変更が触れた行だけを、変更の前後で数えて差し替える
+        // 長大行の数: 同じ窓 (端の前後 1 バイトを含む) が触れた行だけを、変更の前後で数えて差し替える。
+        // 窓の端の行を含めるのは、CR と LF の合体・分離で隣の行の境目が動くため (SAF-13)
         let th = self.format.long_line_threshold;
-        let ranges: Vec<_> = cs.changed_ranges().collect();
-        let old = long_lines_touched(before, ranges.iter().map(|(o, _)| (o.start.0, o.end.0)), th);
-        let new = long_lines_touched(
-            &self.text,
-            ranges.iter().map(|(_, n)| (n.start.0, n.end.0)),
-            th,
-        );
+        let old = long_lines_touched(before, windows.iter().map(|(o, _)| *o), th);
+        let new = long_lines_touched(&self.text, windows.iter().map(|(_, n)| *n), th);
         self.format.long_lines = (self.format.long_lines + new).saturating_sub(old);
     }
 

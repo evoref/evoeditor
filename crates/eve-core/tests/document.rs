@@ -155,6 +155,24 @@ fn 保存の流れ() {
     assert!(!d.is_dirty(), "保存時点に戻れば未変更");
 }
 
+// spec: 03 §11.5.1 (長大行の数を、変わった行だけで増減する)
+#[test]
+fn cr_と_lf_の合体と分離でも長大行の数は狂わない() {
+    let mut f = eve_core::TextFormat::new_document();
+    f.long_line_threshold = 3;
+    let mut d = Document::from_text(eve_text::Text::from("aaaa\rX\nb"), f);
+    assert_eq!(d.format.long_lines, 1);
+    // X を消すと CR と LF が合体して CRLF になる。長い行 aaaa は 1 行のまま
+    d.apply(&user(edit(&d, 5, 6, ""), 0)).unwrap();
+    assert_eq!(d.to_string_lossy(), "aaaa\r\nb");
+    assert_eq!(d.format.long_lines, 1, "合体");
+    // CRLF の間に挿入すると分離する
+    d.apply(&user(edit(&d, 5, 5, "Y"), 10)).unwrap();
+    assert_eq!(d.format.long_lines, 1, "分離");
+    d.undo().unwrap();
+    assert_eq!(d.format.long_lines, 1, "Undo");
+}
+
 // ---------- eol_stats のプロパティテスト ----------
 
 #[derive(Clone, Debug)]
@@ -233,8 +251,11 @@ proptest! {
     #![proptest_config(ProptestConfig { cases: 2048, ..ProptestConfig::default() })]
 
     #[test]
-    fn eol_stats_は常に数え直しと一致する(initial in "[ab\r\n]{0,12}", acts in proptest::collection::vec(act(), 0..40)) {
-        let mut d = Document::from_text(eve_text::Text::from(initial.as_str()), eve_core::TextFormat::new_document());
+    fn eol_stats_と長大行の数は常に数え直しと一致する(initial in "[ab\r\n]{0,12}", th in 0usize..4, acts in proptest::collection::vec(act(), 0..40)) {
+        // 長大行の閾値を小さくして、CR と LF の合体・分離で長さが閾値をまたぐ行を作る (SAF-13)
+        let mut f = eve_core::TextFormat::new_document();
+        f.long_line_threshold = th;
+        let mut d = Document::from_text(eve_text::Text::from(initial.as_str()), f);
         prop_assert_eq!(d.format.eol_stats, d.recount_eol());
         let mut t = 0;
         for a in &acts {
@@ -262,6 +283,11 @@ proptest! {
                 Act::Redo => { d.redo().unwrap(); }
             }
             prop_assert_eq!(d.format.eol_stats, d.recount_eol(), "操作 {:?} の後、文書 {:?}", a, d.to_string_lossy());
+            prop_assert_eq!(
+                d.format.long_lines,
+                eve_core::count_long_lines(d.text(), th),
+                "長大行の数。操作 {:?} の後、文書 {:?}", a, d.to_string_lossy()
+            );
         }
     }
 }

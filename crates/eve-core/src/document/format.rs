@@ -30,17 +30,18 @@ pub fn count_long_lines(text: &dyn TextRead, threshold: usize) -> usize {
     n + usize::from(run > threshold)
 }
 
-/// 位置の範囲 `ranges` (昇順で重ならない) が触れる行のうち、閾値を超える行の数 (同じ行は 1 回だけ数える)。
-/// 編集の前後の文書で数え、長大行の数を差分で更新するのに使う。
+/// 位置の範囲 `ranges` (`[s, e]`。昇順。文書の範囲に切り詰める) が触れる行のうち、閾値を超える行の数
+/// (同じ行は 1 回だけ数える)。編集の前後の文書で数え、長大行の数を差分で更新するのに使う。
 pub(crate) fn long_lines_touched(
     text: &dyn TextRead,
     ranges: impl Iterator<Item = (usize, usize)>,
     threshold: usize,
 ) -> usize {
+    let len = text.len_bytes();
     let (mut next, mut n) = (0usize, 0usize);
     for (s, e) in ranges {
-        let a = text.byte_to_line(ByteOff(s)).0.max(next);
-        let b = text.byte_to_line(ByteOff(e)).0;
+        let a = text.byte_to_line(ByteOff(s.min(len))).0.max(next);
+        let b = text.byte_to_line(ByteOff(e.min(len))).0;
         for l in a..=b {
             let l = eve_text::LineIdx(l);
             n += usize::from(text.line_end_byte(l).0 - text.line_to_byte(l).0 > threshold);
