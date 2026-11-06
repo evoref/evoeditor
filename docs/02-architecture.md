@@ -1349,9 +1349,9 @@ impl Host {
             }
         }
         self.publish_events(self.editor.drain_events());   // 内部購読者・駆動 API への通知 (§10.1)
-        // 描画の間引き (04 §4.4): 即時に描くのは、入力 (端末からのペーストを含む) と、ジョブの結果のうち進捗 (`JobResult::Progress`)・
-        // 検索の途中経過 (`SearchBatch`) 以外 (読込・保存の完了・失敗・確認など)。それ以外 (進捗・途中経過、クリップボードの取得の結果、
-        // 期限の処理) だけの変化は、直前の描画から 16 ms 未満なら描かず、render_due = 直前の描画 + 16 ms を待ちの期限に加える
+        // 描画の間引き (04 §4.4): 即時に描くのは、入力 (端末からのペーストを含む)、クリップボードからの貼り付けの結果 (取得の結果と、
+        // 期限切れで内部レジスタから貼るもの)、ジョブの結果のうち進捗 (`JobResult::Progress`)・検索の途中経過 (`SearchBatch`) 以外
+        // (読込・保存の完了・失敗・確認など)。それ以外 (進捗・途中経過、期限の処理) だけの変化は、直前の描画から 16 ms 未満なら描かず、render_due = 直前の描画 + 16 ms を待ちの期限に加える
         // (Host の状態。core は描画の時刻を知らない)。Frontend::wake_after の期限が来たときも描く
         if self.editor.needs_render() && self.render_allowed() || self.frontend_wake_due() {
             let w = self.window;                                                 // Host が持つ Window は 1 つ (v0.x)。複数の Window は v0.5 以降の拡張点 (下の箇条)
@@ -1431,7 +1431,7 @@ impl InputSink {
 | `HostBuilder` / `HostArgs` / `HostJobs` / `LogSink` による組み立て (下の「Host の組み立て」) | 無い。`Host::new(ports: Ports)` / `Host::with_channel(ports, (tx, rx))` で作り、bin が setter (`set_clipboard`・`set_rescue_writer`・`set_config`・`set_keymap`・`set_locale`・`set_user_theme`・`set_config_sources`・`set_log_path`・`set_system_encoding`・`set_initial_encoding`・`set_ssh_session`・`add_config_report`) を順に呼ぶ。設定の読込は bin が行う | v0.3 の M16 (STR-C3) で、setter をまとめた `HostInit` 構造体にする。そのとき下の「Host の組み立て」の範囲を実装に合わせて絞る |
 | `Host::start(frontend)` / `run(frontend)` | `start(frontend, files: &[InitialFile], read_only)` / `run(frontend, files, read_only)`。`Editor` は `Host::new` の時点で `Capabilities::default()` で作り、`start` は `init` → `set_caps` → 端末の緊急復元の情報 → `set_viewport` → `open_initial_files` → `start_input` → 最初の描画の順 | 引数は実装に合わせてよい (`HostInit` にまとめるときに見直す) |
 | `step` の `Signal` → `shutdown_noninteractive`、`Fatal` → `emergency_exit`、`apply(eff)` / `exit_normally` | `step` の腕の中に直接書く (退避 → 端末の復元 → 終了コード)。非対話の終了の待ち (置換中の計数・退避の完了) は bin (`main.rs`) に Windows と Unix で別に書いてある | v0.3 の M16 (STR-C1) で eve-host に `NonInteractiveShutdown` (Clock を注入) として移し、試験を足す |
-| 描画の間引き: 入力・ペーストの結果だけ即時、ジョブの結果などは 16 ms に間引く | 間引くのはジョブの進捗 (`Progress`) と検索の途中経過 (`SearchBatch`) だけ。ほかのジョブの結果は即時に描く | **実装を正とした** (2026-11-06、PO。v0.3 の M15)。上の擬似コードの注釈を実装に合わせた (ジョブの結果のうち間引くのは進捗と途中経過だけ。ジョブ以外の通知 (クリップボードの取得の結果など) も間引く側)。04 §4.4 の表 (ジョブの結果で間引くのは検索件数・読込進捗) とも合う |
+| 描画の間引き: 入力・ペーストの結果だけ即時、ジョブの結果などは 16 ms に間引く | 間引くのはジョブの進捗 (`Progress`) と検索の途中経過 (`SearchBatch`) だけ。ほかのジョブの結果は即時に描く | **実装を正とした** (2026-11-06、PO。v0.3 の M15)。上の擬似コードの注釈を実装に合わせた (ジョブの結果のうち間引くのは進捗と途中経過だけ)。クリップボードからの貼り付けの結果は、間引く側にあって最大 16 ms 遅れ得たので、入力の結果として即時に描く側へ直した (2026-11-06、`fix/`)。04 §4.4 の表 (ジョブの結果で間引くのは検索件数・読込進捗) とも合う |
 | `wait_hint` / `set_waker` (外部のループからの駆動、X21) | 無い | 未実装。外部のループから駆動する最初の利用者 (駆動 API・組込み) の版で入れる |
 
 **Host の組み立て (`HostBuilder`、正本)**: Host の部品は `HostBuilder` で差し替える。`Host::new(args)` は本番の部品で組み立てる `HostBuilder::new(args).build()` の短縮で、テストの Harness (09 §3.4)・駆動モードの `--fake-ports` (§10.5)・組込みはこの builder を使う。部品ごとに別の差し替えの口を作らない。

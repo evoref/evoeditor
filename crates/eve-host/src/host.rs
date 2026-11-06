@@ -99,6 +99,8 @@ pub struct Host {
     clip_busy: Arc<std::sync::atomic::AtomicBool>,
     /// 待っている取得の token と期限 (2 秒)。
     clip_wait: Option<(eve_view::ClipboardToken, Tick)>,
+    /// 貼り付けの結果を渡した: 次の描画を間引かない (クリップボードからの貼り付けは入力の結果、04 §4.4・02 §9.2)。
+    render_now: bool,
     /// 端末が OSC 52 の書込に対応する (`frontend.init` の能力、05 §8.1)。
     osc52_write: bool,
     /// SSH 接続中 (`SSH_TTY` / `SSH_CONNECTION`)。`clipboard.osc52 = auto` で OSC 52 を使う条件。
@@ -144,6 +146,7 @@ impl Host {
             clipboard: None,
             clip_busy: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             clip_wait: None,
+            render_now: false,
             osc52_write: false,
             ssh_session: std::env::var_os("SSH_TTY").is_some()
                 || std::env::var_os("SSH_CONNECTION").is_some(),
@@ -561,6 +564,8 @@ impl Host {
         }
         self.publish_events();
         let wake_due = self.wake_at.is_some_and(|t| t <= self.clock.now());
+        // 貼り付けの結果 (取得の結果・期限切れで内部レジスタから) も入力の結果として即時に描く
+        let input_driven = input_driven || std::mem::take(&mut self.render_now);
         if (self.editor.needs_render() && self.render_allowed(input_driven)) || wake_due {
             self.render(frontend);
         }
@@ -692,6 +697,7 @@ impl Host {
         if let Some(w) = self.window {
             self.editor
                 .handle_input(w, eve_view::InputEvent::ClipboardContent { token, text });
+            self.render_now = true;
         }
     }
 
@@ -707,8 +713,8 @@ impl Host {
         }
     }
 
-    /// 描画の間引き: 入力の結果は即時に描く。それ以外 (ジョブの結果など) だけの変化は、直前の描画から 16 ms 未満なら
-    /// 描かず、期限を待ちの期限に加える。
+    /// 描画の間引き: 入力の結果 (クリップボードからの貼り付けを含む) は即時に描く。それ以外 (ジョブの進捗など) だけの変化は、
+    /// 直前の描画から 16 ms 未満なら描かず、期限を待ちの期限に加える。
     fn render_allowed(&mut self, input_driven: bool) -> bool {
         let now = self.clock.now();
         match self.last_render {
