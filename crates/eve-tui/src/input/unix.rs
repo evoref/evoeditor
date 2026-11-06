@@ -570,12 +570,15 @@ mod tests {
         );
         let fd = Arc::downgrade(&input.fd);
         drop(input);
-        // スレッドが終われば送り先 (`Chan`) も drop され、受け手は切断を知る
-        assert_eq!(
-            rx.recv_timeout(Duration::from_secs(2)),
-            Err(mpsc::RecvTimeoutError::Disconnected),
-            "入力スレッドが止まらない"
-        );
+        // スレッドが終われば送り先 (`Chan`) も drop され、受け手は切断を知る。並行に走る試験の raise(SIGWINCH) は
+        // signal-hook がすべての登録に配るので、止まる前に Resize が届くことがある。切断までの受信は読み捨てる
+        loop {
+            match rx.recv_timeout(Duration::from_secs(2)) {
+                Ok(_) => continue,
+                Err(mpsc::RecvTimeoutError::Disconnected) => break,
+                Err(e) => panic!("入力スレッドが止まらない: {e:?}"),
+            }
+        }
         t.join().unwrap();
         assert!(
             fd.upgrade().is_none(),
