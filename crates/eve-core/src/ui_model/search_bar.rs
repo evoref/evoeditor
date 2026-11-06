@@ -15,7 +15,7 @@ use crate::document::{Origin, Transaction, UndoGroupHint};
 use crate::jobs::cancel::CancelToken;
 use crate::jobs::{JobKind, JobResult};
 use crate::search::{
-    Case, QueryError, SearchQuery, build_replace_all, replacement_for, scan_lines,
+    Case, QueryError, SearchQuery, build_replace_all, replacement_for, scan_bytes,
     unescape_replacement,
 };
 use crate::time::Tick;
@@ -483,7 +483,14 @@ impl EditorState {
             if len > SYNC_LINE_MAX {
                 continue;
             }
-            scan_lines(t, &m, l..l + 1, &cancel, &mut |r| {
+            // 1 行の範囲 (行頭から次の行頭まで。最後の行は文書の末尾まで)
+            let end = if l + 1 < n {
+                t.line_to_byte(LineIdx(l + 1))
+            } else {
+                ByteOff(t.len_bytes())
+            };
+            let range = ByteRange::new(t.line_to_byte(LineIdx(l)), end);
+            scan_bytes(t, &m, range, &cancel, &mut |r| {
                 out.push((r.start.0, r.end.0));
                 true
             });

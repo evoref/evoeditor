@@ -54,6 +54,6 @@ pub use jobs::{
 };
 pub use search::{
     Case, Matcher, QueryError, SearchJob, SearchQuery, build_replace_all, find_next,
-    replacement_for, run_search, scan_bytes, scan_lines, unescape_replacement,
+    replacement_for, run_search, scan_bytes, unescape_replacement,
 };
 pub use time::{Clock, Millis, Tick};
