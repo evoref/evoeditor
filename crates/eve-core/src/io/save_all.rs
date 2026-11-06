@@ -7,8 +7,9 @@ use std::collections::BTreeSet;
 
 use eve_view::{DocumentId, JobId, MessageLevel};
 
+use crate::command::ids;
 use crate::command::{
-    CommandCtx, CommandKind, CommandRegistry, CommandResult, CommandSpec, Permission, RejectReason,
+    CommandCtx, CommandKind, CommandRegistry, CommandResult, Permission, RejectReason,
 };
 use crate::editor::state::EditorState;
 use crate::io::fs::Expect;
@@ -180,14 +181,11 @@ fn file_save_all(ctx: &mut CommandCtx<'_>) -> CommandResult {
 
 /// v0.2 の `file.save_all` (07 §11.6)。
 pub(crate) fn register(r: &mut CommandRegistry) {
-    r.register(
-        CommandSpec::new(
-            "file.save_all",
-            CommandKind::File,
-            Permission::None,
-            "",
-            file_save_all,
-        )
-        .expect("カタログの when 句は構文が正しい"),
+    r.add(
+        ids::FILE_SAVE_ALL,
+        CommandKind::File,
+        Permission::None,
+        "",
+        file_save_all,
     );
 }

@@ -7,8 +7,9 @@ use std::ops::Range;
 use eve_view::{CutPolicy, DocumentId, InputFieldModel, ListItem, OverlayModel, ViewId};
 
 use super::state::EditorState;
+use crate::command::ids;
 use crate::command::{
-    CommandCtx, CommandKind, CommandRegistry, CommandResult, CommandSpec, Permission, RejectReason,
+    CommandCtx, CommandKind, CommandRegistry, CommandResult, Permission, RejectReason,
 };
 use crate::io::pending::Pending;
 use crate::layout::cell_text;
@@ -288,14 +289,34 @@ fn buffer_prev(ctx: &mut CommandCtx<'_>) -> CommandResult {
 
 /// v0.2 のバッファコマンド (07 §11.6 の `buffer.close` / `buffer.next` / `buffer.prev`)。
 pub(crate) fn register(r: &mut CommandRegistry) {
-    let spec = |id, perm, h| {
-        CommandSpec::new(id, CommandKind::Ui, perm, "", h)
-            .expect("カタログの when 句は構文が正しい")
-    };
-    r.register(spec("buffer.close", Permission::None, buffer_close));
-    r.register(spec("buffer.list", Permission::Ui, buffer_list));
-    r.register(spec("buffer.next", Permission::Ui, buffer_next));
-    r.register(spec("buffer.prev", Permission::Ui, buffer_prev));
+    r.add(
+        ids::BUFFER_CLOSE,
+        CommandKind::Ui,
+        Permission::None,
+        "",
+        buffer_close,
+    );
+    r.add(
+        ids::BUFFER_LIST,
+        CommandKind::Ui,
+        Permission::Ui,
+        "",
+        buffer_list,
+    );
+    r.add(
+        ids::BUFFER_NEXT,
+        CommandKind::Ui,
+        Permission::Ui,
+        "",
+        buffer_next,
+    );
+    r.add(
+        ids::BUFFER_PREV,
+        CommandKind::Ui,
+        Permission::Ui,
+        "",
+        buffer_prev,
+    );
 }
 
 // ---- (v0.3 の M14、STR-B1 で io/ から移した) ----

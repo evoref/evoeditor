@@ -7,9 +7,10 @@
 use eve_text::{ByteOff, Text, next_grapheme_boundary, prev_grapheme_boundary};
 use eve_view::{DocumentId, EditorEvent, Effect, MessageLevel, OverlayKind, QuitRescue, Revision};
 
+use crate::command::ids;
 use crate::command::{
     ArgValue, Args, CommandCtx, CommandInvocation, CommandKind, CommandRegistry, CommandResult,
-    CommandSpec, Permission, RejectReason,
+    Permission, RejectReason,
 };
 use crate::io::io_jobs::OpenOptions;
 
@@ -545,15 +546,15 @@ impl EditorState {
             return None;
         }
         let id = inv.id.as_str();
-        if id.starts_with("ui.") || id == "app.quit" {
+        if id.starts_with("ui.") || id == ids::APP_QUIT {
             return None;
         }
         // バッファ一覧の中の `buffer.close` は、選んでいる文書を閉じる (07 §11.6 の `list` コンテキスト)
-        if id == "buffer.close" && self.overlay_name() == "buffer_list" {
+        if id == ids::BUFFER_CLOSE && self.overlay_name() == "buffer_list" {
             return None;
         }
         // 入力欄への貼り付け: システムクリップボードを要求し、応答は入力欄の最初の行を入れる (`on_clipboard_content`)
-        if id == "edit.paste" {
+        if id == ids::EDIT_PASTE {
             return Some(if self.input_mut().is_some() {
                 self.request_paste()
             } else {
@@ -564,13 +565,13 @@ impl EditorState {
         if self.ui.overlay.is_none()
             && !matches!(
                 id,
-                "edit.insert_text"
-                    | "edit.delete_backward"
-                    | "edit.delete_forward"
-                    | "cursor.move_left"
-                    | "cursor.move_right"
-                    | "cursor.home"
-                    | "cursor.end"
+                ids::EDIT_INSERT_TEXT
+                    | ids::EDIT_DELETE_BACKWARD
+                    | ids::EDIT_DELETE_FORWARD
+                    | ids::CURSOR_MOVE_LEFT
+                    | ids::CURSOR_MOVE_RIGHT
+                    | ids::CURSOR_HOME
+                    | ids::CURSOR_END
             )
         {
             return None;
@@ -582,7 +583,7 @@ impl EditorState {
         let t = text_of(text);
         let mut edited = false;
         match id {
-            "edit.insert_text" => {
+            ids::EDIT_INSERT_TEXT => {
                 if let Some(s) = inv.args.str("text") {
                     // 入力欄は 1 行: 改行は取り除く
                     let s: String = s.chars().filter(|c| !matches!(c, '\n' | '\r')).collect();
@@ -591,21 +592,21 @@ impl EditorState {
                     edited = true;
                 }
             }
-            "edit.delete_backward" => {
+            ids::EDIT_DELETE_BACKWARD => {
                 let b = prev_grapheme_boundary(&t, ByteOff(*cursor)).0;
                 text.replace_range(b..*cursor, "");
                 *cursor = b;
                 edited = true;
             }
-            "edit.delete_forward" => {
+            ids::EDIT_DELETE_FORWARD => {
                 let e = next_grapheme_boundary(&t, ByteOff(*cursor)).0;
                 text.replace_range(*cursor..e, "");
                 edited = true;
             }
-            "cursor.move_left" => *cursor = prev_grapheme_boundary(&t, ByteOff(*cursor)).0,
-            "cursor.move_right" => *cursor = next_grapheme_boundary(&t, ByteOff(*cursor)).0,
-            "cursor.home" => *cursor = 0,
-            "cursor.end" => *cursor = text.len(),
+            ids::CURSOR_MOVE_LEFT => *cursor = prev_grapheme_boundary(&t, ByteOff(*cursor)).0,
+            ids::CURSOR_MOVE_RIGHT => *cursor = next_grapheme_boundary(&t, ByteOff(*cursor)).0,
+            ids::CURSOR_HOME => *cursor = 0,
+            ids::CURSOR_END => *cursor = text.len(),
             _ => return Some(CommandResult::Rejected(RejectReason::NotAvailable)),
         }
         if edited {
@@ -628,9 +629,11 @@ impl EditorState {
         if self.input_mut().is_none() {
             return false;
         }
-        let inv =
-            CommandInvocation::new("edit.insert_text", crate::command::InvocationSource::Keymap)
-                .with_args(Args::new().with_str("text", s));
+        let inv = CommandInvocation::new(
+            ids::EDIT_INSERT_TEXT,
+            crate::command::InvocationSource::Keymap,
+        )
+        .with_args(Args::new().with_str("text", s));
         self.overlay_intercept(&inv);
         true
     }
@@ -914,19 +917,16 @@ fn cmd_search_prev(ctx: &mut CommandCtx<'_>) -> CommandResult {
 /// `search.next` / `search.prev` は Motion (実行すると Undo の結合を封印する、03 §7.3 R3)。
 fn reg_motion_search(r: &mut CommandRegistry) {
     let handlers: [(&str, crate::Handler); 2] = [
-        ("search.next", cmd_search_next),
-        ("search.prev", cmd_search_prev),
+        (ids::SEARCH_NEXT, cmd_search_next),
+        (ids::SEARCH_PREV, cmd_search_prev),
     ];
     for (id, h) in handlers {
-        r.register(
-            CommandSpec::new(
-                id,
-                CommandKind::Motion,
-                Permission::Read,
-                "search.active",
-                h,
-            )
-            .expect("カタログの when 句は構文が正しい"),
+        r.add(
+            id,
+            CommandKind::Motion,
+            Permission::Read,
+            "search.active",
+            h,
         );
     }
 }
@@ -963,98 +963,144 @@ fn cmd_suspend(ctx: &mut CommandCtx<'_>) -> CommandResult {
     CommandResult::Done
 }
 
-macro_rules! reg_ui {
-    ($r:expr, $id:expr, $when:expr, $h:expr) => {
-        $r.register(
-            CommandSpec::new($id, CommandKind::Ui, Permission::None, $when, $h)
-                .expect("カタログの when 句は構文が正しい"),
-        )
-    };
-}
-
 /// オーバーレイ内のコマンドと `app.quit`・`app.suspend` (07 §11.6)。
 pub(crate) fn register(r: &mut CommandRegistry) {
     let active = "overlay.active != \"\" || search.active";
-    reg_ui!(r, "ui.confirm", active, cmd_confirm);
-    reg_ui!(r, "ui.cancel", "", cmd_cancel);
-    reg_ui!(r, "ui.list_next", active, cmd_list_next);
-    reg_ui!(r, "ui.list_prev", active, cmd_list_prev);
-    reg_ui!(
-        r,
-        "ui.dialog_choose",
-        "overlay.active == \"dialog\"",
-        cmd_dialog_choose
+    r.add(
+        ids::UI_CONFIRM,
+        CommandKind::Ui,
+        Permission::None,
+        active,
+        cmd_confirm,
     );
-    reg_ui!(r, "ui.palette_open", "", cmd_palette_open);
-    reg_ui!(r, "ui.redraw", "", cmd_redraw);
-    reg_ui!(r, "ui.list_page_down", active, cmd_list_page_down);
-    reg_ui!(r, "ui.list_page_up", active, cmd_list_page_up);
+    r.add(
+        ids::UI_CANCEL,
+        CommandKind::Ui,
+        Permission::None,
+        "",
+        cmd_cancel,
+    );
+    r.add(
+        ids::UI_LIST_NEXT,
+        CommandKind::Ui,
+        Permission::None,
+        active,
+        cmd_list_next,
+    );
+    r.add(
+        ids::UI_LIST_PREV,
+        CommandKind::Ui,
+        Permission::None,
+        active,
+        cmd_list_prev,
+    );
+    r.add(
+        ids::UI_DIALOG_CHOOSE,
+        CommandKind::Ui,
+        Permission::None,
+        "overlay.active == \"dialog\"",
+        cmd_dialog_choose,
+    );
+    r.add(
+        ids::UI_PALETTE_OPEN,
+        CommandKind::Ui,
+        Permission::None,
+        "",
+        cmd_palette_open,
+    );
+    r.add(
+        ids::UI_REDRAW,
+        CommandKind::Ui,
+        Permission::None,
+        "",
+        cmd_redraw,
+    );
+    r.add(
+        ids::UI_LIST_PAGE_DOWN,
+        CommandKind::Ui,
+        Permission::None,
+        active,
+        cmd_list_page_down,
+    );
+    r.add(
+        ids::UI_LIST_PAGE_UP,
+        CommandKind::Ui,
+        Permission::None,
+        active,
+        cmd_list_page_up,
+    );
     // 07 §11.6 の perm 列は `ui` (キーマップ以外からも呼べるが、外部クライアントには許可を要する)
     for (id, when, h) in [
-        ("search.open", "", cmd_search_open as crate::Handler),
+        (ids::SEARCH_OPEN, "", cmd_search_open as crate::Handler),
         (
-            "search.toggle_case",
+            ids::SEARCH_TOGGLE_CASE,
             "search.active",
             cmd_search_toggle_case,
         ),
         (
-            "search.toggle_regex",
+            ids::SEARCH_TOGGLE_REGEX,
             "search.active",
             cmd_search_toggle_regex,
         ),
         (
-            "search.toggle_word",
+            ids::SEARCH_TOGGLE_WORD,
             "search.active",
             cmd_search_toggle_word,
         ),
         (
-            "search.toggle_selection",
+            ids::SEARCH_TOGGLE_SELECTION,
             "search.active",
             cmd_search_toggle_selection,
         ),
     ] {
-        r.register(
-            CommandSpec::new(id, CommandKind::Ui, Permission::Ui, when, h)
-                .expect("カタログの when 句は構文が正しい"),
-        );
+        r.add(id, CommandKind::Ui, Permission::Ui, when, h);
     }
     reg_motion_search(r);
     // 置換 (03 §12.5): 置換欄を開く (Ui)、すべて置換 (Edit。承認を要する `propose`)
-    r.register(
-        CommandSpec::new(
-            "search.replace_open",
-            CommandKind::Ui,
-            Permission::Ui,
-            "!doc.read_only",
-            cmd_search_replace_open,
-        )
-        .expect("カタログの when 句は構文が正しい"),
+    r.add(
+        ids::SEARCH_REPLACE_OPEN,
+        CommandKind::Ui,
+        Permission::Ui,
+        "!doc.read_only",
+        cmd_search_replace_open,
     );
-    r.register(
-        CommandSpec::new(
-            "search.replace",
-            CommandKind::Edit,
-            Permission::Propose,
-            "search.replace_active && !doc.read_only",
-            cmd_search_replace,
-        )
-        .expect("カタログの when 句は構文が正しい"),
+    r.add(
+        ids::SEARCH_REPLACE,
+        CommandKind::Edit,
+        Permission::Propose,
+        "search.replace_active && !doc.read_only",
+        cmd_search_replace,
     );
-    r.register(
-        CommandSpec::new(
-            "search.replace_all",
-            CommandKind::Edit,
-            Permission::Propose,
-            "search.replace_active && !doc.read_only",
-            cmd_search_replace_all,
-        )
-        .expect("カタログの when 句は構文が正しい"),
+    r.add(
+        ids::SEARCH_REPLACE_ALL,
+        CommandKind::Edit,
+        Permission::Propose,
+        "search.replace_active && !doc.read_only",
+        cmd_search_replace_all,
     );
-    reg_ui!(r, "app.quit", "", cmd_quit);
-    reg_ui!(r, "app.suspend", "caps.can_suspend", cmd_suspend);
+    r.add(
+        ids::APP_QUIT,
+        CommandKind::Ui,
+        Permission::None,
+        "",
+        cmd_quit,
+    );
+    r.add(
+        ids::APP_SUSPEND,
+        CommandKind::Ui,
+        Permission::None,
+        "caps.can_suspend",
+        cmd_suspend,
+    );
     #[cfg(feature = "test-hooks")]
     if test_hook_panic_command() {
-        reg_ui!(r, "internal.debug_panic", "", cmd_debug_panic);
+        r.add(
+            "internal.debug_panic",
+            CommandKind::Ui,
+            Permission::None,
+            "",
+            cmd_debug_panic,
+        );
     }
 }
 

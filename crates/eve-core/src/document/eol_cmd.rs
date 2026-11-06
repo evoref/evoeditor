@@ -8,6 +8,7 @@
 use eve_text::{ChangeSet, LineEnding, TextRead};
 use eve_view::{CommandId, DocumentId, MessageLevel, Revision, ViewId};
 
+use crate::command::ids;
 use crate::document::eol::build_eol_conversion;
 use crate::document::{EolStats, FormatChange, FormatState, Origin, Transaction, UndoGroupHint};
 use crate::jobs::cancel::CancelToken;
@@ -152,7 +153,7 @@ impl EditorState {
         let sel = self.view(c.view).map(|v| v.selection.clone());
         let tx = Transaction::new(
             cs,
-            Origin::Command(CommandId::new("file.set_line_ending")),
+            Origin::Command(CommandId::new(ids::FILE_SET_LINE_ENDING)),
             self.now(),
         )
         .with_view(c.view)

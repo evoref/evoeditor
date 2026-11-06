@@ -9,6 +9,7 @@ use eve_view::{CommandId, KeyCode, KeyStroke, Modifiers};
 
 use super::{Layer, NONE_COMMAND, format_sequence, parse_sequence};
 use crate::command::context::ContextExpr;
+use crate::command::ids;
 use crate::editor::Editor;
 
 /// ユーザーが書けるコンテキスト (07 §7.1)。core が公開する固定集合。
@@ -17,7 +18,7 @@ const CONTEXTS: [&str; 8] = [
 ];
 
 /// どの設定でも必ず届く脱出のコマンド (07 §7.6)。
-const ESCAPE_COMMANDS: [&str; 3] = ["app.quit", "ui.palette_open", "ui.cancel"];
+const ESCAPE_COMMANDS: [&str; 3] = [ids::APP_QUIT, ids::UI_PALETTE_OPEN, ids::UI_CANCEL];
 
 impl Editor {
     /// `keymap.toml` の内容でユーザー層を置き換える。戻り値は、読込の診断に検証の診断を足したもの。

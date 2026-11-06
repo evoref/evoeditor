@@ -8,6 +8,7 @@ use eve_text::grapheme_indices;
 use eve_view::{CutPolicy, InputFieldModel, KeyLabel, ListItem, OverlayModel};
 
 use crate::command::context::{ContextExpr, CtxValue};
+use crate::command::ids;
 use crate::command::{Args, CommandResult, RejectReason};
 use crate::editor::state::EditorState;
 use crate::layout::cell_text;
@@ -21,12 +22,12 @@ fn hidden(id: &str) -> bool {
     id.starts_with("internal.")
         || matches!(
             id,
-            "ui.confirm"
-                | "ui.list_next"
-                | "ui.list_prev"
-                | "ui.list_page_down"
-                | "ui.list_page_up"
-                | "ui.dialog_choose"
+            ids::UI_CONFIRM
+                | ids::UI_LIST_NEXT
+                | ids::UI_LIST_PREV
+                | ids::UI_LIST_PAGE_DOWN
+                | ids::UI_LIST_PAGE_UP
+                | ids::UI_DIALOG_CHOOSE
         )
 }
 
@@ -54,19 +55,19 @@ const ENCODINGS: &[(&str, &str)] = &[
 
 const ARG_DEFS: &[ArgDef] = &[
     ArgDef {
-        command: "file.set_line_ending",
+        command: ids::FILE_SET_LINE_ENDING,
         arg: "eol",
         label_key: "ui.palette.arg.eol",
         choices: &[("lf", "LF"), ("crlf", "CRLF"), ("cr", "CR")],
     },
     ArgDef {
-        command: "file.reopen_with_encoding",
+        command: ids::FILE_REOPEN_WITH_ENCODING,
         arg: "encoding",
         label_key: "ui.palette.arg.encoding",
         choices: ENCODINGS,
     },
     ArgDef {
-        command: "file.set_encoding",
+        command: ids::FILE_SET_ENCODING,
         arg: "encoding",
         label_key: "ui.palette.arg.encoding",
         choices: ENCODINGS,

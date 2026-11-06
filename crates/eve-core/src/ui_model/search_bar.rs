@@ -10,6 +10,7 @@ use eve_view::{
 };
 
 use crate::command::CommandResult;
+use crate::command::ids;
 use crate::document::{Origin, Transaction, UndoGroupHint};
 use crate::jobs::cancel::CancelToken;
 use crate::jobs::{JobKind, JobResult};
@@ -653,7 +654,7 @@ impl EditorState {
         let sel = view.and_then(|v| self.docs.views.get(&v).map(|v| v.selection.clone()));
         let mut tx = Transaction::new(
             changes,
-            Origin::Command(eve_view::CommandId::new("search.replace")),
+            Origin::Command(eve_view::CommandId::new(ids::SEARCH_REPLACE)),
             self.now,
         )
         .with_undo_group(UndoGroupHint::Break)
@@ -711,7 +712,7 @@ impl EditorState {
         let sel = view.and_then(|v| self.docs.views.get(&v).map(|v| v.selection.clone()));
         let mut tx = Transaction::new(
             changes,
-            Origin::Command(eve_view::CommandId::new("search.replace_all")),
+            Origin::Command(eve_view::CommandId::new(ids::SEARCH_REPLACE_ALL)),
             self.now,
         )
         .with_undo_group(UndoGroupHint::Break)

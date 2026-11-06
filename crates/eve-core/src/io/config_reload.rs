@@ -7,9 +7,8 @@
 use eve_config::{Config, KeymapFile, Severity};
 use eve_view::{Effect, MessageLevel};
 
-use crate::command::{
-    CommandCtx, CommandKind, CommandRegistry, CommandResult, CommandSpec, Permission,
-};
+use crate::command::ids;
+use crate::command::{CommandCtx, CommandKind, CommandRegistry, CommandResult, Permission};
 use crate::editor::Editor;
 use crate::editor::state::EditorState;
 use crate::io::pending::Pending;
@@ -278,14 +277,11 @@ fn config_reload(ctx: &mut CommandCtx<'_>) -> CommandResult {
 }
 
 pub(crate) fn register(r: &mut CommandRegistry) {
-    r.register(
-        CommandSpec::new(
-            "config.reload",
-            CommandKind::Ui,
-            Permission::None,
-            "",
-            config_reload,
-        )
-        .expect("カタログの when 句は構文が正しい"),
+    r.add(
+        ids::CONFIG_RELOAD,
+        CommandKind::Ui,
+        Permission::None,
+        "",
+        config_reload,
     );
 }

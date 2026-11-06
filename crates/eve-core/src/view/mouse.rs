@@ -7,9 +7,8 @@ use eve_view::{
     Effect, MessageLevel, Modifiers, MouseAt, MouseButton, MouseEvent, MouseKind, ViewId,
 };
 
-use crate::command::{
-    CommandCtx, CommandKind, CommandRegistry, CommandResult, CommandSpec, Permission,
-};
+use crate::command::ids;
+use crate::command::{CommandCtx, CommandKind, CommandRegistry, CommandResult, Permission};
 use crate::editor::state::EditorState;
 use crate::layout::{Affinity, line_rows, wrap_ctx};
 use crate::time::{Millis, Tick};
@@ -230,24 +229,18 @@ fn toggle_hint_bar(ctx: &mut CommandCtx<'_>) -> CommandResult {
 }
 
 pub(crate) fn register(r: &mut CommandRegistry) {
-    r.register(
-        CommandSpec::new(
-            "ui.toggle_hint_bar",
-            CommandKind::Ui,
-            Permission::Ui,
-            "",
-            toggle_hint_bar,
-        )
-        .expect("カタログの when 句は構文が正しい"),
+    r.add(
+        ids::UI_TOGGLE_HINT_BAR,
+        CommandKind::Ui,
+        Permission::Ui,
+        "",
+        toggle_hint_bar,
     );
-    r.register(
-        CommandSpec::new(
-            "ui.toggle_mouse",
-            CommandKind::Ui,
-            Permission::None,
-            "caps.mouse",
-            toggle_mouse,
-        )
-        .expect("カタログの when 句は構文が正しい"),
+    r.add(
+        ids::UI_TOGGLE_MOUSE,
+        CommandKind::Ui,
+        Permission::None,
+        "caps.mouse",
+        toggle_mouse,
     );
 }

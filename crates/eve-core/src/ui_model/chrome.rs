@@ -8,6 +8,7 @@ use eve_view::{
     StatusModel, ViewId,
 };
 
+use crate::command::ids;
 use crate::document::{Document, LoadState};
 
 use crate::editor::state::EditorState;
@@ -15,13 +16,13 @@ use crate::layout::cell_text;
 
 /// ヒントバーの `normal` 文脈の項目 (07 §11.6 の「ヒント」列。CommandId と優先度)。
 const NORMAL_HINTS: [(&str, u8); 7] = [
-    ("app.quit", 5),
-    ("ui.palette_open", 5),
-    ("file.save", 4),
-    ("search.open", 3),
-    ("file.open", 2),
-    ("edit.undo", 2),
-    ("cursor.goto_line", 1),
+    (ids::APP_QUIT, 5),
+    (ids::UI_PALETTE_OPEN, 5),
+    (ids::FILE_SAVE, 4),
+    (ids::SEARCH_OPEN, 3),
+    (ids::FILE_OPEN, 2),
+    (ids::EDIT_UNDO, 2),
+    (ids::CURSOR_GOTO_LINE, 1),
 ];
 
 fn item(
@@ -389,18 +390,18 @@ pub(crate) fn hint_model(state: &EditorState, chord: &[KeyStroke]) -> HintModel 
         let mut items = vec![
             HintItem {
                 keys: vec![stroke(KeyCode::Esc)],
-                text: word("ui.cancel"),
+                text: word(ids::UI_CANCEL),
                 priority: 5,
             },
             HintItem {
                 keys: vec![stroke(KeyCode::Enter)],
-                text: word("ui.confirm"),
+                text: word(ids::UI_CONFIRM),
                 priority: 4,
             },
         ];
         if state.ui.overlay.is_none() {
             // 検索バー: Enter は次の一致、Alt+C は大小の切替
-            items[1].text = word("search.next");
+            items[1].text = word(ids::SEARCH_NEXT);
             items.push(HintItem {
                 keys: vec![KeyLabel {
                     strokes: vec![KeyStroke {
@@ -408,7 +409,7 @@ pub(crate) fn hint_model(state: &EditorState, chord: &[KeyStroke]) -> HintModel 
                         key: KeyCode::Char('c'),
                     }],
                 }],
-                text: word("search.toggle_case"),
+                text: word(ids::SEARCH_TOGGLE_CASE),
                 priority: 2,
             });
             if state
@@ -424,7 +425,7 @@ pub(crate) fn hint_model(state: &EditorState, chord: &[KeyStroke]) -> HintModel 
                             key: KeyCode::Char('a'),
                         }],
                     }],
-                    text: word("search.replace_all"),
+                    text: word(ids::SEARCH_REPLACE_ALL),
                     priority: 3,
                 });
             }
@@ -432,7 +433,7 @@ pub(crate) fn hint_model(state: &EditorState, chord: &[KeyStroke]) -> HintModel 
         if state.is_dialog() {
             items.push(HintItem {
                 keys: vec![stroke(KeyCode::Tab)],
-                text: word("ui.list_next"),
+                text: word(ids::UI_LIST_NEXT),
                 priority: 3,
             });
         }

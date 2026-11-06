@@ -4,8 +4,9 @@
 use eve_view::{DocumentId, MessageLevel};
 
 use crate::FsPath;
+use crate::command::ids;
 use crate::command::{
-    CommandCtx, CommandKind, CommandRegistry, CommandResult, CommandSpec, Permission, RejectReason,
+    CommandCtx, CommandKind, CommandRegistry, CommandResult, Permission, RejectReason,
 };
 use crate::document::LoadState;
 use crate::editor::state::EditorState;
@@ -219,14 +220,11 @@ fn file_check_external_changes(ctx: &mut CommandCtx<'_>) -> CommandResult {
 }
 
 pub(crate) fn register(r: &mut CommandRegistry) {
-    r.register(
-        CommandSpec::new(
-            "file.check_external_changes",
-            CommandKind::File,
-            Permission::None,
-            "doc.has_path",
-            file_check_external_changes,
-        )
-        .expect("カタログの when 句は構文が正しい"),
+    r.add(
+        ids::FILE_CHECK_EXTERNAL_CHANGES,
+        CommandKind::File,
+        Permission::None,
+        "doc.has_path",
+        file_check_external_changes,
     );
 }
