@@ -7,7 +7,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use eve_core::{JobPorts, Ports};
-use eve_host::{ClipboardFailure, ClipboardProvider, Host, HostMsg, channel};
+use eve_host::{ClipboardFailure, ClipboardProvider, Host, HostInit, HostMsg, channel};
 use eve_testkit::{
     AsciiOptions, FixedPaths, HeadlessFrontend, ManualClock, ManualJobSpawner, MemFs,
 };
@@ -54,6 +54,22 @@ fn env() -> Env {
 }
 
 fn env_with(caps: eve_view::Capabilities) -> Env {
+    env_init(caps, HostInit::default())
+}
+
+/// 設定を渡した Host。
+fn env_config(caps: eve_view::Capabilities, config: eve_config::Config) -> Env {
+    env_init(
+        caps,
+        HostInit {
+            config: Some(config),
+            ..HostInit::default()
+        },
+    )
+}
+
+/// `init` に偽物のクリップボードを足して Host を作る。
+fn env_init(caps: eve_view::Capabilities, init: HostInit) -> Env {
     let clock = ManualClock::new();
     let fs = Arc::new(MemFs::new(Arc::new(clock.clone())));
     fs.add_dir("/w");
@@ -72,7 +88,6 @@ fn env_with(caps: eve_view::Capabilities) -> Env {
     };
     let (to_host, from_workers) = channel();
     let (_unused_tx, host_inbox) = channel();
-    let mut host = Host::with_channel(ports, (to_host, host_inbox));
     let (wtx, written) = mpsc::channel();
     let fake = Arc::new(Fake {
         written: wtx,
@@ -80,7 +95,14 @@ fn env_with(caps: eve_view::Capabilities) -> Env {
         gate: Mutex::new(None),
         write_error: Mutex::new(None),
     });
-    host.set_clipboard(fake.clone());
+    let host = Host::with_channel(
+        ports,
+        (to_host, host_inbox),
+        HostInit {
+            clipboard: Some(fake.clone()),
+            ..init
+        },
+    );
     Env {
         host,
         fe: HeadlessFrontend::new(40, 8).with_caps(caps),
@@ -318,8 +340,13 @@ fn システムに書けないとき_osc52_で書き_内部レジスタに切り
 
 #[test]
 fn システムに書けて_ssh_でもなければ_auto_は_osc52_を送らない() {
-    let mut e = env_with(osc_caps());
-    e.host.set_ssh_session(false);
+    let mut e = env_init(
+        osc_caps(),
+        HostInit {
+            ssh_session: Some(false),
+            ..HostInit::default()
+        },
+    );
     copy_abc(&mut e);
     assert_eq!(
         e.written.recv_timeout(Duration::from_secs(5)).unwrap(),
@@ -337,9 +364,14 @@ fn ssh_中の_auto_と_always_は_システムに書けても_osc52_を送る() 
         (eve_config::Osc52Policy::Auto, true),
         (eve_config::Osc52Policy::Always, false),
     ] {
-        let mut e = env_with(osc_caps());
-        e.host.set_config(config(policy), "config.toml", Vec::new());
-        e.host.set_ssh_session(ssh);
+        let mut e = env_init(
+            osc_caps(),
+            HostInit {
+                config: Some(config(policy)),
+                ssh_session: Some(ssh),
+                ..HostInit::default()
+            },
+        );
         copy_abc(&mut e);
         assert_eq!(
             e.written.recv_timeout(Duration::from_secs(5)).unwrap(),
@@ -353,23 +385,16 @@ fn ssh_中の_auto_と_always_は_システムに書けても_osc52_を送る() 
 #[test]
 fn never_と非対応の端末では_osc52_を送らず_失敗を知らせる() {
     // never
-    let mut e = env_with(osc_caps());
-    e.host.set_config(
-        config(eve_config::Osc52Policy::Never),
-        "config.toml",
-        Vec::new(),
-    );
+    let mut e = env_config(osc_caps(), config(eve_config::Osc52Policy::Never));
     *e.fake.write_error.lock().unwrap() = Some(ClipboardFailure::Unavailable);
     copy_abc(&mut e);
     assert!(e.pump_worker());
     assert!(e.fe.probe().osc52_writes().is_empty());
     assert!(message_keys(&mut e).contains(&"msg.clipboard.fallback".to_owned()));
     // 端末が対応していない
-    let mut e = env();
-    e.host.set_config(
+    let mut e = env_config(
+        eve_view::Capabilities::default(),
         config(eve_config::Osc52Policy::Always),
-        "config.toml",
-        Vec::new(),
     );
     *e.fake.write_error.lock().unwrap() = Some(ClipboardFailure::Unavailable);
     copy_abc(&mut e);
@@ -379,14 +404,12 @@ fn never_と非対応の端末では_osc52_を送らず_失敗を知らせる() 
 
 #[test]
 fn 上限を超える本文は_osc52_では送らない() {
-    let mut e = env_with(osc_caps());
-    e.host.set_config(
+    let mut e = env_config(
+        osc_caps(),
         eve_config::Config {
             osc52_max_bytes: 1_000,
             ..config(eve_config::Osc52Policy::Always)
         },
-        "config.toml",
-        Vec::new(),
     );
     e.start();
     e.text(&"x".repeat(800)); // base64 で 1,068 バイト

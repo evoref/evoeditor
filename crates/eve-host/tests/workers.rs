@@ -44,7 +44,7 @@ fn 実スレッドで開き_編集し_保存して_終了する() {
         jobs: std::rc::Rc::new(spawner),
         paths,
     };
-    let mut host = Host::with_channel(ports, (tx, rx));
+    let mut host = Host::with_channel(ports, (tx, rx), eve_host::HostInit::default());
     let mut fe = HeadlessFrontend::new(40, 8);
     let probe = fe.probe();
 

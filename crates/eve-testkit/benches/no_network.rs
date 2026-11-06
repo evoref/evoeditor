@@ -83,7 +83,7 @@ fn main() {
         jobs: Rc::new(jobs),
         paths,
     };
-    let mut host = Host::with_channel(ports, (tx, rx));
+    let mut host = Host::with_channel(ports, (tx, rx), eve_host::HostInit::default());
     let mut fe = HeadlessFrontend::new(80, 24);
     let probe = fe.probe();
 

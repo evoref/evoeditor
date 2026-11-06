@@ -165,7 +165,7 @@ crate の接頭辞 `eve-` と bin の名前 `evoeditor` は [OQ-01](10-decisions
 | `eve-config` | lib | v0.1 | 設定スキーマ、既定値、TOML 読込・マージ (v0.1 はユーザー層のみ。`--config` は v0.2、言語別・ワークスペースは v0.5)、検証、キーマップ定義の解析 (書式は v0.1 で確定、ファイル読込は v0.2)、**テーマ解決** (4 段の Style 表の事前計算と、省略された段の近似。v0.1 の組込みテーマは truecolor と mono を明示し、256 / 16 は近似で埋める)、同梱の言語ファイルの解析と検証 (v0.1 は `ja` のみ) | serde, toml, globset (v0.5), regex (遅延コンパイル), toml_edit (書き戻し、v0.5), schemars (optional、スキーマ生成) | ファイル I/O (内容文字列を受け取る)、core 依存、起動経路での正規表現コンパイル | `ratatui`, `crossterm`, `tokio`, `reqwest`, `hyper`, `windows-sys`, `libc`, `eve-core`, `eve-platform`, `eve-host`, `eve-tui`, `eve-protocol`, `eve-syntax`, `eve-lsp`, `eve-ai`, `eve-testkit`, `eve-docs-tables` |
 | `eve-core` | lib | v0.1 | `Editor` ファサード、`EditorState`、Document/View/Layout、View への Selection 格納と Motion、Transaction/Undo、Command レジストリと実行 (権限判定フック)、キーマップ解決 (§7.2)、検索、Job 管理、Frame 生成、`Query` 応答、`EditorEvent` の発行、**Ports (trait) 定義**、`ThreadGuard` の印と検査関数 `assert_not_main_thread_fs()` (§4.4)。モジュール所有境界は [§4.6](#46-eve-core-のモジュール所有境界) | eve-text, eve-encoding, eve-view, eve-config, regex (v0.1 は大文字小文字を区別しないリテラル検索の経路だけで使う。正規表現の検索は v0.2、03 §12.3), memchr, twox-hash | 端末クレート、tokio、直接の OS API (std::fs 含む。Port 経由) | `ratatui`, `crossterm`, `tokio`, `reqwest`, `hyper`, `windows-sys`, `libc`, `eve-platform`, `eve-host`, `eve-tui`, `eve-protocol`, `eve-syntax`, `eve-lsp`, `eve-ai`, `eve-testkit`, `eve-docs-tables` |
 | `eve-platform` | lib | v0.1 (Windows の実装のみ。Unix の実装は macOS / Linux を出荷する版、§4.7) | Ports の実装: ファイル読み書き (原子的保存・権限維持)、パス正規化、設定/状態ディレクトリ、ファイル監視 (v0.5)、外部プロセス起動 (v0.5)、資格情報ストア (v1.L)。**Host 側部品** (eve-host が呼ぶ安全な関数。`unsafe` と OS API はこの crate の中に閉じる、R5): `ClipboardProvider` (core には注入しない、§6.3)、コンソールイベントの受信 (`SetConsoleCtrlHandler` の登録と、受けたイベントを eve-host のコールバックへ渡す部分)、所有者のみの DACL (Unix は 0600 / 0700) でのファイル・ディレクトリの作成、緊急退避の書込 (`std::fs` を直接使う。§11.2.1)、緊急の端末復元 `emergency_restore(handle, bytes, saved_mode, restored)` (受信スレッドが使う。§9.6)、Windows のセッション終了通知受信 (§11.2.1、v0.2)、Unix のシグナル受信 (macOS / Linux を出荷する版) | eve-core (Port の trait と型), eve-view (`emergency_restore` が受け取る平文の型 `RawTermHandle` / `SavedTermMode` / `TermRestoredFlag`、§9.2), windows-sys (ディレクトリの解決は自前で行う。05 §7.2), libc と signal-hook (Unix の実装と同時), 純 Rust のハッシュ (§13.7), notify (v0.5), process-wrap または windows-sys 直接 (v0.5), keyring (v1.L)。arboard は v0.1 では採用せず v0.2 以降の選択肢 (OQ-111) | UI ロジック | `ratatui`, `crossterm`, `eve-host`, `eve-tui`, `eve-testkit`, `eve-docs-tables` |
-| `eve-host` | lib | v0.1 | **Composition Root の共通部**: 設定読込、Port 実装の注入、`JobSpawner` 実装 (固定 2 ワーカー)、単一受信口 `HostMsg`、メインループ (`Host::run()` と `Host::step(msg)`)、Effect ディスパッチ、`EmergencySnapshot` の公開と緊急退避の起動 (書込そのものは eve-platform の Host 部品を呼ぶ)、シグナル/コンソール/セッション終了の受信後の処理 (v0.1 は Windows のコンソールイベント。セッション終了通知は v0.2、Unix のシグナルは macOS / Linux を出荷する版。OS API の呼出しは eve-platform の Host 部品)、パニックハンドラ、ログ (自前の最小購読者)。**`Frontend` trait** と、部品を差し替えて Host を組み立てる **`HostBuilder`** を定義 ([§9.2](#92-メインループ-擬似コード)) | eve-core, eve-view, eve-config, eve-platform, arc-swap (`EmergencySnapshot` のスロット、§11.2.1) | 編集ロジック、端末クレート、`unsafe` (R5) | `ratatui`, `crossterm`, `eve-tui`, `eve-testkit`, `eve-docs-tables` |
+| `eve-host` | lib | v0.1 | **Composition Root の共通部**: 設定読込、Port 実装の注入、`JobSpawner` 実装 (固定 2 ワーカー)、単一受信口 `HostMsg`、メインループ (`Host::run()` と `Host::step(msg)`)、Effect ディスパッチ、`EmergencySnapshot` の公開と緊急退避の起動 (書込そのものは eve-platform の Host 部品を呼ぶ)、シグナル/コンソール/セッション終了の受信後の処理 (v0.1 は Windows のコンソールイベント。セッション終了通知は v0.2、Unix のシグナルは macOS / Linux を出荷する版。OS API の呼出しは eve-platform の Host 部品)、パニックハンドラ、ログ (自前の最小購読者)。**`Frontend` trait** と、Host を作るときに渡すものをまとめた **`HostInit`** を定義 ([§9.2](#92-メインループ-擬似コード)) | eve-core, eve-view, eve-config, eve-platform, arc-swap (`EmergencySnapshot` のスロット、§11.2.1) | 編集ロジック、端末クレート、`unsafe` (R5) | `ratatui`, `crossterm`, `eve-tui`, `eve-testkit`, `eve-docs-tables` |
 | `eve-tui` | lib | v0.1 | `Frontend` の TUI 実装: 端末の初期化/復元、入力の正規化 (Unix は自前の VT 解析 `vt_input`、Windows は自前の `ReadConsoleInputW` ループ → `InputEvent`、連続 Text の集約。ADR-0005 の改訂)、`Frame` → ratatui Buffer 描画、端末能力と色深度の判定、256 / 16 段への色の近似表 (04 §12.3)、OSC 52 書込 (v0.2) | ratatui, crossterm, unicode-segmentation (編集面の Span を書記素ごとのセルに分ける。幅の関数は持たない) | 編集ロジック (core にあるべきもの) | `eve-testkit`, `eve-docs-tables` |
 | `evoeditor` (bin) | bin | v0.1 | 引数解析と `eve_host::Host::new(args)?.run(&mut TuiFrontend::new())` だけ (`Host::new(args)` は本番の部品で組み立てる `HostBuilder::new(args).build()` の短縮、§9.2。設定読込は `Host::new`、`Frontend::init` → Editor 構築 → 入力開始の順序は `Host::start` の中、§9.2 / §9.5) | lexopt (案), anyhow | ビジネスロジック | `eve-testkit`, `eve-docs-tables` |
 | `eve-protocol` | lib (dev) | v0.2 以降 (dev。ADR-0039) | 駆動 API ([§10.5](#105-駆動-api-stage-d)) の JSON-RPC の型とフレーミング (`Content-Length`)。eve-view の serde 型を運ぶ。sidecar モードと、その上の MCP サーバの写像 (v1.L-b 候補、06 §3.5)。外部プラグインのプロトコル (v1.X、§10.3) も本 crate に足す (プラグイン用に別の crate を作らない)。配布同梱は OQ-120 | eve-view (feature `serde`), serde, serde_json | 編集ロジック | `ratatui`, `crossterm`, `eve-core`, `eve-platform`, `eve-host`, `eve-tui`, `eve-testkit`, `eve-docs-tables` |
@@ -1430,27 +1430,30 @@ impl InputSink {
 
 | 仕様 | v0.2.0 の実装 | 扱い |
 |---|---|---|
-| `HostBuilder` / `HostArgs` / `HostJobs` / `LogSink` による組み立て (下の「Host の組み立て」) | 無い。`Host::new(ports: Ports)` / `Host::with_channel(ports, (tx, rx))` で作り、bin が setter (`set_clipboard`・`set_rescue_writer`・`set_config`・`set_keymap`・`set_locale`・`set_user_theme`・`set_config_sources`・`set_log_path`・`set_system_encoding`・`set_initial_encoding`・`set_ssh_session`・`add_config_report`) を順に呼ぶ。設定の読込は bin が行う | v0.3 の M16 (STR-C3) で、setter をまとめた `HostInit` 構造体にする。そのとき下の「Host の組み立て」の範囲を実装に合わせて絞る |
-| `Host::start(frontend)` / `run(frontend)` | `start(frontend, files: &[InitialFile], read_only)` / `run(frontend, files, read_only)`。`Editor` は `Host::new` の時点で `Capabilities::default()` で作り、`start` は `init` → `set_caps` → 端末の緊急復元の情報 → `set_viewport` → `open_initial_files` → `start_input` → 最初の描画の順 | 引数は実装に合わせてよい (`HostInit` にまとめるときに見直す) |
+| `HostBuilder` / `HostArgs` / `HostJobs` / `LogSink` による組み立て (下の「Host の組み立て」) | 無い。`Host::new(ports: Ports)` / `Host::with_channel(ports, (tx, rx))` で作り、bin が setter (`set_clipboard`・`set_rescue_writer`・`set_config`・`set_keymap`・`set_locale`・`set_user_theme`・`set_config_sources`・`set_log_path`・`set_system_encoding`・`set_initial_encoding`・`set_ssh_session`・`add_config_report`) を順に呼ぶ。設定の読込は bin が行う | v0.3 の M16 (STR-C3) で、setter をまとめた `HostInit` 構造体にした (`Host::with_channel(ports, (tx, rx), init)`、2026-11-07)。下の「Host の組み立て」を実装に合わせて絞り、`HostBuilder` / `HostJobs` / `LogSink` は後の版の案として残した。設定の読込は bin のまま |
+| `Host::start(frontend)` / `run(frontend)` | `start(frontend, files: &[InitialFile], read_only)` / `run(frontend, files, read_only)`。`Editor` は `Host::new` の時点で `Capabilities::default()` で作り、`start` は `init` → `set_caps` → 端末の緊急復元の情報 → `set_viewport` → `open_initial_files` → `start_input` → 最初の描画の順 | 引数は実装に合わせた (v0.3 の M16、STR-C3 で見直した)。起動時に渡すものは `HostInit` に、開くファイルと `--readonly` は `start` / `run` の引数に置く (`HostInit` に移すと、外部のループが `start` を呼ぶときに渡す口が無くなるため) |
 | `step` の `Signal` → `shutdown_noninteractive`、`Fatal` → `emergency_exit`、`apply(eff)` / `exit_normally` | `step` の腕の中に直接書く (退避 → 端末の復元 → 終了コード)。非対話の終了の待ち (置換中の計数・退避の完了) は bin (`main.rs`) に Windows と Unix で別に書いてある | 非対話の終了の待ちは v0.3 の M16 (STR-C1) で eve-host の `NonInteractiveShutdown` (時計と待ちを注入) に移し、試験を足した (bin は OS のコールバックの登録と終わり方だけ)。`step` の腕の形は上のまま |
 | 描画の間引き: 入力・ペーストの結果だけ即時、ジョブの結果などは 16 ms に間引く | 間引くのはジョブの進捗 (`Progress`) と検索の途中経過 (`SearchBatch`) だけ。ほかのジョブの結果は即時に描く | **実装を正とした** (2026-11-06、PO。v0.3 の M15)。上の擬似コードの注釈を実装に合わせた (ジョブの結果のうち間引くのは進捗と途中経過だけ)。クリップボードからの貼り付けの結果は、間引く側にあって最大 16 ms 遅れ得たので、入力の結果として即時に描く側へ直した (2026-11-06、`fix/`)。04 §4.4 の表 (ジョブの結果で間引くのは検索件数・読込進捗) とも合う |
 | `wait_hint` / `set_waker` (外部のループからの駆動、X21) | 無い | 未実装。外部のループから駆動する最初の利用者 (駆動 API・組込み) の版で入れる |
 
-**Host の組み立て (`HostBuilder`、正本)**: Host の部品は `HostBuilder` で差し替える。`Host::new(args)` は本番の部品で組み立てる `HostBuilder::new(args).build()` の短縮で、テストの Harness (09 §3.4)・駆動モードの `--fake-ports` (§10.5)・組込みはこの builder を使う。部品ごとに別の差し替えの口を作らない。
+**Host の組み立て (`HostInit`、正本)**: 呼び出し側 (bin・テスト) が Port (`Ports`、§4.4) と `HostInit` を作り、`Host::with_channel(ports, (tx, rx), init)` で Host を作る (`Host::new(ports)` は受信口も `HostInit` も既定の短縮)。起動時に Host へ渡すものは `HostInit` の欄にまとめ、部品ごとの setter を作らない。設定・キーマップ・テーマの読込とログの準備は bin が行い、結果を `HostInit` で渡す。端末には触れない (端末は `start` の `Frontend::init` から、§9.5)。
 
 ```rust
-// eve-host
-struct HostBuilder { .. }
-impl HostBuilder {
-    fn new(args: HostArgs) -> HostBuilder;                                   // 既定はすべて本番の部品 (下表)
-    fn fs(self, make: impl FnOnce(ReplacingCount) -> Arc<dyn FileSystem>) -> Self; // Host が作った置換中フラグの計数 (§4.4) を渡して作らせる
-    fn clock(self, c: Arc<dyn Clock>) -> Self;
-    fn paths(self, p: Arc<dyn Paths>) -> Self;                               // 設定の読込 (config_dir)・ログ・退避の場所 (state_dir) もこの Paths に従う
-    fn jobs(self, make: impl FnOnce(JobPorts, InputSink) -> Rc<dyn HostJobs>) -> Self; // JobSpawner + HostTasks (§4.4) の実装。結果は InputSink で受信口へ
-    fn clipboard(self, c: Box<dyn ClipboardProvider>) -> Self;               // trait は eve-platform が定義し eve-host が再公開する
-    fn log_sink(self, s: Box<dyn LogSink + Send>) -> Self;                   // ログの出力先。ログスレッドが呼ぶ (§11.3)
-    fn rescue_writer(self, w: Arc<dyn RescueWriter>) -> Self;                // 緊急退避の書き手 (下記)
-    fn build(self) -> Result<Host, StartError>;                              // 設定読込 (§9.5 手順 2) とログの準備 (手順 3) まで。端末には触れない
+// eve-host。すべて省略できる (Default は「何も渡さない」: 既定の設定・内部レジスタだけ・退避の書き手なし)
+#[derive(Default)]
+struct HostInit {
+    initial_encoding: Option<Encoding>,                       // --encoding (FR-111)。start の open_initial_files に渡す
+    config: Option<Config>,                                   // 解決済みの設定 (07 §5.0)。None は既定のまま
+    config_reports: Vec<(String, Vec<Diagnostic>)>,          // 設定の診断 (表示名, 診断)。最初の Frame の後に出す (07 §4.3)
+    user_theme: Option<(String, Option<Theme>)>,              // テーマファイルのテーマ (読めなければ None、07 §8.6)
+    config_sources: Option<ConfigSources>,                    // config.reload が読み直す元 (07 §6)
+    keymap: Option<(String, KeymapFile)>,                     // keymap.toml (表示名, 中身)。診断は config_reports の後に積む
+    locale: Option<Locale>,                                   // UI の言語 (07 §17.1)
+    log_path: Option<String>,                                 // 設定の問題の要約に出すログの場所
+    system_encoding: Option<Encoding>,                        // OS のロケール由来の文字コード (05 §6)
+    clipboard: Option<Arc<dyn ClipboardProvider>>,            // 無ければ内部レジスタだけ。trait は eve-platform が定義し eve-host が再公開する
+    rescue_writer: Option<Arc<dyn RescueWriter>>,             // 緊急退避の書き手 (下記)
+    ssh_session: Option<bool>,                                // clipboard.osc52 = auto の条件。None は SSH_TTY / SSH_CONNECTION から
 }
 // 緊急退避 (と「保存を中止して終了」の退避) の書き手 (eve-host が定義)。受信スレッド・メインの catch_unwind から呼ぶ (§11.2.1)
 trait RescueWriter: Send + Sync {
@@ -1459,6 +1462,9 @@ trait RescueWriter: Send + Sync {
         // RescueOutcome は実際の退避先と書けた文書の数 (stderr.recovery.* の引数)。本文と manifest は本番と共用のシリアライズ関数で作る
 }
 ```
+
+- **当てる順**: `Host::with_channel` は `HostInit` を Editor に次の順で 1 項目ずつ当てる (v0.2.0 の bin の setter の順と同じ): 設定 → テーマ (設定の `theme.name` の後) → 設定の読込元 → キーマップ → UI の言語 → ログの場所 → OS の文字コード。設定の診断は `config_reports` → キーマップの診断の順に積む。
+- **部品の差し替え**: 下の表の部品は、呼び出し側が `Ports` と `HostInit` の欄に偽物を入れて差し替える (テストの Harness、09 §3.4)。ログの出力先 (`LogSink`) は v0.3 の実装に無い (ログは bin が開き、`HostInit` に載るのは場所の表示名だけ)。部品を作る手順まで Host が持つ builder (`HostBuilder`: 置換中の計数を渡して `fs` を作らせる、`HostJobs`、`LogSink`、設定の読込を Host に移す) は、駆動モードの `--fake-ports` (§10.5) か組込みの最初の利用者の版で `HostInit` を包む形で足す (§9.5 と OQ-176 の `HostBuilder` はその案)。
 
 | 部品 | 本番 (既定) | テスト (`eve-testkit` の Harness) | `--fake-ports` (v0.2、§10.5) |
 |---|---|---|---|
