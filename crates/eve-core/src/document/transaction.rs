@@ -75,6 +75,9 @@ pub struct Transaction {
     pub meta: TransactionMeta,
     /// 書式と読み取り専用の理由の変更 (再読込)。適用で差し替え、Undo ノードに持たせて一緒に戻す (03 §7.2)。
     pub format_change: Option<super::format::FormatChange>,
+    /// Undo の記録 (逆変換) を、変更の最初から最後までの範囲を旧本文で置き換える 1 件にしてよい (大量のすべて置換、
+    /// 03 §12.5)。メモリが増えないときだけそうする (`document::coarse_inverse`)。
+    pub coarse_undo: bool,
 }
 
 impl Transaction {
@@ -94,7 +97,14 @@ impl Transaction {
             undo_group: UndoGroupHint::Auto,
             meta: TransactionMeta::default(),
             format_change: None,
+            coarse_undo: false,
         }
+    }
+
+    /// Undo の記録を 1 件の置き換えにしてよい (大量のすべて置換、03 §12.5)。
+    pub fn with_coarse_undo(mut self) -> Transaction {
+        self.coarse_undo = true;
+        self
     }
 
     pub fn with_format_change(mut self, c: super::format::FormatChange) -> Transaction {

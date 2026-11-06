@@ -96,6 +96,9 @@ pub(crate) struct SearchBarState {
     pub memo: SearchBarMemo,
 }
 
+/// この件数以上のすべて置換は、Undo の記録を 1 件の置き換えにしてよい (`REPLACE_COARSE_UNDO_MIN`、03 §12.5)。
+const REPLACE_COARSE_UNDO_MIN: u64 = 10_000;
+
 /// すべて置換をジョブで作るときの境界 (`SEARCH_SYNC_STEP_BYTES`、03 §12.2)。これ以下の文書はメインスレッドで作る。
 const REPLACE_SYNC_BYTES: usize = 1 << 20;
 
@@ -785,6 +788,10 @@ impl EditorState {
         .with_selections(sel, None);
         if let Some(v) = view {
             tx = tx.with_view(v);
+        }
+        // 大量の置換は、Undo の記録を 1 件の置き換えにしてよい (メモリが増えないときだけ、03 §12.5)
+        if count >= REPLACE_COARSE_UNDO_MIN {
+            tx = tx.with_coarse_undo();
         }
         if self.apply_transaction(doc_id, tx).is_err() {
             self.show_message(MessageLevel::Warn, keys::MSG_SEARCH_REPLACE_STALE, &[]);

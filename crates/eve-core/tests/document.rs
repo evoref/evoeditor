@@ -219,3 +219,78 @@ proptest! {
         }
     }
 }
+
+/// `text` の中の `from` を全部 `to` に置き換える ChangeSet と件数。
+fn replace_every(doc: &Document, text: &str, from: &str, to: &str) -> (ChangeSet, usize) {
+    let edits: Vec<Edit> = text
+        .match_indices(from)
+        .map(|(i, m)| Edit {
+            range: ByteRange::from(i..i + m.len()),
+            insert: to.into(),
+        })
+        .collect();
+    let n = edits.len();
+    (
+        ChangeSet::from_sorted_edits(&doc.snapshot(), edits).unwrap(),
+        n,
+    )
+}
+
+fn doc_with(text: &str) -> Document {
+    let mut d = Document::new_untitled();
+    d.apply(&user(edit(&d, 0, 0, text), 0)).unwrap();
+    d
+}
+
+// spec: 03 §12.5 (大量のすべて置換の Undo の記録)
+#[test]
+fn 一致の詰まった大量の置換の_undo_は_1_件の置き換えで戻る() {
+    let text = format!("head\n{}tail", "ab ".repeat(12_000));
+    let mut d = doc_with(&text);
+    let (cs, n) = replace_every(&d, &text, "ab", "xyz");
+    assert_eq!(n, 12_000);
+    let tx = Transaction::new(cs, Origin::System, Tick(10))
+        .with_undo_group(UndoGroupHint::Break)
+        .with_coarse_undo();
+    d.apply(&tx).unwrap();
+    let replaced = d.to_string_lossy();
+    assert_eq!(replaced, format!("head\n{}tail", "xyz ".repeat(12_000)));
+    let undo = d.undo().unwrap().unwrap();
+    assert_eq!(d.to_string_lossy(), text);
+    assert_eq!(
+        undo.changes.changed_ranges().count(),
+        1,
+        "Undo は 1 件の置き換え"
+    );
+    // ほかの View の位置 (Bias::Before) は、範囲の中なら始端に寄る。範囲の外は保たれる
+    let start = "head\n".len();
+    let inside = start + 4 * 100;
+    assert_eq!(
+        undo.changes
+            .map_pos(eve_text::ByteOff(inside), eve_text::Bias::Before),
+        eve_text::ByteOff(start)
+    );
+    assert_eq!(
+        undo.changes
+            .map_pos(eve_text::ByteOff(2), eve_text::Bias::Before),
+        eve_text::ByteOff(2)
+    );
+    // Redo は変更ごとの ChangeSet のまま
+    let redo = d.redo().unwrap().unwrap();
+    assert_eq!(d.to_string_lossy(), replaced);
+    assert_eq!(redo.changes.changed_ranges().count(), 12_000);
+}
+
+// spec: 03 §12.5 (範囲の旧本文が変更ごとの逆変換の見積りより大きければ、変更ごとの逆変換を使う)
+#[test]
+fn 一致のまばらな大量の置換の_undo_は変更ごとの逆変換() {
+    let gap = " ".repeat(300);
+    let text = format!("ab{gap}").repeat(10_000);
+    let mut d = doc_with(&text);
+    let (cs, _) = replace_every(&d, &text, "ab", "x");
+    let tx = Transaction::new(cs, Origin::System, Tick(10)).with_coarse_undo();
+    d.apply(&tx).unwrap();
+    let undo = d.undo().unwrap().unwrap();
+    assert_eq!(d.to_string_lossy(), text);
+    assert_eq!(undo.changes.changed_ranges().count(), 10_000);
+}
