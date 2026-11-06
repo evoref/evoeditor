@@ -279,13 +279,14 @@ pub(super) fn build_row(
             decor = over(decor, marks.styles.selection);
         }
         let mut c = u.col - base + shift;
-        for (text, w, symbol) in &u.parts {
-            let (w, c0) = (*w as usize, c);
+        let mut buf = [0u8; 4];
+        for (text, w, symbol) in u.parts(&mut buf) {
+            let (w, c0) = (w as usize, c);
             c += w;
             if w == 0 {
                 continue;
             }
-            let base = if !*symbol {
+            let base = if !symbol {
                 marks.styles.text
             } else if is_whitespace_mark(text) {
                 marks.styles.whitespace
