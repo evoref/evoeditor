@@ -59,7 +59,8 @@ pub struct TransactionMeta {}
 
 #[derive(Clone, Debug)]
 pub struct Transaction {
-    pub changes: ChangeSet,
+    /// 適用する変更。履歴のノードと適用の結果 (`Applied`) で共有する (複製しない、PRF-15)。
+    pub changes: std::sync::Arc<ChangeSet>,
     /// 発行 View の Selection (Undo 時の復元用)。他 View 由来や Reload では `None`。
     pub selection_before: Option<Selection>,
     /// 適用後に発行 View へ設定する Selection。`None` なら `changes` で写像する。
@@ -77,9 +78,13 @@ pub struct Transaction {
 }
 
 impl Transaction {
-    pub fn new(changes: ChangeSet, origin: Origin, timestamp: Tick) -> Transaction {
+    pub fn new(
+        changes: impl Into<std::sync::Arc<ChangeSet>>,
+        origin: Origin,
+        timestamp: Tick,
+    ) -> Transaction {
         Transaction {
-            changes,
+            changes: changes.into(),
             selection_before: None,
             selection_after: None,
             origin,

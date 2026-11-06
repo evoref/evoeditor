@@ -5,6 +5,7 @@
 //! `FormatChange` (Reload が `TextFormat` と読み取り専用の理由を本文と一緒に戻す。改行コード変換も使う)。
 
 use std::collections::VecDeque;
+use std::sync::Arc;
 
 use eve_text::{ByteRange, ChangeSet, Op, Selection};
 
@@ -45,8 +46,9 @@ struct UndoNode {
     id: NodeId,
     /// 最初の Transaction の由来 (結合しても変えない。Undo / Redo の通知に「元の Origin」として載せる)。
     origin: Origin,
-    redo: ChangeSet,
-    undo: ChangeSet,
+    /// 記録した Transaction の変更 (共有。結合したら作り直す)。
+    redo: Arc<ChangeSet>,
+    undo: Arc<ChangeSet>,
     selection_before: Option<Selection>,
     selection_after: Option<Selection>,
     last_edit_at: Tick,
@@ -68,7 +70,7 @@ pub struct RecordOutcome {
 /// Undo / Redo で適用する変更。
 #[derive(Clone, Debug)]
 pub struct HistoryStep {
-    pub changes: ChangeSet,
+    pub changes: Arc<ChangeSet>,
     /// ノードを作った Transaction の Origin (Undo / Redo は独立した Origin を持たない)。
     pub origin: Origin,
     /// 発行 View に復元する Selection。Undo は `selection_before`、Redo は `selection_after`。
@@ -359,8 +361,8 @@ impl UndoHistory {
             return;
         };
         let old_id = prev.id;
-        prev.redo = redo;
-        prev.undo = undo;
+        prev.redo = Arc::new(redo);
+        prev.undo = Arc::new(undo);
         prev.selection_after = tx.selection_after.clone();
         prev.last_edit_at = tx.timestamp;
         prev.id = new_id;
@@ -385,8 +387,8 @@ impl UndoHistory {
         self.undo.push_back(UndoNode {
             id,
             origin: tx.origin.clone(),
-            redo: tx.changes.clone(),
-            undo: inverse,
+            redo: Arc::clone(&tx.changes),
+            undo: Arc::new(inverse),
             selection_before: tx.selection_before.clone(),
             selection_after: tx.selection_after.clone(),
             last_edit_at: tx.timestamp,
