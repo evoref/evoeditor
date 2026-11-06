@@ -11,6 +11,7 @@ use super::Affinity;
 use super::WrapSettings;
 use super::cursor_in_rows;
 use super::units::Unit;
+use super::units::is_plain_wide;
 use super::units::is_whitespace_mark;
 use super::units::line_content;
 use super::units::long_index;
@@ -127,8 +128,10 @@ pub(crate) fn gutter_width(doc: &Document, cols: usize) -> u16 {
     if cols >= w + 2 { w as u16 } else { 0 }
 }
 
-/// 隣り合う ASCII の記号でない Span を結合する (Span の契約: 含む書記素の幅がすべて同じ)。
-fn push_span(spans: &mut Vec<Span>, text: &str, width: u16, style: Style) {
+/// 隣り合う Span を結合する (Span の契約: 含む書記素の幅がすべて同じ)。結合するのは、印字できる ASCII の連続と、
+/// 通常の幅 2 の文字 (`is_plain_wide`: 1 文字 = 1 書記素で、前後のどの文字とも結合しない) の連続 (Span の文字列の確保を
+/// 減らす)。`wide_tail` は直前の Span が後者か (毎回 Span の全体を走査しない)。
+fn push_span(spans: &mut Vec<Span>, wide_tail: &mut bool, text: &str, width: u16, style: Style) {
     let ascii_cells =
         width as usize == text.len() && text.bytes().all(|b| (0x20..0x7F).contains(&b));
     if ascii_cells
@@ -142,11 +145,24 @@ fn push_span(spans: &mut Vec<Span>, text: &str, width: u16, style: Style) {
         last.width += width;
         return;
     }
+    let mut cs = text.chars();
+    let plain_wide =
+        width == 2 && matches!((cs.next(), cs.next()), (Some(c), None) if is_plain_wide(c));
+    if plain_wide
+        && *wide_tail
+        && let Some(last) = spans.last_mut()
+        && last.style == style
+    {
+        last.text.push_str(text);
+        last.width += width;
+        return;
+    }
     spans.push(Span {
         text: text.to_owned(),
         width,
         style,
     });
+    *wide_tail = plain_wide;
 }
 
 pub(super) struct RowOut {
@@ -257,6 +273,7 @@ pub(super) fn build_row(
     let (win_start, win_end) = (left, left + cols);
     let (mut clipped_left, mut clipped_right, mut risky) = (false, false, false);
     let mut spans: Vec<Span> = Vec::new();
+    let mut wide_tail = false;
     'units: for u in us.clone() {
         let at = ls + u.byte;
         // 重ねる順 (低 → 高、03 §14.5): 記号 → 表現不能の文字 → 検索の一致 / 現在の一致 → 選択
@@ -304,13 +321,19 @@ pub(super) fn build_row(
             }
             risky |= u.risky;
             if c0 >= win_start && c <= win_end {
-                push_span(&mut spans, text, w as u16, style);
+                push_span(&mut spans, &mut wide_tail, text, w as u16, style);
             } else {
                 // セルの途中で切れる: 見える分のセルを空白で埋める
                 let visible = c.min(win_end) - c0.max(win_start);
                 clipped_left |= c0 < win_start;
                 clipped_right |= c > win_end;
-                push_span(&mut spans, &" ".repeat(visible), visible as u16, style);
+                push_span(
+                    &mut spans,
+                    &mut wide_tail,
+                    &" ".repeat(visible),
+                    visible as u16,
+                    style,
+                );
             }
         }
     }
@@ -332,7 +355,7 @@ pub(super) fn build_row(
             .iter()
             .any(|&(s, e)| s <= line_end_abs && e > line_end_abs);
     if eol_selected && total >= win_start && total < win_end {
-        push_span(&mut spans, " ", 1, marks.styles.selection);
+        push_span(&mut spans, &mut wide_tail, " ", 1, marks.styles.selection);
     }
     let cursor_cols = heads
         .iter()
