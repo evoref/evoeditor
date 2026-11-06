@@ -18,6 +18,7 @@ mod time;
 mod ui_model;
 mod view;
 
+pub use command::clipboard::ClipboardFallbackReason;
 pub use jobs::cancel::CancelToken;
 mod search;
 pub use document::eol::build_eol_conversion;

@@ -947,6 +947,15 @@ more = "ほか {count} 個"
 [ui.load_state]
 loading = "読込中"
 
+[ui.clipboard_reason]
+no_command = "wl-clipboard または xclip を入れるとシステムのクリップボードが使えます"
+no_display = "画面 (DISPLAY / WAYLAND_DISPLAY) がありません"
+read_failed = "読み取れませんでした"
+ssh = "SSH 接続中は外部のコマンドを使いません"
+timeout = "読み取りが時間内に終わりませんでした"
+too_large = "大きすぎてシステムのクリップボードに入りません"
+write_failed = "書き込めませんでした"
+
 [ui.read_only_reason]
 binary = "バイナリファイル"
 file_attribute = "読み取り専用属性のファイル"

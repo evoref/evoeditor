@@ -131,3 +131,26 @@ fn 大きい選択はハンドルで渡し_回収できる() {
     assert!(src.to_text() == big);
     assert!(h.editor.take_clipboard(id).is_none(), "一度だけ");
 }
+
+// 理由は Host・eve-platform から値 (`ClipboardFallbackReason`) で受け取り、core が UI の言語の文言にする
+// (docs/review/v0.3-findings.md の STR-C2。英語の UI に日本語の理由が混ざらない、01 NFR-603)
+#[test]
+fn 切り替えの理由は_ui_の言語の文言になる() {
+    for (locale, want) in [
+        (
+            eve_config::Locale::Ja,
+            "大きすぎてシステムのクリップボードに入りません",
+        ),
+        (
+            eve_config::Locale::En,
+            "the text is too large for the system clipboard",
+        ),
+    ] {
+        let mut h = Harness::new().with_locale(locale).with_size(160, 8);
+        h.editor.report(eve_core::HostReport::ClipboardFallback {
+            reason: eve_core::ClipboardFallbackReason::TooLarge,
+        });
+        let screen = h.frame_text();
+        assert!(screen.contains(want), "{screen}");
+    }
+}
