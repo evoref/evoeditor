@@ -6,6 +6,42 @@
 
 use std::collections::BTreeMap;
 
+/// システムのクリップボードを使えず内部レジスタに切り替えた理由 (`msg.clipboard.fallback` の `{reason}`)。文言は
+/// `ui.clipboard_reason.<key>` (04 §15.1)。Host・eve-platform は文字列ではなくこの値を渡す (文言は core が言語に合わせて作る)。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum ClipboardFallbackReason {
+    /// 読み取りに失敗した。
+    ReadFailed,
+    /// 書込に失敗した。
+    WriteFailed,
+    /// 大きすぎてシステムのクリップボードに入らない (64 MiB)。
+    TooLarge,
+    /// 読み取りが期限 (2 秒) までに終わらなかった。
+    Timeout,
+    /// SSH 接続中は外部のコマンドを使わない (Linux)。
+    Ssh,
+    /// 画面 (`DISPLAY` / `WAYLAND_DISPLAY`) が無い (Linux)。
+    NoDisplay,
+    /// 使えるコマンド (wl-clipboard / xclip) が無い (Linux)。
+    NoCommand,
+}
+
+impl ClipboardFallbackReason {
+    /// 文言キーの末尾 (`ui.clipboard_reason.<key>`)。
+    pub fn key(self) -> &'static str {
+        match self {
+            ClipboardFallbackReason::ReadFailed => "read_failed",
+            ClipboardFallbackReason::WriteFailed => "write_failed",
+            ClipboardFallbackReason::TooLarge => "too_large",
+            ClipboardFallbackReason::Timeout => "timeout",
+            ClipboardFallbackReason::Ssh => "ssh",
+            ClipboardFallbackReason::NoDisplay => "no_display",
+            ClipboardFallbackReason::NoCommand => "no_command",
+        }
+    }
+}
+
 use eve_text::{ByteRange, Snapshot, TextRead};
 use eve_view::{
     ClipboardHandleId, ClipboardTarget, ClipboardText, ClipboardToken, Effect, MessageLevel,
@@ -58,15 +94,20 @@ impl EditorState {
     }
 
     /// システムクリップボードを使えなかったことを知らせる (`msg.clipboard.fallback`、同じ起動の中で最初の 1 回だけ)。
-    pub fn notify_clipboard_fallback(&mut self, reason: &str) {
+    pub fn notify_clipboard_fallback(&mut self, reason: ClipboardFallbackReason) {
         if self.clipboard.fallback_notified {
             return;
         }
         self.clipboard.fallback_notified = true;
+        let reason = self.catalog().render(
+            &format!("ui.clipboard_reason.{}", reason.key()),
+            &[],
+            &|_| None,
+        );
         self.show_message(
             MessageLevel::Info,
             keys::MSG_CLIPBOARD_FALLBACK,
-            &[("reason", reason)],
+            &[("reason", &reason)],
         );
     }
 
@@ -153,7 +194,7 @@ impl EditorState {
             let t = match text {
                 Some(t) => t,
                 None => {
-                    self.notify_clipboard_fallback("取得できませんでした");
+                    self.notify_clipboard_fallback(ClipboardFallbackReason::ReadFailed);
                     match &self.clipboard.register {
                         Some(src) => src.to_text(),
                         None => return,
@@ -175,7 +216,7 @@ impl EditorState {
         let text = match text {
             Some(t) => t,
             None => {
-                self.notify_clipboard_fallback("取得できませんでした");
+                self.notify_clipboard_fallback(ClipboardFallbackReason::ReadFailed);
                 match &self.clipboard.register {
                     Some(src) => src.to_text(),
                     None => return,

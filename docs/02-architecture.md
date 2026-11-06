@@ -780,7 +780,7 @@ Command 実行 ─▶ Transaction 生成 (ChangeSet + selection_before/after + O
 | `new(ports: Ports, config: Arc<ResolvedConfig>, caps: Capabilities) -> Editor` | `Host::start` (`Frontend::init` の後、§9.5) | 空の EditorState を作る。I/O もジョブ投入もしない |
 | `open_initial_files(files: &[InitialFile], read_only: bool, forced: Option<Encoding>)` | `Host::start` (最初の大きさを渡した後、最初の Frame の前) | CLI で渡された開き方。`InitialFile { path: String, line: Option<usize>, col: Option<usize> }` (複数のパスと `path:行:桁` / `+行`、v0.2)。空なら無題の文書。`read_only` は `--readonly`、`forced` は `--encoding`。パスの正規化 (`Paths::normalize`) と開くジョブの投入は core が行う。1 つのパスだけの `open_initial(path: Option<&str>, read_only: bool)` と `open_initial_with(.., forced)` も持つ (テスト用)。v0.1 の案の `OpenRequest` は置かなかった |
 | `configure(c: StartupConfig)` (v0.3 の M14) | Host (`start` / `run` の前、設定・テーマ・言語・ログの場所などを渡すたび) | 起動の前の設定を当てる。`StartupConfig` の `None` の項目は変えない。Host は `EditorState` に直接触らない (`state_mut()` は試験と testkit だけ。clippy の `disallowed-methods` で製品のコードから禁じる。docs/review/v0.3-findings.md の STR-B3) |
-| `report(r: HostReport)` (v0.3 の M14) | Host (`start` の中: 最初の大きさ。最初の Frame の後: 設定の診断) | Host が知った事実 (`Viewport { cols, rows }`・`ConfigDiagnostics { file, diagnostics }`) を渡す |
+| `report(r: HostReport)` (v0.3 の M14) | Host (`start` の中: 最初の大きさ。最初の Frame の後: 設定の診断。クリップボードの書込・取得の結果を受けた `step` の中: 切り替えの理由) | Host が知った事実 (`Viewport { cols, rows }`・`ConfigDiagnostics { file, diagnostics }`・`ClipboardFallback { reason }` (v0.3 の M16)) を渡す |
 | `handle_input(window: WindowId, ev: InputEvent)` | Host (`HostMsg::Input`) | キーマップ解決 (§7.2) → コマンド実行 |
 | `on_job_result(r: JobResult)` | Host (`HostMsg::Job`) | ジョブ結果の採否 (§5.3) と状態の更新 (§9.3) |
 | `tick(now: Tick)` | Host (各 step の先頭・各メッセージの処理の直前・最後、§9.2。`now` は `Clock::now()`) | Editor の「今」を `now` に更新し (§4.4「時刻の源」)、期限の来たもの (チョードの曖昧の解決、Undo 結合の区切り、検索の静止 300 ms、(v0.2) スワップ) を処理する |
@@ -796,7 +796,7 @@ Command 実行 ─▶ Transaction 生成 (ChangeSet + selection_before/after + O
 | `report(r: HostReport)` | Host (起動時の診断は `Host::start` の `Editor::new` の直後。Host の作業の結果は `HostMsg::Report` を受けた `step` の中、§9.2) | Host が自分で行った処理のうち利用者に示す結果 (型は下記) を Message キュー (FR-505) に積む **唯一の口**。どの MessageKey で・いつ・何回示すか (例: `msg.clipboard.fallback` は同じ起動の中で最初の 1 回だけ、FR-205 AC-2) は core が決め、Host は文言を持たない。文書の状態は変えない |
 | `set_caps(caps: Capabilities)` | Host (`Frontend::init` の後と `CapabilitiesChanged` のとき) | 端末の能力を渡す。キー表記もこれで作り直す |
 | `set_keymap(keymap)` / `set_user_keymap(file: &KeymapFile) -> Vec<Diagnostic>` / `registry()` / `register(spec)` | Host (起動時のユーザーのキーマップ、07 §7)・テスト | キーマップとコマンドの登録 |
-| `notify_clipboard_fallback(reason: &str)` | Host (クリップボードの書込・取得の失敗) | v0.2.0 の暫定の入口 (`report(HostReport::ClipboardWriteFailed)` の代わり)。v0.3 の M14 / M16 で `report` に置き換える (下の「v0.2.0 の実装との差」) |
+| ~~`notify_clipboard_fallback(reason: &str)`~~ | — | v0.2.0 の暫定の入口だった。v0.3 の M16 (STR-C2) で `report(HostReport::ClipboardFallback { reason })` に置き換えて消した |
 | `swap_leftovers()` / `swap_recovered_leftovers()` | Host (正常終了) | 正常終了で消すスワップの一覧 (03 §10.2) |
 | `state()` / `state_mut()` | Host・テスト | v0.2.0 の暫定の入口 (下の「v0.2.0 の実装との差」)。v0.3 の M14 で Host からの利用をなくす |
 | `on_fs_event` (v0.5) / `on_service_message` (v1.L) | Host | 最初の利用者の版で足す |
@@ -816,16 +816,18 @@ struct DocSnapshot {
 
 // eve-core (#[non_exhaustive]。変種は最初の利用者の版で足す)。Host → core の報告 (Editor::report の引数)
 enum HostReport {
-    ClipboardWriteFailed { reason: ClipboardFailure },   // システムクリップボードに書けなかった (ClipboardProvider の失敗・非対応と上限の超過、§6.3)。内容は core が
-                                                         // 内部レジスタに入れ済み。core は reason に応じて示す (失敗・非対応は msg.clipboard.fallback を
-                                                         // 最初の 1 回だけ、FR-205 AC-2。TooLarge は上限の超過の通知、04 §15.2)
+    ClipboardFallback { reason: ClipboardFallbackReason }, // システムクリップボードを使えず内部レジスタに切り替えた (書込・取得の失敗、非対応、上限の超過、
+                                                         // 取得の期限切れ、§6.3)。core は msg.clipboard.fallback を最初の 1 回だけ示し (FR-205 AC-2)、{reason} を
+                                                         // ui.clipboard_reason.<key> の文言にする (UI の言語、NFR-603。v0.3 の M16 で ClipboardWriteFailed から改めた)
     ConfigDiagnostics(Vec<ConfigDiagnostic>),            // 起動時の設定の診断 (eve-config の型、07 §4.2)。core が msg.config.problem / problems に要約し、
                                                          // 最初の Frame の後に示す (07 §4.3)。「未対応」の情報診断を数えない規則も core が適用する
     StartupDiagnostics(Vec<StartupDiagnostic>),          // 起動を止めない引数・環境変数の診断 (起動を止めるものは stderr と終了コード 2、07 §18.3 / §18.4)。
                                                          // v0.1 は空の列でもよい (変種と型の中身は最初の利用者と同時に足す)
     IoJobStalled { job: JobId },                         // io ジョブが監視時間を超えた (§9.1、提案、OQ-179)。core が「応答のない I/O を待っている」ことを示す
 }
-enum ClipboardFailure { Unavailable /*開けない・他のプロセスが握っている*/, Unsupported /*この環境に手段が無い*/, TooLarge /*64 MiB 超、§6.3*/, Failed }
+enum ClipboardFallbackReason { ReadFailed, WriteFailed, TooLarge /*64 MiB 超、§6.3*/, Timeout /*取得の 2 秒*/, Ssh, NoDisplay, NoCommand /*Linux、05 §8.2*/ }
+// eve-platform の ClipboardFailure (Unavailable / Unsupported / TooLarge / Failed) は提供者の結果。Host が提供者の理由 (unsupported_reason) と合わせて
+// ClipboardFallbackReason にしてから報告する (文字列は渡さない)
 ```
 
 - **`HostReport` と `HostMsg` の関係**: `HostMsg` (§9.2) は他のスレッドからメインの受信口に届くメッセージ、`HostReport` はメインスレッドの Host が Editor に渡す報告で、別の型にする。メインスレッドで分かる結果 (起動時の設定・引数の診断) は Host が `Editor::report` を直接呼ぶ。他のスレッドで分かる結果 (`bg` で文字列化してから `ClipboardProvider` に渡した書込の失敗、§6.3) は、その Host の作業が `HostMsg::Report(HostReport)` を受信口に送り、それを受けた `step` が `Editor::report` に渡す (ジョブの結果 `HostMsg::Job` と同じく、Editor の状態を変えるのはメインスレッドだけ)。frontend は `HostMsg::Report` を送らない。
@@ -835,7 +837,7 @@ enum ClipboardFailure { Unavailable /*開けない・他のプロセスが握っ
 | 仕様 | v0.2.0 の実装 | 扱い |
 |---|---|---|
 | `new(ports, config, caps)` で設定を渡す | `new(ports: Ports, caps: Capabilities)`。設定・テーマ・言語・設定の出所・ログのパス・システムの文字コードは、Host が `state_mut()` の setter (`set_config`・`set_user_theme`・`set_locale`・`set_config_sources`・`set_log_path`・`set_system_encoding`) で後から渡す。最初の大きさも `handle_input(Resize)` ではなく `state_mut().set_viewport(cols, rows)` で渡す | v0.3 の M14 (STR-B3) で、`Editor` に起動時の設定をまとめて渡す入口 (`configure(StartupConfig)` の案) を足し、Host の `state_mut()` の利用 (8 か所) をなくす。そのとき本表を消し、上の `new` の行を実装に合わせる |
-| `report(r: HostReport)` と `HostMsg::Report` | 無い (`HostReport` の型も無い)。クリップボードの失敗は `notify_clipboard_fallback(&str)`、起動時の設定の診断は `state_mut().report_config(file, &diagnostics)` で渡す。`StartupDiagnostics`・`IoJobStalled` は無い | v0.3 の M14 / M16 (STR-B3 / C2) で `HostReport` を入れる。クリップボードの失敗の理由を文字列 (日本語の直書き) で渡している点は NFR-603 の不具合で、`HostReport` の enum にするときに直す (`fix/`) |
+| `report(r: HostReport)` と `HostMsg::Report` | 無い (`HostReport` の型も無い)。クリップボードの失敗は `notify_clipboard_fallback(&str)`、起動時の設定の診断は `state_mut().report_config(file, &diagnostics)` で渡す。`StartupDiagnostics`・`IoJobStalled` は無い | v0.3 の M14 (STR-B3) で `report(HostReport)` を入れた (`Viewport`・`ConfigDiagnostics`)。M16 (STR-C2、`fix/`) でクリップボードの切り替えを `ClipboardFallback { reason }` にし、理由を文字列 (日本語の直書き、NFR-603 の不具合) でなく enum で渡すよう直した。`HostMsg::Report`・`StartupDiagnostics`・`IoJobStalled` は未実装 (クリップボードの書込の失敗は今は `HostMsg::ClipboardWriteFailed` で届く) |
 | `Editor` の `pub` は表のメソッドだけ (§4.6) | `state()` / `state_mut()`・`open_document(Document)` (テスト用) も `pub`。eve-core の `editor/` の `pub fn` は 164 個 | v0.3 の M14 (STR-B3) で `pub(crate)` に下げる |
 
 
@@ -1281,7 +1283,7 @@ enum HostMsg {
     Job(Box<JobResult>),            // io / bg ワーカー (§9.3)。大きいので Box で包む
     // Report(HostReport)           // Host の作業の結果を Editor::report に渡す (§5.4)。v0.2.0 の実装に無い (§5.4 の「v0.2.0 の実装との差」)。v0.3 で入れる
     Clipboard { token, result },    // クリップボードの取得 (eve-clip-read) の結果 (§6.3)
-    ClipboardWriteFailed(ClipboardFailure), // クリップボードの書込 (eve-clip-write) の失敗。step が Editor::notify_clipboard_fallback に渡す (v0.2.0 の暫定。Report に置き換える)
+    ClipboardWriteFailed(ClipboardFailure), // クリップボードの書込 (eve-clip-write) の失敗。step が理由にして Editor::report(HostReport::ClipboardFallback) に渡す (v0.3。HostMsg::Report に置き換えるのは後)
     Osc52 { text, system_failure }, // OSC 52 で書く文字列 (05 §8.1)。step が Frontend::write_osc52 に渡す
     Fs(FsEvent),                    // v0.5 (ファイル監視)
     Service(ServiceMsg),            // v1.L (LSP / AI)

@@ -31,15 +31,14 @@ pub enum Detection {
 }
 
 impl Detection {
-    /// コマンドが無い理由 (`msg.clipboard.fallback` の `{reason}`)。
-    pub fn reason(&self) -> Option<&'static str> {
+    /// コマンドが無い理由 (`msg.clipboard.fallback` の `{reason}`。文言は core が作る)。
+    pub fn reason(&self) -> Option<eve_core::ClipboardFallbackReason> {
+        use eve_core::ClipboardFallbackReason as R;
         match self {
             Detection::Command(_) => None,
-            Detection::Ssh => Some("SSH 接続中は外部のコマンドを使いません"),
-            Detection::Headless => Some("画面 (DISPLAY / WAYLAND_DISPLAY) がありません"),
-            Detection::Missing => {
-                Some("wl-clipboard または xclip を入れるとシステムのクリップボードが使えます")
-            }
+            Detection::Ssh => Some(R::Ssh),
+            Detection::Headless => Some(R::NoDisplay),
+            Detection::Missing => Some(R::NoCommand),
         }
     }
 }
@@ -300,7 +299,7 @@ mod unix {
                 .and_then(decode))
         }
 
-        fn unsupported_reason(&self) -> Option<&'static str> {
+        fn unsupported_reason(&self) -> Option<eve_core::ClipboardFallbackReason> {
             // 検出の前 (失敗を返す前) には呼ばれない。検出していなければ理由は無い
             self.detected.get().and_then(Detection::reason)
         }
@@ -531,7 +530,10 @@ mod tests {
             let c = UnixClipboard::with_detection(Detection::Missing);
             assert_eq!(c.set_text("x"), Err(ClipboardFailure::Unsupported));
             assert_eq!(c.get_text(), Err(ClipboardFailure::Unsupported));
-            assert!(c.unsupported_reason().is_some_and(|r| r.contains("xclip")));
+            assert_eq!(
+                c.unsupported_reason(),
+                Some(eve_core::ClipboardFallbackReason::NoCommand)
+            );
         }
     }
 }

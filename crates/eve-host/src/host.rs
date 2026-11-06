@@ -8,8 +8,8 @@ use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 
 use eve_core::{
-    Clock, DocSnapshot, Editor, InitialFile, JobResult, Millis, Ports, RescueReason, RescueWriter,
-    Tick,
+    ClipboardFallbackReason, Clock, DocSnapshot, Editor, InitialFile, JobResult, Millis, Ports,
+    RescueReason, RescueWriter, Tick,
 };
 use eve_view::{Capabilities, DocumentId, EditorEvent, Effect, StderrLine, WindowId};
 
@@ -457,8 +457,10 @@ impl Host {
                         let text = match result {
                             Ok(t) => t,
                             Err(e) => {
-                                let reason = self.clipboard_reason(e, "取得できませんでした");
-                                self.editor.notify_clipboard_fallback(reason);
+                                let reason =
+                                    self.clipboard_reason(e, ClipboardFallbackReason::ReadFailed);
+                                self.editor
+                                    .report(eve_core::HostReport::ClipboardFallback { reason });
                                 None
                             }
                         };
@@ -472,13 +474,15 @@ impl Host {
                     if !frontend.write_osc52(&text)
                         && let Some(e) = system_failure
                     {
-                        let reason = self.clipboard_reason(e, "書き込めませんでした");
-                        self.editor.notify_clipboard_fallback(reason);
+                        let reason = self.clipboard_reason(e, ClipboardFallbackReason::WriteFailed);
+                        self.editor
+                            .report(eve_core::HostReport::ClipboardFallback { reason });
                     }
                 }
                 HostMsg::ClipboardWriteFailed(e) => {
-                    let reason = self.clipboard_reason(e, "書き込めませんでした");
-                    self.editor.notify_clipboard_fallback(reason);
+                    let reason = self.clipboard_reason(e, ClipboardFallbackReason::WriteFailed);
+                    self.editor
+                        .report(eve_core::HostReport::ClipboardFallback { reason });
                 }
                 HostMsg::Signal(kind) => {
                     // test-hooks: メインが止まった状態の再現 (受信スレッドの緊急の端末復元を検査する、09 §3.6)
@@ -580,8 +584,8 @@ impl Host {
     fn clipboard_reason(
         &self,
         e: eve_platform::clipboard::ClipboardFailure,
-        otherwise: &'static str,
-    ) -> &'static str {
+        otherwise: ClipboardFallbackReason,
+    ) -> ClipboardFallbackReason {
         use eve_platform::clipboard::ClipboardFailure::{TooLarge, Unsupported};
         match e {
             Unsupported => self
@@ -589,7 +593,7 @@ impl Host {
                 .as_ref()
                 .and_then(|p| p.unsupported_reason())
                 .unwrap_or(otherwise),
-            TooLarge => "大きすぎてシステムのクリップボードに入りません",
+            TooLarge => ClipboardFallbackReason::TooLarge,
             _ => otherwise,
         }
     }
@@ -627,8 +631,9 @@ impl Host {
             _ => false,
         };
         if too_large {
-            self.editor
-                .notify_clipboard_fallback("大きすぎてシステムのクリップボードに入りません");
+            self.editor.report(eve_core::HostReport::ClipboardFallback {
+                reason: ClipboardFallbackReason::TooLarge,
+            });
             return;
         }
         let tx = self.tx.clone();
@@ -707,8 +712,9 @@ impl Host {
             && self.clock.now() >= due
         {
             self.clip_wait = None;
-            self.editor
-                .notify_clipboard_fallback("取得がタイムアウトしました");
+            self.editor.report(eve_core::HostReport::ClipboardFallback {
+                reason: ClipboardFallbackReason::Timeout,
+            });
             self.deliver_clipboard(token, None);
         }
     }

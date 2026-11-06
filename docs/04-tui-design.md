@@ -1621,6 +1621,13 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 | `ui.read_only_reason.stateful_encoding_with_invalid_bytes` | 同上。`StatefulEncodingWithInvalidBytes` | 不正なバイトを含む ISO-2022-JP のファイル |
 | `ui.read_only_reason.binary` | 同上。`Binary` | バイナリファイル |
 | `ui.read_only_reason.large_file_viewer` | 同上。`LargeFileViewer` | 巨大なファイル (読み取り専用で開く指定) |
+| `ui.clipboard_reason.read_failed` | `msg.clipboard.fallback` の `{reason}`。`ClipboardFallbackReason::ReadFailed` (貼り付けの読み取りの失敗。以下の 7 行は eve-core の `ClipboardFallbackReason` と 1 対 1。Host・eve-platform は文字列でなくこの値を渡す) | 読み取れませんでした |
+| `ui.clipboard_reason.write_failed` | 同上。`WriteFailed` (コピーの書込の失敗) | 書き込めませんでした |
+| `ui.clipboard_reason.too_large` | 同上。`TooLarge` (64 MiB の上限を超える、05 §8.1) | 大きすぎてシステムのクリップボードに入りません |
+| `ui.clipboard_reason.timeout` | 同上。`Timeout` (読み取りが 2 秒で終わらない、05 §8.1) | 読み取りが時間内に終わりませんでした |
+| `ui.clipboard_reason.ssh` | 同上。`Ssh` (Linux。05 §8.2) | SSH 接続中は外部のコマンドを使いません |
+| `ui.clipboard_reason.no_display` | 同上。`NoDisplay` (Linux。05 §8.2) | 画面 (DISPLAY / WAYLAND_DISPLAY) がありません |
+| `ui.clipboard_reason.no_command` | 同上。`NoCommand` (Linux。05 §8.2) | wl-clipboard または xclip を入れるとシステムのクリップボードが使えます |
 | `ui.load_state.loading` | 読込中の文書への編集操作を拒否したときの `msg.edit.read_only` の `{reason}` (読込中は読み取り専用の理由ではなく `load_state == Loading` から導出する状態で、03 §9.6。`ui.read_only_reason.*` には入れない。ステータスバーの読込中の表示は `status.loading.long` / `.short`、§8.7) | 読込中 |
 | `info.hint_bar.hidden` | `ui.toggle_hint_bar` でヒントバーを隠した (FR-504、§8.5) | ヒントバーを隠しました (その行を本文に使います) |
 | `info.hint_bar.shown` | `ui.toggle_hint_bar` でヒントバーを表示した | ヒントバーを表示しました |

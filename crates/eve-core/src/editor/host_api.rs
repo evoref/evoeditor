@@ -30,6 +30,11 @@ pub enum HostReport<'a> {
         file: &'a str,
         diagnostics: &'a [eve_config::Diagnostic],
     },
+    /// システムのクリップボードを使えず、内部レジスタに切り替えた (書込・取得の失敗、非対応、上限の超過、取得の期限切れ。
+    /// 02 §6.3)。core が `msg.clipboard.fallback` を同じ起動の中で最初の 1 回だけ示す (01 FR-205 AC-2)。
+    ClipboardFallback {
+        reason: crate::ClipboardFallbackReason,
+    },
 }
 
 impl Editor {
@@ -63,6 +68,9 @@ impl Editor {
             HostReport::Viewport { cols, rows } => self.state.set_viewport(cols, rows),
             HostReport::ConfigDiagnostics { file, diagnostics } => {
                 self.state.report_config(file, diagnostics);
+            }
+            HostReport::ClipboardFallback { reason } => {
+                self.state.notify_clipboard_fallback(reason)
             }
         }
     }

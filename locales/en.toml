@@ -949,6 +949,15 @@ more = "and {count} more"
 [ui.load_state]
 loading = "Loading"
 
+[ui.clipboard_reason]
+no_command = "install wl-clipboard or xclip to use the system clipboard"
+no_display = "there is no display (DISPLAY / WAYLAND_DISPLAY)"
+read_failed = "it could not be read"
+ssh = "external commands are not used over SSH"
+timeout = "reading it did not finish in time"
+too_large = "the text is too large for the system clipboard"
+write_failed = "it could not be written"
+
 [ui.read_only_reason]
 binary = "binary file"
 file_attribute = "file with the read-only attribute"
