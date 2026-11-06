@@ -39,8 +39,8 @@ pub use input::{
     MouseKind,
 };
 pub use query::{
-    Answer, ByteRange, DocumentInfo, FocusTarget, LoadStateView, Query, QueryError, SelRange,
-    WindowInfo,
+    Answer, ByteRange, DocumentInfo, FocusTarget, LoadStateView, Query, QueryError,
+    ReadOnlyReasonView, SelRange, WindowInfo,
 };
 pub use term::{RawTermHandle, SavedTermMode, TermRestoredFlag};
 

@@ -1194,7 +1194,7 @@ TUI と、ヘッドレスの消費者 (シナリオ・駆動 API・ヘッドレ�
 **型レベルの防御 (v0.1 から)**
 
 - `eve-view` の enum は v0.1 から `#[non_exhaustive]` にする (frontend の `match` に既定の腕を強制し、変種の追加を非破壊にする)。**struct は C3 で付ける** (提案、OQ-177): 外部の消費者は C3 (TUI 完成時のレビュー) まで存在せず、それまでの消費者 (eve-tui・`eve-testkit`・`eve-host`) は同じリポジトリにあって、フィールドの追加は §8.4 の C1 / C2 の手続きで同じ PR で直せる。struct に v0.1 から付けると、他 crate からの構築がすべて `Default` / ビルダー経由になり、テストの組み立て (Frame の期待値、`Capabilities` のプリセット等) の手間が C3 まで続く。C3 では全 struct に付け、構築を `Default` / ビルダー経由に切り替える。例外は緊急の端末復元に渡す平文の型のうち `RawTermHandle` と `TermRestoredFlag` で、C3 の後も公開フィールドのタプル struct のまま他 crate (eve-tui) から直接作る (§9.2)。`eve-view` 以外の公開型 (`eve-host` の `HostMsg` 等) も同じ規則に従う。
-- frontend は `match` に必ず既定描画 (`_ =>`) を持つ。意味的 UI モデルに新しい変種を足すときは、公開リポジトリの消費者 (TUI とヘッドレス参照レンダラ) の描画を同じ PR に含めるか、未知の変種を Confirm / List に退化させる既定描画で受ける。
+- frontend は `match` に必ず既定描画 (`_ =>`) を持つ。意味的 UI モデルに新しい変種を足すときは、公開リポジトリの消費者 (TUI とヘッドレス参照レンダラ) の描画を同じ PR に含める。既定描画は、知らない変種を何も描かずに受ける (パニックしない)。`#[non_exhaustive]` の変種の中身は消費者から読めないので、Confirm / List に退化させて描くことはできない (v0.3 の M16 で改めた、04 §16)。
 - `pub const CONTRACT_VERSION: u32` を置く。C3 で 1 にし、以降の契約の変更ごとに上げる (C3 までは 0 に固定。上の「C3 までの運用」)。Frame JSON (と、実装後は駆動 API の `initialize`) に含める。
 - frontend 固有の挙動は `Capabilities` か `[frontend.<name>]` 設定で表現し、core に「TUI なら」のような frontend 別の分岐を書かない。TUI 固有の表現 (罫線・記号) は 04 に置き、core の文書に書かない。
 
@@ -1809,10 +1809,14 @@ struct DocumentInfo {
     revision: Revision,
     dirty: bool,
     load_state: LoadStateView,                     // eve-view 用の列挙 (eve-core の load_state を写したもの)
-    read_only: Vec<String>,                        // ReadOnlyReason (§5.1) の変種名を PascalCase のまま優先順に (例 "FileAttribute", "InvalidBytes")
+    read_only: Vec<ReadOnlyReasonView>,            // 読み取り専用の理由を優先順に (空なら理由なし)。v0.3 で Vec<String> (変種名の文字列) から型に改めた (STR-C6)
     views: Vec<ViewId>,                            // この文書を表示している View (v0.1 は 1 つ)
 }
 enum LoadStateView { Loading, Ready, Failed }      // Partial は v0.4 で足す (§5.1 の予約)
+enum ReadOnlyReasonView {                          // eve-core の ReadOnlyReason (§5.1、03 §9.6) を 1 対 1 に写したもの。変換は eve-core
+    FileAttribute, UserRequested, NoWritePermission, InvalidBytes, StatefulEncodingWithInvalidBytes,
+    Binary, LargeFileViewer, LoadIncomplete,
+}
 struct WindowInfo { window: WindowId, views: Vec<ViewId>, focus: FocusTarget /*§8.2*/ }
 struct ByteRange { start: u64, end: u64 }          // eve-view の位置の範囲 (バイトオフセット、ADR-0010)。eve-text の同名の型 (ByteOff (usize) の組、03 §19) とは別の型で、
                                                    // eve-view は他の eve-* に依存しないので別に持つ。所有と変換規則は §12.2
@@ -2042,7 +2046,7 @@ sensitive = false                     # 任意 (無ければ false)。秘密フ�
 
 | 型 / 概念 | 定義する crate | 詳細を書く文書 |
 |---|---|---|
-| `InputEvent`, `KeyEvent`, `Frame`, `Style`, `Effect`, `Capabilities`, `EditorEvent` / `OriginKind`, `Query` / `Answer` / `QueryError` / `DocumentInfo` / `WindowInfo` / `LoadStateView`, `ByteRange`, `CONTRACT_VERSION`、緊急の端末復元に渡す平文の型 (`RawTermHandle` / `SavedTermMode` / `TermRestoredFlag`、§9.2)、`Effect` の付属型 (`QuitRescue` / `ClipboardTarget` / `StderrLine`、§6.3)、境界型が使う ID 型 (`DocumentId` / `ViewId` / `WindowId` / `Revision` / `ViewRevision` (§8.2) / `ProposalId` / `AiRequestId` / `HunkId` (§10.2.1) / `ChoiceId` (§8.2) / `ClipboardHandleId` / `ClipboardToken` (§6.3) / `ClientId` / `PluginId` (v1.X の予約) / `JobId`)、`SpanText` | eve-view | 02 (骨格・正本) → 04 (TUI 解釈) / 03 (意味的 UI モデルの詳細・生成側) |
+| `InputEvent`, `KeyEvent`, `Frame`, `Style`, `Effect`, `Capabilities`, `EditorEvent` / `OriginKind`, `Query` / `Answer` / `QueryError` / `DocumentInfo` / `WindowInfo` / `LoadStateView` / `ReadOnlyReasonView`, `ByteRange`, `CONTRACT_VERSION`、緊急の端末復元に渡す平文の型 (`RawTermHandle` / `SavedTermMode` / `TermRestoredFlag`、§9.2)、`Effect` の付属型 (`QuitRescue` / `ClipboardTarget` / `StderrLine`、§6.3)、境界型が使う ID 型 (`DocumentId` / `ViewId` / `WindowId` / `Revision` / `ViewRevision` (§8.2) / `ProposalId` / `AiRequestId` / `HunkId` (§10.2.1) / `ChoiceId` (§8.2) / `ClipboardHandleId` / `ClipboardToken` (§6.3) / `ClientId` / `PluginId` (v1.X の予約) / `JobId`)、`SpanText` | eve-view | 02 (骨格・正本) → 04 (TUI 解釈) / 03 (意味的 UI モデルの詳細・生成側) |
 | `CommandId`, `CommandSpec`, `ContextExpr`, `InvocationSource` | eve-core (`CommandId` は eve-view) | 02 (骨格) → 07 (カタログ・when 変数・参照書式) |
 | `Transaction`, `ChangeSet`, `Origin` | eve-text / eve-core (`Revision` の型は eve-view。eve-text の `Snapshot` は Revision を持たず、対にするのは Document、§5.3) | 03 |
 | `ClipboardText` (`Effect::SetClipboard` の中身) | eve-view (`Inline(String)` / `Handle(ClipboardHandleId)` の serde 可能な列挙) / eve-core (ハンドルの表と `Editor::take_clipboard`) | 02 §6.3 |

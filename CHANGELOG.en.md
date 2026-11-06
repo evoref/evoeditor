@@ -11,6 +11,10 @@ The Japanese version ([CHANGELOG.md](CHANGELOG.md)) is authoritative. Both are u
 
 ## [Unreleased]
 
+### Changed
+
+- eve-view: changed the type of `DocumentInfo.read_only` from `Vec<String>` (variant names as strings) to `Vec<ReadOnlyReasonView>` (a new enum) (breaking; the `Query::Documents` answer). Aligned the documentation of `Capabilities.osc52_write` and `InputEvent::Resize` with the implementation (no type change).
+
 ### Fixed
 
 - **The "characters that cannot be saved" confirmation for Shift_JIS / EUC-JP could point to a later character first**: when a character that changes into another character on saving (such as `¥`) came before a character that cannot be represented, the confirmation showed (and moved to) the later one first. Characters are now reported in document order.

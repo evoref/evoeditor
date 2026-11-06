@@ -9,6 +9,10 @@ v0.1.0 のリリースまでの `0.0.x` は、マイルストーンを数える�
 
 ## [Unreleased]
 
+### 変更
+
+- eve-view: `DocumentInfo.read_only` の型を `Vec<String>` (変種名の文字列) から `Vec<ReadOnlyReasonView>` (新しい enum) に変えた (破壊的変更。`Query::Documents` の応答)。`Capabilities.osc52_write`・`InputEvent::Resize` の説明を実装に合わせた (型は変えない)。
+
 ### 修正
 
 - **Shift_JIS / EUC-JP で保存するときの「表現できない文字」の確認が、最初の文字でなく後ろの文字を先に示すことがある**: `¥` のように保存すると別の文字に変わる文字が、その後ろの表現できない文字より前にあると、確認で先に示す (移動する) 文字が後ろの方になっていました。文書の中の順に示すようになりました。

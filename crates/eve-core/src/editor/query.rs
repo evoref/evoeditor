@@ -3,8 +3,8 @@
 
 use eve_text::{ByteOff, ByteRange as TextRange, TextRead};
 use eve_view::{
-    Answer, ByteRange, DocumentInfo, FocusTarget, LoadStateView, Query, QueryError, SelRange,
-    ViewId, WindowId, WindowInfo,
+    Answer, ByteRange, DocumentInfo, FocusTarget, LoadStateView, Query, QueryError,
+    ReadOnlyReasonView, SelRange, ViewId, WindowId, WindowInfo,
 };
 
 use crate::document::{LoadState, ReadOnlyReason};
@@ -37,7 +37,7 @@ impl Editor {
                             LoadState::Ready => LoadStateView::Ready,
                             LoadState::Failed => LoadStateView::Failed,
                         },
-                        read_only: d.read_only.iter().map(reason_name).collect(),
+                        read_only: d.read_only.iter().map(reason_view).collect(),
                         views: state
                             .docs
                             .views
@@ -140,6 +140,18 @@ fn to_off(n: u64) -> ByteOff {
     ByteOff(usize::try_from(n).unwrap_or(usize::MAX))
 }
 
-fn reason_name(r: ReadOnlyReason) -> String {
-    format!("{r:?}")
+/// 読み取り専用の理由を境界型に写す (02 §12.2。変種は 1 対 1)。
+fn reason_view(r: ReadOnlyReason) -> ReadOnlyReasonView {
+    match r {
+        ReadOnlyReason::FileAttribute => ReadOnlyReasonView::FileAttribute,
+        ReadOnlyReason::UserRequested => ReadOnlyReasonView::UserRequested,
+        ReadOnlyReason::NoWritePermission => ReadOnlyReasonView::NoWritePermission,
+        ReadOnlyReason::InvalidBytes => ReadOnlyReasonView::InvalidBytes,
+        ReadOnlyReason::StatefulEncodingWithInvalidBytes => {
+            ReadOnlyReasonView::StatefulEncodingWithInvalidBytes
+        }
+        ReadOnlyReason::Binary => ReadOnlyReasonView::Binary,
+        ReadOnlyReason::LargeFileViewer => ReadOnlyReasonView::LargeFileViewer,
+        ReadOnlyReason::LoadIncomplete => ReadOnlyReasonView::LoadIncomplete,
+    }
 }

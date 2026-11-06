@@ -9,7 +9,7 @@
 //! - `status` / `message` / `hints` / `search_bar`: 編集面の下の行 (04 §8.4 / §8.7〜§8.9)。
 //! - `overlay` / `input_field` / `confirm` / `prompt` / `list` / `help` / `which_key`: オーバーレイ (04 §7.4 / §8.1〜§8.6)。
 
-use eve_view::{CellSize, ColorDepth, Frame, OverlayModel};
+use eve_view::{CellPos, CellSize, ColorDepth, Frame, OverlayModel};
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 
@@ -145,7 +145,7 @@ pub fn render_screen(
                 OverlayModel::Prompt { .. } => render_prompt(&mut w, area, ov, &theme, glyphs),
                 OverlayModel::List { .. } => render_list(&mut w, area, ov, &theme, glyphs),
                 OverlayModel::Help { .. } => render_help(&mut w, area, ov, &theme),
-                _ => None,
+                _ => render_unknown_overlay(),
             };
             if c.is_some() {
                 cursor = c;
@@ -160,4 +160,12 @@ pub fn render_screen(
     // オーバーレイがあるときの編集面のカーソルは出さない (core は primary_cursor を None にする)
     r.cursor = cursor;
     r
+}
+
+/// eve-tui が知らないオーバーレイの既定描画 (02 §8.4 の「frontend は既定描画を持つ」)。何も描かず、カーソルも動かさない
+/// (下の編集面・クロームはそのまま見える。パニックしない)。変種の中身は `#[non_exhaustive]` の外から読めないので、
+/// 退化させて描くことはこの層ではできない。変種を足す PR が TUI の描画を同時に足す (02 §8.4、04 §16)。今の変種
+/// (`Confirm` / `Prompt` / `List` / `Help`) はすべて上の腕で描くので、ここへは来ない。
+fn render_unknown_overlay() -> Option<CellPos> {
+    None
 }

@@ -3,7 +3,8 @@
 
 use eve_testkit::Harness;
 use eve_view::{
-    Answer, ByteRange, EditorEvent, LoadStateView, OverlayKind, Query, QueryError, StatusKind,
+    Answer, ByteRange, EditorEvent, LoadStateView, OverlayKind, Query, QueryError,
+    ReadOnlyReasonView, StatusKind,
 };
 
 fn answer(h: &Harness, q: &Query) -> Answer {
@@ -391,4 +392,19 @@ fn undo_では履歴破棄の通知を出さない() {
         !h.messages()
             .contains(&"info.undo.history_trimmed".to_owned())
     );
+}
+
+// verifies: AC-NFR-707-4
+#[test]
+fn query_の文書一覧は読み取り専用の理由を型で返す() {
+    let mut h = Harness::new().with_file("/w/ro.txt", b"abc\n");
+    h.fs.set_readonly("/w/ro.txt", true);
+    h.open("/w/ro.txt");
+    h.run_jobs();
+    h.cmd("file.toggle_read_only");
+    h.cmd("file.toggle_read_only");
+    match answer(&h, &Query::Documents) {
+        Answer::Documents(ds) => assert_eq!(ds[0].read_only, [ReadOnlyReasonView::UserRequested]),
+        a => panic!("{a:?}"),
+    }
 }
