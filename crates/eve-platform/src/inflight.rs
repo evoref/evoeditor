@@ -16,6 +16,7 @@ use eve_core::{FileTime, FsPath, InflightRecord, SaveMethod, SaveWarning};
 #[cfg(windows)]
 use crate::path::simplify_verbatim;
 use crate::sys::create_dir_private;
+use crate::toml_lite::{self, parse_basic_string};
 
 /// フラグの版 (キーの追加は版を上げずに行ってよい。意味の変更・必須キーの追加で上げる)。
 const FORMAT_VERSION: u32 = 1;
@@ -116,27 +117,6 @@ fn method_name(m: SaveMethod) -> &'static str {
     }
 }
 
-/// TOML の基本文字列にする。
-pub(crate) fn toml_str(s: &str) -> String {
-    let mut out = String::with_capacity(s.len() + 2);
-    out.push('"');
-    for c in s.chars() {
-        match c {
-            '\\' => out.push_str("\\\\"),
-            '"' => out.push_str("\\\""),
-            '\n' => out.push_str("\\n"),
-            '\r' => out.push_str("\\r"),
-            '\t' => out.push_str("\\t"),
-            c if (c as u32) < 0x20 || c as u32 == 0x7F => {
-                out.push_str(&format!("\\u{:04X}", c as u32));
-            }
-            c => out.push(c),
-        }
-    }
-    out.push('"');
-    out
-}
-
 /// プロセスの作成時刻 (UNIX 紀元からの経過、Windows: `GetProcessTimes`)。取れなければ `None`。
 #[cfg(windows)]
 pub(crate) fn process_start() -> Option<FileTime> {
@@ -179,30 +159,24 @@ pub(crate) fn rewrite_flag(path: &Path, body: &FlagBody<'_>) -> io::Result<()> {
 
 /// フラグの内容 (TOML)。
 fn flag_text(body: &FlagBody<'_>) -> String {
-    let mut text = String::new();
-    let mut line = |k: &str, v: String| {
-        text.push_str(k);
-        text.push_str(" = ");
-        text.push_str(&v);
-        text.push('\n');
-    };
-    line("format_version", FORMAT_VERSION.to_string());
-    line("target", toml_str(&body.target.to_string_lossy()));
-    line("pid", std::process::id().to_string());
+    let mut w = toml_lite::Writer::default();
+    w.kv("format_version", &FORMAT_VERSION.to_string());
+    w.str("target", &body.target.to_string_lossy());
+    w.kv("pid", &std::process::id().to_string());
     if let Some(t) = process_start() {
-        line("started_at_secs", t.secs.to_string());
-        line("started_at_nanos", t.nanos.to_string());
+        w.kv("started_at_secs", &t.secs.to_string());
+        w.kv("started_at_nanos", &t.nanos.to_string());
     }
-    line("method", toml_str(method_name(body.method)));
+    w.str("method", method_name(body.method));
     if let Some(t) = body.tmp {
-        line("tmp", toml_str(&t.to_string_lossy()));
+        w.str("tmp", &t.to_string_lossy());
     }
     if let Some(b) = body.backup {
-        line("backup", toml_str(&b.to_string_lossy()));
+        w.str("backup", &b.to_string_lossy());
     }
-    line("backup_recorded", body.backup_recorded.to_string());
-    line("backup_complete", body.backup_complete.to_string());
-    text
+    w.kv("backup_recorded", &body.backup_recorded.to_string());
+    w.kv("backup_complete", &body.backup_complete.to_string());
+    w.finish()
 }
 
 /// フラグを書く (一時名に書いて fsync し、名前を変える。照合も保存中フラグも使わない下位関数)。書いたフラグのパスを返す。
@@ -229,32 +203,6 @@ fn write_replace(path: &Path, bytes: &[u8]) -> io::Result<()> {
 }
 
 // ---------- 読み手 ----------
-
-/// TOML の基本文字列 (引用符の中) をほどく。`None` は不正。
-pub(crate) fn parse_string(v: &str) -> Option<String> {
-    let inner = v.strip_prefix('"')?.strip_suffix('"')?;
-    let mut out = String::with_capacity(inner.len());
-    let mut it = inner.chars();
-    while let Some(c) = it.next() {
-        if c != '\\' {
-            out.push(c);
-            continue;
-        }
-        match it.next()? {
-            '\\' => out.push('\\'),
-            '"' => out.push('"'),
-            'n' => out.push('\n'),
-            'r' => out.push('\r'),
-            't' => out.push('\t'),
-            'u' => {
-                let hex: String = it.by_ref().take(4).collect();
-                out.push(char::from_u32(u32::from_str_radix(&hex, 16).ok()?)?);
-            }
-            _ => return None,
-        }
-    }
-    Some(out)
-}
 
 /// フラグ 1 つを読む。解析できなければ `malformed = true` (`target` は照会したパス、`pid` はファイル名から)。
 fn parse_flag(flag: &Path, queried: &Path) -> InflightRecord {
@@ -287,17 +235,16 @@ fn parse_flag(flag: &Path, queried: &Path) -> InflightRecord {
     let (mut recorded, mut complete) = (None, None);
     let (mut s_secs, mut s_nanos) = (None::<i64>, None::<u32>);
     for l in text.lines() {
-        let Some((k, v)) = l.split_once(" = ") else {
+        let Some((k, v)) = toml_lite::key_value(l) else {
             continue;
         };
-        let v = v.trim();
-        match k.trim() {
+        match k {
             "format_version" => version = v.parse::<u32>().ok(),
-            "target" => target = parse_string(v),
+            "target" => target = parse_basic_string(v),
             "pid" => pid = v.parse::<u32>().ok(),
-            "method" => method = parse_string(v),
-            "tmp" => tmp = parse_string(v),
-            "backup" => backup = parse_string(v),
+            "method" => method = parse_basic_string(v),
+            "tmp" => tmp = parse_basic_string(v),
+            "backup" => backup = parse_basic_string(v),
             "backup_recorded" => recorded = v.parse::<bool>().ok(),
             "backup_complete" => complete = v.parse::<bool>().ok(),
             "started_at_secs" => s_secs = v.parse().ok(),
@@ -553,12 +500,74 @@ mod tests {
         p
     }
 
+    // STR-D5: TOML の読み書きを toml_lite にまとめても、フラグの形式はバイト単位で変わらず、同じに読める
     #[test]
-    fn 文字列の往復() {
-        for s in ["plain", "a\"b\\c", "日本語 \t\n", "\u{1}x"] {
-            assert_eq!(parse_string(&toml_str(s)).as_deref(), Some(s), "{s:?}");
-        }
-        assert_eq!(parse_string("no quotes"), None);
+    fn フラグの全文はバイト単位で変わらない() {
+        let body = FlagBody {
+            target: Path::new("C:\\w\\\"日本\"\n.txt"),
+            method: SaveMethod::InPlace,
+            tmp: Some(Path::new("C:\\w\\t.tmp")),
+            backup: Some(Path::new("C:\\b\\x")),
+            backup_recorded: true,
+            backup_complete: false,
+        };
+        let started = process_start()
+            .map(|t| {
+                format!(
+                    "started_at_secs = {}\nstarted_at_nanos = {}\n",
+                    t.secs, t.nanos
+                )
+            })
+            .unwrap_or_default();
+        let want = format!(
+            "format_version = 1\ntarget = \"C:\\\\w\\\\\\\"日本\\\"\\n.txt\"\npid = {}\n{started}\
+             method = \"in_place\"\ntmp = \"C:\\\\w\\\\t.tmp\"\nbackup = \"C:\\\\b\\\\x\"\n\
+             backup_recorded = true\nbackup_complete = false\n",
+            std::process::id()
+        );
+        assert_eq!(flag_text(&body), want);
+        let body = FlagBody {
+            target: Path::new("/a"),
+            method: SaveMethod::NewFile,
+            tmp: None,
+            backup: None,
+            backup_recorded: false,
+            backup_complete: true,
+        };
+        let want = format!(
+            "format_version = 1\ntarget = \"/a\"\npid = {}\n{started}method = \"new_file\"\n\
+             backup_recorded = false\nbackup_complete = true\n",
+            std::process::id()
+        );
+        assert_eq!(flag_text(&body), want);
+    }
+
+    #[test]
+    fn フラグの読みは空白と未知のキーと空の値を同じに扱う() {
+        let d = tmp_dir("parse-lite");
+        let f = d.join("9-1.toml");
+        // 行頭の空白・値の後の空白は許し、空の値は前の値を消す (後勝ち)、`=` の前後に空白が無い行は無視する
+        fs::write(
+            &f,
+            "  format_version = 1  \ntarget = \"/x\"\ntarget=\"/y\"\npid = 9\npid = \nmethod = \"atomic\"\n\
+             backup_recorded = false\nbackup_complete = false\nzzz = 1\n",
+        )
+        .unwrap();
+        let r = parse_flag(&f, Path::new("/q"));
+        assert!(r.malformed, "pid が空の値で消えたので不正");
+        fs::write(
+            &f,
+            "  format_version = 1  \ntarget = \"/x\"\ntarget=\"/y\"\npid = 9\nmethod = \"atomic\"\n\
+             tmp = \"/t\"\nbackup_recorded = true\nbackup_complete = false\nzzz = 1\n",
+        )
+        .unwrap();
+        let r = parse_flag(&f, Path::new("/q"));
+        assert!(!r.malformed);
+        assert_eq!(r.target, FsPath::new("/x"));
+        assert_eq!(r.pid, 9);
+        assert_eq!(r.tmp, Some(FsPath::new("/t")));
+        assert!(r.backup_recorded && !r.backup_complete);
+        let _ = fs::remove_dir_all(d);
     }
 
     #[cfg(unix)]

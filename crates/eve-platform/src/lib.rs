@@ -6,7 +6,7 @@
 //! OS の API を直接呼ぶ部分は `cfg` のモジュールに閉じる。保存・直接上書き・保存中フラグ・スワップの走査などのアルゴリズムが使う
 //! API (`ReplaceFileW`・DACL・SID、Unix の xattr・`renameat2` など) は `sys::windows` / `sys::unix` の安全な関数にする。
 
-// unsafe は OS の API の包み `sys::windows`・`sys::unix` と、OS の API そのものを扱うモジュール `clipboard`・`clipboard_test`・
+// unsafe は OS の API の包み `sys::windows`・`sys::unix` と、OS の API そのものを扱うモジュール `clipboard::win`・`clipboard_test`・
 // `console`・`dll`・`locale`・`session`・`signals`・`term` だけに許す (R5)。アルゴリズムのモジュール (`save`・`unix_fs`・`fs`・
 // `fs_common`・`inplace`・`inflight`・`swap_scan`・`hooks` など) には許さない。
 #![deny(unsafe_code)]
@@ -158,7 +158,6 @@ macro_rules! state_dir_methods {
 }
 
 pub mod clipboard;
-pub mod clipboard_cmd;
 #[cfg(all(windows, feature = "test-hooks"))]
 pub mod clipboard_test;
 #[cfg(windows)]
@@ -191,5 +190,6 @@ pub mod term;
 #[cfg(unix)]
 #[path = "term_unix.rs"]
 pub mod term;
+mod toml_lite;
 #[cfg(unix)]
 pub mod unix_fs;

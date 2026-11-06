@@ -18,7 +18,8 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use eve_core::{DocSnapshot, RescueOutcome, RescueReason, RescueWriter};
 use eve_text::{ByteRange, LineEnding, TextRead};
 
-use crate::inflight::{create_dir_all_private, toml_str};
+use crate::inflight::create_dir_all_private;
+use crate::toml_lite;
 
 /// manifest の版 (意味の変更・必須キーの追加で上げる。キーの追加は版を上げない)。
 const FORMAT_VERSION: u32 = 1;
@@ -316,52 +317,45 @@ pub(crate) fn manifest_text(
     docs: &[ManifestDoc],
     owner: Option<&Owner>,
 ) -> String {
-    let mut t = String::new();
-    let kv = |t: &mut String, k: &str, v: String| {
-        t.push_str(k);
-        t.push_str(" = ");
-        t.push_str(&v);
-        t.push('\n');
-    };
-    kv(&mut t, "format_version", FORMAT_VERSION.to_string());
-    kv(
-        &mut t,
+    let mut w = toml_lite::Writer::default();
+    w.kv("format_version", &FORMAT_VERSION.to_string());
+    w.str(
         "created_by",
-        toml_str(&format!("evoeditor {}", env!("CARGO_PKG_VERSION"))),
+        &format!("evoeditor {}", env!("CARGO_PKG_VERSION")),
     );
-    kv(&mut t, "created_at", toml_str(created_at));
-    kv(&mut t, "reason", toml_str(reason.as_str()));
-    kv(&mut t, "complete", complete.to_string());
+    w.str("created_at", created_at);
+    w.str("reason", reason.as_str());
+    w.kv("complete", &complete.to_string());
     if let Some(o) = owner {
-        kv(&mut t, "pid", o.pid.to_string());
+        w.kv("pid", &o.pid.to_string());
         if let Some(st) = o.started_at {
-            kv(&mut t, "started_at_secs", st.secs.to_string());
-            kv(&mut t, "started_at_nanos", st.nanos.to_string());
+            w.kv("started_at_secs", &st.secs.to_string());
+            w.kv("started_at_nanos", &st.nanos.to_string());
         }
     }
     for d in docs {
-        t.push_str("\n[[document]]\n");
-        kv(&mut t, "file", toml_str(&d.file));
+        w.table_array("document");
+        w.str("file", &d.file);
         if let Some(p) = &d.path {
-            kv(&mut t, "path", toml_str(p));
+            w.str("path", p);
         }
         if let Some(u) = &d.untitled_name {
-            kv(&mut t, "untitled_name", toml_str(u));
+            w.str("untitled_name", u);
         }
-        kv(&mut t, "encoding", toml_str(d.encoding));
-        kv(&mut t, "bom", d.bom.to_string());
-        kv(&mut t, "default_eol", toml_str(d.default_eol));
-        kv(&mut t, "eol_mixed", d.eol_mixed.to_string());
-        kv(&mut t, "final_newline", d.final_newline.to_string());
-        kv(&mut t, "pua_escaped", d.pua_escaped.to_string());
-        kv(&mut t, "revision", d.revision.to_string());
-        kv(&mut t, "len", d.len.to_string());
-        kv(&mut t, "written", d.written.to_string());
+        w.str("encoding", d.encoding);
+        w.kv("bom", &d.bom.to_string());
+        w.str("default_eol", d.default_eol);
+        w.kv("eol_mixed", &d.eol_mixed.to_string());
+        w.kv("final_newline", &d.final_newline.to_string());
+        w.kv("pua_escaped", &d.pua_escaped.to_string());
+        w.kv("revision", &d.revision.to_string());
+        w.kv("len", &d.len.to_string());
+        w.kv("written", &d.written.to_string());
         if d.sensitive {
-            kv(&mut t, "sensitive", "true".to_owned());
+            w.kv("sensitive", "true");
         }
     }
-    t
+    w.finish()
 }
 
 /// manifest を原子的に更新する (同じディレクトリの一時ファイルに書いて fsync し、rename。途中で強制終了されても
@@ -379,9 +373,7 @@ pub(crate) fn write_manifest(dir: &Path, text: &str) -> io::Result<()> {
 // ---------- 書き手 ----------
 
 /// 本文を 1 つ書く関数 (`write_body` と同じ型)。試験で書込の失敗を差し込むために `write_with` が受ける。
-#[doc(hidden)]
-pub type BodyWriter<'a> =
-    &'a dyn Fn(&Path, &DocSnapshot, &dyn Fn() -> bool) -> io::Result<Option<u8>>;
+type BodyWriter<'a> = &'a dyn Fn(&Path, &DocSnapshot, &dyn Fn() -> bool) -> io::Result<Option<u8>>;
 
 impl RescueWriter for StateRescue {
     fn write(
@@ -461,8 +453,7 @@ impl Stages {
 impl StateRescue {
     /// `write` の本体。時間切れだけが中断で、1 文書の書込の失敗 (権限・ロック) はその文書を `written = false` のまま
     /// 次の文書へ進む (複数文書で、1 件の失敗が他の文書を落とさないため。03 §9.8 の不変条件 5、§10.1)。
-    #[doc(hidden)]
-    pub fn write_with(
+    fn write_with(
         &self,
         docs: &[Arc<DocSnapshot>],
         reason: RescueReason,
@@ -622,16 +613,6 @@ pub(crate) fn write_body(
     Ok(Some(last))
 }
 
-/// 試験が書込の失敗を差し込むとき、失敗させない文書に使う本物の書き手。
-#[doc(hidden)]
-pub fn write_body_for_test(
-    path: &Path,
-    d: &DocSnapshot,
-    expired: &dyn Fn() -> bool,
-) -> io::Result<Option<u8>> {
-    write_body(path, d, expired)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -725,6 +706,67 @@ mod tests {
             assert!(t.contains(want), "{want}\n{t}");
         }
         assert!(!t.contains("sensitive"), "false は書かない");
+    }
+
+    // STR-D5: TOML の書き手を toml_lite にまとめても、ディスク上の形式はバイト単位で変わらない
+    #[test]
+    fn manifest_の全文はバイト単位で変わらない() {
+        let d = |file: &str, path: Option<&str>, untitled: Option<&str>, sensitive| ManifestDoc {
+            file: file.into(),
+            path: path.map(Into::into),
+            untitled_name: untitled.map(Into::into),
+            encoding: "UTF-8",
+            bom: true,
+            default_eol: "lf",
+            eol_mixed: true,
+            final_newline: false,
+            pua_escaped: true,
+            revision: 7,
+            len: 3,
+            written: false,
+            sensitive,
+        };
+        let owner = Owner {
+            pid: 42,
+            started_at: Some(eve_core::FileTime {
+                secs: 100,
+                nanos: 5,
+            }),
+        };
+        let t = manifest_text(
+            RescueReason::Signal,
+            "2026-10-21T00:00:00Z",
+            false,
+            &[
+                d(
+                    "1-a.txt",
+                    Some("C:\\w\\\"a\"\t\u{1}\u{7f}.txt"),
+                    None,
+                    false,
+                ),
+                d("2-無題.txt", None, Some("無題-2"), true),
+            ],
+            Some(&owner),
+        );
+        let want = format!(
+            "format_version = 1\ncreated_by = \"evoeditor {}\"\ncreated_at = \"2026-10-21T00:00:00Z\"\n\
+             reason = \"signal\"\ncomplete = false\npid = 42\nstarted_at_secs = 100\nstarted_at_nanos = 5\n\
+             \n[[document]]\nfile = \"1-a.txt\"\npath = \"C:\\\\w\\\\\\\"a\\\"\\t\\u0001\\u007F.txt\"\n\
+             encoding = \"UTF-8\"\nbom = true\ndefault_eol = \"lf\"\neol_mixed = true\nfinal_newline = false\n\
+             pua_escaped = true\nrevision = 7\nlen = 3\nwritten = false\n\
+             \n[[document]]\nfile = \"2-無題.txt\"\nuntitled_name = \"無題-2\"\n\
+             encoding = \"UTF-8\"\nbom = true\ndefault_eol = \"lf\"\neol_mixed = true\nfinal_newline = false\n\
+             pua_escaped = true\nrevision = 7\nlen = 3\nwritten = false\nsensitive = true\n",
+            env!("CARGO_PKG_VERSION")
+        );
+        assert_eq!(t, want);
+        // 所有者なし・文書なし
+        let t = manifest_text(RescueReason::Panic, "x", true, &[], None);
+        let want = format!(
+            "format_version = 1\ncreated_by = \"evoeditor {}\"\ncreated_at = \"x\"\nreason = \"panic\"\ncomplete = true\n",
+            env!("CARGO_PKG_VERSION")
+        );
+        assert_eq!(t, want);
     }
 
     fn scratch(tag: &str) -> PathBuf {
@@ -842,5 +884,144 @@ mod tests {
         .unwrap();
         assert!(!fallback && d.starts_with(&st));
         let _ = fs::remove_dir_all(&st);
+    }
+}
+
+/// 書込の失敗・遅れを差し込む試験 (本文の書き手 `write_with` は crate の外に出さない、STR-D5)。
+#[cfg(all(test, any(windows, target_os = "linux")))]
+mod body_writer_tests {
+    use std::fs;
+    use std::path::{Path, PathBuf};
+    use std::sync::Arc;
+    use std::time::Duration;
+
+    use eve_core::{DocSnapshot, DocumentId, FsPath, RescueReason, RescueWriter, TextFormat};
+    use eve_text::Text;
+    use eve_view::Revision;
+
+    use super::{StateRescue, write_body};
+
+    fn tmp(tag: &str) -> PathBuf {
+        let n = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| d.as_nanos());
+        let p = std::env::temp_dir().join(format!("eve-rescue-{tag}-{}-{n}", std::process::id()));
+        fs::create_dir_all(&p).unwrap();
+        p
+    }
+
+    /// 文書のパス (OS の形の絶対パス)。
+    fn abs(rel: &str) -> String {
+        if cfg!(windows) {
+            format!("C:\\{rel}")
+        } else {
+            format!("/{rel}")
+        }
+    }
+
+    fn doc(
+        id: u64,
+        text: &str,
+        path: Option<&str>,
+        f: impl FnOnce(&mut TextFormat),
+    ) -> Arc<DocSnapshot> {
+        let mut format = TextFormat::new_document();
+        f(&mut format);
+        Arc::new(DocSnapshot {
+            doc: DocumentId(id),
+            snapshot: Text::from(text).snapshot(),
+            format,
+            revision: Revision(id * 10),
+            saved_node_exists: false,
+            sensitive: false,
+            path: path.map(FsPath::from),
+            untitled_name: path.is_none().then(|| format!("無題-{id}")),
+        })
+    }
+
+    fn manifest(dir: &Path) -> String {
+        fs::read_to_string(dir.join("manifest.toml")).unwrap()
+    }
+
+    // 03 §9.8 の不変条件 5: 1 文書の書込の失敗 (権限・ロック) は、その文書だけ `written = false` にして次の文書へ進む。
+    // 時間切れだけが中断。書けた文書は退避に残る。
+    #[test]
+    fn 一つの文書の書込が失敗しても_他の文書は退避する() {
+        let state = tmp("one-fails");
+        let w = StateRescue::new(Some(state.join("s")));
+        // 小さい文書から書くので、"a" (1 バイト) が最初、"bbb" が 2 番目、"cccccc" が最後
+        let docs = [
+            doc(1, "a", Some(&abs("a")), |_| {}),
+            doc(2, "bbb", Some(&abs("b")), |_| {}),
+            doc(3, "cccccc", Some(&abs("c")), |_| {}),
+        ];
+        let fail_second = |path: &Path, d: &DocSnapshot, expired: &dyn Fn() -> bool| {
+            if d.doc == DocumentId(2) {
+                return Err(std::io::Error::from(std::io::ErrorKind::PermissionDenied));
+            }
+            write_body(path, d, expired)
+        };
+        let out = w.write_with(
+            &docs,
+            RescueReason::Signal,
+            Duration::from_secs(10),
+            &fail_second,
+        );
+        assert_eq!(out.total, 3);
+        assert_eq!(out.written, 2, "失敗した 1 件を除く 2 件は書けた");
+        assert!(!out.complete, "全件ではないので complete は false");
+        let dir = out.dir.expect("退避先");
+        assert_eq!(fs::read_to_string(dir.join("1-a.txt")).unwrap(), "a");
+        assert_eq!(fs::read_to_string(dir.join("3-c.txt")).unwrap(), "cccccc");
+        let m = manifest(&dir);
+        assert!(m.contains("complete = false"), "{m}");
+        assert_eq!(m.matches("written = true").count(), 2, "{m}");
+        assert_eq!(m.matches("written = false").count(), 1, "{m}");
+        let _ = fs::remove_dir_all(state);
+    }
+
+    // Issue #342 (SAF-35): 遅い退避は、各段の経過時間を状態ディレクトリのログに残す (途中で終わっても、どこまで進んだかが分かる)。
+    // 速い退避では何も書かない。
+    #[test]
+    fn 遅い退避は各段の時間をログに残し_速い退避は書かない() {
+        let state = tmp("slow-stages");
+        let sd = state.join("s");
+        let log = sd.join("log").join("evoeditor.log");
+        let docs = [doc(1, "unsaved text", None, |_| {})];
+        // 時間に依らないよう、しきい値を差し替える: 速い退避は 60 秒より速く、遅い退避 (本文の書込で 600 ms 待つ) は 100 ms より遅い
+        // (既定の 500 ms のままだと、負荷の高い機械で速い退避がしきい値を超えて落ちた)
+        let fast_w = StateRescue::new(Some(sd.clone())).with_slow_stage(Duration::from_secs(60));
+        let fast = fast_w.write(&docs, RescueReason::ConsoleClose, Duration::from_secs(10));
+        assert!(fast.complete);
+        assert!(
+            !fs::read_to_string(&log)
+                .unwrap_or_default()
+                .contains("退避の段の時間"),
+            "速い退避ではログに書かない"
+        );
+        let slow_body = |path: &Path, d: &DocSnapshot, expired: &dyn Fn() -> bool| {
+            std::thread::sleep(Duration::from_millis(600));
+            write_body(path, d, expired)
+        };
+        let w = StateRescue::new(Some(sd.clone())).with_slow_stage(Duration::from_millis(100));
+        let out = w.write_with(
+            &docs,
+            RescueReason::ConsoleClose,
+            Duration::from_secs(10),
+            &slow_body,
+        );
+        assert!(out.complete);
+        let text = fs::read_to_string(&log).unwrap();
+        let line = text
+            .lines()
+            .find(|l| l.contains("退避の段の時間 (console_close、遅い)"))
+            .unwrap_or_else(|| panic!("遅い段のログがある: {text}"));
+        assert!(
+            line.contains("ディレクトリ")
+                && line.contains("manifest 1")
+                && line.contains("本文 1 (12 B)"),
+            "{line}"
+        );
+        let _ = fs::remove_dir_all(state);
     }
 }

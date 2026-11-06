@@ -10,13 +10,16 @@
 // 検査の失敗は panic で伝える。
 #![allow(clippy::print_stdout, clippy::print_stderr)]
 
-use std::io::{Read, Write};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use portable_pty::{Child, CommandBuilder, MasterPty, PtySize, native_pty_system};
+use portable_pty::{Child, MasterPty, PtySize};
+
+#[path = "common/pty.rs"]
+mod pty;
 
 static STATE_SEQ: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
 
@@ -54,19 +57,6 @@ impl Session {
 
     /// 環境変数を足して起動する (`EVE_TEST_HOOK` など)。
     fn start_with(args: &[&str], state: Option<PathBuf>, envs: &[(&str, &str)]) -> Session {
-        let pty = native_pty_system()
-            .openpty(PtySize {
-                rows: ROWS,
-                cols: COLS,
-                pixel_width: 0,
-                pixel_height: 0,
-            })
-            .expect("擬似端末を開けません");
-        let mut cmd = CommandBuilder::new(exe());
-        cmd.args(args);
-        cmd.env_remove("NO_COLOR");
-        cmd.env_remove("WT_SESSION");
-        cmd.env_remove("TERM_PROGRAM");
         // 利用者の状態ディレクトリを汚さない (保存中フラグ・退避はここに書く)
         let state = state.unwrap_or_else(|| {
             std::env::temp_dir().join(format!(
@@ -75,9 +65,8 @@ impl Session {
                 STATE_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
             ))
         });
-        cmd.env("EVE_STATE_DIR", &state);
         // OS の言語に依らず日本語で始める (言語の選択を試すテストは `envs` や引数で上書きする)
-        cmd.env("EVE_LANG", "ja");
+        let mut cmd = pty::command(&exe(), args, &state);
         // 開発者の実際の設定 (%APPDATA%) を読まない。設定ディレクトリを指定しない試験は、スワップを切った空に近い設定で動かす
         // (スワップの書込・復旧の提案は負荷で時機が揺れ、無関係の試験を邪魔する)。スワップを試す試験は `E2E_SWAP` を渡す
         // (この変数は製品へは渡さない、試験側の目印)。
@@ -101,43 +90,19 @@ enabled = {swap}
                 cmd.env(k, v);
             }
         }
-        let child = pty.slave.spawn_command(cmd).expect("起動できません");
-        drop(pty.slave);
-        let mut reader = pty.master.try_clone_reader().expect("reader");
-        let writer: Arc<Mutex<Box<dyn Write + Send>>> =
-            Arc::new(Mutex::new(pty.master.take_writer().expect("writer")));
-        let parser = Arc::new(Mutex::new(vt100::Parser::new(
-            std::num::NonZeroU16::new(ROWS).expect("ROWS は 1 以上"),
-            std::num::NonZeroU16::new(COLS).expect("COLS は 1 以上"),
-            0,
-        )));
+        let parser = pty::parser(COLS, ROWS);
         let raw = Arc::new(Mutex::new(Vec::new()));
-        {
-            let (parser, raw, writer) = (parser.clone(), raw.clone(), writer.clone());
-            // テストの駆動側の読み取りスレッド (製品のスレッドではない。R11 の対象外)
-            #[allow(clippy::disallowed_methods)]
-            thread::spawn(move || {
-                let mut buf = [0u8; 4096];
-                while let Ok(n) = reader.read(&mut buf) {
-                    if n == 0 {
-                        break;
-                    }
-                    let chunk = &buf[..n];
-                    // ConPTY は起動時にカーソル位置を尋ねる (DSR)。端末として答える
-                    if chunk.windows(4).any(|w| w == b"\x1b[6n")
-                        && let Ok(mut w) = writer.lock()
-                    {
-                        let _ = w.write_all(b"\x1b[1;1R");
-                        let _ = w.flush();
-                    }
-                    raw.lock().unwrap().extend_from_slice(chunk);
-                    parser.lock().unwrap().process(chunk);
-                }
-            });
-        }
+        let on_chunk = {
+            let (parser, raw) = (parser.clone(), raw.clone());
+            move |chunk: &[u8]| {
+                raw.lock().unwrap().extend_from_slice(chunk);
+                parser.lock().unwrap().process(chunk);
+            }
+        };
+        let pty = pty::spawn(cmd, COLS, ROWS, 4096, on_chunk);
         Session {
-            child,
-            writer,
+            child: pty.child,
+            writer: pty.writer,
             parser,
             raw,
             master: Some(pty.master),
