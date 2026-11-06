@@ -170,11 +170,41 @@ pub struct FormatState {
     pub read_only: ReadOnlyReasons,
 }
 
-/// Undo ノードに持つ書式の変更 (前後の値)。Undo は `before`、Redo は `after` へ戻す。
+/// Undo ノードに持つ書式の変更 (前後の値)。Undo は `before`、Redo は `after` へ戻す。戻す範囲は種類で決まる (03 §7.2)。
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct FormatChange {
-    pub before: FormatState,
-    pub after: FormatState,
+pub enum FormatChange {
+    /// 再読込 (`Origin::Reload`、03 §9.5): `TextFormat` 全体と読み取り専用の理由。
+    Reload {
+        before: FormatState,
+        after: FormatState,
+    },
+    /// 改行コードの変換 (`file.set_line_ending`、03 §8.4): `default_eol` だけ。
+    /// 文字コード・BOM・往復の情報・読み取り専用の理由は戻さない (`eol_stats` は本文の適用で数え直す)。
+    DefaultEol {
+        before: LineEnding,
+        after: LineEnding,
+    },
+}
+
+/// Undo / Redo で本文と一緒に戻す書式 (`FormatChange` の片側)。
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum FormatRestore {
+    State(FormatState),
+    DefaultEol(LineEnding),
+}
+
+impl FormatChange {
+    /// Undo なら `before`、Redo (と最初の適用) なら `after` の側。
+    pub fn side(&self, after: bool) -> FormatRestore {
+        match self {
+            FormatChange::Reload { before, after: a } => {
+                FormatRestore::State(if after { a.clone() } else { before.clone() })
+            }
+            FormatChange::DefaultEol { before, after: a } => {
+                FormatRestore::DefaultEol(if after { *a } else { *before })
+            }
+        }
+    }
 }
 
 /// 文書の形式 (03 §8.1)。

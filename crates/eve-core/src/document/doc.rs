@@ -11,7 +11,7 @@ use crate::io::fs::FileStamp;
 use crate::io::fspath::FsPath;
 
 use super::format::{
-    EolStats, LoadState, ReadOnlyReasons, TextFormat, count_long_lines, count_range,
+    EolStats, FormatRestore, LoadState, ReadOnlyReasons, TextFormat, count_long_lines, count_range,
     long_lines_touched,
 };
 use super::history::{NodeId, RecordOutcome, UndoHistory};
@@ -185,8 +185,7 @@ impl Document {
         if tx.changes.is_identity() {
             // 本文が同じ再読込: 書式と理由だけ差し替える (履歴のノードは作らない)
             if let Some(fc) = &tx.format_change {
-                self.format = fc.after.format.clone();
-                self.read_only = fc.after.read_only;
+                self.restore_format(fc.side(true));
             }
             return Ok(AppliedTx::Identity {
                 selection: tx.selection_after.clone(),
@@ -210,10 +209,9 @@ impl Document {
         } else {
             Some(self.history.record(tx, inverse))
         };
-        // 再読込: 書式と読み取り専用の理由を新しい内容のものに差し替える (前後の値は Undo ノードが持つ)
+        // 再読込・改行コードの変換: 書式を新しいものに差し替える (前後の値は Undo ノードが持つ)
         if let Some(fc) = &tx.format_change {
-            self.format = fc.after.format.clone();
-            self.read_only = fc.after.read_only;
+            self.restore_format(fc.side(true));
         }
         Ok(AppliedTx::Changed(Applied {
             old_revision,
@@ -264,16 +262,15 @@ impl Document {
         changes: Arc<ChangeSet>,
         origin: Origin,
         selection: Option<Selection>,
-        format: Option<super::format::FormatState>,
+        format: Option<FormatRestore>,
     ) -> Result<Applied, ApplyError> {
         let before = self.text.snapshot();
         // 履歴と文書が食い違った場合も、文書は変えない (履歴の不整合は呼び出しの誤り)
         self.text.apply(&changes).map_err(ApplyError::Text)?;
         self.update_eol_stats(&before, &changes);
-        // 再読込のノードは、書式と読み取り専用の理由も一緒に戻す (03 §7.2)
+        // 再読込・改行コードの変換のノードは、書式も一緒に戻す (03 §7.2)
         if let Some(f) = format {
-            self.format = f.format;
-            self.read_only = f.read_only;
+            self.restore_format(f);
         }
         let old_revision = self.revision;
         self.revision = self.revision.next();
@@ -286,6 +283,17 @@ impl Document {
             selection,
             record: None,
         })
+    }
+
+    /// 書式を戻す (03 §7.2): 再読込は `TextFormat` 全体と読み取り専用の理由、改行コードの変換は `default_eol` だけ。
+    fn restore_format(&mut self, f: FormatRestore) {
+        match f {
+            FormatRestore::State(st) => {
+                self.format = st.format;
+                self.read_only = st.read_only;
+            }
+            FormatRestore::DefaultEol(eol) => self.format.default_eol = eol,
+        }
     }
 
     /// 再読込の完了 (03 §9.5): 読み込んだ内容がディスクの状態なので、ここを保存点にして `Ready` に戻す。

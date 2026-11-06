@@ -143,7 +143,7 @@ impl EditorState {
             return;
         };
         format.eol_stats = crate::document::EolStats::count(&text);
-        let change = FormatChange {
+        let change = FormatChange::Reload {
             before: FormatState {
                 format: old.format.clone(),
                 read_only: old.read_only,

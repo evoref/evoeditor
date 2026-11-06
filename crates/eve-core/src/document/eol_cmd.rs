@@ -10,7 +10,7 @@ use eve_view::{CommandId, DocumentId, MessageLevel, Revision, ViewId};
 
 use crate::command::ids;
 use crate::document::eol::build_eol_conversion;
-use crate::document::{EolStats, FormatChange, FormatState, Origin, Transaction, UndoGroupHint};
+use crate::document::{FormatChange, Origin, Transaction, UndoGroupHint};
 use crate::jobs::cancel::CancelToken;
 use crate::jobs::{JobKind, JobResult};
 use crate::ui_model::keys;
@@ -114,42 +114,15 @@ impl EditorState {
     }
 
     /// ChangeSet を 1 つの Transaction として適用し、同時に `default_eol` を `eol` にする。
-    /// Undo ノードの `format_change` に前後の書式を持たせ、1 回の Undo で本文と `default_eol` が戻る (03 §7.2)。
+    /// Undo ノードの `format_change` に前後の `default_eol` だけを持たせ、1 回の Undo で本文と `default_eol` が戻る
+    /// (文字コード・BOM などは戻さない。`eol_stats` は本文の適用で数え直す。03 §7.2)。
     fn apply_eol_conversion(&mut self, c: EolConvert, cs: ChangeSet) {
         let Some(doc) = self.docs.documents.get(&c.doc) else {
             return;
         };
-        let stats = doc.format.eol_stats;
-        let before = doc.format.clone();
-        let mut after = before.clone();
-        after.default_eol = c.eol;
-        after.eol_stats = match c.eol {
-            LineEnding::Lf => EolStats {
-                lf: stats.total(),
-                crlf: 0,
-                cr: 0,
-            },
-            LineEnding::Crlf => EolStats {
-                lf: 0,
-                crlf: stats.total(),
-                cr: 0,
-            },
-            LineEnding::Cr => EolStats {
-                lf: 0,
-                crlf: 0,
-                cr: stats.total(),
-            },
-        };
-        let read_only = doc.read_only;
-        let change = FormatChange {
-            before: FormatState {
-                format: before,
-                read_only,
-            },
-            after: FormatState {
-                format: after,
-                read_only,
-            },
+        let change = FormatChange::DefaultEol {
+            before: doc.format.default_eol,
+            after: c.eol,
         };
         let sel = self.view(c.view).map(|v| v.selection.clone());
         let tx = Transaction::new(

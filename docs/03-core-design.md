@@ -600,7 +600,7 @@ pub struct UndoNode {
     redo: ChangeSet,                 // 適用
     undo: ChangeSet,                 // 取り消し (削除テキストを含む)
     selection_before: Option<Selection>, selection_after: Option<Selection>,
-    format_change: Option<FormatChange>, // Origin::Reload: 再読込前後の TextFormat と内容由来の読み取り専用の理由 (§9.5)。改行コードの変換 (file.set_line_ending): 前後の default_eol だけ (§8.4)
+    format_change: Option<FormatChange>, // 種類で戻す範囲が決まる (§7.2): Reload { before, after } = 再読込前後の TextFormat 全体と内容由来の読み取り専用の理由 (§9.5)。DefaultEol { before, after } = 改行コードの変換 (file.set_line_ending) の前後の default_eol だけ (§8.4)
     origin_class: OriginClass, last_edit_at: Tick, group_sealed: bool,
     bytes: usize,                    // メモリ会計用 (§7.5)
 }
@@ -622,7 +622,7 @@ pub struct UndoNode {
 | 文書テキスト | はい | — |
 | 発行 View の Selection | はい (`selection_before`) | 入力の文脈を取り戻す |
 | 他 View の Selection / スクロール | 写像のみ | 他 View のユーザー操作を巻き戻さない |
-| 文字コード・改行コード設定の変更 | **いいえ** (メタデータ)。ただし「改行コード変換」(`file.set_line_ending`、§8.4) はテキスト変更なので戻り、`default_eol` も変換前に戻る (`UndoNode.format_change`) | メタデータ変更はステータスバーで見え、再設定が容易。変換は本文と新しく挿入する改行を一緒に戻さないと、Undo の後の Enter が変換後の改行になり混在を作る |
+| 文字コード・改行コード設定の変更 | **いいえ** (メタデータ)。ただし「改行コード変換」(`file.set_line_ending`、§8.4) はテキスト変更なので戻り、`default_eol` も変換前に戻る (`UndoNode.format_change`)。変換のノードの `format_change` が戻すのは **`default_eol` だけ** で、文字コード・BOM・往復の情報 (`roundtrip`)・不正バイトの数・読み取り専用の理由は戻さない (変換の後に変えたメタデータを Undo で巻き戻さない。`eol_stats` と長大行の数は本文の適用で数え直す)。`TextFormat` 全体を戻すのは下の再読込のノードだけ | メタデータ変更はステータスバーで見え、再設定が容易。変換は本文と新しく挿入する改行を一緒に戻さないと、Undo の後の Enter が変換後の改行になり混在を作る |
 | 外部変更の再読込 (Reload。v0.1 は明示の `file.reload`、フォーカス復帰時の確認は v0.2) | **はい**。本文と一緒に、再読込前の `TextFormat` と、再読込で付け直した読み取り専用の理由 (どの理由を付け直すかは §8.8 の「読み取り専用の理由の差し替え」) も戻る (`UndoNode.format_change`)。ただし **再読込の後に読み取り専用の文書では Undo できない** (`edit.undo` の when が `!doc.read_only`、07 §11.6。提案、OQ-216) | 「再読込で自分の編集が消えた」を取り消せる (§9.5)。本文だけを戻すと、不正バイトを含む本文が編集可能になる等の不整合が起きる |
 | 文字コードを指定して開き直す (FR-111) | **いいえ** (Undo できない操作。履歴を消す。確定 (ユーザー回答)、§8.8) | 開き直しは dirty でないときだけ可なので未保存の内容を失わない。本文・文字コード・読み取り専用・保存点が食い違う状態を作らない |
 | 保存 | 該当なし (履歴に境界を作るだけ) | FR-204 |
@@ -768,7 +768,7 @@ pub struct LossySpan { range: ByteRange /* テキスト座標。編集で写像 
 | 行の定義 | §2.4。LF / CRLF / CR を区切りとし、CRLF は 1 つ |
 | 改行の挿入 (FR-202) | `default_eol` を挿入する (混在ファイルで直前・直後の改行と合体する場合は §6.2 の `eol_guard` が種類を合わせる)。読込時の `default_eol` は多数派 (同数なら LF、全く改行がなければ設定の既定 `file.default_line_ending`、既定 LF。OS 依存にしない: P6) |
 | 混在 (Mixed) | `eol_stats` の 2 種以上が非 0 なら Mixed。ステータスバーに `混在` (01 FR-503 / 04 §8.7) と示す。警告も「揃える」提案もしない (保持が正しい挙動。OQ-52) |
-| 変換コマンド (FR-113、**v0.1**) | `file.set_line_ending(eol)` (`eol` = LF / CRLF / CR。パレットでリストから選ぶ、07 §11.6)。手順: (1) 文書が編集できない (`read_only` が空でない、または `load_state != Ready`) なら Transaction を作らずに `msg.edit.read_only` で拒否する (§9.6)。(2) 変える改行の数 k を `eol_stats` から求める (`eol` 以外の 2 種の和。走査しない)。k = 0 なら本文を変えず、`default_eol` だけを `eol` にして (メタデータの変更。Undo の対象外で dirty にしない、§7.2) `info.eol.unchanged` を出す。(3) k > 0 なら、`eol` と異なるすべての区切り (混在の少数派を含む) を `eol` に置き換える ChangeSet を作る。文書が 1 MiB (`SEARCH_SYNC_STEP_BYTES`、§12.2) 以下ならメインスレッドで作り、超えればジョブ (`JobKind::ConvertEol`、02 §9.3) で Snapshot (Revision R) から作る (全文走査。適用は O(k log n))。すべての区切りを同じ `eol` にするので、置き換えで隣り合った CR と LF が新しい CRLF に結合することはない。(4) 適用の時点で Revision が R でなければ、今の Snapshot で 1 回だけ作り直し、それも古ければ適用せずに `msg.eol.convert_stale` を出す。(5) **1 つの Transaction** (`Origin::Command("file.set_line_ending")`、`UndoGroupHint::Break`) として適用し、同時に `default_eol` を `eol` にする。Undo ノードの `format_change` に前後の `default_eol` を持たせ、1 回の Undo で本文と `default_eol` が一緒に戻る (§7.2)。`eol_stats` は適用で数え直され (§2.4)、ステータスバーの改行コードは `eol` になる (「混在」が消える)。文書は dirty になり、`info.eol.converted` で件数を示す。選択は ChangeSet で写像する。変換は保存時のエンコードと独立で、どの文字コードでもそのまま書く (保存は区切りをそのまま書く、下の「保存」)。Undo の予算 (§7.5) の「直前の 1 操作は保持」が大きな変換にも働く |
+| 変換コマンド (FR-113、**v0.1**) | `file.set_line_ending(eol)` (`eol` = LF / CRLF / CR。パレットでリストから選ぶ、07 §11.6)。手順: (1) 文書が編集できない (`read_only` が空でない、または `load_state != Ready`) なら Transaction を作らずに `msg.edit.read_only` で拒否する (§9.6)。(2) 変える改行の数 k を `eol_stats` から求める (`eol` 以外の 2 種の和。走査しない)。k = 0 なら本文を変えず、`default_eol` だけを `eol` にして (メタデータの変更。Undo の対象外で dirty にしない、§7.2) `info.eol.unchanged` を出す。(3) k > 0 なら、`eol` と異なるすべての区切り (混在の少数派を含む) を `eol` に置き換える ChangeSet を作る。文書が 1 MiB (`SEARCH_SYNC_STEP_BYTES`、§12.2) 以下ならメインスレッドで作り、超えればジョブ (`JobKind::ConvertEol`、02 §9.3) で Snapshot (Revision R) から作る (全文走査。適用は O(k log n))。すべての区切りを同じ `eol` にするので、置き換えで隣り合った CR と LF が新しい CRLF に結合することはない。(4) 適用の時点で Revision が R でなければ、今の Snapshot で 1 回だけ作り直し、それも古ければ適用せずに `msg.eol.convert_stale` を出す。(5) **1 つの Transaction** (`Origin::Command("file.set_line_ending")`、`UndoGroupHint::Break`) として適用し、同時に `default_eol` を `eol` にする。Undo ノードの `format_change` に前後の `default_eol` だけを持たせ (`FormatChange::DefaultEol`。文字コード・BOM などは戻さない)、1 回の Undo で本文と `default_eol` が一緒に戻る (§7.2)。`eol_stats` は適用で数え直され (§2.4)、ステータスバーの改行コードは `eol` になる (「混在」が消える)。文書は dirty になり、`info.eol.converted` で件数を示す。選択は ChangeSet で写像する。変換は保存時のエンコードと独立で、どの文字コードでもそのまま書く (保存は区切りをそのまま書く、下の「保存」)。Undo の予算 (§7.5) の「直前の 1 操作は保持」が大きな変換にも働く |
 | カーソル | CRLF の内側に置けない (書記素) |
 | 削除 | 行末で Delete → CRLF 全体 (1 書記素) を削除。Backspace も同様 |
 | 検索 | リテラル検索では改行 (`\n`) を入力できない (単一行の入力欄。§12.3)。正規表現の `\n` (複数行にまたがる一致は v0.4。v0.2 は「未対応」と表示、§12.3) は `\r?\n\|\r` と等価の糖衣で、`LF` / `CRLF` / `CR` の **どれにも一致** させる (正規表現の `R` フラグ = CRLF モード)。`$` は CR の直前にも一致する ([§12.3](#123-正規表現)) |
