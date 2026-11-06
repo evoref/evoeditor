@@ -46,6 +46,32 @@ fn to_char_boundary(text: &dyn TextRead, pos: Pos, bias: Bias) -> usize {
     p
 }
 
+/// 前後のどちらに何が来ても結合しない文字 (UAX #29 の Grapheme_Cluster_Break が Other で、絵文字の ZWJ 列・地域指示記号・
+/// ハングルの字母・インド系の結合にも関わらない) のうち、本文によく出る範囲 (印字できる ASCII・かな・漢字・全角の英数と主な句読点)。
+/// 両隣がこの範囲なら、窓を切り出さずに境界と分かる (REF-01)。範囲の全文字を試験で確かめている。
+fn never_joins(c: char) -> bool {
+    matches!(c as u32,
+        0x20..=0x7E            // 印字できる ASCII
+        | 0x3001..=0x3002      // 、。
+        | 0x300C..=0x300D      // 「」
+        | 0x3041..=0x3096      // ひらがな (結合する濁点 U+3099・U+309A は除く)
+        | 0x30A1..=0x30FA | 0x30FC // カタカナ
+        | 0x4E00..=0x9FFF      // CJK 統合漢字
+        | 0xFF01..=0xFF5E) // 全角の ASCII
+}
+
+/// char 境界 `pos` から始まる文字 (末尾なら `None`)。チャンクの中で読む (確保しない)。
+fn char_after(text: &dyn TextRead, pos: usize) -> Option<char> {
+    let (chunk, start) = text.chunk_at(ByteOff(pos));
+    chunk.get(pos.checked_sub(start.0)?..)?.chars().next()
+}
+
+/// char 境界 `pos` で終わる文字 (先頭なら `None`)。チャンクの中で読む (確保しない)。
+fn char_before(text: &dyn TextRead, pos: usize) -> Option<char> {
+    let (chunk, start) = text.chunk_at(ByteOff(pos.checked_sub(1)?));
+    chunk.get(..pos.checked_sub(start.0)?)?.chars().next_back()
+}
+
 /// `pos` が書記素境界か。文書の先頭と末尾は境界。char 境界でない位置は `false`。範囲外は `false`。
 pub fn is_grapheme_boundary(text: &dyn TextRead, pos: Pos) -> bool {
     let len = text.len_bytes();
@@ -55,7 +81,17 @@ pub fn is_grapheme_boundary(text: &dyn TextRead, pos: Pos) -> bool {
     if pos.0 == 0 || pos.0 == len {
         return true;
     }
-    with_window(text, pos.0, |buf, rel, _| {
+    if char_before(text, pos.0).is_some_and(never_joins)
+        && char_after(text, pos.0).is_some_and(never_joins)
+    {
+        return true;
+    }
+    is_boundary_window(text, pos.0)
+}
+
+/// `is_grapheme_boundary` の窓の経路 (`0 < pos < len` の char 境界)。
+fn is_boundary_window(text: &dyn TextRead, pos: usize) -> bool {
+    with_window(text, pos, |buf, rel, _| {
         GraphemeCursor::new(rel, buf.len(), true)
             .is_boundary(buf, 0)
             .unwrap_or(true)
@@ -69,6 +105,19 @@ pub fn next_grapheme_boundary(text: &dyn TextRead, pos: Pos) -> Pos {
     if p >= len {
         return ByteOff(len);
     }
+    // 今の文字と次の文字がどちらも結合しないなら、次の境界は今の文字の直後
+    if let Some(c) = char_after(text, p).filter(|&c| never_joins(c)) {
+        let q = p + c.len_utf8();
+        if q == len || char_after(text, q).is_some_and(never_joins) {
+            return ByteOff(q);
+        }
+    }
+    next_boundary_window(text, p)
+}
+
+/// `next_grapheme_boundary` の窓の経路 (`p < len` の char 境界)。
+fn next_boundary_window(text: &dyn TextRead, p: usize) -> Pos {
+    let len = text.len_bytes();
     let next = with_window(text, p, |buf, rel, lo| {
         let mut cur = GraphemeCursor::new(rel, buf.len(), true);
         cur.next_boundary(buf, 0).ok().flatten().map(|b| lo + b)
@@ -83,6 +132,18 @@ pub fn prev_grapheme_boundary(text: &dyn TextRead, pos: Pos) -> Pos {
     if p == 0 {
         return ByteOff(0);
     }
+    // 前の文字とその前の文字がどちらも結合しないなら、前の境界は前の文字の直前
+    if let Some(c) = char_before(text, p).filter(|&c| never_joins(c)) {
+        let q = p - c.len_utf8();
+        if q == 0 || char_before(text, q).is_some_and(never_joins) {
+            return ByteOff(q);
+        }
+    }
+    prev_boundary_window(text, p)
+}
+
+/// `prev_grapheme_boundary` の窓の経路 (`0 < p` の char 境界)。
+fn prev_boundary_window(text: &dyn TextRead, p: usize) -> Pos {
     let prev = with_window(text, p, |buf, rel, lo| {
         let mut cur = GraphemeCursor::new(rel, buf.len(), true);
         cur.prev_boundary(buf, 0).ok().flatten().map(|b| lo + b)
@@ -244,6 +305,85 @@ mod tests {
             p = n;
             steps += 1;
             assert!(steps < 100);
+        }
+    }
+
+    /// 近道の範囲の全文字が、代表の文字 (ASCII・かな・自分自身) のどちら側に来ても窓の経路で境界になる
+    /// (Extend・SpacingMark・Prepend・ZWJ・地域指示記号・ハングルの字母が範囲に混ざっていない)。
+    #[test]
+    fn 結合しない文字の範囲は全文字で窓の経路でも境界になる() {
+        let mut checked = 0;
+        for v in 0..=0x10FFFFu32 {
+            let Some(c) = char::from_u32(v).filter(|&c| never_joins(c)) else {
+                continue;
+            };
+            for x in ['a', 'あ', c] {
+                for s in [format!("{x}{c}"), format!("{c}{x}")] {
+                    let text = t(&s);
+                    let mid = s.chars().next().unwrap().len_utf8();
+                    assert!(is_boundary_window(&text, mid), "{v:#x} {s:?}");
+                }
+            }
+            checked += 1;
+        }
+        assert!(checked > 20_000, "{checked}");
+    }
+
+    fn any_char() -> impl proptest::strategy::Strategy<Value = char> {
+        use proptest::prelude::*;
+        prop_oneof![
+            6 => proptest::char::range('a', 'e'),
+            2 => Just(' '),
+            1 => Just('\t'),
+            2 => Just('\r'),
+            2 => Just('\n'),
+            4 => Just('あ'),
+            2 => Just('ア'),
+            2 => Just('漢'),
+            1 => Just('、'),
+            1 => Just('Ａ'),
+            2 => Just('\u{301}'),
+            1 => Just('\u{3099}'),
+            1 => Just('\u{FF9E}'),
+            1 => Just('ｶ'),
+            1 => Just('\u{200D}'),
+            1 => Just('\u{FE0F}'),
+            1 => Just('👨'),
+            1 => Just('\u{1F1EF}'),
+            1 => Just('\u{1100}'),
+            1 => Just('\u{1161}'),
+            1 => Just('\u{0915}'),
+            1 => Just('\u{094D}'),
+            1 => Just('\u{0600}'),
+        ]
+    }
+
+    proptest::proptest! {
+        #![proptest_config(proptest::prelude::ProptestConfig { cases: 48, ..Default::default() })]
+
+        /// 近道を入れた判定は、全位置で窓の経路 (近道の前の実装) と一致する。チャンクの境目をまたぐ長さで試す。
+        #[test]
+        fn 近道の判定は全位置で窓の経路と一致する(
+            v in proptest::collection::vec(any_char(), 0..3000)
+        ) {
+            let s: String = v.into_iter().collect();
+            let text = t(&s);
+            let len = s.len();
+            for i in 0..=len {
+                let p = ByteOff(i);
+                if !s.is_char_boundary(i) {
+                    proptest::prop_assert!(!is_grapheme_boundary(&text, p));
+                    continue;
+                }
+                let want = i == 0 || i == len || is_boundary_window(&text, i);
+                proptest::prop_assert_eq!(is_grapheme_boundary(&text, p), want, "{}", i);
+                if i < len {
+                    proptest::prop_assert_eq!(next_grapheme_boundary(&text, p), next_boundary_window(&text, i), "{}", i);
+                }
+                if i > 0 {
+                    proptest::prop_assert_eq!(prev_grapheme_boundary(&text, p), prev_boundary_window(&text, i), "{}", i);
+                }
+            }
         }
     }
 
