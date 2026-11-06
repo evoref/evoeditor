@@ -93,6 +93,25 @@ pub struct Document {
     pub(crate) layout_cache: std::cell::RefCell<crate::layout::LayoutCache>,
 }
 
+/// `eol_stats` の更新の窓 (03 §6.5): 編集ごとに旧 `[s-1, e+1)`・新 `[s-1, s+|x|+1)` を取り、
+/// 旧の窓どうしが重なるか接する (間が 1 バイト以下の) ものを 1 つにまとめる (同じ区切りを二重に数えない)。
+/// 文書の範囲への切り詰めと CRLF の間での広げは `count_range` が行う。
+fn eol_windows(cs: &ChangeSet) -> Vec<((usize, usize), (usize, usize))> {
+    let mut out: Vec<((usize, usize), (usize, usize))> = Vec::new();
+    for (old, new) in cs.changed_ranges() {
+        let o = (old.start.0.saturating_sub(1), old.end.0 + 1);
+        let n = (new.start.0.saturating_sub(1), new.end.0 + 1);
+        match out.last_mut() {
+            Some((po, pn)) if o.0 <= po.1 + 1 => {
+                po.1 = o.1;
+                pn.1 = n.1;
+            }
+            _ => out.push((o, n)),
+        }
+    }
+    out
+}
+
 impl Document {
     /// 同じ `DocumentId` の旧文書を差し替えるとき、Revision を旧文書の続き (`prev` の次) にする (03 §17.1: 文書ごとに単調増加)。
     pub(crate) fn continue_revision(&mut self, prev: Revision) {
@@ -302,12 +321,12 @@ impl Document {
         self.history.seal();
     }
 
-    /// 手順 4 の `eol_stats` と `long_lines` の更新 (INV-D5): 変更ごとに、旧文書と新文書の窓の改行を数え直して差し替える。
+    /// 手順 4 の `eol_stats` と `long_lines` の更新 (INV-D5): 窓ごとに、旧文書と新文書の改行を数え直して差し替える。
     fn update_eol_stats(&mut self, before: &Snapshot, cs: &ChangeSet) {
         let mut stats = self.format.eol_stats;
-        for (old, new) in cs.changed_ranges() {
-            let o = count_range(before, old.start.0.saturating_sub(1), old.end.0 + 1);
-            let n = count_range(&self.text, new.start.0.saturating_sub(1), new.end.0 + 1);
+        for (old, new) in eol_windows(cs) {
+            let o = count_range(before, old.0, old.1);
+            let n = count_range(&self.text, new.0, new.1);
             stats = stats.replaced(o, n);
         }
         self.format.eol_stats = stats;

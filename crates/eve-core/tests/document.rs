@@ -159,9 +159,21 @@ fn 保存の流れ() {
 
 #[derive(Clone, Debug)]
 enum Act {
-    Insert { at: u16, s: &'static str },
-    Delete { at: u16, len: u8 },
-    Replace { at: u16, len: u8, s: &'static str },
+    Insert {
+        at: u16,
+        s: &'static str,
+    },
+    Delete {
+        at: u16,
+        len: u8,
+    },
+    Replace {
+        at: u16,
+        len: u8,
+        s: &'static str,
+    },
+    /// 複数箇所を 1 つの ChangeSet で変える (すべて置換・複数カーソル・改行コードの変換と同じ形)
+    Multi(Vec<(u16, u8, &'static str)>),
     Undo,
     Redo,
 }
@@ -173,10 +185,40 @@ fn act() -> impl Strategy<Value = Act> {
     prop_oneof![
         5 => (any::<u16>(), s.clone()).prop_map(|(at, s)| Act::Insert { at, s }),
         4 => (any::<u16>(), 1u8..5).prop_map(|(at, len)| Act::Delete { at, len }),
-        2 => (any::<u16>(), 1u8..5, s).prop_map(|(at, len, s)| Act::Replace { at, len, s }),
+        2 => (any::<u16>(), 1u8..5, s.clone()).prop_map(|(at, len, s)| Act::Replace { at, len, s }),
+        4 => proptest::collection::vec((any::<u16>(), 0u8..4, prop_oneof![Just(""), s]), 2..6).prop_map(Act::Multi),
         2 => Just(Act::Undo),
         1 => Just(Act::Redo),
     ]
+}
+
+/// `Act::Multi` の置換の列を、昇順で重ならない (接してよい) `Edit` に直す。
+fn multi_edits(text: &str, parts: &[(u16, u8, &'static str)]) -> Vec<Edit> {
+    let mut v: Vec<(usize, usize, &str)> = parts
+        .iter()
+        .map(|(at, len, s)| {
+            let st = boundary(text, *at);
+            let mut en = (st + *len as usize).min(text.len());
+            while !text.is_char_boundary(en) {
+                en += 1;
+            }
+            (st, en, *s)
+        })
+        .collect();
+    v.sort_by_key(|e| (e.0, e.1));
+    let mut out = Vec::new();
+    let mut pos = 0;
+    for (st, en, s) in v {
+        if st < pos {
+            continue;
+        }
+        out.push(Edit {
+            range: ByteRange::from(st..en),
+            insert: s.into(),
+        });
+        pos = en;
+    }
+    out
 }
 
 fn boundary(text: &str, at: u16) -> usize {
@@ -188,7 +230,7 @@ fn boundary(text: &str, at: u16) -> usize {
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig { cases: 512, ..ProptestConfig::default() })]
+    #![proptest_config(ProptestConfig { cases: 2048, ..ProptestConfig::default() })]
 
     #[test]
     fn eol_stats_は常に数え直しと一致する(initial in "[ab\r\n]{0,12}", acts in proptest::collection::vec(act(), 0..40)) {
@@ -211,6 +253,10 @@ proptest! {
                     }
                     let ins = if let Act::Replace { s, .. } = a { *s } else { "" };
                     d.apply(&user(edit(&d, st, en, ins), t)).unwrap();
+                }
+                Act::Multi(parts) => {
+                    let cs = ChangeSet::from_sorted_edits(&d.snapshot(), multi_edits(&text, parts)).unwrap();
+                    d.apply(&user(cs, t)).unwrap();
                 }
                 Act::Undo => { d.undo().unwrap(); }
                 Act::Redo => { d.redo().unwrap(); }
