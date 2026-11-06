@@ -779,6 +779,8 @@ Command 実行 ─▶ Transaction 生成 (ChangeSet + selection_before/after + O
 |---|---|---|
 | `new(ports: Ports, config: Arc<ResolvedConfig>, caps: Capabilities) -> Editor` | `Host::start` (`Frontend::init` の後、§9.5) | 空の EditorState を作る。I/O もジョブ投入もしない |
 | `open_initial_files(files: &[InitialFile], read_only: bool, forced: Option<Encoding>)` | `Host::start` (最初の大きさを渡した後、最初の Frame の前) | CLI で渡された開き方。`InitialFile { path: String, line: Option<usize>, col: Option<usize> }` (複数のパスと `path:行:桁` / `+行`、v0.2)。空なら無題の文書。`read_only` は `--readonly`、`forced` は `--encoding`。パスの正規化 (`Paths::normalize`) と開くジョブの投入は core が行う。1 つのパスだけの `open_initial(path: Option<&str>, read_only: bool)` と `open_initial_with(.., forced)` も持つ (テスト用)。v0.1 の案の `OpenRequest` は置かなかった |
+| `configure(c: StartupConfig)` (v0.3 の M14) | Host (`start` / `run` の前、設定・テーマ・言語・ログの場所などを渡すたび) | 起動の前の設定を当てる。`StartupConfig` の `None` の項目は変えない。Host は `EditorState` に直接触らない (`state_mut()` は試験と testkit だけ。clippy の `disallowed-methods` で製品のコードから禁じる。docs/review/v0.3-findings.md の STR-B3) |
+| `report(r: HostReport)` (v0.3 の M14) | Host (`start` の中: 最初の大きさ。最初の Frame の後: 設定の診断) | Host が知った事実 (`Viewport { cols, rows }`・`ConfigDiagnostics { file, diagnostics }`) を渡す |
 | `handle_input(window: WindowId, ev: InputEvent)` | Host (`HostMsg::Input`) | キーマップ解決 (§7.2) → コマンド実行 |
 | `on_job_result(r: JobResult)` | Host (`HostMsg::Job`) | ジョブ結果の採否 (§5.3) と状態の更新 (§9.3) |
 | `tick(now: Tick)` | Host (各 step の先頭・各メッセージの処理の直前・最後、§9.2。`now` は `Clock::now()`) | Editor の「今」を `now` に更新し (§4.4「時刻の源」)、期限の来たもの (チョードの曖昧の解決、Undo 結合の区切り、検索の静止 300 ms、(v0.2) スワップ) を処理する |

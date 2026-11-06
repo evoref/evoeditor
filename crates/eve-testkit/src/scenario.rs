@@ -441,7 +441,10 @@ fn run_inner(sc: &Scenario, dir: Option<&Path>) -> Result<Outcome, Vec<String>> 
                 loaded.diagnostics
             )]);
         }
-        h.editor.state_mut().set_config(loaded.config);
+        h.editor.configure(eve_core::StartupConfig {
+            config: Some(loaded.config),
+            ..Default::default()
+        });
     }
     for (p, f) in &sc.setup.fs {
         h = h.with_file(&ws_path(p), f.text.as_deref().unwrap_or("").as_bytes());

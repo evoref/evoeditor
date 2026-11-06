@@ -154,12 +154,18 @@ impl Host {
 
     /// ログファイルの場所を渡す (設定の問題の要約に出す)。
     pub fn set_log_path(&mut self, path: Option<String>) {
-        self.editor.state_mut().set_log_path(path);
+        self.editor.configure(eve_core::StartupConfig {
+            log_path: Some(path),
+            ..Default::default()
+        });
     }
 
     /// OS のロケール由来の文字コードのヒントを渡す (`file.default_encoding = "system"`、05 §6)。`start` / `run` の前に呼ぶ。
     pub fn set_system_encoding(&mut self, encoding: Option<eve_core::Encoding>) {
-        self.editor.state_mut().set_system_encoding(encoding);
+        self.editor.configure(eve_core::StartupConfig {
+            system_encoding: Some(encoding),
+            ..Default::default()
+        });
     }
 
     /// 設定と、その読込の診断を渡す (`start` / `run` の前に呼ぶ)。`file` は診断の表示名。
@@ -170,7 +176,10 @@ impl Host {
         diagnostics: Vec<eve_config::Diagnostic>,
     ) {
         self.config = config.clone();
-        self.editor.state_mut().set_config(config);
+        self.editor.configure(eve_core::StartupConfig {
+            config: Some(config),
+            ..Default::default()
+        });
         if !diagnostics.is_empty() {
             self.config_report.push((file.to_owned(), diagnostics));
         }
@@ -185,12 +194,18 @@ impl Host {
 
     /// テーマファイルから読んだテーマを渡す (`None` は読めなかった: default で動く。07 §8.6)。
     pub fn set_user_theme(&mut self, name: &str, theme: Option<eve_config::theme::Theme>) {
-        self.editor.state_mut().set_user_theme(name, theme);
+        self.editor.configure(eve_core::StartupConfig {
+            user_theme: Some((name.to_owned(), theme)),
+            ..Default::default()
+        });
     }
 
     /// 設定の読込元を渡す (`config.reload` が同じ元を読み直す、07 §6)。
     pub fn set_config_sources(&mut self, sources: eve_core::ConfigSources) {
-        self.editor.state_mut().set_config_sources(sources);
+        self.editor.configure(eve_core::StartupConfig {
+            config_sources: Some(sources),
+            ..Default::default()
+        });
     }
 
     /// ユーザーのキーマップ (`keymap.toml`) を渡す (`start` / `run` の前に呼ぶ)。`file` は診断の表示名。
@@ -203,7 +218,10 @@ impl Host {
 
     /// UI の言語を渡す (`start` / `run` の前に呼ぶ。選択順は `eve_config::select_locale`、07 §17.1)。
     pub fn set_locale(&mut self, locale: eve_config::Locale) {
-        self.editor.state_mut().set_locale(locale);
+        self.editor.configure(eve_core::StartupConfig {
+            locale: Some(locale),
+            ..Default::default()
+        });
     }
 
     /// SSH 接続中かを上書きする (既定は環境変数 `SSH_TTY` / `SSH_CONNECTION` から。試験用)。
@@ -298,7 +316,10 @@ impl Host {
             let _ = self.restore_info.set(info);
         }
         let size = frontend.surface_size();
-        self.editor.state_mut().set_viewport(size.cols, size.rows);
+        self.editor.report(eve_core::HostReport::Viewport {
+            cols: size.cols,
+            rows: size.rows,
+        });
         self.editor.tick(self.clock.now());
         self.editor
             .open_initial_files(files, read_only, self.initial_encoding);
@@ -315,7 +336,10 @@ impl Host {
         self.render(frontend);
         // 設定の診断は最初の Frame の後に出す (起動を妨げない、07 §4.3)
         for (file, diagnostics) in std::mem::take(&mut self.config_report) {
-            self.editor.state_mut().report_config(&file, &diagnostics);
+            self.editor.report(eve_core::HostReport::ConfigDiagnostics {
+                file: &file,
+                diagnostics: &diagnostics,
+            });
             self.render(frontend);
         }
         Ok(())
