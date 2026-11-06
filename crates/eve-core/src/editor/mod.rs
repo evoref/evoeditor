@@ -100,7 +100,7 @@ impl Editor {
             .first_bindings_where(&Self::EDITOR_CONTEXTS, &ok);
         let labels = seqs
             .iter()
-            .map(|(k, v)| (k.clone(), crate::keymap::format_sequence(v)))
+            .map(|(k, v)| (k.clone(), eve_view::key_notation(v, caps.ascii_only)))
             .collect();
         self.state.set_key_bindings(labels, seqs);
         self.state

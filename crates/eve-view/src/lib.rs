@@ -36,7 +36,7 @@ pub use ids::{
 };
 pub use input::{
     InputEvent, KeyCode, KeyEvent, KeyKind, KeyStroke, Modifiers, MouseAt, MouseButton, MouseEvent,
-    MouseKind,
+    MouseKind, key_notation,
 };
 pub use query::{
     Answer, ByteRange, DocumentInfo, FocusTarget, LoadStateView, Query, QueryError,

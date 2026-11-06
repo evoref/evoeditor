@@ -115,13 +115,7 @@ fn chrome_lines(frame: &Frame) -> String {
             let keys: Vec<String> = h
                 .keys
                 .iter()
-                .map(|k| {
-                    k.strokes
-                        .iter()
-                        .map(|s| eve_core::format_stroke(*s))
-                        .collect::<Vec<_>>()
-                        .join(" ")
-                })
+                .map(|k| eve_view::key_notation(&k.strokes, false))
                 .collect();
             format!("{} {}", keys.join("/"), cell_text(&h.text))
         })

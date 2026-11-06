@@ -972,7 +972,8 @@ Vim 層 (FR-607) は v0.5 以降だが、v0.1 から次を壊さないこと。
 | 方針 | 内容 |
 |---|---|
 | 既定 | `Ctrl+S` 形式 (初心者に読める)。macOS でも `⌃S` / `⌘S` の記法は使わない (端末では Cmd ではなく Ctrl であることを明示するため。主修飾 `mod` も TUI では `Ctrl` と表示する、07 §7.1) |
-| 設定表記との対応 | 表示表記は 07 §7.2 の設定表記から機械的に生成する: 修飾 `ctrl`/`alt`/`shift`/`super`/`mod` → `Ctrl`/`Alt`/`Shift`/`Super`/(解決後の名前)、区切り `+` は共通、キー名は先頭大文字化 (`pageup` → `PgUp`、`pagedown` → `PgDn`、`esc` → `Esc`、`enter` → `Enter`、`backspace` → `Backspace`、`up` → `↑` (ASCII 縮退時 (§3.7) は `Up`))。例: `ctrl+shift+s` ↔ `Ctrl+Shift+S`、`ctrl+k s` ↔ `Ctrl+K S`。09 のテスト記法も 07 の設定表記 (`ctrl+end`) を使う |
+| 設定表記との対応 | 表示表記は 07 §7.2 の設定表記から機械的に生成する: 修飾 `ctrl`/`alt`/`shift`/`super`/`mod` → `Ctrl`/`Alt`/`Shift`/`Super`/(解決後の名前)、区切り `+` は共通、キー名は先頭大文字化 (`esc` → `Esc`、`enter` → `Enter`、`backspace` → `Backspace`、`delete` → `Delete`、`insert` → `Insert`、`printscreen` → `PrintScreen`。`Del` / `Ins` / `PrtSc` と略さない)。例外は `pageup` → `PgUp`、`pagedown` → `PgDn` と矢印 (`up` → `↑` 等。ASCII 縮退時 (§3.7) は `Up` / `Down` / `Left` / `Right`)。例: `ctrl+shift+s` ↔ `Ctrl+Shift+S`、`ctrl+k s` ↔ `Ctrl+K S`。09 のテスト記法も 07 の設定表記 (`ctrl+end`) を使う |
+| 実装の共有 | 表示表記を作る関数は **1 つ** で、eve-view の `key_notation(strokes, ascii)` を core (`{key:…}`・ヘルプのキー一覧・チョード待ちの表示) と eve-tui (パレット・ヒントバー) が共有する (eve-tui は eve-core に依存しないので、両方が依存する eve-view に置く。`ascii` は `Capabilities.ascii_only`)。ヒントバーの圧縮表記 (`^S`) だけは eve-tui が作る。**機械向けの記録は別の表記**: 設定の診断のキー (`keys.<context>.<keys>`) とゴールデンの `default_keymap.tsv` は eve-core の `format_stroke` (`PageDown`・`Up` のように略さない) のまま固定し、表示表記の変更に連動させない |
 | 狭い時 | ヒントバーのみ `^S` 形式に圧縮 (§8.8) |
 | チョード | `Ctrl+K S` (空白区切り) |
 | 区別困難時・横取り | パレットの各行・ヒントバー・`{key:…}` (07 §17.2) には、その端末で **届くと分かっている割当のうちカタログの記載順で最初のもの** を出す: 拡張キーが無効なら [E] 割当を除き、`Capabilities.intercepted_keys` (§7.3a) に載るキーを含む割当を除く。例: Windows Terminal では `select.extend_to_doc_end` の `Ctrl+Shift+End` を出さず、パレットからの実行になる。届く割当が無ければ「コマンドパレットから実行」の文言 (`ui.key.via_palette`) にする。全割当を出し届かない割当に印を付けるキー一覧 (`help.keys`) は v0.2 |

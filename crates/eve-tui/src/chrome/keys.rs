@@ -1,57 +1,10 @@
 //! キー表記 (04 §7.8)。
 
-use eve_view::{KeyCode, KeyLabel, KeyStroke, Modifiers};
+use eve_view::{KeyCode, KeyLabel, KeyStroke, Modifiers, key_notation};
 
-pub(super) fn key_name(code: KeyCode, ascii: bool) -> String {
-    match code {
-        KeyCode::Char(' ') => "Space".to_owned(),
-        KeyCode::Char(c) => c.to_uppercase().collect(),
-        KeyCode::F(n) => format!("F{n}"),
-        KeyCode::Enter => "Enter".to_owned(),
-        KeyCode::Tab => "Tab".to_owned(),
-        KeyCode::Esc => "Esc".to_owned(),
-        KeyCode::Backspace => "Backspace".to_owned(),
-        KeyCode::Delete => "Del".to_owned(),
-        KeyCode::Insert => "Ins".to_owned(),
-        KeyCode::Home => "Home".to_owned(),
-        KeyCode::End => "End".to_owned(),
-        KeyCode::PageUp => "PgUp".to_owned(),
-        KeyCode::PageDown => "PgDn".to_owned(),
-        KeyCode::Up => if ascii { "Up" } else { "↑" }.to_owned(),
-        KeyCode::Down => if ascii { "Down" } else { "↓" }.to_owned(),
-        KeyCode::Left => if ascii { "Left" } else { "←" }.to_owned(),
-        KeyCode::Right => if ascii { "Right" } else { "→" }.to_owned(),
-        KeyCode::Menu => "Menu".to_owned(),
-        KeyCode::CapsLock => "CapsLock".to_owned(),
-        KeyCode::PrintScreen => "PrtSc".to_owned(),
-        _ => "?".to_owned(),
-    }
-}
-
-/// `Ctrl+S` 形式。チョードは空白区切り。
+/// `Ctrl+S` 形式。チョードは空白区切り。表記は eve-view の `key_notation` (core と共有) に任せる。
 pub fn key_label_full(label: &KeyLabel, ascii: bool) -> String {
-    let stroke = |s: &KeyStroke| {
-        let mut out = String::new();
-        for (flag, name) in [
-            (Modifiers::CTRL, "Ctrl"),
-            (Modifiers::ALT, "Alt"),
-            (Modifiers::SHIFT, "Shift"),
-            (Modifiers::SUPER, "Super"),
-        ] {
-            if s.mods.contains(flag) {
-                out.push_str(name);
-                out.push('+');
-            }
-        }
-        out.push_str(&key_name(s.key, ascii));
-        out
-    };
-    label
-        .strokes
-        .iter()
-        .map(stroke)
-        .collect::<Vec<_>>()
-        .join(" ")
+    key_notation(&label.strokes, ascii)
 }
 
 /// ヒントバーの圧縮表記: `Ctrl` + 1 文字は `^S`、それ以外はそのまま。
@@ -60,7 +13,7 @@ pub fn key_label_compact(label: &KeyLabel, ascii: bool) -> String {
         (m, KeyCode::Char(c)) if m == Modifiers::CTRL && c != ' ' => {
             format!("^{}", c.to_uppercase().collect::<String>())
         }
-        _ => key_label_full(&KeyLabel { strokes: vec![*s] }, ascii),
+        _ => key_notation(std::slice::from_ref(s), ascii),
     };
     label
         .strokes

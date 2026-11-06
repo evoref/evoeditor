@@ -14,9 +14,11 @@ The Japanese version ([CHANGELOG.md](CHANGELOG.md)) is authoritative. Both are u
 ### Changed
 
 - eve-view: changed the type of `DocumentInfo.read_only` from `Vec<String>` (variant names as strings) to `Vec<ReadOnlyReasonView>` (a new enum) (breaking; the `Query::Documents` answer). Aligned the documentation of `Capabilities.osc52_write` and `InputEvent::Resize` with the implementation (no type change).
+- eve-view: added `key_notation(strokes, ascii)`, the function that formats keys for display (addition only; shared by the core and eve-tui, docs/04 §7.8).
 
 ### Fixed
 
+- **Keys were written differently depending on where they appeared**: the help key list, keys inside messages and the display after `Ctrl+K` showed `Ctrl+PageDown` and `Ctrl+Shift+Up`, while the command palette and the hint bar showed `Ctrl+PgDn` and `Del` for the same keys. All places now use `PgUp` / `PgDn`, arrow symbols such as `↑` (`Up` etc. when box drawing is limited to ASCII), and `Delete` / `Insert` / `PrintScreen`.
 - **The "characters that cannot be saved" confirmation for Shift_JIS / EUC-JP could point to a later character first**: when a character that changes into another character on saving (such as `¥`) came before a character that cannot be represented, the confirmation showed (and moved to) the later one first. Characters are now reported in document order.
 - **`--check-config` printed message keys for settings not supported in this version**: with a reserved section such as `[ai]`, or `preset` directly under `[keys]` in the keymap, `evoeditor --check-config` printed the message key as is (such as `msg.config.unsupported.text`). It now prints "{item} is not supported in this version and was ignored".
 - **Reopening with another encoding could lose another document's unsaved changes**: after choosing "Reopen with Encoding" on a document with unsaved changes and choosing "Save" in the confirmation, switching to another document with unsaved changes before the save finished made evoeditor reopen the document you switched to, without asking, discarding its unsaved edits and undo history. Only the saved document is reopened now.
