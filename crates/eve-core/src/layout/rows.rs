@@ -161,8 +161,36 @@ pub(super) struct Marks<'a> {
     pub(super) current: Option<(usize, usize)>,
     /// 保存先の文字コードで表せない文字 (E3、03 §8.6)。
     pub(super) unmappable: &'a [(usize, usize)],
-    /// テーマのロールの表 (07 §8.6)。
-    pub(super) roles: &'a eve_view::RoleStyles,
+    /// 行の組み立てで使うロールのスタイル (フレームごとに 1 回引く)。
+    pub(super) styles: &'a RowStyles,
+}
+
+/// 行の組み立てで使うロールのスタイル (07 §8.6)。`RoleStyles::get` は名前の二分探索なので、
+/// 単位ごとに引かず、フレームの初めに 1 回だけ引いて持つ (PRF-01)。
+pub(super) struct RowStyles {
+    pub(super) text: Style,
+    pub(super) whitespace: Style,
+    pub(super) control_char: Style,
+    pub(super) selection: Style,
+    pub(super) search_match: Style,
+    pub(super) search_current: Style,
+    pub(super) line_number: Style,
+    pub(super) line_number_active: Style,
+}
+
+impl RowStyles {
+    pub(super) fn new(roles: &eve_view::RoleStyles) -> RowStyles {
+        RowStyles {
+            text: roles.get("ui.text"),
+            whitespace: roles.get("ui.whitespace"),
+            control_char: roles.get("ui.control_char"),
+            selection: roles.get("ui.selection"),
+            search_match: roles.get("ui.search.match"),
+            search_current: roles.get("ui.search.current"),
+            line_number: roles.get("ui.line_number"),
+            line_number_active: roles.get("ui.line_number.active"),
+        }
+    }
 }
 
 /// 折り返した論理行のうち、作る表示行 1 本 (単位の範囲、継続行のずらし、行内の表示行の番号、最後の表示行か)。
@@ -240,15 +268,15 @@ pub(super) fn build_row(
             );
         }
         if marks.current.is_some_and(|(s, e)| s <= at && at < e) {
-            decor = over(decor, marks.roles.get("ui.search.current"));
+            decor = over(decor, marks.styles.search_current);
         } else {
             let i = marks.found.partition_point(|&(_, e)| e <= at);
             if marks.found.get(i).is_some_and(|&(s, _)| s <= at) {
-                decor = over(decor, marks.roles.get("ui.search.match"));
+                decor = over(decor, marks.styles.search_match);
             }
         }
         if selected(at) {
-            decor = over(decor, marks.roles.get("ui.selection"));
+            decor = over(decor, marks.styles.selection);
         }
         let mut c = u.col - base + shift;
         for (text, w, symbol) in &u.parts {
@@ -258,11 +286,11 @@ pub(super) fn build_row(
                 continue;
             }
             let base = if !*symbol {
-                marks.roles.get("ui.text")
+                marks.styles.text
             } else if is_whitespace_mark(text) {
-                marks.roles.get("ui.whitespace")
+                marks.styles.whitespace
             } else {
-                marks.roles.get("ui.control_char")
+                marks.styles.control_char
             };
             let style = over(base, decor);
             if c0 >= win_end {
@@ -303,7 +331,7 @@ pub(super) fn build_row(
             .iter()
             .any(|&(s, e)| s <= line_end_abs && e > line_end_abs);
     if eol_selected && total >= win_start && total < win_end {
-        push_span(&mut spans, " ", 1, marks.roles.get("ui.selection"));
+        push_span(&mut spans, " ", 1, marks.styles.selection);
     }
     let cursor_cols = heads
         .iter()
@@ -344,14 +372,10 @@ pub(super) fn gutter_spans(line: usize, width: u16, style: Style) -> Vec<Span> {
 }
 
 /// 行 `line` の行番号のスタイル。
-pub(super) fn line_number_style(
-    roles: &eve_view::RoleStyles,
-    line: usize,
-    cursor_line: usize,
-) -> Style {
-    let base = roles.get("ui.line_number");
+pub(super) fn line_number_style(styles: &RowStyles, line: usize, cursor_line: usize) -> Style {
+    let base = styles.line_number;
     if line == cursor_line {
-        over(base, roles.get("ui.line_number.active"))
+        over(base, styles.line_number_active)
     } else {
         base
     }

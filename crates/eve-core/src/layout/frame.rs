@@ -12,6 +12,7 @@ use super::Affinity;
 use super::cursor_in_rows;
 use super::rows::Marks;
 use super::rows::RowPart;
+use super::rows::RowStyles;
 use super::rows::build_row;
 use super::rows::cell_text;
 use super::rows::gutter_spans;
@@ -114,12 +115,12 @@ fn wrapped_rows(
                 break;
             }
             let gutter = if r == 0 {
-                gutter_spans(line, gw, line_number_style(marks.roles, line, cursor_line))
+                gutter_spans(line, gw, line_number_style(marks.styles, line, cursor_line))
             } else if gw > 0 {
                 vec![Span {
                     text: " ".repeat(gw as usize),
                     width: gw,
-                    style: marks.roles.get("ui.line_number"),
+                    style: marks.styles.line_number,
                 }]
             } else {
                 Vec::new()
@@ -201,11 +202,12 @@ pub(crate) fn build_frame(
     let found = state.visible_matches(view.doc, top_line, rows);
     let current = state.bar_current();
     let unmappable = state.unmappable_marks_for(view.doc);
+    let styles = RowStyles::new(&state.settings.roles);
     let marks = Marks {
         found: &found,
         current,
         unmappable: &unmappable,
-        roles: &state.settings.roles,
+        styles: &styles,
     };
     let cursor_line = t.byte_to_line(view.selection.primary().head).0;
     // 長大行を含む文書は折り返さない (`view.wrap` の値は変えない。03 §11.5.1)
@@ -256,11 +258,7 @@ pub(crate) fn build_frame(
                 &sel,
                 &here,
                 &marks,
-                gutter_spans(
-                    line,
-                    gw,
-                    line_number_style(&state.settings.roles, line, cursor_line),
-                ),
+                gutter_spans(line, gw, line_number_style(&styles, line, cursor_line)),
                 None,
             );
             for (&h, &c) in here.iter().zip(&ro.cursor_cols) {
