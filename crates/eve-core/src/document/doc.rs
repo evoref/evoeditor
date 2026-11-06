@@ -175,8 +175,12 @@ impl Document {
         }
         // 2.〜4. 適用前の Snapshot、逆変換、適用。`Text::apply` は検査を先に行い、失敗では何も変えない
         let before = self.text.snapshot();
-        let inverse = tx.changes.invert(&before);
         self.text.apply(&tx.changes).map_err(ApplyError::Text)?;
+        let inverse = tx
+            .coarse_undo
+            .then(|| super::coarse_inverse(&tx.changes, &before, &self.text))
+            .flatten()
+            .unwrap_or_else(|| tx.changes.invert(&before));
         self.update_eol_stats(&before, &tx.changes);
         // 5. Revision
         let old_revision = self.revision;
