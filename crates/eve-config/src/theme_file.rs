@@ -121,7 +121,8 @@ struct RoleSpec {
 #[derive(Clone, Debug, Default)]
 struct Parsed {
     inherits: Option<String>,
-    roles: Vec<(String, RoleSpec)>,
+    /// (ロール名, 書き換え, ロールのキーの (行, 桁))。位置は知らないロールの診断に使う。
+    roles: Vec<(String, RoleSpec, (u32, u32))>,
 }
 
 struct Cx<'a> {
@@ -373,7 +374,8 @@ fn parse(text: &str) -> (Option<Parsed>, Vec<Diagnostic>) {
                     match rv.get_ref() {
                         DeValue::Table(t) => {
                             let spec = cx.role(&role, t);
-                            out.roles.push((role, spec));
+                            let at = cx.pos(rk.span().start);
+                            out.roles.push((role, spec, at));
                         }
                         other => cx.warn(
                             DiagKind::TypeMismatch {
@@ -460,7 +462,8 @@ pub fn load_theme(
         ));
     };
     // 子から親へたどる
-    let mut chain: Vec<Parsed> = Vec::new();
+    // (ファイル名, 解析結果)
+    let mut chain: Vec<(String, Parsed)> = Vec::new();
     let mut seen: Vec<String> = Vec::new();
     let mut cur = name.to_owned();
     let base = loop {
@@ -507,34 +510,34 @@ pub fn load_theme(
         let (parsed, diags) = parse(text.strip_prefix('\u{feff}').unwrap_or(&text));
         let failed = parsed.is_none();
         if !diags.is_empty() {
-            reports.push((file, diags));
+            reports.push((file.clone(), diags));
         }
         let Some(p) = parsed else {
             debug_assert!(failed);
             return (None, reports);
         };
         cur = p.inherits.clone().unwrap_or_else(|| "default".to_owned());
-        chain.push(p);
+        chain.push((file, p));
     };
     let mut roles = base.roles;
     // 親から子の順に重ねる
-    for p in chain.iter().rev() {
-        for (role, spec) in &p.roles {
+    for (file, p) in chain.iter().rev() {
+        for (role, spec, (line, column)) in &p.roles {
             match roles.iter_mut().find(|r| r.name == role) {
                 Some(r) => *r = apply(*r, spec),
                 None => {
-                    let file = format!("themes/{name}.toml");
+                    // 知らないロールは、それを書いたファイルの、ロールのキーの位置で知らせる
                     let d = Diagnostic {
                         severity: Severity::Warning,
                         kind: DiagKind::UnknownKey { suggestion: None },
                         key: role.clone(),
                         value: String::new(),
-                        line: 0,
-                        column: 0,
+                        line: *line,
+                        column: *column,
                     };
-                    match reports.iter_mut().find(|(f, _)| *f == file) {
+                    match reports.iter_mut().find(|(f, _)| f == file) {
                         Some((_, ds)) => ds.push(d),
-                        None => reports.push((file, vec![d])),
+                        None => reports.push((file.clone(), vec![d])),
                     }
                 }
             }
@@ -672,10 +675,28 @@ mod tests {
             all.iter()
                 .any(|d| d.key == "ui.selection.fg" && d.severity == Severity::Warning)
         );
-        assert!(all.iter().any(|d| d.key == "ui.not_a_role"));
+        let unknown = all.iter().find(|d| d.key == "ui.not_a_role").unwrap();
+        assert_eq!((unknown.line, unknown.column), (3, 1), "ロールのキーの位置");
         assert!(
             all.iter()
                 .any(|d| d.key == "syntax" && d.severity == Severity::Info)
+        );
+    }
+
+    #[test]
+    fn 親のファイルの知らないロールは親のファイルで知らせる() {
+        let read = files(&[
+            ("child", "[meta]\ninherits = \"parent\"\n"),
+            ("parent", "[ui]\n\n  nope = { fg = \"#ffffff\" }\n"),
+        ]);
+        let (t, reports) = load_theme("child", &read);
+        assert!(t.is_some());
+        assert_eq!(reports.len(), 1, "{reports:?}");
+        let (file, ds) = &reports[0];
+        assert_eq!(file, "themes/parent.toml");
+        assert_eq!(
+            (ds[0].key.as_str(), ds[0].line, ds[0].column),
+            ("ui.nope", 3, 3)
         );
     }
 

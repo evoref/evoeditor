@@ -79,6 +79,6 @@
 2:20	Warning	ui.selection.fg	"nope"
   The value nope of ui.selection.fg cannot be used
   Allowed values: #rrggbb, #rgb, ansi.<name>, ansi.<0-255>, default. This item is ignored
-0:0	Warning	ui.not_a_role	""
+3:1	Warning	ui.not_a_role	""
   There is no configuration item named ui.not_a_role
   See the bundled config.example.toml for the available items
