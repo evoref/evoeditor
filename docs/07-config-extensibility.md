@@ -203,11 +203,11 @@ provider = "osc52"
 
 ### 4.1 スキーマの正の情報源
 
-スキーマは **Rust の型 (`ResolvedConfig` とその部分構造体、serde derive)** を正とし、以下を同じ定義から自動生成する。手書きの二重管理をしない。
+スキーマは **eve-config の宣言の表** (メタ表。`crates/eve-config/src/config.rs` の `config_keys!` と、列挙値の `config_enum!`) を正とする。`macro_rules!` だけで書き、proc-macro・serde derive・build.rs は使わない (依存と起動経路を増やさない。v0.3 の M17、STR-E2)。表は公開キー 1 つを 1 行に、フィールド・型・既定値・フルキー・読み方 (範囲つきの整数 `int(min, max)`・真偽値 `boolean`・列挙値 `choice`・別名や後の版の値を扱う個別の関数 `custom(f)`) で書き、列挙値は変種と設定ファイルの値 (許容値。診断に出す順) の対で書く。この表から、設定値の型 (`Config`) とその既定値、公開キーの一覧、読込と検証、`config.reload` の変わった項目 (`changed_keys`)、`--dump-config` の値の表記と、診断に出す既定値の表記を生成する。手書きの二重管理をしない。表の外にある正本とは試験で突合する: §5 の表 (公開前のキーの一覧 `reserved.rs` が §5 の表のキーから公開キーを除いたものと一致すること。eve-core の試験 `config_reserved`) と、同梱の `config.example.toml` (宣言の表の全公開キーを既定値で書いていること。eve-config の試験)。範囲外の値を丸める項目 (§4.2) を足すときは、読み方を表に足す。以下を同じ表から生成する。
 
 | 生成物 | 用途 | 手段 (案) | 版 |
 |---|---|---|---|
-| 既定値入りの注釈付き設定例 (`evoeditor --dump-config --defaults --annotated`) | 初心者が「コピーして編集」できる雛形。項目ごとに説明コメントと既定値 | **v0.1 は手書きの注釈付き雛形 `config.example.toml` を同梱** し、CI で既定値と突合する (09 §11.2。v0.1 は eve-config の既定値を出すテストで、v0.2 から `--dump-config --defaults` で)。doc コメント収集マクロ (proc-macro 依存またはメタ表の二重管理) は v0.5 で検討 | v0.1 (手書き) / v0.5 (生成) |
+| 既定値入りの注釈付き設定例 (`evoeditor --dump-config --defaults --annotated`) | 初心者が「コピーして編集」できる雛形。項目ごとに説明コメントと既定値 | **v0.1 は手書きの注釈付き雛形 `config.example.toml` を同梱** し、CI で既定値と突合する (09 §11.2。v0.1 は eve-config の既定値を出すテストで、v0.2 から `--dump-config --defaults` で。v0.3 から宣言の表の全公開キーを書いていることも確かめる)。doc コメント収集マクロ (proc-macro 依存またはメタ表の二重管理) は v0.5 で検討 | v0.1 (手書き) / v0.5 (生成) |
 | JSON Schema (`evoeditor --dump-schema`) | 他エディタ (VS Code, taplo) での補完・検証 | `schemars` (optional feature、起動経路に含めない) | v0.5 (Could) |
 | ヘルプ画面の設定一覧 | FR-514 (設定一覧は追加分) | メタ表 | v0.5 |
 

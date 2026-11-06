@@ -1,7 +1,10 @@
 //! ユーザー層の設定ファイル (`config.toml`) の読込と検証 (docs/07 §4.2・§5.0、01 FR-701〜703)。
 //!
-//! 公開キーは v0.1 の 7 個と、v0.2 で足した `file.swap.*` の 5 個。ファイルが無い・壊れている・値が不正なときも `Config` は必ず返り、
-//! 問題は `Diagnostic` の列として返す (最初のエラーで止まらない)。不正な項目は既定値に戻す。
+//! 公開キーは宣言の表 (`config_keys!`、07 §4.1) で決め、`Config`・既定値・読込・`--dump-config` の表記をそこから生成する。
+//! ファイルが無い・壊れている・値が不正なときも `Config` は必ず返り、問題は `Diagnostic` の列として返す
+//! (最初のエラーで止まらない)。不正な項目は既定値に戻す。
+
+use std::sync::OnceLock;
 
 use toml::Spanned;
 use toml::de::{DeString, DeTable, DeValue};
@@ -70,28 +73,167 @@ pub struct Diagnostic {
     pub column: u32,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum IndentUnit {
-    Tab,
-    Space,
+/// 公開キーの値の TOML の表記 (`--dump-config` の出力と、診断の既定値の表記)。
+pub(crate) trait ConfigValue {
+    fn toml(&self) -> String;
 }
 
-/// Backspace の削除の単位 (`editor.backspace_unit`、03 §13.1、OQ-45)。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum BackspaceUnit {
-    /// 書記素クラスタ単位 (既定)。
-    Grapheme,
-    /// コードポイント単位 (結合文字・ハングル字母を 1 つずつ消す)。
-    Codepoint,
+macro_rules! plain_value {
+    ($($ty:ty),*) => {
+        $(impl ConfigValue for $ty {
+            fn toml(&self) -> String {
+                self.to_string()
+            }
+        })*
+    };
+}
+plain_value!(u8, u16, u32, u64, bool);
+
+impl ConfigValue for String {
+    fn toml(&self) -> String {
+        format!("\"{self}\"")
+    }
 }
 
-/// 背景を塗るテーマの明暗 (`theme.background`、07 §5.4・§8.6)。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ThemeBackground {
-    /// テーマの名前どおり (既定)。
-    Auto,
-    Dark,
-    Light,
+impl ConfigValue for Option<crate::Locale> {
+    fn toml(&self) -> String {
+        format!("\"{}\"", self.map_or("auto", |l| l.code()))
+    }
+}
+
+/// 列挙値の宣言: `型 { 変種 = "設定ファイルの値", ... }`。許容値の一覧 (`NAMES`、並びは診断に出す順)・
+/// 値からの変換・TOML の表記を生成する。
+macro_rules! config_enum {
+    ($(
+        $(#[$meta:meta])*
+        $ty:ident { $( $(#[$vmeta:meta])* $var:ident = $name:literal, )* }
+    )*) => {$(
+        $(#[$meta])*
+        #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+        pub enum $ty {
+            $( $(#[$vmeta])* $var, )*
+        }
+
+        impl $ty {
+            /// 設定ファイルに書ける値 (許容値)。
+            pub(crate) const NAMES: &'static [&'static str] = &[$($name),*];
+
+            pub(crate) fn from_name(s: &str) -> Option<$ty> {
+                match s {
+                    $($name => Some($ty::$var),)*
+                    _ => None,
+                }
+            }
+
+            pub(crate) fn name(self) -> &'static str {
+                match self {
+                    $($ty::$var => $name,)*
+                }
+            }
+        }
+
+        impl ConfigValue for $ty {
+            fn toml(&self) -> String {
+                format!("\"{}\"", self.name())
+            }
+        }
+    )*};
+}
+
+config_enum! {
+    IndentUnit {
+        Tab = "tab",
+        Space = "space",
+    }
+
+    /// Backspace の削除の単位 (`editor.backspace_unit`、03 §13.1、OQ-45)。
+    BackspaceUnit {
+        /// 書記素クラスタ単位 (既定)。
+        Grapheme = "grapheme",
+        /// コードポイント単位 (結合文字・ハングル字母を 1 つずつ消す)。
+        Codepoint = "codepoint",
+    }
+
+    /// 背景を塗るテーマの明暗 (`theme.background`、07 §5.4・§8.6)。
+    ThemeBackground {
+        /// テーマの名前どおり (既定)。
+        Auto = "auto",
+        Dark = "dark",
+        Light = "light",
+    }
+
+    /// 空白の可視化 (`view.show_whitespace`、03 §13.2、FR-508)。
+    ShowWhitespace {
+        /// 可視化しない。
+        Off = "off",
+        /// 全角スペース (U+3000) とタブ文字だけを記号で示す (既定)。
+        Minimal = "minimal",
+    }
+
+    /// 折り返しの方式 (`view.wrap`、03 §14.3、07 §5.3)。
+    WrapMode {
+        /// 折り返さない (水平スクロール、既定)。
+        Off = "off",
+        /// 幅いっぱいの書記素単位で折る。
+        Soft = "soft",
+        /// 単語境界を優先して折る。
+        Word = "word",
+    }
+
+    /// 折り返した継続行のインデント (`view.wrap_indent`)。
+    WrapIndent {
+        None = "none",
+        /// 論理行のインデント幅で揃える (既定)。
+        Same = "same",
+    }
+
+    /// OSC 52 でクリップボードへ書く方針 (`clipboard.osc52`、05 §8.1)。
+    Osc52Policy {
+        /// SSH 接続中、またはシステムのクリップボードに書けないとき (既定)。
+        Auto = "auto",
+        /// 端末が対応していれば、いつも書く。
+        Always = "always",
+        /// 書かない。
+        Never = "never",
+    }
+
+    /// 外部変更の扱い (`file.reload_on_external_change`、03 §9.5)。
+    ExternalChangePolicy {
+        /// いつも確認する。
+        Ask = "ask",
+        /// dirty でなければ確認なしで再読込する (既定)。
+        AutoIfUnmodified = "auto_if_unmodified",
+        /// フォーカス復帰で確かめない (明示のコマンドと保存時の照合は行う)。
+        Never = "never",
+    }
+
+    /// 新規ファイル・判定不能時の文字コード (`file.default_encoding`)。別名は `encoding` で正規名に寄せる。
+    DefaultEncoding {
+        Utf8 = "utf-8",
+        Utf8Bom = "utf-8-bom",
+        Utf16Le = "utf-16le",
+        Utf16Be = "utf-16be",
+        ShiftJis = "shift_jis",
+        EucJp = "euc-jp",
+        Iso2022Jp = "iso-2022-jp",
+        /// OS ロケール由来のヒント (docs/05 §6)。
+        System = "system",
+    }
+
+    DefaultLineEnding {
+        Lf = "lf",
+        Crlf = "crlf",
+        Cr = "cr",
+        Native = "native",
+    }
+
+    ColorMode {
+        Auto = "auto",
+        TrueColor = "truecolor",
+        Color256 = "256",
+        Color16 = "16",
+        None = "none",
+    }
 }
 
 /// テーマの名前として使える文字列か (組込みの名前、またはテーマファイル `themes/<name>.toml` の名前。
@@ -102,266 +244,155 @@ pub fn is_theme_name(s: &str) -> bool {
             .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
 }
 
-/// 空白の可視化 (`view.show_whitespace`、03 §13.2、FR-508)。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ShowWhitespace {
-    /// 可視化しない。
-    Off,
-    /// 全角スペース (U+3000) とタブ文字だけを記号で示す (既定)。
-    Minimal,
+/// 公開キー 1 つの値の読み方 (`config_keys!` の 4 列目)。
+/// - `int(min, max)`: 範囲 `min..=max` の整数 (範囲外は警告して既定値)。
+/// - `boolean`: 真偽値。
+/// - `choice`: `config_enum!` で宣言した列挙値 (許容値の外は警告して既定値)。
+/// - `custom(f)`: 関数 `f(cx, key, v) -> Option<型>` で読む (別名・後の版の値など、表で書けないもの)。
+macro_rules! read_value {
+    ($cx:expr, $key:expr, $v:expr, $ty:ty, int($min:expr, $max:expr)) => {
+        $cx.int($key, $v, $min, $max).map(|n| n as $ty)
+    };
+    ($cx:expr, $key:expr, $v:expr, $ty:ty, boolean) => {
+        $cx.boolean($key, $v)
+    };
+    ($cx:expr, $key:expr, $v:expr, $ty:ty, choice) => {
+        $cx.string($key, $v, <$ty>::NAMES)
+            .and_then(|s| <$ty>::from_name(&s))
+    };
+    ($cx:expr, $key:expr, $v:expr, $ty:ty, custom($f:expr)) => {
+        $f($cx, $key, $v)
+    };
 }
 
-/// 折り返しの方式 (`view.wrap`、03 §14.3、07 §5.3)。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum WrapMode {
-    /// 折り返さない (水平スクロール、既定)。
-    Off,
-    /// 幅いっぱいの書記素単位で折る。
-    Soft,
-    /// 単語境界を優先して折る。
-    Word,
-}
-
-/// 折り返した継続行のインデント (`view.wrap_indent`)。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum WrapIndent {
-    None,
-    /// 論理行のインデント幅で揃える (既定)。
-    Same,
-}
-
-/// OSC 52 でクリップボードへ書く方針 (`clipboard.osc52`、05 §8.1)。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Osc52Policy {
-    /// SSH 接続中、またはシステムのクリップボードに書けないとき (既定)。
-    Auto,
-    /// 端末が対応していれば、いつも書く。
-    Always,
-    /// 書かない。
-    Never,
-}
-
-/// 外部変更の扱い (`file.reload_on_external_change`、03 §9.5)。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ExternalChangePolicy {
-    /// いつも確認する。
-    Ask,
-    /// dirty でなければ確認なしで再読込する (既定)。
-    AutoIfUnmodified,
-    /// フォーカス復帰で確かめない (明示のコマンドと保存時の照合は行う)。
-    Never,
-}
-
-/// 新規ファイル・判定不能時の文字コード (`file.default_encoding`)。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum DefaultEncoding {
-    Utf8,
-    Utf8Bom,
-    Utf16Le,
-    Utf16Be,
-    ShiftJis,
-    EucJp,
-    Iso2022Jp,
-    /// OS ロケール由来のヒント (docs/05 §6)。
-    System,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum DefaultLineEnding {
-    Lf,
-    Crlf,
-    Cr,
-    Native,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ColorMode {
-    Auto,
-    TrueColor,
-    Color256,
-    Color16,
-    None,
-}
-
-/// 公開キー (v0.1 の 7 個 (docs/07 §5.0) と、v0.2 で足した `file.swap.*` の 5 個)。`Default` が既定値。
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Config {
-    pub tab_width: u8,
-    pub indent_unit: IndentUnit,
-    pub indent_width: u8,
-    pub default_encoding: DefaultEncoding,
-    pub default_line_ending: DefaultLineEnding,
-    /// East Asian Ambiguous の幅 (1 か 2)。
-    pub ambiguous_width: u8,
-    pub color_mode: ColorMode,
-    /// `file.swap.enabled`: swap-lite を使うか (FR-118、docs/07 §5.2)。
-    pub swap_enabled: bool,
-    /// `file.swap.interval_ms`: 最後の入力からスワップを書くまでの遅延。
-    pub swap_interval_ms: u32,
-    /// `file.swap.min_interval_ms`: 同じ文書のスワップの最短の間隔。
-    pub swap_min_interval_ms: u32,
-    /// `file.swap.max_bytes`: これを超える文書はスワップの対象外。
-    pub swap_max_bytes: u64,
-    /// `file.swap.exclude_secret_files`: 秘密ファイルの名前に一致する文書をスワップしない (OQ-109)。
-    pub swap_exclude_secret_files: bool,
-    /// `ui.locale`: UI の言語。`None` は `auto` (環境変数・OS ロケールで決める、docs/07 §17.1)。
-    pub ui_locale: Option<crate::Locale>,
-    /// `editor.undo.total_max_bytes`: プロセス全体の Undo 履歴の上限 (NFR-203、docs/03 §7.5)。
-    pub undo_total_max_bytes: u64,
-    /// `editor.backspace_unit`: Backspace の削除の単位 (FR-201)。
-    pub backspace_unit: BackspaceUnit,
-    /// `view.wrap`: 折り返しの方式 (FR-506)。
-    pub wrap: WrapMode,
-    /// `view.wrap_indent`: 継続行のインデント。
-    pub wrap_indent: WrapIndent,
-    /// `view.wrap_kinsoku`: 禁則処理 (OQ-57)。
-    pub wrap_kinsoku: bool,
-    /// `view.show_whitespace`: 空白の可視化。
-    pub show_whitespace: ShowWhitespace,
-    /// `theme.name`: テーマ。
-    pub theme_name: String,
-    /// `theme.background`: 背景を塗るテーマの明暗。
-    pub theme_background: ThemeBackground,
-    /// `ui.mouse`: マウスの入力を使うか (FR-307、04 §6.8)。
-    pub mouse: bool,
-    /// `ui.hint_bar`: 画面下のヒントバーを出すか (FR-504、04 §8.5)。`ui.toggle_hint_bar` で実行中に切り替えられる。
-    pub hint_bar: bool,
-    /// `ui.mouse_wheel_lines`: ホイール 1 目盛りのスクロール量 (表示行)。
-    pub mouse_wheel_lines: u8,
-    /// `ui.which_key_delay_ms`: チョードの保留から which-key を出すまでの時間 (04 §7.4)。
-    pub which_key_delay_ms: u16,
-    /// `clipboard.osc52`: OSC 52 の送出方針。
-    pub osc52: Osc52Policy,
-    /// `clipboard.osc52_max_bytes`: OSC 52 の本文 (base64) の上限。超えたら送らない (05 §8.4)。
-    pub osc52_max_bytes: u32,
-    /// `file.huge_file_warn_bytes`: これを超えるファイルは開く前に警告する (FR-127、docs/03 §11.2)。
-    pub huge_file_warn_bytes: u64,
-    /// `file.long_line_threshold`: これを超える行を長大行として扱う (NFR-106、docs/03 §11.5)。
-    pub long_line_threshold: u64,
-    /// `file.reload_on_external_change`: 外部変更の扱い (FR-117)。
-    pub reload_on_external_change: ExternalChangePolicy,
-}
-
-impl Default for Config {
-    fn default() -> Config {
-        Config {
-            tab_width: 4,
-            indent_unit: IndentUnit::Space,
-            indent_width: 4,
-            default_encoding: DefaultEncoding::Utf8,
-            default_line_ending: DefaultLineEnding::Lf,
-            ambiguous_width: 1,
-            color_mode: ColorMode::Auto,
-            swap_enabled: true,
-            swap_interval_ms: 2_000,
-            swap_min_interval_ms: 10_000,
-            swap_max_bytes: 64 * 1024 * 1024,
-            swap_exclude_secret_files: true,
-            ui_locale: None,
-            undo_total_max_bytes: 256 * 1024 * 1024,
-            backspace_unit: BackspaceUnit::Grapheme,
-            wrap: WrapMode::Off,
-            wrap_indent: WrapIndent::Same,
-            wrap_kinsoku: true,
-            show_whitespace: ShowWhitespace::Minimal,
-            theme_name: "default".to_owned(),
-            theme_background: ThemeBackground::Auto,
-            mouse: true,
-            hint_bar: true,
-            mouse_wheel_lines: 3,
-            which_key_delay_ms: 500,
-            osc52: Osc52Policy::Auto,
-            osc52_max_bytes: 100_000,
-            huge_file_warn_bytes: 512 * 1024 * 1024,
-            long_line_threshold: 1024 * 1024,
-            reload_on_external_change: ExternalChangePolicy::AutoIfUnmodified,
+/// 公開キーの宣言の表 (docs/07 §4.1): `フィールド: 型 = 既定値, "キー", 読み方;`。
+/// ここから `Config` とその `Default`、公開キーの一覧 `KEYS`、`changed_keys`、読込 (`Cx::value`)、
+/// TOML の表記 (`declared_values`。`--dump-config` と `default_display` が使う) を生成する。
+/// キーを足すときは、この表に 1 行足す (07 §5 の表と `dist/config.example.toml` も。どちらも試験が突合する)。
+macro_rules! config_keys {
+    ($(
+        $(#[$doc:meta])*
+        $field:ident: $ty:ty = $default:expr, $key:literal, $read:ident $(($($arg:expr),*))?;
+    )*) => {
+        /// 公開キーの値 (宣言の表 `config_keys!` から生成)。`Default` が既定値。
+        #[derive(Debug, Clone, PartialEq, Eq)]
+        pub struct Config {
+            $( $(#[$doc])* pub $field: $ty, )*
         }
-    }
+
+        impl Default for Config {
+            fn default() -> Config {
+                Config {
+                    $( $field: $default, )*
+                }
+            }
+        }
+
+        /// 公開キー (宣言の順)。
+        pub(crate) const KEYS: &[&str] = &[$($key),*];
+
+        /// `a` から `b` で値が変わった公開キー (`config.reload` の要約、07 §6 の規則 4)。並びは宣言の順。
+        pub fn changed_keys(a: &Config, b: &Config) -> Vec<&'static str> {
+            let mut out = Vec::new();
+            $(
+                if a.$field != b.$field {
+                    out.push($key);
+                }
+            )*
+            out
+        }
+
+        /// 公開キーの (キー, TOML の値の表記)。宣言の順。
+        pub(crate) fn declared_values(c: &Config) -> Vec<(&'static str, String)> {
+            vec![$( ($key, ConfigValue::toml(&c.$field)), )*]
+        }
+
+        impl Cx<'_> {
+            /// 公開キー `key` の値を読む。誤りは診断を積んで、値を変えない (既定値または下の層の値のまま)。
+            fn value(&mut self, key: &str, v: &Spanned<DeValue<'_>>) {
+                match key {
+                    $(
+                        $key => {
+                            if let Some(x) = read_value!(self, key, v, $ty, $read $(($($arg),*))?) {
+                                self.out.config.$field = x;
+                            }
+                        }
+                    )*
+                    _ => {}
+                }
+            }
+        }
+    };
 }
 
-/// `a` から `b` で値が変わった公開キー (`config.reload` の要約、07 §6 の規則 4)。並びは `Config` のフィールドの順。
-pub fn changed_keys(a: &Config, b: &Config) -> Vec<&'static str> {
-    // フィールドを足したら、ここにも足す (下の試験が既定値との差で全フィールドを確かめる)
-    [
-        ("editor.tab_width", a.tab_width != b.tab_width),
-        ("editor.indent_unit", a.indent_unit != b.indent_unit),
-        ("editor.indent_width", a.indent_width != b.indent_width),
-        (
-            "file.default_encoding",
-            a.default_encoding != b.default_encoding,
-        ),
-        (
-            "file.default_line_ending",
-            a.default_line_ending != b.default_line_ending,
-        ),
-        (
-            "view.ambiguous_width",
-            a.ambiguous_width != b.ambiguous_width,
-        ),
-        ("theme.color_mode", a.color_mode != b.color_mode),
-        ("file.swap.enabled", a.swap_enabled != b.swap_enabled),
-        (
-            "file.swap.interval_ms",
-            a.swap_interval_ms != b.swap_interval_ms,
-        ),
-        (
-            "file.swap.min_interval_ms",
-            a.swap_min_interval_ms != b.swap_min_interval_ms,
-        ),
-        ("file.swap.max_bytes", a.swap_max_bytes != b.swap_max_bytes),
-        (
-            "file.swap.exclude_secret_files",
-            a.swap_exclude_secret_files != b.swap_exclude_secret_files,
-        ),
-        ("ui.locale", a.ui_locale != b.ui_locale),
-        (
-            "editor.undo.total_max_bytes",
-            a.undo_total_max_bytes != b.undo_total_max_bytes,
-        ),
-        (
-            "editor.backspace_unit",
-            a.backspace_unit != b.backspace_unit,
-        ),
-        ("view.wrap", a.wrap != b.wrap),
-        ("view.wrap_indent", a.wrap_indent != b.wrap_indent),
-        ("view.wrap_kinsoku", a.wrap_kinsoku != b.wrap_kinsoku),
-        (
-            "view.show_whitespace",
-            a.show_whitespace != b.show_whitespace,
-        ),
-        ("theme.name", a.theme_name != b.theme_name),
-        ("theme.background", a.theme_background != b.theme_background),
-        ("ui.mouse", a.mouse != b.mouse),
-        ("ui.hint_bar", a.hint_bar != b.hint_bar),
-        (
-            "ui.mouse_wheel_lines",
-            a.mouse_wheel_lines != b.mouse_wheel_lines,
-        ),
-        (
-            "ui.which_key_delay_ms",
-            a.which_key_delay_ms != b.which_key_delay_ms,
-        ),
-        ("clipboard.osc52", a.osc52 != b.osc52),
-        (
-            "clipboard.osc52_max_bytes",
-            a.osc52_max_bytes != b.osc52_max_bytes,
-        ),
-        (
-            "file.huge_file_warn_bytes",
-            a.huge_file_warn_bytes != b.huge_file_warn_bytes,
-        ),
-        (
-            "file.long_line_threshold",
-            a.long_line_threshold != b.long_line_threshold,
-        ),
-        (
-            "file.reload_on_external_change",
-            a.reload_on_external_change != b.reload_on_external_change,
-        ),
-    ]
-    .into_iter()
-    .filter_map(|(k, changed)| changed.then_some(k))
-    .collect()
+config_keys! {
+    /// `editor.tab_width`: タブ文字の表示幅。
+    tab_width: u8 = 4, "editor.tab_width", int(1, 16);
+    /// `editor.indent_unit`: インデントの操作で入れる単位。
+    indent_unit: IndentUnit = IndentUnit::Space, "editor.indent_unit", choice;
+    /// `editor.indent_width`: スペースのインデントの幅。
+    indent_width: u8 = 4, "editor.indent_width", int(1, 16);
+    /// `file.default_encoding`: 新規ファイル・判定不能時の文字コード。
+    default_encoding: DefaultEncoding = DefaultEncoding::Utf8,
+        "file.default_encoding", custom(read_encoding);
+    /// `file.default_line_ending`: 新規ファイルの改行。
+    default_line_ending: DefaultLineEnding = DefaultLineEnding::Lf,
+        "file.default_line_ending", choice;
+    /// `view.ambiguous_width`: East Asian Ambiguous の幅 (1 か 2)。
+    ambiguous_width: u8 = 1, "view.ambiguous_width", int(1, 2);
+    /// `theme.color_mode`: 色深度の判定の上書き。
+    color_mode: ColorMode = ColorMode::Auto, "theme.color_mode", choice;
+    /// `file.swap.enabled`: swap-lite を使うか (FR-118、docs/07 §5.2)。
+    swap_enabled: bool = true, "file.swap.enabled", boolean;
+    /// `file.swap.interval_ms`: 最後の入力からスワップを書くまでの遅延。
+    swap_interval_ms: u32 = 2_000, "file.swap.interval_ms", int(100, 600_000);
+    /// `file.swap.min_interval_ms`: 同じ文書のスワップの最短の間隔。
+    swap_min_interval_ms: u32 = 10_000, "file.swap.min_interval_ms", int(100, 3_600_000);
+    /// `file.swap.max_bytes`: これを超える文書はスワップの対象外。
+    swap_max_bytes: u64 = 64 * 1024 * 1024, "file.swap.max_bytes", int(1_048_576, 1 << 40);
+    /// `file.swap.exclude_secret_files`: 秘密ファイルの名前に一致する文書をスワップしない (OQ-109)。
+    swap_exclude_secret_files: bool = true, "file.swap.exclude_secret_files", boolean;
+    /// `ui.locale`: UI の言語。`None` は `auto` (環境変数・OS ロケールで決める、docs/07 §17.1)。
+    ui_locale: Option<crate::Locale> = None, "ui.locale", custom(read_locale);
+    /// `editor.undo.total_max_bytes`: プロセス全体の Undo 履歴の上限 (NFR-203、docs/03 §7.5)。
+    undo_total_max_bytes: u64 = 256 * 1024 * 1024,
+        "editor.undo.total_max_bytes", int(1_048_576, 1 << 40);
+    /// `editor.backspace_unit`: Backspace の削除の単位 (FR-201)。
+    backspace_unit: BackspaceUnit = BackspaceUnit::Grapheme, "editor.backspace_unit", choice;
+    /// `view.wrap`: 折り返しの方式 (FR-506)。
+    wrap: WrapMode = WrapMode::Off, "view.wrap", choice;
+    /// `view.wrap_indent`: 継続行のインデント。
+    wrap_indent: WrapIndent = WrapIndent::Same, "view.wrap_indent", choice;
+    /// `view.wrap_kinsoku`: 禁則処理 (OQ-57)。
+    wrap_kinsoku: bool = true, "view.wrap_kinsoku", boolean;
+    /// `view.show_whitespace`: 空白の可視化。
+    show_whitespace: ShowWhitespace = ShowWhitespace::Minimal,
+        "view.show_whitespace", custom(read_show_whitespace);
+    /// `theme.name`: テーマ。
+    theme_name: String = "default".to_owned(), "theme.name", custom(read_theme_name);
+    /// `theme.background`: 背景を塗るテーマの明暗。
+    theme_background: ThemeBackground = ThemeBackground::Auto, "theme.background", choice;
+    /// `ui.mouse`: マウスの入力を使うか (FR-307、04 §6.8)。
+    mouse: bool = true, "ui.mouse", boolean;
+    /// `ui.hint_bar`: 画面下のヒントバーを出すか (FR-504、04 §8.5)。`ui.toggle_hint_bar` で実行中に切り替えられる。
+    hint_bar: bool = true, "ui.hint_bar", boolean;
+    /// `ui.mouse_wheel_lines`: ホイール 1 目盛りのスクロール量 (表示行)。
+    mouse_wheel_lines: u8 = 3, "ui.mouse_wheel_lines", int(1, 20);
+    /// `ui.which_key_delay_ms`: チョードの保留から which-key を出すまでの時間 (04 §7.4)。
+    which_key_delay_ms: u16 = 500, "ui.which_key_delay_ms", int(0, 5_000);
+    /// `clipboard.osc52`: OSC 52 の送出方針。
+    osc52: Osc52Policy = Osc52Policy::Auto, "clipboard.osc52", choice;
+    /// `clipboard.osc52_max_bytes`: OSC 52 の本文 (base64) の上限。超えたら送らない (05 §8.4)。
+    osc52_max_bytes: u32 = 100_000, "clipboard.osc52_max_bytes", int(1_000, 16_777_216);
+    /// `file.huge_file_warn_bytes`: これを超えるファイルは開く前に警告する (FR-127、docs/03 §11.2)。
+    huge_file_warn_bytes: u64 = 512 * 1024 * 1024,
+        "file.huge_file_warn_bytes", int(1_048_576, 1 << 40);
+    /// `file.long_line_threshold`: これを超える行を長大行として扱う (NFR-106、docs/03 §11.5)。
+    /// 下限は長大行で表示する先頭 (64 KiB)。
+    long_line_threshold: u64 = 1024 * 1024, "file.long_line_threshold", int(65_536, 1 << 30);
+    /// `file.reload_on_external_change`: 外部変更の扱い (FR-117)。
+    reload_on_external_change: ExternalChangePolicy = ExternalChangePolicy::AutoIfUnmodified,
+        "file.reload_on_external_change", choice;
 }
 
 /// 読込の結果。
@@ -371,62 +402,21 @@ pub struct Loaded {
     pub diagnostics: Vec<Diagnostic>,
 }
 
+/// 公開キーを持つセクション (公開キーの先頭の名前。並びは `--dump-config` の出力の順、07 §5 の表の順)。
 const SECTIONS: &[&str] = &["editor", "file", "view", "theme", "ui", "clipboard"];
-pub(crate) const KEYS: &[&str] = &[
-    "editor.tab_width",
-    "editor.indent_unit",
-    "editor.indent_width",
-    "file.default_encoding",
-    "file.default_line_ending",
-    "view.ambiguous_width",
-    "theme.color_mode",
-    "file.swap.enabled",
-    "file.swap.interval_ms",
-    "file.swap.min_interval_ms",
-    "file.swap.max_bytes",
-    "file.swap.exclude_secret_files",
-    "ui.locale",
-    "editor.undo.total_max_bytes",
-    "editor.backspace_unit",
-    "view.wrap",
-    "view.wrap_indent",
-    "view.wrap_kinsoku",
-    "view.show_whitespace",
-    "theme.name",
-    "theme.background",
-    "ui.mouse",
-    "ui.hint_bar",
-    "ui.mouse_wheel_lines",
-    "ui.which_key_delay_ms",
-    "clipboard.osc52",
-    "clipboard.osc52_max_bytes",
-    "file.huge_file_warn_bytes",
-    "file.long_line_threshold",
-    "file.reload_on_external_change",
-];
 
-const INDENT_UNITS: &[&str] = &["tab", "space"];
-const BACKSPACE_UNITS: &[&str] = &["grapheme", "codepoint"];
 const THEME_NAMES: &[&str] = &["default", "default-dark", "default-light", "ansi"];
-const THEME_BACKGROUNDS: &[&str] = &["auto", "dark", "light"];
-const SHOW_WHITESPACE: &[&str] = &["off", "minimal"];
-const OSC52_POLICIES: &[&str] = &["auto", "always", "never"];
-const EXTERNAL_CHANGE_POLICIES: &[&str] = &["ask", "auto_if_unmodified", "never"];
-const WRAP_MODES: &[&str] = &["off", "soft", "word"];
-const WRAP_INDENTS: &[&str] = &["none", "same"];
-const ENCODINGS: &[&str] = &[
-    "utf-8",
-    "utf-8-bom",
-    "utf-16le",
-    "utf-16be",
-    "shift_jis",
-    "euc-jp",
-    "iso-2022-jp",
-    "system",
-];
-const LINE_ENDINGS: &[&str] = &["lf", "crlf", "cr", "native"];
-const COLOR_MODES: &[&str] = &["auto", "truecolor", "256", "16", "none"];
 const LOCALES: &[&str] = &["auto", "ja", "en"];
+
+/// `--dump-config` の並びの順位: セクション (`SECTIONS` の順)、セクションの直下のキー、入れ子のキー (`file.swap.*`)。
+pub(crate) fn dump_rank(key: &str) -> (usize, bool) {
+    let section = key.split('.').next().unwrap_or("");
+    let rank = SECTIONS
+        .iter()
+        .position(|s| *s == section)
+        .unwrap_or(SECTIONS.len());
+    (rank, key.matches('.').count() > 1)
+}
 
 /// 設定ファイルの本文を読む。`text` が空でも構文エラーでも `Config` を返す。
 pub fn load_str(text: &str) -> Loaded {
@@ -559,230 +549,6 @@ impl Cx<'_> {
         }
     }
 
-    fn value(&mut self, key: &str, v: &Spanned<DeValue<'_>>) {
-        match key {
-            "editor.tab_width" => {
-                if let Some(n) = self.int(key, v, 1, 16) {
-                    self.out.config.tab_width = n as u8;
-                }
-            }
-            "editor.indent_width" => {
-                if let Some(n) = self.int(key, v, 1, 16) {
-                    self.out.config.indent_width = n as u8;
-                }
-            }
-            "file.swap.enabled" => {
-                if let Some(b) = self.boolean(key, v) {
-                    self.out.config.swap_enabled = b;
-                }
-            }
-            "file.swap.exclude_secret_files" => {
-                if let Some(b) = self.boolean(key, v) {
-                    self.out.config.swap_exclude_secret_files = b;
-                }
-            }
-            "file.swap.interval_ms" => {
-                if let Some(n) = self.int(key, v, 100, 600_000) {
-                    self.out.config.swap_interval_ms = n as u32;
-                }
-            }
-            "file.swap.min_interval_ms" => {
-                if let Some(n) = self.int(key, v, 100, 3_600_000) {
-                    self.out.config.swap_min_interval_ms = n as u32;
-                }
-            }
-            "file.swap.max_bytes" => {
-                if let Some(n) = self.int(key, v, 1_048_576, 1 << 40) {
-                    self.out.config.swap_max_bytes = n as u64;
-                }
-            }
-            "view.ambiguous_width" => {
-                if let Some(n) = self.int(key, v, 1, 2) {
-                    self.out.config.ambiguous_width = n as u8;
-                }
-            }
-            "editor.indent_unit" => {
-                if let Some(s) = self.string(key, v, INDENT_UNITS) {
-                    self.out.config.indent_unit = match s.as_str() {
-                        "tab" => IndentUnit::Tab,
-                        _ => IndentUnit::Space,
-                    };
-                }
-            }
-            "editor.backspace_unit" => {
-                if let Some(s) = self.string(key, v, BACKSPACE_UNITS) {
-                    self.out.config.backspace_unit = match s.as_str() {
-                        "codepoint" => BackspaceUnit::Codepoint,
-                        _ => BackspaceUnit::Grapheme,
-                    };
-                }
-            }
-            "view.wrap" => {
-                if let Some(s) = self.string(key, v, WRAP_MODES) {
-                    self.out.config.wrap = match s.as_str() {
-                        "soft" => WrapMode::Soft,
-                        "word" => WrapMode::Word,
-                        _ => WrapMode::Off,
-                    };
-                }
-            }
-            "view.wrap_indent" => {
-                if let Some(s) = self.string(key, v, WRAP_INDENTS) {
-                    self.out.config.wrap_indent = match s.as_str() {
-                        "none" => WrapIndent::None,
-                        _ => WrapIndent::Same,
-                    };
-                }
-            }
-            "clipboard.osc52" => {
-                if let Some(s) = self.string(key, v, OSC52_POLICIES) {
-                    self.out.config.osc52 = match s.as_str() {
-                        "always" => Osc52Policy::Always,
-                        "never" => Osc52Policy::Never,
-                        _ => Osc52Policy::Auto,
-                    };
-                }
-            }
-            "clipboard.osc52_max_bytes" => {
-                if let Some(n) = self.int(key, v, 1_000, 16_777_216) {
-                    self.out.config.osc52_max_bytes = n as u32;
-                }
-            }
-            "file.huge_file_warn_bytes" => {
-                if let Some(n) = self.int(key, v, 1_048_576, 1 << 40) {
-                    self.out.config.huge_file_warn_bytes = n as u64;
-                }
-            }
-            "file.reload_on_external_change" => {
-                if let Some(s) = self.string(key, v, EXTERNAL_CHANGE_POLICIES) {
-                    self.out.config.reload_on_external_change = match s.as_str() {
-                        "ask" => ExternalChangePolicy::Ask,
-                        "never" => ExternalChangePolicy::Never,
-                        _ => ExternalChangePolicy::AutoIfUnmodified,
-                    };
-                }
-            }
-            "file.long_line_threshold" => {
-                // 下限は長大行で表示する先頭 (64 KiB)
-                if let Some(n) = self.int(key, v, 65_536, 1 << 30) {
-                    self.out.config.long_line_threshold = n as u64;
-                }
-            }
-            "ui.mouse" => {
-                if let Some(b) = self.boolean(key, v) {
-                    self.out.config.mouse = b;
-                }
-            }
-            "ui.hint_bar" => {
-                if let Some(b) = self.boolean(key, v) {
-                    self.out.config.hint_bar = b;
-                }
-            }
-            "ui.which_key_delay_ms" => {
-                if let Some(n) = self.int(key, v, 0, 5_000) {
-                    self.out.config.which_key_delay_ms = n as u16;
-                }
-            }
-            "ui.mouse_wheel_lines" => {
-                if let Some(n) = self.int(key, v, 1, 20) {
-                    self.out.config.mouse_wheel_lines = n as u8;
-                }
-            }
-            "theme.name" => {
-                // 組込みの名前か、テーマファイル (`<設定ディレクトリ>/themes/<name>.toml`) の名前。ファイルが有るかは読むときに見る
-                if let Some(s) = self.raw_string(key, v) {
-                    if is_theme_name(&s) {
-                        self.out.config.theme_name = s;
-                    } else {
-                        self.invalid(key, THEME_NAMES, v);
-                    }
-                }
-            }
-            "theme.background" => {
-                if let Some(s) = self.string(key, v, THEME_BACKGROUNDS) {
-                    self.out.config.theme_background = match s.as_str() {
-                        "dark" => ThemeBackground::Dark,
-                        "light" => ThemeBackground::Light,
-                        _ => ThemeBackground::Auto,
-                    };
-                }
-            }
-            "view.show_whitespace" => {
-                let Some(s) = self.raw_string(key, v) else {
-                    return;
-                };
-                match s.as_str() {
-                    "off" => self.out.config.show_whitespace = ShowWhitespace::Off,
-                    "minimal" => self.out.config.show_whitespace = ShowWhitespace::Minimal,
-                    // 後の版の値 (v0.5): 未対応の情報診断にして既定の `minimal` を使う (07 §5.3)
-                    "ideographic" | "trailing" | "all" => {
-                        self.diag(
-                            Severity::Info,
-                            DiagKind::Unsupported,
-                            key.to_owned(),
-                            v.span().start,
-                        );
-                        self.set_value(v);
-                    }
-                    _ => self.invalid(key, SHOW_WHITESPACE, v),
-                }
-            }
-            "view.wrap_kinsoku" => {
-                if let Some(b) = self.boolean(key, v) {
-                    self.out.config.wrap_kinsoku = b;
-                }
-            }
-            "file.default_encoding" => {
-                let Some(s) = self.raw_string(key, v) else {
-                    return;
-                };
-                match encoding(&s) {
-                    Some(e) => self.out.config.default_encoding = e,
-                    None => self.invalid(key, ENCODINGS, v),
-                }
-            }
-            "file.default_line_ending" => {
-                if let Some(s) = self.string(key, v, LINE_ENDINGS) {
-                    self.out.config.default_line_ending = match s.as_str() {
-                        "crlf" => DefaultLineEnding::Crlf,
-                        "cr" => DefaultLineEnding::Cr,
-                        "native" => DefaultLineEnding::Native,
-                        _ => DefaultLineEnding::Lf,
-                    };
-                }
-            }
-            "editor.undo.total_max_bytes" => {
-                if let Some(n) = self.int(key, v, 1_048_576, 1 << 40) {
-                    self.out.config.undo_total_max_bytes = n as u64;
-                }
-            }
-            "ui.locale" => {
-                let Some(s) = self.raw_string(key, v) else {
-                    return;
-                };
-                if s.trim().eq_ignore_ascii_case("auto") {
-                    self.out.config.ui_locale = None;
-                } else if let Some(l) = crate::Locale::parse(&s) {
-                    self.out.config.ui_locale = Some(l);
-                } else {
-                    self.invalid(key, LOCALES, v);
-                }
-            }
-            "theme.color_mode" => {
-                if let Some(s) = self.string(key, v, COLOR_MODES) {
-                    self.out.config.color_mode = match s.as_str() {
-                        "truecolor" => ColorMode::TrueColor,
-                        "256" => ColorMode::Color256,
-                        "16" => ColorMode::Color16,
-                        "none" => ColorMode::None,
-                        _ => ColorMode::Auto,
-                    };
-                }
-            }
-            _ => {}
-        }
-    }
-
     fn mismatch(&mut self, key: &str, v: &Spanned<DeValue<'_>>, expected: &'static str) {
         self.diag(
             Severity::Warning,
@@ -886,19 +652,82 @@ impl Cx<'_> {
     }
 }
 
-/// `file.default_encoding` の値。WHATWG の別名ラベルは正規名に寄せる (docs/07 §5.2)。
+/// `file.default_encoding`: 正規名か WHATWG の別名ラベル (docs/07 §5.2)。
+fn read_encoding(cx: &mut Cx<'_>, key: &str, v: &Spanned<DeValue<'_>>) -> Option<DefaultEncoding> {
+    let s = cx.raw_string(key, v)?;
+    let e = encoding(&s);
+    if e.is_none() {
+        cx.invalid(key, DefaultEncoding::NAMES, v);
+    }
+    e
+}
+
+/// `view.show_whitespace`: 後の版の値 (v0.5) は、未対応の情報診断にして既定の `minimal` を使う (07 §5.3)。
+fn read_show_whitespace(
+    cx: &mut Cx<'_>,
+    key: &str,
+    v: &Spanned<DeValue<'_>>,
+) -> Option<ShowWhitespace> {
+    let s = cx.raw_string(key, v)?;
+    if matches!(s.as_str(), "ideographic" | "trailing" | "all") {
+        cx.diag(
+            Severity::Info,
+            DiagKind::Unsupported,
+            key.to_owned(),
+            v.span().start,
+        );
+        cx.set_value(v);
+        return None;
+    }
+    let w = ShowWhitespace::from_name(&s);
+    if w.is_none() {
+        cx.invalid(key, ShowWhitespace::NAMES, v);
+    }
+    w
+}
+
+/// `theme.name`: 組込みの名前か、テーマファイル (`<設定ディレクトリ>/themes/<name>.toml`) の名前。
+/// ファイルが有るかは読むときに見る。
+fn read_theme_name(cx: &mut Cx<'_>, key: &str, v: &Spanned<DeValue<'_>>) -> Option<String> {
+    let s = cx.raw_string(key, v)?;
+    if is_theme_name(&s) {
+        Some(s)
+    } else {
+        cx.invalid(key, THEME_NAMES, v);
+        None
+    }
+}
+
+/// `ui.locale`: 言語タグか `auto` (`Some(None)`)。
+fn read_locale(
+    cx: &mut Cx<'_>,
+    key: &str,
+    v: &Spanned<DeValue<'_>>,
+) -> Option<Option<crate::Locale>> {
+    let s = cx.raw_string(key, v)?;
+    if s.trim().eq_ignore_ascii_case("auto") {
+        Some(None)
+    } else if let Some(l) = crate::Locale::parse(&s) {
+        Some(Some(l))
+    } else {
+        cx.invalid(key, LOCALES, v);
+        None
+    }
+}
+
+/// `file.default_encoding` の値。正規名 (`DefaultEncoding::NAMES`) のほか、WHATWG の別名ラベルを正規名に寄せる
+/// (docs/07 §5.2)。大文字小文字は区別しない。
 fn encoding(s: &str) -> Option<DefaultEncoding> {
-    Some(match s.to_ascii_lowercase().as_str() {
-        "utf-8" | "utf8" | "unicode-1-1-utf-8" => DefaultEncoding::Utf8,
-        "utf-8-bom" => DefaultEncoding::Utf8Bom,
-        "utf-16le" | "utf-16" | "ucs-2" | "unicode" | "csunicode" => DefaultEncoding::Utf16Le,
-        "utf-16be" | "unicodefffe" => DefaultEncoding::Utf16Be,
-        "shift_jis" | "shift-jis" | "sjis" | "windows-31j" | "ms_kanji" | "csshiftjis"
-        | "x-sjis" | "ms932" | "cp932" => DefaultEncoding::ShiftJis,
-        "euc-jp" | "x-euc-jp" | "cseucpkdfmtjapanese" => DefaultEncoding::EucJp,
-        "iso-2022-jp" | "csiso2022jp" => DefaultEncoding::Iso2022Jp,
-        "system" => DefaultEncoding::System,
-        _ => return None,
+    let s = s.to_ascii_lowercase();
+    DefaultEncoding::from_name(&s).or(match s.as_str() {
+        "utf8" | "unicode-1-1-utf-8" => Some(DefaultEncoding::Utf8),
+        "utf-16" | "ucs-2" | "unicode" | "csunicode" => Some(DefaultEncoding::Utf16Le),
+        "unicodefffe" => Some(DefaultEncoding::Utf16Be),
+        "shift-jis" | "sjis" | "windows-31j" | "ms_kanji" | "csshiftjis" | "x-sjis" | "ms932"
+        | "cp932" => Some(DefaultEncoding::ShiftJis),
+        "x-euc-jp" | "cseucpkdfmtjapanese" => Some(DefaultEncoding::EucJp),
+        "csiso2022jp" => Some(DefaultEncoding::Iso2022Jp),
+        _ => None,
     })
 }
 
@@ -910,36 +739,15 @@ fn is_reserved_key(full: &str) -> bool {
         .any(|r| *r == full || r.starts_with(&prefix))
 }
 
-/// 公開キーの既定値の表記 (診断の「既定値 {default} を使います」に入れる)。未知のキーは空。
+/// 公開キーの既定値の表記 (診断の「既定値 {default} を使います」に入れる)。宣言の表の既定値の TOML の表記から
+/// 引用符を除いたもの。未知のキーは空。
 pub fn default_display(key: &str) -> &'static str {
-    match key {
-        "editor.tab_width" | "editor.indent_width" => "4",
-        "editor.indent_unit" => "space",
-        "editor.backspace_unit" => "grapheme",
-        "view.wrap" => "off",
-        "view.show_whitespace" => "minimal",
-        "theme.name" => "default",
-        "theme.background" => "auto",
-        "view.wrap_indent" => "same",
-        "view.wrap_kinsoku" | "ui.mouse" | "ui.hint_bar" => "true",
-        "ui.mouse_wheel_lines" => "3",
-        "ui.which_key_delay_ms" => "500",
-        "clipboard.osc52" => "auto",
-        "clipboard.osc52_max_bytes" => "100000",
-        "file.huge_file_warn_bytes" => "536870912",
-        "file.long_line_threshold" => "1048576",
-        "file.reload_on_external_change" => "auto_if_unmodified",
-        "file.default_encoding" => "utf-8",
-        "file.default_line_ending" => "lf",
-        "view.ambiguous_width" => "1",
-        "file.swap.enabled" | "file.swap.exclude_secret_files" => "true",
-        "file.swap.interval_ms" => "2000",
-        "file.swap.min_interval_ms" => "10000",
-        "file.swap.max_bytes" => "67108864",
-        "editor.undo.total_max_bytes" => "268435456",
-        "theme.color_mode" | "ui.locale" => "auto",
-        _ => "",
-    }
+    static DEFAULTS: OnceLock<Vec<(&'static str, String)>> = OnceLock::new();
+    DEFAULTS
+        .get_or_init(|| declared_values(&Config::default()))
+        .iter()
+        .find(|(k, _)| *k == key)
+        .map_or("", |(_, v)| v.trim_matches('"'))
 }
 
 /// 編集距離 2 以下で最も近い候補 (同点は先頭)。
