@@ -13,7 +13,7 @@ use eve_view::{CellPos, CellSize, ColorDepth, Frame, OverlayModel};
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 
-use crate::buffer::{PaneRender, Writer, render_panes};
+use crate::buffer::{PaneRender, Writer};
 use crate::glyphs::Glyphs;
 use crate::theme::Theme;
 
@@ -95,11 +95,12 @@ pub fn render_screen(
     if ScreenLayout::is_too_small(window) {
         return render_too_small(frame, window, depth);
     }
-    let mut r = render_panes(frame, depth, glyphs);
+    // 行の割り当ては端末の大きさから決める (04 §3.5。編集面の行数だけでは 10 行の境目を区別できない)
+    let layout = ScreenLayout::for_frame_in(frame, window);
+    let mut r = crate::buffer::render_panes_in(frame, layout, depth, glyphs);
     let theme = Theme::from_roles(&frame.roles);
     let ascii = glyphs.ellipsis.width == 3;
     // 検索バーの行は編集面の下。クロームはその下に続く
-    let layout = ScreenLayout::for_frame(frame);
     let cols = layout.cols;
     let area = layout.surface();
     let mut cursor = r.cursor;

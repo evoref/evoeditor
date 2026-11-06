@@ -484,3 +484,19 @@ fn ヒントバーを隠すとクロームは_2_行で_メッセージ行だけ�
         rows[14]
     );
 }
+
+// 04 §3.5: 端末がちょうど 10 行 (10 行未満ではない) ならクロームは 3 行で、編集面 7 行とで画面の全行を使う。
+// 編集面の行数 (7) だけでは 9 行の端末 (クローム 2 行) と区別できないので、描画は端末の大きさから行を割り当てる
+#[test]
+fn 十行の端末はクローム_3_行で最後の行まで描く() {
+    let mut h = Harness::new().with_size(80, 7);
+    let f = h.frame();
+    assert_eq!(f.size.rows, 7);
+    let window = CellSize { cols: 80, rows: 10 };
+    let r = render_screen(&f, window, ColorDepth::TrueColor, &Glyphs::unicode());
+    assert_eq!(r.buffer.area.height, 10);
+    assert!(
+        !row_text(&r.buffer, 9).trim().is_empty(),
+        "最後の行 (ヒントバー) が空でない"
+    );
+}
