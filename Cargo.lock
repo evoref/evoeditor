@@ -367,6 +367,7 @@ version = "0.2.0"
 dependencies = [
  "encoding_rs",
  "eve-core",
+ "eve-testkit",
  "eve-text",
  "eve-view",
  "libc",

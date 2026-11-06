@@ -1,23 +1,20 @@
 //! `FileSystem` Port の実装 (docs/05 §2.1 / §4.5、Windows)。読み取り側 (`metadata` / `canonicalize` / `open_read`)。
+//! OS に依らない読込の部品 (チャンク読込・リンクの情報・ダングリングの判定) は `fs_common` (Unix と共有)。
 //! 保存 (`write_atomic`) は `save` (05 §4.1 / §4.2)。
-//!
-//! 読込側の規則 (05 §4.5): チャンクは 1 MiB、`EINTR` (`Interrupted`) は内側で再試行する、ハンドルは読込の完了後すぐ閉じる
-//! (呼び側が `ReadChunks` を捨てる)、共有モードは std の既定 (読み・書き・削除を許す)、mmap は使わない。
 
 use std::fs::{self, File};
-use std::io::{self, Read};
+use std::io;
 use std::path::Path;
 use std::time::UNIX_EPOCH;
 
 use eve_core::{
-    ChunkError, FileKind, FileMeta, FileSystem, FileTime, FsError, FsErrorDetail, FsErrorKind,
-    FsKind, FsPath, LinkInfo, LinkKind, ReadChunks, SaveOptions, SaveReport,
+    FileKind, FileMeta, FileSystem, FileTime, FsError, FsErrorDetail, FsErrorKind, FsKind, FsPath,
+    ReadChunks, SaveOptions, SaveReport,
 };
 
+pub use crate::fs_common::READ_CHUNK_BYTES;
+use crate::fs_common::{file_kind, link_info, metadata_error};
 use crate::path::simplify_verbatim;
-
-/// 読込のチャンクの大きさ (05 §4.5。64 KiB〜1 MiB でベンチで決める。既定は 1 MiB)。
-pub const READ_CHUNK_BYTES: usize = 1024 * 1024;
 
 /// Windows のファイルシステム。`state_dir` (05 §7.5) を持つと、保存で保存中フラグを書き、開くときに `inflight_for` で読む。
 /// 持たない (`default()`) と、フラグは書かず空を返す (テスト・状態ディレクトリを使えないとき)。
@@ -112,14 +109,10 @@ fn file_time(t: io::Result<std::time::SystemTime>) -> FileTime {
 }
 
 fn fs_kind(path: &Path) -> FsKind {
-    if cfg!(windows) {
-        if crate::sys::is_remote(path) {
-            FsKind::Network
-        } else {
-            FsKind::Local
-        }
+    if crate::sys::is_remote(path) {
+        FsKind::Network
     } else {
-        FsKind::Unknown
+        FsKind::Local
     }
 }
 
@@ -136,40 +129,9 @@ impl FileSystem for WinFs {
 
     fn metadata(&self, path: &FsPath) -> Result<FileMeta, FsError> {
         let p = path.as_path();
-        let meta = match fs::metadata(p) {
-            Ok(m) => m,
-            Err(e) => {
-                // リンクは在るがリンク先が無い (ダングリング)
-                if e.kind() == io::ErrorKind::NotFound
-                    && let Ok(sm) = fs::symlink_metadata(p)
-                    && sm.file_type().is_symlink()
-                {
-                    let target = fs::read_link(p).ok().map(FsPath::new);
-                    let detail = target.map(|target| FsErrorDetail::DanglingLink { target });
-                    return Err(FsError {
-                        kind: FsErrorKind::NotFound,
-                        detail,
-                        source: Some(e),
-                    });
-                }
-                return Err(map_io_error(e, path));
-            }
-        };
-        let kind = if meta.is_file() {
-            FileKind::File
-        } else if meta.is_dir() {
-            FileKind::Dir
-        } else {
-            FileKind::Other
-        };
-        let link = fs::symlink_metadata(p)
-            .ok()
-            .filter(|sm| sm.file_type().is_symlink())
-            .map(|_| LinkInfo {
-                kind: LinkKind::Symlink,
-                target: fs::read_link(p).ok().map(FsPath::new),
-                dangling: false,
-            });
+        let meta = fs::metadata(p).map_err(|e| metadata_error(e, path))?;
+        let kind = file_kind(&meta);
+        let link = link_info(p);
         // ファイルの識別とハードリンク数 (開けなければ分からないものとして続ける)
         let (file_id, nlink) = if kind == FileKind::File {
             match File::open(p).and_then(|f| crate::sys::file_info(&f)) {
@@ -207,21 +169,7 @@ impl FileSystem for WinFs {
     }
 
     fn open_read(&self, path: &FsPath) -> Result<Box<dyn ReadChunks + Send>, FsError> {
-        let f = File::open(path.as_path()).map_err(|e| map_io_error(e, path))?;
-        // ディレクトリは開けない (Windows の `File::open` はディレクトリで成功しないが、他 OS のために確かめる)
-        if let Ok(m) = f.metadata()
-            && !m.is_file()
-        {
-            return Err(FsError::with_detail(
-                FsErrorKind::InvalidPath,
-                FsErrorDetail::NotAFile,
-            ));
-        }
-        Ok(Box::new(FileChunks {
-            file: f,
-            buf: vec![0u8; READ_CHUNK_BYTES],
-            path: path.clone(),
-        }))
+        crate::fs_common::open_read(path)
     }
 
     fn write_atomic(
@@ -232,27 +180,6 @@ impl FileSystem for WinFs {
     ) -> Result<SaveReport, FsError> {
         // 一時ファイル + `ReplaceFileW` (05 §4.1 / §4.2)。実装は `save`
         self.write_atomic_impl(path, data, opts)
-    }
-}
-
-/// ファイルをチャンクで読む。
-struct FileChunks {
-    file: File,
-    buf: Vec<u8>,
-    path: FsPath,
-}
-
-impl ReadChunks for FileChunks {
-    fn next_chunk(&mut self) -> Result<Option<&[u8]>, ChunkError> {
-        loop {
-            match self.file.read(&mut self.buf) {
-                Ok(0) => return Ok(None),
-                Ok(n) => return Ok(Some(&self.buf[..n])),
-                // EINTR は本層の中で再試行して外に出さない
-                Err(e) if e.kind() == io::ErrorKind::Interrupted => {}
-                Err(e) => return Err(ChunkError::Io(map_io_error(e, &self.path))),
-            }
-        }
     }
 }
 
@@ -311,15 +238,13 @@ mod tests {
         assert!(m.mtime.secs > 1_600_000_000);
         assert_eq!(m.nlink, 1);
         assert_eq!(read_all(&fsys, &p), "こんにちは\n".as_bytes());
-        if cfg!(windows) {
-            let id = m.file_id.expect("Windows ではファイルの識別が取れる");
-            assert_eq!(
-                fsys.metadata(&p).unwrap().file_id,
-                Some(id),
-                "同じファイルは同じ識別"
-            );
-            assert_eq!(m.fs_kind, FsKind::Local);
-        }
+        let id = m.file_id.expect("Windows ではファイルの識別が取れる");
+        assert_eq!(
+            fsys.metadata(&p).unwrap().file_id,
+            Some(id),
+            "同じファイルは同じ識別"
+        );
+        assert_eq!(m.fs_kind, FsKind::Local);
     }
 
     #[test]
@@ -352,13 +277,11 @@ mod tests {
         assert!(e.detail.is_none(), "親が在るときは detail なし");
         let e = fsys.metadata(&t.path("nodir\\x.txt")).unwrap_err();
         assert_eq!(e.kind, FsErrorKind::NotFound);
-        if cfg!(windows) {
-            assert!(
-                matches!(e.detail, Some(FsErrorDetail::ParentMissing { .. })),
-                "{:?}",
-                e.detail
-            );
-        }
+        assert!(
+            matches!(e.detail, Some(FsErrorDetail::ParentMissing { .. })),
+            "{:?}",
+            e.detail
+        );
         let e = fsys.open_read(&t.path("none.txt")).map(|_| ()).unwrap_err();
         assert_eq!(e.kind, FsErrorKind::NotFound);
     }

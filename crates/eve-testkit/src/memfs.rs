@@ -520,6 +520,8 @@ impl FileSystem for MemFs {
         injected(&mut s, FsOp::WriteRecovery)?;
         let dir = FsPath::from(format!("/s/recovery/rescue/{}", s.recovered.len() + 1).as_str());
         let body = doc.to_vec();
+        // 書いたディレクトリは在る (02 §4.5。契約試験が `metadata` で確かめる)
+        Self::add_ancestors_and_self(&mut s, &dir);
         s.recovered.push((dir.clone(), body));
         Ok(dir)
     }
