@@ -51,6 +51,10 @@ pub struct TuiFrontend {
     /// 描画が入力スレッドへ渡す編集面の位置 (マウスの座標変換、04 §6.8)。
     geom: std::sync::Arc<crate::mouse::SharedGeom>,
     entered: bool,
+    /// Unix: 端末タイトルを XTWINOPS で退避した (`CSI 22;0 t`)。復元で 1 回だけ戻す (`CSI 23;0 t`、04 §14.1 / §14.3)。
+    /// 外から止められた (SIGCONT だけが来る) 再初期化では退避し直さない (退避と復元を釣り合わせる)。
+    #[cfg(unix)]
+    title_pushed: bool,
     /// マウスの捕捉 (`SetMouseCapture`)。Unix の SIGCONT の後の再初期化で入れ直す。
     mouse: bool,
     /// 「復元済み」の原子フラグ。`restore` と受信スレッドの緊急の復元が共有し、立てた側だけが復元の出力をする (02 §9.6 手順 4)。
@@ -79,6 +83,8 @@ impl TuiFrontend {
             thread: None,
             geom: Default::default(),
             entered: false,
+            #[cfg(unix)]
+            title_pushed: false,
             mouse: false,
             restored: eve_view::TermRestoredFlag::default(),
         }
@@ -98,6 +104,12 @@ impl TuiFrontend {
 
     /// 代替スクリーンと端末のモードを入れる (初期化と、Unix の SIGCONT の後の再初期化)。
     fn enter_screen(&mut self) {
+        // 04 §14.1 の 3: 代替スクリーンの前にタイトルを退避する (非対応の端末は無視する)
+        #[cfg(unix)]
+        if !self.title_pushed {
+            self.title_pushed = true;
+            self.write(crate::unix::TITLE_PUSH);
+        }
         self.write(ENTER);
         #[cfg(unix)]
         self.write(crate::unix::ENTER_MODES);
@@ -361,6 +373,12 @@ impl Frontend for TuiFrontend {
                 self.write(LEAVE);
             }
         }
+        // 04 §14.3 の 8: タイトルを戻す (代替スクリーンを抜けた後。緊急の復元が先に戻していても、pop は退避の数だけ)
+        #[cfg(unix)]
+        if self.title_pushed {
+            self.title_pushed = false;
+            self.write(crate::unix::TITLE_POP);
+        }
         if let Some(o) = self.out.as_mut() {
             o.restore();
         }
@@ -386,9 +404,9 @@ impl Drop for TuiFrontend {
 /// 緊急の端末復元で書くバイト列: 先頭の CAN (書きかけの VT シーケンスを打ち切る) + 復元の固定の列 (04 §14.3)。
 #[cfg(windows)]
 const EMERGENCY_BYTES: &[u8] = b"\x18\x1b[?2026l\x1b[0m\x1b[0 q\x1b[?25h\x1b[?7h\x1b[?1049l";
-/// 同上 (Unix は先に `unix::LEAVE_MODES` と同じモードを外す)。
+/// 同上 (Unix は先に `unix::LEAVE_MODES` と同じモードを外し、最後に `unix::TITLE_POP` でタイトルを戻す)。
 #[cfg(unix)]
-const EMERGENCY_BYTES: &[u8] = b"\x18\x1b[>4m\x1b[<u\x1b[?1004l\x1b[?2004l\x1b[?1006l\x1b[?1002l\x1b[?1000l\x1b[?2026l\x1b[0m\x1b[0 q\x1b[?25h\x1b[?7h\x1b[?1049l";
+const EMERGENCY_BYTES: &[u8] = b"\x18\x1b[>4m\x1b[<u\x1b[?1004l\x1b[?2004l\x1b[?1006l\x1b[?1002l\x1b[?1000l\x1b[?2026l\x1b[0m\x1b[0 q\x1b[?25h\x1b[?7h\x1b[?1049l\x1b[23;0t";
 
 /// 編集面の下のクローム行数 (`surface_size` の計算に使う)。
 pub const fn chrome_rows() -> u16 {
@@ -410,6 +428,19 @@ pub(crate) fn run_guarded(body: impl FnOnce(), on_panic: impl FnOnce()) {
 mod tests {
     use super::run_guarded;
     use std::cell::Cell;
+
+    /// 緊急の復元のバイト列は、通常の復元と同じ列を同じ順に並べたもの (手書きの複製なので一致を縛る。
+    /// docs/review/v0.3-findings.md の STR-C5)。
+    #[test]
+    fn 緊急の復元のバイト列は通常の復元の列と一致する() {
+        let mut want = String::from("\x18");
+        #[cfg(unix)]
+        want.push_str(crate::unix::LEAVE_MODES);
+        want.push_str(crate::ansi::LEAVE);
+        #[cfg(unix)]
+        want.push_str(crate::unix::TITLE_POP);
+        assert_eq!(super::EMERGENCY_BYTES, want.as_bytes());
+    }
 
     #[test]
     fn 入力スレッドの本体が_panic_したら知らせる() {
