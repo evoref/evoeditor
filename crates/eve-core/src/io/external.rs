@@ -14,6 +14,7 @@ use crate::io::file::{fs_reason, same_on_disk};
 use crate::io::fs::FsErrorKind;
 use crate::io::pending::Pending;
 use crate::jobs::{JobError, JobKind, JobResult, MetaPurpose};
+use crate::ui_model::keys;
 use crate::ui_model::overlay::{ChoiceDef, ConfirmAction, ConfirmState};
 use eve_config::ExternalChangePolicy;
 
@@ -94,7 +95,7 @@ impl EditorState {
                     if explicit {
                         self.show_message(
                             MessageLevel::Info,
-                            "info.external.unchanged",
+                            keys::INFO_EXTERNAL_UNCHANGED,
                             &[("path", &shown)],
                         );
                     }
@@ -124,7 +125,7 @@ impl EditorState {
                     if explicit {
                         self.show_message(
                             MessageLevel::Info,
-                            "info.external.unchanged",
+                            keys::INFO_EXTERNAL_UNCHANGED,
                             &[("path", &shown)],
                         );
                     }
@@ -142,7 +143,7 @@ impl EditorState {
                 ..
             } if explicit => self.show_message(
                 MessageLevel::Error,
-                "msg.external.check_failed",
+                keys::MSG_EXTERNAL_CHECK_FAILED,
                 &[("path", &shown), ("reason", &fs_reason(&e))],
             ),
             _ => {}

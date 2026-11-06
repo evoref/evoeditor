@@ -13,6 +13,7 @@ use crate::command::{
     Permission, RejectReason,
 };
 use crate::io::io_jobs::OpenOptions;
+use crate::ui_model::keys;
 
 use crate::editor::state::EditorState;
 
@@ -318,7 +319,7 @@ impl EditorState {
 
     fn untitled_name(&self) -> String {
         self.catalog()
-            .render("status.untitled", &[("n", "1")], &|_| None)
+            .render(keys::STATUS_UNTITLED, &[("n", "1")], &|_| None)
     }
 
     fn choose(&mut self, choice: usize) -> CommandResult {
@@ -330,7 +331,7 @@ impl EditorState {
         if choice >= c.cancel_index() {
             match &c.action {
                 ConfirmAction::SaveFailed(_) | ConfirmAction::Lossy(_) => {
-                    self.show_message(MessageLevel::Info, "info.save.aborted", &[]);
+                    self.show_message(MessageLevel::Info, keys::INFO_SAVE_ABORTED, &[]);
                 }
                 ConfirmAction::Open(ask) => self.open_aborted(ask),
                 // 終了の連鎖のキャンセル: 連鎖全体を中止し、破棄の印をすべて無効にする (文書は元のまま)

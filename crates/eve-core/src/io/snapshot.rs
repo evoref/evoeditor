@@ -6,6 +6,7 @@ use eve_view::{DocumentId, Revision};
 
 use crate::document::TextFormat;
 use crate::io::fspath::FsPath;
+use crate::ui_model::keys;
 
 /// 1 つの文書の退避用の公開物。`Send + Sync`。
 #[derive(Clone, Debug)]
@@ -60,7 +61,7 @@ impl crate::editor::state::EditorState {
             path: d.path.clone(),
             untitled_name: d.path.is_none().then(|| {
                 self.catalog()
-                    .render("status.untitled", &[("n", "1")], &|_| None)
+                    .render(keys::STATUS_UNTITLED, &[("n", "1")], &|_| None)
             }),
         })
     }

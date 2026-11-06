@@ -12,6 +12,7 @@ use crate::command::ids;
 use crate::command::{Args, CommandResult, RejectReason};
 use crate::editor::state::EditorState;
 use crate::layout::cell_text;
+use crate::ui_model::keys;
 use crate::ui_model::overlay::Overlay;
 
 /// 候補の窓の最大行数 (04 §8.1)。
@@ -57,19 +58,19 @@ const ARG_DEFS: &[ArgDef] = &[
     ArgDef {
         command: ids::FILE_SET_LINE_ENDING,
         arg: "eol",
-        label_key: "ui.palette.arg.eol",
+        label_key: keys::UI_PALETTE_ARG_EOL,
         choices: &[("lf", "LF"), ("crlf", "CRLF"), ("cr", "CR")],
     },
     ArgDef {
         command: ids::FILE_REOPEN_WITH_ENCODING,
         arg: "encoding",
-        label_key: "ui.palette.arg.encoding",
+        label_key: keys::UI_PALETTE_ARG_ENCODING,
         choices: ENCODINGS,
     },
     ArgDef {
         command: ids::FILE_SET_ENCODING,
         arg: "encoding",
-        label_key: "ui.palette.arg.encoding",
+        label_key: keys::UI_PALETTE_ARG_ENCODING,
         choices: ENCODINGS,
     },
 ];
@@ -508,14 +509,14 @@ impl EditorState {
         let cells = cell_text(&p.text, CutPolicy::End).spans;
         let cursor = cell_text(&p.text[..p.cursor], CutPolicy::End).spans.len();
         let title = render(
-            "ui.palette.arg_title",
+            keys::UI_PALETTE_ARG_TITLE,
             &[
                 ("command", &self.command_title(def.command)),
                 ("arg", &render(def.label_key, &[])),
             ],
         );
         let footer = render(
-            "ui.palette.footer",
+            keys::UI_PALETTE_FOOTER,
             &[
                 ("matched", &hits.len().to_string()),
                 ("total", &def.choices.len().to_string()),
@@ -535,7 +536,7 @@ impl EditorState {
             first,
             selected,
             footer: cell_text(&footer, CutPolicy::Never),
-            no_match: cell_text(&render("ui.palette.no_match", &[]), CutPolicy::End),
+            no_match: cell_text(&render(keys::UI_PALETTE_NO_MATCH, &[]), CutPolicy::End),
         }
     }
 
@@ -564,7 +565,7 @@ impl EditorState {
                 let e = &self.ui.palette_entries[h.entry];
                 let disabled_reason = self.disabled_reason_key(e).map(|k| {
                     let why = render(&format!("ui.palette.reason.{k}"), &[]);
-                    let text = render("ui.palette.disabled", &[("reason", &why)]);
+                    let text = render(keys::UI_PALETTE_DISABLED, &[("reason", &why)]);
                     cell_text(&text, CutPolicy::End)
                 });
                 ListItem {
@@ -590,7 +591,7 @@ impl EditorState {
         let placeholder = p
             .text
             .is_empty()
-            .then(|| cell_text(&render("ui.palette.placeholder", &[]), CutPolicy::End));
+            .then(|| cell_text(&render(keys::UI_PALETTE_PLACEHOLDER, &[]), CutPolicy::End));
         let matched = hits.len().to_string();
         let total = self
             .ui
@@ -600,11 +601,11 @@ impl EditorState {
             .count()
             .to_string();
         let footer = render(
-            "ui.palette.footer",
+            keys::UI_PALETTE_FOOTER,
             &[("matched", &matched), ("total", &total)],
         );
         OverlayModel::List {
-            title: cell_text(&render("ui.palette.title", &[]), CutPolicy::Never),
+            title: cell_text(&render(keys::UI_PALETTE_TITLE, &[]), CutPolicy::Never),
             input: InputFieldModel {
                 len: cells.len(),
                 cells,
@@ -617,7 +618,7 @@ impl EditorState {
             first,
             selected,
             footer: cell_text(&footer, CutPolicy::Never),
-            no_match: cell_text(&render("ui.palette.no_match", &[]), CutPolicy::End),
+            no_match: cell_text(&render(keys::UI_PALETTE_NO_MATCH, &[]), CutPolicy::End),
         }
     }
 }

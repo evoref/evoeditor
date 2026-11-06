@@ -14,6 +14,7 @@ use crate::io::paths::Paths;
 use crate::io::pending::Pending;
 use crate::jobs::JobSpawner;
 use crate::time::Tick;
+use crate::ui_model::keys;
 
 use crate::command::context::CtxValue;
 
@@ -683,7 +684,7 @@ impl EditorState {
             if self.io.trim_notified.insert(doc) {
                 self.show_message(
                     eve_view::MessageLevel::Info,
-                    "info.undo.history_trimmed",
+                    keys::INFO_UNDO_HISTORY_TRIMMED,
                     &[],
                 );
             }
@@ -695,7 +696,7 @@ impl EditorState {
         if a.record.as_ref().is_some_and(|r| r.pruned) && self.io.trim_notified.insert(doc) {
             self.show_message(
                 eve_view::MessageLevel::Info,
-                "info.undo.history_trimmed",
+                keys::INFO_UNDO_HISTORY_TRIMMED,
                 &[],
             );
         }

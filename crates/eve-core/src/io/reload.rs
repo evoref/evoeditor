@@ -6,6 +6,7 @@ use crate::document::Document;
 use crate::io::fspath::FsPath;
 use crate::io::io_jobs::OpenOptions;
 use crate::jobs::{JobError, JobKind, JobResult};
+use crate::ui_model::keys;
 use eve_encoding::Encoding;
 
 use super::file::*;
@@ -181,7 +182,7 @@ impl EditorState {
         if applied.is_err() {
             self.show_message(
                 MessageLevel::Error,
-                "msg.open.failed",
+                keys::MSG_OPEN_FAILED,
                 &[("path", &path.display()), ("reason", "reload")],
             );
             return;
@@ -192,9 +193,9 @@ impl EditorState {
             .get(&doc_id)
             .is_some_and(|d| !d.read_only.is_empty());
         let key = if read_only {
-            "info.reload.done_read_only"
+            keys::INFO_RELOAD_DONE_READ_ONLY
         } else {
-            "info.reload.done"
+            keys::INFO_RELOAD_DONE
         };
         self.show_message(MessageLevel::Info, key, &[("path", &path.display())]);
     }
@@ -229,7 +230,7 @@ impl EditorState {
                 if changed_during_load {
                     self.message(
                         MessageLevel::Warn,
-                        "msg.open.changed_during_load",
+                        keys::MSG_OPEN_CHANGED_DURING_LOAD,
                         &path.display(),
                     );
                 }
@@ -259,13 +260,13 @@ impl EditorState {
                 if changed_during_load {
                     self.message(
                         MessageLevel::Warn,
-                        "msg.open.changed_during_load",
+                        keys::MSG_OPEN_CHANGED_DURING_LOAD,
                         &path.display(),
                     );
                 }
                 self.show_message(
                     MessageLevel::Info,
-                    "info.reopen.history_cleared",
+                    keys::INFO_REOPEN_HISTORY_CLEARED,
                     &[("encoding", encoding.name())],
                 );
             }
@@ -284,10 +285,12 @@ impl EditorState {
                 self.reopen_restore(doc_id);
                 let reason = reason_label(&err);
                 let (level, key) = match err {
-                    JobError::Cancelled => (MessageLevel::Info, "info.open.cancelled"),
+                    JobError::Cancelled => (MessageLevel::Info, keys::INFO_OPEN_CANCELLED),
                     JobError::Fs(e) => (MessageLevel::Error, open_error_key(&e)),
-                    JobError::OutOfMemory { .. } => (MessageLevel::Error, "msg.open.out_of_memory"),
-                    _ => (MessageLevel::Error, "msg.open.failed"),
+                    JobError::OutOfMemory { .. } => {
+                        (MessageLevel::Error, keys::MSG_OPEN_OUT_OF_MEMORY)
+                    }
+                    _ => (MessageLevel::Error, keys::MSG_OPEN_FAILED),
                 };
                 self.show_message(
                     level,
@@ -299,9 +302,9 @@ impl EditorState {
             _ => {
                 self.reopen_restore(doc_id);
                 let key = if kind == OpenKind::Reload {
-                    "msg.reload.missing"
+                    keys::MSG_RELOAD_MISSING
                 } else {
-                    "msg.open.failed"
+                    keys::MSG_OPEN_FAILED
                 };
                 self.show_message(
                     MessageLevel::Error,

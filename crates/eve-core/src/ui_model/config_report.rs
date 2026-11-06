@@ -4,6 +4,7 @@ use eve_config::{DiagKind, Diagnostic, default_display};
 use eve_view::MessageLevel;
 
 use crate::editor::state::EditorState;
+use crate::ui_model::keys;
 
 /// 型の語 (`ui.config.type.*`) のキー。toml の型名から。
 fn type_key(toml_type: &str) -> String {
@@ -31,7 +32,7 @@ impl EditorState {
         if shown.len() == 1 {
             self.show_message(
                 MessageLevel::Warn,
-                "msg.config.problem",
+                keys::MSG_CONFIG_PROBLEM,
                 &[
                     ("file", file),
                     ("line", &line),
@@ -48,7 +49,7 @@ impl EditorState {
                 .unwrap_or_else(|| "ログなし".to_owned());
             self.show_message(
                 MessageLevel::Warn,
-                "msg.config.problems",
+                keys::MSG_CONFIG_PROBLEMS,
                 &[("count", &count), ("detail", &detail), ("log", &log)],
             );
         }
@@ -69,7 +70,7 @@ pub fn diagnostic_texts(cat: &eve_config::Catalog, d: &Diagnostic) -> (String, S
         DiagKind::Unsupported => {
             let item = [("item", d.key.as_str())];
             return (
-                cat.render("info.config.unsupported", &item, &|_| None),
+                cat.render(keys::INFO_CONFIG_UNSUPPORTED, &item, &|_| None),
                 String::new(),
             );
         }

@@ -12,6 +12,7 @@ use eve_view::{DocumentId, ViewId};
 
 use crate::command::ids;
 use crate::document::{Document, Origin, Transaction};
+use crate::ui_model::keys;
 
 use crate::command::{
     CommandCtx, CommandKind, CommandRegistry, CommandResult, Permission, RejectReason,
@@ -194,8 +195,11 @@ fn set_line_ending(ctx: &mut CommandCtx<'_>) -> CommandResult {
     let k = stats.total() - same;
     if k == 0 {
         ctx.state.set_default_eol(doc_id, eol);
-        ctx.state
-            .show_message(MessageLevel::Info, "info.eol.unchanged", &[("eol", name)]);
+        ctx.state.show_message(
+            MessageLevel::Info,
+            keys::INFO_EOL_UNCHANGED,
+            &[("eol", name)],
+        );
         return CommandResult::Done;
     }
     // (3)〜(5) ChangeSet を作って 1 つの Transaction で適用する (1 MiB 超はジョブ。editor/eol.rs)

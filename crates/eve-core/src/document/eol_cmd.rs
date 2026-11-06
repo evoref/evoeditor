@@ -13,6 +13,7 @@ use crate::document::eol::build_eol_conversion;
 use crate::document::{EolStats, FormatChange, FormatState, Origin, Transaction, UndoGroupHint};
 use crate::jobs::cancel::CancelToken;
 use crate::jobs::{JobKind, JobResult};
+use crate::ui_model::keys;
 
 use crate::editor::state::EditorState;
 use crate::io::pending::Pending;
@@ -106,7 +107,7 @@ impl EditorState {
         if fresh {
             self.apply_eol_conversion(c, changes);
         } else if c.retried {
-            self.show_message(MessageLevel::Warn, "msg.eol.convert_stale", &[]);
+            self.show_message(MessageLevel::Warn, keys::MSG_EOL_CONVERT_STALE, &[]);
         } else {
             self.start_eol_conversion(EolConvert { retried: true, ..c });
         }
@@ -163,10 +164,10 @@ impl EditorState {
         match self.apply_transaction(c.doc, tx) {
             Ok(_) => self.show_message(
                 MessageLevel::Info,
-                "info.eol.converted",
+                keys::INFO_EOL_CONVERTED,
                 &[("count", &c.count.to_string()), ("eol", name(c.eol))],
             ),
-            Err(_) => self.show_message(MessageLevel::Warn, "msg.eol.convert_stale", &[]),
+            Err(_) => self.show_message(MessageLevel::Warn, keys::MSG_EOL_CONVERT_STALE, &[]),
         }
     }
 }

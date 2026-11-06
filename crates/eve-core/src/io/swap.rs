@@ -18,6 +18,7 @@ use crate::document::LoadState;
 use crate::editor::state::EditorState;
 use crate::io::pending::Pending;
 use crate::time::{Millis, Tick};
+use crate::ui_model::keys;
 use crate::{FsErrorKind, FsPath, JobError, JobKind, JobResult};
 
 /// 失敗した後始末をやり直すまでの間隔。
@@ -80,12 +81,12 @@ impl EditorState {
         self.io.swap.notified_large.insert(id);
         let name = path.unwrap_or_else(|| {
             self.catalog()
-                .render("status.untitled", &[("n", "1")], &|_| None)
+                .render(keys::STATUS_UNTITLED, &[("n", "1")], &|_| None)
         });
         let mib = (max / (1024 * 1024)).to_string();
         self.show_message(
             eve_view::MessageLevel::Warn,
-            "msg.swap.too_large",
+            keys::MSG_SWAP_TOO_LARGE,
             &[("path", &name), ("mib", &mib)],
         );
     }

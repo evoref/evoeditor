@@ -5,6 +5,7 @@ use eve_view::{DocumentId, MessageLevel};
 use crate::io::fs::Expect;
 use crate::io::fspath::FsPath;
 use crate::jobs::{JobError, JobKind, JobResult};
+use crate::ui_model::keys;
 use eve_encoding::Encoding;
 
 use super::pending::*;
@@ -172,7 +173,7 @@ impl EditorState {
                     if retried {
                         self.show_message(
                             MessageLevel::Error,
-                            "msg.save.failed",
+                            keys::MSG_SAVE_FAILED,
                             &[("path", &ask.path.display()), ("reason", "stale")],
                         );
                     } else {
@@ -185,7 +186,7 @@ impl EditorState {
                     let (line, col) = self.pos_of_offset(ask.doc, t.offset);
                     let shown = if t.ch.is_control() { '\u{FFFD}' } else { t.ch };
                     details.push(self.catalog().render(
-                        "ui.confirm.save.unmappable_replace.item",
+                        keys::UI_CONFIRM_SAVE_UNMAPPABLE_REPLACE_ITEM,
                         &[
                             ("line", &line.to_string()),
                             ("col", &col.to_string()),
@@ -199,7 +200,7 @@ impl EditorState {
                 let rest = counts.total().saturating_sub(targets.len() as u64);
                 if rest > 0 {
                     details.push(self.catalog().render(
-                        "ui.confirm.save.unmappable_replace.more",
+                        keys::UI_CONFIRM_SAVE_UNMAPPABLE_REPLACE_MORE,
                         &[("count", &rest.to_string())],
                         &|_| None,
                     ));
@@ -231,8 +232,8 @@ impl EditorState {
             }
             JobResult::Failed { err, .. } => {
                 let (level, key) = match err {
-                    JobError::Cancelled => (MessageLevel::Info, "info.save.aborted"),
-                    _ => (MessageLevel::Error, "msg.save.failed"),
+                    JobError::Cancelled => (MessageLevel::Info, keys::INFO_SAVE_ABORTED),
+                    _ => (MessageLevel::Error, keys::MSG_SAVE_FAILED),
                 };
                 self.show_message(
                     level,
@@ -297,7 +298,7 @@ impl EditorState {
         if self.apply_transaction(ask.doc, tx).is_err() {
             self.show_message(
                 MessageLevel::Error,
-                "msg.save.failed",
+                keys::MSG_SAVE_FAILED,
                 &[("path", &ask.path.display()), ("reason", "replace")],
             );
             return CommandResult::Done;
@@ -361,7 +362,7 @@ impl EditorState {
             self.set_selection(view, eve_text::Selection::point(eve_text::ByteOff(off)));
             self.ensure_cursor_visible(view);
         }
-        self.show_message(MessageLevel::Info, "info.save.aborted", &[]);
+        self.show_message(MessageLevel::Info, keys::INFO_SAVE_ABORTED, &[]);
     }
 }
 

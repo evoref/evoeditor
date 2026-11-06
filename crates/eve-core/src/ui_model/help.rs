@@ -15,6 +15,7 @@ use crate::command::{
 use crate::editor::state::EditorState;
 use crate::keymap::format_sequence;
 use crate::layout::cell_text;
+use crate::ui_model::keys;
 use crate::ui_model::overlay::Overlay;
 
 /// ヘルプのキー一覧で、この端末で届かない割当の後ろに付ける印 (04 §8.6)。
@@ -58,19 +59,23 @@ impl EditorState {
             lines.push(line(HelpLineKind::Heading, None, render(key)));
         };
 
-        section(&mut lines, HelpSection::Intro, "ui.help.section.intro");
+        section(&mut lines, HelpSection::Intro, keys::UI_HELP_SECTION_INTRO);
         for k in [
-            "ui.help.intro.save",
-            "ui.help.intro.quit",
-            "ui.help.intro.palette",
+            keys::UI_HELP_INTRO_SAVE,
+            keys::UI_HELP_INTRO_QUIT,
+            keys::UI_HELP_INTRO_PALETTE,
         ] {
             lines.push(line(HelpLineKind::Body, None, render(k)));
         }
         lines.push(line(HelpLineKind::Body, None, String::new()));
 
         // キー一覧: 割当のあるコマンドをカテゴリ別に。同じコマンドの割当はすべて並べる
-        section(&mut lines, HelpSection::Keys, "ui.help.section.keys");
-        lines.push(line(HelpLineKind::Body, None, render("ui.help.keys.note")));
+        section(&mut lines, HelpSection::Keys, keys::UI_HELP_SECTION_KEYS);
+        lines.push(line(
+            HelpLineKind::Body,
+            None,
+            render(keys::UI_HELP_KEYS_NOTE),
+        ));
         let note_at = lines.len();
         let mut any_unreachable = false;
         let mut last_ns = "";
@@ -110,7 +115,11 @@ impl EditorState {
         if any_unreachable {
             lines.insert(
                 note_at,
-                line(HelpLineKind::Body, None, render("ui.help.keys.unreachable")),
+                line(
+                    HelpLineKind::Body,
+                    None,
+                    render(keys::UI_HELP_KEYS_UNREACHABLE),
+                ),
             );
         }
         lines.push(line(HelpLineKind::Body, None, String::new()));
@@ -119,7 +128,7 @@ impl EditorState {
         section(
             &mut lines,
             HelpSection::Commands,
-            "ui.help.section.commands",
+            keys::UI_HELP_SECTION_COMMANDS,
         );
         let mut last_ns = "";
         for id in self.palette_command_ids() {
@@ -149,13 +158,13 @@ impl EditorState {
         section(
             &mut lines,
             HelpSection::Terminal,
-            "ui.help.section.terminal",
+            keys::UI_HELP_SECTION_TERMINAL,
         );
         for k in [
-            "ui.help.terminal.ime",
-            "ui.help.terminal.chord",
-            "ui.help.terminal.alt",
-            "ui.help.terminal.readme",
+            keys::UI_HELP_TERMINAL_IME,
+            keys::UI_HELP_TERMINAL_CHORD,
+            keys::UI_HELP_TERMINAL_ALT,
+            keys::UI_HELP_TERMINAL_README,
         ] {
             lines.push(line(HelpLineKind::Body, None, render(k)));
         }
@@ -170,7 +179,7 @@ impl EditorState {
                 kind: HelpLineKind::Body,
                 key: None,
                 text: cell_text(
-                    &cat.render("ui.history.empty", &[], &|_| None),
+                    &cat.render(keys::UI_HISTORY_EMPTY, &[], &|_| None),
                     CutPolicy::End,
                 ),
             }];
@@ -182,9 +191,9 @@ impl EditorState {
                 let secs = m.at.0 / 1000;
                 let level = cat.render(
                     match m.level {
-                        eve_view::MessageLevel::Info => "ui.history.level.info",
-                        eve_view::MessageLevel::Warn => "ui.history.level.warn",
-                        _ => "ui.history.level.error",
+                        eve_view::MessageLevel::Info => keys::UI_HISTORY_LEVEL_INFO,
+                        eve_view::MessageLevel::Warn => keys::UI_HISTORY_LEVEL_WARN,
+                        _ => keys::UI_HISTORY_LEVEL_ERROR,
                     },
                     &[],
                     &|_| None,
@@ -290,7 +299,7 @@ impl EditorState {
         self.copy_text(&out);
         self.show_message(
             eve_view::MessageLevel::Info,
-            "info.history.copied",
+            keys::INFO_HISTORY_COPIED,
             &[("count", &count.to_string())],
         );
         CommandResult::Done
@@ -320,9 +329,9 @@ impl EditorState {
         let max = lines.len().saturating_sub(self.help_view_rows());
         let render = |key: &str| self.catalog().render(key, &[], &|c| self.key_label(c));
         let (title, footer) = if h.history {
-            ("ui.history.title", "ui.history.footer")
+            (keys::UI_HISTORY_TITLE, keys::UI_HISTORY_FOOTER)
         } else {
-            ("ui.help.title", "ui.help.footer")
+            (keys::UI_HELP_TITLE, keys::UI_HELP_FOOTER)
         };
         OverlayModel::Help {
             title: cell_text(&render(title), CutPolicy::Never),

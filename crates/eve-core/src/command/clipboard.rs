@@ -13,6 +13,7 @@ use eve_view::{
 
 use crate::command::{CommandCtx, CommandResult, RejectReason};
 use crate::editor::state::EditorState;
+use crate::ui_model::keys;
 
 /// `Inline` にする上限 (これ未満は core が文字列化する)。
 pub const INLINE_MAX_BYTES: usize = 64 * 1024;
@@ -64,7 +65,7 @@ impl EditorState {
         self.clipboard.fallback_notified = true;
         self.show_message(
             MessageLevel::Info,
-            "msg.clipboard.fallback",
+            keys::MSG_CLIPBOARD_FALLBACK,
             &[("reason", reason)],
         );
     }

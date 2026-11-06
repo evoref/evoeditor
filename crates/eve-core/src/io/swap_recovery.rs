@@ -13,6 +13,7 @@ use eve_text::{ByteRange, Edit};
 
 use crate::document::{LoadState, Origin, Transaction};
 use crate::editor::state::EditorState;
+use crate::ui_model::keys;
 use crate::ui_model::overlay::{ChoiceDef, ConfirmAction, ConfirmState};
 use crate::{DocumentId, FsPath, JobError, JobKind, JobResult, SwapEntry, SwapOwner};
 
@@ -50,7 +51,7 @@ impl EditorState {
         if let Some(first) = unreadable.first() {
             self.show_message(
                 MessageLevel::Warn,
-                "msg.swap.unreadable",
+                keys::MSG_SWAP_UNREADABLE,
                 &[
                     ("dir", &first.dir.display()),
                     ("count", &unreadable.len().to_string()),
@@ -64,7 +65,7 @@ impl EditorState {
         if let Some(first) = candidates.first() {
             self.show_message(
                 MessageLevel::Warn,
-                "msg.swap.found",
+                keys::MSG_SWAP_FOUND,
                 &[
                     ("count", &candidates.len().to_string()),
                     ("dir", &first.dir.display()),
@@ -125,14 +126,15 @@ impl EditorState {
         let mut details = Vec::new();
         let args = [("path", name.as_str())];
         if changed {
-            details.push(
-                self.catalog()
-                    .render("ui.confirm.swap_recovery.changed", &args, &|_| None),
-            );
+            details.push(self.catalog().render(
+                keys::UI_CONFIRM_SWAP_RECOVERY_CHANGED,
+                &args,
+                &|_| None,
+            ));
         }
         if entry.sensitive {
             details.push(self.catalog().render(
-                "ui.confirm.swap_recovery.sensitive",
+                keys::UI_CONFIRM_SWAP_RECOVERY_SENSITIVE,
                 &args,
                 &|_| None,
             ));
@@ -188,7 +190,7 @@ impl EditorState {
         for e in hit {
             self.show_message(
                 MessageLevel::Warn,
-                "msg.swap.other_instance",
+                keys::MSG_SWAP_OTHER_INSTANCE,
                 &[("path", &path.display()), ("pid", &e.pid.to_string())],
             );
         }
@@ -196,7 +198,7 @@ impl EditorState {
 
     fn untitled_label(&self) -> String {
         self.catalog()
-            .render("status.untitled", &[("n", "1")], &|_| None)
+            .render(keys::STATUS_UNTITLED, &[("n", "1")], &|_| None)
     }
 
     /// 提案への答え。`apply` は本文を読むジョブを投入し、`discard` はスワップを消す (この選択が破棄の確認)。
@@ -257,7 +259,7 @@ impl EditorState {
                 // 読めなかった: スワップは残す
                 self.show_message(
                     MessageLevel::Error,
-                    "msg.swap.read_failed",
+                    keys::MSG_SWAP_READ_FAILED,
                     &[("dir", &entry.dir.display())],
                 );
                 return;
@@ -268,7 +270,7 @@ impl EditorState {
         };
         if d.revision() != revision || !d.read_only.is_empty() {
             // 提案の後で文書が変わった: 適用しない。スワップは残し、もう一度提案できるようにする
-            self.show_message(MessageLevel::Warn, "msg.swap.changed_since_offer", &[]);
+            self.show_message(MessageLevel::Warn, keys::MSG_SWAP_CHANGED_SINCE_OFFER, &[]);
             self.io.swap.candidates.push(entry);
             return;
         }
@@ -297,7 +299,7 @@ impl EditorState {
         ) else {
             self.show_message(
                 MessageLevel::Error,
-                "msg.swap.read_failed",
+                keys::MSG_SWAP_READ_FAILED,
                 &[("dir", &entry.dir.display())],
             );
             return;
@@ -308,14 +310,14 @@ impl EditorState {
                 self.io.swap.recovered.entry(doc).or_default().push(entry);
                 self.show_message(
                     MessageLevel::Info,
-                    "info.swap.recovered",
+                    keys::INFO_SWAP_RECOVERED,
                     &[("path", &name)],
                 );
             }
             Err(_) => {
                 self.show_message(
                     MessageLevel::Error,
-                    "msg.swap.read_failed",
+                    keys::MSG_SWAP_READ_FAILED,
                     &[("dir", &entry.dir.display())],
                 );
                 self.io.swap.candidates.push(entry);
@@ -328,7 +330,7 @@ impl EditorState {
         match r {
             JobResult::SwapRemoved { .. } => {
                 if notify {
-                    self.show_message(MessageLevel::Info, "info.swap.discarded", &[]);
+                    self.show_message(MessageLevel::Info, keys::INFO_SWAP_DISCARDED, &[]);
                 }
             }
             JobResult::Failed {
@@ -336,7 +338,7 @@ impl EditorState {
                 ..
             } => self.show_message(
                 MessageLevel::Warn,
-                "msg.swap.remove_failed",
+                keys::MSG_SWAP_REMOVE_FAILED,
                 &[("dir", &entry.dir.display())],
             ),
             _ => {}

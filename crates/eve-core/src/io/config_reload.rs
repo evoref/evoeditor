@@ -13,6 +13,7 @@ use crate::editor::Editor;
 use crate::editor::state::EditorState;
 use crate::io::pending::Pending;
 use crate::jobs::{ConfigFile, JobKind, JobResult};
+use crate::ui_model::keys;
 
 /// 設定ファイルの名前 (設定ディレクトリの直下、07 §2)。
 pub const CONFIG_FILE: &str = "config.toml";
@@ -191,7 +192,7 @@ impl EditorState {
                 .to_owned();
             self.show_message(
                 MessageLevel::Warn,
-                "msg.config.reload_kept",
+                keys::MSG_CONFIG_RELOAD_KEPT,
                 &[("file", &name)],
             );
         } else {
@@ -218,13 +219,13 @@ impl EditorState {
             changed.push(KEYMAP_FILE);
         }
         if changed.is_empty() {
-            self.show_message(MessageLevel::Info, "info.config.reload_unchanged", &[]);
+            self.show_message(MessageLevel::Info, keys::INFO_CONFIG_RELOAD_UNCHANGED, &[]);
             return;
         }
         let keys = changed.join(", ");
         self.show_message(
             MessageLevel::Info,
-            "info.config.reloaded",
+            keys::INFO_CONFIG_RELOADED,
             &[("count", &changed.len().to_string()), ("keys", &keys)],
         );
         let restart: Vec<&str> = changed
@@ -235,7 +236,7 @@ impl EditorState {
         if !restart.is_empty() {
             self.show_message(
                 MessageLevel::Info,
-                "info.config.reload_restart",
+                keys::INFO_CONFIG_RELOAD_RESTART,
                 &[("keys", &restart.join(", "))],
             );
         }
@@ -253,7 +254,7 @@ impl Editor {
             self.state.report_config(KEYMAP_FILE, &keymap.diagnostics);
             self.state.show_message(
                 MessageLevel::Warn,
-                "msg.config.reload_kept",
+                keys::MSG_CONFIG_RELOAD_KEPT,
                 &[("file", KEYMAP_FILE)],
             );
         } else {

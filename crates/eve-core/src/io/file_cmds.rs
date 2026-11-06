@@ -5,6 +5,7 @@ use eve_view::MessageLevel;
 use crate::command::ids;
 use crate::io::fspath::FsPath;
 use crate::io::io_jobs::OpenOptions;
+use crate::ui_model::keys;
 use eve_encoding::Encoding;
 
 use crate::command::{
@@ -29,14 +30,14 @@ impl EditorState {
         }
         let key = if doc.read_only.is_empty() {
             doc.read_only.insert(ReadOnlyReason::UserRequested);
-            "info.read_only.set"
+            keys::INFO_READ_ONLY_SET
         } else if doc.read_only.releasable() {
             if doc.read_only.contains(ReadOnlyReason::FileAttribute) {
                 doc.attribute_released = true;
             }
             doc.read_only.remove(ReadOnlyReason::FileAttribute);
             doc.read_only.remove(ReadOnlyReason::UserRequested);
-            "info.read_only.released"
+            keys::INFO_READ_ONLY_RELEASED
         } else {
             return CommandResult::Rejected(RejectReason::NotAvailable);
         };

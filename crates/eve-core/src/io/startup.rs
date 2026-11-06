@@ -11,6 +11,7 @@ use crate::io::io_jobs::OpenOptions;
 use crate::io::open::OpenKind;
 use crate::io::pending::Pending;
 use crate::jobs::{JobKind, JobResult};
+use crate::ui_model::keys;
 use crate::view::motion::line_col_byte;
 use eve_text::{Selection, TextRead};
 
@@ -61,7 +62,7 @@ impl EditorState {
         let Ok(path) = self.paths.normalize(raw_path) else {
             self.show_message(
                 eve_view::MessageLevel::Error,
-                "msg.open.failed",
+                keys::MSG_OPEN_FAILED,
                 &[("path", raw_path), ("reason", "invalid path")],
             );
             return None;
@@ -194,9 +195,9 @@ impl EditorState {
         self.show_message(
             MessageLevel::Warn,
             if only_rescue {
-                "msg.recovery.found_rescue"
+                keys::MSG_RECOVERY_FOUND_RESCUE
             } else {
-                "msg.recovery.found"
+                keys::MSG_RECOVERY_FOUND
             },
             &[("dir", &newest), ("count", &count)],
         );
@@ -211,10 +212,10 @@ impl EditorState {
         {
             let summary = self
                 .catalog()
-                .render("info.app.release_summary", &[], &|_| None);
+                .render(keys::INFO_APP_RELEASE_SUMMARY, &[], &|_| None);
             self.show_message(
                 MessageLevel::Info,
-                "info.app.updated",
+                keys::INFO_APP_UPDATED,
                 &[
                     ("version", env!("CARGO_PKG_VERSION")),
                     ("summary", &summary),

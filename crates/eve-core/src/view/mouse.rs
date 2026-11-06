@@ -12,6 +12,7 @@ use crate::command::{CommandCtx, CommandKind, CommandRegistry, CommandResult, Pe
 use crate::editor::state::EditorState;
 use crate::layout::{Affinity, line_rows, wrap_ctx};
 use crate::time::{Millis, Tick};
+use crate::ui_model::keys;
 
 /// Shift+ホイールの横スクロール量 (列)。
 const WHEEL_COLUMNS: i64 = 4;
@@ -202,9 +203,9 @@ fn toggle_mouse(ctx: &mut CommandCtx<'_>) -> CommandResult {
     ctx.state.show_message(
         MessageLevel::Info,
         if enabled {
-            "info.mouse.enabled"
+            keys::INFO_MOUSE_ENABLED
         } else {
-            "info.mouse.disabled"
+            keys::INFO_MOUSE_DISABLED
         },
         &[],
     );
@@ -219,9 +220,9 @@ fn toggle_hint_bar(ctx: &mut CommandCtx<'_>) -> CommandResult {
     ctx.state.show_message(
         MessageLevel::Info,
         if on {
-            "info.hint_bar.shown"
+            keys::INFO_HINT_BAR_SHOWN
         } else {
-            "info.hint_bar.hidden"
+            keys::INFO_HINT_BAR_HIDDEN
         },
         &[],
     );

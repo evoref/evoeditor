@@ -9,6 +9,7 @@ use eve_view::MessageLevel;
 use crate::editor::state::EditorState;
 use crate::io::io_jobs::OpenOptions;
 use crate::io::pending::Pending;
+use crate::ui_model::keys;
 use crate::ui_model::overlay::{ChoiceDef, ConfirmAction, ConfirmState};
 use crate::{CommandResult, JobError, JobKind, JobResult, Leftover, LeftoverKind, LeftoverOp};
 
@@ -129,7 +130,7 @@ impl EditorState {
         }
         self.show_message(
             MessageLevel::Warn,
-            "msg.leftover.tmp_opened",
+            keys::MSG_LEFTOVER_TMP_OPENED,
             &[("path", &l.target.display())],
         );
     }
@@ -140,8 +141,8 @@ impl EditorState {
         match r {
             JobResult::LeftoverDone { .. } => {
                 let key = match ask.op {
-                    LeftoverOp::Restore => "info.leftover.restored",
-                    LeftoverOp::DeleteBak | LeftoverOp::DeleteTmp => "info.leftover.deleted",
+                    LeftoverOp::Restore => keys::INFO_LEFTOVER_RESTORED,
+                    LeftoverOp::DeleteBak | LeftoverOp::DeleteTmp => keys::INFO_LEFTOVER_DELETED,
                 };
                 self.show_message(MessageLevel::Info, key, &[("path", &path)]);
                 if ask.then_open_tmp {
@@ -154,7 +155,7 @@ impl EditorState {
             } => {
                 self.show_message(
                     MessageLevel::Error,
-                    "msg.leftover.failed",
+                    keys::MSG_LEFTOVER_FAILED,
                     &[("path", &path), ("reason", &format!("{:?}", e.kind))],
                 );
             }
