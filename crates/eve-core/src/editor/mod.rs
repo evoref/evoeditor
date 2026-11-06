@@ -20,7 +20,7 @@ use eve_view::{
 };
 
 pub use crate::command::clipboard::ClipboardSource;
-pub use crate::command::context::{ContextExpr, CtxValue, ParseError};
+pub use crate::command::context::{CONTEXT_VARS, ContextExpr, CtxValue, ParseError};
 pub use crate::command::edit::normalize_eol;
 pub use crate::command::{
     ArgValue, Args, CommandCtx, CommandInvocation, CommandKind, CommandRegistry, CommandResult,

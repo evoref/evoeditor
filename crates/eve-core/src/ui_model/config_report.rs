@@ -103,6 +103,7 @@ pub fn diagnostic_texts(cat: &eve_config::Catalog, d: &Diagnostic) -> (String, S
                 P::UnknownCommand => "keymap_unknown_command",
                 P::BadKey => "keymap_bad_key",
                 P::BadWhen => "keymap_bad_when",
+                P::UnknownWhenVar => "keymap_unknown_when_var",
                 P::PrintableKey => "keymap_printable_key",
                 P::ChordPrefix => "keymap_chord_prefix",
                 P::EscapeKey => "keymap_escape_key",

@@ -47,6 +47,8 @@ pub enum KeymapProblem {
     BadKey,
     /// `when` 句が読めない。
     BadWhen,
+    /// `when` 句に知らない変数がある (07 §7.3)。`Diagnostic.value` はその変数名。
+    UnknownWhenVar,
     /// 修飾のない文字キー: 文字入力を奪うので割り当てられない (07 §7.6)。
     PrintableKey,
     /// 既定のチョードの先頭と同じ単体のキー: チョード側を優先する (07 §7.6)。

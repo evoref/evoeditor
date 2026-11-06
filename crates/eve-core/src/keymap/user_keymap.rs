@@ -81,8 +81,17 @@ impl Editor {
                         continue;
                     }
                     let when = when.as_deref().unwrap_or("");
-                    if ContextExpr::parse(when).is_err() {
+                    let Ok(expr) = ContextExpr::parse(when) else {
                         diags.push(warn(KeymapProblem::BadWhen, when));
+                        continue;
+                    };
+                    // 知らない変数は評価すると黙って偽になるので、割当を使わずに知らせる (07 §7.3)
+                    if let Some(v) = expr
+                        .vars()
+                        .into_iter()
+                        .find(|v| !crate::command::context::CONTEXT_VARS.contains(&v.as_str()))
+                    {
+                        diags.push(warn(KeymapProblem::UnknownWhenVar, &v));
                         continue;
                     }
                     (command.as_str(), when)
