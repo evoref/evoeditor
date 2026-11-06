@@ -293,8 +293,9 @@ fn move_lines(ctx: &mut CommandCtx<'_>, up: bool) -> CommandResult {
     let total = t.len_lines();
     let text = |s: usize, e: usize| t.slice_to_string(ByteRange::new(ByteOff(s), ByteOff(e)));
     let mut edits: Vec<Edit> = Vec::new();
-    // 動かすブロックと、位置のずれ (符号つき)
-    let mut moved: Vec<(Block, i64)> = Vec::new();
+    // 動かしたブロックと、ブロックの本文 (`[bs, be]`) の位置のずれ (符号つき)、ブロックの後の行頭の写し先
+    // (選択が行頭で終わるとき、その位置もブロックについていく)
+    let mut moved: Vec<Moved> = Vec::new();
     for (a, b) in target_blocks(doc, &sel) {
         if up {
             if a == 0 {
@@ -313,7 +314,12 @@ fn move_lines(ctx: &mut CommandCtx<'_>, up: bool) -> CommandResult {
                 range: ByteRange::new(ByteOff(ps), ByteOff(end)),
                 insert: new.as_str().into(),
             });
-            moved.push(((a, b), -((bs - ps) as i64)));
+            moved.push(Moved {
+                block: (a, b),
+                be,
+                delta: -((bs - ps) as i64),
+                after: (end, ps + (be - bs) + (bs - pe)),
+            });
         } else {
             if b + 1 >= total {
                 continue;
@@ -330,26 +336,51 @@ fn move_lines(ctx: &mut CommandCtx<'_>, up: bool) -> CommandResult {
                 range: ByteRange::new(ByteOff(bs), ByteOff(end)),
                 insert: new.as_str().into(),
             });
-            moved.push(((a, b), (ns - bs) as i64));
+            // ブロックの本文は、隣の行の本文とブロックの改行の後に来る
+            moved.push(Moved {
+                block: (a, b),
+                be,
+                delta: (ne - be) as i64,
+                after: (ns, end),
+            });
         }
     }
-    let line_of: Vec<(usize, usize)> = sel
-        .iter()
-        .map(|r| (bl(t, r.anchor), bl(t, r.head)))
-        .collect();
+    // 各 Range は、始まりの行を含むブロックについていく (終わりが次の行の行頭でも同じブロック)
+    let start_line: Vec<usize> = sel.iter().map(|r| bl(t, r.start())).collect();
     commit(ctx, "edit.move_line", edits, move |_, _| {
-        let shift = |p: Pos, line: usize| -> Pos {
-            let d = moved
-                .iter()
-                .find(|((a, b), _)| line >= *a && line <= *b)
-                .map_or(0, |(_, d)| *d);
-            ByteOff((p.0 as i64 + d) as usize)
-        };
         sel.iter()
-            .zip(&line_of)
-            .map(|(r, &(la, lh))| Range::new(shift(r.anchor, la), shift(r.head, lh)))
+            .zip(&start_line)
+            .map(|(r, &line)| {
+                let Some(m) = moved
+                    .iter()
+                    .find(|m| line >= m.block.0 && line <= m.block.1)
+                else {
+                    return *r;
+                };
+                let shift = |p: Pos| -> Pos {
+                    if p.0 <= m.be {
+                        ByteOff((p.0 as i64 + m.delta) as usize)
+                    } else if p.0 == m.after.0 {
+                        ByteOff(m.after.1)
+                    } else {
+                        p
+                    }
+                };
+                Range::new(shift(r.anchor), shift(r.head))
+            })
             .collect()
     })
+}
+
+/// 上下移動で動かしたブロック (`move_lines`)。
+struct Moved {
+    block: Block,
+    /// ブロックの最後の行の本文の末尾 (改行の前。旧座標)。
+    be: usize,
+    /// ブロックの本文の位置のずれ。
+    delta: i64,
+    /// ブロックの後の行頭 (旧座標) と、その写し先 (移した後のブロックの本文の末尾と、それに続く改行の後)。
+    after: (usize, usize),
 }
 
 fn move_line_up(ctx: &mut CommandCtx<'_>) -> CommandResult {
