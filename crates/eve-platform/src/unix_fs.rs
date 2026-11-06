@@ -461,8 +461,9 @@ impl FileSystem for UnixFs {
         // 記録は消す」。Windows の save.rs は不在でもフラグを残す。docs/review/v0.3-findings.md の SAF-10)
         let abort = |file: Option<File>, flag: &mut FlagGuard| {
             drop(file);
-            match fs::remove_file(&tmp) {
-                Err(e) if e.kind() != io::ErrorKind::NotFound => {}
+            match hooked("unlink_tmp", || fs::remove_file(&tmp)) {
+                // 消せなければフラグを残し、名前をログに残す (05 §4.1 手順 8)
+                Err(e) if e.kind() != io::ErrorKind::NotFound => flag.log_leftover_tmp(&tmp, &e),
                 _ => flag.remove(),
             }
         };
@@ -879,6 +880,52 @@ true
 
     fn leftovers_outside_state(t: &Tmp) -> Vec<String> {
         leftovers(t).into_iter().filter(|n| n != "state").collect()
+    }
+
+    // SAF-41: 中断の後片付けで一時ファイルを消せなければ、保存中フラグを残し、一時ファイルの名前を状態ディレクトリのログに残す
+    // (05 §4.1 手順 8。本文は書かない)
+    #[test]
+    fn 中断の後に一時ファイルを消せなければ名前をログに残しフラグも残す() {
+        let t = Tmp::new("unlink-tmp");
+        let ufs = with_state(&t);
+        let a = t.p("a.txt");
+        fs::write(
+            &a, b"old
+",
+        )
+        .unwrap();
+        let expect = stamp_of(&ufs, &a);
+        let _r = hooks::inject_errno("replace", libc::EIO);
+        let _u = hooks::inject_errno("unlink_tmp", libc::EACCES);
+        save(
+            &ufs,
+            &a,
+            b"secret body
+",
+            expect,
+        )
+        .unwrap_err();
+        assert_eq!(
+            fs::read(&a).unwrap(),
+            b"old
+",
+            "T は無傷"
+        );
+        let tmp = leftovers_outside_state(&t)
+            .into_iter()
+            .find(|n| n != "a.txt")
+            .expect("一時ファイルが残る");
+        let log = fs::read_to_string(t.p("state").join("log").join("evoeditor.log")).unwrap();
+        assert!(log.contains(&tmp), "{log}");
+        assert!(!log.contains("secret body"), "本文は書かない: {log}");
+        // 保存中フラグのファイルが残る (自分のプロセスの記録なので list_inflight には出ない)
+        let flags: Vec<_> = fs::read_dir(t.p("state").join("recovery").join("inflight"))
+            .unwrap()
+            .flatten()
+            .flat_map(|k| fs::read_dir(k.path()).unwrap().flatten())
+            .filter(|e| e.path().extension().is_some_and(|x| x == "toml"))
+            .collect();
+        assert_eq!(flags.len(), 1, "フラグは残る");
     }
 
     // SAF-23: 置換の rename が EXDEV / ENOTSUP で、取り直した T が無傷なら AtomicUnsupported (core が確認の後に直接上書きへ進む、

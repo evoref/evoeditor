@@ -424,6 +424,18 @@ pub(crate) struct FlagGuard {
 }
 
 impl FlagGuard {
+    /// 中断の後片付けで一時ファイルを消せなかった: その名前を状態ディレクトリのログに残す (05 §4.1 手順 8。本文は含まれるので
+    /// 「どこにあるか」だけ。docs/review/v0.3-findings.md の SAF-41)。保存中フラグは残っているので、次の起動の走査も見つける。
+    pub(crate) fn log_leftover_tmp(&self, tmp: &Path, err: &std::io::Error) {
+        crate::log::Logger::with_level(self.state_dir.as_deref(), crate::log::Level::Warn).log(
+            crate::log::Level::Warn,
+            &format!(
+                "中断した保存の一時ファイルを消せませんでした: {} ({err})",
+                tmp.display()
+            ),
+        );
+    }
+
     /// 一時ファイルを作る前に書く。書けなければ警告して続ける (原子的置換では T が無傷のまま残るため)。
     pub(crate) fn begin(
         state_dir: Option<&Path>,
