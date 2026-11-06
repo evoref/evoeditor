@@ -13,6 +13,7 @@ use crate::document::Document;
 
 use super::CharWidth;
 use super::ColIndex;
+use super::cache::{LongKey, UnitsKey};
 
 /// 空白の可視化の記号 (タブの `>` と続きの空白、全角スペースの `[]`) か。それ以外の記号は制御文字・不可視文字。
 pub(super) fn is_whitespace_mark(text: &str) -> bool {
@@ -90,8 +91,7 @@ pub(super) fn units_for(doc: &Document, line: usize, content: &str) -> std::rc::
     if content.len() < UNITS_CACHE_MIN {
         return Rc::new(units_with(content, esc, ws, &cfg));
     }
-    type Key = (eve_view::Revision, usize, bool, u8, bool, bool);
-    let key: Key = (
+    let key: UnitsKey = (
         doc.revision(),
         line,
         esc,
@@ -99,14 +99,13 @@ pub(super) fn units_for(doc: &Document, line: usize, content: &str) -> std::rc::
         cfg.ambiguous_wide,
         ws,
     );
-    if let Some(any) = doc.layout_cache.borrow().as_ref()
-        && let Some((k, u)) = any.downcast_ref::<(Key, Rc<Vec<Unit>>)>()
+    if let Some((k, u)) = doc.layout_cache.borrow().units.as_ref()
         && *k == key
     {
         return u.clone();
     }
     let u = Rc::new(units_with(content, esc, ws, &cfg));
-    *doc.layout_cache.borrow_mut() = Some(Box::new((key, u.clone())));
+    doc.layout_cache.borrow_mut().units = Some((key, u.clone()));
     u
 }
 
@@ -260,12 +259,9 @@ pub(super) fn long_index(doc: &Document, line: usize) -> Option<(usize, std::rc:
     let (ls, le) = (t.line_to_byte(l).0, t.line_end_byte(l).0);
     let esc = esc_enabled(doc);
     let cfg = doc_width_config(doc);
-    type Key = (eve_view::Revision, usize, bool, u8, bool);
-    type Entries = Vec<(Key, Rc<ColIndex>)>;
-    let key: Key = (doc.revision(), line, esc, cfg.tab_width, cfg.ambiguous_wide);
-    let mut cache = doc.long_cache.borrow_mut();
-    let entries = cache.get_or_insert_with(|| Box::new(Entries::new()));
-    let entries = entries.downcast_mut::<Entries>()?;
+    let key: LongKey = (doc.revision(), line, esc, cfg.tab_width, cfg.ambiguous_wide);
+    let mut cache = doc.layout_cache.borrow_mut();
+    let entries = &mut cache.long;
     // 古い Revision の索引は使えないので捨てる
     entries.retain(|(k, _)| k.0 == key.0);
     if let Some((_, ix)) = entries.iter().find(|(k, _)| *k == key) {

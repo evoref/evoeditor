@@ -6,10 +6,12 @@
 //!
 //! spec: 02 §8, 03 §14, 07 §8 (テーマ段の適用)
 
+mod cache;
 mod frame;
 mod rows;
 mod units;
 
+pub(crate) use cache::LayoutCache;
 pub(crate) use frame::{build_frame, primary_cursor_cell};
 pub(crate) use rows::{cell_text, gutter_width, line_rows, wrap_ctx, wrap_width};
 pub(crate) use units::{

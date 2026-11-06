@@ -89,11 +89,8 @@ pub struct Document {
     /// 読込中の進捗 (百分率)。ステータスバーの `[読込中 n%]` に出す。
     pub load_percent: u8,
     pub display: DisplaySettings,
-    /// 長い行の表示単位の計算結果 (最後の 1 行分)。1 回の操作で同じ行を何度も展開しないための覚え。
-    /// 中身の型は表示の層 (`editor::layout`) だけが知る。
-    pub(crate) layout_cache: std::cell::RefCell<Option<Box<dyn std::any::Any>>>,
-    /// 長大行の列の索引 (直近の数行分、03 §11.5.1)。中身の型は `editor::layout` だけが知る。
-    pub(crate) long_cache: std::cell::RefCell<Option<Box<dyn std::any::Any>>>,
+    /// レイアウトの覚え (長い行の表示単位・長大行の列の索引)。読み書きするのは `layout/` だけ。
+    pub(crate) layout_cache: std::cell::RefCell<crate::layout::LayoutCache>,
 }
 
 impl Document {
@@ -124,8 +121,7 @@ impl Document {
             load_state: LoadState::Ready,
             load_percent: 0,
             display: DisplaySettings::default(),
-            layout_cache: std::cell::RefCell::new(None),
-            long_cache: std::cell::RefCell::new(None),
+            layout_cache: std::cell::RefCell::default(),
         }
     }
 
