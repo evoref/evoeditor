@@ -100,6 +100,16 @@ pub(crate) fn verdict(v: &Value) -> Verdict {
             limits(v, 2.0, 8.0),
             "1 MB の文書の検索欄への入力 (一致を強調し直す)",
         ),
+        "BM-103b-search-1m-regex" => t(
+            "NFR-103 を維持 (p50 2 ms / p99 8 ms)",
+            limits(v, 2.0, 8.0),
+            "1 MB の文書の検索欄への正規表現の入力 (一致を強調し直す)",
+        ),
+        "BM-108" => t(
+            "(参考) NFR-108 の目安 50 ms (許容 200 ms)",
+            None,
+            "100 MB の中ほどにだけある語の最初の一致の表示 (検索語と Enter の読取完了 → 一致の行が出た Frame の write)",
+        ),
         "BM-103b-search" => t(
             "NFR-103 を維持 (p50 2 ms / p99 8 ms)",
             limits(v, 2.0, 8.0),
