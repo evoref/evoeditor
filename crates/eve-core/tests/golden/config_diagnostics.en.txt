@@ -58,8 +58,8 @@
 4:1	Warning	keys.nowhere.ctrl+s	"nowhere"
   The context in keys.nowhere.ctrl+s is not available
   Available: global, editor, search, prompt, palette, list, dialog, help. This binding is ignored
-0:0	Error	keys.editor.Ctrl+Q	"app.quit"
-  The binding keys.editor.Ctrl+Q would make quit, the command palette or cancel unreachable
+11:1	Error	keys.editor.ctrl+q	"app.quit"
+  The binding keys.editor.ctrl+q would make quit, the command palette or cancel unreachable
   The default binding was kept. Choose another key
 ## theme: cycle_a (themes/cycle_a.toml, 使える: false)
 0:0	Error		""

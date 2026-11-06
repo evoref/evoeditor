@@ -149,6 +149,21 @@ fn 脱出キーに届かなくなる割当は外して既定を残す() {
 }
 
 #[test]
+fn 脱出キーの診断は書かれた行と桁とキーの表記で出す() {
+    let mut h = Harness::new();
+    let f =
+        load_keymap_str("[keys.editor]\n\"f6\" = \"edit.delete_line\"\n  \"ctrl+q\" = \"none\"\n");
+    let d = h.editor.set_user_keymap(&f);
+    let e = d
+        .iter()
+        .find(|d| d.kind == DiagKind::Keymap(KeymapProblem::EscapeKey))
+        .unwrap_or_else(|| panic!("{d:?}"));
+    // 整形した表記 (Ctrl+Q) ではなく、書かれたとおり
+    assert_eq!(e.key, "keys.editor.ctrl+q");
+    assert_eq!((e.line, e.column), (3, 3));
+}
+
+#[test]
 fn when_に知らない変数がある割当は警告して使わない() {
     let mut h = Harness::new();
     let f = load_keymap_str(concat!(

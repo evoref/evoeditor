@@ -58,8 +58,8 @@
 4:1	Warning	keys.nowhere.ctrl+s	"nowhere"
   keys.nowhere.ctrl+s のコンテキスト名は使えません
   使える名前: global, editor, search, prompt, palette, list, dialog, help。この割当は使いません
-0:0	Error	keys.editor.Ctrl+Q	"app.quit"
-  keys.editor.Ctrl+Q の割当だと、終了・コマンドパレット・取消のどれかに届かなくなります
+11:1	Error	keys.editor.ctrl+q	"app.quit"
+  keys.editor.ctrl+q の割当だと、終了・コマンドパレット・取消のどれかに届かなくなります
   既定の割当を残しました。別のキーにしてください
 ## theme: cycle_a (themes/cycle_a.toml, 使える: false)
 0:0	Error		""
