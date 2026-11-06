@@ -10,10 +10,11 @@ use eve_text::{
 use eve_text::{WidthConfig, str_display_width};
 use eve_view::{DocumentId, ViewId};
 
+use crate::command::ids;
 use crate::document::{Document, Origin, Transaction};
 
 use crate::command::{
-    CommandCtx, CommandKind, CommandRegistry, CommandResult, CommandSpec, Permission, RejectReason,
+    CommandCtx, CommandKind, CommandRegistry, CommandResult, Permission, RejectReason,
 };
 use crate::view::motion::{indent_end, word_stop};
 
@@ -136,7 +137,7 @@ fn clipboard_cut(ctx: &mut CommandCtx<'_>) -> CommandResult {
     }
     edit_each_as(
         ctx,
-        Origin::Command(eve_view::CommandId::new("clipboard.cut")),
+        Origin::Command(eve_view::CommandId::new(ids::CLIPBOARD_CUT)),
         |_, r| {
             (!r.is_empty()).then(|| Plan {
                 del: ByteRange::new(r.start(), r.end()),
@@ -473,68 +474,54 @@ fn outdent_bytes(doc: &Document, ls: usize, le: usize, width: usize) -> usize {
 
 // ---------- 登録 ----------
 
-macro_rules! reg {
-    ($r:expr, $id:expr, $kind:expr, $perm:expr, $when:expr, $h:expr) => {
-        $r.register(
-            CommandSpec::new($id, $kind, $perm, $when, $h)
-                .expect("カタログの when 句は構文が正しい"),
-        )
-    };
-}
-
 /// v0.1 の編集コマンド (07 §11.6 の「編集」。カタログが正本)。
 pub(crate) fn register(r: &mut CommandRegistry) {
     use CommandKind::{Edit, Motion};
     use Permission::{None as NoPerm, Propose, Read};
     let w = "!doc.read_only";
-    reg!(r, "file.set_line_ending", Edit, Propose, w, set_line_ending);
-    reg!(
-        r,
-        "clipboard.copy",
+    r.add(ids::FILE_SET_LINE_ENDING, Edit, Propose, w, set_line_ending);
+    r.add(
+        ids::CLIPBOARD_COPY,
         CommandKind::Ui,
         NoPerm,
         "!selection.empty",
-        crate::command::clipboard::copy
+        crate::command::clipboard::copy,
     );
-    reg!(
-        r,
-        "clipboard.cut",
+    r.add(
+        ids::CLIPBOARD_CUT,
         Edit,
         NoPerm,
         "!selection.empty && !doc.read_only",
-        clipboard_cut
+        clipboard_cut,
     );
-    reg!(
-        r,
-        "edit.paste",
+    r.add(
+        ids::EDIT_PASTE,
         Edit,
         NoPerm,
         w,
-        crate::command::clipboard::paste
+        crate::command::clipboard::paste,
     );
-    reg!(r, "edit.insert_text", Edit, Propose, w, insert_text);
-    reg!(r, "edit.newline", Edit, Propose, w, newline);
-    reg!(r, "edit.undo", Edit, NoPerm, w, undo);
-    reg!(r, "edit.redo", Edit, NoPerm, w, redo);
-    reg!(r, "edit.delete_backward", Edit, Propose, w, delete_backward);
-    reg!(r, "edit.delete_forward", Edit, Propose, w, delete_forward);
-    reg!(
-        r,
-        "edit.delete_word_backward",
+    r.add(ids::EDIT_INSERT_TEXT, Edit, Propose, w, insert_text);
+    r.add(ids::EDIT_NEWLINE, Edit, Propose, w, newline);
+    r.add(ids::EDIT_UNDO, Edit, NoPerm, w, undo);
+    r.add(ids::EDIT_REDO, Edit, NoPerm, w, redo);
+    r.add(ids::EDIT_DELETE_BACKWARD, Edit, Propose, w, delete_backward);
+    r.add(ids::EDIT_DELETE_FORWARD, Edit, Propose, w, delete_forward);
+    r.add(
+        ids::EDIT_DELETE_WORD_BACKWARD,
         Edit,
         Propose,
         w,
-        delete_word_backward
+        delete_word_backward,
     );
-    reg!(
-        r,
-        "edit.delete_word_forward",
+    r.add(
+        ids::EDIT_DELETE_WORD_FORWARD,
         Edit,
         Propose,
         w,
-        delete_word_forward
+        delete_word_forward,
     );
-    reg!(r, "edit.indent", Edit, Propose, w, indent);
-    reg!(r, "edit.outdent", Edit, Propose, w, outdent);
-    reg!(r, "select.all", Motion, Read, "", select_all);
+    r.add(ids::EDIT_INDENT, Edit, Propose, w, indent);
+    r.add(ids::EDIT_OUTDENT, Edit, Propose, w, outdent);
+    r.add(ids::SELECT_ALL, Motion, Read, "", select_all);
 }

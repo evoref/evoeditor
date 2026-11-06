@@ -7,10 +7,11 @@
 use eve_text::{ByteOff, ByteRange, ChangeSet, Edit, LineIdx, Pos, Range, Selection, TextRead};
 use eve_view::{CommandId, DocumentId, ViewId};
 
+use crate::command::ids;
 use crate::document::{Document, Origin, Transaction};
 
 use crate::command::{
-    CommandCtx, CommandKind, CommandRegistry, CommandResult, CommandSpec, Permission, RejectReason,
+    CommandCtx, CommandKind, CommandRegistry, CommandResult, Permission, RejectReason,
 };
 
 fn lb(t: &impl TextRead, l: usize) -> usize {
@@ -144,7 +145,7 @@ pub(crate) fn indent_lines(ctx: &mut CommandCtx<'_>, unit: &str) -> CommandResul
             }
         }
     }
-    commit(ctx, "edit.indent", edits, move |_, cs| {
+    commit(ctx, ids::EDIT_INDENT, edits, move |_, cs| {
         sel.iter().map(|r| map_range(r, cs)).collect()
     })
 }
@@ -175,7 +176,7 @@ pub(crate) fn outdent_lines(
             }
         }
     }
-    commit(ctx, "edit.outdent", edits, move |_, cs| {
+    commit(ctx, ids::EDIT_OUTDENT, edits, move |_, cs| {
         sel.iter().map(|r| map_range(r, cs)).collect()
     })
 }
@@ -225,7 +226,7 @@ fn duplicate_line(ctx: &mut CommandCtx<'_>) -> CommandResult {
             .collect::<Vec<_>>()
     };
     let blocks2 = blocks.clone();
-    commit(ctx, "edit.duplicate_line", edits, move |_, _| {
+    commit(ctx, ids::EDIT_DUPLICATE_LINE, edits, move |_, _| {
         let pos = |p: Pos, line: usize| -> Pos {
             // p が属するブロックの番号
             let i = blocks2
@@ -270,7 +271,7 @@ fn delete_line(ctx: &mut CommandCtx<'_>) -> CommandResult {
             insert: "".into(),
         });
     }
-    commit(ctx, "edit.delete_line", edits, move |_, cs| {
+    commit(ctx, ids::EDIT_DELETE_LINE, edits, move |_, cs| {
         cursors
             .iter()
             .map(|&p| Range::point(cs.map_pos(ByteOff(p), eve_text::Bias::After)))
@@ -362,21 +363,18 @@ fn move_line_down(ctx: &mut CommandCtx<'_>) -> CommandResult {
 /// v0.2 の行操作のコマンド (07 §11.6 の「編集」)。
 pub(crate) fn register(r: &mut CommandRegistry) {
     let handlers: [(&str, crate::Handler); 4] = [
-        ("edit.duplicate_line", duplicate_line),
-        ("edit.delete_line", delete_line),
-        ("edit.move_line_up", move_line_up),
-        ("edit.move_line_down", move_line_down),
+        (ids::EDIT_DUPLICATE_LINE, duplicate_line),
+        (ids::EDIT_DELETE_LINE, delete_line),
+        (ids::EDIT_MOVE_LINE_UP, move_line_up),
+        (ids::EDIT_MOVE_LINE_DOWN, move_line_down),
     ];
     for (id, h) in handlers {
-        r.register(
-            CommandSpec::new(
-                id,
-                CommandKind::Edit,
-                Permission::Propose,
-                "!doc.read_only",
-                h,
-            )
-            .expect("カタログの when 句は構文が正しい"),
+        r.add(
+            id,
+            CommandKind::Edit,
+            Permission::Propose,
+            "!doc.read_only",
+            h,
         );
     }
 }

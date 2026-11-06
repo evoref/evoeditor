@@ -9,13 +9,13 @@ use eve_text::{
 };
 use eve_view::{DocumentId, ViewId};
 
+use crate::command::ids;
 use crate::document::Document;
 
 use crate::layout::{Affinity, WrapSettings, line_rows};
 
 use crate::command::{
-    ArgValue, CommandCtx, CommandKind, CommandRegistry, CommandResult, CommandSpec, Permission,
-    RejectReason,
+    ArgValue, CommandCtx, CommandKind, CommandRegistry, CommandResult, Permission, RejectReason,
 };
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -427,40 +427,181 @@ pub(crate) fn goto_line_command(ctx: &mut CommandCtx<'_>) -> CommandResult {
     CommandResult::Done
 }
 
-macro_rules! reg {
-    ($r:expr, $id:expr, $h:expr) => {
-        $r.register(
-            CommandSpec::new($id, CommandKind::Motion, Permission::Read, "", $h)
-                .expect("カタログの when 句は構文が正しい"),
-        )
-    };
-}
-
 /// v0.1 の移動・選択コマンド (07 §11.6。`ui.cancel` はオーバーレイと同時)。
 pub(crate) fn register(r: &mut CommandRegistry) {
-    reg!(r, "cursor.move_left", move_left);
-    reg!(r, "cursor.move_right", move_right);
-    reg!(r, "cursor.move_up", move_up);
-    reg!(r, "cursor.move_down", move_down);
-    reg!(r, "select.extend_left", extend_left);
-    reg!(r, "select.extend_right", extend_right);
-    reg!(r, "select.extend_up", extend_up);
-    reg!(r, "select.extend_down", extend_down);
-    reg!(r, "cursor.move_word_left", move_word_left);
-    reg!(r, "cursor.move_word_right", move_word_right);
-    reg!(r, "select.extend_word_left", extend_word_left);
-    reg!(r, "select.extend_word_right", extend_word_right);
-    reg!(r, "cursor.home", home);
-    reg!(r, "cursor.end", end);
-    reg!(r, "select.extend_home", extend_home);
-    reg!(r, "select.extend_end", extend_end);
-    reg!(r, "cursor.doc_start", doc_start);
-    reg!(r, "cursor.doc_end", doc_end);
-    reg!(r, "select.extend_to_doc_start", extend_to_doc_start);
-    reg!(r, "select.extend_to_doc_end", extend_to_doc_end);
-    reg!(r, "cursor.page_up", page_up);
-    reg!(r, "cursor.page_down", page_down);
-    reg!(r, "select.extend_page_up", extend_page_up);
-    reg!(r, "select.extend_page_down", extend_page_down);
-    reg!(r, "cursor.goto_line", goto_line);
+    r.add(
+        ids::CURSOR_MOVE_LEFT,
+        CommandKind::Motion,
+        Permission::Read,
+        "",
+        move_left,
+    );
+    r.add(
+        ids::CURSOR_MOVE_RIGHT,
+        CommandKind::Motion,
+        Permission::Read,
+        "",
+        move_right,
+    );
+    r.add(
+        ids::CURSOR_MOVE_UP,
+        CommandKind::Motion,
+        Permission::Read,
+        "",
+        move_up,
+    );
+    r.add(
+        ids::CURSOR_MOVE_DOWN,
+        CommandKind::Motion,
+        Permission::Read,
+        "",
+        move_down,
+    );
+    r.add(
+        ids::SELECT_EXTEND_LEFT,
+        CommandKind::Motion,
+        Permission::Read,
+        "",
+        extend_left,
+    );
+    r.add(
+        ids::SELECT_EXTEND_RIGHT,
+        CommandKind::Motion,
+        Permission::Read,
+        "",
+        extend_right,
+    );
+    r.add(
+        ids::SELECT_EXTEND_UP,
+        CommandKind::Motion,
+        Permission::Read,
+        "",
+        extend_up,
+    );
+    r.add(
+        ids::SELECT_EXTEND_DOWN,
+        CommandKind::Motion,
+        Permission::Read,
+        "",
+        extend_down,
+    );
+    r.add(
+        ids::CURSOR_MOVE_WORD_LEFT,
+        CommandKind::Motion,
+        Permission::Read,
+        "",
+        move_word_left,
+    );
+    r.add(
+        ids::CURSOR_MOVE_WORD_RIGHT,
+        CommandKind::Motion,
+        Permission::Read,
+        "",
+        move_word_right,
+    );
+    r.add(
+        ids::SELECT_EXTEND_WORD_LEFT,
+        CommandKind::Motion,
+        Permission::Read,
+        "",
+        extend_word_left,
+    );
+    r.add(
+        ids::SELECT_EXTEND_WORD_RIGHT,
+        CommandKind::Motion,
+        Permission::Read,
+        "",
+        extend_word_right,
+    );
+    r.add(
+        ids::CURSOR_HOME,
+        CommandKind::Motion,
+        Permission::Read,
+        "",
+        home,
+    );
+    r.add(
+        ids::CURSOR_END,
+        CommandKind::Motion,
+        Permission::Read,
+        "",
+        end,
+    );
+    r.add(
+        ids::SELECT_EXTEND_HOME,
+        CommandKind::Motion,
+        Permission::Read,
+        "",
+        extend_home,
+    );
+    r.add(
+        ids::SELECT_EXTEND_END,
+        CommandKind::Motion,
+        Permission::Read,
+        "",
+        extend_end,
+    );
+    r.add(
+        ids::CURSOR_DOC_START,
+        CommandKind::Motion,
+        Permission::Read,
+        "",
+        doc_start,
+    );
+    r.add(
+        ids::CURSOR_DOC_END,
+        CommandKind::Motion,
+        Permission::Read,
+        "",
+        doc_end,
+    );
+    r.add(
+        ids::SELECT_EXTEND_TO_DOC_START,
+        CommandKind::Motion,
+        Permission::Read,
+        "",
+        extend_to_doc_start,
+    );
+    r.add(
+        ids::SELECT_EXTEND_TO_DOC_END,
+        CommandKind::Motion,
+        Permission::Read,
+        "",
+        extend_to_doc_end,
+    );
+    r.add(
+        ids::CURSOR_PAGE_UP,
+        CommandKind::Motion,
+        Permission::Read,
+        "",
+        page_up,
+    );
+    r.add(
+        ids::CURSOR_PAGE_DOWN,
+        CommandKind::Motion,
+        Permission::Read,
+        "",
+        page_down,
+    );
+    r.add(
+        ids::SELECT_EXTEND_PAGE_UP,
+        CommandKind::Motion,
+        Permission::Read,
+        "",
+        extend_page_up,
+    );
+    r.add(
+        ids::SELECT_EXTEND_PAGE_DOWN,
+        CommandKind::Motion,
+        Permission::Read,
+        "",
+        extend_page_down,
+    );
+    r.add(
+        ids::CURSOR_GOTO_LINE,
+        CommandKind::Motion,
+        Permission::Read,
+        "",
+        goto_line,
+    );
 }

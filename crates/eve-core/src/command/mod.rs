@@ -6,6 +6,7 @@
 pub(crate) mod clipboard;
 pub(crate) mod context;
 pub(crate) mod edit;
+pub(crate) mod ids;
 pub(crate) mod line_ops;
 
 use std::collections::BTreeMap;
@@ -203,6 +204,22 @@ impl CommandRegistry {
     /// 登録する。同じ ID が既にあれば置き換える。
     pub fn register(&mut self, spec: CommandSpec) {
         self.specs.insert(spec.id.clone(), spec);
+    }
+
+    /// 組込みのコマンドを登録する (docs/review/v0.3-findings.md の STR-B4 (2))。`when` は 07 §11.6 のカタログの
+    /// 文字列。構文の誤りと、同じ ID の二重の登録は組込みの誤りなので panic する (起動の試験で分かる)。
+    pub(crate) fn add(
+        &mut self,
+        id: &str,
+        kind: CommandKind,
+        permission: Permission,
+        when: &str,
+        handler: Handler,
+    ) {
+        let spec = CommandSpec::new(id, kind, permission, when, handler)
+            .unwrap_or_else(|e| panic!("組込みのコマンド {id} の when が読めない: {e:?}"));
+        let old = self.specs.insert(spec.id.clone(), spec);
+        assert!(old.is_none(), "組込みのコマンド {id} を二重に登録した");
     }
 
     pub fn get(&self, id: &CommandId) -> Option<&CommandSpec> {

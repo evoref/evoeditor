@@ -2,12 +2,13 @@
 
 use eve_view::MessageLevel;
 
+use crate::command::ids;
 use crate::io::fspath::FsPath;
 use crate::io::io_jobs::OpenOptions;
 use eve_encoding::Encoding;
 
 use crate::command::{
-    CommandCtx, CommandKind, CommandRegistry, CommandResult, CommandSpec, Permission, RejectReason,
+    CommandCtx, CommandKind, CommandRegistry, CommandResult, Permission, RejectReason,
 };
 use crate::editor::state::EditorState;
 use crate::ui_model::overlay::PromptKind;
@@ -121,53 +122,62 @@ pub(crate) fn file_save_as(ctx: &mut CommandCtx<'_>) -> CommandResult {
     }
 }
 
-macro_rules! reg {
-    ($r:expr, $id:expr, $kind:expr, $when:expr, $h:expr) => {
-        $r.register(
-            CommandSpec::new($id, $kind, Permission::None, $when, $h)
-                .expect("カタログの when 句は構文が正しい"),
-        )
-    };
-}
-
 /// v0.1 のファイルコマンドのうち、確認 UI なしで動くもの (07 §11.6 の「ファイル・アプリ」)。
 pub(crate) fn register(r: &mut CommandRegistry) {
-    reg!(r, "file.new", CommandKind::File, "", file_new);
-    reg!(r, "file.open", CommandKind::File, "", file_open);
-    reg!(
-        r,
-        "file.save",
+    r.add(
+        ids::FILE_NEW,
         CommandKind::File,
-        "!doc.read_only",
-        file_save
-    );
-    reg!(r, "file.save_as", CommandKind::File, "", file_save_as);
-    reg!(
-        r,
-        "file.reload",
-        CommandKind::File,
-        "doc.has_path",
-        file_reload
-    );
-    reg!(
-        r,
-        "file.set_encoding",
-        CommandKind::File,
+        Permission::None,
         "",
-        file_set_encoding
+        file_new,
     );
-    reg!(
-        r,
-        "file.toggle_read_only",
+    r.add(
+        ids::FILE_OPEN,
         CommandKind::File,
-        "doc.read_only_releasable || !doc.read_only",
-        file_toggle_read_only
+        Permission::None,
+        "",
+        file_open,
     );
-    reg!(
-        r,
-        "file.reopen_with_encoding",
+    r.add(
+        ids::FILE_SAVE,
         CommandKind::File,
+        Permission::None,
+        "!doc.read_only",
+        file_save,
+    );
+    r.add(
+        ids::FILE_SAVE_AS,
+        CommandKind::File,
+        Permission::None,
+        "",
+        file_save_as,
+    );
+    r.add(
+        ids::FILE_RELOAD,
+        CommandKind::File,
+        Permission::None,
         "doc.has_path",
-        file_reopen_with_encoding
+        file_reload,
+    );
+    r.add(
+        ids::FILE_SET_ENCODING,
+        CommandKind::File,
+        Permission::None,
+        "",
+        file_set_encoding,
+    );
+    r.add(
+        ids::FILE_TOGGLE_READ_ONLY,
+        CommandKind::File,
+        Permission::None,
+        "doc.read_only_releasable || !doc.read_only",
+        file_toggle_read_only,
+    );
+    r.add(
+        ids::FILE_REOPEN_WITH_ENCODING,
+        CommandKind::File,
+        Permission::None,
+        "doc.has_path",
+        file_reopen_with_encoding,
     );
 }

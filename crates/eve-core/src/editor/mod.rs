@@ -34,6 +34,7 @@ pub use crate::layout::{Affinity, WrapMode, WrapSettings};
 pub use crate::search::search_state::{SearchCount, SearchStep};
 pub use state::{EditorState, ScrollPos, View, Window};
 
+use crate::command::ids;
 use crate::document::Document;
 use crate::jobs::Ports;
 use crate::time::Tick;
@@ -48,22 +49,28 @@ pub struct Editor {
     which_key_shown: bool,
 }
 
+/// 組込みのコマンドをすべて登録した登録簿 (07 §11.6。`command::ids::ALL` と一致する)。
+pub(crate) fn builtin_registry() -> CommandRegistry {
+    let mut r = CommandRegistry::new();
+    crate::command::edit::register(&mut r);
+    crate::view::motion::register(&mut r);
+    crate::io::file_cmds::register(&mut r);
+    crate::io::external::register(&mut r);
+    buffer::register(&mut r);
+    crate::io::save_all::register(&mut r);
+    crate::ui_model::help::register(&mut r);
+    crate::io::config_reload::register(&mut r);
+    crate::view::view_cmds::register(&mut r);
+    crate::view::mouse::register(&mut r);
+    crate::command::line_ops::register(&mut r);
+    crate::ui_model::overlay::register(&mut r);
+    r
+}
+
 impl Editor {
     /// 空の EditorState を作る。I/O もジョブ投入もしない。
     pub fn new(ports: Ports, caps: Capabilities) -> Editor {
-        let mut registry = CommandRegistry::new();
-        crate::command::edit::register(&mut registry);
-        crate::view::motion::register(&mut registry);
-        crate::io::file_cmds::register(&mut registry);
-        crate::io::external::register(&mut registry);
-        buffer::register(&mut registry);
-        crate::io::save_all::register(&mut registry);
-        crate::ui_model::help::register(&mut registry);
-        crate::io::config_reload::register(&mut registry);
-        crate::view::view_cmds::register(&mut registry);
-        crate::view::mouse::register(&mut registry);
-        crate::command::line_ops::register(&mut registry);
-        crate::ui_model::overlay::register(&mut registry);
+        let registry = builtin_registry();
         let mut state = EditorState::new(caps, ports.jobs.clone(), ports.paths.clone());
         state.set_palette_entries(
             registry
@@ -397,7 +404,7 @@ impl Editor {
     fn insert_text(&mut self, s: &str) {
         let args = Args::new().with_str("text", s);
         self.execute(
-            CommandInvocation::new("edit.insert_text", InvocationSource::Keymap).with_args(args),
+            CommandInvocation::new(ids::EDIT_INSERT_TEXT, InvocationSource::Keymap).with_args(args),
         );
     }
 

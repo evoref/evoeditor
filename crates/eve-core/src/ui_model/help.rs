@@ -8,8 +8,9 @@ use std::collections::BTreeMap;
 
 use eve_view::{CutPolicy, HelpLine, HelpLineKind, KeyStroke, OverlayModel};
 
+use crate::command::ids;
 use crate::command::{
-    CommandCtx, CommandKind, CommandRegistry, CommandResult, CommandSpec, Permission, RejectReason,
+    CommandCtx, CommandKind, CommandRegistry, CommandResult, Permission, RejectReason,
 };
 use crate::editor::state::EditorState;
 use crate::keymap::format_sequence;
@@ -355,17 +356,14 @@ fn message_history_copy(ctx: &mut CommandCtx<'_>) -> CommandResult {
 /// v0.2 のヘルプコマンド (07 §11.6 の `help.open` / `help.keys` / `help.commands`)。
 pub(crate) fn register(r: &mut CommandRegistry) {
     let handlers: [(&str, crate::Handler); 5] = [
-        ("ui.message_history", message_history),
-        ("ui.message_history_copy", message_history_copy),
-        ("help.open", help_open),
-        ("help.keys", help_keys),
-        ("help.commands", help_commands),
+        (ids::UI_MESSAGE_HISTORY, message_history),
+        (ids::UI_MESSAGE_HISTORY_COPY, message_history_copy),
+        (ids::HELP_OPEN, help_open),
+        (ids::HELP_KEYS, help_keys),
+        (ids::HELP_COMMANDS, help_commands),
     ];
     for (id, h) in handlers {
-        r.register(
-            CommandSpec::new(id, CommandKind::Ui, Permission::Ui, "", h)
-                .expect("カタログの when 句は構文が正しい"),
-        );
+        r.add(id, CommandKind::Ui, Permission::Ui, "", h);
     }
 }
 

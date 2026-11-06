@@ -1,7 +1,8 @@
 //! View の表示属性のコマンド (docs/07 §11.6 の `view.*`、04 §7.2)。
 
+use crate::command::ids;
 use crate::command::{
-    CommandCtx, CommandKind, CommandRegistry, CommandResult, CommandSpec, Permission, RejectReason,
+    CommandCtx, CommandKind, CommandRegistry, CommandResult, Permission, RejectReason,
 };
 use crate::layout::WrapMode;
 
@@ -26,14 +27,11 @@ fn toggle_wrap(ctx: &mut CommandCtx<'_>) -> CommandResult {
 }
 
 pub(crate) fn register(r: &mut CommandRegistry) {
-    r.register(
-        CommandSpec::new(
-            "view.toggle_wrap",
-            CommandKind::Ui,
-            Permission::Ui,
-            "",
-            toggle_wrap,
-        )
-        .expect("カタログの when 句は構文が正しい"),
+    r.add(
+        ids::VIEW_TOGGLE_WRAP,
+        CommandKind::Ui,
+        Permission::Ui,
+        "",
+        toggle_wrap,
     );
 }
