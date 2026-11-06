@@ -14,6 +14,7 @@ use crate::command::{
 use crate::editor::state::EditorState;
 use crate::io::fs::Expect;
 use crate::jobs::{JobError, JobResult};
+use crate::ui_model::keys;
 use crate::ui_model::overlay::{ChoiceDef, ConfirmAction, ConfirmState};
 
 /// 実行中の全保存。
@@ -54,7 +55,7 @@ impl EditorState {
                 && self.io.lossy_ok != Some((id, doc.revision())))
                 || needs_readonly_ok
             {
-                let reason = self.message_text("ui.confirm.save_all_failed.needs_confirm", &[]);
+                let reason = self.message_text(keys::UI_CONFIRM_SAVE_ALL_FAILED_NEEDS_CONFIRM, &[]);
                 batch.failed.push((path.display(), reason));
                 continue;
             }
@@ -92,16 +93,18 @@ impl EditorState {
                 err: JobError::Fs(e),
                 ..
             } => match &e.kind {
-                crate::FsErrorKind::ReplacedMovedToBackup { backup } => {
-                    self.message_text("msg.save.moved_to_backup", &[("backup", &backup.display())])
-                }
+                crate::FsErrorKind::ReplacedMovedToBackup { backup } => self.message_text(
+                    keys::MSG_SAVE_MOVED_TO_BACKUP,
+                    &[("backup", &backup.display())],
+                ),
                 crate::FsErrorKind::InPlaceFailed { backup: Some(b) } => self.message_text(
-                    "msg.save.in_place_failed",
+                    keys::MSG_SAVE_IN_PLACE_FAILED,
                     &[("path", &shown), ("backup", &b.display())],
                 ),
-                crate::FsErrorKind::InPlaceFailed { backup: None } => {
-                    self.message_text("msg.save.in_place_failed_no_backup", &[("path", &shown)])
-                }
+                crate::FsErrorKind::InPlaceFailed { backup: None } => self.message_text(
+                    keys::MSG_SAVE_IN_PLACE_FAILED_NO_BACKUP,
+                    &[("path", &shown)],
+                ),
                 _ => crate::io::file::fs_reason(e),
             },
             JobResult::Failed { err, .. } => crate::io::file::reason_label(err),
@@ -141,9 +144,9 @@ impl EditorState {
             return;
         };
         let key = match (b.saved + b.skipped + b.failed.len(), b.skipped) {
-            (0, _) => "info.save_all.none",
-            (_, 0) => "info.save_all.done",
-            _ => "info.save_all.done_skipped",
+            (0, _) => keys::INFO_SAVE_ALL_NONE,
+            (_, 0) => keys::INFO_SAVE_ALL_DONE,
+            _ => keys::INFO_SAVE_ALL_DONE_SKIPPED,
         };
         let (saved, skipped) = (b.saved.to_string(), b.skipped.to_string());
         self.show_message(

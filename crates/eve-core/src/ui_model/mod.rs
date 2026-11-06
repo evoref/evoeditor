@@ -6,6 +6,7 @@
 pub(crate) mod chrome;
 pub(crate) mod config_report;
 pub(crate) mod help;
+pub(crate) mod keys;
 pub(crate) mod message;
 pub(crate) mod overlay;
 pub(crate) mod palette;

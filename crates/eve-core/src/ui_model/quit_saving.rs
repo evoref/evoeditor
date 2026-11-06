@@ -10,6 +10,7 @@ use eve_view::{DocumentId, Effect, JobId, QuitRescue, StderrLine};
 
 use crate::editor::state::EditorState;
 use crate::time::{Millis, Tick};
+use crate::ui_model::keys;
 use crate::ui_model::overlay::{ChoiceDef, ConfirmAction, ConfirmState, Continuation};
 use crate::{CommandResult, FsErrorKind, FsPath, JobError, JobResult};
 
@@ -106,13 +107,13 @@ impl EditorState {
             .map(FsPath::display)
             .unwrap_or_else(|| {
                 self.catalog()
-                    .render("status.untitled", &[("n", "1")], &|_| None)
+                    .render(keys::STATUS_UNTITLED, &[("n", "1")], &|_| None)
             });
         // 保存中の文書が 2 件以上なら、先頭の 1 件に「ほか N 件」を足す (03 §9.8)
         let docs: std::collections::BTreeSet<_> = jobs.iter().map(|(_, d)| *d).collect();
         let path = if docs.len() > 1 {
             let others = self.catalog().render(
-                "ui.confirm.quit_saving.others",
+                keys::UI_CONFIRM_QUIT_SAVING_OTHERS,
                 &[("count", &(docs.len() - 1).to_string())],
                 &|_| None,
             );

@@ -19,6 +19,7 @@ use crate::search::{
     unescape_replacement,
 };
 use crate::time::Tick;
+use crate::ui_model::keys;
 
 use crate::editor::state::EditorState;
 use crate::io::pending::Pending;
@@ -231,7 +232,7 @@ impl EditorState {
             return CommandResult::Rejected(crate::command::RejectReason::NotAvailable);
         };
         if bar.sel_ranges.is_empty() {
-            self.show_message(MessageLevel::Info, "info.search.no_selection", &[]);
+            self.show_message(MessageLevel::Info, keys::INFO_SEARCH_NO_SELECTION, &[]);
             return CommandResult::Done;
         }
         bar.in_selection = !bar.in_selection;
@@ -369,7 +370,7 @@ impl EditorState {
         let count_text = match self.search_count_for(bar.current) {
             SearchCount::Idle => None,
             SearchCount::Running { found } => Some(render(
-                "ui.search.count.running",
+                keys::UI_SEARCH_COUNT_RUNNING,
                 &[("found", &found.to_string())],
             )),
             SearchCount::Exact { current, total } | SearchCount::AtLeast { current, total } => {
@@ -378,19 +379,19 @@ impl EditorState {
                     SearchCount::AtLeast { .. }
                 );
                 Some(if total == 0 {
-                    render("ui.search.count.no_match", &[])
+                    render(keys::UI_SEARCH_COUNT_NO_MATCH, &[])
                 } else {
                     let cur = current.map_or("-".to_owned(), |c| c.to_string());
                     let key = if at_least {
-                        "ui.search.count.at_least"
+                        keys::UI_SEARCH_COUNT_AT_LEAST
                     } else {
-                        "ui.search.count.exact"
+                        keys::UI_SEARCH_COUNT_EXACT
                     };
                     render(key, &[("current", &cur), ("total", &total.to_string())])
                 })
             }
             SearchCount::Approx { total } => Some(render(
-                "ui.search.count.approx",
+                keys::UI_SEARCH_COUNT_APPROX,
                 &[("total", &total.to_string())],
             )),
         };
@@ -398,11 +399,11 @@ impl EditorState {
         let error = bar.error.as_ref().map(|e| {
             let text = match e {
                 QueryError::Syntax(reason) => {
-                    render("msg.search.invalid_regex.text", &[("reason", reason)])
+                    render(keys::MSG_SEARCH_INVALID_REGEX_TEXT, &[("reason", reason)])
                 }
-                QueryError::Multiline => render("msg.search.newline_unsupported.text", &[]),
+                QueryError::Multiline => render(keys::MSG_SEARCH_NEWLINE_UNSUPPORTED_TEXT, &[]),
                 QueryError::TooLarge => render(
-                    "msg.search.invalid_regex.text",
+                    keys::MSG_SEARCH_INVALID_REGEX_TEXT,
                     &[("reason", "pattern too large")],
                 ),
             };
@@ -412,7 +413,10 @@ impl EditorState {
             let cells = cell_text(text, CutPolicy::End).spans;
             let cursor = cell_text(&text[..*cur], CutPolicy::End).spans.len();
             ReplaceRowModel {
-                label: cell_text(&render("ui.search.replace_label", &[]), CutPolicy::Never),
+                label: cell_text(
+                    &render(keys::UI_SEARCH_REPLACE_LABEL, &[]),
+                    CutPolicy::Never,
+                ),
                 input: InputFieldModel {
                     len: cells.len(),
                     cells,
@@ -422,7 +426,7 @@ impl EditorState {
                     placeholder: None,
                 },
                 button: cell_text(
-                    &render("ui.search.replace_all_button", &[]),
+                    &render(keys::UI_SEARCH_REPLACE_ALL_BUTTON, &[]),
                     CutPolicy::Never,
                 ),
             }
@@ -430,7 +434,7 @@ impl EditorState {
         Some(SearchBarModel {
             replace,
             focus: bar.focus,
-            label: cell_text(&render("ui.search.label", &[]), CutPolicy::Never),
+            label: cell_text(&render(keys::UI_SEARCH_LABEL, &[]), CutPolicy::Never),
             input: InputFieldModel {
                 len: cells.len(),
                 cells,
@@ -539,7 +543,11 @@ impl EditorState {
             replacement
         };
         if query.matcher().is_none() {
-            self.show_message(MessageLevel::Info, "info.search.replace_empty_query", &[]);
+            self.show_message(
+                MessageLevel::Info,
+                keys::INFO_SEARCH_REPLACE_EMPTY_QUERY,
+                &[],
+            );
             return CommandResult::Done;
         }
         // 実行中のすべて置換があれば二重に始めない
@@ -625,7 +633,11 @@ impl EditorState {
             return CommandResult::Done;
         }
         if query.matcher().is_none() {
-            self.show_message(MessageLevel::Info, "info.search.replace_empty_query", &[]);
+            self.show_message(
+                MessageLevel::Info,
+                keys::INFO_SEARCH_REPLACE_EMPTY_QUERY,
+                &[],
+            );
             return CommandResult::Done;
         }
         let replacement = if query.is_regex() {
@@ -634,7 +646,7 @@ impl EditorState {
             replacement
         };
         let Some((range, insert)) = self.replace_target(doc_id, &query, &replacement) else {
-            self.show_message(MessageLevel::Info, "info.search.replace_no_match", &[]);
+            self.show_message(MessageLevel::Info, keys::INFO_SEARCH_REPLACE_NO_MATCH, &[]);
             return CommandResult::Done;
         };
         let Some(doc) = self.docs.documents.get(&doc_id) else {
@@ -692,7 +704,7 @@ impl EditorState {
             if fresh {
                 self.apply_replace_all(doc_id, changes, count);
             } else {
-                self.show_message(MessageLevel::Warn, "msg.search.replace_stale", &[]);
+                self.show_message(MessageLevel::Warn, keys::MSG_SEARCH_REPLACE_STALE, &[]);
             }
         }
     }
@@ -705,7 +717,7 @@ impl EditorState {
         count: u64,
     ) {
         if count == 0 {
-            self.show_message(MessageLevel::Info, "info.search.replace_no_match", &[]);
+            self.show_message(MessageLevel::Info, keys::INFO_SEARCH_REPLACE_NO_MATCH, &[]);
             return;
         }
         let view = self.focused_view();
@@ -721,12 +733,12 @@ impl EditorState {
             tx = tx.with_view(v);
         }
         if self.apply_transaction(doc_id, tx).is_err() {
-            self.show_message(MessageLevel::Warn, "msg.search.replace_stale", &[]);
+            self.show_message(MessageLevel::Warn, keys::MSG_SEARCH_REPLACE_STALE, &[]);
             return;
         }
         self.show_message(
             MessageLevel::Info,
-            "info.search.replaced",
+            keys::INFO_SEARCH_REPLACED,
             &[("count", &count.to_string())],
         );
         // 保持した一致は編集で無効になった: 検索をやり直す

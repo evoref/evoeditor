@@ -5,6 +5,7 @@ use eve_config::Catalog;
 use eve_view::{EditorEvent, MessageLevel};
 
 use crate::editor::state::EditorState;
+use crate::ui_model::keys;
 
 /// 表示中のメッセージ (解決済みの文言)。
 #[derive(Clone, Debug)]
@@ -101,7 +102,7 @@ impl EditorState {
             .unwrap_or_default();
         self.show_message(
             eve_view::MessageLevel::Warn,
-            "msg.edit.read_only",
+            keys::MSG_EDIT_READ_ONLY,
             &[("reason", &reason)],
         );
     }

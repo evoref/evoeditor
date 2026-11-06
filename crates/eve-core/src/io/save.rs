@@ -9,6 +9,7 @@ use crate::io::fs::{
 };
 use crate::io::fspath::FsPath;
 use crate::jobs::{JobError, JobKind, JobResult, SaveStrategy};
+use crate::ui_model::keys;
 
 use super::file::*;
 use super::open::*;
@@ -84,7 +85,7 @@ impl EditorState {
             return CommandResult::Done;
         };
         if doc.load_state != crate::document::LoadState::Ready {
-            self.message(MessageLevel::Info, "info.reload.busy", &path.display());
+            self.message(MessageLevel::Info, keys::INFO_RELOAD_BUSY, &path.display());
             return CommandResult::Rejected(RejectReason::NotAvailable);
         }
         // 読み取り専用 (`--readonly`・書込権限なし・不正バイト等) の文書は同じパスへ書かず、名前を尋ねる
@@ -119,7 +120,7 @@ impl EditorState {
         let Ok(path) = self.paths.normalize(raw_path) else {
             self.show_message(
                 MessageLevel::Error,
-                "msg.save.invalid_path",
+                keys::MSG_SAVE_INVALID_PATH,
                 &[("path", raw_path), ("reason", "invalid path")],
             );
             return CommandResult::Rejected(RejectReason::InvalidArgs);
@@ -132,7 +133,11 @@ impl EditorState {
             return CommandResult::Rejected(RejectReason::NotAvailable);
         }
         if self.save_in_progress(doc_id) {
-            self.message(MessageLevel::Info, "info.save.in_progress", &path.display());
+            self.message(
+                MessageLevel::Info,
+                keys::INFO_SAVE_IN_PROGRESS,
+                &path.display(),
+            );
             return CommandResult::Done;
         }
         let same = doc.path.as_ref() == Some(&path);
@@ -140,7 +145,7 @@ impl EditorState {
         if same && !doc.is_editable() {
             self.message(
                 MessageLevel::Warn,
-                "msg.save_as.same_file_read_only",
+                keys::MSG_SAVE_AS_SAME_FILE_READ_ONLY,
                 &path.display(),
             );
             return CommandResult::Rejected(RejectReason::ReadOnly);
@@ -200,7 +205,7 @@ impl EditorState {
         // (保存の経路はすべてここを通る。コマンドの when 句を経ない確認の「保存」からも。docs/review/v0.3-findings.md の SAF-17)
         if doc.load_state != crate::document::LoadState::Ready {
             let shown = path.display();
-            self.message(MessageLevel::Info, "info.reload.busy", &shown);
+            self.message(MessageLevel::Info, keys::INFO_RELOAD_BUSY, &shown);
             return CommandResult::Rejected(RejectReason::NotAvailable);
         }
         // 読み取り専用属性を解除した文書の上書き保存は、「読み取り専用を解除して保存」の確認を経る (FR-116、03 §9.3 手順 1)。
@@ -242,7 +247,7 @@ impl EditorState {
         if out_encoding.is_stateful() && doc.format.invalid_bytes > 0 {
             self.show_message(
                 MessageLevel::Error,
-                "msg.save.encoding_unsupported_iso2022",
+                keys::MSG_SAVE_ENCODING_UNSUPPORTED_ISO2022,
                 &[("path", &path.display())],
             );
             return CommandResult::Rejected(RejectReason::NotAvailable);
@@ -418,14 +423,14 @@ impl EditorState {
         match r {
             JobResult::RecoveryWritten { path: target, .. } => self.show_message(
                 MessageLevel::Info,
-                "info.save.to_recovery",
+                keys::INFO_SAVE_TO_RECOVERY,
                 &[("target", &target.display()), ("path", &path.display())],
             ),
             JobResult::Failed { err, .. } => {
                 let reason = reason_label(&err);
                 self.show_message(
                     MessageLevel::Error,
-                    "msg.save.recovery_failed",
+                    keys::MSG_SAVE_RECOVERY_FAILED,
                     &[("reason", &reason), ("path", &path.display())],
                 );
             }
@@ -587,7 +592,7 @@ impl EditorState {
             _ => false,
         };
         match r {
-            _ if unchanged => self.message(MessageLevel::Info, "info.save.unchanged", &shown),
+            _ if unchanged => self.message(MessageLevel::Info, keys::INFO_SAVE_UNCHANGED, &shown),
             // NotFound は不一致として保存へ進む。その他の失敗は照合の失敗として示す
             JobResult::Failed {
                 err: JobError::Fs(e),
@@ -595,14 +600,14 @@ impl EditorState {
             } if e.kind != FsErrorKind::NotFound => {
                 self.show_message(
                     MessageLevel::Error,
-                    "msg.save.check_failed",
+                    keys::MSG_SAVE_CHECK_FAILED,
                     &[("path", &shown), ("reason", &fs_reason(&e))],
                 );
             }
             JobResult::Failed {
                 err: JobError::Cancelled,
                 ..
-            } => self.message(MessageLevel::Info, "info.save.aborted", &shown),
+            } => self.message(MessageLevel::Info, keys::INFO_SAVE_ABORTED, &shown),
             _ => {
                 let Some((path, expected)) = self.docs.documents.get(&doc_id).and_then(|d| {
                     Some((
@@ -660,9 +665,9 @@ impl EditorState {
                     path: path.display(),
                 });
                 let key = if report_method == SaveMethod::InPlace {
-                    "info.save.in_place"
+                    keys::INFO_SAVE_IN_PLACE
                 } else {
-                    "info.save.done"
+                    keys::INFO_SAVE_DONE
                 };
                 self.message(MessageLevel::Info, key, &path.display());
                 self.show_save_warning(path, &report.warnings);
@@ -713,7 +718,7 @@ impl EditorState {
             JobResult::Unmappable { total, .. } => {
                 self.show_message(
                     MessageLevel::Error,
-                    "msg.save.failed",
+                    keys::MSG_SAVE_FAILED,
                     &[
                         ("path", &path.display()),
                         ("reason", &format!("unmappable ({total})")),
@@ -789,9 +794,9 @@ impl EditorState {
                 // 直接上書きの途中の失敗: 元のファイルは壊れている可能性がある。バックアップの場所を必ず示す (05 §4.4 手順 8)
                 let b = backup.as_ref().map(FsPath::display).unwrap_or_default();
                 let key = if backup.is_some() {
-                    "msg.save.in_place_failed"
+                    keys::MSG_SAVE_IN_PLACE_FAILED
                 } else {
-                    "msg.save.in_place_failed_no_backup"
+                    keys::MSG_SAVE_IN_PLACE_FAILED_NO_BACKUP
                 };
                 self.report_save_failure(
                     ask,
@@ -848,9 +853,9 @@ impl EditorState {
                     _ => String::new(),
                 };
                 let (level, key) = match err {
-                    JobError::Cancelled => (MessageLevel::Info, "info.save.aborted"),
+                    JobError::Cancelled => (MessageLevel::Info, keys::INFO_SAVE_ABORTED),
                     JobError::Fs(e) => (MessageLevel::Error, save_error_key(&e)),
-                    _ => (MessageLevel::Error, "msg.save.failed"),
+                    _ => (MessageLevel::Error, keys::MSG_SAVE_FAILED),
                 };
                 let backup = match &err_backup {
                     Some(b) => b.display(),
@@ -910,25 +915,27 @@ impl EditorState {
         };
         let p = path.display();
         match w {
-            W::FsyncFailed => {
-                self.show_message(MessageLevel::Warn, "msg.save.fsync_failed", &[("path", &p)])
-            }
+            W::FsyncFailed => self.show_message(
+                MessageLevel::Warn,
+                keys::MSG_SAVE_FSYNC_FAILED,
+                &[("path", &p)],
+            ),
             W::ChangedAfterSave => {
                 self.show_message(
                     MessageLevel::Warn,
-                    "msg.save.changed_after_save",
+                    keys::MSG_SAVE_CHANGED_AFTER_SAVE,
                     &[("path", &p)],
                 );
             }
             W::BackupNotRemoved { path: backup } => self.show_message(
                 MessageLevel::Warn,
-                "msg.save.backup_not_removed",
+                keys::MSG_SAVE_BACKUP_NOT_REMOVED,
                 &[("path", &p), ("backup", &backup.display())],
             ),
             W::PermissionNarrowed => {
                 self.show_message(
                     MessageLevel::Warn,
-                    "msg.save.permission_narrowed",
+                    keys::MSG_SAVE_PERMISSION_NARROWED,
                     &[("path", &p)],
                 );
             }
@@ -944,13 +951,13 @@ impl EditorState {
                     .join(", ");
                 self.show_message(
                     MessageLevel::Warn,
-                    "msg.save.attributes_not_copied",
+                    keys::MSG_SAVE_ATTRIBUTES_NOT_COPIED,
                     &[("path", &p), ("reason", &reason)],
                 );
             }
             W::InflightFlagNotWritten => self.show_message(
                 MessageLevel::Warn,
-                "msg.save.inflight_flag_not_written",
+                keys::MSG_SAVE_INFLIGHT_FLAG_NOT_WRITTEN,
                 &[("path", &p)],
             ),
         }
@@ -960,21 +967,21 @@ impl EditorState {
 /// 保存失敗の MessageKey (04 §15.2)。失敗の後の選択肢 (確認ダイアログ) は別に出す。
 pub(crate) fn save_error_key(e: &FsError) -> &'static str {
     match (&e.kind, &e.detail) {
-        (FsErrorKind::PermissionDenied, _) => "msg.save.permission_denied",
-        (FsErrorKind::DiskFull, _) => "msg.save.disk_full",
-        (FsErrorKind::ReadOnlyFs, _) => "msg.save.read_only_fs",
-        (FsErrorKind::InvalidPath, _) => "msg.save.invalid_path",
-        (FsErrorKind::Busy, _) => "msg.save.busy",
+        (FsErrorKind::PermissionDenied, _) => keys::MSG_SAVE_PERMISSION_DENIED,
+        (FsErrorKind::DiskFull, _) => keys::MSG_SAVE_DISK_FULL,
+        (FsErrorKind::ReadOnlyFs, _) => keys::MSG_SAVE_READ_ONLY_FS,
+        (FsErrorKind::InvalidPath, _) => keys::MSG_SAVE_INVALID_PATH,
+        (FsErrorKind::Busy, _) => keys::MSG_SAVE_BUSY,
         // 置換の途中で失敗し、元のファイルは退避名に残っている (NFR-301 AC-2)。そのパスを必ず示す
-        (FsErrorKind::ReplacedMovedToBackup { .. }, _) => "msg.save.moved_to_backup",
+        (FsErrorKind::ReplacedMovedToBackup { .. }, _) => keys::MSG_SAVE_MOVED_TO_BACKUP,
         (FsErrorKind::NotFound, Some(FsErrorDetail::ParentMissing { .. })) => {
-            "msg.save.parent_missing"
+            keys::MSG_SAVE_PARENT_MISSING
         }
         // リンク先が無いシンボリックリンク: 書かずに、リンク先を示して知らせる (FR-106 AC-2)
         (FsErrorKind::NotFound, Some(FsErrorDetail::DanglingLink { .. })) => {
-            "msg.save.dangling_link"
+            keys::MSG_SAVE_DANGLING_LINK
         }
-        _ => "msg.save.failed",
+        _ => keys::MSG_SAVE_FAILED,
     }
 }
 

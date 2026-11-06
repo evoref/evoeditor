@@ -10,6 +10,7 @@ use eve_view::{DocumentId, JobId, MessageLevel, Revision};
 use crate::jobs::cancel::CancelToken;
 use crate::jobs::{JobKind, JobResult};
 use crate::search::{SearchQuery, scan_bytes};
+use crate::ui_model::keys;
 
 use crate::editor::state::EditorState;
 use crate::io::pending::Pending;
@@ -443,9 +444,9 @@ impl EditorState {
         self.ensure_cursor_visible(view);
         if wrapped {
             let key = if forward {
-                "info.search.wrapped_forward"
+                keys::INFO_SEARCH_WRAPPED_FORWARD
             } else {
-                "info.search.wrapped_backward"
+                keys::INFO_SEARCH_WRAPPED_BACKWARD
             };
             self.show_message(MessageLevel::Info, key, &[]);
         }

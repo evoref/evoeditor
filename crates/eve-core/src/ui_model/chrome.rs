@@ -10,6 +10,7 @@ use eve_view::{
 
 use crate::command::ids;
 use crate::document::{Document, LoadState};
+use crate::ui_model::keys;
 
 use crate::editor::state::EditorState;
 use crate::layout::cell_text;
@@ -76,7 +77,7 @@ pub(crate) fn status_model(
     // 左群: ファイル名・変更・読み取り専用・読込中・保存中・チョード
     let name = match doc.path.as_ref().and_then(|p| p.file_name()) {
         Some(n) => n,
-        None => render(state, "status.untitled", &[("n", "1")]),
+        None => render(state, keys::STATUS_UNTITLED, &[("n", "1")]),
     };
     // 文書が 2 件以上のときは、ファイル名の後ろに何番目かを出す (03 §9.8)
     let name = match state.buffer_position() {
@@ -103,8 +104,8 @@ pub(crate) fn status_model(
     }
     if !doc.read_only.is_empty() {
         let (long, short) = (
-            render(state, "status.read_only.long", &[]),
-            render(state, "status.read_only.short", &[]),
+            render(state, keys::STATUS_READ_ONLY_LONG, &[]),
+            render(state, keys::STATUS_READ_ONLY_SHORT, &[]),
         );
         items.push(item(
             StatusKind::ReadOnly,
@@ -118,8 +119,8 @@ pub(crate) fn status_model(
     // 長い行を含む文書: 閾値を超える行は char 近似モードで表示する (NFR-106、03 §11.5.1、04 §8.7)
     if doc.format.long_lines > 0 {
         let (long, short) = (
-            render(state, "status.degraded.long_line.long", &[]),
-            render(state, "status.degraded.long_line.short", &[]),
+            render(state, keys::STATUS_DEGRADED_LONG_LINE_LONG, &[]),
+            render(state, keys::STATUS_DEGRADED_LONG_LINE_SHORT, &[]),
         );
         items.push(item(
             StatusKind::Degraded,
@@ -138,8 +139,8 @@ pub(crate) fn status_model(
         let percent = percent.to_string();
         let a = [("percent", percent.as_str())];
         let (long, short) = (
-            render(state, "status.loading.long", &a),
-            render(state, "status.loading.short", &a),
+            render(state, keys::STATUS_LOADING_LONG, &a),
+            render(state, keys::STATUS_LOADING_SHORT, &a),
         );
         items.push(item(
             StatusKind::Loading,
@@ -152,8 +153,8 @@ pub(crate) fn status_model(
     }
     if state.is_saving(view.doc) {
         let (long, short) = (
-            render(state, "status.saving.long", &[]),
-            render(state, "status.saving.short", &[]),
+            render(state, keys::STATUS_SAVING_LONG, &[]),
+            render(state, keys::STATUS_SAVING_SHORT, &[]),
         );
         items.push(item(
             StatusKind::Saving,
@@ -181,7 +182,7 @@ pub(crate) fn status_model(
     if !r.is_empty() {
         let t = doc.text();
         let n = t.byte_to_char(r.end()).0 - t.byte_to_char(r.start()).0;
-        let text = render(state, "status.selection", &[("count", &n.to_string())]);
+        let text = render(state, keys::STATUS_SELECTION, &[("count", &n.to_string())]);
         items.push(item(
             StatusKind::Selection,
             &text,
@@ -198,8 +199,8 @@ pub(crate) fn status_model(
     ];
     let a: Vec<(&str, &str)> = a.iter().map(|(k, v)| (*k, v.as_str())).collect();
     let (long, short) = (
-        render(state, "status.position.long", &a),
-        render(state, "status.position.short", &a),
+        render(state, keys::STATUS_POSITION_LONG, &a),
+        render(state, keys::STATUS_POSITION_SHORT, &a),
     );
     items.push(item(
         StatusKind::Position,
@@ -212,7 +213,7 @@ pub(crate) fn status_model(
     let (name, short) = (doc.format.encoding.name(), doc.format.encoding.short_name());
     let with_bom = |n: &str| {
         if doc.format.has_bom {
-            render(state, "status.encoding.bom", &[("encoding", n)])
+            render(state, keys::STATUS_ENCODING_BOM, &[("encoding", n)])
         } else {
             n.to_owned()
         }
@@ -227,7 +228,7 @@ pub(crate) fn status_model(
         CutPolicy::Never,
     ));
     let eol = if doc.format.eol_stats.is_mixed() {
-        render(state, "status.eol_mixed", &[])
+        render(state, keys::STATUS_EOL_MIXED, &[])
     } else {
         match doc.format.default_eol {
             eve_text::LineEnding::Lf => "LF",
@@ -281,7 +282,10 @@ pub(crate) fn overlay_models(state: &EditorState) -> Vec<OverlayModel> {
             if !c.choices.iter().any(|d| d.id == "abort") {
                 choices.push(Choice {
                     id: ChoiceId(c.cancel_index() as u16),
-                    label: cell_text(&render(state, "ui.confirm.cancel", &[]), CutPolicy::Never),
+                    label: cell_text(
+                        &render(state, keys::UI_CONFIRM_CANCEL, &[]),
+                        CutPolicy::Never,
+                    ),
                     key: None,
                     destructive: false,
                 });
@@ -299,7 +303,7 @@ pub(crate) fn overlay_models(state: &EditorState) -> Vec<OverlayModel> {
                 default: ChoiceId(c.default as u16),
                 focused: ChoiceId(c.focused as u16),
                 nav_hint: Some(cell_text(
-                    &render(state, "ui.confirm.nav_hint", &[]),
+                    &render(state, keys::UI_CONFIRM_NAV_HINT, &[]),
                     CutPolicy::End,
                 )),
             }]
@@ -357,8 +361,8 @@ pub(crate) fn hint_model(state: &EditorState, chord: &[KeyStroke]) -> HintModel 
         let text = cell_text(
             state
                 .catalog()
-                .get("hint.ui.cancel")
-                .unwrap_or("hint.ui.cancel"),
+                .get(keys::HINT_UI_CANCEL)
+                .unwrap_or(keys::HINT_UI_CANCEL),
             CutPolicy::Never,
         );
         return HintModel {
@@ -453,8 +457,8 @@ pub(crate) fn hint_model(state: &EditorState, chord: &[KeyStroke]) -> HintModel 
         let text = cell_text(
             state
                 .catalog()
-                .get("hint.ui.cancel")
-                .unwrap_or("hint.ui.cancel"),
+                .get(keys::HINT_UI_CANCEL)
+                .unwrap_or(keys::HINT_UI_CANCEL),
             CutPolicy::Never,
         );
         return HintModel {
@@ -489,7 +493,11 @@ pub(crate) fn hint_model(state: &EditorState, chord: &[KeyStroke]) -> HintModel 
 pub(crate) fn chrome_texts(state: &EditorState) -> ChromeTexts {
     let min = state.term.caps.min_surface;
     let (cols, rows) = (min.cols.to_string(), min.rows.to_string());
-    let text = render(state, "ui.too_small", &[("cols", &cols), ("rows", &rows)]);
+    let text = render(
+        state,
+        keys::UI_TOO_SMALL,
+        &[("cols", &cols), ("rows", &rows)],
+    );
     ChromeTexts {
         too_small: cell_text(&text, CutPolicy::Never),
     }

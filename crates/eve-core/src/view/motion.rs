@@ -11,6 +11,7 @@ use eve_view::{DocumentId, ViewId};
 
 use crate::command::ids;
 use crate::document::Document;
+use crate::ui_model::keys;
 
 use crate::layout::{Affinity, WrapSettings, line_rows};
 
@@ -415,7 +416,7 @@ pub(crate) fn goto_line_command(ctx: &mut CommandCtx<'_>) -> CommandResult {
     if let Some(want) = clamped_from {
         ctx.state.show_message(
             eve_view::MessageLevel::Info,
-            "info.goto_line.clamped",
+            keys::INFO_GOTO_LINE_CLAMPED,
             &[
                 ("line", &want.to_string()),
                 ("last", &(last + 1).to_string()),

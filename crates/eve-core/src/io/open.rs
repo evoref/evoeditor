@@ -8,6 +8,7 @@ use crate::io::fs::{Expect, FsError, FsErrorDetail, FsErrorKind};
 use crate::io::fspath::FsPath;
 use crate::io::io_jobs::OpenOptions;
 use crate::jobs::{ConfirmAsk, JobError, JobKind, JobResult, SaveStrategy};
+use crate::ui_model::keys;
 
 use super::file::*;
 use super::pending::*;
@@ -183,12 +184,16 @@ impl EditorState {
                 d.read_only = detected;
                 self.put_document(doc_id, d);
                 if long_lines > 0 {
-                    self.message(MessageLevel::Info, "info.open.long_line", &path.display());
+                    self.message(
+                        MessageLevel::Info,
+                        keys::INFO_OPEN_LONG_LINE,
+                        &path.display(),
+                    );
                 }
                 if changed_during_load {
                     self.message(
                         MessageLevel::Warn,
-                        "msg.open.changed_during_load",
+                        keys::MSG_OPEN_CHANGED_DURING_LOAD,
                         &path.display(),
                     );
                 }
@@ -196,21 +201,21 @@ impl EditorState {
                 if lossy > 0 {
                     self.show_message(
                         MessageLevel::Info,
-                        "info.open.lossy_roundtrip",
+                        keys::INFO_OPEN_LOSSY_ROUNDTRIP,
                         &[("count", &lossy.to_string())],
                     );
                 }
                 if let Some(e) = notes.redetected {
                     self.show_message(
                         MessageLevel::Info,
-                        "info.open.redetected",
+                        keys::INFO_OPEN_REDETECTED,
                         &[("encoding", e.name())],
                     );
                 }
                 if let Some(guess) = notes.guess_unsupported {
                     self.show_message(
                         MessageLevel::Info,
-                        "info.open.guess_unsupported",
+                        keys::INFO_OPEN_GUESS_UNSUPPORTED,
                         &[
                             ("path", &path.display()),
                             ("guess", guess),
@@ -234,9 +239,9 @@ impl EditorState {
                 d.path = Some(path.clone());
                 self.put_document(doc_id, d);
                 let key = if parent_missing.is_some() {
-                    "msg.open.parent_missing"
+                    keys::MSG_OPEN_PARENT_MISSING
                 } else {
-                    "info.open.new_file"
+                    keys::INFO_OPEN_NEW_FILE
                 };
                 let dir = parent_missing
                     .as_ref()
@@ -271,10 +276,12 @@ impl EditorState {
             JobResult::Failed { err, .. } => {
                 let reason = reason_label(&err);
                 let (level, key) = match err {
-                    JobError::Cancelled => (MessageLevel::Info, "info.open.cancelled"),
+                    JobError::Cancelled => (MessageLevel::Info, keys::INFO_OPEN_CANCELLED),
                     JobError::Fs(e) => (MessageLevel::Error, open_error_key(&e)),
-                    JobError::OutOfMemory { .. } => (MessageLevel::Error, "msg.open.out_of_memory"),
-                    _ => (MessageLevel::Error, "msg.open.failed"),
+                    JobError::OutOfMemory { .. } => {
+                        (MessageLevel::Error, keys::MSG_OPEN_OUT_OF_MEMORY)
+                    }
+                    _ => (MessageLevel::Error, keys::MSG_OPEN_FAILED),
                 };
                 self.open_failed(doc_id, replace, level, key, &path, &reason);
             }
@@ -377,7 +384,7 @@ impl EditorState {
             self.reopen_restore(ask.doc);
             self.message(
                 MessageLevel::Info,
-                "info.open.cancelled",
+                keys::INFO_OPEN_CANCELLED,
                 &ask.path.display(),
             );
             return;
@@ -386,7 +393,7 @@ impl EditorState {
             ask.doc,
             ask.replace,
             MessageLevel::Info,
-            "info.open.cancelled",
+            keys::INFO_OPEN_CANCELLED,
             &ask.path,
             "",
         );
@@ -422,10 +429,10 @@ impl EditorState {
     pub(crate) fn show_interrupted(&mut self, path: &FsPath, is: &crate::io::fs::InterruptedSave) {
         use crate::io::fs::SaveMethod;
         let key = match (is.method, is.backup.is_some(), is.complete) {
-            (SaveMethod::NewFile, _, _) => "msg.open.interrupted_new",
-            (_, true, true) => "msg.open.interrupted_save",
-            (_, true, false) => "msg.open.interrupted_save_incomplete",
-            (_, false, _) => "msg.open.interrupted_save_no_backup",
+            (SaveMethod::NewFile, _, _) => keys::MSG_OPEN_INTERRUPTED_NEW,
+            (_, true, true) => keys::MSG_OPEN_INTERRUPTED_SAVE,
+            (_, true, false) => keys::MSG_OPEN_INTERRUPTED_SAVE_INCOMPLETE,
+            (_, false, _) => keys::MSG_OPEN_INTERRUPTED_SAVE_NO_BACKUP,
         };
         let backup = is.backup.as_ref().map(FsPath::display).unwrap_or_default();
         let tmp = is.tmp.as_ref().map(FsPath::display).unwrap_or_default();
@@ -525,10 +532,10 @@ pub(crate) fn human_size(n: u64) -> String {
 /// 開く失敗の MessageKey (04 §15.2)。
 pub(crate) fn open_error_key(e: &FsError) -> &'static str {
     match (&e.kind, &e.detail) {
-        (FsErrorKind::PermissionDenied, _) => "msg.open.permission_denied",
-        (FsErrorKind::Busy, _) => "msg.open.busy",
-        (_, Some(FsErrorDetail::NotAFile)) => "msg.open.not_a_file",
-        (_, Some(FsErrorDetail::ReservedName)) => "msg.open.reserved_name",
-        _ => "msg.open.failed",
+        (FsErrorKind::PermissionDenied, _) => keys::MSG_OPEN_PERMISSION_DENIED,
+        (FsErrorKind::Busy, _) => keys::MSG_OPEN_BUSY,
+        (_, Some(FsErrorDetail::NotAFile)) => keys::MSG_OPEN_NOT_A_FILE,
+        (_, Some(FsErrorDetail::ReservedName)) => keys::MSG_OPEN_RESERVED_NAME,
+        _ => keys::MSG_OPEN_FAILED,
     }
 }

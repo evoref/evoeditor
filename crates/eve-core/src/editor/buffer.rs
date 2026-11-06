@@ -13,6 +13,7 @@ use crate::command::{
 };
 use crate::io::pending::Pending;
 use crate::layout::cell_text;
+use crate::ui_model::keys;
 use crate::ui_model::overlay::{Continuation, Overlay};
 use crate::ui_model::palette::{PaletteState, WINDOW, find, lower_graphemes};
 
@@ -73,7 +74,7 @@ impl EditorState {
             .and_then(|d| d.path.as_ref().and_then(|p| p.file_name()))
             .unwrap_or_else(|| {
                 self.catalog()
-                    .render("status.untitled", &[("n", "1")], &|_| None)
+                    .render(keys::STATUS_UNTITLED, &[("n", "1")], &|_| None)
             })
     }
 
@@ -181,19 +182,21 @@ impl EditorState {
             .collect();
         let cells = cell_text(&p.text, CutPolicy::End).spans;
         let cursor = cell_text(&p.text[..p.cursor], CutPolicy::End).spans.len();
-        let placeholder = p
-            .text
-            .is_empty()
-            .then(|| cell_text(&render("ui.buffer_list.placeholder", &[]), CutPolicy::End));
+        let placeholder = p.text.is_empty().then(|| {
+            cell_text(
+                &render(keys::UI_BUFFER_LIST_PLACEHOLDER, &[]),
+                CutPolicy::End,
+            )
+        });
         let footer = render(
-            "ui.palette.footer",
+            keys::UI_PALETTE_FOOTER,
             &[
                 ("matched", &hits.len().to_string()),
                 ("total", &self.buffer_order().len().to_string()),
             ],
         );
         OverlayModel::List {
-            title: cell_text(&render("ui.buffer_list.title", &[]), CutPolicy::Never),
+            title: cell_text(&render(keys::UI_BUFFER_LIST_TITLE, &[]), CutPolicy::Never),
             input: InputFieldModel {
                 len: cells.len(),
                 cells,
@@ -206,7 +209,7 @@ impl EditorState {
             first,
             selected,
             footer: cell_text(&footer, CutPolicy::Never),
-            no_match: cell_text(&render("ui.buffer_list.no_match", &[]), CutPolicy::End),
+            no_match: cell_text(&render(keys::UI_BUFFER_LIST_NO_MATCH, &[]), CutPolicy::End),
         }
     }
 

@@ -11,6 +11,7 @@ use crate::io::fs::{Expect, FsError};
 use crate::io::fspath::FsPath;
 use crate::io::io_jobs::OpenOptions;
 use crate::jobs::{JobError, JobKind, MetaPurpose};
+use crate::ui_model::keys;
 use eve_encoding::Encoding;
 
 use super::open::*;
@@ -124,7 +125,7 @@ impl EditorState {
         let Ok(path) = self.paths.normalize(raw_path) else {
             self.show_message(
                 MessageLevel::Error,
-                "msg.open.failed",
+                keys::MSG_OPEN_FAILED,
                 &[("path", raw_path), ("reason", "invalid path")],
             );
             return CommandResult::Rejected(RejectReason::InvalidArgs);
@@ -140,7 +141,7 @@ impl EditorState {
             if self.active_document() == Some(id) {
                 self.message(
                     MessageLevel::Info,
-                    "info.open.already_open",
+                    keys::INFO_OPEN_ALREADY_OPEN,
                     &path.display(),
                 );
             } else {
@@ -193,7 +194,11 @@ impl EditorState {
             return CommandResult::Done;
         };
         if self.save_in_progress(doc_id) {
-            self.message(MessageLevel::Info, "info.save.in_progress", &path.display());
+            self.message(
+                MessageLevel::Info,
+                keys::INFO_SAVE_IN_PROGRESS,
+                &path.display(),
+            );
             return CommandResult::Done;
         }
         if !doc.is_dirty() {
@@ -244,7 +249,7 @@ impl EditorState {
         let path = doc.path.clone();
         if self.save_in_progress(doc_id) {
             let shown = path.as_ref().map(FsPath::display).unwrap_or_default();
-            self.message(MessageLevel::Info, "info.save.in_progress", &shown);
+            self.message(MessageLevel::Info, keys::INFO_SAVE_IN_PROGRESS, &shown);
             return CommandResult::Done;
         }
         match path {
@@ -272,12 +277,16 @@ impl EditorState {
             return CommandResult::Rejected(RejectReason::NotAvailable);
         };
         if doc.load_state != crate::document::LoadState::Ready || self.open_in_progress() {
-            self.message(MessageLevel::Info, "info.reload.busy", &path.display());
+            self.message(MessageLevel::Info, keys::INFO_RELOAD_BUSY, &path.display());
             return CommandResult::Rejected(RejectReason::NotAvailable);
         }
         // 保存ジョブの実行中はその完了を待たせる (保存が終わってから実行し直す)
         if self.save_in_progress(doc_id) {
-            self.message(MessageLevel::Info, "info.save.in_progress", &path.display());
+            self.message(
+                MessageLevel::Info,
+                keys::INFO_SAVE_IN_PROGRESS,
+                &path.display(),
+            );
             return CommandResult::Rejected(RejectReason::NotAvailable);
         }
         let Some(enc) = enc else {
@@ -302,11 +311,15 @@ impl EditorState {
             return CommandResult::Rejected(RejectReason::NotAvailable);
         };
         if doc.load_state != crate::document::LoadState::Ready || self.open_in_progress() {
-            self.message(MessageLevel::Info, "info.reload.busy", &path.display());
+            self.message(MessageLevel::Info, keys::INFO_RELOAD_BUSY, &path.display());
             return CommandResult::Rejected(RejectReason::NotAvailable);
         }
         if self.save_in_progress(doc_id) {
-            self.message(MessageLevel::Info, "info.save.in_progress", &path.display());
+            self.message(
+                MessageLevel::Info,
+                keys::INFO_SAVE_IN_PROGRESS,
+                &path.display(),
+            );
             return CommandResult::Rejected(RejectReason::NotAvailable);
         }
         if doc.is_dirty() {
