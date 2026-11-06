@@ -36,7 +36,7 @@ impl EditorState {
             return;
         }
         // 動いている別のプロセスのスワップ。同じファイルを開いたら (tick で) 警告する
-        self.swap.alive.extend(
+        self.io.swap.alive.extend(
             swaps
                 .iter()
                 .filter(|e| e.owner == SwapOwner::Alive)
@@ -71,19 +71,19 @@ impl EditorState {
                 ],
             );
         }
-        self.swap.candidates.extend(candidates);
+        self.io.swap.candidates.extend(candidates);
     }
 
     /// 今の文書に該当する候補があれば、復旧を提案する。何かが開いていれば、閉じるまで待つ。
     pub(crate) fn swap_offer(&mut self) {
         self.swap_warn_alive();
-        if self.swap.candidates.is_empty() || self.overlay_kind() != "" {
+        if self.io.swap.candidates.is_empty() || self.overlay_kind() != "" {
             return;
         }
         let Some(id) = self.active_document() else {
             return;
         };
-        let Some(d) = self.documents.get(&id) else {
+        let Some(d) = self.docs.documents.get(&id) else {
             return;
         };
         // 編集中の内容を上書きしないよう、読込済みで何も編集していない文書にだけ出す
@@ -98,6 +98,7 @@ impl EditorState {
         };
         // 該当する候補のうち、最後に書かれたもの
         let Some(i) = self
+            .io
             .swap
             .candidates
             .iter()
@@ -108,7 +109,7 @@ impl EditorState {
         else {
             return;
         };
-        let entry = self.swap.candidates.remove(i);
+        let entry = self.io.swap.candidates.remove(i);
         let revision = d.revision();
         // 元のファイルがスワップを書いた後に変わっている
         let changed = match (d.disk_stamp.as_ref(), entry.modified) {
@@ -167,12 +168,12 @@ impl EditorState {
 
     /// 開いた文書と同じファイルのスワップを、動いている別のプロセスが書いていれば警告する (1 件につき 1 回)。
     fn swap_warn_alive(&mut self) {
-        if self.swap.alive.is_empty() {
+        if self.io.swap.alive.is_empty() {
             return;
         }
         let Some(d) = self
             .active_document()
-            .and_then(|id| self.documents.get(&id))
+            .and_then(|id| self.docs.documents.get(&id))
             .filter(|d| d.load_state == LoadState::Ready)
         else {
             return;
@@ -180,10 +181,10 @@ impl EditorState {
         let Some(path) = d.path.clone() else {
             return;
         };
-        let (hit, rest): (Vec<_>, Vec<_>) = std::mem::take(&mut self.swap.alive)
+        let (hit, rest): (Vec<_>, Vec<_>) = std::mem::take(&mut self.io.swap.alive)
             .into_iter()
             .partition(|e| e.path.as_ref().is_some_and(|p| same_path(p, &path)));
-        self.swap.alive = rest;
+        self.io.swap.alive = rest;
         for e in hit {
             self.show_message(
                 MessageLevel::Warn,
@@ -214,7 +215,7 @@ impl EditorState {
                     entry: entry.clone(),
                 },
             );
-            self.pending.insert(
+            self.io.pending.insert(
                 job,
                 Pending::SwapRead {
                     doc,
@@ -231,7 +232,7 @@ impl EditorState {
                     entry: entry.clone(),
                 },
             );
-            self.pending.insert(
+            self.io.pending.insert(
                 job,
                 Pending::SwapRemove {
                     entry: Box::new(entry),
@@ -262,13 +263,13 @@ impl EditorState {
                 return;
             }
         };
-        let Some(d) = self.documents.get_mut(&doc) else {
+        let Some(d) = self.docs.documents.get_mut(&doc) else {
             return;
         };
         if d.revision() != revision || !d.read_only.is_empty() {
             // 提案の後で文書が変わった: 適用しない。スワップは残し、もう一度提案できるようにする
             self.show_message(MessageLevel::Warn, "msg.swap.changed_since_offer", &[]);
-            self.swap.candidates.push(entry);
+            self.io.swap.candidates.push(entry);
             return;
         }
         // 無題の文書は、スワップの形式 (文字コード・BOM・改行) を引き継ぐ。パスのある文書は開いた形式のまま
@@ -283,7 +284,7 @@ impl EditorState {
             .map(FsPath::display)
             .or_else(|| entry.untitled_name.clone())
             .unwrap_or_else(|| self.untitled_label());
-        let Some(d) = self.documents.get(&doc) else {
+        let Some(d) = self.docs.documents.get(&doc) else {
             return;
         };
         let all = ByteRange::all(d.len_bytes());
@@ -304,7 +305,7 @@ impl EditorState {
         let tx = Transaction::new(cs, Origin::Recovery, self.now);
         match self.apply_transaction(doc, tx) {
             Ok(_) => {
-                self.swap.recovered.entry(doc).or_default().push(entry);
+                self.io.swap.recovered.entry(doc).or_default().push(entry);
                 self.show_message(
                     MessageLevel::Info,
                     "info.swap.recovered",
@@ -317,7 +318,7 @@ impl EditorState {
                     "msg.swap.read_failed",
                     &[("dir", &entry.dir.display())],
                 );
-                self.swap.candidates.push(entry);
+                self.io.swap.candidates.push(entry);
             }
         }
     }
@@ -344,20 +345,21 @@ impl EditorState {
 
     /// 適用した古いスワップを、新しいスワップが書けた・文書が保存された (dirty でなくなった)・文書が閉じられたときに消す。
     pub(crate) fn swap_release_recovered(&mut self) {
-        if self.swap.recovered.is_empty() {
+        if self.io.swap.recovered.is_empty() {
             return;
         }
         let ready: Vec<DocumentId> = self
+            .io
             .swap
             .recovered
             .keys()
             .copied()
             .filter(|id| {
-                self.documents.get(id).is_none_or(|d| !d.is_dirty()) || self.swap_written(*id)
+                self.docs.documents.get(id).is_none_or(|d| !d.is_dirty()) || self.swap_written(*id)
             })
             .collect();
         for id in ready {
-            for entry in self.swap.recovered.remove(&id).unwrap_or_default() {
+            for entry in self.io.swap.recovered.remove(&id).unwrap_or_default() {
                 let job = self.jobs.spawn(
                     None,
                     eve_view::Revision::INITIAL,
@@ -365,7 +367,7 @@ impl EditorState {
                         entry: entry.clone(),
                     },
                 );
-                self.pending.insert(
+                self.io.pending.insert(
                     job,
                     Pending::SwapRemove {
                         entry: Box::new(entry),
@@ -378,6 +380,6 @@ impl EditorState {
 
     /// 正常終了のとき、Host が消す古いスワップ (適用したが、まだ消していないもの)。
     pub(crate) fn swap_recovered_leftovers(&self) -> Vec<SwapEntry> {
-        self.swap.recovered.values().flatten().cloned().collect()
+        self.io.swap.recovered.values().flatten().cloned().collect()
     }
 }

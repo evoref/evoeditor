@@ -24,6 +24,7 @@ impl EditorState {
     pub(crate) fn buffer_position(&self) -> Option<(usize, usize)> {
         let active = self.active_document()?;
         let ids: Vec<DocumentId> = self
+            .docs
             .documents
             .keys()
             .copied()
@@ -35,7 +36,7 @@ impl EditorState {
 
     /// 置き換えで読込中の文書か (まだ表示されておらず、読込が終わるまで集合の外のものとして扱う)。
     fn is_loading_replacement(&self, doc: DocumentId) -> bool {
-        self.pending.values().any(|p| {
+        self.io.pending.values().any(|p| {
             matches!(
                 p,
                 Pending::Open { doc: d, replace: Some(_), .. } if *d == doc
@@ -48,12 +49,13 @@ impl EditorState {
     fn buffer_order(&self) -> Vec<DocumentId> {
         let mut out: Vec<DocumentId> = self.active_document().into_iter().collect();
         let others = self
+            .docs
             .recent
             .iter()
             .rev()
-            .chain(self.documents.keys())
+            .chain(self.docs.documents.keys())
             .copied()
-            .filter(|d| self.documents.contains_key(d) && !self.is_loading_replacement(*d));
+            .filter(|d| self.docs.documents.contains_key(d) && !self.is_loading_replacement(*d));
         for d in others {
             if !out.contains(&d) {
                 out.push(d);
@@ -64,7 +66,8 @@ impl EditorState {
 
     /// 文書の表示名 (ファイル名、無題は `status.untitled`)。
     fn buffer_name(&self, doc: DocumentId) -> String {
-        self.documents
+        self.docs
+            .documents
             .get(&doc)
             .and_then(|d| d.path.as_ref().and_then(|p| p.file_name()))
             .unwrap_or_else(|| {
@@ -87,7 +90,7 @@ impl EditorState {
                     return Some((doc, std::iter::once(s..s + q.len()).collect()));
                 }
                 // ディレクトリでも探せる (照合した箇所は名前の外なので印は付けない)
-                let path = self.documents.get(&doc)?.path.as_ref()?.display();
+                let path = self.docs.documents.get(&doc)?.path.as_ref()?.display();
                 find(&lower_graphemes(&path), &q).map(|_| (doc, Vec::new()))
             })
             .collect()
@@ -107,7 +110,7 @@ impl EditorState {
 
     /// 一覧で選んでいる文書。
     fn buffer_list_selected(&self) -> Option<DocumentId> {
-        let Some(Overlay::Palette(p)) = &self.overlay else {
+        let Some(Overlay::Palette(p)) = &self.ui.overlay else {
             return None;
         };
         let hits = self.buffer_hits(&p.text);
@@ -151,7 +154,7 @@ impl EditorState {
             .skip(first)
             .take(WINDOW)
             .filter_map(|(doc_id, ranges)| {
-                let doc = self.documents.get(doc_id)?;
+                let doc = self.docs.documents.get(doc_id)?;
                 let marker = if doc.is_dirty() { "[+] " } else { "    " };
                 let dir = doc
                     .path
@@ -208,7 +211,7 @@ impl EditorState {
 
     /// 開いた順で `delta` 個先の文書へ切り替える (端で循環する)。文書が 1 件なら何もしない。
     fn switch_buffer(&mut self, delta: isize) -> CommandResult {
-        let ids: Vec<DocumentId> = self.documents.keys().copied().collect();
+        let ids: Vec<DocumentId> = self.docs.documents.keys().copied().collect();
         let Some(pos) = self
             .active_document()
             .and_then(|a| ids.iter().position(|d| *d == a))
@@ -233,12 +236,13 @@ impl EditorState {
     pub(crate) fn close_buffer(&mut self, doc: DocumentId) -> CommandResult {
         if self.active_document() == Some(doc) {
             let next = self
+                .docs
                 .recent
                 .iter()
                 .rev()
                 .copied()
-                .find(|d| *d != doc && self.documents.contains_key(d))
-                .or_else(|| self.documents.keys().copied().find(|d| *d != doc));
+                .find(|d| *d != doc && self.docs.documents.contains_key(d))
+                .or_else(|| self.docs.documents.keys().copied().find(|d| *d != doc));
             match next {
                 Some(n) => {
                     self.activate_document(n);
@@ -254,14 +258,14 @@ impl EditorState {
         } else {
             self.close_document(doc);
         }
-        self.recent.retain(|d| *d != doc);
+        self.docs.recent.retain(|d| *d != doc);
         CommandResult::Done
     }
 }
 
 fn buffer_close(ctx: &mut CommandCtx<'_>) -> CommandResult {
     // バッファ一覧の中では、選んでいる文書を閉じる (07 §11.6 の `list` コンテキスト)
-    if matches!(&ctx.state.overlay, Some(Overlay::Palette(p)) if p.buffers) {
+    if matches!(&ctx.state.ui.overlay, Some(Overlay::Palette(p)) if p.buffers) {
         return ctx.state.buffer_list_close_selected();
     }
     match ctx.state.active_document() {
@@ -299,19 +303,19 @@ impl EditorState {
     /// `doc` を表示する (最初の Window の View をその文書のものにする)。文書の View が無ければ作る。
     /// 検索バーは文書ごとには持たないので、切り替える前に閉じる (03 §9.8)。
     pub(crate) fn activate_document(&mut self, doc: DocumentId) {
-        if self.active_document() == Some(doc) || !self.documents.contains_key(&doc) {
+        if self.active_document() == Some(doc) || !self.docs.documents.contains_key(&doc) {
             return;
         }
         self.search_close();
         if let Some(prev) = self.active_document() {
-            self.recent.retain(|d| *d != prev);
-            self.recent.push(prev);
+            self.docs.recent.retain(|d| *d != prev);
+            self.docs.recent.push(prev);
         }
-        let view = match self.views.iter().find(|(_, v)| v.doc == doc) {
+        let view = match self.docs.views.iter().find(|(_, v)| v.doc == doc) {
             Some((id, _)) => *id,
             None => self.add_view(doc),
         };
-        if let Some(w) = self.windows.first_mut() {
+        if let Some(w) = self.docs.windows.first_mut() {
             w.root = view;
         }
         self.mark_dirty_render();
@@ -319,7 +323,7 @@ impl EditorState {
 
     /// Window の表示を `view` に切り替え、`old` の文書を閉じる。Window がなければ作る。
     pub(crate) fn show_view(&mut self, view: ViewId, old: Option<DocumentId>) {
-        match self.windows.first_mut() {
+        match self.docs.windows.first_mut() {
             Some(w) => w.root = view,
             None => {
                 self.add_window(view);

@@ -18,6 +18,7 @@ impl Editor {
         match q {
             Query::Documents => Ok(Answer::Documents(
                 state
+                    .docs
                     .documents
                     .iter()
                     .map(|(id, d)| DocumentInfo {
@@ -37,6 +38,7 @@ impl Editor {
                         },
                         read_only: d.read_only.iter().map(reason_name).collect(),
                         views: state
+                            .docs
                             .views
                             .iter()
                             .filter(|(_, v)| v.doc == *id)
@@ -47,12 +49,13 @@ impl Editor {
             )),
             Query::Windows => Ok(Answer::Windows(
                 state
+                    .docs
                     .windows
                     .iter()
                     .map(|w| WindowInfo {
                         window: w.id,
                         views: vec![w.root],
-                        focus: if state.overlay.is_some() {
+                        focus: if state.ui.overlay.is_some() {
                             FocusTarget::Overlay(0)
                         } else {
                             FocusTarget::Pane(w.root)
@@ -108,7 +111,7 @@ impl Editor {
                     primary: v.selection.primary_index(),
                 })
             }
-            Query::Capabilities => Ok(Answer::Capabilities(state.caps.clone())),
+            Query::Capabilities => Ok(Answer::Capabilities(state.term.caps.clone())),
             Query::Status { window } => {
                 let view = self.window_root(*window)?;
                 Ok(Answer::Status(chrome::status_model(

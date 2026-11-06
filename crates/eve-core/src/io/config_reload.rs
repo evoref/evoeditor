@@ -56,7 +56,7 @@ impl EditorState {
                 name: name.clone(),
             },
         );
-        self.pending.insert(job, Pending::ThemeRead);
+        self.io.pending.insert(job, Pending::ThemeRead);
     }
 
     /// テーマファイルの読込の結果。読めなければ `default` で動き、診断を出す。
@@ -95,11 +95,11 @@ fn text_of(f: &ConfigFile) -> Result<Option<String>, String> {
 impl EditorState {
     /// 設定の読込元を置く (Host が起動時に、bin の決めたものを渡す)。置かなければ設定ディレクトリの 2 つのファイル。
     pub fn set_config_sources(&mut self, sources: ConfigSources) {
-        self.config_sources = Some(sources);
+        self.io.config_sources = Some(sources);
     }
 
     fn config_sources(&self) -> ConfigSources {
-        if let Some(s) = &self.config_sources {
+        if let Some(s) = &self.io.config_sources {
             return s.clone();
         }
         let dir = self.paths.config_dir();
@@ -135,6 +135,7 @@ impl EditorState {
     fn start_config_reload(&mut self) -> CommandResult {
         // 二重に始めない
         if self
+            .io
             .pending
             .values()
             .any(|p| matches!(p, Pending::ConfigReload))
@@ -150,7 +151,7 @@ impl EditorState {
                 keymap: src.keymap.clone(),
             },
         );
-        self.pending.insert(job, Pending::ConfigReload);
+        self.io.pending.insert(job, Pending::ConfigReload);
         CommandResult::Done
     }
 
@@ -200,7 +201,7 @@ impl EditorState {
             // テーマファイルも読み直す (名前が同じでも、ファイルが変わっていることがある)
             self.start_theme_read();
         }
-        self.reloaded = Some((keymap, changed));
+        self.keys.reloaded = Some((keymap, changed));
     }
 
     /// 新しい設定に差し替える。マウスの取得は frontend に伝える (即時に効く)。
@@ -245,7 +246,7 @@ impl EditorState {
 impl Editor {
     /// 再読込の結果が届いていれば、キーマップを差し替えて要約を出す (`on_job_result` の後に呼ぶ)。
     pub(crate) fn finish_reload_keymap(&mut self) {
-        let Some((keymap, changed)) = self.state.reloaded.take() else {
+        let Some((keymap, changed)) = self.state.keys.reloaded.take() else {
             return;
         };
         let mut keymap_changed = false;
@@ -258,7 +259,12 @@ impl Editor {
             );
         } else {
             // まだ一度も設定していない (キーマップのファイルが無い起動) は空と同じ
-            keymap_changed = self.state.user_keymap_entries.as_deref().unwrap_or(&[])
+            keymap_changed = self
+                .state
+                .keys
+                .user_keymap_entries
+                .as_deref()
+                .unwrap_or(&[])
                 != keymap.entries.as_slice();
             let diags = self.set_user_keymap(&keymap);
             self.state.report_config(KEYMAP_FILE, &diags);

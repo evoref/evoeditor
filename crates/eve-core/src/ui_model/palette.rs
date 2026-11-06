@@ -204,7 +204,7 @@ pub(crate) fn find(hay: &[String], needle: &[String]) -> Option<usize> {
 
 impl EditorState {
     pub fn set_palette_entries(&mut self, entries: Vec<PaletteEntry>) {
-        self.palette_entries = entries;
+        self.ui.palette_entries = entries;
     }
 
     /// 一覧に出す名前 `カテゴリ: タイトル` (04 §8.1)。カテゴリは CommandId の名前空間。
@@ -251,7 +251,7 @@ impl EditorState {
 
     /// 引数を尋ねている途中なら 1 段戻って `true` (コマンドの一覧に戻る)。
     pub(crate) fn palette_back(&mut self) -> bool {
-        if let Some(Overlay::Palette(p)) = &mut self.overlay
+        if let Some(Overlay::Palette(p)) = &mut self.ui.overlay
             && p.stage.is_some()
         {
             *p = PaletteState::default();
@@ -276,13 +276,14 @@ impl EditorState {
         let en = eve_config::Catalog::builtin(eve_config::Locale::En);
         // 最近実行の順位 (新しいほど小さい)。覚えていないものは最後
         let recency = |id: &str| {
-            self.palette_recent
+            self.ui
+                .palette_recent
                 .iter()
                 .position(|r| r == id)
                 .unwrap_or(usize::MAX)
         };
         let mut hits: Vec<(i32, usize, Hit)> = Vec::new();
-        for (i, e) in self.palette_entries.iter().enumerate() {
+        for (i, e) in self.ui.palette_entries.iter().enumerate() {
             if !self.supported_here(e) {
                 continue;
             }
@@ -328,9 +329,9 @@ impl EditorState {
 
     /// パレットから実行したコマンドを覚える (新しいものを先頭に、直近 `RECENT_MAX` 件)。
     fn remember_palette_command(&mut self, id: &str) {
-        self.palette_recent.retain(|r| r != id);
-        self.palette_recent.insert(0, id.to_owned());
-        self.palette_recent.truncate(RECENT_MAX);
+        self.ui.palette_recent.retain(|r| r != id);
+        self.ui.palette_recent.insert(0, id.to_owned());
+        self.ui.palette_recent.truncate(RECENT_MAX);
     }
 
     /// この frontend で使えるコマンドか。when 句が `caps.*` を参照して偽なら (例: Windows の `app.suspend`)、端末の能力が足りない
@@ -376,7 +377,7 @@ impl EditorState {
 
     /// `ui.list_page_down` / `ui.list_page_up`: 表示窓の行数ぶん動かす (端で止まる)。
     pub(crate) fn palette_page(&mut self, forward: bool) -> CommandResult {
-        let Some(Overlay::Palette(p)) = &self.overlay else {
+        let Some(Overlay::Palette(p)) = &self.ui.overlay else {
             return CommandResult::Rejected(RejectReason::NotAvailable);
         };
         let n = match p.stage {
@@ -384,7 +385,7 @@ impl EditorState {
             Some(def) => self.arg_hits(def, &p.text).len(),
             None => self.palette_hits(&p.text).len(),
         };
-        if let Some(Overlay::Palette(p)) = &mut self.overlay
+        if let Some(Overlay::Palette(p)) = &mut self.ui.overlay
             && n > 0
         {
             p.selected = if forward {
@@ -399,14 +400,14 @@ impl EditorState {
 
     /// 入力が変わったら先頭の候補を選ぶ。
     pub(crate) fn palette_reset_selection(&mut self) {
-        if let Some(Overlay::Palette(p)) = &mut self.overlay {
+        if let Some(Overlay::Palette(p)) = &mut self.ui.overlay {
             p.selected = 0;
         }
     }
 
     /// `ui.list_next` / `ui.list_prev` (折り返す)。
     pub(crate) fn palette_move(&mut self, forward: bool) -> CommandResult {
-        let Some(Overlay::Palette(p)) = &self.overlay else {
+        let Some(Overlay::Palette(p)) = &self.ui.overlay else {
             return CommandResult::Rejected(RejectReason::NotAvailable);
         };
         let n = match p.stage {
@@ -414,7 +415,7 @@ impl EditorState {
             Some(def) => self.arg_hits(def, &p.text).len(),
             None => self.palette_hits(&p.text).len(),
         };
-        if let Some(Overlay::Palette(p)) = &mut self.overlay
+        if let Some(Overlay::Palette(p)) = &mut self.ui.overlay
             && n > 0
         {
             p.selected = if forward {
@@ -430,7 +431,7 @@ impl EditorState {
     /// `ui.confirm`: 選択中のコマンドを閉じてから実行する (実行は Editor が行う)。
     /// 候補が無い・実行できないコマンドのときは、パレットを閉じない。
     pub(crate) fn palette_confirm(&mut self) -> CommandResult {
-        let Some(Overlay::Palette(p)) = &self.overlay else {
+        let Some(Overlay::Palette(p)) = &self.ui.overlay else {
             return CommandResult::Rejected(RejectReason::NotAvailable);
         };
         if p.buffers {
@@ -444,7 +445,7 @@ impl EditorState {
             };
             let value = def.choices[hit.entry].0;
             self.set_overlay(None);
-            self.deferred_command =
+            self.ui.deferred_command =
                 Some((def.command.to_owned(), Args::new().with_str(def.arg, value)));
             self.mark_dirty_render();
             return CommandResult::Done;
@@ -453,7 +454,7 @@ impl EditorState {
         let Some(hit) = hits.get(p.selected.min(hits.len().saturating_sub(1))) else {
             return CommandResult::Done;
         };
-        let entry = &self.palette_entries[hit.entry];
+        let entry = &self.ui.palette_entries[hit.entry];
         if self.disabled_reason_key(entry).is_some() {
             return CommandResult::Done;
         }
@@ -469,14 +470,14 @@ impl EditorState {
             return CommandResult::Done;
         }
         self.set_overlay(None);
-        self.deferred_command = Some((id, Args::new()));
+        self.ui.deferred_command = Some((id, Args::new()));
         self.mark_dirty_render();
         CommandResult::Done
     }
 
     /// 次に実行するコマンド (パレットで選んだもの)。
     pub fn take_deferred_command(&mut self) -> Option<(String, Args)> {
-        self.deferred_command.take()
+        self.ui.deferred_command.take()
     }
 
     /// 引数の値の一覧 (`ui.palette.arg_title`)。
@@ -559,7 +560,7 @@ impl EditorState {
             .skip(first)
             .take(WINDOW)
             .map(|h| {
-                let e = &self.palette_entries[h.entry];
+                let e = &self.ui.palette_entries[h.entry];
                 let disabled_reason = self.disabled_reason_key(e).map(|k| {
                     let why = render(&format!("ui.palette.reason.{k}"), &[]);
                     let text = render("ui.palette.disabled", &[("reason", &why)]);
@@ -591,6 +592,7 @@ impl EditorState {
             .then(|| cell_text(&render("ui.palette.placeholder", &[]), CutPolicy::End));
         let matched = hits.len().to_string();
         let total = self
+            .ui
             .palette_entries
             .iter()
             .filter(|e| self.supported_here(e))

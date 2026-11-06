@@ -27,7 +27,8 @@ impl EditorState {
 
     /// 保存ジョブの完了を待っているか (ステータスバーの `[保存中]`)。
     pub(crate) fn is_saving(&self, doc: DocumentId) -> bool {
-        self.pending
+        self.io
+            .pending
             .values()
             .any(|p| matches!(p, Pending::Save { doc: d, .. } if *d == doc))
     }
@@ -35,21 +36,22 @@ impl EditorState {
     /// 読込を待っている間、置き換え対象の今の文書は編集を受け付けない (03 §9.2 の置き換えの手順)。
     /// 編集は読込の完了で黙って捨てられてしまうため。
     pub(crate) fn open_in_progress(&self) -> bool {
-        self.pending
+        self.io
+            .pending
             .values()
             .any(|p| matches!(p, Pending::Open { .. }))
     }
 
     pub(crate) fn save_in_progress(&self, doc_id: DocumentId) -> bool {
-        self.pending
+        self.io.pending
             .values()
             .any(|p| matches!(p, Pending::Save { doc, .. } | Pending::CheckUnchanged { doc } if *doc == doc_id))
     }
 
     /// 進行中の読込 (開く・開き直し・再読込) の進捗 (百分率)。無ければ `None`。
     pub(crate) fn loading_percent(&self) -> Option<u8> {
-        self.pending.values().find_map(|p| match p {
-            Pending::Open { doc, .. } => self.documents.get(doc).map(|d| d.load_percent),
+        self.io.pending.values().find_map(|p| match p {
+            Pending::Open { doc, .. } => self.docs.documents.get(doc).map(|d| d.load_percent),
             _ => None,
         })
     }
@@ -57,6 +59,7 @@ impl EditorState {
     /// 読込中の文書の読込ジョブを取り消す。取り消すものがあれば `true`。
     pub(crate) fn cancel_loading(&mut self) -> bool {
         let ids: Vec<_> = self
+            .io
             .pending
             .iter()
             .filter(|(_, p)| matches!(p, Pending::Open { .. }))
@@ -86,16 +89,17 @@ impl EditorState {
     /// 文書を閉じる。保存ジョブが実行中なら、その保存の結果が届くまで内容を緊急退避の対象に残す
     /// (結果が失敗なら退避先に書く。03 §9.2 の閉じる手順 (a))。
     pub fn close_document(&mut self, doc: DocumentId) {
-        self.open_jumps.remove(&doc);
-        self.views.retain(|_, v| v.doc != doc);
+        self.io.open_jumps.remove(&doc);
+        self.docs.views.retain(|_, v| v.doc != doc);
         let saving = self
+            .io
             .pending
             .values()
             .any(|p| matches!(p, Pending::Save { doc: d, .. } if *d == doc));
         let retained = saving.then(|| self.rescue_snapshot(doc, true)).flatten();
-        if self.documents.remove(&doc).is_some() {
+        if self.docs.documents.remove(&doc).is_some() {
             if let Some(snap) = retained {
-                self.closing_snapshots.insert(doc, snap);
+                self.io.closing_snapshots.insert(doc, snap);
             }
             // 退避用の公開物から外す (破棄した内容を緊急退避に残さない。保存中の文書は上で残している)
             self.mark_snapshot_update(doc);
@@ -127,6 +131,7 @@ impl EditorState {
         };
         // 今の文書は置き換えない (03 §9.8)。同じパスが既に開いていれば、そのバッファへ切り替える
         let existing = self
+            .docs
             .documents
             .iter()
             .find(|(_, d)| d.path.as_ref() == Some(&path))
@@ -160,7 +165,7 @@ impl EditorState {
                 opts,
             },
         );
-        self.pending.insert(
+        self.io.pending.insert(
             job,
             Pending::Open {
                 doc: doc_id,
@@ -201,7 +206,8 @@ impl EditorState {
                     purpose: MetaPurpose::UnchangedSave,
                 },
             );
-            self.pending
+            self.io
+                .pending
                 .insert(job, Pending::CheckUnchanged { doc: doc_id });
             return CommandResult::Pending(job);
         }
@@ -215,7 +221,7 @@ impl EditorState {
         let Some(doc_id) = self.active_document() else {
             return CommandResult::Rejected(RejectReason::NoTarget);
         };
-        let Some(doc) = self.documents.get(&doc_id) else {
+        let Some(doc) = self.docs.documents.get(&doc_id) else {
             return CommandResult::Rejected(RejectReason::NoTarget);
         };
         if doc.load_state != crate::document::LoadState::Ready {
@@ -259,7 +265,7 @@ impl EditorState {
         let Some(doc_id) = self.active_document() else {
             return CommandResult::Rejected(RejectReason::NoTarget);
         };
-        let Some(doc) = self.documents.get(&doc_id) else {
+        let Some(doc) = self.docs.documents.get(&doc_id) else {
             return CommandResult::Rejected(RejectReason::NoTarget);
         };
         let Some(path) = doc.path.clone() else {
@@ -289,7 +295,7 @@ impl EditorState {
         let Some(doc_id) = self.active_document() else {
             return CommandResult::Rejected(RejectReason::NoTarget);
         };
-        let Some(doc) = self.documents.get(&doc_id) else {
+        let Some(doc) = self.docs.documents.get(&doc_id) else {
             return CommandResult::Rejected(RejectReason::NoTarget);
         };
         let Some(path) = doc.path.clone() else {

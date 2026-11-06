@@ -61,7 +61,7 @@ impl EditorState {
     }
 
     fn start_eol_conversion(&mut self, mut c: EolConvert) {
-        let Some(d) = self.documents.get(&c.doc) else {
+        let Some(d) = self.docs.documents.get(&c.doc) else {
             return;
         };
         c.revision = d.revision();
@@ -73,6 +73,7 @@ impl EditorState {
         }
         // 実行中の変換があれば二重に始めない
         if self
+            .io
             .pending
             .values()
             .any(|p| matches!(p, Pending::ConvertEol(_)))
@@ -88,7 +89,7 @@ impl EditorState {
                 eol: c.eol,
             },
         );
-        self.pending.insert(job, Pending::ConvertEol(c));
+        self.io.pending.insert(job, Pending::ConvertEol(c));
     }
 
     /// ジョブの結果。作った Revision が古ければ今の Snapshot で 1 回だけ作り直し、それも古ければ中止を知らせる。
@@ -97,6 +98,7 @@ impl EditorState {
             return;
         };
         let fresh = self
+            .docs
             .documents
             .get(&c.doc)
             .is_some_and(|d| d.revision() == c.revision);
@@ -112,7 +114,7 @@ impl EditorState {
     /// ChangeSet を 1 つの Transaction として適用し、同時に `default_eol` を `eol` にする。
     /// Undo ノードの `format_change` に前後の書式を持たせ、1 回の Undo で本文と `default_eol` が戻る (03 §7.2)。
     fn apply_eol_conversion(&mut self, c: EolConvert, cs: ChangeSet) {
-        let Some(doc) = self.documents.get(&c.doc) else {
+        let Some(doc) = self.docs.documents.get(&c.doc) else {
             return;
         };
         let stats = doc.format.eol_stats;

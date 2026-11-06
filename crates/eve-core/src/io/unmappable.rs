@@ -52,6 +52,7 @@ impl EditorState {
         // 置換して保存: 文書が編集できるときだけ (表現不能の文字にエスケープ文字を含まないとき)
         if !has_escape
             && self
+                .docs
                 .documents
                 .get(&ask.doc)
                 .is_some_and(|d| d.is_editable())
@@ -82,7 +83,7 @@ impl EditorState {
     /// 通し番号 `n` (Unicode スカラー値) の文字の (バイト位置, 行, 桁)。行・桁は 1 始まり (桁は文字数)。
     pub(crate) fn char_pos(&self, doc: DocumentId, n: u64) -> Option<(usize, usize, usize)> {
         use eve_text::TextRead;
-        let d = self.documents.get(&doc)?;
+        let d = self.docs.documents.get(&doc)?;
         let t = d.text();
         let body = t.slice_to_string(eve_text::ByteRange::all(t.len_bytes()));
         let (off, _) = body.char_indices().nth(usize::try_from(n).ok()?)?;
@@ -95,7 +96,7 @@ impl EditorState {
     /// 表現不能の確認の選択 (キャンセルは `unmappable_cancelled`)。
     pub(crate) fn choose_unmappable(&mut self, ask: UnmappableAsk, id: &str) -> CommandResult {
         // 保存へ進む選択では強調は要らない (キャンセルのときだけ次の編集まで残す)
-        self.unmappable_marks = None;
+        self.io.unmappable_marks = None;
         if id == "replace" {
             return self.spawn_replace(ask, false);
         }
@@ -124,7 +125,7 @@ impl EditorState {
 
     /// 表現不能の文字を置換する ChangeSet を作るジョブを投入する (03 §8.6 の選択肢 2)。
     pub(crate) fn spawn_replace(&mut self, ask: UnmappableAsk, retried: bool) -> CommandResult {
-        let Some(doc) = self.documents.get(&ask.doc) else {
+        let Some(doc) = self.docs.documents.get(&ask.doc) else {
             return CommandResult::Done;
         };
         let revision = doc.revision();
@@ -137,7 +138,7 @@ impl EditorState {
                 escape: doc.format.save_escape_policy(ask.encoding),
             },
         );
-        self.pending.insert(
+        self.io.pending.insert(
             job,
             Pending::ReplaceUnmappable {
                 ask,
@@ -164,7 +165,7 @@ impl EditorState {
                 counts,
                 ..
             } => {
-                let Some(doc) = self.documents.get(&ask.doc) else {
+                let Some(doc) = self.docs.documents.get(&ask.doc) else {
                     return;
                 };
                 if doc.revision() != revision {
@@ -246,7 +247,7 @@ impl EditorState {
     /// バイト位置 `off` の (行, 桁)。どちらも 1 始まり (桁は文字数)。
     pub(crate) fn pos_of_offset(&self, doc: DocumentId, off: usize) -> (usize, usize) {
         use eve_text::TextRead;
-        let Some(d) = self.documents.get(&doc) else {
+        let Some(d) = self.docs.documents.get(&doc) else {
             return (1, 1);
         };
         let t = d.text();
@@ -268,7 +269,7 @@ impl EditorState {
         revision: eve_view::Revision,
     ) -> CommandResult {
         use crate::document::{Origin, Transaction, UndoGroupHint};
-        let Some(doc) = self.documents.get(&ask.doc) else {
+        let Some(doc) = self.docs.documents.get(&ask.doc) else {
             return CommandResult::Done;
         };
         if doc.revision() != revision {
@@ -278,14 +279,15 @@ impl EditorState {
         let view = self
             .focused_window()
             .and_then(|w| self.window_view(w))
-            .filter(|v| self.views.get(v).is_some_and(|v| v.doc == ask.doc))
+            .filter(|v| self.docs.views.get(v).is_some_and(|v| v.doc == ask.doc))
             .or_else(|| {
-                self.views
+                self.docs
+                    .views
                     .iter()
                     .find(|(_, v)| v.doc == ask.doc)
                     .map(|(id, _)| *id)
             });
-        let sel = view.and_then(|v| self.views.get(&v).map(|v| v.selection.clone()));
+        let sel = view.and_then(|v| self.docs.views.get(&v).map(|v| v.selection.clone()));
         let mut tx = Transaction::new(changes, Origin::System, self.now)
             .with_undo_group(UndoGroupHint::Break)
             .with_selections(sel, None);
@@ -306,7 +308,7 @@ impl EditorState {
     /// 表現不能の文字 (通し番号 `indices`) の位置を強調として記録する。文書の Revision が変わると無効になる。
     pub(crate) fn mark_unmappable(&mut self, doc: DocumentId, indices: &[u64]) {
         use eve_text::TextRead;
-        let Some(d) = self.documents.get(&doc) else {
+        let Some(d) = self.docs.documents.get(&doc) else {
             return;
         };
         let t = d.text();
@@ -327,15 +329,20 @@ impl EditorState {
             }
             pos += chunk.len();
         }
-        self.unmappable_marks = Some((doc, d.revision(), marks));
+        self.io.unmappable_marks = Some((doc, d.revision(), marks));
         self.mark_dirty_render();
     }
 
     /// 強調する表現不能の文字 (文書が変わっていなければ)。
     pub(crate) fn unmappable_marks_for(&self, doc: DocumentId) -> Vec<(usize, usize)> {
-        match &self.unmappable_marks {
+        match &self.io.unmappable_marks {
             Some((d, rev, marks))
-                if *d == doc && self.documents.get(d).is_some_and(|x| x.revision() == *rev) =>
+                if *d == doc
+                    && self
+                        .docs
+                        .documents
+                        .get(d)
+                        .is_some_and(|x| x.revision() == *rev) =>
             {
                 marks.clone()
             }
@@ -349,7 +356,7 @@ impl EditorState {
             && let Some(view) = self
                 .focused_window()
                 .and_then(|w| self.window_view(w))
-                .filter(|v| self.views.get(v).is_some_and(|v| v.doc == ask.doc))
+                .filter(|v| self.docs.views.get(v).is_some_and(|v| v.doc == ask.doc))
         {
             self.set_selection(view, eve_text::Selection::point(eve_text::ByteOff(off)));
             self.ensure_cursor_visible(view);

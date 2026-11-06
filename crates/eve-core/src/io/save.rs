@@ -71,12 +71,12 @@ impl EditorState {
             return CommandResult::Rejected(RejectReason::NoTarget);
         };
         // 保存中なら、その保存の完了後に続ける (二重に保存しない)
-        let in_flight = self.pending.iter().find_map(|(job, p)| match p {
+        let in_flight = self.io.pending.iter().find_map(|(job, p)| match p {
             Pending::Save { doc, .. } if *doc == doc_id => Some(*job),
             _ => None,
         });
         if let Some(job) = in_flight {
-            self.continuations.insert(job, cont);
+            self.ui.continuations.insert(job, cont);
             return CommandResult::Pending(job);
         }
         let Some(path) = doc.path.clone() else {
@@ -124,7 +124,7 @@ impl EditorState {
             );
             return CommandResult::Rejected(RejectReason::InvalidArgs);
         };
-        let Some(doc) = self.documents.get(&doc_id) else {
+        let Some(doc) = self.docs.documents.get(&doc_id) else {
             return CommandResult::Rejected(RejectReason::NoTarget);
         };
         // 読込中・読込に失敗した文書は保存できない (中身が揃っていない)
@@ -189,10 +189,11 @@ impl EditorState {
     ) -> CommandResult {
         // ダングリングのリンクのリンク先への作成は、承認した保存の 1 回だけ
         let create_link_target = self
+            .io
             .link_create_ok
             .take_if(|(d, p)| *d == doc_id && *p == path)
             .is_some();
-        let Some(doc) = self.documents.get_mut(&doc_id) else {
+        let Some(doc) = self.docs.documents.get_mut(&doc_id) else {
             return CommandResult::Rejected(RejectReason::NoTarget);
         };
         // 読込中 (開き直し・再読込の途中を含む) は保存しない。旧本文の保存の結果が新しい文書の保存点と照合を狂わせる
@@ -205,7 +206,7 @@ impl EditorState {
         // 読み取り専用属性を解除した文書の上書き保存は、「読み取り専用を解除して保存」の確認を経る (FR-116、03 §9.3 手順 1)。
         // 承認した Revision では繰り返さない
         let clear_readonly = doc.attribute_released && doc.path.as_ref() == Some(&path);
-        if clear_readonly && self.readonly_ok != Some((doc_id, doc.revision())) {
+        if clear_readonly && self.io.readonly_ok != Some((doc_id, doc.revision())) {
             let ask = LossyAsk {
                 doc: doc_id,
                 path,
@@ -224,7 +225,7 @@ impl EditorState {
         if out_encoding == doc.format.encoding
             && doc.format.roundtrip.lossy_lines > 0
             && doc.is_dirty()
-            && self.lossy_ok != Some((doc_id, doc.revision()))
+            && self.io.lossy_ok != Some((doc_id, doc.revision()))
         {
             let ask = LossyAsk {
                 doc: doc_id,
@@ -269,9 +270,9 @@ impl EditorState {
             },
         );
         if let Some(c) = cont {
-            self.continuations.insert(job, c);
+            self.ui.continuations.insert(job, c);
         }
-        self.pending.insert(
+        self.io.pending.insert(
             job,
             Pending::Save {
                 doc: doc_id,
@@ -288,16 +289,16 @@ impl EditorState {
     /// 閉じた文書の保存の結果が届いた: 公開物を外す。保存が成功していなければ、内容を失わないよう退避先に書く
     /// (閉じた文書なので確認は出さない。書いた場所は `finish_write_recovery` のメッセージで示す)。
     pub(crate) fn release_closing_snapshot(&mut self, doc: DocumentId, path: &FsPath, saved: bool) {
-        if self.documents.contains_key(&doc) {
+        if self.docs.documents.contains_key(&doc) {
             return;
         }
         if saved {
-            self.closing_snapshots.remove(&doc);
+            self.io.closing_snapshots.remove(&doc);
             self.mark_snapshot_update(doc);
             return;
         }
         // 失敗: 退避先への書込が終わるまで、公開物は緊急退避に残す
-        let Some(snapshot) = self.closing_snapshots.get(&doc).cloned() else {
+        let Some(snapshot) = self.io.closing_snapshots.get(&doc).cloned() else {
             return;
         };
         let job = self.jobs.spawn(
@@ -307,7 +308,7 @@ impl EditorState {
                 doc: std::sync::Arc::new(snapshot),
             },
         );
-        self.pending.insert(
+        self.io.pending.insert(
             job,
             Pending::WriteRecovery {
                 path: path.clone(),
@@ -395,7 +396,7 @@ impl EditorState {
                     snapshot.revision,
                     JobKind::WriteRecovery { doc: snapshot },
                 );
-                self.pending.insert(
+                self.io.pending.insert(
                     job,
                     Pending::WriteRecovery {
                         path,
@@ -517,8 +518,8 @@ impl EditorState {
             fmt,
         } = ask;
         if choice == 1 {
-            if let Some(d) = self.documents.get(&doc) {
-                self.readonly_ok = Some((doc, d.revision()));
+            if let Some(d) = self.docs.documents.get(&doc) {
+                self.io.readonly_ok = Some((doc, d.revision()));
             }
             return self.start_save_with(doc, path, expected, cont, strategy, fmt);
         }
@@ -574,7 +575,7 @@ impl EditorState {
     }
 
     pub(crate) fn finish_check(&mut self, doc_id: DocumentId, r: JobResult) {
-        let Some(doc) = self.documents.get(&doc_id) else {
+        let Some(doc) = self.docs.documents.get(&doc_id) else {
             return;
         };
         let shown = doc.path.as_ref().map(FsPath::display).unwrap_or_default();
@@ -603,7 +604,7 @@ impl EditorState {
                 ..
             } => self.message(MessageLevel::Info, "info.save.aborted", &shown),
             _ => {
-                let Some((path, expected)) = self.documents.get(&doc_id).and_then(|d| {
+                let Some((path, expected)) = self.docs.documents.get(&doc_id).and_then(|d| {
                     Some((
                         d.path.clone()?,
                         d.disk_stamp.map_or(Expect::Absent, Expect::Stamp),
@@ -631,7 +632,7 @@ impl EditorState {
         match r {
             JobResult::Saved { report, .. } => {
                 let report_method = report.method;
-                if let Some(doc) = self.documents.get_mut(&doc_id) {
+                if let Some(doc) = self.docs.documents.get_mut(&doc_id) {
                     // `file.set_encoding`: 保存が成功したので新しい書式に確定する。往復の検査結果は旧文字コードのものなので捨てる
                     // (書いた内容を再エンコードすれば同じバイト列になる、03 §8.8)
                     if let Some(f) = fmt {
@@ -690,7 +691,7 @@ impl EditorState {
                 recorded,
                 encoding,
                 ..
-            } if self.documents.contains_key(&doc_id) && !recorded.is_empty() => {
+            } if self.docs.documents.contains_key(&doc_id) && !recorded.is_empty() => {
                 // 該当箇所 (先頭 100 件) を強調する。次の編集まで残す (03 §8.6)
                 let indices: Vec<u64> = recorded.iter().map(|u| u.char_index).collect();
                 self.mark_unmappable(doc_id, &indices);
@@ -724,7 +725,7 @@ impl EditorState {
                 err: JobError::Fs(ref e),
                 ..
             } if fallback_kind(&e.kind, &e.detail).is_some()
-                && self.documents.contains_key(&doc_id) =>
+                && self.docs.documents.contains_key(&doc_id) =>
             {
                 let kind =
                     fallback_kind(&e.kind, &e.detail).unwrap_or(FallbackKind::AtomicUnsupported);
@@ -756,7 +757,7 @@ impl EditorState {
                         ..
                     }),
                 ..
-            } if self.documents.contains_key(&doc_id) => {
+            } if self.docs.documents.contains_key(&doc_id) => {
                 let kind = match (expected, current) {
                     (Expect::Absent, _) => FallbackKind::ConflictCreated,
                     (_, None) => FallbackKind::ConflictDeleted,
@@ -803,7 +804,7 @@ impl EditorState {
                 // 上書き保存が権限エラーで失敗したら、文書を読み取り専用 (書込権限なし) に切り替える。編集した内容は失われず、
                 // 名前を付けて保存で書ける (FR-116 AC-3、03 §9.6)。名前を付けて保存の失敗では付けない (失敗したのは別のパス)
                 if matches!(&err, JobError::Fs(e) if e.kind == FsErrorKind::PermissionDenied)
-                    && let Some(doc) = self.documents.get_mut(&doc_id)
+                    && let Some(doc) = self.docs.documents.get_mut(&doc_id)
                     && doc.path.as_ref() == Some(path)
                 {
                     doc.read_only

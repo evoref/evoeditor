@@ -83,7 +83,7 @@ impl EditorState {
             fmt,
             ..
         } = ask;
-        self.link_create_ok = Some((doc, path.clone()));
+        self.io.link_create_ok = Some((doc, path.clone()));
         self.start_save_fmt(doc, path, expected, cont, fmt)
     }
 
@@ -91,7 +91,7 @@ impl EditorState {
     /// 区分 B は別名が既定、区分 D は文字が変わらないので保存が既定 (04 §15.2)。
     pub(crate) fn open_lossy(&mut self, ask: LossyAsk) {
         use crate::ui_model::overlay::{ChoiceDef, ConfirmAction, ConfirmState};
-        let Some(doc) = self.documents.get(&ask.doc) else {
+        let Some(doc) = self.docs.documents.get(&ask.doc) else {
             return;
         };
         let count = doc.format.roundtrip.lossy_lines;
@@ -137,8 +137,8 @@ impl EditorState {
             fmt,
         } = ask;
         if choice == 0 {
-            if let Some(d) = self.documents.get(&doc) {
-                self.lossy_ok = Some((doc, d.revision()));
+            if let Some(d) = self.docs.documents.get(&doc) {
+                self.io.lossy_ok = Some((doc, d.revision()));
             }
             return self.start_save_with(doc, path, expected, cont, strategy, fmt);
         }
@@ -402,7 +402,7 @@ impl EditorState {
                 opts,
             },
         );
-        self.pending.insert(
+        self.io.pending.insert(
             job,
             Pending::Open {
                 doc: ask.doc,
@@ -451,7 +451,7 @@ impl EditorState {
             && self.active_document() == Some(from)
         {
             // 何も入力していない無題のバッファは、開いたファイルで置き換える (何も失わない。起動直後の Ctrl+O で空のバッファが残らない)
-            let pristine = self.documents.get(&from).is_some_and(|d| {
+            let pristine = self.docs.documents.get(&from).is_some_and(|d| {
                 d.path.is_none()
                     && !d.is_dirty()
                     && d.len_bytes() == 0
@@ -464,7 +464,7 @@ impl EditorState {
             }
         }
         // 起動時の `+行:桁` / `path:行:桁`: 読み終わった文書の位置へ移る (範囲外は丸める)
-        if let Some((line, col)) = self.open_jumps.remove(&doc) {
+        if let Some((line, col)) = self.io.open_jumps.remove(&doc) {
             self.jump_to_line_col(view, doc, line, col);
         }
         self.mark_snapshot_update(doc);
@@ -484,10 +484,10 @@ impl EditorState {
             // 表示中の文書の読込に失敗 (起動時の文書、または読込中に切り替えて表示していた足したバッファ): 失敗した文書は閉じ、
             // 開く前の文書 (残っていれば)・ほかの文書・無題の文書の順で表示する (再試行できる、03 §9.2 の「失敗」・§9.8)。
             // 表示を移さずに閉じると、Window が消えた View を指したままになる (fuzz_editor で見つけた)
-            self.open_jumps.remove(&doc);
+            self.io.open_jumps.remove(&doc);
             let others = replace
-                .filter(|r| *r != doc && self.documents.contains_key(r))
-                .or_else(|| self.documents.keys().copied().find(|d| *d != doc));
+                .filter(|r| *r != doc && self.docs.documents.contains_key(r))
+                .or_else(|| self.docs.documents.keys().copied().find(|d| *d != doc));
             match others {
                 Some(next) => {
                     self.activate_document(next);

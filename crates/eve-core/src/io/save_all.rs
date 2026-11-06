@@ -29,13 +29,13 @@ pub(crate) struct SaveAll {
 
 impl EditorState {
     fn save_all(&mut self) -> CommandResult {
-        if self.save_all.is_some() {
+        if self.io.save_all.is_some() {
             return CommandResult::Rejected(RejectReason::NotAvailable);
         }
         let mut batch = SaveAll::default();
-        let ids: Vec<DocumentId> = self.documents.keys().copied().collect();
+        let ids: Vec<DocumentId> = self.docs.documents.keys().copied().collect();
         for id in ids {
-            let Some(doc) = self.documents.get(&id) else {
+            let Some(doc) = self.docs.documents.get(&id) else {
                 continue;
             };
             if !doc.is_dirty() || self.save_in_progress(id) {
@@ -48,8 +48,9 @@ impl EditorState {
             let expected = doc.disk_stamp.map_or(Expect::Absent, Expect::Stamp);
             // 書く前の確認 (区分 B、03 §8.6 E2'・読み取り専用を解除して保存、FR-116) が要る文書は保存しない
             let needs_readonly_ok =
-                doc.attribute_released && self.readonly_ok != Some((id, doc.revision()));
-            if (doc.format.roundtrip.lossy_lines > 0 && self.lossy_ok != Some((id, doc.revision())))
+                doc.attribute_released && self.io.readonly_ok != Some((id, doc.revision()));
+            if (doc.format.roundtrip.lossy_lines > 0
+                && self.io.lossy_ok != Some((id, doc.revision())))
                 || needs_readonly_ok
             {
                 let reason = self.message_text("ui.confirm.save_all_failed.needs_confirm", &[]);
@@ -65,7 +66,7 @@ impl EditorState {
                     .push((path.display(), "unsupported".to_owned())),
             }
         }
-        self.save_all = Some(batch);
+        self.io.save_all = Some(batch);
         self.finish_save_all_if_done();
         CommandResult::Done
     }
@@ -79,7 +80,7 @@ impl EditorState {
         path: &crate::FsPath,
         r: &JobResult,
     ) -> Option<bool> {
-        if !self.save_all.as_ref()?.jobs.contains(&job) {
+        if !self.io.save_all.as_ref()?.jobs.contains(&job) {
             return None;
         }
         // 元のファイルが退避名に移った・直接上書きの途中で失敗したときは、その場所を一覧に出す
@@ -106,7 +107,7 @@ impl EditorState {
             JobResult::Unmappable { .. } => "unmappable".to_owned(),
             _ => "failed".to_owned(),
         };
-        let batch = self.save_all.as_mut()?;
+        let batch = self.io.save_all.as_mut()?;
         batch.jobs.remove(&job);
         if matches!(r, JobResult::Saved { .. }) {
             batch.saved += 1;
@@ -120,7 +121,7 @@ impl EditorState {
                 if e.kind == crate::FsErrorKind::PermissionDenied
         );
         if denied
-            && let Some(d) = self.documents.get_mut(&doc)
+            && let Some(d) = self.docs.documents.get_mut(&doc)
             && d.path.as_ref() == Some(path)
         {
             d.read_only
@@ -132,10 +133,10 @@ impl EditorState {
 
     /// 全部の保存ジョブが終わったら 1 回だけ知らせる (失敗があれば一覧の確認)。
     pub(crate) fn finish_save_all_if_done(&mut self) {
-        if self.save_all.as_ref().is_none_or(|b| !b.jobs.is_empty()) {
+        if self.io.save_all.as_ref().is_none_or(|b| !b.jobs.is_empty()) {
             return;
         }
-        let Some(b) = self.save_all.take() else {
+        let Some(b) = self.io.save_all.take() else {
             return;
         };
         let key = match (b.saved + b.skipped + b.failed.len(), b.skipped) {

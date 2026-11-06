@@ -214,8 +214,8 @@ impl EditorState {
                 Overlay::Help(_) => OverlayKind::Help,
             })
         };
-        let (before, after) = (kind(&self.overlay), kind(&new));
-        self.overlay = new;
+        let (before, after) = (kind(&self.ui.overlay), kind(&new));
+        self.ui.overlay = new;
         if before != after
             && let Some(window) = self.focused_window()
         {
@@ -227,7 +227,7 @@ impl EditorState {
     }
 
     fn take_overlay(&mut self) -> Option<Overlay> {
-        let old = self.overlay.take();
+        let old = self.ui.overlay.take();
         if old.is_some()
             && let Some(window) = self.focused_window()
         {
@@ -246,7 +246,7 @@ impl EditorState {
 
     /// 条件式 `overlay.active` の値: 出ていなければ空、確認は `dialog`、プロンプトは `prompt`。
     pub(crate) fn overlay_name(&self) -> &'static str {
-        match &self.overlay {
+        match &self.ui.overlay {
             None => "",
             Some(Overlay::Confirm(_)) => "dialog",
             Some(Overlay::Prompt(_)) => "prompt",
@@ -259,13 +259,13 @@ impl EditorState {
     /// キー入力のコンテキスト名: オーバーレイ、無ければ検索バー (`search`)、無ければ空 (編集面)。
     pub(crate) fn input_context(&self) -> &'static str {
         match self.overlay_name() {
-            "" if self.search_bar.is_some() => "search",
+            "" if self.find.search_bar.is_some() => "search",
             n => n,
         }
     }
 
     pub(crate) fn is_dialog(&self) -> bool {
-        matches!(self.overlay, Some(Overlay::Confirm(_)))
+        matches!(self.ui.overlay, Some(Overlay::Confirm(_)))
     }
 
     // ---------- 未保存の確認 ----------
@@ -291,7 +291,7 @@ impl EditorState {
         let mut args = vec![("path".to_owned(), path)];
         // 終了の連鎖で尋ねる文書が 2 件以上なら、何件目かを前置する
         if cont == Continuation::Quit
-            && let Some(chain) = self.quit_chain.as_ref().filter(|c| c.total() >= 2)
+            && let Some(chain) = self.ui.quit_chain.as_ref().filter(|c| c.total() >= 2)
         {
             args.push(("index".to_owned(), (chain.done + 1).to_string()));
             args.push(("total".to_owned(), chain.total().to_string()));
@@ -333,7 +333,7 @@ impl EditorState {
                 }
                 ConfirmAction::Open(ask) => self.open_aborted(ask),
                 // 終了の連鎖のキャンセル: 連鎖全体を中止し、破棄の印をすべて無効にする (文書は元のまま)
-                ConfirmAction::Unsaved(Continuation::Quit) => self.quit_chain = None,
+                ConfirmAction::Unsaved(Continuation::Quit) => self.ui.quit_chain = None,
                 ConfirmAction::Unmappable(ask) | ConfirmAction::UnmappableReplace { ask, .. } => {
                     self.unmappable_cancelled(ask)
                 }
@@ -410,7 +410,7 @@ impl EditorState {
     /// 保存中の待ちを済ませた後の終了の入口: dirty な全文書の確認 (終了の連鎖) へ進む。
     fn begin_quit(&mut self) -> CommandResult {
         let remaining = self.quit_targets(&[]);
-        self.quit_chain = Some(QuitChain {
+        self.ui.quit_chain = Some(QuitChain {
             remaining,
             discarded: Vec::new(),
             done: 0,
@@ -422,6 +422,7 @@ impl EditorState {
     /// アクティブな文書を先頭に、残りは開いた順。
     fn quit_targets(&self, discarded: &[(DocumentId, Revision)]) -> Vec<DocumentId> {
         let mut ids: Vec<DocumentId> = self
+            .docs
             .documents
             .iter()
             .filter(|(id, d)| d.is_dirty() && !discarded.contains(&(**id, d.revision())))
@@ -440,7 +441,7 @@ impl EditorState {
     /// 終了の連鎖を次へ進める: 次の dirty な文書をアクティブにして確認を出す。全部済んで、
     /// 確認の間に変わった文書も無ければ終了する。
     pub(crate) fn advance_quit_chain(&mut self) -> CommandResult {
-        let Some(mut chain) = self.quit_chain.take() else {
+        let Some(mut chain) = self.ui.quit_chain.take() else {
             if let Some(r) = self.quit_while_saving(false) {
                 return r;
             }
@@ -462,7 +463,7 @@ impl EditorState {
             }
         }
         let head = chain.remaining[0];
-        self.quit_chain = Some(chain);
+        self.ui.quit_chain = Some(chain);
         self.activate_document(head);
         self.confirm_doc_if_dirty(head, "unsaved", Continuation::Quit);
         CommandResult::Done
@@ -470,7 +471,7 @@ impl EditorState {
 
     /// 連鎖の確認中の文書。
     fn quit_head(&self) -> Option<DocumentId> {
-        self.quit_chain.as_ref()?.remaining.first().copied()
+        self.ui.quit_chain.as_ref()?.remaining.first().copied()
     }
 
     /// 終了の連鎖で「保存」: 確認中の文書を保存し、成功したら次へ進む。
@@ -483,12 +484,12 @@ impl EditorState {
 
     /// 終了の連鎖で「破棄」: 内容は残して印だけ付け、次へ進む。
     fn quit_discard_head(&mut self) -> CommandResult {
-        if let Some(chain) = self.quit_chain.as_mut()
+        if let Some(chain) = self.ui.quit_chain.as_mut()
             && !chain.remaining.is_empty()
         {
             let doc = chain.remaining.remove(0);
             chain.done += 1;
-            if let Some(d) = self.documents.get(&doc) {
+            if let Some(d) = self.docs.documents.get(&doc) {
                 chain.discarded.push((doc, d.revision()));
             }
         }
@@ -509,7 +510,7 @@ impl EditorState {
     }
 
     fn prompt_mut(&mut self) -> Option<&mut PromptState> {
-        match &mut self.overlay {
+        match &mut self.ui.overlay {
             Some(Overlay::Prompt(p)) => Some(p),
             _ => None,
         }
@@ -522,11 +523,11 @@ impl EditorState {
 
     /// 入力欄 (プロンプトとパレットで共通の編集)。
     fn input_mut(&mut self) -> Option<(&mut String, &mut usize)> {
-        match &mut self.overlay {
+        match &mut self.ui.overlay {
             Some(Overlay::Prompt(p)) => Some((&mut p.text, &mut p.cursor)),
             Some(Overlay::Palette(p)) => Some((&mut p.text, &mut p.cursor)),
             None => {
-                let b = self.search_bar.as_mut()?;
+                let b = self.find.search_bar.as_mut()?;
                 match b.focus {
                     eve_view::BarFocus::Search => Some((&mut b.text, &mut b.cursor)),
                     eve_view::BarFocus::Replace => b.replace.as_mut().map(|(t, c)| (t, c)),
@@ -540,7 +541,7 @@ impl EditorState {
     /// プロンプトの入力欄を編集するコマンドを横取りする (オーバーレイの間は文書を編集しない)。
     /// オーバーレイが出ていて、オーバーレイ用でも編集用でもないコマンドは拒否する (モーダル)。
     pub(crate) fn overlay_intercept(&mut self, inv: &CommandInvocation) -> Option<CommandResult> {
-        if self.overlay.is_none() && self.search_bar.is_none() {
+        if self.ui.overlay.is_none() && self.find.search_bar.is_none() {
             return None;
         }
         let id = inv.id.as_str();
@@ -560,7 +561,7 @@ impl EditorState {
             });
         }
         // 検索バーはモーダルではない: 入力欄の編集だけを受け、それ以外のコマンドは通常どおり実行する
-        if self.overlay.is_none()
+        if self.ui.overlay.is_none()
             && !matches!(
                 id,
                 "edit.insert_text"
@@ -574,7 +575,7 @@ impl EditorState {
         {
             return None;
         }
-        let is_prompt = matches!(self.overlay, Some(Overlay::Prompt(_)));
+        let is_prompt = matches!(self.ui.overlay, Some(Overlay::Prompt(_)));
         let Some((text, cursor)) = self.input_mut() else {
             return Some(CommandResult::Rejected(RejectReason::NotAvailable));
         };
@@ -612,7 +613,7 @@ impl EditorState {
                 if let Some(p) = self.prompt_mut() {
                     p.error = None;
                 }
-            } else if self.overlay.is_none() {
+            } else if self.ui.overlay.is_none() {
                 self.bar_edited();
             } else {
                 self.palette_reset_selection();
@@ -635,7 +636,7 @@ impl EditorState {
     }
 
     fn submit_prompt(&mut self) -> CommandResult {
-        let Some(Overlay::Prompt(p)) = self.overlay.clone() else {
+        let Some(Overlay::Prompt(p)) = self.ui.overlay.clone() else {
             return CommandResult::Rejected(RejectReason::NotAvailable);
         };
         let text = p.text.trim().to_owned();
@@ -721,7 +722,7 @@ impl EditorState {
             CommandResult::Done => need_job,
             _ => false,
         };
-        if failed && self.overlay.is_none() {
+        if failed && self.ui.overlay.is_none() {
             self.set_overlay(Some(prev));
             self.mark_dirty_render();
         }
@@ -739,7 +740,7 @@ impl EditorState {
 
     /// `ui.confirm`: 確認はフォーカス中の選択肢を、プロンプトは入力を確定する。
     pub fn ui_confirm(&mut self) -> CommandResult {
-        match &self.overlay {
+        match &self.ui.overlay {
             Some(Overlay::Confirm(c)) => {
                 let f = c.focused;
                 self.choose(f)
@@ -754,7 +755,7 @@ impl EditorState {
 
     /// `ui.cancel`: オーバーレイを閉じる (データは変えない)。出ていなければ何もしない。
     pub fn ui_cancel(&mut self) -> CommandResult {
-        if self.overlay.is_none() && self.search_bar.is_some() {
+        if self.ui.overlay.is_none() && self.find.search_bar.is_some() {
             self.search_close();
             return CommandResult::Done;
         }
@@ -763,11 +764,11 @@ impl EditorState {
             return CommandResult::Done;
         }
         // 読込中なら取り消す (FR-122。結果は `Failed { Cancelled }` で届き、旧文書があれば残る)
-        if self.overlay.is_none() && self.cancel_loading() {
+        if self.ui.overlay.is_none() && self.cancel_loading() {
             return CommandResult::Done;
         }
         // 確認の `Esc` はキャンセルの選択 (保存の失敗の確認では中止を示す)
-        if let Some(Overlay::Confirm(c)) = &self.overlay {
+        if let Some(Overlay::Confirm(c)) = &self.ui.overlay {
             let cancel = c.cancel_index();
             return self.choose(cancel);
         }
@@ -775,7 +776,7 @@ impl EditorState {
         if let Some(Overlay::Prompt(PromptState {
             kind: PromptKind::Encoding { ask },
             ..
-        })) = &self.overlay
+        })) = &self.ui.overlay
         {
             let ask = ask.clone();
             self.take_overlay();
@@ -791,17 +792,17 @@ impl EditorState {
 
     /// `ui.list_next` / `ui.list_prev`: 確認のフォーカスを移す (折り返す)。
     pub fn ui_list_move(&mut self, forward: bool) -> CommandResult {
-        if matches!(self.overlay, Some(Overlay::Palette(_))) {
+        if matches!(self.ui.overlay, Some(Overlay::Palette(_))) {
             return self.palette_move(forward);
         }
-        if matches!(self.overlay, Some(Overlay::Help(_))) {
+        if matches!(self.ui.overlay, Some(Overlay::Help(_))) {
             return self.help_scroll(if forward { 1 } else { -1 });
         }
-        if self.overlay.is_none() && self.search_bar.is_some() {
+        if self.ui.overlay.is_none() && self.find.search_bar.is_some() {
             self.bar_focus_cycle(forward);
             return CommandResult::Done;
         }
-        let Some(Overlay::Confirm(c)) = &mut self.overlay else {
+        let Some(Overlay::Confirm(c)) = &mut self.ui.overlay else {
             return CommandResult::Rejected(RejectReason::NotAvailable);
         };
         let n = c.choices.len() + 1;
@@ -816,7 +817,7 @@ impl EditorState {
 
     /// `ui.dialog_choose { choice }`。
     pub fn ui_dialog_choose(&mut self, choice: usize) -> CommandResult {
-        let n = match &self.overlay {
+        let n = match &self.ui.overlay {
             Some(Overlay::Confirm(c)) => c.choices.len(),
             _ => return CommandResult::Rejected(RejectReason::NotAvailable),
         };
@@ -835,7 +836,7 @@ impl EditorState {
             _ => c,
         };
         let c = c.to_lowercase().next().unwrap_or(c);
-        let idx = match &self.overlay {
+        let idx = match &self.ui.overlay {
             Some(Overlay::Confirm(st)) => st.choices.iter().position(|d| d.accel == Some(c)),
             _ => None,
         };
@@ -931,14 +932,14 @@ fn reg_motion_search(r: &mut CommandRegistry) {
 }
 
 fn cmd_list_page_down(ctx: &mut CommandCtx<'_>) -> CommandResult {
-    if matches!(ctx.state.overlay, Some(Overlay::Help(_))) {
+    if matches!(ctx.state.ui.overlay, Some(Overlay::Help(_))) {
         return ctx.state.help_page(true);
     }
     ctx.state.palette_page(true)
 }
 
 fn cmd_list_page_up(ctx: &mut CommandCtx<'_>) -> CommandResult {
-    if matches!(ctx.state.overlay, Some(Overlay::Help(_))) {
+    if matches!(ctx.state.ui.overlay, Some(Overlay::Help(_))) {
         return ctx.state.help_page(false);
     }
     ctx.state.palette_page(false)

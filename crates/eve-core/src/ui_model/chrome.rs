@@ -249,7 +249,7 @@ pub(crate) fn status_model(
 /// オーバーレイのモデル (確認・入力プロンプト)。文言は core が解決して `CellText` で渡す。
 pub(crate) fn overlay_models(state: &EditorState) -> Vec<OverlayModel> {
     use crate::ui_model::overlay::Overlay;
-    match &state.overlay {
+    match &state.ui.overlay {
         None => Vec::new(),
         Some(Overlay::Confirm(c)) => {
             let key = |leaf: &str| format!("ui.confirm.{}.{leaf}", c.name);
@@ -344,7 +344,7 @@ pub(crate) fn overlay_models(state: &EditorState) -> Vec<OverlayModel> {
 pub(crate) fn hint_model(state: &EditorState, chord: &[KeyStroke]) -> HintModel {
     // ヘルプ画面: 決定するものは無いので、閉じる (`Esc`) だけを案内する
     if matches!(
-        state.overlay,
+        state.ui.overlay,
         Some(crate::ui_model::overlay::Overlay::Help(_))
     ) {
         let esc = KeyLabel {
@@ -369,7 +369,7 @@ pub(crate) fn hint_model(state: &EditorState, chord: &[KeyStroke]) -> HintModel 
             }],
         };
     }
-    if state.overlay.is_some() || state.search_bar.is_some() {
+    if state.ui.overlay.is_some() || state.find.search_bar.is_some() {
         // オーバーレイ: 決定・取消 (確認は次へも)。キーは固定 (オーバーレイの割当は既定のまま)
         let stroke = |key| KeyLabel {
             strokes: vec![KeyStroke {
@@ -398,7 +398,7 @@ pub(crate) fn hint_model(state: &EditorState, chord: &[KeyStroke]) -> HintModel 
                 priority: 4,
             },
         ];
-        if state.overlay.is_none() {
+        if state.ui.overlay.is_none() {
             // 検索バー: Enter は次の一致、Alt+C は大小の切替
             items[1].text = word("search.next");
             items.push(HintItem {
@@ -412,6 +412,7 @@ pub(crate) fn hint_model(state: &EditorState, chord: &[KeyStroke]) -> HintModel 
                 priority: 2,
             });
             if state
+                .find
                 .search_bar
                 .as_ref()
                 .is_some_and(|b| b.replace.is_some())
@@ -485,7 +486,7 @@ pub(crate) fn hint_model(state: &EditorState, chord: &[KeyStroke]) -> HintModel 
 }
 
 pub(crate) fn chrome_texts(state: &EditorState) -> ChromeTexts {
-    let min = state.caps.min_surface;
+    let min = state.term.caps.min_surface;
     let (cols, rows) = (min.cols.to_string(), min.rows.to_string());
     let text = render(state, "ui.too_small", &[("cols", &cols), ("rows", &rows)]);
     ChromeTexts {

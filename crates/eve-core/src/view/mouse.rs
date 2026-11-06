@@ -34,11 +34,11 @@ pub(crate) struct Drag {
 impl EditorState {
     pub(crate) fn on_mouse(&mut self, m: MouseEvent) {
         // オーバーレイ・検索バーが開いている間は、編集面のマウスを無視する
-        if self.overlay.is_some()
-            || self.search_bar.is_some()
-            || !self.views.contains_key(&m.at.view)
+        if self.ui.overlay.is_some()
+            || self.find.search_bar.is_some()
+            || !self.docs.views.contains_key(&m.at.view)
         {
-            self.mouse_drag = None;
+            self.term.mouse_drag = None;
             return;
         }
         match m.kind {
@@ -49,7 +49,7 @@ impl EditorState {
                 self.mouse_down(m);
             }
             MouseKind::Drag(MouseButton::Left) => self.mouse_move(m.at),
-            MouseKind::Up(MouseButton::Left) => self.mouse_drag = None,
+            MouseKind::Up(MouseButton::Left) => self.term.mouse_drag = None,
             MouseKind::WheelUp => self.mouse_wheel(m, -1),
             MouseKind::WheelDown => self.mouse_wheel(m, 1),
             _ => {}
@@ -63,12 +63,12 @@ impl EditorState {
         };
         // Undo の結合はカーソル移動と同じく封印する
         self.seal_active_history();
-        let anchor = match self.views.get(&view) {
+        let anchor = match self.docs.views.get(&view) {
             Some(v) if m.mods.contains(Modifiers::SHIFT) => v.selection.primary().anchor,
             _ => pos,
         };
         self.mouse_select(view, anchor, pos, aff);
-        self.mouse_drag = Some(Drag {
+        self.term.mouse_drag = Some(Drag {
             view,
             anchor,
             at: m.at,
@@ -77,7 +77,7 @@ impl EditorState {
     }
 
     fn mouse_move(&mut self, at: MouseAt) {
-        let Some(mut drag) = self.mouse_drag else {
+        let Some(mut drag) = self.term.mouse_drag else {
             return;
         };
         drag.at = at;
@@ -87,7 +87,7 @@ impl EditorState {
         } else {
             drag.next_scroll = None;
         }
-        self.mouse_drag = Some(drag);
+        self.term.mouse_drag = Some(drag);
         self.drag_select(drag);
     }
 
@@ -106,7 +106,7 @@ impl EditorState {
 
     /// 面の外へドラッグしている間、時間が来たら 1 表示行スクロールして選択を伸ばす。
     pub(crate) fn mouse_tick(&mut self) {
-        let Some(mut drag) = self.mouse_drag else {
+        let Some(mut drag) = self.term.mouse_drag else {
             return;
         };
         let Some(due) = drag.next_scroll else {
@@ -118,12 +118,12 @@ impl EditorState {
         let up = drag.at.row < 0;
         self.scroll_lines(drag.view, if up { -1 } else { 1 });
         drag.next_scroll = Some(self.now + AUTO_SCROLL_INTERVAL);
-        self.mouse_drag = Some(drag);
+        self.term.mouse_drag = Some(drag);
         self.drag_select(drag);
     }
 
     pub(crate) fn mouse_deadline(&self) -> Option<Tick> {
-        self.mouse_drag.and_then(|d| d.next_scroll)
+        self.term.mouse_drag.and_then(|d| d.next_scroll)
     }
 
     fn mouse_wheel(&mut self, m: MouseEvent, dir: i64) {
@@ -140,10 +140,10 @@ impl EditorState {
     /// 水平スクロール (折り返し OFF)。いちばん長い可視行の幅を超えて右へは動かさない。
     fn scroll_columns(&mut self, view: ViewId, delta: i64) {
         let rows = self.viewport().1 as usize;
-        let Some(v) = self.views.get(&view) else {
+        let Some(v) = self.docs.views.get(&view) else {
             return;
         };
-        let Some(d) = self.documents.get(&v.doc) else {
+        let Some(d) = self.docs.documents.get(&v.doc) else {
             return;
         };
         let t = d.text();
@@ -156,7 +156,7 @@ impl EditorState {
         let left = i64::from(v.scroll.left_col);
         let new = (left + delta).clamp(0, widest.saturating_sub(1) as i64);
         if new != left
-            && let Some(v) = self.views.get_mut(&view)
+            && let Some(v) = self.docs.views.get_mut(&view)
         {
             v.scroll.left_col = new as u32;
             self.mark_dirty_render();
@@ -165,8 +165,8 @@ impl EditorState {
 
     /// 面のセルに対応する文書の位置 (と折り返し位置の帰属)。03 §5.8.1 の規則。面の外の行は端の行に丸める。
     fn mouse_position(&self, at: MouseAt) -> Option<(ByteOff, Affinity)> {
-        let v = self.views.get(&at.view)?;
-        let d = self.documents.get(&v.doc)?;
+        let v = self.docs.views.get(&at.view)?;
+        let d = self.docs.documents.get(&v.doc)?;
         let (cols, rows) = self.viewport();
         let gw = i32::from(crate::layout::gutter_width(d, cols as usize));
         let row = at.row.clamp(0, (i32::from(rows) - 1).max(0)) as usize;
@@ -196,9 +196,9 @@ impl EditorState {
 
 /// `ui.toggle_mouse`: マウスの取得の ON/OFF。OFF の間は端末のネイティブ選択・スクロールが使える (04 §6.8)。
 fn toggle_mouse(ctx: &mut CommandCtx<'_>) -> CommandResult {
-    let enabled = !ctx.state.mouse_on;
-    ctx.state.mouse_on = enabled;
-    ctx.state.mouse_drag = None;
+    let enabled = !ctx.state.term.mouse_on;
+    ctx.state.term.mouse_on = enabled;
+    ctx.state.term.mouse_drag = None;
     ctx.state.push_effect(Effect::SetMouseCapture { enabled });
     ctx.state.show_message(
         MessageLevel::Info,
@@ -214,8 +214,8 @@ fn toggle_mouse(ctx: &mut CommandCtx<'_>) -> CommandResult {
 
 /// `ui.toggle_hint_bar`: ヒントバーの表示の ON/OFF (FR-504)。OFF の間はその行を本文に使う (04 §3.5)。
 fn toggle_hint_bar(ctx: &mut CommandCtx<'_>) -> CommandResult {
-    let on = !ctx.state.hint_bar_on;
-    ctx.state.hint_bar_on = on;
+    let on = !ctx.state.term.hint_bar_on;
+    ctx.state.term.hint_bar_on = on;
     ctx.state.mark_dirty_render();
     ctx.state.show_message(
         MessageLevel::Info,

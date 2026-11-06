@@ -42,6 +42,7 @@ impl EditorState {
         } else {
             let count = shown.len().to_string();
             let log = self
+                .io
                 .log_path
                 .clone()
                 .unwrap_or_else(|| "ログなし".to_owned());

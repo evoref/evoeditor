@@ -69,19 +69,19 @@ impl EditorState {
         let c = self.config();
         let name = with_background(c.theme_name.as_str(), c.theme_background).to_owned();
         // 組込みでなければテーマファイル (読めていればそれ、読めていなければ default、07 §8.6)
-        let roles = match &self.user_theme {
+        let roles = match &self.settings.user_theme {
             Some((n, t)) if builtin(&name).is_none() && *n == name => {
-                resolve_theme(t, self.caps.color_depth)
+                resolve_theme(t, self.term.caps.color_depth)
             }
-            _ => resolve(&name, self.caps.color_depth),
+            _ => resolve(&name, self.term.caps.color_depth),
         };
-        self.roles = std::sync::Arc::new(roles);
+        self.settings.roles = std::sync::Arc::new(roles);
         self.mark_dirty_render();
     }
 
     /// テーマファイルから読んだテーマを置く (`None` は読めなかった: `default` で動く)。名前が今の `theme.name` なら表を作り直す。
     pub fn set_user_theme(&mut self, name: &str, theme: Option<Theme>) {
-        self.user_theme = theme.map(|t| (name.to_owned(), t));
+        self.settings.user_theme = theme.map(|t| (name.to_owned(), t));
         self.refresh_roles();
     }
 }

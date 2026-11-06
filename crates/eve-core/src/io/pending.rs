@@ -107,6 +107,7 @@ pub(crate) struct NewFormat {
 impl EditorState {
     pub(crate) fn take_pending_for(&mut self, doc: DocumentId) {
         let ids: Vec<_> = self
+            .io
             .pending
             .iter()
             .filter(|(_, p)| match p {
@@ -114,7 +115,7 @@ impl EditorState {
                 | Pending::CheckUnchanged { doc: d }
                 | Pending::ExternalCheck { doc: d, .. } => *d == doc,
                 Pending::ReplaceUnmappable { ask, .. } => ask.doc == doc,
-                Pending::Search => self.search.as_ref().is_some_and(|s| s.doc() == doc),
+                Pending::Search => self.find.search.as_ref().is_some_and(|s| s.doc() == doc),
                 Pending::FindNext { doc: d, .. } => *d == doc,
                 Pending::ReplaceAll { doc: d, .. } => *d == doc,
                 Pending::ConvertEol(c) => c.doc == doc,
@@ -133,12 +134,12 @@ impl EditorState {
             })
             .map(|(id, _)| *id)
             .collect();
-        if self.search.as_ref().is_some_and(|s| s.doc() == doc) {
-            self.search = None;
+        if self.find.search.as_ref().is_some_and(|s| s.doc() == doc) {
+            self.find.search = None;
         }
         for id in ids {
-            self.continuations.remove(&id);
-            self.pending.remove(&id);
+            self.ui.continuations.remove(&id);
+            self.io.pending.remove(&id);
             self.jobs.cancel(id);
         }
     }
@@ -148,14 +149,14 @@ impl EditorState {
         let job = r.job();
         // 読込の進捗は終わりではない。待ちの記録は残して、読込中の文書の進捗だけ更新する
         if let JobResult::Progress { bytes, total, .. } = r {
-            if let Some(Pending::Open { doc, .. }) = self.pending.get(&job) {
+            if let Some(Pending::Open { doc, .. }) = self.io.pending.get(&job) {
                 let pct = bytes
                     .saturating_mul(100)
                     .checked_div(total)
                     .unwrap_or(0)
                     .min(100) as u8;
                 let doc = *doc;
-                if let Some(d) = self.documents.get_mut(&doc) {
+                if let Some(d) = self.docs.documents.get_mut(&doc) {
                     d.load_percent = pct;
                 }
                 self.mark_dirty_render();
@@ -163,12 +164,12 @@ impl EditorState {
             return;
         }
         // 検索は途中経過が複数届く。待ちの記録は終わりまで残す
-        if matches!(self.pending.get(&job), Some(Pending::Search)) {
+        if matches!(self.io.pending.get(&job), Some(Pending::Search)) {
             self.on_search_result(r);
             return;
         }
-        let cont = self.continuations.remove(&job);
-        let Some(pending) = self.pending.remove(&job) else {
+        let cont = self.ui.continuations.remove(&job);
+        let Some(pending) = self.io.pending.remove(&job) else {
             return;
         };
         match pending {
@@ -196,7 +197,7 @@ impl EditorState {
             Pending::WriteRecovery { path, release } => {
                 self.finish_write_recovery(&path, r);
                 if let Some(doc) = release {
-                    self.closing_snapshots.remove(&doc);
+                    self.io.closing_snapshots.remove(&doc);
                     self.mark_snapshot_update(doc);
                 }
             }
@@ -228,7 +229,7 @@ impl EditorState {
             } => {
                 let saved = matches!(r, JobResult::Saved { .. });
                 // 「保存を中止して終了」の最中: 成功は採用し、失敗は終了時の stderr に残す。確認も後続も出さない
-                if self.quit_abort.is_some() {
+                if self.ui.quit_abort.is_some() {
                     if !self.quit_abort_save_result(&path, &r) {
                         self.finish_save(doc, at, revision, &path, expected, fmt, None, r);
                     }
