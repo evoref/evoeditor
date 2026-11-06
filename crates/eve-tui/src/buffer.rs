@@ -55,7 +55,7 @@ pub fn bar_rows(frame: &Frame) -> u16 {
 }
 
 /// 変換の結果。
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct PaneRender {
     /// 端末全体 (編集面 + クローム) の大きさのバッファ。
     pub buffer: Buffer,
@@ -160,15 +160,28 @@ impl Writer<'_> {
     }
 
     /// `limit` (含まない) までに収めて Span を書く。次に書く位置を返す。
-    pub(crate) fn span(&mut self, mut x: u16, y: u16, limit: u16, span: &Span) -> u16 {
-        if span.width == 0 || x >= limit {
+    pub(crate) fn span(&mut self, x: u16, y: u16, limit: u16, span: &Span) -> u16 {
+        self.span_with(x, y, limit, &span.text, span.width, span.style)
+    }
+
+    /// `span` の本体。Span を組み立てずに、文字列・幅・スタイルを借用で受け取る (PRF-08)。
+    pub(crate) fn span_with(
+        &mut self,
+        mut x: u16,
+        y: u16,
+        limit: u16,
+        text: &str,
+        width: u16,
+        style: eve_view::Style,
+    ) -> u16 {
+        if width == 0 || x >= limit {
             return x;
         }
-        let (text, n) = replace_controls(&span.text);
+        let (text, n) = replace_controls(text);
         self.sanitized += n;
-        let style = self.style(span.style);
+        let style = self.style(style);
         // ASCII の連続 (幅 = バイト数) は 1 文字 1 セル。それ以外は 1 書記素 (core の Span の契約)
-        if span.width as usize == text.len() && text.bytes().all(|b| (0x20..0x7F).contains(&b)) {
+        if width as usize == text.len() && text.bytes().all(|b| (0x20..0x7F).contains(&b)) {
             for ch in text.chars() {
                 if x >= limit {
                     break;
@@ -179,7 +192,7 @@ impl Writer<'_> {
             }
             return x;
         }
-        if x + span.width > limit {
+        if x + width > limit {
             // 全角が矩形の端をまたぐときは、防御的に 1 セルずつ空白で埋める (04 §3.5)
             while x < limit {
                 self.set(x, y, " ", style, false);
@@ -188,10 +201,10 @@ impl Writer<'_> {
             return x;
         }
         self.set(x, y, &text, style, false);
-        for k in 1..span.width {
+        for k in 1..width {
             self.set(x + k, y, " ", style, true);
         }
-        x + span.width
+        x + width
     }
 }
 

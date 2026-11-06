@@ -103,8 +103,14 @@ fn truncate_middle(spans: &[Span], max: u16, ell: &Glyph) -> Vec<Span> {
 fn put(w: &mut Writer<'_>, x: u16, y: u16, limit: u16, spans: &[Span], base: Style) -> u16 {
     let mut x = x;
     for sp in spans {
-        let s = Span::new(sp.text.clone(), sp.width, overlay_style(base, sp.style));
-        x = w.span(x, y, limit, &s);
+        x = w.span_with(
+            x,
+            y,
+            limit,
+            &sp.text,
+            sp.width,
+            overlay_style(base, sp.style),
+        );
     }
     x
 }

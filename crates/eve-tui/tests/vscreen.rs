@@ -52,7 +52,7 @@ impl Term {
     fn draw(&mut self, h: &mut Harness) -> (PaneRender, Frame) {
         let f = h.frame();
         let r = render_screen(&f, window_of(&f), self.depth, &self.glyphs);
-        let out = self.emitter.frame(&r, &f, true);
+        let out = self.emitter.frame(r.clone(), &f, true);
         self.screen.feed(&out);
         (r, f)
     }
@@ -129,7 +129,7 @@ fn 曖昧幅_2_の端末でも_ascii_縮退なら千回の更新の後も画面�
                 true,
                 ColorDepth::TrueColor,
             );
-            let out = fresh.emitter.frame(&r, &f, true);
+            let out = fresh.emitter.frame(r.clone(), &f, true);
             fresh.screen.feed(&out);
             assert_eq!(t.screen.lines(), fresh.screen.lines(), "段階 {step}");
         }

@@ -68,7 +68,7 @@ fn output(h: &mut Harness) -> String {
         rows: f.size.rows + chrome_rows_for_surface(f.size.rows),
     };
     let r = render_screen(&f, win, ColorDepth::TrueColor, &Glyphs::unicode());
-    Emitter::new().frame(&r, &f, true)
+    Emitter::new().frame(r.clone(), &f, true)
 }
 
 fn assert_clean(out: &str, what: &str) {

@@ -37,7 +37,7 @@ fn 最初のフレームは全画面で_buffer_と同じ画面になる() {
     let f = h.frame();
     let r = render(&f);
     let mut e = Emitter::new();
-    let out = e.frame(&r, &f, true);
+    let out = e.frame(r.clone(), &f, true);
     let mut s = screen(30, r.buffer.area.height as usize);
     s.feed(&out);
     assert_eq!(s.lines(), buffer_rows(&r));
@@ -56,13 +56,13 @@ fn カーソルは最後に出力され_形状は変わったときだけ() {
     let f = h.frame();
     let r = render(&f);
     let mut e = Emitter::new();
-    let first = e.frame(&r, &f, true);
+    let first = e.frame(r.clone(), &f, true);
     let pos = r.cursor.unwrap();
     let cup = format!("\x1b[{};{}H", pos.row + 1, pos.col + 1);
     let tail = first.strip_suffix("\x1b[?2026l").unwrap();
     assert!(tail.ends_with(&format!("{cup}\x1b[?25h")), "{tail:?}");
     assert!(first.contains(" q"), "最初のフレームは形状を出す");
-    let second = e.frame(&r, &f, true);
+    let second = e.frame(r.clone(), &f, true);
     assert!(!second.contains(" q"), "形状が同じなら出さない");
     assert!(
         !second.contains("ab"),
@@ -94,11 +94,11 @@ fn 部分更新の結果は全再描画と同じ() {
         }
         let f = h.frame();
         let r = render(&f);
-        let out = e.frame(&r, &f, true);
+        let out = e.frame(r.clone(), &f, true);
         s.feed(&out);
         // 全再描画 (新しい出力器・新しい端末) と同じ
         let mut fresh = screen(40, 8 + 3);
-        fresh.feed(&Emitter::new().frame(&r, &f, true));
+        fresh.feed(&Emitter::new().frame(r.clone(), &f, true));
         assert_eq!(s.lines(), fresh.lines(), "段階 {i}: {step:?}");
         assert_eq!(s.lines(), buffer_rows(&r), "段階 {i}");
     }
@@ -112,11 +112,11 @@ fn 幅危険行は変化したとき行全体を再出力する() {
     let r = render(&f);
     assert_eq!(r.risky_rows, vec![1]);
     let mut e = Emitter::new();
-    e.frame(&r, &f, true);
+    e.frame(r.clone(), &f, true);
     h.text("c");
     let f2 = h.frame();
     let r2 = render(&f2);
-    let out = e.frame(&r2, &f2, true);
+    let out = e.frame(r2.clone(), &f2, true);
     assert!(out.contains("\x1b[0K"), "EL で行の残骸を消す: {out:?}");
     // 行全体の再出力: 変化していない文字 (半角カナ) も出る
     assert!(out.contains("ｶ"));
@@ -132,12 +132,12 @@ fn 全角の後続セルが単独のセルに変わる行は行全体を再出�
     assert!(r.risky_rows.is_empty());
     let mut e = Emitter::new();
     let mut s = screen(30, r.buffer.area.height as usize);
-    s.feed(&e.frame(&r, &f, true));
+    s.feed(&e.frame(r.clone(), &f, true));
     h.keys("backspace backspace");
     h.text("abcd");
     let f2 = h.frame();
     let r2 = render(&f2);
-    let out = e.frame(&r2, &f2, true);
+    let out = e.frame(r2.clone(), &f2, true);
     assert!(out.contains("[0K"), "EL で行の残骸を消す: {out:?}");
     s.feed(&out);
     assert_eq!(s.lines(), buffer_rows(&r2));
@@ -146,12 +146,12 @@ fn 全角の後続セルが単独のセルに変わる行は行全体を再出�
     h.text("かき");
     let f3 = h.frame();
     let r3 = render(&f3);
-    s.feed(&e.frame(&r3, &f3, true));
+    s.feed(&e.frame(r3.clone(), &f3, true));
     h.keys("backspace backspace");
     h.text("さし");
     let f4 = h.frame();
     let r4 = render(&f4);
-    let out4 = e.frame(&r4, &f4, true);
+    let out4 = e.frame(r4.clone(), &f4, true);
     assert!(!out4.contains("[0K"), "{out4:?}");
     s.feed(&out4);
     assert_eq!(s.lines(), buffer_rows(&r4));
@@ -163,7 +163,7 @@ fn 全角の後は_cup_で絶対位置を指定する() {
     h.text("あb");
     let f = h.frame();
     let r = render(&f);
-    let out = Emitter::new().frame(&r, &f, false);
+    let out = Emitter::new().frame(r.clone(), &f, false);
     let gw = f.panes[0].gutter_width;
     // 「b」は「あ」(幅 2) の直後。連続書込に頼らず CUP を出す
     let b_col = gw + 2;
@@ -179,15 +179,15 @@ fn 再描画の要求とリサイズは全画面() {
     let f = h.frame();
     let r = render(&f);
     let mut e = Emitter::new();
-    e.frame(&r, &f, true);
+    e.frame(r.clone(), &f, true);
     e.invalidate();
-    let out = e.frame(&r, &f, true);
+    let out = e.frame(r.clone(), &f, true);
     assert!(out.contains("\x1b[2J"), "全画面再描画は画面消去から");
     // 大きさが変わったときも全画面
     let mut h2 = Harness::new().with_size(20, 5);
     h2.text("x");
     let f2 = h2.frame();
-    let out2 = e.frame(&render(&f2), &f2, true);
+    let out2 = e.frame(render(&f2), &f2, true);
     assert!(out2.contains("\x1b[2J"));
 }
 
@@ -199,9 +199,9 @@ fn タイトルは変化したときだけ_制御文字を含めない() {
     f.title = "a\u{7}b - evoeditor".to_owned();
     let r = render(&f);
     let mut e = Emitter::new();
-    let first = e.frame(&r, &f, true);
+    let first = e.frame(r.clone(), &f, true);
     assert!(first.contains("\x1b]0;ab - evoeditor\x1b\\"), "{first:?}");
-    let second = e.frame(&r, &f, true);
+    let second = e.frame(r.clone(), &f, true);
     assert!(!second.contains("\x1b]0;"));
 }
 

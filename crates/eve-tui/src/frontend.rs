@@ -244,7 +244,7 @@ impl Frontend for TuiFrontend {
             .map_or(eve_view::ColorDepth::TrueColor, |d| d.caps.color_depth);
         let window = self.window().unwrap_or(frame.size);
         let r = render_screen(frame, window, depth, &self.glyphs);
-        let out = self.emitter.frame(&r, frame, true);
+        let out = self.emitter.frame(r, frame, true);
         crate::trace::render_emitted();
         self.write(&out);
         // 計測用ビルド: 描画の `write` が戻った時刻を記録する。`--bench-exit-after-first-frame` なら、端末を復元して終わる
