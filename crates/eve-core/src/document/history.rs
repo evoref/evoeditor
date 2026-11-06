@@ -86,6 +86,8 @@ pub struct UndoHistory {
     next_id: u64,
     saved: Option<NodeId>,
     budget: UndoBudget,
+    /// `undo` と `redo` の全ノードの会計値の合計。編集のたびに全ノードを足さないよう、増減で保つ (PRF-14)。
+    total: usize,
 }
 
 impl Default for UndoHistory {
@@ -165,6 +167,7 @@ impl UndoHistory {
             next_id: 1,
             saved: Some(NodeId(0)),
             budget,
+            total: 0,
         }
     }
 
@@ -198,13 +201,18 @@ impl UndoHistory {
         self.redo.len()
     }
 
-    /// 履歴の合計バイト数 (会計。プロセス全体の上限の算出に使う)。
+    /// 履歴の合計バイト数 (会計。プロセス全体の上限の算出に使う)。O(1)。
     pub fn bytes(&self) -> usize {
-        self.undo
-            .iter()
-            .chain(self.redo.iter())
-            .map(|n| n.bytes)
-            .sum()
+        debug_assert_eq!(
+            self.total,
+            self.undo
+                .iter()
+                .chain(self.redo.iter())
+                .map(|n| n.bytes)
+                .sum::<usize>(),
+            "会計値の合計がノードの合計とずれた"
+        );
+        self.total
     }
 
     /// 現在位置を保存点にする (読込完了・新規文書・開き直し・保存完了で保存に使った位置が現在のとき)。
@@ -227,6 +235,7 @@ impl UndoHistory {
     pub fn reset(&mut self) {
         self.undo.clear();
         self.redo.clear();
+        self.total = 0;
         self.base = NodeId(self.next_id);
         self.next_id += 1;
         self.saved = Some(self.base);
@@ -257,6 +266,8 @@ impl UndoHistory {
             {
                 self.saved = None;
             }
+            let freed: usize = self.redo.iter().map(|n| n.bytes).sum();
+            self.total -= freed;
             self.redo.clear();
         }
         let merge = self
@@ -364,11 +375,13 @@ impl UndoHistory {
         prev.selection_after = tx.selection_after.clone();
         prev.last_edit_at = tx.timestamp;
         prev.id = new_id;
+        let old_bytes = prev.bytes;
         prev.bytes = cost_of(
             &prev.redo,
             &prev.undo,
             [&prev.selection_before, &prev.selection_after],
         );
+        self.total = self.total - old_bytes + prev.bytes;
         // 内容が変わったので以前の位置とは別の位置になる
         if self.saved == Some(old_id) {
             self.saved = None;
@@ -382,6 +395,7 @@ impl UndoHistory {
             &inverse,
             [&tx.selection_before, &tx.selection_after],
         );
+        self.total += bytes;
         self.undo.push_back(UndoNode {
             id,
             origin: tx.origin.clone(),
@@ -419,6 +433,7 @@ impl UndoHistory {
         if self.saved.is_some_and(|s| s < self.base) {
             self.saved = None;
         }
+        self.total -= n.bytes;
         n.bytes
     }
 
