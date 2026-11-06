@@ -78,7 +78,7 @@ impl EditorState {
         doc.load_state = LoadState::Loading;
         let (doc_id, view) = self.add_document(doc);
         // 最初のファイルが開けなかったときは、これが最初に表示する文書になる
-        if self.first_window().is_none() {
+        if self.focused_window().is_none() {
             self.show_view(view, None);
         }
         self.spawn_open(doc_id, view, path, opts);

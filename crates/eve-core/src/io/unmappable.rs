@@ -276,7 +276,7 @@ impl EditorState {
         }
         // 置換する文書を表示している View の選択を履歴に入れる (別の文書の View を使うと Undo でカーソルが飛ぶ、SAF-19)
         let view = self
-            .first_window()
+            .focused_window()
             .and_then(|w| self.window_view(w))
             .filter(|v| self.views.get(v).is_some_and(|v| v.doc == ask.doc))
             .or_else(|| {
@@ -347,7 +347,7 @@ impl EditorState {
     pub(crate) fn unmappable_cancelled(&mut self, ask: &UnmappableAsk) {
         if let Some((off, _, _)) = self.char_pos(ask.doc, ask.first_char)
             && let Some(view) = self
-                .first_window()
+                .focused_window()
                 .and_then(|w| self.window_view(w))
                 .filter(|v| self.views.get(v).is_some_and(|v| v.doc == ask.doc))
         {

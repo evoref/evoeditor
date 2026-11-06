@@ -70,7 +70,7 @@ impl EditorState {
 
     /// 今の文書 (最初の Window の View の文書)。
     pub fn active_document(&self) -> Option<DocumentId> {
-        let w = self.first_window()?;
+        let w = self.focused_window()?;
         self.view(self.window_view(w)?).map(|v| v.doc)
     }
 

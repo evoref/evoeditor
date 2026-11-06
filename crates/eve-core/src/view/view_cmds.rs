@@ -7,7 +7,7 @@ use crate::layout::WrapMode;
 
 /// `view.toggle_wrap`: 折り返しの ON/OFF。ON にするときの方式は設定 `view.wrap` (`off` なら `word`)。
 fn toggle_wrap(ctx: &mut CommandCtx<'_>) -> CommandResult {
-    let Some(w) = ctx.state.first_window() else {
+    let Some(w) = ctx.state.focused_window() else {
         return CommandResult::Rejected(RejectReason::NoTarget);
     };
     let Some(view) = ctx.state.window_view(w) else {

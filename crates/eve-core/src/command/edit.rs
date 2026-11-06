@@ -33,7 +33,7 @@ enum CursorRule {
 
 /// 操作の対象 (Window の View とその文書)。
 fn active(ctx: &CommandCtx<'_>) -> Option<(ViewId, DocumentId)> {
-    let w = ctx.state.first_window()?;
+    let w = ctx.state.focused_window()?;
     let v = ctx.state.window_view(w)?;
     Some((v, ctx.state.view(v)?.doc))
 }
@@ -171,7 +171,7 @@ fn set_line_ending(ctx: &mut CommandCtx<'_>) -> CommandResult {
     };
     let Some(view_id) = ctx
         .state
-        .first_window()
+        .focused_window()
         .and_then(|w| ctx.state.window_view(w))
     else {
         return CommandResult::Rejected(RejectReason::NoTarget);

@@ -75,7 +75,7 @@ impl EditorState {
             return false;
         };
         let Some(view) = self
-            .first_window()
+            .focused_window()
             .and_then(|w| self.window_view(w))
             .and_then(|v| self.views.get(&v))
         else {
