@@ -12,6 +12,7 @@ use eve_view::{
 use ratatui::buffer::{Buffer, CellDiffOption};
 use ratatui::layout::Rect;
 use ratatui::style::{Color as RColor, Modifier, Style as RStyle};
+use unicode_segmentation::UnicodeSegmentation;
 
 use crate::color::clamp_style;
 use crate::glyphs::Glyphs;
@@ -164,6 +165,28 @@ impl Writer<'_> {
         self.span_with(x, y, limit, &span.text, span.width, span.style)
     }
 
+    /// 編集面の本文の Span を書く。契約 (`eve_view::Span`) では、本文の Span は 1 書記素か、含まれるすべての書記素の幅が同じもの
+    /// なので、幅を書記素数で割って 1 書記素ずつセルに置く。割り切れない (契約に合わない) ときは 1 書記素として書く。
+    pub(crate) fn body_span(&mut self, mut x: u16, y: u16, limit: u16, span: &Span) -> u16 {
+        let text = span.text.as_str();
+        // ASCII の連続と 1 書記素は `span_with` と同じ
+        if text.is_ascii() || span.width == 0 {
+            return self.span(x, y, limit, span);
+        }
+        let n = text.graphemes(true).count();
+        if n <= 1 || !(span.width as usize).is_multiple_of(n) {
+            return self.span(x, y, limit, span);
+        }
+        let w = span.width / n as u16;
+        for g in text.graphemes(true) {
+            if x >= limit {
+                break;
+            }
+            x = self.span_with(x, y, limit, g, w, span.style);
+        }
+        x
+    }
+
     /// `span` の本体。Span を組み立てずに、文字列・幅・スタイルを借用で受け取る (PRF-08)。
     pub(crate) fn span_with(
         &mut self,
@@ -244,7 +267,7 @@ fn render_row(
         );
     }
     for sp in &row.spans {
-        x = w.span(x, y, limit, sp);
+        x = w.body_span(x, y, limit, sp);
     }
     // 折り返しの継続行は、行番号欄の右端 (区切りの左) に `↪` を描く (04 §10。ASCII 縮退時は `>`)
     if let RowSource::Line { wrap_idx, .. } = row.source
