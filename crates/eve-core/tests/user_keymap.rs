@@ -147,3 +147,45 @@ fn 脱出キーに届かなくなる割当は外して既定を残す() {
     h.keys("ctrl+q");
     assert_eq!(h.overlay(), "dialog", "終了の確認が出る");
 }
+
+#[test]
+fn when_に知らない変数がある割当は警告して使わない() {
+    let mut h = Harness::new();
+    let f = load_keymap_str(concat!(
+        "[keys.editor]
+",
+        "\"f6\" = { command = \"edit.delete_line\", when = \"!selection.empty || doc.dirty\" }
+",
+        "\"f7\" = { command = \"edit.duplicate_line\", when = \"doc.modified\" }
+",
+    ));
+    let d = h.editor.set_user_keymap(&f);
+    let unknown: Vec<(&str, &str)> = d
+        .iter()
+        .filter(|d| d.kind == DiagKind::Keymap(KeymapProblem::UnknownWhenVar))
+        .map(|d| (d.key.as_str(), d.value.as_str()))
+        .collect();
+    assert_eq!(unknown, [("keys.editor.f6", "doc.dirty")], "{d:?}");
+    // 知らない変数の割当は使わない (既定の f6 も無いので何も起きない)
+    h.paste(
+        "a
+b
+",
+    );
+    h.keys("ctrl+home f6");
+    assert_eq!(
+        h.doc_text(),
+        "a
+b
+"
+    );
+    // 07 §7.3 の `doc.modified` は使える (貼り付けたので未保存の変更がある)
+    h.keys("f7");
+    assert_eq!(
+        h.doc_text(),
+        "a
+a
+b
+"
+    );
+}

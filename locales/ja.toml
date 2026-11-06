@@ -501,6 +501,10 @@ text = "{item} のキーの書き方が正しくありません"
 hint = "書式は設定の仕様 (07 §7.3) を見てください。この割当は使いません"
 text = "{item} の when 句が正しくありません"
 
+[msg.config.keymap_unknown_when_var]
+hint = "使える変数は設定の仕様 (07 §7.3) を見てください。この割当は使いません"
+text = "{item} の when 句の {value} は使えない変数です"
+
 [msg.config.keymap_printable_key]
 hint = "ctrl や alt を組み合わせたキーにしてください。この割当は使いません"
 text = "{item} は文字入力に使うキーなので割り当てられません"

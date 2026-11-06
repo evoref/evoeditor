@@ -66,7 +66,9 @@ fn 組込みの_when_の識別子はどれも_core_が値を返し仕様の表�
     let (names, prefixes) = spec_vars();
     let mut errors = Vec::new();
     for (v, at) in &used {
-        if h.editor.state().context_value(v).is_none() {
+        if !eve_core::CONTEXT_VARS.contains(&v.as_str())
+            || h.editor.state().context_value(v).is_none()
+        {
             errors.push(format!("{v} ({at}): core が値を返さない (いつも偽になる)"));
         }
         if !names.contains(v) && !prefixes.iter().any(|p| v.starts_with(p.as_str())) {
@@ -74,4 +76,24 @@ fn 組込みの_when_の識別子はどれも_core_が値を返し仕様の表�
         }
     }
     assert!(errors.is_empty(), "{}", errors.join("\n"));
+}
+
+#[test]
+fn core_の識別子の一覧はどれも値を返し仕様の表にある() {
+    let h = Harness::new();
+    let (names, prefixes) = spec_vars();
+    for v in eve_core::CONTEXT_VARS {
+        assert!(
+            h.editor.state().context_value(v).is_some(),
+            "{v}: core が値を返さない"
+        );
+        assert!(
+            names.iter().any(|n| n == v) || prefixes.iter().any(|p| v.starts_with(p.as_str())),
+            "{v}: 07 §7.3 の表に無い"
+        );
+    }
+    // 一覧に無い識別子には値を返さない (一覧と `context_value` の食い違いを見つける)
+    for v in ["doc.dirty", "editor", "no.such_var"] {
+        assert!(h.editor.state().context_value(v).is_none(), "{v}");
+    }
 }

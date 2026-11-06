@@ -503,6 +503,10 @@ text = "The key in {item} is not valid"
 hint = "See the config spec (07 §7.3) for the syntax. This binding is ignored"
 text = "The when clause in {item} is not valid"
 
+[msg.config.keymap_unknown_when_var]
+hint = "See the config spec (07 §7.3) for the available variables. This binding is ignored"
+text = "{value} in the when clause of {item} is not a known variable"
+
 [msg.config.keymap_printable_key]
 hint = "Combine it with ctrl or alt. This binding is ignored"
 text = "{item} is a text-input key and cannot be bound"

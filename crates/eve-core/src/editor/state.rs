@@ -994,7 +994,7 @@ impl EditorState {
             "doc.read_only_releasable" => b(doc.is_some_and(|d| {
                 d.load_state == crate::document::LoadState::Ready && d.read_only.releasable()
             })),
-            "doc.dirty" => b(doc.is_some_and(Document::is_dirty)),
+            "doc.modified" => b(doc.is_some_and(Document::is_dirty)),
             "selection.empty" => b(view.is_none_or(|v| v.selection.iter().all(|r| r.is_empty()))),
             "overlay.active" => Some(CtxValue::Str(self.overlay_name().to_owned())),
             "search.active" => b(self.find.search_bar.is_some()),
@@ -1020,7 +1020,6 @@ impl EditorState {
                         .get(&v.doc)
                         .is_some_and(|d| d.format.long_lines == 0)
             })),
-            "editor" => b(true),
             _ => None,
         }
     }
