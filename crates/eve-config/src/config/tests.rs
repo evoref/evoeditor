@@ -622,3 +622,327 @@ fn 配布する設定例は全公開キーを既定値で書く() {
     want.sort();
     assert_eq!(written, want);
 }
+
+/// 公開キーを型ごとに分ける (読み方の宣言の表との突合も兼ねる)。
+const INT_KEYS: [&str; 12] = [
+    "editor.tab_width",
+    "editor.indent_width",
+    "view.ambiguous_width",
+    "file.swap.interval_ms",
+    "file.swap.min_interval_ms",
+    "file.swap.max_bytes",
+    "editor.undo.total_max_bytes",
+    "ui.mouse_wheel_lines",
+    "ui.which_key_delay_ms",
+    "clipboard.osc52_max_bytes",
+    "file.huge_file_warn_bytes",
+    "file.long_line_threshold",
+];
+const BOOL_KEYS: [&str; 5] = [
+    "file.swap.enabled",
+    "file.swap.exclude_secret_files",
+    "view.wrap_kinsoku",
+    "ui.mouse",
+    "ui.hint_bar",
+];
+
+/// 読んだ結果の診断が 1 件で、そのキーのもの。
+fn only_diag<'a>(l: &'a Loaded, key: &str) -> &'a Diagnostic {
+    assert_eq!(l.diagnostics.len(), 1, "{key}: {:?}", l.diagnostics);
+    let d = &l.diagnostics[0];
+    assert_eq!(d.key, key);
+    d
+}
+
+#[test]
+fn 全公開キーで型の取り違えは警告して既定値に戻す() {
+    let string_keys: Vec<&str> = KEYS
+        .iter()
+        .copied()
+        .filter(|k| !INT_KEYS.contains(k) && !BOOL_KEYS.contains(k))
+        .collect();
+    assert_eq!(
+        INT_KEYS.len() + BOOL_KEYS.len() + string_keys.len(),
+        KEYS.len()
+    );
+    // (キー, 期待する型, 取り違えた値の TOML, found, 記録される値)
+    let mut cases: Vec<(&str, &str, &str, &str, &str)> = Vec::new();
+    for k in INT_KEYS {
+        cases.push((k, "integer", "\"7\"", "string", "7"));
+        cases.push((k, "integer", "true", "boolean", "true"));
+        cases.push((k, "integer", "1.5", "float", "1.5"));
+        cases.push((k, "integer", "[1]", "array", "array"));
+        cases.push((k, "integer", "{ a = 1 }", "table", "table"));
+    }
+    for k in BOOL_KEYS {
+        cases.push((k, "boolean", "1", "integer", "1"));
+        cases.push((k, "boolean", "\"true\"", "string", "true"));
+        cases.push((k, "boolean", "0x10", "integer", "10"));
+    }
+    for k in &string_keys {
+        cases.push((k, "string", "1", "integer", "1"));
+        cases.push((k, "string", "false", "boolean", "false"));
+        cases.push((k, "string", "2.5", "float", "2.5"));
+    }
+    for (key, expected, value, found, shown) in cases {
+        let l = load_str(&format!("{key} = {value}\n"));
+        assert_eq!(l.config, Config::default(), "{key} = {value}");
+        let d = only_diag(&l, key);
+        assert_eq!(d.severity, Severity::Warning, "{key} = {value}");
+        assert_eq!(
+            d.kind,
+            DiagKind::TypeMismatch { expected, found },
+            "{key} = {value}"
+        );
+        assert_eq!(d.value, shown, "{key} = {value}");
+        assert_eq!((d.line, d.column), (1, key.len() as u32 + 4), "{key}");
+    }
+}
+
+#[test]
+fn 整数は進数と区切りを読み_範囲の端を含む() {
+    for (src, want) in [
+        ("editor.tab_width = 1", 1),
+        ("editor.tab_width = 16", 16),
+        ("editor.tab_width = 0x10", 16),
+        ("editor.tab_width = 0o10", 8),
+        ("editor.tab_width = 0b11", 3),
+        ("editor.tab_width = 1_0", 10),
+    ] {
+        let l = load_str(src);
+        assert!(l.diagnostics.is_empty(), "{src}: {:?}", l.diagnostics);
+        assert_eq!(l.config.tab_width, want, "{src}");
+    }
+    for (src, shown) in [
+        ("editor.tab_width = 17", "17"),
+        ("editor.tab_width = 0", "0"),
+        ("editor.tab_width = 0x11", "11"),
+        ("editor.tab_width = 1_7", "17"),
+        // i64 に収まらないものは、読む前に TOML の解析が落とす場合がある
+        (
+            "editor.tab_width = 9223372036854775807",
+            "9223372036854775807",
+        ),
+    ] {
+        let l = load_str(src);
+        assert_eq!(l.config.tab_width, 4, "{src}");
+        let d = only_diag(&l, "editor.tab_width");
+        assert_eq!(d.kind, DiagKind::OutOfRange { min: 1, max: 16 }, "{src}");
+        assert_eq!(d.value, shown, "{src}");
+        assert_eq!((d.line, d.column), (1, 20), "{src}");
+    }
+}
+
+#[test]
+fn 真偽値と文字列の正しい値は診断なしで読む() {
+    let l = load_str("ui.mouse = false\nview.wrap_kinsoku = false\nview.wrap = \"word\"\n");
+    assert!(l.diagnostics.is_empty(), "{:?}", l.diagnostics);
+    assert!(!l.config.mouse);
+    assert!(!l.config.wrap_kinsoku);
+    assert_eq!(l.config.wrap, WrapMode::Word);
+}
+
+#[test]
+fn 列挙値の不正は書かれた値と位置を記録する() {
+    let l = load_str("[view]\n  wrap = \"hard\"\n");
+    assert_eq!(l.config.wrap, WrapMode::Off);
+    let d = only_diag(&l, "view.wrap");
+    assert_eq!(
+        d.kind,
+        DiagKind::InvalidValue {
+            allowed: WrapMode::NAMES
+        }
+    );
+    assert_eq!(d.value, "hard");
+    assert_eq!((d.line, d.column), (2, 10));
+    // 許容値は 1 つずつ読める
+    for name in WrapMode::NAMES {
+        let l = load_str(&format!("view.wrap = \"{name}\"\n"));
+        assert!(l.diagnostics.is_empty(), "{name}");
+        assert_eq!(l.config.wrap.name(), *name);
+    }
+}
+
+#[test]
+fn 診断の位置は行と桁_複数行でも() {
+    let src = "# c\n\n[editor]\n\ttab_width = \"x\"\nindent_width = true\n";
+    let l = load_str(src);
+    let pos: Vec<(&str, u32, u32)> = l
+        .diagnostics
+        .iter()
+        .map(|d| (d.key.as_str(), d.line, d.column))
+        .collect();
+    assert_eq!(
+        pos,
+        vec![("editor.indent_width", 5, 16), ("editor.tab_width", 4, 14)]
+    );
+    // 未知のキーはキーの位置
+    let l = load_str("\n\n[editor]\n    zzz = 1\n");
+    let d = only_diag(&l, "editor.zzz");
+    assert_eq!((d.line, d.column), (4, 5));
+}
+
+#[test]
+fn view_show_whitespace_の後の版の値は情報診断で_不正な値は警告() {
+    for v in ["ideographic", "trailing", "all"] {
+        let l = load_str(&format!("view.show_whitespace = \"{v}\"\n"));
+        assert_eq!(l.config.show_whitespace, ShowWhitespace::Minimal);
+        let d = only_diag(&l, "view.show_whitespace");
+        assert_eq!(
+            (d.severity, &d.kind),
+            (Severity::Info, &DiagKind::Unsupported)
+        );
+        assert_eq!(d.value, v);
+        assert_eq!((d.line, d.column), (1, 24));
+    }
+    let l = load_str("view.show_whitespace = \"off\"\n");
+    assert!(l.diagnostics.is_empty());
+    assert_eq!(l.config.show_whitespace, ShowWhitespace::Off);
+    let l = load_str("view.show_whitespace = \"bogus\"\n");
+    let d = only_diag(&l, "view.show_whitespace");
+    assert_eq!(d.severity, Severity::Warning);
+    assert_eq!(d.value, "bogus");
+    assert_eq!(l.config.show_whitespace, ShowWhitespace::Minimal);
+}
+
+#[test]
+fn theme_name_と_file_default_encoding_の不正は警告して既定値() {
+    let l = load_str("theme.name = \"a/b\"\n");
+    assert_eq!(l.config, Config::default());
+    let d = only_diag(&l, "theme.name");
+    assert_eq!(
+        d.kind,
+        DiagKind::InvalidValue {
+            allowed: crate::theme::BUILTIN_NAMES
+        }
+    );
+    assert_eq!(d.value, "a/b");
+    let l = load_str("theme.name = \"my_theme-2\"\n");
+    assert!(l.diagnostics.is_empty());
+    assert_eq!(l.config.theme_name, "my_theme-2");
+    let l = load_str("file.default_encoding = \"klingon\"\n");
+    assert_eq!(l.config, Config::default());
+    let d = only_diag(&l, "file.default_encoding");
+    assert_eq!(
+        d.kind,
+        DiagKind::InvalidValue {
+            allowed: DefaultEncoding::NAMES
+        }
+    );
+    assert_eq!(d.value, "klingon");
+}
+
+#[test]
+fn テーマの名前は英数字とハイフンと下線の_1_から_64_文字() {
+    let ok64 = "a".repeat(64);
+    let ng65 = "a".repeat(65);
+    for s in ["a", "Z9", "-", "_", "my-theme_2", ok64.as_str()] {
+        assert!(is_theme_name(s), "{s}");
+    }
+    for s in [
+        "",
+        ng65.as_str(),
+        "a b",
+        "a.b",
+        "a/b",
+        "a\\b",
+        "..",
+        "あ",
+        "a\n",
+        "a+b",
+        "a:b",
+        "a@b",
+        "a[b",
+        "a`b",
+        "a{b",
+        "a~b",
+    ] {
+        assert!(!is_theme_name(s), "{s:?}");
+    }
+    // 長さはバイトで数える (全角 22 字 = 66 バイトは通さない)
+    assert!(!is_theme_name(&"あ".repeat(22)));
+}
+
+#[test]
+fn 編集距離() {
+    for (a, b, d) in [
+        ("", "", 0),
+        ("abc", "abc", 0),
+        ("", "abc", 3),
+        ("abc", "abd", 1),
+        ("abc", "abcd", 1),
+        ("kitten", "sitting", 3),
+        ("flaw", "lawn", 2),
+        ("ab", "ba", 2),
+        ("日本語", "日本人", 1),
+    ] {
+        assert_eq!(distance(a, b), d, "{a} {b}");
+        assert_eq!(distance(b, a), d, "{b} {a}");
+    }
+}
+
+#[test]
+fn 候補は編集距離_2_以下で最も近いもの_同点は先頭() {
+    assert_eq!(nearest("abc", &[]), None);
+    assert_eq!(nearest("abc", &["abc"]), Some("abc"));
+    assert_eq!(nearest("abcd", &["abxy"]), Some("abxy")); // 距離 2
+    assert_eq!(nearest("abcd", &["axyz"]), None); // 距離 3
+    assert_eq!(nearest("ab", &["ac", "ad"]), Some("ac")); // 同点は先頭
+    assert_eq!(nearest("ab", &["ad", "ac"]), Some("ad"));
+    assert_eq!(nearest("abc", &["xbz", "abd"]), Some("abd")); // 後ろのほうが近い
+    assert_eq!(nearest("abc", &["abd", "xbz"]), Some("abd"));
+    assert_eq!(nearest("abc", &["xyz", "abx", "abc"]), Some("abc"));
+}
+
+#[test]
+fn 綴りの候補は距離_2_まで_3_からは出さない() {
+    let l = load_str("[editor]\ntab_wdth = 2\ntb_wdth = 2\ntab_w = 2\n");
+    assert_eq!(
+        kinds(&l),
+        vec![
+            ("editor.tab_w", &DiagKind::UnknownKey { suggestion: None }),
+            (
+                "editor.tab_wdth",
+                &DiagKind::UnknownKey {
+                    suggestion: Some("editor.tab_width".to_owned())
+                }
+            ),
+            (
+                "editor.tb_wdth",
+                &DiagKind::UnknownKey {
+                    suggestion: Some("editor.tab_width".to_owned())
+                }
+            ),
+        ]
+    );
+}
+
+#[test]
+fn 文字コードの別名はすべて正規名に寄せる() {
+    use DefaultEncoding::*;
+    for (labels, want) in [
+        (&["utf8", "unicode-1-1-utf-8", "UTF8"][..], Utf8),
+        (&["utf-16", "ucs-2", "unicode", "csunicode"][..], Utf16Le),
+        (&["unicodefffe"][..], Utf16Be),
+        (
+            &[
+                "shift-jis",
+                "sjis",
+                "windows-31j",
+                "ms_kanji",
+                "csshiftjis",
+                "x-sjis",
+                "ms932",
+                "cp932",
+            ][..],
+            ShiftJis,
+        ),
+        (&["x-euc-jp", "cseucpkdfmtjapanese"][..], EucJp),
+        (&["csiso2022jp"][..], Iso2022Jp),
+    ] {
+        for label in labels {
+            assert_eq!(encoding(label), Some(want), "{label}");
+        }
+    }
+    assert_eq!(encoding("latin1"), None);
+}

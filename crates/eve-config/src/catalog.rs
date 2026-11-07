@@ -364,4 +364,62 @@ b = \"x〔y\"
 ");
         assert_eq!(d.render("a.b", &[], &no_keys), "x〔y");
     }
+
+    #[test]
+    fn 件数と空かどうかとキーの列() {
+        let e = Catalog::default();
+        assert_eq!(e.len(), 0);
+        assert!(e.is_empty());
+        assert_eq!(e.keys().count(), 0);
+        let c = cat("[a]
+b = \"x\"
+c = \"y\"
+");
+        assert_eq!(c.len(), 2);
+        assert!(!c.is_empty());
+        assert_eq!(c.keys().collect::<Vec<_>>(), ["a.b", "a.c"]);
+        // [meta] だけなら空
+        let m = cat("[meta]
+language = \"ja\"
+");
+        assert!(m.is_empty());
+        assert_eq!(m.len(), 0);
+        assert!(!Catalog::builtin_ja().is_empty());
+        assert!(!Catalog::builtin_en().is_empty());
+    }
+
+    #[test]
+    fn エラーの表示_contains_と言語ごとの同梱() {
+        let e = Catalog::parse(
+            "a = 1
+",
+        )
+        .unwrap_err();
+        assert_eq!(
+            e.to_string(),
+            "言語ファイルを読めません: `a` は文字列でもテーブルでもない"
+        );
+        let c = cat("[a]
+b = \"x\"
+");
+        assert!(c.contains("a.b"));
+        assert!(!c.contains("a"));
+        assert!(!c.contains("a.c"));
+        assert!(std::ptr::eq(
+            Catalog::builtin(crate::Locale::Ja),
+            Catalog::builtin_ja()
+        ));
+        assert!(std::ptr::eq(
+            Catalog::builtin(crate::Locale::En),
+            Catalog::builtin_en()
+        ));
+    }
+
+    #[test]
+    fn プレースホルダの列() {
+        assert_eq!(placeholders("{a} と {key:x.y} {{z}} {b"), ["a", "key:x.y"]);
+        // 名前の中の { は名前の一部で、閉じた括弧の次から読み直す
+        assert_eq!(placeholders("{a{}"), ["a{"]);
+        assert_eq!(placeholders("{}{c}"), ["", "c"]);
+    }
 }
