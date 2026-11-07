@@ -175,6 +175,6 @@ mod tests {
     fn 設定が決まっていれば環境変数は読まず警告もしない() {
         let c = select_locale(None, Some(Locale::Ja), Some("xx"), None);
         assert_eq!(c.source, LocaleSource::Config);
-        assert!(c.warnings.is_empty());
+        assert!(c.warnings.is_empty(), "{:?}", c.warnings);
     }
 }

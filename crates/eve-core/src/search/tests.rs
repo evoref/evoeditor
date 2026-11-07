@@ -58,7 +58,8 @@ fn コンパイルの結果は複製と共有し_条件を変えると作り直�
 #[test]
 fn 空の検索語は何にも一致しない() {
     assert!(lit("").matcher().is_none());
-    assert!(find_all("abc", &lit("")).is_empty());
+    let actual = find_all("abc", &lit(""));
+    assert!(actual.is_empty(), "{actual:?}");
 }
 
 #[test]
@@ -80,7 +81,8 @@ fn 日本語と全角英字() {
     assert_eq!(find_all("日本語の日本", &lit("日本")), [(0, 6), (12, 18)]);
     // 全角英字は大小の区別がある文字。半角とは同一視しない
     assert_eq!(find_all("Ａａ", &lit("ａ")).len(), 2);
-    assert!(find_all("Ａａ", &lit("a")).is_empty());
+    let actual = find_all("Ａａ", &lit("a"));
+    assert!(actual.is_empty(), "{actual:?}");
 }
 
 #[test]
@@ -94,11 +96,13 @@ fn 畳み込みで長さが変わる文字を含む行でも位置は元の文�
 #[test]
 fn 書記素の途中に当たった候補は捨てる() {
     // e + COMBINING ACUTE: `e` だけには一致しない
-    assert!(find_all("e\u{301}", &lit("e")).is_empty());
+    let actual = find_all("e\u{301}", &lit("e"));
+    assert!(actual.is_empty(), "{actual:?}");
     assert_eq!(find_all("e\u{301}e", &lit("e")), [(3, 4)]);
     // 絵文字の ZWJ 列の先頭
     let family = "👨\u{200D}👩\u{200D}👧";
-    assert!(find_all(family, &lit("👨")).is_empty());
+    let actual = find_all(family, &lit("👨"));
+    assert!(actual.is_empty(), "{actual:?}");
 }
 
 // verifies: AC-FR-404-3

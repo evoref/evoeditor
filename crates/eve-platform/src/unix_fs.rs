@@ -780,7 +780,8 @@ true
             fs::metadata(&a).unwrap().permissions().mode() & 0o7777,
             0o444
         );
-        assert!(leftovers(&t).is_empty());
+        let actual = leftovers(&t);
+        assert!(actual.is_empty(), "{actual:?}");
     }
 
     #[test]
@@ -796,7 +797,8 @@ true
         let e = save(&ufs, &a, b"x", Expect::Stamp(stale)).unwrap_err();
         assert!(matches!(e.kind, FsErrorKind::Conflict { .. }));
         assert_eq!(fs::read(&a).unwrap(), b"orig");
-        assert!(leftovers(&t).is_empty());
+        let actual = leftovers(&t);
+        assert!(actual.is_empty(), "{actual:?}");
     }
 
     #[test]
@@ -990,7 +992,8 @@ true
             "{:?}",
             leftovers(&t)
         );
-        assert!(ufs.list_inflight().unwrap().is_empty());
+        let actual = ufs.list_inflight().unwrap();
+        assert!(actual.is_empty(), "{actual:?}");
     }
 
     // REF-07: 上書きしない移動 (Linux は renameat2) を使えない FS では、ハードリンク + 削除で新規ファイルを作る
@@ -1045,7 +1048,8 @@ true
             "{:?}",
             leftovers(&t)
         );
-        assert!(ufs.list_inflight().unwrap().is_empty());
+        let actual = ufs.list_inflight().unwrap();
+        assert!(actual.is_empty(), "{actual:?}");
     }
 
     // 05 §4.1 手順 3: 一時ファイルの fsync を FS が受け付けない (EINVAL / ENOTSUP / EOPNOTSUPP / ENOSYS。ネットワーク FS など) ときは警告にして保存を続ける

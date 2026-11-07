@@ -354,7 +354,8 @@ fn システムに書けて_ssh_でもなければ_auto_は_osc52_を送らな�
     );
     e.clock.advance(eve_core::Millis(20));
     e.host.step(&mut e.fe, HostMsg::Tick);
-    assert!(e.fe.probe().osc52_writes().is_empty());
+    let actual = e.fe.probe().osc52_writes();
+    assert!(actual.is_empty(), "{actual:?}");
 }
 
 // verifies: FR-205
@@ -389,7 +390,8 @@ fn never_と非対応の端末では_osc52_を送らず_失敗を知らせる() 
     *e.fake.write_error.lock().unwrap() = Some(ClipboardFailure::Unavailable);
     copy_abc(&mut e);
     assert!(e.pump_worker());
-    assert!(e.fe.probe().osc52_writes().is_empty());
+    let actual = e.fe.probe().osc52_writes();
+    assert!(actual.is_empty(), "{actual:?}");
     assert!(message_keys(&mut e).contains(&"msg.clipboard.fallback".to_owned()));
     // 端末が対応していない
     let mut e = env_config(
@@ -399,7 +401,8 @@ fn never_と非対応の端末では_osc52_を送らず_失敗を知らせる() 
     *e.fake.write_error.lock().unwrap() = Some(ClipboardFailure::Unavailable);
     copy_abc(&mut e);
     assert!(e.pump_worker());
-    assert!(e.fe.probe().osc52_writes().is_empty());
+    let actual = e.fe.probe().osc52_writes();
+    assert!(actual.is_empty(), "{actual:?}");
 }
 
 #[test]
@@ -424,5 +427,6 @@ fn 上限を超える本文は_osc52_では送らない() {
     );
     e.clock.advance(eve_core::Millis(20));
     e.host.step(&mut e.fe, HostMsg::Tick);
-    assert!(e.fe.probe().osc52_writes().is_empty());
+    let actual = e.fe.probe().osc52_writes();
+    assert!(actual.is_empty(), "{actual:?}");
 }

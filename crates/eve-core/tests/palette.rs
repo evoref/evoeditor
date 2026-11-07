@@ -56,7 +56,7 @@ fn 空の入力は_hidden_を除く全コマンドを_id_順に出す() {
     let footer: String = footer.spans.iter().map(|s| s.text.to_string()).collect();
     assert!(footer.starts_with(&format!("{0}/{0}", footer.split('/').next().unwrap())));
     let all = ids(&f);
-    assert!(!all.is_empty());
+    assert!(!all.is_empty(), "空でないはず");
     let mut sorted = all.clone();
     sorted.sort();
     assert_eq!(all, sorted);
@@ -95,7 +95,7 @@ fn 一致が無ければ_0_件() {
     h.keys("ctrl+p");
     h.text("zzzzzz");
     let f = h.frame();
-    assert!(list(&f).0.is_empty());
+    assert_eq!(list(&f).0.as_slice(), []);
     h.keys("enter");
     assert_eq!(h.overlay(), "palette", "候補が無ければ閉じない");
 }
@@ -171,7 +171,7 @@ fn 割当キーを逆引きして添える() {
         .iter()
         .find(|i| cells(i.detail.as_ref().unwrap()) == "file.save_as")
         .unwrap();
-    assert!(!item.keys.is_empty());
+    assert!(!item.keys.is_empty(), "空でないはず");
 }
 
 #[test]

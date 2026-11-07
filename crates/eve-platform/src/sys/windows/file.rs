@@ -135,8 +135,9 @@ pub(crate) fn free_bytes(path: &Path) -> Option<u64> {
     let w = wide(path);
     let mut avail = 0u64;
     // SAFETY: NUL 終端のパスと、書込先の有効なポインタ (他の出力は不要なので null)。
-    let ok =
-        unsafe { GetDiskFreeSpaceExW(w.as_ptr(), &mut avail, ptr::null_mut(), ptr::null_mut()) };
+    let ok = unsafe {
+        GetDiskFreeSpaceExW(w.as_ptr(), &raw mut avail, ptr::null_mut(), ptr::null_mut())
+    };
     (ok != 0).then_some(avail)
 }
 
@@ -151,7 +152,7 @@ pub(crate) fn file_info(f: &File) -> io::Result<HandleInfo> {
     // SAFETY: 全ビット 0 の `BY_HANDLE_FILE_INFORMATION` は有効な値 (すべて整数)。
     let mut info: BY_HANDLE_FILE_INFORMATION = unsafe { std::mem::zeroed() };
     // SAFETY: `f` は開いているファイルのハンドル、`info` は書込先の有効な構造体。
-    if unsafe { GetFileInformationByHandle(f.as_raw_handle(), &mut info) } == 0 {
+    if unsafe { GetFileInformationByHandle(f.as_raw_handle(), &raw mut info) } == 0 {
         return Err(io::Error::last_os_error());
     }
     Ok(HandleInfo {

@@ -316,6 +316,7 @@ mod tests {
             ["AC-FR-105-1", "AC-NFR-203-2"]
         );
         assert_eq!(ac_ids_in(" AC-FR-105-1."), ["AC-FR-105-1"]);
-        assert!(ac_ids_in("なし").is_empty());
+        let actual = ac_ids_in("なし");
+        assert!(actual.is_empty(), "{actual:?}");
     }
 }

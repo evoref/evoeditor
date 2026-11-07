@@ -540,7 +540,8 @@ mod tests {
     // verifies: AC-FR-507-2
     #[test]
     fn 絵文字の中の_zwj_とタグと異体字は可視化しない() {
-        assert!(invisible_marks("👨\u{200D}👩").is_empty());
+        let actual = invisible_marks("👨\u{200D}👩");
+        assert!(actual.is_empty(), "{actual:?}");
         assert!(
             invisible_marks("👨🏽\u{200D}👩\u{FE0F}").is_empty(),
             "肌色修飾・VS を挟んでも絵文字列"
@@ -553,10 +554,12 @@ mod tests {
         assert_eq!(invisible_marks("\u{200D}"), ["<ZWJ>"]);
         // 旗のタグ列 (🏴 + タグ + 取消タグ)
         let flag = "\u{1F3F4}\u{E0067}\u{E0062}\u{E0065}\u{E006E}\u{E0067}\u{E007F}";
-        assert!(invisible_marks(flag).is_empty());
+        let actual = invisible_marks(flag);
+        assert!(actual.is_empty(), "{actual:?}");
         assert_eq!(w(flag), 2);
         // 基底の直後の VS は示さない。単独の VS は示す
-        assert!(invisible_marks("a\u{FE0F}").is_empty());
+        let actual = invisible_marks("a\u{FE0F}");
+        assert!(actual.is_empty(), "{actual:?}");
         assert_eq!(invisible_marks("\u{FE01}"), ["<VS2>"]);
         assert_eq!(invisible_marks("\u{E0100}"), ["<VS17>"]);
         assert_eq!(

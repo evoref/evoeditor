@@ -1961,7 +1961,8 @@ fn 正常終了ではスワップを消す() {
     s.wait_for("未保存の確認", |t| t.contains("[D]"));
     s.send(b"d");
     assert_eq!(s.wait_exit(), 0);
-    assert!(swap_dirs(&s.state).is_empty());
+    let actual = swap_dirs(&s.state);
+    assert!(actual.is_empty(), "{actual:?}");
     let _ = std::fs::remove_dir_all(&s.state);
 }
 

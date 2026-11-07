@@ -81,7 +81,7 @@ mod tests {
         let c = Capabilities::default();
         assert_eq!(c.color_depth, ColorDepth::TrueColor);
         assert!(!c.mouse && !c.can_suspend);
-        assert!(c.intercepted_keys.is_empty());
+        assert!(c.intercepted_keys.is_empty(), "{:?}", c.intercepted_keys);
         assert_eq!(c.clone(), c);
     }
 }

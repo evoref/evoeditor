@@ -437,8 +437,10 @@ mod tests {
     fn アクセラレータの並び() {
         assert_eq!(accelerators("[S] 保存して終了"), ['S']);
         assert_eq!(accelerators("`[K] a` ★ / `[C] b`"), ['K', 'C']);
-        assert!(accelerators("[Esc] Cancel").is_empty());
-        assert!(accelerators("[a] x").is_empty());
+        let actual = accelerators("[Esc] Cancel");
+        assert!(actual.is_empty(), "{actual:?}");
+        let actual = accelerators("[a] x");
+        assert!(actual.is_empty(), "{actual:?}");
     }
 
     #[test]

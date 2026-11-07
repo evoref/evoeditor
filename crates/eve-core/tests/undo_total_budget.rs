@@ -63,7 +63,8 @@ fn 直前の_1_操作は上限より優先し_1_ノードしかない文書は�
     assert_eq!(docs[0].1.history().undo_len(), 1);
     assert_eq!(docs[1].1.history().undo_len(), 1);
     // 無限ループにならず、さらに呼んでも何も削らない
-    assert!(trim_to_total_budget(&mut docs, 1).is_empty());
+    let actual = trim_to_total_budget(&mut docs, 1);
+    assert!(actual.is_empty(), "{actual:?}");
 }
 
 #[test]
@@ -87,7 +88,8 @@ fn 上限以下なら何もしない() {
     grow(&mut a, 3, 1_000);
     let bytes = a.history().bytes();
     let mut docs = [("a", &mut a)];
-    assert!(trim_to_total_budget(&mut docs, bytes).is_empty());
+    let actual = trim_to_total_budget(&mut docs, bytes);
+    assert!(actual.is_empty(), "{actual:?}");
     assert_eq!(docs[0].1.history().undo_len(), 3);
 }
 

@@ -699,7 +699,8 @@ mod tests {
 
     #[test]
     fn 文書が無ければ出さない_秘密は削除を促す() {
-        assert!(recovery_lines(&RescueOutcome::default()).is_empty());
+        let actual = recovery_lines(&RescueOutcome::default());
+        assert!(actual.is_empty(), "{actual:?}");
         let mut o = outcome(1, 1, true, false);
         o.sensitive = true;
         let l = recovery_lines(&o);

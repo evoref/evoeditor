@@ -26,7 +26,7 @@ pub fn save_mode(fd: i32) -> Option<Vec<u8>> {
     // SAFETY: ゼロ初期化した termios (整数と配列だけ) に書かせる。
     let mut t: libc::termios = unsafe { std::mem::zeroed() };
     // SAFETY: 有効な書込先。fd が端末でなければ失敗を返すだけ。
-    if unsafe { libc::tcgetattr(fd, &mut t) } != 0 {
+    if unsafe { libc::tcgetattr(fd, &raw mut t) } != 0 {
         return None;
     }
     // SAFETY: termios は詰め物も含めて初期化済み (zeroed の上に書かれた) の平文の構造体。
@@ -160,7 +160,7 @@ extern "C" fn on_crash(signo: i32, info: *mut libc::siginfo_t, _: *mut libc::c_v
         }
         if let Some(i) = CRASH_SIGNALS.iter().position(|&s| s == signo) {
             // SAFETY: 起動時に保存した元のハンドラに戻す。戻った後、同じ障害がもう一度起きて元の動作になる
-            unsafe { libc::sigaction(signo, &c.previous[i], std::ptr::null_mut()) };
+            unsafe { libc::sigaction(signo, &raw const c.previous[i], std::ptr::null_mut()) };
             return;
         }
     }
@@ -183,7 +183,7 @@ pub fn install_crash_restore(
     let mut previous: [libc::sigaction; CRASH_SIGNALS.len()] = unsafe { std::mem::zeroed() };
     for (i, &s) in CRASH_SIGNALS.iter().enumerate() {
         // SAFETY: 有効な書込先。
-        if unsafe { libc::sigaction(s, std::ptr::null(), &mut previous[i]) } != 0 {
+        if unsafe { libc::sigaction(s, std::ptr::null(), &raw mut previous[i]) } != 0 {
             return Err(io::Error::last_os_error());
         }
     }
@@ -202,8 +202,8 @@ pub fn install_crash_restore(
             act.sa_sigaction =
                 on_crash as extern "C" fn(i32, *mut libc::siginfo_t, *mut libc::c_void) as usize;
             act.sa_flags = libc::SA_SIGINFO | libc::SA_ONSTACK;
-            libc::sigemptyset(&mut act.sa_mask);
-            if libc::sigaction(s, &act, std::ptr::null_mut()) != 0 {
+            libc::sigemptyset(&raw mut act.sa_mask);
+            if libc::sigaction(s, &raw const act, std::ptr::null_mut()) != 0 {
                 return Err(io::Error::last_os_error());
             }
         }
@@ -221,8 +221,8 @@ mod tests {
         // SAFETY: 有効な書込先 2 つ。名前・termios・大きさは使わない (null)。
         let r = unsafe {
             libc::openpty(
-                &mut m,
-                &mut s,
+                &raw mut m,
+                &raw mut s,
                 std::ptr::null_mut(),
                 std::ptr::null(),
                 std::ptr::null(),
@@ -267,15 +267,15 @@ mod tests {
             rlim_max: 0,
         };
         // SAFETY: 有効な rlimit。
-        unsafe { libc::setrlimit(libc::RLIMIT_CORE, &r) };
+        unsafe { libc::setrlimit(libc::RLIMIT_CORE, &raw const r) };
     }
 
     fn set_raw(fd: i32) {
         let mut t = parse_mode(&save_mode(fd).unwrap()).unwrap();
         // SAFETY: 有効な termios。
         unsafe {
-            libc::cfmakeraw(&mut t);
-            libc::tcsetattr(fd, libc::TCSANOW, &t);
+            libc::cfmakeraw(&raw mut t);
+            libc::tcsetattr(fd, libc::TCSANOW, &raw const t);
         }
     }
 
@@ -335,7 +335,7 @@ mod tests {
         }
         let mut status = 0;
         // SAFETY: 自分の子を待つ。
-        assert_eq!(unsafe { libc::waitpid(pid, &mut status, 0) }, pid);
+        assert_eq!(unsafe { libc::waitpid(pid, &raw mut status, 0) }, pid);
         assert!(libc::WIFSIGNALED(status), "{status:#x}");
         assert_eq!(
             libc::WTERMSIG(status),
@@ -372,7 +372,7 @@ mod tests {
         }
         let mut status = 0;
         // SAFETY: 自分の子を待つ。
-        assert_eq!(unsafe { libc::waitpid(pid, &mut status, 0) }, pid);
+        assert_eq!(unsafe { libc::waitpid(pid, &raw mut status, 0) }, pid);
         assert!(libc::WIFSIGNALED(status), "{status:#x}");
         assert_eq!(libc::WTERMSIG(status), libc::SIGSEGV, "既定の動作で終わる");
         assert!(echo_on(s), "子が termios を戻した");
