@@ -3,6 +3,8 @@
 //! (`keymap/default_keymap.rs`) は 07 §11.6 の表と照らすので文字列のまま。`ALL` が登録と一致することを試験で確かめる。
 
 pub const APP_QUIT: &str = "app.quit";
+pub const APP_QUIT_WITH_ERROR: &str = "app.quit_with_error";
+pub const APP_SAVE_AND_QUIT: &str = "app.save_and_quit";
 pub const APP_SUSPEND: &str = "app.suspend";
 pub const BUFFER_CLOSE: &str = "buffer.close";
 pub const BUFFER_LIST: &str = "buffer.list";
@@ -11,6 +13,7 @@ pub const BUFFER_PREV: &str = "buffer.prev";
 pub const CLIPBOARD_COPY: &str = "clipboard.copy";
 pub const CLIPBOARD_CUT: &str = "clipboard.cut";
 pub const CONFIG_RELOAD: &str = "config.reload";
+pub const CONFIG_SHOW_DIAGNOSTICS: &str = "config.show_diagnostics";
 pub const CURSOR_DOC_END: &str = "cursor.doc_end";
 pub const CURSOR_DOC_START: &str = "cursor.doc_start";
 pub const CURSOR_END: &str = "cursor.end";
@@ -93,8 +96,10 @@ pub const VIEW_TOGGLE_WRAP: &str = "view.toggle_wrap";
 
 /// 組込みのコマンドの ID のすべて (ID の順。登録と一致することを確かめる試験に使う)。
 #[cfg(test)]
-pub const ALL: [&str; 88] = [
+pub const ALL: [&str; 91] = [
     APP_QUIT,
+    APP_QUIT_WITH_ERROR,
+    APP_SAVE_AND_QUIT,
     APP_SUSPEND,
     BUFFER_CLOSE,
     BUFFER_LIST,
@@ -103,6 +108,7 @@ pub const ALL: [&str; 88] = [
     CLIPBOARD_COPY,
     CLIPBOARD_CUT,
     CONFIG_RELOAD,
+    CONFIG_SHOW_DIAGNOSTICS,
     CURSOR_DOC_END,
     CURSOR_DOC_START,
     CURSOR_END,

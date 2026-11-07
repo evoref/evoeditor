@@ -119,6 +119,8 @@ pub(crate) struct PaletteState {
     pub stage: Option<&'static ArgDef>,
     /// バッファ一覧 (`buffer.list`、04 §8.5)。パレットと同じリスト部品で、候補が文書になる。
     pub buffers: bool,
+    /// 設定の診断の一覧 (`config.show_diagnostics`、07 §4.3)。パレットと同じリスト部品で、候補が診断になる。
+    pub diagnostics: bool,
 }
 
 struct Hit {
@@ -287,7 +289,8 @@ impl EditorState {
             .to_owned()
     }
 
-    /// 一致した候補 (04 §8.1、07 §11.4)。順序は ファジー一致のスコア → 最近実行 → `CommandId` 順。
+    /// 一致した候補 (04 §8.1、07 §11.4)。順序は ファジー一致のスコア → 同点なら照合の対象 (書記素数) が短いほう →
+    /// 最近実行 → `CommandId` 順。
     /// 照合の対象はタイトル (表示の言語) と英語のタイトルと `CommandId` (そのままの形と単語に分けた形)。
     /// 空の入力は 最近実行 → `CommandId` 順の全件。
     fn palette_hits(&self, query: &str) -> Vec<Hit> {
@@ -301,13 +304,15 @@ impl EditorState {
                 .position(|r| r == id)
                 .unwrap_or(usize::MAX)
         };
-        let mut hits: Vec<(i32, usize, Hit)> = Vec::new();
+        // (スコア, 一致した照合の対象の長さ, 最近実行の順位, 候補)
+        let mut hits: Vec<(i32, usize, usize, Hit)> = Vec::new();
         for (i, e) in self.ui.palette_entries.iter().enumerate() {
             if !self.supported_here(e) {
                 continue;
             }
             if q.is_empty() {
                 hits.push((
+                    0,
                     0,
                     recency(&e.id),
                     Hit {
@@ -325,25 +330,27 @@ impl EditorState {
             let id_raw = lower_graphemes(&e.id);
             let id_words = lower_graphemes(&e.id.replace(['.', '_'], " "));
             let on_title = fuzzy(&title, &q);
+            // 最も高いスコアの照合の対象。同点なら短い (入力に近い) 対象 (07 §11.4)
             let best = [
-                on_title.as_ref().map(|(s, _)| *s),
-                fuzzy(&en_title, &q).map(|(s, _)| s),
-                fuzzy(&id_raw, &q).map(|(s, _)| s),
-                fuzzy(&id_words, &q).map(|(s, _)| s),
+                on_title.as_ref().map(|(s, _)| (*s, title.len())),
+                fuzzy(&en_title, &q).map(|(s, _)| (s, en_title.len())),
+                fuzzy(&id_raw, &q).map(|(s, _)| (s, id_raw.len())),
+                fuzzy(&id_words, &q).map(|(s, _)| (s, id_words.len())),
             ]
             .into_iter()
             .flatten()
-            .max();
-            let Some(score) = best else {
+            .max_by_key(|&(s, len)| (s, std::cmp::Reverse(len)));
+            let Some((score, len)) = best else {
                 continue;
             };
             // 強調するのは表示しているタイトルで一致した箇所だけ
             let ranges = on_title.map(|(_, p)| to_ranges(&p)).unwrap_or_default();
-            hits.push((score, recency(&e.id), Hit { entry: i, ranges }));
+            hits.push((score, len, recency(&e.id), Hit { entry: i, ranges }));
         }
+        // スコア → 同点なら照合の対象が短いほう (「save」で `file.save` を `app.save_and_quit` より先に) → 最近実行。
         // entries は CommandId 順。安定ソートなので同順位は CommandId 順のまま
-        hits.sort_by_key(|(score, recent, _)| (std::cmp::Reverse(*score), *recent));
-        hits.into_iter().map(|(_, _, h)| h).collect()
+        hits.sort_by_key(|(score, len, recent, _)| (std::cmp::Reverse(*score), *len, *recent));
+        hits.into_iter().map(|(_, _, _, h)| h).collect()
     }
 
     /// パレットから実行したコマンドを覚える (新しいものを先頭に、直近 `RECENT_MAX` 件)。
@@ -394,16 +401,22 @@ impl EditorState {
         CommandResult::Done
     }
 
+    /// 一覧で一致した候補の数 (パレット・引数の値・バッファ一覧・設定の診断)。
+    fn list_len(&self, p: &PaletteState) -> usize {
+        match p.stage {
+            _ if p.buffers => self.buffer_hits(&p.text).len(),
+            _ if p.diagnostics => self.config_diagnostic_hits(&p.text).len(),
+            Some(def) => self.arg_hits(def, &p.text).len(),
+            None => self.palette_hits(&p.text).len(),
+        }
+    }
+
     /// `ui.list_page_down` / `ui.list_page_up`: 表示窓の行数ぶん動かす (端で止まる)。
     pub(crate) fn palette_page(&mut self, forward: bool) -> CommandResult {
         let Some(Overlay::Palette(p)) = &self.ui.overlay else {
             return CommandResult::Rejected(RejectReason::NotAvailable);
         };
-        let n = match p.stage {
-            _ if p.buffers => self.buffer_hits(&p.text).len(),
-            Some(def) => self.arg_hits(def, &p.text).len(),
-            None => self.palette_hits(&p.text).len(),
-        };
+        let n = self.list_len(p);
         if let Some(Overlay::Palette(p)) = &mut self.ui.overlay
             && n > 0
         {
@@ -429,11 +442,7 @@ impl EditorState {
         let Some(Overlay::Palette(p)) = &self.ui.overlay else {
             return CommandResult::Rejected(RejectReason::NotAvailable);
         };
-        let n = match p.stage {
-            _ if p.buffers => self.buffer_hits(&p.text).len(),
-            Some(def) => self.arg_hits(def, &p.text).len(),
-            None => self.palette_hits(&p.text).len(),
-        };
+        let n = self.list_len(p);
         if let Some(Overlay::Palette(p)) = &mut self.ui.overlay
             && n > 0
         {
@@ -455,6 +464,9 @@ impl EditorState {
         };
         if p.buffers {
             return self.buffer_list_confirm();
+        }
+        if p.diagnostics {
+            return self.config_diagnostics_confirm();
         }
         if let Some(def) = p.stage {
             // 引数の値を選んだ: パレットを閉じて、その値でコマンドを実行する
@@ -561,6 +573,9 @@ impl EditorState {
     pub(crate) fn palette_model(&self, p: &PaletteState) -> OverlayModel {
         if p.buffers {
             return self.buffer_list_model(p);
+        }
+        if p.diagnostics {
+            return self.config_diagnostics_model(p);
         }
         if let Some(def) = p.stage {
             return self.arg_model(p, def);

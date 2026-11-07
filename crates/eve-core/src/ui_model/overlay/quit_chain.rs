@@ -11,6 +11,9 @@ use crate::editor::state::EditorState;
 
 use super::Overlay;
 
+/// `app.quit_with_error` の終了コード (07 §18.4)。
+const EXIT_QUIT_WITH_ERROR: u8 = 4;
+
 /// 保存や破棄の後に続ける操作 (03 §9.7 の連鎖の後続)。
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum Continuation {
@@ -252,7 +255,7 @@ impl EditorState {
             Continuation::Close(doc) => self.close_buffer(doc),
             Continuation::Quit => {
                 self.push_effect(Effect::Quit {
-                    code: 0,
+                    code: self.ui.quit_code,
                     rescue: QuitRescue::None,
                     stderr: Vec::new(),
                 });
@@ -261,13 +264,47 @@ impl EditorState {
         }
     }
 
-    /// 終了する。dirty な文書があれば、全部について確認する終了の連鎖に入る (03 §9.8)。
+    /// 終了する。dirty な文書があれば、全部について確認する終了の連鎖に入る (03 §9.8)。終了コードは 0 (07 §18.4)。
     pub fn request_quit(&mut self) -> CommandResult {
+        self.request_quit_with(0)
+    }
+
+    /// `app.quit_with_error`: 保存せずに、終了コード 4 で終わる (07 §18.4)。確認は `app.quit` と同じで、
+    /// dirty な文書があれば終了の連鎖 (保存 / 破棄 / キャンセル、FR-107) に入り、済んだら終了コード 4 で終わる。
+    pub fn request_quit_with_error(&mut self) -> CommandResult {
+        self.request_quit_with(EXIT_QUIT_WITH_ERROR)
+    }
+
+    /// 終了コード `code` で終了する要求。「保存を中止して終了」の最中は、その終了コードを変えない。
+    fn request_quit_with(&mut self, code: u8) -> CommandResult {
+        if self.ui.quit_abort.is_none() {
+            self.ui.quit_code = code;
+        }
         // 保存ジョブの実行中は、その完了を待つ (03 §9.7 (f))
         if let Some(r) = self.quit_while_saving(true) {
             return r;
         }
         self.begin_quit()
+    }
+
+    /// `app.save_and_quit`: 表示中の文書を保存し (`file.save`)、成功したら終了する (`app.quit`。07 §18.6)。
+    /// 保存は終了の連鎖の「保存」と同じ経路で、無題・読み取り専用の文書は名前を尋ね、保存が失敗・キャンセルされたら
+    /// 終了しない。保存の後は `app.quit` と同じで、ほかに dirty な文書があれば終了の連鎖で確認する。
+    /// 表示中の文書が dirty でなければ、保存せずに `app.quit` と同じ終了へ進む。終了コードは 0。
+    pub fn request_save_and_quit(&mut self) -> CommandResult {
+        if self.ui.quit_abort.is_some() {
+            return CommandResult::Done;
+        }
+        let Some(doc) = self
+            .active_document()
+            .filter(|d| self.document(*d).is_some_and(|d| d.is_dirty()))
+        else {
+            return self.request_quit();
+        };
+        self.ui.quit_code = 0;
+        // 連鎖の途中の (前の終了の) 状態は持ち越さない。保存の成功後に、連鎖を作り直して残りを確かめる
+        self.ui.quit_chain = None;
+        self.save_doc_then(doc, Continuation::Quit)
     }
 
     /// 保存中の待ちを済ませた後の終了の入口: dirty な全文書の確認 (終了の連鎖) へ進む。

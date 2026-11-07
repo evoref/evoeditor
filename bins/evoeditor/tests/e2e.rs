@@ -456,6 +456,54 @@ b3
     let _ = std::fs::remove_dir_all(dir);
 }
 
+const CTRL_P: &[u8] = b"\x10";
+
+/// コマンドパレットを開いて `query` で探し、先頭の候補を実行する。
+fn run_from_palette(s: &Session, query: &str) {
+    // 直前の入力と続けて届くと貼り付けとして扱われるので、間を空ける (ヒントバーにも「コマンド」があるので、入力欄の案内で待つ)
+    thread::sleep(Duration::from_millis(300));
+    s.send(CTRL_P);
+    s.wait_for("パレット", |t| t.contains("コマンドを入力"));
+    type_slowly(s, query);
+    s.wait_for("候補", |t| t.contains(query));
+    thread::sleep(Duration::from_millis(300));
+    s.send(b"\r");
+}
+
+// 失敗として終了 (`app.quit_with_error`、07 §18.4): 未保存の確認の後、保存せずに終了コード 4 で終わる
+#[test]
+fn 失敗として終了はパレットから実行して終了コード_4() {
+    let dir = temp_dir("quit_error");
+    let path = dir.join("COMMIT_EDITMSG");
+    std::fs::write(&path, b"\n").unwrap();
+    let mut s = Session::start(&[path.to_str().unwrap()]);
+    s.wait_for("最初の画面", |t| t.contains("COMMIT_EDITMSG"));
+    type_slowly(&s, "wip");
+    s.wait_for("編集した", |t| t.contains("[+]"));
+    run_from_palette(&s, "app.quit_with_error");
+    s.wait_for("未保存の確認", |t| t.contains("[D]"));
+    s.send(b"d");
+    assert_eq!(s.wait_exit(), 4);
+    assert_eq!(std::fs::read(&path).unwrap(), b"\n", "保存していない");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+// 保存して終了 (`app.save_and_quit`、07 §18.6): 1 操作で保存して終了コード 0 で終わる
+#[test]
+fn 保存して終了はパレットから実行して保存し終了コード_0() {
+    let dir = temp_dir("save_quit");
+    let path = dir.join("COMMIT_EDITMSG");
+    std::fs::write(&path, b"\n").unwrap();
+    let mut s = Session::start(&[path.to_str().unwrap()]);
+    s.wait_for("最初の画面", |t| t.contains("COMMIT_EDITMSG"));
+    type_slowly(&s, "fix");
+    s.wait_for("編集した", |t| t.contains("[+]"));
+    run_from_palette(&s, "app.save_and_quit");
+    assert_eq!(s.wait_exit(), 0);
+    assert_eq!(std::fs::read(&path).unwrap(), b"fix\n");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
 // (1) 起動 → 文字入力 → Ctrl+S → Ctrl+Q、ファイルの内容が一致する (無題は名前を尋ねる)
 #[test]
 fn 入力して保存して終了するとファイルの内容が一致する() {

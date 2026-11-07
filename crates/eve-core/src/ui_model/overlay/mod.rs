@@ -80,6 +80,7 @@ impl EditorState {
             Some(Overlay::Confirm(_)) => "dialog",
             Some(Overlay::Prompt(_)) => "prompt",
             Some(Overlay::Palette(p)) if p.buffers => "buffer_list",
+            Some(Overlay::Palette(p)) if p.diagnostics => "config_diagnostics",
             Some(Overlay::Palette(_)) => "palette",
             Some(Overlay::Help(_)) => "help",
         }

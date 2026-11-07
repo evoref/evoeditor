@@ -199,6 +199,7 @@ pub(crate) fn default_keymap() -> Keymap {
     // 行の複製・削除・上下移動 (v0.2、FR-207)。Alt+↑/↓ は横取りされる端末があるので、チョードの代替を持つ
     bind("editor", "ctrl+k d", "edit.duplicate_line");
     bind("editor", "ctrl+k l", "edit.delete_line");
+    bind("editor", "mod+shift+k", "edit.delete_line"); // [E]
     bind("editor", "alt+up", "edit.move_line_up");
     bind("editor", "alt+down", "edit.move_line_down");
     bind("editor", "ctrl+k up", "edit.move_line_up");
@@ -231,6 +232,7 @@ pub(crate) fn default_keymap() -> Keymap {
         ("search", "shift+f3"),
         ("editor", "ctrl+shift+home"),
         ("editor", "ctrl+shift+end"),
+        ("editor", "mod+shift+k"),
     ] {
         l.mark_enhanced(ctx, keys);
     }

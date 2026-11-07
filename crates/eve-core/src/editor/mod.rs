@@ -63,6 +63,7 @@ pub fn builtin_registry() -> CommandRegistry {
     crate::io::save_all::register(&mut r);
     crate::ui_model::help::register(&mut r);
     crate::io::config_reload::register(&mut r);
+    crate::ui_model::config_report::register(&mut r);
     crate::view::view_cmds::register(&mut r);
     crate::view::mouse::register(&mut r);
     crate::command::line_ops::register(&mut r);
@@ -345,8 +346,8 @@ impl Editor {
             "palette" => &["palette", "list", "prompt", "global"],
             // ヘルプ画面: 移動と閉じるだけ (入力欄は無い)
             "help" => &["help", "global"],
-            // バッファ一覧: 一覧の移動と一覧内の `buffer.close` は `list`。パレットの割当 (`palette`) は見ない
-            "buffer_list" => &["list", "prompt", "global"],
+            // バッファ一覧・設定の診断の一覧: 一覧の移動と一覧内の `buffer.close` は `list`。パレットの割当 (`palette`) は見ない
+            "buffer_list" | "config_diagnostics" => &["list", "prompt", "global"],
             "search" => &["search", "prompt", "global"],
             _ => &Self::EDITOR_CONTEXTS,
         }

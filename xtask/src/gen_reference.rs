@@ -8,8 +8,10 @@
 //! どれも `--no-config --locale ja` を付けて出させる (利用者の設定と環境の言語に左右されない。生成物は日本語)。
 //! `--check` は書き換えずに、生成した結果が今のファイルと一致することと、07 §11.6 のカタログとの突合を確かめる。
 //! **カタログ (仕様) が正、生成物は実装出力** (ADR-0025)。突合で差があれば失敗し、どちらを直すかは人が判断する。
-//! 突合の項目: (1) 版の注記の無い行の CommandId はすべて登録され、登録済みのコマンドはカタログのどれかの行にある。
-//! (2) 既定キーマップの (コマンド, キー) の組が、カタログの「既定キー」列と一致する (注記付きの行の割当は、あってもなくてもよい)。
+//! 突合の項目: (1) 版の注記の無い行と、注記の版が出荷した版 (ワークスペースの版のメジャー・マイナー) 以下の行の
+//! CommandId はすべて登録され、登録済みのコマンドはカタログのどれかの行にある。
+//! (2) 既定キーマップの (コマンド, キー) の組が、カタログの「既定キー」列と一致する (まだ出荷していない版の注記付きの行の割当は、
+//! あってもなくてもよい。出荷した版の行の割当は必須)。
 //! (3) 拡張キー (`[E]`) の印が一致する。(4) 割当を置くコンテキストの集合が一致する (「コンテキスト」列の意味、07 §11.6)。
 //! (4) の差のうち、どちらを直すかを判断して報告したもの (実装を直す作業が残るもの) だけは、`CONTEXT_EXCEPTIONS` の表で
 //! 警告にとどめる (PO 判断 2026-11-07、09 §11.2)。表にあるのに差が無くなった行は、表から外すよう失敗にする。
@@ -307,12 +309,27 @@ fn normalize_keys(keys: &str) -> String {
 /// 今は空 (2026-11-07 の 12 件は実装を直した)。表と警告の仕組みは、次に判断を待つ差が出たときのために残す。
 const CONTEXT_EXCEPTIONS: &[(&str, &str, &str)] = &[];
 
+/// 出荷した版 (ワークスペースの版の (メジャー, マイナー))。注記の版がこれ以下の行は、注記の無い行と同じく登録が要る。
+fn shipped_version() -> (u32, u32) {
+    let mut it = env!("CARGO_PKG_VERSION")
+        .split('.')
+        .map(|n| n.parse::<u32>().unwrap_or(0));
+    (it.next().unwrap_or(0), it.next().unwrap_or(0))
+}
+
+/// 登録が要る行か: 版の注記が無い、または注記の版が出荷した版 `shipped` 以下 (出荷した版の行の取りこぼしを見つける)。
+fn required(r: &eve_docs_tables::catalog::Row, shipped: (u32, u32)) -> bool {
+    !r.later || r.since.is_some_and(|v| v <= shipped)
+}
+
 /// 07 §11.6 のカタログとの突合: (誤り, 警告)。`exceptions` はコンテキストの差を警告にとどめる (コマンド, キー, 理由)。
+/// `shipped` は出荷した版 (`shipped_version`)。
 fn compare_catalog(
     doc07: &str,
     list: &CommandList,
     km: &KeymapDump,
     exceptions: &[(&str, &str, &str)],
+    shipped: (u32, u32),
 ) -> Result<(Vec<String>, Vec<String>), String> {
     let rows = eve_docs_tables::catalog::read(doc07)
         .map_err(|e| format!("07 §11.6 のカタログを読めません: {e}"))?;
@@ -325,9 +342,18 @@ fn compare_catalog(
     for r in &rows {
         for id in &r.ids {
             all_ids.insert(id.as_str());
-            if !r.later && !listed.contains(id.as_str()) {
+            if required(r, shipped) && !listed.contains(id.as_str()) {
+                let note = match r.since {
+                    Some((x, y)) if r.later => {
+                        format!(
+                            "注記の版 v{x}.{y} は出荷済み (v{}.{})",
+                            shipped.0, shipped.1
+                        )
+                    }
+                    _ => "版の注記なし".to_owned(),
+                };
                 errors.push(format!(
-                    "07 行 {}: `{id}` (版の注記なし) が登録されていません (--list-commands に無い)",
+                    "07 行 {}: `{id}` ({note}) が登録されていません (--list-commands に無い)",
                     r.line
                 ));
             }
@@ -363,7 +389,7 @@ fn compare_catalog(
                 .entry((b.id.clone(), normalize_keys(&b.keys)))
                 .or_insert(Want {
                     line: r.line,
-                    later: r.later,
+                    later: !required(r, shipped),
                     enhanced: false,
                     contexts: BTreeSet::new(),
                 });
@@ -466,7 +492,8 @@ fn build(root: &Path) -> Result<(Vec<(&'static str, String)>, Vec<String>, Vec<S
         }
     }
     let doc07 = read_text(&root.join("docs/07-config-extensibility.md"))?;
-    let (errors, warnings) = compare_catalog(&doc07, &list, &km, CONTEXT_EXCEPTIONS)?;
+    let (errors, warnings) =
+        compare_catalog(&doc07, &list, &km, CONTEXT_EXCEPTIONS, shipped_version())?;
     let files = vec![
         (COMMANDS, render_commands(&list)),
         (KEYMAP, render_keymap(&km)),
@@ -625,13 +652,16 @@ mod tests {
             "| `file.save` | `cmd.file.save` | File | — | — | `-` | `editor` | `mod+s` | - |\n",
             "| `file.open` | `cmd.file.open` | File | — | — | `-` | `editor` | `mod+o` [E], `mod+n` | - |\n",
             "| `file.new` | `cmd.file.new` | File | — | — | `-` | `editor` | — | - |\n",
-            "| `file.later` (v0.9) | `cmd.file.later` | File | — | — | `-` | `editor` | `f5` | - |",
+            "| `file.later` (v0.9) | `cmd.file.later` | File | — | — | `-` | `editor` | `f5` | - |\n",
+            "| `file.shipped` (v0.2) | `cmd.file.shipped` | File | — | — | `-` | `editor` | `f6` | - |\n",
+            "| `file.next` (v0.3 で実装) | `cmd.file.next` | File | — | — | `-` | `editor` | — | - |\n",
+            "| `ai.x` (v1.L) | `cmd.ai.x` | Ui | — | — | `-` | `editor` | — | - |",
         ));
         let exceptions = [
             ("file.save", "ctrl+s", "試験の例外"),
             ("file.save", "f1", "差の無い例外"),
         ];
-        let (errors, warnings) = compare_catalog(&doc, &list, &km, &exceptions).unwrap();
+        let (errors, warnings) = compare_catalog(&doc, &list, &km, &exceptions, (0, 2)).unwrap();
         let joined = errors.join("\n");
         assert!(
             joined.contains("`file.new` (版の注記なし) が登録されていません"),
@@ -654,7 +684,20 @@ mod tests {
             joined.contains("`file.save` の `f1` は差が無くなった"),
             "{joined}"
         );
-        assert_eq!(errors.len(), 4, "{joined}");
+        assert!(
+            joined
+                .contains("`file.shipped` (注記の版 v0.2 は出荷済み (v0.2)) が登録されていません"),
+            "出荷した版の注記付きの行は登録が要る: {joined}"
+        );
+        assert!(
+            !joined.contains("file.next") && !joined.contains("ai.x"),
+            "まだ出荷していない版・数で読めない版の行は無くてよい: {joined}"
+        );
+        assert!(
+            joined.contains("`file.shipped` の既定キー `f6` が既定キーマップにありません"),
+            "出荷した版の行の割当は必須: {joined}"
+        );
+        assert_eq!(errors.len(), 6, "{joined}");
         assert_eq!(warnings.len(), 1, "{warnings:?}");
         assert!(
             warnings[0].contains("`file.save` の `ctrl+s` のコンテキスト")
@@ -663,7 +706,7 @@ mod tests {
         );
 
         // 例外の表に無いコンテキストの差は失敗
-        let (errors, warnings) = compare_catalog(&doc, &list, &km, &[]).unwrap();
+        let (errors, warnings) = compare_catalog(&doc, &list, &km, &[], (0, 2)).unwrap();
         assert!(warnings.is_empty(), "{warnings:?}");
         assert!(
             errors

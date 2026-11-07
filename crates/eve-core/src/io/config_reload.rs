@@ -70,6 +70,8 @@ impl EditorState {
         else {
             return;
         };
+        // 一覧 (`config.show_diagnostics`) のテーマファイルの診断は、読み直した結果に置き換える
+        self.forget_config_diagnostics(EditorState::is_theme_diagnostic_file);
         for (file, diags) in &reports {
             self.report_config(file, diags);
         }
@@ -98,7 +100,7 @@ impl EditorState {
         self.io.config_sources = Some(sources);
     }
 
-    fn config_sources(&self) -> ConfigSources {
+    pub(crate) fn config_sources(&self) -> ConfigSources {
         if let Some(s) = &self.io.config_sources {
             return s.clone();
         }
@@ -180,6 +182,11 @@ impl EditorState {
             },
         };
         let mut changed: Vec<&'static str> = Vec::new();
+        // 一覧 (`config.show_diagnostics`) の設定ファイル (と `--set`) の診断は、読み直した結果に置き換える。
+        // キーマップの診断は `finish_reload_keymap` で置き換え、テーマの診断はテーマを読み直すときに置き換える
+        self.forget_config_diagnostics(|f| {
+            f != KEYMAP_FILE && !EditorState::is_theme_diagnostic_file(f)
+        });
         for (name, diags) in &resolved.reports {
             self.report_config(name, diags);
         }
@@ -198,6 +205,8 @@ impl EditorState {
         } else {
             changed = eve_config::changed_keys(self.config(), &resolved.config);
             self.apply_reloaded_config(resolved.config);
+            // 組込みのテーマに替えたときは読まないので、前のテーマファイルの診断をここで消す
+            self.forget_config_diagnostics(EditorState::is_theme_diagnostic_file);
             // テーマファイルも読み直す (名前が同じでも、ファイルが変わっていることがある)
             self.start_theme_read();
         }

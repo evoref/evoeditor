@@ -6,6 +6,8 @@
 pub(crate) const HINT_UI_CANCEL: &str = "hint.ui.cancel";
 pub(crate) const INFO_APP_RELEASE_SUMMARY: &str = "info.app.release_summary";
 pub(crate) const INFO_APP_UPDATED: &str = "info.app.updated";
+pub(crate) const INFO_CONFIG_DIAGNOSTIC_NO_FILE: &str = "info.config.diagnostic_no_file";
+pub(crate) const INFO_CONFIG_NO_DIAGNOSTICS: &str = "info.config.no_diagnostics";
 pub(crate) const INFO_CONFIG_RELOAD_RESTART: &str = "info.config.reload_restart";
 pub(crate) const INFO_CONFIG_RELOAD_UNCHANGED: &str = "info.config.reload_unchanged";
 pub(crate) const INFO_CONFIG_RELOADED: &str = "info.config.reloaded";
@@ -127,6 +129,11 @@ pub(crate) const STATUS_UNTITLED: &str = "status.untitled";
 pub(crate) const UI_BUFFER_LIST_NO_MATCH: &str = "ui.buffer_list.no_match";
 pub(crate) const UI_BUFFER_LIST_PLACEHOLDER: &str = "ui.buffer_list.placeholder";
 pub(crate) const UI_BUFFER_LIST_TITLE: &str = "ui.buffer_list.title";
+pub(crate) const UI_CONFIG_DIAGNOSTICS_ITEM: &str = "ui.config_diagnostics.item";
+pub(crate) const UI_CONFIG_DIAGNOSTICS_ITEM_NO_HINT: &str = "ui.config_diagnostics.item_no_hint";
+pub(crate) const UI_CONFIG_DIAGNOSTICS_NO_MATCH: &str = "ui.config_diagnostics.no_match";
+pub(crate) const UI_CONFIG_DIAGNOSTICS_PLACEHOLDER: &str = "ui.config_diagnostics.placeholder";
+pub(crate) const UI_CONFIG_DIAGNOSTICS_TITLE: &str = "ui.config_diagnostics.title";
 pub(crate) const UI_CONFIRM_CANCEL: &str = "ui.confirm.cancel";
 pub(crate) const UI_CONFIRM_NAV_HINT: &str = "ui.confirm.nav_hint";
 pub(crate) const UI_CONFIRM_QUIT_SAVING_OTHERS: &str = "ui.confirm.quit_saving.others";
@@ -179,10 +186,12 @@ pub(crate) const UI_TOO_SMALL: &str = "ui.too_small";
 
 /// すべての定数 (キーの順。試験に使う)。
 #[cfg(test)]
-const ALL: [&str; 168] = [
+const ALL: [&str; 175] = [
     HINT_UI_CANCEL,
     INFO_APP_RELEASE_SUMMARY,
     INFO_APP_UPDATED,
+    INFO_CONFIG_DIAGNOSTIC_NO_FILE,
+    INFO_CONFIG_NO_DIAGNOSTICS,
     INFO_CONFIG_RELOAD_RESTART,
     INFO_CONFIG_RELOAD_UNCHANGED,
     INFO_CONFIG_RELOADED,
@@ -302,6 +311,11 @@ const ALL: [&str; 168] = [
     UI_BUFFER_LIST_NO_MATCH,
     UI_BUFFER_LIST_PLACEHOLDER,
     UI_BUFFER_LIST_TITLE,
+    UI_CONFIG_DIAGNOSTICS_ITEM,
+    UI_CONFIG_DIAGNOSTICS_ITEM_NO_HINT,
+    UI_CONFIG_DIAGNOSTICS_NO_MATCH,
+    UI_CONFIG_DIAGNOSTICS_PLACEHOLDER,
+    UI_CONFIG_DIAGNOSTICS_TITLE,
     UI_CONFIRM_CANCEL,
     UI_CONFIRM_NAV_HINT,
     UI_CONFIRM_QUIT_SAVING_OTHERS,

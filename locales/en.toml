@@ -8,6 +8,14 @@ language = "en"
 description = "Quit the editor."
 title = "Quit"
 
+[cmd.app.quit_with_error]
+description = "Quit without saving, with exit code 4 (like Vim's :cq). Use it to abort git commit and the like. If documents have unsaved changes, you are asked as when quitting."
+title = "Quit with Error"
+
+[cmd.app.save_and_quit]
+description = "Save the current document, then quit. If other documents have unsaved changes, you are asked as when quitting."
+title = "Save and Quit"
+
 [cmd.app.suspend]
 description = "Suspend the editor and return to the shell. Resume it with the shell's fg."
 title = "Suspend"
@@ -23,6 +31,10 @@ title = "Cut"
 [cmd.config.reload]
 description = "Reload the settings files (config.toml and keymap.toml) without restarting."
 title = "Reload Settings"
+
+[cmd.config.show_diagnostics]
+description = "List the problems in the settings file, the keymap and the theme. Press Enter to open the file at that line."
+title = "Show Settings Diagnostics"
 
 [cmd.cursor.doc_end]
 description = "Move the cursor to the end of the document."
@@ -390,6 +402,8 @@ updated = "Updated to evoeditor {version}: {summary}"
 unsupported = "{option} is not available in this version and was ignored"
 
 [info.config]
+diagnostic_no_file = "The diagnostic for {file} was not written in a file, so there is nothing to open"
+no_diagnostics = "There are no settings diagnostics"
 reload_restart = "These items take effect after a restart: {keys}"
 reload_unchanged = "Reloaded the settings (nothing changed)"
 reloaded = "Reloaded the settings. {count} items changed: {keys}"
@@ -1039,6 +1053,13 @@ footer = "{matched}/{total}"
 placeholder = "Type a command"
 disabled = "Cannot run now: {reason}"
 no_match = "No matching commands"
+
+[ui.config_diagnostics]
+title = "Settings Diagnostics"
+placeholder = "Filter by text"
+no_match = "No matching diagnostics"
+item = "{level}: {text} / {hint}"
+item_no_hint = "{level}: {text}"
 
 [ui.buffer_list]
 title = "Buffers"

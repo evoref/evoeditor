@@ -1,13 +1,13 @@
  1e
- 2▶ 編集: 前の文字を削除                       edit.delete_backward  Backspace
- 3  編集: 後ろの文字を削除                         edit.delete_forward  Delete
- 4  編集: 行を削除                                  edit.delete_line  Ctrl+K L
-~   編集: 前の単語を削除             edit.delete_word_backward  Ctrl+Backspace
-~   編集: 後ろの単語を削除               edit.delete_word_forward  Ctrl+Delete
-~   編集: 行を複製                               edit.duplicate_line  Ctrl+K D
+ 2▶ 編集: やり直し                                           edit.redo  Ctrl+Y
+ 3  編集: 元に戻す                                           edit.undo  Ctrl+Z
+ 4  編集: 貼り付け                                          edit.paste  Ctrl+V
 ~   編集: インデント                                          edit.indent  Tab
+~   編集: 改行                                             edit.newline  Enter
+~   編集: インデント解除                               edit.outdent  Shift+Tab
+~   編集: 行を削除                                  edit.delete_line  Ctrl+K L
 ~   編集: 文字を挿入                                          edit.insert_text
-~   編集: 行を下へ移動                            edit.move_line_down  Alt+↓
+~   編集: 行を上へ移動                              edit.move_line_up  Alt+↑
 memo.txt                                                     行 1, 桁 1 UTF-8 LF
 
 Esc 取消  Enter 決定

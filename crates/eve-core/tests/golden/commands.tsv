@@ -1,5 +1,7 @@
 # id	kind	permission	when
 app.quit	Ui	None	—
+app.quit_with_error	Ui	None	—
+app.save_and_quit	File	None	—
 app.suspend	Ui	None	caps.can_suspend
 buffer.close	Ui	None	—
 buffer.list	Ui	Ui	—
@@ -8,6 +10,7 @@ buffer.prev	Ui	Ui	—
 clipboard.copy	Ui	None	!selection.empty
 clipboard.cut	Edit	None	!selection.empty && !doc.read_only
 config.reload	Ui	None	—
+config.show_diagnostics	Ui	Ui	—
 cursor.doc_end	Motion	Read	—
 cursor.doc_start	Motion	Read	—
 cursor.end	Motion	Read	—

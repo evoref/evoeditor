@@ -172,6 +172,12 @@ pub(crate) struct UiState {
     pub(crate) quit_wait: Option<crate::ui_model::quit_saving::QuitWait>,
     /// 「保存を中止して終了」の最中 (保存ジョブがすべて終わったら終了する)。
     pub(crate) quit_abort: Option<crate::ui_model::quit_saving::QuitAbort>,
+    /// 今の終了の要求の終了コード (`app.quit` / `app.save_and_quit` は 0、`app.quit_with_error` は 4。07 §18.4)。
+    /// 終了の要求のたびに置き直す。
+    pub(crate) quit_code: u8,
+    /// 設定・キーマップ・テーマのファイルの診断 (ファイルの表示名, 診断)。最後に読んだときのもの
+    /// (`config.show_diagnostics`、07 §4.3)。診断の無いファイルは載せない。
+    pub(crate) config_diagnostics: Vec<(String, Vec<eve_config::Diagnostic>)>,
     /// 表示中のメッセージ (解決済み)。
     pub(crate) message: Option<crate::ui_model::message::ShownMessage>,
     /// 未読のメッセージの数。
@@ -259,6 +265,8 @@ impl EditorState {
                 quit_chain: None,
                 quit_wait: None,
                 quit_abort: None,
+                quit_code: 0,
+                config_diagnostics: Vec::new(),
                 message: None,
                 unread: 0,
                 message_log: std::collections::VecDeque::new(),
