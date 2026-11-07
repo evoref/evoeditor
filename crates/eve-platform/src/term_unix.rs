@@ -119,7 +119,7 @@ static CRASH: OnceLock<Crash> = OnceLock::new();
 static CRASH_FD: AtomicI32 = AtomicI32::new(-1);
 
 /// `si_code` が、障害ではなくプロセスから送られた (`kill`・`sigqueue`・`raise` など) ことを表すか。Linux は 0 以下
-/// (SI_USER = 0、SI_QUEUE = -1、SI_TKILL = -6。障害は正)。macOS は SI_USER = 0x10001 から始まる正の値 (未確認、05 §11.1)。
+/// (`SI_USER` = `0、SI_QUEUE` = -`1、SI_TKILL` = -6。障害は正)。macOS は `SI_USER` = 0x10001 から始まる正の値 (未確認、05 §11.1)。
 fn sent_by_process(code: i32) -> bool {
     if cfg!(target_vendor = "apple") {
         code <= 0 || code >= 0x10000
@@ -171,6 +171,10 @@ extern "C" fn on_crash(signo: i32, info: *mut libc::siginfo_t, _: *mut libc::c_v
 
 /// 異常終了のシグナルで端末を戻すハンドラを付ける (プロセスで 1 回。2 回目以降は何もしない)。`fd`・`bytes`・`saved_mode`・
 /// `restored` は `emergency_restore` と同じ。
+///
+/// # Errors
+///
+/// 元のシグナルハンドラの読み出し、または新しいハンドラの登録 (`sigaction`) が失敗したとき。
 pub fn install_crash_restore(
     fd: i32,
     bytes: &'static [u8],

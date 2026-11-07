@@ -92,6 +92,10 @@ fn heading_level(line: &str) -> Option<usize> {
 
 /// 見出し (`### 4.1 crate 一覧` のように `#` から始まる行全体) の下の本文を返す。
 /// 同じか上の階層の次の見出しまでを本文とする。戻り値は (行番号 (1 始まり)、本文の行) の組。
+///
+/// # Errors
+///
+/// `heading` に当たる見出しが見つからないとき (`Error::HeadingNotFound`)。
 pub fn section<'a>(markdown: &'a str, heading: &str) -> Result<Vec<(usize, &'a str)>, Error> {
     let mut lines = markdown
         .lines()
@@ -197,6 +201,10 @@ pub fn tables_in(body: &[(usize, &str)]) -> Vec<Table> {
 
 /// 固定された見出しの下の表をすべて読み、必要な列がそろっていることを確かめる。
 /// 列の追加は末尾にだけ許し、知らない列は無視する (docs/11 §8.5)。
+///
+/// # Errors
+///
+/// 見出しが見つからない (`Error::HeadingNotFound`)、見出しの下に表がない (`Error::NoTable`)、必要な列がない (`Error::MissingColumn`) とき。
 pub fn read_tables(markdown: &str, heading: &str, required: &[&str]) -> Result<Vec<Table>, Error> {
     let body = section(markdown, heading)?;
     let tables = tables_in(&body);

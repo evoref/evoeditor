@@ -1,5 +1,5 @@
 //! 黙示の置換 (別の文字として黙って写される文字) の検出 (docs/03 §8.6 E1、01 FR-112 AC-2・AC-3、FR-109 AC-4)。
-//! Shift_JIS / EUC-JP / ISO-2022-JP のそれぞれで、すべての Unicode スカラー値を符号化し、
+//! `Shift_JIS` / EUC-JP / ISO-2022-JP のそれぞれで、すべての Unicode スカラー値を符号化し、
 //! 表現不能として報告されなかった文字が、復号すると元の文字に戻る (黙って別の文字になった文字が 1 つも無い) ことを確かめる。
 #![expect(
     clippy::cast_possible_truncation,

@@ -96,6 +96,10 @@ pub enum Unusable {
 }
 
 /// `TERM=dumb` なら起動しない。
+///
+/// # Errors
+///
+/// `TERM=dumb` のとき (`Unusable::DumbTerminal`)。
 pub fn check_usable(env: &dyn Env) -> Result<(), Unusable> {
     if env.var("TERM").as_deref() == Some("dumb") {
         return Err(Unusable::DumbTerminal);
@@ -107,7 +111,7 @@ fn nonempty(env: &dyn Env, key: &str) -> bool {
     env.var(key).is_some_and(|v| !v.is_empty())
 }
 
-/// 環境変数から既知の TrueColor 端末と判断できるか (§5.2a の順 4)。
+/// 環境変数から既知の `TrueColor` 端末と判断できるか (§5.2a の順 4)。
 fn known_truecolor_terminal(env: &dyn Env) -> bool {
     if env.var("WT_SESSION").is_some() || env.var("KITTY_WINDOW_ID").is_some() {
         return true;

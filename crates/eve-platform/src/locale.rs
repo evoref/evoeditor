@@ -35,6 +35,10 @@ pub fn tag_from_posix_env(
 
 /// UI の言語の OS ロケール検出 (05 §6.1)。言語タグの候補 (例 `ja-JP`) を返し、取れなければ `None`。
 /// Windows は UI 言語 (`GetUserDefaultUILanguage`) を見て、`LANG` / `LC_*` は見ない (Git Bash などが無関係に設定するため)。
+///
+/// # Panics
+///
+/// 内部の定数 (バッファ長 85) が `i32` に収まらないときだけ。実際にはパニックしない。
 #[cfg(windows)]
 pub fn ui_language_tag() -> Option<String> {
     #[allow(unsafe_code)]

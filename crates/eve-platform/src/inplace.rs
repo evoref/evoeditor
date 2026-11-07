@@ -1,5 +1,5 @@
 //! 直接上書き `write_in_place` の実装 (docs/05 §4.4 の手順 1〜9、§7.5)。Windows と Unix で共通で、OS ごとに違うのは
-//! 開き方 (共有モード)・領域の事前確保・ハンドルの FileId だけ (下の `cfg` の関数)。
+//! 開き方 (共有モード)・領域の事前確保・ハンドルの `FileId` だけ (下の `cfg` の関数)。
 //!
 //! 原子的置換ができない・意味が変わるとき (ハードリンク・共有違反・親に書込権限がない・一時ファイル規則) に、core が確認の後で呼ぶ。
 //! **元のファイルに書き始めるのは手順 6 からで、それより前のどの失敗でも元のファイルは変わらない**: 照合 → 保存中フラグ →
@@ -112,7 +112,7 @@ fn is_sharing_violation(e: &io::Error) -> bool {
     )
 }
 
-/// 開いたハンドルの FileId。
+/// 開いたハンドルの `FileId`。
 #[cfg(windows)]
 fn handle_file_id(file: &File) -> Option<eve_core::FileId> {
     crate::sys::file_info(file).ok().map(|i| eve_core::FileId {

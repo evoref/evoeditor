@@ -59,6 +59,10 @@ fn read_with(
 }
 
 /// 04 §15.2 の文言目録。`MessageKey` 列は 1 行に 1 つ (略記・複数は失敗にする)。
+///
+/// # Errors
+///
+/// 見出しや列が見つからないとき、または `MessageKey` 列が 1 行に 1 つでないとき (`Error::BadRow` など)。
 pub fn read_catalog(doc04: &str) -> Result<Vec<Message>, Error> {
     read_with(doc04, CATALOG_HEADING, &|cell| {
         let keys = identifiers(cell);
@@ -74,6 +78,10 @@ pub fn read_catalog(doc04: &str) -> Result<Vec<Message>, Error> {
 
 /// 04 §15.1 の画面文言。`MessageKey` 列は `a.b.long` / `.short` のように、後ろの項目が直前のキーの最後の語を
 /// 置き換える略記を使う (展開して 1 件ずつにする。`ja` と場面は同じ行のもの)。
+///
+/// # Errors
+///
+/// 見出しや列が見つからないとき、または略記の前にキーがないなど `MessageKey` 列を展開できないとき (`Error::BadRow` など)。
 pub fn read_screen(doc04: &str) -> Result<Vec<Message>, Error> {
     read_with(doc04, SCREEN_HEADING, &|cell| {
         let mut out: Vec<String> = Vec::new();

@@ -120,6 +120,10 @@ impl Emitter {
 
     /// 1 フレームの出力を作る。`sync` が真なら BSU / ESU で囲む (04 §4.5。常に送る)。
     /// `r` のバッファは次のフレームとの差分のために覚える (複製せずに移す、PRF-07)。
+    ///
+    /// # Panics
+    ///
+    /// `r` のバッファの範囲内のセルを取得できないとき。内部の不変条件が破れたときだけで、実際には起きない。
     pub fn frame(&mut self, r: PaneRender, frame: &Frame, sync: bool) -> String {
         let cur = &r.buffer;
         let area = cur.area;

@@ -57,6 +57,10 @@ impl UnixSignal {
 
 /// シグナルの受信を始める。`cb` はシグナルスレッドで、届いた順に 1 つずつ呼ばれる (戻るまで次は呼ばない)。
 /// 登録した後は、これらのシグナルの既定の動作 (終了) は起きない (呼び側が終了を決める)。
+///
+/// # Errors
+///
+/// シグナルの登録、またはシグナルスレッドの作成に失敗したとき。
 pub fn start(cb: impl Fn(UnixSignal) + Send + 'static) -> io::Result<()> {
     let mut signals = Signals::new([SIGINT, SIGTERM, SIGHUP, SIGCONT])?;
     // シグナルスレッド (02 §9.1 の表。deps-policy.toml の R11 の許可)

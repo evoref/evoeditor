@@ -1,7 +1,7 @@
 //! コンソールイベントの受信 (docs/05 §11.2、Windows)。`SetConsoleCtrlHandler` の登録と、受けたイベントを呼び出し側の
 //! コールバックへ渡す部分だけ。緊急退避・終了コードの決定・端末の復元 (CLOSE で待つ時間の予算など) は eve-host の責務。
 //!
-//! ハンドラは **OS が作る別スレッド** で呼ばれる。コールバックは `Send + Sync` で、長くブロックしない (CTRL_CLOSE は
+//! ハンドラは **OS が作る別スレッド** で呼ばれる。コールバックは `Send + Sync` で、長くブロックしない (`CTRL_CLOSE` は
 //! ハンドラが戻るとプロセスが終了されるので、呼び側が必要なだけ待つ)。
 
 #![allow(unsafe_code)]
@@ -58,6 +58,10 @@ unsafe extern "system" fn handler(kind: u32) -> i32 {
 }
 
 /// ハンドラを登録する (プロセスで 1 回だけ。2 回目は `AlreadyExists`)。コールバックが `true` を返したイベントは処理済み。
+///
+/// # Errors
+///
+/// 既にハンドラを登録済みのとき (`AlreadyExists`)、または OS がハンドラの登録を拒んだとき。
 pub fn install_handler(cb: impl Fn(CtrlEvent) -> bool + Send + Sync + 'static) -> io::Result<()> {
     if CALLBACK.set(Box::new(cb)).is_err() {
         return Err(io::Error::from(io::ErrorKind::AlreadyExists));
@@ -77,6 +81,10 @@ unsafe extern "system" fn swallow(_kind: u32) -> i32 {
 /// 別プロセス `pid` のコンソールにコントロールイベントを送る (テスト用の補助プロセスから呼ぶ。09 §3.6 (8)、
 /// `console-event`)。自分のコンソールを離れて `pid` のコンソールに接続し、自分は受けないようにして
 /// `GenerateConsoleCtrlEvent` を送る。`CtrlC` / `CtrlBreak` だけ送れる。
+///
+/// # Errors
+///
+/// `pid` のコンソールへの接続、自分のハンドラの無効化、イベントの送信のどれかが失敗したとき。
 #[cfg(feature = "test-hooks")]
 pub fn send_ctrl_event(pid: u32, ev: CtrlEvent) -> io::Result<()> {
     use windows_sys::Win32::System::Console::{

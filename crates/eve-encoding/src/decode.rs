@@ -1,8 +1,8 @@
 //! すべての文字コードのチャンク単位のデコード (docs/03-core-design.md §8.3)。
 //!
 //! 不正なバイトは **1 バイトにつき 1 つの私用文字 `U+10FF00 + b`** にエスケープして続行する (U+FFFD への置換はしない)。
-//! UTF-8 は `Utf8Decoder`、それ以外は encoding_rs の `decode_to_string_without_replacement` を使う。
-//! encoding_rs が返す `Malformed(len, consumed_after)` の不正バイトは直前の入力バッファに属することがあるので、
+//! UTF-8 は `Utf8Decoder`、それ以外は `encoding_rs` の `decode_to_string_without_replacement` を使う。
+//! `encoding_rs` が返す `Malformed(len, consumed_after)` の不正バイトは直前の入力バッファに属することがあるので、
 //! 消費した入力の末尾 `HISTORY` バイトを保持して元のバイト値を回収する。結果はチャンクの分け方に依存しない。
 
 use encoding_rs::DecoderResult;

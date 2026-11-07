@@ -1,6 +1,6 @@
 //! `ChangeSet`: 文書全体を覆う操作列 (Retain / Delete / Insert) による変更の表現 (docs/03-core-design.md §6.1〜§6.2・§6.4)。
 //!
-//! xi-editor / Helix / CodeMirror 6 と同じ族の表現で、合成 (`compose`)・逆変換 (`invert`)・位置写像 (`map_pos`) が
+//! xi-editor / Helix / `CodeMirror` 6 と同じ族の表現で、合成 (`compose`)・逆変換 (`invert`)・位置写像 (`map_pos`) が
 //! 代数的に定義できる。位置はすべて **適用前の文書のバイト位置**。
 //!
 //! 挿入は `InsertText::Str` (複写した文字列) と `InsertText::Rope` (rope を共有して複写しない)。`Rope` は文書全体の
@@ -174,7 +174,7 @@ pub enum EditError {
 /// `Text::apply` のエラー。エラーのとき、文書は何も変更されない。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ChangeSetError {
-    /// `len_before` が文書のバイト数と違う (古い版に基づく ChangeSet)。
+    /// `len_before` が文書のバイト数と違う (古い版に基づく `ChangeSet`)。
     LenMismatch { expected: usize, actual: usize },
     /// 操作の境界が char 境界でない (INV-T1)。
     NotCharBoundary { pos: ByteOff },
@@ -188,7 +188,7 @@ pub enum ComposeError {
         left_after: usize,
         right_before: usize,
     },
-    /// 次の ChangeSet の境界が、前の ChangeSet が挿入した文字列の char の途中にある。
+    /// 次の `ChangeSet` の境界が、前の `ChangeSet` が挿入した文字列の char の途中にある。
     SplitInsideChar,
 }
 
@@ -361,7 +361,7 @@ fn lengths(ops: &[Op]) -> (usize, usize) {
 }
 
 impl ChangeSet {
-    /// 何も変えない ChangeSet。
+    /// 何も変えない `ChangeSet`。
     pub fn identity(len: usize) -> ChangeSet {
         ChangeSet::from_ops([Op::Retain(len)])
     }
@@ -381,6 +381,10 @@ impl ChangeSet {
     /// 昇順で重ならない置換の列から作る。`len_before` は `base` のバイト数。
     /// 端が char 境界でないものは `NotCharBoundary`、重なりや昇順でない並びは `Overlap`
     /// (重なりを切り詰めない。切り詰めは呼び出し側が、渡す前に行う。03 §4.5)。
+    ///
+    /// # Errors
+    ///
+    /// 編集の端が char 境界でない (`NotCharBoundary`)、編集が重なる・昇順でない (`Overlap`)、端が範囲外または `start > end` (`OutOfRange`) のとき。
     pub fn from_sorted_edits(
         base: &dyn TextRead,
         edits: impl IntoIterator<Item = Edit>,
@@ -427,7 +431,11 @@ impl ChangeSet {
         self.ops.iter().all(|op| matches!(op, Op::Retain(_)))
     }
 
-    /// `self` を適用した後に `next` を適用するのと同じ、1 つの ChangeSet (CS1)。
+    /// `self` を適用した後に `next` を適用するのと同じ、1 つの `ChangeSet` (CS1)。
+    ///
+    /// # Errors
+    ///
+    /// `self` の適用後の長さと `next` の適用前の長さが違う (`LenMismatch`)、または `next` の境界が `self` の挿入した char の途中にある (`SplitInsideChar`) とき。
     pub fn compose(&self, next: &ChangeSet) -> Result<ChangeSet, ComposeError> {
         if self.len_after != next.len_before {
             return Err(ComposeError::LenMismatch {
@@ -548,7 +556,7 @@ impl ChangeSet {
         Ok(ChangeSet::from_ops(out))
     }
 
-    /// 適用を取り消す ChangeSet (CS2 / CS3)。`before` は `self` を適用する前の文書。
+    /// 適用を取り消す `ChangeSet` (CS2 / CS3)。`before` は `self` を適用する前の文書。
     /// 削除したテキストを `before` から取り出して挿入に変える。文書全体の削除は `before` の rope を共有する
     /// (`InsertText::Rope`。旧全文を複写しない、03 §9.5)。それ以外は複写する (64 KiB 以上の `Slice` は v0.4)。
     ///
@@ -585,9 +593,9 @@ impl ChangeSet {
     /// 削除範囲の内側・端は削除の開始位置へ潰れる (置換では、`After` は挿入の後ろ)。
     /// 文書の末尾より後ろの `p` は、新しい文書の末尾に丸める。計算量は操作の数に比例する。
     ///
-    /// 注意: 合成した ChangeSet (`compose`) の `map_pos` は、元の ChangeSet を順に写像した結果と一致するとは限らない
-    /// (合成で「残す部分」の構造が失われるため)。Undo の結合などで合成した ChangeSet で Selection を写像せず、
-    /// 元の ChangeSet を順に写像すること。
+    /// 注意: 合成した `ChangeSet` (`compose`) の `map_pos` は、元の `ChangeSet` を順に写像した結果と一致するとは限らない
+    /// (合成で「残す部分」の構造が失われるため)。Undo の結合などで合成した `ChangeSet` で Selection を写像せず、
+    /// 元の `ChangeSet` を順に写像すること。
     pub fn map_pos(&self, p: ByteOff, bias: Bias) -> ByteOff {
         let p = p.0;
         let (mut old, mut new) = (0usize, 0usize);
@@ -719,6 +727,10 @@ impl ChangeSet {
 impl Text {
     /// `ChangeSet` を適用する。`len_before` が文書と違う、または操作の境界が char 境界でないときは
     /// エラーを返し、**何も変更しない** (検査は書き換えの前にまとめて行う。INV-T1)。
+    ///
+    /// # Errors
+    ///
+    /// `len_before` が文書のバイト数と違う (`LenMismatch`)、または操作の境界が char 境界でない (`NotCharBoundary`) とき。このとき文書は変わらない。
     pub fn apply(&mut self, cs: &ChangeSet) -> Result<(), ChangeSetError> {
         if cs.len_before != self.len_bytes() {
             return Err(ChangeSetError::LenMismatch {

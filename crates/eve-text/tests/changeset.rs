@@ -761,7 +761,7 @@ fn 巨大な長さでもパニックしない() {
 
 // ---------- InsertText::Rope (SAF-33、03 §9.5) ----------
 
-/// 挿入をすべて `InsertText::Rope` にした ChangeSet (内容は同じ)。
+/// 挿入をすべて `InsertText::Rope` にした `ChangeSet` (内容は同じ)。
 fn as_rope(cs: &ChangeSet) -> ChangeSet {
     ChangeSet::from_ops(cs.ops().iter().map(|op| match op {
         Op::Insert(s) => Op::Insert(InsertText::Rope(Snapshot::from(

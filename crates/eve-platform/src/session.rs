@@ -104,6 +104,10 @@ unsafe extern "system" fn wnd_proc(
 /// 専用スレッドを立て、そこで非表示のトップレベルウィンドウを作ってメッセージループを回す。スレッドを立てるだけで戻る
 /// (起動経路をブロックしない、02 §9.5)。`reason` は終了の画面に出る理由の文言、`cb` は受けた通知 (`QueryEnd` は
 /// 使い捨てのスレッドで、`End` はメッセージループのスレッドで呼ぶ。`End` から戻るとプロセスが終了されうる)。
+///
+/// # Errors
+///
+/// 専用スレッドを作れないとき。
 pub fn start(
     reason: &str,
     cb: impl Fn(SessionEvent) + Send + Sync + 'static,
