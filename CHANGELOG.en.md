@@ -18,6 +18,7 @@ The Japanese version ([CHANGELOG.md](CHANGELOG.md)) is authoritative. Both are u
 
 ### Fixed
 
+- **Some config diagnostics had broken wording or no position**: for items without a default (a section written as a value, a wrong theme color), the hint said "This item uses the default " with an empty default (it now says "This item is ignored"). Diagnostics for unbinding the escape key (`"ctrl+q" = "none"`) and for an unknown role in a theme file now show the line and column where they were written.
 - **Moving a multi-line selection up or down broke the selection from the second move**: with lines of different lengths, the selected range shifted from the second move on. The same lines now stay selected however many times you move them.
 - **Undoing a line-ending conversion also reverted a later encoding or BOM change**: undo now restores only the line ending (a later save uses the encoding you chose).
 - **Reloading a file could move the cursor to a different line**: after the file was changed externally near the top, reload kept the same byte offset and the cursor jumped to another line. It now stays at the same line and column (in characters).
