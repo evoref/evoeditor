@@ -395,7 +395,7 @@ list_next = "Next"
 palette_open = "Commands"
 
 [info.app]
-release_summary = "Adds swap files and recovery, multiple documents, regex search and replace, soft wrap, mouse, theme switching, English UI, and more. See the release notes for details"
+release_summary = "Reorganizes and speeds up the internals and fixes data-safety and correctness bugs. Also adds Save and Quit, word editing in input fields, and more. See the release notes for details"
 updated = "Updated to evoeditor {version}: {summary}"
 
 [info.cli]
