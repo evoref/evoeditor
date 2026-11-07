@@ -20,14 +20,14 @@ use crate::msg::{HostMsg, SignalKind};
 
 /// 手順 2: `HostMsg::Signal` を送った後、メインの終了を待つ上限 (02 §9.6 手順 2、§11.2.1 の表の段 2)。
 pub const MAIN_EXIT_WAIT: Duration = Duration::from_secs(2);
-/// シグナル・外部からの CTRL_C / CTRL_BREAK の合計の上限 (受信から、02 §11.2.1 の表の「合計の上限」)。
+/// シグナル・外部からの `CTRL_C` / `CTRL_BREAK` の合計の上限 (受信から、02 §11.2.1 の表の「合計の上限」)。
 pub const SIGNAL_TOTAL_LIMIT: Duration = Duration::from_secs(5);
 /// 手順 4 の端末の緊急復元に残す時間 (使い捨てのスレッドを待つ上限、02 §9.6 手順 4)。
 pub const EMERGENCY_RESTORE_RESERVE: Duration = Duration::from_millis(200);
 /// シグナル系で置換中の計数を待つ期限 (受信から 5 s − 200 ms、02 §11.2.1 の表の段 3)。
 pub const REPLACING_DEADLINE_SIGNAL: Duration =
     SIGNAL_TOTAL_LIMIT.saturating_sub(EMERGENCY_RESTORE_RESERVE);
-/// CTRL_CLOSE・セッション終了で置換中の計数を待つ期限 (受信から t = 4.3 s。残りの 0.2 s は復帰の余裕。
+/// `CTRL_CLOSE`・セッション終了で置換中の計数を待つ期限 (受信から t = 4.3 s。残りの 0.2 s は復帰の余裕。
 /// 合計の上限 4.5 s の内、02 §11.2.1 の表の段 3、05 §11.2 の時系列表)。
 pub const REPLACING_DEADLINE_CLOSE: Duration = Duration::from_millis(4300);
 /// パニック・`Fatal` のメインが、退避の後に置換中の計数を待つ上限 (02 §11.2.1 の表の段 3)。
@@ -41,7 +41,7 @@ const REPLACING_POLL: Duration = Duration::from_millis(5);
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum ShutdownTrigger {
-    /// Unix の SIGINT / SIGTERM / SIGHUP、Windows の CTRL_C / CTRL_BREAK 等 (CTRL_CLOSE 以外)。手順 1〜4。
+    /// Unix の SIGINT / SIGTERM / SIGHUP、Windows の `CTRL_C` / `CTRL_BREAK` 等 (`CTRL_CLOSE` 以外)。手順 1〜4。
     Signal(SignalKind),
     /// Windows の `CTRL_CLOSE_EVENT`。1・2 (送るだけ)・3 を行ってハンドラから戻る。
     ConsoleClose,
@@ -61,16 +61,21 @@ pub enum ShutdownEnd {
     /// メインが止まっていたので、受信スレッドが端末を戻し、退避の結果を出した。呼び手がプロセスを終える
     /// (Unix は同じシグナル、Windows は `ExitCode::INTERRUPTED`。07 §18.4、05 §11.5)。
     Exit,
-    /// ハンドラから戻る (CTRL_CLOSE・セッション終了。端末はコンソールごと閉じられる)。
+    /// ハンドラから戻る (`CTRL_CLOSE`・セッション終了。端末はコンソールごと閉じられる)。
     Return,
 }
 
 /// 組み立ての材料 (Host から受け取る共有物)。
 pub struct ShutdownParts {
+    /// 緊急退避の共有状態 (`Host::emergency`)。
     pub emergency: Arc<EmergencyCtl>,
+    /// 置換中の文書の計数 (0 に戻るまで待つ、02 §11.2.1)。
     pub replacing: ReplacingCount,
+    /// 緊急の端末復元の情報の置き場 (`Host::restore_info`)。
     pub restore_info: Arc<OnceLock<EmergencyRestoreInfo>>,
+    /// `Host::run` が終わると立つフラグ (`Host::run_finished`)。
     pub run_finished: Arc<AtomicBool>,
+    /// 受信口への送信口 (`Host::sender`)。
     pub tx: Sender<HostMsg>,
 }
 
@@ -122,16 +127,19 @@ impl NonInteractiveShutdown {
         self
     }
 
+    /// 時計を差し替える (試験用。既定は `SystemClock`)。
     pub fn with_clock(mut self, clock: Arc<dyn Clock>) -> Self {
         self.clock = clock;
         self
     }
 
+    /// 待ちの実装を差し替える (試験用。既定は `thread::sleep`)。時計を進める偽の待ちを渡せる。
     pub fn with_sleep(mut self, f: impl Fn(Duration) + Send + Sync + 'static) -> Self {
         self.sleep = Arc::new(f);
         self
     }
 
+    /// 端末の緊急復元の実装を差し替える (試験用。既定は `eve_platform::term::emergency_restore`)。
     pub fn with_restore(
         mut self,
         f: impl Fn(&EmergencyRestoreInfo) + Send + Sync + 'static,

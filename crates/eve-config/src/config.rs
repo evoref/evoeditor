@@ -9,11 +9,15 @@ use std::sync::OnceLock;
 use toml::Spanned;
 use toml::de::{DeString, DeTable, DeValue};
 
-/// 診断の重さ。表示の文言は host / core が MessageKey で決める (docs/07 §4.3)。
+/// 診断の重さ。表示の文言は host / core が `MessageKey` で決める (docs/07 §4.3)。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Severity {
+    /// 情報。動作に影響しない (後の版の設定を読み飛ばした、など)。
     Info,
+    /// 警告。該当の項目だけを既定値 (または下の層の値) に戻す。
     Warning,
+    /// エラー。構文エラーや読めないファイルなど、そのファイル全体を使えない。`--check-config` の終了コード 3 と
+    /// `config.reload` で前の設定を維持する判定の対象 (07 §4.3・§18.4)。
     Error,
 }
 
@@ -21,20 +25,36 @@ pub enum Severity {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DiagKind {
     /// TOML の構文エラー。ファイル全体を無視する。
-    Syntax { message: String },
+    Syntax {
+        /// TOML パーサの説明文。
+        message: String,
+    },
     /// 未知のキー・セクション。`suggestion` は編集距離 2 以下の公開キー。
-    UnknownKey { suggestion: Option<String> },
+    UnknownKey {
+        /// 編集距離 2 以下の公開キー。近いものが無ければ `None`。
+        suggestion: Option<String>,
+    },
     /// 後の版で公開する設定 (このバージョンでは未対応)。情報。画面には出さず、件数にも数えない (07 §4.3)。
     Unsupported,
     /// 型が違う。
     TypeMismatch {
+        /// 期待した型の名前 (`integer` など)。
         expected: &'static str,
+        /// 書かれていた型の名前。
         found: &'static str,
     },
     /// 範囲外 (整数)。
-    OutOfRange { min: i64, max: i64 },
+    OutOfRange {
+        /// 許容する最小値 (この値を含む)。
+        min: i64,
+        /// 許容する最大値 (この値を含む)。
+        max: i64,
+    },
     /// 列挙値が不正。許容値を提示する。
-    InvalidValue { allowed: &'static [&'static str] },
+    InvalidValue {
+        /// 許容する値 (診断に出す順)。
+        allowed: &'static [&'static str],
+    },
     /// キーマップ (`keymap.toml`) の問題。`Diagnostic.key` は書かれたキー、`value` は書かれたコマンドなど。
     Keymap(KeymapProblem),
 }
@@ -63,13 +83,17 @@ pub enum KeymapProblem {
 /// 設定の問題 1 件。`line` / `column` は 1 始まり (構文エラーで位置が無いときは 0)。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Diagnostic {
+    /// 重さ。
     pub severity: Severity,
+    /// 種類と、その詳細。
     pub kind: DiagKind,
     /// ドット区切りのキー (`editor.tab_width`)。構文エラーでは空。
     pub key: String,
     /// 書かれた値 (文字列はそのまま、整数は書かれた表記。値を持たない診断では空)。
     pub value: String,
+    /// 行 (1 始まり。位置が無いときは 0)。
     pub line: u32,
+    /// 桁 (1 始まりの文字数。位置が無いときは 0)。
     pub column: u32,
 }
 
@@ -141,8 +165,11 @@ macro_rules! config_enum {
 }
 
 config_enum! {
+    /// インデントの操作で入れる単位 (`editor.indent_unit`、07 §5.1)。
     IndentUnit {
+        /// タブ文字。
         Tab = "tab",
+        /// スペース (幅は `editor.indent_width`)。
         Space = "space",
     }
 
@@ -158,7 +185,9 @@ config_enum! {
     ThemeBackground {
         /// テーマの名前どおり (既定)。
         Auto = "auto",
+        /// 暗い背景として塗る。
         Dark = "dark",
+        /// 明るい背景として塗る。
         Light = "light",
     }
 
@@ -182,6 +211,7 @@ config_enum! {
 
     /// 折り返した継続行のインデント (`view.wrap_indent`)。
     WrapIndent {
+        /// 揃えない (継続行は左端から)。
         None = "none",
         /// 論理行のインデント幅で揃える (既定)。
         Same = "same",
@@ -209,29 +239,47 @@ config_enum! {
 
     /// 新規ファイル・判定不能時の文字コード (`file.default_encoding`)。別名は `encoding` で正規名に寄せる。
     DefaultEncoding {
+        /// UTF-8 (BOM なし)。
         Utf8 = "utf-8",
+        /// UTF-8 (BOM 付き)。
         Utf8Bom = "utf-8-bom",
+        /// UTF-16 リトルエンディアン。
         Utf16Le = "utf-16le",
+        /// UTF-16 ビッグエンディアン。
         Utf16Be = "utf-16be",
+        /// `Shift_JIS`。
         ShiftJis = "shift_jis",
+        /// EUC-JP。
         EucJp = "euc-jp",
+        /// ISO-2022-JP。
         Iso2022Jp = "iso-2022-jp",
         /// OS ロケール由来のヒント (docs/05 §6)。
         System = "system",
     }
 
+    /// 新規ファイルの改行 (`file.default_line_ending`、07 §5.2)。
     DefaultLineEnding {
+        /// LF (改行文字 U+000A)。
         Lf = "lf",
+        /// CRLF (U+000D U+000A)。
         Crlf = "crlf",
+        /// CR (U+000D)。
         Cr = "cr",
+        /// OS の既定 (Windows は CRLF、それ以外は LF)。
         Native = "native",
     }
 
+    /// 色深度の判定の上書き (`theme.color_mode`、07 §5.4、04 §5.2a)。
     ColorMode {
+        /// 環境変数と端末の申告から判定する (既定)。
         Auto = "auto",
+        /// 24 ビット色。
         TrueColor = "truecolor",
+        /// 256 色。
         Color256 = "256",
+        /// 16 色。
         Color16 = "16",
+        /// 色なし (各ロールの `mono` の段を使う、04 §12.4)。
         None = "none",
     }
 }
@@ -400,7 +448,9 @@ config_keys! {
 /// 読込の結果。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Loaded {
+    /// 読み込んだ設定。不正な項目は既定値 (または下の層の値) のまま。
     pub config: Config,
+    /// 見つかった問題 (ファイル内の出現順)。
     pub diagnostics: Vec<Diagnostic>,
 }
 

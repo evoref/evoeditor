@@ -1,6 +1,6 @@
 //! `FileSystem` Port の契約試験 (docs/02 §4.5 の「既定の実装」の注、docs/review/v0.3-findings.md の STR-D3 / STR-T4)。
 //!
-//! MemFs と実 FS (`WinFs` / `UnixFs`) に同じ検査を掛け、仕様 (02 §4.5、05 §2.1 / §4.1 / §4.5 / §5.4) が定める観察できる振る舞いを
+//! `MemFs` と実 FS (`WinFs` / `UnixFs`) に同じ検査を掛け、仕様 (02 §4.5、05 §2.1 / §4.1 / §4.5 / §5.4) が定める観察できる振る舞いを
 //! 揃える。trait の既定の実装 (空の一覧・`Unsupported`・`Other`) を上書きし忘れた実装は、書く操作の検査で落ちる。
 //!
 //! 使い方: `suite(|| Subject::new(fs, root).caps(..).lister(..).keep(guard))`。検査ごとに `make` を呼んで新しい対象を作る。
@@ -44,9 +44,11 @@ type Lister = Box<dyn Fn(&FsPath) -> Vec<String>>;
 
 /// 検査の対象 1 つ (検査ごとに新しく作る)。
 pub struct Subject {
+    /// 検査する `FileSystem` の実装。
     pub fs: Arc<dyn FileSystem>,
     /// 空の既存ディレクトリ。
     pub root: FsPath,
+    /// 実装の能力と既知の仕様との差。
     pub caps: Caps,
     /// ディレクトリの直下の名前 (一時ファイルの残りの検査に使う)。無ければ残りを確かめない。
     lister: Option<Lister>,
@@ -55,6 +57,7 @@ pub struct Subject {
 }
 
 impl Subject {
+    /// `root` (空の既存ディレクトリ) の下で `fs` を検査する対象を作る。能力は `Caps::default()`。
     pub fn new(fs: Arc<dyn FileSystem>, root: FsPath) -> Subject {
         Subject {
             fs,
@@ -65,18 +68,21 @@ impl Subject {
         }
     }
 
+    /// 能力と既知の差を決める。
     #[must_use]
     pub fn caps(mut self, caps: Caps) -> Subject {
         self.caps = caps;
         self
     }
 
+    /// ディレクトリの直下の名前を返す関数を渡す (一時ファイルが残らないことの検査に使う。無ければ確かめない)。
     #[must_use]
     pub fn lister(mut self, f: impl Fn(&FsPath) -> Vec<String> + 'static) -> Subject {
         self.lister = Some(Box::new(f));
         self
     }
 
+    /// 検査の後まで持っておくもの (一時ディレクトリの後片付けなど)。対象と一緒に落とす。
     #[must_use]
     pub fn keep(mut self, guard: impl Any) -> Subject {
         self._keep = Some(Box::new(guard));
@@ -145,6 +151,10 @@ pub const CHECKS: &[(&str, Check)] = &[
 ];
 
 /// すべての検査を掛ける。落ちた検査の名前をまとめて panic する。
+///
+/// # Panics
+///
+/// 1 つでも検査が落ちたとき。
 pub fn suite(make: impl Fn() -> Subject) {
     let failed = failures(make);
     assert!(failed.is_empty(), "契約試験で落ちた検査: {failed:?}");

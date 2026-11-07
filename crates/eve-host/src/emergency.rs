@@ -21,11 +21,16 @@ const DONE: u8 = 2;
 /// 退避の状態 (02 §11.2.1 の `EmergencyState`)。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum EmergencyState {
+    /// まだ誰も退避を始めていない。
     Idle,
+    /// ある経路が退避を書いている最中。
     Writing,
+    /// 退避を終えた (結果は `EmergencyCtl::outcome`)。プロセスで 1 回だけここへ進む。
     Done,
 }
 
+/// 緊急退避の共有状態 (02 §11.2.1)。文書の公開物のスロットと、退避を 1 回だけ実行する状態を持つ。
+/// 複数のスレッドから `Arc` 越しに使う。
 pub struct EmergencyCtl {
     /// 文書ごとの公開物 (dirty な文書だけ)。
     slots: ArcSwap<Vec<Arc<DocSnapshot>>>,
@@ -37,6 +42,7 @@ pub struct EmergencyCtl {
 }
 
 impl EmergencyCtl {
+    /// 空のスロット・`Idle`・書き手なしで作る。
     pub fn new() -> Arc<EmergencyCtl> {
         Arc::new(EmergencyCtl {
             slots: ArcSwap::from_pointee(Vec::new()),
@@ -69,6 +75,7 @@ impl EmergencyCtl {
         self.slots.load().as_ref().clone()
     }
 
+    /// 今の状態。
     pub fn state(&self) -> EmergencyState {
         match self.state.load(Ordering::Acquire) {
             IDLE => EmergencyState::Idle,

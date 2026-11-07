@@ -8,8 +8,10 @@
 /// 同梱している UI の言語。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Locale {
+    /// 日本語 (既定)。
     #[default]
     Ja,
+    /// 英語。
     En,
 }
 
@@ -39,10 +41,15 @@ impl Locale {
 /// 選択順の段。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LocaleSource {
+    /// コマンドラインの `--locale`。
     Cli,
+    /// 設定ファイルの `ui.locale`。
     Config,
+    /// 環境変数 `EVE_LANG`。
     Env,
+    /// OS のロケール。
     Os,
+    /// どれにも当たらず、既定の `ja`。
     Default,
 }
 
@@ -51,14 +58,18 @@ pub enum LocaleSource {
 pub struct LocaleWarning {
     /// `Cli` か `Env`。
     pub source: LocaleSource,
+    /// 利用者が書いた値そのまま。
     pub value: String,
 }
 
 /// 選択の結果。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LocaleChoice {
+    /// 選ばれた言語。
     pub locale: Locale,
+    /// 選んだ段。
     pub source: LocaleSource,
+    /// 同梱の言語に当たらなかった値 (選択順に、ログに出す)。
     pub warnings: Vec<LocaleWarning>,
 }
 

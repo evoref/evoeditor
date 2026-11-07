@@ -26,7 +26,9 @@ pub struct FrontendConfig {
 /// 01 NFR-603。docs/review/v0.3-findings.md の STR-C2)。`detail` は OS の誤りの文 (OS が作ったもの)。
 #[derive(Debug)]
 pub struct FrontendError {
+    /// 失敗の種類。bin が UI の言語の文言を選ぶ手掛かり。
     pub kind: FrontendErrorKind,
+    /// OS の誤りの文。無ければ `None`。
     pub detail: Option<String>,
 }
 
@@ -63,6 +65,7 @@ impl FrontendErrorKind {
 }
 
 impl FrontendError {
+    /// 詳細なしで作る。
     pub fn new(kind: FrontendErrorKind) -> FrontendError {
         FrontendError { kind, detail: None }
     }
@@ -93,10 +96,13 @@ impl std::error::Error for FrontendError {}
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum RenderOutcome {
+    /// 描き終えた。
     Done,
     /// 描いたら編集面の大きさが変わっていた (予約。v0.1 の TUI は常に `Done`)。
     SurfaceChanged {
+        /// 新しい編集面の列数 (セル)。
         cols: u16,
+        /// 新しい編集面の行数 (セル)。
         rows: u16,
     },
 }
@@ -104,6 +110,7 @@ pub enum RenderOutcome {
 /// `apply_effect` の結果。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum EffectOutcome {
+    /// frontend が処理した (Host は何もしない)。
     Handled,
     /// frontend は扱わない (Host が処理する: 終了・クリップボード等)。
     Unhandled,
@@ -145,13 +152,24 @@ pub struct EmergencyRestoreInfo {
     pub restored: TermRestoredFlag,
 }
 
+/// 端末など、描画と入力の実装 (docs/02 §9.2)。Host が起動時に `init`、`start_input` を呼び、ループの中で
+/// `render` と `apply_effect` を呼び、どの終了経路でも `restore` を呼ぶ。
 pub trait Frontend {
     /// 端末の確認・初期化・能力の判定。Host が設定を読んだ後、Editor を作る前に 1 回だけ呼ぶ。失敗なら起動エラー。
+    ///
+    /// # Errors
+    ///
+    /// 端末が使えない・コンソールを設定できないときの `FrontendError` (種類は `FrontendErrorKind`)。
     fn init(&mut self, cfg: &FrontendConfig) -> Result<Capabilities, FrontendError>;
     /// 入力の源を起動する。`tx` は受信口への送信口。
+    ///
+    /// # Errors
+    ///
+    /// 入力のコンソール・端末を設定できない、または入力スレッドを起動できないときの `FrontendError`。
     fn start_input(&mut self, tx: InputSink) -> Result<(), FrontendError>;
     /// 編集面の大きさ (最初の `Resize` 用)。
     fn surface_size(&self) -> CellSize;
+    /// `Frame` を描く。
     fn render(&mut self, frame: &Frame) -> RenderOutcome;
     /// Host が処理する前に frontend が扱いたい `Effect`。
     fn apply_effect(&mut self, eff: &Effect) -> EffectOutcome;
@@ -170,6 +188,8 @@ pub trait Frontend {
     fn write_osc52(&mut self, _text: &str) -> bool {
         false
     }
+    /// 端末を一時的に手放す (サスペンド、`Effect::Suspend` など)。既定では何もしない。
     fn suspend(&mut self) {}
+    /// `suspend` の後に端末を取り戻す。既定では何もしない。
     fn resume(&mut self) {}
 }

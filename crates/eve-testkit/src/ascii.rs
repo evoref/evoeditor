@@ -5,10 +5,14 @@
 
 use eve_view::{Frame, StyleMods};
 
+/// `render_ascii` の出力の選び方。
 #[derive(Clone, Copy, Debug)]
 pub struct AsciiOptions {
+    /// ガター (行番号の欄) を出す。
     pub show_gutter: bool,
+    /// 反転表示 (選択) の連続を `«` `»` で囲む。
     pub mark_selection: bool,
+    /// 末尾に主カーソルの位置 `cursor: (col,row)` の行を出す。
     pub show_cursor: bool,
     /// ステータス・ヒント・メッセージ行を末尾に出す。
     pub show_chrome: bool,

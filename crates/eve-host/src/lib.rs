@@ -4,6 +4,7 @@
 //! 緊急退避の制御 (`EmergencyCtl`)、非対話の終了の手順 (`NonInteractiveShutdown`)。
 
 #![forbid(unsafe_code)]
+#![deny(missing_docs)]
 
 mod clock;
 mod emergency;
