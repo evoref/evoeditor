@@ -358,14 +358,27 @@ mod tests {
         ]
     }
 
-    proptest::proptest! {
-        #![proptest_config(proptest::prelude::ProptestConfig { cases: 48, ..Default::default() })]
+    /// 1 件が重い試験 (全位置 × 窓) の件数。既定は 48 件、`PROPTEST_CASES` があればその 1/20 (夜間の 10000 なら 500)。
+    /// `proptest!` のマクロは `PROPTEST_CASES` で件数を上書きする (夜間に 1 時間を超えた、Issue #453) ので、
+    /// この試験は `TestRunner` を直に使って件数を決める。
+    fn heavy_config() -> proptest::test_runner::Config {
+        let cases = std::env::var("PROPTEST_CASES")
+            .ok()
+            .and_then(|v| v.parse::<u32>().ok())
+            .map_or(48, |n| (n / 20).max(48));
+        proptest::test_runner::Config {
+            cases,
+            source_file: Some(file!()),
+            ..proptest::test_runner::Config::default()
+        }
+    }
 
-        /// 近道を入れた判定は、全位置で窓の経路 (近道の前の実装) と一致する。チャンクの境目をまたぐ長さで試す。
-        #[test]
-        fn 近道の判定は全位置で窓の経路と一致する(
-            v in proptest::collection::vec(any_char(), 0..3000)
-        ) {
+    /// 近道を入れた判定は、全位置で窓の経路 (近道の前の実装) と一致する。チャンクの境目をまたぐ長さで試す。
+    #[test]
+    fn 近道の判定は全位置で窓の経路と一致する() {
+        let mut runner = proptest::test_runner::TestRunner::new(heavy_config());
+        let strategy = proptest::collection::vec(any_char(), 0..3000);
+        let result = runner.run(&strategy, |v| {
             let s: String = v.into_iter().collect();
             let text = t(&s);
             let len = s.len();
@@ -378,12 +391,29 @@ mod tests {
                 let want = i == 0 || i == len || is_boundary_window(&text, i);
                 proptest::prop_assert_eq!(is_grapheme_boundary(&text, p), want, "{}", i);
                 if i < len {
-                    proptest::prop_assert_eq!(next_grapheme_boundary(&text, p), next_boundary_window(&text, i), "{}", i);
+                    proptest::prop_assert_eq!(
+                        next_grapheme_boundary(&text, p),
+                        next_boundary_window(&text, i),
+                        "{}",
+                        i
+                    );
                 }
                 if i > 0 {
-                    proptest::prop_assert_eq!(prev_grapheme_boundary(&text, p), prev_boundary_window(&text, i), "{}", i);
+                    proptest::prop_assert_eq!(
+                        prev_grapheme_boundary(&text, p),
+                        prev_boundary_window(&text, i),
+                        "{}",
+                        i
+                    );
                 }
             }
+            Ok(())
+        });
+        if let Err(e) = result {
+            panic!(
+                "{e}
+{runner}"
+            );
         }
     }
 
