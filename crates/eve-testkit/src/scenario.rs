@@ -21,45 +21,67 @@ use crate::Harness;
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Scenario {
+    /// `[meta]`: 識別と出典。
     pub meta: Meta,
+    /// `[setup]`: 初期状態。
     #[serde(default)]
     pub setup: Setup,
+    /// `[[step]]`: 入力の列 (書いた順に流す)。
     #[serde(default)]
     pub step: Vec<Step>,
+    /// `[[assert]]`: 検査の列。
     #[serde(default, rename = "assert")]
     pub asserts: Vec<Assert>,
 }
 
+/// `[meta]` (11 §6.3)。
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Meta {
+    /// シナリオの ID。`tests/scenarios/` からの相対パスの `.toml` を除いたものと一致させる (`file/save_crlf`)。
     pub id: String,
+    /// 何を確かめるかの 1 文。
     pub title: String,
+    /// 検証する AC・規範行の ID (`xtask trace` が集める)。
     #[serde(default)]
     pub verifies: Vec<String>,
+    /// このシナリオが通るべき最初の版 (`v0.1` のように `v` で始まる)。
     pub since: String,
+    /// 分類のタグ。
     #[serde(default)]
     pub tags: Vec<String>,
 }
 
+/// `[setup]`: 初期状態 (11 §6.3)。
 #[derive(Debug, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Setup {
+    /// 画面の大きさ (列, 行)。省略時は 80×24。
     pub size: Option<[u16; 2]>,
+    /// `Capabilities` のプリセット名。今は `tui_default` だけ。
     pub caps: Option<String>,
+    /// 開始時刻。受け付けるが、今のハーネスは使わない。
     pub now: Option<String>,
+    /// 乱数の種。受け付けるが、今のハーネスは使わない。
     pub seed: Option<u64>,
+    /// ユーザー層の `config.toml` の本文 (07 §5.0 の公開キーだけ)。
     pub config: Option<String>,
+    /// UI の言語。今は未対応 (書くと失敗する)。
     pub locale: Option<String>,
+    /// 偽 FS の初期内容。キーはワークスペース相対のパス。
     #[serde(default)]
     pub fs: BTreeMap<String, FsEntry>,
 }
 
+/// `[setup.fs]` の 1 ファイル (`text` / `bytes` / `file` のうち 1 つ)。
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct FsEntry {
+    /// UTF-8 の本文。
     pub text: Option<String>,
+    /// base64 のバイト列。今は未対応。
     pub bytes: Option<String>,
+    /// testdata の相対パス。今は未対応。
     pub file: Option<String>,
 }
 
@@ -67,37 +89,61 @@ pub struct FsEntry {
 #[derive(Debug, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Step {
+    /// 文書を開く (ワークスペース相対のパス。ジョブは `run_jobs` で完了する)。
     pub open: Option<String>,
+    /// `true` で積まれたジョブを実行する。
     pub run_jobs: Option<bool>,
+    /// 空白区切りのキー列 (07 §7.2 の設定表記)。
     pub keys: Option<String>,
+    /// 確定済みのテキスト入力 (`InputEvent::Text`)。
     pub text: Option<String>,
+    /// ブラケットペースト。
     pub paste: Option<String>,
+    /// 手動の時計を進める (ミリ秒)。
     pub advance_ms: Option<u64>,
+    /// 画面の大きさ (列, 行) を変える。
     pub resize: Option<[u16; 2]>,
+    /// 実行するコマンドの `CommandId` (07 §11.6)。
     pub cmd: Option<String>,
+    /// `cmd` の引数。
     pub args: Option<toml::Table>,
 }
 
+/// `[[assert]]` の `query`: 投げる問い合わせ (02 §10.1 の `Query`)。
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct QuerySpec {
+    /// 問い合わせの種類 (`documents` / `document` / `text` / `selection`)。
     pub kind: String,
+    /// 対象の文書のパス (ワークスペース相対)。省略時は今の文書。
     pub path: Option<String>,
 }
 
 #[derive(Debug, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
+/// `[[assert]]`: 検査 1 件。書いた項目をすべて検査する (11 §6.3)。
 pub struct Assert {
+    /// n 番目 (1 始まり) の step の直後に検査する。省略時は全 step の後。
     pub at: Option<usize>,
+    /// 偽 FS の内容 (キーはワークスペース相対のパス)。
     pub fs: Option<BTreeMap<String, FsEntry>>,
+    /// 投げる問い合わせ。`expect` と組にする。
     pub query: Option<QuerySpec>,
+    /// `query` の `Answer` の一部 (キーは `Answer` の serde 名)。
     pub expect: Option<toml::Table>,
+    /// Frame のゴールデンの名前 (`<name>.frame.<lang>.txt`)。
     pub frame: Option<String>,
+    /// ASCII の Frame に含まれるべき文字列。
     pub frame_contains: Option<Vec<String>>,
+    /// 起きるべき `EditorEvent` の種類の列 (順序付きの部分列)。
     pub events: Option<Vec<String>>,
+    /// `Effect` の列。今は未対応。
     pub effects: Option<toml::Value>,
+    /// ステータス項目。今は未対応。
     pub status: Option<toml::Table>,
+    /// 出ているオーバーレイの種類 (`Harness::overlay` の値。`dialog` / `prompt` / `palette` など)。
     pub overlay: Option<String>,
+    /// `false` なら、パニックすることを期待する。
     pub no_panic: Option<bool>,
 }
 
@@ -106,13 +152,17 @@ fn ws_path(p: &str) -> String {
 }
 
 /// ファイルを読んで型と規則を検証する。`rel` は `tests/scenarios/` からの相対パス (`file/save_crlf.toml`)。
+///
+/// # Errors
+///
+/// TOML として読めない、未知のキーがある、または `validate` の規則に反するとき、その説明の列。
 pub fn load(text: &str, rel: &str) -> Result<Scenario, Vec<String>> {
     let sc: Scenario = toml::from_str(text).map_err(|e| vec![format!("{rel}: {e}")])?;
     let errs = validate(&sc, rel);
     if errs.is_empty() { Ok(sc) } else { Err(errs) }
 }
 
-/// 型で表せない規則 (11 §6.3 の表)。存在しない CommandId もここで見る。
+/// 型で表せない規則 (11 §6.3 の表)。存在しない `CommandId` もここで見る。
 pub fn validate(sc: &Scenario, rel: &str) -> Vec<String> {
     let mut e = Vec::new();
     let want_id = rel.trim_end_matches(".toml").replace('\\', "/");
@@ -396,17 +446,26 @@ fn check_assert(h: &mut Harness, a: &Assert, k: usize, dir: Option<&Path>) -> Ve
 
 /// 実行の結果 (最後の Frame の ASCII。`--print-frame` で出す)。
 pub struct Outcome {
+    /// 最後の Frame の ASCII。
     pub frame: String,
 }
 
 /// シナリオを実行し、失敗した assert を返す。パニックは `no_panic` の失敗として扱う。
 /// `frame` (Frame のゴールデン) を使うシナリオは `run_at` で置き場所を渡す。
+///
+/// # Errors
+///
+/// 失敗した assert (未対応の項目を含む) の説明の列。
 pub fn run(sc: &Scenario) -> Result<Outcome, Vec<String>> {
     run_at(sc, None)
 }
 
 /// `run` と同じ。`dir` はシナリオのファイルのあるディレクトリで、`frame = "<name>"` のゴールデン
 /// `<dir>/<name>.frame.<lang>.txt` (docs/11 §6.2 / §6.5) をそこから読む。
+///
+/// # Errors
+///
+/// 失敗した assert の説明の列。ゴールデンが違う、`dir` が `None` なのに `frame` を使う、パニックした (`no_panic = false` を除く)、などもここに入る。
 pub fn run_at(sc: &Scenario, dir: Option<&Path>) -> Result<Outcome, Vec<String>> {
     let res = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| run_inner(sc, dir)));
     match res {

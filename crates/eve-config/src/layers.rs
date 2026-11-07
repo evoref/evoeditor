@@ -11,12 +11,14 @@ use crate::{DiagKind, Diagnostic, Loaded, Severity};
 pub struct Source {
     /// 診断に出す名前 (`config.toml`、`--config` のパス)。
     pub name: String,
+    /// 本文。ファイルが無ければ `Ok(None)`、読めなければ `Err` に理由。
     pub text: Result<Option<String>, String>,
 }
 
 /// 合成の結果。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Resolved {
+    /// 合成した設定。
     pub config: Config,
     /// (名前, 診断)。診断の無いものは含めない。
     pub reports: Vec<(String, Vec<Diagnostic>)>,

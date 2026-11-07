@@ -9,6 +9,7 @@
 pub enum ThemeColor {
     /// 端末の既定色。
     Default,
+    /// 24 ビット色 (赤・緑・青、各 0〜255)。
     Rgb(u8, u8, u8),
     /// 端末のパレットの番号 (`ansi.<0-255>`、16 色の名前は 0〜15)。
     Ansi(u8),
@@ -16,22 +17,31 @@ pub enum ThemeColor {
 
 /// 属性 (`mods`) のビット。
 pub mod mods {
+    /// 属性なし。
     pub const NONE: u8 = 0;
+    /// 太字。
     pub const BOLD: u8 = 1;
+    /// 下線。
     pub const UNDERLINE: u8 = 2;
+    /// 反転。
     pub const REVERSE: u8 = 4;
+    /// 淡色。
     pub const DIM: u8 = 8;
 }
 
 /// ある段のスタイル。
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct ThemeStyle {
+    /// 前景色。
     pub fg: ThemeColor,
+    /// 背景色。
     pub bg: ThemeColor,
+    /// 属性 (`mods` の定数のビット和)。
     pub mods: u8,
 }
 
 impl ThemeStyle {
+    /// 端末の既定色で属性なし。
     pub const DEFAULT: ThemeStyle = ThemeStyle {
         fg: ThemeColor::Default,
         bg: ThemeColor::Default,
@@ -42,18 +52,26 @@ impl ThemeStyle {
 /// 色深度 (端末が描ける段)。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Depth {
+    /// 24 ビット色。
     TrueColor,
+    /// 256 色。
     Ansi256,
+    /// 16 色。
     Ansi16,
+    /// 色なし (属性だけ)。
     Mono,
 }
 
 /// ロール 1 つの 4 段。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Role {
+    /// ロール名 (`ui.text` など、07 §8.2)。
     pub name: &'static str,
+    /// 24 ビット色の段。
     pub truecolor: ThemeStyle,
+    /// 256 色の段。
     pub ansi256: ThemeStyle,
+    /// 16 色の段。
     pub ansi16: ThemeStyle,
     /// 無色の段は属性だけ。
     pub mono: u8,
@@ -287,6 +305,7 @@ pub const BUILTIN_NAMES: &[&str] = &["default", "default-dark", "default-light",
 /// 組込みテーマ (07 §8.6)。
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Theme {
+    /// ロールの一覧。
     pub roles: Vec<Role>,
     /// 背景を塗る (`default-dark` / `default-light`)。色の段では、各ロールの端末の既定色を `ui.text` の色で置き換える。
     pub paints: bool,

@@ -17,13 +17,21 @@ use eve_core::{
 /// 障害を注入できる操作。
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum FsOp {
+    /// `FileSystem::metadata`。
     Metadata,
+    /// `FileSystem::canonicalize`。
     Canonicalize,
+    /// `FileSystem::open_read`。
     OpenRead,
+    /// `FileSystem::write_atomic`。
     WriteAtomic,
+    /// 直接上書き (`FileSystem::write_in_place`)。
     WriteInPlace,
+    /// 退避先への保存 (`FileSystem::write_recovery`)。
     WriteRecovery,
+    /// スワップの書込 (`FileSystem::write_swap`)。
     WriteSwap,
+    /// スワップの破棄 (`FileSystem::discard_swap`)。
     DiscardSwap,
 }
 
@@ -40,10 +48,15 @@ fn swap_key(path: Option<&FsPath>, doc: eve_view::DocumentId) -> SwapKey {
 /// `write_atomic` のステップ (失敗を注入でき、到達したステップは `MemFs::steps` に残る)。
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum WriteStep {
+    /// 一時ファイルを作る。
     CreateTemp,
+    /// 一時ファイルへ本文を書く (供給側 `ReadChunks` を読み切る)。
     WriteData,
+    /// 一時ファイルの fsync (`FsyncLevel::None` では通らない)。
     Fsync,
+    /// 保存先へ置き換える。
     Replace,
+    /// ディレクトリの fsync (`FsyncLevel::Full` だけ。置き換えの後)。
     DirFsync,
 }
 
@@ -94,6 +107,8 @@ struct State {
     swap_entries: Vec<(eve_core::SwapEntry, Option<eve_core::SwapBody>)>,
 }
 
+/// メモリ上の `FileSystem` (偽 Port)。ファイル・ディレクトリ・シンボリックリンクを持ち、`fail_next` などで障害を注入できる。
+/// 時刻は注入した `Clock` から取る (書くたびに連番で mtime が変わる)。
 pub struct MemFs {
     clock: Arc<dyn Clock>,
     state: Mutex<State>,
@@ -103,6 +118,7 @@ pub struct MemFs {
 const DEFAULT_CHUNK: usize = 1 << 20;
 
 impl MemFs {
+    /// 空の `MemFs` を作る。`clock` は mtime に使う。
     pub fn new(clock: Arc<dyn Clock>) -> MemFs {
         MemFs {
             clock,
@@ -153,6 +169,7 @@ impl MemFs {
         self.set_file(&FsPath::from(path), data);
     }
 
+    /// ディレクトリを作る (祖先も作る)。
     pub fn add_dir(&self, path: &str) {
         let mut s = self.st();
         Self::add_ancestors_and_self(&mut s, &FsPath::from(path));
@@ -166,7 +183,7 @@ impl MemFs {
         }
     }
 
-    /// 外部からの変更: 内容と mtime を変える (file_id は保つ)。無ければ作る。
+    /// 外部からの変更: 内容と mtime を変える (`file_id` は保つ)。無ければ作る。
     pub fn set_file(&self, path: &FsPath, data: &[u8]) {
         let mut s = self.st();
         let mtime = self.now_time(&mut s);
@@ -193,6 +210,7 @@ impl MemFs {
         );
     }
 
+    /// ファイルを消す (外部からの削除。無ければ何もしない)。
     pub fn remove(&self, path: &FsPath) {
         self.st().files.remove(path);
     }
@@ -291,6 +309,7 @@ impl MemFs {
         self.st().files.keys().map(FsPath::display).collect()
     }
 
+    /// ファイルの内容。無ければ `None`。
     pub fn read(&self, path: &str) -> Option<Vec<u8>> {
         self.st()
             .files
@@ -298,6 +317,7 @@ impl MemFs {
             .map(|e| e.data.clone())
     }
 
+    /// ファイルの今の `FileStamp` (ハッシュなし)。無ければ `None`。
     pub fn stamp(&self, path: &str) -> Option<FileStamp> {
         let s = self.st();
         s.files
@@ -305,12 +325,14 @@ impl MemFs {
             .map(|e| FileStamp::from_meta(&meta_of(e), None))
     }
 
+    /// ファイルまたはディレクトリがあるか。
     pub fn exists(&self, path: &str) -> bool {
         let s = self.st();
         let p = FsPath::from(path);
         s.files.contains_key(&p) || s.dirs.contains(&p)
     }
 
+    /// 読み取り専用の属性を付け外しする (無いパスは何もしない)。
     pub fn set_readonly(&self, path: &str, readonly: bool) {
         if let Some(e) = self.st().files.get_mut(&FsPath::from(path)) {
             e.readonly = readonly;
@@ -324,13 +346,14 @@ impl MemFs {
             .insert(FsPath::from(link), FsPath::from(target));
     }
 
+    /// ハードリンク数を決める (`HardlinkPolicy` の試験用。無いパスは何もしない)。
     pub fn set_nlink(&self, path: &str, nlink: u32) {
         if let Some(e) = self.st().files.get_mut(&FsPath::from(path)) {
             e.nlink = nlink;
         }
     }
 
-    /// 内容を差し替える。更新時刻・長さ・file_id は変えない (mtime の分解能の内の書き換えを再現する)。
+    /// 内容を差し替える。更新時刻・長さ・`file_id` は変えない (mtime の分解能の内の書き換えを再現する)。
     /// 長さが変わるときは、長さだけは新しい内容になる (長さを同じにしたいときは同じ長さの内容を渡す)。
     pub fn set_data_keep_mtime(&self, path: &str, data: &[u8]) {
         if let Some(e) = self.st().files.get_mut(&FsPath::from(path)) {
@@ -357,6 +380,7 @@ impl MemFs {
         }
     }
 
+    /// 読込のチャンクの大きさ (バイト。既定は 1 MiB、0 は 1 に切り上げる)。
     pub fn set_chunk_size(&self, bytes: usize) {
         self.st().chunk_size = bytes.max(1);
     }
@@ -773,7 +797,7 @@ impl FileSystem for MemFs {
         })
     }
 
-    /// 直接上書き: 既存のファイルの内容をその場で置き換える (file_id と nlink は保つ)。バックアップは持たない
+    /// 直接上書き: 既存のファイルの内容をその場で置き換える (`file_id` と `nlink` は保つ)。バックアップは持たない
     /// (`fail_next(WriteInPlace, BackupFailed)` で事前バックアップの失敗を注入できる)。
     fn write_in_place(
         &self,
@@ -823,7 +847,7 @@ impl FileSystem for MemFs {
     }
 }
 
-/// Stamp の照合 (05 §5.5): mtime・len・file_id、ハッシュは双方にあるときだけ。
+/// `FileStamp` の照合 (05 §5.5): mtime・len・`file_id`、ハッシュは双方にあるときだけ。
 fn stamp_matches(want: &FileStamp, have: &FileStamp) -> bool {
     want.mtime == have.mtime
         && want.len == have.len
@@ -864,7 +888,9 @@ impl ReadChunks for MemReader {
 /// 保存の供給側の失敗の種類 (`BytesSource::fail_after`)。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SourceFailure {
+    /// エンコードで表現できない (`ChunkError::Unmappable`)。
     Unmappable,
+    /// 保存が中断された (`ChunkError::Aborted`)。
     Aborted,
 }
 
@@ -877,6 +903,7 @@ pub struct BytesSource {
 }
 
 impl BytesSource {
+    /// `data` を `chunk` バイトずつ (最後は短い) 供給する。`chunk` が 0 のときは 1。
     pub fn new(data: &[u8], chunk: usize) -> BytesSource {
         BytesSource {
             data: data.to_vec(),

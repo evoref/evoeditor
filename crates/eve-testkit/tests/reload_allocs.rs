@@ -1,6 +1,6 @@
 //! 再読込の確保の量 (SAF-33、03 §9.5 / §7.5): 新全文・旧全文を複写しない。
 //!
-//! 確保を数える allocator は dev 依存の `stats_alloc` (bm_allocs と同じ)。このバイナリの試験は 1 つだけにする
+//! 確保を数える allocator は dev 依存の `stats_alloc` (`bm_allocs` と同じ)。このバイナリの試験は 1 つだけにする
 //! (数える範囲に他の試験のスレッドの確保が混ざらないように)。
 
 use std::alloc::System;

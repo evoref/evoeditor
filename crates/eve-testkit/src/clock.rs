@@ -10,10 +10,12 @@ use eve_core::{Clock, Millis, Tick};
 pub struct ManualClock(Arc<AtomicU64>);
 
 impl ManualClock {
+    /// `Tick(0)` から始まる時計を作る。
     pub fn new() -> ManualClock {
         ManualClock::default()
     }
 
+    /// `d` だけ進める。`u64` の上限で止まる (飽和する)。複製した時計にも見える。
     pub fn advance(&self, d: Millis) {
         // 飽和加算 (u64 の上限で止まる)。CAS の繰り返し (fetch_update は MSRV と最新版で名前が違う)
         let mut cur = self.0.load(Ordering::Acquire);
@@ -27,6 +29,7 @@ impl ManualClock {
         }
     }
 
+    /// 時刻を `t` に決める (戻すこともできる)。
     pub fn set(&self, t: Tick) {
         self.0.store(t.0, Ordering::Release);
     }

@@ -34,7 +34,11 @@ pub struct Catalog {
 }
 
 impl Catalog {
-    /// 言語ファイルを読む。`[meta]` は含めない。
+    /// 言語ファイルを読む。`[meta]` は含めない。入れ子の表は `.` 区切りのキーに平らにする。
+    ///
+    /// # Errors
+    ///
+    /// TOML として読めないとき、または文字列でも表でもない値があるとき、`CatalogError` を返す。
     pub fn parse(src: &str) -> Result<Catalog, CatalogError> {
         let table: toml::Table = src
             .parse()
@@ -49,6 +53,10 @@ impl Catalog {
     }
 
     /// 同梱の `ja`。同梱のファイルは CI で検査するので、読めないのは開発中の誤りだけ。
+    ///
+    /// # Panics
+    ///
+    /// 同梱の `locales/ja.toml` が読めないとき (開発中の誤り。CI の試験が防ぐ)。
     pub fn builtin_ja() -> &'static Catalog {
         static JA: OnceLock<Catalog> = OnceLock::new();
         JA.get_or_init(|| Catalog::parse(BUILTIN_JA).expect("同梱の locales/ja.toml は読める"))
@@ -63,23 +71,31 @@ impl Catalog {
     }
 
     /// 同梱の `en`。キー集合は `ja` と一致する (`cargo xtask i18n` と下の試験が検査する)。
+    ///
+    /// # Panics
+    ///
+    /// 同梱の `locales/en.toml` が読めないとき (開発中の誤り。CI の試験が防ぐ)。
     pub fn builtin_en() -> &'static Catalog {
         static EN: OnceLock<Catalog> = OnceLock::new();
         EN.get_or_init(|| Catalog::parse(BUILTIN_EN).expect("同梱の locales/en.toml は読める"))
     }
 
+    /// キーの文言。無ければ `None`。
     pub fn get(&self, key: &str) -> Option<&str> {
         self.entries.get(key).map(String::as_str)
     }
 
+    /// キーがあるか。
     pub fn contains(&self, key: &str) -> bool {
         self.entries.contains_key(key)
     }
 
+    /// 文言の件数。
     pub fn len(&self) -> usize {
         self.entries.len()
     }
 
+    /// 文言が 1 件も無いか。
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty()
     }

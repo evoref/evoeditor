@@ -4,12 +4,14 @@ use std::time::Instant;
 
 use eve_core::{Clock, Tick};
 
+/// 本番の単調時計 (`eve_core::Clock`)。壁時計の調整に影響されない `Instant` を使う。
 #[derive(Debug)]
 pub struct SystemClock {
     start: Instant,
 }
 
 impl SystemClock {
+    /// 今を起点 (`Tick(0)`) とする時計を作る。
     pub fn new() -> SystemClock {
         SystemClock {
             start: Instant::now(),

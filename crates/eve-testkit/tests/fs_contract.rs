@@ -38,7 +38,7 @@ fn memfs_は_filesystem_の契約を満たす() {
     });
 }
 
-/// 必須の 4 つだけを MemFs に任せ、残りは trait の既定の実装のままの Port (上書きを忘れた実装の再現)。
+/// 必須の 4 つだけを `MemFs` に任せ、残りは trait の既定の実装のままの Port (上書きを忘れた実装の再現)。
 struct OnlyRequired(Arc<MemFs>);
 
 impl FileSystem for OnlyRequired {

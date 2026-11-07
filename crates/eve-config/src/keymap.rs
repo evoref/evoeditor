@@ -14,8 +14,11 @@ use crate::{DiagKind, Diagnostic, Severity};
 pub enum KeyAction {
     /// コマンドを実行する。`has_args` は `args` が書かれていた (v0.2 は未対応)。
     Command {
+        /// コマンド ID (core が一覧と照合する)。
         command: String,
+        /// `when` 句の本文。書かれていなければ `None` (読み方は core、07 §7.3)。
         when: Option<String>,
+        /// `args` が書かれていたか。
         has_args: bool,
     },
     /// `"none"`: 下位の層の割当をこの層で遮蔽する。
@@ -25,17 +28,24 @@ pub enum KeyAction {
 /// `[keys.<context>]` の 1 行。配列値は書かれた順に複数の `KeymapEntry` になる。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct KeymapEntry {
+    /// `[keys.<context>]` のコンテキスト名 (検証は core)。
     pub context: String,
     /// 書かれたとおりのキー (空白区切りでストロークの列)。
     pub keys: String,
+    /// 割当の動作。
     pub action: KeyAction,
+    /// 書かれた行 (1 始まり)。
     pub line: u32,
+    /// 書かれた桁 (1 始まりの文字数)。
     pub column: u32,
 }
 
+/// 読み込んだ `keymap.toml`。
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct KeymapFile {
+    /// 割当 (書かれた順)。
     pub entries: Vec<KeymapEntry>,
+    /// 書式の問題 (出現順)。
     pub diagnostics: Vec<Diagnostic>,
 }
 
