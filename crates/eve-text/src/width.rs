@@ -246,13 +246,18 @@ pub fn grapheme_width(g: &str, cfg: &WidthConfig) -> u8 {
     };
     let total = base + marks_len;
     if total > 0 {
-        return total.min(MAX_GRAPHEME_WIDTH as usize) as u8;
+        return u8::try_from(total)
+            .unwrap_or(MAX_GRAPHEME_WIDTH)
+            .min(MAX_GRAPHEME_WIDTH);
     }
     if !marks.is_empty() {
         return 0; // show_invisible = false の不可視文字
     }
     // どれにも当たらず幅 0: 先頭のコードポイントの `<U+XXXX>`
-    format!("<U+{:04X}>", first as u32).chars().count() as u8
+    // `<U+XXXX>` は最大 10 文字 (`<U+10FFFF>`)。上限で丸める
+    u8::try_from(format!("<U+{:04X}>", first as u32).chars().count())
+        .unwrap_or(MAX_GRAPHEME_WIDTH)
+        .min(MAX_GRAPHEME_WIDTH)
 }
 
 /// 可視化の対象を除いた部分 `rest` の幅 (`g` は元の書記素。絵文字の判定に使う)。
@@ -351,7 +356,8 @@ pub fn grapheme_display(g: &str, cfg: &WidthConfig) -> GraphemeDisplay {
         return GraphemeDisplay::default();
     };
     let sym = |text: String| {
-        let w = text.chars().count() as u16;
+        // 可視記号は短い (`^X`・`<U+XXXX>` など)。収まらなければ上限で丸める
+        let w = u16::try_from(text.chars().count()).unwrap_or(u16::MAX);
         GraphemeDisplay {
             base: text,
             base_width: w,
@@ -403,13 +409,15 @@ pub fn grapheme_display(g: &str, cfg: &WidthConfig) -> GraphemeDisplay {
         }
     }
     let marks_width = marks.chars().count();
-    let total = (base_width + marks_width).min(MAX_GRAPHEME_WIDTH as usize);
-    let marks_width = marks_width.min(total);
+    // 合計は MAX_GRAPHEME_WIDTH (u8) で丸めるので、どちらも u16 に収まる
+    let total = u16::try_from((base_width + marks_width).min(usize::from(MAX_GRAPHEME_WIDTH)))
+        .unwrap_or(u16::from(MAX_GRAPHEME_WIDTH));
+    let marks_width = u16::try_from(marks_width).unwrap_or(u16::MAX).min(total);
     GraphemeDisplay {
         base,
-        base_width: (total - marks_width) as u16,
+        base_width: total - marks_width,
         marks,
-        marks_width: marks_width as u16,
+        marks_width,
     }
 }
 
@@ -578,7 +586,7 @@ mod tests {
     fn 幅_0_の書記素はセルを作る() {
         assert_eq!(w("\u{301}"), 1, "孤立結合文字は ◌ + 結合");
         // 幅 0 で他に当たらないもの (モンゴル語の自由異体字セレクタ U+180B は Mn だが可視化の対象外)
-        assert_eq!(w("\u{180B}"), "<U+180B>".chars().count() as u8);
+        assert_eq!(w("\u{180B}"), 8, "<U+180B> の文字数");
         assert_eq!(
             w("\u{34F}"),
             1,

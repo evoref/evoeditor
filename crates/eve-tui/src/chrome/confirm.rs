@@ -44,7 +44,7 @@ pub(super) fn render_confirm(
     let (bw, mut bordered) = box_width(want_inner, area.cols);
     // 縦 (04 §3.5, OQ-182): 足りないときはボタン行と案内行を優先し、本文を切る。枠も省く
     let nav_n = u16::from(nav.is_some());
-    let det_n = detail_rows.len() as u16;
+    let det_n = crate::cells(detail_rows.len());
     let min_bordered = 2 + 1 + 1 + 1 + nav_n; // 枠・本文・空行・ボタン・案内 (詳細なし)
     let (show_message, show_details, blank, show_nav);
     if bordered && area.rows >= min_bordered {
@@ -93,7 +93,8 @@ pub(super) fn render_confirm(
         row += 1;
     }
     for (i, d) in detail_rows.iter().take(show_details as usize).enumerate() {
-        let last_cut = i as u16 + 1 == show_details && show_details < detail_rows.len() as u16;
+        let last_cut = crate::cells(i).saturating_add(1) == show_details
+            && show_details < crate::cells(detail_rows.len());
         let spans = if last_cut {
             // 描けなかった行がある: 最後の行を省略記号にする
             let mut s = truncate_end(

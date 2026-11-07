@@ -108,7 +108,8 @@ fn write_all(fd: BorrowedFd<'_>, mut b: &[u8]) -> io::Result<()> {
             }
             return Err(e);
         }
-        b = &b[n as usize..];
+        // n >= 0 を確かめた後
+        b = &b[n.unsigned_abs()..];
     }
     Ok(())
 }
@@ -234,7 +235,8 @@ impl ConsoleOut {
 
     /// 描画先の fd (緊急の端末復元に渡す)。
     pub fn raw_handle(&self) -> usize {
-        self.fd.as_raw_fd() as usize
+        // 開いている fd は 0 以上。万一負なら usize::MAX (無効な fd。復元の書込が失敗するだけ。パニックにしない)
+        usize::try_from(self.fd.as_raw_fd()).unwrap_or(usize::MAX)
     }
 
     /// 出力の側には戻すモードが無い (termios は入力の側が戻す)。
@@ -345,7 +347,7 @@ impl Loop<'_> {
             let n =
                 unsafe { libc::read(self.fd.as_raw_fd(), chunk.as_mut_ptr().cast(), chunk.len()) };
             if n > 0 {
-                buf.extend_from_slice(&chunk[..n as usize]);
+                buf.extend_from_slice(&chunk[..n.unsigned_abs()]);
                 continue;
             }
             if n == 0 {

@@ -319,7 +319,8 @@ impl EditorState {
 
     /// 1 画面ぶんスクロールする。
     pub(crate) fn help_page(&mut self, forward: bool) -> CommandResult {
-        let page = self.help_view_rows().saturating_sub(1).max(1) as isize;
+        let page =
+            isize::try_from(self.help_view_rows().saturating_sub(1).max(1)).unwrap_or(isize::MAX);
         self.help_scroll(if forward { page } else { -page })
     }
 

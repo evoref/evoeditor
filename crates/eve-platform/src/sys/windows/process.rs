@@ -31,8 +31,9 @@ pub(crate) fn process_start() -> Option<FileTime> {
     }
     let ticks = ticks(&c);
     // 100 ns 単位、1601-01-01 起点 → UNIX 紀元
-    let secs = (ticks / 10_000_000) as i64 - EPOCH_DIFF_SECS;
-    let nanos = ((ticks % 10_000_000) * 100) as u32;
+    // u64::MAX / 10^7 は i64 に収まる。端数の 100 ns 単位 × 100 は 10^9 未満で u32 に収まる
+    let secs = i64::try_from(ticks / 10_000_000).unwrap_or(i64::MAX) - EPOCH_DIFF_SECS;
+    let nanos = u32::try_from((ticks % 10_000_000) * 100).unwrap_or(0);
     Some(FileTime { secs, nanos })
 }
 
@@ -67,7 +68,7 @@ pub(crate) fn process_state(pid: u32, want_start: bool) -> ProcessState {
         let (mut c, mut e, mut k, mut u) = (ZERO, ZERO, ZERO, ZERO);
         // SAFETY: 有効なハンドルと書込先の `FILETIME` 4 つ。
         if unsafe { GetProcessTimes(h, &mut c, &mut e, &mut k, &mut u) } != 0 {
-            let secs = (ticks(&c) / 10_000_000) as i64 - EPOCH_DIFF_SECS;
+            let secs = i64::try_from(ticks(&c) / 10_000_000).unwrap_or(i64::MAX) - EPOCH_DIFF_SECS;
             started = Some(FileTime { secs, nanos: 0 });
         }
     }

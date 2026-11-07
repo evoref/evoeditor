@@ -15,6 +15,11 @@
 //! ファイルにも書く。RSS は Linux の `/proc/self/statm` から読む (ほかの OS では `null`)。
 
 #![allow(clippy::print_stdout, clippy::print_stderr)]
+#![expect(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "計測用の数値変換。値は十分に小さい"
+)]
 
 use std::io::Write as _;
 use std::time::{Duration, Instant};

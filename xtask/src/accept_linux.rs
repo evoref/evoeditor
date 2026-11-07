@@ -1526,7 +1526,9 @@ fn f6_overwrite(ctx: &Ctx) -> CheckResult {
 fn big_file(ctx: &Ctx) -> Result<(PathBuf, usize), String> {
     let path = ctx.work.join("g-100mb.txt");
     if let Ok(m) = fs::metadata(&path) {
-        return Ok((path, m.len() as usize));
+        let len = usize::try_from(m.len())
+            .map_err(|e| format!("{} のサイズが usize に収まらない: {e}", path.display()))?;
+        return Ok((path, len));
     }
     let mut s = String::with_capacity(100_100_000);
     let mut i = 0u32;

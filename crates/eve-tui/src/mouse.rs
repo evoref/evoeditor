@@ -63,7 +63,11 @@ impl SharedGeom {
 
     fn get(&self) -> Option<(ViewId, i32)> {
         let v = self.view.load(Ordering::Relaxed);
-        (v != 0).then(|| (ViewId(v), self.rows.load(Ordering::Relaxed) as i32))
+        // rows は u16 から入れるので i32 に収まる
+        (v != 0).then(|| {
+            let rows = i32::try_from(self.rows.load(Ordering::Relaxed)).unwrap_or(i32::MAX);
+            (ViewId(v), rows)
+        })
     }
 }
 
@@ -114,7 +118,7 @@ impl MouseTracker {
         }
         if r.flags & WHEELED != 0 {
             // ホイールの向きは `dwButtonState` の上位 16 ビット (符号付き) の符号
-            let delta = (r.buttons >> 16) as u16 as i16;
+            let delta = ((r.buttons >> 16) as u16).cast_signed();
             return match delta {
                 d if d > 0 && inside => vec![ev(MouseKind::WheelUp)],
                 d if d < 0 && inside => vec![ev(MouseKind::WheelDown)],
@@ -217,7 +221,7 @@ mod tests {
     fn ホイールは向きで分け_面の外は捨てる() {
         let (g, mut t) = (geom(), MouseTracker::new());
         let up = rec(1, 1, 120u32 << 16, WHEELED);
-        let down = rec(1, 1, (-120i16 as u16 as u32) << 16, WHEELED);
+        let down = rec(1, 1, u32::from((-120i16).cast_unsigned()) << 16, WHEELED);
         assert_eq!(kinds(&t.feed(up, &g)), [MouseKind::WheelUp]);
         assert_eq!(kinds(&t.feed(down, &g)), [MouseKind::WheelDown]);
         let out = rec(1, 11, 120u32 << 16, WHEELED);

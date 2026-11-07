@@ -1,4 +1,8 @@
 //! `Frame` → `Buffer` の変換 (docs/04 §4.2、L4 の TestBackend 相当の検査)。`Harness` (eve-testkit) で Frame を作る。
+#![expect(
+    clippy::cast_possible_truncation,
+    reason = "テスト用の数値変換。値は小さく収まる"
+)]
 
 use eve_testkit::Harness;
 use eve_tui::buffer::{chrome_rows_for_surface, render_panes, row_text};

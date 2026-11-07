@@ -82,7 +82,11 @@ impl Unit {
     /// 描く (文字列, 幅, 記号か) の列。`buf` は 1 文字の単位の文字列を置く場所。
     pub(super) fn parts<'a>(&'a self, buf: &'a mut [u8; 4]) -> PartsIter<'a> {
         match &self.parts {
-            Parts::Char(c) => PartsIter::One(Some((c.encode_utf8(buf), self.width as u16, false))),
+            Parts::Char(c) => PartsIter::One(Some((
+                c.encode_utf8(buf),
+                super::cells_u16(self.width),
+                false,
+            ))),
             Parts::List(v) => PartsIter::Many(v.iter()),
         }
     }
@@ -181,10 +185,10 @@ pub(super) fn unit_slow(
         if ws {
             parts.push((">".to_owned(), 1, true));
             if w > 1 {
-                parts.push((" ".repeat(w - 1), (w - 1) as u16, true));
+                parts.push((" ".repeat(w - 1), super::cells_u16(w - 1), true));
             }
         } else {
-            parts.push((" ".repeat(w), w as u16, false));
+            parts.push((" ".repeat(w), super::cells_u16(w), false));
         }
     } else if g == "\u{3000}" {
         // 可視化しないときも、端末の全角の空白の描き方に頼らず ASCII の空白 2 つで描く

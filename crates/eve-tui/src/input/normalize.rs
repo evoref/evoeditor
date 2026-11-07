@@ -90,8 +90,9 @@ fn modifier_vk(vk: u16) -> bool {
 /// 仮想キーコード → `KeyCode` (配列に依存する記号キーは US 配列の刻印。JIS の差は v0.2 で確認する)。
 fn map_vk(vk: u16) -> Option<KeyCode> {
     Some(match vk {
-        0x41..=0x5A => KeyCode::Char((b'a' + (vk - 0x41) as u8) as char),
-        0x30..=0x39 => KeyCode::Char((b'0' + (vk - 0x30) as u8) as char),
+        // 範囲の腕の中なので差は u8 に収まる
+        0x41..=0x5A => KeyCode::Char((b'a' + u8::try_from(vk - 0x41).ok()?) as char),
+        0x30..=0x39 => KeyCode::Char((b'0' + u8::try_from(vk - 0x30).ok()?) as char),
         0x20 => KeyCode::Char(' '),
         0x0D => KeyCode::Enter,
         0x09 => KeyCode::Tab,
@@ -108,7 +109,7 @@ fn map_vk(vk: u16) -> Option<KeyCode> {
         0x27 => KeyCode::Right,
         0x28 => KeyCode::Down,
         0x5D => KeyCode::Menu,
-        0x70..=0x87 => KeyCode::F((vk - 0x70 + 1) as u8),
+        0x70..=0x87 => KeyCode::F(u8::try_from(vk - 0x70 + 1).ok()?),
         0xBA => KeyCode::Char(';'),
         0xBB => KeyCode::Char('='),
         0xBC => KeyCode::Char(','),

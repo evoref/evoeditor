@@ -261,7 +261,11 @@ mod tests {
         let l = Logger::with_level(Some(&d), Level::Warn);
         let log = d.join("log");
         fs::create_dir_all(&log).unwrap();
-        fs::write(log.join("evoeditor.log"), vec![b'x'; MAX_BYTES as usize]).unwrap();
+        fs::write(
+            log.join("evoeditor.log"),
+            vec![b'x'; usize::try_from(MAX_BYTES).unwrap()],
+        )
+        .unwrap();
         fs::write(log.join("evoeditor.log.1"), b"old1").unwrap();
         l.log(Level::Warn, "new");
         assert_eq!(fs::read(log.join("evoeditor.log.2")).unwrap(), b"old1");

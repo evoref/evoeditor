@@ -16,7 +16,7 @@ pub(super) fn text_width(spans: &[Span]) -> u16 {
 }
 
 pub(super) fn ascii_span(text: &str, style: Style) -> Span {
-    Span::new(text, text.len() as u16, style)
+    Span::new(text, crate::cells(text.len()), style)
 }
 
 pub(super) fn glyph_span(g: &Glyph, style: Style) -> Span {

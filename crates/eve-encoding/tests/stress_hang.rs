@@ -7,6 +7,10 @@
 //! ```
 
 #![allow(clippy::print_stdout)]
+#![expect(
+    clippy::cast_possible_truncation,
+    reason = "テスト用の数値変換。値は小さく収まる"
+)]
 
 use std::sync::mpsc;
 use std::time::{Duration, Instant};

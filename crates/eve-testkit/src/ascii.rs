@@ -191,7 +191,7 @@ mod tests {
             window: WindowId(1),
             size: CellSize {
                 cols: 10,
-                rows: rows.len() as u16,
+                rows: u16::try_from(rows.len()).expect("試験の画面の行数は u16 に収まる"),
             },
             panes: vec![PaneFrame {
                 view: ViewId(1),

@@ -328,23 +328,23 @@ mod tests {
                 let s = reference(enc, line);
                 s.lossy_lines + s.unmappable_lines > 0
             };
-            for a in 0u16..=255 {
-                for b in 0u16..=255 {
-                    let line = [a as u8, b as u8, b'\n'];
+            for a in 0u8..=u8::MAX {
+                for b in 0u8..=u8::MAX {
+                    let line = [a, b, b'\n'];
                     assert!(
                         may_differ(enc, &line) || !differs(&line),
                         "{enc:?} {line:02X?}"
                     );
                     // 前に ASCII があっても、2 バイト目を先頭と取り違えない
-                    let line = [b'a', a as u8, b as u8, b'\n'];
+                    let line = [b'a', a, b, b'\n'];
                     assert!(
                         may_differ(enc, &line) || !differs(&line),
                         "{enc:?} {line:02X?}"
                     );
                 }
                 if enc == Encoding::EucJp {
-                    for b in 0u16..=255 {
-                        let line = [0x8F, a as u8, b as u8, b'\n'];
+                    for b in 0u8..=u8::MAX {
+                        let line = [0x8F, a, b, b'\n'];
                         assert!(
                             may_differ(enc, &line) || !differs(&line),
                             "{enc:?} {line:02X?}"

@@ -144,7 +144,11 @@ impl Cx<'_> {
         let head = self.text.get(..offset.min(self.text.len())).unwrap_or("");
         let line = head.matches('\n').count() + 1;
         let col = head.rsplit('\n').next().map_or(0, |l| l.chars().count()) + 1;
-        (line as u32, col as u32)
+        // 診断の位置の表示用。u32 を超える行・桁は上限で丸める
+        (
+            u32::try_from(line).unwrap_or(u32::MAX),
+            u32::try_from(col).unwrap_or(u32::MAX),
+        )
     }
 
     fn warn(&mut self, kind: DiagKind, key: &str, value: &str, at: usize) {
@@ -329,7 +333,8 @@ fn parse_color(s: &str) -> Option<ThemeColor> {
     NAMES
         .iter()
         .position(|x| *x == n)
-        .map(|i| ThemeColor::Ansi(base + i as u8))
+        .and_then(|i| u8::try_from(i).ok())
+        .map(|i| ThemeColor::Ansi(base + i))
 }
 
 /// テーマファイル 1 つを解く。構文エラーなら `None` と診断。

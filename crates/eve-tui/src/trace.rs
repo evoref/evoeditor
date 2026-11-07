@@ -83,7 +83,8 @@ mod imp {
     }
 
     fn now_ns(s: &State) -> u64 {
-        s.epoch.elapsed().as_nanos() as u64
+        // 計測用。u64 の ns (約 584 年) を超えたら上限で止める
+        u64::try_from(s.epoch.elapsed().as_nanos()).unwrap_or(u64::MAX)
     }
 
     pub fn request_exit_after_first_frame() {

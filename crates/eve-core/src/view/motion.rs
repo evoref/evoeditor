@@ -239,7 +239,8 @@ fn run(ctx: &mut CommandCtx<'_>, m: Motion, extend: bool) -> CommandResult {
     };
     let count = match ctx.args.get("count") {
         None => 1,
-        Some(ArgValue::Int(n)) if *n >= 1 => *n as usize,
+        // 回数は usize に収まらなければ usize::MAX で止める (どの移動も端で止まる)
+        Some(ArgValue::Int(n)) if *n >= 1 => usize::try_from(*n).unwrap_or(usize::MAX),
         Some(_) => return CommandResult::Rejected(RejectReason::InvalidArgs),
     };
     let rows = ctx.state.viewport().1 as usize;
@@ -289,15 +290,11 @@ fn run(ctx: &mut CommandCtx<'_>, m: Motion, extend: bool) -> CommandResult {
         return CommandResult::Rejected(RejectReason::InvalidArgs);
     };
     // ページ移動はスクロール位置も同じ行数だけ動かし、カーソルの画面上の相対位置を保つ
+    let page = i64::try_from(rows.saturating_sub(1).max(1)).unwrap_or(i64::MAX);
+    let count_i64 = i64::try_from(count).unwrap_or(i64::MAX);
     let page_scroll = match m {
-        Motion::PageUp => Some(
-            (rows.saturating_sub(1).max(1) as i64)
-                .saturating_mul(count as i64)
-                .saturating_neg(),
-        ),
-        Motion::PageDown => {
-            Some((rows.saturating_sub(1).max(1) as i64).saturating_mul(count as i64))
-        }
+        Motion::PageUp => Some(page.saturating_mul(count_i64).saturating_neg()),
+        Motion::PageDown => Some(page.saturating_mul(count_i64)),
         _ => None,
     };
     let keep = m.keeps_goal().then_some(primary_goal).flatten();

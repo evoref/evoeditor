@@ -47,7 +47,8 @@ fn file_time(m: &fs::Metadata) -> FileTime {
         .ok()
         .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
         .map_or(FileTime::default(), |d| FileTime {
-            secs: d.as_secs() as i64,
+            // i64 を超える秒は上限で止める
+            secs: i64::try_from(d.as_secs()).unwrap_or(i64::MAX),
             nanos: d.subsec_nanos(),
         })
 }
@@ -66,7 +67,8 @@ fn open_shared_read(target: &Path) -> io::Result<File> {
             Ok(f) => return Ok(f),
             Err(e)
                 if matches!(
-                    e.raw_os_error().map(|c| c as u32),
+                    // Win32 のエラー番号 (DWORD) を i32 で受けたもの。ビットのまま戻す
+                    e.raw_os_error().map(i32::cast_unsigned),
                     Some(ERROR_SHARING_VIOLATION | ERROR_LOCK_VIOLATION)
                 ) && attempt < SHARING_RETRY_MS.len() =>
             {
@@ -94,7 +96,8 @@ fn preallocate(file: &File, dir: &Path, extra: u64, new_alloc: u64) -> Result<()
         return Err(FsError::new(FsErrorKind::DiskFull));
     }
     Err(map_io_error(
-        io::Error::from_raw_os_error(code as i32),
+        // Win32 のエラー番号 (DWORD) を、io::Error の i32 にビットのまま入れる
+        io::Error::from_raw_os_error(code.cast_signed()),
         &FsPath::new(dir),
     ))
 }
@@ -103,7 +106,8 @@ fn preallocate(file: &File, dir: &Path, extra: u64, new_alloc: u64) -> Result<()
 #[cfg(windows)]
 fn is_sharing_violation(e: &io::Error) -> bool {
     matches!(
-        e.raw_os_error().map(|c| c as u32),
+        // Win32 のエラー番号 (DWORD) を i32 で受けたもの。ビットのまま戻す
+        e.raw_os_error().map(i32::cast_unsigned),
         Some(ERROR_SHARING_VIOLATION | ERROR_LOCK_VIOLATION)
     )
 }
@@ -212,7 +216,7 @@ pub(crate) fn write_in_place(
             let ts = timestamp_basic(
                 std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
-                    .map_or(0, |d| d.as_secs() as i64),
+                    .map_or(0, |d| i64::try_from(d.as_secs()).unwrap_or(i64::MAX)),
             );
             Some(
                 sd.join("backup")
@@ -395,7 +399,8 @@ pub(crate) fn write_in_place(
         if let Some(n) = kill_at
             && written + chunk.len() as u64 >= n
         {
-            let part = (n - written) as usize;
+            // 試験用の打ち切り: n - written <= chunk.len() なので usize に収まる
+            let part = usize::try_from(n - written).map_or(chunk.len(), |p| p.min(chunk.len()));
             let _ = file.write_all(&chunk[..part]);
             let _ = file.flush();
             hooks::hit("kill_mid_inplace_write");

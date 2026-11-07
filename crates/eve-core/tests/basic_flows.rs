@@ -2,6 +2,10 @@
 //! のシナリオ (もとは M1 の AC、docs/08 §2.2「M1 で通す AC」、01 §5)。`Harness` (eve-testkit) で書く。
 //! 各テストの直前の `// verifies:` が、`tests/ac-checklist.toml` の `verified_by` に書く AC の ID。
 //! 既存の単体・結合テストが検証している AC は、ここには重ねず ac-checklist から直接それを指す。
+#![expect(
+    clippy::cast_possible_truncation,
+    reason = "テスト用の数値変換。値は小さく収まる"
+)]
 
 use eve_core::Args;
 use eve_testkit::Harness;

@@ -78,6 +78,11 @@ impl StateRescue {
 // ---------- 時刻 (UTC) ----------
 
 /// UNIX 秒 → (年, 月, 日, 時, 分, 秒)。Howard Hinnant の civil_from_days。
+#[expect(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "日 (1..=31)・月 (1..=12)・時分秒 (rem_euclid で 0..86400) は式の上で 0 以上で u32 に収まる"
+)]
 fn civil(secs: i64) -> (i64, u32, u32, u32, u32, u32) {
     let days = secs.div_euclid(86_400);
     let rem = secs.rem_euclid(86_400);
@@ -104,7 +109,8 @@ fn civil(secs: i64) -> (i64, u32, u32, u32, u32, u32) {
 pub(crate) fn now_secs() -> i64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map_or(0, |d| d.as_secs() as i64)
+        // i64 を超える秒 (遠い未来) は上限で止める (緊急退避の経路なのでパニックにしない)
+        .map_or(0, |d| i64::try_from(d.as_secs()).unwrap_or(i64::MAX))
 }
 
 /// `YYYYMMDDTHHMMSSZ` (ISO 8601 の基本形式、05 §7.5 の退避ディレクトリ名)。

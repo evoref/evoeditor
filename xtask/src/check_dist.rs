@@ -356,7 +356,11 @@ mod tests {
         b[5] = 1;
         b[0x20..0x28].copy_from_slice(&(phoff as u64).to_le_bytes());
         b[0x36..0x38].copy_from_slice(&56u16.to_le_bytes());
-        b[0x38..0x3a].copy_from_slice(&(phs.len() as u16).to_le_bytes());
+        b[0x38..0x3a].copy_from_slice(
+            &u16::try_from(phs.len())
+                .expect("プログラムヘッダは 65535 個以下")
+                .to_le_bytes(),
+        );
         for (i, (ty, body)) in phs.iter().enumerate() {
             let ph = phoff + i * 56;
             let off = b.len();

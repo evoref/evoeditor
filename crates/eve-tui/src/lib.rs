@@ -21,6 +21,12 @@ pub mod sanitize;
 pub mod theme;
 pub mod trace;
 
+/// セルの数・座標 (usize) を `u16` にする。収まらない値は `u16::MAX` で止める
+/// (描画の座標は u16。黙って下位のビットだけにしない。描画の経路なのでパニックにもしない)。
+pub(crate) fn cells(n: usize) -> u16 {
+    u16::try_from(n).unwrap_or(u16::MAX)
+}
+
 // 以前の場所 (crate の直下) の名前。bin (`unix::is_background_job`)・fuzz (`vt_input::fuzz_pipeline`)・診断の例が使う。
 #[cfg(unix)]
 pub use input::unix;

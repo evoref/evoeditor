@@ -162,7 +162,10 @@ pub(crate) fn resolve_target(path: &FsPath, create: bool) -> Result<PathBuf, FsE
 fn sibling_name(name: &str, kind: &str) -> String {
     let mut h = RandomState::new().build_hasher();
     h.write_u32(std::process::id());
-    let r = h.finish() as u32;
+    // 乱数としてハッシュの下位 32 ビットを使う (上位は捨ててよい)
+    let r: u32 = (h.finish() & u64::from(u32::MAX))
+        .try_into()
+        .unwrap_or_default();
     let suffix = format!(".eve-{kind}-{}-{r:08x}", std::process::id());
     // NAME_MAX (255 バイト) に収める
     let room = 255usize.saturating_sub(1 + suffix.len());

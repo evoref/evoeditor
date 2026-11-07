@@ -141,7 +141,8 @@ mod tests {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
-            .as_secs() as i64;
+            .as_secs();
+        let now = i64::try_from(now).unwrap();
         assert!(t.secs <= now + 2 && t.secs > now - 24 * 3600, "{t:?}");
         assert!(pid_running(me));
         assert!(!pid_running(0));
