@@ -13,9 +13,13 @@ Supported operating systems are **Windows 11 (x86_64)** and **Linux (x86_64 / aa
 ## What it does
 
 - Opens UTF-8 (with or without BOM), UTF-16, Shift_JIS, EUC-JP and ISO-2022-JP files and saves them **in the original encoding and line endings**. If some characters cannot be represented, it tells you before saving.
-- Saving is atomic (if it stops halfway, the original file is not damaged). Before saving, it checks whether another program changed the file.
-- Search and replace all. For huge files, it keeps accepting input while loading and searching.
-- Undo and redo. On abnormal termination, it rescues unsaved content.
+- Saving is atomic (if it stops halfway, the original file is not damaged). Before saving, it checks whether another program changed the file. It also checks when you come back from another app (when the terminal reports that it regained focus), and reloads the file if you have not edited it. A document for which you chose "Ignore" on such a change shows `[Changed on disk]` in the status bar.
+- It writes what you are editing to a swap file about 2 seconds after your last input. If you open the same file after a forced termination or a power loss, it offers to recover the content. On abnormal termination, when the terminal is closed, and on logoff, it rescues unsaved content.
+- You can open several documents and switch between them.
+- Search (regular expressions, whole words, within the selection) and replace (one at a time or all). For huge files, it keeps accepting input while loading and searching. Lines longer than 1 MiB can be edited too.
+- Undo and redo, duplicating and moving lines, soft wrap, mouse, themes, whitespace display, and changing key bindings (`keymap.toml`).
+- The user interface is in Japanese or English (`--locale ja|en`, the setting `[ui] locale`).
+- The help screen (`Ctrl+K H`) lists the keys and commands.
 
 Main keys (the command palette is `F1` or `Ctrl+P`; it shows the key assigned to each command):
 
@@ -26,6 +30,8 @@ Main keys (the command palette is `F1` or `Ctrl+P`; it shows the key assigned to
 | `Ctrl+F` | Search (`Ctrl+R` to replace) |
 | `Ctrl+Z` | Undo |
 | `Ctrl+G` | Go to line |
+| `Ctrl+E` | List of open documents (`Ctrl+PageDown` / `Ctrl+PageUp` for next / previous, `Ctrl+W` to close) |
+| `Ctrl+K H` | Help (list of keys and commands) |
 | `Ctrl+Q` | Quit |
 
 ## Installation
@@ -111,7 +117,9 @@ If you have a Rust development environment, you can also install with `cargo ins
 
 ```sh
 evoeditor                 # a new untitled document
-evoeditor memo.txt        # open a file (only one)
+evoeditor memo.txt        # open a file
+evoeditor a.txt b.txt     # open several files
+evoeditor +12 memo.txt    # open at line 12 (memo.txt:12:5 for line 12, column 5)
 evoeditor --readonly a.txt
 evoeditor --encoding shift_jis old.txt   # open with a given encoding
 evoeditor --help
@@ -160,25 +168,19 @@ untrusted comment: minisign public key 39CA49EFC7BC926D
 RWRtkrzH70nKORpBFPEtLy6elo0xP5XsEli9SU/OaxnBmNM8o14GKMhv
 ```
 
-## Known limitations (v0.1)
+## Known limitations
 
-- **The target is Windows Terminal and the console host on Windows 11 (x86_64).** Windows 10, macOS and Linux are not supported. The user interface is Japanese only.
+- **The targets are Windows Terminal and the console host on Windows 11 (x86_64), and terminals on Linux (x86_64 / aarch64).** Windows 10 is not officially supported. macOS is not supported (it cannot be checked on real hardware yet; planned after 1.0).
 - **The executable is not signed.** SmartScreen may show a warning (usually not, if you verified the files and unblocked them in step 3). Even if a warning appears, after confirming the verification you can choose "More info" → "Run anyway". On Windows 11 with **Smart App Control turned on**, unsigned executables may be refused; this version does not provide a workaround. With "Controlled folder access" enabled, you cannot save into protected folders (such as Documents). If antivirus software flags it by mistake, verify the signature and hash again before restoring it from quarantine, and let us know in Issues.
-- **Only one document can be open at a time.** Opening another file replaces the current document (with a confirmation if it is unsaved). At most one path can be given on the command line.
-- **Unsaved content cannot be rescued on forced termination or power loss.** It is rescued on normal exit and on panic. It may also not be rescued on Windows logoff or shutdown; save before logging off. Files on disk are not damaged, thanks to atomic saving.
-- **Files with invalid bytes are opened read-only.** Reopening with a given encoding may recover them. Read-only files and documents opened with `--readonly` cannot be edited (editing is refused with the reason). You can edit after saving under another name.
-- **Files with a line longer than 1 MiB are opened read-only.** Such a line is shown up to its first 64 KiB.
+- **On forced termination or power loss, edits made after the last swap write are lost.** The swap file is written about 2 seconds after your last input. Documents larger than 64 MiB, read-only documents and files that may contain secrets (`.env`, `*.pem`, `id_rsa*` and so on) are not written to swap. The rescue on Windows logoff or shutdown runs within the time the OS waits, so it may not finish; save before logging off. Files on disk are not damaged, thanks to atomic saving.
+- **Files with invalid bytes are opened read-only.** Reopening with a given encoding may recover them. Read-only files and documents opened with `--readonly` cannot be edited (editing is refused with the reason). You can edit after saving under another name, or after turning read-only off with `file.toggle_read_only`.
+- **Lines longer than 1 MiB are edited in an approximate display** (`[Long line: approximate]` in the status bar). On such a line, combining characters and the like are counted one by one.
 - **When saving as ISO-2022-JP, characters that cannot be represented** (half-width katakana, compatibility characters not in JIS, and so on) are listed before saving. Replace them, or change the encoding. When a document containing supplementary kanji and the like is saved in its original encoding, some byte representations may change; in that case, too, you are asked before saving.
-- **Search is plain text only** (with a case sensitivity toggle). There are no regular expressions. Replacement is "replace all" only (undone with one undo).
-- **External changes are not reported until you save.** On save, you are asked "Overwrite / Save as / Cancel". Files larger than 16 MiB are checked by modification time and length, so a rewrite that keeps the same length and modification time may be missed.
-- Whitespace visualization covers only full-width spaces and tabs. There is no help screen (see the key list in the command palette). The clipboard is the Windows clipboard; OSC 52 is not supported. There are 7 configuration keys and 5 command-line options.
+- **Regular expression search works within a line** (patterns that span line breaks cannot be used).
+- **External changes are checked only for the document on screen** (when you come back from another app, or with `file.check_external_changes`). Other documents are checked after you switch to them, and are protected by the check on save ("Overwrite / Save as / Cancel"). If the terminal does not report regaining focus, you are not told until you save. Files larger than 16 MiB are checked by modification time and length, so a rewrite that keeps the same length and modification time may be missed.
 - **Opening a file on a UNC path (`\\server\share\…`) may make Windows send your credentials to that server.** This is OS behavior that evoeditor cannot control. Do not open paths on untrusted servers.
 - When the terminal has 256 or 16 colors, colors are approximated automatically. Distinctions are kept with symbols and attributes.
-- The display during Japanese input (IME) conversion and key combinations may differ depending on the terminal and IME. Please tell us in Issues if you notice anything.
-
----
-
-The Japanese version ([README.md](README.md)) is authoritative. If the two differ, the Japanese version applies.
+- The display during Japanese input (IME) conversion and key combinations may differ depending on the terminal and IME. Some keys such as `Ctrl+Shift+S` do not arrive on terminals that do not send enhanced keys (they are marked with `*` in the key list of the help screen; there are alternatives such as `Ctrl+K S`). Please tell us in Issues if you notice anything.
 
 ## Known limitations (Linux)
 
@@ -186,6 +188,10 @@ The Japanese version ([README.md](README.md)) is authoritative. If the two diffe
 - **Clipboard**: evoeditor uses `wl-copy` / `wl-paste` (Wayland), `xclip` or `xsel` (X11), and `powershell.exe` on WSL. When connected over SSH (the commands would write on the remote side) or when none of them is available, it writes to the terminal clipboard with OSC 52 if the terminal supports it (VTE-based terminals such as GNOME Terminal do not). Otherwise, the clipboard works only inside evoeditor.
 - **`Ctrl+Z` is undo.** To go back to the shell temporarily, press `Ctrl+K Z`, and return with `fg`.
 - **In Windows Terminal on WSL, `Ctrl+Shift+<letter>` such as `Ctrl+Shift+Z` is not told apart from `Ctrl+<letter>`** (Windows Terminal sends the same key; the same applies inside tmux). Use `Ctrl+Y` to redo.
-- **When the terminal is closed or on `kill` (SIGTERM / SIGHUP / SIGINT), evoeditor rescues unsaved content before quitting.** It cannot rescue on `kill -9` (SIGKILL) or power loss. Files on disk are not damaged, thanks to atomic saving.
+- **When the terminal is closed or on `kill` (SIGTERM / SIGHUP / SIGINT), evoeditor rescues unsaved content before quitting.** It cannot rescue on `kill -9` (SIGKILL) or power loss, and edits made after the last swap write are lost. Files on disk are not damaged, thanks to atomic saving.
 - **Inside tmux**, we recommend `set -s escape-time 10`, `set -g set-clipboard on`, `set -s extended-keys on` and `set -g focus-events on` in `~/.tmux.conf` (for `Esc` responsiveness, the clipboard, and telling keys with `Ctrl+Shift` apart). Inside tmux, when the outer terminal is unknown, evoeditor draws with 256 colors (override with `color_mode = "truecolor"` under `[theme]`).
 - **On WSL, edit files on the Linux side (under `~`).** Files on Windows drives (under `/mnt/c`) can be opened too, but are slower.
+
+---
+
+The Japanese version ([README.md](README.md)) is authoritative. If the two differ, the Japanese version applies.

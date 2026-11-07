@@ -13,13 +13,16 @@ The Japanese version ([CHANGELOG.md](CHANGELOG.md)) is authoritative. Both are u
 
 ### Added
 
+- **The status bar shows files changed outside evoeditor**: a document for which you chose "Ignore" when an external change was found (for example, when you came back from another app) shows `[Changed on disk]` (`Changed` when narrow) in the status bar. It disappears when you save, reload or reopen the document. You can now tell that the content on screen differs from the file on disk after the dialog has closed.
 - For developers: the generated reference in `docs/reference/` (commands, the default keymap and the default settings) and `cargo xtask gen-reference`, which writes it (`--check` checks that it is up to date and matches the command catalog in the spec; it is part of `cargo xtask check`). Added the hidden options it reads, `--list-commands [--json]` and `--dump-keymap [--json]` (the keymap with your `keymap.toml` applied). They are not shown in `--help` (docs/09 §11.2).
 
 ### Changed
 
+- **"What it does" and "Known limitations" in the bundled `README.md` / `README.en.md` now match the features of v0.2**: the heading "Known limitations (v0.1)" is now "Known limitations". Limitations removed in v0.2 (only one document, no regular expressions, no help screen, no OSC 52, long lines opened read-only, external changes not reported until you save, Japanese-only UI, no Linux support, and so on) were dropped, and the current ones were added (edits after the last swap write are lost on forced termination, external changes are checked only for the document on screen, some keys do not arrive on terminals without enhanced keys, and so on). The "Starting" examples now include several files and `+line`.
 - **Five bindings that terminals cannot tell apart without enhanced keys are now treated as needing enhanced keys, as the spec says**: `Ctrl+Shift+S` (Save As), `Ctrl+Shift+Z` (Redo), `Shift+F3` (Find previous) and `Ctrl+Shift+Home` / `Ctrl+Shift+End` (select to the start / end of the document). On terminals without enhanced keys, the help key list marks them as not reachable, and key hints in the palette, messages and elsewhere show a reachable alternative instead (`Ctrl+K S` for Save As).
 
 - eve-view: changed the type of `DocumentInfo.read_only` from `Vec<String>` (variant names as strings) to `Vec<ReadOnlyReasonView>` (a new enum) (breaking; the `Query::Documents` answer). Aligned the documentation of `Capabilities.osc52_write` and `InputEvent::Resize` with the implementation (no type change).
+- eve-view: added `ExternalChange` (a document whose external change was ignored) to `StatusKind` (addition only; docs/04 §8.7).
 - eve-view: added `key_notation(strokes, ascii)`, the function that formats keys for display (addition only; shared by the core and eve-tui, docs/04 §7.8).
 
 ### Fixed
