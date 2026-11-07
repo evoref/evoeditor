@@ -117,7 +117,17 @@ enabled = {swap}
     }
 
     /// 端末の大きさを変える (ConPTY と、画面を解釈する側の両方)。
+    ///
+    /// 画面を解釈する側のロックを持ったまま、先にその大きさを変えてから pty の大きさを変える (Issue #373)。
+    /// pty を先に変えると、子が新しい大きさで描いた出力を、読み取りスレッドが古い大きさのままの解釈側に
+    /// 流し得る (vt100 は自動折り返しの無効化に対応しないので、はみ出した文字が折り返して画面が崩れたまま残る)。
+    /// 古い大きさの出力が新しい解釈側に入っても、子は大きさが変わると全面を描き直すので上書きされる。
     fn resize(&self, cols: u16, rows: u16) {
+        let mut parser = self.parser.lock().unwrap();
+        parser.screen_mut().set_size(
+            std::num::NonZeroU16::new(rows).expect("rows は 1 以上"),
+            std::num::NonZeroU16::new(cols).expect("cols は 1 以上"),
+        );
         self.master
             .as_ref()
             .expect("pty がある")
@@ -128,10 +138,7 @@ enabled = {swap}
                 pixel_height: 0,
             })
             .expect("リサイズ");
-        self.parser.lock().unwrap().screen_mut().set_size(
-            std::num::NonZeroU16::new(rows).expect("rows は 1 以上"),
-            std::num::NonZeroU16::new(cols).expect("cols は 1 以上"),
-        );
+        drop(parser);
     }
 
     fn screen(&self) -> String {
