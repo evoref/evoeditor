@@ -35,6 +35,7 @@ impl Millis {
 
 /// 単調時計。これ 1 本だけ (壁時計は持たない)。本番は eve-host、テストは `ManualClock`。
 pub trait Clock: Send + Sync {
+    /// 今の時刻 (単調増加。減らない)。
     fn now(&self) -> Tick;
 }
 

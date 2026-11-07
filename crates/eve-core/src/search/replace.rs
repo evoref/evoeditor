@@ -92,8 +92,8 @@ pub fn unescape_replacement(s: &str, eol: &str) -> String {
     out
 }
 
-/// すべて置換の ChangeSet を作る (一致を保持せず、走査しながら直接組み立てる、03 §12.5)。
-/// 一致の選び方は検索と同じ。返すのは (ChangeSet, 置換した件数)。取り消されたら `None`。
+/// すべて置換の `ChangeSet` を作る (一致を保持せず、走査しながら直接組み立てる、03 §12.5)。
+/// 一致の選び方は検索と同じ。返すのは (`ChangeSet`, 置換した件数)。取り消されたら `None`。
 pub fn build_replace_all(
     text: &dyn TextRead,
     query: &SearchQuery,

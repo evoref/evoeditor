@@ -20,32 +20,39 @@ use crate::frontend::{
 };
 use crate::msg::{ExitCode, HostMsg};
 
-/// 1 回の `step` で続けて処理する時間の目安 (超えたら残りは次の `step` へ)。
 /// システムクリップボードの取得を待つ時間 (05 §8.1)。
 const CLIPBOARD_TIMEOUT: Millis = Millis(2000);
 
+/// 1 回の `step` で続けて処理する時間の目安 (超えたら残りは次の `step` へ)。
 const STEP_BUDGET: Millis = Millis(8);
 /// 進捗・検索の途中経過などによる再描画の最小の間隔 (入力・貼り付けの結果と、ジョブの完了・失敗などは即時に描く、04 §4.4)。
 const RENDER_INTERVAL: Millis = Millis(16);
 /// 蓄えておく `EditorEvent` の上限 (購読者がいない間に増え続けない)。
 const MAX_EVENTS: usize = 4096;
-/// 緊急退避の時間予算 (02 §11.2.1 の表)。パニック・Fatal は 5 s、シグナル系 (CTRL_C / CTRL_BREAK 等) は 2.5 s、CTRL_CLOSE は 3.5 s。
+/// 緊急退避の時間予算 (02 §11.2.1 の表)。パニック・Fatal は 5 s、シグナル系 (`CTRL_C` / `CTRL_BREAK` 等) は 2.5 s、`CTRL_CLOSE` は 3.5 s。
+/// パニックと `HostMsg::Fatal` の退避の時間予算 (5 s)。
 pub const RESCUE_BUDGET_FATAL: std::time::Duration = std::time::Duration::from_secs(5);
+/// シグナル系 (Unix の SIGINT / SIGTERM / SIGHUP、Windows の `CTRL_C` / `CTRL_BREAK` 等) の退避の時間予算 (2.5 s)。
 pub const RESCUE_BUDGET_SIGNAL: std::time::Duration = std::time::Duration::from_millis(2500);
+/// `CTRL_CLOSE` (コンソールの閉鎖) の退避の時間予算 (3.5 s)。
 pub const RESCUE_BUDGET_CLOSE: std::time::Duration = std::time::Duration::from_millis(3500);
-/// Windows のログオフ・シャットダウンの退避の上限 (対話的なアプリの猶予は既定でおよそ 5 秒。CTRL_CLOSE と同じ配分、05 §11.2)。
+/// Windows のログオフ・シャットダウンの退避の上限 (対話的なアプリの猶予は既定でおよそ 5 秒。`CTRL_CLOSE` と同じ配分、05 §11.2)。
 pub const RESCUE_BUDGET_SESSION: std::time::Duration = std::time::Duration::from_millis(3500);
 /// 「保存を中止して終了」の退避は時間予算なし (02 §11.2.1 の表。利用者が選んだ終了で、外から終わらされないので書き終えてから終了する)。
 /// 書き手は `受信 + 予算` を期限にするので、`Instant` に足して溢れない大きさの値で「なし」を表す。
 pub const RESCUE_BUDGET_UNBOUNDED: std::time::Duration =
     std::time::Duration::from_secs(24 * 60 * 60);
 
+/// `Host::step` の結果。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum StepOutcome {
+    /// ループを続ける。
     Continue,
+    /// 終了する。値はプロセスの終了コード。
     Exit(ExitCode),
 }
 
+/// `Host::start` の失敗。
 #[derive(Debug)]
 pub enum StartError {
     /// `Frontend::init` の失敗 (端末でない等)。端末を変えていないので復元は要らない。
@@ -84,6 +91,7 @@ pub fn channel() -> (Sender<HostMsg>, Receiver<HostMsg>) {
     mpsc::channel()
 }
 
+/// Composition Root の共通部 (docs/02 §9.2)。`Editor` と Port を持ち、受信口のメッセージで `Editor` を駆動する。
 pub struct Host {
     editor: Editor,
     clock: Arc<dyn Clock>,
@@ -281,10 +289,12 @@ impl Host {
         Arc::clone(&self.emergency)
     }
 
+    /// 駆動している `Editor`。
     pub fn editor(&self) -> &Editor {
         &self.editor
     }
 
+    /// 駆動している `Editor` (可変)。
     pub fn editor_mut(&mut self) -> &mut Editor {
         &mut self.editor
     }
@@ -294,6 +304,7 @@ impl Host {
         self.tx.clone()
     }
 
+    /// 最初の Window。`start` が成功するまでは `None`。
     pub fn window(&self) -> Option<WindowId> {
         self.window
     }
@@ -315,6 +326,11 @@ impl Host {
 
     /// 起動の後半 (02 §9.5): `frontend.init` → 能力と編集面の大きさ → 最初の文書 → 入力の開始 → 最初の Frame。
     /// `files` が空なら無題の文書。複数なら最初のものを表示し、残りは読込中のバッファとして足す。
+    ///
+    /// # Errors
+    ///
+    /// `frontend.init` が失敗したとき `StartError::Init` (端末を変えていない)。最初の Window を作れなかったとき
+    /// `StartError::NoWindow`。入力の開始が失敗したとき `StartError::Frontend`。
     pub fn start(
         &mut self,
         frontend: &mut dyn Frontend,

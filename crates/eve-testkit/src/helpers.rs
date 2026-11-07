@@ -19,6 +19,10 @@ pub fn opened(path: &str, bytes: &[u8]) -> Harness {
 
 impl Harness {
     /// 最初の Window の今の View の主選択の範囲 (バイト位置の `(開始, 終了)`。向きは捨てる)。
+    ///
+    /// # Panics
+    ///
+    /// 最初の Window・View が無いとき (`defer_start` で起動していない Harness など)。
     pub fn selection_range(&self) -> (usize, usize) {
         let st = self.editor.state();
         let w = st.first_window().expect("Window がある");
@@ -31,6 +35,10 @@ impl Harness {
     }
 
     /// 文書 `doc` の本文 (今の文書は `doc_text`)。
+    ///
+    /// # Panics
+    ///
+    /// 文書 `doc` が無いとき。
     pub fn text_of(&self, doc: eve_view::DocumentId) -> String {
         self.editor
             .state()

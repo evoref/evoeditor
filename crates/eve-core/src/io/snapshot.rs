@@ -10,16 +10,21 @@ use crate::io::fspath::FsPath;
 /// 1 つの文書の退避用の公開物。`Send + Sync`。
 #[derive(Clone, Debug)]
 pub struct DocSnapshot {
+    /// 文書の ID。
     pub doc: DocumentId,
     /// O(1) の clone。
     pub snapshot: Snapshot,
+    /// 文書の形式 (退避の manifest に書く文字コード・BOM・改行)。
     pub format: TextFormat,
+    /// 公開した時点の Revision。
     pub revision: Revision,
     /// 保存点がある (= ディスク上に保存済みの版がある)。復旧の案内に使う。
     pub saved_node_exists: bool,
     /// 秘密ファイルのパターンに一致する (パターンの正本は 07。`is_secret_path` で判定する)。
     pub sensitive: bool,
+    /// ファイルのパス。無題の文書は `None`。
     pub path: Option<FsPath>,
+    /// 無題の文書の表示名。パスのある文書は `None`。
     pub untitled_name: Option<String>,
 }
 

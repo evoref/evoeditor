@@ -587,7 +587,7 @@ impl EditorState {
     }
 
     /// `search.replace_all` (03 §12.5): 検索欄の検索語・大小の区別で、置換欄の文字列にすべて置き換える。1 つの Undo 単位。
-    /// 文書が 1 MiB 以下ならメインスレッドで、超えればジョブで ChangeSet を作る。
+    /// 文書が 1 MiB 以下ならメインスレッドで、超えればジョブで `ChangeSet` を作る。
     pub fn search_replace_all(&mut self) -> CommandResult {
         let Some(bar) = &self.find.search_bar else {
             return CommandResult::Rejected(crate::command::RejectReason::NotAvailable);
@@ -779,7 +779,7 @@ impl EditorState {
         }
     }
 
-    /// ChangeSet を 1 つの Transaction (`Origin::Command("search.replace_all")`、Undo 1 回分) として適用する。
+    /// `ChangeSet` を 1 つの Transaction (`Origin::Command("search.replace_all")`、Undo 1 回分) として適用する。
     fn apply_replace_all(
         &mut self,
         doc_id: eve_view::DocumentId,

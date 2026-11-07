@@ -9,6 +9,10 @@
 use std::path::Path;
 
 /// `path` のゴールデンと `actual` を比べる。`EVE_UPDATE_GOLDEN` が立っていれば `actual` を書く。違えば panic する。
+///
+/// # Panics
+///
+/// ゴールデンが無い・内容が違う・書けないとき (`compare` が `Err` を返す場合と同じ)。
 pub fn check(path: &Path, actual: &str) {
     if let Err(m) = compare(path, actual) {
         panic!("{m}");
@@ -16,6 +20,11 @@ pub fn check(path: &Path, actual: &str) {
 }
 
 /// `check` と同じだが、違いを panic でなく `Err` (説明の文) で返す (シナリオ DSL のように失敗を集めて報告するとき)。
+///
+/// # Errors
+///
+/// ゴールデンが無い、内容が違う (最初に違う行と前後を文に含める)、または `EVE_UPDATE_GOLDEN` で書くときにディレクトリを
+/// 作れない・ファイルに書けないとき。
 pub fn compare(path: &Path, actual: &str) -> Result<(), String> {
     let actual = actual.replace("\r\n", "\n");
     if std::env::var_os("EVE_UPDATE_GOLDEN").is_some() {

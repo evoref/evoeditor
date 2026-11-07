@@ -9,6 +9,7 @@
 //! 持つもの: ID 型・入力・能力・`Effect`・`EditorEvent`・`Query`/`Answer`・`Frame` と意味的 UI モデル。
 
 #![forbid(unsafe_code)]
+#![deny(missing_docs)]
 
 mod caps;
 mod command;

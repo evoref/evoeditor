@@ -24,6 +24,7 @@ const SCROLL_MARGIN: usize = 3;
 /// スクロール位置。`top` は先頭可視行の行頭 (03 §4.6)。折り返しと水平スクロールは TUI の版で足す。
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct ScrollPos {
+    /// 先頭可視行の行頭 (バイト)。
     pub top: ByteOff,
     /// 水平スクロール量 (表示列。折り返しなしのとき)。
     pub left_col: u32,
@@ -34,8 +35,11 @@ pub struct ScrollPos {
 /// 文書の表示と Selection の単位。
 #[derive(Clone, Debug)]
 pub struct View {
+    /// 表示する文書。
     pub doc: DocumentId,
+    /// この View の Selection (03 §4)。文書の変更で写像される。
     pub selection: Selection,
+    /// スクロール位置。
     pub scroll: ScrollPos,
     /// 垂直移動の目標の表示列 (03 §5.2)。水平移動・編集・クリックでクリアし、垂直移動は維持する。
     pub goal_dcol: Option<u32>,
@@ -48,13 +52,17 @@ pub struct View {
 /// frontend が持つ編集面。v0.x は 1 つで、View を 1 つ持つ。
 #[derive(Clone, Copy, Debug)]
 pub struct Window {
+    /// Window の識別子。
     pub id: WindowId,
+    /// 表示している View。
     pub root: ViewId,
 }
 
 /// 表現不能の文字の強調 (文書, 作った Revision, 文書内のバイト範囲)。
 pub(crate) type UnmappableMarks = (DocumentId, eve_view::Revision, Vec<(usize, usize)>);
 
+/// エディタの状態の全体 (02 §4.1)。文書・View・Window、設定、端末の状態、出力 (Effect・EditorEvent) を持つ。
+/// 文書の変更は `apply_transaction` / `undo` / `redo` だけを通る。
 pub struct EditorState {
     /// Editor の「今」。Host が各メッセージの処理の前に `tick` で渡した値で、コマンドの実行中に読み直さない。
     pub(crate) now: Tick,
@@ -216,6 +224,7 @@ pub(crate) struct TermState {
 }
 
 impl EditorState {
+    /// 空の状態を作る (文書なし・既定の設定)。`caps` は端末の能力、`jobs` はジョブの投入口、`paths` は各ディレクトリ。
     pub fn new(caps: Capabilities, jobs: Rc<dyn JobSpawner>, paths: Arc<dyn Paths>) -> EditorState {
         EditorState {
             now: Tick(0),
@@ -299,6 +308,7 @@ impl EditorState {
         }
     }
 
+    /// 今の設定。
     pub fn config(&self) -> &eve_config::Config {
         &self.settings.config
     }
@@ -451,10 +461,12 @@ impl EditorState {
         id
     }
 
+    /// 編集面の大きさ (列, 行)。端末の大きさから検索バーなどの行を引いたもの (行は 1 以上)。
     pub fn viewport(&self) -> (u16, u16) {
         self.term.viewport
     }
 
+    /// 端末の大きさ (列, 行) を設定し、バーの分を引いた編集面に反映する。大きさが変わればカーソルが見えるようにスクロールする。
     pub fn set_viewport(&mut self, cols: u16, rows: u16) {
         self.term.surface = (cols, rows);
         self.apply_viewport(cols, rows);
@@ -478,6 +490,7 @@ impl EditorState {
         }
     }
 
+    /// 端末の能力を差し替える。色の深さが変われば、テーマの色を解決し直す。
     pub fn set_caps(&mut self, caps: Capabilities) {
         let depth_changed = self.term.caps.color_depth != caps.color_depth;
         self.term.caps = caps;
@@ -487,6 +500,7 @@ impl EditorState {
         self.out.needs_render = true;
     }
 
+    /// Editor の「今」(Host が `tick` で渡した最後の値)。
     pub fn now(&self) -> Tick {
         self.now
     }
@@ -519,6 +533,7 @@ impl EditorState {
         }
     }
 
+    /// 文書 `doc` を表示する View を作る (カーソルは先頭)。
     pub fn add_view(&mut self, doc: DocumentId) -> ViewId {
         let id = ViewId(self.fresh());
         self.docs.views.insert(
@@ -535,6 +550,7 @@ impl EditorState {
         id
     }
 
+    /// View `root` を表示する Window を作る。
     pub fn add_window(&mut self, root: ViewId) -> WindowId {
         let id = WindowId(self.fresh());
         self.docs.windows.push(Window { id, root });
@@ -546,6 +562,7 @@ impl EditorState {
         self.docs.documents.len()
     }
 
+    /// 文書。閉じた・無い ID は `None`。
     pub fn document(&self, id: DocumentId) -> Option<&Document> {
         self.docs.documents.get(&id)
     }
@@ -569,10 +586,12 @@ impl EditorState {
         self.out.needs_render = true;
     }
 
+    /// View。無い ID は `None`。
     pub fn view(&self, id: ViewId) -> Option<&View> {
         self.docs.views.get(&id)
     }
 
+    /// Window。無い ID は `None`。
     pub fn window(&self, id: WindowId) -> Option<&Window> {
         self.docs.windows.iter().find(|w| w.id == id)
     }
@@ -600,28 +619,34 @@ impl EditorState {
 
     // ---------- 出力 ----------
 
+    /// frontend への Effect (02 §6.3) を積む。
     pub fn push_effect(&mut self, e: Effect) {
         self.out.effects.push(e);
     }
 
+    /// 積んだ Effect を積んだ順に取り出す (空にする)。
     pub fn drain_effects(&mut self) -> Vec<Effect> {
         std::mem::take(&mut self.out.effects)
     }
 
+    /// Host への `EditorEvent` を積む。
     pub fn push_event(&mut self, e: EditorEvent) {
         self.out.events.push(e);
     }
 
+    /// 積んだ `EditorEvent` を積んだ順に取り出す (空にする)。
     pub fn drain_events(&mut self) -> Vec<EditorEvent> {
         std::mem::take(&mut self.out.events)
     }
 
+    /// 前回の呼び出しの後に、退避用の公開物 (`DocSnapshot`) が変わった文書を ID の順に取り出す (空にする。03 §6.5 手順 12)。
     pub fn take_snapshot_updates(&mut self) -> Vec<DocumentId> {
         std::mem::take(&mut self.out.snapshot_updates)
             .into_iter()
             .collect()
     }
 
+    /// 前回の Frame の後に、描き直しが要る変化があった。
     pub fn needs_render(&self) -> bool {
         self.out.needs_render
     }
@@ -631,6 +656,7 @@ impl EditorState {
         self.out.needs_render = false;
     }
 
+    /// 描き直しを要求する。
     pub fn mark_dirty_render(&mut self) {
         self.out.needs_render = true;
     }
@@ -638,7 +664,12 @@ impl EditorState {
     // ---------- 変更の唯一の経路 ----------
 
     /// Transaction を適用し、全 View の Selection・スクロールを写像し、通知を積む (03 §6.5 の手順 7・10・12)。
-    /// 発行 View は `tx.view`。
+    /// 発行 View は `tx.view`。成功なら適用後の Revision (変更の無い Transaction は今の Revision)。
+    ///
+    /// # Errors
+    ///
+    /// 文書が無い・読み取り専用・読込中なら `Rejected`、`tx` が古い Revision に基づくなら `StaleBase`、
+    /// 境界が char 境界でなければ `Text`。いずれも文書は変えない。
     pub fn apply_transaction(
         &mut self,
         doc: DocumentId,
@@ -666,6 +697,10 @@ impl EditorState {
     }
 
     /// Undo。取り消すものがなければ `Ok(false)`。発行 View の Selection は `selection_before` に戻す。
+    ///
+    /// # Errors
+    ///
+    /// 文書が無い・読み取り専用・読込中なら `Rejected`。
     pub fn undo(&mut self, doc: DocumentId, view: Option<ViewId>) -> Result<bool, ApplyError> {
         let document = self
             .docs
@@ -676,6 +711,11 @@ impl EditorState {
         Ok(applied.map(|a| self.after_change(doc, &a, view)).is_some())
     }
 
+    /// Redo。やり直すものがなければ `Ok(false)`。
+    ///
+    /// # Errors
+    ///
+    /// 文書が無い・読み取り専用・読込中なら `Rejected`。
     pub fn redo(&mut self, doc: DocumentId, view: Option<ViewId>) -> Result<bool, ApplyError> {
         let document = self
             .docs
@@ -881,6 +921,7 @@ impl EditorState {
         self.ensure_cursor_visible_with_margin(view, margin);
     }
 
+    /// `ensure_cursor_visible` の余白 (行) を指定する形。
     pub fn ensure_cursor_visible_with_margin(&mut self, view: ViewId, margin: usize) {
         self.ensure_vertical(view, margin);
         self.ensure_horizontal(view);

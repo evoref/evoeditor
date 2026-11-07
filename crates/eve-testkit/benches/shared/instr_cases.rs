@@ -35,7 +35,7 @@ fn japanese_1m() -> Vec<u8> {
     unit.repeat((1 << 20) / unit.len() + 1).into_bytes()
 }
 
-/// Shift_JIS の 1 MB (「日本語」= 93 FA 96 7B 8C EA と ASCII と改行)。
+/// `Shift_JIS` の 1 MB (「日本語」= 93 FA 96 7B 8C EA と ASCII と改行)。
 fn sjis_1m() -> Vec<u8> {
     let unit: &[u8] =
         b"\x93\xfa\x96\x7b\x8c\xea\x82\xcc\x83\x65\x83\x4c\x83\x58\x83\x67 sjis text 456\r\n";

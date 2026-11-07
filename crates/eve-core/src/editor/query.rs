@@ -13,6 +13,12 @@ use super::Editor;
 use crate::ui_model::chrome;
 
 impl Editor {
+    /// 読み取り専用の問い合わせに答える (02 §10.1 X18)。状態を変えない。
+    ///
+    /// # Errors
+    ///
+    /// 文書・View・Window が無ければ `UnknownDocument` / `UnknownView` / `UnknownWindow`、読込が終わっていなければ `NotLoaded`、
+    /// 範囲が文書の外か UTF-8 の境界でなければ `RangeOutOfBounds`、この版で答えない問い合わせは `Unsupported`。
     pub fn query(&self, q: &Query) -> Result<Answer, QueryError> {
         let state = &self.state;
         match q {

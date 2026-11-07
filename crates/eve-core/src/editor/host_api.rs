@@ -24,15 +24,23 @@ pub struct StartupConfig {
 /// 起動の後に Host が Editor に知らせる事実。
 pub enum HostReport<'a> {
     /// frontend の編集面の大きさ (起動のとき。以後の大きさの変化は `InputEvent::Resize`)。
-    Viewport { cols: u16, rows: u16 },
+    Viewport {
+        /// 列数 (表示セル)。
+        cols: u16,
+        /// 行数。
+        rows: u16,
+    },
     /// 設定ファイルの読込の診断 (最初の Frame の後にメッセージとして出す、07 §4.3)。`file` は表示名。
     ConfigDiagnostics {
+        /// 設定ファイルの表示名。
         file: &'a str,
+        /// そのファイルの診断。
         diagnostics: &'a [eve_config::Diagnostic],
     },
     /// システムのクリップボードを使えず、内部レジスタに切り替えた (書込・取得の失敗、非対応、上限の超過、取得の期限切れ。
     /// 02 §6.3)。core が `msg.clipboard.fallback` を同じ起動の中で最初の 1 回だけ示す (01 FR-205 AC-2)。
     ClipboardFallback {
+        /// 切り替えた理由。
         reason: crate::ClipboardFallbackReason,
     },
 }

@@ -73,6 +73,7 @@ impl std::fmt::Display for Revision {
 pub struct ViewRevision(pub u64);
 
 impl ViewRevision {
+    /// 次の版。上限 (`u64::MAX`) では止まる。
     pub fn next(self) -> ViewRevision {
         ViewRevision(self.0.saturating_add(1))
     }

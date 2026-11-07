@@ -23,18 +23,25 @@ pub enum AppliedTx {
     /// 変更のない Transaction (手順 1)。文書・Revision・履歴・通知のどれも変わらない。
     /// 発行 View の Selection だけを `selection` (あれば) に更新する。
     Identity {
+        /// 発行 View に設定する Selection (`tx.selection_after`)。無ければ変えない。
         selection: Option<Selection>,
     },
+    /// 文書を変えた。
     Changed(Applied),
 }
 
 /// 適用した変更。呼び出し側が View・Decoration の写像と通知に使う。
 #[derive(Clone, Debug)]
 pub struct Applied {
+    /// 適用の前の Revision。
     pub old_revision: Revision,
+    /// 適用の後の Revision。
     pub revision: Revision,
+    /// 適用した `ChangeSet` (`old_revision` の文書に対するもの)。
     pub changes: Arc<ChangeSet>,
+    /// 変更の出どころ。
     pub origin: Origin,
+    /// Undo による変更。
     pub is_undo: bool,
     /// 発行 View に設定する Selection。通常の編集は `selection_after` (なければ `None` = 写像)、
     /// Undo は `selection_before`、Redo は `selection_after`。
@@ -43,10 +50,16 @@ pub struct Applied {
     pub record: Option<RecordOutcome>,
 }
 
+/// Transaction を適用できない理由。どの場合も文書は変えない。
 #[derive(Debug)]
 pub enum ApplyError {
     /// `tx.changes.len_before` が文書の長さと違う (古い Revision に基づく)。
-    StaleBase { expected: usize, actual: usize },
+    StaleBase {
+        /// Transaction が前提とする文書の長さ (バイト)。
+        expected: usize,
+        /// 今の文書の長さ (バイト)。
+        actual: usize,
+    },
     /// 読み取り専用、または読込が終わっていない。
     Rejected,
     /// 操作の境界が char 境界でない (文書は変えない)。
@@ -56,7 +69,9 @@ pub enum ApplyError {
 /// 表示の設定 (`editor.tab_width`・`view.ambiguous_width`、07 §5.0)。Editor が文書を持つときに設定から写す。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct DisplaySettings {
+    /// タブの幅 (表示列。`editor.tab_width`)。
     pub tab_width: u8,
+    /// East Asian Width が曖昧な文字を幅 2 で数える (`view.ambiguous_width = 2`)。
     pub ambiguous_wide: bool,
     /// 全角スペースとタブを記号で示す (`view.show_whitespace = "minimal"`、03 §13.2)。
     pub show_whitespace: bool,
@@ -72,22 +87,30 @@ impl Default for DisplaySettings {
     }
 }
 
+/// 1 つの文書 (02 §5.1、03 §6)。本文・Revision・Undo 履歴と、ファイルの形式・読み取り専用の理由・読込状態を持つ。
+/// 本文を変えるのは `apply` / `undo` / `redo` だけ。
 pub struct Document {
     text: Text,
+    /// ファイルのパス。無題の文書は `None`。
     pub path: Option<FsPath>,
+    /// 最後に読んだ・保存したときのファイルの Stamp (外部変更の照合に使う)。無題・未保存の新規は `None`。
     pub disk_stamp: Option<FileStamp>,
+    /// 文書の形式 (文字コード・BOM・改行など)。
     pub format: TextFormat,
     revision: Revision,
     history: UndoHistory,
+    /// 読み取り専用の理由 (空なら編集できる。読込中は `load_state` で別に判定する)。
     pub read_only: ReadOnlyReasons,
     /// 読み取り専用属性 (`FileAttribute`) を `file.toggle_read_only` で解除した。上書き保存は「読み取り専用を解除して保存」の確認を経る (03 §9.6)。
     pub attribute_released: bool,
     /// 外部変更の確認で「無視」を選んだときのファイルの状態 (03 §9.5)。フォーカス復帰で同じ状態を見つけても、もう尋ねない。
     /// 保存の成功・再読込で忘れる。
     pub external_seen: Option<FileStamp>,
+    /// 読込の状態。
     pub load_state: LoadState,
     /// 読込中の進捗 (百分率)。ステータスバーの `[読込中 n%]` に出す。
     pub load_percent: u8,
+    /// 表示の設定 (設定から写す)。
     pub display: DisplaySettings,
     /// レイアウトの覚え (長い行の表示単位・長大行の列の索引)。読み書きするのは `layout/` だけ。
     pub(crate) layout_cache: std::cell::RefCell<crate::layout::LayoutCache>,
@@ -147,22 +170,27 @@ impl Document {
         }
     }
 
+    /// 本文。
     pub fn text(&self) -> &Text {
         &self.text
     }
 
+    /// 本文の Snapshot (ジョブに渡す。以後の編集の影響を受けない)。
     pub fn snapshot(&self) -> Snapshot {
         self.text.snapshot()
     }
 
+    /// 今の Revision (本文が変わるたびに増える。03 §17.1)。
     pub fn revision(&self) -> Revision {
         self.revision
     }
 
+    /// Undo 履歴。
     pub fn history(&self) -> &UndoHistory {
         &self.history
     }
 
+    /// 保存点から変わっている (未保存の変更がある)。
     pub fn is_dirty(&self) -> bool {
         self.history.is_dirty()
     }
@@ -173,6 +201,11 @@ impl Document {
     }
 
     /// Transaction を適用する (03 §6.5 の手順 1〜6・11)。
+    ///
+    /// # Errors
+    ///
+    /// `tx` が古い Revision に基づくなら `StaleBase`、編集できない (読み取り専用・読込中。`Origin::Recovery` / `Reload` は除く)
+    /// なら `Rejected`、境界が char 境界でなければ `Text`。いずれも文書は変えない。
     pub fn apply(&mut self, tx: &Transaction) -> Result<AppliedTx, ApplyError> {
         // 1. 前提検査
         if tx.changes.len_before() != self.text.len_bytes() {
@@ -229,6 +262,10 @@ impl Document {
 
     /// Undo。取り消すものがなければ `None`。読み取り専用では `Err(Rejected)` (Reload・Recovery のノードは例外にしない:
     /// 03 §7.2 の `edit.undo` の when は `!doc.read_only`)。
+    ///
+    /// # Errors
+    ///
+    /// 編集できない (読み取り専用・読込中) なら `Rejected`。
     pub fn undo(&mut self) -> Result<Option<Applied>, ApplyError> {
         if !self.is_editable() {
             return Err(ApplyError::Rejected);
@@ -245,6 +282,10 @@ impl Document {
     }
 
     /// Redo。やり直すものがなければ `None`。
+    ///
+    /// # Errors
+    ///
+    /// 編集できない (読み取り専用・読込中) なら `Rejected`。
     pub fn redo(&mut self) -> Result<Option<Applied>, ApplyError> {
         if !self.is_editable() {
             return Err(ApplyError::Rejected);
@@ -361,10 +402,12 @@ impl Document {
             .slice_to_string(eve_text::ByteRange::all(self.text.len_bytes()))
     }
 
+    /// 本文の長さ (バイト)。
     pub fn len_bytes(&self) -> usize {
         self.text.len_bytes()
     }
 
+    /// バイト位置 `i` を文書の長さに切り詰めた `ByteOff` (char 境界には揃えない)。
     pub fn byte_off(&self, i: usize) -> ByteOff {
         ByteOff(i.min(self.text.len_bytes()))
     }

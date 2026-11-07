@@ -211,7 +211,7 @@ impl EditorState {
             .collect()
     }
 
-    /// パレットに出るコマンドの ID (CommandId 順。この frontend で使えないものを除く)。
+    /// パレットに出るコマンドの ID (`CommandId` 順。この frontend で使えないものを除く)。
     fn palette_command_ids(&self) -> Vec<&str> {
         self.ui
             .palette_entries

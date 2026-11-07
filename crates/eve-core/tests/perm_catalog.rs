@@ -29,7 +29,7 @@ fn kind_of(cell: &str) -> CommandKind {
     }
 }
 
-/// カタログの CommandId 1 個分。
+/// カタログの `CommandId` 1 個分。
 struct Entry {
     line: usize,
     perm: String,
@@ -42,7 +42,7 @@ struct Entry {
     shared: bool,
 }
 
-/// カタログの CommandId → その行の内容 (`eve_docs_tables::catalog` で読む)。
+/// カタログの `CommandId` → その行の内容 (`eve_docs_tables::catalog` で読む)。
 fn catalog() -> BTreeMap<String, Entry> {
     let doc = include_str!("../../../docs/07-config-extensibility.md");
     let rows = catalog::read(doc).expect("カタログを読める");

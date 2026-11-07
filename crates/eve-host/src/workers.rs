@@ -80,6 +80,8 @@ impl Lane {
     }
 }
 
+/// 本番の `JobSpawner`。`io` ワーカーと `bg` ワーカーのスレッドへジョブを渡し、結果を `HostMsg::Job` で受信口へ送る。
+/// 破棄するとワーカーの終了を待つ (最大 1 秒、終わらなければ切り離す)。
 pub struct ThreadJobSpawner {
     next_id: Cell<u64>,
     /// 実行中・待機中のジョブの取消しトークン。ワーカーが手放した (他に持つ者がいない) ものは投入のときに掃除する。
@@ -94,6 +96,10 @@ pub struct ThreadJobSpawner {
 
 impl ThreadJobSpawner {
     /// `tx` は Host の受信口への送信口 (`Host::sender`、または `channel` で作ったもの)。
+    ///
+    /// # Errors
+    ///
+    /// `io` ワーカーのスレッドを起動できなかったとき、その OS の誤り。
     pub fn new(ports: JobPorts, tx: Sender<HostMsg>) -> std::io::Result<ThreadJobSpawner> {
         let io = Lane::start("eve-io", ports.clone(), tx.clone())?;
         Ok(ThreadJobSpawner {

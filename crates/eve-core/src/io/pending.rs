@@ -45,9 +45,9 @@ pub(crate) enum Pending {
         cursor: eve_text::ByteOff,
         forward: bool,
     },
-    /// 改行コードの変換の ChangeSet を作るジョブ (03 §8.4)。
+    /// 改行コードの変換の `ChangeSet` を作るジョブ (03 §8.4)。
     ConvertEol(crate::document::eol_cmd::EolConvert),
-    /// すべて置換の ChangeSet を作るジョブ (03 §12.5)。
+    /// すべて置換の `ChangeSet` を作るジョブ (03 §12.5)。
     ReplaceAll {
         doc: DocumentId,
         revision: eve_view::Revision,
@@ -79,7 +79,7 @@ pub(crate) enum Pending {
         path: FsPath,
         release: Option<DocumentId>,
     },
-    /// 表現不能の文字の置換の ChangeSet を作るジョブ (E3 の選択肢 2)。`revision` は投入時の文書の Revision。
+    /// 表現不能の文字の置換の `ChangeSet` を作るジョブ (E3 の選択肢 2)。`revision` は投入時の文書の Revision。
     ReplaceUnmappable {
         ask: UnmappableAsk,
         revision: eve_view::Revision,

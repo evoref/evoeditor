@@ -1,4 +1,4 @@
-//! 1 MiB を超える文書の改行コードの変換 (docs/03 §8.4 の (3)(4)): ジョブで ChangeSet を作る。
+//! 1 MiB を超える文書の改行コードの変換 (docs/03 §8.4 の (3)(4)): ジョブで `ChangeSet` を作る。
 
 use eve_core::{Args, Origin, Tick, Transaction};
 use eve_testkit::Harness;

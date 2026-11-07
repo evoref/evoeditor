@@ -39,6 +39,7 @@ pub enum LeftoverOp {
 /// 起動時に提案する 1 件。T のパス 1 つ分。
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Leftover {
+    /// 痕跡の種類。
     pub kind: LeftoverKind,
     /// 保存先 T。
     pub target: FsPath,
@@ -197,7 +198,7 @@ impl Traces {
 }
 
 /// `tmp` が T のハードリンクか。FileId は FS によって 0 や同じ値を返し得る (Windows のネットワークのリダイレクタ・WebDAV・
-/// ReFS など) ので、FileId の一致に加えて両方の `nlink >= 2` と、index が 0 でないことを求める (外れたら提案に回す)。
+/// `ReFS` など) ので、FileId の一致に加えて両方の `nlink >= 2` と、index が 0 でないことを求める (外れたら提案に回す)。
 fn hard_link_of(fs: &dyn FileSystem, tmp: &FsPath, target: &FsPath) -> bool {
     match (fs.metadata(tmp), fs.metadata(target)) {
         (Ok(a), Ok(b)) => {
@@ -281,9 +282,9 @@ mod tests {
     use crate::io::fs::{FileId, FileKind, FileMeta, FsKind, ReadChunks};
     use std::sync::Mutex;
 
-    /// 名前ごとに FileId を持つだけの FileSystem (ハードリンク = 同じ FileId の 2 つの名前)。MemFs はハードリンクを作れない。
+    /// 名前ごとに `FileId` を持つだけの `FileSystem` (ハードリンク = 同じ `FileId` の 2 つの名前)。MemFs はハードリンクを作れない。
     struct Links {
-        /// (名前, FileId の index, nlink)
+        /// (名前, `FileId` の index, nlink)
         files: Mutex<Vec<(FsPath, u128, u32)>>,
         records: Vec<InflightRecord>,
     }

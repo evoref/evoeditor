@@ -4,6 +4,7 @@
 //! 宣言の表、07 §4.1)、キーマップ (`keymap.toml`) とテーマファイルの読込。
 
 #![forbid(unsafe_code)]
+#![deny(missing_docs)]
 
 mod catalog;
 mod config;

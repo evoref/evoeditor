@@ -17,6 +17,8 @@ struct Queued {
     cancel: CancelToken,
 }
 
+/// 積むだけで実行しない `JobSpawner` (テスト用)。`run_jobs` で積んだ順に同じスレッドで実行する。
+/// 単一スレッド専用 (`Rc` で共有する)。
 pub struct ManualJobSpawner {
     ports: JobPorts,
     next_id: Cell<u64>,
@@ -25,6 +27,7 @@ pub struct ManualJobSpawner {
 }
 
 impl ManualJobSpawner {
+    /// 空のキューで作る。`ports` は `run_job` に渡す。
     pub fn new(ports: JobPorts) -> Rc<ManualJobSpawner> {
         Rc::new(ManualJobSpawner {
             ports,

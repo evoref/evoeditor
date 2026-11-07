@@ -205,7 +205,7 @@ impl Soak {
         }
     }
 
-    /// 文書の大きさを MIN_BYTES〜MAX_BYTES に保つ (間隔ごとに見る)。
+    /// 文書の大きさを `MIN_BYTES`〜`MAX_BYTES` に保つ (間隔ごとに見る)。
     fn keep_size(&mut self) -> usize {
         let len = self.h.doc_text().len();
         if len > MAX_BYTES {
