@@ -129,7 +129,7 @@ fn 全角の後続セルが単独のセルに変わる行は行全体を再出�
     h.text("あい");
     let f = h.frame();
     let r = render(&f);
-    assert!(r.risky_rows.is_empty());
+    assert!(r.risky_rows.is_empty(), "{:?}", r.risky_rows);
     let mut e = Emitter::new();
     let mut s = screen(30, r.buffer.area.height as usize);
     s.feed(&e.frame(r.clone(), &f, true));

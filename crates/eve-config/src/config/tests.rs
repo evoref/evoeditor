@@ -11,7 +11,7 @@ fn kinds(l: &Loaded) -> Vec<(&str, &DiagKind)> {
 fn 空のファイルは既定値で診断なし() {
     let l = load_str("");
     assert_eq!(l.config, Config::default());
-    assert!(l.diagnostics.is_empty());
+    assert!(l.diagnostics.is_empty(), "{:?}", l.diagnostics);
 }
 
 #[test]
@@ -51,7 +51,7 @@ color_mode = "256"
 fn ドット記法でも読める() {
     let l = load_str("editor.tab_width = 2\n");
     assert_eq!(l.config.tab_width, 2);
-    assert!(l.diagnostics.is_empty());
+    assert!(l.diagnostics.is_empty(), "{:?}", l.diagnostics);
 }
 
 // verifies: AC-FR-703-1
@@ -444,7 +444,8 @@ fn file_の閾値を読む() {
 #[test]
 fn changed_keys_は変わった公開キーだけを並べ_全キーを網羅する() {
     let a = Config::default();
-    assert!(changed_keys(&a, &a).is_empty());
+    let actual = changed_keys(&a, &a);
+    assert!(actual.is_empty(), "{actual:?}");
     let b = Config {
         tab_width: 8,
         mouse: false,
@@ -807,7 +808,7 @@ fn view_show_whitespace_の後の版の値は情報診断で_不正な値は警�
         assert_eq!((d.line, d.column), (1, 24));
     }
     let l = load_str("view.show_whitespace = \"off\"\n");
-    assert!(l.diagnostics.is_empty());
+    assert!(l.diagnostics.is_empty(), "{:?}", l.diagnostics);
     assert_eq!(l.config.show_whitespace, ShowWhitespace::Off);
     let l = load_str("view.show_whitespace = \"bogus\"\n");
     let d = only_diag(&l, "view.show_whitespace");
@@ -829,7 +830,7 @@ fn theme_name_と_file_default_encoding_の不正は警告して既定値() {
     );
     assert_eq!(d.value, "a/b");
     let l = load_str("theme.name = \"my_theme-2\"\n");
-    assert!(l.diagnostics.is_empty());
+    assert!(l.diagnostics.is_empty(), "{:?}", l.diagnostics);
     assert_eq!(l.config.theme_name, "my_theme-2");
     let l = load_str("file.default_encoding = \"klingon\"\n");
     assert_eq!(l.config, Config::default());

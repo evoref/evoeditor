@@ -29,7 +29,8 @@ fn 読み取り専用属性を解除して編集し_確認を経て保存する�
     h.run_jobs();
     assert_eq!(reasons(&h), [ReadOnlyReason::FileAttribute]);
     assert_eq!(h.cmd("file.toggle_read_only"), CommandResult::Done);
-    assert!(reasons(&h).is_empty());
+    let actual = reasons(&h);
+    assert!(actual.is_empty(), "{actual:?}");
     assert!(h.messages().contains(&"info.read_only.released".to_owned()));
     h.text("x");
     assert_eq!(h.doc_text(), "xabc\n");

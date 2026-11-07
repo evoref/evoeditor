@@ -91,7 +91,8 @@ fn bak_を削除する選択() {
     h.run_jobs();
     assert!(!h.fs.exists("/w/a.txt.eve-bak-1"));
     assert!(!h.fs.exists("/w/a.txt"), "戻していない");
-    assert!(h.fs.inflight_records().is_empty());
+    let actual = h.fs.inflight_records();
+    assert!(actual.is_empty(), "{actual:?}");
     assert!(h.messages().contains(&"info.leftover.deleted".to_owned()));
 }
 
@@ -104,7 +105,8 @@ fn 内容が同一の退避名は確認なしで消す() {
     });
     assert_eq!(h.overlay(), "", "同一なので提案しない");
     assert!(!h.fs.exists("/w/a.txt.eve-bak-1"));
-    assert!(h.fs.inflight_records().is_empty());
+    let actual = h.fs.inflight_records();
+    assert!(actual.is_empty(), "{actual:?}");
 }
 
 #[test]
@@ -155,7 +157,8 @@ fn tmp_を削除する選択() {
     h.answer(1);
     h.run_jobs();
     assert!(!h.fs.exists("/w/n.txt.eve-tmp-1"));
-    assert!(h.fs.inflight_records().is_empty());
+    let actual = h.fs.inflight_records();
+    assert!(actual.is_empty(), "{actual:?}");
 }
 
 #[test]

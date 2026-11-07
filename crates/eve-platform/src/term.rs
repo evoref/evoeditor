@@ -66,7 +66,7 @@ fn restore_now(out: HANDLE, bytes: &[u8], (out_mode, in_mode): (Option<u32>, Opt
             out,
             units.as_ptr().cast(),
             units.len() as u32,
-            &mut written,
+            &raw mut written,
             std::ptr::null(),
         );
     }

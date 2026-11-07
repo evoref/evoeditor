@@ -91,9 +91,11 @@ mod tests {
     #[test]
     fn frontend_の_pr_は_core_を変えず_eve_view_の変更にはラベルが要る() {
         // ラベルなし・core の変更だけ: OK
-        assert!(violations(&s(&["crates/eve-core/src/lib.rs"]), &[]).is_empty());
+        let actual = violations(&s(&["crates/eve-core/src/lib.rs"]), &[]);
+        assert!(actual.is_empty(), "{actual:?}");
         // area:tui で eve-tui だけ: OK
-        assert!(violations(&s(&["crates/eve-tui/src/win.rs"]), &s(&["area:tui"])).is_empty());
+        let actual = violations(&s(&["crates/eve-tui/src/win.rs"]), &s(&["area:tui"]));
+        assert!(actual.is_empty(), "{actual:?}");
         // area:tui で core を変える: 失敗
         assert_eq!(
             violations(
@@ -108,13 +110,11 @@ mod tests {
             violations(&s(&["crates/eve-view/src/frame.rs"]), &[]).len(),
             1
         );
-        assert!(
-            violations(
-                &s(&["crates/eve-view/src/frame.rs"]),
-                &s(&["contract-change"])
-            )
-            .is_empty()
+        let actual = violations(
+            &s(&["crates/eve-view/src/frame.rs"]),
+            &s(&["contract-change"]),
         );
+        assert!(actual.is_empty(), "{actual:?}");
         // area:tui で eve-view を変える: ラベルがあっても R9 で失敗
         assert_eq!(
             violations(

@@ -76,7 +76,7 @@ impl ConsoleInput {
         let output = open_console("CONOUT$")?;
         let mut saved = 0u32;
         // SAFETY: `input` は開いたコンソール入力のハンドル、`saved` は書込先の有効な u32。
-        if unsafe { GetConsoleMode(input, &mut saved) } == 0 {
+        if unsafe { GetConsoleMode(input, &raw mut saved) } == 0 {
             return Err(io::Error::last_os_error());
         }
         let mut mode = saved
@@ -112,7 +112,7 @@ impl ConsoleInput {
     pub fn set_mouse(&self, on: bool) {
         let mut mode = 0u32;
         // SAFETY: `input` は有効なコンソール入力のハンドル、`mode` は書込先の有効な u32。
-        if unsafe { GetConsoleMode(self.input.0, &mut mode) } == 0 {
+        if unsafe { GetConsoleMode(self.input.0, &raw mut mode) } == 0 {
             return;
         }
         if on {
@@ -153,7 +153,7 @@ fn window_size(output: HANDLE) -> io::Result<CellSize> {
     // SAFETY: 全ビット 0 の `CONSOLE_SCREEN_BUFFER_INFO` は有効な値 (すべて整数)。
     let mut info: CONSOLE_SCREEN_BUFFER_INFO = unsafe { std::mem::zeroed() };
     // SAFETY: `output` は開いたコンソール出力のハンドル、`info` は書込先の有効な構造体。
-    if unsafe { GetConsoleScreenBufferInfo(output, &mut info) } == 0 {
+    if unsafe { GetConsoleScreenBufferInfo(output, &raw mut info) } == 0 {
         return Err(io::Error::last_os_error());
     }
     let w = i32::from(info.srWindow.Right) - i32::from(info.srWindow.Left) + 1;
@@ -181,7 +181,7 @@ fn wait(h: HANDLE, ms: u32) -> io::Result<Wait> {
 fn pending(h: HANDLE) -> io::Result<u32> {
     let mut n = 0u32;
     // SAFETY: `h` は有効なコンソール入力のハンドル、`n` は書込先の有効な u32。
-    if unsafe { GetNumberOfConsoleInputEvents(h, &mut n) } == 0 {
+    if unsafe { GetNumberOfConsoleInputEvents(h, &raw mut n) } == 0 {
         return Err(io::Error::last_os_error());
     }
     Ok(n)
@@ -198,7 +198,7 @@ fn read_chunk(
     let n = want.min(buf.len() as u32);
     let mut got = 0u32;
     // SAFETY: `buf` は `n` 件以上の有効な領域、`got` は書込先の有効な u32。
-    if unsafe { ReadConsoleInputW(h, buf.as_mut_ptr(), n, &mut got) } == 0 {
+    if unsafe { ReadConsoleInputW(h, buf.as_mut_ptr(), n, &raw mut got) } == 0 {
         return Err(io::Error::last_os_error());
     }
     // 計測用ビルド: 入力のバイトを読み終えた時刻 (01 §3.0.1 の (b) の始点)。文字を押した記録があるときだけ
@@ -286,7 +286,7 @@ fn send_mouse(
     // SAFETY: 全ビット 0 の `CONSOLE_SCREEN_BUFFER_INFO` は有効な値 (すべて整数)。
     let mut info: CONSOLE_SCREEN_BUFFER_INFO = unsafe { std::mem::zeroed() };
     // SAFETY: `output` は開いたコンソール出力のハンドル、`info` は書込先の有効な構造体。
-    let (left, top) = if unsafe { GetConsoleScreenBufferInfo(output, &mut info) } == 0 {
+    let (left, top) = if unsafe { GetConsoleScreenBufferInfo(output, &raw mut info) } == 0 {
         (0, 0)
     } else {
         (i32::from(info.srWindow.Left), i32::from(info.srWindow.Top))
@@ -395,7 +395,7 @@ impl ConsoleOut {
         let h = open_console("CONOUT$")?;
         let mut saved = 0u32;
         // SAFETY: `h` は開いたコンソール出力のハンドル、`saved` は書込先の有効な u32。
-        if unsafe { GetConsoleMode(h, &mut saved) } == 0 {
+        if unsafe { GetConsoleMode(h, &raw mut saved) } == 0 {
             return Err(io::Error::last_os_error());
         }
         let mode = saved | ENABLE_VIRTUAL_TERMINAL_PROCESSING | DISABLE_NEWLINE_AUTO_RETURN;
@@ -433,7 +433,7 @@ impl ConsoleOut {
                     self.handle.0,
                     rest.as_ptr().cast(),
                     n as u32,
-                    &mut written,
+                    &raw mut written,
                     std::ptr::null(),
                 )
             };

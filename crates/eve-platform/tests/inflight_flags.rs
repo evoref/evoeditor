@@ -173,7 +173,8 @@ fn 保存の成功ではフラグは残らない() {
     fs::write(e.file("a.txt"), b"x").unwrap();
     let s0 = stamp(&e.fs, &e.path("a.txt"));
     save(&e.fs, &e.path("a.txt"), b"y", Expect::Stamp(s0)).unwrap();
-    assert!(e.flags().is_empty());
+    let actual = e.flags();
+    assert!(actual.is_empty(), "{actual:?}");
 }
 
 #[test]
@@ -212,12 +213,14 @@ fn 置換前の失敗では一時ファイルとフラグの両方を消す() {
         e.fs.write_atomic(&p, &mut Fail, &SaveOptions::user_file(Expect::Stamp(s0)))
             .unwrap_err();
     assert_eq!(err.kind, eve_core::FsErrorKind::SourceFailed);
-    assert!(e.flags().is_empty());
+    let actual = e.flags();
+    assert!(actual.is_empty(), "{actual:?}");
     assert_eq!(names(&e.root), ["a.txt"]);
     // 照合の不一致 (フラグを書く前)
     fs::write(e.file("a.txt"), b"changed by someone").unwrap();
     assert!(save(&e.fs, &p, b"z", Expect::Stamp(s0)).is_err());
-    assert!(e.flags().is_empty());
+    let actual = e.flags();
+    assert!(actual.is_empty(), "{actual:?}");
 }
 
 #[test]
@@ -334,11 +337,8 @@ fn 状態ディレクトリを持たない実装はフラグを書かず空を�
     let e = Env::new("nostate");
     let fs_no_state = NativeFs::default();
     save(&fs_no_state, &e.path("a.txt"), b"x", Expect::Absent).unwrap();
-    assert!(e.flags().is_empty());
-    assert!(
-        fs_no_state
-            .inflight_for(&e.path("a.txt"))
-            .unwrap()
-            .is_empty()
-    );
+    let actual = e.flags();
+    assert!(actual.is_empty(), "{actual:?}");
+    let actual = fs_no_state.inflight_for(&e.path("a.txt")).unwrap();
+    assert!(actual.is_empty(), "{actual:?}");
 }

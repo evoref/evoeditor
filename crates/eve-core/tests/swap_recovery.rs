@@ -156,7 +156,8 @@ fn 保存すれば_新しいスワップを待たずに古いスワップを消�
     h.run_jobs();
     assert!(!h.is_dirty());
     assert_eq!(h.fs_read("/w/a.txt").unwrap(), b"recovered");
-    assert!(h.fs.swap_entries().is_empty());
+    let actual = h.fs.swap_entries();
+    assert!(actual.is_empty(), "{actual:?}");
 }
 
 // verifies: FR-118, NFR-307
@@ -195,7 +196,8 @@ fn 破棄を選ぶとスワップを消し_文書は変えない() {
     h.run_jobs();
     assert_eq!(h.doc_text(), "");
     assert!(!h.is_dirty());
-    assert!(h.fs.swap_entries().is_empty());
+    let actual = h.fs.swap_entries();
+    assert!(actual.is_empty(), "{actual:?}");
     assert!(h.messages().contains(&"info.swap.discarded".to_owned()));
 }
 

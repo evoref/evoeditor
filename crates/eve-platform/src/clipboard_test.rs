@@ -102,7 +102,7 @@ pub fn serve_delayed(text: &str, delay_ms: u64, lifetime_ms: u64, ready: impl Fn
             lpszMenuName: std::ptr::null(),
             lpszClassName: class.as_ptr(),
         };
-        RegisterClassW(&wc);
+        RegisterClassW(&raw const wc);
         let hwnd = CreateWindowExW(
             0,
             class.as_ptr(),
@@ -132,9 +132,9 @@ pub fn serve_delayed(text: &str, delay_ms: u64, lifetime_ms: u64, ready: impl Fn
         );
         ready();
         let mut msg: MSG = std::mem::zeroed();
-        while GetMessageW(&mut msg, std::ptr::null_mut(), 0, 0) > 0 {
-            TranslateMessage(&msg);
-            DispatchMessageW(&msg);
+        while GetMessageW(&raw mut msg, std::ptr::null_mut(), 0, 0) > 0 {
+            TranslateMessage(&raw const msg);
+            DispatchMessageW(&raw const msg);
         }
     }
     true
