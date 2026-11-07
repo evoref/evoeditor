@@ -15,6 +15,29 @@ use super::pending::*;
 use crate::command::{CommandResult, RejectReason};
 use crate::editor::state::EditorState;
 
+/// 旧本文の位置 `head` の行:桁 (書記素) を、新本文の同じ行:桁へ写す (03 §9.5)。
+/// 新本文の行が足りなければ最後の行、桁が足りなければ行末にする。
+fn same_line_col(
+    old: &eve_text::Text,
+    new: &eve_text::Text,
+    head: eve_text::ByteOff,
+) -> eve_text::ByteOff {
+    use eve_text::{ByteOff, TextRead, next_grapheme_boundary};
+    let head = ByteOff(head.0.min(old.len_bytes()));
+    let line = old.byte_to_line(head);
+    let (mut p, mut col) = (old.line_to_byte(line), 1);
+    while p < head {
+        let n = next_grapheme_boundary(old, p);
+        if n == p {
+            break;
+        }
+        p = n;
+        col += 1;
+    }
+    let last = new.len_lines().saturating_sub(1);
+    crate::view::motion::line_col_byte(new, line.0.min(last), col)
+}
+
 impl EditorState {
     /// 確認を済ませた (または dirty でない) 開き直しの開始。同じ `DocumentId` で読込ジョブを投入し、読込中は旧本文を表示し続ける。
     pub(crate) fn start_reopen(&mut self, doc_id: DocumentId, enc: Encoding) -> CommandResult {
@@ -143,7 +166,7 @@ impl EditorState {
             return;
         };
         format.eol_stats = crate::document::EolStats::count(&text);
-        let change = FormatChange {
+        let change = FormatChange::Reload {
             before: FormatState {
                 format: old.format.clone(),
                 read_only: old.read_only,
@@ -166,10 +189,11 @@ impl EditorState {
             self.reopen_restore(doc_id);
             return;
         };
-        // カーソルは同じ位置を目安にし (新しい内容の範囲に収める)、Undo では元の Selection に戻す
+        // カーソルは同じ行:桁 (書記素) を目安にし (行・桁が足りなければ最後の行・行末に丸める)、Undo では元の Selection に戻す
         let before_sel = self.docs.views.get(&view).map(|v| v.selection.clone());
         let head = before_sel.as_ref().map_or(0, |s| s.primary().head.0);
-        let after_sel = Selection::point(ByteOff(head.min(new_len))).normalized(&text);
+        let after_sel =
+            Selection::point(same_line_col(old.text(), &text, ByteOff(head))).normalized(&text);
         let tx = Transaction::new(cs, Origin::Reload, self.now)
             .with_selections(before_sel, Some(after_sel))
             .with_view(view)

@@ -1055,6 +1055,28 @@ fn 再読込は外部の変更を取り込み_undo_で戻せる() {
     assert!(!doc(&s).1.is_dirty());
 }
 
+// spec: 03 §9.5 (再読込の後のカーソルは同じ行:桁 (書記素) を目安にする)
+#[test]
+fn 再読込の後のカーソルは同じ行と桁に置く() {
+    let mut s = env();
+    s.fs.add_file("/w/a.txt", b"aaa\nbbbb\nccc");
+    open(&mut s, "/w/a.txt");
+    keys(&mut s, "ctrl+end left"); // 3 行目の 3 桁 (cc|c)
+    assert_eq!(s.selection_range(), (11, 11));
+    // 外部で前の方に行が足され、3 行目は全角の行になった
+    s.fs.set_file(
+        &FsPath::from("/w/a.txt"),
+        "x\naaa\n日本語です\nccc".as_bytes(),
+    );
+    run(&mut s, "file.reload", Args::new());
+    let p = "x\naaa\n日本".len();
+    assert_eq!(s.selection_range(), (p, p), "3 行目の 3 桁 (日本|語)");
+    // 行が足りなければ最後の行、桁が足りなければ行末
+    s.fs.set_file(&FsPath::from("/w/a.txt"), b"z");
+    run(&mut s, "file.reload", Args::new());
+    assert_eq!(s.selection_range(), (1, 1));
+}
+
 #[test]
 fn 再読込の書式の変更は_undo_で本文と一緒に戻る() {
     let mut s = env();

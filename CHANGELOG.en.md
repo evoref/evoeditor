@@ -18,6 +18,10 @@ The Japanese version ([CHANGELOG.md](CHANGELOG.md)) is authoritative. Both are u
 
 ### Fixed
 
+- **Moving a multi-line selection up or down broke the selection from the second move**: with lines of different lengths, the selected range shifted from the second move on. The same lines now stay selected however many times you move them.
+- **Undoing a line-ending conversion also reverted a later encoding or BOM change**: undo now restores only the line ending (a later save uses the encoding you chose).
+- **Reloading a file could move the cursor to a different line**: after the file was changed externally near the top, reload kept the same byte offset and the cursor jumped to another line. It now stays at the same line and column (in characters).
+- **The line-ending and long-line counts could go wrong after replacing in many places at once**: after edits that change several places in one step, or that join or split CR and LF, the status bar's line-ending indicator and the long-line count could disagree with the text.
 - **Keys were written differently depending on where they appeared**: the help key list, keys inside messages and the display after `Ctrl+K` showed `Ctrl+PageDown` and `Ctrl+Shift+Up`, while the command palette and the hint bar showed `Ctrl+PgDn` and `Del` for the same keys. All places now use `PgUp` / `PgDn`, arrow symbols such as `↑` (`Up` etc. when box drawing is limited to ASCII), and `Delete` / `Insert` / `PrintScreen`.
 - **The "characters that cannot be saved" confirmation for Shift_JIS / EUC-JP could point to a later character first**: when a character that changes into another character on saving (such as `¥`) came before a character that cannot be represented, the confirmation showed (and moved to) the later one first. Characters are now reported in document order.
 - **`--check-config` printed message keys for settings not supported in this version**: with a reserved section such as `[ai]`, or `preset` directly under `[keys]` in the keymap, `evoeditor --check-config` printed the message key as is (such as `msg.config.unsupported.text`). It now prints "{item} is not supported in this version and was ignored".

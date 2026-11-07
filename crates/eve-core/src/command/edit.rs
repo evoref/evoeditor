@@ -152,7 +152,7 @@ fn clipboard_cut(ctx: &mut CommandCtx<'_>) -> CommandResult {
 // ---------- 改行コードの変換 (03 §8.4、FR-113) ----------
 
 /// `file.set_line_ending { eol }`。`eol` と異なるすべての区切りを `eol` に置き換え、`default_eol` も `eol` にする。
-/// 1 つの Transaction (`UndoGroupHint::Break`) で適用し、Undo ノードの `format_change` に前後の書式を持たせる (1 回の Undo で本文と
+/// 1 つの Transaction (`UndoGroupHint::Break`) で適用し、Undo ノードの `format_change` に前後の `default_eol` だけを持たせる (1 回の Undo で本文と
 /// `default_eol` が戻る、03 §7.2)。変える改行が無ければ本文は変えず、`default_eol` だけを変える (メタデータ。Undo の対象外)。
 fn set_line_ending(ctx: &mut CommandCtx<'_>) -> CommandResult {
     use eve_text::LineEnding;
