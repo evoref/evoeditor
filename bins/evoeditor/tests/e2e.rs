@@ -579,7 +579,9 @@ fn コンソールを閉じると未保存の内容を退避して終了する()
         "{manifest}"
     );
     assert!(
-        manifest.contains("complete = true"),
+        // 退避できた = 全文書が OS に渡った (`stored = true`、NFR-302 AC-5)。`complete` (fsync まで済み) は
+        // 時間予算の残りで決まり、負荷の下では false になり得る (02 §11.2.1 の 2 段の書く順)
+        manifest.contains("stored = true"),
         "{manifest}\n{}",
         rescue_report(&s, exited_after)
     );
@@ -819,7 +821,9 @@ fn パニックすると端末を戻し_未保存の内容を退避してクラ�
     let manifest = std::fs::read_to_string(dirs[0].join("manifest.toml")).unwrap();
     assert!(manifest.contains("reason = \"panic\""), "{manifest}");
     assert!(
-        manifest.contains("complete = true"),
+        // 退避できた = 全文書が OS に渡った (`stored = true`、NFR-302 AC-5)。`complete` (fsync まで済み) は
+        // 時間予算の残りで決まり、負荷の下では false になり得る (02 §11.2.1 の 2 段の書く順)
+        manifest.contains("stored = true"),
         "{manifest}\n--- log\n{}",
         state_log(&s)
     );
@@ -891,7 +895,9 @@ fn コンソールイベントで退避して終了する(kind: &str) {
     let manifest = std::fs::read_to_string(dirs[0].join("manifest.toml")).unwrap();
     assert!(manifest.contains("reason = \"signal\""), "{manifest}");
     assert!(
-        manifest.contains("complete = true"),
+        // 退避できた = 全文書が OS に渡った (`stored = true`、NFR-302 AC-5)。`complete` (fsync まで済み) は
+        // 時間予算の残りで決まり、負荷の下では false になり得る (02 §11.2.1 の 2 段の書く順)
+        manifest.contains("stored = true"),
         "{manifest}\n--- log\n{}",
         state_log(&s)
     );
@@ -949,7 +955,9 @@ fn シグナルで退避して同じシグナルで終わる(name: &str, want: &
     let manifest = std::fs::read_to_string(dirs[0].join("manifest.toml")).unwrap();
     assert!(manifest.contains("reason = \"signal\""), "{manifest}");
     assert!(
-        manifest.contains("complete = true"),
+        // 退避できた = 全文書が OS に渡った (`stored = true`、NFR-302 AC-5)。`complete` (fsync まで済み) は
+        // 時間予算の残りで決まり、負荷の下では false になり得る (02 §11.2.1 の 2 段の書く順)
+        manifest.contains("stored = true"),
         "{manifest}\n--- log\n{}",
         state_log(&s)
     );
@@ -1015,7 +1023,9 @@ fn メインが止まっていても_sigterm_で端末を戻して同じシグ�
     assert_eq!(dirs.len(), 1, "{dirs:?}");
     let manifest = std::fs::read_to_string(dirs[0].join("manifest.toml")).unwrap();
     assert!(
-        manifest.contains("complete = true"),
+        // 退避できた = 全文書が OS に渡った (`stored = true`、NFR-302 AC-5)。`complete` (fsync まで済み) は
+        // 時間予算の残りで決まり、負荷の下では false になり得る (02 §11.2.1 の 2 段の書く順)
+        manifest.contains("stored = true"),
         "{manifest}\n--- log\n{}",
         state_log(&s)
     );
@@ -1116,7 +1126,9 @@ fn メインが止まっていても_ctrl_break_で端末を戻して終了す�
     assert_eq!(dirs.len(), 1, "{dirs:?}");
     let manifest = std::fs::read_to_string(dirs[0].join("manifest.toml")).unwrap();
     assert!(
-        manifest.contains("complete = true"),
+        // 退避できた = 全文書が OS に渡った (`stored = true`、NFR-302 AC-5)。`complete` (fsync まで済み) は
+        // 時間予算の残りで決まり、負荷の下では false になり得る (02 §11.2.1 の 2 段の書く順)
+        manifest.contains("stored = true"),
         "{manifest}\n--- log\n{}",
         state_log(&s)
     );
@@ -1168,7 +1180,9 @@ fn メインが止まっていてもコンソールを閉じると未保存の�
         "{manifest}"
     );
     assert!(
-        manifest.contains("complete = true"),
+        // 退避できた = 全文書が OS に渡った (`stored = true`、NFR-302 AC-5)。`complete` (fsync まで済み) は
+        // 時間予算の残りで決まり、負荷の下では false になり得る (02 §11.2.1 の 2 段の書く順)
+        manifest.contains("stored = true"),
         "{manifest}\n{}",
         rescue_report(&s, exited_after)
     );
