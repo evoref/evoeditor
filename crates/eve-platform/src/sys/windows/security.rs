@@ -59,7 +59,8 @@ impl OwnerOnly {
         Ok(OwnerOnly {
             descriptor,
             attrs: SECURITY_ATTRIBUTES {
-                nLength: std::mem::size_of::<SECURITY_ATTRIBUTES>() as u32,
+                nLength: u32::try_from(std::mem::size_of::<SECURITY_ATTRIBUTES>())
+                    .unwrap_or(u32::MAX),
                 lpSecurityDescriptor: descriptor,
                 bInheritHandle: 0,
             },
@@ -202,7 +203,8 @@ fn owner_sid_of(path: &Path) -> io::Result<String> {
         )
     };
     if rc != 0 {
-        return Err(io::Error::from_raw_os_error(rc as i32));
+        // Win32 のエラー番号 (DWORD) を、io::Error の i32 にビットのまま入れる
+        return Err(io::Error::from_raw_os_error(rc.cast_signed()));
     }
     let r = sid_string(owner);
     // SAFETY: 上で確保された記述子。`owner` はこの後使わない。

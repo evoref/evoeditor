@@ -49,10 +49,10 @@ pub(super) fn render_search_bar(
     let width_of = |short: bool| -> u16 {
         toggles
             .iter()
-            .map(|t| (if short { &t.1 } else { &t.0 }).chars().count() as u16)
+            .map(|t| crate::cells((if short { &t.1 } else { &t.0 }).chars().count()))
             .sum::<u16>()
             // トグルの間の空白
-            + (toggles.len() as u16 - 1)
+            + (crate::cells(toggles.len()) - 1)
     };
     let label_w = text_width(&bar.label.spans);
     // 右端には件数を置く。検索語を使えないときは、件数の代わりに理由を出す
@@ -90,7 +90,7 @@ pub(super) fn render_search_bar(
         } else {
             style
         };
-        let ts = Span::new(text.as_str(), text.chars().count() as u16, tstyle);
+        let ts = Span::new(text.as_str(), crate::cells(text.chars().count()), tstyle);
         rx = w.span(rx, y, cols, &ts);
     }
     if show_count && let Some(c) = right_text {

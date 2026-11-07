@@ -696,7 +696,8 @@ fn 全公開キーで型の取り違えは警告して既定値に戻す() {
             "{key} = {value}"
         );
         assert_eq!(d.value, shown, "{key} = {value}");
-        assert_eq!((d.line, d.column), (1, key.len() as u32 + 4), "{key}");
+        let col = u32::try_from(key.len()).expect("キーは短い") + 4;
+        assert_eq!((d.line, d.column), (1, col), "{key}");
     }
 }
 

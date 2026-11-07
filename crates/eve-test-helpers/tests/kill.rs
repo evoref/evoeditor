@@ -314,7 +314,7 @@ fn バックアップの書込中の中断は不完全として案内し_t_は�
     let e = Env::new("ip-midbackup");
     // 1 チャンク (1 MiB) より大きい元ファイルで、バックアップの途中を作る
     let orig: Vec<u8> = (0..2 * 1024 * 1024)
-        .map(|i| b'a' + (i % 26) as u8)
+        .map(|i| b'a' + u8::try_from(i % 26).expect("26 未満"))
         .collect();
     fs::write(e.file("a.txt"), &orig).unwrap();
     killed(&e.save("a.txt", "inplace", NEW, Some("kill_mid_backup")));
@@ -369,7 +369,9 @@ fn バックアップの後の切断点では完全なバックアップが残�
 #[test]
 fn 上書きの途中の中断では_t_は半端に書き換わりバックアップが元の内容を保つ() {
     let e = Env::new("ip-mid");
-    let orig: Vec<u8> = (0..200_000).map(|i| b'a' + (i % 26) as u8).collect();
+    let orig: Vec<u8> = (0..200_000)
+        .map(|i| b'a' + u8::try_from(i % 26).expect("26 未満"))
+        .collect();
     fs::write(e.file("a.txt"), &orig).unwrap();
     let new: Vec<u8> = vec![b'N'; 200_000];
     killed(&e.save(

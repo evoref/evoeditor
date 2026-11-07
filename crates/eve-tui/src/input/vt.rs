@@ -124,9 +124,10 @@ fn tilde_key(n: u32) -> Option<KeyCode> {
         4 | 8 => KeyCode::End,
         5 => KeyCode::PageUp,
         6 => KeyCode::PageDown,
-        11..=15 => KeyCode::F((n - 10) as u8),
-        17..=21 => KeyCode::F((n - 11) as u8),
-        23 | 24 => KeyCode::F((n - 12) as u8),
+        // 範囲の腕の中なので差は u8 に収まる
+        11..=15 => KeyCode::F(u8::try_from(n - 10).ok()?),
+        17..=21 => KeyCode::F(u8::try_from(n - 11).ok()?),
+        23 | 24 => KeyCode::F(u8::try_from(n - 12).ok()?),
         _ => return None,
     })
 }
@@ -466,7 +467,10 @@ impl VtParser {
             state |= button_bits::CTRL;
         }
         // 座標は 1 始まり。`params` が u16 の上限で止めるので、i32 で溢れない (SAF-08)
-        let (col, row) = (x as i32 - 1, y as i32 - 1);
+        let (col, row) = (
+            i32::try_from(x).unwrap_or(i32::MAX) - 1,
+            i32::try_from(y).unwrap_or(i32::MAX) - 1,
+        );
         let rec = |buttons, flags| MouseRec {
             col,
             row,
@@ -479,7 +483,8 @@ impl VtParser {
             return Some(match b & 3 {
                 0 => rec(self.buttons | (120 << 16), button_bits::WHEELED),
                 1 => rec(
-                    self.buttons | ((-120i16 as u16 as u32) << 16),
+                    // 上位 16 ビットは符号付き (Windows の dwButtonState と同じ形)。ビットのまま入れる
+                    self.buttons | (u32::from((-120i16).cast_unsigned()) << 16),
                     button_bits::WHEELED,
                 ),
                 _ => rec(self.buttons, button_bits::HWHEELED),
@@ -820,8 +825,8 @@ mod tests {
         );
         assert_eq!(recs[2].buttons & button_bits::LEFT, 0, "解放");
         assert_eq!(recs[3].flags, button_bits::WHEELED);
-        assert!(((recs[3].buttons >> 16) as u16 as i16) > 0, "上");
-        assert!(((recs[4].buttons >> 16) as u16 as i16) < 0, "下");
+        assert!(((recs[3].buttons >> 16) as u16).cast_signed() > 0, "上");
+        assert!(((recs[4].buttons >> 16) as u16).cast_signed() < 0, "下");
         // 20 = 左 + Shift + Ctrl
         assert_eq!(recs[5].state & button_bits::SHIFT, button_bits::SHIFT);
         assert_ne!(recs[5].state & button_bits::CTRL, 0);

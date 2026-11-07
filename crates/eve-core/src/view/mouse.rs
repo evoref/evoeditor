@@ -154,11 +154,13 @@ impl EditorState {
             .max()
             .unwrap_or(0);
         let left = i64::from(v.scroll.left_col);
-        let new = (left + delta).clamp(0, widest.saturating_sub(1) as i64);
+        let max_left = i64::try_from(widest.saturating_sub(1)).unwrap_or(i64::MAX);
+        let new = left.saturating_add(delta).clamp(0, max_left);
         if new != left
             && let Some(v) = self.docs.views.get_mut(&view)
         {
-            v.scroll.left_col = new as u32;
+            // left_col は u32。それより右へは動かさない (0 以上は clamp で保証)
+            v.scroll.left_col = u32::try_from(new).unwrap_or(u32::MAX);
             self.mark_dirty_render();
         }
     }
@@ -169,8 +171,9 @@ impl EditorState {
         let d = self.docs.documents.get(&v.doc)?;
         let (cols, rows) = self.viewport();
         let gw = i32::from(crate::layout::gutter_width(d, cols as usize));
-        let row = at.row.clamp(0, (i32::from(rows) - 1).max(0)) as usize;
-        let text_col = (at.col - gw).max(0) as usize;
+        // どちらも 0 以上に丸めてから変換する
+        let row = usize::try_from(at.row.clamp(0, (i32::from(rows) - 1).max(0))).unwrap_or(0);
+        let text_col = usize::try_from(at.col.saturating_sub(gw).max(0)).unwrap_or(0);
         let t = d.text();
         let n_lines = t.len_lines();
         if let Some((s, width)) = wrap_ctx(self, at.view) {

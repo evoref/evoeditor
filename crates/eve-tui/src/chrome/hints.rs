@@ -31,7 +31,7 @@ pub(super) fn hint_total(entries: &[HintEntry<'_>], compact: bool) -> u16 {
             }
         })
         .sum();
-    sum + live.len().saturating_sub(1) as u16 * gap
+    sum.saturating_add(crate::cells(live.len().saturating_sub(1)).saturating_mul(gap))
 }
 
 pub(super) fn render_hints(

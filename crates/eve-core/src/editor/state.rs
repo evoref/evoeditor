@@ -741,7 +741,9 @@ impl EditorState {
                 {
                     let cols = crate::layout::wrap_width(document, viewport);
                     let n = crate::layout::line_rows(document, top_line, view.wrap, cols).len();
-                    view.scroll.wrap_idx.min(n.saturating_sub(1) as u32)
+                    view.scroll
+                        .wrap_idx
+                        .min(u32::try_from(n.saturating_sub(1)).unwrap_or(u32::MAX))
                 } else {
                     0
                 };
@@ -829,7 +831,7 @@ impl EditorState {
         let Some(doc) = self.docs.views.get(&view).map(|v| v.doc) else {
             return;
         };
-        let max_top = self.max_top_line(doc) as i64;
+        let max_top = self.max_top_line(doc);
         let Some(v) = self.docs.views.get_mut(&view) else {
             return;
         };
@@ -837,8 +839,15 @@ impl EditorState {
             return;
         };
         let t = d.text();
-        let top = t.byte_to_line(v.scroll.top).0 as i64;
-        let new = top.saturating_add(delta).clamp(0, max_top.max(0)) as usize;
+        let top = t.byte_to_line(v.scroll.top).0;
+        // 符号付きの変換をせずに、0..=max_top で止める
+        let step = usize::try_from(delta.unsigned_abs()).unwrap_or(usize::MAX);
+        let new = if delta >= 0 {
+            top.saturating_add(step)
+        } else {
+            top.saturating_sub(step)
+        }
+        .min(max_top);
         v.scroll.top = t.line_to_byte(LineIdx(new));
         self.out.needs_render = true;
     }

@@ -55,7 +55,8 @@ fn restore_now(fd: i32, bytes: &[u8], mode: Option<&libc::termios>) {
         // SAFETY: `rest` は有効な領域。fd が無効なら失敗を返すだけ。
         let n = unsafe { libc::write(fd, rest.as_ptr().cast(), rest.len()) };
         if n > 0 {
-            rest = &rest[n as usize..];
+            // n > 0 を確かめた後
+            rest = &rest[n.unsigned_abs()..];
         } else if n < 0 && io::Error::last_os_error().raw_os_error() == Some(libc::EINTR) {
             continue;
         } else {
@@ -244,7 +245,7 @@ mod tests {
             // SAFETY: 有効な書込先。
             let n = unsafe { libc::read(fd, buf.as_mut_ptr().cast(), buf.len()) };
             if n > 0 {
-                out.extend_from_slice(&buf[..n as usize]);
+                out.extend_from_slice(&buf[..n.unsigned_abs()]);
             } else {
                 std::thread::sleep(Duration::from_millis(10));
                 if !out.is_empty() {
@@ -288,7 +289,7 @@ mod tests {
         assert!(!echo_on(s));
         let flag = AtomicBool::new(false);
         assert!(emergency_restore(
-            s as usize,
+            usize::try_from(s).unwrap(),
             b"\x18\x1b[?1049l",
             &saved,
             &flag
@@ -299,7 +300,7 @@ mod tests {
         assert!(out.ends_with(b"\x1b[?1049l"), "{out:?}");
         set_raw(s);
         assert!(
-            !emergency_restore(s as usize, b"x", &saved, &flag),
+            !emergency_restore(usize::try_from(s).unwrap(), b"x", &saved, &flag),
             "復元済み"
         );
         assert!(!echo_on(s));

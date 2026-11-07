@@ -87,7 +87,8 @@ pub(crate) fn move_no_replace(from: &Path, to: &Path) -> Result<(), u32> {
 
 /// `move_no_replace` の `io::Error` 版。
 pub(crate) fn rename_no_replace(from: &Path, to: &Path) -> io::Result<()> {
-    move_no_replace(from, to).map_err(|code| io::Error::from_raw_os_error(code as i32))
+    // Win32 のエラー番号 (DWORD) を、io::Error の i32 にビットのまま入れる
+    move_no_replace(from, to).map_err(|code| io::Error::from_raw_os_error(code.cast_signed()))
 }
 
 /// `ReplaceFileW(T, tmp, backup, 0)` を 1 回だけ呼ぶ (再試行は呼び側)。失敗は `GetLastError` のコード。
@@ -121,7 +122,7 @@ pub(crate) fn set_allocation_size(file: &File, size: i64) -> Result<(), u32> {
             file.as_raw_handle(),
             FileAllocationInfo,
             ptr::from_ref(&info).cast(),
-            std::mem::size_of::<FILE_ALLOCATION_INFO>() as u32,
+            u32::try_from(std::mem::size_of::<FILE_ALLOCATION_INFO>()).unwrap_or(u32::MAX),
         )
     };
     if ok != 0 {

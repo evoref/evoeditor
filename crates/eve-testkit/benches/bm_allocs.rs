@@ -40,7 +40,8 @@ fn main() {
             println!(
                 "{}\t{}",
                 st.allocations + st.reallocations,
-                st.bytes_allocated + st.bytes_reallocated.max(0) as usize
+                st.bytes_allocated
+                    + usize::try_from(st.bytes_reallocated.max(0)).expect("max(0) で非負")
             );
         }
     }

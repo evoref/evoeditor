@@ -39,7 +39,7 @@ pub(super) fn render_help(
     let max = lines.len().saturating_sub(body_rows);
     let first = (*scroll).min(max);
     for (i, line) in lines.iter().skip(first).take(body_rows).enumerate() {
-        let y = 1 + i as u16;
+        let y = crate::cells(i).saturating_add(1);
         match line.kind {
             HelpLineKind::Heading => {
                 let st = overlay_style(

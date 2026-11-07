@@ -213,7 +213,7 @@ fn open_inner(
         let first = plan.is_none();
         if first {
             let head = &chunk[..chunk.len().min(SNIFF_LEN)];
-            let file_complete = meta.len as usize <= head.len();
+            let file_complete = usize::try_from(meta.len).is_ok_and(|n| n <= head.len());
             let Detection {
                 kind,
                 confidence,
@@ -247,8 +247,11 @@ fn open_inner(
                 let mut probe = Decoder::new(enc, bom_len > 0);
                 let mut sink = String::new();
                 probe.decode(head, file_complete, &mut sink);
-                let permille =
-                    (u64::from(probe.invalid_bytes()) * 1000 / head.len().max(1) as u64) as u32;
+                // 不正バイトは head の中の数なので 1000 以下
+                let permille = u32::try_from(
+                    u64::from(probe.invalid_bytes()) * 1000 / head.len().max(1) as u64,
+                )
+                .unwrap_or(u32::MAX);
                 if permille > MANY_INVALID_PERMILLE {
                     return JobResult::NeedsConfirm {
                         job: id,
@@ -270,7 +273,8 @@ fn open_inner(
             });
         }
         // 読む量の上限
-        let room = limit.saturating_sub(read_total) as usize;
+        // usize に収まらない残りは、上限が無いのと同じ
+        let room = usize::try_from(limit.saturating_sub(read_total)).unwrap_or(usize::MAX);
         if chunk.len() > room {
             chunk = &chunk[..room];
             truncated = true;

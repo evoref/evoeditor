@@ -186,13 +186,14 @@ mod tests {
         let w = start("test", move |ev| g.lock().unwrap().push(ev)).unwrap();
         assert!(w.wait_ready(Duration::from_secs(5)));
         let hwnd = *w.hwnd.get().unwrap() as HWND;
+        let logoff = LPARAM::try_from(ENDSESSION_LOGOFF).unwrap();
         // SAFETY: 作ったウィンドウへの同期の送信 (ウィンドウのスレッドが処理して戻る)
-        let r = unsafe { SendMessageW(hwnd, WM_QUERYENDSESSION, 0, ENDSESSION_LOGOFF as LPARAM) };
+        let r = unsafe { SendMessageW(hwnd, WM_QUERYENDSESSION, 0, logoff) };
         assert_eq!(r, 1);
         // SAFETY: 同上
         unsafe { SendMessageW(hwnd, WM_ENDSESSION, 0, 0) };
         // SAFETY: 同上
-        unsafe { SendMessageW(hwnd, WM_ENDSESSION, 1, ENDSESSION_LOGOFF as LPARAM) };
+        unsafe { SendMessageW(hwnd, WM_ENDSESSION, 1, logoff) };
         // 問い合わせは別スレッドで届くので、3 つそろうまで待つ
         let end = Instant::now() + Duration::from_secs(5);
         while got.lock().unwrap().len() < 3 && Instant::now() < end {

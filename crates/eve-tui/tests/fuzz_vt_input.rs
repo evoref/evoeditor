@@ -1,5 +1,9 @@
 //! `fuzz_vt_input` の本体を proptest で回す (docs/review/v0.3-findings.md の §2.7 の 8。libFuzzer は MSVC 非対応なので、
 //! CI ではこの試験で同じ関数を検査し、Linux の夜間ジョブで fuzz する)。
+#![expect(
+    clippy::cast_possible_truncation,
+    reason = "テスト用の数値変換。値は小さく収まる"
+)]
 
 use eve_tui::vt_input::fuzz_pipeline;
 use proptest::prelude::*;

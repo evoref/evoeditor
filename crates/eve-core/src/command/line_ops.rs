@@ -317,7 +317,8 @@ fn move_lines(ctx: &mut CommandCtx<'_>, up: bool) -> CommandResult {
             moved.push(Moved {
                 block: (a, b),
                 be,
-                delta: -((bs - ps) as i64),
+                back: bs - ps,
+                fwd: 0,
                 after: (end, ps + (be - bs) + (bs - pe)),
             });
         } else {
@@ -340,7 +341,8 @@ fn move_lines(ctx: &mut CommandCtx<'_>, up: bool) -> CommandResult {
             moved.push(Moved {
                 block: (a, b),
                 be,
-                delta: (ne - be) as i64,
+                back: 0,
+                fwd: ne - be,
                 after: (ns, end),
             });
         }
@@ -359,7 +361,7 @@ fn move_lines(ctx: &mut CommandCtx<'_>, up: bool) -> CommandResult {
                 };
                 let shift = |p: Pos| -> Pos {
                     if p.0 <= m.be {
-                        ByteOff((p.0 as i64 + m.delta) as usize)
+                        ByteOff((p.0 + m.fwd).saturating_sub(m.back))
                     } else if p.0 == m.after.0 {
                         ByteOff(m.after.1)
                     } else {
@@ -377,8 +379,9 @@ struct Moved {
     block: Block,
     /// ブロックの最後の行の本文の末尾 (改行の前。旧座標)。
     be: usize,
-    /// ブロックの本文の位置のずれ。
-    delta: i64,
+    /// ブロックの本文の位置のずれ (前へ動かす量と後へ動かす量。どちらかは 0。符号付きの変換をしない)。
+    back: usize,
+    fwd: usize,
     /// ブロックの後の行頭 (旧座標) と、その写し先 (移した後のブロックの本文の末尾と、それに続く改行の後)。
     after: (usize, usize),
 }

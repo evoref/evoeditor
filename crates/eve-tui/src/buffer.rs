@@ -147,7 +147,7 @@ impl Writer<'_> {
         if n <= 1 || !(span.width as usize).is_multiple_of(n) {
             return self.span(x, y, limit, span);
         }
-        let w = span.width / n as u16;
+        let w = span.width / crate::cells(n);
         for g in text.graphemes(true) {
             if x >= limit {
                 break;
@@ -291,7 +291,7 @@ pub fn render_panes_in(
         };
         for pane in &frame.panes {
             for (i, row) in pane.rows.iter().enumerate() {
-                let i = i as u16;
+                let i = crate::cells(i);
                 if i >= pane.rect.rows {
                     break;
                 }

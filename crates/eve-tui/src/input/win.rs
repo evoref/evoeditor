@@ -195,7 +195,7 @@ fn read_chunk(
     out: &mut Vec<Raw>,
     mouse: &mut Vec<MouseRec>,
 ) -> io::Result<()> {
-    let n = want.min(buf.len() as u32);
+    let n = want.min(u32::try_from(buf.len()).unwrap_or(u32::MAX));
     let mut got = 0u32;
     // SAFETY: `buf` は `n` 件以上の有効な領域、`got` は書込先の有効な u32。
     if unsafe { ReadConsoleInputW(h, buf.as_mut_ptr(), n, &raw mut got) } == 0 {
@@ -403,9 +403,10 @@ impl ConsoleOut {
         if unsafe { SetConsoleMode(h, mode) } == 0 {
             return Err(io::Error::last_os_error());
         }
-        let mut buf = vec![0u16; 4096];
-        // SAFETY: `buf` は `buf.len()` 個の u16 の有効な領域。
-        let n = unsafe { GetConsoleTitleW(buf.as_mut_ptr(), buf.len() as u32) } as usize;
+        const TITLE_CAP: u32 = 4096;
+        let mut buf = vec![0u16; TITLE_CAP as usize];
+        // SAFETY: `buf` は `TITLE_CAP` 個の u16 の有効な領域。
+        let n = unsafe { GetConsoleTitleW(buf.as_mut_ptr(), TITLE_CAP) } as usize;
         let title = (n > 0 && n < buf.len()).then(|| buf[..n].to_vec());
         Ok(ConsoleOut {
             handle: Handle(h),
@@ -432,7 +433,8 @@ impl ConsoleOut {
                 WriteConsoleW(
                     self.handle.0,
                     rest.as_ptr().cast(),
-                    n as u32,
+                    // n は MAX_UNITS 以下なので u32 に収まる (書けた分だけ進むので、丸めても欠けない)
+                    u32::try_from(n).unwrap_or(u32::MAX),
                     &raw mut written,
                     std::ptr::null(),
                 )

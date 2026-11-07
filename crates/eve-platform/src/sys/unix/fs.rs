@@ -99,13 +99,14 @@ pub(crate) fn list_xattrs(f: &File) -> io::Result<Vec<Vec<u8>>> {
             Err(e)
         };
     }
-    let mut buf = vec![0u8; n as usize];
+    // n >= 0 を確かめた後
+    let mut buf = vec![0u8; n.unsigned_abs()];
     // SAFETY: `buf` は `n` バイト。
     let n = unsafe { libc::flistxattr(fd, buf.as_mut_ptr().cast(), buf.len()) };
     if n < 0 {
         return Err(io::Error::last_os_error());
     }
-    buf.truncate(n as usize);
+    buf.truncate(n.unsigned_abs());
     Ok(buf
         .split(|b| *b == 0)
         .filter(|s| !s.is_empty())
@@ -122,13 +123,14 @@ pub(crate) fn get_xattr(f: &File, name: &[u8]) -> io::Result<Vec<u8>> {
     if n < 0 {
         return Err(io::Error::last_os_error());
     }
-    let mut buf = vec![0u8; n as usize];
+    // n >= 0 を確かめた後
+    let mut buf = vec![0u8; n.unsigned_abs()];
     // SAFETY: `buf` は `n` バイト。
     let n = unsafe { libc::fgetxattr(fd, c.as_ptr(), buf.as_mut_ptr().cast(), buf.len()) };
     if n < 0 {
         return Err(io::Error::last_os_error());
     }
-    buf.truncate(n as usize);
+    buf.truncate(n.unsigned_abs());
     Ok(buf)
 }
 

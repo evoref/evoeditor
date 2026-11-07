@@ -20,9 +20,11 @@ fn body(fill: char) -> Vec<u8> {
 
 /// (確保したバイト数, 残ったバイト数)。
 fn bytes(st: &Stats) -> (usize, isize) {
-    let allocated = st.bytes_allocated + st.bytes_reallocated.max(0) as usize;
-    let retained =
-        st.bytes_allocated as isize - st.bytes_deallocated as isize + st.bytes_reallocated;
+    let allocated =
+        st.bytes_allocated + usize::try_from(st.bytes_reallocated.max(0)).expect("max(0) で非負");
+    let retained = isize::try_from(st.bytes_allocated).expect("確保量は isize に収まる")
+        - isize::try_from(st.bytes_deallocated).expect("解放量は isize に収まる")
+        + st.bytes_reallocated;
     (allocated, retained)
 }
 
@@ -51,7 +53,7 @@ fn 再読込は本文を複写しない() {
     );
     // 残るのは新本文の rope だけ (旧本文は Undo の履歴が旧 rope のまま持つ)
     assert!(
-        retained < (new.len() as isize) * 3 / 2,
+        retained < isize::try_from(new.len()).expect("本文は isize に収まる") * 3 / 2,
         "残った確保 {retained}"
     );
     // Undo で旧本文に、Redo で新本文に戻る

@@ -65,7 +65,8 @@ fn restore_now(out: HANDLE, bytes: &[u8], (out_mode, in_mode): (Option<u32>, Opt
         WriteConsoleW(
             out,
             units.as_ptr().cast(),
-            units.len() as u32,
+            // 復元の列は短い。収まらなければ先頭の u32::MAX 単位だけを書く (復元の経路なのでパニックにしない)
+            u32::try_from(units.len()).unwrap_or(u32::MAX),
             &raw mut written,
             std::ptr::null(),
         );

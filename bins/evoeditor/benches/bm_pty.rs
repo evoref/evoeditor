@@ -27,6 +27,11 @@
 
 #![cfg_attr(not(windows), allow(dead_code, unused_imports))]
 #![allow(clippy::print_stdout, clippy::print_stderr)]
+#![expect(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "計測用の数値変換。値は十分に小さい"
+)]
 // 計測の駆動側の読み取りスレッド (製品のスレッドではない。R11 の対象外)
 #![allow(clippy::disallowed_methods)]
 

@@ -66,6 +66,10 @@ print_stderr = "warn"
 borrow_as_ptr = "warn"
 ptr_as_ptr = "warn"
 assert_is_empty = "warn"
+# 本文の位置・長さ・幅・行番号・端末の座標の `as` の変換で、値が黙って欠ける・符号が変わるのを防ぐ。
+cast_possible_truncation = "warn"
+cast_possible_wrap = "warn"
+cast_sign_loss = "warn"
 
 # 配布ビルドと BM 計測だけに使う (docs/05 §16.3)。CI の通常ジョブは dev プロファイルと cargo check で回す。
 [profile.release]

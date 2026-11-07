@@ -1,6 +1,10 @@
 //! Undo 履歴のメモリ (01 FR-203 AC-3 / NFR-203 AC-2、docs/09 §3.2)。
 //! ランダムな編集 (64 KiB 以上の削除を一定割合で含む) の後、プロセスのメモリ (Windows の Private Bytes) の増分が
 //! Undo の会計値の 1.2 倍以下であること。Private Bytes は Windows だけで読める (他の OS では会計値の整合だけを検査する)。
+#![expect(
+    clippy::cast_possible_truncation,
+    reason = "テスト用の数値変換。値は小さく収まる"
+)]
 
 use std::time::Duration;
 

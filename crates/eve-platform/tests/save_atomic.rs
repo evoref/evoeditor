@@ -147,7 +147,9 @@ fn 既存のファイルを置換する() {
 fn 大きな内容を複数のチャンクで書く() {
     let t = Tmp::new("big");
     let p = t.path("big.bin");
-    let data: Vec<u8> = (0..3 * 1024 * 1024).map(|i| (i % 251) as u8).collect();
+    let data: Vec<u8> = (0..3 * 1024 * 1024)
+        .map(|i| u8::try_from(i % 251).expect("251 未満"))
+        .collect();
     save(&p, &data, Expect::Absent).unwrap();
     assert_eq!(fs::read(t.p("big.bin")).unwrap(), data);
 }

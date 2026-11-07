@@ -125,7 +125,11 @@ impl LineRows {
 pub(crate) fn gutter_width(doc: &Document, cols: usize) -> u16 {
     let lines = doc.text().len_lines().max(1);
     let w = lines.to_string().len().max(2) + 1;
-    if cols >= w + 2 { w as u16 } else { 0 }
+    if cols >= w + 2 {
+        super::cells_u16(w)
+    } else {
+        0
+    }
 }
 
 /// 隣り合う Span を結合する (Span の契約: 含む書記素の幅がすべて同じ)。結合するのは、印字できる ASCII の連続と、
@@ -321,7 +325,7 @@ pub(super) fn build_row(
             }
             risky |= u.risky;
             if c0 >= win_start && c <= win_end {
-                push_span(&mut spans, &mut wide_tail, text, w as u16, style);
+                push_span(&mut spans, &mut wide_tail, text, super::cells_u16(w), style);
             } else {
                 // セルの途中で切れる: 見える分のセルを空白で埋める
                 let visible = c.min(win_end) - c0.max(win_start);
@@ -331,7 +335,7 @@ pub(super) fn build_row(
                     &mut spans,
                     &mut wide_tail,
                     &" ".repeat(visible),
-                    visible as u16,
+                    super::cells_u16(visible),
                     style,
                 );
             }
@@ -342,7 +346,7 @@ pub(super) fn build_row(
             0,
             Span {
                 text: " ".repeat(shift),
-                width: shift as u16,
+                width: super::cells_u16(shift),
                 style: Style::DEFAULT,
             },
         );
@@ -373,7 +377,7 @@ pub(super) fn build_row(
     RowOut {
         row: RenderRow {
             source: RowSource::Line {
-                line: line as u32,
+                line: super::index_u32(line),
                 wrap_idx: part.map_or(0, |p| p.wrap_idx),
             },
             gutter,

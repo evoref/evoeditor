@@ -49,7 +49,8 @@ const ERROR_UNABLE_TO_MOVE_REPLACEMENT_2: u32 = 1177;
 const NAME_LIMIT: usize = 255;
 
 pub(crate) fn os_error(code: u32, path: &FsPath) -> FsError {
-    map_io_error(io::Error::from_raw_os_error(code as i32), path)
+    // Win32 のエラー番号 (DWORD) を、io::Error の i32 にビットのまま入れる
+    map_io_error(io::Error::from_raw_os_error(code.cast_signed()), path)
 }
 
 /// `.<name>.eve-<kind>-<pid>-<rand8>`。全体が 255 UTF-16 単位を超えるときは `<name>` を文字境界で切り詰め、`~<hash8>` を付ける (05 §4.1)。
@@ -82,7 +83,10 @@ fn sibling_name(name: &str, kind: &str) -> String {
 fn rand32() -> u32 {
     let mut h = RandomState::new().build_hasher();
     h.write_u32(std::process::id());
-    h.finish() as u32
+    // 乱数としてハッシュの下位 32 ビットを使う (上位は捨ててよい)
+    (h.finish() & u64::from(u32::MAX))
+        .try_into()
+        .unwrap_or_default()
 }
 
 /// 保存先 T: シンボリックリンクなら最終リンク先 (ダングリングは `NotFound` + `DanglingLink`)。
@@ -224,7 +228,7 @@ impl WinFs {
         let mut file = match create_new(&tmp, owner.as_ref()) {
             Ok(f) => f,
             // 親に書込権限がない (一時ファイルを作れない): 確認付きの直接上書きへ (05 §4.4)
-            Err(e) if e.raw_os_error() == Some(ERROR_ACCESS_DENIED as i32) => {
+            Err(e) if e.raw_os_error() == Some(ERROR_ACCESS_DENIED.cast_signed()) => {
                 flag.remove();
                 return Err(FsError::new(FsErrorKind::AtomicUnsupported));
             }
@@ -360,7 +364,7 @@ impl WinFs {
                     ReplaceFailure::Other(code) if intact => {
                         abort(&tmp, &mut flag);
                         let mut err = FsError::new(FsErrorKind::AtomicUnsupported);
-                        err.source = Some(io::Error::from_raw_os_error(code as i32));
+                        err.source = Some(io::Error::from_raw_os_error(code.cast_signed()));
                         err
                     }
                     ReplaceFailure::Other(_) => FsError::new(FsErrorKind::ReplacedMovedToBackup {

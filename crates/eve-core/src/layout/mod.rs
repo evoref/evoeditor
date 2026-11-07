@@ -29,3 +29,14 @@ mod wrap_scroll;
 use long::{CharWidth, ColIndex};
 pub use wrap::{Affinity, WrapMode, WrapSettings};
 use wrap::{cursor_in_rows, wrap_line};
+
+/// 画面のセルの数・座標 (usize) を `u16` にする。収まらない値は `u16::MAX` で止める
+/// (描画の座標は u16。黙って下位のビットだけにしない。描画の経路なのでパニックにもしない)。
+pub(crate) fn cells_u16(n: usize) -> u16 {
+    u16::try_from(n).unwrap_or(u16::MAX)
+}
+
+/// 行番号・折り返しの番号 (usize) を `u32` にする。収まらない値は `u32::MAX` で止める。
+pub(crate) fn index_u32(n: usize) -> u32 {
+    u32::try_from(n).unwrap_or(u32::MAX)
+}

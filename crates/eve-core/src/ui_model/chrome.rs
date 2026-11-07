@@ -274,7 +274,7 @@ pub(crate) fn overlay_models(state: &EditorState) -> Vec<OverlayModel> {
                 .iter()
                 .enumerate()
                 .map(|(i, d)| Choice {
-                    id: ChoiceId(i as u16),
+                    id: ChoiceId(u16::try_from(i).unwrap_or(u16::MAX)),
                     label: cell_text(&render(state, &key(d.id), &args), CutPolicy::Never),
                     key: d.accel,
                     destructive: d.destructive,
@@ -284,7 +284,7 @@ pub(crate) fn overlay_models(state: &EditorState) -> Vec<OverlayModel> {
             // 同じ意味の表示が 2 つ並ばないよう付けない (`Esc` は変わらずキャンセルの番号に届く)
             if !c.choices.iter().any(|d| d.id == "abort") {
                 choices.push(Choice {
-                    id: ChoiceId(c.cancel_index() as u16),
+                    id: ChoiceId(u16::try_from(c.cancel_index()).unwrap_or(u16::MAX)),
                     label: cell_text(
                         &render(state, keys::UI_CONFIRM_CANCEL, &[]),
                         CutPolicy::Never,
@@ -303,8 +303,8 @@ pub(crate) fn overlay_models(state: &EditorState) -> Vec<OverlayModel> {
                         .collect()
                 }),
                 choices,
-                default: ChoiceId(c.default as u16),
-                focused: ChoiceId(c.focused as u16),
+                default: ChoiceId(u16::try_from(c.default).unwrap_or(u16::MAX)),
+                focused: ChoiceId(u16::try_from(c.focused).unwrap_or(u16::MAX)),
                 nav_hint: Some(cell_text(
                     &render(state, keys::UI_CONFIRM_NAV_HINT, &[]),
                     CutPolicy::End,

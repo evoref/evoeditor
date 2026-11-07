@@ -129,7 +129,7 @@ fn wrapped_rows(
                 first: wr.first,
                 end: wr.end,
                 indent: wr.indent,
-                wrap_idx: r as u32,
+                wrap_idx: super::index_u32(r),
                 last: r + 1 == wrows.len(),
             };
             let ro = build_row(doc, line, 0, text_cols, sel, &[], marks, gutter, Some(part));
@@ -142,8 +142,8 @@ fn wrapped_rows(
                 let (cr, cc) = cursor_in_rows(&us, &wrows, h - ls, aff);
                 if cr == r && cc < text_cols {
                     let pos = CellPos {
-                        col: gw + cc as u16,
-                        row: out_rows.len() as u16,
+                        col: gw.saturating_add(super::cells_u16(cc)),
+                        row: super::cells_u16(out_rows.len()),
                     };
                     cursors.push(pos);
                     if h == primary_head {
@@ -264,8 +264,8 @@ pub(crate) fn build_frame(
             for (&h, &c) in here.iter().zip(&ro.cursor_cols) {
                 if c >= left && c - left < text_cols {
                     let pos = CellPos {
-                        col: gw + (c - left) as u16,
-                        row: r as u16,
+                        col: gw.saturating_add(super::cells_u16(c - left)),
+                        row: super::cells_u16(r),
                     };
                     cursors.push(pos);
                     if h == primary_head {
@@ -282,8 +282,8 @@ pub(crate) fn build_frame(
         rect: CellRect {
             col: 0,
             row: 0,
-            cols: cols as u16,
-            rows: rows as u16,
+            cols: super::cells_u16(cols),
+            rows: super::cells_u16(rows),
         },
         revision: (doc.revision(), ViewRevision(0)),
         gutter_width: gw,
@@ -294,8 +294,8 @@ pub(crate) fn build_frame(
     Some(Frame {
         window,
         size: CellSize {
-            cols: cols as u16,
-            rows: rows as u16,
+            cols: super::cells_u16(cols),
+            rows: super::cells_u16(rows),
         },
         panes: vec![pane],
         focus: if overlay_open {

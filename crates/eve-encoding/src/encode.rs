@@ -92,8 +92,9 @@ pub mod cp932 {
             return None;
         }
         let n = v - GAIJI_FIRST;
-        let lead = 0xF0 + (n / 188) as u8;
-        let t = (n % 188) as u8;
+        // 外字の範囲 (0xE000..=0xE757、1880 字) なので n / 188 < 10、n % 188 < 188
+        let lead = 0xF0 + u8::try_from(n / 188).ok()?;
+        let t = u8::try_from(n % 188).ok()?;
         let trail = if t < 0x3F { 0x40 + t } else { 0x41 + t };
         Some([lead, trail])
     }

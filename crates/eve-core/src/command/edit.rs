@@ -101,13 +101,17 @@ fn edit_each_as(
         return CommandResult::Rejected(RejectReason::InvalidArgs);
     };
     // 適用後の Selection: 挿入の直後に置くものは数値で、それ以外は写像で求める
-    let mut delta: i64 = 0;
+    // 前の編集で足した量と消した量 (符号付きの変換をしない)。編集は昇順で重ならないので、
+    // 開始 + 足した量 >= 消した量
+    let mut added = 0usize;
+    let mut removed = 0usize;
     let mut ranges = Vec::with_capacity(plans.len());
     for (r, plan) in before.iter().zip(&plans) {
         match plan {
             Some(p) => {
-                let new_start = (p.del.start.0 as i64 + delta) as usize;
-                delta += p.ins.len() as i64 - p.del.len() as i64;
+                let new_start = (p.del.start.0 + added) - removed;
+                added += p.ins.len();
+                removed += p.del.len();
                 ranges.push(match p.cursor {
                     CursorRule::AfterInsert => Range::point(ByteOff(new_start + p.ins.len())),
                     CursorRule::Keep => r.map(&cs, Bias::After),

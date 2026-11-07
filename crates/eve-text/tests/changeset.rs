@@ -2,6 +2,12 @@
 //!
 //! 文字列の素朴なモデル (`&str` を直接組み立てる) と、`Text::apply` の結果を突き合わせる。
 //! Undo 相当として、適用のたびに `invert` を積み、逆順に適用して元に戻ることも確かめる。
+#![expect(
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::cast_sign_loss,
+    reason = "テスト用の数値変換。値は小さく収まる"
+)]
 
 use eve_text::{
     Bias, ByteOff, ByteRange, ChangeSet, ChangeSetError, ComposeError, Edit, EditError, InsertText,

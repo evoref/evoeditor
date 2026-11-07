@@ -87,15 +87,17 @@ pub fn map_io_error(e: io::Error, path: &FsPath) -> FsError {
 fn file_time(t: io::Result<std::time::SystemTime>) -> FileTime {
     match t {
         Ok(t) => match t.duration_since(UNIX_EPOCH) {
+            // i64 を超える秒は上限で止める
             Ok(d) => FileTime {
-                secs: d.as_secs() as i64,
+                secs: i64::try_from(d.as_secs()).unwrap_or(i64::MAX),
                 nanos: d.subsec_nanos(),
             },
             // 紀元より前 (まれ): 負の秒で表す
             Err(e) => {
                 let d = e.duration();
                 FileTime {
-                    secs: -(d.as_secs() as i64) - i64::from(d.subsec_nanos() > 0),
+                    secs: -i64::try_from(d.as_secs()).unwrap_or(i64::MAX)
+                        - i64::from(d.subsec_nanos() > 0),
                     nanos: if d.subsec_nanos() > 0 {
                         1_000_000_000 - d.subsec_nanos()
                     } else {
@@ -252,7 +254,7 @@ mod tests {
         let t = Tmp::new("big");
         let p = t.path("big.bin");
         let data: Vec<u8> = (0..(READ_CHUNK_BYTES * 2 + 123))
-            .map(|i| (i % 251) as u8)
+            .map(|i| u8::try_from(i % 251).expect("251 未満"))
             .collect();
         File::create(p.as_path()).unwrap().write_all(&data).unwrap();
         let fsys = WinFs::default();

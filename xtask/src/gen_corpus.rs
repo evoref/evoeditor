@@ -71,7 +71,7 @@ impl Rng {
 
     /// 0 以上 `n` 未満。
     fn below(&mut self, n: usize) -> usize {
-        (self.next_u64() % n as u64) as usize
+        usize::try_from(self.next_u64() % n as u64).expect("n 未満なので usize に収まる")
     }
 
     fn pick<'a>(&mut self, items: &[&'a str]) -> &'a str {
@@ -172,7 +172,9 @@ fn write_long_line(
         if written + add > target {
             // 残りを ASCII の 'x' で埋めて、目標のバイト数ちょうどにする
             let rest = target - written;
-            w.write_all(&vec![b'x'; rest as usize])?;
+            let rest_len = usize::try_from(rest)
+                .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
+            w.write_all(&vec![b'x'; rest_len])?;
             written += rest;
             break;
         }

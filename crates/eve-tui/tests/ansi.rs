@@ -1,5 +1,9 @@
 //! 差分出力 (`ansi::Emitter`) の検査 (docs/04 §4.3 / §4.5 / §4.6 / §4.7)。出力を最小の仮想端末で解釈し、
 //! 部分更新の結果が全再描画と同じ画面になること (S-06 の 1,000 回更新の確認と同じ性質) を確かめる。
+#![expect(
+    clippy::cast_possible_truncation,
+    reason = "テスト用の数値変換。値は小さく収まる"
+)]
 
 use eve_testkit::{Harness, VirtualScreen, WidthConfig};
 use eve_tui::ansi::{ENTER, Emitter, LEAVE};

@@ -16,6 +16,11 @@
 //! ```
 
 #![allow(clippy::print_stdout, clippy::print_stderr)]
+#![expect(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "計測用の数値変換。値は十分に小さい"
+)]
 
 #[cfg(any(windows, unix))]
 mod imp {

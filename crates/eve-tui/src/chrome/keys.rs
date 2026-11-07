@@ -25,5 +25,5 @@ pub fn key_label_compact(label: &KeyLabel, ascii: bool) -> String {
 
 pub(super) fn label_width(s: &str) -> u16 {
     // この層が作るキー表記は ASCII と、非縮退時の矢印 (1 セル) だけ
-    s.chars().count() as u16
+    crate::cells(s.chars().count())
 }

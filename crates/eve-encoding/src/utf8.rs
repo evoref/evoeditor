@@ -17,10 +17,10 @@ pub fn escape_byte(b: u8) -> char {
 
 /// エスケープ文字なら元のバイト。
 pub fn unescape_char(c: char) -> Option<u8> {
-    let v = c as u32;
-    (ESCAPE_BASE..=ESCAPE_BASE + 0xFF)
-        .contains(&v)
-        .then(|| (v - ESCAPE_BASE) as u8)
+    // ESCAPE_BASE..=ESCAPE_BASE + 0xFF の中のときだけ、差が u8 に収まる
+    (c as u32)
+        .checked_sub(ESCAPE_BASE)
+        .and_then(|d| u8::try_from(d).ok())
 }
 
 /// 不正バイトのエスケープの扱い (03 §8.1 / §8.3)。

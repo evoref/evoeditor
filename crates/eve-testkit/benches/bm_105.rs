@@ -10,6 +10,12 @@
 //! 基準機 (ENV-W1) で他の重い作業を止めて実行する。結果は標準出力に出す。
 
 #![allow(clippy::print_stdout, clippy::print_stderr)]
+#![expect(
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::cast_sign_loss,
+    reason = "計測用の数値変換。値は十分に小さい"
+)]
 
 use std::time::{Duration, Instant};
 
