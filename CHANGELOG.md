@@ -9,6 +9,10 @@ v0.1.0 のリリースまでの `0.0.x` は、マイルストーンを数える�
 
 ## [Unreleased]
 
+### 追加
+
+- 開発者向け: 生成リファレンス `docs/reference/` (コマンド一覧・既定キーマップ・設定の既定値) と、それを作る `cargo xtask gen-reference` (`--check` で最新性と仕様のカタログとの突合。`cargo xtask check` に含めた)。入力にする隠しオプション `--list-commands [--json]` と `--dump-keymap [--json]` (利用者のキーマップを重ねた結果) を追加した (`--help` には出さない。docs/09 §11.2)。
+
 ### 変更
 
 - eve-view: `DocumentInfo.read_only` の型を `Vec<String>` (変種名の文字列) から `Vec<ReadOnlyReasonView>` (新しい enum) に変えた (破壊的変更。`Query::Documents` の応答)。`Capabilities.osc52_write`・`InputEvent::Resize` の説明を実装に合わせた (型は変えない)。

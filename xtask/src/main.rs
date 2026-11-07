@@ -10,6 +10,7 @@
 //! - `review-wording`: 日本語 UI 文言の人手レビュー用の一覧 (docs/review/ja-wording-v0.1.md) を生成する
 //! - `dist`: 配布 zip / tar.gz と SHA256SUMS の作成・検査 (`--verify ARCHIVE` で検査だけ。docs/05 §18.2)
 //! - `gen-notices`: THIRD-PARTY-NOTICES.md の生成 (`--check` で最新性の検査。docs/05 §17.1)
+//! - `gen-reference`: 生成リファレンス docs/reference/* の生成 (`--check` で最新性と 07 §11.6 のカタログとの突合。docs/09 §11.2)
 //! - `check-ac-checklist`: `tests/ac-checklist.toml` の検査 (docs/11 §3.3)
 //! - `bench`: ベンチの記録 (docs/09 §5.2)
 //! - `check-themes`: 組込みテーマのロール表の検査 (docs/09 §3.5、docs/07 §8.2)
@@ -42,6 +43,7 @@ mod crash_consistency;
 mod dist;
 mod gen_corpus;
 mod gen_notices;
+mod gen_reference;
 mod i18n;
 mod nightly;
 mod no_network;
@@ -68,6 +70,7 @@ const USAGE: &str = "\
   review-wording      日本語 UI 文言のレビュー用の一覧の生成 (--reviewed 日付: 全件 OK の記録)
   dist                配布 zip / tar.gz と SHA256SUMS の作成と検査 (--verify ARCHIVE: 検査だけ。--target T (Linux の musl 版) / --exe / --version)
   gen-notices         THIRD-PARTY-NOTICES.md の生成 (cargo-about。--check: 最新性の検査)
+  gen-reference       生成リファレンス docs/reference/* の生成 (bin の --list-commands 等の JSON から。--check: 最新性と 07 §11.6 との突合)
   check-ac-checklist  tests/ac-checklist.toml の検査 (check の一部)
   bench               ベンチの記録 (BM-103a・BM-205 → target/bench/bench.json。--quick は動作確認用。
                       --env ENV-W1 --out DIR: 基準機の記録 (BM-106・端末込みの BM-101b/102b/103b/107 も測り、DIR に JSON と summary.md)
@@ -93,6 +96,7 @@ fn main() -> ExitCode {
         Some("review-wording") => review_wording::run(&args.collect::<Vec<_>>()),
         Some("dist") => dist::run(&args.collect::<Vec<_>>()),
         Some("gen-notices") => gen_notices::run(&args.collect::<Vec<_>>()),
+        Some("gen-reference") => gen_reference::run(&args.collect::<Vec<_>>()),
         Some("check-ac-checklist") => ac_checklist::run(),
         Some("bench") => bench::run_all(&args.collect::<Vec<_>>()),
         Some("check-themes") => check_themes::run_all(),

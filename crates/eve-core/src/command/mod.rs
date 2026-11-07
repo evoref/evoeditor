@@ -3,6 +3,7 @@
 //!
 //! spec: 02 §6, 07 §11.6 (カタログ), 03 §15 (編集・クリップボード)
 
+pub(crate) mod arg_schema;
 pub(crate) mod clipboard;
 pub(crate) mod context;
 pub(crate) mod edit;

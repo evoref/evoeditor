@@ -18,8 +18,8 @@ use crate::ui_model::overlay::Overlay;
 /// 候補の窓の最大行数 (04 §8.1)。
 pub(crate) const WINDOW: usize = 12;
 
-/// パレットに出さないコマンド (オーバーレイ内専用と内部用、07 §11.6)。
-fn hidden(id: &str) -> bool {
+/// パレットに出さないコマンド (`hidden`。オーバーレイ内専用と内部用、07 §11.6)。一覧の出力 (`--list-commands`) も使う。
+pub fn hidden(id: &str) -> bool {
     id.starts_with("internal.")
         || matches!(
             id,
@@ -45,7 +45,8 @@ pub(crate) struct ArgDef {
     choices: &'static [(&'static str, &'static str)],
 }
 
-const ENCODINGS: &[(&str, &str)] = &[
+/// 文字コードの引数の値 (値, 表示)。引数の形 (`arg_schema`) と共有する。
+pub(crate) const ENCODINGS: &[(&str, &str)] = &[
     ("utf-8", "UTF-8"),
     ("utf-16le", "UTF-16LE"),
     ("utf-16be", "UTF-16BE"),
@@ -54,12 +55,15 @@ const ENCODINGS: &[(&str, &str)] = &[
     ("iso-2022-jp", "ISO-2022-JP"),
 ];
 
+/// 改行コードの引数の値 (値, 表示)。引数の形 (`arg_schema`) と共有する。
+pub(crate) const LINE_ENDINGS: &[(&str, &str)] = &[("lf", "LF"), ("crlf", "CRLF"), ("cr", "CR")];
+
 const ARG_DEFS: &[ArgDef] = &[
     ArgDef {
         command: ids::FILE_SET_LINE_ENDING,
         arg: "eol",
         label_key: keys::UI_PALETTE_ARG_EOL,
-        choices: &[("lf", "LF"), ("crlf", "CRLF"), ("cr", "CR")],
+        choices: LINE_ENDINGS,
     },
     ArgDef {
         command: ids::FILE_REOPEN_WITH_ENCODING,
