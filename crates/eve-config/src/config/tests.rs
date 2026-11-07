@@ -677,7 +677,7 @@ fn 全公開キーで型の取り違えは警告して既定値に戻す() {
     for k in BOOL_KEYS {
         cases.push((k, "boolean", "1", "integer", "1"));
         cases.push((k, "boolean", "\"true\"", "string", "true"));
-        cases.push((k, "boolean", "0x10", "integer", "10"));
+        cases.push((k, "boolean", "0x10", "integer", "0x10"));
     }
     for k in &string_keys {
         cases.push((k, "string", "1", "integer", "1"));
@@ -716,8 +716,11 @@ fn 整数は進数と区切りを読み_範囲の端を含む() {
     for (src, shown) in [
         ("editor.tab_width = 17", "17"),
         ("editor.tab_width = 0", "0"),
-        ("editor.tab_width = 0x11", "11"),
-        ("editor.tab_width = 1_7", "17"),
+        // 書いたままの表記で記録する (進数の接頭辞・区切り・符号を落とさない)
+        ("editor.tab_width = 0x11", "0x11"),
+        ("editor.tab_width = 1_7", "1_7"),
+        ("editor.tab_width = +17", "+17"),
+        ("editor.tab_width = 17 # comment", "17"),
         // i64 に収まらないものは、読む前に TOML の解析が落とす場合がある
         (
             "editor.tab_width = 9223372036854775807",
@@ -731,6 +734,14 @@ fn 整数は進数と区切りを読み_範囲の端を含む() {
         assert_eq!(d.value, shown, "{src}");
         assert_eq!((d.line, d.column), (1, 20), "{src}");
     }
+}
+
+#[test]
+fn 型の違う小数は書いたままの表記で記録する() {
+    let l = load_str("editor.tab_width = 1_0.50\n");
+    assert_eq!(l.config.tab_width, 4);
+    let d = only_diag(&l, "editor.tab_width");
+    assert_eq!(d.value, "1_0.50");
 }
 
 #[test]

@@ -18,6 +18,7 @@ The Japanese version ([CHANGELOG.md](CHANGELOG.md)) is authoritative. Both are u
 
 ### Fixed
 
+- **Config diagnostics showed numbers in a different form than written**: a number written in hexadecimal, octal or binary, or with `_` separators (for example `tab_width = 0x11`), was shown without its prefix and separators (`11`) in out-of-range and other diagnostics, so it looked like a different value. It is now shown as written.
 - **Some config diagnostics had broken wording or no position**: for items without a default (a section written as a value, a wrong theme color), the hint said "This item uses the default " with an empty default (it now says "This item is ignored"). Diagnostics for unbinding the escape key (`"ctrl+q" = "none"`) and for an unknown role in a theme file now show the line and column where they were written.
 - **Some non-setting names in the config file were silently ignored instead of warned about**: writing a name that is not a setting key (a command or a color role name), such as `[ui] palette_open = 1`, gave no warning. The list of reserved keys now matches the spec table, and such names are reported.
 - **Moving a multi-line selection up or down broke the selection from the second move**: with lines of different lengths, the selected range shifted from the second move on. The same lines now stay selected however many times you move them.
