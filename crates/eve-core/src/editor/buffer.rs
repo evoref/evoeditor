@@ -71,11 +71,13 @@ impl EditorState {
         self.docs
             .documents
             .get(&doc)
-            .and_then(|d| d.path.as_ref().and_then(|p| p.file_name()))
-            .unwrap_or_else(|| {
-                self.catalog()
-                    .render(keys::STATUS_UNTITLED, &[("n", "1")], &|_| None)
+            .map(|d| {
+                d.path
+                    .as_ref()
+                    .and_then(|p| p.file_name())
+                    .unwrap_or_else(|| self.untitled_label(d))
             })
+            .unwrap_or_default()
     }
 
     /// 入力に合うバッファ (文書, 名前の中で照合した書記素の範囲)。空の入力は全件を並び順のまま返す。

@@ -241,13 +241,13 @@ fn 画面の外のカーソルは含めない() {
 fn タイトルと_revision() {
     let mut s = Scene::new("|", 20, 2);
     let t = s.frame().title;
-    assert_eq!(t, "無題 - evoeditor");
+    assert_eq!(t, "無題-1 - evoeditor");
     s.e.execute(
         CommandInvocation::new("edit.insert_text", InvocationSource::Keymap)
             .with_args(Args::new().with_str("text", "x")),
     );
     let f = s.frame();
-    assert_eq!(f.title, "* 無題 - evoeditor");
+    assert_eq!(f.title, "* 無題-1 - evoeditor");
     assert_eq!(f.panes[0].revision.0.0, 1);
     let _ = s.view;
 }

@@ -91,6 +91,8 @@ pub struct Document {
     pub display: DisplaySettings,
     /// レイアウトの覚え (長い行の表示単位・長大行の列の索引)。読み書きするのは `layout/` だけ。
     pub(crate) layout_cache: std::cell::RefCell<crate::layout::LayoutCache>,
+    /// 無題の通し番号 (`無題-{n}` の n、03 §9.8)。`EditorState::add_document` が振る。名前を付けて保存した後も戻さない。
+    pub(crate) untitled_no: Option<u32>,
 }
 
 /// `eol_stats` の更新の窓 (03 §6.5): 編集ごとに旧 `[s-1, e+1)`・新 `[s-1, s+|x|+1)` を取り、
@@ -141,6 +143,7 @@ impl Document {
             load_percent: 0,
             display: DisplaySettings::default(),
             layout_cache: std::cell::RefCell::default(),
+            untitled_no: None,
         }
     }
 
