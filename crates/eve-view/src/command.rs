@@ -4,15 +4,18 @@
 use std::fmt;
 use std::sync::Arc;
 
-/// `file.save` のような、`<名前空間>.<名前>` の形の識別子。CommandId 自体は翻訳しない。
+/// `file.save` のような、`<名前空間>.<名前>` の形の識別子。`CommandId` 自体は翻訳しない。
+/// 複製は参照の数を増やすだけで、文字列を写さない。
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct CommandId(Arc<str>);
 
 impl CommandId {
+    /// 文字列から作る。形 (`<名前空間>.<名前>`) やカタログ (07 §11.6) に有るかは検査しない。
     pub fn new(id: &str) -> CommandId {
         CommandId(Arc::from(id))
     }
 
+    /// 識別子の文字列 (`file.save` など)。
     pub fn as_str(&self) -> &str {
         &self.0
     }

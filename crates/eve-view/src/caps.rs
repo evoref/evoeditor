@@ -8,21 +8,28 @@
 
 use crate::input::KeyStroke;
 
-/// 色深度。
+/// 色深度。core は Frame を作るときに、テーマの各ロールについて事前に計算した 4 段のうち、この段の Style を選ぶ
+/// (02 §8.2「色の段」、ADR-0027)。frontend は再縮退しない。
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 #[non_exhaustive]
 pub enum ColorDepth {
+    /// 色なし (属性だけ。`NO_COLOR` など)。
     Mono,
+    /// 16 色 (`Color::Indexed` の 0〜15)。
     Ansi16,
+    /// 256 色 (`Color::Indexed` の 0〜255)。
     Ansi256,
+    /// 24 ビット色 (`Color::Rgb`)。
     #[default]
     TrueColor,
 }
 
-/// 端末の大きさ (セル単位)。
+/// 端末・面の大きさ (セル単位)。
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub struct CellSize {
+    /// 列数 (セル)。
     pub cols: u16,
+    /// 行数 (セル)。
     pub rows: u16,
 }
 
@@ -31,6 +38,7 @@ pub struct CellSize {
 pub struct Capabilities {
     /// 色深度。TUI は起動時に環境変数だけで判定し、実行中は変えない。
     pub color_depth: ColorDepth,
+    /// マウスの入力 (`InputEvent::Mouse`) を送れる。
     pub mouse: bool,
     /// kitty keyboard protocol などで修飾が区別できる。
     pub enhanced_keys: bool,
