@@ -36,6 +36,23 @@ fn read_slack(len: u64) -> u64 {
     (1024 * 1024).max(len / 16)
 }
 
+/// 利用者のデータ量で決まる確保の見込みを `try_reserve` で確かめる (INV-IO4、02 §11.2.2、03 §9.2)。
+/// 確保できたらすぐ解放する。rope の構築 (ropey) は確保の失敗を返せないので、読み始める前の検査で
+/// OOM で abort する経路を減らす。失敗は `JobError::OutOfMemory` (プロセスは続ける)。
+fn probe_reserve(len: u64) -> Result<(), JobError> {
+    let oom = JobError::OutOfMemory { requested: len };
+    let Ok(n) = usize::try_from(len) else {
+        return Err(oom);
+    };
+    let mut v: Vec<u8> = Vec::new();
+    if v.try_reserve_exact(n).is_err() {
+        return Err(oom);
+    }
+    // 使わない確保を最適化で消させない (消えると失敗を検出できない)
+    std::hint::black_box(v.as_ptr());
+    Ok(())
+}
+
 /// 開くときの指定。
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct OpenOptions {
@@ -149,6 +166,10 @@ fn open_inner(
         };
     }
     let stamp_before = FileStamp::from_meta(&meta, None);
+    // 本文の大きさ分を確保できるかを先に確かめる (rope の構築は確保の失敗を返せない。02 §11.2.2、03 §9.2)
+    if let Err(e) = probe_reserve(meta.len) {
+        return fail(e);
+    }
 
     // 3. 読み始める
     let mut reader = match ports.fs.open_read(path) {
@@ -280,6 +301,13 @@ fn open_inner(
             }
         }
         out.clear();
+        // 復号のバッファ: 1 バイトが最大 3 バイト (不正バイトの PUA・2 バイトの文字コード) になる
+        let need = chunk.len().saturating_mul(3).saturating_add(16);
+        if out.try_reserve(need).is_err() {
+            return fail(JobError::OutOfMemory {
+                requested: need as u64,
+            });
+        }
         dec.decode(chunk, false, &mut out);
         builder.append(&out);
         // 往復の検査は元のバイト列 (BOM を除く) で行う
