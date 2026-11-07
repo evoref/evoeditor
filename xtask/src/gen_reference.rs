@@ -304,31 +304,8 @@ fn normalize_keys(keys: &str) -> String {
 }
 
 /// コンテキストの差を警告にとどめる (コマンド, 設定の表記のキー, 理由)。実装かカタログを直したら行を消す。
-const CONTEXT_EXCEPTIONS: &[(&str, &str, &str)] = &[
-    ("cursor.move_word_left", "ctrl+left", PROMPT_WORD),
-    ("cursor.move_word_right", "ctrl+right", PROMPT_WORD),
-    ("edit.delete_word_backward", "ctrl+backspace", PROMPT_WORD),
-    ("edit.delete_word_forward", "ctrl+delete", PROMPT_WORD),
-    (
-        "select.all",
-        "ctrl+a",
-        "実装が誤り: 04 §7.2 の prompt の表に Ctrl+A (欄内全選択) があるが、prompt に割当が無い",
-    ),
-    ("ui.list_next", "down", LIST_NAV),
-    ("ui.list_prev", "up", LIST_NAV),
-    ("ui.list_next", "ctrl+n", LIST_NAV),
-    ("ui.list_prev", "ctrl+p", LIST_NAV),
-    ("ui.list_page_down", "pagedown", LIST_NAV),
-    ("ui.list_page_up", "pageup", LIST_NAV),
-    (
-        "ui.message_history",
-        "ctrl+k m",
-        "実装が誤り: 07 §7.1 は global の既定の割当を app.quit・ui.palette_open・ui.redraw・help.open に限る。実装は global に置いている",
-    ),
-];
-
-const PROMPT_WORD: &str = "実装が誤り: 04 §7.2 の prompt の表に Ctrl+←/→・Ctrl+Backspace / Ctrl+Delete があるが、prompt に割当が無い";
-const LIST_NAV: &str = "実装が誤り: 候補の移動は list に置く (04 §7.2・07 §7.1)。実装は palette に置き、バッファ一覧の参照順に palette を足して届かせている";
+/// 今は空 (2026-11-07 の 12 件は実装を直した)。表と警告の仕組みは、次に判断を待つ差が出たときのために残す。
+const CONTEXT_EXCEPTIONS: &[(&str, &str, &str)] = &[];
 
 /// 07 §11.6 のカタログとの突合: (誤り, 警告)。`exceptions` はコンテキストの差を警告にとどめる (コマンド, キー, 理由)。
 fn compare_catalog(

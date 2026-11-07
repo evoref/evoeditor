@@ -6,7 +6,7 @@ global	F1	ui.palette_open	Args({})	ContextExpr(None)	false
 global	Ctrl+Shift+P	ui.palette_open	Args({})	ContextExpr(None)	true
 global	Ctrl+K R	ui.redraw	Args({})	ContextExpr(None)	false
 global	Ctrl+K H	help.open	Args({})	ContextExpr(None)	false
-global	Ctrl+K M	ui.message_history	Args({})	ContextExpr(None)	false
+editor	Ctrl+K M	ui.message_history	Args({})	ContextExpr(None)	false
 editor	Ctrl+K Z	app.suspend	Args({})	ContextExpr(None)	false
 editor	Alt+Z	view.toggle_wrap	Args({})	ContextExpr(None)	false
 editor	Ctrl+K O	view.toggle_wrap	Args({})	ContextExpr(None)	false
@@ -44,12 +44,12 @@ editor	Ctrl+F	search.open	Args({})	ContextExpr(None)	false
 editor	Esc	ui.cancel	Args({})	ContextExpr(None)	false
 editor	Ctrl+R	search.replace_open	Args({})	ContextExpr(None)	false
 editor	Ctrl+H	search.replace_open	Args({})	ContextExpr(None)	true
-palette	Down	ui.list_next	Args({})	ContextExpr(None)	false
-palette	Up	ui.list_prev	Args({})	ContextExpr(None)	false
-palette	Ctrl+N	ui.list_next	Args({})	ContextExpr(None)	false
-palette	Ctrl+P	ui.list_prev	Args({})	ContextExpr(None)	false
-palette	PageDown	ui.list_page_down	Args({})	ContextExpr(None)	false
-palette	PageUp	ui.list_page_up	Args({})	ContextExpr(None)	false
+list	Down	ui.list_next	Args({})	ContextExpr(None)	false
+list	Up	ui.list_prev	Args({})	ContextExpr(None)	false
+list	Ctrl+N	ui.list_next	Args({})	ContextExpr(None)	false
+list	Ctrl+P	ui.list_prev	Args({})	ContextExpr(None)	false
+list	PageDown	ui.list_page_down	Args({})	ContextExpr(None)	false
+list	PageUp	ui.list_page_up	Args({})	ContextExpr(None)	false
 dialog	Enter	ui.confirm	Args({})	ContextExpr(None)	false
 dialog	Esc	ui.cancel	Args({})	ContextExpr(None)	false
 dialog	Tab	ui.list_next	Args({})	ContextExpr(None)	false
@@ -68,6 +68,11 @@ prompt	Left	cursor.move_left	Args({})	ContextExpr(None)	false
 prompt	Right	cursor.move_right	Args({})	ContextExpr(None)	false
 prompt	Home	cursor.home	Args({})	ContextExpr(None)	false
 prompt	End	cursor.end	Args({})	ContextExpr(None)	false
+prompt	Ctrl+Backspace	edit.delete_word_backward	Args({})	ContextExpr(None)	false
+prompt	Ctrl+Delete	edit.delete_word_forward	Args({})	ContextExpr(None)	false
+prompt	Ctrl+Left	cursor.move_word_left	Args({})	ContextExpr(None)	false
+prompt	Ctrl+Right	cursor.move_word_right	Args({})	ContextExpr(None)	false
+prompt	Ctrl+A	select.all	Args({})	ContextExpr(None)	false
 editor	Ctrl+S	file.save	Args({})	ContextExpr(None)	false
 editor	Ctrl+Shift+S	file.save_as	Args({})	ContextExpr(None)	true
 editor	Ctrl+K S	file.save_as	Args({})	ContextExpr(None)	false

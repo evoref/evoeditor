@@ -12,6 +12,7 @@ mod quit_chain;
 pub(crate) use app_cmds::register;
 #[cfg(feature = "test-hooks")]
 pub(crate) use app_cmds::test_hook_panic_command;
+pub(crate) use input_field::field_selection;
 pub(crate) use prompt::{PromptKind, PromptState};
 pub(crate) use quit_chain::{ChoiceDef, ConfirmAction, ConfirmState, Continuation, QuitChain};
 

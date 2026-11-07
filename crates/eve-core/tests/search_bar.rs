@@ -402,3 +402,25 @@ fn トグルはバーを開き直すと既定に戻る() {
     let b = bar(&mut h);
     assert!(!b.regex && !b.whole_word);
 }
+
+// 検索バーは search → prompt → global (07 §7.1): `prompt` の欄内の単語の移動・削除・全選択が検索欄に効き、文書は動かない
+#[test]
+fn 検索欄でも単語の移動と削除と全選択が効き_文書は動かない() {
+    let mut h = Harness::new();
+    h.paste("one two three");
+    h.keys("ctrl+home ctrl+f");
+    h.text("abc def");
+    h.keys("ctrl+left");
+    assert_eq!(bar(&mut h).input.cursor, 4);
+    h.keys("ctrl+backspace");
+    let b = bar(&mut h);
+    let typed: String = b.input.cells.iter().map(|c| c.text.as_str()).collect();
+    assert_eq!((typed.as_str(), b.input.cursor), ("def", 0));
+    h.keys("ctrl+a");
+    assert_eq!(bar(&mut h).input.selection, Some(0..3));
+    h.text("two");
+    let b = bar(&mut h);
+    let typed: String = b.input.cells.iter().map(|c| c.text.as_str()).collect();
+    assert_eq!((typed.as_str(), b.input.selection), ("two", None));
+    assert_eq!(h.doc_text(), "one two three", "文書は編集されない");
+}

@@ -446,12 +446,13 @@ fn which_key_は編集面の左下に続きのキーと動作を重ねる() {
     };
     assert!(line_of("メッセージ履歴").contains("│ M "), "{all}");
     assert!(line_of("名前を付けて保存").contains("│ S "), "{all}");
-    // 左下: 編集面の最下行の近くにある
+    // 左下: 編集面の最下行の近くにある (一覧の末尾の行で確かめる。並びは editor → global の割当の順)
     let at = rows
         .iter()
-        .rposition(|r| r.contains("メッセージ履歴"))
+        .rposition(|r| r.contains("行を下へ移動"))
         .unwrap();
     assert!(at >= 12, "{at}");
+    assert!(line_of("行を下へ移動").starts_with("│ ↓ "), "{all}");
 }
 
 // verifies: FR-504

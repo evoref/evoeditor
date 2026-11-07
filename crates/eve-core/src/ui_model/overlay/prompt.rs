@@ -51,6 +51,8 @@ pub(crate) struct PromptState {
     pub text: String,
     /// `text` 内のカーソル (バイト。書記素境界)。
     pub cursor: usize,
+    /// 欄内全選択 (`select.all`) の最中。次の編集・移動で解ける。
+    pub all_selected: bool,
     /// 検証エラーの MessageKey の末尾 (`ui.prompt.<name>.error.<kind>`)。
     pub error: Option<&'static str>,
 }
@@ -90,6 +92,7 @@ impl EditorState {
             kind,
             text: initial,
             cursor,
+            all_selected: false,
             error: None,
         })));
         self.mark_dirty_render();

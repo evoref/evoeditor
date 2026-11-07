@@ -330,3 +330,23 @@ fn 一覧の中で_dirty_な文書を閉じると確認が出る() {
     assert!(!exists(&s, a) && exists(&s, b));
     assert_eq!(s.doc_id(), b);
 }
+
+// 一覧の移動は `list` (07 §7.1 の参照順: バッファ一覧は list → prompt → global)
+#[test]
+fn 一覧の中で_ctrl_n_と_ctrl_p_で選択が動く() {
+    let (mut s, _) = named_three();
+    run(&mut s, "buffer.list");
+    let (_, selected) = list_rows(&mut s);
+    assert_eq!(selected, 1);
+    keys(&mut s, "ctrl+n");
+    assert_eq!(list_rows(&mut s).1, 2);
+    keys(&mut s, "ctrl+p ctrl+p");
+    assert_eq!(list_rows(&mut s).1, 0);
+    assert_eq!(
+        s.overlay(),
+        "buffer_list",
+        "ctrl+p でパレットに切り替わらない"
+    );
+    keys(&mut s, "pagedown");
+    assert_eq!(list_rows(&mut s).1, 2);
+}

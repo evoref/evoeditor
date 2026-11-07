@@ -132,3 +132,15 @@ fn ヘルプ画面では_ctrl_c_は何もしない() {
     let actual = clipboard_writes(&h);
     assert!(actual.is_empty(), "{actual:?}");
 }
+
+// `ctrl+k m` は `editor` の割当 (07 §7.1: `global` の既定の割当は app.quit・ui.palette_open・ui.redraw・help.open だけ)
+#[test]
+fn オーバーレイの中では_ctrl_k_m_で履歴を開かない() {
+    let mut h = Harness::new().with_size(80, 20);
+    h.keys("ctrl+p");
+    assert_eq!(h.overlay(), "palette");
+    h.keys("ctrl+k m");
+    assert_eq!(h.overlay(), "palette", "パレットのまま");
+    h.keys("esc ctrl+k m");
+    assert_eq!(h.overlay(), "help", "編集面からは開く");
+}

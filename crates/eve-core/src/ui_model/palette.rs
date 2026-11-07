@@ -7,6 +7,8 @@ use std::ops::Range;
 use eve_text::grapheme_indices;
 use eve_view::{CutPolicy, InputFieldModel, KeyLabel, ListItem, OverlayModel};
 
+use crate::ui_model::overlay::field_selection;
+
 use crate::command::context::{ContextExpr, CtxValue};
 use crate::command::ids;
 use crate::command::{Args, CommandResult, RejectReason};
@@ -109,6 +111,8 @@ pub(crate) struct PaletteState {
     pub text: String,
     /// `text` 内のカーソル (バイト。書記素境界)。
     pub cursor: usize,
+    /// 欄内全選択 (`select.all`) の最中。次の編集・移動で解ける。
+    pub all_selected: bool,
     /// 一致した候補の中での選択位置。
     pub selected: usize,
     /// 引数を尋ねている最中のコマンド (`Esc` で 1 段戻る)。
@@ -520,6 +524,7 @@ impl EditorState {
             .collect();
         let cells = cell_text(&p.text, CutPolicy::End).spans;
         let cursor = cell_text(&p.text[..p.cursor], CutPolicy::End).spans.len();
+        let selection = field_selection(p.all_selected, cells.len());
         let title = render(
             keys::UI_PALETTE_ARG_TITLE,
             &[
@@ -541,7 +546,7 @@ impl EditorState {
                 cells,
                 first: 0,
                 cursor,
-                selection: None,
+                selection,
                 placeholder: None,
             },
             items,
@@ -600,6 +605,7 @@ impl EditorState {
             .collect();
         let cells = cell_text(&p.text, CutPolicy::End).spans;
         let cursor = cell_text(&p.text[..p.cursor], CutPolicy::End).spans.len();
+        let selection = field_selection(p.all_selected, cells.len());
         let placeholder = p
             .text
             .is_empty()
@@ -623,7 +629,7 @@ impl EditorState {
                 cells,
                 first: 0,
                 cursor,
-                selection: None,
+                selection,
                 placeholder,
             },
             items,

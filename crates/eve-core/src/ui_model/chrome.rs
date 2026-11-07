@@ -317,12 +317,13 @@ pub(crate) fn overlay_models(state: &EditorState) -> Vec<OverlayModel> {
             let name = p.kind.name();
             let cells = cell_text(&p.text, CutPolicy::End).spans;
             let cursor = cell_text(&p.text[..p.cursor], CutPolicy::End).spans.len();
+            let selection = crate::ui_model::overlay::field_selection(p.all_selected, cells.len());
             let input = InputFieldModel {
                 len: cells.len(),
                 cells,
                 first: 0,
                 cursor,
-                selection: None,
+                selection,
                 placeholder: None,
             };
             let hint_key = format!("ui.prompt.{name}.hint");
