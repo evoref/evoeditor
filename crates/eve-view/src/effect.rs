@@ -12,24 +12,32 @@ pub enum Effect {
     Quit {
         /// 終了コード (値の正本は 07 §18.4)。
         code: u8,
+        /// exit の前に未保存の文書を退避するか。
         rescue: QuitRescue,
-        /// 端末の復元の後に出す行。core は文言を解決せず、MessageKey の名前と引数で渡す。
+        /// 端末の復元の後に出す行 (この順)。core は文言を解決せず、`MessageKey` の名前と引数で渡す。
         stderr: Vec<StderrLine>,
     },
     /// クリップボードへの書込。
     SetClipboard {
+        /// 書き込む文字列 (小さければ直接、大きければハンドル)。
         content: ClipboardText,
+        /// 書込先のクリップボード。
         target: ClipboardTarget,
     },
     /// クリップボードの読込。応答は `InputEvent::ClipboardContent`。
     RequestClipboard {
+        /// 応答の `InputEvent::ClipboardContent` に同じ値を入れて返す。
         token: ClipboardToken,
+        /// 読む元のクリップボード。
         target: ClipboardTarget,
     },
     /// ベル。
     Bell,
     /// マウスの取得を有効 / 無効にする (`ui.toggle_mouse`。無効の間は端末のネイティブ選択・スクロールが使える、04 §6.8)。
-    SetMouseCapture { enabled: bool },
+    SetMouseCapture {
+        /// 真なら取得する (端末のマウスイベントを frontend が受ける)。
+        enabled: bool,
+    },
     /// 画面の全体を描き直す (`ui.redraw`。04 §4.7 (f)。ずれた表示からの回復)。
     Redraw,
     /// 自分を停止する (`app.suspend`。Unix のジョブ制御、05 §11.3)。frontend が端末を戻して止まり、再開したら全面を描き直す。
@@ -50,7 +58,7 @@ pub enum QuitRescue {
 /// 端末の復元の後に stderr へ出す 1 行の指定。
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct StderrLine {
-    /// MessageKey の名前 (`stderr.*` のみ)。
+    /// `MessageKey` の名前 (`stderr.*` のみ)。
     pub key: String,
     /// プレースホルダの名前と値。
     pub args: Vec<(String, String)>,
@@ -70,7 +78,9 @@ pub enum ClipboardText {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum ClipboardTarget {
+    /// OS の通常のクリップボード (Windows のクリップボード、X11 / Wayland の `CLIPBOARD`)。
     System,
+    /// X11 / Wayland の `PRIMARY` 選択 (中ボタンで貼る選択)。今の core はこの値を出さない (予約)。
     Primary,
 }
 

@@ -24,12 +24,19 @@ pub enum InputEvent {
     ///    frontend は描かずに今の大きさを送り直し、次の `Frame` で描く (04 §3.6)。大きさが前と同じなら core は何もしない。
     ///
     /// 起動時の最初の大きさは、このイベントではなく `Frontend::surface_size` から Host が渡す。
-    Resize { cols: u16, rows: u16 },
-    /// フォーカスの有無。
+    Resize {
+        /// 編集面の列数 (セル)。
+        cols: u16,
+        /// 編集面の行数 (セル)。
+        rows: u16,
+    },
+    /// 端末のフォーカスの有無 (真 = 得た、偽 = 失った)。
     Focus(bool),
     /// `Effect::RequestClipboard` の応答。`None` は取得できなかった。
     ClipboardContent {
+        /// 要求 (`Effect::RequestClipboard`) の `token` と同じ値。古い要求への応答は core が捨てる。
         token: ClipboardToken,
+        /// 読んだ文字列 (改行は正規化していない)。
         text: Option<String>,
     },
     /// 実行中に判明・変化した能力 (拡張キーの検出など)。
@@ -39,43 +46,61 @@ pub enum InputEvent {
 /// マウスの操作 1 つ (docs/03 §5.8.1、02 §7.3)。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct MouseEvent {
+    /// 操作の種類 (押下・ドラッグ・解放・ホイール)。
     pub kind: MouseKind,
+    /// 操作の時に押されていた修飾キー。
     pub mods: Modifiers,
+    /// 操作の位置 (編集面のセル)。
     pub at: MouseAt,
 }
 
+/// マウスの操作の種類。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum MouseKind {
+    /// ボタンを押した。
     Down(MouseButton),
     /// ボタンを押したままの移動。
     Drag(MouseButton),
+    /// ボタンを放した。
     Up(MouseButton),
+    /// ホイールを上 (文書の先頭の向き) へ回した。
     WheelUp,
+    /// ホイールを下 (文書の末尾の向き) へ回した。
     WheelDown,
 }
 
+/// マウスのボタン。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum MouseButton {
+    /// 左ボタン。
     Left,
+    /// 中ボタン (ホイールの押し込み)。
     Middle,
+    /// 右ボタン。
     Right,
 }
 
 /// 編集面 (`PaneFrame.rect`) の左上を原点とするセル。ボタンを押している間は面の外 (負・はみ出し) もそのまま渡す。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct MouseAt {
+    /// 操作の対象の編集面の View。
     pub view: ViewId,
+    /// 編集面の中の表示行 (0 始まり。面の上は負)。
     pub row: i32,
+    /// 編集面の中の表示列 (セル、0 始まり。ガターを含む。面の左は負)。
     pub col: i32,
 }
 
 /// キー 1 つの押下・リピート・解放。
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct KeyEvent {
+    /// 押されたキー (正規化済み)。
     pub code: KeyCode,
+    /// 押されていた修飾キー。
     pub mods: Modifiers,
+    /// 押下・リピート・解放の別。
     pub kind: KeyKind,
 }
 
@@ -94,8 +119,11 @@ impl KeyEvent {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[non_exhaustive]
 pub enum KeyKind {
+    /// 押下。
     Press,
+    /// 押し続けによる自動の繰り返し。
     Repeat,
+    /// 解放 (core には届かない)。
     Release,
 }
 
@@ -104,37 +132,61 @@ pub enum KeyKind {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[non_exhaustive]
 pub enum KeyCode {
+    /// 文字キー (英字は小文字。空白は `' '`)。
     Char(char),
-    /// `f1`〜`f24`。
+    /// `f1`〜`f24` (値は 1〜24)。
     F(u8),
+    /// Enter。
     Enter,
+    /// Tab (`Shift+Tab` は `Shift` との組)。
     Tab,
+    /// Esc。
     Esc,
+    /// Backspace。
     Backspace,
+    /// Delete。
     Delete,
+    /// Insert。
     Insert,
+    /// Home。
     Home,
+    /// End。
     End,
+    /// Page Up。
     PageUp,
+    /// Page Down。
     PageDown,
+    /// 上矢印。
     Up,
+    /// 下矢印。
     Down,
+    /// 左矢印。
     Left,
+    /// 右矢印。
     Right,
+    /// アプリケーション (メニュー) キー。
     Menu,
+    /// Caps Lock。
     CapsLock,
+    /// Print Screen。
     PrintScreen,
 }
 
-/// 修飾キーの集合。
+/// 修飾キーの集合 (ビット集合)。組は `|` で作る (例 `Modifiers::CTRL | Modifiers::SHIFT`)。
+/// 文字の属性 (`StyleMods`) とは別の型。
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub struct Modifiers(u8);
 
 impl Modifiers {
+    /// 修飾なし (空の集合)。
     pub const NONE: Modifiers = Modifiers(0);
+    /// Ctrl。
     pub const CTRL: Modifiers = Modifiers(1);
+    /// Alt (端末の ESC 前置も frontend がこれに正規化する)。
     pub const ALT: Modifiers = Modifiers(2);
+    /// Shift。
     pub const SHIFT: Modifiers = Modifiers(4);
+    /// Super (Windows キー・Command キー)。
     pub const SUPER: Modifiers = Modifiers(8);
 
     /// `other` のすべての修飾を含むか。
@@ -142,6 +194,7 @@ impl Modifiers {
         self.0 & other.0 == other.0
     }
 
+    /// 修飾が 1 つも無いか。
     pub fn is_empty(self) -> bool {
         self.0 == 0
     }
@@ -158,7 +211,9 @@ impl std::ops::BitOr for Modifiers {
 /// キー 1 打 (修飾 + キー)。チョードの 1 ストローク、`Capabilities::intercepted_keys` などに使う。
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct KeyStroke {
+    /// 修飾キー。
     pub mods: Modifiers,
+    /// キー。
     pub key: KeyCode,
 }
 
