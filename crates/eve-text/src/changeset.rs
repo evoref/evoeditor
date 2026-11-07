@@ -3,37 +3,98 @@
 //! xi-editor / Helix / CodeMirror 6 と同じ族の表現で、合成 (`compose`)・逆変換 (`invert`)・位置写像 (`map_pos`) が
 //! 代数的に定義できる。位置はすべて **適用前の文書のバイト位置**。
 //!
-//! 現在は `InsertText::Str` だけ。`Slice` / `Rope` は Undo のメモリ会計と一緒に入れる (03 §6.5)。
+//! 挿入は `InsertText::Str` (複写した文字列) と `InsertText::Rope` (rope を共有して複写しない)。`Rope` は文書全体の
+//! 置き換え (再読込の新全文、全体の削除の旧全文) だけで使う (03 §6.5 / §9.5)。64 KiB 以上の削除の `Slice` は v0.4。
 
 use std::fmt;
 use std::sync::Arc;
+
+use ropey::Rope;
 
 use crate::text::{Snapshot, Text, TextRead};
 use crate::types::{ByteOff, ByteRange};
 
 /// 挿入する文字列。Undo 履歴と Transaction で共有する (コピーしない)。
 /// `Debug` は本文を出さず、バイト数だけを出す (本文を log やパニックに出さない)。
-#[derive(Clone, PartialEq, Eq)]
+/// 等しさは内容で比べる (`Str` と `Rope` でも、同じ内容なら等しい)。
+#[derive(Clone)]
 #[non_exhaustive]
 pub enum InsertText {
     Str(Arc<str>),
+    /// 大きな本文を複写せずに持つ (rope の節を共有する。`Snapshot` の複製は O(1))。
+    Rope(Snapshot),
 }
 
 impl InsertText {
-    pub fn as_str(&self) -> &str {
+    /// 連続した文字列 (`Str`) のときだけ返す。`Rope` は `None` (全文を連結しない。`chunks` を使う)。
+    pub fn as_str(&self) -> Option<&str> {
         match self {
-            InsertText::Str(s) => s,
+            InsertText::Str(s) => Some(s),
+            InsertText::Rope(_) => None,
         }
     }
 
+    /// 内容を連続したチャンクで返す (空のチャンクは返さない)。
+    pub fn chunks(&self) -> impl Iterator<Item = &str> + '_ {
+        let (s, r) = match self {
+            InsertText::Str(s) => (Some(&**s).filter(|s| !s.is_empty()), None),
+            InsertText::Rope(r) => (None, Some(r.chunks(ByteRange::all(r.len_bytes())))),
+        };
+        s.into_iter()
+            .chain(r.into_iter().flatten().filter(|c| !c.is_empty()))
+    }
+
     pub fn len(&self) -> usize {
-        self.as_str().len()
+        match self {
+            InsertText::Str(s) => s.len(),
+            InsertText::Rope(r) => r.len_bytes(),
+        }
     }
 
     pub fn is_empty(&self) -> bool {
-        self.as_str().is_empty()
+        self.len() == 0
+    }
+
+    fn is_char_boundary(&self, b: usize) -> bool {
+        match self {
+            InsertText::Str(s) => s.is_char_boundary(b),
+            InsertText::Rope(r) => r.is_char_boundary(ByteOff(b)),
+        }
+    }
+
+    /// `a..b` の部分 (char 境界であること)。`Str` は複写し、`Rope` は節を共有する。
+    fn slice(&self, a: usize, b: usize) -> InsertText {
+        match self {
+            InsertText::Str(s) => InsertText::from(&s[a..b]),
+            InsertText::Rope(r) => {
+                InsertText::Rope(Snapshot::from_rope(Rope::from(r.rope().byte_slice(a..b))))
+            }
+        }
+    }
+
+    /// rope にする (`Str` は複写する。`Rope` は共有する)。
+    fn to_rope(&self) -> Rope {
+        match self {
+            InsertText::Str(s) => Rope::from_str(s),
+            InsertText::Rope(r) => r.rope().clone(),
+        }
     }
 }
+
+impl PartialEq for InsertText {
+    fn eq(&self, other: &InsertText) -> bool {
+        if let (Some(a), Some(b)) = (self.as_str(), other.as_str()) {
+            return a == b;
+        }
+        self.len() == other.len()
+            && self
+                .chunks()
+                .flat_map(str::bytes)
+                .eq(other.chunks().flat_map(str::bytes))
+    }
+}
+
+impl Eq for InsertText {}
 
 impl From<&str> for InsertText {
     fn from(s: &str) -> InsertText {
@@ -205,24 +266,44 @@ fn normalize(ops: impl IntoIterator<Item = Op>) -> Vec<Op> {
         }
     }
     /// 結合中の挿入。1 つだけなら Arc を共有し、2 つ以上なら 1 つのバッファにためる (線形時間)。
+    /// `Rope` が混ざれば rope をつなぐ (大きな本文を複写しない。`Str` の側だけ rope にする)。
     enum Pending {
         None,
         One(InsertText),
         Many(String),
+        ManyRope(Rope),
     }
     impl Pending {
         fn push(&mut self, s: InsertText) {
             *self = match std::mem::replace(self, Pending::None) {
                 Pending::None => Pending::One(s),
-                Pending::One(prev) => {
-                    let mut joined = String::with_capacity(prev.len() + s.len());
-                    joined.push_str(prev.as_str());
-                    joined.push_str(s.as_str());
-                    Pending::Many(joined)
-                }
-                Pending::Many(mut buf) => {
-                    buf.push_str(s.as_str());
-                    Pending::Many(buf)
+                Pending::One(prev) => match (prev.as_str(), s.as_str()) {
+                    (Some(a), Some(b)) => {
+                        let mut joined = String::with_capacity(a.len() + b.len());
+                        joined.push_str(a);
+                        joined.push_str(b);
+                        Pending::Many(joined)
+                    }
+                    _ => {
+                        let mut r = prev.to_rope();
+                        r.append(s.to_rope());
+                        Pending::ManyRope(r)
+                    }
+                },
+                Pending::Many(mut buf) => match s.as_str() {
+                    Some(b) => {
+                        buf.push_str(b);
+                        Pending::Many(buf)
+                    }
+                    None => {
+                        let mut r = Rope::from_str(&buf);
+                        r.append(s.to_rope());
+                        Pending::ManyRope(r)
+                    }
+                },
+                Pending::ManyRope(mut r) => {
+                    r.append(s.to_rope());
+                    Pending::ManyRope(r)
                 }
             };
         }
@@ -231,6 +312,9 @@ fn normalize(ops: impl IntoIterator<Item = Op>) -> Vec<Op> {
                 Pending::None => {}
                 Pending::One(s) => out.push(Op::Insert(s)),
                 Pending::Many(buf) => out.push(Op::Insert(InsertText::Str(Arc::from(buf)))),
+                Pending::ManyRope(r) => {
+                    out.push(Op::Insert(InsertText::Rope(Snapshot::from_rope(r))));
+                }
             }
         }
     }
@@ -360,17 +444,18 @@ impl ChangeSet {
         enum Cur<'a> {
             Retain(usize),
             Delete(usize),
-            /// `rest` は未消費の部分。先頭から消費していなければ、`whole` に元の挿入を持つ (Arc を共有できる)。
+            /// 挿入 `ins` の `off` バイト目からが未消費の部分。
             Insert {
-                rest: &'a str,
-                whole: Option<&'a InsertText>,
+                ins: &'a InsertText,
+                off: usize,
             },
         }
-        /// 挿入の先頭 `k` バイトを取り出す。全体を使うなら Arc を共有し、一部ならコピーする。
-        fn take(rest: &str, whole: Option<&InsertText>, k: usize) -> InsertText {
-            match whole {
-                Some(w) if k == w.len() => w.clone(),
-                _ => InsertText::from(&rest[..k]),
+        /// 挿入の `off` から `k` バイトを取り出す。全体を使うなら共有し、一部なら `Str` は複写、`Rope` は節を共有する。
+        fn take(ins: &InsertText, off: usize, k: usize) -> InsertText {
+            if off == 0 && k == ins.len() {
+                ins.clone()
+            } else {
+                ins.slice(off, off + k)
             }
         }
         impl<'a> Cursor<'a> {
@@ -379,8 +464,8 @@ impl ChangeSet {
                     Op::Retain(n) => Cur::Retain(n - self.off),
                     Op::Delete(n) => Cur::Delete(n - self.off),
                     Op::Insert(s) => Cur::Insert {
-                        rest: &s.as_str()[self.off..],
-                        whole: (self.off == 0).then_some(s),
+                        ins: s,
+                        off: self.off,
                     },
                 })
             }
@@ -416,9 +501,10 @@ impl ChangeSet {
                     a.advance(n);
                 }
                 // 次の挿入は、そのまま合成後の挿入になる
-                (_, Some(Cur::Insert { rest, whole })) => {
-                    out.push(Op::Insert(take(rest, whole, rest.len())));
-                    b.advance(rest.len());
+                (_, Some(Cur::Insert { ins, off })) => {
+                    let rest = ins.len() - off;
+                    out.push(Op::Insert(take(ins, off, rest)));
+                    b.advance(rest);
                 }
                 (Some(Cur::Retain(n)), Some(Cur::Retain(m))) => {
                     let k = n.min(m);
@@ -432,19 +518,19 @@ impl ChangeSet {
                     a.advance(k);
                     b.advance(k);
                 }
-                (Some(Cur::Insert { rest, whole }), Some(Cur::Retain(m))) => {
-                    let k = rest.len().min(m);
-                    if !rest.is_char_boundary(k) {
+                (Some(Cur::Insert { ins, off }), Some(Cur::Retain(m))) => {
+                    let k = (ins.len() - off).min(m);
+                    if !ins.is_char_boundary(off + k) {
                         return Err(ComposeError::SplitInsideChar);
                     }
-                    out.push(Op::Insert(take(rest, whole, k)));
+                    out.push(Op::Insert(take(ins, off, k)));
                     a.advance(k);
                     b.advance(k);
                 }
                 // 前が挿入して、次が削除する: 打ち消し合って何も残らない
-                (Some(Cur::Insert { rest, .. }), Some(Cur::Delete(m))) => {
-                    let k = rest.len().min(m);
-                    if !rest.is_char_boundary(k) {
+                (Some(Cur::Insert { ins, off }), Some(Cur::Delete(m))) => {
+                    let k = (ins.len() - off).min(m);
+                    if !ins.is_char_boundary(off + k) {
                         return Err(ComposeError::SplitInsideChar);
                     }
                     a.advance(k);
@@ -463,7 +549,8 @@ impl ChangeSet {
     }
 
     /// 適用を取り消す ChangeSet (CS2 / CS3)。`before` は `self` を適用する前の文書。
-    /// 削除したテキストを `before` から取り出して挿入に変える。
+    /// 削除したテキストを `before` から取り出して挿入に変える。文書全体の削除は `before` の rope を共有する
+    /// (`InsertText::Rope`。旧全文を複写しない、03 §9.5)。それ以外は複写する (64 KiB 以上の `Slice` は v0.4)。
     ///
     /// 事前条件: `before.len_bytes() == self.len_before()` で、操作の境界が char 境界。
     /// 満たさない場合もパニックはしないが、結果は意味を持たない。
@@ -474,6 +561,10 @@ impl ChangeSet {
             match op {
                 Op::Retain(n) => {
                     ops.push(Op::Retain(*n));
+                    pos = pos.saturating_add(*n);
+                }
+                Op::Delete(n) if pos == 0 && *n == before.len_bytes() => {
+                    ops.push(Op::Insert(InsertText::Rope(before.clone())));
                     pos = pos.saturating_add(*n);
                 }
                 Op::Delete(n) => {
@@ -649,13 +740,26 @@ impl Text {
         for op in &cs.ops {
             match op {
                 Op::Retain(n) => pos += n,
+                // 全体の削除は空にするだけ (共有している節を複製しない)
+                Op::Delete(n) if pos == 0 && *n == rope.len_bytes() => *rope = Rope::new(),
                 Op::Delete(n) => {
                     let (a, b) = (rope.byte_to_char(pos), rope.byte_to_char(pos + n));
                     rope.remove(a..b);
                 }
-                Op::Insert(s) => {
-                    rope.insert(rope.byte_to_char(pos), s.as_str());
+                Op::Insert(InsertText::Str(s)) => {
+                    rope.insert(rope.byte_to_char(pos), s);
                     pos += s.len();
+                }
+                // rope を共有してつなぐ (複写しない)。空の文書 (全体の置き換え) は差し替えるだけ
+                Op::Insert(InsertText::Rope(r)) => {
+                    if rope.len_bytes() == 0 {
+                        *rope = r.rope().clone();
+                    } else {
+                        let tail = rope.split_off(rope.byte_to_char(pos));
+                        rope.append(r.rope().clone());
+                        rope.append(tail);
+                    }
+                    pos += r.len_bytes();
                 }
             }
         }
