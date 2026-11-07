@@ -1128,7 +1128,7 @@ struct ReplaceRowModel { label: CellText /*ui.search.replace_label*/, input: Inp
 enum SearchCount { Idle, Running { found: u32 }, Exact { current: Option<u32>, total: u32 },
                    AtLeast { current: Option<u32>, total: u32 } /*件数上限で打ち切り*/, Approx { total: u32 } /*編集後の「約」(03 §12.2)*/, NoMatch }
 struct StatusModel { items: Vec<StatusItem> }
-struct StatusItem { kind: StatusKind /*Path | Dirty | ReadOnly | Loading | Saving | Degraded (長大行などの縮退) | Chord (保留中のチョード) | Selection | Position | Encoding | Eol*/,
+struct StatusItem { kind: StatusKind /*Path | Dirty | ReadOnly | Loading | Saving | ExternalChange (外部変更を無視した文書、03 §9.5) | Degraded (長大行などの縮退) | Chord (保留中のチョード) | Selection | Position | Encoding | Eol*/,
                     long: CellText, short: Option<CellText> /*core が言語ファイルから解決した短い形*/, priority: u8 /*大きいほど残す*/,
                     align: StatusAlign /*Left | Right: ステータスバーの左詰め群・右詰め群のどちらに置くか (04 §8.7)*/ }
 struct HintModel { context: HintContext, items: Vec<HintItem> }

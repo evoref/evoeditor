@@ -178,3 +178,64 @@ fn 確認などが出ている間は確かめない() {
     assert_eq!(h.overlay(), "palette");
     assert_eq!(h.doc_text(), "abc\n");
 }
+
+fn has_external_status(h: &mut Harness) -> bool {
+    h.frame()
+        .status
+        .items
+        .iter()
+        .any(|i| i.kind == eve_view::StatusKind::ExternalChange)
+}
+
+// verifies: FR-117
+#[test]
+fn 無視した外部変更はステータスに出し_保存か再読込で消す() {
+    let mut h = opened();
+    h.text("x");
+    assert!(!has_external_status(&mut h));
+    h.fs.add_file("/w/a.txt", b"changed\n");
+    focus(&mut h);
+    // 尋ねている間は出さない (まだ選んでいない)
+    assert_eq!(h.overlay(), "dialog");
+    assert!(!has_external_status(&mut h));
+    h.keys("enter");
+    assert!(has_external_status(&mut h));
+    assert!(h.frame_contains("[外部で変更]"), "{}", h.frame_text());
+    // 上書き保存 (保存時の照合の確認で上書き) で消える
+    h.keys("ctrl+s");
+    h.run_jobs();
+    assert_eq!(h.overlay(), "dialog");
+    h.keys("o");
+    h.run_jobs();
+    assert!(!h.is_dirty());
+    assert!(!has_external_status(&mut h));
+
+    // 再読込でも消える
+    h.text("y");
+    h.fs.add_file("/w/a.txt", b"again!\n");
+    focus(&mut h);
+    h.keys("enter");
+    assert!(has_external_status(&mut h));
+    h.cmd("file.reload");
+    // 未保存の変更を捨てる確認
+    assert_eq!(h.overlay(), "dialog");
+    h.keys("l");
+    h.run_jobs();
+    assert_eq!(h.doc_text(), "again!\n");
+    assert!(!has_external_status(&mut h));
+}
+
+// verifies: FR-117
+#[test]
+fn 未編集で読み直したときと_削除を新規として保持したときはステータスに出さない() {
+    let mut h = opened();
+    h.fs.add_file("/w/a.txt", b"changed\n");
+    focus(&mut h);
+    assert_eq!(h.doc_text(), "changed\n");
+    assert!(!has_external_status(&mut h));
+    h.fs.remove(&"/w/a.txt".into());
+    focus(&mut h);
+    assert_eq!(h.overlay(), "dialog");
+    h.keys("k");
+    assert!(!has_external_status(&mut h));
+}

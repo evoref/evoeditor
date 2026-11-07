@@ -998,6 +998,10 @@ short = "RO"
 long = "[Saving]"
 short = "Saving"
 
+[status.external_change]
+long = "[Changed on disk]"
+short = "Changed"
+
 [status.degraded.long_line]
 long = "[Long line: approximate]"
 short = "Approx"

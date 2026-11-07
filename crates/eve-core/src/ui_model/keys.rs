@@ -114,6 +114,8 @@ pub(crate) const STATUS_DEGRADED_LONG_LINE_LONG: &str = "status.degraded.long_li
 pub(crate) const STATUS_DEGRADED_LONG_LINE_SHORT: &str = "status.degraded.long_line.short";
 pub(crate) const STATUS_ENCODING_BOM: &str = "status.encoding.bom";
 pub(crate) const STATUS_EOL_MIXED: &str = "status.eol_mixed";
+pub(crate) const STATUS_EXTERNAL_CHANGE_LONG: &str = "status.external_change.long";
+pub(crate) const STATUS_EXTERNAL_CHANGE_SHORT: &str = "status.external_change.short";
 pub(crate) const STATUS_LOADING_LONG: &str = "status.loading.long";
 pub(crate) const STATUS_LOADING_SHORT: &str = "status.loading.short";
 pub(crate) const STATUS_POSITION_LONG: &str = "status.position.long";
@@ -179,7 +181,7 @@ pub(crate) const UI_TOO_SMALL: &str = "ui.too_small";
 
 /// すべての定数 (キーの順。試験に使う)。
 #[cfg(test)]
-const ALL: [&str; 168] = [
+const ALL: [&str; 170] = [
     HINT_UI_CANCEL,
     INFO_APP_RELEASE_SUMMARY,
     INFO_APP_UPDATED,
@@ -289,6 +291,8 @@ const ALL: [&str; 168] = [
     STATUS_DEGRADED_LONG_LINE_SHORT,
     STATUS_ENCODING_BOM,
     STATUS_EOL_MIXED,
+    STATUS_EXTERNAL_CHANGE_LONG,
+    STATUS_EXTERNAL_CHANGE_SHORT,
     STATUS_LOADING_LONG,
     STATUS_LOADING_SHORT,
     STATUS_POSITION_LONG,
