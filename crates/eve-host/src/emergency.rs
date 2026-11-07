@@ -175,6 +175,7 @@ mod tests {
             RescueOutcome {
                 total: docs.len(),
                 written: docs.len(),
+                stored: docs.len(),
                 complete: true,
                 ..RescueOutcome::default()
             }

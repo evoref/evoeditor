@@ -51,9 +51,12 @@ pub struct RescueOutcome {
     pub dir: Option<PathBuf>,
     /// 退避の対象にした文書の数。
     pub total: usize,
-    /// 本文を書き終えた文書の数。
+    /// 本文を書き終えて fsync で確定した文書の数 (manifest の `written = true`)。`stored` 以下。
     pub written: usize,
-    /// 全文書を書き終えた (manifest が `complete = true`)。
+    /// 本文のすべてを OS に渡した文書の数 (manifest の `stored = true`。fsync の前に強制終了されても本文は残る)。
+    /// NFR-302 AC-5 の「退避できた」はこの数で数える (02 §11.2.1 の「書く順」の段 1)。
+    pub stored: usize,
+    /// 全文書を確定した (manifest が `complete = true`。全文書が `written = true`)。
     pub complete: bool,
     /// 通常の場所に書けず、代替の退避先に書いた (05 §7.5)。
     pub fallback: bool,
@@ -70,7 +73,7 @@ pub struct RescueOutcome {
 pub enum RescueError {
     /// OS の入出力の誤り (文は OS が作ったもの)。
     Io(String),
-    /// 時間内に 1 件も書けなかった。
+    /// 時間内に 1 件も OS に渡せなかった。
     NotWritten,
     /// 退避の書き手が panic した (内部の誤り)。
     WriterPanicked,

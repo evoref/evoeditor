@@ -18,8 +18,8 @@ use eve_text::TextRead as _;
 
 use crate::inflight::{create_dir_all_private, normalized, process_start};
 use crate::rescue::{
-    ManifestDoc, Owner, eol_name, manifest_text, now_secs, safe_basename, timestamp_rfc3339,
-    write_body, write_manifest,
+    ManifestDoc, Owner, SyncFn, eol_name, manifest_text, now_secs, safe_basename, sync_file,
+    timestamp_rfc3339, write_body, write_manifest,
 };
 use crate::sys::map_io_error;
 
@@ -45,10 +45,12 @@ fn swap_dir(state_dir: &Path, name: &str) -> PathBuf {
 /// スワップを書く。`state_dir` の下に所有者のみで作り、本文と manifest を原子的に置き換える。
 pub(crate) fn write_swap(state_dir: &Path, d: &DocSnapshot) -> Result<(), FsError> {
     let dir_path = FsPath::new(state_dir.join("swap"));
-    write(state_dir, d).map_err(|e| map_io_error(e, &dir_path))
+    write(state_dir, d, &sync_file).map_err(|e| map_io_error(e, &dir_path))
 }
 
-fn write(state_dir: &Path, d: &DocSnapshot) -> io::Result<()> {
+/// `sync` は fsync する関数 (本番は `sync_file`。試験は呼ばれた順を記録する)。スワップは緊急退避の 2 段の書き方 (02 §11.2.1)
+/// を使わず、本文と manifest をそれぞれ fsync してから rename する。
+fn write(state_dir: &Path, d: &DocSnapshot, sync: SyncFn<'_>) -> io::Result<()> {
     let pid = std::process::id();
     let name = swap_name(d.path.as_ref().map(FsPath::as_path), d.doc.0, pid);
     let dir = swap_dir(state_dir, &name);
@@ -65,7 +67,7 @@ fn write(state_dir: &Path, d: &DocSnapshot) -> io::Result<()> {
 
     // (1) 本文: 一時ファイルに書いて fsync し、名前を変える
     let tmp = dir.join(format!("{file}.tmp"));
-    let last = write_body(&tmp, d, &|| false)?.unwrap_or(0);
+    let last = write_body(&tmp, d, &|| false, sync)?.unwrap_or(0);
     fs::rename(&tmp, dir.join(&file))?;
 
     // (2) manifest: 新しい本文を指すものに置き換える
@@ -82,6 +84,8 @@ fn write(state_dir: &Path, d: &DocSnapshot) -> io::Result<()> {
         revision: d.revision.0,
         len: d.snapshot.len_bytes(),
         written: true,
+        stored: false,
+        xxh3: None,
         sensitive: d.sensitive,
     };
     let owner = Owner {
@@ -95,7 +99,7 @@ fn write(state_dir: &Path, d: &DocSnapshot) -> io::Result<()> {
         &[entry],
         Some(&owner),
     );
-    write_manifest(&dir, &text)?;
+    write_manifest(&dir, &text, Some(sync))?;
 
     // (3) 古い本文と、前回の書込の残りの一時ファイルを消す (消せなくても次の書込で消える)
     if let Ok(rd) = fs::read_dir(&dir) {
@@ -122,5 +126,72 @@ pub(crate) fn discard_swap(
         Ok(()) => Ok(()),
         Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(()),
         Err(e) => Err(map_io_error(e, &FsPath::new(dir))),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::cell::RefCell;
+
+    use eve_core::{DocumentId, TextFormat};
+    use eve_text::Text;
+    use eve_view::Revision;
+
+    use super::*;
+    use crate::rescue::SyncPoint;
+
+    // スワップは緊急退避の 2 段の書き方 (02 §11.2.1) を使わない: 本文を fsync してから rename し、manifest を fsync してから
+    // rename する (今までどおり)。manifest に `stored` / `xxh3` を書かない
+    #[test]
+    fn スワップは本文と_manifest_をそれぞれ_fsync_してから置き換える() {
+        let n = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| d.as_nanos());
+        let state = std::env::temp_dir().join(format!("eve-swap-sync-{}-{n}", std::process::id()));
+        let d = DocSnapshot {
+            doc: DocumentId(7),
+            snapshot: Text::from("swap text").snapshot(),
+            format: TextFormat::new_document(),
+            revision: Revision(3),
+            saved_node_exists: false,
+            sensitive: false,
+            path: None,
+            untitled_name: Some("無題-7".into()),
+        };
+        let events: RefCell<Vec<(SyncPoint, Vec<String>)>> = RefCell::new(Vec::new());
+        let record = |p: SyncPoint, f: &fs::File| {
+            // fsync の時点のディレクトリの中身 (rename の前であることを確かめる)
+            let dir = swap_dir(&state, &swap_name(None, 7, std::process::id()));
+            let mut names: Vec<String> = fs::read_dir(&dir)
+                .unwrap()
+                .flatten()
+                .map(|e| e.file_name().to_string_lossy().into_owned())
+                .collect();
+            names.sort();
+            events.borrow_mut().push((p, names));
+            f.sync_all()
+        };
+        write(&state, &d, &record).unwrap();
+        let ev = events.borrow();
+        assert_eq!(
+            ev.iter().map(|(p, _)| *p).collect::<Vec<_>>(),
+            [SyncPoint::Body(1), SyncPoint::Manifest],
+            "{ev:?}"
+        );
+        assert_eq!(
+            ev[0].1,
+            ["1-無題-7.r3.txt.tmp"],
+            "本文は rename の前に fsync する"
+        );
+        assert_eq!(
+            ev[1].1,
+            ["1-無題-7.r3.txt", "manifest.toml.tmp"],
+            "manifest は rename の前に fsync する"
+        );
+        let dir = swap_dir(&state, &swap_name(None, 7, std::process::id()));
+        let m = fs::read_to_string(dir.join("manifest.toml")).unwrap();
+        assert!(m.contains("written = true"), "{m}");
+        assert!(!m.contains("stored") && !m.contains("xxh3"), "{m}");
+        let _ = fs::remove_dir_all(&state);
     }
 }

@@ -385,6 +385,7 @@ dependencies = [
  "eve-platform",
  "eve-text",
  "eve-view",
+ "xxhash-rust",
 ]
 
 [[package]]
@@ -451,6 +452,7 @@ dependencies = [
  "portable-pty",
  "vt100",
  "windows-sys 0.61.2",
+ "xxhash-rust",
 ]
 
 [[package]]
