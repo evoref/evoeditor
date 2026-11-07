@@ -1,6 +1,6 @@
 //! BM-104 / BM-202: サイズ別オープンの時間とメモリ (docs/09-testing-quality.md §5.2、01 NFR-104 / NFR-202、S-02 の最終判定の材料)。
 //! 実ファイル (Windows は `WinFs`、Unix は `UnixFs`) を core の読込ジョブ (`run_job`) で開く。測るのは (2) 「開く」→ 読込完了
-//! (`Ready` 相当) の区間で、UTF-8 の 1 MB / 10 MB / 100 MB と Shift_JIS の 100 MB。メモリは読込完了から 1 秒アイドルの後の
+//! (`Ready` 相当) の区間で、UTF-8 の 1 MB / 10 MB / 100 MB と `Shift_JIS` の 100 MB。メモリは読込完了から 1 秒アイドルの後の
 //! 物理メモリ (Windows はワーキングセット、Linux は VmRSS。01 NFR-201) の増分を、基準 (デコード後の UTF-8 サイズ × 1.5 + 15 MB、
 //! 許容 ×2.5) と並べて示す。
 //!

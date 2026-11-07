@@ -46,7 +46,7 @@ fn to_char_boundary(text: &dyn TextRead, pos: Pos, bias: Bias) -> usize {
     p
 }
 
-/// 前後のどちらに何が来ても結合しない文字 (UAX #29 の Grapheme_Cluster_Break が Other で、絵文字の ZWJ 列・地域指示記号・
+/// 前後のどちらに何が来ても結合しない文字 (UAX #29 の `Grapheme_Cluster_Break` が Other で、絵文字の ZWJ 列・地域指示記号・
 /// ハングルの字母・インド系の結合にも関わらない) のうち、本文によく出る範囲 (印字できる ASCII・かな・漢字・全角の英数と主な句読点)。
 /// 両隣がこの範囲なら、窓を切り出さずに境界と分かる (REF-01)。範囲の全文字を試験で確かめている。
 fn never_joins(c: char) -> bool {

@@ -74,7 +74,7 @@ pub(crate) fn status_model(
     };
     use StatusAlign::{Left, Right};
 
-    // 左群: ファイル名・変更・読み取り専用・読込中・保存中・チョード
+    // 左群: ファイル名・変更・読み取り専用・機能縮退・読込中・保存中・外部変更・チョード
     let name = match doc.path.as_ref().and_then(|p| p.file_name()) {
         Some(n) => n,
         None => state.untitled_label(doc),
@@ -158,6 +158,21 @@ pub(crate) fn status_model(
         );
         items.push(item(
             StatusKind::Saving,
+            &long,
+            Some(&short),
+            5,
+            Left,
+            CutPolicy::Never,
+        ));
+    }
+    // 外部変更: 確認で「無視」を選んだ文書は、ディスクの内容と違うことを保存か再読込まで示す (03 §9.5、04 §8.7)
+    if doc.external_seen.is_some() {
+        let (long, short) = (
+            render(state, keys::STATUS_EXTERNAL_CHANGE_LONG, &[]),
+            render(state, keys::STATUS_EXTERNAL_CHANGE_SHORT, &[]),
+        );
+        items.push(item(
+            StatusKind::ExternalChange,
             &long,
             Some(&short),
             5,

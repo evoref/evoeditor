@@ -5,7 +5,7 @@
 //!   最初の書込・読込で専用のスレッドに作り、そのスレッドでメッセージループを回す (他のアプリが `EmptyClipboard` したときに所有者へ
 //!   送られる `WM_DESTROYCLIPBOARD` を処理するため。回さないと相手のアプリを待たせる)。
 //! - **競合**: `OpenClipboard` は他のプロセスが開いていると失敗するので、10 ms 間隔で最大 5 回やり直す。
-//! - **改行**: CF_UNICODETEXT のまま入れ・読む。CRLF の正規化は core の貼り付けの入口で行う。
+//! - **改行**: `CF_UNICODETEXT` のまま入れ・読む。CRLF の正規化は core の貼り付けの入口で行う。
 
 #![allow(unsafe_code)]
 
@@ -27,7 +27,7 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{
 
 use super::{ClipboardFailure, ClipboardProvider, SYSTEM_MAX_BYTES};
 
-/// CF_UNICODETEXT。
+/// `CF_UNICODETEXT`。
 const CF_UNICODETEXT: u32 = 13;
 /// `OpenClipboard` のやり直し (10 ms × 5)。
 const OPEN_RETRIES: u32 = 5;
@@ -40,10 +40,10 @@ pub trait ClipApi: Send + Sync {
     fn open(&self, owner: usize) -> bool;
     fn close(&self);
     fn empty(&self) -> bool;
-    /// UTF-16 (終端 NUL なし) を CF_UNICODETEXT として入れる。
+    /// UTF-16 (終端 NUL なし) を `CF_UNICODETEXT` として入れる。
     fn set_unicode(&self, units: &[u16]) -> bool;
     fn has_unicode(&self) -> bool;
-    /// CF_UNICODETEXT の中身 (終端 NUL なし)。`max_units` を超えるなら `Err(TooLarge)`。
+    /// `CF_UNICODETEXT` の中身 (終端 NUL なし)。`max_units` を超えるなら `Err(TooLarge)`。
     fn get_unicode(&self, max_units: usize) -> Result<Option<Vec<u16>>, ClipboardFailure>;
 }
 

@@ -128,6 +128,11 @@ pub struct ConsoleInput {
 }
 
 impl ConsoleInput {
+    /// 入力側の端末 (`/dev/tty`) を開く。
+    ///
+    /// # Errors
+    ///
+    /// `/dev/tty` を開けない、または raw モードにできないとき。
     pub fn open() -> io::Result<ConsoleInput> {
         ConsoleInput::with_fd(open_tty(true)?)
     }
@@ -152,6 +157,11 @@ impl ConsoleInput {
         })
     }
 
+    /// 端末の大きさ (セル数) を返す。
+    ///
+    /// # Errors
+    ///
+    /// 端末の大きさを取得できないとき (`ioctl` の失敗)。
     pub fn window_size(&self) -> io::Result<CellSize> {
         window_size(self.fd.as_fd())
     }
@@ -219,16 +229,31 @@ pub struct ConsoleOut {
 }
 
 impl ConsoleOut {
+    /// 出力側の端末 (`/dev/tty`) を開く。
+    ///
+    /// # Errors
+    ///
+    /// `/dev/tty` を開けないとき。
     pub fn open() -> io::Result<ConsoleOut> {
         Ok(ConsoleOut {
             fd: open_tty(false)?,
         })
     }
 
+    /// 文字列を端末に書く。
+    ///
+    /// # Errors
+    ///
+    /// 端末への書込が失敗したとき。
     pub fn write_str(&mut self, s: &str) -> io::Result<()> {
         write_all(self.fd.as_fd(), s.as_bytes())
     }
 
+    /// 端末の大きさ (セル数) を返す。
+    ///
+    /// # Errors
+    ///
+    /// 端末の大きさを取得できないとき (`ioctl` の失敗)。
     pub fn window_size(&self) -> io::Result<CellSize> {
         window_size(self.fd.as_fd())
     }
@@ -447,6 +472,10 @@ fn run(fd: BorrowedFd<'_>, out: &dyn InputOut, geom: &SharedGeom, w: &Wakers, re
 
 /// 入力スレッドを起動する。termios は `ConsoleInput` が持ち、復元は呼び出し側 (`ConsoleInput::restore`)。
 /// スレッドは `ConsoleInput` の drop で止まる (SAF-30)。
+///
+/// # Errors
+///
+/// シグナル用のパイプを作れない、または入力スレッドを作れないとき。
 // 入力スレッドは 02 §9.1 の表のスレッド (R11 の例外。deps-policy.toml の `allowed_files` に載せている)。
 #[allow(clippy::disallowed_methods)]
 pub fn spawn_input_thread(

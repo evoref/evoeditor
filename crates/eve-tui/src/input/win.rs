@@ -71,6 +71,10 @@ impl ConsoleInput {
     /// `CONIN$` / `CONOUT$` を開き、入力モードを設定する (05 §9.1 の入力モード)。
     /// `ENABLE_PROCESSED_INPUT` / `ENABLE_LINE_INPUT` / `ENABLE_ECHO_INPUT` / `ENABLE_VIRTUAL_TERMINAL_INPUT` /
     /// `ENABLE_MOUSE_INPUT` を落とし、`ENABLE_WINDOW_INPUT` を立てる。簡易編集モードは変えない (v0.1)。
+    ///
+    /// # Errors
+    ///
+    /// `CONIN$` / `CONOUT$` を開けない、または入力モードを設定できないとき。
     pub fn open() -> io::Result<ConsoleInput> {
         let input = open_console("CONIN$")?;
         let output = open_console("CONOUT$")?;
@@ -102,7 +106,11 @@ impl ConsoleInput {
         })
     }
 
-    /// 端末のウィンドウの大きさ (`srWindow` から。バッファの大きさではない、05 §9.1 の ConPTY の癖)。
+    /// 端末のウィンドウの大きさ (`srWindow` から。バッファの大きさではない、05 §9.1 の `ConPTY` の癖)。
+    ///
+    /// # Errors
+    ///
+    /// コンソールの情報を取得できないとき。
     pub fn window_size(&self) -> io::Result<CellSize> {
         window_size(self.output.0)
     }
@@ -363,6 +371,10 @@ fn run(input: Handle, output: Handle, out: &dyn InputOut, geom: &SharedGeom) {
 }
 
 /// 入力スレッドを起動する。コンソールのモードは `ConsoleInput` が持ち、復元は呼び出し側 (`ConsoleInput::restore`)。
+///
+/// # Errors
+///
+/// 入力スレッドを作れないとき。
 // 入力スレッドは 02 §9.1 の表のスレッド (R11 の例外。deps-policy.toml の `allowed_files` に載せている)。
 #[allow(clippy::disallowed_methods)]
 pub fn spawn_input_thread(
@@ -391,6 +403,10 @@ pub struct ConsoleOut {
 impl ConsoleOut {
     /// `CONOUT$` を開き、`ENABLE_VIRTUAL_TERMINAL_PROCESSING | DISABLE_NEWLINE_AUTO_RETURN` を設定する。VT を拒否する
     /// コンソールは `Err` (起動エラー、`stderr.unsupported_console`)。元のモードと端末タイトルを保存する。
+    ///
+    /// # Errors
+    ///
+    /// `CONOUT$` を開けない、またはコンソールが VT 出力を拒否したとき。
     pub fn open() -> io::Result<ConsoleOut> {
         let h = open_console("CONOUT$")?;
         let mut saved = 0u32;
@@ -417,6 +433,10 @@ impl ConsoleOut {
     }
 
     /// 文字列を書く (UTF-16 に変換し、サロゲートペアを割らずに分けて書く)。
+    ///
+    /// # Errors
+    ///
+    /// コンソールへの書込 (`WriteConsoleW`) が失敗したとき。
     pub fn write_str(&mut self, s: &str) -> io::Result<()> {
         const MAX_UNITS: usize = 16 * 1024;
         let units: Vec<u16> = s.encode_utf16().collect();
@@ -448,6 +468,10 @@ impl ConsoleOut {
     }
 
     /// 端末のウィンドウの大きさ (`srWindow`)。
+    ///
+    /// # Errors
+    ///
+    /// コンソールの情報を取得できないとき。
     pub fn window_size(&self) -> io::Result<CellSize> {
         window_size(self.handle.0)
     }

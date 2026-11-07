@@ -862,7 +862,7 @@ pub struct LossySpan { range: ByteRange /* テキスト座標。編集で写像 
 - 「指定して開き直す」(`file.reopen_with_encoding`): dirty なら実行前に保存か破棄を求める (01 FR-111 AC-2。FR-107 と同じ 3 択で、保存を選んだら保存の成功後に開き直す。§9.7)。Document を破棄せず、同じ `DocumentId` で読込ジョブ (手順 2 の明示指定付き) を再投入し、新しい本文は **旧本文とは別に構築** する。読込中は `load_state = Loading` で **旧本文を表示し続け** (編集はできない)、完了時に本文・`TextFormat`・読み取り専用の理由 (`InvalidBytes` 等の内容由来のもの) を一括で差し替え、**履歴を消して新しい根を作り、`saved` = 根** (dirty = false) にする。**開き直しは Undo できない操作** とし、書式 (文字コード・BOM・改行の統計) と読み取り専用の理由は本文と一緒に置き換える (確定 (ユーザー回答))。理由: 本文だけを Undo で戻すと、文字コード・不正バイトの読み取り専用・保存点が本文と食い違い (例: Shift_JIS で開き直した後に Undo すると、不正バイトを含む旧デコード結果が編集可能になる。NFR-304 に反する)。dirty でないときだけ実行するので、失うのは保存済みの編集の Undo 履歴だけで、未保存の内容は失わない。完了時に「開き直したため Undo 履歴を消去しました」と 1 回通知する。外部変更の再読込 (§9.5) は Undo 可のまま (自分の編集を取り戻すため) で、書式も一緒に戻す (§7.2)。
   - 開き直しのキャンセル (`ui.cancel`)・失敗では、旧本文・旧 `TextFormat`・旧い読み取り専用の理由・履歴をそのまま保ち、`load_state = Ready` に戻す (エラーはメッセージで示す)。
   - 開く前の確認 (512 MiB 超・不正バイトの比率、`JobResult::NeedsConfirm`) は通常の読込 (§9.2) と同じ規則で出す。「中止」は上のキャンセルと同じ。明示指定で読むので文字コードの判定 (§8.2 手順 1 の BOM の判定 (指定した文字コードの BOM と一致すれば読み飛ばす) と手順 3〜8) とバイナリ・UTF-32 の BOM の確認は行わない (バイナリの確認から開き直した文書の `Binary` の理由は外れる)。
-  - **読み取り専用の理由の差し替え** (開き直しと再読込 (§9.5) の両方の正本。§7.2 と §9.5 手順 5 はここを参照する): `FileAttribute` は新しい `FileMeta.readonly` で付け直し、`UserRequested` と `NoWritePermission` は保つ。内容由来の理由のうち `InvalidBytes` / `StatefulEncodingWithInvalidBytes` / `LongLine` は新しい読込の結果で付け直す。`Binary` と `LargeFileViewer` は、**開き直しでは** 新しい読込の結果で付け直し (バイナリの確認から開き直した文書の `Binary` は外れる)、**再読込では保つ** (明示指定の読込ではバイナリの判定をせず、`LargeFileViewer` の文書は `confirmed_large` と `read_only_requested` を立てて読み直すため、§9.5 手順 3)。再読込で付け直した理由は前後の値を `format_change` に持ち、Undo / Redo で本文と一緒に戻る (§7.2)。開き直しは Undo できない。
+  - **読み取り専用の理由の差し替え** (開き直しと再読込 (§9.5) の両方の正本。§7.2 と §9.5 手順 5 はここを参照する): `FileAttribute` は新しい `FileMeta.readonly` で付け直し、`UserRequested` と `NoWritePermission` は保つ。内容由来の理由のうち `InvalidBytes` / `StatefulEncodingWithInvalidBytes` は新しい読込の結果で付け直す。`Binary` と `LargeFileViewer` は、**開き直しでは** 新しい読込の結果で付け直し (バイナリの確認から開き直した文書の `Binary` は外れる)、**再読込では保つ** (明示指定の読込ではバイナリの判定をせず、`LargeFileViewer` の文書は `confirmed_large` と `read_only_requested` を立てて読み直すため、§9.5 手順 3)。再読込で付け直した理由は前後の値を `format_change` に持ち、Undo / Redo で本文と一緒に戻る (§7.2)。開き直しは Undo できない。
   - 保存ジョブの実行中は、その完了を待ってから dirty を判定する。
 - 「指定して保存する」(`file.set_encoding`): 引数の `encoding` と `bom` から新しい format (`encoding` / `has_bom` だけを変え、他は元のまま) を作り、**今の format は変えずに** 保存ジョブにその format を渡す。`TextFormat` は **保存が成功したときだけ** 新しい format に確定し、失敗・キャンセル・`Conflict`・表現不能 (E3 の 3) で終わったら元のまま (メタデータの変更なので Undo の対象外、§7.2)。手順 0 (未編集なら書かない、§9.3) は適用せず、常に書く。表現不能のチェックは §8.6。
   - `bom` の扱い (既定値の正本は 07 の `file.set_encoding` の引数): 省略したときは **UTF-16LE/BE は BOM 付き、UTF-8 は今の文書の BOM の有無を保つ** (`file.write_bom` には依らない)。BOM を持たない文字コード (Shift_JIS / EUC-JP / ISO-2022-JP) では `bom` を **無視** する (`has_bom = false`。指定しても誤りにしない)。
@@ -1012,7 +1012,7 @@ file.open(path)
 | 由来 | 理由 | 決め方 |
 |---|---|---|
 | 確認の回答・開く要求 (`pending_reasons`、main が入れる) | `LargeFileViewer` / `Binary` / `InvalidBytes` / `StatefulEncodingWithInvalidBytes` / `UserRequested` | 上の表で「読み取り専用で開く」を選んだときの理由。`--readonly` (`OpenRequest.readonly`、07 §18.3) は `UserRequested` |
-| 内容 (`Complete.detected`、ジョブが入れる) | `InvalidBytes` / `StatefulEncodingWithInvalidBytes` / `LongLine` / `Binary` | `format.invalid_bytes > 0` で状態付きでなければ `InvalidBytes`、状態付き符号化 (ISO-2022-JP) なら `StatefulEncodingWithInvalidBytes` (§8.3。確認を経ずに開いた場合 (比率が 1% 以下・文字コードを指定して開いた) も付く、NFR-304)。閾値超の行があれば `LongLine` (§11.5。v0.1 だけ。v0.2 からは付けない、§11.5.1)。`read_only_requested` でバイナリ・UTF-32 の BOM の確認を省いたときは、その判定が当たれば `Binary` |
+| 内容 (`Complete.detected`、ジョブが入れる) | `InvalidBytes` / `StatefulEncodingWithInvalidBytes` / `Binary` | `format.invalid_bytes > 0` で状態付きでなければ `InvalidBytes`、状態付き符号化 (ISO-2022-JP) なら `StatefulEncodingWithInvalidBytes` (§8.3。確認を経ずに開いた場合 (比率が 1% 以下・文字コードを指定して開いた) も付く、NFR-304)。閾値超の行は理由にしない (v0.1 にあった `LongLine` は v0.2 で外した。§9.6、§11.5.1)。`read_only_requested` でバイナリ・UTF-32 の BOM の確認を省いたときは、その判定が当たれば `Binary` |
 | ファイル (`meta`、main が決める) | `FileAttribute` | `meta.readonly` (05 §5.2) |
 
 - **メインスレッドの I/O はゼロ**: `stat` / サイズ確認 / canonical 比較はすべてジョブで行う。「開く」の体感は Loading 表示が即出る分だけ良くなり、小さいローカルファイルでは手順 2〜5 が数 ms で完了するため違いは見えない。読込ジョブは `io` スレッドで直列に実行する (02 §9.1)。
@@ -1173,7 +1173,7 @@ file.save(doc)  [main]
   3. 読込ジョブ (`JobKind::Open`) を同じ `DocumentId` で投入する。`OpenOptions.forced` に今の文書の文字コードを入れ (§8.2 手順 2。判定し直さず、バイナリ・UTF-32 の BOM の確認もしない。BOM は手順 2 の規則で読み飛ばして `has_bom` を決める)、今の文書が `LargeFileViewer` なら `confirmed_large` と `read_only_requested` を立てて巨大ファイルの確認を繰り返さない。それ以外の開く前の確認 (512 MiB 超・不正バイトの比率) は通常の読込 (§9.2) と同じ規則で出し、「中止」はキャンセルと同じ。二重オープンの判定 (`Identity`) は同じ文書なので行わない。読込中は `load_state = Loading` で **旧本文を表示し続け** (編集はできない。ステータスバーは `[読込中 n%]`)、`ui.cancel` で取り消せる。
   4. 取消し・失敗 (ファイルが無い・読めない等) では、旧本文・`TextFormat`・読み取り専用の理由・履歴をそのまま保って `load_state = Ready` に戻し、失敗は理由を示す (ファイルが無いときは `msg.reload.missing`、それ以外は読込と同じ `msg.open.*`。取消しは `info.open.cancelled`)。
   5. `Complete` を受けたら、下の「再読込の実現」で `Origin::Reload` の Transaction として適用し、`info.reload.done` を出す。読み取り専用の理由は §8.8 の「読み取り専用の理由の差し替え」(再読込の規則。`Binary` と `LargeFileViewer` は保つ) で付け直す。再読込の後に読み取り専用の文書では `info.reload.done` の代わりに `info.reload.done_read_only` を出す (Undo で戻せないため。下の「再読込の実現」、提案、OQ-216)。ステータスバーの文字コード・改行コード・読み取り専用の表示は新しい内容に合わせて変わる。
-- **状態** (v0.2): `external_modified: Option<FileStamp>` を Document に持ち、ステータスバーに表示。
+- **状態** (v0.2): 確認で「無視」を選んだときのファイルの Stamp を `Document.external_seen: Option<FileStamp>` に持つ (下の「同じ変更で何度も聞かない」)。`Some` の間は、文書の内容がディスクと違うと分かっているので、ステータスバーに **外部変更** (`StatusKind::ExternalChange`、04 §8.7) を出す。保存の成功・再読込・開き直しで `None` に戻り、表示も消える。確認なしで読み直したとき (未編集) と、削除の「新規として保持」(新規ファイル扱い) では出さない。確認を出している間と、確認を `Esc` で閉じたとき (次のフォーカス復帰でまた尋ねる) も出さない (v0.3 の M18 で実装)。
 - **検知したときの選択肢** (v0.2。dirty かどうかで既定を変える):
 
 | Document の状態 | 既定の挙動 |
@@ -1189,7 +1189,7 @@ file.save(doc)  [main]
   - **削除**: `ui.confirm.external_deleted` (`[K]` 新規として保持 ★ / `[C]` 閉じる。閉じるは `buffer.close` と同じ手順で、dirty なら未保存の確認が出る)。保持は文書を新規ファイル扱いにする (`disk_stamp` を捨てる): 次の保存は `Expect::Absent` で確認なしにファイルを作り直し (その間に同名のファイルが作られていれば `ui.confirm.save.conflict_created`)、フォーカス復帰でも再び尋ねない (ファイルが無いのは新規ファイルの状態と同じ)。
   - **同じ変更で何度も聞かない**: 「無視」を選んだら、そのときのファイルの Stamp を `Document.external_seen` に覚え、フォーカス復帰で同じ Stamp を見つけても尋ねない (明示のコマンドでは尋ねる。削除の「新規として保持」は上のとおり新規ファイル扱いにするので覚える必要が無い)。保存の成功・再読込で忘れる。保存時の照合の確認 (`ui.confirm.save.conflict_*`) はこれと関係なく出る。
   - 照合の失敗 (読めない等) は、フォーカス復帰では何も出さず、コマンドでは `msg.external.check_failed` を出す。
-  - 残し: ステータスバーの表示 (上の「状態」)、保存時の競合の確認の「再読込」の選択肢、アクティブでない文書の確認。
+  - 残し: 保存時の競合の確認の「再読込」の選択肢、アクティブでない文書の確認。ステータスバーの表示 (上の「状態」) は v0.3 の M18 で入れた。
 - **再読込の実現**: 新内容をジョブで読み込み (§9.2 と同じ経路。文字コードは文書の現在の `encoding` を §8.2 手順 2 の明示指定として渡し、判定し直さない。BOM は手順 2 の規則で、その文字コードの BOM と一致すれば読み飛ばして `has_bom` を決める)、完了時に **旧テキスト → 新テキストの ChangeSet** を作って `Transaction(Origin::Reload)` として適用する。**再読込 (v0.1 の `file.reload`、v0.2 のフォーカス復帰時の確認とも) は全置換 ChangeSet** (`Delete(全体) + Insert(新全文)`。新全文は読込の rope を、旧全文は逆変換が旧 rope を、どちらも `InsertText::Rope` で共有するためコピーなし (§6.5 の「実装の状態」))。新しい内容に合わせて `TextFormat` (`has_bom`・`eol_stats`・`invalid_bytes`・`roundtrip`・`pua_escape` 等) と内容由来の読み取り専用の理由も置き換え、前後の値を Undo ノードの `format_change` に持たせる (Undo / Redo で本文と一緒に戻る、§7.2)。Selection は「同じ行:桁 (書記素)」を目安に写像し、Decoration は無効化する。行単位 diff による **最小差分** (imara-diff / similar) は、差分ビュー FR-517 (v1.L) と同時に導入する。**Undo で元に戻せる** (P1 原則)。ただし再読込の後に読み取り専用の文書 (読み取り専用の文書を読み直した、または読み直した内容に不正バイトがある等) では、`edit.undo` の when (`!doc.read_only`、07 §11.6) により Undo できない (再読込そのものは §6.5 の拒否の例外だが、`edit.undo` / `edit.redo` はコマンドの when の段階で実行できない。提案、OQ-216)。旧全文の保持によるメモリ増は 01 NFR-202 の例外 (§7.5)。再読込後 `history.saved` を再読込ノードの位置 (§7.4) にし、`disk_stamp` を更新。Undo で再読込前に戻ると、内容がディスクと違うので dirty になる。
 - **自分の保存と外部変更の競合**: §9.3 手順 5a のジョブ内チェックで、競合時はファイルを壊さずに中止する。ユーザーが「上書き」を選んだ場合でも、元ファイルは原子的置換まで無傷 (Windows の置換途中失敗は退避名で残る、§9.4)。
 
@@ -1208,8 +1208,8 @@ file.save(doc)  [main]
 | `Binary` | バイナリの警告で「読み取り専用で開く」を選んだ (FR-115) | 解除できない (NG10) |
 | `LargeFileViewer` | 巨大ファイル (512 MiB 超) の警告で「読み取り専用で開く」を選んだ (FR-127、§11.2)。不正バイトの多いファイルの警告 (FR-127) で「読み取り専用で開く」を選んだ文書には付けず、理由は `InvalidBytes` だけになる | 解除できない (開き直さずに編集できると、FR-127 の警告の意味が無くなるため) |
 | `LoadIncomplete` | v0.1 では付かない (読込の失敗では読めた部分を開かない、§9.2 の「失敗」)。読めた部分だけを開く選択肢を入れる版のための予約 | 解除できない (保存すると読めなかった後半を失うため)。名前を付けて保存は可 |
-| `LongLine` | 閾値を超える行を含む (§11.5、v0.1) | 解除できない。v0.2 からは char 近似モードで編集できるので、この理由は付かない |
 
+- v0.1 にあった理由 `LongLine` (閾値を超える行を含む、§11.5) は、v0.2 の M9d で長大行を char 近似モードで編集できるようにしたので外した (§11.5.1。変種も無い)。
 - 理由が複数あるときは全部を保持し、表示はこの表の上にあるものを先に出す。**名前を付けて保存** は読み取り専用の文書でも実行できる (v0.1 で読み取り専用の文書を保存する唯一の手段)。例外: `StatefulEncodingWithInvalidBytes` の文書 (不正バイトを含む ISO-2022-JP) は、ISO-2022-JP のままの名前を付けて保存・ISO-2022-JP を指定した保存を連鎖の開始時に `msg.save.encoding_unsupported_iso2022` で拒否する (保存先を尋ねない。§8.3、確定 (ユーザー回答)、OQ-207)。別の文字コードを指定した保存はエスケープ文字が表現不能 (E4) なので E3 のキャンセルだけになり、この文書を書く手段は無い (FR-111 で別の文字コードとして開き直す)。成功したら保存先について `FileAttribute` / `NoWritePermission` を判定し直し (外れれば編集できる)、それ以外の理由は残す。
 - 解除の取り消し (`file.toggle_read_only` をもう一度) は、どの文書でも `UserRequested` を付ける (v0.2)。
 - **M9d の実装 (v0.2)**: `doc.read_only_releasable` は「読込が済み、理由があり、すべてが `FileAttribute` か `UserRequested`」。`FileAttribute` を解除した文書は解除の記録 (`Document.attribute_released`) を持ち、元のパスへの上書き保存の前に `ui.confirm.save.read_only` (既定は別名で保存) を出す。承認は (文書, Revision) ごとで、同じ Revision の保存では繰り返さない。全保存では保存せず、確認が要る文書として一覧に出す。承認した保存は `SaveOptions.clear_readonly` で投入し、Port が置換の直前に属性を外して置換の後に付け直す (05 §4.2)。解除の記録は、名前を付けて保存で別のパスに書いたときと、再読込 (属性をディスクから判定し直す) で消える。直接上書き (§9.3 手順 7 の確認の後、05 §4.4) では属性を外さないので、`PermissionDenied` (理由 `NoWritePermission`) になる。
@@ -1539,7 +1539,7 @@ v0.1 の縮退 (読み取り専用で先頭 64 KiB だけ) を、v0.2 の char �
 
 **今の作りの問題**: 行の表示・カーソルの列・列からの位置は、すべて `line_content` (行全体を `String` にする) と `units_for` (行全体を表示の単位 `Unit` に展開する。1 単位ごとに文字列を持つ) を通る。単位の展開は (Revision, 行) で 1 行分だけキャッシュする。10 MB の行ではこの展開が数百 MB のメモリと数百 ms を使うので、v0.1 は先頭 64 KiB に切って避けている。char 近似モードでは **行全体を展開しない別の経路** が要る。
 
-**対象の判定**: 行ごとに「その行のバイト長 > 文書の `format.long_line_threshold`」(開いたときの閾値、07 §5.2)。行の長さは行インデックスから O(1) で分かるので、表示のたびに判定してよい。編集で行が閾値を超えた・下回ったら、その時点から経路が替わる。読込ジョブは `LongLine` の理由を付けない (§9.6 の表のとおり)。v0.1 の先頭 64 KiB の切り取り (`LONG_LINE_VISIBLE`・`line_visible_end`・`clamp_to_visible`) と、行末の「以下 N バイト省略」の印はやめる。
+**対象の判定**: 行ごとに「その行のバイト長 > 文書の `format.long_line_threshold`」(開いたときの閾値、07 §5.2)。行の長さは行インデックスから O(1) で分かるので、表示のたびに判定してよい。編集で行が閾値を超えた・下回ったら、その時点から経路が替わる。読込ジョブは長大行を読み取り専用の理由にしない (v0.1 にあった `LongLine` は v0.2 で外した。§9.6)。v0.1 の先頭 64 KiB の切り取り (`LONG_LINE_VISIBLE`・`line_visible_end`・`clamp_to_visible`) と、行末の「以下 N バイト省略」の印はやめる。
 
 **核となる仕組み**: 長大行の **列の索引** を 1 つ作り、下のすべての利用者がこれだけを根拠にする。
 

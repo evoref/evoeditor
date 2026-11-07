@@ -125,6 +125,10 @@ impl UnixPaths {
     }
 
     /// 起動時の環境から作る (作業ディレクトリは起動時に 1 回だけ読む)。
+    ///
+    /// # Errors
+    ///
+    /// 作業ディレクトリを取得できないとき (`std::env::current_dir` の失敗)。
     #[cfg(unix)]
     pub fn from_process_env() -> std::io::Result<UnixPaths> {
         let cwd = std::env::current_dir()?.to_string_lossy().into_owned();
@@ -179,6 +183,10 @@ impl WinPaths {
     }
 
     /// 起動時の環境から作る (作業ディレクトリは起動時に 1 回だけ読む。以後 `chdir` しない)。
+    ///
+    /// # Errors
+    ///
+    /// 作業ディレクトリを取得できないとき (`std::env::current_dir` の失敗)。
     pub fn from_process_env() -> std::io::Result<WinPaths> {
         let cwd = std::env::current_dir()?.to_string_lossy().into_owned();
         let home = std::env::var("USERPROFILE").ok().filter(|v| !v.is_empty());

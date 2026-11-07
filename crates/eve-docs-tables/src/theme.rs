@@ -56,6 +56,10 @@ pub struct RoleRow {
 const MODS: [&str; 4] = ["bold", "underline", "reverse", "dim"];
 
 /// セルを読む。読めなければ理由を返す。
+///
+/// # Errors
+///
+/// セルに空の項があるとき、色の組が `前景` / `背景` の 1 つずつでないとき、または `none` を他の語と結合したとき (理由の文言を返す)。
 pub fn parse_cell(cell: &str) -> Result<StyleSpec, String> {
     let text = strip_parentheticals(cell);
     let mut spec = StyleSpec::default();
@@ -88,6 +92,10 @@ pub fn parse_cell(cell: &str) -> Result<StyleSpec, String> {
 }
 
 /// 07 §8.2 のロール表を読む。
+///
+/// # Errors
+///
+/// 見出しや表がないとき、ロール名や必要な列がないとき、またはセルを読めないとき (理由の文言を返す)。
 pub fn parse_roles(doc07: &str) -> Result<Vec<RoleRow>, String> {
     let body = section(doc07, THEME_HEADING).map_err(|e: Error| e.to_string())?;
     let tables = tables_in(&body);

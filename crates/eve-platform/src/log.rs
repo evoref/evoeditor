@@ -25,6 +25,10 @@ pub const CRASH_LOGS_KEPT: usize = 20;
 ///
 /// 状態ディレクトリの他のファイルと同じく所有者のみで作る (パニックの文言にパスが入り得る、05 §5.6)。書いた後に、
 /// 最新 `CRASH_LOGS_KEPT` 件を超えた分を古い順 (更新時刻、同じなら名前) に消す (docs/review/v0.3-findings.md の SAF-11)。
+///
+/// # Errors
+///
+/// ログのディレクトリを作れないとき、またはログのファイルを作れない・書けないとき。古いログの削除の失敗は無視する。
 pub fn write_crash_log(state_dir: &Path, body: &str) -> io::Result<PathBuf> {
     let dir = state_dir.join("log");
     create_dir_all_private(&dir)?;

@@ -349,7 +349,9 @@ v0.1 で実装するのは Windows の手順 (`ReplaceFileW` 系。§4.2) で、
    ReplaceFileW (新規ファイルは MoveFileExW、Unix は rename) の呼出しを始めた後は CancelToken を見ず、手順 7 まで進めて結果を返す (取り消されていても Saved になる)
    (§11.5 の通常の終了はこれが 0 に戻るまで exit しない。§11.4 の非対話の終了はその経路の時間予算の範囲で待つ。write_in_place では書込の全体を覆う、§4.4 手順 6)
 5b. Windows: 元の T が READONLY だった場合は、置換が成功した後で T に READONLY を付け直す
-6. ディレクトリ fsync (Unix のみ、v0.2。Windows は不可・不要)
+6. ディレクトリ fsync — FsyncLevel::Full / FileOnly のとき (None では行わない)。Unix のみ、v0.2。Windows は不可・不要で、どの水準でもディレクトリを flush しない。
+   失敗は警告 (SaveWarning::FsyncFailed) で、保存は成功として返す。
+   FileOnly と Full の動作は今は同じ (どちらも手順 3 と手順 6 を行う。Windows ではどちらも手順 3 の FlushFileBuffers だけ) で、値を分けているのは OQ-77 (FsKind::Network の既定を緩めるか) の検討のために残した区別である
 7. 事後: metadata(T) を取り直し SaveReport.new_stamp (FileStamp。hash は書いた内容から計算済み) に入れる。FileId が変わること (Unix では必ず変わる) を core に伝え、監視 (§12) の自己イベント抑制に使う。
    **置換の後の T が自分の書いたものかを FileId で確かめる**: 手順 3b でハンドルを閉じる前に tmp の FileId (と len) を控えておき、事後の metadata(T) の FileId が
    それと一致しなければ (置換から事後の metadata までの間に他のプロセスが T を置き換えた。ReplaceFileW では置換後の T は tmp の FileId を持つ (§5.4、S-09 で確認)。

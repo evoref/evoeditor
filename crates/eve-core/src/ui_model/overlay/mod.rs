@@ -68,12 +68,15 @@ impl EditorState {
         old
     }
 
-    /// 出ているオーバーレイの種類 (`""` なし / `"dialog"` / `"prompt"`)。
+    /// 出ているオーバーレイの種類。条件式 `overlay.active` の値と同じ (07 §7.3、11 §6.3 の `overlay`):
+    /// `""` (なし) / `"dialog"` (確認) / `"prompt"` (入力プロンプト) / `"palette"` (コマンドパレット) /
+    /// `"buffer_list"` (バッファ一覧) / `"help"` (ヘルプ)。
     pub fn overlay_kind(&self) -> &'static str {
         self.overlay_name()
     }
 
-    /// 条件式 `overlay.active` の値: 出ていなければ空、確認は `dialog`、プロンプトは `prompt`。
+    /// 条件式 `overlay.active` の値: 出ていなければ空、確認は `dialog`、プロンプトは `prompt`、
+    /// パレットは `palette` (バッファ一覧は `buffer_list`)、ヘルプは `help`。
     pub(crate) fn overlay_name(&self) -> &'static str {
         match &self.ui.overlay {
             None => "",

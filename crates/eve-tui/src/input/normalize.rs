@@ -3,8 +3,8 @@
 //!
 //! 実測 (S-07、2026-10-21) を反映している:
 //! - `Ctrl+文字` は `UnicodeChar` が制御文字で届くので、**仮想キーコードを優先** してキーを作る (バースト中だけ例外)。
-//! - IME の確定文字は `vk = 0` の KeyDown / KeyUp の対 (`UnicodeChar` = 文字) で届く → `Text`。
-//! - 半角/全角・変換・無変換などは KeyUp だけが届く (KeyDown は IME が消費) → Release は破棄するので何も起きない。
+//! - IME の確定文字は `vk = 0` の `KeyDown` / `KeyUp` の対 (`UnicodeChar` = 文字) で届く → `Text`。
+//! - 半角/全角・変換・無変換などは `KeyUp` だけが届く (`KeyDown` は IME が消費) → Release は破棄するので何も起きない。
 //! - 貼り付けは 1 つの大きなバッチで届く。N = 16・T = 16 ms (`BURST_N` / `BURST_T`)。
 
 use std::collections::BTreeSet;
@@ -13,7 +13,7 @@ use eve_view::{InputEvent, KeyCode, KeyEvent, KeyKind, Modifiers};
 
 use super::{TextItem, push_text};
 
-/// バーストの開始に必要な、文字を生成する KeyDown の件数 (04 §6.6。S-07 で確定)。
+/// バーストの開始に必要な、文字を生成する `KeyDown` の件数 (04 §6.6。S-07 で確定)。
 pub const BURST_N: usize = 16;
 /// バースト中の無入力の待ち (ms)。
 pub const BURST_T_MS: u32 = 16;
@@ -61,14 +61,14 @@ impl KeyRec {
     fn shift(&self) -> bool {
         self.state & SHIFT != 0
     }
-    /// AltGr: 右 Alt、または 左 Alt + Ctrl (欧州配列の AltGr は Ctrl+Alt として届く)。
+    /// `AltGr`: 右 Alt、または 左 Alt + Ctrl (欧州配列の `AltGr` は Ctrl+Alt として届く)。
     fn altgr_like(&self) -> bool {
         self.state & RIGHT_ALT != 0 || (self.state & LEFT_ALT != 0 && self.ctrl())
     }
     fn alt(&self) -> bool {
         self.state & (LEFT_ALT | RIGHT_ALT) != 0
     }
-    /// 文字を生成する KeyDown か (バースト検出の数え方、04 §6.6)。
+    /// 文字を生成する `KeyDown` か (バースト検出の数え方、04 §6.6)。
     fn makes_char(&self) -> bool {
         self.down && self.ch != 0
     }
@@ -145,7 +145,7 @@ struct Burst {
     body: Vec<u16>,
     /// 改行・制御文字・Ctrl 付きキーを含まない (含むなら `Paste`、含まないなら `Text`)。
     plain: bool,
-    /// 最後に文字を生成した KeyDown と、その直前の本文の長さ (末尾の 1 打鍵の例外の判定用)。
+    /// 最後に文字を生成した `KeyDown` と、その直前の本文の長さ (末尾の 1 打鍵の例外の判定用)。
     last: Option<(KeyRec, usize)>,
 }
 
@@ -253,7 +253,7 @@ impl Normalizer {
         out
     }
 
-    /// バースト中の 1 記録: `UnicodeChar` から本文を作る。文字を生成しない記録 (矢印・修飾キー等) と KeyUp は捨てる。
+    /// バースト中の 1 記録: `UnicodeChar` から本文を作る。文字を生成しない記録 (矢印・修飾キー等) と `KeyUp` は捨てる。
     fn absorb(&mut self, k: &KeyRec) {
         let Some(b) = self.burst.as_mut() else {
             return;
@@ -367,7 +367,7 @@ mod tests {
         })
     }
 
-    /// KeyDown と KeyUp の対 (1 打鍵)。
+    /// `KeyDown` と `KeyUp` の対 (1 打鍵)。
     fn tap(vk: u16, ch: u16, state: u32) -> Vec<Raw> {
         vec![key(true, vk, ch, state), key(false, vk, ch, state)]
     }
