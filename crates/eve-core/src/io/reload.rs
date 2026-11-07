@@ -156,7 +156,7 @@ impl EditorState {
         detected: crate::document::ReadOnlyReasons,
     ) {
         use crate::document::{FormatChange, FormatState, Origin, Transaction};
-        use eve_text::{ByteOff, ByteRange, ChangeSet, Edit, Selection, TextRead};
+        use eve_text::{ByteOff, ChangeSet, InsertText, Op, Selection, TextRead};
         // 読み取り専用属性はディスクから判定し直したので、解除の記録と外部変更の見送りは捨てる
         if let Some(d) = self.docs.documents.get_mut(&doc_id) {
             d.attribute_released = false;
@@ -176,19 +176,12 @@ impl EditorState {
                 read_only: detected,
             },
         };
-        let new_len = text.len_bytes();
-        let body = text.slice_to_string(ByteRange::all(new_len));
+        // 全置換。新全文は読込の rope を共有し (複写しない)、旧全文は逆変換が旧 rope を共有する (03 §9.5、SAF-33)
         let old_len = old.text().len_bytes();
-        let Ok(cs) = ChangeSet::from_sorted_edits(
-            old.text(),
-            [Edit {
-                range: ByteRange::all(old_len),
-                insert: body.into(),
-            }],
-        ) else {
-            self.reopen_restore(doc_id);
-            return;
-        };
+        let cs = ChangeSet::from_ops([
+            Op::Delete(old_len),
+            Op::Insert(InsertText::Rope(text.snapshot())),
+        ]);
         // カーソルは同じ行:桁 (書記素) を目安にし (行・桁が足りなければ最後の行・行末に丸める)、Undo では元の Selection に戻す
         let before_sel = self.docs.views.get(&view).map(|v| v.selection.clone());
         let head = before_sel.as_ref().map_or(0, |s| s.primary().head.0);

@@ -124,26 +124,26 @@ fn kind_of(hunks: &[(ByteRange, ByteRange)]) -> EditKind {
     }
 }
 
-fn inserted_texts(cs: &ChangeSet) -> impl Iterator<Item = &str> {
+fn inserted_texts(cs: &ChangeSet) -> impl Iterator<Item = &eve_text::InsertText> {
     cs.ops().iter().filter_map(|op| match op {
-        Op::Insert(s) if !s.is_empty() => Some(s.as_str()),
+        Op::Insert(s) if !s.is_empty() => Some(s),
         _ => None,
     })
 }
 
 fn inserted_len(cs: &ChangeSet) -> usize {
-    inserted_texts(cs).map(str::len).sum()
+    inserted_texts(cs).map(eve_text::InsertText::len).sum()
 }
 
 fn has_newline(cs: &ChangeSet) -> bool {
-    inserted_texts(cs).any(|s| s.contains(['\n', '\r']))
+    inserted_texts(cs).any(|s| s.chunks().any(|c| c.contains(['\n', '\r'])))
 }
 
 /// 挿入が改行 1 つだけか (R6 (a)): すべての挿入文字列が LF / CRLF / CR のどれか 1 つ。
 fn only_single_newlines(cs: &ChangeSet) -> bool {
     let mut any = false;
     for s in inserted_texts(cs) {
-        if !matches!(s, "\n" | "\r\n" | "\r") {
+        if !matches!(s.as_str(), Some("\n" | "\r\n" | "\r")) {
             return false;
         }
         any = true;
