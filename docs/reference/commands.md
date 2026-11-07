@@ -44,7 +44,7 @@
 | `edit.newline` | 改行 | Edit | — | `!doc.read_only` | `propose` | `editor`: `Enter` | 出す |
 | `edit.outdent` | インデント解除 | Edit | — | `!doc.read_only` | `propose` | `editor`: `Shift+Tab` | 出す |
 | `edit.paste` | 貼り付け | Edit | — | `!doc.read_only` | `-` | `editor`: `Ctrl+V`, `Shift+Insert`<br>`prompt`: `Ctrl+V`, `Shift+Insert` | 出す |
-| `edit.redo` | やり直し | Edit | — | `!doc.read_only` | `-` | `editor`: `Ctrl+Y`, `Ctrl+Shift+Z` | 出す |
+| `edit.redo` | やり直し | Edit | — | `!doc.read_only` | `-` | `editor`: `Ctrl+Y`, `Ctrl+Shift+Z` [E] | 出す |
 | `edit.undo` | 元に戻す | Edit | — | `!doc.read_only` | `-` | `editor`: `Ctrl+Z` | 出す |
 | `file.check_external_changes` | 外部変更の確認 | File | — | `doc.has_path` | `-` | — | 出す |
 | `file.new` | 新規作成 | File | — | — | `-` | `editor`: `Ctrl+N`<br>`search`: `Ctrl+N` | 出す |
@@ -53,7 +53,7 @@
 | `file.reopen_with_encoding` | 文字コードを指定して開き直す | File | `encoding`: `enum(utf-8\|utf-16le\|utf-16be\|shift_jis\|euc-jp\|iso-2022-jp)` | `doc.has_path` | `-` | — | 出す |
 | `file.save` | 保存 | File | — | `!doc.read_only` | `-` | `editor`: `Ctrl+S`<br>`search`: `Ctrl+S` | 出す |
 | `file.save_all` | すべて保存 | File | — | — | `-` | `editor`: `Ctrl+K A` | 出す |
-| `file.save_as` | 名前を付けて保存 | File | `path?`: `path` | — | `-` | `editor`: `Ctrl+Shift+S`, `Ctrl+K S`<br>`search`: `Ctrl+Shift+S` | 出す |
+| `file.save_as` | 名前を付けて保存 | File | `path?`: `path` | — | `-` | `editor`: `Ctrl+Shift+S` [E], `Ctrl+K S`<br>`search`: `Ctrl+Shift+S` [E] | 出す |
 | `file.set_encoding` | 文字コードを変更 | File | `encoding`: `enum(utf-8\|utf-16le\|utf-16be\|shift_jis\|euc-jp\|iso-2022-jp)`<br>`bom?`: `bool` | — | `-` | — | 出す |
 | `file.set_line_ending` | 改行コードを変換 | Edit | `eol`: `enum(lf\|crlf\|cr)` | `!doc.read_only` | `propose` | — | 出す |
 | `file.toggle_read_only` | 読み取り専用の切替 | File | — | `doc.read_only_releasable \|\| !doc.read_only` | `-` | — | 出す |
@@ -62,7 +62,7 @@
 | `help.open` | ヘルプを開く | Ui | — | — | `ui` | `global`: `Ctrl+K H` | 出す |
 | `search.next` | 次を検索 | Motion | — | `search.active` | `read` | `search`: `Enter`, `↓`, `F3` | 出す |
 | `search.open` | 検索 | Ui | `query?`: `string` | — | `ui` | `editor`: `Ctrl+F`<br>`search`: `Ctrl+F` | 出す |
-| `search.prev` | 前を検索 | Motion | — | `search.active` | `read` | `search`: `↑`, `Shift+F3`, `Shift+Enter` [E] | 出す |
+| `search.prev` | 前を検索 | Motion | — | `search.active` | `read` | `search`: `↑`, `Shift+F3` [E], `Shift+Enter` [E] | 出す |
 | `search.replace` | 置換 | Edit | — | `search.replace_active && !doc.read_only` | `propose` | `search`: `Enter` | 出す |
 | `search.replace_all` | すべて置換 | Edit | — | `search.replace_active && !doc.read_only` | `propose` | `search`: `Alt+A` | 出す |
 | `search.replace_open` | 置換 | Ui | — | `!doc.read_only` | `ui` | `editor`: `Ctrl+R`, `Ctrl+H` [E]<br>`search`: `Ctrl+R`, `Ctrl+H` [E] | 出す |
@@ -78,8 +78,8 @@
 | `select.extend_page_down` | 次のページまで選択 | Motion | — | — | `read` | `editor`: `Shift+PgDn`, `Ctrl+K >` | 出す |
 | `select.extend_page_up` | 前のページまで選択 | Motion | — | — | `read` | `editor`: `Shift+PgUp`, `Ctrl+K <` | 出す |
 | `select.extend_right` | 右へ選択 | Motion | `count?`: `int` | — | `read` | `editor`: `Shift+→` | 出す |
-| `select.extend_to_doc_end` | 文書の末尾まで選択 | Motion | — | — | `read` | `editor`: `Ctrl+Shift+End` | 出す |
-| `select.extend_to_doc_start` | 文書の先頭まで選択 | Motion | — | — | `read` | `editor`: `Ctrl+Shift+Home` | 出す |
+| `select.extend_to_doc_end` | 文書の末尾まで選択 | Motion | — | — | `read` | `editor`: `Ctrl+Shift+End` [E] | 出す |
+| `select.extend_to_doc_start` | 文書の先頭まで選択 | Motion | — | — | `read` | `editor`: `Ctrl+Shift+Home` [E] | 出す |
 | `select.extend_up` | 上へ選択 | Motion | `count?`: `int` | — | `read` | `editor`: `Shift+↑` | 出す |
 | `select.extend_word_left` | 単語の左へ選択 | Motion | `count?`: `int` | — | `read` | `editor`: `Ctrl+Shift+←`, `Alt+Shift+←` | 出す |
 | `select.extend_word_right` | 単語の右へ選択 | Motion | `count?`: `int` | — | `read` | `editor`: `Ctrl+Shift+→`, `Alt+Shift+→` | 出す |

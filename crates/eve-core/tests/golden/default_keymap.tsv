@@ -20,7 +20,7 @@ search	Enter	search.next	Args({})	ContextExpr(None)	false
 search	Down	search.next	Args({})	ContextExpr(None)	false
 search	F3	search.next	Args({})	ContextExpr(None)	false
 search	Up	search.prev	Args({})	ContextExpr(None)	false
-search	Shift+F3	search.prev	Args({})	ContextExpr(None)	false
+search	Shift+F3	search.prev	Args({})	ContextExpr(None)	true
 search	Shift+Enter	search.prev	Args({})	ContextExpr(None)	true
 search	Alt+C	search.toggle_case	Args({})	ContextExpr(None)	false
 search	Ctrl+K C	search.toggle_case	Args({})	ContextExpr(None)	false
@@ -37,7 +37,7 @@ search	Ctrl+R	search.replace_open	Args({})	ContextExpr(None)	false
 search	Ctrl+H	search.replace_open	Args({})	ContextExpr(None)	true
 search	Ctrl+F	search.open	Args({})	ContextExpr(None)	false
 search	Ctrl+S	file.save	Args({})	ContextExpr(None)	false
-search	Ctrl+Shift+S	file.save_as	Args({})	ContextExpr(None)	false
+search	Ctrl+Shift+S	file.save_as	Args({})	ContextExpr(None)	true
 search	Ctrl+O	file.open	Args({})	ContextExpr(None)	false
 search	Ctrl+N	file.new	Args({})	ContextExpr(None)	false
 editor	Ctrl+F	search.open	Args({})	ContextExpr(None)	false
@@ -69,7 +69,7 @@ prompt	Right	cursor.move_right	Args({})	ContextExpr(None)	false
 prompt	Home	cursor.home	Args({})	ContextExpr(None)	false
 prompt	End	cursor.end	Args({})	ContextExpr(None)	false
 editor	Ctrl+S	file.save	Args({})	ContextExpr(None)	false
-editor	Ctrl+Shift+S	file.save_as	Args({})	ContextExpr(None)	false
+editor	Ctrl+Shift+S	file.save_as	Args({})	ContextExpr(None)	true
 editor	Ctrl+K S	file.save_as	Args({})	ContextExpr(None)	false
 editor	Ctrl+K A	file.save_all	Args({})	ContextExpr(None)	false
 editor	Ctrl+O	file.open	Args({})	ContextExpr(None)	false
@@ -91,7 +91,7 @@ editor	Shift+Delete	clipboard.cut	Args({})	ContextExpr(None)	false
 editor	Shift+Insert	edit.paste	Args({})	ContextExpr(None)	false
 editor	Ctrl+Z	edit.undo	Args({})	ContextExpr(None)	false
 editor	Ctrl+Y	edit.redo	Args({})	ContextExpr(None)	false
-editor	Ctrl+Shift+Z	edit.redo	Args({})	ContextExpr(None)	false
+editor	Ctrl+Shift+Z	edit.redo	Args({})	ContextExpr(None)	true
 editor	Backspace	edit.delete_backward	Args({})	ContextExpr(None)	false
 editor	Delete	edit.delete_forward	Args({})	ContextExpr(None)	false
 editor	Ctrl+Backspace	edit.delete_word_backward	Args({})	ContextExpr(None)	false
@@ -121,9 +121,9 @@ editor	Shift+Home	select.extend_home	Args({})	ContextExpr(None)	false
 editor	End	cursor.end	Args({})	ContextExpr(None)	false
 editor	Shift+End	select.extend_end	Args({})	ContextExpr(None)	false
 editor	Ctrl+Home	cursor.doc_start	Args({})	ContextExpr(None)	false
-editor	Ctrl+Shift+Home	select.extend_to_doc_start	Args({})	ContextExpr(None)	false
+editor	Ctrl+Shift+Home	select.extend_to_doc_start	Args({})	ContextExpr(None)	true
 editor	Ctrl+End	cursor.doc_end	Args({})	ContextExpr(None)	false
-editor	Ctrl+Shift+End	select.extend_to_doc_end	Args({})	ContextExpr(None)	false
+editor	Ctrl+Shift+End	select.extend_to_doc_end	Args({})	ContextExpr(None)	true
 editor	PageUp	cursor.page_up	Args({})	ContextExpr(None)	false
 editor	Shift+PageUp	select.extend_page_up	Args({})	ContextExpr(None)	false
 editor	PageDown	cursor.page_down	Args({})	ContextExpr(None)	false

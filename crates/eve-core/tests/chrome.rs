@@ -175,9 +175,10 @@ fn エラーは_text_と_hint_の_2_部でキー表記を解決する() {
         .iter()
         .map(|sp| sp.text.as_str())
         .collect();
+    // `Ctrl+Shift+S` は拡張キーが要る割当 ([E]、07 §11.6) なので、拡張キーの無い端末では届く代替の `Ctrl+K S` を示す (04 §7.8)
     assert_eq!(
         hint,
-        "フォルダを作ってから保存するか、別名で保存 (Ctrl+Shift+S) してください"
+        "フォルダを作ってから保存するか、別名で保存 (Ctrl+K S) してください"
     );
     // Warn は Esc で消える。カーソル移動では消えない
     s.keys("left");

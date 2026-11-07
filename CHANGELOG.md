@@ -15,6 +15,8 @@ v0.1.0 のリリースまでの `0.0.x` は、マイルストーンを数える�
 
 ### 変更
 
+- **拡張キーが無いと区別できない 5 つの割当を、仕様どおり「拡張キーが要る」として扱う**: `Ctrl+Shift+S` (名前を付けて保存)・`Ctrl+Shift+Z` (やり直し)・`Shift+F3` (前を検索)・`Ctrl+Shift+Home` / `Ctrl+Shift+End` (文書の先頭 / 末尾まで選択)。拡張キーが使えない端末では、ヘルプのキー一覧でこれらに「届かない」の印が付き、パレット・メッセージなどのキーの表示は届く代替 (名前を付けて保存なら `Ctrl+K S`) になります。
+
 - eve-view: `DocumentInfo.read_only` の型を `Vec<String>` (変種名の文字列) から `Vec<ReadOnlyReasonView>` (新しい enum) に変えた (破壊的変更。`Query::Documents` の応答)。`Capabilities.osc52_write`・`InputEvent::Resize` の説明を実装に合わせた (型は変えない)。
 - eve-view: キーの表示用の表記の関数 `key_notation(strokes, ascii)` を追加した (追加のみ。core と eve-tui が共有する、docs/04 §7.8)。
 

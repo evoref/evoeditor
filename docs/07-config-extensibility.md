@@ -1144,7 +1144,7 @@ verb       := [a-z][a-z0-9_]*
 凡例:
 
 - **kind** = Edit / Motion / Ui / File / External (02 §6.3)。**perm** = AI・プラグイン・**External (駆動 API / sidecar、X16)** からの呼出し可否 (02 §10.4): `-` 不可 / `propose` (結果が Proposal 経由) / `read` (読み取りのみ) / `ui`。v0.1 の権限判定フックは User 主体だけを扱い、External 主体は変種の予約のみ (駆動 API と同じ版で実装、§14.3)。
-- **コンテキスト** = その割当が属するキーマップのコンテキスト (§7.1。参照順も §7.1)。コンテキスト列に `パレット` と書いた行は **キーマップのコンテキストではなく**、既定キーを持たずパレットから実行することを表す (既定キー列は `—`)。
+- **コンテキスト** = その割当が属するキーマップのコンテキスト (§7.1。参照順も §7.1)。**割当を置くコンテキスト** を書き、参照順をたどってキーが届く場面は書かない (PO 判断 2026-11-07。行の既定キーがコンテキストごとに違うときは、既定キー列に `` `ctx`: `` の見出しで分けて書く。`cargo xtask gen-reference --check` が実装の割当と突合する、09 §11.2)。コンテキスト列に `パレット` と書いた行は **キーマップのコンテキストではなく**、既定キーを持たずパレットから実行することを表す (既定キー列は `—`)。
 - **既定キー** は §7.2 の設定表記 (`mod` = TUI では `ctrl`)。英字との組は `mod` (例 `mod+s`)、特殊キー (`home` / `end` / `insert` / `pageup` / `pagedown` / 矢印 / `backspace` / `delete` / `tab` 等) との組は `ctrl` 固定 (例 `ctrl+home`、`ctrl+insert`)。**`ctrl` を直書きする英字との組 (上の規則の例外。`mod` に解決せず、どの frontend / OS でも物理 Ctrl のまま)**: (1) `ctrl+k` を先頭ストロークとするチョードの代替割当 (`ctrl+k s` 等。`(alt)`)、(2) `list` コンテキストの `ctrl+n` / `ctrl+p` (候補の移動。Emacs / readline 由来の端末の慣習)、(3) `ctrl+h` (`search.replace_open` の別名。レガシー VT の端末では `ctrl+backspace` と同じ符号 (0x08) で、`[E]` のときだけ区別できる。正規化で畳まれて届かない端末ではこの割当は無効、04 §6.2)。これら以外で英字と `ctrl` を直書きする既定キーは作らない (CI の突合で検出する)。コンテキストごとに割当が違う行は `コンテキスト: キー` の形で書く。`[E]` = 拡張キーボードプロトコル (v0.2 から push) または Windows のコンソール API でのみ区別できる。`[横]` = 04 §7.3a の横取り表で、対象端末のどれかが横取りする (その端末では届かない)。`(alt)` = 代替割当 (全端末で届く。04 §7.3a の横取り表を考慮済み)。既定キー列にはキーだけを書き、キーでない手段 (パレットからの実行、別のコマンドを使った案内) は括弧の注記で書く。**キーの記載順** は、ヒントバーと `{key:<command_id>}` (§17.2) に出す割当を選ぶ順でもある: 端末で届くと分かっている割当のうち最初のものを出す (拡張キーが無ければ `[E]` を除き、端末の横取り表に載るキーを除く。02 §7.1 `Capabilities.intercepted_keys`)。
 - **ヒント** = ヒントバーに出す文脈と優先度 (`文脈:優先度`)。**v0.1 の文脈は `normal` (編集面) と `overlay` (パレット・入力プロンプト・確認ダイアログ・検索バー・チョード保留中で共通) の 2 つ** (04 §8.8)。`overlay` では、`when` が偽の項目と、その場面のコンテキスト (§7.1) で届く割当が無い項目を出さないので、場面ごとに出る項目は変わる。版注記付きの行に書いた `palette` / `prompt` / `confirm` / `search` / `chord` / `help` は v0.2 で細分する文脈。優先度は **大きいほど残る** (5 = 常に残す。02 §8.2 `HintItem.priority`)。表示順は優先度の降順、同じ優先度は本表の行順。各文脈で抜け出す手段 (`normal` は終了とパレット、`overlay` は `Esc`) を 5 にする。ヒントの語は `hint.<command_id>` (§17.2、8 セル以内。語は 04 §15.1)。`-` = 出さない。
 - **表の記法 (機械可読。11 §8.5 のパーサが読む規則)**: 本表は 11 §8.5 の規則 (識別子はバッククォート、1 つのバッククォートに 1 つの完全な識別子、ワイルドカード・略記なし) に加え、次の記法に従う。
@@ -1162,10 +1162,10 @@ verb       := [a-z][a-z0-9_]*
 | ID | title key | kind | args | when | perm | コンテキスト | 既定キー | ヒント |
 |---|---|---|---|---|---|---|---|---|
 | `file.save` | `cmd.file.save` | File | — | `!doc.read_only` | `-` | `editor`, `search` | `mod+s` | normal:4 |
-| `file.save_as` | `cmd.file.save_as` | File | `path?` | — | `-` | `editor` | `mod+shift+s` [E], `ctrl+k s` (alt) | - |
+| `file.save_as` | `cmd.file.save_as` | File | `path?` | — | `-` | `editor`, `search` | `editor`: `mod+shift+s` [E], `ctrl+k s` (alt)、`search`: `mod+shift+s` [E] | - |
 | `file.save_all` (v0.2) | `cmd.file.save_all` | File | — | — | `-` | `editor` | `ctrl+k a` (alt) | chord:3 |
-| `file.open` | `cmd.file.open` | File | `path?` | — | `-` | `editor` | `mod+o` | normal:2 |
-| `file.new` | `cmd.file.new` | File | — | — | `-` | `editor` | `mod+n` | - |
+| `file.open` | `cmd.file.open` | File | `path?` | — | `-` | `editor`, `search` | `mod+o` | normal:2 |
+| `file.new` | `cmd.file.new` | File | — | — | `-` | `editor`, `search` | `mod+n` | - |
 | `file.reload` | `cmd.file.reload` | File | — | `doc.has_path` | `-` | パレット | — | - |
 | `file.check_external_changes` (v0.2) | `cmd.file.check_external_changes` | File | — | `doc.has_path` | `-` | パレット | — | - |
 | `file.reopen_with_encoding` | `cmd.file.reopen_with_encoding` | File | `encoding` (列挙。パレットではリストで尋ねる) | `doc.has_path` | `-` | パレット | — | - |
@@ -1201,7 +1201,7 @@ verb       := [a-z][a-z0-9_]*
 | `edit.paste` | `cmd.edit.paste` | Edit | — | `!doc.read_only` | `-` | `editor`, `prompt` | `mod+v`, `shift+insert` (alt) (Windows Terminal ではどちらも端末の貼り付けになり、`Paste` (または個別キーのバースト) として届く。結果は同じ、04 §7.3a) | - |
 | `select.all` | `cmd.select.all` | Motion | — | — | `read` | `editor`, `prompt` (欄内全選択) | `mod+a` | - |
 | `edit.delete_backward` / `edit.delete_forward` | `cmd.edit.delete_backward` / `cmd.edit.delete_forward` | Edit | — | `!doc.read_only` | `propose` | `editor`, `prompt` | `backspace` / `delete` | - |
-| `edit.delete_word_backward` / `edit.delete_word_forward` | `cmd.edit.delete_word_backward` / `cmd.edit.delete_word_forward` | Edit | — | `!doc.read_only` | `propose` | `editor`, `prompt` | `ctrl+backspace` / `ctrl+delete`, `alt+backspace` (alt) (backward のみ)。単語の範囲・空白・行頭行末・選択ありの扱いは 03 §5.3 | - |
+| `edit.delete_word_backward` / `edit.delete_word_forward` | `cmd.edit.delete_word_backward` / `cmd.edit.delete_word_forward` | Edit | — | `!doc.read_only` | `propose` | `editor`, `prompt` | `editor`: `ctrl+backspace` / `ctrl+delete`, `alt+backspace` (alt) (backward のみ)、`prompt`: `ctrl+backspace` / `ctrl+delete`。単語の範囲・空白・行頭行末・選択ありの扱いは 03 §5.3 | - |
 | `edit.indent` / `edit.outdent` | `cmd.edit.indent` / `cmd.edit.outdent` | Edit | — | `!doc.read_only` | `propose` | `editor` | `tab` / `shift+tab` (版の注記: 選択範囲へのインデント / アンインデント (`!selection.empty`) は v0.2、FR-208。v0.1 は選択なしの動作だけで、`tab` はタブ / スペースの挿入。**v0.1 で選択ありの `tab` / `shift+tab` は何もしない** (選択を保ち、文書は変わらない)) | - |
 | `edit.duplicate_line` (v0.2) | `cmd.edit.duplicate_line` | Edit | — | `!doc.read_only` | `propose` | `editor` | `ctrl+k d` (alt) | - |
 | `edit.delete_line` (v0.2) | `cmd.edit.delete_line` | Edit | — | `!doc.read_only` | `propose` | `editor` | `ctrl+k l` (alt), `mod+shift+k` [E] | - |
@@ -1211,18 +1211,18 @@ verb       := [a-z][a-z0-9_]*
 
 | ID | title key | kind | args | when | perm | コンテキスト | 既定キー | ヒント |
 |---|---|---|---|---|---|---|---|---|
-| `cursor.move_left` / `cursor.move_right` / `cursor.move_up` / `cursor.move_down` | `cmd.cursor.move_left` / `cmd.cursor.move_right` / `cmd.cursor.move_up` / `cmd.cursor.move_down` | Motion | `count?` | — | `read` | `editor`、`prompt` (`left` / `right` のみ) | `left` / `right` / `up` / `down` | - |
+| `cursor.move_left` / `cursor.move_right` / `cursor.move_up` / `cursor.move_down` | `cmd.cursor.move_left` / `cmd.cursor.move_right` / `cmd.cursor.move_up` / `cmd.cursor.move_down` | Motion | `count?` | — | `read` | `editor`, `prompt` | `editor`: `left` / `right` / `up` / `down`、`prompt`: `left` / `right` / — / — | - |
 | `select.extend_left` / `select.extend_right` / `select.extend_up` / `select.extend_down` | `cmd.select.extend_left` / `cmd.select.extend_right` / `cmd.select.extend_up` / `cmd.select.extend_down` | Motion | `count?` | — | `read` | `editor` | `shift+left` / `shift+right` / `shift+up` / `shift+down` | - |
-| `cursor.move_word_left` / `cursor.move_word_right` | `cmd.cursor.move_word_left` / `cmd.cursor.move_word_right` | Motion | `count?` | — | `read` | `editor`, `prompt` | `ctrl+left` / `ctrl+right`, `alt+left` / `alt+right` [横], `alt+b` / `alt+f` (alt) | - |
+| `cursor.move_word_left` / `cursor.move_word_right` | `cmd.cursor.move_word_left` / `cmd.cursor.move_word_right` | Motion | `count?` | — | `read` | `editor`, `prompt` | `editor`: `ctrl+left` / `ctrl+right`, `alt+left` / `alt+right` [横], `alt+b` / `alt+f` (alt)、`prompt`: `ctrl+left` / `ctrl+right` | - |
 | `select.extend_word_left` / `select.extend_word_right` | `cmd.select.extend_word_left` / `cmd.select.extend_word_right` | Motion | `count?` | — | `read` | `editor` | `ctrl+shift+left` / `ctrl+shift+right`, `alt+shift+left` / `alt+shift+right` [横] | - |
-| `cursor.home` / `cursor.end` | `cmd.cursor.home` / `cmd.cursor.end` | Motion | — | — | `read` | `editor`, `prompt` | `home` / `end`, `ctrl+k left` / `ctrl+k right` (alt) | - |
+| `cursor.home` / `cursor.end` | `cmd.cursor.home` / `cmd.cursor.end` | Motion | — | — | `read` | `editor`, `prompt` | `editor`: `home` / `end`, `ctrl+k left` / `ctrl+k right` (alt)、`prompt`: `home` / `end` | - |
 | `select.extend_home` / `select.extend_end` | `cmd.select.extend_home` / `cmd.select.extend_end` | Motion | — | — | `read` | `editor` | `shift+home` / `shift+end`, `ctrl+k shift+left` / `ctrl+k shift+right` (alt) | - |
 | `cursor.doc_start` / `cursor.doc_end` | `cmd.cursor.doc_start` / `cmd.cursor.doc_end` | Motion | — | — | `read` | `editor` | `ctrl+home` / `ctrl+end` (案内: `cursor.goto_line` (`mod+g`) で `1` / `$` を入力しても同じ位置へ移れる。割当ではない) | - |
 | `select.extend_to_doc_start` / `select.extend_to_doc_end` | `cmd.select.extend_to_doc_start` / `cmd.select.extend_to_doc_end` | Motion | — | — | `read` | `editor` | `ctrl+shift+home` / `ctrl+shift+end` [E][横] (代替キーなし。届かない端末ではパレットから実行) | - |
 | `cursor.page_up` / `cursor.page_down` | `cmd.cursor.page_up` / `cmd.cursor.page_down` | Motion | — | — | `read` | `editor` | `pageup` / `pagedown`, `ctrl+k ,` / `ctrl+k .` (alt) | - |
 | `select.extend_page_up` / `select.extend_page_down` | `cmd.select.extend_page_up` / `cmd.select.extend_page_down` | Motion | — | — | `read` | `editor` | `shift+pageup` / `shift+pagedown`, `ctrl+k <` / `ctrl+k >` (alt) | - |
 | `cursor.goto_line` | `cmd.cursor.goto_line` | Motion | `line?` (`int` または文字列 `"$"` = 最終行), `col?` (`int`) | — | `read` | `editor` | `mod+g` | normal:1 |
-| `ui.cancel` | `cmd.ui.cancel` | Ui | — | — | `-` | `editor`, `search`, `prompt`, `dialog` (v0.2 から `help`) | `esc` | overlay:5 |
+| `ui.cancel` | `cmd.ui.cancel` | Ui | — | — | `-` | `editor`, `prompt`, `dialog`, `help` (検索バーには参照順 `search` → `prompt` で `prompt` の割当が届く、§7.1) | `esc` | overlay:5 |
 
 **検索・表示** (v0.1 の ID 6 個)
 
@@ -1247,8 +1247,8 @@ verb       := [a-z][a-z0-9_]*
 | ID | title key | kind | args | when | perm | コンテキスト | 既定キー | ヒント |
 |---|---|---|---|---|---|---|---|---|
 | `ui.confirm` | `cmd.ui.confirm` | Ui | — | `overlay.active != "" \|\| search.active` | `-` | `prompt`, `dialog` | `enter` (`dialog` ではフォーカス中のボタンを実行) | overlay:4 |
-| `ui.list_next` / `ui.list_prev` | `cmd.ui.list_next` / `cmd.ui.list_prev` | Ui | — | `overlay.active != "" \|\| search.active` | `-` | `list`, `dialog` (v0.2 から `help`) | `list`: `down` / `up`, `ctrl+n` / `ctrl+p`、`dialog`: `tab` / `shift+tab`, `right` / `left`, `down` / `up` | overlay:3 (next のみ) |
-| `ui.list_page_down` / `ui.list_page_up` | `cmd.ui.list_page_down` / `cmd.ui.list_page_up` | Ui | — | `overlay.active != "" \|\| search.active` | `-` | `list` (v0.2 から `help`) | `pagedown` / `pageup` | - |
+| `ui.list_next` / `ui.list_prev` | `cmd.ui.list_next` / `cmd.ui.list_prev` | Ui | — | `overlay.active != "" \|\| search.active` | `-` | `list`, `dialog`, `help`, `search` | `list`: `down` / `up`, `ctrl+n` / `ctrl+p`、`dialog`: `tab` / `shift+tab`, `right` / `left`, `down` / `up`、`help`: `down` / `up`、`search`: `tab` / `shift+tab` (検索欄 → 置換欄 → ボタンの移動、04 §8.4) | overlay:3 (next のみ) |
+| `ui.list_page_down` / `ui.list_page_up` | `cmd.ui.list_page_down` / `cmd.ui.list_page_up` | Ui | — | `overlay.active != "" \|\| search.active` | `-` | `list`, `help` | `pagedown` / `pageup` | - |
 | `ui.dialog_choose` | `cmd.ui.dialog_choose` | Ui | `choice` | `overlay.active == "dialog"` | `-` | `dialog` | (選択肢のアクセラレータ 1 文字。組込みの dialog 層が `Text` を照合する、§7.1。複数書記素の `Text` と `Paste` は先頭の書記素も照合せずすべて捨てる (提案、02 §7.2 K1、OQ-180)) | - |
 
 - `list` では `ctrl+p` = 前、`ctrl+n` = 次。
