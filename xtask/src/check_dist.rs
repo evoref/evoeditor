@@ -319,7 +319,8 @@ mod tests {
     #[test]
     fn feature_は_tree_の行から探す() {
         let tree = "evoeditor v0.0.0\neve-core v0.0.0\neve-core feature \"default\"\n";
-        assert!(forbidden_features(tree).is_empty());
+        let actual = forbidden_features(tree);
+        assert!(actual.is_empty(), "{actual:?}");
         let tree = "evoeditor feature \"test-hooks\"\n";
         assert_eq!(forbidden_features(tree), ["test-hooks"]);
     }
@@ -332,7 +333,8 @@ mod tests {
             .flat_map(u16::to_le_bytes)
             .collect();
         assert_eq!(forbidden_strings(&wide), ["EVE_TRACE_FILE"]);
-        assert!(forbidden_strings(b"nothing here").is_empty());
+        let actual = forbidden_strings(b"nothing here");
+        assert!(actual.is_empty(), "{actual:?}");
     }
 
     // verifies: AC-NFR-502-2
@@ -356,7 +358,11 @@ mod tests {
         b[5] = 1;
         b[0x20..0x28].copy_from_slice(&(phoff as u64).to_le_bytes());
         b[0x36..0x38].copy_from_slice(&56u16.to_le_bytes());
-        b[0x38..0x3a].copy_from_slice(&(phs.len() as u16).to_le_bytes());
+        b[0x38..0x3a].copy_from_slice(
+            &u16::try_from(phs.len())
+                .expect("プログラムヘッダは 65535 個以下")
+                .to_le_bytes(),
+        );
         for (i, (ty, body)) in phs.iter().enumerate() {
             let ph = phoff + i * 56;
             let off = b.len();

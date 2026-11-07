@@ -41,7 +41,8 @@ fn make(method: SaveMethod, target: &str, seq: u32, secs: i64) -> InflightRecord
 #[test]
 fn 痕跡が無ければ提案しない() {
     let mut s = env();
-    assert!(start(&mut s).is_empty());
+    let actual = start(&mut s);
+    assert!(actual.is_empty(), "{actual:?}");
 }
 
 // verifies: NFR-301
@@ -112,7 +113,8 @@ fn tmp_だけなら_t_の有無に依らず_tmp_の提案() {
 fn 痕跡が何も残っていない記録はフラグだけを消す() {
     let mut s = env();
     record(&s, SaveMethod::Atomic, "/w/a.txt", 1, 10);
-    assert!(start(&mut s).is_empty());
+    let actual = start(&mut s);
+    assert!(actual.is_empty(), "{actual:?}");
     assert!(s.fs.inflight_records().is_empty(), "フラグを掃除する");
 }
 

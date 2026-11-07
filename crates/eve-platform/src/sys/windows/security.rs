@@ -49,7 +49,7 @@ impl OwnerOnly {
             ConvertStringSecurityDescriptorToSecurityDescriptorW(
                 sddl.as_ptr(),
                 SDDL_REVISION_1,
-                &mut descriptor,
+                &raw mut descriptor,
                 ptr::null_mut(),
             )
         };
@@ -59,7 +59,8 @@ impl OwnerOnly {
         Ok(OwnerOnly {
             descriptor,
             attrs: SECURITY_ATTRIBUTES {
-                nLength: std::mem::size_of::<SECURITY_ATTRIBUTES>() as u32,
+                nLength: u32::try_from(std::mem::size_of::<SECURITY_ATTRIBUTES>())
+                    .unwrap_or(u32::MAX),
                 lpSecurityDescriptor: descriptor,
                 bInheritHandle: 0,
             },
@@ -67,7 +68,7 @@ impl OwnerOnly {
     }
 
     pub(crate) fn as_ptr(&self) -> *const SECURITY_ATTRIBUTES {
-        &self.attrs
+        &raw const self.attrs
     }
 }
 
@@ -104,7 +105,7 @@ pub(crate) fn create_dir_private(dir: &Path) -> io::Result<()> {
 fn sid_string(sid: PSID) -> io::Result<String> {
     let mut s: *mut u16 = ptr::null_mut();
     // SAFETY: `sid` は呼び側が有効な SID を渡す。`s` は書込先の有効なポインタ。
-    if unsafe { ConvertSidToStringSidW(sid, &mut s) } == 0 {
+    if unsafe { ConvertSidToStringSidW(sid, &raw mut s) } == 0 {
         return Err(io::Error::last_os_error());
     }
     // SAFETY: `s` は NUL 終端の UTF-16 (`LocalAlloc` で確保)。読んでから `LocalFree` する。
@@ -123,17 +124,18 @@ fn sid_string(sid: PSID) -> io::Result<String> {
 pub(crate) fn current_user_sid() -> io::Result<String> {
     let mut token: HANDLE = ptr::null_mut();
     // SAFETY: 自プロセスのトークンを問い合わせ用に開く。
-    if unsafe { OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut token) } == 0 {
+    if unsafe { OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &raw mut token) } == 0 {
         return Err(io::Error::last_os_error());
     }
     let result = (|| {
         let mut len = 0u32;
         // SAFETY: 長さの問い合わせ (バッファなし)。失敗 (ERROR_INSUFFICIENT_BUFFER) が正常。
-        unsafe { GetTokenInformation(token, TokenUser, ptr::null_mut(), 0, &mut len) };
+        unsafe { GetTokenInformation(token, TokenUser, ptr::null_mut(), 0, &raw mut len) };
         let mut buf = vec![0u8; len as usize];
         // SAFETY: `buf` は `len` バイトの書込先。
-        if unsafe { GetTokenInformation(token, TokenUser, buf.as_mut_ptr().cast(), len, &mut len) }
-            == 0
+        if unsafe {
+            GetTokenInformation(token, TokenUser, buf.as_mut_ptr().cast(), len, &raw mut len)
+        } == 0
         {
             return Err(io::Error::last_os_error());
         }
@@ -152,17 +154,24 @@ pub(crate) fn current_user_sid() -> io::Result<String> {
 fn token_owner_sid() -> io::Result<String> {
     let mut token: HANDLE = ptr::null_mut();
     // SAFETY: 自プロセスのトークンを問い合わせ用に開く。
-    if unsafe { OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut token) } == 0 {
+    if unsafe { OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &raw mut token) } == 0 {
         return Err(io::Error::last_os_error());
     }
     let result = (|| {
         let mut len = 0u32;
         // SAFETY: 長さの問い合わせ (バッファなし)。失敗 (ERROR_INSUFFICIENT_BUFFER) が正常。
-        unsafe { GetTokenInformation(token, TokenOwner, ptr::null_mut(), 0, &mut len) };
+        unsafe { GetTokenInformation(token, TokenOwner, ptr::null_mut(), 0, &raw mut len) };
         let mut buf = vec![0u8; len as usize];
         // SAFETY: `buf` は `len` バイトの書込先。
-        if unsafe { GetTokenInformation(token, TokenOwner, buf.as_mut_ptr().cast(), len, &mut len) }
-            == 0
+        if unsafe {
+            GetTokenInformation(
+                token,
+                TokenOwner,
+                buf.as_mut_ptr().cast(),
+                len,
+                &raw mut len,
+            )
+        } == 0
         {
             return Err(io::Error::last_os_error());
         }
@@ -186,15 +195,16 @@ fn owner_sid_of(path: &Path) -> io::Result<String> {
             w.as_ptr(),
             SE_FILE_OBJECT,
             OWNER_SECURITY_INFORMATION,
-            &mut owner,
+            &raw mut owner,
             ptr::null_mut(),
             ptr::null_mut(),
             ptr::null_mut(),
-            &mut descriptor,
+            &raw mut descriptor,
         )
     };
     if rc != 0 {
-        return Err(io::Error::from_raw_os_error(rc as i32));
+        // Win32 のエラー番号 (DWORD) を、io::Error の i32 にビットのまま入れる
+        return Err(io::Error::from_raw_os_error(rc.cast_signed()));
     }
     let r = sid_string(owner);
     // SAFETY: 上で確保された記述子。`owner` はこの後使わない。

@@ -1,5 +1,9 @@
 //! L4: 仮想画面 (`VirtualScreen`) を使った出力の検査 (docs/09 §3.5)。Frame → Buffer → 出力バイト列 → 仮想画面の往復で、
 //! 画面・カーソル・クロームの省略が Frame の宣言と一致することを確かめる (04 §4.7 の幅不一致対策 (a)(c)、08 S-06 の合否基準)。
+#![expect(
+    clippy::cast_possible_truncation,
+    reason = "テスト用の数値変換。値は小さく収まる"
+)]
 
 use eve_testkit::{Harness, VirtualScreen, WidthConfig};
 use eve_tui::ansi::Emitter;

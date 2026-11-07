@@ -47,7 +47,7 @@ pub fn ui_language_tag() -> Option<String> {
         windows_sys::Win32::Globalization::LCIDToLocaleName(
             u32::from(langid),
             buf.as_mut_ptr(),
-            buf.len() as i32,
+            i32::try_from(buf.len()).expect("85 要素"),
             0,
         )
     };

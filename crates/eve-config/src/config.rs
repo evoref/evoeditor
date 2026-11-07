@@ -251,7 +251,9 @@ pub fn is_theme_name(s: &str) -> bool {
 /// - `custom(f)`: 関数 `f(cx, key, v) -> Option<型>` で読む (別名・後の版の値など、表で書けないもの)。
 macro_rules! read_value {
     ($cx:expr, $key:expr, $v:expr, $ty:ty, int($min:expr, $max:expr)) => {
-        $cx.int($key, $v, $min, $max).map(|n| n as $ty)
+        $cx.int($key, $v, $min, $max).map(|n| {
+            <$ty>::try_from(n).expect("config_keys! の int(min, max) は型に収まる範囲で書く")
+        })
     };
     ($cx:expr, $key:expr, $v:expr, $ty:ty, boolean) => {
         $cx.boolean($key, $v)
@@ -467,7 +469,11 @@ impl Cx<'_> {
         let head = self.text.get(..end).unwrap_or("");
         let line = head.matches('\n').count() + 1;
         let col = head.rsplit('\n').next().map_or(0, |l| l.chars().count()) + 1;
-        (line as u32, col as u32)
+        // 診断の位置の表示用。u32 を超える行・桁は上限で丸める
+        (
+            u32::try_from(line).unwrap_or(u32::MAX),
+            u32::try_from(col).unwrap_or(u32::MAX),
+        )
     }
 
     fn diag(&mut self, severity: Severity, kind: DiagKind, key: String, at: usize) {

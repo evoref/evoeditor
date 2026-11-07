@@ -95,9 +95,9 @@ fn spawn_owner() -> Option<usize> {
             // SAFETY: 自分のスレッドのメッセージキューを読む。`msg` は有効な書込先。
             unsafe {
                 let mut msg: MSG = std::mem::zeroed();
-                while GetMessageW(&mut msg, std::ptr::null_mut(), 0, 0) > 0 {
-                    TranslateMessage(&msg);
-                    DispatchMessageW(&msg);
+                while GetMessageW(&raw mut msg, std::ptr::null_mut(), 0, 0) > 0 {
+                    TranslateMessage(&raw const msg);
+                    DispatchMessageW(&raw const msg);
                 }
             }
         })
@@ -161,8 +161,8 @@ impl ClipApi for Win32Api {
             if h.is_null() {
                 return Ok(None);
             }
-            let size_units = GlobalSize(h as _) / 2;
-            let p = GlobalLock(h as _).cast::<u16>();
+            let size_units = GlobalSize(h.cast()) / 2;
+            let p = GlobalLock(h.cast()).cast::<u16>();
             if p.is_null() {
                 return Err(ClipboardFailure::Failed);
             }
@@ -179,7 +179,7 @@ impl ClipApi for Win32Api {
                     Ok(Some(v))
                 }
             };
-            GlobalUnlock(h as _);
+            GlobalUnlock(h.cast());
             result
         }
     }

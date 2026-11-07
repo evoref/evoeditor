@@ -1,6 +1,10 @@
 //! `fuzz_editor` の本体 (`eve_testkit::fuzzing::editor_sequence`) を、決定的な乱数で作った入力で回す (docs/09 §3.3、NFR-305)。
 //! libFuzzer は MSVC 非対応なので、Windows の CI ではこれで同じ不変条件を確かめる。本格の探索は Linux の夜間の `fuzz_editor`。
 //! 回数は `EVE_FUZZ_EDITOR_CASES` (既定 300) で変えられる。
+#![expect(
+    clippy::cast_possible_truncation,
+    reason = "テスト用の数値変換。値は小さく収まる"
+)]
 
 use eve_testkit::fuzzing::editor_sequence;
 

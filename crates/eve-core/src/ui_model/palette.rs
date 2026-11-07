@@ -152,18 +152,26 @@ pub(crate) fn fuzzy(hay: &[String], needle: &[String]) -> Option<(i32, Vec<usize
         } else {
             0
         };
-        return Some((1000 + bonus - s as i32, (s..s + needle.len()).collect()));
+        let s_score = i32::try_from(s).unwrap_or(i32::MAX);
+        return Some((
+            (1000i32 + bonus).saturating_sub(s_score),
+            (s..s + needle.len()).collect(),
+        ));
     }
     // 部分列: 前から順に当てる。語頭の文字を優先して当て、それで当てきれなければ前から最初の文字に当て直す
     let pos = subsequence(hay, needle, true).or_else(|| subsequence(hay, needle, false))?;
-    let mut score = 500 - pos[0] as i32;
+    let mut score = 500i32.saturating_sub(i32::try_from(pos[0]).unwrap_or(i32::MAX));
     for (k, &i) in pos.iter().enumerate() {
         if word_start(hay, i) {
             score += 20;
         }
         if k > 0 {
             let gap = i - pos[k - 1] - 1;
-            score += if gap == 0 { 15 } else { -(gap.min(20) as i32) };
+            score += if gap == 0 {
+                15
+            } else {
+                -i32::try_from(gap.min(20)).unwrap_or(20)
+            };
         }
     }
     Some((score, pos))

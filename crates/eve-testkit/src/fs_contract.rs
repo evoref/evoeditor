@@ -259,7 +259,9 @@ fn read_after_write(s: &Subject) {
     let p = create(s, "t.txt", text);
     assert_eq!(read_all(s, &p), text);
 
-    let big: Vec<u8> = (0..(5 << 19) + 7).map(|i| (i % 251) as u8).collect();
+    let big: Vec<u8> = (0..(5 << 19) + 7)
+        .map(|i| u8::try_from(i % 251).expect("251 未満"))
+        .collect();
     let p = create(s, "big.bin", &big);
     let mut r = s.fs.open_read(&p).unwrap();
     let mut out = Vec::new();
@@ -505,7 +507,8 @@ fn remove_file(s: &Subject) {
 fn no_inflight_after_save(s: &Subject) {
     let p = create(s, "a.txt", b"v1");
     save(s, &p, b"v2", Expect::Stamp(stamp(s, &p))).unwrap();
-    assert!(s.fs.inflight_for(&p).unwrap().is_empty());
+    let actual = s.fs.inflight_for(&p).unwrap();
+    assert!(actual.is_empty(), "{actual:?}");
     assert!(!s.fs.list_inflight().unwrap().iter().any(|r| r.target == p));
 }
 

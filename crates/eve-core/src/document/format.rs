@@ -87,9 +87,9 @@ impl EolStats {
     /// `self - removed + added` (各成分を 0 で止める)。
     pub(crate) fn replaced(self, removed: EolStats, added: EolStats) -> EolStats {
         let f = |cur: usize, rem: usize, add: usize| {
-            let v = cur as i128 - rem as i128 + add as i128;
-            debug_assert!(v >= 0, "eol_stats が負になった");
-            v.max(0) as usize
+            let v = cur.saturating_add(add);
+            debug_assert!(v >= rem, "eol_stats が負になった");
+            v.saturating_sub(rem)
         };
         EolStats {
             lf: f(self.lf, removed.lf, added.lf),
@@ -460,6 +460,10 @@ mod tests {
     }
 
     #[test]
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "試験の乱数を小さい剰余で添字にする"
+    )]
     fn 改行の数え方は_1_バイトずつ数えた結果と同じ() {
         let mut x = 0x2545_F491_4F6C_DD1Du64;
         let mut next = || {

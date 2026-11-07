@@ -1,5 +1,9 @@
 //! クローム (ステータスバー・メッセージ行・ヒントバー) とオーバーレイ (確認・入力プロンプト) の描画の検査
 //! (docs/04 §3.3 / §3.5 / §8.2 / §8.3 / §8.7〜§8.9)。Harness が作る `Frame` を `render_screen` で `Buffer` にして、行の文字列を見る。
+#![expect(
+    clippy::cast_possible_truncation,
+    reason = "テスト用の数値変換。値は小さく収まる"
+)]
 
 use eve_testkit::Harness;
 use eve_tui::buffer::{chrome_rows_for_surface, row_text};

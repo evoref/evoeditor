@@ -77,6 +77,10 @@ impl Role {
 
 const D: ThemeColor = ThemeColor::Default;
 
+#[expect(
+    clippy::cast_possible_truncation,
+    reason = "0xRRGGBB から各 8 ビットを取り出す (上位は捨てる)"
+)]
 const fn rgb(c: u32) -> ThemeColor {
     ThemeColor::Rgb((c >> 16) as u8, (c >> 8) as u8, c as u8)
 }

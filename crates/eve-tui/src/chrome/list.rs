@@ -33,7 +33,7 @@ pub(super) fn render_list(
     let style = theme.overlay;
     let ascii = glyphs.ellipsis.width == 3;
     let (bw, mut bordered) = box_width(76, area.cols);
-    let body_rows = items.len().max(1) as u16;
+    let body_rows = crate::cells(items.len().max(1));
     let rows_for = |bordered: bool, n: u16| u16::from(bordered) * 2 + 1 + n;
     if rows_for(bordered, body_rows) > area.rows {
         bordered = false;
@@ -65,7 +65,7 @@ pub(super) fn render_list(
         put(w, ix, iy + 1, limit, &t, theme.placeholder);
     }
     for (k, item) in items.iter().take(n as usize).enumerate() {
-        let y = iy + 1 + k as u16;
+        let y = iy.saturating_add(1).saturating_add(crate::cells(k));
         let is_sel = *first + k == *selected;
         let disabled = item.disabled_reason.is_some();
         let base = if disabled {

@@ -71,7 +71,8 @@ pub fn decode_pipeline(data: &[u8]) {
     let summary = checker.finish();
 
     // 状態付き符号化で不正バイトがあれば読み取り専用 (復号できない入力は不正バイトに数えられる)
-    let escapes = text.chars().filter(|c| unescape_char(*c).is_some()).count() as u32;
+    let escapes = u32::try_from(text.chars().filter(|c| unescape_char(*c).is_some()).count())
+        .unwrap_or(u32::MAX);
     assert!(dec.invalid_bytes() <= escapes.max(dec.invalid_bytes()));
     if enc.is_stateful() {
         assert_eq!(dec.pua_mode(), crate::PuaEscapeMode::DisabledStateful);

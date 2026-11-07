@@ -67,7 +67,7 @@ fn termios_of(fd: BorrowedFd<'_>) -> io::Result<libc::termios> {
     // SAFETY: ゼロ初期化した termios (整数と配列だけ) に書かせる。
     let mut t: libc::termios = unsafe { std::mem::zeroed() };
     // SAFETY: 開いている fd と有効な書込先。
-    if unsafe { libc::tcgetattr(fd.as_raw_fd(), &mut t) } != 0 {
+    if unsafe { libc::tcgetattr(fd.as_raw_fd(), &raw mut t) } != 0 {
         return Err(io::Error::last_os_error());
     }
     Ok(t)
@@ -108,7 +108,8 @@ fn write_all(fd: BorrowedFd<'_>, mut b: &[u8]) -> io::Result<()> {
             }
             return Err(e);
         }
-        b = &b[n as usize..];
+        // n >= 0 を確かめた後
+        b = &b[n.unsigned_abs()..];
     }
     Ok(())
 }
@@ -136,7 +137,7 @@ impl ConsoleInput {
         let saved = termios_of(fd.as_fd())?;
         let mut raw = saved;
         // SAFETY: 有効な termios を raw に書き換える。
-        unsafe { libc::cfmakeraw(&mut raw) };
+        unsafe { libc::cfmakeraw(&raw mut raw) };
         raw.c_cc[libc::VMIN] = 1;
         raw.c_cc[libc::VTIME] = 0;
         set_termios(fd.as_fd(), &raw)?;
@@ -234,7 +235,8 @@ impl ConsoleOut {
 
     /// 描画先の fd (緊急の端末復元に渡す)。
     pub fn raw_handle(&self) -> usize {
-        self.fd.as_raw_fd() as usize
+        // 開いている fd は 0 以上。万一負なら usize::MAX (無効な fd。復元の書込が失敗するだけ。パニックにしない)
+        usize::try_from(self.fd.as_raw_fd()).unwrap_or(usize::MAX)
     }
 
     /// 出力の側には戻すモードが無い (termios は入力の側が戻す)。
@@ -345,7 +347,7 @@ impl Loop<'_> {
             let n =
                 unsafe { libc::read(self.fd.as_raw_fd(), chunk.as_mut_ptr().cast(), chunk.len()) };
             if n > 0 {
-                buf.extend_from_slice(&chunk[..n as usize]);
+                buf.extend_from_slice(&chunk[..n.unsigned_abs()]);
                 continue;
             }
             if n == 0 {
@@ -496,8 +498,15 @@ mod tests {
             ws_ypixel: 0,
         };
         // SAFETY: 有効な書込先と winsize。
-        let r =
-            unsafe { libc::openpty(&mut m, &mut s, std::ptr::null_mut(), std::ptr::null(), &ws) };
+        let r = unsafe {
+            libc::openpty(
+                &raw mut m,
+                &raw mut s,
+                std::ptr::null_mut(),
+                std::ptr::null(),
+                &raw const ws,
+            )
+        };
         assert_eq!(r, 0);
         // SAFETY: `openpty` が返した、ほかに持ち主の無い fd。従の側を非ブロックにする。
         unsafe {

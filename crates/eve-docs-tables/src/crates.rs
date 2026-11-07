@@ -92,7 +92,7 @@ mod tests {
         assert_eq!(v[0].forbidden, ["ratatui", "crossterm"]);
         assert_eq!(v[1].name, "evoeditor");
         assert_eq!(v[1].version, "v0.1");
-        assert!(v[2].forbidden.is_empty());
+        assert!(v[2].forbidden.is_empty(), "{:?}", v[2].forbidden);
         assert_eq!(v[2].version, "v1.L");
     }
 

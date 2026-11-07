@@ -781,15 +781,8 @@ mod tests {
             max_nodes: 3,
         });
         d.h.mark_saved(); // 根
-        for i in 0..5u64 {
-            let out = d.edit(
-                i as usize,
-                i as usize,
-                "x",
-                Origin::Paste,
-                UndoGroupHint::Auto,
-                10,
-            );
+        for i in 0..5usize {
+            let out = d.edit(i, i, "x", Origin::Paste, UndoGroupHint::Auto, 10);
             assert_eq!(out.pruned, i >= 3);
         }
         assert_eq!(d.h.undo_len(), 3);

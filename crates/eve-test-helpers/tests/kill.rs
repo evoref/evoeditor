@@ -301,7 +301,8 @@ fn フラグだけの段では_t_は無傷でバックアップは無く_報告�
     killed(&e.save("a.txt", "inplace", NEW, Some("kill_after_inflight_flag")));
     assert_eq!(fs::read(e.file("a.txt")).unwrap(), ORIG);
     assert_eq!(e.flags(), 1);
-    assert!(e.backups().is_empty());
+    let actual = e.backups();
+    assert!(actual.is_empty(), "{actual:?}");
     let (report, _) = e.open_report("a.txt");
     assert!(report.is_none(), "msg.open.interrupted_save* は出ない");
     assert_eq!(e.flags(), 0, "開いた後にフラグだけが消える");
@@ -313,7 +314,7 @@ fn バックアップの書込中の中断は不完全として案内し_t_は�
     let e = Env::new("ip-midbackup");
     // 1 チャンク (1 MiB) より大きい元ファイルで、バックアップの途中を作る
     let orig: Vec<u8> = (0..2 * 1024 * 1024)
-        .map(|i| b'a' + (i % 26) as u8)
+        .map(|i| b'a' + u8::try_from(i % 26).expect("26 未満"))
         .collect();
     fs::write(e.file("a.txt"), &orig).unwrap();
     killed(&e.save("a.txt", "inplace", NEW, Some("kill_mid_backup")));
@@ -368,7 +369,9 @@ fn バックアップの後の切断点では完全なバックアップが残�
 #[test]
 fn 上書きの途中の中断では_t_は半端に書き換わりバックアップが元の内容を保つ() {
     let e = Env::new("ip-mid");
-    let orig: Vec<u8> = (0..200_000).map(|i| b'a' + (i % 26) as u8).collect();
+    let orig: Vec<u8> = (0..200_000)
+        .map(|i| b'a' + u8::try_from(i % 26).expect("26 未満"))
+        .collect();
     fs::write(e.file("a.txt"), &orig).unwrap();
     let new: Vec<u8> = vec![b'N'; 200_000];
     killed(&e.save(
@@ -514,7 +517,8 @@ fn 置換の途中の強制終了は_走査で_bak_と_tmp_の両方の提案に
     e.act(&l2[0], LeftoverOp::DeleteTmp).expect("消せる");
     assert_eq!(e.flags(), 0);
     assert!(e.names().iter().all(|n| n == "a.txt"), "{:?}", e.names());
-    assert!(e.scan().is_empty());
+    let actual = e.scan();
+    assert!(actual.is_empty(), "{actual:?}");
 }
 
 // 置換の途中の状態 (`kill_after_replace_begin`) は Windows の置換 (T を退避名に移してから一時ファイルを移す) だけにある。
@@ -571,7 +575,8 @@ fn 保存が成功していれば走査は何も提案しない() {
     let e = Env::new("scan-clean");
     fs::write(e.file("a.txt"), ORIG).unwrap();
     assert_eq!(e.save("a.txt", "atomic", NEW, None).code, Some(0));
-    assert!(e.scan().is_empty());
+    let actual = e.scan();
+    assert!(actual.is_empty(), "{actual:?}");
 }
 
 // ---- 緊急退避の段 1 の後の強制終了 (09 §3.6 (7)、02 §11.2.1 の「書く順」) ----

@@ -92,7 +92,8 @@ fn 診断が無ければ何も出さない() {
     let mut h = Harness::new();
     h.clear_log();
     h.editor.state_mut().report_config("config.toml", &[]);
-    assert!(h.messages().is_empty());
+    let actual = h.messages();
+    assert!(actual.is_empty(), "{actual:?}");
 }
 
 #[test]
@@ -161,7 +162,8 @@ fn 未対応の情報診断は画面に出さない() {
     h.editor
         .state_mut()
         .report_config("config.toml", &l.diagnostics);
-    assert!(h.messages().is_empty());
+    let actual = h.messages();
+    assert!(actual.is_empty(), "{actual:?}");
     // 警告が 1 件混じれば、その 1 件だけを数える
     let l = load_str("[editor]\nauto_indent = false\ntab_width = 0\n");
     h.editor
@@ -190,7 +192,8 @@ fn 公開前の_ui_キーは未対応の情報診断になり_画面に出ない
     h.editor
         .state_mut()
         .report_config("config.toml", &l.diagnostics);
-    assert!(h.messages().is_empty());
+    let actual = h.messages();
+    assert!(actual.is_empty(), "{actual:?}");
 }
 
 // NFR-603 AC-3 (v0.2。チェックリストは v0.2 のゲートで作る)

@@ -130,8 +130,10 @@ fn 壊れたフラグは_malformed_で返す() {
 #[test]
 fn 状態ディレクトリが空ならどちらも空() {
     let e = Env::new("empty");
-    assert!(e.fs.list_inflight().unwrap().is_empty());
-    assert!(e.fs.list_orphan_backups().unwrap().is_empty());
+    let actual = e.fs.list_inflight().unwrap();
+    assert!(actual.is_empty(), "{actual:?}");
+    let actual = e.fs.list_orphan_backups().unwrap();
+    assert!(actual.is_empty(), "{actual:?}");
 }
 
 #[test]

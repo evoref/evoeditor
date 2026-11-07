@@ -200,7 +200,8 @@ mod tests {
     #[test]
     fn 差分は許可リストのファイルだけ() {
         let diff = "docs/compat/0.1.0/release-checklist.md\ndocs/perf/0.1.0/a.md\ntests/ac-checklist.toml\n";
-        assert!(disallowed(diff).is_empty());
+        let actual = disallowed(diff);
+        assert!(actual.is_empty(), "{actual:?}");
         let diff = "docs/compat/0.1.0/a.md\nsrc/x.rs\ndocs/08-roadmap.md\n";
         assert_eq!(disallowed(diff), ["src/x.rs", "docs/08-roadmap.md"]);
     }

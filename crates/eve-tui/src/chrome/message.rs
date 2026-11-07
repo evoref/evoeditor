@@ -36,7 +36,7 @@ pub(super) fn render_message(
     };
     let head_w = mark.width + 1;
     let hint_w = hint.as_ref().map_or(0, |h| 2 + h.width);
-    let fixed = head_w + hint_w + suffix.len() as u16;
+    let fixed = head_w + hint_w.saturating_add(crate::cells(suffix.len()));
     // 切り詰めは詳細 (本文) から: 対処 (hint) は省略しない
     let text_budget = cols.saturating_sub(fixed);
     let mut line: Vec<Span> = vec![glyph_span(mark, style), ascii_span(" ", style)];

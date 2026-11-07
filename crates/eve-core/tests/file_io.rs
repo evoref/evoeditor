@@ -855,7 +855,8 @@ fn 退避先に保存が失敗するとそれを示す() {
     );
     type_text(&mut s, "r");
     s.run_jobs();
-    assert!(s.fs.recovery_written().is_empty());
+    let actual = s.fs.recovery_written();
+    assert!(actual.is_empty(), "{actual:?}");
     assert!(messages(&mut s).contains(&"msg.save.recovery_failed".to_owned()));
     assert!(doc(&s).1.is_dirty());
 }
@@ -879,7 +880,8 @@ fn 保存の失敗の確認の別名で保存とキャンセル() {
     keys(&mut s, "esc");
     assert!(!dialog_open(&s));
     assert!(messages(&mut s).contains(&"info.save.aborted".to_owned()));
-    assert!(s.fs.recovery_written().is_empty());
+    let actual = s.fs.recovery_written();
+    assert!(actual.is_empty(), "{actual:?}");
 }
 
 #[test]

@@ -141,7 +141,7 @@ impl MemFs {
         s.seq = s.seq.wrapping_add(1);
         let ms = self.clock.now().0;
         FileTime {
-            secs: (ms / 1000) as i64,
+            secs: i64::try_from(ms / 1000).expect("試験の時計の秒は i64 に収まる"),
             nanos: ((ms % 1000) as u32) * 1_000_000 + s.seq % 1_000_000,
         }
     }
@@ -848,7 +848,8 @@ impl ReadChunks for MemReader {
         }
         let mut end = (self.pos + self.chunk).min(self.data.len());
         if let Some(n) = self.fail_after {
-            let n = n as usize;
+            // usize を超える位置で失敗させる指定は、失敗しないのと同じ
+            let n = usize::try_from(n).unwrap_or(usize::MAX);
             if self.pos >= n {
                 return Err(ChunkError::Io(FsError::new(FsErrorKind::Other)));
             }

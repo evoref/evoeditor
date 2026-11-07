@@ -30,7 +30,7 @@ pub(super) fn status_total(entries: &[StatusEntry]) -> u16 {
             .map(|e| text_width(&e.spans))
             .collect();
         let sum: u16 = ws.iter().sum();
-        let gaps = ws.len().saturating_sub(1) as u16 * ITEM_GAP;
+        let gaps = crate::cells(ws.len().saturating_sub(1)).saturating_mul(ITEM_GAP);
         (ws.len(), sum + gaps)
     };
     let (ln, lw) = group(StatusAlign::Left);
@@ -139,7 +139,7 @@ pub(super) fn render_status(
     }
     let right = live(StatusAlign::Right);
     let rw: u16 = right.iter().map(|e| text_width(&e.spans)).sum::<u16>()
-        + right.len().saturating_sub(1) as u16 * ITEM_GAP;
+        + crate::cells(right.len().saturating_sub(1)).saturating_mul(ITEM_GAP);
     let mut x = cols - rw;
     for e in right {
         x = put(w, x, y, cols, &e.spans, styled(e));

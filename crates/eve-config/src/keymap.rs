@@ -43,7 +43,11 @@ fn pos(text: &str, offset: usize) -> (u32, u32) {
     let head = text.get(..offset.min(text.len())).unwrap_or("");
     let line = head.matches('\n').count() + 1;
     let col = head.rsplit('\n').next().map_or(0, |l| l.chars().count()) + 1;
-    (line as u32, col as u32)
+    // 診断の位置の表示用。u32 を超える行・桁は上限で丸める
+    (
+        u32::try_from(line).unwrap_or(u32::MAX),
+        u32::try_from(col).unwrap_or(u32::MAX),
+    )
 }
 
 struct Cx<'a> {
@@ -227,7 +231,7 @@ mod tests {
     #[test]
     fn 構文エラーはファイル全体を無視し_診断を返す() {
         let f = load_keymap_str("[keys.editor\n");
-        assert!(f.entries.is_empty());
+        assert!(f.entries.is_empty(), "{:?}", f.entries);
         assert!(matches!(f.diagnostics[0].kind, DiagKind::Syntax { .. }));
     }
 
@@ -254,7 +258,7 @@ mod tests {
                 .iter()
                 .any(|(k, _)| matches!(k, DiagKind::TypeMismatch { .. }))
         );
-        assert!(f.entries.is_empty());
+        assert!(f.entries.is_empty(), "{:?}", f.entries);
     }
 
     #[test]

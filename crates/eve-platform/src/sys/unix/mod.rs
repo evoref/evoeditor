@@ -40,7 +40,7 @@ pub(crate) fn free_bytes(path: &Path) -> Option<u64> {
     // SAFETY: ゼロ初期化した `statvfs` (全フィールドが整数) に書かせる。
     let mut st: libc::statvfs = unsafe { std::mem::zeroed() };
     // SAFETY: NUL 終端のパスと有効な書込先。
-    if unsafe { libc::statvfs(c.as_ptr(), &mut st) } != 0 {
+    if unsafe { libc::statvfs(c.as_ptr(), &raw mut st) } != 0 {
         return None;
     }
     #[allow(clippy::useless_conversion)]
@@ -88,10 +88,10 @@ pub(crate) fn passwd_home() -> Option<String> {
         let mut out: *mut libc::passwd = std::ptr::null_mut();
         let r = libc::getpwuid_r(
             euid(),
-            &mut pw,
+            &raw mut pw,
             buf.as_mut_ptr().cast(),
             buf.len(),
-            &mut out,
+            &raw mut out,
         );
         if r != 0 || out.is_null() || pw.pw_dir.is_null() {
             return None;
@@ -141,7 +141,8 @@ mod tests {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
-            .as_secs() as i64;
+            .as_secs();
+        let now = i64::try_from(now).unwrap();
         assert!(t.secs <= now + 2 && t.secs > now - 24 * 3600, "{t:?}");
         assert!(pid_running(me));
         assert!(!pid_running(0));

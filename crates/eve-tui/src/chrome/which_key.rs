@@ -47,7 +47,9 @@ pub(super) fn render_which_key(
         (key_w + 2 + model.items.iter().map(|i| i.text.width).max().unwrap_or(0)).max(title.width);
     let (bw, bordered) = box_width(want_inner, area.cols);
     let pad = u16::from(bordered) * 2;
-    let rows = (model.items.len() as u16 + pad).min(area.rows);
+    let rows = crate::cells(model.items.len())
+        .saturating_add(pad)
+        .min(area.rows);
     if rows == 0 {
         return;
     }
@@ -67,6 +69,6 @@ pub(super) fn render_which_key(
         ];
         let mut line: Vec<Span> = spans.to_vec();
         line.extend(item.text.spans.iter().cloned());
-        draw_line(w, &b, i as u16, &line, style, glyphs);
+        draw_line(w, &b, crate::cells(i), &line, style, glyphs);
     }
 }

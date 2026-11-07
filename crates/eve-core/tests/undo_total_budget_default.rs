@@ -1,5 +1,9 @@
 //! NFR-203 (v0.2、01 §5.5 の FR-103 / NFR-203 の行): 既定のプロセス全体の上限 (256 MiB) のまま、複数文書の編集の合計が上限を超えると、
 //! 履歴が最も大きい文書から古い順に破棄され、通知が出る (docs/03 §7.5)。数百 MB を使うので release でも数秒かかる。
+#![expect(
+    clippy::cast_possible_truncation,
+    reason = "テスト用の数値変換。値は小さく収まる"
+)]
 
 use eve_testkit::Harness;
 

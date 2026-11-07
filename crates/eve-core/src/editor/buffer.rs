@@ -222,7 +222,14 @@ impl EditorState {
         else {
             return CommandResult::Rejected(RejectReason::NoTarget);
         };
-        let next = (pos as isize + delta).rem_euclid(ids.len() as isize) as usize;
+        // 符号付きの変換をせずに、`(pos + delta) mod n` を求める
+        let n = ids.len();
+        let step = delta.unsigned_abs() % n;
+        let next = if delta >= 0 {
+            (pos + step) % n
+        } else {
+            (pos + n - step) % n
+        };
         self.activate_document(ids[next]);
         CommandResult::Done
     }
