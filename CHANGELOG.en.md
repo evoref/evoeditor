@@ -11,6 +11,10 @@ The Japanese version ([CHANGELOG.md](CHANGELOG.md)) is authoritative. Both are u
 
 ## [Unreleased]
 
+### Added
+
+- For developers: the generated reference in `docs/reference/` (commands, the default keymap and the default settings) and `cargo xtask gen-reference`, which writes it (`--check` checks that it is up to date and matches the command catalog in the spec; it is part of `cargo xtask check`). Added the hidden options it reads, `--list-commands [--json]` and `--dump-keymap [--json]` (the keymap with your `keymap.toml` applied). They are not shown in `--help` (docs/09 §11.2).
+
 ### Changed
 
 - eve-view: changed the type of `DocumentInfo.read_only` from `Vec<String>` (variant names as strings) to `Vec<ReadOnlyReasonView>` (a new enum) (breaking; the `Query::Documents` answer). Aligned the documentation of `Capabilities.osc52_write` and `InputEvent::Resize` with the implementation (no type change).

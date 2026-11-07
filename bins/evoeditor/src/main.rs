@@ -2,7 +2,7 @@
 //! 編集のロジックは core、端末は eve-tui、OS は eve-platform にある。
 //!
 //! 起動・描画・入力・終了のほか、保存・文字コード (`--encoding`)・設定の読込もここで Host に渡す。責務ごとのモジュール:
-//! `cli` (引数の解析)、`settings` (設定の読込)、`modes` (端末を始めない起動の形)、`startup` (Host の組み立て)、
+//! `cli` (引数の解析)、`settings` (設定の読込)、`modes` (端末を始めない起動の形)、`listing` (隠しオプションのコマンドとキーマップの一覧)、`startup` (Host の組み立て)、
 //! `os_events` (OS からの終了の要求)、`panic` (パニックの記録)、`exit` (終了コードと終了時の行)、`texts` (端末の外の文言)。
 
 #![forbid(unsafe_code)]
@@ -11,6 +11,7 @@
 
 mod cli;
 mod exit;
+mod listing;
 mod modes;
 mod os_events;
 mod panic;
@@ -131,6 +132,18 @@ fn main() -> ProcessExit {
             config,
             ..
         }) => modes::dump_config(&config, defaults, json),
+        Ok(Cli::Run {
+            mode: cli::Mode::ListCommands { json },
+            config,
+            locale,
+            ..
+        }) => listing::list_commands(&config, locale.as_deref(), json),
+        Ok(Cli::Run {
+            mode: cli::Mode::DumpKeymap { json },
+            config,
+            locale,
+            ..
+        }) => listing::dump_keymap(&config, locale.as_deref(), json),
         Ok(Cli::Run {
             files,
             read_only,

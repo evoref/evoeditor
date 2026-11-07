@@ -37,6 +37,8 @@ vt100 = "0.18"
 encoding_rs = "0.8.42"
 # 退避の manifest の `xxh3` を本文と突き合わせる (02 §11.2.1)
 xxhash-rust = { version = "0.8.19", features = ["xxh3"] }
+# 隠しオプション `--list-commands --json` / `--dump-keymap --json` の出力の形を確かめる (09 §11.2)
+serde_json = "1.0.154"
 
 [target.'cfg(windows)'.dev-dependencies]
 # bm_pty: 子のプロセスが消える (後始末が終わる) まで待つ (WaitForSingleObject)

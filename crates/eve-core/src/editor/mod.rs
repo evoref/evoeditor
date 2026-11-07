@@ -49,8 +49,9 @@ pub struct Editor {
     which_key_shown: bool,
 }
 
-/// 組込みのコマンドをすべて登録した登録簿 (07 §11.6。`command::ids::ALL` と一致する)。
-pub(crate) fn builtin_registry() -> CommandRegistry {
+/// 組込みのコマンドをすべて登録した登録簿 (07 §11.6。`command::ids::ALL` と一致する)。`Editor` を作らずに
+/// コマンドの一覧を出す経路 (`evoeditor --list-commands`、07 §11.5) も使う。
+pub fn builtin_registry() -> CommandRegistry {
     let mut r = CommandRegistry::new();
     crate::command::edit::register(&mut r);
     crate::view::motion::register(&mut r);

@@ -18,8 +18,12 @@ mod time;
 mod ui_model;
 mod view;
 
+pub use command::arg_schema::{ArgSpec, ArgType, command_args};
 pub use command::clipboard::ClipboardFallbackReason;
+pub use editor::builtin_registry;
 pub use jobs::cancel::CancelToken;
+pub use keymap::{KEYMAP_CONTEXTS, resolve_keymap};
+pub use ui_model::palette::hidden as command_hidden;
 mod search;
 pub use document::eol::build_eol_conversion;
 pub use document::{

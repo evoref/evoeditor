@@ -9,6 +9,8 @@
 pub(crate) mod default_keymap;
 mod user_keymap;
 
+pub use user_keymap::{CONTEXTS as KEYMAP_CONTEXTS, resolve_keymap};
+
 use std::collections::HashMap;
 use std::fmt;
 
@@ -193,6 +195,8 @@ pub struct Binding {
     pub command: CommandId,
     pub args: Args,
     pub when: ContextExpr,
+    /// `when` の元の文字列 (空は常に真。一覧の出力 `--dump-keymap` に使う)。
+    pub when_src: String,
     /// 拡張キー (kitty keyboard protocol など) が無いと区別できない割当 (07 §11.6 の `[E]`)。
     pub enhanced: bool,
 }
@@ -230,6 +234,7 @@ impl Layer {
         when: &str,
     ) -> Result<&mut Layer, String> {
         let sequence = parse_sequence(keys).map_err(|e| format!("{keys}: {e}"))?;
+        let when_src = when.to_owned();
         let when = ContextExpr::parse(when).map_err(|e| format!("{keys}: {e}"))?;
         let b = Binding {
             context,
@@ -237,6 +242,7 @@ impl Layer {
             command: CommandId::new(command),
             args: Args::new(),
             when,
+            when_src,
             enhanced: false,
         };
         if let Some(old) = self
@@ -379,12 +385,17 @@ impl Keymap {
 
     /// すべての割当 (表示から外すものを除く)。層の順。ヘルプのキー一覧が使う。
     pub fn all_bindings(&self) -> Vec<&Binding> {
+        self.listed_bindings().into_iter().map(|(_, b)| b).collect()
+    }
+
+    /// `all_bindings` に、割当のある層の名前 (`default` / `user`) を添えたもの。一覧の出力 (`--dump-keymap`、07 §7.7) が使う。
+    pub fn listed_bindings(&self) -> Vec<(&'static str, &Binding)> {
         self.layers
             .iter()
             .enumerate()
-            .flat_map(|(li, l)| l.bindings.iter().map(move |b| (li, b)))
-            .filter(|(li, b)| b.command.as_str() != NONE_COMMAND && !self.shadowed(*li, b))
-            .map(|(_, b)| b)
+            .flat_map(|(li, l)| l.bindings.iter().map(move |b| (li, l.name, b)))
+            .filter(|(li, _, b)| b.command.as_str() != NONE_COMMAND && !self.shadowed(*li, b))
+            .map(|(_, name, b)| (name, b))
             .collect()
     }
 

@@ -238,94 +238,6 @@ mod tests {
         let _ = default_keymap();
     }
 
-    /// 割当 1 件: キー (`—` は `None`) と、拡張キー (`[E]`) が要るか。
-    type Elem<'a> = (Option<&'a str>, bool);
-
-    /// 既定キー列 (07 §11.6 の表記) を、割当の組 (`a` / `b` の並び) と、直後の括弧書きの注記に分ける。
-    /// 属性 `[横]` `(alt)` は読み飛ばし、`[E]` は覚える (対の最後のキーにだけ付いたものは対のすべてに及ぶ)。
-    /// `ctx`: は文脈の見出しとして読み飛ばす。それ以外の `(…)` は注記。
-    fn groups(cell: &str) -> Vec<(Vec<Elem<'_>>, String)> {
-        let mut out: Vec<(Vec<Elem<'_>>, String)> = Vec::new();
-        let mut cur: Vec<Elem<'_>> = Vec::new();
-        let mut rest = cell.trim();
-        while !rest.is_empty() {
-            let key = if let Some(r) = rest.strip_prefix('`') {
-                let end = r.find('`').expect("バッククォートが閉じている");
-                let (k, after) = (&r[..end], &r[end + 1..]);
-                if let Some(a) = after.strip_prefix(':') {
-                    rest = a.trim_start(); // `ctx`: の見出し
-                    continue;
-                }
-                rest = after;
-                Some(k)
-            } else if let Some(r) = rest.strip_prefix('—') {
-                rest = r;
-                None
-            } else {
-                rest = rest.trim_start_matches([',', '、', ' ']);
-                if rest.starts_with('(') {
-                    // 組の外の括弧書き (直前の組の注記)
-                    let (note, after) = take_paren(rest);
-                    if let Some(last) = out.last_mut() {
-                        last.1.push_str(&note);
-                    }
-                    rest = after;
-                } else if !rest.is_empty() && !rest.starts_with('`') && !rest.starts_with('—') {
-                    rest = &rest[rest.chars().next().map_or(0, char::len_utf8)..];
-                }
-                continue;
-            };
-            // 属性: `[E]` `[横]` `(alt)`
-            let mut enhanced = false;
-            loop {
-                let t = rest.trim_start();
-                if t.starts_with('[') {
-                    let end = t.find(']').expect("] が閉じている");
-                    enhanced |= &t[1..end] == "E";
-                    rest = &t[end + 1..];
-                } else if let Some(r) = t.strip_prefix("(alt)") {
-                    rest = r;
-                } else {
-                    break;
-                }
-            }
-            cur.push((key, enhanced));
-            if let Some(r) = rest.trim_start().strip_prefix("/ ") {
-                rest = r; // 同じ組の続き
-            } else {
-                // 対の最後にだけ属性があるときは、対のすべてに及ぶ
-                if cur.len() > 1
-                    && cur[..cur.len() - 1].iter().all(|e| !e.1)
-                    && cur[cur.len() - 1].1
-                {
-                    for e in &mut cur {
-                        e.1 = true;
-                    }
-                }
-                out.push((std::mem::take(&mut cur), String::new()));
-            }
-        }
-        out
-    }
-
-    /// `(` から対応する `)` まで (入れ子を数える)。中身と残りを返す。
-    fn take_paren(s: &str) -> (String, &str) {
-        let mut depth = 0;
-        for (i, c) in s.char_indices() {
-            match c {
-                '(' => depth += 1,
-                ')' => {
-                    depth -= 1;
-                    if depth == 0 {
-                        return (s[1..i].to_owned(), &s[i + 1..]);
-                    }
-                }
-                _ => {}
-            }
-        }
-        (s[1..].to_owned(), "")
-    }
-
     /// 07 §11.6 の v0.1 の行の (コマンド, キー列の表記) → 拡張キーが要るか。
     fn doc_bindings() -> BTreeMap<(String, String), bool> {
         catalog_bindings(false)
@@ -336,43 +248,15 @@ mod tests {
         catalog_bindings(true)
     }
 
+    /// 既定キー列の読み方は `eve_docs_tables::catalog::bindings` (読み手は 1 か所、STR-E1)。
     fn catalog_bindings(later: bool) -> BTreeMap<(String, String), bool> {
         let doc = include_str!("../../../../docs/07-config-extensibility.md");
         let rows = catalog::read(doc).expect("カタログを読める");
         let mut want = BTreeMap::new();
-        {
-            for row in rows.iter().filter(|r| r.later == later) {
-                let ids = &row.ids;
-                for (elems, note) in groups(&row.keys) {
-                    if elems.iter().all(|e| e.0.is_none()) {
-                        continue; // 割当が無い (`—` だけ)
-                    }
-                    // 1 つだけの割当が複数 ID の行にあるときは、注記の「<ID の最後の語> のみ」で対象を決める
-                    let only: Option<&String> = if elems.len() == 1 && ids.len() > 1 {
-                        let word = note.split(" のみ").next().unwrap_or("");
-                        let i = row.id_index_by_last_word(word).unwrap_or_else(|| {
-                            panic!("行 {}: 割当 1 個の対象が決まらない: {note}", row.line)
-                        });
-                        Some(&ids[i])
-                    } else {
-                        None
-                    };
-                    assert!(
-                        only.is_some() || elems.len() == ids.len() || ids.len() == 1,
-                        "行 {}: ID {} 個に割当 {} 個: {elems:?}",
-                        row.line,
-                        ids.len(),
-                        elems.len()
-                    );
-                    for (i, (e, enhanced)) in elems.iter().enumerate() {
-                        let Some(k) = e else {
-                            continue; // `—` (無い側)
-                        };
-                        let id = only.unwrap_or(&ids[if ids.len() == 1 { 0 } else { i }]);
-                        let seq = parse_sequence(k).unwrap_or_else(|e| panic!("{k}: {e:?}"));
-                        want.insert((id.clone(), format_sequence(&seq)), *enhanced);
-                    }
-                }
+        for row in rows.iter().filter(|r| r.later == later) {
+            for b in catalog::bindings(row).unwrap_or_else(|e| panic!("{e}")) {
+                let seq = parse_sequence(&b.keys).unwrap_or_else(|e| panic!("{}: {e:?}", b.keys));
+                want.insert((b.id, format_sequence(&seq)), b.enhanced);
             }
         }
         want
