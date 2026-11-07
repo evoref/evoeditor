@@ -17,6 +17,8 @@ The Japanese version ([CHANGELOG.md](CHANGELOG.md)) is authoritative. Both are u
 
 ### Changed
 
+- **Five bindings that terminals cannot tell apart without enhanced keys are now treated as needing enhanced keys, as the spec says**: `Ctrl+Shift+S` (Save As), `Ctrl+Shift+Z` (Redo), `Shift+F3` (Find previous) and `Ctrl+Shift+Home` / `Ctrl+Shift+End` (select to the start / end of the document). On terminals without enhanced keys, the help key list marks them as not reachable, and key hints in the palette, messages and elsewhere show a reachable alternative instead (`Ctrl+K S` for Save As).
+
 - eve-view: changed the type of `DocumentInfo.read_only` from `Vec<String>` (variant names as strings) to `Vec<ReadOnlyReasonView>` (a new enum) (breaking; the `Query::Documents` answer). Aligned the documentation of `Capabilities.osc52_write` and `InputEvent::Resize` with the implementation (no type change).
 - eve-view: added `key_notation(strokes, ascii)`, the function that formats keys for display (addition only; shared by the core and eve-tui, docs/04 §7.8).
 

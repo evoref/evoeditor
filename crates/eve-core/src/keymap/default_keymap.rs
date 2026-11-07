@@ -219,6 +219,12 @@ pub(crate) fn default_keymap() -> Keymap {
         ("search", "shift+enter"),
         ("search", "ctrl+h"),
         ("editor", "ctrl+h"),
+        ("editor", "mod+shift+s"),
+        ("search", "mod+shift+s"),
+        ("editor", "mod+shift+z"),
+        ("search", "shift+f3"),
+        ("editor", "ctrl+shift+home"),
+        ("editor", "ctrl+shift+end"),
     ] {
         l.mark_enhanced(ctx, keys);
     }

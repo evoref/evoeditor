@@ -13,6 +13,6 @@
 ~
 ~
 a.txt                                                                           Ln 1, Col 1 UTF-8 LF
-⚠ The folder /nodir of …  Create the folder and then save, or save under another name (Ctrl+Shift+S)
+⚠ The folder /nodir of /nod…  Create the folder and then save, or save under another name (Ctrl+K S)
 Ctrl+Q Quit  Ctrl+P Commands  Ctrl+S Save  Ctrl+F Find  Ctrl+O Open  Ctrl+Z Undo  Ctrl+G Goto
 cursor: Some(CellPos { col: 3, row: 0 })

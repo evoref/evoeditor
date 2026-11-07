@@ -10,9 +10,9 @@
 //! **カタログ (仕様) が正、生成物は実装出力** (ADR-0025)。突合で差があれば失敗し、どちらを直すかは人が判断する。
 //! 突合の項目: (1) 版の注記の無い行の CommandId はすべて登録され、登録済みのコマンドはカタログのどれかの行にある。
 //! (2) 既定キーマップの (コマンド, キー) の組が、カタログの「既定キー」列と一致する (注記付きの行の割当は、あってもなくてもよい)。
-//! 次の 2 つは警告にとどめる (M18 の時点で差があり、どちらを直すかの判断が済んでいないため。09 §11.2):
-//! (3) 拡張キー (`[E]`) の印の違い。(4) コンテキストの違い (カタログの「コンテキスト」列には、割当を置くコンテキストではなく
-//! キーが届く場面を書いた行がある)。
+//! (3) 拡張キー (`[E]`) の印が一致する。(4) 割当を置くコンテキストの集合が一致する (「コンテキスト」列の意味、07 §11.6)。
+//! (4) の差のうち、どちらを直すかを判断して報告したもの (実装を直す作業が残るもの) だけは、`CONTEXT_EXCEPTIONS` の表で
+//! 警告にとどめる (PO 判断 2026-11-07、09 §11.2)。表にあるのに差が無くなった行は、表から外すよう失敗にする。
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
@@ -303,11 +303,39 @@ fn normalize_keys(keys: &str) -> String {
         .join(" ")
 }
 
-/// 07 §11.6 のカタログとの突合: (誤り, 警告)。
+/// コンテキストの差を警告にとどめる (コマンド, 設定の表記のキー, 理由)。実装かカタログを直したら行を消す。
+const CONTEXT_EXCEPTIONS: &[(&str, &str, &str)] = &[
+    ("cursor.move_word_left", "ctrl+left", PROMPT_WORD),
+    ("cursor.move_word_right", "ctrl+right", PROMPT_WORD),
+    ("edit.delete_word_backward", "ctrl+backspace", PROMPT_WORD),
+    ("edit.delete_word_forward", "ctrl+delete", PROMPT_WORD),
+    (
+        "select.all",
+        "ctrl+a",
+        "実装が誤り: 04 §7.2 の prompt の表に Ctrl+A (欄内全選択) があるが、prompt に割当が無い",
+    ),
+    ("ui.list_next", "down", LIST_NAV),
+    ("ui.list_prev", "up", LIST_NAV),
+    ("ui.list_next", "ctrl+n", LIST_NAV),
+    ("ui.list_prev", "ctrl+p", LIST_NAV),
+    ("ui.list_page_down", "pagedown", LIST_NAV),
+    ("ui.list_page_up", "pageup", LIST_NAV),
+    (
+        "ui.message_history",
+        "ctrl+k m",
+        "実装が誤り: 07 §7.1 は global の既定の割当を app.quit・ui.palette_open・ui.redraw・help.open に限る。実装は global に置いている",
+    ),
+];
+
+const PROMPT_WORD: &str = "実装が誤り: 04 §7.2 の prompt の表に Ctrl+←/→・Ctrl+Backspace / Ctrl+Delete があるが、prompt に割当が無い";
+const LIST_NAV: &str = "実装が誤り: 候補の移動は list に置く (04 §7.2・07 §7.1)。実装は palette に置き、バッファ一覧の参照順に palette を足して届かせている";
+
+/// 07 §11.6 のカタログとの突合: (誤り, 警告)。`exceptions` はコンテキストの差を警告にとどめる (コマンド, キー, 理由)。
 fn compare_catalog(
     doc07: &str,
     list: &CommandList,
     km: &KeymapDump,
+    exceptions: &[(&str, &str, &str)],
 ) -> Result<(Vec<String>, Vec<String>), String> {
     let rows = eve_docs_tables::catalog::read(doc07)
         .map_err(|e| format!("07 §11.6 のカタログを読めません: {e}"))?;
@@ -336,7 +364,7 @@ fn compare_catalog(
         }
     }
 
-    // (2) (コマンド, キー) の組と (3) 拡張キーの印、コンテキストの違い (警告)
+    // (2) (コマンド, キー) の組、(3) 拡張キーの印、(4) コンテキスト
     struct Want {
         line: usize,
         later: bool,
@@ -366,6 +394,7 @@ fn compare_catalog(
             e.contexts.extend(contexts);
         }
     }
+    let mut used: BTreeSet<(String, String)> = BTreeSet::new();
     let mut have: BTreeMap<(String, String), (bool, BTreeSet<String>)> = BTreeMap::new();
     for b in km.bindings.iter().filter(|b| b.layer == "default") {
         let e = have
@@ -383,7 +412,7 @@ fn compare_catalog(
             None => {}
             Some((enhanced, contexts)) => {
                 if *enhanced != w.enhanced {
-                    warnings.push(format!(
+                    errors.push(format!(
                         "07 行 {}: `{id}` の `{key}` の拡張キーの印: 実装 {} / カタログ {}",
                         w.line,
                         if *enhanced { "[E]" } else { "なし" },
@@ -391,10 +420,17 @@ fn compare_catalog(
                     ));
                 }
                 if *contexts != w.contexts {
-                    warnings.push(format!(
+                    let msg = format!(
                         "07 行 {}: `{id}` の `{key}` のコンテキスト: 実装 {:?} / カタログ {:?}",
                         w.line, contexts, w.contexts
-                    ));
+                    );
+                    match exceptions.iter().find(|(c, k, _)| c == id && k == key) {
+                        Some((_, _, why)) => {
+                            used.insert((id.clone(), key.clone()));
+                            warnings.push(format!("{msg} (例外: {why})"));
+                        }
+                        None => errors.push(msg),
+                    }
                 }
             }
         }
@@ -403,6 +439,13 @@ fn compare_catalog(
         if !want.contains_key(&(id.clone(), key.clone())) {
             errors.push(format!(
                 "既定キーマップの `{id}` の `{key}` が 07 §11.6 のカタログの既定キー列にありません"
+            ));
+        }
+    }
+    for (c, k, _) in exceptions {
+        if !used.contains(&((*c).to_owned(), (*k).to_owned())) {
+            errors.push(format!(
+                "コンテキストの例外 `{c}` の `{k}` は差が無くなった (または組が無い): CONTEXT_EXCEPTIONS から外してください"
             ));
         }
     }
@@ -446,7 +489,7 @@ fn build(root: &Path) -> Result<(Vec<(&'static str, String)>, Vec<String>, Vec<S
         }
     }
     let doc07 = read_text(&root.join("docs/07-config-extensibility.md"))?;
-    let (errors, warnings) = compare_catalog(&doc07, &list, &km)?;
+    let (errors, warnings) = compare_catalog(&doc07, &list, &km, CONTEXT_EXCEPTIONS)?;
     let files = vec![
         (COMMANDS, render_commands(&list)),
         (KEYMAP, render_keymap(&km)),
@@ -607,7 +650,11 @@ mod tests {
             "| `file.new` | `cmd.file.new` | File | — | — | `-` | `editor` | — | - |\n",
             "| `file.later` (v0.9) | `cmd.file.later` | File | — | — | `-` | `editor` | `f5` | - |",
         ));
-        let (errors, warnings) = compare_catalog(&doc, &list, &km).unwrap();
+        let exceptions = [
+            ("file.save", "ctrl+s", "試験の例外"),
+            ("file.save", "f1", "差の無い例外"),
+        ];
+        let (errors, warnings) = compare_catalog(&doc, &list, &km, &exceptions).unwrap();
         let joined = errors.join("\n");
         assert!(
             joined.contains("`file.new` (版の注記なし) が登録されていません"),
@@ -622,19 +669,30 @@ mod tests {
             "注記付きの行の割当は無くてよい: {joined}"
         );
         assert!(!joined.contains("f9"), "ユーザーの層は突合しない: {joined}");
-        assert_eq!(errors.len(), 2, "{joined}");
-        let warned = warnings.join(
-            "
-",
-        );
-        assert_eq!(warnings.len(), 2, "{warned}");
         assert!(
-            warned.contains("`file.open` の `ctrl+o` の拡張キーの印"),
-            "{warned}"
+            joined.contains("`file.open` の `ctrl+o` の拡張キーの印"),
+            "{joined}"
         );
         assert!(
-            warned.contains("`file.save` の `ctrl+s` のコンテキスト"),
-            "{warned}"
+            joined.contains("`file.save` の `f1` は差が無くなった"),
+            "{joined}"
+        );
+        assert_eq!(errors.len(), 4, "{joined}");
+        assert_eq!(warnings.len(), 1, "{warnings:?}");
+        assert!(
+            warnings[0].contains("`file.save` の `ctrl+s` のコンテキスト")
+                && warnings[0].contains("試験の例外"),
+            "{warnings:?}"
+        );
+
+        // 例外の表に無いコンテキストの差は失敗
+        let (errors, warnings) = compare_catalog(&doc, &list, &km, &[]).unwrap();
+        assert!(warnings.is_empty(), "{warnings:?}");
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.contains("`file.save` の `ctrl+s` のコンテキスト")),
+            "{errors:?}"
         );
     }
 }

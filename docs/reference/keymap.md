@@ -29,7 +29,7 @@
 | `Ctrl+R` | `ctrl+r` | `search.replace_open` | 置換 | — | — |
 | `Ctrl+H` | `ctrl+h` | `search.replace_open` | 置換 | — | 要 |
 | `Ctrl+S` | `ctrl+s` | `file.save` | 保存 | — | — |
-| `Ctrl+Shift+S` | `ctrl+shift+s` | `file.save_as` | 名前を付けて保存 | — | — |
+| `Ctrl+Shift+S` | `ctrl+shift+s` | `file.save_as` | 名前を付けて保存 | — | 要 |
 | `Ctrl+K S` | `ctrl+k s` | `file.save_as` | 名前を付けて保存 | — | — |
 | `Ctrl+K A` | `ctrl+k a` | `file.save_all` | すべて保存 | — | — |
 | `Ctrl+O` | `ctrl+o` | `file.open` | 開く | — | — |
@@ -50,7 +50,7 @@
 | `Shift+Insert` | `shift+insert` | `edit.paste` | 貼り付け | — | — |
 | `Ctrl+Z` | `ctrl+z` | `edit.undo` | 元に戻す | — | — |
 | `Ctrl+Y` | `ctrl+y` | `edit.redo` | やり直し | — | — |
-| `Ctrl+Shift+Z` | `ctrl+shift+z` | `edit.redo` | やり直し | — | — |
+| `Ctrl+Shift+Z` | `ctrl+shift+z` | `edit.redo` | やり直し | — | 要 |
 | `Backspace` | `backspace` | `edit.delete_backward` | 前の文字を削除 | — | — |
 | `Delete` | `delete` | `edit.delete_forward` | 後ろの文字を削除 | — | — |
 | `Ctrl+Backspace` | `ctrl+backspace` | `edit.delete_word_backward` | 前の単語を削除 | — | — |
@@ -80,9 +80,9 @@
 | `End` | `end` | `cursor.end` | 行末へ移動 | — | — |
 | `Shift+End` | `shift+end` | `select.extend_end` | 行末まで選択 | — | — |
 | `Ctrl+Home` | `ctrl+home` | `cursor.doc_start` | 文書の先頭へ移動 | — | — |
-| `Ctrl+Shift+Home` | `ctrl+shift+home` | `select.extend_to_doc_start` | 文書の先頭まで選択 | — | — |
+| `Ctrl+Shift+Home` | `ctrl+shift+home` | `select.extend_to_doc_start` | 文書の先頭まで選択 | — | 要 |
 | `Ctrl+End` | `ctrl+end` | `cursor.doc_end` | 文書の末尾へ移動 | — | — |
-| `Ctrl+Shift+End` | `ctrl+shift+end` | `select.extend_to_doc_end` | 文書の末尾まで選択 | — | — |
+| `Ctrl+Shift+End` | `ctrl+shift+end` | `select.extend_to_doc_end` | 文書の末尾まで選択 | — | 要 |
 | `PgUp` | `pageup` | `cursor.page_up` | 前のページへ移動 | — | — |
 | `Shift+PgUp` | `shift+pageup` | `select.extend_page_up` | 前のページまで選択 | — | — |
 | `PgDn` | `pagedown` | `cursor.page_down` | 次のページへ移動 | — | — |
@@ -114,7 +114,7 @@
 | `↓` | `down` | `search.next` | 次を検索 | — | — |
 | `F3` | `f3` | `search.next` | 次を検索 | — | — |
 | `↑` | `up` | `search.prev` | 前を検索 | — | — |
-| `Shift+F3` | `shift+f3` | `search.prev` | 前を検索 | — | — |
+| `Shift+F3` | `shift+f3` | `search.prev` | 前を検索 | — | 要 |
 | `Shift+Enter` | `shift+enter` | `search.prev` | 前を検索 | — | 要 |
 | `Alt+C` | `alt+c` | `search.toggle_case` | 大小文字の区別を切替 | — | — |
 | `Ctrl+K C` | `ctrl+k c` | `search.toggle_case` | 大小文字の区別を切替 | — | — |
@@ -131,7 +131,7 @@
 | `Ctrl+H` | `ctrl+h` | `search.replace_open` | 置換 | — | 要 |
 | `Ctrl+F` | `ctrl+f` | `search.open` | 検索 | — | — |
 | `Ctrl+S` | `ctrl+s` | `file.save` | 保存 | — | — |
-| `Ctrl+Shift+S` | `ctrl+shift+s` | `file.save_as` | 名前を付けて保存 | — | — |
+| `Ctrl+Shift+S` | `ctrl+shift+s` | `file.save_as` | 名前を付けて保存 | — | 要 |
 | `Ctrl+O` | `ctrl+o` | `file.open` | 開く | — | — |
 | `Ctrl+N` | `ctrl+n` | `file.new` | 新規作成 | — | — |
 
