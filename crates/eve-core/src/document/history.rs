@@ -2,7 +2,7 @@
 //!
 //! 位置は `NodeId` (文書ごとの単調増加の通番) で表し、スタック上の深さでは表さない (§7.1)。
 //! 結合規則 R1〜R9 (§7.3) は `UndoHistory::record` が上から順に評価する。
-//! `FormatChange` (Reload が `TextFormat` と読み取り専用の理由を本文と一緒に戻す。改行コード変換も使う)。
+//! `FormatChange` (Reload は `TextFormat` と読み取り専用の理由を、改行コード変換は `default_eol` だけを本文と一緒に戻す)。
 
 use std::collections::VecDeque;
 use std::sync::Arc;
@@ -11,7 +11,7 @@ use eve_text::{ByteRange, ChangeSet, Op, Selection};
 
 use crate::time::{Millis, Tick};
 
-use super::format::{FormatChange, FormatState};
+use super::format::{FormatChange, FormatRestore};
 use super::transaction::{Origin, Transaction, UndoGroupHint};
 
 /// 履歴上の位置。文書ごとの通番で、破棄しても再利用しない。
@@ -54,7 +54,7 @@ struct UndoNode {
     last_edit_at: Tick,
     group_sealed: bool,
     bytes: usize,
-    /// 書式の変更 (再読込)。Undo は `before`、Redo は `after` を戻す。
+    /// 書式の変更 (再読込・改行コードの変換)。Undo は `before`、Redo は `after` を戻す。
     format: Option<FormatChange>,
 }
 
@@ -75,8 +75,8 @@ pub struct HistoryStep {
     pub origin: Origin,
     /// 発行 View に復元する Selection。Undo は `selection_before`、Redo は `selection_after`。
     pub selection: Option<Selection>,
-    /// 本文と一緒に戻す書式と読み取り専用の理由 (再読込のノードだけ)。
-    pub format: Option<FormatState>,
+    /// 本文と一緒に戻す書式 (再読込と改行コードの変換のノードだけ。範囲は `FormatChange` の種類で決まる)。
+    pub format: Option<FormatRestore>,
 }
 
 #[derive(Debug)]
@@ -453,7 +453,7 @@ impl UndoHistory {
             changes: node.undo.clone(),
             origin: node.origin.clone(),
             selection: node.selection_before.clone(),
-            format: node.format.as_ref().map(|f| f.before.clone()),
+            format: node.format.as_ref().map(|f| f.side(false)),
         };
         self.redo.push(node);
         self.seal();
@@ -467,7 +467,7 @@ impl UndoHistory {
             changes: node.redo.clone(),
             origin: node.origin.clone(),
             selection: node.selection_after.clone(),
-            format: node.format.as_ref().map(|f| f.after.clone()),
+            format: node.format.as_ref().map(|f| f.side(true)),
         };
         self.undo.push_back(node);
         self.seal();

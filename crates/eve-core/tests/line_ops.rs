@@ -191,6 +191,46 @@ fn 選択した複数の行を動かす() {
     assert_eq!(h.doc_text(), "a\nb\nc\nd\n");
 }
 
+/// 主選択の範囲の本文。
+fn selected(h: &Harness) -> String {
+    let (s, e) = h.selection_range();
+    h.doc_text()[s..e].to_owned()
+}
+
+// spec: 03 §15.4 (選択はブロックについていく)
+#[test]
+fn 複数行の選択は何回動かしても同じ行を選んだまま() {
+    // 長さの違う行。選択は行頭で終わる (最後の行を含めない)
+    let mut h = doc("aa\nb\nccc\ndddd\ne\n");
+    h.keys("shift+down shift+down"); // aa, b
+    assert_eq!(selected(&h), "aa\nb\n");
+    for want in ["ccc\naa\nb\ndddd\ne\n", "ccc\ndddd\naa\nb\ne\n"] {
+        h.cmd("edit.move_line_down");
+        assert_eq!(h.doc_text(), want);
+        assert_eq!(selected(&h), "aa\nb\n", "下へ: {want:?}");
+    }
+    for want in ["ccc\naa\nb\ndddd\ne\n", "aa\nb\nccc\ndddd\ne\n"] {
+        h.cmd("edit.move_line_up");
+        assert_eq!(h.doc_text(), want);
+        assert_eq!(selected(&h), "aa\nb\n", "上へ: {want:?}");
+    }
+    // 行の途中で始まり・終わる選択 (y の行は短いので、行末で終わる)
+    let mut h = doc("x\nlong line\ny\nz\nw\n");
+    at_line(&mut h, 1);
+    h.keys("right right shift+down");
+    assert_eq!(selected(&h), "ng line\ny");
+    for want in ["x\nz\nlong line\ny\nw\n", "x\nz\nw\nlong line\ny\n"] {
+        h.cmd("edit.move_line_down");
+        assert_eq!(h.doc_text(), want);
+        assert_eq!(selected(&h), "ng line\ny", "下へ: {want:?}");
+    }
+    for want in ["x\nz\nlong line\ny\nw\n", "x\nlong line\ny\nz\nw\n"] {
+        h.cmd("edit.move_line_up");
+        assert_eq!(h.doc_text(), want);
+        assert_eq!(selected(&h), "ng line\ny", "上へ: {want:?}");
+    }
+}
+
 #[test]
 fn 既定のキーで動く() {
     let mut h = doc("a\nb\n");

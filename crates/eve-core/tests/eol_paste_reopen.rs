@@ -119,6 +119,41 @@ fn 改行コードの変換は_lf_crlf_cr_のどれでも全部そろい_状態�
     }
 }
 
+// spec: 03 §7.2 (改行コード変換の Undo は default_eol だけを戻す)
+#[test]
+fn 改行コード変換の_undo_は文字コードと_bom_を戻さない() {
+    let mut h = opened("/w/c.txt", b"a\r\nb\r\nc\n");
+    assert_eq!(default_eol(&h), LineEnding::Crlf);
+    h.cmd_with("file.set_line_ending", Args::new().with_str("eol", "lf"));
+    assert_eq!(h.doc_text(), "a\nb\nc\n");
+    // 変換の後に、文字コードと BOM を変えた (メタデータの変更。Undo の対象外)
+    let id = h.doc_id();
+    {
+        let d = h.editor.state_mut().document_mut(id).unwrap();
+        d.format.encoding = Encoding::ShiftJis;
+        d.format.has_bom = true;
+    }
+    h.keys("ctrl+z");
+    let d = h.editor.state().document(id).unwrap();
+    assert_eq!(h.doc_text(), "a\r\nb\r\nc\n");
+    assert_eq!(d.format.default_eol, LineEnding::Crlf, "default_eol は戻る");
+    assert_eq!(
+        (d.format.encoding, d.format.has_bom),
+        (Encoding::ShiftJis, true),
+        "文字コードと BOM は戻らない"
+    );
+    assert_eq!(d.format.eol_stats, d.recount_eol());
+    h.keys("ctrl+y");
+    let d = h.editor.state().document(id).unwrap();
+    assert_eq!(h.doc_text(), "a\nb\nc\n");
+    assert_eq!(d.format.default_eol, LineEnding::Lf);
+    assert_eq!(
+        (d.format.encoding, d.format.has_bom),
+        (Encoding::ShiftJis, true)
+    );
+    assert_eq!(d.format.eol_stats, d.recount_eol());
+}
+
 // verifies: AC-FR-113-4
 #[test]
 fn 改行がすでにそろっていれば文書も履歴も変わらず_読み取り専用では拒否する() {

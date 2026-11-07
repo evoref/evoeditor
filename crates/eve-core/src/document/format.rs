@@ -30,17 +30,18 @@ pub fn count_long_lines(text: &dyn TextRead, threshold: usize) -> usize {
     n + usize::from(run > threshold)
 }
 
-/// 位置の範囲 `ranges` (昇順で重ならない) が触れる行のうち、閾値を超える行の数 (同じ行は 1 回だけ数える)。
-/// 編集の前後の文書で数え、長大行の数を差分で更新するのに使う。
+/// 位置の範囲 `ranges` (`[s, e]`。昇順。文書の範囲に切り詰める) が触れる行のうち、閾値を超える行の数
+/// (同じ行は 1 回だけ数える)。編集の前後の文書で数え、長大行の数を差分で更新するのに使う。
 pub(crate) fn long_lines_touched(
     text: &dyn TextRead,
     ranges: impl Iterator<Item = (usize, usize)>,
     threshold: usize,
 ) -> usize {
+    let len = text.len_bytes();
     let (mut next, mut n) = (0usize, 0usize);
     for (s, e) in ranges {
-        let a = text.byte_to_line(ByteOff(s)).0.max(next);
-        let b = text.byte_to_line(ByteOff(e)).0;
+        let a = text.byte_to_line(ByteOff(s.min(len))).0.max(next);
+        let b = text.byte_to_line(ByteOff(e.min(len))).0;
         for l in a..=b {
             let l = eve_text::LineIdx(l);
             n += usize::from(text.line_end_byte(l).0 - text.line_to_byte(l).0 > threshold);
@@ -169,11 +170,41 @@ pub struct FormatState {
     pub read_only: ReadOnlyReasons,
 }
 
-/// Undo ノードに持つ書式の変更 (前後の値)。Undo は `before`、Redo は `after` へ戻す。
+/// Undo ノードに持つ書式の変更 (前後の値)。Undo は `before`、Redo は `after` へ戻す。戻す範囲は種類で決まる (03 §7.2)。
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct FormatChange {
-    pub before: FormatState,
-    pub after: FormatState,
+pub enum FormatChange {
+    /// 再読込 (`Origin::Reload`、03 §9.5): `TextFormat` 全体と読み取り専用の理由。
+    Reload {
+        before: FormatState,
+        after: FormatState,
+    },
+    /// 改行コードの変換 (`file.set_line_ending`、03 §8.4): `default_eol` だけ。
+    /// 文字コード・BOM・往復の情報・読み取り専用の理由は戻さない (`eol_stats` は本文の適用で数え直す)。
+    DefaultEol {
+        before: LineEnding,
+        after: LineEnding,
+    },
+}
+
+/// Undo / Redo で本文と一緒に戻す書式 (`FormatChange` の片側)。
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum FormatRestore {
+    State(FormatState),
+    DefaultEol(LineEnding),
+}
+
+impl FormatChange {
+    /// Undo なら `before`、Redo (と最初の適用) なら `after` の側。
+    pub fn side(&self, after: bool) -> FormatRestore {
+        match self {
+            FormatChange::Reload { before, after: a } => {
+                FormatRestore::State(if after { a.clone() } else { before.clone() })
+            }
+            FormatChange::DefaultEol { before, after: a } => {
+                FormatRestore::DefaultEol(if after { *a } else { *before })
+            }
+        }
+    }
 }
 
 /// 文書の形式 (03 §8.1)。
