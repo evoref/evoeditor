@@ -40,7 +40,8 @@ impl InsertText {
             InsertText::Str(s) => (Some(&**s).filter(|s| !s.is_empty()), None),
             InsertText::Rope(r) => (None, Some(r.chunks(ByteRange::all(r.len_bytes())))),
         };
-        s.into_iter().chain(r.into_iter().flatten())
+        s.into_iter()
+            .chain(r.into_iter().flatten().filter(|c| !c.is_empty()))
     }
 
     pub fn len(&self) -> usize {

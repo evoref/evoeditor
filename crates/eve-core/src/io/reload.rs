@@ -192,11 +192,9 @@ impl EditorState {
             .with_view(view)
             .with_format_change(change);
         let applied = self.apply_transaction(doc_id, tx);
-        if let Some(d) = self.docs.documents.get_mut(&doc_id) {
-            d.finish_reload(stamp);
-        }
-        self.mark_dirty_render();
         if applied.is_err() {
+            // 旧本文が残る。保存点・disk_stamp は動かさない (未保存の編集を保存済みの扱いにしない)
+            self.reopen_restore(doc_id);
             self.show_message(
                 MessageLevel::Error,
                 keys::MSG_OPEN_FAILED,
@@ -204,6 +202,10 @@ impl EditorState {
             );
             return;
         }
+        if let Some(d) = self.docs.documents.get_mut(&doc_id) {
+            d.finish_reload(stamp);
+        }
+        self.mark_dirty_render();
         let read_only = self
             .docs
             .documents
