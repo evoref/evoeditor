@@ -238,6 +238,9 @@ fn 端末のタイトルにも何番目かを出す() {
     assert_eq!(title(&mut s), "無題-1 (1/3) - evoeditor");
     run(&mut s, "buffer.next");
     assert_eq!(title(&mut s), "無題-2 (2/3) - evoeditor");
+    // 変更ありの印は何番目かの後ろ (04 §3 の `Frame.title` の内容規約)
+    text(&mut s, "x");
+    assert_eq!(title(&mut s), "無題-2 (2/3) ● - evoeditor");
 }
 
 /// a.txt, b.txt, c.txt の 3 文書 (開いた順。a が表示中)。

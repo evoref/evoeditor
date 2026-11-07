@@ -56,12 +56,9 @@ fn title(state: &EditorState, doc: &Document) -> String {
         Some((n, total)) => format!(" ({n}/{total})"),
         None => String::new(),
     };
-    format!(
-        "{}{}{} - evoeditor",
-        if doc.is_dirty() { "* " } else { "" },
-        name,
-        pos
-    )
+    // 形は `"<basename>[ (n/total)][ ●] - evoeditor"` (04 §3 の `Frame.title` の内容規約)
+    let dirty = if doc.is_dirty() { " ●" } else { "" };
+    format!("{name}{pos}{dirty} - evoeditor")
 }
 
 /// 折り返し ON の表示行を `rows` 本作る (03 §14.3.1)。先頭は `top` の論理行の `wrap_idx` 番目の表示行。
