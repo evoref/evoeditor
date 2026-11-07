@@ -124,26 +124,26 @@ fn kind_of(hunks: &[(ByteRange, ByteRange)]) -> EditKind {
     }
 }
 
-fn inserted_texts(cs: &ChangeSet) -> impl Iterator<Item = &str> {
+fn inserted_texts(cs: &ChangeSet) -> impl Iterator<Item = &eve_text::InsertText> {
     cs.ops().iter().filter_map(|op| match op {
-        Op::Insert(s) if !s.is_empty() => Some(s.as_str()),
+        Op::Insert(s) if !s.is_empty() => Some(s),
         _ => None,
     })
 }
 
 fn inserted_len(cs: &ChangeSet) -> usize {
-    inserted_texts(cs).map(str::len).sum()
+    inserted_texts(cs).map(eve_text::InsertText::len).sum()
 }
 
 fn has_newline(cs: &ChangeSet) -> bool {
-    inserted_texts(cs).any(|s| s.contains(['\n', '\r']))
+    inserted_texts(cs).any(|s| s.chunks().any(|c| c.contains(['\n', '\r'])))
 }
 
 /// 挿入が改行 1 つだけか (R6 (a)): すべての挿入文字列が LF / CRLF / CR のどれか 1 つ。
 fn only_single_newlines(cs: &ChangeSet) -> bool {
     let mut any = false;
     for s in inserted_texts(cs) {
-        if !matches!(s, "\n" | "\r\n" | "\r") {
+        if !matches!(s.as_str(), Some("\n" | "\r\n" | "\r")) {
             return false;
         }
         any = true;
@@ -291,19 +291,18 @@ impl UndoHistory {
 
     /// 結合する (`true`) か新ノード (`false`) かと、記録の後で封印するか (§7.3)。
     fn decide(&mut self, tx: &Transaction, merge: bool) -> (bool, bool) {
-        let newline = has_newline(&tx.changes);
         let prev_open = self.undo.back().is_some_and(|p| !p.group_sealed);
         // R1
         if tx.undo_group == UndoGroupHint::Merge && prev_open {
-            return (true, newline);
+            return (true, has_newline(&tx.changes));
         }
-        // R2
+        // R2 (改行の走査より先に見る。再読込の全文の挿入を走査しない)
         if tx.origin != Origin::User || tx.undo_group == UndoGroupHint::Break {
             self.seal();
             return (false, true);
         }
         // R3〜R9 は should_merge が評価した結果 (merge)。改行を含む挿入は記録の後で封印する (R6)
-        (merge, newline)
+        (merge, has_newline(&tx.changes))
     }
 
     /// R3〜R9: 直前のノードに結合するか。R1 / R2 は呼び出し側で先に評価する。

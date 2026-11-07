@@ -752,3 +752,94 @@ fn 巨大な長さでもパニックしない() {
     let _ = cs.map_range(ByteRange::from(0..10));
     assert!(Text::from("abc").apply(&cs).is_err());
 }
+
+// ---------- InsertText::Rope (SAF-33、03 §9.5) ----------
+
+/// 挿入をすべて `InsertText::Rope` にした ChangeSet (内容は同じ)。
+fn as_rope(cs: &ChangeSet) -> ChangeSet {
+    ChangeSet::from_ops(cs.ops().iter().map(|op| match op {
+        Op::Insert(s) => Op::Insert(InsertText::Rope(Snapshot::from(
+            s.as_str().expect("make_cs は Str を作る"),
+        ))),
+        o => o.clone(),
+    }))
+}
+
+proptest! {
+    #![proptest_config(config())]
+
+    // spec: 03 §6.2 CS1 / CS2 (挿入が Rope でも、適用・合成・逆変換の結果は Str と同じ)
+    #[test]
+    fn rope_の挿入でも適用と合成と逆変換は同じ(s in any_text(), ra in raw_edits(), rb in raw_edits()) {
+        let t = Text::from(s.as_str());
+        let (a, ea) = make_cs(&t, &s, &ra);
+        let s1 = model_apply(&s, &ea);
+        let t1 = Text::from(s1.as_str());
+        let (b, eb) = make_cs(&t1, &s1, &rb);
+        let (ra_, rb_) = (as_rope(&a), as_rope(&b));
+        prop_assert_eq!(&ra_, &a, "内容で比べて等しい");
+        let composed = ra_.compose(&rb_).unwrap();
+        prop_assert!(is_normal(&composed));
+        prop_assert_eq!(&composed, &a.compose(&b).unwrap());
+        let mut u = Text::from(s.as_str());
+        u.apply(&composed).unwrap();
+        prop_assert_eq!(contents(&u), model_apply(&s1, &eb));
+        // 逆変換 (全体の削除は Rope になる) で元に戻る
+        let mut v = Text::from(s.as_str());
+        let before = v.snapshot();
+        v.apply(&ra_).unwrap();
+        let inv = ra_.invert(&before);
+        v.apply(&inv).unwrap();
+        prop_assert_eq!(contents(&v), s);
+    }
+}
+
+#[test]
+fn 全体の削除の逆変換は旧本文を複写せず_rope_で持つ() {
+    let mut t = Text::from("old\r\ntext");
+    let before = t.snapshot();
+    let cs = ChangeSet::from_ops([
+        Op::Delete(before.len_bytes()),
+        Op::Insert(InsertText::Rope(Snapshot::from("new\n"))),
+    ]);
+    t.apply(&cs).unwrap();
+    assert_eq!(contents(&t), "new\n");
+    let inv = cs.invert(&before);
+    assert!(
+        matches!(&inv.ops()[1], Op::Insert(InsertText::Rope(_))),
+        "{:?}",
+        inv.ops()
+    );
+    assert_eq!(
+        inv.ops()[1].clone(),
+        Op::Insert(InsertText::from("old\r\ntext"))
+    );
+    t.apply(&inv).unwrap();
+    assert_eq!(contents(&t), "old\r\ntext");
+    assert_eq!(t.len_lines(), 2, "行の構造も戻る");
+    // 一部の削除は従来どおり複写 (Str)
+    let part = ChangeSet::from_ops([Op::Retain(1), Op::Delete(2), Op::Retain(6)]);
+    assert!(matches!(
+        &part.invert(&t.snapshot()).ops()[1],
+        Op::Insert(InsertText::Str(_))
+    ));
+}
+
+#[test]
+fn rope_の挿入は途中にもつなげ_chunks_で読める() {
+    let mut t = Text::from("ab\r");
+    let ins = InsertText::Rope(Snapshot::from("\nxy"));
+    assert_eq!(ins.as_str(), None);
+    assert_eq!(ins.chunks().collect::<String>(), "\nxy");
+    t.apply(&ChangeSet::from_ops([Op::Retain(3), Op::Insert(ins)]))
+        .unwrap();
+    assert_eq!(contents(&t), "ab\r\nxy");
+    assert_eq!(t.len_lines(), 2, "つないだ境目の CRLF は 1 つの改行");
+    // Str と Rope の隣り合う挿入は 1 つにまとまる
+    let cs = ChangeSet::from_ops([
+        Op::Insert(InsertText::from("a")),
+        Op::Insert(InsertText::Rope(Snapshot::from("b"))),
+        Op::Insert(InsertText::from("c")),
+    ]);
+    assert_eq!(cs.ops(), [Op::Insert(InsertText::from("abc"))]);
+}

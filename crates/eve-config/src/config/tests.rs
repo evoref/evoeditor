@@ -159,7 +159,7 @@ fn 列挙値の不正は許容値を提示する() {
         vec![(
             "file.default_line_ending",
             &DiagKind::InvalidValue {
-                allowed: LINE_ENDINGS
+                allowed: &["lf", "crlf", "cr", "native"]
             }
         )]
     );
@@ -488,4 +488,137 @@ fn changed_keys_は変わった公開キーだけを並べ_全キーを網羅す
     .collect();
     let keys: std::collections::BTreeSet<&str> = KEYS.iter().copied().collect();
     assert_eq!(names, keys);
+}
+
+/// 既定値の表記 (診断の「既定値 {default} を使います」) を全公開キーで固定する (STR-T7)。宣言の表から生成するので、
+/// 表の既定値か TOML の表記を変えたら、ここも変わる。
+#[test]
+fn 既定値の表記は全公開キーで決まった値() {
+    let want = [
+        ("editor.tab_width", "4"),
+        ("editor.indent_unit", "space"),
+        ("editor.indent_width", "4"),
+        ("file.default_encoding", "utf-8"),
+        ("file.default_line_ending", "lf"),
+        ("view.ambiguous_width", "1"),
+        ("theme.color_mode", "auto"),
+        ("file.swap.enabled", "true"),
+        ("file.swap.interval_ms", "2000"),
+        ("file.swap.min_interval_ms", "10000"),
+        ("file.swap.max_bytes", "67108864"),
+        ("file.swap.exclude_secret_files", "true"),
+        ("ui.locale", "auto"),
+        ("editor.undo.total_max_bytes", "268435456"),
+        ("editor.backspace_unit", "grapheme"),
+        ("view.wrap", "off"),
+        ("view.wrap_indent", "same"),
+        ("view.wrap_kinsoku", "true"),
+        ("view.show_whitespace", "minimal"),
+        ("theme.name", "default"),
+        ("theme.background", "auto"),
+        ("ui.mouse", "true"),
+        ("ui.hint_bar", "true"),
+        ("ui.mouse_wheel_lines", "3"),
+        ("ui.which_key_delay_ms", "500"),
+        ("clipboard.osc52", "auto"),
+        ("clipboard.osc52_max_bytes", "100000"),
+        ("file.huge_file_warn_bytes", "536870912"),
+        ("file.long_line_threshold", "1048576"),
+        ("file.reload_on_external_change", "auto_if_unmodified"),
+    ];
+    assert_eq!(want.len(), KEYS.len());
+    for (key, display) in want {
+        assert_eq!(default_display(key), display, "{key}");
+    }
+    // 公開キーでない名前 (セクション・テーマの値など) は空
+    for key in ["editor", "ui.selection.fg", "editor.auto_indent", ""] {
+        assert_eq!(default_display(key), "", "{key}");
+    }
+}
+
+/// 列挙値の許容値 (診断の「使える値: …」) の並びを固定する。
+#[test]
+fn 列挙値の許容値は決まった並び() {
+    let cases: [(&[&str], &[&str]); 11] = [
+        (IndentUnit::NAMES, &["tab", "space"]),
+        (BackspaceUnit::NAMES, &["grapheme", "codepoint"]),
+        (ThemeBackground::NAMES, &["auto", "dark", "light"]),
+        (ShowWhitespace::NAMES, &["off", "minimal"]),
+        (Osc52Policy::NAMES, &["auto", "always", "never"]),
+        (
+            ExternalChangePolicy::NAMES,
+            &["ask", "auto_if_unmodified", "never"],
+        ),
+        (WrapMode::NAMES, &["off", "soft", "word"]),
+        (WrapIndent::NAMES, &["none", "same"]),
+        (
+            DefaultEncoding::NAMES,
+            &[
+                "utf-8",
+                "utf-8-bom",
+                "utf-16le",
+                "utf-16be",
+                "shift_jis",
+                "euc-jp",
+                "iso-2022-jp",
+                "system",
+            ],
+        ),
+        (DefaultLineEnding::NAMES, &["lf", "crlf", "cr", "native"]),
+        (
+            ColorMode::NAMES,
+            &["auto", "truecolor", "256", "16", "none"],
+        ),
+    ];
+    for (names, want) in cases {
+        assert_eq!(names, want);
+    }
+    // 値と変種は 1 対 1
+    for n in ColorMode::NAMES {
+        assert_eq!(ColorMode::from_name(n).map(ColorMode::name), Some(*n));
+    }
+}
+
+#[test]
+fn 公開キーのセクションは_sections_と一致する() {
+    let mut from_keys: Vec<&str> = Vec::new();
+    for k in KEYS {
+        let s = k.split('.').next().unwrap();
+        if !from_keys.contains(&s) {
+            from_keys.push(s);
+        }
+    }
+    from_keys.sort_unstable();
+    let mut sections = SECTIONS.to_vec();
+    sections.sort_unstable();
+    assert_eq!(from_keys, sections);
+}
+
+/// 配布する設定例は、宣言の表の公開キーをすべて書き、既定値と同じ値を書く (宣言の表との突合、STR-E2)。
+#[test]
+fn 配布する設定例は全公開キーを既定値で書く() {
+    let text = include_str!("../../../../dist/config.example.toml");
+    let table: toml::Table = text.parse().expect("設定例は TOML");
+    fn flatten(prefix: &str, t: &toml::Table, out: &mut Vec<(String, String)>) {
+        for (k, v) in t {
+            let full = if prefix.is_empty() {
+                k.clone()
+            } else {
+                format!("{prefix}.{k}")
+            };
+            match v {
+                toml::Value::Table(inner) => flatten(&full, inner, out),
+                other => out.push((full, other.to_string())),
+            }
+        }
+    }
+    let mut written = Vec::new();
+    flatten("", &table, &mut written);
+    written.sort();
+    let mut want: Vec<(String, String)> = declared_values(&Config::default())
+        .into_iter()
+        .map(|(k, v)| (k.to_owned(), v))
+        .collect();
+    want.sort();
+    assert_eq!(written, want);
 }

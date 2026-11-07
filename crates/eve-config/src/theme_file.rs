@@ -41,7 +41,8 @@ const NAMES: [&str; 8] = [
     "black", "red", "green", "yellow", "blue", "magenta", "cyan", "white",
 ];
 
-fn xterm_rgb(index: u8) -> (u8, u8, u8) {
+/// xterm の 256 色の番号 → RGB (04 §12.3)。eve-tui の `color::xterm_rgb` と同じ (eve-tui の試験 `color_cross` が突合する)。
+pub fn xterm_rgb(index: u8) -> (u8, u8, u8) {
     match index {
         0..=15 => ANSI16[index as usize],
         16..=231 => {
@@ -59,7 +60,8 @@ fn xterm_rgb(index: u8) -> (u8, u8, u8) {
     }
 }
 
-/// 重み付き RGB 距離 (04 §12.3。eve-tui の最終防衛線と同じ式)。
+/// 重み付き RGB 距離 (04 §12.3。eve-tui の最終防衛線と同じ式。依存の向き (02 §4.1) で関数を共有できないので、
+/// 結果を eve-tui の試験 `color_cross` で突合する)。
 fn distance(a: (u8, u8, u8), b: (u8, u8, u8)) -> i64 {
     let rmean = (i64::from(a.0) + i64::from(b.0)) / 2;
     let (dr, dg, db) = (
@@ -70,30 +72,36 @@ fn distance(a: (u8, u8, u8), b: (u8, u8, u8)) -> i64 {
     (((512 + rmean) * dr * dr) >> 8) + 4 * dg * dg + (((767 - rmean) * db * db) >> 8)
 }
 
+/// RGB に最も近い 256 色の番号 (キューブ 216 色 + グレー 24 階調。0..=15 は選ばない)。eve-tui の
+/// `color::rgb_to_ansi256` と同じ。
+pub fn rgb_to_ansi256(rgb: (u8, u8, u8)) -> u8 {
+    (16..=255u8)
+        .min_by_key(|&i| (distance(rgb, xterm_rgb(i)), i))
+        .unwrap_or(16)
+}
+
+/// RGB に最も近い 16 色の番号 (xterm 既定のパレットとの距離)。eve-tui の `color::rgb_to_ansi16` と同じ。
+pub fn rgb_to_ansi16(rgb: (u8, u8, u8)) -> u8 {
+    (0..16u8)
+        .min_by_key(|&i| (distance(rgb, ANSI16[i as usize]), i))
+        .unwrap_or(0)
+}
+
 /// 色を 256 色の段に近似する (RGB はキューブとグレーから。番号はそのまま)。
 fn to256(c: ThemeColor) -> ThemeColor {
     match c {
-        ThemeColor::Rgb(r, g, b) => ThemeColor::Ansi(
-            (16..=255u8)
-                .min_by_key(|&i| (distance((r, g, b), xterm_rgb(i)), i))
-                .unwrap_or(16),
-        ),
+        ThemeColor::Rgb(r, g, b) => ThemeColor::Ansi(rgb_to_ansi256((r, g, b))),
         _ => c,
     }
 }
 
 /// 色を 16 色の段に近似する。
 fn to16(c: ThemeColor) -> ThemeColor {
-    let rgb = match c {
-        ThemeColor::Rgb(r, g, b) => (r, g, b),
-        ThemeColor::Ansi(i) if i >= 16 => xterm_rgb(i),
-        _ => return c,
-    };
-    ThemeColor::Ansi(
-        (0..16u8)
-            .min_by_key(|&i| (distance(rgb, ANSI16[i as usize]), i))
-            .unwrap_or(0),
-    )
+    match c {
+        ThemeColor::Rgb(r, g, b) => ThemeColor::Ansi(rgb_to_ansi16((r, g, b))),
+        ThemeColor::Ansi(i) if i >= 16 => ThemeColor::Ansi(rgb_to_ansi16(xterm_rgb(i))),
+        _ => c,
+    }
 }
 
 /// 近似した段で前景と背景が同じ番号になったら、前景を外して反転にする (04 §12.3)。

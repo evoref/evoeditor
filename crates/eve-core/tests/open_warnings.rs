@@ -129,3 +129,50 @@ fn 不正バイトが_1_パーセントを超えると見込みを示して_3_�
     assert_eq!(h.overlay(), "");
     assert_ne!(h.doc_path().as_deref(), Some("/w/a.txt"));
 }
+
+// verifies: NFR-203
+// spec: 03 §9.2 (読込の確保は try_reserve。失敗は msg.open.out_of_memory で、プロセスは続ける)
+#[test]
+fn 読込の確保に失敗したら落ちずに中止して知らせる() {
+    let mut h = Harness::new()
+        .with_size(80, 6)
+        .with_file("/w/big.txt", b"abc\n");
+    // 中身は小さいまま、確保できない大きさ (1 EiB) に見せる
+    h.fs.set_fake_len("/w/big.txt", Some(1 << 60));
+    h.open("/w/big.txt");
+    h.run_jobs();
+    h.keys("r"); // 巨大ファイルの確認: 読み取り専用で開く
+    h.run_jobs();
+    assert!(
+        h.messages().contains(&"msg.open.out_of_memory".to_owned()),
+        "{:?}",
+        h.messages()
+    );
+    assert_ne!(h.doc_path().as_deref(), Some("/w/big.txt"), "開かない");
+    assert!(h.frame_contains("メモリが足りない"));
+}
+
+// verifies: NFR-203
+// spec: 03 §9.5 手順 4 (再読込の失敗は旧本文・履歴をそのまま保つ)
+#[test]
+fn 再読込の確保に失敗したら旧本文のまま知らせる() {
+    let mut h = Harness::new()
+        .with_size(80, 6)
+        .with_file("/w/a.txt", b"old\n");
+    h.open("/w/a.txt");
+    h.run_jobs();
+    h.fs.set_fake_len("/w/a.txt", Some(1 << 60));
+    h.cmd("file.reload");
+    h.run_jobs();
+    h.keys("r"); // 巨大ファイルの確認
+    h.run_jobs();
+    assert!(
+        h.messages().contains(&"msg.open.out_of_memory".to_owned()),
+        "{:?}",
+        h.messages()
+    );
+    assert_eq!(h.doc_text(), "old\n");
+    assert_eq!(h.doc_path().as_deref(), Some("/w/a.txt"));
+    h.text("x");
+    assert_eq!(h.doc_text(), "xold\n", "読込中の状態が残らず、編集できる");
+}

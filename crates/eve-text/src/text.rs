@@ -67,6 +67,17 @@ impl Text {
     }
 }
 
+impl Snapshot {
+    /// 内部の rope (`InsertText::Rope` の適用・切り出し。同じ crate の中だけ)。
+    pub(crate) fn rope(&self) -> &Rope {
+        &self.rope
+    }
+
+    pub(crate) fn from_rope(rope: Rope) -> Snapshot {
+        Snapshot { rope }
+    }
+}
+
 impl From<&str> for Text {
     fn from(s: &str) -> Text {
         Text {

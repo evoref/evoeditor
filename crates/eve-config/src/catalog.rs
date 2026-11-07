@@ -165,7 +165,11 @@ fn expand_conditionals(template: &str, args: &[(&str, &str)]) -> String {
             return out;
         };
         let inner = &after[..end];
-        if placeholder_names(inner).all(|n| args.iter().any(|(k, v)| *k == n && !v.is_empty())) {
+        if placeholders(inner)
+            .into_iter()
+            .filter(|n| !n.starts_with("key:"))
+            .all(|n| args.iter().any(|(k, v)| *k == n && !v.is_empty()))
+        {
             out.push_str(inner);
         }
         rest = &after[end + '〕'.len_utf8()..];
@@ -174,8 +178,10 @@ fn expand_conditionals(template: &str, args: &[(&str, &str)]) -> String {
     out
 }
 
-/// 文字列の中の `{name}` の name (`{key:…}` と `{{` のエスケープは除く)。
-fn placeholder_names(s: &str) -> impl Iterator<Item = &str> {
+/// 文言の中のプレースホルダ `{name}` の name の列 (`{key:<command_id>}` は `key:<command_id>` のまま。
+/// `{{` は `{` のエスケープで数えない。閉じていない `{` から後は読まない)。言語ファイルの解決と
+/// `cargo xtask i18n` の検査 (言語の間でプレースホルダが揃っているか) が同じ規則で読むための、唯一の実装。
+pub fn placeholders(s: &str) -> Vec<&str> {
     let mut names = Vec::new();
     let mut rest = s;
     while let Some(i) = rest.find('{') {
@@ -186,16 +192,13 @@ fn placeholder_names(s: &str) -> impl Iterator<Item = &str> {
         }
         match tail.find('}') {
             Some(end) => {
-                let name = &tail[1..end];
-                if !name.starts_with("key:") {
-                    names.push(name);
-                }
+                names.push(&tail[1..end]);
                 rest = &tail[end + 1..];
             }
             None => break,
         }
     }
-    names.into_iter()
+    names
 }
 
 fn flatten(

@@ -59,22 +59,12 @@ fn is_cjk_text(c: char) -> bool {
     matches!(c as u32, 0x3041..=0x30FF | 0x3400..=0x9FFF | 0xFF66..=0xFF9F)
 }
 
-/// 文言の `{name}` と `{key:id}` の名前の集合 (`{{` は除く)。
+/// 文言の `{name}` と `{key:id}` の名前の集合 (`{{` は除く)。読み方は言語ファイルの解決と同じ (eve-config)。
 fn placeholders(s: &str) -> BTreeSet<String> {
-    let mut out = BTreeSet::new();
-    let mut it = s.chars().peekable();
-    while let Some(c) = it.next() {
-        if c != '{' {
-            continue;
-        }
-        if it.peek() == Some(&'{') {
-            it.next();
-            continue;
-        }
-        let name: String = it.by_ref().take_while(|c| *c != '}').collect();
-        out.insert(name);
-    }
-    out
+    eve_config::placeholders(s)
+        .into_iter()
+        .map(str::to_owned)
+        .collect()
 }
 
 /// 文言の `[X]` (大文字 1 字の角括弧) の並び。確認ダイアログのアクセラレータ。
