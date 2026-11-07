@@ -232,7 +232,8 @@ impl EditorState {
             .map(|a| a.stderr)
             .unwrap_or_default();
         self.push_effect(Effect::Quit {
-            code: 0,
+            // 終了の要求のコード (`app.quit_with_error` なら 4、07 §18.4)
+            code: self.ui.quit_code,
             rescue: QuitRescue::DirtyDocuments,
             stderr,
         });

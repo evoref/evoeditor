@@ -1,6 +1,6 @@
 # コマンド一覧
 
-生成物 (`cargo xtask gen-reference` で作り直す。手で直さない。docs/09 §11.2)。`evoeditor --list-commands --json` の出力 (組込みのコマンド 88 個。CommandId の順) から作る。コマンドと既定キーの正本は [07 §11.6 のカタログ](../07-config-extensibility.md#116-v01-commandid-カタログ-付録) で、`cargo xtask gen-reference --check` が突合する。
+生成物 (`cargo xtask gen-reference` で作り直す。手で直さない。docs/09 §11.2)。`evoeditor --list-commands --json` の出力 (組込みのコマンド 91 個。CommandId の順) から作る。コマンドと既定キーの正本は [07 §11.6 のカタログ](../07-config-extensibility.md#116-v01-commandid-カタログ-付録) で、`cargo xtask gen-reference --check` が突合する。
 
 - **種類**・**権限** は 07 §11.6 の kind / perm 列の表記 (権限の `-` は外部の主体から呼べない)。**when** の `—` は常に実行できる。
 - **引数** は `名前` (`?` は省略可能): 型 (07 §11.2)。
@@ -10,6 +10,8 @@
 | ID | タイトル | 種類 | 引数 | when | 権限 | 既定キー | パレット |
 |---|---|---|---|---|---|---|---|
 | `app.quit` | 終了 | Ui | — | — | `-` | `global`: `Ctrl+Q` | 出す |
+| `app.quit_with_error` | 失敗として終了 | Ui | — | — | `-` | — | 出す |
+| `app.save_and_quit` | 保存して終了 | File | — | — | `-` | — | 出す |
 | `app.suspend` | 一時停止 (サスペンド) | Ui | — | `caps.can_suspend` | `-` | `editor`: `Ctrl+K Z` | 出す |
 | `buffer.close` | 閉じる | Ui | — | — | `-` | `editor`: `Ctrl+W`, `Ctrl+K W`<br>`list`: `Ctrl+W` | 出す |
 | `buffer.list` | 一覧 | Ui | — | — | `ui` | `editor`: `Ctrl+E` | 出す |
@@ -18,6 +20,7 @@
 | `clipboard.copy` | コピー | Ui | — | `!selection.empty` | `-` | `editor`: `Ctrl+C`, `Ctrl+Insert` | 出す |
 | `clipboard.cut` | 切り取り | Edit | — | `!selection.empty && !doc.read_only` | `-` | `editor`: `Ctrl+X`, `Shift+Delete` | 出す |
 | `config.reload` | 設定を読み直す | Ui | — | — | `-` | — | 出す |
+| `config.show_diagnostics` | 設定の診断を表示 | Ui | — | — | `ui` | — | 出す |
 | `cursor.doc_end` | 文書の末尾へ移動 | Motion | — | — | `read` | `editor`: `Ctrl+End` | 出す |
 | `cursor.doc_start` | 文書の先頭へ移動 | Motion | — | — | `read` | `editor`: `Ctrl+Home` | 出す |
 | `cursor.end` | 行末へ移動 | Motion | — | — | `read` | `editor`: `End`, `Ctrl+K →`<br>`prompt`: `End` | 出す |
@@ -33,7 +36,7 @@
 | `cursor.page_up` | 前のページへ移動 | Motion | — | — | `read` | `editor`: `PgUp`, `Ctrl+K ,` | 出す |
 | `edit.delete_backward` | 前の文字を削除 | Edit | — | `!doc.read_only` | `propose` | `editor`: `Backspace`<br>`prompt`: `Backspace` | 出す |
 | `edit.delete_forward` | 後ろの文字を削除 | Edit | — | `!doc.read_only` | `propose` | `editor`: `Delete`<br>`prompt`: `Delete` | 出す |
-| `edit.delete_line` | 行を削除 | Edit | — | `!doc.read_only` | `propose` | `editor`: `Ctrl+K L` | 出す |
+| `edit.delete_line` | 行を削除 | Edit | — | `!doc.read_only` | `propose` | `editor`: `Ctrl+K L`, `Ctrl+Shift+K` [E] | 出す |
 | `edit.delete_word_backward` | 前の単語を削除 | Edit | — | `!doc.read_only` | `propose` | `editor`: `Ctrl+Backspace`, `Alt+Backspace`<br>`prompt`: `Ctrl+Backspace` | 出す |
 | `edit.delete_word_forward` | 後ろの単語を削除 | Edit | — | `!doc.read_only` | `propose` | `editor`: `Ctrl+Delete`<br>`prompt`: `Ctrl+Delete` | 出す |
 | `edit.duplicate_line` | 行を複製 | Edit | — | `!doc.read_only` | `propose` | `editor`: `Ctrl+K D` | 出す |

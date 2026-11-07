@@ -33,6 +33,9 @@ pub struct Row {
     pub ids: Vec<String>,
     /// 後の版の注記 (`(v0.2)` など) が ID 列に付いた行。実装した版から登録してよい (必須ではない)。
     pub later: bool,
+    /// 注記の版 (`(v0.2)` や `(v0.3 で実装)` の (メジャー, マイナー))。注記が無い、または `(v1.L)` のように
+    /// 数で読めない版は `None`。出荷した版の行が登録されていることの突合 (`gen-reference --check`) に使う。
+    pub since: Option<(u32, u32)>,
     pub title_keys: Vec<String>,
     /// `Edit` / `Motion` / `Ui` / `File`。
     pub kinds: Vec<String>,
@@ -86,6 +89,7 @@ pub fn read(doc07: &str) -> Result<Vec<Row>, Error> {
             let mut row = Row {
                 line: r.line,
                 later: id_cell.contains("(v"),
+                since: note_version(&id_cell),
                 title_keys,
                 kinds: Vec::new(),
                 perms: Vec::new(),
@@ -105,6 +109,20 @@ pub fn read(doc07: &str) -> Result<Vec<Row>, Error> {
 }
 
 /// kind 列: `Edit` (行のすべて)、`Edit / Ui` (ID の順)、`Edit (cut) / Ui (copy)` (注記の語で ID を選ぶ)。
+/// ID 列の最初の版の注記 `(vX.Y` の (X, Y)。`(v1.L)` のように数で読めなければ `None`。
+fn note_version(id_cell: &str) -> Option<(u32, u32)> {
+    let rest = &id_cell[id_cell.find("(v")? + 2..];
+    let (major, rest) = leading_number(rest)?;
+    let (minor, _) = leading_number(rest.strip_prefix('.')?)?;
+    Some((major, minor))
+}
+
+/// 先頭の 10 進の数と、その後ろ。先頭が数字でなければ `None`。
+fn leading_number(s: &str) -> Option<(u32, &str)> {
+    let end = s.find(|c: char| !c.is_ascii_digit()).unwrap_or(s.len());
+    Some((s[..end].parse().ok()?, &s[end..]))
+}
+
 fn split_kinds(row: &Row, cell: &str) -> Result<Vec<String>, String> {
     let parts: Vec<&str> = cell.split(" / ").map(str::trim).collect();
     let n = row.ids.len();
@@ -330,11 +348,22 @@ mod tests {
         assert_eq!(rows[0].ids, ["file.save"]);
         assert_eq!(rows[0].when, "`!doc.read_only`");
         assert!(!rows[0].later);
+        assert_eq!(rows[0].since, None);
+        assert_eq!(rows[2].since, Some((0, 2)));
         assert_eq!(rows[1].kinds, ["Ui", "Edit"]);
         assert_eq!(rows[1].perms, ["read", "propose"]);
         assert_eq!(rows[2].kinds, ["Ui", "Ui"]);
         assert!(rows[2].later);
         assert_eq!(rows[1].id_index_by_last_word("cut"), Some(1));
+    }
+
+    #[test]
+    fn 版の注記を数で読む() {
+        assert_eq!(note_version("`a.b` (v0.3 で実装)"), Some((0, 3)));
+        assert_eq!(note_version("`a.b` (v0.2、M10 で実装)"), Some((0, 2)));
+        assert_eq!(note_version("`a.b` (v1.L)"), None);
+        assert_eq!(note_version("`a.b` (v12.34)"), Some((12, 34)));
+        assert_eq!(note_version("`a.b`"), None);
     }
 
     #[test]

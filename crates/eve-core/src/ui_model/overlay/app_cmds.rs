@@ -1,4 +1,4 @@
-//! オーバーレイ・検索バーの中のコマンドと `app.quit` / `app.suspend` の登録 (07 §11.6)。
+//! オーバーレイ・検索バーの中のコマンドと `app.quit` / `app.quit_with_error` / `app.save_and_quit` / `app.suspend` の登録 (07 §11.6)。
 
 use eve_view::Effect;
 
@@ -118,12 +118,20 @@ fn cmd_quit(ctx: &mut CommandCtx<'_>) -> CommandResult {
     ctx.state.request_quit()
 }
 
+fn cmd_quit_with_error(ctx: &mut CommandCtx<'_>) -> CommandResult {
+    ctx.state.request_quit_with_error()
+}
+
+fn cmd_save_and_quit(ctx: &mut CommandCtx<'_>) -> CommandResult {
+    ctx.state.request_save_and_quit()
+}
+
 fn cmd_suspend(ctx: &mut CommandCtx<'_>) -> CommandResult {
     ctx.state.push_effect(Effect::Suspend);
     CommandResult::Done
 }
 
-/// オーバーレイ内のコマンドと `app.quit`・`app.suspend` (07 §11.6)。
+/// オーバーレイ内のコマンドと `app.quit`・`app.quit_with_error`・`app.save_and_quit`・`app.suspend` (07 §11.6)。
 pub(crate) fn register(r: &mut CommandRegistry) {
     let active = "overlay.active != \"\" || search.active";
     r.add(
@@ -244,6 +252,20 @@ pub(crate) fn register(r: &mut CommandRegistry) {
         Permission::None,
         "",
         cmd_quit,
+    );
+    r.add(
+        ids::APP_QUIT_WITH_ERROR,
+        CommandKind::Ui,
+        Permission::None,
+        "",
+        cmd_quit_with_error,
+    );
+    r.add(
+        ids::APP_SAVE_AND_QUIT,
+        CommandKind::File,
+        Permission::None,
+        "",
+        cmd_save_and_quit,
     );
     r.add(
         ids::APP_SUSPEND,

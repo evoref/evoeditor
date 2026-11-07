@@ -637,8 +637,9 @@ impl Host {
         stderr: Vec<StderrLine>,
         rescue: eve_view::QuitRescue,
     ) -> ExitCode {
-        // 正常な終了では、スワップはもう要らない。「保存を中止して終了」などの退避を伴う終了では残す (復旧の材料)
-        if code == 0 && matches!(rescue, eve_view::QuitRescue::None) {
+        // 未保存の確認 (FR-107) を経た終了 (`app.quit` の 0 と `app.quit_with_error` の 4、07 §18.4) では、スワップはもう要らない。
+        // 「保存を中止して終了」などの退避を伴う終了では残す (復旧の材料)
+        if matches!(rescue, eve_view::QuitRescue::None) {
             for (doc, path) in self.editor.swap_leftovers() {
                 let _ = self.fs.discard_swap(doc, path.as_ref());
             }

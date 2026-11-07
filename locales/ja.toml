@@ -6,6 +6,14 @@ language = "ja"
 description = "エディタを終了します。"
 title = "終了"
 
+[cmd.app.quit_with_error]
+description = "保存せずに、終了コード 4 で終了します (Vim の :cq と同じ)。git commit などを中止させるときに使います。未保存の文書があれば、終了と同じく確認します。"
+title = "失敗として終了"
+
+[cmd.app.save_and_quit]
+description = "表示中の文書を保存してから終了します。ほかに未保存の文書があれば、終了と同じく確認します。"
+title = "保存して終了"
+
 [cmd.app.suspend]
 description = "エディタを一時停止してシェルに戻ります。シェルの fg で再開します。"
 title = "一時停止 (サスペンド)"
@@ -21,6 +29,10 @@ title = "切り取り"
 [cmd.config.reload]
 description = "設定ファイル (config.toml と keymap.toml) を読み直して、再起動せずに反映します。"
 title = "設定を読み直す"
+
+[cmd.config.show_diagnostics]
+description = "設定ファイル・キーマップ・テーマの問題を一覧で表示します。Enter で該当のファイルの該当の行を開きます。"
+title = "設定の診断を表示"
 
 [cmd.cursor.doc_end]
 description = "カーソルを文書の末尾へ動かします。"
@@ -388,6 +400,8 @@ updated = "evoeditor {version} に更新しました: {summary}"
 unsupported = "{option} はこのバージョンでは使えないため無視しました"
 
 [info.config]
+diagnostic_no_file = "{file} の診断は、ファイルに書かれたものではないため開けません"
+no_diagnostics = "設定の診断はありません"
 reload_restart = "次の項目は再起動すると有効になります: {keys}"
 reload_unchanged = "設定を読み直しました (変わった項目はありません)"
 reloaded = "設定を読み直しました。{count} 項目が変わりました: {keys}"
@@ -1041,6 +1055,13 @@ footer = "{matched}/{total}"
 placeholder = "コマンドを入力"
 disabled = "現在は実行できません: {reason}"
 no_match = "一致するコマンドはありません"
+
+[ui.config_diagnostics]
+title = "設定の診断"
+placeholder = "診断の文で絞り込み"
+no_match = "一致する診断はありません"
+item = "{level}: {text} / {hint}"
+item_no_hint = "{level}: {text}"
 
 [ui.buffer_list]
 title = "バッファ"

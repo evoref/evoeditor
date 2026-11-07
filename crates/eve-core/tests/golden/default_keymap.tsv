@@ -135,6 +135,7 @@ editor	PageDown	cursor.page_down	Args({})	ContextExpr(None)	false
 editor	Shift+PageDown	select.extend_page_down	Args({})	ContextExpr(None)	false
 editor	Ctrl+K D	edit.duplicate_line	Args({})	ContextExpr(None)	false
 editor	Ctrl+K L	edit.delete_line	Args({})	ContextExpr(None)	false
+editor	Ctrl+Shift+K	edit.delete_line	Args({})	ContextExpr(None)	true
 editor	Alt+Up	edit.move_line_up	Args({})	ContextExpr(None)	false
 editor	Alt+Down	edit.move_line_down	Args({})	ContextExpr(None)	false
 editor	Ctrl+K Up	edit.move_line_up	Args({})	ContextExpr(None)	false

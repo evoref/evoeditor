@@ -1,16 +1,16 @@
  1Type a command
  2▶ App: Quit                                                 app.quit  Ctrl+Q
- 3  Buffer: Close                                         buffer.close  Ctrl+W
- 4  Buffer: List                                           buffer.list  Ctrl+E
+ 3  App: Quit with Error                                   app.quit_with_error
+ 4  App: Save and Quit                                       app.save_and_quit
+~   Buffer: Close                                         buffer.close  Ctrl+W
+~   Buffer: List                                           buffer.list  Ctrl+E
 ~   Buffer: Next document                               buffer.next  Ctrl+PgDn
 ~   Buffer: Previous document                           buffer.prev  Ctrl+PgUp
 ~   Clipboard: Copy                      Cannot run now: There is no selection
 ~   Clipboard: Cut                       Cannot run now: There is no selection
 ~   Reload Settings                                              config.reload
+~   Show Settings Diagnostics                          config.show_diagnostics
 ~   Move: Go to Document End                          cursor.doc_end  Ctrl+End
-~   Move: Go to Document Start                     cursor.doc_start  Ctrl+Home
-~   Move: Go to Line End                                       cursor.end  End
-~   Move: Go to Line                                  cursor.goto_line  Ctrl+G
 ~
 memo.txt                                                    Ln 1, Col 1 UTF-8 LF
 

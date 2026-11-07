@@ -13,6 +13,15 @@ The Japanese version ([CHANGELOG.md](CHANGELOG.md)) is authoritative. Both are u
 
 ### Added
 
+- **Save and Quit (`app.save_and_quit`)**: saves the current document, then quits, in one step (for example, when you finish writing a `git commit` message). An untitled document asks for a name, and nothing quits if the save fails. If other documents have unsaved changes, you are asked as when quitting. Run it from the command palette (it has no default key).
+- **Quit with Error (`app.quit_with_error`)**: quits without saving, with exit code 4 (like Vim's `:cq`). Use it to abort `git commit` and the like from the editor. If documents have unsaved changes, you are asked as when quitting. Run it from the command palette.
+- **Show Settings Diagnostics (`config.show_diagnostics`)**: lists the problems in the settings file, the keymap and the theme (including items this version does not support), and Enter opens the file at that line. The message at startup or after reloading the settings showed only the first problem; now you can see all of them on screen. When there are none, it says so. Run it from the command palette.
+- For developers: the generated reference in `docs/reference/` (commands, the default keymap and the default settings) and `cargo xtask gen-reference`, which writes it (`--check` checks that it is up to date and matches the command catalog in the spec; it is part of `cargo xtask check`). Added the hidden options it reads, `--list-commands [--json]` and `--dump-keymap [--json]` (the keymap with your `keymap.toml` applied). They are not shown in `--help` (docs/09 §11.2). `--check` also checks that the commands of catalog rows annotated with an already shipped version are registered.
+
+### Changed
+
+- **The command palette lists the shorter name first among equally good matches**: for example, typing "save" puts Save above Save and Quit (so that Enter does not quit).
+- **`Ctrl+Shift+K` now deletes the line** (as in the spec's key table). It reaches the editor only on terminals with enhanced keys; elsewhere use `Ctrl+K L` as before, which the palette and help show instead.
 - **The status bar shows files changed outside evoeditor**: a document for which you chose "Ignore" when an external change was found (for example, when you came back from another app) shows `[Changed on disk]` (`Changed` when narrow) in the status bar. It disappears when you save, reload or reopen the document. You can now tell that the content on screen differs from the file on disk after the dialog has closed.
 - For developers: the generated reference in `docs/reference/` (commands, the default keymap and the default settings) and `cargo xtask gen-reference`, which writes it (`--check` checks that it is up to date and matches the command catalog in the spec; it is part of `cargo xtask check`). Added the hidden options it reads, `--list-commands [--json]` and `--dump-keymap [--json]` (the keymap with your `keymap.toml` applied). They are not shown in `--help` (docs/09 §11.2).
 

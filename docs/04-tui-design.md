@@ -791,19 +791,19 @@ TUI では IME は端末/OS が処理し、evoeditor には **確定文字列だ
 | 保存 | `file.save` | `Ctrl+S` | パレット | raw モードで XON/XOFF を無効化するため届く (FR-609) |
 | 名前を付けて保存 | `file.save_as` | `Ctrl+Shift+S` [E] | `Ctrl+K S` | |
 | すべて保存 (v0.2) | `file.save_all` | — | `Ctrl+K A` | 複数文書 (FR-103) と同時 |
-| 保存して終了 (v0.2) | `app.save_and_quit` | — | パレット | `$GIT_EDITOR` 用途 (07 §18.6)。v0.1 は Ctrl+S → Ctrl+Q の 2 操作 |
+| 保存して終了 (v0.3 で実装) | `app.save_and_quit` | — | パレット | `$GIT_EDITOR` 用途 (07 §18.6)。v0.1・v0.2 は Ctrl+S → Ctrl+Q の 2 操作 |
 | 開く | `file.open` | `Ctrl+O` | — | v0.1: パス入力プロンプト (**補完なし**。補完は `read_dir` を要するため v0.5 のファジーファインダ FR-125 と同時)。**v0.1 は単一文書** なので、開くと今の文書を置き換える。今の文書が未保存なら FR-107 と同じ確認 (`ui.confirm.unsaved_replace`、§15.2) |
 | 新規 | `file.new` | `Ctrl+N` | — | FR-124。今の文書を置き換える (未保存なら上と同じ確認)。[横] GNOME の `Ctrl+Shift+N` とは別 |
 | バッファを閉じる (v0.2) | `buffer.close` | `Ctrl+W` | `Ctrl+K W` | 複数文書 (FR-103) と同時。未保存なら確認 (FR-107) |
 | 終了 | `app.quit` | `Ctrl+Q` | パレット | 未保存なら確認 |
-| 失敗終了 (v0.2) | `app.quit_with_error` | — | パレット | 終了コード 4 (07 §18.4、`git commit` 中止)。v0.1 はメッセージを空にして保存すればコミットは中止される |
+| 失敗終了 (v0.3 で実装) | `app.quit_with_error` | — | パレット | 終了コード 4 (07 §18.4、`git commit` 中止)。未保存の確認は `app.quit` と同じ。v0.1・v0.2 はメッセージを空にして保存すればコミットは中止される |
 | サスペンド (Unix、v0.2) | `app.suspend` | — | `Ctrl+K Z` | `Ctrl+Z` は Undo のため。FR-609。`Capabilities.can_suspend` が偽なら when で非表示 |
 | コマンドパレット | `ui.palette_open` | `Ctrl+P` | `F1`、`Ctrl+Shift+P` [E][横] (別名) | Windows Terminal が `Ctrl+Shift+P` を横取りするため第一は `Ctrl+P`。**v0.1 はヘルプ画面を持たないので `F1` もパレットを開く** (FR-514 はパレットで代用。各行に割当キーが出る、§8.1) |
 | ヘルプ (v0.2) | `help.open` | — | `Ctrl+K H` | FR-514 (ヘルプ画面)。v0.2 で `F1` をヘルプに移すかは提案中 (移す場合は CHANGELOG に記す) |
 | キー一覧 / コマンド一覧 (v0.2) | `help.keys` / `help.commands` | — | パレット | FR-514。ヘルプの節 (§8.6) と同じ内容 |
 | メッセージ履歴 (v0.2) | `ui.message_history` | — | `Ctrl+K M` | FR-505 (履歴) |
 | 再描画 | `ui.redraw` | — | `Ctrl+K R` | §4.7(f) |
-| 設定診断の表示 (v0.2) | `config.show_diagnostics` | — | パレット | FR-703 (07 §4.3)。v0.1 は起動時のメッセージだけ |
+| 設定診断の表示 (v0.3 で実装) | `config.show_diagnostics` | — | パレット | FR-703 (07 §4.3、一覧は §8.5a)。v0.1・v0.2 は起動時と再読込のときのメッセージだけ |
 | 設定再読込 (v0.2) | `config.reload` | — | パレット | FR-706 (07 §6)。v0.1 は再起動で反映 |
 | ファイルを再読込 | `file.reload` | — | パレット | FR-117 (明示の再読込、03 §9.5)。未編集ならそのまま読み直し、dirty なら `ui.confirm.reload_discard` (§15.2) で確認する。パスを持たない文書では淡色と理由 |
 | 外部変更の確認 (v0.2) | `file.check_external_changes` | — | パレット | FR-117 (フォーカス復帰時の確認と同時) |
@@ -992,7 +992,7 @@ core の意味的モデル ([02 §8.1](02-architecture.md#81-方針-adr-0008)) �
 | 起動 | `Ctrl+P` または `F1`。開いた時点で入力欄は空。v0.1 は全コマンドを **アルファベット順** (CommandId 順) で表示する。v0.2 から **最近実行 (直近 20 件、セッション内) → アルファベット順** (07 §11.4) |
 | 位置 | 上部中央。幅 = min(80, 端末幅 − 4)、高さ = 入力 1 行 + 候補最大 12 行 + 枠 |
 | 候補行 | `カテゴリ: タイトル` (MessageKey `cmd.*`) + 右寄せで `CommandId` (薄色、狭いと省略) + キー表記 (§7.8)。**v0.1 ではヘルプ画面の代わり** で、全コマンドとその割当キーをここで見られる (FR-514) |
-| 照合・順序 | core が行う。タイトル (日本語) **と** CommandId **と** 英語タイトル (定数表、07 §11.4) の全てを対象にする (日本語 UI でも `save` で見つかる)。順序は、**v0.1: 前方一致 → 部分一致 → アルファベット順** (ファジー一致・最近実行は使わない。FR-602)、**v0.2 から: ファジー一致スコア → 最近実行 → アルファベット順** (07 §11.4。スコアの規則と最近実行の範囲は 07 §11.4 の M9c の実装)。一致箇所は下線 + 太字で示す (色だけに頼らない)。照合位置はモデル (`items[i].match_ranges`、03 §14.6) が返す |
+| 照合・順序 | core が行う。タイトル (日本語) **と** CommandId **と** 英語タイトル (定数表、07 §11.4) の全てを対象にする (日本語 UI でも `save` で見つかる)。順序は、**v0.1: 前方一致 → 部分一致 → アルファベット順** (ファジー一致・最近実行は使わない。FR-602)、**v0.2 から: ファジー一致スコア → 最近実行 → アルファベット順** (v0.3 から、スコアが同点なら照合の対象が短いほうを最近実行より先にする。07 §11.4。スコアの規則と最近実行の範囲は 07 §11.4 の M9c の実装)。一致箇所は下線 + 太字で示す (色だけに頼らない)。照合位置はモデル (`items[i].match_ranges`、03 §14.6) が返す |
 | 実行不可のコマンド | `when` が偽のものは **表示するが淡色** にし、「現在は実行できません: <理由>」(`disabled_reason`) を示す (07 §11.4 / OQ-38。隠すと「存在しない」と誤解する、P7)。**例外 (v0.2)**: `when` が `caps.*` を参照して偽のもの (この端末・OS では使えない。例: Windows の `app.suspend`) は、状況が変われば実行できるものではないので、パレットとヘルプ (FR-514) の一覧から外し、件数にも数えない (05 §11.2)。上級者向けの非表示設定 `ui.palette.hide_unavailable` は Could |
 | 引数付きコマンド | **既定値の無い必須引数** があるコマンドを選ぶと、同じオーバーレイで順に尋ねる (v0.1 から。07 §11.2)。列挙値の引数は値のリスト (例: 「文字コードを指定して開き直す」→ `UTF-8` / `UTF-16LE` / … / `ISO-2022-JP` の一覧)、それ以外は入力プロンプト。`Esc` で 1 段戻る。省略可能な引数のコマンド (例: Go to line、開く) は、そのコマンドの既定の動作 (行番号やパスを尋ねるプロンプト) になる |
 | 出すコマンド | `hidden` でない全コマンド (07 §11.6。オーバーレイ内専用の `ui.confirm` / `ui.list_*` / `ui.dialog_choose` と `internal.*` は出さない) |
@@ -1040,6 +1040,15 @@ v0.1 は単一文書で、バッファ一覧を持たない (別のファイル�
 
 - リストオーバーレイ (パレットと同じ部品)。行: 変更マーカー `●`/`[+]`、名前、ディレクトリ (薄色、長いと中間省略)、文字コード。`Enter` で切替、`Ctrl+W` で閉じる (一覧内。07 §11.6 の `list` コンテキストの `buffer.close`)。
 - 順序: 最近使った順 (直前のバッファが 2 番目 → `Ctrl+E` `Enter` で直前と往復)。
+
+### 8.5a 設定の診断の一覧 (FR-703、v0.3)
+
+`config.show_diagnostics` (07 §4.3) が開く。バッファ一覧 (§8.5) と同じリストオーバーレイ (`OverlayModel::List`) で、`overlay.active` は `config_diagnostics`、キーのコンテキストは `list` → `prompt` → `global` (07 §7.1)。
+
+- 見出しは `ui.config_diagnostics.title`、入力欄が空のときの案内は `ui.config_diagnostics.placeholder`、件数は `ui.palette.footer` (`{matched}/{total}`)、絞り込みに一致しないときは `ui.config_diagnostics.no_match`。
+- 行: `重さ: 本文 / 対処` (重さの語は `ui.history.level.*`。対処の無い情報診断は `重さ: 本文`)。右の列 (薄色、長いと中間省略) に `ファイル:行`。本文の末尾は `…` で切る。
+- `Enter` で選んだ診断のファイルの該当の行・桁を開き、一覧を閉じる。`Esc` で何もせずに閉じる。`↑` / `↓`・`PgUp` / `PgDn` などの移動はパレットと同じ (`list`)。
+- 診断が 0 件のときは一覧を開かず、メッセージ行に `info.config.no_diagnostics` を出す (空の一覧を出さない)。
 
 ### 8.6 ヘルプ (FR-514、ヘルプ画面は v0.2)
 
@@ -1515,6 +1524,11 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 | `ui.buffer_list.title` | バッファ一覧 (`buffer.list`、§8.5。v0.2) の見出し | バッファ |
 | `ui.buffer_list.placeholder` | 同上。入力欄が空のときの案内 (名前とディレクトリで絞り込む) | 文書名で絞り込み |
 | `ui.buffer_list.no_match` | 同上。絞り込みに一致する文書が無いとき | 一致する文書はありません |
+| `ui.config_diagnostics.title` | 設定の診断の一覧 (`config.show_diagnostics`、§8.5a。v0.3) の見出し | 設定の診断 |
+| `ui.config_diagnostics.placeholder` | 同上。入力欄が空のときの案内 (本文と `ファイル:行` で絞り込む) | 診断の文で絞り込み |
+| `ui.config_diagnostics.no_match` | 同上。絞り込みに一致する診断が無いとき | 一致する診断はありません |
+| `ui.config_diagnostics.item` | 同上。1 行の本文。`{level}` は `ui.history.level.*`、`{text}` / `{hint}` は診断の本文と対処 (`msg.config.*` の `.text` / `.hint`) | {level}: {text} / {hint} |
+| `ui.config_diagnostics.item_no_hint` | 同上。対処の無い診断 (「このバージョンでは未対応」の情報診断) の 1 行 | {level}: {text} |
 | `ui.help.title` | ヘルプ画面の見出し (04 §8.6。v0.2) | ヘルプ |
 | `ui.help.footer` | ヘルプ画面の下端の操作の案内 | ↑↓ PgUp PgDn で移動、Esc で閉じる |
 | `ui.history.title` | メッセージ履歴 (`ui.message_history`、§8.9。v0.2) の見出し | メッセージ履歴 |
@@ -1691,6 +1705,8 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 | `info.config.reload_unchanged` | 同上。変わった項目が無い | 設定を読み直しました (変わった項目はありません) |
 | `info.config.reload_restart` | 同上。変わった項目に、再起動しないと効かないもの (`theme.color_mode` / `view.ambiguous_width` / `ui.locale`) がある | 次の項目は再起動すると有効になります: {keys} |
 | `msg.config.reload_kept` | 同上。ファイルにエラー (構文エラー・読めない) があり、そのファイルは前の設定のまま (07 §6 の規則 1。診断は `msg.config.problem` で別に出す) | {file} にエラーがあるため、前の設定のままにしました / エラーを直してから、もう一度読み直してください |
+| `info.config.no_diagnostics` | `config.show_diagnostics` (07 §4.3、v0.3) で、診断が 1 件も無い (一覧を開かない) | 設定の診断はありません |
+| `info.config.diagnostic_no_file` | 同上。一覧で選んだ診断が、ファイルに書かれたものではない (`--set` の値) ので開けない。`{file}` は `--set` | {file} の診断は、ファイルに書かれたものではないため開けません |
 | `info.config.unsupported` (v0.2) | 公開前のキー・予約のセクション・後の版の値 (07 §5 冒頭の「このバージョンでは未対応」)。v0.1 は画面に出さず、件数にも数えず、ログにだけ書く (07 §4.3)。`config.show_diagnostics` (v0.2) の一覧で使う | {item} はこのバージョンでは未対応のため無視しました |
 
 v0.2 以降の診断 (名前だけを予約し、文言はその版で言語ファイルに加える): `msg.config.unknown_command` (キーマップの未知のコマンド ID)、`msg.config.invalid_key_notation` (キー表記の構文エラー)、`msg.config.chord_prefix` (プレフィックス衝突)、`msg.config.unknown_name` (存在しないテーマ・言語・ロケール名)、`info.config.key_conflict` (同一キーの重複)、`info.config.deprecated_key` (廃止キーの自動変換)、`info.config.ignored_workspace` (所有者検査で無視したワークスペース設定、v0.5)、`info.config.pending_trust` (信頼待ちの危険項目、v0.5)、`msg.config.unsafe_value` (安全性違反、v0.5)。
