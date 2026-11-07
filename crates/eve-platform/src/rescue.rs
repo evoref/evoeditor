@@ -30,6 +30,9 @@ pub struct StateRescue {
     state_dir: Option<PathBuf>,
     /// これより遅い退避の段をログに書く (既定は `SLOW_STAGE`)。
     slow_stage: Duration,
+    /// 最初の文書の manifest を書いた直後に、期限 (`received + budget`) が過ぎるまで眠り、さらに眠る余りの時間 (単体試験だけが
+    /// 変える。別プロセスの試験は test-hooks の `rescue_stall_after_manifest`)。`None` は眠らない。
+    stall_after_manifest: Option<Duration>,
 }
 
 impl StateRescue {
@@ -38,12 +41,21 @@ impl StateRescue {
         StateRescue {
             state_dir,
             slow_stage: SLOW_STAGE,
+            stall_after_manifest: None,
         }
     }
 
     /// 段の時間をログに書くしきい値を変える (試験用。時間に依らずに「速い」「遅い」を確かめるため)。
     pub fn with_slow_stage(mut self, slow_stage: Duration) -> StateRescue {
         self.slow_stage = slow_stage;
+        self
+    }
+
+    /// 最初の文書の manifest を書いた直後に、期限が過ぎるまで眠り、さらに `extra` だけ眠らせる (単体試験用。test-hooks の
+    /// `rescue_stall_after_manifest` と同じ)。
+    #[cfg(test)]
+    fn with_stall_after_manifest(mut self, extra: Duration) -> StateRescue {
+        self.stall_after_manifest = Some(extra);
         self
     }
 }
@@ -380,92 +392,173 @@ impl RescueWriter for StateRescue {
         &self,
         docs: &[Arc<DocSnapshot>],
         reason: RescueReason,
+        received: Instant,
         budget: Duration,
     ) -> RescueOutcome {
-        self.write_with(docs, reason, budget, &write_body)
+        self.write_with(docs, reason, received, budget, &write_body)
     }
 }
 
-/// 退避の各段の経過時間 (Issue #342、docs/review/v0.3-findings.md の SAF-35)。退避の始まりから `SLOW_STAGE` を過ぎた後の各段と、
-/// 書き終えられなかったときに、それまでの段の時刻を状態ディレクトリのログ (`log/evoeditor.log`) に 1 行ずつ書く。
-/// 段ごとに書くのは、途中で OS に終了させられても、どの段まで進んだかを残すため。速く終わる普段の退避では何も書かない。
-struct Stages {
-    start: Instant,
+/// 退避の各段の経過時間 (Issue #342、docs/review/v0.3-findings.md の SAF-35)。時刻は受信 (`received`) から数える。
+/// 状態ディレクトリのログ (`log/evoeditor.log`) に 1 行ずつ書く。ファイルは最初に書くときに 1 回だけ開き、以後は追記だけ
+/// (fsync しない。退避の時間を延ばさない)。開けなければログを諦めて退避を続ける。`EVE_LOG` に依らず warn で書く (05 §7.3)。
+///
+/// - 受信から `SLOW_STAGE` を過ぎた後の各段と、書き終えられなかったときに、それまでの段の時刻をまとめて書く (「遅い」)。
+/// - 外から終わらされ得る経路 (CTRL_CLOSE・セッション終了・シグナル。OS や送り手が猶予の後に強制終了する) では、速くても、
+///   始めた時点の 1 行 (`begin`) と、各段を終えるたびの 1 行 (「途中」。`PROGRESS_LINES` 行まで) を書く。早くに終わらされても、
+///   始めたか・最後にどの段まで進んだかが残る。経路は CAS に勝った経路の `reason` で決まる。
+/// - 時間切れの印 (`note`) は積むだけで、書くのは最後の manifest の後 (`finish`)。打切りから最後の manifest までの間に
+///   ログの書込を挟まない (書けた本文が `written = false` のまま残る窓を広げない)。
+///
+/// それ以外の経路 (パニック・Fatal・中止して終了・退避先に保存) の速く終わる退避では何も書かない (ファイルも開かない)。
+struct Stages<'a> {
+    received: Instant,
     slow_stage: Duration,
     reason: RescueReason,
-    log: crate::log::Logger,
+    state_dir: Option<&'a Path>,
+    /// ログのファイル。`None` はまだ開いていない、`Some(None)` は開けなかった。
+    log: Option<Option<crate::log::AppendLog>>,
     done: String,
+    /// 外から終わらされ得る経路か (始めと各段を、速くても書く)。
+    progress: bool,
+    /// 書いた「途中」の行の数。
+    progress_lines: usize,
 }
 
 /// これより遅い退避の段をログに書く。
 const SLOW_STAGE: Duration = Duration::from_millis(500);
+/// 外から終わらされ得る経路で、速くても書く「途中」の行の上限 (文書が多くてもログの書込で退避を延ばさない。1 文書の退避は
+/// ディレクトリ・manifest・本文・完了の manifest の 4 行)。
+const PROGRESS_LINES: usize = 8;
 
-impl Stages {
+/// 外から終わらされ得る経路か (猶予の後に OS や送り手が強制終了する: CTRL_CLOSE は約 5 s、セッション終了、シグナルの送り手が
+/// 続けて送る SIGKILL)。
+fn killable(reason: RescueReason) -> bool {
+    matches!(
+        reason,
+        RescueReason::ConsoleClose | RescueReason::SessionEnd | RescueReason::Signal
+    )
+}
+
+impl<'a> Stages<'a> {
     fn new(
         reason: RescueReason,
-        state_dir: Option<&Path>,
-        start: Instant,
+        state_dir: Option<&'a Path>,
+        received: Instant,
         slow_stage: Duration,
-    ) -> Stages {
+    ) -> Stages<'a> {
         Stages {
-            start,
+            received,
             slow_stage,
             reason,
-            log: crate::log::Logger::with_level(state_dir, crate::log::Level::Warn),
+            state_dir,
+            log: None,
             done: String::new(),
+            progress: killable(reason),
+            progress_lines: 0,
         }
     }
 
-    /// 段 `name` を終えた。遅ければ、ここまでの段をログに書く。
-    fn mark(&mut self, name: &str) {
-        let ms = self.start.elapsed().as_millis();
+    /// 1 行を書く (最初の 1 回だけファイルを開く)。
+    fn log_line(&mut self, message: &str) {
+        let state_dir = self.state_dir;
+        if let Some(log) = self
+            .log
+            .get_or_insert_with(|| crate::log::AppendLog::open(state_dir))
+        {
+            log.line(crate::log::Level::Warn, message);
+        }
+    }
+
+    /// 書き始める。外から終わらされ得る経路では、受信から何 ms で始めたかを 1 行書く。
+    fn begin(&mut self, docs: usize, bytes: u64, budget: Duration) {
+        if self.progress {
+            let line = format!(
+                "退避を始めた ({}、受信から {} ms、{docs} 件 {bytes} B、予算 {} ms)",
+                self.reason.as_str(),
+                self.received.elapsed().as_millis(),
+                budget.as_millis()
+            );
+            self.log_line(&line);
+        }
+    }
+
+    /// 段 `name` を積む (書かない)。時間切れの印に使う (`finish` の行に載る)。
+    fn note(&mut self, name: &str) -> u128 {
+        let ms = self.received.elapsed().as_millis();
         if !self.done.is_empty() {
             self.done.push_str(", ");
         }
         self.done.push_str(&format!("{name} {ms} ms"));
-        if self.start.elapsed() >= self.slow_stage {
+        ms
+    }
+
+    /// 段 `name` を終えた。遅ければ、ここまでの段をログに書く。外から終わらされ得る経路では、速くてもこの段を書く。
+    fn mark(&mut self, name: &str) {
+        let ms = self.note(name);
+        if self.received.elapsed() >= self.slow_stage {
             self.write("遅い");
+        } else if self.progress && self.progress_lines < PROGRESS_LINES {
+            self.progress_lines += 1;
+            let line = format!(
+                "退避の段の時間 ({}、途中): {name} {ms} ms",
+                self.reason.as_str()
+            );
+            self.log_line(&line);
         }
     }
 
-    /// 終わった。書き終えられなかったら、ここまでの段をログに書く。
-    fn finish(&mut self, out: &RescueOutcome) {
+    /// 終わった (最後の manifest の後に呼ぶ)。書き終えられなかったら、ここまでの段 (時間切れの印を含む) と理由
+    /// (時間切れ・書込の失敗) をログに書く。
+    fn finish(&mut self, out: &RescueOutcome, timed_out: bool) {
         if !out.complete {
+            let cause = if timed_out {
+                "時間切れ"
+            } else {
+                "書込の失敗"
+            };
             self.write(&format!(
-                "書き終えられなかった ({}/{} 件)",
+                "書き終えられなかった ({}/{} 件、{cause})",
                 out.written, out.total
             ));
         }
     }
 
-    fn write(&self, what: &str) {
-        self.log.log(
-            crate::log::Level::Warn,
-            &format!(
-                "退避の段の時間 ({}、{what}): {}",
-                self.reason.as_str(),
-                self.done
-            ),
+    fn write(&mut self, what: &str) {
+        let line = format!(
+            "退避の段の時間 ({}、{what}): {}",
+            self.reason.as_str(),
+            self.done
         );
+        self.log_line(&line);
     }
 }
 
 impl StateRescue {
     /// `write` の本体。時間切れだけが中断で、1 文書の書込の失敗 (権限・ロック) はその文書を `written = false` のまま
     /// 次の文書へ進む (複数文書で、1 件の失敗が他の文書を落とさないため。03 §9.8 の不変条件 5、§10.1)。
+    ///
+    /// 予算は `received` (受信の時刻) から数え、各文書の頭・本文を作る前・本文のチャンクの間・manifest を書き直す前に確かめる。
+    /// 過ぎていたら、書けた分を載せた最後の manifest (`complete = false`) を書いて打ち切る。fsync などの同期の I/O の
+    /// 途中では打ち切れない (Issue #342)。
     fn write_with(
         &self,
         docs: &[Arc<DocSnapshot>],
         reason: RescueReason,
+        received: Instant,
         budget: Duration,
         body: BodyWriter<'_>,
     ) -> RescueOutcome {
         // test-hooks: `recovery_timeout=<ms>` で退避の段の予算を縮め、時間切れ (`complete = false`) を起こす (09 §3.6)
         let budget = crate::hooks::value("recovery_timeout")
             .map_or(budget, |ms| budget.min(Duration::from_millis(ms)));
-        let start = Instant::now();
-        let expired = || start.elapsed() >= budget;
-        let mut stages = Stages::new(reason, self.state_dir.as_deref(), start, self.slow_stage);
+        // test-hooks: `rescue_stall_after_manifest=<ms>` で、最初の文書の manifest を書いた直後に、期限が過ぎるまで眠り、
+        // さらに `<ms>` だけ眠る (本文を書く前の時間切れ・外からの終了を、時間の大小に頼らずに再現する、09 §3.6)
+        let stall = crate::hooks::value("rescue_stall_after_manifest")
+            .map(Duration::from_millis)
+            .or(self.stall_after_manifest);
+        let expired = || received.elapsed() >= budget;
+        let mut stages = Stages::new(reason, self.state_dir.as_deref(), received, self.slow_stage);
         let mut out = RescueOutcome {
             total: docs.len(),
             sensitive: docs.iter().any(|d| d.sensitive),
@@ -476,12 +569,13 @@ impl StateRescue {
             return out;
         }
         let secs = now_secs();
-        // 本文の合計に manifest などの余裕を足した、必要な空き容量
-        let needed = docs
+        let total_bytes = docs
             .iter()
             .map(|d| d.snapshot.len_bytes() as u64)
-            .sum::<u64>()
-            .saturating_add(1024 * 1024);
+            .sum::<u64>();
+        stages.begin(docs.len(), total_bytes, budget);
+        // 本文の合計に manifest などの余裕を足した、必要な空き容量
+        let needed = total_bytes.saturating_add(1024 * 1024);
         let (dir, fallback) = match open_dir(
             self.state_dir.as_deref(),
             secs,
@@ -492,7 +586,7 @@ impl StateRescue {
             Err(e) => {
                 out.error = Some(eve_core::RescueError::Io(e.to_string()));
                 stages.mark("ディレクトリ (失敗)");
-                stages.finish(&out);
+                stages.finish(&out, false);
                 return out;
             }
         };
@@ -511,8 +605,12 @@ impl StateRescue {
                 &manifest_text(reason, &created_at, complete, entries, None),
             )
         };
+        let mut timed_out = false;
         for (i, d) in order.iter().enumerate() {
+            let n = i + 1;
             if expired() {
+                timed_out = true;
+                stages.note(&format!("時間切れ (文書 {n} の前)"));
                 break;
             }
             let base = d
@@ -522,7 +620,7 @@ impl StateRescue {
                 .map(|n| n.to_string_lossy().into_owned())
                 .or_else(|| d.untitled_name.clone())
                 .unwrap_or_default();
-            let file = format!("{}-{}.txt", i + 1, safe_basename(&base));
+            let file = format!("{n}-{}.txt", safe_basename(&base));
             let mut entry = ManifestDoc {
                 file: file.clone(),
                 path: d.path.as_ref().map(eve_core::FsPath::display),
@@ -541,34 +639,67 @@ impl StateRescue {
             // 書く前に written = false の項目を載せる (途中で止まっても、書きかけの本文があることが分かる)
             entries.push(entry_clone(&entry));
             if publish(&entries, false).is_err() {
-                stages.mark(&format!("manifest {} (失敗)", i + 1));
+                stages.mark(&format!("manifest {n} (失敗)"));
                 entries.pop();
                 continue;
             }
-            stages.mark(&format!("manifest {}", i + 1));
-            let result = body(&dir.join(&file), d, &expired);
-            stages.mark(&format!("本文 {} ({} B)", i + 1, d.snapshot.len_bytes()));
-            match result {
+            stages.mark(&format!("manifest {n}"));
+            if i == 0
+                && let Some(extra) = stall
+            {
+                std::thread::sleep(budget.saturating_sub(received.elapsed()) + extra);
+            }
+            // 本文を作る前に予算を確かめる (本文のファイルを作らずに打ち切る。manifest には written = false で残る)
+            if expired() {
+                timed_out = true;
+                stages.note(&format!("本文 {n} (時間切れ、書く前)"));
+                break;
+            }
+            let bytes = d.snapshot.len_bytes();
+            match body(&dir.join(&file), d, &expired) {
                 Ok(Some(last)) => {
+                    stages.mark(&format!("本文 {n} ({bytes} B)"));
                     entry.final_newline = matches!(last, b'\n' | b'\r');
                     entry.written = true;
                     *entries.last_mut().expect("直前に積んだ") = entry;
                     out.written += 1;
-                    let _ = publish(&entries, false);
+                    // 最後の文書の書き直しは、下の完了の manifest が兼ねる
+                    if n < order.len() {
+                        // 書き直す前に予算を確かめる。過ぎていたら書き直さずに、書けた分を完了の manifest に載せて打ち切る
+                        if expired() {
+                            timed_out = true;
+                            stages.note(&format!("時間切れ (manifest {n} の書き直しの前)"));
+                            break;
+                        }
+                        let _ = publish(&entries, false);
+                    }
                 }
                 // 時間切れ: 書けた分の manifest を残して終わる
-                Ok(None) => break,
-                // 書込の失敗: この文書は `written = false` のまま、次の文書へ (時間切れでなければ続ける)
+                Ok(None) => {
+                    timed_out = true;
+                    stages.note(&format!("本文 {n} (時間切れ、途中)"));
+                    break;
+                }
+                // 書込の失敗: この文書は `written = false` のまま (manifest は書く前に載せたものと同じなので書き直さない)、
+                // 次の文書へ (時間切れでなければ続ける)
                 Err(e) => {
+                    stages.mark(&format!("本文 {n} (失敗)"));
                     out.error = Some(eve_core::RescueError::Io(e.to_string()));
-                    let _ = publish(&entries, false);
                 }
             }
         }
         out.complete = out.written == out.total;
-        let _ = publish(&entries, out.complete);
-        stages.mark("完了の manifest");
-        stages.finish(&out);
+        // 最後の manifest は予算を過ぎても書く。書けなければ、最後の文書は manifest で `written = false` のまま残る
+        // (本文は残る) ので、完了にしない
+        match publish(&entries, out.complete) {
+            Ok(()) => stages.mark("完了の manifest"),
+            Err(e) => {
+                out.complete = false;
+                out.error = Some(eve_core::RescueError::Io(e.to_string()));
+                stages.mark("完了の manifest (失敗)");
+            }
+        }
+        stages.finish(&out, timed_out);
         if out.written == 0 && out.total > 0 && out.error.is_none() {
             out.error = Some(eve_core::RescueError::NotWritten);
         }
@@ -893,7 +1024,7 @@ mod body_writer_tests {
     use std::fs;
     use std::path::{Path, PathBuf};
     use std::sync::Arc;
-    use std::time::Duration;
+    use std::time::{Duration, Instant};
 
     use eve_core::{DocSnapshot, DocumentId, FsPath, RescueReason, RescueWriter, TextFormat};
     use eve_text::Text;
@@ -964,6 +1095,7 @@ mod body_writer_tests {
         let out = w.write_with(
             &docs,
             RescueReason::Signal,
+            Instant::now(),
             Duration::from_secs(10),
             &fail_second,
         );
@@ -977,26 +1109,39 @@ mod body_writer_tests {
         assert!(m.contains("complete = false"), "{m}");
         assert_eq!(m.matches("written = true").count(), 2, "{m}");
         assert_eq!(m.matches("written = false").count(), 1, "{m}");
+        // 時間切れではなく書込の失敗であることがログで分かる (Issue #342)
+        let text = log_text(&state.join("s"));
+        assert!(
+            text.contains("本文 2 (失敗)")
+                && text.contains("書き終えられなかった (2/3 件、書込の失敗)"),
+            "{text}"
+        );
         let _ = fs::remove_dir_all(state);
     }
 
+    fn log_text(sd: &Path) -> String {
+        fs::read_to_string(sd.join("log").join("evoeditor.log")).unwrap_or_default()
+    }
+
     // Issue #342 (SAF-35): 遅い退避は、各段の経過時間を状態ディレクトリのログに残す (途中で終わっても、どこまで進んだかが分かる)。
-    // 速い退避では何も書かない。
+    // 外から終わらされない経路 (パニックなど) の速い退避では何も書かない。
     #[test]
     fn 遅い退避は各段の時間をログに残し_速い退避は書かない() {
         let state = tmp("slow-stages");
         let sd = state.join("s");
-        let log = sd.join("log").join("evoeditor.log");
         let docs = [doc(1, "unsaved text", None, |_| {})];
         // 時間に依らないよう、しきい値を差し替える: 速い退避は 60 秒より速く、遅い退避 (本文の書込で 600 ms 待つ) は 100 ms より遅い
         // (既定の 500 ms のままだと、負荷の高い機械で速い退避がしきい値を超えて落ちた)
         let fast_w = StateRescue::new(Some(sd.clone())).with_slow_stage(Duration::from_secs(60));
-        let fast = fast_w.write(&docs, RescueReason::ConsoleClose, Duration::from_secs(10));
+        let fast = fast_w.write(
+            &docs,
+            RescueReason::Panic,
+            Instant::now(),
+            Duration::from_secs(10),
+        );
         assert!(fast.complete);
         assert!(
-            !fs::read_to_string(&log)
-                .unwrap_or_default()
-                .contains("退避の段の時間"),
+            !log_text(&sd).contains("退避"),
             "速い退避ではログに書かない"
         );
         let slow_body = |path: &Path, d: &DocSnapshot, expired: &dyn Fn() -> bool| {
@@ -1006,21 +1151,238 @@ mod body_writer_tests {
         let w = StateRescue::new(Some(sd.clone())).with_slow_stage(Duration::from_millis(100));
         let out = w.write_with(
             &docs,
-            RescueReason::ConsoleClose,
+            RescueReason::Panic,
+            Instant::now(),
             Duration::from_secs(10),
             &slow_body,
         );
         assert!(out.complete);
-        let text = fs::read_to_string(&log).unwrap();
+        let text = log_text(&sd);
         let line = text
             .lines()
-            .find(|l| l.contains("退避の段の時間 (console_close、遅い)"))
+            .find(|l| l.contains("退避の段の時間 (panic、遅い)"))
             .unwrap_or_else(|| panic!("遅い段のログがある: {text}"));
         assert!(
             line.contains("ディレクトリ")
                 && line.contains("manifest 1")
                 && line.contains("本文 1 (12 B)"),
             "{line}"
+        );
+        let _ = fs::remove_dir_all(state);
+    }
+
+    // Issue #342: 外から終わらされ得る経路 (CTRL_CLOSE など) は、速くても、始めた時点 (受信から何 ms か) と各段をログに残す
+    // (OS の猶予切れで早くに終わらされても、始めたか・最後にどの段まで進んだかが分かる)
+    #[test]
+    fn 外から終わらされ得る経路は速くても始めと各段をログに残す() {
+        let state = tmp("progress");
+        let sd = state.join("s");
+        let w = StateRescue::new(Some(sd.clone())).with_slow_stage(Duration::from_secs(60));
+        let out = w.write(
+            &[doc(1, "unsaved text", None, |_| {})],
+            RescueReason::ConsoleClose,
+            Instant::now(),
+            Duration::from_secs(10),
+        );
+        assert!(out.complete);
+        let text = log_text(&sd);
+        let lines: Vec<&str> = text.lines().collect();
+        let begin = lines
+            .iter()
+            .position(|l| l.contains("退避を始めた (console_close、受信から "))
+            .unwrap_or_else(|| panic!("始めの行がある: {text}"));
+        assert!(
+            lines[begin].contains("1 件 12 B") && lines[begin].contains("予算 10000 ms"),
+            "{text}"
+        );
+        // 始めの行の後に、段ごとの行が順に並ぶ
+        let mut at = begin;
+        for stage in [
+            ": ディレクトリ ",
+            ": manifest 1 ",
+            ": 本文 1 (12 B) ",
+            ": 完了の manifest ",
+        ] {
+            let found = lines[at + 1..]
+                .iter()
+                .position(|l| {
+                    l.contains("退避の段の時間 (console_close、途中)") && l.contains(stage)
+                })
+                .unwrap_or_else(|| panic!("{stage} の行が順に並ぶ: {text}"));
+            at += 1 + found;
+        }
+        assert!(
+            !text.contains("遅い") && !text.contains("書き終えられなかった"),
+            "{text}"
+        );
+        let _ = fs::remove_dir_all(state);
+    }
+
+    // Issue #342: manifest 1 の後、本文を作る前に予算が尽きたら、本文のファイルを作らずに打ち切り、最後の manifest
+    // (`complete = false`、`written = false`) を書く。ログは「時間切れ」で、書込の失敗と見分けられる
+    #[test]
+    fn 本文を作る前に予算が尽きたら本文を作らずに_complete_false_の_manifest_を残す() {
+        let state = tmp("before-body");
+        let sd = state.join("s");
+        let w = StateRescue::new(Some(sd.clone()))
+            .with_slow_stage(Duration::from_secs(60))
+            // 期限が過ぎるまで眠り、さらに 10 ms 眠る (時間の大小に頼らない。予算は負荷の下でも manifest 1 まで届く長さ)
+            .with_stall_after_manifest(Duration::from_millis(10));
+        let out = w.write(
+            &[doc(1, "unsaved text", None, |_| {})],
+            RescueReason::ConsoleClose,
+            Instant::now(),
+            Duration::from_secs(3),
+        );
+        assert!(!out.complete && out.written == 0, "{out:?}");
+        assert_eq!(out.error, Some(eve_core::RescueError::NotWritten));
+        let dir = out.dir.expect("退避先");
+        let m = manifest(&dir);
+        assert!(
+            m.contains("complete = false") && m.contains("written = false"),
+            "{m}"
+        );
+        let names: Vec<String> = fs::read_dir(&dir)
+            .unwrap()
+            .flatten()
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(names, ["manifest.toml"], "本文のファイルを作らない");
+        let text = log_text(&sd);
+        assert!(text.contains("本文 1 (時間切れ、書く前)"), "{text}");
+        assert!(
+            text.contains("書き終えられなかった (0/1 件、時間切れ)"),
+            "{text}"
+        );
+        let _ = fs::remove_dir_all(state);
+    }
+
+    // 予算は受信の時刻から数える (05 §11.2 の時系列表の「受信から t = 3.5 s」)。受信から予算を過ぎて呼ばれたら、
+    // 1 件も書かずに `complete = false` の manifest を残す
+    #[test]
+    fn 予算は受信の時刻から数える() {
+        let state = tmp("received");
+        let sd = state.join("s");
+        let received = Instant::now()
+            .checked_sub(Duration::from_millis(500))
+            .expect("500 ms 前の時刻");
+        let w = StateRescue::new(Some(sd.clone())).with_slow_stage(Duration::from_secs(60));
+        let out = w.write(
+            &[doc(1, "x", None, |_| {})],
+            RescueReason::Signal,
+            received,
+            Duration::from_millis(200),
+        );
+        assert!(!out.complete && out.written == 0, "{out:?}");
+        let m = manifest(&out.dir.expect("退避先"));
+        assert!(m.contains("complete = false"), "{m}");
+        let text = log_text(&sd);
+        let begin = text
+            .lines()
+            .find(|l| l.contains("退避を始めた (signal、受信から "))
+            .unwrap_or_else(|| panic!("{text}"));
+        let ms: u64 = begin
+            .split("受信から ")
+            .nth(1)
+            .and_then(|r| r.split(' ').next())
+            .and_then(|n| n.parse().ok())
+            .unwrap_or_else(|| panic!("{begin}"));
+        assert!(ms >= 500, "受信からの時間を書く: {begin}");
+        assert!(text.contains("時間切れ (文書 1 の前)"), "{text}");
+        let _ = fs::remove_dir_all(state);
+    }
+
+    // manifest を書き直す前にも予算を確かめる: 過ぎていたら書き直さずに、書けた文書を最後の manifest (`complete = false`) に
+    // 載せて打ち切る (残りの文書には進まない)
+    #[test]
+    fn manifest_の書き直しの前に予算が尽きたら書けた分を最後の_manifest_に載せて打ち切る() {
+        let state = tmp("before-rewrite");
+        let sd = state.join("s");
+        let docs = [
+            doc(1, "a", Some(&abs("a")), |_| {}),
+            doc(2, "bbb", Some(&abs("b")), |_| {}),
+        ];
+        // 1 件目の本文は書き終えるが、期限が過ぎるまで待ってから書き終える (時間の大小に頼らない)
+        let slow_first = |path: &Path, _d: &DocSnapshot, expired: &dyn Fn() -> bool| {
+            while !expired() {
+                std::thread::sleep(Duration::from_millis(5));
+            }
+            fs::write(path, b"a")?;
+            Ok(Some(b'a'))
+        };
+        let w = StateRescue::new(Some(sd.clone())).with_slow_stage(Duration::from_secs(60));
+        let out = w.write_with(
+            &docs,
+            RescueReason::ConsoleClose,
+            Instant::now(),
+            Duration::from_secs(3),
+            &slow_first,
+        );
+        assert_eq!((out.written, out.total, out.complete), (1, 2, false));
+        let dir = out.dir.expect("退避先");
+        let m = manifest(&dir);
+        assert!(m.contains("complete = false"), "{m}");
+        assert_eq!(
+            m.matches("[[document]]").count(),
+            1,
+            "2 件目には進まない: {m}"
+        );
+        assert!(m.contains("written = true"), "{m}");
+        assert!(!dir.join("2-b.txt").exists());
+        let text = log_text(&sd);
+        assert!(
+            text.contains("時間切れ (manifest 1 の書き直しの前)"),
+            "{text}"
+        );
+        assert!(
+            text.contains("書き終えられなかった (1/2 件、時間切れ)"),
+            "{text}"
+        );
+        let _ = fs::remove_dir_all(state);
+    }
+
+    // 最後の manifest が書けなければ完了にしない (最後の文書の書き直しは最後の manifest が兼ねるので、manifest では
+    // `written = false` のまま残る。本文は残る)
+    #[test]
+    fn 最後の_manifest_が書けなければ完了にせず誤りを返す() {
+        let state = tmp("final-manifest");
+        let sd = state.join("s");
+        // 本文を書いた後に、manifest の一時ファイルの名前をディレクトリで塞ぐ (最後の manifest の作成が失敗する)
+        let block_manifest = |path: &Path, d: &DocSnapshot, expired: &dyn Fn() -> bool| {
+            let r = write_body(path, d, expired);
+            fs::create_dir(path.parent().unwrap().join("manifest.toml.tmp"))?;
+            r
+        };
+        let w = StateRescue::new(Some(sd.clone())).with_slow_stage(Duration::from_secs(60));
+        let out = w.write_with(
+            &[doc(1, "unsaved text", None, |_| {})],
+            RescueReason::ConsoleClose,
+            Instant::now(),
+            Duration::from_secs(10),
+            &block_manifest,
+        );
+        assert_eq!((out.written, out.total), (1, 1));
+        assert!(!out.complete, "{out:?}");
+        assert!(
+            matches!(out.error, Some(eve_core::RescueError::Io(_))),
+            "{out:?}"
+        );
+        let dir = out.dir.expect("退避先");
+        let m = manifest(&dir);
+        assert!(
+            m.contains("complete = false") && m.contains("written = false"),
+            "manifest 1 のまま: {m}"
+        );
+        assert_eq!(
+            fs::read_to_string(dir.join("1-無題-1.txt")).unwrap(),
+            "unsaved text",
+            "本文は残る"
+        );
+        let text = log_text(&sd);
+        assert!(
+            text.contains("完了の manifest (失敗)")
+                && text.contains("書き終えられなかった (1/1 件、書込の失敗)"),
+            "{text}"
         );
         let _ = fs::remove_dir_all(state);
     }

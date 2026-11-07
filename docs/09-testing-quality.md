@@ -231,7 +231,8 @@ L3 で必ずカバーする要件: FR-1xx (ファイル管理) の全 Must (FR-1
 | `fail_<点>=<errno>` (v0.3 の M13) | Unix の原子的保存 (`unix_fs.rs`) の呼び出し点 `<点>` を、本物の呼び出しをせずに errno `<errno>` (数) で毎回失敗させる。点は `replace` (既存の T の置換の rename)・`rename_noreplace` (新規ファイルの上書きしない移動)・`link` / `unlink_after_link` (その退路)・`fsync` (一時ファイル)・`fsync_dir` (ディレクトリ)・`fchown` (root の所有者の複製。本文を書く前)・`fchown_group` (グループの複製)・`unlink_tmp` (中断の後片付けの一時ファイルの削除)。**Unix だけ**。errno が数で読めなければ panic する。同じ仕組みを単体試験 (`cfg(test)`) は `hooks::inject_errno` (そのスレッドの次の 1 回だけ。使われなければ試験を落とす) で使う。差し替えるのはその点の呼び出しだけで、中断の後片付けは本物のまま走る。`EVE_TEST_HOOK_LOG` には書かない | eve-platform の単体試験 (SAF-23・REF-07・05 §4.1 手順 3 / 6。docs/review/v0.3-findings.md の STR-T10)。他人の所有・root の分岐 (SAF-36 / 37) は単体試験だけの `hooks::pretend_uid` (実効 uid と一時ファイルの st_uid の差し替え) で確かめる |
 | `inplace_len_mismatch` | in-place の 2 回目のエンコードが乾式走査の `out_len` より 1 バイト長い列を供給する (不変条件違反の注入) | eve-platform の L0 (`InPlaceFailed`) |
 | `pause_after_create=<印のファイル>` | 保存用一時ファイル・退避ファイルを作った直後 (書く前) に、印のファイルが消えるまで待つ | (10) |
-| `recovery_timeout=<ms>` | 緊急退避の **退避の段** (02 §11.2.1 の段 1。パニックは 5 s、CTRL_C / CTRL_BREAK は 2.5 s、CTRL_CLOSE は 3.5 s) の予算を指定の値に縮め、時間切れ (`complete = false` の打切り) を起こす。後の段の予算と合計の上限は変えない | (7) (8) |
+| `recovery_timeout=<ms>` | 緊急退避の **退避の段** (02 §11.2.1 の段 1。パニックは 5 s、CTRL_C / CTRL_BREAK は 2.5 s、CTRL_CLOSE は 3.5 s) の予算を指定の値に縮め (受信から数える)、時間切れ (`complete = false` の打切り) を起こす。後の段の予算と合計の上限は変えない | (7) (8) |
+| `rescue_stall_after_manifest=<ms>` | 緊急退避の書き手が、最初の文書の manifest (`written = false`) を書いた直後に、退避の段の期限が過ぎるまで眠り、さらに指定の時間だけ眠る (時間の大小に頼らない)。`recovery_timeout` と組み合わせて、本文を作る前の時間切れ (本文なし・`complete = false`・ログの「書き終えられなかった (… 時間切れ)」) を確定的に起こす (Issue #342) | (8) |
 | `log_console_events` | コンソールイベントのハンドラの受信時刻と種別を `EVE_TEST_HOOK_LOG` に記録する | (8) |
 | `panic_command` | `internal.debug_panic` をコマンドとして登録する (無ければ登録しない) | (7)、NFR-504 |
 | `main_stall` | メインが `HostMsg::Signal` を受けたところで止まる (無限に待つ)。受信スレッドの 2 秒待ち → 端末の緊急復元 → `128+n` での終了 (02 §9.6 手順 4) を検査する | (8) メインが止まった状態の CTRL_BREAK |

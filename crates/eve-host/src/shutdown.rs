@@ -8,7 +8,7 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::Sender;
 use std::sync::{Arc, OnceLock};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use eve_core::{Clock, ReplacingCount, RescueOutcome, RescueReason, Tick};
 
@@ -143,11 +143,13 @@ impl NonInteractiveShutdown {
     /// 契機ごとの手順を行う。`ShutdownEnd::Exit` のときは呼び手が直ちにプロセスを終える。
     pub fn run(&self, trigger: ShutdownTrigger) -> ShutdownEnd {
         let t0 = self.clock.now();
+        // 退避の予算の起点 (受信の時刻)。書き手は実時間で打ち切るので、注入した時計ではなく `Instant` で持つ
+        let received = Instant::now();
         match trigger {
             ShutdownTrigger::Signal(kind) => {
                 // 1. 退避 (最大 2.5 s。CAS に負けたら Done を待つ)
                 self.emergency
-                    .run(RescueReason::Signal, RESCUE_BUDGET_SIGNAL);
+                    .run_since(RescueReason::Signal, received, RESCUE_BUDGET_SIGNAL);
                 // 2. メインへ知らせ、最大 2 s 終了を待つ
                 if self.tx.send(HostMsg::Signal(kind)).is_err() {
                     return ShutdownEnd::NotSent;
@@ -175,7 +177,7 @@ impl NonInteractiveShutdown {
             ShutdownTrigger::ConsoleClose => {
                 // 1. 退避 (最大 3.5 s) → 2. 送るだけ (待たない)
                 self.emergency
-                    .run(RescueReason::ConsoleClose, RESCUE_BUDGET_CLOSE);
+                    .run_since(RescueReason::ConsoleClose, received, RESCUE_BUDGET_CLOSE);
                 if self
                     .tx
                     .send(HostMsg::Signal(SignalKind::ConsoleClose))
@@ -191,13 +193,13 @@ impl NonInteractiveShutdown {
             }
             ShutdownTrigger::SessionQuery => {
                 self.emergency
-                    .run(RescueReason::SessionEnd, RESCUE_BUDGET_SESSION);
+                    .run_since(RescueReason::SessionEnd, received, RESCUE_BUDGET_SESSION);
                 ShutdownEnd::Return
             }
             ShutdownTrigger::SessionEnd => {
                 // 問い合わせで始めた退避の完了を待つ (届いていなければここで書く。退避は 1 回だけ)
                 self.emergency
-                    .run(RescueReason::SessionEnd, RESCUE_BUDGET_SESSION);
+                    .run_since(RescueReason::SessionEnd, received, RESCUE_BUDGET_SESSION);
                 self.wait_replacing(Some(
                     REPLACING_DEADLINE_CLOSE.saturating_sub(self.since(t0)),
                 ));
@@ -257,6 +259,7 @@ mod tests {
             &self,
             docs: &[Arc<DocSnapshot>],
             reason: RescueReason,
+            _received: Instant,
             budget: Duration,
         ) -> RescueOutcome {
             push(

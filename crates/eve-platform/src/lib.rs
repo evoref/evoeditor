@@ -58,6 +58,7 @@ macro_rules! state_dir_methods {
             let out = $crate::rescue::StateRescue::new(self.state_dir.clone()).write(
                 &[std::sync::Arc::new(doc.clone())],
                 RescueReason::UserSave,
+                std::time::Instant::now(),
                 std::time::Duration::from_secs(30),
             );
             match out.dir {
