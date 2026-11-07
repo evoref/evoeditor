@@ -190,7 +190,7 @@ enum Act {
         len: u8,
         s: &'static str,
     },
-    /// 複数箇所を 1 つの ChangeSet で変える (すべて置換・複数カーソル・改行コードの変換と同じ形)
+    /// 複数箇所を 1 つの `ChangeSet` で変える (すべて置換・複数カーソル・改行コードの変換と同じ形)
     Multi(Vec<(u16, u8, &'static str)>),
     Undo,
     Redo,
@@ -292,7 +292,7 @@ proptest! {
     }
 }
 
-/// `text` の中の `from` を全部 `to` に置き換える ChangeSet と件数。
+/// `text` の中の `from` を全部 `to` に置き換える `ChangeSet` と件数。
 fn replace_every(doc: &Document, text: &str, from: &str, to: &str) -> (ChangeSet, usize) {
     let edits: Vec<Edit> = text
         .match_indices(from)

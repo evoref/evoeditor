@@ -45,20 +45,39 @@ pub enum SearchCount {
     /// 検索語が空、または検索していない。
     Idle,
     /// 走査中 (届いた件数)。
-    Running { found: u64 },
+    Running {
+        /// これまでに届いた件数。
+        found: u64,
+    },
     /// 全件を数えた。`current` は選択が一致のとき、その番号 (1 始まり)。
-    Exact { current: Option<u64>, total: u64 },
+    Exact {
+        /// 選択している一致の番号 (1 始まり)。選択が一致でなければ `None`。
+        current: Option<u64>,
+        /// 一致の総数。
+        total: u64,
+    },
     /// 数える上限に達した。
-    AtLeast { current: Option<u64>, total: u64 },
+    AtLeast {
+        /// 選択している一致の番号 (1 始まり)。選択が一致でなければ `None`。
+        current: Option<u64>,
+        /// 数えた件数 (これ以上ある)。
+        total: u64,
+    },
     /// 編集で保持が無効になった。目安の件数。
-    Approx { total: u64 },
+    Approx {
+        /// 編集の前に数えた件数。
+        total: u64,
+    },
 }
 
 /// `search_step` の結果。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SearchStep {
     /// 一致へ移った。`wrapped` は文書の端を越えた。
-    Moved { wrapped: bool },
+    Moved {
+        /// 文書の端を越えて折り返した。
+        wrapped: bool,
+    },
     /// 一致が無い。
     NoMatch,
     /// 同期検索の範囲では見つからなかった (全件の走査が終われば見つかる可能性がある)。

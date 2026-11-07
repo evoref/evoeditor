@@ -12,10 +12,12 @@ use std::path::{Path, PathBuf};
 pub struct FsPath(PathBuf);
 
 impl FsPath {
+    /// パスを包む (正規化はしない。境界から入るパスは `Paths::normalize` を通す)。
     pub fn new(path: impl Into<PathBuf>) -> FsPath {
         FsPath(path.into())
     }
 
+    /// 中の `Path`。
     pub fn as_path(&self) -> &Path {
         &self.0
     }
@@ -28,6 +30,7 @@ impl FsPath {
             .map(|p| FsPath(p.to_path_buf()))
     }
 
+    /// `child` を後ろに繋いだパス (`Path::join` と同じ規則)。
     pub fn join(&self, child: impl AsRef<Path>) -> FsPath {
         FsPath(self.0.join(child))
     }

@@ -311,7 +311,7 @@ mod tests {
             .collect()
     }
 
-    /// 07 §11.6 末尾の「FR-606 の到達性検査」の頻出操作リスト (箇条書きの CommandId)。
+    /// 07 §11.6 末尾の「FR-606 の到達性検査」の頻出操作リスト (箇条書きの `CommandId`)。
     fn frequent_ops() -> Vec<String> {
         let doc = include_str!("../../../../docs/07-config-extensibility.md");
         let start = doc

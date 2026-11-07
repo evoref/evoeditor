@@ -20,6 +20,7 @@ pub enum WrapMode {
 /// View の折り返しの設定。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct WrapSettings {
+    /// 折り返しの方式 (`view.wrap`)。
     pub mode: WrapMode,
     /// 継続行を論理行のインデント幅で揃える (`view.wrap_indent = same`)。
     pub indent_same: bool,
@@ -38,6 +39,7 @@ impl Default for WrapSettings {
 }
 
 impl WrapSettings {
+    /// 折り返す (`mode` が `Off` でない)。
     pub fn is_on(&self) -> bool {
         self.mode != WrapMode::Off
     }
@@ -46,7 +48,9 @@ impl WrapSettings {
 /// 折り返し位置のカーソルの帰属 (03 §14.3)。`Before` = 上の表示行の末尾、`After` = 下の表示行の先頭。
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Affinity {
+    /// 上の表示行の末尾に置く。
     Before,
+    /// 下の表示行の先頭に置く。
     #[default]
     After,
 }

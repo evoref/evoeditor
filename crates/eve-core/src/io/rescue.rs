@@ -15,13 +15,17 @@ use crate::DocSnapshot;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum RescueReason {
+    /// パニック。
     Panic,
+    /// 外部からの停止の要求 (Windows の `CTRL_C` / `CTRL_BREAK`、Unix の SIGTERM / SIGHUP など。02 §11.2)。
     Signal,
+    /// Windows のコンソールを閉じた (`CTRL_CLOSE_EVENT`)。
     ConsoleClose,
     /// Windows のログオフ・シャットダウン (`WM_QUERYENDSESSION` / `WM_ENDSESSION`、05 §11.2)。
     SessionEnd,
+    /// 回復できない誤り (`HostMsg::Fatal`)。
     Fatal,
-    /// 「保存を中止して終了」(ui.confirm.quit_saving)。
+    /// 「保存を中止して終了」(`ui.confirm.quit_saving`)。
     QuitAbortedSave,
     /// 「退避先に保存」。
     UserSave,
@@ -30,6 +34,7 @@ pub enum RescueReason {
 }
 
 impl RescueReason {
+    /// manifest の `reason` に書く文字列 (`panic` など)。
     pub fn as_str(self) -> &'static str {
         match self {
             RescueReason::Panic => "panic",

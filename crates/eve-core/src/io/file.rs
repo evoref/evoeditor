@@ -21,7 +21,7 @@ use crate::editor::state::EditorState;
 use crate::ui_model::overlay::{Continuation, PromptKind};
 
 impl EditorState {
-    /// MessageKey を解決して表示する。`path` は `{path}` (表示用のパス)。
+    /// `MessageKey` を解決して表示する。`path` は `{path}` (表示用のパス)。
     pub(crate) fn message(&mut self, level: MessageLevel, key: &str, path: &str) {
         self.show_message(level, key, &[("path", path)]);
     }

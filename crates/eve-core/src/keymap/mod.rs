@@ -21,10 +21,14 @@ use crate::command::{Args, CommandInvocation, InvocationSource};
 
 // ---------- ストロークの書式 (07 §7.2) ----------
 
+/// キーの書式 (07 §7.2) の誤り。
 #[derive(Debug, PartialEq, Eq)]
 pub enum KeyParseError {
+    /// キーが空 (`""`・`ctrl+` など)。
     Empty,
+    /// 知らないキー名。
     UnknownKey(String),
+    /// 知らない修飾 (`ctrl` / `alt` / `shift` / `super` / `mod` 以外)。
     UnknownModifier(String),
     /// `mod` と `ctrl` / `super` の併記 (解決後に重複する)。
     DuplicateModifier,
@@ -53,6 +57,10 @@ fn add_mod(m: Modifiers, mods: &mut Modifiers) -> Result<(), KeyParseError> {
 
 /// `mod+shift+s` のような 1 ストロークを読む。`mod` は TUI では `ctrl` に解決する。
 /// 大文字 1 字は `shift+小文字` に正準化する。
+///
+/// # Errors
+///
+/// キーが空なら `Empty`、知らないキー名・修飾なら `UnknownKey` / `UnknownModifier`、修飾の重複なら `DuplicateModifier`。
 pub fn parse_stroke(s: &str) -> Result<KeyStroke, KeyParseError> {
     if s.is_empty() {
         return Err(KeyParseError::Empty);
@@ -123,6 +131,10 @@ pub fn parse_stroke(s: &str) -> Result<KeyStroke, KeyParseError> {
 }
 
 /// 空白で区切ったストロークの列 (`ctrl+k s`)。
+///
+/// # Errors
+///
+/// 列が空なら `Empty`。ほかは各ストロークの `parse_stroke` の誤り。
 pub fn parse_sequence(s: &str) -> Result<Vec<KeyStroke>, KeyParseError> {
     let seq: Result<Vec<_>, _> = s.split_whitespace().map(parse_stroke).collect();
     let seq = seq?;
@@ -190,10 +202,15 @@ pub const NONE_COMMAND: &str = "none";
 /// 1 つの割当。
 #[derive(Clone, Debug)]
 pub struct Binding {
+    /// 割当のコンテキスト (`editor` など。`KEYMAP_CONTEXTS`)。
     pub context: &'static str,
+    /// ストロークの列 (2 つ以上ならチョード)。
     pub sequence: Vec<KeyStroke>,
+    /// 実行するコマンド (`none` は割当の解除)。
     pub command: CommandId,
+    /// コマンドに渡す引数。
     pub args: Args,
+    /// 割当が有効な条件。
     pub when: ContextExpr,
     /// `when` の元の文字列 (空は常に真。一覧の出力 `--dump-keymap` に使う)。
     pub when_src: String,
@@ -212,11 +229,13 @@ pub fn reachable(b: &Binding, caps: &eve_view::Capabilities) -> bool {
 /// 層 (既定・ユーザー・ワークスペース・モード・overlay 固有)。
 #[derive(Clone, Debug, Default)]
 pub struct Layer {
+    /// 層の名前 (`default` / `user` など)。
     pub name: &'static str,
     bindings: Vec<Binding>,
 }
 
 impl Layer {
+    /// 空の層を作る。
     pub fn new(name: &'static str) -> Layer {
         Layer {
             name,
@@ -226,6 +245,10 @@ impl Layer {
 
     /// 割当を足す。同じ層・同じコンテキスト・同じキーで `when` が同じ定義は後勝ちで置き換える (K4)。
     /// `when` が違うものは先に足した方が優先 (配列値の先頭から)。
+    ///
+    /// # Errors
+    ///
+    /// `keys` がキーの書式に合わない、または `when` が条件式として読めないとき、`keys` を添えた説明の文字列。
     pub fn bind(
         &mut self,
         context: &'static str,
@@ -257,6 +280,11 @@ impl Layer {
         Ok(self)
     }
 
+    /// 引数つきの割当を足す (`when` は常に真)。置き換えの規則は `bind` と同じ。
+    ///
+    /// # Errors
+    ///
+    /// `keys` がキーの書式に合わないとき、`keys` を添えた説明の文字列。
     pub fn bind_with_args(
         &mut self,
         context: &'static str,
@@ -292,6 +320,7 @@ impl Layer {
         dropped
     }
 
+    /// 層の割当 (足した順)。
     pub fn bindings(&self) -> &[Binding] {
         &self.bindings
     }
@@ -318,6 +347,7 @@ impl PartialEq for CommandInvocation {
     }
 }
 
+/// 層を重ねたキーマップと、チョードの保留の状態 (02 §7.2)。
 #[derive(Debug)]
 pub struct Keymap {
     /// 優先順 (先頭が最優先)。
@@ -329,6 +359,10 @@ impl Keymap {
     /// `layers` は優先順 (overlay 固有 > モード > ワークスペース > ユーザー > 既定)。
     /// 同じコンテキストの中で、一方が他方の真のプレフィックスになる割当 (曖昧なチョード) は
     /// `chord_timeout_ms` を使う層が無い間は設計エラー (K3)。
+    ///
+    /// # Errors
+    ///
+    /// 曖昧なチョードがあれば、そのコンテキストと割当を示す説明の文字列。
     pub fn new(layers: Vec<Layer>) -> Result<Keymap, String> {
         let mut by_ctx: HashMap<&str, Vec<&Binding>> = HashMap::new();
         for b in layers.iter().flat_map(|l| &l.bindings) {
@@ -521,6 +555,7 @@ impl Keymap {
         out
     }
 
+    /// チョードの保留を捨てる。
     pub fn clear_pending(&mut self) {
         self.pending.clear();
     }

@@ -40,6 +40,7 @@ impl EditorState {
         self.keys.key_labels.get(command).cloned()
     }
 
+    /// メッセージ・ヒントに出すキーの表記 (`labels`、コマンド ID → 表記) と割当の列 (`seqs`) を差し替える。
     pub fn set_key_bindings(
         &mut self,
         labels: std::collections::BTreeMap<String, String>,
@@ -61,7 +62,7 @@ impl EditorState {
         self.keys.key_seqs.get(command).cloned()
     }
 
-    /// MessageKey を解決して表示する。`msg.*` は `.text` と `.hint`、それ以外は 1 つの文。
+    /// `MessageKey` を解決して表示する。`msg.*` は `.text` と `.hint`、それ以外は 1 つの文。
     /// 外向きには `EditorEvent::MessageShown` (キーだけ) も積む。
     /// メッセージ `key` の本文だけを解決する (確認ダイアログの本文に入れる。`hint` は含めない)。
     pub(crate) fn message_text(&self, key: &str, args: &[(&str, &str)]) -> String {
@@ -107,6 +108,7 @@ impl EditorState {
         );
     }
 
+    /// カタログのキー `key` の文言を `args` で埋めてメッセージに出し、履歴に積む。`<key>.text` / `<key>.hint` があればその 2 つを使う。
     pub fn show_message(&mut self, level: MessageLevel, key: &str, args: &[(&str, &str)]) {
         let cat = self.catalog();
         let label = |c: &str| self.key_label(c);

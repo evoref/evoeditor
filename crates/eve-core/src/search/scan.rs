@@ -223,14 +223,22 @@ pub fn find_next(
 /// 全件走査のジョブ本体 (§12.2)。`from` のある行から文書の末尾まで、続けて先頭からその行の手前までを走査し、
 /// 256 件または 20 ms ごとに `SearchBatch` を送る。保持する一致は `max_matches` 件まで、数えるのは `count_limit` 件まで。
 pub struct SearchJob<'a> {
+    /// 結果に付けるジョブ。
     pub job: JobId,
+    /// 検索する本文。
     pub snapshot: &'a dyn TextRead,
+    /// 検索の条件。
     pub query: &'a SearchQuery,
+    /// 走査を始める位置 (バイト。この位置のある行から走査する)。
     pub from: ByteOff,
+    /// 保持する一致の上限 (件)。
     pub max_matches: usize,
+    /// 数える一致の上限 (件)。
     pub count_limit: u64,
 }
 
+/// 全件走査を実行し、`SearchBatch` を順に、最後に `SearchDone` を `emit` に渡す (03 §12.2)。
+/// キャンセルされたら `Failed { Cancelled }` で終わる。検索語が空・照合器を作れなければ 0 件の `SearchDone`。
 pub fn run_search(
     p: SearchJob<'_>,
     clock: &dyn Clock,

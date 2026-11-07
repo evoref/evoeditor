@@ -39,6 +39,8 @@ use crate::document::Document;
 use crate::jobs::Ports;
 use crate::time::Tick;
 
+/// eve-core の公開ファサード (02 §4.1)。Host は入力・ジョブの結果・時刻をこれに渡し、Frame・Effect・EditorEvent を受け取る。
+/// メインスレッドで使い、I/O はしない (ADR-0020。I/O はジョブとして `Ports.jobs` に投入する)。
 pub struct Editor {
     pub(crate) state: EditorState,
     pub(crate) registry: CommandRegistry,
@@ -69,7 +71,7 @@ pub fn builtin_registry() -> CommandRegistry {
 }
 
 impl Editor {
-    /// 空の EditorState を作る。I/O もジョブ投入もしない。
+    /// 空の `EditorState` を作る。I/O もジョブ投入もしない。
     pub fn new(ports: Ports, caps: Capabilities) -> Editor {
         let registry = builtin_registry();
         let mut state = EditorState::new(caps, ports.jobs.clone(), ports.paths.clone());
@@ -119,18 +121,22 @@ impl Editor {
         self.refresh_key_labels();
     }
 
+    /// エディタの状態 (読み取り)。
     pub fn state(&self) -> &EditorState {
         &self.state
     }
 
+    /// エディタの状態 (書込)。試験とベンチの組み立て用で、Host は使わない (`configure` / `report` を使う。02 §5.4)。
     pub fn state_mut(&mut self) -> &mut EditorState {
         &mut self.state
     }
 
+    /// コマンドの登録簿。
     pub fn registry(&self) -> &CommandRegistry {
         &self.registry
     }
 
+    /// コマンドを登録する。同じ ID が既にあれば置き換える。
     pub fn register(&mut self, spec: CommandSpec) {
         self.registry.register(spec);
     }
@@ -207,6 +213,7 @@ impl Editor {
         &self.keymap
     }
 
+    /// キーマップを差し替え、ヒント・パレットなどに出すキーの表記を作り直す。
     pub fn set_keymap(&mut self, keymap: Keymap) {
         self.keymap = keymap;
         self.refresh_key_labels();
@@ -409,10 +416,12 @@ impl Editor {
         );
     }
 
+    /// 積んだ Effect を積んだ順に取り出す (02 §5.4)。Host が `Frontend::apply_effect` に渡す。
     pub fn drain_effects(&mut self) -> Vec<Effect> {
         self.state.drain_effects()
     }
 
+    /// 積んだ `EditorEvent` を積んだ順に取り出す。
     pub fn drain_events(&mut self) -> Vec<EditorEvent> {
         self.state.drain_events()
     }
@@ -443,6 +452,7 @@ impl Editor {
         self.state.swap_recovered_leftovers()
     }
 
+    /// 前回の呼び出しの後に、退避用の公開物 (`DocSnapshot`) が変わった文書を取り出す (03 §6.5 手順 12)。
     pub fn take_snapshot_updates(&mut self) -> Vec<DocumentId> {
         self.state.take_snapshot_updates()
     }
@@ -487,6 +497,7 @@ impl Editor {
         })
     }
 
+    /// 前回の Frame の後に、描き直しが要る変化があった。
     pub fn needs_render(&self) -> bool {
         self.state.needs_render()
     }

@@ -1,5 +1,5 @@
 //! 表現不能の文字の置換 (docs/03 §8.6「E3 の選択肢」の選択肢 2)。保存先の文字コードで表せない文字を、置換先の規則で
-//! 置き換える ChangeSet を作る (`JobKind::ReplaceUnmappable`、bg ワーカー)。
+//! 置き換える `ChangeSet` を作る (`JobKind::ReplaceUnmappable`、bg ワーカー)。
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -12,11 +12,14 @@ use crate::jobs::cancel::CancelToken;
 /// 一覧に載せる対象の上限 (03 §8.6 の「置換の一覧」)。
 pub const MAX_TARGETS: usize = 100;
 
-/// 置換の対象 1 件 (一覧の 1 行)。位置は ChangeSet を作った Snapshot の座標。
+/// 置換の対象 1 件 (一覧の 1 行)。位置は `ChangeSet` を作った Snapshot の座標。
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ReplaceTarget {
+    /// 文字の位置 (バイト)。
     pub offset: usize,
+    /// 表現できない文字。
     pub ch: char,
+    /// 置き換える文字。
     pub replacement: char,
 }
 
@@ -25,13 +28,14 @@ pub struct ReplaceTarget {
 pub struct ReplaceCounts {
     /// 半角カナ → 全角カナ (ISO-2022-JP)。
     pub kana: u64,
-    /// 互換文字の表 (Shift_JIS / EUC-JP / ISO-2022-JP)。
+    /// 互換文字の表 (`Shift_JIS` / EUC-JP / ISO-2022-JP)。
     pub compat: u64,
     /// それ以外 → `?`。
     pub question: u64,
 }
 
 impl ReplaceCounts {
+    /// 置換する文字の総数。
     pub fn total(&self) -> u64 {
         self.kana + self.compat + self.question
     }
@@ -96,7 +100,7 @@ fn is_unmappable(enc: Encoding, escape: EscapePolicy, ch: char) -> bool {
     !report.is_empty()
 }
 
-/// 表現不能の文字をすべて置換する ChangeSet を作る。対象が無ければ `None`。取消しで `None` を返さず `Err(())`。
+/// 表現不能の文字をすべて置換する `ChangeSet` を作る。対象が無ければ `None`。取消しで `None` を返さず `Err(())`。
 pub fn build_replacement(
     snapshot: &Snapshot,
     enc: Encoding,

@@ -529,7 +529,7 @@ pub(crate) fn human_size(n: u64) -> String {
     }
 }
 
-/// 開く失敗の MessageKey (04 §15.2)。
+/// 開く失敗の `MessageKey` (04 §15.2)。
 pub(crate) fn open_error_key(e: &FsError) -> &'static str {
     match (&e.kind, &e.detail) {
         (FsErrorKind::PermissionDenied, _) => keys::MSG_OPEN_PERMISSION_DENIED,

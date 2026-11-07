@@ -124,7 +124,7 @@ impl EditorState {
         }
     }
 
-    /// 表現不能の文字を置換する ChangeSet を作るジョブを投入する (03 §8.6 の選択肢 2)。
+    /// 表現不能の文字を置換する `ChangeSet` を作るジョブを投入する (03 §8.6 の選択肢 2)。
     pub(crate) fn spawn_replace(&mut self, ask: UnmappableAsk, retried: bool) -> CommandResult {
         let Some(doc) = self.docs.documents.get(&ask.doc) else {
             return CommandResult::Done;
@@ -150,7 +150,7 @@ impl EditorState {
         CommandResult::Pending(job)
     }
 
-    /// 置換の ChangeSet ができた: 対象の一覧を示して確認を取る。作った Revision と今の Revision が違えば 1 回だけ作り直す。
+    /// 置換の `ChangeSet` ができた: 対象の一覧を示して確認を取る。作った Revision と今の Revision が違えば 1 回だけ作り直す。
     pub(crate) fn finish_replace_unmappable(
         &mut self,
         ask: UnmappableAsk,
@@ -261,7 +261,7 @@ impl EditorState {
         (line + 1, body.chars().count() + 1)
     }
 
-    /// 置換の確認で「置換して保存」: ChangeSet を 1 つの Transaction (`Origin::System`、Undo で戻せる) として適用し、
+    /// 置換の確認で「置換して保存」: `ChangeSet` を 1 つの Transaction (`Origin::System`、Undo で戻せる) として適用し、
     /// 同じ文字コードで保存し直す (03 §8.6)。作った Revision が古ければ作り直す。
     pub(crate) fn apply_replacement_and_save(
         &mut self,

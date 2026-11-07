@@ -26,7 +26,7 @@ impl Rng {
     }
 }
 
-/// プロセスの Private Bytes (Windows: PagefileUsage)。
+/// プロセスの Private Bytes (Windows: `PagefileUsage`)。
 fn private_bytes() -> usize {
     memory_stats::memory_stats().map_or(0, |m| m.virtual_mem)
 }

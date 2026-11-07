@@ -10,10 +10,12 @@ use std::sync::atomic::{AtomicBool, Ordering};
 pub struct CancelToken(Arc<AtomicBool>);
 
 impl CancelToken {
+    /// 立っていないトークンを作る。
     pub fn new() -> CancelToken {
         CancelToken::default()
     }
 
+    /// キャンセルを立てる (戻せない。同じトークンの複製すべてに見える)。
     pub fn cancel(&self) {
         self.0.store(true, Ordering::Release);
     }
@@ -23,6 +25,7 @@ impl CancelToken {
         Arc::strong_count(&self.0) > 1
     }
 
+    /// キャンセルが立っている。
     pub fn is_cancelled(&self) -> bool {
         self.0.load(Ordering::Acquire)
     }

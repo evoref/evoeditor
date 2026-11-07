@@ -971,7 +971,7 @@ impl EditorState {
     }
 }
 
-/// 保存失敗の MessageKey (04 §15.2)。失敗の後の選択肢 (確認ダイアログ) は別に出す。
+/// 保存失敗の `MessageKey` (04 §15.2)。失敗の後の選択肢 (確認ダイアログ) は別に出す。
 pub(crate) fn save_error_key(e: &FsError) -> &'static str {
     match (&e.kind, &e.detail) {
         (FsErrorKind::PermissionDenied, _) => keys::MSG_SAVE_PERMISSION_DENIED,

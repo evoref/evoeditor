@@ -92,7 +92,7 @@ pub(crate) enum ConfirmAction {
     QuitSaving,
     /// 置換途中の痕跡の提案 (05 §4.6。選択肢は提案の種類による)。
     Leftover(Box<crate::Leftover>),
-    /// 置換の一覧の確認 (置換して保存 / キャンセル、03 §8.6)。`revision` は ChangeSet を作った時点の文書の Revision。
+    /// 置換の一覧の確認 (置換して保存 / キャンセル、03 §8.6)。`revision` は `ChangeSet` を作った時点の文書の Revision。
     UnmappableReplace {
         ask: crate::io::unmappable::UnmappableAsk,
         changes: eve_text::ChangeSet,

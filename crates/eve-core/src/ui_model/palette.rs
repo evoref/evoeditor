@@ -1,6 +1,6 @@
 //! コマンドパレット (docs/04 §8.1、07 §11.4、01 FR-602・FR-511・FR-514)。
 //! 入力欄はプロンプトと共通の編集で、候補は `hidden` でない全コマンド。照合は core が行う。
-//! v0.1: 前方一致 → 部分一致 → CommandId 順。照合の対象は日本語の title と CommandId。
+//! v0.1: 前方一致 → 部分一致 → `CommandId` 順。照合の対象は日本語の title と `CommandId`。
 
 use std::ops::Range;
 
@@ -41,7 +41,7 @@ pub(crate) struct ArgDef {
     command: &'static str,
     /// 引数名。
     arg: &'static str,
-    /// 見出しに入れる引数の名前の MessageKey (`ui.palette.arg.*`)。
+    /// 見出しに入れる引数の名前の `MessageKey` (`ui.palette.arg.*`)。
     label_key: &'static str,
     /// (値, 表示)。
     choices: &'static [(&'static str, &'static str)],
@@ -221,11 +221,12 @@ pub(crate) fn find(hay: &[String], needle: &[String]) -> Option<usize> {
 }
 
 impl EditorState {
+    /// コマンドパレットの候補を差し替える。
     pub fn set_palette_entries(&mut self, entries: Vec<PaletteEntry>) {
         self.ui.palette_entries = entries;
     }
 
-    /// 一覧に出す名前 `カテゴリ: タイトル` (04 §8.1)。カテゴリは CommandId の名前空間。
+    /// 一覧に出す名前 `カテゴリ: タイトル` (04 §8.1)。カテゴリは `CommandId` の名前空間。
     fn command_label(&self, id: &str) -> String {
         let title = self.command_title(id);
         let ns = id.split('.').next().unwrap_or(id);
@@ -286,9 +287,9 @@ impl EditorState {
             .to_owned()
     }
 
-    /// 一致した候補 (04 §8.1、07 §11.4)。順序は ファジー一致のスコア → 最近実行 → CommandId 順。
-    /// 照合の対象はタイトル (表示の言語) と英語のタイトルと CommandId (そのままの形と単語に分けた形)。
-    /// 空の入力は 最近実行 → CommandId 順の全件。
+    /// 一致した候補 (04 §8.1、07 §11.4)。順序は ファジー一致のスコア → 最近実行 → `CommandId` 順。
+    /// 照合の対象はタイトル (表示の言語) と英語のタイトルと `CommandId` (そのままの形と単語に分けた形)。
+    /// 空の入力は 最近実行 → `CommandId` 順の全件。
     fn palette_hits(&self, query: &str) -> Vec<Hit> {
         let q = lower_graphemes(query.trim());
         let en = eve_config::Catalog::builtin(eve_config::Locale::En);
