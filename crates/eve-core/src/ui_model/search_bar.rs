@@ -92,6 +92,8 @@ pub(crate) struct SearchBarState {
     /// 置換欄 (開いているとき。テキストとカーソル)。
     pub replace: Option<(String, usize)>,
     pub focus: BarFocus,
+    /// フォーカスのある欄 (検索欄・置換欄) の欄内全選択 (`select.all`) の最中。編集・移動・フォーカスの移動で解ける。
+    pub all_selected: bool,
     /// Frame を作るたびの計算の覚え。
     pub memo: SearchBarMemo,
 }
@@ -139,6 +141,7 @@ impl EditorState {
             current: None,
             replace: None,
             focus: BarFocus::Search,
+            all_selected: false,
             memo: SearchBarMemo::default(),
         });
         self.set_bar_rows();
@@ -163,6 +166,7 @@ impl EditorState {
                 bar.replace = Some((String::new(), 0));
             }
             // 検索語が空なら検索欄、あれば置換欄にフォーカスを置く
+            bar.all_selected = false;
             bar.focus = if bar.text.is_empty() {
                 BarFocus::Search
             } else {
@@ -184,6 +188,7 @@ impl EditorState {
         let order = [BarFocus::Search, BarFocus::Replace, BarFocus::Button];
         let i = order.iter().position(|f| *f == bar.focus).unwrap_or(0);
         bar.focus = order[if forward { (i + 1) % 3 } else { (i + 2) % 3 }];
+        bar.all_selected = false;
         self.mark_dirty_render();
     }
 
@@ -402,6 +407,10 @@ impl EditorState {
         let cursor = cell_text(&bar.text[..bar.cursor], CutPolicy::End)
             .spans
             .len();
+        let selection = crate::ui_model::overlay::field_selection(
+            bar.all_selected && bar.focus == BarFocus::Search,
+            cells.len(),
+        );
         let count_text = match self.search_count_for(bar.current) {
             SearchCount::Idle => None,
             SearchCount::Running { found } => Some(render(
@@ -447,6 +456,10 @@ impl EditorState {
         let replace = bar.replace.as_ref().map(|(text, cur)| {
             let cells = cell_text(text, CutPolicy::End).spans;
             let cursor = cell_text(&text[..*cur], CutPolicy::End).spans.len();
+            let selection = crate::ui_model::overlay::field_selection(
+                bar.all_selected && bar.focus == BarFocus::Replace,
+                cells.len(),
+            );
             ReplaceRowModel {
                 label: cell_text(
                     &render(keys::UI_SEARCH_REPLACE_LABEL, &[]),
@@ -457,7 +470,7 @@ impl EditorState {
                     cells,
                     first: 0,
                     cursor,
-                    selection: None,
+                    selection,
                     placeholder: None,
                 },
                 button: cell_text(
@@ -475,7 +488,7 @@ impl EditorState {
                 cells,
                 first: 0,
                 cursor,
-                selection: None,
+                selection,
                 placeholder: None,
             },
             case: match bar.case {

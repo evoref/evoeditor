@@ -182,6 +182,7 @@ impl EditorState {
             .collect();
         let cells = cell_text(&p.text, CutPolicy::End).spans;
         let cursor = cell_text(&p.text[..p.cursor], CutPolicy::End).spans.len();
+        let selection = crate::ui_model::overlay::field_selection(p.all_selected, cells.len());
         let placeholder = p.text.is_empty().then(|| {
             cell_text(
                 &render(keys::UI_BUFFER_LIST_PLACEHOLDER, &[]),
@@ -202,7 +203,7 @@ impl EditorState {
                 cells,
                 first: 0,
                 cursor,
-                selection: None,
+                selection,
                 placeholder,
             },
             items,

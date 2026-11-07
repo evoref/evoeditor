@@ -204,3 +204,40 @@ b
 "
     );
 }
+
+// バッファ一覧の参照順は list → prompt → global (07 §7.1)。`[keys.palette]` の割当はバッファ一覧に届かない
+#[test]
+fn palette_の割当はバッファ一覧に漏れず_list_の割当は両方に効く() {
+    let mut h = Harness::new();
+    let d = load(
+        &mut h,
+        "[keys.palette]\n\"f6\" = \"ui.list_next\"\n[keys.list]\n\"f7\" = \"ui.list_next\"\n",
+    );
+    assert!(d.is_empty(), "{d:?}");
+    let selected = |h: &mut Harness| {
+        let f = h.frame();
+        let eve_view::OverlayModel::List { selected, .. } = &f.overlays[0] else {
+            panic!("一覧ではない")
+        };
+        *selected
+    };
+    h.keys("ctrl+p");
+    h.keys("f6");
+    assert_eq!(selected(&mut h), 1, "パレットでは palette の割当が効く");
+    h.keys("f7");
+    assert_eq!(selected(&mut h), 2, "パレットでは list の割当も効く");
+    h.keys("esc");
+    h.cmd("file.new");
+    h.cmd("file.new");
+    h.cmd("buffer.list");
+    assert_eq!(h.overlay(), "buffer_list");
+    let before = selected(&mut h);
+    h.keys("f6");
+    assert_eq!(
+        selected(&mut h),
+        before,
+        "palette の割当はバッファ一覧に届かない"
+    );
+    h.keys("f7");
+    assert_eq!(selected(&mut h), before + 1, "list の割当は届く");
+}

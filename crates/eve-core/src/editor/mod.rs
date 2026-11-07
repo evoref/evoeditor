@@ -338,8 +338,8 @@ impl Editor {
             "palette" => &["palette", "list", "prompt", "global"],
             // ヘルプ画面: 移動と閉じるだけ (入力欄は無い)
             "help" => &["help", "global"],
-            // バッファ一覧: `list` の割当 (一覧内の `buffer.close`) を先に見て、移動などはパレットと共通
-            "buffer_list" => &["list", "palette", "prompt", "global"],
+            // バッファ一覧: 一覧の移動と一覧内の `buffer.close` は `list`。パレットの割当 (`palette`) は見ない
+            "buffer_list" => &["list", "prompt", "global"],
             "search" => &["search", "prompt", "global"],
             _ => &Self::EDITOR_CONTEXTS,
         }

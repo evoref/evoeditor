@@ -27,15 +27,15 @@
 | `cursor.move_left` | 左へ移動 | Motion | `count?`: `int` | — | `read` | `editor`: `←`<br>`prompt`: `←` | 出す |
 | `cursor.move_right` | 右へ移動 | Motion | `count?`: `int` | — | `read` | `editor`: `→`<br>`prompt`: `→` | 出す |
 | `cursor.move_up` | 上へ移動 | Motion | `count?`: `int` | — | `read` | `editor`: `↑` | 出す |
-| `cursor.move_word_left` | 単語の左へ移動 | Motion | `count?`: `int` | — | `read` | `editor`: `Ctrl+←`, `Alt+←`, `Alt+B` | 出す |
-| `cursor.move_word_right` | 単語の右へ移動 | Motion | `count?`: `int` | — | `read` | `editor`: `Ctrl+→`, `Alt+→`, `Alt+F` | 出す |
+| `cursor.move_word_left` | 単語の左へ移動 | Motion | `count?`: `int` | — | `read` | `editor`: `Ctrl+←`, `Alt+←`, `Alt+B`<br>`prompt`: `Ctrl+←` | 出す |
+| `cursor.move_word_right` | 単語の右へ移動 | Motion | `count?`: `int` | — | `read` | `editor`: `Ctrl+→`, `Alt+→`, `Alt+F`<br>`prompt`: `Ctrl+→` | 出す |
 | `cursor.page_down` | 次のページへ移動 | Motion | — | — | `read` | `editor`: `PgDn`, `Ctrl+K .` | 出す |
 | `cursor.page_up` | 前のページへ移動 | Motion | — | — | `read` | `editor`: `PgUp`, `Ctrl+K ,` | 出す |
 | `edit.delete_backward` | 前の文字を削除 | Edit | — | `!doc.read_only` | `propose` | `editor`: `Backspace`<br>`prompt`: `Backspace` | 出す |
 | `edit.delete_forward` | 後ろの文字を削除 | Edit | — | `!doc.read_only` | `propose` | `editor`: `Delete`<br>`prompt`: `Delete` | 出す |
 | `edit.delete_line` | 行を削除 | Edit | — | `!doc.read_only` | `propose` | `editor`: `Ctrl+K L` | 出す |
-| `edit.delete_word_backward` | 前の単語を削除 | Edit | — | `!doc.read_only` | `propose` | `editor`: `Ctrl+Backspace`, `Alt+Backspace` | 出す |
-| `edit.delete_word_forward` | 後ろの単語を削除 | Edit | — | `!doc.read_only` | `propose` | `editor`: `Ctrl+Delete` | 出す |
+| `edit.delete_word_backward` | 前の単語を削除 | Edit | — | `!doc.read_only` | `propose` | `editor`: `Ctrl+Backspace`, `Alt+Backspace`<br>`prompt`: `Ctrl+Backspace` | 出す |
+| `edit.delete_word_forward` | 後ろの単語を削除 | Edit | — | `!doc.read_only` | `propose` | `editor`: `Ctrl+Delete`<br>`prompt`: `Ctrl+Delete` | 出す |
 | `edit.duplicate_line` | 行を複製 | Edit | — | `!doc.read_only` | `propose` | `editor`: `Ctrl+K D` | 出す |
 | `edit.indent` | インデント | Edit | — | `!doc.read_only` | `propose` | `editor`: `Tab` | 出す |
 | `edit.insert_text` | 文字を挿入 | Edit | `text`: `string` | `!doc.read_only` | `propose` | — | 出す |
@@ -70,7 +70,7 @@
 | `search.toggle_regex` | 正規表現を切替 | Ui | — | `search.active` | `ui` | `search`: `Alt+R`, `Ctrl+K X` | 出す |
 | `search.toggle_selection` | 選択範囲内を切替 | Ui | — | `search.active` | `ui` | `search`: `Alt+L`, `Ctrl+K L` | 出す |
 | `search.toggle_word` | 単語単位を切替 | Ui | — | `search.active` | `ui` | `search`: `Alt+W`, `Ctrl+K B` | 出す |
-| `select.all` | すべて選択 | Motion | — | — | `read` | `editor`: `Ctrl+A` | 出す |
+| `select.all` | すべて選択 | Motion | — | — | `read` | `editor`: `Ctrl+A`<br>`prompt`: `Ctrl+A` | 出す |
 | `select.extend_down` | 下へ選択 | Motion | `count?`: `int` | — | `read` | `editor`: `Shift+↓` | 出す |
 | `select.extend_end` | 行末まで選択 | Motion | — | — | `read` | `editor`: `Shift+End`, `Ctrl+K Shift+→` | 出す |
 | `select.extend_home` | 行頭まで選択 | Motion | — | — | `read` | `editor`: `Shift+Home`, `Ctrl+K Shift+←` | 出す |
@@ -86,11 +86,11 @@
 | `ui.cancel` | 取り消し | Ui | — | — | `-` | `editor`: `Esc`<br>`prompt`: `Esc`<br>`dialog`: `Esc`<br>`help`: `Esc` | 出す |
 | `ui.confirm` | 決定 | Ui | — | `overlay.active != "" \|\| search.active` | `-` | `prompt`: `Enter`<br>`dialog`: `Enter` | 出さない |
 | `ui.dialog_choose` | 選択肢を選ぶ | Ui | `choice`: `int` | `overlay.active == "dialog"` | `-` | — | 出さない |
-| `ui.list_next` | 次の項目 | Ui | — | `overlay.active != "" \|\| search.active` | `-` | `search`: `Tab`<br>`palette`: `↓`, `Ctrl+N`<br>`dialog`: `Tab`, `→`, `↓`<br>`help`: `↓` | 出さない |
-| `ui.list_page_down` | 一覧の次のページ | Ui | — | `overlay.active != "" \|\| search.active` | `-` | `palette`: `PgDn`<br>`help`: `PgDn` | 出さない |
-| `ui.list_page_up` | 一覧の前のページ | Ui | — | `overlay.active != "" \|\| search.active` | `-` | `palette`: `PgUp`<br>`help`: `PgUp` | 出さない |
-| `ui.list_prev` | 前の項目 | Ui | — | `overlay.active != "" \|\| search.active` | `-` | `search`: `Shift+Tab`<br>`palette`: `↑`, `Ctrl+P`<br>`dialog`: `Shift+Tab`, `←`, `↑`<br>`help`: `↑` | 出さない |
-| `ui.message_history` | メッセージ履歴 | Ui | — | — | `ui` | `global`: `Ctrl+K M` | 出す |
+| `ui.list_next` | 次の項目 | Ui | — | `overlay.active != "" \|\| search.active` | `-` | `search`: `Tab`<br>`list`: `↓`, `Ctrl+N`<br>`dialog`: `Tab`, `→`, `↓`<br>`help`: `↓` | 出さない |
+| `ui.list_page_down` | 一覧の次のページ | Ui | — | `overlay.active != "" \|\| search.active` | `-` | `list`: `PgDn`<br>`help`: `PgDn` | 出さない |
+| `ui.list_page_up` | 一覧の前のページ | Ui | — | `overlay.active != "" \|\| search.active` | `-` | `list`: `PgUp`<br>`help`: `PgUp` | 出さない |
+| `ui.list_prev` | 前の項目 | Ui | — | `overlay.active != "" \|\| search.active` | `-` | `search`: `Shift+Tab`<br>`list`: `↑`, `Ctrl+P`<br>`dialog`: `Shift+Tab`, `←`, `↑`<br>`help`: `↑` | 出さない |
+| `ui.message_history` | メッセージ履歴 | Ui | — | — | `ui` | `editor`: `Ctrl+K M` | 出す |
 | `ui.message_history_copy` | メッセージ履歴をコピー | Ui | — | — | `ui` | `help`: `Ctrl+C` | 出す |
 | `ui.palette_open` | コマンドパレット | Ui | — | — | `-` | `global`: `Ctrl+P`, `F1`, `Ctrl+Shift+P` [E] | 出す |
 | `ui.redraw` | 再描画 | Ui | — | — | `-` | `global`: `Ctrl+K R` | 出す |

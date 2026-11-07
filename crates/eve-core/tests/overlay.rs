@@ -494,3 +494,49 @@ fn 名前を付けて保存が拒否されたら_プロンプトに戻る() {
     keys(&mut s, "esc");
     assert_eq!(s.fs.read("/w/bad.txt").unwrap(), b"x\x9A");
 }
+
+/// プロンプトの入力欄の (文字列, カーソル, 選択)。
+fn prompt_field(s: &mut Harness) -> (String, usize, Option<std::ops::Range<usize>>) {
+    let f = s.frame();
+    let OverlayModel::Prompt { input, .. } = &f.overlays[0] else {
+        panic!("プロンプトではない")
+    };
+    let typed = input.cells.iter().map(|c| c.text.as_str()).collect();
+    (typed, input.cursor, input.selection.clone())
+}
+
+// 04 §7.2 の「オーバーレイ・検索バー内」の `prompt`: Ctrl+←/→・Ctrl+Backspace / Ctrl+Delete・Ctrl+A (欄内全選択)
+#[test]
+fn 入力欄で単語の移動と削除と全選択が効く() {
+    let mut s = Harness::new();
+    run(&mut s, "file.open", Args::new());
+    text(&mut s, "foo bar.txt");
+    keys(&mut s, "ctrl+left");
+    assert_eq!(prompt_field(&mut s).1, 8, "txt の前");
+    keys(&mut s, "ctrl+left ctrl+left");
+    assert_eq!(prompt_field(&mut s).1, 4, "bar の前");
+    keys(&mut s, "ctrl+right");
+    assert_eq!(prompt_field(&mut s).1, 7, ". の前");
+    keys(&mut s, "ctrl+backspace");
+    assert_eq!(prompt_field(&mut s), ("foo .txt".into(), 4, None));
+    keys(&mut s, "ctrl+delete");
+    assert_eq!(prompt_field(&mut s), ("foo txt".into(), 4, None));
+    assert_eq!(s.doc_text(), "", "文書は変わらない");
+    // 全選択: 欄全体を選び、入力で置き換わる
+    keys(&mut s, "ctrl+a");
+    assert_eq!(prompt_field(&mut s), ("foo txt".into(), 7, Some(0..7)));
+    text(&mut s, "z");
+    assert_eq!(prompt_field(&mut s), ("z".into(), 1, None));
+    // 全選択の削除は欄を空にし、移動は選択を解いて端へ寄せる
+    text(&mut s, "ab");
+    keys(&mut s, "ctrl+a backspace");
+    assert_eq!(prompt_field(&mut s), (String::new(), 0, None));
+    text(&mut s, "ab");
+    keys(&mut s, "ctrl+a left");
+    assert_eq!(prompt_field(&mut s), ("ab".into(), 0, None));
+    // 貼り付けも選択を置き換える
+    keys(&mut s, "ctrl+a");
+    s.editor
+        .handle_input(s.window(), InputEvent::Paste("q".into()));
+    assert_eq!(prompt_field(&mut s), ("q".into(), 1, None));
+}

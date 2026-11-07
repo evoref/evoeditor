@@ -26,7 +26,8 @@ pub(crate) fn default_keymap() -> Keymap {
     bind("global", "mod+shift+p", "ui.palette_open"); // [E][横]
     bind("global", "ctrl+k r", "ui.redraw");
     bind("global", "ctrl+k h", "help.open");
-    bind("global", "ctrl+k m", "ui.message_history");
+    // メッセージ履歴 (`global` は app.quit・ui.palette_open・ui.redraw・help.open に限る、07 §7.1)
+    bind("editor", "ctrl+k m", "ui.message_history");
     // サスペンド (Unix。`ctrl+z` は Undo のため、04 §7.2)
     bind("editor", "ctrl+k z", "app.suspend");
     bind("editor", "alt+z", "view.toggle_wrap");
@@ -73,13 +74,13 @@ pub(crate) fn default_keymap() -> Keymap {
     bind("editor", "esc", "ui.cancel");
     bind("editor", "mod+r", "search.replace_open");
     bind("editor", "ctrl+h", "search.replace_open"); // [E]
-    // コマンドパレット (palette → list → prompt → global)
-    bind("palette", "down", "ui.list_next");
-    bind("palette", "up", "ui.list_prev");
-    bind("palette", "ctrl+n", "ui.list_next");
-    bind("palette", "ctrl+p", "ui.list_prev");
-    bind("palette", "pagedown", "ui.list_page_down");
-    bind("palette", "pageup", "ui.list_page_up");
+    // 一覧の候補の移動 (一覧の UI で共通。パレットは palette → list → prompt → global、バッファ一覧は list → prompt → global)
+    bind("list", "down", "ui.list_next");
+    bind("list", "up", "ui.list_prev");
+    bind("list", "ctrl+n", "ui.list_next");
+    bind("list", "ctrl+p", "ui.list_prev");
+    bind("list", "pagedown", "ui.list_page_down");
+    bind("list", "pageup", "ui.list_page_up");
     // テスト専用: パニックの注入 (本来キー割当なし。E2E が端末から送れるよう、フックがあるときだけ割り当てる)
     #[cfg(feature = "test-hooks")]
     if crate::ui_model::overlay::test_hook_panic_command() {
@@ -110,6 +111,11 @@ pub(crate) fn default_keymap() -> Keymap {
         ("right", "cursor.move_right"),
         ("home", "cursor.home"),
         ("end", "cursor.end"),
+        ("ctrl+backspace", "edit.delete_word_backward"),
+        ("ctrl+delete", "edit.delete_word_forward"),
+        ("ctrl+left", "cursor.move_word_left"),
+        ("ctrl+right", "cursor.move_word_right"),
+        ("mod+a", "select.all"),
     ] {
         bind("prompt", keys, cmd);
     }
