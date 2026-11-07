@@ -451,7 +451,8 @@ impl Harness {
         self.fs.read(path)
     }
 
-    /// 出ているオーバーレイの種類 (`""` / `"dialog"` / `"prompt"`)。
+    /// 出ているオーバーレイの種類 (`EditorState::overlay_kind` の値。11 §6.3 の `overlay`):
+    /// `""` (なし) / `"dialog"` / `"prompt"` / `"palette"` / `"buffer_list"` / `"help"`。
     pub fn overlay(&self) -> &'static str {
         self.editor.state().overlay_kind()
     }

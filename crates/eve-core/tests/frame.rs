@@ -247,7 +247,7 @@ fn タイトルと_revision() {
             .with_args(Args::new().with_str("text", "x")),
     );
     let f = s.frame();
-    assert_eq!(f.title, "* 無題-1 - evoeditor");
+    assert_eq!(f.title, "無題-1 ● - evoeditor", "04 §3 の内容規約");
     assert_eq!(f.panes[0].revision.0.0, 1);
     let _ = s.view;
 }
