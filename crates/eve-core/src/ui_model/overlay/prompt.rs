@@ -53,7 +53,7 @@ pub(crate) struct PromptState {
     pub cursor: usize,
     /// 欄内全選択 (`select.all`) の最中。次の編集・移動で解ける。
     pub all_selected: bool,
-    /// 検証エラーの MessageKey の末尾 (`ui.prompt.<name>.error.<kind>`)。
+    /// 検証エラーの `MessageKey` の末尾 (`ui.prompt.<name>.error.<kind>`)。
     pub error: Option<&'static str>,
 }
 

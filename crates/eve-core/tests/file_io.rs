@@ -38,7 +38,7 @@ fn frame(h: &mut Harness) -> eve_view::Frame {
     h.frame()
 }
 
-/// これまでに出たメッセージの MessageKey (読むと捨てる)。
+/// これまでに出たメッセージの `MessageKey` (読むと捨てる)。
 fn messages(h: &mut Harness) -> Vec<String> {
     let m = h.messages();
     h.clear_log();

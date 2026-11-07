@@ -63,7 +63,7 @@ pub(crate) fn hash_file(
 /// - `mtime` も `len` も同じ: 内容が違えば `Conflict` (mtime の分解能の内の書き換えを見逃さない)。
 /// - `len` と `FileId` が同じで `mtime` だけが違う: 内容が同じなら変更なしとみなし、新しい mtime の Stamp を返す
 ///   (以後の照合に使う。同期ソフトが mtime だけを更新したときに確認を出さない)。
-/// - それ以外 (長さや FileId が違う・ハッシュが無い・16 MiB 超・存在しない): そのまま返す (Port の照合に任せる)。
+/// - それ以外 (長さや `FileId` が違う・ハッシュが無い・16 MiB 超・存在しない): そのまま返す (Port の照合に任せる)。
 pub(crate) fn reconcile(
     fs: &dyn FileSystem,
     path: &FsPath,

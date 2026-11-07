@@ -6,8 +6,11 @@ use eve_text::{ByteOff, LineEnding, TextRead};
 /// 改行の種類別の数。`CRLF` は 1 つと数える (03 §2.4)。
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct EolStats {
+    /// LF の数。
     pub lf: usize,
+    /// CRLF の数。
     pub crlf: usize,
+    /// 単独の CR の数。
     pub cr: usize,
 }
 
@@ -57,6 +60,7 @@ impl EolStats {
         count_range(text, 0, text.len_bytes())
     }
 
+    /// 改行の総数。
     pub fn total(&self) -> usize {
         self.lf + self.crlf + self.cr
     }
@@ -108,7 +112,7 @@ fn byte_at(text: &dyn TextRead, i: usize) -> Option<u8> {
 }
 
 /// `[start, end)` の改行を数える。範囲の端が CRLF の `\r` と `\n` の間に当たるときは 1 バイト外へ広げる
-/// (03 §6.5「eol_stats の更新」)。
+/// (03 §6.5「`eol_stats` の更新」)。
 pub(crate) fn count_range(text: &dyn TextRead, start: usize, end: usize) -> EolStats {
     let len = text.len_bytes();
     let (mut s, mut e) = (start.min(len), end.min(len));
@@ -210,14 +214,17 @@ impl FormatChange {
 /// 文書の形式 (03 §8.1)。
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TextFormat {
+    /// 文字コード (保存先の既定)。
     pub encoding: Encoding,
     /// BOM の種類は `encoding` から決まる (UTF-8 / UTF-16LE / UTF-16BE)。保存時に同じものを書く。
     pub has_bom: bool,
     /// 新規に挿入する改行 (文書全体の改行コードではない)。
     pub default_eol: LineEnding,
+    /// 文書の中の改行の種類別の数 (編集で差分を更新する)。
     pub eol_stats: EolStats,
     /// 不正バイトの保持マーカーの数。0 でなければ読み取り専用 (NFR-304)。
     pub invalid_bytes: u32,
+    /// 不正バイトの PUA エスケープの方式 (03 §8.3)。
     pub pua_escape: PuaEscapeMode,
     /// 読込時の往復の検査 (03 §8.7。v0.1 は件数と先頭の位置だけ)。
     pub roundtrip: RoundtripSummary,
@@ -267,13 +274,21 @@ impl TextFormat {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[repr(u8)]
 pub enum ReadOnlyReason {
+    /// ファイルの読み取り専用属性 (`FileMeta.readonly`)。`file.toggle_read_only` で解除できる。
     FileAttribute = 0,
+    /// 利用者が読み取り専用を求めた (`--readonly` など)。`file.toggle_read_only` で解除できる。
     UserRequested,
+    /// 保存で書込の権限が無いと分かった (`PermissionDenied`)。
     NoWritePermission,
+    /// 不正バイトを含む (`invalid_bytes > 0`、NFR-304)。
     InvalidBytes,
+    /// 状態付き符号化 (ISO-2022-JP) で不正バイトを含む (03 §8.3)。
     StatefulEncodingWithInvalidBytes,
+    /// バイナリの疑いを確認して開いた。
     Binary,
+    /// 巨大ファイルを確認して開いた (FR-127)。
     LargeFileViewer,
+    /// 読込が途中で終わった部分だけを開いた (予約。v0.1 では付けない)。
     LoadIncomplete,
 }
 
@@ -293,18 +308,22 @@ const ALL_REASONS: [ReadOnlyReason; 8] = [
 pub struct ReadOnlyReasons(u16);
 
 impl ReadOnlyReasons {
+    /// 理由を加える。
     pub fn insert(&mut self, r: ReadOnlyReason) {
         self.0 |= 1 << (r as u8);
     }
 
+    /// 理由を外す。
     pub fn remove(&mut self, r: ReadOnlyReason) {
         self.0 &= !(1 << (r as u8));
     }
 
+    /// 理由を含む。
     pub fn contains(&self, r: ReadOnlyReason) -> bool {
         self.0 & (1 << (r as u8)) != 0
     }
 
+    /// 理由が 1 つも無い。
     pub fn is_empty(&self) -> bool {
         self.0 == 0
     }
@@ -314,7 +333,6 @@ impl ReadOnlyReasons {
         ALL_REASONS.into_iter().filter(|r| self.contains(*r))
     }
 
-    /// 表示に出す 1 つ (優先順で先頭)。
     /// `file.toggle_read_only` で解除できるか (理由があり、すべてが `FileAttribute` か `UserRequested`。03 §9.6 の表)。
     pub fn releasable(&self) -> bool {
         !self.is_empty()
@@ -326,16 +344,21 @@ impl ReadOnlyReasons {
             })
     }
 
+    /// 表示に出す 1 つ (優先順で先頭)。理由が無ければ `None`。
     pub fn primary(&self) -> Option<ReadOnlyReason> {
         self.iter().next()
     }
 }
 
+/// 文書の読込の状態 (03 §9.2)。`Ready` 以外は編集できない。
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum LoadState {
+    /// 読込中 (再読込中は旧本文を表示し続ける)。
     Loading,
+    /// 読込を終えた (新規・無題の文書を含む)。
     #[default]
     Ready,
+    /// 読込に失敗した。
     Failed,
 }
 

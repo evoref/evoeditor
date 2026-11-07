@@ -28,7 +28,9 @@ const NODE_OVERHEAD: usize = 128;
 /// 文書ごとの Undo の予算 (§7.5)。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct UndoBudget {
+    /// 履歴の会計の合計の上限 (バイト。既定 64 MiB)。
     pub max_bytes: usize,
+    /// ノードの数の上限 (既定 10000)。
     pub max_nodes: usize,
 }
 
@@ -70,6 +72,7 @@ pub struct RecordOutcome {
 /// Undo / Redo で適用する変更。
 #[derive(Clone, Debug)]
 pub struct HistoryStep {
+    /// 今の文書に適用する `ChangeSet` (Undo は逆変換、Redo は元の変更)。
     pub changes: Arc<ChangeSet>,
     /// ノードを作った Transaction の Origin (Undo / Redo は独立した Origin を持たない)。
     pub origin: Origin,
@@ -79,6 +82,7 @@ pub struct HistoryStep {
     pub format: Option<FormatRestore>,
 }
 
+/// 文書ごとの線形の Undo 履歴 (03 §7)。保存点を持ち、予算 (`UndoBudget`) を超えると古いノードから捨てる。
 #[derive(Debug)]
 pub struct UndoHistory {
     undo: VecDeque<UndoNode>,
@@ -108,7 +112,7 @@ enum EditKind {
     Mixed,
 }
 
-/// ChangeSet の変更のまとまり (適用前の範囲, 適用後の範囲) の一覧。
+/// `ChangeSet` の変更のまとまり (適用前の範囲, 適用後の範囲) の一覧。
 fn hunks(cs: &ChangeSet) -> Vec<(ByteRange, ByteRange)> {
     cs.changed_ranges().collect()
 }
@@ -161,6 +165,7 @@ fn cost_of(redo: &ChangeSet, undo: &ChangeSet, sels: [&Option<Selection>; 2]) ->
 }
 
 impl UndoHistory {
+    /// 空の履歴を作る。根が保存点。
     pub fn new(budget: UndoBudget) -> UndoHistory {
         UndoHistory {
             undo: VecDeque::new(),
@@ -178,6 +183,7 @@ impl UndoHistory {
         self.undo.back().map_or(self.base, |n| n.id)
     }
 
+    /// 保存点のノード。保存点のノードが破棄された (予算の超過・redo の破棄・結合で内容が変わった) ときは `None` (以後は常に dirty)。
     pub fn saved(&self) -> Option<NodeId> {
         self.saved
     }
@@ -187,18 +193,22 @@ impl UndoHistory {
         self.saved != Some(self.current())
     }
 
+    /// 取り消せるノードがある。
     pub fn can_undo(&self) -> bool {
         !self.undo.is_empty()
     }
 
+    /// やり直せるノードがある。
     pub fn can_redo(&self) -> bool {
         !self.redo.is_empty()
     }
 
+    /// 取り消せるノードの数。
     pub fn undo_len(&self) -> usize {
         self.undo.len()
     }
 
+    /// やり直せるノードの数。
     pub fn redo_len(&self) -> usize {
         self.redo.len()
     }

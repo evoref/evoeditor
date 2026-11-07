@@ -27,7 +27,9 @@ pub const CONTEXT_VARS: [&str; 12] = [
 /// 識別子の値。
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CtxValue {
+    /// 真偽値。
     Bool(bool),
+    /// 文字列 (`==` / `!=` で比べる。単独では空でなければ真)。
     Str(String),
 }
 
@@ -59,9 +61,12 @@ enum Node {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ContextExpr(Option<Node>);
 
+/// 条件式の構文の誤り。
 #[derive(Debug, PartialEq, Eq)]
 pub struct ParseError {
+    /// 誤りの位置 (式の先頭からの char の数)。
     pub pos: usize,
+    /// 誤りの説明。
     pub message: &'static str,
 }
 
@@ -79,6 +84,11 @@ impl ContextExpr {
         ContextExpr(None)
     }
 
+    /// 条件式の文字列を解析する。空白だけの文字列は常に真の式。
+    ///
+    /// # Errors
+    ///
+    /// 文法 (モジュールの説明) に合わないとき `ParseError`。知らない識別子は誤りにしない (評価で偽)。
     pub fn parse(src: &str) -> Result<ContextExpr, ParseError> {
         if src.trim().is_empty() {
             return Ok(ContextExpr(None));

@@ -14,7 +14,9 @@ use memchr::memmem;
 pub enum Case {
     /// 検索語に大文字を含めば区別し、含まなければ区別しない。
     Smart,
+    /// 常に区別する。
     Sensitive,
+    /// 常に区別しない。
     Insensitive,
 }
 
@@ -102,6 +104,7 @@ impl SearchQuery {
         self
     }
 
+    /// 検索の範囲 (バイト範囲の昇順)。`None` は文書全体。
     pub fn scope(&self) -> Option<&[ByteRange]> {
         self.scope.as_deref()
     }
@@ -120,24 +123,29 @@ impl SearchQuery {
         self
     }
 
+    /// 正規表現として探す。
     pub fn is_regex(&self) -> bool {
         self.regex
     }
 
+    /// 単語単位で探す。
     pub fn is_whole_word(&self) -> bool {
         self.whole_word
     }
 
+    /// 大文字小文字の扱いを変える。
     pub fn with_case(mut self, case: Case) -> SearchQuery {
         self.case = case;
         self.compiled = Compiled::default();
         self
     }
 
+    /// 検索語。
     pub fn pattern(&self) -> &str {
         &self.pattern
     }
 
+    /// 大文字小文字の扱い。
     pub fn case(&self) -> Case {
         self.case
     }
@@ -177,6 +185,10 @@ impl SearchQuery {
 
     /// 照合器を作る。検索語が空なら `Ok(None)`。正規表現の構文エラーなどは `Err`。
     /// 結果は覚えて、この問い合わせとその複製で使い回す (同じ条件でコンパイルし直さない、PRF-09)。
+    ///
+    /// # Errors
+    ///
+    /// 正規表現の構文の誤り (`Syntax`)、改行にまたがるパターン (`Multiline`)、コンパイル後の大きさの上限の超過 (`TooLarge`)。
     pub fn compile(&self) -> Result<Option<Arc<Matcher>>, QueryError> {
         self.compiled
             .0

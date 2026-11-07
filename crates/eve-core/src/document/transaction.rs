@@ -18,6 +18,7 @@ pub enum Origin {
     Paste,
     /// 外部変更の再読込。
     Reload,
+    /// LSP の編集 (予約。LSP を持つ版で使う)。
     Lsp,
     /// スワップ・緊急退避からの復旧適用。
     Recovery,
@@ -57,6 +58,7 @@ pub enum UndoGroupHint {
 #[non_exhaustive]
 pub struct TransactionMeta {}
 
+/// 文書を変える唯一の単位 (03 §6.3)。`Document::apply` / `EditorState::apply_transaction` に渡す。
 #[derive(Clone, Debug)]
 pub struct Transaction {
     /// 適用する変更。履歴のノードと適用の結果 (`Applied`) で共有する (複製しない、PRF-15)。
@@ -65,13 +67,17 @@ pub struct Transaction {
     pub selection_before: Option<Selection>,
     /// 適用後に発行 View へ設定する Selection。`None` なら `changes` で写像する。
     pub selection_after: Option<Selection>,
+    /// 変更の出どころ。
     pub origin: Origin,
     /// Undo / Redo による適用 (Origin は元のまま)。
     pub is_undo: bool,
+    /// 発行 View (`selection_after` を設定する View)。無ければ全 View で写像するだけ。
     pub view: Option<ViewId>,
     /// Editor の「今」 (Host が各メッセージの処理の前に渡した Tick)。コマンドの実行中に Clock を読み直さない。
     pub timestamp: Tick,
+    /// Undo の結合の指示。
     pub undo_group: UndoGroupHint,
+    /// 拡張メタデータ (v0.1 は空)。
     pub meta: TransactionMeta,
     /// 書式と読み取り専用の理由の変更 (再読込)。適用で差し替え、Undo ノードに持たせて一緒に戻す (03 §7.2)。
     pub format_change: Option<super::format::FormatChange>,
@@ -81,6 +87,7 @@ pub struct Transaction {
 }
 
 impl Transaction {
+    /// `changes` を `origin` として時刻 `timestamp` に適用する Transaction を作る。Selection・発行 View は持たず、結合は `Auto`。
     pub fn new(
         changes: impl Into<std::sync::Arc<ChangeSet>>,
         origin: Origin,
@@ -107,11 +114,13 @@ impl Transaction {
         self
     }
 
+    /// 書式と読み取り専用の理由の変更を持たせる (再読込・改行コードの変換)。
     pub fn with_format_change(mut self, c: super::format::FormatChange) -> Transaction {
         self.format_change = Some(c);
         self
     }
 
+    /// 発行 View の適用前・適用後の Selection を持たせる。
     pub fn with_selections(
         mut self,
         before: Option<Selection>,
@@ -122,11 +131,13 @@ impl Transaction {
         self
     }
 
+    /// 発行 View を持たせる。
     pub fn with_view(mut self, view: ViewId) -> Transaction {
         self.view = Some(view);
         self
     }
 
+    /// Undo の結合の指示を持たせる。
     pub fn with_undo_group(mut self, hint: UndoGroupHint) -> Transaction {
         self.undo_group = hint;
         self

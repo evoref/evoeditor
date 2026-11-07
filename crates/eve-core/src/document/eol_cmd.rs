@@ -1,5 +1,5 @@
 //! 改行コードの変換の実行 (docs/03 §8.4、01 FR-113)。`file.set_line_ending` の手順 (3)〜(5)。
-//! 文書が 1 MiB 以下ならメインスレッドで ChangeSet を作り、超えればジョブ (`JobKind::ConvertEol`) で作る。
+//! 文書が 1 MiB 以下ならメインスレッドで `ChangeSet` を作り、超えればジョブ (`JobKind::ConvertEol`) で作る。
 
 // document/ の中に置くが、文書テキストを直接変える経路 (`eve_text::Text::apply`) は使わない
 // (document/mod.rs の許可を受け継がない。変更は Transaction を通す、02 §5.2)
@@ -37,7 +37,7 @@ pub(crate) struct EolConvert {
     pub eol: LineEnding,
     /// 変える区切りの数。
     pub count: usize,
-    /// ChangeSet を作った Revision。
+    /// `ChangeSet` を作った Revision。
     pub revision: Revision,
     /// 作り直した (一度古くなった)。
     pub retried: bool,
@@ -113,7 +113,7 @@ impl EditorState {
         }
     }
 
-    /// ChangeSet を 1 つの Transaction として適用し、同時に `default_eol` を `eol` にする。
+    /// `ChangeSet` を 1 つの Transaction として適用し、同時に `default_eol` を `eol` にする。
     /// Undo ノードの `format_change` に前後の `default_eol` だけを持たせ、1 回の Undo で本文と `default_eol` が戻る
     /// (文字コード・BOM などは戻さない。`eol_stats` は本文の適用で数え直す。03 §7.2)。
     fn apply_eol_conversion(&mut self, c: EolConvert, cs: ChangeSet) {

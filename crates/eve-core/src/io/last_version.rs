@@ -20,7 +20,7 @@ pub enum LastVersionOutcome {
     Silent,
 }
 
-/// SemVer の比較に使う形 (`major.minor.patch` と、あればプレリリースの識別子)。ビルドメタデータは無視する。
+/// `SemVer` の比較に使う形 (`major.minor.patch` と、あればプレリリースの識別子)。ビルドメタデータは無視する。
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct Version {
     core: (u64, u64, u64),
@@ -41,7 +41,7 @@ fn parse_version(s: &str) -> Option<Version> {
     Some(Version { core: v, pre })
 }
 
-/// SemVer の優先順位 (プレリリースは正式版より前。識別子は数字なら数値、それ以外は文字列で比べ、数字が先)。
+/// `SemVer` の優先順位 (プレリリースは正式版より前。識別子は数字なら数値、それ以外は文字列で比べ、数字が先)。
 fn cmp_version(a: &Version, b: &Version) -> std::cmp::Ordering {
     use std::cmp::Ordering;
     a.core

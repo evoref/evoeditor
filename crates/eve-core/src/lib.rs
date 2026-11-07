@@ -4,6 +4,8 @@
 //! (docs/02 §4.4 / §4.5 / §9.3)。
 
 #![forbid(unsafe_code)]
+// 公開 crate は公開面のすべてに文書を付ける (docs/09 §8.1、NFR-705。v0.3 から)。
+#![deny(missing_docs)]
 // FsError は詳細 (Conflict の Stamp など) を持つ大きな型。エラーは稀な経路なので、Box で包まず値で返す。
 #![allow(clippy::result_large_err)]
 
