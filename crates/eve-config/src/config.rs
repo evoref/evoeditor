@@ -571,12 +571,18 @@ impl Cx<'_> {
         self.set_value(v);
     }
 
+    /// 値の書かれた範囲の原文 (前後の空白を除く)。範囲が原文に収まらなければ `None`。
+    fn source_of(&self, v: &Spanned<DeValue<'_>>) -> Option<&str> {
+        self.text.get(v.span()).map(str::trim)
+    }
+
     /// 直前に積んだ診断に、書かれた値を記録する。
     fn set_value(&mut self, v: &Spanned<DeValue<'_>>) {
         let text = match v.get_ref() {
             DeValue::String(s) => s.to_string(),
-            DeValue::Integer(i) => i.as_str().to_owned(),
-            DeValue::Float(f) => f.as_str().to_owned(),
+            // 数は書いたままの表記 (`0x11`・`1_000`・`+5`) を記録する。toml の `as_str` は接頭辞と区切りを落とす
+            DeValue::Integer(i) => self.source_of(v).unwrap_or(i.as_str()).to_owned(),
+            DeValue::Float(f) => self.source_of(v).unwrap_or(f.as_str()).to_owned(),
             DeValue::Boolean(b) => b.to_string(),
             other => other.type_str().to_owned(),
         };
