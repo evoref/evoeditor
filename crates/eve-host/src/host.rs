@@ -35,6 +35,10 @@ pub const RESCUE_BUDGET_SIGNAL: std::time::Duration = std::time::Duration::from_
 pub const RESCUE_BUDGET_CLOSE: std::time::Duration = std::time::Duration::from_millis(3500);
 /// Windows のログオフ・シャットダウンの退避の上限 (対話的なアプリの猶予は既定でおよそ 5 秒。CTRL_CLOSE と同じ配分、05 §11.2)。
 pub const RESCUE_BUDGET_SESSION: std::time::Duration = std::time::Duration::from_millis(3500);
+/// 「保存を中止して終了」の退避は時間予算なし (02 §11.2.1 の表。利用者が選んだ終了で、外から終わらされないので書き終えてから終了する)。
+/// 書き手は `受信 + 予算` を期限にするので、`Instant` に足して溢れない大きさの値で「なし」を表す。
+pub const RESCUE_BUDGET_UNBOUNDED: std::time::Duration =
+    std::time::Duration::from_secs(24 * 60 * 60);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum StepOutcome {
@@ -631,7 +635,7 @@ impl Host {
         if matches!(rescue, eve_view::QuitRescue::DirtyDocuments) {
             self.sync_emergency();
             self.emergency
-                .run(RescueReason::QuitAbortedSave, RESCUE_BUDGET_CLOSE);
+                .run(RescueReason::QuitAbortedSave, RESCUE_BUDGET_UNBOUNDED);
         }
         frontend.restore();
         self.exit_stderr = stderr;

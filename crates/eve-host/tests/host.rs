@@ -215,6 +215,7 @@ use eve_core::{DocSnapshot, RescueOutcome, RescueReason, RescueWriter};
 #[derive(Default)]
 struct Spy {
     calls: Mutex<Vec<(RescueReason, usize)>>,
+    budgets: Mutex<Vec<Duration>>,
 }
 
 impl RescueWriter for Spy {
@@ -223,9 +224,10 @@ impl RescueWriter for Spy {
         docs: &[Arc<DocSnapshot>],
         reason: RescueReason,
         _received: std::time::Instant,
-        _budget: Duration,
+        budget: Duration,
     ) -> RescueOutcome {
         self.calls.lock().unwrap().push((reason, docs.len()));
+        self.budgets.lock().unwrap().push(budget);
         RescueOutcome {
             total: docs.len(),
             written: docs.len(),
@@ -408,6 +410,11 @@ fn 保存を中止して終了すると_dirty_な文書を退避してから_res
         *spy.calls.lock().unwrap(),
         vec![(RescueReason::QuitAbortedSave, 1)],
         "取り消した保存の文書は dirty のままなので退避する"
+    );
+    assert_eq!(
+        *spy.budgets.lock().unwrap(),
+        vec![eve_host::RESCUE_BUDGET_UNBOUNDED],
+        "「保存を中止して終了」の退避は時間予算なし (02 §11.2.1)"
     );
     assert_eq!(e.probe.restore_count(), 1);
 }
