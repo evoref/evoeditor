@@ -553,7 +553,7 @@ v0.1 の公開側で用意するのは `eve-view` の型の規則 (`#[non_exhaus
 |---|---|
 | CI 緑 | `ci.yml` の全ジョブ成功 (L5 は retries 込み) |
 | レビュー | 1 名以上の承認。**単独開発期間** はブランチ保護の「承認必須」を 0 にし (自分の PR は承認できないため)、代わりにセルフレビューのチェックリスト (§8.4) を PR に貼る。管理者のバイパスは許さず、必須のステータスチェックだけで merge を止める (11 §9.1) |
-| lint | clippy 警告 0 (`-D warnings`。`[workspace.lints]` に明示)、rustfmt。pedantic の採用リントと `missing_docs` (公開 crate) は **v0.3 から** |
+| lint | clippy 警告 0 (`-D warnings`。`[workspace.lints]` に明示)、rustfmt。pedantic の採用リントと `missing_docs` (公開 crate) は **v0.3 から**。**採用する pedantic のリント (PO の決定、2026-11-07)**: 型の変換で値が欠ける・符号が変わるもの (`cast_possible_truncation`・`cast_possible_wrap`・`cast_sign_loss`。本文の位置・長さの計算の誤りを防ぐ)、unsafe のポインタの扱い (`borrow_as_ptr`・`ptr_as_ptr`)、公開 API の文書 (`missing_errors_doc`・`missing_panics_doc`・`doc_markdown`)、試験の書き方 (`assert_is_empty`)。`[workspace.lints.clippy]` に `warn` で書き、CI の `-D warnings` で落とす。直せない箇所は `#[expect(clippy::…, reason = "…")]` で理由を書いて外す (`allow` は使わない)。件数が多く効果の薄いもの (`must_use_candidate`・`too_many_lines` など) は採らない。`missing_docs` の対象の公開 crate は 02 §4.1 / 12 §4.1 の外部の消費者に開く範囲 (`eve-view`・`eve-config`・`eve-host`・`eve-core`・`eve-testkit`) |
 | カバレッジ | **v0.1 は報告のみ** (夜間の artifact、§6.3)。v0.5 からゲート: crate 別の下限 `eve-text` 90% / `eve-encoding` 90% / `eve-core` 80% (`undo` / `buffer` モジュールは 90%、`llvm-cov` の `--ignore-filename-regex` でモジュール別に測る) (ここまでが 01 NFR-702 の値)。本書で加える目安: `eve-config` 80% / `eve-platform` 60% (OS 分岐のため) / `eve-tui` 60%。PR で前回比 −0.5 ポイント超の低下は要説明 |
 | 依存 | §7 (各規則の開始版に従う。C を含む依存 0 は失敗、推移的依存の総数は報告) |
 | 寄稿の表明 | 全コミットに `Signed-off-by:` (DCO、OQ-154。§6.2 `dco` ジョブ。昇格の PR と bot の PR は対象外で、squash のメッセージに `Signed-off-by:` を残す、11 §9.4) |
