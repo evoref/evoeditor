@@ -99,6 +99,8 @@ struct State {
     /// このプロセスのスワップ。鍵は本番の名前の付け方 (eve-platform の `swap_name`) と同じく、パスがあればパス、
     /// 無題なら文書。パスが変わった後に書くと別のスワップになる (旧パスのものは消すまで残る)。値は (文書, 本文)。
     swaps: BTreeMap<SwapKey, (eve_view::DocumentId, Vec<u8>)>,
+    /// 文書ごとの、最後に書いたスワップの `untitled_name`。
+    swap_untitled: BTreeMap<eve_view::DocumentId, Option<String>>,
     /// `write_swap` が成功した回数。
     swap_writes: u32,
     /// スワップを実装していない Port のふり (`Unsupported` を返す)。
@@ -141,6 +143,7 @@ impl MemFs {
                 recovery: Vec::new(),
                 recovered: Vec::new(),
                 swaps: BTreeMap::new(),
+                swap_untitled: BTreeMap::new(),
                 swap_writes: 0,
                 swap_unsupported: false,
                 swap_entries: Vec::new(),
@@ -268,6 +271,11 @@ impl MemFs {
             .iter()
             .find(|(_, (d, _))| *d == doc)
             .map(|(k, _)| k.0.clone())
+    }
+
+    /// 文書の最後に書いたスワップの `untitled_name` (書いていなければ `None`)。
+    pub fn swap_untitled_name_of(&self, doc: eve_view::DocumentId) -> Option<Option<String>> {
+        self.st().swap_untitled.get(&doc).cloned()
     }
 
     /// 残っているスワップの数。
@@ -582,6 +590,7 @@ impl FileSystem for MemFs {
             swap_key(doc.path.as_ref(), doc.doc),
             (doc.doc, doc.to_vec()),
         );
+        s.swap_untitled.insert(doc.doc, doc.untitled_name.clone());
         s.swap_writes += 1;
         Ok(())
     }

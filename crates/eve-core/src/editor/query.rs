@@ -8,7 +8,6 @@ use eve_view::{
 };
 
 use crate::document::{LoadState, ReadOnlyReason};
-use crate::ui_model::keys;
 
 use super::Editor;
 use crate::ui_model::chrome;
@@ -31,11 +30,7 @@ impl Editor {
                     .map(|(id, d)| DocumentInfo {
                         doc: *id,
                         path: d.path.as_ref().map(|p| p.display()),
-                        untitled_name: d.path.is_none().then(|| {
-                            state
-                                .catalog()
-                                .render(keys::STATUS_UNTITLED, &[("n", "1")], &|_| None)
-                        }),
+                        untitled_name: d.path.is_none().then(|| state.untitled_label(d)),
                         revision: d.revision(),
                         dirty: d.is_dirty(),
                         load_state: match d.load_state {

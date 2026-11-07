@@ -73,16 +73,19 @@ impl EditorState {
                 && d.load_state == LoadState::Ready
                 && d.len_bytes() as u64 > max
                 && !self.io.swap.notified_large.contains(id))
-            .then(|| (*id, d.path.as_ref().map(FsPath::display)))
+            .then(|| {
+                let name = d
+                    .path
+                    .as_ref()
+                    .map(FsPath::display)
+                    .unwrap_or_else(|| self.untitled_label(d));
+                (*id, name)
+            })
         });
-        let Some((id, path)) = hit else {
+        let Some((id, name)) = hit else {
             return;
         };
         self.io.swap.notified_large.insert(id);
-        let name = path.unwrap_or_else(|| {
-            self.catalog()
-                .render(keys::STATUS_UNTITLED, &[("n", "1")], &|_| None)
-        });
         let mib = (max / (1024 * 1024)).to_string();
         self.show_message(
             eve_view::MessageLevel::Warn,

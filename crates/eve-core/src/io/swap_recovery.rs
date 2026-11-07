@@ -122,7 +122,7 @@ impl EditorState {
             .as_ref()
             .map(FsPath::display)
             .or_else(|| entry.untitled_name.clone())
-            .unwrap_or_else(|| self.untitled_label());
+            .unwrap_or_else(|| self.untitled_label(d));
         let mut details = Vec::new();
         let args = [("path", name.as_str())];
         if changed {
@@ -194,11 +194,6 @@ impl EditorState {
                 &[("path", &path.display()), ("pid", &e.pid.to_string())],
             );
         }
-    }
-
-    fn untitled_label(&self) -> String {
-        self.catalog()
-            .render(keys::STATUS_UNTITLED, &[("n", "1")], &|_| None)
     }
 
     /// 提案への答え。`apply` は本文を読むジョブを投入し、`discard` はスワップを消す (この選択が破棄の確認)。
@@ -285,7 +280,13 @@ impl EditorState {
             .as_ref()
             .map(FsPath::display)
             .or_else(|| entry.untitled_name.clone())
-            .unwrap_or_else(|| self.untitled_label());
+            .or_else(|| {
+                self.docs
+                    .documents
+                    .get(&doc)
+                    .map(|d| self.untitled_label(d))
+            })
+            .unwrap_or_default();
         let Some(d) = self.docs.documents.get(&doc) else {
             return;
         };

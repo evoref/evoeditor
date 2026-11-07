@@ -42,7 +42,7 @@ fn title(state: &EditorState, doc: &Document) -> String {
         .path
         .as_ref()
         .and_then(|p| p.file_name())
-        .unwrap_or_else(|| "無題".to_owned());
+        .unwrap_or_else(|| state.untitled_label(doc));
     // 制御文字と、表示を偽装できる双方向の制御文字は端末のタイトルに出さない
     let name: String = name
         .chars()

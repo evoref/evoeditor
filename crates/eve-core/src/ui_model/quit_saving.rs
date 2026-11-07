@@ -105,10 +105,15 @@ impl EditorState {
             .iter()
             .find_map(|(_, d)| self.docs.documents.get(d).and_then(|d| d.path.as_ref()))
             .map(FsPath::display)
-            .unwrap_or_else(|| {
-                self.catalog()
-                    .render(keys::STATUS_UNTITLED, &[("n", "1")], &|_| None)
-            });
+            .or_else(|| {
+                // 無題の文書だけ: 先頭の文書の名前 (閉じた文書は退避用に残した公開物の名前)
+                jobs.iter()
+                    .find_map(|(_, d)| match self.docs.documents.get(d) {
+                        Some(doc) => Some(self.untitled_label(doc)),
+                        None => self.io.closing_snapshots.get(d)?.untitled_name.clone(),
+                    })
+            })
+            .unwrap_or_default();
         // 保存中の文書が 2 件以上なら、先頭の 1 件に「ほか N 件」を足す (03 §9.8)
         let docs: std::collections::BTreeSet<_> = jobs.iter().map(|(_, d)| *d).collect();
         let path = if docs.len() > 1 {

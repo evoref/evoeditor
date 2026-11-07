@@ -77,7 +77,7 @@ pub(crate) fn status_model(
     // 左群: ファイル名・変更・読み取り専用・読込中・保存中・チョード
     let name = match doc.path.as_ref().and_then(|p| p.file_name()) {
         Some(n) => n,
-        None => render(state, keys::STATUS_UNTITLED, &[("n", "1")]),
+        None => state.untitled_label(doc),
     };
     // 文書が 2 件以上のときは、ファイル名の後ろに何番目かを出す (03 §9.8)
     let name = match state.buffer_position() {

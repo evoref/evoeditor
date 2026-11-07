@@ -95,6 +95,8 @@ pub(crate) struct DocSet {
     pub(crate) views: BTreeMap<ViewId, View>,
     pub(crate) windows: Vec<Window>,
     pub(crate) next_id: u64,
+    /// 次に振る無題の通し番号 (起動ごとに 1 から。閉じても再利用しない、03 §9.8)。
+    pub(crate) next_untitled: u32,
     /// 前に表示していた文書 (最近使った順。末尾が直近)。閉じた後に表示する文書を選ぶのに使う。
     pub(crate) recent: Vec<DocumentId>,
 }
@@ -300,6 +302,7 @@ impl EditorState {
                 views: BTreeMap::new(),
                 windows: Vec::new(),
                 next_id: 1,
+                next_untitled: 1,
                 recent: Vec::new(),
             },
         }
@@ -424,6 +427,16 @@ impl EditorState {
         doc
     }
 
+    /// 無題の文書の表示名 (`status.untitled` に文書の通し番号を入れたもの、03 §9.8 の「無題の採番」)。
+    pub(crate) fn untitled_label(&self, doc: &Document) -> String {
+        let n = doc.untitled_no.unwrap_or(1).to_string();
+        self.catalog().render(
+            crate::ui_model::keys::STATUS_UNTITLED,
+            &[("n", &n)],
+            &|_| None,
+        )
+    }
+
     /// 読込の完了などで、既に採番した文書の中身を差し替える。表示設定を写す。
     pub(crate) fn put_document(&mut self, id: DocumentId, mut doc: Document) {
         doc.display = self.display_settings();
@@ -432,6 +445,7 @@ impl EditorState {
         // (docs/review/v0.3-findings.md の SAF-06)
         if let Some(old) = self.docs.documents.get(&id) {
             doc.continue_revision(old.revision());
+            doc.untitled_no = doc.untitled_no.or(old.untitled_no);
         }
         self.docs.documents.insert(id, doc);
     }
@@ -496,6 +510,10 @@ impl EditorState {
     /// 文書を追加し、それを表示する View を作る (カーソルは先頭)。文書の ID は閉じた後も再利用しない。
     pub fn add_document(&mut self, mut doc: Document) -> (DocumentId, ViewId) {
         doc.display = self.display_settings();
+        if doc.path.is_none() && doc.untitled_no.is_none() {
+            doc.untitled_no = Some(self.docs.next_untitled);
+            self.docs.next_untitled = self.docs.next_untitled.saturating_add(1);
+        }
         let doc_id = DocumentId(self.fresh());
         self.docs.documents.insert(doc_id, doc);
         let view_id = self.add_view(doc_id);

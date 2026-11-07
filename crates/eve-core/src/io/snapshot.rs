@@ -6,7 +6,6 @@ use eve_view::{DocumentId, Revision};
 
 use crate::document::TextFormat;
 use crate::io::fspath::FsPath;
-use crate::ui_model::keys;
 
 /// 1 つの文書の退避用の公開物。`Send + Sync`。
 #[derive(Clone, Debug)]
@@ -64,10 +63,7 @@ impl crate::editor::state::EditorState {
             // 秘密ファイルパターン (docs/07 §5.12.2) に一致する文書。退避の manifest の `sensitive` と、終了時の削除の案内になる
             sensitive: d.path.as_ref().is_some_and(crate::is_secret_path),
             path: d.path.clone(),
-            untitled_name: d.path.is_none().then(|| {
-                self.catalog()
-                    .render(keys::STATUS_UNTITLED, &[("n", "1")], &|_| None)
-            }),
+            untitled_name: d.path.is_none().then(|| self.untitled_label(d)),
         })
     }
 }

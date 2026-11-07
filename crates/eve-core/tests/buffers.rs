@@ -218,10 +218,10 @@ fn ステータスバーは文書が_2_件以上のとき何番目かを出す()
     let (mut s, _) = three();
     assert_eq!(status_name(&mut s), "無題-1 (1/3)");
     run(&mut s, "buffer.next");
-    assert_eq!(status_name(&mut s), "無題-1 (2/3)");
+    assert_eq!(status_name(&mut s), "無題-2 (2/3)");
     run(&mut s, "buffer.prev");
     run(&mut s, "buffer.prev");
-    assert_eq!(status_name(&mut s), "無題-1 (3/3)");
+    assert_eq!(status_name(&mut s), "無題-3 (3/3)");
     run(&mut s, "buffer.close");
     assert_eq!(
         status_name(&mut s),
@@ -233,11 +233,11 @@ fn ステータスバーは文書が_2_件以上のとき何番目かを出す()
 #[test]
 fn 端末のタイトルにも何番目かを出す() {
     let mut one = Harness::new();
-    assert_eq!(title(&mut one), "無題 - evoeditor", "1 件なら出さない");
+    assert_eq!(title(&mut one), "無題-1 - evoeditor", "1 件なら出さない");
     let (mut s, _) = three();
-    assert_eq!(title(&mut s), "無題 (1/3) - evoeditor");
+    assert_eq!(title(&mut s), "無題-1 (1/3) - evoeditor");
     run(&mut s, "buffer.next");
-    assert_eq!(title(&mut s), "無題 (2/3) - evoeditor");
+    assert_eq!(title(&mut s), "無題-2 (2/3) - evoeditor");
 }
 
 /// a.txt, b.txt, c.txt の 3 文書 (開いた順。a が表示中)。

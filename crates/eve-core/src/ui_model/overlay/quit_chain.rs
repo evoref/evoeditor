@@ -155,7 +155,7 @@ impl EditorState {
             .path
             .as_ref()
             .map(|p| p.display())
-            .unwrap_or_else(|| self.untitled_name());
+            .unwrap_or_else(|| self.untitled_label(doc));
         let mut args = vec![("path".to_owned(), path)];
         // 終了の連鎖で尋ねる文書が 2 件以上なら、何件目かを前置する
         if cont == Continuation::Quit
@@ -181,11 +181,6 @@ impl EditorState {
     pub(crate) fn open_confirm(&mut self, c: ConfirmState) {
         self.set_overlay(Some(Overlay::Confirm(Box::new(c))));
         self.mark_dirty_render();
-    }
-
-    fn untitled_name(&self) -> String {
-        self.catalog()
-            .render(keys::STATUS_UNTITLED, &[("n", "1")], &|_| None)
     }
 
     pub(super) fn choose(&mut self, choice: usize) -> CommandResult {
