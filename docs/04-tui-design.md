@@ -1770,8 +1770,9 @@ v0.2 以降の診断 (名前だけを予約し、文言はその版で言語フ�
 
 | MessageKey | 出す場面 | en | ja |
 |---|---|---|---|
-| `stderr.recovery.saved` | 退避した | Unsaved changes were saved to: {dir} ({count} documents) | 保存されていない変更を退避しました: {dir} ({count} 件) |
-| `stderr.recovery.partial` | 一部だけ退避できた (時間予算の満了・書込の失敗) | Only {written} of {total} documents could be saved to: {dir} | {total} 件のうち {written} 件だけを退避できました: {dir} |
+| `stderr.recovery.saved` | 退避した (全文書の本文を OS に渡した。manifest の全文書が `stored = true`、02 §11.2.1。入出力の誤りで完了しなかったときは全文書が `written = true` のときだけ) | Unsaved changes were saved to: {dir} ({count} documents) | 保存されていない変更を退避しました: {dir} ({count} 件) |
+| `stderr.recovery.partial` | 一部だけ退避できた (時間予算の満了・書込の失敗。`{stored}` は本文を OS に渡した文書の数 (manifest の `stored = true`)、02 §11.2.1。ただし入出力の誤りで完了しなかった (fsync・最後の manifest の失敗) ときは、確定した文書 (`written = true`) の数で数え、`saved` / `fallback` も確定した数で選ぶ) | Only {stored} of {total} documents could be saved to: {dir} | {total} 件のうち {stored} 件だけを退避できました: {dir} |
+| `stderr.recovery.unsynced` | 退避した (OS に渡した) 文書のうち、fsync による確定 (`written = true`) を終えられなかったものがある (段 2 の時間切れ・fsync の失敗、02 §11.2.1)。`saved` / `fallback` / `partial` の行の次に出す。`{count}` は確定できなかった文書の数。入出力の誤りで完了しなかったときは出さない (上の `partial`) | {count} of the saved documents were not yet confirmed on disk. They may be lost if the power fails soon. | 退避したうち {count} 件は、ディスクへの書込の完了を確かめられませんでした。この後すぐに電源が切れると、失われることがあります。 |
 | `stderr.recovery.fallback` | 通常の場所に書けず、代替先に退避した (05 §7.5) | Could not write to the usual location. Unsaved changes were saved to: {dir} | いつもの場所に書けなかったため、別の場所に退避しました: {dir} |
 | `stderr.recovery.failed` | 退避できなかった | Unsaved changes could NOT be saved: {reason} | 保存されていない変更を退避できませんでした: {reason} |
 | `stderr.recovery.secret` | 秘密を含み得るファイルを退避した | The saved changes include files that may contain secrets. Delete {dir} when you no longer need it. | 退避した中に秘密を含むかもしれないファイルがあります。要らなくなったら {dir} を削除してください。 |
@@ -1800,7 +1801,7 @@ v0.2 以降の診断 (名前だけを予約し、文言はその版で言語フ�
 | `panic.crash_log` | クラッシュログを書けた (09 §10) | Crash log: {path}  (contains no document content) | クラッシュログ: {path} (文書の内容は含みません) |
 | `panic.report` | パニックの案内の最後の行 | To report this problem, attach the crash log to an issue: {url} | 問題を報告するときは、クラッシュログを Issue に添付してください: {url} |
 
-パニック時は `panic.header` → 退避の結果 (`stderr.recovery.*` のどれか。`saved` / `fallback` のときは `stderr.recovery.next` も) → `panic.crash_log` → `panic.report` の順に出す。
+パニック時は `panic.header` → 退避の結果 (`stderr.recovery.*` のどれか。確定できなかった文書があれば次に `stderr.recovery.unsynced`。`saved` / `fallback` のときは最後に `stderr.recovery.next` も) → `panic.crash_log` → `panic.report` の順に出す。
 
 ---
 

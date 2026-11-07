@@ -6,7 +6,10 @@
 //! (09 §3.4、実クリップボードの失敗と遅延の検査)。
 //!
 //! `console-event <pid> <ctrl-c|ctrl-break>` は、別プロセスのコンソールにコントロールイベントを送る (09 §3.6 (8))。
-//! `clip-*` と `console-event` は Windows だけ。`save` は Windows (`WinFs`) と Linux (`UnixFs`) の両方で動く。
+//! `rescue <state_dir> <content_file>...` は、各ファイルの内容 (UTF-8) を無題の dirty な文書として緊急退避の書き手
+//! (`StateRescue`、予算 60 s、`reason = "signal"`) で退避する (09 §3.6 (7) の退避の kill テスト。`kill_before_rescue_sync` で、本文を
+//! OS に渡した後・fsync の前に強制終了する)。終了コード: 0 = `complete = true`、3 = それ以外、137 = 切断点で強制終了。
+//! `clip-*` と `console-event` は Windows だけ。`save` と `rescue` は Windows (`WinFs`) と Linux (`UnixFs`) の両方で動く。
 //!
 //! 使い方: `eve-test-helpers save <state_dir> <path> <atomic|inplace|inplace-skip> <content_file>`
 //! 終了コード: 0 = 保存した (`SaveReport` の method を標準出力へ)、3 = 保存の失敗 (`FsErrorKind` を標準エラーへ)、2 = 使い方の誤り、
@@ -54,6 +57,7 @@ fn main() -> ExitCode {
         Some("clip-delay") => return clip_delay(&args[1..]),
         #[cfg(windows)]
         Some("clip-read") => return clip_read(),
+        Some("rescue") => return rescue(&args[1..]),
         _ => {}
     }
     let [cmd, state, path, mode, content] = args.as_slice() else {
@@ -107,6 +111,48 @@ fn main() -> ExitCode {
             eprintln!("{:?}", e.kind);
             ExitCode::from(3)
         }
+    }
+}
+
+/// `rescue <state_dir> <content_file>...`: 0 = `complete = true`、2 = 使い方の誤り、3 = 書き終えられなかった。
+fn rescue(args: &[String]) -> ExitCode {
+    use std::sync::Arc;
+
+    use eve_core::{DocSnapshot, DocumentId, RescueReason, RescueWriter, TextFormat};
+    use eve_platform::rescue::StateRescue;
+    let [state, files @ ..] = args else {
+        eprintln!("使い方: eve-test-helpers rescue <state_dir> <content_file>...");
+        return ExitCode::from(2);
+    };
+    let mut docs = Vec::new();
+    for (i, f) in files.iter().enumerate() {
+        let Ok(text) = std::fs::read_to_string(f) else {
+            eprintln!("内容を読めません: {f}");
+            return ExitCode::from(2);
+        };
+        let id = i as u64 + 1;
+        docs.push(Arc::new(DocSnapshot {
+            doc: DocumentId(id),
+            snapshot: eve_text::Text::from(text.as_str()).snapshot(),
+            format: TextFormat::new_document(),
+            revision: eve_view::Revision(id),
+            saved_node_exists: false,
+            sensitive: false,
+            path: None,
+            untitled_name: Some(format!("untitled-{id}")),
+        }));
+    }
+    let out = StateRescue::new(Some(state.into())).write(
+        &docs,
+        RescueReason::Signal,
+        std::time::Instant::now(),
+        std::time::Duration::from_secs(60),
+    );
+    println!("{out:?}");
+    if out.complete {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::from(3)
     }
 }
 

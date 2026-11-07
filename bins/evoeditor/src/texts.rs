@@ -1,7 +1,7 @@
 //! 端末を復元した後に stderr へ出す文言の定数表 (docs/04 §15.2 の `stderr.*` / `panic.*` / `cli.help.*`)。言語ファイルには入れない
 //! (パニックの経路で言語ファイルを引かないため)。**v0.2 から英語 (ASCII) の行を先に、日本語の行を 2 字下げで次に出す** (OQ-67、04 §14.4)。
-//! パニック時の行の順は `panic.header` → 退避の結果 (`stderr.recovery.*`。`saved` / `fallback` のときは `stderr.recovery.next` も)
-//! → `panic.crash_log` → `panic.report`。
+//! パニック時の行の順は `panic.header` → 退避の結果 (`stderr.recovery.*`。確定できなかった文書があれば次に `unsynced`、
+//! `saved` / `fallback` のときは最後に `stderr.recovery.next` も) → `panic.crash_log` → `panic.report`。
 
 use std::io::Write;
 use std::path::Path;
@@ -205,15 +205,21 @@ pub fn recovery_lines(o: &RescueOutcome) -> Vec<Bi> {
         .unwrap_or_default();
     let total = o.total;
     let mut lines = Vec::new();
-    match (&o.dir, o.written, o.complete) {
-        (Some(_), w, true) if w == total && !o.fallback => {
+    // 「退避できた」は本文を OS に渡した文書 (`stored`) で数える (01 NFR-302 AC-5、02 §11.2.1)。fsync で確定できなかった文書
+    // (`stored - written`) は `stderr.recovery.unsynced` で別に示す。ただし入出力の誤り (`Io`) で完了しなかったときは、確定した
+    // 文書 (`written`) だけを数え、`unsynced` は出さない (誤りの後の、確定していない本文を「退避した」と言わない。04 §15.2)
+    let io_failed = !o.complete && matches!(o.error, Some(eve_core::RescueError::Io(_)));
+    let saved = if io_failed { o.written } else { o.stored };
+    match (&o.dir, saved) {
+        (Some(_), s) if s == total && !o.fallback => {
             lines.push(Bi::new(
                 format!("Unsaved changes were saved to: {dir} ({total} documents)"),
                 format!("保存されていない変更を退避しました: {dir} ({total} 件)"),
             ));
+            push_unsynced(&mut lines, o);
             lines.push(recovery_next());
         }
-        (Some(_), w, true) if w == total => {
+        (Some(_), s) if s == total => {
             lines.push(Bi::new(
                 format!(
                     "Could not write to the usual location. Unsaved changes were saved to: {dir}"
@@ -222,13 +228,15 @@ pub fn recovery_lines(o: &RescueOutcome) -> Vec<Bi> {
                     "いつもの場所に書けなかったため、別の場所に退避しました: {dir} (早めに別の場所へ移してください)"
                 ),
             ));
+            push_unsynced(&mut lines, o);
             lines.push(recovery_next());
         }
-        (Some(_), w, _) if w > 0 => {
+        (Some(_), stored) if stored > 0 => {
             lines.push(Bi::new(
-                format!("Only {w} of {total} documents could be saved to: {dir}"),
-                format!("{total} 件のうち {w} 件だけを退避できました: {dir}"),
+                format!("Only {stored} of {total} documents could be saved to: {dir}"),
+                format!("{total} 件のうち {stored} 件だけを退避できました: {dir}"),
             ));
+            push_unsynced(&mut lines, o);
         }
         _ => {
             let reason = rescue_reason(o.error.as_ref());
@@ -249,6 +257,22 @@ pub fn recovery_lines(o: &RescueOutcome) -> Vec<Bi> {
         ));
     }
     lines
+}
+
+/// 退避した (OS に渡した) 文書のうち、fsync で確定できなかったものがあれば `stderr.recovery.unsynced` を足す。
+fn push_unsynced(lines: &mut Vec<Bi>, o: &RescueOutcome) {
+    let io_failed = !o.complete && matches!(o.error, Some(eve_core::RescueError::Io(_)));
+    let count = o.stored.saturating_sub(o.written);
+    if count > 0 && !io_failed {
+        lines.push(Bi::new(
+            format!(
+                "{count} of the saved documents were not yet confirmed on disk. They may be lost if the power fails soon."
+            ),
+            format!(
+                "退避したうち {count} 件は、ディスクへの書込の完了を確かめられませんでした。この後すぐに電源が切れると、失われることがあります。"
+            ),
+        ));
+    }
 }
 
 /// 使い方の誤り (`stderr.usage.*`、終了コード 2) の英日 1 組。
@@ -449,6 +473,7 @@ mod tests {
             dir: Some(PathBuf::from("C:\\s\\recovery\\20261021T000000Z-1")),
             total,
             written,
+            stored: written,
             complete,
             fallback,
             ..RescueOutcome::default()
@@ -473,6 +498,10 @@ mod tests {
             outcome(2, 2, true, false),
             outcome(1, 1, true, true),
             outcome(3, 1, false, false),
+            RescueOutcome {
+                stored: 3,
+                ..outcome(3, 1, false, false)
+            },
             RescueOutcome {
                 total: 1,
                 ..RescueOutcome::default()
@@ -591,6 +620,67 @@ mod tests {
         assert!(l[0].ja.contains("3 件のうち 1 件だけ"), "{l:?}");
         assert!(l[0].en.starts_with("Only 1 of 3 documents"), "{l:?}");
         assert_eq!(l.len(), 1, "next は付けない");
+    }
+
+    // 全文書を OS に渡したが確定できなかった文書がある (段 2 の時間切れ): 退避したと示し、確定できなかった件数を添える
+    #[test]
+    fn 退避したが確定できなかった文書がある() {
+        let o = RescueOutcome {
+            stored: 2,
+            ..outcome(2, 0, false, false)
+        };
+        let l = recovery_lines(&o);
+        assert!(
+            l[0].ja.starts_with("保存されていない変更を退避しました:")
+                && l[0].ja.contains("(2 件)"),
+            "{l:?}"
+        );
+        assert!(
+            l[1].ja
+                .starts_with("退避したうち 2 件は、ディスクへの書込の完了を確かめられませんでした")
+                && l[1]
+                    .en
+                    .starts_with("2 of the saved documents were not yet confirmed on disk"),
+            "{l:?}"
+        );
+        assert_eq!(l[2], recovery_next());
+        assert_eq!(l.len(), 3);
+        // 一部だけ OS に渡せて、そのうち確定できなかった文書がある
+        let o = RescueOutcome {
+            stored: 2,
+            ..outcome(3, 1, false, false)
+        };
+        let l = recovery_lines(&o);
+        assert!(l[0].ja.contains("3 件のうち 2 件だけ"), "{l:?}");
+        assert!(l[1].ja.starts_with("退避したうち 1 件は"), "{l:?}");
+        assert_eq!(l.len(), 2, "next は付けない");
+    }
+
+    // 全文書を OS に渡したが、入出力の誤りで完了しなかった (fsync・最後の manifest の失敗): 「退避しました」とは言わず、確定した
+    // 文書だけを数える
+    #[test]
+    fn 入出力の誤りで完了しなければ確定した文書だけを退避したと数える() {
+        let mut o = RescueOutcome {
+            stored: 2,
+            ..outcome(2, 1, false, false)
+        };
+        o.error = Some(eve_core::RescueError::Io("fsync failed".into()));
+        let l = recovery_lines(&o);
+        assert!(
+            !l.iter()
+                .any(|x| x.ja.starts_with("保存されていない変更を退避しました")),
+            "{l:?}"
+        );
+        assert!(l[0].ja.contains("2 件のうち 1 件だけ"), "{l:?}");
+        assert_eq!(l.len(), 1, "unsynced も next も付けない: {l:?}");
+        // 確定した文書が無ければ、退避できなかったと理由を示す
+        o.written = 0;
+        let l = recovery_lines(&o);
+        assert!(
+            l[0].ja.contains("退避できませんでした: fsync failed"),
+            "{l:?}"
+        );
+        assert_eq!(l.len(), 1, "{l:?}");
     }
 
     #[test]

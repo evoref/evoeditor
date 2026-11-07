@@ -62,7 +62,10 @@ macro_rules! state_dir_methods {
                 std::time::Duration::from_secs(30),
             );
             match out.dir {
-                Some(dir) if out.complete => Ok(::eve_core::FsPath::new(dir)),
+                // 利用者が選んだ保存なので、最後の manifest の fsync の失敗 (`error`) も失敗として返す (02 §11.2.1)
+                Some(dir) if out.complete && out.error.is_none() => {
+                    Ok(::eve_core::FsPath::new(dir))
+                }
                 _ => {
                     let msg = out
                         .error

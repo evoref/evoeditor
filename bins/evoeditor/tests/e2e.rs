@@ -1249,10 +1249,66 @@ fn 退避の予算が本文の前に尽きると本文なしの打切りがロ�
     for want in [
         format!("退避を始めた ({reason}、受信から "),
         "本文 1 (時間切れ、書く前)".to_owned(),
-        "書き終えられなかった (0/1 件、時間切れ)".to_owned(),
+        "書き終えられなかった (確定 0/1 件・OS に渡した 0/1 件、時間切れ)".to_owned(),
     ] {
         assert!(log.contains(&want), "{want}\n{report}");
     }
+    let _ = std::fs::remove_dir_all(&s.state);
+}
+
+// Issue #342 (02 §11.2.1 の「書く順」): 段 1 (本文を OS に渡す) の後、段 2 (fsync による確定) の前に予算が尽きても (test-hooks の
+// `rescue_stall_before_sync` で期限が過ぎるまで眠らせる)、本文は残り、manifest は `stored = true`・`written = false`・
+// `complete = false` で xxh3 が本文と一致する。終了時の stderr は「退避しました」と、確定できなかった件数 (`stderr.recovery.unsynced`)
+// を示す (パニックの経路。`recovery_timeout` は負荷の下でも段 1 を終えられる長さ)
+#[cfg(feature = "test-hooks")]
+#[test]
+fn 退避の予算が確定の前に尽きても本文が残り_確定できなかった件数を示す() {
+    let mut s = Session::start_with(
+        &[],
+        None,
+        &[(
+            "EVE_TEST_HOOK",
+            "panic_command,recovery_timeout=2000,rescue_stall_before_sync=50",
+        )],
+    );
+    s.wait_ready();
+    type_slowly(&s, "unsaved text");
+    s.wait_for("入力が見える", |t| t.contains("unsaved text"));
+    s.send(b"[24~");
+    assert_eq!(s.wait_exit(), 70);
+    s.wait_raw("問題を報告するときは");
+    let raw = s.raw_text();
+    assert!(raw.contains("保存されていない変更を退避しました"), "{raw}");
+    assert!(raw.contains("退避したうち 1 件は"), "{raw}");
+    let dirs = recovery_dirs(&s.state);
+    assert_eq!(dirs.len(), 1, "{dirs:?}");
+    let manifest = std::fs::read_to_string(dirs[0].join("manifest.toml")).unwrap();
+    assert!(
+        manifest.contains("complete = false")
+            && manifest.contains("written = false\nstored = true\nxxh3 = "),
+        "{manifest}\n{}",
+        state_log(&s)
+    );
+    let body: Vec<_> = std::fs::read_dir(&dirs[0])
+        .unwrap()
+        .flatten()
+        .filter(|e| e.file_name().to_string_lossy().ends_with(".txt"))
+        .collect();
+    assert_eq!(body.len(), 1);
+    let bytes = std::fs::read(body[0].path()).unwrap();
+    assert_eq!(bytes, b"unsaved text");
+    let hash = manifest
+        .lines()
+        .find_map(|l| l.strip_prefix("xxh3 = \""))
+        .and_then(|l| l.strip_suffix('"'))
+        .unwrap_or_else(|| panic!("{manifest}"));
+    assert_eq!(hash, format!("{:016x}", xxhash_rust::xxh3::xxh3_64(&bytes)));
+    let log = state_log(&s);
+    assert!(
+        log.contains("確定 1 (時間切れ、fsync の前)")
+            && log.contains("書き終えられなかった (確定 0/1 件・OS に渡した 1/1 件、時間切れ)"),
+        "{log}"
+    );
     let _ = std::fs::remove_dir_all(&s.state);
 }
 
