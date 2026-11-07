@@ -22,7 +22,7 @@ pub use frontend::{
 };
 pub use host::{
     Host, HostInit, RESCUE_BUDGET_CLOSE, RESCUE_BUDGET_FATAL, RESCUE_BUDGET_SESSION,
-    RESCUE_BUDGET_SIGNAL, StartError, StepOutcome, channel,
+    RESCUE_BUDGET_SIGNAL, RESCUE_BUDGET_UNBOUNDED, StartError, StepOutcome, channel,
 };
 pub use msg::{ExitCode, FatalReason, HostMsg, SignalKind};
 pub use shutdown::{
