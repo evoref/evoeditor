@@ -56,7 +56,7 @@ pub enum WriteStep {
     Fsync,
     /// 保存先へ置き換える。
     Replace,
-    /// ディレクトリの fsync (`FsyncLevel::Full` だけ。置き換えの後)。
+    /// ディレクトリの fsync (`FsyncLevel::Full` / `FileOnly`。`None` では通らない。置き換えの後。05 §4.1 手順 6)。
     DirFsync,
 }
 
@@ -791,7 +791,8 @@ impl FileSystem for MemFs {
         };
         let new_stamp = FileStamp::from_meta(&meta_of(&entry), None);
         s.files.insert(path.clone(), entry);
-        if opts.fsync == FsyncLevel::Full {
+        // 6. ディレクトリの fsync: `Full` / `FileOnly` のとき (05 §4.1 手順 6。Unix の実装と同じ)
+        if opts.fsync != FsyncLevel::None {
             step(&mut s, WriteStep::DirFsync)?;
         }
         let method = if existing.is_some() {
@@ -1116,6 +1117,50 @@ mod tests {
                 WriteStep::DirFsync
             ]
         );
+    }
+
+    #[test]
+    fn ディレクトリの_fsync_は_full_と_file_only_で通り_none_で通らない() {
+        // 05 §4.1 手順 3・6 (Unix の実装と同じ)
+        for (level, want) in [
+            (
+                FsyncLevel::Full,
+                &[
+                    WriteStep::CreateTemp,
+                    WriteStep::WriteData,
+                    WriteStep::Fsync,
+                    WriteStep::Replace,
+                    WriteStep::DirFsync,
+                ][..],
+            ),
+            (
+                FsyncLevel::FileOnly,
+                &[
+                    WriteStep::CreateTemp,
+                    WriteStep::WriteData,
+                    WriteStep::Fsync,
+                    WriteStep::Replace,
+                    WriteStep::DirFsync,
+                ][..],
+            ),
+            (
+                FsyncLevel::None,
+                &[
+                    WriteStep::CreateTemp,
+                    WriteStep::WriteData,
+                    WriteStep::Replace,
+                ][..],
+            ),
+        ] {
+            let (fs, _) = fs();
+            fs.add_file("/w/a.txt", b"orig");
+            let mut opts = SaveOptions::user_file(Expect::Any);
+            opts.fsync = level;
+            let mut src = BytesSource::new(b"new", 4);
+            fs.write_atomic(&FsPath::from("/w/a.txt"), &mut src, &opts)
+                .unwrap();
+            assert_eq!(fs.steps(), want, "{level:?}");
+        }
     }
 
     #[test]

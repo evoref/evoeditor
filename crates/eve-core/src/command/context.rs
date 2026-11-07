@@ -64,7 +64,9 @@ pub struct ContextExpr(Option<Node>);
 /// 条件式の構文の誤り。
 #[derive(Debug, PartialEq, Eq)]
 pub struct ParseError {
-    /// 誤りの位置 (式の先頭からの char の数)。
+    /// 誤りの位置 (式の先頭からの char の数。0 始まり)。
+    ///
+    /// 表示 (`Display`) は 1 から数えて「{pos + 1} 文字目」と出す。
     pub pos: usize,
     /// 誤りの説明。
     pub message: &'static str,
@@ -72,7 +74,8 @@ pub struct ParseError {
 
 impl fmt::Display for ParseError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "条件式の {} 文字目: {}", self.pos, self.message)
+        // 利用者に見せる位置は 1 から数える (フィールドは 0 始まり)
+        write!(f, "条件式の {} 文字目: {}", self.pos + 1, self.message)
     }
 }
 
@@ -338,5 +341,17 @@ mod tests {
         for src in ["a &&", "(a", "a b", "== \"x\"", "a == b", "a == \"x"] {
             assert!(ContextExpr::parse(src).is_err(), "{src}");
         }
+    }
+
+    #[test]
+    fn 誤りの位置は_0_始まりで表示は_1_から数える() {
+        // 「a b」の誤りは 2 個目の char (b) にある
+        let e = ContextExpr::parse("a b").unwrap_err();
+        assert_eq!(e.pos, 2);
+        assert!(e.to_string().starts_with("条件式の 3 文字目: "), "{e}");
+        // 先頭の誤りは 1 文字目
+        let e = ContextExpr::parse("== \"x\"").unwrap_err();
+        assert_eq!(e.pos, 0);
+        assert!(e.to_string().starts_with("条件式の 1 文字目: "), "{e}");
     }
 }

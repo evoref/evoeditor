@@ -141,7 +141,7 @@ pub struct Assert {
     pub effects: Option<toml::Value>,
     /// ステータス項目。今は未対応。
     pub status: Option<toml::Table>,
-    /// 出ているオーバーレイの種類 (`Harness::overlay` の値。`dialog` / `prompt` / `palette` など)。
+    /// 出ているオーバーレイの種類 (`Harness::overlay` の値。`""` / `dialog` / `prompt` / `palette` / `buffer_list` / `help`)。
     pub overlay: Option<String>,
     /// `false` なら、パニックすることを期待する。
     pub no_panic: Option<bool>,
