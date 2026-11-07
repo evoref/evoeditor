@@ -17,8 +17,8 @@ workspace = true
 bench-trace = []
 
 [dependencies]
-eve-view = { version = "0.2.0", path = "../eve-view" }
-eve-host = { version = "0.2.0", path = "../eve-host" }
+eve-view = { version = "0.3.0", path = "../eve-view" }
+eve-host = { version = "0.3.0", path = "../eve-host" }
 # 採用版は S-06 で固定 (02 §13.2)。ウィジェットは使わず、Buffer のセルへの書込と差分出力だけを使う (ADR-0005)
 ratatui = { version = "=0.30.2", default-features = false }
 # 編集面の Span (幅の同じ書記素の連続) を書記素ごとのセルに分ける (eve_view::Span の契約)。eve-text と同じ版
@@ -40,11 +40,11 @@ libc = "0.2.191"
 signal-hook = { version = "0.4.6", default-features = false }
 
 [dev-dependencies]
-eve-testkit = { version = "0.2.0", path = "../eve-testkit" }
+eve-testkit = { version = "0.3.0", path = "../eve-testkit" }
 # 入力スレッドの panic を Host まで通す試験 (frontend.rs) で Host を組む (Ports)
-eve-core = { version = "0.2.0", path = "../eve-core" }
-eve-docs-tables = { version = "0.2.0", path = "../eve-docs-tables" }
+eve-core = { version = "0.3.0", path = "../eve-core" }
+eve-docs-tables = { version = "0.3.0", path = "../eve-docs-tables" }
 # 色の近似を eve-config の同じ近似と突合する (tests/color_cross.rs、STR-E4)
-eve-config = { version = "0.2.0", path = "../eve-config" }
+eve-config = { version = "0.3.0", path = "../eve-config" }
 unicode-width = "0.2"
 proptest = "1.12.0"
