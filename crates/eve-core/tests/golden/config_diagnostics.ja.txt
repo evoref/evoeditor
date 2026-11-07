@@ -17,7 +17,7 @@
 ## config: 節が表でない
 1:10	Warning	editor	""
   editor の値の型が違います (書かれた型: 整数)
-  テーブル で書いてください。この項目は既定値  を使います
+  テーブル で書いてください。この項目は使いません
 ## config: 範囲の外
 2:13	Warning	editor.tab_width	"0"
   editor.tab_width の値 0 は範囲外です
@@ -58,8 +58,8 @@
 4:1	Warning	keys.nowhere.ctrl+s	"nowhere"
   keys.nowhere.ctrl+s のコンテキスト名は使えません
   使える名前: global, editor, search, prompt, palette, list, dialog, help。この割当は使いません
-0:0	Error	keys.editor.Ctrl+Q	"app.quit"
-  keys.editor.Ctrl+Q の割当だと、終了・コマンドパレット・取消のどれかに届かなくなります
+11:1	Error	keys.editor.ctrl+q	"app.quit"
+  keys.editor.ctrl+q の割当だと、終了・コマンドパレット・取消のどれかに届かなくなります
   既定の割当を残しました。別のキーにしてください
 ## theme: cycle_a (themes/cycle_a.toml, 使える: false)
 0:0	Error		""
@@ -78,7 +78,7 @@
   syntax はこのバージョンでは未対応のため無視しました
 2:20	Warning	ui.selection.fg	"nope"
   ui.selection.fg の値 nope は使えません
-  使える値: #rrggbb, #rgb, ansi.<name>, ansi.<0-255>, default。この項目は既定値  を使います
-0:0	Warning	ui.not_a_role	""
+  使える値: #rrggbb, #rgb, ansi.<name>, ansi.<0-255>, default。この項目は使いません
+3:1	Warning	ui.not_a_role	""
   ui.not_a_role という設定項目はありません
   設定できる項目は同梱の config.example.toml を見てください

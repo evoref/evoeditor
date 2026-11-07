@@ -89,7 +89,12 @@ pub fn diagnostic_texts(cat: &eve_config::Catalog, d: &Diagnostic) -> (String, S
             args.push(("expected", word(expected)));
             args.push(("actual", word(found)));
             args.push(("default", default.to_owned()));
-            "type_mismatch"
+            // 既定値を持たない項目 (節が表でない・テーマの値) は、既定値の文の無い文言にする (04 §15.2)
+            if default.is_empty() {
+                "type_mismatch_no_default"
+            } else {
+                "type_mismatch"
+            }
         }
         DiagKind::OutOfRange { min, max } => {
             args.push(("range", format!("{min}〜{max}")));
@@ -112,7 +117,11 @@ pub fn diagnostic_texts(cat: &eve_config::Catalog, d: &Diagnostic) -> (String, S
         DiagKind::InvalidValue { allowed } => {
             args.push(("allowed", allowed.join(", ")));
             args.push(("default", default.to_owned()));
-            "invalid_value"
+            if default.is_empty() {
+                "invalid_value_no_default"
+            } else {
+                "invalid_value"
+            }
         }
     };
     let refs: Vec<(&str, &str)> = args.iter().map(|(k, v)| (*k, v.as_str())).collect();
@@ -144,5 +153,49 @@ mod tests {
             assert!(!text.contains("msg.config"), "{text}");
             assert_eq!(hint, "");
         }
+    }
+
+    #[test]
+    fn 既定値を持たない項目の対処の文に空の既定値を入れない() {
+        let d = |key: &str, kind| Diagnostic {
+            severity: Severity::Warning,
+            kind,
+            key: key.to_owned(),
+            value: "nope".to_owned(),
+            line: 1,
+            column: 1,
+        };
+        let cases = [
+            d(
+                "editor",
+                DiagKind::TypeMismatch {
+                    expected: "table",
+                    found: "integer",
+                },
+            ),
+            d(
+                "ui.selection.fg",
+                DiagKind::InvalidValue {
+                    allowed: &["#rrggbb"],
+                },
+            ),
+        ];
+        for d in &cases {
+            let (_, ja) = diagnostic_texts(Catalog::builtin_ja(), d);
+            assert!(ja.ends_with("この項目は使いません"), "{ja}");
+            assert!(!ja.contains("既定値"), "{ja}");
+            let (_, en) = diagnostic_texts(Catalog::builtin_en(), d);
+            assert!(en.ends_with("This item is ignored"), "{en}");
+        }
+        // 既定値を持つ項目は今までどおり
+        let t = d(
+            "editor.tab_width",
+            DiagKind::TypeMismatch {
+                expected: "integer",
+                found: "string",
+            },
+        );
+        let (_, ja) = diagnostic_texts(Catalog::builtin_ja(), &t);
+        assert!(ja.ends_with("既定値 4 を使います"), "{ja}");
     }
 }

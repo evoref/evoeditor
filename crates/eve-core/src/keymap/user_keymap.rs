@@ -4,10 +4,12 @@
 //! コンテキストは「このバージョンでは未対応」の情報診断にして使わない。問題のある割当は、それだけを無効にして診断を返す
 //! (ほかの割当は使う)。
 
-use eve_config::{DiagKind, Diagnostic, KeyAction, KeymapFile, KeymapProblem, Severity};
+use eve_config::{
+    DiagKind, Diagnostic, KeyAction, KeymapEntry, KeymapFile, KeymapProblem, Severity,
+};
 use eve_view::{CommandId, KeyCode, KeyStroke, Modifiers};
 
-use super::{Layer, NONE_COMMAND, format_sequence, parse_sequence};
+use super::{Binding, Layer, NONE_COMMAND, format_sequence, parse_sequence};
 use crate::command::context::ContextExpr;
 use crate::command::ids;
 use crate::editor::Editor;
@@ -26,6 +28,8 @@ impl Editor {
         let mut diags = file.diagnostics.clone();
         self.state.keys.user_keymap_entries = Some(file.entries.clone());
         let mut layer = Layer::new("user");
+        // 層に入れた割当と、その元の行 (脱出キーの検査の診断に、書かれた位置とキーを出す)
+        let mut origins: Vec<Origin<'_>> = Vec::new();
         for e in &file.entries {
             let key = format!("keys.{}.{}", e.context, e.keys);
             let diag = |severity, kind, value: &str| Diagnostic {
@@ -104,15 +108,23 @@ impl Editor {
             layer
                 .bind(ctx, &e.keys, command, when)
                 .expect("検証済みのキーと when");
+            let when = ContextExpr::parse(when).expect("検証済みの when");
+            origins.push((ctx, seq, when, e));
         }
         self.keymap.set_user_layer(layer.clone());
-        self.restore_escape_keys(&mut layer, &mut diags);
+        self.restore_escape_keys(&mut layer, &origins, &mut diags);
         self.refresh_key_labels();
         diags
     }
 
     /// 終了・コマンドパレット・取消に届かなくなったら、その原因の割当を外す (エラー、07 §7.6)。
-    fn restore_escape_keys(&mut self, layer: &mut Layer, diags: &mut Vec<Diagnostic>) {
+    /// 診断は、外した割当を書いた行の位置と、書かれたキーの表記で出す。
+    fn restore_escape_keys(
+        &mut self,
+        layer: &mut Layer,
+        origins: &[Origin<'_>],
+        diags: &mut Vec<Diagnostic>,
+    ) {
         for cmd in ESCAPE_COMMANDS {
             if self.keymap.escape_reachable(cmd) {
                 continue;
@@ -121,18 +133,38 @@ impl Editor {
             // 脱出キーと同じキーを別の用途にした (または解除した) 割当を、コンテキストを問わず外す
             let dropped = layer.retain(|b| !defaults.iter().any(|(_, seq)| *seq == b.sequence));
             for b in dropped {
+                let (key, line, column) = match origin(origins, &b) {
+                    Some(e) => (format!("keys.{}.{}", e.context, e.keys), e.line, e.column),
+                    None => (
+                        format!("keys.{}.{}", b.context, format_sequence(&b.sequence)),
+                        0,
+                        0,
+                    ),
+                };
                 diags.push(Diagnostic {
                     severity: Severity::Error,
                     kind: DiagKind::Keymap(KeymapProblem::EscapeKey),
-                    key: format!("keys.{}.{}", b.context, format_sequence(&b.sequence)),
+                    key,
                     value: cmd.to_owned(),
-                    line: 0,
-                    column: 0,
+                    line,
+                    column,
                 });
             }
             self.keymap.set_user_layer(layer.clone());
         }
     }
+}
+
+/// 層に入れた割当 (コンテキスト・キーの列・`when`) と、それを書いた行。
+type Origin<'a> = (&'static str, Vec<KeyStroke>, ContextExpr, &'a KeymapEntry);
+
+/// 層の割当 `b` を書いた行。同じコンテキスト・キー・`when` の割当は後の行が上書きするので、最後の行。
+fn origin<'a>(origins: &[Origin<'a>], b: &Binding) -> Option<&'a KeymapEntry> {
+    origins
+        .iter()
+        .rev()
+        .find(|(ctx, seq, when, _)| *ctx == b.context && *seq == b.sequence && *when == b.when)
+        .map(|(_, _, _, e)| *e)
 }
 
 /// 修飾のない (または Shift だけの) 文字キー。`Text` として届くので、割り当てても効かず、文字入力を奪う。

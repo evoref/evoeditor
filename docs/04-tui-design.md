@@ -1674,8 +1674,10 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 | `msg.config.keymap_chord_prefix` | キーマップ (`keymap.toml`) の診断。既定のチョードの先頭と同じ単体のキー (07 §7.6) | {item} は、既定の続けて押すキー (Ctrl+K など) の先頭です / 続けて押すキーを優先し、この割当は使いません |
 | `msg.config.keymap_escape_key` | キーマップ (`keymap.toml`) の診断。脱出キーに届かなくなる割当 (07 §7.6。既定を残す) | {item} の割当だと、終了・コマンドパレット・取消のどれかに届かなくなります / 既定の割当を残しました。別のキーにしてください |
 | `msg.config.type_mismatch` | 型不一致。`{actual}` は書かれた値の型、`{expected}` は期待する型 (どちらも下の `ui.config.type.*`)。該当項目は下位層の値 (v0.1 は既定値) に戻す | {item} の値の型が違います (書かれた型: {actual}) / {expected} で書いてください。この項目は既定値 {default} を使います |
+| `msg.config.type_mismatch_no_default` | 型不一致のうち、既定値を持たない項目 (節が表でない `editor = 1`、テーマファイルのロール `ui.selection = 1` など)。`msg.config.type_mismatch` の `{default}` が空になる場面の代わりに出す。該当の項目は使わない (テーマのロールは継いだ値のまま) | {item} の値の型が違います (書かれた型: {actual}) / {expected} で書いてください。この項目は使いません |
 | `msg.config.out_of_range` | 範囲外。`{range}` は許容範囲 (例 `1〜16`)。`{default}` は戻した値 (丸める項目 (07 §4.2) は丸めた値) | {item} の値 {value} は範囲外です / {range} で指定してください。この項目は {default} を使います |
 | `msg.config.invalid_value` | 列挙値不正 (`file.default_encoding` の許容値外を含む)。`{allowed}` は許容値を `, ` で並べたもの | {item} の値 {value} は使えません / 使える値: {allowed}。この項目は既定値 {default} を使います |
+| `msg.config.invalid_value_no_default` | 列挙値不正のうち、既定値を持たない項目 (テーマファイルの色 `ui.selection.fg = "nope"` など)。`msg.config.invalid_value` の `{default}` が空になる場面の代わりに出す。該当の値は使わない | {item} の値 {value} は使えません / 使える値: {allowed}。この項目は使いません |
 | `ui.config.type.integer` | `{actual}` / `{expected}` に入れる型の語 | 整数 |
 | `ui.config.type.float` | `{actual}` / `{expected}` に入れる型の語 | 小数 |
 | `ui.config.type.string` | `{actual}` / `{expected}` に入れる型の語 | 文字列 |

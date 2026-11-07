@@ -17,7 +17,7 @@
 ## config: 節が表でない
 1:10	Warning	editor	""
   The type of the value of editor is wrong (found: an integer)
-  Write it as a table. This item uses the default 
+  Write it as a table. This item is ignored
 ## config: 範囲の外
 2:13	Warning	editor.tab_width	"0"
   The value 0 of editor.tab_width is out of range
@@ -58,8 +58,8 @@
 4:1	Warning	keys.nowhere.ctrl+s	"nowhere"
   The context in keys.nowhere.ctrl+s is not available
   Available: global, editor, search, prompt, palette, list, dialog, help. This binding is ignored
-0:0	Error	keys.editor.Ctrl+Q	"app.quit"
-  The binding keys.editor.Ctrl+Q would make quit, the command palette or cancel unreachable
+11:1	Error	keys.editor.ctrl+q	"app.quit"
+  The binding keys.editor.ctrl+q would make quit, the command palette or cancel unreachable
   The default binding was kept. Choose another key
 ## theme: cycle_a (themes/cycle_a.toml, 使える: false)
 0:0	Error		""
@@ -78,7 +78,7 @@
   syntax is not supported in this version and was ignored
 2:20	Warning	ui.selection.fg	"nope"
   The value nope of ui.selection.fg cannot be used
-  Allowed values: #rrggbb, #rgb, ansi.<name>, ansi.<0-255>, default. This item uses the default 
-0:0	Warning	ui.not_a_role	""
+  Allowed values: #rrggbb, #rgb, ansi.<name>, ansi.<0-255>, default. This item is ignored
+3:1	Warning	ui.not_a_role	""
   There is no configuration item named ui.not_a_role
   See the bundled config.example.toml for the available items

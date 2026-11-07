@@ -487,6 +487,10 @@ text = "The system clipboard is not available, so the editor's own clipboard was
 hint = "Allowed values: {allowed}. This item uses the default {default}"
 text = "The value {value} of {item} cannot be used"
 
+[msg.config.invalid_value_no_default]
+hint = "Allowed values: {allowed}. This item is ignored"
+text = "The value {value} of {item} cannot be used"
+
 [msg.config.keymap_unknown_context]
 hint = "Available: global, editor, search, prompt, palette, list, dialog, help. This binding is ignored"
 text = "The context in {item} is not available"
@@ -541,6 +545,10 @@ text = "This configuration file is not used because its syntax is invalid: {reas
 
 [msg.config.type_mismatch]
 hint = "Write it as {expected}. This item uses the default {default}"
+text = "The type of the value of {item} is wrong (found: {actual})"
+
+[msg.config.type_mismatch_no_default]
+hint = "Write it as {expected}. This item is ignored"
 text = "The type of the value of {item} is wrong (found: {actual})"
 
 [msg.config.unknown_key]
