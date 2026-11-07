@@ -8,7 +8,7 @@
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::{Arc, Condvar, Mutex, OnceLock};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use arc_swap::{ArcSwap, ArcSwapOption};
 use eve_core::{DocSnapshot, RescueOutcome, RescueReason, RescueWriter};
@@ -83,8 +83,19 @@ impl EmergencyCtl {
     }
 
     /// 退避を実行する。`Idle → Writing` の CAS に勝った経路だけが書く。負けた経路は `Done` になるまで (最大 `budget`) 待つ。
-    /// 結果を返す (待ちが尽きて書込中のままなら `None`)。
+    /// 結果を返す (待ちが尽きて書込中のままなら `None`)。予算は今から数える (受信の時刻が分かる経路は `run_since`)。
     pub fn run(&self, reason: RescueReason, budget: Duration) -> Option<Arc<RescueOutcome>> {
+        self.run_since(reason, Instant::now(), budget)
+    }
+
+    /// `run` の、予算を `received` (終了の要求を受けた時刻) から数える形 (02 §11.2.1 の「終了の順序と時間予算」、05 §11.2 の
+    /// 時系列表の「受信から t = 3.5 s」)。書き手の打ち切りも、負けた経路の待ちも、期限 `received + budget` に揃える。
+    pub fn run_since(
+        &self,
+        reason: RescueReason,
+        received: Instant,
+        budget: Duration,
+    ) -> Option<Arc<RescueOutcome>> {
         let won = self
             .state
             .compare_exchange(IDLE, WRITING, Ordering::AcqRel, Ordering::Acquire)
@@ -92,12 +103,14 @@ impl EmergencyCtl {
         if won {
             let docs = self.docs();
             let outcome = match self.writer.get() {
-                Some(w) => catch_unwind(AssertUnwindSafe(|| w.write(&docs, reason, budget)))
-                    .unwrap_or_else(|_| RescueOutcome {
-                        total: docs.len(),
-                        error: Some(eve_core::RescueError::WriterPanicked),
-                        ..RescueOutcome::default()
-                    }),
+                Some(w) => catch_unwind(AssertUnwindSafe(|| {
+                    w.write(&docs, reason, received, budget)
+                }))
+                .unwrap_or_else(|_| RescueOutcome {
+                    total: docs.len(),
+                    error: Some(eve_core::RescueError::WriterPanicked),
+                    ..RescueOutcome::default()
+                }),
                 None => RescueOutcome {
                     total: docs.len(),
                     complete: docs.is_empty(),
@@ -114,8 +127,8 @@ impl EmergencyCtl {
             cv.notify_all();
             return self.outcome();
         }
-        // 負けた: Done まで待つ (予算の内)
-        self.wait_done(budget);
+        // 負けた: Done まで待つ (受信からの予算の内)
+        self.wait_done(budget.saturating_sub(received.elapsed()));
         self.outcome()
     }
 
@@ -153,6 +166,7 @@ mod tests {
             &self,
             docs: &[Arc<DocSnapshot>],
             _reason: RescueReason,
+            _received: Instant,
             _budget: Duration,
         ) -> RescueOutcome {
             self.calls.fetch_add(1, Ordering::SeqCst);
@@ -233,6 +247,36 @@ mod tests {
         let o = c.run(RescueReason::Fatal, Duration::from_millis(100));
         assert!(o.is_none(), "書込中のまま予算が尽きた");
         assert!(t.elapsed() < Duration::from_millis(400));
+        assert!(winner.join().unwrap().is_some());
+    }
+
+    // 負けた経路の待ちは、受信の時刻 (`received`) からの予算で縮む (02 §11.2.1 の「受信から」)
+    #[test]
+    fn 負けた経路の待ちは受信の時刻から数える() {
+        let (c, w) = ctl(4000, false);
+        let c2 = c.clone();
+        let winner =
+            std::thread::spawn(move || c2.run(RescueReason::Signal, Duration::from_secs(10)));
+        let wait = Instant::now();
+        while w.calls.load(Ordering::SeqCst) == 0 {
+            assert!(
+                wait.elapsed() < Duration::from_secs(5),
+                "書き手が始まらない"
+            );
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        // 1.5 s 前に受けた・予算 2 s: 待ちは残りの約 0.5 s (受信から数えなければ 2 s 待つ)
+        let received = Instant::now()
+            .checked_sub(Duration::from_millis(1500))
+            .expect("1.5 s 前の時刻");
+        let t = Instant::now();
+        let o = c.run_since(RescueReason::ConsoleClose, received, Duration::from_secs(2));
+        let waited = t.elapsed();
+        assert!(o.is_none(), "書込中のまま予算が尽きた");
+        assert!(
+            waited < Duration::from_millis(1500),
+            "受信からの予算の残りだけ待つ: {waited:?}"
+        );
         assert!(winner.join().unwrap().is_some());
     }
 

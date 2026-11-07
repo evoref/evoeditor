@@ -510,6 +510,34 @@ fn state_log(s: &Session) -> String {
         .unwrap_or_else(|_| "(ログなし)".to_owned())
 }
 
+/// 退避の試験が落ちたときの材料 (Issue #342): 閉じてから子が終わるまでの経過時間、退避ディレクトリのファイルの一覧と大きさ、
+/// `evoeditor.log` の中身。外から終わらされた (猶予切れ)・予算切れ・書込の失敗を、後から見分ける。
+#[cfg(any(windows, feature = "test-hooks"))]
+fn rescue_report(s: &Session, exited_after: Option<Duration>) -> String {
+    let mut out = format!(
+        "--- 閉じてから終わるまで: {}\n--- 退避ディレクトリ\n",
+        exited_after.map_or_else(|| "(終わらなかった)".to_owned(), |d| format!("{d:?}"))
+    );
+    let recovery = s.state.join("recovery");
+    match std::fs::read_dir(&recovery) {
+        Err(e) => out.push_str(&format!("({}: {e})\n", recovery.display())),
+        Ok(rd) => {
+            for d in rd.flatten() {
+                out.push_str(&format!("{}/\n", d.file_name().to_string_lossy()));
+                for f in std::fs::read_dir(d.path()).into_iter().flatten().flatten() {
+                    let len = f
+                        .metadata()
+                        .map_or_else(|e| e.to_string(), |m| format!("{} B", m.len()));
+                    out.push_str(&format!("  {} ({len})\n", f.file_name().to_string_lossy()));
+                }
+            }
+        }
+    }
+    out.push_str("--- log\n");
+    out.push_str(&state_log(s));
+    out
+}
+
 // (8b ii) コンソールを閉じる (CTRL_CLOSE): 未保存の内容を退避して終了する。退避は受信スレッドがメインを待たずに書く
 // verifies: AC-FR-107-2
 // verifies: AC-NFR-302-2
@@ -521,11 +549,14 @@ fn コンソールを閉じると未保存の内容を退避して終了する()
     type_slowly(&s, "unsaved text");
     s.wait_for("入力が見える", |t| t.contains("unsaved text"));
     let recovery = s.state.join("recovery");
+    let closed = Instant::now();
     s.close_console();
     let code = s.exit_within(Duration::from_secs(10));
+    let exited_after = code.map(|_| closed.elapsed());
     assert!(
         code.is_some(),
-        "コンソールを閉じたら終了する (CTRL_CLOSE は約 5 秒で強制終了される)"
+        "コンソールを閉じたら終了する (CTRL_CLOSE は約 5 秒で強制終了される)\n{}",
+        rescue_report(&s, exited_after)
     );
     // 退避ディレクトリ: <UTC timestamp>-<pid>/ に本文と manifest
     let dirs: Vec<_> = std::fs::read_dir(&recovery)
@@ -539,8 +570,8 @@ fn コンソールを閉じると未保存の内容を退避して終了する()
     assert_eq!(
         dirs.len(),
         1,
-        "退避は 1 件: {dirs:?} ({recovery:?})\n--- log\n{}",
-        state_log(&s)
+        "退避は 1 件: {dirs:?} ({recovery:?})\n{}",
+        rescue_report(&s, exited_after)
     );
     let manifest = std::fs::read_to_string(dirs[0].join("manifest.toml")).unwrap();
     assert!(
@@ -549,15 +580,15 @@ fn コンソールを閉じると未保存の内容を退避して終了する()
     );
     assert!(
         manifest.contains("complete = true"),
-        "{manifest}\n--- log\n{}",
-        state_log(&s)
+        "{manifest}\n{}",
+        rescue_report(&s, exited_after)
     );
     let body: Vec<_> = std::fs::read_dir(&dirs[0])
         .unwrap()
         .flatten()
         .filter(|e| e.file_name().to_string_lossy().ends_with(".txt"))
         .collect();
-    assert_eq!(body.len(), 1);
+    assert_eq!(body.len(), 1, "{}", rescue_report(&s, exited_after));
     assert_eq!(
         std::fs::read_to_string(body[0].path()).unwrap(),
         "unsaved text"
@@ -802,12 +833,13 @@ fn パニックすると端末を戻し_未保存の内容を退避してクラ�
         std::fs::read_to_string(body[0].path()).unwrap(),
         "unsaved text"
     );
-    // クラッシュログ: パニックの場所はあるが、文書の内容は含まない
+    // クラッシュログ: パニックの場所はあるが、文書の内容は含まない (`evoeditor.log` は数えない。退避が遅いと段の記録を書く)
     let logs: Vec<_> = std::fs::read_dir(s.state.join("log"))
         .unwrap()
         .flatten()
+        .filter(|e| e.file_name().to_string_lossy().starts_with("crash-"))
         .collect();
-    assert_eq!(logs.len(), 1);
+    assert_eq!(logs.len(), 1, "{logs:?}");
     let log = std::fs::read_to_string(logs[0].path()).unwrap();
     assert!(
         log.contains("internal.debug_panic") && !log.contains("unsaved text"),
@@ -887,7 +919,7 @@ fn ctrl_break_を受けると未保存の内容を退避して終了する() {
 }
 
 /// 退避のディレクトリ (`<UTC の時刻>-<pid>/`) の一覧。
-#[cfg(unix)]
+#[cfg(any(unix, feature = "test-hooks"))]
 fn recovery_dirs(state: &Path) -> Vec<PathBuf> {
     std::fs::read_dir(state.join("recovery"))
         .map(|rd| {
@@ -1105,15 +1137,16 @@ fn メインが止まっていてもコンソールを閉じると未保存の�
     let closed = Instant::now();
     s.close_console();
     let code = s.exit_within(Duration::from_secs(10));
+    let exited_after = code.map(|_| closed.elapsed());
     assert!(
         code.is_some(),
-        "強制終了までに終わる: {:?}",
-        closed.elapsed()
+        "強制終了までに終わる\n{}",
+        rescue_report(&s, exited_after)
     );
     assert!(
-        closed.elapsed() < Duration::from_millis(4500),
-        "受信から 4.5 秒の内に退避が書かれて終わる: {:?}",
-        closed.elapsed()
+        exited_after.is_some_and(|d| d < Duration::from_millis(4500)),
+        "受信から 4.5 秒の内に退避が書かれて終わる\n{}",
+        rescue_report(&s, exited_after)
     );
     let dirs: Vec<_> = std::fs::read_dir(&recovery)
         .map(|rd| {
@@ -1126,8 +1159,8 @@ fn メインが止まっていてもコンソールを閉じると未保存の�
     assert_eq!(
         dirs.len(),
         1,
-        "退避は 1 件: {dirs:?}\n--- log\n{}",
-        state_log(&s)
+        "退避は 1 件: {dirs:?}\n{}",
+        rescue_report(&s, exited_after)
     );
     let manifest = std::fs::read_to_string(dirs[0].join("manifest.toml")).unwrap();
     assert!(
@@ -1136,8 +1169,8 @@ fn メインが止まっていてもコンソールを閉じると未保存の�
     );
     assert!(
         manifest.contains("complete = true"),
-        "{manifest}\n--- log\n{}",
-        state_log(&s)
+        "{manifest}\n{}",
+        rescue_report(&s, exited_after)
     );
     let body: Vec<_> = std::fs::read_dir(&dirs[0])
         .unwrap()
@@ -1149,6 +1182,77 @@ fn メインが止まっていてもコンソールを閉じると未保存の�
         std::fs::read_to_string(body[0].path()).unwrap(),
         "unsaved text"
     );
+    let _ = std::fs::remove_dir_all(&s.state);
+}
+
+// Issue #342: 退避の予算切れの形を確定的に再現する (test-hooks の `rescue_stall_after_manifest` で manifest 1 の直後に、期限が
+// 過ぎるまで眠ってからさらに少し眠らせ、本文を作る前に予算を切らす。`recovery_timeout` は負荷の下でも manifest 1 まで届く長さ)。manifest は `complete = false`・`written = false` で本文が無く、
+// ログに始めの行・最後の段 (本文を書く前の時間切れ)・「書き終えられなかった (… 時間切れ)」が残る。外から終わらされた形
+// (猶予切れ。ログに「書き終えられなかった」が無い) や書込の失敗 (「書込の失敗」) と見分けられる。
+// Windows はコンソールを閉じ (CTRL_CLOSE)、Unix は SIGTERM で同じ経路 (受信スレッドの退避) を通す。
+#[cfg(feature = "test-hooks")]
+#[test]
+fn 退避の予算が本文の前に尽きると本文なしの打切りがログで分かる() {
+    let mut s = Session::start_with(
+        &[],
+        None,
+        &[(
+            "EVE_TEST_HOOK",
+            "recovery_timeout=2000,rescue_stall_after_manifest=50",
+        )],
+    );
+    s.wait_ready();
+    type_slowly(&s, "unsaved text");
+    s.wait_for("入力が見える", |t| t.contains("unsaved text"));
+    let closed = Instant::now();
+    #[cfg(windows)]
+    let (reason, ended) = {
+        s.close_console();
+        (
+            "console_close",
+            s.exit_within(Duration::from_secs(10)).is_some(),
+        )
+    };
+    #[cfg(unix)]
+    let (reason, ended) = {
+        s.signal("TERM");
+        ("signal", s.status_within(Duration::from_secs(10)).is_some())
+    };
+    let exited_after = ended.then(|| closed.elapsed());
+    let report = rescue_report(&s, exited_after);
+    assert!(ended, "終了する\n{report}");
+    let dirs = recovery_dirs(&s.state);
+    assert_eq!(dirs.len(), 1, "退避は 1 件: {dirs:?}\n{report}");
+    let manifest = std::fs::read_to_string(dirs[0].join("manifest.toml")).unwrap();
+    assert!(
+        manifest.contains(&format!("reason = \"{reason}\""))
+            && manifest.contains("complete = false")
+            && manifest.contains("written = false"),
+        "{manifest}\n{report}"
+    );
+    let bodies: Vec<_> = std::fs::read_dir(&dirs[0])
+        .unwrap()
+        .flatten()
+        .filter(|e| e.file_name().to_string_lossy().ends_with(".txt"))
+        .collect();
+    assert!(bodies.is_empty(), "本文を作らない\n{report}");
+    let log = state_log(&s);
+    // manifest 1 の段は、受信から 500 ms の内なら「途中」、過ぎていれば「遅い」の行に載る
+    assert!(
+        log.lines()
+            .any(|l| (l.contains(&format!("退避の段の時間 ({reason}、途中)"))
+                || l.contains(&format!("退避の段の時間 ({reason}、遅い)")))
+                && l.contains("manifest 1 ")),
+        "manifest 1 の段の行
+{report}"
+    );
+    for want in [
+        format!("退避を始めた ({reason}、受信から "),
+        "本文 1 (時間切れ、書く前)".to_owned(),
+        "書き終えられなかった (0/1 件、時間切れ)".to_owned(),
+    ] {
+        assert!(log.contains(&want), "{want}\n{report}");
+    }
     let _ = std::fs::remove_dir_all(&s.state);
 }
 

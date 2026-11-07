@@ -2,11 +2,12 @@
 //!
 //! 書き手 (`RescueWriter`) は公開済みの `DocSnapshot` だけを読み、Editor にも `FileSystem` Port にも触れずに、状態ディレクトリの
 //! `recovery/<UTC timestamp>-<pid>/` へ本文 (`<n>-<basename>.txt`) と `manifest.toml` を書く。実装は eve-platform (安全な関数、
-//! `std::fs` を直接使う)、呼ぶのは eve-host (パニック・Fatal・コンソールイベント・シグナルの経路)。時間予算 (`budget`) を超えたら、
-//! 書けた分の manifest を `complete = false` のまま残して打ち切る。書き手は **ブロックするロックを取らない** ことが求められる。
+//! `std::fs` を直接使う)、呼ぶのは eve-host (パニック・Fatal・コンソールイベント・シグナルの経路)。時間予算 (`budget`。
+//! 起点は受信 (パニックは捕捉、Fatal はメインが `HostMsg::Fatal` を受けた) の時刻 `received`、05 §11.2 の時系列表) を超えたら、書けた分の manifest を `complete = false` のまま
+//! 残して打ち切る。書き手は **ブロックするロックを取らない** ことが求められる。
 
 use std::path::PathBuf;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use crate::DocSnapshot;
 
@@ -98,12 +99,16 @@ impl RescueOutcome {
 
 /// 緊急退避の書き手。
 pub trait RescueWriter: Send + Sync {
-    /// `docs` (dirty な文書の公開物) を、小さい文書から順に退避する。`budget` を超えたら打ち切る。パニックしてはならない
-    /// (呼び側も `catch_unwind` で包むが、書けた分の manifest を残すのは書き手の責務)。
+    /// `docs` (dirty な文書の公開物) を、小さい文書から順に退避する。期限 (`received + budget`) を過ぎたら打ち切る。
+    /// `received` は終了の要求を受けた時刻 (パニックは捕捉の時刻、`Fatal` はメインが `HostMsg::Fatal` を受けた時刻) で、予算は
+    /// そこから数える (02 §11.2.1 の「終了の順序と時間予算」、05 §11.2 の時系列表)。シグナル・コンソールイベント・セッション終了の
+    /// `received` は受信スレッドのコールバックに入った時刻 (`NonInteractiveShutdown::run` の頭) で、OS が配送するまでの遅れは含まない。パニックしてはならない (呼び側も `catch_unwind` で包むが、書けた分の
+    /// manifest を残すのは書き手の責務)。
     fn write(
         &self,
         docs: &[std::sync::Arc<DocSnapshot>],
         reason: RescueReason,
+        received: Instant,
         budget: Duration,
     ) -> RescueOutcome;
 }

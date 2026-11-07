@@ -222,6 +222,7 @@ impl RescueWriter for Spy {
         &self,
         docs: &[Arc<DocSnapshot>],
         reason: RescueReason,
+        _received: std::time::Instant,
         _budget: Duration,
     ) -> RescueOutcome {
         self.calls.lock().unwrap().push((reason, docs.len()));

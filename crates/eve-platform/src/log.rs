@@ -167,6 +167,41 @@ impl Logger {
     }
 }
 
+/// 1 回だけ開いたログのファイルに追記する書き手 (緊急退避の段の記録用、05 §7.3)。ディレクトリの作成・ローテーションの確認・
+/// open は `open` の 1 回だけで、各行は `write_all` だけ (fsync しない)。`EVE_LOG` に依らず書く (呼び手が warn の行だけを書く)。
+pub(crate) struct AppendLog {
+    file: fs::File,
+}
+
+impl AppendLog {
+    /// `state_dir/log/evoeditor.log` を追記で開く。開けなければ `None` (呼び手はログを諦めて続ける)。
+    pub(crate) fn open(state_dir: Option<&Path>) -> Option<AppendLog> {
+        let dir = state_dir?.join("log");
+        create_dir_all_private(&dir).ok()?;
+        let file = dir.join("evoeditor.log");
+        if fs::metadata(&file).is_ok_and(|m| m.len() >= MAX_BYTES) {
+            rotate(&file);
+        }
+        let file = crate::sys::private_options()
+            .create(true)
+            .append(true)
+            .open(&file)
+            .ok()?;
+        Some(AppendLog { file })
+    }
+
+    /// 1 行を書く (`Logger` と同じ形)。失敗は無視する (ログで本体を止めない)。
+    pub(crate) fn line(&mut self, level: Level, message: &str) {
+        let one_line = message.replace(['\r', '\n'], " ");
+        let line = format!(
+            "{} {} {one_line}\n",
+            timestamp_rfc3339(now_secs()),
+            level.name()
+        );
+        let _ = self.file.write_all(line.as_bytes());
+    }
+}
+
 /// `evoeditor.log` → `.1` → `.2` と送る (最古を捨てる)。失敗は無視する (他のインスタンスが先に改名したなど)。
 fn rotate(file: &Path) {
     let gen_path = |n: u32| {
