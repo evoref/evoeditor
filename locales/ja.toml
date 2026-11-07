@@ -996,6 +996,10 @@ short = "RO"
 long = "[保存中]"
 short = "保存中"
 
+[status.external_change]
+long = "[外部で変更]"
+short = "外部変更"
+
 [status.degraded.long_line]
 long = "[長い行: 近似表示]"
 short = "近似"
