@@ -18,6 +18,7 @@ The Japanese version ([CHANGELOG.md](CHANGELOG.md)) is authoritative. Both are u
 
 ### Fixed
 
+- **Some non-setting names in the config file were silently ignored instead of warned about**: writing a name that is not a setting key (a command or a color role name), such as `[ui] palette_open = 1`, gave no warning. The list of reserved keys now matches the spec table, and such names are reported.
 - **Moving a multi-line selection up or down broke the selection from the second move**: with lines of different lengths, the selected range shifted from the second move on. The same lines now stay selected however many times you move them.
 - **Undoing a line-ending conversion also reverted a later encoding or BOM change**: undo now restores only the line ending (a later save uses the encoding you chose).
 - **Reloading a file could move the cursor to a different line**: after the file was changed externally near the top, reload kept the same byte offset and the cursor jumped to another line. It now stays at the same line and column (in characters).
