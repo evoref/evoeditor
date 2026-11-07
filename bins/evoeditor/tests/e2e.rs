@@ -59,11 +59,15 @@ impl Session {
     fn start_with(args: &[&str], state: Option<PathBuf>, envs: &[(&str, &str)]) -> Session {
         // 利用者の状態ディレクトリを汚さない (保存中フラグ・退避はここに書く)
         let state = state.unwrap_or_else(|| {
-            std::env::temp_dir().join(format!(
+            let dir = std::env::temp_dir().join(format!(
                 "evo-e2e-state-{}-{}",
                 std::process::id(),
                 STATE_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
-            ))
+            ));
+            // 前の実行が落ちて片付けなかった同じ名前のディレクトリを拾わない (Windows はプロセス番号を使い回すので、
+            // 名前が重なると前の退避が残って「退避は 1 件」などの検査が落ちる)。試験が渡した state には触れない
+            let _ = std::fs::remove_dir_all(&dir);
+            dir
         });
         // OS の言語に依らず日本語で始める (言語の選択を試すテストは `envs` や引数で上書きする)
         let mut cmd = pty::command(&exe(), args, &state);
