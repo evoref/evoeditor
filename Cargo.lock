@@ -418,6 +418,7 @@ dependencies = [
 name = "eve-tui"
 version = "0.2.0"
 dependencies = [
+ "eve-config",
  "eve-core",
  "eve-docs-tables",
  "eve-host",
@@ -1500,6 +1501,7 @@ dependencies = [
 name = "xtask"
 version = "0.2.0"
 dependencies = [
+ "eve-config",
  "eve-docs-tables",
  "serde",
  "serde_json",
