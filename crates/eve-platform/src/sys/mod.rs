@@ -27,7 +27,7 @@ pub(crate) use unix::*;
 #[cfg(windows)]
 pub(crate) use windows::*;
 
-/// 照合の比較 (05 §5.5。ハッシュは持たないので (mtime, len, FileId))。
+/// 照合の比較 (05 §5.5。ハッシュは持たないので (mtime, len, `FileId`))。
 pub(crate) fn matches(want: &FileStamp, have: &FileStamp) -> bool {
     want.mtime == have.mtime && want.len == have.len && want.file_id == have.file_id
 }

@@ -3,7 +3,7 @@
 //! Unicode の General Category / Emoji のプロパティ表は持たない (依存は `unicode-width` と `unicode-segmentation` だけ)。
 //! 次の判定は、該当する範囲を列挙した近似である:
 //! - Cf (書式文字): 既知の Cf の集合 (`cf_mark`)
-//! - Extended_Pictographic / Emoji_Presentation: 絵文字の主なブロック (`is_pictographic`)
+//! - `Extended_Pictographic` / `Emoji_Presentation`: 絵文字の主なブロック (`is_pictographic`)
 //! - 未割当・新規のコードポイントを `is_width_risky` で拾うこと: できない (表が要る)。端末との不一致は 04 の補正が受ける
 //!
 //! 不正バイトのエスケープ (`pua_escape` の文書の `U+10FF00..FF`、`<0xHH>` = 6 セル) は文書の状態に依存するので、
@@ -102,7 +102,7 @@ fn vs_number(c: char) -> Option<u32> {
     }
 }
 
-/// Extended_Pictographic の近似 (絵文字の主なブロック)。
+/// `Extended_Pictographic` の近似 (絵文字の主なブロック)。
 fn is_pictographic(c: char) -> bool {
     matches!(c,
         '\u{00A9}' | '\u{00AE}' | '\u{203C}' | '\u{2049}' | '\u{2122}' | '\u{2139}' | '\u{2194}'..='\u{21AA}'

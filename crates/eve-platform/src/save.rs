@@ -1,7 +1,7 @@
 //! 原子的保存 `write_atomic` の Windows 実装 (docs/05 §4.1 の共通手順と §4.2、§5.6)。
 //!
 //! 順序: 0 事前検査 (リンクの解決・親・照合・ハードリンク) → 1 一時ファイル (所有者のみの DACL) → 2 チャンク書込 → 3 fsync・ハンドルを閉じる
-//! → 4 属性 (HIDDEN / SYSTEM) の複製 → 4b 置換の直前の照合 → 5 `ReplaceFileW` (新規ファイルは `MoveFileExW`) → 7 事後 (FileId の確認・退避名の削除)。
+//! → 4 属性 (HIDDEN / SYSTEM) の複製 → 4b 置換の直前の照合 → 5 `ReplaceFileW` (新規ファイルは `MoveFileExW`) → 7 事後 (`FileId` の確認・退避名の削除)。
 //! 失敗では一時ファイルを消し、元のファイルは無傷に保つ。置換は `ReplaceFileW` だけで、フラグは 0 (ACL・ADS・作成日時は
 //! `ReplaceFileW` が保つ)。置換に失敗して T が無傷なら `AtomicUnsupported` (確認付きの直接上書きは core 側)。
 //!

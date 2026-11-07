@@ -39,7 +39,7 @@ pub fn command(exe: &str, args: &[&str], state: &Path) -> CommandBuilder {
 }
 
 /// `cols` × `rows` の擬似端末で `cmd` を起こし、出力を読み取りスレッドで `on_chunk` に渡す。
-/// ConPTY は起動時にカーソル位置を尋ねる (DSR) ので、`on_chunk` の前に端末として答える。
+/// `ConPTY` は起動時にカーソル位置を尋ねる (DSR) ので、`on_chunk` の前に端末として答える。
 pub fn spawn(
     cmd: CommandBuilder,
     cols: u16,

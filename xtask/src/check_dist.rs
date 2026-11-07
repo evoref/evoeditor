@@ -5,7 +5,7 @@
 //! (2) exe に test-hooks と bench-trace の目印の文字列が無い、(3) 隠しオプション `--bench-exit-after-first-frame` が
 //! 未知のオプションとして終了コード 2 で終わる、(4) 静的リンク: Windows (PE) は取り込む DLL に VC ランタイムと UCRT が無い、
 //! Linux (ELF、musl) はプログラムインタプリタ (`PT_INTERP`) と共有ライブラリの依存 (`DT_NEEDED`) が無い、
-//! (5) Windows だけ: exe のヘッダの DependentLoadFlags が System32 だけから DLL を読む設定 (0x800) になっている (NFR-502 AC-2 (a))。
+//! (5) Windows だけ: exe のヘッダの `DependentLoadFlags` が System32 だけから DLL を読む設定 (0x800) になっている (NFR-502 AC-2 (a))。
 //! あわせて BM-205 (exe のサイズ) を `target/dist/size.json` に書く。
 //!
 //! `--exe <パス>` を付けると、ビルドと (1) を飛ばして、そのファイルを検査する (`release.yml` の展開後の exe 用)。
@@ -144,10 +144,10 @@ pub fn run(args: &[String]) -> Result<(), String> {
 }
 
 /// `cargo tree -e features` の出力から、禁止された feature を探す。
-/// LOAD_LIBRARY_SEARCH_SYSTEM32: 起動時のインポートの DLL を System32 だけから探す。
+/// `LOAD_LIBRARY_SEARCH_SYSTEM32`: 起動時のインポートの DLL を System32 だけから探す。
 const LOAD_LIBRARY_SEARCH_SYSTEM32: u16 = 0x800;
 
-/// PE (64 ビット) のロード構成ディレクトリの DependentLoadFlags (オフセット 78)。読めなければ None。
+/// PE (64 ビット) のロード構成ディレクトリの `DependentLoadFlags` (オフセット 78)。読めなければ None。
 fn dependent_load_flags(pe: &[u8]) -> Option<u16> {
     let u16_at = |o: usize| pe.get(o..o + 2).map(|b| u16::from_le_bytes([b[0], b[1]]));
     let u32_at = |o: usize| {
@@ -210,7 +210,7 @@ struct ElfDynamic {
     needed: usize,
 }
 
-/// ELF (64 ビット、リトルエンディアン。x86_64 と aarch64) のプログラムヘッダと動的セクションを読む。読めなければ None。
+/// ELF (64 `ビット、リトルエンディアン。x86_64` と aarch64) のプログラムヘッダと動的セクションを読む。読めなければ None。
 fn elf_dynamic_deps(b: &[u8]) -> Option<ElfDynamic> {
     const PT_DYNAMIC: u32 = 2;
     const PT_INTERP: u32 = 3;

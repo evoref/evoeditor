@@ -1,10 +1,10 @@
 //! `cargo xtask crash-consistency`: 保存のクラッシュ一貫性の検査 (NFR-301 の「電源断」、docs/09 §6.3、OQ-143、Linux)。
-//! **LazyFS** (FUSE。fsync されていない書込を自前のキャッシュに持ち、`lazyfs::clear-cache` で落とせる) の上で、
+//! **`LazyFS`** (FUSE。fsync されていない書込を自前のキャッシュに持ち、`lazyfs::clear-cache` で落とせる) の上で、
 //! `eve-test-helpers save` を保存手順の各切断点で強制終了させ (`EVE_TEST_HOOK`)、キャッシュを落として電源断を模擬し、
 //! 「元ファイルまたは新ファイルが完全に残る」ことを確かめる。直接上書きは、途中で落ちても完全なバックアップと保存中フラグが
 //! 残っていれば合格 (起動時の走査が復旧を提案できる、05 §4.4)。
 //!
-//! LazyFS が落とすのはデータだけで、メタデータ (作成・rename) は下の FS にすぐ反映される。そこでこの検査が見つけられるのは
+//! `LazyFS` が落とすのはデータだけで、メタデータ (作成・rename) は下の FS にすぐ反映される。そこでこの検査が見つけられるのは
 //! 「rename / 完了の前に fsync していない」誤りで、ディレクトリの fsync の欠落は見つけられない (09 §6.3)。
 //! 道具が効いていることは、最初に **対照** (fsync せずに rename したファイルの内容が落ちること) で確かめる。
 //!
@@ -283,7 +283,7 @@ fn run_root(helper: &Path, work: &Path, base: &Path, lz: Option<&Lazy>) -> Resul
     }
 }
 
-/// 対照: fsync せずに rename したファイルの内容が、キャッシュを落とすと失われること (LazyFS が効いている証拠)。
+/// 対照: fsync せずに rename したファイルの内容が、キャッシュを落とすと失われること (`LazyFS` が効いている証拠)。
 fn control(base: &Path, lz: &Lazy) -> Result<(), String> {
     let dir = base.join("control");
     fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
@@ -395,7 +395,7 @@ fn write_synced(path: &Path, data: &[u8]) -> Result<(), String> {
     Ok(())
 }
 
-/// マウントした LazyFS。
+/// マウントした `LazyFS`。
 struct Lazy {
     child: Child,
     mnt: PathBuf,
@@ -408,7 +408,7 @@ struct Lazy {
 }
 
 impl Lazy {
-    /// `root` の上に LazyFS を `mnt` へマウントする (前面で動かし、マウントが現れるまで待つ)。
+    /// `root` の上に `LazyFS` を `mnt` へマウントする (前面で動かし、マウントが現れるまで待つ)。
     fn mount(bin: &Path, root: &Path, mnt: &Path, dir: &Path) -> Result<Lazy, String> {
         fs::create_dir_all(mnt).map_err(|e| format!("{}: {e}", mnt.display()))?;
         fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
@@ -520,7 +520,7 @@ impl Lazy {
         let _ = self.child.wait();
     }
 
-    /// LazyFS の出力の末尾 (失敗の手掛かり)。
+    /// `LazyFS` の出力の末尾 (失敗の手掛かり)。
     fn tail(&self) -> String {
         // ログのファイル (無ければ標準出力の写し) の最後の 10 行
         let out = self.log.with_file_name("lazyfs.out");

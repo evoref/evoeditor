@@ -125,6 +125,10 @@ fn is_later_version(note: &str) -> bool {
 }
 
 /// 1 行 (要件 ID のセルと受入基準のセル) から、v0.1 の AC を取り出す。
+///
+/// # Errors
+///
+/// 要件 ID のセルから ID を 1 つも読めないとき、または受入基準のセルに `AC-<n>:` が 1 つもないとき (理由の文言を返す)。
 pub fn extract_row(requirement_cell: &str, acceptance_cell: &str) -> Result<Vec<Ac>, String> {
     let reqs = requirement_ids(requirement_cell);
     if reqs.is_empty() {
@@ -155,6 +159,10 @@ pub fn extract_row(requirement_cell: &str, acceptance_cell: &str) -> Result<Vec<
 }
 
 /// 01 の markdown から v0.1 の AC をすべて読む。読めない行があれば失敗する。
+///
+/// # Errors
+///
+/// 表の見出しや列が見つからないとき、または行から AC を読めないとき (`Error::BadRow` など)。
 pub fn read_acs(markdown_01: &str) -> Result<Vec<Ac>, Error> {
     let mut all: Vec<Ac> = Vec::new();
     for heading in AC_HEADINGS {
@@ -257,6 +265,10 @@ fn later_heads(cell: &str) -> Vec<(Option<String>, u32)> {
 
 /// 01 §5.5 の、`要件` 列に `version` (`v0.2` など) を含む行から検証の単位を読む。
 /// その版の行で要件 ID を読めないものは失敗にする (黙って読み飛ばさない、docs/11 §8.5)。
+///
+/// # Errors
+///
+/// 表の見出しや列が見つからないとき、またはその版の行で要件 ID を読めないとき (`Error::BadRow` など)。
 pub fn read_later_units(markdown_01: &str, version: &str) -> Result<Vec<Unit>, Error> {
     let mut out = std::collections::BTreeSet::new();
     for table in read_tables(markdown_01, LATER_HEADING, &["要件", "受入基準 (概要)"])? {

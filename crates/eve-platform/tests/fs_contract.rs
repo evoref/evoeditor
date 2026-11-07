@@ -1,5 +1,5 @@
 //! 実 FS (Windows は `WinFs`、Unix は `UnixFs`) に `FileSystem` の契約試験を掛ける (docs/02 §4.5、05 §2.1 / §4.1、STR-D3)。
-//! 同じ検査を eve-testkit の `tests/fs_contract.rs` が MemFs に掛ける。状態ディレクトリを持つものと持たないものの両方。
+//! 同じ検査を eve-testkit の `tests/fs_contract.rs` が `MemFs` に掛ける。状態ディレクトリを持つものと持たないものの両方。
 
 use std::fs;
 use std::path::PathBuf;

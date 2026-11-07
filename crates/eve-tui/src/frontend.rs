@@ -437,7 +437,7 @@ mod tests {
     }
 
     /// 入力スレッドの panic を、本物の送り先 (`SinkOut`) と Host の待ち受けのループまで通す (SAF-07、
-    /// docs/review/v0.3-findings.md の §2.7 の 6)。Frontend は HeadlessFrontend に任せ、`start_input` だけを
+    /// docs/review/v0.3-findings.md の §2.7 の 6)。Frontend は `HeadlessFrontend` に任せ、`start_input` だけを
     /// 「panic する入力スレッドの本体」に差し替える (`run_guarded` は入力スレッドの本体そのもの。スレッドを作るのは
     /// R11 で win.rs / unix.rs だけなので、ここでは同じスレッドで走らせる)。Host は `Fatal(InputThreadDied)` を受けて、
     /// 端末を 1 回だけ復元して FATAL で終わる。

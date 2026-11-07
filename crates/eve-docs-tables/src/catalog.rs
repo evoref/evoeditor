@@ -1,4 +1,4 @@
-//! 07 §11.6 の CommandId カタログ (docs/07-config-extensibility.md) を読む。
+//! 07 §11.6 の `CommandId` カタログ (docs/07-config-extensibility.md) を読む。
 //!
 //! カタログの読み手は、既定キーマップの突合 (eve-core)・権限と種類と `when` の突合 (eve-core のテスト)・
 //! 文言の検査 (`cargo xtask i18n`)・生成リファレンスとの突合 (`cargo xtask gen-reference --check`) の 4 つ。列の解釈 (複数 ID の行の分け方・版の注記) をここ 1 か所にまとめる
@@ -59,6 +59,10 @@ impl Row {
 }
 
 /// 07 の本文からカタログを読む。列の欠け・ID と title key の個数の違い・分けられない kind / perm は失敗にする。
+///
+/// # Errors
+///
+/// 見出しや列が見つからないとき、または行の形が規則に合わないとき (`Error::BadRow` など)。
 pub fn read(doc07: &str) -> Result<Vec<Row>, Error> {
     let tables = read_tables(doc07, HEADING, &COLUMNS)?;
     let mut out = Vec::new();
@@ -146,7 +150,7 @@ fn split_perms(row: &Row, cell: &str) -> Result<Vec<String>, String> {
 /// 既定キー列から読んだ割当 1 件 (07 §11.6 の「既定キー」列の記法)。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CatalogBinding {
-    /// 割当の対象の CommandId。
+    /// 割当の対象の `CommandId`。
     pub id: String,
     /// 既定キー列に `` `ctx`: `` の見出しがあればそのコンテキスト。無ければ `None` (行の「コンテキスト」列に従う)。
     pub context: Option<String>,
@@ -257,6 +261,10 @@ fn take_paren(s: &str) -> (String, &str) {
 
 /// 行の既定キー列を、ID ごとの割当にする。複数 ID の行の組 (`` `a` / `b` ``) は左から ID に 1 対 1 で当て、1 つだけの
 /// 割当は注記の「`<ID の最後の語>` のみ」で対象を決める (07 §11.6 の記法)。割当の無い組 (`—`) は飛ばす。
+///
+/// # Errors
+///
+/// 複数 ID の行の割当が ID と合わないとき、または注記の「`<ID の最後の語>` のみ」に当たる ID がないとき (理由の文言を返す)。
 pub fn bindings(row: &Row) -> Result<Vec<CatalogBinding>, String> {
     let ids = &row.ids;
     let mut out = Vec::new();

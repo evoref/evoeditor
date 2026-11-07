@@ -117,7 +117,7 @@ fn my_euid() -> u32 {
     hooks::uid_override("euid").unwrap_or_else(euid)
 }
 
-/// 一時ファイルの所有者 (fstat の st_uid。単体試験では `hooks::pretend_uid("tmp_uid", ..)` で差し替えられる)。
+/// 一時ファイルの所有者 (fstat の `st_uid。単体試験では` `hooks::pretend_uid("tmp_uid", ..)` で差し替えられる)。
 fn tmp_owner(f: &File) -> Option<u32> {
     hooks::uid_override("tmp_uid").or_else(|| f.metadata().ok().map(|m| m.uid()))
 }
@@ -885,7 +885,7 @@ true
         ))
     }
 
-    /// 保存中フラグを書く UnixFs (状態ディレクトリは `t` の下の `state`)。中断の後にフラグが残らないことを確かめる (05 §4.1 手順 8)。
+    /// 保存中フラグを書く `UnixFs` (状態ディレクトリは `t` の下の `state`)。中断の後にフラグが残らないことを確かめる (05 §4.1 手順 8)。
     fn with_state(t: &Tmp) -> UnixFs {
         let sd = t.p("state");
         fs::create_dir_all(&sd).unwrap();
@@ -1101,7 +1101,7 @@ true
         }
     }
 
-    /// 状態ディレクトリに残る保存中フラグのファイルの数 (自分のプロセスの記録は list_inflight に出ないので、ファイルを数える)。
+    /// 状態ディレクトリに残る保存中フラグのファイルの数 (自分のプロセスの記録は `list_inflight` に出ないので、ファイルを数える)。
     fn flag_files(t: &Tmp) -> usize {
         let Ok(rd) = fs::read_dir(t.p("state").join("recovery").join("inflight")) else {
             return 0;

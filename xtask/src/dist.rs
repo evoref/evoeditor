@@ -1,4 +1,4 @@
-//! `cargo xtask dist`: 配布物 (Windows x86_64 の zip・Linux の musl 静的版の tar.gz と `SHA256SUMS`) の作成と検査
+//! `cargo xtask dist`: 配布物 (Windows `x86_64` の zip・Linux の musl 静的版の tar.gz と `SHA256SUMS`) の作成と検査
 //! (docs/05 §18.2 / §18.6、docs/09 §8.2「配布物」)。
 //!
 //! - `dist [--exe PATH] [--version V]`: 配布ビルドの exe を `check-dist` で検査し、`THIRD-PARTY-NOTICES.md` の最新性を確かめて、

@@ -3,8 +3,8 @@
 //! - **E1 照合**: UTF-8 以外 (UTF-16 を除く) では、出力したバイト列を同じ文字コードで復号して元の文字列と照合し、
 //!   `Unmappable` と、黙示の置換 (`¥` → 0x5C、`−` → 0x817C、半角カナ → 全角カナなど) を同じ「表現不能」として
 //!   位置つきで報告する (黙って置換しない、FR-112)。最大 100 件を記録し、総数は数える。
-//! - **CP932 の外字** (U+E000〜U+E757): Shift_JIS では自前の逆算で 2 バイトを出す (encoding_rs は復号専用、§8.7)。
-//! - **UTF-16**: 自前の書き手 (encoding_rs は UTF-16 のエンコードを提供しない。作ると黙って UTF-8 になる)。
+//! - **CP932 の外字** (U+E000〜U+E757): `Shift_JIS` では自前の逆算で 2 バイトを出す (`encoding_rs` は復号専用、§8.7)。
+//! - **UTF-16**: 自前の書き手 (`encoding_rs` は UTF-16 のエンコードを提供しない。作ると黙って UTF-8 になる)。
 //! - **ISO-2022-JP (E6)**: 行ごとにエンコーダを閉じ、各行を ASCII 状態で終える。行は次の改行までためてから符号化する
 //!   (改行を含まない巨大な 1 行は、その行の長さだけメモリを使う)。
 //! - **不正バイトのエスケープ** (`U+10FF00 + b`): `EscapePolicy::Restore` なら元のバイトに戻して書く (§8.3)。
@@ -85,7 +85,7 @@ pub mod cp932 {
     pub const GAIJI_FIRST: u32 = 0xE000;
     pub const GAIJI_LAST: u32 = 0xE757;
 
-    /// 外字の符号位置 → Shift_JIS の 2 バイト。
+    /// 外字の符号位置 → `Shift_JIS` の 2 バイト。
     pub fn gaiji_to_sjis(ch: char) -> Option<[u8; 2]> {
         let v = ch as u32;
         if !(GAIJI_FIRST..=GAIJI_LAST).contains(&v) {
@@ -272,7 +272,7 @@ impl Encoder {
         }
     }
 
-    /// Shift_JIS / EUC-JP (状態を持たない)。
+    /// `Shift_JIS` / EUC-JP (状態を持たない)。
     fn encode_rs(&mut self, text: &str, out: &mut Vec<u8>, report: &mut EncodeReport) {
         let base = self.chars_done;
         // 特別な文字 (U+10FF00.. のエスケープは UTF-8 の先頭バイトが 0xF4、Shift_JIS の外字 U+E000..U+E757 は 0xEE) が

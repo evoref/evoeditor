@@ -111,7 +111,7 @@ fn take_injected(point: &str) -> Option<i32> {
 }
 
 /// uid の差し替え (単体試験だけ)。他人の所有・root の分岐 (05 §4.1 手順 1・4、SAF-36 / 37) を、uid を変えずに確かめる。
-/// 点は `euid` (実効 uid) と `tmp_uid` (一時ファイルの fstat の st_uid)。配布ビルドと別プロセスの試験では常に `None` (本物の値)。
+/// 点は `euid` (実効 uid) と `tmp_uid` (一時ファイルの fstat の `st_uid)。配布ビルドと別プロセスの試験では常に` `None` (本物の値)。
 #[cfg(unix)]
 #[inline]
 pub(crate) fn uid_override(point: &str) -> Option<u32> {

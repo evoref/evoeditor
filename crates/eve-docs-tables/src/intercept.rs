@@ -19,6 +19,10 @@ pub struct Terminal {
 }
 
 /// 04 の本文から横取り表を読む。
+///
+/// # Errors
+///
+/// 見出しや列が見つからないとき (`Error::HeadingNotFound` / `NoTable` / `MissingColumn`)。
 pub fn read(doc04: &str) -> Result<Vec<Terminal>, Error> {
     let mut out = Vec::new();
     for t in read_tables(doc04, HEADING, &["端末", "横取りするキー"])? {
@@ -36,6 +40,10 @@ pub fn read(doc04: &str) -> Result<Vec<Terminal>, Error> {
 }
 
 /// `name` の端末の行の、横取りするキー。行が無ければ失敗にする。
+///
+/// # Errors
+///
+/// 表を読めないとき、または `name` の端末の行がないとき (`Error::BadRow`)。
 pub fn keys_of(doc04: &str, name: &str) -> Result<Vec<String>, Error> {
     read(doc04)?
         .into_iter()

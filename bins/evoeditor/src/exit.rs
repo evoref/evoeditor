@@ -83,7 +83,7 @@ pub(crate) fn finish(
     code.0
 }
 
-/// パニックのときの終わり方: 退避 (最大 5 s。メインの catch_unwind の後) → 端末の復元は済み → panic.header → 退避の結果 →
+/// パニックのときの終わり方: 退避 (最大 5 s。メインの `catch_unwind` の後) → 端末の復元は済み → panic.header → 退避の結果 →
 /// クラッシュログ → 報告先。
 pub(crate) fn finish_panic(
     emergency: &EmergencyCtl,

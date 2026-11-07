@@ -114,7 +114,7 @@ pub(crate) fn load_keymap(src: &eve_core::ConfigSources) -> eve_config::KeymapFi
     }
 }
 
-/// UI の言語: --locale > ui.locale > EVE_LANG > OS の言語 > ja (07 §17.1)。
+/// UI の言語: --locale > ui.locale > `EVE_LANG` > OS の言語 > ja (07 §17.1)。
 pub(crate) fn choose_locale(
     cli_locale: Option<&str>,
     config: &eve_config::Config,

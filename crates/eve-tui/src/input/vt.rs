@@ -543,6 +543,10 @@ fn partial_suffix(s: &[u8], pat: &[u8]) -> usize {
 /// 入力の先頭 1 バイトを分割の数、続く分割の数だけのバイトを分割の位置にして、残りの本文を任意の位置で区切った読取の列として
 /// `feed` する (途中で `flush` も挟む)。パニックしない (算術のあふれも含む。fuzz は overflow-checks を有効にして回す)ことと、
 /// 最後の `flush` の後に、貼り付けの受信中でなければ持ち越しが残らないことを確かめる。
+///
+/// # Panics
+///
+/// `flush` の後に、貼り付けの受信中でないのに持ち越しが残っているとき (試験・fuzz が見つけたい不具合を示すための `assert!`)。
 pub fn fuzz_pipeline(data: &[u8]) {
     let Some((&n, rest)) = data.split_first() else {
         return;

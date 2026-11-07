@@ -2,7 +2,7 @@
 //!
 //! - **検出** ([`detect`]): SSH 接続中は検出しない (外部コマンドはリモート側に書いてしまう)。Wayland は `wl-copy` / `wl-paste`、
 //!   X11 は `xclip` → `xsel` を、**root しか書けないディレクトリ** (`/usr/bin`・`/bin`) に限って探す (PATH は見ない)。
-//!   見つからず WSL なら、絶対パスの `powershell.exe` の `Set-Clipboard` / `Get-Clipboard` を使う (WSLg があっても `wl-copy` が
+//!   見つからず WSL なら、絶対パスの `powershell.exe` の `Set-Clipboard` / `Get-Clipboard` を使う (`WSLg` があっても `wl-copy` が
 //!   無い環境のため)。`clip.exe` は使わない (UTF-16LE の BOM 付きで渡すと BOM がクリップボードに残り、BOM が無いと漢字だけの
 //!   短い文を UTF-16 と判定できずに化ける。WSL で実測、2026-11-01)。
 //!   検出は環境変数とファイルの確認だけの純粋な関数で、どの OS でも試験できる。

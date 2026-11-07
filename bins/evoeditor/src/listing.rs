@@ -5,7 +5,7 @@
 //! JSON の形 (`format` = 1。項目を足すときは同じ版のまま後ろに足し、意味を変えるときは版を上げる):
 //! - `--list-commands --json`: `{ "format", "locale", "commands": [ { "id", "title", "description", "kind", "args":
 //!   [ { "name", "type", "required" } ], "when", "permission", "hidden", "keys": [ { "context", "key", "label",
-//!   "enhanced" } ] } ] }`。コマンドは CommandId の順、`keys` は組込みの既定キーマップの割当 (07 §7.1 のコンテキストの順、その中は層の順・登録の順)。
+//!   "enhanced" } ] } ] }`。コマンドは `CommandId` の順、`keys` は組込みの既定キーマップの割当 (07 §7.1 のコンテキストの順、その中は層の順・登録の順)。
 //! - `--dump-keymap --json`: `{ "format", "locale", "bindings": [ { "context", "key", "label", "command", "title",
 //!   "when", "layer", "enhanced" } ] }`。コンテキストは 07 §7.1 の順、同じコンテキストの中は層の優先順・登録の順。
 //!

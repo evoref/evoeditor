@@ -1,19 +1,19 @@
 //! `cargo xtask i18n`: UI 文言の検査 (docs/09-testing-quality.md §6.2 の `i18n`、docs/07 §17、docs/11 §8.5、NFR-602 / 603)。
 //!
 //! 入力は docs の 2 つの表 (`eve-docs-tables` で、11 §8.5 の規則どおりに読む。読めなければ失敗):
-//! - 04 §15.2 の MessageKey 目録 (`MessageKey` / `ja` 列)
-//! - 07 §11.6 の v0.1 CommandId カタログ (`ID` / `title key` / `ヒント` 列)
+//! - 04 §15.2 の `MessageKey` 目録 (`MessageKey` / `ja` 列)
+//! - 07 §11.6 の v0.1 `CommandId` カタログ (`ID` / `title key` / `ヒント` 列)
 //!
 //! 検査する内容:
-//! 1. 目録の整合: MessageKey の重複がない、`ja` が空でない、`{…}` の引数の括弧が対応している、
+//! 1. 目録の整合: `MessageKey` の重複がない、`ja` が空でない、`{…}` の引数の括弧が対応している、
 //!    `msg.*` は `.text` と `.hint` の対 (NFR-602)、`info.*` は `.hint` を持たない、`hint.*` は表示幅 8 セル以内。
-//! 2. カタログの整合: v0.1 の各 CommandId の `title key` が `cmd.<id>` で、左から順に 1 対 1 に対応する。
+//! 2. カタログの整合: v0.1 の各 `CommandId` の `title key` が `cmd.<id>` で、左から順に 1 対 1 に対応する。
 //! 3. `locales/ja.toml` があれば、期待するキー集合 (目録から `stderr.*` / `panic.*` / `cli.*` を除いたもの、
 //!    `cmd.<id>.title` / `cmd.<id>.description`、ヒントの文脈 (`normal` / `overlay`) を持つ ID の `hint.<id>`) と
-//!    比べる。欠落も余剰もエラー。無ければ、その旨を表示してこの項目だけ飛ばす (言語ファイルは MessageKey を
+//!    比べる。欠落も余剰もエラー。無ければ、その旨を表示してこの項目だけ飛ばす (言語ファイルは `MessageKey` を
 //!    実装するマイルストーンで作る)。
 //!
-//! コードの MessageKey の列挙との突合は、その列挙ができてから足す。
+//! コードの `MessageKey` の列挙との突合は、その列挙ができてから足す。
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -109,14 +109,14 @@ fn read_messages(doc04: &str) -> Result<Vec<Entry>, String> {
         .collect())
 }
 
-/// 04 §15.1 の画面文言の MessageKey (`a.b.long` / `.short` の略記は展開したもの)。
+/// 04 §15.1 の画面文言の `MessageKey` (`a.b.long` / `.short` の略記は展開したもの)。
 fn read_screen_keys(doc04: &str) -> Result<BTreeSet<String>, String> {
     let list = eve_docs_tables::messages::read_screen(doc04)
         .map_err(|e| format!("04 §15.1 の画面文言を読めません: {e}"))?;
     Ok(list.into_iter().map(|m| m.key).collect())
 }
 
-/// カタログの行: (CommandId, title key, ヒントの文脈の集合)。
+/// カタログの行: (`CommandId`, title key, ヒントの文脈の集合)。
 struct Command {
     id: String,
     title_key: String,

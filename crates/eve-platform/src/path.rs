@@ -151,6 +151,10 @@ fn split_unc(unc: &str) -> Result<(Root, &str), FsError> {
 
 /// Unix のパスの正規化 (05 §3.2 の手順 1・3・4)。チルダ展開 (`~` と `~/` だけ) → 相対を作業ディレクトリ基準の絶対に →
 /// 連続の `/` と `.` の要素を除き、末尾の `/` を除く (ルートは `/`)。`..` は畳まない。存在の確認はしない。
+///
+/// # Errors
+///
+/// `raw` が空、または NUL を含むとき、`~` を展開するのにホームが無いとき、絶対にできないとき (いずれも `InvalidPath`)。
 pub fn normalize_unix(raw: &str, ctx: &PathCtx) -> Result<FsPath, FsError> {
     if raw.is_empty() || raw.contains('\0') {
         return Err(invalid());
@@ -177,6 +181,10 @@ pub fn normalize_unix(raw: &str, ctx: &PathCtx) -> Result<FsPath, FsError> {
 }
 
 /// Windows のパスの正規化 (手順 1・3・5)。存在の確認はしない。
+///
+/// # Errors
+///
+/// `raw` が空、または NUL を含むとき、`~` を展開するのにホームが無いとき、Windows のパスとして正しくない (予約名・不正な構成要素など) とき。
 pub fn normalize_windows(raw: &str, ctx: &PathCtx) -> Result<FsPath, FsError> {
     if raw.is_empty() || raw.contains('\0') {
         return Err(invalid());

@@ -7,8 +7,8 @@
 //! - `proptest`: `PROPTEST_CASES=10000` で Linux CI の対象 crate のテスト。
 //! - `audit`: `cargo audit` と `cargo deny check advisories` (本体と `fuzz/`)。例外は `deny.toml` の `[advisories] ignore` の 1 か所。
 //! - `coverage`: `cargo llvm-cov nextest --lcov` (報告のみ、OQ-101)。
-//! - `crash` (v0.2): 保存のクラッシュ一貫性 (`cargo xtask crash-consistency`。LazyFS は環境変数 `LAZYFS_BIN`、下の FS は
-//!   `EVE_CRASH_ROOTS`。nightly.yml が LazyFS をビルドし、ext4 / xfs / btrfs のループバックを用意する。NFR-301、09 §6.3)。
+//! - `crash` (v0.2): 保存のクラッシュ一貫性 (`cargo xtask crash-consistency`。`LazyFS` は環境変数 `LAZYFS_BIN`、下の FS は
+//!   `EVE_CRASH_ROOTS`。nightly.yml が `LazyFS` をビルドし、ext4 / xfs / btrfs のループバックを用意する。NFR-301、09 §6.3)。
 //!   `--only` を付けない実行で `LAZYFS_BIN` が無いときは、失敗にせず飛ばして要約に書く (定時の実行は既定ブランチ (main) の
 //!   nightly.yml で動き、LazyFS を用意するステップを持たない版がある。`--only crash` と明示したら失敗にする)。
 //! - `soak` (v0.2): NFR-306 の長時間の soak (BM-306、`cargo bench -p eve-testkit --bench bm_306`)。`--soak-minutes N` を

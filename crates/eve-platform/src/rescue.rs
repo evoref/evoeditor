@@ -77,7 +77,7 @@ impl StateRescue {
 
 // ---------- 時刻 (UTC) ----------
 
-/// UNIX 秒 → (年, 月, 日, 時, 分, 秒)。Howard Hinnant の civil_from_days。
+/// UNIX 秒 → (年, 月, 日, 時, 分, 秒)。Howard Hinnant の `civil_from_days`。
 #[expect(
     clippy::cast_possible_truncation,
     clippy::cast_sign_loss,
@@ -476,7 +476,7 @@ impl RescueWriter for StateRescue {
 /// (fsync しない。退避の時間を延ばさない)。開けなければログを諦めて退避を続ける。`EVE_LOG` に依らず warn で書く (05 §7.3)。
 ///
 /// - 受信から `SLOW_STAGE` を過ぎた後の各段と、書き終えられなかったときに、それまでの段の時刻をまとめて書く (「遅い」)。
-/// - 外から終わらされ得る経路 (CTRL_CLOSE・セッション終了・シグナル。OS や送り手が猶予の後に強制終了する) では、速くても、
+/// - 外から終わらされ得る経路 (`CTRL_CLOSE・セッション終了・シグナル。OS` や送り手が猶予の後に強制終了する) では、速くても、
 ///   始めた時点の 1 行 (`begin`) と、各段を終えるたびの 1 行 (「途中」。`PROGRESS_LINES` 行まで) を書く。早くに終わらされても、
 ///   始めたか・最後にどの段まで進んだかが残る。経路は CAS に勝った経路の `reason` で決まる。
 /// - 時間切れの印 (`note`) は積むだけで、書くのは最後の manifest の後 (`finish`)。打切りから最後の manifest までの間に
@@ -503,7 +503,7 @@ const SLOW_STAGE: Duration = Duration::from_millis(500);
 /// ディレクトリ・manifest 1・本文 1・manifest (OS に渡した)・確定 1・完了の manifest の 6 行)。
 const PROGRESS_LINES: usize = 8;
 
-/// 外から終わらされ得る経路か (猶予の後に OS や送り手が強制終了する: CTRL_CLOSE は約 5 s、セッション終了、シグナルの送り手が
+/// 外から終わらされ得る経路か (猶予の後に OS や送り手が強制終了する: `CTRL_CLOSE` は約 5 s、セッション終了、シグナルの送り手が
 /// 続けて送る SIGKILL)。
 fn killable(reason: RescueReason) -> bool {
     matches!(
