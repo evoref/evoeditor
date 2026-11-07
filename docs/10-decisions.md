@@ -580,7 +580,7 @@ OQ の番号は本書で一意に振り、各文書は OQ 番号で参照する�
   4. v0.1 は `eve-testkit` の **ヘッドレス参照レンダラ** (`HeadlessFrontend`。`Frontend` trait のテスト用実装で、Frame から直接セル占有を作る) を持つ。Frame JSON ゴールデン (契約テスト) は TUI 完成時のレビューで作る ([v0.1 の範囲から外した項目](#v01-の範囲から外した項目) の #43)。
 - **運用の改訂** (2026-11-04、確定 (ユーザー回答)): `CONTRACT_VERSION` は C3 まで 0 に固定し、境界型の変更は `CHANGELOG.md` に `eve-view:` の 1 行で記録する (`docs/contract-changes.md` は作らない)。理由と手続きは [02 §8.4](02-architecture.md#84-境界型の契約と凍結段階) の「C3 までの運用」。決定 2 の凍結段階は変えない。
 - **根拠**: P4、P5。Composition Root を bin に直書きすると、TUI とヘッドレス (テストのハーネス・駆動 API) で重複する。
-- **影響**: 02 §4 / §8 / §9、09 (CI)。境界型への追加 (`Effect` の型、`Frontend::wake_after`、`Paths::normalize`、`FileSystem` の `create_recovery_dir` / `list_recovery_dirs`、`TermRestoredFlag`、`ReplacingCount`、`FsPath`) は、02 §8.4 の C0〜C1 の手続きで承認する対象である。
+- **影響**: 02 §4 / §8 / §9、09 (CI)。境界型への追加 (`Effect` の型、`Frontend::wake_after`、`Paths::normalize`、`FileSystem` の `create_recovery_dir` / `list_recovery_dirs` (後に `create_recovery_dir` は、ディレクトリを作って本文と manifest まで書く `write_recovery` に置き換えた。02 §4.5。2026-11-07 に記述を揃えた)、`TermRestoredFlag`、`ReplacingCount`、`FsPath`) は、02 §8.4 の C0〜C1 の手続きで承認する対象である。
 
 ### ADR-0031: 安定性・性能のための簡略化と危険箇所の是正
 
