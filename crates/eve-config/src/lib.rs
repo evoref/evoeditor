@@ -10,7 +10,7 @@ mod config;
 mod keymap;
 mod layers;
 mod locale;
-mod reserved;
+pub mod reserved;
 pub mod theme;
 pub mod theme_file;
 
