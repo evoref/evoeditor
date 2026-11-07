@@ -129,5 +129,6 @@ fn ヘルプ画面では_ctrl_c_は何もしない() {
     h.keys("ctrl+k h");
     h.clear_log();
     h.keys("ctrl+c");
-    assert!(clipboard_writes(&h).is_empty());
+    let actual = clipboard_writes(&h);
+    assert!(actual.is_empty(), "{actual:?}");
 }

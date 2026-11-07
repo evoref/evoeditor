@@ -372,7 +372,8 @@ mod tests {
     #[test]
     fn t_のハードリンクとして残った一時ファイルは確認なしで消す() {
         let fs = env(SaveMethod::NewFile, 1, 2);
-        assert!(scan(&fs).is_empty());
+        let actual = scan(&fs);
+        assert!(actual.is_empty(), "{actual:?}");
         assert!(!fs.has("/w/.a.txt.eve-tmp-1"), "一時ファイルを消す");
         assert!(fs.has("/w/a.txt"), "T は残す");
         assert!(!fs.has("/s/1.toml"), "フラグを消す");

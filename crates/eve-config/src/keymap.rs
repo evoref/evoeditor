@@ -231,7 +231,7 @@ mod tests {
     #[test]
     fn 構文エラーはファイル全体を無視し_診断を返す() {
         let f = load_keymap_str("[keys.editor\n");
-        assert!(f.entries.is_empty());
+        assert!(f.entries.is_empty(), "{:?}", f.entries);
         assert!(matches!(f.diagnostics[0].kind, DiagKind::Syntax { .. }));
     }
 
@@ -258,7 +258,7 @@ mod tests {
                 .iter()
                 .any(|(k, _)| matches!(k, DiagKind::TypeMismatch { .. }))
         );
-        assert!(f.entries.is_empty());
+        assert!(f.entries.is_empty(), "{:?}", f.entries);
     }
 
     #[test]

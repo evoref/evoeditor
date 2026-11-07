@@ -507,7 +507,8 @@ fn remove_file(s: &Subject) {
 fn no_inflight_after_save(s: &Subject) {
     let p = create(s, "a.txt", b"v1");
     save(s, &p, b"v2", Expect::Stamp(stamp(s, &p))).unwrap();
-    assert!(s.fs.inflight_for(&p).unwrap().is_empty());
+    let actual = s.fs.inflight_for(&p).unwrap();
+    assert!(actual.is_empty(), "{actual:?}");
     assert!(!s.fs.list_inflight().unwrap().iter().any(|r| r.target == p));
 }
 

@@ -34,7 +34,7 @@ fn query_で文書一覧_本文_選択_ステータス_オーバーレイを読�
             assert_eq!(ds[0].path.as_deref(), Some("/w/a.txt"));
             assert!(!ds[0].dirty);
             assert_eq!(ds[0].load_state, LoadStateView::Ready);
-            assert!(ds[0].read_only.is_empty());
+            assert!(ds[0].read_only.is_empty(), "{:?}", ds[0].read_only);
             assert_eq!(ds[0].views.len(), 1);
         }
         a => panic!("{a:?}"),
@@ -226,7 +226,8 @@ fn 文書の変更とメッセージとオーバーレイの開閉が_editor_eve
             .iter()
             .any(|e| matches!(e, EditorEvent::DocumentSaved { .. }))
     );
-    assert!(!h.messages().is_empty());
+    let actual = h.messages();
+    assert!(!actual.is_empty(), "空でないはず");
 
     // v0.1 で発火するのは Document / Message / Overlay の 3 系だけ
     for e in h.events() {
@@ -269,7 +270,8 @@ fn 範囲外の行番号は最終行に丸めて通知する() {
         "cursor.goto_line",
         eve_core::Args::new().with_int("line", 2),
     );
-    assert!(h.messages().is_empty());
+    let actual = h.messages();
+    assert!(actual.is_empty(), "{actual:?}");
 }
 
 // verifies: AC-NFR-203-1
@@ -327,7 +329,8 @@ c",
         r,
         eve_core::CommandResult::Rejected(eve_core::RejectReason::InvalidArgs)
     );
-    assert!(h.messages().is_empty());
+    let actual = h.messages();
+    assert!(actual.is_empty(), "{actual:?}");
 }
 
 #[test]

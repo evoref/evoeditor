@@ -488,23 +488,32 @@ mod tests {
             vec![k(KeyCode::F(24), Modifiers::NONE)]
         );
         // 修飾キー単独・CapsLock は何も出さない
-        assert!(n.feed(&tap(0x11, 0, LEFT_CTRL)).is_empty());
-        assert!(n.feed(&tap(0x10, 0, SHIFT)).is_empty());
-        assert!(n.feed(&tap(0x14, 0, 0)).is_empty());
+        let actual = n.feed(&tap(0x11, 0, LEFT_CTRL));
+        assert!(actual.is_empty(), "{actual:?}");
+        let actual = n.feed(&tap(0x10, 0, SHIFT));
+        assert!(actual.is_empty(), "{actual:?}");
+        let actual = n.feed(&tap(0x14, 0, 0));
+        assert!(actual.is_empty(), "{actual:?}");
     }
 
     #[test]
     fn 日本語の_ime_キーと_ctrl_break_は捨てる() {
         let mut n = Normalizer::new();
         // 半角/全角: 何も届かない。変換・無変換: KeyUp だけ
-        assert!(n.feed(&[key(false, 0x1C, 0, 0)]).is_empty());
-        assert!(n.feed(&[key(false, 0x1D, 0, 0)]).is_empty());
+        let actual = n.feed(&[key(false, 0x1C, 0, 0)]);
+        assert!(actual.is_empty(), "{actual:?}");
+        let actual = n.feed(&[key(false, 0x1D, 0, 0)]);
+        assert!(actual.is_empty(), "{actual:?}");
         // KeyDown が届いても未知のキーとして捨てる
-        assert!(n.feed(&[key(true, 0x1C, 0, 0)]).is_empty());
-        assert!(n.feed(&[key(true, 0xF4, 0, 0)]).is_empty());
+        let actual = n.feed(&[key(true, 0x1C, 0, 0)]);
+        assert!(actual.is_empty(), "{actual:?}");
+        let actual = n.feed(&[key(true, 0xF4, 0, 0)]);
+        assert!(actual.is_empty(), "{actual:?}");
         // Ctrl+Break の KeyUp (VK_CANCEL)
-        assert!(n.feed(&[key(false, 0x03, 3, LEFT_CTRL)]).is_empty());
-        assert!(n.feed(&[key(true, 0x03, 3, LEFT_CTRL)]).is_empty());
+        let actual = n.feed(&[key(false, 0x03, 3, LEFT_CTRL)]);
+        assert!(actual.is_empty(), "{actual:?}");
+        let actual = n.feed(&[key(true, 0x03, 3, LEFT_CTRL)]);
+        assert!(actual.is_empty(), "{actual:?}");
     }
 
     #[test]
@@ -531,7 +540,8 @@ mod tests {
         assert_eq!(ev(&n.feed(&b)), vec![InputEvent::Text("𠮷😀".into())]);
         // 上位サロゲートが次の読取に持ち越されても同じ
         let mut n = Normalizer::new();
-        assert!(ev(&n.feed(&tap(0, u[0], 0))).is_empty());
+        let actual = ev(&n.feed(&tap(0, u[0], 0)));
+        assert!(actual.is_empty(), "{actual:?}");
         assert_eq!(
             ev(&n.feed(&tap(0, u[1], 0))),
             vec![InputEvent::Text("𠮷".into())]
@@ -650,7 +660,8 @@ mod tests {
         {
             b.extend(tap(0, c as u16, 0));
         }
-        assert!(n.feed(&b).is_empty());
+        let actual = n.feed(&b);
+        assert!(actual.is_empty(), "{actual:?}");
         assert!(n.in_burst());
         let o = n.close_burst();
         assert_eq!(
@@ -664,10 +675,12 @@ mod tests {
     #[test]
     fn バーストは複数のバッチにまたがる() {
         let mut n = Normalizer::new();
-        assert!(n.feed(&paste_batch("0123456789abcdef\r")).is_empty());
+        let actual = n.feed(&paste_batch("0123456789abcdef\r"));
+        assert!(actual.is_empty(), "{actual:?}");
         assert!(n.in_burst());
         // 次のバッチは N 未満でもバーストに連結される
-        assert!(n.feed(&paste_batch("xyz")).is_empty());
+        let actual = n.feed(&paste_batch("xyz"));
+        assert!(actual.is_empty(), "{actual:?}");
         let o = ev(&n.close_burst());
         assert_eq!(o, vec![InputEvent::Paste("0123456789abcdef\nxyz".into())]);
     }

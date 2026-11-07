@@ -73,6 +73,7 @@ mod tests {
                 "connect(3, {sa_family=AF_INET}, 16) = 0"
             ]
         );
-        assert!(syscalls("1  +++ exited with 0 +++\n").is_empty());
+        let actual = syscalls("1  +++ exited with 0 +++\n");
+        assert!(actual.is_empty(), "{actual:?}");
     }
 }

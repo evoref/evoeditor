@@ -722,14 +722,18 @@ mod tests {
     #[test]
     fn 読取の末尾で途切れた_csi_と_utf8_は持ち越す() {
         let mut p = VtParser::new();
-        assert!(p.feed(b"\x1b[1;").is_empty());
+        let actual = p.feed(b"\x1b[1;");
+        assert!(actual.is_empty(), "{actual:?}");
         assert_eq!(ev(p.feed(b"5A")), vec![k(K::Up, Modifiers::CTRL)]);
         let bytes = "あ".as_bytes();
-        assert!(p.feed(&bytes[..1]).is_empty());
+        let actual = p.feed(&bytes[..1]);
+        assert!(actual.is_empty(), "{actual:?}");
         assert_eq!(ev(p.feed(&bytes[1..])), vec![text("あ")]);
         // 途絶えたら捨てる
-        assert!(p.feed(b"\x1b[").is_empty());
-        assert!(p.flush().is_empty());
+        let actual = p.feed(b"\x1b[");
+        assert!(actual.is_empty(), "{actual:?}");
+        let actual = p.flush();
+        assert!(actual.is_empty(), "{actual:?}");
         assert_eq!(ev(p.feed(b"z")), vec![text("z")]);
     }
 
@@ -744,10 +748,12 @@ mod tests {
     #[test]
     fn ブラケットペーストは読取をまたいで_1_つの_paste() {
         let mut p = VtParser::new();
-        assert!(p.feed(b"\x1b[200~line1\r\nli").is_empty());
+        let actual = p.feed(b"\x1b[200~line1\r\nli");
+        assert!(actual.is_empty(), "{actual:?}");
         assert!(p.in_paste());
         // 終了のシーケンスの途中で途切れる
-        assert!(p.feed(b"ne2\x1b[20").is_empty());
+        let actual = p.feed(b"ne2\x1b[20");
+        assert!(actual.is_empty(), "{actual:?}");
         assert_eq!(
             ev(p.feed(b"1~")),
             vec![InputEvent::Paste("line1\r\nline2".to_owned())]

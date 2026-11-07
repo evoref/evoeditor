@@ -100,7 +100,8 @@ fn 自分のスワップは列挙しない() {
     let state = tmp("mine");
     let w = NativeFs::new(&state);
     w.write_swap(&doc(1, 1, "a", None)).unwrap();
-    assert!(w.list_swaps().unwrap().is_empty());
+    let actual = w.list_swaps().unwrap();
+    assert!(actual.is_empty(), "{actual:?}");
     let _ = fs::remove_dir_all(state);
 }
 
@@ -266,7 +267,8 @@ fn 消せるのは_swap_の下の_swp_だけ() {
 #[test]
 fn 状態ディレクトリが無ければ空_消すのは未対応() {
     let w = NativeFs::default();
-    assert!(w.list_swaps().unwrap().is_empty());
+    let actual = w.list_swaps().unwrap();
+    assert!(actual.is_empty(), "{actual:?}");
     let e = eve_core::SwapEntry {
         dir: FsPath::from(if cfg!(windows) {
             "C:\\x\\swap\\a.swp"

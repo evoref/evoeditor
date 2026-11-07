@@ -701,7 +701,7 @@ mod tests {
         let mut m = map();
         run(&mut m, &["editor"], "ctrl+k");
         assert_eq!(run(&mut m, &["editor"], "esc"), Resolution::Cancelled);
-        assert!(m.pending().is_empty());
+        assert_eq!(m.pending(), []);
         // 保留がなければ Esc は通常のキー
         assert_eq!(run(&mut m, &["editor"], "esc"), Resolution::Unbound);
     }
@@ -714,7 +714,7 @@ mod tests {
             run(&mut m, &["editor"], "z"),
             Resolution::UnassignedInSequence
         );
-        assert!(m.pending().is_empty());
+        assert_eq!(m.pending(), []);
         assert_eq!(
             id(&run(&mut m, &["editor"], "enter")),
             "user.enter",

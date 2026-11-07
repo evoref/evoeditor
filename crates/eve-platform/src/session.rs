@@ -135,7 +135,7 @@ pub fn start(
                     lpszClassName: class.as_ptr(),
                 };
                 // 2 回目 (試験で複数作る) は登録済みで失敗するが、同じクラスを使えばよい
-                RegisterClassW(&wc);
+                RegisterClassW(&raw const wc);
                 // `WS_VISIBLE` を付けない通常のウィンドウ (親なし = トップレベル。`HWND_MESSAGE` ではない)
                 CreateWindowExW(
                     0,
@@ -161,9 +161,9 @@ pub fn start(
             // SAFETY: このスレッドのメッセージループ。`MSG` はゼロ初期化で足りる
             unsafe {
                 let mut msg: MSG = std::mem::zeroed();
-                while GetMessageW(&mut msg, std::ptr::null_mut(), 0, 0) > 0 {
-                    TranslateMessage(&msg);
-                    DispatchMessageW(&msg);
+                while GetMessageW(&raw mut msg, std::ptr::null_mut(), 0, 0) > 0 {
+                    TranslateMessage(&raw const msg);
+                    DispatchMessageW(&raw const msg);
                 }
             }
         })?;

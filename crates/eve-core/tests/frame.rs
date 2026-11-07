@@ -337,7 +337,11 @@ fn 画面が狭いときはガターを出さない() {
     let mut s = Scene::new("ab|", 3, 1);
     let f = s.frame();
     assert_eq!(f.panes[0].gutter_width, 0);
-    assert!(f.panes[0].rows[0].gutter.is_empty());
+    assert!(
+        f.panes[0].rows[0].gutter.is_empty(),
+        "{:?}",
+        f.panes[0].rows[0].gutter
+    );
     let w: u16 = f.panes[0].rows[0].spans.iter().map(|sp| sp.width).sum();
     assert!(w <= 3);
 }

@@ -311,7 +311,8 @@ mod tests {
     #[test]
     fn 識別子はバッククォートの中だけ() {
         assert_eq!(identifiers("`a`, `b` (注: `c`の話)"), ["a", "b", "c"]);
-        assert!(identifiers("説明だけ").is_empty());
+        let actual = identifiers("説明だけ");
+        assert!(actual.is_empty(), "{actual:?}");
     }
 
     #[test]

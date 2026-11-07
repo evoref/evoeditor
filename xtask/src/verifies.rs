@@ -183,7 +183,7 @@ mod tests {
         // 前の規則 (5 行以内の最初の fn) では、補助の関数 helper を対象と取り違えていた
         let (v, e) =
             run("// verifies: AC-FR-107-2\n/// 補助\nfn helper() {}\n\n#[test]\nfn 試験() {}\n");
-        assert!(v.is_empty());
+        assert!(v.is_empty(), "{v:?}");
         assert!(e[0].contains("`#[test]` がありません"), "{e:?}");
     }
 
