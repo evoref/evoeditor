@@ -84,7 +84,7 @@ const USAGE: &str = "\
   no-network          無通信の検査 (NFR-501 AC-2。シナリオを strace -e trace=network の下で走らせる。Linux)
   perf-diff           基準との性能の比較 (--base <ref> --mode instr|time|allocs --out FILE。劣化は警告だけ)
   accept-linux        Linux の受入の自動の部分 (docs/compat/checklist.md の A〜G と L。tmux。--archive TGZ --only A1,C2 --keep。Linux)
-  nightly             夜間ジョブ (Linux。--only fuzz,proptest,audit,coverage,crash,soak --fuzz-seconds N --soak-minutes N --seed N)";
+  nightly             夜間ジョブ (Linux。--only fuzz[:<ターゲット>+…],proptest,audit,coverage,crash,soak --fuzz-seconds N --soak-minutes N --seed N)";
 
 fn main() -> ExitCode {
     let mut args = std::env::args().skip(1);

@@ -20,7 +20,7 @@ on:
         required: false
         default: "600"
       only:
-        description: "実行する手順を絞る (fuzz,proptest,audit,coverage,crash,soak のカンマ区切り。空なら全部)"
+        description: "実行する手順を絞る (fuzz,proptest,audit,coverage,crash,soak のカンマ区切り。空なら全部)。fuzz は fuzz:fuzz_decode+fuzz_editor でターゲットを絞れる (リリース前の 1 時間、docs/09 §8.2)"
         required: false
         default: ""
       soak_minutes:
