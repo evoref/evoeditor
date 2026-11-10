@@ -1,0 +1,16 @@
+{
+  "commit": "d46f528",
+  "env": "ENV-W1",
+  "id": "BM-109-many",
+  "quick": false,
+  "results": [
+    {
+      "id": "BM-109-many",
+      "matches": 907858,
+      "mb": 100,
+      "n": 3,
+      "p50_ms": 154.0,
+      "quick": false
+    }
+  ]
+}
