@@ -1,0 +1,19 @@
+{
+  "commit": "d46f528",
+  "env": "ENV-W1",
+  "id": "BM-104-100m-sjis",
+  "quick": false,
+  "results": [
+    {
+      "id": "BM-104-100m-sjis",
+      "max_ms": 430.2,
+      "mem_delta_bytes": 122933248,
+      "mem_limit_bytes": 173015172,
+      "p50_ms": 416.3,
+      "p99_ms": 430.2,
+      "quick": false,
+      "runs": 30,
+      "size_bytes": 94417298
+    }
+  ]
+}
