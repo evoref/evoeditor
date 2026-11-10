@@ -5,10 +5,14 @@
 
 use eve_view::{Frame, StyleMods};
 
+/// `render_ascii` の出力の選び方。
 #[derive(Clone, Copy, Debug)]
 pub struct AsciiOptions {
+    /// ガター (行番号の欄) を出す。
     pub show_gutter: bool,
+    /// 反転表示 (選択) の連続を `«` `»` で囲む。
     pub mark_selection: bool,
+    /// 末尾に主カーソルの位置 `cursor: (col,row)` の行を出す。
     pub show_cursor: bool,
     /// ステータス・ヒント・メッセージ行を末尾に出す。
     pub show_chrome: bool,
@@ -38,6 +42,15 @@ fn put_spans(cells: &mut Vec<Cell>, spans: &[eve_view::Span], sel_bg: eve_view::
         let n = sp.text.chars().count();
         let reverse = sp.style.mods.contains(StyleMods::REVERSE)
             || (sel_bg != eve_view::Color::Default && sp.style.bg == sel_bg);
+        // 幅の同じ書記素の連続 (Span の契約、eve_view::Span)。幅を書記素数で割って 1 書記素ずつ置く
+        let graphemes: Vec<&str> = if n == w {
+            Vec::new()
+        } else {
+            eve_text::grapheme_indices(&sp.text)
+                .into_iter()
+                .map(|(_, g)| g)
+                .collect()
+        };
         if n == w {
             // 1 文字 = 1 セル (ASCII の連続など)
             for c in sp.text.chars() {
@@ -45,6 +58,20 @@ fn put_spans(cells: &mut Vec<Cell>, spans: &[eve_view::Span], sel_bg: eve_view::
                     text: Some(c.to_string()),
                     reverse,
                 });
+            }
+        } else if graphemes.len() > 1 && w.is_multiple_of(graphemes.len()) {
+            let gw = w / graphemes.len();
+            for g in graphemes {
+                cells.push(Cell {
+                    text: Some(g.to_owned()),
+                    reverse,
+                });
+                for _ in 1..gw {
+                    cells.push(Cell {
+                        text: None,
+                        reverse,
+                    });
+                }
             }
         } else {
             // 1 書記素 (幅 2 以上、または複数の文字を持つ書記素): 先頭のセルに全体を置く
@@ -92,13 +119,7 @@ fn chrome_lines(frame: &Frame) -> String {
             let keys: Vec<String> = h
                 .keys
                 .iter()
-                .map(|k| {
-                    k.strokes
-                        .iter()
-                        .map(|s| eve_core::format_stroke(*s))
-                        .collect::<Vec<_>>()
-                        .join(" ")
-                })
+                .map(|k| eve_view::key_notation(&k.strokes, false))
                 .collect();
             format!("{} {}", keys.join("/"), cell_text(&h.text))
         })
@@ -174,7 +195,7 @@ mod tests {
             window: WindowId(1),
             size: CellSize {
                 cols: 10,
-                rows: rows.len() as u16,
+                rows: u16::try_from(rows.len()).expect("試験の画面の行数は u16 に収まる"),
             },
             panes: vec![PaneFrame {
                 view: ViewId(1),

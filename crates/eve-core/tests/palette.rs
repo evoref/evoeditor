@@ -56,7 +56,7 @@ fn 空の入力は_hidden_を除く全コマンドを_id_順に出す() {
     let footer: String = footer.spans.iter().map(|s| s.text.to_string()).collect();
     assert!(footer.starts_with(&format!("{0}/{0}", footer.split('/').next().unwrap())));
     let all = ids(&f);
-    assert!(!all.is_empty());
+    assert!(!all.is_empty(), "空でないはず");
     let mut sorted = all.clone();
     sorted.sort();
     assert_eq!(all, sorted);
@@ -95,7 +95,7 @@ fn 一致が無ければ_0_件() {
     h.keys("ctrl+p");
     h.text("zzzzzz");
     let f = h.frame();
-    assert!(list(&f).0.is_empty());
+    assert_eq!(list(&f).0.as_slice(), []);
     h.keys("enter");
     assert_eq!(h.overlay(), "palette", "候補が無ければ閉じない");
 }
@@ -171,7 +171,7 @@ fn 割当キーを逆引きして添える() {
         .iter()
         .find(|i| cells(i.detail.as_ref().unwrap()) == "file.save_as")
         .unwrap();
-    assert!(!item.keys.is_empty());
+    assert!(!item.keys.is_empty(), "空でないはず");
 }
 
 #[test]
@@ -435,4 +435,26 @@ fn 入力が空なら最近実行したものを先頭に並べる() {
     h.keys("ctrl+p");
     let got = ids(&h.frame());
     assert_eq!(&got[..2], ["select.all", "ui.redraw"], "新しい順");
+}
+
+// 同点なら照合の対象が短いほうを先 (07 §11.4、v0.3)。「保存して終了」が「保存」より上に来て、Enter で終了しない
+#[test]
+fn 同点なら照合の対象が短いほうが上に来て_enter_で保存する() {
+    for query in ["save", "保存"] {
+        let mut h = eve_testkit::helpers::opened("/w/a.txt", b"aaa");
+        h.text("x");
+        h.keys("ctrl+p");
+        h.text(query);
+        let got = ids(&h.frame());
+        assert_eq!(got[0], "file.save", "{query}: {got:?}");
+        let pos = |id: &str| got.iter().position(|g| g == id);
+        assert!(
+            pos("file.save") < pos("app.save_and_quit"),
+            "{query}: {got:?}"
+        );
+        h.keys("enter");
+        h.run_jobs();
+        assert_eq!(h.quit_code(), None, "{query}: 終了しない");
+        assert_eq!(h.fs_read("/w/a.txt").unwrap(), b"xaaa", "{query}: 保存した");
+    }
 }

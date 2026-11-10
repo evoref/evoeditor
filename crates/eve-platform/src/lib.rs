@@ -1,11 +1,14 @@
-//! Ports の OS 実装 (docs/02 §4.1、docs/05)。Windows (`fs::WinFs` ほか) と Unix (`unix_fs::UnixFs`、v0.2 の M7。Linux で確かめる)。
+//! Ports の OS 実装 (docs/02 §4.1、docs/05)。Windows (`fs::WinFs` ほか) と Unix (`unix_fs::UnixFs`、v0.2。Linux で確かめる)。
 //! 純粋な計算 (パスの正規化・ディレクトリの解決) はどの OS でもテストできるようにしてある。
 //!
 //! 状態ディレクトリの部品 (保存中フラグ `inflight`・直接上書き `inplace`・状態ファイル・スワップ・緊急退避 `rescue`・ログ) は
 //! OS に依らず、OS ごとに違う小さな部品 (所有者のみの作成・プロセスの生存と起動時刻・空き容量・代替の退避先) だけを `sys` から呼ぶ。
-//! OS の API を直接呼ぶ部分 (Windows のコンソール・セッション・クリップボード・`ReplaceFileW`、Unix の xattr など) は `cfg` のモジュールに閉じる。
+//! OS の API を直接呼ぶ部分は `cfg` のモジュールに閉じる。保存・直接上書き・保存中フラグ・スワップの走査などのアルゴリズムが使う
+//! API (`ReplaceFileW`・DACL・SID、Unix の xattr・`renameat2` など) は `sys::windows` / `sys::unix` の安全な関数にする。
 
-// unsafe は OS の API を呼ぶ `fs::winapi`・`console`・`dll`・`save` など (Windows) と `unix_fs`・`sys`・`inplace`・`hooks` (Unix) だけに許す (R5)。
+// unsafe は OS の API の包み `sys::windows`・`sys::unix` と、OS の API そのものを扱うモジュール `clipboard::win`・`clipboard_test`・
+// `console`・`dll`・`locale`・`session`・`signals`・`term` だけに許す (R5)。アルゴリズムのモジュール (`save`・`unix_fs`・`fs`・
+// `fs_common`・`inplace`・`inflight`・`swap_scan`・`hooks` など) には許さない。
 #![deny(unsafe_code)]
 // eve-core の `FsError` は大きい型 (エラーは稀な経路)。値で返す。
 #![allow(clippy::result_large_err)]
@@ -55,14 +58,19 @@ macro_rules! state_dir_methods {
             let out = $crate::rescue::StateRescue::new(self.state_dir.clone()).write(
                 &[std::sync::Arc::new(doc.clone())],
                 RescueReason::UserSave,
+                std::time::Instant::now(),
                 std::time::Duration::from_secs(30),
             );
             match out.dir {
-                Some(dir) if out.complete => Ok(::eve_core::FsPath::new(dir)),
+                // 利用者が選んだ保存なので、最後の manifest の fsync の失敗 (`error`) も失敗として返す (02 §11.2.1)
+                Some(dir) if out.complete && out.error.is_none() => {
+                    Ok(::eve_core::FsPath::new(dir))
+                }
                 _ => {
                     let msg = out
                         .error
-                        .unwrap_or_else(|| "書き込めませんでした".to_owned());
+                        .unwrap_or(::eve_core::RescueError::NotWritten)
+                        .to_string();
                     let mut e = ::eve_core::FsError::new(::eve_core::FsErrorKind::Other);
                     e.source = Some(::std::io::Error::other(msg));
                     Err(e)
@@ -154,7 +162,6 @@ macro_rules! state_dir_methods {
 }
 
 pub mod clipboard;
-pub mod clipboard_cmd;
 #[cfg(all(windows, feature = "test-hooks"))]
 pub mod clipboard_test;
 #[cfg(windows)]
@@ -164,13 +171,12 @@ pub mod dirs;
 pub mod dll;
 #[cfg(windows)]
 pub mod fs;
+mod fs_common;
 mod hooks;
 mod inflight;
 mod inplace;
 pub mod locale;
 pub mod log;
-#[cfg(windows)]
-mod owner;
 pub mod path;
 pub mod rescue;
 #[cfg(windows)]
@@ -188,5 +194,6 @@ pub mod term;
 #[cfg(unix)]
 #[path = "term_unix.rs"]
 pub mod term;
+mod toml_lite;
 #[cfg(unix)]
 pub mod unix_fs;

@@ -4,7 +4,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use eve_core::{JobPorts, Ports};
-use eve_host::{ExitCode, FatalReason, Host, HostMsg, SignalKind, StepOutcome};
+use eve_host::{ExitCode, FatalReason, Host, HostInit, HostMsg, SignalKind, StepOutcome};
 use eve_testkit::{
     AsciiOptions, FixedPaths, HeadlessFrontend, HeadlessProbe, ManualClock, ManualJobSpawner, MemFs,
 };
@@ -20,6 +20,10 @@ struct Env {
 }
 
 fn env() -> Env {
+    env_with(HostInit::default())
+}
+
+fn env_with(init: HostInit) -> Env {
     let clock = ManualClock::new();
     let fs = Arc::new(MemFs::new(Arc::new(clock.clone())));
     fs.add_dir("/w");
@@ -39,7 +43,7 @@ fn env() -> Env {
     let fe = HeadlessFrontend::new(40, 8);
     let probe = fe.probe();
     Env {
-        host: Host::new(ports),
+        host: Host::with_channel(ports, eve_host::channel(), init),
         fe,
         probe,
         clock,
@@ -211,6 +215,7 @@ use eve_core::{DocSnapshot, RescueOutcome, RescueReason, RescueWriter};
 #[derive(Default)]
 struct Spy {
     calls: Mutex<Vec<(RescueReason, usize)>>,
+    budgets: Mutex<Vec<Duration>>,
 }
 
 impl RescueWriter for Spy {
@@ -218,28 +223,33 @@ impl RescueWriter for Spy {
         &self,
         docs: &[Arc<DocSnapshot>],
         reason: RescueReason,
-        _budget: Duration,
+        _received: std::time::Instant,
+        budget: Duration,
     ) -> RescueOutcome {
         self.calls.lock().unwrap().push((reason, docs.len()));
+        self.budgets.lock().unwrap().push(budget);
         RescueOutcome {
             total: docs.len(),
             written: docs.len(),
+            stored: docs.len(),
             complete: true,
             ..RescueOutcome::default()
         }
     }
 }
 
-fn with_spy(e: &mut Env) -> Arc<Spy> {
+fn with_spy() -> (Env, Arc<Spy>) {
     let spy = Arc::new(Spy::default());
-    e.host.set_rescue_writer(spy.clone());
-    spy
+    let e = env_with(HostInit {
+        rescue_writer: Some(spy.clone()),
+        ..HostInit::default()
+    });
+    (e, spy)
 }
 
 #[test]
 fn 致命的エラーでは_dirty_な文書を退避してから_restore_する() {
-    let mut e = env();
-    let spy = with_spy(&mut e);
+    let (mut e, spy) = with_spy();
     e.start();
     e.input(InputEvent::Text("unsaved".into()));
     let out = e
@@ -254,8 +264,7 @@ fn 致命的エラーでは_dirty_な文書を退避してから_restore_する(
 
 #[test]
 fn シグナルとコンソールの閉鎖は契機を区別して退避する() {
-    let mut e = env();
-    let spy = with_spy(&mut e);
+    let (mut e, spy) = with_spy();
     e.start();
     e.input(InputEvent::Text("x".into()));
     e.host
@@ -268,8 +277,7 @@ fn シグナルとコンソールの閉鎖は契機を区別して退避する()
 
 #[test]
 fn 受信スレッドが先に退避していればメインは書き直さない() {
-    let mut e = env();
-    let spy = with_spy(&mut e);
+    let (mut e, spy) = with_spy();
     e.start();
     e.input(InputEvent::Text("x".into()));
     // コンソールハンドラのスレッドが先に書いた (メインを待たない、02 §11.2.1)
@@ -288,8 +296,7 @@ fn 受信スレッドが先に退避していればメインは書き直さな�
 
 #[test]
 fn 保存済みの文書しか無ければ退避する文書は無い() {
-    let mut e = env();
-    let spy = with_spy(&mut e);
+    let (mut e, spy) = with_spy();
     e.start();
     e.host
         .step(&mut e.fe, HostMsg::Fatal(FatalReason::InputThreadDied));
@@ -298,9 +305,12 @@ fn 保存済みの文書しか無ければ退避する文書は無い() {
 
 #[test]
 fn 設定の診断は最初の_frame_の後にメッセージとして出す() {
-    let mut e = env();
     let l = eve_config::load_str("[editor]\ntab_width = 0\n");
-    e.host.set_config(l.config, "config.toml", l.diagnostics);
+    let mut e = env_with(HostInit {
+        config: Some(l.config),
+        config_reports: vec![("config.toml".to_owned(), l.diagnostics)],
+        ..HostInit::default()
+    });
     e.start();
     assert_eq!(e.probe.render_count(), 2, "最初の Frame の後に再描画する");
     let screen = e
@@ -359,8 +369,7 @@ fn 正常終了ではスワップを消し_異常終了では残す() {
 
 #[test]
 fn 保存を中止して終了すると_dirty_な文書を退避してから_restore_する() {
-    let mut e = env();
-    let spy = with_spy(&mut e);
+    let (mut e, spy) = with_spy();
     e.fs.set_file(&eve_core::FsPath::from("/w/a.txt"), b"hello");
     e.start();
     e.host.editor_mut().open_initial(Some("/w/a.txt"), false);
@@ -401,6 +410,11 @@ fn 保存を中止して終了すると_dirty_な文書を退避してから_res
         *spy.calls.lock().unwrap(),
         vec![(RescueReason::QuitAbortedSave, 1)],
         "取り消した保存の文書は dirty のままなので退避する"
+    );
+    assert_eq!(
+        *spy.budgets.lock().unwrap(),
+        vec![eve_host::RESCUE_BUDGET_UNBOUNDED],
+        "「保存を中止して終了」の退避は時間予算なし (02 §11.2.1)"
     );
     assert_eq!(e.probe.restore_count(), 1);
 }

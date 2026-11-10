@@ -1,13 +1,16 @@
 //! 文書の形式情報 (docs/02 §5.1、docs/03 §8.1 / §9.6): 改行の統計、`TextFormat`、読み取り専用の理由、読込状態。
 
-use eve_encoding::{Encoding, PuaEscapeMode, RoundtripSummary};
+use eve_encoding::{Encoding, EscapePolicy, PuaEscapeMode, RoundtripSummary};
 use eve_text::{ByteOff, LineEnding, TextRead};
 
 /// 改行の種類別の数。`CRLF` は 1 つと数える (03 §2.4)。
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct EolStats {
+    /// LF の数。
     pub lf: usize,
+    /// CRLF の数。
     pub crlf: usize,
+    /// 単独の CR の数。
     pub cr: usize,
 }
 
@@ -30,17 +33,18 @@ pub fn count_long_lines(text: &dyn TextRead, threshold: usize) -> usize {
     n + usize::from(run > threshold)
 }
 
-/// 位置の範囲 `ranges` (昇順で重ならない) が触れる行のうち、閾値を超える行の数 (同じ行は 1 回だけ数える)。
-/// 編集の前後の文書で数え、長大行の数を差分で更新するのに使う。
+/// 位置の範囲 `ranges` (`[s, e]`。昇順。文書の範囲に切り詰める) が触れる行のうち、閾値を超える行の数
+/// (同じ行は 1 回だけ数える)。編集の前後の文書で数え、長大行の数を差分で更新するのに使う。
 pub(crate) fn long_lines_touched(
     text: &dyn TextRead,
     ranges: impl Iterator<Item = (usize, usize)>,
     threshold: usize,
 ) -> usize {
+    let len = text.len_bytes();
     let (mut next, mut n) = (0usize, 0usize);
     for (s, e) in ranges {
-        let a = text.byte_to_line(ByteOff(s)).0.max(next);
-        let b = text.byte_to_line(ByteOff(e)).0;
+        let a = text.byte_to_line(ByteOff(s.min(len))).0.max(next);
+        let b = text.byte_to_line(ByteOff(e.min(len))).0;
         for l in a..=b {
             let l = eve_text::LineIdx(l);
             n += usize::from(text.line_end_byte(l).0 - text.line_to_byte(l).0 > threshold);
@@ -56,6 +60,7 @@ impl EolStats {
         count_range(text, 0, text.len_bytes())
     }
 
+    /// 改行の総数。
     pub fn total(&self) -> usize {
         self.lf + self.crlf + self.cr
     }
@@ -86,9 +91,9 @@ impl EolStats {
     /// `self - removed + added` (各成分を 0 で止める)。
     pub(crate) fn replaced(self, removed: EolStats, added: EolStats) -> EolStats {
         let f = |cur: usize, rem: usize, add: usize| {
-            let v = cur as i128 - rem as i128 + add as i128;
-            debug_assert!(v >= 0, "eol_stats が負になった");
-            v.max(0) as usize
+            let v = cur.saturating_add(add);
+            debug_assert!(v >= rem, "eol_stats が負になった");
+            v.saturating_sub(rem)
         };
         EolStats {
             lf: f(self.lf, removed.lf, added.lf),
@@ -107,7 +112,7 @@ fn byte_at(text: &dyn TextRead, i: usize) -> Option<u8> {
 }
 
 /// `[start, end)` の改行を数える。範囲の端が CRLF の `\r` と `\n` の間に当たるときは 1 バイト外へ広げる
-/// (03 §6.5「eol_stats の更新」)。
+/// (03 §6.5「`eol_stats` の更新」)。
 pub(crate) fn count_range(text: &dyn TextRead, start: usize, end: usize) -> EolStats {
     let len = text.len_bytes();
     let (mut s, mut e) = (start.min(len), end.min(len));
@@ -169,24 +174,57 @@ pub struct FormatState {
     pub read_only: ReadOnlyReasons,
 }
 
-/// Undo ノードに持つ書式の変更 (前後の値)。Undo は `before`、Redo は `after` へ戻す。
+/// Undo ノードに持つ書式の変更 (前後の値)。Undo は `before`、Redo は `after` へ戻す。戻す範囲は種類で決まる (03 §7.2)。
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct FormatChange {
-    pub before: FormatState,
-    pub after: FormatState,
+pub enum FormatChange {
+    /// 再読込 (`Origin::Reload`、03 §9.5): `TextFormat` 全体と読み取り専用の理由。
+    Reload {
+        before: FormatState,
+        after: FormatState,
+    },
+    /// 改行コードの変換 (`file.set_line_ending`、03 §8.4): `default_eol` だけ。
+    /// 文字コード・BOM・往復の情報・読み取り専用の理由は戻さない (`eol_stats` は本文の適用で数え直す)。
+    DefaultEol {
+        before: LineEnding,
+        after: LineEnding,
+    },
+}
+
+/// Undo / Redo で本文と一緒に戻す書式 (`FormatChange` の片側)。
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum FormatRestore {
+    State(FormatState),
+    DefaultEol(LineEnding),
+}
+
+impl FormatChange {
+    /// Undo なら `before`、Redo (と最初の適用) なら `after` の側。
+    pub fn side(&self, after: bool) -> FormatRestore {
+        match self {
+            FormatChange::Reload { before, after: a } => {
+                FormatRestore::State(if after { a.clone() } else { before.clone() })
+            }
+            FormatChange::DefaultEol { before, after: a } => {
+                FormatRestore::DefaultEol(if after { *a } else { *before })
+            }
+        }
+    }
 }
 
 /// 文書の形式 (03 §8.1)。
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TextFormat {
+    /// 文字コード (保存先の既定)。
     pub encoding: Encoding,
     /// BOM の種類は `encoding` から決まる (UTF-8 / UTF-16LE / UTF-16BE)。保存時に同じものを書く。
     pub has_bom: bool,
     /// 新規に挿入する改行 (文書全体の改行コードではない)。
     pub default_eol: LineEnding,
+    /// 文書の中の改行の種類別の数 (編集で差分を更新する)。
     pub eol_stats: EolStats,
     /// 不正バイトの保持マーカーの数。0 でなければ読み取り専用 (NFR-304)。
     pub invalid_bytes: u32,
+    /// 不正バイトの PUA エスケープの方式 (03 §8.3)。
     pub pua_escape: PuaEscapeMode,
     /// 読込時の往復の検査 (03 §8.7。v0.1 は件数と先頭の位置だけ)。
     pub roundtrip: RoundtripSummary,
@@ -211,19 +249,46 @@ impl TextFormat {
             long_lines: 0,
         }
     }
+
+    /// 文字コード `out` で保存するときの、不正バイトのエスケープ文字の扱い (03 §8.3、E4)。
+    ///
+    /// - 元の文字コードのまま保存し、文書が不正バイトを持つとき: エスケープ文字を元のバイトに戻す (読込時の方式のまま)。
+    /// - 別の文字コードへ保存するとき: エスケープ文字は元の文字コードのバイトなので、別の文字コードの中には書けない
+    ///   (書くと前後のバイトとずれる・結合する)。表現不能として報告する。元のテキストが真にその範囲の文字を
+    ///   含む (`DisabledCollision`) ときは通常の文字として書く。
+    /// - 不正バイトの無い文書: エスケープ文字は読込で作ったものではない (他の文書から貼り付けた等) ので、
+    ///   元のバイトに戻さず表現不能として報告する (docs/review/v0.3-findings.md の SAF-02b。貼り付けの時点で
+    ///   `<0xNN>` の表記に変える 03 §8.3 の「編集」の行の実装までの暫定)。
+    pub fn save_escape_policy(&self, out: Encoding) -> EscapePolicy {
+        match self.pua_escape {
+            PuaEscapeMode::DisabledCollision => EscapePolicy::AsText,
+            PuaEscapeMode::Enabled if out == self.encoding && self.invalid_bytes > 0 => {
+                EscapePolicy::Restore
+            }
+            _ => EscapePolicy::Reject,
+        }
+    }
 }
 
 /// 読み取り専用の理由 (03 §9.6)。宣言順が表示の優先順。
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[repr(u8)]
 pub enum ReadOnlyReason {
+    /// ファイルの読み取り専用属性 (`FileMeta.readonly`)。`file.toggle_read_only` で解除できる。
     FileAttribute = 0,
+    /// 利用者が読み取り専用を求めた (`--readonly` など)。`file.toggle_read_only` で解除できる。
     UserRequested,
+    /// 保存で書込の権限が無いと分かった (`PermissionDenied`)。
     NoWritePermission,
+    /// 不正バイトを含む (`invalid_bytes > 0`、NFR-304)。
     InvalidBytes,
+    /// 状態付き符号化 (ISO-2022-JP) で不正バイトを含む (03 §8.3)。
     StatefulEncodingWithInvalidBytes,
+    /// バイナリの疑いを確認して開いた。
     Binary,
+    /// 巨大ファイルを確認して開いた (FR-127)。
     LargeFileViewer,
+    /// 読込が途中で終わった部分だけを開いた (予約。v0.1 では付けない)。
     LoadIncomplete,
 }
 
@@ -243,18 +308,22 @@ const ALL_REASONS: [ReadOnlyReason; 8] = [
 pub struct ReadOnlyReasons(u16);
 
 impl ReadOnlyReasons {
+    /// 理由を加える。
     pub fn insert(&mut self, r: ReadOnlyReason) {
         self.0 |= 1 << (r as u8);
     }
 
+    /// 理由を外す。
     pub fn remove(&mut self, r: ReadOnlyReason) {
         self.0 &= !(1 << (r as u8));
     }
 
+    /// 理由を含む。
     pub fn contains(&self, r: ReadOnlyReason) -> bool {
         self.0 & (1 << (r as u8)) != 0
     }
 
+    /// 理由が 1 つも無い。
     pub fn is_empty(&self) -> bool {
         self.0 == 0
     }
@@ -264,7 +333,6 @@ impl ReadOnlyReasons {
         ALL_REASONS.into_iter().filter(|r| self.contains(*r))
     }
 
-    /// 表示に出す 1 つ (優先順で先頭)。
     /// `file.toggle_read_only` で解除できるか (理由があり、すべてが `FileAttribute` か `UserRequested`。03 §9.6 の表)。
     pub fn releasable(&self) -> bool {
         !self.is_empty()
@@ -276,16 +344,21 @@ impl ReadOnlyReasons {
             })
     }
 
+    /// 表示に出す 1 つ (優先順で先頭)。理由が無ければ `None`。
     pub fn primary(&self) -> Option<ReadOnlyReason> {
         self.iter().next()
     }
 }
 
+/// 文書の読込の状態 (03 §9.2)。`Ready` 以外は編集できない。
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum LoadState {
+    /// 読込中 (再読込中は旧本文を表示し続ける)。
     Loading,
+    /// 読込を終えた (新規・無題の文書を含む)。
     #[default]
     Ready,
+    /// 読込に失敗した。
     Failed,
 }
 
@@ -410,6 +483,10 @@ mod tests {
     }
 
     #[test]
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "試験の乱数を小さい剰余で添字にする"
+    )]
     fn 改行の数え方は_1_バイトずつ数えた結果と同じ() {
         let mut x = 0x2545_F491_4F6C_DD1Du64;
         let mut next = || {

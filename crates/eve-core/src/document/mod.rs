@@ -1,10 +1,14 @@
 //! 文書 (docs/03 §6〜§7)。`Document`・`Transaction`・Undo 履歴。文書テキストを変える唯一の経路 (`Document::apply`) も
 //! ここに閉じる (docs/02 §5.2。`eve_text::Text::apply` は clippy の `disallowed_methods` で、このモジュール以外から呼べない)。
+//!
+//! spec: 02 §5.1, 02 §5.2, 03 §6, 03 §7, 03 §8.4 (改行コードの変換)
 
 // 文書テキストを変える経路はこのモジュールに閉じる (clippy.toml の `eve_text::Text::apply`)
 #![allow(clippy::disallowed_methods)]
 
 mod doc;
+pub(crate) mod eol;
+pub(crate) mod eol_cmd;
 mod format;
 mod history;
 mod transaction;
@@ -43,4 +47,33 @@ pub fn trim_to_total_budget<K: Copy + PartialEq>(
         }
     }
     trimmed
+}
+
+/// 1 件の変更あたりの逆変換の大きさの見積り (演算 3 つと挿入する文字列の確保の分。03 §12.5)。
+const COARSE_PER_EDIT: usize = 128;
+
+/// 大量のすべて置換の Undo の記録 (03 §12.5): 変更の最初の始端から最後の終端までを旧本文で置き換える 1 件の逆変換。
+/// 範囲の旧本文が、変更ごとの逆変換の見積り (削除する本文 + 1 件あたり `COARSE_PER_EDIT`) より大きければ `None`
+/// (メモリを増やさない。変更ごとの逆変換を使う)。`after` は `changes` を適用した後の本文。
+pub(crate) fn coarse_inverse(
+    changes: &eve_text::ChangeSet,
+    before: &dyn eve_text::TextRead,
+    after: &dyn eve_text::TextRead,
+) -> Option<eve_text::ChangeSet> {
+    let hunks: Vec<_> = changes.changed_ranges().collect();
+    let (first, last) = (hunks.first()?, hunks.last()?);
+    let old = eve_text::ByteRange::new(first.0.start, last.0.end);
+    let new = eve_text::ByteRange::new(first.1.start, last.1.end);
+    let deleted: usize = hunks.iter().map(|(o, _)| o.len()).sum();
+    if old.len() > deleted.saturating_add(COARSE_PER_EDIT.saturating_mul(hunks.len())) {
+        return None;
+    }
+    eve_text::ChangeSet::from_sorted_edits(
+        after,
+        [eve_text::Edit {
+            range: new,
+            insert: before.slice_to_string(old).into(),
+        }],
+    )
+    .ok()
 }

@@ -1,5 +1,9 @@
 //! 組込みテーマ `default` (eve-config) と core の解決が、docs/07 §8.2 のロール表と一致する (09 §3.5 の `xtask check-themes`)。
 //! 表の全ロールの 4 段 (truecolor / 256 / 16 / mono) を、core が Frame で渡す形 (`resolve_theme`) で突き合わせる。
+#![expect(
+    clippy::cast_possible_truncation,
+    reason = "テスト用の数値変換。値は小さく収まる"
+)]
 
 use eve_docs_tables::theme::{StyleSpec, hex_rgb, parse_roles};
 use eve_view::{Color, ColorDepth, Style, StyleMods};

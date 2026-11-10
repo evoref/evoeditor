@@ -45,7 +45,8 @@ pub fn xterm_rgb(index: u8) -> (u8, u8, u8) {
     }
 }
 
-/// 重み付き RGB 距離 (redmean。決定的で小さい実装、04 §12.3)。
+/// 重み付き RGB 距離 (redmean。決定的で小さい実装、04 §12.3)。テーマファイルの近似 (eve-config の `theme_file`) と
+/// 同じ式で、依存の向き (02 §4.1) で関数を共有できないので、結果を試験 `color_cross` で突合する。
 fn distance(a: (u8, u8, u8), b: (u8, u8, u8)) -> i64 {
     let rmean = (i64::from(a.0) + i64::from(b.0)) / 2;
     let (dr, dg, db) = (

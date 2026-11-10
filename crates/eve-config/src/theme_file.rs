@@ -41,7 +41,8 @@ const NAMES: [&str; 8] = [
     "black", "red", "green", "yellow", "blue", "magenta", "cyan", "white",
 ];
 
-fn xterm_rgb(index: u8) -> (u8, u8, u8) {
+/// xterm の 256 色の番号 → RGB (04 §12.3)。eve-tui の `color::xterm_rgb` と同じ (eve-tui の試験 `color_cross` が突合する)。
+pub fn xterm_rgb(index: u8) -> (u8, u8, u8) {
     match index {
         0..=15 => ANSI16[index as usize],
         16..=231 => {
@@ -59,7 +60,8 @@ fn xterm_rgb(index: u8) -> (u8, u8, u8) {
     }
 }
 
-/// 重み付き RGB 距離 (04 §12.3。eve-tui の最終防衛線と同じ式)。
+/// 重み付き RGB 距離 (04 §12.3。eve-tui の最終防衛線と同じ式。依存の向き (02 §4.1) で関数を共有できないので、
+/// 結果を eve-tui の試験 `color_cross` で突合する)。
 fn distance(a: (u8, u8, u8), b: (u8, u8, u8)) -> i64 {
     let rmean = (i64::from(a.0) + i64::from(b.0)) / 2;
     let (dr, dg, db) = (
@@ -70,30 +72,36 @@ fn distance(a: (u8, u8, u8), b: (u8, u8, u8)) -> i64 {
     (((512 + rmean) * dr * dr) >> 8) + 4 * dg * dg + (((767 - rmean) * db * db) >> 8)
 }
 
+/// RGB に最も近い 256 色の番号 (キューブ 216 色 + グレー 24 階調。0..=15 は選ばない)。eve-tui の
+/// `color::rgb_to_ansi256` と同じ。
+pub fn rgb_to_ansi256(rgb: (u8, u8, u8)) -> u8 {
+    (16..=255u8)
+        .min_by_key(|&i| (distance(rgb, xterm_rgb(i)), i))
+        .unwrap_or(16)
+}
+
+/// RGB に最も近い 16 色の番号 (xterm 既定のパレットとの距離)。eve-tui の `color::rgb_to_ansi16` と同じ。
+pub fn rgb_to_ansi16(rgb: (u8, u8, u8)) -> u8 {
+    (0..16u8)
+        .min_by_key(|&i| (distance(rgb, ANSI16[i as usize]), i))
+        .unwrap_or(0)
+}
+
 /// 色を 256 色の段に近似する (RGB はキューブとグレーから。番号はそのまま)。
 fn to256(c: ThemeColor) -> ThemeColor {
     match c {
-        ThemeColor::Rgb(r, g, b) => ThemeColor::Ansi(
-            (16..=255u8)
-                .min_by_key(|&i| (distance((r, g, b), xterm_rgb(i)), i))
-                .unwrap_or(16),
-        ),
+        ThemeColor::Rgb(r, g, b) => ThemeColor::Ansi(rgb_to_ansi256((r, g, b))),
         _ => c,
     }
 }
 
 /// 色を 16 色の段に近似する。
 fn to16(c: ThemeColor) -> ThemeColor {
-    let rgb = match c {
-        ThemeColor::Rgb(r, g, b) => (r, g, b),
-        ThemeColor::Ansi(i) if i >= 16 => xterm_rgb(i),
-        _ => return c,
-    };
-    ThemeColor::Ansi(
-        (0..16u8)
-            .min_by_key(|&i| (distance(rgb, ANSI16[i as usize]), i))
-            .unwrap_or(0),
-    )
+    match c {
+        ThemeColor::Rgb(r, g, b) => ThemeColor::Ansi(rgb_to_ansi16((r, g, b))),
+        ThemeColor::Ansi(i) if i >= 16 => ThemeColor::Ansi(rgb_to_ansi16(xterm_rgb(i))),
+        _ => c,
+    }
 }
 
 /// 近似した段で前景と背景が同じ番号になったら、前景を外して反転にする (04 §12.3)。
@@ -121,7 +129,8 @@ struct RoleSpec {
 #[derive(Clone, Debug, Default)]
 struct Parsed {
     inherits: Option<String>,
-    roles: Vec<(String, RoleSpec)>,
+    /// (ロール名, 書き換え, ロールのキーの (行, 桁))。位置は知らないロールの診断に使う。
+    roles: Vec<(String, RoleSpec, (u32, u32))>,
 }
 
 struct Cx<'a> {
@@ -135,7 +144,11 @@ impl Cx<'_> {
         let head = self.text.get(..offset.min(self.text.len())).unwrap_or("");
         let line = head.matches('\n').count() + 1;
         let col = head.rsplit('\n').next().map_or(0, |l| l.chars().count()) + 1;
-        (line as u32, col as u32)
+        // 診断の位置の表示用。u32 を超える行・桁は上限で丸める
+        (
+            u32::try_from(line).unwrap_or(u32::MAX),
+            u32::try_from(col).unwrap_or(u32::MAX),
+        )
     }
 
     fn warn(&mut self, kind: DiagKind, key: &str, value: &str, at: usize) {
@@ -320,7 +333,8 @@ fn parse_color(s: &str) -> Option<ThemeColor> {
     NAMES
         .iter()
         .position(|x| *x == n)
-        .map(|i| ThemeColor::Ansi(base + i as u8))
+        .and_then(|i| u8::try_from(i).ok())
+        .map(|i| ThemeColor::Ansi(base + i))
 }
 
 /// テーマファイル 1 つを解く。構文エラーなら `None` と診断。
@@ -373,7 +387,8 @@ fn parse(text: &str) -> (Option<Parsed>, Vec<Diagnostic>) {
                     match rv.get_ref() {
                         DeValue::Table(t) => {
                             let spec = cx.role(&role, t);
-                            out.roles.push((role, spec));
+                            let at = cx.pos(rk.span().start);
+                            out.roles.push((role, spec, at));
                         }
                         other => cx.warn(
                             DiagKind::TypeMismatch {
@@ -387,7 +402,7 @@ fn parse(text: &str) -> (Option<Parsed>, Vec<Diagnostic>) {
                     }
                 }
             }
-            // シンタックスのスコープは v0.4 (tree-sitter と一緒)
+            // シンタックスのスコープは v0.6 (tree-sitter と一緒)
             ("syntax", _) => cx.info(name, k.span().start),
             _ => cx.warn(
                 DiagKind::UnknownKey { suggestion: None },
@@ -460,7 +475,8 @@ pub fn load_theme(
         ));
     };
     // 子から親へたどる
-    let mut chain: Vec<Parsed> = Vec::new();
+    // (ファイル名, 解析結果)
+    let mut chain: Vec<(String, Parsed)> = Vec::new();
     let mut seen: Vec<String> = Vec::new();
     let mut cur = name.to_owned();
     let base = loop {
@@ -507,34 +523,34 @@ pub fn load_theme(
         let (parsed, diags) = parse(text.strip_prefix('\u{feff}').unwrap_or(&text));
         let failed = parsed.is_none();
         if !diags.is_empty() {
-            reports.push((file, diags));
+            reports.push((file.clone(), diags));
         }
         let Some(p) = parsed else {
             debug_assert!(failed);
             return (None, reports);
         };
         cur = p.inherits.clone().unwrap_or_else(|| "default".to_owned());
-        chain.push(p);
+        chain.push((file, p));
     };
     let mut roles = base.roles;
     // 親から子の順に重ねる
-    for p in chain.iter().rev() {
-        for (role, spec) in &p.roles {
+    for (file, p) in chain.iter().rev() {
+        for (role, spec, (line, column)) in &p.roles {
             match roles.iter_mut().find(|r| r.name == role) {
                 Some(r) => *r = apply(*r, spec),
                 None => {
-                    let file = format!("themes/{name}.toml");
+                    // 知らないロールは、それを書いたファイルの、ロールのキーの位置で知らせる
                     let d = Diagnostic {
                         severity: Severity::Warning,
                         kind: DiagKind::UnknownKey { suggestion: None },
                         key: role.clone(),
                         value: String::new(),
-                        line: 0,
-                        column: 0,
+                        line: *line,
+                        column: *column,
                     };
-                    match reports.iter_mut().find(|(f, _)| *f == file) {
+                    match reports.iter_mut().find(|(f, _)| f == file) {
                         Some((_, ds)) => ds.push(d),
-                        None => reports.push((file, vec![d])),
+                        None => reports.push((file.clone(), vec![d])),
                     }
                 }
             }
@@ -672,10 +688,28 @@ mod tests {
             all.iter()
                 .any(|d| d.key == "ui.selection.fg" && d.severity == Severity::Warning)
         );
-        assert!(all.iter().any(|d| d.key == "ui.not_a_role"));
+        let unknown = all.iter().find(|d| d.key == "ui.not_a_role").unwrap();
+        assert_eq!((unknown.line, unknown.column), (3, 1), "ロールのキーの位置");
         assert!(
             all.iter()
                 .any(|d| d.key == "syntax" && d.severity == Severity::Info)
+        );
+    }
+
+    #[test]
+    fn 親のファイルの知らないロールは親のファイルで知らせる() {
+        let read = files(&[
+            ("child", "[meta]\ninherits = \"parent\"\n"),
+            ("parent", "[ui]\n\n  nope = { fg = \"#ffffff\" }\n"),
+        ]);
+        let (t, reports) = load_theme("child", &read);
+        assert!(t.is_some());
+        assert_eq!(reports.len(), 1, "{reports:?}");
+        let (file, ds) = &reports[0];
+        assert_eq!(file, "themes/parent.toml");
+        assert_eq!(
+            (ds[0].key.as_str(), ds[0].line, ds[0].column),
+            ("ui.nope", 3, 3)
         );
     }
 

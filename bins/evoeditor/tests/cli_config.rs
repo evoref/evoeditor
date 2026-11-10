@@ -158,3 +158,60 @@ fn check_config_はテーマファイルも確かめる() {
     assert_eq!(code, 3, "{out}");
     let _ = std::fs::remove_dir_all(&d);
 }
+
+// ---------- 外から見える出力のゴールデン (docs/review/v0.3-findings.md の STR-T1、v0.3 の M13) ----------
+// 比べ方は eve_testkit::golden と同じ (bin は eve-testkit に依存しない決まり、deps-policy.toml)。
+// `EVE_UPDATE_GOLDEN=1` で作る・書き換える。既にあるゴールデンの書き換えは人間が判断する (11 §6.2)。
+
+fn golden(name: &str, actual: &str) {
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/golden")
+        .join(name);
+    let actual = actual.replace("\r\n", "\n");
+    if std::env::var_os("EVE_UPDATE_GOLDEN").is_some() {
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(&path, &actual).unwrap();
+        return;
+    }
+    let want = std::fs::read_to_string(&path)
+        .unwrap_or_else(|_| {
+            panic!(
+                "ゴールデン {} がありません (EVE_UPDATE_GOLDEN=1 で作る)",
+                path.display()
+            )
+        })
+        .replace("\r\n", "\n");
+    assert_eq!(actual, want, "ゴールデン {} と違います", path.display());
+}
+
+#[test]
+fn ゴールデン_既定の設定の_json() {
+    let d = dir("golden-dump");
+    let (code, out) = run(&d, &["--dump-config", "--defaults", "--json"]);
+    assert_eq!(code, 0, "{out}");
+    golden("dump_config_defaults.json", &out);
+}
+
+#[test]
+fn ゴールデン_help() {
+    let out = Command::new(EXE)
+        .arg("--help")
+        .output()
+        .expect("起動できる");
+    assert_eq!(out.status.code(), Some(0));
+    golden("help.txt", &String::from_utf8_lossy(&out.stdout));
+}
+
+#[test]
+fn ゴールデン_使い方の誤り() {
+    let out = Command::new(EXE)
+        .arg("--no-such-option")
+        .output()
+        .expect("起動できる");
+    assert_eq!(
+        out.status.code(),
+        Some(2),
+        "使い方の誤りは終了コード 2 (07 §18.4)"
+    );
+    golden("usage_error.txt", &String::from_utf8_lossy(&out.stderr));
+}

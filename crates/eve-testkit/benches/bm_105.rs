@@ -1,7 +1,7 @@
 //! BM-105: 巨大ファイル上の編集 (docs/09-testing-quality.md §5.2、01 NFR-105)。
 //! 100 MB のファイルの中央へ 1 文字挿入 → Undo を 1,100 回 (先頭 100 回はウォームアップとして除く) 繰り返し、
 //! コマンド実行時間 (編集コマンドの開始から Transaction の適用完了まで。Frame 生成を含まない) の p50 / p99 を出す。
-//! 目標: p50 1 ms / p99 5 ms。ヘッドレス (`Harness`・`MemFs`) で測る。M1 の core 完成後の暫定判定 (ADR-0004、S-02)。
+//! 目標: p50 1 ms / p99 5 ms。ヘッドレス (`Harness`・`MemFs`) で測る。暫定判定 (ADR-0004、S-02)。
 //!
 //! ```text
 //! cargo bench -p eve-testkit --bench bm_105
@@ -10,6 +10,12 @@
 //! 基準機 (ENV-W1) で他の重い作業を止めて実行する。結果は標準出力に出す。
 
 #![allow(clippy::print_stdout, clippy::print_stderr)]
+#![expect(
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::cast_sign_loss,
+    reason = "計測用の数値変換。値は十分に小さい"
+)]
 
 use std::time::{Duration, Instant};
 

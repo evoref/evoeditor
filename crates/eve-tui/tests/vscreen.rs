@@ -1,5 +1,9 @@
 //! L4: 仮想画面 (`VirtualScreen`) を使った出力の検査 (docs/09 §3.5)。Frame → Buffer → 出力バイト列 → 仮想画面の往復で、
 //! 画面・カーソル・クロームの省略が Frame の宣言と一致することを確かめる (04 §4.7 の幅不一致対策 (a)(c)、08 S-06 の合否基準)。
+#![expect(
+    clippy::cast_possible_truncation,
+    reason = "テスト用の数値変換。値は小さく収まる"
+)]
 
 use eve_testkit::{Harness, VirtualScreen, WidthConfig};
 use eve_tui::ansi::Emitter;
@@ -52,7 +56,7 @@ impl Term {
     fn draw(&mut self, h: &mut Harness) -> (PaneRender, Frame) {
         let f = h.frame();
         let r = render_screen(&f, window_of(&f), self.depth, &self.glyphs);
-        let out = self.emitter.frame(&r, &f, true);
+        let out = self.emitter.frame(r.clone(), &f, true);
         self.screen.feed(&out);
         (r, f)
     }
@@ -129,7 +133,7 @@ fn 曖昧幅_2_の端末でも_ascii_縮退なら千回の更新の後も画面�
                 true,
                 ColorDepth::TrueColor,
             );
-            let out = fresh.emitter.frame(&r, &f, true);
+            let out = fresh.emitter.frame(r.clone(), &f, true);
             fresh.screen.feed(&out);
             assert_eq!(t.screen.lines(), fresh.screen.lines(), "段階 {step}");
         }

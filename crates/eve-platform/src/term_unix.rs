@@ -26,7 +26,7 @@ pub fn save_mode(fd: i32) -> Option<Vec<u8>> {
     // SAFETY: ゼロ初期化した termios (整数と配列だけ) に書かせる。
     let mut t: libc::termios = unsafe { std::mem::zeroed() };
     // SAFETY: 有効な書込先。fd が端末でなければ失敗を返すだけ。
-    if unsafe { libc::tcgetattr(fd, &mut t) } != 0 {
+    if unsafe { libc::tcgetattr(fd, &raw mut t) } != 0 {
         return None;
     }
     // SAFETY: termios は詰め物も含めて初期化済み (zeroed の上に書かれた) の平文の構造体。
@@ -55,7 +55,8 @@ fn restore_now(fd: i32, bytes: &[u8], mode: Option<&libc::termios>) {
         // SAFETY: `rest` は有効な領域。fd が無効なら失敗を返すだけ。
         let n = unsafe { libc::write(fd, rest.as_ptr().cast(), rest.len()) };
         if n > 0 {
-            rest = &rest[n as usize..];
+            // n > 0 を確かめた後
+            rest = &rest[n.unsigned_abs()..];
         } else if n < 0 && io::Error::last_os_error().raw_os_error() == Some(libc::EINTR) {
             continue;
         } else {
@@ -118,7 +119,7 @@ static CRASH: OnceLock<Crash> = OnceLock::new();
 static CRASH_FD: AtomicI32 = AtomicI32::new(-1);
 
 /// `si_code` が、障害ではなくプロセスから送られた (`kill`・`sigqueue`・`raise` など) ことを表すか。Linux は 0 以下
-/// (SI_USER = 0、SI_QUEUE = -1、SI_TKILL = -6。障害は正)。macOS は SI_USER = 0x10001 から始まる正の値 (未確認、05 §11.1)。
+/// (`SI_USER` = `0、SI_QUEUE` = -`1、SI_TKILL` = -6。障害は正)。macOS は `SI_USER` = 0x10001 から始まる正の値 (未確認、05 §11.1)。
 fn sent_by_process(code: i32) -> bool {
     if cfg!(target_vendor = "apple") {
         code <= 0 || code >= 0x10000
@@ -160,7 +161,7 @@ extern "C" fn on_crash(signo: i32, info: *mut libc::siginfo_t, _: *mut libc::c_v
         }
         if let Some(i) = CRASH_SIGNALS.iter().position(|&s| s == signo) {
             // SAFETY: 起動時に保存した元のハンドラに戻す。戻った後、同じ障害がもう一度起きて元の動作になる
-            unsafe { libc::sigaction(signo, &c.previous[i], std::ptr::null_mut()) };
+            unsafe { libc::sigaction(signo, &raw const c.previous[i], std::ptr::null_mut()) };
             return;
         }
     }
@@ -170,6 +171,10 @@ extern "C" fn on_crash(signo: i32, info: *mut libc::siginfo_t, _: *mut libc::c_v
 
 /// 異常終了のシグナルで端末を戻すハンドラを付ける (プロセスで 1 回。2 回目以降は何もしない)。`fd`・`bytes`・`saved_mode`・
 /// `restored` は `emergency_restore` と同じ。
+///
+/// # Errors
+///
+/// 元のシグナルハンドラの読み出し、または新しいハンドラの登録 (`sigaction`) が失敗したとき。
 pub fn install_crash_restore(
     fd: i32,
     bytes: &'static [u8],
@@ -183,7 +188,7 @@ pub fn install_crash_restore(
     let mut previous: [libc::sigaction; CRASH_SIGNALS.len()] = unsafe { std::mem::zeroed() };
     for (i, &s) in CRASH_SIGNALS.iter().enumerate() {
         // SAFETY: 有効な書込先。
-        if unsafe { libc::sigaction(s, std::ptr::null(), &mut previous[i]) } != 0 {
+        if unsafe { libc::sigaction(s, std::ptr::null(), &raw mut previous[i]) } != 0 {
             return Err(io::Error::last_os_error());
         }
     }
@@ -202,8 +207,8 @@ pub fn install_crash_restore(
             act.sa_sigaction =
                 on_crash as extern "C" fn(i32, *mut libc::siginfo_t, *mut libc::c_void) as usize;
             act.sa_flags = libc::SA_SIGINFO | libc::SA_ONSTACK;
-            libc::sigemptyset(&mut act.sa_mask);
-            if libc::sigaction(s, &act, std::ptr::null_mut()) != 0 {
+            libc::sigemptyset(&raw mut act.sa_mask);
+            if libc::sigaction(s, &raw const act, std::ptr::null_mut()) != 0 {
                 return Err(io::Error::last_os_error());
             }
         }
@@ -221,8 +226,8 @@ mod tests {
         // SAFETY: 有効な書込先 2 つ。名前・termios・大きさは使わない (null)。
         let r = unsafe {
             libc::openpty(
-                &mut m,
-                &mut s,
+                &raw mut m,
+                &raw mut s,
                 std::ptr::null_mut(),
                 std::ptr::null(),
                 std::ptr::null(),
@@ -244,7 +249,7 @@ mod tests {
             // SAFETY: 有効な書込先。
             let n = unsafe { libc::read(fd, buf.as_mut_ptr().cast(), buf.len()) };
             if n > 0 {
-                out.extend_from_slice(&buf[..n as usize]);
+                out.extend_from_slice(&buf[..n.unsigned_abs()]);
             } else {
                 std::thread::sleep(Duration::from_millis(10));
                 if !out.is_empty() {
@@ -267,15 +272,15 @@ mod tests {
             rlim_max: 0,
         };
         // SAFETY: 有効な rlimit。
-        unsafe { libc::setrlimit(libc::RLIMIT_CORE, &r) };
+        unsafe { libc::setrlimit(libc::RLIMIT_CORE, &raw const r) };
     }
 
     fn set_raw(fd: i32) {
         let mut t = parse_mode(&save_mode(fd).unwrap()).unwrap();
         // SAFETY: 有効な termios。
         unsafe {
-            libc::cfmakeraw(&mut t);
-            libc::tcsetattr(fd, libc::TCSANOW, &t);
+            libc::cfmakeraw(&raw mut t);
+            libc::tcsetattr(fd, libc::TCSANOW, &raw const t);
         }
     }
 
@@ -288,7 +293,7 @@ mod tests {
         assert!(!echo_on(s));
         let flag = AtomicBool::new(false);
         assert!(emergency_restore(
-            s as usize,
+            usize::try_from(s).unwrap(),
             b"\x18\x1b[?1049l",
             &saved,
             &flag
@@ -299,7 +304,7 @@ mod tests {
         assert!(out.ends_with(b"\x1b[?1049l"), "{out:?}");
         set_raw(s);
         assert!(
-            !emergency_restore(s as usize, b"x", &saved, &flag),
+            !emergency_restore(usize::try_from(s).unwrap(), b"x", &saved, &flag),
             "復元済み"
         );
         assert!(!echo_on(s));
@@ -335,7 +340,7 @@ mod tests {
         }
         let mut status = 0;
         // SAFETY: 自分の子を待つ。
-        assert_eq!(unsafe { libc::waitpid(pid, &mut status, 0) }, pid);
+        assert_eq!(unsafe { libc::waitpid(pid, &raw mut status, 0) }, pid);
         assert!(libc::WIFSIGNALED(status), "{status:#x}");
         assert_eq!(
             libc::WTERMSIG(status),
@@ -372,7 +377,7 @@ mod tests {
         }
         let mut status = 0;
         // SAFETY: 自分の子を待つ。
-        assert_eq!(unsafe { libc::waitpid(pid, &mut status, 0) }, pid);
+        assert_eq!(unsafe { libc::waitpid(pid, &raw mut status, 0) }, pid);
         assert!(libc::WIFSIGNALED(status), "{status:#x}");
         assert_eq!(libc::WTERMSIG(status), libc::SIGSEGV, "既定の動作で終わる");
         assert!(echo_on(s), "子が termios を戻した");

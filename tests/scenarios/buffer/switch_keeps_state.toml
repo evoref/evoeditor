@@ -47,3 +47,5 @@ expect = { head = 6 }
 [[assert]]
 query = { kind = "document", path = "a.txt" }
 expect = { text = "alpha\n", dirty = false }
+[[assert]]
+frame = "switch_keeps_state"

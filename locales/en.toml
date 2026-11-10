@@ -8,6 +8,14 @@ language = "en"
 description = "Quit the editor."
 title = "Quit"
 
+[cmd.app.quit_with_error]
+description = "Quit without saving, with exit code 4 (like Vim's :cq). Use it to abort git commit and the like. If documents have unsaved changes, you are asked as when quitting."
+title = "Quit with Error"
+
+[cmd.app.save_and_quit]
+description = "Save the current document, then quit. If other documents have unsaved changes, you are asked as when quitting."
+title = "Save and Quit"
+
 [cmd.app.suspend]
 description = "Suspend the editor and return to the shell. Resume it with the shell's fg."
 title = "Suspend"
@@ -23,6 +31,10 @@ title = "Cut"
 [cmd.config.reload]
 description = "Reload the settings files (config.toml and keymap.toml) without restarting."
 title = "Reload Settings"
+
+[cmd.config.show_diagnostics]
+description = "List the problems in the settings file, the keymap and the theme. Press Enter to open the file at that line."
+title = "Show Settings Diagnostics"
 
 [cmd.cursor.doc_end]
 description = "Move the cursor to the end of the document."
@@ -383,13 +395,15 @@ list_next = "Next"
 palette_open = "Commands"
 
 [info.app]
-release_summary = "Adds swap files and recovery, multiple documents, regex search and replace, soft wrap, mouse, theme switching, English UI, and more. See the release notes for details"
+release_summary = "Reorganizes and speeds up the internals and fixes data-safety and correctness bugs. Also adds Save and Quit, word editing in input fields, and more. See the release notes for details"
 updated = "Updated to evoeditor {version}: {summary}"
 
 [info.cli]
 unsupported = "{option} is not available in this version and was ignored"
 
 [info.config]
+diagnostic_no_file = "The diagnostic for {file} was not written in a file, so there is nothing to open"
+no_diagnostics = "There are no settings diagnostics"
 reload_restart = "These items take effect after a restart: {keys}"
 reload_unchanged = "Reloaded the settings (nothing changed)"
 reloaded = "Reloaded the settings. {count} items changed: {keys}"
@@ -487,6 +501,10 @@ text = "The system clipboard is not available, so the editor's own clipboard was
 hint = "Allowed values: {allowed}. This item uses the default {default}"
 text = "The value {value} of {item} cannot be used"
 
+[msg.config.invalid_value_no_default]
+hint = "Allowed values: {allowed}. This item is ignored"
+text = "The value {value} of {item} cannot be used"
+
 [msg.config.keymap_unknown_context]
 hint = "Available: global, editor, search, prompt, palette, list, dialog, help. This binding is ignored"
 text = "The context in {item} is not available"
@@ -502,6 +520,10 @@ text = "The key in {item} is not valid"
 [msg.config.keymap_bad_when]
 hint = "See the config spec (07 §7.3) for the syntax. This binding is ignored"
 text = "The when clause in {item} is not valid"
+
+[msg.config.keymap_unknown_when_var]
+hint = "See the config spec (07 §7.3) for the available variables. This binding is ignored"
+text = "{value} in the when clause of {item} is not a known variable"
 
 [msg.config.keymap_printable_key]
 hint = "Combine it with ctrl or alt. This binding is ignored"
@@ -537,6 +559,10 @@ text = "This configuration file is not used because its syntax is invalid: {reas
 
 [msg.config.type_mismatch]
 hint = "Write it as {expected}. This item uses the default {default}"
+text = "The type of the value of {item} is wrong (found: {actual})"
+
+[msg.config.type_mismatch_no_default]
+hint = "Write it as {expected}. This item is ignored"
 text = "The type of the value of {item} is wrong (found: {actual})"
 
 [msg.config.unknown_key]
@@ -675,6 +701,10 @@ text = "Some permissions and attributes of {path} could not be carried over: {re
 hint = "Choose in the next prompt"
 text = "Could not make the backup before overwriting in place. Nothing was written"
 
+[msg.save.backup_not_removed]
+hint = "Delete {backup} if you do not need it"
+text = "Saved {path}, but {backup}, where the original file was moved, could not be deleted"
+
 [msg.save.busy]
 hint = "Close that program and retry with {key:file.save}, or save under another name"
 text = "Could not save because another program is using {path}"
@@ -703,6 +733,10 @@ text = "This document cannot be saved as ISO-2022-JP because it contains invalid
 hint = "Save under another name ({key:file.save_as}), or check the permissions"
 text = "Could not save {path}: {reason}"
 
+[msg.save.fsync_failed]
+hint = "On network or removable drives, the content may be lost by a power failure or removal. Eject the drive safely before removing it"
+text = "Saved {path}, but the write to the disk could not be confirmed"
+
 [msg.save.in_place_failed]
 hint = "Save under another name ({key:file.save_as}) and compare it with the backup"
 text = "Overwriting {path} in place failed partway. The file may be damaged. Content before writing: {backup}"
@@ -710,6 +744,10 @@ text = "Overwriting {path} in place failed partway. The file may be damaged. Con
 [msg.save.in_place_failed_no_backup]
 hint = "Save under another name ({key:file.save_as}) to keep the current content"
 text = "Overwriting {path} in place failed partway. The file may be damaged, and there is no backup"
+
+[msg.save.inflight_flag_not_written]
+hint = "If evoeditor is killed during a save, the traces may not be found at the next start"
+text = "Saved {path}, but the in-progress mark could not be written"
 
 [msg.save.invalid_path]
 hint = "Save under a different file name"
@@ -731,6 +769,10 @@ text = "You do not have permission to write to {path}"
 hint = "The file is also checked for changes when you save"
 text = "Could not check {path} for changes: {reason}"
 
+[msg.save.permission_narrowed]
+hint = "Set the permissions again in the OS if needed"
+text = "Saved {path}, but the permissions for other users became narrower than before"
+
 [msg.save.read_only_fs]
 hint = "Save under another name ({key:file.save_as})"
 text = "{path} is in a read-only location"
@@ -738,6 +780,10 @@ text = "{path} is in a read-only location"
 [msg.save.recovery_failed]
 hint = "Save under another name ({key:file.save_as})"
 text = "Could not save to the recovery folder: {reason}. The original file {path} was not changed"
+
+[msg.save.tmp_not_removed]
+hint = "Delete {tmp} if you do not need it. Until then, the next save asks about a hard link"
+text = "Saved {path}, but the temporary file {tmp} could not be deleted (it is the same file as the saved one)"
 
 [msg.save_as.not_a_file]
 hint = "Enter a different file name"
@@ -929,6 +975,15 @@ more = "and {count} more"
 [ui.load_state]
 loading = "Loading"
 
+[ui.clipboard_reason]
+no_command = "install wl-clipboard or xclip to use the system clipboard"
+no_display = "there is no display (DISPLAY / WAYLAND_DISPLAY)"
+read_failed = "it could not be read"
+ssh = "external commands are not used over SSH"
+timeout = "reading it did not finish in time"
+too_large = "the text is too large for the system clipboard"
+write_failed = "it could not be written"
+
 [ui.read_only_reason]
 binary = "binary file"
 file_attribute = "file with the read-only attribute"
@@ -956,6 +1011,10 @@ short = "RO"
 [status.saving]
 long = "[Saving]"
 short = "Saving"
+
+[status.external_change]
+long = "[Changed on disk]"
+short = "Changed"
 
 [status.degraded.long_line]
 long = "[Long line: approximate]"
@@ -998,6 +1057,13 @@ footer = "{matched}/{total}"
 placeholder = "Type a command"
 disabled = "Cannot run now: {reason}"
 no_match = "No matching commands"
+
+[ui.config_diagnostics]
+title = "Settings Diagnostics"
+placeholder = "Filter by text"
+no_match = "No matching diagnostics"
+item = "{level}: {text} / {hint}"
+item_no_hint = "{level}: {text}"
 
 [ui.buffer_list]
 title = "Buffers"

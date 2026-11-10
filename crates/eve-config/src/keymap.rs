@@ -14,8 +14,11 @@ use crate::{DiagKind, Diagnostic, Severity};
 pub enum KeyAction {
     /// コマンドを実行する。`has_args` は `args` が書かれていた (v0.2 は未対応)。
     Command {
+        /// コマンド ID (core が一覧と照合する)。
         command: String,
+        /// `when` 句の本文。書かれていなければ `None` (読み方は core、07 §7.3)。
         when: Option<String>,
+        /// `args` が書かれていたか。
         has_args: bool,
     },
     /// `"none"`: 下位の層の割当をこの層で遮蔽する。
@@ -25,17 +28,24 @@ pub enum KeyAction {
 /// `[keys.<context>]` の 1 行。配列値は書かれた順に複数の `KeymapEntry` になる。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct KeymapEntry {
+    /// `[keys.<context>]` のコンテキスト名 (検証は core)。
     pub context: String,
     /// 書かれたとおりのキー (空白区切りでストロークの列)。
     pub keys: String,
+    /// 割当の動作。
     pub action: KeyAction,
+    /// 書かれた行 (1 始まり)。
     pub line: u32,
+    /// 書かれた桁 (1 始まりの文字数)。
     pub column: u32,
 }
 
+/// 読み込んだ `keymap.toml`。
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct KeymapFile {
+    /// 割当 (書かれた順)。
     pub entries: Vec<KeymapEntry>,
+    /// 書式の問題 (出現順)。
     pub diagnostics: Vec<Diagnostic>,
 }
 
@@ -43,7 +53,11 @@ fn pos(text: &str, offset: usize) -> (u32, u32) {
     let head = text.get(..offset.min(text.len())).unwrap_or("");
     let line = head.matches('\n').count() + 1;
     let col = head.rsplit('\n').next().map_or(0, |l| l.chars().count()) + 1;
-    (line as u32, col as u32)
+    // 診断の位置の表示用。u32 を超える行・桁は上限で丸める
+    (
+        u32::try_from(line).unwrap_or(u32::MAX),
+        u32::try_from(col).unwrap_or(u32::MAX),
+    )
 }
 
 struct Cx<'a> {
@@ -227,7 +241,7 @@ mod tests {
     #[test]
     fn 構文エラーはファイル全体を無視し_診断を返す() {
         let f = load_keymap_str("[keys.editor\n");
-        assert!(f.entries.is_empty());
+        assert!(f.entries.is_empty(), "{:?}", f.entries);
         assert!(matches!(f.diagnostics[0].kind, DiagKind::Syntax { .. }));
     }
 
@@ -254,7 +268,7 @@ mod tests {
                 .iter()
                 .any(|(k, _)| matches!(k, DiagKind::TypeMismatch { .. }))
         );
-        assert!(f.entries.is_empty());
+        assert!(f.entries.is_empty(), "{:?}", f.entries);
     }
 
     #[test]

@@ -48,6 +48,10 @@ pub enum Mode {
     CrashReport,
     /// `--licenses` (隠し): 同梱の第三者告知を表示して終える (05 §17.1)。
     Licenses,
+    /// `--list-commands [--json]` (隠し): 組込みのコマンドの一覧を出し、終える (07 §11.5、09 §11.2)。
+    ListCommands { json: bool },
+    /// `--dump-keymap [--json]` (隠し): 解決後のキーマップを出し、終える (07 §7.7、09 §11.2)。
+    DumpKeymap { json: bool },
 }
 
 /// 解析の結果。
@@ -59,7 +63,7 @@ pub enum Cli {
         /// 開くファイル (0 個なら無題。複数は v0.2、最初のものを表示する)。
         files: Vec<FileArg>,
         read_only: bool,
-        /// `--encoding` の値 (M3 で使う。v0.1 の M2 では受け取るだけ)。
+        /// `--encoding` の値 (開く文書の文字コードの指定)。
         encoding: Option<String>,
         /// `--locale` の値 (UI の言語。選択順の最上位、07 §17.1)。同梱の言語に当たるかは `eve_config::select_locale` が見る。
         locale: Option<String>,
@@ -163,6 +167,7 @@ pub fn parse(
     let mut config = ConfigArgs::default();
     let (mut check, mut dump, mut defaults, mut json) = (false, false, false, false);
     let (mut crash_report, mut licenses) = (false, false);
+    let (mut list_commands, mut dump_keymap) = (false, false);
     let mut log_level = None;
     let mut only_positional = false;
     let add_file =
@@ -232,6 +237,9 @@ pub fn parse(
             "--defaults" => defaults = true,
             "--crash-report" => crash_report = true,
             "--licenses" => licenses = true,
+            // 生成リファレンスと 07 §11.6 のカタログとの突合の入力 (隠し。`--help` に出さない、07 §18.3)
+            "--list-commands" => list_commands = true,
+            "--dump-keymap" => dump_keymap = true,
             "--log-level" => {
                 log_level = Some(
                     it.next()
@@ -256,7 +264,7 @@ pub fn parse(
                 None => ignored.push(s.to_owned()),
             },
             s if s.starts_with('-') && s != "-" => return Err(UsageError::UnknownOption(a)),
-            // `-` (標準入力) は v0.3。いまはファイル名として扱わず未対応として無視する
+            // `-` (標準入力) は v0.4。いまはファイル名として扱わず未対応として無視する
             "-" => ignored.push(a),
             _ => add_file(&mut files, a, &mut pending),
         }
@@ -269,10 +277,12 @@ pub fn parse(
         last.line = Some(line);
         last.col = col;
     }
-    // `--defaults` / `--json` は `--dump-config` の修飾だけ
-    if (defaults || json) && !dump {
-        let o = if defaults { "--defaults" } else { "--json" };
-        return Err(UsageError::UnknownOption(o.to_owned()));
+    // `--defaults` は `--dump-config` の修飾だけ。`--json` は `--dump-config` / `--list-commands` / `--dump-keymap` の修飾
+    if defaults && !dump {
+        return Err(UsageError::UnknownOption("--defaults".to_owned()));
+    }
+    if json && !(dump || list_commands || dump_keymap) {
+        return Err(UsageError::UnknownOption("--json".to_owned()));
     }
     let mode = if licenses {
         Mode::Licenses
@@ -282,6 +292,10 @@ pub fn parse(
         Mode::CheckConfig
     } else if dump {
         Mode::DumpConfig { defaults, json }
+    } else if list_commands {
+        Mode::ListCommands { json }
+    } else if dump_keymap {
+        Mode::DumpKeymap { json }
     } else {
         Mode::Edit
     };
@@ -467,6 +481,21 @@ mod tests {
         );
         assert_eq!(mode(&["--crash-report"]), Mode::CrashReport);
         assert_eq!(mode(&["--licenses"]), Mode::Licenses);
+        assert_eq!(
+            mode(&["--list-commands", "--json"]),
+            Mode::ListCommands { json: true }
+        );
+        assert_eq!(mode(&["--dump-keymap"]), Mode::DumpKeymap { json: false });
+        assert_eq!(
+            p(&["--json"]).unwrap_err(),
+            UsageError::UnknownOption("--json".into()),
+            "--dump-config / --list-commands / --dump-keymap の修飾だけ"
+        );
+        assert_eq!(
+            p(&["--list-commands", "--defaults"]).unwrap_err(),
+            UsageError::UnknownOption("--defaults".into()),
+            "--defaults は --dump-config の修飾だけ"
+        );
         let Cli::Run { log_level, .. } = p(&["--log-level", "debug"]).unwrap() else {
             panic!()
         };

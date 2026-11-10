@@ -1,5 +1,9 @@
 //! クローム (ステータスバー・メッセージ行・ヒントバー) とオーバーレイ (確認・入力プロンプト) の描画の検査
 //! (docs/04 §3.3 / §3.5 / §8.2 / §8.3 / §8.7〜§8.9)。Harness が作る `Frame` を `render_screen` で `Buffer` にして、行の文字列を見る。
+#![expect(
+    clippy::cast_possible_truncation,
+    reason = "テスト用の数値変換。値は小さく収まる"
+)]
 
 use eve_testkit::Harness;
 use eve_tui::buffer::{chrome_rows_for_surface, row_text};
@@ -442,12 +446,13 @@ fn which_key_は編集面の左下に続きのキーと動作を重ねる() {
     };
     assert!(line_of("メッセージ履歴").contains("│ M "), "{all}");
     assert!(line_of("名前を付けて保存").contains("│ S "), "{all}");
-    // 左下: 編集面の最下行の近くにある
+    // 左下: 編集面の最下行の近くにある (一覧の末尾の行で確かめる。並びは editor → global の割当の順)
     let at = rows
         .iter()
-        .rposition(|r| r.contains("メッセージ履歴"))
+        .rposition(|r| r.contains("行を下へ移動"))
         .unwrap();
     assert!(at >= 12, "{at}");
+    assert!(line_of("行を下へ移動").starts_with("│ ↓ "), "{all}");
 }
 
 // verifies: FR-504
@@ -482,5 +487,21 @@ fn ヒントバーを隠すとクロームは_2_行で_メッセージ行だけ�
         rows[14].contains("ヒントバーを隠しました"),
         "メッセージ行: {:?}",
         rows[14]
+    );
+}
+
+// 04 §3.5: 端末がちょうど 10 行 (10 行未満ではない) ならクロームは 3 行で、編集面 7 行とで画面の全行を使う。
+// 編集面の行数 (7) だけでは 9 行の端末 (クローム 2 行) と区別できないので、描画は端末の大きさから行を割り当てる
+#[test]
+fn 十行の端末はクローム_3_行で最後の行まで描く() {
+    let mut h = Harness::new().with_size(80, 7);
+    let f = h.frame();
+    assert_eq!(f.size.rows, 7);
+    let window = CellSize { cols: 80, rows: 10 };
+    let r = render_screen(&f, window, ColorDepth::TrueColor, &Glyphs::unicode());
+    assert_eq!(r.buffer.area.height, 10);
+    assert!(
+        !row_text(&r.buffer, 9).trim().is_empty(),
+        "最後の行 (ヒントバー) が空でない"
     );
 }

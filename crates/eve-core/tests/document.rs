@@ -155,13 +155,43 @@ fn 保存の流れ() {
     assert!(!d.is_dirty(), "保存時点に戻れば未変更");
 }
 
+// spec: 03 §11.5.1 (長大行の数を、変わった行だけで増減する)
+#[test]
+fn cr_と_lf_の合体と分離でも長大行の数は狂わない() {
+    let mut f = eve_core::TextFormat::new_document();
+    f.long_line_threshold = 3;
+    let mut d = Document::from_text(eve_text::Text::from("aaaa\rX\nb"), f);
+    assert_eq!(d.format.long_lines, 1);
+    // X を消すと CR と LF が合体して CRLF になる。長い行 aaaa は 1 行のまま
+    d.apply(&user(edit(&d, 5, 6, ""), 0)).unwrap();
+    assert_eq!(d.to_string_lossy(), "aaaa\r\nb");
+    assert_eq!(d.format.long_lines, 1, "合体");
+    // CRLF の間に挿入すると分離する
+    d.apply(&user(edit(&d, 5, 5, "Y"), 10)).unwrap();
+    assert_eq!(d.format.long_lines, 1, "分離");
+    d.undo().unwrap();
+    assert_eq!(d.format.long_lines, 1, "Undo");
+}
+
 // ---------- eol_stats のプロパティテスト ----------
 
 #[derive(Clone, Debug)]
 enum Act {
-    Insert { at: u16, s: &'static str },
-    Delete { at: u16, len: u8 },
-    Replace { at: u16, len: u8, s: &'static str },
+    Insert {
+        at: u16,
+        s: &'static str,
+    },
+    Delete {
+        at: u16,
+        len: u8,
+    },
+    Replace {
+        at: u16,
+        len: u8,
+        s: &'static str,
+    },
+    /// 複数箇所を 1 つの `ChangeSet` で変える (すべて置換・複数カーソル・改行コードの変換と同じ形)
+    Multi(Vec<(u16, u8, &'static str)>),
     Undo,
     Redo,
 }
@@ -173,10 +203,40 @@ fn act() -> impl Strategy<Value = Act> {
     prop_oneof![
         5 => (any::<u16>(), s.clone()).prop_map(|(at, s)| Act::Insert { at, s }),
         4 => (any::<u16>(), 1u8..5).prop_map(|(at, len)| Act::Delete { at, len }),
-        2 => (any::<u16>(), 1u8..5, s).prop_map(|(at, len, s)| Act::Replace { at, len, s }),
+        2 => (any::<u16>(), 1u8..5, s.clone()).prop_map(|(at, len, s)| Act::Replace { at, len, s }),
+        4 => proptest::collection::vec((any::<u16>(), 0u8..4, prop_oneof![Just(""), s]), 2..6).prop_map(Act::Multi),
         2 => Just(Act::Undo),
         1 => Just(Act::Redo),
     ]
+}
+
+/// `Act::Multi` の置換の列を、昇順で重ならない (接してよい) `Edit` に直す。
+fn multi_edits(text: &str, parts: &[(u16, u8, &'static str)]) -> Vec<Edit> {
+    let mut v: Vec<(usize, usize, &str)> = parts
+        .iter()
+        .map(|(at, len, s)| {
+            let st = boundary(text, *at);
+            let mut en = (st + *len as usize).min(text.len());
+            while !text.is_char_boundary(en) {
+                en += 1;
+            }
+            (st, en, *s)
+        })
+        .collect();
+    v.sort_by_key(|e| (e.0, e.1));
+    let mut out = Vec::new();
+    let mut pos = 0;
+    for (st, en, s) in v {
+        if st < pos {
+            continue;
+        }
+        out.push(Edit {
+            range: ByteRange::from(st..en),
+            insert: s.into(),
+        });
+        pos = en;
+    }
+    out
 }
 
 fn boundary(text: &str, at: u16) -> usize {
@@ -188,11 +248,14 @@ fn boundary(text: &str, at: u16) -> usize {
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig { cases: 512, ..ProptestConfig::default() })]
+    #![proptest_config(ProptestConfig { cases: 2048, ..ProptestConfig::default() })]
 
     #[test]
-    fn eol_stats_は常に数え直しと一致する(initial in "[ab\r\n]{0,12}", acts in proptest::collection::vec(act(), 0..40)) {
-        let mut d = Document::from_text(eve_text::Text::from(initial.as_str()), eve_core::TextFormat::new_document());
+    fn eol_stats_と長大行の数は常に数え直しと一致する(initial in "[ab\r\n]{0,12}", th in 0usize..4, acts in proptest::collection::vec(act(), 0..40)) {
+        // 長大行の閾値を小さくして、CR と LF の合体・分離で長さが閾値をまたぐ行を作る (SAF-13)
+        let mut f = eve_core::TextFormat::new_document();
+        f.long_line_threshold = th;
+        let mut d = Document::from_text(eve_text::Text::from(initial.as_str()), f);
         prop_assert_eq!(d.format.eol_stats, d.recount_eol());
         let mut t = 0;
         for a in &acts {
@@ -212,10 +275,94 @@ proptest! {
                     let ins = if let Act::Replace { s, .. } = a { *s } else { "" };
                     d.apply(&user(edit(&d, st, en, ins), t)).unwrap();
                 }
+                Act::Multi(parts) => {
+                    let cs = ChangeSet::from_sorted_edits(&d.snapshot(), multi_edits(&text, parts)).unwrap();
+                    d.apply(&user(cs, t)).unwrap();
+                }
                 Act::Undo => { d.undo().unwrap(); }
                 Act::Redo => { d.redo().unwrap(); }
             }
             prop_assert_eq!(d.format.eol_stats, d.recount_eol(), "操作 {:?} の後、文書 {:?}", a, d.to_string_lossy());
+            prop_assert_eq!(
+                d.format.long_lines,
+                eve_core::count_long_lines(d.text(), th),
+                "長大行の数。操作 {:?} の後、文書 {:?}", a, d.to_string_lossy()
+            );
         }
     }
+}
+
+/// `text` の中の `from` を全部 `to` に置き換える `ChangeSet` と件数。
+fn replace_every(doc: &Document, text: &str, from: &str, to: &str) -> (ChangeSet, usize) {
+    let edits: Vec<Edit> = text
+        .match_indices(from)
+        .map(|(i, m)| Edit {
+            range: ByteRange::from(i..i + m.len()),
+            insert: to.into(),
+        })
+        .collect();
+    let n = edits.len();
+    (
+        ChangeSet::from_sorted_edits(&doc.snapshot(), edits).unwrap(),
+        n,
+    )
+}
+
+fn doc_with(text: &str) -> Document {
+    let mut d = Document::new_untitled();
+    d.apply(&user(edit(&d, 0, 0, text), 0)).unwrap();
+    d
+}
+
+// spec: 03 §12.5 (大量のすべて置換の Undo の記録)
+#[test]
+fn 一致の詰まった大量の置換の_undo_は_1_件の置き換えで戻る() {
+    let text = format!("head\n{}tail", "ab ".repeat(12_000));
+    let mut d = doc_with(&text);
+    let (cs, n) = replace_every(&d, &text, "ab", "xyz");
+    assert_eq!(n, 12_000);
+    let tx = Transaction::new(cs, Origin::System, Tick(10))
+        .with_undo_group(UndoGroupHint::Break)
+        .with_coarse_undo();
+    d.apply(&tx).unwrap();
+    let replaced = d.to_string_lossy();
+    assert_eq!(replaced, format!("head\n{}tail", "xyz ".repeat(12_000)));
+    let undo = d.undo().unwrap().unwrap();
+    assert_eq!(d.to_string_lossy(), text);
+    assert_eq!(
+        undo.changes.changed_ranges().count(),
+        1,
+        "Undo は 1 件の置き換え"
+    );
+    // ほかの View の位置 (Bias::Before) は、範囲の中なら始端に寄る。範囲の外は保たれる
+    let start = "head\n".len();
+    let inside = start + 4 * 100;
+    assert_eq!(
+        undo.changes
+            .map_pos(eve_text::ByteOff(inside), eve_text::Bias::Before),
+        eve_text::ByteOff(start)
+    );
+    assert_eq!(
+        undo.changes
+            .map_pos(eve_text::ByteOff(2), eve_text::Bias::Before),
+        eve_text::ByteOff(2)
+    );
+    // Redo は変更ごとの ChangeSet のまま
+    let redo = d.redo().unwrap().unwrap();
+    assert_eq!(d.to_string_lossy(), replaced);
+    assert_eq!(redo.changes.changed_ranges().count(), 12_000);
+}
+
+// spec: 03 §12.5 (範囲の旧本文が変更ごとの逆変換の見積りより大きければ、変更ごとの逆変換を使う)
+#[test]
+fn 一致のまばらな大量の置換の_undo_は変更ごとの逆変換() {
+    let gap = " ".repeat(300);
+    let text = format!("ab{gap}").repeat(10_000);
+    let mut d = doc_with(&text);
+    let (cs, _) = replace_every(&d, &text, "ab", "x");
+    let tx = Transaction::new(cs, Origin::System, Tick(10)).with_coarse_undo();
+    d.apply(&tx).unwrap();
+    let undo = d.undo().unwrap().unwrap();
+    assert_eq!(d.to_string_lossy(), text);
+    assert_eq!(undo.changes.changed_ranges().count(), 10_000);
 }

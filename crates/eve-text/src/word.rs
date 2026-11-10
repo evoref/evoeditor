@@ -4,7 +4,7 @@
 //! 分類の単位は書記素で、書記素の先頭のスカラ値の分類をその書記素の分類とする。
 //!
 //! 分類は標準ライブラリの `char` の判定と、日本語の範囲表で行う (Unicode の Script / General Category の表は持たない):
-//! - 空白は `char::is_whitespace`、英数は `char::is_alphanumeric` (L* / N* と Other_Alphabetic)
+//! - 空白は `char::is_whitespace`、英数は `char::is_alphanumeric` (L* / N* と `Other_Alphabetic`)
 //! - 書記素の先頭の結合文字 (Mn / Mc) は主な結合文字のブロックだけを `Alnum` とする (孤立した結合文字は稀)
 
 use unicode_segmentation::UnicodeSegmentation;

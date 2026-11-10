@@ -1,28 +1,28 @@
 //! `Frontend` の TUI 実装 (docs/02 §9.2、docs/04 §14)。端末の初期化と復元、入力スレッドの起動、描画。OS ごとの端末の部品は
-//! `win` (Windows のコンソール) と `unix` (`/dev/tty`) で、同じ形 (`ConsoleInput`・`ConsoleOut`・`spawn_input_thread`) をしている。
+//! `input::win` (Windows のコンソール) と `input::unix` (`/dev/tty`) で、同じ形 (`ConsoleInput`・`ConsoleOut`・`spawn_input_thread`) をしている。
 //!
-//! 現在の範囲 (M2 の E5): 編集面・クローム・オーバーレイの描画。マウス・フォーカス・ブラケットペースト・拡張キーは
-//! v0.1 では有効にしない (04 §14.1)。復元は冪等で、どの終了経路でも `restore` (または `Drop`) で行う。
+//! 編集面・クローム・オーバーレイを描画する。復元は冪等で、どの終了経路でも `restore` (または `Drop`) で行う。
 
 use std::io;
 use std::thread::JoinHandle;
 
 use eve_host::{
-    EffectOutcome, FatalReason, Frontend, FrontendConfig, FrontendError, HostMsg, InputSink,
-    RenderOutcome,
+    EffectOutcome, FatalReason, Frontend, FrontendConfig, FrontendError, FrontendErrorKind,
+    HostMsg, InputSink, RenderOutcome,
 };
 use eve_view::{Capabilities, CellSize, Effect, Frame, InputEvent};
 
 use crate::ansi::{ENTER, Emitter, LEAVE};
-use crate::buffer::CHROME_ROWS;
+use crate::buffer::{CHROME_ROWS, bar_rows};
 use crate::caps::{CapsConfig, ColorMode, Detected, ProcessEnv, check_usable, detect};
-use crate::chrome::render_screen;
+use crate::chrome::{ScreenLayout, render_screen};
 use crate::glyphs::Glyphs;
+use crate::input::InputOut;
 #[cfg(unix)]
-use crate::unix as term_io;
+use crate::input::unix as term_io;
 #[cfg(windows)]
-use crate::win as term_io;
-use term_io::{ConsoleInput, ConsoleOut, InputOut, spawn_input_thread, surface_resize};
+use crate::input::win as term_io;
+use term_io::{ConsoleInput, ConsoleOut, spawn_input_thread};
 
 /// `eve_host::InputSink` を入力スレッドの送り先にする。
 struct SinkOut(InputSink);
@@ -52,14 +52,18 @@ pub struct TuiFrontend {
     /// 描画が入力スレッドへ渡す編集面の位置 (マウスの座標変換、04 §6.8)。
     geom: std::sync::Arc<crate::mouse::SharedGeom>,
     entered: bool,
+    /// Unix: 端末タイトルを XTWINOPS で退避した (`CSI 22;0 t`)。復元で 1 回だけ戻す (`CSI 23;0 t`、04 §14.1 / §14.3)。
+    /// 外から止められた (SIGCONT だけが来る) 再初期化では退避し直さない (退避と復元を釣り合わせる)。
+    #[cfg(unix)]
+    title_pushed: bool,
     /// マウスの捕捉 (`SetMouseCapture`)。Unix の SIGCONT の後の再初期化で入れ直す。
     mouse: bool,
     /// 「復元済み」の原子フラグ。`restore` と受信スレッドの緊急の復元が共有し、立てた側だけが復元の出力をする (02 §9.6 手順 4)。
     restored: eve_view::TermRestoredFlag,
 }
 
-fn err(what: &str, e: &io::Error) -> FrontendError {
-    FrontendError(format!("{what}: {e}"))
+fn err(kind: FrontendErrorKind, e: &io::Error) -> FrontendError {
+    FrontendError::io(kind, e)
 }
 
 impl TuiFrontend {
@@ -80,6 +84,8 @@ impl TuiFrontend {
             thread: None,
             geom: Default::default(),
             entered: false,
+            #[cfg(unix)]
+            title_pushed: false,
             mouse: false,
             restored: eve_view::TermRestoredFlag::default(),
         }
@@ -99,9 +105,15 @@ impl TuiFrontend {
 
     /// 代替スクリーンと端末のモードを入れる (初期化と、Unix の SIGCONT の後の再初期化)。
     fn enter_screen(&mut self) {
+        // 04 §14.1 の 3: 代替スクリーンの前にタイトルを退避する (非対応の端末は無視する)
+        #[cfg(unix)]
+        if !self.title_pushed {
+            self.title_pushed = true;
+            self.write(crate::input::unix::TITLE_PUSH);
+        }
         self.write(ENTER);
         #[cfg(unix)]
-        self.write(crate::unix::ENTER_MODES);
+        self.write(crate::input::unix::ENTER_MODES);
         self.entered = true;
     }
 
@@ -138,7 +150,7 @@ impl TuiFrontend {
     #[cfg(unix)]
     fn suspend(&mut self) {
         self.restore();
-        crate::unix::stop_self();
+        crate::input::unix::stop_self();
         if let Some(i) = self.input.as_ref() {
             i.request_reinit();
         }
@@ -163,12 +175,10 @@ impl Frontend for TuiFrontend {
     fn init(&mut self, cfg: &FrontendConfig) -> Result<Capabilities, FrontendError> {
         // 0 前提確認: TERM=dumb は起動しない
         check_usable(&ProcessEnv)
-            .map_err(|_| FrontendError("TERM=dumb の端末では起動できません".to_owned()))?;
+            .map_err(|_| FrontendError::new(FrontendErrorKind::UnusableTerminal))?;
         // 1〜2 コンソールモード (出力は VT、入力は自前のループ向け)。VT を拒否するコンソールは起動エラー
-        let out =
-            ConsoleOut::open().map_err(|e| err("コンソールの出力を VT モードにできません", &e))?;
-        let input =
-            ConsoleInput::open().map_err(|e| err("コンソールの入力を設定できません", &e))?;
+        let out = ConsoleOut::open().map_err(|e| err(FrontendErrorKind::ConsoleOutput, &e))?;
+        let input = ConsoleInput::open().map_err(|e| err(FrontendErrorKind::ConsoleInput, &e))?;
         let ambiguous = matches!(cfg.ambiguous_width, 1 | 2).then_some(cfg.ambiguous_width);
         let detected = detect(
             CapsConfig {
@@ -192,40 +202,34 @@ impl Frontend for TuiFrontend {
 
     fn start_input(&mut self, tx: InputSink) -> Result<(), FrontendError> {
         let Some(input) = self.input.as_ref() else {
-            return Err(FrontendError(
-                "init の前に start_input が呼ばれました".to_owned(),
-            ));
+            return Err(FrontendError::new(FrontendErrorKind::InputBeforeInit));
         };
         self.sink = Some(tx.clone());
         let t = spawn_input_thread(input, SinkOut(tx), self.geom.clone())
-            .map_err(|e| err("入力スレッドを起動できません", &e))?;
+            .map_err(|e| err(FrontendErrorKind::InputThread, &e))?;
         self.thread = Some(t);
         Ok(())
     }
 
     fn surface_size(&self) -> CellSize {
         match self.window() {
-            Ok(w) => match surface_resize(w, self.geom.hint_bar()) {
-                InputEvent::Resize { cols, rows } => CellSize { cols, rows },
-                _ => CellSize::default(),
-            },
+            Ok(w) => ScreenLayout::compute(w, self.geom.hint_bar(), 0).surface(),
             Err(_) => CellSize::default(),
         }
     }
 
     fn render(&mut self, frame: &Frame) -> RenderOutcome {
         // 編集面の大きさが Frame と違えば、出力せずに Resize を送る (04 §3.6。次の反復で正しい Frame が来る)
-        // Frame の編集面は、検索バーが開いていればその行数だけ端末の編集面より小さい (`crate::buffer::bar_rows`)。
+        // Frame の編集面は、検索バーが開いていればその行数だけ端末の編集面より小さい (`ScreenLayout::frame_size`)。
         // ヒントバーの表示が変われば (FR-504) クロームの行数が変わるので、先に覚えてから比べる (変わった直後の 1 回は Resize になる)
         #[cfg(unix)]
         self.reinit_if_continued();
         self.geom.set_hint_bar(frame.hint_bar);
-        let now = self.surface_size();
-        let expected = CellSize {
-            cols: now.cols,
-            rows: now.rows.saturating_sub(crate::buffer::bar_rows(frame)),
-        };
-        if expected != frame.size {
+        // 大きさを取れなければ 0×0 (`surface_size` と同じ)
+        let window = self.window().unwrap_or_default();
+        let layout = ScreenLayout::compute(window, self.geom.hint_bar(), bar_rows(frame));
+        let now = layout.surface();
+        if layout.frame_size() != frame.size {
             self.emitter.invalidate();
             if let Some(s) = &self.sink {
                 s.send(InputEvent::Resize {
@@ -245,7 +249,7 @@ impl Frontend for TuiFrontend {
             .map_or(eve_view::ColorDepth::TrueColor, |d| d.caps.color_depth);
         let window = self.window().unwrap_or(frame.size);
         let r = render_screen(frame, window, depth, &self.glyphs);
-        let out = self.emitter.frame(&r, frame, true);
+        let out = self.emitter.frame(r, frame, true);
         crate::trace::render_emitted();
         self.write(&out);
         // 計測用ビルド: 描画の `write` が戻った時刻を記録する。`--bench-exit-after-first-frame` なら、端末を復元して終わる
@@ -261,7 +265,19 @@ impl Frontend for TuiFrontend {
                 .items
                 .iter()
                 .any(|i| i.kind == eve_view::StatusKind::Loading);
-        if crate::trace::render_done(content, progress) {
+        // 検索で一致へ移った: 計測ハーネスが決めた語が編集面の行に出ている (BM-108)
+        let matched = crate::trace::match_text().is_some_and(|m| {
+            frame.panes.first().is_some_and(|p| {
+                p.rows.iter().any(|r| {
+                    r.spans
+                        .iter()
+                        .map(|s| s.text.as_str())
+                        .collect::<String>()
+                        .contains(m)
+                })
+            })
+        });
+        if crate::trace::render_done(content, progress, matched) {
             self.restore();
             crate::trace::flush();
             std::process::exit(0);
@@ -346,9 +362,15 @@ impl Frontend for TuiFrontend {
                 .swap(true, std::sync::atomic::Ordering::AcqRel)
             {
                 #[cfg(unix)]
-                self.write(crate::unix::LEAVE_MODES);
+                self.write(crate::input::unix::LEAVE_MODES);
                 self.write(LEAVE);
             }
+        }
+        // 04 §14.3 の 8: タイトルを戻す (代替スクリーンを抜けた後。緊急の復元が先に戻していても、pop は退避の数だけ)
+        #[cfg(unix)]
+        if self.title_pushed {
+            self.title_pushed = false;
+            self.write(crate::input::unix::TITLE_POP);
         }
         if let Some(o) = self.out.as_mut() {
             o.restore();
@@ -375,11 +397,138 @@ impl Drop for TuiFrontend {
 /// 緊急の端末復元で書くバイト列: 先頭の CAN (書きかけの VT シーケンスを打ち切る) + 復元の固定の列 (04 §14.3)。
 #[cfg(windows)]
 const EMERGENCY_BYTES: &[u8] = b"\x18\x1b[?2026l\x1b[0m\x1b[0 q\x1b[?25h\x1b[?7h\x1b[?1049l";
-/// 同上 (Unix は先に `unix::LEAVE_MODES` と同じモードを外す)。
+/// 同上 (Unix は先に `unix::LEAVE_MODES` と同じモードを外し、最後に `unix::TITLE_POP` でタイトルを戻す)。
 #[cfg(unix)]
-const EMERGENCY_BYTES: &[u8] = b"\x18\x1b[>4m\x1b[<u\x1b[?1004l\x1b[?2004l\x1b[?1006l\x1b[?1002l\x1b[?1000l\x1b[?2026l\x1b[0m\x1b[0 q\x1b[?25h\x1b[?7h\x1b[?1049l";
+const EMERGENCY_BYTES: &[u8] = b"\x18\x1b[>4m\x1b[<u\x1b[?1004l\x1b[?2004l\x1b[?1006l\x1b[?1002l\x1b[?1000l\x1b[?2026l\x1b[0m\x1b[0 q\x1b[?25h\x1b[?7h\x1b[?1049l\x1b[23;0t";
 
 /// 編集面の下のクローム行数 (`surface_size` の計算に使う)。
 pub const fn chrome_rows() -> u16 {
     CHROME_ROWS
+}
+
+/// 入力スレッドの本体 `body` を走らせ、panic したら `on_panic` を呼ぶ (Windows と Unix の入力スレッドで共有する)。
+///
+/// 入力スレッドが panic したまま黙って終わると、端末は raw のまま入力を受け付けず、退避も走らない。`on_panic` で
+/// Host に `Fatal(InputThreadDied)` を送り、Host が退避と端末の復元をして終える (04 §14.2・05 §11.4。
+/// docs/review/v0.3-findings.md の SAF-07)。panic の内容はパニックフック (bin) が記録する。
+pub(crate) fn run_guarded(body: impl FnOnce(), on_panic: impl FnOnce()) {
+    if std::panic::catch_unwind(std::panic::AssertUnwindSafe(body)).is_err() {
+        on_panic();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::run_guarded;
+    use std::cell::Cell;
+
+    #[test]
+    fn 入力スレッドの本体が_panic_したら知らせる() {
+        let died = Cell::new(false);
+        run_guarded(|| panic!("入力の解析の不具合"), || died.set(true));
+        assert!(died.get());
+    }
+
+    #[test]
+    fn 本体が普通に終われば知らせない() {
+        let died = Cell::new(false);
+        run_guarded(|| {}, || died.set(true));
+        assert!(!died.get());
+    }
+
+    /// 入力スレッドの panic を、本物の送り先 (`SinkOut`) と Host の待ち受けのループまで通す (SAF-07、
+    /// docs/review/v0.3-findings.md の §2.7 の 6)。Frontend は `HeadlessFrontend` に任せ、`start_input` だけを
+    /// 「panic する入力スレッドの本体」に差し替える (`run_guarded` は入力スレッドの本体そのもの。スレッドを作るのは
+    /// R11 で win.rs / unix.rs だけなので、ここでは同じスレッドで走らせる)。Host は `Fatal(InputThreadDied)` を受けて、
+    /// 端末を 1 回だけ復元して FATAL で終わる。
+    #[test]
+    fn 入力スレッドが_panic_すると_host_が受けて端末を復元して終わる() {
+        use std::rc::Rc;
+        use std::sync::Arc;
+
+        use eve_core::{JobPorts, Ports};
+        use eve_host::{
+            EffectOutcome, ExitCode, Frontend, FrontendConfig, FrontendError, Host, InputSink,
+            RenderOutcome,
+        };
+        use eve_testkit::{FixedPaths, HeadlessFrontend, ManualClock, ManualJobSpawner, MemFs};
+        use eve_view::{Capabilities, CellSize, Effect, Frame};
+
+        struct PanickingInput {
+            inner: HeadlessFrontend,
+            died: bool,
+        }
+
+        impl Frontend for PanickingInput {
+            fn init(&mut self, cfg: &FrontendConfig) -> Result<Capabilities, FrontendError> {
+                self.inner.init(cfg)
+            }
+            fn start_input(&mut self, tx: InputSink) -> Result<(), FrontendError> {
+                use crate::input::InputOut as _;
+                let out = super::SinkOut(tx);
+                let mut died = false;
+                run_guarded(
+                    || panic!("入力の解析の不具合 (試験)"),
+                    || {
+                        out.died();
+                        died = true;
+                    },
+                );
+                self.died = died;
+                Ok(())
+            }
+            fn surface_size(&self) -> CellSize {
+                self.inner.surface_size()
+            }
+            fn render(&mut self, frame: &Frame) -> RenderOutcome {
+                self.inner.render(frame)
+            }
+            fn apply_effect(&mut self, eff: &Effect) -> EffectOutcome {
+                self.inner.apply_effect(eff)
+            }
+            fn restore(&mut self) {
+                self.inner.restore();
+            }
+        }
+
+        let clock = ManualClock::new();
+        let fs = Arc::new(MemFs::new(Arc::new(clock.clone())));
+        fs.add_dir("/w");
+        let paths = Arc::new(FixedPaths::default());
+        let jobs = ManualJobSpawner::new(JobPorts {
+            fs: fs.clone(),
+            clock: Arc::new(clock.clone()),
+            paths: paths.clone(),
+        });
+        let ports = Ports {
+            fs,
+            clock: Arc::new(clock),
+            jobs: Rc::clone(&jobs) as Rc<dyn eve_core::JobSpawner>,
+            paths,
+        };
+        let inner = HeadlessFrontend::new(40, 8);
+        let probe = inner.probe();
+        let mut fe = PanickingInput { inner, died: false };
+        let mut host = Host::new(ports);
+        let code = host.run(&mut fe, &[], false);
+        assert_eq!(code, ExitCode::FATAL);
+        assert_eq!(probe.restore_count(), 1, "端末を 1 回だけ復元する");
+        assert!(fe.died, "panic は run_guarded の中で捕まえて died を呼ぶ");
+    }
+
+    /// 緊急の復元の列は、通常の復元 (`ansi::LEAVE`、Unix は先に `unix::LEAVE_MODES`、最後に `unix::TITLE_POP`) と同じ並びに
+    /// CAN を前置したもの (04 §14.3。docs/review/v0.3-findings.md の STR-T9)。片方だけを直すとずれるので、ここで突き合わせる。
+    #[test]
+    fn 緊急の復元の列は通常の復元と同じ並び() {
+        #[cfg(windows)]
+        let expected = format!("\x18{}", crate::ansi::LEAVE);
+        #[cfg(unix)]
+        let expected = format!(
+            "\x18{}{}{}",
+            crate::input::unix::LEAVE_MODES,
+            crate::ansi::LEAVE,
+            crate::input::unix::TITLE_POP
+        );
+        assert_eq!(super::EMERGENCY_BYTES, expected.as_bytes());
+    }
 }

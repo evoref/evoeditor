@@ -62,6 +62,17 @@ pub(crate) fn verdict(v: &Value) -> Verdict {
             "spawn → 本文の最初の Frame の write (1 MB、壁時計)",
         ),
         "BM-103a" => t("(診断用)", None, "core 区間のみ。判定は BM-103b"),
+        id if id.starts_with("BM-109-") => t(
+            "(参考)",
+            None,
+            "100 MB のリテラル検索の全件の走査 (ヘッドレス。NFR-109)",
+        ),
+        "BM-103a-wrap" => t(
+            "(診断用)",
+            None,
+            "core 区間のみ。折り返し ON (view.wrap = word)",
+        ),
+        "BM-103a-200x60" => t("(診断用)", None, "core 区間のみ。端末 200x60"),
         "BM-103b" => t(
             "p50 2 ms / p99 8 ms",
             limits(v, 2.0, 8.0),
@@ -84,6 +95,21 @@ pub(crate) fn verdict(v: &Value) -> Verdict {
             "端末込み (ConPTY の出力の周期 約 16 ms を含む)",
         ),
         // 負荷の下のキー入力 (BM-103b と同じ区間・同じ目標)
+        "BM-103b-search-1m" => t(
+            "NFR-103 を維持 (p50 2 ms / p99 8 ms)",
+            limits(v, 2.0, 8.0),
+            "1 MB の文書の検索欄への入力 (一致を強調し直す)",
+        ),
+        "BM-103b-search-1m-regex" => t(
+            "NFR-103 を維持 (p50 2 ms / p99 8 ms)",
+            limits(v, 2.0, 8.0),
+            "1 MB の文書の検索欄への正規表現の入力 (一致を強調し直す)",
+        ),
+        "BM-108" => t(
+            "(参考) NFR-108 の目安 50 ms (許容 200 ms)",
+            None,
+            "100 MB の中ほどにだけある語の最初の一致の表示 (検索語と Enter の読取完了 → 一致の行が出た Frame の write)",
+        ),
         "BM-103b-search" => t(
             "NFR-103 を維持 (p50 2 ms / p99 8 ms)",
             limits(v, 2.0, 8.0),

@@ -1,0 +1,8 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 3017df403421aadfc7c3a2f4fa28a95310ac2a3ffb852acd75680d5a916b7b11 # shrinks to initial = "", acts = [Insert { at: 0, s: "\r\n" }, Replace { at: 4385, len: 1, s: "a" }, Multi([(42021, 0, "\r"), (57532, 0, "a")])]
+cc 259a4a9df385bb67941171b3bb329bcba3c5b91e4cdbe53a0af50858c14593c4 # shrinks to initial = "", th = 0, acts = [Replace { at: 0, len: 1, s: "x\ny" }, Multi([(8188, 1, "あ\r"), (0, 0, "")]), Replace { at: 13948, len: 1, s: "\r" }]

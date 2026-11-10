@@ -12,50 +12,21 @@ use eve_view::{
 use ratatui::buffer::{Buffer, CellDiffOption};
 use ratatui::layout::Rect;
 use ratatui::style::{Color as RColor, Modifier, Style as RStyle};
+use unicode_segmentation::UnicodeSegmentation;
 
+use crate::chrome::ScreenLayout;
 use crate::color::clamp_style;
 use crate::glyphs::Glyphs;
 use crate::sanitize::replace_controls;
 use crate::theme::Theme;
 
-/// 編集面の下のクロームの行数 (ステータスバー・メッセージ行・ヒントバー、04 §3.1)。
-pub const CHROME_ROWS: u16 = 3;
-
-/// 編集面が `surface_rows` 行のときのクロームの行数 (ヒントバーを出すとき)。端末が 10 行未満 (= 編集面が 8 行未満) のときは、
-/// メッセージ行を確保せず 2 行にする (04 §3.5。メッセージは表示中だけヒントバーの行を使う)。
-pub const fn chrome_rows_for_surface(surface_rows: u16) -> u16 {
-    chrome_rows(surface_rows, true)
-}
-
-/// `chrome_rows_for_surface` にヒントバーの表示 (`Frame.hint_bar`、FR-504) を加えたもの。ヒントバーを隠すときは、端末の
-/// 大きさに依らずステータスバーとメッセージ行の 2 行 (10 行未満でも、その 1 行をメッセージの表示中だけ使う、04 §3.5)。
-pub const fn chrome_rows(surface_rows: u16, hint_bar: bool) -> u16 {
-    if !hint_bar || surface_rows < 8 {
-        CHROME_ROWS - 1
-    } else {
-        CHROME_ROWS
-    }
-}
-
-/// 端末が `window_rows` 行のときの編集面の行数 (`chrome_rows` の逆)。
-pub const fn surface_rows_for_window(window_rows: u16, hint_bar: bool) -> u16 {
-    if !hint_bar || window_rows < 10 {
-        window_rows.saturating_sub(CHROME_ROWS - 1)
-    } else {
-        window_rows - CHROME_ROWS
-    }
-}
-
-/// 検索バーが取る行数 (検索欄 1 行 + 置換欄があれば 1 行)。
-pub fn bar_rows(frame: &Frame) -> u16 {
-    frame
-        .search
-        .as_ref()
-        .map_or(0, |b| 1 + u16::from(b.replace.is_some()))
-}
+// 行の割り当ての計算は `chrome::layout` に集めた (04 §3.1 / §3.5)。以前の場所の名前を残す (試験・診断が使う)。
+pub use crate::chrome::layout::{
+    CHROME_ROWS, bar_rows, chrome_rows, chrome_rows_for_surface, surface_rows_for_window,
+};
 
 /// 変換の結果。
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct PaneRender {
     /// 端末全体 (編集面 + クローム) の大きさのバッファ。
     pub buffer: Buffer,
@@ -160,15 +131,50 @@ impl Writer<'_> {
     }
 
     /// `limit` (含まない) までに収めて Span を書く。次に書く位置を返す。
-    pub(crate) fn span(&mut self, mut x: u16, y: u16, limit: u16, span: &Span) -> u16 {
-        if span.width == 0 || x >= limit {
+    pub(crate) fn span(&mut self, x: u16, y: u16, limit: u16, span: &Span) -> u16 {
+        self.span_with(x, y, limit, &span.text, span.width, span.style)
+    }
+
+    /// 編集面の本文の Span を書く。契約 (`eve_view::Span`) では、本文の Span は 1 書記素か、含まれるすべての書記素の幅が同じもの
+    /// なので、幅を書記素数で割って 1 書記素ずつセルに置く。割り切れない (契約に合わない) ときは 1 書記素として書く。
+    pub(crate) fn body_span(&mut self, mut x: u16, y: u16, limit: u16, span: &Span) -> u16 {
+        let text = span.text.as_str();
+        // ASCII の連続と 1 書記素は `span_with` と同じ
+        if text.is_ascii() || span.width == 0 {
+            return self.span(x, y, limit, span);
+        }
+        let n = text.graphemes(true).count();
+        if n <= 1 || !(span.width as usize).is_multiple_of(n) {
+            return self.span(x, y, limit, span);
+        }
+        let w = span.width / crate::cells(n);
+        for g in text.graphemes(true) {
+            if x >= limit {
+                break;
+            }
+            x = self.span_with(x, y, limit, g, w, span.style);
+        }
+        x
+    }
+
+    /// `span` の本体。Span を組み立てずに、文字列・幅・スタイルを借用で受け取る (PRF-08)。
+    pub(crate) fn span_with(
+        &mut self,
+        mut x: u16,
+        y: u16,
+        limit: u16,
+        text: &str,
+        width: u16,
+        style: eve_view::Style,
+    ) -> u16 {
+        if width == 0 || x >= limit {
             return x;
         }
-        let (text, n) = replace_controls(&span.text);
+        let (text, n) = replace_controls(text);
         self.sanitized += n;
-        let style = self.style(span.style);
+        let style = self.style(style);
         // ASCII の連続 (幅 = バイト数) は 1 文字 1 セル。それ以外は 1 書記素 (core の Span の契約)
-        if span.width as usize == text.len() && text.bytes().all(|b| (0x20..0x7F).contains(&b)) {
+        if width as usize == text.len() && text.bytes().all(|b| (0x20..0x7F).contains(&b)) {
             for ch in text.chars() {
                 if x >= limit {
                     break;
@@ -179,7 +185,7 @@ impl Writer<'_> {
             }
             return x;
         }
-        if x + span.width > limit {
+        if x + width > limit {
             // 全角が矩形の端をまたぐときは、防御的に 1 セルずつ空白で埋める (04 §3.5)
             while x < limit {
                 self.set(x, y, " ", style, false);
@@ -188,10 +194,10 @@ impl Writer<'_> {
             return x;
         }
         self.set(x, y, &text, style, false);
-        for k in 1..span.width {
+        for k in 1..width {
             self.set(x + k, y, " ", style, true);
         }
-        x + span.width
+        x + width
     }
 }
 
@@ -231,7 +237,7 @@ fn render_row(
         );
     }
     for sp in &row.spans {
-        x = w.span(x, y, limit, sp);
+        x = w.body_span(x, y, limit, sp);
     }
     // 折り返しの継続行は、行番号欄の右端 (区切りの左) に `↪` を描く (04 §10。ASCII 縮退時は `>`)
     if let RowSource::Line { wrap_idx, .. } = row.source
@@ -252,12 +258,21 @@ fn render_row(
     }
 }
 
-/// Frame の編集面を Buffer に書く。
+/// Frame の編集面を Buffer に書く (端末の大きさが分からないとき。行の割り当ては `ScreenLayout::for_frame` で推す)。
 pub fn render_panes(frame: &Frame, depth: ColorDepth, glyphs: &Glyphs) -> PaneRender {
+    render_panes_in(frame, ScreenLayout::for_frame(frame), depth, glyphs)
+}
+
+/// `render_panes` の本体。行の割り当て `layout` (`render_screen` は端末の大きさから求めたもの) の大きさの Buffer に書く。
+pub fn render_panes_in(
+    frame: &Frame,
+    layout: ScreenLayout,
+    depth: ColorDepth,
+    glyphs: &Glyphs,
+) -> PaneRender {
     let theme = Theme::from_roles(&frame.roles);
     // 検索バーは編集面の下に 1 行取る (編集面の行数 `size.rows` はその分を引いてある)
-    let base = frame.size.rows + bar_rows(frame);
-    let (cols, rows) = (frame.size.cols, base + chrome_rows(base, frame.hint_bar));
+    let (cols, rows) = (layout.cols, layout.rows());
     let mut buffer = Buffer::empty(Rect::new(0, 0, cols, rows));
     // 背景を塗るテーマ (07 §8.6) は、画面全体を本文の色で塗ってから描く (行末より右・文書末尾より下も同じ色にする)
     let text = frame.roles.get("ui.text");
@@ -276,7 +291,7 @@ pub fn render_panes(frame: &Frame, depth: ColorDepth, glyphs: &Glyphs) -> PaneRe
         };
         for pane in &frame.panes {
             for (i, row) in pane.rows.iter().enumerate() {
-                let i = i as u16;
+                let i = crate::cells(i);
                 if i >= pane.rect.rows {
                     break;
                 }

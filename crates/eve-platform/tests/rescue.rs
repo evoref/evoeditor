@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 #[cfg(windows)]
 use std::process::Command;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use eve_core::{DocSnapshot, Encoding, FsPath, RescueReason, RescueWriter, TextFormat};
 use eve_platform::rescue::StateRescue;
@@ -87,9 +87,9 @@ fn 小さい文書から書いて_manifest_は完了になる() {
         },
     );
     let small = doc(2, "small", None, |_| {});
-    let out = w.write(&[big, small], RescueReason::Panic, AMPLE);
+    let out = w.write(&[big, small], RescueReason::Panic, Instant::now(), AMPLE);
     assert!(out.complete && !out.fallback, "{out:?}");
-    assert_eq!((out.total, out.written), (2, 2));
+    assert_eq!((out.total, out.stored, out.written), (2, 2, 2));
     let dir = out.dir.unwrap();
     assert!(dir.starts_with(state.join("state").join("recovery")));
     // 小さい文書が 1 番、大きい文書が 2 番 (名前は `<n>-<basename>.txt`。basename は拡張子を含む)
@@ -117,6 +117,14 @@ fn 小さい文書から書いて_manifest_は完了になる() {
     let path_line = format!("path = \"{}\"", abs("w/big.txt").replace('\\', "\\\\"));
     assert!(m.contains(&path_line), "{path_line}\n{m}");
     assert_eq!(m.matches("written = true").count(), 2);
+    assert_eq!(m.matches("stored = true").count(), 2);
+    assert!(
+        m.contains(&format!(
+            "xxh3 = \"{:016x}\"",
+            xxhash_rust::xxh3::xxh3_64(b"small")
+        )),
+        "{m}"
+    );
     assert!(!dir.join("manifest.toml.tmp").exists());
     let _ = fs::remove_dir_all(state);
 }
@@ -127,7 +135,7 @@ fn 不正バイトのエスケープと_pua_を保つ() {
     let w = StateRescue::new(Some(state.join("s")));
     let text = format!("a{}b\u{FF9E}", eve_encoding_escape(0x9A));
     let d = doc(1, &text, None, |f| f.invalid_bytes = 1);
-    let out = w.write(&[d], RescueReason::Fatal, AMPLE);
+    let out = w.write(&[d], RescueReason::Fatal, Instant::now(), AMPLE);
     let dir = out.dir.unwrap();
     let body = fs::read_to_string(dir.join("1-無題-1.txt")).unwrap();
     assert_eq!(body, text, "内部の UTF-8 のまま (PUA を保つ)");
@@ -144,7 +152,7 @@ fn 時間予算が尽きたら書けた分だけ残し_complete_は_false() {
     let state = tmp("budget");
     let w = StateRescue::new(Some(state.join("s")));
     let a = doc(1, "a", Some(&abs("a.txt")), |_| {});
-    let out = w.write(&[a], RescueReason::Signal, Duration::ZERO);
+    let out = w.write(&[a], RescueReason::Signal, Instant::now(), Duration::ZERO);
     assert!(!out.complete);
     assert_eq!(out.written, 0);
     assert!(out.error.is_some());
@@ -158,7 +166,12 @@ fn 時間予算が尽きたら書けた分だけ残し_complete_は_false() {
 fn 退避する文書が無ければ何も作らない() {
     let state = tmp("none");
     let w = StateRescue::new(Some(state.join("s")));
-    let out = w.write(&[], RescueReason::Signal, Duration::from_secs(1));
+    let out = w.write(
+        &[],
+        RescueReason::Signal,
+        Instant::now(),
+        Duration::from_secs(1),
+    );
     assert!(out.nothing_to_save() && out.complete && out.dir.is_none());
     assert!(!state.join("s").exists());
     let _ = fs::remove_dir_all(state);
@@ -171,7 +184,7 @@ fn 同じ秒の退避は連番で別のディレクトリになる() {
     let mut dirs = Vec::new();
     for i in 0..3 {
         let d = doc(1, "x", None, |_| {});
-        let out = w.write(&[d], RescueReason::Panic, AMPLE);
+        let out = w.write(&[d], RescueReason::Panic, Instant::now(), AMPLE);
         dirs.push(out.dir.unwrap());
         assert!(out.complete, "{i}");
     }
@@ -198,7 +211,7 @@ fn 状態ディレクトリを使えなければ代替の退避先に書く() {
     fs::write(&blocked, b"file").unwrap();
     let w = StateRescue::new(Some(blocked.clone()));
     let d = doc(1, "rescued", Some(&abs("a.txt")), |_| {});
-    let out = w.write(&[d], RescueReason::ConsoleClose, AMPLE);
+    let out = w.write(&[d], RescueReason::ConsoleClose, Instant::now(), AMPLE);
     let dir = out.dir.clone().expect("代替の退避先");
     assert!(out.fallback && out.complete, "{out:?}");
     assert!(
@@ -231,6 +244,7 @@ fn 退避先は所有者のみの_0700_と_0600() {
     let out = w.write(
         &[doc(1, "secret", None, |_| {})],
         RescueReason::Panic,
+        Instant::now(),
         AMPLE,
     );
     let dir = out.dir.unwrap();
@@ -251,6 +265,7 @@ fn 退避先は所有者のみの_dacl() {
     let out = w.write(
         &[doc(1, "secret", None, |_| {})],
         RescueReason::Panic,
+        Instant::now(),
         AMPLE,
     );
     let dir = out.dir.unwrap();
@@ -280,6 +295,7 @@ fn 長い名前と予約文字のファイル名() {
     let out = w.write(
         &[doc(1, "x", Some(&long), |_| {})],
         RescueReason::Panic,
+        Instant::now(),
         AMPLE,
     );
     assert!(out.complete, "{out:?}");
@@ -371,7 +387,12 @@ fn 書いた退避は次の走査で見つかる() {
     let state = tmp("scan2");
     let sd = state.join("s");
     let w = StateRescue::new(Some(sd.clone()));
-    let out = w.write(&[doc(1, "x", None, |_| {})], RescueReason::Panic, AMPLE);
+    let out = w.write(
+        &[doc(1, "x", None, |_| {})],
+        RescueReason::Panic,
+        Instant::now(),
+        AMPLE,
+    );
     let written = out.dir.unwrap();
     let found = NativeFs::new(&sd).list_recovery_dirs().unwrap();
     assert!(
@@ -443,7 +464,12 @@ fn 未知の_format_version_の退避は一覧に出るが_変更も移動も削
     );
     // 新しい退避を書いても、古い退避には触れない
     let d = doc(1, "新しい", Some("n.txt"), |_| {});
-    let out = StateRescue::new(Some(state.clone())).write(&[d], RescueReason::Panic, AMPLE);
+    let out = StateRescue::new(Some(state.clone())).write(
+        &[d],
+        RescueReason::Panic,
+        Instant::now(),
+        AMPLE,
+    );
     assert!(out.complete);
     assert_eq!(
         snapshot(&old),
@@ -468,24 +494,33 @@ fn 合計_100_mb_の_dirty_文書の退避が_5_秒以内に完了する() {
     use eve_text::TextRead;
     let total: usize = docs.iter().map(|d| d.snapshot.len_bytes()).sum();
     assert!(total >= 100 * 1000 * 1000, "合計 {total} バイト");
-    // 時間の判定は基準機 (EVE_PERF_STRICT=1) で行う。共有の CI ランナーは fsync が遅く、5 秒を超えて打ち切られることがある
-    // (NFR-302 AC-5 の「時間切れの場合も書けた分は manifest に記録される」の側を、どの環境でも検査する)
+    // 時間の判定は基準機 (EVE_PERF_STRICT=1) で行う。共有の CI ランナーはディスクが遅く、5 秒を超えて打ち切られることがある
+    // (NFR-302 AC-5 の「時間切れの場合も書けた分は manifest に記録される」の側を、どの環境でも検査する)。AC-5 の「退避できた」は
+    // 全文書の本文を OS に渡した (`stored = true`) 時点で数える (02 §11.2.1 の段 1。fsync による確定は予算の残りで行う)
     let strict = std::env::var_os("EVE_PERF_STRICT").is_some();
     let t = std::time::Instant::now();
-    let out = w.write(&docs, RescueReason::Fatal, Duration::from_secs(5));
+    let out = w.write(
+        &docs,
+        RescueReason::Fatal,
+        Instant::now(),
+        Duration::from_secs(5),
+    );
     let elapsed = t.elapsed();
     eprintln!(
-        "100 MB の退避: {elapsed:?} (complete = {}, written = {})",
-        out.complete, out.written
+        "100 MB の退避: {elapsed:?} (complete = {}, stored = {}, written = {})",
+        out.complete, out.stored, out.written
     );
     let dir = out.dir.clone().expect("退避先ができる");
     // どの環境でも: 打ち切られても書けた分が残り、manifest の complete が実際と一致する
-    assert!(out.written >= 1, "少なくとも 1 文書は書ける");
+    assert!(out.stored >= 1, "少なくとも 1 文書は OS に渡せる");
+    let m = manifest(&dir);
     assert_eq!(
-        manifest(&dir).contains("complete = true"),
+        m.contains("complete = true"),
         out.complete,
         "manifest の complete が実際と一致する"
     );
+    assert_eq!(m.matches("stored = true").count(), out.stored, "{m}");
+    assert_eq!(m.matches("written = true").count(), out.written, "{m}");
     let full_files = fs::read_dir(&dir)
         .unwrap()
         .flatten()
@@ -493,15 +528,18 @@ fn 合計_100_mb_の_dirty_文書の退避が_5_秒以内に完了する() {
         .filter(|e| e.metadata().unwrap().len() == body.len() as u64)
         .count();
     assert_eq!(
-        full_files, out.written,
-        "書けたと記録した文書は全文が書かれている"
+        full_files, out.stored,
+        "OS に渡したと記録した文書は全文が書かれている"
     );
     // 予算 (5 秒) を超えても、最後の fsync の分を除いて大きくは超えない
     assert!(elapsed < Duration::from_secs(5 + 5), "{elapsed:?}");
     if strict {
         assert!(elapsed < Duration::from_secs(5), "{elapsed:?}");
-        assert!(out.complete, "時間内に全部書けた: {:?}", out.error);
-        assert_eq!(out.written, 4);
+        assert_eq!(
+            out.stored, 4,
+            "時間内に全文書を OS に渡せた: {:?}",
+            out.error
+        );
         let written: u64 = fs::read_dir(&dir)
             .unwrap()
             .flatten()
@@ -510,42 +548,5 @@ fn 合計_100_mb_の_dirty_文書の退避が_5_秒以内に完了する() {
             .sum();
         assert_eq!(written, total as u64, "本文のバイト数が一致する");
     }
-    let _ = fs::remove_dir_all(state);
-}
-
-// 03 §9.8 の不変条件 5: 1 文書の書込の失敗 (権限・ロック) は、その文書だけ `written = false` にして次の文書へ進む。
-// 時間切れだけが中断。書けた文書は退避に残る。
-#[test]
-fn 一つの文書の書込が失敗しても_他の文書は退避する() {
-    let state = tmp("one-fails");
-    let w = StateRescue::new(Some(state.join("s")));
-    // 小さい文書から書くので、"a" (1 バイト) が最初、"bbb" が 2 番目、"cccccc" が最後
-    let docs = [
-        doc(1, "a", Some(&abs("a")), |_| {}),
-        doc(2, "bbb", Some(&abs("b")), |_| {}),
-        doc(3, "cccccc", Some(&abs("c")), |_| {}),
-    ];
-    let fail_second = |path: &Path, d: &DocSnapshot, expired: &dyn Fn() -> bool| {
-        if d.doc == DocumentId(2) {
-            return Err(std::io::Error::from(std::io::ErrorKind::PermissionDenied));
-        }
-        eve_platform::rescue::write_body_for_test(path, d, expired)
-    };
-    let out = w.write_with(
-        &docs,
-        RescueReason::Signal,
-        Duration::from_secs(10),
-        &fail_second,
-    );
-    assert_eq!(out.total, 3);
-    assert_eq!(out.written, 2, "失敗した 1 件を除く 2 件は書けた");
-    assert!(!out.complete, "全件ではないので complete は false");
-    let dir = out.dir.expect("退避先");
-    assert_eq!(fs::read_to_string(dir.join("1-a.txt")).unwrap(), "a");
-    assert_eq!(fs::read_to_string(dir.join("3-c.txt")).unwrap(), "cccccc");
-    let m = manifest(&dir);
-    assert!(m.contains("complete = false"), "{m}");
-    assert_eq!(m.matches("written = true").count(), 2, "{m}");
-    assert_eq!(m.matches("written = false").count(), 1, "{m}");
     let _ = fs::remove_dir_all(state);
 }

@@ -2,13 +2,13 @@
 //! チェックアウトしたコードのこのコマンドを呼ぶ (手順の中身は対象のブランチの `xtask` にあるので、トリガを直さずに済む)。Linux 前提。
 //!
 //! v0.1 の手順 (`--only` で絞れる):
-//! - `fuzz`: `fuzz_decode` と `fuzz_editor` (v0.2) を、それぞれ `--fuzz-seconds` (既定 1200 秒。09 §6.3 の v0.2)。`-close_fd_mask=3` で入力とスタックをログに出さない。クラッシュ入力は
+//! - `fuzz`: `fuzz_decode`・`fuzz_editor` (v0.2)・`fuzz_encode`・`fuzz_vt_input` (v0.3) を、それぞれ `--fuzz-seconds` (既定 1200 秒。09 §6.3 の v0.2)。`-close_fd_mask=3` で入力とスタックをログに出さない。クラッシュ入力は
 //!   `.github/fuzz-recipients.txt` の公開鍵で `age` により暗号化し、平文は消す (artifact に上げるのは暗号化したものだけ)。
 //! - `proptest`: `PROPTEST_CASES=10000` で Linux CI の対象 crate のテスト。
 //! - `audit`: `cargo audit` と `cargo deny check advisories` (本体と `fuzz/`)。例外は `deny.toml` の `[advisories] ignore` の 1 か所。
 //! - `coverage`: `cargo llvm-cov nextest --lcov` (報告のみ、OQ-101)。
-//! - `crash` (v0.2): 保存のクラッシュ一貫性 (`cargo xtask crash-consistency`。LazyFS は環境変数 `LAZYFS_BIN`、下の FS は
-//!   `EVE_CRASH_ROOTS`。nightly.yml が LazyFS をビルドし、ext4 / xfs / btrfs のループバックを用意する。NFR-301、09 §6.3)。
+//! - `crash` (v0.2): 保存のクラッシュ一貫性 (`cargo xtask crash-consistency`。`LazyFS` は環境変数 `LAZYFS_BIN`、下の FS は
+//!   `EVE_CRASH_ROOTS`。nightly.yml が `LazyFS` をビルドし、ext4 / xfs / btrfs のループバックを用意する。NFR-301、09 §6.3)。
 //!   `--only` を付けない実行で `LAZYFS_BIN` が無いときは、失敗にせず飛ばして要約に書く (定時の実行は既定ブランチ (main) の
 //!   nightly.yml で動き、LazyFS を用意するステップを持たない版がある。`--only crash` と明示したら失敗にする)。
 //! - `soak` (v0.2): NFR-306 の長時間の soak (BM-306、`cargo bench -p eve-testkit --bench bm_306`)。`--soak-minutes N` を
@@ -22,20 +22,26 @@
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
-use crate::util::{run, run_capture, workspace_root};
+use crate::util::{read_text, run, run_capture, workspace_root};
 
-/// Linux CI の対象 crate (ci.yml の test (linux) と同じ、09 §6.4)。
-const LINUX_CRATES: [&str; 9] = [
-    "eve-text",
-    "eve-encoding",
-    "eve-view",
-    "eve-config",
-    "eve-core",
-    "eve-host",
-    "eve-testkit",
-    "eve-docs-tables",
-    "xtask",
-];
+/// Linux CI の対象 crate (`Cargo.toml` の `[workspace.metadata.evoeditor] linux-ci-crates`、09 §6.4)。
+/// ci.yml の clippy (linux) / test (linux) の `-p` の並びと同じ (試験で確かめる)。
+fn linux_crates() -> Result<Vec<String>, String> {
+    let text = read_text(&workspace_root().join("Cargo.toml"))?;
+    let v: toml::Value = toml::from_str(&text).map_err(|e| format!("Cargo.toml: {e}"))?;
+    let list = v["workspace"]["metadata"]["evoeditor"]["linux-ci-crates"]
+        .as_array()
+        .ok_or_else(|| {
+            "Cargo.toml に workspace.metadata.evoeditor.linux-ci-crates がありません".to_owned()
+        })?;
+    list.iter()
+        .map(|c| {
+            c.as_str()
+                .map(str::to_owned)
+                .ok_or_else(|| "linux-ci-crates の要素は文字列にしてください".to_owned())
+        })
+        .collect()
+}
 
 const STEPS: [&str; 6] = ["fuzz", "proptest", "audit", "coverage", "crash", "soak"];
 
@@ -148,7 +154,7 @@ fn commit() -> String {
 const CRASH_PREFIXES: [&str; 3] = ["crash-", "oom-", "timeout-"];
 
 /// fuzz のターゲット (docs/09 §3.3)。それぞれ `--fuzz-seconds` 秒ずつ回す。
-const FUZZ_TARGETS: [&str; 2] = ["fuzz_decode", "fuzz_editor"];
+const FUZZ_TARGETS: [&str; 4] = ["fuzz_decode", "fuzz_editor", "fuzz_encode", "fuzz_vt_input"];
 
 fn fuzz(seconds: u64, seed: u64, out_dir: &Path, summary: &mut Vec<String>) -> Result<(), String> {
     let artifacts = out_dir.join("fuzz-artifacts");
@@ -317,8 +323,8 @@ fn proptest() -> Result<(), String> {
         "nightly",
         "--no-tests=pass",
     ]);
-    for c in LINUX_CRATES {
-        cmd.args(["-p", c]);
+    for c in linux_crates()? {
+        cmd.args(["-p", &c]);
     }
     run("proptest 拡張 (PROPTEST_CASES=10000)", &mut cmd)
 }
@@ -392,10 +398,10 @@ fn coverage(out_dir: &Path) -> Result<(), String> {
     ])
     .arg(&lcov)
     .args(["--ignore-filename-regex", "crates/eve-testkit"]);
-    for c in LINUX_CRATES {
-        cmd.args(["-p", c]);
+    for c in linux_crates()? {
+        cmd.args(["-p", &c]);
     }
-    // v0.1 は報告のみ (OQ-101)。閾値のゲートは v0.4 から
+    // 報告のみ (OQ-101)。閾値のゲートは v0.5 から (NFR-702)
     run("coverage (報告のみ)", &mut cmd)
 }
 
@@ -467,6 +473,36 @@ mod tests {
         assert!(!skip_crash(true, false));
         assert!(!skip_crash(false, true));
         assert!(!skip_crash(true, true));
+    }
+
+    #[test]
+    fn linux_ci_の対象_crate_は_ci_yml_の_p_の並びと同じ() {
+        let want = linux_crates().unwrap();
+        let ci = read_text(&workspace_root().join(".github/workflows/ci.yml")).unwrap();
+        // clippy (linux) と test (linux) の `args: -p ...` の行
+        let lines: Vec<&str> = ci
+            .lines()
+            .map(str::trim)
+            .filter(|l| l.starts_with("args: -p "))
+            .collect();
+        assert_eq!(
+            lines.len(),
+            2,
+            "ci.yml の `args: -p` の行は 2 つ (clippy と test)"
+        );
+        for l in lines {
+            let mut got = Vec::new();
+            let mut words = l.split_whitespace();
+            while let Some(w) = words.next() {
+                if w == "-p" {
+                    got.push(words.next().unwrap().to_owned());
+                }
+            }
+            assert_eq!(
+                got, want,
+                "ci.yml と Cargo.toml の linux-ci-crates が違う: {l}"
+            );
+        }
     }
 
     #[test]

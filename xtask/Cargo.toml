@@ -13,7 +13,9 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
-eve-docs-tables = { version = "0.2.0", path = "../crates/eve-docs-tables" }
+eve-docs-tables = { version = "0.3.0", path = "../crates/eve-docs-tables" }
+# i18n: 文言のプレースホルダの読み方を、言語ファイルの解決 (Catalog) と共有する
+eve-config = { version = "0.3.0", path = "../crates/eve-config" }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 toml = "1.1.8"

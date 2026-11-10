@@ -1,29 +1,26 @@
 //! `cargo xtask i18n`: UI 文言の検査 (docs/09-testing-quality.md §6.2 の `i18n`、docs/07 §17、docs/11 §8.5、NFR-602 / 603)。
 //!
 //! 入力は docs の 2 つの表 (`eve-docs-tables` で、11 §8.5 の規則どおりに読む。読めなければ失敗):
-//! - 04 §15.2 の MessageKey 目録 (`MessageKey` / `ja` 列)
-//! - 07 §11.6 の v0.1 CommandId カタログ (`ID` / `title key` / `ヒント` 列)
+//! - 04 §15.2 の `MessageKey` 目録 (`MessageKey` / `ja` 列)
+//! - 07 §11.6 の v0.1 `CommandId` カタログ (`ID` / `title key` / `ヒント` 列)
 //!
 //! 検査する内容:
-//! 1. 目録の整合: MessageKey の重複がない、`ja` が空でない、`{…}` の引数の括弧が対応している、
+//! 1. 目録の整合: `MessageKey` の重複がない、`ja` が空でない、`{…}` の引数の括弧が対応している、
 //!    `msg.*` は `.text` と `.hint` の対 (NFR-602)、`info.*` は `.hint` を持たない、`hint.*` は表示幅 8 セル以内。
-//! 2. カタログの整合: v0.1 の各 CommandId の `title key` が `cmd.<id>` で、左から順に 1 対 1 に対応する。
+//! 2. カタログの整合: v0.1 の各 `CommandId` の `title key` が `cmd.<id>` で、左から順に 1 対 1 に対応する。
 //! 3. `locales/ja.toml` があれば、期待するキー集合 (目録から `stderr.*` / `panic.*` / `cli.*` を除いたもの、
 //!    `cmd.<id>.title` / `cmd.<id>.description`、ヒントの文脈 (`normal` / `overlay`) を持つ ID の `hint.<id>`) と
-//!    比べる。欠落も余剰もエラー。無ければ、その旨を表示してこの項目だけ飛ばす (言語ファイルは MessageKey を
+//!    比べる。欠落も余剰もエラー。無ければ、その旨を表示してこの項目だけ飛ばす (言語ファイルは `MessageKey` を
 //!    実装するマイルストーンで作る)。
 //!
-//! コードの MessageKey の列挙との突合は、その列挙ができてから足す。
+//! コードの `MessageKey` の列挙との突合は、その列挙ができてから足す。
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use eve_docs_tables::{identifiers, read_tables, strip_parentheticals};
+use eve_docs_tables::strip_parentheticals;
 
 use crate::util::{read_text, workspace_root};
 
-const MESSAGE_HEADING: &str = "### 15.2 保存・読込・退避・パニックの文言目録";
-const SCREEN_HEADING: &str = "### 15.1 v0.1 の画面文言 (ja)";
-const CATALOG_HEADING: &str = "### 11.6 v0.1 CommandId カタログ (付録)";
 /// 言語ファイルに入れない (eve-host の定数表に置く) キーの接頭辞。
 const NOT_IN_LOCALE: [&str; 3] = ["stderr.", "panic.", "cli."];
 /// ヒントの幅の上限 (表示幅 8 セル = 全角 4 文字 / 半角 8 文字、NFR-603)。
@@ -62,22 +59,12 @@ fn is_cjk_text(c: char) -> bool {
     matches!(c as u32, 0x3041..=0x30FF | 0x3400..=0x9FFF | 0xFF66..=0xFF9F)
 }
 
-/// 文言の `{name}` と `{key:id}` の名前の集合 (`{{` は除く)。
+/// 文言の `{name}` と `{key:id}` の名前の集合 (`{{` は除く)。読み方は言語ファイルの解決と同じ (eve-config)。
 fn placeholders(s: &str) -> BTreeSet<String> {
-    let mut out = BTreeSet::new();
-    let mut it = s.chars().peekable();
-    while let Some(c) = it.next() {
-        if c != '{' {
-            continue;
-        }
-        if it.peek() == Some(&'{') {
-            it.next();
-            continue;
-        }
-        let name: String = it.by_ref().take_while(|c| *c != '}').collect();
-        out.insert(name);
-    }
-    out
+    eve_config::placeholders(s)
+        .into_iter()
+        .map(str::to_owned)
+        .collect()
 }
 
 /// 文言の `[X]` (大文字 1 字の角括弧) の並び。確認ダイアログのアクセラレータ。
@@ -110,55 +97,26 @@ fn braces_balanced(s: &str) -> bool {
 }
 
 fn read_messages(doc04: &str) -> Result<Vec<Entry>, String> {
-    let tables = read_tables(doc04, MESSAGE_HEADING, &["MessageKey", "ja"])
+    let list = eve_docs_tables::messages::read_catalog(doc04)
         .map_err(|e| format!("04 §15.2 の目録を読めません: {e}"))?;
-    let mut out = Vec::new();
-    for t in &tables {
-        for row in &t.rows {
-            let keys = identifiers(t.cell(row, "MessageKey").unwrap_or_default());
-            if keys.len() != 1 {
-                return Err(format!(
-                    "04 §15.2 行 {}: `MessageKey` 列には MessageKey を 1 つだけバッククォートで書きます (略記・複数は不可): {:?}",
-                    row.line,
-                    t.cell(row, "MessageKey")
-                ));
-            }
-            out.push(Entry {
-                key: keys.into_iter().next().unwrap_or_default(),
-                ja: t.cell(row, "ja").unwrap_or_default().to_owned(),
-                line: row.line,
-            });
-        }
-    }
-    Ok(out)
+    Ok(list
+        .into_iter()
+        .map(|m| Entry {
+            key: m.key,
+            ja: m.ja,
+            line: m.line,
+        })
+        .collect())
 }
 
-/// 04 §15.1 の画面文言の MessageKey。`MessageKey` 列は `a.b.long` / `.short` のように、後ろの項目が
-/// 直前のキーの最後の語を置き換える略記を使う。
+/// 04 §15.1 の画面文言の `MessageKey` (`a.b.long` / `.short` の略記は展開したもの)。
 fn read_screen_keys(doc04: &str) -> Result<BTreeSet<String>, String> {
-    let tables = read_tables(doc04, SCREEN_HEADING, &["MessageKey", "ja"])
+    let list = eve_docs_tables::messages::read_screen(doc04)
         .map_err(|e| format!("04 §15.1 の画面文言を読めません: {e}"))?;
-    let mut out = BTreeSet::new();
-    for t in &tables {
-        for row in &t.rows {
-            let mut prev: Option<String> = None;
-            for id in identifiers(t.cell(row, "MessageKey").unwrap_or_default()) {
-                let key = match (id.strip_prefix('.'), &prev) {
-                    (Some(tail), Some(p)) => {
-                        let base = p.rsplit_once('.').map_or(p.as_str(), |(b, _)| b);
-                        format!("{base}.{tail}")
-                    }
-                    _ => id,
-                };
-                prev = Some(key.clone());
-                out.insert(key);
-            }
-        }
-    }
-    Ok(out)
+    Ok(list.into_iter().map(|m| m.key).collect())
 }
 
-/// カタログの行: (CommandId, title key, ヒントの文脈の集合)。
+/// カタログの行: (`CommandId`, title key, ヒントの文脈の集合)。
 struct Command {
     id: String,
     title_key: String,
@@ -168,78 +126,50 @@ struct Command {
 }
 
 fn read_catalog(doc07: &str) -> Result<Vec<Command>, String> {
-    let cols = [
-        "ID",
-        "title key",
-        "kind",
-        "args",
-        "when",
-        "perm",
-        "コンテキスト",
-        "既定キー",
-        "ヒント",
-    ];
-    let tables = read_tables(doc07, CATALOG_HEADING, &cols)
+    let rows = eve_docs_tables::catalog::read(doc07)
         .map_err(|e| format!("07 §11.6 のカタログを読めません: {e}"))?;
     let mut out = Vec::new();
-    for t in &tables {
-        for row in &t.rows {
-            let id_cell = t.cell(row, "ID").unwrap_or_default();
-            // 版の注記は ID 列の括弧に書く。(v0.2) などが付いた行は `later` にする (必須にしない)。
-            let later = id_cell.matches('(').count() > 0 && id_cell.contains("(v");
-            let ids = identifiers(&strip_parentheticals(id_cell));
-            let titles = identifiers(&strip_parentheticals(
-                t.cell(row, "title key").unwrap_or_default(),
-            ));
-            if ids.is_empty() || ids.len() != titles.len() {
-                return Err(format!(
-                    "07 §11.6 行 {}: `ID` 列 ({}) と `title key` 列 ({}) の個数が合いません",
-                    row.line,
-                    ids.len(),
-                    titles.len()
-                ));
+    for row in rows {
+        // ヒント列: `文脈:優先度` を `, ` で区切る。`(<ID の最後の語> のみ)` は一部の ID に限る。
+        let mut all_contexts = BTreeSet::new();
+        let mut per_id: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+        for part in row.hints.split(", ") {
+            let (body, only) = match part.split_once(" (") {
+                Some((b, rest)) => (b, rest.strip_suffix(" のみ)").map(str::to_owned)),
+                None => (part, None),
+            };
+            let ctx = body
+                .trim()
+                .split(':')
+                .next()
+                .unwrap_or_default()
+                .trim()
+                .to_owned();
+            if ctx.is_empty() || ctx == "-" || ctx == "—" {
+                continue;
             }
-            // ヒント列: `文脈:優先度` を `, ` で区切る。`(<ID の最後の語> のみ)` は一部の ID に限る。
-            let hint_cell = t.cell(row, "ヒント").unwrap_or_default();
-            let mut all_contexts = BTreeSet::new();
-            let mut per_id: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
-            for part in hint_cell.split(", ") {
-                let (body, only) = match part.split_once(" (") {
-                    Some((b, rest)) => (b, rest.strip_suffix(" のみ)").map(str::to_owned)),
-                    None => (part, None),
-                };
-                let ctx = body
-                    .trim()
-                    .split(':')
-                    .next()
-                    .unwrap_or_default()
-                    .trim()
-                    .to_owned();
-                if ctx.is_empty() || ctx == "-" || ctx == "—" {
-                    continue;
+            match only {
+                Some(word) => {
+                    per_id.entry(word).or_default().insert(ctx);
                 }
-                match only {
-                    Some(word) => {
-                        per_id.entry(word).or_default().insert(ctx);
-                    }
-                    None => {
-                        all_contexts.insert(ctx);
-                    }
+                None => {
+                    all_contexts.insert(ctx);
                 }
             }
-            for (id, title_key) in ids.into_iter().zip(titles) {
-                let last = id.rsplit(['.', '_']).next().unwrap_or(&id).to_owned();
-                let mut hint_contexts = all_contexts.clone();
-                if let Some(extra) = per_id.get(&last) {
+        }
+        for (i, (id, title_key)) in row.ids.iter().zip(&row.title_keys).enumerate() {
+            let mut hint_contexts = all_contexts.clone();
+            for (word, extra) in &per_id {
+                if row.id_index_by_last_word(word) == Some(i) {
                     hint_contexts.extend(extra.iter().cloned());
                 }
-                out.push(Command {
-                    id,
-                    title_key,
-                    hint_contexts,
-                    later,
-                });
             }
+            out.push(Command {
+                id: id.clone(),
+                title_key: title_key.clone(),
+                hint_contexts,
+                later: row.later,
+            });
         }
     }
     Ok(out)
@@ -507,8 +437,10 @@ mod tests {
     fn アクセラレータの並び() {
         assert_eq!(accelerators("[S] 保存して終了"), ['S']);
         assert_eq!(accelerators("`[K] a` ★ / `[C] b`"), ['K', 'C']);
-        assert!(accelerators("[Esc] Cancel").is_empty());
-        assert!(accelerators("[a] x").is_empty());
+        let actual = accelerators("[Esc] Cancel");
+        assert!(actual.is_empty(), "{actual:?}");
+        let actual = accelerators("[a] x");
+        assert!(actual.is_empty(), "{actual:?}");
     }
 
     #[test]

@@ -311,14 +311,15 @@ dependencies = [
 
 [[package]]
 name = "eve-config"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
+ "proptest",
  "toml",
 ]
 
 [[package]]
 name = "eve-core"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "encoding_rs",
  "eve-config",
@@ -336,11 +337,11 @@ dependencies = [
 
 [[package]]
 name = "eve-docs-tables"
-version = "0.2.0"
+version = "0.3.0"
 
 [[package]]
 name = "eve-encoding"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "chardetng",
  "encoding_rs",
@@ -349,7 +350,7 @@ dependencies = [
 
 [[package]]
 name = "eve-host"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "arc-swap",
  "eve-config",
@@ -362,10 +363,11 @@ dependencies = [
 
 [[package]]
 name = "eve-platform"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "encoding_rs",
  "eve-core",
+ "eve-testkit",
  "eve-text",
  "eve-view",
  "libc",
@@ -377,17 +379,18 @@ dependencies = [
 
 [[package]]
 name = "eve-test-helpers"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "eve-core",
  "eve-platform",
  "eve-text",
  "eve-view",
+ "xxhash-rust",
 ]
 
 [[package]]
 name = "eve-testkit"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "eve-config",
  "eve-core",
@@ -396,13 +399,14 @@ dependencies = [
  "eve-text",
  "eve-view",
  "serde",
+ "stats_alloc",
  "toml",
  "unicode-width",
 ]
 
 [[package]]
 name = "eve-text"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "memory-stats",
  "proptest",
@@ -413,26 +417,30 @@ dependencies = [
 
 [[package]]
 name = "eve-tui"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
+ "eve-config",
+ "eve-core",
  "eve-docs-tables",
  "eve-host",
  "eve-testkit",
  "eve-view",
  "libc",
+ "proptest",
  "ratatui",
  "signal-hook",
+ "unicode-segmentation",
  "unicode-width",
  "windows-sys 0.61.2",
 ]
 
 [[package]]
 name = "eve-view"
-version = "0.2.0"
+version = "0.3.0"
 
 [[package]]
 name = "evoeditor"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "encoding_rs",
  "eve-config",
@@ -442,8 +450,10 @@ dependencies = [
  "eve-tui",
  "eve-view",
  "portable-pty",
+ "serde_json",
  "vt100",
  "windows-sys 0.61.2",
+ "xxhash-rust",
 ]
 
 [[package]]
@@ -1070,6 +1080,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 
 [[package]]
+name = "stats_alloc"
+version = "0.1.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5c0e04424e733e69714ca1bbb9204c1a57f09f5493439520f9f68c132ad25eec"
+
+[[package]]
 name = "str_indices"
 version = "0.4.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1486,8 +1502,9 @@ dependencies = [
 
 [[package]]
 name = "xtask"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
+ "eve-config",
  "eve-docs-tables",
  "serde",
  "serde_json",

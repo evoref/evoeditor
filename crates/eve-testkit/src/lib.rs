@@ -1,17 +1,21 @@
 //! ヘッドレス駆動ハーネス (Harness)、偽 Port (MemFs・ManualClock・ManualJobSpawner)、HeadlessFrontend (docs/02 §4.1、docs/09 §3.4)。
 //!
 //! 現在は偽 Port (`ManualClock` / `FixedPaths` / `MemFs` / `ManualJobSpawner`)、`Harness`、`HeadlessFrontend`、ASCII の Frame
-//! がある。`ThreadGuard` の検査モードは eve-core 側の印と一緒に足す。
+//! がある。
 
 #![forbid(unsafe_code)]
+#![deny(missing_docs)]
 // eve-core の FsError は大きい型 (エラーは稀な経路)。値で返す。
 #![allow(clippy::result_large_err)]
 
 mod ascii;
 mod clock;
+pub mod fs_contract;
 pub mod fuzzing;
+pub mod golden;
 mod harness;
 mod headless;
+pub mod helpers;
 mod jobs;
 mod memfs;
 mod paths;
@@ -20,7 +24,9 @@ mod virtual_screen;
 
 pub use ascii::{AsciiOptions, render_ascii};
 pub use clock::ManualClock;
-pub use harness::Harness;
+/// `Harness::with_locale` に渡す言語 (eve-config に依存しない crate の試験からも使えるように)。
+pub use eve_config::Locale;
+pub use harness::{Harness, HarnessBuilder};
 pub use headless::{HeadlessFrontend, HeadlessProbe};
 pub use jobs::ManualJobSpawner;
 pub use memfs::{BytesSource, FsOp, MEMFS_STATE_DIR, MemFs, SourceFailure, WriteStep};

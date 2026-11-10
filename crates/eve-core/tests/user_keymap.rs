@@ -2,6 +2,7 @@
 
 use eve_config::{DiagKind, KeymapProblem, load_keymap_str};
 use eve_testkit::Harness;
+use eve_testkit::helpers::cell_text;
 
 /// `keymap.toml` の本文を読ませて、診断の種類の列を返す。
 fn load(h: &mut Harness, text: &str) -> Vec<(String, DiagKind)> {
@@ -48,14 +49,10 @@ fn 既定の割当を別のコマンドに付け替えると_ラベルとヘル�
     let key_of = |title: &str| {
         lines
             .iter()
-            .find(|l| l.kind == eve_view::HelpLineKind::Entry && text_of(&l.text) == title)
-            .and_then(|l| l.key.as_ref().map(text_of))
+            .find(|l| l.kind == eve_view::HelpLineKind::Entry && cell_text(&l.text) == title)
+            .and_then(|l| l.key.as_ref().map(cell_text))
     };
     assert!(key_of("名前を付けて保存").unwrap().contains("Ctrl+S"));
-}
-
-fn text_of(t: &eve_view::CellText) -> String {
-    t.spans.iter().map(|s| s.text.to_string()).collect()
 }
 
 #[test]
@@ -149,4 +146,98 @@ fn 脱出キーに届かなくなる割当は外して既定を残す() {
     h.text("x");
     h.keys("ctrl+q");
     assert_eq!(h.overlay(), "dialog", "終了の確認が出る");
+}
+
+#[test]
+fn 脱出キーの診断は書かれた行と桁とキーの表記で出す() {
+    let mut h = Harness::new();
+    let f =
+        load_keymap_str("[keys.editor]\n\"f6\" = \"edit.delete_line\"\n  \"ctrl+q\" = \"none\"\n");
+    let d = h.editor.set_user_keymap(&f);
+    let e = d
+        .iter()
+        .find(|d| d.kind == DiagKind::Keymap(KeymapProblem::EscapeKey))
+        .unwrap_or_else(|| panic!("{d:?}"));
+    // 整形した表記 (Ctrl+Q) ではなく、書かれたとおり
+    assert_eq!(e.key, "keys.editor.ctrl+q");
+    assert_eq!((e.line, e.column), (3, 3));
+}
+
+#[test]
+fn when_に知らない変数がある割当は警告して使わない() {
+    let mut h = Harness::new();
+    let f = load_keymap_str(concat!(
+        "[keys.editor]
+",
+        "\"f6\" = { command = \"edit.delete_line\", when = \"!selection.empty || doc.dirty\" }
+",
+        "\"f7\" = { command = \"edit.duplicate_line\", when = \"doc.modified\" }
+",
+    ));
+    let d = h.editor.set_user_keymap(&f);
+    let unknown: Vec<(&str, &str)> = d
+        .iter()
+        .filter(|d| d.kind == DiagKind::Keymap(KeymapProblem::UnknownWhenVar))
+        .map(|d| (d.key.as_str(), d.value.as_str()))
+        .collect();
+    assert_eq!(unknown, [("keys.editor.f6", "doc.dirty")], "{d:?}");
+    // 知らない変数の割当は使わない (既定の f6 も無いので何も起きない)
+    h.paste(
+        "a
+b
+",
+    );
+    h.keys("ctrl+home f6");
+    assert_eq!(
+        h.doc_text(),
+        "a
+b
+"
+    );
+    // 07 §7.3 の `doc.modified` は使える (貼り付けたので未保存の変更がある)
+    h.keys("f7");
+    assert_eq!(
+        h.doc_text(),
+        "a
+a
+b
+"
+    );
+}
+
+// バッファ一覧の参照順は list → prompt → global (07 §7.1)。`[keys.palette]` の割当はバッファ一覧に届かない
+#[test]
+fn palette_の割当はバッファ一覧に漏れず_list_の割当は両方に効く() {
+    let mut h = Harness::new();
+    let d = load(
+        &mut h,
+        "[keys.palette]\n\"f6\" = \"ui.list_next\"\n[keys.list]\n\"f7\" = \"ui.list_next\"\n",
+    );
+    assert!(d.is_empty(), "{d:?}");
+    let selected = |h: &mut Harness| {
+        let f = h.frame();
+        let eve_view::OverlayModel::List { selected, .. } = &f.overlays[0] else {
+            panic!("一覧ではない")
+        };
+        *selected
+    };
+    h.keys("ctrl+p");
+    h.keys("f6");
+    assert_eq!(selected(&mut h), 1, "パレットでは palette の割当が効く");
+    h.keys("f7");
+    assert_eq!(selected(&mut h), 2, "パレットでは list の割当も効く");
+    h.keys("esc");
+    h.cmd("file.new");
+    h.cmd("file.new");
+    h.cmd("buffer.list");
+    assert_eq!(h.overlay(), "buffer_list");
+    let before = selected(&mut h);
+    h.keys("f6");
+    assert_eq!(
+        selected(&mut h),
+        before,
+        "palette の割当はバッファ一覧に届かない"
+    );
+    h.keys("f7");
+    assert_eq!(selected(&mut h), before + 1, "list の割当は届く");
 }

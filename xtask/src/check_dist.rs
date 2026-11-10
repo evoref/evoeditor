@@ -5,7 +5,7 @@
 //! (2) exe に test-hooks と bench-trace の目印の文字列が無い、(3) 隠しオプション `--bench-exit-after-first-frame` が
 //! 未知のオプションとして終了コード 2 で終わる、(4) 静的リンク: Windows (PE) は取り込む DLL に VC ランタイムと UCRT が無い、
 //! Linux (ELF、musl) はプログラムインタプリタ (`PT_INTERP`) と共有ライブラリの依存 (`DT_NEEDED`) が無い、
-//! (5) Windows だけ: exe のヘッダの DependentLoadFlags が System32 だけから DLL を読む設定 (0x800) になっている (NFR-502 AC-2 (a))。
+//! (5) Windows だけ: exe のヘッダの `DependentLoadFlags` が System32 だけから DLL を読む設定 (0x800) になっている (NFR-502 AC-2 (a))。
 //! あわせて BM-205 (exe のサイズ) を `target/dist/size.json` に書く。
 //!
 //! `--exe <パス>` を付けると、ビルドと (1) を飛ばして、そのファイルを検査する (`release.yml` の展開後の exe 用)。
@@ -144,10 +144,10 @@ pub fn run(args: &[String]) -> Result<(), String> {
 }
 
 /// `cargo tree -e features` の出力から、禁止された feature を探す。
-/// LOAD_LIBRARY_SEARCH_SYSTEM32: 起動時のインポートの DLL を System32 だけから探す。
+/// `LOAD_LIBRARY_SEARCH_SYSTEM32`: 起動時のインポートの DLL を System32 だけから探す。
 const LOAD_LIBRARY_SEARCH_SYSTEM32: u16 = 0x800;
 
-/// PE (64 ビット) のロード構成ディレクトリの DependentLoadFlags (オフセット 78)。読めなければ None。
+/// PE (64 ビット) のロード構成ディレクトリの `DependentLoadFlags` (オフセット 78)。読めなければ None。
 fn dependent_load_flags(pe: &[u8]) -> Option<u16> {
     let u16_at = |o: usize| pe.get(o..o + 2).map(|b| u16::from_le_bytes([b[0], b[1]]));
     let u32_at = |o: usize| {
@@ -210,7 +210,7 @@ struct ElfDynamic {
     needed: usize,
 }
 
-/// ELF (64 ビット、リトルエンディアン。x86_64 と aarch64) のプログラムヘッダと動的セクションを読む。読めなければ None。
+/// ELF (64 `ビット、リトルエンディアン。x86_64` と aarch64) のプログラムヘッダと動的セクションを読む。読めなければ None。
 fn elf_dynamic_deps(b: &[u8]) -> Option<ElfDynamic> {
     const PT_DYNAMIC: u32 = 2;
     const PT_INTERP: u32 = 3;
@@ -319,7 +319,8 @@ mod tests {
     #[test]
     fn feature_は_tree_の行から探す() {
         let tree = "evoeditor v0.0.0\neve-core v0.0.0\neve-core feature \"default\"\n";
-        assert!(forbidden_features(tree).is_empty());
+        let actual = forbidden_features(tree);
+        assert!(actual.is_empty(), "{actual:?}");
         let tree = "evoeditor feature \"test-hooks\"\n";
         assert_eq!(forbidden_features(tree), ["test-hooks"]);
     }
@@ -332,7 +333,8 @@ mod tests {
             .flat_map(u16::to_le_bytes)
             .collect();
         assert_eq!(forbidden_strings(&wide), ["EVE_TRACE_FILE"]);
-        assert!(forbidden_strings(b"nothing here").is_empty());
+        let actual = forbidden_strings(b"nothing here");
+        assert!(actual.is_empty(), "{actual:?}");
     }
 
     // verifies: AC-NFR-502-2
@@ -356,7 +358,11 @@ mod tests {
         b[5] = 1;
         b[0x20..0x28].copy_from_slice(&(phoff as u64).to_le_bytes());
         b[0x36..0x38].copy_from_slice(&56u16.to_le_bytes());
-        b[0x38..0x3a].copy_from_slice(&(phs.len() as u16).to_le_bytes());
+        b[0x38..0x3a].copy_from_slice(
+            &u16::try_from(phs.len())
+                .expect("プログラムヘッダは 65535 個以下")
+                .to_le_bytes(),
+        );
         for (i, (ty, body)) in phs.iter().enumerate() {
             let ph = phoff + i * 56;
             let off = b.len();

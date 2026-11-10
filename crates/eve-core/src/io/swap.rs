@@ -1,0 +1,336 @@
+//! swap-lite の予約と後始末 (docs/03 §10.2、FR-118 / NFR-307)。
+//!
+//! dirty な文書の全文を、最後の入力から `file.swap.interval_ms` (既定 2 秒) 後に `bg` のジョブで書く。続く書出しは同じ文書で
+//! 最短 `file.swap.min_interval_ms` (既定 10 秒) 間隔。止まらずに打ち続けて 2 秒の空きが来なくても、未書出しの変更が
+//! `min_interval_ms` 続けば書く。文書が保存された・閉じられた・対象外になったときはスワップを消す。
+//!
+//! 同じ文書のスワップのジョブは同時に 1 つだけ。書込中のスワップはキャンセルせず、その間の変更は完了後に最新の Snapshot で
+//! 1 回だけ書く (書きかけを残さない)。Port が実装していなければ (`FsErrorKind::Unsupported`) そのセッションでは止める。
+//! 配置・命名・pid の確認は Port の側 (05 §7.5)。
+
+use std::cmp::{max, min};
+use std::collections::BTreeMap;
+use std::sync::Arc;
+
+use eve_view::{DocumentId, JobId, Revision};
+
+use crate::document::LoadState;
+use crate::editor::state::EditorState;
+use crate::io::pending::Pending;
+use crate::time::{Millis, Tick};
+use crate::ui_model::keys;
+use crate::{FsErrorKind, FsPath, JobError, JobKind, JobResult};
+
+/// 失敗した後始末をやり直すまでの間隔。
+const DISCARD_RETRY: Millis = Millis(10_000);
+
+#[derive(Default)]
+pub(crate) struct SwapState {
+    docs: BTreeMap<DocumentId, SwapDoc>,
+    /// Port がスワップを実装していない。以後このセッションでは何もしない。
+    stopped: bool,
+    /// 復旧の候補 (他のプロセスが残した、読めるスワップ)。該当する文書が開いたら提案する (`swap_recovery.rs`)。
+    pub(crate) candidates: Vec<crate::SwapEntry>,
+    /// 動いている別のプロセスのスワップ (同じファイルを開いたら警告する)。
+    pub(crate) alive: Vec<crate::SwapEntry>,
+    /// 「スワップの対象外」を知らせた文書 (1 文書につき 1 回)。
+    notified_large: std::collections::BTreeSet<DocumentId>,
+    /// 復旧を適用した古いスワップ。新しいスワップが書けるか、文書が保存されるまで消さない。
+    pub(crate) recovered: BTreeMap<DocumentId, Vec<crate::SwapEntry>>,
+}
+
+#[derive(Default)]
+struct SwapDoc {
+    /// 書くべき Revision と、それに気づいた時刻。
+    seen: Option<(Revision, Tick)>,
+    /// 書けていない変更が始まった時刻 (連続入力でも `min_interval_ms` で書くため)。
+    first_change: Option<Tick>,
+    /// 最後に書き終えた Revision。
+    written: Option<Revision>,
+    /// 書込中のジョブとその Revision。
+    inflight: Option<(JobId, Revision)>,
+    /// 最後に書き始めた時刻。
+    last_start: Option<Tick>,
+    /// ディスクにスワップがある (書き終えた、または書込中)。
+    on_disk: bool,
+    /// スワップを書いたときの文書のパス (消すときの宛先。無題は `None`)。
+    path: Option<FsPath>,
+    /// 消すジョブ。
+    discarding: Option<JobId>,
+    /// 消すのに失敗した後、やり直してよい時刻。
+    discard_retry_at: Option<Tick>,
+}
+
+impl EditorState {
+    /// 上限 (`file.swap.max_bytes`) を超える dirty な文書があれば、スワップの対象外であることを 1 回だけ知らせる (FR-118 AC)。
+    fn swap_notify_large(&mut self) {
+        if !self.settings.config.swap_enabled {
+            return;
+        }
+        let max = self.settings.config.swap_max_bytes;
+        let hit = self.docs.documents.iter().find_map(|(id, d)| {
+            (d.is_dirty()
+                && d.load_state == LoadState::Ready
+                && d.len_bytes() as u64 > max
+                && !self.io.swap.notified_large.contains(id))
+            .then(|| {
+                let name = d
+                    .path
+                    .as_ref()
+                    .map(FsPath::display)
+                    .unwrap_or_else(|| self.untitled_label(d));
+                (*id, name)
+            })
+        });
+        let Some((id, name)) = hit else {
+            return;
+        };
+        self.io.swap.notified_large.insert(id);
+        let mib = (max / (1024 * 1024)).to_string();
+        self.show_message(
+            eve_view::MessageLevel::Warn,
+            keys::MSG_SWAP_TOO_LARGE,
+            &[("path", &name), ("mib", &mib)],
+        );
+    }
+
+    /// 書いてよい文書なら、その Revision。dirty で読込済み・編集可・上限以下で、秘密ファイルの除外に当たらないもの。
+    fn swap_eligible(&self, id: DocumentId) -> Option<Revision> {
+        let cfg = &self.settings.config;
+        if !cfg.swap_enabled {
+            return None;
+        }
+        let d = self.docs.documents.get(&id)?;
+        if !d.is_dirty() || d.load_state != LoadState::Ready || !d.read_only.is_empty() {
+            return None;
+        }
+        if d.len_bytes() as u64 > cfg.swap_max_bytes {
+            return None;
+        }
+        if cfg.swap_exclude_secret_files && d.path.as_ref().is_some_and(crate::is_secret_path) {
+            return None;
+        }
+        Some(d.revision())
+    }
+
+    /// ディスクのスワップが要らなくなったか (消してよいか)。消すのは、未保存の内容を失わないと確定したときだけ
+    /// (03 §10.2): 保存や破棄で clean になった、閉じて破棄が確定した (保存中に閉じた文書は、保存が終わって
+    /// 公開物を外すまで残す)、スワップを使わない設定にした。読み取り専用になった・読込中・上限を超えた・
+    /// 秘密ファイルの除外に当たるようになっただけの dirty な文書のスワップは、書き足さないが消さない
+    /// (残したスワップは、正常終了の片付けか次の起動の復旧の提案で扱う。docs/review/v0.3-findings.md の SAF-03)。
+    fn swap_obsolete(&self, id: DocumentId) -> bool {
+        if !self.settings.config.swap_enabled {
+            return true;
+        }
+        match self.docs.documents.get(&id) {
+            Some(d) => !d.is_dirty(),
+            None => !self.io.closing_snapshots.contains_key(&id),
+        }
+    }
+
+    /// 次に書く時刻。気づいていない (`seen` が無い) ときは `None`。
+    fn swap_due(&self, e: &SwapDoc) -> Option<Tick> {
+        let (_, seen_at) = e.seen?;
+        let first = e.first_change?;
+        let cfg = &self.settings.config;
+        let min_interval = Millis(u64::from(cfg.swap_min_interval_ms));
+        let base = min(
+            seen_at + Millis(u64::from(cfg.swap_interval_ms)),
+            first + min_interval,
+        );
+        Some(match e.last_start {
+            Some(t) => max(base, t + min_interval),
+            None => base,
+        })
+    }
+
+    /// `Editor::tick` から呼ぶ。期限が来た文書のスワップを書くジョブを投入し、要らなくなったスワップを消すジョブを投入する。
+    pub(crate) fn swap_tick(&mut self) {
+        self.swap_notify_large();
+        self.swap_offer();
+        self.leftover_offer();
+        self.swap_release_recovered();
+        if self.io.swap.stopped {
+            return;
+        }
+        let mut ids: Vec<DocumentId> = self.docs.documents.keys().copied().collect();
+        ids.extend(self.io.swap.docs.keys().copied());
+        ids.sort();
+        ids.dedup();
+        for id in ids {
+            self.swap_step(id);
+        }
+    }
+
+    fn swap_step(&mut self, id: DocumentId) {
+        let now = self.now;
+        let eligible = self.swap_eligible(id);
+        let mut e = self.io.swap.docs.remove(&id).unwrap_or_default();
+        let busy = e.inflight.is_some() || e.discarding.is_some();
+        let Some(rev) = eligible else {
+            // 書込中・削除中は完了を待つ (結果の処理の後の tick で見直す)
+            if !busy
+                && e.on_disk
+                && self.swap_obsolete(id)
+                && e.discard_retry_at.is_none_or(|t| now >= t)
+            {
+                self.spawn_swap_discard(id, &mut e);
+            }
+            // 書いていなければ記録は要らない
+            if e.on_disk {
+                self.io.swap.docs.insert(id, e);
+            }
+            return;
+        };
+        // 名前を付けて保存などで文書のパスが変わった: スワップの名前はパスから作るので、新しい名前で書く前に
+        // 旧パスの名前のスワップを消す (残すと、次の起動で古い内容を旧パスの復旧として提案する、03 §9.3。SAF-21)
+        let cur_path = self.docs.documents.get(&id).and_then(|d| d.path.clone());
+        if e.on_disk && e.path != cur_path {
+            if !busy && e.discard_retry_at.is_none_or(|t| now >= t) {
+                self.spawn_swap_discard(id, &mut e);
+            }
+            self.io.swap.docs.insert(id, e);
+            return;
+        }
+        // 書込中の Snapshot より後の変更も、気づいた時刻を記録する (完了後に最新で 1 回、期限どおりに書くため)
+        let covered = e.inflight.map(|(_, r)| r).or(e.written);
+        if covered == Some(rev) {
+            e.seen = None;
+            e.first_change = None;
+        } else if e.seen.map(|(r, _)| r) != Some(rev) {
+            e.seen = Some((rev, now));
+            e.first_change.get_or_insert(now);
+        }
+        if !busy
+            && self.swap_due(&e).is_some_and(|due| now >= due)
+            && let Some(snap) = self.rescue_snapshot(id, true)
+        {
+            let path = snap.path.clone();
+            let job = self.jobs.spawn(
+                Some(id),
+                rev,
+                JobKind::Swap {
+                    doc: Arc::new(snap),
+                },
+            );
+            self.io.pending.insert(job, Pending::Swap { doc: id });
+            e.inflight = Some((job, rev));
+            e.on_disk = true;
+            e.path = path;
+            e.last_start = Some(now);
+            e.seen = None;
+            e.first_change = None;
+        }
+        self.io.swap.docs.insert(id, e);
+    }
+
+    /// 文書 `id` のディスクのスワップ (書いたときのパスの名前) を消すジョブを投入する。
+    fn spawn_swap_discard(&mut self, id: DocumentId, e: &mut SwapDoc) {
+        let job = self.jobs.spawn(
+            Some(id),
+            Revision(0),
+            JobKind::SwapDiscard {
+                doc: id,
+                path: e.path.clone(),
+            },
+        );
+        self.io
+            .pending
+            .insert(job, Pending::SwapDiscard { doc: id });
+        e.discarding = Some(job);
+    }
+
+    /// 次に `tick` が要る時刻 (スワップを書く・消す時刻)。
+    pub(crate) fn swap_deadline(&self) -> Option<Tick> {
+        if self.io.swap.stopped {
+            return None;
+        }
+        self.io
+            .swap
+            .docs
+            .iter()
+            .filter(|(_, e)| e.inflight.is_none() && e.discarding.is_none())
+            .filter_map(|(id, e)| {
+                // 消すもの (swap_step と同じ条件): 要らなくなったスワップと、パスが変わった後の旧パスのスワップ
+                let path_changed =
+                    e.on_disk && e.path != self.docs.documents.get(id).and_then(|d| d.path.clone());
+                let eligible = self.swap_eligible(*id).is_some();
+                if e.on_disk
+                    && ((!eligible && self.swap_obsolete(*id)) || (eligible && path_changed))
+                {
+                    Some(e.discard_retry_at.unwrap_or(self.now))
+                } else if eligible {
+                    self.swap_due(e)
+                } else {
+                    // 書けなくなった dirty な文書のスワップは残す (tick は要らない)
+                    None
+                }
+            })
+            .min()
+    }
+
+    /// ディスクにスワップがある文書 (正常終了のとき、Host が消す。書込中のものを含む)。
+    pub(crate) fn swap_leftovers(&self) -> Vec<(DocumentId, Option<FsPath>)> {
+        self.io
+            .swap
+            .docs
+            .iter()
+            .filter(|(_, e)| e.on_disk)
+            .map(|(id, e)| (*id, e.path.clone()))
+            .collect()
+    }
+
+    /// 文書の新しいスワップを書き終えている (古いスワップを消してよい)。
+    pub(crate) fn swap_written(&self, id: DocumentId) -> bool {
+        self.io
+            .swap
+            .docs
+            .get(&id)
+            .is_some_and(|e| e.written.is_some())
+    }
+
+    /// スワップを書くジョブの結果。
+    pub(crate) fn finish_swap(&mut self, doc: DocumentId, r: JobResult) {
+        let Some(e) = self.io.swap.docs.get_mut(&doc) else {
+            return;
+        };
+        let inflight = e.inflight.take();
+        match r {
+            JobResult::SwapWritten { .. } => {
+                if let Some((_, rev)) = inflight {
+                    e.written = Some(rev);
+                }
+            }
+            JobResult::Failed {
+                err: JobError::Fs(err),
+                ..
+            } if err.kind == FsErrorKind::Unsupported => self.swap_stop(),
+            // 失敗: 書けた Revision は変わらない。次の期限で書き直す (`last_start` が間隔を空ける)
+            _ => {}
+        }
+    }
+
+    /// スワップを消すジョブの結果。
+    pub(crate) fn finish_swap_discard(&mut self, doc: DocumentId, r: JobResult) {
+        let now = self.now;
+        let Some(e) = self.io.swap.docs.get_mut(&doc) else {
+            return;
+        };
+        e.discarding = None;
+        match r {
+            JobResult::SwapDiscarded { .. } => {
+                self.io.swap.docs.remove(&doc);
+            }
+            JobResult::Failed {
+                err: JobError::Fs(err),
+                ..
+            } if err.kind == FsErrorKind::Unsupported => self.swap_stop(),
+            _ => e.discard_retry_at = Some(now + DISCARD_RETRY),
+        }
+    }
+
+    fn swap_stop(&mut self) {
+        self.io.swap.stopped = true;
+        self.io.swap.docs.clear();
+    }
+}

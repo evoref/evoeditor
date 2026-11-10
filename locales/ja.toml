@@ -6,6 +6,14 @@ language = "ja"
 description = "エディタを終了します。"
 title = "終了"
 
+[cmd.app.quit_with_error]
+description = "保存せずに、終了コード 4 で終了します (Vim の :cq と同じ)。git commit などを中止させるときに使います。未保存の文書があれば、終了と同じく確認します。"
+title = "失敗として終了"
+
+[cmd.app.save_and_quit]
+description = "表示中の文書を保存してから終了します。ほかに未保存の文書があれば、終了と同じく確認します。"
+title = "保存して終了"
+
 [cmd.app.suspend]
 description = "エディタを一時停止してシェルに戻ります。シェルの fg で再開します。"
 title = "一時停止 (サスペンド)"
@@ -21,6 +29,10 @@ title = "切り取り"
 [cmd.config.reload]
 description = "設定ファイル (config.toml と keymap.toml) を読み直して、再起動せずに反映します。"
 title = "設定を読み直す"
+
+[cmd.config.show_diagnostics]
+description = "設定ファイル・キーマップ・テーマの問題を一覧で表示します。Enter で該当のファイルの該当の行を開きます。"
+title = "設定の診断を表示"
 
 [cmd.cursor.doc_end]
 description = "カーソルを文書の末尾へ動かします。"
@@ -381,13 +393,15 @@ list_next = "次へ"
 palette_open = "コマンド"
 
 [info.app]
-release_summary = "スワップと復旧、複数の文書、正規表現の検索と置換、折り返し、マウス、テーマの切替、英語の表示などに対応しました。詳しくはリリースノートを見てください"
+release_summary = "内部を整理して効率化し、データの保全と正しさの不具合を直しました。保存して終了、入力欄での単語の編集なども加わりました。詳しくはリリースノートを見てください"
 updated = "evoeditor {version} に更新しました: {summary}"
 
 [info.cli]
 unsupported = "{option} はこのバージョンでは使えないため無視しました"
 
 [info.config]
+diagnostic_no_file = "{file} の診断は、ファイルに書かれたものではないため開けません"
+no_diagnostics = "設定の診断はありません"
 reload_restart = "次の項目は再起動すると有効になります: {keys}"
 reload_unchanged = "設定を読み直しました (変わった項目はありません)"
 reloaded = "設定を読み直しました。{count} 項目が変わりました: {keys}"
@@ -485,6 +499,10 @@ text = "システムのクリップボードを使えないため、エディタ
 hint = "使える値: {allowed}。この項目は既定値 {default} を使います"
 text = "{item} の値 {value} は使えません"
 
+[msg.config.invalid_value_no_default]
+hint = "使える値: {allowed}。この項目は使いません"
+text = "{item} の値 {value} は使えません"
+
 [msg.config.keymap_unknown_context]
 hint = "使える名前: global, editor, search, prompt, palette, list, dialog, help。この割当は使いません"
 text = "{item} のコンテキスト名は使えません"
@@ -500,6 +518,10 @@ text = "{item} のキーの書き方が正しくありません"
 [msg.config.keymap_bad_when]
 hint = "書式は設定の仕様 (07 §7.3) を見てください。この割当は使いません"
 text = "{item} の when 句が正しくありません"
+
+[msg.config.keymap_unknown_when_var]
+hint = "使える変数は設定の仕様 (07 §7.3) を見てください。この割当は使いません"
+text = "{item} の when 句の {value} は使えない変数です"
 
 [msg.config.keymap_printable_key]
 hint = "ctrl や alt を組み合わせたキーにしてください。この割当は使いません"
@@ -535,6 +557,10 @@ text = "この設定ファイルは書式が正しくないため使っていま
 
 [msg.config.type_mismatch]
 hint = "{expected} で書いてください。この項目は既定値 {default} を使います"
+text = "{item} の値の型が違います (書かれた型: {actual})"
+
+[msg.config.type_mismatch_no_default]
+hint = "{expected} で書いてください。この項目は使いません"
 text = "{item} の値の型が違います (書かれた型: {actual})"
 
 [msg.config.unknown_key]
@@ -673,6 +699,10 @@ text = "{path} の権限・属性の一部を引き継げませんでした: {re
 hint = "続く確認で選んでください"
 text = "直接上書きの前のバックアップを作れませんでした。何も書き込んでいません"
 
+[msg.save.backup_not_removed]
+hint = "要らなければ {backup} を消してください"
+text = "{path} を保存しましたが、元のファイルを移した {backup} を消せませんでした"
+
 [msg.save.busy]
 hint = "そのプログラムを閉じて {key:file.save} で再試行するか、別名で保存してください"
 text = "他のプログラムが {path} を使用中のため保存できませんでした"
@@ -701,6 +731,10 @@ text = "不正なバイトを含むため、この文書は ISO-2022-JP では�
 hint = "別名で保存 ({key:file.save_as}) するか、権限を確認してください"
 text = "{path} を保存できませんでした: {reason}"
 
+[msg.save.fsync_failed]
+hint = "ネットワーク上やリムーバブルのドライブでは、電源断や取り外しで内容を失うことがあります。取り外す前に安全な取り外しを行ってください"
+text = "{path} を保存しましたが、ディスクへの書き込みの完了を確かめられませんでした"
+
 [msg.save.in_place_failed]
 hint = "別名で保存 ({key:file.save_as}) してから、バックアップと見比べてください"
 text = "{path} の直接上書きの途中で失敗しました。ファイルが壊れている可能性があります。書き込む前の内容: {backup}"
@@ -708,6 +742,10 @@ text = "{path} の直接上書きの途中で失敗しました。ファイル�
 [msg.save.in_place_failed_no_backup]
 hint = "別名で保存 ({key:file.save_as}) して、今の内容を残してください"
 text = "{path} の直接上書きの途中で失敗しました。ファイルが壊れている可能性があり、バックアップはありません"
+
+[msg.save.inflight_flag_not_written]
+hint = "保存の途中で強制終了したときに、次の起動で痕跡を見つけられないことがあります"
+text = "{path} を保存しましたが、保存中の印を書けませんでした"
 
 [msg.save.invalid_path]
 hint = "別のファイル名で保存してください"
@@ -729,6 +767,10 @@ text = "{path} に書き込む権限がありません"
 hint = "保存するときにも、ファイルが変わっていないかを照合します"
 text = "{path} の変更を確かめられませんでした: {reason}"
 
+[msg.save.permission_narrowed]
+hint = "必要なら OS で権限を設定し直してください"
+text = "{path} を保存しましたが、他の利用者からの権限が元より狭くなりました"
+
 [msg.save.read_only_fs]
 hint = "別名で保存 ({key:file.save_as}) してください"
 text = "{path} は読み取り専用の場所にあります"
@@ -736,6 +778,10 @@ text = "{path} は読み取り専用の場所にあります"
 [msg.save.recovery_failed]
 hint = "別名で保存 ({key:file.save_as}) してください"
 text = "退避先に保存できませんでした: {reason}。元のファイル {path} は変更していません"
+
+[msg.save.tmp_not_removed]
+hint = "要らなければ {tmp} を消してください。消すまでは次の保存でハードリンクの確認が出ます"
+text = "{path} を保存しましたが、一時ファイル {tmp} を消せませんでした (保存したファイルと同じ実体です)"
 
 [msg.save_as.not_a_file]
 hint = "別のファイル名を入力してください"
@@ -927,6 +973,15 @@ more = "ほか {count} 個"
 [ui.load_state]
 loading = "読込中"
 
+[ui.clipboard_reason]
+no_command = "wl-clipboard または xclip を入れるとシステムのクリップボードが使えます"
+no_display = "画面 (DISPLAY / WAYLAND_DISPLAY) がありません"
+read_failed = "読み取れませんでした"
+ssh = "SSH 接続中は外部のコマンドを使いません"
+timeout = "読み取りが時間内に終わりませんでした"
+too_large = "大きすぎてシステムのクリップボードに入りません"
+write_failed = "書き込めませんでした"
+
 [ui.read_only_reason]
 binary = "バイナリファイル"
 file_attribute = "読み取り専用属性のファイル"
@@ -954,6 +1009,10 @@ short = "RO"
 [status.saving]
 long = "[保存中]"
 short = "保存中"
+
+[status.external_change]
+long = "[外部で変更]"
+short = "外部変更"
 
 [status.degraded.long_line]
 long = "[長い行: 近似表示]"
@@ -996,6 +1055,13 @@ footer = "{matched}/{total}"
 placeholder = "コマンドを入力"
 disabled = "現在は実行できません: {reason}"
 no_match = "一致するコマンドはありません"
+
+[ui.config_diagnostics]
+title = "設定の診断"
+placeholder = "診断の文で絞り込み"
+no_match = "一致する診断はありません"
+item = "{level}: {text} / {hint}"
+item_no_hint = "{level}: {text}"
 
 [ui.buffer_list]
 title = "バッファ"

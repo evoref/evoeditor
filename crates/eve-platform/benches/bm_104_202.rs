@@ -1,11 +1,11 @@
 //! BM-104 / BM-202: サイズ別オープンの時間とメモリ (docs/09-testing-quality.md §5.2、01 NFR-104 / NFR-202、S-02 の最終判定の材料)。
 //! 実ファイル (Windows は `WinFs`、Unix は `UnixFs`) を core の読込ジョブ (`run_job`) で開く。測るのは (2) 「開く」→ 読込完了
-//! (`Ready` 相当) の区間で、UTF-8 の 1 MB / 10 MB / 100 MB と Shift_JIS の 100 MB。メモリは読込完了から 1 秒アイドルの後の
+//! (`Ready` 相当) の区間で、UTF-8 の 1 MB / 10 MB / 100 MB と `Shift_JIS` の 100 MB。メモリは読込完了から 1 秒アイドルの後の
 //! 物理メモリ (Windows はワーキングセット、Linux は VmRSS。01 NFR-201) の増分を、基準 (デコード後の UTF-8 サイズ × 1.5 + 15 MB、
 //! 許容 ×2.5) と並べて示す。
 //!
 //! **診断と記録用**: 判定は基準機 (内蔵 NVMe、09 §5.1 / OQ-23) の値で行う。ここは開発機・CI ランナーの値で、目安にしかならない。
-//! (1) の「開く → 最初の進捗の Frame」は進捗表示の Frame がまだ無いので測らない。
+//! (1) の「開く → 最初の進捗の Frame」は、測る区間に進捗表示の Frame を含めないので測らない。
 //! Linux の musl 版と gnu 版の比較 (OQ-112、05 §17.3) は、同じ機械で `--target` だけを替えて測る。
 //!
 //! ```text
@@ -16,6 +16,11 @@
 //! ```
 
 #![allow(clippy::print_stdout, clippy::print_stderr)]
+#![expect(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "計測用の数値変換。値は十分に小さい"
+)]
 
 #[cfg(any(windows, unix))]
 mod imp {

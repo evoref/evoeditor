@@ -1,0 +1,417 @@
+# theme	depth	role	fg	bg	mods
+default	TrueColor	ui.control_char	Rgb(255, 255, 255)	Rgb(138, 58, 185)	0x00
+default	TrueColor	ui.cursor_line	Rgb(232, 232, 232)	Rgb(58, 61, 74)	0x00
+default	TrueColor	ui.dialog.button	Default	Default	0x00
+default	TrueColor	ui.dialog.button.focused	Default	Default	0x05
+default	TrueColor	ui.eof_marker	Rgb(128, 128, 128)	Default	0x00
+default	TrueColor	ui.hint_bar	Default	Default	0x00
+default	TrueColor	ui.hint_bar.key	Rgb(26, 26, 26)	Rgb(143, 208, 255)	0x00
+default	TrueColor	ui.input.placeholder	Rgb(128, 128, 128)	Default	0x00
+default	TrueColor	ui.line_number	Rgb(128, 128, 128)	Default	0x00
+default	TrueColor	ui.line_number.active	Default	Default	0x01
+default	TrueColor	ui.message.error	Rgb(255, 255, 255)	Rgb(179, 38, 30)	0x01
+default	TrueColor	ui.message.info	Default	Default	0x00
+default	TrueColor	ui.message.warning	Rgb(26, 26, 26)	Rgb(224, 165, 59)	0x01
+default	TrueColor	ui.overlay	Default	Default	0x00
+default	TrueColor	ui.overlay.disabled	Rgb(128, 128, 128)	Default	0x00
+default	TrueColor	ui.overlay.match	Default	Default	0x03
+default	TrueColor	ui.overlay.selected	Rgb(238, 240, 246)	Rgb(59, 91, 181)	0x00
+default	TrueColor	ui.scroll_marker	Rgb(128, 128, 128)	Default	0x01
+default	TrueColor	ui.search.current	Rgb(26, 26, 26)	Rgb(240, 148, 90)	0x03
+default	TrueColor	ui.search.match	Rgb(26, 26, 26)	Rgb(230, 200, 74)	0x02
+default	TrueColor	ui.search_bar.toggle_on	Default	Default	0x04
+default	TrueColor	ui.selection	Rgb(238, 240, 246)	Rgb(59, 91, 181)	0x00
+default	TrueColor	ui.status_bar	Rgb(232, 232, 232)	Rgb(47, 51, 64)	0x00
+default	TrueColor	ui.status_bar.chord	Default	Default	0x01
+default	TrueColor	ui.text	Default	Default	0x00
+default	TrueColor	ui.whitespace	Rgb(128, 128, 128)	Default	0x00
+default	Ansi256	ui.control_char	Ansi(231)	Ansi(91)	0x00
+default	Ansi256	ui.cursor_line	Ansi(254)	Ansi(236)	0x00
+default	Ansi256	ui.dialog.button	Default	Default	0x00
+default	Ansi256	ui.dialog.button.focused	Default	Default	0x05
+default	Ansi256	ui.eof_marker	Ansi(244)	Default	0x00
+default	Ansi256	ui.hint_bar	Default	Default	0x00
+default	Ansi256	ui.hint_bar.key	Ansi(233)	Ansi(117)	0x00
+default	Ansi256	ui.input.placeholder	Ansi(244)	Default	0x00
+default	Ansi256	ui.line_number	Ansi(244)	Default	0x00
+default	Ansi256	ui.line_number.active	Default	Default	0x01
+default	Ansi256	ui.message.error	Ansi(231)	Ansi(124)	0x01
+default	Ansi256	ui.message.info	Default	Default	0x00
+default	Ansi256	ui.message.warning	Ansi(233)	Ansi(179)	0x01
+default	Ansi256	ui.overlay	Default	Default	0x00
+default	Ansi256	ui.overlay.disabled	Ansi(244)	Default	0x00
+default	Ansi256	ui.overlay.match	Default	Default	0x03
+default	Ansi256	ui.overlay.selected	Ansi(255)	Ansi(61)	0x00
+default	Ansi256	ui.scroll_marker	Ansi(244)	Default	0x01
+default	Ansi256	ui.search.current	Ansi(233)	Ansi(209)	0x03
+default	Ansi256	ui.search.match	Ansi(233)	Ansi(221)	0x02
+default	Ansi256	ui.search_bar.toggle_on	Default	Default	0x04
+default	Ansi256	ui.selection	Ansi(255)	Ansi(61)	0x00
+default	Ansi256	ui.status_bar	Ansi(254)	Ansi(237)	0x00
+default	Ansi256	ui.status_bar.chord	Default	Default	0x01
+default	Ansi256	ui.text	Default	Default	0x00
+default	Ansi256	ui.whitespace	Ansi(244)	Default	0x00
+default	Ansi16	ui.control_char	Ansi(15)	Ansi(5)	0x00
+default	Ansi16	ui.cursor_line	Default	Default	0x00
+default	Ansi16	ui.dialog.button	Default	Default	0x00
+default	Ansi16	ui.dialog.button.focused	Default	Default	0x05
+default	Ansi16	ui.eof_marker	Ansi(8)	Default	0x00
+default	Ansi16	ui.hint_bar	Default	Default	0x00
+default	Ansi16	ui.hint_bar.key	Ansi(0)	Ansi(6)	0x00
+default	Ansi16	ui.input.placeholder	Ansi(8)	Default	0x00
+default	Ansi16	ui.line_number	Ansi(8)	Default	0x00
+default	Ansi16	ui.line_number.active	Default	Default	0x01
+default	Ansi16	ui.message.error	Ansi(15)	Ansi(1)	0x01
+default	Ansi16	ui.message.info	Default	Default	0x00
+default	Ansi16	ui.message.warning	Ansi(0)	Ansi(3)	0x01
+default	Ansi16	ui.overlay	Default	Default	0x00
+default	Ansi16	ui.overlay.disabled	Ansi(8)	Default	0x00
+default	Ansi16	ui.overlay.match	Default	Default	0x03
+default	Ansi16	ui.overlay.selected	Ansi(15)	Ansi(4)	0x00
+default	Ansi16	ui.scroll_marker	Ansi(8)	Default	0x01
+default	Ansi16	ui.search.current	Ansi(0)	Ansi(11)	0x03
+default	Ansi16	ui.search.match	Ansi(0)	Ansi(3)	0x02
+default	Ansi16	ui.search_bar.toggle_on	Default	Default	0x04
+default	Ansi16	ui.selection	Ansi(15)	Ansi(4)	0x00
+default	Ansi16	ui.status_bar	Default	Default	0x04
+default	Ansi16	ui.status_bar.chord	Default	Default	0x01
+default	Ansi16	ui.text	Default	Default	0x00
+default	Ansi16	ui.whitespace	Ansi(8)	Default	0x00
+default	Mono	ui.control_char	Default	Default	0x04
+default	Mono	ui.cursor_line	Default	Default	0x00
+default	Mono	ui.dialog.button	Default	Default	0x00
+default	Mono	ui.dialog.button.focused	Default	Default	0x05
+default	Mono	ui.eof_marker	Default	Default	0x00
+default	Mono	ui.hint_bar	Default	Default	0x00
+default	Mono	ui.hint_bar.key	Default	Default	0x04
+default	Mono	ui.input.placeholder	Default	Default	0x00
+default	Mono	ui.line_number	Default	Default	0x00
+default	Mono	ui.line_number.active	Default	Default	0x01
+default	Mono	ui.message.error	Default	Default	0x05
+default	Mono	ui.message.info	Default	Default	0x00
+default	Mono	ui.message.warning	Default	Default	0x01
+default	Mono	ui.overlay	Default	Default	0x00
+default	Mono	ui.overlay.disabled	Default	Default	0x00
+default	Mono	ui.overlay.match	Default	Default	0x03
+default	Mono	ui.overlay.selected	Default	Default	0x04
+default	Mono	ui.scroll_marker	Default	Default	0x01
+default	Mono	ui.search.current	Default	Default	0x06
+default	Mono	ui.search.match	Default	Default	0x02
+default	Mono	ui.search_bar.toggle_on	Default	Default	0x04
+default	Mono	ui.selection	Default	Default	0x04
+default	Mono	ui.status_bar	Default	Default	0x04
+default	Mono	ui.status_bar.chord	Default	Default	0x01
+default	Mono	ui.text	Default	Default	0x00
+default	Mono	ui.whitespace	Default	Default	0x08
+default-dark	TrueColor	ui.control_char	Rgb(255, 255, 255)	Rgb(138, 58, 185)	0x00
+default-dark	TrueColor	ui.cursor_line	Rgb(232, 232, 232)	Rgb(58, 61, 74)	0x00
+default-dark	TrueColor	ui.dialog.button	Rgb(212, 212, 212)	Rgb(30, 30, 30)	0x00
+default-dark	TrueColor	ui.dialog.button.focused	Rgb(212, 212, 212)	Rgb(30, 30, 30)	0x05
+default-dark	TrueColor	ui.eof_marker	Rgb(128, 128, 128)	Rgb(30, 30, 30)	0x00
+default-dark	TrueColor	ui.hint_bar	Rgb(212, 212, 212)	Rgb(30, 30, 30)	0x00
+default-dark	TrueColor	ui.hint_bar.key	Rgb(26, 26, 26)	Rgb(143, 208, 255)	0x00
+default-dark	TrueColor	ui.input.placeholder	Rgb(128, 128, 128)	Rgb(30, 30, 30)	0x00
+default-dark	TrueColor	ui.line_number	Rgb(128, 128, 128)	Rgb(30, 30, 30)	0x00
+default-dark	TrueColor	ui.line_number.active	Rgb(212, 212, 212)	Rgb(30, 30, 30)	0x01
+default-dark	TrueColor	ui.message.error	Rgb(255, 255, 255)	Rgb(179, 38, 30)	0x01
+default-dark	TrueColor	ui.message.info	Rgb(212, 212, 212)	Rgb(30, 30, 30)	0x00
+default-dark	TrueColor	ui.message.warning	Rgb(26, 26, 26)	Rgb(224, 165, 59)	0x01
+default-dark	TrueColor	ui.overlay	Rgb(212, 212, 212)	Rgb(30, 30, 30)	0x00
+default-dark	TrueColor	ui.overlay.disabled	Rgb(128, 128, 128)	Rgb(30, 30, 30)	0x00
+default-dark	TrueColor	ui.overlay.match	Rgb(212, 212, 212)	Rgb(30, 30, 30)	0x03
+default-dark	TrueColor	ui.overlay.selected	Rgb(238, 240, 246)	Rgb(59, 91, 181)	0x00
+default-dark	TrueColor	ui.scroll_marker	Rgb(128, 128, 128)	Rgb(30, 30, 30)	0x01
+default-dark	TrueColor	ui.search.current	Rgb(26, 26, 26)	Rgb(240, 148, 90)	0x03
+default-dark	TrueColor	ui.search.match	Rgb(26, 26, 26)	Rgb(230, 200, 74)	0x02
+default-dark	TrueColor	ui.search_bar.toggle_on	Rgb(212, 212, 212)	Rgb(30, 30, 30)	0x04
+default-dark	TrueColor	ui.selection	Rgb(238, 240, 246)	Rgb(59, 91, 181)	0x00
+default-dark	TrueColor	ui.status_bar	Rgb(232, 232, 232)	Rgb(47, 51, 64)	0x00
+default-dark	TrueColor	ui.status_bar.chord	Rgb(212, 212, 212)	Rgb(30, 30, 30)	0x01
+default-dark	TrueColor	ui.text	Rgb(212, 212, 212)	Rgb(30, 30, 30)	0x00
+default-dark	TrueColor	ui.whitespace	Rgb(128, 128, 128)	Rgb(30, 30, 30)	0x00
+default-dark	Ansi256	ui.control_char	Ansi(231)	Ansi(91)	0x00
+default-dark	Ansi256	ui.cursor_line	Ansi(254)	Ansi(236)	0x00
+default-dark	Ansi256	ui.dialog.button	Ansi(252)	Ansi(234)	0x00
+default-dark	Ansi256	ui.dialog.button.focused	Ansi(252)	Ansi(234)	0x05
+default-dark	Ansi256	ui.eof_marker	Ansi(244)	Ansi(234)	0x00
+default-dark	Ansi256	ui.hint_bar	Ansi(252)	Ansi(234)	0x00
+default-dark	Ansi256	ui.hint_bar.key	Ansi(233)	Ansi(117)	0x00
+default-dark	Ansi256	ui.input.placeholder	Ansi(244)	Ansi(234)	0x00
+default-dark	Ansi256	ui.line_number	Ansi(244)	Ansi(234)	0x00
+default-dark	Ansi256	ui.line_number.active	Ansi(252)	Ansi(234)	0x01
+default-dark	Ansi256	ui.message.error	Ansi(231)	Ansi(124)	0x01
+default-dark	Ansi256	ui.message.info	Ansi(252)	Ansi(234)	0x00
+default-dark	Ansi256	ui.message.warning	Ansi(233)	Ansi(179)	0x01
+default-dark	Ansi256	ui.overlay	Ansi(252)	Ansi(234)	0x00
+default-dark	Ansi256	ui.overlay.disabled	Ansi(244)	Ansi(234)	0x00
+default-dark	Ansi256	ui.overlay.match	Ansi(252)	Ansi(234)	0x03
+default-dark	Ansi256	ui.overlay.selected	Ansi(255)	Ansi(61)	0x00
+default-dark	Ansi256	ui.scroll_marker	Ansi(244)	Ansi(234)	0x01
+default-dark	Ansi256	ui.search.current	Ansi(233)	Ansi(209)	0x03
+default-dark	Ansi256	ui.search.match	Ansi(233)	Ansi(221)	0x02
+default-dark	Ansi256	ui.search_bar.toggle_on	Ansi(252)	Ansi(234)	0x04
+default-dark	Ansi256	ui.selection	Ansi(255)	Ansi(61)	0x00
+default-dark	Ansi256	ui.status_bar	Ansi(254)	Ansi(237)	0x00
+default-dark	Ansi256	ui.status_bar.chord	Ansi(252)	Ansi(234)	0x01
+default-dark	Ansi256	ui.text	Ansi(252)	Ansi(234)	0x00
+default-dark	Ansi256	ui.whitespace	Ansi(244)	Ansi(234)	0x00
+default-dark	Ansi16	ui.control_char	Ansi(15)	Ansi(5)	0x00
+default-dark	Ansi16	ui.cursor_line	Ansi(7)	Ansi(0)	0x00
+default-dark	Ansi16	ui.dialog.button	Ansi(7)	Ansi(0)	0x00
+default-dark	Ansi16	ui.dialog.button.focused	Ansi(7)	Ansi(0)	0x05
+default-dark	Ansi16	ui.eof_marker	Ansi(8)	Ansi(0)	0x00
+default-dark	Ansi16	ui.hint_bar	Ansi(7)	Ansi(0)	0x00
+default-dark	Ansi16	ui.hint_bar.key	Ansi(0)	Ansi(6)	0x00
+default-dark	Ansi16	ui.input.placeholder	Ansi(8)	Ansi(0)	0x00
+default-dark	Ansi16	ui.line_number	Ansi(8)	Ansi(0)	0x00
+default-dark	Ansi16	ui.line_number.active	Ansi(7)	Ansi(0)	0x01
+default-dark	Ansi16	ui.message.error	Ansi(15)	Ansi(1)	0x01
+default-dark	Ansi16	ui.message.info	Ansi(7)	Ansi(0)	0x00
+default-dark	Ansi16	ui.message.warning	Ansi(0)	Ansi(3)	0x01
+default-dark	Ansi16	ui.overlay	Ansi(7)	Ansi(0)	0x00
+default-dark	Ansi16	ui.overlay.disabled	Ansi(8)	Ansi(0)	0x00
+default-dark	Ansi16	ui.overlay.match	Ansi(7)	Ansi(0)	0x03
+default-dark	Ansi16	ui.overlay.selected	Ansi(15)	Ansi(4)	0x00
+default-dark	Ansi16	ui.scroll_marker	Ansi(8)	Ansi(0)	0x01
+default-dark	Ansi16	ui.search.current	Ansi(0)	Ansi(11)	0x03
+default-dark	Ansi16	ui.search.match	Ansi(0)	Ansi(3)	0x02
+default-dark	Ansi16	ui.search_bar.toggle_on	Ansi(7)	Ansi(0)	0x04
+default-dark	Ansi16	ui.selection	Ansi(15)	Ansi(4)	0x00
+default-dark	Ansi16	ui.status_bar	Ansi(7)	Ansi(0)	0x04
+default-dark	Ansi16	ui.status_bar.chord	Ansi(7)	Ansi(0)	0x01
+default-dark	Ansi16	ui.text	Ansi(7)	Ansi(0)	0x00
+default-dark	Ansi16	ui.whitespace	Ansi(8)	Ansi(0)	0x00
+default-dark	Mono	ui.control_char	Default	Default	0x04
+default-dark	Mono	ui.cursor_line	Default	Default	0x00
+default-dark	Mono	ui.dialog.button	Default	Default	0x00
+default-dark	Mono	ui.dialog.button.focused	Default	Default	0x05
+default-dark	Mono	ui.eof_marker	Default	Default	0x00
+default-dark	Mono	ui.hint_bar	Default	Default	0x00
+default-dark	Mono	ui.hint_bar.key	Default	Default	0x04
+default-dark	Mono	ui.input.placeholder	Default	Default	0x00
+default-dark	Mono	ui.line_number	Default	Default	0x00
+default-dark	Mono	ui.line_number.active	Default	Default	0x01
+default-dark	Mono	ui.message.error	Default	Default	0x05
+default-dark	Mono	ui.message.info	Default	Default	0x00
+default-dark	Mono	ui.message.warning	Default	Default	0x01
+default-dark	Mono	ui.overlay	Default	Default	0x00
+default-dark	Mono	ui.overlay.disabled	Default	Default	0x00
+default-dark	Mono	ui.overlay.match	Default	Default	0x03
+default-dark	Mono	ui.overlay.selected	Default	Default	0x04
+default-dark	Mono	ui.scroll_marker	Default	Default	0x01
+default-dark	Mono	ui.search.current	Default	Default	0x06
+default-dark	Mono	ui.search.match	Default	Default	0x02
+default-dark	Mono	ui.search_bar.toggle_on	Default	Default	0x04
+default-dark	Mono	ui.selection	Default	Default	0x04
+default-dark	Mono	ui.status_bar	Default	Default	0x04
+default-dark	Mono	ui.status_bar.chord	Default	Default	0x01
+default-dark	Mono	ui.text	Default	Default	0x00
+default-dark	Mono	ui.whitespace	Default	Default	0x08
+default-light	TrueColor	ui.control_char	Rgb(255, 255, 255)	Rgb(138, 58, 185)	0x00
+default-light	TrueColor	ui.cursor_line	Rgb(232, 232, 232)	Rgb(58, 61, 74)	0x00
+default-light	TrueColor	ui.dialog.button	Rgb(30, 30, 30)	Rgb(250, 250, 250)	0x00
+default-light	TrueColor	ui.dialog.button.focused	Rgb(30, 30, 30)	Rgb(250, 250, 250)	0x05
+default-light	TrueColor	ui.eof_marker	Rgb(128, 128, 128)	Rgb(250, 250, 250)	0x00
+default-light	TrueColor	ui.hint_bar	Rgb(30, 30, 30)	Rgb(250, 250, 250)	0x00
+default-light	TrueColor	ui.hint_bar.key	Rgb(26, 26, 26)	Rgb(143, 208, 255)	0x00
+default-light	TrueColor	ui.input.placeholder	Rgb(128, 128, 128)	Rgb(250, 250, 250)	0x00
+default-light	TrueColor	ui.line_number	Rgb(128, 128, 128)	Rgb(250, 250, 250)	0x00
+default-light	TrueColor	ui.line_number.active	Rgb(30, 30, 30)	Rgb(250, 250, 250)	0x01
+default-light	TrueColor	ui.message.error	Rgb(255, 255, 255)	Rgb(179, 38, 30)	0x01
+default-light	TrueColor	ui.message.info	Rgb(30, 30, 30)	Rgb(250, 250, 250)	0x00
+default-light	TrueColor	ui.message.warning	Rgb(26, 26, 26)	Rgb(224, 165, 59)	0x01
+default-light	TrueColor	ui.overlay	Rgb(30, 30, 30)	Rgb(250, 250, 250)	0x00
+default-light	TrueColor	ui.overlay.disabled	Rgb(128, 128, 128)	Rgb(250, 250, 250)	0x00
+default-light	TrueColor	ui.overlay.match	Rgb(30, 30, 30)	Rgb(250, 250, 250)	0x03
+default-light	TrueColor	ui.overlay.selected	Rgb(238, 240, 246)	Rgb(59, 91, 181)	0x00
+default-light	TrueColor	ui.scroll_marker	Rgb(128, 128, 128)	Rgb(250, 250, 250)	0x01
+default-light	TrueColor	ui.search.current	Rgb(26, 26, 26)	Rgb(240, 148, 90)	0x03
+default-light	TrueColor	ui.search.match	Rgb(26, 26, 26)	Rgb(230, 200, 74)	0x02
+default-light	TrueColor	ui.search_bar.toggle_on	Rgb(30, 30, 30)	Rgb(250, 250, 250)	0x04
+default-light	TrueColor	ui.selection	Rgb(238, 240, 246)	Rgb(59, 91, 181)	0x00
+default-light	TrueColor	ui.status_bar	Rgb(232, 232, 232)	Rgb(47, 51, 64)	0x00
+default-light	TrueColor	ui.status_bar.chord	Rgb(30, 30, 30)	Rgb(250, 250, 250)	0x01
+default-light	TrueColor	ui.text	Rgb(30, 30, 30)	Rgb(250, 250, 250)	0x00
+default-light	TrueColor	ui.whitespace	Rgb(128, 128, 128)	Rgb(250, 250, 250)	0x00
+default-light	Ansi256	ui.control_char	Ansi(231)	Ansi(91)	0x00
+default-light	Ansi256	ui.cursor_line	Ansi(254)	Ansi(236)	0x00
+default-light	Ansi256	ui.dialog.button	Ansi(235)	Ansi(255)	0x00
+default-light	Ansi256	ui.dialog.button.focused	Ansi(235)	Ansi(255)	0x05
+default-light	Ansi256	ui.eof_marker	Ansi(244)	Ansi(255)	0x00
+default-light	Ansi256	ui.hint_bar	Ansi(235)	Ansi(255)	0x00
+default-light	Ansi256	ui.hint_bar.key	Ansi(233)	Ansi(117)	0x00
+default-light	Ansi256	ui.input.placeholder	Ansi(244)	Ansi(255)	0x00
+default-light	Ansi256	ui.line_number	Ansi(244)	Ansi(255)	0x00
+default-light	Ansi256	ui.line_number.active	Ansi(235)	Ansi(255)	0x01
+default-light	Ansi256	ui.message.error	Ansi(231)	Ansi(124)	0x01
+default-light	Ansi256	ui.message.info	Ansi(235)	Ansi(255)	0x00
+default-light	Ansi256	ui.message.warning	Ansi(233)	Ansi(179)	0x01
+default-light	Ansi256	ui.overlay	Ansi(235)	Ansi(255)	0x00
+default-light	Ansi256	ui.overlay.disabled	Ansi(244)	Ansi(255)	0x00
+default-light	Ansi256	ui.overlay.match	Ansi(235)	Ansi(255)	0x03
+default-light	Ansi256	ui.overlay.selected	Ansi(255)	Ansi(61)	0x00
+default-light	Ansi256	ui.scroll_marker	Ansi(244)	Ansi(255)	0x01
+default-light	Ansi256	ui.search.current	Ansi(233)	Ansi(209)	0x03
+default-light	Ansi256	ui.search.match	Ansi(233)	Ansi(221)	0x02
+default-light	Ansi256	ui.search_bar.toggle_on	Ansi(235)	Ansi(255)	0x04
+default-light	Ansi256	ui.selection	Ansi(255)	Ansi(61)	0x00
+default-light	Ansi256	ui.status_bar	Ansi(254)	Ansi(237)	0x00
+default-light	Ansi256	ui.status_bar.chord	Ansi(235)	Ansi(255)	0x01
+default-light	Ansi256	ui.text	Ansi(235)	Ansi(255)	0x00
+default-light	Ansi256	ui.whitespace	Ansi(244)	Ansi(255)	0x00
+default-light	Ansi16	ui.control_char	Ansi(15)	Ansi(5)	0x00
+default-light	Ansi16	ui.cursor_line	Ansi(0)	Ansi(15)	0x00
+default-light	Ansi16	ui.dialog.button	Ansi(0)	Ansi(15)	0x00
+default-light	Ansi16	ui.dialog.button.focused	Ansi(0)	Ansi(15)	0x05
+default-light	Ansi16	ui.eof_marker	Ansi(8)	Ansi(15)	0x00
+default-light	Ansi16	ui.hint_bar	Ansi(0)	Ansi(15)	0x00
+default-light	Ansi16	ui.hint_bar.key	Ansi(0)	Ansi(6)	0x00
+default-light	Ansi16	ui.input.placeholder	Ansi(8)	Ansi(15)	0x00
+default-light	Ansi16	ui.line_number	Ansi(8)	Ansi(15)	0x00
+default-light	Ansi16	ui.line_number.active	Ansi(0)	Ansi(15)	0x01
+default-light	Ansi16	ui.message.error	Ansi(15)	Ansi(1)	0x01
+default-light	Ansi16	ui.message.info	Ansi(0)	Ansi(15)	0x00
+default-light	Ansi16	ui.message.warning	Ansi(0)	Ansi(3)	0x01
+default-light	Ansi16	ui.overlay	Ansi(0)	Ansi(15)	0x00
+default-light	Ansi16	ui.overlay.disabled	Ansi(8)	Ansi(15)	0x00
+default-light	Ansi16	ui.overlay.match	Ansi(0)	Ansi(15)	0x03
+default-light	Ansi16	ui.overlay.selected	Ansi(15)	Ansi(4)	0x00
+default-light	Ansi16	ui.scroll_marker	Ansi(8)	Ansi(15)	0x01
+default-light	Ansi16	ui.search.current	Ansi(0)	Ansi(11)	0x03
+default-light	Ansi16	ui.search.match	Ansi(0)	Ansi(3)	0x02
+default-light	Ansi16	ui.search_bar.toggle_on	Ansi(0)	Ansi(15)	0x04
+default-light	Ansi16	ui.selection	Ansi(15)	Ansi(4)	0x00
+default-light	Ansi16	ui.status_bar	Ansi(0)	Ansi(15)	0x04
+default-light	Ansi16	ui.status_bar.chord	Ansi(0)	Ansi(15)	0x01
+default-light	Ansi16	ui.text	Ansi(0)	Ansi(15)	0x00
+default-light	Ansi16	ui.whitespace	Ansi(8)	Ansi(15)	0x00
+default-light	Mono	ui.control_char	Default	Default	0x04
+default-light	Mono	ui.cursor_line	Default	Default	0x00
+default-light	Mono	ui.dialog.button	Default	Default	0x00
+default-light	Mono	ui.dialog.button.focused	Default	Default	0x05
+default-light	Mono	ui.eof_marker	Default	Default	0x00
+default-light	Mono	ui.hint_bar	Default	Default	0x00
+default-light	Mono	ui.hint_bar.key	Default	Default	0x04
+default-light	Mono	ui.input.placeholder	Default	Default	0x00
+default-light	Mono	ui.line_number	Default	Default	0x00
+default-light	Mono	ui.line_number.active	Default	Default	0x01
+default-light	Mono	ui.message.error	Default	Default	0x05
+default-light	Mono	ui.message.info	Default	Default	0x00
+default-light	Mono	ui.message.warning	Default	Default	0x01
+default-light	Mono	ui.overlay	Default	Default	0x00
+default-light	Mono	ui.overlay.disabled	Default	Default	0x00
+default-light	Mono	ui.overlay.match	Default	Default	0x03
+default-light	Mono	ui.overlay.selected	Default	Default	0x04
+default-light	Mono	ui.scroll_marker	Default	Default	0x01
+default-light	Mono	ui.search.current	Default	Default	0x06
+default-light	Mono	ui.search.match	Default	Default	0x02
+default-light	Mono	ui.search_bar.toggle_on	Default	Default	0x04
+default-light	Mono	ui.selection	Default	Default	0x04
+default-light	Mono	ui.status_bar	Default	Default	0x04
+default-light	Mono	ui.status_bar.chord	Default	Default	0x01
+default-light	Mono	ui.text	Default	Default	0x00
+default-light	Mono	ui.whitespace	Default	Default	0x08
+ansi	TrueColor	ui.control_char	Ansi(15)	Ansi(5)	0x00
+ansi	TrueColor	ui.cursor_line	Default	Default	0x00
+ansi	TrueColor	ui.dialog.button	Default	Default	0x00
+ansi	TrueColor	ui.dialog.button.focused	Default	Default	0x05
+ansi	TrueColor	ui.eof_marker	Ansi(8)	Default	0x00
+ansi	TrueColor	ui.hint_bar	Default	Default	0x00
+ansi	TrueColor	ui.hint_bar.key	Ansi(0)	Ansi(6)	0x00
+ansi	TrueColor	ui.input.placeholder	Ansi(8)	Default	0x00
+ansi	TrueColor	ui.line_number	Ansi(8)	Default	0x00
+ansi	TrueColor	ui.line_number.active	Default	Default	0x01
+ansi	TrueColor	ui.message.error	Ansi(15)	Ansi(1)	0x01
+ansi	TrueColor	ui.message.info	Default	Default	0x00
+ansi	TrueColor	ui.message.warning	Ansi(0)	Ansi(3)	0x01
+ansi	TrueColor	ui.overlay	Default	Default	0x00
+ansi	TrueColor	ui.overlay.disabled	Ansi(8)	Default	0x00
+ansi	TrueColor	ui.overlay.match	Default	Default	0x03
+ansi	TrueColor	ui.overlay.selected	Ansi(15)	Ansi(4)	0x00
+ansi	TrueColor	ui.scroll_marker	Ansi(8)	Default	0x01
+ansi	TrueColor	ui.search.current	Ansi(0)	Ansi(11)	0x03
+ansi	TrueColor	ui.search.match	Ansi(0)	Ansi(3)	0x02
+ansi	TrueColor	ui.search_bar.toggle_on	Default	Default	0x04
+ansi	TrueColor	ui.selection	Ansi(15)	Ansi(4)	0x00
+ansi	TrueColor	ui.status_bar	Default	Default	0x04
+ansi	TrueColor	ui.status_bar.chord	Default	Default	0x01
+ansi	TrueColor	ui.text	Default	Default	0x00
+ansi	TrueColor	ui.whitespace	Ansi(8)	Default	0x00
+ansi	Ansi256	ui.control_char	Ansi(15)	Ansi(5)	0x00
+ansi	Ansi256	ui.cursor_line	Default	Default	0x00
+ansi	Ansi256	ui.dialog.button	Default	Default	0x00
+ansi	Ansi256	ui.dialog.button.focused	Default	Default	0x05
+ansi	Ansi256	ui.eof_marker	Ansi(8)	Default	0x00
+ansi	Ansi256	ui.hint_bar	Default	Default	0x00
+ansi	Ansi256	ui.hint_bar.key	Ansi(0)	Ansi(6)	0x00
+ansi	Ansi256	ui.input.placeholder	Ansi(8)	Default	0x00
+ansi	Ansi256	ui.line_number	Ansi(8)	Default	0x00
+ansi	Ansi256	ui.line_number.active	Default	Default	0x01
+ansi	Ansi256	ui.message.error	Ansi(15)	Ansi(1)	0x01
+ansi	Ansi256	ui.message.info	Default	Default	0x00
+ansi	Ansi256	ui.message.warning	Ansi(0)	Ansi(3)	0x01
+ansi	Ansi256	ui.overlay	Default	Default	0x00
+ansi	Ansi256	ui.overlay.disabled	Ansi(8)	Default	0x00
+ansi	Ansi256	ui.overlay.match	Default	Default	0x03
+ansi	Ansi256	ui.overlay.selected	Ansi(15)	Ansi(4)	0x00
+ansi	Ansi256	ui.scroll_marker	Ansi(8)	Default	0x01
+ansi	Ansi256	ui.search.current	Ansi(0)	Ansi(11)	0x03
+ansi	Ansi256	ui.search.match	Ansi(0)	Ansi(3)	0x02
+ansi	Ansi256	ui.search_bar.toggle_on	Default	Default	0x04
+ansi	Ansi256	ui.selection	Ansi(15)	Ansi(4)	0x00
+ansi	Ansi256	ui.status_bar	Default	Default	0x04
+ansi	Ansi256	ui.status_bar.chord	Default	Default	0x01
+ansi	Ansi256	ui.text	Default	Default	0x00
+ansi	Ansi256	ui.whitespace	Ansi(8)	Default	0x00
+ansi	Ansi16	ui.control_char	Ansi(15)	Ansi(5)	0x00
+ansi	Ansi16	ui.cursor_line	Default	Default	0x00
+ansi	Ansi16	ui.dialog.button	Default	Default	0x00
+ansi	Ansi16	ui.dialog.button.focused	Default	Default	0x05
+ansi	Ansi16	ui.eof_marker	Ansi(8)	Default	0x00
+ansi	Ansi16	ui.hint_bar	Default	Default	0x00
+ansi	Ansi16	ui.hint_bar.key	Ansi(0)	Ansi(6)	0x00
+ansi	Ansi16	ui.input.placeholder	Ansi(8)	Default	0x00
+ansi	Ansi16	ui.line_number	Ansi(8)	Default	0x00
+ansi	Ansi16	ui.line_number.active	Default	Default	0x01
+ansi	Ansi16	ui.message.error	Ansi(15)	Ansi(1)	0x01
+ansi	Ansi16	ui.message.info	Default	Default	0x00
+ansi	Ansi16	ui.message.warning	Ansi(0)	Ansi(3)	0x01
+ansi	Ansi16	ui.overlay	Default	Default	0x00
+ansi	Ansi16	ui.overlay.disabled	Ansi(8)	Default	0x00
+ansi	Ansi16	ui.overlay.match	Default	Default	0x03
+ansi	Ansi16	ui.overlay.selected	Ansi(15)	Ansi(4)	0x00
+ansi	Ansi16	ui.scroll_marker	Ansi(8)	Default	0x01
+ansi	Ansi16	ui.search.current	Ansi(0)	Ansi(11)	0x03
+ansi	Ansi16	ui.search.match	Ansi(0)	Ansi(3)	0x02
+ansi	Ansi16	ui.search_bar.toggle_on	Default	Default	0x04
+ansi	Ansi16	ui.selection	Ansi(15)	Ansi(4)	0x00
+ansi	Ansi16	ui.status_bar	Default	Default	0x04
+ansi	Ansi16	ui.status_bar.chord	Default	Default	0x01
+ansi	Ansi16	ui.text	Default	Default	0x00
+ansi	Ansi16	ui.whitespace	Ansi(8)	Default	0x00
+ansi	Mono	ui.control_char	Default	Default	0x04
+ansi	Mono	ui.cursor_line	Default	Default	0x00
+ansi	Mono	ui.dialog.button	Default	Default	0x00
+ansi	Mono	ui.dialog.button.focused	Default	Default	0x05
+ansi	Mono	ui.eof_marker	Default	Default	0x00
+ansi	Mono	ui.hint_bar	Default	Default	0x00
+ansi	Mono	ui.hint_bar.key	Default	Default	0x04
+ansi	Mono	ui.input.placeholder	Default	Default	0x00
+ansi	Mono	ui.line_number	Default	Default	0x00
+ansi	Mono	ui.line_number.active	Default	Default	0x01
+ansi	Mono	ui.message.error	Default	Default	0x05
+ansi	Mono	ui.message.info	Default	Default	0x00
+ansi	Mono	ui.message.warning	Default	Default	0x01
+ansi	Mono	ui.overlay	Default	Default	0x00
+ansi	Mono	ui.overlay.disabled	Default	Default	0x00
+ansi	Mono	ui.overlay.match	Default	Default	0x03
+ansi	Mono	ui.overlay.selected	Default	Default	0x04
+ansi	Mono	ui.scroll_marker	Default	Default	0x01
+ansi	Mono	ui.search.current	Default	Default	0x06
+ansi	Mono	ui.search.match	Default	Default	0x02
+ansi	Mono	ui.search_bar.toggle_on	Default	Default	0x04
+ansi	Mono	ui.selection	Default	Default	0x04
+ansi	Mono	ui.status_bar	Default	Default	0x04
+ansi	Mono	ui.status_bar.chord	Default	Default	0x01
+ansi	Mono	ui.text	Default	Default	0x00
+ansi	Mono	ui.whitespace	Default	Default	0x08

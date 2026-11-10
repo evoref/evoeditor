@@ -1,7 +1,7 @@
 //! BM-306: 長時間の soak (docs/09-testing-quality.md §5.2 の NFR-306 の行、§6.3)。ヘッドレスの `Harness` で、
 //! ランダムな編集 (入力・改行・削除・範囲の削除)・Undo / Redo・カーソル移動・検索・保存を決定的な乱数で繰り返し、
 //! 一定の間隔ごとに RSS とキー入力 (入力 → Frame 生成、BM-103a と同じ区間) の p50 / p99 を記録する。
-//! v0.2〜v0.4 は夜間に 1 時間回して **傾向を観察する** (ゲートにしない)。8 時間の判定は v1.0 (01 NFR-306)。
+//! v0.2〜v0.6 は夜間に 1 時間回して **傾向を観察する** (ゲートにしない)。8 時間の判定は v1.0 (01 NFR-306)。
 //!
 //! 履歴の上限 (MR8: メッセージ履歴・検索履歴、元に戻す履歴の全体の上限) が効いていれば、RSS は最初の数分で
 //! 頭打ちになり、入力の遅延も伸びない。文書の大きさは 512 KiB〜2 MiB に保つ (伸び続けると遅延の推移が読めない)。
@@ -15,6 +15,11 @@
 //! ファイルにも書く。RSS は Linux の `/proc/self/statm` から読む (ほかの OS では `null`)。
 
 #![allow(clippy::print_stdout, clippy::print_stderr)]
+#![expect(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "計測用の数値変換。値は十分に小さい"
+)]
 
 use std::io::Write as _;
 use std::time::{Duration, Instant};
@@ -200,7 +205,7 @@ impl Soak {
         }
     }
 
-    /// 文書の大きさを MIN_BYTES〜MAX_BYTES に保つ (間隔ごとに見る)。
+    /// 文書の大きさを `MIN_BYTES`〜`MAX_BYTES` に保つ (間隔ごとに見る)。
     fn keep_size(&mut self) -> usize {
         let len = self.h.doc_text().len();
         if len > MAX_BYTES {

@@ -1,6 +1,6 @@
 //! 読込時の往復の検査 (docs/03-core-design.md §8.7 の「検出は読込時にストリーミングで行う」)。
 //!
-//! UTF-8 / UTF-16 は区分 A (1:1) なので検査しない。Shift_JIS / EUC-JP / ISO-2022-JP では、元のバイト列を **行ごと**
+//! UTF-8 / UTF-16 は区分 A (1:1) `なので検査しない。Shift_JIS` / EUC-JP / ISO-2022-JP では、元のバイト列を **行ごと**
 //! (LF 区切り。Shift_JIS・EUC-JP の LF は後続バイトにならず、ISO-2022-JP は行ごとに ASCII 状態へ戻す E6 の単位) に復号し、
 //! 保存と同じ方式で再符号化して元のバイト列と比べる。一致しない行を「別のバイト表現で保存される」行として数える
 //! (`RoundtripInfo::Summary`、v0.1)。表現不能の文字を含む行は E3 の置換 (または E1 の報告) を経ないと保存できないので、
@@ -116,7 +116,7 @@ impl RoundtripChecker {
     }
 
     /// ためた行を検査する。無損失と分かる行 (`may_differ` が偽) は復号・再符号化をせず、残りの行だけを正確に調べる
-    /// (100 MB の Shift_JIS で、全行を再符号化すると数秒かかるため)。
+    /// (100 MB の `Shift_JIS` で、全行を再符号化すると数秒かかるため)。
     fn flush_block(&mut self) {
         let block = std::mem::take(&mut self.block);
         let mut start = self.block_offset;
@@ -156,7 +156,7 @@ impl RoundtripChecker {
 /// 保守的に (真の側に倒して) 判定する。取りこぼしが無いことは、全ての 2 バイト (と EUC-JP の `0x8F` の 3 バイト) の組で
 /// 実際の復号・符号化と照合するテストで確かめている。
 ///
-/// - Shift_JIS: 2 バイト文字のうち、再符号化で別の符号になるもの (NEC 特殊文字 `0x87`、NEC 選択 IBM 拡張 `0xED` `0xEE`、
+/// - `Shift_JIS`: 2 バイト文字のうち、再符号化で別の符号になるもの (NEC 特殊文字 `0x87`、NEC 選択 IBM 拡張 `0xED` `0xEE`、
 ///   IBM 拡張 `0xFA` の重複) の先頭バイトを持つ行。ほかの文字・半角カナ・不正バイト (エスケープして元に戻す) は同じに戻る。
 /// - EUC-JP: 補助漢字 (`0x8F`、復号専用で符号化できない) と、重複する符号の先頭バイト `0xAD` `0xFC` を持つ行。
 /// - ISO-2022-JP: ASCII だけで、エスケープ・シフト (`ESC` `SO` `SI`) を含まない行は同じ。それ以外は検査する。
@@ -328,23 +328,23 @@ mod tests {
                 let s = reference(enc, line);
                 s.lossy_lines + s.unmappable_lines > 0
             };
-            for a in 0u16..=255 {
-                for b in 0u16..=255 {
-                    let line = [a as u8, b as u8, b'\n'];
+            for a in 0u8..=u8::MAX {
+                for b in 0u8..=u8::MAX {
+                    let line = [a, b, b'\n'];
                     assert!(
                         may_differ(enc, &line) || !differs(&line),
                         "{enc:?} {line:02X?}"
                     );
                     // 前に ASCII があっても、2 バイト目を先頭と取り違えない
-                    let line = [b'a', a as u8, b as u8, b'\n'];
+                    let line = [b'a', a, b, b'\n'];
                     assert!(
                         may_differ(enc, &line) || !differs(&line),
                         "{enc:?} {line:02X?}"
                     );
                 }
                 if enc == Encoding::EucJp {
-                    for b in 0u16..=255 {
-                        let line = [0x8F, a as u8, b as u8, b'\n'];
+                    for b in 0u8..=u8::MAX {
+                        let line = [0x8F, a, b, b'\n'];
                         assert!(
                             may_differ(enc, &line) || !differs(&line),
                             "{enc:?} {line:02X?}"

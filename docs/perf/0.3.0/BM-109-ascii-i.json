@@ -1,0 +1,16 @@
+{
+  "commit": "d46f528",
+  "env": "ENV-W1",
+  "id": "BM-109-ascii-i",
+  "quick": false,
+  "results": [
+    {
+      "id": "BM-109-ascii-i",
+      "matches": 1,
+      "mb": 100,
+      "n": 3,
+      "p50_ms": 33.8,
+      "quick": false
+    }
+  ]
+}

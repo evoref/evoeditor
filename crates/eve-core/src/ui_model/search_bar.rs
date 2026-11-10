@@ -1,0 +1,858 @@
+//! 検索バー (docs/04 §8.4、03 §12、01 FR-401〜404)。
+//!
+//! 開いている間は編集面を 1 行縮め、キー入力はバーの入力欄へ行く (コンテキスト `search`)。入力のたびに検索をやり直し、
+//! 最初の一致 (開いたときの位置から先) を **強調するだけで選択はしない**。`Enter` / `↓` / `F3` で一致が主選択になる (確定)。
+//! `Esc` で閉じると、確定していない一致は選択として残さない。
+
+use eve_text::{ByteOff, ByteRange, LineIdx, Selection, TextRead};
+use eve_view::{
+    BarFocus, CaseMode, CutPolicy, InputFieldModel, MessageLevel, ReplaceRowModel, SearchBarModel,
+};
+
+use crate::command::CommandResult;
+use crate::command::ids;
+use crate::document::{Origin, Transaction, UndoGroupHint};
+use crate::jobs::cancel::CancelToken;
+use crate::jobs::{JobKind, JobResult};
+use crate::search::{
+    Case, QueryError, SearchQuery, build_replace_all, replacement_for, scan_bytes,
+    unescape_replacement,
+};
+use crate::time::Tick;
+use crate::ui_model::keys;
+
+use crate::editor::state::EditorState;
+use crate::io::pending::Pending;
+use crate::layout::cell_text;
+use crate::search::search_state::{Found, SearchCount, SearchStep};
+
+impl SearchBarState {
+    /// 今の入力とトグルから作る問い合わせ。条件が前と同じなら前のもの (コンパイル済みの照合器を共有する) を返す (PRF-09)。
+    pub(crate) fn query(&self) -> SearchQuery {
+        let q = SearchQuery::literal(&self.text)
+            .with_case(self.case)
+            .with_regex(self.regex)
+            .with_whole_word(self.whole_word)
+            .with_scope(self.in_selection.then(|| self.sel_ranges.clone()));
+        let mut last = self.memo.query.borrow_mut();
+        match &*last {
+            Some(prev) if *prev == q => prev.clone(),
+            _ => {
+                *last = Some(q.clone());
+                q
+            }
+        }
+    }
+}
+
+/// 可視行の一致 (文書のバイト位置の半開区間、開始位置の昇順)。
+pub(crate) type VisibleMatches = std::rc::Rc<[(usize, usize)]>;
+
+/// 可視行の一致の覚えのキー (文書, Revision, 先頭の行, 行数, 問い合わせ)。
+type VisibleKey = (
+    eve_view::DocumentId,
+    eve_view::Revision,
+    usize,
+    usize,
+    SearchQuery,
+);
+
+/// 検索バーの、Frame を作るたびに同じ結果になる計算の覚え (PRF-09 / REF-04)。
+#[derive(Clone, Debug, Default)]
+pub(crate) struct SearchBarMemo {
+    /// 最後に作った問い合わせ (コンパイル済みの照合器を持つ)。
+    query: std::cell::RefCell<Option<SearchQuery>>,
+    /// 最後に求めた可視行の一致。検索の途中経過の再描画などで、条件が同じ間は可視行を走査し直さない。
+    visible: std::cell::RefCell<Option<(VisibleKey, VisibleMatches)>>,
+}
+
+/// 可視行の強調で、1 行あたり検索する上限 (`SEARCH_SYNC_LINE_MAX`、03 §12.2)。これを超える行は強調しない。
+const SYNC_LINE_MAX: usize = 16 * 1024;
+
+#[derive(Clone, Debug)]
+pub(crate) struct SearchBarState {
+    pub text: String,
+    /// `text` 内のカーソル (バイト。書記素境界)。
+    pub cursor: usize,
+    pub case: Case,
+    /// 正規表現として探す (`search.toggle_regex`)。バーを開くたびに off から始まる。
+    pub regex: bool,
+    /// 単語単位 (`search.toggle_word`)。同じく off から始まる。
+    pub whole_word: bool,
+    /// 選択範囲内だけを探す (`search.toggle_selection`)。off から始まる。
+    pub in_selection: bool,
+    /// バーを開いたときの選択 (空でない Range。開始位置の昇順)。編集に合わせて写像する (03 §12.5)。
+    pub sel_ranges: std::sync::Arc<[ByteRange]>,
+    /// 検索語をコンパイルできない理由。あれば検索しない (03 §12.3)。
+    pub error: Option<QueryError>,
+    /// 入力しているときの検索の起点 (開いたときの選択の始端。一致へ移ったらその一致の始端)。
+    pub anchor: ByteOff,
+    /// 入力で見つかった、まだ選択していない現在の一致。
+    pub current: Option<ByteRange>,
+    /// 置換欄 (開いているとき。テキストとカーソル)。
+    pub replace: Option<(String, usize)>,
+    pub focus: BarFocus,
+    /// フォーカスのある欄 (検索欄・置換欄) の欄内全選択 (`select.all`) の最中。編集・移動・フォーカスの移動で解ける。
+    pub all_selected: bool,
+    /// Frame を作るたびの計算の覚え。
+    pub memo: SearchBarMemo,
+}
+
+/// この件数以上のすべて置換は、Undo の記録を 1 件の置き換えにしてよい (`REPLACE_COARSE_UNDO_MIN`、03 §12.5)。
+const REPLACE_COARSE_UNDO_MIN: u64 = 10_000;
+
+/// すべて置換をジョブで作るときの境界 (`SEARCH_SYNC_STEP_BYTES`、03 §12.2)。これ以下の文書はメインスレッドで作る。
+const REPLACE_SYNC_BYTES: usize = 1 << 20;
+
+impl EditorState {
+    /// 検索バーが開いているか (条件式 `search.active`)。
+    pub fn search_bar_open(&self) -> bool {
+        self.find.search_bar.is_some()
+    }
+
+    /// 検索バーを開く。開いていれば何もしない (欄はそのまま)。
+    pub fn search_open(&mut self) -> CommandResult {
+        if self.find.search_bar.is_some() {
+            return CommandResult::Done;
+        }
+        let anchor = self.bar_cursor(false).unwrap_or(ByteOff(0));
+        let sel_ranges: std::sync::Arc<[ByteRange]> = self
+            .focused_window()
+            .and_then(|w| self.window_view(w))
+            .and_then(|v| self.view(v))
+            .map(|v| {
+                v.selection
+                    .iter()
+                    .filter(|r| !r.is_empty())
+                    .map(|r| ByteRange::new(r.start(), r.end()))
+                    .collect()
+            })
+            .unwrap_or_else(|| std::sync::Arc::from([]));
+        self.find.search_bar = Some(SearchBarState {
+            text: String::new(),
+            cursor: 0,
+            case: Case::Smart,
+            regex: false,
+            whole_word: false,
+            in_selection: false,
+            sel_ranges,
+            error: None,
+            anchor,
+            current: None,
+            replace: None,
+            focus: BarFocus::Search,
+            all_selected: false,
+            memo: SearchBarMemo::default(),
+        });
+        self.set_bar_rows();
+        CommandResult::Done
+    }
+
+    /// `search.replace_open`: 置換欄つきで開く (開いていれば置換欄を足す)。読み取り専用の文書では開かない。
+    pub fn search_replace_open(&mut self) -> CommandResult {
+        let read_only = self.active_document().is_some_and(|d| {
+            self.docs
+                .documents
+                .get(&d)
+                .is_some_and(|d| !d.is_editable())
+        });
+        if read_only {
+            self.notify_read_only();
+            return CommandResult::Done;
+        }
+        self.search_open();
+        if let Some(bar) = &mut self.find.search_bar {
+            if bar.replace.is_none() {
+                bar.replace = Some((String::new(), 0));
+            }
+            // 検索語が空なら検索欄、あれば置換欄にフォーカスを置く
+            bar.all_selected = false;
+            bar.focus = if bar.text.is_empty() {
+                BarFocus::Search
+            } else {
+                BarFocus::Replace
+            };
+        }
+        self.set_bar_rows();
+        CommandResult::Done
+    }
+
+    /// `Tab` / `Shift+Tab`: 検索欄 → 置換欄 → ボタン → 検索欄 (置換欄が開いているときだけ)。
+    pub(crate) fn bar_focus_cycle(&mut self, forward: bool) {
+        let Some(bar) = &mut self.find.search_bar else {
+            return;
+        };
+        if bar.replace.is_none() {
+            return;
+        }
+        let order = [BarFocus::Search, BarFocus::Replace, BarFocus::Button];
+        let i = order.iter().position(|f| *f == bar.focus).unwrap_or(0);
+        bar.focus = order[if forward { (i + 1) % 3 } else { (i + 2) % 3 }];
+        bar.all_selected = false;
+        self.mark_dirty_render();
+    }
+
+    /// 入力欄を編集した: 検索欄なら検索をやり直す。
+    pub(crate) fn bar_edited(&mut self) {
+        if self
+            .find
+            .search_bar
+            .as_ref()
+            .is_some_and(|b| b.focus == BarFocus::Search)
+        {
+            self.bar_changed();
+        } else {
+            self.mark_dirty_render();
+        }
+    }
+
+    /// 検索バーを閉じる。確定していない現在の一致は選択として残さない。
+    pub fn search_close(&mut self) {
+        if self.find.search_bar.take().is_none() {
+            return;
+        }
+        self.search_stop();
+        self.cancel_replace_job();
+        self.set_bar_rows();
+    }
+
+    /// 検索バーの行数 (検索欄 1 行 + 置換欄があれば 1 行、閉じていれば 0)。編集面はその分だけ縮む。
+    fn set_bar_rows(&mut self) {
+        self.term.bar_rows = self
+            .find
+            .search_bar
+            .as_ref()
+            .map_or(0, |b| 1 + u16::from(b.replace.is_some()));
+        let (cols, rows) = self.term.surface;
+        self.apply_viewport(cols, rows);
+        self.mark_dirty_render();
+    }
+
+    /// 選択の端 (`end` が偽なら始端)。
+    fn bar_cursor(&self, end: bool) -> Option<ByteOff> {
+        let v = self.view(self.focused_view()?)?;
+        let r = v.selection.primary();
+        Some(if end { r.end() } else { r.start() })
+    }
+
+    /// 大小の区別を巡回する (Smart → Sensitive → Insensitive → Smart) 。切り替えたら再検索する。
+    pub fn search_toggle_case(&mut self) -> CommandResult {
+        let Some(bar) = &mut self.find.search_bar else {
+            return CommandResult::Rejected(crate::command::RejectReason::NotAvailable);
+        };
+        bar.case = bar.case.next();
+        self.bar_changed();
+        CommandResult::Done
+    }
+
+    /// 正規表現の ON / OFF を切り替える。切り替えたら再検索する。
+    pub fn search_toggle_regex(&mut self) -> CommandResult {
+        let Some(bar) = &mut self.find.search_bar else {
+            return CommandResult::Rejected(crate::command::RejectReason::NotAvailable);
+        };
+        bar.regex = !bar.regex;
+        self.bar_changed();
+        CommandResult::Done
+    }
+
+    /// 単語単位の ON / OFF を切り替える。切り替えたら再検索する。
+    pub fn search_toggle_word(&mut self) -> CommandResult {
+        let Some(bar) = &mut self.find.search_bar else {
+            return CommandResult::Rejected(crate::command::RejectReason::NotAvailable);
+        };
+        bar.whole_word = !bar.whole_word;
+        self.bar_changed();
+        CommandResult::Done
+    }
+
+    /// 選択範囲内だけを探すかを切り替える (`search.toggle_selection`)。範囲は検索バーを開いたときの選択で、
+    /// 選択が無かったときは切り替えずに知らせる。切り替えたら再検索する。
+    pub fn search_toggle_selection(&mut self) -> CommandResult {
+        let Some(bar) = &mut self.find.search_bar else {
+            return CommandResult::Rejected(crate::command::RejectReason::NotAvailable);
+        };
+        if bar.sel_ranges.is_empty() {
+            self.show_message(MessageLevel::Info, keys::INFO_SEARCH_NO_SELECTION, &[]);
+            return CommandResult::Done;
+        }
+        bar.in_selection = !bar.in_selection;
+        // 入力の起点は範囲の先頭にする (範囲の外から探し始めない)
+        if bar.in_selection {
+            bar.anchor = bar.sel_ranges[0].start;
+        }
+        self.bar_changed();
+        CommandResult::Done
+    }
+
+    /// 編集に合わせて、選択範囲内の検索の範囲を写像する (範囲の端での挿入は範囲に含める)。
+    pub(crate) fn map_search_scope(&mut self, doc: eve_view::DocumentId, cs: &eve_text::ChangeSet) {
+        if self.active_document() != Some(doc) {
+            return;
+        }
+        let Some(bar) = &mut self.find.search_bar else {
+            return;
+        };
+        if bar.sel_ranges.is_empty() {
+            return;
+        }
+        bar.sel_ranges = bar
+            .sel_ranges
+            .iter()
+            .map(|r| {
+                ByteRange::new(
+                    cs.map_pos(r.start, eve_text::Bias::Before),
+                    cs.map_pos(r.end, eve_text::Bias::After),
+                )
+            })
+            .collect();
+    }
+
+    /// 入力欄・トグルが変わった: 検索をやり直し、起点から先の最初の一致を強調する。
+    /// 検索語をコンパイルできないとき (正規表現の構文エラーなど) は検索せず、理由を示す。
+    pub(crate) fn bar_changed(&mut self) {
+        let Some(bar) = &self.find.search_bar else {
+            return;
+        };
+        let query = bar.query();
+        let anchor = bar.anchor;
+        let error = query.compile().err();
+        if let Some(bar) = &mut self.find.search_bar {
+            bar.error = error.clone();
+        }
+        if error.is_some() {
+            // 前の検索の結果を残さない
+            self.search_start(SearchQuery::literal(""));
+            if let Some(bar) = &mut self.find.search_bar {
+                bar.current = None;
+            }
+            self.mark_dirty_render();
+            return;
+        }
+        self.search_start(query.clone());
+        let found = match (self.active_document(), query.pattern().is_empty()) {
+            (Some(doc), false) => match self.sync_find(doc, &query, anchor, true) {
+                Found::Hit(m, _) => Some(m),
+                _ => None,
+            },
+            _ => None,
+        };
+        if let Some(bar) = &mut self.find.search_bar {
+            bar.current = found;
+        }
+        if let Some(m) = found {
+            self.reveal(m.start);
+        }
+        self.mark_dirty_render();
+    }
+
+    /// 選択を動かさずに、`pos` が見えるようスクロールする。
+    fn reveal(&mut self, pos: ByteOff) {
+        let Some(view) = self.focused_view() else {
+            return;
+        };
+        let Some(saved) = self.view(view).map(|v| v.selection.clone()) else {
+            return;
+        };
+        self.set_selection(view, Selection::point(pos));
+        self.ensure_cursor_visible(view);
+        if let Some(v) = self.docs.views.get_mut(&view) {
+            v.selection = saved;
+        }
+    }
+
+    /// `Enter` / `↓` / `F3` (`search.next`) と `↑` (`search.prev`)。入力で強調した一致があれば、まずそれを選択する。
+    pub fn search_move(&mut self, forward: bool) -> SearchStep {
+        let Some(bar) = &self.find.search_bar else {
+            return SearchStep::NoQuery;
+        };
+        // ボタンにフォーカスがあるときの Enter はすべて置換 (Alt が使えない端末向け、04 §8.4)
+        if bar.focus == BarFocus::Button {
+            self.search_replace_all();
+            return SearchStep::NoQuery;
+        }
+        if forward
+            && let Some(cur) = bar.current
+            && let Some(view) = self.focused_view()
+        {
+            self.set_selection(
+                view,
+                Selection::single(eve_text::Range::new(cur.start, cur.end)),
+            );
+            self.ensure_cursor_visible(view);
+            if let Some(bar) = &mut self.find.search_bar {
+                bar.current = None;
+                bar.anchor = cur.start;
+            }
+            self.mark_dirty_render();
+            return SearchStep::Moved { wrapped: false };
+        }
+        let r = self.search_step(forward);
+        if matches!(r, SearchStep::Moved { .. }) {
+            let a = self.bar_cursor(false);
+            if let (Some(bar), Some(a)) = (&mut self.find.search_bar, a) {
+                bar.current = None;
+                bar.anchor = a;
+            }
+        }
+        r
+    }
+
+    /// 検索バーの表示モデル。
+    pub(crate) fn search_bar_model(&self) -> Option<SearchBarModel> {
+        let bar = self.find.search_bar.as_ref()?;
+        let render = |key: &str, args: &[(&str, &str)]| {
+            self.catalog().render(key, args, &|c| self.key_label(c))
+        };
+        let cells = cell_text(&bar.text, CutPolicy::End).spans;
+        let cursor = cell_text(&bar.text[..bar.cursor], CutPolicy::End)
+            .spans
+            .len();
+        let selection = crate::ui_model::overlay::field_selection(
+            bar.all_selected && bar.focus == BarFocus::Search,
+            cells.len(),
+        );
+        let count_text = match self.search_count_for(bar.current) {
+            SearchCount::Idle => None,
+            SearchCount::Running { found } => Some(render(
+                keys::UI_SEARCH_COUNT_RUNNING,
+                &[("found", &found.to_string())],
+            )),
+            SearchCount::Exact { current, total } | SearchCount::AtLeast { current, total } => {
+                let at_least = matches!(
+                    self.search_count_for(bar.current),
+                    SearchCount::AtLeast { .. }
+                );
+                Some(if total == 0 {
+                    render(keys::UI_SEARCH_COUNT_NO_MATCH, &[])
+                } else {
+                    let cur = current.map_or("-".to_owned(), |c| c.to_string());
+                    let key = if at_least {
+                        keys::UI_SEARCH_COUNT_AT_LEAST
+                    } else {
+                        keys::UI_SEARCH_COUNT_EXACT
+                    };
+                    render(key, &[("current", &cur), ("total", &total.to_string())])
+                })
+            }
+            SearchCount::Approx { total } => Some(render(
+                keys::UI_SEARCH_COUNT_APPROX,
+                &[("total", &total.to_string())],
+            )),
+        };
+        let query = bar.query();
+        let error = bar.error.as_ref().map(|e| {
+            let text = match e {
+                QueryError::Syntax(reason) => {
+                    render(keys::MSG_SEARCH_INVALID_REGEX_TEXT, &[("reason", reason)])
+                }
+                QueryError::Multiline => render(keys::MSG_SEARCH_NEWLINE_UNSUPPORTED_TEXT, &[]),
+                QueryError::TooLarge => render(
+                    keys::MSG_SEARCH_INVALID_REGEX_TEXT,
+                    &[("reason", "pattern too large")],
+                ),
+            };
+            cell_text(&text, CutPolicy::End)
+        });
+        let replace = bar.replace.as_ref().map(|(text, cur)| {
+            let cells = cell_text(text, CutPolicy::End).spans;
+            let cursor = cell_text(&text[..*cur], CutPolicy::End).spans.len();
+            let selection = crate::ui_model::overlay::field_selection(
+                bar.all_selected && bar.focus == BarFocus::Replace,
+                cells.len(),
+            );
+            ReplaceRowModel {
+                label: cell_text(
+                    &render(keys::UI_SEARCH_REPLACE_LABEL, &[]),
+                    CutPolicy::Never,
+                ),
+                input: InputFieldModel {
+                    len: cells.len(),
+                    cells,
+                    first: 0,
+                    cursor,
+                    selection,
+                    placeholder: None,
+                },
+                button: cell_text(
+                    &render(keys::UI_SEARCH_REPLACE_ALL_BUTTON, &[]),
+                    CutPolicy::Never,
+                ),
+            }
+        });
+        Some(SearchBarModel {
+            replace,
+            focus: bar.focus,
+            label: cell_text(&render(keys::UI_SEARCH_LABEL, &[]), CutPolicy::Never),
+            input: InputFieldModel {
+                len: cells.len(),
+                cells,
+                first: 0,
+                cursor,
+                selection,
+                placeholder: None,
+            },
+            case: match bar.case {
+                Case::Smart => CaseMode::Smart,
+                Case::Sensitive => CaseMode::Sensitive,
+                Case::Insensitive => CaseMode::Insensitive,
+            },
+            case_on: query.is_case_sensitive(),
+            regex: bar.regex,
+            whole_word: bar.whole_word,
+            in_selection: bar.in_selection,
+            error,
+            count_text: count_text.map(|t| cell_text(&t, CutPolicy::End)),
+        })
+    }
+
+    /// 可視行の一致 (強調する範囲)。保持した一致ではなく、可視行だけを同期検索する (03 §12.2 の「可視範囲のハイライト」)。
+    /// 1 行が `SYNC_LINE_MAX` を超える行は強調しない。検索バーが開いていなければ `None`。
+    /// (文書, Revision, 範囲, 問い合わせ) が前と同じなら、前の結果を返す (REF-04)。
+    pub(crate) fn visible_matches(
+        &self,
+        doc_id: eve_view::DocumentId,
+        top_line: usize,
+        rows: usize,
+    ) -> Option<VisibleMatches> {
+        let bar = self.find.search_bar.as_ref()?;
+        let query = bar.query();
+        let doc = self.docs.documents.get(&doc_id)?;
+        let key: VisibleKey = (doc_id, doc.revision(), top_line, rows, query);
+        if let Some((k, v)) = &*bar.memo.visible.borrow()
+            && *k == key
+        {
+            return Some(v.clone());
+        }
+        let m = key.4.matcher()?;
+        let found: std::rc::Rc<[(usize, usize)]> =
+            self.scan_visible(doc, &m, top_line, rows).into();
+        *bar.memo.visible.borrow_mut() = Some((key, found.clone()));
+        Some(found)
+    }
+
+    fn scan_visible(
+        &self,
+        doc: &crate::document::Document,
+        m: &crate::search::Matcher,
+        top_line: usize,
+        rows: usize,
+    ) -> Vec<(usize, usize)> {
+        let t = doc.text();
+        let n = t.len_lines();
+        let mut out = Vec::new();
+        let cancel = CancelToken::new();
+        for l in top_line..(top_line + rows).min(n) {
+            let len = t.line_end_byte(LineIdx(l)).0 - t.line_to_byte(LineIdx(l)).0;
+            if len > SYNC_LINE_MAX {
+                continue;
+            }
+            // 1 行の範囲 (行頭から次の行頭まで。最後の行は文書の末尾まで)
+            let end = if l + 1 < n {
+                t.line_to_byte(LineIdx(l + 1))
+            } else {
+                ByteOff(t.len_bytes())
+            };
+            let range = ByteRange::new(t.line_to_byte(LineIdx(l)), end);
+            scan_bytes(t, m, range, &cancel, &mut |r| {
+                out.push((r.start.0, r.end.0));
+                true
+            });
+        }
+        out
+    }
+
+    /// 入力で強調している現在の一致 (文書内のバイト範囲)。
+    pub(crate) fn bar_current(&self) -> Option<(usize, usize)> {
+        self.find
+            .search_bar
+            .as_ref()?
+            .current
+            .map(|r| (r.start.0, r.end.0))
+    }
+}
+
+impl EditorState {
+    fn cancel_replace_job(&mut self) {
+        let ids: Vec<_> = self
+            .io
+            .pending
+            .iter()
+            .filter(|(_, p)| matches!(p, Pending::ReplaceAll { .. }))
+            .map(|(id, _)| *id)
+            .collect();
+        for id in ids {
+            self.io.pending.remove(&id);
+            self.jobs.cancel(id);
+        }
+    }
+
+    /// `search.replace_all` (03 §12.5): 検索欄の検索語・大小の区別で、置換欄の文字列にすべて置き換える。1 つの Undo 単位。
+    /// 文書が 1 MiB 以下ならメインスレッドで、超えればジョブで `ChangeSet` を作る。
+    pub fn search_replace_all(&mut self) -> CommandResult {
+        let Some(bar) = &self.find.search_bar else {
+            return CommandResult::Rejected(crate::command::RejectReason::NotAvailable);
+        };
+        let Some((replacement, _)) = bar.replace.clone() else {
+            return CommandResult::Rejected(crate::command::RejectReason::NotAvailable);
+        };
+        let query = bar.query();
+        let Some(doc_id) = self.active_document() else {
+            return CommandResult::Done;
+        };
+        let Some(doc) = self.docs.documents.get(&doc_id) else {
+            return CommandResult::Done;
+        };
+        if !doc.is_editable() {
+            self.notify_read_only();
+            return CommandResult::Done;
+        }
+        // 正規表現では置換文字列の `\n` を文書の既定の改行に直す (`$1` の展開は一致ごと、03 §12.5)
+        let replacement = if query.is_regex() {
+            unescape_replacement(&replacement, doc.format.default_eol.as_str())
+        } else {
+            replacement
+        };
+        if query.matcher().is_none() {
+            self.show_message(
+                MessageLevel::Info,
+                keys::INFO_SEARCH_REPLACE_EMPTY_QUERY,
+                &[],
+            );
+            return CommandResult::Done;
+        }
+        // 実行中のすべて置換があれば二重に始めない
+        if self
+            .io
+            .pending
+            .values()
+            .any(|p| matches!(p, Pending::ReplaceAll { .. }))
+        {
+            return CommandResult::Done;
+        }
+        let revision = doc.revision();
+        if doc.text().len_bytes() <= REPLACE_SYNC_BYTES {
+            let built = build_replace_all(doc.text(), &query, &replacement, &CancelToken::new());
+            if let Some((changes, count)) = built {
+                self.apply_replace_all(doc_id, changes, count);
+            }
+            return CommandResult::Done;
+        }
+        let snapshot = doc.snapshot();
+        let job = self.jobs.spawn(
+            Some(doc_id),
+            revision,
+            JobKind::ReplaceAll {
+                snapshot,
+                query,
+                replacement,
+            },
+        );
+        self.io.pending.insert(
+            job,
+            Pending::ReplaceAll {
+                doc: doc_id,
+                revision,
+            },
+        );
+        CommandResult::Done
+    }
+
+    /// 1 件置換の対象の一致: 選択範囲がちょうど一致ならそれ (`search.next` で確定した一致)、
+    /// そうでなければ入力で強調している現在の一致。
+    fn replace_target(
+        &self,
+        doc_id: eve_view::DocumentId,
+        query: &SearchQuery,
+        replacement: &str,
+    ) -> Option<(ByteRange, String)> {
+        let doc = self.docs.documents.get(&doc_id)?;
+        let text = doc.text();
+        let sel = self
+            .focused_window()
+            .and_then(|w| self.window_view(w))
+            .and_then(|v| self.view(v))
+            .map(|v| *v.selection.primary())?;
+        let selected = ByteRange::new(sel.start(), sel.end());
+        if !selected.is_empty()
+            && let Some(s) = replacement_for(text, query, selected, replacement)
+        {
+            return Some((selected, s));
+        }
+        let cur = self.find.search_bar.as_ref()?.current?;
+        replacement_for(text, query, cur, replacement).map(|s| (cur, s))
+    }
+
+    /// `search.replace` (03 §12.5): 現在の一致を置換欄の文字列に置き換え、次の一致を強調する。置換ごとに別の Undo 単位。
+    /// 正規表現では `$1` / `${name}` を展開し、`\n` を既定の改行にする。
+    pub fn search_replace(&mut self) -> CommandResult {
+        let Some(bar) = &self.find.search_bar else {
+            return CommandResult::Rejected(crate::command::RejectReason::NotAvailable);
+        };
+        let Some((replacement, _)) = bar.replace.clone() else {
+            return CommandResult::Rejected(crate::command::RejectReason::NotAvailable);
+        };
+        let query = bar.query();
+        let Some(doc_id) = self.active_document() else {
+            return CommandResult::Done;
+        };
+        let Some(doc) = self.docs.documents.get(&doc_id) else {
+            return CommandResult::Done;
+        };
+        if !doc.is_editable() {
+            self.notify_read_only();
+            return CommandResult::Done;
+        }
+        if query.matcher().is_none() {
+            self.show_message(
+                MessageLevel::Info,
+                keys::INFO_SEARCH_REPLACE_EMPTY_QUERY,
+                &[],
+            );
+            return CommandResult::Done;
+        }
+        let replacement = if query.is_regex() {
+            unescape_replacement(&replacement, doc.format.default_eol.as_str())
+        } else {
+            replacement
+        };
+        let Some((range, insert)) = self.replace_target(doc_id, &query, &replacement) else {
+            self.show_message(MessageLevel::Info, keys::INFO_SEARCH_REPLACE_NO_MATCH, &[]);
+            return CommandResult::Done;
+        };
+        let Some(doc) = self.docs.documents.get(&doc_id) else {
+            return CommandResult::Done;
+        };
+        let after = ByteOff(range.start.0 + insert.len());
+        let Ok(changes) = eve_text::ChangeSet::from_sorted_edits(
+            doc.text(),
+            [eve_text::Edit {
+                range,
+                insert: std::sync::Arc::from(insert),
+            }],
+        ) else {
+            return CommandResult::Done;
+        };
+        let view = self.focused_view();
+        let sel = view.and_then(|v| self.docs.views.get(&v).map(|v| v.selection.clone()));
+        let mut tx = Transaction::new(
+            changes,
+            Origin::Command(eve_view::CommandId::new(ids::SEARCH_REPLACE)),
+            self.now,
+        )
+        .with_undo_group(UndoGroupHint::Break)
+        .with_selections(sel, None);
+        if let Some(v) = view {
+            tx = tx.with_view(v);
+        }
+        if self.apply_transaction(doc_id, tx).is_err() {
+            return CommandResult::Done;
+        }
+        // 次の一致は、置換した文字列の後ろから探す。カーソルも置換の後ろに置く
+        if let Some(v) = view {
+            self.set_selection(v, Selection::point(after));
+        }
+        if let Some(bar) = &mut self.find.search_bar {
+            bar.anchor = after;
+        }
+        self.bar_changed();
+        CommandResult::Done
+    }
+
+    /// すべて置換のジョブの結果。作った Revision が古ければ適用せず中止を知らせる。
+    pub(crate) fn finish_replace_all(
+        &mut self,
+        doc_id: eve_view::DocumentId,
+        revision: eve_view::Revision,
+        r: JobResult,
+    ) {
+        if let JobResult::ReplaceAllDone { changes, count, .. } = r {
+            let fresh = self
+                .docs
+                .documents
+                .get(&doc_id)
+                .is_some_and(|d| d.revision() == revision);
+            if fresh {
+                self.apply_replace_all(doc_id, changes, count);
+            } else {
+                self.show_message(MessageLevel::Warn, keys::MSG_SEARCH_REPLACE_STALE, &[]);
+            }
+        }
+    }
+
+    /// `ChangeSet` を 1 つの Transaction (`Origin::Command("search.replace_all")`、Undo 1 回分) として適用する。
+    fn apply_replace_all(
+        &mut self,
+        doc_id: eve_view::DocumentId,
+        changes: eve_text::ChangeSet,
+        count: u64,
+    ) {
+        if count == 0 {
+            self.show_message(MessageLevel::Info, keys::INFO_SEARCH_REPLACE_NO_MATCH, &[]);
+            return;
+        }
+        let view = self.focused_view();
+        let sel = view.and_then(|v| self.docs.views.get(&v).map(|v| v.selection.clone()));
+        let mut tx = Transaction::new(
+            changes,
+            Origin::Command(eve_view::CommandId::new(ids::SEARCH_REPLACE_ALL)),
+            self.now,
+        )
+        .with_undo_group(UndoGroupHint::Break)
+        .with_selections(sel, None);
+        if let Some(v) = view {
+            tx = tx.with_view(v);
+        }
+        // 大量の置換は、Undo の記録を 1 件の置き換えにしてよい (メモリが増えないときだけ、03 §12.5)
+        if count >= REPLACE_COARSE_UNDO_MIN {
+            tx = tx.with_coarse_undo();
+        }
+        if self.apply_transaction(doc_id, tx).is_err() {
+            self.show_message(MessageLevel::Warn, keys::MSG_SEARCH_REPLACE_STALE, &[]);
+            return;
+        }
+        self.show_message(
+            MessageLevel::Info,
+            keys::INFO_SEARCH_REPLACED,
+            &[("count", &count.to_string())],
+        );
+        // 保持した一致は編集で無効になった: 検索をやり直す
+        self.bar_changed();
+    }
+}
+
+/// 編集が止まってから再検索するまでの間 (03 §12.2「編集後の結果」)。
+const RESEARCH_DELAY: u64 = 300;
+
+impl EditorState {
+    /// 編集で検索の結果が無効になったら、入力が止まって 300 ms 後に再検索する。`Editor::tick` から呼ぶ。
+    pub(crate) fn search_tick(&mut self) {
+        let stale =
+            self.find.search_bar.is_some() && self.find.search.is_some() && !self.search_fresh();
+        let cur = self
+            .find
+            .search
+            .as_ref()
+            .and_then(|s| self.docs.documents.get(&s.doc()).map(|d| d.revision()));
+        let (true, Some(cur)) = (stale, cur) else {
+            self.find.research = None;
+            return;
+        };
+        match self.find.research {
+            Some((rev, at)) if rev == cur => {
+                if self.now.saturating_sub(at) >= crate::time::Millis(RESEARCH_DELAY) {
+                    self.find.research = None;
+                    self.bar_changed();
+                }
+            }
+            // 初めて気づいた、または気づいた後にまた編集された: 待ち直す
+            _ => self.find.research = Some((cur, self.now)),
+        }
+    }
+
+    /// 次に `tick` が要る時刻 (再検索の期限)。
+    pub(crate) fn search_deadline(&self) -> Option<Tick> {
+        self.find
+            .research
+            .map(|(_, at)| Tick(at.0 + RESEARCH_DELAY))
+    }
+}

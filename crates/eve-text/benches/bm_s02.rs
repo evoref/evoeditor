@@ -1,7 +1,7 @@
 //! BM-S02: テキストバッファ (ropey 1.6) の暫定判定のマイクロベンチ (docs/09-testing-quality.md §5.2、docs/08-roadmap.md S-02、ADR-0004)。
 //!
 //! 入力は `xtask gen-corpus` の決定的データを **メモリ上のバイト列** に読んだもの。ファイル I/O・コマンド・Port・core は
-//! 経由しない (実ファイルの読込を含む値は M3 の BM-104 / 202)。判定は暫定で、各値が NFR-104 / 105 / 202 の目標値に収まる
+//! 経由しない (実ファイルの読込を含む値は BM-104 / 202)。判定は暫定で、各値が NFR-104 / 105 / 202 の目標値に収まる
 //! 見込みであること。
 //!
 //! 使い方 (基準機 ENV-W1 で、他の重い作業を止めて実行する):
@@ -13,9 +13,14 @@
 //!
 //! 統計: ウォームアップの後に N 回測り、p50 / p99 / 最大値を出す (09 §3.0: p50 / p99 で判定する)。criterion は p99 を
 //! 出力しないので使わず、標準ライブラリの `Instant` で測る。メモリは Windows の Private Bytes (`memory-stats` の
-//! `virtual_mem` = PagefileUsage)。
+//! `virtual_mem` = `PagefileUsage`)。
 
 #![allow(clippy::print_stdout, clippy::print_stderr)]
+#![expect(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "計測用の数値変換。値は十分に小さい"
+)]
 
 use std::fmt::Write as _;
 use std::fs;
@@ -110,7 +115,7 @@ fn measure_batched(name: &str, batch: usize, runs: usize, mut f: impl FnMut(usiz
     Stats::from(&format!("{name} (バッチ {batch} 回の平均)"), ns)
 }
 
-/// プロセスの Private Bytes (Windows: PagefileUsage)。
+/// プロセスの Private Bytes (Windows: `PagefileUsage`)。
 fn private_bytes() -> usize {
     memory_stats::memory_stats().map_or(0, |m| m.virtual_mem)
 }
@@ -176,7 +181,7 @@ impl Report {
 }
 
 /// 中央またはランダムな位置への 1 文字挿入を `runs` 回行い (ウォームアップ 100 回を除く)、逆順に Undo する。
-/// 挿入 = ChangeSet の作成 + 逆変換の作成 + 適用。Undo = 逆変換の逆 (redo 用) の作成 + 逆変換の適用。
+/// 挿入 = `ChangeSet` の作成 + 逆変換の作成 + 適用。Undo = 逆変換の逆 (redo 用) の作成 + 逆変換の適用。
 /// `hold` なら、各編集の間 Snapshot を保持する (木の共有により、経路のコピーが起きる)。
 fn edit_and_undo(rep: &mut Report, raw: &str, label: &str, hold: bool, random: bool, quick: bool) {
     let mut t = build(raw);

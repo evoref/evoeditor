@@ -132,6 +132,7 @@ mod tests {
             intercepted_keys(TerminalKind::WindowsTerminal).len(),
             WINDOWS_TERMINAL.len()
         );
-        assert!(intercepted_keys(TerminalKind::Other).is_empty());
+        let actual = intercepted_keys(TerminalKind::Other);
+        assert!(actual.is_empty(), "{actual:?}");
     }
 }

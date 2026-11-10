@@ -104,6 +104,10 @@ unsafe extern "system" fn wnd_proc(
 /// 専用スレッドを立て、そこで非表示のトップレベルウィンドウを作ってメッセージループを回す。スレッドを立てるだけで戻る
 /// (起動経路をブロックしない、02 §9.5)。`reason` は終了の画面に出る理由の文言、`cb` は受けた通知 (`QueryEnd` は
 /// 使い捨てのスレッドで、`End` はメッセージループのスレッドで呼ぶ。`End` から戻るとプロセスが終了されうる)。
+///
+/// # Errors
+///
+/// 専用スレッドを作れないとき。
 pub fn start(
     reason: &str,
     cb: impl Fn(SessionEvent) + Send + Sync + 'static,
@@ -135,7 +139,7 @@ pub fn start(
                     lpszClassName: class.as_ptr(),
                 };
                 // 2 回目 (試験で複数作る) は登録済みで失敗するが、同じクラスを使えばよい
-                RegisterClassW(&wc);
+                RegisterClassW(&raw const wc);
                 // `WS_VISIBLE` を付けない通常のウィンドウ (親なし = トップレベル。`HWND_MESSAGE` ではない)
                 CreateWindowExW(
                     0,
@@ -161,9 +165,9 @@ pub fn start(
             // SAFETY: このスレッドのメッセージループ。`MSG` はゼロ初期化で足りる
             unsafe {
                 let mut msg: MSG = std::mem::zeroed();
-                while GetMessageW(&mut msg, std::ptr::null_mut(), 0, 0) > 0 {
-                    TranslateMessage(&msg);
-                    DispatchMessageW(&msg);
+                while GetMessageW(&raw mut msg, std::ptr::null_mut(), 0, 0) > 0 {
+                    TranslateMessage(&raw const msg);
+                    DispatchMessageW(&raw const msg);
                 }
             }
         })?;
@@ -186,13 +190,14 @@ mod tests {
         let w = start("test", move |ev| g.lock().unwrap().push(ev)).unwrap();
         assert!(w.wait_ready(Duration::from_secs(5)));
         let hwnd = *w.hwnd.get().unwrap() as HWND;
+        let logoff = LPARAM::try_from(ENDSESSION_LOGOFF).unwrap();
         // SAFETY: 作ったウィンドウへの同期の送信 (ウィンドウのスレッドが処理して戻る)
-        let r = unsafe { SendMessageW(hwnd, WM_QUERYENDSESSION, 0, ENDSESSION_LOGOFF as LPARAM) };
+        let r = unsafe { SendMessageW(hwnd, WM_QUERYENDSESSION, 0, logoff) };
         assert_eq!(r, 1);
         // SAFETY: 同上
         unsafe { SendMessageW(hwnd, WM_ENDSESSION, 0, 0) };
         // SAFETY: 同上
-        unsafe { SendMessageW(hwnd, WM_ENDSESSION, 1, ENDSESSION_LOGOFF as LPARAM) };
+        unsafe { SendMessageW(hwnd, WM_ENDSESSION, 1, logoff) };
         // 問い合わせは別スレッドで届くので、3 つそろうまで待つ
         let end = Instant::now() + Duration::from_secs(5);
         while got.lock().unwrap().len() < 3 && Instant::now() < end {

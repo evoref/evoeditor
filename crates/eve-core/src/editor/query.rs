@@ -3,30 +3,34 @@
 
 use eve_text::{ByteOff, ByteRange as TextRange, TextRead};
 use eve_view::{
-    Answer, ByteRange, DocumentInfo, FocusTarget, LoadStateView, Query, QueryError, SelRange,
-    ViewId, WindowId, WindowInfo,
+    Answer, ByteRange, DocumentInfo, FocusTarget, LoadStateView, Query, QueryError,
+    ReadOnlyReasonView, SelRange, ViewId, WindowId, WindowInfo,
 };
 
 use crate::document::{LoadState, ReadOnlyReason};
 
-use super::{Editor, chrome};
+use super::Editor;
+use crate::ui_model::chrome;
 
 impl Editor {
+    /// 読み取り専用の問い合わせに答える (02 §10.1 X18)。状態を変えない。
+    ///
+    /// # Errors
+    ///
+    /// 文書・View・Window が無ければ `UnknownDocument` / `UnknownView` / `UnknownWindow`、読込が終わっていなければ `NotLoaded`、
+    /// 範囲が文書の外か UTF-8 の境界でなければ `RangeOutOfBounds`、この版で答えない問い合わせは `Unsupported`。
     pub fn query(&self, q: &Query) -> Result<Answer, QueryError> {
         let state = &self.state;
         match q {
             Query::Documents => Ok(Answer::Documents(
                 state
+                    .docs
                     .documents
                     .iter()
                     .map(|(id, d)| DocumentInfo {
                         doc: *id,
                         path: d.path.as_ref().map(|p| p.display()),
-                        untitled_name: d.path.is_none().then(|| {
-                            state
-                                .catalog()
-                                .render("status.untitled", &[("n", "1")], &|_| None)
-                        }),
+                        untitled_name: d.path.is_none().then(|| state.untitled_label(d)),
                         revision: d.revision(),
                         dirty: d.is_dirty(),
                         load_state: match d.load_state {
@@ -34,8 +38,9 @@ impl Editor {
                             LoadState::Ready => LoadStateView::Ready,
                             LoadState::Failed => LoadStateView::Failed,
                         },
-                        read_only: d.read_only.iter().map(reason_name).collect(),
+                        read_only: d.read_only.iter().map(reason_view).collect(),
                         views: state
+                            .docs
                             .views
                             .iter()
                             .filter(|(_, v)| v.doc == *id)
@@ -46,12 +51,13 @@ impl Editor {
             )),
             Query::Windows => Ok(Answer::Windows(
                 state
+                    .docs
                     .windows
                     .iter()
                     .map(|w| WindowInfo {
                         window: w.id,
                         views: vec![w.root],
-                        focus: if state.overlay.is_some() {
+                        focus: if state.ui.overlay.is_some() {
                             FocusTarget::Overlay(0)
                         } else {
                             FocusTarget::Pane(w.root)
@@ -107,7 +113,7 @@ impl Editor {
                     primary: v.selection.primary_index(),
                 })
             }
-            Query::Capabilities => Ok(Answer::Capabilities(state.caps.clone())),
+            Query::Capabilities => Ok(Answer::Capabilities(state.term.caps.clone())),
             Query::Status { window } => {
                 let view = self.window_root(*window)?;
                 Ok(Answer::Status(chrome::status_model(
@@ -135,6 +141,18 @@ fn to_off(n: u64) -> ByteOff {
     ByteOff(usize::try_from(n).unwrap_or(usize::MAX))
 }
 
-fn reason_name(r: ReadOnlyReason) -> String {
-    format!("{r:?}")
+/// 読み取り専用の理由を境界型に写す (02 §12.2。変種は 1 対 1)。
+fn reason_view(r: ReadOnlyReason) -> ReadOnlyReasonView {
+    match r {
+        ReadOnlyReason::FileAttribute => ReadOnlyReasonView::FileAttribute,
+        ReadOnlyReason::UserRequested => ReadOnlyReasonView::UserRequested,
+        ReadOnlyReason::NoWritePermission => ReadOnlyReasonView::NoWritePermission,
+        ReadOnlyReason::InvalidBytes => ReadOnlyReasonView::InvalidBytes,
+        ReadOnlyReason::StatefulEncodingWithInvalidBytes => {
+            ReadOnlyReasonView::StatefulEncodingWithInvalidBytes
+        }
+        ReadOnlyReason::Binary => ReadOnlyReasonView::Binary,
+        ReadOnlyReason::LargeFileViewer => ReadOnlyReasonView::LargeFileViewer,
+        ReadOnlyReason::LoadIncomplete => ReadOnlyReasonView::LoadIncomplete,
+    }
 }

@@ -17,6 +17,10 @@ pub struct CrateRow {
 }
 
 /// 02 の markdown から crate 一覧を読む。
+///
+/// # Errors
+///
+/// 見出しや列が見つからないとき、または `crate` 列・`版` 列などの行の形が規則に合わないとき (`Error::BadRow` など)。
 pub fn read_crates(markdown_02: &str) -> Result<Vec<CrateRow>, Error> {
     let mut out = Vec::new();
     for table in read_tables(
@@ -92,7 +96,7 @@ mod tests {
         assert_eq!(v[0].forbidden, ["ratatui", "crossterm"]);
         assert_eq!(v[1].name, "evoeditor");
         assert_eq!(v[1].version, "v0.1");
-        assert!(v[2].forbidden.is_empty());
+        assert!(v[2].forbidden.is_empty(), "{:?}", v[2].forbidden);
         assert_eq!(v[2].version, "v1.L");
     }
 

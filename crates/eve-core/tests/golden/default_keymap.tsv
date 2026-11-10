@@ -1,0 +1,153 @@
+# context	keys	command	args	when	enhanced
+search	Enter	search.replace	Args({})	ContextExpr(Some(Var("search.replace_focused")))	false
+global	Ctrl+Q	app.quit	Args({})	ContextExpr(None)	false
+global	Ctrl+P	ui.palette_open	Args({})	ContextExpr(None)	false
+global	F1	ui.palette_open	Args({})	ContextExpr(None)	false
+global	Ctrl+Shift+P	ui.palette_open	Args({})	ContextExpr(None)	true
+global	Ctrl+K R	ui.redraw	Args({})	ContextExpr(None)	false
+global	Ctrl+K H	help.open	Args({})	ContextExpr(None)	false
+editor	Ctrl+K M	ui.message_history	Args({})	ContextExpr(None)	false
+editor	Ctrl+K Z	app.suspend	Args({})	ContextExpr(None)	false
+editor	Alt+Z	view.toggle_wrap	Args({})	ContextExpr(None)	false
+editor	Ctrl+K O	view.toggle_wrap	Args({})	ContextExpr(None)	false
+help	Down	ui.list_next	Args({})	ContextExpr(None)	false
+help	Up	ui.list_prev	Args({})	ContextExpr(None)	false
+help	PageDown	ui.list_page_down	Args({})	ContextExpr(None)	false
+help	PageUp	ui.list_page_up	Args({})	ContextExpr(None)	false
+help	Esc	ui.cancel	Args({})	ContextExpr(None)	false
+help	Ctrl+C	ui.message_history_copy	Args({})	ContextExpr(None)	false
+search	Enter	search.next	Args({})	ContextExpr(None)	false
+search	Down	search.next	Args({})	ContextExpr(None)	false
+search	F3	search.next	Args({})	ContextExpr(None)	false
+search	Up	search.prev	Args({})	ContextExpr(None)	false
+search	Shift+F3	search.prev	Args({})	ContextExpr(None)	true
+search	Shift+Enter	search.prev	Args({})	ContextExpr(None)	true
+search	Alt+C	search.toggle_case	Args({})	ContextExpr(None)	false
+search	Ctrl+K C	search.toggle_case	Args({})	ContextExpr(None)	false
+search	Alt+R	search.toggle_regex	Args({})	ContextExpr(None)	false
+search	Ctrl+K X	search.toggle_regex	Args({})	ContextExpr(None)	false
+search	Alt+W	search.toggle_word	Args({})	ContextExpr(None)	false
+search	Ctrl+K B	search.toggle_word	Args({})	ContextExpr(None)	false
+search	Alt+L	search.toggle_selection	Args({})	ContextExpr(None)	false
+search	Ctrl+K L	search.toggle_selection	Args({})	ContextExpr(None)	false
+search	Alt+A	search.replace_all	Args({})	ContextExpr(None)	false
+search	Tab	ui.list_next	Args({})	ContextExpr(None)	false
+search	Shift+Tab	ui.list_prev	Args({})	ContextExpr(None)	false
+search	Ctrl+R	search.replace_open	Args({})	ContextExpr(None)	false
+search	Ctrl+H	search.replace_open	Args({})	ContextExpr(None)	true
+search	Ctrl+F	search.open	Args({})	ContextExpr(None)	false
+search	Ctrl+S	file.save	Args({})	ContextExpr(None)	false
+search	Ctrl+Shift+S	file.save_as	Args({})	ContextExpr(None)	true
+search	Ctrl+O	file.open	Args({})	ContextExpr(None)	false
+search	Ctrl+N	file.new	Args({})	ContextExpr(None)	false
+editor	Ctrl+F	search.open	Args({})	ContextExpr(None)	false
+editor	Esc	ui.cancel	Args({})	ContextExpr(None)	false
+editor	Ctrl+R	search.replace_open	Args({})	ContextExpr(None)	false
+editor	Ctrl+H	search.replace_open	Args({})	ContextExpr(None)	true
+list	Down	ui.list_next	Args({})	ContextExpr(None)	false
+list	Up	ui.list_prev	Args({})	ContextExpr(None)	false
+list	Ctrl+N	ui.list_next	Args({})	ContextExpr(None)	false
+list	Ctrl+P	ui.list_prev	Args({})	ContextExpr(None)	false
+list	PageDown	ui.list_page_down	Args({})	ContextExpr(None)	false
+list	PageUp	ui.list_page_up	Args({})	ContextExpr(None)	false
+dialog	Enter	ui.confirm	Args({})	ContextExpr(None)	false
+dialog	Esc	ui.cancel	Args({})	ContextExpr(None)	false
+dialog	Tab	ui.list_next	Args({})	ContextExpr(None)	false
+dialog	Right	ui.list_next	Args({})	ContextExpr(None)	false
+dialog	Down	ui.list_next	Args({})	ContextExpr(None)	false
+dialog	Shift+Tab	ui.list_prev	Args({})	ContextExpr(None)	false
+dialog	Left	ui.list_prev	Args({})	ContextExpr(None)	false
+dialog	Up	ui.list_prev	Args({})	ContextExpr(None)	false
+prompt	Ctrl+V	edit.paste	Args({})	ContextExpr(None)	false
+prompt	Shift+Insert	edit.paste	Args({})	ContextExpr(None)	false
+prompt	Enter	ui.confirm	Args({})	ContextExpr(None)	false
+prompt	Esc	ui.cancel	Args({})	ContextExpr(None)	false
+prompt	Backspace	edit.delete_backward	Args({})	ContextExpr(None)	false
+prompt	Delete	edit.delete_forward	Args({})	ContextExpr(None)	false
+prompt	Left	cursor.move_left	Args({})	ContextExpr(None)	false
+prompt	Right	cursor.move_right	Args({})	ContextExpr(None)	false
+prompt	Home	cursor.home	Args({})	ContextExpr(None)	false
+prompt	End	cursor.end	Args({})	ContextExpr(None)	false
+prompt	Ctrl+Backspace	edit.delete_word_backward	Args({})	ContextExpr(None)	false
+prompt	Ctrl+Delete	edit.delete_word_forward	Args({})	ContextExpr(None)	false
+prompt	Ctrl+Left	cursor.move_word_left	Args({})	ContextExpr(None)	false
+prompt	Ctrl+Right	cursor.move_word_right	Args({})	ContextExpr(None)	false
+prompt	Ctrl+A	select.all	Args({})	ContextExpr(None)	false
+editor	Ctrl+S	file.save	Args({})	ContextExpr(None)	false
+editor	Ctrl+Shift+S	file.save_as	Args({})	ContextExpr(None)	true
+editor	Ctrl+K S	file.save_as	Args({})	ContextExpr(None)	false
+editor	Ctrl+K A	file.save_all	Args({})	ContextExpr(None)	false
+editor	Ctrl+O	file.open	Args({})	ContextExpr(None)	false
+editor	Ctrl+N	file.new	Args({})	ContextExpr(None)	false
+editor	Ctrl+W	buffer.close	Args({})	ContextExpr(None)	false
+editor	Ctrl+K W	buffer.close	Args({})	ContextExpr(None)	false
+editor	Ctrl+PageDown	buffer.next	Args({})	ContextExpr(None)	false
+editor	Ctrl+PageUp	buffer.prev	Args({})	ContextExpr(None)	false
+editor	Ctrl+K N	buffer.next	Args({})	ContextExpr(None)	false
+editor	Ctrl+E	buffer.list	Args({})	ContextExpr(None)	false
+list	Ctrl+W	buffer.close	Args({})	ContextExpr(None)	false
+editor	Ctrl+K P	buffer.prev	Args({})	ContextExpr(None)	false
+editor	Enter	edit.newline	Args({})	ContextExpr(None)	false
+editor	Ctrl+C	clipboard.copy	Args({})	ContextExpr(None)	false
+editor	Ctrl+X	clipboard.cut	Args({})	ContextExpr(None)	false
+editor	Ctrl+V	edit.paste	Args({})	ContextExpr(None)	false
+editor	Ctrl+Insert	clipboard.copy	Args({})	ContextExpr(None)	false
+editor	Shift+Delete	clipboard.cut	Args({})	ContextExpr(None)	false
+editor	Shift+Insert	edit.paste	Args({})	ContextExpr(None)	false
+editor	Ctrl+Z	edit.undo	Args({})	ContextExpr(None)	false
+editor	Ctrl+Y	edit.redo	Args({})	ContextExpr(None)	false
+editor	Ctrl+Shift+Z	edit.redo	Args({})	ContextExpr(None)	true
+editor	Backspace	edit.delete_backward	Args({})	ContextExpr(None)	false
+editor	Delete	edit.delete_forward	Args({})	ContextExpr(None)	false
+editor	Ctrl+Backspace	edit.delete_word_backward	Args({})	ContextExpr(None)	false
+editor	Ctrl+Delete	edit.delete_word_forward	Args({})	ContextExpr(None)	false
+editor	Alt+Backspace	edit.delete_word_backward	Args({})	ContextExpr(None)	false
+editor	Tab	edit.indent	Args({})	ContextExpr(None)	false
+editor	Shift+Tab	edit.outdent	Args({})	ContextExpr(None)	false
+editor	Ctrl+A	select.all	Args({})	ContextExpr(None)	false
+editor	Left	cursor.move_left	Args({})	ContextExpr(None)	false
+editor	Shift+Left	select.extend_left	Args({})	ContextExpr(None)	false
+editor	Right	cursor.move_right	Args({})	ContextExpr(None)	false
+editor	Shift+Right	select.extend_right	Args({})	ContextExpr(None)	false
+editor	Up	cursor.move_up	Args({})	ContextExpr(None)	false
+editor	Shift+Up	select.extend_up	Args({})	ContextExpr(None)	false
+editor	Down	cursor.move_down	Args({})	ContextExpr(None)	false
+editor	Shift+Down	select.extend_down	Args({})	ContextExpr(None)	false
+editor	Ctrl+Left	cursor.move_word_left	Args({})	ContextExpr(None)	false
+editor	Ctrl+Shift+Left	select.extend_word_left	Args({})	ContextExpr(None)	false
+editor	Ctrl+Right	cursor.move_word_right	Args({})	ContextExpr(None)	false
+editor	Ctrl+Shift+Right	select.extend_word_right	Args({})	ContextExpr(None)	false
+editor	Alt+Left	cursor.move_word_left	Args({})	ContextExpr(None)	false
+editor	Alt+Shift+Left	select.extend_word_left	Args({})	ContextExpr(None)	false
+editor	Alt+Right	cursor.move_word_right	Args({})	ContextExpr(None)	false
+editor	Alt+Shift+Right	select.extend_word_right	Args({})	ContextExpr(None)	false
+editor	Home	cursor.home	Args({})	ContextExpr(None)	false
+editor	Shift+Home	select.extend_home	Args({})	ContextExpr(None)	false
+editor	End	cursor.end	Args({})	ContextExpr(None)	false
+editor	Shift+End	select.extend_end	Args({})	ContextExpr(None)	false
+editor	Ctrl+Home	cursor.doc_start	Args({})	ContextExpr(None)	false
+editor	Ctrl+Shift+Home	select.extend_to_doc_start	Args({})	ContextExpr(None)	true
+editor	Ctrl+End	cursor.doc_end	Args({})	ContextExpr(None)	false
+editor	Ctrl+Shift+End	select.extend_to_doc_end	Args({})	ContextExpr(None)	true
+editor	PageUp	cursor.page_up	Args({})	ContextExpr(None)	false
+editor	Shift+PageUp	select.extend_page_up	Args({})	ContextExpr(None)	false
+editor	PageDown	cursor.page_down	Args({})	ContextExpr(None)	false
+editor	Shift+PageDown	select.extend_page_down	Args({})	ContextExpr(None)	false
+editor	Ctrl+K D	edit.duplicate_line	Args({})	ContextExpr(None)	false
+editor	Ctrl+K L	edit.delete_line	Args({})	ContextExpr(None)	false
+editor	Ctrl+Shift+K	edit.delete_line	Args({})	ContextExpr(None)	true
+editor	Alt+Up	edit.move_line_up	Args({})	ContextExpr(None)	false
+editor	Alt+Down	edit.move_line_down	Args({})	ContextExpr(None)	false
+editor	Ctrl+K Up	edit.move_line_up	Args({})	ContextExpr(None)	false
+editor	Ctrl+K Down	edit.move_line_down	Args({})	ContextExpr(None)	false
+editor	Alt+B	cursor.move_word_left	Args({})	ContextExpr(None)	false
+editor	Alt+F	cursor.move_word_right	Args({})	ContextExpr(None)	false
+editor	Ctrl+G	cursor.goto_line	Args({})	ContextExpr(None)	false
+editor	Ctrl+K Left	cursor.home	Args({})	ContextExpr(None)	false
+editor	Ctrl+K Right	cursor.end	Args({})	ContextExpr(None)	false
+editor	Ctrl+K Shift+Left	select.extend_home	Args({})	ContextExpr(None)	false
+editor	Ctrl+K Shift+Right	select.extend_end	Args({})	ContextExpr(None)	false
+editor	Ctrl+K ,	cursor.page_up	Args({})	ContextExpr(None)	false
+editor	Ctrl+K .	cursor.page_down	Args({})	ContextExpr(None)	false
+editor	Ctrl+K <	select.extend_page_up	Args({})	ContextExpr(None)	false
+editor	Ctrl+K >	select.extend_page_down	Args({})	ContextExpr(None)	false

@@ -301,7 +301,8 @@ fn フラグだけの段では_t_は無傷でバックアップは無く_報告�
     killed(&e.save("a.txt", "inplace", NEW, Some("kill_after_inflight_flag")));
     assert_eq!(fs::read(e.file("a.txt")).unwrap(), ORIG);
     assert_eq!(e.flags(), 1);
-    assert!(e.backups().is_empty());
+    let actual = e.backups();
+    assert!(actual.is_empty(), "{actual:?}");
     let (report, _) = e.open_report("a.txt");
     assert!(report.is_none(), "msg.open.interrupted_save* は出ない");
     assert_eq!(e.flags(), 0, "開いた後にフラグだけが消える");
@@ -313,7 +314,7 @@ fn バックアップの書込中の中断は不完全として案内し_t_は�
     let e = Env::new("ip-midbackup");
     // 1 チャンク (1 MiB) より大きい元ファイルで、バックアップの途中を作る
     let orig: Vec<u8> = (0..2 * 1024 * 1024)
-        .map(|i| b'a' + (i % 26) as u8)
+        .map(|i| b'a' + u8::try_from(i % 26).expect("26 未満"))
         .collect();
     fs::write(e.file("a.txt"), &orig).unwrap();
     killed(&e.save("a.txt", "inplace", NEW, Some("kill_mid_backup")));
@@ -368,7 +369,9 @@ fn バックアップの後の切断点では完全なバックアップが残�
 #[test]
 fn 上書きの途中の中断では_t_は半端に書き換わりバックアップが元の内容を保つ() {
     let e = Env::new("ip-mid");
-    let orig: Vec<u8> = (0..200_000).map(|i| b'a' + (i % 26) as u8).collect();
+    let orig: Vec<u8> = (0..200_000)
+        .map(|i| b'a' + u8::try_from(i % 26).expect("26 未満"))
+        .collect();
     fs::write(e.file("a.txt"), &orig).unwrap();
     let new: Vec<u8> = vec![b'N'; 200_000];
     killed(&e.save(
@@ -450,7 +453,7 @@ fn 中断の後の保存の成功で前の記録は消える() {
     let _ = Path::new("");
 }
 
-// ---- 起動時の走査と提案の適用 (M6e、05 §4.6「起動時の提案の規則」、03 §10.3 手順 1b) ----
+// ---- 起動時の走査と提案の適用 (05 §4.6「起動時の提案の規則」、03 §10.3 手順 1b) ----
 
 impl Env {
     fn run(&self, kind: JobKind) -> JobResult {
@@ -514,7 +517,8 @@ fn 置換の途中の強制終了は_走査で_bak_と_tmp_の両方の提案に
     e.act(&l2[0], LeftoverOp::DeleteTmp).expect("消せる");
     assert_eq!(e.flags(), 0);
     assert!(e.names().iter().all(|n| n == "a.txt"), "{:?}", e.names());
-    assert!(e.scan().is_empty());
+    let actual = e.scan();
+    assert!(actual.is_empty(), "{actual:?}");
 }
 
 // 置換の途中の状態 (`kill_after_replace_begin`) は Windows の置換 (T を退避名に移してから一時ファイルを移す) だけにある。
@@ -571,5 +575,92 @@ fn 保存が成功していれば走査は何も提案しない() {
     let e = Env::new("scan-clean");
     fs::write(e.file("a.txt"), ORIG).unwrap();
     assert_eq!(e.save("a.txt", "atomic", NEW, None).code, Some(0));
-    assert!(e.scan().is_empty());
+    let actual = e.scan();
+    assert!(actual.is_empty(), "{actual:?}");
+}
+
+// ---- 緊急退避の段 1 の後の強制終了 (09 §3.6 (7)、02 §11.2.1 の「書く順」) ----
+
+// 本文を OS に渡した後・最初の fsync の前に強制終了しても、本文は len バイトで残り XXH3-64 が manifest の xxh3 と一致し、
+// manifest は stored = true・written = false・complete = false (読み手の規則で「読める」、02 §11.2.1)
+// 01 NFR-302 AC-5 の「退避できた」(全文書が stored = true) が、OS の強制終了の後も成り立つことを確かめる
+// verifies: AC-NFR-302-5
+#[test]
+fn 退避の本文を_os_に渡した後_fsync_の前に強制終了しても本文と_stored_が残る() {
+    let e = Env::new("rescue-sync");
+    let texts = [
+        "short unsaved
+",
+        "長めの未保存の文書
+二行目
+",
+    ];
+    let files: Vec<PathBuf> = texts
+        .iter()
+        .enumerate()
+        .map(|(i, t)| {
+            let f = e.root.join(format!("content-{i}.txt"));
+            fs::write(&f, t).unwrap();
+            f
+        })
+        .collect();
+    let run = |hook: Option<&str>| {
+        let mut cmd = Command::new(EXE);
+        cmd.arg("rescue")
+            .arg(&e.state)
+            .args(&files)
+            .stdout(std::process::Stdio::null());
+        match hook {
+            Some(h) => cmd.env("EVE_TEST_HOOK", h),
+            None => cmd.env_remove("EVE_TEST_HOOK"),
+        };
+        let st = cmd.status().expect("補助プロセスを起動できない");
+        #[cfg(unix)]
+        let code = {
+            use std::os::unix::process::ExitStatusExt;
+            st.code().or_else(|| st.signal().map(|s| 128 + s))
+        };
+        #[cfg(windows)]
+        let code = st.code();
+        Run { code }
+    };
+    killed(&run(Some("kill_before_rescue_sync")));
+    let dirs: Vec<PathBuf> = fs::read_dir(e.state.join("recovery"))
+        .unwrap()
+        .flatten()
+        .map(|d| d.path())
+        .collect();
+    assert_eq!(dirs.len(), 1, "{dirs:?}");
+    let dir = &dirs[0];
+    let m = fs::read_to_string(dir.join("manifest.toml")).unwrap();
+    assert!(m.contains("complete = false"), "{m}");
+    assert!(
+        !m.contains("written = true"),
+        "fsync の前なので確定していない: {m}"
+    );
+    let docs: Vec<&str> = m.split("[[document]]").skip(1).collect();
+    assert_eq!(docs.len(), 2, "{m}");
+    // 小さい文書から: 1 番が短い文書
+    for (sec, text) in docs.iter().zip(texts) {
+        let val = |key: &str| {
+            sec.lines()
+                .find_map(|l| l.strip_prefix(&format!("{key} = ")))
+                .unwrap_or_else(|| panic!("{key} が無い: {m}"))
+                .trim_matches('"')
+                .to_owned()
+        };
+        assert_eq!(val("written"), "false", "{m}");
+        assert_eq!(val("stored"), "true", "{m}");
+        let body = fs::read(dir.join(val("file"))).unwrap();
+        assert_eq!(body, text.as_bytes(), "本文が残る");
+        assert_eq!(val("len"), body.len().to_string(), "{m}");
+        assert_eq!(
+            val("xxh3"),
+            format!("{:016x}", xxhash_rust::xxh3::xxh3_64(&body)),
+            "{m}"
+        );
+    }
+    assert!(!dir.join("manifest.toml.tmp").exists(), "{m}");
+    // 切断点なしなら最後まで書いて complete = true
+    assert_eq!(run(None).code, Some(0));
 }

@@ -1,6 +1,10 @@
 //! `fuzz_editor` の本体 (`eve_testkit::fuzzing::editor_sequence`) を、決定的な乱数で作った入力で回す (docs/09 §3.3、NFR-305)。
 //! libFuzzer は MSVC 非対応なので、Windows の CI ではこれで同じ不変条件を確かめる。本格の探索は Linux の夜間の `fuzz_editor`。
 //! 回数は `EVE_FUZZ_EDITOR_CASES` (既定 300) で変えられる。
+#![expect(
+    clippy::cast_possible_truncation,
+    reason = "テスト用の数値変換。値は小さく収まる"
+)]
 
 use eve_testkit::fuzzing::editor_sequence;
 
@@ -55,4 +59,19 @@ fn 任意の入力列でパニックせず_frame_と状態の不変条件を保�
 
 fn hex(b: &[u8]) -> String {
     b.iter().map(|x| format!("{x:02x}")).collect()
+}
+
+/// コミットした最小の corpus (`fuzz/corpus/fuzz_editor/`、docs/review/v0.3-findings.md の STR-T8) を毎回流す。夜間の fuzz の
+/// 出発点で、引数付きのコマンド・外部の変更・ジョブの交互の進行・長大行の閾値を下げた設定に最初から届かせる。
+#[test]
+fn コミットした_corpus_の入力でも不変条件を保つ() {
+    let dir =
+        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fuzz/corpus/fuzz_editor");
+    let mut n = 0;
+    for e in std::fs::read_dir(&dir).expect("corpus がある") {
+        let path = e.unwrap().path();
+        editor_sequence(&std::fs::read(&path).unwrap());
+        n += 1;
+    }
+    assert!(n >= 6, "corpus は 6 件以上: {n}");
 }

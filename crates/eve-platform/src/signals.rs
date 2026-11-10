@@ -57,6 +57,10 @@ impl UnixSignal {
 
 /// シグナルの受信を始める。`cb` はシグナルスレッドで、届いた順に 1 つずつ呼ばれる (戻るまで次は呼ばない)。
 /// 登録した後は、これらのシグナルの既定の動作 (終了) は起きない (呼び側が終了を決める)。
+///
+/// # Errors
+///
+/// シグナルの登録、またはシグナルスレッドの作成に失敗したとき。
 pub fn start(cb: impl Fn(UnixSignal) + Send + 'static) -> io::Result<()> {
     let mut signals = Signals::new([SIGINT, SIGTERM, SIGHUP, SIGCONT])?;
     // シグナルスレッド (02 §9.1 の表。deps-policy.toml の R11 の許可)
@@ -80,9 +84,9 @@ pub fn die_by_signal(signo: i32) -> ! {
     unsafe {
         libc::signal(signo, libc::SIG_DFL);
         let mut set: libc::sigset_t = std::mem::zeroed();
-        libc::sigemptyset(&mut set);
-        libc::sigaddset(&mut set, signo);
-        libc::pthread_sigmask(libc::SIG_UNBLOCK, &set, std::ptr::null_mut());
+        libc::sigemptyset(&raw mut set);
+        libc::sigaddset(&raw mut set, signo);
+        libc::pthread_sigmask(libc::SIG_UNBLOCK, &raw const set, std::ptr::null_mut());
         libc::raise(signo);
         libc::_exit(128 + signo)
     }
@@ -127,7 +131,7 @@ mod tests {
         }
         let mut status = 0;
         // SAFETY: 自分の子を待つ。
-        assert_eq!(unsafe { libc::waitpid(pid, &mut status, 0) }, pid);
+        assert_eq!(unsafe { libc::waitpid(pid, &raw mut status, 0) }, pid);
         assert!(libc::WIFSIGNALED(status), "{status:#x}");
         assert_eq!(libc::WTERMSIG(status), SIGTERM);
     }

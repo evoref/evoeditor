@@ -46,7 +46,7 @@ pub fn hold(ms: u64, ready: impl FnOnce()) -> bool {
 
 unsafe extern "system" fn wnd_proc(h: HWND, m: u32, w: WPARAM, l: LPARAM) -> LRESULT {
     match m {
-        WM_RENDERFORMAT if w as u32 == CF_UNICODETEXT => {
+        WM_RENDERFORMAT if w == CF_UNICODETEXT as usize => {
             if let Some((units, delay)) = SERVED.get() {
                 std::thread::sleep(Duration::from_millis(*delay));
                 // SAFETY: 確保したグローバルメモリに UTF-16 + NUL を書いて OS に渡す (失敗時は解放する)。
@@ -102,7 +102,7 @@ pub fn serve_delayed(text: &str, delay_ms: u64, lifetime_ms: u64, ready: impl Fn
             lpszMenuName: std::ptr::null(),
             lpszClassName: class.as_ptr(),
         };
-        RegisterClassW(&wc);
+        RegisterClassW(&raw const wc);
         let hwnd = CreateWindowExW(
             0,
             class.as_ptr(),
@@ -132,9 +132,9 @@ pub fn serve_delayed(text: &str, delay_ms: u64, lifetime_ms: u64, ready: impl Fn
         );
         ready();
         let mut msg: MSG = std::mem::zeroed();
-        while GetMessageW(&mut msg, std::ptr::null_mut(), 0, 0) > 0 {
-            TranslateMessage(&msg);
-            DispatchMessageW(&msg);
+        while GetMessageW(&raw mut msg, std::ptr::null_mut(), 0, 0) > 0 {
+            TranslateMessage(&raw const msg);
+            DispatchMessageW(&raw const msg);
         }
     }
     true

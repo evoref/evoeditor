@@ -1,0 +1,84 @@
+## config: 構文の誤り
+1:8	Error		""
+  This configuration file is not used because its syntax is invalid: unclosed table, expected `]`
+  Fix the line shown. Until then the defaults are used
+## config: 知らない節
+1:2	Warning	edtor	""
+  There is no configuration item named edtor
+  Did you mean editor? See the bundled config.example.toml for the available items
+## config: 知らないキー
+2:1	Warning	editor.tab_widht	""
+  There is no configuration item named editor.tab_widht
+  Did you mean editor.tab_width? See the bundled config.example.toml for the available items
+## config: 型の違い
+2:13	Warning	editor.tab_width	"4"
+  The type of the value of editor.tab_width is wrong (found: a string)
+  Write it as an integer. This item uses the default 4
+## config: 節が表でない
+1:10	Warning	editor	""
+  The type of the value of editor is wrong (found: an integer)
+  Write it as a table. This item is ignored
+## config: 範囲の外
+2:13	Warning	editor.tab_width	"0"
+  The value 0 of editor.tab_width is out of range
+  Specify a value in 1〜16. This item uses 4
+## config: 許されない値
+2:18	Warning	editor.backspace_unit	"word"
+  The value word of editor.backspace_unit cannot be used
+  Allowed values: grapheme, codepoint. This item uses the default grapheme
+## config: 未対応の節
+1:2	Info	ai	""
+  ai is not supported in this version and was ignored
+## config: 正しい設定
+(診断なし)
+## keymap: キーマップの構文の誤り
+1:13	Error		""
+  This configuration file is not used because its syntax is invalid: unclosed table, expected `]`
+  Fix the line shown. Until then the defaults are used
+## keymap: キーマップの各種の誤り
+2:1	Info	keys.preset	""
+  keys.preset is not supported in this version and was ignored
+9:1	Warning	keys.editor.a	"a"
+  keys.editor.a is a text-input key and cannot be bound
+  Combine it with ctrl or alt. This binding is ignored
+10:1	Warning	keys.editor.ctrl+k	"ctrl+k"
+  keys.editor.ctrl+k is the first key of a default key sequence (such as Ctrl+K)
+  The key sequence wins. This binding is ignored
+7:1	Warning	keys.editor.ctrl+nope	"ctrl+nope"
+  The key in keys.editor.ctrl+nope is not valid
+  Examples: ctrl+shift+s, alt+up, f5. This binding is ignored
+6:1	Warning	keys.editor.ctrl+s	"no.such_command"
+  The command no.such_command in keys.editor.ctrl+s does not exist
+  Check command names in the command palette. This binding is ignored
+8:1	Warning	keys.editor.f5	"doc.modified &&"
+  The when clause in keys.editor.f5 is not valid
+  See the config spec (07 §7.3) for the syntax. This binding is ignored
+12:1	Info	keys.editor.f6	""
+  keys.editor.f6 is not supported in this version and was ignored
+4:1	Warning	keys.nowhere.ctrl+s	"nowhere"
+  The context in keys.nowhere.ctrl+s is not available
+  Available: global, editor, search, prompt, palette, list, dialog, help. This binding is ignored
+11:1	Error	keys.editor.ctrl+q	"app.quit"
+  The binding keys.editor.ctrl+q would make quit, the command palette or cancel unreachable
+  The default binding was kept. Choose another key
+## theme: cycle_a (themes/cycle_a.toml, 使える: false)
+0:0	Error		""
+  This configuration file is not used because its syntax is invalid: inherits が循環しています (cycle_a)
+  Fix the line shown. Until then the defaults are used
+## theme: missing (themes/missing.toml, 使える: false)
+0:0	Error		""
+  This configuration file is not used because its syntax is invalid: テーマ missing がありません
+  Fix the line shown. Until then the defaults are used
+## theme: broken (themes/broken.toml, 使える: false)
+1:4	Error		""
+  This configuration file is not used because its syntax is invalid: unclosed table, expected `]`
+  Fix the line shown. Until then the defaults are used
+## theme: values (themes/values.toml, 使える: true)
+4:2	Info	syntax	""
+  syntax is not supported in this version and was ignored
+2:20	Warning	ui.selection.fg	"nope"
+  The value nope of ui.selection.fg cannot be used
+  Allowed values: #rrggbb, #rgb, ansi.<name>, ansi.<0-255>, default. This item is ignored
+3:1	Warning	ui.not_a_role	""
+  There is no configuration item named ui.not_a_role
+  See the bundled config.example.toml for the available items

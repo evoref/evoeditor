@@ -1,4 +1,4 @@
-//! 実バイナリを ConPTY で駆動する計測 (docs/09-testing-quality.md §5.2、01 §3.0.1)。
+//! 実バイナリを `ConPTY` で駆動する計測 (docs/09-testing-quality.md §5.2、01 §3.0.1)。
 //!
 //! **計測用ビルド** (`--features bench-trace`) のとき、プロセス内の区間の記録 (`EVE_TRACE_FILE`、eve-tui の `trace`) を使って、
 //! 仕様 (01 §3.0.1) の区間で測る。これが判定に使う値:
@@ -6,8 +6,12 @@
 //! - **BM-101b / 102b**: 計測ハーネスが spawn した時刻 → 同じ終点 (起動 (b) spawn から。壁時計で比べる)。
 //! - **BM-103b**: 入力スレッドが入力を読み終えた時刻 → 描画の `write` が戻るまで (判定区間 (b))。打鍵間隔 30 ms。
 //! - **BM-107**: 100 MB の文書の保存中のカーソル移動の同じ区間 (01 NFR-107 AC-1。NFR-103 の値を維持するか)。
+//! - **BM-103b-search-1m**: 1 MB の文書の検索欄への入力 (一致を強調し直す) の同じ区間 (`--only 103s`)。正規表現のモードは
+//!   **BM-103b-search-1m-regex** (`--only 103r`)。
+//! - **BM-108**: 100 MB の文書の中ほどにだけある語を検索欄に打って `Enter` し、読取完了 → 一致の行が編集面に出た最初の
+//!   Frame の `write` まで (`--only 108`。区間の記録 `search.first_match`)。
 //!
-//! どのビルドでも測る、端末込みの参考値 (ConPTY を挟むので実際の Windows Terminal より遅めに出る。判定には使わない):
+//! どのビルドでも測る、端末込みの参考値 (`ConPTY` を挟むので実際の Windows Terminal より遅めに出る。判定には使わない):
 //! - **BM-101c / 102c**: spawn → 最初の画面 (ステータスバーの `無題-1` / ファイルの先頭) が端末に届くまで。
 //! - **BM-103c**: キー入力 (`a`) を送ってから、画面にその文字が現れるまで。
 //!
@@ -23,17 +27,25 @@
 
 #![cfg_attr(not(windows), allow(dead_code, unused_imports))]
 #![allow(clippy::print_stdout, clippy::print_stderr)]
+#![expect(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "計測用の数値変換。値は十分に小さい"
+)]
 // 計測の駆動側の読み取りスレッド (製品のスレッドではない。R11 の対象外)
 #![allow(clippy::disallowed_methods)]
 
-use std::io::{Read, Write};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, UNIX_EPOCH};
 
-use portable_pty::{Child, CommandBuilder, MasterPty, PtySize, native_pty_system};
+use portable_pty::{Child, MasterPty, PtySize};
+
+#[path = "../tests/common/pty.rs"]
+mod pty;
 
 const EXE: &str = env!("CARGO_BIN_EXE_evoeditor");
 const COLS: u16 = 120;
@@ -62,92 +74,71 @@ struct Term {
 impl Term {
     /// spawn の直前の時刻を返す。`trace` があれば、区間の記録をそのファイルに出させる (計測用ビルドのとき)。
     fn start(args: &[&str], marker: &'static str, trace: Option<&Path>) -> (Term, Instant) {
+        Term::start_env(args, marker, trace, &[])
+    }
+
+    /// `start` に、子プロセスの環境変数 `env` を足したもの。
+    fn start_env(
+        args: &[&str],
+        marker: &'static str,
+        trace: Option<&Path>,
+        env: &[(&str, &str)],
+    ) -> (Term, Instant) {
         static SEQ: AtomicUsize = AtomicUsize::new(0);
         let state = std::env::temp_dir().join(format!(
             "evo-bench-state-{}-{}",
             std::process::id(),
             SEQ.fetch_add(1, Ordering::Relaxed)
         ));
-        let pty = native_pty_system()
-            .openpty(PtySize {
-                rows: ROWS,
-                cols: COLS,
-                pixel_width: 0,
-                pixel_height: 0,
-            })
-            .expect("ConPTY を開けません");
-        let mut cmd = CommandBuilder::new(EXE);
-        cmd.args(args);
-        cmd.env_remove("NO_COLOR");
-        cmd.env_remove("WT_SESSION");
-        cmd.env_remove("TERM_PROGRAM");
-        cmd.env("EVE_STATE_DIR", &state);
-        // OS の言語に依らず日本語で計測する
-        cmd.env("EVE_LANG", "ja");
+        let mut cmd = pty::command(EXE, args, &state);
         // 設定ディレクトリは無い (設定ファイルなし)
         cmd.env("EVE_CONFIG_DIR", state.join("no-config"));
         if let Some(t) = trace {
             cmd.env("EVE_TRACE_FILE", t);
         }
-        let mut reader = pty.master.try_clone_reader().expect("reader");
-        let writer = Arc::new(Mutex::new(pty.master.take_writer().expect("writer")));
-        let parser = Arc::new(Mutex::new(vt100::Parser::new(
-            std::num::NonZeroU16::new(ROWS).expect("ROWS は 1 以上"),
-            std::num::NonZeroU16::new(COLS).expect("COLS は 1 以上"),
-            0,
-        )));
+        for (k, v) in env {
+            cmd.env(k, v);
+        }
+        let parser = pty::parser(COLS, ROWS);
         let a_count = Arc::new(AtomicUsize::new(0));
         let ready = Arc::new(AtomicBool::new(false));
         let marker_flag = Arc::new(AtomicBool::new(false));
         let saving = Arc::new(AtomicBool::new(false));
         let loading = Arc::new(AtomicBool::new(false));
-        let loading_t = loading.clone();
-        let t0 = Instant::now();
-        let spawn_unix_ns = unix_ns();
-        let child = pty.slave.spawn_command(cmd).expect("起動できません");
-        drop(pty.slave);
-        {
-            let (parser, a_count, ready, marker_flag, saving) = (
+        let on_chunk = {
+            let (parser, a_count, ready, marker_flag, saving, loading) = (
                 parser.clone(),
                 a_count.clone(),
                 ready.clone(),
                 marker_flag.clone(),
                 saving.clone(),
+                loading.clone(),
             );
-            let answer = writer.clone();
-            thread::spawn(move || {
-                let mut buf = [0u8; 16384];
-                while let Ok(n) = reader.read(&mut buf) {
-                    if n == 0 {
-                        break;
-                    }
-                    let chunk = &buf[..n];
-                    // ConPTY は起動時にカーソル位置を尋ねる (DSR)。端末として答える
-                    if chunk.windows(4).any(|w| w == b"\x1b[6n") {
-                        let mut w = answer.lock().unwrap();
-                        let _ = w.write_all(b"\x1b[1;1R");
-                        let _ = w.flush();
-                    }
-                    let mut p = parser.lock().unwrap();
-                    p.process(chunk);
-                    let s = p.screen();
-                    let all = s.contents();
-                    a_count.store(all.matches('a').count(), Ordering::Release);
-                    if all.contains("無題-1") || all.contains(".txt") {
-                        ready.store(true, Ordering::Release);
-                    }
-                    if !marker.is_empty() && all.contains(marker) {
-                        marker_flag.store(true, Ordering::Release);
-                    }
-                    saving.store(all.contains("[+]"), Ordering::Release);
-                    loading_t.store(all.contains("読込中"), Ordering::Release);
+            move |chunk: &[u8]| {
+                let mut p = parser.lock().unwrap();
+                p.process(chunk);
+                let s = p.screen();
+                let all = s.contents();
+                a_count.store(all.matches('a').count(), Ordering::Release);
+                if all.contains("無題-1") || all.contains(".txt") {
+                    ready.store(true, Ordering::Release);
                 }
-            });
-        }
+                if !marker.is_empty() && all.contains(marker) {
+                    marker_flag.store(true, Ordering::Release);
+                }
+                saving.store(all.contains("[+]"), Ordering::Release);
+                loading.store(all.contains("読込中"), Ordering::Release);
+            }
+        };
+        let pty = pty::spawn(cmd, COLS, ROWS, 16384, on_chunk);
+        let spawn_unix_ns = pty
+            .spawned_wall
+            .duration_since(UNIX_EPOCH)
+            .map_or(0, |d| d.as_nanos());
         (
             Term {
-                child,
-                writer,
+                child: pty.child,
+                writer: pty.writer,
                 parser,
                 a_count,
                 ready,
@@ -158,7 +149,7 @@ impl Term {
                 state,
                 spawn_unix_ns,
             },
-            t0,
+            pty.spawned_at,
         )
     }
 
@@ -180,7 +171,7 @@ impl Term {
         }
     }
 
-    /// 端末の大きさを変える (ConPTY へ。画面の解釈 (vt100) の大きさは変えない。計測は記録で行う)。
+    /// 端末の大きさを変える (`ConPTY` へ。画面の解釈 (vt100) の大きさは変えない。計測は記録で行う)。
     fn resize(&mut self, cols: u16, rows: u16) {
         self._master
             .resize(PtySize {
@@ -193,7 +184,7 @@ impl Term {
     }
 
     /// 終了を待つ。終了コード (待ちきれなければ `None`)。
-    /// 終了コードは、プロセスの後始末より先に取れる。後始末の間はシステムの CreateProcess が止まることがあり
+    /// 終了コードは、プロセスの後始末より先に取れる。後始末の間はシステムの `CreateProcess` が止まることがあり
     /// (exe が exFAT の上にあると約 225 ms)、続けて起動すると BM-101b に入る。プロセスのハンドルが signaled に
     /// なる (後始末が終わる) まで待ってから戻る (portable-pty の `wait` は終了コードが取れるとすぐ戻るので使わない)
     fn wait_exit(&mut self, limit: Duration) -> Option<u32> {
@@ -244,12 +235,6 @@ impl Drop for Term {
         self.wait_gone(WAIT);
         let _ = std::fs::remove_dir_all(&self.state);
     }
-}
-
-fn unix_ns() -> u128 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_or(0, |d| d.as_nanos())
 }
 
 /// 区間の記録 (eve-tui の `trace`) の 1 行。
@@ -710,6 +695,116 @@ fn proc_stat(pid: u32) -> (u64, f64) {
 }
 
 /// 100 MB の文書の検索バーで文字を打ち続け (1 文字ごとに全件の検索が走る)、その間のキー入力の判定区間 (FR-404 AC-1)。
+/// BM-103b-search-1m: 1 MB の文書で検索バーを開き、検索欄に `o` と `BackSpace` を交互に 30 ms ごとに打つ。`o` のたびに
+/// 一致 (画面の中に多数) を強調し直す。測るのは `o` の打鍵 (入力の読取完了 → 描画の write)。NFR-103 の条件から外した
+/// 「検索一致のハイライト有効」の代わりに、検索欄への入力の遅延を別に測る (docs/review/v0.3-findings.md の §3.3 の 1、2026-11-05 PO)。
+/// `regex` なら正規表現のモード (`Ctrl+K X`) で同じことをする (BM-103b-search-1m-regex。照合器のコンパイルを含む経路)。
+fn search_typing_1m(
+    dir: &Path,
+    file: &Path,
+    runs: usize,
+    warmup: usize,
+    regex: bool,
+) -> Vec<Duration> {
+    const VK_O: u64 = 0x4F;
+    let trace = dir.join(if regex {
+        "search1m-re.jsonl"
+    } else {
+        "search1m.jsonl"
+    });
+    let (mut t, _) = Term::start(&[file.to_str().unwrap()], "00000000", Some(&trace));
+    t.wait("ファイルの先頭", || t.marker.load(Ordering::Acquire));
+    t.send(b"\x06"); // Ctrl+F
+    thread::sleep(Duration::from_millis(300));
+    if regex {
+        t.send(b"\x0bx"); // Ctrl+K X (search.toggle_regex)
+        thread::sleep(Duration::from_millis(300));
+    }
+    for _ in 0..runs + warmup {
+        t.send(b"o");
+        thread::sleep(Duration::from_millis(30));
+        t.send(b"\x7f"); // BackSpace
+        thread::sleep(Duration::from_millis(30));
+    }
+    t.send(b"\x1b"); // 検索バーを閉じる
+    thread::sleep(Duration::from_millis(300));
+    t.send(b"\x11");
+    assert_eq!(t.wait_exit(WAIT), Some(0), "正常に終了しません");
+    let spans: Vec<Span> = read_spans(&trace)
+        .into_iter()
+        .filter(|s| s.name == "input.to_flush" && s.vk == Some(VK_O))
+        .collect();
+    let _ = std::fs::remove_file(&trace);
+    spans
+        .iter()
+        .skip(warmup)
+        .map(|s| ns_dur(s.end_ns - s.start_ns))
+        .collect()
+}
+
+/// BM-108 の語。100 MB の文書の中ほどの 1 行にだけある (`k` `s` を含めない: 含むと行ごとに畳み込む経路になる、03 §12.4)。
+const FIRST_MATCH_WORD: &str = "zebra";
+
+/// 100 MB の文書の中ほどの 1 行にだけ `FIRST_MATCH_WORD` がある文書。
+fn make_big_mid_word(dir: &Path) -> PathBuf {
+    let path = dir.join("big_100mb_mid.txt");
+    if !path.exists() {
+        let line = "0123456789 the quick brown fox 日本語の行です。0123456789\n";
+        let half = line.repeat(50 * 1024 * 1024 / line.len());
+        let body = format!("{half}0123456789 the {FIRST_MATCH_WORD} line\n{half}");
+        std::fs::write(&path, body).expect("大きいファイル");
+    }
+    path
+}
+
+/// BM-108 (01 NFR-108、09 §5.2): 100 MB を開き、先頭から検索バーで `FIRST_MATCH_WORD` と `Enter` を一度に送る。同期の検索の
+/// 範囲 (1 MiB) より遠いので、単発の検索ジョブが一致を見つけて一致へ移る。`Esc` → `Ctrl+Home` で先頭に戻して繰り返す。
+/// 区間は `search.first_match` (読取完了 → 一致の行が編集面に出た Frame の `write`)。
+fn first_match_100m(dir: &Path, runs: usize, warmup: usize) -> Vec<Duration> {
+    let path = make_big_mid_word(dir);
+    let trace = dir.join("first-match.jsonl");
+    let (mut t, _) = Term::start_env(
+        &[path.to_str().unwrap()],
+        "quick brown",
+        Some(&trace),
+        &[("EVE_TRACE_MATCH", FIRST_MATCH_WORD)],
+    );
+    t.wait("開く", || t.marker.load(Ordering::Acquire));
+    thread::sleep(Duration::from_millis(4000));
+    for _ in 0..runs + warmup {
+        t.send(b"\x06"); // Ctrl+F
+        thread::sleep(Duration::from_millis(300));
+        t.send(format!("{FIRST_MATCH_WORD}\r").as_bytes());
+        thread::sleep(Duration::from_millis(700));
+        t.send(b"\x1b"); // 検索バーを閉じる
+        thread::sleep(Duration::from_millis(200));
+        t.send(b"\x1b[1;5H"); // Ctrl+Home
+        thread::sleep(Duration::from_millis(300));
+    }
+    t.send(b"\x11");
+    assert_eq!(t.wait_exit(WAIT), Some(0), "正常に終了しません");
+    // 検索語・Enter の読取から始まる区間だけを採る (Esc / Ctrl+Home の読取の後の Frame にも語が出ていることがある)
+    let spans: Vec<Span> = read_spans(&trace)
+        .into_iter()
+        .filter(|s| {
+            s.name == "search.first_match"
+                && s.vk
+                    .is_some_and(|v| v == 0x0D || (0x41..=0x5A).contains(&v))
+        })
+        .collect();
+    let _ = std::fs::remove_file(&trace);
+    assert!(
+        spans.len() >= runs + warmup,
+        "search.first_match が足りません ({} 件)",
+        spans.len()
+    );
+    spans
+        .iter()
+        .skip(warmup)
+        .map(|s| ns_dur(s.end_ns - s.start_ns))
+        .collect()
+}
+
 fn search_load(dir: &Path, runs: usize, warmup: usize) -> Vec<Duration> {
     let path = make_big(dir, "big_100mb.txt", 100);
     let trace = dir.join("search.jsonl");
@@ -945,6 +1040,39 @@ fn main() {
         report(
             "BM-103b-search",
             "100 MB の全件検索中のキー入力 (入力の読取完了 → 描画の write)",
+            v,
+            json,
+            quick,
+        );
+    }
+    if traced && want("103s") {
+        let file = make_one_mb(&dir);
+        let v = search_typing_1m(&dir, &file, runs, warmup, false);
+        report(
+            "BM-103b-search-1m",
+            "1 MB の文書の検索欄への入力 (一致を強調し直す。入力の読取完了 → 描画の write)",
+            v,
+            json,
+            quick,
+        );
+    }
+    if traced && want("103r") {
+        let file = make_one_mb(&dir);
+        let v = search_typing_1m(&dir, &file, runs, warmup, true);
+        report(
+            "BM-103b-search-1m-regex",
+            "1 MB の文書の検索欄への正規表現の入力 (一致を強調し直す。入力の読取完了 → 描画の write)",
+            v,
+            json,
+            quick,
+        );
+    }
+    if traced && want("108") {
+        let n = if quick { 5 } else { 30 };
+        let v = first_match_100m(&dir, n, 2);
+        report(
+            "BM-108",
+            "100 MB の文書の最初の一致の表示 (検索語と Enter の読取完了 → 一致の行が出た Frame の write。30 回)",
             v,
             json,
             quick,

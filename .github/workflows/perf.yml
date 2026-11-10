@@ -2,7 +2,7 @@
 # 同じランナーで測って比べる。劣化は Actions の警告とジョブの要約に出すだけで、ブロックしない (必須のチェックにしない)。
 #   instr (linux):  valgrind (callgrind) の命令数。+5% 超で警告 (決定的)
 #   time (windows): 同じランナーでの wall-clock の A/B (交互に測った中央値)。+10% 超で警告 (共有ランナーなので目安)
-# 計測の本体は eve-testkit の bm_instr、比較は cargo xtask perf-diff。
+# 計測の本体は eve-testkit の bm_instr (確保の回数は bm_allocs)、比較は cargo xtask perf-diff。
 name: perf
 
 on:
@@ -48,6 +48,9 @@ jobs:
             runner: ubuntu-24.04
           - mode: time
             runner: windows-2025
+          # 確保の回数 (bm_allocs。決定的なので OS を問わない。docs/review/v0.3-findings.md の §3.3 の 3)
+          - mode: allocs
+            runner: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

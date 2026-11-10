@@ -1,6 +1,10 @@
+use eve_text::{ByteOff, Text, TextRead};
+use eve_view::JobId;
+
 use super::*;
-use crate::time::Tick;
-use eve_text::Text;
+use crate::jobs::cancel::CancelToken;
+use crate::jobs::{JobError, JobResult};
+use crate::time::{Clock, Tick};
 
 struct Fixed;
 impl Clock for Fixed {
@@ -33,9 +37,29 @@ fn 一致は重ならないものを左から取る() {
 }
 
 #[test]
+fn コンパイルの結果は複製と共有し_条件を変えると作り直す() {
+    let q = lit("abc").with_regex(true).with_case(Case::Sensitive);
+    let m = q.matcher().unwrap();
+    // 複製 (検索ジョブに渡すもの) は同じ照合器を使う
+    assert!(std::sync::Arc::ptr_eq(&m, &q.clone().matcher().unwrap()));
+    assert!(std::sync::Arc::ptr_eq(&m, &q.matcher().unwrap()));
+    // 条件を変えた問い合わせは作り直す。比べるのは条件だけ
+    let insensitive = q.clone().with_case(Case::Insensitive);
+    assert!(!std::sync::Arc::ptr_eq(&m, &insensitive.matcher().unwrap()));
+    assert_eq!(q, lit("abc").with_regex(true).with_case(Case::Sensitive));
+    assert_ne!(q, insensitive);
+    assert_eq!(find_all("ABC abc", &insensitive), [(0, 3), (4, 7)]);
+    assert_eq!(find_all("ABC abc", &q), [(4, 7)]);
+    // 誤りも覚える
+    let bad = lit("(").with_regex(true);
+    assert!(bad.compile().is_err() && bad.clone().compile().is_err());
+}
+
+#[test]
 fn 空の検索語は何にも一致しない() {
     assert!(lit("").matcher().is_none());
-    assert!(find_all("abc", &lit("")).is_empty());
+    let actual = find_all("abc", &lit(""));
+    assert!(actual.is_empty(), "{actual:?}");
 }
 
 #[test]
@@ -57,7 +81,8 @@ fn 日本語と全角英字() {
     assert_eq!(find_all("日本語の日本", &lit("日本")), [(0, 6), (12, 18)]);
     // 全角英字は大小の区別がある文字。半角とは同一視しない
     assert_eq!(find_all("Ａａ", &lit("ａ")).len(), 2);
-    assert!(find_all("Ａａ", &lit("a")).is_empty());
+    let actual = find_all("Ａａ", &lit("a"));
+    assert!(actual.is_empty(), "{actual:?}");
 }
 
 #[test]
@@ -71,11 +96,13 @@ fn 畳み込みで長さが変わる文字を含む行でも位置は元の文�
 #[test]
 fn 書記素の途中に当たった候補は捨てる() {
     // e + COMBINING ACUTE: `e` だけには一致しない
-    assert!(find_all("e\u{301}", &lit("e")).is_empty());
+    let actual = find_all("e\u{301}", &lit("e"));
+    assert!(actual.is_empty(), "{actual:?}");
     assert_eq!(find_all("e\u{301}e", &lit("e")), [(3, 4)]);
     // 絵文字の ZWJ 列の先頭
     let family = "👨\u{200D}👩\u{200D}👧";
-    assert!(find_all(family, &lit("👨")).is_empty());
+    let actual = find_all(family, &lit("👨"));
+    assert!(actual.is_empty(), "{actual:?}");
 }
 
 // verifies: AC-FR-404-3

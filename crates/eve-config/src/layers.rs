@@ -3,10 +3,7 @@
 //!
 //! 起動時 (bin) と `config.reload` (core) が同じ規則で合成するよう、読み込んだ本文を受け取る純関数にしている。
 
-use crate::config::{
-    BackspaceUnit, ColorMode, Config, DefaultEncoding, DefaultLineEnding, ExternalChangePolicy,
-    IndentUnit, Osc52Policy, ShowWhitespace, ThemeBackground, WrapIndent, WrapMode, load_str_onto,
-};
+use crate::config::{Config, declared_values, dump_rank, load_str_onto};
 use crate::{DiagKind, Diagnostic, Loaded, Severity};
 
 /// ユーザー層のファイル 1 つ。`text` は、無ければ `Ok(None)`、読めなければ理由。
@@ -14,12 +11,14 @@ use crate::{DiagKind, Diagnostic, Loaded, Severity};
 pub struct Source {
     /// 診断に出す名前 (`config.toml`、`--config` のパス)。
     pub name: String,
+    /// 本文。ファイルが無ければ `Ok(None)`、読めなければ `Err` に理由。
     pub text: Result<Option<String>, String>,
 }
 
 /// 合成の結果。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Resolved {
+    /// 合成した設定。
     pub config: Config,
     /// (名前, 診断)。診断の無いものは含めない。
     pub reports: Vec<(String, Vec<Diagnostic>)>,
@@ -107,137 +106,12 @@ pub fn resolve(sources: &[Source], sets: &[String]) -> Resolved {
     }
 }
 
-/// 公開キーの (キー, TOML の値の表記)。並びは 07 §5 の表の順に近い、セクションごと。
+/// 公開キーの (キー, TOML の値の表記)。並びはセクションごと (07 §5 の表の順) で、セクションの中は宣言の表の順。
+/// 入れ子のキー (`file.swap.*`・`editor.undo.*`) は、そのセクションの直下のキーの後に置く。
 pub fn values(c: &Config) -> Vec<(&'static str, String)> {
-    let s = |v: &str| format!("\"{v}\"");
-    vec![
-        ("editor.tab_width", c.tab_width.to_string()),
-        (
-            "editor.indent_unit",
-            s(match c.indent_unit {
-                IndentUnit::Tab => "tab",
-                IndentUnit::Space => "space",
-            }),
-        ),
-        ("editor.indent_width", c.indent_width.to_string()),
-        (
-            "editor.backspace_unit",
-            s(match c.backspace_unit {
-                BackspaceUnit::Grapheme => "grapheme",
-                BackspaceUnit::Codepoint => "codepoint",
-            }),
-        ),
-        (
-            "editor.undo.total_max_bytes",
-            c.undo_total_max_bytes.to_string(),
-        ),
-        (
-            "file.default_encoding",
-            s(match c.default_encoding {
-                DefaultEncoding::Utf8 => "utf-8",
-                DefaultEncoding::Utf8Bom => "utf-8-bom",
-                DefaultEncoding::Utf16Le => "utf-16le",
-                DefaultEncoding::Utf16Be => "utf-16be",
-                DefaultEncoding::ShiftJis => "shift_jis",
-                DefaultEncoding::EucJp => "euc-jp",
-                DefaultEncoding::Iso2022Jp => "iso-2022-jp",
-                DefaultEncoding::System => "system",
-            }),
-        ),
-        (
-            "file.default_line_ending",
-            s(match c.default_line_ending {
-                DefaultLineEnding::Lf => "lf",
-                DefaultLineEnding::Crlf => "crlf",
-                DefaultLineEnding::Cr => "cr",
-                DefaultLineEnding::Native => "native",
-            }),
-        ),
-        (
-            "file.huge_file_warn_bytes",
-            c.huge_file_warn_bytes.to_string(),
-        ),
-        (
-            "file.long_line_threshold",
-            c.long_line_threshold.to_string(),
-        ),
-        (
-            "file.reload_on_external_change",
-            s(match c.reload_on_external_change {
-                ExternalChangePolicy::Ask => "ask",
-                ExternalChangePolicy::AutoIfUnmodified => "auto_if_unmodified",
-                ExternalChangePolicy::Never => "never",
-            }),
-        ),
-        ("file.swap.enabled", c.swap_enabled.to_string()),
-        ("file.swap.interval_ms", c.swap_interval_ms.to_string()),
-        (
-            "file.swap.min_interval_ms",
-            c.swap_min_interval_ms.to_string(),
-        ),
-        ("file.swap.max_bytes", c.swap_max_bytes.to_string()),
-        (
-            "file.swap.exclude_secret_files",
-            c.swap_exclude_secret_files.to_string(),
-        ),
-        ("view.ambiguous_width", c.ambiguous_width.to_string()),
-        (
-            "view.wrap",
-            s(match c.wrap {
-                WrapMode::Off => "off",
-                WrapMode::Soft => "soft",
-                WrapMode::Word => "word",
-            }),
-        ),
-        (
-            "view.wrap_indent",
-            s(match c.wrap_indent {
-                WrapIndent::None => "none",
-                WrapIndent::Same => "same",
-            }),
-        ),
-        ("view.wrap_kinsoku", c.wrap_kinsoku.to_string()),
-        (
-            "view.show_whitespace",
-            s(match c.show_whitespace {
-                ShowWhitespace::Off => "off",
-                ShowWhitespace::Minimal => "minimal",
-            }),
-        ),
-        (
-            "theme.color_mode",
-            s(match c.color_mode {
-                ColorMode::Auto => "auto",
-                ColorMode::TrueColor => "truecolor",
-                ColorMode::Color256 => "256",
-                ColorMode::Color16 => "16",
-                ColorMode::None => "none",
-            }),
-        ),
-        ("theme.name", s(c.theme_name.as_str())),
-        (
-            "theme.background",
-            s(match c.theme_background {
-                ThemeBackground::Auto => "auto",
-                ThemeBackground::Dark => "dark",
-                ThemeBackground::Light => "light",
-            }),
-        ),
-        ("ui.locale", s(c.ui_locale.map_or("auto", |l| l.code()))),
-        ("ui.mouse", c.mouse.to_string()),
-        ("ui.hint_bar", c.hint_bar.to_string()),
-        ("ui.mouse_wheel_lines", c.mouse_wheel_lines.to_string()),
-        ("ui.which_key_delay_ms", c.which_key_delay_ms.to_string()),
-        (
-            "clipboard.osc52",
-            s(match c.osc52 {
-                Osc52Policy::Auto => "auto",
-                Osc52Policy::Always => "always",
-                Osc52Policy::Never => "never",
-            }),
-        ),
-        ("clipboard.osc52_max_bytes", c.osc52_max_bytes.to_string()),
-    ]
+    let mut v = declared_values(c);
+    v.sort_by_key(|(k, _)| dump_rank(k));
+    v
 }
 
 /// `--dump-config` の出力。TOML ではセクションごとに並べ、JSON では平らなキーの表にする。
@@ -270,7 +144,7 @@ pub fn dump(c: &Config, json: bool) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::load_str;
+    use crate::{Osc52Policy, WrapMode, load_str};
 
     fn src(name: &str, text: &str) -> Source {
         Source {
@@ -335,5 +209,48 @@ mod tests {
         // 公開キーをすべて出す
         assert_eq!(values(&c).len(), crate::config::KEYS.len());
         assert!(dump(&c, true).contains("\"editor.tab_width\": 8"));
+    }
+
+    #[test]
+    fn 出力の並びはセクションごとで_入れ子のキーは後() {
+        let keys: Vec<&str> = values(&Config::default())
+            .into_iter()
+            .map(|(k, _)| k)
+            .collect();
+        assert_eq!(
+            keys,
+            [
+                "editor.tab_width",
+                "editor.indent_unit",
+                "editor.indent_width",
+                "editor.backspace_unit",
+                "editor.undo.total_max_bytes",
+                "file.default_encoding",
+                "file.default_line_ending",
+                "file.huge_file_warn_bytes",
+                "file.long_line_threshold",
+                "file.reload_on_external_change",
+                "file.swap.enabled",
+                "file.swap.interval_ms",
+                "file.swap.min_interval_ms",
+                "file.swap.max_bytes",
+                "file.swap.exclude_secret_files",
+                "view.ambiguous_width",
+                "view.wrap",
+                "view.wrap_indent",
+                "view.wrap_kinsoku",
+                "view.show_whitespace",
+                "theme.color_mode",
+                "theme.name",
+                "theme.background",
+                "ui.locale",
+                "ui.mouse",
+                "ui.hint_bar",
+                "ui.mouse_wheel_lines",
+                "ui.which_key_delay_ms",
+                "clipboard.osc52",
+                "clipboard.osc52_max_bytes",
+            ]
+        );
     }
 }

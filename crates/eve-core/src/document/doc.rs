@@ -7,11 +7,11 @@ use std::sync::Arc;
 use eve_text::{ByteOff, ChangeSet, ChangeSetError, Selection, Snapshot, Text, TextRead};
 use eve_view::Revision;
 
-use crate::fs::FileStamp;
-use crate::fspath::FsPath;
+use crate::io::fs::FileStamp;
+use crate::io::fspath::FsPath;
 
 use super::format::{
-    EolStats, LoadState, ReadOnlyReasons, TextFormat, count_long_lines, count_range,
+    EolStats, FormatRestore, LoadState, ReadOnlyReasons, TextFormat, count_long_lines, count_range,
     long_lines_touched,
 };
 use super::history::{NodeId, RecordOutcome, UndoHistory};
@@ -23,18 +23,25 @@ pub enum AppliedTx {
     /// 変更のない Transaction (手順 1)。文書・Revision・履歴・通知のどれも変わらない。
     /// 発行 View の Selection だけを `selection` (あれば) に更新する。
     Identity {
+        /// 発行 View に設定する Selection (`tx.selection_after`)。無ければ変えない。
         selection: Option<Selection>,
     },
+    /// 文書を変えた。
     Changed(Applied),
 }
 
 /// 適用した変更。呼び出し側が View・Decoration の写像と通知に使う。
 #[derive(Clone, Debug)]
 pub struct Applied {
+    /// 適用の前の Revision。
     pub old_revision: Revision,
+    /// 適用の後の Revision。
     pub revision: Revision,
+    /// 適用した `ChangeSet` (`old_revision` の文書に対するもの)。
     pub changes: Arc<ChangeSet>,
+    /// 変更の出どころ。
     pub origin: Origin,
+    /// Undo による変更。
     pub is_undo: bool,
     /// 発行 View に設定する Selection。通常の編集は `selection_after` (なければ `None` = 写像)、
     /// Undo は `selection_before`、Redo は `selection_after`。
@@ -43,10 +50,16 @@ pub struct Applied {
     pub record: Option<RecordOutcome>,
 }
 
+/// Transaction を適用できない理由。どの場合も文書は変えない。
 #[derive(Debug)]
 pub enum ApplyError {
     /// `tx.changes.len_before` が文書の長さと違う (古い Revision に基づく)。
-    StaleBase { expected: usize, actual: usize },
+    StaleBase {
+        /// Transaction が前提とする文書の長さ (バイト)。
+        expected: usize,
+        /// 今の文書の長さ (バイト)。
+        actual: usize,
+    },
     /// 読み取り専用、または読込が終わっていない。
     Rejected,
     /// 操作の境界が char 境界でない (文書は変えない)。
@@ -56,7 +69,9 @@ pub enum ApplyError {
 /// 表示の設定 (`editor.tab_width`・`view.ambiguous_width`、07 §5.0)。Editor が文書を持つときに設定から写す。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct DisplaySettings {
+    /// タブの幅 (表示列。`editor.tab_width`)。
     pub tab_width: u8,
+    /// East Asian Width が曖昧な文字を幅 2 で数える (`view.ambiguous_width = 2`)。
     pub ambiguous_wide: bool,
     /// 全角スペースとタブを記号で示す (`view.show_whitespace = "minimal"`、03 §13.2)。
     pub show_whitespace: bool,
@@ -72,31 +87,62 @@ impl Default for DisplaySettings {
     }
 }
 
+/// 1 つの文書 (02 §5.1、03 §6)。本文・Revision・Undo 履歴と、ファイルの形式・読み取り専用の理由・読込状態を持つ。
+/// 本文を変えるのは `apply` / `undo` / `redo` だけ。
 pub struct Document {
     text: Text,
+    /// ファイルのパス。無題の文書は `None`。
     pub path: Option<FsPath>,
+    /// 最後に読んだ・保存したときのファイルの Stamp (外部変更の照合に使う)。無題・未保存の新規は `None`。
     pub disk_stamp: Option<FileStamp>,
+    /// 文書の形式 (文字コード・BOM・改行など)。
     pub format: TextFormat,
     revision: Revision,
     history: UndoHistory,
+    /// 読み取り専用の理由 (空なら編集できる。読込中は `load_state` で別に判定する)。
     pub read_only: ReadOnlyReasons,
     /// 読み取り専用属性 (`FileAttribute`) を `file.toggle_read_only` で解除した。上書き保存は「読み取り専用を解除して保存」の確認を経る (03 §9.6)。
     pub attribute_released: bool,
     /// 外部変更の確認で「無視」を選んだときのファイルの状態 (03 §9.5)。フォーカス復帰で同じ状態を見つけても、もう尋ねない。
     /// 保存の成功・再読込で忘れる。
     pub external_seen: Option<FileStamp>,
+    /// 読込の状態。
     pub load_state: LoadState,
     /// 読込中の進捗 (百分率)。ステータスバーの `[読込中 n%]` に出す。
     pub load_percent: u8,
+    /// 表示の設定 (設定から写す)。
     pub display: DisplaySettings,
-    /// 長い行の表示単位の計算結果 (最後の 1 行分)。1 回の操作で同じ行を何度も展開しないための覚え。
-    /// 中身の型は表示の層 (`editor::layout`) だけが知る。
-    pub(crate) layout_cache: std::cell::RefCell<Option<Box<dyn std::any::Any>>>,
-    /// 長大行の列の索引 (直近の数行分、03 §11.5.1)。中身の型は `editor::layout` だけが知る。
-    pub(crate) long_cache: std::cell::RefCell<Option<Box<dyn std::any::Any>>>,
+    /// レイアウトの覚え (長い行の表示単位・長大行の列の索引)。読み書きするのは `layout/` だけ。
+    pub(crate) layout_cache: std::cell::RefCell<crate::layout::LayoutCache>,
+    /// 無題の通し番号 (`無題-{n}` の n、03 §9.8)。`EditorState::add_document` が振る。名前を付けて保存した後も戻さない。
+    pub(crate) untitled_no: Option<u32>,
+}
+
+/// `eol_stats` の更新の窓 (03 §6.5): 編集ごとに旧 `[s-1, e+1)`・新 `[s-1, s+|x|+1)` を取り、
+/// 旧の窓どうしが重なるか接する (間が 1 バイト以下の) ものを 1 つにまとめる (同じ区切りを二重に数えない)。
+/// 文書の範囲への切り詰めと CRLF の間での広げは `count_range` が行う。
+fn eol_windows(cs: &ChangeSet) -> Vec<((usize, usize), (usize, usize))> {
+    let mut out: Vec<((usize, usize), (usize, usize))> = Vec::new();
+    for (old, new) in cs.changed_ranges() {
+        let o = (old.start.0.saturating_sub(1), old.end.0 + 1);
+        let n = (new.start.0.saturating_sub(1), new.end.0 + 1);
+        match out.last_mut() {
+            Some((po, pn)) if o.0 <= po.1 + 1 => {
+                po.1 = o.1;
+                pn.1 = n.1;
+            }
+            _ => out.push((o, n)),
+        }
+    }
+    out
 }
 
 impl Document {
+    /// 同じ `DocumentId` の旧文書を差し替えるとき、Revision を旧文書の続き (`prev` の次) にする (03 §17.1: 文書ごとに単調増加)。
+    pub(crate) fn continue_revision(&mut self, prev: Revision) {
+        self.revision = prev.next();
+    }
+
     /// 新規文書 (無題)。履歴の根が保存点。
     pub fn new_untitled() -> Document {
         Document::from_text(Text::new(), TextFormat::new_document())
@@ -119,27 +165,32 @@ impl Document {
             load_state: LoadState::Ready,
             load_percent: 0,
             display: DisplaySettings::default(),
-            layout_cache: std::cell::RefCell::new(None),
-            long_cache: std::cell::RefCell::new(None),
+            layout_cache: std::cell::RefCell::default(),
+            untitled_no: None,
         }
     }
 
+    /// 本文。
     pub fn text(&self) -> &Text {
         &self.text
     }
 
+    /// 本文の Snapshot (ジョブに渡す。以後の編集の影響を受けない)。
     pub fn snapshot(&self) -> Snapshot {
         self.text.snapshot()
     }
 
+    /// 今の Revision (本文が変わるたびに増える。03 §17.1)。
     pub fn revision(&self) -> Revision {
         self.revision
     }
 
+    /// Undo 履歴。
     pub fn history(&self) -> &UndoHistory {
         &self.history
     }
 
+    /// 保存点から変わっている (未保存の変更がある)。
     pub fn is_dirty(&self) -> bool {
         self.history.is_dirty()
     }
@@ -150,6 +201,11 @@ impl Document {
     }
 
     /// Transaction を適用する (03 §6.5 の手順 1〜6・11)。
+    ///
+    /// # Errors
+    ///
+    /// `tx` が古い Revision に基づくなら `StaleBase`、編集できない (読み取り専用・読込中。`Origin::Recovery` / `Reload` は除く)
+    /// なら `Rejected`、境界が char 境界でなければ `Text`。いずれも文書は変えない。
     pub fn apply(&mut self, tx: &Transaction) -> Result<AppliedTx, ApplyError> {
         // 1. 前提検査
         if tx.changes.len_before() != self.text.len_bytes() {
@@ -165,8 +221,7 @@ impl Document {
         if tx.changes.is_identity() {
             // 本文が同じ再読込: 書式と理由だけ差し替える (履歴のノードは作らない)
             if let Some(fc) = &tx.format_change {
-                self.format = fc.after.format.clone();
-                self.read_only = fc.after.read_only;
+                self.restore_format(fc.side(true));
             }
             return Ok(AppliedTx::Identity {
                 selection: tx.selection_after.clone(),
@@ -174,8 +229,12 @@ impl Document {
         }
         // 2.〜4. 適用前の Snapshot、逆変換、適用。`Text::apply` は検査を先に行い、失敗では何も変えない
         let before = self.text.snapshot();
-        let inverse = tx.changes.invert(&before);
         self.text.apply(&tx.changes).map_err(ApplyError::Text)?;
+        let inverse = tx
+            .coarse_undo
+            .then(|| super::coarse_inverse(&tx.changes, &before, &self.text))
+            .flatten()
+            .unwrap_or_else(|| tx.changes.invert(&before));
         self.update_eol_stats(&before, &tx.changes);
         // 5. Revision
         let old_revision = self.revision;
@@ -186,15 +245,14 @@ impl Document {
         } else {
             Some(self.history.record(tx, inverse))
         };
-        // 再読込: 書式と読み取り専用の理由を新しい内容のものに差し替える (前後の値は Undo ノードが持つ)
+        // 再読込・改行コードの変換: 書式を新しいものに差し替える (前後の値は Undo ノードが持つ)
         if let Some(fc) = &tx.format_change {
-            self.format = fc.after.format.clone();
-            self.read_only = fc.after.read_only;
+            self.restore_format(fc.side(true));
         }
         Ok(AppliedTx::Changed(Applied {
             old_revision,
             revision: self.revision,
-            changes: Arc::new(tx.changes.clone()),
+            changes: Arc::clone(&tx.changes),
             origin: tx.origin.clone(),
             is_undo: tx.is_undo,
             selection: tx.selection_after.clone(),
@@ -204,6 +262,10 @@ impl Document {
 
     /// Undo。取り消すものがなければ `None`。読み取り専用では `Err(Rejected)` (Reload・Recovery のノードは例外にしない:
     /// 03 §7.2 の `edit.undo` の when は `!doc.read_only`)。
+    ///
+    /// # Errors
+    ///
+    /// 編集できない (読み取り専用・読込中) なら `Rejected`。
     pub fn undo(&mut self) -> Result<Option<Applied>, ApplyError> {
         if !self.is_editable() {
             return Err(ApplyError::Rejected);
@@ -220,6 +282,10 @@ impl Document {
     }
 
     /// Redo。やり直すものがなければ `None`。
+    ///
+    /// # Errors
+    ///
+    /// 編集できない (読み取り専用・読込中) なら `Rejected`。
     pub fn redo(&mut self) -> Result<Option<Applied>, ApplyError> {
         if !self.is_editable() {
             return Err(ApplyError::Rejected);
@@ -237,31 +303,41 @@ impl Document {
 
     fn apply_step(
         &mut self,
-        changes: ChangeSet,
+        changes: Arc<ChangeSet>,
         origin: Origin,
         selection: Option<Selection>,
-        format: Option<super::format::FormatState>,
+        format: Option<FormatRestore>,
     ) -> Result<Applied, ApplyError> {
         let before = self.text.snapshot();
         // 履歴と文書が食い違った場合も、文書は変えない (履歴の不整合は呼び出しの誤り)
         self.text.apply(&changes).map_err(ApplyError::Text)?;
         self.update_eol_stats(&before, &changes);
-        // 再読込のノードは、書式と読み取り専用の理由も一緒に戻す (03 §7.2)
+        // 再読込・改行コードの変換のノードは、書式も一緒に戻す (03 §7.2)
         if let Some(f) = format {
-            self.format = f.format;
-            self.read_only = f.read_only;
+            self.restore_format(f);
         }
         let old_revision = self.revision;
         self.revision = self.revision.next();
         Ok(Applied {
             old_revision,
             revision: self.revision,
-            changes: Arc::new(changes),
+            changes,
             origin,
             is_undo: true,
             selection,
             record: None,
         })
+    }
+
+    /// 書式を戻す (03 §7.2): 再読込は `TextFormat` 全体と読み取り専用の理由、改行コードの変換は `default_eol` だけ。
+    fn restore_format(&mut self, f: FormatRestore) {
+        match f {
+            FormatRestore::State(st) => {
+                self.format = st.format;
+                self.read_only = st.read_only;
+            }
+            FormatRestore::DefaultEol(eol) => self.format.default_eol = eol,
+        }
     }
 
     /// 再読込の完了 (03 §9.5): 読み込んだ内容がディスクの状態なので、ここを保存点にして `Ready` に戻す。
@@ -297,24 +373,21 @@ impl Document {
         self.history.seal();
     }
 
-    /// 手順 4 の `eol_stats` と `long_lines` の更新 (INV-D5): 変更ごとに、旧文書と新文書の窓の改行を数え直して差し替える。
+    /// 手順 4 の `eol_stats` と `long_lines` の更新 (INV-D5): 窓ごとに、旧文書と新文書の改行を数え直して差し替える。
     fn update_eol_stats(&mut self, before: &Snapshot, cs: &ChangeSet) {
+        let windows = eol_windows(cs);
         let mut stats = self.format.eol_stats;
-        for (old, new) in cs.changed_ranges() {
-            let o = count_range(before, old.start.0.saturating_sub(1), old.end.0 + 1);
-            let n = count_range(&self.text, new.start.0.saturating_sub(1), new.end.0 + 1);
+        for (old, new) in &windows {
+            let o = count_range(before, old.0, old.1);
+            let n = count_range(&self.text, new.0, new.1);
             stats = stats.replaced(o, n);
         }
         self.format.eol_stats = stats;
-        // 長大行の数: 変更が触れた行だけを、変更の前後で数えて差し替える
+        // 長大行の数: 同じ窓 (端の前後 1 バイトを含む) が触れた行だけを、変更の前後で数えて差し替える。
+        // 窓の端の行を含めるのは、CR と LF の合体・分離で隣の行の境目が動くため (SAF-13)
         let th = self.format.long_line_threshold;
-        let ranges: Vec<_> = cs.changed_ranges().collect();
-        let old = long_lines_touched(before, ranges.iter().map(|(o, _)| (o.start.0, o.end.0)), th);
-        let new = long_lines_touched(
-            &self.text,
-            ranges.iter().map(|(_, n)| (n.start.0, n.end.0)),
-            th,
-        );
+        let old = long_lines_touched(before, windows.iter().map(|(o, _)| *o), th);
+        let new = long_lines_touched(&self.text, windows.iter().map(|(_, n)| *n), th);
         self.format.long_lines = (self.format.long_lines + new).saturating_sub(old);
     }
 
@@ -329,10 +402,12 @@ impl Document {
             .slice_to_string(eve_text::ByteRange::all(self.text.len_bytes()))
     }
 
+    /// 本文の長さ (バイト)。
     pub fn len_bytes(&self) -> usize {
         self.text.len_bytes()
     }
 
+    /// バイト位置 `i` を文書の長さに切り詰めた `ByteOff` (char 境界には揃えない)。
     pub fn byte_off(&self, i: usize) -> ByteOff {
         ByteOff(i.min(self.text.len_bytes()))
     }

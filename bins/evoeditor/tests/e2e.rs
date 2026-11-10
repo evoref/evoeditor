@@ -1,22 +1,25 @@
 //! L5 端末 E2E (docs/09 §3.6): 実バイナリを擬似端末 (portable-pty。Windows は ConPTY、Linux は openpty) で起動し、
-//! `vt100` で画面を解釈して検査する。遅く不安定になりやすいので最小限。生バイト列は比較しない (ConPTY は出力を再合成するため)。
+//! `vt100` で画面を解釈して検査する。遅く不安定になりやすいので最小限。生バイト列は比較しない (`ConPTY` は出力を再合成するため)。
 //! Windows 固有の経路 (コンソールイベント・DLL の探索・UNC・Win32 のクリップボード) は `cfg(windows)`、Unix のシグナルの経路は
 //! `cfg(unix)` の試験にする。
 //!
-//! v0.1 の M2 で成り立つシナリオ: (1) 起動と終了、(2) 未保存の終了の確認ダイアログ、(3) 制御キーがアプリに届く、
+//! 主なシナリオ: (1) 起動と終了、(2) 未保存の終了の確認ダイアログ、(3) 制御キーがアプリに届く、
 //! (5) 端末の復元、(9) 貼り付けの安全。(7) のパニック注入は feature test-hooks のときだけ走る。
 
 #![cfg(any(windows, target_os = "linux"))]
 // 検査の失敗は panic で伝える。
 #![allow(clippy::print_stdout, clippy::print_stderr)]
 
-use std::io::{Read, Write};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use portable_pty::{Child, CommandBuilder, MasterPty, PtySize, native_pty_system};
+use portable_pty::{Child, MasterPty, PtySize};
+
+#[path = "common/pty.rs"]
+mod pty;
 
 static STATE_SEQ: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
 
@@ -54,30 +57,20 @@ impl Session {
 
     /// 環境変数を足して起動する (`EVE_TEST_HOOK` など)。
     fn start_with(args: &[&str], state: Option<PathBuf>, envs: &[(&str, &str)]) -> Session {
-        let pty = native_pty_system()
-            .openpty(PtySize {
-                rows: ROWS,
-                cols: COLS,
-                pixel_width: 0,
-                pixel_height: 0,
-            })
-            .expect("擬似端末を開けません");
-        let mut cmd = CommandBuilder::new(exe());
-        cmd.args(args);
-        cmd.env_remove("NO_COLOR");
-        cmd.env_remove("WT_SESSION");
-        cmd.env_remove("TERM_PROGRAM");
         // 利用者の状態ディレクトリを汚さない (保存中フラグ・退避はここに書く)
         let state = state.unwrap_or_else(|| {
-            std::env::temp_dir().join(format!(
+            let dir = std::env::temp_dir().join(format!(
                 "evo-e2e-state-{}-{}",
                 std::process::id(),
                 STATE_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
-            ))
+            ));
+            // 前の実行が落ちて片付けなかった同じ名前のディレクトリを拾わない (Windows はプロセス番号を使い回すので、
+            // 名前が重なると前の退避が残って「退避は 1 件」などの検査が落ちる)。試験が渡した state には触れない
+            let _ = std::fs::remove_dir_all(&dir);
+            dir
         });
-        cmd.env("EVE_STATE_DIR", &state);
         // OS の言語に依らず日本語で始める (言語の選択を試すテストは `envs` や引数で上書きする)
-        cmd.env("EVE_LANG", "ja");
+        let mut cmd = pty::command(&exe(), args, &state);
         // 開発者の実際の設定 (%APPDATA%) を読まない。設定ディレクトリを指定しない試験は、スワップを切った空に近い設定で動かす
         // (スワップの書込・復旧の提案は負荷で時機が揺れ、無関係の試験を邪魔する)。スワップを試す試験は `E2E_SWAP` を渡す
         // (この変数は製品へは渡さない、試験側の目印)。
@@ -101,43 +94,19 @@ enabled = {swap}
                 cmd.env(k, v);
             }
         }
-        let child = pty.slave.spawn_command(cmd).expect("起動できません");
-        drop(pty.slave);
-        let mut reader = pty.master.try_clone_reader().expect("reader");
-        let writer: Arc<Mutex<Box<dyn Write + Send>>> =
-            Arc::new(Mutex::new(pty.master.take_writer().expect("writer")));
-        let parser = Arc::new(Mutex::new(vt100::Parser::new(
-            std::num::NonZeroU16::new(ROWS).expect("ROWS は 1 以上"),
-            std::num::NonZeroU16::new(COLS).expect("COLS は 1 以上"),
-            0,
-        )));
+        let parser = pty::parser(COLS, ROWS);
         let raw = Arc::new(Mutex::new(Vec::new()));
-        {
-            let (parser, raw, writer) = (parser.clone(), raw.clone(), writer.clone());
-            // テストの駆動側の読み取りスレッド (製品のスレッドではない。R11 の対象外)
-            #[allow(clippy::disallowed_methods)]
-            thread::spawn(move || {
-                let mut buf = [0u8; 4096];
-                while let Ok(n) = reader.read(&mut buf) {
-                    if n == 0 {
-                        break;
-                    }
-                    let chunk = &buf[..n];
-                    // ConPTY は起動時にカーソル位置を尋ねる (DSR)。端末として答える
-                    if chunk.windows(4).any(|w| w == b"\x1b[6n")
-                        && let Ok(mut w) = writer.lock()
-                    {
-                        let _ = w.write_all(b"\x1b[1;1R");
-                        let _ = w.flush();
-                    }
-                    raw.lock().unwrap().extend_from_slice(chunk);
-                    parser.lock().unwrap().process(chunk);
-                }
-            });
-        }
+        let on_chunk = {
+            let (parser, raw) = (parser.clone(), raw.clone());
+            move |chunk: &[u8]| {
+                raw.lock().unwrap().extend_from_slice(chunk);
+                parser.lock().unwrap().process(chunk);
+            }
+        };
+        let pty = pty::spawn(cmd, COLS, ROWS, 4096, on_chunk);
         Session {
-            child,
-            writer,
+            child: pty.child,
+            writer: pty.writer,
             parser,
             raw,
             master: Some(pty.master),
@@ -151,8 +120,18 @@ enabled = {swap}
         w.flush().expect("flush");
     }
 
-    /// 端末の大きさを変える (ConPTY と、画面を解釈する側の両方)。
+    /// 端末の大きさを変える (`ConPTY` と、画面を解釈する側の両方)。
+    ///
+    /// 画面を解釈する側のロックを持ったまま、先にその大きさを変えてから pty の大きさを変える (Issue #373)。
+    /// pty を先に変えると、子が新しい大きさで描いた出力を、読み取りスレッドが古い大きさのままの解釈側に
+    /// 流し得る (vt100 は自動折り返しの無効化に対応しないので、はみ出した文字が折り返して画面が崩れたまま残る)。
+    /// 古い大きさの出力が新しい解釈側に入っても、子は大きさが変わると全面を描き直すので上書きされる。
     fn resize(&self, cols: u16, rows: u16) {
+        let mut parser = self.parser.lock().unwrap();
+        parser.screen_mut().set_size(
+            std::num::NonZeroU16::new(rows).expect("rows は 1 以上"),
+            std::num::NonZeroU16::new(cols).expect("cols は 1 以上"),
+        );
         self.master
             .as_ref()
             .expect("pty がある")
@@ -163,10 +142,7 @@ enabled = {swap}
                 pixel_height: 0,
             })
             .expect("リサイズ");
-        self.parser.lock().unwrap().screen_mut().set_size(
-            std::num::NonZeroU16::new(rows).expect("rows は 1 以上"),
-            std::num::NonZeroU16::new(cols).expect("cols は 1 以上"),
-        );
+        drop(parser);
     }
 
     fn screen(&self) -> String {
@@ -484,6 +460,54 @@ b3
     let _ = std::fs::remove_dir_all(dir);
 }
 
+const CTRL_P: &[u8] = b"\x10";
+
+/// コマンドパレットを開いて `query` で探し、先頭の候補を実行する。
+fn run_from_palette(s: &Session, query: &str) {
+    // 直前の入力と続けて届くと貼り付けとして扱われるので、間を空ける (ヒントバーにも「コマンド」があるので、入力欄の案内で待つ)
+    thread::sleep(Duration::from_millis(300));
+    s.send(CTRL_P);
+    s.wait_for("パレット", |t| t.contains("コマンドを入力"));
+    type_slowly(s, query);
+    s.wait_for("候補", |t| t.contains(query));
+    thread::sleep(Duration::from_millis(300));
+    s.send(b"\r");
+}
+
+// 失敗として終了 (`app.quit_with_error`、07 §18.4): 未保存の確認の後、保存せずに終了コード 4 で終わる
+#[test]
+fn 失敗として終了はパレットから実行して終了コード_4() {
+    let dir = temp_dir("quit_error");
+    let path = dir.join("COMMIT_EDITMSG");
+    std::fs::write(&path, b"\n").unwrap();
+    let mut s = Session::start(&[path.to_str().unwrap()]);
+    s.wait_for("最初の画面", |t| t.contains("COMMIT_EDITMSG"));
+    type_slowly(&s, "wip");
+    s.wait_for("編集した", |t| t.contains("[+]"));
+    run_from_palette(&s, "app.quit_with_error");
+    s.wait_for("未保存の確認", |t| t.contains("[D]"));
+    s.send(b"d");
+    assert_eq!(s.wait_exit(), 4);
+    assert_eq!(std::fs::read(&path).unwrap(), b"\n", "保存していない");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+// 保存して終了 (`app.save_and_quit`、07 §18.6): 1 操作で保存して終了コード 0 で終わる
+#[test]
+fn 保存して終了はパレットから実行して保存し終了コード_0() {
+    let dir = temp_dir("save_quit");
+    let path = dir.join("COMMIT_EDITMSG");
+    std::fs::write(&path, b"\n").unwrap();
+    let mut s = Session::start(&[path.to_str().unwrap()]);
+    s.wait_for("最初の画面", |t| t.contains("COMMIT_EDITMSG"));
+    type_slowly(&s, "fix");
+    s.wait_for("編集した", |t| t.contains("[+]"));
+    run_from_palette(&s, "app.save_and_quit");
+    assert_eq!(s.wait_exit(), 0);
+    assert_eq!(std::fs::read(&path).unwrap(), b"fix\n");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
 // (1) 起動 → 文字入力 → Ctrl+S → Ctrl+Q、ファイルの内容が一致する (無題は名前を尋ねる)
 #[test]
 fn 入力して保存して終了するとファイルの内容が一致する() {
@@ -531,6 +555,41 @@ fn 設定ディレクトリが無くても使え_設定ディレクトリは作�
     let _ = std::fs::remove_dir_all(dir);
 }
 
+/// 状態ディレクトリのログ (`log/evoeditor.log`)。退避の試験が落ちたときに、退避の段の時間 (遅いときだけ書く) を見るため
+/// (Issue #342)。
+fn state_log(s: &Session) -> String {
+    std::fs::read_to_string(s.state.join("log").join("evoeditor.log"))
+        .unwrap_or_else(|_| "(ログなし)".to_owned())
+}
+
+/// 退避の試験が落ちたときの材料 (Issue #342): 閉じてから子が終わるまでの経過時間、退避ディレクトリのファイルの一覧と大きさ、
+/// `evoeditor.log` の中身。外から終わらされた (猶予切れ)・予算切れ・書込の失敗を、後から見分ける。
+#[cfg(any(windows, feature = "test-hooks"))]
+fn rescue_report(s: &Session, exited_after: Option<Duration>) -> String {
+    let mut out = format!(
+        "--- 閉じてから終わるまで: {}\n--- 退避ディレクトリ\n",
+        exited_after.map_or_else(|| "(終わらなかった)".to_owned(), |d| format!("{d:?}"))
+    );
+    let recovery = s.state.join("recovery");
+    match std::fs::read_dir(&recovery) {
+        Err(e) => out.push_str(&format!("({}: {e})\n", recovery.display())),
+        Ok(rd) => {
+            for d in rd.flatten() {
+                out.push_str(&format!("{}/\n", d.file_name().to_string_lossy()));
+                for f in std::fs::read_dir(d.path()).into_iter().flatten().flatten() {
+                    let len = f
+                        .metadata()
+                        .map_or_else(|e| e.to_string(), |m| format!("{} B", m.len()));
+                    out.push_str(&format!("  {} ({len})\n", f.file_name().to_string_lossy()));
+                }
+            }
+        }
+    }
+    out.push_str("--- log\n");
+    out.push_str(&state_log(s));
+    out
+}
+
 // (8b ii) コンソールを閉じる (CTRL_CLOSE): 未保存の内容を退避して終了する。退避は受信スレッドがメインを待たずに書く
 // verifies: AC-FR-107-2
 // verifies: AC-NFR-302-2
@@ -542,11 +601,14 @@ fn コンソールを閉じると未保存の内容を退避して終了する()
     type_slowly(&s, "unsaved text");
     s.wait_for("入力が見える", |t| t.contains("unsaved text"));
     let recovery = s.state.join("recovery");
+    let closed = Instant::now();
     s.close_console();
     let code = s.exit_within(Duration::from_secs(10));
+    let exited_after = code.map(|_| closed.elapsed());
     assert!(
         code.is_some(),
-        "コンソールを閉じたら終了する (CTRL_CLOSE は約 5 秒で強制終了される)"
+        "コンソールを閉じたら終了する (CTRL_CLOSE は約 5 秒で強制終了される)\n{}",
+        rescue_report(&s, exited_after)
     );
     // 退避ディレクトリ: <UTC timestamp>-<pid>/ に本文と manifest
     let dirs: Vec<_> = std::fs::read_dir(&recovery)
@@ -557,19 +619,30 @@ fn コンソールを閉じると未保存の内容を退避して終了する()
                 .collect()
         })
         .unwrap_or_default();
-    assert_eq!(dirs.len(), 1, "退避は 1 件: {dirs:?} ({recovery:?})");
+    assert_eq!(
+        dirs.len(),
+        1,
+        "退避は 1 件: {dirs:?} ({recovery:?})\n{}",
+        rescue_report(&s, exited_after)
+    );
     let manifest = std::fs::read_to_string(dirs[0].join("manifest.toml")).unwrap();
     assert!(
         manifest.contains("reason = \"console_close\""),
         "{manifest}"
     );
-    assert!(manifest.contains("complete = true"), "{manifest}");
+    assert!(
+        // 退避できた = 全文書が OS に渡った (`stored = true`、NFR-302 AC-5)。`complete` (fsync まで済み) は
+        // 時間予算の残りで決まり、負荷の下では false になり得る (02 §11.2.1 の 2 段の書く順)
+        manifest.contains("stored = true"),
+        "{manifest}\n{}",
+        rescue_report(&s, exited_after)
+    );
     let body: Vec<_> = std::fs::read_dir(&dirs[0])
         .unwrap()
         .flatten()
         .filter(|e| e.file_name().to_string_lossy().ends_with(".txt"))
         .collect();
-    assert_eq!(body.len(), 1);
+    assert_eq!(body.len(), 1, "{}", rescue_report(&s, exited_after));
     assert_eq!(
         std::fs::read_to_string(body[0].path()).unwrap(),
         "unsaved text"
@@ -799,7 +872,13 @@ fn パニックすると端末を戻し_未保存の内容を退避してクラ�
     assert_eq!(dirs.len(), 1, "{dirs:?}");
     let manifest = std::fs::read_to_string(dirs[0].join("manifest.toml")).unwrap();
     assert!(manifest.contains("reason = \"panic\""), "{manifest}");
-    assert!(manifest.contains("complete = true"), "{manifest}");
+    assert!(
+        // 退避できた = 全文書が OS に渡った (`stored = true`、NFR-302 AC-5)。`complete` (fsync まで済み) は
+        // 時間予算の残りで決まり、負荷の下では false になり得る (02 §11.2.1 の 2 段の書く順)
+        manifest.contains("stored = true"),
+        "{manifest}\n--- log\n{}",
+        state_log(&s)
+    );
     let body: Vec<_> = std::fs::read_dir(&dirs[0])
         .unwrap()
         .flatten()
@@ -810,12 +889,13 @@ fn パニックすると端末を戻し_未保存の内容を退避してクラ�
         std::fs::read_to_string(body[0].path()).unwrap(),
         "unsaved text"
     );
-    // クラッシュログ: パニックの場所はあるが、文書の内容は含まない
+    // クラッシュログ: パニックの場所はあるが、文書の内容は含まない (`evoeditor.log` は数えない。退避が遅いと段の記録を書く)
     let logs: Vec<_> = std::fs::read_dir(s.state.join("log"))
         .unwrap()
         .flatten()
+        .filter(|e| e.file_name().to_string_lossy().starts_with("crash-"))
         .collect();
-    assert_eq!(logs.len(), 1);
+    assert_eq!(logs.len(), 1, "{logs:?}");
     let log = std::fs::read_to_string(logs[0].path()).unwrap();
     assert!(
         log.contains("internal.debug_panic") && !log.contains("unsaved text"),
@@ -866,7 +946,13 @@ fn コンソールイベントで退避して終了する(kind: &str) {
     assert_eq!(dirs.len(), 1, "{dirs:?}");
     let manifest = std::fs::read_to_string(dirs[0].join("manifest.toml")).unwrap();
     assert!(manifest.contains("reason = \"signal\""), "{manifest}");
-    assert!(manifest.contains("complete = true"), "{manifest}");
+    assert!(
+        // 退避できた = 全文書が OS に渡った (`stored = true`、NFR-302 AC-5)。`complete` (fsync まで済み) は
+        // 時間予算の残りで決まり、負荷の下では false になり得る (02 §11.2.1 の 2 段の書く順)
+        manifest.contains("stored = true"),
+        "{manifest}\n--- log\n{}",
+        state_log(&s)
+    );
     let body: Vec<_> = std::fs::read_dir(&dirs[0])
         .unwrap()
         .flatten()
@@ -891,7 +977,7 @@ fn ctrl_break_を受けると未保存の内容を退避して終了する() {
 }
 
 /// 退避のディレクトリ (`<UTC の時刻>-<pid>/`) の一覧。
-#[cfg(unix)]
+#[cfg(any(unix, feature = "test-hooks"))]
 fn recovery_dirs(state: &Path) -> Vec<PathBuf> {
     std::fs::read_dir(state.join("recovery"))
         .map(|rd| {
@@ -920,7 +1006,13 @@ fn シグナルで退避して同じシグナルで終わる(name: &str, want: &
     assert_eq!(dirs.len(), 1, "{dirs:?}");
     let manifest = std::fs::read_to_string(dirs[0].join("manifest.toml")).unwrap();
     assert!(manifest.contains("reason = \"signal\""), "{manifest}");
-    assert!(manifest.contains("complete = true"), "{manifest}");
+    assert!(
+        // 退避できた = 全文書が OS に渡った (`stored = true`、NFR-302 AC-5)。`complete` (fsync まで済み) は
+        // 時間予算の残りで決まり、負荷の下では false になり得る (02 §11.2.1 の 2 段の書く順)
+        manifest.contains("stored = true"),
+        "{manifest}\n--- log\n{}",
+        state_log(&s)
+    );
     let body: Vec<_> = std::fs::read_dir(&dirs[0])
         .unwrap()
         .flatten()
@@ -982,7 +1074,13 @@ fn メインが止まっていても_sigterm_で端末を戻して同じシグ�
     let dirs = recovery_dirs(&s.state);
     assert_eq!(dirs.len(), 1, "{dirs:?}");
     let manifest = std::fs::read_to_string(dirs[0].join("manifest.toml")).unwrap();
-    assert!(manifest.contains("complete = true"), "{manifest}");
+    assert!(
+        // 退避できた = 全文書が OS に渡った (`stored = true`、NFR-302 AC-5)。`complete` (fsync まで済み) は
+        // 時間予算の残りで決まり、負荷の下では false になり得る (02 §11.2.1 の 2 段の書く順)
+        manifest.contains("stored = true"),
+        "{manifest}\n--- log\n{}",
+        state_log(&s)
+    );
     let _ = std::fs::remove_dir_all(&s.state);
 }
 
@@ -1079,7 +1177,13 @@ fn メインが止まっていても_ctrl_break_で端末を戻して終了す�
         .collect();
     assert_eq!(dirs.len(), 1, "{dirs:?}");
     let manifest = std::fs::read_to_string(dirs[0].join("manifest.toml")).unwrap();
-    assert!(manifest.contains("complete = true"), "{manifest}");
+    assert!(
+        // 退避できた = 全文書が OS に渡った (`stored = true`、NFR-302 AC-5)。`complete` (fsync まで済み) は
+        // 時間予算の残りで決まり、負荷の下では false になり得る (02 §11.2.1 の 2 段の書く順)
+        manifest.contains("stored = true"),
+        "{manifest}\n--- log\n{}",
+        state_log(&s)
+    );
     let _ = std::fs::remove_dir_all(&s.state);
 }
 
@@ -1097,15 +1201,16 @@ fn メインが止まっていてもコンソールを閉じると未保存の�
     let closed = Instant::now();
     s.close_console();
     let code = s.exit_within(Duration::from_secs(10));
+    let exited_after = code.map(|_| closed.elapsed());
     assert!(
         code.is_some(),
-        "強制終了までに終わる: {:?}",
-        closed.elapsed()
+        "強制終了までに終わる\n{}",
+        rescue_report(&s, exited_after)
     );
     assert!(
-        closed.elapsed() < Duration::from_millis(4500),
-        "受信から 4.5 秒の内に退避が書かれて終わる: {:?}",
-        closed.elapsed()
+        exited_after.is_some_and(|d| d < Duration::from_millis(4500)),
+        "受信から 4.5 秒の内に退避が書かれて終わる\n{}",
+        rescue_report(&s, exited_after)
     );
     let dirs: Vec<_> = std::fs::read_dir(&recovery)
         .map(|rd| {
@@ -1115,13 +1220,24 @@ fn メインが止まっていてもコンソールを閉じると未保存の�
                 .collect()
         })
         .unwrap_or_default();
-    assert_eq!(dirs.len(), 1, "退避は 1 件: {dirs:?}");
+    assert_eq!(
+        dirs.len(),
+        1,
+        "退避は 1 件: {dirs:?}\n{}",
+        rescue_report(&s, exited_after)
+    );
     let manifest = std::fs::read_to_string(dirs[0].join("manifest.toml")).unwrap();
     assert!(
         manifest.contains("reason = \"console_close\""),
         "{manifest}"
     );
-    assert!(manifest.contains("complete = true"), "{manifest}");
+    assert!(
+        // 退避できた = 全文書が OS に渡った (`stored = true`、NFR-302 AC-5)。`complete` (fsync まで済み) は
+        // 時間予算の残りで決まり、負荷の下では false になり得る (02 §11.2.1 の 2 段の書く順)
+        manifest.contains("stored = true"),
+        "{manifest}\n{}",
+        rescue_report(&s, exited_after)
+    );
     let body: Vec<_> = std::fs::read_dir(&dirs[0])
         .unwrap()
         .flatten()
@@ -1131,6 +1247,133 @@ fn メインが止まっていてもコンソールを閉じると未保存の�
     assert_eq!(
         std::fs::read_to_string(body[0].path()).unwrap(),
         "unsaved text"
+    );
+    let _ = std::fs::remove_dir_all(&s.state);
+}
+
+// Issue #342: 退避の予算切れの形を確定的に再現する (test-hooks の `rescue_stall_after_manifest` で manifest 1 の直後に、期限が
+// 過ぎるまで眠ってからさらに少し眠らせ、本文を作る前に予算を切らす。`recovery_timeout` は負荷の下でも manifest 1 まで届く長さ)。manifest は `complete = false`・`written = false` で本文が無く、
+// ログに始めの行・最後の段 (本文を書く前の時間切れ)・「書き終えられなかった (… 時間切れ)」が残る。外から終わらされた形
+// (猶予切れ。ログに「書き終えられなかった」が無い) や書込の失敗 (「書込の失敗」) と見分けられる。
+// Windows はコンソールを閉じ (CTRL_CLOSE)、Unix は SIGTERM で同じ経路 (受信スレッドの退避) を通す。
+#[cfg(feature = "test-hooks")]
+#[test]
+fn 退避の予算が本文の前に尽きると本文なしの打切りがログで分かる() {
+    let mut s = Session::start_with(
+        &[],
+        None,
+        &[(
+            "EVE_TEST_HOOK",
+            "recovery_timeout=2000,rescue_stall_after_manifest=50",
+        )],
+    );
+    s.wait_ready();
+    type_slowly(&s, "unsaved text");
+    s.wait_for("入力が見える", |t| t.contains("unsaved text"));
+    let closed = Instant::now();
+    #[cfg(windows)]
+    let (reason, ended) = {
+        s.close_console();
+        (
+            "console_close",
+            s.exit_within(Duration::from_secs(10)).is_some(),
+        )
+    };
+    #[cfg(unix)]
+    let (reason, ended) = {
+        s.signal("TERM");
+        ("signal", s.status_within(Duration::from_secs(10)).is_some())
+    };
+    let exited_after = ended.then(|| closed.elapsed());
+    let report = rescue_report(&s, exited_after);
+    assert!(ended, "終了する\n{report}");
+    let dirs = recovery_dirs(&s.state);
+    assert_eq!(dirs.len(), 1, "退避は 1 件: {dirs:?}\n{report}");
+    let manifest = std::fs::read_to_string(dirs[0].join("manifest.toml")).unwrap();
+    assert!(
+        manifest.contains(&format!("reason = \"{reason}\""))
+            && manifest.contains("complete = false")
+            && manifest.contains("written = false"),
+        "{manifest}\n{report}"
+    );
+    let bodies: Vec<_> = std::fs::read_dir(&dirs[0])
+        .unwrap()
+        .flatten()
+        .filter(|e| e.file_name().to_string_lossy().ends_with(".txt"))
+        .collect();
+    assert!(bodies.is_empty(), "本文を作らない\n{report}");
+    let log = state_log(&s);
+    // manifest 1 の段は、受信から 500 ms の内なら「途中」、過ぎていれば「遅い」の行に載る
+    assert!(
+        log.lines()
+            .any(|l| (l.contains(&format!("退避の段の時間 ({reason}、途中)"))
+                || l.contains(&format!("退避の段の時間 ({reason}、遅い)")))
+                && l.contains("manifest 1 ")),
+        "manifest 1 の段の行
+{report}"
+    );
+    for want in [
+        format!("退避を始めた ({reason}、受信から "),
+        "本文 1 (時間切れ、書く前)".to_owned(),
+        "書き終えられなかった (確定 0/1 件・OS に渡した 0/1 件、時間切れ)".to_owned(),
+    ] {
+        assert!(log.contains(&want), "{want}\n{report}");
+    }
+    let _ = std::fs::remove_dir_all(&s.state);
+}
+
+// Issue #342 (02 §11.2.1 の「書く順」): 段 1 (本文を OS に渡す) の後、段 2 (fsync による確定) の前に予算が尽きても (test-hooks の
+// `rescue_stall_before_sync` で期限が過ぎるまで眠らせる)、本文は残り、manifest は `stored = true`・`written = false`・
+// `complete = false` で xxh3 が本文と一致する。終了時の stderr は「退避しました」と、確定できなかった件数 (`stderr.recovery.unsynced`)
+// を示す (パニックの経路。`recovery_timeout` は負荷の下でも段 1 を終えられる長さ)
+#[cfg(feature = "test-hooks")]
+#[test]
+fn 退避の予算が確定の前に尽きても本文が残り_確定できなかった件数を示す() {
+    let mut s = Session::start_with(
+        &[],
+        None,
+        &[(
+            "EVE_TEST_HOOK",
+            "panic_command,recovery_timeout=2000,rescue_stall_before_sync=50",
+        )],
+    );
+    s.wait_ready();
+    type_slowly(&s, "unsaved text");
+    s.wait_for("入力が見える", |t| t.contains("unsaved text"));
+    s.send(b"[24~");
+    assert_eq!(s.wait_exit(), 70);
+    s.wait_raw("問題を報告するときは");
+    let raw = s.raw_text();
+    assert!(raw.contains("保存されていない変更を退避しました"), "{raw}");
+    assert!(raw.contains("退避したうち 1 件は"), "{raw}");
+    let dirs = recovery_dirs(&s.state);
+    assert_eq!(dirs.len(), 1, "{dirs:?}");
+    let manifest = std::fs::read_to_string(dirs[0].join("manifest.toml")).unwrap();
+    assert!(
+        manifest.contains("complete = false")
+            && manifest.contains("written = false\nstored = true\nxxh3 = "),
+        "{manifest}\n{}",
+        state_log(&s)
+    );
+    let body: Vec<_> = std::fs::read_dir(&dirs[0])
+        .unwrap()
+        .flatten()
+        .filter(|e| e.file_name().to_string_lossy().ends_with(".txt"))
+        .collect();
+    assert_eq!(body.len(), 1);
+    let bytes = std::fs::read(body[0].path()).unwrap();
+    assert_eq!(bytes, b"unsaved text");
+    let hash = manifest
+        .lines()
+        .find_map(|l| l.strip_prefix("xxh3 = \""))
+        .and_then(|l| l.strip_suffix('"'))
+        .unwrap_or_else(|| panic!("{manifest}"));
+    assert_eq!(hash, format!("{:016x}", xxhash_rust::xxh3::xxh3_64(&bytes)));
+    let log = state_log(&s);
+    assert!(
+        log.contains("確定 1 (時間切れ、fsync の前)")
+            && log.contains("書き終えられなかった (確定 0/1 件・OS に渡した 1/1 件、時間切れ)"),
+        "{log}"
     );
     let _ = std::fs::remove_dir_all(&s.state);
 }
@@ -1693,7 +1936,7 @@ fn 強制終了してもスワップから復旧できる_ファイル() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-// 置換途中の痕跡 (M6e、05 §4.6): 保存の途中 (置換の直前) で強制終了すると一時ファイルが残り、次の起動で提案が出る。
+// 置換途中の痕跡 (05 §4.6): 保存の途中 (置換の直前) で強制終了すると一時ファイルが残り、次の起動で提案が出る。
 // 「別バッファで開く」は読み取り専用で開き、次の起動の「削除」で一時ファイルもフラグも無くなる。
 // 実行: cargo test -p evoeditor --features test-hooks --test e2e
 #[cfg(feature = "test-hooks")]
@@ -1784,7 +2027,8 @@ fn 正常終了ではスワップを消す() {
     s.wait_for("未保存の確認", |t| t.contains("[D]"));
     s.send(b"d");
     assert_eq!(s.wait_exit(), 0);
-    assert!(swap_dirs(&s.state).is_empty());
+    let actual = swap_dirs(&s.state);
+    assert!(actual.is_empty(), "{actual:?}");
     let _ = std::fs::remove_dir_all(&s.state);
 }
 

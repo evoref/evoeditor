@@ -1,6 +1,6 @@
 //! `MemFs`: メモリ上の `FileSystem` と障害注入 (docs/02 §4.5、docs/09 §3.4)。
 //!
-//! M1 の範囲は `metadata` / `canonicalize` / `open_read` / `write_atomic`。障害注入は
+//! 障害注入は
 //! (1) 操作ごとの次の 1 回の失敗、(2) `Busy` を k 回返してから成功、(3) `write_atomic` の各ステップでの失敗、
 //! (4) N バイト書込後の `DiskFull`、(5) 読込の途中の失敗、(6) 外部からの変更 (Stamp の不一致)、を持つ。
 //! 失敗したステップより後は実行せず、保存先は元のまま (一時ファイルは作らない・残さない) にする。
@@ -17,23 +17,46 @@ use eve_core::{
 /// 障害を注入できる操作。
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum FsOp {
+    /// `FileSystem::metadata`。
     Metadata,
+    /// `FileSystem::canonicalize`。
     Canonicalize,
+    /// `FileSystem::open_read`。
     OpenRead,
+    /// `FileSystem::write_atomic`。
     WriteAtomic,
+    /// 直接上書き (`FileSystem::write_in_place`)。
     WriteInPlace,
+    /// 退避先への保存 (`FileSystem::write_recovery`)。
     WriteRecovery,
+    /// スワップの書込 (`FileSystem::write_swap`)。
     WriteSwap,
+    /// スワップの破棄 (`FileSystem::discard_swap`)。
     DiscardSwap,
+}
+
+/// このプロセスのスワップの鍵 (パス、無題なら文書)。
+type SwapKey = (Option<FsPath>, Option<eve_view::DocumentId>);
+
+fn swap_key(path: Option<&FsPath>, doc: eve_view::DocumentId) -> SwapKey {
+    match path {
+        Some(p) => (Some(p.clone()), None),
+        None => (None, Some(doc)),
+    }
 }
 
 /// `write_atomic` のステップ (失敗を注入でき、到達したステップは `MemFs::steps` に残る)。
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum WriteStep {
+    /// 一時ファイルを作る。
     CreateTemp,
+    /// 一時ファイルへ本文を書く (供給側 `ReadChunks` を読み切る)。
     WriteData,
+    /// 一時ファイルの fsync (`FsyncLevel::None` では通らない)。
     Fsync,
+    /// 保存先へ置き換える。
     Replace,
+    /// ディレクトリの fsync (`FsyncLevel::Full` / `FileOnly`。`None` では通らない。置き換えの後。05 §4.1 手順 6)。
     DirFsync,
 }
 
@@ -57,6 +80,8 @@ struct State {
     seq: u32,
     chunk_size: usize,
     fail_next: Vec<(FsOp, FsErrorKind)>,
+    /// 次の保存の成功 (`write_atomic` / `write_in_place`) に付ける警告。
+    warn_next: Vec<eve_core::SaveWarning>,
     busy: BTreeMap<FsOp, u32>,
     fail_step: Vec<(WriteStep, FsErrorKind)>,
     disk_full_after: Option<u64>,
@@ -71,7 +96,11 @@ struct State {
     /// 「退避先に保存」で書いた本文。
     recovered: Vec<(FsPath, Vec<u8>)>,
     /// スワップ (文書 → 書いたときのパスと本文)。
-    swaps: BTreeMap<eve_view::DocumentId, (Option<FsPath>, Vec<u8>)>,
+    /// このプロセスのスワップ。鍵は本番の名前の付け方 (eve-platform の `swap_name`) と同じく、パスがあればパス、
+    /// 無題なら文書。パスが変わった後に書くと別のスワップになる (旧パスのものは消すまで残る)。値は (文書, 本文)。
+    swaps: BTreeMap<SwapKey, (eve_view::DocumentId, Vec<u8>)>,
+    /// 文書ごとの、最後に書いたスワップの `untitled_name`。
+    swap_untitled: BTreeMap<eve_view::DocumentId, Option<String>>,
     /// `write_swap` が成功した回数。
     swap_writes: u32,
     /// スワップを実装していない Port のふり (`Unsupported` を返す)。
@@ -80,6 +109,8 @@ struct State {
     swap_entries: Vec<(eve_core::SwapEntry, Option<eve_core::SwapBody>)>,
 }
 
+/// メモリ上の `FileSystem` (偽 Port)。ファイル・ディレクトリ・シンボリックリンクを持ち、`fail_next` などで障害を注入できる。
+/// 時刻は注入した `Clock` から取る (書くたびに連番で mtime が変わる)。
 pub struct MemFs {
     clock: Arc<dyn Clock>,
     state: Mutex<State>,
@@ -89,6 +120,7 @@ pub struct MemFs {
 const DEFAULT_CHUNK: usize = 1 << 20;
 
 impl MemFs {
+    /// 空の `MemFs` を作る。`clock` は mtime に使う。
     pub fn new(clock: Arc<dyn Clock>) -> MemFs {
         MemFs {
             clock,
@@ -100,6 +132,7 @@ impl MemFs {
                 seq: 0,
                 chunk_size: DEFAULT_CHUNK,
                 fail_next: Vec::new(),
+                warn_next: Vec::new(),
                 busy: BTreeMap::new(),
                 fail_step: Vec::new(),
                 disk_full_after: None,
@@ -110,6 +143,7 @@ impl MemFs {
                 recovery: Vec::new(),
                 recovered: Vec::new(),
                 swaps: BTreeMap::new(),
+                swap_untitled: BTreeMap::new(),
                 swap_writes: 0,
                 swap_unsupported: false,
                 swap_entries: Vec::new(),
@@ -126,7 +160,7 @@ impl MemFs {
         s.seq = s.seq.wrapping_add(1);
         let ms = self.clock.now().0;
         FileTime {
-            secs: (ms / 1000) as i64,
+            secs: i64::try_from(ms / 1000).expect("試験の時計の秒は i64 に収まる"),
             nanos: ((ms % 1000) as u32) * 1_000_000 + s.seq % 1_000_000,
         }
     }
@@ -138,6 +172,7 @@ impl MemFs {
         self.set_file(&FsPath::from(path), data);
     }
 
+    /// ディレクトリを作る (祖先も作る)。
     pub fn add_dir(&self, path: &str) {
         let mut s = self.st();
         Self::add_ancestors_and_self(&mut s, &FsPath::from(path));
@@ -151,7 +186,7 @@ impl MemFs {
         }
     }
 
-    /// 外部からの変更: 内容と mtime を変える (file_id は保つ)。無ければ作る。
+    /// 外部からの変更: 内容と mtime を変える (`file_id` は保つ)。無ければ作る。
     pub fn set_file(&self, path: &FsPath, data: &[u8]) {
         let mut s = self.st();
         let mtime = self.now_time(&mut s);
@@ -178,6 +213,7 @@ impl MemFs {
         );
     }
 
+    /// ファイルを消す (外部からの削除。無ければ何もしない)。
     pub fn remove(&self, path: &FsPath) {
         self.st().files.remove(path);
     }
@@ -221,12 +257,25 @@ impl MemFs {
 
     /// 文書のスワップの本文 (無ければ `None`)。
     pub fn swap_of(&self, doc: eve_view::DocumentId) -> Option<Vec<u8>> {
-        self.st().swaps.get(&doc).map(|(_, b)| b.clone())
+        self.st()
+            .swaps
+            .values()
+            .find(|(d, _)| *d == doc)
+            .map(|(_, b)| b.clone())
     }
 
     /// 文書のスワップを書いたときのパス (`Some(None)` は無題)。
     pub fn swap_path_of(&self, doc: eve_view::DocumentId) -> Option<Option<FsPath>> {
-        self.st().swaps.get(&doc).map(|(p, _)| p.clone())
+        self.st()
+            .swaps
+            .iter()
+            .find(|(_, (d, _))| *d == doc)
+            .map(|(k, _)| k.0.clone())
+    }
+
+    /// 文書の最後に書いたスワップの `untitled_name` (書いていなければ `None`)。
+    pub fn swap_untitled_name_of(&self, doc: eve_view::DocumentId) -> Option<Option<String>> {
+        self.st().swap_untitled.get(&doc).cloned()
     }
 
     /// 残っているスワップの数。
@@ -268,6 +317,7 @@ impl MemFs {
         self.st().files.keys().map(FsPath::display).collect()
     }
 
+    /// ファイルの内容。無ければ `None`。
     pub fn read(&self, path: &str) -> Option<Vec<u8>> {
         self.st()
             .files
@@ -275,6 +325,7 @@ impl MemFs {
             .map(|e| e.data.clone())
     }
 
+    /// ファイルの今の `FileStamp` (ハッシュなし)。無ければ `None`。
     pub fn stamp(&self, path: &str) -> Option<FileStamp> {
         let s = self.st();
         s.files
@@ -282,12 +333,14 @@ impl MemFs {
             .map(|e| FileStamp::from_meta(&meta_of(e), None))
     }
 
+    /// ファイルまたはディレクトリがあるか。
     pub fn exists(&self, path: &str) -> bool {
         let s = self.st();
         let p = FsPath::from(path);
         s.files.contains_key(&p) || s.dirs.contains(&p)
     }
 
+    /// 読み取り専用の属性を付け外しする (無いパスは何もしない)。
     pub fn set_readonly(&self, path: &str, readonly: bool) {
         if let Some(e) = self.st().files.get_mut(&FsPath::from(path)) {
             e.readonly = readonly;
@@ -301,18 +354,24 @@ impl MemFs {
             .insert(FsPath::from(link), FsPath::from(target));
     }
 
+    /// ハードリンク数を決める (`HardlinkPolicy` の試験用。無いパスは何もしない)。
     pub fn set_nlink(&self, path: &str, nlink: u32) {
         if let Some(e) = self.st().files.get_mut(&FsPath::from(path)) {
             e.nlink = nlink;
         }
     }
 
-    /// 内容を差し替える。更新時刻・長さ・file_id は変えない (mtime の分解能の内の書き換えを再現する)。
+    /// 内容を差し替える。更新時刻・長さ・`file_id` は変えない (mtime の分解能の内の書き換えを再現する)。
     /// 長さが変わるときは、長さだけは新しい内容になる (長さを同じにしたいときは同じ長さの内容を渡す)。
     pub fn set_data_keep_mtime(&self, path: &str, data: &[u8]) {
         if let Some(e) = self.st().files.get_mut(&FsPath::from(path)) {
             e.data = data.to_vec();
         }
+    }
+
+    /// 次の保存の成功に `warnings` を付ける (保存は成功のまま。`SaveReport.warnings` の扱いを試す)。
+    pub fn warn_next(&self, warnings: Vec<eve_core::SaveWarning>) {
+        self.st().warn_next = warnings;
     }
 
     /// 内容を変えずに更新時刻だけを `secs` 秒進める (同期ソフト・ウイルス対策による mtime だけの更新を再現する)。
@@ -329,6 +388,7 @@ impl MemFs {
         }
     }
 
+    /// 読込のチャンクの大きさ (バイト。既定は 1 MiB、0 は 1 に切り上げる)。
     pub fn set_chunk_size(&self, bytes: usize) {
         self.st().chunk_size = bytes.max(1);
     }
@@ -492,6 +552,8 @@ impl FileSystem for MemFs {
         injected(&mut s, FsOp::WriteRecovery)?;
         let dir = FsPath::from(format!("/s/recovery/rescue/{}", s.recovered.len() + 1).as_str());
         let body = doc.to_vec();
+        // 書いたディレクトリは在る (02 §4.5。契約試験が `metadata` で確かめる)
+        Self::add_ancestors_and_self(&mut s, &dir);
         s.recovered.push((dir.clone(), body));
         Ok(dir)
     }
@@ -524,7 +586,11 @@ impl FileSystem for MemFs {
             return Err(FsError::new(FsErrorKind::Unsupported));
         }
         injected(&mut s, FsOp::WriteSwap)?;
-        s.swaps.insert(doc.doc, (doc.path.clone(), doc.to_vec()));
+        s.swaps.insert(
+            swap_key(doc.path.as_ref(), doc.doc),
+            (doc.doc, doc.to_vec()),
+        );
+        s.swap_untitled.insert(doc.doc, doc.untitled_name.clone());
         s.swap_writes += 1;
         Ok(())
     }
@@ -532,14 +598,14 @@ impl FileSystem for MemFs {
     fn discard_swap(
         &self,
         doc: eve_view::DocumentId,
-        _path: Option<&FsPath>,
+        path: Option<&FsPath>,
     ) -> Result<(), FsError> {
         let mut s = self.st();
         if s.swap_unsupported {
             return Err(FsError::new(FsErrorKind::Unsupported));
         }
         injected(&mut s, FsOp::DiscardSwap)?;
-        s.swaps.remove(&doc);
+        s.swaps.remove(&swap_key(path, doc));
         Ok(())
     }
 
@@ -703,7 +769,8 @@ impl FileSystem for MemFs {
                     buf.extend_from_slice(chunk);
                 }
                 Ok(None) => break,
-                // 供給側の失敗: 一時ファイルは消え、元ファイルは無傷
+                // 供給側の失敗: 一時ファイルは消え、元ファイルは無傷。`Io` は中の FsError のまま (02 §4.5、実 FS と同じ)
+                Err(ChunkError::Io(e)) => return Err(e),
                 Err(_) => return Err(FsError::new(FsErrorKind::SourceFailed)),
             }
         }
@@ -724,7 +791,8 @@ impl FileSystem for MemFs {
         };
         let new_stamp = FileStamp::from_meta(&meta_of(&entry), None);
         s.files.insert(path.clone(), entry);
-        if opts.fsync == FsyncLevel::Full {
+        // 6. ディレクトリの fsync: `Full` / `FileOnly` のとき (05 §4.1 手順 6。Unix の実装と同じ)
+        if opts.fsync != FsyncLevel::None {
             step(&mut s, WriteStep::DirFsync)?;
         }
         let method = if existing.is_some() {
@@ -735,11 +803,11 @@ impl FileSystem for MemFs {
         Ok(SaveReport {
             method,
             new_stamp,
-            warnings: Vec::new(),
+            warnings: std::mem::take(&mut s.warn_next),
         })
     }
 
-    /// 直接上書き: 既存のファイルの内容をその場で置き換える (file_id と nlink は保つ)。バックアップは持たない
+    /// 直接上書き: 既存のファイルの内容をその場で置き換える (`file_id` と `nlink` は保つ)。バックアップは持たない
     /// (`fail_next(WriteInPlace, BackupFailed)` で事前バックアップの失敗を注入できる)。
     fn write_in_place(
         &self,
@@ -784,12 +852,12 @@ impl FileSystem for MemFs {
         Ok(SaveReport {
             method: SaveMethod::InPlace,
             new_stamp,
-            warnings: Vec::new(),
+            warnings: std::mem::take(&mut s.warn_next),
         })
     }
 }
 
-/// Stamp の照合 (05 §5.5): mtime・len・file_id、ハッシュは双方にあるときだけ。
+/// `FileStamp` の照合 (05 §5.5): mtime・len・`file_id`、ハッシュは双方にあるときだけ。
 fn stamp_matches(want: &FileStamp, have: &FileStamp) -> bool {
     want.mtime == have.mtime
         && want.len == have.len
@@ -814,7 +882,8 @@ impl ReadChunks for MemReader {
         }
         let mut end = (self.pos + self.chunk).min(self.data.len());
         if let Some(n) = self.fail_after {
-            let n = n as usize;
+            // usize を超える位置で失敗させる指定は、失敗しないのと同じ
+            let n = usize::try_from(n).unwrap_or(usize::MAX);
             if self.pos >= n {
                 return Err(ChunkError::Io(FsError::new(FsErrorKind::Other)));
             }
@@ -829,7 +898,9 @@ impl ReadChunks for MemReader {
 /// 保存の供給側の失敗の種類 (`BytesSource::fail_after`)。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SourceFailure {
+    /// エンコードで表現できない (`ChunkError::Unmappable`)。
     Unmappable,
+    /// 保存が中断された (`ChunkError::Aborted`)。
     Aborted,
 }
 
@@ -842,6 +913,7 @@ pub struct BytesSource {
 }
 
 impl BytesSource {
+    /// `data` を `chunk` バイトずつ (最後は短い) 供給する。`chunk` が 0 のときは 1。
     pub fn new(data: &[u8], chunk: usize) -> BytesSource {
         BytesSource {
             data: data.to_vec(),
@@ -1045,6 +1117,50 @@ mod tests {
                 WriteStep::DirFsync
             ]
         );
+    }
+
+    #[test]
+    fn ディレクトリの_fsync_は_full_と_file_only_で通り_none_で通らない() {
+        // 05 §4.1 手順 3・6 (Unix の実装と同じ)
+        for (level, want) in [
+            (
+                FsyncLevel::Full,
+                &[
+                    WriteStep::CreateTemp,
+                    WriteStep::WriteData,
+                    WriteStep::Fsync,
+                    WriteStep::Replace,
+                    WriteStep::DirFsync,
+                ][..],
+            ),
+            (
+                FsyncLevel::FileOnly,
+                &[
+                    WriteStep::CreateTemp,
+                    WriteStep::WriteData,
+                    WriteStep::Fsync,
+                    WriteStep::Replace,
+                    WriteStep::DirFsync,
+                ][..],
+            ),
+            (
+                FsyncLevel::None,
+                &[
+                    WriteStep::CreateTemp,
+                    WriteStep::WriteData,
+                    WriteStep::Replace,
+                ][..],
+            ),
+        ] {
+            let (fs, _) = fs();
+            fs.add_file("/w/a.txt", b"orig");
+            let mut opts = SaveOptions::user_file(Expect::Any);
+            opts.fsync = level;
+            let mut src = BytesSource::new(b"new", 4);
+            fs.write_atomic(&FsPath::from("/w/a.txt"), &mut src, &opts)
+                .unwrap();
+            assert_eq!(fs.steps(), want, "{level:?}");
+        }
     }
 
     #[test]

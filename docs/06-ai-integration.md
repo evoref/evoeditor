@@ -11,7 +11,7 @@
 
 > **v0.1 の実装者へ**: 本書のうち v0.1 に関わるのは [§17](#17-v01-で用意しておくべき最小の拡張点) だけである。それ以外の節はすべて v1.L 以降の設計で、v0.1 の実装では読まない。
 >
-> AI 機能の実装は v1.L 以降 (ADR-0028: 先行するのは型・Port・列挙の拡張点だけで、v0.1〜v0.4 に AI の実装は含めない)。ただし **v0.1 の設計がここで要求する拡張点 ([§17](#17-v01-で用意しておくべき最小の拡張点)) を満たしていること** を v0.1 の設計レビュー項目とする。駆動 API (Stage D、02 §10.5) は v0.2 以降に実装する開発用機能 (dev feature。v0.1 はメソッド名・Frame JSON の形の予約のみ) で、本書の MCP サーバはその上に載る (§3.5)。
+> AI 機能の実装は v1.L 以降 (ADR-0028: 先行するのは型・Port・列挙の拡張点だけで、v0.1〜v0.6 に AI の実装は含めない)。ただし **v0.1 の設計がここで要求する拡張点 ([§17](#17-v01-で用意しておくべき最小の拡張点)) を満たしていること** を v0.1 の設計レビュー項目とする。駆動 API (Stage D、02 §10.5) は v0.2 以降に実装する開発用機能 (dev feature。v0.1 はメソッド名・Frame JSON の形の予約のみ) で、本書の MCP サーバはその上に載る (§3.5)。
 > コード片は 02 と同じく **仕様説明用の擬似コード (Rust 風)** であり、確定 API ではない。
 > 外部プロトコル・製品の最新動向で確証のない事項は **「要調査」**、2026-10 時点の公開情報 (各製品のリポジトリ・文書) で確認したが版によって変わり得る事項は **「(2026-10 時点)」**、確認できなかった事項は **「要確認」** と明記した。いずれも v1.L 着手前のスパイク S-22 / S-23 (08 §3) で再確認する。
 >
@@ -653,7 +653,7 @@ struct ContextItem {
 | 文書の変更 (ChangeSet) | `DocumentChanged` を契機に、core 内で `pending_changes` (02 §5.3) の ChangeSet を引く | Proposal のハンク範囲の写像 (§7.4) | v1.L |
 | カーソル移動・フォーカス | `SelectionChanged` / `FocusChanged` | 補完の破棄・起動判定 | v1.L-a |
 | LSP の診断 | eve-lsp の結果 (core が保持) を `Query` で取り出す | 対象範囲と重なる診断を `ContextItem::Diagnostic` (非信頼データ、区切りの中) として近い位置に付ける。指示編集では「この範囲の診断」として必ず添える (UC-03 と共通) | v1.L |
-| 構文木 | tree-sitter (v0.4 の eve-syntax) | **範囲の選び方** に使う: 指示編集で選択が空なら「カーソルを含む関数・ブロック」を Target の候補として示す、補完の prefix の切り出しを関数の先頭に揃える、周辺を「囲むスコープの宣言部 (シグネチャ・型定義)」で優先して埋める。構文木そのものは送らない | v1.L |
+| 構文木 | tree-sitter (v0.6 の eve-syntax) | **範囲の選び方** に使う: 指示編集で選択が空なら「カーソルを含む関数・ブロック」を Target の候補として示す、補完の prefix の切り出しを関数の先頭に揃える、周辺を「囲むスコープの宣言部 (シグネチャ・型定義)」で優先して埋める。構文木そのものは送らない | v1.L |
 | 言語・パス | 文書のメタデータ | 相対パスと言語名をシステム指示ではなくセグメント 3〜4 の見出しに置く (先頭を固定するため) | v1.L-a |
 | 承認状態 | core の `AiSession` 表 | 送信プレビュー (§6.6)・監査 (§15)。AI-INV-3 のとおり、eve-ai は core が確定した `ContextBundle` しか受け取らない | v1.L-a |
 
@@ -1170,7 +1170,7 @@ FR-909。目的は「いつ・どこに・何を送ったか」をユーザー�
 | rebase の性質テスト | ランダムなユーザー編集列に対し、Proposal のハンク写像が「重ならない編集では適用結果が (ユーザー編集を先に適用 → ハンク適用) と一致」「重なる編集では Stale」になることを検査 | なし |
 | パーサ fuzz | SSE・JSON・区切り抽出・ツール呼出し引数 (NFR-305) | なし |
 | インジェクション回帰コーパス | 既知の攻撃文字列を含むファイルで、(a) 承認なしに副作用が起きない、(b) 不可視文字フラグが立つ、ことを検査 (モデルの応答品質ではなく **構造的防御** を検査する) | なし |
-| UI スナップショット | SendPreview / ProposalReview / PermissionPrompt の Frame を insta で比較 | なし |
+| UI スナップショット | SendPreview / ProposalReview / PermissionPrompt の Frame をスナップショット (`eve_testkit::golden::check`) で比較 | なし |
 | 実機契約テスト | 小さな FIM 対応モデル (数百 MB 級) と最新の `llama-server` (および Ollama) を CI の任意ジョブで起動し、能力検出・`/tokenize`・`/infill`・構造化出力・キャンセルの往復を確認する。**決定性**: `seed` 固定・`temperature = 0`・`top_k = 1` で比較するが、llama-server はバッチの大きさでキャッシュ利用時の結果が揺れ得る (`cache_prompt` の注記) ので、出力の完全一致ではなく「スキーマに合う」「停止条件で止まる」を判定する。サーバの版を記録し、API の変化を早く検知する (§4.4.1)。クラウドは手動実行のみ (CI の既定ではネットワークなし) | 任意 (ループバック) |
 | 実機の性能計測 (S-22 / 09) | 基準条件 (NFR-116) で補完の TTFT・キャッシュ再利用率・キャンセルからスロット解放までの時間を計測し記録 | 任意 |
 | 駆動 API 経由のシナリオ (v1.L-b) | MCP サーバの各ツールを `evoeditor --headless --rpc stdio --fake-ports` 上で呼び、`editor/query` の除外適用・`edit/propose` の承認待ち・`--allow-write` 無しでの保存拒否を検査 (AI-INV-2 の External 一般化)。シナリオ DSL (11-dev-workflow) で記述 | なし |
@@ -1187,11 +1187,11 @@ v0.1 では AI を実装しないが、以下が無いと v1.L で core の構�
 | X3 | ChangeSet の位置/範囲写像 | `map_pos(pos, bias)` / `map_range(range) -> Mapped \| Overlapped` (重なり判定を返す)。合成 (compose) と逆変換 | 03 (eve-text) |
 | X4 | 文書変更イベント | X17 の `EditorEvent::DocumentChanged` (v0.1 は `DocumentChanged { doc, revision, origin_kind }`、02 §10.1。`edits: Option<EditSummary>` は X25 で v1.L から追加) を使う。イベントは本文も ChangeSet も運ばず、Proposal の写像に要る ChangeSet は core 内の `pending_changes` から引く (§6.8 / §7.4) | 02/03 |
 | X5 | Snapshot + Revision | 02 §5.3 どおり。範囲の切り出しが O(範囲長 + log n) | 03 |
-| X6 | Decoration / 仮想テキスト Provider | Decoration Provider の trait は v0.1 では定義しない (tree-sitter (v0.4) と同時、02 §10.1)。仮想テキスト Provider は型だけ予約し、「行内」と「行間 (行全体)」の両方を表せる形にする | 03/04 |
+| X6 | Decoration / 仮想テキスト Provider | Decoration Provider の trait は v0.1 では定義しない (tree-sitter (v0.6) と同時、02 §10.1)。仮想テキスト Provider は型だけ予約し、「行内」と「行間 (行全体)」の両方を表せる形にする | 03/04 |
 | X7 | オーバーレイ/パネルモデルの拡張性 | `OverlayModel` / `PanelModel` を `#[non_exhaustive]` にし、Confirm に「複数選択肢 + 詳細表示」を持たせる (SendPreview / PermissionPrompt の土台) | 02/04 |
 | X8 | `CommandSpec.permission` と `InvocationSource::{Ai, External}` | `CommandSpec.permission` は v0.1 で **実装** (必須項目。組込みコマンド全件に「AI/外部から呼べるか」の既定値を付ける。検証は 01 FR-601 AC-2)。`InvocationSource::{Ai, External}` は v0.1 では変種の予約のみ (External は駆動 API の実装 (v0.2 以降) と同時、Ai は v1.L) | 07 |
 | X9 | `HostMsg::Service` とキャンセル可能な要求 ID | v0.1 で enum 変種を予約。JobTable のキャンセルトークンを「ジョブ以外の要求」にも使える汎用 ID にする | 02/03 |
-| X10 | ファイル列挙と除外判定の共通部品 | **v0.1 では実装しない** (最初の利用者は v0.4 の横断検索・ファインダ (FR-125 / 405) で、そのときに作る)。v0.4 でパスパターン照合 (.gitignore 形式) を core の純粋関数として作り (I/O は FileSystem Port)、AI の除外 (§6.5) はそれを共用する | 03/05/07 |
+| X10 | ファイル列挙と除外判定の共通部品 | **v0.1 では実装しない** (最初の利用者は v0.5 の横断検索・ファインダ (FR-125 / 405) で、そのときに作る)。v0.5 でパスパターン照合 (.gitignore 形式) を core の純粋関数として作り (I/O は FileSystem Port)、AI の除外 (§6.5) はそれを共用する | 03/05/07 |
 | X11 | `Effect::OpenUrl` のユーザー起点制約 | 「ユーザー操作に起因する場合のみ発行」を規約化 (AI 応答から自動発行させない) | 02/04 |
 | X12 | テキスト無害化関数の再利用 | NFR-503 の無害化を、ファイル内容以外の文字列 (外部由来メッセージ) にも適用できる API に | 03/04 |
 | X13 | 設定スキーマの `ai` 名前空間予約 | v0.1 は `ai.enabled` を認識し「この版では未対応」と表示 (未知キー警告にしない) | 07 |
@@ -1227,7 +1227,7 @@ v0.1 では AI を実装しないが、以下が無いと v1.L で core の構�
 | OQ-92 | AI 機能の i18n | AI 関連 UI 文言は MessageKey 化し、OQ-21 に従う (UI 文言は v0.1 から ja のみ。AI の文言は v1.L で ja を追加し、英語は英語 UI の追加時に同時に入れる) | 裁量 / v1.L |
 | OQ-93 | LSP 経由の AI 補完 (方式 G) | eve-lsp がインライン補完系メッセージに対応すれば UC-05 の別経路になる。v1.X で要調査 | 裁量 / v1.X |
 | OQ-36 | AI の安全方針: (a) ワークスペース層の AI 項目を常に無視 / (c) 範囲の端に接する挿入も失効 | 本書はいずれもこの案で記述 (§11.1 / §7.4)。(b) 平文 `api_key` を提供しない、は確定 (ユーザー回答、01 FR-907、§10.1) | PO / (a)・(c) は v1.L 着手前 |
-| OQ-120 | ヘッドレス RPC (駆動 API) を配布ビルドに同梱するか | (配布ビルドでの予約名の扱いと `eve-view` の feature は確定 (ユーザー回答)、10) 本書の立場: MCP サーバ (v1.L-b) は sidecar モードが配布ビルドに **含まれる** ことを前提にする。v0.x は dev feature のみでよい。同梱は S-21 の計測 (サイズ・起動時間) を受けて v0.4 着手前に決める (10) | PO / v0.4 着手前 |
+| OQ-120 | ヘッドレス RPC (駆動 API) を配布ビルドに同梱するか | (配布ビルドでの予約名の扱いと `eve-view` の feature は確定 (ユーザー回答)、10) 本書の立場: MCP サーバ (v1.L-b) は sidecar モードが配布ビルドに **含まれる** ことを前提にする。v0.x は dev feature のみでよい。同梱は S-21 の計測 (サイズ・起動時間) を受けて v0.5 着手前に決める (10) | PO / v0.5 着手前 |
 | OQ-128 | ローカル LLM アダプタの対象範囲 | `llama_server` を第一級 (ネイティブ API を深く使う)、`openai_compatible` を汎用とし、Ollama は汎用 + ネイティブ補助 (`/api/show` の能力・`/api/generate` の `suffix`)。LM Studio / vLLM / llamafile は汎用で能力の範囲 (§3.3.1) | 裁量 / v1.L 着手前 (S-22) |
 | OQ-130 | チャットテンプレートと FIM の扱い | チャットはサーバ側でテンプレートを適用。FIM はサーバ側 (`/infill`・`suffix`) を優先し、無ければ同梱の FIM テンプレート (モデル系列ごと) で生プロンプト。チャット形式での補完代用はしない (§7.6) | 裁量 / v1.L-a |
 | OQ-131 | 構造化出力の方式 | JSON schema を第一 (llama-server・Ollama・vLLM で共通)、GBNF は JSON schema の無いサーバ向けに eve-ai が生成、制約の無いサーバは nonce 付き区切りに縮退。いずれも検証してから適用 (§7.2) | 裁量 / v1.L-a |

@@ -4,12 +4,13 @@
 
 use std::collections::BTreeMap;
 use std::fmt;
+use std::ops::ControlFlow;
 use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 
 use eve_core::{
-    Clock, DocSnapshot, Editor, InitialFile, JobResult, Millis, Ports, RescueReason, RescueWriter,
-    Tick,
+    ClipboardFallbackReason, Clock, DocSnapshot, Editor, InitialFile, JobResult, Millis, Ports,
+    RescueReason, RescueWriter, Tick,
 };
 use eve_view::{Capabilities, DocumentId, EditorEvent, Effect, StderrLine, WindowId};
 
@@ -19,28 +20,39 @@ use crate::frontend::{
 };
 use crate::msg::{ExitCode, HostMsg};
 
-/// 1 回の `step` で続けて処理する時間の目安 (超えたら残りは次の `step` へ)。
 /// システムクリップボードの取得を待つ時間 (05 §8.1)。
 const CLIPBOARD_TIMEOUT: Millis = Millis(2000);
 
+/// 1 回の `step` で続けて処理する時間の目安 (超えたら残りは次の `step` へ)。
 const STEP_BUDGET: Millis = Millis(8);
 /// 進捗・検索の途中経過などによる再描画の最小の間隔 (入力・貼り付けの結果と、ジョブの完了・失敗などは即時に描く、04 §4.4)。
 const RENDER_INTERVAL: Millis = Millis(16);
 /// 蓄えておく `EditorEvent` の上限 (購読者がいない間に増え続けない)。
 const MAX_EVENTS: usize = 4096;
-/// 緊急退避の時間予算 (02 §11.2.1 の表)。パニック・Fatal は 5 s、シグナル系 (CTRL_C / CTRL_BREAK 等) は 2.5 s、CTRL_CLOSE は 3.5 s。
+/// 緊急退避の時間予算 (02 §11.2.1 の表)。パニック・Fatal は 5 s、シグナル系 (`CTRL_C` / `CTRL_BREAK` 等) は 2.5 s、`CTRL_CLOSE` は 3.5 s。
+/// パニックと `HostMsg::Fatal` の退避の時間予算 (5 s)。
 pub const RESCUE_BUDGET_FATAL: std::time::Duration = std::time::Duration::from_secs(5);
+/// シグナル系 (Unix の SIGINT / SIGTERM / SIGHUP、Windows の `CTRL_C` / `CTRL_BREAK` 等) の退避の時間予算 (2.5 s)。
 pub const RESCUE_BUDGET_SIGNAL: std::time::Duration = std::time::Duration::from_millis(2500);
+/// `CTRL_CLOSE` (コンソールの閉鎖) の退避の時間予算 (3.5 s)。
 pub const RESCUE_BUDGET_CLOSE: std::time::Duration = std::time::Duration::from_millis(3500);
-/// Windows のログオフ・シャットダウンの退避の上限 (対話的なアプリの猶予は既定でおよそ 5 秒。CTRL_CLOSE と同じ配分、05 §11.2)。
+/// Windows のログオフ・シャットダウンの退避の上限 (対話的なアプリの猶予は既定でおよそ 5 秒。`CTRL_CLOSE` と同じ配分、05 §11.2)。
 pub const RESCUE_BUDGET_SESSION: std::time::Duration = std::time::Duration::from_millis(3500);
+/// 「保存を中止して終了」の退避は時間予算なし (02 §11.2.1 の表。利用者が選んだ終了で、外から終わらされないので書き終えてから終了する)。
+/// 書き手は `受信 + 予算` を期限にするので、`Instant` に足して溢れない大きさの値で「なし」を表す。
+pub const RESCUE_BUDGET_UNBOUNDED: std::time::Duration =
+    std::time::Duration::from_secs(24 * 60 * 60);
 
+/// `Host::step` の結果。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum StepOutcome {
+    /// ループを続ける。
     Continue,
+    /// 終了する。値はプロセスの終了コード。
     Exit(ExitCode),
 }
 
+/// `Host::start` の失敗。
 #[derive(Debug)]
 pub enum StartError {
     /// `Frontend::init` の失敗 (端末でない等)。端末を変えていないので復元は要らない。
@@ -55,7 +67,19 @@ impl fmt::Display for StartError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             StartError::Init(e) | StartError::Frontend(e) => e.fmt(f),
-            StartError::NoWindow => write!(f, "起動時に Window を作れませんでした"),
+            StartError::NoWindow => write!(f, "could not create the window at startup"),
+        }
+    }
+}
+
+impl StartError {
+    /// stderr の理由の文言のキー (bin の表 `stderr.reason.*`) と、OS の誤りの詳細。
+    pub fn reason_key(&self) -> (String, Option<String>) {
+        match self {
+            StartError::Init(e) | StartError::Frontend(e) => {
+                (format!("frontend.{}", e.kind.key()), e.detail.clone())
+            }
+            StartError::NoWindow => ("start.no_window".to_owned(), None),
         }
     }
 }
@@ -67,6 +91,7 @@ pub fn channel() -> (Sender<HostMsg>, Receiver<HostMsg>) {
     mpsc::channel()
 }
 
+/// Composition Root の共通部 (docs/02 §9.2)。`Editor` と Port を持ち、受信口のメッセージで `Editor` を駆動する。
 pub struct Host {
     editor: Editor,
     clock: Arc<dyn Clock>,
@@ -82,7 +107,7 @@ pub struct Host {
     /// `Frontend::wake_after` の期限。
     wake_at: Option<Tick>,
     /// 退避用の公開物 (文書ごとのスロット。緊急退避の書き手が読む)。
-    slots: BTreeMap<DocumentId, DocSnapshot>,
+    slots: BTreeMap<DocumentId, Arc<DocSnapshot>>,
     events: Vec<EditorEvent>,
     exit_stderr: Vec<StderrLine>,
     /// 起動時に開くファイルの文字コードの指定 (`--encoding`)。
@@ -99,6 +124,8 @@ pub struct Host {
     clip_busy: Arc<std::sync::atomic::AtomicBool>,
     /// 待っている取得の token と期限 (2 秒)。
     clip_wait: Option<(eve_view::ClipboardToken, Tick)>,
+    /// 貼り付けの結果を渡した: 次の描画を間引かない (クリップボードからの貼り付けは入力の結果、04 §4.4・02 §9.2)。
+    render_now: bool,
     /// 端末が OSC 52 の書込に対応する (`frontend.init` の能力、05 §8.1)。
     osc52_write: bool,
     /// SSH 接続中 (`SSH_TTY` / `SSH_CONNECTION`)。`clipboard.osc52 = auto` で OSC 52 を使う条件。
@@ -109,23 +136,115 @@ pub struct Host {
     config_report: Vec<(String, Vec<eve_config::Diagnostic>)>,
 }
 
+/// Host を作るときに渡すもの (docs/02 §9.2 の「Host の組み立て」)。`Default` は何も渡さない形 (既定の設定・内部レジスタだけ・
+/// 退避の書き手なし)。`Host::with_channel` が欄を決まった順に Editor へ当てる (順は `Host::with_channel` の注釈)。
+#[derive(Default)]
+pub struct HostInit {
+    /// 起動時に開くファイルの文字コードの指定 (`--encoding`、FR-111)。
+    pub initial_encoding: Option<eve_core::Encoding>,
+    /// 解決済みの設定 (07 §5.0)。`None` は既定の設定のまま (Editor に当てない)。
+    pub config: Option<eve_config::Config>,
+    /// 設定の診断 (表示名, 診断)。最初の Frame の後に、この順にメッセージとして出す (07 §4.3、FR-703)。空の診断は捨てる。
+    pub config_reports: Vec<(String, Vec<eve_config::Diagnostic>)>,
+    /// テーマファイルから読んだテーマ (名前, `None` は読めなかった: default で動く。07 §8.6)。
+    pub user_theme: Option<(String, Option<eve_config::theme::Theme>)>,
+    /// 設定の読込元 (`config.reload` が同じ元を読み直す、07 §6)。
+    pub config_sources: Option<eve_core::ConfigSources>,
+    /// ユーザーのキーマップ (表示名, `keymap.toml`)。その診断は `config_reports` の後に積む。
+    pub keymap: Option<(String, eve_config::KeymapFile)>,
+    /// UI の言語 (選択順は `eve_config::select_locale`、07 §17.1)。
+    pub locale: Option<eve_config::Locale>,
+    /// ログファイルの場所 (設定の問題の要約に出す)。
+    pub log_path: Option<String>,
+    /// OS のロケール由来の文字コードのヒント (`file.default_encoding = "system"`、05 §6)。
+    pub system_encoding: Option<eve_core::Encoding>,
+    /// システムクリップボードの提供者 (無ければ内部レジスタだけ)。
+    pub clipboard: Option<Arc<dyn eve_platform::clipboard::ClipboardProvider>>,
+    /// 緊急退避の書き手 (無ければ退避は書かない)。
+    pub rescue_writer: Option<Arc<dyn RescueWriter>>,
+    /// SSH 接続中か (`clipboard.osc52 = auto` の条件)。`None` は環境変数 `SSH_TTY` / `SSH_CONNECTION` から決める。
+    pub ssh_session: Option<bool>,
+}
+
 impl Host {
-    /// Port から Host を作る。Editor は空で、`start` で frontend の能力と最初の文書を設定する。
+    /// Port から、何も渡さない (`HostInit::default()`) Host を作る。Editor は空で、`start` で frontend の能力と最初の文書を設定する。
     pub fn new(ports: Ports) -> Host {
-        Host::with_channel(ports, channel())
+        Host::with_channel(ports, channel(), HostInit::default())
     }
 
-    /// 起動時に開くファイルの文字コードを指定する (`--encoding`、FR-111)。`start` / `run` の前に呼ぶ。
-    pub fn set_initial_encoding(&mut self, encoding: Option<eve_core::Encoding>) {
-        self.initial_encoding = encoding;
-    }
-
-    /// 受信口を外で作った Host。`ThreadJobSpawner` のように、Host より先に送信口が要る Port のため。
-    pub fn with_channel(ports: Ports, (tx, inbox): (Sender<HostMsg>, Receiver<HostMsg>)) -> Host {
+    /// 受信口を外で作った Host (`ThreadJobSpawner` のように、Host より先に送信口が要る Port のため)。
+    /// `init` は Editor に次の順で 1 項目ずつ当てる (v0.2.0 の bin の setter の順と同じ。テーマは設定の `theme.name` の後):
+    /// 設定 → テーマ → 設定の読込元 → キーマップ → UI の言語 → ログの場所 → OS の文字コード。
+    /// 設定の診断は `config_reports` → キーマップの診断の順に積み、`start` の最初の Frame の後に出す。
+    pub fn with_channel(
+        ports: Ports,
+        (tx, inbox): (Sender<HostMsg>, Receiver<HostMsg>),
+        init: HostInit,
+    ) -> Host {
+        use eve_core::StartupConfig;
+        let HostInit {
+            initial_encoding,
+            config,
+            config_reports,
+            user_theme,
+            config_sources,
+            keymap,
+            locale,
+            log_path,
+            system_encoding,
+            clipboard,
+            rescue_writer,
+            ssh_session,
+        } = init;
         let clock = ports.clock.clone();
         let fs = ports.fs.clone();
+        let mut editor = Editor::new(ports, Capabilities::default());
+        let mut config_report: Vec<_> = config_reports
+            .into_iter()
+            .filter(|(_, d)| !d.is_empty())
+            .collect();
+        // `Editor::configure` は欄の順に当てるので、まとめずに 1 項目ずつ渡す (上の順を保つ)
+        if let Some(c) = &config {
+            editor.configure(StartupConfig {
+                config: Some(c.clone()),
+                ..Default::default()
+            });
+        }
+        if let Some(t) = user_theme {
+            editor.configure(StartupConfig {
+                user_theme: Some(t),
+                ..Default::default()
+            });
+        }
+        if let Some(s) = config_sources {
+            editor.configure(StartupConfig {
+                config_sources: Some(s),
+                ..Default::default()
+            });
+        }
+        if let Some((file, keymap)) = keymap {
+            let diagnostics = editor.set_user_keymap(&keymap);
+            if !diagnostics.is_empty() {
+                config_report.push((file, diagnostics));
+            }
+        }
+        if let Some(l) = locale {
+            editor.configure(StartupConfig {
+                locale: Some(l),
+                ..Default::default()
+            });
+        }
+        editor.configure(StartupConfig {
+            log_path: Some(log_path),
+            system_encoding: Some(system_encoding),
+            ..Default::default()
+        });
+        let emergency = EmergencyCtl::new();
+        if let Some(w) = rescue_writer {
+            emergency.set_writer(w);
+        }
         Host {
-            editor: Editor::new(ports, Capabilities::default()),
+            editor,
             clock,
             fs,
             inbox,
@@ -137,83 +256,22 @@ impl Host {
             slots: BTreeMap::new(),
             events: Vec::new(),
             exit_stderr: Vec::new(),
-            initial_encoding: None,
-            emergency: EmergencyCtl::new(),
+            initial_encoding,
+            emergency,
             restore_info: Arc::new(std::sync::OnceLock::new()),
             run_finished: Arc::new(std::sync::atomic::AtomicBool::new(false)),
-            clipboard: None,
+            clipboard,
             clip_busy: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             clip_wait: None,
+            render_now: false,
             osc52_write: false,
-            ssh_session: std::env::var_os("SSH_TTY").is_some()
-                || std::env::var_os("SSH_CONNECTION").is_some(),
-            config: eve_config::Config::default(),
-            config_report: Vec::new(),
+            ssh_session: ssh_session.unwrap_or_else(|| {
+                std::env::var_os("SSH_TTY").is_some()
+                    || std::env::var_os("SSH_CONNECTION").is_some()
+            }),
+            config: config.unwrap_or_default(),
+            config_report,
         }
-    }
-
-    /// ログファイルの場所を渡す (設定の問題の要約に出す)。
-    pub fn set_log_path(&mut self, path: Option<String>) {
-        self.editor.state_mut().set_log_path(path);
-    }
-
-    /// OS のロケール由来の文字コードのヒントを渡す (`file.default_encoding = "system"`、05 §6)。`start` / `run` の前に呼ぶ。
-    pub fn set_system_encoding(&mut self, encoding: Option<eve_core::Encoding>) {
-        self.editor.state_mut().set_system_encoding(encoding);
-    }
-
-    /// 設定と、その読込の診断を渡す (`start` / `run` の前に呼ぶ)。`file` は診断の表示名。
-    pub fn set_config(
-        &mut self,
-        config: eve_config::Config,
-        file: &str,
-        diagnostics: Vec<eve_config::Diagnostic>,
-    ) {
-        self.config = config.clone();
-        self.editor.state_mut().set_config(config);
-        if !diagnostics.is_empty() {
-            self.config_report.push((file.to_owned(), diagnostics));
-        }
-    }
-
-    /// 設定の診断を足す (`--config` の各ファイル・`--set` の分。最初の Frame の後にメッセージとして出す)。
-    pub fn add_config_report(&mut self, file: &str, diagnostics: Vec<eve_config::Diagnostic>) {
-        if !diagnostics.is_empty() {
-            self.config_report.push((file.to_owned(), diagnostics));
-        }
-    }
-
-    /// テーマファイルから読んだテーマを渡す (`None` は読めなかった: default で動く。07 §8.6)。
-    pub fn set_user_theme(&mut self, name: &str, theme: Option<eve_config::theme::Theme>) {
-        self.editor.state_mut().set_user_theme(name, theme);
-    }
-
-    /// 設定の読込元を渡す (`config.reload` が同じ元を読み直す、07 §6)。
-    pub fn set_config_sources(&mut self, sources: eve_core::ConfigSources) {
-        self.editor.state_mut().set_config_sources(sources);
-    }
-
-    /// ユーザーのキーマップ (`keymap.toml`) を渡す (`start` / `run` の前に呼ぶ)。`file` は診断の表示名。
-    pub fn set_keymap(&mut self, file: &str, keymap: &eve_config::KeymapFile) {
-        let diagnostics = self.editor.set_user_keymap(keymap);
-        if !diagnostics.is_empty() {
-            self.config_report.push((file.to_owned(), diagnostics));
-        }
-    }
-
-    /// UI の言語を渡す (`start` / `run` の前に呼ぶ。選択順は `eve_config::select_locale`、07 §17.1)。
-    pub fn set_locale(&mut self, locale: eve_config::Locale) {
-        self.editor.state_mut().set_locale(locale);
-    }
-
-    /// SSH 接続中かを上書きする (既定は環境変数 `SSH_TTY` / `SSH_CONNECTION` から。試験用)。
-    pub fn set_ssh_session(&mut self, ssh: bool) {
-        self.ssh_session = ssh;
-    }
-
-    /// システムクリップボードの提供者を設定する (`start` / `run` の前に呼ぶ。無ければ内部レジスタだけ)。
-    pub fn set_clipboard(&mut self, p: Arc<dyn eve_platform::clipboard::ClipboardProvider>) {
-        self.clipboard = Some(p);
     }
 
     /// 緊急の端末復元の情報の置き場 (受信スレッドに配る。`start` の `init` の後に入る)。
@@ -231,15 +289,12 @@ impl Host {
         Arc::clone(&self.emergency)
     }
 
-    /// 緊急退避の書き手を設定する (`start` / `run` の前に呼ぶ)。
-    pub fn set_rescue_writer(&mut self, w: Arc<dyn RescueWriter>) {
-        self.emergency.set_writer(w);
-    }
-
+    /// 駆動している `Editor`。
     pub fn editor(&self) -> &Editor {
         &self.editor
     }
 
+    /// 駆動している `Editor` (可変)。
     pub fn editor_mut(&mut self) -> &mut Editor {
         &mut self.editor
     }
@@ -249,6 +304,7 @@ impl Host {
         self.tx.clone()
     }
 
+    /// 最初の Window。`start` が成功するまでは `None`。
     pub fn window(&self) -> Option<WindowId> {
         self.window
     }
@@ -264,12 +320,17 @@ impl Host {
     }
 
     /// 退避用の公開物 (dirty な文書だけがある)。
-    pub fn emergency_slots(&self) -> &BTreeMap<DocumentId, DocSnapshot> {
+    pub fn emergency_slots(&self) -> &BTreeMap<DocumentId, Arc<DocSnapshot>> {
         &self.slots
     }
 
     /// 起動の後半 (02 §9.5): `frontend.init` → 能力と編集面の大きさ → 最初の文書 → 入力の開始 → 最初の Frame。
     /// `files` が空なら無題の文書。複数なら最初のものを表示し、残りは読込中のバッファとして足す。
+    ///
+    /// # Errors
+    ///
+    /// `frontend.init` が失敗したとき `StartError::Init` (端末を変えていない)。最初の Window を作れなかったとき
+    /// `StartError::NoWindow`。入力の開始が失敗したとき `StartError::Frontend`。
     pub fn start(
         &mut self,
         frontend: &mut dyn Frontend,
@@ -298,7 +359,10 @@ impl Host {
             let _ = self.restore_info.set(info);
         }
         let size = frontend.surface_size();
-        self.editor.state_mut().set_viewport(size.cols, size.rows);
+        self.editor.report(eve_core::HostReport::Viewport {
+            cols: size.cols,
+            rows: size.rows,
+        });
         self.editor.tick(self.clock.now());
         self.editor
             .open_initial_files(files, read_only, self.initial_encoding);
@@ -315,7 +379,10 @@ impl Host {
         self.render(frontend);
         // 設定の診断は最初の Frame の後に出す (起動を妨げない、07 §4.3)
         for (file, diagnostics) in std::mem::take(&mut self.config_report) {
-            self.editor.state_mut().report_config(&file, &diagnostics);
+            self.editor.report(eve_core::HostReport::ConfigDiagnostics {
+                file: &file,
+                diagnostics: &diagnostics,
+            });
             self.render(frontend);
         }
         Ok(())
@@ -348,9 +415,13 @@ impl Host {
                 frontend.restore();
                 ("stderr.fatal", ExitCode(1))
             };
+            // 理由は文言のキーと OS の詳細で渡す (bin が UI の言語の文にする。STR-C2)
+            let (reason_key, detail) = e.reason_key();
+            let mut args = vec![("reason_key".to_owned(), reason_key)];
+            args.extend(detail.map(|d| ("detail".to_owned(), d)));
             self.exit_stderr.push(StderrLine {
                 key: key.to_owned(),
-                args: vec![("reason".to_owned(), e.to_string())],
+                args,
             });
             return code;
         }
@@ -407,78 +478,9 @@ impl Host {
         while let Some(msg) = next.take() {
             // 各メッセージの処理の直前: Editor の「今」をこのメッセージの受信時刻にする
             self.editor.tick(self.clock.now());
-            match msg {
-                HostMsg::Input(w, ev) => {
-                    input_driven = true;
-                    self.editor.handle_input(w, ev);
-                }
-                HostMsg::Job(result) => {
-                    // 完了・失敗・確認などの結果は、待たせずに描く (開く操作の最初の画面を 16 ms 遅らせない)。
-                    // 進捗と検索の途中経過だけを間引く (04 §4.4)
-                    if !matches!(
-                        *result,
-                        JobResult::Progress { .. } | JobResult::SearchBatch { .. }
-                    ) {
-                        input_driven = true;
-                    }
-                    self.editor.on_job_result(*result);
-                }
-                HostMsg::Clipboard { token, result } => {
-                    // 待っている token の結果だけ使う (期限後に届いたものは捨てる)
-                    if self.clip_wait.is_some_and(|(t, _)| t == token) {
-                        self.clip_wait = None;
-                        let text = match result {
-                            Ok(t) => t,
-                            Err(e) => {
-                                let reason = self.clipboard_reason(e, "取得できませんでした");
-                                self.editor.notify_clipboard_fallback(reason);
-                                None
-                            }
-                        };
-                        self.deliver_clipboard(token, text);
-                    }
-                }
-                HostMsg::Osc52 {
-                    text,
-                    system_failure,
-                } => {
-                    if !frontend.write_osc52(&text)
-                        && let Some(e) = system_failure
-                    {
-                        let reason = self.clipboard_reason(e, "書き込めませんでした");
-                        self.editor.notify_clipboard_fallback(reason);
-                    }
-                }
-                HostMsg::ClipboardWriteFailed(e) => {
-                    let reason = self.clipboard_reason(e, "書き込めませんでした");
-                    self.editor.notify_clipboard_fallback(reason);
-                }
-                HostMsg::Signal(kind) => {
-                    // test-hooks: メインが止まった状態の再現 (受信スレッドの緊急の端末復元を検査する、09 §3.6)
-                    #[cfg(feature = "test-hooks")]
-                    if test_hook("main_stall") {
-                        loop {
-                            std::thread::sleep(std::time::Duration::from_secs(3600));
-                        }
-                    }
-                    // 非対話の終了要求: 退避を書く (受信スレッドが先に書いていれば、その `Done` を待つ) → 端末の復元 → 終了 (02 §11.2.1)
-                    let (reason, budget) = match kind {
-                        crate::msg::SignalKind::ConsoleClose => {
-                            (RescueReason::ConsoleClose, RESCUE_BUDGET_CLOSE)
-                        }
-                        _ => (RescueReason::Signal, RESCUE_BUDGET_SIGNAL),
-                    };
-                    self.emergency.run(reason, budget);
-                    frontend.restore();
-                    return StepOutcome::Exit(ExitCode::INTERRUPTED);
-                }
-                HostMsg::Fatal(_) => {
-                    // 入力スレッドの死亡・非メインスレッドのパニック: メインが退避を書く (最大 5 s) → 端末の復元 → 終了
-                    self.emergency.run(RescueReason::Fatal, RESCUE_BUDGET_FATAL);
-                    frontend.restore();
-                    return StepOutcome::Exit(ExitCode::FATAL);
-                }
-                HostMsg::Tick => {}
+            match self.handle_msg(frontend, msg) {
+                ControlFlow::Continue(driven) => input_driven |= driven,
+                ControlFlow::Break(code) => return StepOutcome::Exit(code),
             }
             self.sync_emergency();
             // 予算の判定は「次を取り出す前」に行う (取り出したメッセージを捨てない)
@@ -490,60 +492,184 @@ impl Host {
         // 最後: 処理中に来た期限を処理する
         self.editor.tick(self.clock.now());
         self.sync_emergency();
+        if let Some(code) = self.apply_effects(frontend) {
+            return StepOutcome::Exit(code);
+        }
+        self.publish_events();
+        self.render_after_step(frontend, input_driven);
+        StepOutcome::Continue
+    }
+
+    /// 1 メッセージの処理。続けるなら「入力の結果として即時に描く」かを、終了なら終了コードを返す。
+    fn handle_msg(
+        &mut self,
+        frontend: &mut dyn Frontend,
+        msg: HostMsg,
+    ) -> ControlFlow<ExitCode, bool> {
+        match msg {
+            HostMsg::Input(w, ev) => {
+                self.editor.handle_input(w, ev);
+                return ControlFlow::Continue(true);
+            }
+            HostMsg::Job(result) => {
+                // 完了・失敗・確認などの結果は、待たせずに描く (開く操作の最初の画面を 16 ms 遅らせない)。
+                // 進捗と検索の途中経過だけを間引く (04 §4.4)
+                let driven = !matches!(
+                    *result,
+                    JobResult::Progress { .. } | JobResult::SearchBatch { .. }
+                );
+                self.editor.on_job_result(*result);
+                return ControlFlow::Continue(driven);
+            }
+            HostMsg::Clipboard { token, result } => self.on_clipboard(token, result),
+            HostMsg::Osc52 {
+                text,
+                system_failure,
+            } => {
+                if !frontend.write_osc52(&text)
+                    && let Some(e) = system_failure
+                {
+                    self.report_clipboard_failure(e, ClipboardFallbackReason::WriteFailed);
+                }
+            }
+            HostMsg::ClipboardWriteFailed(e) => {
+                self.report_clipboard_failure(e, ClipboardFallbackReason::WriteFailed);
+            }
+            HostMsg::Signal(kind) => {
+                return ControlFlow::Break(self.exit_on_signal(frontend, kind));
+            }
+            HostMsg::Fatal(_) => return ControlFlow::Break(self.exit_on_fatal(frontend)),
+            HostMsg::Tick => {}
+        }
+        ControlFlow::Continue(false)
+    }
+
+    /// `HostMsg::Clipboard`: 待っている token の結果だけ使う (期限後に届いたものは捨てる)。
+    fn on_clipboard(
+        &mut self,
+        token: eve_view::ClipboardToken,
+        result: Result<Option<String>, eve_platform::clipboard::ClipboardFailure>,
+    ) {
+        if !self.clip_wait.is_some_and(|(t, _)| t == token) {
+            return;
+        }
+        self.clip_wait = None;
+        let text = match result {
+            Ok(t) => t,
+            Err(e) => {
+                self.report_clipboard_failure(e, ClipboardFallbackReason::ReadFailed);
+                None
+            }
+        };
+        self.deliver_clipboard(token, text);
+    }
+
+    /// クリップボードの失敗を、内部レジスタに切り替えたこととして core に知らせる。
+    fn report_clipboard_failure(
+        &mut self,
+        e: eve_platform::clipboard::ClipboardFailure,
+        otherwise: ClipboardFallbackReason,
+    ) {
+        let reason = self.clipboard_reason(e, otherwise);
+        self.editor
+            .report(eve_core::HostReport::ClipboardFallback { reason });
+    }
+
+    /// 非対話の終了要求: 退避を書く (受信スレッドが先に書いていれば、その `Done` を待つ) → 端末の復元 → 終了 (02 §11.2.1)。
+    fn exit_on_signal(
+        &mut self,
+        frontend: &mut dyn Frontend,
+        kind: crate::msg::SignalKind,
+    ) -> ExitCode {
+        // test-hooks: メインが止まった状態の再現 (受信スレッドの緊急の端末復元を検査する、09 §3.6)
+        #[cfg(feature = "test-hooks")]
+        if test_hook("main_stall") {
+            loop {
+                std::thread::sleep(std::time::Duration::from_secs(3600));
+            }
+        }
+        let (reason, budget) = match kind {
+            crate::msg::SignalKind::ConsoleClose => {
+                (RescueReason::ConsoleClose, RESCUE_BUDGET_CLOSE)
+            }
+            _ => (RescueReason::Signal, RESCUE_BUDGET_SIGNAL),
+        };
+        self.emergency.run(reason, budget);
+        frontend.restore();
+        ExitCode::INTERRUPTED
+    }
+
+    /// 入力スレッドの死亡・非メインスレッドのパニック: メインが退避を書く (最大 5 s) → 端末の復元 → 終了。
+    fn exit_on_fatal(&mut self, frontend: &mut dyn Frontend) -> ExitCode {
+        self.emergency.run(RescueReason::Fatal, RESCUE_BUDGET_FATAL);
+        frontend.restore();
+        ExitCode::FATAL
+    }
+
+    /// 溜まった `Effect` を実行する (frontend が扱わなかったものだけ)。`Effect::Quit` なら終了コードを返す (残りは実行しない)。
+    fn apply_effects(&mut self, frontend: &mut dyn Frontend) -> Option<ExitCode> {
         for eff in self.editor.drain_effects() {
             if frontend.apply_effect(&eff) == EffectOutcome::Handled {
                 continue;
             }
             match eff {
                 // 書込: 内部レジスタには core が書き済み。システムへは使い捨てのスレッドで書く (ブロックし得る)
-                Effect::SetClipboard { content, .. } => {
-                    self.write_clipboard(content);
-                    continue;
-                }
+                Effect::SetClipboard { content, .. } => self.write_clipboard(content),
                 // 読込: 使い捨てのスレッドで取得し、2 秒で応答が無ければ内部レジスタからの貼り付けに切り替える (05 §8.1)
-                Effect::RequestClipboard { token, .. } => {
-                    self.read_clipboard(token);
-                    continue;
-                }
+                Effect::RequestClipboard { token, .. } => self.read_clipboard(token),
+                Effect::Quit {
+                    code,
+                    stderr,
+                    rescue,
+                    ..
+                } => return Some(self.exit_normally(frontend, code, stderr, rescue)),
                 _ => {}
             }
-            if let Effect::Quit {
-                code,
-                stderr,
-                rescue,
-                ..
-            } = eff
-            {
-                // 正常な終了では、スワップはもう要らない。「保存を中止して終了」などの退避を伴う終了では残す (復旧の材料)
-                if code == 0 && matches!(rescue, eve_view::QuitRescue::None) {
-                    for (doc, path) in self.editor.swap_leftovers() {
-                        let _ = self.fs.discard_swap(doc, path.as_ref());
-                    }
-                    for entry in self.editor.swap_recovered_leftovers() {
-                        let _ = self.fs.remove_swap(&entry);
-                    }
-                }
-                // 「保存を中止して終了」: dirty な文書を緊急退避と同じ書き手・形式で退避してから終了する (03 §9.7 (f))。
-                // 結果の行は終了時に main が出す (`emergency.outcome()`)
-                if matches!(rescue, eve_view::QuitRescue::DirtyDocuments) {
-                    self.sync_emergency();
-                    self.emergency
-                        .run(RescueReason::QuitAbortedSave, RESCUE_BUDGET_CLOSE);
-                }
-                frontend.restore();
-                self.exit_stderr = stderr;
-                return StepOutcome::Exit(ExitCode(code));
+        }
+        None
+    }
+
+    /// `Effect::Quit`: スワップの後始末・必要なら退避 → 端末の復元 → 終了コード。
+    fn exit_normally(
+        &mut self,
+        frontend: &mut dyn Frontend,
+        code: u8,
+        stderr: Vec<StderrLine>,
+        rescue: eve_view::QuitRescue,
+    ) -> ExitCode {
+        // 未保存の確認 (FR-107) を経た終了 (`app.quit` の 0 と `app.quit_with_error` の 4、07 §18.4) では、スワップはもう要らない。
+        // 「保存を中止して終了」などの退避を伴う終了では残す (復旧の材料)
+        if matches!(rescue, eve_view::QuitRescue::None) {
+            for (doc, path) in self.editor.swap_leftovers() {
+                let _ = self.fs.discard_swap(doc, path.as_ref());
+            }
+            for entry in self.editor.swap_recovered_leftovers() {
+                let _ = self.fs.remove_swap(&entry);
             }
         }
-        self.publish_events();
+        // 「保存を中止して終了」: dirty な文書を緊急退避と同じ書き手・形式で退避してから終了する (03 §9.7 (f))。
+        // 結果の行は終了時に main が出す (`emergency.outcome()`)
+        if matches!(rescue, eve_view::QuitRescue::DirtyDocuments) {
+            self.sync_emergency();
+            self.emergency
+                .run(RescueReason::QuitAbortedSave, RESCUE_BUDGET_UNBOUNDED);
+        }
+        frontend.restore();
+        self.exit_stderr = stderr;
+        ExitCode(code)
+    }
+
+    /// `step` の最後の描画: 変化があり間引きの対象でなければ、または frontend の期限が来ていれば描く。次の frontend の期限を覚える。
+    fn render_after_step(&mut self, frontend: &mut dyn Frontend, input_driven: bool) {
         let wake_due = self.wake_at.is_some_and(|t| t <= self.clock.now());
+        // 貼り付けの結果 (取得の結果・期限切れで内部レジスタから) も入力の結果として即時に描く
+        let input_driven = input_driven || std::mem::take(&mut self.render_now);
         if (self.editor.needs_render() && self.render_allowed(input_driven)) || wake_due {
             self.render(frontend);
         }
         self.wake_at = frontend
             .wake_after()
             .map(|d| self.clock.now() + (Millis(u64::try_from(d.as_millis()).unwrap_or(u64::MAX))));
-        StepOutcome::Continue
     }
 
     /// クリップボードの失敗の理由 (`msg.clipboard.fallback` の `{reason}`)。手段が無いときは提供者が理由を持つ
@@ -551,8 +677,8 @@ impl Host {
     fn clipboard_reason(
         &self,
         e: eve_platform::clipboard::ClipboardFailure,
-        otherwise: &'static str,
-    ) -> &'static str {
+        otherwise: ClipboardFallbackReason,
+    ) -> ClipboardFallbackReason {
         use eve_platform::clipboard::ClipboardFailure::{TooLarge, Unsupported};
         match e {
             Unsupported => self
@@ -560,7 +686,7 @@ impl Host {
                 .as_ref()
                 .and_then(|p| p.unsupported_reason())
                 .unwrap_or(otherwise),
-            TooLarge => "大きすぎてシステムのクリップボードに入りません",
+            TooLarge => ClipboardFallbackReason::TooLarge,
             _ => otherwise,
         }
     }
@@ -598,8 +724,9 @@ impl Host {
             _ => false,
         };
         if too_large {
-            self.editor
-                .notify_clipboard_fallback("大きすぎてシステムのクリップボードに入りません");
+            self.editor.report(eve_core::HostReport::ClipboardFallback {
+                reason: ClipboardFallbackReason::TooLarge,
+            });
             return;
         }
         let tx = self.tx.clone();
@@ -668,6 +795,7 @@ impl Host {
         if let Some(w) = self.window {
             self.editor
                 .handle_input(w, eve_view::InputEvent::ClipboardContent { token, text });
+            self.render_now = true;
         }
     }
 
@@ -677,14 +805,15 @@ impl Host {
             && self.clock.now() >= due
         {
             self.clip_wait = None;
-            self.editor
-                .notify_clipboard_fallback("取得がタイムアウトしました");
+            self.editor.report(eve_core::HostReport::ClipboardFallback {
+                reason: ClipboardFallbackReason::Timeout,
+            });
             self.deliver_clipboard(token, None);
         }
     }
 
-    /// 描画の間引き: 入力の結果は即時に描く。それ以外 (ジョブの結果など) だけの変化は、直前の描画から 16 ms 未満なら
-    /// 描かず、期限を待ちの期限に加える。
+    /// 描画の間引き: 入力の結果 (クリップボードからの貼り付けを含む) は即時に描く。それ以外 (ジョブの進捗など) だけの変化は、
+    /// 直前の描画から 16 ms 未満なら描かず、期限を待ちの期限に加える。
     fn render_allowed(&mut self, input_driven: bool) -> bool {
         let now = self.clock.now();
         match self.last_render {
@@ -719,7 +848,9 @@ impl Host {
         for doc in self.editor.take_snapshot_updates() {
             match self.editor.emergency_snapshot(doc) {
                 Some(s) => {
-                    self.emergency.publish(doc, Some(s.clone()));
+                    // 退避の書き手のスロットと Host の写しで 1 つの公開物を共有する (複製しない、PRF-19)
+                    let s = Arc::new(s);
+                    self.emergency.publish(doc, Some(Arc::clone(&s)));
                     self.slots.insert(doc, s);
                 }
                 None => {

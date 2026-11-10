@@ -69,7 +69,7 @@ pub enum Confidence {
     Certain,
 }
 
-/// 対応していない BOM の種類 (本文を読まずに確認を求める)。UTF-16 は M3 から復号するので、ここには UTF-32 だけが来る。
+/// 対応していない BOM の種類 (本文を読まずに確認を求める)。UTF-16 は復号するので、`detect` が返すのは UTF-32 だけ。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum UnsupportedBom {
     Utf32Le,

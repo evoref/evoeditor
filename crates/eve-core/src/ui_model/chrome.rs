@@ -1,0 +1,523 @@
+//! クローム (ステータスバー・ヒントバー・小さすぎる端末の文言) のモデル (docs/04 §8.7 / §8.8、docs/02 §8.2)。
+//! 文言は core が言語ファイルから解決し、幅も計算して渡す。frontend は配置と省略だけを行う。
+
+use eve_text::{ByteOff, ByteRange, TextRead, grapheme_indices};
+use eve_view::{
+    Choice, ChoiceId, ChromeTexts, CutPolicy, HintContext, HintItem, HintModel, InputFieldModel,
+    KeyCode, KeyLabel, KeyStroke, Modifiers, OverlayModel, StatusAlign, StatusItem, StatusKind,
+    StatusModel, ViewId,
+};
+
+use crate::command::ids;
+use crate::document::{Document, LoadState};
+use crate::ui_model::keys;
+
+use crate::editor::state::EditorState;
+use crate::layout::cell_text;
+
+/// ヒントバーの `normal` 文脈の項目 (07 §11.6 の「ヒント」列。CommandId と優先度)。
+const NORMAL_HINTS: [(&str, u8); 7] = [
+    (ids::APP_QUIT, 5),
+    (ids::UI_PALETTE_OPEN, 5),
+    (ids::FILE_SAVE, 4),
+    (ids::SEARCH_OPEN, 3),
+    (ids::FILE_OPEN, 2),
+    (ids::EDIT_UNDO, 2),
+    (ids::CURSOR_GOTO_LINE, 1),
+];
+
+fn item(
+    kind: StatusKind,
+    long: &str,
+    short: Option<&str>,
+    priority: u8,
+    align: StatusAlign,
+    cut: CutPolicy,
+) -> StatusItem {
+    StatusItem {
+        kind,
+        long: cell_text(long, cut),
+        short: short.map(|s| cell_text(s, CutPolicy::Never)),
+        priority,
+        align,
+    }
+}
+
+fn render(state: &EditorState, key: &str, args: &[(&str, &str)]) -> String {
+    let label = |c: &str| state.key_label(c);
+    state.catalog().render(key, args, &label)
+}
+
+/// 行頭からの書記素数 + 1 (桁。書記素数、04 の `ui.column_unit = "grapheme"`)。長大行は char 数 (03 §11.5.1)。
+fn grapheme_column(doc: &Document, head: ByteOff) -> usize {
+    let t = doc.text();
+    let line = t.byte_to_line(head);
+    let ls = t.line_to_byte(line);
+    if let Some(n) = crate::layout::long_line_chars(doc, line.0, head.0 - ls.0) {
+        return n + 1;
+    }
+    let prefix = t.slice_to_string(ByteRange::new(ls, head));
+    grapheme_indices(&prefix).len() + 1
+}
+
+pub(crate) fn status_model(
+    state: &EditorState,
+    view_id: ViewId,
+    chord: &[KeyStroke],
+) -> StatusModel {
+    let mut items = Vec::new();
+    let Some(view) = state.view(view_id) else {
+        return StatusModel::default();
+    };
+    let Some(doc) = state.document(view.doc) else {
+        return StatusModel::default();
+    };
+    use StatusAlign::{Left, Right};
+
+    // 左群: ファイル名・変更・読み取り専用・機能縮退・読込中・保存中・外部変更・チョード
+    let name = match doc.path.as_ref().and_then(|p| p.file_name()) {
+        Some(n) => n,
+        None => state.untitled_label(doc),
+    };
+    // 文書が 2 件以上のときは、ファイル名の後ろに何番目かを出す (03 §9.8)
+    let name = match state.buffer_position() {
+        Some((n, total)) => format!("{name} ({n}/{total})"),
+        None => name,
+    };
+    items.push(item(
+        StatusKind::Path,
+        &name,
+        None,
+        4,
+        Left,
+        CutPolicy::Middle,
+    ));
+    if doc.is_dirty() {
+        items.push(item(
+            StatusKind::Dirty,
+            "[+]",
+            None,
+            5,
+            Left,
+            CutPolicy::Never,
+        ));
+    }
+    if !doc.read_only.is_empty() {
+        let (long, short) = (
+            render(state, keys::STATUS_READ_ONLY_LONG, &[]),
+            render(state, keys::STATUS_READ_ONLY_SHORT, &[]),
+        );
+        items.push(item(
+            StatusKind::ReadOnly,
+            &long,
+            Some(&short),
+            5,
+            Left,
+            CutPolicy::Never,
+        ));
+    }
+    // 長い行を含む文書: 閾値を超える行は char 近似モードで表示する (NFR-106、03 §11.5.1、04 §8.7)
+    if doc.format.long_lines > 0 {
+        let (long, short) = (
+            render(state, keys::STATUS_DEGRADED_LONG_LINE_LONG, &[]),
+            render(state, keys::STATUS_DEGRADED_LONG_LINE_SHORT, &[]),
+        );
+        items.push(item(
+            StatusKind::Degraded,
+            &long,
+            Some(&short),
+            5,
+            Left,
+            CutPolicy::Never,
+        ));
+    }
+    // 読込中: 読込中の文書そのもの、または置き換えの途中で旧文書を見せている間 (03 §9.2) に進捗を出す
+    let loading = (doc.load_state == LoadState::Loading)
+        .then_some(doc.load_percent)
+        .or_else(|| state.loading_percent());
+    if let Some(percent) = loading {
+        let percent = percent.to_string();
+        let a = [("percent", percent.as_str())];
+        let (long, short) = (
+            render(state, keys::STATUS_LOADING_LONG, &a),
+            render(state, keys::STATUS_LOADING_SHORT, &a),
+        );
+        items.push(item(
+            StatusKind::Loading,
+            &long,
+            Some(&short),
+            5,
+            Left,
+            CutPolicy::Never,
+        ));
+    }
+    if state.is_saving(view.doc) {
+        let (long, short) = (
+            render(state, keys::STATUS_SAVING_LONG, &[]),
+            render(state, keys::STATUS_SAVING_SHORT, &[]),
+        );
+        items.push(item(
+            StatusKind::Saving,
+            &long,
+            Some(&short),
+            5,
+            Left,
+            CutPolicy::Never,
+        ));
+    }
+    // 外部変更: 確認で「無視」を選んだ文書は、ディスクの内容と違うことを保存か再読込まで示す (03 §9.5、04 §8.7)
+    if doc.external_seen.is_some() {
+        let (long, short) = (
+            render(state, keys::STATUS_EXTERNAL_CHANGE_LONG, &[]),
+            render(state, keys::STATUS_EXTERNAL_CHANGE_SHORT, &[]),
+        );
+        items.push(item(
+            StatusKind::ExternalChange,
+            &long,
+            Some(&short),
+            5,
+            Left,
+            CutPolicy::Never,
+        ));
+    }
+    if !chord.is_empty() {
+        let text = format!(
+            "{} …",
+            eve_view::key_notation(chord, state.term.caps.ascii_only)
+        );
+        items.push(item(
+            StatusKind::Chord,
+            &text,
+            None,
+            5,
+            Left,
+            CutPolicy::Never,
+        ));
+    }
+
+    // 右群: 選択・位置・文字コード・改行コード
+    let r = view.selection.primary();
+    if !r.is_empty() {
+        let t = doc.text();
+        let n = t.byte_to_char(r.end()).0 - t.byte_to_char(r.start()).0;
+        let text = render(state, keys::STATUS_SELECTION, &[("count", &n.to_string())]);
+        items.push(item(
+            StatusKind::Selection,
+            &text,
+            None,
+            2,
+            Right,
+            CutPolicy::Never,
+        ));
+    }
+    let line = doc.text().byte_to_line(r.head).0 + 1;
+    let a = [
+        ("line", line.to_string()),
+        ("col", grapheme_column(doc, r.head).to_string()),
+    ];
+    let a: Vec<(&str, &str)> = a.iter().map(|(k, v)| (*k, v.as_str())).collect();
+    let (long, short) = (
+        render(state, keys::STATUS_POSITION_LONG, &a),
+        render(state, keys::STATUS_POSITION_SHORT, &a),
+    );
+    items.push(item(
+        StatusKind::Position,
+        &long,
+        Some(&short),
+        4,
+        Right,
+        CutPolicy::Never,
+    ));
+    let (name, short) = (doc.format.encoding.name(), doc.format.encoding.short_name());
+    let with_bom = |n: &str| {
+        if doc.format.has_bom {
+            render(state, keys::STATUS_ENCODING_BOM, &[("encoding", n)])
+        } else {
+            n.to_owned()
+        }
+    };
+    let (enc, enc_short) = (with_bom(name), with_bom(short));
+    items.push(item(
+        StatusKind::Encoding,
+        &enc,
+        (enc_short != enc).then_some(enc_short.as_str()),
+        3,
+        Right,
+        CutPolicy::Never,
+    ));
+    let eol = if doc.format.eol_stats.is_mixed() {
+        render(state, keys::STATUS_EOL_MIXED, &[])
+    } else {
+        match doc.format.default_eol {
+            eve_text::LineEnding::Lf => "LF",
+            eve_text::LineEnding::Crlf => "CRLF",
+            eve_text::LineEnding::Cr => "CR",
+        }
+        .to_owned()
+    };
+    items.push(item(
+        StatusKind::Eol,
+        &eol,
+        None,
+        3,
+        Right,
+        CutPolicy::Never,
+    ));
+    StatusModel { items }
+}
+
+/// オーバーレイのモデル (確認・入力プロンプト)。文言は core が解決して `CellText` で渡す。
+pub(crate) fn overlay_models(state: &EditorState) -> Vec<OverlayModel> {
+    use crate::ui_model::overlay::Overlay;
+    match &state.ui.overlay {
+        None => Vec::new(),
+        Some(Overlay::Confirm(c)) => {
+            let key = |leaf: &str| format!("ui.confirm.{}.{leaf}", c.name);
+            let args: Vec<(&str, &str)> = c
+                .args
+                .iter()
+                .map(|(k, v)| (k.as_str(), v.as_str()))
+                .collect();
+            // 終了の連鎖 (03 §9.8) は何件目かを前置した本文を使う
+            let message_leaf = if c.args.iter().any(|(k, _)| k == "index") {
+                "chain"
+            } else {
+                "message"
+            };
+            let mut choices: Vec<Choice> = c
+                .choices
+                .iter()
+                .enumerate()
+                .map(|(i, d)| Choice {
+                    id: ChoiceId(u16::try_from(i).unwrap_or(u16::MAX)),
+                    label: cell_text(&render(state, &key(d.id), &args), CutPolicy::Never),
+                    key: d.accel,
+                    destructive: d.destructive,
+                })
+                .collect();
+            // キャンセルは最後 (`Esc`)。「中止」の選択肢を自分で持つ確認 (不正バイトが多いファイル) では、
+            // 同じ意味の表示が 2 つ並ばないよう付けない (`Esc` は変わらずキャンセルの番号に届く)
+            if !c.choices.iter().any(|d| d.id == "abort") {
+                choices.push(Choice {
+                    id: ChoiceId(u16::try_from(c.cancel_index()).unwrap_or(u16::MAX)),
+                    label: cell_text(
+                        &render(state, keys::UI_CONFIRM_CANCEL, &[]),
+                        CutPolicy::Never,
+                    ),
+                    key: None,
+                    destructive: false,
+                });
+            }
+            vec![OverlayModel::Confirm {
+                title: cell_text(&render(state, &key("title"), &[]), CutPolicy::Never),
+                message: cell_text(&render(state, &key(message_leaf), &args), CutPolicy::End),
+                details: (!c.details.is_empty()).then(|| {
+                    c.details
+                        .iter()
+                        .map(|l| cell_text(l, CutPolicy::End))
+                        .collect()
+                }),
+                choices,
+                default: ChoiceId(u16::try_from(c.default).unwrap_or(u16::MAX)),
+                focused: ChoiceId(u16::try_from(c.focused).unwrap_or(u16::MAX)),
+                nav_hint: Some(cell_text(
+                    &render(state, keys::UI_CONFIRM_NAV_HINT, &[]),
+                    CutPolicy::End,
+                )),
+            }]
+        }
+        Some(Overlay::Palette(p)) => vec![state.palette_model(p)],
+        Some(Overlay::Help(h)) => vec![state.help_model(h)],
+        Some(Overlay::Prompt(p)) => {
+            let name = p.kind.name();
+            let cells = cell_text(&p.text, CutPolicy::End).spans;
+            let cursor = cell_text(&p.text[..p.cursor], CutPolicy::End).spans.len();
+            let selection = crate::ui_model::overlay::field_selection(p.all_selected, cells.len());
+            let input = InputFieldModel {
+                len: cells.len(),
+                cells,
+                first: 0,
+                cursor,
+                selection,
+                placeholder: None,
+            };
+            let hint_key = format!("ui.prompt.{name}.hint");
+            let hint = state
+                .catalog()
+                .contains(&hint_key)
+                .then(|| cell_text(&render(state, &hint_key, &[]), CutPolicy::End));
+            let error = p.error.map(|kind| {
+                cell_text(
+                    &render(state, &format!("ui.prompt.{name}.error.{kind}"), &[]),
+                    CutPolicy::End,
+                )
+            });
+            vec![OverlayModel::Prompt {
+                title: cell_text(
+                    &render(state, &format!("ui.prompt.{name}.title"), &[]),
+                    CutPolicy::Never,
+                ),
+                input,
+                hint,
+                error,
+            }]
+        }
+    }
+}
+
+pub(crate) fn hint_model(state: &EditorState, chord: &[KeyStroke]) -> HintModel {
+    // ヘルプ画面: 決定するものは無いので、閉じる (`Esc`) だけを案内する
+    if matches!(
+        state.ui.overlay,
+        Some(crate::ui_model::overlay::Overlay::Help(_))
+    ) {
+        let esc = KeyLabel {
+            strokes: vec![KeyStroke {
+                mods: Modifiers::NONE,
+                key: KeyCode::Esc,
+            }],
+        };
+        let text = cell_text(
+            state
+                .catalog()
+                .get(keys::HINT_UI_CANCEL)
+                .unwrap_or(keys::HINT_UI_CANCEL),
+            CutPolicy::Never,
+        );
+        return HintModel {
+            context: HintContext::Overlay,
+            items: vec![HintItem {
+                keys: vec![esc],
+                text,
+                priority: 5,
+            }],
+        };
+    }
+    if state.ui.overlay.is_some() || state.find.search_bar.is_some() {
+        // オーバーレイ: 決定・取消 (確認は次へも)。キーは固定 (オーバーレイの割当は既定のまま)
+        let stroke = |key| KeyLabel {
+            strokes: vec![KeyStroke {
+                mods: Modifiers::NONE,
+                key,
+            }],
+        };
+        let word = |cmd: &str| {
+            cell_text(
+                state
+                    .catalog()
+                    .get(&format!("hint.{cmd}"))
+                    .unwrap_or("hint"),
+                CutPolicy::Never,
+            )
+        };
+        let mut items = vec![
+            HintItem {
+                keys: vec![stroke(KeyCode::Esc)],
+                text: word(ids::UI_CANCEL),
+                priority: 5,
+            },
+            HintItem {
+                keys: vec![stroke(KeyCode::Enter)],
+                text: word(ids::UI_CONFIRM),
+                priority: 4,
+            },
+        ];
+        if state.ui.overlay.is_none() {
+            // 検索バー: Enter は次の一致、Alt+C は大小の切替
+            items[1].text = word(ids::SEARCH_NEXT);
+            items.push(HintItem {
+                keys: vec![KeyLabel {
+                    strokes: vec![KeyStroke {
+                        mods: Modifiers::ALT,
+                        key: KeyCode::Char('c'),
+                    }],
+                }],
+                text: word(ids::SEARCH_TOGGLE_CASE),
+                priority: 2,
+            });
+            if state
+                .find
+                .search_bar
+                .as_ref()
+                .is_some_and(|b| b.replace.is_some())
+            {
+                items.push(HintItem {
+                    keys: vec![KeyLabel {
+                        strokes: vec![KeyStroke {
+                            mods: Modifiers::ALT,
+                            key: KeyCode::Char('a'),
+                        }],
+                    }],
+                    text: word(ids::SEARCH_REPLACE_ALL),
+                    priority: 3,
+                });
+            }
+        }
+        if state.is_dialog() {
+            items.push(HintItem {
+                keys: vec![stroke(KeyCode::Tab)],
+                text: word(ids::UI_LIST_NEXT),
+                priority: 3,
+            });
+        }
+        return HintModel {
+            context: HintContext::Overlay,
+            items,
+        };
+    }
+    if !chord.is_empty() {
+        // チョード保留中は `Esc 取消` だけを出す (04 §8.8)
+        let esc = KeyLabel {
+            strokes: vec![KeyStroke {
+                mods: Modifiers::NONE,
+                key: KeyCode::Esc,
+            }],
+        };
+        let text = cell_text(
+            state
+                .catalog()
+                .get(keys::HINT_UI_CANCEL)
+                .unwrap_or(keys::HINT_UI_CANCEL),
+            CutPolicy::Never,
+        );
+        return HintModel {
+            context: HintContext::Overlay,
+            items: vec![HintItem {
+                keys: vec![esc],
+                text,
+                priority: 5,
+            }],
+        };
+    }
+    let mut items: Vec<HintItem> = NORMAL_HINTS
+        .iter()
+        .filter_map(|&(cmd, priority)| {
+            // 届く割当が無い項目は出さない
+            let strokes = state.key_sequence(cmd)?;
+            let word = state.catalog().get(&format!("hint.{cmd}"))?;
+            Some(HintItem {
+                keys: vec![KeyLabel { strokes }],
+                text: cell_text(word, CutPolicy::Never),
+                priority,
+            })
+        })
+        .collect();
+    items.sort_by_key(|i| std::cmp::Reverse(i.priority));
+    HintModel {
+        context: HintContext::Normal,
+        items,
+    }
+}
+
+pub(crate) fn chrome_texts(state: &EditorState) -> ChromeTexts {
+    let min = state.term.caps.min_surface;
+    let (cols, rows) = (min.cols.to_string(), min.rows.to_string());
+    let text = render(
+        state,
+        keys::UI_TOO_SMALL,
+        &[("cols", &cols), ("rows", &rows)],
+    );
+    ChromeTexts {
+        too_small: cell_text(&text, CutPolicy::Never),
+    }
+}

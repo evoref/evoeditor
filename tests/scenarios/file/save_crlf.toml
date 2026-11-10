@@ -38,3 +38,5 @@ query = { kind = "document", path = "a.txt" }
 expect = { dirty = false, eol = "crlf", encoding = "utf-8" }
 [[assert]]
 frame_contains = ["a.txt"]
+[[assert]]
+frame = "save_crlf"

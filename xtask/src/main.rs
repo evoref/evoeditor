@@ -10,6 +10,7 @@
 //! - `review-wording`: 日本語 UI 文言の人手レビュー用の一覧 (docs/review/ja-wording-v0.1.md) を生成する
 //! - `dist`: 配布 zip / tar.gz と SHA256SUMS の作成・検査 (`--verify ARCHIVE` で検査だけ。docs/05 §18.2)
 //! - `gen-notices`: THIRD-PARTY-NOTICES.md の生成 (`--check` で最新性の検査。docs/05 §17.1)
+//! - `gen-reference`: 生成リファレンス docs/reference/* の生成 (`--check` で最新性と 07 §11.6 のカタログとの突合。docs/09 §11.2)
 //! - `check-ac-checklist`: `tests/ac-checklist.toml` の検査 (docs/11 §3.3)
 //! - `bench`: ベンチの記録 (docs/09 §5.2)
 //! - `check-themes`: 組込みテーマのロール表の検査 (docs/09 §3.5、docs/07 §8.2)
@@ -20,7 +21,7 @@
 //! - `trace`: 仕様と実装・試験の対応の検査と docs/traceability.md の生成 (`--check`。docs/11 §3.3、09 §8.3)
 //! - `crash-consistency`: 保存のクラッシュ一貫性の検査 (NFR-301 の電源断。LazyFS の上で切断点ごとに fsync されていない書込を落とす。Linux。docs/09 §6.3)
 //! - `no-network`: NFR-501 AC-2 の無通信の検査 (ヘッドレスのシナリオを strace の下で走らせる。Linux。docs/09 §3.6)
-//! - `perf-diff`: 基準のコミットとの性能の比較 (`--base <ref> --mode instr|time`。命令数 +5% / A/B +10% で警告。docs/09 §5.4)
+//! - `perf-diff`: 基準のコミットとの性能の比較 (`--base <ref> --mode instr|time|allocs`。命令数 +5% / A/B +10% / 確保の回数 +5% で警告。docs/09 §5.4)
 //! - `accept-linux`: Linux の受入の手順の自動の部分 (tmux を擬似端末にする。WSL では Windows のクリップボードとの往復も。docs/09 §3.7)
 //! - `nightly`: 夜間ジョブの入口 (fuzz・proptest 拡張・audit・coverage・crash・soak。Linux。docs/09 §6.3)
 
@@ -42,6 +43,7 @@ mod crash_consistency;
 mod dist;
 mod gen_corpus;
 mod gen_notices;
+mod gen_reference;
 mod i18n;
 mod nightly;
 mod no_network;
@@ -51,6 +53,7 @@ mod scenario;
 mod spec_index;
 mod trace;
 mod util;
+mod verifies;
 mod verify_tag;
 
 use std::process::ExitCode;
@@ -67,6 +70,7 @@ const USAGE: &str = "\
   review-wording      日本語 UI 文言のレビュー用の一覧の生成 (--reviewed 日付: 全件 OK の記録)
   dist                配布 zip / tar.gz と SHA256SUMS の作成と検査 (--verify ARCHIVE: 検査だけ。--target T (Linux の musl 版) / --exe / --version)
   gen-notices         THIRD-PARTY-NOTICES.md の生成 (cargo-about。--check: 最新性の検査)
+  gen-reference       生成リファレンス docs/reference/* の生成 (bin の --list-commands 等の JSON から。--check: 最新性と 07 §11.6 との突合)
   check-ac-checklist  tests/ac-checklist.toml の検査 (check の一部)
   bench               ベンチの記録 (BM-103a・BM-205 → target/bench/bench.json。--quick は動作確認用。
                       --env ENV-W1 --out DIR: 基準機の記録 (BM-106・端末込みの BM-101b/102b/103b/107 も測り、DIR に JSON と summary.md)
@@ -78,7 +82,7 @@ const USAGE: &str = "\
   trace               仕様と試験の対応の検査と docs/traceability.md の生成 (--check: 存在しない ID と行列の最新性)
   crash-consistency   保存のクラッシュ一貫性の検査 (NFR-301。LazyFS で電源断を模擬。--lazyfs BIN --root DIR、--no-lazyfs は空回し。Linux)
   no-network          無通信の検査 (NFR-501 AC-2。シナリオを strace -e trace=network の下で走らせる。Linux)
-  perf-diff           基準との性能の比較 (--base <ref> --mode instr|time --out FILE。劣化は警告だけ)
+  perf-diff           基準との性能の比較 (--base <ref> --mode instr|time|allocs --out FILE。劣化は警告だけ)
   accept-linux        Linux の受入の自動の部分 (docs/compat/checklist.md の A〜G と L。tmux。--archive TGZ --only A1,C2 --keep。Linux)
   nightly             夜間ジョブ (Linux。--only fuzz,proptest,audit,coverage,crash,soak --fuzz-seconds N --soak-minutes N --seed N)";
 
@@ -92,6 +96,7 @@ fn main() -> ExitCode {
         Some("review-wording") => review_wording::run(&args.collect::<Vec<_>>()),
         Some("dist") => dist::run(&args.collect::<Vec<_>>()),
         Some("gen-notices") => gen_notices::run(&args.collect::<Vec<_>>()),
+        Some("gen-reference") => gen_reference::run(&args.collect::<Vec<_>>()),
         Some("check-ac-checklist") => ac_checklist::run(),
         Some("bench") => bench::run_all(&args.collect::<Vec<_>>()),
         Some("check-themes") => check_themes::run_all(),

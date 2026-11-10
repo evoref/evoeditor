@@ -22,12 +22,71 @@ pub struct FrontendConfig {
     pub mouse: bool,
 }
 
+/// `Frontend::init` / `start_input` の失敗。利用者への文言は bin が `kind` から UI の言語で作る (日本語の文字列を運ばない、
+/// 01 NFR-603。docs/review/v0.3-findings.md の STR-C2)。`detail` は OS の誤りの文 (OS が作ったもの)。
 #[derive(Debug)]
-pub struct FrontendError(pub String);
+pub struct FrontendError {
+    /// 失敗の種類。bin が UI の言語の文言を選ぶ手掛かり。
+    pub kind: FrontendErrorKind,
+    /// OS の誤りの文。無ければ `None`。
+    pub detail: Option<String>,
+}
+
+/// `FrontendError` の種類。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum FrontendErrorKind {
+    /// `TERM=dumb` など、使えない端末 (04 §5.2)。
+    UnusableTerminal,
+    /// 描画先のコンソール・端末を開けない、または VT モードにできない。
+    ConsoleOutput,
+    /// 入力のコンソール・端末を設定できない。
+    ConsoleInput,
+    /// `init` の前に `start_input` が呼ばれた (呼び側の誤り)。
+    InputBeforeInit,
+    /// 入力スレッドを起動できない。
+    InputThread,
+    /// そのほか (外部の frontend の実装が使う)。
+    Other,
+}
+
+impl FrontendErrorKind {
+    /// 文言のキーの末尾 (bin の stderr の表で `stderr.reason.frontend.<key>`)。
+    pub fn key(self) -> &'static str {
+        match self {
+            FrontendErrorKind::UnusableTerminal => "unusable_terminal",
+            FrontendErrorKind::ConsoleOutput => "console_output",
+            FrontendErrorKind::ConsoleInput => "console_input",
+            FrontendErrorKind::InputBeforeInit => "input_before_init",
+            FrontendErrorKind::InputThread => "input_thread",
+            FrontendErrorKind::Other => "other",
+        }
+    }
+}
+
+impl FrontendError {
+    /// 詳細なしで作る。
+    pub fn new(kind: FrontendErrorKind) -> FrontendError {
+        FrontendError { kind, detail: None }
+    }
+
+    /// OS の誤りを詳細に持つ。
+    pub fn io(kind: FrontendErrorKind, e: &std::io::Error) -> FrontendError {
+        FrontendError {
+            kind,
+            detail: Some(e.to_string()),
+        }
+    }
+}
 
 impl fmt::Display for FrontendError {
+    /// ログのための英語の短い文 (利用者への文言は bin)。
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "frontend の初期化に失敗しました: {}", self.0)
+        write!(f, "frontend error ({})", self.kind.key())?;
+        if let Some(d) = &self.detail {
+            write!(f, ": {d}")?;
+        }
+        Ok(())
     }
 }
 
@@ -37,10 +96,13 @@ impl std::error::Error for FrontendError {}
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum RenderOutcome {
+    /// 描き終えた。
     Done,
     /// 描いたら編集面の大きさが変わっていた (予約。v0.1 の TUI は常に `Done`)。
     SurfaceChanged {
+        /// 新しい編集面の列数 (セル)。
         cols: u16,
+        /// 新しい編集面の行数 (セル)。
         rows: u16,
     },
 }
@@ -48,6 +110,7 @@ pub enum RenderOutcome {
 /// `apply_effect` の結果。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum EffectOutcome {
+    /// frontend が処理した (Host は何もしない)。
     Handled,
     /// frontend は扱わない (Host が処理する: 終了・クリップボード等)。
     Unhandled,
@@ -89,13 +152,24 @@ pub struct EmergencyRestoreInfo {
     pub restored: TermRestoredFlag,
 }
 
+/// 端末など、描画と入力の実装 (docs/02 §9.2)。Host が起動時に `init`、`start_input` を呼び、ループの中で
+/// `render` と `apply_effect` を呼び、どの終了経路でも `restore` を呼ぶ。
 pub trait Frontend {
     /// 端末の確認・初期化・能力の判定。Host が設定を読んだ後、Editor を作る前に 1 回だけ呼ぶ。失敗なら起動エラー。
+    ///
+    /// # Errors
+    ///
+    /// 端末が使えない・コンソールを設定できないときの `FrontendError` (種類は `FrontendErrorKind`)。
     fn init(&mut self, cfg: &FrontendConfig) -> Result<Capabilities, FrontendError>;
     /// 入力の源を起動する。`tx` は受信口への送信口。
+    ///
+    /// # Errors
+    ///
+    /// 入力のコンソール・端末を設定できない、または入力スレッドを起動できないときの `FrontendError`。
     fn start_input(&mut self, tx: InputSink) -> Result<(), FrontendError>;
     /// 編集面の大きさ (最初の `Resize` 用)。
     fn surface_size(&self) -> CellSize;
+    /// `Frame` を描く。
     fn render(&mut self, frame: &Frame) -> RenderOutcome;
     /// Host が処理する前に frontend が扱いたい `Effect`。
     fn apply_effect(&mut self, eff: &Effect) -> EffectOutcome;
@@ -114,6 +188,8 @@ pub trait Frontend {
     fn write_osc52(&mut self, _text: &str) -> bool {
         false
     }
+    /// 端末を一時的に手放す (サスペンド、`Effect::Suspend` など)。既定では何もしない。
     fn suspend(&mut self) {}
+    /// `suspend` の後に端末を取り戻す。既定では何もしない。
     fn resume(&mut self) {}
 }

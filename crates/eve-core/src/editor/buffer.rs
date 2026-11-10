@@ -4,16 +4,18 @@
 
 use std::ops::Range;
 
-use eve_view::{CutPolicy, DocumentId, InputFieldModel, ListItem, OverlayModel};
+use eve_view::{CutPolicy, DocumentId, InputFieldModel, ListItem, OverlayModel, ViewId};
 
-use super::command::{
-    CommandCtx, CommandKind, CommandRegistry, CommandResult, CommandSpec, Permission, RejectReason,
-};
-use super::file::Pending;
-use super::layout::cell_text;
-use super::overlay::{Continuation, Overlay};
-use super::palette::{PaletteState, WINDOW, find, lower_graphemes};
 use super::state::EditorState;
+use crate::command::ids;
+use crate::command::{
+    CommandCtx, CommandKind, CommandRegistry, CommandResult, Permission, RejectReason,
+};
+use crate::io::pending::Pending;
+use crate::layout::cell_text;
+use crate::ui_model::keys;
+use crate::ui_model::overlay::{Continuation, Overlay};
+use crate::ui_model::palette::{PaletteState, WINDOW, find, lower_graphemes};
 
 /// 一覧の行頭の変更マーカーの幅 (`[+] `)。照合した箇所の位置を合わせるのに使う。
 const MARKER_WIDTH: usize = 4;
@@ -21,9 +23,10 @@ const MARKER_WIDTH: usize = 4;
 impl EditorState {
     /// 表示中の文書の、開いた順での番号 (1 始まり) と文書の数。文書が 1 件なら `None`
     /// (ステータスバーの `(2/3)`、03 §9.8)。置き換えの読込中の文書は数えない。
-    pub(super) fn buffer_position(&self) -> Option<(usize, usize)> {
+    pub(crate) fn buffer_position(&self) -> Option<(usize, usize)> {
         let active = self.active_document()?;
         let ids: Vec<DocumentId> = self
+            .docs
             .documents
             .keys()
             .copied()
@@ -35,7 +38,7 @@ impl EditorState {
 
     /// 置き換えで読込中の文書か (まだ表示されておらず、読込が終わるまで集合の外のものとして扱う)。
     fn is_loading_replacement(&self, doc: DocumentId) -> bool {
-        self.pending.values().any(|p| {
+        self.io.pending.values().any(|p| {
             matches!(
                 p,
                 Pending::Open { doc: d, replace: Some(_), .. } if *d == doc
@@ -48,12 +51,13 @@ impl EditorState {
     fn buffer_order(&self) -> Vec<DocumentId> {
         let mut out: Vec<DocumentId> = self.active_document().into_iter().collect();
         let others = self
+            .docs
             .recent
             .iter()
             .rev()
-            .chain(self.documents.keys())
+            .chain(self.docs.documents.keys())
             .copied()
-            .filter(|d| self.documents.contains_key(d) && !self.is_loading_replacement(*d));
+            .filter(|d| self.docs.documents.contains_key(d) && !self.is_loading_replacement(*d));
         for d in others {
             if !out.contains(&d) {
                 out.push(d);
@@ -64,17 +68,20 @@ impl EditorState {
 
     /// 文書の表示名 (ファイル名、無題は `status.untitled`)。
     fn buffer_name(&self, doc: DocumentId) -> String {
-        self.documents
+        self.docs
+            .documents
             .get(&doc)
-            .and_then(|d| d.path.as_ref().and_then(|p| p.file_name()))
-            .unwrap_or_else(|| {
-                self.catalog()
-                    .render("status.untitled", &[("n", "1")], &|_| None)
+            .map(|d| {
+                d.path
+                    .as_ref()
+                    .and_then(|p| p.file_name())
+                    .unwrap_or_else(|| self.untitled_label(d))
             })
+            .unwrap_or_default()
     }
 
     /// 入力に合うバッファ (文書, 名前の中で照合した書記素の範囲)。空の入力は全件を並び順のまま返す。
-    pub(super) fn buffer_hits(&self, query: &str) -> Vec<(DocumentId, Vec<Range<usize>>)> {
+    pub(crate) fn buffer_hits(&self, query: &str) -> Vec<(DocumentId, Vec<Range<usize>>)> {
         let q = lower_graphemes(query.trim());
         self.buffer_order()
             .into_iter()
@@ -87,7 +94,7 @@ impl EditorState {
                     return Some((doc, std::iter::once(s..s + q.len()).collect()));
                 }
                 // ディレクトリでも探せる (照合した箇所は名前の外なので印は付けない)
-                let path = self.documents.get(&doc)?.path.as_ref()?.display();
+                let path = self.docs.documents.get(&doc)?.path.as_ref()?.display();
                 find(&lower_graphemes(&path), &q).map(|_| (doc, Vec::new()))
             })
             .collect()
@@ -107,7 +114,7 @@ impl EditorState {
 
     /// 一覧で選んでいる文書。
     fn buffer_list_selected(&self) -> Option<DocumentId> {
-        let Some(Overlay::Palette(p)) = &self.overlay else {
+        let Some(Overlay::Palette(p)) = &self.ui.overlay else {
             return None;
         };
         let hits = self.buffer_hits(&p.text);
@@ -116,7 +123,7 @@ impl EditorState {
     }
 
     /// `ui.confirm`: 選んだ文書に切り替えて一覧を閉じる。候補が無ければ閉じない。
-    pub(super) fn buffer_list_confirm(&mut self) -> CommandResult {
+    pub(crate) fn buffer_list_confirm(&mut self) -> CommandResult {
         let Some(doc) = self.buffer_list_selected() else {
             return CommandResult::Done;
         };
@@ -135,7 +142,7 @@ impl EditorState {
     }
 
     /// 一覧の表示 (パレットと同じ `OverlayModel::List`)。行: 変更マーカー・名前、右に ディレクトリ と文字コード。
-    pub(super) fn buffer_list_model(&self, p: &PaletteState) -> OverlayModel {
+    pub(crate) fn buffer_list_model(&self, p: &PaletteState) -> OverlayModel {
         let render = |key: &str, args: &[(&str, &str)]| {
             self.catalog().render(key, args, &|c| self.key_label(c))
         };
@@ -151,7 +158,7 @@ impl EditorState {
             .skip(first)
             .take(WINDOW)
             .filter_map(|(doc_id, ranges)| {
-                let doc = self.documents.get(doc_id)?;
+                let doc = self.docs.documents.get(doc_id)?;
                 let marker = if doc.is_dirty() { "[+] " } else { "    " };
                 let dir = doc
                     .path
@@ -177,51 +184,61 @@ impl EditorState {
             .collect();
         let cells = cell_text(&p.text, CutPolicy::End).spans;
         let cursor = cell_text(&p.text[..p.cursor], CutPolicy::End).spans.len();
-        let placeholder = p
-            .text
-            .is_empty()
-            .then(|| cell_text(&render("ui.buffer_list.placeholder", &[]), CutPolicy::End));
+        let selection = crate::ui_model::overlay::field_selection(p.all_selected, cells.len());
+        let placeholder = p.text.is_empty().then(|| {
+            cell_text(
+                &render(keys::UI_BUFFER_LIST_PLACEHOLDER, &[]),
+                CutPolicy::End,
+            )
+        });
         let footer = render(
-            "ui.palette.footer",
+            keys::UI_PALETTE_FOOTER,
             &[
                 ("matched", &hits.len().to_string()),
                 ("total", &self.buffer_order().len().to_string()),
             ],
         );
         OverlayModel::List {
-            title: cell_text(&render("ui.buffer_list.title", &[]), CutPolicy::Never),
+            title: cell_text(&render(keys::UI_BUFFER_LIST_TITLE, &[]), CutPolicy::Never),
             input: InputFieldModel {
                 len: cells.len(),
                 cells,
                 first: 0,
                 cursor,
-                selection: None,
+                selection,
                 placeholder,
             },
             items,
             first,
             selected,
             footer: cell_text(&footer, CutPolicy::Never),
-            no_match: cell_text(&render("ui.buffer_list.no_match", &[]), CutPolicy::End),
+            no_match: cell_text(&render(keys::UI_BUFFER_LIST_NO_MATCH, &[]), CutPolicy::End),
         }
     }
 
     /// 開いた順で `delta` 個先の文書へ切り替える (端で循環する)。文書が 1 件なら何もしない。
     fn switch_buffer(&mut self, delta: isize) -> CommandResult {
-        let ids: Vec<DocumentId> = self.documents.keys().copied().collect();
+        let ids: Vec<DocumentId> = self.docs.documents.keys().copied().collect();
         let Some(pos) = self
             .active_document()
             .and_then(|a| ids.iter().position(|d| *d == a))
         else {
             return CommandResult::Rejected(RejectReason::NoTarget);
         };
-        let next = (pos as isize + delta).rem_euclid(ids.len() as isize) as usize;
+        // 符号付きの変換をせずに、`(pos + delta) mod n` を求める
+        let n = ids.len();
+        let step = delta.unsigned_abs() % n;
+        let next = if delta >= 0 {
+            (pos + step) % n
+        } else {
+            (pos + n - step) % n
+        };
         self.activate_document(ids[next]);
         CommandResult::Done
     }
 
     /// 文書を閉じる要求。dirty なら FR-107 の確認を出す (保存を選んだら保存が成功したときだけ閉じる)。
-    pub(super) fn request_close(&mut self, doc: DocumentId) -> CommandResult {
+    pub(crate) fn request_close(&mut self, doc: DocumentId) -> CommandResult {
         if self.confirm_doc_if_dirty(doc, "unsaved_close", Continuation::Close(doc)) {
             return CommandResult::Done;
         }
@@ -230,15 +247,16 @@ impl EditorState {
 
     /// 確認を済ませた (破棄または保存した) 後に文書を閉じる。表示中の文書なら、最近使った順で次の文書を表示する。
     /// 最後の 1 件なら無題の文書を新しく作る (終了はしない、03 §9.8)。
-    pub(super) fn close_buffer(&mut self, doc: DocumentId) -> CommandResult {
+    pub(crate) fn close_buffer(&mut self, doc: DocumentId) -> CommandResult {
         if self.active_document() == Some(doc) {
             let next = self
+                .docs
                 .recent
                 .iter()
                 .rev()
                 .copied()
-                .find(|d| *d != doc && self.documents.contains_key(d))
-                .or_else(|| self.documents.keys().copied().find(|d| *d != doc));
+                .find(|d| *d != doc && self.docs.documents.contains_key(d))
+                .or_else(|| self.docs.documents.keys().copied().find(|d| *d != doc));
             match next {
                 Some(n) => {
                     self.activate_document(n);
@@ -254,14 +272,14 @@ impl EditorState {
         } else {
             self.close_document(doc);
         }
-        self.recent.retain(|d| *d != doc);
+        self.docs.recent.retain(|d| *d != doc);
         CommandResult::Done
     }
 }
 
 fn buffer_close(ctx: &mut CommandCtx<'_>) -> CommandResult {
     // バッファ一覧の中では、選んでいる文書を閉じる (07 §11.6 の `list` コンテキスト)
-    if matches!(&ctx.state.overlay, Some(Overlay::Palette(p)) if p.buffers) {
+    if matches!(&ctx.state.ui.overlay, Some(Overlay::Palette(p)) if p.buffers) {
         return ctx.state.buffer_list_close_selected();
     }
     match ctx.state.active_document() {
@@ -283,13 +301,71 @@ fn buffer_prev(ctx: &mut CommandCtx<'_>) -> CommandResult {
 }
 
 /// v0.2 のバッファコマンド (07 §11.6 の `buffer.close` / `buffer.next` / `buffer.prev`)。
-pub(super) fn register(r: &mut CommandRegistry) {
-    let spec = |id, perm, h| {
-        CommandSpec::new(id, CommandKind::Ui, perm, "", h)
-            .expect("カタログの when 句は構文が正しい")
-    };
-    r.register(spec("buffer.close", Permission::None, buffer_close));
-    r.register(spec("buffer.list", Permission::Ui, buffer_list));
-    r.register(spec("buffer.next", Permission::Ui, buffer_next));
-    r.register(spec("buffer.prev", Permission::Ui, buffer_prev));
+pub(crate) fn register(r: &mut CommandRegistry) {
+    r.add(
+        ids::BUFFER_CLOSE,
+        CommandKind::Ui,
+        Permission::None,
+        "",
+        buffer_close,
+    );
+    r.add(
+        ids::BUFFER_LIST,
+        CommandKind::Ui,
+        Permission::Ui,
+        "",
+        buffer_list,
+    );
+    r.add(
+        ids::BUFFER_NEXT,
+        CommandKind::Ui,
+        Permission::Ui,
+        "",
+        buffer_next,
+    );
+    r.add(
+        ids::BUFFER_PREV,
+        CommandKind::Ui,
+        Permission::Ui,
+        "",
+        buffer_prev,
+    );
+}
+
+// ---- (v0.3 の M14、STR-B1 で io/ から移した) ----
+impl EditorState {
+    /// `doc` を表示する (最初の Window の View をその文書のものにする)。文書の View が無ければ作る。
+    /// 検索バーは文書ごとには持たないので、切り替える前に閉じる (03 §9.8)。
+    pub(crate) fn activate_document(&mut self, doc: DocumentId) {
+        if self.active_document() == Some(doc) || !self.docs.documents.contains_key(&doc) {
+            return;
+        }
+        self.search_close();
+        if let Some(prev) = self.active_document() {
+            self.docs.recent.retain(|d| *d != prev);
+            self.docs.recent.push(prev);
+        }
+        let view = match self.docs.views.iter().find(|(_, v)| v.doc == doc) {
+            Some((id, _)) => *id,
+            None => self.add_view(doc),
+        };
+        if let Some(w) = self.docs.windows.first_mut() {
+            w.root = view;
+        }
+        self.mark_dirty_render();
+    }
+
+    /// Window の表示を `view` に切り替え、`old` の文書を閉じる。Window がなければ作る。
+    pub(crate) fn show_view(&mut self, view: ViewId, old: Option<DocumentId>) {
+        match self.docs.windows.first_mut() {
+            Some(w) => w.root = view,
+            None => {
+                self.add_window(view);
+            }
+        }
+        if let Some(old) = old {
+            self.close_document(old);
+        }
+        self.mark_dirty_render();
+    }
 }

@@ -31,6 +31,7 @@ impl Default for WidthConfig {
 }
 
 impl WidthConfig {
+    /// East Asian Ambiguous の幅だけを `width` (1 または 2) にし、ほかは既定 (1) にする。
     pub fn ambiguous(width: u8) -> WidthConfig {
         WidthConfig {
             ambiguous: width,
@@ -56,13 +57,19 @@ impl WidthConfig {
 /// セルの属性 (SGR の結果)。
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Attr {
+    /// 太字 (SGR 1)。
     pub bold: bool,
+    /// 淡色 (SGR 2)。
     pub dim: bool,
+    /// 斜体 (SGR 3)。
     pub italic: bool,
+    /// 下線 (SGR 4)。
     pub underline: bool,
+    /// 反転 (SGR 7)。
     pub reverse: bool,
     /// `38;2;r;g;b` は `rgb(r,g,b)`、`38;5;n` は `idx(n)`。既定色は `None`。
     pub fg: Option<String>,
+    /// 背景色。表記は `fg` と同じ。
     pub bg: Option<String>,
 }
 
@@ -103,6 +110,7 @@ pub struct VirtualScreen {
 }
 
 impl VirtualScreen {
+    /// 空白で埋めた `cols` × `rows` の画面を作る。カーソルは左上、`width` で文字の幅を決める。
     pub fn new(cols: u16, rows: u16, width: WidthConfig) -> VirtualScreen {
         let (cols, rows) = (cols as usize, rows as usize);
         VirtualScreen {
@@ -126,6 +134,10 @@ impl VirtualScreen {
     }
 
     /// 出力の 1 まとまりを解釈する。
+    ///
+    /// # Panics
+    ///
+    /// 解釈しないエスケープ列が来たとき (出力器が想定外の列を出したことに気づくため)。
     pub fn feed(&mut self, s: &str) {
         self.bytes_fed += s.len();
         let cs: Vec<char> = s.chars().collect();
@@ -342,10 +354,12 @@ impl VirtualScreen {
 
     // ---- 検査用の読み出し ----
 
+    /// 列数。
     pub fn cols(&self) -> usize {
         self.cols
     }
 
+    /// 行数。
     pub fn rows(&self) -> usize {
         self.rows
     }
@@ -372,6 +386,11 @@ impl VirtualScreen {
         &self.cells[y * self.cols + x].text
     }
 
+    /// 列 `x`、行 `y` (0 始まり) のセルの属性。
+    ///
+    /// # Panics
+    ///
+    /// 画面の外のとき。
     pub fn attr_at(&self, x: usize, y: usize) -> &Attr {
         &self.cells[y * self.cols + x].attr
     }
@@ -381,6 +400,7 @@ impl VirtualScreen {
         (self.x, self.y)
     }
 
+    /// カーソルを表示しているか。
     pub fn cursor_visible(&self) -> bool {
         self.cursor_visible
     }
@@ -400,14 +420,17 @@ impl VirtualScreen {
         self.sync_depth == 0
     }
 
+    /// 代替画面にいるか。
     pub fn in_alt_screen(&self) -> bool {
         self.alt_screen
     }
 
+    /// 行末の自動折り返しが有効か。
     pub fn autowrap(&self) -> bool {
         self.autowrap
     }
 
+    /// 設定されたウィンドウタイトル。無ければ `None`。
     pub fn title(&self) -> Option<&str> {
         self.title.as_deref()
     }

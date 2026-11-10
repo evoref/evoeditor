@@ -1,5 +1,5 @@
 //! 読込中に表示へ切り替えたバッファの読込が失敗したとき、表示を開く前の文書へ戻す (docs/03 §9.2 の「失敗」・§9.8)。
-//! fuzz_editor で見つけた不具合の回帰試験: 失敗したバッファを閉じるだけだと、Window が消えた View を指したままになり Frame を作れなかった。
+//! `fuzz_editor` で見つけた不具合の回帰試験: 失敗したバッファを閉じるだけだと、Window が消えた View を指したままになり Frame を作れなかった。
 
 use eve_core::FsErrorKind;
 use eve_testkit::{FsOp, Harness};

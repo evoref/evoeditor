@@ -22,14 +22,90 @@ use eve_view::{
 use crate::ascii::{AsciiOptions, render_ascii};
 use crate::{FixedPaths, ManualClock, ManualJobSpawner, MemFs};
 
+/// `Editor` を偽 Port でヘッドレスに駆動する入口。入力を渡し、`Editor` の状態・`EditorEvent`・`Effect`・Frame を検査する。
 pub struct Harness {
+    /// 駆動している `Editor`。
     pub editor: Editor,
+    /// 偽の `FileSystem` (障害注入や外部変更の再現に直接触れる)。
     pub fs: Arc<MemFs>,
+    /// 手動の時計 (`advance_ms` と同じものを直接進めることもできる)。
     pub clock: ManualClock,
     jobs: Rc<ManualJobSpawner>,
     window: WindowId,
+    /// 組み立てのときの画面の大きさ (`started` で渡す)。
+    size: (u16, u16),
     events: Vec<EditorEvent>,
     effects: Vec<Effect>,
+}
+
+/// `Harness::builder()` の組み立て。起動の前に効かせたいもの (端末の能力・設定・言語・偽 FS のファイル) を置く。
+///
+/// ```ignore
+/// let mut h = Harness::builder()
+///     .size(100, 30)
+///     .file("/w/a.txt", b"aaa\n")
+///     .locale(Locale::En)
+///     .build();
+/// ```
+#[derive(Default)]
+pub struct HarnessBuilder {
+    size: Option<(u16, u16)>,
+    caps: Option<Capabilities>,
+    config: Option<eve_config::Config>,
+    locale: Option<eve_config::Locale>,
+    files: Vec<(String, Vec<u8>)>,
+    dirs: Vec<String>,
+    defer_start: bool,
+}
+
+impl HarnessBuilder {
+    /// 画面の大きさ (既定は 80×24)。
+    pub fn size(mut self, cols: u16, rows: u16) -> Self {
+        self.size = Some((cols, rows));
+        self
+    }
+
+    /// 端末の能力 (`Editor::new` に渡す。既定は `Capabilities::default()`)。
+    pub fn caps(mut self, caps: Capabilities) -> Self {
+        self.caps = Some(caps);
+        self
+    }
+
+    /// 設定 (起動の前に `set_config` する)。
+    pub fn config(mut self, config: eve_config::Config) -> Self {
+        self.config = Some(config);
+        self
+    }
+
+    /// UI の言語 (既定は `ja`)。
+    pub fn locale(mut self, locale: eve_config::Locale) -> Self {
+        self.locale = Some(locale);
+        self
+    }
+
+    /// 偽 FS にファイルを置く (`/w` は常にある)。
+    pub fn file(mut self, path: &str, data: &[u8]) -> Self {
+        self.files.push((path.to_owned(), data.to_vec()));
+        self
+    }
+
+    /// 偽 FS にディレクトリを置く。
+    pub fn dir(mut self, path: &str) -> Self {
+        self.dirs.push(path.to_owned());
+        self
+    }
+
+    /// 起動 (`open_initial`) をしない。試験の側で `h.editor.open_initial*` を呼び、続けて `h.started()` を呼ぶ
+    /// (起動の引数・起動時の走査を確かめる試験)。
+    pub fn defer_start(mut self) -> Self {
+        self.defer_start = true;
+        self
+    }
+
+    /// 組み立てる。`defer_start` でなければ、無題の文書を開いて起動を済ませる。
+    pub fn build(self) -> Harness {
+        Harness::assemble(self)
+    }
 }
 
 impl Default for Harness {
@@ -41,9 +117,24 @@ impl Default for Harness {
 impl Harness {
     /// 無題の文書が 1 つ開いた状態。保存先の `/w` があり、画面は 80×24。
     pub fn new() -> Harness {
+        Harness::builder().build()
+    }
+
+    /// 組み立て方を変えた Harness (起動の前に置く設定・言語・端末の能力・ファイル、起動を遅らせるか)。
+    pub fn builder() -> HarnessBuilder {
+        HarnessBuilder::default()
+    }
+
+    fn assemble(b: HarnessBuilder) -> Harness {
         let clock = ManualClock::new();
         let fs = Arc::new(MemFs::new(Arc::new(clock.clone())));
         fs.add_dir("/w");
+        for d in &b.dirs {
+            fs.add_dir(d);
+        }
+        for (p, data) in &b.files {
+            fs.add_file(p, data);
+        }
         let paths = Arc::new(FixedPaths::default());
         let jobs = ManualJobSpawner::new(JobPorts {
             fs: fs.clone(),
@@ -56,20 +147,57 @@ impl Harness {
             jobs: Rc::clone(&jobs) as Rc<dyn eve_core::JobSpawner>,
             paths,
         };
-        let mut editor = Editor::new(ports, Capabilities::default());
-        editor.open_initial(None, false);
-        let window = editor.state().first_window().expect("起動時の Window");
+        let mut editor = Editor::new(ports, b.caps.unwrap_or_default());
+        if let Some(config) = b.config {
+            editor.configure(eve_core::StartupConfig {
+                config: Some(config),
+                ..Default::default()
+            });
+        }
+        if let Some(locale) = b.locale {
+            editor.configure(eve_core::StartupConfig {
+                locale: Some(locale),
+                ..Default::default()
+            });
+        }
         let mut h = Harness {
             editor,
             fs,
             clock,
             jobs,
-            window,
+            window: WindowId::default(),
+            size: b.size.unwrap_or((80, 24)),
             events: Vec::new(),
             effects: Vec::new(),
         };
-        h.resize(80, 24);
+        if !b.defer_start {
+            h.editor.open_initial(None, false);
+            h.started();
+        }
         h
+    }
+
+    /// 起動 (`Editor::open_initial` / `open_initial_files`) を試験の側で呼んだ後に呼ぶ。最初の Window を覚え、
+    /// 組み立てのときの大きさを渡す。`HarnessBuilder::defer_start` のときに使う。
+    ///
+    /// # Panics
+    ///
+    /// `Editor` に最初の Window が無いとき (`open_initial` を呼んでいない)。
+    pub fn started(&mut self) {
+        self.window = self.editor.state().first_window().expect("起動時の Window");
+        let (cols, rows) = self.size;
+        self.resize(cols, rows);
+    }
+
+    /// 入力を渡す Window (起動時の Window)。
+    /// `defer_start` で `started` をまだ呼んでいなければ、Editor の最初の Window (起動の後なら有る)。
+    pub fn window(&self) -> WindowId {
+        if self.window == WindowId::default()
+            && let Some(w) = self.editor.state().first_window()
+        {
+            return w;
+        }
+        self.window
     }
 
     // ---- 初期状態 ----
@@ -80,13 +208,24 @@ impl Harness {
         self
     }
 
+    /// 端末の能力を差し替える。
     pub fn with_caps(mut self, caps: Capabilities) -> Harness {
         self.editor.set_caps(caps);
         self
     }
 
+    /// 画面の大きさ (列, 行) を変える (`resize` を送る)。
     pub fn with_size(mut self, cols: u16, rows: u16) -> Harness {
         self.resize(cols, rows);
+        self
+    }
+
+    /// UI の言語を選ぶ (既定は `ja`)。
+    pub fn with_locale(mut self, locale: eve_config::Locale) -> Harness {
+        self.editor.configure(eve_core::StartupConfig {
+            locale: Some(locale),
+            ..Default::default()
+        });
         self
     }
 
@@ -98,6 +237,10 @@ impl Harness {
     }
 
     /// 07 §7.2 の設定表記 (小文字・`+`・空白区切り) のキー列を押す。`mod` は `ctrl`。不正な表記は panic する。
+    ///
+    /// # Panics
+    ///
+    /// `seq` に読めないキー表記があるとき。
     pub fn keys(&mut self, seq: &str) {
         for part in seq.split_whitespace() {
             let stroke = eve_core::parse_stroke(part)
@@ -125,6 +268,10 @@ impl Harness {
     }
 
     /// マウス操作 (`InputEvent::Mouse`)。`row` / `col` は編集面の左上を原点とするセル (面の外は負やはみ出しで渡す)。
+    ///
+    /// # Panics
+    ///
+    /// 最初の Window に View が無いとき。
     pub fn mouse(
         &mut self,
         kind: eve_view::MouseKind,
@@ -167,6 +314,7 @@ impl Harness {
         self.cmd_with(id, Args::new())
     }
 
+    /// 引数付きでコマンドを実行する。実行の前に時刻を `Editor` に渡し、実行の後に `EditorEvent` と `Effect` を蓄える。
     pub fn cmd_with(&mut self, id: &str, args: Args) -> CommandResult {
         self.editor.tick(self.clock.now());
         let r = self
@@ -177,6 +325,10 @@ impl Harness {
     }
 
     /// 確認ダイアログの選択肢 (0 始まりの並び順) を選ぶ。
+    ///
+    /// # Panics
+    ///
+    /// `choice` が `i64` に収まらないとき。
     pub fn answer(&mut self, choice: usize) -> CommandResult {
         let n = i64::try_from(choice).expect("選択肢の番号");
         self.cmd_with("ui.dialog_choose", Args::new().with_int("choice", n))
@@ -189,6 +341,7 @@ impl Harness {
         self.collect();
     }
 
+    /// 画面の大きさ (列, 行) を変える (`InputEvent::Resize`)。
     pub fn resize(&mut self, cols: u16, rows: u16) {
         self.input(InputEvent::Resize { cols, rows });
     }
@@ -231,7 +384,8 @@ impl Harness {
 
     fn input(&mut self, ev: InputEvent) {
         self.editor.tick(self.clock.now());
-        self.editor.handle_input(self.window, ev);
+        let w = self.window();
+        self.editor.handle_input(w, ev);
         self.collect();
     }
 
@@ -243,10 +397,19 @@ impl Harness {
     // ---- 検査 ----
 
     /// 読み取り専用の問い合わせ (`Editor::query`、NFR-707 AC-4)。
+    ///
+    /// # Errors
+    ///
+    /// `Editor::query` が返す `QueryError` (存在しない文書・View・Window、読込が終わっていない文書、範囲外など)。
     pub fn query(&self, q: &Query) -> Result<Answer, QueryError> {
         self.editor.query(q)
     }
 
+    /// 今の文書の ID。
+    ///
+    /// # Panics
+    ///
+    /// 今の文書が無いとき。
     pub fn doc_id(&self) -> DocumentId {
         self.editor
             .state()
@@ -254,6 +417,11 @@ impl Harness {
             .expect("今の文書がある")
     }
 
+    /// 今の文書の本文 (不正な UTF-8 は置き換える)。
+    ///
+    /// # Panics
+    ///
+    /// 今の文書が無いとき。
     pub fn doc_text(&self) -> String {
         self.editor
             .state()
@@ -262,6 +430,7 @@ impl Harness {
             .to_string_lossy()
     }
 
+    /// 今の文書のパス (表示の形)。無題なら `None`。
     pub fn doc_path(&self) -> Option<String> {
         self.editor
             .state()
@@ -269,6 +438,7 @@ impl Harness {
             .and_then(|d| d.path.as_ref().map(|p| p.display()))
     }
 
+    /// 今の文書が未保存の変更を持つか。
     pub fn is_dirty(&self) -> bool {
         self.editor
             .state()
@@ -281,13 +451,19 @@ impl Harness {
         self.fs.read(path)
     }
 
-    /// 出ているオーバーレイの種類 (`""` / `"dialog"` / `"prompt"`)。
+    /// 出ているオーバーレイの種類 (`EditorState::overlay_kind` の値。11 §6.3 の `overlay`):
+    /// `""` (なし) / `"dialog"` / `"prompt"` / `"palette"` / `"buffer_list"` / `"help"`。
     pub fn overlay(&self) -> &'static str {
         self.editor.state().overlay_kind()
     }
 
+    /// 今の Window の `Frame`。
+    ///
+    /// # Panics
+    ///
+    /// `Frame` を作れないとき。
     pub fn frame(&mut self) -> Frame {
-        self.editor.frame(self.window).expect("Frame が作れる")
+        self.editor.frame(self.window()).expect("Frame が作れる")
     }
 
     /// ASCII の Frame (クロームと選択とカーソルつき。11 §6.5)。
@@ -298,10 +474,12 @@ impl Harness {
         })
     }
 
+    /// `opts` を指定した ASCII の Frame (`frame_text` は既定の選び方にクロームを足したもの)。
     pub fn frame_text_with(&mut self, opts: AsciiOptions) -> String {
         render_ascii(&self.frame(), opts)
     }
 
+    /// ASCII の Frame (`frame_text`) に `needle` が含まれるか。
     pub fn frame_contains(&mut self, needle: &str) -> bool {
         self.frame_text().contains(needle)
     }
@@ -316,7 +494,7 @@ impl Harness {
         &self.effects
     }
 
-    /// `MessageShown` の MessageKey の列。
+    /// `MessageShown` の `MessageKey` の列。
     pub fn messages(&self) -> Vec<String> {
         self.events
             .iter()

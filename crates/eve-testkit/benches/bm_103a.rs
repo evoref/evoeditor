@@ -8,10 +8,17 @@
 //! cargo bench -p eve-testkit --bench bm_103a
 //! cargo bench -p eve-testkit --bench bm_103a -- --quick   # 動作確認 (回数を減らす。記録には使わない)
 //! cargo bench -p eve-testkit --bench bm_103a -- --json    # 1 行の JSON (xtask bench が集める)
-//! cargo bench -p eve-testkit --bench bm_103a -- --wrap    # 折り返し ON (`view.wrap = word`) で測る (03 §14.3.1)
+//! cargo bench -p eve-testkit --bench bm_103a -- --wrap    # 折り返し ON (`view.wrap = word`) で測る (03 §14.3.1)。id は BM-103a-wrap
+//! cargo bench -p eve-testkit --bench bm_103a -- --size 200x60  # 端末の大きさを変える (既定 120x40)。id は BM-103a-200x60
 //! ```
 
 #![allow(clippy::print_stdout, clippy::print_stderr)]
+#![expect(
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::cast_sign_loss,
+    reason = "計測用の数値変換。値は十分に小さい"
+)]
 
 use std::time::{Duration, Instant};
 
@@ -44,12 +51,27 @@ fn main() {
     let quick = args.iter().any(|a| a == "--quick");
     let json = args.iter().any(|a| a == "--json");
     let wrap = args.iter().any(|a| a == "--wrap");
+    let (cols, rows) = args
+        .iter()
+        .position(|a| a == "--size")
+        .and_then(|i| args.get(i + 1))
+        .and_then(|v| v.split_once('x'))
+        .and_then(|(c, r)| Some((c.parse::<u16>().ok()?, r.parse::<u16>().ok()?)))
+        .unwrap_or((120, 40));
+    // 条件を変えたものは別の id で記録する (bench_report で並べる、docs/review/v0.3-findings.md の §3.3 の 6・9)
+    let mut id = String::from("BM-103a");
+    if (cols, rows) != (120, 40) {
+        id.push_str(&format!("-{cols}x{rows}"));
+    }
+    if wrap {
+        id.push_str("-wrap");
+    }
     let (runs, warmup) = if quick { (1_000, 100) } else { (10_000, 1_000) };
 
     let data = corpus(1024 * 1024);
     let lines = data.iter().filter(|b| **b == b'\n').count();
     let mut h = Harness::new()
-        .with_size(120, 40)
+        .with_size(cols, rows)
         .with_file("/w/doc.txt", &data);
     drop(data);
     h.open("/w/doc.txt");
@@ -94,7 +116,7 @@ fn main() {
     );
     if json {
         println!(
-            "{{\"id\":\"BM-103a\",\"n\":{},\"p50_us\":{:.1},\"p99_us\":{:.1},\"p999_us\":{:.1},\"max_us\":{:.1},\"quick\":{quick}}}",
+            "{{\"id\":\"{id}\",\"n\":{},\"p50_us\":{:.1},\"p99_us\":{:.1},\"p999_us\":{:.1},\"max_us\":{:.1},\"quick\":{quick}}}",
             v.len(),
             p50.as_secs_f64() * 1e6,
             p99.as_secs_f64() * 1e6,
@@ -103,7 +125,7 @@ fn main() {
         );
     } else {
         println!(
-            "BM-103a キー入力の core 区間 (120x40, 1 MB, {runs} 回, ウォームアップ {warmup} 回){}",
+            "{id} キー入力の core 区間 ({cols}x{rows}, 1 MB, {runs} 回, ウォームアップ {warmup} 回){}",
             if quick {
                 " [--quick: 記録には使わない]"
             } else {

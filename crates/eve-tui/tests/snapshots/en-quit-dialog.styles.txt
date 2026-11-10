@@ -1,0 +1,16 @@
+0: 0-2 Rgb(128, 128, 128) Reset NONE
+1: 0-2 Rgb(128, 128, 128) Reset NONE
+2: 0-6 Rgb(128, 128, 128) Reset NONE | 13-14 Rgb(128, 128, 128) Reset NONE
+3: 0-2 Rgb(128, 128, 128) Reset BOLD
+4: 0-0 Rgb(128, 128, 128) Reset NONE
+5: 0-0 Rgb(128, 128, 128) Reset NONE
+6: 0-0 Rgb(128, 128, 128) Reset NONE
+7: 0-0 Rgb(128, 128, 128) Reset NONE | 11-28 Reset Reset BOLD | REVERSED
+8: 0-0 Rgb(128, 128, 128) Reset NONE
+9: 0-0 Rgb(128, 128, 128) Reset NONE
+10: 0-0 Rgb(128, 128, 128) Reset NONE
+11: 0-0 Rgb(128, 128, 128) Reset NONE
+12: 0-0 Rgb(128, 128, 128) Reset NONE
+13: 0-0 Rgb(128, 128, 128) Reset NONE
+14: 0-79 Rgb(232, 232, 232) Rgb(47, 51, 64) NONE
+16: 0-2 Rgb(26, 26, 26) Rgb(143, 208, 255) NONE | 12-16 Rgb(26, 26, 26) Rgb(143, 208, 255) NONE | 22-24 Rgb(26, 26, 26) Rgb(143, 208, 255) NONE

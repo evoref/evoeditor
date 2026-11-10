@@ -1,9 +1,13 @@
 //! 文字コード全体のプロパティテスト (docs/09 §3.3 L1、docs/03 §8.3 / §8.6 / §8.7)。
 //!
-//! - チャンクの分け方に依存しない (1 バイト単位でも結果が変わらない。encoding_rs の `Malformed` が直前のバッファに属する場合を含む)
+//! - チャンクの分け方に依存しない (1 `バイト単位でも結果が変わらない。encoding_rs` の `Malformed` が直前のバッファに属する場合を含む)
 //! - UTF-8 / UTF-16LE/BE は任意のバイト列が、復号 → 元のバイトに戻して符号化で **バイト一致** する (区分 A)
-//! - Shift_JIS / EUC-JP / ISO-2022-JP は、表現できる文字列が符号化 → 復号で元に戻る
-//! - 任意のバイト列でパニックしない (fuzz_decode の入口と同じ性質)
+//! - `Shift_JIS` / EUC-JP / ISO-2022-JP は、表現できる文字列が符号化 → 復号で元に戻る
+//! - 任意のバイト列でパニックしない (`fuzz_decode` の入口と同じ性質)
+#![expect(
+    clippy::cast_possible_truncation,
+    reason = "テスト用の数値変換。値は小さく収まる"
+)]
 
 use eve_encoding::{Decoder, EncodeReport, Encoder, Encoding, EscapePolicy, unescape_char};
 use proptest::prelude::*;

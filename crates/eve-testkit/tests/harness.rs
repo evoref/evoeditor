@@ -1,4 +1,4 @@
-//! `Harness` 自身の語彙の検査 (docs/09 §3.4 の例を含む)。M1 の AC のシナリオは D2b。
+//! `Harness` 自身の語彙の検査 (docs/09 §3.4 の例を含む)。
 
 use eve_testkit::Harness;
 

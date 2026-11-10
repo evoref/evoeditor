@@ -1,4 +1,8 @@
-//! `Frame` → `Buffer` の変換 (docs/04 §4.2、L4 の TestBackend 相当の検査)。`Harness` (eve-testkit) で Frame を作る。
+//! `Frame` → `Buffer` の変換 (docs/04 §4.2、L4 の `TestBackend` 相当の検査)。`Harness` (eve-testkit) で Frame を作る。
+#![expect(
+    clippy::cast_possible_truncation,
+    reason = "テスト用の数値変換。値は小さく収まる"
+)]
 
 use eve_testkit::Harness;
 use eve_tui::buffer::{chrome_rows_for_surface, render_panes, row_text};
@@ -182,4 +186,49 @@ name = \"default-dark\"
             "({x},{y})"
         );
     }
+}
+
+// 編集面の Span の契約 (eve_view::Span): 幅の同じ書記素の連続は 1 つの Span にしてよく、frontend は幅を書記素数で割る
+#[test]
+fn 幅の同じ書記素の連続の_span_は書記素ごとのセルに分ける() {
+    let mut h = Harness::new().with_size(30, 6);
+    h.text("ab");
+    let mut f = frame_of(&mut h);
+    let x0 = f.panes[0].rect.col;
+    let row = &mut f.panes[0].rows[0];
+    row.gutter.clear();
+    row.spans = vec![
+        eve_view::Span::new("あい漢", 6, Style::DEFAULT),
+        // 結合文字を含む書記素 (2 書記素で幅 2) も書記素の単位で分ける
+        eve_view::Span::new("e\u{301}x", 2, Style::DEFAULT),
+    ];
+    let r = render_panes(&f, ColorDepth::TrueColor, &Glyphs::unicode());
+    let cell = |x: u16| r.buffer.cell((x0 + x, 0)).unwrap();
+    for (i, g) in ["あ", "い", "漢"].iter().enumerate() {
+        let x = 2 * i as u16;
+        assert_eq!(cell(x).symbol(), *g);
+        assert_eq!(cell(x).diff_option, CellDiffOption::None);
+        assert_eq!(cell(x + 1).diff_option, CellDiffOption::Skip);
+    }
+    assert_eq!(cell(6).symbol(), "e\u{301}");
+    assert_eq!(cell(7).symbol(), "x");
+    assert!(row_text(&r.buffer, 0).contains("あい漢e\u{301}x"));
+}
+
+// 割り切れない (契約に合わない) Span は、今までどおり 1 書記素として書く
+#[test]
+fn 幅が書記素数で割り切れない_span_は_1_書記素として書く() {
+    let mut h = Harness::new().with_size(30, 6);
+    h.text("ab");
+    let mut f = frame_of(&mut h);
+    let x0 = f.panes[0].rect.col;
+    let row = &mut f.panes[0].rows[0];
+    row.gutter.clear();
+    row.spans = vec![eve_view::Span::new("あa", 3, Style::DEFAULT)];
+    let r = render_panes(&f, ColorDepth::TrueColor, &Glyphs::unicode());
+    assert_eq!(r.buffer.cell((x0, 0)).unwrap().symbol(), "あa");
+    assert_eq!(
+        r.buffer.cell((x0 + 1, 0)).unwrap().diff_option,
+        CellDiffOption::Skip
+    );
 }

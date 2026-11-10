@@ -1,6 +1,7 @@
 //! メッセージ履歴 (docs/04 §8.9、01 FR-505): `Ctrl+K M` で、これまでのメッセージを古い順に並べた全画面のスクロールを開く。
 
 use eve_testkit::Harness;
+use eve_testkit::helpers::cell_text;
 use eve_view::{HelpLine, HelpLineKind, MessageLevel, OverlayModel};
 
 /// メッセージを 1 件出す (文言は何でもよい)。
@@ -8,10 +9,6 @@ fn say(h: &mut Harness, level: MessageLevel) {
     h.editor
         .state_mut()
         .show_message(level, "info.save.unchanged", &[]);
-}
-
-fn text_of(t: &eve_view::CellText) -> String {
-    t.spans.iter().map(|s| s.text.to_string()).collect()
 }
 
 fn history(h: &mut Harness) -> (String, Vec<HelpLine>, usize) {
@@ -25,7 +22,7 @@ fn history(h: &mut Harness) -> (String, Vec<HelpLine>, usize) {
     else {
         panic!("履歴ではない")
     };
-    (text_of(&title), lines, scroll)
+    (cell_text(&title), lines, scroll)
 }
 
 #[test]
@@ -36,7 +33,7 @@ fn 履歴が空なら案内の一行を出す() {
     let (title, lines, _) = history(&mut h);
     assert_eq!(title, "メッセージ履歴");
     assert_eq!(lines.len(), 1);
-    assert_eq!(text_of(&lines[0].text), "メッセージはまだありません");
+    assert_eq!(cell_text(&lines[0].text), "メッセージはまだありません");
 }
 
 #[test]
@@ -48,7 +45,7 @@ fn 出したメッセージが古い順に並び_レベルと経過時間が付�
     h.keys("ctrl+k m");
     let (_, lines, _) = history(&mut h);
     assert_eq!(lines.len(), 2);
-    let k = |i: usize| text_of(lines[i].key.as_ref().unwrap());
+    let k = |i: usize| cell_text(lines[i].key.as_ref().unwrap());
     assert_eq!(k(0), "00:00 情報");
     assert_eq!(k(1), "01:05 警告");
     assert!(lines.iter().all(|l| l.kind == HelpLineKind::Entry));
@@ -89,7 +86,7 @@ fn ヘルプは履歴ではなく従来どおり開く() {
     h.keys("ctrl+k h");
     let (title, lines, _) = history(&mut h);
     assert_eq!(title, "ヘルプ");
-    assert_eq!(text_of(&lines[0].text), "はじめに");
+    assert_eq!(cell_text(&lines[0].text), "はじめに");
 }
 
 fn clipboard_writes(h: &Harness) -> Vec<String> {
@@ -132,5 +129,18 @@ fn ヘルプ画面では_ctrl_c_は何もしない() {
     h.keys("ctrl+k h");
     h.clear_log();
     h.keys("ctrl+c");
-    assert!(clipboard_writes(&h).is_empty());
+    let actual = clipboard_writes(&h);
+    assert!(actual.is_empty(), "{actual:?}");
+}
+
+// `ctrl+k m` は `editor` の割当 (07 §7.1: `global` の既定の割当は app.quit・ui.palette_open・ui.redraw・help.open だけ)
+#[test]
+fn オーバーレイの中では_ctrl_k_m_で履歴を開かない() {
+    let mut h = Harness::new().with_size(80, 20);
+    h.keys("ctrl+p");
+    assert_eq!(h.overlay(), "palette");
+    h.keys("ctrl+k m");
+    assert_eq!(h.overlay(), "palette", "パレットのまま");
+    h.keys("esc ctrl+k m");
+    assert_eq!(h.overlay(), "help", "編集面からは開く");
 }

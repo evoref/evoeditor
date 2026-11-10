@@ -26,7 +26,7 @@ path = "crates/eve-view"
 spec = ["02 §8"]
 owner = "shared"
 reviewer = "human:maintainer"
-stage = "C1"
+stage = "C2"
 notes = "境界型。変更は契約変更の手続き (11 §8.4、ラベル contract-change)"
 
 [[unit]]
@@ -42,40 +42,62 @@ path = "crates/eve-core/src/document"
 spec = ["02 §5.1-5.2", "03 §6", "03 §7"]
 owner = "shared"
 reviewer = "human:maintainer"
-notes = "線形 Undo (03 §7.1) と保存点"
+notes = "線形 Undo (03 §7.1) と保存点、改行コードの変換 (eol.rs・eol_cmd.rs。v0.3 の M14 で crate の直下と editor/ から移した)"
 
 [[unit]]
-path = "crates/eve-core/src/editor/layout"
-spec = ["02 §8", "03 §14"]
+path = "crates/eve-core/src/keymap"
+spec = ["02 §7.2", "07 §7", "07 §11.6"]
 owner = "shared"
 reviewer = "human:maintainer"
-notes = "editor/layout.rs と editor/layout/ (折り返し・長大行の列の索引)"
+notes = "キーマップの解決 (K1〜K8)・既定のキーマップ・ユーザーのキーマップ (v0.3 の M14 で editor/ から移した)"
 
 [[unit]]
-path = "crates/eve-core/src/editor/file.rs"
-spec = ["03 §9"]
+path = "crates/eve-core/src/command"
+spec = ["02 §6", "07 §11.6", "03 §15"]
 owner = "shared"
 reviewer = "human:maintainer"
-notes = "開く・保存・再読込の論理手順 (I/O は io_jobs.rs のジョブ)"
-
-[[unit]]
-path = "crates/eve-core/src/io_jobs.rs"
-spec = ["03 §8", "03 §9"]
-owner = "shared"
-reviewer = "human:maintainer"
-
-[[unit]]
-path = "crates/eve-core/src/jobs.rs"
-spec = ["02 §9.3"]
-owner = "shared"
-reviewer = "human:maintainer"
+notes = "コマンドの型とレジストリ・when の式・編集・行の操作・クリップボード (v0.3 の M14 で editor/ から移した)"
 
 [[unit]]
 path = "crates/eve-core/src/search"
 spec = ["03 §12"]
 owner = "shared"
 reviewer = "human:maintainer"
-notes = "search.rs と search/"
+notes = "リテラル検索の基盤・検索ジョブ・文書内検索の状態 (v0.3 の M14 で crate の直下と editor/ から移した)"
+
+[[unit]]
+path = "crates/eve-core/src/ui_model"
+spec = ["04 §8", "04 §15", "03 §9.7"]
+owner = "shared"
+reviewer = "human:maintainer"
+notes = "意味的 UI モデル (オーバーレイ・パレット・ヘルプ・メッセージ・ステータスとヒント・検索バー・設定の診断・保存中の終了) (v0.3 の M14 で editor/ から移した)"
+
+[[unit]]
+path = "crates/eve-core/src/view"
+spec = ["03 §4", "03 §5"]
+owner = "shared"
+reviewer = "human:maintainer"
+notes = "移動・選択 (Motion)・マウス・View の表示属性のコマンド (v0.3 の M14 で editor/ から移した)"
+
+[[unit]]
+path = "crates/eve-core/src/layout"
+spec = ["02 §8", "03 §14", "07 §8"]
+owner = "shared"
+reviewer = "human:maintainer"
+notes = "Frame の生成・折り返し・長大行の列の索引・テーマ段の適用・折り返しのスクロール (v0.3 の M14 で editor/ から移した)"
+
+[[unit]]
+path = "crates/eve-core/src/io"
+spec = ["03 §8", "03 §9", "03 §10", "02 §4.5"]
+owner = "shared"
+reviewer = "human:maintainer"
+notes = "開く・保存・再読込・外部変更の確認の論理手順 (file.rs)、読込・保存のジョブの本体 (io_jobs.rs)、FileSystem / Paths の Port、スワップ・退避・起動時の走査 (v0.3 の M14 で editor/ と crate の直下から移した。file.rs の分割は STR-B1)"
+
+[[unit]]
+path = "crates/eve-core/src/jobs"
+spec = ["02 §4.4", "02 §9.3"]
+owner = "shared"
+reviewer = "human:maintainer"
 
 [[unit]]
 path = "crates/eve-core/src/editor"

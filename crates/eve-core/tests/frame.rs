@@ -241,13 +241,13 @@ fn 画面の外のカーソルは含めない() {
 fn タイトルと_revision() {
     let mut s = Scene::new("|", 20, 2);
     let t = s.frame().title;
-    assert_eq!(t, "無題 - evoeditor");
+    assert_eq!(t, "無題-1 - evoeditor");
     s.e.execute(
         CommandInvocation::new("edit.insert_text", InvocationSource::Keymap)
             .with_args(Args::new().with_str("text", "x")),
     );
     let f = s.frame();
-    assert_eq!(f.title, "* 無題 - evoeditor");
+    assert_eq!(f.title, "無題-1 ● - evoeditor", "04 §3 の内容規約");
     assert_eq!(f.panes[0].revision.0.0, 1);
     let _ = s.view;
 }
@@ -337,7 +337,11 @@ fn 画面が狭いときはガターを出さない() {
     let mut s = Scene::new("ab|", 3, 1);
     let f = s.frame();
     assert_eq!(f.panes[0].gutter_width, 0);
-    assert!(f.panes[0].rows[0].gutter.is_empty());
+    assert!(
+        f.panes[0].rows[0].gutter.is_empty(),
+        "{:?}",
+        f.panes[0].rows[0].gutter
+    );
     let w: u16 = f.panes[0].rows[0].spans.iter().map(|sp| sp.width).sum();
     assert!(w <= 3);
 }
@@ -369,5 +373,36 @@ fn 多数のカーソルでも可視範囲の分だけを作る() {
     assert!(
         f.panes[0].cursors.len() <= 5 + 5,
         "可視行にあるカーソルだけ"
+    );
+}
+
+// Span の契約 (eve_view::Span): 幅の同じ書記素の連続は 1 つの Span にしてよい。core は印字できる ASCII の連続と、
+// 通常の幅 2 の文字 (かな・漢字など) の連続をまとめる。スタイルが変わるところと、幅の違う文字の境では分ける
+#[test]
+fn 通常の幅_2_の文字の連続は_1_つの_span_にまとめる() {
+    let mut s = Scene::new("ab日本語の行cd漢字«選択»|", 40, 4);
+    let f = s.frame();
+    let row = &f.panes[0].rows[0];
+    let texts: Vec<(&str, u16)> = row
+        .spans
+        .iter()
+        .map(|sp| (sp.text.as_str(), sp.width))
+        .collect();
+    assert_eq!(
+        texts,
+        [
+            ("ab", 2),
+            ("日本語の行", 10),
+            ("cd", 2),
+            ("漢字", 4),
+            ("選択", 4)
+        ],
+        "{texts:?}"
+    );
+    // 文字の格子 (ゴールデンの元) は 1 書記素ずつのまま
+    assert!(
+        s.ascii().contains("ab日本語の行cd漢字«選択»"),
+        "{}",
+        s.ascii()
     );
 }

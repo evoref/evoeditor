@@ -1,0 +1,84 @@
+## config: 構文の誤り
+1:8	Error		""
+  この設定ファイルは書式が正しくないため使っていません: unclosed table, expected `]`
+  該当の行を直してください。直すまでは既定値で動きます
+## config: 知らない節
+1:2	Warning	edtor	""
+  edtor という設定項目はありません
+  editor ではありませんか?設定できる項目は同梱の config.example.toml を見てください
+## config: 知らないキー
+2:1	Warning	editor.tab_widht	""
+  editor.tab_widht という設定項目はありません
+  editor.tab_width ではありませんか?設定できる項目は同梱の config.example.toml を見てください
+## config: 型の違い
+2:13	Warning	editor.tab_width	"4"
+  editor.tab_width の値の型が違います (書かれた型: 文字列)
+  整数 で書いてください。この項目は既定値 4 を使います
+## config: 節が表でない
+1:10	Warning	editor	""
+  editor の値の型が違います (書かれた型: 整数)
+  テーブル で書いてください。この項目は使いません
+## config: 範囲の外
+2:13	Warning	editor.tab_width	"0"
+  editor.tab_width の値 0 は範囲外です
+  1〜16 で指定してください。この項目は 4 を使います
+## config: 許されない値
+2:18	Warning	editor.backspace_unit	"word"
+  editor.backspace_unit の値 word は使えません
+  使える値: grapheme, codepoint。この項目は既定値 grapheme を使います
+## config: 未対応の節
+1:2	Info	ai	""
+  ai はこのバージョンでは未対応のため無視しました
+## config: 正しい設定
+(診断なし)
+## keymap: キーマップの構文の誤り
+1:13	Error		""
+  この設定ファイルは書式が正しくないため使っていません: unclosed table, expected `]`
+  該当の行を直してください。直すまでは既定値で動きます
+## keymap: キーマップの各種の誤り
+2:1	Info	keys.preset	""
+  keys.preset はこのバージョンでは未対応のため無視しました
+9:1	Warning	keys.editor.a	"a"
+  keys.editor.a は文字入力に使うキーなので割り当てられません
+  ctrl や alt を組み合わせたキーにしてください。この割当は使いません
+10:1	Warning	keys.editor.ctrl+k	"ctrl+k"
+  keys.editor.ctrl+k は、既定の続けて押すキー (Ctrl+K など) の先頭です
+  続けて押すキーを優先し、この割当は使いません
+7:1	Warning	keys.editor.ctrl+nope	"ctrl+nope"
+  keys.editor.ctrl+nope のキーの書き方が正しくありません
+  例: ctrl+shift+s、alt+up、f5。この割当は使いません
+6:1	Warning	keys.editor.ctrl+s	"no.such_command"
+  keys.editor.ctrl+s のコマンド no.such_command はありません
+  コマンド名はコマンドパレットで確かめられます。この割当は使いません
+8:1	Warning	keys.editor.f5	"doc.modified &&"
+  keys.editor.f5 の when 句が正しくありません
+  書式は設定の仕様 (07 §7.3) を見てください。この割当は使いません
+12:1	Info	keys.editor.f6	""
+  keys.editor.f6 はこのバージョンでは未対応のため無視しました
+4:1	Warning	keys.nowhere.ctrl+s	"nowhere"
+  keys.nowhere.ctrl+s のコンテキスト名は使えません
+  使える名前: global, editor, search, prompt, palette, list, dialog, help。この割当は使いません
+11:1	Error	keys.editor.ctrl+q	"app.quit"
+  keys.editor.ctrl+q の割当だと、終了・コマンドパレット・取消のどれかに届かなくなります
+  既定の割当を残しました。別のキーにしてください
+## theme: cycle_a (themes/cycle_a.toml, 使える: false)
+0:0	Error		""
+  この設定ファイルは書式が正しくないため使っていません: inherits が循環しています (cycle_a)
+  該当の行を直してください。直すまでは既定値で動きます
+## theme: missing (themes/missing.toml, 使える: false)
+0:0	Error		""
+  この設定ファイルは書式が正しくないため使っていません: テーマ missing がありません
+  該当の行を直してください。直すまでは既定値で動きます
+## theme: broken (themes/broken.toml, 使える: false)
+1:4	Error		""
+  この設定ファイルは書式が正しくないため使っていません: unclosed table, expected `]`
+  該当の行を直してください。直すまでは既定値で動きます
+## theme: values (themes/values.toml, 使える: true)
+4:2	Info	syntax	""
+  syntax はこのバージョンでは未対応のため無視しました
+2:20	Warning	ui.selection.fg	"nope"
+  ui.selection.fg の値 nope は使えません
+  使える値: #rrggbb, #rgb, ansi.<name>, ansi.<0-255>, default。この項目は使いません
+3:1	Warning	ui.not_a_role	""
+  ui.not_a_role という設定項目はありません
+  設定できる項目は同梱の config.example.toml を見てください

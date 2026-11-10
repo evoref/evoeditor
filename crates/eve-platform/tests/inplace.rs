@@ -156,9 +156,13 @@ fn 短くすると書き終えた後に縮める() {
 #[test]
 fn 大きな内容を書く() {
     let e = Env::new("big");
-    let orig: Vec<u8> = (0..2 * 1024 * 1024).map(|i| (i % 253) as u8).collect();
+    let orig: Vec<u8> = (0..2 * 1024 * 1024)
+        .map(|i| u8::try_from(i % 253).expect("253 未満"))
+        .collect();
     fs::write(e.file("a.bin"), &orig).unwrap();
-    let new: Vec<u8> = (0..3 * 1024 * 1024).map(|i| (i % 241) as u8).collect();
+    let new: Vec<u8> = (0..3 * 1024 * 1024)
+        .map(|i| u8::try_from(i % 241).expect("241 未満"))
+        .collect();
     e.save("a.bin", &new).unwrap();
     assert_eq!(fs::read(e.file("a.bin")).unwrap(), new);
     assert_eq!(e.count(&e.state), 0);

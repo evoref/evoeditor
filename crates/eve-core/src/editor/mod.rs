@@ -1,113 +1,91 @@
 //! `Editor`: eve-core の唯一の入口 (docs/02 §4.6 / §5.4)。Host・frontend・テストのハーネスはこれだけを使う。
 //! すべてメインスレッドから呼び、どのメソッドも I/O をせずブロックしない (ADR-0020)。
 //!
-//! 現在の範囲 (M1 の C2a): 文書・View・Window の集合、変更の唯一の経路 (`EditorState::apply_transaction`)、
-//! コマンドのレジストリと `execute`。編集コマンド・キーマップ・移動は後続の PR で足す。
+//! 持つもの: 文書・View・Window の集合、変更の唯一の経路 (`EditorState::apply_transaction`)、
+//! コマンドのレジストリと `execute`、キーマップ、編集・移動・検索・ファイル操作のコマンド。
 
-mod buffer;
-mod chrome;
-mod clipboard;
-mod command;
-mod config_reload;
-pub use config_reload::{CONFIG_FILE, ConfigSources, KEYMAP_FILE};
-pub use config_report::diagnostic_texts as config_diagnostic_texts;
-mod config_report;
-mod context;
-mod default_keymap;
-mod edit;
-mod eol;
-mod external;
-mod file;
-mod help;
-mod theme;
-pub use theme::resolve as resolve_theme;
-mod keymap;
-mod layout;
-mod leftover_offer;
-mod line_ops;
-mod message;
-mod motion;
-mod mouse;
-mod overlay;
-mod palette;
-mod query;
-mod quit_saving;
-mod save_all;
-mod startup;
-mod view_cmds;
-pub use startup::InitialFile;
-mod search_bar;
-mod search_state;
-mod snapshot;
-mod state;
-mod swap;
-mod swap_recovery;
-mod user_keymap;
+pub(crate) mod buffer;
+mod host_api;
+pub use crate::io::config_reload::{CONFIG_FILE, ConfigSources, KEYMAP_FILE};
+pub use crate::layout::theme::resolve as resolve_theme;
+pub use crate::ui_model::config_report::diagnostic_texts as config_diagnostic_texts;
+pub use host_api::{HostReport, StartupConfig};
+pub(crate) mod query;
+pub use crate::io::startup::InitialFile;
+pub(crate) mod state;
 
 use eve_view::{
     Capabilities, DocumentId, EditorEvent, Effect, InputEvent, KeyCode, KeyKind, KeyStroke,
     Modifiers, ViewId, WindowId,
 };
 
-pub use clipboard::ClipboardSource;
-pub use command::{
+pub use crate::command::clipboard::ClipboardSource;
+pub use crate::command::context::{CONTEXT_VARS, ContextExpr, CtxValue, ParseError};
+pub use crate::command::edit::normalize_eol;
+pub use crate::command::{
     ArgValue, Args, CommandCtx, CommandInvocation, CommandKind, CommandRegistry, CommandResult,
     CommandSpec, Handler, InvocationSource, Permission, RejectReason,
 };
-pub use context::{ContextExpr, CtxValue, ParseError};
-pub use edit::normalize_eol;
-pub use keymap::{
+pub use crate::io::snapshot::DocSnapshot;
+pub use crate::keymap::{
     Binding, KeyParseError, Keymap, Layer, Resolution, format_stroke, parse_sequence, parse_stroke,
 };
-pub use layout::{Affinity, WrapMode, WrapSettings};
-pub use search_state::{SearchCount, SearchStep};
-pub use snapshot::DocSnapshot;
+pub use crate::layout::{Affinity, WrapMode, WrapSettings};
+pub use crate::search::search_state::{SearchCount, SearchStep};
 pub use state::{EditorState, ScrollPos, View, Window};
 
+use crate::command::ids;
 use crate::document::Document;
 use crate::jobs::Ports;
 use crate::time::Tick;
 
+/// eve-core の公開ファサード (02 §4.1)。Host は入力・ジョブの結果・時刻をこれに渡し、Frame・Effect・EditorEvent を受け取る。
+/// メインスレッドで使い、I/O はしない (ADR-0020。I/O はジョブとして `Ports.jobs` に投入する)。
 pub struct Editor {
-    state: EditorState,
-    registry: CommandRegistry,
-    keymap: Keymap,
-    #[allow(dead_code)] // C4 (開く・保存) のジョブ投入で使う
-    ports: Ports,
+    pub(crate) state: EditorState,
+    pub(crate) registry: CommandRegistry,
+    pub(crate) keymap: Keymap,
     /// チョードの保留が始まった (最後のキーを受けた) 時刻。which-key の 500 ms を数える。
     chord_since: Option<Tick>,
     /// which-key を出した (出す時刻に描き直しを一度だけ要求するため)。
     which_key_shown: bool,
 }
 
+/// 組込みのコマンドをすべて登録した登録簿 (07 §11.6。`command::ids::ALL` と一致する)。`Editor` を作らずに
+/// コマンドの一覧を出す経路 (`evoeditor --list-commands`、07 §11.5) も使う。
+pub fn builtin_registry() -> CommandRegistry {
+    let mut r = CommandRegistry::new();
+    crate::command::edit::register(&mut r);
+    crate::view::motion::register(&mut r);
+    crate::io::file_cmds::register(&mut r);
+    crate::io::external::register(&mut r);
+    buffer::register(&mut r);
+    crate::io::save_all::register(&mut r);
+    crate::ui_model::help::register(&mut r);
+    crate::io::config_reload::register(&mut r);
+    crate::ui_model::config_report::register(&mut r);
+    crate::view::view_cmds::register(&mut r);
+    crate::view::mouse::register(&mut r);
+    crate::command::line_ops::register(&mut r);
+    crate::ui_model::overlay::register(&mut r);
+    r
+}
+
 impl Editor {
-    /// 空の EditorState を作る。I/O もジョブ投入もしない。
+    /// 空の `EditorState` を作る。I/O もジョブ投入もしない。
     pub fn new(ports: Ports, caps: Capabilities) -> Editor {
-        let mut registry = CommandRegistry::new();
-        edit::register(&mut registry);
-        motion::register(&mut registry);
-        file::register(&mut registry);
-        external::register(&mut registry);
-        buffer::register(&mut registry);
-        save_all::register(&mut registry);
-        help::register(&mut registry);
-        config_reload::register(&mut registry);
-        view_cmds::register(&mut registry);
-        mouse::register(&mut registry);
-        line_ops::register(&mut registry);
-        overlay::register(&mut registry);
+        let registry = builtin_registry();
         let mut state = EditorState::new(caps, ports.jobs.clone(), ports.paths.clone());
         state.set_palette_entries(
             registry
                 .iter()
-                .filter_map(|s| palette::PaletteEntry::new(s.id.as_str(), &s.when))
+                .filter_map(|s| crate::ui_model::palette::PaletteEntry::new(s.id.as_str(), &s.when))
                 .collect(),
         );
         let mut editor = Editor {
             state,
             registry,
-            keymap: default_keymap::default_keymap(),
-            ports,
+            keymap: crate::keymap::default_keymap::default_keymap(),
             chord_since: None,
             which_key_shown: false,
         };
@@ -118,23 +96,24 @@ impl Editor {
     /// `{key:<command_id>}` の解決に使うキー表記を、今のキーマップから作り直す。
     /// キーの表記を作り直す。表記 (パレット・ヒントバー・`{key:…}`) はこの端末で届く割当から選び (04 §7.8)、
     /// ヘルプのキー一覧は全割当を、届くかの印とともに持つ。
-    fn refresh_key_labels(&mut self) {
-        let caps = self.state.caps.clone();
-        let ok = |b: &keymap::Binding| keymap::reachable(b, &caps);
+    pub(crate) fn refresh_key_labels(&mut self) {
+        let caps = self.state.term.caps.clone();
+        let ok = |b: &crate::keymap::Binding| crate::keymap::reachable(b, &caps);
         let seqs = self
             .keymap
             .first_bindings_where(&Self::EDITOR_CONTEXTS, &ok);
         let labels = seqs
             .iter()
-            .map(|(k, v)| (k.clone(), keymap::format_sequence(v)))
+            .map(|(k, v)| (k.clone(), eve_view::key_notation(v, caps.ascii_only)))
             .collect();
         self.state.set_key_bindings(labels, seqs);
-        self.state.set_all_key_bindings(help::collect_all_bindings(
-            self.keymap
-                .all_bindings()
-                .into_iter()
-                .map(|b| (b.command.as_str().to_owned(), b.sequence.clone(), ok(b))),
-        ));
+        self.state
+            .set_all_key_bindings(crate::ui_model::help::collect_all_bindings(
+                self.keymap
+                    .all_bindings()
+                    .into_iter()
+                    .map(|b| (b.command.as_str().to_owned(), b.sequence.clone(), ok(b))),
+            ));
     }
 
     /// 端末の能力を差し替える (起動時と `CapabilitiesChanged`)。届く割当が変わるので、キーの表記も作り直す。
@@ -143,18 +122,22 @@ impl Editor {
         self.refresh_key_labels();
     }
 
+    /// エディタの状態 (読み取り)。
     pub fn state(&self) -> &EditorState {
         &self.state
     }
 
+    /// エディタの状態 (書込)。試験とベンチの組み立て用で、Host は使わない (`configure` / `report` を使う。02 §5.4)。
     pub fn state_mut(&mut self) -> &mut EditorState {
         &mut self.state
     }
 
+    /// コマンドの登録簿。
     pub fn registry(&self) -> &CommandRegistry {
         &self.registry
     }
 
+    /// コマンドを登録する。同じ ID が既にあれば置き換える。
     pub fn register(&mut self, spec: CommandSpec) {
         self.registry.register(spec);
     }
@@ -162,7 +145,7 @@ impl Editor {
     /// 文書を追加して表示する。Window がなければ作る。ヘッドレスのテストと、読込完了後の経路が使う。
     pub fn open_document(&mut self, doc: Document) -> (DocumentId, ViewId, WindowId) {
         let (doc_id, view_id) = self.state.add_document(doc);
-        let window = match self.state.first_window() {
+        let window = match self.state.focused_window() {
             Some(w) => w,
             None => self.state.add_window(view_id),
         };
@@ -226,6 +209,12 @@ impl Editor {
     }
 
     /// キーマップを差し替える (層を足した設定の反映、テスト)。保留中のストロークは破棄する。
+    /// 今のキーマップ (既定とユーザーの層。一覧の出力と試験に使う。読み取りだけ)。
+    pub fn keymap(&self) -> &Keymap {
+        &self.keymap
+    }
+
+    /// キーマップを差し替え、ヒント・パレットなどに出すキーの表記を作り直す。
     pub fn set_keymap(&mut self, keymap: Keymap) {
         self.keymap = keymap;
         self.refresh_key_labels();
@@ -276,7 +265,7 @@ impl Editor {
             None => {
                 let doc = self.state.blank_document();
                 let (_, view) = self.state.add_document(doc);
-                if self.state.first_window().is_none() {
+                if self.state.focused_window().is_none() {
                     self.state.add_window(view);
                 }
             }
@@ -326,7 +315,7 @@ impl Editor {
                 if self.state.is_dialog() {
                     // 確認ダイアログでは貼り付けを捨てる (選択肢が実行されないように)
                 } else if !self.state.prompt_paste(&s) {
-                    edit::paste_text(&mut self.state, &s);
+                    crate::command::edit::paste_text(&mut self.state, &s);
                 }
             }
             InputEvent::Mouse(m) => {
@@ -357,8 +346,8 @@ impl Editor {
             "palette" => &["palette", "list", "prompt", "global"],
             // ヘルプ画面: 移動と閉じるだけ (入力欄は無い)
             "help" => &["help", "global"],
-            // バッファ一覧: `list` の割当 (一覧内の `buffer.close`) を先に見て、移動などはパレットと共通
-            "buffer_list" => &["list", "palette", "prompt", "global"],
+            // バッファ一覧・設定の診断の一覧: 一覧の移動と一覧内の `buffer.close` は `list`。パレットの割当 (`palette`) は見ない
+            "buffer_list" | "config_diagnostics" => &["list", "prompt", "global"],
             "search" => &["search", "prompt", "global"],
             _ => &Self::EDITOR_CONTEXTS,
         }
@@ -424,14 +413,16 @@ impl Editor {
     fn insert_text(&mut self, s: &str) {
         let args = Args::new().with_str("text", s);
         self.execute(
-            CommandInvocation::new("edit.insert_text", InvocationSource::Keymap).with_args(args),
+            CommandInvocation::new(ids::EDIT_INSERT_TEXT, InvocationSource::Keymap).with_args(args),
         );
     }
 
+    /// 積んだ Effect を積んだ順に取り出す (02 §5.4)。Host が `Frontend::apply_effect` に渡す。
     pub fn drain_effects(&mut self) -> Vec<Effect> {
         self.state.drain_effects()
     }
 
+    /// 積んだ `EditorEvent` を積んだ順に取り出す。
     pub fn drain_events(&mut self) -> Vec<EditorEvent> {
         self.state.drain_events()
     }
@@ -439,11 +430,6 @@ impl Editor {
     /// 退避用の公開物を作る。dirty でない文書・読込中の文書・閉じた文書は `None` (スロットを空にする)。
     pub fn emergency_snapshot(&self, doc: DocumentId) -> Option<DocSnapshot> {
         self.state.rescue_snapshot(doc, true)
-    }
-
-    /// システムクリップボードを使えなかったことを知らせる (Host が書込の失敗・取得のタイムアウトで呼ぶ)。
-    pub fn notify_clipboard_fallback(&mut self, reason: &str) {
-        self.state.notify_clipboard_fallback(reason);
     }
 
     /// `Effect::SetClipboard` の `Handle` の中身を取り出す (Host が実行時に呼ぶ、02 §4.4)。
@@ -459,7 +445,7 @@ impl Editor {
 
     /// 起動時の走査が見つけた置換途中の痕跡の提案 (新しい順。05 §4.6)。
     pub fn leftovers(&self) -> &[crate::Leftover] {
-        &self.state.leftovers
+        &self.state.io.leftovers
     }
 
     /// 復旧で適用した古いスワップのうち、まだ消していないもの。Host が正常終了のときに消す。
@@ -467,13 +453,14 @@ impl Editor {
         self.state.swap_recovered_leftovers()
     }
 
+    /// 前回の呼び出しの後に、退避用の公開物 (`DocSnapshot`) が変わった文書を取り出す (03 §6.5 手順 12)。
     pub fn take_snapshot_updates(&mut self) -> Vec<DocumentId> {
         self.state.take_snapshot_updates()
     }
 
     /// Window の Frame を作る (可視範囲だけ。コストは文書の大きさに依存しない)。
     pub fn frame(&mut self, window: WindowId) -> Option<eve_view::Frame> {
-        let mut f = layout::build_frame(&self.state, window, self.keymap.pending());
+        let mut f = crate::layout::build_frame(&self.state, window, self.keymap.pending());
         if let Some(f) = f.as_mut() {
             f.which_key = self.which_key_model();
         }
@@ -500,7 +487,7 @@ impl Editor {
                     .unwrap_or_else(|| "…".to_owned());
                 eve_view::WhichKeyItem {
                     key,
-                    text: layout::cell_text(&text, eve_view::CutPolicy::End),
+                    text: crate::layout::cell_text(&text, eve_view::CutPolicy::End),
                     more: cmd.is_none(),
                 }
             })
@@ -511,6 +498,7 @@ impl Editor {
         })
     }
 
+    /// 前回の Frame の後に、描き直しが要る変化があった。
     pub fn needs_render(&self) -> bool {
         self.state.needs_render()
     }

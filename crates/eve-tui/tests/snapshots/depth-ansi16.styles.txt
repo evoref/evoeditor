@@ -1,0 +1,16 @@
+0: 0-2 Indexed(8) Reset BOLD | 3-8 Indexed(15) Indexed(4) NONE
+1: 0-2 Indexed(8) Reset NONE
+2: 0-6 Indexed(8) Reset NONE | 13-14 Indexed(8) Reset NONE
+3: 0-2 Indexed(8) Reset NONE
+4: 0-0 Indexed(8) Reset NONE
+5: 0-0 Indexed(8) Reset NONE
+6: 0-0 Indexed(8) Reset NONE
+7: 0-0 Indexed(8) Reset NONE
+8: 0-0 Indexed(8) Reset NONE
+9: 0-0 Indexed(8) Reset NONE
+10: 0-0 Indexed(8) Reset NONE
+11: 0-0 Indexed(8) Reset NONE
+12: 0-0 Indexed(8) Reset NONE
+13: 0-0 Indexed(8) Reset NONE
+14: 0-79 Reset Reset REVERSED
+16: 0-1 Indexed(0) Indexed(6) NONE | 8-9 Indexed(0) Indexed(6) NONE | 20-21 Indexed(0) Indexed(6) NONE | 28-29 Indexed(0) Indexed(6) NONE | 36-37 Indexed(0) Indexed(6) NONE | 44-45 Indexed(0) Indexed(6) NONE | 56-57 Indexed(0) Indexed(6) NONE

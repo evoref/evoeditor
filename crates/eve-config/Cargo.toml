@@ -14,3 +14,7 @@ workspace = true
 
 [dependencies]
 toml = "1.1.8"
+
+[dev-dependencies]
+# 読込の性質の試験 (tests/load_props.rs、docs/review/v0.3-findings.md の STR-T8)
+proptest = "1.12.0"

@@ -1,5 +1,5 @@
 //! 文字コードの種類 (docs/03-core-design.md §8.1)。v0.1 で読み書きするのは UTF-8・UTF-16LE/BE・Shift_JIS (CP932)・EUC-JP・ISO-2022-JP。
-//! encoding_rs の静的な `Encoding` を包み、UTF-16 は自前の書き手を持つ (encoding_rs は UTF-16 のエンコードを提供しない、§8.6)。
+//! `encoding_rs` の静的な `Encoding` を包み、UTF-16 は自前の書き手を持つ (`encoding_rs` は UTF-16 のエンコードを提供しない、§8.6)。
 
 /// 読み書きできる文字コード。
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -8,7 +8,7 @@ pub enum Encoding {
     Utf8,
     Utf16Le,
     Utf16Be,
-    /// Shift_JIS (Windows の CP932 と同じ写像、encoding_rs の `SHIFT_JIS`)。
+    /// `Shift_JIS` (Windows の CP932 `と同じ写像、encoding_rs` の `SHIFT_JIS`)。
     ShiftJis,
     EucJp,
     /// 状態付き符号化 (`is_stateful`)。

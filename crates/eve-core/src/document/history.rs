@@ -2,15 +2,16 @@
 //!
 //! 位置は `NodeId` (文書ごとの単調増加の通番) で表し、スタック上の深さでは表さない (§7.1)。
 //! 結合規則 R1〜R9 (§7.3) は `UndoHistory::record` が上から順に評価する。
-//! `FormatChange` (Reload が `TextFormat` と読み取り専用の理由を本文と一緒に戻す)。改行コード変換の利用者は後続。
+//! `FormatChange` (Reload は `TextFormat` と読み取り専用の理由を、改行コード変換は `default_eol` だけを本文と一緒に戻す)。
 
 use std::collections::VecDeque;
+use std::sync::Arc;
 
 use eve_text::{ByteRange, ChangeSet, Op, Selection};
 
 use crate::time::{Millis, Tick};
 
-use super::format::{FormatChange, FormatState};
+use super::format::{FormatChange, FormatRestore};
 use super::transaction::{Origin, Transaction, UndoGroupHint};
 
 /// 履歴上の位置。文書ごとの通番で、破棄しても再利用しない。
@@ -27,7 +28,9 @@ const NODE_OVERHEAD: usize = 128;
 /// 文書ごとの Undo の予算 (§7.5)。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct UndoBudget {
+    /// 履歴の会計の合計の上限 (バイト。既定 64 MiB)。
     pub max_bytes: usize,
+    /// ノードの数の上限 (既定 10000)。
     pub max_nodes: usize,
 }
 
@@ -45,14 +48,15 @@ struct UndoNode {
     id: NodeId,
     /// 最初の Transaction の由来 (結合しても変えない。Undo / Redo の通知に「元の Origin」として載せる)。
     origin: Origin,
-    redo: ChangeSet,
-    undo: ChangeSet,
+    /// 記録した Transaction の変更 (共有。結合したら作り直す)。
+    redo: Arc<ChangeSet>,
+    undo: Arc<ChangeSet>,
     selection_before: Option<Selection>,
     selection_after: Option<Selection>,
     last_edit_at: Tick,
     group_sealed: bool,
     bytes: usize,
-    /// 書式の変更 (再読込)。Undo は `before`、Redo は `after` を戻す。
+    /// 書式の変更 (再読込・改行コードの変換)。Undo は `before`、Redo は `after` を戻す。
     format: Option<FormatChange>,
 }
 
@@ -68,15 +72,17 @@ pub struct RecordOutcome {
 /// Undo / Redo で適用する変更。
 #[derive(Clone, Debug)]
 pub struct HistoryStep {
-    pub changes: ChangeSet,
+    /// 今の文書に適用する `ChangeSet` (Undo は逆変換、Redo は元の変更)。
+    pub changes: Arc<ChangeSet>,
     /// ノードを作った Transaction の Origin (Undo / Redo は独立した Origin を持たない)。
     pub origin: Origin,
     /// 発行 View に復元する Selection。Undo は `selection_before`、Redo は `selection_after`。
     pub selection: Option<Selection>,
-    /// 本文と一緒に戻す書式と読み取り専用の理由 (再読込のノードだけ)。
-    pub format: Option<FormatState>,
+    /// 本文と一緒に戻す書式 (再読込と改行コードの変換のノードだけ。範囲は `FormatChange` の種類で決まる)。
+    pub format: Option<FormatRestore>,
 }
 
+/// 文書ごとの線形の Undo 履歴 (03 §7)。保存点を持ち、予算 (`UndoBudget`) を超えると古いノードから捨てる。
 #[derive(Debug)]
 pub struct UndoHistory {
     undo: VecDeque<UndoNode>,
@@ -86,6 +92,8 @@ pub struct UndoHistory {
     next_id: u64,
     saved: Option<NodeId>,
     budget: UndoBudget,
+    /// `undo` と `redo` の全ノードの会計値の合計。編集のたびに全ノードを足さないよう、増減で保つ (PRF-14)。
+    total: usize,
 }
 
 impl Default for UndoHistory {
@@ -104,7 +112,7 @@ enum EditKind {
     Mixed,
 }
 
-/// ChangeSet の変更のまとまり (適用前の範囲, 適用後の範囲) の一覧。
+/// `ChangeSet` の変更のまとまり (適用前の範囲, 適用後の範囲) の一覧。
 fn hunks(cs: &ChangeSet) -> Vec<(ByteRange, ByteRange)> {
     cs.changed_ranges().collect()
 }
@@ -120,26 +128,26 @@ fn kind_of(hunks: &[(ByteRange, ByteRange)]) -> EditKind {
     }
 }
 
-fn inserted_texts(cs: &ChangeSet) -> impl Iterator<Item = &str> {
+fn inserted_texts(cs: &ChangeSet) -> impl Iterator<Item = &eve_text::InsertText> {
     cs.ops().iter().filter_map(|op| match op {
-        Op::Insert(s) if !s.is_empty() => Some(s.as_str()),
+        Op::Insert(s) if !s.is_empty() => Some(s),
         _ => None,
     })
 }
 
 fn inserted_len(cs: &ChangeSet) -> usize {
-    inserted_texts(cs).map(str::len).sum()
+    inserted_texts(cs).map(eve_text::InsertText::len).sum()
 }
 
 fn has_newline(cs: &ChangeSet) -> bool {
-    inserted_texts(cs).any(|s| s.contains(['\n', '\r']))
+    inserted_texts(cs).any(|s| s.chunks().any(|c| c.contains(['\n', '\r'])))
 }
 
 /// 挿入が改行 1 つだけか (R6 (a)): すべての挿入文字列が LF / CRLF / CR のどれか 1 つ。
 fn only_single_newlines(cs: &ChangeSet) -> bool {
     let mut any = false;
     for s in inserted_texts(cs) {
-        if !matches!(s, "\n" | "\r\n" | "\r") {
+        if !matches!(s.as_str(), Some("\n" | "\r\n" | "\r")) {
             return false;
         }
         any = true;
@@ -157,6 +165,7 @@ fn cost_of(redo: &ChangeSet, undo: &ChangeSet, sels: [&Option<Selection>; 2]) ->
 }
 
 impl UndoHistory {
+    /// 空の履歴を作る。根が保存点。
     pub fn new(budget: UndoBudget) -> UndoHistory {
         UndoHistory {
             undo: VecDeque::new(),
@@ -165,6 +174,7 @@ impl UndoHistory {
             next_id: 1,
             saved: Some(NodeId(0)),
             budget,
+            total: 0,
         }
     }
 
@@ -173,6 +183,7 @@ impl UndoHistory {
         self.undo.back().map_or(self.base, |n| n.id)
     }
 
+    /// 保存点のノード。保存点のノードが破棄された (予算の超過・redo の破棄・結合で内容が変わった) ときは `None` (以後は常に dirty)。
     pub fn saved(&self) -> Option<NodeId> {
         self.saved
     }
@@ -182,29 +193,38 @@ impl UndoHistory {
         self.saved != Some(self.current())
     }
 
+    /// 取り消せるノードがある。
     pub fn can_undo(&self) -> bool {
         !self.undo.is_empty()
     }
 
+    /// やり直せるノードがある。
     pub fn can_redo(&self) -> bool {
         !self.redo.is_empty()
     }
 
+    /// 取り消せるノードの数。
     pub fn undo_len(&self) -> usize {
         self.undo.len()
     }
 
+    /// やり直せるノードの数。
     pub fn redo_len(&self) -> usize {
         self.redo.len()
     }
 
-    /// 履歴の合計バイト数 (会計。プロセス全体の上限の算出に使う)。
+    /// 履歴の合計バイト数 (会計。プロセス全体の上限の算出に使う)。O(1)。
     pub fn bytes(&self) -> usize {
-        self.undo
-            .iter()
-            .chain(self.redo.iter())
-            .map(|n| n.bytes)
-            .sum()
+        debug_assert_eq!(
+            self.total,
+            self.undo
+                .iter()
+                .chain(self.redo.iter())
+                .map(|n| n.bytes)
+                .sum::<usize>(),
+            "会計値の合計がノードの合計とずれた"
+        );
+        self.total
     }
 
     /// 現在位置を保存点にする (読込完了・新規文書・開き直し・保存完了で保存に使った位置が現在のとき)。
@@ -227,6 +247,7 @@ impl UndoHistory {
     pub fn reset(&mut self) {
         self.undo.clear();
         self.redo.clear();
+        self.total = 0;
         self.base = NodeId(self.next_id);
         self.next_id += 1;
         self.saved = Some(self.base);
@@ -257,6 +278,8 @@ impl UndoHistory {
             {
                 self.saved = None;
             }
+            let freed: usize = self.redo.iter().map(|n| n.bytes).sum();
+            self.total -= freed;
             self.redo.clear();
         }
         let merge = self
@@ -278,19 +301,18 @@ impl UndoHistory {
 
     /// 結合する (`true`) か新ノード (`false`) かと、記録の後で封印するか (§7.3)。
     fn decide(&mut self, tx: &Transaction, merge: bool) -> (bool, bool) {
-        let newline = has_newline(&tx.changes);
         let prev_open = self.undo.back().is_some_and(|p| !p.group_sealed);
         // R1
         if tx.undo_group == UndoGroupHint::Merge && prev_open {
-            return (true, newline);
+            return (true, has_newline(&tx.changes));
         }
-        // R2
+        // R2 (改行の走査より先に見る。再読込の全文の挿入を走査しない)
         if tx.origin != Origin::User || tx.undo_group == UndoGroupHint::Break {
             self.seal();
             return (false, true);
         }
         // R3〜R9 は should_merge が評価した結果 (merge)。改行を含む挿入は記録の後で封印する (R6)
-        (merge, newline)
+        (merge, has_newline(&tx.changes))
     }
 
     /// R3〜R9: 直前のノードに結合するか。R1 / R2 は呼び出し側で先に評価する。
@@ -359,16 +381,18 @@ impl UndoHistory {
             return;
         };
         let old_id = prev.id;
-        prev.redo = redo;
-        prev.undo = undo;
+        prev.redo = Arc::new(redo);
+        prev.undo = Arc::new(undo);
         prev.selection_after = tx.selection_after.clone();
         prev.last_edit_at = tx.timestamp;
         prev.id = new_id;
+        let old_bytes = prev.bytes;
         prev.bytes = cost_of(
             &prev.redo,
             &prev.undo,
             [&prev.selection_before, &prev.selection_after],
         );
+        self.total = self.total - old_bytes + prev.bytes;
         // 内容が変わったので以前の位置とは別の位置になる
         if self.saved == Some(old_id) {
             self.saved = None;
@@ -382,11 +406,12 @@ impl UndoHistory {
             &inverse,
             [&tx.selection_before, &tx.selection_after],
         );
+        self.total += bytes;
         self.undo.push_back(UndoNode {
             id,
             origin: tx.origin.clone(),
-            redo: tx.changes.clone(),
-            undo: inverse,
+            redo: Arc::clone(&tx.changes),
+            undo: Arc::new(inverse),
             selection_before: tx.selection_before.clone(),
             selection_after: tx.selection_after.clone(),
             last_edit_at: tx.timestamp,
@@ -419,6 +444,7 @@ impl UndoHistory {
         if self.saved.is_some_and(|s| s < self.base) {
             self.saved = None;
         }
+        self.total -= n.bytes;
         n.bytes
     }
 
@@ -436,7 +462,7 @@ impl UndoHistory {
             changes: node.undo.clone(),
             origin: node.origin.clone(),
             selection: node.selection_before.clone(),
-            format: node.format.as_ref().map(|f| f.before.clone()),
+            format: node.format.as_ref().map(|f| f.side(false)),
         };
         self.redo.push(node);
         self.seal();
@@ -450,7 +476,7 @@ impl UndoHistory {
             changes: node.redo.clone(),
             origin: node.origin.clone(),
             selection: node.selection_after.clone(),
-            format: node.format.as_ref().map(|f| f.after.clone()),
+            format: node.format.as_ref().map(|f| f.side(true)),
         };
         self.undo.push_back(node);
         self.seal();
@@ -765,15 +791,8 @@ mod tests {
             max_nodes: 3,
         });
         d.h.mark_saved(); // 根
-        for i in 0..5u64 {
-            let out = d.edit(
-                i as usize,
-                i as usize,
-                "x",
-                Origin::Paste,
-                UndoGroupHint::Auto,
-                10,
-            );
+        for i in 0..5usize {
+            let out = d.edit(i, i, "x", Origin::Paste, UndoGroupHint::Auto, 10);
             assert_eq!(out.pruned, i >= 3);
         }
         assert_eq!(d.h.undo_len(), 3);

@@ -34,7 +34,11 @@ pub struct Catalog {
 }
 
 impl Catalog {
-    /// 言語ファイルを読む。`[meta]` は含めない。
+    /// 言語ファイルを読む。`[meta]` は含めない。入れ子の表は `.` 区切りのキーに平らにする。
+    ///
+    /// # Errors
+    ///
+    /// TOML として読めないとき、または文字列でも表でもない値があるとき、`CatalogError` を返す。
     pub fn parse(src: &str) -> Result<Catalog, CatalogError> {
         let table: toml::Table = src
             .parse()
@@ -49,6 +53,10 @@ impl Catalog {
     }
 
     /// 同梱の `ja`。同梱のファイルは CI で検査するので、読めないのは開発中の誤りだけ。
+    ///
+    /// # Panics
+    ///
+    /// 同梱の `locales/ja.toml` が読めないとき (開発中の誤り。CI の試験が防ぐ)。
     pub fn builtin_ja() -> &'static Catalog {
         static JA: OnceLock<Catalog> = OnceLock::new();
         JA.get_or_init(|| Catalog::parse(BUILTIN_JA).expect("同梱の locales/ja.toml は読める"))
@@ -63,23 +71,31 @@ impl Catalog {
     }
 
     /// 同梱の `en`。キー集合は `ja` と一致する (`cargo xtask i18n` と下の試験が検査する)。
+    ///
+    /// # Panics
+    ///
+    /// 同梱の `locales/en.toml` が読めないとき (開発中の誤り。CI の試験が防ぐ)。
     pub fn builtin_en() -> &'static Catalog {
         static EN: OnceLock<Catalog> = OnceLock::new();
         EN.get_or_init(|| Catalog::parse(BUILTIN_EN).expect("同梱の locales/en.toml は読める"))
     }
 
+    /// キーの文言。無ければ `None`。
     pub fn get(&self, key: &str) -> Option<&str> {
         self.entries.get(key).map(String::as_str)
     }
 
+    /// キーがあるか。
     pub fn contains(&self, key: &str) -> bool {
         self.entries.contains_key(key)
     }
 
+    /// 文言の件数。
     pub fn len(&self) -> usize {
         self.entries.len()
     }
 
+    /// 文言が 1 件も無いか。
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty()
     }
@@ -165,7 +181,11 @@ fn expand_conditionals(template: &str, args: &[(&str, &str)]) -> String {
             return out;
         };
         let inner = &after[..end];
-        if placeholder_names(inner).all(|n| args.iter().any(|(k, v)| *k == n && !v.is_empty())) {
+        if placeholders(inner)
+            .into_iter()
+            .filter(|n| !n.starts_with("key:"))
+            .all(|n| args.iter().any(|(k, v)| *k == n && !v.is_empty()))
+        {
             out.push_str(inner);
         }
         rest = &after[end + '〕'.len_utf8()..];
@@ -174,8 +194,10 @@ fn expand_conditionals(template: &str, args: &[(&str, &str)]) -> String {
     out
 }
 
-/// 文字列の中の `{name}` の name (`{key:…}` と `{{` のエスケープは除く)。
-fn placeholder_names(s: &str) -> impl Iterator<Item = &str> {
+/// 文言の中のプレースホルダ `{name}` の name の列 (`{key:<command_id>}` は `key:<command_id>` のまま。
+/// `{{` は `{` のエスケープで数えない。閉じていない `{` から後は読まない)。言語ファイルの解決と
+/// `cargo xtask i18n` の検査 (言語の間でプレースホルダが揃っているか) が同じ規則で読むための、唯一の実装。
+pub fn placeholders(s: &str) -> Vec<&str> {
     let mut names = Vec::new();
     let mut rest = s;
     while let Some(i) = rest.find('{') {
@@ -186,16 +208,13 @@ fn placeholder_names(s: &str) -> impl Iterator<Item = &str> {
         }
         match tail.find('}') {
             Some(end) => {
-                let name = &tail[1..end];
-                if !name.starts_with("key:") {
-                    names.push(name);
-                }
+                names.push(&tail[1..end]);
                 rest = &tail[end + 1..];
             }
             None => break,
         }
     }
-    names.into_iter()
+    names
 }
 
 fn flatten(
@@ -360,5 +379,63 @@ b = \"{path} を開けません〔(一時ファイル {tmp})〕\"
 b = \"x〔y\"
 ");
         assert_eq!(d.render("a.b", &[], &no_keys), "x〔y");
+    }
+
+    #[test]
+    fn 件数と空かどうかとキーの列() {
+        let e = Catalog::default();
+        assert_eq!(e.len(), 0);
+        assert!(e.is_empty());
+        assert_eq!(e.keys().count(), 0);
+        let c = cat("[a]
+b = \"x\"
+c = \"y\"
+");
+        assert_eq!(c.len(), 2);
+        assert!(!c.is_empty());
+        assert_eq!(c.keys().collect::<Vec<_>>(), ["a.b", "a.c"]);
+        // [meta] だけなら空
+        let m = cat("[meta]
+language = \"ja\"
+");
+        assert!(m.is_empty());
+        assert_eq!(m.len(), 0);
+        assert!(!Catalog::builtin_ja().is_empty());
+        assert!(!Catalog::builtin_en().is_empty());
+    }
+
+    #[test]
+    fn エラーの表示_contains_と言語ごとの同梱() {
+        let e = Catalog::parse(
+            "a = 1
+",
+        )
+        .unwrap_err();
+        assert_eq!(
+            e.to_string(),
+            "言語ファイルを読めません: `a` は文字列でもテーブルでもない"
+        );
+        let c = cat("[a]
+b = \"x\"
+");
+        assert!(c.contains("a.b"));
+        assert!(!c.contains("a"));
+        assert!(!c.contains("a.c"));
+        assert!(std::ptr::eq(
+            Catalog::builtin(crate::Locale::Ja),
+            Catalog::builtin_ja()
+        ));
+        assert!(std::ptr::eq(
+            Catalog::builtin(crate::Locale::En),
+            Catalog::builtin_en()
+        ));
+    }
+
+    #[test]
+    fn プレースホルダの列() {
+        assert_eq!(placeholders("{a} と {key:x.y} {{z}} {b"), ["a", "key:x.y"]);
+        // 名前の中の { は名前の一部で、閉じた括弧の次から読み直す
+        assert_eq!(placeholders("{a{}"), ["a{"]);
+        assert_eq!(placeholders("{}{c}"), ["", "c"]);
     }
 }

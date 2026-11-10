@@ -13,6 +13,8 @@ Rust 製テキストエディタ。**仕様書駆動** ([ADR-0001](docs/10-decis
 - **1 タスク = 1 作業ブランチ = 1 PR**。PR は `develop` 宛て、squash で入れる (develop 上で 1 作業 = 1 コミット)。マージ後に作業ブランチを削除する。rebase は作業ブランチ内でだけ自由。
 - `dev/<版>`、`release/*`、`hotfix/*` ブランチは使わない。
 - merge は人間が行う。`gh pr merge` は実行前に確認が出る。
+  - 例外は [docs/11 §8.2](docs/11-dev-workflow.md) の「自己マージの許可」。人間がチャットで許可したら、作業の前に `python .claude/hooks/merge-permit.py grant --until <YYYY-MM-DD> --note "<根拠>"` を実行する (このときに 1 回だけ確認が出る)。許可がある間は、`develop` 宛ての PR を `gh pr merge <番号> --squash` を単独で実行して入れるときだけ、確認が出ない。
+  - 人間が許可を取り消したら `merge-permit.py revoke` を実行する。今の状態は `merge-permit.py status` で見る。許可は `.git/eve-allow-pr-merge` にあり、commit されない。
 
 ## リリースと版
 
@@ -36,7 +38,8 @@ Rust 製テキストエディタ。**仕様書駆動** ([ADR-0001](docs/10-decis
   - `v*` タグの作成と push
   - `git stash` (作業ツリーを動かし、改行コードや未追跡の変更を壊しやすいため)
   - `git reset --hard` / `git clean -f` / `git restore` / `git checkout -- <path>` (作業ツリーの変更を捨てる。確認が出る)
-  - `gh pr merge` (確認)
+  - `gh pr merge` (確認。自己マージの許可がある間の、`develop` 宛ての `--squash` だけは通す) と、GitHub MCP の `merge_pull_request` (確認)
+  - 自己マージの許可を出す操作 (`merge-permit.py grant`、許可のファイルへの直接の書き込み) (確認)
 - GitHub のブランチ保護 (`main` と `develop`: PR 必須、直接 push・force push・削除の禁止) も併用する。設定の手順は [docs/11 §9.1](docs/11-dev-workflow.md)。
 - hook に拒否されたら、回避せずに理由を人間に伝えて指示を待つ。
 

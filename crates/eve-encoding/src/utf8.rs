@@ -10,6 +10,10 @@
 pub const ESCAPE_BASE: u32 = 0x10FF00;
 
 /// 不正バイト `b` のエスケープ文字。
+///
+/// # Panics
+///
+/// 内部の不変条件が破れたときだけ。`ESCAPE_BASE + 0..=255` は常に妥当な `char` なので、実際にはパニックしない。
 pub fn escape_byte(b: u8) -> char {
     // `ESCAPE_BASE + 0..=255` は補助私用面 B の中で、常に妥当な char
     char::from_u32(ESCAPE_BASE + u32::from(b)).expect("U+10FF00..=U+10FFFF は妥当な char")
@@ -17,10 +21,10 @@ pub fn escape_byte(b: u8) -> char {
 
 /// エスケープ文字なら元のバイト。
 pub fn unescape_char(c: char) -> Option<u8> {
-    let v = c as u32;
-    (ESCAPE_BASE..=ESCAPE_BASE + 0xFF)
-        .contains(&v)
-        .then(|| (v - ESCAPE_BASE) as u8)
+    // ESCAPE_BASE..=ESCAPE_BASE + 0xFF の中のときだけ、差が u8 に収まる
+    (c as u32)
+        .checked_sub(ESCAPE_BASE)
+        .and_then(|d| u8::try_from(d).ok())
 }
 
 /// 不正バイトのエスケープの扱い (03 §8.1 / §8.3)。

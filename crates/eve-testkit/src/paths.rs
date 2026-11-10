@@ -10,6 +10,7 @@ pub struct FixedPaths {
 }
 
 impl FixedPaths {
+    /// `root` の下にディレクトリを置き、相対パスを `cwd` 基準にする `Paths` を作る。
     pub fn new(root: &str, cwd: &str) -> FixedPaths {
         FixedPaths {
             root: FsPath::from(root),

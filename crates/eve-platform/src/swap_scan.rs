@@ -1,16 +1,15 @@
 //! スワップの復旧の探索 (docs/03 §10.3、05 §5.3 / §7.5)。`swap/*.swp` を列挙して manifest を要約し、本文を読み、他のプロセスの残骸を消す。
 //! 書く側は `swap.rs`。pid の生存確認は起動時刻の一致も見る (05 §5.3。Windows は `OpenProcess`、Unix は `kill(pid, 0)` と `/proc`)。
 
-#![cfg_attr(windows, allow(unsafe_code))]
-
 use std::fs;
 use std::io;
 use std::path::Path;
 
 use eve_core::{FileTime, FsError, FsErrorKind, FsPath, SwapBody, SwapEntry, SwapOwner};
 
-use crate::inflight::{parse_string, process_start};
+use crate::inflight::process_start;
 use crate::sys::map_io_error;
+use crate::toml_lite::{self, parse_basic_string};
 
 /// manifest から読んだ、復旧に要る項目。
 #[derive(Default)]
@@ -48,21 +47,20 @@ fn parse_manifest(text: &str) -> Parsed {
             in_doc = true;
             continue;
         }
-        let Some((k, v)) = l.split_once(" = ") else {
+        let Some((k, v)) = toml_lite::key_value(l) else {
             continue;
         };
-        let v = v.trim();
-        match (in_doc, k.trim()) {
+        match (in_doc, k) {
             (false, "format_version") => p.version = v.parse().ok(),
             (false, "pid") => p.pid = v.parse().ok(),
             (false, "started_at_secs") => secs = v.parse().ok(),
             (false, "started_at_nanos") => nanos = v.parse().ok(),
-            (true, "file") => p.file = parse_string(v),
-            (true, "path") => p.path = parse_string(v),
-            (true, "untitled_name") => p.untitled_name = parse_string(v),
-            (true, "encoding") => p.encoding = parse_string(v),
+            (true, "file") => p.file = parse_basic_string(v),
+            (true, "path") => p.path = parse_basic_string(v),
+            (true, "untitled_name") => p.untitled_name = parse_basic_string(v),
+            (true, "encoding") => p.encoding = parse_basic_string(v),
             (true, "bom") => p.bom = v == "true",
-            (true, "default_eol") => p.default_eol = parse_string(v),
+            (true, "default_eol") => p.default_eol = parse_basic_string(v),
             (true, "revision") => p.revision = v.parse().ok(),
             (true, "len") => p.len = v.parse().ok(),
             (true, "written") => p.written = v.parse().ok(),
@@ -97,40 +95,18 @@ pub(crate) fn process_alive(pid: u32, started_at: Option<FileTime>) -> bool {
 /// 同上 (Windows: `OpenProcess` + `GetProcessTimes`)。
 #[cfg(windows)]
 pub(crate) fn process_alive(pid: u32, started_at: Option<FileTime>) -> bool {
-    use windows_sys::Win32::Foundation::{CloseHandle, FILETIME, GetLastError};
-    use windows_sys::Win32::System::Threading::{
-        GetExitCodeProcess, GetProcessTimes, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION,
-    };
-    const STILL_ACTIVE: u32 = 259;
-    const ERROR_ACCESS_DENIED: u32 = 5;
-    // SAFETY: 有効な引数。返ったハンドルは下で閉じる。
-    let h = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid) };
-    if h.is_null() {
+    use crate::sys::ProcessState;
+    match crate::sys::process_state(pid, started_at.is_some()) {
         // アクセス拒否は「いるが開けない」。それ以外 (無効な pid) はいない
-        // SAFETY: 直前の呼出しのエラーを読むだけ。
-        return unsafe { GetLastError() } == ERROR_ACCESS_DENIED;
-    }
-    let mut code = 0u32;
-    // SAFETY: 有効なハンドルと書込先。
-    let running = unsafe { GetExitCodeProcess(h, &mut code) } != 0 && code == STILL_ACTIVE;
-    let mut matches = true;
-    if running && let Some(want) = started_at {
-        let zero = FILETIME {
-            dwLowDateTime: 0,
-            dwHighDateTime: 0,
-        };
-        let (mut c, mut e, mut k, mut u) = (zero, zero, zero, zero);
-        // SAFETY: 有効なハンドルと書込先の `FILETIME` 4 つ。
-        if unsafe { GetProcessTimes(h, &mut c, &mut e, &mut k, &mut u) } != 0 {
-            let ticks = (u64::from(c.dwHighDateTime) << 32) | u64::from(c.dwLowDateTime);
-            const EPOCH_DIFF_SECS: i64 = 11_644_473_600;
-            let secs = (ticks / 10_000_000) as i64 - EPOCH_DIFF_SECS;
-            matches = same_start(FileTime { secs, nanos: 0 }, want);
+        ProcessState::NotOpened { denied } => denied,
+        ProcessState::Opened { running, started } => {
+            let matches = match (started_at, started) {
+                (Some(want), Some(have)) => same_start(have, want),
+                _ => true,
+            };
+            running && matches
         }
     }
-    // SAFETY: `OpenProcess` が返したハンドル。
-    unsafe { CloseHandle(h) };
-    running && matches
 }
 
 /// 自分のプロセスが書いたものか (pid と起動時刻が一致する)。
@@ -276,6 +252,19 @@ mod tests {
             (Some(3), Some(10), Some(true))
         );
         assert!(p.sensitive);
+    }
+
+    // STR-D5: 読み手を toml_lite にまとめても同じに読む。行は前後の空白を除いてから見るので、空の値の行 (`pid = `) は
+    // 無視して前の値が残る。2 つ目の `[[document]]` 以降は読まない
+    #[test]
+    fn manifest_の読みは空白と空の値と_2_つ目の文書を同じに扱う() {
+        let t = "  format_version = 1\npid = 42\npid = \npid=7\n  [[document]]  \nfile = \"a\"  \nbom = true\nlen = x\n\n[[document]]\nfile = \"b\"\n";
+        let p = parse_manifest(t);
+        assert_eq!((p.version, p.pid), (Some(1), Some(42)));
+        assert_eq!(p.file.as_deref(), Some("a"));
+        assert!(p.bom);
+        assert_eq!(p.len, None);
+        assert_eq!(p.started_at, None);
     }
 
     #[test]

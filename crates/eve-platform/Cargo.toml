@@ -13,16 +13,18 @@ publish.workspace = true
 workspace = true
 
 [features]
-# テスト専用の経路 (保存途中の kill フック。環境変数 `EVE_TEST_HOOK`)。配布ビルドには入れない (09 §3.6)
+# テスト専用の経路 (保存途中の kill フック、Unix の保存のシステムコールの失敗の差し替え。環境変数 `EVE_TEST_HOOK`)。配布ビルドには入れない (09 §3.6)
 test-hooks = []
 
 [dependencies]
-eve-core = { version = "0.2.0", path = "../eve-core" }
-eve-text = { version = "0.2.0", path = "../eve-text" }
+eve-core = { version = "0.3.0", path = "../eve-core" }
+eve-text = { version = "0.3.0", path = "../eve-text" }
 xxhash-rust = { version = "0.8.19", features = ["xxh3"] }
 
 [dev-dependencies]
-eve-view = { version = "0.2.0", path = "../eve-view" }
+eve-view = { version = "0.3.0", path = "../eve-view" }
+# FileSystem の契約試験 (eve_testkit::fs_contract を MemFs と同じく実 FS に掛ける。tests/fs_contract.rs だけが使う)
+eve-testkit = { version = "0.3.0", path = "../eve-testkit" }
 memory-stats = "1.2.0"
 encoding_rs = "0.8.42"
 

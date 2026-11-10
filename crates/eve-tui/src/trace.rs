@@ -20,6 +20,8 @@
 //! - `open.progress`: 直前のキー入力 (`fields.vk`。`Enter` = 0x0D) の読取完了 → 読込の進捗を含む最初の Frame の `write` が戻った時刻
 //!   (01 §3.0.1 の「開く → 進捗」。NFR-104 / FR-122)。
 //! - `resize.to_flush`: 最後のリサイズイベントの読取完了 → 次の Frame の `write` が戻った時刻 (「リサイズ → 再描画」。FR-512)。
+//! - `search.first_match`: 直前のキー入力 (`fields.vk`) の読取完了 → 環境変数 `EVE_TRACE_MATCH` の文字列が編集面の行に初めて
+//!   現れた Frame の `write` が戻った時刻 (検索で一致へ移って画面に出るまで。BM-108、01 NFR-108)。キー入力のたびに測り直す。
 //!
 //! 書出しは `flush` (終了の直前) にまとめて行い、計測区間にファイルの I/O を含めない。隠しオプション
 //! `--bench-exit-after-first-frame` は、最初の Frame の `write` が戻った直後に端末を復元して終了する。
@@ -35,6 +37,8 @@ mod imp {
         epoch: Instant,
         wall_main: u128,
         path: String,
+        /// `EVE_TRACE_MATCH` (`search.first_match` の終点の印。文書の本文ではなく計測ハーネスが決めた語)。
+        match_text: Option<String>,
     }
 
     static STATE: OnceLock<State> = OnceLock::new();
@@ -51,6 +55,8 @@ mod imp {
     static LAST_READ: AtomicU64 = AtomicU64::new(0);
     static LAST_VK: AtomicU64 = AtomicU64::new(0);
     static PROGRESS_ARMED: AtomicBool = AtomicBool::new(false);
+    /// キー入力の後、`EVE_TRACE_MATCH` の語がまだ画面に出ていない (`search.first_match` を待っている)。
+    static MATCH_ARMED: AtomicBool = AtomicBool::new(false);
     /// 最後のリサイズイベントの読取完了 (ns+1)。
     static RESIZE: AtomicU64 = AtomicU64::new(0);
     static FIRST_DONE: AtomicBool = AtomicBool::new(false);
@@ -69,12 +75,16 @@ mod imp {
                 epoch: Instant::now(),
                 wall_main: wall_ns(),
                 path,
+                match_text: std::env::var("EVE_TRACE_MATCH")
+                    .ok()
+                    .filter(|m| !m.is_empty()),
             });
         }
     }
 
     fn now_ns(s: &State) -> u64 {
-        s.epoch.elapsed().as_nanos() as u64
+        // 計測用。u64 の ns (約 584 年) を超えたら上限で止める
+        u64::try_from(s.epoch.elapsed().as_nanos()).unwrap_or(u64::MAX)
     }
 
     pub fn request_exit_after_first_frame() {
@@ -87,6 +97,7 @@ mod imp {
             LAST_READ.store(now_ns(s) + 1, Ordering::Release);
             LAST_VK.store(u64::from(vk), Ordering::Release);
             PROGRESS_ARMED.store(true, Ordering::Release);
+            MATCH_ARMED.store(true, Ordering::Release);
         }
         if let Some(vk) = first_key_down_vk
             && PENDING
@@ -132,9 +143,15 @@ mod imp {
         }
     }
 
+    /// `search.first_match` の終点の印の語 (`EVE_TRACE_MATCH`)。記録していなければ `None`。
+    pub fn match_text() -> Option<&'static str> {
+        STATE.get()?.match_text.as_deref()
+    }
+
     /// 描画の `write` が戻った直後。最初の Frame だけが `true` を返す (`--bench-exit-after-first-frame` が付いているとき)。
     /// `content`: この Frame で本文 (空白でない文字) が見える。`progress`: この Frame に読込の進捗が出ている。
-    pub fn render_done(content: bool, progress: bool) -> bool {
+    /// `matched`: この Frame の編集面の行に `match_text` が出ている。
+    pub fn render_done(content: bool, progress: bool, matched: bool) -> bool {
         let Some(s) = STATE.get() else { return false };
         let end = now_ns(s);
         let thread = std::thread::current().name().unwrap_or("?").to_owned();
@@ -160,6 +177,13 @@ mod imp {
             let vk = LAST_VK.load(Ordering::Acquire);
             push(format!(
                 "{{\"name\":\"open.progress\",\"start_ns\":{start},\"end_ns\":{end},\"thread\":\"{thread}\",\"fields\":{{\"vk\":{vk}}}}}"
+            ));
+        }
+        if matched && MATCH_ARMED.swap(false, Ordering::AcqRel) {
+            let start = LAST_READ.load(Ordering::Acquire).saturating_sub(1);
+            let vk = LAST_VK.load(Ordering::Acquire);
+            push(format!(
+                "{{\"name\":\"search.first_match\",\"start_ns\":{start},\"end_ns\":{end},\"thread\":\"{thread}\",\"fields\":{{\"vk\":{vk}}}}}"
             ));
         }
         let resize = RESIZE.swap(0, Ordering::AcqRel);
@@ -208,7 +232,11 @@ mod imp {
     #[inline(always)]
     pub fn render_emitted() {}
     #[inline(always)]
-    pub fn render_done(_content: bool, _progress: bool) -> bool {
+    pub fn match_text() -> Option<&'static str> {
+        None
+    }
+    #[inline(always)]
+    pub fn render_done(_content: bool, _progress: bool, _matched: bool) -> bool {
         false
     }
     #[inline(always)]

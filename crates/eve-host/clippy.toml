@@ -2,3 +2,8 @@
 # 作ってよいのは §9.1 の表のスレッド (io / bg の固定 2 本、ログ、クリップボード取得の使い捨て) に限る。
 # 専用の clippy.toml は、ルートの clippy.toml とマージされないので、ルートの R11 の項目をここでは書かない。
 # std::fs / std::process は eve-host の中でも直接使わない方針だが、Port の実装は eve-platform にある (R5)。
+
+# STR-B3 (docs/review/v0.3-findings.md): Host は EditorState に直接触らない。ルートの clippy.toml の同じ項目をここにも書く。
+disallowed-methods = [
+    { path = "eve_core::Editor::state_mut", reason = "STR-B3: Host・frontend・bin は EditorState に直接触らない。起動の前の設定は Editor::configure、Host が知った事実は Editor::report (docs/02 §5.4)。試験と testkit だけが許可して使う" },
+]
