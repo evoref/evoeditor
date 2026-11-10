@@ -200,11 +200,7 @@ pub fn run_all(args: &[String]) -> Result<(), String> {
 
     println!("▶ BM-205 (配布ビルドの exe のサイズ)");
     run_capture(Command::new("cargo").args(["build", "--release", "-p", "evoeditor"]))?;
-    let exe = root.join("target/release").join(if cfg!(windows) {
-        "evoeditor.exe"
-    } else {
-        "evoeditor"
-    });
+    let exe = crate::check_dist::release_exe(None);
     let bytes = std::fs::metadata(&exe)
         .map_err(|e| format!("{}: {e}", exe.display()))?
         .len();

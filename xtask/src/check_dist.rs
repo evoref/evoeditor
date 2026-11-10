@@ -76,7 +76,7 @@ pub fn run(args: &[String]) -> Result<(), String> {
             if !found.is_empty() {
                 return Err(format!("配布ビルドに有効な feature があります: {found:?}"));
             }
-            release_exe(&root, target.as_deref())
+            release_exe(target.as_deref())
         }
     };
     let bytes = std::fs::read(&exe).map_err(|e| format!("{}: {e}", exe.display()))?;
@@ -185,11 +185,13 @@ fn dependent_load_flags(pe: &[u8]) -> Option<u16> {
     u16_at(to_file(lc_rva)? + 78)
 }
 
-/// 配布ビルドの exe の場所 (`target` を指定すれば `target/<三つ組>/release`)。
-pub fn release_exe(root: &std::path::Path, target: Option<&str>) -> PathBuf {
+/// 配布ビルドの exe の場所 (ビルドの出力先 (`CARGO_TARGET_DIR` を反映する) の `release`。
+/// `target` を指定すれば `<三つ組>/release`)。
+pub fn release_exe(target: Option<&str>) -> PathBuf {
+    let base = crate::util::cargo_target_dir();
     let dir = match target {
-        Some(t) => root.join("target").join(t).join("release"),
-        None => root.join("target/release"),
+        Some(t) => base.join(t).join("release"),
+        None => base.join("release"),
     };
     let windows = target.map_or(cfg!(windows), |t| t.contains("windows"));
     dir.join(if windows {
@@ -341,7 +343,8 @@ mod tests {
     #[test]
     fn 配布ビルドの_dll_の検索は_system32_に限る() {
         // リポジトリの設定で作った配布ビルドの exe を見る
-        let exe = crate::util::workspace_root().join("target/release/evoeditor.exe");
+        // Windows の exe だけを見る (Linux の上では無いので飛ばす)
+        let exe = crate::util::cargo_target_dir().join("release/evoeditor.exe");
         let Ok(bytes) = std::fs::read(&exe) else {
             return; // 配布ビルドがまだ無いときは、check-dist (CI の build-release-smoke) が見る
         };
