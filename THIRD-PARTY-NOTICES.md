@@ -756,10 +756,10 @@ DEALINGS IN THE SOFTWARE.
 利用している crate:
 
 - serde_spanned 1.1.2 (https://github.com/toml-rs/toml)
-- toml 1.1.8+spec-1.1.0 (https://github.com/toml-rs/toml)
+- toml 1.2.0+spec-1.1.0 (https://github.com/toml-rs/toml)
 - toml_datetime 1.1.2+spec-1.1.0 (https://github.com/toml-rs/toml)
 - toml_parser 1.1.5+spec-1.1.0 (https://github.com/toml-rs/toml)
-- toml_writer 1.1.3+spec-1.1.0 (https://github.com/toml-rs/toml)
+- toml_writer 1.2.0+spec-1.1.0 (https://github.com/toml-rs/toml)
 
 ```text
 Copyright (c) Individual contributors
