@@ -598,7 +598,7 @@ v0.1 の公開側で用意するのは `eve-view` の型の規則 (`#[non_exhaus
 | 互換 (英語 UI) | `cargo xtask i18n` (言語間のキー集合の差分とヒント幅) が通り、`--locale en` で起動の画面・ヘルプ・ダイアログに日本語が残らない (NFR-603。手で一巡する) | `docs/compat/<version>/acceptance.md` |
 | 受入 | NFR-601 の **3 名** の簡易テストの所見がある (上の表の受入の行。人が行う。手順は `docs/review/usability-v0.2.md` の §1〜§2) | 所見は `docs/review/usability-v0.2.md` の §3 に書き、`docs/compat/<version>/acceptance.md` の NFR-601 の欄から参照する |
 | データ保全 | 上の表の行 (Windows) に加えて、**Unix の kill テスト** (`eve-test-helpers` の切断点、§3.6) が Linux CI で通り、**LazyFS のクラッシュ一貫性** (§6.3) が判定コミットで ext4 / xfs / btrfs のすべて合格 (`nightly.yml` を `only=crash` で手動実行)。スワップと復旧 (FR-118 / NFR-307) のシナリオと kill テストが通る | CI と夜間ジョブの実行 |
-| fuzz | 判定コミットで `fuzz_decode` と `fuzz_editor` を **それぞれ 1 時間** (`nightly.yml` の手動実行で `fuzz_seconds=3600`) 回してクラッシュ 0 | Release のノート |
+| fuzz | 判定コミットで `fuzz_decode` と `fuzz_editor` を **それぞれ 1 時間** (`nightly.yml` の手動実行で `fuzz_seconds=3600`。回すターゲットを `only` の `fuzz:fuzz_decode+fuzz_editor` で絞る (例 `only=fuzz:fuzz_decode+fuzz_editor,proptest,audit,coverage,crash,soak`)。絞らないと fuzz の全ターゲット (v0.3 は 4 つ) を 1 時間ずつ回し、ジョブの上限 (240 分) に収まらない、Issue #488) 回してクラッシュ 0 | Release のノート |
 | 長時間 (観察) | NFR-306 の 1 時間の soak (BM-306、夜間ジョブ) の RSS と入力遅延の推移を見て、右肩上がりが無いことを所見に書く。**ゲートにはしない** (8 時間の判定は v1.0) | リリースのチェックリストの所見 |
 | MSRV | CI の `msrv` ジョブ (`rust-version` のツールチェーンで workspace をビルドする) が判定コミットで通る (v0.2 から CI で判定する。確定 (ユーザー回答、2026-11-03))。`cargo install --tag` の経路の確認 (上の表の配布経路の検証) は v0.1 と同じくタグの後 | CI |
 | 配布物 (Linux) | `release.yml` の `build-linux` / `smoke-linux` が x86_64 と aarch64 で通る (tar.gz・`.debug`・`SHA256SUMS`、展開 → 内容物の検査 → `--version` → スモーク)。`SHA256SUMS.minisig` (メンテナの手元のオフライン鍵、05 §18.9) が README の公開鍵で検証できる | Release のノート |
