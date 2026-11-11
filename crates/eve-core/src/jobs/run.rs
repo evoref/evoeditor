@@ -47,6 +47,7 @@ pub fn run_job(
             strategy,
             clear_readonly,
             create_link_target,
+            preserved,
         } => run_save(
             SaveParams {
                 path,
@@ -58,6 +59,7 @@ pub fn run_job(
                 strategy: *strategy,
                 clear_readonly: *clear_readonly,
                 create_link_target: *create_link_target,
+                preserved,
             },
             ports,
             cancel,
@@ -66,7 +68,10 @@ pub fn run_job(
             snapshot,
             encoding,
             escape,
-        } => match crate::io::unmap::build_replacement(snapshot, *encoding, *escape, cancel) {
+            preserved,
+        } => match crate::io::unmap::build_replacement(
+            snapshot, *encoding, *escape, preserved, cancel,
+        ) {
             Ok(Some((changes, targets, counts))) => JobResult::UnmappableReplacement {
                 changes,
                 targets,
@@ -433,6 +438,7 @@ mod tests {
                 strategy: SaveStrategy::default(),
                 clear_readonly: false,
                 create_link_target: false,
+                preserved: crate::document::PreservedMap::new(),
             },
         };
         let mut out = Vec::new();

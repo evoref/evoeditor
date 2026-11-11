@@ -4,6 +4,7 @@ use eve_encoding::{Encoding, EscapePolicy};
 use eve_text::Snapshot;
 use eve_view::{DocumentId, JobId, Revision};
 
+use crate::document::PreservedMap;
 use crate::io::fs::{Expect, HardlinkPolicy, InPlaceBackup};
 use crate::io::fspath::FsPath;
 use crate::io::io_jobs::OpenOptions;
@@ -103,6 +104,10 @@ pub enum JobKind {
         clear_readonly: bool,
         /// ダングリングのシンボリックリンクのリンク先に新規作成する (FR-106。確認を経た保存だけ)。
         create_link_target: bool,
+        /// 保持方式の記録の、保存を始めた時点の版 (03 §8.6 E2 / §8.7.1、v0.4。渡した後の編集の影響を受けない)。
+        /// 書く文字コードが文書の文字コードと同じで、保持が効いている (`PreserveStatus::Active`) ときだけ渡し、ほかは空。
+        /// 空なら記録を使わない (v0.3 と同じ出力)。
+        preserved: PreservedMap,
     },
     /// 表現不能の文字を置換する `ChangeSet` を作る (E3 の選択肢 2、03 §8.6)。`snapshot` は投入時の Revision のもの。
     ReplaceUnmappable {
@@ -112,6 +117,9 @@ pub enum JobKind {
         encoding: Encoding,
         /// 不正バイトのエスケープ文字の扱い (03 §8.3)。
         escape: EscapePolicy,
+        /// 保持方式の記録の版 (`Save` と同じ条件で渡す)。保存と同じ計画で元のバイト列を書く範囲の文字は、置換の対象に
+        /// しない (03 §8.6 E2)。
+        preserved: PreservedMap,
     },
     /// 保存の失敗の後の「退避先に保存」(03 §9.7 (e))。`doc` の公開物を退避ディレクトリへ書く。
     WriteRecovery {

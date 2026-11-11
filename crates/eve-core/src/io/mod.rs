@@ -22,6 +22,7 @@ pub(crate) mod replacing;
 pub(crate) mod rescue;
 pub(crate) mod save;
 pub(crate) mod save_all;
+pub(crate) mod save_plan;
 pub(crate) mod secret;
 pub(crate) mod snapshot;
 pub(crate) mod startup;

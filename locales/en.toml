@@ -432,8 +432,9 @@ already_open = "{path} is already open"
 cancelled = "Cancelled loading {path}"
 guess_unsupported = "The encoding of {path} was guessed as {guess}, which is not supported in this version, so it was opened as {encoding} / If it looks wrong, choose another with Reopen with Encoding ({key:file.reopen_with_encoding})"
 long_line = "{path} has a very long line. That line is shown approximately, one character at a time (combining marks may look separated)"
-lossy_roundtrip = "In this encoding, some characters in the edited places may be saved as different bytes ({count} places)"
 new_file = "{path} does not exist, so it was opened as a new file (saving creates it)"
+preserve_off = "The original bytes of this document were not kept. Saving in the original encoding may write some characters as different bytes"
+preserve_partial = "The original bytes of {count} lines could not be kept. Saving after an edit may change how escape sequences are written on these lines (the characters do not change)"
 redetected = "Re-detected the encoding as {encoding}"
 
 [info.paste]
@@ -785,6 +786,10 @@ text = "Could not save to the recovery folder: {reason}. The original file {path
 hint = "Delete {tmp} if you do not need it. Until then, the next save asks about a hard link"
 text = "Saved {path}, but the temporary file {tmp} could not be deleted (it is the same file as the saved one)"
 
+[msg.save.verify_failed]
+hint = "The original bytes are no longer kept. Save again ({key:file.save}) to save without them, after a confirmation"
+text = "Stopped saving {path}: the content to be written did not read back as the document text (this may be a bug). The file was not changed"
+
 [msg.save_as.not_a_file]
 hint = "Enter a different file name"
 text = "{path} is not a file (it may be a folder)"
@@ -902,7 +907,7 @@ alt = "[A] Save as"
 
 [ui.confirm.save.roundtrip_unchecked]
 title = "May be saved with different bytes"
-message = "A very long line stopped the encoding check partway. In the unchecked part, some places may be saved as different bytes for the same characters"
+message = "This document has parts whose original bytes were not kept. Some characters may be saved as different bytes for the same character"
 save = "[S] Save"
 alt = "[A] Save as"
 

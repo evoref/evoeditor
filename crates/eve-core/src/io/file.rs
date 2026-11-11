@@ -351,6 +351,7 @@ pub(crate) fn reason_label(err: &JobError) -> String {
         JobError::Panic => "panic".to_owned(),
         JobError::OutOfMemory { .. } => "out of memory".to_owned(),
         JobError::Cancelled => "cancelled".to_owned(),
+        JobError::VerifyFailed => "verify failed".to_owned(),
     }
 }
 

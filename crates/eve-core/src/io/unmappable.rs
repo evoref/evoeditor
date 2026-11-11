@@ -130,6 +130,8 @@ impl EditorState {
             return CommandResult::Done;
         };
         let revision = doc.revision();
+        // 保存と同じ条件で保持方式の記録の版を渡す (元のバイト列を書く範囲の文字は置換の対象にしない、03 §8.6 E2)
+        let preserved = doc.preserved_for(ask.encoding);
         let job = self.jobs.spawn(
             Some(ask.doc),
             revision,
@@ -137,6 +139,7 @@ impl EditorState {
                 snapshot: doc.snapshot(),
                 encoding: ask.encoding,
                 escape: doc.format.save_escape_policy(ask.encoding),
+                preserved,
             },
         );
         self.io.pending.insert(

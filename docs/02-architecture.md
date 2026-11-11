@@ -1510,7 +1510,8 @@ enum JobKind {                     // Port は持たない (run_job が JobPorts
                                    // io / bg の振り分けは eve-host の JobSpawner の実装が決める (下の「io」「bg」は仕様の意図。v0.2.0 の実装は Search だけが bg、§9.1 の「v0.2.0 の実装との差」)
     Open     { path: FsPath, opts: OpenOptions },                                                     // io
     Save     { path: FsPath, snapshot: Snapshot, encoding: Encoding, bom: bool, pua: PuaEscapeMode /*不正バイトのエスケープの扱い、03 §8.3*/,
-               preserved: PreservedMap /*v0.4: 保存を始めた時点の保持方式の記録の版 (渡した後の編集の影響を受けない。03 §8.6 E2 / §8.7.1)*/,
+               preserved: PreservedMap /*v0.4: 保存を始めた時点の保持方式の記録の版 (渡した後の編集の影響を受けない。03 §8.6 E2 / §8.7.1)。
+                                         書く文字コードが文書の文字コードと同じで、保持が効いている (PreserveStatus::Active) ときだけ表を渡し、ほかは空 (記録を使わない)*/,
                expected: Expect, strategy: SaveStrategy, clear_readonly: bool /*FR-116*/, create_link_target: bool /*FR-106*/ }, // io。
                                                                       // 保存点の履歴ノードはジョブに渡さず、core が投入時にジョブ表 (Pending::Save) に持つ
     Metadata { path: FsPath, purpose: MetaPurpose },                                                  // io
@@ -1594,7 +1595,8 @@ enum JobResult {                   // #[non_exhaustive]
                    notes: OpenNotes /*{ redetected: Option<Encoding> (判定をやり直した結果), guess_unsupported: Option<&str> (対応しない文字コードと推定した名前、03 §8.2) }*/,
                    interrupted_save: Option<InterruptedSave> /*§4.5。存在するファイルでも、直接上書きの中断の痕跡があれば返す*/ },
     // ── 保存 (io、03 §9.3) ──
-    Saved        { report: SaveReport },                        // 保存点の履歴ノード・保存先のパスは core がジョブ表 (Pending::Save) に持つ。
+    Saved        { report: SaveReport },
+                                                                            // 保存点の履歴ノード・保存先のパスは core がジョブ表 (Pending::Save) に持つ。
                                                                             // 保存後の stamp は report.new_stamp
     Unmappable   { total: u64, recorded: Vec<Unmappable> /*先頭の位置*/, encoding: Encoding }, // 保存の表現不能 (03 §9.3 手順 5b)。何も書いていない
     // ── metadata の照合 (io) ──
@@ -1632,6 +1634,9 @@ enum JobError {                    // #[non_exhaustive]
     OutOfMemory { requested: u64 },// 利用者のデータ量で決まる確保 (読込用の事前確保、保存のバッファ等) の try_reserve が失敗した (§11.2.2)。プロセスは続ける
     Cancelled,                     // CancelToken が立った (§4.4)。キャンセルを表す唯一の結果
     Panic,                         // ワーカーの catch_unwind
+    VerifyFailed,                  // v0.4: 保持方式の記録を渡した保存の確かめに合わない (03 §8.6 E2。記録が確認 (i) に合わない・表の不変条件に反する、
+                                   // または出力の全体を同じ文字コードで復号しても本文にならない (確認 (ii))。実装の誤りへの備え)。何も書いていない。
+                                   // core は文書の記録を全部捨てて「保持なし」にし、msg.save.verify_failed で示す (03 §8.7.1、04 §15.2)
 }
 ```
 

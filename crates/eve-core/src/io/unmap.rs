@@ -7,6 +7,7 @@ use std::sync::Arc;
 use eve_encoding::{EncodeReport, Encoder, Encoding, EscapePolicy};
 use eve_text::{ByteOff, ByteRange, ChangeSet, Edit, Snapshot, TextRead};
 
+use crate::document::PreservedMap;
 use crate::jobs::cancel::CancelToken;
 
 /// 一覧に載せる対象の上限 (03 §8.6 の「置換の一覧」)。
@@ -101,12 +102,23 @@ fn is_unmappable(enc: Encoding, escape: EscapePolicy, ch: char) -> bool {
 }
 
 /// 表現不能の文字をすべて置換する `ChangeSet` を作る。対象が無ければ `None`。取消しで `None` を返さず `Err(())`。
+///
+/// `preserved` は保持方式の記録の版 (保存と同じ条件で渡す。空なら記録を使わない)。保存と同じ計画 (`save_plan`) で
+/// 元のバイト列を書く記録の範囲の文字は、置換の対象にしない (03 §8.6 E2。編集していない範囲の補助漢字・半角カナを
+/// `?` や全角カナに置き換えない)。
 pub fn build_replacement(
     snapshot: &Snapshot,
     enc: Encoding,
     escape: EscapePolicy,
+    preserved: &PreservedMap,
     cancel: &CancelToken,
 ) -> Result<Option<(ChangeSet, Vec<ReplaceTarget>, ReplaceCounts)>, ()> {
+    let raw = if preserved.is_empty() {
+        Vec::new()
+    } else {
+        crate::io::save_plan::raw_ranges(snapshot, enc, preserved)
+    };
+    let mut raw = raw.into_iter().peekable();
     let body = snapshot.slice_to_string(ByteRange::all(snapshot.len_bytes()));
     let mut cache: HashMap<char, bool> = HashMap::new();
     let mut edits: Vec<Edit> = Vec::new();
@@ -117,6 +129,11 @@ pub fn build_replacement(
             return Err(());
         }
         if ch.is_ascii() {
+            continue;
+        }
+        // 元のバイト列を書く範囲の文字は対象にしない (範囲は昇順で重ならない)
+        while raw.next_if(|(_, e)| e.0 <= off).is_some() {}
+        if raw.peek().is_some_and(|(s, _)| s.0 <= off) {
             continue;
         }
         let bad = *cache

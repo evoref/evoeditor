@@ -224,12 +224,21 @@ impl EditorState {
             return CommandResult::Done;
         }
         let out_encoding = fmt.map_or(doc.format.encoding, |f| f.encoding);
-        // 区分 B / D: 元の文字コードのまま、別のバイト表現で保存される箇所がある文書を編集して保存するときは、
-        // 書き込む前に確認する (FR-112 AC-4 (a)・NFR-303、03 §8.6 E2')。無編集の上書き保存は書き込まないので出ない。
-        // 承認した Revision では繰り返さない
-        if out_encoding == doc.format.encoding
-            && doc.format.roundtrip.may_be_lossy()
-            && doc.is_dirty()
+        // 状態付き符号化 (ISO-2022-JP) で不正バイトを含む文書は保存しない (03 §8.3 (a)。不正バイトを失わないため)。
+        // 保存の前の確認より先に拒否する (03 §9.7 の「連鎖の開始時の拒否」)
+        if out_encoding.is_stateful() && doc.format.invalid_bytes > 0 {
+            self.show_message(
+                MessageLevel::Error,
+                keys::MSG_SAVE_ENCODING_UNSUPPORTED_ISO2022,
+                &[("path", &path.display())],
+            );
+            return CommandResult::Rejected(RejectReason::NotAvailable);
+        }
+        // 保存の前の確認 (FR-112 AC-4 (a)・NFR-303、03 §8.6 E2'・§8.7.1): 元の文字コードのまま書くと、元のバイト列を
+        // 覚えていない区分 B / D の箇所が別のバイト表現になり得る文書 (「保持なし」「保持できなかった箇所がある」) で、
+        // 書き込む前に確認する。v0.4 は未編集の文書でも出す (名前を付けて保存・`file.set_encoding` で同じ文字コード。
+        // 未編集の上書き保存は手順 0 で書き込まないので、ここへ来ない)。承認した Revision では繰り返さない
+        if let Some(kind) = super::open::preconfirm(doc, out_encoding)
             && self.io.lossy_ok != Some((doc_id, doc.revision()))
         {
             let ask = LossyAsk {
@@ -240,17 +249,8 @@ impl EditorState {
                 strategy,
                 fmt,
             };
-            self.open_lossy(ask);
+            self.open_lossy(ask, kind);
             return CommandResult::Done;
-        }
-        // 状態付き符号化 (ISO-2022-JP) で不正バイトを含む文書は保存しない (03 §8.3 (a)。不正バイトを失わないため)
-        if out_encoding.is_stateful() && doc.format.invalid_bytes > 0 {
-            self.show_message(
-                MessageLevel::Error,
-                keys::MSG_SAVE_ENCODING_UNSUPPORTED_ISO2022,
-                &[("path", &path.display())],
-            );
-            return CommandResult::Rejected(RejectReason::NotAvailable);
         }
         let (encoding, bom, escape) = (
             out_encoding,
@@ -258,6 +258,8 @@ impl EditorState {
             doc.format.save_escape_policy(out_encoding),
         );
         let revision = doc.revision();
+        // 保持方式の記録の、保存を始めた時点の版 (複製は O(1)。03 §9.3 手順 4)。Snapshot と同じ時点で取る
+        let preserved = doc.preserved_for(out_encoding);
         let (snapshot, at) = doc.begin_save();
         let job = self.jobs.spawn(
             Some(doc_id),
@@ -272,6 +274,7 @@ impl EditorState {
                 strategy,
                 clear_readonly,
                 create_link_target,
+                preserved,
             },
         );
         if let Some(c) = cont {
@@ -638,23 +641,17 @@ impl EditorState {
             JobResult::Saved { report, .. } => {
                 let report_method = report.method;
                 if let Some(doc) = self.docs.documents.get_mut(&doc_id) {
-                    // `file.set_encoding`: 保存が成功したので新しい書式に確定する。往復の検査結果は旧文字コードのものなので捨てる
-                    // (書いた内容を再エンコードすれば同じバイト列になる、03 §8.8)
-                    // 保持方式の記録 (03 §8.7.1): 違う文字コードで書いたら捨てる (状態も対象外に戻る)。同じ文字コードなら
-                    // 表と状態を残す (要約の件数は v0.3 と同じく空にする。保存の前の確認 (E2') の条件を変えないため)。
-                    // この版の保存は記録を使わず代表バイト列で書くので、同じ文字コードで書いた後の表はディスクと合わないが、
-                    // 保存で表を使うのは M22 の 6 本目からで、それまでは表を読まない
+                    // `file.set_encoding`: 保存が成功したので新しい書式に確定する。違う文字コードで書いたら、往復の検査結果
+                    // (旧文字コードのもの) と保持方式の記録を捨てる (状態も対象外に戻る。書いた内容を再エンコードすれば
+                    // 同じバイト列になる、03 §8.8)。同じ文字コードなら、表・状態・往復の要約を残す (記録を使って書いたので、
+                    // 記録は有効なまま。v0.3 までの「要約を空にする」は違う文字コードへ変えたときだけ、03 §8.7.1)
                     if let Some(f) = fmt {
-                        let same = f.encoding == doc.format.encoding;
-                        let preserve = doc.format.roundtrip.preserve;
-                        doc.format.encoding = f.encoding;
-                        doc.format.has_bom = f.bom;
-                        doc.format.roundtrip = Default::default();
-                        if same {
-                            doc.format.roundtrip.preserve = preserve;
-                        } else {
+                        if f.encoding != doc.format.encoding {
+                            doc.format.roundtrip = Default::default();
                             doc.clear_preserved();
                         }
+                        doc.format.encoding = f.encoding;
+                        doc.format.has_bom = f.bom;
                     }
                     // 名前を付けて保存 (別のパスへ書いた) では、元のファイルに由来する読み取り専用の理由
                     // (属性・書込権限なし) を外す。書き込めた保存先の文書は編集できる (FR-116 AC-4、03 §9.6)。
@@ -866,6 +863,8 @@ impl EditorState {
                 let (level, key) = match err {
                     JobError::Cancelled => (MessageLevel::Info, keys::INFO_SAVE_ABORTED),
                     JobError::Fs(e) => (MessageLevel::Error, save_error_key(&e)),
+                    // 確認 (ii) の不一致 (03 §8.6 E2): 何も書いていない。別名で保存・退避先に保存を選べる
+                    JobError::VerifyFailed => (MessageLevel::Error, keys::MSG_SAVE_VERIFY_FAILED),
                     _ => (MessageLevel::Error, keys::MSG_SAVE_FAILED),
                 };
                 let backup = match &err_backup {

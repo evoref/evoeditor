@@ -22,6 +22,7 @@ use crate::io::fs::{
 };
 use crate::io::fspath::FsPath;
 use crate::io::interrupted::map_interrupted;
+use crate::io::save_plan::{Decision, Planner, Unused};
 use crate::jobs::cancel::CancelToken;
 use crate::jobs::{ConfirmAsk, JobError, JobOutput, JobPorts, JobResult, OpenNotes};
 
@@ -465,16 +466,96 @@ fn preserved_from_records(
     }
 }
 
+/// 保存の計画があるときの、1 段の出力の目安の大きさ (バイト)。
+const STEP_TARGET: usize = 64 * 1024;
+
+/// 保存の出力の確認 (ii) (03 §8.6 E2): 出力の全体を同じ文字コードの 1 本の復号器で通しで復号し、Snapshot の本文と
+/// 前から順に突き合わせる (元のバイト列と符号化した部分のつなぎ目を含む。不正バイトは §8.3 のとおり PUA に戻る)。
+/// 作業のメモリは、1 段の出力を復号した分だけ。
+struct Verify {
+    dec: Decoder,
+    buf: String,
+    /// 突き合わせ終えた本文の位置。
+    at: usize,
+    ok: bool,
+}
+
+impl Verify {
+    fn new(encoding: Encoding) -> Verify {
+        Verify {
+            dec: Decoder::new(encoding, false),
+            buf: String::new(),
+            at: 0,
+            ok: true,
+        }
+    }
+
+    /// 出力 `bytes` を復号して、本文の続きと比べる。`last` は出力の終わり (復号器の持ち越しを出し切る)。
+    fn feed(&mut self, text: &Snapshot, bytes: &[u8], last: bool) {
+        if !self.ok {
+            return;
+        }
+        self.buf.clear();
+        self.dec.decode(bytes, last, &mut self.buf);
+        if self.buf.is_empty() {
+            return;
+        }
+        let end = self.at + self.buf.len();
+        if end > text.len_bytes() || !text.is_char_boundary(eve_text::ByteOff(end)) {
+            self.ok = false;
+            return;
+        }
+        let mut off = 0usize;
+        for c in text.chunks(ByteRange::new(
+            eve_text::ByteOff(self.at),
+            eve_text::ByteOff(end),
+        )) {
+            let got = self.buf.as_bytes().get(off..off + c.len());
+            if got != Some(c.as_bytes()) {
+                self.ok = false;
+                return;
+            }
+            off += c.len();
+        }
+        self.ok = off == self.buf.len();
+        self.at = end;
+    }
+
+    /// 出力の終わり: 本文の全体まで突き合わせたことを確かめる (足りなければ不一致)。
+    fn finish(&mut self, text: &Snapshot) {
+        self.ok &= self.at == text.len_bytes();
+    }
+}
+
 /// 保存の符号化の流れ: Snapshot を `encoding` に符号化した出力を、1 段ずつ取り出す。
 ///
 /// 乾式走査 ([`dry_run`]) と本番の書き込み ([`SnapshotSource`]) が同じものを使うので、2 つの出力は長さも内容も一致する
 /// (03 §9.3 の「乾式走査と出力長」。直接上書きは、乾式走査で求めた長さのとおりに書く)。
+///
+/// 保持方式の記録の版 (`preserved`) を渡すと (v0.4、03 §8.6 E2)、保存の計画 (`save_plan::Planner`) に従って、記録の境界で
+/// 本文を区間に切り、区間はチャンクごとに `Encoder::encode`、元のバイト列を書く記録は `Encoder::write_preserved`、使わない
+/// 記録は範囲の文字列をまとめて `encode` に渡す。計画は記録と Snapshot だけで決まるので、出力はチャンクの区切りに依らない
+/// (記録が rope のチャンクの境をまたいでも、範囲の文字列を 1 つにしてから扱う)。表が空なら v0.3 と同じ出力。
 struct SaveStream<'a> {
+    snapshot: &'a Snapshot,
+    /// 今の区間 (`pos` から次の記録の始まり、記録が尽きたら文書の末尾まで) のチャンク。
     chunks: eve_text::Chunks<'a>,
     enc: Encoder,
     report: EncodeReport,
     started: bool,
     finished: bool,
+    /// 保存の計画 (表が空なら `None`)。
+    plan: Option<Planner<'a>>,
+    /// 今の区間の終わりで扱う記録。
+    pending: Option<Decision<'a>>,
+    /// 計画を決め終えた位置 (直前の記録の終わり)。
+    pos: usize,
+    /// 使わなかった行の記録の数 (ISO-2022-JP の、行の内容の全体でなくなった記録。編集した行と同じく正規形で書く)。
+    line_unused: usize,
+    /// 確認 (i) に合わない・表の不変条件に反する記録の数 (起きないはず)。1 以上なら書く前に止める (03 §8.6 E2)。
+    broken: usize,
+    /// 確認 (ii)。表を渡したときだけ行う。
+    verify: Option<Verify>,
 }
 
 impl<'a> SaveStream<'a> {
@@ -483,37 +564,136 @@ impl<'a> SaveStream<'a> {
         encoding: Encoding,
         bom: bool,
         escape: EscapePolicy,
+        preserved: &'a PreservedMap,
     ) -> SaveStream<'a> {
-        SaveStream {
+        let with_plan = !preserved.is_empty();
+        let mut s = SaveStream {
+            snapshot,
             chunks: snapshot.chunks(ByteRange::all(snapshot.len_bytes())),
             enc: Encoder::new(encoding, bom, escape),
             report: EncodeReport::default(),
             started: false,
             finished: false,
+            plan: with_plan.then(|| Planner::new(snapshot, encoding, preserved)),
+            pending: None,
+            pos: 0,
+            line_unused: 0,
+            broken: 0,
+            verify: with_plan.then(|| Verify::new(encoding)),
+        };
+        if with_plan {
+            s.next_segment();
         }
+        s
+    }
+
+    /// `pos` から次の記録までの区間を用意する (表の不変条件に反する記録は、区切りにせずに数える)。
+    fn next_segment(&mut self) {
+        let len = self.snapshot.len_bytes();
+        let Some(plan) = self.plan.as_mut() else {
+            return;
+        };
+        loop {
+            match plan.next(self.pos) {
+                Some(Decision::Skip { .. }) => self.broken += 1,
+                Some(d) => {
+                    let end = d.start();
+                    self.chunks = self.snapshot.chunks(ByteRange::new(
+                        eve_text::ByteOff(self.pos),
+                        eve_text::ByteOff(end),
+                    ));
+                    self.pending = Some(d);
+                    return;
+                }
+                None => {
+                    self.chunks = self.snapshot.chunks(ByteRange::new(
+                        eve_text::ByteOff(self.pos),
+                        eve_text::ByteOff(len),
+                    ));
+                    self.pending = None;
+                    return;
+                }
+            }
+        }
+    }
+
+    /// 区間の終わりに来た記録を扱う。
+    fn apply(&mut self, d: Decision<'a>, out: &mut Vec<u8>) {
+        match d {
+            Decision::Raw { span, text } => {
+                if !self.enc.write_preserved(&text, span.bytes, out) {
+                    // 計画は書けると判断した (起きないはず): 記録を使わずに符号化し、書く前に止める
+                    self.enc.encode(&text, out, &mut self.report);
+                    self.broken += 1;
+                }
+                self.pos = span.range.end.0;
+            }
+            Decision::Encode { span, text, why } => {
+                self.enc.encode(&text, out, &mut self.report);
+                match why {
+                    Unused::Line => self.line_unused += 1,
+                    Unused::Mismatch => self.broken += 1,
+                }
+                self.pos = span.range.end.0;
+            }
+            // `next_segment` が数えて読み飛ばすので、ここへは来ない
+            Decision::Skip { .. } => self.broken += 1,
+        }
+        self.next_segment();
     }
 
     /// 次の 1 段の出力を `out` に書く (`out` は先に空にする)。段が尽きたら `false`。
     /// 出力が空の段もある (ISO-2022-JP は行末までためる)。表現不能の文字は `report` にたまる。
     fn step(&mut self, out: &mut Vec<u8>) -> bool {
         out.clear();
-        match self.chunks.next() {
-            Some(s) => {
+        let mut last = false;
+        let mut any = false;
+        loop {
+            if let Some(s) = self.chunks.next() {
                 self.enc.encode(s, out, &mut self.report);
                 self.started = true;
-            }
-            None if !self.started => {
+            } else if let Some(d) = self.pending.take() {
+                self.apply(d, out);
+                self.started = true;
+            } else if !self.started {
                 // 空の文書: BOM だけを書く (なければ何も書かない)
                 self.started = true;
                 self.enc.encode("", out, &mut self.report);
-            }
-            None if !self.finished => {
+            } else if !self.finished {
                 self.finished = true;
                 self.enc.finish(out, &mut self.report);
+                last = true;
+            } else {
+                break;
             }
-            None => return false,
+            any = true;
+            // 記録が細かく並ぶ文書で、1 段の出力が小さくなりすぎないよう、計画があるときは目安の大きさまでまとめる
+            // (出力のバイト列は段の分け方に依らない)。計画が無いときは v0.3 と同じくチャンクごと
+            if last || self.plan.is_none() || out.len() >= STEP_TARGET {
+                break;
+            }
+        }
+        if !any {
+            return false;
+        }
+        if let Some(v) = self.verify.as_mut() {
+            v.feed(self.snapshot, out, last);
         }
         true
+    }
+
+    /// 出力を終えた (`step` が偽を返した) 後に呼ぶ: 確認 (ii) で、本文の全体まで突き合わせたことを確かめる。
+    fn finish_verify(&mut self) {
+        if let Some(v) = self.verify.as_mut() {
+            v.finish(self.snapshot);
+        }
+    }
+
+    /// 保持方式の記録を使う保存の確かめに合わない (03 §8.6 E2): 確認 (i) に合わない・表の不変条件に反する記録があった、
+    /// または確認 (ii) で不一致を見つけた (表を渡さなかったときは常に偽)。出力の途中でも、それまでに見つけたものを返す。
+    /// どれも書く前に止める (`JobError::VerifyFailed`)。
+    fn verify_failed(&self) -> bool {
+        self.broken > 0 || self.verify.as_ref().is_some_and(|v| !v.ok)
     }
 }
 
@@ -566,14 +746,20 @@ impl SnapshotSource<'_> {
             return Err(ChunkError::Aborted);
         }
         while self.stream.step(&mut self.buf) {
-            if !self.stream.report.is_empty() {
-                // 表現不能の文字: 何も書かずに止める (乾式走査で見つけているので、ここへは来ないはず)
+            // 表現不能の文字・確認 (ii) の不一致: 何も書かずに止める (乾式走査で見つけているので、ここへは来ないはず。
+            // 原子的保存では Port が一時ファイルを捨てる)
+            if !self.stream.report.is_empty() || self.stream.verify_failed() {
                 return Err(ChunkError::Aborted);
             }
             // 出力が空の段は飛ばす (ISO-2022-JP は行末までためる。空の文書で BOM が無いとき)
             if !self.buf.is_empty() {
                 return Ok(Some(&self.buf));
             }
+        }
+        // 出力の全体が本文に一致したことを確かめてから終わりを返す (確認 (ii)。一致しなければ置換しない)
+        self.stream.finish_verify();
+        if self.stream.verify_failed() {
+            return Err(ChunkError::Aborted);
         }
         Ok(None)
     }
@@ -598,11 +784,24 @@ pub(crate) struct SaveParams<'a> {
     pub strategy: crate::jobs::SaveStrategy,
     pub clear_readonly: bool,
     pub create_link_target: bool,
+    /// 保持方式の記録の版 (保存を始めた時点のもの、03 §8.6 E2)。空なら記録を使わない (v0.3 と同じ出力)。
+    pub preserved: &'a PreservedMap,
+}
+
+/// 乾式走査の結果。
+struct DryScan {
+    report: EncodeReport,
+    out_len: u64,
+    /// 確認 (i)・(ii) と表の不変条件に合った (表を渡さなかったときは常に真)。
+    verified: bool,
+    /// 確認 (i) に合わない・表の不変条件に反する記録の数。
+    broken: usize,
 }
 
 /// 乾式走査: 出力は捨てて、表現不能の文字と出力のバイト長だけを集める (03 §8.6 E1・05 §4.4 手順 0。書く前に止めるため)。
-fn dry_run(p: &SaveParams<'_>, cancel: &CancelToken) -> Option<(EncodeReport, u64)> {
-    let mut stream = SaveStream::new(p.snapshot, p.encoding, p.bom, p.escape);
+/// 保持方式の記録を渡したときは、確認 (i)・(ii) もここで行う (03 §8.6 E2。合わなければ Port を呼ばずに止める)。
+fn dry_run(p: &SaveParams<'_>, cancel: &CancelToken) -> Option<DryScan> {
+    let mut stream = SaveStream::new(p.snapshot, p.encoding, p.bom, p.escape, p.preserved);
     let mut sink = Vec::new();
     let mut out_len = 0u64;
     loop {
@@ -614,18 +813,26 @@ fn dry_run(p: &SaveParams<'_>, cancel: &CancelToken) -> Option<(EncodeReport, u6
         }
         out_len += sink.len() as u64;
     }
-    Some((stream.report, out_len))
+    stream.finish_verify();
+    Some(DryScan {
+        verified: !stream.verify_failed(),
+        broken: stream.broken,
+        report: stream.report,
+        out_len,
+    })
 }
 
 pub(crate) fn run_save(p: SaveParams<'_>, ports: &JobPorts, cancel: &CancelToken) -> JobResult {
     use crate::jobs::SaveStrategy;
     // 直接上書きは出力の長さが要るので常に乾式走査をする。それ以外は、UTF-8 と UTF-16 が全 Unicode スカラー値を表せるので、
-    // 表現不能になり得るのはエスケープ文字だけ (E4)。Shift_JIS・EUC-JP・ISO-2022-JP は書く前に走査する
+    // 表現不能になり得るのはエスケープ文字だけ (E4)。Shift_JIS・EUC-JP・ISO-2022-JP は書く前に走査する。保持方式の記録を
+    // 渡したときも走査する (確認 (ii) を書く前に行う。記録を渡すのは Shift_JIS・EUC-JP・ISO-2022-JP だけ)
     let in_place = matches!(p.strategy, SaveStrategy::InPlace { .. });
     let mut out_len = 0u64;
     if in_place
         || !(p.encoding == Encoding::Utf8 || p.encoding.is_utf16())
         || p.escape == EscapePolicy::Reject
+        || !p.preserved.is_empty()
     {
         match dry_run(&p, cancel) {
             None => {
@@ -633,14 +840,29 @@ pub(crate) fn run_save(p: SaveParams<'_>, ports: &JobPorts, cancel: &CancelToken
                     err: JobError::Cancelled,
                 };
             }
-            Some((report, _)) if !report.is_empty() => {
+            // 確認 (i) に合わない・表の不変条件に反する記録がある (実装の誤り)。どのビルドでも何も書かずに止める。
+            // 表現不能より先に見る (合わない記録をふつうに符号化したことで表現不能になった文字を、置換の対象として
+            // 示さない)
+            Some(d) if d.broken > 0 => {
+                return JobResult::Failed {
+                    err: JobError::VerifyFailed,
+                };
+            }
+            Some(d) if !d.report.is_empty() => {
                 return JobResult::Unmappable {
-                    total: report.total,
-                    recorded: report.recorded,
+                    total: d.report.total,
+                    recorded: d.report.recorded,
                     encoding: p.encoding,
                 };
             }
-            Some((_, n)) => out_len = n,
+            // 確認 (ii): 出力を復号しても本文にならない (実装の誤り)。何も書かずに止める (表現不能の文字は出力から抜けて
+            // 本文と合わないので、表現不能の後に見る)
+            Some(d) if !d.verified => {
+                return JobResult::Failed {
+                    err: JobError::VerifyFailed,
+                };
+            }
+            Some(d) => out_len = d.out_len,
         }
     }
     let SaveParams {
@@ -653,9 +875,10 @@ pub(crate) fn run_save(p: SaveParams<'_>, ports: &JobPorts, cancel: &CancelToken
         strategy,
         clear_readonly,
         create_link_target,
+        preserved,
     } = p;
     let mut src = SnapshotSource {
-        stream: SaveStream::new(snapshot, encoding, bom, escape),
+        stream: SaveStream::new(snapshot, encoding, bom, escape, preserved),
         buf: Vec::new(),
         cancel,
         hasher: Some(crate::io::content_hash::ContentHasher::new()),
@@ -704,11 +927,95 @@ pub(crate) fn run_save(p: SaveParams<'_>, ports: &JobPorts, cancel: &CancelToken
         Err(e) if cancel.is_cancelled() && !wrote_target(&e) => JobResult::Failed {
             err: JobError::Cancelled,
         },
+        // 本番の書き込みで確認 (i)・(ii) に合わなかった (乾式走査で確かめているので起きないはず): 置換の前に止めた
+        Err(e) if src.stream.verify_failed() && !wrote_target(&e) => JobResult::Failed {
+            err: JobError::VerifyFailed,
+        },
         Err(e) => JobResult::Failed {
             err: JobError::Fs(e),
         },
     }
 }
+
+/// 試験用: 保存の符号化の結果 (`save_for_test`)。
+#[cfg(test)]
+#[derive(Debug)]
+pub(crate) struct SaveTestOut {
+    /// 本番の書き込みの供給と同じ手順で作った出力の全部 (表現不能の文字は飛ばしたもの)。
+    pub(crate) bytes: Vec<u8>,
+    /// 乾式走査の出力の長さ。
+    pub(crate) dry_len: u64,
+    /// 表現不能の総数。
+    pub(crate) unmappable: u64,
+    /// 確認 (i)・(ii) と表の不変条件に合った。
+    pub(crate) verified: bool,
+    /// 確認 (i) に合わなかった・表の不変条件に反した記録の数 (0 で `verified` が偽なら、確認 (ii) の不一致)。
+    pub(crate) broken: usize,
+    /// 使わなかった行の記録 (ISO-2022-JP の、行の内容の全体でなくなった記録) の数。
+    pub(crate) line_unused: usize,
+    /// 本番の書き込みの供給 (`SnapshotSource`) が最後まで返した出力 (表現不能・確認 (ii) の不一致で止まったら `None`)。
+    pub(crate) source: Option<Vec<u8>>,
+}
+
+/// 試験用: 乾式走査と本番の書き込みの供給の両方で、Snapshot と保持方式の記録の版から保存の出力を作る (03 §22.1 の
+/// 保持方式の (a)(b) の性質テストと、故障の注入の試験が使う)。
+#[cfg(test)]
+pub(crate) fn save_for_test(
+    snapshot: &Snapshot,
+    encoding: Encoding,
+    escape: EscapePolicy,
+    preserved: &PreservedMap,
+) -> SaveTestOut {
+    let path = FsPath::new("/t/a.txt");
+    let p = SaveParams {
+        path: &path,
+        snapshot,
+        encoding,
+        bom: false,
+        escape,
+        expected: Expect::Any,
+        strategy: crate::jobs::SaveStrategy::default(),
+        clear_readonly: false,
+        create_link_target: false,
+        preserved,
+    };
+    let cancel = CancelToken::new();
+    let d = dry_run(&p, &cancel).unwrap_or_else(|| unreachable!("取り消していない"));
+    // 表現不能の文字を飛ばした出力の全部 (段をそのままつなぐ)
+    let mut stream = SaveStream::new(snapshot, encoding, false, escape, preserved);
+    let mut bytes = Vec::new();
+    let mut piece = Vec::new();
+    while stream.step(&mut piece) {
+        bytes.extend_from_slice(&piece);
+    }
+    let mut src = SnapshotSource {
+        stream: SaveStream::new(snapshot, encoding, false, escape, preserved),
+        buf: Vec::new(),
+        cancel: &cancel,
+        hasher: None,
+        written: 0,
+    };
+    let mut got = Vec::new();
+    let source = loop {
+        match src.next_chunk() {
+            Ok(Some(c)) => got.extend_from_slice(c),
+            Ok(None) => break Some(got),
+            Err(_) => break None,
+        }
+    };
+    SaveTestOut {
+        bytes,
+        dry_len: d.out_len,
+        unmappable: d.report.total,
+        verified: d.verified,
+        broken: stream.broken,
+        line_unused: stream.line_unused,
+        source,
+    }
+}
+
+#[cfg(test)]
+mod preserve_save;
 
 #[cfg(test)]
 mod tests {
@@ -720,8 +1027,9 @@ mod tests {
         let t = eve_text::Text::from(text);
         let snap = t.snapshot();
         let cancel = CancelToken::new();
+        let empty = PreservedMap::new();
         let mut src = SnapshotSource {
-            stream: SaveStream::new(&snap, encoding, bom, EscapePolicy::Restore),
+            stream: SaveStream::new(&snap, encoding, bom, EscapePolicy::Restore, &empty),
             buf: Vec::new(),
             cancel: &cancel,
             hasher: None,
@@ -772,11 +1080,16 @@ mod tests {
                         },
                         clear_readonly: false,
                         create_link_target: false,
+                        preserved: &PreservedMap::new(),
                     };
-                    let (report, len) = dry_run(&p, &CancelToken::new()).unwrap();
-                    assert!(report.is_empty(), "{encoding:?} {bom} {text:?}");
+                    let d = dry_run(&p, &CancelToken::new()).unwrap();
+                    assert!(d.report.is_empty(), "{encoding:?} {bom} {text:?}");
                     let out = written(text, encoding, bom);
-                    assert_eq!(len, out.len() as u64, "{encoding:?} bom={bom} {text:?}");
+                    assert_eq!(
+                        d.out_len,
+                        out.len() as u64,
+                        "{encoding:?} bom={bom} {text:?}"
+                    );
                 }
             }
         }

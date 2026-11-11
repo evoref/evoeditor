@@ -243,6 +243,31 @@ impl Document {
         self.history.forget_preserved();
     }
 
+    /// 文字コード `out` で書く保存 (と「置換して保存」の対象の判定) に渡す、保持方式の記録の版 (03 §8.6 E2、§9.3 手順 4。
+    /// 複製は O(1))。書く文字コードが記録を集めたときの文字コード (= 文書の文字コード。文字コードを変える経路は表を
+    /// 捨てる) と同じで、保持が効いている (`Active`) ときだけ表を渡し、ほかは空 (記録を使わない)。
+    pub(crate) fn preserved_for(&self, out: eve_encoding::Encoding) -> PreservedMap {
+        if out == self.format.encoding
+            && matches!(
+                self.format.roundtrip.preserve,
+                PreserveStatus::Active { .. }
+            )
+        {
+            self.preserved.clone()
+        } else {
+            PreservedMap::new()
+        }
+    }
+
+    /// 保存の出力の確認 (03 §8.6 E2 の確認 (i)・(ii)) で保存が止まった: 表と履歴の記録を全部捨てて「保持なし (照合に
+    /// 失敗した)」にする (03 §8.7.1 の「保存」)。同じ表を渡し続けると同じ文字コードで二度と保存できないため。次の保存は
+    /// 保存の前の確認 (E2') を経て、記録を使わずに (v0.3 と同じ出力で) 書く。
+    pub(crate) fn abandon_preserved(&mut self) {
+        self.clear_preserved();
+        self.format.roundtrip.preserve =
+            PreserveStatus::Unavailable(NoPreserveReason::VerifyFailed);
+    }
+
     /// 本文。
     pub fn text(&self) -> &Text {
         &self.text

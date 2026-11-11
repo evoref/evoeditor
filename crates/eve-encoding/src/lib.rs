@@ -23,7 +23,8 @@ pub use detect::{
     find_iso_switch, redetect_window,
 };
 pub use encode::{
-    EncodeReport, Encoder, EscapePolicy, MAX_RECORDED, Unmappable, UnmappableKind, cp932, utf16_len,
+    EncodeReport, Encoder, EscapePolicy, MAX_RECORDED, Unmappable, UnmappableKind, cp932,
+    preserved_matches, utf16_len,
 };
 pub use encoding::Encoding;
 pub use preserve::{

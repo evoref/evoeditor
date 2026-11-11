@@ -7,6 +7,11 @@
 //! - (c) どの時点でも、表の各記録が不変条件を満たす (`PreservedMap::check`)。Undo / Redo で表と履歴が食い違わない。
 //! - (d) 同じ履歴の位置 (`NodeId`) では、Undo と Redo をどう混ぜても、表・保持方式の状態・本文が同じ。全部 Undo すると
 //!   開いた直後に戻る (底を捨てていなければ)。
+//! - 保存 (03 §22.1 の保持方式の (a)(b)、M22 の 6): 途中の時点で元の文字コードの保存の出力を作り、(a) 出力を復号すると
+//!   本文に一致し、表に残っている記録の範囲 (ISO-2022-JP は行の内容の全体であるもの) は元のバイト列、ほかは記録なしの
+//!   符号化 (代表バイト列) になる (計画を使わない素朴な組み立てと一致する)。(b) 乾式走査の長さ・内容と、本番の書き込みの
+//!   供給の出力が一致する。保存は表も履歴も変えない (使わなかった記録も表に残す) ので、保存をはさんでも (d) が
+//!   成り立つ。全部 Undo して保存すると、元のファイルとバイト一致する (01 §5.5 の NFR-303 AC-7)。
 
 use std::collections::HashMap;
 
@@ -116,7 +121,7 @@ impl World {
     }
 
     /// Undo / Redo で前に居た位置に戻った: 状態が同じ (d)。
-    fn revisit(&self) -> Result<(), TestCaseError> {
+    fn revisit(&mut self) -> Result<(), TestCaseError> {
         self.check()?;
         let cur = self.doc.history().current();
         let want = self.seen.get(&cur);
@@ -240,6 +245,11 @@ impl World {
             Op::Delete(self.doc.len_bytes()),
             Op::Insert(InsertText::Rope(text.snapshot())),
         ]);
+        if cs.is_identity() {
+            // 空の文書を空の内容で再読込する恒等の変更は、履歴のノードを作らずに書式と表だけを差し替える (`Document::apply`
+            // の手順 1)。その位置の状態が、前後のノードの書式 (Undo / Redo で戻すもの) と食い違うので (d) の対象にしない
+            return Ok(());
+        }
         self.now += 10;
         self.apply(Transaction::new(cs, Origin::Reload, Tick(self.now)).with_format_change(change))
     }
@@ -267,6 +277,52 @@ impl World {
             PreserveStatus::Unavailable(NoPreserveReason::Recovered)
         );
         Ok(())
+    }
+
+    /// 元の文字コードの保存の出力を作って確かめる (03 §22.1 の保持方式の (a)(b))。保存は表も履歴も変えない (使わなかった
+    /// 記録も表に残す。03 §8.7.1 の「保存」)。書いた出力を返す (表現不能・確かめの不一致で書かないときは `None`)。
+    fn save(&mut self) -> Result<Option<Vec<u8>>, TestCaseError> {
+        let enc = self.enc;
+        // 保存の開始は履歴を封印する (`Document::begin_save`)
+        let _ = self.doc.begin_save();
+        let map = self.doc.preserved_for(enc);
+        let escape = self.doc.format.save_escape_policy(enc);
+        let snap = self.doc.snapshot();
+        let out = crate::io::io_jobs::save_for_test(&snap, enc, escape, &map);
+        prop_assert_eq!(out.broken, 0, "表の記録は確認 (i) に合う");
+        // 使わなかった記録は、ISO-2022-JP の行が変わった (行の内容の全体でなくなった) 記録だけ
+        if !enc.is_stateful() {
+            prop_assert_eq!(out.line_unused, 0);
+        }
+        // (b) 乾式走査の長さと、本番の書き込みの供給の出力
+        prop_assert_eq!(out.dry_len, out.bytes.len() as u64);
+        if out.unmappable > 0 {
+            // 編集で入れた表現不能の文字 (¬ など): 何も書かない (E3)
+            prop_assert!(out.source.is_none());
+            return Ok(None);
+        }
+        if !out.verified {
+            // 確認 (ii) で止まるのは、不正バイトのエスケープ文字を含む文書を編集して、エスケープ文字が隣の文字と組になる
+            // 並びを作ったときだけ (例: 0x8F 0xF3 0xF3 の 0x8F を消すと 0xF3 0xF3 が漢字になる。03 §8.3 の「隣接エスケープの
+            // 意味変化」。記録と関係なく起きる。製品ではこの文書は読み取り専用で編集できない)。何も書かない
+            prop_assert!(self.doc.format.invalid_bytes > 0, "確認 (ii)");
+            prop_assert!(out.source.is_none());
+            return Ok(None);
+        }
+        // 計画を使わない素朴な組み立てと同じ出力
+        let naive = naive_output(enc, escape, self.doc.text(), &map);
+        prop_assert_eq!(&out.bytes, &naive);
+        prop_assert_eq!(out.source.as_ref(), Some(&out.bytes));
+        // (a) 復号すると本文。記録の範囲は元のバイト列、ほかは記録なしの符号化
+        let mut d = Decoder::new(enc, false);
+        let mut back = String::new();
+        d.decode(&out.bytes, true, &mut back);
+        // 表を渡さない保存 (v0.3 と同じ出力。確認 (ii) をしない) では、編集で隣り合ったエスケープ文字が組になることがある
+        // (上と同じ。記録と関係なく、製品では読み取り専用の文書)
+        if !(map.is_empty() && self.doc.format.invalid_bytes > 0) {
+            prop_assert_eq!(&back, &all(self.doc.text()));
+        }
+        Ok(Some(out.bytes))
     }
 
     fn undo(&mut self) -> Result<bool, TestCaseError> {
@@ -303,7 +359,7 @@ fn run(enc: Encoding, bytes: &[u8], acts: &[Action]) -> Result<(), TestCaseError
     w.remember()?;
     let initial = w.at();
     for (kind, parts, extra) in acts {
-        match kind % 16 {
+        match kind % 18 {
             0..=6 => {
                 if let Some(cs) = w.make_cs(parts) {
                     // 時刻の差が小さい User の入力は結合し得る (R7 / R8)。Merge の指示は必ず結合する (R1)
@@ -334,6 +390,9 @@ fn run(enc: Encoding, bytes: &[u8], acts: &[Action]) -> Result<(), TestCaseError
                 let with = INSERTS[usize::from(*extra) % INSERTS.len()];
                 w.recover(with)?;
             }
+            16 | 17 => {
+                w.save()?;
+            }
             _ => {
                 // Undo の予算で底を捨てる (03 §7.5。捨てたノードの記録はノードと一緒に消える)
                 if w.doc.trim_history_oldest().is_some() {
@@ -343,13 +402,76 @@ fn run(enc: Encoding, bytes: &[u8], acts: &[Action]) -> Result<(), TestCaseError
             }
         }
     }
-    // (d) 全部 Undo してから全部 Redo しても、どの位置でも同じ状態 (revisit が確かめる)
+    w.save()?;
+    // (d) 全部 Undo してから全部 Redo しても、どの位置でも同じ状態 (revisit が確かめる。保存をはさんでも)
     while w.undo()? {}
     if !w.trimmed {
         prop_assert_eq!(&w.at(), &initial, "全部 Undo すると開いた直後に戻る");
+        // AC-7: 読込の状態まで全部 Undo して元の文字コードで書くと、元のファイルとバイト一致する (保持できなかった行の
+        // 無い文書。保存を何回はさんでも)
+        let (_, recs) = check_roundtrip_with_records(enc, bytes);
+        let iso_ok =
+            !enc.is_stateful() || (recs.unpreserved == 0 && w.doc.format.invalid_bytes == 0);
+        if iso_ok
+            && matches!(
+                w.doc.format.roundtrip.preserve,
+                PreserveStatus::Active { .. }
+            )
+        {
+            let out = w.save()?;
+            prop_assert_eq!(
+                out.as_deref(),
+                Some(bytes),
+                "全部 Undo して保存すると元のファイル"
+            );
+        }
     }
     while w.redo()? {}
     Ok(())
+}
+
+/// 保存の出力の素朴な組み立て (保存の計画を使わない): `Shift_JIS` / EUC-JP は、表の記録の範囲を元のバイト列、その間を
+/// 記録なしの符号化にする。ISO-2022-JP は行ごとに、行の内容の全体を範囲とする記録があれば元のバイト列、なければ記録
+/// なしの符号化 (行ごとに ASCII 状態で閉じる)。行の終端はそのまま。
+fn naive_output(
+    enc: Encoding,
+    escape: eve_encoding::EscapePolicy,
+    text: &dyn TextRead,
+    map: &PreservedMap,
+) -> Vec<u8> {
+    let s = all(text);
+    let spans = map.to_spans();
+    let mut out = Vec::new();
+    let encode = |seg: &str, out: &mut Vec<u8>| {
+        let mut e = eve_encoding::Encoder::new(enc, false, escape);
+        let mut r = eve_encoding::EncodeReport::default();
+        e.encode(seg, out, &mut r);
+        e.finish(out, &mut r);
+    };
+    if enc.is_stateful() {
+        for l in 0..text.len_lines() {
+            let ls = text.line_to_byte(LineIdx(l)).0;
+            let le = text.line_end_byte(LineIdx(l)).0;
+            match spans
+                .iter()
+                .find(|sp| sp.range.start.0 == ls && sp.range.end.0 == le)
+            {
+                Some(sp) => out.extend_from_slice(&sp.bytes),
+                None => encode(&s[ls..le], &mut out),
+            }
+            let next = text.line_to_byte(LineIdx(l + 1)).0;
+            out.extend_from_slice(&s.as_bytes()[le..next]);
+        }
+    } else {
+        let mut pos = 0usize;
+        for sp in &spans {
+            encode(&s[pos..sp.range.start.0], &mut out);
+            out.extend_from_slice(&sp.bytes);
+            pos = sp.range.end.0;
+        }
+        encode(&s[pos..], &mut out);
+    }
+    out
 }
 
 proptest! {

@@ -270,6 +270,7 @@ impl EditorState {
                 ..
             } => {
                 let encoding = format.encoding;
+                let note = crate::io::open::preserve_note(&format);
                 // 保持方式の記録も新しい読込の結果に入れ替える (03 §8.8 / §8.7.1)
                 let mut d = Document::from_loaded(text, format, preserved);
                 d.path = Some(path.clone());
@@ -291,6 +292,8 @@ impl EditorState {
                         &path.display(),
                     );
                 }
+                // 読込の完了時の保持方式の通知 (03 §8.7.1)。履歴を消した通知を現在のメッセージにするため、先に出す
+                self.show_preserve_note(note);
                 self.show_message(
                     MessageLevel::Info,
                     keys::INFO_REOPEN_HISTORY_CLEARED,

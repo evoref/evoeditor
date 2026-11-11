@@ -52,7 +52,74 @@ pub(crate) struct LossyAsk {
     pub fmt: Option<NewFormat>,
 }
 
+/// 保存の前の確認 (03 §8.6 E2'、§8.7.1) の文言の選び方。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum PreConfirm {
+    /// 保持できなかった箇所の数を言える: `Shift_JIS` / EUC-JP は `ui.confirm.save.lossy_roundtrip`、ISO-2022-JP は
+    /// `ui.confirm.save.escape_normalized`。
+    Count(u64),
+    /// 数を言えない (「保持なし」の文書、検査を打ち切った文書): `ui.confirm.save.roundtrip_unchecked`。
+    Unchecked,
+}
+
+/// 文書 `doc` を文字コード `out` で書く前に、確認 (03 §8.6 E2') が要るか。要らなければ `None`。
+///
+/// 元の文字コードで書くときだけ出す (別の文字コードへの変換は E1 / E3 で扱う)。未編集かどうかは見ない (名前を付けて
+/// 保存・`file.set_encoding` では未編集でも書く。未編集の上書き保存は手順 0 で書かないので、ここへ来ない)。保持方式の
+/// 状態ごとの条件:
+/// - 保持が効いている (`Active`): 読込の時点で保持できなかった箇所 (`unpreserved`。ISO-2022-JP の、ASCII 状態で
+///   始まらない・終わらない差のある行) が 1 以上なら、その数で出す。0 なら出さない (編集した範囲の区分 B の文字が
+///   代表バイト列になるのは区分 C で、確認しない。行を結合して行の内容の全体でなくなった ISO-2022-JP の行の記録も、
+///   編集した行と同じ区分 C)。
+/// - 「保持なし」(`Unavailable`): 理由が `VerifyFailed` (読込・保存の確かめに失敗した。記録があった文書だけ) なら
+///   無条件で、ほかは読込時の検査で区分 B / D の箇所を見つけた (`lossy_lines > 0`) か検査を打ち切った (`incomplete`)
+///   文書だけ、数を言わずに出す。補助漢字・半角カナなど復号専用の文字の行 (`unmappable_lines`) だけの文書は出さない
+///   (保存は必ず E3 で止まり、確認の文が事実と合わない。v0.3 と同じく E3 に任せる)。理由が `InvalidBytes` (不正バイト
+///   を含む ISO-2022-JP) は、保存の連鎖の開始で拒否する (03 §8.3) ので出さない。
+/// - 対象外 (`NotApplicable`。区分 A の文字コード・新規文書・違う文字コードで保存した後): 出さない。
+pub(crate) fn preconfirm(doc: &Document, out: eve_encoding::Encoding) -> Option<PreConfirm> {
+    if out != doc.format.encoding {
+        return None;
+    }
+    preserve_kind(&doc.format)
+}
+
+/// 保存の前の確認と読込の完了時の通知に共通の条件 (`preconfirm` の説明)。
+fn preserve_kind(format: &crate::document::TextFormat) -> Option<PreConfirm> {
+    use eve_encoding::{NoPreserveReason, PreserveStatus};
+    let rt = &format.roundtrip;
+    match rt.preserve {
+        PreserveStatus::Active { unpreserved } => {
+            (unpreserved > 0).then_some(PreConfirm::Count(u64::from(unpreserved)))
+        }
+        PreserveStatus::Unavailable(NoPreserveReason::InvalidBytes) => None,
+        PreserveStatus::Unavailable(NoPreserveReason::VerifyFailed) => Some(PreConfirm::Unchecked),
+        PreserveStatus::Unavailable(_) => {
+            (rt.lossy_lines > 0 || rt.incomplete).then_some(PreConfirm::Unchecked)
+        }
+        PreserveStatus::NotApplicable => None,
+    }
+}
+
+/// 読込の完了時の、保持方式の通知 (03 §8.7.1 の「読込の完了時の通知」): (`MessageKey`, 数)。条件は保存の前の確認
+/// (`preconfirm`) と同じ: 保持できなかった箇所がある文書は数を言う `info.open.preserve_partial`、「保持なし」は数を
+/// 言わない `info.open.preserve_off`。保持が効いている文書 (保持できなかった箇所が無い) と、区分 B / D の箇所の無い
+/// 文書では `None` (v0.3 までの `info.open.lossy_roundtrip` は出さない)。
+pub(crate) fn preserve_note(format: &crate::document::TextFormat) -> Option<(&'static str, u64)> {
+    match preserve_kind(format)? {
+        PreConfirm::Count(n) => Some((keys::INFO_OPEN_PRESERVE_PARTIAL, n)),
+        PreConfirm::Unchecked => Some((keys::INFO_OPEN_PRESERVE_OFF, 0)),
+    }
+}
+
 impl EditorState {
+    /// 読込の完了時の保持方式の通知を出す (`preserve_note`)。
+    pub(crate) fn show_preserve_note(&mut self, note: Option<(&'static str, u64)>) {
+        if let Some((key, count)) = note {
+            self.show_message(MessageLevel::Info, key, &[("count", &count.to_string())]);
+        }
+    }
+
     /// 保存先がダングリングのシンボリックリンク: リンク先を示して、リンク先に作成するかを尋ねる (FR-106、05 §4.1)。
     pub(crate) fn open_dangling_link(&mut self, ask: SaveFailedAsk, target: String) {
         use crate::ui_model::overlay::{ChoiceDef, ConfirmAction, ConfirmState};
@@ -88,15 +155,14 @@ impl EditorState {
         self.start_save_fmt(doc, path, expected, cont, fmt)
     }
 
-    /// 区分 B (ISO-2022-JP は区分 D のエスケープの書き方) の確認を出す。選択肢: 保存 / 別名で保存。
-    /// 区分 B は別名が既定、区分 D は文字が変わらないので保存が既定 (04 §15.2)。
-    /// 読込時の検査を打ち切った文書は、数を言えないので専用の文言にし、別名を既定にする (03 §8.7、Issue #495)。
-    pub(crate) fn open_lossy(&mut self, ask: LossyAsk) {
+    /// 保存の前の確認 (03 §8.6 E2') を出す。選択肢: 保存 / 別名で保存。条件と文言の選び方は `preconfirm`。
+    /// 区分 B は別名が既定、区分 D (ISO-2022-JP のエスケープの書き方) は文字が変わらないので保存が既定 (04 §15.2)。
+    /// 数を言えない文書 (「保持なし」・検査を打ち切った) は専用の文言にし、別名を既定にする (03 §8.7.1、Issue #495)。
+    pub(crate) fn open_lossy(&mut self, ask: LossyAsk, kind: PreConfirm) {
         use crate::ui_model::overlay::{ChoiceDef, ConfirmAction, ConfirmState};
         let Some(doc) = self.docs.documents.get(&ask.doc) else {
             return;
         };
-        let count = doc.format.roundtrip.lossy_lines;
         let example = doc
             .format
             .roundtrip
@@ -104,12 +170,12 @@ impl EditorState {
             .first()
             .map(u64::to_string)
             .unwrap_or_default();
-        let (name, default) = if doc.format.roundtrip.incomplete {
-            ("save.roundtrip_unchecked", 1)
-        } else if doc.format.encoding.is_stateful() {
-            ("save.escape_normalized", 0)
-        } else {
-            ("save.lossy_roundtrip", 1)
+        let (name, default, count) = match kind {
+            PreConfirm::Unchecked => ("save.roundtrip_unchecked", 1, 0),
+            PreConfirm::Count(n) if doc.format.encoding.is_stateful() => {
+                ("save.escape_normalized", 0, n)
+            }
+            PreConfirm::Count(n) => ("save.lossy_roundtrip", 1, n),
         };
         let choice = |id: &'static str, accel: char| ChoiceDef {
             id,
@@ -179,7 +245,7 @@ impl EditorState {
                 interrupted_save,
                 ..
             } => {
-                let lossy = format.roundtrip.lossy_lines;
+                let note = preserve_note(&format);
                 let encoding = format.encoding;
                 let long_lines = format.long_lines;
                 let mut d = Document::from_loaded(text, format, preserved);
@@ -202,13 +268,7 @@ impl EditorState {
                     );
                 }
                 // 文字コードに関する通知 (最後に出したものが現在のメッセージ)
-                if lossy > 0 {
-                    self.show_message(
-                        MessageLevel::Info,
-                        keys::INFO_OPEN_LOSSY_ROUNDTRIP,
-                        &[("count", &lossy.to_string())],
-                    );
-                }
+                self.show_preserve_note(note);
                 if let Some(e) = notes.redetected {
                     self.show_message(
                         MessageLevel::Info,

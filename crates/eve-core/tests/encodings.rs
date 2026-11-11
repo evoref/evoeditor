@@ -249,16 +249,36 @@ fn 黙示の置換も表現不能として止める() {
     assert!(doc(&s).is_dirty());
 }
 
+// 読込時の検査は区分 B の行を数える (v0.1)。v0.4 では、保持が効いている文書 (元のバイト列を覚えた) には読込の完了時の
+// 通知を出さず、保持できなかった箇所がある文書 (ここでは ISO-2022-JP の、ローマ字状態のまま改行する行) に数を言って出す
+// (03 §8.7.1。v0.3 までは区分 B の行があれば `info.open.lossy_roundtrip` を出していた)
 // verifies: AC-NFR-303-3
 #[test]
-fn 重複符号化の行を読込時に数えて通知する() {
+fn 重複符号化の行を読込時に数え_保持できなかった箇所がある文書だけ通知する() {
     let mut s = env();
     let bytes = [sjis(JP), b"\xFA\x54\n".to_vec()].concat();
     s.fs.add_file("/w/a.txt", &bytes);
     messages(&mut s);
     open(&mut s, "/w/a.txt");
     assert_eq!(doc(&s).format.roundtrip.lossy_lines, 1);
-    assert!(messages(&mut s).contains(&"info.open.lossy_roundtrip".to_owned()));
+    let m = messages(&mut s);
+    assert!(
+        !m.contains(&"info.open.lossy_roundtrip".to_owned()),
+        "{m:?}"
+    );
+    assert!(
+        !m.iter().any(|k| k.starts_with("info.open.preserve")),
+        "保持が効いている文書には出さない: {m:?}"
+    );
+    // 保持できなかった箇所がある文書
+    s.fs.add_file("/w/j.txt", b"\x1B$@$\"\x1B(B\nabc\n\x1B(J\\\n");
+    open_as(&mut s, "/w/j.txt", Encoding::Iso2022Jp);
+    assert!(doc(&s).format.roundtrip.lossy_lines > 0);
+    let m = messages(&mut s);
+    assert!(
+        m.contains(&"info.open.preserve_partial".to_owned()),
+        "{m:?}"
+    );
 }
 
 // 往復の検査を打ち切った文書 (4 MiB を超える行がある) は、打ち切りより後ろの区分 B / D を数えていない。
@@ -366,7 +386,7 @@ fn 表現不能の文字を強調し_次の編集まで残す() {
     assert_eq!(marked(&mut s), "", "次の編集で消える");
 }
 
-/// 編集した区分 B の文書を元の文字コードで保存する前に、書き込まず確認する (03 §8.6 E2'、FR-112 AC-4 (a))。
+/// 区分 B の文書 (CP932 の重複符号化) を開いて、区分 B でない所 (先頭) を編集した状態。
 fn lossy_doc() -> (Harness, Vec<u8>) {
     let mut s = env();
     let bytes = [sjis(JP), b"\xFA\x54\n".to_vec()].concat();
@@ -376,37 +396,102 @@ fn lossy_doc() -> (Harness, Vec<u8>) {
     (s, bytes)
 }
 
+/// 「保持なし」の区分 B の文書: 重複符号化 (IBM 拡張の ￢ 0xFA54) を含む `Shift_JIS` の文書を開き、スワップから復旧した
+/// (元のバイト列を覚えていないので、元の文字コードで書く前に確認する。03 §8.6 E2'、§8.7.1)。復旧で編集した状態。
+fn unpreserved_doc() -> (Harness, Vec<u8>) {
+    let bytes = b"a\xFA\x54b\n\xFA\x54\xFA\x54c\n".to_vec();
+    let mut s = Harness::new()
+        .with_size(80, 12)
+        .with_file("/w/a.txt", &bytes);
+    s.fs.add_swap_entry(
+        eve_core::SwapEntry {
+            dir: FsPath::from("/s/swap/aaaa-4242.swp"),
+            path: Some(FsPath::from("/w/a.txt")),
+            untitled_name: None,
+            revision: 7,
+            len: 12,
+            pid: 4242,
+            owner: eve_core::SwapOwner::Stale,
+            sensitive: false,
+            modified: Some(eve_core::FileTime {
+                secs: 4_000_000_000,
+                nanos: 0,
+            }),
+            readable: true,
+        },
+        Some(eve_core::SwapBody {
+            text: "a￢b\n復旧\n".to_owned(),
+            encoding: Encoding::ShiftJis,
+            has_bom: false,
+            default_eol: eve_text::LineEnding::Lf,
+        }),
+    );
+    s.open("/w/a.txt");
+    s.run_jobs();
+    assert_eq!(doc(&s).format.encoding, Encoding::ShiftJis);
+    s.advance_ms(0);
+    assert_eq!(s.overlay(), "dialog", "復旧の提案");
+    s.answer(0);
+    s.run_jobs();
+    assert_eq!(
+        doc(&s).format.roundtrip.preserve,
+        eve_encoding::PreserveStatus::Unavailable(eve_encoding::NoPreserveReason::Recovered)
+    );
+    assert!(doc(&s).is_dirty());
+    (s, bytes)
+}
+
+// v0.4 は「保持なし」の文書だけが対象 (03 §8.7.1)。保持が効いている文書は下の試験
 // verifies: AC-FR-112-4, AC-NFR-303-3
 #[test]
-fn 区分_b_の文書を編集して保存するときは書き込む前に確認し_保存を選ぶと代表バイトで書く() {
-    let (mut s, bytes) = lossy_doc();
+fn 保持なしの区分_b_の文書を編集して保存するときは書き込む前に確認し_保存を選ぶと代表バイトで書く()
+{
+    let (mut s, bytes) = unpreserved_doc();
     save(&mut s);
     assert_eq!(s.overlay(), "dialog", "確認が出る");
     assert_eq!(s.fs.read("/w/a.txt").unwrap(), bytes, "まだ書いていない");
     // 保存 (S)
     s.text("s");
     s.run_jobs();
-    let saved = s.fs.read("/w/a.txt").unwrap();
-    assert_ne!(saved, bytes);
-    assert!(saved.starts_with(b"x"));
+    assert_eq!(
+        s.fs.read("/w/a.txt").unwrap(),
+        [b"a\x81\xCAb\n".to_vec(), sjis("復旧\n")].concat(),
+        "代表バイト列 (0x81CA) で書く"
+    );
     assert!(!doc(&s).is_dirty());
 }
 
 // verifies: AC-FR-112-4
 #[test]
-fn 区分_b_の確認で別名で保存を選ぶと名前の入力へ_esc_では何もしない() {
-    let (mut s, bytes) = lossy_doc();
+fn 保持なしの文書の確認で別名で保存を選ぶと名前の入力へ_esc_では何もしない() {
+    let (mut s, bytes) = unpreserved_doc();
     save(&mut s);
     s.text("a");
     s.run_jobs();
     assert_eq!(s.overlay(), "prompt");
     assert_eq!(s.fs.read("/w/a.txt").unwrap(), bytes);
-    let (mut s, bytes) = lossy_doc();
+    let (mut s, bytes) = unpreserved_doc();
     save(&mut s);
     s.keys("esc");
     assert_eq!(s.overlay(), "");
     assert_eq!(s.fs.read("/w/a.txt").unwrap(), bytes);
     assert!(doc(&s).is_dirty());
+}
+
+// v0.4: 保持が効いている区分 B の文書は、編集して元の文字コードで保存しても確認せず、編集していない範囲を元のバイト列で
+// 書く (03 §8.6 E2 / E2'、§8.7.1。v0.3 までは確認を出し、承認すると全体を代表バイト列で書いていた)。01 §5.5 の NFR-303 AC-5
+// verifies: NFR-303
+#[test]
+fn 区分_b_の文書を編集して保存しても確認せず_編集していない範囲は元のバイト列で書く() {
+    let (mut s, bytes) = lossy_doc();
+    save(&mut s);
+    assert_eq!(s.overlay(), "", "確認は出ない");
+    assert_eq!(
+        s.fs.read("/w/a.txt").unwrap(),
+        [b"x".to_vec(), bytes].concat(),
+        "重複符号化 0xFA54 はそのまま"
+    );
+    assert!(!doc(&s).is_dirty());
 }
 
 // verifies: AC-NFR-303-3
@@ -423,15 +508,19 @@ fn 区分_b_でも_utf8_で保存し直すなら確認しない() {
     assert_eq!(doc(&s).format.encoding, Encoding::Utf8);
 }
 
+// v0.4 は、保持できなかった箇所がある文書 (ここでは、ローマ字状態のまま改行する最後の行) だけが対象 (03 §8.7.1)。
+// 確認の既定は「保存」(文字は変わらない)
 // verifies: AC-NFR-303-4
 #[test]
-fn iso_2022_jp_のエスケープが変わる文書は編集して保存するとき確認する() {
+fn iso_2022_jp_の保持できなかった行がある文書は編集して保存するとき確認する() {
     let mut s = env();
-    // JIS X 0208 を `ESC $ @` (旧い書き方) で書いた行 + 通常の行。再エンコードは `ESC $ B` に揃う
+    // JIS X 0208 を `ESC $ @` (旧い書き方) で書いた行 + 通常の行 + ローマ字状態のまま改行する行
     let mut bytes = b"\x1b$@\x46\x7c\x4b\x5c\x1b(B\n".to_vec();
     bytes.extend_from_slice(&iso2022(JP));
+    bytes.extend_from_slice(b"\x1B(J\\\n");
     s.fs.add_file("/w/a.txt", &bytes);
     open(&mut s, "/w/a.txt");
+    assert_eq!(doc(&s).format.encoding, Encoding::Iso2022Jp);
     assert!(
         doc(&s).format.roundtrip.lossy_lines > 0,
         "区分 D の差を数える"
@@ -440,24 +529,83 @@ fn iso_2022_jp_のエスケープが変わる文書は編集して保存する�
     save(&mut s);
     assert_eq!(s.overlay(), "dialog");
     assert_eq!(s.fs.read("/w/a.txt").unwrap(), bytes, "まだ書いていない");
-    s.text("s");
+    s.keys("enter");
     s.run_jobs();
     assert!(!doc(&s).is_dirty());
 }
 
-// verifies: AC-FR-112-4
+// v0.4: エスケープの選び方が再エンコードと違う行 (区分 D) は、編集しなければ元のバイト列で書き、確認しない (03 §8.7.1。
+// v0.3 までは編集して保存するときに確認を出し、正規形で書いていた)。編集した行は正規形。01 §5.5 の NFR-303 AC-6
+// verifies: NFR-303
 #[test]
-fn euc_jp_の補助漢字を含む文書は編集して保存すると何も書かず表現不能の選択肢を出す() {
+fn iso_2022_jp_のエスケープが変わる行は編集しなければ元のバイト列で書き確認しない() {
+    let mut s = env();
+    // JIS X 0208 を `ESC $ @` (旧い書き方) で書いた行 + 通常の行。再エンコードは `ESC $ B` に揃う
+    let first = b"\x1b$@\x46\x7c\x4b\x5c\x1b(B\n".to_vec();
+    let rest = iso2022(JP);
+    let bytes = [first.clone(), rest.clone()].concat();
+    s.fs.add_file("/w/a.txt", &bytes);
+    open(&mut s, "/w/a.txt");
+    assert!(
+        doc(&s).format.roundtrip.lossy_lines > 0,
+        "区分 D の差を数える"
+    );
+    // 2 行目の行頭に入力する (1 行目は編集しない)
+    s.keys("down");
+    s.text("x");
+    save(&mut s);
+    assert_eq!(s.overlay(), "", "確認は出ない");
+    assert_eq!(
+        s.fs.read("/w/a.txt").unwrap(),
+        [first.clone(), b"x".to_vec(), rest.clone()].concat()
+    );
+    // 1 行目を編集すると、その行は正規形 (`ESC $ B`)
+    s.keys("ctrl+home");
+    s.text("y");
+    save(&mut s);
+    assert_eq!(s.overlay(), "");
+    assert_eq!(
+        s.fs.read("/w/a.txt").unwrap(),
+        [b"y\x1b$BF|K\\\x1b(B\n".to_vec(), b"x".to_vec(), rest].concat()
+    );
+    assert!(!doc(&s).is_dirty());
+}
+
+/// 補助漢字 (JIS X 0212) の行を含む EUC-JP の文書。
+fn euc_0212_doc() -> (Harness, Vec<u8>) {
     let mut s = env();
     // JIS X 0212 の 0x8F 0xB0 0xA1 (丂 U+4E02) は復号できるが、エンコーダは出力しない
     let mut bytes = encoding_rs::EUC_JP.encode(JP).0.into_owned();
     bytes.extend_from_slice(b"\x8f\xb0\xa1\n");
     s.fs.add_file("/w/a.txt", &bytes);
     open_as(&mut s, "/w/a.txt", Encoding::EucJp);
-    s.text("x");
+    (s, bytes)
+}
+
+// v0.4: 編集で入れた補助漢字は、これまでどおり表現不能として何も書かずに E3 の選択肢を出す (FR-112 AC-4 (b))。編集して
+// いない補助漢字は元のバイト列で書く (下の試験)
+// verifies: AC-FR-112-4
+#[test]
+fn euc_jp_の文書に補助漢字を入力して保存すると何も書かず表現不能の選択肢を出す() {
+    let (mut s, bytes) = euc_0212_doc();
+    s.text("丂");
     save(&mut s);
     assert_eq!(s.overlay(), "dialog", "E3 の選択肢が出る");
     assert_eq!(s.fs.read("/w/a.txt").unwrap(), bytes, "何も書かれない");
+}
+
+// v0.4: 編集していない補助漢字は元のバイト列で書く (確認も表現不能も出ない、03 §8.7.1)。01 §5.5 の NFR-303 AC-5
+// verifies: NFR-303
+#[test]
+fn euc_jp_の補助漢字は編集していなければ元のバイト列で書く() {
+    let (mut s, bytes) = euc_0212_doc();
+    s.text("x");
+    save(&mut s);
+    assert_eq!(s.overlay(), "", "確認も表現不能の選択肢も出ない");
+    assert_eq!(
+        s.fs.read("/w/a.txt").unwrap(),
+        [b"x".to_vec(), bytes].concat()
+    );
 }
 
 // ---------- 不正バイトのエスケープ文字の書き方 (03 §8.3、E4。docs/review/v0.3-findings.md の SAF-02 / 02b) ----------
