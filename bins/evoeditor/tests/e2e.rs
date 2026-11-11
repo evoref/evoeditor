@@ -783,6 +783,87 @@ fn shift_jis_のファイルを開いて文字コードを表示する() {
     let _ = std::fs::remove_dir_all(dir);
 }
 
+/// 保持方式 (03 §8.6 E2、§8.7.1。01 NFR-303 AC-5): 再符号化で別のバイト列になる文字 (区分 B) を 1 行目に持つ `bytes` を、
+/// `encoding` を指定して開き、2 行目の行頭に 1 文字入力して保存・終了する。確認は出ず (出れば保存が済まず `[+]` が残る)、
+/// ファイルは「元のバイト列 + 入力した 1 文字」になる。
+fn 区分_b_を含むファイルの別の行に入力して保存する(
+    name: &str,
+    encoding: &str,
+    label: &str,
+    line1: &[u8],
+    line2: &[u8],
+    typed: (&str, &[u8]),
+    shown: &str,
+) {
+    let dir = temp_dir(name);
+    let path = dir.join("preserve.txt");
+    let orig = [line1, b"\n", line2, b"\n"].concat();
+    std::fs::write(&path, &orig).unwrap();
+    let mut s = Session::start(&["--encoding", encoding, "+2", path.to_str().unwrap()]);
+    // 読込が済んで (2 行目が見え、その行頭にカーソルがある) から打つ。待たずに打つと読込中の入力は捨てられる
+    s.wait_for("本文と文字コードと 2 行目への移動", |t| {
+        t.contains(shown) && t.contains(label) && t.contains("行 2, 桁 1")
+    });
+    type_slowly(&s, typed.0);
+    s.wait_for("変更あり", |t| t.contains("[+]"));
+    s.send(CTRL_S);
+    s.wait_for("保存した (確認は出ない)", |t| !t.contains("[+]"));
+    s.send(CTRL_Q);
+    assert_eq!(s.wait_exit(), 0, "保存済みなので確認なしで終了する");
+    let want = [line1, b"\n", typed.1, line2, b"\n"].concat();
+    assert_eq!(
+        std::fs::read(&path).unwrap(),
+        want,
+        "編集していない範囲は元のバイト列のまま"
+    );
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+// 01 §5.5 の NFR-303 AC-5 (v0.4 の AC は `tests/ac-checklist.toml` の対象外なので、要件 ID で印を付ける)
+// verifies: NFR-303
+#[test]
+fn shift_jis_の区分_b_の文字を含むファイルは別の行に入力して保存しても元のバイト列のまま() {
+    // 1 行目: 区分B: ￢ (IBM 拡張の重複符号化 0xFA54。再符号化すると 0x81CA になる) です。
+    let line1 = [
+        encoding_rs::SHIFT_JIS.encode("区分B: ").0.as_ref(),
+        b"\xFA\x54",
+        encoding_rs::SHIFT_JIS.encode("です。").0.as_ref(),
+    ]
+    .concat();
+    let line2 = encoding_rs::SHIFT_JIS.encode("編集する行").0.into_owned();
+    区分_b_を含むファイルの別の行に入力して保存する(
+        "preserve-sjis",
+        "shift_jis",
+        "Shift_JIS",
+        &line1,
+        &line2,
+        ("x", b"x"),
+        "区分B: ￢です。",
+    );
+}
+
+// 01 §5.5 の NFR-303 AC-5。EUC-JP の補助漢字は、v0.3 までは表現不能で保存が止まった (FR-112 AC-4 (b))
+// verifies: NFR-303
+#[test]
+fn euc_jp_の補助漢字を含むファイルは別の行に入力して保存しても元のバイト列のまま() {
+    // 1 行目: 補助漢字: 丂 (JIS X 0212 の 0x8FB0A1。符号化できない)
+    let line1 = [
+        encoding_rs::EUC_JP.encode("補助漢字: ").0.as_ref(),
+        b"\x8F\xB0\xA1",
+    ]
+    .concat();
+    let line2 = encoding_rs::EUC_JP.encode("編集する行").0.into_owned();
+    区分_b_を含むファイルの別の行に入力して保存する(
+        "preserve-euc",
+        "euc-jp",
+        "EUC-JP",
+        &line1,
+        &line2,
+        ("x", b"x"),
+        "補助漢字: 丂",
+    );
+}
+
 #[test]
 fn 未知の文字コードの指定は使い方の誤り() {
     let out = std::process::Command::new(exe())
