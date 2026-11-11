@@ -13,7 +13,7 @@ The Japanese version ([CHANGELOG.md](CHANGELOG.md)) is authoritative. Both are u
 
 ### Changed
 
-- **Faster regular-expression search, and faster case-insensitive search for some words**: on large files with many lines, the per-line setup cost is reduced. On a 100 MB file, a full scan with a regular expression that matches rarely went from about 1.5 s to about 0.1 s (measured on a development machine). Search results are unchanged.
+- **Faster regular-expression search, and faster case-insensitive search for some words**: on large files with many lines, the per-line setup cost is reduced. On a 100 MB file, a full scan with a regular expression that matches rarely went from about 1.5 s to about 0.1 s (measured on a development machine). Regular expressions that start with a character class, such as `\d+`, went from about 4.5 s to about 0.2 s, helped by a change to how the regular-expression engine is configured. Search results are unchanged.
 
 ### Fixed
 
