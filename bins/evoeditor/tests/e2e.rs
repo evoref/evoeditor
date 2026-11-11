@@ -474,21 +474,38 @@ fn run_from_palette(s: &Session, query: &str) {
     s.send(b"\r");
 }
 
+/// コミットメッセージのひな形 (1 行目は空。`#` の行は、読込が済んだことを画面で確かめるための本文)。
+const COMMIT_TEMPLATE: &[u8] = b"\n# message\n";
+
+/// [`COMMIT_TEMPLATE`] の読込が済むまで待つ。
+///
+/// ファイル名は読込の前からタブに出る。読込中の文書は編集できず、その間に打った文字は捨てられるので、
+/// 本文が見えるまで待ってから打つ。
+fn wait_commit_loaded(s: &Session) {
+    s.wait_for("本文", |t| {
+        t.contains("COMMIT_EDITMSG") && t.contains("# message")
+    });
+}
+
 // 失敗として終了 (`app.quit_with_error`、07 §18.4): 未保存の確認の後、保存せずに終了コード 4 で終わる
 #[test]
 fn 失敗として終了はパレットから実行して終了コード_4() {
     let dir = temp_dir("quit_error");
     let path = dir.join("COMMIT_EDITMSG");
-    std::fs::write(&path, b"\n").unwrap();
+    std::fs::write(&path, COMMIT_TEMPLATE).unwrap();
     let mut s = Session::start(&[path.to_str().unwrap()]);
-    s.wait_for("最初の画面", |t| t.contains("COMMIT_EDITMSG"));
+    wait_commit_loaded(&s);
     type_slowly(&s, "wip");
     s.wait_for("編集した", |t| t.contains("[+]"));
     run_from_palette(&s, "app.quit_with_error");
     s.wait_for("未保存の確認", |t| t.contains("[D]"));
     s.send(b"d");
     assert_eq!(s.wait_exit(), 4);
-    assert_eq!(std::fs::read(&path).unwrap(), b"\n", "保存していない");
+    assert_eq!(
+        std::fs::read(&path).unwrap(),
+        COMMIT_TEMPLATE,
+        "保存していない"
+    );
     let _ = std::fs::remove_dir_all(dir);
 }
 
@@ -497,14 +514,14 @@ fn 失敗として終了はパレットから実行して終了コード_4() {
 fn 保存して終了はパレットから実行して保存し終了コード_0() {
     let dir = temp_dir("save_quit");
     let path = dir.join("COMMIT_EDITMSG");
-    std::fs::write(&path, b"\n").unwrap();
+    std::fs::write(&path, COMMIT_TEMPLATE).unwrap();
     let mut s = Session::start(&[path.to_str().unwrap()]);
-    s.wait_for("最初の画面", |t| t.contains("COMMIT_EDITMSG"));
+    wait_commit_loaded(&s);
     type_slowly(&s, "fix");
     s.wait_for("編集した", |t| t.contains("[+]"));
     run_from_palette(&s, "app.save_and_quit");
     assert_eq!(s.wait_exit(), 0);
-    assert_eq!(std::fs::read(&path).unwrap(), b"fix\n");
+    assert_eq!(std::fs::read(&path).unwrap(), b"fix\n# message\n");
     let _ = std::fs::remove_dir_all(dir);
 }
 
