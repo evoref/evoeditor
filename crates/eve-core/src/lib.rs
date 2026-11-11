@@ -30,9 +30,9 @@ mod search;
 pub use document::eol::build_eol_conversion;
 pub use document::{
     Applied, AppliedTx, ApplyError, DisplaySettings, Document, EolStats, HistoryStep,
-    LONG_LINE_THRESHOLD, LoadState, NodeId, Origin, ReadOnlyReason, ReadOnlyReasons, RecordOutcome,
-    TextFormat, Transaction, TransactionMeta, UndoBudget, UndoGroupHint, UndoHistory,
-    count_long_lines, trim_to_total_budget,
+    LONG_LINE_THRESHOLD, LoadState, NodeId, Origin, PreservedError, PreservedMap, ReadOnlyReason,
+    ReadOnlyReasons, RecordOutcome, TextFormat, Transaction, TransactionMeta, UndoBudget,
+    UndoGroupHint, UndoHistory, count_long_lines, trim_to_total_budget,
 };
 pub use editor::{
     Affinity, ArgValue, Args, Binding, CONFIG_FILE, CONTEXT_VARS, CommandCtx, CommandInvocation,

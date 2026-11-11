@@ -3,6 +3,8 @@
 //! 位置は `NodeId` (文書ごとの単調増加の通番) で表し、スタック上の深さでは表さない (§7.1)。
 //! 結合規則 R1〜R9 (§7.3) は `UndoHistory::record` が上から順に評価する。
 //! `FormatChange` (Reload は `TextFormat` と読み取り専用の理由を、改行コード変換は `default_eol` だけを本文と一緒に戻す)。
+//! 保持方式の記録 (03 §8.7.1、v0.4): 編集で外した記録をノードが持ち (`PreservedUndo`)、Undo で戻し Redo で外す。
+//! 再読込・復旧の表の入れ替えは `FormatChange` が前後の表を持つ。
 
 use std::collections::VecDeque;
 use std::sync::Arc;
@@ -12,6 +14,7 @@ use eve_text::{ByteRange, ChangeSet, Op, Selection};
 use crate::time::{Millis, Tick};
 
 use super::format::{FormatChange, FormatRestore};
+use super::preserved::{PreservedMap, PreservedSpan, merge_removed, spans_bytes};
 use super::transaction::{Origin, Transaction, UndoGroupHint};
 
 /// 履歴上の位置。文書ごとの通番で、破棄しても再利用しない。
@@ -56,8 +59,57 @@ struct UndoNode {
     last_edit_at: Tick,
     group_sealed: bool,
     bytes: usize,
-    /// 書式の変更 (再読込・改行コードの変換)。Undo は `before`、Redo は `after` を戻す。
+    /// 書式の変更 (再読込・改行コードの変換・復旧の保持方式の状態)。Undo は `before`、Redo は `after` を戻す。
     format: Option<FormatChange>,
+    /// この Transaction の適用で外した保持方式の記録 (03 §7.1 の `preserved_removed`)。
+    preserved: PreservedUndo,
+}
+
+/// Undo のノードが持つ、保持方式の記録 (03 §7.1 の `preserved_removed`、§8.7.1)。再読込・復旧の表の全体の入れ替えは
+/// `FormatChange` が前後の表を持つ (表の複製は O(1))。記録の列は `Arc` で持ち、Undo / Redo で複写しない。
+#[derive(Clone, Debug, Default)]
+pub(crate) enum PreservedUndo {
+    /// 外した記録が無い。
+    #[default]
+    None,
+    /// 編集で外した記録 (編集の前の座標、昇順、空でない)。Undo で戻し、Redo で再び外す。
+    Removed(Arc<[PreservedSpan]>),
+    /// 粗い逆変換 (03 §12.5) のノード。逆変換が変更の間の変わっていない範囲も一緒に置き換えるので、位置を写せない。
+    /// Undo は `after` (編集の後の座標で、`hull` を写した範囲) を長さ `hull_len` の範囲に戻し、記録を `before`
+    /// (編集の前に `hull` にあった記録) に入れ替える。Redo は `removed` (編集で外した記録) を外して位置を写す。
+    Range {
+        after: ByteRange,
+        hull_len: usize,
+        before: Arc<[PreservedSpan]>,
+        removed: Arc<[PreservedSpan]>,
+    },
+}
+
+impl PreservedUndo {
+    /// 編集で外した記録から作る (空なら `None`)。
+    pub(crate) fn removed(spans: Vec<PreservedSpan>) -> PreservedUndo {
+        if spans.is_empty() {
+            PreservedUndo::None
+        } else {
+            PreservedUndo::Removed(spans.into())
+        }
+    }
+
+    /// 持っている記録の元のバイト列のバイト数 (Undo の予算に数える、03 §7.5)。
+    fn bytes(&self) -> usize {
+        match self {
+            PreservedUndo::None => 0,
+            PreservedUndo::Removed(r) => spans_bytes(r),
+            PreservedUndo::Range {
+                before, removed, ..
+            } => spans_bytes(before) + spans_bytes(removed),
+        }
+    }
+
+    /// 位置の写像だけで Undo / Redo できる (ノードの結合で、外した記録を合わせられる)。
+    fn is_simple(&self) -> bool {
+        !matches!(self, PreservedUndo::Range { .. })
+    }
 }
 
 /// `record` の結果。
@@ -80,6 +132,8 @@ pub struct HistoryStep {
     pub selection: Option<Selection>,
     /// 本文と一緒に戻す書式 (再読込と改行コードの変換のノードだけ。範囲は `FormatChange` の種類で決まる)。
     pub format: Option<FormatRestore>,
+    /// 本文と一緒に戻す・外す保持方式の記録 (03 §8.7.1)。Undo か Redo かは、どちらの `*_step` で得たかで決まる。
+    pub(crate) preserved: PreservedUndo,
 }
 
 /// 文書ごとの線形の Undo 履歴 (03 §7)。保存点を持ち、予算 (`UndoBudget`) を超えると古いノードから捨てる。
@@ -155,13 +209,25 @@ fn only_single_newlines(cs: &ChangeSet) -> bool {
     any
 }
 
-fn cost_of(redo: &ChangeSet, undo: &ChangeSet, sels: [&Option<Selection>; 2]) -> usize {
+/// ノードの会計値 (03 §7.5)。`preserved` は、ノードが持つ保持方式の記録 (外した記録・再読込と復旧の前後の表) の
+/// 元のバイト列のバイト数。
+fn cost_of(
+    redo: &ChangeSet,
+    undo: &ChangeSet,
+    sels: [&Option<Selection>; 2],
+    preserved: usize,
+) -> usize {
     let sel_bytes: usize = sels
         .iter()
         .filter_map(|s| s.as_ref())
         .map(|s| s.len() * std::mem::size_of::<eve_text::Range>())
         .sum();
-    inserted_len(redo) + inserted_len(undo) + NODE_OVERHEAD + sel_bytes
+    inserted_len(redo) + inserted_len(undo) + NODE_OVERHEAD + sel_bytes + preserved
+}
+
+/// ノードが持つ保持方式の記録のバイト数 (外した記録と、書式の変更が持つ前後の表)。
+fn preserved_cost(format: Option<&FormatChange>, preserved: &PreservedUndo) -> usize {
+    preserved.bytes() + format.map_or(0, FormatChange::preserved_bytes)
 }
 
 impl UndoHistory {
@@ -268,7 +334,20 @@ impl UndoHistory {
 
     /// 適用した Transaction を記録する (§6.5 手順 6)。`inverse` は `tx.changes.invert(適用前)`。
     /// `tx.is_undo` の Transaction は渡さない (Undo / Redo は履歴上の移動で、新ノードを作らない)。
+    /// 保持方式の記録は持たない (`Document::apply` は `record_with` を使う)。
     pub fn record(&mut self, tx: &Transaction, inverse: ChangeSet) -> RecordOutcome {
+        self.record_with(tx, inverse, tx.format_change.clone(), PreservedUndo::None)
+    }
+
+    /// `record` に、ノードが持つ書式の変更 (`format`。`tx.format_change` か、`Document::apply` が復旧のために作った
+    /// もの) と、外した保持方式の記録 (`preserved`) を渡す版。
+    pub(crate) fn record_with(
+        &mut self,
+        tx: &Transaction,
+        inverse: ChangeSet,
+        format: Option<FormatChange>,
+        preserved: PreservedUndo,
+    ) -> RecordOutcome {
         debug_assert!(!tx.is_undo, "Undo / Redo は record しない");
         // 新しい編集は redo を破棄する。保存点が redo のノードを指していれば戻れない
         if !self.redo.is_empty() {
@@ -282,15 +361,17 @@ impl UndoHistory {
             self.total -= freed;
             self.redo.clear();
         }
+        // 書式の変更・粗い逆変換の記録を持つ Transaction は結合しない (R2 の Origin・`Break` で、もともと結合しない)
+        let simple = format.is_none() && preserved.is_simple();
         let merge = self
             .undo
             .back()
             .is_some_and(|prev| self.should_merge(prev, tx));
-        let (merged, seal_after) = self.decide(tx, merge);
+        let (merged, seal_after) = self.decide(tx, merge, simple);
         if merged {
-            self.merge_into_last(tx, inverse);
+            self.merge_into_last(tx, inverse, format, preserved);
         } else {
-            self.push_node(tx, inverse);
+            self.push_node(tx, inverse, format, preserved);
         }
         if seal_after {
             self.seal();
@@ -300,8 +381,16 @@ impl UndoHistory {
     }
 
     /// 結合する (`true`) か新ノード (`false`) かと、記録の後で封印するか (§7.3)。
-    fn decide(&mut self, tx: &Transaction, merge: bool) -> (bool, bool) {
-        let prev_open = self.undo.back().is_some_and(|p| !p.group_sealed);
+    /// `simple` が偽 (書式の変更・粗い逆変換の記録を持つ) なら、R2 と同じく新ノードにして前後を封印する。
+    fn decide(&mut self, tx: &Transaction, merge: bool, simple: bool) -> (bool, bool) {
+        if !simple {
+            self.seal();
+            return (false, true);
+        }
+        let prev_open = self
+            .undo
+            .back()
+            .is_some_and(|p| !p.group_sealed && p.format.is_none() && p.preserved.is_simple());
         // R1
         if tx.undo_group == UndoGroupHint::Merge && prev_open {
             return (true, has_newline(&tx.changes));
@@ -368,7 +457,13 @@ impl UndoHistory {
         }
     }
 
-    fn merge_into_last(&mut self, tx: &Transaction, inverse: ChangeSet) {
+    fn merge_into_last(
+        &mut self,
+        tx: &Transaction,
+        inverse: ChangeSet,
+        format: Option<FormatChange>,
+        preserved: PreservedUndo,
+    ) {
         let new_id = self.fresh_id();
         let Some(prev) = self.undo.back_mut() else {
             return;
@@ -377,9 +472,28 @@ impl UndoHistory {
         let (Ok(redo), Ok(undo)) = (prev.redo.compose(&tx.changes), inverse.compose(&prev.undo))
         else {
             debug_assert!(false, "結合の合成に失敗した");
-            self.push_node(tx, inverse);
+            self.push_node(tx, inverse, format, preserved);
             return;
         };
+        // 外した記録を合わせる (03 §8.7.1): 後の Transaction が外した記録を、結合する前の Undo でノードの前の座標へ戻す
+        let merged_preserved = match (&prev.preserved, preserved) {
+            (PreservedUndo::None, PreservedUndo::None) => PreservedUndo::None,
+            (PreservedUndo::Removed(r), PreservedUndo::None) => {
+                PreservedUndo::Removed(Arc::clone(r))
+            }
+            (PreservedUndo::None, PreservedUndo::Removed(newer)) => {
+                PreservedUndo::removed(merge_removed(Vec::new(), newer.to_vec(), &prev.undo))
+            }
+            (PreservedUndo::Removed(older), PreservedUndo::Removed(newer)) => {
+                PreservedUndo::removed(merge_removed(older.to_vec(), newer.to_vec(), &prev.undo))
+            }
+            // 粗い逆変換の記録は結合しない (`decide` が新ノードにする)
+            (_, p @ PreservedUndo::Range { .. }) | (PreservedUndo::Range { .. }, p) => {
+                debug_assert!(false, "粗い逆変換のノードは結合しない");
+                p
+            }
+        };
+        prev.preserved = merged_preserved;
         let old_id = prev.id;
         prev.redo = Arc::new(redo);
         prev.undo = Arc::new(undo);
@@ -391,6 +505,7 @@ impl UndoHistory {
             &prev.redo,
             &prev.undo,
             [&prev.selection_before, &prev.selection_after],
+            preserved_cost(prev.format.as_ref(), &prev.preserved),
         );
         self.total = self.total - old_bytes + prev.bytes;
         // 内容が変わったので以前の位置とは別の位置になる
@@ -399,12 +514,19 @@ impl UndoHistory {
         }
     }
 
-    fn push_node(&mut self, tx: &Transaction, inverse: ChangeSet) {
+    fn push_node(
+        &mut self,
+        tx: &Transaction,
+        inverse: ChangeSet,
+        format: Option<FormatChange>,
+        preserved: PreservedUndo,
+    ) {
         let id = self.fresh_id();
         let bytes = cost_of(
             &tx.changes,
             &inverse,
             [&tx.selection_before, &tx.selection_after],
+            preserved_cost(format.as_ref(), &preserved),
         );
         self.total += bytes;
         self.undo.push_back(UndoNode {
@@ -417,7 +539,8 @@ impl UndoHistory {
             last_edit_at: tx.timestamp,
             group_sealed: false,
             bytes,
-            format: tx.format_change.clone(),
+            format,
+            preserved,
         });
     }
 
@@ -463,6 +586,7 @@ impl UndoHistory {
             origin: node.origin.clone(),
             selection: node.selection_before.clone(),
             format: node.format.as_ref().map(|f| f.side(false)),
+            preserved: node.preserved.clone(),
         };
         self.redo.push(node);
         self.seal();
@@ -477,10 +601,50 @@ impl UndoHistory {
             origin: node.origin.clone(),
             selection: node.selection_after.clone(),
             format: node.format.as_ref().map(|f| f.side(true)),
+            preserved: node.preserved.clone(),
         };
         self.undo.push_back(node);
         self.seal();
         Some(step)
+    }
+
+    /// 全部のノードが持つ保持方式の記録を捨てる (違う文字コードで保存が成功した、03 §8.7.1)。外した記録と、再読込・
+    /// 復旧の前後の表を空にする (Undo で別の文字コードの記録が表に戻らないように。表と履歴の食い違いも作らない)。
+    /// 表を空にした前後の状態は「保持なし (捨てた)」にする。
+    pub(crate) fn forget_preserved(&mut self) {
+        for n in self.undo.iter_mut().chain(self.redo.iter_mut()) {
+            let mut changed = !matches!(n.preserved, PreservedUndo::None);
+            n.preserved = PreservedUndo::None;
+            match &mut n.format {
+                // 表を捨てた前後の状態は「保持が効いている」のままにしない (Undo / Redo でこの書式に戻った文書は、
+                // 元のバイト列を持っていない。保存の前の確認の対象にする)
+                Some(FormatChange::Reload { before, after }) => {
+                    for s in [before, after] {
+                        s.preserved = PreservedMap::new();
+                        s.format.roundtrip.preserve = s.format.roundtrip.preserve.discarded();
+                    }
+                    changed = true;
+                }
+                Some(FormatChange::Recovery { before, after }) => {
+                    for s in [before, after] {
+                        s.map = PreservedMap::new();
+                        s.status = s.status.discarded();
+                    }
+                    changed = true;
+                }
+                _ => {}
+            }
+            if changed {
+                let old = n.bytes;
+                n.bytes = cost_of(
+                    &n.redo,
+                    &n.undo,
+                    [&n.selection_before, &n.selection_after],
+                    preserved_cost(n.format.as_ref(), &n.preserved),
+                );
+                self.total = self.total - old + n.bytes;
+            }
+        }
     }
 
     #[cfg(test)]

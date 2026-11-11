@@ -39,6 +39,66 @@ pub struct RoundtripSummary {
     pub unmappable_lines: u32,
     /// 長すぎる行があり、検査を打ち切った (その行から後ろは検査していない)。v0.4 では ISO-2022-JP だけ。
     pub incomplete: bool,
+    /// 保持方式の状態 (03 §8.7.1、v0.4)。検査器は決めない (既定の `NotApplicable` のまま返す)。読込のジョブが記録を文書の
+    /// 表にして照合した結果で決める。上の 4 つの意味は変えない。
+    pub preserve: PreserveStatus,
+}
+
+/// 保持方式の状態 (03 §8.7.1 の「『保持なし』と『保持できなかった箇所がある』」)。記録そのものは文書が持ち
+/// (eve-core の `PreservedMap`)、ここは要約だけを持つ。
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum PreserveStatus {
+    /// 対象外: 区分 A の文字コード (UTF-8 / UTF-16)・新規文書・別の文字コードで保存した後など、元のバイト列を覚える
+    /// 必要が無い文書。
+    #[default]
+    NotApplicable,
+    /// 保持が効いている (記録が 0 件のこともある)。`unpreserved` が 0 でなければ「保持できなかった箇所がある」
+    /// (ISO-2022-JP の、ASCII 状態で始まらない・終わらない差のある行の数)。
+    Active {
+        /// 保持できなかった箇所の数。
+        unpreserved: u32,
+    },
+    /// 保持なし (記録を全部捨てた。v0.3 と同じ扱いに落ちる)。
+    Unavailable(NoPreserveReason),
+}
+
+impl PreserveStatus {
+    /// 保持が効いていて、保持できなかった箇所も無い。
+    #[must_use]
+    pub fn is_complete(&self) -> bool {
+        matches!(self, PreserveStatus::Active { unpreserved: 0 })
+    }
+}
+
+/// 「保持なし」の理由 (03 §8.7.1 の (a)〜(e) と、不正バイトを含む ISO-2022-JP)。
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum NoPreserveReason {
+    /// 記録が上限を超えた (a)、または記録を集めるメモリを確保できなかった (e) (`PreserveState::Overflow`)。
+    Overflow,
+    /// 検査を打ち切った (b。ISO-2022-JP の 4 MiB を超える行)。
+    Incomplete,
+    /// 読込の完了時の照合に失敗した (c)。
+    VerifyFailed,
+    /// 緊急退避・スワップから復旧した (d)。
+    Recovered,
+    /// 不正バイトを含む ISO-2022-JP の文書 (記録を集めない。ISO-2022-JP では保存しない、03 §8.3)。
+    InvalidBytes,
+    /// 違う文字コードで保存したときに、履歴に残っていた記録を捨てた。その後に Undo で前の文字コードの書式に戻った
+    /// (再読込・復旧の Undo) 文書は、元のバイト列を持っていない。
+    Discarded,
+}
+
+impl PreserveStatus {
+    /// 記録を捨てた後の状態。保持が効いていた (`Active`) なら「保持なし (捨てた)」にし、ほかはそのまま。
+    #[must_use]
+    pub fn discarded(self) -> PreserveStatus {
+        match self {
+            PreserveStatus::Active { .. } => {
+                PreserveStatus::Unavailable(NoPreserveReason::Discarded)
+            }
+            other => other,
+        }
+    }
 }
 
 impl RoundtripSummary {

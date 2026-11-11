@@ -640,10 +640,21 @@ impl EditorState {
                 if let Some(doc) = self.docs.documents.get_mut(&doc_id) {
                     // `file.set_encoding`: 保存が成功したので新しい書式に確定する。往復の検査結果は旧文字コードのものなので捨てる
                     // (書いた内容を再エンコードすれば同じバイト列になる、03 §8.8)
+                    // 保持方式の記録 (03 §8.7.1): 違う文字コードで書いたら捨てる (状態も対象外に戻る)。同じ文字コードなら
+                    // 表と状態を残す (要約の件数は v0.3 と同じく空にする。保存の前の確認 (E2') の条件を変えないため)。
+                    // この版の保存は記録を使わず代表バイト列で書くので、同じ文字コードで書いた後の表はディスクと合わないが、
+                    // 保存で表を使うのは M22 の 6 本目からで、それまでは表を読まない
                     if let Some(f) = fmt {
+                        let same = f.encoding == doc.format.encoding;
+                        let preserve = doc.format.roundtrip.preserve;
                         doc.format.encoding = f.encoding;
                         doc.format.has_bom = f.bom;
                         doc.format.roundtrip = Default::default();
+                        if same {
+                            doc.format.roundtrip.preserve = preserve;
+                        } else {
+                            doc.clear_preserved();
+                        }
                     }
                     // 名前を付けて保存 (別のパスへ書いた) では、元のファイルに由来する読み取り専用の理由
                     // (属性・書込権限なし) を外す。書き込めた保存先の文書は編集できる (FR-116 AC-4、03 §9.6)。

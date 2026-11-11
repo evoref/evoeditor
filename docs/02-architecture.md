@@ -1588,7 +1588,7 @@ enum JobResult {                   // #[non_exhaustive]
     NewFile      { interrupted_save: Option<InterruptedSave> /*§4.5。残っていた保存中フラグ*/,
                    parent_missing: Option<FsPath> /*親フォルダが無い (FsErrorDetail::ParentMissing の dir)。msg.open.parent_missing を出す (03 §9.2)*/ }, // パスが存在しない
     Complete     { text: Text, format: TextFormat, meta: FileMeta, stamp: FileStamp, changed_during_load: bool,
-                   preserved: PreservedMap /*v0.4: 保持方式の記録。ジョブが文書の位置に直し、読込の完了時の照合を済ませたもの (03 §8.7.1)*/,
+                   preserved: PreservedMap /*v0.4: 保持方式の記録。ジョブが文書の位置に直し、読込の完了時の照合を済ませたもの (03 §8.7.1)。照合に失敗したら空で、状態は format.roundtrip.preserve (03 §8.1)*/,
                    detected: ReadOnlyReasons /*ジョブが内容から判定した理由。read_only_requested で確認を省いたときの Binary / InvalidBytes /
                                                StatefulEncodingWithInvalidBytes 等。どの理由をジョブが入れるかは 03 §9.2 / §9.6*/,
                    notes: OpenNotes /*{ redetected: Option<Encoding> (判定をやり直した結果), guess_unsupported: Option<&str> (対応しない文字コードと推定した名前、03 §8.2) }*/,

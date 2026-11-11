@@ -21,7 +21,8 @@
 //!   間の変わっていない範囲も一緒に置き換えるノード (03 §12.5 の粗い逆変換、文書全体の置き換え) は、`affected_hull` と
 //!   `spans_in` で編集の前の記録を取り出しておき、Undo で `replace_range` で入れ替える。
 //!
-//! 5 本目 (`Document` への組み込み) までは製品から呼ばない。
+//! 文書は表を `Document` のフィールドに持つ (03 §8.7.1 の「集める側と持つ側」)。更新は `Document::apply` と Undo / Redo の
+//! 適用の 2 か所だけで行う (03 §6.5 手順 4)。
 
 use std::fmt;
 use std::sync::Arc;
@@ -141,7 +142,7 @@ impl SpanRef<'_> {
 
 /// 表を作れなかった・表が不変条件を満たさない理由。本文を含めない (ログに残してよい)。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct PreservedError {
+pub struct PreservedError {
     /// 記録の番号 (作るときは `PreservedRecords.records` の番号、検査では表の昇順の番号)。
     pub(crate) index: usize,
     pub(crate) kind: PreservedErrorKind,
@@ -550,7 +551,7 @@ enum Rule {
 /// 文書が持つ、保持方式の記録の表 (03 §8.7.1)。範囲の昇順で、重ならない (長さ 0 の記録は、前の記録の終わりと同じ位置に
 /// あってよい)。
 #[derive(Clone, Default)]
-pub(crate) struct PreservedMap {
+pub struct PreservedMap {
     slots: Arc<Vec<Slot>>,
     count: usize,
     bytes: usize,
@@ -667,17 +668,23 @@ impl PreservedMap {
     }
 
     /// 件数。
-    pub(crate) fn len(&self) -> usize {
+    pub fn len(&self) -> usize {
         self.count
     }
 
-    pub(crate) fn is_empty(&self) -> bool {
+    /// 記録が無い。
+    pub fn is_empty(&self) -> bool {
         self.count == 0
     }
 
     /// 元のバイト列の合計のバイト数。
-    pub(crate) fn total_bytes(&self) -> usize {
+    pub fn total_bytes(&self) -> usize {
         self.bytes
+    }
+
+    /// 記録の範囲と理由を昇順に走査する (試験と調べもの用。元のバイト列は出さない)。
+    pub fn ranges(&self) -> impl Iterator<Item = (ByteRange, PreserveReason)> + '_ {
+        self.iter().map(|r| (r.range, r.reason))
     }
 
     /// 範囲の昇順の走査。
@@ -998,7 +1005,7 @@ impl PreservedMap {
     /// # Errors
     ///
     /// 最初に見つけた食い違いの記録の番号と理由。
-    pub(crate) fn check(&self, text: &dyn TextRead, enc: Encoding) -> Result<(), PreservedError> {
+    pub fn check(&self, text: &dyn TextRead, enc: Encoding) -> Result<(), PreservedError> {
         self.check_structure()?;
         let mut buf = Scratch::default();
         for (index, r) in self.iter().enumerate() {
@@ -1232,3 +1239,6 @@ mod tests;
 
 #[cfg(test)]
 mod props;
+
+#[cfg(test)]
+mod doc_props;

@@ -170,6 +170,7 @@ impl EditorState {
             JobResult::Complete {
                 text,
                 format,
+                preserved,
                 meta: _,
                 stamp,
                 changed_during_load,
@@ -181,7 +182,7 @@ impl EditorState {
                 let lossy = format.roundtrip.lossy_lines;
                 let encoding = format.encoding;
                 let long_lines = format.long_lines;
-                let mut d = Document::from_loaded(text, format);
+                let mut d = Document::from_loaded(text, format, preserved);
                 d.path = Some(path.clone());
                 d.disk_stamp = Some(stamp);
                 d.read_only = detected;

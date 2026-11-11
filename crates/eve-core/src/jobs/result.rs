@@ -4,7 +4,7 @@ use eve_encoding::{Encoding, UnsupportedBom};
 use eve_text::Text;
 use eve_view::JobId;
 
-use crate::document::{ReadOnlyReasons, TextFormat};
+use crate::document::{PreservedMap, ReadOnlyReasons, TextFormat};
 use crate::io::fs::{FileMeta, FileStamp, FsError, InterruptedSave, RecoveryDirEntry, SaveReport};
 use crate::io::fspath::FsPath;
 
@@ -54,6 +54,10 @@ pub struct JobOutput {
 /// ジョブの結果 (02 §4.4)。結果が属するジョブは [`JobOutput`] が持つ。受け取る側は投入時の Revision で古い結果を捨てる (ADR-0020)。
 #[derive(Debug)]
 #[non_exhaustive]
+#[allow(
+    clippy::large_enum_variant,
+    reason = "読込の完了 (`Complete`) は 1 つのジョブで 1 回だけ運ぶ。v0.4 で保持方式の状態と表が増えて閾値を超えたが、箱に入れても得が無い"
+)]
 pub enum JobResult {
     /// `Metadata` の結果。
     Meta {
@@ -66,8 +70,10 @@ pub enum JobResult {
     Complete {
         /// 読み込んだ本文。
         text: Text,
-        /// 判定した形式 (文字コード・BOM・改行コードなど)。
+        /// 判定した形式 (文字コード・BOM・改行コードなど)。保持方式の状態は `format.roundtrip.preserve`。
         format: TextFormat,
+        /// 保持方式の記録の表 (03 §8.7.1、02 §9.3)。ジョブが本文と照合済み (照合に失敗したら空で、状態は「保持なし」)。
+        preserved: PreservedMap,
         /// 読んだファイルの属性。
         meta: FileMeta,
         /// 読んだ時点の Stamp。
