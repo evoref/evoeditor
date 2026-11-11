@@ -263,7 +263,7 @@ impl EditorState {
                 ..
             } => {
                 let encoding = format.encoding;
-                let mut d = Document::from_text(text, format);
+                let mut d = Document::from_loaded(text, format);
                 d.path = Some(path.clone());
                 d.disk_stamp = Some(stamp);
                 d.read_only = detected;

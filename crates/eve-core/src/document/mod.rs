@@ -15,8 +15,8 @@ mod transaction;
 
 pub use doc::{Applied, AppliedTx, ApplyError, DisplaySettings, Document};
 pub use format::{
-    EolStats, FormatChange, FormatState, LONG_LINE_THRESHOLD, LoadState, ReadOnlyReason,
-    ReadOnlyReasons, TextFormat, count_long_lines,
+    EolStats, FormatChange, FormatState, LONG_LINE_THRESHOLD, LineStatsScanner, LoadState,
+    ReadOnlyReason, ReadOnlyReasons, TextFormat, count_long_lines,
 };
 pub use history::{HistoryStep, NodeId, RecordOutcome, UndoBudget, UndoHistory};
 pub use transaction::{Origin, Transaction, TransactionMeta, UndoGroupHint};
