@@ -807,13 +807,14 @@ impl FileSystem for MemFs {
         })
     }
 
-    /// 直接上書き: 既存のファイルの内容をその場で置き換える (`file_id` と `nlink` は保つ)。バックアップは持たない
+    /// 直接上書き: 既存のファイルの内容をその場で置き換える (`file_id` と `nlink` は保つ)。バックアップは持たない。
+    /// 供給された内容の長さが `len` と違えば、何も書かずに `InPlaceFailed` を返す。
     /// (`fail_next(WriteInPlace, BackupFailed)` で事前バックアップの失敗を注入できる)。
     fn write_in_place(
         &self,
         path: &FsPath,
         data: &mut dyn ReadChunks,
-        _len: u64,
+        len: u64,
         opts: &SaveOptions,
         _cancel: &eve_core::CancelToken,
     ) -> Result<SaveReport, FsError> {
@@ -840,6 +841,11 @@ impl FileSystem for MemFs {
                 Ok(None) => break,
                 Err(_) => return Err(FsError::new(FsErrorKind::SourceFailed)),
             }
+        }
+        // 実物 (eve-platform) は、乾式走査で求めた長さ `len` のとおりに書けなかったら失敗にする (途中まで書き換わっている)。
+        // ここでは何も書かずに同じ種類の失敗を返す (呼び出し側の長さの見積もりの誤りを、試験で見つけるため)
+        if buf.len() as u64 != len {
+            return Err(FsError::new(FsErrorKind::InPlaceFailed { backup: None }));
         }
         let mtime = self.now_time(&mut s);
         let entry = Entry {
