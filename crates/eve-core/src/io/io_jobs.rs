@@ -12,7 +12,7 @@ use eve_encoding::{
 use eve_text::{ByteRange, LineEnding, Snapshot, TextBuilder, TextRead};
 use eve_view::JobId;
 
-use crate::document::{EolStats, ReadOnlyReason, ReadOnlyReasons, TextFormat};
+use crate::document::{LineStatsScanner, ReadOnlyReason, ReadOnlyReasons, TextFormat};
 use crate::io::fs::{
     ChunkError, Expect, FileKind, FileStamp, FsError, FsErrorDetail, FsErrorKind, ReadChunks,
     SaveOptions,
@@ -179,6 +179,11 @@ fn open_inner(
     let limit = meta.len.saturating_add(read_slack(meta.len));
     let mut read_total: u64 = 0;
     let mut builder = TextBuilder::new();
+    // 改行の統計と長大行の数は、復号した文字列を木に足すときに一緒に数える (読込の後に全文を走査し直さない。PRF-17)
+    let long_line_threshold = opts
+        .long_line_threshold
+        .unwrap_or(crate::document::LONG_LINE_THRESHOLD);
+    let mut line_stats = LineStatsScanner::new(long_line_threshold);
     let det_opts = DetectOptions::default().with_forced(opts.forced);
     let mut plan: Option<Plan> = None;
     let mut decoder: Option<Decoder> = None;
@@ -314,6 +319,7 @@ fn open_inner(
         }
         dec.decode(chunk, false, &mut out);
         builder.append(&out);
+        line_stats.feed(&out);
         // 往復の検査は元のバイト列 (BOM を除く) で行う
         let body = if first {
             &chunk[pl.bom_len.min(chunk.len())..]
@@ -341,6 +347,7 @@ fn open_inner(
     out.clear();
     dec.decode(&[], true, &mut out);
     builder.append(&out);
+    line_stats.feed(&out);
     chk.feed(&[], true);
     let (enc, binary_confirmed, guess_unsupported) = plan
         .as_ref()
@@ -357,8 +364,9 @@ fn open_inner(
         });
 
     // 形式: 文字コード・BOM・不正バイト・改行の多数派 (同数・改行なしは `file.default_line_ending`)
-    let eol_stats = EolStats::count(&text);
-    let mut format = TextFormat {
+    // 閾値 (既定 1 MiB) を超える行は char 近似モードで扱う (編集できる。NFR-106、03 §11.5.1)
+    let (eol_stats, long_lines) = line_stats.finish();
+    let format = TextFormat {
         encoding: enc,
         has_bom: dec.has_bom(),
         default_eol: eol_stats.majority(opts.default_eol.unwrap_or(LineEnding::Lf)),
@@ -366,13 +374,9 @@ fn open_inner(
         invalid_bytes: dec.invalid_bytes(),
         pua_escape: dec.pua_mode(),
         roundtrip: chk.finish(),
-        long_line_threshold: opts
-            .long_line_threshold
-            .unwrap_or(crate::document::LONG_LINE_THRESHOLD),
-        long_lines: 0,
+        long_line_threshold,
+        long_lines,
     };
-    // 閾値 (既定 1 MiB) を超える行は char 近似モードで扱う (編集できる。NFR-106、03 §11.5.1)
-    format.long_lines = crate::document::count_long_lines(&text, format.long_line_threshold);
     let mut detected = opts.pending;
     if meta.readonly {
         detected.insert(ReadOnlyReason::FileAttribute);

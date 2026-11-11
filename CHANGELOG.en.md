@@ -14,6 +14,7 @@ The Japanese version ([CHANGELOG.md](CHANGELOG.md)) is authoritative. Both are u
 ### Changed
 
 - **Faster regular-expression search, and faster case-insensitive search for some words**: on large files with many lines, the per-line setup cost is reduced. On a 100 MB file, a full scan with a regular expression that matches rarely went from about 1.5 s to about 0.1 s (measured on a development machine). Regular expressions that start with a character class, such as `\d+`, went from about 4.5 s to about 0.2 s, helped by a change to how the regular-expression engine is configured. Search results are unchanged.
+- **Large files open faster**: the editor no longer re-reads the whole text after loading to count line endings and long lines; it counts them while loading. On a 100 MB file, the time to finish opening dropped by about 30% (measured on a development machine).
 
 ### Fixed
 
