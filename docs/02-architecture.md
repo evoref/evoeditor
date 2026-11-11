@@ -124,7 +124,7 @@ flowchart LR
 |---|---|---|---|
 | 1 | core はヘッドレスで、端末/OS API に依存しない | [ADR-0002](10-decisions.md#adr-0002-core--frontend-の厳密分離) | 確定 |
 | 2 | Cargo workspace を Foundations / Core / Host / Frontends・Services / Platform / bin に分割。`eve-encoding` と `eve-host` を独立 crate にする | [ADR-0003](10-decisions.md#adr-0003-cargo-workspace-と-crate-分割) | 確定 |
-| 3 | テキストは ropey を `TextStorage` 抽象越しに使う | [ADR-0004](10-decisions.md#adr-0004-テキストバッファのデータ構造) | 条件付き確定 (S-02) |
+| 3 | テキストは ropey を `TextStorage` 抽象越しに使う | [ADR-0004](10-decisions.md#adr-0004-テキストバッファのデータ構造) | 確定 (S-02 の最終判定) |
 | 4 | TUI は ratatui + crossterm | [ADR-0005](10-decisions.md#adr-0005-tui-ライブラリ) | 条件付き確定 (S-06 / S-07) |
 | 5 | 単一所有のメインループ + 固定 2 本の std スレッドワーカー。受信口は上限なしで生産側がまとめる。async (tokio) は LSP/AI の内側に閉じ込める | [ADR-0006](10-decisions.md#adr-0006-スレッドモデルと-async-境界) | 確定 |
 | 6 | 全操作を名前空間付き CommandId + 型付き引数で表現し、呼び出し元と権限を照合する | [ADR-0007](10-decisions.md#adr-0007-コマンド駆動設計) | 確定 |
@@ -138,7 +138,7 @@ flowchart LR
 | 14 | 緊急退避は `EmergencySnapshot` (文書ごとのスロット) から受信スレッドが直ちに書く | [ADR-0023](10-decisions.md#adr-0023-緊急退避は-emergencysnapshot-から別スレッドで書く) | 条件付き確定 (S-11) |
 | 15 | 既定テーマは TrueColor。縮退段 (256 / 16 / mono) の Style を事前に計算し、core が段を選んで Style を解決する (v0.1 の組込みテーマが明示するのは truecolor と mono の 2 段で、256 / 16 は truecolor の値からの自動近似。01 FR-513、07 §8) | [ADR-0027](10-decisions.md#adr-0027-既定テーマは-truecolor縮退段を明示する) | 確定 |
 | 16 | CommandId カタログと設定キー・既定値の正本は 07 | [ADR-0025](10-decisions.md#adr-0025-commandid-カタログと設定キーの正本は-07) | 確定 |
-| 17 | レガシー文字コードの保存は encode→decode 照合 (v0.1) + 復号専用文字の保持方式 (v0.4) | [ADR-0026](10-decisions.md#adr-0026-レガシー文字コード保存の黙示置換検出と保持方式) | 条件付き確定 (S-01) |
+| 17 | レガシー文字コードの保存は encode→decode 照合 (v0.1) + 復号専用文字の保持方式 (v0.4) | [ADR-0026](10-decisions.md#adr-0026-レガシー文字コード保存の黙示置換検出と保持方式) | 確定 (S-01 の判定) |
 | 18 | リリース最優先の段階リリース。公開面は v0.1 で決め、内部構造は最小にする | [ADR-0028](10-decisions.md#adr-0028-リリース最優先の段階リリース) | 確定 |
 | 19 | `eve-host` + `Frontend` trait。境界型は `#[non_exhaustive]` + 契約版 + 凍結段階。frontend-parity CI (ヘッドレス参照レンダラと TUI を比較。v0.1 はヘッドレス参照レンダラまでで、Frame JSON ゴールデンと parity の CI ジョブは TUI 完成時のレビューで作る) | [ADR-0030](10-decisions.md#adr-0030-eve-host-と-frontend-trait境界型の契約と凍結段階) | 確定 (ユーザー回答) |
 | 20 | 安定性・性能のための簡略化と危険箇所の是正 | [ADR-0031](10-decisions.md#adr-0031-安定性性能のための簡略化と危険箇所の是正) | 確定 |
@@ -2079,7 +2079,7 @@ sensitive = false                     # 任意 (無ければ false)。秘密フ�
 
 ## 13. 主要クレート選定
 
-> 個々のクレートの採否は、ADR で決めたもの (ropey = ADR-0004、ratatui + crossterm = ADR-0005 はいずれも条件付き確定。encoding_rs = ADR-0009、TOML = ADR-0011、thiserror / anyhow / tracing = ADR-0012 は確定) を除いて **提案中**。バージョンは採用確定時点の最新安定版を `Cargo.lock` で固定する。P0 スパイクと実装中の計測で起動時間・バイナリサイズ・Windows 動作を確認する。v0.1 の目標は **推移的依存 ≤ 90 (`x86_64-pc-windows-msvc`、既定 feature、normal 依存。Linux は出荷する版で加える)、C を含む依存 0、バイナリ ≤ 8 MB** (NFR-205 / NFR-207。いずれも Should で、v0.1 のリリースゲートは C を含む依存 0 だけ。依存数とサイズは報告する、08 §2.2)。
+> 個々のクレートの採否は、ADR で決めたもの (ropey = ADR-0004 は確定、ratatui + crossterm = ADR-0005 は条件付き確定。encoding_rs = ADR-0009、TOML = ADR-0011、thiserror / anyhow / tracing = ADR-0012 は確定) を除いて **提案中**。バージョンは採用確定時点の最新安定版を `Cargo.lock` で固定する。P0 スパイクと実装中の計測で起動時間・バイナリサイズ・Windows 動作を確認する。v0.1 の目標は **推移的依存 ≤ 90 (`x86_64-pc-windows-msvc`、既定 feature、normal 依存。Linux は出荷する版で加える)、C を含む依存 0、バイナリ ≤ 8 MB** (NFR-205 / NFR-207。いずれも Should で、v0.1 のリリースゲートは C を含む依存 0 だけ。依存数とサイズは報告する、08 §2.2)。
 
 ### 13.0 依存追加の評価基準
 
@@ -2118,7 +2118,7 @@ sensitive = false                     # 任意 (無ければ false)。秘密フ�
 | **encoding_rs** | WHATWG 準拠、高速 (Firefox)、Shift_JIS/EUC-JP/ISO-2022-JP 等 | (1) UTF-16 への **エンコード** は非対応 → 自前。(2) **エンコーダは表現不能文字を常にエラーにするわけではない** (下記)。(3) EUC-JP の JIS X 0212 (補助漢字) と Shift_JIS (CP932) の外字 (0xF040〜0xF9FC → U+E000〜U+E757) は **復号専用** でエンコードできない。外字は `eve-encoding` が復号の式の逆で自前に符号化して往復させる (確定 (ユーザー回答)、OQ-206、03 §8.7 の「CP932 の外字」)。JIS X 0212 は区分 B のまま | **採用** (ただし単独では保存の安全を保証できないため、下記の照合と保持方式を併用) |
 | **chardetng** | 文字コード推定 (Firefox 由来、日本語レガシー対応)。1.0 で `Iso2022JpDetection` 等の API | 推定は確率的 → BOM・UTF-8 妥当性を優先し、推定は最後。07 の `detection_candidates` は推定結果の事後フィルタ | **採用** |
 
-**レガシー文字コード保存の方式 (ADR-0026、条件付き確定 (S-01))**: WHATWG の Shift_JIS / EUC-JP エンコーダは `¥` (U+00A5) を 0x5C、`‾` (U+203E) を 0x7E、`−` (U+2212) を全角マイナス相当に **黙って写像** し、ISO-2022-JP エンコーダは半角カナを全角カナに **黙って変換** する。これらは `Unmappable` を返さないため、「Unmappable が返れば警告」だけでは FR-112 (黙って置換しない) と P1 を満たせない。そこで encoding_rs だけに頼らず次の段で守る。
+**レガシー文字コード保存の方式 (ADR-0026、確定)**: WHATWG の Shift_JIS / EUC-JP エンコーダは `¥` (U+00A5) を 0x5C、`‾` (U+203E) を 0x7E、`−` (U+2212) を全角マイナス相当に **黙って写像** し、ISO-2022-JP エンコーダは半角カナを全角カナに **黙って変換** する。これらは `Unmappable` を返さないため、「Unmappable が返れば警告」だけでは FR-112 (黙って置換しない) と P1 を満たせない。そこで encoding_rs だけに頼らず次の段で守る。
 
 | 段 | 版 | 方式 | 効果 |
 |---|---|---|---|
