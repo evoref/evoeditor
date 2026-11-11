@@ -168,7 +168,7 @@ evoeditor は Rust 製のテキストエディタである。最初は「nano �
 | ヒントバー | hint bar | 主要操作のキーを常時表示する行 (FR-504) |
 | オーバーレイ | overlay | 編集面の上に重ねる一時 UI (パレット、プロンプト、確認、補完、差分承認)。`OverlayModel`。型・描画・設計の文脈ではこの語を使う |
 | ダイアログ | dialog | オーバーレイのうち、利用者に確認・選択・入力を求めるもの (`OverlayModel::Confirm` / `Prompt`。例: 確認ダイアログ、警告ダイアログ)。利用者向けの文言・説明と、確認の種類を指すときに使う。パレット・補完・差分承認はダイアログと呼ばない |
-| パネル | panel | 編集面の横/下に常駐する UI (v0.4 以降: ファイルツリー、検索結果、AI チャット)。core は希望サイド・サイズのみ、配置は frontend |
+| パネル | panel | 編集面の横/下に常駐する UI (v0.5 以降: ファイルツリー、検索結果、AI チャット)。core は希望サイド・サイズのみ、配置は frontend |
 | 装飾 | `Decoration` | 文書テキストに重ねる表示情報 (ハイライト、診断の下線、検索一致) |
 | 仮想テキスト | virtual text | 文書に存在しないが表示されるテキスト (AI のゴーストテキスト、インレイヒント) |
 | 色深度 / 縮退段 | color depth / tier | 端末が表示できる色の段 (TrueColor / 256 / 16 / 無色)。テーマは各ロールに 4 段の表現を持ち、core が `Capabilities.color_depth` の段で Style を解決する (ADR-0027)。v0.1 の組込みテーマは truecolor と無色を明示し、256 / 16 は自動近似 |
@@ -190,7 +190,7 @@ evoeditor は Rust 製のテキストエディタである。最初は「nano �
 | 緊急スナップショット | `EmergencySnapshot` | パニック・シグナル・コンソールクローズ時に別スレッドから読める、未保存 Document の最新 Snapshot を文書ごとのスロットに持つもの。Host が lock-free に公開する (ADR-0023) |
 | 緊急退避 | emergency save | 異常終了時に EmergencySnapshot を `recovery/` に書くこと。シグナルの受信スレッドが直ちに書く。本文は改行・エスケープを変えず、形式情報は版付きの manifest に記録 |
 | スワップ | swap | 未保存内容を定期的に書き出し、SIGKILL・電源断などの後に復旧できるようにするもの (03 §10.2) |
-| ポータブルモード | portable mode | 実行ファイル隣の `data/` に全ディレクトリを向ける起動形態 (v0.4 Could) |
+| ポータブルモード | portable mode | 実行ファイル隣の `data/` に全ディレクトリを向ける起動形態 (v0.6 Could、05 §7.4) |
 | 互換性マトリクス | compatibility matrix | 端末 × OS × 機能の対応表 (05)。リリース前に記入 |
 | 基準環境 / 最低環境 | reference / minimum environment | 01 §3.0 の計測条件 |
 | 基準機 / 環境 ID | reference machine / `ENV-W1` | 数値目標を判定する実機 (v0.1 は Windows 11 の開発 PC 1 台)。計測の記録には機種名ではなく環境 ID (`ENV-W1` 等) だけを書く (01 §3.0) |

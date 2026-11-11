@@ -410,7 +410,7 @@ v0.1 は設定キーを増やさない。縮退は端末側の判定 (A1・A2) �
 | ジョブ結果 (検索件数、読込進捗、ハイライト v0.6)、AI ストリーミング (v1.L) | 最小間隔 16 ms (≒60 fps) でまとめる。直前の描画から 16 ms 未満なら Host が待ちの期限に「次回描画」(直前の描画 + 16 ms) を加えて待つ (02 §9.2) |
 | 読込進捗表示 | 最小間隔 100 ms (数字が読める速度で十分。ジョブ側も進捗を 10 Hz 以下で送る、03 §9.2) |
 
-**適応的ペーシング (遅い端末・SSH 対策、v0.2〜v0.4)**: 出力 `write+flush` の所要時間を計測し、直近の平均が 16 ms を超える場合は非入力契機の最小間隔を「計測値 × 2」(上限 200 ms) に広げる。v0.1 Must の根拠が無いため、OQ-66 の計測 (v0.1 中) を見て v0.2〜v0.4 で導入する。入力契機の描画は v0.1 でも、前回の書込が終わる前に次が溜まった場合は自然に合体される (メインスレッドで書くため)。
+**適応的ペーシング (遅い端末・SSH 対策。版は未定)**: 出力 `write+flush` の所要時間を計測し、直近の平均が 16 ms を超える場合は非入力契機の最小間隔を「計測値 × 2」(上限 200 ms) に広げる。v0.1 Must の根拠が無く、導入の根拠にする計測 (遅い端末・SSH での書込の所要時間。OQ-66) も v0.3 までに取れていないので、**v0.4 までには入れない**。遅い端末での実測で必要が出た版で導入する (08 §2.5)。入力契機の描画は v0.1 でも、前回の書込が終わる前に次が溜まった場合は自然に合体される (メインスレッドで書くため)。
 
 > 書込がブロックする間メインスレッドは止まるが、入力スレッドは読み続けて inbox に溜め、次の反復で一括処理されるため入力は失われない。それでも書込が常に長い環境 (極端に遅い回線) では「出力専用スレッド + 最新フレーム優先」が有効になり得る。v0.1 では採らず、計測で判断する ([OQ-66](#18-未決事項))。シグナルで終了するときにメインが書込でブロックしていても退避が走るよう、退避はシグナルスレッドが直接行う (§14.5)。
 
@@ -553,7 +553,7 @@ NFR-503 の主対策は core (Frame 生成前の無害化、[02 §8.2](02-archit
 - 判定は環境変数だけで行い、端末に問い合わせない (T3)。
 - **`WT_SESSION` の誤判定 (注意)**: `WT_SESSION` は Windows Terminal から起動した子プロセスに引き継がれるため、Windows Terminal から別ウィンドウの conhost を起動した場合や、Windows Terminal 内から起動した VS Code の統合端末 (`TERM_PROGRAM=vscode` も立つ) でも立ち得る。誤判定の影響は、色深度が truecolor になる (conhost・VS Code とも 24 ビット色は描ける見込みで実害は小さい) ことと、§7.3a の横取り表を Windows Terminal の行で引く (横取り扱いが多めになるだけで安全側) こと。順 4 では `TERM_PROGRAM=vscode` を `WT_SESSION` より先に見て VS Code を区別する。補助判定 (親プロセスが `WindowsTerminal.exe` / `OpenConsole.exe` か、`GetConsoleWindow` と ConPTY の有無) を併用するかは S-07 / S-06 の結果で検討する (提案、[OQ-183](#18-未決事項))。
 
-`TERM=dumb`、stdin が端末でなく `-` も渡されていない場合 (例: cron から起動)、または描画先のコンソール/端末を得られない場合 (Unix で `/dev/tty` を開けない、Windows で `CONOUT$` を開けない) は、`Frontend::init` がエラーを返し、TUI を起動せずに `stderr.not_a_terminal` (v0.1 は日本語の行だけ。英語の行の併記は v0.2、§15.2) を stderr に出し、終了コード 5 で終了する (07 §18.4)。**stdout だけが端末でない場合 (`evoeditor > log`) はエラーにしない**: 描画先を常に端末 (Unix は `/dev/tty`、Windows は `CONOUT$`) とし、stdout は `--stdout` (v0.5) のためだけに使う (07 §18.5、05 §9.1)。Windows で VT モードを有効にできないコンソールでは `stderr.unsupported_console` を出す (終了コードは同じ 5、05 §9.1)。標準入力からの読込 `cmd | evoeditor -` (FR-120、v0.4) では、Unix では `/dev/tty`、Windows では `CONIN$` を入力に使う。crossterm の `use-dev-tty` 相当。詳細 05。
+`TERM=dumb` の場合、または描画先・入力のコンソール/端末を得られない場合 (Unix で `/dev/tty` を開けない、Windows で `CONOUT$` / `CONIN$` を開けない。例: cron から起動) は、`Frontend::init` がエラーを返し、TUI を起動せずに `stderr.not_a_terminal` (v0.1 は日本語の行だけ。英語の行の併記は v0.2、§15.2) を stderr に出し、終了コード 5 で終了する (07 §18.4)。**stdout だけが端末でない場合 (`evoeditor > log`) はエラーにしない**: 描画先を常に端末 (Unix は `/dev/tty`、Windows は `CONOUT$`) とし、stdout は `--stdout` (v0.5) のためだけに使う (07 §18.5、05 §9.1)。**stdin だけが端末でない場合 (`xargs evoeditor`、`evoeditor file < /dev/null` 等) もエラーにしない**: キー入力は常に端末 (Unix は `/dev/tty`、Windows は `CONIN$`) から読み、`-` が無ければ stdin は読まない (07 §18.5)。Windows で VT モードを有効にできないコンソールでは `stderr.unsupported_console` を出す (終了コードは同じ 5、05 §9.1)。標準入力からの読込 `cmd | evoeditor -` (FR-120、v0.4) では、Unix では `/dev/tty`、Windows では `CONIN$` を入力に使う。crossterm の `use-dev-tty` 相当。詳細 05。
 
 ### 5.3 問い合わせ応答の解析問題
 
@@ -1796,7 +1796,7 @@ v0.2 以降の診断 (名前だけを予約し、文言はその版で言語フ�
 | `stderr.recovery.failed` | 退避できなかった | Unsaved changes could NOT be saved: {reason} | 保存されていない変更を退避できませんでした: {reason} |
 | `stderr.recovery.secret` | 秘密を含み得るファイルを退避した | The saved changes include files that may contain secrets. Delete {dir} when you no longer need it. | 退避した中に秘密を含むかもしれないファイルがあります。要らなくなったら {dir} を削除してください。 |
 | `stderr.recovery.next` | 退避した後の案内 (v0.1 の復旧は「起動時に退避の場所を示し、利用者が手で開く」、02 §11.2.1・上の `msg.recovery.found`) | (v0.2) You can recover them the next time you start evoeditor. | (v0.1) 次に evoeditor を起動したときに退避の場所を表示します。そのファイルを開いて内容を確かめてください。 (v0.2 の復旧 UI から) 次に evoeditor を起動したときに取り戻せます。 |
-| `stderr.not_a_terminal` | stdin が端末でなく `-` も無い・`TERM=dumb`・描画先の端末を得られない (Unix で `/dev/tty`、Windows で `CONOUT$` を開けない) (起動前、§5.2a、05 §9.1。終了コード 5。stdout だけが端末でない場合は出さない) | evoeditor must be run in a terminal. | evoeditor は端末の中で起動してください。 |
+| `stderr.not_a_terminal` | `TERM=dumb`・描画先や入力の端末を得られない (Unix で `/dev/tty`、Windows で `CONOUT$` / `CONIN$` を開けない) (起動前、§5.2a、05 §9.1。終了コード 5。stdin や stdout だけが端末でない場合は出さない) | evoeditor must be run in a terminal. | evoeditor は端末の中で起動してください。 |
 | `stderr.unsupported_console` | Windows でコンソールが VT モードを受け付けない (起動前、05 §9.1。終了コード 5) | This console is not supported. Please use Windows Terminal. | この端末は非対応です。Windows Terminal をご利用ください。 |
 | `stderr.background_job` | Unix でバックグラウンドのジョブとして起動された (起動前、端末に触れずに。05 §11.3。終了コード 5。v0.2) | evoeditor cannot run as a background job. Start it in the foreground. | evoeditor はバックグラウンドのジョブでは起動できません。前面 (フォアグラウンド) で起動してください。 |
 | `stderr.quit.waiting_save` | 通常終了 (`app.quit` / `Effect::Quit`) で、端末を復元した後に置換中フラグが上がっていた (保存の完了を待つ前に Host が 1 行出す。待たずに済むときは出さない。複数の保存先があれば 1 行ずつ。02 §9.6、05 §11) | Waiting for the save to finish: {path} | 保存の完了を待っています: {path} |
@@ -1895,11 +1895,11 @@ TUI 側の版ごとの範囲。版と要件の対応の正本は 01 / 08。後�
 
 ### 17.2 v0.2 (日常の不足を埋める)
 
-複数文書とバッファ一覧・次 / 前・全保存 (FR-103)、ヘルプ画面 (FR-514、§8.6)、正規表現の検索とトグル (FR-402)、OSC 52 (§5.2)、ヒントバーの非表示と文脈の細分・チョードの続きの候補 (§8.8)、256 / 16 色の段の明示値 (候補、§12.3)、`help.*` / `file.check_external_changes` / `file.toggle_read_only` / `app.save_and_quit` / `app.quit_with_error` / `config.show_diagnostics` 等のコマンド (07 §11.6)、マウス捕捉 (FR-307、`ui.mouse` 既定 on)、置換欄の 1 件ずつの置換 (FR-403)、検索の単語単位 (FR-402)、ソフトラップの表示 (FR-506)、行操作 (FR-207) と選択範囲へのインデント (FR-208)、空白の可視化の切替の設定 `view.show_whitespace` (FR-508)、メッセージ履歴 (FR-505)、サスペンド/再開 (FR-609)、設定再読込 `config.reload` (FR-706)、kitty 拡張キーの push / pop (§6.3)、フォーカスイベント (§6.9)、which-key ポップアップ (§7.4)、端末ごとの幅補正表 (§4.7 (b))、`view.width_risky_display = "replace"` (§4.7 (d))、ユーザーキーマップ (単一ストロークの上書き) の読込、組込みテーマ `ansi` と背景を塗る `default-dark` / `default-light`、テーマファイル (FR-707)、テーマ切替 (FR-513)、パレットのファジー順位付けと最近実行順 (FR-602)、`ui.ascii_only` / `ui.alternate_screen` / `ui.bell` / `view.emoji_width` 等の設定キーの公開 (07 §5.13)、適応的ペーシング (§4.4、計測次第で v0.2〜v0.4)、スワップ復旧 UI (03 §10.3)、`+行` / `path:行:桁` 引数。macOS / Linux とその端末 (§6.4 / §7.3a の該当行) と英語 UI (起動前・パニック時の文言の英語の併記を含む) は v0.2 (確定 (ユーザー回答))。ユーザーの言語ファイルは v0.2 以降の候補 (提案中)。
+複数文書とバッファ一覧・次 / 前・全保存 (FR-103)、ヘルプ画面 (FR-514、§8.6)、正規表現の検索とトグル (FR-402)、OSC 52 (§5.2)、ヒントバーの非表示と文脈の細分・チョードの続きの候補 (§8.8)、256 / 16 色の段の明示値 (候補、§12.3)、`help.*` / `file.check_external_changes` / `file.toggle_read_only` / `app.save_and_quit` / `app.quit_with_error` / `config.show_diagnostics` 等のコマンド (07 §11.6)、マウス捕捉 (FR-307、`ui.mouse` 既定 on)、置換欄の 1 件ずつの置換 (FR-403)、検索の単語単位 (FR-402)、ソフトラップの表示 (FR-506)、行操作 (FR-207) と選択範囲へのインデント (FR-208)、空白の可視化の切替の設定 `view.show_whitespace` (FR-508)、メッセージ履歴 (FR-505)、サスペンド/再開 (FR-609)、設定再読込 `config.reload` (FR-706)、kitty 拡張キーの push / pop (§6.3)、フォーカスイベント (§6.9)、which-key ポップアップ (§7.4)、端末ごとの幅補正表 (§4.7 (b))、`view.width_risky_display = "replace"` (§4.7 (d))、ユーザーキーマップ (単一ストロークの上書き) の読込、組込みテーマ `ansi` と背景を塗る `default-dark` / `default-light`、テーマファイル (FR-707)、テーマ切替 (FR-513)、パレットのファジー順位付けと最近実行順 (FR-602)、`ui.ascii_only` / `ui.alternate_screen` / `ui.bell` / `view.emoji_width` 等の設定キーの公開 (07 §5.13)、スワップ復旧 UI (03 §10.3)、`+行` / `path:行:桁` 引数。macOS / Linux とその端末 (§6.4 / §7.3a の該当行) と英語 UI (起動前・パニック時の文言の英語の併記を含む) は v0.2 (確定 (ユーザー回答))。ユーザーの言語ファイルは v0.4 (§17.3)。適応的ペーシング (§4.4) は v0.2 では入れず、版は未定とした。
 
 ### 17.3 v0.4
 
-高コントラストテーマ (§12.5、NFR-604)、幅プローブ (§4.7 (e)、S-15)、標準入力からの読込 `evoeditor -` (FR-120、§5.2a)、Partial 読込中の表示 (03 §11.3)。
+高コントラストテーマ (§12.5、NFR-604)、幅プローブ (§4.7 (e)、S-15)、標準入力からの読込 `evoeditor -` (FR-120。入力に使う端末は §5.2a の末尾、07 §18.5)、Partial 読込中の表示 (03 §11.3)、ユーザーの言語ファイル (NFR-603、07 §17.1)。
 
 ### 17.4 v0.5 以降
 
@@ -1916,7 +1916,7 @@ TUI 側の版ごとの範囲。版と要件の対応の正本は 01 / 08。後�
 | OQ-33 | Windows の入力経路とペースト判別 | **確定 (ユーザー回答)**: Windows は自前の `WaitForSingleObject` + `ReadConsoleInputW` のループで読み (crossterm の `event::read()` は使わない。VT 入力 + 自前の VT パーサは採らない)、貼り付けはバースト検出 (1 回の読取で文字を生成する `KeyDown` が N 件以上で開始、T ms 無入力で閉じる) で `Paste` に合成する。§6.6 のバースト規則を適用。理由: crossterm では 1 回の読取の件数と無入力の間隔が分からず、バースト検出を実装できない (§4.8)。S-07 で N と T (暫定 N = 16、T = 16 ms) を実測で確定し、IME・AltGr・日本語キー・`Ctrl+Break` を確認する (§6.6) | 確定 (N・T の値は S-07 / P0 末) |
 | OQ-61 | 端末問い合わせ応答の扱い | v0.1〜v0.4 は問い合わせしない。v0.5 で必要性が出たら、応答を認識する入力パーサで扱う (Windows は `ReadConsoleInputW` の自前ループにキーイベントの列として届く応答を認識する処理、Unix は crossterm を拡張/置換したパーサ) | 裁量 / v0.5 着手前 |
 | OQ-64 | 幅危険書記素の既定表示 (`view.width_risky_display`) | `"unicode"` (そのまま表示し、行単位で再出力、§4.7)。崩れ報告の多い端末は端末種別ごとの個別既定 | 裁量 / v0.1 中 (S-06 後) |
-| OQ-66 | 出力専用スレッド | メインスレッドで書く。v0.1 の計測 (BM-103b / S-13) で書込が p99 8 ms を超える環境が対象端末 (Windows Terminal・conhost) にあれば、出力スレッド + 最新フレーム優先にする。適応的ペーシング (§4.4) の v0.2〜v0.4 での導入判断も同じ計測で | 裁量 / v0.1 中 (S-13 後) |
+| OQ-66 | 出力専用スレッド | メインスレッドで書く。v0.1 の計測 (BM-103b / S-13) で書込が p99 8 ms を超える環境が対象端末 (Windows Terminal・conhost) にあれば、出力スレッド + 最新フレーム優先にする。適応的ペーシング (§4.4) の導入の判断も同じ計測で行う (v0.4 までには入れない) | 裁量 / v0.1 中 (S-13 後) |
 | OQ-68 | 曖昧幅 = 2 と ratatui 差分の衝突 | 継続セルの明示書込で回避できるかを 08 §3 S-06 で判断し、不可なら自前差分 (ADR-0005 の退路)。曖昧幅 2 は非サポートにしない (U3 (日本語ユーザー) に不利)。自動検証は 09 §3.5 の自前仮想画面モデル | スパイク (S-06) / P0 末 |
 | OQ-180 | チョード保留中・確認ダイアログでの複数書記素の `Text` / `Paste` の扱い | 保留中は先頭の書記素だけを照合し残りは捨てる。ダイアログは複数書記素の `Text` と `Paste` をすべて捨てる (02 §7.2 K1、§6.1 / §7.4) | PO 確認 / v0.1 中 |
 | OQ-181 | 無色モードで dim だけに頼るロールの代替表現 (プレースホルダ・実行できないパレット項目・行番号) | 丸括弧・行頭の `-`・通常属性 + 区切り (§12.4)。07 §8.2 のテーマの表も合わせる | 裁量 / v0.1 中 (S-06 後) |
