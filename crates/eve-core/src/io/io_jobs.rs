@@ -416,15 +416,63 @@ fn open_inner(
     }
 }
 
-/// 保存のためのチャンク供給: Snapshot を `encoding` に符号化して `write_atomic` に渡す。
-struct SnapshotSource<'a> {
+/// 保存の符号化の流れ: Snapshot を `encoding` に符号化した出力を、1 段ずつ取り出す。
+///
+/// 乾式走査 ([`dry_run`]) と本番の書き込み ([`SnapshotSource`]) が同じものを使うので、2 つの出力は長さも内容も一致する
+/// (03 §9.3 の「乾式走査と出力長」。直接上書きは、乾式走査で求めた長さのとおりに書く)。
+struct SaveStream<'a> {
     chunks: eve_text::Chunks<'a>,
     enc: Encoder,
-    buf: Vec<u8>,
     report: EncodeReport,
-    cancel: &'a CancelToken,
     started: bool,
     finished: bool,
+}
+
+impl<'a> SaveStream<'a> {
+    fn new(
+        snapshot: &'a Snapshot,
+        encoding: Encoding,
+        bom: bool,
+        escape: EscapePolicy,
+    ) -> SaveStream<'a> {
+        SaveStream {
+            chunks: snapshot.chunks(ByteRange::all(snapshot.len_bytes())),
+            enc: Encoder::new(encoding, bom, escape),
+            report: EncodeReport::default(),
+            started: false,
+            finished: false,
+        }
+    }
+
+    /// 次の 1 段の出力を `out` に書く (`out` は先に空にする)。段が尽きたら `false`。
+    /// 出力が空の段もある (ISO-2022-JP は行末までためる)。表現不能の文字は `report` にたまる。
+    fn step(&mut self, out: &mut Vec<u8>) -> bool {
+        out.clear();
+        match self.chunks.next() {
+            Some(s) => {
+                self.enc.encode(s, out, &mut self.report);
+                self.started = true;
+            }
+            None if !self.started => {
+                // 空の文書: BOM だけを書く (なければ何も書かない)
+                self.started = true;
+                self.enc.encode("", out, &mut self.report);
+            }
+            None if !self.finished => {
+                self.finished = true;
+                self.enc.finish(out, &mut self.report);
+            }
+            None => return false,
+        }
+        true
+    }
+}
+
+/// 保存のためのチャンク供給: [`SaveStream`] の出力を `write_atomic` / `write_in_place` に渡す。
+struct SnapshotSource<'a> {
+    stream: SaveStream<'a>,
+    buf: Vec<u8>,
+    cancel: &'a CancelToken,
     /// 書いた内容のハッシュ (16 MiB 以下だけ。超えたら `None` にして計算をやめる、05 §5.5)
     hasher: Option<crate::io::content_hash::ContentHasher>,
     written: u64,
@@ -468,39 +516,17 @@ impl SnapshotSource<'_> {
         if self.cancel.is_cancelled() {
             return Err(ChunkError::Aborted);
         }
-        loop {
-            self.buf.clear();
-            match self.chunks.next() {
-                Some(s) => {
-                    self.enc.encode(s, &mut self.buf, &mut self.report);
-                    self.started = true;
-                    if !self.report.is_empty() {
-                        // 表現不能の文字: 何も書かずに止める (乾式走査で見つけているので、ここへは来ないはず)
-                        return Err(ChunkError::Aborted);
-                    }
-                    // ISO-2022-JP は行末までためるので、出力が空のチャンクがある
-                    if self.buf.is_empty() {
-                        continue;
-                    }
-                    return Ok(Some(&self.buf));
-                }
-                None if !self.started => {
-                    // 空の文書: BOM だけを書く (なければ何も書かない)
-                    self.started = true;
-                    self.enc.encode("", &mut self.buf, &mut self.report);
-                    return Ok((!self.buf.is_empty()).then_some(&self.buf[..]));
-                }
-                None if !self.finished => {
-                    self.finished = true;
-                    self.enc.finish(&mut self.buf, &mut self.report);
-                    if !self.report.is_empty() {
-                        return Err(ChunkError::Aborted);
-                    }
-                    return Ok((!self.buf.is_empty()).then_some(&self.buf[..]));
-                }
-                None => return Ok(None),
+        while self.stream.step(&mut self.buf) {
+            if !self.stream.report.is_empty() {
+                // 表現不能の文字: 何も書かずに止める (乾式走査で見つけているので、ここへは来ないはず)
+                return Err(ChunkError::Aborted);
+            }
+            // 出力が空の段は飛ばす (ISO-2022-JP は行末までためる。空の文書で BOM が無いとき)
+            if !self.buf.is_empty() {
+                return Ok(Some(&self.buf));
             }
         }
+        Ok(None)
     }
 }
 
@@ -527,22 +553,19 @@ pub(crate) struct SaveParams<'a> {
 
 /// 乾式走査: 出力は捨てて、表現不能の文字と出力のバイト長だけを集める (03 §8.6 E1・05 §4.4 手順 0。書く前に止めるため)。
 fn dry_run(p: &SaveParams<'_>, cancel: &CancelToken) -> Option<(EncodeReport, u64)> {
-    let mut enc = Encoder::new(p.encoding, p.bom, p.escape);
-    let mut report = EncodeReport::default();
+    let mut stream = SaveStream::new(p.snapshot, p.encoding, p.bom, p.escape);
     let mut sink = Vec::new();
     let mut out_len = 0u64;
-    for s in p.snapshot.chunks(ByteRange::all(p.snapshot.len_bytes())) {
+    loop {
         if cancel.is_cancelled() {
             return None;
         }
-        sink.clear();
-        enc.encode(s, &mut sink, &mut report);
+        if !stream.step(&mut sink) {
+            break;
+        }
         out_len += sink.len() as u64;
     }
-    sink.clear();
-    enc.finish(&mut sink, &mut report);
-    out_len += sink.len() as u64;
-    Some((report, out_len))
+    Some((stream.report, out_len))
 }
 
 pub(crate) fn run_save(p: SaveParams<'_>, ports: &JobPorts, cancel: &CancelToken) -> JobResult {
@@ -583,13 +606,9 @@ pub(crate) fn run_save(p: SaveParams<'_>, ports: &JobPorts, cancel: &CancelToken
         create_link_target,
     } = p;
     let mut src = SnapshotSource {
-        chunks: snapshot.chunks(ByteRange::all(snapshot.len_bytes())),
-        enc: Encoder::new(encoding, bom, escape),
+        stream: SaveStream::new(snapshot, encoding, bom, escape),
         buf: Vec::new(),
-        report: EncodeReport::default(),
         cancel,
-        started: false,
-        finished: false,
         hasher: Some(crate::io::content_hash::ContentHasher::new()),
         written: 0,
     };
@@ -639,5 +658,82 @@ pub(crate) fn run_save(p: SaveParams<'_>, ports: &JobPorts, cancel: &CancelToken
         Err(e) => JobResult::Failed {
             err: JobError::Fs(e),
         },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::jobs::SaveStrategy;
+
+    /// 本番の書き込みの供給 (`SnapshotSource`) が返す内容の全部。
+    fn written(text: &str, encoding: Encoding, bom: bool) -> Vec<u8> {
+        let t = eve_text::Text::from(text);
+        let snap = t.snapshot();
+        let cancel = CancelToken::new();
+        let mut src = SnapshotSource {
+            stream: SaveStream::new(&snap, encoding, bom, EscapePolicy::Restore),
+            buf: Vec::new(),
+            cancel: &cancel,
+            hasher: None,
+            written: 0,
+        };
+        let mut out = Vec::new();
+        while let Some(c) = src.next_chunk().unwrap() {
+            out.extend_from_slice(c);
+        }
+        out
+    }
+
+    // 直接上書きは乾式走査で求めた長さのとおりに書くので、2 つの長さは必ず同じ (空の文書の BOM、チャンクをまたぐ文書、
+    // ISO-2022-JP の行末でのまとめ書きを含む)
+    #[test]
+    fn 乾式走査の長さは本番の出力の長さと同じ() {
+        let long = "日本語の行 abc\r\n".repeat(400);
+        let docs = [
+            "",
+            "a",
+            "abc\n",
+            "日本語\nかな\n",
+            "末尾に改行なし",
+            long.as_str(),
+        ];
+        for encoding in [
+            Encoding::Utf8,
+            Encoding::Utf16Le,
+            Encoding::Utf16Be,
+            Encoding::ShiftJis,
+            Encoding::EucJp,
+            Encoding::Iso2022Jp,
+        ] {
+            for bom in [false, true] {
+                for text in docs {
+                    let t = eve_text::Text::from(text);
+                    let snap = t.snapshot();
+                    let path = FsPath::new("/w/a.txt");
+                    let p = SaveParams {
+                        path: &path,
+                        snapshot: &snap,
+                        encoding,
+                        bom,
+                        escape: EscapePolicy::Restore,
+                        expected: Expect::Any,
+                        strategy: SaveStrategy::InPlace {
+                            backup: crate::io::fs::InPlaceBackup::Required,
+                        },
+                        clear_readonly: false,
+                        create_link_target: false,
+                    };
+                    let (report, len) = dry_run(&p, &CancelToken::new()).unwrap();
+                    assert!(report.is_empty(), "{encoding:?} {bom} {text:?}");
+                    let out = written(text, encoding, bom);
+                    assert_eq!(len, out.len() as u64, "{encoding:?} bom={bom} {text:?}");
+                }
+            }
+        }
+        // 空の文書でも BOM は書く (乾式走査も数える)
+        assert_eq!(written("", Encoding::Utf8, true), b"\xEF\xBB\xBF");
+        assert_eq!(written("", Encoding::Utf16Le, true), b"\xFF\xFE");
+        assert_eq!(written("", Encoding::Utf8, false), b"");
     }
 }
