@@ -698,12 +698,12 @@ EditorState
    ├─ documents: BTreeMap<DocumentId, Document>
    │    └─ Document { text: Text /*TextStorage の実装 (eve-text)*/, path: Option<FsPath>, disk_stamp: Option<FileStamp> /*FileId は disk_stamp.file_id*/,
    │                  format: TextFormat { encoding, has_bom, default_eol, eol_stats, invalid_bytes, pua_escape,
-   │                                       roundtrip: RoundtripSummary /*v0.1: 区分 B の検出結果 (件数 + 先頭 100 箇所)、v0.4: lossy_roundtrip 表*/,
+   │                                       roundtrip: RoundtripSummary /*v0.1〜v0.3: 区分 B の検出の結果 (行の数 + 先頭 100 行の位置)。v0.4 の保持方式の記録の型は M22 の仕様で決める (03 §8.1)*/,
    │                                       long_line_threshold /*開いたときの閾値*/, long_lines /*閾値を超える行の数*/ },
    │                  revision: Revision, history: UndoHistory { .., saved: Option<NodeId> },
    │                  read_only: ReadOnlyReasons /*理由の集合 (下記)*/, attribute_released /*読み取り専用属性を解除した (03 §9.6)*/,
    │                  external_seen: Option<FileStamp> /*外部変更の確認で「無視」を選んだ状態 (03 §9.5)*/,
-   │                  load_state /*Loading | Ready | Failed。Partial は値のみ予約 (v0.4)*/, load_percent, display: DisplaySettings,
+   │                  load_state /*Loading | Ready | Failed。Partial は v0.4 で足す (名前だけを決めてある)*/, load_percent, display: DisplaySettings,
    │                  /*表示層のキャッシュ 2 つ (行の表示単位・長大行の列の索引)。v0.3 の M14 で layout 側へ移す (STR-B2)*/ }
    │                  // 編集の可否 = read_only が空 かつ load_state == Ready。読込中は load_state から導出し、理由の集合には入れない
    │                  // pending_changes (§5.3、v1.L)・language (v0.5)・decorations (v0.6) は最初の利用者の版で足す
@@ -1658,7 +1658,7 @@ enum JobError {                    // #[non_exhaustive]
 | `WriteRecovery` | `RecoveryWritten` / `Failed` | **採用** (書いた場所を `info.save.to_recovery` で示すだけで、文書の状態 (`saved`・dirty・format) は変えない)。`Failed` も採用して `msg.save.recovery_failed` を示す | **採用** (同じメッセージを示す。書いた事実と場所は文書が無くても利用者に要る) | キャンセル済み: **採用** (書いた事実は取り消せない。左の列と同じ)。ジョブ表に無い: 破棄 (終端の後) | 03 §9.7 (e) |
 | `RecoveryScan` | `RecoveryFound` / `Failed` | **採用** (ディスク側の情報で、文書の Revision に依らない)。`dirs` が空でなければ起動時の退避の案内 (04 §15.2) を 1 回示す。v0.1 の案内は退避の中身 (manifest・本文) を読まず、名前と場所だけで決める (形式の版も見ない。形式不明・新しい版の形式の案内は v0.2 の復旧 UI、§11.2.1)。キーは、`kind = Emergency` の退避 (代替の退避先のものを含む) が 1 件以上あれば `msg.recovery.found`、`Rescue` だけなら `msg.recovery.found_rescue`。`{dir}` はそのキーの kind の退避のうち名前の UTC timestamp が最も新しい 1 件のディレクトリ **自身** の絶対パス (緊急退避は `recovery/` 直下、「退避先に保存」は `recovery/rescue/` の中、代替の退避先 (`alternate = true`) はさらに別の場所で、親が揃わないため親は示さない)。`{count}` は `dirs` の全件数 (両方の kind と代替の退避先を含む)。`Failed` は `warn!` ログだけで、利用者には示さない (案内は補助で、起動を妨げない) | **採用** (同上。走査は文書と無関係) | 破棄 (キャンセルしないので通常は起きない) | 03 §10.1 |
 - **開く**: core はまず Document を `Loading` 状態で作成し (パスだけを持つ)、`metadata` → `canonicalize` → `FileId` による二重オープン判定 → 読込をすべて **`io` ジョブ内** で行う (ADR-0020)。メインスレッドでは `stat` もしない。
-- **大きいファイルの読込**: ワーカーがチャンク単位でデコードし、進捗 (10 Hz 以下) を返す。core は開く操作から 50 ms 以内に進捗を表示し、読込中も入力に応答し、キャンセルを受け付ける (NFR-104、FR-122)。読込中は Document を `Loading` として扱う。先頭部分を読み取り専用で先に表示する `Partial` は v0.4 (`load_state` の値だけ予約)。16 MiB 以下はハッシュも同じジョブで計算する (§4.5)。読込用の事前確保は `try_reserve` (§11.2.2)。
+- **大きいファイルの読込**: ワーカーがチャンク単位でデコードし、進捗 (10 Hz 以下) を返す。core は開く操作から 50 ms 以内に進捗を表示し、読込中も入力に応答し、キャンセルを受け付ける (NFR-104、FR-122)。読込中は Document を `Loading` として扱う。先頭部分を読み取り専用で先に表示する `Partial` は v0.4 (`load_state` に値を足す。v0.3 までのコードの列挙には無い)。16 MiB 以下はハッシュも同じジョブで計算する (§4.5)。読込用の事前確保は `try_reserve` (§11.2.2)。
 - **保存**: 常に `io` ジョブで行う (Snapshot を渡す)。ジョブ内では、エンコードと黙示置換の照合 (§13.4、表現不能文字があれば書込前に中止して位置を返す、FR-112)、区分 B の確認 (v0.1、§13.4)、`SaveOptions.expected` による外部変更の照合 (FR-117)、`write_atomic` を行う。直接上書き (承認後の `write_in_place`、および `InPlacePattern` による自動の直接上書き) は、書く前に必ず乾式走査 (エンコード + 照合、書込なし) で表現不能の有無と出力長を確定する (§4.5)。保存のエンコーダ `SaveEncoder` (Snapshot と format から作り、`ReadChunks` を実装する) は `SaveEncoder::dry_scan(&snapshot, &format, cancel) -> Result<DryScan { out_len: u64 }, Unmappable { positions, total }>` (書き出さずに全文を encode + 照合し、BOM と ISO-2022-JP の終端エスケープを含む出力のバイト数を数える) と、同じ規則で 2 回目のエンコードをチャンクで供給する `SaveEncoder::new(snapshot, format)` を持つ。ジョブは `out_len` を `write_in_place` の `len` に、後者を `data` に渡す (`ReadChunks` に長さのメソッドは足さない。03 §9.3 の「乾式走査と出力長」)。**手順の順序と分岐の正本は 03 §9.3** (本書は要約)。保存中の編集は許可し、完了時に「Snapshot 取得時点の履歴ノード」を `history.saved` にする (§5.1)。
 - **未編集の上書き保存** (確定 (ユーザー回答)、OQ-116): dirty でなく、かつディスク上のファイルが `disk_stamp` と一致する (照合は `io` ジョブで `metadata`) ときの上書き保存は **書き込まない** (「変更はありません」と表示)。別のファイルへの名前を付けて保存と文字コードの変更 (`file.set_encoding`) では書き込む。名前を付けて保存で今の文書と同じファイルを指したときは上書き保存と同じ扱い (未編集なら書かない)。操作ごとの一覧は 03 §9.3 の「手順 0 の適用対象」。
 - **外部変更チェック** の `metadata` もジョブで行う。v0.1 は保存直前の照合のみ。フォーカス復帰時の確認は v0.2、ファイル監視通知時は v0.5。明示の再読込 (`file.reload`、v0.1) は `Open` ジョブ (`OpenOptions.forced_encoding` に今の文字コード) で読み直し、`Complete` を `Origin::Reload` の Transaction として適用する (03 §9.5)。
