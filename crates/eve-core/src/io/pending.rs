@@ -7,7 +7,7 @@ use crate::document::NodeId;
 use crate::io::fs::Expect;
 use crate::io::fspath::FsPath;
 use crate::io::io_jobs::OpenOptions;
-use crate::jobs::JobResult;
+use crate::jobs::{JobOutput, JobResult};
 use eve_encoding::Encoding;
 
 use super::open::*;
@@ -145,8 +145,8 @@ impl EditorState {
     }
 
     /// ジョブの結果を受け取る (02 §5.4)。
-    pub fn on_job_result(&mut self, r: JobResult) {
-        let job = r.job();
+    pub fn on_job_result(&mut self, out: JobOutput) {
+        let JobOutput { job, body: r } = out;
         // 読込の進捗は終わりではない。待ちの記録は残して、読込中の文書の進捗だけ更新する
         if let JobResult::Progress { bytes, total, .. } = r {
             if let Some(Pending::Open { doc, .. }) = self.io.pending.get(&job) {
@@ -165,7 +165,7 @@ impl EditorState {
         }
         // 検索は途中経過が複数届く。待ちの記録は終わりまで残す
         if matches!(self.io.pending.get(&job), Some(Pending::Search)) {
-            self.on_search_result(r);
+            self.on_search_result(JobOutput { job, body: r });
             return;
         }
         let cont = self.ui.continuations.remove(&job);

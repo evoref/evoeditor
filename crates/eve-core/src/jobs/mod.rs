@@ -14,5 +14,5 @@ mod run;
 
 pub use kind::{JobKind, JobRequest, MetaPurpose, SaveStrategy};
 pub use ports::{JobPorts, JobSpawner, Ports};
-pub use result::{ConfigFile, ConfirmAsk, JobError, JobResult, OpenNotes};
+pub use result::{ConfigFile, ConfirmAsk, JobError, JobOutput, JobResult, OpenNotes};
 pub use run::run_job;

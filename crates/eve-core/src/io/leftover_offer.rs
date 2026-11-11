@@ -139,7 +139,7 @@ impl EditorState {
     pub(crate) fn finish_leftover(&mut self, ask: LeftoverAsk, r: JobResult) {
         let path = ask.leftover.target.display();
         match r {
-            JobResult::LeftoverDone { .. } => {
+            JobResult::LeftoverDone => {
                 let key = match ask.op {
                     LeftoverOp::Restore => keys::INFO_LEFTOVER_RESTORED,
                     LeftoverOp::DeleteBak | LeftoverOp::DeleteTmp => keys::INFO_LEFTOVER_DELETED,

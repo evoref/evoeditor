@@ -12,7 +12,7 @@ use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
 use eve_core::{
-    CancelToken, JobError, JobKind, JobPorts, JobRequest, JobResult, JobSpawner, run_job,
+    CancelToken, JobError, JobKind, JobOutput, JobPorts, JobRequest, JobResult, JobSpawner, run_job,
 };
 use eve_view::{DocumentId, JobId, Revision};
 
@@ -51,9 +51,11 @@ impl Lane {
                         });
                     }));
                     if outcome.is_err() {
-                        let _ = tx.send(HostMsg::Job(Box::new(JobResult::Failed {
+                        let _ = tx.send(HostMsg::Job(Box::new(JobOutput {
                             job,
-                            err: JobError::Panic,
+                            body: JobResult::Failed {
+                                err: JobError::Panic,
+                            },
                         })));
                     }
                 }
@@ -155,9 +157,11 @@ impl JobSpawner for ThreadJobSpawner {
         };
         if !sent {
             // ワーカーが死んでいる: ジョブ表の行が残らないよう、その場で終端の結果を返す
-            let _ = self.tx.send(HostMsg::Job(Box::new(JobResult::Failed {
+            let _ = self.tx.send(HostMsg::Job(Box::new(JobOutput {
                 job: id,
-                err: JobError::Panic,
+                body: JobResult::Failed {
+                    err: JobError::Panic,
+                },
             })));
         }
         id

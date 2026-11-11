@@ -11,7 +11,7 @@ use eve_text::{ByteOff, ByteRange, TextRead, is_grapheme_boundary};
 use eve_view::JobId;
 
 use crate::jobs::cancel::CancelToken;
-use crate::jobs::{JobError, JobResult};
+use crate::jobs::{JobError, JobOutput, JobResult};
 use crate::time::{Clock, Millis};
 
 use super::lines::for_each_line;
@@ -242,14 +242,16 @@ pub fn run_search(
     p: SearchJob<'_>,
     clock: &dyn Clock,
     cancel: &CancelToken,
-    emit: &mut dyn FnMut(JobResult),
+    emit: &mut dyn FnMut(JobOutput),
 ) {
     let Some(m) = p.query.matcher() else {
-        emit(JobResult::SearchDone {
+        emit(JobOutput {
             job: p.job,
-            total: 0,
-            count_limited: false,
-            truncated: false,
+            body: JobResult::SearchDone {
+                total: 0,
+                count_limited: false,
+                truncated: false,
+            },
         });
         return;
     };
@@ -275,9 +277,11 @@ pub fn run_search(
             if !sent_any || batch.len() >= BATCH_MATCHES || now.saturating_sub(last) >= BATCH_MILLIS
             {
                 sent_any = true;
-                emit(JobResult::SearchBatch {
+                emit(JobOutput {
                     job: p.job,
-                    matches: std::mem::take(&mut batch),
+                    body: JobResult::SearchBatch {
+                        matches: std::mem::take(&mut batch),
+                    },
                 });
                 last = now;
             }
@@ -305,22 +309,26 @@ pub fn run_search(
         &mut on_match,
     );
     if !done && !cut {
-        emit(JobResult::Failed {
+        emit(JobOutput {
             job: p.job,
-            err: JobError::Cancelled,
+            body: JobResult::Failed {
+                err: JobError::Cancelled,
+            },
         });
         return;
     }
     if !batch.is_empty() {
-        emit(JobResult::SearchBatch {
+        emit(JobOutput {
             job: p.job,
-            matches: batch,
+            body: JobResult::SearchBatch { matches: batch },
         });
     }
-    emit(JobResult::SearchDone {
+    emit(JobOutput {
         job: p.job,
-        total,
-        count_limited,
-        truncated,
+        body: JobResult::SearchDone {
+            total,
+            count_limited,
+            truncated,
+        },
     });
 }

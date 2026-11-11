@@ -6,7 +6,9 @@ use crate::io::fs::FileStamp;
 use crate::io::fspath::FsPath;
 use crate::io::io_jobs::{SaveParams, run_open, run_save};
 
-use super::{ConfigFile, JobError, JobKind, JobPorts, JobRequest, JobResult, MetaPurpose};
+use super::{
+    ConfigFile, JobError, JobKind, JobOutput, JobPorts, JobRequest, JobResult, MetaPurpose,
+};
 
 /// ジョブを同期的に実行する。eve-host のワーカーとテストが同じ関数を使う (スレッドは呼び出し側が用意する)。
 /// 開始前にキャンセルされていれば何もせず `Failed { Cancelled }` を返す。結果は `emit` に 1 つ渡す。
@@ -14,22 +16,22 @@ pub fn run_job(
     req: &JobRequest,
     ports: &JobPorts,
     cancel: &CancelToken,
-    emit: &mut dyn FnMut(JobResult),
+    emit: &mut dyn FnMut(JobOutput),
 ) {
     if cancel.is_cancelled() {
-        emit(JobResult::Failed {
+        emit(JobOutput {
             job: req.id,
-            err: JobError::Cancelled,
+            body: JobResult::Failed {
+                err: JobError::Cancelled,
+            },
         });
         return;
     }
-    let result = match &req.kind {
+    let body = match &req.kind {
         JobKind::LastVersion { current } => JobResult::LastVersionChecked {
-            job: req.id,
             outcome: crate::io::last_version::check_and_record(&*ports.fs, current),
         },
         JobKind::RecoveryScan => JobResult::RecoveryFound {
-            job: req.id,
             dirs: ports.fs.list_recovery_dirs().unwrap_or_default(),
             swaps: ports.fs.list_swaps().unwrap_or_default(),
             leftovers: crate::io::leftover::scan(&*ports.fs),
@@ -46,7 +48,6 @@ pub fn run_job(
             clear_readonly,
             create_link_target,
         } => run_save(
-            req.id,
             SaveParams {
                 path,
                 snapshot,
@@ -67,20 +68,17 @@ pub fn run_job(
             escape,
         } => match crate::io::unmap::build_replacement(snapshot, *encoding, *escape, cancel) {
             Ok(Some((changes, targets, counts))) => JobResult::UnmappableReplacement {
-                job: req.id,
                 changes,
                 targets,
                 counts,
             },
             // 対象が無い (文書が変わって表現不能が消えた等): 空の置換として返す
             Ok(None) => JobResult::UnmappableReplacement {
-                job: req.id,
                 changes: eve_text::ChangeSet::identity(eve_text::TextRead::len_bytes(snapshot)),
                 targets: Vec::new(),
                 counts: crate::io::unmap::ReplaceCounts::default(),
             },
             Err(()) => JobResult::Failed {
-                job: req.id,
                 err: JobError::Cancelled,
             },
         },
@@ -90,20 +88,15 @@ pub fn run_job(
             from,
             forward,
         } => match crate::search::find_next(snapshot, query, *from, *forward, cancel) {
-            Some(found) => JobResult::FindNextDone { job: req.id, found },
+            Some(found) => JobResult::FindNextDone { found },
             None => JobResult::Failed {
-                job: req.id,
                 err: JobError::Cancelled,
             },
         },
         JobKind::ConvertEol { snapshot, eol } => {
             match crate::document::eol::build_eol_conversion(snapshot, *eol, cancel) {
-                Some(changes) => JobResult::ConvertEolDone {
-                    job: req.id,
-                    changes,
-                },
+                Some(changes) => JobResult::ConvertEolDone { changes },
                 None => JobResult::Failed {
-                    job: req.id,
                     err: JobError::Cancelled,
                 },
             }
@@ -113,13 +106,8 @@ pub fn run_job(
             query,
             replacement,
         } => match crate::search::build_replace_all(snapshot, query, replacement, cancel) {
-            Some((changes, count)) => JobResult::ReplaceAllDone {
-                job: req.id,
-                changes,
-                count,
-            },
+            Some((changes, count)) => JobResult::ReplaceAllDone { changes, count },
             None => JobResult::Failed {
-                job: req.id,
                 err: JobError::Cancelled,
             },
         },
@@ -146,46 +134,40 @@ pub fn run_job(
             return;
         }
         JobKind::WriteRecovery { doc } => match ports.fs.write_recovery(doc) {
-            Ok(path) => JobResult::RecoveryWritten { job: req.id, path },
+            Ok(path) => JobResult::RecoveryWritten { path },
             Err(err) => JobResult::Failed {
-                job: req.id,
                 err: JobError::Fs(err),
             },
         },
         JobKind::Swap { doc } => match ports.fs.write_swap(doc) {
-            Ok(()) => JobResult::SwapWritten { job: req.id },
+            Ok(()) => JobResult::SwapWritten,
             Err(err) => JobResult::Failed {
-                job: req.id,
                 err: JobError::Fs(err),
             },
         },
         JobKind::SwapRead { entry } => match ports.fs.read_swap(entry) {
-            Ok(body) => JobResult::SwapRead { job: req.id, body },
+            Ok(body) => JobResult::SwapRead { body },
             Err(err) => JobResult::Failed {
-                job: req.id,
                 err: JobError::Fs(err),
             },
         },
         JobKind::SwapRemove { entry } => match ports.fs.remove_swap(entry) {
-            Ok(()) => JobResult::SwapRemoved { job: req.id },
+            Ok(()) => JobResult::SwapRemoved,
             Err(err) => JobResult::Failed {
-                job: req.id,
                 err: JobError::Fs(err),
             },
         },
         JobKind::LeftoverAct { leftover, op } => {
             match crate::io::leftover::act(&*ports.fs, leftover, *op) {
-                Ok(()) => JobResult::LeftoverDone { job: req.id },
+                Ok(()) => JobResult::LeftoverDone,
                 Err(err) => JobResult::Failed {
-                    job: req.id,
                     err: JobError::Fs(err),
                 },
             }
         }
         JobKind::SwapDiscard { doc, path } => match ports.fs.discard_swap(*doc, path.as_ref()) {
-            Ok(()) => JobResult::SwapDiscarded { job: req.id },
+            Ok(()) => JobResult::SwapDiscarded,
             Err(err) => JobResult::Failed {
-                job: req.id,
                 err: JobError::Fs(err),
             },
         },
@@ -201,14 +183,12 @@ pub fn run_job(
             };
             let (theme, reports) = eve_config::theme_file::load_theme(name, &read);
             JobResult::ThemeRead {
-                job: req.id,
                 name: name.clone(),
                 theme,
                 reports,
             }
         }
         JobKind::ReadConfig { files, keymap } => JobResult::ConfigRead {
-            job: req.id,
             config: files
                 .iter()
                 .map(|f| read_config_file(&*ports.fs, f))
@@ -219,7 +199,6 @@ pub fn run_job(
             Ok(meta) => {
                 if cancel.is_cancelled() {
                     JobResult::Failed {
-                        job: req.id,
                         err: JobError::Cancelled,
                     }
                 } else {
@@ -235,20 +214,15 @@ pub fn run_job(
                         None
                     };
                     let stamp = FileStamp::from_meta(&meta, hash);
-                    JobResult::Meta {
-                        job: req.id,
-                        meta,
-                        stamp,
-                    }
+                    JobResult::Meta { meta, stamp }
                 }
             }
             Err(err) => JobResult::Failed {
-                job: req.id,
                 err: JobError::Fs(err),
             },
         },
     };
-    emit(result);
+    emit(JobOutput { job: req.id, body });
 }
 
 /// 設定ファイルの大きさの上限 (これを超えるものは設定ではないとみなして読まない)。
@@ -366,7 +340,7 @@ mod tests {
         }
     }
 
-    fn run(p: &JobPorts, c: &CancelToken) -> Vec<JobResult> {
+    fn run(p: &JobPorts, c: &CancelToken) -> Vec<JobOutput> {
         let mut out = Vec::new();
         run_job(&req(), p, c, &mut |r| out.push(r));
         out
@@ -376,8 +350,9 @@ mod tests {
     fn メタ情報のジョブは_stamp_を返す() {
         let out = run(&ports(Ok(meta())), &CancelToken::new());
         assert_eq!(out.len(), 1);
-        match &out[0] {
-            JobResult::Meta { job, stamp, .. } => {
+        let JobOutput { job, body } = &out[0];
+        match body {
+            JobResult::Meta { stamp, .. } => {
                 assert_eq!(*job, JobId(7));
                 assert_eq!(stamp.len, 3);
             }
@@ -389,7 +364,7 @@ mod tests {
     fn 失敗は_failed_で返る() {
         let out = run(&ports(Err(FsErrorKind::NotFound)), &CancelToken::new());
         assert!(
-            matches!(&out[0], JobResult::Failed { err: JobError::Fs(e), .. } if e.kind == FsErrorKind::NotFound)
+            matches!(&out[0].body, JobResult::Failed { err: JobError::Fs(e), .. } if e.kind == FsErrorKind::NotFound)
         );
     }
 
@@ -400,7 +375,7 @@ mod tests {
         let out = run(&ports(Ok(meta())), &c);
         assert_eq!(out.len(), 1);
         assert!(matches!(
-            &out[0],
+            &out[0].body,
             JobResult::Failed {
                 err: JobError::Cancelled,
                 ..
@@ -462,7 +437,7 @@ mod tests {
         };
         let mut out = Vec::new();
         run_job(&r, &p, &cancel, &mut |x| out.push(x));
-        out.pop().expect("終端の結果")
+        out.pop().expect("終端の結果").body
     }
 
     // 05 §4.1 手順 5、NFR-301 AC-2 (docs/review/v0.3-findings.md の SAF-04)

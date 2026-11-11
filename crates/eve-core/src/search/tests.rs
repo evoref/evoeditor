@@ -3,7 +3,7 @@ use eve_view::JobId;
 
 use super::*;
 use crate::jobs::cancel::CancelToken;
-use crate::jobs::{JobError, JobResult};
+use crate::jobs::{JobError, JobOutput, JobResult};
 use crate::time::{Clock, Tick};
 
 struct Fixed;
@@ -115,7 +115,7 @@ fn 取り消すと止まる() {
     assert!(!scan_lines(&t, &m, 0..t.len_lines(), &c, &mut |_| true));
 }
 
-fn run(doc: &str, q: &SearchQuery, from: usize, max: usize, limit: u64) -> Vec<JobResult> {
+fn run(doc: &str, q: &SearchQuery, from: usize, max: usize, limit: u64) -> Vec<JobOutput> {
     let t = Text::from(doc);
     let mut out = Vec::new();
     run_search(
@@ -134,11 +134,11 @@ fn run(doc: &str, q: &SearchQuery, from: usize, max: usize, limit: u64) -> Vec<J
     out
 }
 
-fn collect(rs: &[JobResult]) -> (Vec<usize>, Option<(u64, bool, bool)>) {
+fn collect(rs: &[JobOutput]) -> (Vec<usize>, Option<(u64, bool, bool)>) {
     let mut starts = Vec::new();
     let mut done = None;
     for r in rs {
-        match r {
+        match &r.body {
             JobResult::SearchBatch { matches, .. } => {
                 starts.extend(matches.iter().map(|m| m.start.0));
             }
@@ -183,7 +183,7 @@ fn 一致が多いとバッチに分ける() {
     let rs = run(&doc, &lit("a"), 0, 10_000, 1_000_000);
     let batches = rs
         .iter()
-        .filter(|r| matches!(r, JobResult::SearchBatch { .. }))
+        .filter(|r| matches!(r.body, JobResult::SearchBatch { .. }))
         .count();
     assert_eq!(batches, 4, "最初の 1 件 + 256 + 256 + 87");
 }
@@ -208,7 +208,7 @@ fn 取り消されたジョブは_cancelled_で終わる() {
         &mut |r| out.push(r),
     );
     assert!(matches!(
-        out[0],
+        out[0].body,
         JobResult::Failed {
             err: JobError::Cancelled,
             ..
@@ -222,9 +222,9 @@ fn 最初の一致はすぐ送る() {
     let rs = run(&doc, &lit("a"), 0, 100, 1000);
     let first = rs
         .iter()
-        .position(|r| matches!(r, JobResult::SearchBatch { .. }))
+        .position(|r| matches!(r.body, JobResult::SearchBatch { .. }))
         .unwrap();
-    let JobResult::SearchBatch { matches, .. } = &rs[first] else {
+    let JobResult::SearchBatch { matches, .. } = &rs[first].body else {
         unreachable!()
     };
     assert_eq!(matches.len(), 1);

@@ -573,7 +573,7 @@ Document::apply(tx) -> Result<AppliedTx, ApplyError>
 | `Slice { snapshot, range }` | 編集前の Snapshot と範囲 | 64 KiB 以上の削除の逆変換の **記録直後だけ** (実体化ジョブの完了まで) | 削除バイト数 + 8 KiB |
 | `Rope(Snapshot)` | 範囲だけを持つ独立の rope (eve-text の自前の型 `Text` で包む。ropey の型は公開しない、§2.2) | 実体化ジョブの完了後。範囲が Snapshot 全体 (全選択削除・Reload / Recovery の全置換) なら記録時から旧 rope をそのまま入れる (コピーなし) | 削除バイト数 + 8 KiB |
 
-- **Slice を長く持たない理由と実体化** (02 §14.1 MR1): ropey 1.x の `RopeSlice` は元の rope を借用し部分木だけを所有できないので (この前提は P0 スパイク S-02 で確認する、§2.3)、`Slice` は **編集前の文書全体** の Snapshot を保持する。その後の編集で現在の rope が経路を作り直すたびに旧 Snapshot だけが参照するノードが増え、最大で当時の文書全体が会計外で残る。そこで手順 6 で `Slice` を記録したら、直ちに `bg` ワーカーへ **実体化ジョブ** (`JobKind::Materialize { snapshot, key: SliceKey, range }` (02 §9.3。文書は `JobRequest.doc`)。`SliceKey` は `Slice` を作るときに振る文書内の通番) を投げ、ジョブは範囲だけを複写した独立の `Text` を作って `JobResult::Materialized { job, key, rope }` で返す。メインは結果を受け取ったとき、その `SliceKey` の `Slice` がまだ履歴 (undo / redo のいずれかのノードの ChangeSet。結合で別のノードに合成されていてもよい) にあれば `InsertText::Rope` に置き換え (旧 Snapshot を解放)、無ければ捨てる。ノードの `NodeId` は結合で振り直されるので、採否の鍵には使わない。実体化ジョブは検索と同じ `bg` で動くが、同種の後続ジョブにキャンセルされない (各ノード独立)。複写のコストは削除量に比例し (100 MB で数十 ms)、メインスレッドでは行わない。
+- **Slice を長く持たない理由と実体化** (02 §14.1 MR1): ropey 1.x の `RopeSlice` は元の rope を借用し部分木だけを所有できないので (この前提は P0 スパイク S-02 で確認する、§2.3)、`Slice` は **編集前の文書全体** の Snapshot を保持する。その後の編集で現在の rope が経路を作り直すたびに旧 Snapshot だけが参照するノードが増え、最大で当時の文書全体が会計外で残る。そこで手順 6 で `Slice` を記録したら、直ちに `bg` ワーカーへ **実体化ジョブ** (`JobKind::Materialize { snapshot, key: SliceKey, range }` (02 §9.3。文書は `JobRequest.doc`)。`SliceKey` は `Slice` を作るときに振る文書内の通番) を投げ、ジョブは範囲だけを複写した独立の `Text` を作って `JobResult::Materialized { key, rope }` で返す。メインは結果を受け取ったとき、その `SliceKey` の `Slice` がまだ履歴 (undo / redo のいずれかのノードの ChangeSet。結合で別のノードに合成されていてもよい) にあれば `InsertText::Rope` に置き換え (旧 Snapshot を解放)、無ければ捨てる。ノードの `NodeId` は結合で振り直されるので、採否の鍵には使わない。実体化ジョブは検索と同じ `bg` で動くが、同種の後続ジョブにキャンセルされない (各ノード独立)。複写のコストは削除量に比例し (100 MB で数十 ms)、メインスレッドでは行わない。
 - 64 KiB 未満の削除を `Str` にコピーするのは、小さな削除のたびに Snapshot (と、その版にしかない経路 4〜8 KiB) を持つと 1 万ステップで数十 MB が会計外に残るため。結果として、会計に現れないメモリは「実体化ジョブの実行中の Snapshot」だけで、時間的に有界になる。性質テスト「ランダムな 1 万回の編集 (64 KiB 以上の削除を一定割合で含む) の後、実体化ジョブがすべて完了した時点で RSS 増分 ≤ Undo 会計の 1.2 倍」を v0.1 の L1 に置く (09 §3.2)。
 - **実装の状態 (v0.3、SAF-33)**: 実装は `Str` と、文書全体の置き換えの `Rope` (`Snapshot` を包む) だけ。`Rope` を使うのは再読込の新全文 (読込の rope を共有。§9.5) と、文書全体の削除の逆変換の旧全文 (旧 rope を共有) で、どちらも複写しない。文書全体の削除の適用は rope を空にするだけ、`Rope` の挿入の適用は rope をつなぐだけ (共有している節を複製しない)。それ以外の削除は 64 KiB 以上でも `Str` に複写する (表の `Slice` と実体化ジョブは未実装。**v0.4 の方針 (2026-11-07 に決定。docs/review/v0.3-findings.md の SAF-33)**: 64 KiB 以上の削除の逆変換は、削除の前の rope を `clone()` して両端を `remove` した `Rope` で持つ。`Slice`・実体化ジョブ・`SliceKey` は入れず、この表と下の「Slice を長く持たない理由と実体化」、02 MR1 は v0.4 の作業で改める)。なお ropey 1.6.1 の `Rope::from(RopeSlice)` は範囲の部分木を共有して端の経路 (O(log n) 個の節) だけを複製するので、上の「部分木だけを所有できない」前提は 1.6.1 では成り立たない (4 MiB の範囲で確保は約 12 KB)。
 
@@ -933,10 +933,10 @@ file.open(path)
              v0.1 は pid の生存確認をしない (他インスタンスが保存中の記録でも報告する。誤報は害が小さい側、05 §4.6)。
              main は interrupted_save が Some なら表の MessageKey (04 §15.2) で場所を示して警告する。
              文書は通常どおり開く (空の新規文書として黙って開かない)。復旧の操作は v0.2 (§10.3)
-           ・NotFound → JobResult::NewFile { job, interrupted_save, parent_missing } (main: 空の新規 Document、dirty=false として確定)。
+           ・NotFound → JobResult::NewFile { interrupted_save, parent_missing } (main: 空の新規 Document、dirty=false として確定)。
              親フォルダが無ければ parent_missing にそのフォルダを入れ、main は `msg.open.parent_missing` で示す (フォルダは作らない。保存は §9.3 の ParentMissing になる。01 FR-101 AC-2)
-           ・FileMeta.kind が File でない (Dir / Other) → JobResult::Failed { job, err: JobError::Fs(FsError) } (main: エラー表示、Document を閉じる)
-           ・len > file.huge_file_warn_bytes (§11.2) かつ OpenOptions.confirmed_large でない → JobResult::NeedsConfirm { job, ask: ConfirmAsk::HugeFile { len } } を送って **ジョブを終了** する
+           ・FileMeta.kind が File でない (Dir / Other) → JobResult::Failed { err: JobError::Fs(FsError) } (main: エラー表示、Document を閉じる)
+           ・len > file.huge_file_warn_bytes (§11.2) かつ OpenOptions.confirmed_large でない → JobResult::NeedsConfirm { ask: ConfirmAsk::HugeFile { len } } を送って **ジョブを終了** する
              (len 以下でも、デコード後の見積り・読込中に伸びた分で閾値を超えれば手順 3 の「読込中のメモリ検査」で同じ確認を出す)。
              main は回答 (読み取り専用で開く / 中止。FR-127) を得たら、「読み取り専用で開く」なら OpenOptions { confirmed_large: true, read_only_requested: true, .. } で
              読込ジョブを再投入する (下の「確認からの再投入」)。確認中に io ワーカー (02 §9.1 の 1 本) を占有せず、他の文書の保存を止めない。回答待ちの状態は Document 側に持つ
@@ -960,7 +960,7 @@ file.open(path)
               それ以外なら cr として数える。ファイルの末尾で持ち越しが残っていれば cr。§8.2.1 のやり直しでは持ち越しも捨てる)
            ・UTF-8 以外: 再エンコード照合で roundtrip を記録 (§8.7、ストリーミング。v0.1 は件数 + 先頭 100 箇所)
            ・16 MiB 以下: 内容ハッシュをストリーミング計算 (05 §5.5 の比較キー)
-           ・開く操作から 50 ms 以内に最初の JobResult::Progress { job, bytes, total } を送り、以後は **最大 10 Hz** (受信口に積まない。02 §9.2)
+           ・開く操作から 50 ms 以内に最初の JobResult::Progress { bytes, total } を送り、以後は **最大 10 Hz** (受信口に積まない。02 §9.2)
            ・CancelToken (02 §9.3) をチャンク毎に確認 (FR-122)
            ・**読込中のメモリ検査** (OpenOptions.confirmed_large でないとき。手順 2 の判定は metadata の len だけなので、読込中に伸びたファイル・
              デコードで膨らむファイルを見逃さないため): (i) sniff の直後に「デコード後の見積り」= len × 文字コードの倍率 (Shift_JIS・EUC-JP は 1.5、
@@ -974,7 +974,7 @@ file.open(path)
              そのまま上書き保存すると手順 5a の照合で Conflict になり、読んだ分だけでファイルを黙って切り詰めることはない。05 §4.5)
            ・§8.2.1 の再判定が起きたら先頭からやり直し (1 回限り)
            ・読込前後の metadata を比較し、変化していれば Complete に `changed_during_load = true` を付ける (05 §4.5)
-  4. [job]  JobResult::Complete { job, text: Text, format: TextFormat, meta: FileMeta, stamp: FileStamp, changed_during_load, detected: ReadOnlyReasons, interrupted_save }
+  4. [job]  JobResult::Complete { text: Text, format: TextFormat, meta: FileMeta, stamp: FileStamp, changed_during_load, detected: ReadOnlyReasons, interrupted_save }
   5. [main] Document.text = text; load_state = Ready; 読み取り専用の理由 (ReadOnlyReasons、§9.6) を下の「付く読み取り専用の理由の決め方」の表で付ける;
            disk_stamp = stamp; canonical = canonical (表示用は 05 §3.3 の簡略化パス); history 根を作る;
            interrupted_save が Some なら手順 2 の警告を出す; 購読者へ DocumentOpened; FR-123 の機能縮退判定 (§11.3)
@@ -1084,7 +1084,7 @@ file.save(doc)  [main]
           表現不能が 1 件でもあれば **Port を呼ばずに** JobResult::Unmappable { total, recorded, encoding } を返す (元ファイルに一切触れない。§8.6 E3 へ)
        b. 乾式走査で確定した出力バイト長 len を渡して write_in_place(path, 同じエンコーダのストリーム (2 回目), len, opts, cancel) を呼ぶ (cancel はジョブの CancelToken) (02 §4.5、05 §4.4 手順 0〜9)。
           05 §4.4 の手順 6 (元ファイルへの書き始め) 以降は CancelToken を見ず、本書込のエンコーダは `Aborted` を返さない (5d から来た場合も同じ。手順 7 の `Cancelled` の箇条)
-  6. JobResult::Saved { job, node, report: SaveReport { method, new_stamp, warnings }, canonical, meta } / JobResult::Failed { job, err: JobError }
+  6. JobResult::Saved { node, report: SaveReport { method, new_stamp, warnings }, canonical, meta } / JobResult::Failed { err: JobError }
   [main]  (採否は 02 §9.3 の採否表が正本 (§17.2)。Revision が進んでいても採用する)
   7. 成功: history.saved = node; disk_stamp = report.new_stamp (置換の後の T の FileId が書いた一時ファイルのものと違えば、Port は書いた内容の stamp を入れて警告を積む。
      ディスクの T とは一致しないので次の保存は照合で Conflict になり、外部変更として扱われる。05 §4.1 手順 7); path 確定 (新規ファイル・名前を付けて保存の場合);
@@ -1345,7 +1345,7 @@ struct SaveChain {
 | その他 (`InvalidPath`、`Other`、`JobError::Panic` 等) | `msg.save.invalid_path` / `msg.save.failed` + `ui.confirm.save_failed` | 同上 | 同上 |
 | `JobError::Cancelled` | `info.save.aborted` | 選択肢なし → 中止 | 捨てる |
 
-- **退避先に保存**: 文書の Snapshot を緊急退避と同じ形式 (§10.1: UTF-8・改行非変換・PUA エスケープのまま、manifest 付き。manifest の `reason = "user_save"`) で `state_dir/recovery/rescue/<UTC timestamp>-<pid>/` に書く (緊急退避のディレクトリとは別。05 §7.5)。書き手は `bg` のジョブ `JobKind::WriteRecovery { doc }` (02 §9.3。`DocSnapshot` を渡す。出力先のディレクトリと本文・manifest は `FileSystem::write_recovery` (02 §4.5) が、名前・`created_at`・代替の退避先を決めて作り、書く。I/O を伴うが `io` ではなく `bg` ワーカーで `FileSystem` Port を使う。シリアライズの関数は緊急退避・スワップと共用) で、結果は `JobResult::RecoveryWritten { job, path }`。`state_dir` を使えない (作れない・書けない) ときは緊急退避と同じ代替の場所の `rescue\` (Windows は `%TEMP%\eve-recovery-<SID>\rescue\<UTC timestamp>-<pid>\`、所有者のみの DACL。05 §7.5 / §11、02 §11.2.1 (OQ-163)) に書く。結果は文書の Revision が進んでいても、取消しの後でも、文書が閉じられていても採用する (02 §9.3 の採否表)。書けたら `info.save.to_recovery` で退避先を示し、書けなければ `msg.save.recovery_failed` (04 §15.2) で理由を示す (どちらでも文書は dirty のまま)。元のファイルは変えず、`saved` は動かさない。**後続の処理は中止する** (退避は保存の代わりではないので、終了・置き換え・開き直しをしない)。
+- **退避先に保存**: 文書の Snapshot を緊急退避と同じ形式 (§10.1: UTF-8・改行非変換・PUA エスケープのまま、manifest 付き。manifest の `reason = "user_save"`) で `state_dir/recovery/rescue/<UTC timestamp>-<pid>/` に書く (緊急退避のディレクトリとは別。05 §7.5)。書き手は `bg` のジョブ `JobKind::WriteRecovery { doc }` (02 §9.3。`DocSnapshot` を渡す。出力先のディレクトリと本文・manifest は `FileSystem::write_recovery` (02 §4.5) が、名前・`created_at`・代替の退避先を決めて作り、書く。I/O を伴うが `io` ではなく `bg` ワーカーで `FileSystem` Port を使う。シリアライズの関数は緊急退避・スワップと共用) で、結果は `JobResult::RecoveryWritten { path }`。`state_dir` を使えない (作れない・書けない) ときは緊急退避と同じ代替の場所の `rescue\` (Windows は `%TEMP%\eve-recovery-<SID>\rescue\<UTC timestamp>-<pid>\`、所有者のみの DACL。05 §7.5 / §11、02 §11.2.1 (OQ-163)) に書く。結果は文書の Revision が進んでいても、取消しの後でも、文書が閉じられていても採用する (02 §9.3 の採否表)。書けたら `info.save.to_recovery` で退避先を示し、書けなければ `msg.save.recovery_failed` (04 §15.2) で理由を示す (どちらでも文書は dirty のまま)。元のファイルは変えず、`saved` は動かさない。**後続の処理は中止する** (退避は保存の代わりではないので、終了・置き換え・開き直しをしない)。
 
 **(f) 保存中の終了操作** (04 §15.2 `ui.confirm.quit_saving`・05 §11.5 と同じ方式): 保存ジョブの実行中 (`Saving`、または連鎖の外で `Document.saving` が Some) に `app.quit` を実行したら、次のとおりにする。
 

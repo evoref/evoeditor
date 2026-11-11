@@ -329,7 +329,7 @@ impl EditorState {
     /// 他のプロセスのスワップを消したジョブの結果。
     pub(crate) fn finish_swap_remove(&mut self, entry: &SwapEntry, notify: bool, r: JobResult) {
         match r {
-            JobResult::SwapRemoved { .. } => {
+            JobResult::SwapRemoved => {
                 if notify {
                     self.show_message(MessageLevel::Info, keys::INFO_SWAP_DISCARDED, &[]);
                 }
