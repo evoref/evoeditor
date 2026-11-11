@@ -753,6 +753,41 @@ fn dialog_open(s: &Harness) -> bool {
     s.overlay() == "dialog"
 }
 
+// 直接上書きは、乾式走査で求めた長さのとおりに書く。本文を全部消した BOM 付きの文書は、出力が BOM だけになる。
+// 乾式走査が BOM を数え忘れると、長さが合わずに保存が失敗していた (M22 の 1 で直した)
+#[test]
+fn 本文を全部消した_bom_付きの文書を直接上書きで保存できる() {
+    for (name, src, want) in [
+        ("utf8", &b"\xEF\xBB\xBFabc"[..], &b"\xEF\xBB\xBF"[..]),
+        ("utf16le", &b"\xFF\xFEa\x00b\x00c\x00"[..], &b"\xFF\xFE"[..]),
+    ] {
+        let mut s = env();
+        s.fs.add_file("/w/a.txt", src);
+        open(&mut s, "/w/a.txt");
+        assert!(doc(&s).1.format.has_bom, "{name}");
+        s.cmd("cursor.doc_end");
+        for _ in 0..3 {
+            keys(&mut s, "backspace");
+        }
+        assert_eq!(doc(&s).1.to_string_lossy(), "", "{name}");
+        messages(&mut s);
+        s.fs.fail_next(
+            eve_testkit::FsOp::WriteAtomic,
+            eve_core::FsErrorKind::AtomicUnsupported,
+        );
+        run(&mut s, "file.save", Args::new());
+        assert!(dialog_open(&s), "{name}: 確認が出る");
+        type_text(&mut s, "o");
+        s.run_jobs();
+        assert_eq!(s.fs.read("/w/a.txt").unwrap(), want, "{name}");
+        assert!(!doc(&s).1.is_dirty(), "{name}");
+        assert!(
+            messages(&mut s).contains(&"info.save.in_place".to_owned()),
+            "{name}"
+        );
+    }
+}
+
 // verifies: AC-FR-105-2
 #[test]
 fn 原子的置換ができなければ確認を出し_直接上書きで保存する() {
