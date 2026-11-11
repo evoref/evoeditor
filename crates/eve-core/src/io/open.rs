@@ -90,6 +90,7 @@ impl EditorState {
 
     /// 区分 B (ISO-2022-JP は区分 D のエスケープの書き方) の確認を出す。選択肢: 保存 / 別名で保存。
     /// 区分 B は別名が既定、区分 D は文字が変わらないので保存が既定 (04 §15.2)。
+    /// 読込時の検査を打ち切った文書は、数を言えないので専用の文言にし、別名を既定にする (03 §8.7、Issue #495)。
     pub(crate) fn open_lossy(&mut self, ask: LossyAsk) {
         use crate::ui_model::overlay::{ChoiceDef, ConfirmAction, ConfirmState};
         let Some(doc) = self.docs.documents.get(&ask.doc) else {
@@ -103,7 +104,9 @@ impl EditorState {
             .first()
             .map(u64::to_string)
             .unwrap_or_default();
-        let (name, default) = if doc.format.encoding.is_stateful() {
+        let (name, default) = if doc.format.roundtrip.incomplete {
+            ("save.roundtrip_unchecked", 1)
+        } else if doc.format.encoding.is_stateful() {
             ("save.escape_normalized", 0)
         } else {
             ("save.lossy_roundtrip", 1)
@@ -178,7 +181,7 @@ impl EditorState {
                 let lossy = format.roundtrip.lossy_lines;
                 let encoding = format.encoding;
                 let long_lines = format.long_lines;
-                let mut d = Document::from_text(text, format);
+                let mut d = Document::from_loaded(text, format);
                 d.path = Some(path.clone());
                 d.disk_stamp = Some(stamp);
                 d.read_only = detected;

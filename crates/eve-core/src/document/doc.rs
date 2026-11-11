@@ -148,10 +148,26 @@ impl Document {
         Document::from_text(Text::new(), TextFormat::new_document())
     }
 
-    /// 読込完了した文書。`format.eol_stats` は文書から数え直す。履歴の根が保存点。
+    /// 読込完了した文書。`format.eol_stats` と `format.long_lines` は文書から数え直す。履歴の根が保存点。
     pub fn from_text(text: Text, mut format: TextFormat) -> Document {
         format.eol_stats = EolStats::count(&text);
         format.long_lines = count_long_lines(&text, format.long_line_threshold);
+        Document::from_loaded(text, format)
+    }
+
+    /// 読込ジョブが作った本文と形式から文書を作る。`format.eol_stats` と `format.long_lines` は、ジョブが復号しながら
+    /// 数えた値をそのまま使う (メインスレッドで全文を走査し直さない。docs/review/v0.3-findings.md の PRF-17)。
+    pub fn from_loaded(text: Text, format: TextFormat) -> Document {
+        debug_assert_eq!(
+            format.eol_stats,
+            EolStats::count(&text),
+            "読込ジョブの改行の統計"
+        );
+        debug_assert_eq!(
+            format.long_lines,
+            count_long_lines(&text, format.long_line_threshold),
+            "読込ジョブの長大行の数"
+        );
         Document {
             text,
             path: None,

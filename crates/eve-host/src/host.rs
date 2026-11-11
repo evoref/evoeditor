@@ -511,14 +511,14 @@ impl Host {
                 self.editor.handle_input(w, ev);
                 return ControlFlow::Continue(true);
             }
-            HostMsg::Job(result) => {
+            HostMsg::Job(out) => {
                 // 完了・失敗・確認などの結果は、待たせずに描く (開く操作の最初の画面を 16 ms 遅らせない)。
                 // 進捗と検索の途中経過だけを間引く (04 §4.4)
                 let driven = !matches!(
-                    *result,
+                    out.body,
                     JobResult::Progress { .. } | JobResult::SearchBatch { .. }
                 );
-                self.editor.on_job_result(*result);
+                self.editor.on_job_result(*out);
                 return ControlFlow::Continue(driven);
             }
             HostMsg::Clipboard { token, result } => self.on_clipboard(token, result),

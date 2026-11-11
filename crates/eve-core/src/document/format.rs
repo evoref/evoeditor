@@ -33,6 +33,77 @@ pub fn count_long_lines(text: &dyn TextRead, threshold: usize) -> usize {
     n + usize::from(run > threshold)
 }
 
+/// 改行の統計と長大行の数を、文書を前から順に渡して 1 回の走査で数える (読込ジョブの復号のループで使う。
+/// docs/review/v0.3-findings.md の PRF-17)。結果は [`EolStats::count`] と [`count_long_lines`] に同じ。
+#[derive(Debug)]
+pub struct LineStatsScanner {
+    stats: EolStats,
+    long_lines: usize,
+    threshold: usize,
+    /// 今の行の、ここまでのバイト数。
+    run: usize,
+    /// 直前に渡された分が CR で終わった (次の先頭が LF なら CRLF)。
+    prev_cr: bool,
+}
+
+impl LineStatsScanner {
+    /// `threshold` (バイト) を超える行を長大行として数える。
+    pub fn new(threshold: usize) -> LineStatsScanner {
+        LineStatsScanner {
+            stats: EolStats::default(),
+            long_lines: 0,
+            threshold,
+            run: 0,
+            prev_cr: false,
+        }
+    }
+
+    /// 文書の続きを渡す (分け方は任意。空でもよい)。
+    pub fn feed(&mut self, chunk: &str) {
+        let b = chunk.as_bytes();
+        let mut i = 0;
+        if self.prev_cr && !b.is_empty() {
+            self.prev_cr = false;
+            if b[0] == b'\n' {
+                self.stats.crlf += 1;
+                i = 1;
+            } else {
+                self.stats.cr += 1;
+            }
+        }
+        while let Some(off) = memchr::memchr2(b'\r', b'\n', &b[i..]) {
+            let p = i + off;
+            self.long_lines += usize::from(self.run + off > self.threshold);
+            self.run = 0;
+            i = p + 1;
+            if b[p] == b'\n' {
+                self.stats.lf += 1;
+            } else {
+                match b.get(i) {
+                    Some(b'\n') => {
+                        self.stats.crlf += 1;
+                        i += 1;
+                    }
+                    Some(_) => self.stats.cr += 1,
+                    None => self.prev_cr = true,
+                }
+            }
+        }
+        self.run += b.len() - i;
+    }
+
+    /// 改行の統計と、長大行の数。
+    pub fn finish(mut self) -> (EolStats, usize) {
+        if self.prev_cr {
+            self.stats.cr += 1;
+        }
+        (
+            self.stats,
+            self.long_lines + usize::from(self.run > self.threshold),
+        )
+    }
+}
+
 /// 位置の範囲 `ranges` (`[s, e]`。昇順。文書の範囲に切り詰める) が触れる行のうち、閾値を超える行の数
 /// (同じ行は 1 回だけ数える)。編集の前後の文書で数え、長大行の数を差分で更新するのに使う。
 pub(crate) fn long_lines_touched(
@@ -540,6 +611,73 @@ mod tests {
                 }
                 assert_eq!(got, count_naive(&bytes[ra..rb]), "case {case} {a}..{b}");
             }
+        }
+    }
+
+    /// 文書を `cuts` の位置 (char 境界へ寄せる) で分けて渡した結果。
+    fn scan_split(doc: &str, cuts: &[usize], threshold: usize) -> (EolStats, usize) {
+        let mut sc = LineStatsScanner::new(threshold);
+        let mut at = 0;
+        for &c in cuts {
+            let mut c = c.min(doc.len()).max(at);
+            while !doc.is_char_boundary(c) {
+                c += 1;
+            }
+            sc.feed(&doc[at..c]);
+            at = c;
+        }
+        sc.feed(&doc[at..]);
+        sc.finish()
+    }
+
+    #[test]
+    fn 順に渡して数えた結果は_全文を数えた結果と同じ() {
+        // CRLF の間・CR の直後・行の途中で分ける。空の文字列を渡しても変わらない
+        let doc = "ab\r\ncd\re\n\n\r\r\nlong-long-line\r";
+        let t = Text::from(doc);
+        for threshold in [0, 1, 2, 5, 13, 14, 100] {
+            let want = (EolStats::count(&t), count_long_lines(&t, threshold));
+            assert_eq!(
+                scan_split(doc, &[], threshold),
+                want,
+                "分けない {threshold}"
+            );
+            for a in 0..=doc.len() {
+                for b in a..=doc.len() {
+                    assert_eq!(
+                        scan_split(doc, &[a, a, b], threshold),
+                        want,
+                        "{a} {b} {threshold}"
+                    );
+                }
+            }
+        }
+        // 空の文書
+        assert_eq!(scan_split("", &[], 0), (EolStats::default(), 0));
+    }
+
+    proptest::proptest! {
+        #[test]
+        fn 順に渡して数えた結果は_どの分け方でも同じ(
+            parts in proptest::collection::vec(
+                proptest::prop_oneof![
+                    proptest::strategy::Just("\n".to_owned()),
+                    proptest::strategy::Just("\r\n".to_owned()),
+                    proptest::strategy::Just("\r".to_owned()),
+                    "[a-zあ😀]{0,12}",
+                ],
+                0..60,
+            ),
+            mut cuts in proptest::collection::vec(0usize..400, 0..12),
+            threshold in 0usize..24,
+        ) {
+            let doc = parts.concat();
+            let t = Text::from(doc.as_str());
+            cuts.sort_unstable();
+            proptest::prop_assert_eq!(
+                scan_split(&doc, &cuts, threshold),
+                (EolStats::count(&t), count_long_lines(&t, threshold))
+            );
         }
     }
 }

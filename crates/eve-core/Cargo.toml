@@ -22,8 +22,10 @@ eve-encoding = { version = "0.3.0", path = "../eve-encoding" }
 eve-view = { version = "0.3.0", path = "../eve-view" }
 eve-config = { version = "0.3.0", path = "../eve-config" }
 memchr = "2.8.3"
-# 正規表現 (docs/03 §12.3)。線形時間保証。行単位で実行する。Unicode は既定で有効
-regex = { version = "1", default-features = false, features = ["std", "unicode", "perf-inline", "perf-literal"] }
+# 正規表現 (docs/03 §12.3)。線形時間保証。行単位で実行する。Unicode は既定で有効。
+# `perf` は実行部分 (遅延 DFA・バックトラック・ワンパス) を含む。外すと、文字クラスで始まるパターンなどが PikeVM だけで
+# 走り、10 倍以上遅くなる (BM-109r-digits)。クレートは増えない (実行ファイルは約 0.2 MB 増える)
+regex = { version = "1", default-features = false, features = ["std", "unicode", "perf"] }
 # 内容ハッシュ XXH3-64 (docs/05 §5.5)。純 Rust
 twox-hash = { version = "2.1.5", default-features = false, features = ["std", "xxhash3_64"] }
 

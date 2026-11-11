@@ -3,7 +3,7 @@
 //! UTF-8 / UTF-16 は区分 A (1:1) `なので検査しない。Shift_JIS` / EUC-JP / ISO-2022-JP では、元のバイト列を **行ごと**
 //! (LF 区切り。Shift_JIS・EUC-JP の LF は後続バイトにならず、ISO-2022-JP は行ごとに ASCII 状態へ戻す E6 の単位) に復号し、
 //! 保存と同じ方式で再符号化して元のバイト列と比べる。一致しない行を「別のバイト表現で保存される」行として数える
-//! (`RoundtripInfo::Summary`、v0.1)。表現不能の文字を含む行は E3 の置換 (または E1 の報告) を経ないと保存できないので、
+//! (`RoundtripSummary`、v0.1)。表現不能の文字を含む行は E3 の置換 (または E1 の報告) を経ないと保存できないので、
 //! ここでは数えず `unmappable_lines` に分ける (§8.7 の区分 D の注記)。
 //!
 //! 単位は **行** (元の仕様の「箇所」より粗い)。改行を含まない巨大な 1 行は `MAX_LINE` を超えると検査を打ち切る (`incomplete`)。
@@ -26,8 +26,18 @@ pub struct RoundtripSummary {
     pub first_offsets: Vec<u64>,
     /// 表現不能の文字を含む行の数 (数えない)。
     pub unmappable_lines: u32,
-    /// 長すぎる行があり、検査を打ち切った。
+    /// 長すぎる行があり、検査を打ち切った (その行から後ろは検査していない)。
     pub incomplete: bool,
+}
+
+impl RoundtripSummary {
+    /// 元の文字コードのまま書くと、別のバイト表現になる箇所があり得るか (03 §8.6 E2' の確認が要るか)。
+    ///
+    /// 差のある行を数えたときと、検査を打ち切ったとき (検査していない範囲に差があり得る。安全側、Issue #495)。
+    #[must_use]
+    pub fn may_be_lossy(&self) -> bool {
+        self.lossy_lines > 0 || self.incomplete
+    }
 }
 
 /// ストリーミングの検査器。`feed` を元のバイト列のチャンクごとに呼び、最後のチャンクで `last = true` にする。
@@ -363,6 +373,13 @@ mod tests {
             c.feed(&chunk, false);
         }
         c.feed(b"\n", true);
-        assert!(c.finish().incomplete);
+        let summary = c.finish();
+        assert!(summary.incomplete);
+        assert_eq!(summary.lossy_lines, 0);
+        assert!(
+            summary.may_be_lossy(),
+            "検査していない範囲があるので、確認が要る"
+        );
+        assert!(!RoundtripSummary::default().may_be_lossy());
     }
 }

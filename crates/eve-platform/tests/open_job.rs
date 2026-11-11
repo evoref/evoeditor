@@ -48,10 +48,10 @@ fn open(path: &FsPath, ports: &JobPorts) -> JobResult {
     let mut out = Vec::new();
     run_job(&req, ports, &CancelToken::new(), &mut |r| out.push(r));
     // 終わりの結果の前に届くのは進捗だけ
-    let last = out.pop().expect("結果がある");
+    let last = out.pop().expect("結果がある").body;
     assert!(
         out.iter()
-            .all(|r| matches!(r, eve_core::JobResult::Progress { .. })),
+            .all(|r| matches!(r.body, eve_core::JobResult::Progress { .. })),
         "終わり以外は進捗"
     );
     last

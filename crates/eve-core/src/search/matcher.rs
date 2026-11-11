@@ -317,18 +317,24 @@ fn fold_line(line: &str) -> (Cow<'_, str>, Option<Vec<usize>>) {
         };
     }
     let mut out = String::with_capacity(line.len());
-    let mut map: Vec<usize> = Vec::with_capacity(line.len() + 1);
     let mut same = true;
-    for (i, c) in line.char_indices() {
+    for c in line.chars() {
         let f = fold_char(c);
         same &= f.len_utf8() == c.len_utf8();
-        for _ in 0..f.len_utf8() {
-            map.push(i);
-        }
         out.push(f);
     }
+    if same {
+        return (Cow::Owned(out), None);
+    }
+    // 畳み込みで長さが変わる文字がある行 (まれ) だけ、位置の表を作る (行ごとに表を確保しない。PRF-11)
+    let mut map: Vec<usize> = Vec::with_capacity(out.len() + 1);
+    for (i, c) in line.char_indices() {
+        for _ in 0..fold_char(c).len_utf8() {
+            map.push(i);
+        }
+    }
     map.push(line.len());
-    (Cow::Owned(out), (!same).then_some(map))
+    (Cow::Owned(out), Some(map))
 }
 
 /// コンパイル済みの検索語。

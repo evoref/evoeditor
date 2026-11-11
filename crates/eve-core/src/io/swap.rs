@@ -296,7 +296,7 @@ impl EditorState {
         };
         let inflight = e.inflight.take();
         match r {
-            JobResult::SwapWritten { .. } => {
+            JobResult::SwapWritten => {
                 if let Some((_, rev)) = inflight {
                     e.written = Some(rev);
                 }
@@ -318,7 +318,7 @@ impl EditorState {
         };
         e.discarding = None;
         match r {
-            JobResult::SwapDiscarded { .. } => {
+            JobResult::SwapDiscarded => {
                 self.io.swap.docs.remove(&doc);
             }
             JobResult::Failed {

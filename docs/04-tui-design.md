@@ -1466,6 +1466,10 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 | `ui.confirm.save.lossy_roundtrip.message` | 同上 | {count} 箇所が、同じ文字の別のバイト表現で保存されます (例: 元の先頭から {example} バイト目の行) |
 | `ui.confirm.save.lossy_roundtrip.save` | 同上 (アクセラレータ `S`) | [S] 保存 |
 | `ui.confirm.save.lossy_roundtrip.alt` | 同上 (アクセラレータ `A`。既定) | [A] 別名で保存 |
+| `ui.confirm.save.roundtrip_unchecked.title` | 読込時の往復の検査を打ち切った文書 (1 行が 4 MiB を超える、03 §8.7) を編集して、元の文字コードのまま保存するとき。検査していない範囲に区分 B / D の箇所があり得る。数は示さない。「別名で保存」が既定 | 別のバイト表現で保存されるかもしれません |
+| `ui.confirm.save.roundtrip_unchecked.message` | 同上 | 長すぎる行があり、文字コードの検査を途中でやめました。検査していない範囲に、同じ文字の別のバイト表現で保存される箇所があるかもしれません |
+| `ui.confirm.save.roundtrip_unchecked.save` | 同上 (アクセラレータ `S`) | [S] 保存 |
+| `ui.confirm.save.roundtrip_unchecked.alt` | 同上 (アクセラレータ `A`。既定) | [A] 別名で保存 |
 | `ui.confirm.save.escape_normalized.title` | 区分 D (ISO-2022-JP のエスケープの書き方が変わる、03 §8.7)。文字は変わらないので「保存」が既定 | エスケープの書き方が変わります |
 | `ui.confirm.save.escape_normalized.message` | 同上 | {count} 行でエスケープシーケンスの書き方が変わります (文字は変わりません) |
 | `ui.confirm.save.escape_normalized.save` | 同上 (アクセラレータ `S`。既定) | [S] 保存 |

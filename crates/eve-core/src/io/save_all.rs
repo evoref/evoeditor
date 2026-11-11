@@ -51,7 +51,7 @@ impl EditorState {
             // 書く前の確認 (区分 B、03 §8.6 E2'・読み取り専用を解除して保存、FR-116) が要る文書は保存しない
             let needs_readonly_ok =
                 doc.attribute_released && self.io.readonly_ok != Some((id, doc.revision()));
-            if (doc.format.roundtrip.lossy_lines > 0
+            if (doc.format.roundtrip.may_be_lossy()
                 && self.io.lossy_ok != Some((id, doc.revision())))
                 || needs_readonly_ok
             {
