@@ -67,6 +67,16 @@ pub(crate) fn verdict(v: &Value) -> Verdict {
             None,
             "100 MB のリテラル検索の全件の走査 (ヘッドレス。NFR-109)",
         ),
+        id if id.starts_with("BM-109r-") && id.ends_with("-1line") => t(
+            "(参考)",
+            None,
+            "10 MB の 1 行の、行単位の方式の検索の全件の走査 (ヘッドレス。S-04 で比べる相手)",
+        ),
+        id if id.starts_with("BM-109r-") => t(
+            "(参考)",
+            None,
+            "100 MB の、行単位の方式の検索の全件の走査 (ヘッドレス。S-04 で比べる相手)",
+        ),
         "BM-103a-wrap" => t(
             "(診断用)",
             None,
