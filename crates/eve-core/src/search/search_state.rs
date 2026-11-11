@@ -8,7 +8,7 @@ use eve_text::{ByteOff, ByteRange, LineIdx, Range, Selection, TextRead};
 use eve_view::{DocumentId, JobId, MessageLevel, Revision};
 
 use crate::jobs::cancel::CancelToken;
-use crate::jobs::{JobKind, JobResult};
+use crate::jobs::{JobKind, JobOutput, JobResult};
 use crate::search::{SearchQuery, scan_bytes};
 use crate::ui_model::keys;
 
@@ -473,8 +473,8 @@ impl EditorState {
     }
 
     /// 検索ジョブの途中経過と終わり。古いジョブの結果は捨てる。
-    pub(crate) fn on_search_result(&mut self, r: JobResult) {
-        let job = r.job();
+    pub(crate) fn on_search_result(&mut self, out: JobOutput) {
+        let JobOutput { job, body: r } = out;
         let Some(s) = self.find.search.as_mut().filter(|s| s.job == Some(job)) else {
             // 取り消した検索の結果。終わりなら待ちの記録を消す
             if !matches!(r, JobResult::SearchBatch { .. }) {

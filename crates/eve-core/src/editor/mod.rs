@@ -221,7 +221,7 @@ impl Editor {
     }
 
     /// ジョブの結果を受け取る (Host が `HostMsg::Job` で呼ぶ)。
-    pub fn on_job_result(&mut self, r: crate::jobs::JobResult) {
+    pub fn on_job_result(&mut self, r: crate::jobs::JobOutput) {
         self.state.on_job_result(r);
         // `config.reload` の結果: キーマップは Editor が持つので、ここで差し替える
         self.finish_reload_keymap();

@@ -4,8 +4,8 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use eve_core::{
-    CancelToken, Clock, FsPath, JobKind, JobPorts, JobRequest, JobResult, OpenOptions, Tick,
-    run_job,
+    CancelToken, Clock, FsPath, JobKind, JobOutput, JobPorts, JobRequest, JobResult, OpenOptions,
+    Tick, run_job,
 };
 use eve_testkit::{FixedPaths, Harness, MemFs};
 use eve_view::{JobId, Revision};
@@ -22,7 +22,7 @@ impl Clock for Stepping {
     }
 }
 
-fn open_results(step_ms: u64, chunk: usize, size: usize) -> Vec<JobResult> {
+fn open_results(step_ms: u64, chunk: usize, size: usize) -> Vec<JobOutput> {
     let clock = Arc::new(Stepping {
         now: AtomicU64::new(0),
         step: step_ms,
@@ -55,17 +55,20 @@ fn open_results(step_ms: u64, chunk: usize, size: usize) -> Vec<JobResult> {
 fn 最初の進捗は読み始めてすぐ送り_終わりは最後に届く() {
     let out = open_results(0, 1024, 10_000);
     assert!(matches!(
-        out[0],
+        out[0].body,
         JobResult::Progress {
             bytes: 0,
             total: 10_000,
             ..
         }
     ));
-    assert!(matches!(out.last(), Some(JobResult::Complete { .. })));
+    assert!(matches!(
+        out.last().map(|o| &o.body),
+        Some(JobResult::Complete { .. })
+    ));
     assert_eq!(
         out.iter()
-            .filter(|r| matches!(r, JobResult::Progress { .. }))
+            .filter(|r| matches!(r.body, JobResult::Progress { .. }))
             .count(),
         1,
         "時計が進まなければ 100 ms あけられず、最初の 1 件だけ"
@@ -79,12 +82,12 @@ fn 進捗は_100_ms_以上あけて送る() {
     let out = open_results(60, 1024, 20 * 1024);
     let n = out
         .iter()
-        .filter(|r| matches!(r, JobResult::Progress { .. }))
+        .filter(|r| matches!(r.body, JobResult::Progress { .. }))
         .count();
     assert!((2..=12).contains(&n), "{n}");
     let bytes: Vec<u64> = out
         .iter()
-        .filter_map(|r| match r {
+        .filter_map(|r| match &r.body {
             JobResult::Progress { bytes, .. } => Some(*bytes),
             _ => None,
         })
@@ -98,10 +101,12 @@ fn 進捗はステータスバーに百分率で出る() {
     let mut h = Harness::new().with_file("/w/a.txt", b"hello");
     h.open("/w/a.txt");
     // 読込中の文書に進捗が届く (起動時は JobId(1) が前回の版の記録 (FR-518)、2 が退避の走査、3 が読込)
-    h.editor.on_job_result(JobResult::Progress {
+    h.editor.on_job_result(JobOutput {
         job: JobId(3),
-        bytes: 50,
-        total: 200,
+        body: JobResult::Progress {
+            bytes: 50,
+            total: 200,
+        },
     });
     let f = h.frame();
     let st: String = f

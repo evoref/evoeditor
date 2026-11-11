@@ -123,7 +123,7 @@ impl Env {
         };
         let mut out = Vec::new();
         run_job(&req, &ports, &CancelToken::new(), &mut |r| out.push(r));
-        match out.pop().expect("結果がある") {
+        match out.pop().expect("結果がある").body {
             JobResult::Complete {
                 interrupted_save, ..
             } => (interrupted_save, true),
@@ -470,7 +470,7 @@ impl Env {
         };
         let mut out = Vec::new();
         run_job(&req, &ports, &CancelToken::new(), &mut |r| out.push(r));
-        out.pop().expect("結果がある")
+        out.pop().expect("結果がある").body
     }
 
     /// 起動時の走査 (`RecoveryScan`) が作る置換途中の痕跡の提案。
@@ -486,7 +486,7 @@ impl Env {
             leftover: Box::new(l.clone()),
             op,
         }) {
-            JobResult::LeftoverDone { .. } => Ok(()),
+            JobResult::LeftoverDone => Ok(()),
             JobResult::Failed { err, .. } => Err(format!("{err:?}")),
             other => panic!("{other:?}"),
         }

@@ -20,7 +20,7 @@ use crate::io::fs::{
 use crate::io::fspath::FsPath;
 use crate::io::interrupted::map_interrupted;
 use crate::jobs::cancel::CancelToken;
-use crate::jobs::{ConfirmAsk, JobError, JobPorts, JobResult, OpenNotes};
+use crate::jobs::{ConfirmAsk, JobError, JobOutput, JobPorts, JobResult, OpenNotes};
 
 /// 先頭の判定に使うバイト数 (03 §8.2 の `sniff_len`)。
 const SNIFF_LEN: usize = 64 * 1024;
@@ -80,7 +80,7 @@ pub(crate) fn run_open(
     opts: OpenOptions,
     ports: &JobPorts,
     cancel: &CancelToken,
-    emit: &mut dyn FnMut(JobResult),
+    emit: &mut dyn FnMut(JobOutput),
 ) -> JobResult {
     open_inner(id, path, opts, ports, cancel, emit, None)
 }
@@ -121,12 +121,11 @@ fn open_inner(
     opts: OpenOptions,
     ports: &JobPorts,
     cancel: &CancelToken,
-    emit: &mut dyn FnMut(JobResult),
+    emit: &mut dyn FnMut(JobOutput),
     redetected: Option<Encoding>,
 ) -> JobResult {
-    let fail = |err| JobResult::Failed { job: id, err };
+    let fail = |err| JobResult::Failed { err };
     let cancelled = || JobResult::Failed {
-        job: id,
         err: JobError::Cancelled,
     };
 
@@ -142,7 +141,6 @@ fn open_inner(
                 _ => None,
             };
             return JobResult::NewFile {
-                job: id,
                 parent_missing,
                 interrupted_save: map_interrupted(ports.fs.as_ref(), &inflight, false),
             };
@@ -161,7 +159,6 @@ fn open_inner(
     // 巨大ファイル (FR-127): 読み始める前に確認する
     if !opts.confirmed_large && meta.len >= opts.huge_file_warn_bytes.unwrap_or(HUGE_FILE_WARN) {
         return JobResult::NeedsConfirm {
-            job: id,
             ask: ConfirmAsk::HugeFile { len: meta.len },
         };
     }
@@ -192,10 +189,12 @@ fn open_inner(
     let mut out = String::new();
     let mut truncated = false;
     // 進捗: 読み始めてすぐ (開く操作から 50 ms 以内) に 1 件、以後は 100 ms 以上あけて (10 Hz 以下、03 §9.2)
-    emit(JobResult::Progress {
+    emit(JobOutput {
         job: id,
-        bytes: 0,
-        total: meta.len,
+        body: JobResult::Progress {
+            bytes: 0,
+            total: meta.len,
+        },
     });
     let mut last_progress = ports.clock.now();
     // 内容ハッシュ (16 MiB 以下。読み込みながら計算する、05 §5.5)
@@ -228,13 +227,11 @@ fn open_inner(
             match kind {
                 DetectedKind::Binary if !opts.read_only_requested => {
                     return JobResult::NeedsConfirm {
-                        job: id,
                         ask: ConfirmAsk::Binary,
                     };
                 }
                 DetectedKind::UnsupportedBom(kind) if !opts.read_only_requested => {
                     return JobResult::NeedsConfirm {
-                        job: id,
                         ask: ConfirmAsk::UnsupportedBom { kind },
                     };
                 }
@@ -259,7 +256,6 @@ fn open_inner(
                 .unwrap_or(u32::MAX);
                 if permille > MANY_INVALID_PERMILLE {
                     return JobResult::NeedsConfirm {
-                        job: id,
                         ask: ConfirmAsk::ManyInvalidBytes {
                             encoding: enc,
                             permille,
@@ -330,10 +326,12 @@ fn open_inner(
         let now = ports.clock.now();
         if now.saturating_sub(last_progress) >= crate::time::Millis(100) {
             last_progress = now;
-            emit(JobResult::Progress {
+            emit(JobOutput {
                 job: id,
-                bytes: read_total,
-                total: meta.len,
+                body: JobResult::Progress {
+                    bytes: read_total,
+                    total: meta.len,
+                },
             });
         }
         if truncated {
@@ -404,7 +402,6 @@ fn open_inner(
         ..stamp_before
     };
     JobResult::Complete {
-        job: id,
         text,
         format,
         meta,
@@ -548,12 +545,7 @@ fn dry_run(p: &SaveParams<'_>, cancel: &CancelToken) -> Option<(EncodeReport, u6
     Some((report, out_len))
 }
 
-pub(crate) fn run_save(
-    id: JobId,
-    p: SaveParams<'_>,
-    ports: &JobPorts,
-    cancel: &CancelToken,
-) -> JobResult {
+pub(crate) fn run_save(p: SaveParams<'_>, ports: &JobPorts, cancel: &CancelToken) -> JobResult {
     use crate::jobs::SaveStrategy;
     // 直接上書きは出力の長さが要るので常に乾式走査をする。それ以外は、UTF-8 と UTF-16 が全 Unicode スカラー値を表せるので、
     // 表現不能になり得るのはエスケープ文字だけ (E4)。Shift_JIS・EUC-JP・ISO-2022-JP は書く前に走査する
@@ -566,13 +558,11 @@ pub(crate) fn run_save(
         match dry_run(&p, cancel) {
             None => {
                 return JobResult::Failed {
-                    job: id,
                     err: JobError::Cancelled,
                 };
             }
             Some((report, _)) if !report.is_empty() => {
                 return JobResult::Unmappable {
-                    job: id,
                     total: report.total,
                     recorded: report.recorded,
                     encoding: p.encoding,
@@ -610,7 +600,6 @@ pub(crate) fn run_save(
                 Ok(s) => Expect::Stamp(s),
                 Err(e) => {
                     return JobResult::Failed {
-                        job: id,
                         err: JobError::Fs(e),
                     };
                 }
@@ -639,17 +628,15 @@ pub(crate) fn run_save(
             if report.new_stamp.len == src.written {
                 report.new_stamp.hash = src.content_hash();
             }
-            JobResult::Saved { job: id, report }
+            JobResult::Saved { report }
         }
         // 取消しを優先するのは、何も書いていない失敗だけ。置換を始めた後の失敗 (元のファイルが退避名に移った・
         // 直接上書きの途中で壊れた) は、取消しを送った後でも必ずそのまま返し、退避先を利用者に示す
         // (05 §4.1 手順 5、NFR-301 AC-2。docs/review/v0.3-findings.md の SAF-04)
         Err(e) if cancel.is_cancelled() && !wrote_target(&e) => JobResult::Failed {
-            job: id,
             err: JobError::Cancelled,
         },
         Err(e) => JobResult::Failed {
-            job: id,
             err: JobError::Fs(e),
         },
     }

@@ -5,8 +5,8 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use eve_core::{
-    FileMeta, FileSystem, FsError, FsPath, JobError, JobKind, JobPorts, JobResult, JobSpawner,
-    MetaPurpose, Ports, ReadChunks, SaveOptions, SaveReport,
+    FileMeta, FileSystem, FsError, FsPath, JobError, JobKind, JobOutput, JobPorts, JobResult,
+    JobSpawner, MetaPurpose, Ports, ReadChunks, SaveOptions, SaveReport,
 };
 use eve_host::{ExitCode, Host, HostMsg, SystemClock, ThreadJobSpawner, channel};
 use eve_testkit::{AsciiOptions, FixedPaths, HeadlessFrontend, MemFs};
@@ -117,7 +117,7 @@ impl FileSystem for PanicFs {
     }
 }
 
-fn recv_job(rx: &std::sync::mpsc::Receiver<HostMsg>) -> JobResult {
+fn recv_job(rx: &std::sync::mpsc::Receiver<HostMsg>) -> JobOutput {
     match rx.recv_timeout(Duration::from_secs(10)).unwrap() {
         HostMsg::Job(r) => *r,
         other => panic!("ジョブの結果ではありません: {other:?}"),
@@ -142,9 +142,9 @@ fn ワーカーのパニックは_failed_で返り_ワーカーは生き続け�
     let b = sp.spawn(None, Revision(0), kind());
     assert_ne!(a, b);
     for want in [a, b] {
-        match recv_job(&rx) {
+        let JobOutput { job, body } = recv_job(&rx);
+        match body {
             JobResult::Failed {
-                job,
                 err: JobError::Panic,
             } => assert_eq!(job, want, "投入順に直列に実行される"),
             other => panic!("{other:?}"),
@@ -218,14 +218,14 @@ fn 待機中のジョブの取消しは_cancelled_で返り_結果は1件だけ(
     sp.cancel(eve_view::JobId(999));
     rtx.send(()).unwrap();
     let mut got = [recv_job(&rx), recv_job(&rx)];
-    got.sort_by_key(|r| r.job().0);
+    got.sort_by_key(|r| r.job.0);
     assert!(
-        matches!(got[0], JobResult::Meta { job, .. } if job == a),
+        matches!(got[0], JobOutput { job, body: JobResult::Meta { .. } } if job == a),
         "{:?}",
         got[0]
     );
     assert!(
-        matches!(&got[1], JobResult::Failed { job, err: JobError::Cancelled } if *job == b),
+        matches!(&got[1], JobOutput { job, body: JobResult::Failed { err: JobError::Cancelled } } if *job == b),
         "{:?}",
         got[1]
     );
@@ -261,11 +261,10 @@ fn 検索は_bg_ワーカーで走り_途中経過と終わりが届く() {
     let (mut found, mut total) = (0usize, None);
     wait_until("検索の終わり", || {
         while let Ok(HostMsg::Job(r)) = rx.try_recv() {
-            match *r {
-                JobResult::SearchBatch { job: j, matches } if j == job => found += matches.len(),
-                JobResult::SearchDone {
-                    job: j, total: t, ..
-                } if j == job => total = Some(t),
+            let JobOutput { job: j, body } = *r;
+            match body {
+                JobResult::SearchBatch { matches } if j == job => found += matches.len(),
+                JobResult::SearchDone { total: t, .. } if j == job => total = Some(t),
                 _ => {}
             }
         }

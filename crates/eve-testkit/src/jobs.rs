@@ -8,7 +8,7 @@ use std::collections::VecDeque;
 use std::rc::Rc;
 
 use eve_core::{
-    CancelToken, JobError, JobKind, JobPorts, JobRequest, JobResult, JobSpawner, run_job,
+    CancelToken, JobError, JobKind, JobOutput, JobPorts, JobRequest, JobResult, JobSpawner, run_job,
 };
 use eve_view::{DocumentId, JobId, Revision};
 
@@ -23,7 +23,7 @@ pub struct ManualJobSpawner {
     ports: JobPorts,
     next_id: Cell<u64>,
     queue: RefCell<VecDeque<Queued>>,
-    inbox: RefCell<VecDeque<JobResult>>,
+    inbox: RefCell<VecDeque<JobOutput>>,
 }
 
 impl ManualJobSpawner {
@@ -68,7 +68,7 @@ impl ManualJobSpawner {
     }
 
     /// 結果の inbox を空にして返す (Host の受信口の代わり)。
-    pub fn take_results(&self) -> Vec<JobResult> {
+    pub fn take_results(&self) -> Vec<JobOutput> {
         self.inbox.borrow_mut().drain(..).collect()
     }
 }
@@ -95,9 +95,11 @@ impl JobSpawner for ManualJobSpawner {
         if let Some(pos) = q.iter().position(|j| j.req.id == job) {
             let j = q.remove(pos).expect("位置は直前に見つけた");
             j.cancel.cancel();
-            self.inbox.borrow_mut().push_back(JobResult::Failed {
+            self.inbox.borrow_mut().push_back(JobOutput {
                 job,
-                err: JobError::Cancelled,
+                body: JobResult::Failed {
+                    err: JobError::Cancelled,
+                },
             });
         }
     }
@@ -141,8 +143,10 @@ mod tests {
         assert!(sp.take_results().is_empty(), "実行前は結果がない");
         assert_eq!(sp.run_jobs(), 2);
         let r = sp.take_results();
-        assert!(matches!(&r[0], JobResult::Meta { job, .. } if *job == a));
-        assert!(matches!(&r[1], JobResult::Failed { job, err: JobError::Fs(_) } if *job == b));
+        assert!(matches!(&r[0], JobOutput { job, body: JobResult::Meta { .. } } if *job == a));
+        assert!(
+            matches!(&r[1], JobOutput { job, body: JobResult::Failed { err: JobError::Fs(_) } } if *job == b)
+        );
         assert_eq!(sp.pending(), 0);
     }
 
@@ -155,8 +159,10 @@ mod tests {
         sp.cancel(JobId(99)); // 存在しないものは何もしない
         assert_eq!(sp.run_jobs(), 1);
         let r = sp.take_results();
-        assert!(matches!(&r[0], JobResult::Failed { job, err: JobError::Cancelled } if *job == a));
-        assert!(matches!(&r[1], JobResult::Meta { job, .. } if *job == b));
+        assert!(
+            matches!(&r[0], JobOutput { job, body: JobResult::Failed { err: JobError::Cancelled } } if *job == a)
+        );
+        assert!(matches!(&r[1], JobOutput { job, body: JobResult::Meta { .. } } if *job == b));
         sp.cancel(b); // 完了済みは何もしない
         assert!(sp.take_results().is_empty());
     }
