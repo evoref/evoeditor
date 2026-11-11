@@ -125,7 +125,7 @@ flowchart LR
 | 1 | core はヘッドレスで、端末/OS API に依存しない | [ADR-0002](10-decisions.md#adr-0002-core--frontend-の厳密分離) | 確定 |
 | 2 | Cargo workspace を Foundations / Core / Host / Frontends・Services / Platform / bin に分割。`eve-encoding` と `eve-host` を独立 crate にする | [ADR-0003](10-decisions.md#adr-0003-cargo-workspace-と-crate-分割) | 確定 |
 | 3 | テキストは ropey を `TextStorage` 抽象越しに使う | [ADR-0004](10-decisions.md#adr-0004-テキストバッファのデータ構造) | 確定 (S-02 の最終判定) |
-| 4 | TUI は ratatui + crossterm | [ADR-0005](10-decisions.md#adr-0005-tui-ライブラリ) | 条件付き確定 (S-06 / S-07) |
+| 4 | TUI は ratatui + crossterm | [ADR-0005](10-decisions.md#adr-0005-tui-ライブラリ) | 確定 (S-06 / S-07 の判定) |
 | 5 | 単一所有のメインループ + 固定 2 本の std スレッドワーカー。受信口は上限なしで生産側がまとめる。async (tokio) は LSP/AI の内側に閉じ込める | [ADR-0006](10-decisions.md#adr-0006-スレッドモデルと-async-境界) | 確定 |
 | 6 | 全操作を名前空間付き CommandId + 型付き引数で表現し、呼び出し元と権限を照合する | [ADR-0007](10-decisions.md#adr-0007-コマンド駆動設計) | 確定 |
 | 7 | core が「テキスト領域はレイアウト済みセルグリッド、UI 部品は意味的モデル」の ViewModel を生成 | [ADR-0008](10-decisions.md#adr-0008-viewmodel-による描画分離) | 確定 |
@@ -135,7 +135,7 @@ flowchart LR
 | 11 | core はメインスレッドで I/O (stat/canonicalize 含む) を行わない (起動時の設定読込は例外)。FileSystem Port の正本は本書 §4.5 | [ADR-0020](10-decisions.md#adr-0020-core-はメインスレッドで-io-を行わないfilesystem-port-の正本は-02) | 確定 |
 | 12 | クリップボードは Effect 経路 (Port にしない)。文字列化は Host のワーカー | [ADR-0021](10-decisions.md#adr-0021-クリップボードは-effect-経路) | 確定 |
 | 13 | キーマップ解決の意味論 (Text/Key、チョード、競合、`mod`) は core に置き本書 §7.2 が正本 | [ADR-0022](10-decisions.md#adr-0022-キーマップ解決の意味論) | 確定 |
-| 14 | 緊急退避は `EmergencySnapshot` (文書ごとのスロット) から受信スレッドが直ちに書く | [ADR-0023](10-decisions.md#adr-0023-緊急退避は-emergencysnapshot-から別スレッドで書く) | 条件付き確定 (S-11) |
+| 14 | 緊急退避は `EmergencySnapshot` (文書ごとのスロット) から受信スレッドが直ちに書く | [ADR-0023](10-decisions.md#adr-0023-緊急退避は-emergencysnapshot-から別スレッドで書く) | 確定 (S-11 の判定) |
 | 15 | 既定テーマは TrueColor。縮退段 (256 / 16 / mono) の Style を事前に計算し、core が段を選んで Style を解決する (v0.1 の組込みテーマが明示するのは truecolor と mono の 2 段で、256 / 16 は truecolor の値からの自動近似。01 FR-513、07 §8) | [ADR-0027](10-decisions.md#adr-0027-既定テーマは-truecolor縮退段を明示する) | 確定 |
 | 16 | CommandId カタログと設定キー・既定値の正本は 07 | [ADR-0025](10-decisions.md#adr-0025-commandid-カタログと設定キーの正本は-07) | 確定 |
 | 17 | レガシー文字コードの保存は encode→decode 照合 (v0.1) + 復号専用文字の保持方式 (v0.4) | [ADR-0026](10-decisions.md#adr-0026-レガシー文字コード保存の黙示置換検出と保持方式) | 確定 (S-01 の判定) |
@@ -1699,7 +1699,7 @@ enum JobError {                    // #[non_exhaustive]
 | Windows のコンソールクローズ・外部からの CTRL_C / CTRL_BREAK (v0.1)、ログオフ・シャットダウン (v0.2、ベストエフォート)、SIGTERM / SIGHUP / 外部からの SIGINT / SSH 切断 (macOS / Linux を出荷する版) | **なし** (送信者は停止を期待しており、対話は届かない) | 下記の役割分担 |
 | SIGTSTP (Unix) | なし | 端末復元 → 停止 → SIGCONT で再初期化・全再描画 (04 §14.5)。サスペンドのコマンドは v0.2 |
 
-**非対話終了の役割分担** (ADR-0023、条件付き確定 (S-11)): メインスレッドが端末への書込でブロックしていても (SSH の停止、ConPTY の詰まり) 退避できるよう、メインに依存しない。
+**非対話終了の役割分担** (ADR-0023): メインスレッドが端末への書込でブロックしていても (SSH の停止、ConPTY の詰まり) 退避できるよう、メインに依存しない。
 
 順序は 1 つに決め、段ごとの時間と合計の上限は [§11.2.1 の「終了の順序と時間予算」](#1121-緊急退避の方式-正本adr-0023) の表を正本とする。
 
@@ -2082,7 +2082,7 @@ sensitive = false                     # 任意 (無ければ false)。秘密フ�
 
 ## 13. 主要クレート選定
 
-> 個々のクレートの採否は、ADR で決めたもの (ropey = ADR-0004 は確定、ratatui + crossterm = ADR-0005 は条件付き確定。encoding_rs = ADR-0009、TOML = ADR-0011、thiserror / anyhow / tracing = ADR-0012 は確定) を除いて **提案中**。バージョンは採用確定時点の最新安定版を `Cargo.lock` で固定する。P0 スパイクと実装中の計測で起動時間・バイナリサイズ・Windows 動作を確認する。v0.1 の目標は **推移的依存 ≤ 90 (`x86_64-pc-windows-msvc`、既定 feature、normal 依存。Linux は出荷する版で加える)、C を含む依存 0、バイナリ ≤ 8 MB** (NFR-205 / NFR-207。いずれも Should で、v0.1 のリリースゲートは C を含む依存 0 だけ。依存数とサイズは報告する、08 §2.2)。
+> 個々のクレートの採否は、ADR で決めたもの (ropey = ADR-0004、ratatui + crossterm = ADR-0005、encoding_rs = ADR-0009、TOML = ADR-0011、thiserror / anyhow / tracing = ADR-0012 は確定) を除いて **提案中**。バージョンは採用確定時点の最新安定版を `Cargo.lock` で固定する。P0 スパイクと実装中の計測で起動時間・バイナリサイズ・Windows 動作を確認する。v0.1 の目標は **推移的依存 ≤ 90 (`x86_64-pc-windows-msvc`、既定 feature、normal 依存。Linux は出荷する版で加える)、C を含む依存 0、バイナリ ≤ 8 MB** (NFR-205 / NFR-207。いずれも Should で、v0.1 のリリースゲートは C を含む依存 0 だけ。依存数とサイズは報告する、08 §2.2)。
 
 ### 13.0 依存追加の評価基準
 
