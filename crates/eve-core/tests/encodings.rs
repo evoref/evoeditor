@@ -261,17 +261,18 @@ fn 重複符号化の行を読込時に数えて通知する() {
     assert!(messages(&mut s).contains(&"info.open.lossy_roundtrip".to_owned()));
 }
 
-// 往復の検査を打ち切った文書 (4 MiB を超える行がある) は、打ち切りより後ろの区分 B を数えていない。
-// 数えていない範囲に区分 B があり得るので、編集して保存するときは確認を出す (03 §8.7、Issue #495)。
+// 往復の検査を打ち切った文書 (4 MiB を超える行がある) は、打ち切りより後ろの区分 B / D を数えていない。
+// 数えていない範囲に区分 B / D があり得るので、編集して保存するときは確認を出す (03 §8.7、Issue #495)。
+// v0.4 で検査を打ち切るのは ISO-2022-JP だけ (Shift_JIS / EUC-JP は長い行を小分けにして調べる、03 §8.7.1)。
 // verifies: AC-NFR-303-3
 #[test]
 fn 検査を打ち切った文書は編集して保存するとき確認する() {
     let mut s = env();
-    // 1 行目が 4 MiB を超える ASCII、2 行目に重複符号化 (IBM 拡張の ¬ 0xFA54。再符号化すると 0x81CA)
+    // 1 行目が 4 MiB を超える ASCII、2 行目にエスケープの選び方の差 (旧 JIS の `ESC $ @`。再符号化すると `ESC $ B`)
     let mut bytes = vec![b'a'; 4 * 1024 * 1024 + 1];
-    bytes.extend_from_slice(b"\n\xFA\x54\n");
+    bytes.extend_from_slice(b"\n\x1B$@$\"\x1B(B\n");
     s.fs.add_file("/w/a.txt", &bytes);
-    open_as(&mut s, "/w/a.txt", Encoding::ShiftJis);
+    open_as(&mut s, "/w/a.txt", Encoding::Iso2022Jp);
     assert!(doc(&s).format.roundtrip.incomplete, "検査を打ち切った");
     s.text("x");
     save(&mut s);
