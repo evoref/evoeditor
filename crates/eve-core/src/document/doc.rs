@@ -4,17 +4,21 @@
 
 use std::sync::Arc;
 
-use eve_text::{ByteOff, ChangeSet, ChangeSetError, Selection, Snapshot, Text, TextRead};
+use eve_encoding::{NoPreserveReason, PreserveStatus};
+use eve_text::{
+    ByteOff, ByteRange, ChangeSet, ChangeSetError, Selection, Snapshot, Text, TextRead,
+};
 use eve_view::Revision;
 
 use crate::io::fs::FileStamp;
 use crate::io::fspath::FsPath;
 
 use super::format::{
-    EolStats, FormatRestore, LoadState, ReadOnlyReasons, TextFormat, count_long_lines, count_range,
-    long_lines_touched,
+    EolStats, FormatChange, FormatRestore, LoadState, PreservedState, ReadOnlyReasons, TextFormat,
+    count_long_lines, count_range, long_lines_touched,
 };
-use super::history::{NodeId, RecordOutcome, UndoHistory};
+use super::history::{NodeId, PreservedUndo, RecordOutcome, UndoHistory};
+use super::preserved::{PreservedMap, PreservedSpan};
 use super::transaction::{Origin, Transaction};
 
 /// `Document::apply` が返す結果。
@@ -116,6 +120,37 @@ pub struct Document {
     pub(crate) layout_cache: std::cell::RefCell<crate::layout::LayoutCache>,
     /// 無題の通し番号 (`無題-{n}` の n、03 §9.8)。`EditorState::add_document` が振る。名前を付けて保存した後も戻さない。
     pub(crate) untitled_no: Option<u32>,
+    /// 保持方式の記録の表 (03 §8.7.1、v0.4)。`TextFormat` には入れない (編集のたびに複製されるため)。状態は
+    /// `format.roundtrip.preserve`。更新は `apply` と Undo / Redo の適用 (`apply_step`) だけで行う (03 §6.5 手順 4)。
+    preserved: PreservedMap,
+    /// Undo / Redo の適用で、表と履歴が食い違った回数 (起きないはず。03 §8.7.1 の「食い違い」)。eve-core には
+    /// ログの出口がまだ無い (02 §9.2 の `LogSink` は Host の部品) ので、件数だけを数え、debug ビルドでは止める。
+    preserved_anomalies: u32,
+}
+
+/// 書式の変更が、保持方式の記録の表を丸ごと入れ替えるか (再読込・復旧)。
+fn replaces_preserved(fc: &FormatChange) -> bool {
+    matches!(
+        fc,
+        FormatChange::Reload { .. } | FormatChange::Recovery { .. }
+    )
+}
+
+/// 粗い逆変換 (03 §12.5) の範囲: 変更の最初の始まりから最後の終わりまでを、触れる記録で広げた範囲 (旧の座標) と、
+/// その範囲にある記録の複製 (4 本目の申し送り: 範囲の境をまたぐ記録が無いよう `affected_hull` で広げる)。
+fn coarse_hull(map: &PreservedMap, cs: &ChangeSet) -> Option<(ByteRange, Vec<PreservedSpan>)> {
+    let mut hunks = cs.changed_ranges();
+    let first = hunks.next()?;
+    let last_end = hunks.last().map_or(first.0.end, |(o, _)| o.end);
+    let hull = map.affected_hull(ByteRange::new(first.0.start, last_end));
+    Some((hull, map.spans_in(hull)))
+}
+
+/// `hull` (旧の座標) を、`cs` を適用した後の座標へ写す。`hull` は全部の変更を含むので、始まりは変わらず、終わりは
+/// 長さの差だけずれる。
+fn map_hull(hull: ByteRange, cs: &ChangeSet) -> ByteRange {
+    let end = (hull.end.0 + cs.len_after()).saturating_sub(cs.len_before());
+    ByteRange::new(hull.start, ByteOff(end))
 }
 
 /// `eol_stats` の更新の窓 (03 §6.5): 編集ごとに旧 `[s-1, e+1)`・新 `[s-1, s+|x|+1)` を取り、
@@ -149,15 +184,17 @@ impl Document {
     }
 
     /// 読込完了した文書。`format.eol_stats` と `format.long_lines` は文書から数え直す。履歴の根が保存点。
+    /// 保持方式の記録の表は空 (試験・新規文書。読込のジョブの結果は `from_loaded` で表を渡す)。
     pub fn from_text(text: Text, mut format: TextFormat) -> Document {
         format.eol_stats = EolStats::count(&text);
         format.long_lines = count_long_lines(&text, format.long_line_threshold);
-        Document::from_loaded(text, format)
+        Document::from_loaded(text, format, PreservedMap::new())
     }
 
-    /// 読込ジョブが作った本文と形式から文書を作る。`format.eol_stats` と `format.long_lines` は、ジョブが復号しながら
-    /// 数えた値をそのまま使う (メインスレッドで全文を走査し直さない。docs/review/v0.3-findings.md の PRF-17)。
-    pub fn from_loaded(text: Text, format: TextFormat) -> Document {
+    /// 読込ジョブが作った本文と形式と、保持方式の記録の表 (`JobResult::Complete` の `preserved`。ジョブが本文と照合済み)
+    /// から文書を作る。`format.eol_stats` と `format.long_lines` は、ジョブが復号しながら数えた値をそのまま使う
+    /// (メインスレッドで全文を走査し直さない。docs/review/v0.3-findings.md の PRF-17)。
+    pub fn from_loaded(text: Text, format: TextFormat, preserved: PreservedMap) -> Document {
         debug_assert_eq!(
             format.eol_stats,
             EolStats::count(&text),
@@ -183,7 +220,27 @@ impl Document {
             display: DisplaySettings::default(),
             layout_cache: std::cell::RefCell::default(),
             untitled_no: None,
+            preserved,
+            preserved_anomalies: 0,
         }
+    }
+
+    /// 保持方式の記録の表 (03 §8.7.1)。状態は `format.roundtrip.preserve`。
+    pub fn preserved(&self) -> &PreservedMap {
+        &self.preserved
+    }
+
+    /// Undo / Redo の適用で、表と履歴が食い違った回数 (試験用。0 のはず)。
+    pub fn preserved_anomalies(&self) -> u32 {
+        self.preserved_anomalies
+    }
+
+    /// 保持方式の記録を捨てる (違う文字コードで保存が成功した、03 §8.7.1 / §8.8)。状態は呼び出し側が
+    /// `format.roundtrip` と一緒に決める。履歴のノードが持つ記録 (外した記録・再読込と復旧の前後の表) も捨てる
+    /// (Undo で元の文字コードの記録が表に戻らないように)。
+    pub(crate) fn clear_preserved(&mut self) {
+        self.preserved = PreservedMap::new();
+        self.history.forget_preserved();
     }
 
     /// 本文。
@@ -235,7 +292,8 @@ impl Document {
             return Err(ApplyError::Rejected);
         }
         if tx.changes.is_identity() {
-            // 本文が同じ再読込: 書式と理由だけ差し替える (履歴のノードは作らない)
+            // 本文が同じ再読込: 書式と理由と保持方式の記録だけ差し替える (履歴のノードは作らない)。本文が同じ復旧は
+            // 何も変えない (記録は本文と合ったまま)
             if let Some(fc) = &tx.format_change {
                 self.restore_format(fc.side(true));
             }
@@ -243,27 +301,68 @@ impl Document {
                 selection: tx.selection_after.clone(),
             });
         }
+        // 書式の変更。復旧は、保持方式の記録を捨てて「保持なし (復旧した)」にする変更をここで作る (03 §8.7.1 の
+        // 「緊急退避・スワップ・復旧」。経路ごとに作らない)
+        let format = match (&tx.format_change, &tx.origin) {
+            (None, Origin::Recovery) if !tx.is_undo => Some(FormatChange::Recovery {
+                before: PreservedState {
+                    map: self.preserved.clone(),
+                    status: self.format.roundtrip.preserve,
+                },
+                after: PreservedState {
+                    map: PreservedMap::new(),
+                    status: PreserveStatus::Unavailable(NoPreserveReason::Recovered),
+                },
+            }),
+            (fc, _) => fc.clone(),
+        };
+        // 粗い逆変換 (03 §12.5) にするときは、編集の前の記録を取り出しておく (変更の境をまたいで外れる記録も含める)
+        let hull = (tx.coarse_undo && !tx.is_undo && !self.preserved.is_empty())
+            .then(|| coarse_hull(&self.preserved, &tx.changes))
+            .flatten();
         // 2.〜4. 適用前の Snapshot、逆変換、適用。`Text::apply` は検査を先に行い、失敗では何も変えない
         let before = self.text.snapshot();
         self.text.apply(&tx.changes).map_err(ApplyError::Text)?;
-        let inverse = tx
+        let coarse = tx
             .coarse_undo
             .then(|| super::coarse_inverse(&tx.changes, &before, &self.text))
-            .flatten()
-            .unwrap_or_else(|| tx.changes.invert(&before));
+            .flatten();
+        let is_coarse = coarse.is_some();
+        let inverse = coarse.unwrap_or_else(|| tx.changes.invert(&before));
         self.update_eol_stats(&before, &tx.changes);
+        // 4. 保持方式の記録の写像 (03 §8.7.1 の「編集での写像」)。表を入れ替える変更 (再読込・復旧) は写さない
+        let preserved = if format.as_ref().is_some_and(replaces_preserved) {
+            PreservedUndo::None
+        } else if tx.is_undo {
+            // 履歴の外から来た Undo / Redo の Transaction: 外さずに位置だけを写す
+            let odd = self.preserved.apply_undo(&tx.changes, &[]);
+            self.note_anomaly(&odd);
+            PreservedUndo::None
+        } else {
+            let removed = self.preserved.apply_edit(&tx.changes);
+            match hull {
+                Some((hull, spans)) if is_coarse => PreservedUndo::Range {
+                    after: map_hull(hull, &tx.changes),
+                    hull_len: hull.len(),
+                    before: spans.into(),
+                    removed: removed.into(),
+                },
+                _ => PreservedUndo::removed(removed),
+            }
+        };
         // 5. Revision
         let old_revision = self.revision;
         self.revision = self.revision.next();
         // 6. 履歴への記録 (Undo / Redo の Transaction は `undo` / `redo` を使う)
+        let after_format = format.as_ref().map(|fc| fc.side(true));
         let record = if tx.is_undo {
             None
         } else {
-            Some(self.history.record(tx, inverse))
+            Some(self.history.record_with(tx, inverse, format, preserved))
         };
-        // 再読込・改行コードの変換: 書式を新しいものに差し替える (前後の値は Undo ノードが持つ)
-        if let Some(fc) = &tx.format_change {
-            self.restore_format(fc.side(true));
+        // 再読込・改行コードの変換・復旧: 書式 (と保持方式の記録) を新しいものに差し替える (前後の値は Undo ノードが持つ)
+        if let Some(f) = after_format {
+            self.restore_format(f);
         }
         Ok(AppliedTx::Changed(Applied {
             old_revision,
@@ -294,6 +393,8 @@ impl Document {
             step.origin,
             step.selection,
             step.format,
+            &step.preserved,
+            false,
         )?))
     }
 
@@ -314,21 +415,55 @@ impl Document {
             step.origin,
             step.selection,
             step.format,
+            &step.preserved,
+            true,
         )?))
     }
 
+    /// Undo (`redo == false`) / Redo の適用。本文・書式と一緒に、保持方式の記録を戻す・外す (03 §8.7.1 の「Undo / Redo」)。
     fn apply_step(
         &mut self,
         changes: Arc<ChangeSet>,
         origin: Origin,
         selection: Option<Selection>,
         format: Option<FormatRestore>,
+        preserved: &PreservedUndo,
+        redo: bool,
     ) -> Result<Applied, ApplyError> {
         let before = self.text.snapshot();
         // 履歴と文書が食い違った場合も、文書は変えない (履歴の不整合は呼び出しの誤り)
         self.text.apply(&changes).map_err(ApplyError::Text)?;
         self.update_eol_stats(&before, &changes);
-        // 再読込・改行コードの変換のノードは、書式も一緒に戻す (03 §7.2)
+        // 保持方式の記録: 表を入れ替えるノード (再読込・復旧) は下の書式と一緒に入れ替える。ほかは写像で戻す・外す
+        let swaps = matches!(
+            format,
+            Some(FormatRestore::State(_) | FormatRestore::Preserved(_))
+        );
+        if !swaps {
+            let odd = match (preserved, redo) {
+                (PreservedUndo::None, false) => self.preserved.apply_undo(&changes, &[]),
+                (PreservedUndo::None, true) => self.preserved.apply_redo(&changes, &[]),
+                (PreservedUndo::Removed(r), false) => self.preserved.apply_undo(&changes, r),
+                (PreservedUndo::Removed(r), true) => self.preserved.apply_redo(&changes, r),
+                (
+                    PreservedUndo::Range {
+                        after,
+                        hull_len,
+                        before,
+                        ..
+                    },
+                    false,
+                ) => {
+                    self.preserved.replace_range(*after, *hull_len, before);
+                    Vec::new()
+                }
+                (PreservedUndo::Range { removed, .. }, true) => {
+                    self.preserved.apply_redo(&changes, removed)
+                }
+            };
+            self.note_anomaly(&odd);
+        }
+        // 再読込・改行コードの変換・復旧のノードは、書式も一緒に戻す (03 §7.2)
         if let Some(f) = format {
             self.restore_format(f);
         }
@@ -345,14 +480,33 @@ impl Document {
         })
     }
 
-    /// 書式を戻す (03 §7.2): 再読込は `TextFormat` 全体と読み取り専用の理由、改行コードの変換は `default_eol` だけ。
+    /// 書式を戻す (03 §7.2): 再読込は `TextFormat` 全体と読み取り専用の理由と保持方式の記録、改行コードの変換は
+    /// `default_eol` だけ、復旧は保持方式の記録と状態だけ。
     fn restore_format(&mut self, f: FormatRestore) {
         match f {
             FormatRestore::State(st) => {
                 self.format = st.format;
                 self.read_only = st.read_only;
+                self.preserved = st.preserved;
             }
             FormatRestore::DefaultEol(eol) => self.format.default_eol = eol,
+            FormatRestore::Preserved(st) => {
+                self.preserved = st.map;
+                self.format.roundtrip.preserve = st.status;
+            }
+        }
+    }
+
+    /// Undo / Redo の適用で表と履歴が食い違った (正しく使えば起きない)。本文を含めずに数え、debug ビルドでは止める。
+    fn note_anomaly(&mut self, odd: &[PreservedSpan]) {
+        if !odd.is_empty() {
+            self.preserved_anomalies = self.preserved_anomalies.saturating_add(1);
+            debug_assert!(
+                false,
+                "保持方式の記録が履歴と食い違った ({} 件、{:?})",
+                odd.len(),
+                odd.first()
+            );
         }
     }
 

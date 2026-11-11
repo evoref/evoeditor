@@ -31,7 +31,7 @@ pub use preserve::{
     PreservedRecord, PreservedRecords,
 };
 pub use roundtrip::{
-    MAX_LINE, MAX_POSITIONS, RoundtripChecker, RoundtripSummary, check as check_roundtrip,
-    check_with_records as check_roundtrip_with_records,
+    MAX_LINE, MAX_POSITIONS, NoPreserveReason, PreserveStatus, RoundtripChecker, RoundtripSummary,
+    check as check_roundtrip, check_with_records as check_roundtrip_with_records,
 };
 pub use utf8::{ESCAPE_BASE, PuaEscapeMode, Utf8Decoder, Utf8Encoder, escape_byte, unescape_char};

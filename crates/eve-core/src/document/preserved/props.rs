@@ -93,7 +93,7 @@ const ISO_END: &[&[u8]] = &[b"", b"", b"z\x1B(B"];
 const EOLS: [&[u8]; 3] = [b"\n", b"\r\n", b"\r"];
 
 /// 挿入する文字列 (区分 B の文字そのものを打ち直しても、記録は戻らない)。
-const INSERTS: &[&str] = &[
+pub(super) const INSERTS: &[&str] = &[
     "", "a", "x\ny", "\n", "\r", "\r\n", "¬", "あ", "\u{FF71}", "\\", "纊",
 ];
 
@@ -125,7 +125,7 @@ fn iso_bytes(lines: &[(u8, Vec<u8>, u8, u8)]) -> Vec<u8> {
 }
 
 /// (文字コード, バイト列)。
-fn doc() -> impl Strategy<Value = (Encoding, Vec<u8>)> {
+pub(super) fn doc() -> impl Strategy<Value = (Encoding, Vec<u8>)> {
     let picks = proptest::collection::vec((any::<u8>(), any::<u8>()), 0..48);
     let iso = proptest::collection::vec(
         (
@@ -217,7 +217,7 @@ struct World {
     copies: Vec<(PreservedMap, Vec<PreservedSpan>)>,
 }
 
-fn floor_boundary(t: &dyn TextRead, mut p: usize) -> usize {
+pub(super) fn floor_boundary(t: &dyn TextRead, mut p: usize) -> usize {
     p = p.min(t.len_bytes());
     while !t.is_char_boundary(ByteOff(p)) {
         p -= 1;

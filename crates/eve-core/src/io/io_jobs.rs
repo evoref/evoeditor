@@ -7,12 +7,15 @@
 
 use eve_encoding::{
     Confidence, Decoder, DetectOptions, DetectedKind, Detection, EncodeReport, Encoder, Encoding,
-    EscapePolicy, RoundtripChecker, detect, find_iso_switch, redetect_window,
+    EscapePolicy, NoPreserveReason, PreserveState, PreserveStatus, PreservedRecords,
+    RoundtripChecker, detect, find_iso_switch, redetect_window,
 };
 use eve_text::{ByteRange, LineEnding, Snapshot, TextBuilder, TextRead};
 use eve_view::JobId;
 
-use crate::document::{LineStatsScanner, ReadOnlyReason, ReadOnlyReasons, TextFormat};
+use crate::document::{
+    LineStatsScanner, PreservedMap, ReadOnlyReason, ReadOnlyReasons, TextFormat,
+};
 use crate::io::fs::{
     ChunkError, Expect, FileKind, FileStamp, FsError, FsErrorDetail, FsErrorKind, ReadChunks,
     SaveOptions,
@@ -264,7 +267,8 @@ fn open_inner(
                 }
             }
             decoder = Some(Decoder::new(enc, bom_len > 0));
-            checker = Some(RoundtripChecker::new(enc));
+            // 保持方式の記録も集める (03 §8.7.1。区分 A の文字コードでは集めない)。BOM は検査器に渡さない (下の `body`)
+            checker = Some(RoundtripChecker::with_records(enc));
             plan = Some(Plan {
                 enc,
                 bom_len,
@@ -341,7 +345,8 @@ fn open_inner(
     // 空のファイルは sniff なしで終わる
     let mut dec =
         decoder.unwrap_or_else(|| Decoder::new(opts.forced.unwrap_or(Encoding::Utf8), true));
-    let mut chk = checker.unwrap_or_else(|| RoundtripChecker::new(Encoding::Utf8));
+    let mut chk = checker
+        .unwrap_or_else(|| RoundtripChecker::with_records(opts.forced.unwrap_or(Encoding::Utf8)));
     out.clear();
     dec.decode(&[], true, &mut out);
     builder.append(&out);
@@ -364,6 +369,12 @@ fn open_inner(
     // 形式: 文字コード・BOM・不正バイト・改行の多数派 (同数・改行なしは `file.default_line_ending`)
     // 閾値 (既定 1 MiB) を超える行は char 近似モードで扱う (編集できる。NFR-106、03 §11.5.1)
     let (eol_stats, long_lines) = line_stats.finish();
+    // 保持方式の記録を文書の表にし、全部の記録を本文と照合する (03 §8.7.1 の「読込の完了時の照合」。記録の総数に
+    // 比例するので、メインスレッドではなくここで行う)
+    let (mut roundtrip, records) = chk.finish_with_records();
+    let (preserved, status) = preserved_from_records(&records, enc, dec.invalid_bytes(), &text);
+    drop(records);
+    roundtrip.preserve = status;
     let format = TextFormat {
         encoding: enc,
         has_bom: dec.has_bom(),
@@ -371,7 +382,7 @@ fn open_inner(
         eol_stats,
         invalid_bytes: dec.invalid_bytes(),
         pua_escape: dec.pua_mode(),
-        roundtrip: chk.finish(),
+        roundtrip,
         long_line_threshold,
         long_lines,
     };
@@ -404,6 +415,7 @@ fn open_inner(
     JobResult::Complete {
         text,
         format,
+        preserved,
         meta,
         stamp,
         changed_during_load,
@@ -413,6 +425,43 @@ fn open_inner(
             guess_unsupported,
         },
         interrupted_save: map_interrupted(ports.fs.as_ref(), &inflight, true),
+    }
+}
+
+/// 読込の検査が集めた記録 (`records`) を文書の表にし、保持方式の状態を決める (03 §8.7.1 の「集める側と持つ側」
+/// 「読込の完了時の照合」「『保持なし』と『保持できなかった箇所がある』」)。`text` は記録を集めたのと同じバイト列を
+/// 復号した本文。照合に合わない記録が 1 件でもあれば、記録を全部捨てて「保持なし」にする。
+///
+/// 照合の失敗は実装の誤りなので debug ビルドでは止める。eve-core にはまだログの出口が無い (02 §9.2 の `LogSink` は
+/// Host の部品) ので、製品では状態 (`NoPreserveReason::VerifyFailed`) だけを残す (本文を含めない)。
+fn preserved_from_records(
+    records: &PreservedRecords,
+    enc: Encoding,
+    invalid_bytes: u32,
+    text: &dyn TextRead,
+) -> (PreservedMap, PreserveStatus) {
+    let none = |reason| (PreservedMap::new(), PreserveStatus::Unavailable(reason));
+    match records.state {
+        PreserveState::Collected => match PreservedMap::from_records(records, enc, text) {
+            Ok(map) => (
+                map,
+                PreserveStatus::Active {
+                    unpreserved: records.unpreserved,
+                },
+            ),
+            Err(e) => {
+                debug_assert!(false, "読込の完了時の照合に失敗した: {e}");
+                none(NoPreserveReason::VerifyFailed)
+            }
+        },
+        PreserveState::Overflow => none(NoPreserveReason::Overflow),
+        PreserveState::Incomplete => none(NoPreserveReason::Incomplete),
+        // 不正バイトを含む ISO-2022-JP の文書 (検査器が記録を捨てる。ISO-2022-JP では保存しない、03 §8.3)
+        PreserveState::Disabled if enc.is_stateful() && invalid_bytes > 0 => {
+            none(NoPreserveReason::InvalidBytes)
+        }
+        // 区分 A の文字コード (UTF-8 / UTF-16。バイナリの確認から UTF-8 で読んだものを含む)
+        PreserveState::Disabled => (PreservedMap::new(), PreserveStatus::NotApplicable),
     }
 }
 

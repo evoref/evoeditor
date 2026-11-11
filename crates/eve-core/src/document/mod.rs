@@ -11,12 +11,7 @@ pub(crate) mod eol;
 pub(crate) mod eol_cmd;
 mod format;
 mod history;
-// 保持方式の記録の表 (03 §8.7.1、M22 の 4)。`Document` への組み込み (読込・編集・Undo / Redo) は M22 の 5 本目なので、
-// それまでは試験からしか使わない
-#[allow(
-    dead_code,
-    reason = "M22 の 5 本目で Document から使う。それまでは単体の型として試験で固める"
-)]
+// 保持方式の記録の表 (03 §8.7.1、M22 の 4・5)
 pub(crate) mod preserved;
 mod transaction;
 
@@ -26,11 +21,7 @@ pub use format::{
     ReadOnlyReason, ReadOnlyReasons, TextFormat, count_long_lines,
 };
 pub use history::{HistoryStep, NodeId, RecordOutcome, UndoBudget, UndoHistory};
-#[allow(
-    unused_imports,
-    reason = "M22 の 5 本目で Document から使う。それまでは単体の型として試験で固める"
-)]
-pub(crate) use preserved::{PreservedError, PreservedMap, PreservedSpan};
+pub use preserved::{PreservedError, PreservedMap};
 pub use transaction::{Origin, Transaction, TransactionMeta, UndoGroupHint};
 
 /// プロセス全体の Undo 履歴の上限 (NFR-203、03 §7.5)。`docs` の履歴の会計値の合計が `limit` を超えている間、

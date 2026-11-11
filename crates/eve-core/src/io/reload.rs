@@ -152,6 +152,7 @@ impl EditorState {
         path: &FsPath,
         text: eve_text::Text,
         mut format: crate::document::TextFormat,
+        preserved: crate::document::PreservedMap,
         stamp: crate::io::fs::FileStamp,
         detected: crate::document::ReadOnlyReasons,
     ) {
@@ -170,10 +171,12 @@ impl EditorState {
             before: FormatState {
                 format: old.format.clone(),
                 read_only: old.read_only,
+                preserved: old.preserved().clone(),
             },
             after: FormatState {
                 format,
                 read_only: detected,
+                preserved,
             },
         };
         // 全置換。新全文は読込の rope を共有し (複写しない)、旧全文は逆変換が旧 rope を共有する (03 §9.5、SAF-33)
@@ -240,12 +243,15 @@ impl EditorState {
             JobResult::Complete {
                 text,
                 format,
+                preserved,
                 stamp,
                 changed_during_load,
                 detected,
                 ..
             } if kind == OpenKind::Reload => {
-                self.apply_reload(doc_id, view, &path, text, format, stamp, detected);
+                self.apply_reload(
+                    doc_id, view, &path, text, format, preserved, stamp, detected,
+                );
                 if changed_during_load {
                     self.message(
                         MessageLevel::Warn,
@@ -257,13 +263,15 @@ impl EditorState {
             JobResult::Complete {
                 text,
                 format,
+                preserved,
                 stamp,
                 changed_during_load,
                 detected,
                 ..
             } => {
                 let encoding = format.encoding;
-                let mut d = Document::from_loaded(text, format);
+                // 保持方式の記録も新しい読込の結果に入れ替える (03 §8.8 / §8.7.1)
+                let mut d = Document::from_loaded(text, format, preserved);
                 d.path = Some(path.clone());
                 d.disk_stamp = Some(stamp);
                 d.read_only = detected;

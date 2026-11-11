@@ -1,6 +1,6 @@
 //! 文書の形式情報 (docs/02 §5.1、docs/03 §8.1 / §9.6): 改行の統計、`TextFormat`、読み取り専用の理由、読込状態。
 
-use eve_encoding::{Encoding, EscapePolicy, PuaEscapeMode, RoundtripSummary};
+use eve_encoding::{Encoding, EscapePolicy, PreserveStatus, PuaEscapeMode, RoundtripSummary};
 use eve_text::{ByteOff, LineEnding, TextRead};
 
 /// 改行の種類別の数。`CRLF` は 1 つと数える (03 §2.4)。
@@ -243,6 +243,18 @@ pub(crate) fn count_range(text: &dyn TextRead, start: usize, end: usize) -> EolS
 pub struct FormatState {
     pub format: TextFormat,
     pub read_only: ReadOnlyReasons,
+    /// 保持方式の記録の表 (03 §8.7.1。v0.4)。再読込は表を新しい読込の結果に入れ替え、Undo / Redo で前後の表に戻す
+    /// (状態は `format.roundtrip.preserve`)。表の複製は O(1)。
+    pub(crate) preserved: super::preserved::PreservedMap,
+}
+
+/// 保持方式の記録の表と状態の組 (03 §8.7.1)。復旧 (`Origin::Recovery`) の前後の値として Undo のノードが持つ。
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PreservedState {
+    /// 記録の表 (複製は O(1))。
+    pub(crate) map: super::preserved::PreservedMap,
+    /// 状態 (`TextFormat.roundtrip.preserve` に戻す)。
+    pub status: PreserveStatus,
 }
 
 /// Undo ノードに持つ書式の変更 (前後の値)。Undo は `before`、Redo は `after` へ戻す。戻す範囲は種類で決まる (03 §7.2)。
@@ -259,6 +271,12 @@ pub enum FormatChange {
         before: LineEnding,
         after: LineEnding,
     },
+    /// 復旧 (`Origin::Recovery`、03 §10.3 / §8.7.1): 保持方式の記録の表と状態だけ。`Document::apply` が作る
+    /// (復旧の後は表が空で「保持なし (復旧した)」、Undo で復旧の前の表と状態に戻る)。
+    Recovery {
+        before: PreservedState,
+        after: PreservedState,
+    },
 }
 
 /// Undo / Redo で本文と一緒に戻す書式 (`FormatChange` の片側)。
@@ -266,6 +284,7 @@ pub enum FormatChange {
 pub enum FormatRestore {
     State(FormatState),
     DefaultEol(LineEnding),
+    Preserved(PreservedState),
 }
 
 impl FormatChange {
@@ -278,6 +297,22 @@ impl FormatChange {
             FormatChange::DefaultEol { before, after: a } => {
                 FormatRestore::DefaultEol(if after { *a } else { *before })
             }
+            FormatChange::Recovery { before, after: a } => {
+                FormatRestore::Preserved(if after { a.clone() } else { before.clone() })
+            }
+        }
+    }
+
+    /// 前後の保持方式の記録の表の元のバイト列のバイト数 (Undo の予算に数える、03 §7.5)。
+    pub(crate) fn preserved_bytes(&self) -> usize {
+        match self {
+            FormatChange::Reload { before, after } => {
+                before.preserved.total_bytes() + after.preserved.total_bytes()
+            }
+            FormatChange::Recovery { before, after } => {
+                before.map.total_bytes() + after.map.total_bytes()
+            }
+            FormatChange::DefaultEol { .. } => 0,
         }
     }
 }
