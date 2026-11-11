@@ -4,9 +4,11 @@
 //! 入力: 任意のバイト列 + 文字コードのラベル + sniff 長 + チャンク分割位置。判定 (03 §8.2) を通してから復号し、
 //! 往復は「バイト → テキスト → バイト」(区分 A の一致と区分 B の検出) だけを検査する。パニックしないことが主な性質。
 
+use crate::preserve::IsoState;
 use crate::{
     Confidence, Decoder, DetectOptions, DetectedKind, EncodeReport, Encoder, Encoding,
-    EscapePolicy, RoundtripChecker, detect, redetect_window, unescape_char,
+    EscapePolicy, PreserveState, PreservedRecords, RoundtripChecker, detect, redetect_window,
+    unescape_char,
 };
 
 /// 入力の先頭の数バイトを制御に使い、残りを本文にする (cargo-fuzz の生のバイト列をそのまま渡せる)。
@@ -56,7 +58,7 @@ pub fn decode_pipeline(data: &[u8]) {
     let body = &body[bom_len.min(body.len())..];
     let mut dec = Decoder::new(enc, false);
     let mut text = String::new();
-    let mut checker = RoundtripChecker::new(enc);
+    let mut checker = RoundtripChecker::with_records(enc);
     let step = if chunk == 0 { body.len().max(1) } else { chunk };
     let mut it = body.chunks(step).peekable();
     if it.peek().is_none() {
@@ -68,7 +70,9 @@ pub fn decode_pipeline(data: &[u8]) {
         dec.decode(c, last, &mut text);
         checker.feed(c, last);
     }
-    let summary = checker.finish();
+    let (summary, records) = checker.finish_with_records();
+    // 保持方式の記録の性質 (03 §8.7.1): 不変条件・本文の座標・昇順で重ならない
+    check_preserved(enc, &text, &records);
 
     // 状態付き符号化で不正バイトがあれば読み取り専用 (復号できない入力は不正バイトに数えられる)
     let escapes = u32::try_from(text.chars().filter(|c| unescape_char(*c).is_some()).count())
@@ -90,6 +94,88 @@ pub fn decode_pipeline(data: &[u8]) {
     }
     // 区分 B の検出は復号と独立に数えるだけ (件数が上限を超えない)
     assert!(summary.first_offsets.len() <= crate::MAX_POSITIONS);
+}
+
+/// 本文 `body` の行 (区切りは LF・CR・CRLF) ごとの (行頭の位置, 行の内容の長さ)。
+pub fn body_lines(body: &str) -> Vec<(usize, usize)> {
+    let b = body.as_bytes();
+    let mut lines = Vec::new();
+    let mut start = 0;
+    let mut i = 0;
+    while i < b.len() {
+        match b[i] {
+            b'\n' => {
+                lines.push((start, i - start));
+                i += 1;
+                start = i;
+            }
+            b'\r' => {
+                lines.push((start, i - start));
+                i += if b.get(i + 1) == Some(&b'\n') { 2 } else { 1 };
+                start = i;
+            }
+            _ => i += 1,
+        }
+    }
+    lines.push((start, b.len() - start));
+    lines
+}
+
+/// 保持方式の記録 (03 §8.7.1) が満たすべき性質を確かめる (満たさなければパニックする)。`body` は、記録を集めたのと同じ
+/// バイト列を `Decoder` で通しで復号した本文。
+///
+/// - 集め終えていない状態 (`Overflow` など) では、記録も元のバイト列も持たない。
+/// - 記録は行番号・行内の位置の昇順で、重ならない。元のバイト列は `arena` を先頭から順に使う。
+/// - 位置 (`line`・`col`・`len`) は本文の行の内容 (行の終端を含まない) の中を指し、不正バイトのエスケープ文字を含まない。
+/// - **不変条件**: 記録の元のバイト列を初期状態から復号すると、本文のその範囲の文字列になり、初期状態で終わる。
+/// - ISO-2022-JP の記録は、行の内容の全体 (内容が空のこともある)。
+pub fn check_preserved(enc: Encoding, body: &str, recs: &PreservedRecords) {
+    if recs.state != PreserveState::Collected {
+        assert!(recs.records.is_empty() && recs.arena.is_empty());
+        assert_eq!(recs.unpreserved, 0);
+        return;
+    }
+    let lines = body_lines(body);
+    let mut prev: Option<(u64, u64)> = None;
+    let mut arena_at = 0u32;
+    for r in &recs.records {
+        // 内容が空の記録は、ISO-2022-JP の行の記録 (冗長なエスケープだけの行) だけ
+        assert!(r.len > 0 || enc == Encoding::Iso2022Jp, "空の記録 {r:?}");
+        if let Some((line, end)) = prev {
+            assert!(
+                r.line > line || (r.line == line && r.col >= end),
+                "昇順で重ならない {r:?}"
+            );
+        }
+        prev = Some((r.line, r.col + u64::from(r.len)));
+        assert_eq!(r.bytes.start, arena_at, "元のバイト列は順に並ぶ");
+        assert!(r.bytes.start < r.bytes.end && r.bytes.end as usize <= recs.arena.len());
+        arena_at = r.bytes.end;
+        let (start, content) = lines[usize::try_from(r.line).expect("行番号")];
+        let col = usize::try_from(r.col).expect("位置");
+        let end = col + r.len as usize;
+        assert!(end <= content, "行の内容の中 {r:?}");
+        let s = &body[start + col..start + end];
+        assert!(
+            !s.chars().any(|c| unescape_char(c).is_some()),
+            "エスケープ文字を含まない {r:?}"
+        );
+        let bytes = recs.bytes_of(r);
+        let decoded = enc
+            .rs()
+            .decode_without_bom_handling_and_without_replacement(bytes)
+            .expect("不正バイトなしに復号できる");
+        assert_eq!(decoded, s, "不変条件 {r:?} {bytes:02X?}");
+        if enc == Encoding::Iso2022Jp {
+            assert_eq!((r.col, r.len as usize), (0, content), "行の内容の全体");
+            assert_eq!(
+                IsoState::Ascii.after(bytes),
+                IsoState::Ascii,
+                "ASCII 状態で終わる"
+            );
+        }
+    }
+    assert_eq!(arena_at as usize, recs.arena.len());
 }
 
 /// `fuzz_encode` の本体 (docs/review/v0.3-findings.md の §2.7 の 9)。入力の先頭 4 バイトで文字コード (6 個)・
