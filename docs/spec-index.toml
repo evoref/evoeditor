@@ -4423,7 +4423,7 @@ title = "版の概観"
 id = "08 §2"
 file = "docs/08-roadmap.md"
 line = 51
-end = 217
+end = 233
 title = "各版の定義"
 
 [[section]]
@@ -4465,105 +4465,105 @@ title = "v0.3: 整理・効率化・品質"
 id = "08 §2.5"
 file = "docs/08-roadmap.md"
 line = 156
-end = 164
+end = 180
 title = "v0.4: 日本語と巨大ファイルの完成版"
 
 [[section]]
 id = "08 §2.6"
 file = "docs/08-roadmap.md"
-line = 165
-end = 173
+line = 181
+end = 189
 title = "v0.5: 実用化 (1) 編集と検索の拡張"
 
 [[section]]
 id = "08 §2.7"
 file = "docs/08-roadmap.md"
-line = 174
-end = 182
+line = 190
+end = 198
 title = "v0.6: 実用化 (2) ハイライトと配布"
 
 [[section]]
 id = "08 §2.8"
 file = "docs/08-roadmap.md"
-line = 183
-end = 192
+line = 199
+end = 208
 title = "v1.0: 安定化"
 
 [[section]]
 id = "08 §2.9"
 file = "docs/08-roadmap.md"
-line = 193
-end = 205
+line = 209
+end = 221
 title = "v1.L: 言語支援・AI 基盤"
 
 [[section]]
 id = "08 §2.10"
 file = "docs/08-roadmap.md"
-line = 206
-end = 217
+line = 222
+end = 233
 title = "v1.X: 拡張"
 
 [[section]]
 id = "08 §3"
 file = "docs/08-roadmap.md"
-line = 218
-end = 282
+line = 234
+end = 298
 title = "P0 検証スパイク一覧"
 
 [[section]]
 id = "08 §3.1"
 file = "docs/08-roadmap.md"
-line = 265
-end = 282
+line = 281
+end = 298
 title = "v0.2 (macOS / Linux 出荷時) の対象"
 
 [[section]]
 id = "08 §4"
 file = "docs/08-roadmap.md"
-line = 283
-end = 301
+line = 299
+end = 318
 title = "マイルストーン"
 
 [[section]]
 id = "08 §5"
 file = "docs/08-roadmap.md"
-line = 302
-end = 349
+line = 319
+end = 366
 title = "実装着手の条件 (仕様確定のゲート)"
 
 [[section]]
 id = "08 §5.1"
 file = "docs/08-roadmap.md"
-line = 318
-end = 349
+line = 335
+end = 366
 title = "G1a の条件の状態"
 
 [[section]]
 id = "08 §6"
 file = "docs/08-roadmap.md"
-line = 350
-end = 376
+line = 367
+end = 393
 title = "依存関係とクリティカルパス"
 
 [[section]]
 id = "08 §7"
 file = "docs/08-roadmap.md"
-line = 377
-end = 390
+line = 394
+end = 407
 title = "繰り越し記録"
 
 [[section]]
 id = "08 §8"
 file = "docs/08-roadmap.md"
-line = 391
-end = 416
+line = 408
+end = 433
 title = "1.0 の判定"
 
 [[section]]
 id = "08 §8.1"
 file = "docs/08-roadmap.md"
-line = 396
-end = 416
+line = 413
+end = 433
 title = "TUI 完成の定義 (OQ-151)"
 
 [[section]]
@@ -8678,153 +8678,201 @@ line = 150
 section = "08 §2.4"
 
 [[id]]
+id = "M20"
+file = "docs/08-roadmap.md"
+line = 168
+section = "08 §2.5"
+
+[[id]]
+id = "M21"
+file = "docs/08-roadmap.md"
+line = 169
+section = "08 §2.5"
+
+[[id]]
+id = "M22"
+file = "docs/08-roadmap.md"
+line = 170
+section = "08 §2.5"
+
+[[id]]
+id = "M23"
+file = "docs/08-roadmap.md"
+line = 171
+section = "08 §2.5"
+
+[[id]]
+id = "M24"
+file = "docs/08-roadmap.md"
+line = 172
+section = "08 §2.5"
+
+[[id]]
+id = "M25"
+file = "docs/08-roadmap.md"
+line = 173
+section = "08 §2.5"
+
+[[id]]
+id = "M26"
+file = "docs/08-roadmap.md"
+line = 174
+section = "08 §2.5"
+
+[[id]]
+id = "M27"
+file = "docs/08-roadmap.md"
+line = 175
+section = "08 §2.5"
+
+[[id]]
 id = "S-01"
-file = "docs/08-roadmap.md"
-line = 243
-section = "08 §3"
-
-[[id]]
-id = "S-02"
-file = "docs/08-roadmap.md"
-line = 244
-section = "08 §3"
-
-[[id]]
-id = "S-03"
-file = "docs/08-roadmap.md"
-line = 245
-section = "08 §3"
-
-[[id]]
-id = "S-04"
-file = "docs/08-roadmap.md"
-line = 246
-section = "08 §3"
-
-[[id]]
-id = "S-05"
-file = "docs/08-roadmap.md"
-line = 247
-section = "08 §3"
-
-[[id]]
-id = "S-06"
-file = "docs/08-roadmap.md"
-line = 248
-section = "08 §3"
-
-[[id]]
-id = "S-07"
-file = "docs/08-roadmap.md"
-line = 249
-section = "08 §3"
-
-[[id]]
-id = "S-08"
-file = "docs/08-roadmap.md"
-line = 250
-section = "08 §3"
-
-[[id]]
-id = "S-09"
-file = "docs/08-roadmap.md"
-line = 251
-section = "08 §3"
-
-[[id]]
-id = "S-10"
-file = "docs/08-roadmap.md"
-line = 252
-section = "08 §3"
-
-[[id]]
-id = "S-11"
-file = "docs/08-roadmap.md"
-line = 253
-section = "08 §3"
-
-[[id]]
-id = "S-12"
-file = "docs/08-roadmap.md"
-line = 254
-section = "08 §3"
-
-[[id]]
-id = "S-13"
-file = "docs/08-roadmap.md"
-line = 255
-section = "08 §3"
-
-[[id]]
-id = "S-14"
-file = "docs/08-roadmap.md"
-line = 256
-section = "08 §3"
-
-[[id]]
-id = "S-15"
-file = "docs/08-roadmap.md"
-line = 257
-section = "08 §3"
-
-[[id]]
-id = "S-20"
-file = "docs/08-roadmap.md"
-line = 258
-section = "08 §3"
-
-[[id]]
-id = "S-21"
 file = "docs/08-roadmap.md"
 line = 259
 section = "08 §3"
 
 [[id]]
-id = "S-22"
+id = "S-02"
 file = "docs/08-roadmap.md"
 line = 260
 section = "08 §3"
 
 [[id]]
-id = "S-23"
+id = "S-03"
 file = "docs/08-roadmap.md"
 line = 261
 section = "08 §3"
 
 [[id]]
+id = "S-04"
+file = "docs/08-roadmap.md"
+line = 262
+section = "08 §3"
+
+[[id]]
+id = "S-05"
+file = "docs/08-roadmap.md"
+line = 263
+section = "08 §3"
+
+[[id]]
+id = "S-06"
+file = "docs/08-roadmap.md"
+line = 264
+section = "08 §3"
+
+[[id]]
+id = "S-07"
+file = "docs/08-roadmap.md"
+line = 265
+section = "08 §3"
+
+[[id]]
+id = "S-08"
+file = "docs/08-roadmap.md"
+line = 266
+section = "08 §3"
+
+[[id]]
+id = "S-09"
+file = "docs/08-roadmap.md"
+line = 267
+section = "08 §3"
+
+[[id]]
+id = "S-10"
+file = "docs/08-roadmap.md"
+line = 268
+section = "08 §3"
+
+[[id]]
+id = "S-11"
+file = "docs/08-roadmap.md"
+line = 269
+section = "08 §3"
+
+[[id]]
+id = "S-12"
+file = "docs/08-roadmap.md"
+line = 270
+section = "08 §3"
+
+[[id]]
+id = "S-13"
+file = "docs/08-roadmap.md"
+line = 271
+section = "08 §3"
+
+[[id]]
+id = "S-14"
+file = "docs/08-roadmap.md"
+line = 272
+section = "08 §3"
+
+[[id]]
+id = "S-15"
+file = "docs/08-roadmap.md"
+line = 273
+section = "08 §3"
+
+[[id]]
+id = "S-20"
+file = "docs/08-roadmap.md"
+line = 274
+section = "08 §3"
+
+[[id]]
+id = "S-21"
+file = "docs/08-roadmap.md"
+line = 275
+section = "08 §3"
+
+[[id]]
+id = "S-22"
+file = "docs/08-roadmap.md"
+line = 276
+section = "08 §3"
+
+[[id]]
+id = "S-23"
+file = "docs/08-roadmap.md"
+line = 277
+section = "08 §3"
+
+[[id]]
 id = "TC-1"
 file = "docs/08-roadmap.md"
-line = 402
+line = 419
 section = "08 §8.1"
 
 [[id]]
 id = "TC-2"
 file = "docs/08-roadmap.md"
-line = 403
+line = 420
 section = "08 §8.1"
 
 [[id]]
 id = "SB-1"
 file = "docs/08-roadmap.md"
-line = 409
+line = 426
 section = "08 §8.1"
 
 [[id]]
 id = "SB-2"
 file = "docs/08-roadmap.md"
-line = 410
+line = 427
 section = "08 §8.1"
 
 [[id]]
 id = "SB-3"
 file = "docs/08-roadmap.md"
-line = 411
+line = 428
 section = "08 §8.1"
 
 [[id]]
 id = "SB-4"
 file = "docs/08-roadmap.md"
-line = 412
+line = 429
 section = "08 §8.1"
 
 [[id]]
