@@ -228,6 +228,18 @@ impl EditorState {
                 fmt,
             } => {
                 let saved = matches!(r, JobResult::Saved { .. });
+                // 保持方式の記録を使う保存の確かめ (03 §8.6 E2 の確認 (i)・(ii)) で止まった: 記録を全部捨てて「保持なし」に
+                // する (03 §8.7.1 の「保存」。同じ表を渡し続けると、同じ文字コードで二度と保存できない)。全保存・「保存を
+                // 中止して終了」の経路を含めて、ここで 1 回だけ行う
+                if matches!(
+                    r,
+                    JobResult::Failed {
+                        err: crate::jobs::JobError::VerifyFailed
+                    }
+                ) && let Some(d) = self.docs.documents.get_mut(&doc)
+                {
+                    d.abandon_preserved();
+                }
                 // 「保存を中止して終了」の最中: 成功は採用し、失敗は終了時の stderr に残す。確認も後続も出さない
                 if self.ui.quit_abort.is_some() {
                     if !self.quit_abort_save_result(&path, &r) {

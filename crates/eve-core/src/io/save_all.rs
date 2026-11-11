@@ -48,10 +48,10 @@ impl EditorState {
                 continue;
             };
             let expected = doc.disk_stamp.map_or(Expect::Absent, Expect::Stamp);
-            // 書く前の確認 (区分 B、03 §8.6 E2'・読み取り専用を解除して保存、FR-116) が要る文書は保存しない
+            // 書く前の確認 (保存の前の確認、03 §8.6 E2'・§8.7.1。読み取り専用を解除して保存、FR-116) が要る文書は保存しない
             let needs_readonly_ok =
                 doc.attribute_released && self.io.readonly_ok != Some((id, doc.revision()));
-            if (doc.format.roundtrip.may_be_lossy()
+            if (crate::io::open::preconfirm(doc, doc.format.encoding).is_some()
                 && self.io.lossy_ok != Some((id, doc.revision())))
                 || needs_readonly_ok
             {

@@ -8,11 +8,15 @@
 //! - **ISO-2022-JP (E6)**: 行ごとにエンコーダを閉じ、各行を ASCII 状態で終える。行は次の改行までためてから符号化する
 //!   (改行を含まない巨大な 1 行は、その行の長さだけメモリを使う)。
 //! - **不正バイトのエスケープ** (`U+10FF00 + b`): `EscapePolicy::Restore` なら元のバイトに戻して書く (§8.3)。
+//! - **保持方式の記録** (v0.4、§8.6 E2・§8.7.1): `Encoder::write_preserved` が、記録の元のバイト列をそのまま書く。
+//!   確認 (i) (`preserved_matches`) と ISO-2022-JP の行頭の条件を口の中で確かめ、文字の通し番号を範囲の文字数だけ進める
+//!   (範囲の文字は E1 の照合の対象にせず、表現不能に数えない)。
 
 use encoding_rs::EncoderResult;
 
 use crate::decode::Decoder;
 use crate::encoding::Encoding;
+use crate::preserve::{IsoState, decodes_to};
 use crate::utf8::{PuaEscapeMode, Utf8Encoder, unescape_char};
 
 /// 記録する表現不能の最大件数 (総数は数える)。
@@ -97,6 +101,28 @@ pub mod cp932 {
         let t = u8::try_from(n % 188).ok()?;
         let trail = if t < 0x3F { 0x40 + t } else { 0x41 + t };
         Some([lead, trail])
+    }
+}
+
+/// 保持方式の記録の元のバイト列 `bytes` を、`enc` の初期状態 (ISO-2022-JP は ASCII 状態) から復号すると、不正バイト
+/// 無しにちょうど `text` になり、初期状態で終わるか (03 §8.6 E2 の確認 (i)、§8.7.1 の不変条件)。記録を使う文字コード
+/// (`Shift_JIS` / EUC-JP / ISO-2022-JP) でなければ偽。`bytes` が空なら偽 (記録の元のバイト列は空でない)。
+///
+/// この真偽だけで、元のバイト列を前後の符号化した出力とつないでも復号の結果が変わらないことが決まる: 状態を持たない
+/// 符号化では、`bytes` は文字の境界で始まり文字の境界で終わる。ISO-2022-JP では、ASCII 状態で始まり ASCII 状態で終わる
+/// (前後の出力も、行ごとに閉じるので ASCII 状態で接する)。
+#[must_use]
+pub fn preserved_matches(enc: Encoding, bytes: &[u8], text: &str) -> bool {
+    if bytes.is_empty() {
+        return false;
+    }
+    match enc {
+        Encoding::ShiftJis | Encoding::EucJp => decodes_to(enc, bytes, text),
+        // 復号が不正バイト無しに通れば、エスケープシーケンスはどれも受け付けるもの (状態を正しく追える)
+        Encoding::Iso2022Jp => {
+            decodes_to(enc, bytes, text) && IsoState::Ascii.after(bytes) == IsoState::Ascii
+        }
+        Encoding::Utf8 | Encoding::Utf16Le | Encoding::Utf16Be => false,
     }
 }
 
@@ -207,6 +233,27 @@ impl Encoder {
             Encoding::ShiftJis | Encoding::EucJp => self.encode_rs(text, out, report),
         }
         self.chars_done += n_chars;
+    }
+
+    /// 保持方式の記録の元のバイト列 `bytes` を、そのまま `out` に追記する (03 §8.6 E2)。`text` は記録の範囲の今の文字列。
+    ///
+    /// 書くのは、確認 (i) (`preserved_matches`) を満たし、ISO-2022-JP では符号化器が行頭 (ためている行が空。行ごとに
+    /// 閉じるので ASCII 状態) にあるときだけ。書いたら文字の通し番号を `text` の文字数だけ進めて真を返す (範囲の文字は
+    /// E1 の照合の対象にせず、表現不能に数えない)。書かないときは何もせずに偽を返す (呼び出し側は `text` を `encode`
+    /// で符号化する)。ISO-2022-JP の「範囲が行の内容の全体である」ことは、行の終わりを見られる呼び出し側が確かめる。
+    pub fn write_preserved(&mut self, text: &str, bytes: &[u8], out: &mut Vec<u8>) -> bool {
+        let at_line_start = self.enc != Encoding::Iso2022Jp || self.line.is_empty();
+        if !at_line_start || !preserved_matches(self.enc, bytes, text) {
+            return false;
+        }
+        out.extend_from_slice(bytes);
+        self.chars_done += text.chars().count() as u64;
+        true
+    }
+
+    /// これまでに渡した文字の数 (`encode` と `write_preserved` の分。表現不能の位置の通し番号と同じ数え方)。
+    pub fn chars_done(&self) -> u64 {
+        self.chars_done
     }
 
     /// 最後に呼ぶ (ISO-2022-JP の最終行を ASCII 状態で閉じる)。
@@ -740,6 +787,68 @@ mod tests {
         let (b, r) = enc(Encoding::Utf8, false, EscapePolicy::Restore, &[&t]);
         assert_eq!(b, b"\xE3\x81\x82\x80");
         assert!(r.is_empty());
+    }
+
+    // 保持方式の記録の元のバイト列を書く口 (03 §8.6 E2): 確認 (i) を口の中で行い、通し番号を範囲の文字数だけ進める
+    #[test]
+    fn 記録の元のバイト列をそのまま書き_通し番号を進める() {
+        let mut e = Encoder::new(Encoding::ShiftJis, false, EscapePolicy::Restore);
+        let (mut out, mut rep) = (Vec::new(), EncodeReport::default());
+        e.encode("a", &mut out, &mut rep);
+        // ￢ の重複符号化 (IBM 拡張 0xFA54。符号化すると 0x81CA)
+        assert!(e.write_preserved("￢￢", b"\xFA\x54\xFA\x54", &mut out));
+        e.encode("😀", &mut out, &mut rep);
+        e.finish(&mut out, &mut rep);
+        assert_eq!(out, b"a\xFA\x54\xFA\x54");
+        assert_eq!(rep.total, 1);
+        assert_eq!(rep.recorded[0].char_index, 3, "記録の 2 文字を数える");
+        assert_eq!(e.chars_done(), 4);
+        // EUC-JP の補助漢字 (復号専用): 記録で書けば表現不能にならない
+        let mut e = Encoder::new(Encoding::EucJp, false, EscapePolicy::Restore);
+        let (mut out, mut rep) = (Vec::new(), EncodeReport::default());
+        assert!(e.write_preserved("丂", b"\x8F\xB0\xA1", &mut out));
+        e.encode("丂", &mut out, &mut rep);
+        assert_eq!(out, b"\x8F\xB0\xA1");
+        assert_eq!((rep.total, rep.recorded[0].char_index), (1, 1));
+    }
+
+    #[test]
+    fn 確認_i_に合わない記録は書かない() {
+        let mut e = Encoder::new(Encoding::ShiftJis, false, EscapePolicy::Restore);
+        let mut out = Vec::new();
+        // 別の文字のバイト列・途中で切れたバイト列・空のバイト列
+        assert!(!e.write_preserved("￢", b"\xFA\x55", &mut out));
+        assert!(!e.write_preserved("￢", b"\xFA", &mut out));
+        assert!(!e.write_preserved("", b"", &mut out));
+        assert_eq!(out, b"");
+        assert_eq!(e.chars_done(), 0);
+        // UTF-8 / UTF-16 は記録を使わない
+        let mut e = Encoder::new(Encoding::Utf8, false, EscapePolicy::Restore);
+        assert!(!e.write_preserved("a", b"a", &mut out));
+        assert!(!preserved_matches(Encoding::Utf16Le, b"a\0", "a"));
+    }
+
+    #[test]
+    fn iso_2022_jp_の記録は行頭で_ascii_状態で終わるときだけ書く() {
+        let mut e = Encoder::new(Encoding::Iso2022Jp, false, EscapePolicy::Reject);
+        let (mut out, mut rep) = (Vec::new(), EncodeReport::default());
+        // 旧 JIS の「あ」の行 (ASCII 状態で終わる)
+        assert!(e.write_preserved("あ", b"\x1B$@$\"\x1B(B", &mut out));
+        e.encode("\nx", &mut out, &mut rep);
+        // 行の途中 (ためている行が空でない) では書かない
+        assert!(!e.write_preserved("あ", b"\x1B$@$\"\x1B(B", &mut out));
+        e.encode("\n", &mut out, &mut rep);
+        // ASCII 状態で終わらない元のバイト列は書かない (半角カナの状態のまま)
+        assert!(!e.write_preserved("ｱ", b"\x1B(I1", &mut out));
+        assert!(e.write_preserved("ｱ", b"\x1B(I1\x1B(B", &mut out));
+        e.finish(&mut out, &mut rep);
+        assert_eq!(out, b"\x1B$@$\"\x1B(B\nx\n\x1B(I1\x1B(B");
+        assert!(rep.is_empty());
+        // 冗長なエスケープだけの行 (本文では空の行) も書ける
+        let mut e = Encoder::new(Encoding::Iso2022Jp, false, EscapePolicy::Reject);
+        let mut out = Vec::new();
+        assert!(e.write_preserved("", b"\x1B(B", &mut out));
+        assert_eq!(out, b"\x1B(B");
     }
 
     #[test]

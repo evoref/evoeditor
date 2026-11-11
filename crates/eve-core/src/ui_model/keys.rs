@@ -27,8 +27,9 @@ pub(crate) const INFO_OPEN_ALREADY_OPEN: &str = "info.open.already_open";
 pub(crate) const INFO_OPEN_CANCELLED: &str = "info.open.cancelled";
 pub(crate) const INFO_OPEN_GUESS_UNSUPPORTED: &str = "info.open.guess_unsupported";
 pub(crate) const INFO_OPEN_LONG_LINE: &str = "info.open.long_line";
-pub(crate) const INFO_OPEN_LOSSY_ROUNDTRIP: &str = "info.open.lossy_roundtrip";
 pub(crate) const INFO_OPEN_NEW_FILE: &str = "info.open.new_file";
+pub(crate) const INFO_OPEN_PRESERVE_OFF: &str = "info.open.preserve_off";
+pub(crate) const INFO_OPEN_PRESERVE_PARTIAL: &str = "info.open.preserve_partial";
 pub(crate) const INFO_OPEN_REDETECTED: &str = "info.open.redetected";
 pub(crate) const INFO_READ_ONLY_RELEASED: &str = "info.read_only.released";
 pub(crate) const INFO_READ_ONLY_SET: &str = "info.read_only.set";
@@ -101,6 +102,7 @@ pub(crate) const MSG_SAVE_PERMISSION_NARROWED: &str = "msg.save.permission_narro
 pub(crate) const MSG_SAVE_READ_ONLY_FS: &str = "msg.save.read_only_fs";
 pub(crate) const MSG_SAVE_RECOVERY_FAILED: &str = "msg.save.recovery_failed";
 pub(crate) const MSG_SAVE_TMP_NOT_REMOVED: &str = "msg.save.tmp_not_removed";
+pub(crate) const MSG_SAVE_VERIFY_FAILED: &str = "msg.save.verify_failed";
 pub(crate) const MSG_SAVE_AS_SAME_FILE_READ_ONLY: &str = "msg.save_as.same_file_read_only";
 pub(crate) const MSG_SEARCH_INVALID_REGEX_TEXT: &str = "msg.search.invalid_regex.text";
 pub(crate) const MSG_SEARCH_NEWLINE_UNSUPPORTED_TEXT: &str = "msg.search.newline_unsupported.text";
@@ -188,7 +190,7 @@ pub(crate) const UI_TOO_SMALL: &str = "ui.too_small";
 
 /// すべての定数 (キーの順。試験に使う)。
 #[cfg(test)]
-const ALL: [&str; 177] = [
+const ALL: [&str; 179] = [
     HINT_UI_CANCEL,
     INFO_APP_RELEASE_SUMMARY,
     INFO_APP_UPDATED,
@@ -213,8 +215,9 @@ const ALL: [&str; 177] = [
     INFO_OPEN_CANCELLED,
     INFO_OPEN_GUESS_UNSUPPORTED,
     INFO_OPEN_LONG_LINE,
-    INFO_OPEN_LOSSY_ROUNDTRIP,
     INFO_OPEN_NEW_FILE,
+    INFO_OPEN_PRESERVE_OFF,
+    INFO_OPEN_PRESERVE_PARTIAL,
     INFO_OPEN_REDETECTED,
     INFO_READ_ONLY_RELEASED,
     INFO_READ_ONLY_SET,
@@ -285,6 +288,7 @@ const ALL: [&str; 177] = [
     MSG_SAVE_READ_ONLY_FS,
     MSG_SAVE_RECOVERY_FAILED,
     MSG_SAVE_TMP_NOT_REMOVED,
+    MSG_SAVE_VERIFY_FAILED,
     MSG_SAVE_AS_SAME_FILE_READ_ONLY,
     MSG_SEARCH_INVALID_REGEX_TEXT,
     MSG_SEARCH_NEWLINE_UNSUPPORTED_TEXT,

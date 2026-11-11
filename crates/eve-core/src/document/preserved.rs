@@ -1098,6 +1098,27 @@ impl PreservedMap {
     pub(crate) fn to_spans(&self) -> Vec<PreservedSpan> {
         self.iter().map(|r| r.to_span()).collect()
     }
+
+    /// 記録の列 (範囲の昇順) から表を作る (試験用。本文と照合しない。保存の故障の注入の試験が、ずらした・すり替えた
+    /// 記録の表を作るのに使う)。
+    #[cfg(test)]
+    pub(crate) fn from_spans(spans: &[PreservedSpan]) -> PreservedMap {
+        let mut m = PreservedMap::new();
+        m.insert_spans(spans);
+        m
+    }
+}
+
+/// `range` が、本文の 1 つの行の内容の全体 (行頭で始まり、その行の終端の直前か文書の末尾で終わる) か (ISO-2022-JP の
+/// 行の記録を保存で使う条件、03 §8.6 E2 の (d))。長さ 0 の範囲は空の行。範囲が本文の外なら偽。
+pub(crate) fn is_whole_line(text: &dyn TextRead, range: ByteRange) -> bool {
+    let (s, e) = (range.start, range.end);
+    if e.0 > text.len_bytes() || s > e {
+        return false;
+    }
+    // CRLF の `\n` の位置は、その CRLF で終わる行に属する (行頭ではない)
+    let line = text.byte_to_line(s);
+    text.line_to_byte(line) == s && text.line_end_byte(line) == e
 }
 
 /// `replace_range` の、入れる記録を 1 回だけ足す。

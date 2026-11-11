@@ -1,5 +1,5 @@
 //! 保持方式の記録 (`PreservedMap`) の、読込・編集・Undo / Redo・再読込・開き直し・文字コードの変更・復旧への組み込み
-//! (docs/03 §8.7.1、M22 の 5)。保存されるバイト列と確認・メッセージは、この版では変えない (6 本目)。
+//! (docs/03 §8.7.1、M22 の 5)。保存での差し替えと、保存の前の確認・読込の完了時の通知は `preserve_save.rs` (M22 の 6)。
 //! 保存先は `MemFs`、ジョブは `ManualJobSpawner`。
 
 use eve_core::{
@@ -323,7 +323,7 @@ fn iso_2022_jp_の行の記録は端に接する入力で外れ_undo_で戻る()
 // spec: 03 §8.7.1 (`file.set_encoding`)、03 §8.8
 #[test]
 fn 別の文字コードで保存すると記録を捨て_同じ文字コードなら残す() {
-    // 同じ文字コード: 表と状態を残す (保存の出力は、この版では代表バイト列のまま)
+    // 同じ文字コード: 表と状態を残す (記録を使って書くので、未編集の文書は元のファイルと同じバイト列になる)
     let mut h = open("/w/a.txt", &sjis_doc());
     let initial = doc(&h).preserved().clone();
     h.cmd_with(
@@ -331,7 +331,16 @@ fn 別の文字コードで保存すると記録を捨て_同じ文字コード�
         Args::new().with_str("encoding", "shift_jis"),
     );
     h.run_jobs();
-    assert_ne!(h.overlay(), "dialog", "未編集なので確認は出ない (この版)");
+    assert_ne!(
+        h.overlay(),
+        "dialog",
+        "保持が効いている文書では確認は出ない"
+    );
+    assert_eq!(
+        h.fs.read("/w/a.txt").unwrap(),
+        sjis_doc(),
+        "元のバイト列のまま"
+    );
     assert_eq!(doc(&h).preserved(), &initial);
     assert_eq!(status(&h), PreserveStatus::Active { unpreserved: 0 });
 
