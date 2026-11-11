@@ -1,7 +1,8 @@
 //! 読込時の往復の検査 (docs/03-core-design.md §8.7 の「検出は読込時にストリーミングで行う」)。
 //!
 //! UTF-8 / UTF-16 は区分 A (1:1) `なので検査しない。Shift_JIS` / EUC-JP / ISO-2022-JP では、元のバイト列を **行ごと**
-//! (LF 区切り。Shift_JIS・EUC-JP の LF は後続バイトにならず、ISO-2022-JP は行ごとに ASCII 状態へ戻す E6 の単位) に復号し、
+//! (区切りは本文の行 (03 §2.4) と同じ LF・CR・CRLF。Shift_JIS・EUC-JP の CR / LF は後続バイトにならず、ISO-2022-JP は
+//! 行ごとに ASCII 状態へ戻す E6 の単位。v0.3 までは LF だけで区切っていた。03 §8.7.1 の「検査の行と長い行」) に復号し、
 //! 保存と同じ方式で再符号化して元のバイト列と比べる。一致しない行を「別のバイト表現で保存される」行として数える
 //! (`RoundtripSummary`、v0.1)。表現不能の文字を含む行は E3 の置換 (または E1 の報告) を経ないと保存できないので、
 //! ここでは数えず `unmappable_lines` に分ける (§8.7 の区分 D の注記)。
@@ -54,6 +55,39 @@ pub struct RoundtripChecker {
     block_offset: u64,
     /// 塊を検査に回す大きさ (バイト)。
     block_limit: usize,
+    /// 直前のチャンクが CR で終わった (行はまだ閉じていない。次のチャンクの先頭が LF なら、その CRLF で閉じる)。
+    pending_cr: bool,
+}
+
+/// `bytes` の中の最初の行の終端 (LF・CR・CRLF) を探し、(終端の先頭の位置, 終端の長さ) を返す。
+/// `bytes` が CR で終わるときは、その後ろが LF かどうかがまだ分からないので、長さを `None` にする。
+fn find_terminator(bytes: &[u8]) -> Option<(usize, Option<usize>)> {
+    let i = bytes.iter().position(|&b| b == b'\n' || b == b'\r')?;
+    if bytes[i] == b'\n' {
+        return Some((i, Some(1)));
+    }
+    match bytes.get(i + 1) {
+        Some(b'\n') => Some((i, Some(2))),
+        Some(_) => Some((i, Some(1))),
+        None => Some((i, None)),
+    }
+}
+
+/// 行の終端で終わる行に分ける (終端は行に含める。最後の行は終端が無いことがある)。
+/// 終端は LF・CR・CRLF。末尾の単独の CR は、その行の終端として扱う。
+fn split_lines(mut bytes: &[u8]) -> impl Iterator<Item = &[u8]> {
+    std::iter::from_fn(move || {
+        if bytes.is_empty() {
+            return None;
+        }
+        let end = match find_terminator(bytes) {
+            Some((i, len)) => i + len.unwrap_or(1),
+            None => bytes.len(),
+        };
+        let (line, rest) = bytes.split_at(end);
+        bytes = rest;
+        Some(line)
+    })
 }
 
 /// 塊の大きさの既定 (バイト)。
@@ -72,6 +106,7 @@ impl RoundtripChecker {
             block: Vec::new(),
             block_offset: 0,
             block_limit: BLOCK_LIMIT,
+            pending_cr: false,
         }
     }
 
@@ -80,12 +115,31 @@ impl RoundtripChecker {
             return;
         }
         let mut rest = chunk;
-        while let Some(i) = rest.iter().position(|&b| b == b'\n') {
-            self.push(&rest[..=i]);
+        // 前のチャンクが CR で終わっていた: 先頭が LF なら CRLF、そうでなければ CR だけで行を閉じる
+        if self.pending_cr && !rest.is_empty() {
+            self.pending_cr = false;
+            if rest[0] == b'\n' {
+                self.push(&rest[..1]);
+                rest = &rest[1..];
+            }
             self.finish_line();
-            rest = &rest[i + 1..];
+        }
+        while let Some((i, len)) = find_terminator(rest) {
+            let Some(len) = len else {
+                // チャンクの末尾の CR: 次のチャンクを見てから閉じる
+                self.push(rest);
+                rest = &[];
+                self.pending_cr = true;
+                break;
+            };
+            self.push(&rest[..i + len]);
+            self.finish_line();
+            rest = &rest[i + len..];
         }
         self.push(rest);
+        if last {
+            self.pending_cr = false;
+        }
         if last && !self.line.is_empty() {
             self.finish_line();
         }
@@ -130,7 +184,7 @@ impl RoundtripChecker {
     fn flush_block(&mut self) {
         let block = std::mem::take(&mut self.block);
         let mut start = self.block_offset;
-        for line in block.split_inclusive(|&b| b == b'\n') {
+        for line in split_lines(&block) {
             if may_differ(self.enc, line) {
                 self.check_line(line, start);
             }
@@ -265,9 +319,11 @@ mod tests {
 
     #[test]
     fn チャンクの分け方に依存しない() {
-        let b = b"abc\n\xFA\x54\n\x93\xFA\n\xFA\x54";
+        // LF・CRLF・CR を混ぜる (CRLF の間・CR の直後で分かれる場合を含む)
+        let b = b"abc\n\xFA\x54\r\n\x93\xFA\r\xFA\x54\r\r\n\xFA\x54\n\r";
         let whole = check(Encoding::ShiftJis, b);
-        for step in 1..=5 {
+        assert_eq!(whole.lossy_lines, 3);
+        for step in 1..=7 {
             let mut c = RoundtripChecker::new(Encoding::ShiftJis);
             let mut it = b.chunks(step).peekable();
             while let Some(ch) = it.next() {
@@ -275,17 +331,60 @@ mod tests {
             }
             assert_eq!(c.finish(), whole, "step {step}");
         }
+        // 最後のチャンクが空でも同じ (末尾の CR は行を閉じる)
+        let mut c = RoundtripChecker::new(Encoding::ShiftJis);
+        c.feed(b, false);
+        c.feed(b"", true);
+        assert_eq!(c.finish(), whole);
     }
 
     /// 全ての行を、取りこぼしの判定を使わずに正確に検査した結果 (基準)。
     fn reference(enc: Encoding, bytes: &[u8]) -> RoundtripSummary {
         let mut c = RoundtripChecker::new(enc);
         let mut start = 0u64;
-        for line in bytes.split_inclusive(|&b| b == b'\n') {
+        for line in split_lines(bytes) {
             c.check_line(line, start);
             start += line.len() as u64;
         }
         c.finish()
+    }
+
+    #[test]
+    fn 行は_lf_cr_crlf_で区切る() {
+        let lines = |b: &'static [u8]| split_lines(b).collect::<Vec<_>>();
+        assert_eq!(
+            lines(b"a\nb\r\nc\rd"),
+            vec![&b"a\n"[..], b"b\r\n", b"c\r", b"d"]
+        );
+        // 空の行、末尾の単独の CR、CR が続く場合
+        assert_eq!(
+            lines(b"\n\r\r\n\r"),
+            vec![&b"\n"[..], b"\r", b"\r\n", b"\r"]
+        );
+        assert_eq!(lines(b""), Vec::<&[u8]>::new());
+    }
+
+    #[test]
+    fn cr_だけの改行でも行ごとに数える() {
+        // v0.3 までは LF だけで区切っていたので、CR だけの改行のファイルは全体が 1 行になっていた
+        let b = b"abc\r\xFA\x54\r\x81\xCA\r\xFA\x54";
+        let s = check(Encoding::ShiftJis, b);
+        assert_eq!(s.lossy_lines, 2);
+        assert_eq!(s.first_offsets, vec![4, 10]);
+        // CRLF の行頭の位置
+        let b = b"abc\r\n\xFA\x54\r\nxyz\r\n";
+        let s = check(Encoding::ShiftJis, b);
+        assert_eq!(s.lossy_lines, 1);
+        assert_eq!(s.first_offsets, vec![5]);
+    }
+
+    #[test]
+    fn iso_2022_jp_の_cr_の行も行ごとに比べる() {
+        // 1 行目 (旧 JIS の `ESC $ @`) だけが差。CR で区切られた 2 行目 (正規形) は差にならない
+        let b = b"\x1B$@$\"\x1B(B\r\x1B$B$\"\x1B(B\r";
+        let s = check(Encoding::Iso2022Jp, b);
+        assert_eq!(s.lossy_lines, 1);
+        assert_eq!(s.first_offsets, vec![0]);
     }
 
     // 取りこぼしの判定を使った検査は、全行を正確に検査した結果と同じ (差のある行の数と位置、表現不能の行の数)
@@ -320,7 +419,8 @@ mod tests {
                     for _ in 0..(next() % 4) {
                         bytes.extend_from_slice(pieces[(next() % 12) as usize]);
                     }
-                    bytes.push(b'\n');
+                    // 行の終端は LF・CRLF・CR を混ぜる
+                    bytes.extend_from_slice([&b"\n"[..], b"\r\n", b"\r"][(next() % 3) as usize]);
                 }
                 let mut fast = RoundtripChecker::new(enc);
                 fast.block_limit = 1 + (next() % 200) as usize;
