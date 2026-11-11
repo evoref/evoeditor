@@ -900,6 +900,12 @@ message = "{count} places will be saved as different bytes for the same characte
 save = "[S] Save"
 alt = "[A] Save as"
 
+[ui.confirm.save.roundtrip_unchecked]
+title = "May be saved with different bytes"
+message = "A very long line stopped the encoding check partway. In the unchecked part, some places may be saved as different bytes for the same characters"
+save = "[S] Save"
+alt = "[A] Save as"
+
 [ui.confirm.save.escape_normalized]
 title = "Escape notation changes"
 message = "The escape notation changes on {count} lines (the characters do not change)"

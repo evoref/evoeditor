@@ -11,6 +11,10 @@ The Japanese version ([CHANGELOG.md](CHANGELOG.md)) is authoritative. Both are u
 
 ## [Unreleased]
 
+### Fixed
+
+- **No confirmation before saving some Shift_JIS / EUC-JP / ISO-2022-JP files with a very long line**: when a line was longer than 4 MiB, the places after it that "will be saved as different bytes for the same characters" were not checked. If such places existed only after that line, saving after an edit changed their bytes without asking (the characters did not change). A file that could not be fully checked now asks for confirmation when you save it in its original encoding after an edit (Issue #495).
+
 ## [0.3.0] - 2026-11-08
 
 The first release of v0.3. It reorganizes and speeds up the internals without changing behavior, and fixes data-safety and correctness bugs. It also adds the remaining v0.2 commands (Save and Quit, Quit with Error, Show Settings Diagnostics) and word editing and select-all in input fields.
