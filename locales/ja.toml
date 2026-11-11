@@ -898,6 +898,12 @@ message = "{count} 箇所が、同じ文字の別のバイト表現で保存さ�
 save = "[S] 保存"
 alt = "[A] 別名で保存"
 
+[ui.confirm.save.roundtrip_unchecked]
+title = "別のバイト表現で保存されるかもしれません"
+message = "長すぎる行があり、文字コードの検査を途中でやめました。検査していない範囲に、同じ文字の別のバイト表現で保存される箇所があるかもしれません"
+save = "[S] 保存"
+alt = "[A] 別名で保存"
+
 [ui.confirm.save.escape_normalized]
 title = "エスケープの書き方が変わります"
 message = "{count} 行でエスケープシーケンスの書き方が変わります (文字は変わりません)"

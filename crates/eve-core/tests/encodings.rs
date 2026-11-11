@@ -261,6 +261,38 @@ fn 重複符号化の行を読込時に数えて通知する() {
     assert!(messages(&mut s).contains(&"info.open.lossy_roundtrip".to_owned()));
 }
 
+// 往復の検査を打ち切った文書 (4 MiB を超える行がある) は、打ち切りより後ろの区分 B を数えていない。
+// 数えていない範囲に区分 B があり得るので、編集して保存するときは確認を出す (03 §8.7、Issue #495)。
+// verifies: AC-NFR-303-3
+#[test]
+fn 検査を打ち切った文書は編集して保存するとき確認する() {
+    let mut s = env();
+    // 1 行目が 4 MiB を超える ASCII、2 行目に重複符号化 (IBM 拡張の ¬ 0xFA54。再符号化すると 0x81CA)
+    let mut bytes = vec![b'a'; 4 * 1024 * 1024 + 1];
+    bytes.extend_from_slice(b"\n\xFA\x54\n");
+    s.fs.add_file("/w/a.txt", &bytes);
+    open_as(&mut s, "/w/a.txt", Encoding::ShiftJis);
+    assert!(doc(&s).format.roundtrip.incomplete, "検査を打ち切った");
+    s.text("x");
+    save(&mut s);
+    assert_eq!(s.overlay(), "dialog", "書く前に確認する");
+    assert_eq!(s.fs.read("/w/a.txt").unwrap(), bytes, "まだ書いていない");
+    // 全保存は、確認が要る文書を保存しない (閉じると元の確認に戻る)
+    s.keys("esc");
+    run(&mut s, "file.save_all", Args::new());
+    assert_eq!(s.fs.read("/w/a.txt").unwrap(), bytes, "全保存でも書かない");
+    if s.overlay() == "dialog" {
+        s.keys("esc");
+    }
+    // 確認で「保存」を選ぶと書く。承認した Revision では繰り返さない
+    save(&mut s);
+    assert_eq!(s.overlay(), "dialog");
+    s.text("s");
+    s.run_jobs();
+    assert!(!doc(&s).is_dirty(), "承認すると保存する");
+    assert_ne!(s.fs.read("/w/a.txt").unwrap(), bytes);
+}
+
 #[test]
 fn 無編集の_shift_jis_は書き込まない() {
     let mut s = env();

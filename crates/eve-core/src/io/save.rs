@@ -228,7 +228,7 @@ impl EditorState {
         // 書き込む前に確認する (FR-112 AC-4 (a)・NFR-303、03 §8.6 E2')。無編集の上書き保存は書き込まないので出ない。
         // 承認した Revision では繰り返さない
         if out_encoding == doc.format.encoding
-            && doc.format.roundtrip.lossy_lines > 0
+            && doc.format.roundtrip.may_be_lossy()
             && doc.is_dirty()
             && self.io.lossy_ok != Some((doc_id, doc.revision()))
         {
