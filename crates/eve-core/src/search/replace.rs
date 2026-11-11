@@ -2,10 +2,11 @@
 
 use std::ops::Range;
 
-use eve_text::{ByteOff, ByteRange, LineIdx, TextRead};
+use eve_text::{ByteOff, ByteRange, TextRead};
 
 use crate::jobs::cancel::CancelToken;
 
+use super::lines::for_each_line;
 use super::matcher::Matcher;
 use super::matcher::SearchQuery;
 use super::scan::scan_bytes;
@@ -19,14 +20,11 @@ pub fn scan_replacements(
     replacement: &str,
     f: &mut dyn FnMut(ByteRange, String) -> bool,
 ) -> bool {
-    for l in lines {
+    for_each_line(text, lines, &mut |ls, line| {
         if cancel.is_cancelled() {
             return false;
         }
-        let ls = text.line_to_byte(LineIdx(l)).0;
-        let le = text.line_end_byte(LineIdx(l)).0;
-        let line = text.slice_to_string(ByteRange::new(ByteOff(ls), ByteOff(le)));
-        let ok = m.find_in_line_inner(text, ls, &line, true, &mut |r, caps| {
+        m.find_in_line_inner(text, ls, line, true, &mut |r, caps| {
             if !m.in_scope(r) {
                 return true;
             }
@@ -36,12 +34,8 @@ pub fn scan_replacements(
                 None => out.push_str(replacement),
             }
             f(r, out)
-        });
-        if !ok {
-            return false;
-        }
-    }
-    true
+        })
+    })
 }
 
 /// 一致 `range` の置換文字列。正規表現では `$1` / `${name}` を展開する。`range` が一致でなければ `None`

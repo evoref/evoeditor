@@ -7,13 +7,14 @@
 
 use std::ops::Range;
 
-use eve_text::{ByteOff, ByteRange, LineIdx, TextRead, is_grapheme_boundary};
+use eve_text::{ByteOff, ByteRange, TextRead, is_grapheme_boundary};
 use eve_view::JobId;
 
 use crate::jobs::cancel::CancelToken;
 use crate::jobs::{JobError, JobResult};
 use crate::time::{Clock, Millis};
 
+use super::lines::for_each_line;
 use super::matcher::Matcher;
 use super::matcher::SearchQuery;
 /// 全件走査の結果を送る間隔 (件数または時間、§12.2)。
@@ -30,22 +31,15 @@ pub(super) fn scan_lines(
     cancel: &CancelToken,
     f: &mut dyn FnMut(ByteRange) -> bool,
 ) -> bool {
-    for l in lines {
+    for_each_line(text, lines, &mut |ls, line| {
         if cancel.is_cancelled() {
             return false;
         }
-        let ls = text.line_to_byte(LineIdx(l)).0;
-        let le = text.line_end_byte(LineIdx(l)).0;
-        if le - ls < m.len {
-            continue;
+        if line.len() < m.len {
+            return true;
         }
-        let line = text.slice_to_string(ByteRange::new(ByteOff(ls), ByteOff(le)));
-        let ok = m.find_in_line(text, ls, &line, &mut |r| !m.in_scope(r) || f(r));
-        if !ok {
-            return false;
-        }
-    }
-    true
+        m.find_in_line(text, ls, line, &mut |r| !m.in_scope(r) || f(r))
+    })
 }
 
 /// 走査の入口。`range` (行頭と行末に揃った範囲) を走査し、一致を `f` へ渡す。チャンクごとに走査できる検索語は、行に切り出さずに
@@ -71,16 +65,20 @@ pub fn scan_bytes(
     let n = m.len;
     // 前のチャンクの末尾のうち、まだ一致に使っていない最大 n-1 バイト (畳み込み済み)
     let mut carry: Vec<u8> = Vec::new();
+    // チャンクごとに確保しないよう、使い回す (畳み込んだチャンク・境目の照合用・次へ持ち越す分。PRF-11)
+    let (mut lowered, mut st, mut next): (Vec<u8>, Vec<u8>, Vec<u8>) =
+        (Vec::new(), Vec::new(), Vec::new());
     let mut pos = range.start.0; // 次のチャンクの文書内の開始位置
     let mut used = range.start.0; // これより前は一致に使った
     for chunk in text.chunks(range) {
         if cancel.is_cancelled() {
             return false;
         }
-        let lowered;
         let body: &[u8] = if m.fold {
-            lowered = chunk.to_ascii_lowercase();
-            lowered.as_bytes()
+            lowered.clear();
+            lowered.extend_from_slice(chunk.as_bytes());
+            lowered.make_ascii_lowercase();
+            &lowered
         } else {
             chunk.as_bytes()
         };
@@ -88,7 +86,8 @@ pub fn scan_bytes(
         // 1. チャンクをまたぐ一致 (carry の中で始まるもの)
         if !carry.is_empty() {
             let take = (n - 1).min(body.len());
-            let mut st = carry.clone();
+            st.clear();
+            st.extend_from_slice(&carry);
             st.extend_from_slice(&body[..take]);
             let mut at = 0;
             while let Some(i) = m.finder.find(&st[at..]) {
@@ -131,7 +130,7 @@ pub fn scan_bytes(
         // 3. 次のチャンクへ持ち越す末尾 (使った分は除く)
         let end = pos + body.len();
         let keep_from = end.saturating_sub(n - 1).max(used);
-        let mut next: Vec<u8> = Vec::new();
+        next.clear();
         if keep_from < end {
             if keep_from >= pos {
                 next.extend_from_slice(&body[keep_from - pos..]);
@@ -141,7 +140,7 @@ pub fn scan_bytes(
                 next.extend_from_slice(body);
             }
         }
-        carry = next;
+        std::mem::swap(&mut carry, &mut next);
         pos = end;
     }
     true

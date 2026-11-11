@@ -9,6 +9,7 @@
 //!
 //! spec: 03 §12
 
+mod lines;
 mod matcher;
 mod replace;
 mod scan;
