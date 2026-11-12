@@ -836,6 +836,14 @@ text = "✖ Invalid regular expression: {reason}"
 hint = "Search works line by line. Use a pattern within one line"
 text = "✖ Patterns that contain a newline are not supported"
 
+[msg.search.replace_invalid_regex]
+hint = "Check that ( ) and [ ] are balanced"
+text = "Nothing was replaced: invalid regular expression: {reason}"
+
+[msg.search.replace_newline_unsupported]
+hint = "Search works line by line. Use a pattern within one line"
+text = "Nothing was replaced: patterns that contain a newline are not supported"
+
 [msg.search.replace_stale]
 hint = "Stop typing and run it again"
 text = "Replace All was cancelled because editing continued"

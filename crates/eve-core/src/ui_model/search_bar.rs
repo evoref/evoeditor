@@ -442,15 +442,9 @@ impl EditorState {
         };
         let query = bar.query();
         let error = bar.error.as_ref().map(|e| {
-            let text = match e {
-                QueryError::Syntax(reason) => {
-                    render(keys::MSG_SEARCH_INVALID_REGEX_TEXT, &[("reason", reason)])
-                }
-                QueryError::Multiline => render(keys::MSG_SEARCH_NEWLINE_UNSUPPORTED_TEXT, &[]),
-                QueryError::TooLarge => render(
-                    keys::MSG_SEARCH_INVALID_REGEX_TEXT,
-                    &[("reason", "pattern too large")],
-                ),
+            let text = match invalid_regex_reason(e) {
+                Some(reason) => render(keys::MSG_SEARCH_INVALID_REGEX_TEXT, &[("reason", reason)]),
+                None => render(keys::MSG_SEARCH_NEWLINE_UNSUPPORTED_TEXT, &[]),
             };
             cell_text(&text, CutPolicy::End)
         });
@@ -572,7 +566,40 @@ impl EditorState {
     }
 }
 
+/// 正規表現が不正という誤りの理由 (構文エラーと大きさの上限の超過)。改行を含むパターン (`Multiline`) は `None`。
+fn invalid_regex_reason(e: &QueryError) -> Option<&str> {
+    match e {
+        QueryError::Syntax(reason) => Some(reason),
+        QueryError::TooLarge => Some("pattern too large"),
+        QueryError::Multiline => None,
+    }
+}
+
 impl EditorState {
+    /// 照合器の無い検索語で置換しようとした: 検索語が空なら `info.search.replace_empty_query`、コンパイルできなければ
+    /// 検索バーに出ている誤りと同じ内容をメッセージ行に出す (04 §8.4。何も置き換えない)。
+    fn notify_unusable_query(&mut self, query: &SearchQuery) {
+        match query.compile() {
+            Err(e) => match invalid_regex_reason(&e) {
+                Some(reason) => self.show_message(
+                    MessageLevel::Warn,
+                    keys::MSG_SEARCH_REPLACE_INVALID_REGEX,
+                    &[("reason", reason)],
+                ),
+                None => self.show_message(
+                    MessageLevel::Warn,
+                    keys::MSG_SEARCH_REPLACE_NEWLINE_UNSUPPORTED,
+                    &[],
+                ),
+            },
+            Ok(_) => self.show_message(
+                MessageLevel::Info,
+                keys::INFO_SEARCH_REPLACE_EMPTY_QUERY,
+                &[],
+            ),
+        }
+    }
+
     fn cancel_replace_job(&mut self) {
         let ids: Vec<_> = self
             .io
@@ -616,11 +643,7 @@ impl EditorState {
         // 置換の文字列の文字どおりの部分は外からの文字列 (挿入の入口 (3)、03 §8.3.1)。`$1` 等が運ぶ文字は同じ文書のもの
         let (replacement, pua) = replacement_text(doc, &replacement);
         if query.matcher().is_none() {
-            self.show_message(
-                MessageLevel::Info,
-                keys::INFO_SEARCH_REPLACE_EMPTY_QUERY,
-                &[],
-            );
+            self.notify_unusable_query(&query);
             return CommandResult::Done;
         }
         // 実行中のすべて置換があれば二重に始めない
@@ -708,11 +731,7 @@ impl EditorState {
             return CommandResult::Done;
         }
         if query.matcher().is_none() {
-            self.show_message(
-                MessageLevel::Info,
-                keys::INFO_SEARCH_REPLACE_EMPTY_QUERY,
-                &[],
-            );
+            self.notify_unusable_query(&query);
             return CommandResult::Done;
         }
         let replacement = if query.is_regex() {

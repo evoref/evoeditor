@@ -1,7 +1,7 @@
 //! 検索語の解釈と照合 (`SearchQuery` → `Matcher`、docs/03 §12.1・§12.3・§12.4)。
 //!
-//! リテラル (memmem)・大小を区別しない照合 (1 文字ずつの小文字への畳み込み)・行単位の正規表現の 3 つの経路を
-//! `Matcher` に閉じる。
+//! リテラル (memmem)・ASCII の大小を畳み込んだ memmem・行単位の正規表現の 3 つの経路を `Matcher` に閉じる。
+//! 大小を区別しないリテラルで ASCII の経路に乗らないものは、検索語をエスケープして正規表現の経路で探す (§12.4 の 3)。
 
 use std::borrow::Cow;
 use std::sync::{Arc, OnceLock};
@@ -162,7 +162,7 @@ impl SearchQuery {
     /// `Smart` の判定: 大文字を含めば区別する。正規表現では `\W` `\S` のようなエスケープの大文字は数えない。
     fn smart_has_upper(&self) -> bool {
         if !self.regex {
-            return self.pattern.chars().any(|c| fold_char(c) != c);
+            return self.pattern.chars().any(|c| lower_char(c) != c);
         }
         let mut escaped = false;
         for c in self.pattern.chars() {
@@ -170,11 +170,20 @@ impl SearchQuery {
                 escaped = false;
             } else if c == '\\' {
                 escaped = true;
-            } else if fold_char(c) != c {
+            } else if lower_char(c) != c {
                 return true;
             }
         }
         false
+    }
+
+    /// 大小を区別せずに探すか (`Smart` は大文字を含まないとき)。
+    fn insensitive(&self) -> bool {
+        match self.case {
+            Case::Sensitive => false,
+            Case::Insensitive => true,
+            Case::Smart => !self.smart_has_upper(),
+        }
     }
 
     /// 照合器。検索語が空・コンパイルできない・改行にまたがるなら `None` (何にも一致しない)。
@@ -204,7 +213,7 @@ impl SearchQuery {
         if self.pattern.is_empty() || self.pattern.contains(['\n', '\r']) {
             return Ok(None);
         }
-        Ok(Some(self.compile_literal()))
+        self.compile_literal().map(Some)
     }
 
     fn compile_regex(&self) -> Result<Option<Matcher>, QueryError> {
@@ -228,63 +237,70 @@ impl SearchQuery {
         if escapes_newline || self.pattern.contains(['\n', '\r']) {
             return Err(QueryError::Multiline);
         }
-        let insensitive = match self.case {
-            Case::Sensitive => false,
-            Case::Insensitive => true,
-            Case::Smart => !self.smart_has_upper(),
-        };
-        let re = regex::RegexBuilder::new(&self.pattern)
-            .case_insensitive(insensitive)
-            .size_limit(REGEX_SIZE_LIMIT)
-            .build()
-            .map_err(|e| match e {
-                regex::Error::CompiledTooBig(_) => QueryError::TooLarge,
-                regex::Error::Syntax(msg) => QueryError::Syntax(first_line(&msg)),
-                _ => QueryError::Syntax(e.to_string()),
-            })?;
-        Ok(Some(Matcher {
+        let re = build_regex(&self.pattern, self.insensitive())?;
+        Ok(Some(self.regex_matcher(re, true)))
+    }
+
+    /// 行ごとに正規表現 `re` で探す照合器。`expand` が偽 (リテラルをエスケープしたもの) なら置換文字列を展開しない。
+    fn regex_matcher(&self, re: regex::Regex, expand: bool) -> Matcher {
+        Matcher {
             finder: memmem::Finder::new(b"").into_owned(),
             len: 0,
             fold: false,
             chunked: false,
             regex: Some(re),
-            whole_word: self.whole_word,
-            scope: self.scope.clone(),
-        }))
-    }
-
-    fn compile_literal(&self) -> Matcher {
-        // 大小の区別がある文字 (小文字・大文字) を 1 つも含まない検索語 (数字・記号・かな・漢字だけ等) は、
-        // 区別しない設定でも区別する設定と同じなので、そのまま memmem で探す (§12.4 の 1)
-        let cased = self
-            .pattern
-            .chars()
-            .any(|c| c.is_lowercase() || c.is_uppercase());
-        let fold = cased
-            && match self.case {
-                Case::Sensitive => false,
-                Case::Insensitive => true,
-                Case::Smart => !self.pattern.chars().any(|c| fold_char(c) != c),
-            };
-        let needle = if fold {
-            self.pattern.chars().map(fold_char).collect::<String>()
-        } else {
-            self.pattern.clone()
-        };
-        // ASCII だけで `k` を含まない検索語は、チャンクごとに ASCII を畳み込んで memmem できる (§12.4 の 2)。
-        // `k` は K (U+212A KELVIN SIGN) が畳み込まれて一致するので、行ごとの経路にする
-        // 単語単位は一致の両端を行の文脈で調べるので、行ごとの経路にする
-        let chunked = (!fold || (needle.is_ascii() && !needle.contains('k'))) && !self.whole_word;
-        Matcher {
-            finder: memmem::Finder::new(needle.as_bytes()).into_owned(),
-            len: needle.len(),
-            fold,
-            chunked,
-            regex: None,
+            expand,
             whole_word: self.whole_word,
             scope: self.scope.clone(),
         }
     }
+
+    /// リテラルの照合器。経路は §12.4 の 1〜3 の順に選び、どの経路でも大小を区別しないときの意味は
+    /// Unicode の単純ケースフォールディング (`regex` の `(?i)` と同じ) になる。
+    fn compile_literal(&self) -> Result<Matcher, QueryError> {
+        // 1. 大小の区別がある文字を 1 つも含まない検索語 (数字・記号・かな・漢字だけ等) は、
+        //    区別しない設定でも区別する設定と同じなので、そのまま memmem で探す
+        let fold = self.insensitive() && self.pattern.chars().any(is_cased);
+        // 2. ASCII だけで `k` `K` `s` `S` を含まない検索語は、チャンクごとに ASCII を畳み込んで memmem できる。
+        //    `k` は K (U+212A KELVIN SIGN)、`s` は ſ (U+017F LATIN SMALL LETTER LONG S) が畳み込まれて一致するので外す
+        //    (ASCII 以外から ASCII へ畳み込まれる文字はこの 2 つだけ)。単語単位は一致の両端を行の文脈で調べるので外す
+        let ascii_fold = self.pattern.is_ascii()
+            && !self.pattern.contains(['k', 'K', 's', 'S'])
+            && !self.whole_word;
+        if fold && !ascii_fold {
+            // 3. それ以外の大小を区別しない検索語は、エスケープして行ごとの正規表現の経路で `(?i)` として探す
+            let re = build_regex(&regex::escape(&self.pattern), true)?;
+            return Ok(self.regex_matcher(re, false));
+        }
+        let needle = if fold {
+            self.pattern.to_ascii_lowercase()
+        } else {
+            self.pattern.clone()
+        };
+        Ok(Matcher {
+            finder: memmem::Finder::new(needle.as_bytes()).into_owned(),
+            len: needle.len(),
+            fold,
+            chunked: !self.whole_word,
+            regex: None,
+            expand: false,
+            whole_word: self.whole_word,
+            scope: self.scope.clone(),
+        })
+    }
+}
+
+/// 正規表現をコンパイルする (大きさの上限つき、§12.3)。
+fn build_regex(pattern: &str, insensitive: bool) -> Result<regex::Regex, QueryError> {
+    regex::RegexBuilder::new(pattern)
+        .case_insensitive(insensitive)
+        .size_limit(REGEX_SIZE_LIMIT)
+        .build()
+        .map_err(|e| match e {
+            regex::Error::CompiledTooBig(_) => QueryError::TooLarge,
+            regex::Error::Syntax(msg) => QueryError::Syntax(first_line(&msg)),
+            _ => QueryError::Syntax(e.to_string()),
+        })
 }
 
 /// `regex` の構文エラーの文言は複数行になる。最後の `error:` の行 (原因) だけを取る。
@@ -298,8 +314,8 @@ fn first_line(msg: &str) -> String {
         )
 }
 
-/// 小文字が 1 文字になる文字だけ畳み込む。
-fn fold_char(c: char) -> char {
+/// 小文字が 1 文字になる文字だけ小文字にする (`Smart` の大文字の判定用)。
+fn lower_char(c: char) -> char {
     let mut it = c.to_lowercase();
     match (it.next(), it.next()) {
         (Some(l), None) => l,
@@ -307,46 +323,28 @@ fn fold_char(c: char) -> char {
     }
 }
 
-/// 畳み込んだ文字列と、畳み込み後のバイト位置 → 元のバイト位置の表 (長さが変わらなければ `None`)。
-fn fold_line(line: &str) -> (Cow<'_, str>, Option<Vec<usize>>) {
-    if line.is_ascii() {
-        return if line.bytes().any(|b| b.is_ascii_uppercase()) {
-            (Cow::Owned(line.to_ascii_lowercase()), None)
-        } else {
-            (Cow::Borrowed(line), None)
-        };
+/// 大小の区別がある文字か (§12.4 の 1 の判定)。小文字・大文字に加えて、大小の対応のある文字 (タイトルケースの `ǅ` など)
+/// も含める。多めに含めても遅い経路に回るだけで、結果は変わらない。
+pub(super) fn is_cased(c: char) -> bool {
+    fn same(mut it: impl Iterator<Item = char>, c: char) -> bool {
+        it.next() == Some(c) && it.next().is_none()
     }
-    let mut out = String::with_capacity(line.len());
-    let mut same = true;
-    for c in line.chars() {
-        let f = fold_char(c);
-        same &= f.len_utf8() == c.len_utf8();
-        out.push(f);
-    }
-    if same {
-        return (Cow::Owned(out), None);
-    }
-    // 畳み込みで長さが変わる文字がある行 (まれ) だけ、位置の表を作る (行ごとに表を確保しない。PRF-11)
-    let mut map: Vec<usize> = Vec::with_capacity(out.len() + 1);
-    for (i, c) in line.char_indices() {
-        for _ in 0..fold_char(c).len_utf8() {
-            map.push(i);
-        }
-    }
-    map.push(line.len());
-    (Cow::Owned(out), Some(map))
+    c.is_lowercase() || c.is_uppercase() || !same(c.to_lowercase(), c) || !same(c.to_uppercase(), c)
 }
 
 /// コンパイル済みの検索語。
 pub struct Matcher {
     pub(super) finder: memmem::Finder<'static>,
-    /// 畳み込み後の検索語のバイト長。
+    /// memmem で探す検索語 (大小を畳み込むときは ASCII の小文字にしたもの) のバイト長。
     pub(super) len: usize,
+    /// ASCII の大小を畳み込んで memmem で探す (§12.4 の 2。検索語は ASCII だけで `k` `K` `s` `S` を含まない)。
     pub(super) fold: bool,
-    /// チャンクごとに走査できる (行ごとの畳み込みが要らない)。
+    /// チャンクごとに走査できる (行に切り出さなくてよい)。
     pub(super) chunked: bool,
-    /// 正規表現のとき。行ごとに実行する (§12.3)。
+    /// 正規表現のとき。行ごとに実行する (§12.3)。大小を区別しないリテラルの一部もエスケープしてここで探す (§12.4 の 3)。
     pub(super) regex: Option<regex::Regex>,
+    /// 置換文字列の `$1` / `${name}` を展開する (利用者の正規表現のときだけ。リテラルをエスケープしたものは展開しない)。
+    expand: bool,
     /// 一致の両端が単語境界にあるものだけを採る。
     whole_word: bool,
     /// この範囲のどれかに収まる一致だけを採る (選択範囲内の検索)。
@@ -364,9 +362,14 @@ impl Matcher {
             .is_some_and(|s| s.start <= r.start && r.end <= s.end)
     }
 
-    /// チャンクごとに (memmem で) 走査できる。`false` は行ごとに畳み込む遅い経路 (約 50 MB/s) になる。
+    /// チャンクごとに (memmem で) 走査できる。`false` は行ごとに切り出す遅い経路になる。
     pub fn is_chunked(&self) -> bool {
         self.chunked
+    }
+
+    /// 置換文字列の `$1` / `${name}` を一致ごとに展開する (利用者の正規表現のとき)。
+    pub(super) fn expands(&self) -> bool {
+        self.expand
     }
 
     /// 1 行の中の一致を左から順に `f` へ渡す。`line_start` は行頭の文書内バイト位置。
@@ -380,7 +383,7 @@ impl Matcher {
         self.find_in_line_inner(text, line_start, line, false, &mut |r, _| f(r))
     }
 
-    /// `find_in_line` の本体。`want_caps` が真で正規表現なら、一致ごとにキャプチャも渡す (置換文字列の展開用)。
+    /// `find_in_line` の本体。`want_caps` が真で利用者の正規表現なら、一致ごとにキャプチャも渡す (置換文字列の展開用)。
     pub(super) fn find_in_line_inner(
         &self,
         text: &dyn TextRead,
@@ -397,6 +400,7 @@ impl Matcher {
                 .is_none_or(|b| b.binary_search(&rel_s).is_ok() && b.binary_search(&rel_e).is_ok())
         };
         if let Some(re) = &self.regex {
+            let want_caps = want_caps && self.expand;
             let mut pos = 0;
             while pos <= line.len() {
                 let (s, e, caps) = if want_caps {
@@ -434,23 +438,23 @@ impl Matcher {
             }
             return true;
         }
-        let (hay, map) = if self.fold {
-            fold_line(line)
+        // ASCII の大小だけを畳み込む (バイト長は変わらないので、位置はそのまま元の行のもの)
+        let hay = if self.fold && line.bytes().any(|b| b.is_ascii_uppercase()) {
+            Cow::Owned(line.to_ascii_lowercase())
         } else {
-            (Cow::Borrowed(line), None)
+            Cow::Borrowed(line)
         };
         let hay = hay.as_bytes();
-        let orig = |i: usize| map.as_ref().map_or(i, |m| m[i]);
         let mut pos = 0;
         while pos <= hay.len() {
             let Some(i) = self.finder.find(&hay[pos..]) else {
                 break;
             };
             let (s, e) = (pos + i, pos + i + self.len);
-            let (so, eo) = (line_start + orig(s), line_start + orig(e));
+            let (so, eo) = (line_start + s, line_start + e);
             if is_grapheme_boundary(text, ByteOff(so))
                 && is_grapheme_boundary(text, ByteOff(eo))
-                && on_word_boundary(orig(s), orig(e))
+                && on_word_boundary(s, e)
             {
                 if !f(ByteRange::new(ByteOff(so), ByteOff(eo)), None) {
                     return false;

@@ -332,3 +332,110 @@ fn 選択した一致を置換し_正規表現ではキャプチャを展開す�
     h.keys("enter"); // 選択している 2 つ目を置換
     assert_eq!(h.doc_text(), "k1=v1 v2=k2");
 }
+
+// ---- 検索語をコンパイルできないときの置換 (04 §8.4) ----
+
+/// 今のメッセージの (レベル, 本文, 対処)。
+fn message_parts(h: &mut Harness) -> (eve_view::MessageLevel, String, String) {
+    let m = h.frame().messages.current.expect("メッセージ");
+    (
+        m.level,
+        cell_text(&m.text),
+        m.hint.map(|t| cell_text(&t)).unwrap_or_default(),
+    )
+}
+
+/// 検索バーの件数の位置に出ている誤り。
+fn bar_error(h: &mut Harness) -> String {
+    cell_text(&h.frame().search.unwrap().error.expect("誤り"))
+}
+
+#[test]
+fn 構文エラーの検索語で置換すると_空の案内ではなく誤りを示し_何も置き換えない() {
+    for key in ["alt+a", "enter"] {
+        let mut h = Harness::new().with_size(80, 10);
+        h.text("a(b a(b");
+        h.keys("ctrl+r alt+r");
+        h.text("a(b");
+        h.keys("tab");
+        h.text("x");
+        let shown = bar_error(&mut h);
+        let reason = shown
+            .strip_prefix("✖ 正規表現が不正: ")
+            .expect("検索バーの誤り")
+            .to_owned();
+        h.keys(key);
+        assert_eq!(h.doc_text(), "a(b a(b", "{key}: 置き換えない");
+        let (level, text, hint) = message_parts(&mut h);
+        assert_ne!(text, "検索する文字列を入力してください", "{key}");
+        assert_eq!(
+            text,
+            format!("正規表現が不正なため、置換しませんでした: {reason}"),
+            "{key}: 検索バーの誤りと同じ理由"
+        );
+        assert_eq!(hint, "( ) や [ ] の対応などを確認してください");
+        assert_eq!(level, eve_view::MessageLevel::Warn);
+    }
+}
+
+#[test]
+fn 改行を含むパターンで置換すると_未対応と示し_何も置き換えない() {
+    for key in ["alt+a", "enter"] {
+        let mut h = Harness::new().with_size(80, 10);
+        h.text("ab");
+        h.keys("ctrl+r alt+r");
+        h.text(r"a\nb");
+        h.keys("tab");
+        h.text("x");
+        assert_eq!(bar_error(&mut h), "✖ 改行を含むパターンは未対応です");
+        h.keys(key);
+        assert_eq!(h.doc_text(), "ab", "{key}: 置き換えない");
+        let (_, text, hint) = message_parts(&mut h);
+        assert_eq!(
+            text, "改行を含むパターンは未対応のため、置換しませんでした",
+            "{key}"
+        );
+        assert_eq!(hint, "行ごとに検索します。1 行の中のパターンにしてください");
+    }
+}
+
+#[test]
+fn 検索語が空なら_1_件置換でも空の案内を出す() {
+    let mut h = Harness::new().with_size(60, 10);
+    h.text("abc");
+    h.keys("ctrl+r tab");
+    h.text("x");
+    h.keys("enter");
+    assert_eq!(message(&mut h), "検索する文字列を入力してください");
+    assert_eq!(h.doc_text(), "abc");
+}
+
+// ---- 大小を区別しない置換 (03 §12.4、OQ-196) ----
+
+#[test]
+fn 大小を区別しない置換は_long_s_とケルビン記号にも一致する() {
+    let mut h = Harness::new().with_size(60, 10);
+    h.text("class CLASS cla\u{17F}s \u{212A}ick");
+    setup(&mut h, "class", "x");
+    h.keys("alt+a");
+    assert_eq!(h.doc_text(), "x x x \u{212A}ick");
+    assert_eq!(message(&mut h), "3 件を置換しました (元に戻すで戻せます)");
+    let mut h = Harness::new().with_size(60, 10);
+    h.text("kick KICK \u{212A}ick");
+    setup(&mut h, "kick", "y");
+    h.keys("alt+a");
+    assert_eq!(h.doc_text(), "y y y");
+}
+
+#[test]
+fn 大小を区別しないリテラルの置換は_正規表現の経路で探しても置換文字列を展開しない() {
+    // `k` を含む大小無視のリテラルは、エスケープした正規表現で探す (03 §12.4 の 3)。置換文字列はリテラルのまま
+    let mut h = Harness::new().with_size(60, 10);
+    h.text("Kelvin kelvin");
+    h.keys("ctrl+home");
+    setup(&mut h, "kelvin", "$1${0}");
+    h.keys("enter");
+    assert_eq!(h.doc_text(), "$1${0} kelvin", "1 件置換");
+    h.keys("alt+a");
+    assert_eq!(h.doc_text(), "$1${0} $1${0}", "すべて置換");
+}
