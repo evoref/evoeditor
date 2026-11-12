@@ -1,7 +1,7 @@
 //! 不正バイト・曖昧幅・往復コーパス (AC の棚卸しの穴埋め): 不正バイトとコードポイントの表記、曖昧幅、往復コーパスの保存、チャンク境界の不正バイト。
 
 use eve_config::Config;
-use eve_core::Args;
+use eve_core::{Args, Encoding, OpenOptions};
 use eve_testkit::Harness;
 
 fn row0(h: &mut Harness) -> String {
@@ -36,6 +36,69 @@ fn 不正バイトは_0x_形式で_c1_制御文字は_u_形式で書き分ける
     h.paste("a\u{85}b");
     let r = row0(&mut h);
     assert!(r.contains("<U+0085>") && !r.contains("<0x85>"), "{r}");
+}
+
+/// 文字コードを指定して開く (開くときの確認が出ていれば、読み取り専用で開く)。
+fn opened_as(bytes: &[u8], enc: Encoding) -> Harness {
+    let mut h = Harness::new().with_size(60, 4).with_file("/w/a.txt", bytes);
+    h.editor.state_mut().open_path(
+        "/w/a.txt",
+        OpenOptions {
+            forced: Some(enc),
+            ..OpenOptions::default()
+        },
+    );
+    h.run_jobs();
+    if h.overlay() == "dialog" {
+        h.keys("r");
+        h.run_jobs();
+    }
+    h
+}
+
+/// 1 行目の行頭と行末のカーソルの列の差 (行の表示幅)。
+fn row0_width_by_cursor(h: &mut Harness) -> u16 {
+    h.keys("home");
+    let a = h.frame().panes[0].cursors[0].col;
+    h.keys("end");
+    let b = h.frame().panes[0].cursors[0].col;
+    b - a
+}
+
+// 状態付き符号化 (ISO-2022-JP) でも、不正バイトは他の文字コードと同じ `<0xHH>` (幅 6) で表示する。カーソルの列も同じ幅で
+// 数える (03 §8.3 の「状態付き符号化」と「表示」、OQ-207)
+// verifies: AC-NFR-304-3
+#[test]
+fn iso_2022_jp_の不正バイトも_0x_形式で表示し_幅_6_で数える() {
+    // JIS X 0208 状態のまま改行する行: LF (0x0A) が不正バイトになり、行は分かれない
+    let mut h = opened_as(b"\x1B$B$\"\n\x1B(Bx", Encoding::Iso2022Jp);
+    let r = row0(&mut h);
+    assert!(r.starts_with("あ<0x0A>x"), "{r:?}");
+    assert!(!r.contains('\u{10FF0A}'), "{r:?}");
+    assert_eq!(row0_width_by_cursor(&mut h), 2 + 6 + 1);
+}
+
+// 不正バイトの無い ISO-2022-JP の文書 (編集できる) に貼ったエスケープ文字も、他の文字コードの文書と同じく `<0xHH>` で
+// 表示する (通常の私用文字として描くのは、元のファイルが真にこの範囲の文字を含む `DisabledCollision` の文書だけ)
+#[test]
+fn 不正バイトの無い_iso_2022_jp_の文書に貼ったエスケープ文字も_0x_形式で表示する() {
+    let mut h = opened_as(b"\x1B$B$\"\x1B(B\n", Encoding::Iso2022Jp);
+    h.paste("\u{10FF80}");
+    let r = row0(&mut h);
+    assert!(r.contains("<0x80>あ"), "{r:?}");
+    assert_eq!(row0_width_by_cursor(&mut h), 6 + 2);
+}
+
+#[test]
+fn shift_jis_の不正バイトの表示と_真の私用文字を含む_utf8_の表示は変わらない() {
+    // Shift_JIS の不正バイト (0xFD)
+    let mut h = opened_as(b"a\xFDb\n", Encoding::ShiftJis);
+    let r = row0(&mut h);
+    assert!(r.contains("a<0xFD>b"), "{r:?}");
+    // 元のファイルが真に U+10FF80 を含む UTF-8 (DisabledCollision): 通常の私用文字として描き、記号にしない
+    let mut h = opened_as("a\u{10FF80}b\n".as_bytes(), Encoding::Utf8);
+    let r = row0(&mut h);
+    assert!(!r.contains("<0x80>"), "{r:?}");
 }
 
 // verifies: AC-NFR-605-1
