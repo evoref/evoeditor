@@ -162,6 +162,17 @@ pub(crate) fn verdict(v: &Value) -> Verdict {
         ),
         "BM-106" => t("p99 100 ms", limits(v, f64::MAX, 100.0), ""),
         "BM-205" => t("(記録)", None, "配布ビルドの exe のサイズ"),
+        // v0.4 (参考): 保持方式の記録の費用 (09 §5.2 の BM-104 / BM-202 の「v0.4 (参考)」)。メモリの基準は並べて示すだけ
+        id if id.starts_with("BM-104-10m-") => t(
+            "(参考) メモリ: デコード後 × 1.5 + 15 MB",
+            None,
+            "全読込完了。区分 B の箇所が密な 10 MB (`-dense`) と、比べる相手のふつうの Shift_JIS (保持方式の記録の費用、03 §8.7.1)",
+        ),
+        id if id.starts_with("BM-107e-") => t(
+            "(参考)",
+            None,
+            "保存のジョブの時間 (Shift_JIS 100 MB、書く内容は読み捨てる)。`-dense` は記録を使う保存、`-dense-norec` は同じ文書を記録を使わずに (03 §8.7.1)",
+        ),
         _ if id.starts_with("BM-104") => {
             // 全読込完了の p50 の目標 (NFR-104)。Shift_JIS は 1.5 倍まで
             let (target, limit_ms) = match id {
@@ -348,6 +359,24 @@ mod tests {
             r#"{"id":"BM-104-100m-sjis","p50_ms":1600.0,"mem_delta_bytes":1,"mem_limit_bytes":2}"#,
         ));
         assert_eq!(slow.verdict, "不合格");
+    }
+
+    // v0.4 の保持方式の記録の費用 (09 §5.2 の BM-104 / BM-202 / BM-107e の「v0.4 (参考)」) は合否を付けない
+    #[test]
+    fn 保持方式の計測は参考() {
+        for s in [
+            r#"{"id":"BM-104-10m-sjis","p50_ms":40.0,"mem_delta_bytes":300,"mem_limit_bytes":200}"#,
+            r#"{"id":"BM-104-10m-sjis-dense","p50_ms":200.0,"mem_delta_bytes":1,"mem_limit_bytes":2}"#,
+            r#"{"id":"BM-104-10m-iso2022jp-dense","p50_ms":200.0}"#,
+            r#"{"id":"BM-107e-100m-sjis-dense","p50_ms":800.0,"max_ms":900.0}"#,
+        ] {
+            assert_eq!(verdict(&v(s)).verdict, "参考", "{s}");
+        }
+        // 既存の 10 MB (UTF-8) は従来どおり判定する
+        let u = verdict(&v(
+            r#"{"id":"BM-104-10m","p50_ms":200.0,"mem_delta_bytes":1,"mem_limit_bytes":2}"#,
+        ));
+        assert_eq!(u.verdict, "不合格");
     }
 
     #[test]

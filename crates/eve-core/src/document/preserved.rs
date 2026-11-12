@@ -27,8 +27,14 @@
 use std::fmt;
 use std::sync::Arc;
 
-use eve_encoding::{Decoder, Encoding, PreserveReason, PreserveState, PreservedRecords};
-use eve_text::{ByteOff, ByteRange, ChangeSet, LineIdx, TextRead};
+use eve_encoding::{
+    Decoder, Encoding, PreserveReason, PreserveState, PreservedRecords, preserved_matches,
+};
+use eve_text::{ByteOff, ByteRange, ChangeSet, TextRead};
+
+pub(crate) mod cursor;
+
+use cursor::TextCursor;
 
 /// 1 つの塊の件数の上限。
 pub(crate) const CHUNK_MAX: usize = 1024;
@@ -605,6 +611,8 @@ impl PreservedMap {
         let lines = text.len_lines();
         let mut b = Builder::new(limits, records.records.len());
         let mut buf = Scratch::default();
+        // 記録は行の昇順なので、行の位置と範囲の文字列は本文を前から順に読んで引く (記録ごとに rope を降りない)
+        let mut tc = TextCursor::new(text);
         let mut prev_end = 0usize;
         let mut total = 0usize;
         // 直前の記録の行 (行番号, 行頭, 行の内容の末尾)。同じ行の記録が続くとき、行の位置を引き直さない
@@ -618,8 +626,7 @@ impl PreservedMap {
                         .ok()
                         .filter(|&l| l < lines)
                         .ok_or(err(PreservedErrorKind::OutOfRange))?;
-                    let s = text.line_to_byte(LineIdx(line)).0;
-                    let e = text.line_end_byte(LineIdx(line)).0;
+                    let (s, e) = tc.line_bounds(line);
                     cur = Some((r.line, s, e));
                     (s, e)
                 }
@@ -638,16 +645,16 @@ impl PreservedMap {
             if start < prev_end {
                 return Err(err(PreservedErrorKind::NotSorted));
             }
-            if !text.is_char_boundary(ByteOff(start)) || !text.is_char_boundary(ByteOff(end)) {
+            // 範囲は行の中 (本文の中) なので、文字列を引けないのは端が char 境界でないときだけ
+            let Some(want) = tc.slice(start, end) else {
                 return Err(err(PreservedErrorKind::NotCharBoundary));
-            }
+            };
             let bytes = records
                 .arena
                 .get(r.bytes.start as usize..r.bytes.end as usize)
                 .filter(|b| !b.is_empty())
                 .ok_or(err(PreservedErrorKind::OutOfRange))?;
-            let range = ByteRange::new(ByteOff(start), ByteOff(end));
-            if !matches_original(enc, bytes, text, range, &mut buf) {
+            if !matches_original(enc, bytes, &want, &mut buf) {
                 return Err(err(PreservedErrorKind::Mismatch));
             }
             prev_end = end;
@@ -1008,19 +1015,21 @@ impl PreservedMap {
     pub fn check(&self, text: &dyn TextRead, enc: Encoding) -> Result<(), PreservedError> {
         self.check_structure()?;
         let mut buf = Scratch::default();
+        let mut tc = TextCursor::new(text);
         for (index, r) in self.iter().enumerate() {
             let err = |kind| Err(PreservedError { index, kind });
             let (s, e) = (r.range.start, r.range.end);
             if e.0 > text.len_bytes() {
                 return err(PreservedErrorKind::OutOfRange);
             }
-            if !text.is_char_boundary(s) || !text.is_char_boundary(e) {
+            // 範囲は本文の中で昇順 (`check_structure`) なので、文字列を引けないのは端が char 境界でないときだけ
+            let Some(want) = tc.slice(s.0, e.0) else {
                 return err(PreservedErrorKind::NotCharBoundary);
-            }
+            };
             if r.line != enc.is_stateful() {
                 return err(PreservedErrorKind::WrongUnit);
             }
-            if !matches_original(enc, r.bytes, text, r.range, &mut buf) {
+            if !matches_original(enc, r.bytes, &want, &mut buf) {
                 return err(PreservedErrorKind::Mismatch);
             }
         }
@@ -1107,18 +1116,6 @@ impl PreservedMap {
         m.insert_spans(spans);
         m
     }
-}
-
-/// `range` が、本文の 1 つの行の内容の全体 (行頭で始まり、その行の終端の直前か文書の末尾で終わる) か (ISO-2022-JP の
-/// 行の記録を保存で使う条件、03 §8.6 E2 の (d))。長さ 0 の範囲は空の行。範囲が本文の外なら偽。
-pub(crate) fn is_whole_line(text: &dyn TextRead, range: ByteRange) -> bool {
-    let (s, e) = (range.start, range.end);
-    if e.0 > text.len_bytes() || s > e {
-        return false;
-    }
-    // CRLF の `\n` の位置は、その CRLF で終わる行に属する (行頭ではない)
-    let line = text.byte_to_line(s);
-    text.line_to_byte(line) == s && text.line_end_byte(line) == e
 }
 
 /// `replace_range` の、入れる記録を 1 回だけ足す。
@@ -1213,45 +1210,31 @@ pub(crate) fn merge_removed(
     out
 }
 
-/// 元のバイト列 `bytes` を `enc` の初期状態から復号すると、本文 `text` の `range` の文字列になり、初期状態で終わるか
-/// (03 §8.7.1 の不変条件。eve-encoding の `fuzzing::check_preserved` と同じ意味)。`buf` は使い回す作業用の文字列
-/// (100 万件の照合で、1 件ごとに確保しない)。
+/// 元のバイト列 `bytes` を `enc` の初期状態から復号すると、範囲の本文の文字列 `want` になり、初期状態で終わるか
+/// (03 §8.7.1 の不変条件。eve-encoding の `fuzzing::check_preserved` と同じ意味)。
 ///
-/// ISO-2022-JP の「ASCII 状態で終わる」は、`Decoder` が復号の後の状態を公開しないので、後ろに `\~` (0x5C 0x7E) を足して
-/// 復号し、その 2 文字がそのまま出ることで確かめる (ローマ字状態では `¥‾`、半角カナ状態では半角カナか不正バイト、
-/// JIS X 0208 状態では漢字 1 字になる)。
-fn matches_original(
-    enc: Encoding,
-    bytes: &[u8],
-    text: &dyn TextRead,
-    range: ByteRange,
-    buf: &mut Scratch,
-) -> bool {
-    const PROBE: &str = "\\~";
-    let Scratch { want, out } = buf;
-    want.clear();
-    for c in text.chunks(range) {
-        want.push_str(c);
-    }
-    if want.len() != range.len() {
-        return false;
-    }
-    out.clear();
-    let mut d = Decoder::new(enc, false);
-    if enc.is_stateful() {
-        d.decode(bytes, false, out);
-        d.decode(PROBE.as_bytes(), true, out);
-        d.invalid_bytes() == 0 && out.strip_suffix(PROBE) == Some(want.as_str())
-    } else {
-        d.decode(bytes, true, out);
-        d.invalid_bytes() == 0 && out == want
+/// 記録を集める文字コード (`Shift_JIS` / EUC-JP / ISO-2022-JP) では、保存の確認 (i) と同じ `preserved_matches` で
+/// 確かめる (文字列を作らずに復号して突き合わせる。ISO-2022-JP の「ASCII 状態で終わる」はエスケープシーケンスを追って
+/// 確かめる。復号が不正バイト無しに通れば、状態は受け付けたエスケープシーケンスだけで決まる)。ほかの文字コード (記録は
+/// 無いはず) は、`Decoder` で復号して比べる (`buf` は使い回す作業用の文字列)。
+fn matches_original(enc: Encoding, bytes: &[u8], want: &str, buf: &mut Scratch) -> bool {
+    match enc {
+        Encoding::ShiftJis | Encoding::EucJp | Encoding::Iso2022Jp => {
+            preserved_matches(enc, bytes, want)
+        }
+        _ => {
+            let out = &mut buf.out;
+            out.clear();
+            let mut d = Decoder::new(enc, false);
+            d.decode(bytes, true, out);
+            d.invalid_bytes() == 0 && out == want
+        }
     }
 }
 
-/// `matches_original` の作業用の文字列 (範囲の本文と、元のバイト列の復号の結果)。
+/// `matches_original` の作業用の文字列 (元のバイト列の復号の結果)。
 #[derive(Default)]
 struct Scratch {
-    want: String,
     out: String,
 }
 

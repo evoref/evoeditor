@@ -13,6 +13,7 @@ use eve_encoding::{
 use eve_text::{ByteRange, LineEnding, Snapshot, TextBuilder, TextRead};
 use eve_view::JobId;
 
+use crate::document::preserved::cursor::TextCursor;
 use crate::document::{
     LineStatsScanner, PreservedMap, ReadOnlyReason, ReadOnlyReasons, TextFormat,
 };
@@ -533,13 +534,21 @@ impl Verify {
 /// (03 §9.3 の「乾式走査と出力長」。直接上書きは、乾式走査で求めた長さのとおりに書く)。
 ///
 /// 保持方式の記録の版 (`preserved`) を渡すと (v0.4、03 §8.6 E2)、保存の計画 (`save_plan::Planner`) に従って、記録の境界で
-/// 本文を区間に切り、区間はチャンクごとに `Encoder::encode`、元のバイト列を書く記録は `Encoder::write_preserved`、使わない
-/// 記録は範囲の文字列をまとめて `encode` に渡す。計画は記録と Snapshot だけで決まるので、出力はチャンクの区切りに依らない
+/// 本文を区間に切り、区間はチャンクごとに `Encoder::encode`、元のバイト列を書く記録は `Encoder::write_checked` (確認 (i) を
+/// 計画が済ませたことを `PreservedBytes` の型が表す)、使わない記録は範囲の文字列をまとめて `encode` に渡す。計画は記録と
+/// Snapshot だけで決まるので、出力はチャンクの区切りに依らない
 /// (記録が rope のチャンクの境をまたいでも、範囲の文字列を 1 つにしてから扱う)。表が空なら v0.3 と同じ出力。
+///
+/// 区間は、本文を前から順に読む位置 (`TextCursor`) からチャンクの単位で切り出す (区間ごとに rope を降りない。記録が
+/// 密な文書では、区間は記録の間の数十バイトになる)。
 struct SaveStream<'a> {
     snapshot: &'a Snapshot,
-    /// 今の区間 (`pos` から次の記録の始まり、記録が尽きたら文書の末尾まで) のチャンク。
+    /// 表が空のとき: 文書の全体のチャンク。
     chunks: eve_text::Chunks<'a>,
+    /// 表があるとき: 区間を切り出す位置と、今の区間の残り `[seg.0, seg.1)` (`pos` から次の記録の始まり、記録が尽きたら
+    /// 文書の末尾まで)。
+    cursor: TextCursor<'a>,
+    seg: (usize, usize),
     enc: Encoder,
     report: EncodeReport,
     started: bool,
@@ -570,6 +579,8 @@ impl<'a> SaveStream<'a> {
         let mut s = SaveStream {
             snapshot,
             chunks: snapshot.chunks(ByteRange::all(snapshot.len_bytes())),
+            cursor: TextCursor::new(snapshot),
+            seg: (0, 0),
             enc: Encoder::new(encoding, bom, escape),
             report: EncodeReport::default(),
             started: false,
@@ -597,19 +608,12 @@ impl<'a> SaveStream<'a> {
             match plan.next(self.pos) {
                 Some(Decision::Skip { .. }) => self.broken += 1,
                 Some(d) => {
-                    let end = d.start();
-                    self.chunks = self.snapshot.chunks(ByteRange::new(
-                        eve_text::ByteOff(self.pos),
-                        eve_text::ByteOff(end),
-                    ));
+                    self.seg = (self.pos, d.start());
                     self.pending = Some(d);
                     return;
                 }
                 None => {
-                    self.chunks = self.snapshot.chunks(ByteRange::new(
-                        eve_text::ByteOff(self.pos),
-                        eve_text::ByteOff(len),
-                    ));
+                    self.seg = (self.pos, len);
                     self.pending = None;
                     return;
                 }
@@ -617,11 +621,35 @@ impl<'a> SaveStream<'a> {
         }
     }
 
+    /// 今の区間の次のチャンク (表が空なら文書の全体のチャンク)。区間が尽きたら `None`。
+    fn next_piece(&mut self) -> Option<&'a str> {
+        if self.plan.is_none() {
+            return self.chunks.next();
+        }
+        let (at, end) = self.seg;
+        if at >= end {
+            return None;
+        }
+        if let Some(p) = self.cursor.piece(at, end) {
+            self.seg.0 = at + p.len();
+            return Some(p);
+        }
+        // 区間の端が char 境界でない (計画が記録の端を確かめているので起きないはず): 区間を符号化せずに数え、書く前に
+        // 止める (`verify_failed`)
+        self.broken += 1;
+        self.seg.0 = end;
+        None
+    }
+
     /// 区間の終わりに来た記録を扱う。
     fn apply(&mut self, d: Decision<'a>, out: &mut Vec<u8>) {
         match d {
-            Decision::Raw { span, text } => {
-                if !self.enc.write_preserved(&text, span.bytes, out) {
+            Decision::Raw { span, text, bytes } => {
+                // 確認 (i) は計画が済ませた (`bytes` はそれを通ったものだけ)。口は文字コードと行頭の条件を見る。
+                // 確かめた文字列が、この記録の範囲のものであること (長さ) もここで確かめる (どのビルドでも。確かめた
+                // 結果を別の範囲に使い回す誤りへの備え)
+                let same_range = bytes.text_len() == span.range.end.0 - span.range.start.0;
+                if !same_range || !self.enc.write_checked(&bytes, out) {
                     // 計画は書けると判断した (起きないはず): 記録を使わずに符号化し、書く前に止める
                     self.enc.encode(&text, out, &mut self.report);
                     self.broken += 1;
@@ -649,7 +677,7 @@ impl<'a> SaveStream<'a> {
         let mut last = false;
         let mut any = false;
         loop {
-            if let Some(s) = self.chunks.next() {
+            if let Some(s) = self.next_piece() {
                 self.enc.encode(s, out, &mut self.report);
                 self.started = true;
             } else if let Some(d) = self.pending.take() {
