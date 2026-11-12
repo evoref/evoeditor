@@ -409,6 +409,12 @@ impl TextFormat {
         }
     }
 
+    /// バイトの文書 (03 §8.3.1 の「文書の種類と保存の扱い」の表の 1 行目): `pua_escape == Enabled` で `escape_encoding`
+    /// が `Some`。本文のエスケープ文字が `escape_encoding` の 1 バイトを表す。
+    pub fn is_bytes_document(&self) -> bool {
+        self.pua_escape == PuaEscapeMode::Enabled && self.escape_encoding.is_some()
+    }
+
     /// 文字コード `out` で保存するときの、不正バイトのエスケープ文字の扱い (03 §8.3.1 の「文書の種類と保存の扱い」の表、
     /// §8.6 E4)。保存・置換して保存・乾式走査の扱いはすべてここで決める (呼び出し側で条件を足さない)。
     ///
@@ -496,15 +502,32 @@ impl ReadOnlyReasons {
         ALL_REASONS.into_iter().filter(|r| self.contains(*r))
     }
 
-    /// `file.toggle_read_only` で解除できるか (理由があり、すべてが `FileAttribute` か `UserRequested`。03 §9.6 の表)。
-    pub fn releasable(&self) -> bool {
-        !self.is_empty()
-            && self.iter().all(|r| {
-                matches!(
-                    r,
-                    ReadOnlyReason::FileAttribute | ReadOnlyReason::UserRequested
-                )
-            })
+    /// `file.toggle_read_only` で解除できるか (理由があり、どれも解除を妨げない。03 §9.6 の表、§8.3.1 の「解除できる
+    /// 文書」)。`format` は文書の書式 (`InvalidBytes` はバイトの文書 (`TextFormat::is_bytes_document`) だけ解除できる)。
+    /// 読込が済んでいるか (`load_state == Ready`) は呼び出し側が見る。
+    pub fn releasable(&self, format: &TextFormat) -> bool {
+        !self.is_empty() && self.blocking(format).is_none()
+    }
+
+    /// 解除を妨げる理由のうち、表示の優先順で最初のもの (03 §9.6 の表)。解除できるのは `FileAttribute`・
+    /// `UserRequested` と、バイトの文書 (`pua_escape == Enabled` で `escape_encoding` が `Some`) の `InvalidBytes`
+    /// (v0.4 の M23。衝突の文書 (b) と、エスケープ文字の由来の文字コードが無い文書 (文字コードの違う復旧の後など) の
+    /// `InvalidBytes` は解除できない)。理由が無ければ `None`。
+    pub fn blocking(&self, format: &TextFormat) -> Option<ReadOnlyReason> {
+        let bytes = format.is_bytes_document();
+        self.iter().find(|r| match r {
+            ReadOnlyReason::FileAttribute | ReadOnlyReason::UserRequested => false,
+            ReadOnlyReason::InvalidBytes => !bytes,
+            _ => true,
+        })
+    }
+
+    /// 理由が `InvalidBytes` だけで、解除できる (バイトの文書。03 §10.3 の M23: 読み取り専用の文書のうち、復旧を
+    /// 提案・適用するもの。スワップの文字コードとの照合は呼び出し側が行う)。
+    pub fn only_releasable_invalid_bytes(&self, format: &TextFormat) -> bool {
+        self.contains(ReadOnlyReason::InvalidBytes)
+            && self.iter().count() == 1
+            && format.is_bytes_document()
     }
 
     /// 表示に出す 1 つ (優先順で先頭)。理由が無ければ `None`。
@@ -618,6 +641,62 @@ mod tests {
         r.remove(ReadOnlyReason::FileAttribute);
         assert_eq!(r.primary(), Some(ReadOnlyReason::InvalidBytes));
         assert!(!r.contains(ReadOnlyReason::FileAttribute));
+    }
+
+    // 03 §9.6 の表と §8.3.1 の「解除できる文書」(v0.4 の M23)
+    #[test]
+    fn 解除できる理由と妨げる理由() {
+        use PuaEscapeMode::{DisabledCollision, DisabledStateful, Enabled};
+        let set = |rs: &[ReadOnlyReason]| {
+            let mut r = ReadOnlyReasons::default();
+            for x in rs {
+                r.insert(*x);
+            }
+            r
+        };
+        let fmt = |pua_escape, escape_encoding| TextFormat {
+            pua_escape,
+            escape_encoding,
+            ..TextFormat::new_document()
+        };
+        let bytes = fmt(Enabled, Some(Encoding::Utf8));
+        // 理由が無ければ解除するものが無い
+        assert!(!ReadOnlyReasons::default().releasable(&bytes));
+        assert_eq!(ReadOnlyReasons::default().blocking(&bytes), None);
+        // 属性・利用者の指定・不正バイト (バイトの文書) の組は解除できる
+        let ok = set(&[
+            ReadOnlyReason::FileAttribute,
+            ReadOnlyReason::UserRequested,
+            ReadOnlyReason::InvalidBytes,
+        ]);
+        assert!(ok.releasable(&bytes));
+        // 衝突の文書 (b)・由来の文字コードの無い文書の InvalidBytes は解除できない (状態付きの文書に InvalidBytes は
+        // 付かないが、付いても同じ)
+        for f in [
+            fmt(DisabledCollision, None),
+            fmt(DisabledStateful, None),
+            fmt(Enabled, None),
+        ] {
+            assert!(!ok.releasable(&f), "{:?}", f.pua_escape);
+            assert_eq!(ok.blocking(&f), Some(ReadOnlyReason::InvalidBytes));
+            assert!(!set(&[ReadOnlyReason::InvalidBytes]).only_releasable_invalid_bytes(&f));
+        }
+        // 解除できない理由が 1 つでもあれば解除できず、優先順で最初の妨げる理由を返す
+        for bad in [
+            ReadOnlyReason::NoWritePermission,
+            ReadOnlyReason::StatefulEncodingWithInvalidBytes,
+            ReadOnlyReason::Binary,
+            ReadOnlyReason::LargeFileViewer,
+            ReadOnlyReason::LoadIncomplete,
+        ] {
+            let r = set(&[ReadOnlyReason::InvalidBytes, bad]);
+            assert!(!r.releasable(&bytes), "{bad:?}");
+            assert_eq!(r.blocking(&bytes), Some(bad));
+        }
+        // 復旧の対象: 理由が InvalidBytes だけで、バイトの文書
+        assert!(set(&[ReadOnlyReason::InvalidBytes]).only_releasable_invalid_bytes(&bytes));
+        assert!(!ok.only_releasable_invalid_bytes(&bytes));
+        assert!(!set(&[ReadOnlyReason::UserRequested]).only_releasable_invalid_bytes(&bytes));
     }
 
     /// 基準: 1 バイトずつ数える。

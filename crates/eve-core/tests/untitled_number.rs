@@ -112,6 +112,7 @@ fn スワップから復旧した無題は_適用した文書の番号のまま(
                 nanos: 0,
             }),
             readable: true,
+            encoding: None,
         },
         Some(eve_core::SwapBody {
             text: "hello".to_owned(),

@@ -155,6 +155,7 @@ impl EditorState {
         preserved: crate::document::PreservedMap,
         stamp: crate::io::fs::FileStamp,
         detected: crate::document::ReadOnlyReasons,
+        read_only_requested: bool,
     ) {
         use crate::document::{FormatChange, FormatState, Origin, Transaction};
         use eve_text::{ByteOff, ChangeSet, InsertText, Op, Selection, TextRead};
@@ -162,10 +163,22 @@ impl EditorState {
         if let Some(d) = self.docs.documents.get_mut(&doc_id) {
             d.attribute_released = false;
             d.external_seen = None;
+            // 再読込の確認 (不正バイトの比率、FR-127) で「読み取り専用で開く」を選んだ: 解除を持ち越さず、記録も消す
+            // (利用者が読み取り専用を選んだので、Undo / Redo でも外さない。03 §8.3.1 の細目 (a))
+            if read_only_requested {
+                d.invalid_bytes_released = false;
+            }
         }
         let Some(old) = self.docs.documents.get(&doc_id) else {
             return;
         };
+        // 「編集を許可」(不正バイトの解除) は同じ文書の再読込では持ち越す: 新しい読込に不正バイトがあっても
+        // `InvalidBytes` を付けない (03 §8.3.1 の「解除の持ち越し」、§8.8)。新しい内容がバイトの文書でない (私用文字と
+        // 衝突した内容 (衝突の文書 (b)) など、解除できない文書) ときは、持ち越さずに付ける
+        let mut detected = detected;
+        if old.invalid_bytes_released && format.is_bytes_document() {
+            detected.remove(crate::document::ReadOnlyReason::InvalidBytes);
+        }
         format.eol_stats = crate::document::EolStats::count(&text);
         let change = FormatChange::Reload {
             before: FormatState {
@@ -250,7 +263,15 @@ impl EditorState {
                 ..
             } if kind == OpenKind::Reload => {
                 self.apply_reload(
-                    doc_id, view, &path, text, format, preserved, stamp, detected,
+                    doc_id,
+                    view,
+                    &path,
+                    text,
+                    format,
+                    preserved,
+                    stamp,
+                    detected,
+                    opts.read_only_requested,
                 );
                 if changed_during_load {
                     self.message(

@@ -525,6 +525,7 @@ fn 復旧した文書は区分_b_の箇所があれば数を言わずに確認�
             nanos: 0,
         }),
         readable: true,
+        encoding: None,
     };
     // a￢b / ￢￢c (￢ は IBM 拡張の重複 0xFA54。保持方式の記録の結線の試験と同じ文書で、自動判定で Shift_JIS)
     let bytes = b"a\xFA\x54b\n\xFA\x54\xFA\x54c\n".to_vec();

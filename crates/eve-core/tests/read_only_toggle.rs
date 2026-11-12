@@ -96,17 +96,19 @@ fn readonly_で開いた文書は解除でき_確認なしで保存する_もう
 // verifies: FR-116
 #[test]
 fn 解除できない理由ではコマンドが実行できない() {
-    // 不正バイト (理由 InvalidBytes) は解除できない (不正バイトの比率の確認で「読み取り専用で開く」を選んでも、理由は
-    // `InvalidBytes` だけで `UserRequested` は付かない。03 §9.2 の表)
-    let mut h = Harness::new().with_file("/w/bad.txt", b"ok \x9A\xFF end\n");
-    h.open("/w/bad.txt");
+    // バイナリの確認で「読み取り専用で開く」を選んだ文書 (理由 `Binary`) は解除できない (NG10、03 §9.6 の表)。
+    // 不正バイト (`InvalidBytes`) は v0.4 の M23 から確認の後に解除できる (試験は `invalid_bytes_release.rs`)
+    let mut h = Harness::new().with_file("/w/bin.dat", b"a\0b\0c\0\n");
+    h.open("/w/bin.dat");
     h.run_jobs();
+    assert_eq!(h.overlay(), "dialog", "バイナリの確認");
     h.text("r");
     h.run_jobs();
-    assert_eq!(reasons(&h), [ReadOnlyReason::InvalidBytes]);
+    assert_eq!(reasons(&h), [ReadOnlyReason::Binary]);
     assert!(!matches!(
         h.cmd("file.toggle_read_only"),
         CommandResult::Done
     ));
-    assert_eq!(reasons(&h), [ReadOnlyReason::InvalidBytes]);
+    assert_eq!(reasons(&h), [ReadOnlyReason::Binary]);
+    assert_eq!(h.overlay(), "", "確認も出さない");
 }

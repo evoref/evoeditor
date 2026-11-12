@@ -1079,9 +1079,7 @@ impl EditorState {
         match name {
             "doc.read_only" => doc.map_or(b(false), |d| b(!d.is_editable())),
             "doc.has_path" => b(doc.is_some_and(|d| d.path.is_some())),
-            "doc.read_only_releasable" => b(doc.is_some_and(|d| {
-                d.load_state == crate::document::LoadState::Ready && d.read_only.releasable()
-            })),
+            "doc.read_only_releasable" => b(doc.is_some_and(Document::read_only_releasable)),
             "doc.modified" => b(doc.is_some_and(Document::is_dirty)),
             "selection.empty" => b(view.is_none_or(|v| v.selection.iter().all(|r| r.is_empty()))),
             "overlay.active" => Some(CtxValue::Str(self.overlay_name().to_owned())),

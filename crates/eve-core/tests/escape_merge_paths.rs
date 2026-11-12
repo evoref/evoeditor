@@ -16,7 +16,7 @@ use std::sync::Arc;
 use eve_core::{
     Args, CancelToken, Document, EscapeMergeApproval, Expect, FsPath, HardlinkPolicy,
     InPlaceBackup, JobKind, JobPorts, JobRequest, JobResult, OpenOptions, Origin, PreservedMap,
-    ReadOnlyReason, SaveStrategy, TextFormat, Tick, Transaction, run_job,
+    SaveStrategy, TextFormat, Tick, Transaction, run_job,
 };
 use eve_encoding::{
     Decoder, EncodeReport, Encoder, Encoding, EscapePolicy, NoPreserveReason, PreserveStatus,
@@ -500,7 +500,7 @@ fn rec_pieces(enc: Encoding) -> (Pieces, Pieces, Pieces) {
 
 const PAD: &str = "0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789\n";
 
-// 記録を持つ文書を開いて (試験だけの近道で編集を許可して) 一部を消して保存する: 書いたら開き直すと本文と同じで clean、
+// 記録を持つ文書を開いて (「編集を許可」で解除して) 一部を消して保存する: 書いたら開き直すと本文と同じで clean、
 // 書かなかったら dirty のまま、`VerifyFailed` (保持なし) にはならない
 // verifies: NFR-304
 #[test]
@@ -534,13 +534,21 @@ fn 記録を持つ文書を開いて編集して保存する() {
                 },
             );
             h.run_jobs();
+            // 「編集を許可」(`file.toggle_read_only` と確認の `[A]`)。不正バイトの無い文書は初めから編集できる
             let id = h.doc_id();
-            {
-                let d = h.editor.state_mut().document_mut(id).unwrap();
-                d.read_only.remove(ReadOnlyReason::InvalidBytes);
-                if !d.is_editable() {
+            if !h.editor.state().document(id).unwrap().is_editable() {
+                if !h
+                    .editor
+                    .state()
+                    .document(id)
+                    .unwrap()
+                    .read_only_releasable()
+                {
                     continue;
                 }
+                h.cmd("file.toggle_read_only");
+                h.text("a");
+                assert!(h.editor.state().document(id).unwrap().is_editable());
             }
             // 本文の先頭部分 (詰め物の前) で、1〜3 文字を 1〜3 回消す
             let text0 = h.doc_text();

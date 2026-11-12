@@ -177,6 +177,10 @@ pub(crate) fn list_swaps(state_dir: &Path) -> Vec<SwapEntry> {
             sensitive: p.sensitive,
             modified,
             readable,
+            encoding: p
+                .encoding
+                .as_deref()
+                .and_then(eve_core::Encoding::from_label),
         });
     }
     out.sort_by(|a, b| a.dir.as_path().cmp(b.dir.as_path()));

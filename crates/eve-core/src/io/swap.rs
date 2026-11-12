@@ -37,6 +37,8 @@ pub(crate) struct SwapState {
     notified_large: std::collections::BTreeSet<DocumentId>,
     /// 復旧を適用した古いスワップ。新しいスワップが書けるか、文書が保存されるまで消さない。
     pub(crate) recovered: BTreeMap<DocumentId, Vec<crate::SwapEntry>>,
+    /// 文字コードが違うので提案しなかった (`info.swap.encoding_mismatch` を出した) 文書と候補 (1 組につき 1 回)。
+    pub(crate) mismatch_notified: Vec<(DocumentId, FsPath)>,
 }
 
 #[derive(Default)]

@@ -45,6 +45,7 @@ fn entry(dir: &str, path: Option<&str>, owner: SwapOwner, readable: bool) -> Swa
             nanos: 0,
         }),
         readable,
+        encoding: None,
     }
 }
 
