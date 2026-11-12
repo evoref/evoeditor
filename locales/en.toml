@@ -445,6 +445,9 @@ notation_as_text = "The clipboard differs from the copy made in the editor, so t
 pua_as_text = "{count} private-use characters (U+10FF00 to U+10FFFF) cannot be inserted as is, so they were inserted as <U+XXXX> text"
 search_notation = "Text like <0xNN> does not match invalid bytes. Search with the regular expression \\x{{10FFNN}}"
 
+[info.prompt]
+target_closed = "The document this input was for has been closed, so nothing was done"
+
 [info.recovery]
 old = "{count} backups are older than 30 days: {dir}"
 
