@@ -70,6 +70,9 @@ pub struct ClipboardSource {
     /// コピー元の `escape_encoding` (本文のエスケープ文字がどの文字コードのバイトか)。貼り付け先が同じ `Some` のときだけ、
     /// エスケープ文字のまま (バイトのまま) 運ぶ。
     pub escape_origin: Option<crate::Encoding>,
+    /// コピー元が衝突の文書 (b) (`DisabledCollision` で不正バイトもある) だった。`U+10FF00..` が不正バイトか真の私用文字かを
+    /// 区別できないので、貼り付けではどの文書へも (衝突の文書 (a) を含む) `<U+10FFNN>` の文字列にする (03 §8.3.1)。
+    pub indistinct: bool,
 }
 
 impl ClipboardSource {
@@ -103,10 +106,6 @@ pub(crate) struct ClipboardState {
     next_token: u64,
     /// `msg.clipboard.fallback` を出した (同じ起動の中で最初の 1 回だけ)。
     fallback_notified: bool,
-    /// 内部レジスタの「システム側は古い」印 (03 §8.3.1): 最後のコピーをシステムのクリップボードに書けなかった
-    /// (書込の失敗・上限の超過)。立っている間の貼り付けは、届いた文字列を見ずに内部レジスタを使う。次のコピーで外す
-    /// (そのコピーの書き出しも失敗すれば、Host の知らせでまた立つ)。
-    system_stale: bool,
 }
 
 impl EditorState {
@@ -119,14 +118,6 @@ impl EditorState {
 
     /// システムクリップボードを使えなかったことを知らせる (`msg.clipboard.fallback`、同じ起動の中で最初の 1 回だけ)。
     pub fn notify_clipboard_fallback(&mut self, reason: ClipboardFallbackReason) {
-        // 書き出しの失敗 (取得の失敗・期限切れ以外) なら、内部レジスタに「システム側は古い」印を付ける (03 §8.3.1)。
-        // 手段が無い (`Ssh` / `NoDisplay` / `NoCommand`) ときは取得も失敗し、貼り付けは内部レジスタを使うので同じになる
-        if !matches!(
-            reason,
-            ClipboardFallbackReason::ReadFailed | ClipboardFallbackReason::Timeout
-        ) {
-            self.clipboard.system_stale = true;
-        }
         if self.clipboard.fallback_notified {
             return;
         }
@@ -170,6 +161,9 @@ impl EditorState {
             range,
             notation: ctx.notation,
             escape_origin: ctx.escape_encoding,
+            // 衝突の文書 (b): 不正バイトと真の私用文字の両方があり、区別できない
+            indistinct: doc.format.pua_escape == eve_encoding::PuaEscapeMode::DisabledCollision
+                && doc.format.invalid_bytes > 0,
         };
         self.put_clipboard(source);
         true
@@ -185,6 +179,7 @@ impl EditorState {
             range,
             notation: false,
             escape_origin: None,
+            indistinct: false,
         });
     }
 
@@ -201,7 +196,6 @@ impl EditorState {
             ClipboardText::Handle(id)
         };
         self.clipboard.register = Some(source);
-        self.clipboard.system_stale = false;
         self.push_effect(Effect::SetClipboard {
             content,
             target: ClipboardTarget::System,
@@ -265,18 +259,22 @@ impl EditorState {
         crate::command::edit::paste_text(self, text.as_deref());
     }
 
-    /// 内部レジスタと「システム側は古い」印 (貼り付けの照合に使う、03 §8.3.1)。
-    pub(crate) fn clipboard_register(&self) -> (Option<&ClipboardSource>, bool) {
-        (
-            self.clipboard.register.as_ref(),
-            self.clipboard.system_stale,
-        )
+    /// 内部レジスタ (貼り付けの照合に使う、03 §8.3.1)。
+    pub(crate) fn clipboard_register(&self) -> Option<&ClipboardSource> {
+        self.clipboard.register.as_ref()
     }
 
-    /// 検索欄・置換欄への貼り付けが、内部レジスタ由来の `<0xNN>` を含むときに知らせる (`info.paste.search_notation`、
-    /// 03 §8.3.1 の「入力欄」・04 §15.2)。欄には届いた文字列のまま入っている。
+    /// 検索欄への貼り付けが、内部レジスタ由来の `<0xNN>` を含むときに知らせる (`info.paste.search_notation`、
+    /// 03 §8.3.1 の「入力欄」・04 §15.2)。欄には届いた文字列のまま入っている。文言が検索の説明なので、置換欄・
+    /// プロンプト・パレットの欄では出さない。
     pub(crate) fn notify_field_paste(&mut self, arrived: &str) {
-        if self.ui.overlay.is_some() || self.find.search_bar.is_none() {
+        let in_search_field = self.ui.overlay.is_none()
+            && self
+                .find
+                .search_bar
+                .as_ref()
+                .is_some_and(|b| b.focus == eve_view::BarFocus::Search);
+        if !in_search_field {
             return;
         }
         let from_register = self

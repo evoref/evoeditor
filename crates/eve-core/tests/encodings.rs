@@ -987,13 +987,13 @@ fn choice_keys(s: &mut Harness) -> Vec<Option<char>> {
         .expect("確認が出ている")
 }
 
-/// 空の UTF-8 の文書の本文に `pasted` を (挿入の入口の規則を通さずに) 入れ、`file.set_encoding` で `Shift_JIS` にして
+/// 空の UTF-8 の文書の本文に `text` を (挿入の入口の規則を通さずに) 入れ、`file.set_encoding` で `Shift_JIS` にして
 /// 保存する。
-fn paste_and_save_as_sjis(pasted: &str) -> Harness {
+fn inject_and_save_as_sjis(text: &str) -> Harness {
     let mut s = env();
     s.fs.add_file("/w/a.txt", b"\n");
     open_as(&mut s, "/w/a.txt", Encoding::Utf8);
-    inject_start(&mut s, pasted);
+    inject_start(&mut s, text);
     run(
         &mut s,
         "file.set_encoding",
@@ -1007,7 +1007,7 @@ fn paste_and_save_as_sjis(pasted: &str) -> Harness {
 // verifies: NFR-304
 #[test]
 fn 表現不能の_101_件目より後ろにエスケープ文字があっても_選択肢はキャンセルだけ() {
-    let mut s = paste_and_save_as_sjis(&format!("{}\u{10FF80}", "😀".repeat(101)));
+    let mut s = inject_and_save_as_sjis(&format!("{}\u{10FF80}", "😀".repeat(101)));
     assert_eq!(s.overlay(), "dialog", "E3 の選択肢が出る");
     let keys = choice_keys(&mut s);
     assert_eq!(keys.len(), 1, "キャンセルだけ: {keys:?}");
@@ -1026,7 +1026,7 @@ fn 表現不能の_101_件目より後ろにエスケープ文字があっても
 
 #[test]
 fn 表現不能の先頭にエスケープ文字があれば_選択肢はキャンセルだけ() {
-    let mut s = paste_and_save_as_sjis(&format!("\u{10FF80}{}", "😀".repeat(101)));
+    let mut s = inject_and_save_as_sjis(&format!("\u{10FF80}{}", "😀".repeat(101)));
     assert_eq!(s.overlay(), "dialog");
     assert_eq!(choice_keys(&mut s).len(), 1);
     assert_eq!(s.fs.read("/w/a.txt").unwrap(), b"\n");
@@ -1034,7 +1034,7 @@ fn 表現不能の先頭にエスケープ文字があれば_選択肢はキャ�
 
 #[test]
 fn エスケープ文字が無ければ_表現不能が_101_件以上でも_置換して保存を出し_全件を置換する() {
-    let mut s = paste_and_save_as_sjis(&"😀".repeat(101));
+    let mut s = inject_and_save_as_sjis(&"😀".repeat(101));
     let keys = choice_keys(&mut s);
     assert_eq!(
         keys.len(),

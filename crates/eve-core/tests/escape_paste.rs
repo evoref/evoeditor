@@ -25,6 +25,19 @@ fn accept_read_only(h: &mut Harness) {
     }
 }
 
+/// 文字コードを指定して開く (読み取り専用はそのまま)。
+fn raw_open(h: &mut Harness, path: &str, enc: Encoding) {
+    h.editor.state_mut().open_path(
+        path,
+        OpenOptions {
+            forced: Some(enc),
+            ..OpenOptions::default()
+        },
+    );
+    h.run_jobs();
+    accept_read_only(h);
+}
+
 /// 文字コードを指定して開き、`InvalidBytes` があれば外す (「編集を許可」の後の状態。試験だけの近道)。
 fn open_as(h: &mut Harness, path: &str, enc: Encoding) {
     h.editor.state_mut().open_path(
@@ -267,7 +280,7 @@ fn 衝突の文書の私用文字は_バイトの文書へはコードポイン�
     assert_eq!(paste_notices(&h), vec!["info.paste.pua_as_text"]);
 }
 
-// ---------- 照合が外れる・システム側が古い ----------
+// ---------- 照合が外れる ----------
 
 // verifies: NFR-304
 #[test]
@@ -300,18 +313,15 @@ fn 空白が変わった文字列は一致しない() {
 
 // verifies: NFR-304
 #[test]
-fn 表記の形の知らせは内部レジスタが不正バイトの文書からのコピーのときだけ() {
+fn 表記の形の知らせは内部レジスタがエスケープ文字を含む表記のコピーのときだけ() {
+    // エスケープ文字を含まないコピー (バイトの文書の "a") では知らせない
     let mut h = sjis_env();
     h.keys("ctrl+home shift+right ctrl+c end");
     h.clear_log();
     paste_from_system(&mut h, Some("<0xA0>"));
     assert_eq!(h.doc_text(), format!("ab{ESC_A0}c<0xA0>\n"));
-    assert_eq!(
-        paste_notices(&h),
-        vec!["info.paste.notation_as_text"],
-        "コピー元はバイトの文書なので知らせる"
-    );
-    // 不正バイトの無い文書からのコピー (escape_origin が None) では知らせない
+    assert_eq!(paste_notices(&h), Vec::<String>::new());
+    // 不正バイトの無い文書からのコピーでも知らせない
     let mut h = env();
     h.fs.add_file("/w/u.txt", b"plain\n");
     open_as(&mut h, "/w/u.txt", Encoding::Utf8);
@@ -322,28 +332,127 @@ fn 表記の形の知らせは内部レジスタが不正バイトの文書か�
     assert_eq!(paste_notices(&h), Vec::<String>::new());
 }
 
+// 不正バイトを含む ISO-2022-JP (状態付き・不正バイトあり。読み取り専用だがコピーはできる) のエスケープ文字は 1 バイトの
+// 意味を持つが、どこに貼ってもバイトとしては運べない。文字列になったことを知らせる (M23 の 5 本目のレビューの再現 r2)
 // verifies: NFR-304
 #[test]
-fn システムのクリップボードへの書込が失敗した後の貼り付けは内部レジスタを使う() {
+fn 状態付きで不正バイトのある文書からのコピーは表記の文字列で入れて知らせる() {
+    let mut h = env();
+    h.fs.add_file("/w/a.txt", b"\x1B$B$\"\n\x1B(Bx");
+    raw_open(&mut h, "/w/a.txt", Encoding::Iso2022Jp);
+    assert_eq!(doc(&h).format.pua_escape, PuaEscapeMode::DisabledStateful);
+    h.keys("ctrl+a ctrl+c");
+    let ClipboardText::Inline(sys) = last_set_clipboard(&h) else {
+        panic!("Inline で渡す");
+    };
+    assert_eq!(sys, "あ<0x0A>x");
+    h.fs.add_file("/w/s.txt", b"ab\xA0c\n");
+    open_as(&mut h, "/w/s.txt", Encoding::ShiftJis);
+    h.keys("ctrl+end");
+    h.clear_log();
+    paste_from_system(&mut h, Some(&sys));
+    assert_eq!(h.doc_text(), format!("ab{ESC_A0}c\nあ<0x0A>x"));
+    assert_eq!(paste_notices(&h), vec!["info.paste.escape_as_text"]);
+}
+
+// 衝突の文書 (b) (不正バイトと真の私用文字の両方。区別できない) からのコピーは、衝突の文書 (a) へも `<U+10FFNN>` の
+// 文字列にする (私用文字のまま入れると、元は 1 バイトだった 0x9A が保存で 4 バイトになる。レビューの再現 r3)
+// verifies: NFR-304
+#[test]
+fn 衝突の文書_b_からのコピーは衝突の文書_a_へもコードポイントの表記で入れて知らせる() {
+    let mut h = env();
+    let mut b = b"x".to_vec();
+    b.extend_from_slice("\u{10FF80}".as_bytes());
+    b.extend_from_slice(b"\x9A\n");
+    h.fs.add_file("/w/b.txt", &b);
+    raw_open(&mut h, "/w/b.txt", Encoding::Utf8);
+    assert_eq!(doc(&h).format.pua_escape, PuaEscapeMode::DisabledCollision);
+    assert!(doc(&h).format.invalid_bytes > 0);
+    let src = h.doc_text();
+    h.keys("ctrl+a ctrl+c");
+    assert_eq!(
+        last_set_clipboard(&h),
+        ClipboardText::Inline(src.clone()),
+        "他のアプリへは私用文字のまま"
+    );
+    h.fs.add_file("/w/a.txt", "q\u{10FF00}\n".as_bytes());
+    open_as(&mut h, "/w/a.txt", Encoding::Utf8);
+    assert_eq!(doc(&h).format.pua_escape, PuaEscapeMode::DisabledCollision);
+    h.keys("ctrl+end");
+    h.clear_log();
+    paste_from_system(&mut h, Some(&src));
+    assert_eq!(h.doc_text(), "q\u{10FF00}\nx<U+10FF80><U+10FF9A>\n");
+    assert_eq!(paste_notices(&h), vec!["info.paste.pua_as_text"]);
+    h.cmd("file.save");
+    h.run_jobs();
+    let out = h.fs.read("/w/a.txt").unwrap();
+    assert!(
+        !out.windows(4).any(|w| w == "\u{10FF9A}".as_bytes()),
+        "0x9A を U+10FF9A の UTF-8 として書かない: {out:02X?}"
+    );
+}
+
+// Windows のクリップボードの取得は最初の NUL で切れる (05 §8.1)。NUL で切れた文字列が届いても内部のコピーとみなし、
+// 内部レジスタの全体を入れる (NUL より後ろを黙って失わない。レビューの再現 r4)
+// verifies: NFR-304
+#[test]
+fn nul_を含む範囲の切り取りと貼り付けは_nul_で切れて届いても全体が戻る() {
+    let mut h = sjis_env();
+    h.keys("ctrl+home");
+    h.cmd_with("edit.insert_text", Args::new().with_str("text", "z\u{0}"));
+    let before = h.doc_text();
+    h.keys("ctrl+a ctrl+x");
+    assert_eq!(h.doc_text(), "");
+    h.clear_log();
+    paste_from_system(&mut h, Some("z"));
+    assert_eq!(h.doc_text(), before);
+    assert_eq!(paste_notices(&h), vec!["info.paste.as_bytes"]);
+}
+
+// ---------- 書き出し・取得の失敗の後も、届いた文字列が入る (レビューの再現 r1 / r1b / r1c の回帰の試験) ----------
+
+/// Host は取得の失敗を `HostReport::ClipboardFallback` で知らせてから `None` を届ける。その順を再現する。
+fn ctrl_v_read_fails(h: &mut Harness, reason: ClipboardFallbackReason) {
+    h.keys("ctrl+v");
+    let token = h
+        .effects()
+        .iter()
+        .rev()
+        .find_map(|e| match e {
+            Effect::RequestClipboard { token, .. } => Some(*token),
+            _ => None,
+        })
+        .expect("RequestClipboard");
+    h.editor.report(HostReport::ClipboardFallback { reason });
+    h.clipboard_content(token, None);
+}
+
+fn plain_env() -> Harness {
+    let mut h = env();
+    h.fs.add_file("/w/u.txt", b"line1\n");
+    open_as(&mut h, "/w/u.txt", Encoding::Utf8);
+    h.keys("ctrl+home shift+end ctrl+c ctrl+end");
+    h
+}
+
+// SSH (取得は常に `Unsupported`) などでは、エディタ内の `edit.paste` は内部レジスタを入れ、端末からの貼り付けは
+// 届いた文字列を入れる (05 §8.1 が案内している経路)
+// verifies: NFR-304
+#[test]
+fn 取得できない環境でも端末からの貼り付けは届いた文字列が入る() {
     for reason in [
-        ClipboardFallbackReason::WriteFailed,
+        ClipboardFallbackReason::Ssh,
+        ClipboardFallbackReason::NoCommand,
+        ClipboardFallbackReason::NoDisplay,
         ClipboardFallbackReason::TooLarge,
     ] {
-        let mut h = sjis_env();
-        copy_escape(&mut h);
-        h.editor.report(HostReport::ClipboardFallback { reason });
-        h.keys("end");
-        h.clear_log();
-        // 届くのは古い文字列 (他のアプリでコピーした内容)
-        paste_from_system(&mut h, Some("OLD"));
-        assert_eq!(h.doc_text(), format!("ab{ESC_A0}c{ESC_A0}\n"), "{reason:?}");
-        assert_eq!(paste_notices(&h), vec!["info.paste.as_bytes"]);
-        // 次のコピーで印は外れる
-        h.keys("ctrl+home shift+right ctrl+c end");
-        paste_from_system(&mut h, Some("OLD"));
+        let mut h = plain_env();
+        ctrl_v_read_fails(&mut h, reason);
+        assert_eq!(h.doc_text(), "line1\nline1", "{reason:?}");
+        h.paste(" https://example.com/");
         assert_eq!(
             h.doc_text(),
-            format!("ab{ESC_A0}c{ESC_A0}OLD\n"),
+            "line1\nline1 https://example.com/",
             "{reason:?}"
         );
     }
@@ -351,23 +460,87 @@ fn システムのクリップボードへの書込が失敗した後の貼り�
 
 // verifies: NFR-304
 #[test]
-fn 取得の失敗は印を付けず_読めなかった貼り付けは内部レジスタを使う() {
+fn 取得の上限超過の後に別のアプリでコピーした文字列は届いたとおりに入る() {
+    let mut h = plain_env();
+    ctrl_v_read_fails(&mut h, ClipboardFallbackReason::TooLarge);
+    paste_from_system(&mut h, Some("NEW"));
+    assert!(h.doc_text().ends_with("NEW"), "{:?}", h.doc_text());
+}
+
+// 書き出しの失敗は知らせるだけで、照合の規則は変えない (03 §8.3.1。前のコピーの失敗が遅れて届いても、次のコピーの
+// 貼り付けを内部レジスタにすり替えない)
+// verifies: NFR-304
+#[test]
+fn 書き出しの失敗の後も_届いた文字列が内部レジスタと違えば届いた文字列が入る() {
+    for reason in [
+        ClipboardFallbackReason::WriteFailed,
+        ClipboardFallbackReason::TooLarge,
+    ] {
+        let mut h = env();
+        h.fs.add_file("/w/u.txt", b"AAA\nBBB\n");
+        open_as(&mut h, "/w/u.txt", Encoding::Utf8);
+        h.keys("ctrl+home shift+end ctrl+c");
+        h.keys("down home shift+end ctrl+c");
+        h.editor.report(HostReport::ClipboardFallback { reason });
+        h.keys("ctrl+end");
+        paste_from_system(&mut h, Some("EXT"));
+        assert!(
+            h.messages().contains(&"msg.clipboard.fallback".to_owned()),
+            "書き出しの失敗は知らせる"
+        );
+        assert!(
+            h.doc_text().ends_with("EXT"),
+            "{reason:?}: {:?}",
+            h.doc_text()
+        );
+        h.paste("TERM");
+        assert!(
+            h.doc_text().ends_with("EXTTERM"),
+            "{reason:?}: {:?}",
+            h.doc_text()
+        );
+    }
+}
+
+// verifies: NFR-304
+#[test]
+fn 読めなかった貼り付けは内部レジスタを使う() {
     let mut h = sjis_env();
     copy_escape(&mut h);
-    h.editor.report(HostReport::ClipboardFallback {
-        reason: ClipboardFallbackReason::ReadFailed,
-    });
     h.keys("end");
-    paste_from_system(&mut h, Some("NEW"));
-    assert_eq!(
-        h.doc_text(),
-        format!("ab{ESC_A0}cNEW\n"),
-        "取得の失敗では古い印を付けない"
-    );
     h.clear_log();
     paste_from_system(&mut h, None);
-    assert_eq!(h.doc_text(), format!("ab{ESC_A0}cNEW{ESC_A0}\n"));
+    assert_eq!(h.doc_text(), format!("ab{ESC_A0}c{ESC_A0}\n"));
     assert_eq!(paste_notices(&h), vec!["info.paste.as_bytes"]);
+}
+
+// 64 KiB 以上の内部レジスタ (Handle で渡す) からも、経路 (1) でバイトのまま入る
+// verifies: NFR-304
+#[test]
+fn 大きい内部レジスタからもバイトのまま貼り付ける() {
+    let mut h = env();
+    let mut bytes = b"x\x80y\n".to_vec();
+    bytes.extend(std::iter::repeat_n(b'a', 70 * 1024));
+    bytes.push(b'\n');
+    h.fs.add_file("/w/big.txt", &bytes);
+    open_as(&mut h, "/w/big.txt", Encoding::Utf8);
+    h.keys("ctrl+a ctrl+c");
+    let ClipboardText::Handle(id) = last_set_clipboard(&h) else {
+        panic!("ハンドルで渡す");
+    };
+    let sys = h.editor.take_clipboard(id).expect("取り出せる").to_text();
+    h.keys("ctrl+end");
+    h.clear_log();
+    paste_from_system(&mut h, Some(&sys));
+    let text = h.doc_text();
+    assert_eq!(text.matches('\u{10FF80}').count(), 2);
+    assert!(!text.contains("<0x80>"));
+    assert_eq!(paste_notices(&h), vec!["info.paste.as_bytes"]);
+    h.cmd("file.save");
+    h.run_jobs();
+    let mut want = bytes.clone();
+    want.extend_from_slice(&bytes);
+    assert_eq!(h.fs.read("/w/big.txt").unwrap(), want, "バイトのまま");
 }
 
 // verifies: NFR-304

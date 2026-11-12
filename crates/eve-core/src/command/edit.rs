@@ -326,9 +326,8 @@ pub(crate) fn paste_text(
     };
     let target = EscapeContext::of(&doc.format);
     let eol = doc.format.default_eol;
-    let (register, stale) = ctx.state.clipboard_register();
-    let Some(plan) =
-        insert_rule::resolve_paste(text, register, stale, target, eol, PASTE_NORMALIZE_EOL)
+    let register = ctx.state.clipboard_register();
+    let Some(plan) = insert_rule::resolve_paste(text, register, target, eol, PASTE_NORMALIZE_EOL)
     else {
         return CommandResult::Done;
     };

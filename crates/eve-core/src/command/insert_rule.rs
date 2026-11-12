@@ -181,8 +181,38 @@ fn register_chars(src: &ClipboardSource) -> impl Iterator<Item = char> + '_ {
 impl ClipboardSource {
     /// 届いた文字列が、この内部レジスタを `to_text` で文字列にしたものと、両側の改行をそろえて一致するか
     /// (§8.3.1 の「内部レジスタとの照合」)。先頭から比べて最初の違いで打ち切る。
+    ///
+    /// `Some(true)` は全体の一致。`Some(false)` は、届いた文字列が内部レジスタの文字列を最初の NUL で切ったものと
+    /// 一致した (Windows のクリップボードの取得は最初の NUL で切れる、05 §8.1。内部のコピーとみなし、内部レジスタの
+    /// 全体を入れる)。
+    pub(crate) fn match_text(&self, arrived: &str) -> Option<bool> {
+        if lf_chars(register_chars(self)).eq(lf_chars(arrived.chars())) {
+            return Some(true);
+        }
+        let cut = lf_chars(register_chars(self)).take_while(|&c| c != '\0');
+        (!arrived.contains('\0') && self.has_nul() && cut.eq(lf_chars(arrived.chars())))
+            .then_some(false)
+    }
+
+    /// 届いた文字列と一致するか (`match_text` の全体の一致と、NUL で切れた一致のどちらか)。
     pub(crate) fn matches_text(&self, arrived: &str) -> bool {
-        lf_chars(register_chars(self)).eq(lf_chars(arrived.chars()))
+        self.match_text(arrived).is_some()
+    }
+
+    fn has_nul(&self) -> bool {
+        use eve_text::TextRead;
+        self.snapshot
+            .chunks(self.range)
+            .any(|c| c.as_bytes().contains(&0))
+    }
+
+    /// 貼り付け先で `<0xNN>` の文字列になるエスケープ文字の数 (表記にするコピー元のときだけ数える。知らせの件数)。
+    fn notation_count(&self) -> u64 {
+        if self.notation {
+            self.escape_count()
+        } else {
+            0
+        }
     }
 
     /// 範囲の中のエスケープ文字の数。
@@ -208,15 +238,14 @@ pub(crate) struct PastePlan {
 
 /// 貼り付けの入口 (1) (`paste_text`。`edit.paste` の応答と端末からの貼り付け) の規則。
 ///
-/// - `arrived`: 届いた文字列 (読めなかったときは `None`)。
-/// - `register`: 内部レジスタ。`stale` はその「システム側は古い」印 (最後のコピーの書き出しが失敗・上限超過)。
+/// - `arrived`: 届いた文字列 (読めなかったときは `None` で、内部レジスタを使う)。
+/// - `register`: 内部レジスタ。
 /// - `target`: 挿入先の文書。`eol` はその `default_eol`、`normalize_eol` は `editor.paste_normalize_eol`。
 ///
 /// 入れるものが無い (届かず、内部レジスタも空) ときは `None`。
 pub(crate) fn resolve_paste(
     arrived: Option<&str>,
     register: Option<&ClipboardSource>,
-    stale: bool,
     target: EscapeContext,
     eol: LineEnding,
     normalize_eol: bool,
@@ -228,14 +257,14 @@ pub(crate) fn resolve_paste(
             s.to_owned()
         }
     };
-    // 一致とみなす内部レジスタ: システム側が古い・届かなかったときは見ずに一致、ほかは両側の改行をそろえて比べる
-    let matched = register.filter(|r| match arrived {
-        Some(a) if !stale => r.matches_text(a),
-        _ => true,
+    // 一致とみなす内部レジスタと、届いた文字列をそのまま使えるか (届かなかった・NUL で切れていたときは内部レジスタの文字列)
+    let matched = register.and_then(|r| match arrived {
+        Some(a) => r.match_text(a).map(|whole| (r, whole)),
+        None => Some((r, false)),
     });
     let mut notices = Vec::new();
     let text = match matched {
-        Some(r) if r.escape_origin.is_some() && r.escape_origin == target.escape_encoding => {
+        Some((r, _)) if r.escape_origin.is_some() && r.escape_origin == target.escape_encoding => {
             // 経路 (1): 内部レジスタの内容 (エスケープ文字のまま) を、設定どおりの改行の正規化をかけて入れる
             use eve_text::TextRead;
             let raw = r.snapshot.slice_to_string(r.range);
@@ -245,18 +274,26 @@ pub(crate) fn resolve_paste(
             }
             eol_rule(&raw)
         }
-        Some(r) => {
-            // 一致したが挿入先ではバイトとして扱えない: 届いた文字列 (届かない・古いときは内部レジスタの文字列) を経路 (2) で
+        Some((r, whole)) => {
+            // 一致したが挿入先ではバイトとして扱えない: 届いた文字列 (届かない・NUL で切れたときは内部レジスタの文字列) を
+            // 経路 (2) で入れる
             let s = match arrived {
-                Some(a) if !stale => eol_rule(a),
+                Some(a) if whole => eol_rule(a),
                 _ => eol_rule(&r.to_text()),
             };
-            if r.escape_origin.is_some() {
-                let n = r.escape_count();
-                if n > 0 {
-                    notices.push(InsertNotice::EscapeAsText(n));
-                }
+            let n = r.notation_count();
+            if n > 0 {
+                notices.push(InsertNotice::EscapeAsText(n));
             }
+            // 衝突の文書 (b) からのコピーは、不正バイトと真の私用文字を区別できないので、衝突の文書 (a) へも表記にする
+            let target = if r.indistinct {
+                EscapeContext {
+                    notation: true,
+                    ..target
+                }
+            } else {
+                target
+            };
             let (s, pua) = external_text(&s, target);
             if pua > 0 {
                 notices.push(InsertNotice::PuaAsText(pua));
@@ -266,7 +303,7 @@ pub(crate) fn resolve_paste(
         None => {
             // 照合が外れた (または内部レジスタが空): 経路 (2)
             let a = arrived?;
-            if register.is_some_and(|r| r.escape_origin.is_some()) && has_byte_notation(a) {
+            if register.is_some_and(|r| r.notation_count() > 0) && has_byte_notation(a) {
                 notices.push(InsertNotice::NotationAsText);
             }
             let s = eol_rule(a);
@@ -285,12 +322,21 @@ mod tests {
     use super::*;
     use eve_text::{ByteOff, ByteRange};
 
-    fn src(text: &str, notation: bool, origin: Option<Encoding>) -> ClipboardSource {
+    /// コピー元の文書の種類: (表記にするか, `escape_encoding`, 衝突の文書 (b) か)。
+    type Origin = (bool, Option<Encoding>, bool);
+
+    const FROM_SJIS: Origin = (true, Some(Encoding::ShiftJis), false);
+    const FROM_PLAIN: Origin = (true, None, false);
+    const FROM_COLLISION_A: Origin = (false, None, false);
+    const FROM_COLLISION_B: Origin = (false, None, true);
+
+    fn src(text: &str, (notation, origin, indistinct): Origin) -> ClipboardSource {
         ClipboardSource {
             snapshot: eve_text::Text::from(text).snapshot(),
             range: ByteRange::new(ByteOff(0), ByteOff(text.len())),
             notation,
             escape_origin: origin,
+            indistinct,
         }
     }
 
@@ -306,6 +352,10 @@ mod tests {
         notation: false,
         escape_encoding: None,
     };
+
+    fn paste(arrived: Option<&str>, r: &ClipboardSource, target: EscapeContext) -> PastePlan {
+        resolve_paste(arrived, Some(r), target, LineEnding::Lf, true).unwrap()
+    }
 
     #[test]
     fn 表記は大文字の_16_進_2_桁() {
@@ -337,7 +387,7 @@ mod tests {
 
     #[test]
     fn 照合は両側の改行をそろえて比べる() {
-        let r = src("a\r\n\u{10FF9A}\rb", true, Some(Encoding::ShiftJis));
+        let r = src("a\r\n\u{10FF9A}\rb", FROM_SJIS);
         assert!(r.matches_text("a\n<0x9A>\nb"));
         assert!(r.matches_text("a\r\n<0x9A>\r\nb"));
         assert!(!r.matches_text("a\n<0x9A>\nb "), "空白が足された");
@@ -346,24 +396,35 @@ mod tests {
     }
 
     #[test]
+    fn 照合は最初の_nul_で切れた文字列とも一致する() {
+        let r = src("z\0\u{10FF9A}", FROM_SJIS);
+        assert_eq!(r.match_text("z\0<0x9A>"), Some(true));
+        assert_eq!(
+            r.match_text("z"),
+            Some(false),
+            "Windows の取得は NUL で切れる"
+        );
+        assert_eq!(r.match_text(""), None, "NUL の前と違う");
+        assert_eq!(r.match_text("z\0"), None, "NUL を含む文字列は全体で比べる");
+        assert_eq!(src("z", FROM_SJIS).match_text("z"), Some(true));
+        // 切れて一致したときは内部レジスタの全体を入れる (経路 (1) でも (2) でも)
+        let p = paste(Some("z"), &r, BYTES_SJIS);
+        assert_eq!(p.text, "z\0\u{10FF9A}");
+        let p = paste(Some("z"), &r, PLAIN);
+        assert_eq!(p.text, "z\0<0x9A>");
+        assert_eq!(p.notices, vec![InsertNotice::EscapeAsText(1)]);
+    }
+
+    #[test]
     fn 同じ文字コードのバイトの文書にはバイトのまま() {
-        let r = src("x\u{10FF9A}\r\ny", true, Some(Encoding::ShiftJis));
-        let p = resolve_paste(
-            Some("x<0x9A>\r\ny"),
-            Some(&r),
-            false,
-            BYTES_SJIS,
-            LineEnding::Lf,
-            true,
-        )
-        .unwrap();
+        let r = src("x\u{10FF9A}\r\ny", FROM_SJIS);
+        let p = paste(Some("x<0x9A>\r\ny"), &r, BYTES_SJIS);
         assert_eq!(p.text, "x\u{10FF9A}\ny");
         assert_eq!(p.notices, vec![InsertNotice::AsBytes(1)]);
         // 正規化しない設定では内部レジスタの改行のまま
         let p = resolve_paste(
             Some("x<0x9A>\ny"),
             Some(&r),
-            false,
             BYTES_SJIS,
             LineEnding::Lf,
             false,
@@ -374,36 +435,35 @@ mod tests {
 
     #[test]
     fn 違う文字コードの文書には表記の文字列で知らせる() {
-        let r = src("x\u{10FF9A}", true, Some(Encoding::ShiftJis));
+        let r = src("x\u{10FF9A}", FROM_SJIS);
         let target = EscapeContext {
             notation: true,
             escape_encoding: Some(Encoding::EucJp),
         };
-        let p = resolve_paste(
-            Some("x<0x9A>"),
-            Some(&r),
-            false,
-            target,
-            LineEnding::Lf,
-            true,
-        )
-        .unwrap();
+        let p = paste(Some("x<0x9A>"), &r, target);
         assert_eq!(p.text, "x<0x9A>");
         assert_eq!(p.notices, vec![InsertNotice::EscapeAsText(1)]);
     }
 
     #[test]
+    fn バイトでない文書や状態付きの文書のエスケープ文字も_文字列にしたことを知らせる() {
+        // バイトでない文書の本文に残ったエスケープ文字・状態付きで不正バイトのある文書 (どちらも `escape_encoding` は None)
+        let r = src("x\u{10FF9A}", FROM_PLAIN);
+        let p = paste(Some("x<0x9A>"), &r, BYTES_SJIS);
+        assert_eq!(p.text, "x<0x9A>");
+        assert_eq!(p.notices, vec![InsertNotice::EscapeAsText(1)]);
+        let p = paste(Some("y<0x9A>"), &r, BYTES_SJIS);
+        assert_eq!(p.notices, vec![InsertNotice::NotationAsText]);
+        // エスケープ文字の無いコピーなら、表記の形が届いても知らせない
+        let r = src("x", FROM_SJIS);
+        let p = paste(Some("y<0x9A>"), &r, BYTES_SJIS);
+        assert_eq!(p.notices, vec![]);
+    }
+
+    #[test]
     fn 照合が外れたら届いた文字列で_表記の形があれば知らせる() {
-        let r = src("x\u{10FF9A}", true, Some(Encoding::ShiftJis));
-        let p = resolve_paste(
-            Some("y<0x9A>\u{10FF80}"),
-            Some(&r),
-            false,
-            BYTES_SJIS,
-            LineEnding::Lf,
-            true,
-        )
-        .unwrap();
+        let r = src("x\u{10FF9A}", FROM_SJIS);
+        let p = paste(Some("y<0x9A>\u{10FF80}"), &r, BYTES_SJIS);
         assert_eq!(p.text, "y<0x9A><U+10FF80>");
         assert_eq!(
             p.notices,
@@ -412,57 +472,46 @@ mod tests {
     }
 
     #[test]
-    fn システム側が古い印があれば届いた文字列を見ない() {
-        let r = src("x\u{10FF9A}", true, Some(Encoding::ShiftJis));
-        let p = resolve_paste(
-            Some("OLD"),
-            Some(&r),
-            true,
-            BYTES_SJIS,
-            LineEnding::Lf,
-            true,
-        )
-        .unwrap();
+    fn 届かなかったときは内部レジスタを使う() {
+        let r = src("x\u{10FF9A}", FROM_SJIS);
+        let p = paste(None, &r, BYTES_SJIS);
         assert_eq!(p.text, "x\u{10FF9A}");
-        let p = resolve_paste(Some("OLD"), Some(&r), true, PLAIN, LineEnding::Lf, true).unwrap();
-        assert_eq!(p.text, "x<0x9A>", "古い文字列ではなく内部レジスタの表記");
+        let p = paste(None, &r, PLAIN);
+        assert_eq!(p.text, "x<0x9A>");
         assert_eq!(p.notices, vec![InsertNotice::EscapeAsText(1)]);
+        // 届いた文字列は、内部レジスタと違えばそのまま入る (書き出しに失敗した後も、v0.3 と同じ)
+        let p = paste(Some("OLD"), &r, BYTES_SJIS);
+        assert_eq!(p.text, "OLD");
     }
 
     #[test]
-    fn 衝突の文書からのコピーはバイトの文書へコードポイントの表記で() {
-        let r = src("x\u{10FF9A}", false, None);
+    fn 衝突の文書_a_からのコピーはバイトの文書へコードポイントの表記で() {
+        let r = src("x\u{10FF9A}", FROM_COLLISION_A);
         assert_eq!(r.to_text(), "x\u{10FF9A}");
-        let p = resolve_paste(
-            Some("x\u{10FF9A}"),
-            Some(&r),
-            false,
-            BYTES_SJIS,
-            LineEnding::Lf,
-            true,
-        )
-        .unwrap();
+        let p = paste(Some("x\u{10FF9A}"), &r, BYTES_SJIS);
         assert_eq!(p.text, "x<U+10FF9A>");
         assert_eq!(p.notices, vec![InsertNotice::PuaAsText(1)]);
-        let p = resolve_paste(
-            Some("x\u{10FF9A}"),
-            Some(&r),
-            false,
-            COLLISION,
-            LineEnding::Lf,
-            true,
-        )
-        .unwrap();
+        let p = paste(Some("x\u{10FF9A}"), &r, COLLISION);
         assert_eq!(p.text, "x\u{10FF9A}");
         assert_eq!(p.notices, vec![]);
     }
 
     #[test]
+    fn 衝突の文書_b_からのコピーは衝突の文書_a_へもコードポイントの表記で() {
+        let r = src("x\u{10FF9A}", FROM_COLLISION_B);
+        assert_eq!(r.to_text(), "x\u{10FF9A}", "他のアプリへはそのまま");
+        for target in [BYTES_SJIS, PLAIN, COLLISION] {
+            let p = paste(Some("x\u{10FF9A}"), &r, target);
+            assert_eq!(p.text, "x<U+10FF9A>", "{target:?}");
+            assert_eq!(p.notices, vec![InsertNotice::PuaAsText(1)]);
+        }
+        let p = paste(None, &r, COLLISION);
+        assert_eq!(p.text, "x<U+10FF9A>");
+    }
+
+    #[test]
     fn 届かず内部レジスタも空なら何もしない() {
-        assert_eq!(
-            resolve_paste(None, None, false, PLAIN, LineEnding::Lf, true),
-            None
-        );
+        assert_eq!(resolve_paste(None, None, PLAIN, LineEnding::Lf, true), None);
     }
 
     // ---------- 性質テスト (03 §22.1 の「貼り付けのエスケープ文字」) ----------
@@ -510,11 +559,18 @@ mod tests {
         })
     }
 
+    fn naive_reg_text(raw: &str, notation: bool) -> String {
+        if notation {
+            naive_bytes(raw)
+        } else {
+            raw.to_owned()
+        }
+    }
+
     /// 規則の表の素朴な実装。返すのは (入れる文字列, 知らせ)。
     fn model(
         arrived: Option<&str>,
-        reg: Option<(&str, bool, Option<Encoding>)>,
-        stale: bool,
+        reg: Option<(&str, Origin)>,
         target: EscapeContext,
         eol: LineEnding,
         normalize: bool,
@@ -526,29 +582,33 @@ mod tests {
                 s.to_owned()
             }
         };
-        let to_ext = |s: String| {
-            if target.notation {
+        let to_ext = |s: String, notation: bool| {
+            if notation {
                 let n = escapes(&s);
                 (naive_codepoints(&s), n)
             } else {
                 (s, 0)
             }
         };
-        let reg_text = reg.map(|(raw, notation, _)| {
-            if notation {
-                naive_bytes(raw)
-            } else {
-                raw.to_owned()
+        // 照合: 全体の一致 (Some(true))、または NUL で切れた一致 (Some(false))
+        let matched = reg.and_then(|(raw, (notation, _, _))| {
+            let rt = lf(&naive_reg_text(raw, notation));
+            match arrived {
+                None => Some(false),
+                Some(a) if lf(a) == rt => Some(true),
+                Some(a)
+                    if !a.contains('\0')
+                        && rt.contains('\0')
+                        && lf(a) == rt.split('\0').next().unwrap() =>
+                {
+                    Some(false)
+                }
+                Some(_) => None,
             }
         });
-        let matched = match (reg, arrived) {
-            (None, _) => false,
-            (Some(_), None) => true,
-            (Some(_), Some(a)) => stale || lf(a) == lf(reg_text.as_deref().unwrap()),
-        };
         let mut notices = Vec::new();
-        if matched {
-            let (raw, _, origin) = reg.unwrap();
+        if let Some(whole) = matched {
+            let (raw, (notation, origin, indistinct)) = reg.unwrap();
             if origin.is_some() && origin == target.escape_encoding {
                 if escapes(raw) > 0 {
                     notices.push(InsertNotice::AsBytes(escapes(raw)));
@@ -556,23 +616,25 @@ mod tests {
                 return Some((norm(raw), notices));
             }
             let src = match arrived {
-                Some(a) if !stale => a.to_owned(),
-                _ => reg_text.unwrap(),
+                Some(a) if whole => a.to_owned(),
+                _ => naive_reg_text(raw, notation),
             };
-            if origin.is_some() && escapes(raw) > 0 {
+            if notation && escapes(raw) > 0 {
                 notices.push(InsertNotice::EscapeAsText(escapes(raw)));
             }
-            let (s, n) = to_ext(norm(&src));
+            let (s, n) = to_ext(norm(&src), target.notation || indistinct);
             if n > 0 {
                 notices.push(InsertNotice::PuaAsText(n));
             }
             return Some((s, notices));
         }
         let a = arrived?;
-        if reg.is_some_and(|(_, _, o)| o.is_some()) && naive_has_notation(a) {
+        if reg.is_some_and(|(raw, (notation, _, _))| notation && escapes(raw) > 0)
+            && naive_has_notation(a)
+        {
             notices.push(InsertNotice::NotationAsText);
         }
-        let (s, n) = to_ext(norm(a));
+        let (s, n) = to_ext(norm(a), target.notation);
         if n > 0 {
             notices.push(InsertNotice::PuaAsText(n));
         }
@@ -592,6 +654,7 @@ mod tests {
             "<0x9A>",
             "<0xa0>",
             " ",
+            "\0",
             "\r",
             "\n",
             "\r\n",
@@ -606,8 +669,16 @@ mod tests {
         prop::collection::vec(piece(), 0..12).prop_map(|v| v.concat())
     }
 
-    fn encoding() -> impl Strategy<Value = Option<Encoding>> {
-        prop::sample::select(vec![None, Some(Encoding::ShiftJis), Some(Encoding::EucJp)])
+    /// コピー元の文書の種類: バイトの文書 (2 つの文字コード)・表記にしてバイトでない文書 (状態付きを含む)・衝突の文書
+    /// (a)・衝突の文書 (b)。
+    fn origin() -> impl Strategy<Value = Origin> {
+        prop::sample::select(vec![
+            FROM_SJIS,
+            (true, Some(Encoding::EucJp), false),
+            FROM_PLAIN,
+            FROM_COLLISION_A,
+            FROM_COLLISION_B,
+        ])
     }
 
     /// 挿入先 (§8.3.1 の「文書の種類と保存の扱い」の表の 6 種): バイトの文書 (2 つの文字コード)・バイトでない文書・
@@ -624,50 +695,41 @@ mod tests {
         ])
     }
 
-    /// 届く文字列: 読めない・内部レジスタの表記そのもの・改行を変えたもの・空白を足したもの・別の文字列。
+    /// 届く文字列: 読めない・内部レジスタの表記そのもの・改行を変えたもの・空白を足したもの・NUL で切ったもの・
+    /// 別の文字列。
     fn arrived_for(reg_text: String) -> impl Strategy<Value = Option<String>> {
         let crlf = reg_text.replace("\r\n", "\n").replace('\n', "\r\n");
         let lf_only = lf(&reg_text);
         let spaced = format!("{reg_text} ");
+        let cut = reg_text.split('\0').next().unwrap_or_default().to_owned();
         prop_oneof![
             Just(None),
             Just(Some(reg_text)),
             Just(Some(crlf)),
             Just(Some(lf_only)),
             Just(Some(spaced)),
+            Just(Some(cut)),
             text().prop_map(Some),
         ]
     }
 
-    /// 1 件の入力: (内部レジスタ (本文, `notation`, `escape_origin`), 届く文字列, 古い印, 挿入先, 改行, 正規化するか)。
+    /// 1 件の入力: (内部レジスタ (本文, コピー元), 届く文字列, 挿入先, 改行, 正規化するか)。
     type Case = (
-        Option<(String, bool, Option<Encoding>)>,
+        Option<(String, Origin)>,
         Option<String>,
-        bool,
         EscapeContext,
         LineEnding,
         bool,
     );
 
     fn case() -> impl Strategy<Value = Case> {
-        let reg = prop::option::of((text(), any::<bool>(), encoding()).prop_map(
-            |(t, notation, origin)| {
-                // コピー元の不変条件: `escape_encoding` が `Some` の文書は表記にする (`Enabled`)
-                (t, notation || origin.is_some(), origin)
-            },
-        ));
-        reg.prop_flat_map(|reg| {
-            let reg_text =
-                reg.as_ref().map_or_else(
-                    String::new,
-                    |(t, n, _)| {
-                        if *n { naive_bytes(t) } else { t.clone() }
-                    },
-                );
+        prop::option::of((text(), origin())).prop_flat_map(|reg| {
+            let reg_text = reg
+                .as_ref()
+                .map_or_else(String::new, |(t, o)| naive_reg_text(t, o.0));
             (
                 Just(reg),
                 arrived_for(reg_text),
-                any::<bool>(),
                 target(),
                 prop::sample::select(vec![LineEnding::Lf, LineEnding::Crlf, LineEnding::Cr]),
                 any::<bool>(),
@@ -683,14 +745,13 @@ mod tests {
 
         #[test]
         fn 貼り付けの結果は規則の表の素朴な実装と一致する(
-            (reg, arrived, stale, target, eol, normalize) in case()
+            (reg, arrived, target, eol, normalize) in case()
         ) {
-            let src = reg.as_ref().map(|(t, n, o)| src(t, *n, *o));
-            let got = resolve_paste(arrived.as_deref(), src.as_ref(), stale, target, eol, normalize);
+            let source = reg.as_ref().map(|(t, o)| src(t, *o));
+            let got = resolve_paste(arrived.as_deref(), source.as_ref(), target, eol, normalize);
             let want = model(
                 arrived.as_deref(),
-                reg.as_ref().map(|(t, n, o)| (t.as_str(), *n, *o)),
-                stale,
+                reg.as_ref().map(|(t, o)| (t.as_str(), *o)),
                 target,
                 eol,
                 normalize,

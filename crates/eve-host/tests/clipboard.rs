@@ -256,11 +256,12 @@ fn 取得の失敗は内部レジスタを貼り付ける() {
     assert!(e.screen().contains("xyxy"), "{}", e.screen());
 }
 
-// 書込に失敗した後は、システムのクリップボードが古いまま (他のアプリの内容 `SYS`) なので、貼り付けは内部レジスタを使う
-// (03 §8.3.1 の「システムのクリップボードが古いまま」、05 §8.1)
+// 書込に失敗した後も、照合の規則は変えない: システムのクリップボードに残っていた内容 (`SYS`) が届けば、それが入る
+// (v0.3 と同じ。03 §8.3.1 の「届かなかったとき・書き出しに失敗したとき」、05 §8.1。失敗は `msg.clipboard.fallback` で
+// 知らせ済み)
 // verifies: NFR-304
 #[test]
-fn 書込の失敗の後の貼り付けは古いシステムの内容ではなく内部レジスタを使う() {
+fn 書込の失敗の後の貼り付けは届いたシステムの内容を入れる() {
     let mut e = env();
     e.start();
     *e.fake.write_error.lock().unwrap() = Some(ClipboardFailure::Unavailable);
@@ -272,10 +273,7 @@ fn 書込の失敗の後の貼り付けは古いシステムの内容ではな�
     e.key(KeyCode::Char('v'), Modifiers::CTRL);
     assert!(e.pump_worker(), "取得の結果 (SYS) が届く");
     let screen = e.screen();
-    assert!(
-        screen.contains("xyxy") && !screen.contains("SYS"),
-        "{screen}"
-    );
+    assert!(screen.contains("xySYS"), "{screen}");
 }
 
 // verifies: AC-FR-205-4
