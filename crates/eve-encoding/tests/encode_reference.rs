@@ -1,10 +1,10 @@
 //! 符号化の照合 (docs/03 §8.6 E1) と保持方式の確認 (i) (§8.6 E2) の、速い経路の回帰の試験 (v0.4 の M22 の 7)。
 //! 速い経路を足した所を、遅いが単純な手順 (速い経路を入れる前の手順を公開の API で組み直したもの) の参照と比べる。
 //!
-//! - E1 の照合 (`Encoder::encode`): BMP の全文字を文脈に置いて符号化し、出力と報告を、文字ごとに encoding_rs で符号化して
+//! - E1 の照合 (`Encoder::encode`): BMP の全文字を文脈に置いて符号化し、出力と報告を、文字ごとに `encoding_rs` で符号化して
 //!   復号で照合する参照 (変更前の手順と同じ判定) と比べる。
 //! - 確認 (i) (`preserved_matches` / `PreservedBytes::check`): 変更前の eve-core の照合 (ISO-2022-JP は `\~` を足して
-//!   `Decoder` で復号する) と、encoding_rs の一括の復号と比べる。
+//!   `Decoder` で復号する) と、`encoding_rs` の一括の復号と比べる。
 
 use eve_encoding::{
     Decoder, EncodeReport, Encoder, Encoding, EscapePolicy, PreservedBytes, UnmappableKind,
@@ -33,7 +33,7 @@ fn encode(enc: Encoding, text: &str) -> (Vec<u8>, Vec<(u64, char, UnmappableKind
     )
 }
 
-/// encoding_rs で `s` を符号化する (表現不能の文字は飛ばし、その位置を返す)。
+/// `encoding_rs` で `s` を符号化する (表現不能の文字は飛ばし、その位置を返す)。
 fn rs_encode(enc: Encoding, s: &str) -> (Vec<u8>, Vec<usize>) {
     let mut e = rs(enc).new_encoder();
     let mut out = vec![0u8; s.len() * 8 + 16];
@@ -143,10 +143,10 @@ fn check_one(enc: Encoding, b: &[u8]) {
 #[test]
 fn 確認_i_は変更前の照合と同じ() {
     for enc in [Encoding::ShiftJis, Encoding::EucJp, Encoding::Iso2022Jp] {
-        for x in 0..256u32 {
-            check_one(enc, &[x as u8]);
-            for y in 0..256u32 {
-                check_one(enc, &[x as u8, y as u8]);
+        for x in 0..=u8::MAX {
+            check_one(enc, &[x]);
+            for y in 0..=u8::MAX {
+                check_one(enc, &[x, y]);
             }
         }
     }

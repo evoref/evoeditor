@@ -281,9 +281,9 @@ fn 大きな文書でチャンクをまたぐ記録も読込と保存で変わ�
         .into_iter()
         .enumerate()
     {
-        for k in 0..4u64 {
-            let seed = 0x9E37_79B9_7F4A_7C15u64.wrapping_mul(k + 1 + 10 * i as u64) | 1;
-            if scenario(enc, seed, [20_000, 60_000, 150_000, 300_000][k as usize]) {
+        for (k, target) in [20_000, 60_000, 150_000, 300_000].into_iter().enumerate() {
+            let seed = 0x9E37_79B9_7F4A_7C15u64.wrapping_mul((k + 1 + 10 * i) as u64) | 1;
+            if scenario(enc, seed, target) {
                 edited += 1;
             }
         }
