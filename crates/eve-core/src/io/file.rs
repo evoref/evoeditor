@@ -194,7 +194,13 @@ impl EditorState {
         };
         let Some(path) = doc.path.clone() else {
             // パスがなければ名前を尋ねる
-            self.open_prompt(PromptKind::SaveAs { then: None }, String::new());
+            self.open_prompt(
+                PromptKind::SaveAs {
+                    doc: doc_id,
+                    then: None,
+                },
+                String::new(),
+            );
             return CommandResult::Done;
         };
         if self.save_in_progress(doc_id) {
@@ -230,6 +236,17 @@ impl EditorState {
         let Some(doc_id) = self.active_document() else {
             return CommandResult::Rejected(RejectReason::NoTarget);
         };
+        self.set_encoding_for(doc_id, enc, bom)
+    }
+
+    /// `set_encoding` の対象を文書 `doc_id` に固定する版 (文字コードの入力の確定。対象は入力を開いた時点の文書、
+    /// 03 §9.8 の「入力・確認の対象」)。
+    pub(crate) fn set_encoding_for(
+        &mut self,
+        doc_id: DocumentId,
+        enc: Option<Encoding>,
+        bom: Option<bool>,
+    ) -> CommandResult {
         let Some(doc) = self.docs.documents.get(&doc_id) else {
             return CommandResult::Rejected(RejectReason::NoTarget);
         };
@@ -237,7 +254,7 @@ impl EditorState {
             return CommandResult::Rejected(RejectReason::NotAvailable);
         }
         let Some(enc) = enc else {
-            self.open_prompt(PromptKind::SetEncoding { bom }, String::new());
+            self.open_prompt(PromptKind::SetEncoding { doc: doc_id, bom }, String::new());
             return CommandResult::Done;
         };
         // BOM: UTF-16 は付ける、UTF-8 は今の文書のまま、それ以外は BOM を持たない (指定しても誤りにしない)
@@ -270,7 +287,7 @@ impl EditorState {
             }
             other => {
                 let initial = other.as_ref().map(FsPath::display).unwrap_or_default();
-                self.open_prompt(PromptKind::SaveAsFormat { fmt }, initial);
+                self.open_prompt(PromptKind::SaveAsFormat { doc: doc_id, fmt }, initial);
                 CommandResult::Done
             }
         }
@@ -281,6 +298,16 @@ impl EditorState {
         let Some(doc_id) = self.active_document() else {
             return CommandResult::Rejected(RejectReason::NoTarget);
         };
+        self.reopen_with_encoding_for(doc_id, enc)
+    }
+
+    /// `reopen_with_encoding` の対象を文書 `doc_id` に固定する版 (文字コードの入力の確定・「編集を許可」の確認の
+    /// 「文字コードを指定して開き直す」。対象は入力・確認を開いた時点の文書、03 §9.8 の「入力・確認の対象」)。
+    pub(crate) fn reopen_with_encoding_for(
+        &mut self,
+        doc_id: DocumentId,
+        enc: Option<Encoding>,
+    ) -> CommandResult {
         let Some(doc) = self.docs.documents.get(&doc_id) else {
             return CommandResult::Rejected(RejectReason::NoTarget);
         };
@@ -301,7 +328,7 @@ impl EditorState {
             return CommandResult::Rejected(RejectReason::NotAvailable);
         }
         let Some(enc) = enc else {
-            self.open_prompt(PromptKind::ReopenEncoding, String::new());
+            self.open_prompt(PromptKind::ReopenEncoding { doc: doc_id }, String::new());
             return CommandResult::Done;
         };
         if self.confirm_doc_if_dirty(doc_id, "unsaved_reopen", Continuation::Reopen(doc_id, enc)) {

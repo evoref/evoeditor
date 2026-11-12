@@ -1,36 +1,59 @@
 //! 入力プロンプト (開く・名前を付けて保存・行へ移動など、docs/04 §8)。開く・確定・確定の後の失敗の扱い。
 
+use eve_view::{DocumentId, MessageLevel};
+
 use crate::command::{ArgValue, Args, CommandCtx, CommandResult, RejectReason};
 use crate::io::io_jobs::OpenOptions;
+use crate::ui_model::keys;
 
 use crate::editor::state::EditorState;
 
 use super::{Continuation, Overlay};
 
+/// 文書を書く・変える入力 (名前を付けて保存・文字コードの入力) は、対象の文書 `doc` を開いた時点で持つ。確定では
+/// 確定の時点の表示中の文書ではなく `doc` に効かせる (読込の完了などで表示が切り替わっても、別の文書を書かない。
+/// 03 §9.8 の「入力・確認の対象」)。確定の時点で `doc` が閉じられていたら、何もせずに入力を閉じて知らせる。
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum PromptKind {
     Open,
     SaveAs {
+        doc: DocumentId,
         then: Option<Continuation>,
     },
+    /// 行へ移動。表示中の文書に効く (内容を変えないので、対象を固定しない)。
     GotoLine,
-    /// 開くときの確認で「文字コードを指定して開く」を選んだ後の文字コードの入力 (03 §9.2)。
+    /// 開くときの確認で「文字コードを指定して開く」を選んだ後の文字コードの入力 (03 §9.2)。対象は `ask.doc`。
     Encoding {
         ask: crate::io::open::OpenAsk,
     },
     /// `file.reopen_with_encoding` に引数が無いときの文字コードの入力 (03 §8.8)。
-    ReopenEncoding,
+    ReopenEncoding {
+        doc: DocumentId,
+    },
     /// `file.set_encoding` に引数が無いときの文字コードの入力 (03 §8.8)。
     SetEncoding {
+        doc: DocumentId,
         bom: Option<bool>,
     },
     /// `file.set_encoding` で、パスのない・読み取り専用の文書の名前の入力 (名前を付けて保存へ新しい書式を渡す)。
     SaveAsFormat {
+        doc: DocumentId,
         fmt: crate::io::pending::NewFormat,
     },
 }
 
 impl PromptKind {
+    /// 入力を開いた時点で固定した対象の文書 (文書を書く・変える入力だけ)。
+    fn target(&self) -> Option<DocumentId> {
+        match self {
+            PromptKind::SaveAs { doc, .. }
+            | PromptKind::ReopenEncoding { doc }
+            | PromptKind::SetEncoding { doc, .. }
+            | PromptKind::SaveAsFormat { doc, .. } => Some(*doc),
+            PromptKind::Open | PromptKind::GotoLine | PromptKind::Encoding { .. } => None,
+        }
+    }
+
     /// `ui.prompt.<name>` の名前。
     pub(crate) fn name(&self) -> &'static str {
         match self {
@@ -38,7 +61,7 @@ impl PromptKind {
             PromptKind::SaveAs { .. } => "save_as",
             PromptKind::GotoLine => "goto_line",
             PromptKind::Encoding { .. }
-            | PromptKind::ReopenEncoding
+            | PromptKind::ReopenEncoding { .. }
             | PromptKind::SetEncoding { .. } => "encoding",
             PromptKind::SaveAsFormat { .. } => "save_as",
         }
@@ -110,6 +133,15 @@ impl EditorState {
             return CommandResult::Rejected(RejectReason::NotAvailable);
         };
         let text = p.text.trim().to_owned();
+        // 対象の文書が入力の間に閉じられた: 何もせずに入力を閉じて知らせる (ほかの文書に効かせない、03 §9.8)
+        if let Some(doc) = p.kind.target()
+            && self.document(doc).is_none()
+        {
+            self.set_overlay(None);
+            self.mark_dirty_render();
+            self.show_message(MessageLevel::Info, keys::INFO_PROMPT_TARGET_CLOSED, &[]);
+            return CommandResult::Rejected(RejectReason::NoTarget);
+        }
         match &p.kind {
             PromptKind::Open | PromptKind::SaveAs { .. } | PromptKind::SaveAsFormat { .. }
                 if text.is_empty() =>
@@ -121,8 +153,8 @@ impl EditorState {
                 self.restore_prompt_if_rejected(Overlay::Prompt(p.clone()), &res, false);
                 res
             }
-            PromptKind::SaveAs { then } => {
-                let res = self.run_from_prompt(|st| st.request_save_as(&text, then.clone()));
+            PromptKind::SaveAs { doc, then } => {
+                let res = self.run_from_prompt(|st| st.request_save_as(*doc, &text, then.clone()));
                 // 保存が始まらなかったとき (不正なパス・保存中・保存できない文書) は、名前の入力に戻る (03 §9.7)
                 self.restore_prompt_if_rejected(Overlay::Prompt(p.clone()), &res, true);
                 res
@@ -137,25 +169,27 @@ impl EditorState {
                 }
                 None => self.prompt_error("invalid"),
             },
-            PromptKind::SaveAsFormat { fmt } => {
-                let res =
-                    self.run_from_prompt(|st| st.request_save_as_fmt(&text, None, Some(*fmt)));
+            PromptKind::SaveAsFormat { doc, fmt } => {
+                let res = self
+                    .run_from_prompt(|st| st.request_save_as_fmt(*doc, &text, None, Some(*fmt)));
                 self.restore_prompt_if_rejected(Overlay::Prompt(p.clone()), &res, true);
                 res
             }
-            PromptKind::SetEncoding { bom } => match eve_encoding::Encoding::from_label(&text) {
-                Some(enc) => {
-                    self.set_overlay(None);
-                    self.mark_dirty_render();
-                    self.set_encoding(Some(enc), *bom)
+            PromptKind::SetEncoding { doc, bom } => {
+                match eve_encoding::Encoding::from_label(&text) {
+                    Some(enc) => {
+                        self.set_overlay(None);
+                        self.mark_dirty_render();
+                        self.set_encoding_for(*doc, Some(enc), *bom)
+                    }
+                    None => self.prompt_error("invalid"),
                 }
-                None => self.prompt_error("invalid"),
-            },
-            PromptKind::ReopenEncoding => match eve_encoding::Encoding::from_label(&text) {
+            }
+            PromptKind::ReopenEncoding { doc } => match eve_encoding::Encoding::from_label(&text) {
                 Some(enc) => {
                     self.set_overlay(None);
                     self.mark_dirty_render();
-                    self.reopen_with_encoding(Some(enc))
+                    self.reopen_with_encoding_for(*doc, Some(enc))
                 }
                 None => self.prompt_error("invalid"),
             },

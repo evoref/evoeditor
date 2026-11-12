@@ -121,7 +121,13 @@ impl EditorState {
             return CommandResult::Rejected(RejectReason::NoTarget);
         };
         let Some(path) = doc.path.clone() else {
-            self.open_prompt(PromptKind::SaveAs { then: Some(cont) }, String::new());
+            self.open_prompt(
+                PromptKind::SaveAs {
+                    doc: doc_id,
+                    then: Some(cont),
+                },
+                String::new(),
+            );
             return CommandResult::Done;
         };
         if doc.load_state != crate::document::LoadState::Ready {
@@ -131,32 +137,41 @@ impl EditorState {
         // 読み取り専用 (`--readonly`・書込権限なし・不正バイト等) の文書は同じパスへ書かず、名前を尋ねる
         // (03 §9.7 の AskUnsaved の行。docs/review/v0.3-findings.md の SAF-18)
         if !doc.read_only.is_empty() {
-            self.open_prompt(PromptKind::SaveAs { then: Some(cont) }, path.display());
+            self.open_prompt(
+                PromptKind::SaveAs {
+                    doc: doc_id,
+                    then: Some(cont),
+                },
+                path.display(),
+            );
             return CommandResult::Done;
         }
         let expected = doc.disk_stamp.map_or(Expect::Absent, Expect::Stamp);
         self.start_save(doc_id, path, expected, Some(cont))
     }
 
-    /// 名前を付けて保存 (パスを指定する)。
+    /// 文書 `doc_id` を名前を付けて保存する (パスを指定する)。対象は名前の入力を開いた時点の文書で、確定の時点の
+    /// 表示中の文書ではない (03 §9.6・§9.8 の「入力・確認の対象」)。
     pub(crate) fn request_save_as(
         &mut self,
+        doc_id: DocumentId,
         raw_path: &str,
         cont: Option<Continuation>,
     ) -> CommandResult {
-        self.request_save_as_fmt(raw_path, cont, None)
+        self.request_save_as_fmt(doc_id, raw_path, cont, None)
     }
 
     /// `request_save_as` に新しい書式を渡す版 (`file.set_encoding` の無題・読み取り専用の文書、03 §8.8)。
     pub(crate) fn request_save_as_fmt(
         &mut self,
+        doc_id: DocumentId,
         raw_path: &str,
         cont: Option<Continuation>,
         fmt: Option<NewFormat>,
     ) -> CommandResult {
-        let Some(doc_id) = self.active_document() else {
+        if self.document(doc_id).is_none() {
             return CommandResult::Rejected(RejectReason::NoTarget);
-        };
+        }
         // 保存先を調べる前に拒否する (03 §9.7 の「連鎖の開始時の拒否」)。名前の入力の後の呼び出しでは、入力の前の
         // 拒否を経ているので、ここで拒否するのは待つ間に書式が変わったときだけ
         if self.reject_stateful_invalid(doc_id, fmt) {
@@ -473,7 +488,7 @@ impl EditorState {
             }
             // 別名で保存: 名前の入力へ (保存の後に続ける操作は引き継ぐ)
             _ => {
-                self.open_prompt(PromptKind::SaveAs { then: cont }, String::new());
+                self.open_prompt(PromptKind::SaveAs { doc, then: cont }, String::new());
                 CommandResult::Done
             }
         }
@@ -591,7 +606,7 @@ impl EditorState {
             }
             return self.start_save_with(doc, path, expected, cont, strategy, fmt);
         }
-        self.open_prompt(PromptKind::SaveAs { then: cont }, String::new());
+        self.open_prompt(PromptKind::SaveAs { doc, then: cont }, String::new());
         CommandResult::Done
     }
 
@@ -636,7 +651,7 @@ impl EditorState {
         match strategy {
             Some(s) => self.start_save_with(doc, path, expected, cont, s, fmt),
             None => {
-                self.open_prompt(PromptKind::SaveAs { then: cont }, String::new());
+                self.open_prompt(PromptKind::SaveAs { doc, then: cont }, String::new());
                 CommandResult::Done
             }
         }
