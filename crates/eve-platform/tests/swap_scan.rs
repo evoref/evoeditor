@@ -126,6 +126,11 @@ fn 終了したプロセスのスワップは_stale_で_要約と本文を読め
     assert_eq!(e.revision, 9);
     assert!(e.readable && !e.sensitive);
     assert!(e.modified.is_some(), "manifest の更新時刻");
+    assert_eq!(
+        e.encoding,
+        Some(eve_core::Encoding::Utf8),
+        "manifest の文字コード (本文を読まずに提案の条件に使う)"
+    );
     assert_eq!(e.len, "こんにちは\r\n世界".len() as u64);
     assert_eq!(
         e.path.as_ref().unwrap().display(),
@@ -309,6 +314,7 @@ fn 状態ディレクトリが無ければ空_消すのは未対応() {
         sensitive: false,
         modified: None,
         readable: false,
+        encoding: None,
     };
     assert_eq!(
         w.remove_swap(&e).unwrap_err().kind,

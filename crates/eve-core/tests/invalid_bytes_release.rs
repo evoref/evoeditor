@@ -658,6 +658,7 @@ fn swap_entry(path: Option<&str>) -> SwapEntry {
             nanos: 0,
         }),
         readable: true,
+        encoding: None,
     }
 }
 
@@ -873,4 +874,269 @@ fn ほかの理由の読み取り専用の文書には復旧を提案しない()
     h.run_jobs();
     h.advance_ms(0);
     assert_eq!(h.overlay(), "", "--readonly の文書には出さない");
+}
+
+// ---------- データの損失の視点のレビュー (M23 の 6 本目) ----------
+
+/// 文字コードを判定に任せて開く。
+fn open_auto(h: &mut Harness, path: &str) {
+    h.editor.state_mut().open_path(path, OpenOptions::default());
+    h.run_jobs();
+    accept_read_only(h);
+}
+
+fn count_of(h: &Harness, key: &str) -> usize {
+    h.messages().iter().filter(|m| *m == key).count()
+}
+
+// 判定が外れて UTF-8 + 不正バイトで開いた Shift_JIS のファイルに、Shift_JIS で書かれたスワップがある。提案すると、
+// 適用・解除・保存で Shift_JIS のファイルが確認なしに UTF-8 で書かれる (レビューの再現)。提案せずに案内し、利用者が
+// Shift_JIS で開き直すと提案して、Shift_JIS のバイト列で保存する
+// verifies: NFR-304, FR-118, FR-111
+#[test]
+fn 文字コードの違うスワップは提案せずに案内し_その文字コードで開き直すと提案する() {
+    let bytes = sjis("ｱｲｳｴｵ\n");
+    // 1 回目の起動: 判定は UTF-8 (不正バイト)。Shift_JIS で開き直して編集し、スワップが書かれる
+    let mut first = Harness::new()
+        .with_size(100, 20)
+        .with_file("/w/a.txt", &bytes);
+    open_auto(&mut first, "/w/a.txt");
+    assert_eq!(doc(&first).format.encoding, Encoding::Utf8);
+    assert_eq!(reasons(&first), [ReadOnlyReason::InvalidBytes]);
+    first.cmd_with(
+        "file.reopen_with_encoding",
+        Args::new().with_str("encoding", "shift_jis"),
+    );
+    first.run_jobs();
+    assert!(doc(&first).is_editable());
+    first.keys("ctrl+end");
+    first.text("カキク");
+    first.advance_ms(0);
+    first.advance_ms(2_000);
+    first.run_jobs();
+    let text = String::from_utf8(first.fs.swap_of(first.doc_id()).expect("スワップ")).unwrap();
+    assert_eq!(text, "ｱｲｳｴｵ\nカキク");
+    // 2 回目の起動: 同じ判定で UTF-8 + InvalidBytes で開く
+    let mut h = Harness::new()
+        .with_size(100, 20)
+        .with_file("/w/a.txt", &bytes);
+    h.fs.add_swap_entry(
+        swap_entry(Some("/w/a.txt")),
+        Some(SwapBody {
+            text: text.clone(),
+            encoding: Encoding::ShiftJis,
+            has_bom: false,
+            default_eol: LineEnding::Lf,
+            pua_escaped: false,
+        }),
+    );
+    open_auto(&mut h, "/w/a.txt");
+    assert_eq!(doc(&h).format.encoding, Encoding::Utf8);
+    assert_eq!(reasons(&h), [ReadOnlyReason::InvalidBytes]);
+    h.clear_log();
+    h.advance_ms(0);
+    assert_eq!(h.overlay(), "", "文字コードが違うので提案しない");
+    assert_eq!(count_of(&h, "info.swap.encoding_mismatch"), 1);
+    let (msg, _) = shown_message(&mut h);
+    assert!(
+        msg.starts_with("/w/a.txt の未保存の内容は Shift_JIS で書かれています。"),
+        "{msg}"
+    );
+    // 案内は 1 回だけ
+    h.advance_ms(100);
+    assert_eq!(count_of(&h, "info.swap.encoding_mismatch"), 1);
+    assert_eq!(h.fs_read("/w/a.txt").unwrap(), bytes, "何も書いていない");
+    // Shift_JIS で開き直すと提案する
+    h.cmd_with(
+        "file.reopen_with_encoding",
+        Args::new().with_str("encoding", "shift_jis"),
+    );
+    h.run_jobs();
+    h.advance_ms(0);
+    assert_eq!(h.overlay(), "dialog", "復旧の提案");
+    h.answer(0);
+    h.run_jobs();
+    assert_eq!(h.doc_text(), text);
+    assert!(doc(&h).is_editable());
+    h.cmd("file.save");
+    h.run_jobs();
+    assert_eq!(h.overlay(), "", "{:?}", h.messages());
+    assert_eq!(h.fs_read("/w/a.txt").unwrap(), sjis("ｱｲｳｴｵ\nカキク"));
+}
+
+// 同じく文字コードの違う (エスケープ文字を持つ) スワップ。開き直した先も不正バイトを含む (理由が InvalidBytes だけの)
+// 文書なら、提案 → 適用 → 解除 → 保存で、不正バイトも元のバイトのまま Shift_JIS で書く
+// verifies: NFR-304, FR-118
+#[test]
+fn 文字コードの違うスワップは開き直した不正バイトの文書に適用し_解除して保存できる() {
+    let bytes = [
+        sjis("日本語\n"),
+        b"x\xA0y\n".to_vec(),
+        PAD.as_bytes().to_vec(),
+    ]
+    .concat();
+    let swapped = format!("追加日本語\nx\u{10FFA0}y\n{PAD}");
+    let mut h = with_swap(
+        &bytes,
+        SwapBody {
+            text: swapped.clone(),
+            encoding: Encoding::ShiftJis,
+            has_bom: false,
+            default_eol: LineEnding::Lf,
+            pua_escaped: true,
+        },
+        Encoding::Utf8,
+    );
+    assert_eq!(reasons(&h), [ReadOnlyReason::InvalidBytes]);
+    h.advance_ms(0);
+    assert_eq!(h.overlay(), "", "UTF-8 の文書には提案しない");
+    assert!(
+        h.messages()
+            .contains(&"info.swap.encoding_mismatch".to_owned())
+    );
+    h.cmd_with(
+        "file.reopen_with_encoding",
+        Args::new().with_str("encoding", "shift_jis"),
+    );
+    h.run_jobs();
+    assert_eq!(reasons(&h), [ReadOnlyReason::InvalidBytes]);
+    h.advance_ms(0);
+    assert_eq!(h.overlay(), "dialog", "復旧の提案");
+    h.answer(0);
+    h.run_jobs();
+    assert_eq!(h.doc_text(), swapped);
+    assert_eq!(doc(&h).format.escape_encoding, Some(Encoding::ShiftJis));
+    assert!(
+        h.messages()
+            .contains(&"info.swap.applied_read_only".to_owned())
+    );
+    release(&mut h);
+    h.cmd("file.save");
+    h.run_jobs();
+    assert_eq!(h.overlay(), "", "{:?}", h.messages());
+    assert_eq!(
+        h.fs_read("/w/a.txt").unwrap(),
+        [
+            sjis("追加日本語\n"),
+            b"x\xA0y\n".to_vec(),
+            PAD.as_bytes().to_vec()
+        ]
+        .concat()
+    );
+}
+
+// 由来の文字コードの無い文書 (`escape_encoding == None`) の InvalidBytes は解除できない (03 §8.3.1 の「解除できる
+// 文書」)。同じ文字コードでも pua_escaped が偽のスワップを適用すると、この状態になる。確認は「元のバイトに戻る」と
+// 事実と違う説明になり、保存も E3 で止まるため。編集の拒否は切替の案内をしない一般のメッセージ
+// verifies: NFR-304, FR-116
+#[test]
+fn 由来の文字コードの無い文書の不正バイトは解除できない() {
+    let bytes = [b"a\x80b\n", PAD.as_bytes()].concat();
+    let mut h = with_swap(
+        &bytes,
+        swap_body(&format!("ab\n{PAD}"), false),
+        Encoding::Utf8,
+    );
+    h.advance_ms(0);
+    h.answer(0);
+    h.run_jobs();
+    assert_eq!(h.doc_text(), format!("ab\n{PAD}"));
+    assert_eq!(doc(&h).format.escape_encoding, None);
+    assert_eq!(doc(&h).format.pua_escape, PuaEscapeMode::Enabled);
+    assert_eq!(reasons(&h), [ReadOnlyReason::InvalidBytes]);
+    assert!(!doc(&h).read_only_releasable());
+    assert_not_releasable(
+        &mut h,
+        "不正なバイトを含むファイル",
+        "msg.edit.read_only",
+        "名前を付けて保存",
+    );
+    let (text, _) = shown_message(&mut h);
+    assert!(text.contains("不正なバイトを含むファイル"), "{text}");
+}
+
+// 解除した文書の再読込で、不正バイトの比率の確認 (FR-127) に「読み取り専用で開く」と答えたら、解除を持ち越さない
+// verifies: NFR-304, FR-127, FR-117
+#[test]
+fn 再読込の比率の確認で読み取り専用を選ぶと解除を持ち越さない() {
+    let mut h = opened(&[b"a\x80b\n", PAD.as_bytes()].concat(), Encoding::Utf8);
+    release(&mut h);
+    let bin: Vec<u8> = (0u8..=255).cycle().take(4096).collect();
+    h.fs.add_file("/w/a.txt", &bin);
+    h.cmd("file.reload");
+    h.run_jobs();
+    assert_eq!(h.overlay(), "dialog", "比率の確認");
+    h.text("r");
+    h.run_jobs();
+    assert_eq!(reasons(&h), [ReadOnlyReason::InvalidBytes]);
+    assert!(!doc(&h).invalid_bytes_released, "記録を消す");
+    assert!(
+        h.messages()
+            .contains(&"info.reload.done_read_only".to_owned())
+    );
+    // もう一度解除するには確認を経る
+    h.cmd("file.toggle_read_only");
+    assert_eq!(h.overlay(), "dialog");
+}
+
+// 本文が同じ復旧を、解除した文書に適用しても、記録を消して読み取り専用に戻す (全置換は恒等の ChangeSet にならず、
+// 書式の変更が当たる)
+// verifies: NFR-304, FR-118
+#[test]
+fn 本文が同じ復旧でも記録を消して読み取り専用に戻す() {
+    let bytes = [b"a\x80b\n", PAD.as_bytes()].concat();
+    let mut h = Harness::new()
+        .with_size(100, 20)
+        .with_file("/w/a.txt", &bytes);
+    h.fs.add_swap_entry(
+        swap_entry(Some("/w/a.txt")),
+        Some(swap_body(&format!("a\u{10FF80}b\n{PAD}"), true)),
+    );
+    h.editor.state_mut().open_path(
+        "/w/a.txt",
+        OpenOptions {
+            forced: Some(Encoding::Utf8),
+            ..OpenOptions::default()
+        },
+    );
+    h.run_jobs_once();
+    let r = h.editor.execute(CommandInvocation::new(
+        "file.toggle_read_only",
+        InvocationSource::Keymap,
+    ));
+    assert_eq!(r, CommandResult::Done);
+    h.editor.state_mut().dialog_accelerator('a');
+    assert!(doc(&h).invalid_bytes_released);
+    h.advance_ms(0);
+    assert_eq!(h.overlay(), "dialog");
+    h.answer(0);
+    h.run_jobs();
+    assert!(!doc(&h).invalid_bytes_released);
+    assert_eq!(reasons(&h), [ReadOnlyReason::InvalidBytes]);
+}
+
+// 確認の不正なバイトの数と最初の位置は、本文のエスケープ文字から求める (復旧で本文が変わると、読込の数 (2 個) と
+// 合わない)
+// verifies: NFR-304
+#[test]
+fn 復旧の後の確認の数と位置は本文のエスケープ文字から求める() {
+    let bytes = [b"a\x80b\x81c\n", PAD.as_bytes()].concat();
+    let mut h = with_swap(
+        &bytes,
+        swap_body(&format!("xy\nab\u{10FF81}c\n{PAD}"), true),
+        Encoding::Utf8,
+    );
+    assert_eq!(doc(&h).format.invalid_bytes, 2);
+    h.advance_ms(0);
+    h.answer(0);
+    h.run_jobs();
+    assert_eq!(reasons(&h), [ReadOnlyReason::InvalidBytes]);
+    assert_eq!(h.cmd("file.toggle_read_only"), CommandResult::Done);
+    let (_, message, ..) = dialog(&mut h);
+    assert!(
+        message.starts_with(
+            "/w/a.txt には UTF-8 として不正なバイトが 1 個あります (最初: 行 2, 桁 3)。"
+        ),
+        "{message}"
+    );
 }

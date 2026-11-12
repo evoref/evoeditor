@@ -494,6 +494,7 @@ wrapped_forward = "Reached the end of the document, searching from the start"
 [info.swap]
 applied_read_only = "Recovered content applied. The document is read-only because it has invalid bytes; allow editing with {key:file.toggle_read_only} to continue"
 discarded = "Discarded the swap"
+encoding_mismatch = "The unsaved content of {path} was written as {encoding}. Reopen with {encoding} ({key:file.reopen_with_encoding}) to be offered the recovery"
 recovered = "Applied the recovered content. {path} does not change until you save"
 
 [info.undo]

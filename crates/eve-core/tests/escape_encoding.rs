@@ -365,6 +365,7 @@ fn swap_entry(path: Option<&str>) -> SwapEntry {
             nanos: 0,
         }),
         readable: true,
+        encoding: None,
     }
 }
 

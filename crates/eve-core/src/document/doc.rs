@@ -364,25 +364,23 @@ impl Document {
 
     /// `file.toggle_read_only` で読み取り専用を解除できるか (when 条件 `doc.read_only_releasable`、07 §7.3。03 §9.6 の
     /// 「M23 の規則」): 読込が済み、理由があり、どれも `FileAttribute` / `UserRequested` / `InvalidBytes` で、
-    /// `InvalidBytes` を含むなら `pua_escape == Enabled`。
+    /// `InvalidBytes` を含むならバイトの文書 (`pua_escape == Enabled` で `escape_encoding` が `Some`)。
     pub fn read_only_releasable(&self) -> bool {
-        self.load_state == LoadState::Ready && self.read_only.releasable(self.format.pua_escape)
+        self.load_state == LoadState::Ready && self.read_only.releasable(&self.format)
     }
 
     /// 解除を妨げる読み取り専用の理由 (表示の優先順で最初のもの)。パレットで `file.toggle_read_only` が淡色のときの
     /// 理由と、編集の拒否のメッセージの選び分けに使う (03 §8.3.1 の「読み取り専用のときの案内」)。
     pub fn blocking_read_only_reason(&self) -> Option<ReadOnlyReason> {
-        self.read_only.blocking(self.format.pua_escape)
+        self.read_only.blocking(&self.format)
     }
 
     /// スワップの復旧を提案・適用できる読み取り専用の状態か (03 §10.3): 読み取り専用でない、または理由が
-    /// `InvalidBytes` だけで `pua_escape == Enabled` (v0.4 の M23。不正バイトを含む文書を解除して編集した後のスワップは、
-    /// 次に開くと `InvalidBytes` で読み取り専用に戻るため)。読込の状態と dirty は呼び出し側が見る。
+    /// `InvalidBytes` だけでバイトの文書 (v0.4 の M23。不正バイトを含む文書を解除して編集した後のスワップは、次に開くと
+    /// `InvalidBytes` で読み取り専用に戻るため)。読み取り専用の文書では、スワップの文字コードが文書の文字コードと同じ
+    /// ことも要る (呼び出し側が見る)。読込の状態と dirty も呼び出し側が見る。
     pub fn recovery_allowed(&self) -> bool {
-        self.read_only.is_empty()
-            || self
-                .read_only
-                .only_releasable_invalid_bytes(self.format.pua_escape)
+        self.read_only.is_empty() || self.read_only.only_releasable_invalid_bytes(&self.format)
     }
 
     /// 解除の記録 (`invalid_bytes_released`) を今の理由に当てる: 記録があり、書式を戻した後の文書がバイトの文書
@@ -391,10 +389,7 @@ impl Document {
     /// 衝突の文書 (b) になった内容と、エスケープ文字がバイトでない文書 (違う文字コードで保存した後の復旧の Redo 等。
     /// 理由は安全側の後の値のまま) には当てない。
     fn apply_invalid_bytes_release(&mut self) {
-        if self.invalid_bytes_released
-            && self.format.pua_escape == PuaEscapeMode::Enabled
-            && self.format.escape_encoding.is_some()
-        {
+        if self.invalid_bytes_released && self.format.is_bytes_document() {
             self.read_only.remove(ReadOnlyReason::InvalidBytes);
         }
     }

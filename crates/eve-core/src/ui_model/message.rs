@@ -110,7 +110,15 @@ impl EditorState {
         let doc = self.active_document().and_then(|d| self.document(d));
         let blocking = doc.and_then(crate::document::Document::blocking_read_only_reason);
         let key = match blocking {
-            Some(R::InvalidBytes) => keys::MSG_EDIT_READ_ONLY_PUA_COLLISION,
+            // 解除できない `InvalidBytes`: 衝突の文書 (b) は専用のメッセージ。由来の文字コードの無い文書 (文字コードの違う
+            // 復旧の後など) は、切替の案内をしない一般のメッセージ (`{reason}` は「不正なバイトを含むファイル」)
+            Some(R::InvalidBytes)
+                if doc.is_some_and(|d| {
+                    d.format.pua_escape == eve_encoding::PuaEscapeMode::DisabledCollision
+                }) =>
+            {
+                keys::MSG_EDIT_READ_ONLY_PUA_COLLISION
+            }
             Some(R::StatefulEncodingWithInvalidBytes) => keys::MSG_EDIT_READ_ONLY_STATEFUL,
             Some(R::Binary) => keys::MSG_EDIT_READ_ONLY_BINARY,
             Some(_) => keys::MSG_EDIT_READ_ONLY,

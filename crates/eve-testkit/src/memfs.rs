@@ -294,7 +294,13 @@ impl MemFs {
     }
 
     /// 他のプロセスが残したスワップを積む (復旧の探索の再現)。`body` が `None` なら本文を読めない (`read_swap` が失敗する)。
+    /// manifest の `encoding` (`SwapEntry.encoding`) が `None` なら、本文の文字コードを入れる (実際の走査と同じく、manifest
+    /// の文字コードは本文の文字コード)。
     pub fn add_swap_entry(&self, entry: eve_core::SwapEntry, body: Option<eve_core::SwapBody>) {
+        let mut entry = entry;
+        if entry.encoding.is_none() {
+            entry.encoding = body.as_ref().map(|b| b.encoding);
+        }
         self.st().swap_entries.push((entry, body));
     }
 

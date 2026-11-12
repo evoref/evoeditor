@@ -424,6 +424,7 @@ fn swap_entry(path: &str) -> SwapEntry {
             nanos: 0,
         }),
         readable: true,
+        encoding: None,
     }
 }
 

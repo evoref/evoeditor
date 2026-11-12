@@ -702,6 +702,7 @@ fn unpreserved_doc() -> (Harness, Vec<u8>) {
                 nanos: 0,
             }),
             readable: true,
+            encoding: None,
         },
         Some(eve_core::SwapBody {
             text: "a￢b\n復旧\n".to_owned(),

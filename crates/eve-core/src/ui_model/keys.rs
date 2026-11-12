@@ -63,6 +63,7 @@ pub(crate) const INFO_SEARCH_WRAPPED_BACKWARD: &str = "info.search.wrapped_backw
 pub(crate) const INFO_SEARCH_WRAPPED_FORWARD: &str = "info.search.wrapped_forward";
 pub(crate) const INFO_SWAP_APPLIED_READ_ONLY: &str = "info.swap.applied_read_only";
 pub(crate) const INFO_SWAP_DISCARDED: &str = "info.swap.discarded";
+pub(crate) const INFO_SWAP_ENCODING_MISMATCH: &str = "info.swap.encoding_mismatch";
 pub(crate) const INFO_SWAP_RECOVERED: &str = "info.swap.recovered";
 pub(crate) const INFO_UNDO_HISTORY_TRIMMED: &str = "info.undo.history_trimmed";
 pub(crate) const MSG_CLIPBOARD_FALLBACK: &str = "msg.clipboard.fallback";
@@ -226,7 +227,7 @@ pub(crate) const UI_TOO_SMALL: &str = "ui.too_small";
 
 /// すべての定数 (キーの順。試験に使う)。
 #[cfg(test)]
-const ALL: [&str; 206] = [
+const ALL: [&str; 207] = [
     HINT_UI_CANCEL,
     INFO_APP_RELEASE_SUMMARY,
     INFO_APP_UPDATED,
@@ -286,6 +287,7 @@ const ALL: [&str; 206] = [
     INFO_SEARCH_WRAPPED_FORWARD,
     INFO_SWAP_APPLIED_READ_ONLY,
     INFO_SWAP_DISCARDED,
+    INFO_SWAP_ENCODING_MISMATCH,
     INFO_SWAP_RECOVERED,
     INFO_UNDO_HISTORY_TRIMMED,
     MSG_CLIPBOARD_FALLBACK,

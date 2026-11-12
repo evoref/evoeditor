@@ -415,6 +415,9 @@ pub struct SwapEntry {
     /// 本文を読める。未知の `format_version`・壊れた manifest・書きかけ (`written = false`) は `false`
     /// (その場合 core は適用を提案せず、場所だけを示す。移動も削除もしない、05 §7.5)。
     pub readable: bool,
+    /// manifest の `encoding` (書いた時点の文書の文字コード)。読めなければ `None`。理由が `InvalidBytes` だけの読み取り
+    /// 専用の文書には、これが文書の文字コードと同じときだけ復旧を提案する (03 §10.3、v0.4 の M23)。
+    pub encoding: Option<crate::Encoding>,
 }
 
 /// スワップの本文と、元の形式 (無題の文書に適用するとき、開いている文書に写す)。本文は内部の UTF-8 のまま (PUA エスケープ保持)。

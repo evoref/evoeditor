@@ -492,6 +492,7 @@ wrapped_forward = "文書の末尾に達したので、先頭から検索しま�
 [info.swap]
 applied_read_only = "復旧内容を適用しました。不正なバイトを含むため読み取り専用です。{key:file.toggle_read_only} で編集を許可すると続けられます"
 discarded = "スワップを破棄しました"
+encoding_mismatch = "{path} の未保存の内容は {encoding} で書かれています。文字コードを指定して開き直す ({key:file.reopen_with_encoding}) で {encoding} を選ぶと、復旧を提案します"
 recovered = "復旧内容を適用しました。保存するまで {path} は変わりません"
 
 [info.undo]

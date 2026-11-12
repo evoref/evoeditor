@@ -64,14 +64,10 @@ impl EditorState {
             .unwrap_or_else(|| self.untitled_label(doc));
         let has_path = doc.path.is_some();
         let encoding = doc.format.encoding.name().to_owned();
-        // 数は読込で数えた不正なバイトの数。復旧でスワップのエスケープ文字が入った文書 (ディスクのファイルに不正
-        // バイトが無い・無題の文書) は読込の数が 0 なので、本文のエスケープ文字を数える
-        let count = match doc.format.invalid_bytes {
-            0 => count_escapes(doc.text()),
-            n => u64::from(n),
-        }
-        .to_string();
-        let first = first_escape_byte(doc.text());
+        // 数と最初の位置は、本文のエスケープ文字から求める (1 回の走査)。`invalid_bytes` は読込の時点の数で、復旧・
+        // 編集の後の本文とは合わないため (03 §8.3.1 の細目 (e))
+        let (first, count) = escape_summary(doc.text());
+        let count = count.to_string();
         let mut args = vec![
             ("path".to_owned(), name),
             ("encoding".to_owned(), encoding),
@@ -163,16 +159,14 @@ fn release_reasons(doc: &mut crate::document::Document) {
     doc.read_only.remove(ReadOnlyReason::InvalidBytes);
 }
 
-/// 本文の最初のエスケープ文字 (`U+10FF00..=U+10FFFF`) のバイト位置 (03 §8.3.1 の「確認」: UTF-8 の `F4 8F BC`〜
-/// `F4 8F BF` を先頭から探し、最初に見つけた所で止まる)。チャンクは char の境界で分かれるので、4 バイトの文字は
+/// 本文の最初のエスケープ文字 (`U+10FF00..=U+10FFFF`) のバイト位置と、エスケープ文字の数 (03 §8.3.1 の「確認」:
+/// UTF-8 の `F4 8F BC`〜`F4 8F BF` を先頭から `memchr` で探す)。チャンクは char の境界で分かれるので、4 バイトの文字は
 /// 1 つのチャンクの中にある。
-fn first_escape_byte(text: &eve_text::Text) -> Option<usize> {
-    escape_bytes(text).next()
-}
-
-/// 本文のエスケープ文字の数。
-fn count_escapes(text: &eve_text::Text) -> u64 {
-    escape_bytes(text).count() as u64
+fn escape_summary(text: &eve_text::Text) -> (Option<usize>, u64) {
+    let mut it = escape_bytes(text);
+    let first = it.next();
+    let count = u64::from(first.is_some()) + it.count() as u64;
+    (first, count)
 }
 
 /// 本文のエスケープ文字 (`U+10FF00..=U+10FFFF`、UTF-8 で `F4 8F BC`〜`F4 8F BF` で始まる) のバイト位置を先頭から順に。

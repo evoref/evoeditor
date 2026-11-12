@@ -119,11 +119,16 @@ impl EditorState {
             return;
         };
         // 編集中の内容を上書きしないよう、読込済みで何も編集していない文書にだけ出す。読み取り専用の文書には出さないが、
-        // 理由が `InvalidBytes` だけ (`pua_escape == Enabled`) の文書には出す (03 §10.3 の M23: 不正バイトを含む文書を
-        // 解除して編集した後のスワップは、次に開くと読み取り専用に戻るため)
+        // 理由が `InvalidBytes` だけのバイトの文書には出す (03 §10.3 の M23: 不正バイトを含む文書を解除して編集した後の
+        // スワップは、次に開くと読み取り専用に戻るため)。ただしその文書には、スワップの文字コード (manifest の
+        // `encoding`) が文書の文字コードと同じ候補だけを出す (判定が外れて別の文字コードで開いた文書に適用して解除する
+        // と、元のファイルを確認なしに別の文字コードで書くため)
         if d.load_state != LoadState::Ready || d.is_dirty() || !d.recovery_allowed() {
             return;
         }
+        let read_only = !d.read_only.is_empty();
+        let doc_encoding = d.format.encoding;
+        let same_encoding = |e: &SwapEntry| !read_only || e.encoding == Some(doc_encoding);
         let blank_untitled = d.path.is_none() && d.len_bytes() == 0;
         let matching = |e: &SwapEntry| match (&e.path, &d.path) {
             (Some(a), Some(b)) => same_path(a, b),
@@ -137,10 +142,30 @@ impl EditorState {
             .candidates
             .iter()
             .enumerate()
-            .filter(|(_, e)| matching(e))
+            .filter(|(_, e)| matching(e) && same_encoding(e))
             .max_by_key(|(_, e)| e.modified.map(|t| (t.secs, t.nanos)))
             .map(|(i, _)| i)
         else {
+            // 文字コードの違う候補だけがある: 提案せず (候補は残す)、その文字コードで開き直す案内を 1 回だけ出す
+            let mismatch = self
+                .io
+                .swap
+                .candidates
+                .iter()
+                .filter(|e| matching(e))
+                .max_by_key(|e| e.modified.map(|t| (t.secs, t.nanos)))
+                .and_then(|e| Some((e.dir.clone(), e.encoding?)));
+            let name = d.path.as_ref().map(FsPath::display);
+            if let (Some((dir, enc)), Some(name)) = (mismatch, name)
+                && !self.io.swap.mismatch_notified.contains(&(id, dir.clone()))
+            {
+                self.io.swap.mismatch_notified.push((id, dir));
+                self.show_message(
+                    MessageLevel::Info,
+                    keys::INFO_SWAP_ENCODING_MISMATCH,
+                    &[("path", &name), ("encoding", enc.name())],
+                );
+            }
             return;
         };
         let entry = self.io.swap.candidates.remove(i);
@@ -300,6 +325,18 @@ impl EditorState {
         if d.revision() != revision || !d.recovery_allowed() {
             // 提案の後で文書が変わった: 適用しない。スワップは残し、もう一度提案できるようにする
             self.show_message(MessageLevel::Warn, keys::MSG_SWAP_CHANGED_SINCE_OFFER, &[]);
+            self.io.swap.candidates.push(entry);
+            return;
+        }
+        // 読み取り専用 (理由が `InvalidBytes` だけ) の文書には、本文の文字コードが文書と同じスワップだけを適用する
+        // (提案の条件の二重の防御。manifest の `encoding` と本文の読込の間に書き換わった場合など)
+        if !d.read_only.is_empty() && body.encoding != d.format.encoding {
+            let name = d.path.as_ref().map(FsPath::display).unwrap_or_default();
+            self.show_message(
+                MessageLevel::Info,
+                keys::INFO_SWAP_ENCODING_MISMATCH,
+                &[("path", &name), ("encoding", body.encoding.name())],
+            );
             self.io.swap.candidates.push(entry);
             return;
         }

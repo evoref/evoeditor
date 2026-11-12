@@ -1519,7 +1519,7 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 | `ui.confirm.save.read_only.write` | 同上 (アクセラレータ `W`。属性を外して置換し、置換の後に付け直す、05 §4.2) | [W] 読み取り専用を解除して保存 |
 | `info.read_only.released` (v0.2) | `file.toggle_read_only` で読み取り専用を解除した (03 §9.6)。理由に `InvalidBytes` を含む文書 (v0.4 の M23) は、外す前に下の `ui.confirm.read_only.invalid_bytes` を 1 回出し、解除の後は代わりに `info.read_only.released_invalid_bytes` を出す (NFR-304 の「編集を許可」、03 §8.3.1) | 読み取り専用を解除しました |
 | `ui.confirm.read_only.invalid_bytes.title` | 不正バイトを含む文書 (理由に `InvalidBytes` を含み、`pua_escape == Enabled`) で `file.toggle_read_only` を実行した (v0.4 の M23、NFR-304 の「編集を許可」、03 §8.3.1 の「確認」)。外す前に 1 回出す。選択肢は `.release` (既定)・`.reopen`・キャンセル (`Esc`。何も変えない)。比率が 1% を超えた文書でも既定は変えない (OQ-217) | 不正なバイトを含む文書の編集 |
-| `ui.confirm.read_only.invalid_bytes.message` | 同上の本文。`{path}`・`{encoding}`・`{count}` (読込で数えた不正なバイトの数 `invalid_bytes`。0 のとき (復旧でスワップのエスケープ文字が入った文書) は本文のエスケープ文字の数)・`{line}` / `{col}` (最初の不正なバイト。確認を出すときに本文の UTF-8 を先頭から探して求める。見つからなければ 〔 〕 ごと省く) | {path} には {encoding} として不正なバイトが {count} 個あります〔 (最初: 行 {line}, 桁 {col})〕。編集を許可すると、それぞれを <0xNN> の 1 文字として消したり動かしたりできます。文字化けして見えるときは、編集せずに文字コードを指定して開き直してください |
+| `ui.confirm.read_only.invalid_bytes.message` | 同上の本文。`{path}`・`{encoding}`・`{count}` (本文のエスケープ文字の数。読込の時点の数 `invalid_bytes` は使わない、03 §8.3.1 の細目 (e))・`{line}` / `{col}` (最初の不正なバイト。確認を出すときに本文の UTF-8 を先頭から探して求める。見つからなければ 〔 〕 ごと省く) | {path} には {encoding} として不正なバイトが {count} 個あります〔 (最初: 行 {line}, 桁 {col})〕。編集を許可すると、それぞれを <0xNN> の 1 文字として消したり動かしたりできます。文字化けして見えるときは、編集せずに文字コードを指定して開き直してください |
 | `ui.confirm.read_only.invalid_bytes.detail_restore` | 同上の `details` の 1 行目 | 保存すると、残っている <0xNN> は元のバイトに戻ります |
 | `ui.confirm.read_only.invalid_bytes.detail_delete` | 同上の `details` の 2 行目 | 消すと、そのバイトはファイルから無くなります (保存の前なら元に戻すで戻せます) |
 | `ui.confirm.read_only.invalid_bytes.detail_merge` | 同上の `details` の 3 行目 | 隣の文字とつながると、開き直したときに別の文字になります (保存の前に確認します) |
@@ -1786,6 +1786,7 @@ v0.2 以降の診断 (名前だけを予約し、文言はその版で言語フ�
 | `msg.swap.remove_failed` (v0.2) | 他のプロセスのスワップを消せなかった | スワップを削除できませんでした: {dir} / 手で削除してください |
 | `info.swap.recovered` (v0.2) | 復旧の提案で「適用」を選び、適用した (`Transaction(Origin::Recovery)`。dirty・Undo 可)。v0.4 の M23 から、読み取り専用の理由が `InvalidBytes` だけの文書にも復旧を提案・適用し、適用した後も読み取り専用のときは、代わりに `info.swap.applied_read_only` を出す (03 §8.3.1 / §10.3) | 復旧内容を適用しました。保存するまで {path} は変わりません |
 | `info.swap.applied_read_only` | 同上で、適用した後も文書が読み取り専用 (不正なバイトを含む文書。復旧では解除を持ち越さない、03 §8.3.1 / §10.3) | 復旧内容を適用しました。不正なバイトを含むため読み取り専用です。{key:file.toggle_read_only} で編集を許可すると続けられます |
+| `info.swap.encoding_mismatch` | 読み取り専用の理由が `InvalidBytes` だけの文書に該当するスワップがあるが、スワップの文字コード (manifest の `encoding`) が文書の文字コードと違うので、復旧を提案しなかった (v0.4 の M23、03 §10.3。候補は残し、その文字コードで開き直すと提案する。1 つの文書と候補の組につき 1 回。適用の時点で本文の文字コードが違っても、適用せずにこれを出す)。`{encoding}` はスワップの文字コード | {path} の未保存の内容は {encoding} で書かれています。文字コードを指定して開き直す ({key:file.reopen_with_encoding}) で {encoding} を選ぶと、復旧を提案します |
 | `info.swap.discarded` (v0.2) | 復旧の提案で「破棄」を選び、スワップを消した | スワップを破棄しました |
 | `msg.leftover.failed` (v0.2) | 置換途中の痕跡の提案への答え (戻す・削除) に失敗した (05 §4.6) | {path} の後始末に失敗しました: {reason} / パスと権限を確認してください |
 | `msg.leftover.tmp_opened` (v0.2) | 一時ファイルを読み取り専用で開いた (末尾が切れている可能性) | 一時ファイルを読み取り専用で開きました。{path} の保存の途中の内容で、末尾が切れている可能性があります / 不要なら次の起動で削除を選んでください |
