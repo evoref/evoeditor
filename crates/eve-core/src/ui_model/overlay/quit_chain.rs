@@ -97,6 +97,8 @@ pub(crate) enum ConfirmAction {
     Leftover(Box<crate::Leftover>),
     /// エスケープ文字のつながりの確認 (このまま保存 / キャンセル、03 §8.3.1・§9.7 (e))。
     EscapeMerge(Box<crate::io::escape_merge::EscapeMergeAsk>),
+    /// 不正バイトを含む文書の「編集を許可」の確認 (編集を許可 / 文字コードを指定して開き直す / キャンセル、03 §8.3.1)。
+    ReleaseInvalidBytes(DocumentId),
     /// 置換の一覧の確認 (置換して保存 / キャンセル、03 §8.6)。`revision` は `ChangeSet` を作った時点の文書の Revision。
     UnmappableReplace {
         ask: crate::io::unmappable::UnmappableAsk,
@@ -248,6 +250,7 @@ impl EditorState {
             ConfirmAction::QuitSaving => self.choose_quit_saving(id),
             ConfirmAction::Unmappable(ask) => self.choose_unmappable(ask, id),
             ConfirmAction::EscapeMerge(ask) => self.choose_escape_merge(*ask),
+            ConfirmAction::ReleaseInvalidBytes(doc) => self.choose_release_invalid_bytes(doc, id),
             ConfirmAction::UnmappableReplace {
                 ask,
                 changes,

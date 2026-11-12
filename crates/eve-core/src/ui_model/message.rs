@@ -17,6 +17,31 @@ pub(crate) struct ShownMessage {
     pub shown_at: crate::time::Tick,
 }
 
+/// 読み取り専用の理由の文言キー (`ui.read_only_reason.*`、04 §15.2)。`InvalidBytes` は、私用文字と衝突した文書 (b)
+/// (`pua_escape == DisabledCollision`) では文言を分ける (03 §8.3.1 の「読み取り専用のときの案内」)。読込が終わって
+/// いない (`LoadIncomplete`、予約) は文言が無いので `None`。
+pub(crate) fn read_only_reason_key(
+    doc: &crate::document::Document,
+    r: crate::document::ReadOnlyReason,
+) -> Option<&'static str> {
+    use crate::document::ReadOnlyReason as R;
+    Some(match r {
+        R::FileAttribute => keys::UI_READ_ONLY_REASON_FILE_ATTRIBUTE,
+        R::UserRequested => keys::UI_READ_ONLY_REASON_USER_REQUESTED,
+        R::NoWritePermission => keys::UI_READ_ONLY_REASON_NO_WRITE_PERMISSION,
+        R::InvalidBytes
+            if doc.format.pua_escape == eve_encoding::PuaEscapeMode::DisabledCollision =>
+        {
+            keys::UI_READ_ONLY_REASON_INVALID_BYTES_COLLISION
+        }
+        R::InvalidBytes => keys::UI_READ_ONLY_REASON_INVALID_BYTES,
+        R::StatefulEncodingWithInvalidBytes => keys::UI_READ_ONLY_REASON_STATEFUL,
+        R::Binary => keys::UI_READ_ONLY_REASON_BINARY,
+        R::LargeFileViewer => keys::UI_READ_ONLY_REASON_LARGE_FILE_VIEWER,
+        R::LoadIncomplete => return None,
+    })
+}
+
 /// 履歴に残すメッセージの上限 (04 §8.9、02 §14.1 MR8)。
 pub(crate) const HISTORY_MAX: usize = 1_000;
 
@@ -77,35 +102,34 @@ impl EditorState {
     }
 
     /// 読み取り専用の文書を編集しようとした: 理由つきで拒否したことを示す (`msg.edit.read_only`、FR-116 AC-1)。
+    /// v0.4 の M23 から、理由ごとにメッセージを分ける (03 §8.3.1 の「読み取り専用のときの案内」、04 §15.2): 解除できない
+    /// 理由があればそれ (衝突の文書 (b)・ISO-2022-JP・バイナリは専用のメッセージ。ほかは `msg.edit.read_only` に
+    /// その理由)、無ければ `InvalidBytes` (切替で、確認の後に編集できる)、どちらでもなければ `msg.edit.read_only`。
     pub(crate) fn notify_read_only(&mut self) {
         use crate::document::ReadOnlyReason as R;
-        let reason = self
-            .active_document()
-            .and_then(|d| self.document(d))
-            .and_then(|d| d.read_only.primary())
-            .and_then(|r| {
-                Some(match r {
-                    R::FileAttribute => "file_attribute",
-                    R::UserRequested => "user_requested",
-                    R::NoWritePermission => "no_write_permission",
-                    R::InvalidBytes => "invalid_bytes",
-                    R::StatefulEncodingWithInvalidBytes => "stateful_encoding_with_invalid_bytes",
-                    R::Binary => "binary",
-                    R::LargeFileViewer => "large_file_viewer",
-                    // 読込が終わっていない (v0.4 の Partial)。理由の文言は無い
-                    R::LoadIncomplete => return None,
-                })
+        let doc = self.active_document().and_then(|d| self.document(d));
+        let blocking = doc.and_then(crate::document::Document::blocking_read_only_reason);
+        let key = match blocking {
+            Some(R::InvalidBytes) => keys::MSG_EDIT_READ_ONLY_PUA_COLLISION,
+            Some(R::StatefulEncodingWithInvalidBytes) => keys::MSG_EDIT_READ_ONLY_STATEFUL,
+            Some(R::Binary) => keys::MSG_EDIT_READ_ONLY_BINARY,
+            Some(_) => keys::MSG_EDIT_READ_ONLY,
+            None if doc.is_some_and(|d| d.read_only.contains(R::InvalidBytes)) => {
+                keys::MSG_EDIT_READ_ONLY_INVALID_BYTES
+            }
+            None => keys::MSG_EDIT_READ_ONLY,
+        };
+        // `{reason}` は解除できない理由、無ければ優先順で先頭の理由
+        let reason = doc
+            .and_then(|d| {
+                let r = d
+                    .blocking_read_only_reason()
+                    .or_else(|| d.read_only.primary())?;
+                read_only_reason_key(d, r)
             })
-            .map(|k| {
-                self.catalog()
-                    .render(&format!("ui.read_only_reason.{k}"), &[], &|_| None)
-            })
+            .map(|k| self.catalog().render(k, &[], &|_| None))
             .unwrap_or_default();
-        self.show_message(
-            eve_view::MessageLevel::Warn,
-            keys::MSG_EDIT_READ_ONLY,
-            &[("reason", &reason)],
-        );
+        self.show_message(eve_view::MessageLevel::Warn, key, &[("reason", &reason)]);
     }
 
     /// カタログのキー `key` の文言を `args` で埋めてメッセージに出し、履歴に積む。`<key>.text` / `<key>.hint` があればその 2 つを使う。

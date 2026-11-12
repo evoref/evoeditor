@@ -118,8 +118,10 @@ impl EditorState {
         let Some(d) = self.docs.documents.get(&id) else {
             return;
         };
-        // 編集中の内容を上書きしないよう、読込済みで何も編集していない文書にだけ出す
-        if d.load_state != LoadState::Ready || d.is_dirty() || !d.read_only.is_empty() {
+        // 編集中の内容を上書きしないよう、読込済みで何も編集していない文書にだけ出す。読み取り専用の文書には出さないが、
+        // 理由が `InvalidBytes` だけ (`pua_escape == Enabled`) の文書には出す (03 §10.3 の M23: 不正バイトを含む文書を
+        // 解除して編集した後のスワップは、次に開くと読み取り専用に戻るため)
+        if d.load_state != LoadState::Ready || d.is_dirty() || !d.recovery_allowed() {
             return;
         }
         let blank_untitled = d.path.is_none() && d.len_bytes() == 0;
@@ -295,7 +297,7 @@ impl EditorState {
         let Some(d) = self.docs.documents.get_mut(&doc) else {
             return;
         };
-        if d.revision() != revision || !d.read_only.is_empty() {
+        if d.revision() != revision || !d.recovery_allowed() {
             // 提案の後で文書が変わった: 適用しない。スワップは残し、もう一度提案できるようにする
             self.show_message(MessageLevel::Warn, keys::MSG_SWAP_CHANGED_SINCE_OFFER, &[]);
             self.io.swap.candidates.push(entry);
@@ -334,6 +336,9 @@ impl EditorState {
         // 無題の文書は、スワップの形式 (文字コード・BOM・改行) を引き継ぐ。パスのある文書は開いた形式のまま。
         // 適用に失敗したら元の形式に戻す (下の `Err`)
         let saved_format = d.path.is_none().then(|| d.format.clone());
+        // 復旧では「編集を許可」を持ち越さない (03 §8.3.1 の「解除の持ち越し」: 復旧では付け直す)。書式の変更を
+        // 適用する前に記録を消す (記録があると `InvalidBytes` を付けないため)。適用に失敗したら戻す
+        let saved_released = std::mem::take(&mut d.invalid_bytes_released);
         if d.path.is_none() {
             // 文字コードを変えるので、今の文字コードのものでない `escape_encoding` は残さない (不変条件、03 §8.3.1)
             if d.format.escape_encoding != Some(body.encoding) {
@@ -352,18 +357,27 @@ impl EditorState {
         match self.apply_transaction(doc, tx) {
             Ok(_) => {
                 self.io.swap.recovered.entry(doc).or_default().push(entry);
-                self.show_message(
-                    MessageLevel::Info,
-                    keys::INFO_SWAP_RECOVERED,
-                    &[("path", &name)],
-                );
+                // 適用した後も読み取り専用 (不正バイトを含む文書) なら、切替で編集を許可すると続けられることを示す
+                // (03 §10.3。`Origin::Recovery` は読み取り専用の拒否の例外)
+                let read_only = self
+                    .docs
+                    .documents
+                    .get(&doc)
+                    .is_some_and(|d| !d.read_only.is_empty());
+                let key = if read_only {
+                    keys::INFO_SWAP_APPLIED_READ_ONLY
+                } else {
+                    keys::INFO_SWAP_RECOVERED
+                };
+                self.show_message(MessageLevel::Info, key, &[("path", &name)]);
             }
             Err(_) => {
-                // 文書は変わっていない。無題の文書に写した形式も戻す
-                if let Some(f) = saved_format
-                    && let Some(d) = self.docs.documents.get_mut(&doc)
-                {
-                    d.format = f;
+                // 文書は変わっていない。無題の文書に写した形式と、解除の記録も戻す
+                if let Some(d) = self.docs.documents.get_mut(&doc) {
+                    d.invalid_bytes_released = saved_released;
+                    if let Some(f) = saved_format {
+                        d.format = f;
+                    }
                 }
                 self.show_message(
                     MessageLevel::Error,

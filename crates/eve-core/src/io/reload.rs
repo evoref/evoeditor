@@ -166,6 +166,13 @@ impl EditorState {
         let Some(old) = self.docs.documents.get(&doc_id) else {
             return;
         };
+        // 「編集を許可」(不正バイトの解除) は同じ文書の再読込では持ち越す: 新しい読込に不正バイトがあっても
+        // `InvalidBytes` を付けない (03 §8.3.1 の「解除の持ち越し」、§8.8)。私用文字と衝突した内容 (衝突の文書 (b)) は
+        // 解除できない文書なので、持ち越さずに付ける
+        let mut detected = detected;
+        if old.invalid_bytes_released && format.pua_escape == eve_encoding::PuaEscapeMode::Enabled {
+            detected.remove(crate::document::ReadOnlyReason::InvalidBytes);
+        }
         format.eol_stats = crate::document::EolStats::count(&text);
         let change = FormatChange::Reload {
             before: FormatState {

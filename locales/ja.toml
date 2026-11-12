@@ -183,7 +183,7 @@ description = "ファイルを読み込み直します。"
 title = "再読込"
 
 [cmd.file.toggle_read_only]
-description = "読み取り専用を解除します。編集できる文書では読み取り専用にします。"
+description = "読み取り専用を解除します。編集できる文書では読み取り専用にします。不正なバイトを含むファイルも、確認の後に編集できます。"
 title = "読み取り専用の切替"
 
 [cmd.file.reopen_with_encoding]
@@ -454,6 +454,7 @@ history_cleared = "{encoding} で開き直しました。元に戻す履歴は�
 
 [info.read_only]
 released = "読み取り専用を解除しました"
+released_invalid_bytes = "編集を許可しました (不正なバイトは <0xNN> の 1 文字として編集できます)"
 set = "読み取り専用にしました"
 
 [info.save]
@@ -484,6 +485,7 @@ wrapped_backward = "文書の先頭に達したので、末尾から検索しま
 wrapped_forward = "文書の末尾に達したので、先頭から検索しました"
 
 [info.swap]
+applied_read_only = "復旧内容を適用しました。不正なバイトを含むため読み取り専用です。{key:file.toggle_read_only} で編集を許可すると続けられます"
 discarded = "スワップを破棄しました"
 recovered = "復旧内容を適用しました。保存するまで {path} は変わりません"
 
@@ -573,6 +575,22 @@ text = "{item} という設定項目はありません"
 [msg.edit.read_only]
 hint = "属性・権限が理由なら、名前を付けて保存 ({key:file.save_as}) した先で編集できます。文字コードの誤判定なら、文字コードを指定して開き直す ({key:file.reopen_with_encoding}) で直せます"
 text = "読み取り専用のため編集できません ({reason})"
+
+[msg.edit.read_only_invalid_bytes]
+hint = "{key:file.toggle_read_only} で、確認の後に編集できます。文字化けなら {key:file.reopen_with_encoding} で開き直してください"
+text = "不正なバイトを含むため読み取り専用です"
+
+[msg.edit.read_only_pua_collision]
+hint = "{key:file.reopen_with_encoding} で別の文字コードとして開き直してください"
+text = "不正なバイトと私用文字の両方を含むため、編集も保存もできません"
+
+[msg.edit.read_only_stateful]
+hint = "{key:file.reopen_with_encoding} で UTF-8 などとして開き直すと編集できます"
+text = "不正なバイトを含む ISO-2022-JP のファイルは編集できません"
+
+[msg.edit.read_only_binary]
+hint = "テキストなら {key:file.reopen_with_encoding} で文字コードを指定して開き直してください"
+text = "バイナリファイルは編集できません"
 
 [msg.edit.replacing]
 hint = "読込が終わるまでお待ちください。やめるときは {key:ui.cancel} で読込を取り消せます"
@@ -992,6 +1010,16 @@ replace = "[R] 置換して保存"
 item = "行 {line}, 桁 {col}: {char} ({codepoint}) → {replacement}"
 more = "ほか {count} 個"
 
+[ui.confirm.read_only.invalid_bytes]
+title = "不正なバイトを含む文書の編集"
+message = "{path} には {encoding} として不正なバイトが {count} 個あります〔 (最初: 行 {line}, 桁 {col})〕。編集を許可すると、それぞれを <0xNN> の 1 文字として消したり動かしたりできます。文字化けして見えるときは、編集せずに文字コードを指定して開き直してください"
+detail_restore = "保存すると、残っている <0xNN> は元のバイトに戻ります"
+detail_delete = "消すと、そのバイトはファイルから無くなります (保存の前なら元に戻すで戻せます)"
+detail_merge = "隣の文字とつながると、開き直したときに別の文字になります (保存の前に確認します)"
+detail_copy = "他のアプリに貼ると <0xNN> という文字列になります"
+release = "[A] 編集を許可"
+reopen = "[E] 文字コードを指定して開き直す"
+
 [ui.load_state]
 loading = "読込中"
 
@@ -1008,6 +1036,7 @@ write_failed = "書き込めませんでした"
 binary = "バイナリファイル"
 file_attribute = "読み取り専用属性のファイル"
 invalid_bytes = "不正なバイトを含むファイル"
+invalid_bytes_collision = "不正なバイトと私用文字を含むファイル"
 large_file_viewer = "巨大なファイル (読み取り専用で開く指定)"
 no_write_permission = "書き込む権限のないファイル"
 stateful_encoding_with_invalid_bytes = "不正なバイトを含む ISO-2022-JP のファイル"

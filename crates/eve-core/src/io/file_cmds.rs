@@ -15,8 +15,10 @@ use crate::editor::state::EditorState;
 use crate::ui_model::overlay::PromptKind;
 
 impl EditorState {
-    /// 読み取り専用の切替 (`file.toggle_read_only`、03 §9.6)。解除できるのは `FileAttribute` と `UserRequested` だけ。
-    /// 編集できる文書では `UserRequested` を付ける。
+    /// 読み取り専用の切替 (`file.toggle_read_only`、03 §9.6)。解除できるのは `FileAttribute`・`UserRequested` と、
+    /// `pua_escape == Enabled` の文書の `InvalidBytes` (v0.4 の M23、03 §8.3.1 の「編集を許可」)。理由に
+    /// `InvalidBytes` を含む文書は、外す前に確認 (`ui.confirm.read_only.invalid_bytes`) を 1 回出す。
+    /// 編集できる文書では `UserRequested` を付ける (解除の記録は残す)。
     pub(crate) fn toggle_read_only(&mut self) -> CommandResult {
         use crate::document::{LoadState, ReadOnlyReason};
         let Some(doc_id) = self.active_document() else {
@@ -31,12 +33,12 @@ impl EditorState {
         let key = if doc.read_only.is_empty() {
             doc.read_only.insert(ReadOnlyReason::UserRequested);
             keys::INFO_READ_ONLY_SET
-        } else if doc.read_only.releasable() {
-            if doc.read_only.contains(ReadOnlyReason::FileAttribute) {
-                doc.attribute_released = true;
+        } else if doc.read_only_releasable() {
+            if doc.read_only.contains(ReadOnlyReason::InvalidBytes) {
+                self.confirm_release_invalid_bytes(doc_id);
+                return CommandResult::Done;
             }
-            doc.read_only.remove(ReadOnlyReason::FileAttribute);
-            doc.read_only.remove(ReadOnlyReason::UserRequested);
+            release_reasons(doc);
             keys::INFO_READ_ONLY_RELEASED
         } else {
             return CommandResult::Rejected(RejectReason::NotAvailable);
@@ -46,6 +48,149 @@ impl EditorState {
         self.mark_dirty_render();
         CommandResult::Done
     }
+
+    /// 不正バイトを含む文書の「編集を許可」の確認を出す (03 §8.3.1 の「確認」、04 §15.2 の
+    /// `ui.confirm.read_only.invalid_bytes`)。本文は文書の名前・文字コード・不正なバイトの数・最初の不正なバイトの位置、
+    /// `details` は要点の 4 行。選択肢は `[A] 編集を許可` (既定)・`[E] 文字コードを指定して開き直す`・キャンセル。
+    fn confirm_release_invalid_bytes(&mut self, doc_id: eve_view::DocumentId) {
+        use crate::ui_model::overlay::{ChoiceDef, ConfirmAction, ConfirmState};
+        let Some(doc) = self.docs.documents.get(&doc_id) else {
+            return;
+        };
+        let name = doc
+            .path
+            .as_ref()
+            .map(FsPath::display)
+            .unwrap_or_else(|| self.untitled_label(doc));
+        let has_path = doc.path.is_some();
+        let encoding = doc.format.encoding.name().to_owned();
+        // 数は読込で数えた不正なバイトの数。復旧でスワップのエスケープ文字が入った文書 (ディスクのファイルに不正
+        // バイトが無い・無題の文書) は読込の数が 0 なので、本文のエスケープ文字を数える
+        let count = match doc.format.invalid_bytes {
+            0 => count_escapes(doc.text()),
+            n => u64::from(n),
+        }
+        .to_string();
+        let first = first_escape_byte(doc.text());
+        let mut args = vec![
+            ("path".to_owned(), name),
+            ("encoding".to_owned(), encoding),
+            ("count".to_owned(), count),
+        ];
+        // 最初の不正なバイトが見つからなければ (全部消した後の復旧など) 位置を省く (〔 〕 ごと)
+        if let Some(off) = first {
+            let (line, col) = self.pos_of_offset(doc_id, off);
+            args.push(("line".to_owned(), line.to_string()));
+            args.push(("col".to_owned(), col.to_string()));
+        }
+        let details = [
+            keys::UI_CONFIRM_READ_ONLY_INVALID_BYTES_DETAIL_RESTORE,
+            keys::UI_CONFIRM_READ_ONLY_INVALID_BYTES_DETAIL_DELETE,
+            keys::UI_CONFIRM_READ_ONLY_INVALID_BYTES_DETAIL_MERGE,
+            keys::UI_CONFIRM_READ_ONLY_INVALID_BYTES_DETAIL_COPY,
+        ]
+        .iter()
+        .map(|k| self.catalog().render(k, &[], &|_| None))
+        .collect();
+        let mut choices = vec![ChoiceDef {
+            id: "release",
+            accel: Some('a'),
+            destructive: false,
+        }];
+        // 開き直しはパスのある文書だけ (無題の文書には `file.reopen_with_encoding` が使えない)
+        if has_path {
+            choices.push(ChoiceDef {
+                id: "reopen",
+                accel: Some('e'),
+                destructive: false,
+            });
+        }
+        self.open_confirm(ConfirmState {
+            name: "read_only.invalid_bytes",
+            args,
+            choices,
+            details,
+            // 既定は「編集を許可」(比率が 1% を超えた文書でも変えない、OQ-217)
+            default: 0,
+            focused: 0,
+            message: None,
+            action: ConfirmAction::ReleaseInvalidBytes(doc_id),
+        });
+    }
+
+    /// 「編集を許可」の確認の選択 (キャンセルは何も変えない)。`release` は `InvalidBytes`・`FileAttribute`・
+    /// `UserRequested` を外して解除の記録を立てる。`reopen` は `file.reopen_with_encoding` (文字コードを尋ねる)。
+    pub(crate) fn choose_release_invalid_bytes(
+        &mut self,
+        doc_id: eve_view::DocumentId,
+        id: &str,
+    ) -> CommandResult {
+        if id == "reopen" {
+            if self.active_document() != Some(doc_id) {
+                return CommandResult::Rejected(RejectReason::NoTarget);
+            }
+            return self.reopen_with_encoding(None);
+        }
+        // 確認を出している間に文書が変わっていれば (読込が始まった等)、外さない
+        let Some(doc) = self
+            .docs
+            .documents
+            .get_mut(&doc_id)
+            .filter(|d| d.read_only_releasable())
+        else {
+            return CommandResult::Rejected(RejectReason::NotAvailable);
+        };
+        release_reasons(doc);
+        doc.invalid_bytes_released = true;
+        self.show_message(
+            MessageLevel::Info,
+            keys::INFO_READ_ONLY_RELEASED_INVALID_BYTES,
+            &[],
+        );
+        self.mark_dirty_render();
+        CommandResult::Done
+    }
+}
+
+/// 解除できる理由を外す (`FileAttribute` を外したら上書き保存の確認のために記録する、03 §9.6 の M9d の規則)。
+fn release_reasons(doc: &mut crate::document::Document) {
+    use crate::document::ReadOnlyReason;
+    if doc.read_only.contains(ReadOnlyReason::FileAttribute) {
+        doc.attribute_released = true;
+    }
+    doc.read_only.remove(ReadOnlyReason::FileAttribute);
+    doc.read_only.remove(ReadOnlyReason::UserRequested);
+    doc.read_only.remove(ReadOnlyReason::InvalidBytes);
+}
+
+/// 本文の最初のエスケープ文字 (`U+10FF00..=U+10FFFF`) のバイト位置 (03 §8.3.1 の「確認」: UTF-8 の `F4 8F BC`〜
+/// `F4 8F BF` を先頭から探し、最初に見つけた所で止まる)。チャンクは char の境界で分かれるので、4 バイトの文字は
+/// 1 つのチャンクの中にある。
+fn first_escape_byte(text: &eve_text::Text) -> Option<usize> {
+    escape_bytes(text).next()
+}
+
+/// 本文のエスケープ文字の数。
+fn count_escapes(text: &eve_text::Text) -> u64 {
+    escape_bytes(text).count() as u64
+}
+
+/// 本文のエスケープ文字 (`U+10FF00..=U+10FFFF`、UTF-8 で `F4 8F BC`〜`F4 8F BF` で始まる) のバイト位置を先頭から順に。
+fn escape_bytes(text: &eve_text::Text) -> impl Iterator<Item = usize> + '_ {
+    use eve_text::{ByteOff, ByteRange, TextRead};
+    let mut base = 0;
+    text.chunks(ByteRange::new(ByteOff(0), ByteOff(text.len_bytes())))
+        .flat_map(move |chunk| {
+            let start = base;
+            base += chunk.len();
+            let b = chunk.as_bytes();
+            memchr::memchr_iter(0xF4, b)
+                .filter(move |&at| {
+                    b.get(at + 1) == Some(&0x8F)
+                        && b.get(at + 2).is_some_and(|x| (0xBC..=0xBF).contains(x))
+                })
+                .map(move |at| start + at)
+        })
 }
 
 pub(crate) fn arg_path(ctx: &CommandCtx<'_>) -> Option<String> {

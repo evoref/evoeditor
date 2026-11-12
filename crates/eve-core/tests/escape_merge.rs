@@ -1,10 +1,10 @@
 //! エスケープ文字のつながり (`EscapeMerge`、docs/03 §8.3.1) の保存 (M23 の 3 本目)。書く前の確認・承認・強調
 //! (M23 の 4 本目) の試験は `escape_merge_confirm.rs`。
 //!
-//! 不正バイトを含む文書は、今は読み取り専用 (「編集を許可」は M23 の後の PR)。編集が要る場合は、試験の中で文書の
-//! `read_only` から `InvalidBytes` を直に外して、解除した後の状態を作る (製品の解除の経路は足さない)。
+//! 不正バイトを含む文書は読み取り専用で開く。編集が要る場合は、製品の「編集を許可」(`file.toggle_read_only` と確認の
+//! `[A]`、M23 の 6 本目) で解除する。
 
-use eve_core::{Args, CommandResult, Document, Encoding, OpenOptions, ReadOnlyReason};
+use eve_core::{Args, CommandResult, Document, Encoding, OpenOptions};
 use eve_encoding::PreserveStatus;
 use eve_testkit::Harness;
 
@@ -38,12 +38,24 @@ fn doc(h: &Harness) -> &Document {
 const PAD: &str = "0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789\n\
                    0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789\n";
 
-/// 「編集を許可」の後の状態を作る (試験だけの近道。製品の解除は M23 の後の PR)。
+/// 「編集を許可」(`file.toggle_read_only` → 確認 `ui.confirm.read_only.invalid_bytes` の `[A]`、03 §8.3.1)。
 fn release_invalid_bytes(h: &mut Harness) {
+    assert_eq!(h.cmd("file.toggle_read_only"), CommandResult::Done);
+    assert_eq!(
+        h.overlay(),
+        "dialog",
+        "編集を許可の確認: {:?}",
+        h.messages()
+    );
+    h.text("a");
     let id = h.doc_id();
-    let d = h.editor.state_mut().document_mut(id).unwrap();
-    d.read_only.remove(ReadOnlyReason::InvalidBytes);
-    assert!(d.is_editable());
+    let d = h.editor.state().document(id).unwrap();
+    assert!(
+        d.is_editable() && d.invalid_bytes_released,
+        "{:?} {:?}",
+        d.read_only.iter().collect::<Vec<_>>(),
+        d.load_state
+    );
 }
 
 /// `Shift_JIS` の `x<0x81>` の行と `@yz` の行。行を結合すると `<0x81>` の直後に `@` が来て、0x8140 (全角の空白) になる。

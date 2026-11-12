@@ -185,7 +185,7 @@ description = "Reload the file from disk."
 title = "Reload"
 
 [cmd.file.toggle_read_only]
-description = "Clear read-only, or make an editable document read-only."
+description = "Clear read-only, or make an editable document read-only. Files with invalid bytes can also be made editable after a confirmation."
 title = "Toggle read-only"
 
 [cmd.file.reopen_with_encoding]
@@ -456,6 +456,7 @@ history_cleared = "Reopened as {encoding}. The undo history was cleared"
 
 [info.read_only]
 released = "Read-only cleared"
+released_invalid_bytes = "Editing allowed (each invalid byte can be edited as one <0xNN> character)"
 set = "Made read-only"
 
 [info.save]
@@ -486,6 +487,7 @@ wrapped_backward = "Reached the start of the document, searching from the end"
 wrapped_forward = "Reached the end of the document, searching from the start"
 
 [info.swap]
+applied_read_only = "Recovered content applied. The document is read-only because it has invalid bytes; allow editing with {key:file.toggle_read_only} to continue"
 discarded = "Discarded the swap"
 recovered = "Applied the recovered content. {path} does not change until you save"
 
@@ -575,6 +577,22 @@ text = "There is no configuration item named {item}"
 [msg.edit.read_only]
 hint = "If it is due to attributes or permissions, save under another name ({key:file.save_as}) and edit that. If the encoding was misdetected, reopen with an encoding ({key:file.reopen_with_encoding})"
 text = "Cannot edit because the document is read-only ({reason})"
+
+[msg.edit.read_only_invalid_bytes]
+hint = "Use {key:file.toggle_read_only} to edit after a confirmation. If the text is garbled, reopen with {key:file.reopen_with_encoding}"
+text = "Read-only because the file has invalid bytes"
+
+[msg.edit.read_only_pua_collision]
+hint = "Reopen it with another encoding ({key:file.reopen_with_encoding})"
+text = "Cannot edit or save because the file has both invalid bytes and private-use characters"
+
+[msg.edit.read_only_stateful]
+hint = "Reopen it as UTF-8 or another encoding ({key:file.reopen_with_encoding}) to edit"
+text = "An ISO-2022-JP file with invalid bytes cannot be edited"
+
+[msg.edit.read_only_binary]
+hint = "If it is text, reopen it with an encoding ({key:file.reopen_with_encoding})"
+text = "Binary files cannot be edited"
 
 [msg.edit.replacing]
 hint = "Please wait until loading finishes. Press {key:ui.cancel} to cancel the load"
@@ -994,6 +1012,16 @@ replace = "[R] Replace and save"
 item = "line {line}, column {col}: {char} ({codepoint}) → {replacement}"
 more = "and {count} more"
 
+[ui.confirm.read_only.invalid_bytes]
+title = "Editing a document with invalid bytes"
+message = "{path} has {count} invalid bytes for {encoding}〔 (first: line {line}, column {col})〕. If you allow editing, you can delete or move each one as a single <0xNN> character. If the text looks garbled, reopen with the right encoding instead of editing"
+detail_restore = "When saved, the remaining <0xNN> are written back as the original bytes"
+detail_delete = "Deleting one removes that byte from the file (undo can bring it back before saving)"
+detail_merge = "If one ends up joined with the text next to it, it reads as a different character when reopened (you are asked before saving)"
+detail_copy = "Pasted into other applications, it becomes the text <0xNN>"
+release = "[A] Allow editing"
+reopen = "[E] Reopen with encoding"
+
 [ui.load_state]
 loading = "Loading"
 
@@ -1010,6 +1038,7 @@ write_failed = "it could not be written"
 binary = "binary file"
 file_attribute = "file with the read-only attribute"
 invalid_bytes = "file with invalid bytes"
+invalid_bytes_collision = "file with invalid bytes and private-use characters"
 large_file_viewer = "huge file (opened read-only by choice)"
 no_write_permission = "file without write permission"
 stateful_encoding_with_invalid_bytes = "ISO-2022-JP file with invalid bytes"

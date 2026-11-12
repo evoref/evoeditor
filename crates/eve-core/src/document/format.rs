@@ -496,15 +496,30 @@ impl ReadOnlyReasons {
         ALL_REASONS.into_iter().filter(|r| self.contains(*r))
     }
 
-    /// `file.toggle_read_only` で解除できるか (理由があり、すべてが `FileAttribute` か `UserRequested`。03 §9.6 の表)。
-    pub fn releasable(&self) -> bool {
-        !self.is_empty()
-            && self.iter().all(|r| {
-                matches!(
-                    r,
-                    ReadOnlyReason::FileAttribute | ReadOnlyReason::UserRequested
-                )
-            })
+    /// `file.toggle_read_only` で解除できるか (理由があり、どれも解除を妨げない。03 §9.6 の表、§8.3.1 の「解除できる
+    /// 文書」)。`pua_escape` は文書の `TextFormat.pua_escape` (`InvalidBytes` は `Enabled` の文書だけ解除できる)。
+    /// 読込が済んでいるか (`load_state == Ready`) は呼び出し側が見る。
+    pub fn releasable(&self, pua_escape: PuaEscapeMode) -> bool {
+        !self.is_empty() && self.blocking(pua_escape).is_none()
+    }
+
+    /// 解除を妨げる理由のうち、表示の優先順で最初のもの (03 §9.6 の表)。解除できるのは `FileAttribute`・
+    /// `UserRequested` と、`pua_escape == Enabled` の文書の `InvalidBytes` (v0.4 の M23。衝突の文書 (b) は
+    /// `DisabledCollision` なので解除できない)。理由が無ければ `None`。
+    pub fn blocking(&self, pua_escape: PuaEscapeMode) -> Option<ReadOnlyReason> {
+        self.iter().find(|r| match r {
+            ReadOnlyReason::FileAttribute | ReadOnlyReason::UserRequested => false,
+            ReadOnlyReason::InvalidBytes => pua_escape != PuaEscapeMode::Enabled,
+            _ => true,
+        })
+    }
+
+    /// 理由が `InvalidBytes` だけで、`pua_escape == Enabled` (03 §10.3 の M23: 読み取り専用の文書のうち、復旧を
+    /// 提案・適用するもの)。
+    pub fn only_releasable_invalid_bytes(&self, pua_escape: PuaEscapeMode) -> bool {
+        self.contains(ReadOnlyReason::InvalidBytes)
+            && self.iter().count() == 1
+            && pua_escape == PuaEscapeMode::Enabled
     }
 
     /// 表示に出す 1 つ (優先順で先頭)。理由が無ければ `None`。
@@ -618,6 +633,53 @@ mod tests {
         r.remove(ReadOnlyReason::FileAttribute);
         assert_eq!(r.primary(), Some(ReadOnlyReason::InvalidBytes));
         assert!(!r.contains(ReadOnlyReason::FileAttribute));
+    }
+
+    // 03 §9.6 の表と §8.3.1 の「解除できる文書」(v0.4 の M23)
+    #[test]
+    fn 解除できる理由と妨げる理由() {
+        use PuaEscapeMode::{DisabledCollision, DisabledStateful, Enabled};
+        let set = |rs: &[ReadOnlyReason]| {
+            let mut r = ReadOnlyReasons::default();
+            for x in rs {
+                r.insert(*x);
+            }
+            r
+        };
+        // 理由が無ければ解除するものが無い
+        assert!(!ReadOnlyReasons::default().releasable(Enabled));
+        assert_eq!(ReadOnlyReasons::default().blocking(Enabled), None);
+        // 属性・利用者の指定・不正バイト (Enabled) の組は解除できる
+        let ok = set(&[
+            ReadOnlyReason::FileAttribute,
+            ReadOnlyReason::UserRequested,
+            ReadOnlyReason::InvalidBytes,
+        ]);
+        assert!(ok.releasable(Enabled));
+        // 衝突の文書 (b) の InvalidBytes は解除できない (状態付きの文書に InvalidBytes は付かないが、付いても同じ)
+        for mode in [DisabledCollision, DisabledStateful] {
+            assert!(!ok.releasable(mode));
+            assert_eq!(ok.blocking(mode), Some(ReadOnlyReason::InvalidBytes));
+        }
+        // 解除できない理由が 1 つでもあれば解除できず、優先順で最初の妨げる理由を返す
+        for bad in [
+            ReadOnlyReason::NoWritePermission,
+            ReadOnlyReason::StatefulEncodingWithInvalidBytes,
+            ReadOnlyReason::Binary,
+            ReadOnlyReason::LargeFileViewer,
+            ReadOnlyReason::LoadIncomplete,
+        ] {
+            let r = set(&[ReadOnlyReason::InvalidBytes, bad]);
+            assert!(!r.releasable(Enabled), "{bad:?}");
+            assert_eq!(r.blocking(Enabled), Some(bad));
+        }
+        // 復旧の対象: 理由が InvalidBytes だけで Enabled
+        assert!(set(&[ReadOnlyReason::InvalidBytes]).only_releasable_invalid_bytes(Enabled));
+        assert!(
+            !set(&[ReadOnlyReason::InvalidBytes]).only_releasable_invalid_bytes(DisabledCollision)
+        );
+        assert!(!ok.only_releasable_invalid_bytes(Enabled));
+        assert!(!set(&[ReadOnlyReason::UserRequested]).only_releasable_invalid_bytes(Enabled));
     }
 
     /// 基準: 1 バイトずつ数える。

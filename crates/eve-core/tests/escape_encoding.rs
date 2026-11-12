@@ -1,8 +1,8 @@
 //! エスケープ文字の由来の文字コード (`TextFormat.escape_encoding`) と保存の扱い (docs/03 §8.3.1 の 2 つの表、§22.3 の
 //! 「不正バイトを含む文書の編集」の (f)(g)、v0.4 の M23 の 2 本目)。保存先は `MemFs`、ジョブは `ManualJobSpawner`。
 //!
-//! 不正バイトを含む文書は、今は読み取り専用 (「編集を許可」は M23 の後の PR)。編集が要る場合は、試験の中で文書の
-//! `read_only` から `InvalidBytes` を直に外して、解除した後の状態を作る (製品の解除の経路は足さない)。
+//! 不正バイトを含む文書は読み取り専用で開く。編集が要る場合は、製品の「編集を許可」(`file.toggle_read_only` と確認の
+//! `[A]`、M23 の 6 本目) で解除する。
 
 use eve_core::{
     Args, CommandResult, Document, Encoding, FileTime, FsPath, OpenOptions, ReadOnlyReason,
@@ -52,13 +52,20 @@ fn doc(h: &Harness) -> &Document {
     h.editor.state().document(id).unwrap()
 }
 
-/// 「編集を許可」の後の状態を作る (試験だけの近道。製品の解除は M23 の後の PR)。
+/// 「編集を許可」(`file.toggle_read_only` → 確認 `ui.confirm.read_only.invalid_bytes` の `[A]`、03 §8.3.1)。
 fn release_invalid_bytes(h: &mut Harness) {
+    assert_eq!(h.cmd("file.toggle_read_only"), CommandResult::Done);
+    assert_eq!(
+        h.overlay(),
+        "dialog",
+        "編集を許可の確認: {:?}",
+        h.messages()
+    );
+    h.text("a");
     let id = h.doc_id();
-    let d = h.editor.state_mut().document_mut(id).unwrap();
-    d.read_only.remove(ReadOnlyReason::InvalidBytes);
+    let d = h.editor.state().document(id).unwrap();
     assert!(
-        d.is_editable(),
+        d.is_editable() && d.invalid_bytes_released,
         "{:?} {:?}",
         d.read_only.iter().collect::<Vec<_>>(),
         d.load_state
@@ -383,7 +390,13 @@ fn recovered_from(bytes: &[u8], body: SwapBody) -> Harness {
     assert_eq!(s.overlay(), "dialog", "復旧の提案 {:?}", s.messages());
     s.answer(0);
     s.run_jobs();
-    assert!(s.messages().contains(&"info.swap.recovered".to_owned()));
+    // 適用の後も読み取り専用 (不正バイトを含む) なら、切替で編集を許可すると続けられると示す (03 §10.3、M23 の 6 本目)
+    let key = if doc(&s).is_editable() {
+        "info.swap.recovered"
+    } else {
+        "info.swap.applied_read_only"
+    };
+    assert!(s.messages().contains(&key.to_owned()), "{:?}", s.messages());
     s
 }
 
@@ -418,7 +431,8 @@ fn 同じ文字コードの復旧は元のバイトに戻し_読込と同じく�
     );
     assert_eq!(s.overlay(), "", "{:?}", s.messages());
     assert_eq!(s.fs.read("/w/b.txt").unwrap(), b"x\x80y");
-    // 復旧の Undo (解除した後の状態で) で、由来の文字コードと読み取り専用の理由が前に戻り、Redo で付く
+    // 復旧の Undo (「編集を許可」で解除した後) で、由来の文字コードが前に戻り、Redo で後の値になる。解除は Undo /
+    // Redo で戻らないので、Redo でも読み取り専用には戻らない (03 §7.2、§8.3.1 の「解除の持ち越し」の細目 (b))
     release_invalid_bytes(&mut s);
     s.cmd("edit.undo");
     assert_eq!(s.doc_text(), "old");
@@ -426,7 +440,7 @@ fn 同じ文字コードの復旧は元のバイトに戻し_読込と同じく�
     assert!(!invalid_bytes_reason(&s));
     s.cmd("edit.redo");
     assert_eq!(doc(&s).format.escape_encoding, Some(Encoding::Utf8));
-    assert!(invalid_bytes_reason(&s), "Redo で読み取り専用の理由も戻る");
+    assert!(!invalid_bytes_reason(&s), "解除の記録があるので付けない");
 }
 
 // データの損失のレビューの再現 (1): 復旧で Some になった文書が編集できると、外から入れた私用文字 (Shift_JIS の文書の
@@ -680,7 +694,11 @@ fn 無題の文書の由来の文字コードは違う文字コードのスワ�
         assert_eq!(doc(&s).format.encoding, Encoding::ShiftJis);
         let want = pua_escaped.then_some(Encoding::ShiftJis);
         assert_eq!(doc(&s).format.escape_encoding, want);
-        release_invalid_bytes(&mut s);
+        // 由来の文字コードが付いた (読み取り専用になった) ときだけ「編集を許可」する
+        assert_eq!(doc(&s).is_editable(), !pua_escaped);
+        if pua_escaped {
+            release_invalid_bytes(&mut s);
+        }
         s.cmd("edit.undo");
         assert_eq!(s.doc_text(), "");
         assert_eq!(
@@ -753,7 +771,7 @@ fn 再読込の_undo_redo_で由来の文字コードも書式ごと戻る() {
     accept_read_only(&mut s);
     assert_eq!(s.doc_text(), "a\u{10FF80}bc\n");
     assert_eq!(doc(&s).format.escape_encoding, Some(Encoding::Utf8));
-    // 再読込の Undo は読み取り専用では行えない (03 §7.2)。解除した後の状態を作って戻す
+    // 再読込の Undo は読み取り専用では行えない (03 §7.2)。「編集を許可」で解除してから戻す
     release_invalid_bytes(&mut s);
     s.cmd("edit.undo");
     assert_eq!(s.doc_text(), "abc\n");
@@ -761,10 +779,13 @@ fn 再読込の_undo_redo_で由来の文字コードも書式ごと戻る() {
     s.cmd("edit.redo");
     assert_eq!(s.doc_text(), "a\u{10FF80}bc\n");
     assert_eq!(doc(&s).format.escape_encoding, Some(Encoding::Utf8));
+    // 解除は Undo / Redo で戻らない (03 §7.2、§8.3.1 の「解除の持ち越し」の細目 (b)): 再読込のノードの後の理由に
+    // `InvalidBytes` があっても、解除の記録があるので付けない
     assert!(
-        doc(&s).read_only.contains(ReadOnlyReason::InvalidBytes),
-        "理由も書式と一緒に戻る"
+        !doc(&s).read_only.contains(ReadOnlyReason::InvalidBytes),
+        "解除の記録があるので Redo でも読み取り専用に戻らない"
     );
+    assert!(doc(&s).is_editable());
 }
 
 // 違う文字コードで保存した後に再読込のノードを Undo / Redo すると、文字コードと由来の文字コードが組で戻る

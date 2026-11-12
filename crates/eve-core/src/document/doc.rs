@@ -107,6 +107,11 @@ pub struct Document {
     pub read_only: ReadOnlyReasons,
     /// 読み取り専用属性 (`FileAttribute`) を `file.toggle_read_only` で解除した。上書き保存は「読み取り専用を解除して保存」の確認を経る (03 §9.6)。
     pub attribute_released: bool,
+    /// 不正バイト (`InvalidBytes`) を `file.toggle_read_only` の確認の後に解除した (「編集を許可」、03 §8.3.1。v0.4 の
+    /// M23)。同じ文書の再読込 (`file.reload`・外部変更からの再読込) では、新しい読込に不正バイトがあっても
+    /// `InvalidBytes` を付けずに解除を持ち越す。文字コードを指定して開き直す・新しく開く (どちらも文書を作り直す)・
+    /// 復旧の適用で消す。Undo / Redo の対象外 (03 §7.2)。
+    pub invalid_bytes_released: bool,
     /// 外部変更の確認で「無視」を選んだときのファイルの状態 (03 §9.5)。フォーカス復帰で同じ状態を見つけても、もう尋ねない。
     /// 保存の成功・再読込で忘れる。
     pub external_seen: Option<FileStamp>,
@@ -218,6 +223,7 @@ impl Document {
             history: UndoHistory::default(),
             read_only: ReadOnlyReasons::default(),
             attribute_released: false,
+            invalid_bytes_released: false,
             external_seen: None,
             load_state: LoadState::Ready,
             load_percent: 0,
@@ -354,6 +360,43 @@ impl Document {
     /// 編集できるか (`read_only` が空かつ `load_state == Ready`)。
     pub fn is_editable(&self) -> bool {
         self.read_only.is_empty() && self.load_state == LoadState::Ready
+    }
+
+    /// `file.toggle_read_only` で読み取り専用を解除できるか (when 条件 `doc.read_only_releasable`、07 §7.3。03 §9.6 の
+    /// 「M23 の規則」): 読込が済み、理由があり、どれも `FileAttribute` / `UserRequested` / `InvalidBytes` で、
+    /// `InvalidBytes` を含むなら `pua_escape == Enabled`。
+    pub fn read_only_releasable(&self) -> bool {
+        self.load_state == LoadState::Ready && self.read_only.releasable(self.format.pua_escape)
+    }
+
+    /// 解除を妨げる読み取り専用の理由 (表示の優先順で最初のもの)。パレットで `file.toggle_read_only` が淡色のときの
+    /// 理由と、編集の拒否のメッセージの選び分けに使う (03 §8.3.1 の「読み取り専用のときの案内」)。
+    pub fn blocking_read_only_reason(&self) -> Option<ReadOnlyReason> {
+        self.read_only.blocking(self.format.pua_escape)
+    }
+
+    /// スワップの復旧を提案・適用できる読み取り専用の状態か (03 §10.3): 読み取り専用でない、または理由が
+    /// `InvalidBytes` だけで `pua_escape == Enabled` (v0.4 の M23。不正バイトを含む文書を解除して編集した後のスワップは、
+    /// 次に開くと `InvalidBytes` で読み取り専用に戻るため)。読込の状態と dirty は呼び出し側が見る。
+    pub fn recovery_allowed(&self) -> bool {
+        self.read_only.is_empty()
+            || self
+                .read_only
+                .only_releasable_invalid_bytes(self.format.pua_escape)
+    }
+
+    /// 解除の記録 (`invalid_bytes_released`) を今の理由に当てる: 記録があり、書式を戻した後の文書がバイトの文書
+    /// (`pua_escape == Enabled` で `escape_encoding` が `Some`) なら `InvalidBytes` を外す (03 §8.3.1 の「解除の持ち越し」、
+    /// §7.2: 解除は Undo / Redo で戻らない)。再読込・復旧のノードの適用と Undo / Redo で書式を戻した後に呼ぶ。
+    /// 衝突の文書 (b) になった内容と、エスケープ文字がバイトでない文書 (違う文字コードで保存した後の復旧の Redo 等。
+    /// 理由は安全側の後の値のまま) には当てない。
+    fn apply_invalid_bytes_release(&mut self) {
+        if self.invalid_bytes_released
+            && self.format.pua_escape == PuaEscapeMode::Enabled
+            && self.format.escape_encoding.is_some()
+        {
+            self.read_only.remove(ReadOnlyReason::InvalidBytes);
+        }
     }
 
     /// Transaction を適用する (03 §6.5 の手順 1〜6・11)。
@@ -584,6 +627,8 @@ impl Document {
                 }
             }
         }
+        // 「編集を許可」は文書の状態で、再読込・復旧のノードの Undo / Redo でも戻らない (03 §7.2)
+        self.apply_invalid_bytes_release();
         debug_assert!(
             self.format.escape_encoding_ok(),
             "escape_encoding の不変条件 (03 §8.3.1): {:?} {:?} {:?}",

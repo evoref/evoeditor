@@ -307,11 +307,10 @@ fn 不正バイトを含む_utf8_の文書を_iso_2022_jp_に指定して保存�
     );
     assert_rejected(&mut s, &before, "読み取り専用");
 
-    // 読み取り専用を解除した (編集できる) 文書でも同じ
-    let id = s.doc_id();
-    let d = s.editor.state_mut().document_mut(id).unwrap();
-    d.read_only.remove(ReadOnlyReason::InvalidBytes);
-    d.read_only.remove(ReadOnlyReason::UserRequested);
+    // 「編集を許可」で解除した (編集できる) 文書でも同じ
+    assert_eq!(s.cmd("file.toggle_read_only"), CommandResult::Done);
+    assert_eq!(s.overlay(), "dialog", "編集を許可の確認");
+    s.text("a");
     assert!(
         doc(&s).is_editable(),
         "{:?}",
