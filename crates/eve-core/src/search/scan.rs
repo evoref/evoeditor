@@ -1,9 +1,9 @@
 //! 文書の走査 (一致を集める・次の一致を探す・検索のジョブ、docs/03 §12.1・§12.2)。
 //!
-//! 走査の入口は `scan_bytes` (範囲を受ける) の 1 つ (03 §12.3 の「走査の境界」)。中の経路は 2 つで、どちらも一致は
-//! 行をまたがない: チャンクごとの memmem (改行を含まないリテラル) と、行ごとに切り出して照合する `LineScan`
-//! (`scan_lines`)。複数行の正規表現 (v0.4、OQ-60) は、この入口の中に 3 つ目の経路 (`StreamScan`) として足し、
-//! 呼び出し側は変えない。
+//! 走査の入口は `scan_bytes` (範囲を受ける) の 1 つ (03 §12.3 の「走査の境界」)。置換の走査 (キャプチャが要る) も同じ
+//! 本体を通す (`scan_bytes_with_captures`)。中の経路は 2 つで、どちらも一致は行をまたがない: チャンクごとの memmem
+//! (改行を含まないリテラル) と、行ごとに切り出して照合する `LineScan` (`scan_lines`)。複数行の正規表現 (v0.4、OQ-60) は、
+//! この入口の中に 3 つ目の経路 (`StreamScan`) として足す (03 §12.3.1。M24 の (2))。
 
 use std::ops::Range;
 
@@ -22,14 +22,19 @@ const BATCH_MATCHES: usize = 256;
 
 const BATCH_MILLIS: Millis = Millis(20);
 
+/// 一致 (と、求めたときはキャプチャ) を受け取る関数。`false` を返すと走査を止める。
+pub(super) type OnMatch<'f> = dyn FnMut(ByteRange, Option<&regex::Captures<'_>>) -> bool + 'f;
+
 /// `LineScan`: 行 `lines` (半開区間) を順に走査し、一致を `f` へ渡す。`f` が `false` を返すか取り消されたら止めて `false`。
+/// `want_caps` が真で利用者の正規表現なら、一致ごとにキャプチャも渡す (置換の文字列の展開用)。
 /// 外からは `scan_bytes` を通して使う (走査の境界、03 §12.3)。
 pub(super) fn scan_lines(
     text: &dyn TextRead,
     m: &Matcher,
     lines: Range<usize>,
     cancel: &CancelToken,
-    f: &mut dyn FnMut(ByteRange) -> bool,
+    want_caps: bool,
+    f: &mut OnMatch<'_>,
 ) -> bool {
     for_each_line(text, lines, &mut |ls, line| {
         if cancel.is_cancelled() {
@@ -38,7 +43,9 @@ pub(super) fn scan_lines(
         if line.len() < m.len {
             return true;
         }
-        m.find_in_line(text, ls, line, &mut |r| !m.in_scope(r) || f(r))
+        m.find_in_line(text, ls, line, want_caps, &mut |r, caps| {
+            !m.in_scope(r) || f(r, caps)
+        })
     })
 }
 
@@ -51,6 +58,29 @@ pub fn scan_bytes(
     cancel: &CancelToken,
     f: &mut dyn FnMut(ByteRange) -> bool,
 ) -> bool {
+    scan(text, m, range, cancel, false, &mut |r, _| f(r))
+}
+
+/// `scan_bytes` と同じ入口で、利用者の正規表現なら一致ごとのキャプチャも渡す (置換、03 §12.5)。
+pub(super) fn scan_bytes_with_captures(
+    text: &dyn TextRead,
+    m: &Matcher,
+    range: ByteRange,
+    cancel: &CancelToken,
+    f: &mut OnMatch<'_>,
+) -> bool {
+    scan(text, m, range, cancel, true, f)
+}
+
+/// 走査の入口の本体 (`scan_bytes` と `scan_bytes_with_captures`)。
+fn scan(
+    text: &dyn TextRead,
+    m: &Matcher,
+    range: ByteRange,
+    cancel: &CancelToken,
+    want_caps: bool,
+    f: &mut OnMatch<'_>,
+) -> bool {
     if !m.chunked {
         let first = text.byte_to_line(range.start).0;
         let last = if range.end.0 >= text.len_bytes() {
@@ -58,10 +88,10 @@ pub fn scan_bytes(
         } else {
             text.byte_to_line(range.end).0
         };
-        return scan_lines(text, m, first..last, cancel, f);
+        return scan_lines(text, m, first..last, cancel, want_caps, f);
     }
-    // 範囲外の一致は渡さない (走査を止めずに読み飛ばす)
-    let f = &mut |r: ByteRange| !m.in_scope(r) || f(r);
+    // 範囲外の一致は渡さない (走査を止めずに読み飛ばす)。memmem の経路にキャプチャは無い
+    let f = &mut |r: ByteRange| !m.in_scope(r) || f(r, None);
     let n = m.len;
     // 前のチャンクの末尾のうち、まだ一致に使っていない最大 n-1 バイト (畳み込み済み)
     let mut carry: Vec<u8> = Vec::new();

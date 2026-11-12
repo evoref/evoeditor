@@ -16,7 +16,7 @@ use crate::document::{Origin, Transaction, UndoGroupHint};
 use crate::jobs::cancel::CancelToken;
 use crate::jobs::{JobKind, JobResult};
 use crate::search::{
-    Case, QueryError, SearchQuery, build_replace_all, replacement_for, scan_bytes,
+    Case, Prepared, QueryError, SearchQuery, build_replace_all, replacement_for, scan_bytes,
     unescape_replacement,
 };
 use crate::time::Tick;
@@ -90,6 +90,8 @@ pub(crate) struct SearchBarState {
     pub anchor: ByteOff,
     /// 入力で見つかった、まだ選択していない現在の一致。
     pub current: Option<ByteRange>,
+    /// 入力中の現在の一致を、正規表現の照合器ができて (`bg` のジョブの最初の結果が届いて) から求める (03 §12.3.1)。
+    pub current_pending: bool,
     /// 置換欄 (開いているとき。テキストとカーソル)。
     pub replace: Option<(String, usize)>,
     pub focus: BarFocus,
@@ -140,6 +142,7 @@ impl EditorState {
             error: None,
             anchor,
             current: None,
+            current_pending: false,
             replace: None,
             focus: BarFocus::Search,
             all_selected: false,
@@ -316,9 +319,11 @@ impl EditorState {
         };
         let query = bar.query();
         let anchor = bar.anchor;
-        let error = query.compile().err();
+        // メインスレッドで行うのは構文の解析と書き換えまで。`regex` のコンパイルは検索のジョブで行う (03 §12.3.1)
+        let error = query.known_error();
         if let Some(bar) = &mut self.find.search_bar {
             bar.error = error.clone();
+            bar.current_pending = false;
         }
         if error.is_some() {
             // 前の検索の結果を残さない
@@ -329,9 +334,11 @@ impl EditorState {
             self.mark_dirty_render();
             return;
         }
+        // memmem の経路の照合器はここで作る (ジョブと同じ覚えを使う)。正規表現は `Pending` のまま
+        let prepared = query.prepared();
         self.search_start(query.clone());
-        let found = match (self.active_document(), query.pattern().is_empty()) {
-            (Some(doc), false) => match self.sync_find(doc, &query, anchor, true) {
+        let found = match (self.active_document(), &prepared) {
+            (Some(doc), Prepared::Ready(_)) => match self.sync_find(doc, &query, anchor, true) {
                 Found::Hit(m, _) => Some(m),
                 _ => None,
             },
@@ -339,6 +346,65 @@ impl EditorState {
         };
         if let Some(bar) = &mut self.find.search_bar {
             bar.current = found;
+            bar.current_pending = matches!(prepared, Prepared::Pending);
+        }
+        if let Some(m) = found {
+            self.reveal(m.start);
+        }
+        self.mark_dirty_render();
+    }
+
+    /// 検索のジョブ (全件・単発・すべて置換) の結果が届いた: ジョブのコンパイルで分かった誤り (`TooLarge`) があれば、
+    /// 構文の誤りと同じく検索バーに示して検索をやめる (03 §12.3.1 の「メインスレッドでのコンパイル」)。入力中の現在の
+    /// 一致を待っているか (`current_pending`) に依らない (`Enter` で単発のジョブに移った後に届いても示す)。示したら `true`。
+    pub(crate) fn bar_show_compile_error(&mut self) -> bool {
+        let Some(bar) = &self.find.search_bar else {
+            return false;
+        };
+        if bar.error.is_some() {
+            return false;
+        }
+        let Some(e) = bar.query().known_error() else {
+            return false;
+        };
+        if let Some(bar) = &mut self.find.search_bar {
+            bar.error = Some(e);
+            bar.current = None;
+            bar.current_pending = false;
+        }
+        self.search_start(SearchQuery::literal(""));
+        self.mark_dirty_render();
+        true
+    }
+
+    /// 検索のジョブの結果が届いた: 正規表現の照合器ができていれば、入力中の現在の一致を求めて強調する (起点から先の
+    /// 最初の一致。照合器をメインスレッドで作らないので、入力の時点では求めない、03 §12.3.1)。コンパイルで分かった誤り
+    /// (`TooLarge`) は、構文の誤りと同じく検索バーに示して検索をやめる (`bar_show_compile_error`)。
+    pub(crate) fn bar_search_progress(&mut self) {
+        if self.bar_show_compile_error() {
+            return;
+        }
+        let Some(bar) = &self.find.search_bar else {
+            return;
+        };
+        if !bar.current_pending {
+            return;
+        }
+        let (query, anchor) = (bar.query(), bar.anchor);
+        let found = match query.prepared() {
+            Prepared::Pending => return,
+            Prepared::Nothing => None,
+            Prepared::Ready(_) => match self.active_document() {
+                Some(doc) => match self.sync_find(doc, &query, anchor, true) {
+                    Found::Hit(m, _) => Some(m),
+                    _ => None,
+                },
+                None => None,
+            },
+        };
+        if let Some(bar) = &mut self.find.search_bar {
+            bar.current = found;
+            bar.current_pending = false;
         }
         if let Some(m) = found {
             self.reveal(m.start);
@@ -371,6 +437,13 @@ impl EditorState {
             self.search_replace_all();
             return SearchStep::NoQuery;
         }
+        // 移動を始めたら、照合器を待っていた入力中の現在の一致は求めない (移動は単発のジョブが担う)
+        if let Some(bar) = &mut self.find.search_bar {
+            bar.current_pending = false;
+        }
+        let Some(bar) = &self.find.search_bar else {
+            return SearchStep::NoQuery;
+        };
         if forward
             && let Some(cur) = bar.current
             && let Some(view) = self.focused_view()
@@ -518,7 +591,10 @@ impl EditorState {
         {
             return Some(v.clone());
         }
-        let m = key.4.matcher()?;
+        // 正規表現の照合器は `bg` のジョブが作る。まだ無ければ強調しない (覚えにも入れない、03 §12.3.1)
+        let Prepared::Ready(m) = key.4.prepared() else {
+            return None;
+        };
         let found: std::rc::Rc<[(usize, usize)]> =
             self.scan_visible(doc, &m, top_line, rows).into();
         *bar.memo.visible.borrow_mut() = Some((key, found.clone()));
@@ -579,8 +655,8 @@ impl EditorState {
     /// 照合器の無い検索語で置換しようとした: 検索語が空なら `info.search.replace_empty_query`、コンパイルできなければ
     /// 検索バーに出ている誤りと同じ内容をメッセージ行に出す (04 §8.4。何も置き換えない)。
     fn notify_unusable_query(&mut self, query: &SearchQuery) {
-        match query.compile() {
-            Err(e) => match invalid_regex_reason(&e) {
+        match query.known_error() {
+            Some(e) => match invalid_regex_reason(&e) {
                 Some(reason) => self.show_message(
                     MessageLevel::Warn,
                     keys::MSG_SEARCH_REPLACE_INVALID_REGEX,
@@ -592,7 +668,7 @@ impl EditorState {
                     &[],
                 ),
             },
-            Ok(_) => self.show_message(
+            None => self.show_message(
                 MessageLevel::Info,
                 keys::INFO_SEARCH_REPLACE_EMPTY_QUERY,
                 &[],
@@ -642,7 +718,8 @@ impl EditorState {
         };
         // 置換の文字列の文字どおりの部分は外からの文字列 (挿入の入口 (3)、03 §8.3.1)。`$1` 等が運ぶ文字は同じ文書のもの
         let (replacement, pua) = replacement_text(doc, &replacement);
-        if query.matcher().is_none() {
+        let prepared = query.prepared();
+        if matches!(prepared, Prepared::Nothing) {
             self.notify_unusable_query(&query);
             return CommandResult::Done;
         }
@@ -656,7 +733,9 @@ impl EditorState {
             return CommandResult::Done;
         }
         let revision = doc.revision();
-        if doc.text().len_bytes() <= REPLACE_SYNC_BYTES {
+        // 小さい文書はメインスレッドで作る。正規表現の照合器がまだ無い (`bg` のジョブがコンパイルしていない) ときは、
+        // メインスレッドでコンパイルせずにジョブで作る (03 §12.3.1)
+        if doc.text().len_bytes() <= REPLACE_SYNC_BYTES && matches!(prepared, Prepared::Ready(_)) {
             let built = build_replace_all(doc.text(), &query, &replacement, &CancelToken::new());
             self.find.replace_all_pua = pua;
             if let Some((changes, count)) = built {
@@ -730,9 +809,15 @@ impl EditorState {
             self.notify_read_only();
             return CommandResult::Done;
         }
-        if query.matcher().is_none() {
-            self.notify_unusable_query(&query);
-            return CommandResult::Done;
+        match query.prepared() {
+            Prepared::Ready(_) => {}
+            Prepared::Nothing => {
+                self.notify_unusable_query(&query);
+                return CommandResult::Done;
+            }
+            // 正規表現の照合器を `bg` のジョブがまだ作っていない: 置き換えず何もしない (件数の位置の `…` が待ちを示す。
+            // メインスレッドでコンパイルしない、03 §12.3.1)
+            Prepared::Pending => return CommandResult::Done,
         }
         let replacement = if query.is_regex() {
             unescape_replacement(&replacement, doc.format.default_eol.as_str())
@@ -805,6 +890,15 @@ impl EditorState {
             } else {
                 self.show_message(MessageLevel::Warn, keys::MSG_SEARCH_REPLACE_STALE, &[]);
             }
+            return;
+        }
+        // ジョブのコンパイルで誤り (`TooLarge`) が分かった: メッセージ行と検索バーに同じ理由を示す (何も置き換えない)
+        let query = self.find.search_bar.as_ref().map(SearchBarState::query);
+        if let Some(q) = query
+            && q.known_error().is_some()
+        {
+            self.notify_unusable_query(&q);
+            self.bar_show_compile_error();
         }
     }
 
