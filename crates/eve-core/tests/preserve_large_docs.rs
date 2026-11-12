@@ -249,7 +249,10 @@ fn scenario(enc: Encoding, seed: u64, target: usize) -> bool {
     // (仕様どおり)。止まらなかったときだけ比べる
     let edited_saved = match save_as(&mut h, "/w/c.txt") {
         Some(got) => {
-            assert!(decode(enc, &got) == text, "{enc:?} {seed:#x}: 保存の復号が本文と違う");
+            assert!(
+                decode(enc, &got) == text,
+                "{enc:?} {seed:#x}: 保存の復号が本文と違う"
+            );
             true
         }
         None => false,
@@ -264,7 +267,10 @@ fn scenario(enc: Encoding, seed: u64, target: usize) -> bool {
         h.cmd("edit.undo");
     }
     let got = save_as(&mut h, "/w/d.txt").expect("全部 Undo の保存");
-    assert!(got == bytes, "{enc:?} {seed:#x}: 全部 Undo の保存が元と違う");
+    assert!(
+        got == bytes,
+        "{enc:?} {seed:#x}: 全部 Undo の保存が元と違う"
+    );
     edited_saved
 }
 
