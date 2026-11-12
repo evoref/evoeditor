@@ -426,7 +426,10 @@ impl EditorState {
                     ConfirmAsk::Binary | ConfirmAsk::UnsupportedBom { .. } => {
                         opts.pending.insert(crate::document::ReadOnlyReason::Binary);
                     }
-                    _ => {}
+                    // 不正バイトの比率の確認の理由は `InvalidBytes` (ISO-2022-JP なら `StatefulEncodingWithInvalidBytes`) だけ
+                    // (03 §9.2 の表)。読込の結果 (`Complete.detected`) が付けるので、ここでは足さない (再判定 (03 §8.2.1) で
+                    // 不正バイトが 0 になった本文に理由を残さないため)。`UserRequested` も付けない (`--readonly` だけの理由)
+                    ConfirmAsk::ManyInvalidBytes { .. } => {}
                 }
                 self.respawn_open(ask, opts)
             }
