@@ -243,6 +243,9 @@ pub enum JobResult {
     SearchBatch {
         /// 今回の一致 (バイト範囲、走査した順)。
         matches: Vec<eve_text::ByteRange>,
+        /// 起点 (`Search` の `from`) 以降に始まる最初の一致。行をまたぐ検索の規則 (全件を文書の先頭から走査する、03 §12.3.1)
+        /// で、見つけたときに保持の上限に依らず 1 回だけ送る。それ以外は `None`。
+        first_after: Option<eve_text::ByteRange>,
     },
     /// 検索の終わり。`total` は数えた件数、`truncated` は保持の上限を超えた、`count_limited` は数える上限で打ち切った。
     SearchDone {
@@ -252,6 +255,21 @@ pub enum JobResult {
         count_limited: bool,
         /// 保持の上限 (`max_matches`) を超えた。
         truncated: bool,
+        /// 再開の位置 (正本の走査がそこから続く位置、1 MiB ごと、昇順。行をまたぐ検索の規則のときだけ。03 §12.3.1)。
+        resume: Vec<eve_text::ByteOff>,
+        /// 探さなかった・重すぎて打ち切った理由 (03 §12.3.1)。あれば件数は 0 で、それまでに届いた一致は捨てる。
+        limit: Option<crate::search::ScanLimit>,
+    },
+    /// 1 件置換の対象の確かめ (`ReplaceOne`) の結果。`insert` は置換文字列 (対象が一致でなければ `None`)。
+    ReplaceOneDone {
+        /// 置換文字列。`range` が一致でなければ `None`。
+        insert: Option<String>,
+    },
+    /// 単発の検索・すべて置換・1 件置換の確かめが、探さなかった・重すぎて打ち切った (03 §12.3.1 の「探さない場合」と「最悪の入力の上限」)。
+    /// 何も移らず、何も置き換えない。
+    SearchLimited {
+        /// 理由。
+        limit: crate::search::ScanLimit,
     },
     /// ジョブの失敗 (キャンセルを含む)。
     Failed {

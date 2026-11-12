@@ -94,12 +94,26 @@ pub fn run_job(
             query,
             from,
             forward,
-        } => match crate::search::find_next(snapshot, query, *from, *forward, cancel) {
-            Some(found) => JobResult::FindNextDone { found },
-            None => JobResult::Failed {
-                err: JobError::Cancelled,
-            },
-        },
+            resume,
+        } => {
+            let p = crate::search::FindJob {
+                snapshot,
+                query,
+                from: *from,
+                forward: *forward,
+                resume,
+            };
+            // 時計を渡す (核の縮めと処理の速さの下限、03 §12.3.1)
+            match crate::search::find_next(&p, Some(&*ports.clock), cancel) {
+                Ok(found) => JobResult::FindNextDone { found },
+                Err(e) => match e.limit() {
+                    Some(limit) => JobResult::SearchLimited { limit },
+                    None => JobResult::Failed {
+                        err: JobError::Cancelled,
+                    },
+                },
+            }
+        }
         JobKind::ConvertEol { snapshot, eol } => {
             match crate::document::eol::build_eol_conversion(snapshot, *eol, cancel) {
                 Some(changes) => JobResult::ConvertEolDone { changes },
@@ -112,10 +126,45 @@ pub fn run_job(
             snapshot,
             query,
             replacement,
-        } => match crate::search::build_replace_all(snapshot, query, replacement, cancel) {
-            Some((changes, count)) => JobResult::ReplaceAllDone { changes, count },
-            None => JobResult::Failed {
+        } => match crate::search::build_replace_all_in(
+            snapshot,
+            query,
+            replacement,
+            Some(&*ports.clock),
+            cancel,
+        ) {
+            Ok(Some((changes, count))) => JobResult::ReplaceAllDone { changes, count },
+            Ok(None) => JobResult::Failed {
                 err: JobError::Cancelled,
+            },
+            Err(e) => match e.limit() {
+                Some(limit) => JobResult::SearchLimited { limit },
+                None => JobResult::Failed {
+                    err: JobError::Cancelled,
+                },
+            },
+        },
+        JobKind::ReplaceOne {
+            snapshot,
+            query,
+            from,
+            range,
+            replacement,
+        } => match crate::search::replace_one_job(
+            snapshot,
+            query,
+            *from,
+            *range,
+            replacement,
+            Some(&*ports.clock),
+            cancel,
+        ) {
+            Ok(insert) => JobResult::ReplaceOneDone { insert },
+            Err(e) => match e.limit() {
+                Some(limit) => JobResult::SearchLimited { limit },
+                None => JobResult::Failed {
+                    err: JobError::Cancelled,
+                },
             },
         },
         JobKind::Search {

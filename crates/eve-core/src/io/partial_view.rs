@@ -521,6 +521,7 @@ fn pending_doc(state: &EditorState, p: &Pending) -> Option<DocumentId> {
         | Pending::ExternalCheck { doc, .. }
         | Pending::FindNext { doc, .. }
         | Pending::ReplaceAll { doc, .. }
+        | Pending::ReplaceOne { doc, .. }
         | Pending::Swap { doc }
         | Pending::SwapDiscard { doc }
         | Pending::SwapRead { doc, .. }

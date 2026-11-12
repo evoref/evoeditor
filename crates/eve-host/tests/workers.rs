@@ -263,7 +263,7 @@ fn 検索は_bg_ワーカーで走り_途中経過と終わりが届く() {
         while let Ok(HostMsg::Job(r)) = rx.try_recv() {
             let JobOutput { job: j, body } = *r;
             match body {
-                JobResult::SearchBatch { matches } if j == job => found += matches.len(),
+                JobResult::SearchBatch { matches, .. } if j == job => found += matches.len(),
                 JobResult::SearchDone { total: t, .. } if j == job => total = Some(t),
                 _ => {}
             }
@@ -271,4 +271,167 @@ fn 検索は_bg_ワーカーで走り_途中経過と終わりが届く() {
         total.is_some()
     });
     assert_eq!((found, total), (600, Some(600)));
+}
+
+#[test]
+fn 単発の検索とすべて置換は_bg_で走り_io_の保存や読込を待たない() {
+    // io のワーカーを止めておく (GateFs の metadata が release まで戻らない)。単発の検索 (`FindNext`) とすべて置換
+    // (`ReplaceAll`) は bg で走るので、その間に結果が届く (02 §9.3、v0.4 の M24 で io から移した)
+    let clock = Arc::new(SystemClock::new());
+    let mem = Arc::new(MemFs::new(clock.clone()));
+    mem.add_dir("/w");
+    mem.add_file("/w/a.txt", b"x");
+    let (etx, erx) = std::sync::mpsc::channel();
+    let (rtx, rrx) = std::sync::mpsc::channel();
+    let fs = Arc::new(GateFs {
+        inner: mem,
+        entered: etx,
+        release: std::sync::Mutex::new(rrx),
+    });
+    let jp = JobPorts {
+        fs,
+        clock,
+        paths: Arc::new(FixedPaths::default()),
+    };
+    let (tx, rx) = channel();
+    let sp = ThreadJobSpawner::new(jp, tx).unwrap();
+    let blocked = sp.spawn(
+        None,
+        Revision(0),
+        JobKind::Metadata {
+            path: FsPath::from("/w/a.txt"),
+            purpose: MetaPurpose::ExternalCheck,
+        },
+    );
+    erx.recv_timeout(Duration::from_secs(10)).unwrap();
+    let snapshot = eve_text::Text::from("ab\nab\n").snapshot();
+    let find = sp.spawn(
+        None,
+        Revision(0),
+        JobKind::FindNext {
+            snapshot: snapshot.clone(),
+            query: eve_core::SearchQuery::literal("ab"),
+            from: eve_text::ByteOff(1),
+            forward: true,
+            resume: Vec::new(),
+        },
+    );
+    let replace = sp.spawn(
+        None,
+        Revision(0),
+        JobKind::ReplaceAll {
+            snapshot,
+            query: eve_core::SearchQuery::literal("ab"),
+            replacement: "x".to_owned(),
+        },
+    );
+    let mut got = [recv_job(&rx), recv_job(&rx)];
+    got.sort_by_key(|r| r.job.0);
+    assert!(
+        matches!(&got[0], JobOutput { job, body: JobResult::FindNextDone { found: Some(_) } } if *job == find),
+        "{:?}",
+        got[0]
+    );
+    assert!(
+        matches!(&got[1], JobOutput { job, body: JobResult::ReplaceAllDone { count: 2, .. } } if *job == replace),
+        "{:?}",
+        got[1]
+    );
+    rtx.send(()).unwrap();
+    let r = recv_job(&rx);
+    assert_eq!(r.job, blocked, "止めていた io のジョブは後で終わる");
+}
+
+/// 全件の走査 (100 MB、大小を区別しない `quick`。行ごとの経路) の途中で投げた単発の検索とすべて置換が、結果を返すまでの時間
+/// (計測用、03 §12.3.1 の「`bg` レーンの順序と取り消し」)。`bg` は先着順なので、そのまま投げると全件の走査の後ろで待つ
+/// (fifo)。core は、走っている全件ジョブを取り消してから投げ、後ろに全件ジョブを投げ直す (cancel)。
+/// `cargo test -p eve-host --release --test workers -- --ignored --nocapture 計測`
+#[test]
+#[ignore = "計測用"]
+#[allow(clippy::print_stdout)]
+fn 計測_全件の走査の途中の単発の検索とすべて置換の待ち() {
+    let line = "0123456789 the quick brown fox jumps over the lazy dog 0123456789\n";
+    let n = 100 * 1024 * 1024 / line.len();
+    let mut doc = String::with_capacity(n * line.len() + 16);
+    for i in 0..n {
+        if i == (1 << 20) / line.len() {
+            doc.push_str("MARK\n");
+        }
+        doc.push_str(line);
+    }
+    let snapshot = eve_text::Text::from(doc.as_str()).snapshot();
+    let clock = Arc::new(SystemClock::new());
+    let jp = JobPorts {
+        fs: Arc::new(MemFs::new(clock.clone())),
+        clock,
+        paths: Arc::new(FixedPaths::default()),
+    };
+    let (tx, rx) = channel();
+    let sp = ThreadJobSpawner::new(jp, tx).unwrap();
+    let search = || JobKind::Search {
+        snapshot: snapshot.clone(),
+        query: eve_core::SearchQuery::literal("QUICK").with_case(eve_core::Case::Insensitive),
+        from: eve_text::ByteOff(0),
+        max_matches: 10_000,
+        count_limit: 1_000_000,
+    };
+    let find = || JobKind::FindNext {
+        snapshot: snapshot.clone(),
+        query: eve_core::SearchQuery::literal("MARK").with_regex(true),
+        from: eve_text::ByteOff(0),
+        forward: true,
+        resume: Vec::new(),
+    };
+    let replace = || JobKind::ReplaceAll {
+        snapshot: snapshot.clone(),
+        query: eve_core::SearchQuery::literal("MARK"),
+        replacement: "X".to_owned(),
+    };
+    // 全件の走査だけの時間
+    let t = Instant::now();
+    let s = sp.spawn(None, Revision(0), search());
+    loop {
+        let r = recv_job(&rx);
+        if r.job == s && !matches!(r.body, JobResult::SearchBatch { .. }) {
+            break;
+        }
+    }
+    println!("全件の走査だけ: {:.1} ms", t.elapsed().as_secs_f64() * 1e3);
+    for (name, kind) in [("単発の検索", 0), ("すべて置換", 1)] {
+        for cancel in [false, true] {
+            let mut times = Vec::new();
+            for _ in 0..3 {
+                let s = sp.spawn(None, Revision(0), search());
+                thread::sleep(Duration::from_millis(20));
+                if cancel {
+                    sp.cancel(s);
+                }
+                let t = Instant::now();
+                let j = sp.spawn(
+                    None,
+                    Revision(0),
+                    if kind == 0 { find() } else { replace() },
+                );
+                let again = cancel.then(|| sp.spawn(None, Revision(0), search()));
+                let mut waited = None;
+                let mut open: Vec<eve_view::JobId> = vec![s];
+                open.extend(again);
+                while waited.is_none() || !open.is_empty() {
+                    let r = recv_job(&rx);
+                    if r.job == j {
+                        waited = Some(t.elapsed());
+                    } else if !matches!(r.body, JobResult::SearchBatch { .. }) {
+                        open.retain(|x| *x != r.job);
+                    }
+                }
+                times.push(waited.unwrap());
+            }
+            times.sort();
+            println!(
+                "{name} ({}): {:.1} ms (3 回の中央値)",
+                if cancel { "cancel" } else { "fifo" },
+                times[1].as_secs_f64() * 1e3
+            );
+        }
+    }
 }

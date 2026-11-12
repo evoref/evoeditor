@@ -123,6 +123,7 @@ pub(crate) const MSG_SAVE_RECOVERY_FAILED: &str = "msg.save.recovery_failed";
 pub(crate) const MSG_SAVE_TMP_NOT_REMOVED: &str = "msg.save.tmp_not_removed";
 pub(crate) const MSG_SAVE_VERIFY_FAILED: &str = "msg.save.verify_failed";
 pub(crate) const MSG_SAVE_AS_SAME_FILE_READ_ONLY: &str = "msg.save_as.same_file_read_only";
+pub(crate) const MSG_SEARCH_INVALID_REGEX: &str = "msg.search.invalid_regex";
 pub(crate) const MSG_SEARCH_INVALID_REGEX_TEXT: &str = "msg.search.invalid_regex.text";
 pub(crate) const MSG_SEARCH_NEWLINE_UNSUPPORTED_TEXT: &str = "msg.search.newline_unsupported.text";
 pub(crate) const MSG_SEARCH_REPLACE_INVALID_REGEX: &str = "msg.search.replace_invalid_regex";
@@ -237,7 +238,7 @@ pub(crate) const UI_TOO_SMALL: &str = "ui.too_small";
 
 /// すべての定数 (キーの順。試験に使う)。
 #[cfg(test)]
-const ALL: [&str; 216] = [
+const ALL: [&str; 217] = [
     HINT_UI_CANCEL,
     INFO_APP_RELEASE_SUMMARY,
     INFO_APP_UPDATED,
@@ -355,6 +356,7 @@ const ALL: [&str; 216] = [
     MSG_SAVE_TMP_NOT_REMOVED,
     MSG_SAVE_VERIFY_FAILED,
     MSG_SAVE_AS_SAME_FILE_READ_ONLY,
+    MSG_SEARCH_INVALID_REGEX,
     MSG_SEARCH_INVALID_REGEX_TEXT,
     MSG_SEARCH_NEWLINE_UNSUPPORTED_TEXT,
     MSG_SEARCH_REPLACE_INVALID_REGEX,

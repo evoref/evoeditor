@@ -286,7 +286,7 @@ title = "保守性・品質・開発基盤 (NFR-7xx)"
 id = "01 §4"
 file = "docs/01-requirements.md"
 line = 392
-end = 545
+end = 546
 title = "MVP (v0.1) の範囲と段階リリース"
 
 [[section]]
@@ -328,49 +328,49 @@ title = "データ損失防止機構の段階化"
 id = "01 §4.6"
 file = "docs/01-requirements.md"
 line = 498
-end = 545
+end = 546
 title = "v0.1 の既知の制約 (リリースノートとヘルプに明記する)"
 
 [[section]]
 id = "01 §5"
 file = "docs/01-requirements.md"
-line = 546
-end = 702
+line = 547
+end = 703
 title = "受入基準 (Must 要件)"
 
 [[section]]
 id = "01 §5.1"
 file = "docs/01-requirements.md"
-line = 550
-end = 571
+line = 551
+end = 572
 title = "v0.1: ファイル・文書管理"
 
 [[section]]
 id = "01 §5.2"
 file = "docs/01-requirements.md"
-line = 572
-end = 591
+line = 573
+end = 592
 title = "v0.1: 編集・移動・検索"
 
 [[section]]
 id = "01 §5.3"
 file = "docs/01-requirements.md"
-line = 592
-end = 616
+line = 593
+end = 617
 title = "v0.1: 表示・入力・設定"
 
 [[section]]
 id = "01 §5.4"
 file = "docs/01-requirements.md"
-line = 617
-end = 659
+line = 618
+end = 660
 title = "v0.1: 非機能"
 
 [[section]]
 id = "01 §5.5"
 file = "docs/01-requirements.md"
-line = 660
-end = 702
+line = 661
+end = 703
 title = "v0.2 以降 (概要。各版の着手前に詳細化)"
 
 [[section]]
@@ -608,7 +608,7 @@ title = "境界型の契約と凍結段階"
 id = "02 §9"
 file = "docs/02-architecture.md"
 line = 1241
-end = 1793
+end = 1807
 title = "イベントループとスレッドモデル"
 
 [[section]]
@@ -629,259 +629,259 @@ title = "メインループ (擬似コード)"
 id = "02 §9.3"
 file = "docs/02-architecture.md"
 line = 1513
-end = 1743
+end = 1757
 title = "ジョブとキャンセル"
 
 [[section]]
 id = "02 §9.4"
 file = "docs/02-architecture.md"
-line = 1744
-end = 1750
+line = 1758
+end = 1764
 title = "async 境界"
 
 [[section]]
 id = "02 §9.5"
 file = "docs/02-architecture.md"
-line = 1751
-end = 1767
+line = 1765
+end = 1781
 title = "起動シーケンス (NFR-101 対応)"
 
 [[section]]
 id = "02 §9.6"
 file = "docs/02-architecture.md"
-line = 1768
-end = 1793
+line = 1782
+end = 1807
 title = "終了・シグナル"
 
 [[section]]
 id = "02 §10"
 file = "docs/02-architecture.md"
-line = 1794
-end = 2001
+line = 1808
+end = 2015
 title = "拡張点 (Extension Points) とプラグイン方針"
 
 [[section]]
 id = "02 §10.1"
 file = "docs/02-architecture.md"
-line = 1796
-end = 1902
+line = 1810
+end = 1916
 title = "MVP 時点で用意する拡張点 (内部 API)"
 
 [[section]]
 id = "02 §10.2"
 file = "docs/02-architecture.md"
-line = 1903
-end = 1961
+line = 1917
+end = 1975
 title = "AI 連携のアーキテクチャ上の位置づけ ([ADR-0013](10-decisions.md#adr-0013-ai-連携の基本方針))"
 
 [[section]]
 id = "02 §10.2.1"
 file = "docs/02-architecture.md"
-line = 1931
-end = 1961
+line = 1945
+end = 1975
 title = "Proposal モデル (正本)"
 
 [[section]]
 id = "02 §10.3"
 file = "docs/02-architecture.md"
-line = 1962
-end = 1967
+line = 1976
+end = 1981
 title = "外部プラグイン機構 ([ADR-0014](10-decisions.md#adr-0014-拡張プラグイン機構の方針))"
 
 [[section]]
 id = "02 §10.4"
 file = "docs/02-architecture.md"
-line = 1968
-end = 1985
+line = 1982
+end = 1999
 title = "権限モデル (AI・プラグイン共通、骨子)"
 
 [[section]]
 id = "02 §10.5"
 file = "docs/02-architecture.md"
-line = 1986
-end = 2001
+line = 2000
+end = 2015
 title = "駆動 API (Stage D)"
 
 [[section]]
 id = "02 §11"
 file = "docs/02-architecture.md"
-line = 2002
-end = 2110
+line = 2016
+end = 2124
 title = "エラー処理・パニック・ログ"
 
 [[section]]
 id = "02 §11.1"
 file = "docs/02-architecture.md"
-line = 2004
-end = 2014
+line = 2018
+end = 2028
 title = "エラー処理方針 ([ADR-0012](10-decisions.md#adr-0012-エラー処理とログ))"
 
 [[section]]
 id = "02 §11.2"
 file = "docs/02-architecture.md"
-line = 2015
-end = 2100
+line = 2029
+end = 2114
 title = "パニック時の扱い (NFR-302)"
 
 [[section]]
 id = "02 §11.2.1"
 file = "docs/02-architecture.md"
-line = 2023
-end = 2095
+line = 2037
+end = 2109
 title = "緊急退避の方式 (正本、ADR-0023)"
 
 [[section]]
 id = "02 §11.2.2"
 file = "docs/02-architecture.md"
-line = 2096
-end = 2100
+line = 2110
+end = 2114
 title = "メモリ不足とスタックオーバーフロー"
 
 [[section]]
 id = "02 §11.3"
 file = "docs/02-architecture.md"
-line = 2101
-end = 2110
+line = 2115
+end = 2124
 title = "ログ"
 
 [[section]]
 id = "02 §12"
 file = "docs/02-architecture.md"
-line = 2111
-end = 2157
+line = 2125
+end = 2171
 title = "後続文書との責務境界"
 
 [[section]]
 id = "02 §12.1"
 file = "docs/02-architecture.md"
-line = 2113
-end = 2126
+line = 2127
+end = 2140
 title = "文書と crate の対応"
 
 [[section]]
 id = "02 §12.2"
 file = "docs/02-architecture.md"
-line = 2127
-end = 2153
+line = 2141
+end = 2167
 title = "境界をまたぐ型の所有者"
 
 [[section]]
 id = "02 §12.3"
 file = "docs/02-architecture.md"
-line = 2154
-end = 2157
+line = 2168
+end = 2171
 title = "正本マップ (本書が正本の概念)"
 
 [[section]]
 id = "02 §13"
 file = "docs/02-architecture.md"
-line = 2158
-end = 2261
+line = 2172
+end = 2275
 title = "主要クレート選定"
 
 [[section]]
 id = "02 §13.0"
 file = "docs/02-architecture.md"
-line = 2162
-end = 2165
+line = 2176
+end = 2179
 title = "依存追加の評価基準"
 
 [[section]]
 id = "02 §13.1"
 file = "docs/02-architecture.md"
-line = 2166
-end = 2172
+line = 2180
+end = 2186
 title = "テキストバッファ"
 
 [[section]]
 id = "02 §13.2"
 file = "docs/02-architecture.md"
-line = 2173
-end = 2181
+line = 2187
+end = 2195
 title = "端末 / TUI"
 
 [[section]]
 id = "02 §13.3"
 file = "docs/02-architecture.md"
-line = 2182
-end = 2189
+line = 2196
+end = 2203
 title = "Unicode"
 
 [[section]]
 id = "02 §13.4"
 file = "docs/02-architecture.md"
-line = 2190
-end = 2218
+line = 2204
+end = 2232
 title = "文字コード"
 
 [[section]]
 id = "02 §13.5"
 file = "docs/02-architecture.md"
-line = 2219
-end = 2228
+line = 2233
+end = 2242
 title = "検索"
 
 [[section]]
 id = "02 §13.6"
 file = "docs/02-architecture.md"
-line = 2229
-end = 2237
+line = 2243
+end = 2251
 title = "並行処理"
 
 [[section]]
 id = "02 §13.7"
 file = "docs/02-architecture.md"
-line = 2238
-end = 2261
+line = 2252
+end = 2275
 title = "その他"
 
 [[section]]
 id = "02 §14"
 file = "docs/02-architecture.md"
-line = 2262
-end = 2297
+line = 2276
+end = 2311
 title = "性能設計の要点"
 
 [[section]]
 id = "02 §14.1"
 file = "docs/02-architecture.md"
-line = 2277
-end = 2297
+line = 2291
+end = 2311
 title = "メモリと安定性の規則"
 
 [[section]]
 id = "02 §15"
 file = "docs/02-architecture.md"
-line = 2298
-end = 2314
+line = 2312
+end = 2328
 title = "セキュリティ境界"
 
 [[section]]
 id = "02 §16"
 file = "docs/02-architecture.md"
-line = 2315
-end = 2334
+line = 2329
+end = 2348
 title = "frontend 境界チェックリスト"
 
 [[section]]
 id = "02 §17"
 file = "docs/02-architecture.md"
-line = 2335
-end = 2398
+line = 2349
+end = 2412
 title = "AI 連携に適した開発構成"
 
 [[section]]
 id = "02 §17.1"
 file = "docs/02-architecture.md"
-line = 2339
-end = 2383
+line = 2353
+end = 2397
 title = "リポジトリ構成 (案)"
 
 [[section]]
 id = "02 §17.2"
 file = "docs/02-architecture.md"
-line = 2384
-end = 2398
+line = 2398
+end = 2412
 title = "構造上の規約"
 
 [[section]]
@@ -7012,73 +7012,73 @@ section = "02 §4.3"
 [[id]]
 id = "MR1"
 file = "docs/02-architecture.md"
-line = 2283
+line = 2297
 section = "02 §14.1"
 
 [[id]]
 id = "MR2"
 file = "docs/02-architecture.md"
-line = 2284
+line = 2298
 section = "02 §14.1"
 
 [[id]]
 id = "MR3"
 file = "docs/02-architecture.md"
-line = 2285
+line = 2299
 section = "02 §14.1"
 
 [[id]]
 id = "MR4"
 file = "docs/02-architecture.md"
-line = 2286
+line = 2300
 section = "02 §14.1"
 
 [[id]]
 id = "MR5"
 file = "docs/02-architecture.md"
-line = 2287
+line = 2301
 section = "02 §14.1"
 
 [[id]]
 id = "MR6"
 file = "docs/02-architecture.md"
-line = 2288
+line = 2302
 section = "02 §14.1"
 
 [[id]]
 id = "MR7"
 file = "docs/02-architecture.md"
-line = 2289
+line = 2303
 section = "02 §14.1"
 
 [[id]]
 id = "MR8"
 file = "docs/02-architecture.md"
-line = 2290
+line = 2304
 section = "02 §14.1"
 
 [[id]]
 id = "MR9"
 file = "docs/02-architecture.md"
-line = 2291
+line = 2305
 section = "02 §14.1"
 
 [[id]]
 id = "MR10"
 file = "docs/02-architecture.md"
-line = 2292
+line = 2306
 section = "02 §14.1"
 
 [[id]]
 id = "MR11"
 file = "docs/02-architecture.md"
-line = 2293
+line = 2307
 section = "02 §14.1"
 
 [[id]]
 id = "MR12"
 file = "docs/02-architecture.md"
-line = 2294
+line = 2308
 section = "02 §14.1"
 
 [[id]]

@@ -10,6 +10,10 @@
 //!   左から・空の一致は採らない・両端が書記素境界・単語単位は両端のそれぞれの行で) で選んだ列。一致の位置、再開の位置と
 //!   正本の一致の終端から走査し直した続き、それを使った前 / 次の一致、すべて置換の展開 (`$0` / `$1` / `${g1}`) を比べる。
 //!   k の健全さ (各一致の行の終端のバイトの数 ≤ k、長さ ≤ 最大の長さ) も確かめる。
+//! - **呼び出し側** (M24 の (3)、03 §12.3.1 の「呼び出し側」): 全件のジョブ (`run_search`) の一致の集合が 1 つ目の参照と
+//!   同じで、行をまたぐ検索の規則 (`Matcher::whole_doc`) では文書の順に届き、`first_after` が起点以降の最初の一致、
+//!   再開の位置から走査し直すと正本の続きになる。単発の検索 (`find_next`) で次 / 前を繰り返して得る一致の並びが、全件の
+//!   集合 (前は逆順) と同じで、端で折り返す。正本の各一致の 1 件置換 (`replace_one`) が、すべて置換の展開と同じ。
 //! - **2 つ目の参照** (書き換えの誤りを見つけるため。1 つ目は参照にも同じ書き換えを掛ける): `\r` も、行の終端に 1 文字ずつ
 //!   一致しうる書き方 (`(?s)` の `.`・すべての文字のクラス・要素に `\r` を書いたクラス・`(?-R)`) も含まない検索語について、
 //!   CRLF と CR を LF にそろえた文書で `\n` を LF だけ (糖衣なし) として探し、位置を元の文書へ戻した結果と一致する。
@@ -25,11 +29,13 @@ use eve_text::{
 };
 
 use crate::jobs::cancel::CancelToken;
+use crate::jobs::{JobOutput, JobResult};
 use crate::time::{Clock, Tick};
 
 use super::limits::SEARCH_CONCAT_MAX_BYTES;
 use super::{
-    Case, LineSpan, ScanCtx, ScanEnd, SearchInternal, SearchQuery, build_replace_all, scan_range,
+    Case, FindJob, LineSpan, ScanCtx, ScanEnd, ScanLimit, SearchInternal, SearchJob, SearchQuery,
+    build_replace_all, find_next, replace_one, run_search, scan_range,
 };
 
 /// 検索語の部品 (書き方, 2 つ目の参照に使えるか)。S-04 と 03 §12.3.1 の表の書き方。
@@ -515,6 +521,9 @@ pub fn check(c: &RegexCase) -> Result<Checked, String> {
         }
     }
 
+    // 呼び出し側: 全件のジョブと、次 / 前の繰り返し (03 §12.3.1 の「呼び出し側」)
+    check_callers(c, &t, &q, &m, &want_ranges, &ctx)?;
+
     // すべて置換の展開 (走査が最後まで進んだので、すべて置換も作れる)
     {
         let Some((cs, n)) = build_replace_all(&t, &q, REPLACEMENT, &CancelToken::new()) else {
@@ -538,6 +547,37 @@ pub fn check(c: &RegexCase) -> Result<Checked, String> {
                 ctx(),
                 want.len()
             ));
+        }
+    }
+
+    // 1 件置換: 正本の各一致について、確かめとキャプチャの取り直し (`replace_one`) の結果が、すべて置換の展開と同じ
+    // (03 §12.3.1 の「置換」。選び始める位置は、行をまたぐ検索の規則では一致の始端、それ以外は一致の始端を含む行の行頭)
+    for r in sample_refs(&want, 8) {
+        let from = if m.whole_doc() {
+            r.s
+        } else {
+            t.line_to_byte(t.byte_to_line(ByteOff(r.s))).0
+        };
+        let got = replace_one(
+            &t,
+            &m,
+            ByteOff(from),
+            ByteRange::new(ByteOff(r.s), ByteOff(r.e)),
+            REPLACEMENT,
+            None,
+            &CancelToken::new(),
+        );
+        match got {
+            Ok(Some(x)) if x == r.expanded => {}
+            Err(ScanEnd::TooHeavy | ScanEnd::TooLarge) => {}
+            other => {
+                return Err(format!(
+                    "1 件置換 {:?} が違う: {}\n 実際 {other:?}\n 期待 {:?}",
+                    (r.s, r.e),
+                    ctx(),
+                    r.expanded
+                ));
+            }
         }
     }
 
@@ -569,6 +609,188 @@ pub fn check(c: &RegexCase) -> Result<Checked, String> {
         }
     }
     Ok(Checked::Compared)
+}
+
+/// 全件のジョブ (`run_search`) の結果 (届いた一致, `first_after`, 再開の位置, 打ち切りの理由)。
+type JobRun = (
+    Vec<(usize, usize)>,
+    Option<(usize, usize)>,
+    Vec<usize>,
+    Option<ScanLimit>,
+);
+
+/// 全件のジョブを `from` を起点に走らせる。
+fn run_job(t: &Text, q: &SearchQuery, from: usize) -> JobRun {
+    let clock = StepClock {
+        now: AtomicU64::new(0),
+        step: 0,
+    };
+    let mut out: Vec<JobOutput> = Vec::new();
+    run_search(
+        SearchJob {
+            job: eve_view::JobId(1),
+            snapshot: t,
+            query: q,
+            from: ByteOff(from),
+            max_matches: usize::MAX,
+            count_limit: u64::MAX,
+        },
+        &clock,
+        &CancelToken::new(),
+        &mut |r| out.push(r),
+    );
+    let (mut got, mut first, mut resume, mut limit) = (Vec::new(), None, Vec::new(), None);
+    for r in out {
+        match r.body {
+            JobResult::SearchBatch {
+                matches,
+                first_after,
+            } => {
+                got.extend(matches.iter().map(|r| (r.start.0, r.end.0)));
+                if let Some(f) = first_after {
+                    first = Some((f.start.0, f.end.0));
+                }
+            }
+            JobResult::SearchDone {
+                resume: rs,
+                limit: l,
+                ..
+            } => {
+                resume = rs.iter().map(|p| p.0).collect();
+                limit = l;
+            }
+            _ => {}
+        }
+    }
+    (got, first, resume, limit)
+}
+
+/// 単発の検索 (`find_next`)。取り消し・打ち切りは `None`。
+fn find_one(
+    t: &Text,
+    q: &SearchQuery,
+    from: usize,
+    forward: bool,
+    resume: &[ByteOff],
+) -> Option<Option<((usize, usize), bool)>> {
+    find_next(
+        &FindJob {
+            snapshot: t,
+            query: q,
+            from: ByteOff(from),
+            forward,
+            resume,
+        },
+        None,
+        &CancelToken::new(),
+    )
+    .ok()
+    .map(|o| o.map(|(r, w)| ((r.start.0, r.end.0), w)))
+}
+
+/// 呼び出し側の検査 (全件のジョブと次 / 前の繰り返し)。
+fn check_callers(
+    c: &RegexCase,
+    t: &Text,
+    q: &SearchQuery,
+    m: &super::Matcher,
+    want: &[(usize, usize)],
+    ctx: &dyn Fn() -> String,
+) -> Result<(), String> {
+    let doc = c.doc.as_str();
+    let len = doc.len();
+    let cursor = floor_char(doc, c.splits.first().copied().unwrap_or(0) % (len + 1));
+    let (got, first, resume, limit) = run_job(t, q, cursor);
+    if limit.is_some() {
+        return Ok(());
+    }
+    let mut sorted = got.clone();
+    sorted.sort_unstable();
+    if sorted != want {
+        return Err(format!(
+            "全件のジョブの一致が違う: {}\n 実際 {got:?}\n 期待 {want:?}",
+            ctx()
+        ));
+    }
+    if !m.whole_doc() {
+        return Ok(());
+    }
+    if got != want {
+        return Err(format!(
+            "全件のジョブが文書の順に届かない: {}\n 実際 {got:?}",
+            ctx()
+        ));
+    }
+    let want_first = want.iter().copied().find(|r| r.0 >= cursor);
+    if first != want_first {
+        return Err(format!(
+            "{cursor} からの first_after が違う: {}\n 実際 {first:?}\n 期待 {want_first:?}",
+            ctx()
+        ));
+    }
+    if resume.windows(2).any(|w| w[0] >= w[1]) {
+        return Err(format!("再開の位置が昇順でない {resume:?}: {}", ctx()));
+    }
+    for &from in &sample(&resume, 4) {
+        let (end, rest) = scan(t, m, from, None, None);
+        let expect: Vec<(usize, usize)> = want.iter().copied().filter(|r| r.0 >= from).collect();
+        if end == ScanEnd::Done && rest != expect {
+            return Err(format!(
+                "ジョブの再開の位置 {from} から走査し直した続きが違う: {}\n 実際 {rest:?}\n 期待 {expect:?}",
+                ctx()
+            ));
+        }
+    }
+    // 次 / 前を繰り返す: 次は今の一致の終端から (正本の位置として渡す)、前は今の一致の始端から
+    let points: Vec<ByteOff> = resume.iter().map(|&p| ByteOff(p)).collect();
+    let steps = want.len().min(24);
+    let mut from = 0;
+    for (i, w) in want.iter().take(steps).enumerate() {
+        let mut starts = points.clone();
+        starts.push(ByteOff(from));
+        let got = find_one(t, q, from, true, &starts);
+        if got != Some(Some((*w, false))) {
+            return Err(format!(
+                "次の一致の {i} 番目 ({from} から) が違う: {}\n 実際 {got:?}\n 期待 {w:?}",
+                ctx()
+            ));
+        }
+        from = w.1;
+    }
+    if steps == want.len() {
+        let mut starts = points.clone();
+        starts.push(ByteOff(from));
+        let got = find_one(t, q, from, true, &starts);
+        let expect = want.first().map(|w| (*w, true));
+        if got != Some(expect) {
+            return Err(format!(
+                "末尾 ({from}) の次の一致 (折り返し) が違う: {}\n 実際 {got:?}\n 期待 {expect:?}",
+                ctx()
+            ));
+        }
+    }
+    let mut from = len;
+    for (i, w) in want.iter().rev().take(steps).enumerate() {
+        let got = find_one(t, q, from, false, &points);
+        if got != Some(Some((*w, false))) {
+            return Err(format!(
+                "前の一致の {i} 番目 ({from} から) が違う: {}\n 実際 {got:?}\n 期待 {w:?}",
+                ctx()
+            ));
+        }
+        from = w.0;
+    }
+    if steps == want.len() {
+        let got = find_one(t, q, from, false, &points);
+        let expect = want.last().map(|w| (*w, true));
+        if got != Some(expect) {
+            return Err(format!(
+                "先頭 ({from}) の前の一致 (折り返し) が違う: {}\n 実際 {got:?}\n 期待 {expect:?}",
+                ctx()
+            ));
+        }
+    }
+    Ok(())
 }
 
 /// 走査の入口で `from` から末尾まで走査した (終わり方, 一致)。
@@ -664,6 +886,14 @@ fn prev_from(
         }
     }
     Some(None)
+}
+
+/// 参照の一致の並びから最大 `n` 個を均等に選ぶ。
+fn sample_refs<'a>(v: &[&'a RefMatch], n: usize) -> Vec<&'a RefMatch> {
+    if v.len() <= n {
+        return v.to_vec();
+    }
+    (0..n).map(|i| v[i * v.len() / n]).collect()
 }
 
 /// 並びから最大 `n` 個を均等に選ぶ。

@@ -170,6 +170,9 @@ pub enum JobKind {
         from: eve_text::ByteOff,
         /// `true` なら後ろへ、`false` なら前へ探す。
         forward: bool,
+        /// 正本の走査を始められる位置 (再開の位置と今の一致の終端、昇順。行をまたぐ検索の規則だけが使う、03 §12.3.1 の
+        /// 「次 / 前」)。空なら文書の先頭から。
+        resume: Vec<eve_text::ByteOff>,
     },
     /// 改行コードの変換の `ChangeSet` を作る (03 §8.4)。`snapshot` は投入時の Revision のもの。
     ConvertEol {
@@ -187,14 +190,29 @@ pub enum JobKind {
         /// 置換後の文字列。
         replacement: String,
     },
-    /// 文書内の全件検索 (03 §12.2)。`from` の行から末尾まで、続けて先頭から走査し、一致を `SearchBatch` で順に返して
-    /// `SearchDone` で終わる。保持するのは `max_matches` 件まで、数えるのは `count_limit` 件まで。
+    /// 1 件置換の対象の確かめとキャプチャの取り直し (03 §12.3.1 の「置換」。重い検索語と上限の無い検索語。メインスレッドで
+    /// 照合しない)。`from` から走査の入口で選び始め、`range.start` で始まる一致が `range` そのものなら、その置換文字列を返す。
+    ReplaceOne {
+        /// 置換の対象の本文。
+        snapshot: Snapshot,
+        /// 検索の条件。
+        query: crate::search::SearchQuery,
+        /// 選び始める正本の位置。
+        from: eve_text::ByteOff,
+        /// 置き換える一致。
+        range: eve_text::ByteRange,
+        /// 置換の文字列 (`$1` などを展開する前)。
+        replacement: String,
+    },
+    /// 文書内の全件検索 (03 §12.2)。`from` の行から末尾まで、続けて先頭から走査し (行をまたぐ検索の規則では文書の先頭から
+    /// 末尾まで、03 §12.3.1)、一致を `SearchBatch` で順に返して `SearchDone` で終わる。保持するのは `max_matches` 件まで、
+    /// 数えるのは `count_limit` 件まで。
     Search {
         /// 検索する本文。
         snapshot: Snapshot,
         /// 検索の条件。
         query: crate::search::SearchQuery,
-        /// 走査を始める位置 (バイト)。
+        /// 起点 (バイト。この位置のある行から走査する。行をまたぐ検索の規則では、この位置以降の最初の一致を `first_after` で知らせる)。
         from: eve_text::ByteOff,
         /// 保持する一致の上限 (件)。
         max_matches: usize,

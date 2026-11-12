@@ -52,6 +52,14 @@ pub(crate) enum Pending {
         doc: DocumentId,
         revision: eve_view::Revision,
     },
+    /// 1 件置換の対象の確かめ (重い検索語・上限の無い検索語、03 §12.3.1 の「置換」)。`pua` は置換の文字列の私用文字を表記に
+    /// した数。
+    ReplaceOne {
+        doc: DocumentId,
+        revision: eve_view::Revision,
+        range: eve_text::ByteRange,
+        pua: u64,
+    },
     /// 起動時の退避ディレクトリの走査。
     RecoveryScan,
     /// 前回起動した版の記録 (FR-518)。
@@ -135,7 +143,9 @@ impl EditorState {
                 Pending::ReplaceUnmappable { ask, .. } => ask.doc == doc,
                 Pending::Search => self.find.search.as_ref().is_some_and(|s| s.doc() == doc),
                 Pending::FindNext { doc: d, .. } => *d == doc,
-                Pending::ReplaceAll { doc: d, .. } => *d == doc,
+                Pending::ReplaceAll { doc: d, .. } | Pending::ReplaceOne { doc: d, .. } => {
+                    *d == doc
+                }
                 Pending::ConvertEol(c) => c.doc == doc,
                 // 保存ジョブは取り消さず、完了を待つ (03 §9.2 の「閉じる手順」。ユーザーが求めた保存を中断しない)
                 Pending::Save { .. }
@@ -218,6 +228,12 @@ impl EditorState {
             } => self.finish_find_next(doc, revision, cursor, forward, r),
             Pending::ConvertEol(c) => self.finish_eol_conversion(c, r),
             Pending::ReplaceAll { doc, revision } => self.finish_replace_all(doc, revision, r),
+            Pending::ReplaceOne {
+                doc,
+                revision,
+                range,
+                pua,
+            } => self.finish_replace_one(doc, revision, range, pua, r),
             Pending::WriteRecovery { path, release } => {
                 self.finish_write_recovery(&path, r);
                 if let Some(doc) = release {

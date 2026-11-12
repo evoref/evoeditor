@@ -24,13 +24,19 @@ mod scan;
 mod stream;
 
 pub use limits::{SEARCH_CONCAT_MAX_BYTES, SEARCH_WINDOW_CORE_BYTES};
-pub(crate) use matcher::Prepared;
+pub(crate) use limits::{SEARCH_FIND_WAIT_MS, SEARCH_SYNC_MULTILINE_MAX};
 pub use matcher::{Case, Matcher, QueryError, QueryPlan, SearchInternal, SearchQuery};
-pub use replace::{build_replace_all, replacement_for, unescape_replacement};
+pub(crate) use matcher::{Prepared, Shape};
+pub use replace::{
+    build_replace_all, build_replace_all_in, replace_one, replace_one_job, replacement_for,
+    unescape_replacement,
+};
 pub use rewrite::LineSpan;
 #[cfg(test)]
 use scan::scan_lines;
-pub use scan::{ScanCtx, ScanEnd, SearchJob, find_next, run_search, scan_bytes, scan_range};
+pub use scan::{
+    FindJob, ScanCtx, ScanEnd, ScanLimit, SearchJob, find_next, run_search, scan_bytes, scan_range,
+};
 
 pub(crate) mod search_state;
 

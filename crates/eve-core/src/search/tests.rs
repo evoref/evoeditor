@@ -1,4 +1,4 @@
-use eve_text::{ByteOff, Text, TextRead};
+use eve_text::{ByteOff, ByteRange, Text, TextRead};
 use eve_view::JobId;
 
 use super::*;
@@ -245,9 +245,223 @@ fn 最初の一致はすぐ送る() {
     assert_eq!(matches.len(), 1);
 }
 
+fn find(
+    t: &Text,
+    q: &SearchQuery,
+    from: usize,
+    forward: bool,
+    cancel: &CancelToken,
+) -> Result<Option<(ByteRange, bool)>, ScanEnd> {
+    find_next(
+        &FindJob {
+            snapshot: t,
+            query: q,
+            from: ByteOff(from),
+            forward,
+            resume: &[],
+        },
+        None,
+        cancel,
+    )
+}
+
+/// 行をまたぐ検索を内部の設定で開いた正規表現 (核は `core` バイト)。
+fn multi(p: &str, core: usize) -> SearchQuery {
+    SearchQuery::literal(p)
+        .with_regex(true)
+        .with_case(Case::Sensitive)
+        .with_internal(SearchInternal {
+            core_bytes: core,
+            ..SearchInternal::multiline()
+        })
+}
+
+/// 全件のジョブの (届いた一致の始端の並び, `first_after` の始端, 再開の位置, 打ち切りの理由, 総数)。
+#[allow(clippy::type_complexity)]
+fn run_whole(
+    doc: &str,
+    q: &SearchQuery,
+    from: usize,
+) -> (
+    Vec<usize>,
+    Option<usize>,
+    Vec<usize>,
+    Option<ScanLimit>,
+    u64,
+) {
+    let rs = run(doc, q, from, 100, 1000);
+    let (mut starts, mut first, mut resume, mut limit, mut total) =
+        (Vec::new(), None, Vec::new(), None, 0);
+    for r in &rs {
+        match &r.body {
+            JobResult::SearchBatch {
+                matches,
+                first_after,
+            } => {
+                starts.extend(matches.iter().map(|m| m.start.0));
+                if let Some(f) = first_after {
+                    assert!(first.is_none(), "first_after は 1 回だけ");
+                    first = Some(f.start.0);
+                }
+            }
+            JobResult::SearchDone {
+                resume: rv,
+                limit: l,
+                total: n,
+                ..
+            } => {
+                resume = rv.iter().map(|p| p.0).collect();
+                limit = *l;
+                total = *n;
+            }
+            _ => {}
+        }
+    }
+    (starts, first, resume, limit, total)
+}
+
+#[test]
+fn 行をまたぐ規則の全件ジョブは文書の先頭から走査し_first_after_と再開の位置を返す() {
+    // `a\na` を `a\na\na\na\na` で探す: 先頭からは [0,3) と [4,7) (カーソルの行 (2) から探すと [2,5) と [6,9))
+    let q = multi(r"a\na", 2);
+    let (starts, first, resume, limit, total) = run_whole("a\na\na\na\na", &q, 2);
+    assert_eq!(starts, [0, 4], "文書の順に届く");
+    assert_eq!(first, Some(4), "起点 2 以降の最初の一致");
+    assert_eq!((limit, total), (None, 2));
+    assert_eq!(resume.first(), Some(&0));
+    assert!(
+        resume.windows(2).all(|w| w[0] + 2 <= w[1]),
+        "核の大きさごとに間引く: {resume:?}"
+    );
+    // 起点以降に一致が無ければ first_after は送らない
+    let (_, first, ..) = run_whole("a\na\nb", &q, 3);
+    assert_eq!(first, None);
+    // 既定 (内部の設定を閉じた) の検索語は今までどおり、カーソルの行から走査し、再開の位置を返さない
+    let (starts, first, resume, ..) = run_whole("ab\nab\nab", &lit("ab"), 3);
+    assert_eq!(starts, [3, 6, 0]);
+    assert_eq!((first, resume.len()), (None, 0));
+}
+
+#[test]
+fn first_after_は保持の上限に依らず送る() {
+    let q = multi(r"a\na", 1 << 20);
+    let doc = "a\na\n".repeat(10);
+    let rs = run(&doc, &q, 30, 2, 1000);
+    let firsts: Vec<usize> = rs
+        .iter()
+        .filter_map(|r| match &r.body {
+            JobResult::SearchBatch {
+                first_after: Some(f),
+                ..
+            } => Some(f.start.0),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        firsts,
+        [32],
+        "起点 30 以降の最初の一致 (正本の始端は 4 の倍数)"
+    );
+    let (_, done) = collect(&rs);
+    assert_eq!(done, Some((10, false, true)));
+}
+
+#[test]
+fn 走査の途中で探さないと分かったら_理由つきの_0_件で終わる() {
+    // k = 1 で最大の長さの無い検索語は、核を行の境界に揃える。長い行で窓が上限を超える
+    let q = SearchQuery::literal(r"a\n[^\n]*")
+        .with_regex(true)
+        .with_internal(SearchInternal {
+            core_bytes: 4,
+            concat_max: 32,
+            ..SearchInternal::multiline()
+        });
+    let doc = format!("a\nb\na\nb\n{}\n", "c".repeat(100));
+    let (_, _, resume, limit, total) = run_whole(&doc, &q, 0);
+    assert_eq!(
+        (limit, total, resume.len()),
+        (Some(ScanLimit::TooLarge), 0, 0)
+    );
+}
+
+#[test]
+fn 行をまたぐ規則の単発の検索は正本の位置から探す() {
+    // 正本は [0,3) と [4,7)。起点 2 から次を探すと [4,7) (行頭 2 から選ぶと [2,5))
+    let t = Text::from("a\na\na\na");
+    let q = multi(r"a\na", 2);
+    let f = |from: usize, forward: bool, resume: &[ByteOff]| {
+        find_next(
+            &FindJob {
+                snapshot: &t,
+                query: &q,
+                from: ByteOff(from),
+                forward,
+                resume,
+            },
+            Some(&Fixed),
+            &CancelToken::new(),
+        )
+        .map(|o| o.map(|(r, w)| (r.start.0, r.end.0, w)))
+    };
+    assert_eq!(f(2, true, &[]), Ok(Some((4, 7, false))));
+    assert_eq!(f(3, true, &[ByteOff(3)]), Ok(Some((4, 7, false))));
+    assert_eq!(f(7, true, &[ByteOff(7)]), Ok(Some((0, 3, true))));
+    assert_eq!(f(4, false, &[]), Ok(Some((0, 3, false))));
+    assert_eq!(f(0, false, &[]), Ok(Some((4, 7, true))));
+    // 探さない検索語は理由を返す
+    let big = multi(r"a\n+", 2).with_internal(SearchInternal {
+        concat_max: 4,
+        ..SearchInternal::multiline()
+    });
+    let r = find_next(
+        &FindJob {
+            snapshot: &t,
+            query: &big,
+            from: ByteOff(0),
+            forward: true,
+            resume: &[],
+        },
+        Some(&Fixed),
+        &CancelToken::new(),
+    );
+    assert_eq!(r, Err(ScanEnd::TooLarge));
+}
+
+#[test]
+fn 一件置換は対象の始端から走査の入口で選んだ最初の一致で確かめる() {
+    let t = Text::from("ab\r\ncd\r\nef");
+    let q = multi(r"(\w)\n(\w)", 4);
+    let m = q.matcher().unwrap();
+    let r = |s: usize, e: usize| ByteRange::new(ByteOff(s), ByteOff(e));
+    let one = |s: usize, e: usize| {
+        replace_one(
+            &t,
+            &m,
+            ByteOff(s),
+            r(s, e),
+            "$2$1",
+            None,
+            &CancelToken::new(),
+        )
+    };
+    assert_eq!(one(1, 5), Ok(Some("cb".to_owned())));
+    // 一致でない範囲 (同じ始端から選んだ一致と違う) は対象にしない
+    assert_eq!(one(1, 4), Ok(None));
+    assert_eq!(one(0, 5), Ok(None));
+    // 窓の端で `\b` が偽って成り立たない (正本は `a\n` の [0,2))
+    let t = Text::from("a\nbc");
+    let q = multi(r"a\nb\b|a\n", 4);
+    let m = q.matcher().unwrap();
+    assert_eq!(
+        replace_one(&t, &m, ByteOff(0), r(0, 2), "X", None, &CancelToken::new()),
+        Ok(Some("X".to_owned()))
+    );
+}
+
 fn next(doc: &str, p: &str, from: usize, forward: bool) -> Option<Option<(usize, bool)>> {
     let t = Text::from(doc);
-    find_next(&t, &lit(p), ByteOff(from), forward, &CancelToken::new())
+    find(&t, &lit(p), from, forward, &CancelToken::new())
+        .ok()
         .map(|o| o.map(|(r, w)| (r.start.0, w)))
 }
 
@@ -277,8 +491,8 @@ fn 単発の検索は取り消せる() {
     let t = Text::from("ab\n".repeat(1000).as_str());
     let c = CancelToken::new();
     c.cancel();
-    assert!(find_next(&t, &lit("zz"), ByteOff(0), true, &c).is_none());
-    assert!(find_next(&t, &lit("zz"), ByteOff(0), false, &c).is_none());
+    assert_eq!(find(&t, &lit("zz"), 0, true, &c), Err(ScanEnd::Cancelled));
+    assert_eq!(find(&t, &lit("zz"), 0, false, &c), Err(ScanEnd::Cancelled));
 }
 
 // ---- 大小を区別しない検索の経路 (03 §12.4、OQ-196): どの経路でも Unicode の単純ケースフォールディングの意味 ----
@@ -478,10 +692,18 @@ fn 置換は走査の入口を通り_範囲と単語単位と選択範囲内に�
         let m = q.matcher().unwrap();
         let mut got = Vec::new();
         let full = eve_text::ByteRange::new(ByteOff(0), ByteOff(t.len_bytes()));
-        replace::scan_replacements(&t, &m, full, &CancelToken::new(), "[$0]", &mut |r, s| {
-            got.push((r.start.0, s));
-            true
-        });
+        let cancel = CancelToken::new();
+        replace::scan_replacements(
+            &t,
+            &m,
+            full,
+            &mut ScanCtx::new(&cancel),
+            "[$0]",
+            &mut |r, s| {
+                got.push((r.start.0, s));
+                true
+            },
+        );
         got
     };
     let mut want = Vec::new();

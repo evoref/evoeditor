@@ -170,6 +170,14 @@ pub(crate) struct SearchSet {
     pub(crate) research: Option<(eve_view::Revision, Tick)>,
     /// 単発の検索ジョブ (進行中の 1 つだけ)。
     pub(crate) find_job: Option<eve_view::JobId>,
+    /// 単発の検索ジョブを待つ間に同じ向きの次 / 前を押した回数 (行をまたぐ検索の規則。届いて移った後に続ける、03 §12.3.1)。
+    pub(crate) find_presses: u32,
+    /// 全件ジョブの結果を待っている次 / 前 (行をまたぐ検索の規則、03 §12.3.1 の「次 / 前」の (4))。
+    pub(crate) find_wait: Option<crate::search::search_state::StepWait>,
+    /// 行をまたぐ検索の規則の次 / 前の待ちを始めた時刻 (100 ms を過ぎたら件数の位置を待ちの表示にする)。
+    pub(crate) find_since: Option<Tick>,
+    /// eve-core の内部の設定 (行をまたぐ検索を試験から開く。利用者の設定ではない、08 §2.5 の M24 の (2)・(3))。
+    pub(crate) internal: crate::search::SearchInternal,
     /// 実行中のすべて置換で、置換の文字列 1 つあたりに `<U+10FFNN>` にした私用文字の数 (03 §8.3.1。適用のときに
     /// 件数を掛けて `info.paste.pua_as_text` で知らせる。すべて置換は同時に 1 つだけ)。
     pub(crate) replace_all_pua: u64,
@@ -296,6 +304,10 @@ impl EditorState {
                 search_bar: None,
                 research: None,
                 find_job: None,
+                find_presses: 0,
+                find_wait: None,
+                find_since: None,
+                internal: crate::search::SearchInternal::default(),
                 replace_all_pua: 0,
             },
             io: IoState {
@@ -791,6 +803,8 @@ impl EditorState {
         self.enforce_total_undo_budget();
         // 選択範囲内の検索の範囲も、同じ変更で写像する (03 §12.5)
         self.map_search_scope(doc, &a.changes);
+        // 行をまたぐ検索の再開の位置も、編集した行より前のものだけを残す (03 §12.3.1)
+        self.map_search_marks(doc, &a.changes, a.old_revision);
         let Some(document) = self.docs.documents.get(&doc) else {
             return;
         };
