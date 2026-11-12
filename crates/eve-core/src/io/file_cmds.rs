@@ -121,11 +121,9 @@ impl EditorState {
         doc_id: eve_view::DocumentId,
         id: &str,
     ) -> CommandResult {
+        // 開き直すのは確認を出した文書 (確定の時点の表示中の文書ではない、03 §9.8 の「入力・確認の対象」)
         if id == "reopen" {
-            if self.active_document() != Some(doc_id) {
-                return CommandResult::Rejected(RejectReason::NoTarget);
-            }
-            return self.reopen_with_encoding(None);
+            return self.reopen_with_encoding_for(doc_id, None);
         }
         // 確認を出している間に文書が変わっていれば (読込が始まった等)、外さない
         let Some(doc) = self
@@ -245,24 +243,24 @@ pub(crate) fn file_save(ctx: &mut CommandCtx<'_>) -> CommandResult {
 }
 
 pub(crate) fn file_save_as(ctx: &mut CommandCtx<'_>) -> CommandResult {
+    let Some(doc) = ctx.state.active_document() else {
+        return CommandResult::Rejected(RejectReason::NoTarget);
+    };
     match arg_path(ctx) {
-        Some(p) => ctx.state.request_save_as(&p, None),
+        Some(p) => ctx.state.request_save_as(doc, &p, None),
         None => {
             // 名前を尋ねる前に、今の文字コードで書けない文書を拒否する (03 §9.7 の「連鎖の開始時の拒否」)
-            if let Some(doc) = ctx.state.active_document()
-                && ctx.state.reject_stateful_invalid(doc, None)
-            {
+            if ctx.state.reject_stateful_invalid(doc, None) {
                 return CommandResult::Rejected(RejectReason::NotAvailable);
             }
-            // 名前を尋ねる。初期値は今のパス
+            // 名前を尋ねる。初期値は今のパス。対象は今の文書に固定する (確定の時点の表示中の文書ではない、03 §9.8)
             let initial = ctx
                 .state
-                .active_document()
-                .and_then(|d| ctx.state.document(d))
+                .document(doc)
                 .and_then(|d| d.path.as_ref().map(FsPath::display))
                 .unwrap_or_default();
             ctx.state
-                .open_prompt(PromptKind::SaveAs { then: None }, initial);
+                .open_prompt(PromptKind::SaveAs { doc, then: None }, initial);
             CommandResult::Done
         }
     }
