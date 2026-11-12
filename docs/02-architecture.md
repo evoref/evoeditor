@@ -270,6 +270,7 @@ core を OS から切り離すための差し替え点 (Hexagonal / Ports & Adap
 | `FileWatcher` | 非ブロッキング (登録のみ) | 監視登録/解除。通知は `HostMsg::Fs` | メイン | eve-platform (notify) | 手動イベント注入 | v0.5 |
 | `ProcessRunner` | I/O | 短命の外部コマンド (フィルタ・フォーマッタ)。**常にユーザー承認後のみ**。長寿命プロセス (LSP・ローカル LLM サーバの管理モード (06 §3.3.3)・プラグイン・外部エージェント) 向けの `spawn_long_lived` (`LongLivedSpec`・`terminate(grace)`) は v1.L で入れ、trait の正本は本節の下の「長寿命プロセスの API」(OS 別の実装は 05 §2.6 / §13.4 / §13.7)。承認は 07 §12 の信頼で代替 (管理モードの起動コマンドはユーザー設定のみ) | ジョブ / サービス | eve-platform | 記録のみ | v0.5 (長寿命 v1.L) |
 | `SecretStore` | I/O | API キー等の取得/保存 | ジョブ / サービス | eve-platform (keyring) | メモリ | v1.L |
+| `StdinSource` | I/O | 標準入力 (`evoeditor -`) をチャンクで読む。1 回だけ取れる。データが無い間はチャネルで待ち、取消しは `wake` で起こす (時間で区切って起きない。下の擬似コード) | ジョブのみ (`OpenStdin`) | eve-platform | 偽物 (eve-testkit) | v0.4 (M25) |
 | `SystemInfo` | 非ブロッキング | 利用可能メモリ・論理コア数。巨大ファイル警告のメモリ連動用 (OQ-05: v0.1 は固定閾値で不要)、ローカル LLM サーバの管理モードでのモデルの必要メモリの確認とスレッド数の既定 (06 §3.3.3) | 任意 | eve-platform | 固定値 | v0.5 以降 (予約)。最初の利用者が v1.L になる場合はそこで定義 |
 
 **v0.1 の Port のシグネチャ (正本)**: `FileSystem` は §4.5。残りの 3 つと、それらを束ねて `Editor::new` に渡す `Ports`、ジョブが受け取る `JobPorts`、キャンセルの `CancelToken` を次に定める。
@@ -347,7 +348,21 @@ struct JobPorts {                                // ジョブ本体 run_job (§9
     fs: Arc<dyn FileSystem>,
     clock: Arc<dyn Clock>,                       // 進捗の間隔 (10 Hz 以下) の判定に使う
     paths: Arc<dyn Paths>,
+    stdin: Option<Arc<dyn StdinSource>>,         // v0.4 の M25: `evoeditor -` で標準入力が端末でないときだけ Host が作る (03 §9.2.2)。JobKind::OpenStdin だけが使う
     // ProcessRunner (v0.5)・SecretStore (v1.L) も最初の利用者と同時に足す
+}
+trait StdinSource: Send + Sync {                 // v0.4 の M25。eve-platform が実装する (05 §9.1 / §9.2)。テストは偽物 (チャンクの列・遅延・エラー・閉じないパイプ)
+    fn take(&self) -> Option<Box<dyn ReadChunks + Send>>; // 1 回だけ Some (2 回目は None)。端末かどうかは作る前に Host が判定する (下の注記)
+    fn wake(&self);                              // 取消しのとき Host (JobSpawner) が呼ぶ。受け渡しのチャネルへ「起きよ」の印を送り、
+                                                 // 待っている next_chunk を戻す (ジョブはそこで CancelToken を見る)。印は 1 つに畳む
+    // 作るとき (Host): 標準入力を私有のハンドル / fd に移し、標準入力の位置には NUL / /dev/null を置く (Windows は継承しない複製を
+    // DuplicateHandle で作り SetStdHandle で NUL を置いて元を閉じる。Unix は fcntl(F_DUPFD_CLOEXEC) で移して fd 0 に /dev/null を dup2)。
+    // 子プロセスがパイプの読み手を持ち続けない・閉じたハンドルの値の再利用で別のものを読まないため (03 §9.2.2、05 §9.1 / §9.2)。
+    // 返す ReadChunks の next_chunk は、別スレッド (eve-stdin) が読んだチャンク (最大 1 MiB) を深さ 4 のチャネルから取る。データが無い間は
+    // チャネルだけで待つ (時間で区切って空のチャンクを返さない。§14 の NFR-204 の「ポーリング禁止」)。wake の印を受けたら空のチャンク
+    // (Ok(Some(&[]))) を返して戻る。EOF は Ok(None)、読取の失敗は ChunkError::Io。ReadChunks を drop したら (取消し・上限・終了)、
+    // eve-stdin を OS ごとの方法で起こして止め (Unix は停止の自己パイプ、Windows は CancelSynchronousIo)、eve-stdin が自分で私有の
+    // ハンドル / fd を閉じて終わる (別のスレッドから閉じない。05 §9.1 / §9.2)
 }
 ```
 
@@ -706,8 +721,15 @@ EditorState
    │                  read_only: ReadOnlyReasons /*理由の集合 (下記)*/, attribute_released /*読み取り専用属性を解除した (03 §9.6)*/,
    │                  invalid_bytes_released /*v0.4 の M23: 不正バイト (InvalidBytes) を解除した。同じ文書の再読込で解除を持ち越す (03 §8.3.1)*/,
    │                  external_seen: Option<FileStamp> /*外部変更の確認で「無視」を選んだ状態 (03 §9.5)*/,
-   │                  load_state /*Loading | Ready | Failed。Partial は v0.4 で足す (名前だけを決めてある)*/, load_percent, display: DisplaySettings,
-   │                  /*表示層のキャッシュ 2 つ (行の表示単位・長大行の列の索引)。v0.3 の M14 で layout 側へ移す (STR-B2)*/ }
+   │                  load_state /*Loading | Partial | Ready | Failed。Partial は v0.4 の M25 (先行表示の間。本文は固定の先頭、03 §9.2.1)*/, load_percent, display: DisplaySettings,
+   │                  load_total /*v0.4 の M25: 最後の Progress.total (ファイルの大きさ)。先行表示の行番号の欄の幅の推定に使う (03 §11.4)*/,
+   │                  stdin: Option<StdinDoc> /*v0.4 の M25: 標準入力の文書だけ Some (03 §9.2.2)。持ち主は Document で、core だけが書く。
+   │                         StdinDoc { bytes_read: u64 /*読んだバイト数。Progress.bytes で更新し、status.loading_bytes と「途中まで ({size})」の size に使う
+   │                                                   (eve-stdin が受け渡し待ちで持つ分は含まない)*/,
+   │                                    pristine: bool /*読み込んだだけ。StdinDone の適用で立て、本文を変える Transaction の適用で外す (Origin を問わない。
+   │                                                     駆動 API の Ai / External を含む。読込そのものは Transaction を作らない)。Undo では戻さない。スワップの対象の判定に使う*/ }*/,
+   │                  /*表示層のキャッシュ 2 つ (行の表示単位・長大行の列の索引)。v0.3 の M14 で layout 側へ移す (STR-B2)。v0.4 の M25 の長大行の索引の覚えは、
+   │                    どの Revision の本文に対して正しいかを覚え (鍵は行頭の位置と表示の設定)、Revision が進んだら 03 §14.4 の「編集」で引き継ぐか捨てる*/ }
    │                  // 編集の可否 = read_only が空 かつ load_state == Ready。読込中は load_state から導出し、理由の集合には入れない
    │                  // pending_changes (§5.3、v1.L)・language (v0.5)・decorations (v0.6) は最初の利用者の版で足す
    ├─ views: BTreeMap<ViewId, View>
@@ -746,7 +768,7 @@ EditorState
 enum ReadOnlyReason {              // 変種名は 03 §9.6 の表と同じ。宣言順は 03 §9.6 の表の行の順 (= 表示の優先順) に合わせる (下の並びは名前の一覧)
     FileAttribute, UserRequested, NoWritePermission, InvalidBytes, StatefulEncodingWithInvalidBytes,
     Binary, LargeFileViewer, LoadIncomplete,
-}                                  // 「読込中」は理由にしない (load_state == Loading から導出する)。
+}                                  // 「読込中」は理由にしない (load_state が Loading / Partial であることから導出する)。
                                    // v0.1 の LongLine (長大行を含む文書) は v0.2 で char 近似モードの編集に置き換えたので無い (03 §11.5.1)
 struct ReadOnlyReasons(u16);       // ビットセット (理由ごとに 1 ビット)。insert / remove / contains / is_empty / iter (優先順)
 impl ReadOnlyReasons { fn primary(&self) -> Option<ReadOnlyReason>; } // 表示に出す 1 つ (優先順で先頭)。ステータスと msg.edit.read_only の {reason} に使う
@@ -787,7 +809,7 @@ Command 実行 ─▶ Transaction 生成 (ChangeSet + selection_before/after + O
 | メソッド | 呼ぶ者・時期 | 内容 |
 |---|---|---|
 | `new(ports: Ports, config: Arc<ResolvedConfig>, caps: Capabilities) -> Editor` | `Host::start` (`Frontend::init` の後、§9.5) | 空の EditorState を作る。I/O もジョブ投入もしない |
-| `open_initial_files(files: &[InitialFile], read_only: bool, forced: Option<Encoding>)` | `Host::start` (最初の大きさを渡した後、最初の Frame の前) | CLI で渡された開き方。`InitialFile { path: String, line: Option<usize>, col: Option<usize> }` (複数のパスと `path:行:桁` / `+行`、v0.2)。空なら無題の文書。`read_only` は `--readonly`、`forced` は `--encoding`。パスの正規化 (`Paths::normalize`) と開くジョブの投入は core が行う。1 つのパスだけの `open_initial(path: Option<&str>, read_only: bool)` と `open_initial_with(.., forced)` も持つ (テスト用)。v0.1 の案の `OpenRequest` は置かなかった |
+| `open_initial_files(files: &[InitialFile], read_only: bool, forced: Option<Encoding>)` | `Host::start` (最初の大きさを渡した後、最初の Frame の前) | CLI で渡された開き方。`InitialFile { path: String, line: Option<usize>, col: Option<usize> }` (複数のパスと `path:行:桁` / `+行`、v0.2)。**v0.4 の M25 (案)**: 標準入力 (`-`) を表すため、`path` を `target: InitialTarget` に替える (`enum InitialTarget { Path(String), Stdin { terminal: bool } }`)。標準入力が端末かどうかは Host が判定して `terminal` に入れ (05 §9.1 / §9.2)、端末でなければ Host は `JobPorts.stdin` に `StdinSource` を入れる。core は `terminal` なら空の無題の文書と `info.stdin.terminal`、そうでなければ `JobKind::OpenStdin` を投入する (03 §9.2.2。`StdinSource::take` で端末を判定しない)。空なら無題の文書。`read_only` は `--readonly`、`forced` は `--encoding`。パスの正規化 (`Paths::normalize`) と開くジョブの投入は core が行う。1 つのパスだけの `open_initial(path: Option<&str>, read_only: bool)` と `open_initial_with(.., forced)` も持つ (テスト用)。v0.1 の案の `OpenRequest` は置かなかった |
 | `configure(c: StartupConfig)` (v0.3 の M14) | Host (`start` / `run` の前、設定・テーマ・言語・ログの場所などを渡すたび) | 起動の前の設定を当てる。`StartupConfig` の `None` の項目は変えない。Host は `EditorState` に直接触らない (`state_mut()` は試験と testkit だけ。clippy の `disallowed-methods` で製品のコードから禁じる。docs/review/v0.3-findings.md の STR-B3) |
 | `report(r: HostReport)` (v0.3 の M14) | Host (`start` の中: 最初の大きさ。最初の Frame の後: 設定の診断。クリップボードの書込・取得の結果を受けた `step` の中: 切り替えの理由) | Host が知った事実 (`Viewport { cols, rows }`・`ConfigDiagnostics { file, diagnostics }`・`ClipboardFallback { reason }` (v0.3 の M16)) を渡す |
 | `handle_input(window: WindowId, ev: InputEvent)` | Host (`HostMsg::Input`) | キーマップ解決 (§7.2) → コマンド実行 |
@@ -800,7 +822,7 @@ Command 実行 ─▶ Transaction 生成 (ChangeSet + selection_before/after + O
 | `needs_render() -> bool` / `frame(&mut self, window: WindowId) -> Option<Frame>` | Host (各 step) | 前回の Frame から状態が変わったか / 可視範囲の Frame の生成 (§8) |
 | `query(&self, q: &Query) -> Result<Answer, QueryError>` | テスト・(後の版の) 駆動 API | 読み取り専用の問い合わせ (§10.1 X18、型は §10.1)。副作用なし |
 | `execute(inv: CommandInvocation) -> CommandResult` | テスト・駆動 API・(後の版の) AI / プラグイン | キーマップを通さずにコマンドを実行する。権限判定フック (§6.1) を通る |
-| `emergency_snapshot(doc: DocumentId) -> Option<DocSnapshot>` | Host (`take_snapshot_updates` が返した文書ごと) | 退避用の公開物を作る。dirty でない文書・`Loading` の文書・閉じた文書は `None` (スロットを空にする) |
+| `emergency_snapshot(doc: DocumentId) -> Option<DocSnapshot>` | Host (`take_snapshot_updates` が返した文書ごと) | 退避用の公開物を作る。dirty でない文書・読込中 (`Loading` / `Partial`。v0.4 の先行表示は `Loading` と同じく対象外) の文書・閉じた文書は `None` (スロットを空にする)。条件はこの 3 つだけ (03 §10.1・§11.2.1 の「公開」と同じ書き方)。標準入力から読んだ文書 (v0.4) は読み終えた時点で dirty なので対象になり、`DocSnapshot.sensitive` を常に立てる (03 §9.2.2) |
 | `take_clipboard(h: ClipboardHandleId) -> Option<ClipboardSource>` | Host (`Effect::SetClipboard` の実行時、§6.3) | ハンドルの中身 (Snapshot と範囲) を取り出す。`ClipboardSource` は `Send` で、Host が `bg` ワーカーで文字列化する (§9.1)。取り出した後のハンドルは無効。文字列化は `ClipboardSource::to_text` で行い、Host は変換の規則を持たない (v0.4 の M23 から、不正バイトのエスケープ文字を表記の文字列 `<0xNN>` にする規則を含む。03 §8.3.1。`ClipboardSource` は eve-core の型で、境界型ではない) |
 | `report(r: HostReport)` | Host (起動時の診断は `Host::start` の `Editor::new` の直後。Host の作業の結果は `HostMsg::Report` を受けた `step` の中、§9.2) | Host が自分で行った処理のうち利用者に示す結果 (型は下記) を Message キュー (FR-505) に積む **唯一の口**。どの MessageKey で・いつ・何回示すか (例: `msg.clipboard.fallback` は同じ起動の中で最初の 1 回だけ、FR-205 AC-2) は core が決め、Host は文言を持たない。文書の状態は変えない |
 | `set_caps(caps: Capabilities)` | Host (`Frontend::init` の後と `CapabilitiesChanged` のとき) | 端末の能力を渡す。キー表記もこれで作り直す |
@@ -818,7 +840,7 @@ struct DocSnapshot {
     format: TextFormat,              // encoding・BOM・default_eol・改行の混在・final_newline・不正バイトのエスケープの有無 (manifest の各キー)
     revision: Revision,
     saved_node_exists: bool,         // history.saved が Some か (保存点がある = ディスク上に保存済みの版がある)。復旧の案内に使う
-    sensitive: bool,                 // 秘密ファイルパターン (正本は 07) に一致する。manifest の sensitive (§11.2.1)
+    sensitive: bool,                 // 秘密ファイルパターン (正本は 07) に一致する、または標準入力から読んだ文書 (v0.4 の M25、03 §9.2.2)。manifest の sensitive (§11.2.1)
     path: Option<FsPath>,            // manifest の path / path_bytes。無題は None
     untitled_name: Option<String>,   // 無題の文書の表示名
 }
@@ -1227,6 +1249,8 @@ TUI と、ヘッドレスの消費者 (シナリオ・駆動 API・ヘッドレ�
 | `io` ワーカー | eve-host (JobSpawner) | ファイル読込・デコード、保存、metadata、外部変更チェック、起動時の退避の走査 (`RecoveryScan`、§9.3) を **直列** に実行 | 起動時 | v0.1 |
 | `bg` ワーカー | eve-host (JobSpawner) | 検索、Undo の実体化 (§14.1 MR1)、E3 の置換の ChangeSet の構築 (`ReplaceUnmappable`)、すべて置換と改行コードの変換の ChangeSet の構築 (`ReplaceAll` / `ConvertEol`)、クリップボードの文字列化 (`Effect::SetClipboard` の `Handle`。JobRequest ではなく Host の作業として `HostTasks::spawn_host_task` (§4.4) でこのキューに積み、結果は core に返さずに `ClipboardProvider` に渡す、§6.3)、スワップ書出し (v0.2。`FileSystem` Port を `SaveOptions { private: true, state_file: true, expected: Expect::Any, .. }` で使う、§11.2.1)、「退避先に保存」の書出し (`WriteRecovery`。I/O を伴うが `io` ではなくこのワーカーで `FileSystem` Port を使う。§9.3、03 §9.7 (e))。新しい要求が来たら同種の古い要求をキャンセルする。例外: Undo の実体化はキャンセルしない。`WriteRecovery` は古い要求を取り消さない (利用者の操作ごとに 1 回書く)。スワップは書込中のものをキャンセルせず、完了後に **最新の Snapshot で 1 回だけ** 再実行する (待っている要求は文書ごとに 1 つに畳む。書きかけのスワップを残さない) | 最初の bg の作業で遅延生成 | v0.1 |
 | ログ | eve-host | warn 以上のログをファイルへ書く | 最初の warn 以上のイベントで遅延生成 | v0.1 |
+| 標準入力の読込 (`eve-stdin-job`) | eve-host (JobSpawner) | **OQ-219 の 8 (提案) の ★ のとき**: `JobKind::OpenStdin` (03 §9.2.2) だけを走らせる専用のワーカー。パイプが閉じない間も `io` (他の文書の読込・保存) と `bg` を止めないため、`io` / `bg` に載せない。ジョブが終わると終わる。**終了のときに待たない** (join しない。§9.6。今の `ThreadJobSpawner` の drop はレーンごとに最大 1 秒待つ (`crates/eve-host/src/workers.rs` の `JOIN_WAIT`) ので、このワーカーをレーンとして作るなら「このレーンは待たない」とする)。8 で (b) を選んだときは作らない (`eve-stdin` が届いたデータを `HostMsg` でメインに知らせ、core が `OpenStdin` の続きを `io` に積み直す) | `evoeditor -` で起動し、標準入力が端末でないときだけ (プロセスで 1 回) | v0.4 (M25) |
+| 標準入力の読取 (`eve-stdin`) | eve-platform (`StdinSource` の実装) | 私有のハンドル / fd (§4.4 の `StdinSource` の注記) から標準入力を読み (Unix は停止の自己パイプと一緒に `poll` で待ってから `read(2)`、Windows は `ReadFile`)、チャンクを深さ 4 のチャネルで受け手 (`eve-stdin-job`) に渡す。読取の中で止まっていても取消しが効くように、ジョブとは別のスレッドにする (入力スレッドと同じく、読むだけのスレッド)。止めるときは OS ごとの方法で起こし (Unix は自己パイプ、Windows は `CancelSynchronousIo`、05 §9.1 / §9.2)、自分でハンドル / fd を閉じて終わる。**終了のときに待たない**。OQ-219 の 8 の (a)・(b) のどちらでも作る (ADR-0006 の改訂の対象) | `StdinSource` を作るとき (Host。`evoeditor -` で標準入力が端末でないとき) | v0.4 (M25) |
 | シグナル / コンソールハンドラ | eve-host (受信の OS API は eve-platform の Host 部品。コンソールハンドラのスレッドは OS が作る) | シグナル・コンソールイベントを受け、緊急退避を直接書いてからメインへ通知し、必要なら置換中フラグを待って端末を緊急復元する (§9.6、時間は §11.2.1) | 起動時 (OS 依存) | v0.1 (Windows のコンソールハンドラ)。Unix のシグナルは macOS / Linux を出荷する版 (Linux の受信スレッド `eve-signal` は eve-platform の `signals` が作る。v0.2 の M7、05 §11.1) |
 | クリップボード取得 (使い捨て) | eve-host | `Effect::RequestClipboard` ごとに作り、`ClipboardProvider` の取得 (ブロックし得る) を呼んで `InputEvent::ClipboardContent` を送って終わる (§6.3)。所有者ウィンドウのスレッドとは別 | `RequestClipboard` ごと | v0.1 |
 | クリップボードの所有者ウィンドウ (Windows) | eve-platform | メッセージ専用ウィンドウ (`HWND_MESSAGE`) を作ってメッセージループを回し、`WM_DESTROYCLIPBOARD` 等を処理する (05 §8.2) | 最初の `SetClipboard` / `RequestClipboard` で遅延生成 | v0.1 |
@@ -1236,7 +1260,7 @@ TUI と、ヘッドレスの消費者 (シナリオ・駆動 API・ヘッドレ�
 | ファイル監視 | eve-platform (notify) | 変更通知を `HostMsg::Fs` へ (デバウンス済み) | 必要時 | v0.5 |
 | 非同期ランタイム | eve-host が起動、eve-lsp / eve-ai が使用 | tokio (専用スレッド、少数ワーカー)。LSP の stdio、HTTP ストリーミング | 必要時 | v1.L |
 
-- **ワーカーは固定 2 本** (ADR-0006、確定。再評価は OQ-103)。保存が検索に待たされないことは `io` と `bg` の分離で満たす。検索は 1 スレッドでも 1 GB/s 出るので v0.1 では並列化しない。優先度付きプールと rayon の検討は v0.5 (横断検索)・v0.6 (tree-sitter)。`JobSpawner` の形は変えないので後から差し替えられる。
+- **ワーカーは固定 2 本** (ADR-0006、確定。再評価は OQ-103)。標準入力の読込 (v0.4 の M25) は、**OQ-219 の 8 (提案) の ★ のとき** に限り例外として、`evoeditor -` のときだけ専用のワーカー `eve-stdin-job` と読取のスレッド `eve-stdin` を足す (上の表。閉じないパイプで `io` を止めないため。汎用のワーカーは増やさない)。8 で (b) を選んだら、`eve-stdin` (入力スレッドと同じ扱いの読取だけのスレッド) だけを足し、作業スレッドは 2 本のままにする。答えが出たら ADR-0006 の改訂・R11 (§4.3) の本文と例外の一覧・`deps-policy.toml` の `thread_spawn.allowed_files`・`clippy.toml` の理由の文を同じ形で直す (08 §2.5 の M25 の (8))。保存が検索に待たされないことは `io` と `bg` の分離で満たす。検索は 1 スレッドでも 1 GB/s 出るので v0.1 では並列化しない。優先度付きプールと rayon の検討は v0.5 (横断検索)・v0.6 (tree-sitter)。`JobSpawner` の形は変えないので後から差し替えられる。
 - **`bg` のキューの順序**: 高い方から `WriteRecovery` (保存の失敗の後に利用者が選んだ退避。データ保全、P1) → `Materialize` (§14.1 MR1。会計外のメモリを持つ時間を短くする) → `ReplaceUnmappable` / `ReplaceAll` / `ConvertEol` (と v0.2 の `Swap`) → 検索 (`Search` / `SearchFrom` / `SearchLines`) の順に先頭へ積み、同じ段の間は投入順とする (提案、OQ-198)。検索は 1 MiB ブロックを処理するごとに、続きを自分でキューに積み直して譲る (長い全件検索が上の段のジョブを待たせない)。検索の中での優先 (可視範囲を先に、等) は 03 §12 が決める。`ManualJobSpawner` の `run_jobs()` も同じ順で実行する (§4.4)。
 - **`io` ワーカーが OS の呼出しで止まったとき** (提案、OQ-179): `io` は 1 本なので、ネットワーク共有の応答が無い等で 1 つのジョブが OS の呼出しの中で止まると、開く・保存・走査がすべて止まる (取消しは呼出しから戻るまで効かない)。そこで Host は `io` ジョブに **監視時間** (5 s。定数) を設ける。ワーカーはジョブを始めるときに (JobId, 開始の Tick) を原子変数に書き (Mutex は使わない、MR9)、Host は待機の期限にその監視の期限を加えて (§9.2 の `wait_deadline`)、超えていたら (1) `HostReport::IoJobStalled { job }` で core に知らせ (§5.4)、(2) そのワーカーを **切り離し**、(3) 新しい `io` ワーカーを作って、キューに残るジョブをそちらで続ける。切り離したワーカーは、止まっていたジョブの結果 (終端を含む) を送り終えたら次のジョブを取らずに終わる。止まっていたジョブは失敗にしない (保存なら置換が後で完了し得る。ジョブ表の行は残り、終端の結果が届けば通常どおり採否を決める、§9.3)。切り離したワーカーが残っている間に新しい `io` ワーカーも止まったら、それ以上は作らない (同時に切り離しておくのは 1 本まで)。R11 の「作業スレッドは固定 2 本」は **「同時に有効なのは 2 本」** と読み替える (切り離した 1 本は数えない)。代替は、`FsKind::Network` (§4.5) と分かった文書のジョブだけを専用の 3 本目のレーンに載せる案 (最初の `metadata` までは分からない) (10 の OQ-179)。
 - **スレッドのパニック**: ワーカーはジョブ単位で `catch_unwind(AssertUnwindSafe(|| run_job(..)))` で包み、パニックを `JobResult::Failed { err: JobError::Panic }` に変換して **そのジョブの終端の結果** として送る (ジョブの失敗として通知し、ワーカーは次のジョブへ進む)。パニックの前に `emit` 済みの非終端の結果 (`Progress`・`Identity`・`SearchHits { done: false }` 等) は届いたまま有効で、core は `Failed { Panic }` を受けた時点でジョブを終える。終端の結果を `emit` した後にパニックした場合、`Failed { Panic }` は「終端の後に届いた結果」として破棄される (§9.3。ログには残る)。Host の作業 (`HostTasks::spawn_host_task`) も同じく包み、失敗として扱う (クリップボードは書込失敗のメッセージ)。**パニックフックはどのスレッドでも端末に触れない**: ワーカーが `run_job` (と Host の作業) を実行している間はスレッドローカルの印 `IN_JOB` を立て、印が立っているスレッドのフックは **ログ (クラッシュログではなく error のログ) だけを書き、`HostMsg::Fatal` を送らない** (上の `catch_unwind` で回復するため)。メイン以外で `IN_JOB` が立っていないスレッド (入力スレッド等) のフックはメインへ `HostMsg::Fatal` を送るだけで、緊急退避は書かず (退避の「1 回だけ」の CAS にも参加しない、§11.2.1)、**退避と端末の復元はメイン (Host) が `Fatal` を受けて行う**。メインのパニックは `catch_unwind` で捕まえた後に Host が退避と復元を行う (§11.2)。入力スレッドの終了 (パニック・読取不能) は Fatal として扱い、緊急退避 (§11.2) してから終了する。
@@ -1511,6 +1535,12 @@ fn run_job(req: &JobRequest, ports: &JobPorts, cancel: &CancelToken, emit: &mut 
 enum JobKind {                     // Port は持たない (run_job が JobPorts から取る、§4.4)。#[non_exhaustive]。
                                    // io / bg の振り分けは eve-host の JobSpawner の実装が決める (下の「io」「bg」は仕様の意図。v0.2.0 の実装は Search だけが bg、§9.1 の「v0.2.0 の実装との差」)
     Open     { path: FsPath, opts: OpenOptions },                                                     // io
+    OpenStdin { opts: OpenOptions },                                                                  // v0.4 の M25 (03 §9.2.2)。OQ-219 の 8 の ★ では io でも bg でもなく専用のワーカー eve-stdin-job (§9.1)。
+                                                                      // JobPorts.stdin から ReadChunks を取って読む。opts は forced (--encoding)・user_read_only (--readonly)・
+                                                                      // default_eol・huge_file_warn_bytes (上限)・long_line_threshold だけを使い、read_only_requested を立てて読む (確認を出さない)。
+                                                                      // CancelToken は「読むのをやめて、読んだところまでを StdinDone で返す」意味 (Failed { Cancelled } にしない)。
+                                                                      // 取消しのときは Host が StdinSource::wake を呼んで待ちを起こす (§4.4)。partial は立てない。
+                                                                      // core はジョブ表で Pending::Open とは別の種類 (Pending::OpenStdin の案) に持つ (03 §9.2.2)
     Save     { path: FsPath, snapshot: Snapshot, encoding: Encoding, bom: bool,
                escape: EscapePolicy /*不正バイトのエスケープ文字の扱い (Restore | AsText | Reject)。core が TextFormat::save_escape_policy で決める (03 §8.3 / §8.3.1。v0.4 の M23 から、Restore は書く文字コードが escape_encoding と同じときだけ)。
                                       v0.1 の案の pua: PuaEscapeMode は、実装 (eve-encoding の EscapePolicy) に合わせて M23 の仕様の PR で改めた*/,
@@ -1560,6 +1590,8 @@ struct OpenOptions {               // 開くジョブの指定 (Copy)。確認 (
                                    // 理由の保持場所はここだけにする (再投入で JobId が変わっても OpenOptions ごと引き継ぐので失われない)。
                                    // main は Complete を受けたら pending ∪ Complete.detected ∪ (meta から決まる理由、03 §9.6) を文書に付ける
     default_eol: Option<LineEnding>, huge_file_warn_bytes: Option<u64>, long_line_threshold: Option<usize>, // 開くときの設定の値 (07 §5)。None は既定値
+    partial: bool,                 // v0.4 の M25: 先行表示 (JobResult::Partial) を送ってよい。core が新しく開く読込 (file.open・起動時のパス) のときだけ立てる。
+                                   // 再読込・開き直し・OpenStdin では立てない。確認からの再投入は引き継ぐ (03 §9.2.1)
     // v0.1 の案の confirmed_invalid_bytes は置かなかった (ManyInvalidBytes の確認の回答は read_only_requested で表す)
 }
 enum SaveStrategy {                // 既定は Atomic { hardlink: Ask }
@@ -1591,7 +1623,9 @@ struct JobOutput { job: JobId, body: JobResult }
 // 変種は最初の利用者と同時に足す (#[non_exhaustive] 相当の扱い。境界型ではない)
 enum JobResult {                   // #[non_exhaustive]
     // ── 開く (io、03 §9.2) ──
-    Progress     { bytes: u64, total: u64 },                    // 50 ms 以内に最初の 1 回、以後 10 Hz 以下
+    Progress     { bytes: u64, total: u64 },                    // 50 ms 以内に最初の 1 回、以後 10 Hz 以下。OpenStdin (v0.4) は total = 0 を送る (空のファイルも total = 0 なので、大きさが分からないかは文書の種類で判定する、03 §9.2.2)
+    Partial      { head: Text /*固定の先頭 (1 MiB まで、行の区切りで切る。全文の接頭辞)*/, format: TextFormat /*先頭の時点の形式。表示にだけ使う*/ },
+                                                                // v0.4 の M25 (03 §9.2.1)。非終端。読込が 200 ms を過ぎても終わらないとき 1 回 (判定のやり直しの後は送り直す)。OpenOptions.partial が立った Open だけが送る
     NeedsConfirm { ask: ConfirmAsk }, // ジョブはここで終了 (下の「確認を待ってブロックしない」)
     // v0.1 の案の Identity (二重オープン判定用の中間結果) は v0.2.0 の実装に無い。v0.2.0 の二重オープンの判定は、開くジョブの前に正規化したパスの
     // 文字列を比べるだけ (FileId を使わない。§4.5 の規則の表の「二重オープン」と食い違う。名前を付けて保存の同一の判定 (SAF-28) と一緒に v0.4 以降で直す)
@@ -1603,6 +1637,10 @@ enum JobResult {                   // #[non_exhaustive]
                                                StatefulEncodingWithInvalidBytes 等。どの理由をジョブが入れるかは 03 §9.2 / §9.6*/,
                    notes: OpenNotes /*{ redetected: Option<Encoding> (判定をやり直した結果), guess_unsupported: Option<&str> (対応しない文字コードと推定した名前、03 §8.2) }*/,
                    interrupted_save: Option<InterruptedSave> /*§4.5。存在するファイルでも、直接上書きの中断の痕跡があれば返す*/ },
+    StdinDone    { text: Text, format: TextFormat, detected: ReadOnlyReasons /*Binary / InvalidBytes / StatefulEncodingWithInvalidBytes / LoadIncomplete*/,
+                   preserved: PreservedMap /*保持方式の記録。ファイルと同じ関数で集める (上限を超えたら Overflow)*/,
+                   end: StdinEnd /*Eof | Limit (上限) | Stopped (取消し) | Error(FsError) (途中の読取の失敗) | OutOfMemory (try_reserve の失敗。構築済みの分を返す)*/ },
+                                                                // v0.4 の M25 (03 §9.2.2)。OpenStdin の終端 (取消しでもこれを返す)。meta・stamp・内容ハッシュ・interrupted_save を持たない
     // ── 保存 (io、03 §9.3) ──
     Saved        { report: SaveReport },
                                                                             // 保存点の履歴ノード・保存先のパスは core がジョブ表 (Pending::Save) に持つ。
@@ -1684,7 +1722,8 @@ enum JobError {                    // #[non_exhaustive]
 
 | ジョブ (`JobKind`) | 結果 | Revision が base より進んでいたとき | 文書が閉じられていたとき | JobId がジョブ表に無い / キャンセル済み | 詳細 |
 |---|---|---|---|---|---|
-| `Open` | `Progress` / `NeedsConfirm` / `NewFile` / `Complete` / `Failed` | 起きない (`Loading` の文書は編集できない)。起きたら不変条件違反として破棄し `error!` ログ | 破棄 (閉じるときにキャンセル済み) | 破棄 | 03 §9.2 |
+| `Open` | `Progress` / `Partial` (v0.4) / `NeedsConfirm` / `NewFile` / `Complete` / `Failed` | 起きない (`Loading` と `Partial` の文書は編集できない)。起きたら不変条件違反として破棄し `error!` ログ | 破棄 (閉じるときにキャンセル済み) | 破棄 | 03 §9.2 / §9.2.1 |
+| `OpenStdin` (v0.4) | `Progress` / `StdinDone` / `Failed` (`Panic` だけ。読んだ内容は失う。確保の失敗は構築済みの分を `StdinDone { end: OutOfMemory }` で返す。03 §9.2.2) | 起きない (同上) | 破棄 (閉じるときにキャンセル済み。読んだ内容も捨てる) | キャンセル済み: **`StdinDone` を採用** (取消し (`Esc`) は「読むのをやめて開く」意味で、終端は `StdinDone { end: Stopped }`)。ジョブ表に無い: 破棄 | 03 §9.2.2 |
 | `Save` | `Saved` / `Unmappable` / `EscapeMerge` (v0.4 の M23。どちらも何も書いていない。確認は結果の base Revision に対して出し、承認の時点で Revision が進んでいれば今の Snapshot で投入し直す、03 §8.3.1 / §9.7 (e)) / `Failed` (cancel の出どころ (`User` / `QuitAbort`) は core の `SaveChain` が持つ (`Saving.cancel_origin`)。ジョブ側は区別せず、どちらも `Failed { Cancelled }` を返す。出し分けは 03 §9.7) | **採用**: `history.saved` を `node` (Snapshot 取得時点のノード) にし、`disk_stamp` を `report.new_stamp` にする。保存後の編集は dirty のまま残る (§5.1)。名前を付けて保存は、ジョブ表 (`Pending::Save`) に持った保存先のパスで文書のパスを更新する (v0.2.0 の `Saved` は `canonical` / `meta` を持たない)。`Failed` も採用 (失敗の確認・メッセージを出す) | 文書には反映しない (破棄)。`Failed` はメッセージで示す (閉じる手順は保存の完了を待つ、03 §9.2) | キャンセル済み: **`Saved` は必ず採用** (書いた事実は取り消せない。左の列と同じ更新をする)。`Failed { Cancelled }` は `info.save.aborted` を出す。それ以外の `Failed` (`ReplacedMovedToBackup` / `InPlaceFailed` 等) も採用してメッセージを出す (退避パスを必ず示す)。ジョブ表に無い: 破棄 (終端の後) | 03 §9.3 / §9.7 |
 | `Metadata` | `Meta` / `Failed` | `UnchangedSave`: 受け手は 03 §9.7 の `CheckingUnchanged`。Revision が進んでいたら結果を破棄し、現在の状態で保存を最初からやり直す (照合の間に dirty になったら書く必要がある)。`SaveAsTarget` / `ExternalCheck` (v0.2): 採用 (ディスク側の情報で、文書の Revision に依らない) | 破棄 | 破棄 (読むだけのジョブで、副作用が無い) | 03 §9.3 / §9.5 / §9.7 |
 | `Search` / `FindNext` | `SearchBatch` / `SearchDone` / `FindNextDone` / `Failed` | 破棄。入力が 300 ms 止まった後に可視範囲から再要求する | 破棄 | 破棄 | 03 §12.2 |
@@ -1695,7 +1734,7 @@ enum JobError {                    // #[non_exhaustive]
 | `WriteRecovery` | `RecoveryWritten` / `Failed` | **採用** (書いた場所を `info.save.to_recovery` で示すだけで、文書の状態 (`saved`・dirty・format) は変えない)。`Failed` も採用して `msg.save.recovery_failed` を示す | **採用** (同じメッセージを示す。書いた事実と場所は文書が無くても利用者に要る) | キャンセル済み: **採用** (書いた事実は取り消せない。左の列と同じ)。ジョブ表に無い: 破棄 (終端の後) | 03 §9.7 (e) |
 | `RecoveryScan` | `RecoveryFound` / `Failed` | **採用** (ディスク側の情報で、文書の Revision に依らない)。`dirs` が空でなければ起動時の退避の案内 (04 §15.2) を 1 回示す。v0.1 の案内は退避の中身 (manifest・本文) を読まず、名前と場所だけで決める (形式の版も見ない。形式不明・新しい版の形式の案内は v0.2 の復旧 UI、§11.2.1)。キーは、`kind = Emergency` の退避 (代替の退避先のものを含む) が 1 件以上あれば `msg.recovery.found`、`Rescue` だけなら `msg.recovery.found_rescue`。`{dir}` はそのキーの kind の退避のうち名前の UTC timestamp が最も新しい 1 件のディレクトリ **自身** の絶対パス (緊急退避は `recovery/` 直下、「退避先に保存」は `recovery/rescue/` の中、代替の退避先 (`alternate = true`) はさらに別の場所で、親が揃わないため親は示さない)。`{count}` は `dirs` の全件数 (両方の kind と代替の退避先を含む)。`Failed` は `warn!` ログだけで、利用者には示さない (案内は補助で、起動を妨げない) | **採用** (同上。走査は文書と無関係) | 破棄 (キャンセルしないので通常は起きない) | 03 §10.1 |
 - **開く**: core はまず Document を `Loading` 状態で作成し (パスだけを持つ)、`metadata` → `canonicalize` → `FileId` による二重オープン判定 → 読込をすべて **`io` ジョブ内** で行う (ADR-0020)。メインスレッドでは `stat` もしない。
-- **大きいファイルの読込**: ワーカーがチャンク単位でデコードし、進捗 (10 Hz 以下) を返す。core は開く操作から 50 ms 以内に進捗を表示し、読込中も入力に応答し、キャンセルを受け付ける (NFR-104、FR-122)。読込中は Document を `Loading` として扱う。先頭部分を読み取り専用で先に表示する `Partial` は v0.4 (`load_state` に値を足す。v0.3 までのコードの列挙には無い)。16 MiB 以下はハッシュも同じジョブで計算する (§4.5)。読込用の事前確保は `try_reserve` (§11.2.2)。
+- **大きいファイルの読込**: ワーカーがチャンク単位でデコードし、進捗 (10 Hz 以下) を返す。core は開く操作から 50 ms 以内に進捗を表示し、読込中も入力に応答し、キャンセルを受け付ける (NFR-104、FR-122)。読込中は Document を `Loading` として扱う。先頭部分を読み取り専用で先に表示する `Partial` は v0.4 の M25 (`load_state` に値を足す。読込が 200 ms を過ぎても終わらないときだけ、ジョブが固定の先頭を `JobResult::Partial` で送る。03 §9.2.1)。標準入力 (`evoeditor -`、v0.4 の M25) は `JobKind::OpenStdin` を専用のワーカーで読む (03 §9.2.2)。16 MiB 以下はハッシュも同じジョブで計算する (§4.5)。読込用の事前確保は `try_reserve` (§11.2.2)。
 - **保存**: 常に `io` ジョブで行う (Snapshot を渡す)。ジョブ内では、エンコードと黙示置換の照合 (§13.4、表現不能文字があれば書込前に中止して位置を返す、FR-112)、区分 B の確認 (v0.1、§13.4)、`SaveOptions.expected` による外部変更の照合 (FR-117)、`write_atomic` を行う。直接上書き (承認後の `write_in_place`、および `InPlacePattern` による自動の直接上書き) は、書く前に必ず乾式走査 (エンコード + 照合、書込なし) で表現不能の有無と出力長を確定する (§4.5)。保存のエンコーダ `SaveEncoder` (Snapshot と format から作り、`ReadChunks` を実装する) は `SaveEncoder::dry_scan(&snapshot, &format, cancel) -> Result<DryScan { out_len: u64 }, Unmappable { positions, total }>` (書き出さずに全文を encode + 照合し、BOM と ISO-2022-JP の終端エスケープを含む出力のバイト数を数える) と、同じ規則で 2 回目のエンコードをチャンクで供給する `SaveEncoder::new(snapshot, format)` を持つ。ジョブは `out_len` を `write_in_place` の `len` に、後者を `data` に渡す (`ReadChunks` に長さのメソッドは足さない。03 §9.3 の「乾式走査と出力長」)。**手順の順序と分岐の正本は 03 §9.3** (本書は要約)。保存中の編集は許可し、完了時に「Snapshot 取得時点の履歴ノード」を `history.saved` にする (§5.1)。
 - **未編集の上書き保存** (確定 (ユーザー回答)、OQ-116): dirty でなく、かつディスク上のファイルが `disk_stamp` と一致する (照合は `io` ジョブで `metadata`) ときの上書き保存は **書き込まない** (「変更はありません」と表示)。別のファイルへの名前を付けて保存と文字コードの変更 (`file.set_encoding`) では書き込む。名前を付けて保存で今の文書と同じファイルを指したときは上書き保存と同じ扱い (未編集なら書かない)。操作ごとの一覧は 03 §9.3 の「手順 0 の適用対象」。
 - **外部変更チェック** の `metadata` もジョブで行う。v0.1 は保存直前の照合のみ。フォーカス復帰時の確認は v0.2、ファイル監視通知時は v0.5。明示の再読込 (`file.reload`、v0.1) は `Open` ジョブ (`OpenOptions.forced_encoding` に今の文字コード) で読み直し、`Complete` を `Origin::Reload` の Transaction として適用する (03 §9.5)。
@@ -1721,6 +1760,7 @@ enum JobError {                    // #[non_exhaustive]
    - **任意の端末機能の有効化の失敗は起動エラーにしない**: ブラケットペーストの有効化 (`?2004h`) や拡張キーボードプロトコルの push が `Unsupported` 等のエラーを返したら、無視して起動を続け、`Capabilities` の該当項目 (`bracketed_paste` / `enhanced_keys`) を false にして知らせる。起動エラーにするのは raw モード・代替スクリーン等の必須の初期化の失敗だけ (04 §14.1)。kitty keyboard protocol の push は Unix だけで行い、Windows では行わない。Windows はブラケットペースト (`?2004h`) を送らない (入力は自前の `ReadConsoleInputW` ループで、貼り付けは個別のキーとして届くのでバースト検出で合成する、04 §6.6。`Capabilities.bracketed_paste` は false)。
 5. 入力スレッドと `io` ワーカーの起動 (`bg` とログスレッドは遅延)。Windows ではセッション終了通知のスレッドも起動する (v0.2。隠しウィンドウの作成はそのスレッドで行い、メインスレッドは待たない。§11.2.1。コストは 09 BM-101a で計測)。クリップボードはここでは初期化しない (§6.3)。
 6. 端末サイズ取得 → `Resize` を core に送る → `Editor::open_initial_files(files, read_only, forced)` (ファイル読込ジョブ投入) → **空/読込中の最初の Frame を即描画**。
+   - **標準入力 (`evoeditor -`、v0.4 の M25)**: 標準入力が端末でないとき、Host は手順 4 の前に `StdinSource` を作って `eve-stdin` を始め、**OQ-219 の 9 (提案) の ★** では最初のデータか EOF (または上限・読取の失敗) が届くまで手順 4 (端末の初期化) を遅らせる (待つ間は stderr に `info.stdin.waiting` の 1 行。03 §9.2.2 の「端末の初期化の時期」)。この待ちは NFR-101 の起動の区間に含めない。読み終えたら (どちらの案でも) 端末のモードを入れ直して全面を描き直す (SIGCONT の再初期化と同じ経路、05 §11.1)
 7. 以降、遅延初期化: 検索ワーカー・ログファイル・クリップボード・(v0.6) シンタックス文法・ファイル監視・(v1.L) LSP/AI は必要時に起動。
 
 予算の目安 (プロセス内、p50): 引数解析 0.05 ms → 設定読込 ≤ 2 ms → 端末初期化 ≤ 1 ms (Windows ≤ 2 ms) → スレッド起動 ≤ 0.3 ms → 最初の Frame の生成と書込 ≤ 1 ms。合計は Windows で ≈ 5.4 ms で、NFR-101 (a) の判定値 8 ms に対して約 1.5 倍の余裕。
@@ -1747,6 +1787,7 @@ enum JobError {                    // #[non_exhaustive]
 - **保存中の終了**: 終了の要求の時点で保存ジョブが実行中なら、5 秒待ってから `ui.confirm.quit_saving` を出す (04 / 05 / 07 と同じ方式。既定と `Esc` は「待つ」)。「保存を中止して終了」を選ぶと、実行中の保存に cancel を送り (main はジョブの段を見ない)、ジョブの終端の結果を待つ。置換の前の段のジョブは `Failed { Cancelled }` (`info.save.aborted`、§9.3) で終わり、置換・上書きを始めたジョブは取消しを無視して完了する (§4.5 の「取消し」)。その後 dirty な文書を退避してから終了する (未保存の内容は退避先に残る。終了時のメッセージで退避先を示す)。
 - **通常終了と置換中フラグ**: ユーザー操作の終了 (`app.quit`) と `Effect::Quit` は、`Frontend::restore` の後、置換中フラグが下りるまで `exit` しない (原子的置換は通常数 ms で終わり、直接上書きは書込を途中で止めると元ファイルが壊れるので、時間予算を設けない。§11.2.1 の表)。**待つ前に知らせる**: 端末を復元した後は画面に何も出ないので、フラグが上がっていたら Host は待ち始める前に stderr へ 1 行 `stderr.quit.waiting_save` (「保存の完了を待っています: {path}」) を出す (待たずに済むときは出さない)。`{path}` は Host の `JobSpawner` が覚えている実行中の `Save` ジョブの保存先 (投入時に記録し、終端の結果を受信口で受けたら消す) を、core と同じ表示用パスの変換 (§4.4) で文字列にしたもの。複数あれば保存先ごとに 1 行ずつ出す。この行は終了の順序 (§11.2.1 の表) の段 3 の前に出る行で、段 5 の行 (`Effect::Quit.stderr` と `stderr.recovery.*`) より前に出る。
 
+- **標準入力のスレッド (v0.4 の M25)**: どの終了の経路でも、`eve-stdin` と `eve-stdin-job` (§9.1) の終わりを **待たない** (読みかけのパイプで終了が止まらない)。止める合図 (05 §9.1 / §9.2) を送るだけで、`exit` で終わらせる。`JobSpawner` の drop がレーンの終わりを待つ実装 (`JOIN_WAIT`) でも、このレーンは待たない。
 - **終了コード表の正本は [07 §18.4](07-config-extensibility.md#184-終了コード)** (OQ-28 で確定) とし、本書は値を再掲しない。05 は OS 差のみを書く。
 - OS ごとのシグナル・コンソールイベントの受け方は 05-platform。
 
@@ -1849,7 +1890,7 @@ struct DocumentInfo {
     read_only: Vec<ReadOnlyReasonView>,            // 読み取り専用の理由を優先順に (空なら理由なし)。v0.3 で Vec<String> (変種名の文字列) から型に改めた (STR-C6)
     views: Vec<ViewId>,                            // この文書を表示している View (v0.1 は 1 つ)
 }
-enum LoadStateView { Loading, Ready, Failed }      // Partial は v0.4 で足す (§5.1 の予約)
+enum LoadStateView { Loading, Partial /*v0.4 の M25。先行表示の間 (03 §9.2.1)。DocumentText / Selection は NotLoaded*/, Ready, Failed } // #[non_exhaustive]。Partial の追加は C2 の追加 (CONTRACT_VERSION は 0 のまま)
 enum ReadOnlyReasonView {                          // eve-core の ReadOnlyReason (§5.1、03 §9.6) を 1 対 1 に写したもの。変換は eve-core
     FileAttribute, UserRequested, NoWritePermission, InvalidBytes, StatefulEncodingWithInvalidBytes,
     Binary, LargeFileViewer, LoadIncomplete,
@@ -1987,7 +2028,7 @@ struct Hunk {
 
 | 項目 | 規定 |
 |---|---|
-| 公開 | `eve-host` は Editor の状態を変える呼出し (`open_initial` / `handle_input` / `on_job_result` / `tick` / `execute`) の **直後に毎回**、`Editor::take_snapshot_updates()` が返した文書 (Transaction の適用・保存の完了・読込の完了・閉じた文書) の **スロット** だけを `Editor::emergency_snapshot(doc)` の結果で更新する (§9.2 の `sync_emergency`)。`drain_events` には依存しない (`Host::step` が `Signal` / `Fatal` で抜ける前に処理したメッセージの分も公開済みになる) **スロット表は容量を固定せず、文書を開くときに伸ばす** (`ArcSwap<Arc<[Arc<ArcSwapOption<DocSnapshot>>]>>`、§14.1 MR12。arc-swap を使う。`DocSnapshot` の型は §5.4)。文書は開いたときに空きスロットを 1 つ割り当て (空きが無ければメインが表を 1 つ足して差し替える)、閉じたときに返す。文書の数に上限は設けず、全文書が緊急退避の対象になる。打鍵ごとの更新はその文書のスロットだけで、確保は `ArcSwapOption::store` に渡す小さな `Arc<DocSnapshot>` の 1 回だけ (本文の rope は clone で共有し、全文の複写はしない)。スロットを空にする条件は「文書が dirty でない (履歴の現在位置が保存点にある)」だけで判定する (03 §10.1 と同じ。保存中に入力した分は保存の完了の後も dirty なので消えない)。保存ジョブの実行中に閉じた文書のスロットは、その保存の完了まで空にしない (03 §9.2 の「閉じる手順」) |
+| 公開 | `eve-host` は Editor の状態を変える呼出し (`open_initial` / `handle_input` / `on_job_result` / `tick` / `execute`) の **直後に毎回**、`Editor::take_snapshot_updates()` が返した文書 (Transaction の適用・保存の完了・読込の完了・閉じた文書) の **スロット** だけを `Editor::emergency_snapshot(doc)` の結果で更新する (§9.2 の `sync_emergency`)。`drain_events` には依存しない (`Host::step` が `Signal` / `Fatal` で抜ける前に処理したメッセージの分も公開済みになる) **スロット表は容量を固定せず、文書を開くときに伸ばす** (`ArcSwap<Arc<[Arc<ArcSwapOption<DocSnapshot>>]>>`、§14.1 MR12。arc-swap を使う。`DocSnapshot` の型は §5.4)。文書は開いたときに空きスロットを 1 つ割り当て (空きが無ければメインが表を 1 つ足して差し替える)、閉じたときに返す。文書の数に上限は設けず、全文書が緊急退避の対象になる。打鍵ごとの更新はその文書のスロットだけで、確保は `ArcSwapOption::store` に渡す小さな `Arc<DocSnapshot>` の 1 回だけ (本文の rope は clone で共有し、全文の複写はしない)。スロットを空にする条件は「文書が dirty でない (履歴の現在位置が保存点にある)」「読込中 (`Loading` / `Partial`。v0.4 の先行表示は `Loading` と同じく対象外)」「閉じた」の 3 つだけで判定する (03 §10.1・§5.4 の `emergency_snapshot` と同じ。保存中に入力した分は保存の完了の後も dirty なので消えない)。保存ジョブの実行中に閉じた文書のスロットは、その保存の完了まで空にしない (03 §9.2 の「閉じる手順」) |
 | ロックの規則 | 退避の経路とパニックフック (ログの書込と `Fatal` の送信) では **ブロックするロックを取らない** (ArcSwap、または try_lock + 最大 50 ms の再試行)。パニックフックはパニックを起こしたスレッドで実行され、そのスレッドがロックを持っていればデッドロックするため。受信スレッドはメインやワーカーがロックを持ったまま止まっていても進めなければならないため |
 | 書き手 | パニック (メインの `catch_unwind`。パニックフックは書かない: `IN_JOB` のワーカーではログだけ、それ以外のメイン以外のスレッドでは `HostMsg::Fatal` を送るだけで、退避はそれを受けたメインが書く、§11.2)、Windows コンソールイベント (`CTRL_CLOSE_EVENT` 等のハンドラスレッド)、入力スレッドの死亡など非メインスレッドのパニック (`HostMsg::Fatal` を受けたメイン)、Windows セッション終了通知 (下記、v0.2)、シグナル (Unix: signal-hook の専用スレッド。macOS / Linux を出荷する版) のいずれからも、公開済みの `EmergencySnapshot` だけを読んで書く。シグナル系は **メインを待たずに直ちに書く** (§9.6)。書込そのものは eve-platform の Host 部品 (安全な関数。`std::fs` を直接使い、Port を通さない。ディレクトリとファイルは所有者のみの DACL / 0700・0600 で作る) が行い、eve-host はそれを呼ぶ (R5)。Port を通さないのは、注入された Port の状態 (テスト用の偽物・ジョブのキュー) に左右されないため |
 | スワップの書き手 (v0.2) | スワップは `bg` ワーカーのジョブ (`JobKind::Swap`) が **`FileSystem` Port** を `SaveOptions { private: true, state_file: true, expected: Expect::Any, .. }` で使って書く (原子的保存で置き換える)。緊急退避とは書き手が異なるが、本文と manifest の形式 (下記) と、それを作るシリアライズの関数は共用する。書込中のスワップはキャンセルせず、完了後に最新で 1 回だけ再実行する (§9.1) |
@@ -2045,7 +2086,7 @@ len = 12345                           # 必須。退避した本文のバイト�
 written = true                        # 必須。本文の書込と fsync を終えたら true
 stored = true                         # 任意 (無ければ false。2026-11-07 に追加)。本文の len バイトをすべて OS に渡した (write が戻った) ら true。written = true の文書も true。スワップは書かない
 xxh3 = "9e1a2f0c4b7d3e58"             # 任意 (stored = true のときだけ)。本文の XXH3-64 (16 進 16 桁、小文字)。読み手が書きかけを見分ける
-sensitive = false                     # 任意 (無ければ false)。秘密ファイルパターン (正本は 07) に一致した文書。読み手は復旧の案内で削除を促す
+sensitive = false                     # 任意 (無ければ false)。秘密ファイルパターン (正本は 07) に一致した文書と、標準入力から読んだ文書 (v0.4 の M25。常に true)。読み手は復旧の案内で削除を促す
 ```
 
 読み手 (v0.2 の復旧 UI) は、`format_version` が知る最大の版より大きい manifest を見たら、本文を読まずに退避の場所だけを示し (`msg.recovery.unknown_format`、04 §15.2)、退避ディレクトリ (manifest・本文) を **変更・移動・削除しない** (05 §7.5 (a))。v0.1 の起動時の案内は manifest を読まないので版を区別せず、`msg.recovery.found` / `found_rescue` で場所を示すだけで、同じく何も変えない (§9.3)。検査は [09 §3.4](09-testing-quality.md#34-l3-ヘッドレス統合テスト-eve-testkit) (未知のキー付きのフィクスチャ。ゲートは G1c)。
@@ -2226,7 +2267,7 @@ sensitive = false                     # 任意 (無ければ false)。秘密フ�
 | 入力遅延 (NFR-103) | メインスレッドで行うのは O(log n) 編集 + 可視範囲の Frame 生成 + 描画出力のみ。I/O (stat 含む)・全文走査・解析はジョブへ。入力の合体と Text の集約。テーマの段は事前計算 (描画時の色変換なし)。計測範囲の定義は 01 §3.0.1 |
 | Frame 生成コスト | 可視行のみ。長大行は「可視列範囲に対応するバイト範囲」をチャンク単位で探索し、行全体を走査しない。行ごとのレイアウトキャッシュ (Revision で無効化、上限は可視行の 2 倍) |
 | 巨大ファイル (NFR-104/105) | ropey の O(log n) 編集、チャンク読込と進捗表示、行数カウント等は遅延。閾値超で重い機能を自動無効化する枠組み (FR-123) は無効化する機能 (ハイライト) と同時に v0.6 |
-| 長大行 (NFR-106) | v0.1: 閾値 (1 MiB) を超える行を含む文書は読み取り専用で開き、その行は先頭 64 KiB までレイアウトする (03 §11.5)。v0.2: 閾値超の行は **char 近似モード** (書記素 = char、幅 = char ごとの表引き、折り返し OFF) で編集でき、ASCII 連続の高速経路で 10 MB の行の各操作 p99 ≤ 100 ms (ジョブ化・キャンセル不要)。列チェックポイント構造と 50 ms は v0.4 以降 |
+| 長大行 (NFR-106) | v0.1: 閾値 (1 MiB) を超える行を含む文書は読み取り専用で開き、その行は先頭 64 KiB までレイアウトする (03 §11.5)。v0.2: 閾値超の行は **char 近似モード** (書記素 = char、幅 = char ごとの表引き、折り返し OFF) で編集でき、ASCII 連続の高速経路で 10 MB の行の各操作 p99 ≤ 100 ms (ジョブ化・キャンセル不要)。50 ms と書記素単位の正確さは v0.4 の M25 (`ColIndex` を書記素の単位に広げ、要る位置まで遅延して作り、編集では変更の位置より前を残す。ジョブにはしない。03 §14.4) |
 | 検索 (NFR-108/109) | リテラルは memmem でチャンクをまたいで走査 (1 GB/s 超)。正規表現は行単位 (v0.2)。結果は 256 件 / 20 ms ごとにまとめて送る。可視範囲の同期検索は時間予算 1 ms (定数。設定キーにしない) |
 | メモリ (NFR-202/203) | rope のチャンク共有、Undo は ChangeSet で保持し全文コピーをしない、Undo 上限 (文書あたり + プロセス全体 (v0.2))、デコードはストリーミング。詳細は §14.1 |
 | アイドル CPU (NFR-204) | タイマはすべて deadline 方式、ポーリング禁止 |
