@@ -544,3 +544,229 @@ fn 改行の種類はそのまま往復する() {
         assert_eq!(s.fs.read("/w/c.txt").unwrap(), want, "{name}");
     }
 }
+
+// ---------- 不正バイトを含むファイル (v0.4 の M23。01 NFR-304 AC-4 / AC-6、03 §8.3.1) ----------
+
+/// ファイルの部品。`Text` は文字コードで符号化し、`Raw` はそのまま (不正バイト) 置く。
+enum Part {
+    Text(&'static str),
+    Raw(&'static [u8]),
+}
+
+/// 不正バイトの比率の確認 (FR-127、1% 超) を出さないための詰め物。
+const PAD: &str = "0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789\n\
+                   0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789\n";
+
+/// `s` を `enc` (UTF-8 / UTF-16 / `Shift_JIS` / EUC-JP) で符号化する (BOM なし)。
+fn encode_text(enc: Encoding, s: &str) -> Vec<u8> {
+    match enc {
+        Encoding::Utf8 => s.as_bytes().to_vec(),
+        Encoding::Utf16Le => s.encode_utf16().flat_map(u16::to_le_bytes).collect(),
+        Encoding::Utf16Be => s.encode_utf16().flat_map(u16::to_be_bytes).collect(),
+        Encoding::ShiftJis => encoding_rs::SHIFT_JIS.encode(s).0.into_owned(),
+        Encoding::EucJp => encoding_rs::EUC_JP.encode(s).0.into_owned(),
+        other => panic!("表にない文字コード {other:?}"),
+    }
+}
+
+fn build_file(enc: Encoding, parts: &[Part]) -> Vec<u8> {
+    let mut out = Vec::new();
+    for p in parts {
+        match p {
+            Part::Text(t) => out.extend_from_slice(&encode_text(enc, t)),
+            Part::Raw(r) => out.extend_from_slice(r),
+        }
+    }
+    out
+}
+
+/// 不正バイトを含むファイルの表 (ラベル, 文字コード, 部品)。不正バイトの前後に ASCII の文字を置く。
+fn invalid_byte_corpus() -> Vec<(&'static str, Encoding, Vec<Part>)> {
+    use Part::{Raw, Text};
+    let head = || Text("ab\n");
+    let tail = || Text("\ncd\n");
+    let pad = || Text(PAD);
+    let mid = |enc, label, raw: &'static [u8]| {
+        (
+            label,
+            enc,
+            vec![head(), Text("x"), Raw(raw), Text("y"), tail(), pad()],
+        )
+    };
+    vec![
+        mid(Encoding::Utf8, "UTF-8 の単独の継続バイト 0x80", b"\x80"),
+        mid(Encoding::Utf8, "UTF-8 の単独の継続バイト 0xBF", b"\xBF"),
+        mid(
+            Encoding::Utf8,
+            "UTF-8 の途中で切れた 3 バイト列 (2 バイトまで)",
+            b"\xE3\x81",
+        ),
+        mid(
+            Encoding::Utf8,
+            "UTF-8 の途中で切れた 3 バイト列 (先頭の 1 バイトだけ)",
+            b"\xE3",
+        ),
+        mid(Encoding::Utf8, "UTF-8 の 0xFF", b"\xFF"),
+        mid(Encoding::ShiftJis, "Shift_JIS の単独バイト 0xA0", b"\xA0"),
+        mid(Encoding::ShiftJis, "Shift_JIS の単独バイト 0xFD", b"\xFD"),
+        mid(Encoding::ShiftJis, "Shift_JIS の単独バイト 0xFE", b"\xFE"),
+        mid(Encoding::ShiftJis, "Shift_JIS の単独バイト 0xFF", b"\xFF"),
+        (
+            "Shift_JIS の途中で切れた 2 バイト (後ろが空白の 0x9F)",
+            Encoding::ShiftJis,
+            vec![head(), Text("x"), Raw(b"\x9F"), Text(" y"), tail(), pad()],
+        ),
+        (
+            "Shift_JIS の途中で切れた 2 バイト (行末の 0x81)",
+            Encoding::ShiftJis,
+            vec![head(), Text("日本"), Raw(b"\x81"), tail(), pad()],
+        ),
+        mid(Encoding::EucJp, "EUC-JP の単独の 0x8E", b"\x8E"),
+        mid(Encoding::EucJp, "EUC-JP の単独の 0x8F", b"\x8F"),
+        (
+            "EUC-JP の行末の 0x8E",
+            Encoding::EucJp,
+            vec![head(), Text("日本"), Raw(b"\x8E"), tail(), pad()],
+        ),
+        mid(
+            Encoding::Utf16Le,
+            "UTF-16LE の孤立した上位サロゲート",
+            b"\x00\xD8",
+        ),
+        mid(
+            Encoding::Utf16Le,
+            "UTF-16LE の孤立した下位サロゲート",
+            b"\x00\xDC",
+        ),
+        (
+            "UTF-16LE の奇数長",
+            Encoding::Utf16Le,
+            vec![head(), Text("x\ncd\n"), pad(), Raw(b"A")],
+        ),
+        mid(
+            Encoding::Utf16Be,
+            "UTF-16BE の孤立した上位サロゲート",
+            b"\xD8\x00",
+        ),
+        mid(
+            Encoding::Utf16Be,
+            "UTF-16BE の孤立した下位サロゲート",
+            b"\xDC\x00",
+        ),
+        (
+            "UTF-16BE の奇数長",
+            Encoding::Utf16Be,
+            vec![head(), Text("x\ncd\n"), pad(), Raw(b"A")],
+        ),
+    ]
+}
+
+/// 「編集を許可」(`file.toggle_read_only` → 確認の `[A]`)。
+fn release_invalid_bytes(h: &mut Harness, label: &str) {
+    assert_eq!(
+        h.cmd("file.toggle_read_only"),
+        eve_core::CommandResult::Done,
+        "{label}"
+    );
+    assert_eq!(h.overlay(), "dialog", "{label}: 編集を許可の確認");
+    h.text("a");
+    assert_eq!(h.overlay(), "", "{label}");
+    assert!(doc(h).is_editable(), "{label}");
+}
+
+// verifies: NFR-304
+#[test]
+fn 不正バイトを含むファイルは_解除して不正バイト以外を編集し同じ文字コードで保存するとバイト一致する()
+ {
+    for (label, enc, parts) in invalid_byte_corpus() {
+        let orig = build_file(enc, &parts);
+        let mut s = env();
+        s.fs.add_file("/w/c.txt", &orig);
+        open_as(&mut s, "/w/c.txt", Some(enc));
+        assert_eq!(doc(&s).format.encoding, enc, "{label}");
+        assert!(
+            doc(&s).format.invalid_bytes > 0,
+            "{label}: 不正バイトがある"
+        );
+        assert!(
+            doc(&s).read_only.contains(ReadOnlyReason::InvalidBytes),
+            "{label}: 既定で読み取り専用"
+        );
+        // 読み取り専用では入力できない
+        let before = s.doc_text();
+        type_text(&mut s, "Q");
+        assert_eq!(s.doc_text(), before, "{label}: 読み取り専用で入力できない");
+        release_invalid_bytes(&mut s, label);
+        // 不正バイトでない所 (文書の先頭) に 1 文字
+        s.keys("ctrl+home");
+        type_text(&mut s, "Z");
+        run(&mut s, "file.save", Args::new());
+        assert_eq!(s.overlay(), "", "{label}: つながらないので確認は出ない");
+        let want = [encode_text(enc, "Z"), orig.clone()].concat();
+        assert_eq!(
+            s.fs.read("/w/c.txt").unwrap(),
+            want,
+            "{label}: 入力した 1 文字を除いて元のバイト列と一致"
+        );
+        // 名前を付けて保存 (同じ文字コード) でも同じ
+        save_as(&mut s, "/w/d.txt");
+        assert_eq!(s.overlay(), "", "{label}");
+        assert_eq!(s.fs.read("/w/d.txt").unwrap(), want, "{label}: 別名");
+    }
+}
+
+// verifies: NFR-304
+#[test]
+fn 不正バイトを含むファイルを別の文字コードで保存しようとすると_表現不能の確認で何も書かない() {
+    for (label, enc, parts) in invalid_byte_corpus() {
+        let orig = build_file(enc, &parts);
+        let target = if enc == Encoding::Utf8 {
+            "shift_jis"
+        } else {
+            "utf-8"
+        };
+        let mut s = env();
+        s.fs.add_file("/w/c.txt", &orig);
+        open_as(&mut s, "/w/c.txt", Some(enc));
+        release_invalid_bytes(&mut s, label);
+        s.keys("ctrl+home");
+        type_text(&mut s, "Z");
+        run(
+            &mut s,
+            "file.set_encoding",
+            Args::new().with_str("encoding", target),
+        );
+        assert_eq!(
+            s.overlay(),
+            "dialog",
+            "{label}: 表現不能の確認 {:?}",
+            s.messages()
+        );
+        let keys: Vec<_> = s
+            .frame()
+            .overlays
+            .iter()
+            .find_map(|o| match o {
+                OverlayModel::Confirm { choices, .. } => {
+                    Some(choices.iter().map(|c| c.key).collect::<Vec<_>>())
+                }
+                _ => None,
+            })
+            .expect("確認が出ている");
+        assert_eq!(keys.len(), 1, "{label}: キャンセルだけ {keys:?}");
+        s.answer(0);
+        s.run_jobs();
+        assert_eq!(s.overlay(), "", "{label}");
+        assert_eq!(
+            s.fs.read("/w/c.txt").unwrap(),
+            orig,
+            "{label}: 何も書かない"
+        );
+        assert_eq!(
+            doc(&s).format.encoding,
+            enc,
+            "{label}: 文字コードは変わらない"
+        );
+        assert!(doc(&s).is_dirty(), "{label}");
+    }
+}
