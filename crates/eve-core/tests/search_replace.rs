@@ -224,12 +224,56 @@ fn 正規表現の置換は_キャプチャを展開する() {
     h.text(r"(\w+)=(\d)");
     h.keys("tab");
     h.text("$2:${1}!");
+    // 正規表現の照合器は検索のジョブがコンパイルする (03 §12.3.1)。置換の前にジョブを走らせる
+    h.run_jobs();
     h.keys("alt+a");
     assert_eq!(h.doc_text(), "1:foo! 2:bar!");
     assert_eq!(message(&mut h), "2 件を置換しました (元に戻すで戻せます)");
     h.keys("esc");
     h.keys("ctrl+z");
     assert_eq!(h.doc_text(), "foo=1 bar=2", "1 回の Undo で戻る");
+}
+
+// 照合器ができる前のすべて置換は、小さい文書でもメインスレッドでコンパイルせず、ジョブで作る (03 §12.3.1)
+#[test]
+fn 照合器ができる前のすべて置換は_小さい文書でもジョブで作る() {
+    let mut h = Harness::new().with_size(60, 10);
+    h.text("foo=1 bar=2");
+    h.keys("ctrl+r");
+    h.keys("alt+r");
+    h.text(r"(\w+)=(\d)");
+    h.keys("tab");
+    h.text("$2:$1");
+    h.keys("alt+a");
+    assert_eq!(
+        h.doc_text(),
+        "foo=1 bar=2",
+        "ジョブの結果が届くまで変えない"
+    );
+    h.run_jobs();
+    assert_eq!(h.doc_text(), "1:foo 2:bar");
+    assert_eq!(message(&mut h), "2 件を置換しました (元に戻すで戻せます)");
+    h.keys("esc");
+    h.keys("ctrl+z");
+    assert_eq!(h.doc_text(), "foo=1 bar=2", "1 回の Undo で戻る");
+}
+
+// ジョブのコンパイルで分かった誤り (大きさの上限の超過) は、すべて置換でもメッセージ行と検索バーに示す
+#[test]
+fn 照合器ができる前のすべて置換で大きすぎる正規表現は理由を示す() {
+    let mut h = Harness::new().with_size(60, 10);
+    h.text("abc");
+    h.keys("ctrl+r");
+    h.keys("alt+r");
+    h.text("(?:[a-z]{1000}){1000}");
+    h.keys("tab");
+    h.text("x");
+    h.keys("alt+a");
+    h.run_jobs();
+    assert_eq!(h.doc_text(), "abc");
+    assert!(message(&mut h).contains("pattern too large"));
+    let e = cell_text(&h.frame().search.unwrap().error.expect("大きすぎる"));
+    assert!(e.contains("pattern too large"), "{e}");
 }
 
 #[test]
@@ -241,6 +285,8 @@ fn 正規表現の置換は_改行と_ドルを扱う() {
     h.text(",");
     h.keys("tab");
     h.text(r"\n");
+    // 正規表現の照合器は検索のジョブがコンパイルする (03 §12.3.1)。置換の前にジョブを走らせる
+    h.run_jobs();
     h.keys("alt+a");
     assert_eq!(h.doc_text(), "a\nb\nc", "\n は既定の改行 (LF)");
 
@@ -251,6 +297,8 @@ fn 正規表現の置換は_改行と_ドルを扱う() {
     h.text(r"\d");
     h.keys("tab");
     h.text("$$ 100");
+    // 正規表現の照合器は検索のジョブがコンパイルする (03 §12.3.1)。置換の前にジョブを走らせる
+    h.run_jobs();
     h.keys("alt+a");
     assert_eq!(h.doc_text(), "price $ 100", "$$ は $");
 
@@ -261,6 +309,8 @@ fn 正規表現の置換は_改行と_ドルを扱う() {
     h.text("-");
     h.keys("tab");
     h.text(r"\\n"); // バックスラッシュ 2 つと n
+    // 正規表現の照合器は検索のジョブがコンパイルする (03 §12.3.1)。置換の前にジョブを走らせる
+    h.run_jobs();
     h.keys("alt+a");
     assert_eq!(
         h.doc_text(),
@@ -278,6 +328,8 @@ fn 単語単位のすべて置換() {
     h.text("foo");
     h.keys("tab");
     h.text("X");
+    // 単語単位の大小無視のリテラルは、エスケープした正規表現で探す (03 §12.4 の 3)。照合器は検索のジョブが作る
+    h.run_jobs();
     h.keys("alt+a");
     assert_eq!(h.doc_text(), "X foobar barfoo X");
 }
@@ -326,6 +378,8 @@ fn 選択した一致を置換し_正規表現ではキャプチャを展開す�
     h.keys("tab");
     h.text("$2=$1");
     h.keys("shift+tab");
+    // 正規表現の照合器は検索のジョブがコンパイルし、届いてから入力中の現在の一致を強調する (03 §12.3.1)
+    h.run_jobs();
     h.keys("enter"); // 1 つ目の一致を選択
     h.keys("enter"); // 2 つ目へ (選択)
     h.keys("tab");
@@ -417,12 +471,15 @@ fn 大小を区別しない置換は_long_s_とケルビン記号にも一致す
     let mut h = Harness::new().with_size(60, 10);
     h.text("class CLASS cla\u{17F}s \u{212A}ick");
     setup(&mut h, "class", "x");
+    // `s` を含む大小無視のリテラルは、エスケープした正規表現で探す (03 §12.4 の 3)。照合器は検索のジョブが作る
+    h.run_jobs();
     h.keys("alt+a");
     assert_eq!(h.doc_text(), "x x x \u{212A}ick");
     assert_eq!(message(&mut h), "3 件を置換しました (元に戻すで戻せます)");
     let mut h = Harness::new().with_size(60, 10);
     h.text("kick KICK \u{212A}ick");
     setup(&mut h, "kick", "y");
+    h.run_jobs();
     h.keys("alt+a");
     assert_eq!(h.doc_text(), "y y y");
 }
@@ -434,6 +491,14 @@ fn 大小を区別しないリテラルの置換は_正規表現の経路で探�
     h.text("Kelvin kelvin");
     h.keys("ctrl+home");
     setup(&mut h, "kelvin", "$1${0}");
+    // 照合器 (エスケープした正規表現) は検索のジョブが作る。届くまでの置換欄の Enter は何もしない (03 §12.3.1)
+    h.keys("enter");
+    assert_eq!(
+        h.doc_text(),
+        "Kelvin kelvin",
+        "照合器が届く前は置き換えない"
+    );
+    h.run_jobs();
     h.keys("enter");
     assert_eq!(h.doc_text(), "$1${0} kelvin", "1 件置換");
     h.keys("alt+a");

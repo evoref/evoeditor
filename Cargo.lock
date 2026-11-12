@@ -332,6 +332,7 @@ dependencies = [
  "memory-stats",
  "proptest",
  "regex",
+ "regex-syntax",
  "twox-hash",
 ]
 

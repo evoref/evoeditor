@@ -3,6 +3,7 @@
 //! 入力は `cargo metadata` の出力と、リポジトリ直下の `deps-policy.toml`。検査が見る依存の辺は
 //! normal 依存だけで、dev 依存と build 依存は対象外 (02 §4.1 の「禁止 crate 列」の注)。
 //! `--docs` を付けると、docs/02 §4.1 の表の「禁止 crate」列と `deps-policy.toml` も突合する。
+//! 版を 1 つだけ許す crate (`SINGLE_VERSION`。02 §13.5 の `regex-syntax`) の版の重複も失敗にする。
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::path::Path;
@@ -62,6 +63,7 @@ struct Metadata {
 struct Package {
     id: String,
     name: String,
+    version: String,
     manifest_path: String,
     links: Option<String>,
     dependencies: Vec<Dependency>,
@@ -194,6 +196,7 @@ pub fn run(with_docs: bool) -> Result<(), String> {
     check_forbid_unsafe(&graph, &root, &mut rep);
     check_lexical(&graph, &policy, &root, &mut rep);
     check_limits(&graph, &policy, &mut rep);
+    check_single_version(&graph, &mut rep);
     if with_docs {
         check_docs(&policy, &root, &mut rep);
     }
@@ -499,6 +502,38 @@ fn check_limits(g: &Graph, policy: &Policy, rep: &mut Report) {
                 policy.limits.max_c_dependencies
             ),
         );
+    }
+}
+
+/// 版を 1 つだけ許す crate (02 §13.5)。`regex-syntax` は `regex` の依存と eve-core の直接の依存 (検索語の書き換え、03 §12.3.1)
+/// を兼ねるので、版が分かれると書き換えた検索語の解釈と `regex` の解釈が食い違いうる (crate の数も増える)。
+const SINGLE_VERSION: &[&str] = &["regex-syntax"];
+
+/// 02 §13.5: `SINGLE_VERSION` の crate が、ロックファイルの解決 (dev 依存を含む) の中で 1 つの版だけ。
+fn check_single_version(g: &Graph, rep: &mut Report) {
+    for name in SINGLE_VERSION {
+        let versions: BTreeSet<&str> = g
+            .packages
+            .values()
+            .filter(|p| p.name == *name)
+            .map(|p| p.version.as_str())
+            .collect();
+        match versions.len() {
+            0 => rep.fail(
+                "02 §13.5",
+                format!("`{name}` が依存にありません (検査の対象を見直す)"),
+            ),
+            1 => rep.ok(
+                "02 §13.5",
+                &format!("`{name}` の版は 1 つ ({})", versions.iter().next().unwrap_or(&"")),
+            ),
+            _ => rep.fail(
+                "02 §13.5",
+                format!(
+                    "`{name}` の版が重複しています: {versions:?} (`regex` と一緒に上げ、eve-core の指定をそろえる)"
+                ),
+            ),
+        }
     }
 }
 

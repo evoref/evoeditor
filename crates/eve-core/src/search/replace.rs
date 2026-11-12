@@ -1,45 +1,38 @@
 //! 置換 (置換の文字列の解釈・置換の候補の走査・すべて置換の ChangeSet、docs/03 §12.5)。
 
-use std::ops::Range;
-
 use eve_text::{ByteOff, ByteRange, TextRead};
 
 use crate::jobs::cancel::CancelToken;
 
-use super::lines::for_each_line;
 use super::matcher::Matcher;
 use super::matcher::SearchQuery;
-use super::scan::scan_bytes;
-/// 行 `lines` を順に走査し、一致とその置換文字列を `f` へ渡す。正規表現では `replacement` の `$1` / `${name}` を
-/// 一致ごとに展開し (`$$` は `$`)、リテラルではそのまま渡す。`f` が `false` を返すか取り消されたら止めて `false`。
+use super::scan::scan_bytes_with_captures;
+
+/// `range` (行頭と行末に揃った範囲) を走査の入口 (`scan_bytes` と同じ本体、03 §12.3 の「走査の境界」) で走査し、一致と
+/// その置換文字列を `f` へ渡す。正規表現では `replacement` の `$1` / `${name}` を一致ごとに展開し (`$$` は `$`)、リテラルでは
+/// そのまま渡す。`f` が `false` を返すか取り消されたら止めて `false`。
 pub fn scan_replacements(
     text: &dyn TextRead,
     m: &Matcher,
-    lines: Range<usize>,
+    range: ByteRange,
     cancel: &CancelToken,
     replacement: &str,
     f: &mut dyn FnMut(ByteRange, String) -> bool,
 ) -> bool {
-    for_each_line(text, lines, &mut |ls, line| {
-        if cancel.is_cancelled() {
-            return false;
+    scan_bytes_with_captures(text, m, range, cancel, &mut |r, caps| {
+        let mut out = String::new();
+        match caps {
+            Some(c) => c.expand(replacement, &mut out),
+            None => out.push_str(replacement),
         }
-        m.find_in_line_inner(text, ls, line, true, &mut |r, caps| {
-            if !m.in_scope(r) {
-                return true;
-            }
-            let mut out = String::new();
-            match caps {
-                Some(c) => c.expand(replacement, &mut out),
-                None => out.push_str(replacement),
-            }
-            f(r, out)
-        })
+        f(r, out)
     })
 }
 
 /// 一致 `range` の置換文字列。正規表現では `$1` / `${name}` を展開する。`range` が一致でなければ `None`
-/// (1 件置換が、選択範囲が一致そのものかを確かめるのにも使う)。
+/// (1 件置換が、選択範囲が一致そのものかを確かめるのにも使う)。`range` の始端を含む行を走査の入口で探す
+/// (一致は行をまたがない。行をまたぎうる検索語の確かめ方は M24 の (3) で正本に合わせる、03 §12.3.1)。
+/// 照合器を作るので、正規表現では `bg` のジョブが照合器を作った後 (`SearchQuery::prepared` が `Ready`) に呼ぶ。
 pub fn replacement_for(
     text: &dyn TextRead,
     query: &SearchQuery,
@@ -47,12 +40,18 @@ pub fn replacement_for(
     replacement: &str,
 ) -> Option<String> {
     let m = query.matcher()?;
-    let line = text.byte_to_line(range.start).0;
+    let line = text.byte_to_line(range.start);
+    let start = text.line_to_byte(line);
+    let end = if line.0 + 1 < text.len_lines() {
+        text.line_to_byte(eve_text::LineIdx(line.0 + 1))
+    } else {
+        ByteOff(text.len_bytes())
+    };
     let mut found = None;
     scan_replacements(
         text,
         &m,
-        line..line + 1,
+        ByteRange::new(start, end),
         &CancelToken::new(),
         replacement,
         &mut |r, s| {
@@ -95,34 +94,21 @@ pub fn build_replace_all(
     cancel: &CancelToken,
 ) -> Option<(eve_text::ChangeSet, u64)> {
     let m = query.matcher()?;
-    let insert: std::sync::Arc<str> = std::sync::Arc::from(replacement);
     let mut edits: Vec<eve_text::Edit> = Vec::new();
     let full = ByteRange::new(ByteOff(0), ByteOff(text.len_bytes()));
-    let ok = if m.expands() {
-        // 正規表現: `$1` / `${name}` を一致ごとに展開する (03 §12.5)
-        scan_replacements(
-            text,
-            &m,
-            0..text.len_lines(),
-            cancel,
-            replacement,
-            &mut |r, s| {
-                edits.push(eve_text::Edit {
-                    range: r,
-                    insert: std::sync::Arc::from(s),
-                });
-                true
+    // 正規表現では `$1` / `${name}` を一致ごとに展開する (03 §12.5)。リテラルは置換の文字列をそのまま入れる
+    let insert: std::sync::Arc<str> = std::sync::Arc::from(replacement);
+    let ok = scan_replacements(text, &m, full, cancel, replacement, &mut |r, s| {
+        edits.push(eve_text::Edit {
+            range: r,
+            insert: if m.expands() {
+                std::sync::Arc::from(s)
+            } else {
+                insert.clone()
             },
-        )
-    } else {
-        scan_bytes(text, &m, full, cancel, &mut |r| {
-            edits.push(eve_text::Edit {
-                range: r,
-                insert: insert.clone(),
-            });
-            true
-        })
-    };
+        });
+        true
+    });
     if !ok {
         return None;
     }

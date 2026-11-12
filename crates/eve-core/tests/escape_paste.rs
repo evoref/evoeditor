@@ -727,6 +727,8 @@ fn 正規表現の置換の参照が運ぶエスケープ文字はバイトの�
     // 検索欄は正規表現の `\x{10FFA0}` でエスケープ文字に一致する
     setup_replace(&mut h, "(\\x{10FFA0})", "[$1\u{10FF80}]");
     h.keys("alt+r");
+    // 正規表現の照合器は検索のジョブがコンパイルする (03 §12.3.1)。置換の前にジョブを走らせる
+    h.run_jobs();
     h.keys("alt+a");
     assert_eq!(h.doc_text(), format!("ab[{ESC_A0}<U+10FF80>]c\n"));
     assert_eq!(paste_notices(&h), vec!["info.paste.pua_as_text"]);

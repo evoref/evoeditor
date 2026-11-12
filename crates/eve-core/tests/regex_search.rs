@@ -115,6 +115,44 @@ fn 構文エラーと複数行は理由つきで拒否する() {
 
 // verifies: FR-402
 #[test]
+fn 行の終端を明示した書き方は符号位置で書いても未対応() {
+    // 03 §12.3.1 の表で行の終端に一致する書き方。行をまたぐ検索は M24 の (4) で開く (08 §2.5)
+    for p in [
+        r"\x0A",
+        r"\x{D}",
+        r"a\u000Ab",
+        r"\r\n",
+        r"[\n]",
+        r"[ \r]",
+        r"[\s\n]+",
+        // 要素に `\n` / `\r` を書いた、すべての文字のクラス (`[\s\S]` は明示しない書き方で、1 行の中で探す)
+        r"[\n\s\S]",
+        r"[\r\n\s\S]+",
+    ] {
+        assert_eq!(re(p).compile().err(), Some(QueryError::Multiline), "{p}");
+    }
+    assert!(
+        matches!(re(r"\n{0}a").compile(), Ok(Some(_))),
+        "一致が行の終端を含みえない"
+    );
+}
+
+// verifies: FR-402
+#[test]
+fn 行の終端を明示しない書き方は_1_行の中で探す() {
+    // 否定・略記のクラスは行の終端を集合から除く。`[^\n]` は CR にも一致しない (03 §12.3.1)
+    assert_eq!(count("ab\ncd\r\nef\rgh", re(r"[^\n]+")), 4);
+    assert_eq!(count("ab\ncd\r\nef\rgh", re(r"[^x]+")), 4);
+    assert_eq!(count("a b\na\tb", re(r"a\sb")), 2);
+    // `(?s)` の `.` と `[\s\S]` は、行をまたぐ検索を開くまで (M24 の (4)) 今までどおり 1 行の中で探す
+    assert_eq!(count("axb\na\nb", re(r"(?s)a.b")), 1);
+    assert_eq!(count("a b\na\nb", re(r"a[\s\S]b")), 1);
+    // フラグ `m`・`R` を付けても、1 行ずつ探す間は `^` / `$` は行頭と行末
+    assert_eq!(count("ab\r\nab\rab", re("^ab$")), 3);
+}
+
+// verifies: FR-402
+#[test]
 fn 構文エラーのときは何にも一致しない() {
     assert_eq!(count("a(b", re("(")), 0);
 }

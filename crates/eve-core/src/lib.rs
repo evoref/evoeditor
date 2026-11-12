@@ -60,7 +60,7 @@ pub use jobs::{
     JobRequest, JobResult, JobSpawner, MetaPurpose, OpenNotes, Ports, SaveStrategy, run_job,
 };
 pub use search::{
-    Case, Matcher, QueryError, SearchJob, SearchQuery, build_replace_all, find_next,
-    replacement_for, run_search, scan_bytes, unescape_replacement,
+    Case, LineSpan, Matcher, QueryError, QueryPlan, SearchJob, SearchQuery, build_replace_all,
+    find_next, replacement_for, run_search, scan_bytes, unescape_replacement,
 };
 pub use time::{Clock, Millis, Tick};

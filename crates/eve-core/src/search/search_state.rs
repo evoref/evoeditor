@@ -2,6 +2,7 @@
 //!
 //! 全件走査はバックグラウンドのジョブで行い、届いた一致を保持する。移動は保持した一致から選ぶ。保持に無い (走査中で
 //! まだ届いていない、保持の上限を超えた、編集で無効になった) ときは、カーソルから同期検索する (最大 256 KiB)。
+//! 正規表現の照合器は `bg` のジョブがコンパイルするので、まだ無いときは同期検索をせずに単発のジョブに回す (03 §12.3.1)。
 //! 編集があると保持は無効になり、件数は「約」表示に落ちる。再検索は呼び出し側 (検索バー) が入力の間を置いて始める。
 
 use eve_text::{ByteOff, ByteRange, LineIdx, Range, Selection, TextRead};
@@ -9,7 +10,7 @@ use eve_view::{DocumentId, JobId, MessageLevel, Revision};
 
 use crate::jobs::cancel::CancelToken;
 use crate::jobs::{JobKind, JobOutput, JobResult};
-use crate::search::{SearchQuery, scan_bytes};
+use crate::search::{Prepared, SearchQuery, scan_bytes};
 use crate::ui_model::keys;
 
 use crate::editor::state::EditorState;
@@ -317,7 +318,8 @@ impl EditorState {
         self.find.find_job = Some(job);
     }
 
-    /// 単発の検索の結果。文書の Revision と選択が投入時のままなら移る (違えば捨てる)。
+    /// 単発の検索の結果。文書の Revision と選択が投入時のままなら移る (違えば捨てる)。ジョブのコンパイルで誤り
+    /// (`TooLarge`) が分かったときは、移らずに検索バーに示す (03 §12.3.1)。
     pub(crate) fn finish_find_next(
         &mut self,
         doc_id: DocumentId,
@@ -327,6 +329,9 @@ impl EditorState {
         r: JobResult,
     ) {
         self.find.find_job = None;
+        if self.bar_show_compile_error() {
+            return;
+        }
         let JobResult::FindNextDone { found, .. } = r else {
             return;
         };
@@ -365,8 +370,11 @@ impl EditorState {
         cursor: ByteOff,
         forward: bool,
     ) -> Found {
-        let Some(m) = query.matcher() else {
-            return Found::None;
+        let m = match query.prepared() {
+            Prepared::Ready(m) => m,
+            Prepared::Nothing => return Found::None,
+            // 正規表現の照合器は `bg` のジョブが作る。まだ無ければ同期検索をせず、単発のジョブに回す (03 §12.3.1)
+            Prepared::Pending => return Found::Incomplete,
         };
         let Some(doc) = self.docs.documents.get(&doc_id) else {
             return Found::None;
@@ -376,7 +384,8 @@ impl EditorState {
         let line = t.byte_to_line(cursor).0.min(n.saturating_sub(1));
         let cancel = CancelToken::new();
         let len = t.len_bytes();
-        // 行ごとに畳み込む経路は約 50 MB/s なので、1 MiB を走査すると約 20 ms (256 KiB でも約 5 ms) かかる (BM-404)。量を絞り、
+        // 行ごとに切り出す経路 (正規表現と、大小を区別しないリテラルのうち §12.4 の 3 のエスケープした `(?i)` の正規表現) は
+        // memmem より 1〜2 桁遅い (行ごとに畳み込んでいた v0.1 の実装で約 50 MB/s、1 MiB で約 20 ms。BM-404)。量を 1/16 に絞り、
         // 見つからなければ呼び出し側が単発のジョブに回す (`Found::Incomplete`)
         let mut budget = if m.is_chunked() {
             SYNC_STEP_BYTES
@@ -504,5 +513,7 @@ impl EditorState {
             }
         }
         self.mark_dirty_render();
+        // 正規表現の照合器はジョブが作る。届いたら、入力中の現在の一致を求める (03 §12.3.1)
+        self.bar_search_progress();
     }
 }

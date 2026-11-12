@@ -373,6 +373,117 @@ fn 改行を含むパターンは未対応と示す() {
     assert!(e.contains("改行を含むパターンは未対応"), "{e}");
 }
 
+// 行の終端を符号位置で書いた検索語 (`\x0A`) は、黙って 0 件にせず未対応と示す (03 §12.3.1、08 §2.5 の M24 の (1))
+#[test]
+fn 行の終端を符号位置で書いたパターンも未対応と示し_否定のクラスは探せる() {
+    let mut h = Harness::new().with_size(60, 10);
+    h.text("ab\ncd");
+    h.keys("ctrl+home");
+    h.keys("ctrl+f");
+    h.keys("alt+r");
+    h.text(r"b\x0Ac");
+    let e = cell_text(&bar(&mut h).error.expect("未対応"));
+    assert!(e.contains("改行を含むパターンは未対応"), "{e}");
+    for _ in 0..r"b\x0Ac".len() {
+        h.keys("backspace");
+    }
+    // `[^\n]` は 1 行の中で一致する (行の終端に一致しない書き方)
+    h.text(r"[^\n]+");
+    assert!(bar(&mut h).error.is_none());
+    assert_eq!(total(&mut h), "1/2");
+}
+
+// 正規表現のコンパイルは検索のジョブで行う。強調と現在の一致は、最初のジョブの結果が届くまで出ない (03 §12.3.1)
+#[test]
+fn 正規表現の強調は検索のジョブの結果が届いてから出る() {
+    let mut h = Harness::new().with_size(40, 10);
+    h.text("foo bar foo");
+    h.keys("ctrl+home");
+    h.keys("ctrl+f");
+    h.keys("alt+r");
+    h.text("fo+");
+    let f = h.frame();
+    assert_eq!(
+        marked(&f, StyleMods::UNDERLINE).replace('|', ""),
+        "",
+        "照合器ができるまで強調しない"
+    );
+    h.run_jobs();
+    let f = h.frame();
+    assert_eq!(marked(&f, StyleMods::UNDERLINE).replace('|', ""), "foofoo");
+    let cur = marked(&f, StyleMods::UNDERLINE | StyleMods::BOLD);
+    assert!(cur.starts_with("foo"), "現在の一致も強調する: {cur}");
+    h.keys("enter");
+    assert_eq!(h.selection_range(), (0, 3), "Enter で現在の一致を確定する");
+    // memmem の経路のリテラルは、今どおり入力の時点で強調する
+    let mut h = Harness::new().with_size(40, 10);
+    h.text("foo bar foo");
+    h.keys("ctrl+home");
+    h.keys("ctrl+f");
+    h.text("foo");
+    let f = h.frame();
+    assert_eq!(marked(&f, StyleMods::UNDERLINE).replace('|', ""), "foofoo");
+}
+
+// コンパイル後の大きさの上限の超過は、構文は正しいのでジョブのコンパイルで分かる (03 §12.3.1)
+#[test]
+fn 大きすぎる正規表現はジョブのコンパイルで分かり_検索バーに理由を示す() {
+    let mut h = Harness::new().with_size(60, 10);
+    h.text("abc");
+    h.keys("ctrl+f");
+    h.keys("alt+r");
+    h.text("(?:[a-z]{1000}){1000}");
+    assert!(
+        bar(&mut h).error.is_none(),
+        "メインスレッドの解析では分からない"
+    );
+    h.run_jobs();
+    let b = bar(&mut h);
+    let e = cell_text(&b.error.expect("大きすぎる"));
+    assert!(e.contains("pattern too large"), "{e}");
+    assert!(b.count_text.is_none(), "件数は出さない");
+}
+
+// 照合器ができる前に `Enter` で単発のジョブへ移っても、ジョブのコンパイルで分かった誤りは検索バーに示す
+// (0 件と出さない。03 §12.3.1 の「メインスレッドでのコンパイル」)
+#[test]
+fn 大きすぎる正規表現を_enter_の後に知っても_検索バーに理由を示す() {
+    let mut h = Harness::new().with_size(60, 10);
+    h.text("abc");
+    h.keys("ctrl+f");
+    h.keys("alt+r");
+    h.text("(?:[a-z]{1000}){1000}");
+    h.keys("enter");
+    h.run_jobs();
+    let b = bar(&mut h);
+    let e = cell_text(&b.error.expect("大きすぎる"));
+    assert!(e.contains("pattern too large"), "{e}");
+    assert!(b.count_text.is_none(), "件数 (0 件) は出さない");
+    assert_eq!(h.selection_range(), (3, 3), "移らない");
+}
+
+// 照合器ができる前の `Enter` (`search.next`) は、同期検索をせずに単発のジョブで探し、届いたら移る (03 §12.3.1)
+#[test]
+fn 照合器ができる前の_enter_は単発のジョブで移る() {
+    let mut h = Harness::new().with_size(60, 10);
+    h.text("xx foo bar foo");
+    h.keys("ctrl+home");
+    h.keys("ctrl+f");
+    h.keys("alt+r");
+    h.text("fo+");
+    h.keys("enter");
+    assert_eq!(
+        h.selection_range(),
+        (0, 0),
+        "ジョブの結果が届くまで移らない"
+    );
+    h.run_jobs();
+    assert_eq!(h.selection_range(), (3, 6));
+    h.keys("enter");
+    h.run_jobs();
+    assert_eq!(h.selection_range(), (11, 14), "照合器ができた後は今どおり");
+}
+
 #[test]
 fn alt_w_で単語単位に切り替わり_再検索する() {
     let mut h = Harness::new().with_size(60, 10);

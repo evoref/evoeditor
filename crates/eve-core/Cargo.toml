@@ -26,6 +26,10 @@ memchr = "2.8.3"
 # `perf` は実行部分 (遅延 DFA・バックトラック・ワンパス) を含む。外すと、文字クラスで始まるパターンなどが PikeVM だけで
 # 走り、10 倍以上遅くなる (BM-109r-digits)。クレートは増えない (実行ファイルは約 0.2 MB 増える)
 regex = { version = "1", default-features = false, features = ["std", "unicode", "perf"] }
+# 検索語の構文木の書き換えと、一致がまたぐ行の数の上限・最大の長さの計算 (docs/03 §12.3.1、02 §13.5)。`regex` の依存として
+# 既に入っている crate で、数は増えない。feature は `regex` の `std`・`unicode` とそろえ、`regex` と一緒に上げる
+# (版が重複したら `cargo xtask check-deps` が失敗にする)
+regex-syntax = { version = "0.8.11", default-features = false, features = ["std", "unicode"] }
 # 内容ハッシュ XXH3-64 (docs/05 §5.5)。純 Rust
 twox-hash = { version = "2.1.5", default-features = false, features = ["std", "xxhash3_64"] }
 

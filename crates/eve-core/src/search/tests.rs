@@ -2,6 +2,7 @@ use eve_text::{ByteOff, Text, TextRead};
 use eve_view::JobId;
 
 use super::*;
+use super::{Prepared, replace};
 use crate::jobs::cancel::CancelToken;
 use crate::jobs::{JobError, JobOutput, JobResult};
 use crate::time::{Clock, Tick};
@@ -19,10 +20,17 @@ fn find_all(doc: &str, q: &SearchQuery) -> Vec<(usize, usize)> {
         return Vec::new();
     };
     let mut out = Vec::new();
-    scan_lines(&t, &m, 0..t.len_lines(), &CancelToken::new(), &mut |r| {
-        out.push((r.start.0, r.end.0));
-        true
-    });
+    scan_lines(
+        &t,
+        &m,
+        0..t.len_lines(),
+        &CancelToken::new(),
+        false,
+        &mut |r, _| {
+            out.push((r.start.0, r.end.0));
+            true
+        },
+    );
     out
 }
 
@@ -112,7 +120,14 @@ fn 取り消すと止まる() {
     let m = lit("a").matcher().unwrap();
     let c = CancelToken::new();
     c.cancel();
-    assert!(!scan_lines(&t, &m, 0..t.len_lines(), &c, &mut |_| true));
+    assert!(!scan_lines(
+        &t,
+        &m,
+        0..t.len_lines(),
+        &c,
+        false,
+        &mut |_, _| true
+    ));
 }
 
 fn run(doc: &str, q: &SearchQuery, from: usize, max: usize, limit: u64) -> Vec<JobOutput> {
@@ -424,4 +439,78 @@ mod 経路の性質 {
             prop_assert_eq!(&find_all(&doc, &q), &want);
         }
     }
+}
+
+// ---- 照合器の 2 段 (03 §12.3.1 の「メインスレッドでのコンパイル」) ----
+
+#[test]
+fn 正規表現の照合器はメインスレッドで作らず_memmem_の照合器は作る() {
+    let q = lit("a+").with_regex(true);
+    assert!(q.analyze().unwrap().is_some(), "解析はメインスレッドで行う");
+    assert!(matches!(q.prepared(), Prepared::Pending));
+    // ジョブ (複製) がコンパイルすると、覚えを共有する元の問い合わせからも使える
+    assert!(q.clone().compile().unwrap().is_some());
+    assert!(matches!(q.prepared(), Prepared::Ready(_)));
+    assert!(matches!(lit("abc").prepared(), Prepared::Ready(_)));
+    assert!(
+        matches!(lit("class").prepared(), Prepared::Pending),
+        "§12.4 の 3 はエスケープした正規表現"
+    );
+    assert!(matches!(
+        lit("(").with_regex(true).prepared(),
+        Prepared::Nothing
+    ));
+    assert!(matches!(lit("").prepared(), Prepared::Nothing));
+    let nl = lit(r"a\nb").with_regex(true);
+    assert_eq!(nl.known_error(), Some(QueryError::Multiline));
+    assert!(matches!(nl.prepared(), Prepared::Nothing));
+    assert!(
+        nl.analyze().unwrap().is_some(),
+        "解析の結果は返す (k と書き換え)"
+    );
+}
+
+#[test]
+fn 置換は走査の入口を通り_範囲と単語単位と選択範囲内に従う() {
+    // 置換の候補の走査 (`scan_replacements`) は検索と同じ入口 (`scan_bytes`) を通る (03 §12.3 の「走査の境界」)
+    let t = Text::from("ab ab\nxab ab");
+    let collect = |q: SearchQuery| {
+        let m = q.matcher().unwrap();
+        let mut got = Vec::new();
+        let full = eve_text::ByteRange::new(ByteOff(0), ByteOff(t.len_bytes()));
+        replace::scan_replacements(&t, &m, full, &CancelToken::new(), "[$0]", &mut |r, s| {
+            got.push((r.start.0, s));
+            true
+        });
+        got
+    };
+    let mut want = Vec::new();
+    scan_bytes(
+        &t,
+        &lit("ab").matcher().unwrap(),
+        eve_text::ByteRange::new(ByteOff(0), ByteOff(t.len_bytes())),
+        &CancelToken::new(),
+        &mut |r| {
+            want.push((r.start.0, "[$0]".to_owned()));
+            true
+        },
+    );
+    assert_eq!(collect(lit("ab")), want, "リテラルは展開しない");
+    let starts = |v: Vec<(usize, String)>| v.into_iter().map(|(s, _)| s).collect::<Vec<_>>();
+    assert_eq!(
+        collect(lit("ab").with_regex(true)),
+        [
+            (0, "[ab]".to_owned()),
+            (3, "[ab]".to_owned()),
+            (7, "[ab]".to_owned()),
+            (10, "[ab]".to_owned())
+        ]
+    );
+    assert_eq!(starts(collect(lit("ab").with_whole_word(true))), [0, 3, 10]);
+    let scope: std::sync::Arc<[eve_text::ByteRange]> =
+        std::sync::Arc::from([eve_text::ByteRange::new(ByteOff(2), ByteOff(9))]);
+    assert_eq!(
+        starts(collect(lit("ab").with_regex(true).with_scope(Some(scope)))),
+        [3, 7]
+    );
 }
