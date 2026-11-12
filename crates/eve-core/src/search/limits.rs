@@ -39,3 +39,15 @@ pub const SEARCH_DISCARD_BUDGET_FACTOR: usize = 8;
 
 /// 捨てた候補の予算の下限 (バイト)。小さな範囲では倍数の予算が小さすぎて、数 KiB の文書でも打ち切ってしまうのを避ける。
 pub const SEARCH_DISCARD_BUDGET_MIN: usize = 1 << 20;
+
+/// 全件の走査が記録する再開の位置の間隔 (バイト。03 §12.3.1 の「全件走査」の 1 MiB ごと)。行の窓が核ごとに知らせる位置を、
+/// この間隔に間引いて `SearchDone` で返す (100 MB で約 100 項目)。試験で核を小さくしたときは核の大きさに合わせる。
+pub const SEARCH_RESUME_STEP_BYTES: usize = 1 << 20;
+
+/// メインスレッドで行をまたぐ検索語の可視範囲を同期検索する窓の大きさの上限 (バイト。`SEARCH_SYNC_MULTILINE_MAX`、03 §12.3.1 の
+/// 「可視範囲の強調」)。窓は「可視行の先頭の k 行前の行頭から可視行の末尾まで」の核と、その後ろの k 行。
+pub const SEARCH_SYNC_MULTILINE_MAX: usize = 64 << 10;
+
+/// 行をまたぐ検索語の単発の検索 (次 / 前) の結果を待つ間、件数の位置を待ちの表示にするまでの時間 (ミリ秒、03 §12.3.1 の
+/// 「次 / 前」の (6))。
+pub const SEARCH_FIND_WAIT_MS: u64 = 100;

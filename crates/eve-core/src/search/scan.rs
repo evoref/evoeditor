@@ -17,7 +17,9 @@ use crate::jobs::cancel::CancelToken;
 use crate::jobs::{JobError, JobOutput, JobResult};
 use crate::time::{Clock, Millis};
 
-use super::limits::{SEARCH_DISCARD_BUDGET_FACTOR, SEARCH_DISCARD_BUDGET_MIN};
+use super::limits::{
+    SEARCH_DISCARD_BUDGET_FACTOR, SEARCH_DISCARD_BUDGET_MIN, SEARCH_RESUME_STEP_BYTES,
+};
 use super::lines::for_each_line;
 use super::matcher::Matcher;
 use super::matcher::SearchQuery;
@@ -44,6 +46,27 @@ pub enum ScanEnd {
     TooLarge,
     /// 重すぎるので打ち切った (処理の速さの下限、捨てた候補の予算。03 §12.3.1 の「最悪の入力の上限」)。それまでに渡した
     /// 一致は捨てる。
+    TooHeavy,
+}
+
+impl ScanEnd {
+    /// 探さなかった・打ち切った理由 (`TooLarge` / `TooHeavy`)。それ以外は `None`。
+    pub fn limit(self) -> Option<ScanLimit> {
+        match self {
+            ScanEnd::TooLarge => Some(ScanLimit::TooLarge),
+            ScanEnd::TooHeavy => Some(ScanLimit::TooHeavy),
+            ScanEnd::Done | ScanEnd::Stopped | ScanEnd::Cancelled => None,
+        }
+    }
+}
+
+/// 検索を探さなかった・打ち切った理由 (03 §12.3.1 の「探さない場合」と「最悪の入力の上限」)。検索バーの「探さない理由」と、
+/// 検索のジョブの結果 (`SearchDone::limit`・`SearchLimited`) が運ぶ。どちらでも、それまでに届いた一致 (強調・保持・件数) は捨てる。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ScanLimit {
+    /// 行の数に上限の無い検索語で文書が全文の連結の上限 (16 MiB) を超える、または行の窓がその上限を超える。
+    TooLarge,
+    /// 重すぎる (上限の無い重い検索語・処理の速さの下限・捨てた候補の予算)。
     TooHeavy,
 }
 
@@ -185,18 +208,18 @@ pub fn scan_range(
     scan(text, m, range, ctx, false, &mut |r, _| f(r))
 }
 
-/// `scan_bytes` と同じ入口で、利用者の正規表現なら一致ごとのキャプチャも渡す (置換、03 §12.5)。
-pub(super) fn scan_bytes_with_captures(
+/// `scan_range` と同じ入口で、利用者の正規表現なら一致ごとのキャプチャも渡す (置換、03 §12.5)。
+pub(super) fn scan_with_captures(
     text: &dyn TextRead,
     m: &Matcher,
     range: ByteRange,
-    cancel: &CancelToken,
+    ctx: &mut ScanCtx<'_>,
     f: &mut OnMatch<'_>,
-) -> bool {
-    scan(text, m, range, &mut ScanCtx::new(cancel), true, f) == ScanEnd::Done
+) -> ScanEnd {
+    scan(text, m, range, ctx, true, f)
 }
 
-/// 走査の入口の本体 (`scan_bytes`・`scan_range`・`scan_bytes_with_captures`)。
+/// 走査の入口の本体 (`scan_bytes`・`scan_range`・`scan_with_captures`)。
 fn scan(
     text: &dyn TextRead,
     m: &Matcher,
@@ -337,27 +360,84 @@ fn scan_memmem(
     true
 }
 
-/// `from` から先 (`forward`) か前の最初の一致を探す。端を越えたら反対側から続ける (`wrapped`)。
-/// 一致が無ければ `Some(None)`、取り消されたら `None`。単発の検索ジョブ (`JobKind::FindNext`) の本体。
-pub fn find_next(
+/// 走査の入口で `range` を走査する。最後まで走査したか、`f` が止めたら `Ok`。取り消し・探さない・打ち切りは `Err` (その終わり方)。
+fn scan_ok(
     text: &dyn TextRead,
-    query: &SearchQuery,
-    from: ByteOff,
-    forward: bool,
+    m: &Matcher,
+    range: ByteRange,
+    clock: Option<&dyn Clock>,
     cancel: &CancelToken,
-) -> Option<Option<(ByteRange, bool)>> {
-    let Some(m) = query.matcher() else {
-        return Some(None);
+    f: &mut dyn FnMut(ByteRange) -> bool,
+) -> Result<(), ScanEnd> {
+    let mut ctx = ScanCtx {
+        cancel,
+        clock,
+        resume: None,
     };
+    match scan_range(text, m, range, &mut ctx, f) {
+        ScanEnd::Done | ScanEnd::Stopped => Ok(()),
+        e => Err(e),
+    }
+}
+
+/// 単発の検索 (`JobKind::FindNext`) の条件。
+pub struct FindJob<'a> {
+    /// 検索する本文。
+    pub snapshot: &'a dyn TextRead,
+    /// 検索の条件。
+    pub query: &'a SearchQuery,
+    /// 起点 (前へは選択の始端、次へは選択の終端)。
+    pub from: ByteOff,
+    /// `true` なら後ろへ、`false` なら前へ探す。
+    pub forward: bool,
+    /// 正本の走査を始められる位置 (再開の位置と、今の一致の終端。行をまたぐ検索の規則だけが使う。文書の先頭は無くても使う)。
+    pub resume: &'a [ByteOff],
+}
+
+/// `from` から先 (`forward`) か前の最初の一致を探す。端を越えたら反対側から続ける (`wrapped`)。
+/// 一致が無ければ `Ok(None)`。単発の検索ジョブ (`JobKind::FindNext`) の本体。ジョブからは時計を渡す (核の縮めと処理の速さの
+/// 下限、03 §12.3.1)。
+///
+/// 行をまたぐ検索の規則 (`Matcher::whole_doc`、03 §12.3.1 の「次 / 前」の (3)) では、一致の集合を文書の先頭から選んだ正本に
+/// 合わせる: 前へは、起点以前で最も近い正本の位置 (`resume`。無ければ文書の先頭) から走査して起点以降に始まる最初の一致を、
+/// 後ろへは、起点より前の最も近い正本の位置から起点まで走査して起点以前に終わる最後の一致を採り、無ければ 1 つ前の位置から
+/// 探し直す。それ以外の検索語は v0.3 のまま (起点の行から探す。k が 0 なら行頭は正本の位置)。
+///
+/// # Errors
+///
+/// 取り消された (`Cancelled`)、探さなかった (`TooLarge`)、重すぎて打ち切った (`TooHeavy`)。
+pub fn find_next(
+    p: &FindJob<'_>,
+    clock: Option<&dyn Clock>,
+    cancel: &CancelToken,
+) -> Result<Option<(ByteRange, bool)>, ScanEnd> {
+    let Some(m) = p.query.matcher() else {
+        return Ok(None);
+    };
+    let text = p.snapshot;
+    let (from, forward) = (p.from, p.forward);
     let len = text.len_bytes();
+    let all = ByteRange::new(ByteOff(0), ByteOff(len));
+    if m.whole_doc() {
+        return find_canonical(
+            text,
+            &m,
+            from.min(ByteOff(len)),
+            forward,
+            p.resume,
+            clock,
+            cancel,
+        );
+    }
     let line_start = text.line_to_byte(text.byte_to_line(from)).0.min(len);
     let mut hit: Option<ByteRange> = None;
     if forward {
         // カーソルの行から末尾まで (カーソルより前に始まる一致は除く)
-        let ok = scan_bytes(
+        scan_ok(
             text,
             &m,
             ByteRange::new(ByteOff(line_start), ByteOff(len)),
+            clock,
             cancel,
             &mut |r| {
                 if r.start >= from {
@@ -366,52 +446,117 @@ pub fn find_next(
                 }
                 true
             },
-        );
+        )?;
         if let Some(r) = hit {
-            return Some(Some((r, false)));
-        }
-        if !ok && cancel.is_cancelled() {
-            return None;
+            return Ok(Some((r, false)));
         }
         // 先頭から (最初の一致)
-        let ok = scan_bytes(
+        scan_ok(text, &m, all, clock, cancel, &mut |r| {
+            hit = Some(r);
+            false
+        })?;
+        return Ok(hit.map(|r| (r, true)));
+    }
+    // 前へ: 全体を 1 回走査して、`from` より前で終わる最後の一致と、全体の最後の一致を取る
+    let (mut before, mut last): (Option<ByteRange>, Option<ByteRange>) = (None, None);
+    scan_ok(text, &m, all, clock, cancel, &mut |r| {
+        if r.end <= from {
+            before = Some(r);
+        }
+        last = Some(r);
+        true
+    })?;
+    Ok(before.map(|r| (r, false)).or(last.map(|r| (r, true))))
+}
+
+/// 行をまたぐ検索の規則の次 / 前 (`find_next` の本体の一つ)。
+fn find_canonical(
+    text: &dyn TextRead,
+    m: &Matcher,
+    from: ByteOff,
+    forward: bool,
+    resume: &[ByteOff],
+    clock: Option<&dyn Clock>,
+    cancel: &CancelToken,
+) -> Result<Option<(ByteRange, bool)>, ScanEnd> {
+    let len = ByteOff(text.len_bytes());
+    // 正本の位置 (文書の先頭を含む、昇順で重複なし)
+    let mut points: Vec<ByteOff> = resume.iter().copied().filter(|p| *p <= len).collect();
+    points.push(ByteOff(0));
+    points.sort_unstable();
+    points.dedup();
+    let mut hit: Option<ByteRange> = None;
+    if forward {
+        let start = points
+            .iter()
+            .copied()
+            .rfind(|p| *p <= from)
+            .unwrap_or(ByteOff(0));
+        scan_ok(
             text,
-            &m,
-            ByteRange::new(ByteOff(0), ByteOff(len)),
+            m,
+            ByteRange::new(start, len),
+            clock,
+            cancel,
+            &mut |r| {
+                if r.start >= from {
+                    hit = Some(r);
+                    return false;
+                }
+                true
+            },
+        )?;
+        if let Some(r) = hit {
+            return Ok(Some((r, false)));
+        }
+        // 折り返し: 文書の最初の一致 (起点以降には無いので、起点より前で始まる)
+        scan_ok(
+            text,
+            m,
+            ByteRange::new(ByteOff(0), from),
+            clock,
             cancel,
             &mut |r| {
                 hit = Some(r);
                 false
             },
-        );
-        if !ok && hit.is_none() {
-            return None;
-        }
-        return Some(hit.map(|r| (r, true)));
+        )?;
+        return Ok(hit.map(|r| (r, true)));
     }
-    // 前へ: 全体を 1 回走査して、`from` より前で終わる最後の一致と、全体の最後の一致を取る
-    let (mut before, mut last): (Option<ByteRange>, Option<ByteRange>) = (None, None);
-    let ok = scan_bytes(
-        text,
-        &m,
-        ByteRange::new(ByteOff(0), ByteOff(len)),
-        cancel,
-        &mut |r| {
+    // 前へ: 起点より前の正本の位置から起点まで走査し、起点以前に終わる最後の一致。無ければ 1 つ前の位置から、前に読んだ所の
+    // 手前まで ([p', p)) を探し直す (読み直さないので、全体で文書を 1 回読む量に収まる)。区間の終わりより前で始まり、終わりを
+    // 越える一致も、その区間の走査が返す
+    let mut end = from;
+    for &p in points.iter().rev().filter(|p| **p < from) {
+        scan_ok(text, m, ByteRange::new(p, end), clock, cancel, &mut |r| {
             if r.end <= from {
-                before = Some(r);
+                hit = Some(r);
             }
-            last = Some(r);
             true
-        },
-    );
-    if !ok {
-        return None;
+        })?;
+        if let Some(r) = hit {
+            return Ok(Some((r, false)));
+        }
+        end = p;
     }
-    Some(before.map(|r| (r, false)).or(last.map(|r| (r, true))))
+    // 折り返し: 文書の最後の一致 (後ろの位置から探し、無ければ 1 つ前の位置から、前に読んだ所の手前まで)
+    let mut end = len;
+    for &p in points.iter().rev() {
+        scan_ok(text, m, ByteRange::new(p, end), clock, cancel, &mut |r| {
+            hit = Some(r);
+            true
+        })?;
+        if let Some(r) = hit {
+            return Ok(Some((r, true)));
+        }
+        end = p;
+    }
+    Ok(None)
 }
 
-/// 全件走査のジョブ本体 (§12.2)。`from` のある行から文書の末尾まで、続けて先頭からその行の手前までを走査し、
-/// 256 件または 20 ms ごとに `SearchBatch` を送る。保持する一致は `max_matches` 件まで、数えるのは `count_limit` 件まで。
+/// 全件走査のジョブ本体 (§12.2)。256 件または 20 ms ごとに `SearchBatch` を送る。保持する一致は `max_matches` 件まで、数えるのは
+/// `count_limit` 件まで。走査の順は、行をまたぐ検索の規則 (`Matcher::whole_doc`) では文書の先頭から末尾まで (正本、03 §12.3.1 の
+/// 「全件走査」)、それ以外は `from` のある行から文書の末尾まで、続けて先頭からその行の手前まで (v0.3 のまま)。
 pub struct SearchJob<'a> {
     /// 結果に付けるジョブ。
     pub job: JobId,
@@ -419,7 +564,8 @@ pub struct SearchJob<'a> {
     pub snapshot: &'a dyn TextRead,
     /// 検索の条件。
     pub query: &'a SearchQuery,
-    /// 走査を始める位置 (バイト。この位置のある行から走査する)。
+    /// 起点 (バイト)。行をまたぐ検索の規則では、この位置以降に始まる最初の一致を `first_after` で知らせる。それ以外は、
+    /// この位置のある行から走査する。
     pub from: ByteOff,
     /// 保持する一致の上限 (件)。
     pub max_matches: usize,
@@ -427,39 +573,53 @@ pub struct SearchJob<'a> {
     pub count_limit: u64,
 }
 
-/// 全件走査を実行し、`SearchBatch` を順に、最後に `SearchDone` を `emit` に渡す (03 §12.2)。
-/// キャンセルされたら `Failed { Cancelled }` で終わる。検索語が空・照合器を作れなければ 0 件の `SearchDone`。
+/// 全件走査を実行し、`SearchBatch` を順に、最後に `SearchDone` を `emit` に渡す (03 §12.2・§12.3.1)。
+/// キャンセルされたら `Failed { Cancelled }` で終わる。検索語が空・照合器を作れなければ 0 件の `SearchDone`。探さなかった・
+/// 重すぎて打ち切った (`ScanEnd::TooLarge` / `TooHeavy`) ときは、0 件と理由 (`limit`) の `SearchDone` で終わる (それまでに
+/// 送った一致は、受け取る側が捨てる)。行をまたぐ検索の規則では、走査の再開の位置を 1 MiB ごとに記録して `SearchDone` で返す。
 pub fn run_search(
     p: SearchJob<'_>,
     clock: &dyn Clock,
     cancel: &CancelToken,
     emit: &mut dyn FnMut(JobOutput),
 ) {
-    let Some(m) = p.query.matcher() else {
+    let job = p.job;
+    let empty_done = |emit: &mut dyn FnMut(JobOutput), limit: Option<ScanLimit>| {
         emit(JobOutput {
-            job: p.job,
+            job,
             body: JobResult::SearchDone {
                 total: 0,
                 count_limited: false,
                 truncated: false,
+                resume: Vec::new(),
+                limit,
             },
         });
+    };
+    let Some(m) = p.query.matcher() else {
+        empty_done(emit, None);
         return;
     };
     let len = p.snapshot.len_bytes();
-    let first = p
-        .snapshot
-        .line_to_byte(p.snapshot.byte_to_line(p.from))
-        .0
-        .min(len);
+    let whole = m.whole_doc();
     let mut batch: Vec<ByteRange> = Vec::new();
     let (mut total, mut kept) = (0u64, 0usize);
     let (mut count_limited, mut truncated) = (false, false);
     let mut last = clock.now();
     let mut cut = false;
     let mut sent_any = false;
+    // 起点以降の最初の一致 (メインスレッドが同期検索をしない検索語だけ。保持の上限に依らず、見つけたら待たずに送る)。
+    // k が 0 の重い検索語は v0.3 の順 (起点の行から末尾まで、続けて先頭から) で、起点以降の一致は最初の区間にだけある
+    let mut first_after: Option<ByteRange> = None;
+    let mut first_found = !m.sends_first_after();
     let mut on_match = |r: ByteRange| {
         total += 1;
+        let mut flush = false;
+        if !first_found && r.start >= p.from {
+            first_found = true;
+            first_after = Some(r);
+            flush = true;
+        }
         if kept < p.max_matches {
             kept += 1;
             batch.push(r);
@@ -467,17 +627,21 @@ pub fn run_search(
             // 最初の一致は待たずに送る (NFR-108)
             if !sent_any || batch.len() >= BATCH_MATCHES || now.saturating_sub(last) >= BATCH_MILLIS
             {
-                sent_any = true;
-                emit(JobOutput {
-                    job: p.job,
-                    body: JobResult::SearchBatch {
-                        matches: std::mem::take(&mut batch),
-                    },
-                });
+                flush = true;
                 last = now;
             }
         } else {
             truncated = true;
+        }
+        if flush {
+            sent_any = true;
+            emit(JobOutput {
+                job,
+                body: JobResult::SearchBatch {
+                    matches: std::mem::take(&mut batch),
+                    first_after: first_after.take(),
+                },
+            });
         }
         if total >= p.count_limit {
             count_limited = true;
@@ -486,47 +650,93 @@ pub fn run_search(
         }
         true
     };
-    // 時計を渡す: 行の窓の経路 (内部の設定で開いたとき) は、窓の処理の時間から核を縮める (取り消しの遅れ、03 §12.3.1)
-    let mut ctx = ScanCtx {
-        cancel,
-        clock: Some(clock),
-        resume: None,
+    // 再開の位置: 行の窓が核ごとに知らせる位置を 1 MiB ごとに間引く (試験で核を小さくしたときは核の大きさごと)
+    let step = SEARCH_RESUME_STEP_BYTES.min(m.internal.core_bytes.max(1));
+    let mut resume: Vec<ByteOff> = Vec::new();
+    let mut on_resume = |r: ByteOff| {
+        if resume
+            .last()
+            .is_none_or(|l| r.0 >= l.0.saturating_add(step))
+        {
+            resume.push(r);
+        }
     };
-    let done = scan_range(
-        p.snapshot,
-        &m,
-        ByteRange::new(ByteOff(first), ByteOff(len)),
-        &mut ctx,
-        &mut on_match,
-    ) == ScanEnd::Done
-        && scan_range(
+    // 時計を渡す: 行の窓の経路 (内部の設定で開いたとき) は、窓の処理の時間から核を縮め、処理の速さの下限で打ち切る (03 §12.3.1)
+    let end = if whole {
+        let mut ctx = ScanCtx {
+            cancel,
+            clock: Some(clock),
+            resume: Some(&mut on_resume),
+        };
+        scan_range(
             p.snapshot,
             &m,
-            ByteRange::new(ByteOff(0), ByteOff(first)),
+            ByteRange::new(ByteOff(0), ByteOff(len)),
             &mut ctx,
             &mut on_match,
-        ) == ScanEnd::Done;
-    if !done && !cut {
-        emit(JobOutput {
-            job: p.job,
-            body: JobResult::Failed {
-                err: JobError::Cancelled,
-            },
-        });
-        return;
+        )
+    } else {
+        let first = p
+            .snapshot
+            .line_to_byte(p.snapshot.byte_to_line(p.from))
+            .0
+            .min(len);
+        let mut ctx = ScanCtx {
+            cancel,
+            clock: Some(clock),
+            resume: None,
+        };
+        match scan_range(
+            p.snapshot,
+            &m,
+            ByteRange::new(ByteOff(first), ByteOff(len)),
+            &mut ctx,
+            &mut on_match,
+        ) {
+            ScanEnd::Done => scan_range(
+                p.snapshot,
+                &m,
+                ByteRange::new(ByteOff(0), ByteOff(first)),
+                &mut ctx,
+                &mut on_match,
+            ),
+            e => e,
+        }
+    };
+    match end {
+        ScanEnd::Done => {}
+        ScanEnd::Stopped if cut => {}
+        ScanEnd::TooLarge | ScanEnd::TooHeavy => {
+            empty_done(emit, end.limit());
+            return;
+        }
+        ScanEnd::Stopped | ScanEnd::Cancelled => {
+            emit(JobOutput {
+                job,
+                body: JobResult::Failed {
+                    err: JobError::Cancelled,
+                },
+            });
+            return;
+        }
     }
-    if !batch.is_empty() {
+    if !batch.is_empty() || first_after.is_some() {
         emit(JobOutput {
-            job: p.job,
-            body: JobResult::SearchBatch { matches: batch },
+            job,
+            body: JobResult::SearchBatch {
+                matches: batch,
+                first_after,
+            },
         });
     }
     emit(JobOutput {
-        job: p.job,
+        job,
         body: JobResult::SearchDone {
             total,
             count_limited,
             truncated,
+            resume: if whole { resume } else { Vec::new() },
+            limit: None,
         },
     });
 }

@@ -183,6 +183,7 @@ impl Editor {
     pub fn next_deadline(&self) -> Option<Tick> {
         [
             self.state.search_deadline(),
+            self.state.search_wait_deadline(),
             self.state.swap_deadline(),
             self.state.quit_wait_deadline(),
             self.state.mouse_deadline(),
