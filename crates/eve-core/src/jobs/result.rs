@@ -1,5 +1,6 @@
 //! ジョブの結果と失敗の型 (docs/02 §4.4)。
 
+pub use eve_encoding::EscapeMergeAt;
 use eve_encoding::{Encoding, UnsupportedBom};
 use eve_text::Text;
 use eve_view::JobId;
@@ -31,6 +32,19 @@ pub enum ConfirmAsk {
         /// ファイルの大きさ (バイト)。
         len: u64,
     },
+}
+
+/// エスケープ文字のつながりの承認 (「このまま保存」、03 §8.3.1 の「承認」)。承認した結果 (件数・先頭 100 件・全件の
+/// ダイジェスト) を持ち、保存のジョブ (`JobKind::Save` の `escape_merge_ok`) は結果がこれと同じときだけ止めない。
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct EscapeMergeApproval {
+    /// 承認したつながりの件数。
+    pub total: u64,
+    /// 承認したつながりの先頭 100 件。
+    pub recorded: Vec<EscapeMergeAt>,
+    /// 承認したつながりの全件 (位置・強調の範囲・局所の復号) のダイジェスト (`JobResult::EscapeMerge` の `digest`)。
+    /// 先頭 100 件より後ろの違いも見る。
+    pub digest: u64,
 }
 
 /// 読込の完了に添える通知 (info メッセージの材料)。
@@ -137,8 +151,28 @@ pub enum JobResult {
         recorded: Vec<eve_encoding::Unmappable>,
         /// 総数のうち、§8.3 のエスケープ文字の数 (全件で数える)。1 以上なら E3 の選択肢 1・2 を出さない (03 §8.6)。
         escapes_unmappable: u64,
+        /// この保存で元のバイトに戻したエスケープ文字の数 (v0.4 の M23)。1 以上なら E3 の「UTF-8 で保存」を出さない
+        /// (UTF-8 にするとエスケープ文字が表現不能になり、もう一度 E3 になる。03 §8.3.1 の「E3 との関係」)。
+        escapes_restored: u64,
         /// 保存先の文字コード。
         encoding: Encoding,
+    },
+    /// エスケープ文字を元のバイトに戻すと隣とつながり、開き直すと別の文字になる箇所がある (03 §8.3.1 の「つながりの
+    /// 検出」。文書の先頭の BOM を含む)。承認 (`escape_merge_ok`) が無い、または結果が承認と違う保存で、乾式走査の段階で
+    /// 見つけたときだけ返す。何も書いていない (一時ファイルも作らない)。
+    EscapeMerge {
+        /// つながりの件数。
+        total: u64,
+        /// 先頭 100 件。
+        recorded: Vec<EscapeMergeAt>,
+        /// 全件 (位置・強調の範囲・局所の復号) のダイジェスト (承認に写す)。
+        digest: u64,
+        /// 開き直すと変わる範囲の合計 (本文の文字数)。
+        changed_chars: u64,
+        /// 開き直すと変わる範囲の合計 (本文の行数)。
+        changed_lines: u64,
+        /// 変わる範囲が文書の末尾まで戻らない。
+        to_eof: bool,
     },
     /// 表現不能の文字の置換の `ChangeSet` ができた (`targets` は先頭 100 件。総数は `counts` の合計)。
     UnmappableReplacement {

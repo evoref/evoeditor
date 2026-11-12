@@ -847,20 +847,22 @@ fn 違う文字コードの保存がキャンセルで終わったら由来の�
 }
 
 // バイトの文書 (Shift_JIS、エスケープ文字が残る) に Shift_JIS で表せない文字を入れて保存すると E3 が出る。03 §8.6 の
-// E3 の表では「UTF-8 で保存」は escapes_restored == 0 のときだけだが、今は escapes_unmappable しか見ないので出る
-// (escapes_restored を数えるのは M23 の 3 本目)。選んでも 2 回目の E3 (キャンセルだけ) になり、何も書かない
+// E3 の表のとおり、この保存はエスケープ文字を元のバイトに戻すので (escapes_restored > 0)「UTF-8 で保存」は出さない
+// (選ぶと UTF-8 ではエスケープ文字が表現不能になり、2 回目の E3 になっていた。M23 の 3 本目で直した)。
+// 「置換して保存」は出る (表現不能の文字にエスケープ文字を含まない)。何も書かない
 #[test]
-fn e3_の_utf8_で保存がエスケープ文字を戻す保存でも出るが_何も書かない() {
+fn e3_の_utf8_で保存はエスケープ文字を戻す保存では出さない() {
     let mut s = sjis_released();
     s.keys("ctrl+end");
     s.text("😀");
     let before = s.fs.read("/w/a.txt").unwrap();
     run(&mut s, "file.save", Args::new());
     assert_eq!(s.overlay(), "dialog");
-    if choice_keys(&mut s).first() == Some(&Some('u')) {
-        s.answer(0);
-        s.run_jobs();
-    }
+    let keys = choice_keys(&mut s);
+    assert!(!keys.contains(&Some('u')), "{keys:?}");
+    assert!(keys.contains(&Some('r')), "{keys:?}");
+    s.keys("esc");
+    s.run_jobs();
     assert_eq!(s.fs.read("/w/a.txt").unwrap(), before, "何も書かない");
     assert_eq!(doc(&s).format.encoding, Encoding::ShiftJis);
 }

@@ -56,8 +56,8 @@ pub use io::rescue::{RescueError, RescueOutcome, RescueReason, RescueWriter};
 pub use io::secret::is_secret_path;
 pub use io::unmap::{ReplaceCounts, ReplaceTarget};
 pub use jobs::{
-    ConfirmAsk, JobError, JobKind, JobOutput, JobPorts, JobRequest, JobResult, JobSpawner,
-    MetaPurpose, OpenNotes, Ports, SaveStrategy, run_job,
+    ConfirmAsk, EscapeMergeApproval, EscapeMergeAt, JobError, JobKind, JobOutput, JobPorts,
+    JobRequest, JobResult, JobSpawner, MetaPurpose, OpenNotes, Ports, SaveStrategy, run_job,
 };
 pub use search::{
     Case, Matcher, QueryError, SearchJob, SearchQuery, build_replace_all, find_next,

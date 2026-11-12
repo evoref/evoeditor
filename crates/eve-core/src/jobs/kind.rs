@@ -8,6 +8,7 @@ use crate::document::PreservedMap;
 use crate::io::fs::{Expect, HardlinkPolicy, InPlaceBackup};
 use crate::io::fspath::FsPath;
 use crate::io::io_jobs::OpenOptions;
+use crate::jobs::EscapeMergeApproval;
 
 /// 保存の方式 (03 §9.3)。既定は原子的保存。確認 (`AtomicUnsupported` / ハードリンク / `BackupFailed`) の後で直接上書きにする。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -108,6 +109,10 @@ pub enum JobKind {
         /// 書く文字コードが文書の文字コードと同じで、保持が効いている (`PreserveStatus::Active`) ときだけ渡し、ほかは空。
         /// 空なら記録を使わない (v0.3 と同じ出力)。
         preserved: PreservedMap,
+        /// エスケープ文字のつながり (03 §8.3.1) の承認 (「このまま保存」)。ジョブは承認があってもつながりを調べ、結果
+        /// (件数・先頭 100 件・全件のダイジェスト) が承認と同じときだけ止めずに書く (違えば何も書かずに
+        /// `JobResult::EscapeMerge`)。承認しても区切った確認 (ii) は行う。
+        escape_merge_ok: Option<EscapeMergeApproval>,
     },
     /// 表現不能の文字を置換する `ChangeSet` を作る (E3 の選択肢 2、03 §8.6)。`snapshot` は投入時の Revision のもの。
     ReplaceUnmappable {

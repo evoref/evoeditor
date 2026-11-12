@@ -74,6 +74,9 @@ pub struct EncodeReport {
     /// 総数のうち、§8.3 の不正バイトのエスケープ文字 (`U+10FF00 + b`) の数。先頭 `MAX_RECORDED` 件に限らず全件で
     /// 数える (03 §8.6 の「E3 の選択肢」の条件は、記録した先頭の件だけでなく全件で判定する)。
     pub escapes: u64,
+    /// 元のバイトに戻して書いたエスケープ文字の数 (`EscapePolicy::Restore`。表現不能とは別に全件で数える)。03 §8.6 の
+    /// 「E3 の選択肢」の「UTF-8 で保存」は、これが 1 以上なら出さない (UTF-8 にするとエスケープ文字が表現不能になる)。
+    pub restored: u64,
 }
 
 impl EncodeReport {
@@ -353,6 +356,10 @@ impl Encoder {
             }
             u.encode(&text[start..], out);
         } else {
+            if self.policy == EscapePolicy::Restore && text.as_bytes().contains(&0xF4) {
+                report.restored +=
+                    text.chars().filter(|&c| unescape_char(c).is_some()).count() as u64;
+            }
             u.encode(text, out);
         }
     }
@@ -368,6 +375,7 @@ impl Encoder {
                 match self.policy {
                     EscapePolicy::Restore => {
                         out.push(b);
+                        report.restored += 1;
                         continue;
                     }
                     EscapePolicy::Reject => {
@@ -411,7 +419,10 @@ impl Encoder {
                 self.run_rs(&text[run_start..bi], base + chars_before_run, out, report);
                 if let Some(b) = unescape_char(c) {
                     match self.policy {
-                        EscapePolicy::Restore => out.push(b),
+                        EscapePolicy::Restore => {
+                            out.push(b);
+                            report.restored += 1;
+                        }
                         _ => reject(report, base + ci, c, UnmappableKind::Unmappable),
                     }
                 } else if let Some(b) = cp932::gaiji_to_sjis(c) {

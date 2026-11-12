@@ -3,9 +3,10 @@
 //! - 未編集の文書は、記録を使って書くと元のファイルとバイト単位で一致する。
 //! - 表が空なら、v0.3 (5 本目まで) の出力 (記録なしの符号化) とバイト単位で同じ。
 //! - 乾式走査と本番の書き込みの供給の出力が一致し、rope のチャンクの形に依らない。
-//! - 故障の注入: 表の記録の位置をずらす・元のバイト列をすり替える・ISO-2022-JP の記録を行の途中に置く・記録を不正バイトの
-//!   エスケープの直後に置く、などをしても、誤ったバイト列をファイルに書かない (確認 (i) で記録を使わずに符号化するか、
-//!   確認 (ii) で保存を止める。どちらになるかを固定する)。原子的保存と直接上書きの両方で、元のファイルを壊さない。
+//! - 故障の注入: 表の記録の位置をずらす・元のバイト列をすり替える・ISO-2022-JP の記録を行の途中に置く、などをしても、
+//!   誤ったバイト列をファイルに書かない (確認 (i) で記録を使わずに符号化するか、確認 (ii) で保存を止める。どちらになるかを
+//!   固定する)。原子的保存と直接上書きの両方で、元のファイルを壊さない。記録を不正バイトのエスケープの直後に置くと、
+//!   v0.4 の M23 からは、つながり (`EscapeMerge`、03 §8.3.1) として書く前に止まる (`VerifyFailed` にしない)。
 
 use std::sync::{Arc, Mutex};
 
@@ -199,7 +200,9 @@ fn 表が空なら記録なしの符号化と同じ出力() {
             let out = save_for_test(&text.snapshot(), enc, policy(enc), &empty);
             assert_eq!(out.bytes, plain(enc, &all(&text)), "{enc:?} {bytes:02X?}");
             assert_eq!(out.dry_len, out.bytes.len() as u64);
-            assert!(out.verified);
+            // 確認 (ii) は、エスケープ文字を元のバイトに戻す保存でも行う (M23 の 3 本目)。表現不能の文字 (補助漢字など。
+            // 表が空なので符号化する) は出力から抜けて突き合わせがずれるが、保存は表現不能 (E3) で先に止まる
+            assert!(out.verified || out.unmappable > 0, "{enc:?} {bytes:02X?}");
         }
     }
 }
@@ -394,9 +397,9 @@ fn 故障の注入_iso_2022_jp_の元のバイト列が_ascii_状態で終わら
     assert_stopped(&out, 1);
 }
 
-#[test]
-fn 故障の注入_不正バイトのエスケープの直後の記録は確認_ii_で止める() {
-    // 孤立した先頭バイト 0x81 (エスケープ文字) の直後に ￢ の記録を置く (読込ではこの並びにならない。0x81 0xFA は組になる)
+/// 孤立した先頭バイト 0x81 (エスケープ文字) の直後に ￢ の記録を置いた本文と表 (読込ではこの並びにならない。0x81 0xFA は
+/// 組になる)。
+fn escape_before_record() -> (Text, PreservedMap) {
     let text = Text::from("\u{10FF81}￢x");
     let map = PreservedMap::from_spans(&[PreservedSpan {
         range: ByteRange::new(ByteOff(4), ByteOff(7)),
@@ -404,37 +407,49 @@ fn 故障の注入_不正バイトのエスケープの直後の記録は確認_
         reason: PreserveReason::DuplicateEncoding,
         line: false,
     }]);
+    (text, map)
+}
+
+// v0.4 の M23 の 2 本目までは、確認 (ii) の不一致 (`VerifyFailed`) で止めていた。並びの直後の記録は、記録の全体を直後の
+// 1 単位として扱うので、つながり (03 §8.3.1) として見つけ、確認 (ii) はつながる範囲を突き合わせない
+#[test]
+fn 不正バイトのエスケープの直後の記録とのつながりは確認_ii_で止めずにつながりとして見つける() {
+    let (text, map) = escape_before_record();
     let out = save_for_test(
         &text.snapshot(),
         Encoding::ShiftJis,
         EscapePolicy::Restore,
         &map,
     );
-    // 確認 (i) は通る (記録だけを見れば正しい)。つなぎ目で別の文字になるので確認 (ii) で止める
-    assert_stopped(&out, 0);
+    // 確認 (i) は通る (記録だけを見れば正しい)
+    assert!(out.verified && out.broken == 0, "{out:?}");
+    let m = out.merges.as_ref().expect("つながりを調べる");
+    assert_eq!((m.total, m.recorded[0].char_index), (1, 0));
+    assert_eq!(m.recorded[0].len_chars, 2, "並びと記録の全体");
+    assert_eq!(out.bytes, b"\x81\xFA\x54x");
 }
 
 // ---------- 原子的保存・直接上書き (Port まで) ----------
 
 /// 1 つのファイルだけを持つ偽の FS。書いた回数を数える。
-struct OneFile {
+pub(super) struct OneFile {
     content: Mutex<Vec<u8>>,
     writes: Mutex<u32>,
 }
 
 impl OneFile {
-    fn new(bytes: &[u8]) -> Arc<OneFile> {
+    pub(super) fn new(bytes: &[u8]) -> Arc<OneFile> {
         Arc::new(OneFile {
             content: Mutex::new(bytes.to_vec()),
             writes: Mutex::new(0),
         })
     }
 
-    fn content(&self) -> Vec<u8> {
+    pub(super) fn content(&self) -> Vec<u8> {
         self.content.lock().unwrap().clone()
     }
 
-    fn writes(&self) -> u32 {
+    pub(super) fn writes(&self) -> u32 {
         *self.writes.lock().unwrap()
     }
 
@@ -518,7 +533,7 @@ impl FileSystem for OneFile {
     }
 }
 
-struct Paths0;
+pub(super) struct Paths0;
 impl crate::io::paths::Paths for Paths0 {
     fn config_dir(&self) -> FsPath {
         FsPath::from("/c")
@@ -537,14 +552,14 @@ impl crate::io::paths::Paths for Paths0 {
     }
 }
 
-struct Clock0;
+pub(super) struct Clock0;
 impl Clock for Clock0 {
     fn now(&self) -> Tick {
         Tick(0)
     }
 }
 
-const STRATEGIES: [SaveStrategy; 2] = [
+pub(super) const STRATEGIES: [SaveStrategy; 2] = [
     SaveStrategy::Atomic {
         hardlink: crate::io::fs::HardlinkPolicy::Ask,
     },
@@ -579,6 +594,7 @@ fn run(
             clear_readonly: false,
             create_link_target: false,
             preserved: map,
+            escape_merge_ok: None,
         },
         &ports,
         &CancelToken::new(),
@@ -622,17 +638,9 @@ fn broken_maps(map: &PreservedMap) -> Vec<(&'static str, PreservedMap)> {
 #[test]
 fn 確かめに合わない表は原子的保存でも直接上書きでも何も書かない() {
     let original = b"original bytes\n".to_vec();
-    // 確認 (ii) の不一致
-    let text = Text::from("\u{10FF81}￢x");
-    let joint = PreservedMap::from_spans(&[PreservedSpan {
-        range: ByteRange::new(ByteOff(4), ByteOff(7)),
-        bytes: (*b"\xFA\x54").into(),
-        reason: PreserveReason::DuplicateEncoding,
-        line: false,
-    }]);
     // 確認 (i) に合わない・表の不変条件に反する
     let (sjis_text, map) = load(Encoding::ShiftJis, SJIS_DOC);
-    let mut cases = vec![("つなぎ目", text.snapshot(), joint)];
+    let mut cases = Vec::new();
     for (name, bad) in broken_maps(&map) {
         cases.push((name, sjis_text.snapshot(), bad));
     }
@@ -656,6 +664,18 @@ fn 確かめに合わない表は原子的保存でも直接上書きでも何�
             );
             assert_eq!(fs.content(), original, "{name}");
         }
+    }
+    // 並びの直後の記録とのつながり: 確認 (ii) の不一致ではなく、つながりとして書く前に止まる (03 §8.3.1)
+    let (text, joint) = escape_before_record();
+    for strategy in STRATEGIES {
+        let fs = OneFile::new(&original);
+        let r = run(&fs, &text.snapshot(), Encoding::ShiftJis, &joint, strategy);
+        assert!(
+            matches!(r, JobResult::EscapeMerge { total: 1, .. }),
+            "{strategy:?}: {r:?}"
+        );
+        assert_eq!(fs.writes(), 0, "{strategy:?}");
+        assert_eq!(fs.content(), original);
     }
 }
 
@@ -688,6 +708,7 @@ fn 表現不能の文字の位置は元のバイト列を書いた範囲を数�
         clear_readonly: false,
         create_link_target: false,
         preserved: &map,
+        escape_merge_ok: None,
     };
     let d = dry_run(&p, &CancelToken::new()).unwrap();
     assert_eq!(d.broken, 0);

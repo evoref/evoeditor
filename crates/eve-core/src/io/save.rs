@@ -321,6 +321,9 @@ impl EditorState {
                 clear_readonly,
                 create_link_target,
                 preserved,
+                // つながりの承認 (`SaveApprovals`) は M23 の次の PR で覚える。今は承認せずに投入する (つながりがあれば
+                // ジョブは何も書かずに `EscapeMerge` を返す)
+                escape_merge_ok: None,
             },
         );
         if let Some(c) = cont {
@@ -752,6 +755,7 @@ impl EditorState {
                 total,
                 recorded,
                 escapes_unmappable,
+                escapes_restored,
                 encoding,
             } if self.docs.documents.contains_key(&doc_id) && !recorded.is_empty() => {
                 // 該当箇所 (先頭 100 件) を強調する。次の編集まで残す (03 §8.6)
@@ -769,8 +773,13 @@ impl EditorState {
                     },
                     total,
                     encoding,
-                    // 記録した先頭 100 件ではなく、全件で数えたエスケープ文字の数で判定する (03 §8.6 の「E3 の選択肢」)
-                    escapes_unmappable > 0,
+                    // 記録した先頭 100 件ではなく、全件で数えたエスケープ文字の数で判定する (03 §8.6 の「E3 の選択肢」)。
+                    // 元のバイトに戻したエスケープ文字があれば、UTF-8 では表現不能になるので「UTF-8 で保存」も出さない
+                    // (03 §8.3.1 の「E3 との関係」)
+                    EscapesInSave {
+                        unmappable: escapes_unmappable > 0,
+                        restored: escapes_restored > 0,
+                    },
                 );
             }
             JobResult::Unmappable { total, .. } => {
@@ -780,6 +789,19 @@ impl EditorState {
                     &[
                         ("path", &path.display()),
                         ("reason", &format!("unmappable ({total})")),
+                    ],
+                );
+            }
+            // エスケープ文字を戻したバイトが隣とつながる (03 §8.3.1): 何も書いていない。確認 (`ui.confirm.save.escape_merge`)
+            // と承認は M23 の次の PR で入れる。それまでは保存の失敗として示し、後続 (終了・置き換え) は続けない
+            // (黙って書かない・黙って成功にしない)
+            JobResult::EscapeMerge { total, .. } => {
+                self.show_message(
+                    MessageLevel::Error,
+                    keys::MSG_SAVE_FAILED,
+                    &[
+                        ("path", &path.display()),
+                        ("reason", &format!("escape merge ({total})")),
                     ],
                 );
             }

@@ -7,8 +7,8 @@
 
 use eve_encoding::{
     Confidence, Decoder, DetectOptions, DetectedKind, Detection, EncodeReport, Encoder, Encoding,
-    EscapePolicy, NoPreserveReason, PreserveState, PreserveStatus, PreservedRecords,
-    RoundtripChecker, detect, find_iso_switch, redetect_window,
+    EscapePolicy, MergeReport, MergeScanner, NoPreserveReason, PreserveState, PreserveStatus,
+    PreservedRecords, RoundtripChecker, detect, find_iso_switch, redetect_window, unescape_char,
 };
 use eve_text::{ByteRange, LineEnding, Snapshot, TextBuilder, TextRead};
 use eve_view::JobId;
@@ -25,7 +25,9 @@ use crate::io::fspath::FsPath;
 use crate::io::interrupted::map_interrupted;
 use crate::io::save_plan::{Decision, Planner, Unused};
 use crate::jobs::cancel::CancelToken;
-use crate::jobs::{ConfirmAsk, JobError, JobOutput, JobPorts, JobResult, OpenNotes};
+use crate::jobs::{
+    ConfirmAsk, EscapeMergeApproval, JobError, JobOutput, JobPorts, JobResult, OpenNotes,
+};
 
 /// 先頭の判定に使うバイト数 (03 §8.2 の `sniff_len`)。
 const SNIFF_LEN: usize = 64 * 1024;
@@ -489,24 +491,132 @@ fn preserved_from_records(
 /// 保存の計画があるときの、1 段の出力の目安の大きさ (バイト)。
 const STEP_TARGET: usize = 64 * 1024;
 
-/// 保存の出力の確認 (ii) (03 §8.6 E2): 出力の全体を同じ文字コードの 1 本の復号器で通しで復号し、Snapshot の本文と
-/// 前から順に突き合わせる (元のバイト列と符号化した部分のつなぎ目を含む。不正バイトは §8.3 のとおり PUA に戻る)。
-/// 作業のメモリは、1 段の出力を復号した分だけ。
+/// つながりの全件のダイジェストのハッシュ (保存の内容のハッシュと同じ XXH3-64。05 §5.5)。
+fn merge_digest() -> Box<dyn std::hash::Hasher> {
+    Box::new(twox_hash::XxHash3_64::new())
+}
+
+/// `s` の中の最初のエスケープ文字 (`U+10FF00..`) のバイト位置。UTF-8 の先頭バイトが 0xF4 の文字だけを確かめる。
+fn next_escape(s: &str) -> Option<usize> {
+    let b = s.as_bytes();
+    let mut i = 0;
+    while let Some(off) = b[i..].iter().position(|&x| x == 0xF4) {
+        let at = i + off;
+        if s[at..]
+            .chars()
+            .next()
+            .is_some_and(|c| unescape_char(c).is_some())
+        {
+            return Some(at);
+        }
+        i = at + 1;
+    }
+    None
+}
+
+/// 保存の出力の確認 (ii) (03 §8.6 E2、§8.3.1): 書いた BOM を除いた出力の全体を同じ文字コードの 1 本の復号器で通しで
+/// 復号し、Snapshot の本文と前から順に突き合わせる (元のバイト列と符号化した部分のつなぎ目を含む。不正バイトは §8.3 の
+/// とおり PUA に戻る)。つながる並びと直後の 1 単位 (`MergeRegion`) だけは突き合わせずに飛ばし、範囲の後で復号器を
+/// 初期状態にし直して続ける (区切った確認 (ii)。安全網を外すのは、つながる範囲の中だけ)。つながるかがまだ決まらない
+/// 並び (終わりの無い区切り) の所からは、決まるまで出力を持って待つ (つながらなければ、ふつうに突き合わせる)。
+/// 作業のメモリは、1 段の出力を復号した分と、決まっていない並びの出力の分。
 struct Verify {
     dec: Decoder,
     buf: String,
     /// 突き合わせ終えた本文の位置。
     at: usize,
     ok: bool,
+    /// まだ読み飛ばしていない、書いた BOM のバイト数。
+    skip: u64,
+    /// つながるかが決まらない並びの所から持っている出力と、その先頭の出力の通しの位置。
+    hold: Vec<u8>,
+    hold_base: u64,
 }
 
 impl Verify {
-    fn new(encoding: Encoding) -> Verify {
+    fn new(encoding: Encoding, bom_len: u64) -> Verify {
         Verify {
             dec: Decoder::new(encoding, false),
             buf: String::new(),
             at: 0,
             ok: true,
+            skip: bom_len,
+            hold: Vec::new(),
+            hold_base: 0,
+        }
+    }
+
+    /// 出力の 1 段 `out` (先頭は出力の通しの `base` バイト目) を、区切り `regions` に従って突き合わせる。`last` は出力の
+    /// 終わり。突き合わせ終えた区切りは `regions` から取り除く。
+    fn feed_step(
+        &mut self,
+        text: &Snapshot,
+        out: &[u8],
+        base: u64,
+        last: bool,
+        regions: Option<&mut std::collections::VecDeque<eve_encoding::MergeRegion>>,
+    ) {
+        // 持っている出力があれば、この段の出力をつないで続きから読む
+        let held;
+        let (data, base): (&[u8], u64) = if self.hold.is_empty() {
+            (out, base)
+        } else {
+            let mut h = std::mem::take(&mut self.hold);
+            h.extend_from_slice(out);
+            held = h;
+            (&held, self.hold_base)
+        };
+        let end = base + data.len() as u64;
+        let mut pos = base;
+        let skip = self.skip.min(end - pos);
+        pos += skip;
+        self.skip -= skip;
+        let mut none = std::collections::VecDeque::new();
+        let regions = regions.unwrap_or(&mut none);
+        let at = |p: u64| usize::try_from(p - base).map_or(data.len(), |i| i.min(data.len()));
+        while self.ok {
+            match regions.front().copied() {
+                // つながるかが決まらない並び: そこから先は、決まるまで持って待つ
+                Some(r) if r.out_start <= pos && r.out_end.is_none() => {
+                    self.hold = data[at(pos)..].to_vec();
+                    self.hold_base = pos;
+                    break;
+                }
+                Some(r) if r.out_start <= pos => {
+                    let (Some(e), Some(t)) = (r.out_end, r.text_end) else {
+                        break;
+                    };
+                    if e > end {
+                        // 区切りの終わりがまだ届いていない (起きないはず): 持って待つ
+                        self.hold = data[at(pos)..].to_vec();
+                        self.hold_base = pos;
+                        break;
+                    }
+                    // つながる並びの手前: 復号器の持ち越しを出し切り、本文が並びの先頭まで突き合ったことを確かめる。
+                    // 並びと直後の 1 単位は突き合わせず、その後で復号器を初期状態にし直す
+                    self.feed(text, &[], true);
+                    self.ok &= self.at == r.text_start;
+                    pos = pos.max(e);
+                    self.at = t;
+                    self.dec.reset();
+                    regions.pop_front();
+                }
+                Some(r) if r.out_start < end => {
+                    self.feed(text, &data[at(pos)..at(r.out_start)], false);
+                    pos = r.out_start;
+                }
+                _ => {
+                    if pos < end {
+                        self.feed(text, &data[at(pos)..], false);
+                    }
+                    break;
+                }
+            }
+        }
+        if last {
+            // 出力の終わりには、決まらない並びは残らない (検出器が終わりで決める)
+            self.ok &= self.hold.is_empty();
+            self.feed(text, &[], true);
         }
     }
 
@@ -582,19 +692,37 @@ struct SaveStream<'a> {
     line_unused: usize,
     /// 確認 (i) に合わない・表の不変条件に反する記録の数 (起きないはず)。1 以上なら書く前に止める (03 §8.6 E2)。
     broken: usize,
-    /// 確認 (ii)。表を渡したときだけ行う。
+    /// 確認 (ii)。表を渡したとき、またはエスケープ文字を元のバイトに戻して書くとき (`Restore`、03 §8.3.1) に行う。
     verify: Option<Verify>,
+    /// エスケープ文字のつながりの検出 (03 §8.3.1)。エスケープ文字を元のバイトに戻して書くときだけ。
+    scan: Option<MergeScanner>,
+    /// 先頭の BOM を書いた (最初の符号化の前に BOM だけを書く。単位の出力に BOM を混ぜない)。
+    bom_flushed: bool,
+    /// 符号化を終えた本文のバイト数。
+    text_pos: usize,
+    /// これまでの段の出力のバイト数の合計 (出力の通しの位置。BOM を含む)。
+    out_base: u64,
 }
 
 impl<'a> SaveStream<'a> {
+    /// `track_range`: つながりの変わる範囲を求める (乾式走査。本番の書き込みは件数と位置だけを見る)。
     fn new(
         snapshot: &'a Snapshot,
         encoding: Encoding,
         bom: bool,
         escape: EscapePolicy,
         preserved: &'a PreservedMap,
+        track_range: bool,
     ) -> SaveStream<'a> {
         let with_plan = !preserved.is_empty();
+        // 状態付きの文字コードは、エスケープ文字を戻さない (符号化器が表現不能にする)
+        let restore = escape == EscapePolicy::Restore && !encoding.is_stateful();
+        let bom_len = match encoding {
+            _ if !bom => 0,
+            Encoding::Utf8 => 3,
+            e if e.is_utf16() => 2,
+            _ => 0,
+        };
         let mut s = SaveStream {
             snapshot,
             chunks: snapshot.chunks(ByteRange::all(snapshot.len_bytes())),
@@ -609,12 +737,65 @@ impl<'a> SaveStream<'a> {
             pos: 0,
             line_unused: 0,
             broken: 0,
-            verify: with_plan.then(|| Verify::new(encoding)),
+            verify: (with_plan || restore).then(|| Verify::new(encoding, bom_len)),
+            scan: restore
+                .then(|| MergeScanner::new(encoding, bom_len > 0, track_range, merge_digest())),
+            bom_flushed: false,
+            text_pos: 0,
+            out_base: 0,
         };
         if with_plan {
             s.next_segment();
         }
         s
+    }
+
+    /// 本文 `text` を符号化して `out` に足す。つながりを検出するときは、検出器が単位を求める間 (並びの周り・変わる
+    /// 範囲の中・先頭の BOM の判定まで) は 1 文字ずつ、それ以外はエスケープ文字の手前までまとめて符号化する
+    /// (出力はチャンクの区切りと同じく、符号化の区切り方に依らない)。
+    fn put_text(&mut self, text: &str, out: &mut Vec<u8>) {
+        self.flush_bom(out);
+        let Some(scan) = self.scan.as_mut() else {
+            self.enc.encode(text, out, &mut self.report);
+            self.text_pos += text.len();
+            return;
+        };
+        let mut rest = text;
+        while !rest.is_empty() {
+            if scan.is_idle() {
+                let cut = next_escape(rest).unwrap_or(rest.len());
+                if cut > 0 {
+                    let (bulk, tail) = rest.split_at(cut);
+                    self.enc.encode(bulk, out, &mut self.report);
+                    scan.bulk(bulk);
+                    self.text_pos += cut;
+                    rest = tail;
+                    continue;
+                }
+            }
+            let n = rest.chars().next().map_or(rest.len(), char::len_utf8);
+            let (one, tail) = rest.split_at(n);
+            let char_index = self.enc.chars_done();
+            let before = out.len();
+            self.enc.encode(one, out, &mut self.report);
+            scan.unit(
+                one,
+                &out[before..],
+                char_index,
+                self.text_pos,
+                self.out_base + before as u64,
+            );
+            self.text_pos += n;
+            rest = tail;
+        }
+    }
+
+    /// 最初の符号化の前に、BOM だけを書く (UTF-8 / UTF-16 で `bom` のとき。ほかの文字コードは何も書かない)。
+    fn flush_bom(&mut self, out: &mut Vec<u8>) {
+        if !self.bom_flushed {
+            self.bom_flushed = true;
+            self.enc.encode("", out, &mut self.report);
+        }
     }
 
     /// `pos` から次の記録までの区間を用意する (表の不変条件に反する記録は、区切りにせずに数える)。
@@ -657,6 +838,7 @@ impl<'a> SaveStream<'a> {
         // 止める (`verify_failed`)
         self.broken += 1;
         self.seg.0 = end;
+        self.text_pos = end;
         None
     }
 
@@ -667,16 +849,36 @@ impl<'a> SaveStream<'a> {
                 // 確認 (i) は計画が済ませた (`bytes` はそれを通ったものだけ)。口は文字コードと行頭の条件を見る。
                 // 確かめた文字列が、この記録の範囲のものであること (長さ) もここで確かめる (どのビルドでも。確かめた
                 // 結果を別の範囲に使い回す誤りへの備え)
+                self.flush_bom(out);
                 let same_range = bytes.text_len() == span.range.end.0 - span.range.start.0;
-                if !same_range || !self.enc.write_checked(&bytes, out) {
+                let char_index = self.enc.chars_done();
+                let before = out.len();
+                if same_range && self.enc.write_checked(&bytes, out) {
+                    // 記録の元のバイト列の全体を 1 単位として、つながりの検出に知らせる (03 §8.3.1。並びの直後の記録は、
+                    // 記録の全体が直後の 1 単位)
+                    if let Some(scan) = self.scan.as_mut() {
+                        if scan.is_idle() {
+                            scan.bulk(&text);
+                        } else {
+                            scan.unit(
+                                &text,
+                                &out[before..],
+                                char_index,
+                                self.text_pos,
+                                self.out_base + before as u64,
+                            );
+                        }
+                    }
+                    self.text_pos += text.len();
+                } else {
                     // 計画は書けると判断した (起きないはず): 記録を使わずに符号化し、書く前に止める
-                    self.enc.encode(&text, out, &mut self.report);
+                    self.put_text(&text, out);
                     self.broken += 1;
                 }
                 self.pos = span.range.end.0;
             }
             Decision::Encode { span, text, why } => {
-                self.enc.encode(&text, out, &mut self.report);
+                self.put_text(&text, out);
                 match why {
                     Unused::Line => self.line_unused += 1,
                     Unused::Mismatch => self.broken += 1,
@@ -697,7 +899,7 @@ impl<'a> SaveStream<'a> {
         let mut any = false;
         loop {
             if let Some(s) = self.next_piece() {
-                self.enc.encode(s, out, &mut self.report);
+                self.put_text(s, out);
                 self.started = true;
             } else if let Some(d) = self.pending.take() {
                 self.apply(d, out);
@@ -705,10 +907,17 @@ impl<'a> SaveStream<'a> {
             } else if !self.started {
                 // 空の文書: BOM だけを書く (なければ何も書かない)
                 self.started = true;
-                self.enc.encode("", out, &mut self.report);
+                self.put_text("", out);
             } else if !self.finished {
                 self.finished = true;
                 self.enc.finish(out, &mut self.report);
+                if let Some(scan) = self.scan.as_mut() {
+                    scan.finish(
+                        self.enc.chars_done(),
+                        self.text_pos,
+                        self.out_base + out.len() as u64,
+                    );
+                }
                 last = true;
             } else {
                 break;
@@ -724,9 +933,16 @@ impl<'a> SaveStream<'a> {
             return false;
         }
         if let Some(v) = self.verify.as_mut() {
-            v.feed(self.snapshot, out, last);
+            let regions = self.scan.as_mut().map(MergeScanner::regions_mut);
+            v.feed_step(self.snapshot, out, self.out_base, last, regions);
         }
+        self.out_base += out.len() as u64;
         true
+    }
+
+    /// つながりの検出の結果 (検出しない保存では `None`)。
+    fn merges(&self) -> Option<MergeReport> {
+        self.scan.as_ref().map(MergeScanner::report)
     }
 
     /// 出力を終えた (`step` が偽を返した) 後に呼ぶ: 確認 (ii) で、本文の全体まで突き合わせたことを確かめる。
@@ -752,9 +968,35 @@ struct SnapshotSource<'a> {
     /// 書いた内容のハッシュ (16 MiB 以下だけ。超えたら `None` にして計算をやめる、05 §5.5)
     hasher: Option<crate::io::content_hash::ContentHasher>,
     written: u64,
+    /// 乾式走査で見つけたつながり (件数・先頭 100 件・全件のダイジェスト)。本番の書き込みの検出がこれと違えば、書くのを
+    /// 止める (03 §8.3.1 の「いつ見つけるか」。不変条件の違反)。つながりを検出しない保存では `None`。
+    expected_merges: Option<MergeReport>,
+    /// 本番の書き込みのつながりが乾式走査と違ったので止めた。
+    merge_mismatch: bool,
 }
 
 impl SnapshotSource<'_> {
+    /// 本番の書き込みのつながりの件数が、乾式走査の件数を超えた (`end` なら、件数・先頭 100 件・全件のダイジェストが
+    /// 乾式走査と違う)。
+    fn merges_differ(&self, end: bool) -> bool {
+        let Some(scan) = self.stream.scan.as_ref() else {
+            return false;
+        };
+        let Some(want) = self.expected_merges.as_ref() else {
+            // 乾式走査のつながりを渡していない (つながりは 0 件のはず)
+            return if end {
+                !scan.same_as(0, &[], merge_digest().finish())
+            } else {
+                scan.total() > 0
+            };
+        };
+        if end {
+            !scan.same_as(want.total, &want.recorded, want.digest)
+        } else {
+            scan.total() > want.total
+        }
+    }
+
     /// 書き終えた内容のハッシュ (上限を超えたら `None`)。
     fn content_hash(&self) -> Option<crate::io::fs::ContentHash> {
         self.hasher
@@ -793,8 +1035,12 @@ impl SnapshotSource<'_> {
             return Err(ChunkError::Aborted);
         }
         while self.stream.step(&mut self.buf) {
-            // 表現不能の文字・確認 (ii) の不一致: 何も書かずに止める (乾式走査で見つけているので、ここへは来ないはず。
-            // 原子的保存では Port が一時ファイルを捨てる)
+            // 表現不能の文字・確認 (ii) の不一致・乾式走査に無かったつながり: 何も書かずに止める (乾式走査で見つけて
+            // いるので、ここへは来ないはず。原子的保存では Port が一時ファイルを捨てる)
+            if self.merges_differ(false) {
+                self.merge_mismatch = true;
+                return Err(ChunkError::Aborted);
+            }
             if !self.stream.report.is_empty() || self.stream.verify_failed() {
                 return Err(ChunkError::Aborted);
             }
@@ -803,8 +1049,15 @@ impl SnapshotSource<'_> {
                 return Ok(Some(&self.buf));
             }
         }
-        // 出力の全体が本文に一致したことを確かめてから終わりを返す (確認 (ii)。一致しなければ置換しない)
+        // 出力の全体が本文に一致したこと (確認 (ii)) と、つながりが乾式走査と同じことを確かめてから終わりを返す
+        // (一致しなければ置換しない)。原子的保存では、ここで止めれば一時ファイルを捨てて元のファイルは無傷。直接上書きでは
+        // 最後のチャンクまで元のファイルに書き終えた後なので、事後の検出にとどまる (書いた中身は乾式走査と同じはずで、
+        // Port は `InPlaceFailed` を返し、core はバックアップの場所を示す。05 §4.4 手順 8)
         self.stream.finish_verify();
+        if self.merges_differ(true) {
+            self.merge_mismatch = true;
+            return Err(ChunkError::Aborted);
+        }
         if self.stream.verify_failed() {
             return Err(ChunkError::Aborted);
         }
@@ -833,22 +1086,27 @@ pub(crate) struct SaveParams<'a> {
     pub create_link_target: bool,
     /// 保持方式の記録の版 (保存を始めた時点のもの、03 §8.6 E2)。空なら記録を使わない (v0.3 と同じ出力)。
     pub preserved: &'a PreservedMap,
+    /// つながり (03 §8.3.1) の承認 (「このまま保存」)。つながりの件数と先頭の位置がこれと同じときだけ、止めずに書く。
+    pub escape_merge_ok: Option<&'a EscapeMergeApproval>,
 }
 
 /// 乾式走査の結果。
 struct DryScan {
     report: EncodeReport,
     out_len: u64,
-    /// 確認 (i)・(ii) と表の不変条件に合った (表を渡さなかったときは常に真)。
+    /// 確認 (i)・(ii) と表の不変条件に合った (表を渡さず、エスケープ文字も戻さないときは常に真)。
     verified: bool,
     /// 確認 (i) に合わない・表の不変条件に反する記録の数。
     broken: usize,
+    /// つながり (03 §8.3.1)。エスケープ文字を元のバイトに戻して書かない保存では `None`。
+    merges: Option<MergeReport>,
 }
 
 /// 乾式走査: 出力は捨てて、表現不能の文字と出力のバイト長だけを集める (03 §8.6 E1・05 §4.4 手順 0。書く前に止めるため)。
 /// 保持方式の記録を渡したときは、確認 (i)・(ii) もここで行う (03 §8.6 E2。合わなければ Port を呼ばずに止める)。
+/// エスケープ文字を元のバイトに戻して書くときは、つながり (変わる範囲を含む) と区切った確認 (ii) もここで行う (03 §8.3.1)。
 fn dry_run(p: &SaveParams<'_>, cancel: &CancelToken) -> Option<DryScan> {
-    let mut stream = SaveStream::new(p.snapshot, p.encoding, p.bom, p.escape, p.preserved);
+    let mut stream = SaveStream::new(p.snapshot, p.encoding, p.bom, p.escape, p.preserved, true);
     let mut sink = Vec::new();
     let mut out_len = 0u64;
     loop {
@@ -864,23 +1122,35 @@ fn dry_run(p: &SaveParams<'_>, cancel: &CancelToken) -> Option<DryScan> {
     Some(DryScan {
         verified: !stream.verify_failed(),
         broken: stream.broken,
+        merges: stream.merges(),
         report: stream.report,
         out_len,
     })
+}
+
+/// つながりの承認 `ok` が、乾式走査で見つけたつながり `m` と同じか (件数・先頭 100 件・全件の
+/// ダイジェスト。03 §8.3.1 の「承認」: Revision ではなく結果で照らし合わせる)。
+fn approved(ok: Option<&EscapeMergeApproval>, m: &MergeReport) -> bool {
+    ok.is_some_and(|a| a.total == m.total && a.recorded == m.recorded && a.digest == m.digest)
 }
 
 pub(crate) fn run_save(p: SaveParams<'_>, ports: &JobPorts, cancel: &CancelToken) -> JobResult {
     use crate::jobs::SaveStrategy;
     // 直接上書きは出力の長さが要るので常に乾式走査をする。それ以外は、UTF-8 と UTF-16 が全 Unicode スカラー値を表せるので、
     // 表現不能になり得るのはエスケープ文字だけ (E4)。Shift_JIS・EUC-JP・ISO-2022-JP は書く前に走査する。保持方式の記録を
-    // 渡したときも走査する (確認 (ii) を書く前に行う。記録を渡すのは Shift_JIS・EUC-JP・ISO-2022-JP だけ)
+    // 渡したときも走査する (確認 (ii) を書く前に行う。記録を渡すのは Shift_JIS・EUC-JP・ISO-2022-JP だけ)。
+    // エスケープ文字を元のバイトに戻して書く保存 (`Restore`) も、UTF-8 / UTF-16 の原子的保存を含めて書く前に走査する
+    // (つながりと区切った確認 (ii) を、一時ファイルを作る前に見る。03 §9.3 の手順 4'、§8.3.1 の「いつ見つけるか」)
     let in_place = matches!(p.strategy, SaveStrategy::InPlace { .. });
     let mut out_len = 0u64;
+    let mut expected_merges = None;
     if in_place
         || !(p.encoding == Encoding::Utf8 || p.encoding.is_utf16())
         || p.escape == EscapePolicy::Reject
+        || p.escape == EscapePolicy::Restore
         || !p.preserved.is_empty()
     {
+        // 見る順序 (03 §8.3.1): (1) 確認 (i) と表の不変条件 → (2) 表現不能 → (3) つながり → (4) 区切った確認 (ii)
         match dry_run(&p, cancel) {
             None => {
                 return JobResult::Failed {
@@ -899,18 +1169,35 @@ pub(crate) fn run_save(p: SaveParams<'_>, ports: &JobPorts, cancel: &CancelToken
                 return JobResult::Unmappable {
                     total: d.report.total,
                     escapes_unmappable: d.report.escapes,
+                    escapes_restored: d.report.restored,
                     recorded: d.report.recorded,
                     encoding: p.encoding,
                 };
             }
-            // 確認 (ii): 出力を復号しても本文にならない (実装の誤り)。何も書かずに止める (表現不能の文字は出力から抜けて
-            // 本文と合わないので、表現不能の後に見る)
+            // つながり: 承認が無い・承認と結果が違えば、何も書かずに (一時ファイルも作らずに) 確認を求める
+            Some(DryScan {
+                merges: Some(m), ..
+            }) if m.total > 0 && !approved(p.escape_merge_ok, &m) => {
+                return JobResult::EscapeMerge {
+                    total: m.total,
+                    recorded: m.recorded,
+                    digest: m.digest,
+                    changed_chars: m.changed_chars,
+                    changed_lines: m.changed_lines,
+                    to_eof: m.to_eof,
+                };
+            }
+            // 確認 (ii): 出力を復号しても本文にならない (実装の誤り。つながる範囲の外の不一致)。何も書かずに止める
+            // (表現不能の文字は出力から抜けて本文と合わないので、表現不能の後に見る。承認したつながりでも行う)
             Some(d) if !d.verified => {
                 return JobResult::Failed {
                     err: JobError::VerifyFailed,
                 };
             }
-            Some(d) => out_len = d.out_len,
+            Some(d) => {
+                out_len = d.out_len;
+                expected_merges = d.merges;
+            }
         }
     }
     let SaveParams {
@@ -924,13 +1211,16 @@ pub(crate) fn run_save(p: SaveParams<'_>, ports: &JobPorts, cancel: &CancelToken
         clear_readonly,
         create_link_target,
         preserved,
+        escape_merge_ok: _,
     } = p;
     let mut src = SnapshotSource {
-        stream: SaveStream::new(snapshot, encoding, bom, escape, preserved),
+        stream: SaveStream::new(snapshot, encoding, bom, escape, preserved, false),
         buf: Vec::new(),
         cancel,
         hasher: Some(crate::io::content_hash::ContentHasher::new()),
         written: 0,
+        expected_merges,
+        merge_mismatch: false,
     };
     // 書き始める前の照合 (内容ハッシュ。05 §5.5): mtime が同じで中身が違えば Conflict、中身が同じで mtime だけが違えば新しい Stamp で続ける
     let expected = match expected {
@@ -975,10 +1265,13 @@ pub(crate) fn run_save(p: SaveParams<'_>, ports: &JobPorts, cancel: &CancelToken
         Err(e) if cancel.is_cancelled() && !wrote_target(&e) => JobResult::Failed {
             err: JobError::Cancelled,
         },
-        // 本番の書き込みで確認 (i)・(ii) に合わなかった (乾式走査で確かめているので起きないはず): 置換の前に止めた
-        Err(e) if src.stream.verify_failed() && !wrote_target(&e) => JobResult::Failed {
-            err: JobError::VerifyFailed,
-        },
+        // 本番の書き込みで確認 (i)・(ii) に合わなかった、またはつながりが乾式走査と違った (乾式走査で確かめているので
+        // 起きないはず): 置換の前に止めた
+        Err(e) if (src.stream.verify_failed() || src.merge_mismatch) && !wrote_target(&e) => {
+            JobResult::Failed {
+                err: JobError::VerifyFailed,
+            }
+        }
         Err(e) => JobResult::Failed {
             err: JobError::Fs(e),
         },
@@ -1001,8 +1294,15 @@ pub(crate) struct SaveTestOut {
     pub(crate) broken: usize,
     /// 使わなかった行の記録 (ISO-2022-JP の、行の内容の全体でなくなった記録) の数。
     pub(crate) line_unused: usize,
-    /// 本番の書き込みの供給 (`SnapshotSource`) が最後まで返した出力 (表現不能・確認 (ii) の不一致で止まったら `None`)。
+    /// 本番の書き込みの供給 (`SnapshotSource`) が最後まで返した出力 (表現不能・確認 (ii) の不一致・乾式走査と違う
+    /// つながりで止まったら `None`)。供給には乾式走査のつながりを渡す (承認した保存と同じ)。
     pub(crate) source: Option<Vec<u8>>,
+    /// 乾式走査のつながり (エスケープ文字を戻さない保存では `None`)。
+    pub(crate) merges: Option<MergeReport>,
+    /// 段ごとに出力を作り直した 2 回目の走査のつながり (変わる範囲を含む。乾式走査と同じはず)。
+    pub(crate) merges_again: Option<MergeReport>,
+    /// 元のバイトに戻したエスケープ文字の数 (乾式走査)。
+    pub(crate) restored: u64,
 }
 
 /// 試験用: 乾式走査と本番の書き込みの供給の両方で、Snapshot と保持方式の記録の版から保存の出力を作る (03 §22.1 の
@@ -1014,34 +1314,49 @@ pub(crate) fn save_for_test(
     escape: EscapePolicy,
     preserved: &PreservedMap,
 ) -> SaveTestOut {
+    save_for_test_bom(snapshot, encoding, false, escape, preserved)
+}
+
+/// 試験用: `save_for_test` に、先頭の BOM を書くかを足したもの。
+#[cfg(test)]
+pub(crate) fn save_for_test_bom(
+    snapshot: &Snapshot,
+    encoding: Encoding,
+    bom: bool,
+    escape: EscapePolicy,
+    preserved: &PreservedMap,
+) -> SaveTestOut {
     let path = FsPath::new("/t/a.txt");
     let p = SaveParams {
         path: &path,
         snapshot,
         encoding,
-        bom: false,
+        bom,
         escape,
         expected: Expect::Any,
         strategy: crate::jobs::SaveStrategy::default(),
         clear_readonly: false,
         create_link_target: false,
         preserved,
+        escape_merge_ok: None,
     };
     let cancel = CancelToken::new();
     let d = dry_run(&p, &cancel).unwrap_or_else(|| unreachable!("取り消していない"));
     // 表現不能の文字を飛ばした出力の全部 (段をそのままつなぐ)
-    let mut stream = SaveStream::new(snapshot, encoding, false, escape, preserved);
+    let mut stream = SaveStream::new(snapshot, encoding, bom, escape, preserved, true);
     let mut bytes = Vec::new();
     let mut piece = Vec::new();
     while stream.step(&mut piece) {
         bytes.extend_from_slice(&piece);
     }
     let mut src = SnapshotSource {
-        stream: SaveStream::new(snapshot, encoding, false, escape, preserved),
+        stream: SaveStream::new(snapshot, encoding, bom, escape, preserved, false),
         buf: Vec::new(),
         cancel: &cancel,
         hasher: None,
         written: 0,
+        expected_merges: d.merges.clone(),
+        merge_mismatch: false,
     };
     let mut got = Vec::new();
     let source = loop {
@@ -1059,11 +1374,17 @@ pub(crate) fn save_for_test(
         broken: stream.broken,
         line_unused: stream.line_unused,
         source,
+        merges_again: stream.merges(),
+        merges: d.merges,
+        restored: d.report.restored,
     }
 }
 
 #[cfg(test)]
 mod preserve_save;
+
+#[cfg(test)]
+mod escape_merge;
 
 #[cfg(test)]
 mod tests {
@@ -1077,11 +1398,13 @@ mod tests {
         let cancel = CancelToken::new();
         let empty = PreservedMap::new();
         let mut src = SnapshotSource {
-            stream: SaveStream::new(&snap, encoding, bom, EscapePolicy::Restore, &empty),
+            stream: SaveStream::new(&snap, encoding, bom, EscapePolicy::Restore, &empty, false),
             buf: Vec::new(),
             cancel: &cancel,
             hasher: None,
             written: 0,
+            expected_merges: None,
+            merge_mismatch: false,
         };
         let mut out = Vec::new();
         while let Some(c) = src.next_chunk().unwrap() {
@@ -1129,6 +1452,7 @@ mod tests {
                         clear_readonly: false,
                         create_link_target: false,
                         preserved: &PreservedMap::new(),
+                        escape_merge_ok: None,
                     };
                     let d = dry_run(&p, &CancelToken::new()).unwrap();
                     assert!(d.report.is_empty(), "{encoding:?} {bom} {text:?}");

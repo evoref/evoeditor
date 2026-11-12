@@ -510,6 +510,7 @@ mod imp {
                         clear_readonly: false,
                         create_link_target: false,
                         preserved: table.clone(),
+                        escape_merge_ok: None,
                     },
                 };
                 let mut out = Vec::new();
