@@ -119,7 +119,7 @@ evoeditor は Rust 製のテキストエディタである。最初は「nano �
 | 桁 | column | ステータスバー・`path:行:桁` の桁。単位は書記素数・1 始まり。設定で表示列に切り替えられる ([OQ-32](10-decisions.md#oq-32-桁の単位) で確定) |
 | 表示幅 / 表示列 | display width / column | 端末セル数。全角=2、結合文字=0 等。UAX #11 ベース。曖昧幅は設定で 1/2 |
 | 幅危険書記素 | width-risky grapheme | 端末によって表示幅が食い違いやすい書記素 (絵文字の VS16・ZWJ 列・国旗・曖昧幅・PUA 等)。分類は eve-text、再出力戦略は 04 |
-| char 近似モード | char approximation mode | 閾値を超える長大行を、書記素 = char・幅 = char ごとの表引き・折り返し OFF として扱うモード ([03 §11.5](03-core-design.md#115-長大行-nfr-106)) |
+| char 近似モード | char approximation mode | 閾値を超える長大行を、書記素 = char・幅 = char ごとの表引き・折り返し OFF として扱うモード ([03 §11.5](03-core-design.md#115-長大行-nfr-106))。v0.2 から。v0.4 の M25 で書記素の単位の列の索引に替える ([03 §14.4](03-core-design.md#144-長大行の列の索引)) |
 | 文字種の遷移 | character class transition | 単語移動の区切り規則。英数字 / 漢字 / ひらがな / カタカナ / 全角英数 / 記号 / 空白の分類が変わる位置で止まる (確定、OQ-117) |
 | 改行の既定 | `default_eol` | 文書に新しく挿入する改行のコード。文書全体の改行コードではない (混在は `eol_stats`)。新規文書は全 OS で LF (確定 (ユーザー回答)、OQ-04) |
 | 変更集合 | `ChangeSet` | 文書に対する挿入・削除の列 (Retain / Delete / Insert)。逆変換・合成・位置写像ができる |
