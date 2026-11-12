@@ -369,8 +369,11 @@ pub(super) fn long_units(
     out
 }
 
+/// 本文の `U+10FF00..FF` を不正バイトのエスケープとして `<0xHH>` (幅 6) で表示するか (03 §8.3 の「表示」、§13.2)。
+/// 状態付き符号化 (`DisabledStateful`。ISO-2022-JP) も表示は他の文字コードと同じ (バイトに戻さないのは保存だけ、
+/// OQ-207)。通常の私用文字として扱うのは、元のファイルが真にこの範囲の文字を含む `DisabledCollision` だけ。
 fn esc_enabled(doc: &Document) -> bool {
-    doc.format.pua_escape == PuaEscapeMode::Enabled
+    doc.format.pua_escape != PuaEscapeMode::DisabledCollision
 }
 
 /// 行内のバイト位置 `byte` にあるカーソルの (表示列, そのセルの幅)。行末では (行の幅, 1)。

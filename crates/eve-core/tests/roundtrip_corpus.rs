@@ -449,11 +449,20 @@ fn iso_2022_jp_で_ascii_状態で始まらない行と終わらない行は確�
 
 #[test]
 fn iso_2022_jp_で_jis_x_0208_状態のまま改行する行は不正バイトで読み取り専用_保存は拒否される() {
-    // `ESC $ B あ LF ESC ( B` (CRLF 版も)。半角カナ状態のまま改行する行も同じ (WHATWG のデコーダが受け付けない)
-    for (name, bytes) in [
-        ("JIS X 0208 + LF", b"\x1B$B$\"\n\x1B(B".as_slice()),
-        ("JIS X 0208 + CRLF", b"\x1B$B$\"\r\n\x1B(B"),
-        ("半角カナ + LF", b"\x1B(I1\n\x1B(B"),
+    // `ESC $ B あ LF ESC ( B` (CRLF 版も)。半角カナ状態のまま改行する行も同じ (WHATWG のデコーダが受け付けない)。
+    // 不正バイトは他の文字コードと同じく `<0x0A>` などの記号で表示する (03 §8.3 の「状態付き符号化」、09 §4)
+    for (name, bytes, shown) in [
+        (
+            "JIS X 0208 + LF",
+            b"\x1B$B$\"\n\x1B(B".as_slice(),
+            "あ<0x0A>",
+        ),
+        (
+            "JIS X 0208 + CRLF",
+            b"\x1B$B$\"\r\n\x1B(B",
+            "あ<0x0D><0x0A>",
+        ),
+        ("半角カナ + LF", b"\x1B(I1\n\x1B(B", "ｱ<0x0A>"),
     ] {
         let mut s = env();
         s.fs.add_file("/w/c.txt", bytes);
@@ -465,6 +474,14 @@ fn iso_2022_jp_で_jis_x_0208_状態のまま改行する行は不正バイト�
                 .read_only
                 .contains(ReadOnlyReason::StatefulEncodingWithInvalidBytes),
             "{name}: 読み取り専用"
+        );
+        let frame = s.frame_text();
+        assert!(frame.contains(shown), "{name}: 記号で表示する\n{frame}");
+        assert!(
+            !frame
+                .chars()
+                .any(|c| ('\u{10FF00}'..='\u{10FFFF}').contains(&c)),
+            "{name}: 私用文字のまま描かない\n{frame}"
         );
         save_as(&mut s, "/w/d.txt");
         assert!(
