@@ -215,7 +215,7 @@ impl EditorState {
             return self.start_save_with(doc, path, expected, cont, strategy, fmt);
         }
         // 別名で保存: 名前の入力へ (保存の後に続ける操作は引き継ぐ)
-        self.open_prompt(PromptKind::SaveAs { then: cont }, String::new());
+        self.open_prompt(PromptKind::SaveAs { doc, then: cont }, String::new());
         CommandResult::Done
     }
 

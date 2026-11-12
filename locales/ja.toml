@@ -443,6 +443,9 @@ notation_as_text = "クリップボードの内容がエディタ内のコピー
 pua_as_text = "私用文字 (U+10FF00〜U+10FFFF) {count} 個は、そのままでは入れられないため <U+XXXX> の文字列にしました"
 search_notation = "<0xNN> の文字列は不正なバイトに一致しません。正規表現の \\x{{10FFNN}} で探せます"
 
+[info.prompt]
+target_closed = "入力の対象の文書が閉じられたため、何もしませんでした"
+
 [info.recovery]
 old = "30 日より古い退避が {count} 件あります: {dir}"
 
