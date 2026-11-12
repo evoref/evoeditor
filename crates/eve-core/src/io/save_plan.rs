@@ -14,12 +14,19 @@
 //!
 //! 表の不変条件・確認 (i) に反する記録は実装の誤りで、保存は書く前に止まる (`JobError::VerifyFailed`。数えるのは
 //! `io_jobs::SaveStream`)。
+//!
+//! 確認 (i) を通った記録は、その結果を `eve_encoding::PreservedBytes` (確認を経ずには作れない型) で符号化器の口
+//! (`Encoder::write_checked`) へ渡す (口で同じ復号をやり直さない)。範囲の文字列・char 境界・行の全体の判定は、本文を
+//! 前から順に読む位置 (`TextCursor`) で引く (記録ごとに rope を降りない。範囲が 1 つのチャンクに収まれば文字列を借りる)。
 
-use eve_encoding::{Encoding, preserved_matches};
+use std::borrow::Cow;
+
+use eve_encoding::{Encoding, PreservedBytes};
 use eve_text::{ByteOff, TextRead};
 
 use crate::document::PreservedMap;
-use crate::document::preserved::{Iter, SpanRef, is_whole_line};
+use crate::document::preserved::cursor::TextCursor;
+use crate::document::preserved::{Iter, SpanRef};
 
 /// 記録を使わなかった理由。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -32,12 +39,16 @@ pub(crate) enum Unused {
 
 /// 1 件の記録の扱い。
 pub(crate) enum Decision<'a> {
-    /// 元のバイト列をそのまま書く。`text` は範囲の今の文字列。
-    Raw { span: SpanRef<'a>, text: String },
+    /// 元のバイト列をそのまま書く。`text` は範囲の今の文字列、`bytes` は確認 (i) を通った元のバイト列。
+    Raw {
+        span: SpanRef<'a>,
+        text: Cow<'a, str>,
+        bytes: PreservedBytes<'a>,
+    },
     /// 記録を使わず、範囲の文字列 `text` をふつうに符号化する (範囲を区切りにする)。
     Encode {
         span: SpanRef<'a>,
-        text: String,
+        text: Cow<'a, str>,
         why: Unused,
     },
     /// 記録を使わず、範囲を区切りにもしない (範囲が本文の外・char 境界でない・前の記録と重なる。表の不変条件に反する。
@@ -58,7 +69,7 @@ impl Decision<'_> {
 
 /// 保存の計画を、本文の前から順に引く。
 pub(crate) struct Planner<'a> {
-    text: &'a dyn TextRead,
+    text: TextCursor<'a>,
     enc: Encoding,
     iter: Iter<'a>,
 }
@@ -66,7 +77,7 @@ pub(crate) struct Planner<'a> {
 impl<'a> Planner<'a> {
     pub(crate) fn new(text: &'a dyn TextRead, enc: Encoding, map: &'a PreservedMap) -> Planner<'a> {
         Planner {
-            text,
+            text: TextCursor::new(text),
             enc,
             iter: map.iter(),
         }
@@ -75,33 +86,31 @@ impl<'a> Planner<'a> {
     /// 次の記録の扱い。`pos` は、そこまでの本文の扱いが決まった位置 (前の記録の終わり)。記録が尽きたら `None`。
     pub(crate) fn next(&mut self, pos: usize) -> Option<Decision<'a>> {
         let span = self.iter.next()?;
-        let (s, e) = (span.range.start, span.range.end);
-        let len = self.text.len_bytes();
-        // 表の不変条件に反する記録 (起きないはず): 区切りにしない
-        if s.0 < pos
-            || e < s
-            || e.0 > len
-            || !self.text.is_char_boundary(s)
-            || !self.text.is_char_boundary(e)
-        {
+        let (s, e) = (span.range.start.0, span.range.end.0);
+        // 表の不変条件に反する記録 (起きないはず): 区切りにしない。範囲が本文の中で逆順でなければ、文字列を引けない
+        // のは端が char 境界でないときだけ
+        if s < pos || e < s || e > self.text.len() {
             return Some(Decision::Skip { span });
         }
-        let text = self.text.slice_to_string(span.range);
-        if self.enc.is_stateful() && !(span.line && is_whole_line(self.text, span.range)) {
+        let Some(text) = self.text.slice(s, e) else {
+            return Some(Decision::Skip { span });
+        };
+        if self.enc.is_stateful() && !(span.line && self.text.is_whole_line(s, e)) {
             return Some(Decision::Encode {
                 span,
                 text,
                 why: Unused::Line,
             });
         }
-        if !preserved_matches(self.enc, span.bytes, &text) {
-            return Some(Decision::Encode {
+        // 確認 (i)。通った記録は、その結果を型で符号化器の口へ運ぶ
+        match PreservedBytes::check(self.enc, span.bytes, &text) {
+            Some(bytes) => Some(Decision::Raw { span, text, bytes }),
+            None => Some(Decision::Encode {
                 span,
                 text,
                 why: Unused::Mismatch,
-            });
+            }),
         }
-        Some(Decision::Raw { span, text })
     }
 }
 

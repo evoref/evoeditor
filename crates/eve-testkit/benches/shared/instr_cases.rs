@@ -2,7 +2,7 @@
 // 取り込む側で `eve_testkit::Harness` を use しておく。
 
 /// ケース (名前, 説明)。名前は比較の表のキーなので変えない (変えたら基準と比べられない)。
-const CASES: [(&str, &str); 7] = [
+const CASES: [(&str, &str); 9] = [
     (
         "open_1m",
         "1 MB の日本語混在の文書を開き、最初の Frame を作る",
@@ -28,7 +28,41 @@ const CASES: [(&str, &str); 7] = [
         "wrap_frame_1m",
         "1 MB の文書を折り返し ON で開き、PageDown を 20 回して毎回 Frame を作る",
     ),
+    (
+        "open_sjis_dense_1m",
+        "各行に区分 B の文字がある 1 MB の Shift_JIS を開く (保持方式の記録を集めて照合する。v0.4)",
+    ),
+    (
+        "save_sjis_dense_1m",
+        "各行に区分 B の文字がある 1 MB の Shift_JIS を開き、1 文字打って保存する (記録を使う保存。v0.4)",
+    ),
 ];
+
+/// 各行に区分 B の文字 (NEC 選定 IBM 拡張の「纊」0xED40。再符号化すると 0xFA5C) を 2 つ置いた `Shift_JIS` の 1 MB
+/// (保持方式の記録が約 5.5 万件)。
+fn sjis_dense_1m() -> Vec<u8> {
+    let unit: &[u8] =
+        b"\x93\xfa\x96\x7b\x8c\xea\xED\x40 sjis text 456 \x83\x65\x83\x4c\x83\x58\x83\x67\xED\x40abc\r\n";
+    unit.repeat((1 << 20) / unit.len() + 1)
+}
+
+/// `Shift_JIS` と指定して開く (ASCII の多い文書は UTF-8 と判定されることがある)。
+// 文字コードを指定して開くのに EditorState を直接使う (試験と計測だけに許す Editor::state_mut、STR-B3)
+#[allow(clippy::disallowed_methods)]
+fn opened_sjis(data: &[u8]) -> Harness {
+    let mut h = Harness::new()
+        .with_size(120, 40)
+        .with_file("/w/a.txt", data);
+    h.editor.state_mut().open_path(
+        "/w/a.txt",
+        eve_core::OpenOptions {
+            forced: Some(eve_core::Encoding::ShiftJis),
+            ..eve_core::OpenOptions::default()
+        },
+    );
+    h.run_jobs();
+    h
+}
 
 fn japanese_1m() -> Vec<u8> {
     let unit = "日本語のテキストと ASCII text 123。かな・カナ・漢字が混ざる行です。\n";
@@ -123,6 +157,23 @@ fn run(case: &str) {
                 h.keys("pagedown");
                 std::hint::black_box(h.frame());
             }
+        }
+        "open_sjis_dense_1m" => {
+            let mut h = opened_sjis(&sjis_dense_1m());
+            std::hint::black_box(h.frame());
+        }
+        "save_sjis_dense_1m" => {
+            let mut h = opened_sjis(&sjis_dense_1m());
+            h.cmd_with(
+                "cursor.goto_line",
+                eve_core::Args::new().with_int("line", 15000),
+            );
+            h.text("x");
+            h.cmd("file.save");
+            h.run_jobs();
+            // 保持が効いている文書は確認を出さずに保存する (保存できていなければ計測にならない)
+            assert!(!h.is_dirty(), "保存した");
+            std::hint::black_box(h.frame());
         }
         other => {
             eprintln!("知らないケースです: {other} (--list で一覧)");
