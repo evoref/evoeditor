@@ -213,6 +213,40 @@ fn バックスペースとデリートは書記素単位() {
     assert_eq!(s.shown(), "a|d", "選択は 1 書記素を足さずに削除");
 }
 
+// 不正バイトのエスケープ文字 (`<0x9A>` と表示する) の前後は常に書記素の境界 (03 §8.3.1 の「書記素と単語」、§13.1)。
+// 不正バイトを含む文書は今は読み取り専用なので、エスケープ文字を本文に持つ編集できる文書を直に作って確かめる
+// spec: 03 §8.3.1
+#[test]
+fn エスケープ文字の直後の結合文字はバックスペースとデリートで別々に消える() {
+    // 結合文字の上の Backspace は結合文字だけを消す
+    let mut s = Scene::new("a\u{10FF9A}\u{301}|b");
+    s.run("edit.delete_backward");
+    assert_eq!(s.shown(), "a\u{10FF9A}|b");
+    // `<0x9A>` の上の Backspace は直後の結合文字を巻き込まない (残った結合文字は前の文字と 1 書記素になるので、
+    // カーソルはその書記素の前へ寄る)
+    let mut s = Scene::new("\u{10FF9A}|\u{301}b");
+    s.run("edit.delete_backward");
+    assert_eq!(s.shown(), "|\u{301}b");
+    let mut s = Scene::new("a\u{10FF9A}|\u{301}b");
+    s.run("edit.delete_backward");
+    assert_eq!(s.shown(), "|a\u{301}b");
+    // Delete も同じ単位
+    let mut s = Scene::new("\n|\u{10FF9A}\u{FE0F}b");
+    s.run("edit.delete_forward");
+    assert_eq!(s.shown(), "\n|\u{FE0F}b");
+    let mut s = Scene::new("a\u{10FF9A}|\u{200D}b");
+    s.run("edit.delete_forward");
+    assert_eq!(s.shown(), "a\u{10FF9A}|b");
+    // 連続するエスケープ文字は 1 つずつ
+    let mut s = Scene::new("\u{10FF80}\u{10FF81}|");
+    s.run("edit.delete_backward");
+    assert_eq!(s.shown(), "\u{10FF80}|");
+    // 間の位置に文字を入れられる (入れた X は直後の結合文字と 1 書記素になるので、カーソルはその前へ寄る)
+    let mut s = Scene::new("a\u{10FF9A}|\u{301}b");
+    s.type_text("X");
+    assert_eq!(s.shown(), "a\u{10FF9A}|X\u{301}b");
+}
+
 #[test]
 fn 文書の端での削除は何も変えない() {
     let mut s = Scene::new("|abc");

@@ -6,9 +6,10 @@
 //! 分類は標準ライブラリの `char` の判定と、日本語の範囲表で行う (Unicode の Script / General Category の表は持たない):
 //! - 空白は `char::is_whitespace`、英数は `char::is_alphanumeric` (L* / N* と `Other_Alphabetic`)
 //! - 書記素の先頭の結合文字 (Mn / Mc) は主な結合文字のブロックだけを `Alnum` とする (孤立した結合文字は稀)
+//! - 不正バイトのエスケープ文字 (`U+10FF00..=U+10FFFF`) は `InvalidByte` (§13.3 の先頭の項、§8.3.1)。書記素の境界
+//!   (§13.1) と同じく、文書の `pua_escape` は見ない
 
-use unicode_segmentation::UnicodeSegmentation;
-
+use crate::grapheme::{is_escape_char, str_graphemes};
 use crate::text::TextRead;
 use crate::types::{ByteOff, ByteRange, LineIdx, Pos};
 
@@ -22,10 +23,13 @@ pub enum ScriptClass {
     FullwidthAlnum,
     Punct,
     Space,
+    /// 不正バイトのエスケープ文字 (03 §8.3.1)。連続する並びを 1 単語とし、どの文字種ともつながらない。
+    InvalidByte,
 }
 
 /// 書記素 `g` の文字種。`prev` は直前の書記素の文字種 (行頭は `None`)。
-/// 長音 `ー`・踊り字・濁点は、直前が漢字・かな・英数ならそれに従い、ランの先頭では既定の種別になる。
+/// 長音 `ー`・踊り字・濁点は、直前が漢字・かな・英数ならそれに従い、ランの先頭では既定の種別になる
+/// (直前が記号・空白・不正バイトのときもランの先頭と同じ)。
 pub fn classify_grapheme(g: &str, prev: Option<ScriptClass>) -> ScriptClass {
     let Some(c) = g.chars().next() else {
         return ScriptClass::Space;
@@ -33,8 +37,11 @@ pub fn classify_grapheme(g: &str, prev: Option<ScriptClass>) -> ScriptClass {
     if c.is_whitespace() {
         return ScriptClass::Space;
     }
+    if is_escape_char(c) {
+        return ScriptClass::InvalidByte;
+    }
     let follow = |default: ScriptClass| match prev {
-        Some(ScriptClass::Punct | ScriptClass::Space) | None => default,
+        Some(ScriptClass::Punct | ScriptClass::Space | ScriptClass::InvalidByte) | None => default,
         Some(p) => p,
     };
     match c {
@@ -81,7 +88,7 @@ pub fn classify_grapheme(g: &str, prev: Option<ScriptClass>) -> ScriptClass {
 fn unit_starts(line: &str) -> Vec<usize> {
     let mut starts = Vec::new();
     let mut prev: Option<ScriptClass> = None;
-    for (i, g) in line.grapheme_indices(true) {
+    for (i, g) in str_graphemes(line) {
         let class = classify_grapheme(g, prev);
         let new_unit = match prev {
             None => true,
@@ -100,7 +107,7 @@ fn unit_starts(line: &str) -> Vec<usize> {
 pub fn word_boundaries(line: &str) -> Vec<usize> {
     let mut out = vec![0];
     let mut prev: Option<ScriptClass> = None;
-    for (i, g) in line.grapheme_indices(true) {
+    for (i, g) in str_graphemes(line) {
         let class = classify_grapheme(g, prev);
         if i > 0 && prev.is_some_and(|p| p != class || class == ScriptClass::Punct) {
             out.push(i);
@@ -213,6 +220,11 @@ mod tests {
     use super::*;
     use crate::text::Text;
 
+    /// 書記素の数 (エスケープ文字の前後を境界とする、§13.1)。
+    fn graphemes_count(s: &str) -> usize {
+        str_graphemes(s).count()
+    }
+
     /// 1 行だけの文書で、行頭から Ctrl+→ を繰り返したときの停止位置を書記素数で返す。
     fn right_stops(s: &str) -> Vec<usize> {
         let t = Text::from(s);
@@ -223,7 +235,7 @@ mod tests {
             if n == p {
                 break;
             }
-            out.push(s[..n.0].graphemes(true).count());
+            out.push(graphemes_count(&s[..n.0]));
             p = n;
         }
         out
@@ -239,7 +251,7 @@ mod tests {
             if n == p {
                 break;
             }
-            out.push(s[..n.0].graphemes(true).count());
+            out.push(graphemes_count(&s[..n.0]));
             p = n;
         }
         out
@@ -357,6 +369,66 @@ y"
             next_word_stop(&t, ByteOff(t.len_bytes())),
             ByteOff(t.len_bytes())
         );
+    }
+
+    /// 不正バイトのエスケープ文字の並びは 1 単語で、前後のどの文字種ともつながらない (03 §13.3 の先頭の項、§8.3.1)。
+    // spec: 03 §13.3
+    #[test]
+    fn エスケープ文字の並びは_1_単語() {
+        let e = "\u{10FF80}";
+        let f = "\u{10FF9A}";
+        // 英数 → 並び → 英数 (書記素の数で a b c E E d e f)
+        let s = format!("abc{e}{f}def");
+        assert_eq!(right_stops(&s), [3, 5, 8]);
+        assert_eq!(left_stops(&s), [5, 3, 0]);
+        assert_eq!(word_boundaries(&s), [0, 3, 11, 14]);
+        // 記号・空白・かな・漢字の隣でも、並びは 1 単位
+        let s = format!("({e}{f}) {e}あ漢");
+        assert_eq!(right_stops(&s), [1, 3, 5, 6, 7, 8]);
+        assert_eq!(left_stops(&s), [7, 6, 5, 3, 1, 0]);
+        // 直後の結合文字は別の書記素 (§13.1)。先頭の結合文字は英数として次の文字とつながる
+        let s = format!("{e}\u{301}x");
+        assert_eq!(right_stops(&s), [1, 3]);
+        assert_eq!(word_boundaries(&s), [0, 4, 7]);
+        // 長音・踊り字は並びに続けない (ランの先頭と同じ扱い)
+        assert_eq!(
+            classify_grapheme("ー", Some(ScriptClass::InvalidByte)),
+            ScriptClass::Katakana
+        );
+        assert_eq!(
+            classify_grapheme("々", Some(ScriptClass::InvalidByte)),
+            ScriptClass::Han
+        );
+        let s = format!("{e}ーア");
+        assert_eq!(right_stops(&s), [1, 3]);
+        // 範囲の両端と、範囲の外の私用文字
+        assert_eq!(
+            classify_grapheme("\u{10FF00}", None),
+            ScriptClass::InvalidByte
+        );
+        assert_eq!(
+            classify_grapheme("\u{10FFFF}", None),
+            ScriptClass::InvalidByte
+        );
+        assert_eq!(classify_grapheme("\u{10FEFF}", None), ScriptClass::Punct);
+        assert_eq!(classify_grapheme("\u{E000}", None), ScriptClass::Punct);
+        // 窓付きの版 (長大行の char 近似モード) も同じ
+        let t = Text::from(format!("x\nabc{e}{f}def {e}\ny").as_str());
+        for p in 2..t.len_bytes() - 2 {
+            if !t.is_char_boundary(ByteOff(p)) {
+                continue;
+            }
+            assert_eq!(
+                next_word_stop_near(&t, ByteOff(p), 1 << 20),
+                next_word_stop(&t, ByteOff(p)),
+                "→ {p}"
+            );
+            assert_eq!(
+                prev_word_stop_near(&t, ByteOff(p), 1 << 20),
+                prev_word_stop(&t, ByteOff(p)),
+                "← {p}"
+            );
+        }
     }
 
     #[test]
