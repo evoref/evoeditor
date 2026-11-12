@@ -48,6 +48,7 @@ pub fn run_job(
             clear_readonly,
             create_link_target,
             preserved,
+            escape_merge_ok,
         } => run_save(
             SaveParams {
                 path,
@@ -60,6 +61,7 @@ pub fn run_job(
                 clear_readonly: *clear_readonly,
                 create_link_target: *create_link_target,
                 preserved,
+                escape_merge_ok: escape_merge_ok.as_ref(),
             },
             ports,
             cancel,
@@ -439,6 +441,7 @@ mod tests {
                 clear_readonly: false,
                 create_link_target: false,
                 preserved: crate::document::PreservedMap::new(),
+                escape_merge_ok: None,
             },
         };
         let mut out = Vec::new();

@@ -109,6 +109,10 @@ impl EditorState {
             },
             JobResult::Failed { err, .. } => crate::io::file::reason_label(err),
             JobResult::Unmappable { .. } => "unmappable".to_owned(),
+            // エスケープ文字のつながり (03 §8.3.1): 確認が要るので保存しない (何も書いていない)
+            JobResult::EscapeMerge { .. } => {
+                self.message_text(keys::UI_CONFIRM_SAVE_ALL_FAILED_NEEDS_CONFIRM, &[])
+            }
             _ => "failed".to_owned(),
         };
         let batch = self.io.save_all.as_mut()?;

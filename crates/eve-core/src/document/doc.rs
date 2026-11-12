@@ -314,7 +314,13 @@ impl Document {
     /// 保存の出力の確認 (03 §8.6 E2 の確認 (i)・(ii)) で保存が止まった: 表と履歴の記録を全部捨てて「保持なし (照合に
     /// 失敗した)」にする (03 §8.7.1 の「保存」)。同じ表を渡し続けると同じ文字コードで二度と保存できないため。次の保存は
     /// 保存の前の確認 (E2') を経て、記録を使わずに (v0.3 と同じ出力で) 書く。
+    ///
+    /// 記録をもともと持たない文書 (保持の状態が `NotApplicable`。UTF-8 / UTF-16 の文書など) は状態を変えない (03 §8.3.1 の
+    /// 「記録が無い文書の `VerifyFailed`」。変えると以後の保存のたびに E2' の確認が出て、文言が事実と合わない)。
     pub(crate) fn abandon_preserved(&mut self) {
+        if self.format.roundtrip.preserve == PreserveStatus::NotApplicable {
+            return;
+        }
         self.clear_preserved();
         self.format.roundtrip.preserve =
             PreserveStatus::Unavailable(NoPreserveReason::VerifyFailed);

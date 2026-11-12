@@ -2,7 +2,7 @@
 //!
 //! `detect` (BOM・バイナリ・文字コードの判定)、`Decoder` / `Encoder` (UTF-8・UTF-16・Shift_JIS・EUC-JP・ISO-2022-JP)、
 //! `Utf8Decoder` / `Utf8Encoder` (不正バイトの私用文字エスケープと、保存時の復元)、往復の検査と保持方式の記録
-//! (`RoundtripChecker`、`PreservedRecords`)。
+//! (`RoundtripChecker`、`PreservedRecords`)、元のバイトに戻したエスケープ文字のつながりの検出 (`MergeScanner`)。
 //! 他の `eve-*` crate に依存しない。I/O をしない。
 
 #![forbid(unsafe_code)]
@@ -13,6 +13,7 @@ mod encode;
 mod encoding;
 #[doc(hidden)]
 pub mod fuzzing;
+mod merge;
 mod preserve;
 mod roundtrip;
 mod utf8;
@@ -27,6 +28,9 @@ pub use encode::{
     cp932, preserved_matches, utf16_len,
 };
 pub use encoding::Encoding;
+pub use merge::{
+    EscapeMergeAt, MAX_MERGES, MERGE_DECODED_CHARS, MergeRegion, MergeReport, MergeScanner,
+};
 pub use preserve::{
     MAX_PRESERVED_BYTES, MAX_PRESERVED_RECORDS, PreserveLimits, PreserveReason, PreserveState,
     PreservedRecord, PreservedRecords,

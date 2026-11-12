@@ -216,6 +216,15 @@ impl EditorState {
             }
             // 取り消された (何も書いていない) ・採用する成功は通常の経路 (`Saved` は呼び出し側が採用する)
             JobResult::Failed { .. } => true,
+            // エスケープ文字のつながり (03 §8.3.1): 何も書いていないので、確認を出さずにそのまま終了へ進む
+            // (dirty な文書は退避される。03 §8.3.1 の「全保存」の箇条)。保存しなかったことは終了時の stderr に残す
+            JobResult::EscapeMerge { total, .. } => {
+                abort.stderr.push(line(
+                    "stderr.quit_abort.save_failed",
+                    vec![("path", p), ("reason", format!("escape merge ({total})"))],
+                ));
+                true
+            }
             _ => false,
         }
     }

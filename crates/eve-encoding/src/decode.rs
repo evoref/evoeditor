@@ -41,6 +41,10 @@ struct RsDecoder {
     has_bom: bool,
     invalid_bytes: u32,
     collision: bool,
+    /// 復号器が消費した入力のバイト数 (BOM を除く)。UTF-16 の持ち越しの判定 (`is_neutral`) に使う。
+    consumed: u64,
+    /// `last = true` で呼んだ (`encoding_rs` の復号器は、その後に使えない)。
+    finished: bool,
 }
 
 impl Decoder {
@@ -59,9 +63,41 @@ impl Decoder {
                 has_bom: false,
                 invalid_bytes: 0,
                 collision: false,
+                consumed: 0,
+                finished: false,
             })),
         };
         Decoder { enc, inner }
+    }
+
+    /// 初期状態に戻す (BOM は読み飛ばさない。`Decoder::new(enc, false)` と同じ状態)。作業の領域は使い回す
+    /// (つながりの局所の検査と区切った確認 (ii) が、並びごとに復号器を作り直さない。03 §8.3.1)。
+    pub fn reset(&mut self) {
+        match &mut self.inner {
+            Inner::Utf8(d) => *d = Utf8Decoder::new(false),
+            Inner::Rs(d) => {
+                d.dec = d.enc.rs().new_decoder_without_bom_handling();
+                d.history.clear();
+                d.skip_bom = false;
+                d.at_start = true;
+                d.start_carry.clear();
+                d.has_bom = false;
+                d.invalid_bytes = 0;
+                d.collision = false;
+                d.consumed = 0;
+                d.finished = false;
+            }
+        }
+    }
+
+    /// 持ち越し (途中で切れた多バイト列・UTF-16 の奇数のバイトと対になる前の上位サロゲート) が無いか。持ち越しが無い
+    /// 状態は初期状態と同じに振る舞う (WHATWG の復号器は先読みをしない)。`last = true` で呼んだ後は真。
+    /// つながりの変わる範囲 (03 §8.3.1 の「示す位置と変わる範囲」) が、復号の側と符号化の側の境界が再び一致したかを見るのに使う。
+    pub fn is_neutral(&self) -> bool {
+        match &self.inner {
+            Inner::Utf8(d) => d.is_neutral(),
+            Inner::Rs(d) => d.is_neutral(),
+        }
     }
 
     pub fn encoding(&self) -> Encoding {
@@ -118,7 +154,42 @@ impl Decoder {
 }
 
 impl RsDecoder {
+    fn is_neutral(&self) -> bool {
+        if self.finished {
+            return true;
+        }
+        if !self.start_carry.is_empty() {
+            return false;
+        }
+        if self.enc.is_utf16() {
+            // encoding_rs は UTF-16 の復号器の状態を見せない。消費したバイトの数が偶数で、最後の 16 ビットの単位が上位
+            // サロゲート (D800..DBFF) でなければ持ち越しは無い (上位サロゲートは、どの経路で読んでも次の単位を待つ)
+            if !self.consumed.is_multiple_of(2) {
+                return false;
+            }
+            let n = self.history.len();
+            if self.consumed == 0 || n < 2 {
+                return true;
+            }
+            let (a, b) = (self.history[n - 2], self.history[n - 1]);
+            let unit = if self.enc == Encoding::Utf16Le {
+                u16::from_le_bytes([a, b])
+            } else {
+                u16::from_be_bytes([a, b])
+            };
+            return !(0xD800..=0xDBFF).contains(&unit);
+        }
+        // Shift_JIS・EUC-JP・ISO-2022-JP: encoding_rs は、持ち越しの無い状態でだけ `Some` を返す (状態を変えない)
+        self.dec.latin1_byte_compatible_up_to(&[]).is_some()
+    }
+
     fn decode(&mut self, chunk: &[u8], last: bool, out: &mut String) {
+        self.decode_inner(chunk, last, out);
+        // 呼び終えた後に is_neutral が encoding_rs の終えた復号器を問い合わせない (問い合わせるとパニックする)
+        self.finished |= last;
+    }
+
+    fn decode_inner(&mut self, chunk: &[u8], last: bool, out: &mut String) {
         if self.at_start {
             // UTF-16 の BOM の判定には先頭 2 バイトが要る
             self.start_carry.extend_from_slice(chunk);
@@ -183,6 +254,7 @@ impl RsDecoder {
     }
 
     fn remember(&mut self, consumed: &[u8]) {
+        self.consumed = self.consumed.wrapping_add(consumed.len() as u64);
         self.history.extend_from_slice(consumed);
         if self.history.len() > HISTORY * 2 {
             let cut = self.history.len() - HISTORY;

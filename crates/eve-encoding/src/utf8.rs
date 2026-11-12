@@ -89,6 +89,11 @@ impl Utf8Decoder {
         self.collision && self.invalid_bytes > 0
     }
 
+    /// 持ち越し (途中で切れた多バイト列、先頭の BOM の判定待ち) が無いか。
+    pub fn is_neutral(&self) -> bool {
+        self.carry_len == 0
+    }
+
     /// 読み終えた後のエスケープの扱い。
     pub fn pua_mode(&self) -> PuaEscapeMode {
         if self.collision {

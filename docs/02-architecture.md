@@ -1515,7 +1515,7 @@ enum JobKind {                     // Port は持たない (run_job が JobPorts
                escape: EscapePolicy /*不正バイトのエスケープ文字の扱い (Restore | AsText | Reject)。core が TextFormat::save_escape_policy で決める (03 §8.3 / §8.3.1。v0.4 の M23 から、Restore は書く文字コードが escape_encoding と同じときだけ)。
                                       v0.1 の案の pua: PuaEscapeMode は、実装 (eve-encoding の EscapePolicy) に合わせて M23 の仕様の PR で改めた*/,
                escape_merge_ok: Option<EscapeMergeApproval> /*v0.4 の M23: エスケープ文字のつながり (03 §8.3.1) の承認 (このまま保存)。つながりを見つけたら、
-                                       結果 (件数と先頭 100 件) がこれと同じときだけ止めずに書き、違えば何も書かずに JobResult::EscapeMerge を返す。承認があっても区切った確認 (ii) は行う*/,
+                                       結果 (件数・先頭 100 件・全件のダイジェスト) がこれと同じときだけ止めずに書き、違えば何も書かずに JobResult::EscapeMerge を返す。承認があっても区切った確認 (ii) は行う*/,
                preserved: PreservedMap /*v0.4: 保存を始めた時点の保持方式の記録の版 (渡した後の編集の影響を受けない。03 §8.6 E2 / §8.7.1)。
                                          書く文字コードが文書の文字コードと同じで、保持が効いている (PreserveStatus::Active) ときだけ表を渡し、ほかは空 (記録を使わない)*/,
                expected: Expect, strategy: SaveStrategy, clear_readonly: bool /*FR-116*/, create_link_target: bool /*FR-106*/ }, // io。
@@ -1608,14 +1608,15 @@ enum JobResult {                   // #[non_exhaustive]
                    escapes_restored: u64 /*v0.4 の M23: この保存で元のバイトに戻したエスケープ文字の数*/,
                    escapes_unmappable: u64 /*v0.4: 表現不能になったエスケープ文字の数 (記録した先頭 100 件ではなく全件で数える。v0.3 までは先頭 100 件だけを見ていた)。
                                             どちらかが 1 以上なら E3 の「UTF-8 で保存」を、後者が 1 以上なら「置換して保存」を出さない (03 §8.6 / §8.3.1)*/ }, // 保存の表現不能 (03 §9.3 手順 5b)。何も書いていない
-    EscapeMerge  { total: u64 /*つながりの件数*/, recorded: Vec<EscapeMergeAt> /*先頭 100 件*/,
-                   changed_chars: u64, changed_lines: u64, to_eof: bool /*開き直すと変わる範囲の合計 (本文の文字数と行数)。文書の末尾まで戻らなければ to_eof*/ },
-                                                                            // v0.4 の M23: エスケープ文字を戻したバイトが隣とつながる (03 §8.3.1 の「つながりの検出」。文書の先頭の BOM を含む)。
+    EscapeMerge  { total: u64 /*つながりの件数*/, recorded: Vec<EscapeMergeAt> /*先頭 100 件*/, digest: u64 /*全件のダイジェスト (承認に写す)*/,
+                   changed_chars: u64, changed_lines: u64, to_eof: bool /*開き直すと変わる範囲の合計 (本文の文字数と行数)。末尾まで閉じず、末尾で復号器に持ち越しが残れば to_eof*/ },
+                                                                            // v0.4 の M23: エスケープ文字を戻したバイトが隣とつながる (03 §8.3.1 の「つながりの検出」。書く文字コード自身の BOM の並びが先頭にできる場合を含む)。
                                                                             // 承認 (escape_merge_ok) が無い、または結果が承認と違う保存で、乾式走査の段階で見つけたときだけ返す。何も書いていない (一時ファイルも作らない)。
                                                                             // core は ui.confirm.save.escape_merge で確認する (03 §9.7 (e))
-    // EscapeMergeAt { char_index: u64 /*局所の復号で最初に違いが出たエスケープ文字の、本文の通し番号 (Unmappable と同じ数え方)*/,
+    // EscapeMergeAt { char_index: u64 /*局所の復号で最初に違いが出たエスケープ文字の、本文の通し番号 (Unmappable と同じ数え方)。違いが直後の 1 単位で初めて出たときは並びの最後のエスケープ文字*/,
     //                 len_chars: u32 /*そこから直後の 1 単位の終わりまでの文字数。強調の範囲*/, decoded: String /*その範囲を局所に復号した文字列の先頭 16 文字 (無害化の前)*/ }
-    // EscapeMergeApproval { total: u64, recorded: Vec<EscapeMergeAt> } /*承認した結果。JobKind::Save の escape_merge_ok に入れる。ジョブは結果がこれと同じときだけ止めない*/
+    // EscapeMergeApproval { total: u64, recorded: Vec<EscapeMergeAt>, digest: u64 /*全件 (位置・強調の範囲・局所の復号) のダイジェスト。XXH3-64*/ }
+    //                 /*承認した結果。JobKind::Save の escape_merge_ok に入れる。ジョブは結果 (件数・先頭 100 件・全件のダイジェスト) がこれと同じときだけ止めない*/
     // ── metadata の照合 (io) ──
     Meta         { meta: FileMeta, stamp: FileStamp },          // MetaPurpose のいずれか (未編集の上書き保存の照合、名前を付けて保存の保存先、フォーカス復帰時の確認 (v0.2))
     // ── E3 の置換 (03 §8.6) ──

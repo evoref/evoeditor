@@ -27,23 +27,35 @@ pub(crate) struct UnmappableAsk {
     pub fmt: Option<NewFormat>,
 }
 
+/// 表現不能で止まった保存の、エスケープ文字の内訳 (03 §8.3.1 の「E3 との関係」)。
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct EscapesInSave {
+    /// 表現不能の文字にエスケープ文字を含む (全件で数えた `escapes_unmappable > 0`)。
+    pub unmappable: bool,
+    /// この保存でエスケープ文字を元のバイトに戻した (`escapes_restored > 0`)。
+    pub restored: bool,
+}
+
 impl EditorState {
-    /// 表現不能の文字の確認を出す。選択肢: UTF-8 で保存 (エスケープ文字を含まないとき) / キャンセル (既定、`Esc`)。
+    /// 表現不能の文字の確認を出す。選択肢: UTF-8 で保存 (エスケープ文字を含まず、元のバイトに戻すエスケープ文字も
+    /// 無いとき) / 置換して保存 (エスケープ文字を含まないとき) / キャンセル (既定、`Esc`)。
     /// 「置換して保存」(`replace`) は置換のジョブを投入する。
     pub(crate) fn open_unmappable(
         &mut self,
         ask: UnmappableAsk,
         total: u64,
         encoding: Encoding,
-        has_escape: bool,
+        escapes: EscapesInSave,
     ) {
         use crate::ui_model::overlay::{ChoiceDef, ConfirmAction, ConfirmState};
         let (line, col) = self
             .char_pos(ask.doc, ask.first_char)
             .map_or((1, 1), |(_, l, c)| (l, c));
         let mut choices = Vec::new();
-        // UTF-8 でも表せないのはエスケープ文字だけ (E4)。UTF-8 / UTF-16 で保存中のときは、選んでも結果が同じなので出さない
-        if !has_escape && !matches!(encoding, Encoding::Utf8) {
+        let has_escape = escapes.unmappable;
+        // UTF-8 でも表せないのはエスケープ文字だけ (E4)。UTF-8 / UTF-16 で保存中のときは、選んでも結果が同じなので出さない。
+        // 元のバイトに戻すエスケープ文字がある保存も、UTF-8 ではそれが表現不能になる (選ぶと 2 回目の E3 になる) ので出さない
+        if !has_escape && !escapes.restored && !matches!(encoding, Encoding::Utf8) {
             choices.push(ChoiceDef {
                 id: "utf8",
                 accel: Some('u'),

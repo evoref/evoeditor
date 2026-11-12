@@ -305,12 +305,13 @@ impl World {
             prop_assert!(out.source.is_none());
             return Ok(None);
         }
-        if !out.verified {
-            // 確認 (ii) で止まるのは、不正バイトのエスケープ文字を含む文書を編集して、エスケープ文字が隣の文字と組になる
-            // 並びを作ったときだけ (例: 0x8F 0xF3 0xF3 の 0x8F を消すと 0xF3 0xF3 が漢字になる。03 §8.3 の「隣接エスケープの
-            // 意味変化」。記録と関係なく起きる。製品ではこの文書は読み取り専用で編集できない)。何も書かない
-            prop_assert!(self.doc.format.invalid_bytes > 0, "確認 (ii)");
-            prop_assert!(out.source.is_none());
+        // 区切った確認 (ii) は、記録が正しい限り一致する (03 §8.3.1。M23 の 3 本目から、つながる範囲は突き合わせない)
+        prop_assert!(out.verified, "確認 (ii)");
+        if out.merges.as_ref().is_some_and(|m| m.total > 0) {
+            // 不正バイトのエスケープ文字を含む文書を編集して、エスケープ文字が隣の文字とつながる並びを作った (例: 0x8F
+            // 0xF3 0xF3 の 0x8F を消すと 0xF3 0xF3 が漢字になる。03 §8.3.1 の「つながりの検出」。記録と関係なく起きる)。
+            // 保存のジョブは書く前に `EscapeMerge` を返し、承認しなければ何も書かない
+            prop_assert!(self.doc.format.invalid_bytes > 0, "つながり");
             return Ok(None);
         }
         // 計画を使わない素朴な組み立てと同じ出力
@@ -321,11 +322,8 @@ impl World {
         let mut d = Decoder::new(enc, false);
         let mut back = String::new();
         d.decode(&out.bytes, true, &mut back);
-        // 表を渡さない保存 (v0.3 と同じ出力。確認 (ii) をしない) では、編集で隣り合ったエスケープ文字が組になることがある
-        // (上と同じ。記録と関係なく、製品では読み取り専用の文書)
-        if !(map.is_empty() && self.doc.format.invalid_bytes > 0) {
-            prop_assert_eq!(&back, &all(self.doc.text()));
-        }
+        // つながりが無ければ、表を渡さない保存でも復号すると本文に戻る (03 §8.3.1 の局所の検査と出力の全体の復号の同値)
+        prop_assert_eq!(&back, &all(self.doc.text()));
         Ok(Some(out.bytes))
     }
 
