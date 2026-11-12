@@ -864,6 +864,133 @@ fn euc_jp_の補助漢字を含むファイルは別の行に入力して保存�
     );
 }
 
+/// 不正バイトを含む `Shift_JIS` のファイル (v0.4 の M23。01 NFR-304 AC-4 / AC-5): 1 行目に単独の 0xA0 (不正バイト)、2 行目が
+/// 編集する行。不正バイトの比率の確認 (1% 超) を出さないよう、後ろに ASCII の詰め物を置く。
+fn 不正バイトを含む_shift_jis_のファイル(line1_tail: &[u8]) -> (Vec<u8>, Vec<u8>) {
+    let line1 = [
+        encoding_rs::SHIFT_JIS.encode("日本語の行").0.as_ref(),
+        line1_tail,
+    ]
+    .concat();
+    let line2 = encoding_rs::SHIFT_JIS.encode("編集する行").0.into_owned();
+    let pad = "0123456789".repeat(40);
+    (
+        line1.clone(),
+        [&line1[..], b"\n", &line2, b"\n", pad.as_bytes(), b"\n"].concat(),
+    )
+}
+
+// 01 §5.5 の NFR-304 AC-4。読み取り専用で開く → 編集を拒否する案内 → パレットで「編集を許可」→ 確認で [A] → 別の行に
+// 入力 → 保存 → 終了。ファイルは「元のバイト列 + 入力分」になる (不正バイト 0xA0 はそのまま残る)
+// verifies: NFR-304
+#[test]
+fn 不正バイトを含むファイルは_編集を許可して別の行に入力して保存すると元のバイト列のまま() {
+    let dir = temp_dir("invalid-bytes-edit");
+    let path = dir.join("invalid.txt");
+    let (_, orig) = 不正バイトを含む_shift_jis_のファイル(b"\xA0");
+    std::fs::write(&path, &orig).unwrap();
+    let mut s = Session::start(&["--encoding", "shift_jis", "+2", path.to_str().unwrap()]);
+    // 読込が済んで (2 行目が見え、不正バイトが <0xA0> で見え、読み取り専用で、その行頭にカーソルがある) から打つ
+    s.wait_for("本文と読み取り専用と 2 行目への移動", |t| {
+        t.contains("編集する行")
+            && t.contains("<0xA0>")
+            && t.contains("RO")
+            && t.contains("行 2, 桁 1")
+    });
+    // 読み取り専用では入力できず、案内が出る
+    type_slowly(&s, "x");
+    s.wait_for("編集の拒否の案内", |t| {
+        t.contains("確認の後に編集できます")
+    });
+    assert!(!s.screen().contains("[+]"), "入力されない:\n{}", s.screen());
+    // パレットで「読み取り専用の切替」→ 確認 → [A] 編集を許可
+    run_from_palette(&s, "file.toggle_read_only");
+    s.wait_for("編集を許可の確認", |t| {
+        t.contains("不正なバイトを含む文書の編集") && t.contains("[A]")
+    });
+    s.send(b"a");
+    s.wait_for("編集を許可した", |t| {
+        t.contains("編集を許可しました")
+    });
+    // 別の行 (2 行目の行頭) に入力して保存する。つながらないので確認は出ない
+    type_slowly(&s, "x");
+    s.wait_for("変更あり", |t| t.contains("[+]"));
+    s.send(CTRL_S);
+    s.wait_for("保存した (確認は出ない)", |t| !t.contains("[+]"));
+    s.send(CTRL_Q);
+    assert_eq!(s.wait_exit(), 0, "保存済みなので確認なしで終了する");
+    let (line1, _) = 不正バイトを含む_shift_jis_のファイル(b"\xA0");
+    let split = line1.len() + 1;
+    let want = [&orig[..split], b"x", &orig[split..]].concat();
+    assert_eq!(
+        std::fs::read(&path).unwrap(),
+        want,
+        "不正バイトは元のバイトのまま、入力した 1 文字だけが増える"
+    );
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+// 01 §5.5 の NFR-304 AC-5。Shift_JIS の 0x81 (行末の不正バイト) の直後に `@` を入れて保存すると、0x81 0x40 が別の文字
+// (U+3000) になるので、ファイルに書く前の確認が出る。Esc (キャンセル) ではファイルは変わらない
+// verifies: NFR-304
+#[test]
+fn 不正バイトが隣とつながる保存は確認が出て_キャンセルすると何も書かない() {
+    let dir = temp_dir("invalid-bytes-merge");
+    let path = dir.join("merge.txt");
+    let (_, orig) = 不正バイトを含む_shift_jis_のファイル(b"\x81");
+    std::fs::write(&path, &orig).unwrap();
+    let mut s = Session::start(&["--encoding", "shift_jis", "+1:7", path.to_str().unwrap()]);
+    s.wait_for(
+        "本文と読み取り専用と <0x81> の直後への移動",
+        |t| {
+            t.contains("編集する行")
+                && t.contains("<0x81>")
+                && t.contains("RO")
+                && t.contains("行 1, 桁 7")
+        },
+    );
+    run_from_palette(&s, "file.toggle_read_only");
+    s.wait_for("編集を許可の確認", |t| {
+        t.contains("不正なバイトを含む文書の編集") && t.contains("[A]")
+    });
+    s.send(b"a");
+    s.wait_for("編集を許可した", |t| {
+        t.contains("編集を許可しました")
+    });
+    // 1 行目の末尾 (<0x81> の直後) に `@` を入れて保存する
+    s.send(b"\x1b[F");
+    thread::sleep(Duration::from_millis(300));
+    type_slowly(&s, "@");
+    s.wait_for("変更あり", |t| t.contains("[+]"));
+    s.send(CTRL_S);
+    s.wait_for("つながりの確認", |t| {
+        t.contains("開き直すと文字が変わる箇所") && t.contains("[S]")
+    });
+    assert_eq!(
+        std::fs::read(&path).unwrap(),
+        orig,
+        "確認の間は何も書かない"
+    );
+    // Esc でキャンセル: 保存せず、ファイルは変わらない
+    s.send(b"\x1b");
+    s.wait_for("保存しなかった", |t| {
+        t.contains("保存しませんでした")
+    });
+    assert!(s.screen().contains("[+]"), "未保存のまま:\n{}", s.screen());
+    assert_eq!(
+        std::fs::read(&path).unwrap(),
+        orig,
+        "キャンセルでは書かない"
+    );
+    // 確認の後の終了: 未保存の確認で破棄する
+    s.send(CTRL_Q);
+    s.wait_for("未保存の確認", |t| t.contains("[D]"));
+    s.send(b"d");
+    assert_eq!(s.wait_exit(), 0);
+    assert_eq!(std::fs::read(&path).unwrap(), orig);
+    let _ = std::fs::remove_dir_all(dir);
+}
+
 #[test]
 fn 未知の文字コードの指定は使い方の誤り() {
     let out = std::process::Command::new(exe())
