@@ -52,11 +52,6 @@ fn doc(h: &Harness) -> &Document {
     h.editor.state().document(id).unwrap()
 }
 
-/// 不正バイトの比率の確認 (FR-127。1% を超えると出る) を出さないための後ろの詰め物 (確認で「読み取り専用で開く」を
-/// 選ぶと、今の実装は `UserRequested` も付けるため)。
-const PAD: &str = "0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789\n\
-                   0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789\n";
-
 /// 「編集を許可」の後の状態を作る (試験だけの近道。製品の解除は M23 の後の PR)。
 fn release_invalid_bytes(h: &mut Harness) {
     let id = h.doc_id();
@@ -177,10 +172,11 @@ fn 読込で衝突の文書は_none() {
 
 // ---------- (f) 違う文字コードで保存した後の Undo (表の 2 行目「違う文字コードでの保存の成功」) ----------
 
-/// 不正バイト (0xA0) を含む `Shift_JIS` の文書を開いて「編集を許可」した後の状態。本文は `ab<0xA0>c\n` と `PAD`。
+/// 不正バイト (0xA0) を含む `Shift_JIS` の文書を開いて「編集を許可」した後の状態。本文は `ab<0xA0>c\n`。
+/// 不正バイトの比率の確認 (1% 超) には「読み取り専用で開く」で答える (理由は `InvalidBytes` だけ、03 §9.2 の表)。
 fn sjis_released() -> Harness {
     let mut s = env();
-    s.fs.add_file("/w/a.txt", &[b"ab\xA0c\n", PAD.as_bytes()].concat());
+    s.fs.add_file("/w/a.txt", b"ab\xA0c\n");
     open_as(&mut s, "/w/a.txt", Encoding::ShiftJis);
     assert_eq!(doc(&s).format.escape_encoding, Some(Encoding::ShiftJis));
     release_invalid_bytes(&mut s);
@@ -193,7 +189,7 @@ fn delete_escape(s: &mut Harness) {
     s.keys("right");
     s.keys("right");
     s.keys("delete");
-    assert_eq!(s.doc_text(), format!("abc\n{PAD}"));
+    assert_eq!(s.doc_text(), "abc\n");
 }
 
 // verifies: NFR-304
@@ -208,7 +204,7 @@ fn エスケープ文字を消して別の文字コードで保存し_undo_で�
         Args::new().with_str("encoding", "utf-8"),
     );
     assert_eq!(s.overlay(), "", "{:?}", s.messages());
-    let utf8 = [b"abc\n", PAD.as_bytes()].concat();
+    let utf8 = b"abc\n".to_vec();
     assert_eq!(s.fs.read("/w/a.txt").unwrap(), utf8);
     assert_eq!(doc(&s).format.encoding, Encoding::Utf8);
     assert_eq!(
@@ -218,7 +214,7 @@ fn エスケープ文字を消して別の文字コードで保存し_undo_で�
     );
     // Undo でエスケープ文字が戻る。保存しようとすると表現不能 (キャンセルだけ) で、何も書かない
     s.cmd("edit.undo");
-    assert_eq!(s.doc_text(), format!("ab\u{10FFA0}c\n{PAD}"));
+    assert_eq!(s.doc_text(), "ab\u{10FFA0}c\n");
     assert_eq!(doc(&s).format.escape_encoding, None);
     run(&mut s, "file.save", Args::new());
     assert_e3_cancel_only(&mut s);
@@ -264,7 +260,7 @@ fn 同じ文字コードで保存しても由来の文字コードは変わら�
     s.keys("ctrl+end");
     s.text("z");
     run(&mut s, "file.save", Args::new());
-    let want = [b"ab\xA0c\n", PAD.as_bytes(), b"z"].concat();
+    let want = b"ab\xA0c\nz".to_vec();
     assert_eq!(s.fs.read("/w/a.txt").unwrap(), want);
     assert_eq!(doc(&s).format.escape_encoding, Some(Encoding::ShiftJis));
     // 同じ文字コードの `file.set_encoding` (BOM の有無だけを変える経路と同じ) でも変えない
@@ -743,30 +739,27 @@ fn 違う文字コードで保存した後は復旧の_redo_でも由来の文�
 
 // ---------- (d) 再読込・開き直し・保存の失敗 ----------
 
-/// 不正バイトの比率の確認 (1% 超) を出さないよう、`PAD` を 2 つ付ける。
-fn padded(head: &[u8]) -> Vec<u8> {
-    [head, PAD.as_bytes(), PAD.as_bytes()].concat()
-}
-
 #[test]
 fn 再読込の_undo_redo_で由来の文字コードも書式ごと戻る() {
     let mut s = env();
-    s.fs.add_file("/w/a.txt", &padded(b"abc\n"));
+    s.fs.add_file("/w/a.txt", b"abc\n");
     open(&mut s, "/w/a.txt");
     assert_eq!(doc(&s).format.escape_encoding, None);
     // 外部で不正バイトを含む内容に変わったので読み直す
-    s.fs.add_file("/w/a.txt", &padded(b"a\x80bc\n"));
+    s.fs.add_file("/w/a.txt", b"a\x80bc\n");
     s.cmd("file.reload");
     s.run_jobs();
-    assert_eq!(s.doc_text(), format!("a\u{10FF80}bc\n{PAD}{PAD}"));
+    // 不正バイトの比率の確認 (1% 超) には「読み取り専用で開く」で答える
+    accept_read_only(&mut s);
+    assert_eq!(s.doc_text(), "a\u{10FF80}bc\n");
     assert_eq!(doc(&s).format.escape_encoding, Some(Encoding::Utf8));
     // 再読込の Undo は読み取り専用では行えない (03 §7.2)。解除した後の状態を作って戻す
     release_invalid_bytes(&mut s);
     s.cmd("edit.undo");
-    assert_eq!(s.doc_text(), format!("abc\n{PAD}{PAD}"));
+    assert_eq!(s.doc_text(), "abc\n");
     assert_eq!(doc(&s).format.escape_encoding, None);
     s.cmd("edit.redo");
-    assert_eq!(s.doc_text(), format!("a\u{10FF80}bc\n{PAD}{PAD}"));
+    assert_eq!(s.doc_text(), "a\u{10FF80}bc\n");
     assert_eq!(doc(&s).format.escape_encoding, Some(Encoding::Utf8));
     assert!(
         doc(&s).read_only.contains(ReadOnlyReason::InvalidBytes),
@@ -778,11 +771,13 @@ fn 再読込の_undo_redo_で由来の文字コードも書式ごと戻る() {
 #[test]
 fn 違う文字コードの保存の後の再読込の_undo_redo_は文字コードと組で戻る() {
     let mut s = env();
-    s.fs.add_file("/w/a.txt", &padded(b"abc\n"));
+    s.fs.add_file("/w/a.txt", b"abc\n");
     open(&mut s, "/w/a.txt");
-    s.fs.add_file("/w/a.txt", &padded(b"a\x80bc\n"));
+    s.fs.add_file("/w/a.txt", b"a\x80bc\n");
     s.cmd("file.reload");
     s.run_jobs();
+    // 不正バイトの比率の確認 (1% 超) には「読み取り専用で開く」で答える
+    accept_read_only(&mut s);
     release_invalid_bytes(&mut s);
     // エスケープ文字を消して Shift_JIS で保存する
     s.keys("ctrl+home");
@@ -800,7 +795,7 @@ fn 違う文字コードの保存の後の再読込の_undo_redo_は文字コー
     assert_eq!(doc(&s).format.encoding, Encoding::ShiftJis);
     assert_eq!(doc(&s).format.escape_encoding, None);
     s.cmd("edit.undo"); // 再読込: 再読込の前の書式 (UTF-8、None) に戻る
-    assert_eq!(s.doc_text(), format!("abc\n{PAD}{PAD}"));
+    assert_eq!(s.doc_text(), "abc\n");
     assert_eq!(doc(&s).format.encoding, Encoding::Utf8);
     assert_eq!(doc(&s).format.escape_encoding, None);
     s.cmd("edit.redo"); // 再読込: 再読込の後の書式 (UTF-8、Some(UTF-8)) に組で戻る
@@ -812,7 +807,7 @@ fn 違う文字コードの保存の後の再読込の_undo_redo_は文字コー
 fn 文字コードを指定して開き直すと由来の文字コードが入れ替わる() {
     let mut s = env();
     // Shift_JIS では「あ」(82 A0)、UTF-8 では不正バイト 2 つ
-    s.fs.add_file("/w/a.txt", &padded(b"a\x82\xA0\n"));
+    s.fs.add_file("/w/a.txt", b"a\x82\xA0\n");
     open_as(&mut s, "/w/a.txt", Encoding::Utf8);
     assert_eq!(doc(&s).format.escape_encoding, Some(Encoding::Utf8));
     run(
@@ -848,10 +843,7 @@ fn 違う文字コードの保存がキャンセルで終わったら由来の�
     assert_eq!(s.overlay(), "");
     assert_eq!(doc(&s).format.encoding, Encoding::ShiftJis);
     assert_eq!(doc(&s).format.escape_encoding, Some(Encoding::ShiftJis));
-    assert_eq!(
-        s.fs.read("/w/a.txt").unwrap(),
-        [b"ab\xA0c\n", PAD.as_bytes()].concat()
-    );
+    assert_eq!(s.fs.read("/w/a.txt").unwrap(), b"ab\xA0c\n");
 }
 
 // バイトの文書 (Shift_JIS、エスケープ文字が残る) に Shift_JIS で表せない文字を入れて保存すると E3 が出る。03 §8.6 の
