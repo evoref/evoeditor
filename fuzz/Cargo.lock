@@ -183,6 +183,7 @@ dependencies = [
  "eve-view",
  "memchr",
  "regex",
+ "regex-syntax",
  "twox-hash",
 ]
 
@@ -198,6 +199,7 @@ dependencies = [
 name = "eve-fuzz"
 version = "0.0.0"
 dependencies = [
+ "eve-core",
  "eve-encoding",
  "eve-testkit",
  "eve-tui",
