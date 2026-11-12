@@ -851,7 +851,7 @@ pub(crate) fn run_save(p: SaveParams<'_>, ports: &JobPorts, cancel: &CancelToken
             Some(d) if !d.report.is_empty() => {
                 return JobResult::Unmappable {
                     total: d.report.total,
-                    escapes: d.report.escapes,
+                    escapes_unmappable: d.report.escapes,
                     recorded: d.report.recorded,
                     encoding: p.encoding,
                 };

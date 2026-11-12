@@ -136,7 +136,7 @@ pub enum JobResult {
         /// 先頭 100 件。
         recorded: Vec<eve_encoding::Unmappable>,
         /// 総数のうち、§8.3 のエスケープ文字の数 (全件で数える)。1 以上なら E3 の選択肢 1・2 を出さない (03 §8.6)。
-        escapes: u64,
+        escapes_unmappable: u64,
         /// 保存先の文字コード。
         encoding: Encoding,
     },

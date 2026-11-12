@@ -702,7 +702,7 @@ impl EditorState {
             JobResult::Unmappable {
                 total,
                 recorded,
-                escapes,
+                escapes_unmappable,
                 encoding,
             } if self.docs.documents.contains_key(&doc_id) && !recorded.is_empty() => {
                 // 該当箇所 (先頭 100 件) を強調する。次の編集まで残す (03 §8.6)
@@ -721,7 +721,7 @@ impl EditorState {
                     total,
                     encoding,
                     // 記録した先頭 100 件ではなく、全件で数えたエスケープ文字の数で判定する (03 §8.6 の「E3 の選択肢」)
-                    escapes > 0,
+                    escapes_unmappable > 0,
                 );
             }
             JobResult::Unmappable { total, .. } => {

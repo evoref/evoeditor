@@ -682,7 +682,7 @@ literal:= '"' ... '"' | number | true | false
 | `frontend` | string | `"tui"` |
 | `os` | string | `"windows"` / `"macos"` / `"linux"` |
 | `caps.<field>` | bool / string | 02 §7.1 `Capabilities` の各フィールド (`caps.can_suspend`、`caps.enhanced_keys`、`caps.mouse` 等)。`app.suspend` の when 等に使う |
-| `doc.has_path` / `doc.read_only_releasable` | bool | パス付き文書か / 読み取り専用の理由が解除可能か (03 §9.6。解除のコマンドは v0.2 なので、v0.1 では常に false) |
+| `doc.has_path` / `doc.read_only_releasable` | bool | パス付き文書か / 読み取り専用の理由が解除可能か (03 §9.6。解除のコマンドは v0.2 なので、v0.1 では常に false。v0.2 は理由がすべて `FileAttribute` / `UserRequested` のとき。v0.4 の M23 は加えて `InvalidBytes` (`pua_escape == Enabled` の文書だけ。私用文字と衝突した文書は除く) も解除できる、03 §8.3.1) |
 | `search.active` | bool | 検索バーが開いている |
 | `search.replace_active` | bool | 検索バーの置換欄が開いている (`search.replace_open` で開く。04 §8.4) |
 | `search.replace_focused` | bool | 検索バーの置換欄にフォーカスがある (v0.2。置換欄の `enter` を `search.replace` にするキーマップの `when` に使う。04 §8.4) |
