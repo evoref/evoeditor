@@ -1606,7 +1606,7 @@ enum JobResult {                   // #[non_exhaustive]
                                                                             // 保存後の stamp は report.new_stamp
     Unmappable   { total: u64, recorded: Vec<Unmappable> /*先頭の位置*/, encoding: Encoding,
                    escapes_restored: u64 /*v0.4 の M23: この保存で元のバイトに戻したエスケープ文字の数*/,
-                   escapes_unmappable: u64 /*v0.4 の M23: 表現不能になったエスケープ文字の数 (記録した先頭 100 件ではなく全件で数える)。
+                   escapes_unmappable: u64 /*v0.4: 表現不能になったエスケープ文字の数 (記録した先頭 100 件ではなく全件で数える。v0.3 までは先頭 100 件だけを見ていた)。
                                             どちらかが 1 以上なら E3 の「UTF-8 で保存」を、後者が 1 以上なら「置換して保存」を出さない (03 §8.6 / §8.3.1)*/ }, // 保存の表現不能 (03 §9.3 手順 5b)。何も書いていない
     EscapeMerge  { total: u64 /*つながりの件数*/, recorded: Vec<EscapeMergeAt> /*先頭 100 件*/,
                    changed_chars: u64, changed_lines: u64, to_eof: bool /*開き直すと変わる範囲の合計 (本文の文字数と行数)。文書の末尾まで戻らなければ to_eof*/ },

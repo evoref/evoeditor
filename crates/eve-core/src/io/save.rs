@@ -702,8 +702,8 @@ impl EditorState {
             JobResult::Unmappable {
                 total,
                 recorded,
+                escapes_unmappable,
                 encoding,
-                ..
             } if self.docs.documents.contains_key(&doc_id) && !recorded.is_empty() => {
                 // 該当箇所 (先頭 100 件) を強調する。次の編集まで残す (03 §8.6)
                 let indices: Vec<u64> = recorded.iter().map(|u| u.char_index).collect();
@@ -720,7 +720,8 @@ impl EditorState {
                     },
                     total,
                     encoding,
-                    recorded.iter().any(|u| is_escape_char(u.ch)),
+                    // 記録した先頭 100 件ではなく、全件で数えたエスケープ文字の数で判定する (03 §8.6 の「E3 の選択肢」)
+                    escapes_unmappable > 0,
                 );
             }
             JobResult::Unmappable { total, .. } => {
