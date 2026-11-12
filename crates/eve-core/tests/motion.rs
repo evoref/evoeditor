@@ -135,6 +135,57 @@ fn 左右は書記素単位で_行をまたぐ() {
     );
 }
 
+// 不正バイトのエスケープ文字 (`<0x9A>` と表示する) の前後は常に書記素の境界 (03 §8.3.1 の「書記素と単語」、§13.1)。
+// 直後の結合文字・異体字セレクタ・ZWJ とは別々に止まり、表示の単位 (`<0x9A>` の 6 セル + `◌` の 1 セル) と一致する
+// spec: 03 §8.3.1
+#[test]
+fn エスケープ文字の前後で左右の移動が_1_つずつ止まる() {
+    let e = '\u{10FF9A}';
+    for mark in ['\u{301}', '\u{FE0F}', '\u{200D}'] {
+        check(
+            &format!("a|{e}{mark}b"),
+            "cursor.move_right",
+            &format!("a{e}|{mark}b"),
+        );
+        check(
+            &format!("a{e}|{mark}b"),
+            "cursor.move_right",
+            &format!("a{e}{mark}|b"),
+        );
+        check(
+            &format!("a{e}{mark}|b"),
+            "cursor.move_left",
+            &format!("a{e}|{mark}b"),
+        );
+        check(
+            &format!("a{e}|{mark}b"),
+            "cursor.move_left",
+            &format!("a|{e}{mark}b"),
+        );
+    }
+    // Shift+→ の選択も 1 つずつ
+    check(
+        &format!("a|{e}\u{301}b"),
+        "select.extend_right",
+        &format!("a«{e}»\u{301}b"),
+    );
+    // 単語の移動は、エスケープ文字の並びを 1 語として止まる (03 §13.3)
+    check(
+        &format!("|abc{e}{e}def"),
+        "cursor.move_word_right",
+        &format!("abc|{e}{e}def"),
+    );
+    check(
+        &format!("abc|{e}{e}def"),
+        "cursor.move_word_right",
+        &format!("abc{e}{e}|def"),
+    );
+    // 上下の移動の目標列も表示の単位で数える: 上の行の列 6 は `<0x9A>` (列 0〜5) の後ろ、結合文字 (列 6) の前
+    let mut s = Scene::new(&format!("abcdef|\n{e}\u{301}x"));
+    s.run("cursor.move_down");
+    assert_eq!(s.shown(), format!("abcdef\n{e}|\u{301}x"));
+}
+
 #[test]
 fn 選択ありの左右は端へ潰れて動かない() {
     check("a«bc»d", "cursor.move_left", "a|bcd");

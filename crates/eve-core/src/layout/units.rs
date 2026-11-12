@@ -194,7 +194,9 @@ pub(super) fn unit_slow(
         // 可視化しないときも、端末の全角の空白の描き方に頼らず ASCII の空白 2 つで描く
         parts.push((if ws { "[]" } else { "  " }.to_owned(), 2, ws));
     } else if esc && g.chars().any(|c| unescape_char(c).is_some()) {
-        // 不正バイトのエスケープ文字は 1 文字ずつ `<0xHH>` にする (結合文字などと同じ書記素になることがある)
+        // 不正バイトのエスケープ文字は 1 文字ずつ `<0xHH>` にする。書記素の境界はエスケープ文字の前後に必ずある
+        // (03 §13.1、`first_grapheme`) ので、ここに来る書記素はエスケープ文字 1 つで、表示の単位とカーソル・削除の
+        // 単位が一致する。1 書記素に複数の文字が来ても (呼び出し側の誤り) 文字ごとに描く
         let mut run = String::new();
         for c in g.chars() {
             if let Some(b) = unescape_char(c) {
@@ -479,6 +481,37 @@ mod tests {
             );
         }
         assert!(units("", false, &cfg).is_empty());
+    }
+
+    /// エスケープ文字は直後の結合文字・異体字セレクタ・ZWJ と別の単位になり、単位の境目はカーソル・削除の単位
+    /// (書記素の境界、03 §13.1) と一致する (03 §8.3.1 の「書記素と単語」)。
+    #[test]
+    fn エスケープ文字は直後の結合文字と別の単位になる() {
+        let cfg = width_config();
+        let line = "a\u{10FF9A}\u{301}\u{10FF80}\u{200D}b";
+        let us = units(line, true, &cfg);
+        let got: Vec<(usize, usize, usize)> = us.iter().map(|u| (u.byte, u.col, u.width)).collect();
+        // a | <0x9A> | ◌́ | <0x80> | <ZWJ> | b
+        assert_eq!(
+            got,
+            [
+                (0, 0, 1),
+                (1, 1, 6),
+                (5, 7, 1),
+                (7, 8, 6),
+                (11, 14, 5),
+                (14, 19, 1)
+            ]
+        );
+        assert_eq!(us[1].parts_vec(), [("<0x9A>".to_owned(), 6, true)]);
+        let text = eve_text::Text::from(line);
+        for u in us.iter() {
+            assert!(
+                eve_text::is_grapheme_boundary(&text, ByteOff(u.byte)),
+                "{}",
+                u.byte
+            );
+        }
     }
 
     /// 基準: 全ての書記素を一般の経路で展開する。

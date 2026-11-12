@@ -101,6 +101,39 @@ fn shift_jis_の不正バイトの表示と_真の私用文字を含む_utf8_の
     assert!(!r.contains("<0x80>"), "{r:?}");
 }
 
+/// 1 行目の行頭から → を押すたびのカーソルの列 (行頭からの相対) と、← で戻るときの列。
+fn cursor_cols_by_arrows(h: &mut Harness, steps: usize) -> (Vec<u16>, Vec<u16>) {
+    h.keys("ctrl+home");
+    let base = h.frame().panes[0].cursors[0].col;
+    let mut right = Vec::new();
+    for _ in 0..steps {
+        h.keys("right");
+        right.push(h.frame().panes[0].cursors[0].col - base);
+    }
+    let mut left = Vec::new();
+    for _ in 0..steps {
+        h.keys("left");
+        left.push(h.frame().panes[0].cursors[0].col - base);
+    }
+    (right, left)
+}
+
+// 不正バイトの直後に結合文字があっても、カーソルは `<0x9A>` と結合文字の間に止まる (エスケープ文字の前後は常に書記素の
+// 境界、03 §8.3.1 の「書記素と単語」・§13.1)。カーソルの列は表示の単位 (`<0x9A>` の 6 セル、孤立した結合文字の 1 セル) と一致する。
+// 不正バイトを含む文書は読み取り専用だが、カーソルは動かせる
+// spec: 03 §8.3.1
+#[test]
+fn 不正バイトの直後の結合文字の前でカーソルが止まる() {
+    // a, 不正バイト 0x9A, U+0301 (CC 81), U+FE0F (EF B8 8F), b
+    let mut h = opened(b"a\x9A\xCC\x81\x9A\xEF\xB8\x8Fb\n");
+    let r = row0(&mut h);
+    assert!(r.starts_with("a<0x9A>"), "{r:?}");
+    let (right, left) = cursor_cols_by_arrows(&mut h, 5);
+    // a (1) → <0x9A> (6) → ◌́ (1) → <0x9A> (6) → 単独の VS16 (<VS16> の 6) → b
+    assert_eq!(right, [1, 7, 8, 14, 20]);
+    assert_eq!(left, [14, 8, 7, 1, 0]);
+}
+
 // verifies: AC-NFR-605-1
 // verifies: AC-FR-701-1
 #[test]
