@@ -3,7 +3,8 @@
 //! 読込時の往復の検査 (`RoundtripChecker`) が、**復号して再び符号化すると元とは別のバイト列になる箇所** の元のバイト列を
 //! 集める。ここには、記録の型と、記録をためる入れ物 (上限とメモリの確保の失敗の扱い)、`Shift_JIS` / EUC-JP の文字ごとの
 //! 突き合わせ、長い行を小分けにする位置の求め方、ISO-2022-JP の状態の追い方を置く。集めた記録を文書に持たせるのと、
-//! 保存で使うのは eve-core (M22 の 5・6。保存の符号化器の口は `Encoder::write_preserved`)。
+//! 保存で使うのは eve-core (M22 の 5・6。保存の符号化器の口は `Encoder::write_preserved`。確認 (i) を済ませた記録は
+//! `PreservedBytes` にして `Encoder::write_checked` へ)。
 //!
 //! - **不変条件** (どの記録も満たす): 記録の元のバイト列を、その文字コードの初期状態 (ISO-2022-JP は ASCII 状態) から
 //!   復号すると、本文の記録の範囲の文字列になり、初期状態で終わる。
@@ -248,10 +249,77 @@ pub(crate) fn may_differ_lead(enc: Encoding, b0: u8) -> bool {
     }
 }
 
+/// 1 文字を再符号化した結果 (元のバイト列に依らない部分)。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Reencoded {
+    /// 符号化器の出力 (`out[..len]`) と、それを復号すると同じ文字に戻るか。
+    Bytes { out: [u8; 16], len: u8, back: bool },
+    /// 出力できない (表現不能)。
+    Unmappable,
+}
+
+/// 再符号化の結果の覚えの大きさ (直接写像の項目の数。2 のべき)。
+const MEMO_SLOTS: usize = 256;
+
+/// 1 文字の再符号化の結果の覚え (文字の値で引く直接写像。`Shift_JIS` / EUC-JP の符号化器は状態を持たないので、結果は
+/// 文字だけで決まる)。区分 B の箇所が密な文書では同じ文字が何度も現れるので、1 文字ごとの再符号化と復号を繰り返さない
+/// (読込の検査の記録を集める費用の大半だった)。
+pub(crate) struct ReencodeMemo {
+    /// 覚えている結果の文字コード。
+    enc: Option<Encoding>,
+    slots: Vec<Option<(char, Reencoded)>>,
+}
+
+impl ReencodeMemo {
+    /// 空の覚え (項目は最初に使うときに確保する)。
+    pub(crate) fn new() -> ReencodeMemo {
+        ReencodeMemo {
+            enc: None,
+            slots: Vec::new(),
+        }
+    }
+
+    /// `c` の再符号化の結果 (覚えていなければ求めて覚える)。違う文字コードで引いたら、覚えを全部捨てる。
+    fn get(&mut self, enc: Encoding, e: &mut encoding_rs::Encoder, c: char) -> Reencoded {
+        if self.enc != Some(enc) || self.slots.is_empty() {
+            self.enc = Some(enc);
+            self.slots = vec![None; MEMO_SLOTS];
+        }
+        let i = c as usize & (MEMO_SLOTS - 1);
+        if let Some((k, r)) = self.slots[i]
+            && k == c
+        {
+            return r;
+        }
+        let r = reencode(enc, e, c);
+        self.slots[i] = Some((c, r));
+        r
+    }
+}
+
+/// 1 文字を再符号化する (`Shift_JIS` / EUC-JP)。
+fn reencode(enc: Encoding, e: &mut encoding_rs::Encoder, c: char) -> Reencoded {
+    let mut tmp = [0u8; 4];
+    let s = c.encode_utf8(&mut tmp);
+    let mut out = [0u8; 16];
+    // 状態を持たない符号化器なので、`last = false` のまま 1 文字ずつ使い回せる (持ち越しが残らない)
+    let (res, _, written) = e.encode_from_utf8_without_replacement(s, &mut out, false);
+    match res {
+        EncoderResult::InputEmpty => Reencoded::Bytes {
+            out,
+            // 作業領域 (16 バイト) に収まった長さ
+            len: u8::try_from(written).unwrap_or(16),
+            back: decodes_to(enc, &out[..written], s),
+        },
+        EncoderResult::Unmappable(_) | EncoderResult::OutputFull => Reencoded::Unmappable,
+    }
+}
+
 /// 1 文字を再符号化して元のバイト列と比べ、違えば理由を返す。
 fn char_diff(
     enc: Encoding,
     e: &mut encoding_rs::Encoder,
+    memo: &mut ReencodeMemo,
     c: char,
     orig: &[u8],
 ) -> Option<PreserveReason> {
@@ -261,43 +329,58 @@ fn char_diff(
     {
         return (g[..] != *orig).then_some(PreserveReason::DuplicateEncoding);
     }
-    let mut tmp = [0u8; 4];
-    let s = c.encode_utf8(&mut tmp);
-    let mut buf = [0u8; 16];
-    // 状態を持たない符号化器なので、`last = false` のまま 1 文字ずつ使い回せる (持ち越しが残らない)
-    let (res, _, written) = e.encode_from_utf8_without_replacement(s, &mut buf, false);
-    match res {
-        EncoderResult::InputEmpty => {
-            let out = &buf[..written];
-            if out == orig {
+    match memo.get(enc, e, c) {
+        Reencoded::Bytes { out, len, back } => {
+            if out[..usize::from(len)] == *orig {
                 None
-            } else if decodes_to(enc, out, s) {
+            } else if back {
                 Some(PreserveReason::DuplicateEncoding)
             } else {
                 // 別の文字に黙って写される (照合で一致しない): 出力できないのと同じ
                 Some(PreserveReason::DecodeOnly)
             }
         }
-        EncoderResult::Unmappable(_) | EncoderResult::OutputFull => {
-            Some(PreserveReason::DecodeOnly)
-        }
+        Reencoded::Unmappable => Some(PreserveReason::DecodeOnly),
     }
 }
 
 /// `bytes` を初期状態から復号すると、ちょうど `want` になるか (不正バイトがあれば偽)。
+///
+/// 復号の結果を文字列に作らず、手元の小さな作業領域に少しずつ復号して `want` の先頭から突き合わせる (記録ごと・区間ごとに
+/// 呼ぶので、1 回ごとにヒープを確保しない。区分 B の箇所が密なファイルの読込・保存で効く)。結果は
+/// `decode_without_bom_handling_and_without_replacement(bytes) == Some(want)` と同じ。
 pub(crate) fn decodes_to(enc: Encoding, bytes: &[u8], want: &str) -> bool {
-    enc.rs()
-        .decode_without_bom_handling_and_without_replacement(bytes)
-        .is_some_and(|s| s == want)
+    let mut d = enc.rs().new_decoder_without_bom_handling();
+    // 1 回の呼び出しで出力できる文字 (UTF-8 で 4 バイトまで) より十分に大きい
+    let mut buf = [0u8; 512];
+    let (mut src, mut rest) = (bytes, want.as_bytes());
+    loop {
+        let (res, read, written) = d.decode_to_utf8_without_replacement(src, &mut buf, true);
+        let Some(tail) = rest.strip_prefix(&buf[..written]) else {
+            return false;
+        };
+        rest = tail;
+        src = &src[read..];
+        match res {
+            encoding_rs::DecoderResult::InputEmpty => return rest.is_empty(),
+            // 進まないことは無い (作業領域は 1 文字より大きい) が、念のため止める
+            encoding_rs::DecoderResult::OutputFull if read > 0 || written > 0 => {}
+            encoding_rs::DecoderResult::OutputFull | encoding_rs::DecoderResult::Malformed(..) => {
+                return false;
+            }
+        }
+    }
 }
 
 /// `Shift_JIS` / EUC-JP の 1 行 (または長い行の一部。文字の境界で始まり、文字の境界で終わる) を、復号した文字列 `text` と
 /// 文字ごとに突き合わせ、再符号化で違いが出る連続した文字を記録にする。`col_base` は `bytes` の先頭の、行頭からの位置
 /// (本文の UTF-8 のバイト数)。不正バイトのエスケープ文字は記録に含めない (区切りになる)。
 ///
-/// 突き合わせが食い違ったら (起きないはず) 偽を返す (呼び出し側は記録を全部捨てる)。
+/// 突き合わせが食い違ったら (起きないはず) 偽を返す (呼び出し側は記録を全部捨てる)。`memo` は 1 文字の再符号化の結果の
+/// 覚え (検査器が文書の全体で使い回す)。
 pub(crate) fn collect_chars(
     rec: &mut Collector,
+    memo: &mut ReencodeMemo,
     enc: Encoding,
     bytes: &[u8],
     text: &str,
@@ -326,7 +409,28 @@ pub(crate) fn collect_chars(
         rec.push(line, col_base + cp as u64, col - cp, orig, reason);
         true
     };
-    for c in text.chars() {
+    let tb = text.as_bytes();
+    while col < tb.len() {
+        // ASCII の並びは同じバイトに戻る: 元のバイト列とまとめて比べて飛ばす (食い違うなら、突き合わせがずれている)。
+        // 違いの続きは、並びの最初の文字で閉じる
+        let k = tb[col..]
+            .iter()
+            .position(|b| !b.is_ascii())
+            .unwrap_or(tb.len() - col);
+        if k > 0 {
+            if bytes.get(p..p + k) != Some(&tb[col..col + k]) {
+                return false;
+            }
+            if !close(&mut run, rec, p, col) {
+                return false;
+            }
+            p += k;
+            col += k;
+            continue;
+        }
+        let Some(c) = text[col..].chars().next() else {
+            break;
+        };
         let (blen, diff) = if unescape_char(c).is_some() {
             // 不正バイトは 1 バイトを 1 文字にエスケープしている (保存で元のバイトに戻すので、記録にしない)
             (1, None)
@@ -338,14 +442,8 @@ pub(crate) fn collect_chars(
             let Some(orig) = bytes.get(p..p + blen) else {
                 return false;
             };
-            let diff = if c.is_ascii() {
-                // ASCII は同じバイトに戻る (食い違うなら、突き合わせがずれている)
-                if blen != 1 || orig[0] != c as u8 {
-                    return false;
-                }
-                None
-            } else if may_differ_lead(enc, b0) {
-                char_diff(enc, &mut e, c, orig)
+            let diff = if may_differ_lead(enc, b0) {
+                char_diff(enc, &mut e, memo, c, orig)
             } else {
                 None
             };
@@ -546,6 +644,99 @@ mod tests {
         assert_eq!(IsoState::Ascii.after(b"\x1B$B$\""), IsoState::Jis0208);
         // 途中で切れたエスケープは状態を変えない
         assert_eq!(IsoState::Ascii.after(b"\x1B$"), IsoState::Ascii);
+    }
+
+    // 再符号化の結果の覚えは文字だけで引く: 同じ文字でも元のバイト列が違えば判定が変わり、覚えの項目を取り合う文字
+    // (値の下位 8 ビットが同じ) が交互に来ても、覚えなしと同じ結果になる
+    #[test]
+    fn 再符号化の覚えは元のバイト列ごとに判定する() {
+        let enc = Encoding::ShiftJis;
+        let mut e = enc.rs().new_encoder();
+        let mut memo = ReencodeMemo::new();
+        // 纊 (U+7E8A): NEC 選定 IBM 拡張 0xED40 は代表 (IBM 拡張 0xFA5C) と違う
+        for _ in 0..3 {
+            assert_eq!(
+                char_diff(enc, &mut e, &mut memo, '纊', b"\xED\x40"),
+                Some(PreserveReason::DuplicateEncoding)
+            );
+            assert_eq!(char_diff(enc, &mut e, &mut memo, '纊', b"\xFA\x5C"), None);
+            // U+7F8A (羊。下位 8 ビットが纊と同じ) は JIS 第 1 水準で、元に戻る
+            assert_eq!(char_diff(enc, &mut e, &mut memo, '羊', b"\x97\x72"), None);
+        }
+        // 覚えなし (毎回新しい覚え) と同じ
+        for (c, orig) in [
+            ('纊', &b"\xED\x40"[..]),
+            ('羊', b"\x97\x72"),
+            ('∵', b"\x87\x9A"),
+        ] {
+            let mut fresh = ReencodeMemo::new();
+            assert_eq!(
+                char_diff(enc, &mut e, &mut memo, c, orig),
+                char_diff(enc, &mut e, &mut fresh, c, orig),
+                "{c}"
+            );
+        }
+        // EUC-JP の補助漢字は出力できない
+        let enc = Encoding::EucJp;
+        let mut e = enc.rs().new_encoder();
+        assert_eq!(
+            char_diff(enc, &mut e, &mut memo, '丂', b"\x8F\xB0\xA1"),
+            Some(PreserveReason::DecodeOnly)
+        );
+    }
+
+    // 文字列を作らない突き合わせは、encoding_rs の一括の復号と比べるのと同じ結果になる (作業領域より長い入力・
+    // 不正バイト・途中で切れた入力・ISO-2022-JP の状態を含む)
+    #[test]
+    fn 作らない突き合わせは一括の復号と同じ() {
+        let mut x = 0x2545_F491_4F6C_DD1Du64;
+        let mut next = || {
+            x ^= x << 13;
+            x ^= x >> 7;
+            x ^= x << 17;
+            x
+        };
+        let parts: [&[u8]; 9] = [
+            b"a",
+            b"\x93\xFA",
+            b"\xED\x40",
+            b"\x8F\xB0\xA1",
+            b"\x1B$B$\"\x1B(B",
+            b"\x1B(I1",
+            b"\xFD",
+            b"\x81",
+            b"\xC6\xFC",
+        ];
+        for enc in [Encoding::ShiftJis, Encoding::EucJp, Encoding::Iso2022Jp] {
+            for round in 0..4000 {
+                // 作業領域 (512 バイト) をまたぐ長さも作る
+                let n = if round % 50 == 0 {
+                    400
+                } else {
+                    1 + (next() % 8) as usize
+                };
+                let mut b = Vec::new();
+                for _ in 0..n {
+                    b.extend_from_slice(parts[(next() % 9) as usize]);
+                }
+                let whole = enc
+                    .rs()
+                    .decode_without_bom_handling_and_without_replacement(&b)
+                    .map(std::borrow::Cow::into_owned);
+                match &whole {
+                    Some(s) => {
+                        assert!(decodes_to(enc, &b, s), "{enc:?} {b:02X?}");
+                        let mut longer = s.clone();
+                        longer.push('x');
+                        assert!(!decodes_to(enc, &b, &longer));
+                        if let Some(c) = s.chars().next_back() {
+                            assert!(!decodes_to(enc, &b, &s[..s.len() - c.len_utf8()]));
+                        }
+                    }
+                    None => assert!(!decodes_to(enc, &b, ""), "{enc:?} {b:02X?}"),
+                }
+            }
+        }
     }
 
     // 小分けにする位置は、どの入力でも文字の境界 (前後を別々に復号しても、通しの復号と同じ)

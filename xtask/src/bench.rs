@@ -1,7 +1,8 @@
 //! `cargo xtask bench`: ベンチの記録 (docs/09-testing-quality.md §5.2 / §6、docs/11 §1)。
 //!
 //! 記録するもの: BM-103a (キー入力の core 区間、ヘッドレス。診断用)、BM-104 / BM-202 (サイズ別オープンの時間とメモリ、実ファイル。診断用。
-//! 判定は基準機)、BM-205 (配布ビルドの exe のサイズ)。
+//! 判定は基準機。v0.4 から区分 B の箇所が密なファイル `-dense` も参考に)、BM-107e (保存のジョブの時間。v0.4 の参考)、
+//! BM-205 (配布ビルドの exe のサイズ)。
 //! BM-101a (起動から最初の Frame まで) は計測用ビルドの隠しフラグと `bench-trace` (記録の仕組み) が要るので M3 以降。
 //! `--env ENV-W1 --out DIR` を付けると基準機の記録になる: BM-106 と、実バイナリを `ConPTY` で駆動する BM-101b / 102b / 103b / 107
 //! (`evoeditor` の `bm_pty`) も測り、DIR にベンチ ID ごとの JSON と `summary.md` を書く (`bench_report`、09 §5.3)。
@@ -116,9 +117,10 @@ pub fn run_all(args: &[String]) -> Result<(), String> {
         results.push(l.to_owned());
     }
 
-    // BM-104 / BM-202 (サイズ別オープンの時間とメモリ。実ファイル、Windows)。S-02 の最終判定の材料 (09 §5.2)
+    // BM-104 / BM-202 (サイズ別オープンの時間とメモリ。実ファイル、Windows)。S-02 の最終判定の材料 (09 §5.2)。
+    // v0.4 から、区分 B の箇所が密なファイルの読込 (`-dense`) と、保存のジョブの時間 BM-107e (参考) も同じベンチが出す
     if cfg!(windows) {
-        println!("▶ BM-104 / BM-202 (サイズ別オープンの時間とメモリ)");
+        println!("▶ BM-104 / BM-202 / BM-107e (サイズ別オープンの時間とメモリ、保存のジョブ)");
         let mut cmd = Command::new("cargo");
         cmd.args([
             "bench",
@@ -135,7 +137,7 @@ pub fn run_all(args: &[String]) -> Result<(), String> {
         let out = run_capture(&mut cmd)?;
         let lines: Vec<&str> = out
             .lines()
-            .filter(|l| l.starts_with("{\"id\":\"BM-104"))
+            .filter(|l| l.starts_with("{\"id\":\"BM-104") || l.starts_with("{\"id\":\"BM-107e-"))
             .collect();
         if lines.is_empty() {
             return Err("BM-104 の結果の行が見つかりません".to_owned());

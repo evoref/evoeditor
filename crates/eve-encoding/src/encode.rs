@@ -10,7 +10,9 @@
 //! - **不正バイトのエスケープ** (`U+10FF00 + b`): `EscapePolicy::Restore` なら元のバイトに戻して書く (§8.3)。
 //! - **保持方式の記録** (v0.4、§8.6 E2・§8.7.1): `Encoder::write_preserved` が、記録の元のバイト列をそのまま書く。
 //!   確認 (i) (`preserved_matches`) と ISO-2022-JP の行頭の条件を口の中で確かめ、文字の通し番号を範囲の文字数だけ進める
-//!   (範囲の文字は E1 の照合の対象にせず、表現不能に数えない)。
+//!   (範囲の文字は E1 の照合の対象にせず、表現不能に数えない)。保存の計画が確認 (i) を済ませた記録は、確認を通った
+//!   ことを型で表す `PreservedBytes` を `Encoder::write_checked` に渡す (口では復号をやり直さず、文字コードと行頭の
+//!   条件だけを見る。`PreservedBytes` は確認 (i) を経ずには作れない)。
 
 use encoding_rs::EncoderResult;
 
@@ -132,6 +134,59 @@ pub fn preserved_matches(enc: Encoding, bytes: &[u8], text: &str) -> bool {
     }
 }
 
+/// 確認 (i) (`preserved_matches`) を通った、保持方式の記録の元のバイト列 (03 §8.6 E2)。[`PreservedBytes::check`] だけが
+/// 作る (確認を経ずには作れない) ので、[`Encoder::write_checked`] は受け取ったバイト列の復号をやり直さずに書ける
+/// (保存の計画が確かめた結果を、符号化器の口へ型で運ぶ。記録ごとに同じ復号を 2 回しない)。`Debug` は元のバイト列の
+/// 中身を出さない (本文由来のバイト列を log やパニックに出さない)。
+#[derive(Clone, Copy)]
+pub struct PreservedBytes<'a> {
+    enc: Encoding,
+    bytes: &'a [u8],
+    /// 確かめた文字列の文字数 (符号化器の文字の通し番号を進める数)。
+    chars: u64,
+    /// 確かめた文字列の UTF-8 のバイト数 (書く側が、今書く範囲の長さと合うことを確かめる)。
+    text_len: usize,
+}
+
+impl std::fmt::Debug for PreservedBytes<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PreservedBytes")
+            .field("enc", &self.enc)
+            .field("bytes", &self.bytes.len())
+            .field("chars", &self.chars)
+            .field("text_len", &self.text_len)
+            .finish()
+    }
+}
+
+impl<'a> PreservedBytes<'a> {
+    /// 確認 (i): `bytes` を `enc` の初期状態から復号すると、不正バイト無しにちょうど `text` になり、初期状態で終わるとき
+    /// だけ作る (`preserved_matches` と同じ条件)。
+    #[must_use]
+    pub fn check(enc: Encoding, bytes: &'a [u8], text: &str) -> Option<PreservedBytes<'a>> {
+        preserved_matches(enc, bytes, text).then(|| PreservedBytes {
+            enc,
+            bytes,
+            chars: text.chars().count() as u64,
+            text_len: text.len(),
+        })
+    }
+
+    /// 確かめた文字列の UTF-8 のバイト数。この型が保証するのは「元のバイト列を復号すると、確かめた文字列になる」
+    /// までで、その文字列が「今書く範囲の文字列」であることは呼び出し側が保つ。書く側は、範囲の長さがこの値と合う
+    /// ことを確かめる (確かめた結果を別の範囲に使い回す誤りへの備え)。
+    #[must_use]
+    pub fn text_len(&self) -> usize {
+        self.text_len
+    }
+
+    /// 元のバイト列。
+    #[must_use]
+    pub fn bytes(&self) -> &'a [u8] {
+        self.bytes
+    }
+}
+
 fn reject(report: &mut EncodeReport, idx: u64, ch: char, kind: UnmappableKind) {
     report.push(Unmappable {
         char_index: idx,
@@ -248,12 +303,20 @@ impl Encoder {
     /// E1 の照合の対象にせず、表現不能に数えない)。書かないときは何もせずに偽を返す (呼び出し側は `text` を `encode`
     /// で符号化する)。ISO-2022-JP の「範囲が行の内容の全体である」ことは、行の終わりを見られる呼び出し側が確かめる。
     pub fn write_preserved(&mut self, text: &str, bytes: &[u8], out: &mut Vec<u8>) -> bool {
+        PreservedBytes::check(self.enc, bytes, text).is_some_and(|p| self.write_checked(&p, out))
+    }
+
+    /// 確認 (i) を通った元のバイト列 (`PreservedBytes::check` で作ったもの) を、そのまま `out` に追記する
+    /// (`write_preserved` から確認 (i) の復号を除いたもの。確認は型が保証する)。書くのは、確かめた文字コードがこの
+    /// 符号化器の文字コードと同じで、ISO-2022-JP では符号化器が行頭にあるときだけ。書いたら文字の通し番号を確かめた
+    /// 文字列の文字数だけ進めて真を返す。書かないときは何もせずに偽を返す (呼び出し側は文字列を `encode` で符号化する)。
+    pub fn write_checked(&mut self, p: &PreservedBytes<'_>, out: &mut Vec<u8>) -> bool {
         let at_line_start = self.enc != Encoding::Iso2022Jp || self.line.is_empty();
-        if !at_line_start || !preserved_matches(self.enc, bytes, text) {
+        if p.enc != self.enc || !at_line_start {
             return false;
         }
-        out.extend_from_slice(bytes);
-        self.chars_done += text.chars().count() as u64;
+        out.extend_from_slice(p.bytes);
+        self.chars_done += p.chars;
         true
     }
 
@@ -368,6 +431,11 @@ impl Encoder {
         }
         let start = out.len();
         let bad = rs_encode(self.enc, run, true, out);
+        // 表現不能が無く、出力を復号すると元に戻る区間 (ほとんどがこれ) は、照合の期待値と復号の結果の文字列を作らない
+        // (区分 B の箇所が密な文書の保存は、記録の間の短い区間ごとにここを通る。報告するものが無いので結果は同じ)
+        if bad.is_empty() && decodes_to(self.enc, &out[start..], run) {
+            return;
+        }
         // 表現不能 (encoding_rs が返したもの) と、照合で見つけた黙示の置換を、本文の順に合わせて報告する
         // (報告の先頭は「最初の表現不能の文字」として UI が使う。docs/review/v0.3-findings.md の SAF-47)
         // 文字の通し番号は、前の表現不能の文字からの差分だけを数える (表現不能ごとに先頭から数えない、SAF-22)
@@ -426,6 +494,10 @@ impl Encoder {
         first_idx: u64,
     ) -> Vec<Unmappable> {
         let mut found = Vec::new();
+        // 復号すると期待値に戻る (黙示の置換が無い) なら、復号の結果の文字列を作らない
+        if decodes_to(self.enc, bytes, expected) {
+            return found;
+        }
         let mut d = Decoder::new(self.enc, false);
         let mut got = String::new();
         d.decode(bytes, true, &mut got);
@@ -489,6 +561,17 @@ impl Encoder {
         out: &mut Vec<u8>,
         report: &mut EncodeReport,
     ) {
+        // エスケープ文字 (U+10FF00..。UTF-8 の先頭バイトが 0xF4) を含まない行で、表現不能が無く、出力を復号すると元に
+        // 戻るとき (ほとんどの行) は、下の照合のための文字列を作らない (報告するものが無いので結果は同じ)。そうでなければ
+        // 出力を戻して、下の手順でやり直す
+        if !line.as_bytes().contains(&0xF4) {
+            let bytes_start = out.len();
+            let bad = rs_encode(Encoding::Iso2022Jp, line, true, out);
+            if bad.is_empty() && decodes_to(Encoding::Iso2022Jp, &out[bytes_start..], line) {
+                return;
+            }
+            out.truncate(bytes_start);
+        }
         // エスケープ文字 (不正バイト) は状態付き符号化では元のバイトに戻せない: 表現不能
         let mut clean = String::with_capacity(line.len());
         let mut kept: Vec<(usize, char)> = Vec::new(); // clean の各文字の元の位置
@@ -855,6 +938,100 @@ mod tests {
         let mut out = Vec::new();
         assert!(e.write_preserved("", b"\x1B(B", &mut out));
         assert_eq!(out, b"\x1B(B");
+    }
+
+    // 確認 (i) を通ったことを型で運ぶ口 (`PreservedBytes` / `write_checked`): 確認 (i) に合わないバイト列からは作れず、
+    // 作ったものは別の文字コードの符号化器と、行の途中の ISO-2022-JP の符号化器には書けない
+    #[test]
+    fn 確認を通った記録だけを書き_文字コードと行頭を見る() {
+        assert!(PreservedBytes::check(Encoding::ShiftJis, b"\xFA\x55", "￢").is_none());
+        assert!(PreservedBytes::check(Encoding::ShiftJis, b"\xFA", "￢").is_none());
+        assert!(PreservedBytes::check(Encoding::ShiftJis, b"", "").is_none());
+        assert!(PreservedBytes::check(Encoding::Utf8, b"a", "a").is_none());
+        assert!(PreservedBytes::check(Encoding::Iso2022Jp, b"\x1B(I1", "ｱ").is_none());
+        let p = PreservedBytes::check(Encoding::ShiftJis, b"\xFA\x54\xFA\x54", "￢￢")
+            .expect("確認 (i) に合う");
+        assert_eq!(p.bytes(), b"\xFA\x54\xFA\x54");
+        assert!(!format!("{p:?}").contains("250"), "Debug は中身を出さない");
+        // 別の文字コードの符号化器には書かない (EUC-JP の符号化器に Shift_JIS で確かめたもの)
+        let mut e = Encoder::new(Encoding::EucJp, false, EscapePolicy::Restore);
+        let mut out = Vec::new();
+        assert!(!e.write_checked(&p, &mut out));
+        assert_eq!((out.len(), e.chars_done()), (0, 0));
+        // 同じ文字コードなら、そのまま書いて通し番号を文字数だけ進める (`write_preserved` と同じ出力)
+        let mut e = Encoder::new(Encoding::ShiftJis, false, EscapePolicy::Restore);
+        let (mut out, mut rep) = (Vec::new(), EncodeReport::default());
+        e.encode("a", &mut out, &mut rep);
+        assert!(e.write_checked(&p, &mut out));
+        e.encode("😀", &mut out, &mut rep);
+        e.finish(&mut out, &mut rep);
+        assert_eq!(out, b"a\xFA\x54\xFA\x54");
+        assert_eq!(rep.recorded[0].char_index, 3);
+        // ISO-2022-JP: 行の途中では書かない
+        let q = PreservedBytes::check(Encoding::Iso2022Jp, b"\x1B$@$\"\x1B(B", "あ")
+            .expect("確認 (i) に合う");
+        let mut e = Encoder::new(Encoding::Iso2022Jp, false, EscapePolicy::Reject);
+        let (mut out, mut rep) = (Vec::new(), EncodeReport::default());
+        e.encode("x", &mut out, &mut rep);
+        assert!(!e.write_checked(&q, &mut out));
+        e.encode("\n", &mut out, &mut rep);
+        assert!(e.write_checked(&q, &mut out));
+        e.finish(&mut out, &mut rep);
+        assert_eq!(out, b"x\n\x1B$@$\"\x1B(B");
+    }
+
+    // 照合の速い経路 (表現不能が無く、出力を復号すると戻る区間は文字列を作らない) が入っても、出力と報告は区切り方に
+    // 依らない (黙示の置換・表現不能・エスケープ・外字が混ざる文字列を、一括と 1 文字ずつで符号化して比べる。短い区間ほど
+    // 速い経路を多く通る)。黙示の置換が速い経路で落ちないこと (報告の中身) は、上の個別の試験が見る
+    #[test]
+    fn 照合の速い経路でも報告は同じ() {
+        let pieces = [
+            "a",
+            "日本",
+            "￢",
+            "纊",
+            "−",
+            "¥",
+            "ｱ",
+            "丂",
+            "😀",
+            "\u{E000}",
+            "\n",
+            "\u{10FF81}",
+        ];
+        let mut x = 0x9E37_79B9_7F4A_7C15u64;
+        let mut next = || {
+            x ^= x << 13;
+            x ^= x >> 7;
+            x ^= x << 17;
+            x
+        };
+        for enc in [Encoding::ShiftJis, Encoding::EucJp, Encoding::Iso2022Jp] {
+            let policy = if enc.is_stateful() {
+                EscapePolicy::Reject
+            } else {
+                EscapePolicy::Restore
+            };
+            for _ in 0..300 {
+                let n = 1 + (next() % 20) as usize;
+                let text: String = (0..n).map(|_| pieces[(next() % 12) as usize]).collect();
+                let (whole, rw) = {
+                    let mut e = Encoder::new(enc, false, policy);
+                    let (mut o, mut r) = (Vec::new(), EncodeReport::default());
+                    e.encode(&text, &mut o, &mut r);
+                    e.finish(&mut o, &mut r);
+                    (o, r)
+                };
+                // 文字ごとに区切って渡しても同じ (区間が短いほど速い経路を多く通る)
+                let mut e = Encoder::new(enc, false, policy);
+                let (mut o, mut r) = (Vec::new(), EncodeReport::default());
+                for (i, c) in text.char_indices() {
+                    e.encode(&text[i..i + c.len_utf8()], &mut o, &mut r);
+                }
+                e.finish(&mut o, &mut r);
+                assert_eq!((&o, &r), (&whole, &rw), "{enc:?} {text:?}");
+            }
+        }
     }
 
     #[test]

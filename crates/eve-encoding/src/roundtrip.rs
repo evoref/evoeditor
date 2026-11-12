@@ -21,6 +21,7 @@ use crate::encode::{EncodeReport, Encoder, EscapePolicy};
 use crate::encoding::Encoding;
 use crate::preserve::{
     self, Collector, IsoState, PreserveLimits, PreserveReason, PreserveState, PreservedRecords,
+    ReencodeMemo,
 };
 
 /// 1 行として検査する最大の長さ (バイト)。ISO-2022-JP だけに使う (`Shift_JIS` / EUC-JP は小分けにして調べる)。
@@ -166,6 +167,8 @@ pub struct RoundtripChecker {
     pub(crate) piece_limit: usize,
     /// 記録を集める (集めないときは `None`)。
     rec: Option<Collector>,
+    /// `Shift_JIS` / EUC-JP で記録を集めるときの、1 文字の再符号化の結果の覚え。
+    memo: ReencodeMemo,
     /// ISO-2022-JP で記録を集めるときの通しの状態。
     iso: Option<IsoTrack>,
 }
@@ -241,6 +244,7 @@ impl RoundtripChecker {
             long: None,
             piece_limit: PIECE_LIMIT,
             rec: None,
+            memo: ReencodeMemo::new(),
             iso: None,
         }
     }
@@ -396,6 +400,15 @@ impl RoundtripChecker {
 
     /// 初期状態から復号する (不正バイトは PUA にエスケープする。本文の復号と同じ)。
     fn decode(&self, bytes: &[u8]) -> String {
+        // 不正バイトの無い行 (ほとんどがこれ) は、encoding_rs で一度に復号する (行ごとに `Decoder` を作らない。
+        // 不正バイトが無ければ `Decoder` と同じ結果)
+        if let Some(s) = self
+            .enc
+            .rs()
+            .decode_without_bom_handling_and_without_replacement(bytes)
+        {
+            return s.into_owned();
+        }
         let mut d = Decoder::new(self.enc, false);
         let mut text = String::new();
         d.decode(bytes, true, &mut text);
@@ -445,7 +458,7 @@ impl RoundtripChecker {
         let Some(rec) = self.rec.as_mut().filter(|r| r.active()) else {
             return;
         };
-        let ok = preserve::collect_chars(rec, enc, bytes, text, line_no, col_base);
+        let ok = preserve::collect_chars(rec, &mut self.memo, enc, bytes, text, line_no, col_base);
         debug_assert!(ok, "文字ごとの突き合わせが食い違った: {enc:?} {bytes:02X?}");
         if !ok {
             // 起きないはず。安全側に倒して記録を全部捨てる (「保持なし」になり、保存の前に確認が出る)
