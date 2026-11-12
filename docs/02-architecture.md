@@ -1598,7 +1598,9 @@ enum JobResult {                   // #[non_exhaustive]
     Saved        { report: SaveReport },
                                                                             // 保存点の履歴ノード・保存先のパスは core がジョブ表 (Pending::Save) に持つ。
                                                                             // 保存後の stamp は report.new_stamp
-    Unmappable   { total: u64, recorded: Vec<Unmappable> /*先頭の位置*/, encoding: Encoding }, // 保存の表現不能 (03 §9.3 手順 5b)。何も書いていない
+    Unmappable   { total: u64, recorded: Vec<Unmappable> /*先頭の位置*/,
+                   escapes: u64 /*total のうち 03 §8.3 のエスケープ文字の数。recorded に限らず全件で数える。1 以上なら E3 の選択肢 1・2 を出さない (03 §8.6)*/,
+                   encoding: Encoding }, // 保存の表現不能 (03 §9.3 手順 5b)。何も書いていない
     // ── metadata の照合 (io) ──
     Meta         { meta: FileMeta, stamp: FileStamp },          // MetaPurpose のいずれか (未編集の上書き保存の照合、名前を付けて保存の保存先、フォーカス復帰時の確認 (v0.2))
     // ── E3 の置換 (03 §8.6) ──

@@ -69,6 +69,9 @@ pub struct EncodeReport {
     pub recorded: Vec<Unmappable>,
     /// 総数。
     pub total: u64,
+    /// 総数のうち、§8.3 の不正バイトのエスケープ文字 (`U+10FF00 + b`) の数。先頭 `MAX_RECORDED` 件に限らず全件で
+    /// 数える (03 §8.6 の「E3 の選択肢」の条件は、記録した先頭の件だけでなく全件で判定する)。
+    pub escapes: u64,
 }
 
 impl EncodeReport {
@@ -78,6 +81,9 @@ impl EncodeReport {
 
     fn push(&mut self, u: Unmappable) {
         self.total += 1;
+        if unescape_char(u.ch).is_some() {
+            self.escapes += 1;
+        }
         if self.recorded.len() < MAX_RECORDED {
             self.recorded.push(u);
         }
@@ -856,5 +862,18 @@ mod tests {
         let t = "😀".repeat(150);
         let (_, r) = all(Encoding::ShiftJis, &t);
         assert_eq!((r.recorded.len(), r.total), (100, 150));
+        assert_eq!(r.escapes, 0);
+    }
+
+    #[test]
+    fn エスケープ文字の数は記録した百件より後ろも数える() {
+        // 絵文字 101 個の後ろにエスケープ文字が 2 つ (記録した先頭 100 件には入らない)
+        let t = format!("{}\u{10FF80}x\u{10FF9A}", "😀".repeat(101));
+        let mut e = Encoder::new(Encoding::ShiftJis, false, EscapePolicy::Reject);
+        let (mut out, mut r) = (Vec::new(), EncodeReport::default());
+        e.encode(&t, &mut out, &mut r);
+        e.finish(&mut out, &mut r);
+        assert_eq!((r.recorded.len(), r.total, r.escapes), (100, 103, 2));
+        assert!(r.recorded.iter().all(|u| unescape_char(u.ch).is_none()));
     }
 }

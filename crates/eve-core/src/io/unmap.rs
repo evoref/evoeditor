@@ -8,6 +8,7 @@ use eve_encoding::{EncodeReport, Encoder, Encoding, EscapePolicy};
 use eve_text::{ByteOff, ByteRange, ChangeSet, Edit, Snapshot, TextRead};
 
 use crate::document::PreservedMap;
+use crate::io::unmappable::is_escape_char;
 use crate::jobs::cancel::CancelToken;
 
 /// 一覧に載せる対象の上限 (03 §8.6 の「置換の一覧」)。
@@ -128,7 +129,9 @@ pub fn build_replacement(
         if i % 65_536 == 0 && cancel.is_cancelled() {
             return Err(());
         }
-        if ch.is_ascii() {
+        // §8.3 のエスケープ文字 (不正バイト) は置換の対象にしない (03 §8.6 の置換先。`?` にすると元のバイトが黙って
+        // 失われる)。エスケープ文字を含む文書には選択肢 2 自体を出さないので、ここは二重の防御
+        if ch.is_ascii() || is_escape_char(ch) {
             continue;
         }
         // 元のバイト列を書く範囲の文字は対象にしない (範囲は昇順で重ならない)
@@ -212,5 +215,65 @@ mod tests {
         let escape = EscapePolicy::Reject;
         assert!(is_unmappable(Encoding::ShiftJis, escape, '😀'));
         assert!(!is_unmappable(Encoding::ShiftJis, escape, 'あ'));
+        // エスケープ文字は別の文字コードへ変換するとき表現不能 (E4)
+        assert!(is_unmappable(Encoding::ShiftJis, escape, '\u{10FF80}'));
+    }
+
+    #[test]
+    fn エスケープ文字は置換の対象にしない() {
+        // 先頭 100 件の内と外の両方にエスケープ文字を置く
+        let body = format!(
+            "\u{10FF9A}a{}\u{10FF80}😀\u{10FF0A}",
+            "😀".repeat(MAX_TARGETS + 1)
+        );
+        let text = eve_text::Text::from(body.as_str());
+        let snap = text.snapshot();
+        let (cs, targets, counts) = build_replacement(
+            &snap,
+            Encoding::ShiftJis,
+            EscapePolicy::Reject,
+            &PreservedMap::new(),
+            &CancelToken::new(),
+        )
+        .expect("取り消していない")
+        .expect("絵文字は対象");
+        // 対象は絵文字だけ (一覧にも件数にもエスケープ文字を入れない)
+        assert_eq!(
+            counts,
+            ReplaceCounts {
+                kana: 0,
+                compat: 0,
+                question: MAX_TARGETS as u64 + 2,
+            }
+        );
+        assert_eq!(targets.len(), MAX_TARGETS);
+        assert!(targets.iter().all(|t| t.ch == '😀' && t.replacement == '?'));
+        // ChangeSet が書き換えるのは絵文字だけ (エスケープ文字の範囲に触れない)
+        let changed: Vec<String> = cs
+            .changed_ranges()
+            .map(|(old, _)| body[old.start.0..old.end.0].to_owned())
+            .collect();
+        assert!(
+            changed.iter().all(|s| s.chars().all(|c| c == '😀')),
+            "{changed:?}"
+        );
+        assert_eq!(
+            cs.len_after(),
+            body.len() - (MAX_TARGETS + 2) * ('😀'.len_utf8() - 1)
+        );
+    }
+
+    #[test]
+    fn エスケープ文字だけなら対象は無い() {
+        let text = eve_text::Text::from("a\u{10FF80}b");
+        let r = build_replacement(
+            &text.snapshot(),
+            Encoding::EucJp,
+            EscapePolicy::Reject,
+            &PreservedMap::new(),
+            &CancelToken::new(),
+        )
+        .expect("取り消していない");
+        assert!(r.is_none());
     }
 }
