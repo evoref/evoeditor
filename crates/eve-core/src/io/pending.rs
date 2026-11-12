@@ -181,6 +181,11 @@ impl EditorState {
             }
             return;
         }
+        // 先行表示の先頭 (03 §9.2.1) も終わりではない。M25 の (1) ではまだ表示に使わずに捨てる (待ちの記録は残す。
+        // 表示の切り替え・`LoadState::Partial` は M25 の (2))
+        if matches!(r, JobResult::Partial { .. }) {
+            return;
+        }
         // 検索は途中経過が複数届く。待ちの記録は終わりまで残す
         if matches!(self.io.pending.get(&job), Some(Pending::Search)) {
             self.on_search_result(JobOutput { job, body: r });
