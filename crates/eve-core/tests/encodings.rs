@@ -1,12 +1,36 @@
 //! 文字コードごとの読み書きのシナリオ (docs/03 §8、01 の FR-108 / 109 / 111 / 112 / 115、NFR-303 / 304)。
 //! 保存先は `MemFs`、ジョブは `ManualJobSpawner`。
 
-use eve_core::{Args, CommandResult, Document, Encoding, FsPath, OpenOptions, ReadOnlyReason};
+use eve_core::{
+    Args, CommandResult, Document, Encoding, FsPath, OpenOptions, Origin, ReadOnlyReason, Tick,
+    Transaction,
+};
 use eve_testkit::Harness;
+use eve_text::{ByteOff, ByteRange, ChangeSet, Edit};
 
 /// 起動していない Harness (文書は `open` / `open_as` で開く)。
 fn env() -> Harness {
     Harness::builder().defer_start().build()
+}
+
+/// 文書の先頭に `text` をそのまま入れる (挿入の入口の規則 (03 §8.3.1) を通さない試験だけの近道)。貼り付け・入力では
+/// 外から来た `U+10FF00..` が `<U+10FFNN>` になるので (v0.4 の M23)、エスケープ文字が不正バイトの無い文書の本文に残る
+/// 状況 (違う文字コードで保存した後の Undo・文字コードの違う復旧など) を短く作るのに使う。
+fn inject_start(h: &mut Harness, text: &str) {
+    let id = h.doc_id();
+    let st = h.editor.state_mut();
+    let d = st.document(id).unwrap();
+    let start = ByteOff(0);
+    let cs = ChangeSet::from_sorted_edits(
+        &d.snapshot(),
+        [Edit {
+            range: ByteRange::new(start, start),
+            insert: text.into(),
+        }],
+    )
+    .unwrap();
+    st.apply_transaction(id, Transaction::new(cs, Origin::Paste, Tick(0)))
+        .unwrap();
 }
 
 fn run(h: &mut Harness, id: &str, args: Args) -> CommandResult {
@@ -929,13 +953,14 @@ fn 不正バイトを含む文書を同じ文字コードで別名保存する�
 }
 
 #[test]
-fn 不正バイトの無い文書に貼ったエスケープ文字は_元のバイトに戻さず表現不能として止める() {
+fn 不正バイトの無い文書の本文にあるエスケープ文字は_元のバイトに戻さず表現不能として止める() {
     let mut s = env();
     s.fs.add_file("/w/b.txt", b"xyz\n");
     open(&mut s, "/w/b.txt");
     assert_eq!(doc(&s).format.invalid_bytes, 0);
-    // 他の文書からエスケープ文字 (U+10FF80 = 0x80 の印) を貼り付けた
-    s.text("\u{10FF80}");
+    // エスケープ文字 (U+10FF80 = 0x80 の印) が本文にある。v0.4 の M23 から、貼り付け・入力では入らない
+    // (`<U+10FF80>` の文字列になる) ので、規則を通さずに入れる
+    inject_start(&mut s, "\u{10FF80}");
     save(&mut s);
     assert_eq!(s.overlay(), "dialog", "表現不能の確認が出る");
     assert_eq!(
@@ -961,12 +986,13 @@ fn choice_keys(s: &mut Harness) -> Vec<Option<char>> {
         .expect("確認が出ている")
 }
 
-/// 空の UTF-8 の文書に `pasted` を貼り、`file.set_encoding` で `Shift_JIS` にして保存する。
-fn paste_and_save_as_sjis(pasted: &str) -> Harness {
+/// 空の UTF-8 の文書の本文に `text` を (挿入の入口の規則を通さずに) 入れ、`file.set_encoding` で `Shift_JIS` にして
+/// 保存する。
+fn inject_and_save_as_sjis(text: &str) -> Harness {
     let mut s = env();
     s.fs.add_file("/w/a.txt", b"\n");
     open_as(&mut s, "/w/a.txt", Encoding::Utf8);
-    s.paste(pasted);
+    inject_start(&mut s, text);
     run(
         &mut s,
         "file.set_encoding",
@@ -980,7 +1006,7 @@ fn paste_and_save_as_sjis(pasted: &str) -> Harness {
 // verifies: NFR-304
 #[test]
 fn 表現不能の_101_件目より後ろにエスケープ文字があっても_選択肢はキャンセルだけ() {
-    let mut s = paste_and_save_as_sjis(&format!("{}\u{10FF80}", "😀".repeat(101)));
+    let mut s = inject_and_save_as_sjis(&format!("{}\u{10FF80}", "😀".repeat(101)));
     assert_eq!(s.overlay(), "dialog", "E3 の選択肢が出る");
     let keys = choice_keys(&mut s);
     assert_eq!(keys.len(), 1, "キャンセルだけ: {keys:?}");
@@ -999,7 +1025,7 @@ fn 表現不能の_101_件目より後ろにエスケープ文字があっても
 
 #[test]
 fn 表現不能の先頭にエスケープ文字があれば_選択肢はキャンセルだけ() {
-    let mut s = paste_and_save_as_sjis(&format!("\u{10FF80}{}", "😀".repeat(101)));
+    let mut s = inject_and_save_as_sjis(&format!("\u{10FF80}{}", "😀".repeat(101)));
     assert_eq!(s.overlay(), "dialog");
     assert_eq!(choice_keys(&mut s).len(), 1);
     assert_eq!(s.fs.read("/w/a.txt").unwrap(), b"\n");
@@ -1007,7 +1033,7 @@ fn 表現不能の先頭にエスケープ文字があれば_選択肢はキャ�
 
 #[test]
 fn エスケープ文字が無ければ_表現不能が_101_件以上でも_置換して保存を出し_全件を置換する() {
-    let mut s = paste_and_save_as_sjis(&"😀".repeat(101));
+    let mut s = inject_and_save_as_sjis(&"😀".repeat(101));
     let keys = choice_keys(&mut s);
     assert_eq!(
         keys.len(),

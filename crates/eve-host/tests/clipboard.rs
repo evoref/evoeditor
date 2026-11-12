@@ -256,6 +256,26 @@ fn 取得の失敗は内部レジスタを貼り付ける() {
     assert!(e.screen().contains("xyxy"), "{}", e.screen());
 }
 
+// 書込に失敗した後も、照合の規則は変えない: システムのクリップボードに残っていた内容 (`SYS`) が届けば、それが入る
+// (v0.3 と同じ。03 §8.3.1 の「届かなかったとき・書き出しに失敗したとき」、05 §8.1。失敗は `msg.clipboard.fallback` で
+// 知らせ済み)
+// verifies: NFR-304
+#[test]
+fn 書込の失敗の後の貼り付けは届いたシステムの内容を入れる() {
+    let mut e = env();
+    e.start();
+    *e.fake.write_error.lock().unwrap() = Some(ClipboardFailure::Unavailable);
+    e.text("xy");
+    e.key(KeyCode::Char('a'), Modifiers::CTRL);
+    e.key(KeyCode::Char('c'), Modifiers::CTRL);
+    assert!(e.pump_worker(), "失敗の報告が届く");
+    e.key(KeyCode::End, Modifiers::NONE);
+    e.key(KeyCode::Char('v'), Modifiers::CTRL);
+    assert!(e.pump_worker(), "取得の結果 (SYS) が届く");
+    let screen = e.screen();
+    assert!(screen.contains("xySYS"), "{screen}");
+}
+
 // verifies: AC-FR-205-4
 #[test]
 fn 上限を超える全選択のコピーは文字列化せず内部レジスタだけに入れて知らせる() {

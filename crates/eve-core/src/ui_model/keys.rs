@@ -31,6 +31,11 @@ pub(crate) const INFO_OPEN_NEW_FILE: &str = "info.open.new_file";
 pub(crate) const INFO_OPEN_PRESERVE_OFF: &str = "info.open.preserve_off";
 pub(crate) const INFO_OPEN_PRESERVE_PARTIAL: &str = "info.open.preserve_partial";
 pub(crate) const INFO_OPEN_REDETECTED: &str = "info.open.redetected";
+pub(crate) const INFO_PASTE_AS_BYTES: &str = "info.paste.as_bytes";
+pub(crate) const INFO_PASTE_ESCAPE_AS_TEXT: &str = "info.paste.escape_as_text";
+pub(crate) const INFO_PASTE_NOTATION_AS_TEXT: &str = "info.paste.notation_as_text";
+pub(crate) const INFO_PASTE_PUA_AS_TEXT: &str = "info.paste.pua_as_text";
+pub(crate) const INFO_PASTE_SEARCH_NOTATION: &str = "info.paste.search_notation";
 pub(crate) const INFO_READ_ONLY_RELEASED: &str = "info.read_only.released";
 pub(crate) const INFO_READ_ONLY_RELEASED_INVALID_BYTES: &str =
     "info.read_only.released_invalid_bytes";
@@ -221,7 +226,7 @@ pub(crate) const UI_TOO_SMALL: &str = "ui.too_small";
 
 /// すべての定数 (キーの順。試験に使う)。
 #[cfg(test)]
-const ALL: [&str; 201] = [
+const ALL: [&str; 206] = [
     HINT_UI_CANCEL,
     INFO_APP_RELEASE_SUMMARY,
     INFO_APP_UPDATED,
@@ -250,6 +255,11 @@ const ALL: [&str; 201] = [
     INFO_OPEN_PRESERVE_OFF,
     INFO_OPEN_PRESERVE_PARTIAL,
     INFO_OPEN_REDETECTED,
+    INFO_PASTE_AS_BYTES,
+    INFO_PASTE_ESCAPE_AS_TEXT,
+    INFO_PASTE_NOTATION_AS_TEXT,
+    INFO_PASTE_PUA_AS_TEXT,
+    INFO_PASTE_SEARCH_NOTATION,
     INFO_READ_ONLY_RELEASED,
     INFO_READ_ONLY_RELEASED_INVALID_BYTES,
     INFO_READ_ONLY_SET,
