@@ -17,6 +17,7 @@
 use regex_syntax::ast::{self, Ast};
 use regex_syntax::hir::{self, Hir, HirKind};
 
+use super::limits::SEARCH_HEAVY_REPEAT;
 use super::matcher::QueryError;
 
 /// AST から HIR への翻訳の誤り。
@@ -49,6 +50,11 @@ pub(super) struct Rewritten {
     pub max_len: Option<usize>,
     /// 行の終端を明示した書き方 (`\n`・`\r`・要素として `\n` / `\r` を書いたクラス) を含む。
     pub explicit_line_end: bool,
+    /// 行の経路では文書全体の意味にならないアサーション (`\A`・`\z`・`(?-m)` の `^` / `$`・`(?-R)` の `^` / `$`) を含む
+    /// (k が 0 でも行の窓で探す、§12.3.1)。
+    pub doc_anchor: bool,
+    /// 重い検索語 (上限のある繰り返しの上限を、入れ子は掛け合わせて、`SEARCH_HEAVY_REPEAT` を超える。§12.3.1 の「重い検索語」)。
+    pub heavy: bool,
 }
 
 /// 検索語 `pattern` を書き換える。`insensitive` は大小を区別しない (`(?i)` の初期値)、`sugar` は `\n` の糖衣
@@ -93,12 +99,42 @@ pub(super) fn rewrite(
                 .map_err(regex_syntax::Error::from)
         })
         .map_err(original_error)?;
+    // `\A`・`\z`・`(?-m)` の `^` / `$` (`Start` / `End`) と、`(?-R)` の `^` / `$` (CRLF を行の終端と見ない `StartLF` / `EndLF`)
+    // は、行ごとに切り出すと行の終端 (CR・CRLF・文書の外) を文字列の端と見るので、文書全体の意味にならない
+    let looks = hir.properties().look_set();
+    let doc_anchor = [
+        hir::Look::Start,
+        hir::Look::End,
+        hir::Look::StartLF,
+        hir::Look::EndLF,
+    ]
+    .into_iter()
+    .any(|l| looks.contains(l));
     Ok(Rewritten {
         lines: line_ends(&hir).map_or(LineSpan::Unbounded, LineSpan::Bounded),
         max_len: hir.properties().maximum_len(),
         pattern: printed,
         explicit_line_end: w.explicit,
+        doc_anchor,
+        heavy: max_repeat(&hir, 1) > SEARCH_HEAVY_REPEAT,
     })
+}
+
+/// 上限のある繰り返しの上限の最大 (入れ子は掛け合わせる。`outer` は外側の上限の積)。上限の無い繰り返し (`*`・`+`) は掛けない。
+fn max_repeat(h: &Hir, outer: u64) -> u64 {
+    match h.kind() {
+        HirKind::Repetition(r) => {
+            let here = r.max.map_or(outer, |m| outer.saturating_mul(u64::from(m)));
+            here.max(max_repeat(&r.sub, here))
+        }
+        HirKind::Capture(c) => max_repeat(&c.sub, outer),
+        HirKind::Concat(v) | HirKind::Alternation(v) => v
+            .iter()
+            .map(|x| max_repeat(x, outer))
+            .max()
+            .unwrap_or(outer),
+        _ => outer,
+    }
 }
 
 /// `regex` の構文エラーと同じ形の文言 (複数行) から、原因の行だけを取る。

@@ -59,8 +59,13 @@ pub use jobs::{
     ConfirmAsk, EscapeMergeApproval, EscapeMergeAt, JobError, JobKind, JobOutput, JobPorts,
     JobRequest, JobResult, JobSpawner, MetaPurpose, OpenNotes, Ports, SaveStrategy, run_job,
 };
+/// `fuzz_regex_search` の本体 (docs/09 §3.3)。cargo-fuzz のターゲットと、CI の proptest が同じ関数を使う。
+#[doc(hidden)]
+pub use search::fuzzing as search_fuzzing;
 pub use search::{
-    Case, LineSpan, Matcher, QueryError, QueryPlan, SearchJob, SearchQuery, build_replace_all,
-    find_next, replacement_for, run_search, scan_bytes, unescape_replacement,
+    Case, LineSpan, Matcher, QueryError, QueryPlan, SEARCH_CONCAT_MAX_BYTES,
+    SEARCH_WINDOW_CORE_BYTES, ScanCtx, ScanEnd, SearchInternal, SearchJob, SearchQuery,
+    build_replace_all, find_next, replacement_for, run_search, scan_bytes, scan_range,
+    unescape_replacement,
 };
 pub use time::{Clock, Millis, Tick};

@@ -1,7 +1,7 @@
 # 夜間ジョブ (docs/09-testing-quality.md §6.1 / §6.3、docs/11 §1)。毎日 UTC 18:00 (JST 03:00) と手動 (workflow_dispatch)。
 # `schedule` は既定ブランチのワークフロー定義で動くので、ここは薄いトリガだけ: 対象のブランチ (変数 NIGHTLY_REF、未設定なら develop。
 # 手動実行では引数 ref で上書き) をチェックアウトし、そのコードの `cargo xtask nightly` を入口にする (手順の中身は xtask にある)。
-# 中身: fuzz_decode と fuzz_editor (v0.2。各 20 分)・proptest 拡張 (PROPTEST_CASES=10000)・cargo audit / deny advisories (本体と fuzz/)・coverage (報告のみ)・
+# 中身: fuzz の 5 つのターゲット (v0.4。各 16 分、合計 80 分。ターゲットを絞らないときは xtask が合計 80 分に抑える)・proptest 拡張 (PROPTEST_CASES=10000)・cargo audit / deny advisories (本体と fuzz/)・coverage (報告のみ)・
 # 保存のクラッシュ一貫性 (v0.2。LazyFS で電源断を模擬する、NFR-301)・長時間の soak (v0.2。BM-306 を 60 分。観察のみ、NFR-306)。
 # fuzz のクラッシュ入力は `.github/fuzz-recipients.txt` の公開鍵で age により暗号化したものだけを artifact に上げる (平文は消す)。
 name: nightly
@@ -16,7 +16,7 @@ on:
         required: false
         default: ""
       fuzz_seconds:
-        description: "fuzz の各ターゲットの時間 (秒。既定 1200)。リリース前の 1 時間の fuzz は 3600 (docs/09 §8.2)"
+        description: "fuzz の各ターゲットの時間 (秒。既定 960。ターゲットを絞らないときは合計 80 分に抑える)。リリース前の 1 時間の fuzz は 3600 で only の fuzz:<ターゲット> と一緒に (docs/09 §8.2)"
         required: false
         default: "600"
       only:
@@ -124,9 +124,9 @@ jobs:
         run: |
           only="${{ inputs.only }}"
           if [ -n "$only" ]; then
-            cargo xtask nightly --fuzz-seconds "${{ inputs.fuzz_seconds || '1200' }}" --soak-minutes "${{ inputs.soak_minutes || '60' }}" --only "$only"
+            cargo xtask nightly --fuzz-seconds "${{ inputs.fuzz_seconds || '960' }}" --soak-minutes "${{ inputs.soak_minutes || '60' }}" --only "$only"
           else
-            cargo xtask nightly --fuzz-seconds "${{ inputs.fuzz_seconds || '1200' }}" --soak-minutes "${{ inputs.soak_minutes || '60' }}"
+            cargo xtask nightly --fuzz-seconds "${{ inputs.fuzz_seconds || '960' }}" --soak-minutes "${{ inputs.soak_minutes || '60' }}"
           fi
       - name: 要約
         if: always()
