@@ -94,7 +94,25 @@ pub(crate) enum Pending {
         expected: Expect,
         /// `file.set_encoding` の新しい書式。保存の成功で文書の書式に確定する。
         fmt: Option<NewFormat>,
+        /// 保存方式 (確認の後に同じ保存をやり直すとき、直接上書きを保つ)。
+        strategy: crate::jobs::SaveStrategy,
+        /// つながりの承認 (03 §8.3.1) を渡して投入したときの、承認したつながりの件数。成功の完了のメッセージを
+        /// `info.save.escape_merged` にする。
+        merged: Option<u64>,
     },
+}
+
+/// 保存ジョブの文脈 (`Pending::Save` のうち、結果の処理に渡すもの)。
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct SaveCtx {
+    pub doc: DocumentId,
+    pub at: NodeId,
+    /// 投入時の文書の Revision (結果の base)。
+    pub revision: eve_view::Revision,
+    pub expected: Expect,
+    pub fmt: Option<NewFormat>,
+    pub strategy: crate::jobs::SaveStrategy,
+    pub merged: Option<u64>,
 }
 
 /// `file.set_encoding` が保存に渡す新しい書式 (保存が成功するまで文書の書式は変えない、03 §8.8)。
@@ -226,7 +244,18 @@ impl EditorState {
                 path,
                 expected,
                 fmt,
+                strategy,
+                merged,
             } => {
+                let job_ctx = SaveCtx {
+                    doc,
+                    at,
+                    revision,
+                    expected,
+                    fmt,
+                    strategy,
+                    merged,
+                };
                 let saved = matches!(r, JobResult::Saved { .. });
                 // 保持方式の記録を使う保存の確かめ (03 §8.6 E2 の確認 (i)・(ii)) で止まった: 記録を全部捨てて「保持なし」に
                 // する (03 §8.7.1 の「保存」。同じ表を渡し続けると、同じ文字コードで二度と保存できない)。全保存・「保存を
@@ -243,7 +272,7 @@ impl EditorState {
                 // 「保存を中止して終了」の最中: 成功は採用し、失敗は終了時の stderr に残す。確認も後続も出さない
                 if self.ui.quit_abort.is_some() {
                     if !self.quit_abort_save_result(&path, &r) {
-                        self.finish_save(doc, at, revision, &path, expected, fmt, None, r);
+                        self.finish_save(&job_ctx, &path, None, r);
                     }
                     self.release_closing_snapshot(doc, &path, saved);
                     self.quit_abort_check();
@@ -253,7 +282,7 @@ impl EditorState {
                 // 全保存の 1 件の失敗は、確認を出さず記録するだけ (03 §9.8)
                 let in_batch = self.save_all_failed(job, doc, &path, &r);
                 if in_batch != Some(true) {
-                    self.finish_save(doc, at, revision, &path, expected, fmt, cont, r);
+                    self.finish_save(&job_ctx, &path, cont, r);
                 }
                 self.release_closing_snapshot(doc, &path, saved);
                 if in_batch.is_some() {

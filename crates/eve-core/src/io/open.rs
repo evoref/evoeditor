@@ -137,6 +137,7 @@ impl EditorState {
             details: Vec::new(),
             default: 0,
             focused: 0,
+            message: None,
             action: ConfirmAction::DanglingLink(ask),
         });
     }
@@ -192,6 +193,7 @@ impl EditorState {
             details: Vec::new(),
             default,
             focused: default,
+            message: None,
             action: ConfirmAction::Lossy(ask),
         });
     }
@@ -407,6 +409,7 @@ impl EditorState {
             details: Vec::new(),
             default: 0,
             focused: 0,
+            message: None,
             action: ConfirmAction::Open(ask),
         });
     }

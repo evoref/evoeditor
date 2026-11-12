@@ -1,5 +1,5 @@
-//! エスケープ文字のつながり (`EscapeMerge`、docs/03 §8.3.1) の保存の連鎖の側の最小限の扱い (M23 の 3 本目)。確認・承認・
-//! 強調は M23 の 4 本目で入れる。今は、何も書いていないことを保存の失敗として示し、後続を続けない。
+//! エスケープ文字のつながり (`EscapeMerge`、docs/03 §8.3.1) の保存 (M23 の 3 本目)。書く前の確認・承認・強調
+//! (M23 の 4 本目) の試験は `escape_merge_confirm.rs`。
 //!
 //! 不正バイトを含む文書は、今は読み取り専用 (「編集を許可」は M23 の後の PR)。編集が要る場合は、試験の中で文書の
 //! `read_only` から `InvalidBytes` を直に外して、解除した後の状態を作る (製品の解除の経路は足さない)。
@@ -63,18 +63,13 @@ fn sjis_joined() -> Harness {
 
 // verifies: NFR-304
 #[test]
-fn つながる保存は何も書かずに保存の失敗として示す() {
+fn つながる保存は何も書かずに確認を出す() {
     let mut s = sjis_joined();
     let before = s.fs.read("/w/a.txt").unwrap();
     run(&mut s, "file.save", Args::new());
     assert_eq!(s.fs.read("/w/a.txt").unwrap(), before, "何も書かない");
     assert!(doc(&s).is_dirty(), "保存しなかった");
-    assert_eq!(
-        s.messages().last().map(String::as_str),
-        Some("msg.save.failed"),
-        "{:?}",
-        s.messages()
-    );
+    assert_eq!(s.overlay(), "dialog", "書く前の確認: {:?}", s.messages());
     // 記録をもともと持たない文書でも、記録を持つ文書でも、つながりでは保持の状態を変えない (VerifyFailed ではない)
     assert!(!matches!(
         doc(&s).format.roundtrip.preserve,
@@ -98,6 +93,8 @@ fn 全保存ではつながる文書を保存しない() {
 fn つながりを戻せば元のバイトのまま保存できる() {
     let mut s = sjis_joined();
     run(&mut s, "file.save", Args::new());
+    // 書く前の確認をキャンセルする
+    s.keys("esc");
     s.cmd("edit.undo");
     s.keys("ctrl+end");
     s.text("z");

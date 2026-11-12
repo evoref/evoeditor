@@ -347,6 +347,7 @@ impl EditorState {
                 details: Vec::new(),
                 default: 1,
                 focused: 1,
+                message: None,
                 action: ConfirmAction::Reload(doc_id),
             });
             return CommandResult::Done;

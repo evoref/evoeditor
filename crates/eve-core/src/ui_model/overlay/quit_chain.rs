@@ -95,6 +95,8 @@ pub(crate) enum ConfirmAction {
     QuitSaving,
     /// 置換途中の痕跡の提案 (05 §4.6。選択肢は提案の種類による)。
     Leftover(Box<crate::Leftover>),
+    /// エスケープ文字のつながりの確認 (このまま保存 / キャンセル、03 §8.3.1・§9.7 (e))。
+    EscapeMerge(Box<crate::io::escape_merge::EscapeMergeAsk>),
     /// 置換の一覧の確認 (置換して保存 / キャンセル、03 §8.6)。`revision` は `ChangeSet` を作った時点の文書の Revision。
     UnmappableReplace {
         ask: crate::io::unmappable::UnmappableAsk,
@@ -113,6 +115,9 @@ pub(crate) struct ConfirmState {
     pub choices: Vec<ChoiceDef>,
     /// 本文の下に 1 行ずつ出す詳細 (E3 の置換の一覧)。無ければ空。
     pub details: Vec<String>,
+    /// 本文の文言の葉 (`ui.confirm.<name>.<leaf>`)。`None` は `message` (終了の連鎖の何件目かがあれば `chain`)。
+    /// 同じ確認で理由に応じて本文を替えるときに使う (E3 のエスケープ文字が理由の本文、つながりの確認の末尾まで等)。
+    pub message: Option<&'static str>,
     /// 初めにフォーカスする選択肢 (`choices.len()` はキャンセル)。
     pub default: usize,
     pub focused: usize,
@@ -174,6 +179,7 @@ impl EditorState {
             details: Vec::new(),
             default: 0,
             focused: 0,
+            message: None,
             action: ConfirmAction::Unsaved(cont),
         }))));
         self.mark_dirty_render();
@@ -203,6 +209,7 @@ impl EditorState {
                 ConfirmAction::Unmappable(ask) | ConfirmAction::UnmappableReplace { ask, .. } => {
                     self.unmappable_cancelled(ask)
                 }
+                ConfirmAction::EscapeMerge(ask) => self.escape_merge_cancelled(ask),
                 _ => {}
             }
             return CommandResult::Done;
@@ -240,6 +247,7 @@ impl EditorState {
             ConfirmAction::Leftover(l) => self.choose_leftover(*l, id),
             ConfirmAction::QuitSaving => self.choose_quit_saving(id),
             ConfirmAction::Unmappable(ask) => self.choose_unmappable(ask, id),
+            ConfirmAction::EscapeMerge(ask) => self.choose_escape_merge(*ask),
             ConfirmAction::UnmappableReplace {
                 ask,
                 changes,
