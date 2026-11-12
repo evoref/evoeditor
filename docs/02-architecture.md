@@ -532,7 +532,8 @@ enum SaveWarning {                 // 保存は成功したが知らせること
     BackupNotRemoved { path: FsPath }, // Windows。置換の成功後に退避名を消せなかった (保存は成功。フラグを残す、05 §4.1 手順 7)
     TempNotRemoved { path: FsPath },   // Unix。新規ファイルの link + unlink の退路で、link の後に一時ファイルを消せなかった (保存は成功。一時ファイルは T と同じ実体。フラグを残す、
                                    // 05 §4.1「新規ファイル」・手順 7。docs/review/v0.3-findings.md の SAF-40)
-    EscapeMerge { positions: Vec<Pos> /*先頭 100 件*/ }, // v0.4 (03 §8.3 の隣接エスケープ)。v0.1 では出さない
+    // v0.3 までの案の EscapeMerge { positions } (03 §8.3 の隣接エスケープを保存の後に警告する) は置かない。v0.4 の M23 で、
+    // 書く前の確認 (JobResult::EscapeMerge、§9.3 / 03 §8.3.1) に替えた
 }
 struct InflightRecord {            // 保存中フラグ 1 つ分 (recovery/inflight/<hash(key)>/<pid>-<seq>.toml、キーは下表「保存中フラグのキー」、配置と書式は 05 §7.5)
     target: FsPath,                // 保存先のパス (フラグのキー)
@@ -697,12 +698,13 @@ Editor (ファサード。frontend と Host が触る唯一の入口)
 EditorState
    ├─ documents: BTreeMap<DocumentId, Document>
    │    └─ Document { text: Text /*TextStorage の実装 (eve-text)*/, path: Option<FsPath>, disk_stamp: Option<FileStamp> /*FileId は disk_stamp.file_id*/,
-   │                  format: TextFormat { encoding, has_bom, default_eol, eol_stats, invalid_bytes, pua_escape,
+   │                  format: TextFormat { encoding, has_bom, default_eol, eol_stats, invalid_bytes, pua_escape, escape_encoding /*v0.4 の M23: 本文のエスケープ文字がどの文字コードのバイトか (03 §8.3.1)*/,
    │                                       roundtrip: RoundtripSummary /*v0.1〜v0.3: 区分 B の検出の結果 (行の数 + 先頭 100 行の位置)。v0.4 は保持方式の要約 (件数と状態)。記録は下の preserved (03 §8.7.1)*/,
    │                                       long_line_threshold /*開いたときの閾値*/, long_lines /*閾値を超える行の数*/ },
    │                  preserved: PreservedMap /*v0.4: 保持方式の記録 (元のバイト列と文書の位置。編集で写像し、Undo / Redo で戻る。TextFormat には入れない、03 §8.7.1)*/,
    │                  revision: Revision, history: UndoHistory { .., saved: Option<NodeId> },
    │                  read_only: ReadOnlyReasons /*理由の集合 (下記)*/, attribute_released /*読み取り専用属性を解除した (03 §9.6)*/,
+   │                  invalid_bytes_released /*v0.4 の M23: 不正バイト (InvalidBytes) を解除した。同じ文書の再読込で解除を持ち越す (03 §8.3.1)*/,
    │                  external_seen: Option<FileStamp> /*外部変更の確認で「無視」を選んだ状態 (03 §9.5)*/,
    │                  load_state /*Loading | Ready | Failed。Partial は v0.4 で足す (名前だけを決めてある)*/, load_percent, display: DisplaySettings,
    │                  /*表示層のキャッシュ 2 つ (行の表示単位・長大行の列の索引)。v0.3 の M14 で layout 側へ移す (STR-B2)*/ }
@@ -799,7 +801,7 @@ Command 実行 ─▶ Transaction 生成 (ChangeSet + selection_before/after + O
 | `query(&self, q: &Query) -> Result<Answer, QueryError>` | テスト・(後の版の) 駆動 API | 読み取り専用の問い合わせ (§10.1 X18、型は §10.1)。副作用なし |
 | `execute(inv: CommandInvocation) -> CommandResult` | テスト・駆動 API・(後の版の) AI / プラグイン | キーマップを通さずにコマンドを実行する。権限判定フック (§6.1) を通る |
 | `emergency_snapshot(doc: DocumentId) -> Option<DocSnapshot>` | Host (`take_snapshot_updates` が返した文書ごと) | 退避用の公開物を作る。dirty でない文書・`Loading` の文書・閉じた文書は `None` (スロットを空にする) |
-| `take_clipboard(h: ClipboardHandleId) -> Option<ClipboardSource>` | Host (`Effect::SetClipboard` の実行時、§6.3) | ハンドルの中身 (Snapshot と範囲) を取り出す。`ClipboardSource` は `Send` で、Host が `bg` ワーカーで文字列化する (§9.1)。取り出した後のハンドルは無効 |
+| `take_clipboard(h: ClipboardHandleId) -> Option<ClipboardSource>` | Host (`Effect::SetClipboard` の実行時、§6.3) | ハンドルの中身 (Snapshot と範囲) を取り出す。`ClipboardSource` は `Send` で、Host が `bg` ワーカーで文字列化する (§9.1)。取り出した後のハンドルは無効。文字列化は `ClipboardSource::to_text` で行い、Host は変換の規則を持たない (v0.4 の M23 から、不正バイトのエスケープ文字を表記の文字列 `<0xNN>` にする規則を含む。03 §8.3.1。`ClipboardSource` は eve-core の型で、境界型ではない) |
 | `report(r: HostReport)` | Host (起動時の診断は `Host::start` の `Editor::new` の直後。Host の作業の結果は `HostMsg::Report` を受けた `step` の中、§9.2) | Host が自分で行った処理のうち利用者に示す結果 (型は下記) を Message キュー (FR-505) に積む **唯一の口**。どの MessageKey で・いつ・何回示すか (例: `msg.clipboard.fallback` は同じ起動の中で最初の 1 回だけ、FR-205 AC-2) は core が決め、Host は文言を持たない。文書の状態は変えない |
 | `set_caps(caps: Capabilities)` | Host (`Frontend::init` の後と `CapabilitiesChanged` のとき) | 端末の能力を渡す。キー表記もこれで作り直す |
 | `set_keymap(keymap)` / `set_user_keymap(file: &KeymapFile) -> Vec<Diagnostic>` / `registry()` / `register(spec)` | Host (起動時のユーザーのキーマップ、07 §7)・テスト | キーマップとコマンドの登録 |
@@ -955,7 +957,7 @@ enum ClipboardText {
 | 段 | 内容 |
 |---|---|
 | 書込 | core → `Effect::SetClipboard{content: ClipboardText, target: System \| Primary}` → Host が `Handle` なら `Editor::take_clipboard` で中身を取り出して **`bg` ワーカーで文字列化** し (`HostTasks::spawn_host_task`、§4.4 / §9.1) `ClipboardProvider` (eve-platform) に渡す。システムクリップボードへの上限 (64 MiB。v0.1 は定数で、設定キーの公開時期は 07 §5) を超えたら内部レジスタだけに入れて通知する。失敗または非対応なら eve-tui が OSC 52 を書く (v0.2。Capabilities.osc52_write、上限 100,000 bytes は 07)。内部レジスタには core が常に保存する (FR-205 のフォールバック。v0.1 はこれだけ)。**通知の経路**: 上限の超過と、`ClipboardProvider` の失敗・非対応 (OSC 52 でも書けなかったとき) は、Host が `HostReport::ClipboardWriteFailed { reason }` にして core に渡す (`bg` の作業からは `HostMsg::Report` で受信口へ送り、`step` が `Editor::report` を呼ぶ、§5.4)。メッセージ (`msg.clipboard.fallback` 等) と、出すのを最初の 1 回に限る判断は core が行う |
-| 読込 | core → `Effect::RequestClipboard{token, target}` → Host が **使い捨てのスレッドで** 取得 (X11/Wayland は数百 ms ブロックし得る。所有者ウィンドウのスレッドとは別、§9.1) → `InputEvent::ClipboardContent{token, text: Option<String>}` で返す。読取は `try_reserve` で確保し、失敗したら `None` + メッセージ (§11.2.2)。`None` なら core は内部レジスタを使う。待機中も入力は受け付ける。貼り付け先は応答が届いた時点 (到着時) の発行 View の Selection で、要求時の Selection は保存しない。token が古くなって応答を捨てるのは、次の `RequestClipboard` を出したときだけ (待つ間の編集・移動・検索では古くならない。03 §12.6) |
+| 読込 | core → `Effect::RequestClipboard{token, target}` → Host が **使い捨てのスレッドで** 取得 (X11/Wayland は数百 ms ブロックし得る。所有者ウィンドウのスレッドとは別、§9.1) → `InputEvent::ClipboardContent{token, text: Option<String>}` で返す。読取は `try_reserve` で確保し、失敗したら `None` + メッセージ (§11.2.2)。`None` なら core は内部レジスタを使う。v0.4 の M23 から、core は届いた文字列と内部レジスタの文字列を、両側の改行を同じに正規化してから比べ、一致して挿入先の `escape_encoding` がコピー元と同じなら内部レジスタの内容 (エスケープ文字のまま) を入れる。システムのクリップボードへの書込が失敗・上限超過だった後は、届いた文字列を見ずに内部レジスタを使う (03 §8.3.1。境界型は変えない)。待機中も入力は受け付ける。貼り付け先は応答が届いた時点 (到着時) の発行 View の Selection で、要求時の Selection は保存しない。token が古くなって応答を捨てるのは、次の `RequestClipboard` を出したときだけ (待つ間の編集・移動・検索では古くならない。03 §12.6) |
 | 実装 | 確定 (ユーザー回答、OQ-111): OS 付属の手段で実装し、専用ライブラリを使わない。v0.1 は Windows (windows-sys の Win32 API を直接) だけ。macOS (`/usr/bin/pbcopy` / `/usr/bin/pbpaste`) と Linux (OSC 52 + 内部レジスタ + `/usr/bin` 配下の `wl-copy` / `wl-paste` / `xclip` / `xsel`。root しか書けないディレクトリに限って検出) は macOS / Linux を出荷する版。S-14 で成り立たない環境があれば arboard (feature 最小) を退路とする |
 | 初期化 | 起動経路では行わず、**初回の Set/Request 時に別スレッドで遅延初期化** する (NFR-101)。Windows のセッション終了通知用の隠しウィンドウ (v0.2) はクリップボードと無関係に起動時に作る (§11.2.1)。クリップボードの所有者ウィンドウにはその隠しウィンドウを使ってよい (05 §8.2) |
 | 実装詳細 | プロバイダの選択順・外部コマンドの扱いは 05 §8 |
@@ -1509,13 +1511,17 @@ fn run_job(req: &JobRequest, ports: &JobPorts, cancel: &CancelToken, emit: &mut 
 enum JobKind {                     // Port は持たない (run_job が JobPorts から取る、§4.4)。#[non_exhaustive]。
                                    // io / bg の振り分けは eve-host の JobSpawner の実装が決める (下の「io」「bg」は仕様の意図。v0.2.0 の実装は Search だけが bg、§9.1 の「v0.2.0 の実装との差」)
     Open     { path: FsPath, opts: OpenOptions },                                                     // io
-    Save     { path: FsPath, snapshot: Snapshot, encoding: Encoding, bom: bool, pua: PuaEscapeMode /*不正バイトのエスケープの扱い、03 §8.3*/,
+    Save     { path: FsPath, snapshot: Snapshot, encoding: Encoding, bom: bool,
+               escape: EscapePolicy /*不正バイトのエスケープ文字の扱い (Restore | AsText | Reject)。core が TextFormat::save_escape_policy で決める (03 §8.3 / §8.3.1。v0.4 の M23 から、Restore は書く文字コードが escape_encoding と同じときだけ)。
+                                      v0.1 の案の pua: PuaEscapeMode は、実装 (eve-encoding の EscapePolicy) に合わせて M23 の仕様の PR で改めた*/,
+               escape_merge_ok: Option<EscapeMergeApproval> /*v0.4 の M23: エスケープ文字のつながり (03 §8.3.1) の承認 (このまま保存)。つながりを見つけたら、
+                                       結果 (件数と先頭 100 件) がこれと同じときだけ止めずに書き、違えば何も書かずに JobResult::EscapeMerge を返す。承認があっても区切った確認 (ii) は行う*/,
                preserved: PreservedMap /*v0.4: 保存を始めた時点の保持方式の記録の版 (渡した後の編集の影響を受けない。03 §8.6 E2 / §8.7.1)。
                                          書く文字コードが文書の文字コードと同じで、保持が効いている (PreserveStatus::Active) ときだけ表を渡し、ほかは空 (記録を使わない)*/,
                expected: Expect, strategy: SaveStrategy, clear_readonly: bool /*FR-116*/, create_link_target: bool /*FR-106*/ }, // io。
                                                                       // 保存点の履歴ノードはジョブに渡さず、core が投入時にジョブ表 (Pending::Save) に持つ
     Metadata { path: FsPath, purpose: MetaPurpose },                                                  // io
-    ReplaceUnmappable { snapshot: Snapshot, encoding: Encoding, pua: PuaEscapeMode, preserved: PreservedMap /*v0.4: 元のバイト列を書く記録の範囲は置換の対象にしない (03 §8.6 E2)*/ },  // bg。03 §8.6 E3 の置換: 全文に E1 の照合を走らせ、表現不能の全件から ChangeSet を作る
+    ReplaceUnmappable { snapshot: Snapshot, encoding: Encoding, escape: EscapePolicy /*Save と同じ*/, preserved: PreservedMap /*v0.4: 元のバイト列を書く記録の範囲は置換の対象にしない (03 §8.6 E2)*/ },  // bg。03 §8.6 E3 の置換: 全文に E1 の照合を走らせ、表現不能の全件から ChangeSet を作る
                                                                       // (ISO-2022-JP の保存での半角カナ → 全角カナ、それ以外 → `?`)
     ReplaceAll { snapshot: Snapshot, query: SearchQuery, replacement: String }, // bg。03 §12.5 のすべて置換: 全一致から ChangeSet を直接作る (一致は保持しない)
     ConvertEol { snapshot: Snapshot, eol: LineEnding },              // bg。03 §8.4 の改行コードの変換: `eol` 以外の改行をすべて `eol` に置き換える ChangeSet を作る
@@ -1598,7 +1604,18 @@ enum JobResult {                   // #[non_exhaustive]
     Saved        { report: SaveReport },
                                                                             // 保存点の履歴ノード・保存先のパスは core がジョブ表 (Pending::Save) に持つ。
                                                                             // 保存後の stamp は report.new_stamp
-    Unmappable   { total: u64, recorded: Vec<Unmappable> /*先頭の位置*/, encoding: Encoding }, // 保存の表現不能 (03 §9.3 手順 5b)。何も書いていない
+    Unmappable   { total: u64, recorded: Vec<Unmappable> /*先頭の位置*/, encoding: Encoding,
+                   escapes_restored: u64 /*v0.4 の M23: この保存で元のバイトに戻したエスケープ文字の数*/,
+                   escapes_unmappable: u64 /*v0.4: 表現不能になったエスケープ文字の数 (記録した先頭 100 件ではなく全件で数える。v0.3 までは先頭 100 件だけを見ていた)。
+                                            どちらかが 1 以上なら E3 の「UTF-8 で保存」を、後者が 1 以上なら「置換して保存」を出さない (03 §8.6 / §8.3.1)*/ }, // 保存の表現不能 (03 §9.3 手順 5b)。何も書いていない
+    EscapeMerge  { total: u64 /*つながりの件数*/, recorded: Vec<EscapeMergeAt> /*先頭 100 件*/,
+                   changed_chars: u64, changed_lines: u64, to_eof: bool /*開き直すと変わる範囲の合計 (本文の文字数と行数)。文書の末尾まで戻らなければ to_eof*/ },
+                                                                            // v0.4 の M23: エスケープ文字を戻したバイトが隣とつながる (03 §8.3.1 の「つながりの検出」。文書の先頭の BOM を含む)。
+                                                                            // 承認 (escape_merge_ok) が無い、または結果が承認と違う保存で、乾式走査の段階で見つけたときだけ返す。何も書いていない (一時ファイルも作らない)。
+                                                                            // core は ui.confirm.save.escape_merge で確認する (03 §9.7 (e))
+    // EscapeMergeAt { char_index: u64 /*局所の復号で最初に違いが出たエスケープ文字の、本文の通し番号 (Unmappable と同じ数え方)*/,
+    //                 len_chars: u32 /*そこから直後の 1 単位の終わりまでの文字数。強調の範囲*/, decoded: String /*その範囲を局所に復号した文字列の先頭 16 文字 (無害化の前)*/ }
+    // EscapeMergeApproval { total: u64, recorded: Vec<EscapeMergeAt> } /*承認した結果。JobKind::Save の escape_merge_ok に入れる。ジョブは結果がこれと同じときだけ止めない*/
     // ── metadata の照合 (io) ──
     Meta         { meta: FileMeta, stamp: FileStamp },          // MetaPurpose のいずれか (未編集の上書き保存の照合、名前を付けて保存の保存先、フォーカス復帰時の確認 (v0.2))
     // ── E3 の置換 (03 §8.6) ──
@@ -1636,6 +1653,9 @@ enum JobError {                    // #[non_exhaustive]
     Panic,                         // ワーカーの catch_unwind
     VerifyFailed,                  // v0.4: 保持方式の記録を渡した保存の確かめに合わない (03 §8.6 E2。記録が確認 (i) に合わない・表の不変条件に反する、
                                    // または出力の全体を同じ文字コードで復号しても本文にならない (確認 (ii))。実装の誤りへの備え)。何も書いていない。
+                                   // v0.4 の M23 から、確認 (ii) はエスケープ文字を元のバイトに戻して書く保存 (escape = Restore) でも行い、エスケープ文字のつながり
+                                   // (JobResult::EscapeMerge) で説明できる不一致は除いて突き合わせる (03 §8.3.1)。復号するのは書いた BOM を除いた出力。記録をもともと持たない文書
+                                   // (保持の状態が NotApplicable) では、core は保持の状態を変えない (Document::abandon_preserved。03 §8.3.1)
                                    // core は文書の記録を全部捨てて「保持なし」にし、msg.save.verify_failed で示す (03 §8.7.1、04 §15.2)
 }
 ```
@@ -1659,7 +1679,7 @@ enum JobError {                    // #[non_exhaustive]
 | ジョブ (`JobKind`) | 結果 | Revision が base より進んでいたとき | 文書が閉じられていたとき | JobId がジョブ表に無い / キャンセル済み | 詳細 |
 |---|---|---|---|---|---|
 | `Open` | `Progress` / `NeedsConfirm` / `NewFile` / `Complete` / `Failed` | 起きない (`Loading` の文書は編集できない)。起きたら不変条件違反として破棄し `error!` ログ | 破棄 (閉じるときにキャンセル済み) | 破棄 | 03 §9.2 |
-| `Save` | `Saved` / `Failed` (cancel の出どころ (`User` / `QuitAbort`) は core の `SaveChain` が持つ (`Saving.cancel_origin`)。ジョブ側は区別せず、どちらも `Failed { Cancelled }` を返す。出し分けは 03 §9.7) | **採用**: `history.saved` を `node` (Snapshot 取得時点のノード) にし、`disk_stamp` を `report.new_stamp` にする。保存後の編集は dirty のまま残る (§5.1)。名前を付けて保存は、ジョブ表 (`Pending::Save`) に持った保存先のパスで文書のパスを更新する (v0.2.0 の `Saved` は `canonical` / `meta` を持たない)。`Failed` も採用 (失敗の確認・メッセージを出す) | 文書には反映しない (破棄)。`Failed` はメッセージで示す (閉じる手順は保存の完了を待つ、03 §9.2) | キャンセル済み: **`Saved` は必ず採用** (書いた事実は取り消せない。左の列と同じ更新をする)。`Failed { Cancelled }` は `info.save.aborted` を出す。それ以外の `Failed` (`ReplacedMovedToBackup` / `InPlaceFailed` 等) も採用してメッセージを出す (退避パスを必ず示す)。ジョブ表に無い: 破棄 (終端の後) | 03 §9.3 / §9.7 |
+| `Save` | `Saved` / `Unmappable` / `EscapeMerge` (v0.4 の M23。どちらも何も書いていない。確認は結果の base Revision に対して出し、承認の時点で Revision が進んでいれば今の Snapshot で投入し直す、03 §8.3.1 / §9.7 (e)) / `Failed` (cancel の出どころ (`User` / `QuitAbort`) は core の `SaveChain` が持つ (`Saving.cancel_origin`)。ジョブ側は区別せず、どちらも `Failed { Cancelled }` を返す。出し分けは 03 §9.7) | **採用**: `history.saved` を `node` (Snapshot 取得時点のノード) にし、`disk_stamp` を `report.new_stamp` にする。保存後の編集は dirty のまま残る (§5.1)。名前を付けて保存は、ジョブ表 (`Pending::Save`) に持った保存先のパスで文書のパスを更新する (v0.2.0 の `Saved` は `canonical` / `meta` を持たない)。`Failed` も採用 (失敗の確認・メッセージを出す) | 文書には反映しない (破棄)。`Failed` はメッセージで示す (閉じる手順は保存の完了を待つ、03 §9.2) | キャンセル済み: **`Saved` は必ず採用** (書いた事実は取り消せない。左の列と同じ更新をする)。`Failed { Cancelled }` は `info.save.aborted` を出す。それ以外の `Failed` (`ReplacedMovedToBackup` / `InPlaceFailed` 等) も採用してメッセージを出す (退避パスを必ず示す)。ジョブ表に無い: 破棄 (終端の後) | 03 §9.3 / §9.7 |
 | `Metadata` | `Meta` / `Failed` | `UnchangedSave`: 受け手は 03 §9.7 の `CheckingUnchanged`。Revision が進んでいたら結果を破棄し、現在の状態で保存を最初からやり直す (照合の間に dirty になったら書く必要がある)。`SaveAsTarget` / `ExternalCheck` (v0.2): 採用 (ディスク側の情報で、文書の Revision に依らない) | 破棄 | 破棄 (読むだけのジョブで、副作用が無い) | 03 §9.3 / §9.5 / §9.7 |
 | `Search` / `FindNext` | `SearchBatch` / `SearchDone` / `FindNextDone` / `Failed` | 破棄。入力が 300 ms 止まった後に可視範囲から再要求する | 破棄 | 破棄 | 03 §12.2 |
 | `Materialize` (v0.2.0 の実装に無い) | `Materialized` / `Failed` | Revision では決めない: `SliceKey` の Slice がまだ履歴 (undo / redo) にあれば採用、無ければ破棄 | 破棄 | 破棄 (実体化はキャンセルしないので、通常は文書を閉じたときだけ) | 03 §6.5 |
@@ -2013,7 +2033,7 @@ bom = false                           # 必須
 default_eol = "crlf"                  # 必須。lf | crlf | cr
 eol_mixed = false                     # 必須
 final_newline = true                  # 必須
-pua_escaped = false                   # 必須。不正バイトの PUA エスケープを含むか
+pua_escaped = false                   # 必須。不正バイトの PUA エスケープを含むか (v0.4 の M23 から、本文のエスケープ文字が encoding のバイトか = escape_encoding.is_some()。03 §8.3.1)
 revision = 42                         # 必須
 len = 12345                           # 必須。退避した本文のバイト数
 written = true                        # 必須。本文の書込と fsync を終えたら true

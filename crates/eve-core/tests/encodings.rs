@@ -683,3 +683,84 @@ fn 不正バイトの無い文書に貼ったエスケープ文字は_元のバ�
         "生のバイト 0x80 を書かない"
     );
 }
+
+// ---------- E3 の選択肢の条件 (03 §8.6「E3 の選択肢」、OQ-207 (3)、NFR-304) ----------
+
+/// 出ている確認の選択肢のアクセラレータ (表示順。E3 は UTF-8 で保存が `u`、置換して保存が `r`)。
+fn choice_keys(s: &mut Harness) -> Vec<Option<char>> {
+    s.frame()
+        .overlays
+        .iter()
+        .find_map(|o| match o {
+            eve_view::OverlayModel::Confirm { choices, .. } => {
+                Some(choices.iter().map(|c| c.key).collect())
+            }
+            _ => None,
+        })
+        .expect("確認が出ている")
+}
+
+/// 空の UTF-8 の文書に `pasted` を貼り、`file.set_encoding` で `Shift_JIS` にして保存する。
+fn paste_and_save_as_sjis(pasted: &str) -> Harness {
+    let mut s = env();
+    s.fs.add_file("/w/a.txt", b"\n");
+    open_as(&mut s, "/w/a.txt", Encoding::Utf8);
+    s.paste(pasted);
+    run(
+        &mut s,
+        "file.set_encoding",
+        Args::new().with_str("encoding", "shift_jis"),
+    );
+    s
+}
+
+// 記録する表現不能は先頭 100 件だけ。エスケープ文字の有無は全件で判定する (101 件目より後ろにあっても選択肢 1・2 を
+// 出さない。出すと「置換して保存」がエスケープ文字を `?` にして、不正バイトが黙って失われる)
+// verifies: NFR-304
+#[test]
+fn 表現不能の_101_件目より後ろにエスケープ文字があっても_選択肢はキャンセルだけ() {
+    let mut s = paste_and_save_as_sjis(&format!("{}\u{10FF80}", "😀".repeat(101)));
+    assert_eq!(s.overlay(), "dialog", "E3 の選択肢が出る");
+    let keys = choice_keys(&mut s);
+    assert_eq!(keys.len(), 1, "キャンセルだけ: {keys:?}");
+    assert!(!keys.contains(&Some('u')) && !keys.contains(&Some('r')));
+    s.answer(0);
+    s.run_jobs();
+    assert_eq!(
+        s.fs.read("/w/a.txt").unwrap(),
+        b"\n",
+        "ファイルは変わらない"
+    );
+    assert_eq!(doc(&s).format.encoding, Encoding::Utf8);
+    assert!(doc(&s).is_dirty());
+    assert!(doc(&s).to_string_lossy().contains('\u{10FF80}'));
+}
+
+#[test]
+fn 表現不能の先頭にエスケープ文字があれば_選択肢はキャンセルだけ() {
+    let mut s = paste_and_save_as_sjis(&format!("\u{10FF80}{}", "😀".repeat(101)));
+    assert_eq!(s.overlay(), "dialog");
+    assert_eq!(choice_keys(&mut s).len(), 1);
+    assert_eq!(s.fs.read("/w/a.txt").unwrap(), b"\n");
+}
+
+#[test]
+fn エスケープ文字が無ければ_表現不能が_101_件以上でも_置換して保存を出し_全件を置換する() {
+    let mut s = paste_and_save_as_sjis(&"😀".repeat(101));
+    let keys = choice_keys(&mut s);
+    assert_eq!(
+        keys.len(),
+        3,
+        "UTF-8 で保存 / 置換して保存 / キャンセル: {keys:?}"
+    );
+    assert_eq!(keys[..2], [Some('u'), Some('r')]);
+    // 置換して保存 → 一覧で承認
+    s.answer(1);
+    s.run_jobs();
+    assert_eq!(s.overlay(), "dialog", "置換の一覧");
+    s.answer(0);
+    s.run_jobs();
+    let want = [b"?".repeat(101), b"\n".to_vec()].concat();
+    assert_eq!(s.fs.read("/w/a.txt").unwrap(), want);
+    assert_eq!(doc(&s).format.encoding, Encoding::ShiftJis);
+}
