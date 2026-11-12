@@ -109,6 +109,12 @@ pub(crate) fn file_save_as(ctx: &mut CommandCtx<'_>) -> CommandResult {
     match arg_path(ctx) {
         Some(p) => ctx.state.request_save_as(&p, None),
         None => {
+            // 名前を尋ねる前に、今の文字コードで書けない文書を拒否する (03 §9.7 の「連鎖の開始時の拒否」)
+            if let Some(doc) = ctx.state.active_document()
+                && ctx.state.reject_stateful_invalid(doc, None)
+            {
+                return CommandResult::Rejected(RejectReason::NotAvailable);
+            }
             // 名前を尋ねる。初期値は今のパス
             let initial = ctx
                 .state

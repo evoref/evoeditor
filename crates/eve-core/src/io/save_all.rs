@@ -48,6 +48,13 @@ impl EditorState {
                 continue;
             };
             let expected = doc.disk_stamp.map_or(Expect::Absent, Expect::Stamp);
+            // 状態付きの文字コードで不正バイトを含む文書は書けない (03 §9.7 の「連鎖の開始時の拒否」)。保存せず、理由を添えて
+            // 失敗の一覧に載せる (全保存は文書ごとのメッセージを出さない)
+            if crate::io::save::stateful_invalid(doc, None) {
+                let reason = self.message_text(keys::MSG_SAVE_ENCODING_UNSUPPORTED_ISO2022, &[]);
+                batch.failed.push((path.display(), reason));
+                continue;
+            }
             // 書く前の確認 (保存の前の確認、03 §8.6 E2'・§8.7.1。読み取り専用を解除して保存、FR-116) が要る文書は保存しない
             let needs_readonly_ok =
                 doc.attribute_released && self.io.readonly_ok != Some((id, doc.revision()));
