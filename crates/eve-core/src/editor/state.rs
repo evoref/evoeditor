@@ -156,6 +156,9 @@ pub(crate) struct SearchSet {
     pub(crate) research: Option<(eve_view::Revision, Tick)>,
     /// 単発の検索ジョブ (進行中の 1 つだけ)。
     pub(crate) find_job: Option<eve_view::JobId>,
+    /// 実行中のすべて置換で、置換の文字列 1 つあたりに `<U+10FFNN>` にした私用文字の数 (03 §8.3.1。適用のときに
+    /// 件数を掛けて `info.paste.pua_as_text` で知らせる。すべて置換は同時に 1 つだけ)。
+    pub(crate) replace_all_pua: u64,
 }
 
 /// UI: オーバーレイと保存の連鎖・パレット・メッセージ行とその履歴・終了の連鎖と保存中の終了・後で実行するコマンド (`EditorState` の部分、docs/review/v0.3-findings.md の STR-B2)。
@@ -279,6 +282,7 @@ impl EditorState {
                 search_bar: None,
                 research: None,
                 find_job: None,
+                replace_all_pua: 0,
             },
             io: IoState {
                 closing_snapshots: BTreeMap::new(),

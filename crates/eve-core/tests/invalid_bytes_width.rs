@@ -4,6 +4,34 @@ use eve_config::Config;
 use eve_core::{Args, Encoding, OpenOptions};
 use eve_testkit::Harness;
 
+/// カーソルの位置に `text` をそのまま入れる (挿入の入口の規則 (03 §8.3.1) を通さない試験だけの近道)。v0.4 の M23 から、
+/// 貼り付け・入力で外から来た `U+10FF00..` は `<U+10FFNN>` の文字列になるので、エスケープ文字が不正バイトの無い文書の
+/// 本文にある状況 (違う文字コードで保存した後の Undo など) は、これで作る。
+fn inject(h: &mut Harness, text: &str) {
+    let id = h.doc_id();
+    let st = h.editor.state_mut();
+    let at = st
+        .first_window()
+        .and_then(|w| st.window_view(w))
+        .and_then(|v| st.view(v))
+        .map(|v| v.selection.primary().head)
+        .unwrap();
+    let d = st.document(id).unwrap();
+    let cs = eve_text::ChangeSet::from_sorted_edits(
+        &d.snapshot(),
+        [eve_text::Edit {
+            range: eve_text::ByteRange::new(at, at),
+            insert: text.into(),
+        }],
+    )
+    .unwrap();
+    st.apply_transaction(
+        id,
+        eve_core::Transaction::new(cs, eve_core::Origin::Paste, eve_core::Tick(0)),
+    )
+    .unwrap();
+}
+
 fn row0(h: &mut Harness) -> String {
     h.frame().panes[0].rows[0]
         .spans
@@ -78,12 +106,13 @@ fn iso_2022_jp_の不正バイトも_0x_形式で表示し_幅_6_で数える() 
     assert_eq!(row0_width_by_cursor(&mut h), 2 + 6 + 1);
 }
 
-// 不正バイトの無い ISO-2022-JP の文書 (編集できる) に貼ったエスケープ文字も、他の文字コードの文書と同じく `<0xHH>` で
-// 表示する (通常の私用文字として描くのは、元のファイルが真にこの範囲の文字を含む `DisabledCollision` の文書だけ)
+// 不正バイトの無い ISO-2022-JP の文書 (編集できる) の本文にあるエスケープ文字も、他の文字コードの文書と同じく `<0xHH>`
+// で表示する (通常の私用文字として描くのは、元のファイルが真にこの範囲の文字を含む `DisabledCollision` の文書だけ)。
+// v0.4 の M23 から、貼り付けでは `<U+10FF80>` の文字列になるので (03 §8.3.1)、規則を通さずに入れる
 #[test]
-fn 不正バイトの無い_iso_2022_jp_の文書に貼ったエスケープ文字も_0x_形式で表示する() {
+fn 不正バイトの無い_iso_2022_jp_の文書の本文にあるエスケープ文字も_0x_形式で表示する() {
     let mut h = opened_as(b"\x1B$B$\"\x1B(B\n", Encoding::Iso2022Jp);
-    h.paste("\u{10FF80}");
+    inject(&mut h, "\u{10FF80}");
     let r = row0(&mut h);
     assert!(r.contains("<0x80>あ"), "{r:?}");
     assert_eq!(row0_width_by_cursor(&mut h), 6 + 2);

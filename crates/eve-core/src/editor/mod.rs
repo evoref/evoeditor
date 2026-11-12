@@ -314,8 +314,11 @@ impl Editor {
                 self.keymap.clear_pending();
                 if self.state.is_dialog() {
                     // 確認ダイアログでは貼り付けを捨てる (選択肢が実行されないように)
-                } else if !self.state.prompt_paste(&s) {
-                    crate::command::edit::paste_text(&mut self.state, &s);
+                } else if self.state.prompt_paste(&s) {
+                    // 入力欄には届いた文字列のまま入れる (03 §8.3.1 の「入力欄」)
+                    self.state.notify_field_paste(&s);
+                } else {
+                    crate::command::edit::paste_text(&mut self.state, Some(&s));
                 }
             }
             InputEvent::Mouse(m) => {

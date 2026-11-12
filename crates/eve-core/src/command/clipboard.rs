@@ -3,6 +3,10 @@
 //! コピーは常に内部レジスタへ書き (Snapshot と範囲を持つだけ。O(1))、システムクリップボードへは Effect で依頼する。
 //! 64 KiB 未満は文字列にして `Inline`、それ以上はハンドルで渡し、Host が `take_clipboard` で取り出してワーカーで文字列化する。
 //! 貼り付けは `RequestClipboard` で読み取りを要求し、応答 (`ClipboardContent`) が届いた時点の Selection に入れる。
+//!
+//! 不正バイトのエスケープ文字 (v0.4 の M23、03 §8.3.1 の「本文に入れる規則」): 内部レジスタはエスケープ文字のまま持ち、
+//! コピー元の `notation` と `escape_origin` を覚える。システムのクリップボードへ渡す文字列は `ClipboardSource::to_text`
+//! (表記 `<0xNN>`)。貼り付けで届いた文字列と内部レジスタの照合は `command::insert_rule`。
 
 use std::collections::BTreeMap;
 
@@ -54,21 +58,37 @@ use crate::ui_model::keys;
 /// `Inline` にする上限 (これ未満は core が文字列化する)。
 pub const INLINE_MAX_BYTES: usize = 64 * 1024;
 
-/// クリップボードの中身 (Snapshot と範囲)。`Send`。文字列化は Host がワーカーで行う。
+/// クリップボードの中身 (Snapshot と範囲) と、コピーした時点の文書の状態 (03 §8.3.1 の「コピー」)。`Send`。
+/// 文字列化は Host がワーカーで行う (`to_text`)。
 #[derive(Clone, Debug)]
 pub struct ClipboardSource {
     pub snapshot: Snapshot,
     pub range: ByteRange,
+    /// コピー元が `pua_escape != DisabledCollision` だった (エスケープ文字を表記 `<0xNN>` にして文字列化する)。
+    /// 偽は衝突の文書で、私用文字をそのまま渡す。文書の外の文字列 (メッセージ履歴など) も偽。
+    pub notation: bool,
+    /// コピー元の `escape_encoding` (本文のエスケープ文字がどの文字コードのバイトか)。貼り付け先が同じ `Some` のときだけ、
+    /// エスケープ文字のまま (バイトのまま) 運ぶ。
+    pub escape_origin: Option<crate::Encoding>,
 }
 
 impl ClipboardSource {
-    /// 範囲の総バイト数 (文字列化の前に上限と比べる)。
+    /// 範囲の総バイト数 (文字列化の前に上限と比べる。表記にすると長くなる分は数えない、05 §8.1)。
     pub fn len_bytes(&self) -> usize {
         self.range.end.0 - self.range.start.0
     }
 
+    /// システムのクリップボードへ渡す文字列 (`Inline`・Host が `Handle` を文字列化するとき・OSC 52 で共通、02 §5.4)。
+    /// `notation` が真ならエスケープ文字を表記 `<0xNN>` にする (表示と同じ。03 §8.3.1)。改行は変えない。
     pub fn to_text(&self) -> String {
-        self.snapshot.slice_to_string(self.range)
+        if !self.notation {
+            return self.snapshot.slice_to_string(self.range);
+        }
+        let mut out = String::with_capacity(self.len_bytes());
+        for chunk in self.snapshot.chunks(self.range) {
+            crate::command::insert_rule::push_notation(&mut out, chunk);
+        }
+        out
     }
 }
 
@@ -83,6 +103,10 @@ pub(crate) struct ClipboardState {
     next_token: u64,
     /// `msg.clipboard.fallback` を出した (同じ起動の中で最初の 1 回だけ)。
     fallback_notified: bool,
+    /// 内部レジスタの「システム側は古い」印 (03 §8.3.1): 最後のコピーをシステムのクリップボードに書けなかった
+    /// (書込の失敗・上限の超過)。立っている間の貼り付けは、届いた文字列を見ずに内部レジスタを使う。次のコピーで外す
+    /// (そのコピーの書き出しも失敗すれば、Host の知らせでまた立つ)。
+    system_stale: bool,
 }
 
 impl EditorState {
@@ -95,6 +119,14 @@ impl EditorState {
 
     /// システムクリップボードを使えなかったことを知らせる (`msg.clipboard.fallback`、同じ起動の中で最初の 1 回だけ)。
     pub fn notify_clipboard_fallback(&mut self, reason: ClipboardFallbackReason) {
+        // 書き出しの失敗 (取得の失敗・期限切れ以外) なら、内部レジスタに「システム側は古い」印を付ける (03 §8.3.1)。
+        // 手段が無い (`Ssh` / `NoDisplay` / `NoCommand`) ときは取得も失敗し、貼り付けは内部レジスタを使うので同じになる
+        if !matches!(
+            reason,
+            ClipboardFallbackReason::ReadFailed | ClipboardFallbackReason::Timeout
+        ) {
+            self.clipboard.system_stale = true;
+        }
         if self.clipboard.fallback_notified {
             return;
         }
@@ -131,9 +163,13 @@ impl EditorState {
         let Some(doc) = self.docs.documents.get(&doc_id) else {
             return false;
         };
+        // コピーした時点の文書の状態を覚える (03 §8.3.1 の「コピー」)
+        let ctx = crate::command::insert_rule::EscapeContext::of(&doc.format);
         let source = ClipboardSource {
             snapshot: doc.snapshot(),
             range,
+            notation: ctx.notation,
+            escape_origin: ctx.escape_encoding,
         };
         self.put_clipboard(source);
         true
@@ -143,7 +179,13 @@ impl EditorState {
     pub(crate) fn copy_text(&mut self, text: &str) {
         let snapshot = eve_text::Text::from(text).snapshot();
         let range = ByteRange::new(eve_text::ByteOff(0), eve_text::ByteOff(text.len()));
-        self.put_clipboard(ClipboardSource { snapshot, range });
+        // 文書の外の文字列: 私用文字に不正バイトの意味は無い (貼り付け先では外からの文字列と同じに扱う)
+        self.put_clipboard(ClipboardSource {
+            snapshot,
+            range,
+            notation: false,
+            escape_origin: None,
+        });
     }
 
     /// 内部レジスタへ書き、システムへの書込を依頼する。64 KiB 未満は文字列、それ以上はハンドルで渡す。
@@ -159,6 +201,7 @@ impl EditorState {
             ClipboardText::Handle(id)
         };
         self.clipboard.register = Some(source);
+        self.clipboard.system_stale = false;
         self.push_effect(Effect::SetClipboard {
             content,
             target: ClipboardTarget::System,
@@ -183,13 +226,15 @@ impl EditorState {
     }
 
     /// `InputEvent::ClipboardContent` の応答。最後の要求の token と違えば捨てる。届いた時点の Selection に貼り付ける。
-    /// 読み取れなかった (`None`) ときは内部レジスタの内容を貼り付ける (05 §8.1)。
+    /// 読み取れなかった (`None`) ときは内部レジスタの内容を貼り付ける (05 §8.1)。本文へは内部レジスタと照合して入れる
+    /// (03 §8.3.1。`edit::paste_text`)。
     pub fn on_clipboard_content(&mut self, token: ClipboardToken, text: Option<String>) {
         if self.clipboard.token != Some(token) {
             return;
         }
         self.clipboard.token = None;
-        // 入力欄 (プロンプト・パレット・検索バー) が出ていれば、そこへ最初の行だけを貼り付ける (04 §6.6)
+        // 入力欄 (プロンプト・パレット・検索バー) が出ていれば、そこへ最初の行だけを貼り付ける (04 §6.6)。
+        // 入力欄は文書ではないので照合せず、届いた文字列のまま入れる (03 §8.3.1 の「入力欄」)
         if self.input_mut_available() {
             let t = match text {
                 Some(t) => t,
@@ -203,6 +248,7 @@ impl EditorState {
             };
             let line = t.lines().next().unwrap_or("").to_owned();
             self.prompt_paste(&line);
+            self.notify_field_paste(&t);
             return;
         }
         let editable = self
@@ -213,17 +259,34 @@ impl EditorState {
             self.notify_read_only();
             return;
         }
-        let text = match text {
-            Some(t) => t,
-            None => {
-                self.notify_clipboard_fallback(ClipboardFallbackReason::ReadFailed);
-                match &self.clipboard.register {
-                    Some(src) => src.to_text(),
-                    None => return,
-                }
-            }
-        };
-        crate::command::edit::paste_text(self, &text);
+        if text.is_none() {
+            self.notify_clipboard_fallback(ClipboardFallbackReason::ReadFailed);
+        }
+        crate::command::edit::paste_text(self, text.as_deref());
+    }
+
+    /// 内部レジスタと「システム側は古い」印 (貼り付けの照合に使う、03 §8.3.1)。
+    pub(crate) fn clipboard_register(&self) -> (Option<&ClipboardSource>, bool) {
+        (
+            self.clipboard.register.as_ref(),
+            self.clipboard.system_stale,
+        )
+    }
+
+    /// 検索欄・置換欄への貼り付けが、内部レジスタ由来の `<0xNN>` を含むときに知らせる (`info.paste.search_notation`、
+    /// 03 §8.3.1 の「入力欄」・04 §15.2)。欄には届いた文字列のまま入っている。
+    pub(crate) fn notify_field_paste(&mut self, arrived: &str) {
+        if self.ui.overlay.is_some() || self.find.search_bar.is_none() {
+            return;
+        }
+        let from_register = self
+            .clipboard
+            .register
+            .as_ref()
+            .is_some_and(|r| r.notation && r.escape_count() > 0 && r.matches_text(arrived));
+        if from_register {
+            self.show_message(MessageLevel::Info, keys::INFO_PASTE_SEARCH_NOTATION, &[]);
+        }
     }
 }
 

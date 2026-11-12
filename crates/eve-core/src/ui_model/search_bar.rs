@@ -11,6 +11,7 @@ use eve_view::{
 
 use crate::command::CommandResult;
 use crate::command::ids;
+use crate::command::insert_rule::{self, EscapeContext, InsertNotice};
 use crate::document::{Origin, Transaction, UndoGroupHint};
 use crate::jobs::cancel::CancelToken;
 use crate::jobs::{JobKind, JobResult};
@@ -612,6 +613,8 @@ impl EditorState {
         } else {
             replacement
         };
+        // 置換の文字列の文字どおりの部分は外からの文字列 (挿入の入口 (3)、03 §8.3.1)。`$1` 等が運ぶ文字は同じ文書のもの
+        let (replacement, pua) = replacement_text(doc, &replacement);
         if query.matcher().is_none() {
             self.show_message(
                 MessageLevel::Info,
@@ -632,11 +635,13 @@ impl EditorState {
         let revision = doc.revision();
         if doc.text().len_bytes() <= REPLACE_SYNC_BYTES {
             let built = build_replace_all(doc.text(), &query, &replacement, &CancelToken::new());
+            self.find.replace_all_pua = pua;
             if let Some((changes, count)) = built {
                 self.apply_replace_all(doc_id, changes, count);
             }
             return CommandResult::Done;
         }
+        self.find.replace_all_pua = pua;
         let snapshot = doc.snapshot();
         let job = self.jobs.spawn(
             Some(doc_id),
@@ -715,6 +720,8 @@ impl EditorState {
         } else {
             replacement
         };
+        // 置換の文字列の文字どおりの部分は外からの文字列 (挿入の入口 (3)、03 §8.3.1)
+        let (replacement, pua) = replacement_text(doc, &replacement);
         let Some((range, insert)) = self.replace_target(doc_id, &query, &replacement) else {
             self.show_message(MessageLevel::Info, keys::INFO_SEARCH_REPLACE_NO_MATCH, &[]);
             return CommandResult::Done;
@@ -746,6 +753,9 @@ impl EditorState {
         }
         if self.apply_transaction(doc_id, tx).is_err() {
             return CommandResult::Done;
+        }
+        if pua > 0 {
+            crate::command::edit::show_notices(self, &[InsertNotice::PuaAsText(pua)]);
         }
         // 次の一致は、置換した文字列の後ろから探す。カーソルも置換の後ろに置く
         if let Some(v) = view {
@@ -815,9 +825,22 @@ impl EditorState {
             keys::INFO_SEARCH_REPLACED,
             &[("count", &count.to_string())],
         );
+        // 置換の文字列の私用文字を表記にしたことは、置換の件数の後に知らせる (黙って文字列にしない、03 §8.3.1)
+        let pua = std::mem::take(&mut self.find.replace_all_pua).saturating_mul(count);
+        if pua > 0 {
+            crate::command::edit::show_notices(self, &[InsertNotice::PuaAsText(pua)]);
+        }
         // 保持した一致は編集で無効になった: 検索をやり直す
         self.bar_changed();
     }
+}
+
+/// 置換の文字列の文字どおりの部分を、挿入先の文書の規則で外からの文字列として直す (03 §8.3.1 の挿入の入口 (3))。
+/// `U+10FF00..` を `<U+10FFNN>` にする (`$` を含まないので、`$1` / `${name}` の展開は変わらない)。返すのは
+/// (置換の文字列, 置換 1 つあたりに置き換えた数)。
+fn replacement_text(doc: &crate::document::Document, replacement: &str) -> (String, u64) {
+    let (s, n) = insert_rule::external_text(replacement, EscapeContext::of(&doc.format));
+    (s.into_owned(), n)
 }
 
 /// 編集が止まってから再検索するまでの間 (03 §12.2「編集後の結果」)。

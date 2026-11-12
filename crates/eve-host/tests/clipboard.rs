@@ -256,6 +256,28 @@ fn 取得の失敗は内部レジスタを貼り付ける() {
     assert!(e.screen().contains("xyxy"), "{}", e.screen());
 }
 
+// 書込に失敗した後は、システムのクリップボードが古いまま (他のアプリの内容 `SYS`) なので、貼り付けは内部レジスタを使う
+// (03 §8.3.1 の「システムのクリップボードが古いまま」、05 §8.1)
+// verifies: NFR-304
+#[test]
+fn 書込の失敗の後の貼り付けは古いシステムの内容ではなく内部レジスタを使う() {
+    let mut e = env();
+    e.start();
+    *e.fake.write_error.lock().unwrap() = Some(ClipboardFailure::Unavailable);
+    e.text("xy");
+    e.key(KeyCode::Char('a'), Modifiers::CTRL);
+    e.key(KeyCode::Char('c'), Modifiers::CTRL);
+    assert!(e.pump_worker(), "失敗の報告が届く");
+    e.key(KeyCode::End, Modifiers::NONE);
+    e.key(KeyCode::Char('v'), Modifiers::CTRL);
+    assert!(e.pump_worker(), "取得の結果 (SYS) が届く");
+    let screen = e.screen();
+    assert!(
+        screen.contains("xyxy") && !screen.contains("SYS"),
+        "{screen}"
+    );
+}
+
 // verifies: AC-FR-205-4
 #[test]
 fn 上限を超える全選択のコピーは文字列化せず内部レジスタだけに入れて知らせる() {

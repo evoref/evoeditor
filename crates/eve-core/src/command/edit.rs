@@ -11,6 +11,7 @@ use eve_text::{WidthConfig, str_display_width};
 use eve_view::{DocumentId, ViewId};
 
 use crate::command::ids;
+use crate::command::insert_rule::{self, EscapeContext, InsertNotice};
 use crate::document::{Document, Origin, Transaction};
 use crate::ui_model::keys;
 
@@ -213,6 +214,8 @@ fn set_line_ending(ctx: &mut CommandCtx<'_>) -> CommandResult {
 
 // ---------- 文字入力・改行 ----------
 
+/// `edit.insert_text` (文字の入力 `InputEvent::Text`・マクロ・駆動 API)。挿入の入口 (2) (03 §8.3.1): 外からの文字列として、
+/// 挿入先が表記にする文書なら `U+10FF00..` を `<U+10FFNN>` にして知らせる。
 fn insert_text(ctx: &mut CommandCtx<'_>) -> CommandResult {
     let Some(text) = ctx.args.str("text") else {
         return CommandResult::Rejected(RejectReason::InvalidArgs);
@@ -221,13 +224,44 @@ fn insert_text(ctx: &mut CommandCtx<'_>) -> CommandResult {
     if text.is_empty() {
         return CommandResult::Done;
     }
-    edit_each(ctx, |_, r| {
+    let Some(target) = target_context(ctx) else {
+        return CommandResult::Rejected(RejectReason::NoTarget);
+    };
+    let (text, pua) = insert_rule::external_text(&text, target);
+    let text = text.into_owned();
+    let notices: Vec<InsertNotice> = (pua > 0)
+        .then_some(InsertNotice::PuaAsText(pua))
+        .into_iter()
+        .collect();
+    let r = edit_each(ctx, |_, r| {
         Some(Plan {
             del: ByteRange::new(r.start(), r.end()),
             ins: text.clone(),
             cursor: CursorRule::AfterInsert,
         })
-    })
+    });
+    if matches!(r, CommandResult::Done) {
+        show_notices(ctx.state, &notices);
+    }
+    r
+}
+
+/// 操作の対象の文書の、本文に入れる規則に効く値 (03 §8.3.1)。
+fn target_context(ctx: &CommandCtx<'_>) -> Option<EscapeContext> {
+    let (_, doc) = active(ctx)?;
+    Some(EscapeContext::of(&ctx.state.document(doc)?.format))
+}
+
+/// 本文に入れたときの知らせを出す (`info.paste.*`、04 §15.2)。
+pub(crate) fn show_notices(
+    state: &mut crate::editor::state::EditorState,
+    notices: &[InsertNotice],
+) {
+    for n in notices {
+        let count = n.count().map(|c| c.to_string());
+        let args: Vec<(&str, &str)> = count.iter().map(|c| ("count", c.as_str())).collect();
+        state.show_message(eve_view::MessageLevel::Info, n.key(), &args);
+    }
 }
 
 fn newline(ctx: &mut CommandCtx<'_>) -> CommandResult {
@@ -270,22 +304,45 @@ pub fn normalize_eol(text: &str, eol: eve_text::LineEnding) -> String {
     out
 }
 
-/// `InputEvent::Paste` の本文を挿入する。改行を文書の `default_eol` に正規化し、自動インデントは適用しない。
-/// 本文の制御文字はコマンドとして解釈せず文字として入れる。Origin は `Paste` (1 操作 = 1 Undo)。
+/// `editor.paste_normalize_eol` (07 §5.13。公開は後の版で、今は常に正規化する)。
+const PASTE_NORMALIZE_EOL: bool = true;
+
+/// 貼り付けの本文を挿入する (挿入の入口 (1)、03 §8.3.1: `edit.paste` の応答 `InputEvent::ClipboardContent` と、端末からの
+/// 貼り付け `InputEvent::Paste`)。`text` は届いた文字列 (読めなかったときは `None` で、内部レジスタを使う)。
+/// 届いた文字列を内部レジスタと照合し、改行を文書の `default_eol` に正規化し (§8.4)、エスケープ文字・私用文字の
+/// 規則をかけてから入れる (`insert_rule::resolve_paste`)。自動インデントは適用しない。本文の制御文字はコマンドとして
+/// 解釈せず文字として入れる。Origin は `Paste` (1 操作 = 1 Undo)。
 pub(crate) fn paste_text(
     state: &mut crate::editor::state::EditorState,
-    text: &str,
+    text: Option<&str>,
 ) -> CommandResult {
     let args = crate::command::Args::new();
     let mut ctx = CommandCtx { state, args: &args };
-    edit_each_as(&mut ctx, Origin::Paste, |doc, r| {
-        let ins = normalize_eol(text, doc.format.default_eol);
+    let Some((_, doc_id)) = active(&ctx) else {
+        return CommandResult::Rejected(RejectReason::NoTarget);
+    };
+    let Some(doc) = ctx.state.document(doc_id) else {
+        return CommandResult::Rejected(RejectReason::NoTarget);
+    };
+    let target = EscapeContext::of(&doc.format);
+    let eol = doc.format.default_eol;
+    let (register, stale) = ctx.state.clipboard_register();
+    let Some(plan) =
+        insert_rule::resolve_paste(text, register, stale, target, eol, PASTE_NORMALIZE_EOL)
+    else {
+        return CommandResult::Done;
+    };
+    let r = edit_each_as(&mut ctx, Origin::Paste, |_, r| {
         Some(Plan {
             del: ByteRange::new(r.start(), r.end()),
-            ins,
+            ins: plan.text.clone(),
             cursor: CursorRule::AfterInsert,
         })
-    })
+    });
+    if matches!(r, CommandResult::Done) {
+        show_notices(ctx.state, &plan.notices);
+    }
+    r
 }
 
 // ---------- 削除 ----------
