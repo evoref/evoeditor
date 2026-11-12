@@ -380,6 +380,31 @@ impl Harness {
         self.collect();
     }
 
+    /// 積まれたジョブを実行し、最初に先行表示の先頭 (`JobResult::Partial`) を送ったジョブの、先頭までの結果を `Editor` に
+    /// 渡す (docs/03 §9.2.1)。先頭より後の結果 (進捗・完了) は取り置き、`finish_held_jobs` で渡す (その間に `Editor` が
+    /// 読込を取り消すと `Cancelled` に替わる)。先頭を送ったジョブがあれば `true`。
+    pub fn run_jobs_until_partial(&mut self) -> bool {
+        let hit = self.jobs.run_jobs_until_partial();
+        for r in self.jobs.take_results() {
+            self.editor.tick(self.clock.now());
+            self.editor.on_job_result(r);
+        }
+        self.collect();
+        hit
+    }
+
+    /// `run_jobs_until_partial` で取り置いた結果を渡し、残りのジョブも実行する (`run_jobs`)。
+    pub fn finish_held_jobs(&mut self) {
+        self.jobs.release_held();
+        self.run_jobs();
+    }
+
+    /// `run_jobs_until_partial` で取り置いた結果を渡し、次に先頭を送るジョブまで進める (起動時の複数のパスなど)。
+    pub fn finish_held_jobs_until_partial(&mut self) -> bool {
+        self.jobs.release_held();
+        self.run_jobs_until_partial()
+    }
+
     /// 実行待ちのジョブを 1 周だけ実行し、結果を `Editor` に渡す (結果から再投入されたジョブは走らせない)。
     pub fn run_jobs_once(&mut self) {
         self.jobs.run_jobs();

@@ -431,6 +431,7 @@ cancelled = "{path} の読込を取り消しました"
 guess_unsupported = "{path} の文字コードは {guess} と推定されましたが、この版では扱えないため {encoding} として開きました / 正しく見えないときは、文字コードを指定して開き直す ({key:file.reopen_with_encoding}) で選び直してください"
 long_line = "{path} には非常に長い行があります。その行は文字を 1 つずつ近似して表示します (結合文字が分かれて見えることがあります)"
 new_file = "{path} は無いため、新しいファイルとして開きました (保存すると作成します)"
+partial_end = "先頭の {size} だけを表示しています。残りは読込の完了後に表示します"
 preserve_off = "この文書では元のバイト列を覚えていません。元の文字コードで保存すると、一部の文字が同じ文字の別のバイト表現になることがあります"
 preserve_partial = "{count} 行は元のバイト列を覚えられませんでした。編集して保存すると、これらの行はエスケープシーケンスの書き方が変わることがあります (文字は変わりません)"
 redetected = "文字コードを {encoding} と判定し直しました"
@@ -589,6 +590,10 @@ text = "読み取り専用のため編集できません ({reason})"
 hint = "{key:file.toggle_read_only} で、確認の後に編集できます。文字化けなら {key:file.reopen_with_encoding} で開き直してください"
 text = "不正なバイトを含むため読み取り専用です"
 
+[msg.edit.read_only_loading]
+hint = "読込の完了を待つか、{key:ui.cancel} で読込を取り消してください"
+text = "読込中のため編集できません"
+
 [msg.edit.read_only_pua_collision]
 hint = "{key:file.reopen_with_encoding} で別の文字コードとして開き直してください"
 text = "不正なバイトと私用文字の両方を含むため、編集も保存もできません"
@@ -652,6 +657,10 @@ text = "メモリが足りないため {path} の読込を中止しました"
 [msg.open.parent_missing]
 hint = "フォルダを作ってから保存するか、別名で保存 ({key:file.save_as}) してください"
 text = "{path} のフォルダ {dir} がありません。新しいファイルとして開きましたが、このままでは保存できません"
+
+[msg.open.partial_unavailable]
+hint = "読込の完了を待つか、{key:ui.cancel} で読込を取り消してください"
+text = "読込中のため使えません"
 
 [msg.open.permission_denied]
 hint = "ファイルの権限を確かめてください"
@@ -1068,6 +1077,10 @@ selection = "({count} 文字選択)"
 
 [status.loading]
 long = "[読込中 {percent}%]"
+short = "{percent}%"
+
+[status.partial]
+long = "[先頭のみ {percent}%]"
 short = "{percent}%"
 
 [status.read_only]

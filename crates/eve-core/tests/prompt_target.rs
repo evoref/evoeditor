@@ -1,6 +1,9 @@
 //! 入力・確認の対象は、開いた時点の文書に固定する (docs/03 §9.6・§9.8 の「入力・確認の対象」)。
-//! 名前を付けて保存・文字コードの入力の間に、ほかの文書の読込が完了して表示が切り替わっても、確定では開いた時点の
-//! 文書に効かせる (表示中の別の文書を書かない・変えない)。確定の時点で対象が閉じられていたら、何もせずに知らせる。
+//! 名前を付けて保存・文字コードの入力の間に、ほかの文書の読込が完了しても、確定では開いた時点の文書に効かせる (表示中の
+//! 別の文書を書かない・変えない)。確定の時点で対象が閉じられていたら、何もせずに知らせる。v0.4 の M25 から、読込の完了
+//! による表示の切り替えはオーバーレイを閉じるまで保留する (03 §9.2.1 の「表示の切り替え」) ので、入力の間は表示も
+//! 変わらない。各試験は、入力・確認を開いた後に表示を直接ほかの文書へ移し (`new_untitled`)、表示中の文書と対象が
+//! 違う条件で、対象の文書に効くことを確かめる。
 
 use eve_core::{Document, DocumentId, OpenOptions};
 use eve_encoding::Encoding;
@@ -8,6 +11,17 @@ use eve_testkit::Harness;
 
 fn doc(h: &Harness, id: DocumentId) -> &Document {
     h.editor.state().document(id).expect("文書がある")
+}
+
+/// 文書 `path` の ID。
+fn doc_of(h: &Harness, path: &str) -> DocumentId {
+    let Ok(eve_view::Answer::Documents(ds)) = h.query(&eve_view::Query::Documents) else {
+        panic!("文書の一覧");
+    };
+    ds.iter()
+        .find(|d| d.path.as_deref() == Some(path))
+        .expect("文書がある")
+        .doc
 }
 
 fn path_of(h: &Harness, id: DocumentId) -> Option<String> {
@@ -41,10 +55,13 @@ fn 名前を付けて保存の入力中に表示が切り替わっても入力�
     // a の名前を付けて保存の入力 (初期値は a のパス)
     h.cmd("file.save_as");
     assert_eq!(h.overlay(), "prompt");
-    // ここで b の読込が完了して、表示が b に切り替わる
+    // ここで b の読込が完了する。表示の切り替えは入力を閉じるまで保留する
     h.run_jobs();
-    let b = h.doc_id();
-    assert_ne!(b, a, "表示は b に切り替わる (この PR では切替を保留しない)");
+    let b = doc_of(&h, "/w/b.txt");
+    assert_eq!(h.doc_id(), a, "入力の間は表示を切り替えない");
+    // 表示を直接ほかの文書へ移す (読込の完了の切り替えは保留されるので、#534 の「表示中の文書 ≠ 対象」をこれで作る)
+    h.editor.state_mut().new_untitled();
+    assert_ne!(h.doc_id(), a, "表示中の文書は対象と違う");
     assert_eq!(h.overlay(), "prompt");
     // 利用者は a を保存するつもりで確定する
     h.keys("enter");
@@ -63,7 +80,7 @@ fn 名前を付けて保存の入力中に表示が切り替わっても入力�
     );
     assert_eq!(path_of(&h, b).as_deref(), Some("/w/b.txt"));
     assert!(!doc(&h, b).is_dirty());
-    assert_eq!(h.doc_id(), b, "表示は b のまま");
+    assert_ne!(h.doc_id(), a, "表示は移した先のまま (b へは切り替えない)");
 }
 
 #[test]
@@ -71,10 +88,13 @@ fn 名前を付けて保存の確定の前に対象の文書が閉じられた�
     let (mut h, a) = a_dirty_b_loading();
     h.cmd("file.save_as");
     assert_eq!(h.overlay(), "prompt");
-    // b の読込が完了して表示が b に切り替わる
+    // b の読込が完了する (表示の切り替えは保留)
     h.run_jobs();
-    let b = h.doc_id();
+    let b = doc_of(&h, "/w/b.txt");
     assert_ne!(a, b);
+    // 表示を直接ほかの文書へ移す (読込の完了の切り替えは保留されるので、#534 の「表示中の文書 ≠ 対象」をこれで作る)
+    h.editor.state_mut().new_untitled();
+    assert_ne!(h.doc_id(), a, "表示中の文書は対象と違う");
     // 入力の間に対象の a が閉じられる (入力はモーダルなので、コマンドではなく状態を直接変えて模す)
     h.editor.state_mut().close_document(a);
     assert_eq!(h.overlay(), "prompt");
@@ -113,8 +133,11 @@ fn 文字コードを指定して保存の入力中に表示が切り替わっ�
     h.cmd("file.set_encoding");
     assert_eq!(h.overlay(), "prompt");
     h.run_jobs();
-    let b = h.doc_id();
-    assert_ne!(a, b, "表示は b に切り替わる");
+    let b = doc_of(&h, "/w/b.txt");
+    assert_eq!(h.doc_id(), a, "入力の間は表示を切り替えない");
+    // 表示を直接ほかの文書へ移す (読込の完了の切り替えは保留されるので、#534 の「表示中の文書 ≠ 対象」をこれで作る)
+    h.editor.state_mut().new_untitled();
+    assert_ne!(h.doc_id(), a, "表示中の文書は対象と違う");
     h.text("shift_jis");
     h.keys("enter");
     h.run_jobs();
@@ -149,8 +172,11 @@ fn 文字コードを指定して開き直す入力中に表示が切り替わ�
         .state_mut()
         .open_path("/w/b.txt", OpenOptions::default());
     h.run_jobs();
-    let b = h.doc_id();
-    assert_ne!(a, b, "表示は b に切り替わる");
+    let b = doc_of(&h, "/w/b.txt");
+    assert_eq!(h.doc_id(), a, "入力の間は表示を切り替えない");
+    // 表示を直接ほかの文書へ移す (読込の完了の切り替えは保留されるので、#534 の「表示中の文書 ≠ 対象」をこれで作る)
+    h.editor.state_mut().new_untitled();
+    assert_ne!(h.doc_id(), a, "表示中の文書は対象と違う");
     assert_eq!(h.overlay(), "prompt");
     h.text("shift_jis");
     h.keys("enter");
@@ -185,8 +211,11 @@ fn 編集を許可の確認から開き直すのは確認を出した文書() {
     h.cmd("file.toggle_read_only");
     assert_eq!(h.overlay(), "dialog");
     h.run_jobs();
-    let b = h.doc_id();
-    assert_ne!(a, b, "表示は b に切り替わる");
+    let b = doc_of(&h, "/w/b.txt");
+    assert_eq!(h.doc_id(), a, "確認の間は表示を切り替えない");
+    // 表示を直接ほかの文書へ移す (読込の完了の切り替えは保留されるので、#534 の「表示中の文書 ≠ 対象」をこれで作る)
+    h.editor.state_mut().new_untitled();
+    assert_ne!(h.doc_id(), a, "表示中の文書は対象と違う");
     // 「文字コードを指定して開き直す」: 確認を出した a の文字コードを尋ねる
     h.text("e");
     assert_eq!(h.overlay(), "prompt");

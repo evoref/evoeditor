@@ -16,6 +16,7 @@ pub(crate) mod last_version;
 pub(crate) mod leftover;
 pub(crate) mod leftover_offer;
 pub(crate) mod open;
+pub(crate) mod partial_view;
 pub(crate) mod paths;
 pub(crate) mod pending;
 pub(crate) mod reload;

@@ -131,17 +131,22 @@ pub(crate) fn status_model(
             CutPolicy::Never,
         ));
     }
-    // 読込中: 読込中の文書そのもの、または置き換えの途中で旧文書を見せている間 (03 §9.2) に進捗を出す
-    let loading = (doc.load_state == LoadState::Loading)
+    // 読込中: 表示中の文書が読込中 (`Loading` / `Partial`) ならその文書の進捗を、そうでなければ表示していない文書の
+    // 新しく開く読込の進捗を出す (03 §9.2.1 の「ステータスバー」、§9.8 の「読込中のバッファ」)。先行表示の間は
+    // `status.partial.*` (02 §5.1: 読込中は `Loading` / `Partial` から導出する)
+    let shown_loading = matches!(doc.load_state, LoadState::Loading | LoadState::Partial);
+    let loading = shown_loading
         .then_some(doc.load_percent)
         .or_else(|| state.loading_percent());
     if let Some(percent) = loading {
         let percent = percent.to_string();
         let a = [("percent", percent.as_str())];
-        let (long, short) = (
-            render(state, keys::STATUS_LOADING_LONG, &a),
-            render(state, keys::STATUS_LOADING_SHORT, &a),
-        );
+        let (long_key, short_key) = if doc.load_state == LoadState::Partial {
+            (keys::STATUS_PARTIAL_LONG, keys::STATUS_PARTIAL_SHORT)
+        } else {
+            (keys::STATUS_LOADING_LONG, keys::STATUS_LOADING_SHORT)
+        };
+        let (long, short) = (render(state, long_key, &a), render(state, short_key, &a));
         items.push(item(
             StatusKind::Loading,
             &long,

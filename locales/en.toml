@@ -433,6 +433,7 @@ cancelled = "Cancelled loading {path}"
 guess_unsupported = "The encoding of {path} was guessed as {guess}, which is not supported in this version, so it was opened as {encoding} / If it looks wrong, choose another with Reopen with Encoding ({key:file.reopen_with_encoding})"
 long_line = "{path} has a very long line. That line is shown approximately, one character at a time (combining marks may look separated)"
 new_file = "{path} does not exist, so it was opened as a new file (saving creates it)"
+partial_end = "Showing only the first {size}. The rest appears when loading finishes"
 preserve_off = "The original bytes of this document were not kept. Saving in the original encoding may write some characters as different bytes"
 preserve_partial = "The original bytes of {count} lines could not be kept. Saving after an edit may change how escape sequences are written on these lines (the characters do not change)"
 redetected = "Re-detected the encoding as {encoding}"
@@ -591,6 +592,10 @@ text = "Cannot edit because the document is read-only ({reason})"
 hint = "Use {key:file.toggle_read_only} to edit after a confirmation. If the text is garbled, reopen with {key:file.reopen_with_encoding}"
 text = "Read-only because the file has invalid bytes"
 
+[msg.edit.read_only_loading]
+hint = "Wait for loading to finish, or press {key:ui.cancel} to cancel it"
+text = "Cannot edit while the file is loading"
+
 [msg.edit.read_only_pua_collision]
 hint = "Reopen it with another encoding ({key:file.reopen_with_encoding})"
 text = "Cannot edit or save because the file has both invalid bytes and private-use characters"
@@ -654,6 +659,10 @@ text = "Loading {path} was stopped because memory ran out"
 [msg.open.parent_missing]
 hint = "Create the folder and then save, or save under another name ({key:file.save_as})"
 text = "The folder {dir} of {path} does not exist. It was opened as a new file, but it cannot be saved as is"
+
+[msg.open.partial_unavailable]
+hint = "Wait for loading to finish, or press {key:ui.cancel} to cancel it"
+text = "Not available while the file is loading"
 
 [msg.open.permission_denied]
 hint = "Check the file's permissions"
@@ -1070,6 +1079,10 @@ selection = "({count} chars selected)"
 
 [status.loading]
 long = "[Loading {percent}%]"
+short = "{percent}%"
+
+[status.partial]
+long = "[First part {percent}%]"
 short = "{percent}%"
 
 [status.read_only]

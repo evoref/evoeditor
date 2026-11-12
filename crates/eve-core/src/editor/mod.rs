@@ -166,6 +166,7 @@ impl Editor {
             self.which_key_shown = true;
             self.state.mark_dirty_render();
         }
+        self.state.flush_open_switches();
     }
 
     /// which-key を出すまでの時間 (`ui.which_key_delay_ms`、既定 500 ms)。
@@ -205,6 +206,8 @@ impl Editor {
                 &CommandInvocation::new(&id, InvocationSource::Palette).with_args(args),
             );
         }
+        // オーバーレイを閉じたら、保留した表示の切り替えを行う (03 §9.2.1 の「表示の切り替え」)
+        self.state.flush_open_switches();
         res
     }
 
@@ -225,6 +228,7 @@ impl Editor {
         self.state.on_job_result(r);
         // `config.reload` の結果: キーマップは Editor が持つので、ここで差し替える
         self.finish_reload_keymap();
+        self.state.flush_open_switches();
     }
 
     /// 起動時の開き方 (`Host::start` が最初の `Resize` の後に呼ぶ)。パスがなければ無題の文書 (FR-124)。
@@ -295,7 +299,13 @@ impl Editor {
                     let chord_pending = !self.keymap.pending().is_empty();
                     // 保留中の Esc は保留を取り消す (メッセージは消さない、04 §8.9 の Esc の優先順位)
                     if !(is_esc && (chord_pending || self.state.overlay_kind() != "")) {
-                        self.state.dismiss_message_on_key(is_esc);
+                        let esc_dismissed = self.state.dismiss_message_on_key(is_esc);
+                        // 1 回の `Esc` は 1 つだけを行う (04 §7.5): オーバーレイ・検索バーが無いときに警告・エラーを
+                        // 消した `Esc` は、読込の取消しなど後ろの層 (`ui.cancel`) を行わない
+                        if esc_dismissed && self.state.find.search_bar.is_none() {
+                            self.state.flush_open_switches();
+                            return;
+                        }
                     }
                     self.on_key(KeyStroke {
                         mods: k.mods,
@@ -336,6 +346,8 @@ impl Editor {
             }
             _ => {}
         }
+        // オーバーレイを閉じたら、保留した表示の切り替えを行う (03 §9.2.1 の「表示の切り替え」)
+        self.state.flush_open_switches();
     }
 
     /// 編集面にフォーカスがあるときのコンテキストの参照順 (07 §7.1)。

@@ -1,6 +1,6 @@
 //! 先行表示のジョブの側 (docs/03 §9.2.1、v0.4 の M25 の (1)、01 FR-122 AC-2〜AC-4): 読込が 200 ms を過ぎても終わらない
 //! とき、開くジョブは固定の先頭 (全文の接頭辞) を `JobResult::Partial` で 1 回送る。遅い読込は `MemFs` のチャンクごとに
-//! `ManualClock` を進めて作る。main (core の受け手) はまだ先頭を捨てる (振る舞いを変えない)。
+//! `ManualClock` を進めて作る。core の受け手 (表示・できる操作・全文への差し替え) の試験は `partial_view.rs`。
 
 use std::sync::Arc;
 
@@ -347,7 +347,7 @@ fn 先頭を送っていなければ判定のやり直しでも時間の条件�
     assert_eq!(heads(&out).len(), 0);
 }
 
-// ---------- core が partial を立てる所と、受け手が捨てること ----------
+// ---------- core が partial を立てる所と、受け手の待ちの記録 ----------
 
 /// 遅い読込 (64 バイトのチャンクごとに 100 ms) の Harness。
 fn slow(h: &Harness) {
@@ -430,20 +430,22 @@ fn 確認からの再投入は先行表示の指定を引き継ぐ() {
 }
 
 #[test]
-fn 受け手は先頭を捨て_読込中の表示と完了は変わらない() {
+fn 受け手は先頭を表示し_待ちの記録を残して完了で全文にする() {
     let mut h = Harness::new().with_file("/w/a.txt", b"hello\nworld\n");
     let CommandResult::Pending(job) = h.open("/w/a.txt") else {
         panic!("読込ジョブを投入する");
     };
-    let before = h.frame_text();
+    let mut format = TextFormat::new_document();
+    format.eol_stats.lf = 1;
     h.editor.on_job_result(JobOutput {
         job,
         body: JobResult::Partial {
             head: Text::from("hello\n"),
-            format: TextFormat::new_document(),
+            format,
         },
     });
-    assert_eq!(h.frame_text(), before, "表示は変わらない");
+    assert_eq!(h.doc_text(), "hello\n", "先頭を表示する");
+    assert!(!h.frame_contains("world"));
     // 待ちの記録は残っていて、完了で全文になる
     h.run_jobs();
     assert_eq!(h.doc_text(), "hello\nworld\n");
