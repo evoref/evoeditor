@@ -3,7 +3,6 @@
 
 use eve_view::{DocumentId, EditorEvent, MessageLevel};
 
-use crate::document::NodeId;
 use crate::io::fs::{
     Expect, FsError, FsErrorDetail, FsErrorKind, HardlinkPolicy, InPlaceBackup, SaveMethod,
 };
@@ -304,6 +303,15 @@ impl EditorState {
             doc.format.save_escape_policy(out_encoding),
         );
         let revision = doc.revision();
+        // つながりの承認 (03 §8.3.1 の「承認」、§9.7 の表の `escape_merge_ok` の列): 投入のたびに `SaveApprovals` から、
+        // この文書の今の Revision のものを引く (無ければ `None`)。ジョブは結果が承認と同じときだけ止めずに書く
+        let escape_merge_ok = self
+            .io
+            .escape_merge_ok
+            .as_ref()
+            .filter(|(d, r, _)| *d == doc_id && *r == revision)
+            .map(|(_, _, a)| a.clone());
+        let merged = escape_merge_ok.as_ref().map(|a| a.total);
         // 保持方式の記録の、保存を始めた時点の版 (複製は O(1)。03 §9.3 手順 4)。Snapshot と同じ時点で取る
         let preserved = doc.preserved_for(out_encoding);
         let (snapshot, at) = doc.begin_save();
@@ -321,9 +329,7 @@ impl EditorState {
                 clear_readonly,
                 create_link_target,
                 preserved,
-                // つながりの承認 (`SaveApprovals`) は M23 の次の PR で覚える。今は承認せずに投入する (つながりがあれば
-                // ジョブは何も書かずに `EscapeMerge` を返す)
-                escape_merge_ok: None,
+                escape_merge_ok,
             },
         );
         if let Some(c) = cont {
@@ -338,6 +344,8 @@ impl EditorState {
                 path,
                 expected,
                 fmt,
+                strategy,
+                merged,
             },
         );
         CommandResult::Pending(job)
@@ -430,6 +438,7 @@ impl EditorState {
             details: Vec::new(),
             default,
             focused: default,
+            message: None,
             action: ConfirmAction::SaveFailed(ask),
         });
     }
@@ -541,6 +550,7 @@ impl EditorState {
             details: Vec::new(),
             default,
             focused: default,
+            message: None,
             action: ConfirmAction::Fallback(ask),
         });
     }
@@ -560,6 +570,7 @@ impl EditorState {
             details: Vec::new(),
             default: 0,
             focused: 0,
+            message: None,
             action: ConfirmAction::ClearReadOnly(ask),
         });
     }
@@ -674,18 +685,21 @@ impl EditorState {
         }
     }
 
-    #[allow(clippy::too_many_arguments)] // 保存ジョブの文脈 (Pending::Save) をそのまま受ける
     pub(crate) fn finish_save(
         &mut self,
-        doc_id: DocumentId,
-        at: NodeId,
-        revision: eve_view::Revision,
+        job: &SaveCtx,
         path: &FsPath,
-        expected: Expect,
-        fmt: Option<NewFormat>,
         cont: Option<Continuation>,
         r: JobResult,
     ) {
+        let SaveCtx {
+            doc: doc_id,
+            at,
+            revision,
+            expected,
+            fmt,
+            ..
+        } = *job;
         match r {
             JobResult::Saved { report, .. } => {
                 let report_method = report.method;
@@ -724,12 +738,27 @@ impl EditorState {
                     revision,
                     path: path.display(),
                 });
-                let key = if report_method == SaveMethod::InPlace {
-                    keys::INFO_SAVE_IN_PLACE
-                } else {
-                    keys::INFO_SAVE_DONE
-                };
-                self.message(MessageLevel::Info, key, &path.display());
+                // 直接上書きで書いたことは 1 回示す (03 §9.3 手順 7)。つながりを承認した保存の完了は、`info.save.done` に
+                // 代えて `info.save.escape_merged` にする (03 §8.3.1 の「つながったまま保存した後」)。直接上書きでは
+                // `info.save.in_place` の後に出す (完了の要点を最後に残す)
+                if report_method == SaveMethod::InPlace {
+                    self.message(
+                        MessageLevel::Info,
+                        keys::INFO_SAVE_IN_PLACE,
+                        &path.display(),
+                    );
+                }
+                match job.merged {
+                    Some(count) => self.show_message(
+                        MessageLevel::Info,
+                        keys::INFO_SAVE_ESCAPE_MERGED,
+                        &[("path", &path.display()), ("count", &count.to_string())],
+                    ),
+                    None if report_method != SaveMethod::InPlace => {
+                        self.message(MessageLevel::Info, keys::INFO_SAVE_DONE, &path.display());
+                    }
+                    None => {}
+                }
                 self.show_save_warning(path, &report.warnings);
                 self.mark_snapshot_update(doc_id);
                 // 保存の後に続ける操作 (開く・新規作成・終了)。保存が失敗したときは続けない
@@ -777,8 +806,13 @@ impl EditorState {
                     // 元のバイトに戻したエスケープ文字があれば、UTF-8 では表現不能になるので「UTF-8 で保存」も出さない
                     // (03 §8.3.1 の「E3 との関係」)
                     EscapesInSave {
-                        unmappable: escapes_unmappable > 0,
+                        unmappable: escapes_unmappable,
                         restored: escapes_restored > 0,
+                        // 本文の「最初」はエスケープ文字の最初 (記録した先頭 100 件に無ければ表現不能の最初)
+                        first: recorded
+                            .iter()
+                            .find(|u| is_escape_char(u.ch))
+                            .map(|u| u.char_index),
                     },
                 );
             }
@@ -792,9 +826,40 @@ impl EditorState {
                     ],
                 );
             }
-            // エスケープ文字を戻したバイトが隣とつながる (03 §8.3.1): 何も書いていない。確認 (`ui.confirm.save.escape_merge`)
-            // と承認は M23 の次の PR で入れる。それまでは保存の失敗として示し、後続 (終了・置き換え) は続けない
-            // (黙って書かない・黙って成功にしない)
+            // エスケープ文字を戻したバイトが隣とつながる (03 §8.3.1): 何も書いていない。書く前の確認
+            // (`ui.confirm.save.escape_merge`) を出す。後続 (終了・置き換え・開き直し) は「このまま保存」で保ち、
+            // キャンセルで捨てる (03 §9.7 (e))
+            JobResult::EscapeMerge {
+                total,
+                recorded,
+                digest,
+                changed_chars,
+                changed_lines,
+                to_eof,
+            } if self.docs.documents.contains_key(&doc_id) && !recorded.is_empty() => {
+                self.open_escape_merge(
+                    super::escape_merge::EscapeMergeAsk {
+                        doc: doc_id,
+                        path: path.clone(),
+                        expected,
+                        cont,
+                        strategy: job.strategy,
+                        fmt,
+                        base: revision,
+                        approval: crate::jobs::EscapeMergeApproval {
+                            total,
+                            recorded,
+                            digest,
+                        },
+                    },
+                    super::escape_merge::MergeExtent {
+                        chars: changed_chars,
+                        lines: changed_lines,
+                        to_eof,
+                    },
+                );
+            }
+            // 閉じた文書 (確認を出す先が無い): 保存の失敗として示す (退避先への書込は結果の処理が行う)
             JobResult::EscapeMerge { total, .. } => {
                 self.show_message(
                     MessageLevel::Error,

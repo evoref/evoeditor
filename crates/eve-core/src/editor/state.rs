@@ -138,6 +138,13 @@ pub(crate) struct IoState {
     pub(crate) lossy_ok: Option<(DocumentId, eve_view::Revision)>,
     /// 「読み取り専用を解除して保存」を承認した (文書, Revision)。同じ Revision の保存では確認を繰り返さない。
     pub(crate) readonly_ok: Option<(DocumentId, eve_view::Revision)>,
+    /// エスケープ文字のつながりの確認で「このまま保存」を選んだ (文書, 結果の base Revision, 承認した結果) (03 §8.3.1 の
+    /// 「承認」、§9.7 の `SaveApprovals`)。保存を投入するたびに、文書と今の Revision が同じならジョブに渡す。
+    pub(crate) escape_merge_ok: Option<(
+        DocumentId,
+        eve_view::Revision,
+        crate::jobs::EscapeMergeApproval,
+    )>,
     /// ダングリングのリンクのリンク先への作成を承認した (文書, パス)。次の 1 回の保存で使って消す。
     pub(crate) link_create_ok: Option<(DocumentId, crate::FsPath)>,
     /// ログファイルの場所 (設定の問題の要約に出す)。
@@ -291,6 +298,7 @@ impl EditorState {
                 leftovers: Vec::new(),
                 lossy_ok: None,
                 readonly_ok: None,
+                escape_merge_ok: None,
                 link_create_ok: None,
                 system_encoding: None,
                 log_path: None,
