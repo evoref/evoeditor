@@ -44,6 +44,8 @@ pub(crate) const INFO_RELOAD_DONE_READ_ONLY: &str = "info.reload.done_read_only"
 pub(crate) const INFO_REOPEN_HISTORY_CLEARED: &str = "info.reopen.history_cleared";
 pub(crate) const INFO_SAVE_ABORTED: &str = "info.save.aborted";
 pub(crate) const INFO_SAVE_DONE: &str = "info.save.done";
+pub(crate) const INFO_SAVE_ESCAPE_MERGE_CANCELLED: &str = "info.save.escape_merge_cancelled";
+pub(crate) const INFO_SAVE_ESCAPE_MERGED: &str = "info.save.escape_merged";
 pub(crate) const INFO_SAVE_IN_PLACE: &str = "info.save.in_place";
 pub(crate) const INFO_SAVE_IN_PROGRESS: &str = "info.save.in_progress";
 pub(crate) const INFO_SAVE_TO_RECOVERY: &str = "info.save.to_recovery";
@@ -146,6 +148,8 @@ pub(crate) const UI_CONFIG_DIAGNOSTICS_TITLE: &str = "ui.config_diagnostics.titl
 pub(crate) const UI_CONFIRM_CANCEL: &str = "ui.confirm.cancel";
 pub(crate) const UI_CONFIRM_NAV_HINT: &str = "ui.confirm.nav_hint";
 pub(crate) const UI_CONFIRM_QUIT_SAVING_OTHERS: &str = "ui.confirm.quit_saving.others";
+pub(crate) const UI_CONFIRM_SAVE_ESCAPE_MERGE_ITEM: &str = "ui.confirm.save.escape_merge.item";
+pub(crate) const UI_CONFIRM_SAVE_ESCAPE_MERGE_MORE: &str = "ui.confirm.save.escape_merge.more";
 pub(crate) const UI_CONFIRM_SAVE_UNMAPPABLE_REPLACE_ITEM: &str =
     "ui.confirm.save.unmappable_replace.item";
 pub(crate) const UI_CONFIRM_SAVE_UNMAPPABLE_REPLACE_MORE: &str =
@@ -195,7 +199,7 @@ pub(crate) const UI_TOO_SMALL: &str = "ui.too_small";
 
 /// すべての定数 (キーの順。試験に使う)。
 #[cfg(test)]
-const ALL: [&str; 184] = [
+const ALL: [&str; 188] = [
     HINT_UI_CANCEL,
     INFO_APP_RELEASE_SUMMARY,
     INFO_APP_UPDATED,
@@ -237,6 +241,8 @@ const ALL: [&str; 184] = [
     INFO_REOPEN_HISTORY_CLEARED,
     INFO_SAVE_ABORTED,
     INFO_SAVE_DONE,
+    INFO_SAVE_ESCAPE_MERGE_CANCELLED,
+    INFO_SAVE_ESCAPE_MERGED,
     INFO_SAVE_IN_PLACE,
     INFO_SAVE_IN_PROGRESS,
     INFO_SAVE_TO_RECOVERY,
@@ -337,6 +343,8 @@ const ALL: [&str; 184] = [
     UI_CONFIRM_CANCEL,
     UI_CONFIRM_NAV_HINT,
     UI_CONFIRM_QUIT_SAVING_OTHERS,
+    UI_CONFIRM_SAVE_ESCAPE_MERGE_ITEM,
+    UI_CONFIRM_SAVE_ESCAPE_MERGE_MORE,
     UI_CONFIRM_SAVE_UNMAPPABLE_REPLACE_ITEM,
     UI_CONFIRM_SAVE_UNMAPPABLE_REPLACE_MORE,
     UI_CONFIRM_SAVE_ALL_FAILED_NEEDS_CONFIRM,

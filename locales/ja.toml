@@ -464,6 +464,8 @@ set = "読み取り専用にしました"
 [info.save]
 aborted = "保存を中止しました ({path} は書き換えていません)"
 done = "{path} を保存しました"
+escape_merge_cancelled = "保存しませんでした。開き直すと文字が変わる {count} 箇所を強調しました (不正なバイトを消す・間に改行を入れる・元の並びに戻すと直ります)"
+escape_merged = "{path} を保存しました。開き直すと {count} 箇所が別の文字になります"
 in_place = "{path} を直接上書きで保存しました"
 in_progress = "保存中です"
 to_recovery = "退避先 {target} に保存しました。元のファイル {path} は変更していません"
@@ -978,6 +980,15 @@ title = "表現できない文字"
 message = "{count} 個の文字は {encoding} で表せません (最初: 行 {line}, 桁 {col})"
 utf8 = "[U] UTF-8 で保存"
 replace = "[R] 置換して保存"
+escape_message = "不正なバイト (<0xNN>) {count} 個は {encoding} では保存できません (最初: 行 {line}, 桁 {col})〔。ほかに表せない文字が {others} 個あります〕。消すか正しい文字に打ち直してから保存してください"
+
+[ui.confirm.save.escape_merge]
+title = "開き直すと文字が変わる箇所"
+message = "{count} 箇所で、不正なバイトが続くバイトや文字とつながり、開き直すと別の文字として読まれます (最初: 行 {line}, 桁 {col})。合わせて {chars} 文字 ({lines} 行) が別の文字になります。まだ保存していません"
+message_to_eof = "{count} 箇所で、不正なバイトが続くバイトや文字とつながり、開き直すと別の文字として読まれます (最初: 行 {line}, 桁 {col})。そこからファイルの末尾まで別の文字になります。まだ保存していません"
+item = "行 {line}, 桁 {col}: {before} → {after}"
+more = "ほか {count} 箇所"
+save = "[S] このまま保存"
 
 [ui.confirm.save.unmappable_replace]
 title = "置換の確認"

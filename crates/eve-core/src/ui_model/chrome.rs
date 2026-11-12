@@ -279,7 +279,9 @@ pub(crate) fn overlay_models(state: &EditorState) -> Vec<OverlayModel> {
                 .map(|(k, v)| (k.as_str(), v.as_str()))
                 .collect();
             // 終了の連鎖 (03 §9.8) は何件目かを前置した本文を使う
-            let message_leaf = if c.args.iter().any(|(k, _)| k == "index") {
+            let message_leaf = if let Some(leaf) = c.message {
+                leaf
+            } else if c.args.iter().any(|(k, _)| k == "index") {
                 "chain"
             } else {
                 "message"

@@ -184,6 +184,7 @@ impl EditorState {
                 .collect(),
             default: 0,
             focused: 0,
+            message: None,
             action: ConfirmAction::Notice,
         });
     }

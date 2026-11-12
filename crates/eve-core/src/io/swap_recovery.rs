@@ -191,6 +191,7 @@ impl EditorState {
             details,
             default: 0,
             focused: 0,
+            message: None,
             action: ConfirmAction::SwapRecovery {
                 entry: Box::new(entry),
                 doc: id,

@@ -166,6 +166,7 @@ impl EditorState {
             details: Vec::new(),
             default,
             focused: default,
+            message: None,
             action,
         });
     }

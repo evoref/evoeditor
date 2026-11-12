@@ -466,6 +466,8 @@ set = "Made read-only"
 [info.save]
 aborted = "Save cancelled ({path} was not changed)"
 done = "Saved {path}"
+escape_merge_cancelled = "Not saved. Highlighted {count} places that would change when reopened (delete the invalid bytes, put a line break between them, or restore the original order)"
+escape_merged = "Saved {path}. {count} places read as different characters when reopened"
 in_place = "Saved {path} by overwriting in place"
 in_progress = "Saving"
 to_recovery = "Saved to {target}. The original file {path} was not changed"
@@ -980,6 +982,15 @@ title = "Characters that cannot be represented"
 message = "{count} characters cannot be represented in {encoding} (first: line {line}, column {col})"
 utf8 = "[U] Save as UTF-8"
 replace = "[R] Replace and save"
+escape_message = "{count} invalid bytes (<0xNN>) cannot be saved in {encoding} (first: line {line}, column {col})〔; {others} other characters cannot be represented either〕. Delete them or retype the correct characters, then save"
+
+[ui.confirm.save.escape_merge]
+title = "Text that changes when reopened"
+message = "At {count} places, invalid bytes join the bytes or characters after them and read as different characters when reopened (first: line {line}, column {col}). {chars} characters ({lines} lines) in total would change. Nothing has been saved yet"
+message_to_eof = "At {count} places, invalid bytes join the bytes or characters after them and read as different characters when reopened (first: line {line}, column {col}). Everything from there to the end of the file would change. Nothing has been saved yet"
+item = "line {line}, column {col}: {before} → {after}"
+more = "and {count} more"
+save = "[S] Save as is"
 
 [ui.confirm.save.unmappable_replace]
 title = "Confirm replacement"

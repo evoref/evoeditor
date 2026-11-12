@@ -76,6 +76,7 @@ impl EditorState {
             details: Vec::new(),
             default: 0,
             focused: 0,
+            message: None,
             action: ConfirmAction::Leftover(Box::new(l)),
         });
     }

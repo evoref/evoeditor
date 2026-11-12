@@ -30,10 +30,13 @@ pub(crate) struct UnmappableAsk {
 /// 表現不能で止まった保存の、エスケープ文字の内訳 (03 §8.3.1 の「E3 との関係」)。
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct EscapesInSave {
-    /// 表現不能の文字にエスケープ文字を含む (全件で数えた `escapes_unmappable > 0`)。
-    pub unmappable: bool,
+    /// 表現不能の文字のうちエスケープ文字の数 (全件で数えた `escapes_unmappable`)。1 以上なら選択肢 1・2 を出さず、
+    /// 本文を不正なバイトの説明 (`ui.confirm.save.unmappable.escape_message`) にする。
+    pub unmappable: u64,
     /// この保存でエスケープ文字を元のバイトに戻した (`escapes_restored > 0`)。
     pub restored: bool,
+    /// 記録した先頭 100 件のうち、最初のエスケープ文字の通し番号 (本文の「最初」の位置)。
+    pub first: Option<u64>,
 }
 
 impl EditorState {
@@ -48,11 +51,17 @@ impl EditorState {
         escapes: EscapesInSave,
     ) {
         use crate::ui_model::overlay::{ChoiceDef, ConfirmAction, ConfirmState};
+        let has_escape = escapes.unmappable > 0;
+        // エスケープ文字が理由の E3 は、本文を不正なバイトの説明にする (03 §8.3.1 の「E3 との関係」)。「最初」は
+        // エスケープ文字の最初の位置 (記録した先頭 100 件に無ければ表現不能の最初)
+        let first = match escapes.first {
+            Some(n) if has_escape => n,
+            _ => ask.first_char,
+        };
         let (line, col) = self
-            .char_pos(ask.doc, ask.first_char)
+            .char_pos(ask.doc, first)
             .map_or((1, 1), |(_, l, c)| (l, c));
         let mut choices = Vec::new();
-        let has_escape = escapes.unmappable;
         // UTF-8 でも表せないのはエスケープ文字だけ (E4)。UTF-8 / UTF-16 で保存中のときは、選んでも結果が同じなので出さない。
         // 元のバイトに戻すエスケープ文字がある保存も、UTF-8 ではそれが表現不能になる (選ぶと 2 回目の E3 になる) ので出さない
         if !has_escape && !escapes.restored && !matches!(encoding, Encoding::Utf8) {
@@ -77,18 +86,36 @@ impl EditorState {
             });
         }
         let default = choices.len();
+        // エスケープ文字が理由のとき: `{count}` は不正なバイトの数、ほかの表現不能の文字の数は `{others}` で添える
+        // (0 なら空にして 〔 〕 ごと省く)
+        let (count, others, message) = if has_escape {
+            let others = total.saturating_sub(escapes.unmappable);
+            (
+                escapes.unmappable,
+                if others > 0 {
+                    others.to_string()
+                } else {
+                    String::new()
+                },
+                Some("escape_message"),
+            )
+        } else {
+            (total, String::new(), None)
+        };
         self.open_confirm(ConfirmState {
             name: "save.unmappable",
             args: vec![
-                ("count".to_owned(), total.to_string()),
+                ("count".to_owned(), count.to_string()),
                 ("encoding".to_owned(), encoding.name().to_owned()),
                 ("line".to_owned(), line.to_string()),
                 ("col".to_owned(), col.to_string()),
+                ("others".to_owned(), others),
             ],
             choices,
             details: Vec::new(),
             default,
             focused: default,
+            message,
             action: ConfirmAction::Unmappable(ask),
         });
     }
@@ -238,6 +265,7 @@ impl EditorState {
                     // 既定はキャンセル
                     default: 1,
                     focused: 1,
+                    message: None,
                     action: ConfirmAction::UnmappableReplace {
                         ask,
                         changes,
@@ -323,28 +351,17 @@ impl EditorState {
 
     /// 表現不能の文字 (通し番号 `indices`) の位置を強調として記録する。文書の Revision が変わると無効になる。
     pub(crate) fn mark_unmappable(&mut self, doc: DocumentId, indices: &[u64]) {
-        use eve_text::TextRead;
+        let ranges: Vec<(u64, u64)> = indices.iter().map(|&i| (i, 1)).collect();
+        let marks = self.char_ranges(doc, &ranges);
+        self.set_marks(doc, marks);
+    }
+
+    /// 本文のバイト範囲 `marks` を、表現不能と同じ強調として今の Revision に記録する (E3 の表現不能・つながりの
+    /// 確認のキャンセル、03 §8.3.1)。文書の Revision が変わると無効になる。
+    pub(crate) fn set_marks(&mut self, doc: DocumentId, marks: Vec<(usize, usize)>) {
         let Some(d) = self.docs.documents.get(&doc) else {
             return;
         };
-        let t = d.text();
-        let want: std::collections::BTreeSet<u64> = indices.iter().copied().collect();
-        let last = want.last().copied().unwrap_or(0);
-        let mut marks: Vec<(usize, usize)> = Vec::with_capacity(want.len());
-        let mut n = 0u64;
-        let mut pos = 0usize;
-        'chunks: for chunk in t.chunks(eve_text::ByteRange::all(t.len_bytes())) {
-            for (i, c) in chunk.char_indices() {
-                if want.contains(&n) {
-                    marks.push((pos + i, pos + i + c.len_utf8()));
-                }
-                n += 1;
-                if n > last {
-                    break 'chunks;
-                }
-            }
-            pos += chunk.len();
-        }
         self.io.unmappable_marks = Some((doc, d.revision(), marks));
         self.mark_dirty_render();
     }

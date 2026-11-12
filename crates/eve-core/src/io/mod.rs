@@ -4,6 +4,7 @@
 //! spec: 03 §9, 03 §10, 02 §4.5, 05 §4, 05 §7
 pub(crate) mod config_reload;
 pub(crate) mod content_hash;
+pub(crate) mod escape_merge;
 pub(crate) mod external;
 pub(crate) mod file;
 pub(crate) mod file_cmds;
