@@ -60,7 +60,41 @@ pub(crate) enum FallbackKind {
     NoBackup,
 }
 
+/// 保存の連鎖の開始時に拒否する文書か (03 §9.7 の「連鎖の開始時の拒否」、§8.3 の (a)、OQ-207): 書く文字コード
+/// (`fmt` が無ければ文書の今の文字コード) が状態付き (ISO-2022-JP) で、文書が不正バイトを含む (`invalid_bytes > 0`)。
+/// 状態付き符号化では不正バイトを元のバイトに戻して書けないため。判断はここだけで行う。
+pub(crate) fn stateful_invalid(doc: &crate::document::Document, fmt: Option<NewFormat>) -> bool {
+    let out_encoding = fmt.map_or(doc.format.encoding, |f| f.encoding);
+    out_encoding.is_stateful() && doc.format.invalid_bytes > 0
+}
+
 impl EditorState {
+    /// 保存の連鎖の開始時の拒否: 文書が `stateful_invalid` に当たれば、
+    /// `msg.save.encoding_unsupported_iso2022` を示して `true` を返す。呼び側はジョブを投入せず、名前の入力・照合・確認の
+    /// どれにも進まず、後続 (`cont`) も実行しない (文書・書式は変えない)。
+    /// 保存の連鎖の入口 (`file.save`・`file.save_as`・`file.set_encoding`・`AskUnsaved` の「保存」・全保存) は、
+    /// 書式が決まった直後にこれを呼ぶ。`start_save_with` も投入の前に呼ぶ (入口を経ずに投入し直す経路の受け止め)。
+    /// 読込が済んでいない文書は対象にしない (読込中の拒否は各入口の規則に任せる)。
+    pub(crate) fn reject_stateful_invalid(
+        &mut self,
+        doc_id: DocumentId,
+        fmt: Option<NewFormat>,
+    ) -> bool {
+        let Some(doc) = self.docs.documents.get(&doc_id) else {
+            return false;
+        };
+        if doc.load_state != crate::document::LoadState::Ready || !stateful_invalid(doc, fmt) {
+            return false;
+        }
+        let shown = doc.path.as_ref().map(FsPath::display).unwrap_or_default();
+        self.show_message(
+            MessageLevel::Error,
+            keys::MSG_SAVE_ENCODING_UNSUPPORTED_ISO2022,
+            &[("path", &shown)],
+        );
+        true
+    }
+
     /// 確認で「保存」を選んだ後: `doc_id` を保存し、成功したら `cont` を続ける。パスがなければ名前を尋ねてから保存する。
     /// 対象はアクティブ文書ではなく `doc_id` (保存の連鎖は保存した文書に属する、03 §9.8)。
     pub(crate) fn save_doc_then(
@@ -68,9 +102,9 @@ impl EditorState {
         doc_id: DocumentId,
         cont: Continuation,
     ) -> CommandResult {
-        let Some(doc) = self.document(doc_id) else {
+        if self.document(doc_id).is_none() {
             return CommandResult::Rejected(RejectReason::NoTarget);
-        };
+        }
         // 保存中なら、その保存の完了後に続ける (二重に保存しない)
         let in_flight = self.io.pending.iter().find_map(|(job, p)| match p {
             Pending::Save { doc, .. } if *doc == doc_id => Some(*job),
@@ -80,6 +114,13 @@ impl EditorState {
             self.ui.continuations.insert(job, cont);
             return CommandResult::Pending(job);
         }
+        // 名前の入力 (無題・読み取り専用) より先に拒否する。後続 (終了・閉じる・開き直し) も行わない (03 §9.7)
+        if self.reject_stateful_invalid(doc_id, None) {
+            return CommandResult::Rejected(RejectReason::NotAvailable);
+        }
+        let Some(doc) = self.document(doc_id) else {
+            return CommandResult::Rejected(RejectReason::NoTarget);
+        };
         let Some(path) = doc.path.clone() else {
             self.open_prompt(PromptKind::SaveAs { then: Some(cont) }, String::new());
             return CommandResult::Done;
@@ -117,6 +158,11 @@ impl EditorState {
         let Some(doc_id) = self.active_document() else {
             return CommandResult::Rejected(RejectReason::NoTarget);
         };
+        // 保存先を調べる前に拒否する (03 §9.7 の「連鎖の開始時の拒否」)。名前の入力の後の呼び出しでは、入力の前の
+        // 拒否を経ているので、ここで拒否するのは待つ間に書式が変わったときだけ
+        if self.reject_stateful_invalid(doc_id, fmt) {
+            return CommandResult::Rejected(RejectReason::NotAvailable);
+        }
         let Ok(path) = self.paths.normalize(raw_path) else {
             self.show_message(
                 MessageLevel::Error,
@@ -208,6 +254,16 @@ impl EditorState {
             self.message(MessageLevel::Info, keys::INFO_RELOAD_BUSY, &shown);
             return CommandResult::Rejected(RejectReason::NotAvailable);
         }
+        // 状態付き符号化 (ISO-2022-JP) で不正バイトを含む文書は保存しない (03 §8.3 (a)。不正バイトを失わないため)。
+        // 入口 (`file.save` 等) は名前の入力の前に同じ判断で拒否している。ここは入口を経ずに投入し直す経路
+        // (確認の後の再投入・E3 の「UTF-8 で保存」等) の受け止めで、保存の前の確認のどれよりも先に拒否する
+        // (03 §9.7 の「連鎖の開始時の拒否」)
+        if self.reject_stateful_invalid(doc_id, fmt) {
+            return CommandResult::Rejected(RejectReason::NotAvailable);
+        }
+        let Some(doc) = self.docs.documents.get_mut(&doc_id) else {
+            return CommandResult::Rejected(RejectReason::NoTarget);
+        };
         // 読み取り専用属性を解除した文書の上書き保存は、「読み取り専用を解除して保存」の確認を経る (FR-116、03 §9.3 手順 1)。
         // 承認した Revision では繰り返さない
         let clear_readonly = doc.attribute_released && doc.path.as_ref() == Some(&path);
@@ -224,16 +280,6 @@ impl EditorState {
             return CommandResult::Done;
         }
         let out_encoding = fmt.map_or(doc.format.encoding, |f| f.encoding);
-        // 状態付き符号化 (ISO-2022-JP) で不正バイトを含む文書は保存しない (03 §8.3 (a)。不正バイトを失わないため)。
-        // 保存の前の確認より先に拒否する (03 §9.7 の「連鎖の開始時の拒否」)
-        if out_encoding.is_stateful() && doc.format.invalid_bytes > 0 {
-            self.show_message(
-                MessageLevel::Error,
-                keys::MSG_SAVE_ENCODING_UNSUPPORTED_ISO2022,
-                &[("path", &path.display())],
-            );
-            return CommandResult::Rejected(RejectReason::NotAvailable);
-        }
         // 保存の前の確認 (FR-112 AC-4 (a)・NFR-303、03 §8.6 E2'・§8.7.1): 元の文字コードのまま書くと、元のバイト列を
         // 覚えていない区分 B / D の箇所が別のバイト表現になり得る文書 (「保持なし」「保持できなかった箇所がある」) で、
         // 書き込む前に確認する。v0.4 は未編集の文書でも出す (名前を付けて保存・`file.set_encoding` で同じ文字コード。

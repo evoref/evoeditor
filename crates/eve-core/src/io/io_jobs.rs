@@ -63,9 +63,12 @@ fn probe_reserve(len: u64) -> Result<(), JobError> {
 /// 開くときの指定。
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct OpenOptions {
-    /// 確認 (バイナリ・UTF-32 の BOM・不正バイトが多い) への回答「読み取り専用で開く」の再投入。確認を出さず、読み取り専用で開く。
+    /// 確認 (巨大ファイル・バイナリ・UTF-32 の BOM・不正バイトが多い) への回答「読み取り専用で開く」の再投入。
+    /// 以降のバイナリ・UTF-32 の BOM・不正バイトの比率の確認を出さずに続ける (03 §9.2 の表の下の注記)。
+    /// それ自体では読み取り専用の理由を付けない (理由は確認ごとに `pending` と読込の判定で決まる。`UserRequested` は付けない)。
     pub read_only_requested: bool,
-    /// `--readonly`。読み取り専用の理由 `UserRequested` を付けるだけで、確認は通常どおり出す。
+    /// `--readonly` などの利用者の指定。読み取り専用の理由 `UserRequested` を付けるだけで、確認は通常どおり出す。
+    /// `UserRequested` を付けるのはこの入口と `pending` だけ (03 §9.6)。
     pub user_read_only: bool,
     /// 文字コードを指定して開く (FR-111、`--encoding`)。判定せず、BOM は指定した文字コードのものだけ読み飛ばす (03 §8.2 手順 2)。
     pub forced: Option<Encoding>,
@@ -408,7 +411,9 @@ fn open_inner(
     if meta.readonly {
         detected.insert(ReadOnlyReason::FileAttribute);
     }
-    if opts.read_only_requested || opts.user_read_only {
+    // `UserRequested` は利用者の指定 (`--readonly` など) だけから付ける (03 §9.6)。確認で「読み取り専用で開く」を
+    // 選んだこと (`read_only_requested`) からは付けない。その理由は確認ごとに `pending` と下の判定で決まる (03 §9.2 の表)
+    if opts.user_read_only {
         detected.insert(ReadOnlyReason::UserRequested);
     }
     if binary_confirmed {

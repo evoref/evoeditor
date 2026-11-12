@@ -1149,7 +1149,7 @@ file.open(path)
 | `HugeFile { len }` | `ui.confirm.open.huge` | 読み取り専用で開く (既定) → `confirmed_large = true`, `read_only_requested = true`, `pending_reasons += LargeFileViewer` / 中止 | `LargeFileViewer` |
 | `UnsupportedBom { kind }` | `ui.confirm.open.utf32` | 読み取り専用で開く (既定) → `read_only_requested = true`, `pending_reasons += Binary` / 文字コードを指定して開く → 文字コードを尋ね (§14.6 の引数の一覧)、`forced_encoding = Some(enc)` / 中止 | 読み取り専用で開いたとき `Binary` |
 | `Binary` | `ui.confirm.open.binary` | 同上 | 同上 |
-| `ManyInvalidBytes { ratio, encoding, memory_factor }` | `ui.confirm.open.invalid_bytes` (`HugeFile` とは **別のキー**) | 読み取り専用で開く (既定) → `confirmed_invalid_bytes = true`, `read_only_requested = true`, `pending_reasons += InvalidBytes` (判定した文字コードが ISO-2022-JP なら `StatefulEncodingWithInvalidBytes`) / 文字コードを指定して開く → `forced_encoding = Some(enc)` (`confirmed_invalid_bytes` は立てない。指定した文字コードでも 1% を超えればもう一度確認する) / 中止 | `InvalidBytes` (ISO-2022-JP なら `StatefulEncodingWithInvalidBytes`。`LargeFileViewer` は付けない) |
+| `ManyInvalidBytes { ratio, encoding, memory_factor }` | `ui.confirm.open.invalid_bytes` (`HugeFile` とは **別のキー**) | 読み取り専用で開く (既定) → `confirmed_invalid_bytes = true`, `read_only_requested = true` (理由は `pending_reasons` に入れず、読込の結果 (`Complete.detected`) が `InvalidBytes` / `StatefulEncodingWithInvalidBytes` を付ける。§8.2.1 の再判定で文字コードが変わり不正バイトが 0 になったときに、理由を残さないため。`UserRequested` は付けない (v0.4 で直した)) / 文字コードを指定して開く → `forced_encoding = Some(enc)` (`confirmed_invalid_bytes` は立てない。指定した文字コードでも 1% を超えればもう一度確認する) / 中止 | `InvalidBytes` (ISO-2022-JP なら `StatefulEncodingWithInvalidBytes`。`LargeFileViewer` は付けない) |
 
   - `read_only_requested` は確認で「読み取り専用で開く」を選んだことを表し、開くジョブは以降の **バイナリ・UTF-32 の BOM・不正バイトの比率 (`ManyInvalidBytes`) の確認を出さずに続ける** (読み取り専用で開くことが決まっているので二重に確認しない。本文は判定した文字コード (バイナリ・UTF-32 の BOM では UTF-8) で復号し、不正バイトは §8.3 で保持する。NUL は `<0x00>` で表示、§9.6)。確認を省いた判定は、ジョブが理由として `Complete.detected` に入れる (下の表)。巨大ファイルの確認は `confirmed_large` で決まる。`--readonly` (`OpenRequest.readonly`) ではこの値を立てず、`open_initial` が最初の投入で `pending_reasons` に `UserRequested` を入れるだけで、確認は通常どおり出す。
   - `forced_encoding` は §8.2 手順 2 の明示指定で、文字コードの判定 (手順 1 の BOM の判定 (指定した文字コードの BOM と一致すれば読み飛ばし、一致しなければ本文のバイトとして扱う) と手順 3〜8) とバイナリ・UTF-32 の BOM の確認を行わない。巨大ファイルと不正バイトの比率の確認はフラグが立っていなければ出す (§8.8)。
@@ -1423,7 +1423,7 @@ struct SaveChain {
 | `AfterFailure` の `EscapeMerge` で「このまま保存」(v0.4 の M23) | 変えない | 変えない | 変えない | 変えない | 変えない | 変えない | 結果の base Revision が今の Revision と同じなら、結果 (件数・先頭 100 件・全件のダイジェスト) を承認として `SaveApprovals` に覚えて入れる。違えば覚えずに `None` のまま今の Snapshot で投入し直す (§8.3.1) |
 | 「別名で保存」で `AskName` へ戻る | `CheckTarget` で上の行のとおり決め直す | 同左 | 変えない | 同左 | 同左 | 同左 | 投入のたびに `SaveApprovals` から引き直す (Revision が同じなら同じ承認) |
 
-**連鎖の開始時の拒否**: 上の表の「連鎖の開始」の契機 (`file.save`・`file.save_as`・`AskUnsaved` の「保存」・`file.set_encoding`) で `format` を決めた直後、`AskName` / `CheckingUnchanged` / `PreConfirm` のどれにも進む前に、`format.encoding` が ISO-2022-JP で文書が §8.3 のエスケープ文字を含む (`invalid_bytes > 0`) なら、ジョブを投入せずに `msg.save.encoding_unsupported_iso2022` を示して連鎖を中止する (`cont` の後続も実行しない。文書・`TextFormat` は変えない。§8.3 の (a)、確定 (ユーザー回答)、OQ-207)。
+**連鎖の開始時の拒否**: 上の表の「連鎖の開始」の契機 (`file.save`・`file.save_as`・`AskUnsaved` の「保存」・`file.set_encoding`) で `format` を決めた直後、`AskName` / `CheckingUnchanged` / `PreConfirm` のどれにも進む前に、`format.encoding` が ISO-2022-JP で文書が §8.3 のエスケープ文字を含む (`invalid_bytes > 0`) なら、ジョブを投入せずに `msg.save.encoding_unsupported_iso2022` を示して連鎖を中止する (`cont` の後続も実行しない。文書・`TextFormat` は変えない。§8.3 の (a)、確定 (ユーザー回答)、OQ-207)。全保存 (§9.8) の文書ごとの保存も同じ判断で拒否し、メッセージは出さずに、その文書を保存せず理由 (このメッセージの text) を添えて失敗の一覧に載せる。
 
 **状態** (`SaveChainState`):
 
