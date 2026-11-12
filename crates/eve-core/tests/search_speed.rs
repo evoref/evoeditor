@@ -93,3 +93,95 @@ fn 解析とコンパイルの時間() {
         println!("{name}: 解析 {analyze:.3} ms / 解析とコンパイル {compile:.2} ms");
     }
 }
+
+/// 実時間の時計 (計測用)。
+struct Wall(std::time::Instant);
+
+impl eve_core::Clock for Wall {
+    fn now(&self) -> eve_core::Tick {
+        eve_core::Tick(u64::try_from(self.0.elapsed().as_millis()).unwrap_or(u64::MAX))
+    }
+}
+
+/// 全件のジョブで、最初の結果 (行をまたぐ検索の規則では `first_after`) が届くまでの時間と、全件を数え終えるまでの時間
+/// (参考値、03 §12.3.1 の「全件走査」。行をまたぐ検索語は文書の先頭から走査するので、カーソルの後ろの最初の一致が届くのは、
+/// カーソルの前の分を走査した後になる)。100 MB の文書の 25% と 75% の位置に目印を置き、カーソルを 0%・50%・90% に置く。
+/// `cargo test -p eve-core --release --test search_speed -- --ignored --nocapture first_after`
+#[test]
+#[ignore = "計測用"]
+fn first_after_までの時間() {
+    use eve_core::{JobResult, SearchInternal, SearchJob, run_search};
+    let line =
+        "0123456789 the quick brown fox jumps over the lazy dog 日本語の行です。0123456789\n";
+    let n = 100 * 1024 * 1024 / line.len();
+    let mut doc = String::with_capacity(n * line.len() + 64);
+    for i in 0..n {
+        if i == n / 4 || i == n * 3 / 4 {
+            doc.push_str("MARK\nX\n");
+        }
+        doc.push_str(line);
+    }
+    let t = Text::from(doc.as_str());
+    let len = t.len_bytes();
+    let cases = [
+        (
+            "k = 0 (v0.3 の規則、カーソルの行から)",
+            SearchQuery::literal("MARK").with_regex(true),
+        ),
+        (
+            r"k = 1 (MARK\nX、先頭から・first_after)",
+            SearchQuery::literal(r"MARK\nX")
+                .with_regex(true)
+                .with_internal(SearchInternal::multiline()),
+        ),
+    ];
+    for (name, q) in cases {
+        let _ = q.compile();
+        for pct in [0usize, 50, 90] {
+            let from = len * pct / 100;
+            let mut times = Vec::new();
+            for _ in 0..3 {
+                let start = std::time::Instant::now();
+                let clock = Wall(start);
+                let (mut first, mut done) = (None, None);
+                run_search(
+                    SearchJob {
+                        job: eve_view::JobId(1),
+                        snapshot: &t,
+                        query: &q,
+                        from: ByteOff(from),
+                        max_matches: 10_000,
+                        count_limit: 1_000_000,
+                    },
+                    &clock,
+                    &CancelToken::new(),
+                    &mut |r| match &r.body {
+                        JobResult::SearchBatch {
+                            first_after,
+                            matches,
+                        } => {
+                            let hit = first_after.is_some()
+                                || (!q.internal().multiline && !matches.is_empty());
+                            if hit && first.is_none() {
+                                first = Some(start.elapsed());
+                            }
+                        }
+                        JobResult::SearchDone { .. } => done = Some(start.elapsed()),
+                        _ => {}
+                    },
+                );
+                times.push((first, done.unwrap()));
+            }
+            times.sort_by_key(|t| t.1);
+            let (first, done) = times[1];
+            println!(
+                "{name} カーソル {pct}%: 最初の結果 {} / 全件 {:.1} ms",
+                first.map_or("なし (起点の後ろに無い)".to_owned(), |d| format!(
+                    "{:.1} ms",
+                    d.as_secs_f64() * 1e3
+                )),
+                done.as_secs_f64() * 1e3
+            );
+        }
+    }
+}

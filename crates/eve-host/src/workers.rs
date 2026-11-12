@@ -114,9 +114,16 @@ impl ThreadJobSpawner {
         })
     }
 
-    /// `bg` ワーカーに回すジョブか。
+    /// `bg` ワーカーに回すジョブか。検索 (全件・単発)・すべて置換・1 件置換の確かめ (02 §9.3。v0.4 の M24 で単発の検索とすべて置換を `io` から
+    /// 移した: 行をまたぐ検索語では単発の検索が文書の先頭から走ることがあり、`io` に置くと保存・読込を待たせる、03 §12.3.1)。
     fn is_bg(kind: &JobKind) -> bool {
-        matches!(kind, JobKind::Search { .. })
+        matches!(
+            kind,
+            JobKind::Search { .. }
+                | JobKind::FindNext { .. }
+                | JobKind::ReplaceAll { .. }
+                | JobKind::ReplaceOne { .. }
+        )
     }
 }
 

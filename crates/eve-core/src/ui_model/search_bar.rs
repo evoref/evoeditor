@@ -16,8 +16,9 @@ use crate::document::{Origin, Transaction, UndoGroupHint};
 use crate::jobs::cancel::CancelToken;
 use crate::jobs::{JobKind, JobResult};
 use crate::search::{
-    Case, Prepared, QueryError, SearchQuery, build_replace_all, replacement_for, scan_bytes,
-    unescape_replacement,
+    Case, LineSpan, Prepared, QueryError, SEARCH_SYNC_MULTILINE_MAX, ScanCtx, ScanEnd, ScanLimit,
+    SearchInternal, SearchQuery, Shape, build_replace_all_in, replace_one, replacement_for,
+    scan_bytes, scan_range, unescape_replacement,
 };
 use crate::time::Tick;
 use crate::ui_model::keys;
@@ -34,7 +35,8 @@ impl SearchBarState {
             .with_case(self.case)
             .with_regex(self.regex)
             .with_whole_word(self.whole_word)
-            .with_scope(self.in_selection.then(|| self.sel_ranges.clone()));
+            .with_scope(self.in_selection.then(|| self.sel_ranges.clone()))
+            .with_internal(self.internal);
         let mut last = self.memo.query.borrow_mut();
         match &*last {
             Some(prev) if *prev == q => prev.clone(),
@@ -86,6 +88,11 @@ pub(crate) struct SearchBarState {
     pub sel_ranges: std::sync::Arc<[ByteRange]>,
     /// 検索語をコンパイルできない理由。あれば検索しない (03 §12.3)。
     pub error: Option<QueryError>,
+    /// 探さない理由 (行の数に上限の無い検索語と 16 MiB を超える文書・重すぎて打ち切った、03 §12.3.1 の「探さない場合」と
+    /// 「最悪の入力の上限」)。構文の誤り (`error`) とは別の項目で、件数の位置に同じく示す。
+    pub refusal: Option<ScanLimit>,
+    /// eve-core の内部の設定 (行をまたぐ検索を試験から開く。利用者の設定ではない)。
+    pub internal: SearchInternal,
     /// 入力しているときの検索の起点 (開いたときの選択の始端。一致へ移ったらその一致の始端)。
     pub anchor: ByteOff,
     /// 入力で見つかった、まだ選択していない現在の一致。
@@ -111,6 +118,16 @@ impl EditorState {
     /// 検索バーが開いているか (条件式 `search.active`)。
     pub fn search_bar_open(&self) -> bool {
         self.find.search_bar.is_some()
+    }
+
+    /// eve-core の内部の設定を変える (行をまたぐ検索を試験から開く。利用者の設定ではない、08 §2.5 の M24 の (2)・(3))。
+    /// 開いている検索バーにも効く (次の再検索から)。
+    #[doc(hidden)]
+    pub fn set_search_internal(&mut self, internal: SearchInternal) {
+        self.find.internal = internal;
+        if let Some(bar) = &mut self.find.search_bar {
+            bar.internal = internal;
+        }
     }
 
     /// 検索バーを開く。開いていれば何もしない (欄はそのまま)。
@@ -140,6 +157,8 @@ impl EditorState {
             in_selection: false,
             sel_ranges,
             error: None,
+            refusal: None,
+            internal: self.find.internal,
             anchor,
             current: None,
             current_pending: false,
@@ -206,6 +225,8 @@ impl EditorState {
         {
             self.bar_changed();
         } else {
+            // 置換の文字列が変わった: 待っているすべて置換・1 件置換の確かめは古い条件のものなので取り消す
+            self.cancel_replace_job();
             self.mark_dirty_render();
         }
     }
@@ -319,10 +340,13 @@ impl EditorState {
         };
         let query = bar.query();
         let anchor = bar.anchor;
+        // 検索語・トグルが変わった: 待っているすべて置換・1 件置換の確かめは古い条件のものなので取り消す (古い結果を当てない)
+        self.cancel_replace_job();
         // メインスレッドで行うのは構文の解析と書き換えまで。`regex` のコンパイルは検索のジョブで行う (03 §12.3.1)
         let error = query.known_error();
         if let Some(bar) = &mut self.find.search_bar {
             bar.error = error.clone();
+            bar.refusal = None;
             bar.current_pending = false;
         }
         if error.is_some() {
@@ -330,6 +354,33 @@ impl EditorState {
             self.search_start(SearchQuery::literal(""));
             if let Some(bar) = &mut self.find.search_bar {
                 bar.current = None;
+            }
+            self.mark_dirty_render();
+            return;
+        }
+        // 探さない理由 (03 §12.3.1 の「探さない場合」): 検索を始めるときの文書の大きさで決め、ジョブを投げない
+        let shape = query.shape();
+        let doc_len = self
+            .active_document()
+            .and_then(|d| self.docs.documents.get(&d))
+            .map_or(0, |d| d.text().len_bytes());
+        if let Some(l) = shape.and_then(|s| s.refusal_for(doc_len)) {
+            // 理由だけを持つ検索の状態にする (編集で文書が変わったら、次の再検索で判定し直す)
+            self.search_refuse(query, l);
+            if let Some(bar) = &mut self.find.search_bar {
+                bar.refusal = Some(l);
+                bar.current = None;
+            }
+            self.mark_dirty_render();
+            return;
+        }
+        // 行をまたぐ検索の規則と重い検索語: 入力中の現在の一致は同期検索をせず、全件ジョブが知らせる起点以降の最初の一致
+        // (`first_after`) で決める (03 §12.3.1 の「入力中の現在の一致」と「重い検索語」)
+        if shape.is_some_and(|s| s.job_driven()) {
+            self.search_start_from(query, Some(anchor));
+            if let Some(bar) = &mut self.find.search_bar {
+                bar.current = None;
+                bar.current_pending = true;
             }
             self.mark_dirty_render();
             return;
@@ -387,7 +438,46 @@ impl EditorState {
         let Some(bar) = &self.find.search_bar else {
             return;
         };
+        // 探さなかった・重すぎて打ち切った (走査の途中で分かったものを含む): 理由を示し、現在の一致を消す (03 §12.3.1)
+        if let Some(l) = self.find.search.as_ref().and_then(|s| s.limit()) {
+            if bar.refusal != Some(l) || bar.current.is_some() || bar.current_pending {
+                self.bar_set_refusal(l);
+            }
+            return;
+        }
         if !bar.current_pending {
+            return;
+        }
+        // 行をまたぐ検索の規則と重い検索語: 入力中の現在の一致は、全件ジョブの `first_after` で決める (同期検索をしない、
+        // 03 §12.3.1)。編集の前の文書を走査したジョブの結果は採らない (次の再検索で求め直す)
+        if let Some(s) = self.find.search.as_ref().filter(|s| s.is_job_driven()) {
+            if !self.search_fresh() {
+                return;
+            }
+            let found = match s.first_after() {
+                Some(r) => Some(r),
+                // 起点以降に一致が無い: 数え終えたら先頭の一致 (折り返し)。数える上限で打ち切ったときは決めない
+                None if s.finished() => {
+                    if s.counted_all() {
+                        s.retained().first().copied()
+                    } else {
+                        None
+                    }
+                }
+                None => return,
+            };
+            // 投入した後にカーソル・選択を動かしていたら、強調だけ (スクロールしない)
+            let moved = s.spawn_sel() != self.primary_selection();
+            if let Some(bar) = &mut self.find.search_bar {
+                bar.current = found;
+                bar.current_pending = false;
+            }
+            if let Some(m) = found
+                && !moved
+            {
+                self.reveal(m.start);
+            }
+            self.mark_dirty_render();
             return;
         }
         let (query, anchor) = (bar.query(), bar.anchor);
@@ -410,6 +500,30 @@ impl EditorState {
             self.reveal(m.start);
         }
         self.mark_dirty_render();
+    }
+
+    /// 探さない理由を検索バーに示し、検索の一致を捨てる (03 §12.3.1)。
+    pub(crate) fn bar_set_refusal(&mut self, l: ScanLimit) {
+        if let Some(bar) = &mut self.find.search_bar {
+            bar.refusal = Some(l);
+            bar.current = None;
+            bar.current_pending = false;
+        }
+        if self
+            .find
+            .search
+            .as_ref()
+            .is_some_and(|s| s.limit() != Some(l))
+        {
+            self.search_set_limit(l);
+        }
+        self.mark_dirty_render();
+    }
+
+    /// 主選択 (始端, 終端)。
+    fn primary_selection(&self) -> Option<(ByteOff, ByteOff)> {
+        let r = *self.view(self.focused_view()?)?.selection.primary();
+        Some((r.start(), r.end()))
     }
 
     /// 選択を動かさずに、`pos` が見えるようスクロールする。
@@ -437,9 +551,20 @@ impl EditorState {
             self.search_replace_all();
             return SearchStep::NoQuery;
         }
+        // 探さない理由がある: 何もせず、メッセージ行に理由を出す (03 §12.3.1 の「探さない場合」)
+        if bar.refusal.is_some() {
+            self.notify_search_limit();
+            return SearchStep::NoMatch;
+        }
         // 移動を始めたら、照合器を待っていた入力中の現在の一致は求めない (移動は単発のジョブが担う)
+        // メインスレッドで同期検索をしない検索語では、編集の前の文書の入力中の現在の一致を使わない (正本でないことがある)
+        let stale_current =
+            self.find.search.as_ref().is_some_and(|s| s.is_job_driven()) && !self.search_fresh();
         if let Some(bar) = &mut self.find.search_bar {
             bar.current_pending = false;
+            if stale_current {
+                bar.current = None;
+            }
         }
         let Some(bar) = &self.find.search_bar else {
             return SearchStep::NoQuery;
@@ -457,6 +582,8 @@ impl EditorState {
                 bar.current = None;
                 bar.anchor = cur.start;
             }
+            // 入力中の現在の一致は正本の一致 (行をまたぐ検索の規則では、その終端から次を探す、03 §12.3.1 の「次 / 前」の (1))
+            self.mark_canon(cur);
             self.mark_dirty_render();
             return SearchStep::Moved { wrapped: false };
         }
@@ -485,7 +612,22 @@ impl EditorState {
             bar.all_selected && bar.focus == BarFocus::Search,
             cells.len(),
         );
-        let count_text = match self.search_count_for(bar.current) {
+        let count = self.search_count_for(bar.current);
+        // 行をまたぐ検索の規則の次 / 前の結果を約 100 ms 待っている: 件数の位置を待ちの表示にする (03 §12.3.1 の「次 / 前」の (6))
+        let waiting = self.search_find_waiting().then(|| {
+            let found = match count {
+                SearchCount::Idle => 0,
+                SearchCount::Running { found } => found,
+                SearchCount::Exact { total, .. }
+                | SearchCount::AtLeast { total, .. }
+                | SearchCount::Approx { total } => total,
+            };
+            render(
+                keys::UI_SEARCH_COUNT_RUNNING,
+                &[("found", &found.to_string())],
+            )
+        });
+        let count_text = waiting.or_else(|| match count {
             SearchCount::Idle => None,
             SearchCount::Running { found } => Some(render(
                 keys::UI_SEARCH_COUNT_RUNNING,
@@ -512,15 +654,25 @@ impl EditorState {
                 keys::UI_SEARCH_COUNT_APPROX,
                 &[("total", &total.to_string())],
             )),
-        };
+        });
         let query = bar.query();
-        let error = bar.error.as_ref().map(|e| {
-            let text = match invalid_regex_reason(e) {
+        let error = bar
+            .error
+            .as_ref()
+            .map(|e| match invalid_regex_reason(e) {
                 Some(reason) => render(keys::MSG_SEARCH_INVALID_REGEX_TEXT, &[("reason", reason)]),
                 None => render(keys::MSG_SEARCH_NEWLINE_UNSUPPORTED_TEXT, &[]),
-            };
-            cell_text(&text, CutPolicy::End)
-        });
+            })
+            // 探さない理由も件数の位置に出す (03 §12.3.1。専用の文言は M24 の (4) で足すまで、不正な正規表現の文言に理由を入れる)
+            .or_else(|| {
+                bar.refusal.map(|l| {
+                    render(
+                        keys::MSG_SEARCH_INVALID_REGEX_TEXT,
+                        &[("reason", limit_reason(l))],
+                    )
+                })
+            })
+            .map(|text| cell_text(&text, CutPolicy::End));
         let replace = bar.replace.as_ref().map(|(text, cur)| {
             let cells = cell_text(text, CutPolicy::End).spans;
             let cursor = cell_text(&text[..*cur], CutPolicy::End).spans.len();
@@ -583,8 +735,15 @@ impl EditorState {
         rows: usize,
     ) -> Option<VisibleMatches> {
         let bar = self.find.search_bar.as_ref()?;
+        // 探さなかった・打ち切った: 強調しない (それまでに届いた一致も捨てる、03 §12.3.1)
+        if bar.refusal.is_some() {
+            return None;
+        }
         let query = bar.query();
         let doc = self.docs.documents.get(&doc_id)?;
+        if let Some(shape) = query.shape().filter(Shape::job_driven) {
+            return Some(self.visible_whole(doc_id, doc, query, shape, top_line, rows));
+        }
         let key: VisibleKey = (doc_id, doc.revision(), top_line, rows, query);
         if let Some((k, v)) = &*bar.memo.visible.borrow()
             && *k == key
@@ -599,6 +758,100 @@ impl EditorState {
             self.scan_visible(doc, &m, top_line, rows).into();
         *bar.memo.visible.borrow_mut() = Some((key, found.clone()));
         Some(found)
+    }
+
+    /// 行をまたぐ検索の規則の可視範囲の強調 (03 §12.3.1 の「可視範囲の強調」): 全件ジョブが終わり、保持した一致が可視行を
+    /// 覆うときはそれを使う。それ以外は、検索語が重くなく、窓 (可視行の先頭の k 行前の行頭から可視行の末尾までを核にした窓の
+    /// 全体) が 64 KiB 以下のときだけ、メインスレッドで窓を同期検索して可視行と交わる一致を強調する。条件に合わないとき・
+    /// 上限なしの検索語では、届いている保持した一致だけを強調する (強調のためのジョブは作らない)。k 行前から始める同期検索は
+    /// 正本と食い違うことがあるが、食い違うのは強調だけ。
+    fn visible_whole(
+        &self,
+        doc_id: eve_view::DocumentId,
+        doc: &crate::document::Document,
+        query: SearchQuery,
+        shape: Shape,
+        top_line: usize,
+        rows: usize,
+    ) -> VisibleMatches {
+        let t = doc.text();
+        let n = t.len_lines();
+        let line_at = |l: usize| {
+            if l >= n {
+                t.len_bytes()
+            } else {
+                t.line_to_byte(LineIdx(l)).0
+            }
+        };
+        let last = top_line.saturating_add(rows).min(n);
+        let (vis_s, vis_e) = (line_at(top_line), line_at(last));
+        let retained = self
+            .find
+            .search
+            .as_ref()
+            .filter(|s| s.doc() == doc_id && s.is_job_driven() && self.search_fresh());
+        // 保持した一致のうち可視行と交わるもの (k が 0 の重い検索語は走査の順が文書の順でないので、全体から選んで並べる)
+        let from_retained = |s: &crate::search::search_state::SearchState| -> VisibleMatches {
+            let mut v: Vec<(usize, usize)> = s
+                .retained()
+                .iter()
+                .filter(|r| r.end.0 > vis_s && r.start.0 < vis_e)
+                .map(|r| (r.start.0, r.end.0))
+                .collect();
+            v.sort_unstable();
+            v.into()
+        };
+        // 1. 全件ジョブが終わり、保持した一致が可視行を覆う
+        if let Some(s) = retained
+            && s.finished()
+            && s.covered() >= vis_e
+        {
+            return from_retained(s);
+        }
+        // 2. 重くなく、窓が 64 KiB 以下なら、窓を同期検索する
+        if let LineSpan::Bounded(k) = shape.lines()
+            && shape.whole_doc()
+            && !shape.heavy_guard()
+        {
+            let core_s = line_at(top_line.saturating_sub(k));
+            let we = line_at(last.saturating_add(k));
+            if we.saturating_sub(core_s) <= SEARCH_SYNC_MULTILINE_MAX {
+                let key: VisibleKey = (doc_id, doc.revision(), top_line, rows, query);
+                let bar = self.find.search_bar.as_ref();
+                if let Some(bar) = bar
+                    && let Some((k0, v)) = &*bar.memo.visible.borrow()
+                    && *k0 == key
+                {
+                    return v.clone();
+                }
+                if let Prepared::Ready(m) = key.4.prepared() {
+                    let cancel = CancelToken::new();
+                    let mut out = Vec::new();
+                    let end = scan_range(
+                        t,
+                        &m,
+                        ByteRange::new(ByteOff(core_s), ByteOff(vis_e)),
+                        &mut ScanCtx::new(&cancel),
+                        &mut |r| {
+                            if r.end.0 > vis_s {
+                                out.push((r.start.0, r.end.0));
+                            }
+                            true
+                        },
+                    );
+                    // 捨てた候補の予算を超えた (`TooHeavy`) ときは、その場は同期検索で強調しない
+                    if end == ScanEnd::Done {
+                        let found: VisibleMatches = out.into();
+                        if let Some(bar) = bar {
+                            *bar.memo.visible.borrow_mut() = Some((key, found.clone()));
+                        }
+                        return found;
+                    }
+                }
+            }
+        }
+        // 3. 届いている保持した一致だけ
+        retained.map_or_else(|| Vec::new().into(), from_retained)
     }
 
     fn scan_visible(
@@ -642,6 +895,15 @@ impl EditorState {
     }
 }
 
+/// 探さない理由の文言 (`msg.search.invalid_regex` の `{reason}` に入れる。専用のキー `msg.search.multiline_too_large` /
+/// `msg.search.pattern_too_heavy` は、行をまたぐ検索を利用者に開く M24 の (4) で足す。それまでは内部の設定で開いたときだけ出る)。
+fn limit_reason(l: ScanLimit) -> &'static str {
+    match l {
+        ScanLimit::TooLarge => "multi-line pattern over the document size limit",
+        ScanLimit::TooHeavy => "pattern too heavy",
+    }
+}
+
 /// 正規表現が不正という誤りの理由 (構文エラーと大きさの上限の超過)。改行を含むパターン (`Multiline`) は `None`。
 fn invalid_regex_reason(e: &QueryError) -> Option<&str> {
     match e {
@@ -676,12 +938,48 @@ impl EditorState {
         }
     }
 
+    /// 探さない理由があるので置換しなかった: メッセージ行に出し、検索バーにも示す (03 §12.3.1。何も置き換えない)。
+    fn notify_limit(&mut self, l: ScanLimit) {
+        self.show_message(
+            MessageLevel::Warn,
+            keys::MSG_SEARCH_REPLACE_INVALID_REGEX,
+            &[("reason", limit_reason(l))],
+        );
+        self.bar_set_refusal(l);
+    }
+
+    /// 探さない理由があるので次 / 前をしなかった: メッセージ行に text と hint を出す (03 §12.3.1。専用のキーは M24 の (4))。
+    pub(crate) fn notify_search_limit(&mut self) {
+        let limit = self
+            .find
+            .search_bar
+            .as_ref()
+            .and_then(|b| b.refusal)
+            .or_else(|| self.find.search.as_ref().and_then(|s| s.limit()));
+        if let Some(l) = limit {
+            self.show_message(
+                MessageLevel::Warn,
+                keys::MSG_SEARCH_INVALID_REGEX,
+                &[("reason", limit_reason(l))],
+            );
+        }
+    }
+
+    /// 1 件置換の確かめのジョブを待っている。
+    fn replace_one_pending(&self) -> bool {
+        self.io
+            .pending
+            .values()
+            .any(|p| matches!(p, Pending::ReplaceOne { .. }))
+    }
+
+    /// 待っているすべて置換と 1 件置換の確かめのジョブを取り消す (検索バーを閉じた・条件が変わった)。
     fn cancel_replace_job(&mut self) {
         let ids: Vec<_> = self
             .io
             .pending
             .iter()
-            .filter(|(_, p)| matches!(p, Pending::ReplaceAll { .. }))
+            .filter(|(_, p)| matches!(p, Pending::ReplaceAll { .. } | Pending::ReplaceOne { .. }))
             .map(|(id, _)| *id)
             .collect();
         for id in ids {
@@ -723,6 +1021,17 @@ impl EditorState {
             self.notify_unusable_query(&query);
             return CommandResult::Done;
         }
+        let limit = bar.refusal.or_else(|| {
+            query
+                .shape()
+                .and_then(|s| s.refusal_for(doc.text().len_bytes()))
+        });
+        if let Some(l) = limit {
+            self.notify_limit(l);
+            return CommandResult::Done;
+        }
+        // 重い検索語は、小さい文書でもメインスレッドで作らない (03 §12.3.1 の「重い検索語」)
+        let heavy = query.shape().is_some_and(|s| s.heavy_guard());
         // 実行中のすべて置換があれば二重に始めない
         if self
             .io
@@ -735,32 +1044,45 @@ impl EditorState {
         let revision = doc.revision();
         // 小さい文書はメインスレッドで作る。正規表現の照合器がまだ無い (`bg` のジョブがコンパイルしていない) ときは、
         // メインスレッドでコンパイルせずにジョブで作る (03 §12.3.1)
-        if doc.text().len_bytes() <= REPLACE_SYNC_BYTES && matches!(prepared, Prepared::Ready(_)) {
-            let built = build_replace_all(doc.text(), &query, &replacement, &CancelToken::new());
+        if doc.text().len_bytes() <= REPLACE_SYNC_BYTES
+            && matches!(prepared, Prepared::Ready(_))
+            && !heavy
+        {
+            let built =
+                build_replace_all_in(doc.text(), &query, &replacement, None, &CancelToken::new());
             self.find.replace_all_pua = pua;
-            if let Some((changes, count)) = built {
-                self.apply_replace_all(doc_id, changes, count);
+            match built {
+                Ok(Some((changes, count))) => self.apply_replace_all(doc_id, changes, count),
+                Ok(None) => {}
+                Err(e) => {
+                    if let Some(l) = e.limit() {
+                        self.notify_limit(l);
+                    }
+                }
             }
             return CommandResult::Done;
         }
         self.find.replace_all_pua = pua;
         let snapshot = doc.snapshot();
-        let job = self.jobs.spawn(
-            Some(doc_id),
-            revision,
-            JobKind::ReplaceAll {
-                snapshot,
-                query,
-                replacement,
-            },
-        );
-        self.io.pending.insert(
-            job,
-            Pending::ReplaceAll {
-                doc: doc_id,
+        // 走っている全件ジョブの後ろで待たない (取り消して、すべて置換の後ろに投げ直す。適用の後は再検索する)
+        self.yield_search(|st| {
+            let job = st.jobs.spawn(
+                Some(doc_id),
                 revision,
-            },
-        );
+                JobKind::ReplaceAll {
+                    snapshot,
+                    query,
+                    replacement,
+                },
+            );
+            st.io.pending.insert(
+                job,
+                Pending::ReplaceAll {
+                    doc: doc_id,
+                    revision,
+                },
+            );
+        });
         CommandResult::Done
     }
 
@@ -789,6 +1111,59 @@ impl EditorState {
         replacement_for(text, query, cur, replacement).map(|s| (cur, s))
     }
 
+    /// 同期検索をしない検索語 (行をまたぐ検索の規則・重い検索語) の 1 件置換の対象 (03 §12.3.1 の「置換」): 選択範囲が正本と
+    /// 分かっている一致 (保持した一致・新しい入力中の現在の一致・次 / 前で移った一致) ならそれ、そうでなく新しい入力中の現在の
+    /// 一致があればそれ。返すのは (対象, 選び始める正本の位置)。正本の位置は、行をまたぐ検索の規則では対象の始端 (一致は始まる
+    /// 位置で決まる)、k が 0 の重い検索語では対象の始端を含む行の行頭。
+    fn replace_candidate(&self, doc_id: eve_view::DocumentId) -> Option<(ByteRange, ByteOff)> {
+        let doc = self.docs.documents.get(&doc_id)?;
+        let (text, rev) = (doc.text(), doc.revision());
+        let s = self.find.search.as_ref().filter(|s| s.doc() == doc_id)?;
+        let fresh = self.search_fresh();
+        let current = self.find.search_bar.as_ref()?.current.filter(|_| fresh);
+        let known =
+            |r: ByteRange| (fresh && s.retains(r)) || s.is_canon(r, rev) || current == Some(r);
+        let (a, b) = self.primary_selection()?;
+        let selected = ByteRange::new(a, b);
+        let target = if !selected.is_empty() && known(selected) {
+            selected
+        } else {
+            current?
+        };
+        let from = if s.is_whole() {
+            target.start
+        } else {
+            text.line_to_byte(text.byte_to_line(target.start))
+        };
+        Some((target, from))
+    }
+
+    /// 行をまたぐ検索の規則の 1 件置換で対象が無い: 置き換えず、次の一致を探す (`search.next` と同じ。届いたら選び、もう一度
+    /// `Enter` で置き換える)。次の一致・入力中の現在の一致を待っている間は何もしない (押した回数を数えない。1 回の `Enter` で
+    /// 2 件を置き換えない、03 §12.3.1 の「置換」)。
+    fn replace_seek_next(&mut self) -> CommandResult {
+        if self.replace_waiting() {
+            return CommandResult::Done;
+        }
+        if matches!(self.search_move(true), SearchStep::NoMatch) {
+            self.show_message(MessageLevel::Info, keys::INFO_SEARCH_REPLACE_NO_MATCH, &[]);
+        }
+        CommandResult::Done
+    }
+
+    /// 同期検索をしない検索語の 1 件置換が、結果を待っている (単発の検索・全件ジョブの結果を待つ次 / 前・入力中の現在の一致・
+    /// 1 件置換の確かめ)。待っている間の置換欄の `Enter` は何もしない (03 §12.3.1 の「置換」)。
+    fn replace_waiting(&self) -> bool {
+        self.find.find_job.is_some()
+            || self.find.find_wait.is_some()
+            || self
+                .find
+                .search_bar
+                .as_ref()
+                .is_some_and(|b| b.current_pending)
+            || self.replace_one_pending()
+    }
+
     /// `search.replace` (03 §12.5): 現在の一致を置換欄の文字列に置き換え、次の一致を強調する。置換ごとに別の Undo 単位。
     /// 正規表現では `$1` / `${name}` を展開し、`\n` を既定の改行にする。
     pub fn search_replace(&mut self) -> CommandResult {
@@ -809,8 +1184,8 @@ impl EditorState {
             self.notify_read_only();
             return CommandResult::Done;
         }
-        match query.prepared() {
-            Prepared::Ready(_) => {}
+        let m = match query.prepared() {
+            Prepared::Ready(m) => m,
             Prepared::Nothing => {
                 self.notify_unusable_query(&query);
                 return CommandResult::Done;
@@ -818,6 +1193,17 @@ impl EditorState {
             // 正規表現の照合器を `bg` のジョブがまだ作っていない: 置き換えず何もしない (件数の位置の `…` が待ちを示す。
             // メインスレッドでコンパイルしない、03 §12.3.1)
             Prepared::Pending => return CommandResult::Done,
+        };
+        if let Some(l) = bar.refusal {
+            self.notify_limit(l);
+            return CommandResult::Done;
+        }
+        let shape = query.shape();
+        let jobbed = shape.is_some_and(|s| s.job_driven());
+        // 同期検索をしない検索語で、次の一致・入力中の現在の一致・確かめの結果を待っている間は何もしない (押した回数も
+        // 数えない。飛ばしたつもりの一致を置き換えない、03 §12.3.1 の「置換」)
+        if jobbed && self.replace_waiting() {
+            return CommandResult::Done;
         }
         let replacement = if query.is_regex() {
             unescape_replacement(&replacement, doc.format.default_eol.as_str())
@@ -826,12 +1212,133 @@ impl EditorState {
         };
         // 置換の文字列の文字どおりの部分は外からの文字列 (挿入の入口 (3)、03 §8.3.1)
         let (replacement, pua) = replacement_text(doc, &replacement);
-        let Some((range, insert)) = self.replace_target(doc_id, &query, &replacement) else {
-            self.show_message(MessageLevel::Info, keys::INFO_SEARCH_REPLACE_NO_MATCH, &[]);
+        if !jobbed {
+            let Some((range, insert)) = self.replace_target(doc_id, &query, &replacement) else {
+                self.show_message(MessageLevel::Info, keys::INFO_SEARCH_REPLACE_NO_MATCH, &[]);
+                return CommandResult::Done;
+            };
+            self.apply_replace_one(doc_id, range, insert, pua);
+            return CommandResult::Done;
+        }
+        let Some((range, from)) = self.replace_candidate(doc_id) else {
+            return self.replace_seek_next();
+        };
+        let Some(shape) = shape else {
             return CommandResult::Done;
         };
-        let Some(doc) = self.docs.documents.get(&doc_id) else {
+        let text = doc.text();
+        // 確かめをメインスレッドで行うのは、行をまたぐ検索の規則で、重くなく、行の数に上限があり、取り直しの窓 (対象の始端から、
+        // 延ばす分の終わりまで) が 64 KiB 以下のときだけ。重い検索語・上限の無い検索語・大きな窓はジョブで行う (一致 1 件が
+        // 大きくなりうる。重い検索語の照合はメインスレッドを止めうる、03 §12.3.1 の「重い検索語」)
+        let on_main = match shape.lines() {
+            LineSpan::Bounded(k) if shape.whole_doc() && !shape.heavy_guard() => {
+                let last = text.byte_to_line(ByteOff(range.end.0.saturating_sub(1))).0;
+                let n = text.len_lines();
+                let lines_end = if last.saturating_add(k).saturating_add(1) >= n {
+                    text.len_bytes()
+                } else {
+                    text.line_to_byte(LineIdx(last + k + 1)).0
+                };
+                let end = shape
+                    .max_len()
+                    .map_or(lines_end, |n| lines_end.min(range.end.0.saturating_add(n)));
+                end.saturating_sub(range.start.0) <= SEARCH_SYNC_MULTILINE_MAX
+            }
+            _ => false,
+        };
+        if on_main {
+            match replace_one(
+                text,
+                &m,
+                from,
+                range,
+                &replacement,
+                None,
+                &CancelToken::new(),
+            ) {
+                Ok(Some(insert)) => self.apply_replace_one(doc_id, range, insert, pua),
+                // 対象でない: 置き換えず、次の一致を探す
+                Ok(None) => return self.replace_seek_next(),
+                Err(e) => {
+                    if let Some(l) = e.limit() {
+                        self.notify_limit(l);
+                    }
+                }
+            }
             return CommandResult::Done;
+        }
+        let revision = doc.revision();
+        let snapshot = doc.snapshot();
+        self.yield_search(|st| {
+            let job = st.jobs.spawn(
+                Some(doc_id),
+                revision,
+                JobKind::ReplaceOne {
+                    snapshot,
+                    query,
+                    from,
+                    range,
+                    replacement,
+                },
+            );
+            st.io.pending.insert(
+                job,
+                Pending::ReplaceOne {
+                    doc: doc_id,
+                    revision,
+                    range,
+                    pua,
+                },
+            );
+        });
+        CommandResult::Done
+    }
+
+    /// 1 件置換の確かめのジョブの結果 (03 §12.3.1 の「置換」)。投げたときの文書のままなら置き換える。対象が一致でなければ、
+    /// 置き換えず次の一致を探す。
+    pub(crate) fn finish_replace_one(
+        &mut self,
+        doc_id: eve_view::DocumentId,
+        revision: eve_view::Revision,
+        range: ByteRange,
+        pua: u64,
+        r: JobResult,
+    ) {
+        if self.bar_show_compile_error() {
+            return;
+        }
+        let same = self
+            .docs
+            .documents
+            .get(&doc_id)
+            .is_some_and(|d| d.revision() == revision);
+        match r {
+            JobResult::ReplaceOneDone {
+                insert: Some(insert),
+            } if same && self.find.search_bar.is_some() => {
+                self.apply_replace_one(doc_id, range, insert, pua);
+            }
+            JobResult::ReplaceOneDone { insert: None } if same => {
+                self.replace_seek_next();
+            }
+            JobResult::SearchLimited { limit } if self.find.search_bar.is_some() => {
+                self.notify_limit(limit);
+            }
+            _ => {}
+        }
+        self.mark_dirty_render();
+    }
+
+    /// 1 件置換を当てる (置換ごとに別の Undo 単位)。カーソルを置換の後ろに置き、そこから次の一致を探し直す。
+    fn apply_replace_one(
+        &mut self,
+        doc_id: eve_view::DocumentId,
+        range: ByteRange,
+        insert: String,
+        pua: u64,
+    ) {
+        let Some(doc) = self.docs.documents.get(&doc_id) else {
+            return;
         };
         let after = ByteOff(range.start.0 + insert.len());
         let Ok(changes) = eve_text::ChangeSet::from_sorted_edits(
@@ -841,7 +1348,7 @@ impl EditorState {
                 insert: std::sync::Arc::from(insert),
             }],
         ) else {
-            return CommandResult::Done;
+            return;
         };
         let view = self.focused_view();
         let sel = view.and_then(|v| self.docs.views.get(&v).map(|v| v.selection.clone()));
@@ -856,7 +1363,7 @@ impl EditorState {
             tx = tx.with_view(v);
         }
         if self.apply_transaction(doc_id, tx).is_err() {
-            return CommandResult::Done;
+            return;
         }
         if pua > 0 {
             crate::command::edit::show_notices(self, &[InsertNotice::PuaAsText(pua)]);
@@ -869,7 +1376,6 @@ impl EditorState {
             bar.anchor = after;
         }
         self.bar_changed();
-        CommandResult::Done
     }
 
     /// すべて置換のジョブの結果。作った Revision が古ければ適用せず中止を知らせる。
@@ -889,6 +1395,13 @@ impl EditorState {
                 self.apply_replace_all(doc_id, changes, count);
             } else {
                 self.show_message(MessageLevel::Warn, keys::MSG_SEARCH_REPLACE_STALE, &[]);
+            }
+            return;
+        }
+        // 探さなかった・重すぎて打ち切った (03 §12.3.1): 何も置き換えず、理由を示す
+        if let JobResult::SearchLimited { limit } = r {
+            if self.find.search_bar.is_some() {
+                self.notify_limit(limit);
             }
             return;
         }
@@ -962,6 +1475,10 @@ const RESEARCH_DELAY: u64 = 300;
 impl EditorState {
     /// 編集で検索の結果が無効になったら、入力が止まって 300 ms 後に再検索する。`Editor::tick` から呼ぶ。
     pub(crate) fn search_tick(&mut self) {
+        // 次 / 前の待ちが 100 ms を過ぎた: 件数の位置を待ちの表示にする (03 §12.3.1 の「次 / 前」の (6))
+        if self.search_find_waiting() {
+            self.mark_dirty_render();
+        }
         let stale =
             self.find.search_bar.is_some() && self.find.search.is_some() && !self.search_fresh();
         let cur = self

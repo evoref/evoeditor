@@ -1,16 +1,23 @@
-//! 文書内検索の状態と、次へ・前への移動 (docs/03 §12.2、01 FR-401・FR-404)。
+//! 文書内検索の状態と、次へ・前への移動 (docs/03 §12.2・§12.3.1、01 FR-401・FR-404)。
 //!
 //! 全件走査はバックグラウンドのジョブで行い、届いた一致を保持する。移動は保持した一致から選ぶ。保持に無い (走査中で
 //! まだ届いていない、保持の上限を超えた、編集で無効になった) ときは、カーソルから同期検索する (最大 256 KiB)。
 //! 正規表現の照合器は `bg` のジョブがコンパイルするので、まだ無いときは同期検索をせずに単発のジョブに回す (03 §12.3.1)。
 //! 編集があると保持は無効になり、件数は「約」表示に落ちる。再検索は呼び出し側 (検索バー) が入力の間を置いて始める。
+//!
+//! **行をまたぐ検索の規則** (`Shape::whole_doc`。内部の設定で開いた、k ≥ 1・上限なし・重い検索語、03 §12.3.1 の「呼び出し側」):
+//! 全件の走査は文書の先頭から (正本) で、カーソル以降の最初の一致は `first_after` で届き、再開の位置 (1 MiB ごと) が
+//! `SearchDone` で届く。次 / 前は同期検索をせず、保持した一致 (正本の先頭の部分) に答えがあればそれへ、全件の走査中なら
+//! その結果を待ち、それ以外は単発のジョブを正本の位置 (再開の位置・今の一致の終端) から投げる。単発のジョブを待つ間に同じ
+//! 向きを押した回数は数え、届いて移った後に続ける。編集では、編集した行の (k + 1) 行より前の再開の位置だけを残す。
 
 use eve_text::{ByteOff, ByteRange, LineIdx, Range, Selection, TextRead};
 use eve_view::{DocumentId, JobId, MessageLevel, Revision};
 
 use crate::jobs::cancel::CancelToken;
 use crate::jobs::{JobKind, JobOutput, JobResult};
-use crate::search::{Prepared, SearchQuery, scan_bytes};
+use crate::search::{LineSpan, Prepared, SEARCH_FIND_WAIT_MS, ScanLimit, SearchQuery, scan_bytes};
+use crate::time::{Millis, Tick};
 use crate::ui_model::keys;
 
 use crate::editor::state::EditorState;
@@ -32,12 +39,44 @@ pub(crate) struct SearchState {
     revision: Revision,
     query: SearchQuery,
     job: Option<JobId>,
-    /// 走査した順に届いた一致 (終わったら開始位置の昇順に整える)。
+    /// 走査した順に届いた一致 (終わったら開始位置の昇順に整える)。行をまたぐ検索の規則では文書の順に届き、正本の先頭の部分。
     matches: Vec<ByteRange>,
     total: u64,
     count_limited: bool,
     /// 保持の上限を超えて、一致の一部しか持っていない。
     truncated: bool,
+    /// 行をまたぐ検索の規則で探している (`Shape::whole_doc`、03 §12.3.1 の「呼び出し側」)。
+    whole: bool,
+    /// メインスレッドで同期検索をしない (`Shape::job_driven`。行をまたぐ検索の規則か、内部の設定で開いた重い検索語)。
+    jobbed: bool,
+    /// 全件ジョブの起点 (投げ直すときに使う)。
+    from: ByteOff,
+    /// 全件ジョブが `SearchDone` で終わった (取り消し・失敗で終わったときは偽。保持した一致を全部とみなさない)。
+    done_ok: bool,
+    /// 検索語の k (編集で残す再開の位置の範囲を決める)。
+    lines: LineSpan,
+    /// 全件ジョブが知らせた、起点以降の最初の一致 (行をまたぐ検索の規則)。
+    first_after: Option<ByteRange>,
+    /// 再開の位置 (昇順。`marks_rev` の文書で有効。編集では、編集した行の (k + 1) 行より前のものだけを残す)。
+    resume: Vec<ByteOff>,
+    /// 最後に移った・知らされた正本の一致 (その終端は正本の位置。`marks_rev` の文書で有効)。
+    canon: Option<ByteRange>,
+    /// `resume` と `canon` が有効な文書の Revision。
+    marks_rev: Revision,
+    /// 探さなかった・重すぎて打ち切った理由 (03 §12.3.1)。あれば一致・件数は持たない。
+    limit: Option<ScanLimit>,
+    /// 投入したときの主選択 (`first_after` が届いたとき、選択が変わっていなければスクロールする)。
+    spawn_sel: Option<(ByteOff, ByteOff)>,
+}
+
+/// 全件ジョブの結果を待っている次 / 前 (行をまたぐ検索の規則、03 §12.3.1 の「次 / 前」の (4))。
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct StepWait {
+    forward: bool,
+    /// 待っている間に同じ向きを押した回数 (移った後に続ける)。
+    presses: u32,
+    cursor: ByteOff,
+    revision: Revision,
 }
 
 /// 件数の表示の材料 (`SearchCount`、04 §8.4)。
@@ -93,53 +132,199 @@ pub(crate) enum Found {
     Incomplete,
 }
 
+/// 行をまたぐ検索の規則の次 / 前の答え方。
+enum Resolve {
+    /// 保持した一致に答えがある (`wrapped`)。
+    Hit(ByteRange, bool),
+    /// 一致が無い (全件を数えて 0 件)。
+    None,
+    /// 全件の走査の結果を待つ。
+    Wait,
+    /// 単発のジョブで探す。
+    Job,
+}
+
 impl SearchState {
     pub(crate) fn doc(&self) -> DocumentId {
         self.doc
+    }
+
+    /// 行をまたぐ検索の規則で探している。
+    pub(crate) fn is_whole(&self) -> bool {
+        self.whole
+    }
+
+    /// 探さなかった・打ち切った理由。
+    pub(crate) fn limit(&self) -> Option<ScanLimit> {
+        self.limit
+    }
+
+    /// 全件ジョブが知らせた、起点以降の最初の一致。
+    pub(crate) fn first_after(&self) -> Option<ByteRange> {
+        self.first_after
+    }
+
+    /// 全件の走査が終わった。
+    pub(crate) fn finished(&self) -> bool {
+        self.job.is_none()
+    }
+
+    /// 全件の走査が終わり、数える上限で打ち切っていない (一致を最後まで数えた)。
+    pub(crate) fn counted_all(&self) -> bool {
+        self.done_ok && !self.count_limited
+    }
+
+    /// メインスレッドで同期検索をしない検索語 (`Shape::job_driven`)。
+    pub(crate) fn is_job_driven(&self) -> bool {
+        self.jobbed
+    }
+
+    /// 全件の一致を持っている (走査が `SearchDone` で終わり、保持と数える上限で打ち切っていない)。
+    fn complete(&self) -> bool {
+        self.done_ok && !self.truncated && !self.count_limited
+    }
+
+    /// 保持した一致 (行をまたぐ検索の規則では文書の順)。
+    pub(crate) fn retained(&self) -> &[ByteRange] {
+        &self.matches
+    }
+
+    /// 保持した一致が文書のどこまでの一致を漏れなく持つか (行をまたぐ検索の規則。この位置より前で始まる正本の一致は
+    /// すべて保持している)。全件を持てば文書の末尾 (`usize::MAX`)。
+    /// 走査の順が文書の順でない (v0.3 の順の) 検索語は、全件を持つときのほかは 0。
+    pub(crate) fn covered(&self) -> usize {
+        if self.complete() {
+            return usize::MAX;
+        }
+        if !self.whole {
+            return 0;
+        }
+        self.matches.last().map_or(0, |r| r.start.0)
+    }
+
+    /// 投入したときの主選択。
+    pub(crate) fn spawn_sel(&self) -> Option<(ByteOff, ByteOff)> {
+        self.spawn_sel
+    }
+
+    /// 保持した一致 (編集で無効になっていない前提で呼ぶ) に `r` があるか。
+    pub(crate) fn retains(&self, r: ByteRange) -> bool {
+        self.matches
+            .binary_search_by_key(&r.start, |m| m.start)
+            .is_ok_and(|i| self.matches[i] == r)
+    }
+
+    /// 最後に移った正本の一致が `r` で、`rev` の文書で有効か。
+    pub(crate) fn is_canon(&self, r: ByteRange, rev: Revision) -> bool {
+        self.marks_rev == rev && self.canon == Some(r)
     }
 }
 
 impl EditorState {
     /// 検索を始める (進行中の検索は取り消す)。検索語が空なら検索を止めて状態を消す。対象は今の文書。
     pub fn search_start(&mut self, query: SearchQuery) {
+        self.search_start_from(query, None);
+    }
+
+    /// `search_start` と同じで、起点を `from` にする (行をまたぐ検索の規則で、この位置以降の最初の一致を `first_after` で
+    /// 受け取る。`None` は選択の終端)。
+    pub(crate) fn search_start_from(&mut self, query: SearchQuery, from: Option<ByteOff>) {
         self.search_cancel_job();
+        if query.pattern().is_empty() {
+            if self.active_document().is_some() {
+                self.find.search = None;
+                self.mark_dirty_render();
+            }
+            return;
+        }
+        let from = from
+            .or_else(|| self.search_cursor(true))
+            .unwrap_or(ByteOff(0));
+        self.spawn_search(query, from, None);
+    }
+
+    /// 全件ジョブを投げて、検索の状態を作り直す (進行中のジョブは呼び出し側が取り消しておく)。`limit` があれば、ジョブを
+    /// 投げずに「探さない理由」の状態にする (編集で文書が変わったら、次の再検索で判定し直す、03 §12.3.1 の「探さない場合」)。
+    fn spawn_search(&mut self, query: SearchQuery, from: ByteOff, limit: Option<ScanLimit>) {
         let Some(doc_id) = self.active_document() else {
             return;
         };
-        if query.pattern().is_empty() {
-            self.find.search = None;
-            self.mark_dirty_render();
-            return;
-        }
+        let spawn_sel = self.primary_sel();
         let Some(doc) = self.docs.documents.get(&doc_id) else {
             return;
         };
         let revision = doc.revision();
         let snapshot = doc.snapshot();
-        let from = self.search_cursor(true).unwrap_or(ByteOff(0));
-        let job = self.jobs.spawn(
-            Some(doc_id),
-            revision,
-            JobKind::Search {
-                snapshot,
-                query: query.clone(),
-                from,
-                max_matches: MAX_MATCHES,
-                count_limit: COUNT_LIMIT,
-            },
-        );
-        self.io.pending.insert(job, Pending::Search);
+        let shape = query.shape();
+        let whole = shape.is_some_and(|s| s.whole_doc());
+        let jobbed = shape.is_some_and(|s| s.job_driven());
+        let lines = shape.map_or(LineSpan::Bounded(0), |s| s.lines());
+        let job = if limit.is_none() {
+            let job = self.jobs.spawn(
+                Some(doc_id),
+                revision,
+                JobKind::Search {
+                    snapshot,
+                    query: query.clone(),
+                    from,
+                    max_matches: MAX_MATCHES,
+                    count_limit: COUNT_LIMIT,
+                },
+            );
+            self.io.pending.insert(job, Pending::Search);
+            Some(job)
+        } else {
+            None
+        };
         self.find.search = Some(SearchState {
             doc: doc_id,
             revision,
             query,
-            job: Some(job),
+            job,
             matches: Vec::new(),
             total: 0,
             count_limited: false,
             truncated: false,
+            whole,
+            jobbed,
+            from,
+            done_ok: false,
+            lines,
+            first_after: None,
+            resume: Vec::new(),
+            canon: None,
+            marks_rev: revision,
+            limit,
+            spawn_sel,
         });
         self.mark_dirty_render();
+    }
+
+    /// 始める前に探さないと分かった (03 §12.3.1 の「探さない場合」): 進行中のジョブを取り消し、ジョブを投げずに理由だけを持つ
+    /// 状態にする。編集で文書が変わると古い状態になり、入力が止まって 300 ms 後の再検索で判定し直す (走査の途中で分かった
+    /// 場合と同じ)。
+    pub(crate) fn search_refuse(&mut self, query: SearchQuery, limit: ScanLimit) {
+        self.search_cancel_job();
+        let from = self.search_cursor(true).unwrap_or(ByteOff(0));
+        self.spawn_search(query, from, Some(limit));
+    }
+
+    /// `bg` のジョブ (単発の検索・すべて置換・1 件置換の確かめ) を、走っている全件ジョブの後ろで待たせない (`bg` は 1 本の
+    /// 先着順、02 §9.3): 全件ジョブを取り消してから `spawn` で投げ、同じ条件の全件ジョブを、その後ろに投げ直す (03 §12.3.1 の
+    /// 「`bg` レーンの順序と取り消し」)。待ちは全件ジョブの取り消しの遅れだけになる。
+    pub(crate) fn yield_search(&mut self, spawn: impl FnOnce(&mut EditorState)) {
+        let running = self.find.search.as_mut().and_then(|s| {
+            let job = s.job.take()?;
+            Some((job, s.query.clone(), s.from))
+        });
+        if let Some((job, ..)) = &running {
+            self.jobs.cancel(*job);
+            self.io.pending.remove(job);
+        }
+        spawn(self);
+        if let Some((_, query, from)) = running {
+            self.spawn_search(query, from, None);
+        }
     }
 
     /// 検索を終える (検索バーを閉じる)。
@@ -156,21 +341,34 @@ impl EditorState {
     }
 
     fn search_cancel_job(&mut self) {
-        if let Some(old) = self.find.find_job.take() {
-            self.jobs.cancel(old);
-            self.io.pending.remove(&old);
-        }
+        self.cancel_find_next();
         if let Some(job) = self.find.search.as_mut().and_then(|s| s.job.take()) {
             self.jobs.cancel(job);
             self.io.pending.remove(&job);
         }
     }
 
+    /// 単発の検索と、全件ジョブを待つ次 / 前を取り消す (押した回数も捨てる)。
+    fn cancel_find_next(&mut self) {
+        if let Some(old) = self.find.find_job.take() {
+            self.jobs.cancel(old);
+            self.io.pending.remove(&old);
+        }
+        self.find.find_presses = 0;
+        self.find.find_wait = None;
+        self.find.find_since = None;
+    }
+
+    /// 主選択 (始端, 終端)。
+    fn primary_sel(&self) -> Option<(ByteOff, ByteOff)> {
+        let r = *self.view(self.focused_view()?)?.selection.primary();
+        Some((r.start(), r.end()))
+    }
+
     /// 選択の端 (次へは終端、前へは始端)。
     fn search_cursor(&self, forward: bool) -> Option<ByteOff> {
-        let v = self.view(self.focused_view()?)?;
-        let r = v.selection.primary();
-        Some(if forward { r.end() } else { r.start() })
+        let (s, e) = self.primary_sel()?;
+        Some(if forward { e } else { s })
     }
 
     pub(crate) fn search_fresh(&self) -> bool {
@@ -180,6 +378,12 @@ impl EditorState {
                 .get(&s.doc)
                 .is_some_and(|d| d.revision() == s.revision)
         })
+    }
+
+    /// 検索の対象の文書の今の Revision。
+    fn search_doc_revision(&self) -> Option<Revision> {
+        let s = self.find.search.as_ref()?;
+        self.docs.documents.get(&s.doc).map(|d| d.revision())
     }
 
     /// 件数の表示の材料。
@@ -192,6 +396,10 @@ impl EditorState {
         let Some(s) = &self.find.search else {
             return SearchCount::Idle;
         };
+        // 探さなかった・打ち切った: 件数は出さない (検索バーは理由を出す、03 §12.3.1)
+        if s.limit.is_some() {
+            return SearchCount::Idle;
+        }
         if !self.search_fresh() {
             return SearchCount::Approx { total: s.total };
         }
@@ -214,6 +422,14 @@ impl EditorState {
         }
     }
 
+    /// 行をまたぐ検索の規則の単発の検索 (か全件ジョブ) の結果を、`SEARCH_FIND_WAIT_MS` を過ぎて待っている (件数の位置を
+    /// 待ちの表示にする、03 §12.3.1 の「次 / 前」の (6))。
+    pub(crate) fn search_find_waiting(&self) -> bool {
+        self.find
+            .find_since
+            .is_some_and(|t| self.now.saturating_sub(t) >= Millis(SEARCH_FIND_WAIT_MS))
+    }
+
     /// 選択が保持した一致のどれかと一致していれば、その位置。一部しか持っていないときは求めない。
     fn search_current_index(&self, probe: Option<ByteRange>) -> Option<usize> {
         let s = self.find.search.as_ref()?;
@@ -222,10 +438,7 @@ impl EditorState {
         }
         let (a, b) = match probe {
             Some(r) => (r.start, r.end),
-            None => {
-                let sel = self.view(self.focused_view()?)?.selection.primary();
-                (sel.start(), sel.end())
-            }
+            None => self.primary_sel()?,
         };
         s.matches
             .binary_search_by_key(&a, |m| m.start)
@@ -238,7 +451,14 @@ impl EditorState {
         let Some(s) = &self.find.search else {
             return SearchStep::NoQuery;
         };
-        let (doc_id, query) = (s.doc, s.query.clone());
+        if s.whole {
+            return self.search_step_whole(forward);
+        }
+        if s.limit.is_some() {
+            self.notify_search_limit();
+            return SearchStep::NoMatch;
+        }
+        let (doc_id, query, jobbed) = (s.doc, s.query.clone(), s.jobbed);
         let Some(cursor) = self.search_cursor(forward) else {
             return SearchStep::NoQuery;
         };
@@ -248,12 +468,7 @@ impl EditorState {
             self.search_start(query.clone());
         }
         // 保持した一致を使えるのは、走査が終わり、上限にも達していないとき (全件を持っているとき) だけ
-        let complete = fresh
-            && self
-                .find
-                .search
-                .as_ref()
-                .is_some_and(|s| s.job.is_none() && !s.truncated && !s.count_limited);
+        let complete = fresh && self.find.search.as_ref().is_some_and(SearchState::complete);
         let found = if complete {
             match self.find_retained(cursor, forward) {
                 Some(h) => h,
@@ -263,6 +478,9 @@ impl EditorState {
                     Some(m) => Found::Hit(if forward { m[0] } else { m[m.len() - 1] }, true),
                 },
             }
+        } else if jobbed {
+            // 重い検索語はメインスレッドで同期検索をしない (単発のジョブで探す、03 §12.3.1 の「重い検索語」)
+            Found::Incomplete
         } else {
             self.sync_find(doc_id, &query, cursor, forward)
         };
@@ -274,19 +492,189 @@ impl EditorState {
             Found::None => SearchStep::NoMatch,
             // 同期検索の範囲では見つからなかった: 単発のジョブに任せる。届いたら移る
             Found::Incomplete => {
-                self.spawn_find_next(doc_id, query, cursor, forward);
+                self.spawn_find_next(doc_id, query, cursor, forward, Vec::new());
                 SearchStep::NotYet
             }
         }
     }
 
-    /// 単発の検索ジョブを投入する (古い単発は取り消す)。
+    /// 行をまたぐ検索の規則の次 / 前 (03 §12.3.1 の「次 / 前」)。同期検索をしない。
+    fn search_step_whole(&mut self, forward: bool) -> SearchStep {
+        let Some(s) = &self.find.search else {
+            return SearchStep::NoQuery;
+        };
+        // 探さなかった・打ち切った: 何もせず、理由をメッセージ行に出す
+        if s.limit.is_some() {
+            self.notify_search_limit();
+            return SearchStep::NoMatch;
+        }
+        let Some(rev) = self.search_doc_revision() else {
+            return SearchStep::NoQuery;
+        };
+        let Some(cursor) = self.search_cursor(forward) else {
+            return SearchStep::NoQuery;
+        };
+        // (5) 同じ (Revision, 起点, 向き) の単発のジョブを待っている間に押した: 取り消さずに数える (届いて移った後に続ける)。
+        // 起点が違う (待つ間にカーソルを動かした) ときは、取り消して今の起点から投げ直す
+        if let Some(job) = self.find.find_job {
+            if let Some(Pending::FindNext {
+                revision,
+                cursor: c,
+                forward: f,
+                ..
+            }) = self.io.pending.get(&job)
+                && *f == forward
+                && *revision == rev
+                && *c == cursor
+            {
+                self.find.find_presses = self.find.find_presses.saturating_add(1);
+                return SearchStep::NotYet;
+            }
+            self.cancel_find_next();
+        }
+        // (4) 全件ジョブの結果を待っている間も同じ
+        if let Some(w) = &mut self.find.find_wait {
+            if w.forward == forward && w.revision == rev && w.cursor == cursor {
+                w.presses = w.presses.saturating_add(1);
+                return SearchStep::NotYet;
+            }
+            self.cancel_find_next();
+        }
+        self.step_whole_from(cursor, forward, 0)
+    }
+
+    /// 行をまたぐ検索の規則で、`cursor` から 1 回移る。待つときは、待ちの後に続ける回数 `presses` を持たせる。
+    fn step_whole_from(&mut self, cursor: ByteOff, forward: bool, presses: u32) -> SearchStep {
+        let Some(s) = &self.find.search else {
+            return SearchStep::NoQuery;
+        };
+        let (doc_id, query) = (s.doc, s.query.clone());
+        let Some(rev) = self.search_doc_revision() else {
+            return SearchStep::NoQuery;
+        };
+        match self.resolve_whole(cursor, forward) {
+            Resolve::Hit(m, wrapped) => {
+                self.search_select(m, wrapped, forward);
+                self.mark_canon(m);
+                SearchStep::Moved { wrapped }
+            }
+            Resolve::None => SearchStep::NoMatch,
+            Resolve::Wait => {
+                self.find.find_wait = Some(StepWait {
+                    forward,
+                    presses,
+                    cursor,
+                    revision: rev,
+                });
+                self.find.find_since = Some(self.now);
+                SearchStep::NotYet
+            }
+            Resolve::Job => {
+                let starts = self.find_starts(cursor);
+                self.spawn_find_next(doc_id, query, cursor, forward, starts);
+                self.find.find_presses = presses;
+                self.find.find_since = Some(self.now);
+                SearchStep::NotYet
+            }
+        }
+    }
+
+    /// 移った後に、待っている間に押された残りの回数だけ続ける (03 §12.3.1 の「次 / 前」の (5))。
+    fn continue_presses(&mut self, forward: bool, mut presses: u32) {
+        while presses > 0 {
+            presses -= 1;
+            let Some(cursor) = self.search_cursor(forward) else {
+                return;
+            };
+            match self.step_whole_from(cursor, forward, presses) {
+                SearchStep::Moved { .. } => {}
+                // 待ちに入った (残りの回数は待ちが持つ)・一致が無い
+                _ => return,
+            }
+        }
+    }
+
+    /// 行をまたぐ検索の規則で、保持した一致 (正本の先頭の部分) から `cursor` の次 / 前を決める。
+    fn resolve_whole(&self, cursor: ByteOff, forward: bool) -> Resolve {
+        let Some(s) = &self.find.search else {
+            return Resolve::None;
+        };
+        if self.search_fresh() {
+            let m = &s.matches;
+            let complete = s.covered() == usize::MAX;
+            if forward {
+                // 前向き: 保持した一致に起点以降のものがあれば、その最初のもの (保持は正本の先頭の部分なので、それが正本の次)
+                let i = m.partition_point(|r| r.start < cursor);
+                if let Some(r) = m.get(i) {
+                    return Resolve::Hit(*r, false);
+                }
+                if complete {
+                    return m.first().map_or(Resolve::None, |r| Resolve::Hit(*r, true));
+                }
+            } else if s.covered() >= cursor.0 {
+                // 後ろ向き: 起点より前で始まる正本の一致をすべて保持しているときだけ
+                let i = m.partition_point(|r| r.end <= cursor);
+                if i > 0 {
+                    return Resolve::Hit(m[i - 1], false);
+                }
+                if complete {
+                    return m.last().map_or(Resolve::None, |r| Resolve::Hit(*r, true));
+                }
+            }
+            // (4) 全件ジョブが走っている間は単発のジョブを投げずに、その結果を待つ
+            if s.job.is_some() {
+                return Resolve::Wait;
+            }
+        }
+        Resolve::Job
+    }
+
+    /// 単発のジョブに渡す正本の位置 (再開の位置・最後に移った一致の終端・起点より前の保持した一致の終端)。
+    fn find_starts(&self, cursor: ByteOff) -> Vec<ByteOff> {
+        let Some(s) = &self.find.search else {
+            return Vec::new();
+        };
+        let mut v = Vec::new();
+        if self.search_doc_revision() == Some(s.marks_rev) {
+            v.extend_from_slice(&s.resume);
+            if let Some(c) = s.canon {
+                v.push(c.end);
+            }
+        }
+        if self.search_fresh() {
+            let i = s.matches.partition_point(|r| r.end <= cursor);
+            if i > 0 {
+                v.push(s.matches[i - 1].end);
+            }
+        }
+        v.sort_unstable();
+        v.dedup();
+        v
+    }
+
+    /// 正本の一致 `m` へ移った (その終端は正本の位置、03 §12.3.1 の「次 / 前」の (1))。
+    pub(crate) fn mark_canon(&mut self, m: ByteRange) {
+        let rev = self.search_doc_revision();
+        let Some(s) = self.find.search.as_mut().filter(|s| s.whole) else {
+            return;
+        };
+        if Some(s.marks_rev) != rev {
+            s.resume.clear();
+            if let Some(r) = rev {
+                s.marks_rev = r;
+            }
+        }
+        s.canon = Some(m);
+    }
+
+    /// 単発の検索ジョブを投入する (古い単発は取り消す)。`resume` は正本の位置 (行をまたぐ検索の規則だけ)。
     fn spawn_find_next(
         &mut self,
         doc_id: DocumentId,
         query: SearchQuery,
         cursor: ByteOff,
         forward: bool,
+        resume: Vec<ByteOff>,
     ) {
         if let Some(old) = self.find.find_job.take() {
             self.jobs.cancel(old);
@@ -296,30 +684,35 @@ impl EditorState {
             return;
         };
         let revision = doc.revision();
-        let job = self.jobs.spawn(
-            Some(doc_id),
-            revision,
-            JobKind::FindNext {
-                snapshot: doc.snapshot(),
-                query,
-                from: cursor,
-                forward,
-            },
-        );
-        self.io.pending.insert(
-            job,
-            Pending::FindNext {
-                doc: doc_id,
+        let snapshot = doc.snapshot();
+        // 走っている全件ジョブの後ろで待たない (取り消して、単発の後ろに投げ直す)
+        self.yield_search(|st| {
+            let job = st.jobs.spawn(
+                Some(doc_id),
                 revision,
-                cursor,
-                forward,
-            },
-        );
-        self.find.find_job = Some(job);
+                JobKind::FindNext {
+                    snapshot,
+                    query,
+                    from: cursor,
+                    forward,
+                    resume,
+                },
+            );
+            st.io.pending.insert(
+                job,
+                Pending::FindNext {
+                    doc: doc_id,
+                    revision,
+                    cursor,
+                    forward,
+                },
+            );
+            st.find.find_job = Some(job);
+        });
     }
 
     /// 単発の検索の結果。文書の Revision と選択が投入時のままなら移る (違えば捨てる)。ジョブのコンパイルで誤り
-    /// (`TooLarge`) が分かったときは、移らずに検索バーに示す (03 §12.3.1)。
+    /// (`TooLarge`) が分かったときは、移らずに検索バーに示す (03 §12.3.1)。探さなかった・打ち切ったときも示す。
     pub(crate) fn finish_find_next(
         &mut self,
         doc_id: DocumentId,
@@ -329,11 +722,21 @@ impl EditorState {
         r: JobResult,
     ) {
         self.find.find_job = None;
+        let presses = std::mem::take(&mut self.find.find_presses);
+        if self.find.find_wait.is_none() {
+            self.find.find_since = None;
+        }
+        self.mark_dirty_render();
         if self.bar_show_compile_error() {
             return;
         }
-        let JobResult::FindNextDone { found, .. } = r else {
-            return;
+        let found = match r {
+            JobResult::FindNextDone { found, .. } => found,
+            JobResult::SearchLimited { limit } => {
+                self.search_set_limit(limit);
+                return;
+            }
+            _ => return,
         };
         let same = self
             .docs
@@ -346,7 +749,28 @@ impl EditorState {
         }
         if let Some((m, wrapped)) = found {
             self.search_select(m, wrapped, forward);
+            if self.find.search.as_ref().is_some_and(|s| s.whole) {
+                self.mark_canon(m);
+                self.continue_presses(forward, presses);
+            }
         }
+    }
+
+    /// 探さなかった・打ち切った (03 §12.3.1): それまでに届いた一致・件数を捨て、走査と次 / 前をやめて、理由を持つ。
+    pub(crate) fn search_set_limit(&mut self, limit: ScanLimit) {
+        self.search_cancel_job();
+        if let Some(s) = self.find.search.as_mut() {
+            s.limit = Some(limit);
+            s.matches.clear();
+            s.total = 0;
+            s.count_limited = false;
+            s.truncated = false;
+            s.first_after = None;
+            s.resume.clear();
+            s.canon = None;
+        }
+        self.mark_dirty_render();
+        self.bar_search_progress();
     }
 
     /// 保持した一致から、`cursor` より先 (前) の最初の一致。
@@ -484,6 +908,7 @@ impl EditorState {
     /// 検索ジョブの途中経過と終わり。古いジョブの結果は捨てる。
     pub(crate) fn on_search_result(&mut self, out: JobOutput) {
         let JobOutput { job, body: r } = out;
+        let fresh = self.search_fresh();
         let Some(s) = self.find.search.as_mut().filter(|s| s.job == Some(job)) else {
             // 取り消した検索の結果。終わりなら待ちの記録を消す
             if !matches!(r, JobResult::SearchBatch { .. }) {
@@ -492,19 +917,41 @@ impl EditorState {
             return;
         };
         match r {
-            JobResult::SearchBatch { matches, .. } => s.matches.extend(matches),
+            JobResult::SearchBatch {
+                matches,
+                first_after,
+                ..
+            } => {
+                s.matches.extend(matches);
+                if first_after.is_some() {
+                    s.first_after = first_after;
+                }
+            }
             JobResult::SearchDone {
                 total,
                 count_limited,
                 truncated,
+                resume,
+                limit,
                 ..
             } => {
                 s.job = None;
+                self.io.pending.remove(&job);
+                if let Some(l) = limit {
+                    // 途中で探さないと分かった・重すぎて打ち切った: それまでに届いた一致 (強調・保持・件数) を捨てる
+                    self.search_set_limit(l);
+                    return;
+                }
                 s.total = total;
                 s.count_limited = count_limited;
                 s.truncated = truncated;
+                s.done_ok = true;
                 s.matches.sort_by_key(|m| m.start);
-                self.io.pending.remove(&job);
+                // 再開の位置は、走査した文書が今の文書のときだけ使う (編集の後に届いたものは、編集を写していない)
+                if s.whole && fresh {
+                    s.resume = resume;
+                    s.marks_rev = s.revision;
+                }
             }
             // 失敗・取り消し: 件数は出さずに終える
             _ => {
@@ -515,5 +962,111 @@ impl EditorState {
         self.mark_dirty_render();
         // 正規表現の照合器はジョブが作る。届いたら、入力中の現在の一致を求める (03 §12.3.1)
         self.bar_search_progress();
+        self.resolve_find_wait();
+    }
+
+    /// 全件ジョブの結果を待っていた次 / 前を、届いた保持した一致で決める (03 §12.3.1 の「次 / 前」の (4))。
+    fn resolve_find_wait(&mut self) {
+        let Some(w) = self.find.find_wait else {
+            return;
+        };
+        let rev = self.search_doc_revision();
+        let limited = self.find.search.as_ref().is_none_or(|s| s.limit.is_some());
+        if limited || rev != Some(w.revision) || self.search_cursor(w.forward) != Some(w.cursor) {
+            self.find.find_wait = None;
+            self.find.find_since = None;
+            return;
+        }
+        match self.resolve_whole(w.cursor, w.forward) {
+            Resolve::Wait => {}
+            Resolve::Hit(m, wrapped) => {
+                self.find.find_wait = None;
+                self.find.find_since = None;
+                self.search_select(m, wrapped, w.forward);
+                self.mark_canon(m);
+                self.continue_presses(w.forward, w.presses);
+            }
+            Resolve::None => {
+                self.find.find_wait = None;
+                self.find.find_since = None;
+            }
+            Resolve::Job => {
+                self.find.find_wait = None;
+                let Some(s) = &self.find.search else {
+                    return;
+                };
+                let (doc, query) = (s.doc, s.query.clone());
+                let starts = self.find_starts(w.cursor);
+                self.spawn_find_next(doc, query, w.cursor, w.forward, starts);
+                self.find.find_presses = w.presses;
+            }
+        }
+        self.mark_dirty_render();
+    }
+
+    /// 編集に合わせて、行をまたぐ検索の規則の再開の位置と最後に移った一致を写す (03 §12.3.1 の「全件走査」): 編集した行の
+    /// (k + 1) 行より前のものは、そこまでの正本の走査が編集した範囲を読まないので残し、後ろは捨てる。待っている次 / 前は
+    /// 取り消す (Revision が変わった)。
+    pub(crate) fn map_search_marks(
+        &mut self,
+        doc: DocumentId,
+        cs: &eve_text::ChangeSet,
+        old_rev: Revision,
+    ) {
+        if !self
+            .find
+            .search
+            .as_ref()
+            .is_some_and(|s| s.doc == doc && s.jobbed)
+        {
+            return;
+        }
+        self.cancel_find_next();
+        // 入力中の現在の一致は編集の前の文書のもの (正本として使わない。再検索で求め直す)
+        if let Some(bar) = &mut self.find.search_bar {
+            bar.current = None;
+        }
+        let Some(d) = self.docs.documents.get(&doc) else {
+            return;
+        };
+        let (t, rev) = (d.text(), d.revision());
+        let Some(s) = self.find.search.as_mut() else {
+            return;
+        };
+        // 記録が編集の前の文書のものでなければ (文書の差し替えの後など) 残さない
+        let first = cs.changed_ranges().next().map(|(old, _)| old.start);
+        if s.marks_rev != old_rev || !s.whole {
+            s.resume.clear();
+            s.canon = None;
+            s.marks_rev = rev;
+            return;
+        }
+        let Some(first) = first else {
+            s.marks_rev = rev;
+            return;
+        };
+        // 編集の始まりより前の位置は、編集の前後で同じ
+        let first = first.min(ByteOff(t.len_bytes()));
+        let line = t.byte_to_line(first).0;
+        let cutoff = match s.lines {
+            LineSpan::Bounded(k) => match line.checked_sub(k.saturating_add(1)) {
+                Some(l) => t.line_to_byte(LineIdx(l)).0,
+                None => 0,
+            },
+            // 上限なし (全文の連結) は、文書の全体を読むので文書の先頭だけが残る
+            LineSpan::Unbounded => 0,
+        };
+        s.resume.retain(|p| p.0 <= cutoff);
+        if s.canon.is_some_and(|c| c.end.0 > cutoff) {
+            s.canon = None;
+        }
+        s.marks_rev = rev;
+    }
+
+    /// 次に検索の待ちの表示を切り替える時刻 (`Editor::tick` の期限)。
+    pub(crate) fn search_wait_deadline(&self) -> Option<Tick> {
+        let t = self.find.find_since?;
+        let at = Tick(t.0.saturating_add(SEARCH_FIND_WAIT_MS));
+        (self.now < at).then_some(at)
     }
 }

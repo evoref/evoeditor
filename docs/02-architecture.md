@@ -1270,7 +1270,7 @@ TUI と、ヘッドレスの消費者 (シナリオ・駆動 API・ヘッドレ�
 
 | 仕様 | v0.2.0 の実装 | 扱い |
 |---|---|---|
-| `bg` に載せるもの: 検索 (`Search` / 単発の検索)、Undo の実体化、`ReplaceUnmappable` / `ReplaceAll` / `ConvertEol` の構築、スワップの書出し、`WriteRecovery`、クリップボードの文字列化 | `bg` は `Search` (全件の検索) だけ。単発の検索 (`FindNext`)・`ReplaceUnmappable`・`ReplaceAll`・`ConvertEol`・`Swap`・`WriteRecovery` と、仕様に無い種別 (`ReadTheme`・`ReadConfig`・`LastVersion`・`SwapRead`・`SwapRemove`・`SwapDiscard`・`LeftoverAct`) はすべて `io` (`eve-host` の `ThreadJobSpawner::is_bg`) | 振り分けを変えると振る舞い (順序と待ち) が変わるので、v0.3 の M16 で決める。特に `WriteRecovery` と `Swap` が `io` にあると、応答の無い保存の後ろで退避が待たされ得る (仕様が `bg` に置いた理由と逆) |
+| `bg` に載せるもの: 検索 (`Search` / 単発の検索)、Undo の実体化、`ReplaceUnmappable` / `ReplaceAll` / `ConvertEol` の構築、スワップの書出し、`WriteRecovery`、クリップボードの文字列化 | `bg` は検索 (`Search` と単発の検索 `FindNext`)・すべて置換 (`ReplaceAll`)・1 件置換の確かめ (`ReplaceOne`) だけ (`FindNext` と `ReplaceAll` は v0.4 の M24 の (3) で `io` から移した。先着順の `bg` で全件の走査の後ろに待たないよう、core が走っている `Search` を取り消して投げ直す、03 §12.3.1)。`ReplaceUnmappable`・`ConvertEol`・`Swap`・`WriteRecovery` と、仕様に無い種別 (`ReadTheme`・`ReadConfig`・`LastVersion`・`SwapRead`・`SwapRemove`・`SwapDiscard`・`LeftoverAct`) はすべて `io` (`eve-host` の `ThreadJobSpawner::is_bg`) | 振り分けを変えると振る舞い (順序と待ち) が変わるので、v0.3 の M16 で決める。特に `WriteRecovery` と `Swap` が `io` にあると、応答の無い保存の後ろで退避が待たされ得る (仕様が `bg` に置いた理由と逆) |
 | Undo の実体化 (`Materialize`、§14.1 MR1) | 無い | 未実装。Undo の大きな削除を Slice で持つ版で入れる |
 | クリップボードの文字列化は `bg` (`HostTasks`、§4.4) | 使い捨てのスレッド `eve-clip-write` | §4.4 の「v0.2.0 の実装との差」 |
 | `bg` のキューの順序 (提案、OQ-198)、`io` の監視 (提案、OQ-179) | 無い (単純な FIFO。`io` の監視なし) | 提案のまま。OQ の回答の後に入れる |
@@ -1533,7 +1533,7 @@ fn run_job(req: &JobRequest, ports: &JobPorts, cancel: &CancelToken, emit: &mut 
     // 非終端の結果は有効のまま。ワーカーのスレッドは run_job の実行中だけ印 IN_JOB を立て、パニックフックは Fatal を送らずログだけ書く (§9.1)
 
 enum JobKind {                     // Port は持たない (run_job が JobPorts から取る、§4.4)。#[non_exhaustive]。
-                                   // io / bg の振り分けは eve-host の JobSpawner の実装が決める (下の「io」「bg」は仕様の意図。v0.2.0 の実装は Search だけが bg、§9.1 の「v0.2.0 の実装との差」)
+                                   // io / bg の振り分けは eve-host の JobSpawner の実装が決める (下の「io」「bg」は仕様の意図。v0.2.0 の実装は Search だけが bg で、v0.4 の M24 の (3) から FindNext と ReplaceAll も bg、§9.1 の「v0.2.0 の実装との差」)
     Open     { path: FsPath, opts: OpenOptions },                                                     // io
     OpenStdin { opts: OpenOptions },                                                                  // v0.4 の M25 (03 §9.2.2)。OQ-219 の 8 (ADR-0006 の改訂) により io でも bg でもなく専用のワーカー eve-stdin-job (§9.1)。
                                                                       // JobPorts.stdin から ReadChunks を取って読む。opts は forced (--encoding)・user_read_only (--readonly)・
@@ -1554,12 +1554,21 @@ enum JobKind {                     // Port は持たない (run_job が JobPorts
     ReplaceUnmappable { snapshot: Snapshot, encoding: Encoding, escape: EscapePolicy /*Save と同じ*/, preserved: PreservedMap /*v0.4: 元のバイト列を書く記録の範囲は置換の対象にしない (03 §8.6 E2)*/ },  // bg。03 §8.6 E3 の置換: 全文に E1 の照合を走らせ、表現不能の全件から ChangeSet を作る
                                                                       // (ISO-2022-JP の保存での半角カナ → 全角カナ、それ以外 → `?`)
     ReplaceAll { snapshot: Snapshot, query: SearchQuery, replacement: String }, // bg。03 §12.5 のすべて置換: 全一致から ChangeSet を直接作る (一致は保持しない)。
-                                                                      // v0.4 の M24: 今の実装の io から bg へ移し、同一視で当たった件数も返す (03 §12.3.1 / §12.4.1)
+                                                                      // v0.4 の M24: io から bg へ移した ((3))。同一視で当たった件数も返す ((5)、03 §12.3.1 / §12.4.1)。
+                                                                      // 探さなかった・重すぎて打ち切ったら SearchLimited を返す
     ConvertEol { snapshot: Snapshot, eol: LineEnding },              // bg。03 §8.4 の改行コードの変換: `eol` 以外の改行をすべて `eol` に置き換える ChangeSet を作る
-    Search   { snapshot: Snapshot, query: SearchQuery, from: ByteOff, max_matches: usize, count_limit: u64 }, // bg。全件の走査: from の行から末尾まで、続けて先頭から。
+    Search   { snapshot: Snapshot, query: SearchQuery, from: ByteOff, max_matches: usize, count_limit: u64 }, // bg。全件の走査: from の行から末尾まで、続けて先頭から
+                                                                      // (行をまたぐ検索語は文書の先頭から末尾まで。from 以降の最初の一致を first_after で知らせる、03 §12.3.1)。
                                                                       // 一致を SearchBatch で順に返し SearchDone で終わる。保持は max_matches 件、数えるのは count_limit 件まで
-    FindNext { snapshot: Snapshot, query: SearchQuery, from: ByteOff, forward: bool },                // bg。単発の検索 (03 §12.2 の search.next / prev)。全件の Search とは別に 1 つだけ
-                                                                      // v0.4 の M24: 今の実装の io から bg へ移す。行をまたぐ検索語では走査を始める位置 (再開の位置) を足す。
+    ReplaceOne { snapshot: Snapshot, query: SearchQuery, from: ByteOff, range: ByteRange, replacement: String }, // bg。v0.4 の M24 の (3):
+                                                                      // 1 件置換の対象の確かめ (重い検索語・上限の無い検索語・大きな窓、03 §12.3.1 の「置換」)。
+                                                                      // from から選び始め、range.start で始まる一致が range そのものなら置換文字列を返す
+    FindNext { snapshot: Snapshot, query: SearchQuery, from: ByteOff, forward: bool,
+               resume: Vec<ByteOff> /*v0.4 の M24: 正本の走査を始められる位置 (再開の位置・今の一致の終端、昇順)。行をまたぐ検索語だけが使う*/ },
+                                                                      // bg。単発の検索 (03 §12.2 の search.next / prev)。全件の Search とは別に 1 つだけ
+                                                                      // v0.4 の M24 の (3) で io から bg へ移した。探さなかった・重すぎて打ち切ったら SearchLimited を返す。
+                                                                      // bg は先着順なので、FindNext・ReplaceAll・ReplaceOne を投げるときは走っている Search を取り消し、
+                                                                      // その後ろに同じ条件の Search を投げ直す (全件の走査の後ろで待たない、03 §12.3.1)
                                                                       // 同じ (Revision, 起点, 向き) の単発が走っている間は取り消さない (連打の回数は main が数える。03 §12.3.1)
     // SearchLines (可視範囲の行検索) と Materialize (§14.1 MR1) は v0.2.0 の実装に無い (§9.1 の「v0.2.0 の実装との差」)
     Swap     { doc: Arc<DocSnapshot> /*1 文書分*/ },                                                  // bg (v0.2)。FileSystem::write_swap (§4.5) が置き場所を決めて書く
@@ -1669,11 +1678,16 @@ enum JobResult {                   // #[non_exhaustive]
     ReplaceAllDone { changes: ChangeSet /*投入時の Revision の全文に対する変更*/, count: u64 /*置き換えた一致の数*/ },
     ConvertEolDone { changes: ChangeSet },                      // count = 0 (変更なし) なら changes は空で、core は文書を変えずに通知だけする
     // ── 検索 (03 §12.2) ──
-    SearchBatch  { matches: Vec<ByteRange> },                   // 非終端。一定の件数・時間ごとにまとめる (§9.2)。v0.4 の M24 で
-                                                                // first_after: Option<ByteRange> (カーソル以降の最初の一致。行をまたぐ検索語で、保持の上限に依らず送る) を足す (03 §12.3.1)
-    SearchDone   { total: u64, count_limited: bool, truncated: bool }, // Search の終端。v0.4 の M24 で resume: Vec<ByteOff> (1 MiB ごとの
-                                                                // 再開の位置) と、重すぎて打ち切った理由を足す (03 §12.3.1 の「最悪の入力の上限」)
+    SearchBatch  { matches: Vec<ByteRange>,                     // 非終端。一定の件数・時間ごとにまとめる (§9.2)
+                   first_after: Option<ByteRange> },            // v0.4 の M24: 起点 (Search の from) 以降の最初の一致。行をまたぐ検索語で、
+                                                                // 保持の上限に依らず 1 回だけ送る (03 §12.3.1)
+    SearchDone   { total: u64, count_limited: bool, truncated: bool, // Search の終端
+                   resume: Vec<ByteOff> /*v0.4 の M24: 1 MiB ごとの再開の位置 (行をまたぐ検索語だけ)*/,
+                   limit: Option<ScanLimit> /*v0.4 の M24: 探さなかった (TooLarge)・重すぎて打ち切った (TooHeavy) 理由。あれば total は 0 で、
+                                              それまでに届いた一致は捨てる (03 §12.3.1 の「探さない場合」と「最悪の入力の上限」)*/ },
     FindNextDone { found: Option<(ByteRange, bool /*折り返して見つけた*/)> },
+    ReplaceOneDone { insert: Option<String> },                  // v0.4 の M24: ReplaceOne の結果 (range が一致でなければ None)
+    SearchLimited { limit: ScanLimit },                         // v0.4 の M24: FindNext・ReplaceAll・ReplaceOne が探さなかった・打ち切った (何も移らず、置き換えない)
     // ── スワップ・退避・痕跡 (03 §9.7 (e) / §10、05 §4.6) ──
     SwapWritten, SwapDiscarded, SwapRemoved, // v0.2。書いた Revision は core がジョブ表に持つ
     SwapRead     { body: SwapBody },                            // v0.2
@@ -1726,7 +1740,7 @@ enum JobError {                    // #[non_exhaustive]
 | `OpenStdin` (v0.4) | `Progress` / `StdinDone` / `Failed` (`Panic` だけ。読んだ内容は失う。確保の失敗は構築済みの分を `StdinDone { end: OutOfMemory }` で返す。03 §9.2.2) | 起きない (同上) | 破棄 (閉じるときにキャンセル済み。読んだ内容も捨てる) | キャンセル済み: **`StdinDone` を採用** (取消し (`Esc`) は「読むのをやめて開く」意味で、終端は `StdinDone { end: Stopped }`)。ジョブ表に無い: 破棄 | 03 §9.2.2 |
 | `Save` | `Saved` / `Unmappable` / `EscapeMerge` (v0.4 の M23。どちらも何も書いていない。確認は結果の base Revision に対して出し、承認の時点で Revision が進んでいれば今の Snapshot で投入し直す、03 §8.3.1 / §9.7 (e)) / `Failed` (cancel の出どころ (`User` / `QuitAbort`) は core の `SaveChain` が持つ (`Saving.cancel_origin`)。ジョブ側は区別せず、どちらも `Failed { Cancelled }` を返す。出し分けは 03 §9.7) | **採用**: `history.saved` を `node` (Snapshot 取得時点のノード) にし、`disk_stamp` を `report.new_stamp` にする。保存後の編集は dirty のまま残る (§5.1)。名前を付けて保存は、ジョブ表 (`Pending::Save`) に持った保存先のパスで文書のパスを更新する (v0.2.0 の `Saved` は `canonical` / `meta` を持たない)。`Failed` も採用 (失敗の確認・メッセージを出す) | 文書には反映しない (破棄)。`Failed` はメッセージで示す (閉じる手順は保存の完了を待つ、03 §9.2) | キャンセル済み: **`Saved` は必ず採用** (書いた事実は取り消せない。左の列と同じ更新をする)。`Failed { Cancelled }` は `info.save.aborted` を出す。それ以外の `Failed` (`ReplacedMovedToBackup` / `InPlaceFailed` 等) も採用してメッセージを出す (退避パスを必ず示す)。ジョブ表に無い: 破棄 (終端の後) | 03 §9.3 / §9.7 |
 | `Metadata` | `Meta` / `Failed` | `UnchangedSave`: 受け手は 03 §9.7 の `CheckingUnchanged`。Revision が進んでいたら結果を破棄し、現在の状態で保存を最初からやり直す (照合の間に dirty になったら書く必要がある)。`SaveAsTarget` / `ExternalCheck` (v0.2): 採用 (ディスク側の情報で、文書の Revision に依らない) | 破棄 | 破棄 (読むだけのジョブで、副作用が無い) | 03 §9.3 / §9.5 / §9.7 |
-| `Search` / `FindNext` | `SearchBatch` / `SearchDone` / `FindNextDone` / `Failed` | 破棄。入力が 300 ms 止まった後に可視範囲から再要求する | 破棄 | 破棄 | 03 §12.2 |
+| `Search` / `FindNext` | `SearchBatch` / `SearchDone` / `FindNextDone` / `SearchLimited` / `Failed` | 破棄。入力が 300 ms 止まった後に可視範囲から再要求する | 破棄 | 破棄 | 03 §12.2 |
 | `Materialize` (v0.2.0 の実装に無い) | `Materialized` / `Failed` | Revision では決めない: `SliceKey` の Slice がまだ履歴 (undo / redo) にあれば採用、無ければ破棄 | 破棄 | 破棄 (実体化はキャンセルしないので、通常は文書を閉じたときだけ) | 03 §6.5 |
 | `Swap` (v0.2) | `SwapWritten` / `Failed` | 採用 (書いた Revision を記録するだけ。Revision はジョブ表が持つ)。待っている要求があれば最新の Snapshot で 1 回だけ再実行 | 破棄 | キャンセル済み: `SwapWritten` は採用 (書いた事実の記録だけ)。ジョブ表に無い: 破棄 | 03 §10.2 |
 | `ReplaceUnmappable` | `UnmappableReplacement` / `Failed` | 破棄 (ChangeSet と一覧は base の座標なので適用しない)。E3 の確認は続いているので、現在の Snapshot で再要求する。一覧を示している間 (承認待ち) に Revision が進んだ場合も、承認の時点で照合して同じく再要求する | 破棄 | 破棄 | 03 §8.6 |
