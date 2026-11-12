@@ -21,7 +21,12 @@
 //! cargo bench -p eve-platform --bench bm_104_202 -- --quick   # 回数を減らす動作確認 (記録には使わない)
 //! cargo bench -p eve-platform --bench bm_104_202 -- --json    # 1 行ずつの JSON (xtask bench が集める)
 //! cargo bench -p eve-platform --bench bm_104_202 --target x86_64-unknown-linux-musl   # OQ-112 の musl 版
+//! cargo bench -p eve-platform --bench bm_104_202 -- --partial # 先行表示を立てた読込 (v0.4 の M25。下の注記)
 //! ```
+//!
+//! **`--partial` (v0.4 の M25、03 §9.2.1)**: `file.open` と同じく `OpenOptions.partial` を立て、時計を実時間にして開く
+//! (読込が 200 ms を過ぎれば、ジョブは先頭 1 MiB の複写から先頭の `Text` を作って送る)。先頭の複写と先頭の構築の費用が
+//! 読込の時間を遅くしないことを、`--partial` なしの値と並べて見る。
 
 #![allow(clippy::print_stdout, clippy::print_stderr)]
 #![expect(
@@ -53,13 +58,31 @@ mod imp {
         }
     }
 
+    /// 実時間の単調時計 (`--partial`。先行表示の 200 ms の条件を実際に効かせる)。
+    struct RealClock(Instant);
+
+    impl Clock for RealClock {
+        fn now(&self) -> Tick {
+            Tick(self.0.elapsed().as_millis() as u64)
+        }
+    }
+
+    /// 時計: `--partial` なら実時間、ほかは止まった時計。
+    fn clock(partial: bool) -> Arc<dyn Clock> {
+        if partial {
+            Arc::new(RealClock(Instant::now()))
+        } else {
+            Arc::new(FixedClock)
+        }
+    }
+
     #[cfg(windows)]
-    fn ports() -> JobPorts {
+    fn ports(partial: bool) -> JobPorts {
         use eve_platform::dirs::WinPaths;
         use eve_platform::fs::WinFs;
         JobPorts {
             fs: Arc::new(WinFs::default()),
-            clock: Arc::new(FixedClock),
+            clock: clock(partial),
             paths: Arc::new(WinPaths::new(
                 Dirs::resolve(&|_| None),
                 PathCtx {
@@ -71,12 +94,12 @@ mod imp {
     }
 
     #[cfg(unix)]
-    fn ports() -> JobPorts {
+    fn ports(partial: bool) -> JobPorts {
         use eve_platform::dirs::UnixPaths;
         use eve_platform::unix_fs::UnixFs;
         JobPorts {
             fs: Arc::new(UnixFs::default()),
-            clock: Arc::new(FixedClock),
+            clock: clock(partial),
             paths: Arc::new(UnixPaths::new(
                 Dirs::resolve(&|_| None),
                 PathCtx {
@@ -206,14 +229,17 @@ mod imp {
         }
     }
 
-    fn open(path: &Path, ports: &JobPorts) -> JobResult {
+    fn open(path: &Path, ports: &JobPorts, partial: bool) -> JobResult {
         let req = JobRequest {
             id: JobId(1),
             doc: None,
             base: Revision(0),
             kind: JobKind::Open {
                 path: FsPath::new(path.to_path_buf()),
-                opts: OpenOptions::default(),
+                opts: OpenOptions {
+                    partial,
+                    ..OpenOptions::default()
+                },
             },
         };
         let mut out = Vec::new();
@@ -253,9 +279,10 @@ mod imp {
         // 他のケースや計測の繰り返しで残ったヒープが増分を小さく見せないよう、ケースごとに新しいプロセスで測る)
         if let Some(i) = args.iter().position(|a| a == "--mem-file") {
             let path = PathBuf::from(&args[i + 1]);
-            let ports = ports();
+            let partial = args.iter().any(|a| a == "--partial");
+            let ports = ports(partial);
             let before = rss();
-            let held = open(&path, &ports);
+            let held = open(&path, &ports, partial);
             std::thread::sleep(Duration::from_secs(1));
             let after = rss();
             assert!(matches!(held, JobResult::Complete { .. }));
@@ -264,6 +291,7 @@ mod imp {
         }
         let quick = args.iter().any(|a| a == "--quick");
         let json = args.iter().any(|a| a == "--json");
+        let partial = args.iter().any(|a| a == "--partial");
         // 回数は 09 §5.2: 1 MB / 10 MB は 1,000 回 (ウォームアップ 100 回を除く)、100 MB は 30 回
         let scale = |full: usize, q: usize| if quick { q } else { full };
 
@@ -364,7 +392,7 @@ mod imp {
             });
         }
 
-        let ports = ports();
+        let ports = ports(partial);
         for c in cases {
             let path = dir.join(format!("{}.txt", c.id));
             std::fs::write(&path, &c.bytes).expect("コーパスを書けません");
@@ -377,7 +405,7 @@ mod imp {
             let mut records = 0usize;
             for i in 0..(c.warmup + c.runs) {
                 let t = Instant::now();
-                let r = open(&path, &ports);
+                let r = open(&path, &ports, partial);
                 let d = t.elapsed();
                 let JobResult::Complete { preserved, .. } = &r else {
                     panic!("{}: 開けませんでした", c.id);
@@ -405,6 +433,7 @@ mod imp {
                 std::process::Command::new(std::env::current_exe().expect("自分の実行ファイル"))
                     .arg("--mem-file")
                     .arg(&path)
+                    .args(partial.then_some("--partial"))
                     .output()
                     .ok()
                     .and_then(|o| String::from_utf8(o.stdout).ok())
@@ -414,7 +443,7 @@ mod imp {
 
             if json {
                 println!(
-                    "{{\"id\":\"{}\",\"size_bytes\":{size},\"runs\":{},\"p50_ms\":{p50:.1},\"p99_ms\":{p99:.1},\"max_ms\":{max:.1},\"mem_delta_bytes\":{delta},\"mem_limit_bytes\":{limit},\"records\":{records},\"quick\":{quick}}}",
+                    "{{\"id\":\"{}\",\"size_bytes\":{size},\"runs\":{},\"p50_ms\":{p50:.1},\"p99_ms\":{p99:.1},\"max_ms\":{max:.1},\"mem_delta_bytes\":{delta},\"mem_limit_bytes\":{limit},\"records\":{records},\"quick\":{quick},\"partial\":{partial}}}",
                     c.id,
                     times.len()
                 );
@@ -426,9 +455,10 @@ mod imp {
                     )
                 });
                 println!(
-                    "{} {}: p50 {p50:.1} ms / p99 {p99:.1} ms / max {max:.1} ms ({} 回、記録 {records} 件) {verdict}",
+                    "{} {}{}: p50 {p50:.1} ms / p99 {p99:.1} ms / max {max:.1} ms ({} 回、記録 {records} 件) {verdict}",
                     c.id,
                     c.label,
+                    if partial { " (--partial)" } else { "" },
                     times.len()
                 );
                 println!(
@@ -477,7 +507,7 @@ mod imp {
                 format,
                 preserved,
                 ..
-            } = open(&path, &ports)
+            } = open(&path, &ports, false)
             else {
                 panic!("{id}: 開けませんでした");
             };

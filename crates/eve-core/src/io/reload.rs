@@ -117,6 +117,8 @@ impl EditorState {
             default_eol: Some(self.config_eol()),
             huge_file_warn_bytes: Some(self.config().huge_file_warn_bytes),
             long_line_threshold: Some(self.config_long_line_threshold()),
+            // 再読込・開き直しの間は旧本文を表示し続けるので、先行表示は要らない (03 §9.2.1 の「対象」)
+            partial: false,
             ..OpenOptions::default()
         };
         self.mark_dirty_render();

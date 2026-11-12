@@ -11,8 +11,10 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use eve_core::{
     ChunkError, Clock, Expect, FileId, FileKind, FileMeta, FileStamp, FileSystem, FileTime,
     FsError, FsErrorDetail, FsErrorKind, FsKind, FsPath, FsyncLevel, HardlinkPolicy,
-    InflightRecord, ReadChunks, RecoveryDirEntry, SaveMethod, SaveOptions, SaveReport,
+    InflightRecord, Millis, ReadChunks, RecoveryDirEntry, SaveMethod, SaveOptions, SaveReport,
 };
+
+use crate::ManualClock;
 
 /// 障害を注入できる操作。
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -79,6 +81,8 @@ struct State {
     next_id: u128,
     seq: u32,
     chunk_size: usize,
+    /// 読込のチャンクを 1 つ返すたびに進める時計と、進める時間 (遅い読込の再現。先行表示の試験、03 §9.2.1)。
+    read_delay: Option<(ManualClock, Millis)>,
     fail_next: Vec<(FsOp, FsErrorKind)>,
     /// 次の保存の成功 (`write_atomic` / `write_in_place`) に付ける警告。
     warn_next: Vec<eve_core::SaveWarning>,
@@ -131,6 +135,7 @@ impl MemFs {
                 next_id: 1,
                 seq: 0,
                 chunk_size: DEFAULT_CHUNK,
+                read_delay: None,
                 fail_next: Vec::new(),
                 warn_next: Vec::new(),
                 busy: BTreeMap::new(),
@@ -397,6 +402,12 @@ impl MemFs {
     /// 読込のチャンクの大きさ (バイト。既定は 1 MiB、0 は 1 に切り上げる)。
     pub fn set_chunk_size(&self, bytes: usize) {
         self.st().chunk_size = bytes.max(1);
+    }
+
+    /// 遅い読込: 読込のチャンクを 1 つ返すたびに `clock` を `per_chunk` だけ進める (`None` で戻す)。読込ジョブの時間の
+    /// 条件 (先行表示の 200 ms、03 §9.2.1) を、チャンクの区切りに合わせて跨がせる。
+    pub fn set_read_delay(&self, delay: Option<(ManualClock, Millis)>) {
+        self.st().read_delay = delay;
     }
 
     // ---------- 障害注入 ----------
@@ -696,6 +707,7 @@ impl FileSystem for MemFs {
                 pos: 0,
                 chunk: s.chunk_size,
                 fail_after: s.read_fail_after,
+                delay: s.read_delay.clone(),
             })),
             None if s.dirs.contains(path) => Err(FsError::with_detail(
                 FsErrorKind::InvalidPath,
@@ -885,6 +897,7 @@ struct MemReader {
     pos: usize,
     chunk: usize,
     fail_after: Option<u64>,
+    delay: Option<(ManualClock, Millis)>,
 }
 
 impl ReadChunks for MemReader {
@@ -903,6 +916,9 @@ impl ReadChunks for MemReader {
         }
         let start = self.pos;
         self.pos = end;
+        if let Some((clock, d)) = &self.delay {
+            clock.advance(*d);
+        }
         Ok(Some(&self.data[start..end]))
     }
 }

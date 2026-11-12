@@ -82,6 +82,9 @@ pub struct OpenOptions {
     pub huge_file_warn_bytes: Option<u64>,
     /// 長大行の閾値 (`file.long_line_threshold`、NFR-106)。`None` は既定 (1 MiB)。
     pub long_line_threshold: Option<usize>,
+    /// 先行表示 (`JobResult::Partial`、03 §9.2.1。v0.4 の M25) を送ってよい。core が新しく開く読込 (`file.open`・起動時の
+    /// パス) のときだけ立てる。再読込・文字コードを指定して開き直すでは立てない。確認からの再投入は引き継ぐ (02 §9.3)。
+    pub partial: bool,
 }
 
 pub(crate) fn run_open(
@@ -95,6 +98,9 @@ pub(crate) fn run_open(
     open_inner(id, path, opts, ports, cancel, emit, None)
 }
 
+mod partial;
+use partial::{HeadCopy, HeadParams, Redo};
+
 /// 先頭の判定の結果 (1 チャンク目で決まる)。
 struct Plan {
     enc: Encoding,
@@ -102,6 +108,23 @@ struct Plan {
     confidence: Confidence,
     binary_confirmed: bool,
     guess_unsupported: Option<&'static str>,
+}
+
+/// 先行表示の先頭の形式に要る、判定の値 (03 §9.2.1 の「結果の形」)。
+fn head_params(
+    enc: Encoding,
+    dec: &Decoder,
+    opts: &OpenOptions,
+    long_line_threshold: usize,
+) -> HeadParams {
+    HeadParams {
+        encoding: enc,
+        has_bom: dec.has_bom(),
+        pua_escape: dec.pua_mode(),
+        invalid_so_far: dec.invalid_bytes(),
+        long_line_threshold,
+        default_eol: opts.default_eol.unwrap_or(LineEnding::Lf),
+    }
 }
 
 /// 判定し直した位置の周辺の窓 (03 §8.2.1)。信頼度「低」の UTF-8 で、不正な UTF-8 または ISO-2022-JP のエスケープ列を
@@ -132,8 +155,9 @@ fn open_inner(
     ports: &JobPorts,
     cancel: &CancelToken,
     emit: &mut dyn FnMut(JobOutput),
-    redetected: Option<Encoding>,
+    redo: Option<Redo>,
 ) -> JobResult {
+    let redetected = redo.map(|r| r.encoding);
     let fail = |err| JobResult::Failed { err };
     let cancelled = || JobResult::Failed {
         err: JobError::Cancelled,
@@ -178,7 +202,14 @@ fn open_inner(
         return fail(e);
     }
 
-    // 3. 読み始める
+    // 3. 読み始める。先行表示 (03 §9.2.1) の時間は、本文の読込 (`open_read`) を始めた時刻から測る (判定のやり直しでは
+    // 最初の読込の時刻を引き継ぎ、前の読込が先頭を送っていれば、先頭が揃った時点で送り直す)
+    let mut head = opts.partial.then(|| {
+        let started = redo
+            .and_then(|r| r.started)
+            .unwrap_or_else(|| ports.clock.now());
+        HeadCopy::new(started, redo.is_some_and(|r| r.partial_sent))
+    });
     let mut reader = match ports.fs.open_read(path) {
         Ok(r) => r,
         Err(e) => return fail(JobError::Fs(e)),
@@ -299,7 +330,7 @@ fn open_inner(
         // 再判定 (03 §8.2.1): 信頼度「低」の UTF-8 で、後半に別の文字コードが現れたら 1 回だけ先頭からやり直す
         if !redetect_checked
             && opts.forced.is_none()
-            && redetected.is_none()
+            && redo.is_none()
             && pl.enc == Encoding::Utf8
             && pl.confidence == Confidence::Low
         {
@@ -309,7 +340,13 @@ fn open_inner(
                     forced: Some(other),
                     ..opts
                 };
-                return open_inner(id, path, again, ports, cancel, emit, Some(other));
+                let redo = Redo {
+                    encoding: other,
+                    started: head.as_ref().map(HeadCopy::started),
+                    partial_sent: head.as_ref().is_some_and(HeadCopy::sent),
+                };
+                drop(head);
+                return open_inner(id, path, again, ports, cancel, emit, Some(redo));
             }
             // 不正な UTF-8 も ISO-2022-JP の列も無い間は、次のチャンクでも見る。最初に見つけた契機で一度だけ判定する
             if find_iso_switch(chunk).is_some() || std::str::from_utf8(chunk).is_err() {
@@ -327,6 +364,10 @@ fn open_inner(
         dec.decode(chunk, false, &mut out);
         builder.append(&out);
         line_stats.feed(&out);
+        // 先行表示の先頭は、木に積むのと同じ復号の出力を別に複写して持つ (全文の接頭辞になる。木には触れない)
+        if let Some(h) = head.as_mut() {
+            h.feed(&out);
+        }
         // 往復の検査は元のバイト列 (BOM を除く) で行う
         let body = if first {
             &chunk[pl.bom_len.min(chunk.len())..]
@@ -343,6 +384,17 @@ fn open_inner(
                     bytes: read_total,
                     total: meta.len,
                 },
+            });
+        }
+        // 先行表示 (03 §9.2.1): 200 ms を過ぎて読み終えていなければ、このチャンクの区切りで 1 回だけ先頭を送る
+        if let Some(h) = head.as_mut()
+            && h.due(now, !truncated && read_total < meta.len)
+        {
+            let params = head_params(pl.enc, dec, &opts, long_line_threshold);
+            let (head, format) = h.take(false, &params);
+            emit(JobOutput {
+                job: id,
+                body: JobResult::Partial { head, format },
             });
         }
         if truncated {
@@ -364,6 +416,20 @@ fn open_inner(
         .map_or((opts.forced.unwrap_or(Encoding::Utf8), false, None), |p| {
             (p.enc, p.binary_confirmed, p.guess_unsupported)
         });
+    // 判定のやり直しの読込が、先頭が揃う前に読み終えた: 終端の結果の直前に先頭を送り直す (03 §9.2.1)。Complete の時点の
+    // 先頭は、常に最後の復号の接頭辞になる
+    if let Some(h) = head.as_mut()
+        && h.resend_pending()
+    {
+        h.feed(&out);
+        let params = head_params(enc, &dec, &opts, long_line_threshold);
+        let (head, format) = h.take(!truncated, &params);
+        emit(JobOutput {
+            job: id,
+            body: JobResult::Partial { head, format },
+        });
+    }
+    drop(head);
     let text = builder.finish();
 
     // 読込前後の metadata を比較する (05 §4.5)

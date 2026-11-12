@@ -50,6 +50,8 @@ impl EditorState {
         opts: OpenOptions,
     ) -> Option<DocumentId> {
         let opts = OpenOptions {
+            // 新しく開く読込なので、先行表示を送ってよい (03 §9.2.1)
+            partial: true,
             default_eol: opts.default_eol.or(Some(self.config_eol())),
             huge_file_warn_bytes: opts
                 .huge_file_warn_bytes
