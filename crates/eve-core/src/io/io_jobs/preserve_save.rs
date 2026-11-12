@@ -39,7 +39,8 @@ fn all(t: &dyn TextRead) -> String {
     t.slice_to_string(ByteRange::all(t.len_bytes()))
 }
 
-/// 元の文字コードで保存するときの不正バイトのエスケープの扱い (`TextFormat::save_escape_policy` と同じ。状態付きは戻さない)。
+/// 元の文字コードで保存するときの不正バイトのエスケープの扱い (読んだ文字コードで書くバイトの文書の
+/// `TextFormat::save_escape_policy` と同じ。状態付きは戻さない)。
 fn policy(enc: Encoding) -> EscapePolicy {
     if enc.is_stateful() {
         EscapePolicy::Reject

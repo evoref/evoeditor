@@ -53,6 +53,10 @@ fn loaded(enc: Encoding, bytes: &[u8]) -> (Text, TextFormat, PreservedMap) {
     format.encoding = enc;
     format.roundtrip = summary;
     format.invalid_bytes = d.invalid_bytes();
+    // 読込のジョブと同じに決める (03 §8.3.1)
+    format.pua_escape = d.pua_mode();
+    format.escape_encoding =
+        TextFormat::escape_encoding_on_load(enc, format.pua_escape, format.invalid_bytes);
     format.eol_stats = crate::document::EolStats::count(&text);
     format.long_lines = count_long_lines(&text, format.long_line_threshold);
     (text, format, map)

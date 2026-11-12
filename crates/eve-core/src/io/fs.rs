@@ -428,6 +428,9 @@ pub struct SwapBody {
     pub has_bom: bool,
     /// 元の文書の既定の改行コード。
     pub default_eol: eve_text::LineEnding,
+    /// manifest の `pua_escaped` (02 §11.2.1): 本文のエスケープ文字が `encoding` のバイトか (書いた文書の
+    /// `escape_encoding.is_some()`)。復旧の適用で `escape_encoding` を決めるのに使う (03 §8.3.1)。
+    pub pua_escaped: bool,
 }
 
 // ---------- 保存中フラグと中断の痕跡 (02 §4.5、05 §4.6 / §7.5) ----------

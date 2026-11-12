@@ -645,10 +645,13 @@ impl EditorState {
                     // (旧文字コードのもの) と保持方式の記録を捨てる (状態も対象外に戻る。書いた内容を再エンコードすれば
                     // 同じバイト列になる、03 §8.8)。同じ文字コードなら、表・状態・往復の要約を残す (記録を使って書いたので、
                     // 記録は有効なまま。v0.3 までの「要約を空にする」は違う文字コードへ変えたときだけ、03 §8.7.1)
+                    // 違う文字コードで書いたら、本文のエスケープ文字の由来の文字コードも捨てる (`None`。この後に Undo で
+                    // エスケープ文字が戻っても元のバイトに戻さない、03 §8.3.1)。同じ文字コードなら変えない
                     if let Some(f) = fmt {
                         if f.encoding != doc.format.encoding {
                             doc.format.roundtrip = Default::default();
                             doc.clear_preserved();
+                            doc.forget_escape_encoding();
                         }
                         doc.format.encoding = f.encoding;
                         doc.format.has_bom = f.bom;
