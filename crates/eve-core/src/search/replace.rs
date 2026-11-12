@@ -98,7 +98,7 @@ pub fn build_replace_all(
     let insert: std::sync::Arc<str> = std::sync::Arc::from(replacement);
     let mut edits: Vec<eve_text::Edit> = Vec::new();
     let full = ByteRange::new(ByteOff(0), ByteOff(text.len_bytes()));
-    let ok = if m.regex.is_some() {
+    let ok = if m.expands() {
         // 正規表現: `$1` / `${name}` を一致ごとに展開する (03 §12.5)
         scan_replacements(
             text,

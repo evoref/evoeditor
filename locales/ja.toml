@@ -834,6 +834,14 @@ text = "✖ 正規表現が不正: {reason}"
 hint = "行ごとに検索します。1 行の中のパターンにしてください"
 text = "✖ 改行を含むパターンは未対応です"
 
+[msg.search.replace_invalid_regex]
+hint = "( ) や [ ] の対応などを確認してください"
+text = "正規表現が不正なため、置換しませんでした: {reason}"
+
+[msg.search.replace_newline_unsupported]
+hint = "行ごとに検索します。1 行の中のパターンにしてください"
+text = "改行を含むパターンは未対応のため、置換しませんでした"
+
 [msg.search.replace_stale]
 hint = "入力を止めてから、もう一度実行してください"
 text = "編集が続いたため、すべて置換を中止しました"

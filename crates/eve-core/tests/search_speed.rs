@@ -24,6 +24,15 @@ fn 走査の速さ() {
             SearchQuery::literal("ZZZZ").with_case(Case::Insensitive),
         ),
         ("日本語", SearchQuery::literal("存在しない")),
+        // `k` `s` を含む ASCII の語の大小無視は、行ごとの正規表現の経路になる (03 §12.4 の 3)
+        (
+            "大小無視 (s を含む ASCII、一致なし)",
+            SearchQuery::literal("ZEBRAS").with_case(Case::Insensitive),
+        ),
+        (
+            "大小無視 (k を含む ASCII、一致が多い)",
+            SearchQuery::literal("QUICK").with_case(Case::Insensitive),
+        ),
     ] {
         let m = q.matcher().unwrap();
         let start = std::time::Instant::now();

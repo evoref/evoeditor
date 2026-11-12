@@ -265,3 +265,163 @@ fn 単発の検索は取り消せる() {
     assert!(find_next(&t, &lit("zz"), ByteOff(0), true, &c).is_none());
     assert!(find_next(&t, &lit("zz"), ByteOff(0), false, &c).is_none());
 }
+
+// ---- 大小を区別しない検索の経路 (03 §12.4、OQ-196): どの経路でも Unicode の単純ケースフォールディングの意味 ----
+
+/// 文書全体を走査の入口 (`scan_bytes`) で探した一致。
+fn scan_all(doc: &str, q: &SearchQuery) -> Vec<(usize, usize)> {
+    let t = Text::from(doc);
+    let Some(m) = q.matcher() else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    let full = eve_text::ByteRange::new(ByteOff(0), ByteOff(t.len_bytes()));
+    scan_bytes(&t, &m, full, &CancelToken::new(), &mut |r| {
+        out.push((r.start.0, r.end.0));
+        true
+    });
+    out
+}
+
+/// 検索語 `p` をエスケープした正規表現の問い合わせ (大小の扱いと単語単位は `q` と同じ)。
+fn as_regex(p: &str, q: &SearchQuery) -> SearchQuery {
+    lit(&regex::escape(p))
+        .with_regex(true)
+        .with_case(q.case())
+        .with_whole_word(q.is_whole_word())
+}
+
+#[test]
+fn 大小を区別しない検索で_s_と_long_s_と_k_とケルビン記号が互いに一致する() {
+    // s=0, S=2, ſ=4..6, k=7, K=9, K (U+212A)=11..14
+    let doc = "s S \u{17F} k K \u{212A}";
+    let s_all = [(0, 1), (2, 3), (4, 6)];
+    let k_all = [(7, 8), (9, 10), (11, 14)];
+    for p in ["s", "S", "\u{17F}"] {
+        let q = lit(p).with_case(Case::Insensitive);
+        assert_eq!(scan_all(doc, &q), s_all, "{p:?}");
+        assert_eq!(find_all(doc, &q), s_all, "{p:?}");
+        assert_eq!(scan_all(doc, &as_regex(p, &q)), s_all, "正規表現 {p:?}");
+    }
+    for p in ["k", "K", "\u{212A}"] {
+        let q = lit(p).with_case(Case::Insensitive);
+        assert_eq!(scan_all(doc, &q), k_all, "{p:?}");
+        assert_eq!(find_all(doc, &q), k_all, "{p:?}");
+        assert_eq!(scan_all(doc, &as_regex(p, &q)), k_all, "正規表現 {p:?}");
+    }
+    // Smart: 小文字だけ (ſ は小文字) なら区別せず、大文字 (K も大文字) を含めば区別する
+    assert_eq!(scan_all(doc, &lit("s")), s_all);
+    assert_eq!(scan_all(doc, &lit("\u{17F}")), s_all);
+    assert_eq!(scan_all(doc, &lit("k")), k_all);
+    assert_eq!(scan_all(doc, &lit("S")), [(2, 3)]);
+    assert_eq!(scan_all(doc, &lit("\u{212A}")), [(11, 14)]);
+    // 単語単位でも同じ
+    let w = |p: &str| lit(p).with_whole_word(true);
+    assert_eq!(scan_all(doc, &w("s")), s_all);
+    assert_eq!(scan_all(doc, &w("k")), k_all);
+    // 語の途中の ſ / K
+    let doc = "class CLASS cla\u{17F}s \u{212A}ICK kick";
+    let q = lit("class");
+    assert_eq!(scan_all(doc, &q), [(0, 5), (6, 11), (12, 18)]);
+    assert_eq!(scan_all(doc, &as_regex("class", &q)), scan_all(doc, &q));
+    let q = lit("KICK").with_case(Case::Insensitive);
+    assert_eq!(scan_all(doc, &q), [(19, 25), (26, 30)]);
+}
+
+#[test]
+fn ascii_の近道は_k_と_s_を含まない検索語だけで_それ以外は行ごとの経路() {
+    let chunked = |q: SearchQuery| q.matcher().unwrap().is_chunked();
+    assert!(chunked(lit("ZEBRA").with_case(Case::Insensitive)));
+    assert!(chunked(lit("zebra")));
+    assert!(chunked(lit("Class").with_case(Case::Sensitive)));
+    assert!(chunked(lit("日本語")), "区別の無い文字だけ");
+    for p in ["s", "S", "k", "K", "class", "QUICK"] {
+        assert!(!chunked(lit(p).with_case(Case::Insensitive)), "{p}");
+    }
+    assert!(!chunked(lit("ab").with_whole_word(true)));
+}
+
+#[test]
+fn ascii_以外から_ascii_の英字へ畳み込まれる文字はケルビン記号と_long_s_だけ() {
+    // §12.4 の 2 の経路 (ASCII の大小だけを畳み込む) の前提。区別の無い文字は畳み込まれない (下の試験) ので、
+    // 区別のある文字だけを調べればよい
+    let hay: String = ('\u{80}'..=char::MAX)
+        .filter(|&c| matcher::is_cased(c))
+        .collect();
+    let re = regex::Regex::new("(?i)[a-z]").unwrap();
+    let found: Vec<char> = re
+        .find_iter(&hay)
+        .filter_map(|m| m.as_str().chars().next())
+        .collect();
+    assert_eq!(found, ['\u{17F}', '\u{212A}']);
+}
+
+#[test]
+fn 区別の無い文字はどれも大小の畳み込みで区別のある文字に一致しない() {
+    // §12.4 の 1 の経路 (区別の無い文字だけの検索語はそのまま memmem) の前提。区別の無い文字の集合を範囲の
+    // 文字クラスにして `(?i)` で広げても、区別のある文字には一致しない
+    let mut ranges: Vec<(u32, u32)> = Vec::new();
+    for c in ('\0'..=char::MAX).filter(|&c| !matcher::is_cased(c)) {
+        let c = u32::from(c);
+        match ranges.last_mut() {
+            Some((_, end)) if *end + 1 == c => *end = c,
+            _ => ranges.push((c, c)),
+        }
+    }
+    let mut class = String::from("(?i)[");
+    for (s, e) in ranges {
+        class.push_str(&format!(r"\x{{{s:X}}}-\x{{{e:X}}}"));
+    }
+    class.push(']');
+    let re = regex::RegexBuilder::new(&class)
+        .size_limit(1 << 30)
+        .build()
+        .unwrap();
+    let cased: String = ('\0'..=char::MAX)
+        .filter(|&c| matcher::is_cased(c))
+        .collect();
+    let found: Vec<&str> = re.find_iter(&cased).map(|m| m.as_str()).collect();
+    assert!(found.is_empty(), "{found:?}");
+}
+
+mod 経路の性質 {
+    use proptest::prelude::*;
+
+    use super::*;
+
+    /// 検索語の文字: 大小の対応が入り組んだ文字 (`ſ` と `s`、K と `k`、σ / ς / Σ、µ / μ、タイトルケースの ǅ) と、
+    /// ASCII の経路に乗る文字・区別の無い文字。
+    const PATTERN: &[char] = &[
+        's', 'S', '\u{17F}', 'k', 'K', '\u{212A}', 'a', 'A', 'σ', 'ς', 'Σ', '\u{B5}', 'ǅ', 'é', '-',
+    ];
+
+    /// 文書の文字: 検索語の文字に、大小の相手 (ß / ẞ、μ / Μ、ǆ / Ǆ、É) と、結合文字・単語の区切り・改行を足したもの。
+    const DOC: &[char] = &[
+        's', 'S', '\u{17F}', 'k', 'K', '\u{212A}', 'a', 'A', 'é', 'É', 'σ', 'ς', 'Σ', 'ß',
+        '\u{1E9E}', '\u{B5}', 'μ', 'Μ', 'ǅ', 'ǆ', 'Ǆ', 'あ', '\u{301}', ' ', '-', '.', '\n',
+    ];
+
+    fn text_of(
+        chars: &'static [char],
+        len: std::ops::Range<usize>,
+    ) -> impl Strategy<Value = String> {
+        prop::collection::vec(prop::sample::select(chars), len)
+            .prop_map(|v| v.into_iter().collect())
+    }
+
+    proptest! {
+        // リテラル (チャンクごと・行ごと) と、エスケープした正規表現の結果は同じ (大小の扱い・単語単位を問わない)
+        #[test]
+        fn リテラルの経路と正規表現の経路の結果は同じ(
+            doc in text_of(DOC, 0..40),
+            p in text_of(PATTERN, 1..4),
+            case in prop::sample::select(vec![Case::Smart, Case::Sensitive, Case::Insensitive]),
+            whole_word: bool,
+        ) {
+            let q = lit(&p).with_case(case).with_whole_word(whole_word);
+            let want = scan_all(&doc, &as_regex(&p, &q));
+            prop_assert_eq!(&scan_all(&doc, &q), &want);
+            prop_assert_eq!(&find_all(&doc, &q), &want);
+        }
+    }
+}
