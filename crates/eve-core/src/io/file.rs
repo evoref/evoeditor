@@ -185,6 +185,10 @@ impl EditorState {
         let Some(doc_id) = self.active_document() else {
             return CommandResult::Rejected(RejectReason::NoTarget);
         };
+        // 名前の入力 (無題の文書)・未編集の照合 (手順 0) より先に拒否する (03 §9.7 の「連鎖の開始時の拒否」)
+        if self.reject_stateful_invalid(doc_id, None) {
+            return CommandResult::Rejected(RejectReason::NotAvailable);
+        }
         let Some(doc) = self.document(doc_id) else {
             return CommandResult::Rejected(RejectReason::NoTarget);
         };
@@ -245,6 +249,13 @@ impl EditorState {
         let fmt = NewFormat {
             encoding: enc,
             bom: has_bom,
+        };
+        // 書式が決まった直後、名前の入力 (無題・読み取り専用の文書) より先に拒否する (03 §9.7 の「連鎖の開始時の拒否」)
+        if self.reject_stateful_invalid(doc_id, Some(fmt)) {
+            return CommandResult::Rejected(RejectReason::NotAvailable);
+        }
+        let Some(doc) = self.docs.documents.get(&doc_id) else {
+            return CommandResult::Rejected(RejectReason::NoTarget);
         };
         let path = doc.path.clone();
         if self.save_in_progress(doc_id) {

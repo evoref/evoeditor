@@ -179,6 +179,267 @@ fn 不正バイトを含む_iso_2022_jp_は専用の理由で読み取り専用_
     assert!(!s.fs.exists("/w/b.txt"), "何も書かない");
 }
 
+// ---------- 連鎖の開始時の拒否 (03 §9.7、NFR-304 AC-3): 保存先を尋ねる前にメッセージを出す ----------
+
+/// JIS X 0208 状態で改行を含む ISO-2022-JP (不正バイトになる。03 §8.3)。
+const ISO_INVALID: &[u8] = b"\x1B$B$\"\n\x1B(Bx";
+const ISO_REJECTED: &str = "msg.save.encoding_unsupported_iso2022";
+
+/// 不正バイトを含む ISO-2022-JP の文書 (読み取り専用、理由 `StatefulEncodingWithInvalidBytes`) を開いた状態。
+fn iso_invalid() -> Harness {
+    let mut s = env();
+    s.fs.add_file("/w/a.txt", ISO_INVALID);
+    open_as(&mut s, "/w/a.txt", Encoding::Iso2022Jp);
+    assert!(doc(&s).format.invalid_bytes > 0);
+    assert!(
+        doc(&s)
+            .read_only
+            .contains(ReadOnlyReason::StatefulEncodingWithInvalidBytes)
+    );
+    messages(&mut s);
+    s
+}
+
+/// ディスク上の全ファイル (パスと中身)。
+fn disk(s: &Harness) -> Vec<(String, Option<Vec<u8>>)> {
+    s.fs.paths()
+        .into_iter()
+        .map(|p| {
+            let b = s.fs.read(&p);
+            (p, b)
+        })
+        .collect()
+}
+
+/// 拒否された: 名前の入力・確認を出さずに拒否のメッセージを出し、どのファイルも書いていない (元のファイル・保存先とも)。
+fn assert_rejected(s: &mut Harness, before: &[(String, Option<Vec<u8>>)], what: &str) {
+    assert_eq!(s.overlay(), "", "{what}: 名前の入力も確認も出さない");
+    let m = messages(s);
+    assert!(m.contains(&ISO_REJECTED.to_owned()), "{what}: {m:?}");
+    assert_eq!(disk(s), before, "{what}: 何も書かない");
+    assert_eq!(s.pending_jobs(), 0, "{what}: ジョブを投入しない");
+}
+
+/// 後続を伴う保存の入口を試すための、dirty で不正バイトを含む ISO-2022-JP の文書。`path` が無ければ無題、
+/// `read_only` なら読み取り専用。不正バイトを含む ISO-2022-JP の文書は読込で解除できない読み取り専用になり編集できないので、
+/// 正しい ISO-2022-JP の文書を編集してから不正バイトの数だけを直に足す (拒否の条件は書式だけで決まる、03 §9.7)。
+fn dirty_iso_invalid(path: Option<&str>, read_only: bool) -> Harness {
+    let mut s = match path {
+        Some(p) => {
+            let mut s = env();
+            s.fs.add_file(p, &iso2022("あ\n"));
+            open_as(&mut s, p, Encoding::Iso2022Jp);
+            s
+        }
+        // 起動した Harness の無題の文書 (起動時の書込を済ませておく)
+        None => {
+            let mut s = Harness::new();
+            s.run_jobs();
+            s
+        }
+    };
+    s.text("い");
+    let id = s.doc_id();
+    let d = s.editor.state_mut().document_mut(id).unwrap();
+    d.format.encoding = Encoding::Iso2022Jp;
+    d.format.invalid_bytes = 1;
+    if read_only {
+        d.read_only
+            .insert(ReadOnlyReason::StatefulEncodingWithInvalidBytes);
+    }
+    assert!(s.is_dirty());
+    messages(&mut s);
+    s
+}
+
+// verifies: AC-NFR-304-3
+#[test]
+fn 不正バイトを含む_iso_2022_jp_の名前を付けて保存と文字コードの指定は名前を尋ねずに拒否する() {
+    // 名前を付けて保存 (パスなし)
+    let mut s = iso_invalid();
+    let before = disk(&s);
+    run(&mut s, "file.save_as", Args::new());
+    assert_rejected(&mut s, &before, "file.save_as (パスなし)");
+
+    // 名前を付けて保存 (今の文書と同じパス): 読み取り専用の同じファイルの拒否より先に拒否する
+    run(
+        &mut s,
+        "file.save_as",
+        Args::new().with_str("path", "/w/a.txt"),
+    );
+    assert_rejected(&mut s, &before, "file.save_as (同じパス)");
+
+    // 文字コードを指定して保存 (読み取り専用の文書は名前を付けて保存の流れへ進むところ)
+    run(
+        &mut s,
+        "file.set_encoding",
+        Args::new().with_str("encoding", "iso-2022-jp"),
+    );
+    assert_rejected(&mut s, &before, "file.set_encoding");
+
+    // 文字コードを尋ねてから指定する経路も同じ
+    run(&mut s, "file.set_encoding", Args::new());
+    assert_eq!(s.overlay(), "prompt", "文字コードを尋ねる");
+    s.text("iso-2022-jp");
+    s.keys("enter");
+    s.run_jobs();
+    assert_rejected(&mut s, &before, "file.set_encoding (文字コードの入力)");
+    assert_eq!(s.fs.read("/w/a.txt").unwrap(), ISO_INVALID);
+}
+
+// verifies: AC-NFR-304-3
+#[test]
+fn 不正バイトを含む_utf8_の文書を_iso_2022_jp_に指定して保存すると名前を尋ねずに拒否する() {
+    // 不正バイトの割合が小さい (多いときの確認を出さない) UTF-8
+    const BYTES: &[u8] = b"abcdefghijklmnopqrstuvwxyz\x80\n";
+    let mut s = env();
+    s.fs.add_file("/w/a.txt", BYTES);
+    open_as(&mut s, "/w/a.txt", Encoding::Utf8);
+    assert_eq!(doc(&s).format.encoding, Encoding::Utf8);
+    assert!(doc(&s).format.invalid_bytes > 0);
+    assert!(!doc(&s).is_editable());
+    messages(&mut s);
+    let before = disk(&s);
+    run(
+        &mut s,
+        "file.set_encoding",
+        Args::new().with_str("encoding", "iso-2022-jp"),
+    );
+    assert_rejected(&mut s, &before, "読み取り専用");
+
+    // 読み取り専用を解除した (編集できる) 文書でも同じ
+    let id = s.doc_id();
+    let d = s.editor.state_mut().document_mut(id).unwrap();
+    d.read_only.remove(ReadOnlyReason::InvalidBytes);
+    d.read_only.remove(ReadOnlyReason::UserRequested);
+    assert!(
+        doc(&s).is_editable(),
+        "{:?}",
+        doc(&s).read_only.iter().collect::<Vec<_>>()
+    );
+    run(
+        &mut s,
+        "file.set_encoding",
+        Args::new().with_str("encoding", "iso-2022-jp"),
+    );
+    assert_rejected(&mut s, &before, "編集できる");
+    assert_eq!(s.fs.read("/w/a.txt").unwrap(), BYTES);
+}
+
+// verifies: AC-NFR-304-3
+#[test]
+fn 不正バイトを含む_iso_2022_jp_の無題の文書は上書き保存で名前を尋ねずに拒否する() {
+    let mut s = dirty_iso_invalid(None, false);
+    let before = disk(&s);
+    run(&mut s, "file.save", Args::new());
+    assert_rejected(&mut s, &before, "file.save");
+    run(
+        &mut s,
+        "file.set_encoding",
+        Args::new().with_str("encoding", "iso-2022-jp"),
+    );
+    assert_rejected(&mut s, &before, "file.set_encoding");
+    assert!(s.is_dirty(), "文書は変えない");
+    assert_eq!(doc(&s).format.encoding, Encoding::Iso2022Jp);
+}
+
+// 終了・閉じるの確認で「保存」を選んだとき、名前の入力 (無題・読み取り専用) や書込の前に拒否し、後続 (終了・閉じる) も行わない
+// verifies: AC-NFR-304-3
+#[test]
+fn 未保存の確認の保存は名前を尋ねずに拒否し_後続を行わない() {
+    for (path, read_only) in [
+        (Some("/w/a.txt"), false),
+        (Some("/w/a.txt"), true),
+        (None, false),
+    ] {
+        let what = format!("{path:?} 読み取り専用={read_only}");
+        // 終了
+        let mut s = dirty_iso_invalid(path, read_only);
+        let before = disk(&s);
+        let id = s.doc_id();
+        run(&mut s, "app.quit", Args::new());
+        assert_eq!(s.overlay(), "dialog", "{what}: 未保存の確認");
+        s.answer(0);
+        s.run_jobs();
+        assert_rejected(&mut s, &before, &format!("{what}: 終了"));
+        assert_eq!(s.quit_code(), None, "{what}: 終了しない");
+        assert!(s.is_dirty());
+
+        // 保存して終了 (`app.save_and_quit` は確認を経ずに同じ「保存」へ進む)
+        run(&mut s, "app.save_and_quit", Args::new());
+        assert_rejected(&mut s, &before, &format!("{what}: 保存して終了"));
+        assert_eq!(s.quit_code(), None, "{what}: 終了しない");
+
+        // 閉じる
+        run(&mut s, "buffer.close", Args::new());
+        assert_eq!(s.overlay(), "dialog", "{what}: 未保存の確認");
+        s.answer(0);
+        s.run_jobs();
+        assert_rejected(&mut s, &before, &format!("{what}: 閉じる"));
+        assert!(s.editor.state().document(id).is_some(), "{what}: 閉じない");
+        assert!(s.is_dirty());
+    }
+}
+
+// 全保存は確認を出さないので、拒否する文書は保存せず、理由を添えて失敗の一覧に載せる (03 §9.8)
+// verifies: AC-NFR-304-3
+#[test]
+fn 全保存は不正バイトを含む_iso_2022_jp_の文書を書かずに失敗の一覧に載せる() {
+    use eve_testkit::helpers::cell_text;
+    use eve_view::OverlayModel;
+    let mut s = dirty_iso_invalid(Some("/w/a.txt"), false);
+    let before = disk(&s);
+    run(&mut s, "file.save_all", Args::new());
+    assert_eq!(disk(&s), before, "何も書かない");
+    assert!(s.is_dirty());
+    assert_eq!(s.overlay(), "dialog", "失敗の一覧");
+    let f = s.frame();
+    let OverlayModel::Confirm { details, .. } = &f.overlays[0] else {
+        panic!("確認が出ていない")
+    };
+    let details: Vec<String> = details.iter().flatten().map(cell_text).collect();
+    assert_eq!(details.len(), 1, "{details:?}");
+    assert!(
+        details[0].starts_with("/w/a.txt: ") && details[0].contains("ISO-2022-JP"),
+        "理由は拒否のメッセージ: {details:?}"
+    );
+}
+
+// 回帰: 不正バイトの無い文書は、ISO-2022-JP でも今までどおり保存できる (無題なら名前を尋ねる)
+#[test]
+fn 不正バイトの無い文書は_iso_2022_jp_で保存できる() {
+    let mut s = env();
+    s.fs.add_file("/w/a.txt", "あ\n".as_bytes());
+    open(&mut s, "/w/a.txt");
+    assert_eq!(doc(&s).format.encoding, Encoding::Utf8);
+    messages(&mut s);
+    run(
+        &mut s,
+        "file.set_encoding",
+        Args::new().with_str("encoding", "iso-2022-jp"),
+    );
+    assert!(!messages(&mut s).contains(&ISO_REJECTED.to_owned()));
+    assert_eq!(s.fs.read("/w/a.txt").unwrap(), iso2022("あ\n"));
+    assert_eq!(doc(&s).format.encoding, Encoding::Iso2022Jp);
+
+    // 無題の ISO-2022-JP の文書の上書き保存は名前を尋ねる
+    let mut s = Harness::new();
+    s.text("い");
+    let id = s.doc_id();
+    s.editor
+        .state_mut()
+        .document_mut(id)
+        .unwrap()
+        .format
+        .encoding = Encoding::Iso2022Jp;
+    run(&mut s, "file.save", Args::new());
+    assert_eq!(s.overlay(), "prompt", "名前を尋ねる");
+    s.text("/w/u.txt");
+    s.keys("enter");
+    s.run_jobs();
+    assert_eq!(s.fs.read("/w/u.txt").unwrap(), iso2022("い"));
+}
+
 #[test]
 fn 先頭が_ascii_で後半に_shift_jis_が現れたら判定し直して読み直す() {
     let mut s = env();

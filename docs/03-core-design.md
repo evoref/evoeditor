@@ -1423,7 +1423,7 @@ struct SaveChain {
 | `AfterFailure` の `EscapeMerge` で「このまま保存」(v0.4 の M23) | 変えない | 変えない | 変えない | 変えない | 変えない | 変えない | 結果の base Revision が今の Revision と同じなら、結果 (件数と先頭 100 件の位置) を承認として `SaveApprovals` に覚えて入れる。違えば覚えずに `None` のまま今の Snapshot で投入し直す (§8.3.1) |
 | 「別名で保存」で `AskName` へ戻る | `CheckTarget` で上の行のとおり決め直す | 同左 | 変えない | 同左 | 同左 | 同左 | 投入のたびに `SaveApprovals` から引き直す (Revision が同じなら同じ承認) |
 
-**連鎖の開始時の拒否**: 上の表の「連鎖の開始」の契機 (`file.save`・`file.save_as`・`AskUnsaved` の「保存」・`file.set_encoding`) で `format` を決めた直後、`AskName` / `CheckingUnchanged` / `PreConfirm` のどれにも進む前に、`format.encoding` が ISO-2022-JP で文書が §8.3 のエスケープ文字を含む (`invalid_bytes > 0`) なら、ジョブを投入せずに `msg.save.encoding_unsupported_iso2022` を示して連鎖を中止する (`cont` の後続も実行しない。文書・`TextFormat` は変えない。§8.3 の (a)、確定 (ユーザー回答)、OQ-207)。
+**連鎖の開始時の拒否**: 上の表の「連鎖の開始」の契機 (`file.save`・`file.save_as`・`AskUnsaved` の「保存」・`file.set_encoding`) で `format` を決めた直後、`AskName` / `CheckingUnchanged` / `PreConfirm` のどれにも進む前に、`format.encoding` が ISO-2022-JP で文書が §8.3 のエスケープ文字を含む (`invalid_bytes > 0`) なら、ジョブを投入せずに `msg.save.encoding_unsupported_iso2022` を示して連鎖を中止する (`cont` の後続も実行しない。文書・`TextFormat` は変えない。§8.3 の (a)、確定 (ユーザー回答)、OQ-207)。全保存 (§9.8) の文書ごとの保存も同じ判断で拒否し、メッセージは出さずに、その文書を保存せず理由 (このメッセージの text) を添えて失敗の一覧に載せる。
 
 **状態** (`SaveChainState`):
 
