@@ -439,6 +439,11 @@ redetected = "Re-detected the encoding as {encoding}"
 
 [info.paste]
 first_line_only = "Only the first line was pasted into the input field"
+as_bytes = "Pasted {count} invalid bytes as bytes"
+escape_as_text = "{count} invalid bytes were pasted as <0xNN> text, because this document cannot hold them as bytes"
+notation_as_text = "The clipboard differs from the copy made in the editor, so text like <0xNN> was pasted as plain text"
+pua_as_text = "{count} private-use characters (U+10FF00 to U+10FFFF) cannot be inserted as is, so they were inserted as <U+XXXX> text"
+search_notation = "Text like <0xNN> does not match invalid bytes. Search with the regular expression \\x{{10FFNN}}"
 
 [info.recovery]
 old = "{count} backups are older than 30 days: {dir}"

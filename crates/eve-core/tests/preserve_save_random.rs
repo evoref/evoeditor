@@ -28,6 +28,34 @@ fn doc(h: &Harness) -> &Document {
     h.editor.state().document(id).unwrap()
 }
 
+/// カーソルの位置に `text` をそのまま入れる (挿入の入口の規則 (03 §8.3.1) を通さない試験だけの近道)。v0.4 の M23 から、
+/// 貼り付け・入力で外から来た `U+10FF00..` は `<U+10FFNN>` の文字列になるので、エスケープ文字が不正バイトの無い文書の
+/// 本文にある状況 (違う文字コードで保存した後の Undo など) は、これで作る。
+fn inject(h: &mut Harness, text: &str) {
+    let id = h.doc_id();
+    let st = h.editor.state_mut();
+    let at = st
+        .first_window()
+        .and_then(|w| st.window_view(w))
+        .and_then(|v| st.view(v))
+        .map(|v| v.selection.primary().head)
+        .unwrap();
+    let d = st.document(id).unwrap();
+    let cs = eve_text::ChangeSet::from_sorted_edits(
+        &d.snapshot(),
+        [eve_text::Edit {
+            range: eve_text::ByteRange::new(at, at),
+            insert: text.into(),
+        }],
+    )
+    .unwrap();
+    st.apply_transaction(
+        id,
+        eve_core::Transaction::new(cs, eve_core::Origin::Paste, eve_core::Tick(0)),
+    )
+    .unwrap();
+}
+
 fn open_as(path: &str, bytes: &[u8], enc: Encoding) -> Harness {
     let mut h = Harness::new().with_size(100, 16).with_file(path, bytes);
     h.editor.state_mut().open_path(
@@ -382,14 +410,20 @@ fn iso_2022_jp_の行の結合を多くしても_保存点の出力は直前の�
     );
 }
 
-// 前提の確認: 不正バイトを持たない Shift_JIS の文書に、不正バイトのエスケープ文字を貼り付けて保存しても、元のバイトに
-// 戻して (前後とつながって別の文字になる並びで) 黙って書かない (03 §8.3 の暫定。表現不能で止まる)
+// 前提の確認: 不正バイトを持たない Shift_JIS の文書の本文にあるエスケープ文字は、保存しても元のバイトに戻して (前後と
+// つながって別の文字になる並びで) 黙って書かない (03 §8.3.1 の表の「バイトでない文書」。表現不能で止まる)。v0.4 の
+// M23 から、貼り付けでは `<U+10FF81>` の文字列になるので (03 §8.3.1)、規則を通さずに入れる
 #[test]
-fn 貼り付けたエスケープ文字は戻さずに表現不能で止める() {
+fn 本文にあるエスケープ文字は戻さずに表現不能で止める() {
     let bytes = b"a\xFA\x54b\n".to_vec();
     let mut h = open_as("/w/p.txt", &bytes, Encoding::ShiftJis);
     h.keys("ctrl+end");
     h.paste("\u{10FF81}A");
+    assert!(
+        h.doc_text().ends_with("<U+10FF81>A"),
+        "貼り付けは文字列になる"
+    );
+    inject(&mut h, "\u{10FF81}A");
     h.cmd_with("file.save", Args::new());
     h.run_jobs();
     assert_eq!(h.overlay(), "dialog", "E3");

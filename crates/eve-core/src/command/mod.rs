@@ -8,6 +8,7 @@ pub(crate) mod clipboard;
 pub(crate) mod context;
 pub(crate) mod edit;
 pub(crate) mod ids;
+pub(crate) mod insert_rule;
 pub(crate) mod line_ops;
 
 use std::collections::BTreeMap;
