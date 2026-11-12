@@ -362,6 +362,24 @@ impl Harness {
         self.collect();
     }
 
+    /// `run_jobs` と同じだが、各結果を `Editor` に渡す前に `seen` に見せる (途中経過・先行表示の先頭など、`Editor` の
+    /// 状態に残らない結果を確かめる試験用)。
+    pub fn run_jobs_with(&mut self, mut seen: impl FnMut(&eve_core::JobOutput)) {
+        loop {
+            self.jobs.run_jobs();
+            let results = self.jobs.take_results();
+            if results.is_empty() {
+                break;
+            }
+            for r in results {
+                seen(&r);
+                self.editor.tick(self.clock.now());
+                self.editor.on_job_result(r);
+            }
+        }
+        self.collect();
+    }
+
     /// 実行待ちのジョブを 1 周だけ実行し、結果を `Editor` に渡す (結果から再投入されたジョブは走らせない)。
     pub fn run_jobs_once(&mut self) {
         self.jobs.run_jobs();

@@ -513,10 +513,13 @@ impl Host {
             }
             HostMsg::Job(out) => {
                 // 完了・失敗・確認などの結果は、待たせずに描く (開く操作の最初の画面を 16 ms 遅らせない)。
-                // 進捗と検索の途中経過だけを間引く (04 §4.4)
+                // 進捗と検索の途中経過だけを間引く (04 §4.4)。先行表示の先頭 (`Partial`) は、core がまだ捨てるので
+                // 描き直さない (M25 の (1)。先頭を表示する (2) で即時に描く側へ移す)
                 let driven = !matches!(
                     out.body,
-                    JobResult::Progress { .. } | JobResult::SearchBatch { .. }
+                    JobResult::Progress { .. }
+                        | JobResult::SearchBatch { .. }
+                        | JobResult::Partial { .. }
                 );
                 self.editor.on_job_result(*out);
                 return ControlFlow::Continue(driven);

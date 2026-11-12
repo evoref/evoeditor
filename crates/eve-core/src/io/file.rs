@@ -113,6 +113,8 @@ impl EditorState {
     /// すでに文書があるときは、読込が終わるまで今の文書を表示し続け、完了で置き換える。
     pub fn open_path(&mut self, raw_path: &str, opts: OpenOptions) -> CommandResult {
         let opts = OpenOptions {
+            // 新しく開く読込なので、先行表示を送ってよい (03 §9.2.1。再読込・開き直しは io/reload.rs で立てない)
+            partial: true,
             default_eol: opts.default_eol.or(Some(self.config_eol())),
             huge_file_warn_bytes: opts
                 .huge_file_warn_bytes
