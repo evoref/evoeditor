@@ -424,6 +424,7 @@ fn unpreserved_doc() -> (Harness, Vec<u8>) {
             encoding: Encoding::ShiftJis,
             has_bom: false,
             default_eol: eve_text::LineEnding::Lf,
+            pua_escaped: false,
         }),
     );
     s.open("/w/a.txt");

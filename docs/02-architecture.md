@@ -2033,7 +2033,7 @@ bom = false                           # 必須
 default_eol = "crlf"                  # 必須。lf | crlf | cr
 eol_mixed = false                     # 必須
 final_newline = true                  # 必須
-pua_escaped = false                   # 必須。不正バイトの PUA エスケープを含むか (v0.4 の M23 から、本文のエスケープ文字が encoding のバイトか = escape_encoding.is_some()。03 §8.3.1)
+pua_escaped = false                   # 必須。不正バイトの PUA エスケープを含むか (v0.4 の M23 から、本文のエスケープ文字が encoding のバイトか = escape_encoding == Some(encoding)。03 §8.3.1)。読み手はキーが無い・値が読めないときは偽とする。意味を変えても format_version は上げない (v0.3 までの書き手が true を書く文書 (invalid_bytes > 0) は常に読み取り専用で、スワップは読み取り専用の文書を書かないので true の古いスワップは無い。古い読み手はこのキーを読まない)
 revision = 42                         # 必須
 len = 12345                           # 必須。退避した本文のバイト数
 written = true                        # 必須。本文の書込と fsync を終えたら true

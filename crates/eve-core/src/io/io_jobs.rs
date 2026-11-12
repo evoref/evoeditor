@@ -15,7 +15,7 @@ use eve_view::JobId;
 
 use crate::document::preserved::cursor::TextCursor;
 use crate::document::{
-    LineStatsScanner, PreservedMap, ReadOnlyReason, ReadOnlyReasons, TextFormat,
+    LineStatsScanner, PreservedMap, ReadOnlyReason, ReadOnlyReasons, TextFormat, count_escape_chars,
 };
 use crate::io::fs::{
     ChunkError, Expect, FileKind, FileStamp, FsError, FsErrorDetail, FsErrorKind, ReadChunks,
@@ -384,10 +384,24 @@ fn open_inner(
         eol_stats,
         invalid_bytes: dec.invalid_bytes(),
         pua_escape: dec.pua_mode(),
+        // 本文のエスケープ文字がこの文字コードのバイトか (03 §8.3.1。開く・再読込・文字コードを指定して開き直すで共通)
+        escape_encoding: TextFormat::escape_encoding_on_load(
+            enc,
+            dec.pua_mode(),
+            dec.invalid_bytes(),
+        ),
         roundtrip,
         long_line_threshold,
         long_lines,
     };
+    // INV-D7 (03 §22): 読込の直後は、衝突でなければエスケープ文字の数が不正バイトの数と同じ (debug ビルドだけ。全文を走査する)
+    debug_assert!(
+        format.pua_escape == eve_encoding::PuaEscapeMode::DisabledCollision
+            || count_escape_chars(&text) == u64::from(format.invalid_bytes),
+        "INV-D7: エスケープ文字の数 {} と不正バイトの数 {} が合わない",
+        count_escape_chars(&text),
+        format.invalid_bytes
+    );
     let mut detected = opts.pending;
     if meta.readonly {
         detected.insert(ReadOnlyReason::FileAttribute);

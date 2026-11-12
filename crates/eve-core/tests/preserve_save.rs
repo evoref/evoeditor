@@ -538,6 +538,7 @@ fn 復旧した文書は区分_b_の箇所があれば数を言わずに確認�
             encoding: Encoding::ShiftJis,
             has_bom: false,
             default_eol: LineEnding::Lf,
+            pua_escaped: false,
         }),
     );
     h.open("/w/a.txt");

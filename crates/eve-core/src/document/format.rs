@@ -33,6 +33,21 @@ pub fn count_long_lines(text: &dyn TextRead, threshold: usize) -> usize {
     n + usize::from(run > threshold)
 }
 
+/// 本文の `U+10FF00..=U+10FFFF` (§8.3 のエスケープ文字) の数 (03 §22 の INV-D7 の検査に使う。全文を 1 回走査する)。
+/// UTF-8 では `F4 8F BC..=BF xx` で、チャンクは文字の境界で切れるので、チャンクごとに先頭バイト 0xF4 を探して数える。
+pub(crate) fn count_escape_chars(text: &dyn TextRead) -> u64 {
+    let mut n = 0u64;
+    for chunk in text.chunks(eve_text::ByteRange::all(text.len_bytes())) {
+        let b = chunk.as_bytes();
+        for i in memchr::memchr_iter(0xF4, b) {
+            if b.get(i + 1) == Some(&0x8F) && b.get(i + 2).is_some_and(|&x| x >= 0xBC) {
+                n += 1;
+            }
+        }
+    }
+    n
+}
+
 /// 改行の統計と長大行の数を、文書を前から順に渡して 1 回の走査で数える (読込ジョブの復号のループで使う。
 /// docs/review/v0.3-findings.md の PRF-17)。結果は [`EolStats::count`] と [`count_long_lines`] に同じ。
 #[derive(Debug)]
@@ -248,13 +263,22 @@ pub struct FormatState {
     pub(crate) preserved: super::preserved::PreservedMap,
 }
 
-/// 保持方式の記録の表と状態の組 (03 §8.7.1)。復旧 (`Origin::Recovery`) の前後の値として Undo のノードが持つ。
+/// 保持方式の記録の表と状態と、エスケープ文字の由来の文字コードの組 (03 §8.7.1 / §8.3.1)。復旧 (`Origin::Recovery`)
+/// の前後の値として Undo のノードが持つ。
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PreservedState {
     /// 記録の表 (複製は O(1))。
     pub(crate) map: super::preserved::PreservedMap,
     /// 状態 (`TextFormat.roundtrip.preserve` に戻す)。
     pub status: PreserveStatus,
+    /// `TextFormat.escape_encoding` に戻す値 (03 §8.3.1: 復旧の Undo では前の値に戻る)。
+    pub escape_encoding: Option<Encoding>,
+    /// `TextFormat.pua_escape` に戻す値 (衝突の文書 (a) に `pua_escaped = true` のスワップを適用すると `Enabled` になる、
+    /// 03 §8.3.1)。
+    pub pua_escape: PuaEscapeMode,
+    /// 読み取り専用の理由 `InvalidBytes` を持つか (内容に由来する理由。`escape_encoding` が `Some` になる復旧で付き、
+    /// Undo で外れる、03 §8.3.1 / §10.3)。ほかの理由は戻さない。
+    pub invalid_bytes_reason: bool,
 }
 
 /// Undo ノードに持つ書式の変更 (前後の値)。Undo は `before`、Redo は `after` へ戻す。戻す範囲は種類で決まる (03 §7.2)。
@@ -271,8 +295,9 @@ pub enum FormatChange {
         before: LineEnding,
         after: LineEnding,
     },
-    /// 復旧 (`Origin::Recovery`、03 §10.3 / §8.7.1): 保持方式の記録の表と状態だけ。`Document::apply` が作る
-    /// (復旧の後は表が空で「保持なし (復旧した)」、Undo で復旧の前の表と状態に戻る)。
+    /// 復旧 (`Origin::Recovery`、03 §10.3 / §8.7.1 / §8.3.1): 保持方式の記録の表と状態と `escape_encoding` だけ。
+    /// `Document::recovery_change` が作る (復旧の後は表が空で「保持なし (復旧した)」、Undo で復旧の前の表と状態と
+    /// `escape_encoding` に戻る)。
     Recovery {
         before: PreservedState,
         after: PreservedState,
@@ -328,10 +353,15 @@ pub struct TextFormat {
     pub default_eol: LineEnding,
     /// 文書の中の改行の種類別の数 (編集で差分を更新する)。
     pub eol_stats: EolStats,
-    /// 不正バイトの保持マーカーの数。0 でなければ読み取り専用 (NFR-304)。
+    /// 不正バイトの保持マーカーの数。0 でなければ読み取り専用 (NFR-304)。読込で数えた数で、編集では増減しない
+    /// (03 §8.3.1)。保存でエスケープ文字を元のバイトに戻すかは `escape_encoding` で決める。
     pub invalid_bytes: u32,
     /// 不正バイトの PUA エスケープの方式 (03 §8.3)。
     pub pua_escape: PuaEscapeMode,
+    /// 本文のエスケープ文字がどの文字コードのバイトか (03 §8.3.1 の「エスケープ文字の由来の文字コード」。v0.4 の M23)。
+    /// 不変条件: `None` か `Some(encoding)` で、`Some` なら `pua_escape == Enabled` で状態付きでない (`escape_encoding_ok`)。
+    /// 読込で決め (`escape_encoding_on_load`)、違う文字コードの保存の成功で `None` にし、復旧の適用で manifest から決める。
+    pub escape_encoding: Option<Encoding>,
     /// 読込時の往復の検査 (03 §8.7。v0.1 は件数と先頭の位置だけ)。
     pub roundtrip: RoundtripSummary,
     /// 開いたときの長大行の閾値 (`file.long_line_threshold`)。設定を変えても開いている文書には遡らない (07 §6)。
@@ -350,25 +380,52 @@ impl TextFormat {
             eol_stats: EolStats::default(),
             invalid_bytes: 0,
             pua_escape: PuaEscapeMode::Enabled,
+            escape_encoding: None,
             roundtrip: RoundtripSummary::default(),
             long_line_threshold: LONG_LINE_THRESHOLD,
             long_lines: 0,
         }
     }
 
-    /// 文字コード `out` で保存するときの、不正バイトのエスケープ文字の扱い (03 §8.3、E4)。
+    /// 読込 (開く・再読込・文字コードを指定して開き直す) で決まる `escape_encoding` (03 §8.3.1 の「エスケープ文字の由来の
+    /// 文字コード」の表の 1 行目): `pua_escape == Enabled` で不正バイトがあれば `Some(encoding)`、ほかは `None`
+    /// (状態付きの文書・衝突の文書も `None`)。
+    pub fn escape_encoding_on_load(
+        encoding: Encoding,
+        pua_escape: PuaEscapeMode,
+        invalid_bytes: u32,
+    ) -> Option<Encoding> {
+        (pua_escape == PuaEscapeMode::Enabled && invalid_bytes > 0).then_some(encoding)
+    }
+
+    /// `escape_encoding` の不変条件 (03 §8.3.1、§22 の INV-D7): `None` か、`Some(encoding)` で `pua_escape == Enabled`、
+    /// `encoding` は状態付きでない。
+    pub fn escape_encoding_ok(&self) -> bool {
+        match self.escape_encoding {
+            None => true,
+            Some(e) => {
+                e == self.encoding && self.pua_escape == PuaEscapeMode::Enabled && !e.is_stateful()
+            }
+        }
+    }
+
+    /// 文字コード `out` で保存するときの、不正バイトのエスケープ文字の扱い (03 §8.3.1 の「文書の種類と保存の扱い」の表、
+    /// §8.6 E4)。保存・置換して保存・乾式走査の扱いはすべてここで決める (呼び出し側で条件を足さない)。
     ///
-    /// - 元の文字コードのまま保存し、文書が不正バイトを持つとき: エスケープ文字を元のバイトに戻す (読込時の方式のまま)。
-    /// - 別の文字コードへ保存するとき: エスケープ文字は元の文字コードのバイトなので、別の文字コードの中には書けない
-    ///   (書くと前後のバイトとずれる・結合する)。表現不能として報告する。元のテキストが真にその範囲の文字を
-    ///   含む (`DisabledCollision`) ときは通常の文字として書く。
-    /// - 不正バイトの無い文書: エスケープ文字は読込で作ったものではない (他の文書から貼り付けた等) ので、
-    ///   元のバイトに戻さず表現不能として報告する (docs/review/v0.3-findings.md の SAF-02b。貼り付けの時点で
-    ///   `<0xNN>` の表記に変える 03 §8.3 の「編集」の行の実装までの暫定)。
+    /// - バイトの文書 (`Enabled`、`escape_encoding == Some(e)`): 書く文字コードが `e` のときだけ元のバイトに戻す
+    ///   (`Restore`)。ほかは表現不能 (`Reject`。`e` のバイトを別の文字コードのファイルに書かない)。
+    /// - バイトでない文書 (`Enabled`、`escape_encoding == None`。不正バイトの無い文書・違う文字コードで保存した後・
+    ///   文字コードの違う復旧): エスケープ文字は意味を持たないので表現不能 (docs/review/v0.3-findings.md の SAF-02b)。
+    /// - 衝突の文書 (a) (`DisabledCollision`、`invalid_bytes == 0`): 私用文字は通常の文字 (`AsText`)。
+    /// - 衝突の文書 (b) (`DisabledCollision`、`invalid_bytes > 0`): 不正バイトと真の私用文字を区別できないので、
+    ///   どの文字コードでも表現不能 (v0.3 までは `AsText` で、不正バイトを私用文字の UTF-8 として書いていた)。
+    /// - 状態付き (`DisabledStateful`): 戻さない (表現不能。不正バイトを含む文書の ISO-2022-JP での保存は、保存の連鎖の
+    ///   開始時に `invalid_bytes` で拒否する。03 §8.3 の「状態付き符号化」)。
     pub fn save_escape_policy(&self, out: Encoding) -> EscapePolicy {
         match self.pua_escape {
-            PuaEscapeMode::DisabledCollision => EscapePolicy::AsText,
-            PuaEscapeMode::Enabled if out == self.encoding && self.invalid_bytes > 0 => {
+            PuaEscapeMode::DisabledCollision if self.invalid_bytes == 0 => EscapePolicy::AsText,
+            // 状態付きの文字コードへは、不変条件が破れていても生のバイトを差し込まない (二重の防御)
+            PuaEscapeMode::Enabled if self.escape_encoding == Some(out) && !out.is_stateful() => {
                 EscapePolicy::Restore
             }
             _ => EscapePolicy::Reject,
@@ -714,5 +771,209 @@ mod tests {
                 (EolStats::count(&t), count_long_lines(&t, threshold))
             );
         }
+    }
+
+    // ---------- エスケープ文字の由来の文字コードと保存の扱い (03 §8.3.1 の 2 つの表) ----------
+
+    const ALL_ENCODINGS: [Encoding; 6] = [
+        Encoding::Utf8,
+        Encoding::Utf16Le,
+        Encoding::Utf16Be,
+        Encoding::ShiftJis,
+        Encoding::EucJp,
+        Encoding::Iso2022Jp,
+    ];
+
+    fn fmt(
+        encoding: Encoding,
+        pua_escape: PuaEscapeMode,
+        invalid_bytes: u32,
+        escape_encoding: Option<Encoding>,
+    ) -> TextFormat {
+        TextFormat {
+            encoding,
+            pua_escape,
+            invalid_bytes,
+            escape_encoding,
+            ..TextFormat::new_document()
+        }
+    }
+
+    #[test]
+    fn 読込で決まる値は_enabled_で不正バイトがあるときだけ_some() {
+        for enc in ALL_ENCODINGS {
+            assert_eq!(
+                TextFormat::escape_encoding_on_load(enc, PuaEscapeMode::Enabled, 3),
+                Some(enc)
+            );
+            assert_eq!(
+                TextFormat::escape_encoding_on_load(enc, PuaEscapeMode::Enabled, 0),
+                None
+            );
+            for mode in [
+                PuaEscapeMode::DisabledCollision,
+                PuaEscapeMode::DisabledStateful,
+            ] {
+                for n in [0, 3] {
+                    assert_eq!(TextFormat::escape_encoding_on_load(enc, mode, n), None);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn 新規文書はバイトでない文書() {
+        let f = TextFormat::new_document();
+        assert_eq!(f.escape_encoding, None);
+        assert!(f.escape_encoding_ok());
+        for out in ALL_ENCODINGS {
+            assert_eq!(f.save_escape_policy(out), EscapePolicy::Reject, "{out:?}");
+        }
+    }
+
+    // 表の 1 行目: バイトの文書は、書く文字コードが escape_encoding と同じときだけ Restore
+    #[test]
+    fn バイトの文書は同じ文字コードのときだけ元のバイトに戻す() {
+        for enc in ALL_ENCODINGS.into_iter().filter(|e| !e.is_stateful()) {
+            let f = fmt(enc, PuaEscapeMode::Enabled, 2, Some(enc));
+            assert!(f.escape_encoding_ok());
+            for out in ALL_ENCODINGS {
+                let want = if out == enc {
+                    EscapePolicy::Restore
+                } else {
+                    EscapePolicy::Reject
+                };
+                assert_eq!(f.save_escape_policy(out), want, "{enc:?} → {out:?}");
+            }
+        }
+    }
+
+    // 表の 2 行目: 不正バイトの無い文書・違う文字コードで保存した後・文字コードの違う復旧。invalid_bytes に依らない
+    #[test]
+    fn バイトでない文書はどの文字コードでも表現不能() {
+        for enc in ALL_ENCODINGS {
+            for n in [0, 5] {
+                let f = fmt(enc, PuaEscapeMode::Enabled, n, None);
+                assert!(f.escape_encoding_ok());
+                for out in ALL_ENCODINGS {
+                    assert_eq!(
+                        f.save_escape_policy(out),
+                        EscapePolicy::Reject,
+                        "{enc:?} {n} → {out:?}"
+                    );
+                }
+            }
+        }
+    }
+
+    // 表の 3 行目
+    #[test]
+    fn 衝突の文書_a_は通常の文字として書く() {
+        for enc in ALL_ENCODINGS {
+            let f = fmt(enc, PuaEscapeMode::DisabledCollision, 0, None);
+            for out in ALL_ENCODINGS {
+                assert_eq!(f.save_escape_policy(out), EscapePolicy::AsText);
+            }
+        }
+    }
+
+    // 表の 4 行目: v0.3 までは AsText で、同じ文字コードの名前を付けて保存で不正バイトを私用文字の UTF-8 として書いていた
+    #[test]
+    fn 衝突の文書_b_はどの文字コードでも表現不能() {
+        for enc in ALL_ENCODINGS {
+            let f = fmt(enc, PuaEscapeMode::DisabledCollision, 1, None);
+            for out in ALL_ENCODINGS {
+                assert_eq!(
+                    f.save_escape_policy(out),
+                    EscapePolicy::Reject,
+                    "{enc:?} → {out:?}"
+                );
+            }
+        }
+    }
+
+    // 表の 5・6 行目: 状態付きは戻さない (不正バイトありの ISO-2022-JP での保存は連鎖の開始時に拒否する)
+    #[test]
+    fn 状態付きの文書は戻さない() {
+        for n in [0, 4] {
+            let f = fmt(
+                Encoding::Iso2022Jp,
+                PuaEscapeMode::DisabledStateful,
+                n,
+                None,
+            );
+            assert!(f.escape_encoding_ok());
+            for out in ALL_ENCODINGS {
+                assert_eq!(f.save_escape_policy(out), EscapePolicy::Reject);
+            }
+        }
+    }
+
+    #[test]
+    fn 不変条件はsomeなら文書の文字コードでenabled() {
+        assert!(
+            !fmt(
+                Encoding::Utf8,
+                PuaEscapeMode::Enabled,
+                1,
+                Some(Encoding::ShiftJis)
+            )
+            .escape_encoding_ok()
+        );
+        assert!(
+            !fmt(
+                Encoding::Utf8,
+                PuaEscapeMode::DisabledCollision,
+                1,
+                Some(Encoding::Utf8)
+            )
+            .escape_encoding_ok()
+        );
+        assert!(
+            !fmt(
+                Encoding::Iso2022Jp,
+                PuaEscapeMode::DisabledStateful,
+                1,
+                Some(Encoding::Iso2022Jp)
+            )
+            .escape_encoding_ok()
+        );
+    }
+
+    #[test]
+    fn エスケープ文字を数える() {
+        let s = format!(
+            "a\u{10FF00}あ\u{10FFFF}😀\u{10FEFF}\u{10FF80}{}\u{10FF01}",
+            "x".repeat(5000)
+        );
+        // U+10FEFF は範囲の外 (F4 8F BB BF)
+        assert_eq!(count_escape_chars(&Text::from(s.as_str())), 4);
+        assert_eq!(count_escape_chars(&Text::from("")), 0);
+        assert_eq!(count_escape_chars(&Text::from("\u{10FFFF}")), 1);
+    }
+
+    // 不変条件が破れていても (起きないはず)、状態付きの文字コードへ生のバイトを差し込まない
+    #[test]
+    fn 状態付きの文字コードへは不変条件が破れていても戻さない() {
+        assert!(
+            !fmt(
+                Encoding::Iso2022Jp,
+                PuaEscapeMode::Enabled,
+                1,
+                Some(Encoding::Iso2022Jp)
+            )
+            .escape_encoding_ok(),
+            "状態付きの Some は不変条件に反する"
+        );
+        let f = fmt(
+            Encoding::Iso2022Jp,
+            PuaEscapeMode::Enabled,
+            1,
+            Some(Encoding::Iso2022Jp),
+        );
+        assert_eq!(
+            f.save_escape_policy(Encoding::Iso2022Jp),
+            EscapePolicy::Reject
+        );
     }
 }

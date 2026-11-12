@@ -440,6 +440,7 @@ fn 復旧を適用すると保持なしになり_undo_で記録と状態が戻�
             encoding: Encoding::ShiftJis,
             has_bom: false,
             default_eol: LineEnding::Lf,
+            pua_escaped: false,
         }),
     );
     h.open("/w/a.txt");

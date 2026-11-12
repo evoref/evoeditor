@@ -647,6 +647,17 @@ impl UndoHistory {
         }
     }
 
+    /// 復旧のノードが持つ前後の `escape_encoding` を `None` にする (違う文字コードで保存が成功した、03 §8.3.1)。
+    /// 予算に数えるバイト数は変わらない (記録の表は変えない)。
+    pub(crate) fn forget_escape_encoding(&mut self) {
+        for n in self.undo.iter_mut().chain(self.redo.iter_mut()) {
+            if let Some(FormatChange::Recovery { before, after }) = &mut n.format {
+                before.escape_encoding = None;
+                after.escape_encoding = None;
+            }
+        }
+    }
+
     #[cfg(test)]
     fn node_ids(&self) -> Vec<u64> {
         self.undo.iter().map(|n| n.id.0).collect()

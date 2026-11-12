@@ -4,7 +4,7 @@
 
 use std::sync::Arc;
 
-use eve_encoding::{NoPreserveReason, PreserveStatus};
+use eve_encoding::{Encoding, NoPreserveReason, PreserveStatus, PuaEscapeMode};
 use eve_text::{
     ByteOff, ByteRange, ChangeSet, ChangeSetError, Selection, Snapshot, Text, TextRead,
 };
@@ -14,8 +14,8 @@ use crate::io::fs::FileStamp;
 use crate::io::fspath::FsPath;
 
 use super::format::{
-    EolStats, FormatChange, FormatRestore, LoadState, PreservedState, ReadOnlyReasons, TextFormat,
-    count_long_lines, count_range, long_lines_touched,
+    EolStats, FormatChange, FormatRestore, LoadState, PreservedState, ReadOnlyReason,
+    ReadOnlyReasons, TextFormat, count_long_lines, count_range, long_lines_touched,
 };
 use super::history::{NodeId, PreservedUndo, RecordOutcome, UndoHistory};
 use super::preserved::{PreservedMap, PreservedSpan};
@@ -205,6 +205,10 @@ impl Document {
             count_long_lines(&text, format.long_line_threshold),
             "読込ジョブの長大行の数"
         );
+        debug_assert!(
+            format.escape_encoding_ok(),
+            "escape_encoding の不変条件 (03 §8.3.1)"
+        );
         Document {
             text,
             path: None,
@@ -241,6 +245,54 @@ impl Document {
     pub(crate) fn clear_preserved(&mut self) {
         self.preserved = PreservedMap::new();
         self.history.forget_preserved();
+    }
+
+    /// 違う文字コードで保存が成功した (03 §8.3.1 の「エスケープ文字の由来の文字コード」の表、§8.8): 本文のエスケープ
+    /// 文字はもう元の文字コードのバイトではないので `escape_encoding` を `None` にする。履歴の復旧のノードが持つ前後の値も
+    /// `None` にする (Undo / Redo で元の文字コードの `Some` が、今の文字コードの文書に戻らないように)。再読込のノードは
+    /// 文字コードごと戻すので変えない (`FormatChange::Reload` の書式は文字コードと組で正しい)。
+    pub(crate) fn forget_escape_encoding(&mut self) {
+        self.format.escape_encoding = None;
+        self.history.forget_escape_encoding();
+    }
+
+    /// 復旧 (`Origin::Recovery`) の書式の変更 (03 §8.7.1 / §8.3.1 / §10.3): 保持方式の記録を捨てて「保持なし (復旧した)」に
+    /// し、`escape_encoding`・`pua_escape` を渡した値にする。`escape_encoding` が `Some` になるときは、読込と同じく内容に
+    /// 由来する読み取り専用の理由 `InvalidBytes` を付ける (前から付いていれば残す)。前の値 (表・状態・`escape_encoding`・
+    /// `pua_escape`・`InvalidBytes` の有無) は Undo で戻すために持つ。
+    pub(crate) fn recovery_change(
+        &self,
+        escape_encoding: Option<Encoding>,
+        pua_escape: PuaEscapeMode,
+    ) -> FormatChange {
+        self.recovery_change_with(escape_encoding, pua_escape, true)
+    }
+
+    /// `recovery_change` の本体。`mark` が偽なら読み取り専用の理由を変えない (`Document::apply` が、書式の変更を
+    /// 渡されなかった復旧について、表と状態だけを変える形で作るとき)。
+    fn recovery_change_with(
+        &self,
+        escape_encoding: Option<Encoding>,
+        pua_escape: PuaEscapeMode,
+        mark: bool,
+    ) -> FormatChange {
+        let invalid_now = self.read_only.contains(ReadOnlyReason::InvalidBytes);
+        FormatChange::Recovery {
+            before: PreservedState {
+                map: self.preserved.clone(),
+                status: self.format.roundtrip.preserve,
+                escape_encoding: self.format.escape_encoding,
+                pua_escape: self.format.pua_escape,
+                invalid_bytes_reason: invalid_now,
+            },
+            after: PreservedState {
+                map: PreservedMap::new(),
+                status: PreserveStatus::Unavailable(NoPreserveReason::Recovered),
+                escape_encoding,
+                pua_escape,
+                invalid_bytes_reason: invalid_now || (mark && escape_encoding.is_some()),
+            },
+        }
     }
 
     /// 文字コード `out` で書く保存 (と「置換して保存」の対象の判定) に渡す、保持方式の記録の版 (03 §8.6 E2、§9.3 手順 4。
@@ -319,7 +371,10 @@ impl Document {
         if tx.changes.is_identity() {
             // 本文が同じ再読込: 書式と理由と保持方式の記録だけ差し替える (履歴のノードは作らない)。本文が同じ復旧は
             // 何も変えない (記録は本文と合ったまま)
-            if let Some(fc) = &tx.format_change {
+            // 復旧の `escape_encoding` も変えない: 本文が読んだときのままなので、エスケープ文字の意味も変わらない
+            if let Some(fc) = &tx.format_change
+                && !matches!(fc, FormatChange::Recovery { .. })
+            {
                 self.restore_format(fc.side(true));
             }
             return Ok(AppliedTx::Identity {
@@ -327,18 +382,14 @@ impl Document {
             });
         }
         // 書式の変更。復旧は、保持方式の記録を捨てて「保持なし (復旧した)」にする変更をここで作る (03 §8.7.1 の
-        // 「緊急退避・スワップ・復旧」。経路ごとに作らない)
+        // 「緊急退避・スワップ・復旧」。経路ごとに作らない)。`escape_encoding` を変える復旧は、呼び出し側が
+        // `recovery_change` で作って渡す
         let format = match (&tx.format_change, &tx.origin) {
-            (None, Origin::Recovery) if !tx.is_undo => Some(FormatChange::Recovery {
-                before: PreservedState {
-                    map: self.preserved.clone(),
-                    status: self.format.roundtrip.preserve,
-                },
-                after: PreservedState {
-                    map: PreservedMap::new(),
-                    status: PreserveStatus::Unavailable(NoPreserveReason::Recovered),
-                },
-            }),
+            (None, Origin::Recovery) if !tx.is_undo => Some(self.recovery_change_with(
+                self.format.escape_encoding,
+                self.format.pua_escape,
+                false,
+            )),
             (fc, _) => fc.clone(),
         };
         // 粗い逆変換 (03 §12.5) にするときは、編集の前の記録を取り出しておく (変更の境をまたいで外れる記録も含める)
@@ -518,8 +569,22 @@ impl Document {
             FormatRestore::Preserved(st) => {
                 self.preserved = st.map;
                 self.format.roundtrip.preserve = st.status;
+                self.format.escape_encoding = st.escape_encoding;
+                self.format.pua_escape = st.pua_escape;
+                if st.invalid_bytes_reason {
+                    self.read_only.insert(ReadOnlyReason::InvalidBytes);
+                } else {
+                    self.read_only.remove(ReadOnlyReason::InvalidBytes);
+                }
             }
         }
+        debug_assert!(
+            self.format.escape_encoding_ok(),
+            "escape_encoding の不変条件 (03 §8.3.1): {:?} {:?} {:?}",
+            self.format.escape_encoding,
+            self.format.encoding,
+            self.format.pua_escape
+        );
     }
 
     /// Undo / Redo の適用で表と履歴が食い違った (正しく使えば起きない)。本文を含めずに数え、debug ビルドでは止める。

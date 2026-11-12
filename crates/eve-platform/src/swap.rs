@@ -80,7 +80,9 @@ fn write(state_dir: &Path, d: &DocSnapshot, sync: SyncFn<'_>) -> io::Result<()> 
         default_eol: eol_name(d.format.default_eol),
         eol_mixed: d.format.eol_stats.is_mixed(),
         final_newline: matches!(last, b'\n' | b'\r'),
-        pua_escaped: d.format.invalid_bytes > 0,
+        // 本文のエスケープ文字が `encoding` のバイトか (03 §8.3.1。v0.4 の M23 から。形式は変えない)。不変条件
+        // (`None` か `Some(encoding)`) が破れていても、別の文字コードのバイトを「バイト」と書かない
+        pua_escaped: d.format.escape_encoding == Some(d.format.encoding),
         revision: d.revision.0,
         len: d.snapshot.len_bytes(),
         written: true,

@@ -118,6 +118,7 @@ fn スワップから復旧した無題は_適用した文書の番号のまま(
             encoding: eve_core::Encoding::Utf8,
             has_bom: false,
             default_eol: eve_text::LineEnding::Lf,
+            pua_escaped: false,
         }),
     );
     h.run_jobs();

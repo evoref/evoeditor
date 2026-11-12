@@ -23,6 +23,7 @@ struct Parsed {
     encoding: Option<String>,
     bom: bool,
     default_eol: Option<String>,
+    pua_escaped: bool,
     revision: Option<u64>,
     len: Option<u64>,
     written: Option<bool>,
@@ -60,6 +61,7 @@ fn parse_manifest(text: &str) -> Parsed {
             (true, "untitled_name") => p.untitled_name = parse_basic_string(v),
             (true, "encoding") => p.encoding = parse_basic_string(v),
             (true, "bom") => p.bom = v == "true",
+            (true, "pua_escaped") => p.pua_escaped = v == "true",
             (true, "default_eol") => p.default_eol = parse_basic_string(v),
             (true, "revision") => p.revision = v.parse().ok(),
             (true, "len") => p.len = v.parse().ok(),
@@ -210,6 +212,7 @@ pub(crate) fn read_swap(entry: &SwapEntry) -> Result<SwapBody, FsError> {
         encoding,
         has_bom: p.bom,
         default_eol,
+        pua_escaped: p.pua_escaped,
     })
 }
 
@@ -252,6 +255,10 @@ mod tests {
             (Some(3), Some(10), Some(true))
         );
         assert!(p.sensitive);
+        assert!(!p.pua_escaped, "書いていなければ偽");
+        // 復旧の適用で `escape_encoding` を決める (03 §8.3.1)
+        let p = parse_manifest(&t.replace("bom = false\n", "bom = false\npua_escaped = true\n"));
+        assert!(p.pua_escaped);
     }
 
     // STR-D5: 読み手を toml_lite にまとめても同じに読む。行は前後の空白を除いてから見るので、空の値の行 (`pid = `) は
