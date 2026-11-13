@@ -28,6 +28,7 @@ pub(crate) const INFO_OPEN_CANCELLED: &str = "info.open.cancelled";
 pub(crate) const INFO_OPEN_GUESS_UNSUPPORTED: &str = "info.open.guess_unsupported";
 pub(crate) const INFO_OPEN_LONG_LINE: &str = "info.open.long_line";
 pub(crate) const INFO_OPEN_NEW_FILE: &str = "info.open.new_file";
+pub(crate) const INFO_OPEN_PARTIAL_END: &str = "info.open.partial_end";
 pub(crate) const INFO_OPEN_PRESERVE_OFF: &str = "info.open.preserve_off";
 pub(crate) const INFO_OPEN_PRESERVE_PARTIAL: &str = "info.open.preserve_partial";
 pub(crate) const INFO_OPEN_REDETECTED: &str = "info.open.redetected";
@@ -76,6 +77,7 @@ pub(crate) const MSG_CONFIG_RELOAD_KEPT: &str = "msg.config.reload_kept";
 pub(crate) const MSG_EDIT_READ_ONLY: &str = "msg.edit.read_only";
 pub(crate) const MSG_EDIT_READ_ONLY_BINARY: &str = "msg.edit.read_only_binary";
 pub(crate) const MSG_EDIT_READ_ONLY_INVALID_BYTES: &str = "msg.edit.read_only_invalid_bytes";
+pub(crate) const MSG_EDIT_READ_ONLY_LOADING: &str = "msg.edit.read_only_loading";
 pub(crate) const MSG_EDIT_READ_ONLY_PUA_COLLISION: &str = "msg.edit.read_only_pua_collision";
 pub(crate) const MSG_EDIT_READ_ONLY_STATEFUL: &str = "msg.edit.read_only_stateful";
 pub(crate) const MSG_EOL_CONVERT_STALE: &str = "msg.eol.convert_stale";
@@ -93,6 +95,7 @@ pub(crate) const MSG_OPEN_INTERRUPTED_SAVE_NO_BACKUP: &str = "msg.open.interrupt
 pub(crate) const MSG_OPEN_NOT_A_FILE: &str = "msg.open.not_a_file";
 pub(crate) const MSG_OPEN_OUT_OF_MEMORY: &str = "msg.open.out_of_memory";
 pub(crate) const MSG_OPEN_PARENT_MISSING: &str = "msg.open.parent_missing";
+pub(crate) const MSG_OPEN_PARTIAL_UNAVAILABLE: &str = "msg.open.partial_unavailable";
 pub(crate) const MSG_OPEN_PERMISSION_DENIED: &str = "msg.open.permission_denied";
 pub(crate) const MSG_OPEN_RESERVED_NAME: &str = "msg.open.reserved_name";
 pub(crate) const MSG_RECOVERY_FOUND: &str = "msg.recovery.found";
@@ -144,6 +147,8 @@ pub(crate) const STATUS_EXTERNAL_CHANGE_LONG: &str = "status.external_change.lon
 pub(crate) const STATUS_EXTERNAL_CHANGE_SHORT: &str = "status.external_change.short";
 pub(crate) const STATUS_LOADING_LONG: &str = "status.loading.long";
 pub(crate) const STATUS_LOADING_SHORT: &str = "status.loading.short";
+pub(crate) const STATUS_PARTIAL_LONG: &str = "status.partial.long";
+pub(crate) const STATUS_PARTIAL_SHORT: &str = "status.partial.short";
 pub(crate) const STATUS_POSITION_LONG: &str = "status.position.long";
 pub(crate) const STATUS_POSITION_SHORT: &str = "status.position.short";
 pub(crate) const STATUS_READ_ONLY_LONG: &str = "status.read_only.long";
@@ -213,6 +218,7 @@ pub(crate) const UI_HISTORY_LEVEL_ERROR: &str = "ui.history.level.error";
 pub(crate) const UI_HISTORY_LEVEL_INFO: &str = "ui.history.level.info";
 pub(crate) const UI_HISTORY_LEVEL_WARN: &str = "ui.history.level.warn";
 pub(crate) const UI_HISTORY_TITLE: &str = "ui.history.title";
+pub(crate) const UI_LOAD_STATE_LOADING: &str = "ui.load_state.loading";
 pub(crate) const UI_PALETTE_ARG_ENCODING: &str = "ui.palette.arg.encoding";
 pub(crate) const UI_PALETTE_ARG_EOL: &str = "ui.palette.arg.eol";
 pub(crate) const UI_PALETTE_ARG_TITLE: &str = "ui.palette.arg_title";
@@ -245,7 +251,7 @@ pub(crate) const UI_TOO_SMALL: &str = "ui.too_small";
 
 /// すべての定数 (キーの順。試験に使う)。
 #[cfg(test)]
-const ALL: [&str; 225] = [
+const ALL: [&str; 231] = [
     HINT_UI_CANCEL,
     INFO_APP_RELEASE_SUMMARY,
     INFO_APP_UPDATED,
@@ -271,6 +277,7 @@ const ALL: [&str; 225] = [
     INFO_OPEN_GUESS_UNSUPPORTED,
     INFO_OPEN_LONG_LINE,
     INFO_OPEN_NEW_FILE,
+    INFO_OPEN_PARTIAL_END,
     INFO_OPEN_PRESERVE_OFF,
     INFO_OPEN_PRESERVE_PARTIAL,
     INFO_OPEN_REDETECTED,
@@ -318,6 +325,7 @@ const ALL: [&str; 225] = [
     MSG_EDIT_READ_ONLY,
     MSG_EDIT_READ_ONLY_BINARY,
     MSG_EDIT_READ_ONLY_INVALID_BYTES,
+    MSG_EDIT_READ_ONLY_LOADING,
     MSG_EDIT_READ_ONLY_PUA_COLLISION,
     MSG_EDIT_READ_ONLY_STATEFUL,
     MSG_EOL_CONVERT_STALE,
@@ -334,6 +342,7 @@ const ALL: [&str; 225] = [
     MSG_OPEN_NOT_A_FILE,
     MSG_OPEN_OUT_OF_MEMORY,
     MSG_OPEN_PARENT_MISSING,
+    MSG_OPEN_PARTIAL_UNAVAILABLE,
     MSG_OPEN_PERMISSION_DENIED,
     MSG_OPEN_RESERVED_NAME,
     MSG_RECOVERY_FOUND,
@@ -384,6 +393,8 @@ const ALL: [&str; 225] = [
     STATUS_EXTERNAL_CHANGE_SHORT,
     STATUS_LOADING_LONG,
     STATUS_LOADING_SHORT,
+    STATUS_PARTIAL_LONG,
+    STATUS_PARTIAL_SHORT,
     STATUS_POSITION_LONG,
     STATUS_POSITION_SHORT,
     STATUS_READ_ONLY_LONG,
@@ -446,6 +457,7 @@ const ALL: [&str; 225] = [
     UI_HISTORY_LEVEL_INFO,
     UI_HISTORY_LEVEL_WARN,
     UI_HISTORY_TITLE,
+    UI_LOAD_STATE_LOADING,
     UI_PALETTE_ARG_ENCODING,
     UI_PALETTE_ARG_EOL,
     UI_PALETTE_ARG_TITLE,

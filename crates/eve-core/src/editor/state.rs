@@ -126,6 +126,13 @@ pub(crate) struct IoState {
     pub(crate) save_all: Option<crate::io::save_all::SaveAll>,
     /// 読込が終わったらカーソルを移す位置 (行, 桁。ともに 1 始まり。起動時の `+行:桁`、07 §18.2)。
     pub(crate) open_jumps: BTreeMap<DocumentId, (usize, usize)>,
+    /// `file.open` の読込の表示の切り替え (先行表示の時点・完了の時点と、オーバーレイの間の保留。03 §9.2.1)。
+    pub(crate) open_switch: BTreeMap<DocumentId, crate::io::partial_view::OpenSwitch>,
+    /// 先行表示の間に `info.open.partial_end` を出した文書 (同じ文書の先行表示の間は 1 回だけ、03 §9.2.1)。
+    pub(crate) partial_end_noted: BTreeSet<DocumentId>,
+    /// 読込の失敗・取消しで閉じる文書のうち、オーバーレイ・検索バーの間は表示を移さずに待っているもの (文書 → 開く前の
+    /// 文書。03 §9.2.1 の「失敗・取消し・閉じる」)。
+    pub(crate) failed_holds: BTreeMap<DocumentId, Option<DocumentId>>,
     /// 履歴の破棄を通知した文書 (文書ごとに 1 回)。
     pub(crate) trim_notified: BTreeSet<DocumentId>,
     /// 表現不能の文字の強調 (文書, 作った Revision, 位置)。Revision が変わる (次の編集) まで残る。
@@ -308,6 +315,9 @@ impl EditorState {
                 pending: BTreeMap::new(),
                 save_all: None,
                 open_jumps: BTreeMap::new(),
+                open_switch: BTreeMap::new(),
+                partial_end_noted: BTreeSet::new(),
+                failed_holds: BTreeMap::new(),
                 trim_notified: BTreeSet::new(),
                 unmappable_marks: None,
                 swap: Default::default(),

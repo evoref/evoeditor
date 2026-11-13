@@ -49,23 +49,45 @@ impl EditorState {
             .any(|p| matches!(p, Pending::Save { doc, .. } | Pending::CheckUnchanged { doc } if *doc == doc_id))
     }
 
-    /// 進行中の読込 (開く・開き直し・再読込) の進捗 (百分率)。無ければ `None`。
-    pub(crate) fn loading_percent(&self) -> Option<u8> {
-        self.io.pending.values().find_map(|p| match p {
-            Pending::Open { doc, .. } => self.docs.documents.get(doc).map(|d| d.load_percent),
+    /// 表示していない文書の、新しく開く読込 (`file.open`・起動時の 2 つ目以降のパス) のジョブ。ステータスバーが
+    /// 読込中として示し、`Esc` が取り消す読込 (表示中の文書が読込中でないとき。03 §9.8 の「読込中のバッファ」)。
+    /// ほかの文書の再読込・開き直しは含めない。
+    fn hidden_open_loads(&self) -> impl Iterator<Item = (eve_view::JobId, DocumentId)> + '_ {
+        let active = self.active_document();
+        self.io.pending.iter().filter_map(move |(id, p)| match p {
+            Pending::Open {
+                doc,
+                kind: OpenKind::Open,
+                ..
+            } if Some(*doc) != active => Some((*id, *doc)),
             _ => None,
         })
     }
 
-    /// 読込中の文書の読込ジョブを取り消す。取り消すものがあれば `true`。
+    /// 表示していない文書の新しく開く読込 (`hidden_open_loads`) の進捗 (百分率)。無ければ `None`。
+    /// 表示中の文書が読込中なら、ステータスバーはその文書の進捗を出す (`ui_model/chrome.rs`)。
+    pub(crate) fn loading_percent(&self) -> Option<u8> {
+        self.hidden_open_loads()
+            .find_map(|(_, doc)| self.docs.documents.get(&doc).map(|d| d.load_percent))
+    }
+
+    /// `Esc` (`ui.cancel`) で読込を取り消す (03 §9.8 の「読込中のバッファ」)。表示中の文書が読込中 (`Loading` /
+    /// `Partial`。開く・再読込・開き直しのどれでも) ならその文書の読込だけを、表示中の文書が読込中でなければ、表示して
+    /// いない文書の新しく開く読込を取り消す。ほかの文書の再読込・開き直しは取り消さない。取り消すものがあれば `true`。
     pub(crate) fn cancel_loading(&mut self) -> bool {
-        let ids: Vec<_> = self
+        let active = self.active_document();
+        let own: Vec<_> = self
             .io
             .pending
             .iter()
-            .filter(|(_, p)| matches!(p, Pending::Open { .. }))
+            .filter(|(_, p)| matches!(p, Pending::Open { doc, .. } if Some(*doc) == active))
             .map(|(id, _)| *id)
             .collect();
+        let ids: Vec<_> = if own.is_empty() {
+            self.hidden_open_loads().map(|(id, _)| id).collect()
+        } else {
+            own
+        };
         for id in &ids {
             self.jobs.cancel(*id);
         }
@@ -91,6 +113,8 @@ impl EditorState {
     /// (結果が失敗なら退避先に書く。03 §9.2 の閉じる手順 (a))。
     pub fn close_document(&mut self, doc: DocumentId) {
         self.io.open_jumps.remove(&doc);
+        // 先行表示の先頭は文書ごと捨てる (03 §9.2.1 の「失敗・取消し・閉じる」)
+        self.forget_partial_state(doc);
         self.docs.views.retain(|_, v| v.doc != doc);
         let saving = self
             .io

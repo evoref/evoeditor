@@ -246,6 +246,16 @@ pub(crate) fn file_save_as(ctx: &mut CommandCtx<'_>) -> CommandResult {
     let Some(doc) = ctx.state.active_document() else {
         return CommandResult::Rejected(RejectReason::NoTarget);
     };
+    // 読込中 (`Loading` / 先行表示の `Partial`) の文書は名前を尋ねずに拒否する (中身が揃っていない。03 §9.2.1 の
+    // 「できない操作」。名前の入力の後で黙って拒否しない)
+    if ctx
+        .state
+        .document(doc)
+        .is_some_and(|d| d.load_state != crate::document::LoadState::Ready)
+    {
+        ctx.state.notify_loading_busy();
+        return CommandResult::Rejected(RejectReason::NotAvailable);
+    }
     match arg_path(ctx) {
         Some(p) => ctx.state.request_save_as(doc, &p, None),
         None => {

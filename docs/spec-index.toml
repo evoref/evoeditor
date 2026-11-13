@@ -2358,70 +2358,70 @@ title = "リサイズ・サスペンド・その他のシグナル"
 id = "04 §15"
 file = "docs/04-tui-design.md"
 line = 1333
-end = 1881
+end = 1885
 title = "日本語環境での考慮事項 (まとめ)"
 
 [[section]]
 id = "04 §15.1"
 file = "docs/04-tui-design.md"
 line = 1350
-end = 1408
+end = 1409
 title = "v0.1 の画面文言 (ja)"
 
 [[section]]
 id = "04 §15.2"
 file = "docs/04-tui-design.md"
-line = 1409
-end = 1881
+line = 1410
+end = 1885
 title = "保存・読込・退避・パニックの文言目録"
 
 [[section]]
 id = "04 §16"
 file = "docs/04-tui-design.md"
-line = 1882
-end = 1920
+line = 1886
+end = 1924
 title = "共通化する部分 / しない部分"
 
 [[section]]
 id = "04 §17"
 file = "docs/04-tui-design.md"
-line = 1921
-end = 1964
+line = 1925
+end = 1968
 title = "版ごとの範囲"
 
 [[section]]
 id = "04 §17.1"
 file = "docs/04-tui-design.md"
-line = 1925
-end = 1950
+line = 1929
+end = 1954
 title = "v0.1 で実装する (最小核)"
 
 [[section]]
 id = "04 §17.2"
 file = "docs/04-tui-design.md"
-line = 1951
-end = 1954
+line = 1955
+end = 1958
 title = "v0.2 (日常の不足を埋める)"
 
 [[section]]
 id = "04 §17.3"
 file = "docs/04-tui-design.md"
-line = 1955
-end = 1958
+line = 1959
+end = 1962
 title = "v0.4"
 
 [[section]]
 id = "04 §17.4"
 file = "docs/04-tui-design.md"
-line = 1959
-end = 1964
+line = 1963
+end = 1968
 title = "v0.5 以降"
 
 [[section]]
 id = "04 §18"
 file = "docs/04-tui-design.md"
-line = 1965
-end = 1981
+line = 1969
+end = 1985
 title = "未決事項"
 
 [[section]]
@@ -7906,67 +7906,67 @@ section = "04 §12.1"
 [[id]]
 id = "OQ-33"
 file = "docs/04-tui-design.md"
-line = 1971
+line = 1975
 section = "04 §18"
 
 [[id]]
 id = "OQ-61"
 file = "docs/04-tui-design.md"
-line = 1972
+line = 1976
 section = "04 §18"
 
 [[id]]
 id = "OQ-64"
 file = "docs/04-tui-design.md"
-line = 1973
+line = 1977
 section = "04 §18"
 
 [[id]]
 id = "OQ-66"
 file = "docs/04-tui-design.md"
-line = 1974
+line = 1978
 section = "04 §18"
 
 [[id]]
 id = "OQ-68"
 file = "docs/04-tui-design.md"
-line = 1975
+line = 1979
 section = "04 §18"
 
 [[id]]
 id = "OQ-180"
 file = "docs/04-tui-design.md"
-line = 1976
+line = 1980
 section = "04 §18"
 
 [[id]]
 id = "OQ-181"
 file = "docs/04-tui-design.md"
-line = 1977
+line = 1981
 section = "04 §18"
 
 [[id]]
 id = "OQ-182"
 file = "docs/04-tui-design.md"
-line = 1978
+line = 1982
 section = "04 §18"
 
 [[id]]
 id = "OQ-183"
 file = "docs/04-tui-design.md"
-line = 1979
+line = 1983
 section = "04 §18"
 
 [[id]]
 id = "OQ-184"
 file = "docs/04-tui-design.md"
-line = 1980
+line = 1984
 section = "04 §18"
 
 [[id]]
 id = "OQ-124"
 file = "docs/04-tui-design.md"
-line = 1981
+line = 1985
 section = "04 §18"
 
 [[id]]

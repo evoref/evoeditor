@@ -2,6 +2,10 @@
 //!
 //! `spawn` はキューに積むだけで実行しない。テストが `run_jobs` を呼ぶと、積まれた順に **同じスレッドで** `run_job` を
 //! 実行し、結果を inbox に積む。`cancel` は未実行ならキューから外して `Cancelled` を積む。
+//!
+//! 先行表示 (docs/03 §9.2.1) の試験のために、`run_jobs_until_partial` は最初に `Partial` を送ったジョブの、`Partial` より
+//! 後の結果を取り置く (読込の途中で止まっている状態を作る)。取り置いた結果は `release_held` で inbox に移し、その間の
+//! `cancel` は取り置いた結果を捨てて `Cancelled` を積む (実際のジョブが次のチャンクの区切りで取消しに気づくのと同じ)。
 
 use std::cell::{Cell, RefCell};
 use std::collections::VecDeque;
@@ -24,6 +28,8 @@ pub struct ManualJobSpawner {
     next_id: Cell<u64>,
     queue: RefCell<VecDeque<Queued>>,
     inbox: RefCell<VecDeque<JobOutput>>,
+    /// `run_jobs_until_partial` が取り置いた結果 (先行表示の先頭より後の進捗・完了)。
+    held: RefCell<Vec<JobOutput>>,
 }
 
 impl ManualJobSpawner {
@@ -34,6 +40,7 @@ impl ManualJobSpawner {
             next_id: Cell::new(1),
             queue: RefCell::default(),
             inbox: RefCell::default(),
+            held: RefCell::default(),
         })
     }
 
@@ -57,6 +64,40 @@ impl ManualJobSpawner {
             n += 1;
         }
         n
+    }
+
+    /// 積まれたジョブを積まれた順に実行し、最初に `JobResult::Partial` を送ったジョブで止まる: そのジョブの `Partial`
+    /// までの結果は inbox に積み、後の結果は取り置く (`release_held` で積む)。残りのジョブは実行しない (読込ジョブは直列)。
+    /// `Partial` を送ったジョブがあれば `true`。
+    pub fn run_jobs_until_partial(&self) -> bool {
+        loop {
+            let Some(job) = self.queue.borrow_mut().pop_front() else {
+                return false;
+            };
+            let mut out = Vec::new();
+            run_job(&job.req, &self.ports, &job.cancel, &mut |r| out.push(r));
+            if let Some(at) = out
+                .iter()
+                .position(|o| matches!(o.body, JobResult::Partial { .. }))
+            {
+                let rest = out.split_off(at + 1);
+                self.inbox.borrow_mut().extend(out);
+                self.held.borrow_mut().extend(rest);
+                return true;
+            }
+            self.inbox.borrow_mut().extend(out);
+        }
+    }
+
+    /// 取り置いた結果を inbox に積む。
+    pub fn release_held(&self) {
+        let held: Vec<JobOutput> = self.held.borrow_mut().drain(..).collect();
+        self.inbox.borrow_mut().extend(held);
+    }
+
+    /// 取り置いた結果の数。
+    pub fn held(&self) -> usize {
+        self.held.borrow().len()
     }
 
     /// 実行待ちのジョブをすべて取り消す (それぞれ `Cancelled` の結果が inbox に積まれる)。
@@ -91,16 +132,24 @@ impl JobSpawner for ManualJobSpawner {
     }
 
     fn cancel(&self, job: JobId) {
+        let cancelled = JobOutput {
+            job,
+            body: JobResult::Failed {
+                err: JobError::Cancelled,
+            },
+        };
         let mut q = self.queue.borrow_mut();
         if let Some(pos) = q.iter().position(|j| j.req.id == job) {
             let j = q.remove(pos).expect("位置は直前に見つけた");
             j.cancel.cancel();
-            self.inbox.borrow_mut().push_back(JobOutput {
-                job,
-                body: JobResult::Failed {
-                    err: JobError::Cancelled,
-                },
-            });
+            self.inbox.borrow_mut().push_back(cancelled);
+            return;
+        }
+        // 先行表示の後で取り置いたジョブ: 残りの結果の代わりに `Cancelled` を積む
+        let mut held = self.held.borrow_mut();
+        if held.iter().any(|o| o.job == job) {
+            held.retain(|o| o.job != job);
+            self.inbox.borrow_mut().push_back(cancelled);
         }
     }
 }

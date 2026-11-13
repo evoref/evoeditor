@@ -186,14 +186,15 @@ impl EditorState {
                 let doc = *doc;
                 if let Some(d) = self.docs.documents.get_mut(&doc) {
                     d.load_percent = pct;
+                    d.load_total = total;
                 }
                 self.mark_dirty_render();
             }
             return;
         }
-        // 先行表示の先頭 (03 §9.2.1) も終わりではない。M25 の (1) ではまだ表示に使わずに捨てる (待ちの記録は残す。
-        // 表示の切り替え・`LoadState::Partial` は M25 の (2))
-        if matches!(r, JobResult::Partial { .. }) {
+        // 先行表示の先頭 (03 §9.2.1) も終わりではない。待ちの記録は残して、文書を先頭にする (io/partial_view.rs)
+        if let JobResult::Partial { head, format } = r {
+            self.on_open_partial(job, head, format);
             return;
         }
         // 検索は途中経過が複数届く。待ちの記録は終わりまで残す
