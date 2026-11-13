@@ -1,12 +1,13 @@
 //! 行の窓と全文の連結 (docs/03 §12.3.1 の「実行」・「窓から窓への引き継ぎ」・「最悪の入力の上限」、08 §2.5 の M24 の (2))。
 //!
-//! 行をまたぐ検索は M24 の (4) まで利用者に開かないので、ここでは eve-core の内部の設定 (`SearchInternal`) で開いて確かめる。
+//! 行をまたぐ検索は M24 の (4) で既定で開いた。窓の境目を多く作るため、試験の口 (`SearchTuning`、feature `test-hooks`) で
+//! 核を小さくして確かめる (核の大きさは結果を変えない)。
 //! 参照との突き合わせは `fuzz_regex_search.rs` (09 §3.3) が受け持ち、ここは固定の例と、打ち切り・探さない場合の理由を見る。
 
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use eve_core::{
-    CancelToken, Case, Clock, LineSpan, QueryError, ScanCtx, ScanEnd, SearchInternal, SearchQuery,
+    CancelToken, Case, Clock, LineSpan, QueryError, ScanCtx, ScanEnd, SearchQuery, SearchTuning,
     Tick, build_replace_all, scan_range,
 };
 use eve_text::{ByteOff, ByteRange, Text, TextRead};
@@ -17,10 +18,11 @@ fn query(p: &str) -> SearchQuery {
         .with_case(Case::Sensitive)
 }
 
+/// 行の窓の核を `core` バイトにした検索語。
 fn open(p: &str, core: usize) -> SearchQuery {
-    query(p).with_internal(SearchInternal {
+    query(p).with_tuning(SearchTuning {
         core_bytes: core,
-        ..SearchInternal::multiline()
+        ..SearchTuning::default()
     })
 }
 
@@ -68,15 +70,17 @@ impl Clock for StepClock {
 }
 
 #[test]
-fn 既定では行をまたぐ検索を開かない() {
-    // 行の終端を明示して行をまたぐ検索語は「未対応」のまま (M24 の (4) まで)
-    assert_eq!(query(r"a\na").compile().err(), Some(QueryError::Multiline));
-    // `(?s)` の `.` は 1 行の中、`\A` は各行の先頭 (v0.3 と同じ)
-    assert_eq!(found(&query(r"(?s)a.b"), "a\nb axb"), [(4, 7)]);
-    assert_eq!(found(&query(r"\Aa"), "a\na"), [(0, 1), (2, 3)]);
+fn 既定で行をまたぐ検索を開く() {
+    // M24 の (4) で、設定なしでも文書全体の意味で探す (v0.3 の「未対応」・各行の先頭の `\A` は無くなった)
+    assert!(matches!(query(r"a\na").compile(), Ok(Some(_))));
+    assert_eq!(found(&query(r"a\na"), "a\na\na"), [(0, 3)]);
+    assert_eq!(found(&query(r"(?s)a.b"), "a\nb axb"), [(0, 3), (4, 7)]);
+    assert_eq!(found(&query(r"\Aa"), "a\na"), [(0, 1)]);
+    assert_eq!(found(&query(r"a\z"), "a\na"), [(2, 3)]);
+    assert_eq!(found(&query(r"(?-m)^a"), "a\na"), [(0, 1)]);
     let m = query(r"(?s)a.b").matcher().unwrap();
-    assert!(!m.is_stream());
-    // 内部の設定で開くと、文書全体の意味になる
+    assert!(m.is_stream());
+    // 核の大きさ (試験の口) を変えても同じ結果
     assert_eq!(found(&open(r"a\na", 1 << 20), "a\na\na"), [(0, 3)]);
     assert_eq!(
         found(&open(r"(?s)a.b", 1 << 20), "a\nb axb"),
@@ -218,9 +222,9 @@ fn 置換のキャプチャは窓の上で取る() {
 
 #[test]
 fn 上限なしの検索語は大きな文書で探さない() {
-    let q = query(r"(?s)a.*b").with_internal(SearchInternal {
+    let q = query(r"(?s)a.*b").with_tuning(SearchTuning {
         concat_max: 16,
-        ..SearchInternal::multiline()
+        ..SearchTuning::default()
     });
     let m = q.matcher().unwrap();
     assert_eq!(m.lines(), LineSpan::Unbounded);
@@ -239,10 +243,9 @@ fn 上限なしの検索語は大きな文書で探さない() {
 #[test]
 fn 窓が上限を超える検索語は探さない() {
     let small = |p: &str| {
-        query(p).with_internal(SearchInternal {
+        query(p).with_tuning(SearchTuning {
             concat_max: 64,
             core_bytes: 1,
-            ..SearchInternal::multiline()
         })
     };
     // 最大の長さが有限 (単語単位でない) なら核を行の途中で切るので、上限より長い行があっても窓は「核 + 最大の長さ」に収まる。
@@ -415,7 +418,7 @@ fn 重い検索語の判定() {
     ] {
         assert_eq!(heavy(p), Some(true), "{p}");
     }
-    // 照合器も同じ判定 (コンパイルは 1 回。閉じた既定でも同じ)
+    // 照合器も同じ判定 (コンパイルは 1 回。核の大きさに依らない)
     assert!(
         open(r"[^\n]{0,3000}zq", 1 << 20)
             .matcher()
@@ -429,16 +432,19 @@ fn 重い検索語の判定() {
         open(r"\w{1000}", 1 << 20).compile().err(),
         Some(QueryError::TooLarge)
     );
-    // k が 0 の重い検索語も、開いたときは行の窓で探す (取り消しの遅れと処理の速さの下限を掛ける。結果は行の経路と同じ)
+    // k が 0 の重い検索語も行の窓で探す (取り消しの遅れと処理の速さの下限を掛ける。結果は行の経路と同じ)
     let q = open(r"[^\n]{0,3000}zq", 8);
     let m = q.matcher().unwrap();
     assert_eq!(m.lines(), LineSpan::Bounded(0));
     assert!(m.is_stream());
-    assert!(!query(r"[^\n]{0,3000}zq").matcher().unwrap().is_stream());
+    assert!(query(r"[^\n]{0,3000}zq").matcher().unwrap().is_stream());
+    // 行の経路の参照: 行が 3000 バイトより短い文書では、重くない `[^\n]*zq` (k が 0。行の経路) と同じ一致になる
+    assert!(!query(r"[^\n]*zq").matcher().unwrap().is_stream());
     let doc = "ab zq\r\nzq\nxx\rzqzq\n".repeat(30);
     let t = Text::from(doc.as_str());
     let (end, got) = scan_with(&t, &q, 0, None);
     assert_eq!(end, ScanEnd::Done);
+    assert_eq!(got, found(&query(r"[^\n]*zq"), &doc));
     assert_eq!(got, found(&query(r"[^\n]{0,3000}zq"), &doc));
     let slow = StepClock(AtomicU64::new(0), 300);
     assert_eq!(scan_with(&t, &q, 0, Some(&slow)).0, ScanEnd::TooHeavy);
@@ -470,8 +476,9 @@ fn crlf_でない行頭行末は文書全体の意味() {
         assert!(m.is_stream(), "{p}");
         assert_eq!(found(&q, doc), want, "{p} / {doc:?}");
     }
-    // 閉じた既定では今までどおり行の経路 (v0.3 と同じ)
-    assert!(!query(r"a(?-R:$)").matcher().unwrap().is_stream());
+    // 核の大きさ (試験の口) を変えなくても同じ (v0.3 までは行の経路で、行の終端を文字列の端と見ていた)
+    assert!(query(r"a(?-R:$)").matcher().unwrap().is_stream());
+    assert_eq!(found(&query(r"a(?-R:$)"), "a\r\nb"), vec![]);
 }
 
 #[test]

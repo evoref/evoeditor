@@ -2,7 +2,7 @@
 //! `docs/07-config-extensibility.md` の §5.1〜§5.11・§5.13 の表の `キー` 列から公開キーを除いたもの (§5.12 の `[ai]` 等は
 //! セクションごと予約する)。表との一致は eve-core の試験 `config_reserved` が確かめる。表が変わったら作り直す。
 
-/// 公開前のセクション (公開キーを持つ `editor` / `file` / `view` / `theme` / `ui` / `clipboard` を除く)。
+/// 公開前のセクション (公開キーを持つ `editor` / `file` / `view` / `theme` / `ui` / `search` / `clipboard` を除く)。
 pub const RESERVED_SECTIONS: &[&str] = &[
     "ai",
     "formatter",
@@ -13,7 +13,6 @@ pub const RESERVED_SECTIONS: &[&str] = &[
     "lsp",
     "plugins",
     "process",
-    "search",
     "session",
     "workspace",
 ];
@@ -70,7 +69,6 @@ pub const RESERVED_KEYS: &[&str] = &[
     "search.count_limit",
     "search.cp932_compat_fold",
     "search.max_matches",
-    "search.newline_sugar",
     "search.regex_default",
     "search.regex_size_limit",
     "search.replace_all_select_result",

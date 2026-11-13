@@ -1,0 +1,50 @@
+# CRLF は 1 つの行の終端で、検索語のどの部分も CR と LF に分けて一致しない。CRLF の文書で空行の続きを 1 つの空行にまとめる
+# すべて置換 (`\n\n+` を `\n\n` に) は、空行を足さない。置換の文字列の `\n` は文書の改行 (CRLF) で入る (FR-402 AC-8、
+# 03 §12.3.1 の「CRLF は 1 つの行の終端」)。
+[meta]
+id = "search/crlf_blank_lines"
+title = "CRLF の文書で空行をまとめるすべて置換は、空行を足さずに CRLF のまま保存する"
+verifies = ["AC-FR-402-8"]
+since = "v0.4"
+tags = ["search", "regex", "multiline", "eol"]
+
+[setup]
+size = [60, 12]
+
+[setup.fs]
+"a.txt" = { text = "a\r\n\r\n\r\nb\r\n\r\nc\r\n" }
+
+[[step]]
+open = "a.txt"
+[[step]]
+run_jobs = true
+[[step]]
+keys = "ctrl+r"
+[[step]]
+keys = "alt+r"
+[[step]]
+text = '\n\n+'
+[[step]]
+run_jobs = true
+[[step]]
+keys = "tab"
+[[step]]
+text = '\n\n'
+[[step]]
+keys = "alt+a"
+[[step]]
+run_jobs = true
+[[step]]
+cmd = "file.save"
+[[step]]
+run_jobs = true
+
+# `a` の後ろの 3 つの改行と、`b` の後ろの 2 つの改行の 2 件 (各行末の CRLF の CR と LF を別々に数えない)。空行は 1 行減る
+[[assert]]
+at = 10
+frame_contains = ["2 件を置換しました。文書は 1 行減りました"]
+[[assert]]
+fs = { "a.txt" = { text = "a\r\n\r\nb\r\n\r\nc\r\n" } }
+[[assert]]
+query = { kind = "document", path = "a.txt" }
+expect = { dirty = false, eol = "crlf" }

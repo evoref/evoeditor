@@ -248,6 +248,7 @@ mod tests {
                 "ui.hint_bar",
                 "ui.mouse_wheel_lines",
                 "ui.which_key_delay_ms",
+                "search.newline_sugar",
                 "clipboard.osc52",
                 "clipboard.osc52_max_bytes",
             ]

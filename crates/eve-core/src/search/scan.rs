@@ -3,7 +3,7 @@
 //! 走査の入口は `scan_bytes` (範囲を受ける) の 1 つ (03 §12.3 の「走査の境界」)。置換の走査 (キャプチャが要る) も同じ
 //! 本体を通す (`scan_bytes_with_captures`)。中の経路は 3 つ: チャンクごとの memmem (改行を含まないリテラル)、行ごとに
 //! 切り出して照合する `LineScan` (`scan_lines`)、行の窓と全文の連結 (`StreamScan`、`stream`。行をまたぎうる正規表現と、
-//! `\A` などで文書の先頭 / 末尾の意味が要る正規表現。03 §12.3.1。M24 の (4) までは内部の設定で開いたときだけ)。
+//! `\A` などで文書の先頭 / 末尾の意味が要る正規表現。03 §12.3.1)。
 //!
 //! 入口の約束 (03 §12.3.1 の「走査の入口の約束」): `range.start` から §12.1 の選び方で選び始めた一致を返す。始端が文書の先頭・
 //! 正本の一致の終端・再開の位置 (`ScanCtx::resume` が知らせる) のとき、正本 (文書の先頭から選んだ一致) と同じになる。
@@ -102,7 +102,7 @@ pub(crate) struct Discard {
 }
 
 impl Discard {
-    /// 走査する範囲の長さ `range_len` に対する予算。`on` が偽なら数えない (行をまたぐ検索を開くまでは v0.3 のまま)。
+    /// 走査する範囲の長さ `range_len` に対する予算。`on` が偽なら数えない (試験の補助の `scan_lines` だけ)。
     pub(crate) fn new(range_len: usize, on: bool) -> Discard {
         Discard {
             used: 0,
@@ -249,10 +249,7 @@ fn scan(
         } else {
             text.byte_to_line(range.end).0
         };
-        let mut discard = Discard::new(
-            range.end.0.saturating_sub(range.start.0),
-            m.internal.multiline,
-        );
+        let mut discard = Discard::new(range.end.0.saturating_sub(range.start.0), true);
         let ok = scan_lines_in(text, m, first..last, cancel, want_caps, &mut discard, f);
         if discard.exceeded {
             return ScanEnd::TooHeavy;
@@ -651,7 +648,7 @@ pub fn run_search(
         true
     };
     // 再開の位置: 行の窓が核ごとに知らせる位置を 1 MiB ごとに間引く (試験で核を小さくしたときは核の大きさごと)
-    let step = SEARCH_RESUME_STEP_BYTES.min(m.internal.core_bytes.max(1));
+    let step = SEARCH_RESUME_STEP_BYTES.min(m.tuning.core_bytes.max(1));
     let mut resume: Vec<ByteOff> = Vec::new();
     let mut on_resume = |r: ByteOff| {
         if resume
@@ -661,7 +658,7 @@ pub fn run_search(
             resume.push(r);
         }
     };
-    // 時計を渡す: 行の窓の経路 (内部の設定で開いたとき) は、窓の処理の時間から核を縮め、処理の速さの下限で打ち切る (03 §12.3.1)
+    // 時計を渡す: 行の窓の経路は、窓の処理の時間から核を縮め、処理の速さの下限で打ち切る (03 §12.3.1)
     let end = if whole {
         let mut ctx = ScanCtx {
             cancel,

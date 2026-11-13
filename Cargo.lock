@@ -323,6 +323,7 @@ version = "0.3.0"
 dependencies = [
  "encoding_rs",
  "eve-config",
+ "eve-core",
  "eve-docs-tables",
  "eve-encoding",
  "eve-testkit",

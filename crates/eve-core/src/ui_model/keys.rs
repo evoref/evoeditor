@@ -61,6 +61,8 @@ pub(crate) const INFO_SEARCH_NO_SELECTION: &str = "info.search.no_selection";
 pub(crate) const INFO_SEARCH_REPLACE_EMPTY_QUERY: &str = "info.search.replace_empty_query";
 pub(crate) const INFO_SEARCH_REPLACE_NO_MATCH: &str = "info.search.replace_no_match";
 pub(crate) const INFO_SEARCH_REPLACED: &str = "info.search.replaced";
+pub(crate) const INFO_SEARCH_REPLACED_LINES_ADDED: &str = "info.search.replaced_lines_added";
+pub(crate) const INFO_SEARCH_REPLACED_LINES_REMOVED: &str = "info.search.replaced_lines_removed";
 pub(crate) const INFO_SEARCH_WRAPPED_BACKWARD: &str = "info.search.wrapped_backward";
 pub(crate) const INFO_SEARCH_WRAPPED_FORWARD: &str = "info.search.wrapped_forward";
 pub(crate) const INFO_SWAP_APPLIED_READ_ONLY: &str = "info.swap.applied_read_only";
@@ -123,12 +125,12 @@ pub(crate) const MSG_SAVE_RECOVERY_FAILED: &str = "msg.save.recovery_failed";
 pub(crate) const MSG_SAVE_TMP_NOT_REMOVED: &str = "msg.save.tmp_not_removed";
 pub(crate) const MSG_SAVE_VERIFY_FAILED: &str = "msg.save.verify_failed";
 pub(crate) const MSG_SAVE_AS_SAME_FILE_READ_ONLY: &str = "msg.save_as.same_file_read_only";
-pub(crate) const MSG_SEARCH_INVALID_REGEX: &str = "msg.search.invalid_regex";
 pub(crate) const MSG_SEARCH_INVALID_REGEX_TEXT: &str = "msg.search.invalid_regex.text";
-pub(crate) const MSG_SEARCH_NEWLINE_UNSUPPORTED_TEXT: &str = "msg.search.newline_unsupported.text";
+pub(crate) const MSG_SEARCH_MULTILINE_TOO_LARGE: &str = "msg.search.multiline_too_large";
+pub(crate) const MSG_SEARCH_MULTILINE_TOO_LARGE_TEXT: &str = "msg.search.multiline_too_large.text";
+pub(crate) const MSG_SEARCH_PATTERN_TOO_HEAVY: &str = "msg.search.pattern_too_heavy";
+pub(crate) const MSG_SEARCH_PATTERN_TOO_HEAVY_TEXT: &str = "msg.search.pattern_too_heavy.text";
 pub(crate) const MSG_SEARCH_REPLACE_INVALID_REGEX: &str = "msg.search.replace_invalid_regex";
-pub(crate) const MSG_SEARCH_REPLACE_NEWLINE_UNSUPPORTED: &str =
-    "msg.search.replace_newline_unsupported";
 pub(crate) const MSG_SEARCH_REPLACE_STALE: &str = "msg.search.replace_stale";
 pub(crate) const MSG_SWAP_CHANGED_SINCE_OFFER: &str = "msg.swap.changed_since_offer";
 pub(crate) const MSG_SWAP_FOUND: &str = "msg.swap.found";
@@ -193,7 +195,18 @@ pub(crate) const UI_HELP_KEYS_UNREACHABLE: &str = "ui.help.keys.unreachable";
 pub(crate) const UI_HELP_SECTION_COMMANDS: &str = "ui.help.section.commands";
 pub(crate) const UI_HELP_SECTION_INTRO: &str = "ui.help.section.intro";
 pub(crate) const UI_HELP_SECTION_KEYS: &str = "ui.help.section.keys";
+pub(crate) const UI_HELP_SECTION_SEARCH: &str = "ui.help.section.search";
 pub(crate) const UI_HELP_SECTION_TERMINAL: &str = "ui.help.section.terminal";
+pub(crate) const UI_HELP_SEARCH_ANCHORS: &str = "ui.help.search.anchors";
+pub(crate) const UI_HELP_SEARCH_CLASS_NEWLINE: &str = "ui.help.search.class_newline";
+pub(crate) const UI_HELP_SEARCH_DOT_ALL: &str = "ui.help.search.dot_all";
+pub(crate) const UI_HELP_SEARCH_INTRO: &str = "ui.help.search.intro";
+pub(crate) const UI_HELP_SEARCH_LIMIT: &str = "ui.help.search.limit";
+pub(crate) const UI_HELP_SEARCH_NEWLINE: &str = "ui.help.search.newline";
+pub(crate) const UI_HELP_SEARCH_NEWLINE_RUN: &str = "ui.help.search.newline_run";
+pub(crate) const UI_HELP_SEARCH_OTHER_TOOLS: &str = "ui.help.search.other_tools";
+pub(crate) const UI_HELP_SEARCH_SINGLE_LINE: &str = "ui.help.search.single_line";
+pub(crate) const UI_HELP_SEARCH_SUGAR: &str = "ui.help.search.sugar";
 pub(crate) const UI_HELP_TERMINAL_ALT: &str = "ui.help.terminal.alt";
 pub(crate) const UI_HELP_TERMINAL_CHORD: &str = "ui.help.terminal.chord";
 pub(crate) const UI_HELP_TERMINAL_IME: &str = "ui.help.terminal.ime";
@@ -238,7 +251,7 @@ pub(crate) const UI_TOO_SMALL: &str = "ui.too_small";
 
 /// すべての定数 (キーの順。試験に使う)。
 #[cfg(test)]
-const ALL: [&str; 217] = [
+const ALL: [&str; 231] = [
     HINT_UI_CANCEL,
     INFO_APP_RELEASE_SUMMARY,
     INFO_APP_UPDATED,
@@ -296,6 +309,8 @@ const ALL: [&str; 217] = [
     INFO_SEARCH_REPLACE_EMPTY_QUERY,
     INFO_SEARCH_REPLACE_NO_MATCH,
     INFO_SEARCH_REPLACED,
+    INFO_SEARCH_REPLACED_LINES_ADDED,
+    INFO_SEARCH_REPLACED_LINES_REMOVED,
     INFO_SEARCH_WRAPPED_BACKWARD,
     INFO_SEARCH_WRAPPED_FORWARD,
     INFO_SWAP_APPLIED_READ_ONLY,
@@ -356,11 +371,12 @@ const ALL: [&str; 217] = [
     MSG_SAVE_TMP_NOT_REMOVED,
     MSG_SAVE_VERIFY_FAILED,
     MSG_SAVE_AS_SAME_FILE_READ_ONLY,
-    MSG_SEARCH_INVALID_REGEX,
     MSG_SEARCH_INVALID_REGEX_TEXT,
-    MSG_SEARCH_NEWLINE_UNSUPPORTED_TEXT,
+    MSG_SEARCH_MULTILINE_TOO_LARGE,
+    MSG_SEARCH_MULTILINE_TOO_LARGE_TEXT,
+    MSG_SEARCH_PATTERN_TOO_HEAVY,
+    MSG_SEARCH_PATTERN_TOO_HEAVY_TEXT,
     MSG_SEARCH_REPLACE_INVALID_REGEX,
-    MSG_SEARCH_REPLACE_NEWLINE_UNSUPPORTED,
     MSG_SEARCH_REPLACE_STALE,
     MSG_SWAP_CHANGED_SINCE_OFFER,
     MSG_SWAP_FOUND,
@@ -418,7 +434,18 @@ const ALL: [&str; 217] = [
     UI_HELP_SECTION_COMMANDS,
     UI_HELP_SECTION_INTRO,
     UI_HELP_SECTION_KEYS,
+    UI_HELP_SECTION_SEARCH,
     UI_HELP_SECTION_TERMINAL,
+    UI_HELP_SEARCH_ANCHORS,
+    UI_HELP_SEARCH_CLASS_NEWLINE,
+    UI_HELP_SEARCH_DOT_ALL,
+    UI_HELP_SEARCH_INTRO,
+    UI_HELP_SEARCH_LIMIT,
+    UI_HELP_SEARCH_NEWLINE,
+    UI_HELP_SEARCH_NEWLINE_RUN,
+    UI_HELP_SEARCH_OTHER_TOOLS,
+    UI_HELP_SEARCH_SINGLE_LINE,
+    UI_HELP_SEARCH_SUGAR,
     UI_HELP_TERMINAL_ALT,
     UI_HELP_TERMINAL_CHORD,
     UI_HELP_TERMINAL_IME,

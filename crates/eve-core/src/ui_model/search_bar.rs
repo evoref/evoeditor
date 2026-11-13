@@ -16,9 +16,9 @@ use crate::document::{Origin, Transaction, UndoGroupHint};
 use crate::jobs::cancel::CancelToken;
 use crate::jobs::{JobKind, JobResult};
 use crate::search::{
-    Case, LineSpan, Prepared, QueryError, SEARCH_SYNC_MULTILINE_MAX, ScanCtx, ScanEnd, ScanLimit,
-    SearchInternal, SearchQuery, Shape, build_replace_all_in, replace_one, replacement_for,
-    scan_bytes, scan_range, unescape_replacement,
+    Case, LineSpan, Prepared, QueryError, SEARCH_CONCAT_MAX_BYTES, SEARCH_SYNC_MULTILINE_MAX,
+    ScanCtx, ScanEnd, ScanLimit, SearchQuery, SearchTuning, Shape, build_replace_all_in,
+    replace_one, replacement_for, scan_bytes, scan_range, unescape_replacement,
 };
 use crate::time::Tick;
 use crate::ui_model::keys;
@@ -36,7 +36,8 @@ impl SearchBarState {
             .with_regex(self.regex)
             .with_whole_word(self.whole_word)
             .with_scope(self.in_selection.then(|| self.sel_ranges.clone()))
-            .with_internal(self.internal);
+            .with_newline_sugar(self.newline_sugar)
+            .tuned(self.tuning);
         let mut last = self.memo.query.borrow_mut();
         match &*last {
             Some(prev) if *prev == q => prev.clone(),
@@ -91,8 +92,10 @@ pub(crate) struct SearchBarState {
     /// 探さない理由 (行の数に上限の無い検索語と 16 MiB を超える文書・重すぎて打ち切った、03 §12.3.1 の「探さない場合」と
     /// 「最悪の入力の上限」)。構文の誤り (`error`) とは別の項目で、件数の位置に同じく示す。
     pub refusal: Option<ScanLimit>,
-    /// eve-core の内部の設定 (行をまたぐ検索を試験から開く。利用者の設定ではない)。
-    pub internal: SearchInternal,
+    /// 正規表現の `\n` の糖衣 (`search.newline_sugar`。検索バーを開いたときの設定の値、03 §12.3.1 の「型と状態の持ち主」)。
+    pub newline_sugar: bool,
+    /// 行の窓の核の大きさと連結の上限 (既定は定数。試験だけが小さくする、`SearchTuning`)。
+    pub tuning: SearchTuning,
     /// 入力しているときの検索の起点 (開いたときの選択の始端。一致へ移ったらその一致の始端)。
     pub anchor: ByteOff,
     /// 入力で見つかった、まだ選択していない現在の一致。
@@ -120,13 +123,15 @@ impl EditorState {
         self.find.search_bar.is_some()
     }
 
-    /// eve-core の内部の設定を変える (行をまたぐ検索を試験から開く。利用者の設定ではない、08 §2.5 の M24 の (2)・(3))。
-    /// 開いている検索バーにも効く (次の再検索から)。
+    /// 行の窓の核の大きさと連結の上限を試験から小さくする (feature `test-hooks` の口。配布ビルドには無い。既定の値より
+    /// 大きくはしない、`SearchTuning`)。開いている検索バーにも効く (次の再検索から)。
+    #[cfg(feature = "test-hooks")]
     #[doc(hidden)]
-    pub fn set_search_internal(&mut self, internal: SearchInternal) {
-        self.find.internal = internal;
+    pub fn set_search_tuning(&mut self, tuning: SearchTuning) {
+        let tuning = tuning.clamped();
+        self.find.tuning = tuning;
         if let Some(bar) = &mut self.find.search_bar {
-            bar.internal = internal;
+            bar.tuning = tuning;
         }
     }
 
@@ -158,7 +163,9 @@ impl EditorState {
             sel_ranges,
             error: None,
             refusal: None,
-            internal: self.find.internal,
+            // 設定の変更は次に検索バーを開いたときから効く (03 §12.3.1 の「型と状態の持ち主」)
+            newline_sugar: self.config().newline_sugar,
+            tuning: self.find.tuning,
             anchor,
             current: None,
             current_pending: false,
@@ -659,17 +666,19 @@ impl EditorState {
         let error = bar
             .error
             .as_ref()
-            .map(|e| match invalid_regex_reason(e) {
-                Some(reason) => render(keys::MSG_SEARCH_INVALID_REGEX_TEXT, &[("reason", reason)]),
-                None => render(keys::MSG_SEARCH_NEWLINE_UNSUPPORTED_TEXT, &[]),
+            .map(|e| {
+                render(
+                    keys::MSG_SEARCH_INVALID_REGEX_TEXT,
+                    &[("reason", invalid_regex_reason(e))],
+                )
             })
-            // 探さない理由も件数の位置に出す (03 §12.3.1。専用の文言は M24 の (4) で足すまで、不正な正規表現の文言に理由を入れる)
+            // 探さない理由も件数の位置に出す (text だけ。検索バーは hint を描かない、03 §12.3.1・04 §8.4)
             .or_else(|| {
                 bar.refusal.map(|l| {
-                    render(
-                        keys::MSG_SEARCH_INVALID_REGEX_TEXT,
-                        &[("reason", limit_reason(l))],
-                    )
+                    let (_, text_key, args) = limit_message(l);
+                    let args: Vec<(&str, &str)> =
+                        args.iter().map(|(k, v)| (*k, v.as_str())).collect();
+                    render(text_key, &args)
                 })
             })
             .map(|text| cell_text(&text, CutPolicy::End));
@@ -895,21 +904,28 @@ impl EditorState {
     }
 }
 
-/// 探さない理由の文言 (`msg.search.invalid_regex` の `{reason}` に入れる。専用のキー `msg.search.multiline_too_large` /
-/// `msg.search.pattern_too_heavy` は、行をまたぐ検索を利用者に開く M24 の (4) で足す。それまでは内部の設定で開いたときだけ出る)。
-fn limit_reason(l: ScanLimit) -> &'static str {
+/// 探さない理由の文言 (03 §12.3.1 の「探さない場合」と「最悪の入力の上限」、04 §15.2): (メッセージの基の名前, その `.text`
+/// のキー, 引数)。検索バーの件数の位置には `.text` だけを出し、次 / 前・置換ではメッセージ行に text と hint を出す。
+fn limit_message(l: ScanLimit) -> (&'static str, &'static str, Vec<(&'static str, String)>) {
     match l {
-        ScanLimit::TooLarge => "multi-line pattern over the document size limit",
-        ScanLimit::TooHeavy => "pattern too heavy",
+        ScanLimit::TooLarge => (
+            keys::MSG_SEARCH_MULTILINE_TOO_LARGE,
+            keys::MSG_SEARCH_MULTILINE_TOO_LARGE_TEXT,
+            vec![("mib", (SEARCH_CONCAT_MAX_BYTES >> 20).to_string())],
+        ),
+        ScanLimit::TooHeavy => (
+            keys::MSG_SEARCH_PATTERN_TOO_HEAVY,
+            keys::MSG_SEARCH_PATTERN_TOO_HEAVY_TEXT,
+            Vec::new(),
+        ),
     }
 }
 
-/// 正規表現が不正という誤りの理由 (構文エラーと大きさの上限の超過)。改行を含むパターン (`Multiline`) は `None`。
-fn invalid_regex_reason(e: &QueryError) -> Option<&str> {
+/// 正規表現が不正という誤りの理由 (構文エラーと大きさの上限の超過)。
+fn invalid_regex_reason(e: &QueryError) -> &str {
     match e {
-        QueryError::Syntax(reason) => Some(reason),
-        QueryError::TooLarge => Some("pattern too large"),
-        QueryError::Multiline => None,
+        QueryError::Syntax(reason) => reason,
+        QueryError::TooLarge => "pattern too large",
     }
 }
 
@@ -918,18 +934,11 @@ impl EditorState {
     /// 検索バーに出ている誤りと同じ内容をメッセージ行に出す (04 §8.4。何も置き換えない)。
     fn notify_unusable_query(&mut self, query: &SearchQuery) {
         match query.known_error() {
-            Some(e) => match invalid_regex_reason(&e) {
-                Some(reason) => self.show_message(
-                    MessageLevel::Warn,
-                    keys::MSG_SEARCH_REPLACE_INVALID_REGEX,
-                    &[("reason", reason)],
-                ),
-                None => self.show_message(
-                    MessageLevel::Warn,
-                    keys::MSG_SEARCH_REPLACE_NEWLINE_UNSUPPORTED,
-                    &[],
-                ),
-            },
+            Some(e) => self.show_message(
+                MessageLevel::Warn,
+                keys::MSG_SEARCH_REPLACE_INVALID_REGEX,
+                &[("reason", invalid_regex_reason(&e))],
+            ),
             None => self.show_message(
                 MessageLevel::Info,
                 keys::INFO_SEARCH_REPLACE_EMPTY_QUERY,
@@ -938,17 +947,20 @@ impl EditorState {
         }
     }
 
+    /// 探さない理由をメッセージ行に text と hint で出す (03 §12.3.1、04 §8.4)。
+    fn show_limit_message(&mut self, l: ScanLimit) {
+        let (key, _, args) = limit_message(l);
+        let args: Vec<(&str, &str)> = args.iter().map(|(k, v)| (*k, v.as_str())).collect();
+        self.show_message(MessageLevel::Warn, key, &args);
+    }
+
     /// 探さない理由があるので置換しなかった: メッセージ行に出し、検索バーにも示す (03 §12.3.1。何も置き換えない)。
     fn notify_limit(&mut self, l: ScanLimit) {
-        self.show_message(
-            MessageLevel::Warn,
-            keys::MSG_SEARCH_REPLACE_INVALID_REGEX,
-            &[("reason", limit_reason(l))],
-        );
+        self.show_limit_message(l);
         self.bar_set_refusal(l);
     }
 
-    /// 探さない理由があるので次 / 前をしなかった: メッセージ行に text と hint を出す (03 §12.3.1。専用のキーは M24 の (4))。
+    /// 探さない理由があるので次 / 前をしなかった: メッセージ行に text と hint を出す (03 §12.3.1)。
     pub(crate) fn notify_search_limit(&mut self) {
         let limit = self
             .find
@@ -957,11 +969,7 @@ impl EditorState {
             .and_then(|b| b.refusal)
             .or_else(|| self.find.search.as_ref().and_then(|s| s.limit()));
         if let Some(l) = limit {
-            self.show_message(
-                MessageLevel::Warn,
-                keys::MSG_SEARCH_INVALID_REGEX,
-                &[("reason", limit_reason(l))],
-            );
+            self.show_limit_message(l);
         }
     }
 
@@ -1442,14 +1450,31 @@ impl EditorState {
         if count >= REPLACE_COARSE_UNDO_MIN {
             tx = tx.with_coarse_undo();
         }
+        let lines_of = |st: &Self| {
+            st.docs
+                .documents
+                .get(&doc_id)
+                .map_or(0, |d| d.text().len_lines())
+        };
+        let before = lines_of(self);
         if self.apply_transaction(doc_id, tx).is_err() {
             self.show_message(MessageLevel::Warn, keys::MSG_SEARCH_REPLACE_STALE, &[]);
             return;
         }
+        // 件数に加えて、文書の行数の変化を言う (行をまたぐ置換は 1 件で多くの行を消しうる。上限の無い検索語は文書の残りを
+        // 「1 件」として消す。03 §12.3.1 の「置換」、04 §15.2 の `info.search.replaced`)
+        let after = lines_of(self);
+        let count_s = count.to_string();
+        let (key, lines) = match after.cmp(&before) {
+            std::cmp::Ordering::Less => (keys::INFO_SEARCH_REPLACED_LINES_REMOVED, before - after),
+            std::cmp::Ordering::Greater => (keys::INFO_SEARCH_REPLACED_LINES_ADDED, after - before),
+            std::cmp::Ordering::Equal => (keys::INFO_SEARCH_REPLACED, 0),
+        };
+        let lines_s = lines.to_string();
         self.show_message(
             MessageLevel::Info,
-            keys::INFO_SEARCH_REPLACED,
-            &[("count", &count.to_string())],
+            key,
+            &[("count", &count_s), ("lines", &lines_s)],
         );
         // 置換の文字列の私用文字を表記にしたことは、置換の件数の後に知らせる (黙って文字列にしない、03 §8.3.1)
         let pua = std::mem::take(&mut self.find.replace_all_pua).saturating_mul(count);

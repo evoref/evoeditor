@@ -59,12 +59,16 @@ pub use jobs::{
     ConfirmAsk, EscapeMergeApproval, EscapeMergeAt, JobError, JobKind, JobOutput, JobPorts,
     JobRequest, JobResult, JobSpawner, MetaPurpose, OpenNotes, Ports, SaveStrategy, run_job,
 };
+/// 行の窓の核の大きさと連結の上限を試験から小さくする口 (feature `test-hooks` のときだけ。配布ビルドには無い、03 §12.3.1)。
+#[cfg(feature = "test-hooks")]
+#[doc(hidden)]
+pub use search::SearchTuning;
 /// `fuzz_regex_search` の本体 (docs/09 §3.3)。cargo-fuzz のターゲットと、CI の proptest が同じ関数を使う。
 #[doc(hidden)]
 pub use search::fuzzing as search_fuzzing;
 pub use search::{
     Case, FindJob, LineSpan, Matcher, QueryError, QueryPlan, SEARCH_CONCAT_MAX_BYTES,
-    SEARCH_WINDOW_CORE_BYTES, ScanCtx, ScanEnd, ScanLimit, SearchInternal, SearchJob, SearchQuery,
+    SEARCH_WINDOW_CORE_BYTES, ScanCtx, ScanEnd, ScanLimit, SearchJob, SearchQuery,
     build_replace_all, build_replace_all_in, find_next, replace_one, replacement_for, run_search,
     scan_bytes, scan_range, unescape_replacement,
 };

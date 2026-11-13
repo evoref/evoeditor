@@ -492,6 +492,8 @@ no_selection = "There is no selection. Select text, then open the search bar"
 replace_empty_query = "Enter the text to search for"
 replace_no_match = "Nothing to replace"
 replaced = "Replaced {count} matches (undo restores them)"
+replaced_lines_added = "Replaced {count} matches; the document is {lines} lines longer (undo restores them)"
+replaced_lines_removed = "Replaced {count} matches; the document is {lines} lines shorter (undo restores them)"
 wrapped_backward = "Reached the start of the document, searching from the end"
 wrapped_forward = "Reached the end of the document, searching from the start"
 
@@ -844,17 +846,17 @@ text = "{path} has the read-only attribute and cannot be overwritten"
 hint = "Check that ( ) and [ ] are balanced"
 text = "✖ Invalid regular expression: {reason}"
 
-[msg.search.newline_unsupported]
-hint = "Search works line by line. Use a pattern within one line"
-text = "✖ Patterns that contain a newline are not supported"
+[msg.search.multiline_too_large]
+hint = "Limit the repetition to search, e.g. (?s).{{0,1000}}"
+text = "✖ Can't search: the pattern can span any number of lines (document over {mib} MiB)"
+
+[msg.search.pattern_too_heavy]
+hint = "Use smaller repetition counts or narrow down .*"
+text = "✖ The search was stopped because the pattern is too heavy"
 
 [msg.search.replace_invalid_regex]
 hint = "Check that ( ) and [ ] are balanced"
 text = "Nothing was replaced: invalid regular expression: {reason}"
-
-[msg.search.replace_newline_unsupported]
-hint = "Search works line by line. Use a pattern within one line"
-text = "Nothing was replaced: patterns that contain a newline are not supported"
 
 [msg.search.replace_stale]
 hint = "Stop typing and run it again"
@@ -1169,6 +1171,7 @@ error = "Error"
 intro = "Getting started"
 keys = "Keys"
 commands = "Commands"
+search = "Writing search patterns"
 terminal = "Terminal settings"
 
 [ui.help.intro]
@@ -1179,6 +1182,18 @@ palette = "Find and run any command from the command palette with {key:ui.palett
 [ui.help.keys]
 note = "Keys written like Ctrl+K S are pressed one after another. Several keys for one command are separated by commas"
 unreachable = "Keys marked * do not reach the editor in this terminal (use the command palette or another key)"
+
+[ui.help.search]
+intro = "Regular expressions in the search bar ([.*] on) can match across lines. Only the following forms, which spell out a line break, match line ends"
+newline = "One line break (LF, CRLF or CR)"
+class_newline = "A run of spaces and line breaks (a class with \\n as a member spans lines)"
+dot_all = "Any character or one line break (CRLF counts as one character)"
+single_line = "Do not span lines (match within one line)"
+newline_run = "A run of line breaks. \\r\\n+ does not match in a CRLF document"
+anchors = "Start / end of the document (^ and $ are the start / end of a line)"
+other_tools = "Write Vim's \\_s as [\\s\\n] and \\_. as (?s). Unlike ripgrep -U or VS Code, \\s and [^x] do not span lines"
+limit = "Patterns that can span any number of lines (such as (?s).* or \\n+) are searched only in documents up to 16 MiB (UTF-8 bytes). In larger documents, limit the repetition, e.g. (?s).{{0,1000}}"
+sugar = "With search.newline_sugar = false in the settings, \\n matches only LF line breaks (not CRLF)"
 
 [ui.help.terminal]
 ime = "While an IME is on, letter keys do not reach the confirmation dialog as accelerators. Choose with Tab or the arrow keys and Enter"

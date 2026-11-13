@@ -2,7 +2,7 @@
 //!
 //! 検索語は 1 行の入力欄から来るので改行を含まない。v0.3 までの一致は行をまたがないため、**行ごと**に走査する
 //! (チャンクの境界を気にしなくてよい)。一致は重ならないものを左から順に取り、両端が書記素境界でない候補は捨てる (§12.1)。
-//! 行をまたぎうる正規表現 (v0.4、§12.3.1) は行の窓と全文の連結 (`stream`) で探す (M24 の (4) までは内部の設定で開いたときだけ)。
+//! 行をまたぎうる正規表現 (v0.4、§12.3.1) は行の窓と全文の連結 (`stream`) で探す。
 //!
 //! 大小を区別しない照合の意味は Unicode の単純ケースフォールディング (`regex` の `(?i)` と同じ。`k` と K (U+212A)、
 //! `s` と `ſ` (U+017F) も一致する)。ASCII だけで `k` `K` `s` `S` を含まない検索語は ASCII の大小を畳み込んだ memmem で、
@@ -25,7 +25,7 @@ mod stream;
 
 pub use limits::{SEARCH_CONCAT_MAX_BYTES, SEARCH_WINDOW_CORE_BYTES};
 pub(crate) use limits::{SEARCH_FIND_WAIT_MS, SEARCH_SYNC_MULTILINE_MAX};
-pub use matcher::{Case, Matcher, QueryError, QueryPlan, SearchInternal, SearchQuery};
+pub use matcher::{Case, Matcher, QueryError, QueryPlan, SearchQuery, SearchTuning};
 pub(crate) use matcher::{Prepared, Shape};
 pub use replace::{
     build_replace_all, build_replace_all_in, replace_one, replace_one_job, replacement_for,
