@@ -327,7 +327,12 @@ pub(super) fn long_index(doc: &Document, line: usize) -> Option<(usize, std::rc:
     // 今の Revision に引き継がれなかった索引は使えないので捨てる (本文を変える経路はすべて `on_change` を通るので、
     // 残っていれば今の本文に対して正しい)。同じ行頭で長さの違う索引 (起きないはず) も捨てる
     entries.retain(|e| e.rev == rev && (e.ls != ls || e.ix.len() == le - ls));
-    if let Some(e) = entries.iter().find(|e| e.ls == ls && e.rule == rule) {
+    // spike (M25 の 6): 折り返し ON の索引も位置 ↔ 列の変換に使える (記録点は書記素の境界)。最も先まで作ったものを使う
+    if let Some(e) = entries
+        .iter()
+        .filter(|e| e.ls == ls && e.rule == rule)
+        .max_by_key(|e| e.ix.built_to_byte())
+    {
         return Some((ls, e.ix.clone()));
     }
     let ix = Rc::new(ColIndex::new(le - ls, CharWidth::new(esc, cfg)));
@@ -338,9 +343,86 @@ pub(super) fn long_index(doc: &Document, line: usize) -> Option<(usize, std::rc:
         rev,
         ls,
         rule,
+        wrap: None,
         ix: ix.clone(),
     });
     Some((ls, ix))
+}
+
+/// spike (M25 の 6): 行 `line` が長大行なら、折り返し ON の (行頭, 列の索引)。記録点は表示行の先頭にだけ置く。
+pub(super) fn long_wrap_index(
+    doc: &Document,
+    line: usize,
+    geom: super::WrapGeom,
+) -> Option<(usize, std::rc::Rc<ColIndex>)> {
+    use std::rc::Rc;
+    if !is_long_line(doc, line) {
+        return None;
+    }
+    let t = doc.text();
+    let l = LineIdx(line);
+    let (ls, le) = (t.line_to_byte(l).0, t.line_end_byte(l).0);
+    let esc = esc_enabled(doc);
+    let cfg = doc_width_config(doc);
+    let rule: LongRule = (esc, cfg.tab_width, cfg.ambiguous_wide);
+    let rev = doc.revision();
+    let mut cache = doc.layout_cache.borrow_mut();
+    let entries = &mut cache.long;
+    entries.retain(|e| e.rev == rev && (e.ls != ls || e.ix.len() == le - ls));
+    if let Some(e) = entries
+        .iter()
+        .find(|e| e.ls == ls && e.rule == rule && e.wrap == Some(geom))
+    {
+        return Some((ls, e.ix.clone()));
+    }
+    let ix = Rc::new(ColIndex::new_wrapped(
+        le - ls,
+        CharWidth::new(esc, cfg),
+        geom,
+    ));
+    if entries.len() >= LONG_CACHE_LINES {
+        entries.remove(0);
+    }
+    entries.push(LongEntry {
+        rev,
+        ls,
+        rule,
+        wrap: Some(geom),
+        ix: ix.clone(),
+    });
+    Some((ls, ix))
+}
+
+/// spike (M25 の 6): 長大行の、位置 `from` (書記素の境界) から `to` (バイト) の手前までの表示の単位 (折り返した表示行 1 本)。
+pub(super) fn long_units_range(
+    doc: &Document,
+    ls: usize,
+    ix: &ColIndex,
+    from: super::long::ColPoint,
+    to: usize,
+) -> Vec<Unit> {
+    let cfg = doc_width_config(doc);
+    let (esc, ws) = (esc_enabled(doc), doc.display.show_whitespace);
+    let tab = cfg.tab_width.max(1) as usize;
+    let t = doc.text();
+    let mut out = Vec::new();
+    ix.walk(t, ls, from, |at, g, w| {
+        if at.byte >= to {
+            return false;
+        }
+        out.push(match g.as_bytes() {
+            &[b @ 0x20..=0x7E] => Unit {
+                col: at.col,
+                parts: Parts::Char(char::from(b)),
+                width: w,
+                byte: at.byte,
+                risky: false,
+            },
+            _ => unit_slow(g, at.byte, at.col, tab, esc, ws, &cfg),
+        });
+        true
+    });
+    out
 }
 
 /// 長大行の、表示列 `left` から `left + cols` までにかかる書記素の表示の単位 (行全体は展開しない) と、行末がその範囲に

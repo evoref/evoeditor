@@ -836,16 +836,15 @@ impl EditorState {
             view.scroll.top = text.line_to_byte(LineIdx(top_line));
             // 折り返し: 先頭が同じ論理行のままなら表示行の番号を新しい行数に収め、動いたら行頭の表示行に戻す
             if view.scroll.wrap_idx > 0 {
-                // 長大行を含む文書は折り返さない (03 §11.5.1)
-                view.scroll.wrap_idx = if view.wrap.is_on()
-                    && document.format.long_lines == 0
-                    && top == view.scroll.top
-                {
+                // spike (M25 の 6): 長大行を含む文書も折り返す。行数は要るところまでだけ数える
+                view.scroll.wrap_idx = if view.wrap.is_on() && top == view.scroll.top {
                     let cols = crate::layout::wrap_width(document, viewport);
-                    let n = crate::layout::line_rows(document, top_line, view.wrap, cols).len();
-                    view.scroll
-                        .wrap_idx
-                        .min(u32::try_from(n.saturating_sub(1)).unwrap_or(u32::MAX))
+                    let lr = crate::layout::line_rows(document, top_line, view.wrap, cols);
+                    if lr.has_row(view.scroll.wrap_idx as usize) {
+                        view.scroll.wrap_idx
+                    } else {
+                        u32::try_from(lr.len().saturating_sub(1)).unwrap_or(u32::MAX)
+                    }
                 } else {
                     0
                 };

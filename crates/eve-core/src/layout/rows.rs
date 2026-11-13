@@ -43,80 +43,162 @@ pub(crate) fn wrap_width(doc: &Document, viewport: (u16, u16)) -> usize {
 }
 
 /// 折り返し ON の View の (設定, 折り返し幅)。OFF は `None` (移動とスクロールは論理行のまま)。
-/// 長大行を含む文書は、`view.wrap` の値に依らず折り返さない (03 §11.5.1)。
+/// spike (M25 の 6): 長大行を含む文書も折り返す (03 §14.4 の「長大行の折り返し」の試作)。
 pub(crate) fn wrap_ctx(state: &EditorState, view: ViewId) -> Option<(WrapSettings, usize)> {
     let v = state.view(view)?;
     if !v.wrap.is_on() {
         return None;
     }
     let d = state.document(v.doc)?;
-    if d.format.long_lines > 0 {
-        return None;
-    }
     Some((v.wrap, wrap_width(d, state.viewport())))
+}
+
+/// 折り返しの幾何 (長大行の索引の鍵)。
+pub(super) fn wrap_geom(doc: &Document, s: WrapSettings, cols: usize) -> super::WrapGeom {
+    super::WrapGeom {
+        cols,
+        word: s.mode == super::WrapMode::Word,
+        indent_same: s.indent_same,
+        kinsoku: s.kinsoku,
+        ws: doc.display.show_whitespace,
+    }
 }
 
 /// 1 論理行を表示行に分けた結果 (03 §14.3.1)。移動とスクロールが表示行を数えるのに使う。
 /// 位置はすべて行頭からのバイト位置 (`rel`)。
-pub(crate) struct LineRows {
+pub(crate) struct LineRows<'a> {
     /// 行頭の絶対バイト位置。
     pub ls: usize,
-    content_len: usize,
-    units: std::rc::Rc<Vec<Unit>>,
-    rows: Vec<wrap::WrapRow>,
+    kind: Kind<'a>,
 }
 
-pub(crate) fn line_rows(doc: &Document, line: usize, s: WrapSettings, cols: usize) -> LineRows {
+enum Kind<'a> {
+    Normal {
+        content_len: usize,
+        units: std::rc::Rc<Vec<Unit>>,
+        rows: Vec<wrap::WrapRow>,
+    },
+    /// spike (M25 の 6): 長大行は、索引の記録点 (表示行の先頭) から要るところだけ折り返す。
+    Long {
+        doc: &'a Document,
+        ix: std::rc::Rc<super::ColIndex>,
+    },
+}
+
+pub(crate) fn line_rows(doc: &Document, line: usize, s: WrapSettings, cols: usize) -> LineRows<'_> {
+    if s.is_on()
+        && let Some((ls, ix)) = super::units::long_wrap_index(doc, line, wrap_geom(doc, s, cols))
+    {
+        return LineRows {
+            ls,
+            kind: Kind::Long { doc, ix },
+        };
+    }
     let (ls, content) = line_content(doc, line);
     let units = units_for(doc, line, &content);
     let rows = wrap_line(&content, &units, cols, s);
     LineRows {
         ls,
-        content_len: content.len(),
-        units,
-        rows,
+        kind: Kind::Normal {
+            content_len: content.len(),
+            units,
+            rows,
+        },
     }
 }
 
-impl LineRows {
-    /// 表示行の数 (1 以上)。
+impl LineRows<'_> {
+    /// 表示行の数 (1 以上)。長大行では行末まで折り返す (重い)。数が要らないところは `has_row` を使う。
     pub fn len(&self) -> usize {
-        self.rows.len()
+        match &self.kind {
+            Kind::Normal { rows, .. } => rows.len(),
+            Kind::Long { doc, ix } => ix.row_count(doc.text(), self.ls),
+        }
     }
 
-    fn byte_of_unit(&self, i: usize) -> usize {
-        self.units.get(i).map_or(self.content_len, |u| u.byte)
+    /// 表示行 `r` があるか (長大行では要るところまでだけ折り返す)。
+    pub fn has_row(&self, r: usize) -> bool {
+        match &self.kind {
+            Kind::Normal { rows, .. } => r < rows.len(),
+            Kind::Long { doc, ix } => ix.has_row(doc.text(), self.ls, r),
+        }
     }
 
     /// 表示行 `r` の先頭 / 末尾 (次の表示行の先頭と同じ位置) のバイト位置。
     pub fn row_start(&self, r: usize) -> usize {
-        self.byte_of_unit(self.rows[r].first)
+        match &self.kind {
+            Kind::Normal {
+                content_len,
+                units,
+                rows,
+            } => units.get(rows[r].first).map_or(*content_len, |u| u.byte),
+            Kind::Long { doc, ix } => ix
+                .row_starts(doc.text(), self.ls, r, 0)
+                .0
+                .first()
+                .map_or(ix.len(), |p| p.byte),
+        }
     }
 
     pub fn row_end(&self, r: usize) -> usize {
-        self.byte_of_unit(self.rows[r].end)
+        match &self.kind {
+            Kind::Normal {
+                content_len,
+                units,
+                rows,
+            } => units.get(rows[r].end).map_or(*content_len, |u| u.byte),
+            Kind::Long { doc, ix } => ix
+                .row_starts(doc.text(), self.ls, r, 1)
+                .0
+                .get(1)
+                .map_or(ix.len(), |p| p.byte),
+        }
     }
 
     /// `rel` にあるカーソルの (表示行, 画面上の列 = 継続行のずらしを含む)。
     pub fn locate(&self, rel: usize, affinity: Affinity) -> (usize, usize) {
-        cursor_in_rows(&self.units, &self.rows, rel, affinity)
+        match &self.kind {
+            Kind::Normal { units, rows, .. } => cursor_in_rows(units, rows, rel, affinity),
+            Kind::Long { doc, ix } => {
+                ix.locate(doc.text(), self.ls, rel, affinity == Affinity::Before)
+            }
+        }
     }
 
     /// 表示行 `r` の画面上の列 `col` の位置 (セルの途中は前に寄せる)。行の幅を超えたら表示行の末尾で、
     /// 折り返し位置なら上の表示行の末尾 (`Before`) にとどめる。
     pub fn at_col(&self, r: usize, col: usize) -> (usize, Affinity) {
-        let row = self.rows[r];
-        let base = self.units.get(row.first).map_or(0, |u| u.col);
+        let (units, rows, content_len) = match &self.kind {
+            Kind::Normal {
+                content_len,
+                units,
+                rows,
+            } => (units, rows, *content_len),
+            Kind::Long { doc, ix } => {
+                let (rel, before) = ix.row_at_col(doc.text(), self.ls, r, col);
+                return (
+                    rel,
+                    if before {
+                        Affinity::Before
+                    } else {
+                        Affinity::After
+                    },
+                );
+            }
+        };
+        let byte_of_unit = |i: usize| units.get(i).map_or(content_len, |u| u.byte);
+        let row = rows[r];
+        let base = units.get(row.first).map_or(0, |u| u.col);
         let want = col.saturating_sub(row.indent) + base;
-        for u in &self.units[row.first..row.end] {
+        for u in &units[row.first..row.end] {
             if want < u.col + u.width {
                 return (u.byte, Affinity::After);
             }
         }
-        if r + 1 == self.rows.len() {
-            (self.content_len, Affinity::After)
+        if r + 1 == rows.len() {
+            (content_len, Affinity::After)
         } else {
-            (self.byte_of_unit(row.end), Affinity::Before)
+            (byte_of_unit(row.end), Affinity::Before)
         }
     }
 }
@@ -238,6 +320,23 @@ pub(super) fn build_row(
     gutter: Vec<Span>,
     part: Option<RowPart>,
 ) -> RowOut {
+    build_row_with(doc, line, left, cols, sel, heads, marks, gutter, part, None)
+}
+
+/// `build_row` の本体。`pre` は spike (M25 の 6) の、折り返した長大行の表示行 1 本分の単位と行の幅 (最後の表示行のとき)。
+#[allow(clippy::too_many_arguments)]
+pub(super) fn build_row_with(
+    doc: &Document,
+    line: usize,
+    left: usize,
+    cols: usize,
+    sel: &[(usize, usize)],
+    heads: &[usize],
+    marks: &Marks<'_>,
+    gutter: Vec<Span>,
+    part: Option<RowPart>,
+    pre: Option<(Vec<Unit>, usize)>,
+) -> RowOut {
     let t = doc.text();
     let (ls, le) = (
         t.line_to_byte(LineIdx(line)).0,
@@ -245,13 +344,18 @@ pub(super) fn build_row(
     );
     let has_terminator = t.line_terminator(LineIdx(line)).is_some();
     // 長大行 (折り返さない) は、見える範囲の書記素だけを単位にする (03 §14.4 の「使う側」の (a))
-    let long = long_index(doc, line);
-    let (body, long_width) = match &long {
-        Some((_, ix)) => {
+    let long = if pre.is_some() {
+        None
+    } else {
+        long_index(doc, line)
+    };
+    let (body, long_width) = match (&long, pre) {
+        (_, Some((us, width))) => (std::rc::Rc::new(us), Some(Some(width))),
+        (Some((_, ix)), None) => {
             let (us, width) = long_units(doc, ls, ix, left, cols);
             (std::rc::Rc::new(us), Some(width))
         }
-        None => (units_for(doc, line, &line_content(doc, line).1), None),
+        (None, None) => (units_for(doc, line, &line_content(doc, line).1), None),
     };
     let line_width = match long_width {
         // 長大行 (折り返さない) の幅は、行末の選択の印 (`total < win_end` のときだけ描く) にだけ使う。行末が窓より右なら

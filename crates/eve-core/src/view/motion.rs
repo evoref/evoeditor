@@ -170,7 +170,7 @@ fn step(
                 // まず表示行末 (折り返し位置では上の表示行の末尾)、すでに表示行末なら論理行末
                 let lr = line_rows(doc, line, s, cols);
                 let (r, _) = lr.locate(p.0 - ls, before);
-                if r + 1 < lr.len() && p.0 != ls + lr.row_end(r) {
+                if lr.has_row(r + 1) && p.0 != ls + lr.row_end(r) {
                     *aff = Affinity::Before;
                     return ByteOff(ls + lr.row_end(r));
                 }
@@ -202,7 +202,7 @@ fn step_rows(
     if going_up && line == 0 && r == 0 {
         return ByteOff(0);
     }
-    if !going_up && line == last_line && r + 1 == lr.len() {
+    if !going_up && line == last_line && !lr.has_row(r + 1) {
         return ByteOff(doc.text().len_bytes());
     }
     let g = *goal.get_or_insert(u32::try_from(col).unwrap_or(u32::MAX));
@@ -217,7 +217,7 @@ fn step_rows(
             } else {
                 break;
             }
-        } else if r + 1 < lr.len() {
+        } else if lr.has_row(r + 1) {
             r += 1;
         } else if line < last_line {
             line += 1;

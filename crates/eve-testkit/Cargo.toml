@@ -45,6 +45,11 @@ harness = false
 name = "bm_106"
 harness = false
 
+# spike (M25 の 6): 長大行の折り返しの判定 (09 §5.2 の BM-106w、03 §14.4 の「長大行の折り返し」)
+[[bench]]
+name = "bm_106w"
+harness = false
+
 # 回帰の検出 (命令数と wall-clock の A/B) の計測の本体。cargo xtask perf-diff が基準と比べる (docs/09 §5.4)
 [[bench]]
 name = "bm_instr"

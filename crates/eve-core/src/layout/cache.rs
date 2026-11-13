@@ -24,6 +24,8 @@ pub(super) struct LongEntry {
     /// 行頭の位置 (文書のバイト位置)。行の番号ではなく位置で引き継ぐ (前の行の増減で番号が変わっても使える)。
     pub ls: usize,
     pub rule: LongRule,
+    /// spike (M25 の 6): 折り返し ON の索引なら、その幾何。
+    pub wrap: Option<super::long::WrapGeom>,
     pub ix: Rc<ColIndex>,
 }
 

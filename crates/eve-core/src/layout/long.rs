@@ -25,6 +25,10 @@ use eve_text::{
 
 use super::is_plain_wide;
 
+mod wrapidx;
+pub(crate) use wrapidx::WrapGeom;
+use wrapidx::WrapState;
+
 /// 記録点の間隔 (バイト。03 §14.4 の `LONG_STEP`)。
 const STEP: usize = 4 * 1024;
 
@@ -221,6 +225,8 @@ struct Built {
     built_to: ColPoint,
     /// 行末 (行の内容のバイト長・表示幅・書記素の数)。行末まで走査したときだけ `Some`。
     end: Option<ColPoint>,
+    /// spike (M25 の 6): 折り返し ON の索引の状態 (記録点は表示行の先頭にだけ置く。`points` と同じ長さの行の番号など)。
+    wrap: Option<WrapState>,
 }
 
 /// 1 行の列の索引。位置はすべて行頭からのバイト。
@@ -232,6 +238,8 @@ pub(crate) struct ColIndex {
     step: usize,
     built: RefCell<Built>,
     rule: CharWidth,
+    /// spike (M25 の 6): 折り返しの幾何。`Some` なら記録点を表示行の先頭にだけ置く (03 §14.3 の表の「長大行」)。
+    geom: Option<WrapGeom>,
 }
 
 /// 走査の 1 片。
@@ -456,8 +464,10 @@ impl ColIndex {
                 points: vec![head],
                 built_to: head,
                 end: (len == 0).then_some(head),
+                wrap: None,
             }),
             rule,
+            geom: None,
         }
     }
 
@@ -477,6 +487,9 @@ impl ColIndex {
     /// `built_to` から先へ、`want` を満たす位置か行末まで走査し、記録点を足す。
     /// 記録点は「手前の記録点から `step` 以上進んだ最初の書記素の境界」なので、どこで止めて続けても同じ位置になる。
     fn extend(&self, text: &dyn TextRead, ls: usize, want: Want) {
+        if self.geom.is_some() {
+            return self.extend_wrapped(text, ls, wrapidx::WWant::from_want(want));
+        }
         let mut b = self.built.borrow_mut();
         if b.end.is_some() || want.done(b.built_to) {
             return;
@@ -485,6 +498,7 @@ impl ColIndex {
             points,
             built_to,
             end,
+            ..
         } = &mut *b;
         let step = self.step;
         // 記録点は `step` 以上離れるので、行全体でも `len / step + 1` 点。倍々に伸ばして余らせない
@@ -659,6 +673,10 @@ impl ColIndex {
     /// 行頭の記録点 (位置 0) は常に残す (`s` は 1 以上。`s == 0` の変更は呼び出し側が索引を捨てる)。
     /// 書記素の境界は「左の文脈と右の 1 文字」で決まるので、`s` より前の境界と、そこまでの表示列・書記素の数は変わらない。
     fn keep_before(&mut self, s: usize, len: usize) {
+        if self.geom.is_some() {
+            self.keep_before_wrapped(s, len);
+            return;
+        }
         let b = self.built.get_mut();
         b.points.retain(|p| p.byte == 0 || p.byte < s);
         if b.built_to.byte >= s {

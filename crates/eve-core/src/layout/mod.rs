@@ -26,7 +26,7 @@ mod long;
 pub(crate) mod theme;
 mod wrap;
 mod wrap_scroll;
-use long::{CharWidth, ColIndex};
+use long::{CharWidth, ColIndex, WrapGeom};
 pub use wrap::{Affinity, WrapMode, WrapSettings};
 use wrap::{cursor_in_rows, wrap_line};
 

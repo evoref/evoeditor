@@ -65,7 +65,7 @@ pub(crate) struct WrapRow {
 
 /// 行頭に来てはならない書記素 (行頭禁則の最小集合、OQ-57)。
 /// 文字列の `contains` ではなく `matches!` で引く (REF-08)。集合は試験で `NO_LINE_START` と照らす。
-fn no_line_start(c: char) -> bool {
+pub(super) fn no_line_start(c: char) -> bool {
     if c.is_ascii() {
         return false;
     }
@@ -122,14 +122,14 @@ fn no_line_start(c: char) -> bool {
 }
 
 /// 行末に来てはならない書記素 (行末禁則の最小集合、OQ-57)。集合は試験で `NO_LINE_END` と照らす。
-fn no_line_end(c: char) -> bool {
+pub(super) fn no_line_end(c: char) -> bool {
     matches!(
         c,
         '（' | '［' | '｛' | '〔' | '〈' | '《' | '「' | '『' | '【' | '(' | '[' | '{'
     )
 }
 
-fn is_space(c: char) -> bool {
+pub(super) fn is_space(c: char) -> bool {
     c == ' ' || c == '\t'
 }
 

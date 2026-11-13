@@ -97,6 +97,84 @@ fn wrapped_rows(
             });
             continue;
         }
+        // spike (M25 の 6): 長大行は、索引の記録点から画面の分の表示行だけを折り返す
+        if let Some((ls, ix)) =
+            super::units::long_wrap_index(doc, line, super::rows::wrap_geom(doc, view.wrap, wrap_cols))
+        {
+            let le = t.line_end_byte(LineIdx(line)).0;
+            let want = rows - out_rows.len();
+            let (starts, at_end) = ix.row_starts(t, ls, widx, want);
+            let k = starts.len().saturating_sub(1);
+            let here: Vec<usize> = heads
+                .iter()
+                .copied()
+                .filter(|&h| h >= ls && h <= le)
+                .collect();
+            let located: Vec<(usize, usize, usize)> = here
+                .iter()
+                .map(|&h| {
+                    let aff = if h == primary_head {
+                        view.cursor_affinity
+                    } else {
+                        Affinity::After
+                    };
+                    let (cr, cc) = ix.locate(t, ls, h - ls, aff == Affinity::Before);
+                    (h, cr, cc)
+                })
+                .collect();
+            for j in 0..k {
+                let r = widx + j;
+                let (from, to) = (starts[j], starts[j + 1]);
+                let last = at_end && j + 1 == k;
+                let units = super::units::long_units_range(doc, ls, &ix, from, to.byte);
+                let gutter = if r == 0 {
+                    gutter_spans(line, gw, line_number_style(marks.styles, line, cursor_line))
+                } else if gw > 0 {
+                    vec![Span {
+                        text: " ".repeat(gw as usize),
+                        width: gw,
+                        style: marks.styles.line_number,
+                    }]
+                } else {
+                    Vec::new()
+                };
+                let part = RowPart {
+                    first: 0,
+                    end: units.len(),
+                    indent: ix.row_indent(t, ls, r),
+                    wrap_idx: super::index_u32(r),
+                    last,
+                };
+                let ro = super::rows::build_row_with(
+                    doc,
+                    line,
+                    0,
+                    text_cols,
+                    sel,
+                    &[],
+                    marks,
+                    gutter,
+                    Some(part),
+                    Some((units, to.col)),
+                );
+                for &(h, cr, cc) in &located {
+                    if cr == r && cc < text_cols {
+                        let pos = CellPos {
+                            col: gw.saturating_add(super::cells_u16(cc)),
+                            row: super::cells_u16(out_rows.len()),
+                        };
+                        cursors.push(pos);
+                        if h == primary_head {
+                            primary = Some(pos);
+                        }
+                    }
+                }
+                out_rows.push(ro.row);
+            }
+            line += 1;
+            widx = 0;
+            continue;
+        }
         let (ls, content) = line_content(doc, line);
         let le = t.line_end_byte(LineIdx(line)).0;
         let us = units_for(doc, line, &content);
@@ -207,8 +285,8 @@ pub(crate) fn build_frame(
         styles: &styles,
     };
     let cursor_line = t.byte_to_line(view.selection.primary().head).0;
-    // 長大行を含む文書は折り返さない (`view.wrap` の値は変えない。03 §11.5.1)
-    let (out_rows, cursors, primary) = if view.wrap.is_on() && doc.format.long_lines == 0 {
+    // spike (M25 の 6): 長大行を含む文書も折り返す
+    let (out_rows, cursors, primary) = if view.wrap.is_on() {
         wrapped_rows(
             doc,
             view,
