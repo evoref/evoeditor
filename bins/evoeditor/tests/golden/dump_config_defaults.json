@@ -29,6 +29,10 @@
   "ui.which_key_delay_ms": 500,
   "search.newline_sugar": true,
   "search.cp932_compat_fold": true,
+  "search.case": "smart",
+  "search.regex_default": false,
+  "search.max_matches": 10000,
+  "search.count_limit": 1000000,
   "clipboard.osc52": "auto",
   "clipboard.osc52_max_bytes": 100000
 }

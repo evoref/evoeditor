@@ -173,6 +173,16 @@ config_enum! {
         Space = "space",
     }
 
+    /// 検索の大文字小文字の区別の既定 (`search.case`、03 §12.1、07 §5.5)。
+    SearchCase {
+        /// 検索語に大文字を含めば区別し、含まなければ区別しない (既定)。
+        Smart = "smart",
+        /// いつも区別する。
+        Sensitive = "sensitive",
+        /// いつも区別しない。
+        Insensitive = "insensitive",
+    }
+
     /// Backspace の削除の単位 (`editor.backspace_unit`、03 §13.1、OQ-45)。
     BackspaceUnit {
         /// 書記素クラスタ単位 (既定)。
@@ -449,6 +459,17 @@ config_keys! {
     /// `search.cp932_compat_fold`: CP932 互換文字 (〜/～ など 8 組) を検索で同一視する (docs/03 §12.4.1)。
     /// 検索バーを開いたときの値で効く。
     cp932_compat_fold: bool = true, "search.cp932_compat_fold", boolean;
+    /// `search.case`: 検索バーを開いたときの大文字小文字の区別 (docs/03 §12.1。`search.toggle_case` で巡回)。
+    /// 検索バーを開いたときの値で効く。
+    search_case: SearchCase = SearchCase::Smart, "search.case", choice;
+    /// `search.regex_default`: 検索バーを開いたときに正規表現のモードにするか (docs/03 §12.1。`search.toggle_regex` で切り替え)。
+    /// 検索バーを開いたときの値で効く。
+    regex_default: bool = false, "search.regex_default", boolean;
+    /// `search.max_matches`: 保持する一致の上限 (docs/03 §12.2)。検索バーを開いたときの値で効く。
+    max_matches: u32 = 10_000, "search.max_matches", int(100, 1_000_000);
+    /// `search.count_limit`: 一致の件数を数える上限 (FR-404、docs/03 §12.2)。超えたら打ち切って「N+」と出す。
+    /// 検索バーを開いたときの値で効く。
+    count_limit: u64 = 1_000_000, "search.count_limit", int(1_000, 1_000_000_000);
 }
 
 /// 読込の結果。

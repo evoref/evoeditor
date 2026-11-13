@@ -250,6 +250,10 @@ mod tests {
                 "ui.which_key_delay_ms",
                 "search.newline_sugar",
                 "search.cp932_compat_fold",
+                "search.case",
+                "search.regex_default",
+                "search.max_matches",
+                "search.count_limit",
                 "clipboard.osc52",
                 "clipboard.osc52_max_bytes",
             ]
