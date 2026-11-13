@@ -430,6 +430,15 @@ impl EditorState {
             .is_some_and(|t| self.now.saturating_sub(t) >= Millis(SEARCH_FIND_WAIT_MS))
     }
 
+    /// 件数の表示の現在の一致 (`search_count_for` が番号を出す一致) の範囲。
+    pub(crate) fn search_current_range(&self, probe: Option<ByteRange>) -> Option<ByteRange> {
+        let s = self.find.search.as_ref()?;
+        if !self.search_fresh() || s.job.is_some() || s.limit.is_some() {
+            return None;
+        }
+        self.search_current_index(probe).map(|i| s.matches[i])
+    }
+
     /// 選択が保持した一致のどれかと一致していれば、その位置。一部しか持っていないときは求めない。
     fn search_current_index(&self, probe: Option<ByteRange>) -> Option<usize> {
         let s = self.find.search.as_ref()?;

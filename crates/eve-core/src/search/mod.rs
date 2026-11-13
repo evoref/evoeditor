@@ -28,8 +28,8 @@ pub(crate) use limits::{SEARCH_FIND_WAIT_MS, SEARCH_SYNC_MULTILINE_MAX};
 pub use matcher::{Case, Matcher, QueryError, QueryPlan, SearchQuery, SearchTuning};
 pub(crate) use matcher::{Prepared, Shape};
 pub use replace::{
-    build_replace_all, build_replace_all_in, replace_one, replace_one_job, replacement_for,
-    unescape_replacement,
+    ReplaceAllBuilt, build_replace_all, build_replace_all_in, replace_one, replace_one_job,
+    replacement_for, unescape_replacement,
 };
 pub use rewrite::LineSpan;
 #[cfg(test)]

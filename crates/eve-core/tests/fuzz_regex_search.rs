@@ -44,6 +44,8 @@ fn case(pattern: &str, doc: &str) -> RegexCase {
         case: Case::Sensitive,
         whole_word: false,
         sugar: true,
+        compat_fold: true,
+        compat_ref: pattern.to_owned(),
         scope: None,
         core_bytes: 1,
         concat_max: SEARCH_CONCAT_MAX_BYTES,
@@ -117,27 +119,75 @@ fn 固定の例は核の大きさに依らず参照と一致する() {
     assert_eq!(compared, 24 * 11 * 8 * 2);
 }
 
+/// 固定の例 (CP932 互換文字の同一視、03 §12.4.1): 互換文字の部品を含む検索語が、同一視 ON / OFF のどちらでも、核の大きさに
+/// 依らず 1 つ目の参照 (全文の連結) と同じで、ON では 2 つ目の参照 (組をそろえた文書で `compat_reference` の形の検索語を
+/// 同一視 OFF で探したもの) とも同じ。
+// verifies: FR-401
+#[test]
+fn 互換文字の同一視の固定の例は参照と一致する() {
+    use eve_core::search_fuzzing::compat_reference;
+    // (検索語, 互換文字の部品) の組。2 つ目の参照の検索語は、部品を `compat_reference` の形に置き換えて作る
+    let pats: [(&str, &[&str]); 8] = [
+        ("〜", &["〜"]),
+        ("a～", &["～"]),
+        (r"[^～]\n", &["[^～]"]),
+        (r"\p{Sm}+", &[r"\p{Sm}"]),
+        (r"\P{Sm}\n\P{Sm}", &[r"\P{Sm}"]),
+        (r"(〜)\n(?P<g1>―)", &["〜", "―"]),
+        (r"\x{FF0D}|¢", &[r"\x{FF0D}", "¢"]),
+        (r"\b−\w", &["−"]),
+    ];
+    let docs = [
+        "a〜\n～b",
+        "a～\r\n―b\n〜\r\n—",
+        "−1 －2\n¢ ￠",
+        "¥￥‾￣\\~\n～〜",
+        "〜\u{301}～",
+    ];
+    let mut compared = 0;
+    for (p, atoms) in pats {
+        let mut r = p.to_owned();
+        for a in atoms {
+            r = r.replace(a, &compat_reference(a));
+        }
+        for d in docs {
+            for core in [1, 2, 3, 7, 40, 1 << 20] {
+                for (fold, ww) in [(true, false), (false, false), (true, true)] {
+                    let mut c = case(p, d);
+                    c.core_bytes = core;
+                    c.compat_fold = fold;
+                    c.compat_ref = r.clone();
+                    c.whole_word = ww;
+                    match check(&c) {
+                        Ok(Checked::Compared) => compared += 1,
+                        Ok(Checked::Skipped(why)) => panic!("{p:?} / {d:?}: 比べなかった ({why})"),
+                        Err(e) => panic!("{e}"),
+                    }
+                }
+            }
+        }
+    }
+    assert_eq!(compared, 8 * 5 * 6 * 3);
+    // 部品の参照の形 (そろえた文書の上での意味)
+    assert_eq!(compat_reference("～"), "(?:～|[〜])");
+    assert_eq!(compat_reference("〜"), "〜");
+    assert_eq!(compat_reference("[^～]"), "[^～〜]");
+    assert_eq!(compat_reference(r"\p{Sm}"), r"(?:\p{Sm}|[〜‖])");
+    assert_eq!(compat_reference(r"\P{Sm}"), r"[^\p{Sm}〜‖]");
+    assert_eq!(compat_reference("¥"), "¥");
+}
+
 /// 回帰: 単語単位の `([\s\n])` で、行の途中の正本の位置 (一致の終端 8) から探すと、窓が行頭へ戻って次の行まで含み、
 /// 上限 (21 バイト) を超えて「探さない」になっていた (正本の走査は探せる。末尾からの次 (折り返し) が `None` だった)。
 /// proptest が見つけた入力 (バイト列) と、同じ文書で単語単位・糖衣・核の大きさ・上限を変えたもの。
 // verifies: FR-402
 #[test]
 fn 行の途中の正本の位置からの次と前は窓の上限で探さないとしない() {
-    let mut data: Vec<u8> = vec![
-        12, 41, 21, 135, 0, 246, 213, 0, 42, 0, 79, 0, 29, 0, 73, 0, 6, 0, 210, 0, 87, 0, 253, 0,
-        162, 0, 58, 0, 216, 0, 96, 0, 96, 0,
-    ];
-    data.resize(160, 0);
-    let c = decode(&data);
-    assert_eq!(
-        (
-            c.pattern.as_str(),
-            c.doc.as_str(),
-            c.whole_word,
-            c.concat_max
-        ),
-        (r"([\s\n])", "é\u{212A}a1\t\ra\u{212A}σaé\r\n\r\n", true, 21)
-    );
+    // proptest が見つけた入力を decode した値を直接書く (M24 の (5) で入力の読み方が変わり、同じバイト列では同じ例に
+    // ならないため)
+    let mut c = case(r"([\s\n])", "é\u{212A}a1\t\ra\u{212A}σaé\r\n\r\n");
+    (c.case, c.whole_word, c.sugar, c.core_bytes, c.concat_max) = (Case::Smart, true, false, 2, 21);
+    c.splits = vec![];
     assert_eq!(check(&c), Ok(Checked::Compared));
     for core in [1, 2, 3, 5, 8, 13, 40] {
         for ww in [false, true] {

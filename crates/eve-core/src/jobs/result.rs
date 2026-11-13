@@ -222,6 +222,8 @@ pub enum JobResult {
         changes: eve_text::ChangeSet,
         /// 置換する件数。
         count: u64,
+        /// そのうち CP932 互換文字の同一視で当たった件数 (03 §12.4.1。知らせを分ける)。
+        folded: u64,
     },
     /// 読込の進捗 (03 §9.2 手順 3)。開く操作から 50 ms 以内に最初の 1 件を送り、以後は 10 Hz 以下。終わりではない。
     Progress {

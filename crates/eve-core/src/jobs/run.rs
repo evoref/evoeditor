@@ -133,7 +133,11 @@ pub fn run_job(
             Some(&*ports.clock),
             cancel,
         ) {
-            Ok(Some((changes, count))) => JobResult::ReplaceAllDone { changes, count },
+            Ok(Some(b)) => JobResult::ReplaceAllDone {
+                changes: b.changes,
+                count: b.count,
+                folded: b.folded,
+            },
             Ok(None) => JobResult::Failed {
                 err: JobError::Cancelled,
             },

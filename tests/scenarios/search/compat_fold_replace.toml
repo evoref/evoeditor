@@ -1,0 +1,91 @@
+# 互換文字の同一視ですべて置換すると、置換の文字列は書いたまま入り (`～` も置き換わる)、知らせは同一視で当たった件数を
+# 分けて言う。`〜` を `～` にそろえる置換は、もとから `～` だった箇所を置き換えず数えない。`¥` と `￥` は同一視しない
+# (01 FR-401 AC-5、03 §12.4.1 の「置換」、§12.5)。
+[meta]
+id = "search/compat_fold_replace"
+title = "互換文字のすべて置換は書いたまま入れ、同一視で当たった件数を分けて知らせる"
+verifies = ["AC-FR-401-5"]
+since = "v0.4"
+tags = ["search", "compat", "replace"]
+
+[setup]
+size = [80, 12]
+
+[setup.fs]
+"a.txt" = { text = "a〜b～c〜\n¥1￥2\nx〜y～" }
+
+[[step]]
+open = "a.txt"
+[[step]]
+run_jobs = true
+[[step]]
+keys = "ctrl+r"
+[[step]]
+text = "〜"
+[[step]]
+keys = "tab"
+[[step]]
+text = "-"
+[[step]]
+keys = "alt+a"
+[[step]]
+run_jobs = true
+[[step]]
+keys = "esc"
+[[step]]
+keys = "ctrl+r"
+[[step]]
+keys = "ctrl+a"
+[[step]]
+text = "¥"
+[[step]]
+keys = "tab"
+[[step]]
+keys = "ctrl+a"
+[[step]]
+text = "Y"
+[[step]]
+keys = "alt+a"
+[[step]]
+run_jobs = true
+[[step]]
+keys = "esc"
+[[step]]
+keys = "ctrl+r"
+[[step]]
+keys = "ctrl+a"
+[[step]]
+text = "-"
+[[step]]
+keys = "tab"
+[[step]]
+keys = "ctrl+a"
+[[step]]
+text = "-"
+[[step]]
+keys = "alt+a"
+[[step]]
+run_jobs = true
+
+# 5 件を置換し、そのうち 2 件 (もとの `～`) が同一視で当たった
+[[assert]]
+at = 8
+query = { kind = "text" }
+expect = { text = "a-b-c-\n¥1￥2\nx-y-" }
+[[assert]]
+at = 8
+frame_contains = ["5 件を置換しました (互換文字の同一視で一致したのは 2 件。元に戻すで戻せます)"]
+# `¥` は `￥` に一致しない (同一視しない組)
+[[assert]]
+at = 17
+query = { kind = "text" }
+expect = { text = "a-b-c-\nY1￥2\nx-y-" }
+[[assert]]
+at = 17
+frame_contains = ["1 件を置換しました (元に戻すで戻せます)"]
+# 置換しても文字が変わらない一致 (`-` を `-` に) は置き換えない
+[[assert]]
+query = { kind = "text" }
+expect = { text = "a-b-c-\nY1￥2\nx-y-" }
+[[assert]]
+frame_contains = ["置換する箇所はありません"]
