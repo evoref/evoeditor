@@ -518,7 +518,7 @@ struct SaveOptions {
     hardlink: HardlinkPolicy,      // nlink > 1 のとき。既定値は 07 §5 (OQ-73 で Ask に確定)
     clear_readonly: bool,          // 「読み取り専用を解除して保存」(FR-116 / FR-106): 保存先の読み取り専用属性を置換の直前に外し、置換の後に付け直す (05 §4.2 の手順 5b)
     create_link_target: bool,      // 保存先がダングリングのシンボリックリンクなら、リンク先に新規作成する (リンクは保つ。FR-106、05 §4.1)。確認を経た保存だけが立てる
-    backup: BackupPolicy,          // 予約 (v0.4、FR-119 の「保存前の版を 1 世代残す」)。v0.1 / v0.2 は常に None。in_place_backup とは別物
+    backup: BackupPolicy,          // 予約 (v0.5 以降、FR-119 の「保存前の版を 1 世代残す」)。v0.1 / v0.2 は常に None。in_place_backup とは別物
 }
 enum InPlaceBackup {               // SaveOptions.in_place_backup。write_in_place の事前バックアップ (05 §4.4 手順 4) の扱い。write_atomic は見ない
     Required,                      // 既定。事前バックアップを作る (作れなければ書かずに BackupFailed)。保存中フラグに backup と backup_recorded = true を記録する
@@ -535,7 +535,7 @@ struct PreserveAttrs {             // 置換で保つ属性。既定はすべて
     security: bool,                // Windows の ACL (ReplaceFileW が保つ)、Unix のモード・所有者 (macOS / Linux を出荷する版)
     streams_xattr: bool,           // Windows の ADS (ReplaceFileW が保つ)、Unix の xattr・POSIX ACL (macOS / Linux を出荷する版)
 }
-enum BackupPolicy { None /*v0.1 / v0.2 は常にこれ*/, KeepPrevious /*予約 (v0.4、FR-119): 保存前の版を 1 世代残す。置き場所と名前は v0.4 で 05 が定める*/ }
+enum BackupPolicy { None /*v0.1 / v0.2 は常にこれ*/, KeepPrevious /*予約 (v0.5 以降、FR-119): 保存前の版を 1 世代残す。置き場所と名前は入れる版 (v0.5 以降) で 05 が定める*/ }
 #[non_exhaustive]
 enum SaveWarning {                 // 保存は成功したが知らせること。core はメッセージで示す (保存の結果は成功のまま)
     InflightFlagNotWritten,        // 保存中フラグを書けなかった (下表「原子性の主張」)。write_atomic でだけ返す (警告して保存は続けた)。
@@ -1775,7 +1775,7 @@ enum JobError {                    // #[non_exhaustive]
 順序の要点: **設定読込 (`Host::new`) → `Frontend::init(&FrontendConfig)` (端末初期化と Capabilities の判定) → `Editor::new(ports, config, caps)` → `start_input` → `Editor::open_initial` → 最初の Frame** (`Frontend::init` 以降は `Host::start`)。bin は `Host::new(args)?.run(&mut frontend)` を呼ぶだけで (`Host::new` は `HostBuilder` の既定の組み立て、§9.2)、`run` は `start` の後にループに入る。外部のループで駆動する場合は `start` を呼んでからそのループで `step` を呼ぶ (§9.2)。
 
 1. 引数解析 (軽量パーサ)。`--version` / `--help` はここで終了。
-2. 設定読込 (**メインスレッドで同期**。ADR-0020 の例外。数 KB の TOML、予算 ≤ 2 ms (p50。テーマの段の解決と同梱の言語ファイルの読込を含む。07 §3.2、09 BM-101a の内訳と同じ)、正規表現は遅延コンパイル。エラーは保留して後で表示)。テーマ解決で 4 段の Style 表を作る (色の数はたかだか数十)。保留した診断は `Editor::new` の直後に `Editor::report(HostReport::ConfigDiagnostics(..))` で core に渡し、core が最初の Frame の後に示す (§5.4、07 §4.3)。
+2. 設定読込 (**メインスレッドで同期**。ADR-0020 の例外。数 KB の TOML、予算 ≤ 2 ms (p50。テーマの段の解決と同梱の言語ファイルの読込を含む。07 §3.2、09 BM-101a の内訳と同じ。v0.4 のユーザーの言語ファイル (07 §17.4) も、選んだ言語のものだけをここで読み、同梱の文言に重ねる。全訳のファイルでの増分は 1 ms 以下が目安 (参考値)。最悪の場合 (上限の 1 MiB のファイルで、診断が 1 ファイルの上限の 100 件と「ほか N 件」に達する) でも、読込・検査・重ね合わせは 20 ms 以内を目安とし (参考値。BM-101a の参考の行で測る)、起動は止めない。ファイルの一覧・開き方・上限は 07 §17.4)、正規表現は遅延コンパイル。エラーは保留して後で表示)。テーマ解決で 4 段の Style 表を作る (色の数はたかだか数十)。保留した診断は `Editor::new` の直後に `Editor::report(HostReport::ConfigDiagnostics(..))` で core に渡し、core が最初の Frame の後に示す (§5.4、07 §4.3)。
    - **大きすぎる設定と遅い設定ディレクトリへの備え** (提案、OQ-190): (a) `config.toml` が **1 MiB** を超えたら読まずに (内容を解析せず) 診断を 1 件出し、ユーザー層を欠いた状態 (既定値) で起動する (数 KB を想定した 2 ms の予算と NFR-101 を守る。TOML 構文エラーと同じ「そのファイルを無視」の扱い、07 §3.3)。(b) 設定の読込を `io` ワーカーのジョブで行い、メインは最大 **200 ms** だけ待つ。間に合わなければ既定値で起動を続け、届いた時点で反映する (ネットワーク上のホーム・`EVE_CONFIG_DIR` で読込が止まっても起動が止まらない)。後から反映するときは、`FrontendConfig` に載る項目 (`Frontend::init` に渡し済み) だけは次の起動から効くことを診断で示す。(b) を採るなら §4.4 規則 4 の例外 (メインスレッドでの同期の読込) は不要になる。
 3. ログの準備 (購読者の登録だけ。**ファイルを開く・state_dir を作るのは最初の warn 以上のイベントまで遅延**。既定レベル warn。`EVE_LOG` は単純なレベル名のみ受理)。
 4. `Frontend::init(&FrontendConfig)` で端末初期化 (raw モード、代替スクリーン、ブラケットペースト (Unix のみ。Windows は送らない)。拡張キーボードプロトコル (kitty keyboard protocol) の有効化は v0.2 で入れ、そのときも **問い合わせず無条件に push** する。v0.1 は push しない (ADR-0039、01 FR-606))。端末への能力問い合わせは起動経路で行わない (応答待ちが NFR-101 を圧迫し、応答の解析が入力ストリームと混ざるため)。能力は受信したイベントの形式から後で判明し `CapabilitiesChanged` で core に伝える。色深度は `theme.color_mode` と環境変数だけで判定する (04 §5)。`init` が返した Capabilities で `Editor::new` を呼ぶ。`init` の直後に `Frontend::emergency_restore_info()` を取得して保持する (受信スレッドが使う、§9.6)。Unix では、同じ値で異常終了のシグナル (SIGSEGV など) のハンドラ `term::install_crash_restore` も付ける (端末の復元だけを行う、05 §11.1)。
@@ -2170,7 +2170,7 @@ sensitive = false                     # 任意 (無ければ false)。秘密フ�
 | 権限 | eve-core | 02 §10.4 (骨子) → 06 (AI)、07 (プラグイン) |
 | `EmergencySnapshot`、緊急退避の manifest | eve-host | 02 §11.2.1 (方式とスキーマの正本) → 05 (OS 別の書き手・配置・命名)、03 §10.1 (core 側の契約) |
 | 設定値の型 (`ResolvedConfig`、テーマの 4 段 Style 表) | eve-config | 07 |
-| UI 文言 (`MessageKey` と同梱の言語ファイル。v0.1 は `ja` のみ) | `MessageKey` の型: eve-core (Frame には解決済みの文字列だけが入る、§8.2)。同梱の言語ファイル (`include_str!`) の解析・検証: eve-config。MessageKey → 文字列の解決: eve-core (Frame 生成時)。v0.1 は言語を `ja` に固定し、言語の選択 (eve-config) と OS ロケールの検出 (eve-platform、05 §6.1) は英語 UI を同梱する v0.2 で入れる (確定 (ユーザー回答)、OQ-21)。言語を足すときは言語ファイルを足すだけで、MessageKey と解決の経路は変えない。起動前・パニック時の stderr の文言 (v0.1 は `ja` のみ。英語 (ASCII) の行の併記は v0.2、OQ-67、01 §4.6): eve-host の定数表。core が出す stderr の行は `StderrLine` (キーと引数) で渡し、文言の解決は eve-host が行う (§6.3) | 07 §17 (書式・選択順・翻訳対象)、01 NFR-603 |
+| UI 文言 (`MessageKey` と同梱の言語ファイル。v0.1 は `ja` のみ) | `MessageKey` の型: eve-core (Frame には解決済みの文字列だけが入る、§8.2)。同梱の言語ファイル (`include_str!`) の解析・検証: eve-config。MessageKey → 文字列の解決: eve-core (Frame 生成時)。v0.1 は言語を `ja` に固定し、言語の選択 (eve-config) と OS ロケールの検出 (eve-platform、05 §6.1) は英語 UI を同梱する v0.2 で入れる (確定 (ユーザー回答)、OQ-21)。言語を足すときは言語ファイルを足すだけで、MessageKey と解決の経路は変えない。v0.4 のユーザーの言語ファイル (`<config_dir>/locales/<lang>.toml`、07 §17.4): 読むのは bin (起動時に 1 回。`config.reload` では読み直さない)、検査と同梱の文言への重ね合わせは eve-config (I/O をしない。検査は `xtask i18n` と同じ関数)、core は重ねた表 (`Arc`) を持って解決する。言語ファイルの診断の文言と、端末を戻した後に bin が stderr へ出す行は、同梱の表だけで解決する (07 §17.4 の「重ねた表を使わないもの」)。起動前・パニック時の stderr の文言 (v0.1 は `ja` のみ。英語 (ASCII) の行の併記は v0.2、OQ-67、01 §4.6): eve-host の定数表。core が出す stderr の行は `StderrLine` (キーと引数) で渡し、文言の解決は eve-host が行う (§6.3) | 07 §17 (書式・選択順・翻訳対象)、01 NFR-603 |
 | 駆動 API のメソッド | eve-protocol | 02 §10.5 (正本) → 11 (使い方) |
 
 ### 12.3 正本マップ (本書が正本の概念)

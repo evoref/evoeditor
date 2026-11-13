@@ -452,7 +452,7 @@ core は unicode-width + 設定 (曖昧幅 NFR-605、絵文字幅方針) で幅�
 | (b) 危険書記素の分類 | **分類の所有者は 03 §13.2 (`eve-text::is_width_risky`)**。core は行ごとに `RenderRow.width_risky` を Frame に載せる (02 §8.2)。eve-tui は分類を再計算せず、**端末実測に基づく補正表** (端末種別ごとに「この文字を 1 セルで描く」等の既知差。**v0.2**) と再描画戦略だけを持つ |
 | (c) 行単位の再出力 | `RenderRow.width_risky` が真の行は、その行が変化したとき **行全体** を再出力する (セル差分に任せない)。**前のフレームで全角の後続セルだったマスが単独のセルに変わる行** (ダイアログ・メッセージの全角を空白などで上書きする行) も同じく行全体を再出力する (v0.2、M7 の WSL の受入で追加、2026-11-03): 先頭セルだけを上書きすると、tmux は後続セルも消えたとみなして書かずにカーソルを送るだけにし、Windows Terminal は後続セルの色・反転を残すため、ダイアログを閉じた跡に `▮` が並んで残った。再出力は次の手順: (1) 行頭へ CUP し、`EL` (`CSI 0 K`、カーソルから行末まで消去) で端末側の残骸を消す、(2) 行の各書記素を、**幅によらず全書記素の前で CUP して** 絶対位置へ置いて出力する (連続書込に頼らない。(a) は幅 2 以上の直後だけだが、`width_risky` の行は全書記素が対象)。ずれは行の中に閉じ込められ、次の行以降へ波及しない |
 | (d) 代替表示モード | 設定 `view.emoji_width`: `"auto"` / `1` / `2`。core の `EmojiWidth::{Auto, One, Two}` に写す (07 §5.3、03 §13.2)。`Auto` は eve-tui の端末補正 (幅プローブ・端末種別の表。補正表は v0.2) が決めた値で、決まらなければ 2 (UAX #11 + 絵文字表示既定=2)。決めた値は core の `WidthConfig.emoji_width` に入り、eve-tui は自分では幅を計算しない (値を core へ渡す経路は 02 側で未定、提案、OQ-215)。v0.1 は `"auto"` 固定の定数で、キーの公開は v0.2 (07 §5.13)。幅危険書記素をプレースホルダ (置換文字 `U+FFFD` や `<U+1F600>` 風、03 §13.2 の `<U+XXXX>` の形) で表示して崩れを根絶する `view.width_risky_display = "replace"` は v0.2 (07 §5.13)。`view.width_risky_display` の既定 (推奨 `"unicode"`) は [OQ-64](#18-未決事項) |
-| (e) 幅プローブ (明示コマンド) | `ui.probe_char_width` コマンド: 代表的な曖昧幅文字・絵文字を書いてカーソル位置報告 (`CSI 6n`) で実幅を測り、推奨設定を提示する。**起動時には自動実行しない** (T3)。v0.4 (Could)。応答の読み方と端末ごとの可否は検証スパイク S-15 (08 §3、v0.4 着手前) で確認する |
+| (e) 幅プローブ (明示コマンド) | `ui.probe_char_width` コマンド: 代表的な曖昧幅文字・絵文字を書いてカーソル位置報告 (`CSI 6n`) で実幅を測り、推奨設定を提示する。**起動時には自動実行しない** (T3)。v0.5 以降 (Could。v0.4 から送った、08 §7)。応答の読み方と端末ごとの可否は検証スパイク S-15 (08 §3。v0.5 以降) で確認する |
 | (f) 手動再描画 | `ui.redraw` (既定キー `Ctrl+K R`) で全画面再描画。ずれた表示から常に回復できる |
 | (g) 自動折り返しの無効化 | 代替スクリーンにいる間は **DECAWM を OFF** (`CSI ? 7 l`) にし、復元手順 (§14.3) で ON (`CSI ? 7 h`) に戻す (フレームごとの切替はしない。切替の単位は提案、[OQ-184](#18-未決事項))。端末が幅を実際より広く描いて行末を越えたとき、次の行へ折り返して下の行を崩すのを防ぐ。緊急復元の固定バイト列にも `CSI ? 7 h` を含める (§14.5)。有効化の失敗は無視して続ける |
 | (h) 横スクロールの左端 | §10 の横スクロールで左端に `‹` を置くセルが、全角書記素の **先頭セル** に当たる場合: 03 側は `‹` / `›` のセルを幅 1 として先に確保し、窓の端で欠けた全角を空白 1 セルずつで埋めて渡す (03 §14.2。`‹` のセルに全角がかかるときも同様に、その全角を描かず空白で埋める。割れた半分を残さない)。TUI は (1) 確保された空白セルに `‹` を重ね、(2) 右端の `›` も同様に確保されたセルに重ねる。TUI が全角の穴埋めを重ねて行うことはしない。この 2 つの端のセルは `width_risky` の行と同じく行全体を再出力する |
@@ -1189,7 +1189,7 @@ v0.1 で TUI は AI のコードを持たないが、v1.L で **ローカル LLM
 |---|---|
 | C1 | スタイルは core で解決済み (02 §8.2。v0.2 の M9c で、クロームのロールも core が解決して `Frame.roles` で渡す形にする。突合と案は 07 §8.6)。**段の選択 (truecolor / 256 / 16 / mono) も core が行う**: `Capabilities.color_depth` を見てテーマ読込時にロールごとに該当段の `Style` を解決し、Frame には端末が描ける色だけが載る。TUI はセルごとの変換をせず、Frame の色をそのまま SGR に写す (描画コストは 0)。色深度は起動時に 1 回だけ判定し、実行中は再判定しない (§5.2、02 §7.1)。例外は **最終防衛線** だけ: `Capabilities.color_depth` の段を超える色 (例 256 段なのに `Rgb`) が Frame に来たときは、そのセルだけ §12.3 の近似で描く (core の不具合の防御。debug ログに件数を記録) |
 | C2 | **既定テーマは最初から TrueColor 対応** (FR-513、v0.1)。名前は **`default`** (07 §5.4 `theme.name` の既定値。v0.1 はテーマが 1 つなのでキーを公開しない)。方式は [ADR-0027](10-decisions.md#adr-0027-既定テーマは-truecolor縮退段を明示する) (OQ-27、確定): 「本文は端末の既定色 (`Default` / `Default`) のまま、選択・ステータスバー・検索一致などの **強調ロールだけを前景色と背景色の RGB の組** で定義する」(組で定義するので端末の背景が明るくても暗くてもコントラストを保証できる)。組込みテーマのロールは「組」「属性だけ」「前景だけ (淡色の補助表示)」の 3 形に限り、**背景だけを塗って前景を端末既定のままにする形は使わない** (明るい背景の端末で読めなくなる。形とコントラスト基準の正本は 07 §8.1、全ロールの表は 07 §8.2)。**v0.1 は truecolor と無色 (`mono`、属性) の 2 段を明示** し、256 / 16 色の段は truecolor の値から §12.3 の表で **自動近似** する (v0.1 の対象端末の Windows Terminal と conhost は truecolor。256 / 16 の段を明示値で手調整するのは v0.2 以降の候補)。近似で区別がつかなくなっても、選択・検索一致・エラー等は `mono` と同じ記号・属性 (反転・下線・太字) を併せ持つので判別できる (NFR-604、C4)。縮退の品質確認は P0 スパイク S-20 (08 §3。truecolor と mono の 2 段) |
-| C3 | 背景まで塗る TrueColor テーマ (`default-dark` / `default-light`) は **v0.2** の組込みテーマ、高コントラスト (`high-contrast-*`、NFR-604) は v0.4。ANSI 16 色だけで端末配色に完全に馴染む `ansi` テーマも **v0.2** の組込みテーマで、1 行の設定で選べる (16 色端末・SSH 先向け)。**v0.1 の組込みテーマは `default` 1 つ** (truecolor と mono の 2 段 + 自動近似) |
+| C3 | 背景まで塗る TrueColor テーマ (`default-dark` / `default-light`) は **v0.2** の組込みテーマ、高コントラスト (`high-contrast-dark` / `high-contrast-light`、NFR-604。背景を塗る 2 つ、§12.5) は v0.4。ANSI 16 色だけで端末配色に完全に馴染む `ansi` テーマも **v0.2** の組込みテーマで、1 行の設定で選べる (16 色端末・SSH 先向け)。**v0.1 の組込みテーマは `default` 1 つ** (truecolor と mono の 2 段 + 自動近似) |
 | C4 | 色だけで意味を伝えない (T7)。すべての意味的スタイル (選択・検索一致・エラー・変更・差分) に属性 (反転・下線・太字) または記号の対応を持つ。無色 (`mono`) の段がそれを保証する |
 
 `default` テーマは RGB の組で書かれているので、端末のパレット設定に依存せず同じ見た目になる。`Color::Indexed(0..=15)` と `ansi.<name>` の解釈には 07 §8 の既定 16 色パレット (`[palette.ansi]` で上書き可) が使われる。
@@ -1222,7 +1222,9 @@ v0.1 で TUI は AI のコードを持たないが、v1.L で **ローカル LLM
 
 ### 12.5 高コントラスト
 
-- NFR-604 の高コントラストテーマ (v0.4): 背景/前景を `Default` に固定、強調はすべて反転・太字・下線。`ansi` テーマ (v0.2) の派生として作る。
+- NFR-604 の高コントラストテーマ (v0.4 の M26): 背景まで塗る 2 つの組込みテーマ **`high-contrast-dark`** (黒の背景に白の文字) と **`high-contrast-light`** (白の背景に黒の文字)。ロール表 (4 段の明示値) と高コントラスト用の基準 (truecolor と 256 の段で、本文と強調の組・淡色の補助表示が 7.0:1 以上、強調の背景が本文の背景に 3.0:1 以上、`dim` を使わない、選択・一致・現在の一致を明るさか属性で区別する、16 の段で 0〜7 の色の前景に太字を付けない など。07 §8.7 の (h1)〜(h9)) の正本は 07 §8.7 で、`xtask check-themes` が検査する (09 §3.5 の (g))。[OQ-221](10-decisions.md#oq-221-高コントラストテーマの細目-v04-の-m26) (確定 (ユーザー回答、2026-11-14)。推す案のとおり) で決めた。
+- 以前の案 (「背景・前景を `Default` に固定し、強調はすべて反転・太字・下線。`ansi` テーマの派生」) は採らない (OQ-221 の 1 の (b))。前景と背景が端末の既定色なら明暗を分ける意味が無く、色を使わないなら無色の段 (§12.4) と見た目がほぼ同じで、比の基準で確かめられないため。
+- 塗り方は `default-dark` / `default-light` と同じ (07 §8.6 の 3 本目): 色の段では、各ロールの端末の既定色を本文 (`ui.text`) の色に置き換え、画面全体を `ui.text` で塗ってから描く。無色の段は塗らず、`default` の mono の段と同じ属性で描く (空白の記号だけ `dim` の代わりに `bold`)。`theme.background` は `dark` / `light` で対の他方へ替える。OS のハイコントラストの設定からは選ばない (端末が OS の配色で描くことが多く、テーマで塗ると食い違う)。
 
 ---
 
@@ -1231,7 +1233,7 @@ v0.1 で TUI は AI のコードを持たないが、v1.L で **ローカル LLM
 | 対象 | 対策 | 版 |
 |---|---|---|
 | 色覚多様性 | T7 / C4。差分は `+`/`-`、診断は `E`/`W` 記号をガターに | v0.1 (方針) / v1.L (診断) |
-| ロービジョン | 端末のフォント拡大に追従 (セル単位設計なので自動)。高コントラストテーマ | v0.1 (フォント追従) / v0.4 (高コントラスト) |
+| ロービジョン | 端末のフォント拡大に追従 (セル単位設計なので自動)。高コントラストテーマ (`high-contrast-dark` / `high-contrast-light`、§12.5) | v0.1 (フォント追従) / v0.4 (高コントラスト) |
 | スクリーンリーダー (端末読み上げ: NVDA + Windows Terminal、VoiceOver + Terminal.app、Orca + GNOME Terminal) | (1) ハードウェアカーソルを常に論理フォーカス位置に置く (T5)。パレットでは **選択中の候補行の先頭** ではなく入力欄に置くため、選択変更をメッセージ行にも出す (`screen_reader_mode` 時) (2) 不要な再描画をしない (差分出力で読み上げの割り込みを減らす) (3) 装飾記号を減らす ASCII モード | v0.5 (`ui.screen_reader_mode`) |
 | 運動機能 | チョードにタイムアウトを設けない (§7.4)。すべての操作にキーボード手段 (マウス不要)。キーリピート不要の操作体系 | v0.1 |
 | 前庭障害 / 動きの抑制 | アニメーション・スムーススクロールを行わない (TUI では元々しない)。視覚ベルは無効化可能 | v0.1 |
@@ -1808,6 +1810,36 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 
 v0.2 以降の診断 (名前だけを予約し、文言はその版で言語ファイルに加える): `msg.config.unknown_command` (キーマップの未知のコマンド ID)、`msg.config.invalid_key_notation` (キー表記の構文エラー)、`msg.config.chord_prefix` (プレフィックス衝突)、`msg.config.unknown_name` (存在しないテーマ・言語・ロケール名)、`info.config.key_conflict` (同一キーの重複)、`info.config.deprecated_key` (廃止キーの自動変換)、`info.config.ignored_workspace` (所有者検査で無視したワークスペース設定、v0.5)、`info.config.pending_trust` (信頼待ちの危険項目、v0.5)、`msg.config.unsafe_value` (安全性違反、v0.5)。
 
+**ユーザーの言語ファイルの診断 (v0.4 の M26、案。07 §17.4、OQ-220)**: 下のキーは案で、M26 の (2) の実装の PR で言語ファイル (`locales/ja.toml` / `en.toml`) と一緒に上の表の行に移す (表の行にすると `xtask i18n` が言語ファイルとの突合で欠落とみなすため、それまでは表の外に置く)。ここに書いた文言は画面に出る形で、言語ファイルでは `{…}` を文字として出す部分を `{{…}}` と書く (07 §17.2)。
+
+- **共通の規則**: `msg.config.problem` / `msg.config.problems` の `{file}` は `locales/<lang>.toml`、`{item}` は文言のキー。言語ファイルの診断の文言は、補う言語の **同梱の** 文言で出す (重ねた表を使わない)。`{item}` / `{value}` / `{reason}` は 07 §4.3 の無害化 (制御文字などを `<U+XXXX>` に、64 文字で切る) を通してから埋める。キーごとの問題は警告で、その文言には補う言語の同梱の文言を使う (`locale_hint_width` だけは書いた文言を使う)。ファイル全体の問題はエラーで、ファイル全体を使わない。1 つのファイルの診断は 100 件までで、残りは `msg.config.locale_more` の 1 件にまとめる。
+- **既存のキーを使うもの**: 値が文字列でない文言は `msg.config.type_mismatch_no_default` (期待する型は `ui.config.type.string`)。`ui.locale` の値の形が合わない・使える言語に当たらないときは `msg.config.invalid_value` (`{allowed}` は `auto`・同梱の言語・`locales/` にある言語。予約の `msg.config.unknown_name` は使わない)。
+- **既存のキーの文言を改めるもの**:
+  - `msg.config.problems` の hint を、言語ファイルにも合う形に一般化する。ja「問題のある項目は使わず、既定値か同梱の文言で動いています。全件はログ ({log}) を見てください」/ en "Items with problems are not used; the defaults or the built-in text are used instead. See the log ({log}) for all of them"。
+  - `cli.help.option.locale` (bin の定数表。下の「`--help` の本文」の表) を、ユーザーの言語を含む形にする。en "Set the UI language: ja, en, or a language with a file in locales/ (overrides ui.locale and EVE_LANG)" / ja「画面の言語を指定します: ja / en、または locales/ に言語ファイルを置いた言語 (設定 ui.locale と EVE_LANG より優先)」。
+- **ファイル全体の問題 (エラー)**:
+  - `msg.config.locale_syntax`: 読めない・通常のファイルでない・UTF-8 でない・TOML の構文エラー。`{reason}` は `msg.config.syntax` と同じ短い説明。行が分からないこともあるので、hint は行の有無に依らず成り立つ形にする。ja「この言語ファイルは書式が正しくないため使っていません: {reason}」/「表示された行 (行が無いときはファイル全体) を直してください。直すまでは同梱の文言で動きます」。en "This language file is not used because it is not valid: {reason}" / "Fix the line shown (or the file, if no line is shown). Until then, the built-in text is used."
+  - `msg.config.locale_too_large`: 1 MiB を超える。`{size}` は読んだ大きさ (「1 MiB を超える」)。ja「この言語ファイルは大きすぎるため使っていません ({size})」/「1 MiB 以下にしてください。直すまでは同梱の文言で動きます」。en "This language file is not used because it is too large ({size})" / "Keep it under 1 MiB. Until then, the built-in text is used."
+- **ファイルの名前と言語の選択 (警告)**:
+  - `msg.config.locale_bad_name`: `locales/` にある `*.toml` の名前が規則 (`^[a-z]{2,3}\.toml$`、デバイス名を除く) に合わない。`{value}` はそのファイルの名前 (要約の `{file}` は `locales/`)。ja「{value} は言語ファイルの名前の規則に合わないため読みません」/「言語の部分だけの英小文字 2〜3 字の名前 (例 fr.toml) にしてください」。en "{value} is not read because its name does not follow the rule for language files" / "Name it with 2 or 3 lowercase letters for the language only (for example fr.toml)."
+  - `msg.config.locale_not_found`: `--locale` / `EVE_LANG` の言語が、同梱の言語にも `locales/` の候補にも無い。`{value}` は書かれた値、`{dir}` は探した `locales/` の絶対パス、`{lang}` は代わりに使う言語。ja「言語 {value} の言語ファイルがありません」/「{dir} に言語ファイルを置くか、ja / en を指定してください。いまは {lang} で表示しています」。en "There is no language file for {value}" / "Put a language file in {dir}, or choose ja or en. {lang} is used for now."
+  - `msg.config.locale_language_mismatch`: `[meta] language` がファイル名の言語と違う。`{value}` は書かれた値、`{lang}` はファイル名の言語。ja「[meta] の language の値 {value} がファイル名と違います」/「ファイル名の言語 ({lang}) として読みました。language の値を直すか、消してください」。en "The language value {value} in [meta] does not match the file name" / "The file was read as {lang}. Fix or remove the language value."
+- **キーごとの問題 (警告。その文言は使わず、同梱の文言を使う)**:
+  - `msg.config.locale_unknown_key`: 同梱の言語ファイルに無いキー。候補は付けない。ja「{item} という文言のキーはありません」/「綴りを確かめてください。新しい版のための文言なら、この版では使いません」。en "There is no text key named {item}" / "Check the spelling. If it is for a newer version, it is not used in this version."
+  - `msg.config.locale_reserved`: `stderr.*` / `panic.*` / `cli.*` のキー。ja「{item} の文言は言語ファイルでは変えられません」/「終了時・異常終了時・--help の文言は変えられません。この文言は使いません」。en "The text of {item} cannot be changed in a language file" / "Messages printed on exit, on a crash, and by --help cannot be changed. This text is not used."
+  - `msg.config.locale_duplicate_key`: 平らにしたキーが重複した。ja「{item} が 2 回書かれています」/「最初に書いた文言を使い、この文言は使いません。どちらかを消してください」。en "{item} is written twice" / "The first one is used and this one is not. Remove one of them."
+  - `msg.config.locale_too_long`: 1,024 文字を超える。`{count}` は文字数。ja「{item} の文言が長すぎます ({count} 文字)」/「1,024 文字以下にしてください。この文言は同梱のものを使います」。en "The text of {item} is too long ({count} characters)" / "Keep it within 1,024 characters. The built-in text is used instead."
+  - `msg.config.locale_empty`: 目に見える文字が無い。ja「{item} の文言に表示される文字がありません」/「文言を書くか、その行を消してください。この文言は同梱のものを使います」。en "The text of {item} has no visible characters" / "Write the text or remove the line. The built-in text is used instead."
+  - `msg.config.locale_control_char`: 使えない文字 (07 §17.4 の検査 4) を含む、または結合文字が多すぎる (検査 5)。`{reason}` は理由の語 (`ui.config.locale_char.*` の案: 制御文字・書式文字・私用領域・非文字・結合文字の数) と最初の文字の `<U+XXXX>`。ja「{item} の文言に使えない文字があります ({reason})」/「改行・タブ・エスケープ・書式文字などを除いてください。この文言は同梱のものを使います」。en "The text of {item} contains a character that cannot be used ({reason})" / "Remove newlines, tabs, escapes, formatting characters, and the like. The built-in text is used instead."
+  - `msg.config.locale_placeholder`: 括弧の対応 (検査 6)、プレースホルダの名前と数・〔 〕 の有無 (検査 7) が合わない。`{expected}` は同梱の文言のプレースホルダを波括弧付きで `, ` で並べたもの (無ければ空で、〔 〕 の文を省く)。ja「{item} の差し込み ({…} の部分) が同梱の文言と合いません」/「同梱の文言と同じ差し込みを、同じ数以下で使ってください〔 (使うもの: {expected})〕。この文言は同梱のものを使います」。en "The placeholders ({…} parts) in {item} do not match the built-in text" / "Use the same placeholders as the built-in text, no more times than it does〔 (expected: {expected})〕. The built-in text is used instead."
+  - `msg.config.locale_accelerator`: `[X]` の並び・位置が同梱の文言と違う、または全角の似た形を含む。ja「{item} の [S] のような角括弧の英字が同梱の文言と違います」/「角括弧の英字は押すキーなので変えられません。同梱の文言と同じ文字を同じ順に、選択肢では先頭に書いてください。この文言は同梱のものを使います」。en "The bracketed letters like [S] in {item} differ from the built-in text" / "They are the keys to press and cannot be changed. Write the same letters in the same order, at the start of a choice. The built-in text is used instead."
+- **キーごとの問題 (警告。その文言を使う)**:
+  - `msg.config.locale_hint_width`: `hint.*` の表示幅が 8 セルを超える。`{width}` は表示幅。ja「{item} のヒントが長すぎます (表示幅 {width})」/「この文言を使いますが、狭い画面ではヒントバーから落ちることがあります。全角 4 文字・半角 8 文字以内を勧めます」。en "The hint {item} is long (width {width})" / "It is used, but it may be dropped from the hint bar on narrow screens. Keep it within 8 columns."
+- **件数の上限と再読込・`--check-config`**:
+  - `msg.config.locale_more`: 1 つのファイルの診断が 100 件を超えた。`{count}` は省いた件数。ja「この言語ファイルには、ほかに {count} 件の問題があります」/「--check-config で全件を確かめてください」。en "This language file has {count} more problems" / "Run --check-config to see all of them."
+  - `info.config.locale_restart`: `config.reload` で、選んだ言語のファイルの大きさか更新日時が起動時と違う (無くなった・現れたを含む)。ja「言語ファイルの変更は、再起動すると反映されます」。en "Changes to the language file take effect after a restart"
+  - `ui.config.locale_summary`: `--check-config` の出力の先頭の 1 行。`{lang}` は使う言語、`{source}` は選んだ段 (`ui.config.locale_source.*` の案: `--locale`・ui.locale・EVE_LANG・OS・既定)、`{file}` はユーザーの言語ファイルの絶対パス (無ければ 〔 〕 ごと省く)、`{base}` は補う言語。ja「言語: {lang} ({source})〔、言語ファイル: {file}〕、補う言語: {base}」。en "Language: {lang} ({source})〔, language file: {file}〕, fallback: {base}"
+
 **`--help` の本文** (`cli.help.*`。07 §18.1 / §17.1。端末を初期化する前に stdout へ出す。言語ファイルに入れず bin の定数表に置く。**v0.1 は日本語の行だけ**、v0.2 から英語 (ASCII) の行と日本語の行を併記。オプション名・文字コード名・終了コードの数字は翻訳しない。表示は上から、オプションの行は `-R, --readonly` のようなオプション名の後ろに説明を揃えて出す)
 
 | MessageKey | 内容 | en | ja |
@@ -2000,7 +2032,7 @@ TUI 側の版ごとの範囲。版と要件の対応の正本は 01 / 08。後�
 
 ### 17.3 v0.4
 
-高コントラストテーマ (§12.5、NFR-604)、幅プローブ (§4.7 (e)、S-15)、標準入力からの読込 `evoeditor -` (FR-120。入力に使う端末と端末を初期化する時期は 03 §9.2.2・05 §9.1 / §9.2、07 §18.5。読込中の表示と文言は §8.7 / §15.2。ヘルプの注意は §8.6)、Partial 読込中の表示 (03 §9.2.1。ステータスバーは §8.7)、ユーザーの言語ファイル (NFR-603、07 §17.1)。
+高コントラストテーマ (§12.5、NFR-604)、標準入力からの読込 `evoeditor -` (FR-120。入力に使う端末と端末を初期化する時期は 03 §9.2.2・05 §9.1 / §9.2、07 §18.5。読込中の表示と文言は §8.7 / §15.2。ヘルプの注意は §8.6)、Partial 読込中の表示 (03 §9.2.1。ステータスバーは §8.7)、ユーザーの言語ファイル (NFR-603、07 §17.4。診断の文言の案は §15.2 の「起動時の引数と設定の診断」の後)。幅プローブ (§4.7 (e)、S-15) は v0.5 以降に送った (08 §7)。
 
 ### 17.4 v0.5 以降
 
