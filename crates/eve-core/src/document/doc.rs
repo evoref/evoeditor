@@ -488,6 +488,7 @@ impl Document {
         if let Some(f) = after_format {
             self.restore_format(f);
         }
+        self.carry_layout(&before, &tx.changes, old_revision);
         Ok(AppliedTx::Changed(Applied {
             old_revision,
             revision: self.revision,
@@ -593,6 +594,7 @@ impl Document {
         }
         let old_revision = self.revision;
         self.revision = self.revision.next();
+        self.carry_layout(&before, &changes, old_revision);
         Ok(Applied {
             old_revision,
             revision: self.revision,
@@ -699,6 +701,19 @@ impl Document {
         let old = long_lines_touched(before, windows.iter().map(|(o, _)| *o), th);
         let new = long_lines_touched(&self.text, windows.iter().map(|(_, n)| *n), th);
         self.format.long_lines = (self.format.long_lines + new).saturating_sub(old);
+    }
+
+    /// 本文に `cs` を当てて Revision を `old` から進めた後に、長大行の列の索引の覚えを引き継ぐか捨てる (03 §14.4 の
+    /// 「編集」、02 §5.1)。閾値は書式を差し替えた (再読込) 後の値。
+    fn carry_layout(&mut self, before: &Snapshot, cs: &ChangeSet, old: Revision) {
+        let threshold = self.format.long_line_threshold;
+        self.layout_cache.get_mut().on_change(
+            before,
+            &self.text,
+            cs,
+            (old, self.revision),
+            threshold,
+        );
     }
 
     /// 文書全体から数え直した値 (検証用)。

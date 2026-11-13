@@ -13,7 +13,7 @@ use crate::document::Document;
 
 use super::CharWidth;
 use super::ColIndex;
-use super::cache::{LongKey, UnitsKey};
+use super::cache::{LongEntry, LongRule, UnitsKey};
 
 /// 空白の可視化の記号 (タブの `>` と続きの空白、全角スペースの `[]`) か。それ以外の記号は制御文字・不可視文字。
 pub(super) fn is_whitespace_mark(text: &str) -> bool {
@@ -308,7 +308,8 @@ pub(crate) fn is_long_line(doc: &Document, line: usize) -> bool {
 const LONG_CACHE_LINES: usize = 4;
 
 /// 行 `line` が長大行 (バイト長が文書の閾値を超える、03 §11.5.1) なら、その (行頭, 列の索引)。
-/// 索引は Revision・行・幅の設定が同じ間は覚えを使う (編集のたびに 1 回走査し直す)。
+/// 索引は (行頭の位置, 表示の設定) で覚え、要る位置までしか作らない (遅延。03 §14.4)。本文が変わったときの引き継ぎは
+/// `LayoutCache::on_change` (編集では変更の位置より前の記録点を残す)。
 pub(super) fn long_index(doc: &Document, line: usize) -> Option<(usize, std::rc::Rc<ColIndex>)> {
     use std::rc::Rc;
     if !is_long_line(doc, line) {
@@ -319,23 +320,31 @@ pub(super) fn long_index(doc: &Document, line: usize) -> Option<(usize, std::rc:
     let (ls, le) = (t.line_to_byte(l).0, t.line_end_byte(l).0);
     let esc = esc_enabled(doc);
     let cfg = doc_width_config(doc);
-    let key: LongKey = (doc.revision(), line, esc, cfg.tab_width, cfg.ambiguous_wide);
+    let rule: LongRule = (esc, cfg.tab_width, cfg.ambiguous_wide);
+    let rev = doc.revision();
     let mut cache = doc.layout_cache.borrow_mut();
     let entries = &mut cache.long;
-    // 古い Revision の索引は使えないので捨てる
-    entries.retain(|(k, _)| k.0 == key.0);
-    if let Some((_, ix)) = entries.iter().find(|(k, _)| *k == key) {
-        return Some((ls, ix.clone()));
+    // 今の Revision に引き継がれなかった索引は使えないので捨てる (本文を変える経路はすべて `on_change` を通るので、
+    // 残っていれば今の本文に対して正しい)。同じ行頭で長さの違う索引 (起きないはず) も捨てる
+    entries.retain(|e| e.rev == rev && (e.ls != ls || e.ix.len() == le - ls));
+    if let Some(e) = entries.iter().find(|e| e.ls == ls && e.rule == rule) {
+        return Some((ls, e.ix.clone()));
     }
-    let ix = Rc::new(ColIndex::build(t, ls, le, CharWidth::new(esc, cfg)));
+    let ix = Rc::new(ColIndex::new(le - ls, CharWidth::new(esc, cfg)));
     if entries.len() >= LONG_CACHE_LINES {
         entries.remove(0);
     }
-    entries.push((key, ix.clone()));
+    entries.push(LongEntry {
+        rev,
+        ls,
+        rule,
+        ix: ix.clone(),
+    });
     Some((ls, ix))
 }
 
-/// 長大行の、表示列 `left` から `left + cols` までにかかる char の表示の単位 (行全体は展開しない)。
+/// 長大行の、表示列 `left` から `left + cols` までにかかる char の表示の単位 (行全体は展開しない) と、行末がその範囲に
+/// あれば行の幅 (範囲より右なら `None`。行末まで索引を作らない、03 §14.4 の遅延)。
 /// 1 char を 1 書記素として `unit_slow` で展開する (幅は索引と同じ)。
 pub(super) fn long_units(
     doc: &Document,
@@ -343,7 +352,7 @@ pub(super) fn long_units(
     ix: &ColIndex,
     left: usize,
     cols: usize,
-) -> Vec<Unit> {
+) -> (Vec<Unit>, Option<usize>) {
     let cfg = doc_width_config(doc);
     let (esc, ws) = (esc_enabled(doc), doc.display.show_whitespace);
     let tab = cfg.tab_width.max(1) as usize;
@@ -351,7 +360,7 @@ pub(super) fn long_units(
     let mut out = Vec::new();
     let mut buf = [0u8; 4];
     // 右端の列にかかる単位まで (その次の単位で、右が切れていることが分かる)
-    ix.walk(t, ls, ix.at_col(t, ls, left), |at, c, w| {
+    let stop = ix.walk(t, ls, ix.at_col(t, ls, left), |at, c, w| {
         if at.col > left + cols {
             return false;
         }
@@ -368,7 +377,9 @@ pub(super) fn long_units(
         });
         true
     });
-    out
+    // 行末で止まったなら、その表示列が行の幅。途中で止まったなら、行の幅は `left + cols` より大きい
+    let width = (stop.byte >= ix.len()).then_some(stop.col);
+    (out, width)
 }
 
 /// 本文の `U+10FF00..FF` を不正バイトのエスケープとして `<0xHH>` (幅 6) で表示するか (03 §8.3 の「表示」、§13.2)。
