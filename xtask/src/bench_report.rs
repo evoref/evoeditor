@@ -62,6 +62,12 @@ pub(crate) fn verdict(v: &Value) -> Verdict {
             "spawn → 本文の最初の Frame の write (1 MB、壁時計)",
         ),
         "BM-103a" => t("(診断用)", None, "core 区間のみ。判定は BM-103b"),
+        // v0.4 の M24: CP932 互換文字を含むリテラル (同一視 ON、行の窓の経路)。BM-109 と同じく NFR-109 の目標で記録する
+        "BM-109-compat" => t(
+            "(参考) NFR-109 の目安 300 ms (許容 1 s)",
+            None,
+            "100 MB の互換文字を含むリテラル検索の全件の走査 (ヘッドレス。同一視 OFF と交互に 5 巡の中央値、比は JSON の ratio)",
+        ),
         id if id.starts_with("BM-109-") => t(
             "(参考)",
             None,
@@ -76,6 +82,17 @@ pub(crate) fn verdict(v: &Value) -> Verdict {
             "(参考)",
             None,
             "100 MB の、行単位の方式の検索の全件の走査 (ヘッドレス。S-04 で比べる相手)",
+        ),
+        // v0.4 の M24: 行をまたぐ正規表現 (行の窓・全文の連結) と、M24 の参考の計測 (09 §5.2)
+        "BM-109m-nextprev" => t(
+            "(参考)",
+            None,
+            "100 MB・k ≥ 1 の、保持に無い位置からの次 / 前 (単発のジョブを含む。ヘッドレス)。p50 は次の 1 回、前と 5 回の連打は JSON",
+        ),
+        id if id.starts_with("BM-109m-") => t(
+            "(参考)",
+            None,
+            "行をまたぐ正規表現の全件の走査 (ヘッドレス。全文の連結の参照と交互に 5 巡の中央値、比は JSON の ratio)",
         ),
         "BM-103a-wrap" => t(
             "(診断用)",
@@ -114,6 +131,17 @@ pub(crate) fn verdict(v: &Value) -> Verdict {
             "NFR-103 を維持 (p50 2 ms / p99 8 ms)",
             limits(v, 2.0, 8.0),
             "1 MB の文書の検索欄への正規表現の入力 (一致を強調し直す)",
+        ),
+        // v0.4 の M24 (09 §5.2): 行をまたぐ正規表現の入力 (Must。NFR-103、FR-404 AC-1)
+        "BM-103b-search-multiline-1m" => t(
+            "NFR-103 を維持 (p50 2 ms / p99 8 ms)",
+            limits(v, 2.0, 8.0),
+            "1 MB の文書の検索欄への行をまたぐ正規表現の入力 (可視範囲を同期検索で強調し直す)",
+        ),
+        "BM-103b-search-multiline" => t(
+            "NFR-103 を維持 (p50 2 ms / p99 8 ms)",
+            limits(v, 2.0, 8.0),
+            "100 MB の行をまたぐ正規表現の全件検索中のキー入力 (FR-404 AC-1)",
         ),
         "BM-108" => t(
             "(参考) NFR-108 の目安 50 ms (許容 200 ms)",
@@ -433,6 +461,33 @@ mod tests {
         assert_eq!(ok(r#"{"id":"BM-201","value":25.0,"unit":"MB"}"#), "不合格");
         assert_eq!(ok(r#"{"id":"BM-204","value":0.0,"unit":"%"}"#), "合格");
         assert_eq!(ok(r#"{"id":"BM-204","value":0.3,"unit":"%"}"#), "不合格");
+    }
+
+    // v0.4 の M24 (09 §5.2): 行をまたぐ検索の入力は NFR-103 で判定し、全件の走査 (BM-109m / BM-109-compat) は参考
+    #[test]
+    fn 行をまたぐ検索の計測() {
+        let ok = |s: &str| verdict(&v(s)).verdict;
+        assert_eq!(
+            ok(r#"{"id":"BM-103b-search-multiline-1m","p50_ms":1.2,"p99_ms":1.9}"#),
+            "合格"
+        );
+        assert_eq!(
+            ok(r#"{"id":"BM-103b-search-multiline","p50_ms":1.2,"p99_ms":9.0}"#),
+            "不合格"
+        );
+        for s in [
+            r#"{"id":"BM-109m-nl-ja","p50_ms":300.0,"ratio":0.9}"#,
+            r#"{"id":"BM-109m-unbounded-1line","p50_ms":20.0}"#,
+            r#"{"id":"BM-109m-nextprev","p50_ms":1.0}"#,
+            r#"{"id":"BM-109-compat","p50_ms":16.0}"#,
+        ] {
+            assert_eq!(ok(s), "参考", "{s}");
+        }
+        assert!(
+            verdict(&v(r#"{"id":"BM-109-compat","p50_ms":16.0}"#))
+                .target
+                .contains("300 ms")
+        );
     }
 
     #[test]

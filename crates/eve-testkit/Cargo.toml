@@ -28,6 +28,9 @@ unicode-width = "0.2"
 eve-platform = { version = "0.3.0", path = "../eve-platform" }
 # 確保の回数の計測 (bench の bm_allocs だけ。自前の unsafe を書かずに GlobalAlloc を数える。2026-11-05 PO、02 §13.0)
 stats_alloc = "0.1.10"
+# BM-109m の比べる相手 (全文を連結して探す参照、09 §5.2。bench の bm_109 だけ)。eve-core が既に使う crate で、feature も
+# eve-core とそろえる (crate の数も版も増えない)
+regex = { version = "1", default-features = false, features = ["std", "unicode", "perf"] }
 
 # 自前のハーネス (p50 / p99 を出すため criterion は使わない)。cargo bench -p eve-testkit --bench bm_105
 [[bench]]

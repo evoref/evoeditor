@@ -8,6 +8,8 @@
 //! - **BM-107**: 100 MB の文書の保存中のカーソル移動の同じ区間 (01 NFR-107 AC-1。NFR-103 の値を維持するか)。
 //! - **BM-103b-search-1m**: 1 MB の文書の検索欄への入力 (一致を強調し直す) の同じ区間 (`--only 103s`)。正規表現のモードは
 //!   **BM-103b-search-1m-regex** (`--only 103r`)。
+//! - **BM-103b-search-multiline-1m** / **BM-103b-search-multiline** (v0.4 の M24): 行をまたぐ正規表現の検索欄への入力の
+//!   同じ区間。1 MB の文書 (可視範囲の同期検索、`--only 103m`) と、100 MB の全件の走査中 (`--only 404m`)。
 //! - **BM-108**: 100 MB の文書の中ほどにだけある語を検索欄に打って `Enter` し、読取完了 → 一致の行が編集面に出た最初の
 //!   Frame の `write` まで (`--only 108`。区間の記録 `search.first_match`)。
 //! - **BM-104v-100m / BM-104v-100m-sjis**: 100 MB (UTF-8 / `Shift_JIS`) を `Ctrl+O` で開き、`Enter` の読取完了 → 文書の先頭部分を
@@ -868,6 +870,53 @@ fn search_typing_1m(
         .collect()
 }
 
+/// BM-103b-search-multiline-1m (v0.4 の M24、09 §5.2): `BM-103b-search-1m-regex` と同じ文書と打鍵の間隔で、正規表現のモードの
+/// 検索欄に行をまたぐパターン `9\n` を入れた後、`0` と `BackSpace` を交互に打つ。`9\n0` と `9\n` は文書の行の境目ごとに一致し
+/// (画面の中に多数)、可視範囲の強調を k 行前からの同期検索で作り直す (03 §12.3.1 の「可視範囲の強調」)。測るのは `0` の打鍵。
+fn search_typing_multiline_1m(
+    dir: &Path,
+    file: &Path,
+    runs: usize,
+    warmup: usize,
+) -> Vec<Duration> {
+    const VK_0: u64 = 0x30;
+    let trace = dir.join("search1m-ml.jsonl");
+    let (mut t, _) = Term::start(&[file.to_str().unwrap()], "00000000", Some(&trace));
+    t.wait("ファイルの先頭", || t.marker.load(Ordering::Acquire));
+    t.send(b"\x06"); // Ctrl+F
+    thread::sleep(Duration::from_millis(300));
+    t.send(b"\x0bx"); // Ctrl+K X (search.toggle_regex)
+    thread::sleep(Duration::from_millis(300));
+    t.send(b"9\\n");
+    thread::sleep(Duration::from_millis(300));
+    for _ in 0..runs + warmup {
+        t.send(b"0");
+        thread::sleep(Duration::from_millis(30));
+        t.send(b"\x7f"); // BackSpace
+        thread::sleep(Duration::from_millis(30));
+    }
+    t.send(b"\x1b"); // 検索バーを閉じる
+    thread::sleep(Duration::from_millis(300));
+    t.send(b"\x11");
+    assert_eq!(t.wait_exit(WAIT), Some(0), "正常に終了しません");
+    // `9` (0x39) は前置きなので数えない
+    let spans: Vec<Span> = read_spans(&trace)
+        .into_iter()
+        .filter(|s| s.name == "input.to_flush" && s.vk == Some(VK_0))
+        .collect();
+    let _ = std::fs::remove_file(&trace);
+    assert!(
+        spans.len() >= runs + warmup,
+        "`0` の打鍵の記録が足りません ({} 件)",
+        spans.len()
+    );
+    spans
+        .iter()
+        .skip(warmup)
+        .map(|s| ns_dur(s.end_ns - s.start_ns))
+        .collect()
+}
+
 /// BM-108 の語。100 MB の文書の中ほどの 1 行にだけある (`k` `s` を含めない: 含むと行ごとに畳み込む経路になる、03 §12.4)。
 const FIRST_MATCH_WORD: &str = "zebra";
 
@@ -957,6 +1006,45 @@ fn search_load(dir: &Path, runs: usize, warmup: usize) -> Vec<Duration> {
     spans
         .iter()
         .skip(warmup)
+        .map(|s| ns_dur(s.end_ns - s.start_ns))
+        .collect()
+}
+
+/// BM-103b-search-multiline (v0.4 の M24、09 §5.2): `BM-103b-search` と同じく 100 MB を開き、正規表現のモードの検索欄に行をまたぐ
+/// パターン (一致しない `\nzq`) を入れた後、1 文字ずつ 30 ms ごとに打つ (行の窓の全件の走査が走り続ける。03 §12.3.1)。
+/// キー入力の判定区間 (FR-404 AC-1 を複数行のパターンに広げたもの)。前置きの `n` `z` `q` は数えない。
+fn search_load_multiline(dir: &Path, runs: usize, warmup: usize) -> Vec<Duration> {
+    let path = make_big(dir, "big_100mb.txt", 100);
+    let trace = dir.join("search-ml.jsonl");
+    let (mut t, _) = Term::start(&[path.to_str().unwrap()], "quick brown", Some(&trace));
+    t.wait("開く", || t.marker.load(Ordering::Acquire));
+    thread::sleep(Duration::from_millis(4000));
+    t.send(b"\x06"); // Ctrl+F
+    thread::sleep(Duration::from_millis(300));
+    t.send(b"\x0bx"); // Ctrl+K X (search.toggle_regex)
+    thread::sleep(Duration::from_millis(300));
+    t.send(b"\\nzq");
+    thread::sleep(Duration::from_millis(300));
+    // `BM-103b-search` と同じ文字 (`k` `s` を含めない)
+    for i in 0..runs + warmup {
+        let c = b"qzxjwv"[i % 6];
+        t.send(&[c]);
+        thread::sleep(Duration::from_millis(30));
+    }
+    t.send(b"\x1b"); // 検索バーを閉じる
+    thread::sleep(Duration::from_millis(300));
+    t.send(b"\x11");
+    assert_eq!(t.wait_exit(WAIT), Some(0), "正常に終了しません");
+    let spans: Vec<Span> = read_spans(&trace)
+        .into_iter()
+        .filter(|s| s.name == "input.to_flush" && s.vk.is_some_and(|v| (0x41..=0x5A).contains(&v)))
+        .collect();
+    let _ = std::fs::remove_file(&trace);
+    // 前置きの `n` `z` `q` と、`Ctrl+F` / `Ctrl+K X` の英字の分を飛ばす
+    let skip = spans.len().saturating_sub(runs + warmup) + warmup;
+    spans
+        .iter()
+        .skip(skip)
         .map(|s| ns_dur(s.end_ns - s.start_ns))
         .collect()
 }
@@ -1212,6 +1300,27 @@ fn main() {
         report(
             "BM-103b-search-1m-regex",
             "1 MB の文書の検索欄への正規表現の入力 (一致を強調し直す。入力の読取完了 → 描画の write)",
+            v,
+            json,
+            quick,
+        );
+    }
+    if traced && want("103m") {
+        let file = make_one_mb(&dir);
+        let v = search_typing_multiline_1m(&dir, &file, runs, warmup);
+        report(
+            "BM-103b-search-multiline-1m",
+            "1 MB の文書の検索欄への行をまたぐ正規表現の入力 (可視範囲を同期検索で強調し直す。入力の読取完了 → 描画の write)",
+            v,
+            json,
+            quick,
+        );
+    }
+    if traced && want("404m") {
+        let v = search_load_multiline(&dir, runs, warmup);
+        report(
+            "BM-103b-search-multiline",
+            "100 MB の行をまたぐ正規表現の全件検索中のキー入力 (入力の読取完了 → 描画の write)",
             v,
             json,
             quick,

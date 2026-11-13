@@ -89,8 +89,9 @@ pub fn run_all(args: &[String]) -> Result<(), String> {
     }
 
     // BM-109 (100 MB のリテラル検索の全件の走査、ヘッドレス。参考値。docs/review/v0.3-findings.md の §3.3 の 5) と、
-    // BM-109r (行単位の方式の全件の走査。v0.4 の S-04 で比べる相手、09 §5.2)
-    println!("▶ BM-109 / BM-109r (検索の全件の走査)");
+    // BM-109r (行単位の方式の全件の走査。v0.4 の S-04 で比べる相手、09 §5.2)。v0.4 の M24 から、行をまたぐ正規表現の
+    // BM-109m (全文の連結の参照と交互に 5 巡回す) と、CP932 互換文字の同一視の BM-109-compat も同じベンチが出す
+    println!("▶ BM-109 / BM-109r / BM-109m / BM-109-compat (検索の全件の走査)");
     let mut cmd = Command::new("cargo");
     cmd.args([
         "bench",
@@ -107,7 +108,11 @@ pub fn run_all(args: &[String]) -> Result<(), String> {
     let out = run_capture(&mut cmd)?;
     let lines: Vec<&str> = out
         .lines()
-        .filter(|l| l.starts_with("{\"id\":\"BM-109-") || l.starts_with("{\"id\":\"BM-109r-"))
+        .filter(|l| {
+            l.starts_with("{\"id\":\"BM-109-")
+                || l.starts_with("{\"id\":\"BM-109r-")
+                || l.starts_with("{\"id\":\"BM-109m-")
+        })
         .collect();
     if lines.is_empty() {
         return Err("BM-109 の結果の行が見つかりません".to_owned());
