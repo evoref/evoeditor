@@ -83,6 +83,7 @@
 | G1 | 100 MB のファイル (`cargo xtask gen-corpus --seed 42` で作る) を開く | 進捗が出る。読込中も入力に応答する。`Esc` で取り消すとすぐ戻る |
 | G2 | 512 MiB 超のファイルを開く | 開く前に警告が出る。「読み取り専用で開く / キャンセル」を選べる |
 | G3 | 100 MB を開いた状態で `Ctrl+S` | 保存中も入力が止まらない |
+| G4 | (v0.4 の M25。先行表示、03 §9.2.1、FR-122 AC-2〜AC-4。BM-104v-100m-sjis の手の確認) `large-100mb` を Shift_JIS に変換したファイル (例: PowerShell 7 で `[IO.File]::WriteAllText("$PWD\sjis-100mb.txt", [IO.File]::ReadAllText("$PWD\large-100mb.txt"), [Text.Encoding]::GetEncoding(932))`) を `Ctrl+O` で開く。先頭が出たら、(1) `PgDn` と `Ctrl+End` で先へ動く、(2) 1 文字入力する、(3) `Ctrl+F` と `Ctrl+G` を押す。そのまま読み終えるのを待つ。もう一度開き、先頭が出ている間に `Esc` を押す | `Enter` から約 0.3 秒以内に文書の先頭が出て、ステータスバーに `[先頭のみ NN%]` が出る (割合は進む)。(1) 先頭の末尾で止まり、「先頭の {size} だけを表示しています。残りは読込の完了後に表示します」が出る。(2) 「読込中のため編集できません」で拒否され、本文は変わらない。(3) 「読込中のため使えません」で拒否され、検索バー・行へ移動の入力は開かない。読み終えると全文に切り替わり、カーソルとスクロールの位置はそのまま (画面が飛ばない・崩れない)。文字コードは `Shift_JIS` と出る。`Esc` では読込が取り消され、先頭も消えて開く前の文書に戻る |
 
 ## H. 異常終了と退避 (記録は `acceptance.md`)
 
@@ -120,6 +121,22 @@ v0.2 の Linux の受入は、開発 PC の **WSL2 (Ubuntu)** を **Windows Term
 | L6 | B1〜B4 を WSL の中で行う (Microsoft IME と Google 日本語入力) | B1〜B4 と同じ |
 | L7 | tmux (README の推奨設定あり) の中で A1・A2・C1・C2・F1 を行い、未保存のまま `tmux kill-session` する | 動作は tmux の外と同じ。kill-session で L2 と同じく退避される |
 | L8 | tmux の推奨設定なし (`tmux -f /dev/null`) で `Esc` と `Ctrl+Shift` を含むキーを押す | 動く (`Esc` の反応が遅いのは tmux の `escape-time` のため。README の既知の制約のとおり) |
+
+## N. 標準入力 (v0.4 の M25。記録は `stdin.md`)
+
+`cmd | evoeditor -` で標準入力を開く手の確認 (05 §9.4 の「標準入力の手での確認」、03 §9.2.2、07 §18.5)。雛形は [`_template/stdin.md`](_template/stdin.md)。
+
+**確かめる環境**: Windows Terminal (PowerShell 7 と cmd)・conhost・VS Code の統合端末・mintty (Git Bash)・Windows PowerShell 5.1 のパイプ・WSL からの interop (WSL の中から `cmd.exe /c "… | evoeditor.exe -"` と、WSL の側のパイプ `cat … | evoeditor -`)・tmux の中 (WSL)・`ssh -t` 越し (Linux のホストへ)。環境に当てはまらない項目 (Windows の N3・N5) は「—」と書く。
+
+**準備**: 手順 G1 の `large-100mb` と、日本語・CRLF を含む小さな UTF-8 のファイル (数 KB。以下 `small.txt`) を作業フォルダに置く。
+
+| # | 手順 | 期待 |
+|---|---|---|
+| N1 | (a) 閉じるパイプ: `small.txt` を `type small.txt \| evoeditor -` (cmd)・`Get-Content -Raw small.txt \| evoeditor -` (PowerShell)・`cat small.txt \| evoeditor -` (sh) で渡す。続けて `large-100mb` を同じように渡し、読込中に矢印キーを押す。読み終えたら `Ctrl+Q` | `type` / `cat` では、待ちの行 (「標準入力を待っています (Ctrl+C で中止)」) は終了の後の画面に残らない。読み終えた内容が無題の文書で開き、`small.txt` と一致する (日本語・改行コード)。100 MB では読込中にステータスバーに `[読込中 12.3 MiB]` の形で読んだ量が出て、入力に応答する。読み終えた文書は変更ありで、`Ctrl+Q` で未保存の確認が出る。Windows PowerShell 5.1 のパイプでは非 ASCII が `?` になる (既知の制約。ヘルプの注意のとおり) |
+| N2 | (b) 閉じないパイプ: `ping -t localhost \| evoeditor -` (Windows)・`tail -f small.txt \| evoeditor -` (sh) で起動し、数秒後に `Esc` を押して「ここまでで開く」(`O`) を選ぶ。別の回で、`Esc` の確認で「読み続ける」(`Esc`) を選ぶ。もう一度起動し、読込中に `Ctrl+Q` を押す | `Esc` で確認「標準入力の読込 / 読むのをやめると書き手が止まり、続きは読めません」が出る。「ここまでで開く」で、読んだ分が読み取り専用 (途中までしか読んでいない内容) で開き、「標準入力を読むのをやめ、ここまで ({size}) を読み取り専用で開きました」が出る。「読み続ける」では読込が続く。`Ctrl+Q` では「標準入力を読み込み中です ({size})」の確認 (ここまでで開く / 破棄 / キャンセル) が出る。**書き手の止まり方を記録する**: Unix の `tail -f` は SIGPIPE で終わる。Windows の `ping -t` は止まらず、evoeditor の終了の後に `Ctrl+C` で止める (07 §18.5) |
+| N3 | (c) 書き手がパスワードを尋ねる (Unix): `sudo -k` の後に `sudo cat small.txt \| evoeditor -` でパスワードを入れる。終了の後に何か打ち込む | パスワードの入力の間は evoeditor の画面にならず、「標準入力を待っています (Ctrl+C で中止)」が出る (端末の初期化は最初のデータまで待つ。OQ-219 の 9)。入力の後に画面が出て崩れない (崩れたら `ui.redraw` で直る)。終了の後、打ち込んだ文字がエコーされる (`stty -a` に `echo`) |
+| N4 | (d) 端末の判定: コンソール (Windows Terminal・conhost) と mintty の擬似端末で `evoeditor -` を直接起動する。`evoeditor - < NUL` (cmd) と `evoeditor - < /dev/null` (sh) で起動する | 端末からは、空の文書と「標準入力が端末のため、読まずに空の文書を開きました」。`NUL` / `/dev/null` からは、空の文書でメッセージなし。どちらも変更なしで、`Ctrl+Q` で確認なしに終わる |
+| N5 | (e) 読込中のサスペンド (Unix): `tail -f small.txt \| evoeditor -` の読込中に `Ctrl+K Z`、シェルで `jobs`、`fg` | シェルに戻るときに端末が元に戻り、パイプラインごと止まっている (`jobs` に `tail` と `evoeditor` が 1 つのジョブで出る)。`fg` で戻り、画面が描き直され、読込が続く |
 
 ## M. ADR から持ち越した確認 (v0.4 の RC。記録は `acceptance.md`)
 

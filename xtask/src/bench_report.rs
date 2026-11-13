@@ -179,6 +179,12 @@ pub(crate) fn verdict(v: &Value) -> Verdict {
             limits(v, 300.0, f64::MAX),
             "開く → 先頭部分を含む最初の Frame の write (先行表示。先に読み終えたら全文)。先行表示だった回の数は JSON の partial_runs",
         ),
+        // v0.4 の M25 の 10: 標準入力の起動 (参考、09 §5.2)。同じ回に交互に測った BM-104-100m の手順との比を備考に足す
+        "BM-120-100m" => t(
+            "(参考)",
+            None,
+            "標準入力の起動 (`cmd | evoeditor -`、UTF-8 100 MB): main 入口 → 読み終えた文書の最初の Frame の write。比は判定に使わない",
+        ),
         "BM-512" => t(
             "p99 16 ms",
             limits(v, f64::MAX, 16.0),
@@ -254,6 +260,26 @@ fn label(v: &Value) -> String {
             s.push_str(x);
         }
     }
+    s
+}
+
+/// 同じ回に交互に測った比べる相手 (`pair_id`) との比の備考 (BM-120-100m の BM-104-100m との比。09 §5.2)。
+/// 比 (`ratio_bm104`) は組ごとの比の中央値。相手が無ければ空。
+fn pair_note(v: &Value) -> String {
+    let (Some(pair), Some(p50), Some(ratio)) = (
+        v.get("pair_id").and_then(Value::as_str),
+        f(v, "pair_p50_ms"),
+        f(v, "ratio_bm104"),
+    ) else {
+        return String::new();
+    };
+    let mut s = format!("。同じ回に交互に測った {pair} の手順 (p50 {p50:.2} ms) との比 {ratio:.2}");
+    if let (Some(fp), Some(fr)) = (f(v, "file_p50_ms"), f(v, "ratio_file")) {
+        s.push_str(&format!(
+            "、起動時のパスで開く起動 (p50 {fp:.2} ms) との比 {fr:.2}"
+        ));
+    }
+    s.push_str(" (組ごとの比の中央値)");
     s
 }
 
@@ -334,11 +360,12 @@ pub(crate) fn write(
                 fmt_ms(v, "max_ms"),
             )
         };
-        let note = if v.get("bytes").is_some() {
+        let mut note = if v.get("bytes").is_some() {
             format!("{} バイト。{}", v["bytes"], ver.note)
         } else {
             ver.note.to_owned()
         };
+        note.push_str(&pair_note(v));
         md.push_str(&format!(
             "| {} | {n} | {p50} | {p99} | {p999} | {max} | {} | {} | {note} |\n",
             label(v),
@@ -488,6 +515,37 @@ mod tests {
                 .target
                 .contains("300 ms")
         );
+    }
+
+    // v0.4 の M25 の 10 (09 §5.2): 標準入力の起動は参考。比べる相手との比を備考に出す
+    #[test]
+    fn 標準入力の起動は参考で比を備考に出す() {
+        let row = v(
+            r#"{"id":"BM-120-100m","n":30,"p50_ms":95.0,"p99_ms":120.0,"max_ms":120.0,"pair_id":"BM-104-100m","pair_p50_ms":150.0,"ratio_bm104":0.633,"file_p50_ms":100.0,"ratio_file":0.95}"#,
+        );
+        let ver = verdict(&row);
+        assert_eq!(ver.verdict, "参考");
+        assert_eq!(ver.target, "(参考)");
+        let note = pair_note(&row);
+        assert!(note.contains("BM-104-100m"), "{note}");
+        assert!(note.contains("p50 150.00 ms"), "{note}");
+        assert!(note.contains("比 0.63"), "{note}");
+        assert!(note.contains("比 0.95"), "{note}");
+        // 相手の無い行は備考を足さない
+        assert_eq!(pair_note(&v(r#"{"id":"BM-104-100m","p50_ms":150.0}"#)), "");
+
+        let dir = std::env::temp_dir().join(format!("xtask-bench-report-{}", std::process::id()));
+        write(&dir, "ENV-W1", "abc1234", false, &[row.to_string()]).unwrap();
+        let md = std::fs::read_to_string(dir.join("summary.md")).unwrap();
+        let json = std::fs::read_to_string(dir.join("BM-120-100m.json")).unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+        let line = md
+            .lines()
+            .find(|l| l.starts_with("| BM-120-100m |"))
+            .expect("BM-120-100m の行");
+        assert!(line.contains("| 参考 |"), "{line}");
+        assert!(line.contains("との比 0.63"), "{line}");
+        assert!(json.contains("\"ratio_bm104\""), "{json}");
     }
 
     #[test]
