@@ -22,6 +22,11 @@
 //! - `resize.to_flush`: 最後のリサイズイベントの読取完了 → 次の Frame の `write` が戻った時刻 (「リサイズ → 再描画」。FR-512)。
 //! - `search.first_match`: 直前のキー入力 (`fields.vk`) の読取完了 → 環境変数 `EVE_TRACE_MATCH` の文字列が編集面の行に初めて
 //!   現れた Frame の `write` が戻った時刻 (検索で一致へ移って画面に出るまで。BM-108、01 NFR-108)。キー入力のたびに測り直す。
+//! - `open.content`: 直前のキー入力 (`fields.vk`) の読取完了 → 編集面に本文の無い Frame の後で、本文 (空白でない文字) が
+//!   初めて出た Frame の `write` が戻った時刻 (「開く」→ 文書の先頭部分を含む最初の Frame。BM-104v、01 FR-122 AC-2)。
+//!   `fields.partial` は、その Frame に読込の進捗も出ていた (先行表示の先頭。03 §9.2.1) なら 1、全文なら 0。
+//! - `open.partial`: `open.content` の Frame が先行表示の先頭だったときの印 (同じ区間。回ごとの有無を BM-104v が数える)。
+//!   本文の無い Frame を挟まない描画 (再読込の間の旧本文など) では記録しない。
 //!
 //! 書出しは `flush` (終了の直前) にまとめて行い、計測区間にファイルの I/O を含めない。隠しオプション
 //! `--bench-exit-after-first-frame` は、最初の Frame の `write` が戻った直後に端末を復元して終了する。
@@ -57,6 +62,8 @@ mod imp {
     static PROGRESS_ARMED: AtomicBool = AtomicBool::new(false);
     /// キー入力の後、`EVE_TRACE_MATCH` の語がまだ画面に出ていない (`search.first_match` を待っている)。
     static MATCH_ARMED: AtomicBool = AtomicBool::new(false);
+    /// 編集面に本文の無い Frame を書いた後、まだ本文の出た Frame を書いていない (`open.content` を待っている)。
+    static CONTENT_ARMED: AtomicBool = AtomicBool::new(false);
     /// 最後のリサイズイベントの読取完了 (ns+1)。
     static RESIZE: AtomicU64 = AtomicU64::new(0);
     static FIRST_DONE: AtomicBool = AtomicBool::new(false);
@@ -178,6 +185,22 @@ mod imp {
             push(format!(
                 "{{\"name\":\"open.progress\",\"start_ns\":{start},\"end_ns\":{end},\"thread\":\"{thread}\",\"fields\":{{\"vk\":{vk}}}}}"
             ));
+        }
+        if !content {
+            CONTENT_ARMED.store(true, Ordering::Release);
+        } else if CONTENT_ARMED.swap(false, Ordering::AcqRel) {
+            // 本文の無い Frame の後で本文が出た: 直前のキー入力から測る (先行表示の先頭なら進捗も出ている)
+            let start = LAST_READ.load(Ordering::Acquire).saturating_sub(1);
+            let vk = LAST_VK.load(Ordering::Acquire);
+            let partial = u8::from(progress);
+            push(format!(
+                "{{\"name\":\"open.content\",\"start_ns\":{start},\"end_ns\":{end},\"thread\":\"{thread}\",\"fields\":{{\"vk\":{vk},\"partial\":{partial}}}}}"
+            ));
+            if progress {
+                push(format!(
+                    "{{\"name\":\"open.partial\",\"start_ns\":{start},\"end_ns\":{end},\"thread\":\"{thread}\",\"fields\":{{\"vk\":{vk}}}}}"
+                ));
+            }
         }
         if matched && MATCH_ARMED.swap(false, Ordering::AcqRel) {
             let start = LAST_READ.load(Ordering::Acquire).saturating_sub(1);
