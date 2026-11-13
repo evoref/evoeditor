@@ -107,6 +107,10 @@ pub(crate) struct SearchBarState {
     pub newline_sugar: bool,
     /// CP932 互換文字の同一視 (`search.cp932_compat_fold`。検索バーを開いたときの設定の値、03 §12.4.1)。
     pub compat_fold: bool,
+    /// 保持する一致の上限 (`search.max_matches`。検索バーを開いたときの設定の値、03 §12.2)。
+    pub max_matches: usize,
+    /// 数える一致の上限 (`search.count_limit`。検索バーを開いたときの設定の値、03 §12.2)。
+    pub count_limit: u64,
     /// 行の窓の核の大きさと連結の上限 (既定は定数。試験だけが小さくする、`SearchTuning`)。
     pub tuning: SearchTuning,
     /// 入力しているときの検索の起点 (開いたときの選択の始端。一致へ移ったらその一致の始端)。
@@ -169,8 +173,12 @@ impl EditorState {
         self.find.search_bar = Some(SearchBarState {
             text: String::new(),
             cursor: 0,
-            case: Case::Smart,
-            regex: false,
+            case: match self.config().search_case {
+                eve_config::SearchCase::Smart => Case::Smart,
+                eve_config::SearchCase::Sensitive => Case::Sensitive,
+                eve_config::SearchCase::Insensitive => Case::Insensitive,
+            },
+            regex: self.config().regex_default,
             whole_word: false,
             in_selection: false,
             sel_ranges,
@@ -179,6 +187,8 @@ impl EditorState {
             // 設定の変更は次に検索バーを開いたときから効く (03 §12.3.1 の「型と状態の持ち主」)
             newline_sugar: self.config().newline_sugar,
             compat_fold: self.config().cp932_compat_fold,
+            max_matches: usize::try_from(self.config().max_matches).unwrap_or(usize::MAX),
+            count_limit: self.config().count_limit,
             tuning: self.find.tuning,
             anchor,
             current: None,

@@ -23,10 +23,6 @@ use crate::ui_model::keys;
 use crate::editor::state::EditorState;
 use crate::io::pending::Pending;
 
-/// 保持する一致の上限 (`search.max_matches`、07 §5.5)。
-const MAX_MATCHES: usize = 10_000;
-/// 数える一致の上限 (`search.count_limit`、07 §5.5)。
-const COUNT_LIMIT: u64 = 1_000_000;
 /// 同期検索で走査する量 (`SEARCH_SYNC_STEP_BYTES`、03 §12.2)。
 const SYNC_STEP_BYTES: usize = 1 << 18;
 /// 同期検索で一度に `scan_bytes` へ渡す量 (打ち切りの粒度)。
@@ -259,6 +255,15 @@ impl EditorState {
         let whole = shape.is_some_and(|s| s.whole_doc());
         let jobbed = shape.is_some_and(|s| s.job_driven());
         let lines = shape.map_or(LineSpan::Bounded(0), |s| s.lines());
+        // 保持と件数の上限は、検索バーを開いたときの設定の値 (バーが無いときは今の設定、`search.max_matches` /
+        // `search.count_limit`、07 §5.5)
+        let (max_matches, count_limit) = match &self.find.search_bar {
+            Some(bar) => (bar.max_matches, bar.count_limit),
+            None => (
+                usize::try_from(self.config().max_matches).unwrap_or(usize::MAX),
+                self.config().count_limit,
+            ),
+        };
         let job = if limit.is_none() {
             let job = self.jobs.spawn(
                 Some(doc_id),
@@ -267,8 +272,8 @@ impl EditorState {
                     snapshot,
                     query: query.clone(),
                     from,
-                    max_matches: MAX_MATCHES,
-                    count_limit: COUNT_LIMIT,
+                    max_matches,
+                    count_limit,
                 },
             );
             self.io.pending.insert(job, Pending::Search);

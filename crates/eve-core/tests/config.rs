@@ -156,7 +156,7 @@ fn 空の既存ファイルと改行のないファイルの改行は設定に�
 #[test]
 fn 未対応の情報診断は画面に出さない() {
     let mut h = Harness::new();
-    let l = load_str("[editor]\nauto_indent = false\n[search]\ncase = \"smart\"\n");
+    let l = load_str("[editor]\nauto_indent = false\n[search]\nregex_size_limit = 1\n");
     assert_eq!(l.diagnostics.len(), 2);
     h.clear_log();
     h.editor
