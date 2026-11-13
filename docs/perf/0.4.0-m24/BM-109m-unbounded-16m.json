@@ -1,0 +1,38 @@
+{
+  "commit": "7f3bed1",
+  "env": "ENV-W1",
+  "id": "BM-109m-unbounded-16m",
+  "quick": false,
+  "results": [
+    {
+      "bytes": 16711757,
+      "id": "BM-109m-unbounded-16m",
+      "matches": 1,
+      "max_ms": 29.5,
+      "min_ms": 26.0,
+      "n": 5,
+      "p50_ms": 26.7,
+      "quick": false,
+      "ratio": 0.84,
+      "ratio_max": 0.96,
+      "ratio_min": 0.82,
+      "ref_p50_ms": 31.2,
+      "run": "bm_109-1"
+    },
+    {
+      "bytes": 16711757,
+      "id": "BM-109m-unbounded-16m",
+      "matches": 1,
+      "max_ms": 24.5,
+      "min_ms": 24.1,
+      "n": 5,
+      "p50_ms": 24.3,
+      "quick": false,
+      "ratio": 0.88,
+      "ratio_max": 0.88,
+      "ratio_min": 0.87,
+      "ref_p50_ms": 27.6,
+      "run": "bm_109-2"
+    }
+  ]
+}

@@ -1,0 +1,38 @@
+{
+  "commit": "7f3bed1",
+  "env": "ENV-W1",
+  "id": "BM-103b-search-multiline",
+  "quick": false,
+  "results": [
+    {
+      "id": "BM-103b-search-multiline",
+      "max_ms": 3.97,
+      "n": 1000,
+      "p50_ms": 1.8,
+      "p999_ms": 3.68,
+      "p99_ms": 3.37,
+      "quick": false,
+      "run": "pty-404m-1"
+    },
+    {
+      "id": "BM-103b-search-multiline",
+      "max_ms": 6.22,
+      "n": 1000,
+      "p50_ms": 1.67,
+      "p999_ms": 3.85,
+      "p99_ms": 3.3,
+      "quick": false,
+      "run": "pty-404m-2"
+    },
+    {
+      "id": "BM-103b-search-multiline",
+      "max_ms": 2.52,
+      "n": 1000,
+      "p50_ms": 1.25,
+      "p999_ms": 2.39,
+      "p99_ms": 2.15,
+      "quick": false,
+      "run": "pty-404m-3"
+    }
+  ]
+}
