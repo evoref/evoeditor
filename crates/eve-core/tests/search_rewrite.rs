@@ -190,7 +190,7 @@ const COMPAT_LITERALS: &[(&str, Case)] = &[
 
 #[test]
 fn 互換文字の同一視の書き換えの表() {
-    let mut out = String::from("# pattern\trewritten\tcompat_folded\tunfolded_k\n");
+    let mut out = String::from("# pattern\trewritten\tcompat_folded\tk_fold_off\n");
     for p in COMPAT_TABLE {
         let q = SearchQuery::literal(p)
             .with_regex(true)

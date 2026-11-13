@@ -205,7 +205,14 @@ pub(crate) const UI_HELP_SECTION_TERMINAL: &str = "ui.help.section.terminal";
 pub(crate) const UI_HELP_SEARCH_ANCHORS: &str = "ui.help.search.anchors";
 pub(crate) const UI_HELP_SEARCH_CLASS_NEWLINE: &str = "ui.help.search.class_newline";
 pub(crate) const UI_HELP_SEARCH_COMPAT_EXCLUDE: &str = "ui.help.search.compat_exclude";
-pub(crate) const UI_HELP_SEARCH_COMPAT_FOLD: &str = "ui.help.search.compat_fold";
+pub(crate) const UI_HELP_SEARCH_COMPAT_INTRO: &str = "ui.help.search.compat_intro";
+pub(crate) const UI_HELP_SEARCH_COMPAT_MARK: &str = "ui.help.search.compat_mark";
+pub(crate) const UI_HELP_SEARCH_COMPAT_MATCH: &str = "ui.help.search.compat_match";
+pub(crate) const UI_HELP_SEARCH_COMPAT_OFF: &str = "ui.help.search.compat_off";
+pub(crate) const UI_HELP_SEARCH_COMPAT_PAIRS: &str = "ui.help.search.compat_pairs";
+pub(crate) const UI_HELP_SEARCH_COMPAT_REGEX: &str = "ui.help.search.compat_regex";
+pub(crate) const UI_HELP_SEARCH_COMPAT_REPLACE: &str = "ui.help.search.compat_replace";
+pub(crate) const UI_HELP_SEARCH_COMPAT_YEN_KEY: &str = "ui.help.search.compat_yen_key";
 pub(crate) const UI_HELP_SEARCH_DOT_ALL: &str = "ui.help.search.dot_all";
 pub(crate) const UI_HELP_SEARCH_INTRO: &str = "ui.help.search.intro";
 pub(crate) const UI_HELP_SEARCH_LIMIT: &str = "ui.help.search.limit";
@@ -248,6 +255,7 @@ pub(crate) const UI_READ_ONLY_REASON_STATEFUL: &str =
 pub(crate) const UI_READ_ONLY_REASON_USER_REQUESTED: &str = "ui.read_only_reason.user_requested";
 pub(crate) const UI_SEARCH_COUNT_APPROX: &str = "ui.search.count.approx";
 pub(crate) const UI_SEARCH_COUNT_AT_LEAST: &str = "ui.search.count.at_least";
+pub(crate) const UI_SEARCH_COUNT_COMPAT_MATCH_SUFFIX: &str = "ui.search.count.compat_match_suffix";
 pub(crate) const UI_SEARCH_COUNT_COMPAT_SUFFIX: &str = "ui.search.count.compat_suffix";
 pub(crate) const UI_SEARCH_COUNT_EXACT: &str = "ui.search.count.exact";
 pub(crate) const UI_SEARCH_COUNT_NO_MATCH: &str = "ui.search.count.no_match";
@@ -259,7 +267,7 @@ pub(crate) const UI_TOO_SMALL: &str = "ui.too_small";
 
 /// すべての定数 (キーの順。試験に使う)。
 #[cfg(test)]
-const ALL: [&str; 237] = [
+const ALL: [&str; 245] = [
     HINT_UI_CANCEL,
     INFO_APP_RELEASE_SUMMARY,
     INFO_APP_UPDATED,
@@ -450,7 +458,14 @@ const ALL: [&str; 237] = [
     UI_HELP_SEARCH_ANCHORS,
     UI_HELP_SEARCH_CLASS_NEWLINE,
     UI_HELP_SEARCH_COMPAT_EXCLUDE,
-    UI_HELP_SEARCH_COMPAT_FOLD,
+    UI_HELP_SEARCH_COMPAT_INTRO,
+    UI_HELP_SEARCH_COMPAT_MARK,
+    UI_HELP_SEARCH_COMPAT_MATCH,
+    UI_HELP_SEARCH_COMPAT_OFF,
+    UI_HELP_SEARCH_COMPAT_PAIRS,
+    UI_HELP_SEARCH_COMPAT_REGEX,
+    UI_HELP_SEARCH_COMPAT_REPLACE,
+    UI_HELP_SEARCH_COMPAT_YEN_KEY,
     UI_HELP_SEARCH_DOT_ALL,
     UI_HELP_SEARCH_INTRO,
     UI_HELP_SEARCH_LIMIT,
@@ -489,6 +504,7 @@ const ALL: [&str; 237] = [
     UI_READ_ONLY_REASON_USER_REQUESTED,
     UI_SEARCH_COUNT_APPROX,
     UI_SEARCH_COUNT_AT_LEAST,
+    UI_SEARCH_COUNT_COMPAT_MATCH_SUFFIX,
     UI_SEARCH_COUNT_COMPAT_SUFFIX,
     UI_SEARCH_COUNT_EXACT,
     UI_SEARCH_COUNT_NO_MATCH,

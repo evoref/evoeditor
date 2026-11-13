@@ -39,10 +39,11 @@ cmd = "file.save"
 [[step]]
 run_jobs = true
 
-# `a` の後ろの 3 つの改行と、`b` の後ろの 2 つの改行の 2 件 (各行末の CRLF の CR と LF を別々に数えない)。空行は 1 行減る
+# 一致は `a` の後ろの 3 つの改行と、`b` の後ろの 2 つの改行の 2 件 (各行末の CRLF の CR と LF を別々に数えない)。`b` の後ろの
+# 一致は置換の文字列と同じ (CRLF 2 つ) なので置き換えず、件数に数えない (03 §12.5)。空行は 1 行減る
 [[assert]]
 at = 10
-frame_contains = ["2 件を置換しました。文書は 1 行減りました"]
+frame_contains = ["1 件を置換しました。文書は 1 行減りました"]
 [[assert]]
 fs = { "a.txt" = { text = "a\r\n\r\nb\r\n\r\nc\r\n" } }
 [[assert]]

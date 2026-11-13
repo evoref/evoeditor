@@ -1,4 +1,4 @@
-# pattern	rewritten	compat_folded	unfolded_k
+# pattern	rewritten	compat_folded	k_fold_off
 〜	[〜～]	true	0
 ～	[～〜]	true	0
 a―b	a[―—]b	true	0

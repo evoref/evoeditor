@@ -21,6 +21,9 @@ use super::limits::{
 };
 use super::rewrite::{LineSpan, Rewritten, compat_partner, first_line, rewrite_with};
 use super::scan::{Discard, ScanLimit};
+use regex_automata::nfa::thompson::{self, pikevm, pikevm::PikeVM};
+use regex_automata::util::syntax;
+use regex_automata::{Anchored, Input, MatchKind};
 
 /// 大文字小文字の扱い (FR-402)。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -629,12 +632,14 @@ fn build_regex(pattern: &str, insensitive: bool) -> Result<regex::Regex, QueryEr
         })
 }
 
-/// 同一視を切った検索語 (すべて置換で、同一視で当たった一致を数える、§12.4.1 の「置換」)。照合器は使うときに 1 回だけ作る
-/// (検索のジョブでは作らない)。
+/// 同一視を切った検索語 (同一視で当たった一致を見分ける、§12.4.1 の「置換」と「検索バーの表示」)。照合器は `regex-automata`
+/// の `PikeVM` で、すべての一致を数える (`MatchKind::All`) ように作る: 始端に固定し、範囲を一致の範囲に限って探すと、範囲の
+/// 終端で終わる一致があればそれが最も長い一致として返る。照合器は、全件の検索のジョブ (`bg`) かすべて置換で初めて作り、
+/// メインスレッドは作られた後だけ使う。
 struct Unfolded {
     pattern: String,
     insensitive: bool,
-    re: OnceLock<Option<regex::Regex>>,
+    vm: OnceLock<Option<PikeVM>>,
 }
 
 impl Unfolded {
@@ -642,14 +647,51 @@ impl Unfolded {
         Unfolded {
             pattern: pattern.to_owned(),
             insensitive,
-            re: OnceLock::new(),
+            vm: OnceLock::new(),
         }
     }
 
-    fn regex(&self) -> Option<&regex::Regex> {
-        self.re
-            .get_or_init(|| build_regex(&self.pattern, self.insensitive).ok())
+    /// 照合器 (無ければ作る)。作れなければ `None`。
+    fn vm(&self) -> Option<&PikeVM> {
+        self.vm
+            .get_or_init(|| {
+                PikeVM::builder()
+                    .syntax(
+                        syntax::Config::new()
+                            .case_insensitive(self.insensitive)
+                            .multi_line(true)
+                            .crlf(true),
+                    )
+                    .thompson(thompson::Config::new().nfa_size_limit(Some(SEARCH_REGEX_SIZE_LIMIT)))
+                    .configure(PikeVM::config().match_kind(MatchKind::All))
+                    .build(&self.pattern)
+                    .ok()
+            })
             .as_ref()
+    }
+}
+
+/// 一致が同一視で当たったものかを確かめる (`Matcher::fold_check`)。照合器の作業領域を持つので、すべて置換では 1 つを
+/// 使い回す。
+pub(crate) struct FoldCheck<'m> {
+    vm: &'m PikeVM,
+    cache: pikevm::Cache,
+}
+
+impl FoldCheck<'_> {
+    /// 一致 `r` が同一視で当たった一致か: 同一視を切った検索語が、文書の前後の文脈のまま、`r` にちょうど一致できない
+    /// (§12.4.1 の「置換」の定義)。同一視を切った検索語を `r` の始端に固定し、探す範囲を `r` に限って、`r` の終端で終わる
+    /// 一致があるかを見る (選択の優先は問わない。`〜|～cc|[〜～]` の `～` の一致は、3 つ目の選択肢で一致できるので数えない)。
+    /// `^`・`$`・`\b`・`\A`・`\z` は範囲の外の前後 1 文字を見て決まる (文書の端はそのまま端)。
+    pub(crate) fn folded(&mut self, text: &dyn TextRead, r: ByteRange) -> bool {
+        let hs = super::stream::prev_char(text, r.start.0);
+        let he = super::stream::next_char(text, r.end.0);
+        let hay = text.slice_to_string(ByteRange::new(ByteOff(hs), ByteOff(he)));
+        let (s, e) = (r.start.0 - hs, r.end.0 - hs);
+        let input = Input::new(&hay).span(s..e).anchored(Anchored::Yes);
+        self.vm
+            .find(&mut self.cache, input)
+            .is_none_or(|m| m.end() != e)
     }
 }
 
@@ -887,20 +929,23 @@ impl Matcher {
         self.unfolded.is_some()
     }
 
-    /// 一致 `r` が同一視で当たった一致か: 同一視を切った検索語で、同じ範囲がちょうど一致しない (§12.4.1 の「置換」)。
-    /// 同一視を切った検索語を `r` の始端から走らせ、最初の一致が `r` そのものかを見る。`^`・`$`・`\b`・`\A`・`\z` の判定は
-    /// 前後の 1 文字で決まるので、`r` の前後 1 文字を付けた文字列の上で探す (文書の端はそのまま端)。同一視が効いていない
-    /// 照合器では常に偽。
-    pub(super) fn folded_match(&self, text: &dyn TextRead, r: ByteRange) -> bool {
-        let Some(re) = self.unfolded.as_ref().and_then(Unfolded::regex) else {
-            return false;
-        };
-        let hs = super::stream::prev_char(text, r.start.0);
-        let he = super::stream::next_char(text, r.end.0);
-        let hay = text.slice_to_string(ByteRange::new(ByteOff(hs), ByteOff(he)));
-        let (s, e) = (r.start.0 - hs, r.end.0 - hs);
-        re.find_at(&hay, s)
-            .is_none_or(|m| (m.start(), m.end()) != (s, e))
+    /// 同一視で当たった一致を見分ける確かめ (`FoldCheck`)。同一視を切った照合器が無ければ作る (`bg` のジョブから呼ぶ)。
+    /// 同一視が効いていない照合器では `None`。
+    pub(crate) fn fold_check(&self) -> Option<FoldCheck<'_>> {
+        let vm = self.unfolded.as_ref()?.vm()?;
+        Some(FoldCheck {
+            vm,
+            cache: vm.create_cache(),
+        })
+    }
+
+    /// `fold_check` と同じだが、同一視を切った照合器がまだ無ければ作らずに `None` (メインスレッドで使う)。
+    pub(crate) fn fold_check_ready(&self) -> Option<FoldCheck<'_>> {
+        let vm = self.unfolded.as_ref()?.vm.get()?.as_ref()?;
+        Some(FoldCheck {
+            vm,
+            cache: vm.create_cache(),
+        })
     }
 
     /// 1 行の中の一致を左から順に `f` へ渡す。`line_start` は行頭の文書内バイト位置。`want_caps` が真で利用者の正規表現

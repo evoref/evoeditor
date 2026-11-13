@@ -419,8 +419,10 @@ fn 置換の文字列は書いたまま入り_同一視で当たった件数を�
             b.folded,
         )
     };
-    // `〜` を `～` にそろえる: もとから `～` だった箇所にも一致して数える (内容は変わらない)
-    assert_eq!(run("〜～〜", &lit("〜"), "～"), ("～～～".to_owned(), 3, 1));
+    // `〜` を `～` にそろえる: もとから `～` だった箇所にも一致するが、一致した文字列と置換の文字列が同じなので置き換えず、
+    // 件数にも同一視の件数にも数えない (03 §12.5、OQ-218 の 6 の改訂)
+    assert_eq!(run("〜～〜", &lit("〜"), "～"), ("～～～".to_owned(), 2, 0));
+    assert_eq!(run("〜～〜", &lit("〜"), "x"), ("xxx".to_owned(), 3, 1));
     // 各組で、書いたほうの文字だけが入る
     for (a, b) in PAIRS {
         let doc = format!("{a}{b}");
@@ -452,9 +454,102 @@ fn 置換の文字列は書いたまま入り_同一視で当たった件数を�
     );
     // 互換文字を含まない検索語は 0
     assert_eq!(run("a〜a", &lit("a"), "b"), ("b〜b".to_owned(), 2, 0));
-    // すべて置換の簡易版 (件数だけ) も同じ件数
+    // すべて置換の簡易版 (件数だけ) も同じ件数 (`〜` は置換の文字列と同じなので数えない)
     let (_, n) = build_replace_all(&Text::from("〜～"), &lit("～"), "〜", &cancel).unwrap();
-    assert_eq!(n, 2);
+    assert_eq!(n, 1);
+}
+
+/// (置換後の本文, 件数, 同一視で当たった件数)。
+fn replace_all(doc: &str, q: &SearchQuery, rep: &str) -> (String, u64, u64) {
+    let t = Text::from(doc);
+    let b = build_replace_all_in(&t, q, rep, None, &CancelToken::new())
+        .unwrap()
+        .unwrap();
+    let mut t2 = Text::from(doc);
+    #[allow(clippy::disallowed_methods)]
+    t2.apply(&b.changes).unwrap();
+    (
+        t2.slice_to_string(ByteRange::new(ByteOff(0), ByteOff(t2.len_bytes()))),
+        b.count,
+        b.folded,
+    )
+}
+
+// 同一視で当たった件数は「同一視を切った検索語が、文書の前後の文脈のまま、その範囲にちょうど一致できない一致」(03 §12.4.1 の
+// 「置換」、OQ-218 の 6 の改訂)。一致の後ろの文字列を切ったところで `$`・`\b`・`\z` が偽って成り立たず、選択の優先にも
+// 左右されない (レビューの指摘から)
+// verifies: FR-401
+#[test]
+fn 同一視で当たった件数は文書の文脈のまま範囲にちょうど一致できるかで数える() {
+    // `a` は同一視していない一致 (`b$` などは文書の上では偽)
+    for p in [r"a(?:b$)?|〜", r"a(?:b\b)?|〜", r"a(?:b\z)?|〜"] {
+        assert_eq!(
+            replace_all("abc", &re(p), "#"),
+            ("#bc".to_owned(), 1, 0),
+            "{p}"
+        );
+    }
+    // ありそうな形: 「— の後ろに数があれば数も」。文書の `—` は同一視で当たっていない
+    assert_eq!(
+        replace_all("—2nd", &re(r"—(?:\d+\b)?"), "-"),
+        ("-2nd".to_owned(), 1, 0)
+    );
+    assert_eq!(
+        replace_all("―2nd", &re(r"—(?:\d+\b)?"), "-"),
+        ("-2nd".to_owned(), 1, 1)
+    );
+    // 同一視を切った検索語の最初の一致は `～cc` だが、3 つ目の選択肢で `～` にちょうど一致できる → 数えない
+    assert_eq!(
+        replace_all("～cc", &re("〜|～cc|[〜～]"), "#"),
+        ("#cc".to_owned(), 1, 0)
+    );
+    // `$1` のキャプチャと番号
+    assert_eq!(
+        replace_all("〜a ～b", &re(r"(〜)(?P<n>[ab])"), "$2$1"),
+        ("a〜 b～".to_owned(), 2, 1)
+    );
+    // 否定のクラス: 同一視すると `[^〜]` は `～` に一致しない
+    assert_eq!(
+        replace_all("〜～a", &re("[^〜]"), "#"),
+        ("〜～#".to_owned(), 1, 0)
+    );
+    // \P{Sm}: 同一視で外れる文字
+    assert_eq!(
+        replace_all("〜‖－x", &re(r"\P{Sm}"), "#"),
+        ("〜‖－#".to_owned(), 1, 0)
+    );
+    // 行をまたぐ一致: 行の終端の後ろの文脈で `^` が決まる
+    assert_eq!(
+        replace_all("～\nx", &re(r"〜\n^x"), "#"),
+        ("#".to_owned(), 1, 1)
+    );
+}
+
+// 一致した文字列と置換の文字列 (展開した後) が同じ一致は置き換えず、件数にも数えない。同一視でない普通の置換にも効く
+// (03 §12.5、OQ-218 の 6 の改訂)
+// verifies: FR-403
+#[test]
+fn 置換しても文字が変わらない一致は置き換えず数えない() {
+    assert_eq!(
+        replace_all("a b a", &lit("a"), "a"),
+        ("a b a".to_owned(), 0, 0)
+    );
+    assert_eq!(
+        replace_all("ab cd", &re(r"(\w+)"), "$1"),
+        ("ab cd".to_owned(), 0, 0)
+    );
+    assert_eq!(replace_all("ab", &re("[ab]"), "a"), ("aa".to_owned(), 1, 0));
+    // 大小を区別しない検索で、大小だけが違う一致は置き換える (バイトで比べる)
+    assert_eq!(
+        replace_all("A a", &lit("a").with_case(Case::Insensitive), "a"),
+        ("a a".to_owned(), 1, 0)
+    );
+    // 長さの違う組 (`¢` は 2 バイト、`￠` は 3 バイト): `￠` は置換の文字列と同じなので置き換えない
+    assert_eq!(
+        replace_all("¢￠", &lit("¢"), "￠"),
+        ("￠￠".to_owned(), 1, 0)
+    );
+    assert_eq!(replace_all("¢￠", &lit("¢"), "c"), ("cc".to_owned(), 2, 1));
 }
 
 // ---- エディタを通して (設定・件数の印・知らせ・Shift_JIS) ----
@@ -543,7 +638,8 @@ fn 件数の印は同一視が効いているときだけ付く() {
     h.keys("ctrl+a");
     h.text(r"\p{Sm}");
     h.run_jobs();
-    assert_eq!(bar_count(&mut h), "1/2 互換");
+    // 今の一致 `〜` (数学記号でない) は、`～` (数学記号) との同一視で当たった
+    assert_eq!(bar_count(&mut h), "1/2 互換一致");
 }
 
 // verifies: FR-401
@@ -565,10 +661,10 @@ fn すべて置換の知らせは同一視で当たった件数を分けて言�
     let mut h = open_bar("〜 ～ 〜", None, true);
     h.text("〜");
     h.keys("tab");
-    h.text("～");
+    h.text("x");
     h.keys("alt+a");
     h.run_jobs();
-    assert_eq!(h.doc_text(), "～ ～ ～");
+    assert_eq!(h.doc_text(), "x x x");
     assert!(
         h.messages()
             .iter()
@@ -577,7 +673,8 @@ fn すべて置換の知らせは同一視で当たった件数を分けて言�
     assert_eq!(
         message(&mut h),
         (
-            "3 件を置換しました (うち 1 件は互換文字の同一視で一致。元に戻すで戻せます)".to_owned(),
+            "3 件を置換しました (互換文字の同一視で一致したのは 1 件。元に戻すで戻せます)"
+                .to_owned(),
             String::new()
         )
     );
@@ -585,6 +682,103 @@ fn すべて置換の知らせは同一視で当たった件数を分けて言�
     h.keys("esc");
     h.keys("ctrl+z");
     assert_eq!(h.doc_text(), "〜 ～ 〜");
+}
+
+// `〜` を `～` にそろえるすべて置換: もとから `～` の箇所は置き換えず数えない。全部がそうなら文書は変わらず、未保存にならない
+// (03 §12.5、OQ-218 の 6 の改訂)
+// verifies: FR-403
+#[test]
+fn そろえるすべて置換はもとからそろっている箇所を置き換えない() {
+    let mut h = open_bar("〜 ～ 〜", None, true);
+    h.text("〜");
+    h.keys("tab");
+    h.text("～");
+    h.keys("alt+a");
+    h.run_jobs();
+    assert_eq!(h.doc_text(), "～ ～ ～");
+    assert_eq!(message(&mut h).0, "2 件を置換しました (元に戻すで戻せます)");
+    // 全部がもとからそろっている: 文書は変わらず、未保存にならない
+    let mut h = open_bar("～ ～", None, true);
+    h.text("〜");
+    h.keys("tab");
+    h.text("～");
+    h.keys("alt+a");
+    h.run_jobs();
+    assert_eq!(h.doc_text(), "～ ～");
+    assert!(!h.is_dirty());
+    assert!(
+        h.messages()
+            .iter()
+            .any(|k| k == "info.search.replace_no_match")
+    );
+}
+
+// 1 件置換で、一致した文字列と置換の文字列が同じなら置き換えずに次の一致へ進む (03 §12.5)
+// verifies: FR-403
+#[test]
+fn 一件置換で文字が変わらない一致は置き換えず次へ進む() {
+    let mut h = open_bar("〜 ～", None, true);
+    h.text("〜");
+    h.run_jobs();
+    h.keys("tab");
+    h.text("〜");
+    // 今の一致は `〜` (置換の文字列と同じ): 置き換えず、次の `～` へ
+    h.keys("enter");
+    h.run_jobs();
+    assert_eq!(h.doc_text(), "〜 ～");
+    assert!(!h.is_dirty(), "文書は変わらない");
+    assert_eq!(bar_count(&mut h), "2/2 互換一致");
+    // 次の `～` を置き換える
+    h.keys("enter");
+    h.run_jobs();
+    assert_eq!(h.doc_text(), "〜 〜");
+}
+
+// 今の一致が同一視で当たったものなら、件数の後ろの印が「互換一致」になる。次へで 1 件ずつ見て、片方だけを 1 件置換で直せる
+// (03 §12.4.1 の「検索バーの表示」、OQ-218 の 7 の改訂)
+// verifies: FR-401
+#[test]
+fn 今の一致が同一視で当たったものなら互換一致と出し_片方だけを一件置換で直せる() {
+    let mut h = open_bar("〜 ～ 〜", None, true);
+    h.text("〜");
+    h.run_jobs();
+    assert_eq!(
+        bar_count(&mut h),
+        "1/3 互換",
+        "入力中の現在の一致は書いた文字"
+    );
+    h.keys("enter");
+    assert_eq!(bar_count(&mut h), "1/3 互換");
+    h.keys("enter");
+    assert_eq!(h.selection_range(), (4, 7));
+    assert_eq!(bar_count(&mut h), "2/3 互換一致", "`～` は同一視で当たった");
+    h.keys("enter");
+    assert_eq!(bar_count(&mut h), "3/3 互換");
+    // 前へで `～` に戻り、置換欄で 1 件置換すると `～` だけが変わる
+    h.keys("shift+enter");
+    assert_eq!(bar_count(&mut h), "2/3 互換一致");
+    h.keys("tab");
+    h.text("~");
+    h.keys("enter");
+    h.run_jobs();
+    assert_eq!(h.doc_text(), "〜 ~ 〜");
+    // 正規表現でも同じ判定 (`[〜a]` の `～` は同一視で当たった)
+    let mut h = open_bar("～", None, false);
+    h.keys("alt+r");
+    h.text("[〜a]");
+    h.run_jobs();
+    assert_eq!(bar_count(&mut h), "1/1 互換一致");
+    // 英語の文言
+    let mut h = Harness::new()
+        .with_size(100, 12)
+        .with_locale(eve_config::Locale::En)
+        .with_file("/w/a.txt", "～".as_bytes());
+    h.open("/w/a.txt");
+    h.run_jobs();
+    h.keys("ctrl+f");
+    h.text("〜");
+    h.run_jobs();
+    assert_eq!(bar_count(&mut h), "1/1 compat match");
 }
 
 // verifies: FR-401
@@ -605,7 +799,7 @@ fn 行数が変わり同一視でも当たったすべて置換は_1_つの知�
     );
     assert_eq!(
         message(&mut h).0,
-        "2 件を置換しました。文書は 2 行減りました (うち 1 件は互換文字の同一視で一致。元に戻すで戻せます)"
+        "2 件を置換しました。文書は 2 行減りました (互換文字の同一視で一致したのは 1 件。元に戻すで戻せます)"
     );
     // 行を足す置換
     let mut h = open_bar("a〜b～", None, true);
@@ -673,7 +867,8 @@ fn shift_jis_の文書の_cp932_の側にも_jis_の側の文字で一致し_文
     h.keys("ctrl+f");
     h.text("〜");
     h.run_jobs();
-    assert_eq!(bar_count(&mut h), "1/1 互換");
+    // 文書の `～` は `〜` の同一視で当たった
+    assert_eq!(bar_count(&mut h), "1/1 互換一致");
     h.keys("enter");
     h.keys("esc");
     assert_eq!(h.doc_text(), text);
@@ -682,29 +877,62 @@ fn shift_jis_の文書の_cp932_の側にも_jis_の側の文字で一致し_文
     assert_eq!(h.fs.read("/w/s.txt").unwrap(), SJIS_CORPUS);
 }
 
-#[test]
-fn ヘルプの検索の書き方に同一視の組と除く組の案内がある() {
-    let mut h = Harness::new().with_size(200, 40);
+/// ヘルプの「検索の書き方」の、同一視の案内の行 (導入の行から `¥` キーの行まで)。
+fn help_compat_lines(locale: Option<eve_config::Locale>, first: &str) -> Vec<String> {
+    let mut h = Harness::new().with_size(200, 60);
+    if let Some(l) = locale {
+        h = h.with_locale(l);
+    }
     h.keys("ctrl+k h");
     let f = h.frame();
     let Some(eve_view::OverlayModel::Help { lines, .. }) = f.overlays.into_iter().next() else {
         panic!("ヘルプが出ている")
     };
     let body: Vec<String> = lines.iter().map(|l| cell_text(&l.text)).collect();
-    let fold = body
+    let s = body
         .iter()
-        .find(|t| t.contains("search.cp932_compat_fold"))
-        .expect("同一視の行");
-    for (a, b) in PAIRS {
-        assert!(fold.contains(a) && fold.contains(b), "{a}{b}: {fold}");
-    }
-    let exclude = body
+        .position(|t| t.starts_with(first))
+        .expect("導入の行");
+    let e = body[s..]
         .iter()
-        .find(|t| t.contains("同一視しません"))
-        .expect("除く組の行");
-    for c in ['¥', '￥', '‾', '￣', '\\'] {
-        assert!(exclude.contains(c), "{c}: {exclude}");
+        .position(|t| t.contains("U+005C"))
+        .expect("`¥` キーの行");
+    body[s..=s + e].to_vec()
+}
+
+// 04 §8.6: 同一視の組・切り方・印・除く組の案内があり、80 桁の端末で切れないよう 1 行が 78 セル以下 (曖昧幅を 1 / 2 の
+// どちらに数えても)。英語も同じ
+#[test]
+fn ヘルプの同一視の案内は_78_セル以下の短い行に分かれている() {
+    for (locale, first) in [
+        (None, "互換文字の同一視"),
+        (Some(eve_config::Locale::En), "Compatible characters"),
+    ] {
+        let lines = help_compat_lines(locale, first);
+        assert_eq!(lines.len(), 9, "{lines:?}");
+        let all = lines.concat();
+        for (a, b) in PAIRS {
+            assert!(all.contains(a) && all.contains(b), "{a}{b}");
+        }
+        for c in ['¥', '￥', '‾', '￣', '~', '～', '\\'] {
+            assert!(all.contains(c), "{c}");
+        }
+        assert!(all.contains("search.cp932_compat_fold = false"));
+        for l in &lines {
+            for ambiguous_wide in [false, true] {
+                let cfg = eve_text::WidthConfig {
+                    ambiguous_wide,
+                    ..eve_text::WidthConfig::default()
+                };
+                let w = eve_text::str_display_width(l, &cfg);
+                assert!(w <= 78, "{w} セル (曖昧幅 {ambiguous_wide}): {l}");
+            }
+        }
     }
+    let ja = help_compat_lines(None, "互換文字の同一視").concat();
+    assert!(ja.contains("互換一致") && ja.contains("3/10 互換"));
+    // `(?-u)` の範囲に掛けないことは利用者向けの約束にしない
+    assert!(!ja.contains("(?-u"));
 }
 
 // ---- 性質 ----
@@ -775,4 +1003,278 @@ proptest! {
         prop_assert_eq!(b.count, got.len() as u64);
         prop_assert_eq!(b.folded, folded, "検索語 {:?} 文書 {:?}", pat, doc);
     }
+}
+
+// ---- レビューで確かめた形 (正規表現の印・組で閉じていること・単語単位の長い行・同一視の件数の参照) ----
+
+/// 解析の結果の印 (同一視が効いているか)。
+fn marked(q: &SearchQuery) -> bool {
+    q.analyze()
+        .ok()
+        .flatten()
+        .is_some_and(|p| p.compat_folded())
+}
+
+// 03 §12.4.1 の「検索バーの表示」: 書き換えで一致する文字が変わる検索語にだけ印が付く (互換文字を書いていない `\p{Sm}` にも
+// 付き、組の両側を含むクラスには付かない)
+#[test]
+fn 正規表現の印は書き換えで一致する文字が変わるときだけ付く() {
+    for p in [
+        "〜",
+        r"\x{301C}",
+        r"\u{FF5E}",
+        r"\U0000301C",
+        "[〜]",
+        "[^〜]",
+        r"\p{Sm}",
+        r"\P{Sm}",
+        r"[^\P{Sm}]",
+        r"[\x{2010}-\x{2014}]",
+        r"[[〜]&&[～]]",
+        r"[〜-～]",
+        "(?i)[^a〜]",
+        r"[\p{Pd}&&\p{Sm}]",
+        // 選択の両側に組の文字を書いても、リテラルの互換文字なので付く (03 §12.4.1 の注)
+        "〜|～",
+    ] {
+        assert!(marked(&re(p)), "印あり: {p}");
+    }
+    for p in [
+        "[〜～]",
+        r"\S",
+        ".",
+        "[^a]",
+        r"[[〜]&&a]",
+        "(?-u:〜)",
+        "¥",
+        r"[\p{Sm}\p{Pd}\p{Po}\p{Sc}]",
+        r"[^\p{Sm}\p{Pd}\p{Po}\p{Sc}]",
+    ] {
+        assert!(!marked(&re(p)), "印なし: {p}");
+    }
+    assert!(!marked(&re("〜").with_compat_fold(false)));
+    assert!(!marked(&lit("〜").with_compat_fold(false)));
+}
+
+/// 組の性質の試験の検索語 (集合の演算・入れ子・組の両側にまたがる範囲・否定の否定・Unicode のクラス)。
+const CLOSED_PATS: &[&str] = &[
+    "〜",
+    "[^〜]",
+    r"\P{Sm}",
+    r"[\p{Sm}--−]",
+    r"[[〜]&&[～]]",
+    r"[〜-～]",
+    r"[‖-∥]",
+    r"[\x{2010}-\x{2014}]+",
+    r"(?i)[^a〜]",
+    r"[^\P{Sm}]",
+    r"[\p{Pd}&&\p{Sm}]",
+    r"[\p{Sc}~~[¢]]",
+    r"[\p{Sc}~~[￠£]]",
+    r"\p{Pd}",
+    r"\p{Po}+",
+    r"[^\p{Sm}\p{Pd}]",
+    r"[[:^alpha:]&&[^〜]]",
+    r"\x{FF5E}",
+    r"[\u{2015}]",
+    "(?x) 〜 # c",
+    "[^[^〜]]",
+    "(?i:[〜])",
+    r"[〜&&\p{Sm}]",
+    r"[^\p{Sm}--[^〜]]",
+    r"[\p{Sm}--\p{Sm}]",
+    r"[^‖--∥]",
+    r"[\W&&[^\p{Sm}]]",
+    r"\p{Sm}{2}",
+    r"[\p{Any}--[〜¢]]",
+    r"[\p{Sk}\p{So}]",
+    r"[\x{A0}-\x{FF}]",
+    r"[\x{FF00}-\x{FFEF}]",
+    r"[^\x{FF00}-\x{FFEF}]",
+    r"\b〜",
+    r"(?u:[^a])",
+    r"(?i)\p{Sm}|[^\p{Lu}〜]",
+    r"[\p{Sm}&&[^\p{Pd}]]|[\x{FF0D}-\x{FF5E}]{2}",
+    r"(?:―|—)+",
+    r"[^\p{Sm}]{2}",
+    r"\p{Sc}",
+];
+
+/// 組の性質の試験の文書の文字。
+const CLOSED_DOC: &[char] = &[
+    '〜', '～', '‖', '∥', '−', '－', '¢', '￠', '£', '￡', '¬', '￢', '¦', '￤', '—', '―', '¥',
+    '￥', 'a', ' ', '-',
+];
+
+fn to_first(s: &str) -> String {
+    s.chars()
+        .map(|c| PAIRS.iter().find(|p| p.1 == c).map_or(c, |p| p.0))
+        .collect()
+}
+
+fn to_second(s: &str) -> String {
+    s.chars()
+        .map(|c| PAIRS.iter().find(|p| p.0 == c).map_or(c, |p| p.1))
+        .collect()
+}
+
+/// バイト範囲を char の番号の範囲に。
+fn char_ranges(doc: &str, v: &[(usize, usize)]) -> Vec<(usize, usize)> {
+    let idx = |b: usize| doc[..b].chars().count();
+    v.iter().map(|&(s, e)| (idx(s), idx(e))).collect()
+}
+
+/// `unfolded` (同一視を切った書き換えの検索語) が、文書 `doc` の上で、前後の文脈のまま `[s, e)` にちょうど一致できるか
+/// (同一視で当たった件数の参照。文書の全体を探す文字列にし、範囲を一致に限って始端に固定する)。
+fn exact_on_whole_doc(unfolded: &str, insensitive: bool, doc: &str, s: usize, e: usize) -> bool {
+    use regex_automata::nfa::thompson::pikevm::PikeVM;
+    use regex_automata::util::syntax;
+    use regex_automata::{Anchored, Input, MatchKind};
+    let vm = PikeVM::builder()
+        .syntax(
+            syntax::Config::new()
+                .case_insensitive(insensitive)
+                .multi_line(true)
+                .crlf(true),
+        )
+        .configure(PikeVM::config().match_kind(MatchKind::All))
+        .build(unfolded)
+        .expect("同一視を切った検索語");
+    let mut cache = vm.create_cache();
+    vm.find(
+        &mut cache,
+        Input::new(doc).span(s..e).anchored(Anchored::Yes),
+    )
+    .is_some_and(|m| m.end() == e)
+}
+
+/// 同一視の件数の性質の試験の部品 (選択・`?`・`\b`・`$`・`\z` と組み合わせる)。
+const FOLDED_ATOMS: &[&str] = &[
+    "〜", "～", "—", "―", "a", "b", "c", r"\d", r"\b", "$", "^", r"\z", "[〜～]", "[〜a]",
+    r"\p{Sm}",
+];
+
+fn folded_pattern() -> impl Strategy<Value = String> {
+    let leaf = prop::sample::select(FOLDED_ATOMS).prop_map(str::to_owned);
+    leaf.prop_recursive(3, 12, 3, |inner| {
+        prop_oneof![
+            prop::collection::vec(inner.clone(), 1..4).prop_map(|v| v.concat()),
+            (inner.clone(), inner.clone()).prop_map(|(a, b)| format!("{a}|{b}")),
+            inner.clone().prop_map(|a| format!("(?:{a})?")),
+            inner.prop_map(|a| format!("(?:{a})+")),
+        ]
+    })
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig {
+        cases: std::env::var("PROPTEST_CASES").ok().and_then(|v| v.parse().ok()).unwrap_or(512),
+        failure_persistence: None,
+        ..ProptestConfig::default()
+    })]
+
+    // 同一視した検索は組で閉じている: どの検索語でも、文書の組の文字を相手の側にそろえても、一致の文字の位置は変わらない
+    #[test]
+    fn 同一視した検索は組で閉じている(
+        pi in 0..CLOSED_PATS.len(),
+        doc in prop::collection::vec(prop::sample::select(CLOSED_DOC), 0..16).prop_map(|v| v.into_iter().collect::<String>()),
+    ) {
+        let p = CLOSED_PATS[pi];
+        let q = re(p);
+        prop_assert!(q.analyze().is_ok(), "{}", p);
+        let a = char_ranges(&doc, &find_all(&doc, &q));
+        let d1 = to_first(&doc);
+        let d2 = to_second(&doc);
+        prop_assert_eq!(&a, &char_ranges(&d1, &find_all(&d1, &q)), "{} 文書 {:?}", p, doc);
+        prop_assert_eq!(&a, &char_ranges(&d2, &find_all(&d2, &q)), "{} 文書 {:?}", p, doc);
+        // 組に無い文字の一致は、同一視の ON / OFF で変わらない (同一視は組の文字の扱いだけを変える)
+        for ch in doc.chars().filter(|c| partner(*c).is_none()) {
+            let one = ch.to_string();
+            prop_assert_eq!(
+                find_all(&one, &re(p).with_compat_fold(false)),
+                find_all(&one, &q),
+                "{} / {:?}", p, ch
+            );
+        }
+    }
+
+    // 同一視で当たった件数 (`folded`) は、すべて置換で置き換える各一致について「同一視を切った検索語が、文書の全体の上で、
+    // 前後の文脈のまま、その範囲にちょうど一致できない」ものの数と同じ (03 §12.4.1 の「置換」。窓の端で `$`・`\b`・`\z` が
+    // 偽って成り立たず、選択の優先に左右されない)
+    #[test]
+    fn 同一視で当たった件数は文書の全体で確かめた値と同じ(
+        p in folded_pattern(),
+        doc in prop::collection::vec(
+            prop::sample::select(&["〜", "～", "—", "―", "a", "b", "c", "1", "22", " ", "\n", "\r\n"][..]),
+            0..14,
+        ).prop_map(|v| v.concat()),
+    ) {
+        let q = re(&p);
+        let Some(plan) = q.analyze().ok().flatten() else {
+            return Ok(());
+        };
+        let Some(unfolded) = re(&p)
+            .with_compat_fold(false)
+            .analyze()
+            .ok()
+            .flatten()
+            .and_then(|x| x.regex_pattern().map(str::to_owned))
+        else {
+            return Ok(());
+        };
+        let matches = find_all(&doc, &q);
+        // 置換の文字列 `#` は文書に無いので、どの一致も置き換える
+        let (_, count, folded) = replace_all(&doc, &q, "#");
+        prop_assert_eq!(count, matches.len() as u64);
+        let want = if plan.compat_folded() {
+            matches
+                .iter()
+                .filter(|&&(s, e)| !exact_on_whole_doc(&unfolded, !q.is_case_sensitive(), &doc, s, e))
+                .count() as u64
+        } else {
+            0
+        };
+        prop_assert_eq!(folded, want, "検索語 {:?} 文書 {:?} 一致 {:?}", p, doc, matches);
+    }
+}
+
+// 互換文字を含むリテラル検索 + 単語単位は、行の窓の経路で行の境界に揃えた核で探す。窓の核を小さく、窓の上限を短くしても
+// (連結の上限より長い行があっても)、結果は既定の大きさと同じ (レビューで確かめた形)
+#[test]
+fn 互換文字を含む単語単位のリテラル検索は窓の大きさに依らない() {
+    use eve_core::{ScanCtx, SearchTuning, scan_range};
+    let tuning = SearchTuning {
+        core_bytes: 4,
+        concat_max: 64,
+    };
+    let line = format!("〜 {} ～ あ\n", "x".repeat(200));
+    let doc = format!("{line}〜 y\n");
+    let t = Text::from(doc.as_str());
+    for q in [
+        lit("〜").with_whole_word(true),
+        lit("〜").with_whole_word(true).with_compat_fold(false),
+        lit("〜"),
+    ] {
+        let small = q.clone().with_tuning(tuning);
+        let m = small.matcher().unwrap();
+        let mut got = Vec::new();
+        let cancel = CancelToken::new();
+        let end = scan_range(
+            &t,
+            &m,
+            ByteRange::new(ByteOff(0), ByteOff(t.len_bytes())),
+            &mut ScanCtx::new(&cancel),
+            &mut |r| {
+                got.push((r.start.0, r.end.0));
+                true
+            },
+        );
+        assert_eq!(end, eve_core::ScanEnd::Done);
+        assert_eq!(got, find_all(&doc, &q), "{q:?}");
+    }
+    assert_eq!(
+        find_all(&doc, &lit("〜").with_whole_word(true)).len(),
+        3,
+        "行頭の `〜`・`～`・次の行の `〜`"
+    );
 }

@@ -1,5 +1,6 @@
-# 互換文字の同一視ですべて置換すると、置換の文字列は書いたまま入り (もとから `～` だった箇所にも一致して同じ文字に
-# 置き換える)、知らせは同一視で当たった件数を分けて言う。`¥` と `￥` は同一視しない (01 FR-401 AC-5、03 §12.4.1 の「置換」)。
+# 互換文字の同一視ですべて置換すると、置換の文字列は書いたまま入り (`～` も置き換わる)、知らせは同一視で当たった件数を
+# 分けて言う。`〜` を `～` にそろえる置換は、もとから `～` だった箇所を置き換えず数えない。`¥` と `￥` は同一視しない
+# (01 FR-401 AC-5、03 §12.4.1 の「置換」、§12.5)。
 [meta]
 id = "search/compat_fold_replace"
 title = "互換文字のすべて置換は書いたまま入れ、同一視で当たった件数を分けて知らせる"
@@ -11,7 +12,7 @@ tags = ["search", "compat", "replace"]
 size = [80, 12]
 
 [setup.fs]
-"a.txt" = { text = "a〜b～c〜\n¥1￥2" }
+"a.txt" = { text = "a〜b～c〜\n¥1￥2\nx〜y～" }
 
 [[step]]
 open = "a.txt"
@@ -24,7 +25,7 @@ text = "〜"
 [[step]]
 keys = "tab"
 [[step]]
-text = "～"
+text = "-"
 [[step]]
 keys = "alt+a"
 [[step]]
@@ -47,18 +48,44 @@ text = "Y"
 keys = "alt+a"
 [[step]]
 run_jobs = true
+[[step]]
+keys = "esc"
+[[step]]
+keys = "ctrl+r"
+[[step]]
+keys = "ctrl+a"
+[[step]]
+text = "-"
+[[step]]
+keys = "tab"
+[[step]]
+keys = "ctrl+a"
+[[step]]
+text = "-"
+[[step]]
+keys = "alt+a"
+[[step]]
+run_jobs = true
 
-# 3 件を置換し、そのうち 1 件 (もとの `～`) が同一視で当たった
+# 5 件を置換し、そのうち 2 件 (もとの `～`) が同一視で当たった
 [[assert]]
 at = 8
 query = { kind = "text" }
-expect = { text = "a～b～c～\n¥1￥2" }
+expect = { text = "a-b-c-\n¥1￥2\nx-y-" }
 [[assert]]
 at = 8
-frame_contains = ["3 件を置換しました (うち 1 件は互換文字の同一視で一致。元に戻すで戻せます)"]
+frame_contains = ["5 件を置換しました (互換文字の同一視で一致したのは 2 件。元に戻すで戻せます)"]
 # `¥` は `￥` に一致しない (同一視しない組)
 [[assert]]
+at = 17
 query = { kind = "text" }
-expect = { text = "a～b～c～\nY1￥2" }
+expect = { text = "a-b-c-\nY1￥2\nx-y-" }
 [[assert]]
+at = 17
 frame_contains = ["1 件を置換しました (元に戻すで戻せます)"]
+# 置換しても文字が変わらない一致 (`-` を `-` に) は置き換えない
+[[assert]]
+query = { kind = "text" }
+expect = { text = "a-b-c-\nY1￥2\nx-y-" }
+[[assert]]
+frame_contains = ["置換する箇所はありません"]

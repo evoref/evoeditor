@@ -69,7 +69,17 @@ pub(crate) struct SearchBarMemo {
     query: std::cell::RefCell<Option<SearchQuery>>,
     /// 最後に求めた可視行の一致。検索の途中経過の再描画などで、条件が同じ間は可視行を走査し直さない。
     visible: std::cell::RefCell<Option<(VisibleKey, VisibleMatches)>>,
+    /// 最後に確かめた「今の一致が同一視で当たったものか」(件数の印、03 §12.4.1)。キーは (文書, Revision, 一致, 問い合わせ)。
+    folded: std::cell::RefCell<Option<(FoldedKey, bool)>>,
 }
+
+/// 今の一致が同一視で当たったものかの覚えのキー。
+type FoldedKey = (
+    eve_view::DocumentId,
+    eve_view::Revision,
+    ByteRange,
+    SearchQuery,
+);
 
 /// 可視行の強調で、1 行あたり検索する上限 (`SEARCH_SYNC_LINE_MAX`、03 §12.2)。これを超える行は強調しない。
 const SYNC_LINE_MAX: usize = 16 * 1024;
@@ -667,18 +677,23 @@ impl EditorState {
             )),
         });
         let query = bar.query();
-        // CP932 互換文字の同一視が効いているときだけ、件数の後ろに印を付ける (03 §12.4.1、04 §8.4。境界の型は変えない)
+        // CP932 互換文字の同一視が効いているときだけ、件数の後ろに印を付ける。今の一致が同一視で当たったものなら、印を
+        // 「互換一致」にする (03 §12.4.1 の「検索バーの表示」、04 §8.4。境界の型は変えない)
         let folded = query
             .analyze()
             .ok()
             .flatten()
             .is_some_and(|p| p.compat_folded());
         let count_text = count_text.map(|t| {
-            if folded {
-                format!("{t} {}", render(keys::UI_SEARCH_COUNT_COMPAT_SUFFIX, &[]))
-            } else {
-                t
+            if !folded {
+                return t;
             }
+            let key = if self.current_match_folded(bar, &query) {
+                keys::UI_SEARCH_COUNT_COMPAT_MATCH_SUFFIX
+            } else {
+                keys::UI_SEARCH_COUNT_COMPAT_SUFFIX
+            };
+            format!("{t} {}", render(key, &[]))
         });
         let error = bar
             .error
@@ -749,6 +764,41 @@ impl EditorState {
             error,
             count_text: count_text.map(|t| cell_text(&t, CutPolicy::End)),
         })
+    }
+
+    /// 件数の表示の今の一致が、CP932 互換文字の同一視で当たったものか (同一視を切った検索語が、文書の前後の文脈のまま、
+    /// その範囲にちょうど一致できない、03 §12.4.1)。照合器が `bg` のジョブで作られた後で、重くない検索語の、64 KiB
+    /// (`SEARCH_SYNC_MULTILINE_MAX`) 以下の一致だけを、メインスレッドで確かめる (それ以外は偽 = 「互換」の印)。
+    fn current_match_folded(&self, bar: &SearchBarState, query: &SearchQuery) -> bool {
+        let Some(r) = self.search_current_range(bar.current) else {
+            return false;
+        };
+        if r.end.0 - r.start.0 > SEARCH_SYNC_MULTILINE_MAX
+            || query.shape().is_some_and(|s| s.heavy_guard())
+        {
+            return false;
+        }
+        let Some(doc_id) = self.find.search.as_ref().map(|s| s.doc()) else {
+            return false;
+        };
+        let Some(doc) = self.docs.documents.get(&doc_id) else {
+            return false;
+        };
+        let key: FoldedKey = (doc_id, doc.revision(), r, query.clone());
+        if let Some((k, v)) = &*bar.memo.folded.borrow()
+            && *k == key
+        {
+            return *v;
+        }
+        let Prepared::Ready(m) = query.prepared() else {
+            return false;
+        };
+        let Some(mut check) = m.fold_check_ready() else {
+            return false;
+        };
+        let v = check.folded(doc.text(), r);
+        *bar.memo.folded.borrow_mut() = Some((key, v));
+        v
     }
 
     /// 可視行の一致 (強調する範囲)。保持した一致ではなく、可視行だけを同期検索する (03 §12.2 の「可視範囲のハイライト」)。
@@ -1354,7 +1404,8 @@ impl EditorState {
         self.mark_dirty_render();
     }
 
-    /// 1 件置換を当てる (置換ごとに別の Undo 単位)。カーソルを置換の後ろに置き、そこから次の一致を探し直す。
+    /// 1 件置換を当てる (置換ごとに別の Undo 単位)。カーソルを置換の後ろに置き、そこから次の一致を探し直す。一致した文字列と
+    /// 置換の文字列 (展開した後) が同じなら置き換えず (文書を変えない)、一致の後ろから次の一致へ進む (03 §12.5)。
     fn apply_replace_one(
         &mut self,
         doc_id: eve_view::DocumentId,
@@ -1365,6 +1416,19 @@ impl EditorState {
         let Some(doc) = self.docs.documents.get(&doc_id) else {
             return;
         };
+        if insert.len() == range.end.0 - range.start.0
+            && doc.text().slice_to_string(range) == insert
+        {
+            let view = self.focused_view();
+            if let Some(v) = view {
+                self.set_selection(v, Selection::point(range.end));
+            }
+            if let Some(bar) = &mut self.find.search_bar {
+                bar.anchor = range.end;
+            }
+            self.bar_changed();
+            return;
+        }
         let after = ByteOff(range.start.0 + insert.len());
         let Ok(changes) = eve_text::ChangeSet::from_sorted_edits(
             doc.text(),
