@@ -72,7 +72,11 @@ fn folded_の数え方_窓の終端で後ろの選択肢が偽って成り立つ
             .unwrap()
             .find("abc")
             .map(|m| (m.start(), m.end()));
-        assert_eq!(unfolded_on_doc, Some((0, 1)), "{p}: 文書の上の同一視なしの最初の一致");
+        assert_eq!(
+            unfolded_on_doc,
+            Some((0, 1)),
+            "{p}: 文書の上の同一視なしの最初の一致"
+        );
         let got = replace_all("abc", &re(p), "#");
         assert_eq!(got.0, "#bc", "{p}");
         assert_eq!(got.2, 0, "{p}: folded (仕様の定義では 0)");
@@ -115,9 +119,15 @@ fn folded_の数え方_ふつうの例() {
     let g = replace_all("～", &re("〜*"), "#");
     eprintln!("〜* on ～: {g:?}");
     // 否定のクラス: 同一視を切ると `[^〜]` は `～` に一致するが、同一視すると一致しない
-    assert_eq!(replace_all("〜～a", &re("[^〜]"), "#"), ("〜～#".to_owned(), 1, 0));
+    assert_eq!(
+        replace_all("〜～a", &re("[^〜]"), "#"),
+        ("〜～#".to_owned(), 1, 0)
+    );
     // \P{Sm}: 同一視で外れる文字
-    assert_eq!(replace_all("〜‖－x", &re(r"\P{Sm}"), "#"), ("〜‖－#".to_owned(), 1, 0));
+    assert_eq!(
+        replace_all("〜‖－x", &re(r"\P{Sm}"), "#"),
+        ("〜‖－#".to_owned(), 1, 0)
+    );
 }
 
 // ---- 3. 印 ----
@@ -313,10 +323,29 @@ fn 単語単位のリテラル検索で長い行() {
     let doc = format!("{line}〜 y\n");
     let t = Text::from(doc.as_str());
     for (name, q) in [
-        ("〜 (同一視 ON)", SearchQuery::literal("〜").with_whole_word(true).with_tuning(tuning)),
-        ("〜 (同一視 OFF)", SearchQuery::literal("〜").with_whole_word(true).with_compat_fold(false).with_tuning(tuning)),
-        ("あ", SearchQuery::literal("あ").with_whole_word(true).with_tuning(tuning)),
-        ("〜 (単語単位なし)", SearchQuery::literal("〜").with_tuning(tuning)),
+        (
+            "〜 (同一視 ON)",
+            SearchQuery::literal("〜")
+                .with_whole_word(true)
+                .with_tuning(tuning),
+        ),
+        (
+            "〜 (同一視 OFF)",
+            SearchQuery::literal("〜")
+                .with_whole_word(true)
+                .with_compat_fold(false)
+                .with_tuning(tuning),
+        ),
+        (
+            "あ",
+            SearchQuery::literal("あ")
+                .with_whole_word(true)
+                .with_tuning(tuning),
+        ),
+        (
+            "〜 (単語単位なし)",
+            SearchQuery::literal("〜").with_tuning(tuning),
+        ),
     ] {
         let m = q.matcher().unwrap();
         let mut out = Vec::new();

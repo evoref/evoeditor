@@ -12,12 +12,14 @@
 //!   (b) 解除の記録があるバイトの文書に `InvalidBytes` の理由が付いていない、
 //!   (c) 外から入れた文字列の `U+10FF00..` が、衝突の文書でない文書に生のまま入らない、
 //!   (d) 保存したファイルを同じ文字コードで開き直すと本文と一致する (つながりの確認を承認した保存は対象外)
+//! - 先行表示 (docs/03 §9.2.1、v0.4 の M25) の不変条件: 先行表示の文書 (`LoadState::Partial`) は dirty でなく、その本文は
+//!   遅い読込で開いたファイルの接頭辞 (BOM の無い UTF-8 で、開いた後にファイルが変わっていなければ)
 
 use std::collections::BTreeMap;
 
 use eve_core::{
-    Args, Encoding, FileTime, FsPath, LoadState, OpenOptions, ReadOnlyReason, SwapBody, SwapEntry,
-    SwapOwner,
+    Args, Encoding, FileTime, FsPath, LoadState, Millis, OpenOptions, ReadOnlyReason, SwapBody,
+    SwapEntry, SwapOwner,
 };
 use eve_view::{Answer, DocumentId, Frame, Query};
 
@@ -170,6 +172,92 @@ fn check_state(h: &Harness, revs: &mut BTreeMap<DocumentId, u64>, step: usize) {
             "step {step}: 解除の記録があるバイトの文書に InvalidBytes が付いている"
         );
     }
+}
+
+/// 先行表示 (docs/03 §9.2.1) の不変条件。`opened` は遅い読込で開いたパスと、開いた時点のファイルの中身。
+fn check_partial(h: &Harness, opened: &BTreeMap<String, Vec<u8>>, step: usize) {
+    let st = h.editor.state();
+    let Ok(Answer::Documents(docs)) = h.query(&Query::Documents) else {
+        return;
+    };
+    for info in docs {
+        let Some(d) = st.document(info.doc) else {
+            continue;
+        };
+        if d.load_state != LoadState::Partial {
+            continue;
+        }
+        assert!(!d.is_dirty(), "step {step}: 先行表示の文書が dirty");
+        // 先頭は全文の接頭辞 (BOM の無い UTF-8 で読み、開いた後にファイルが書き換わっていないときだけ見る)
+        let Some(path) = d.path.as_ref().map(FsPath::display) else {
+            continue;
+        };
+        let (Some(bytes), Some(now)) = (opened.get(&path), h.fs_read(&path)) else {
+            continue;
+        };
+        if *bytes != now || d.format.encoding != Encoding::Utf8 || d.format.has_bom {
+            continue;
+        }
+        let head = d.to_string_lossy();
+        if head
+            .chars()
+            .any(|c| ('\u{10FF00}'..='\u{10FFFF}').contains(&c))
+        {
+            continue;
+        }
+        assert!(
+            bytes.starts_with(head.as_bytes()),
+            "step {step}: 先行表示の先頭 ({} バイト) が {path} の接頭辞でない",
+            head.len()
+        );
+    }
+}
+
+/// 遅い読込で開く操作 (docs/03 §9.2.1、v0.4 の M25 の 3)。`/w/slow<n>.txt` (無ければ作る) を、チャンクを小さくして
+/// チャンクごとに時計を進める読込で開く。読込を積むだけ・先行表示の先頭で止める (後の結果は取り置く)・先頭で止めてから
+/// 最後まで進める・取り置いた結果を渡すだけ、のどれか。遅い読込の設定はその後の読込にも残る。開いたパスと中身を `opened` に記録する。
+fn slow_open(h: &mut Harness, b: &mut Bytes<'_>, opened: &mut BTreeMap<String, Vec<u8>>) -> String {
+    let sel = b.u8();
+    let mode = sel % 4;
+    if mode == 3 {
+        h.finish_held_jobs();
+        return "finish_held_jobs".to_owned();
+    }
+    let path = format!("/w/slow{}.txt", (sel >> 2) % 3);
+    if h.fs_read(&path).is_none() {
+        // 行 (改行・CR・日本語・結合文字を含みうる) を繰り返す。チャンクの数が 200 ms をまたぐよう、ある程度の長さにする
+        let line = b.text(24);
+        let reps = 1 + usize::from(b.u8() % 64);
+        h.fs.add_file(&path, format!("{line}\n").repeat(reps).as_bytes());
+    }
+    let chunk = 4 + usize::from(b.u8() % 125);
+    let per_chunk = [30u64, 70, 110, 250][usize::from(sel >> 4) % 4];
+    h.fs.set_chunk_size(chunk);
+    h.fs.set_read_delay(Some((h.clock.clone(), Millis(per_chunk))));
+    if let Some(bytes) = h.fs_read(&path) {
+        opened.insert(path.clone(), bytes);
+    }
+    h.open(&path);
+    let what = match mode {
+        0 => "積むだけ",
+        1 => {
+            if h.run_jobs_until_partial() {
+                "先頭で止めた"
+            } else {
+                "先頭が届かずに最後まで"
+            }
+        }
+        _ => {
+            let hit = h.run_jobs_until_partial();
+            h.finish_held_jobs();
+            if hit {
+                "先頭の後に最後まで"
+            } else {
+                "先頭が届かずに最後まで"
+            }
+        }
+    };
+    format!("slow_open {path} chunk {chunk} per {per_chunk} ms ({what})")
 }
 
 /// 衝突の文書 (`DisabledCollision`。私用文字が通常の文字) か。`PuaEscapeMode` は eve-encoding の型で、eve-testkit の依存に
@@ -425,11 +513,12 @@ fn command_with_args(b: &mut Bytes<'_>) -> (&'static str, Args) {
 /// 1 つの入力を流す。先頭: [0..2] 初期文書の長さ (下位 12 ビット。ビット 12〜14 は初期文書の形、ビット 15 はスワップを積むか。
 /// 下)、続いて文書の本文、[次の 2 バイト] ビューポートの大きさ
 /// (行の数のバイトの最上位ビットが立っていれば、長大行の閾値を 64 バイトに下げた設定で起動する。長大行とジョブの経路に届かせる)、
-/// 残りが操作の列 (操作の種類 1 バイト + 引数)。操作は 22 種類: 文字・キー・貼り付け・大きさ・引数なしのコマンド・ジョブ・時刻・
+/// 残りが操作の列 (操作の種類 1 バイト + 引数)。操作は 23 種類: 文字・キー・貼り付け・大きさ・引数なしのコマンド・ジョブ・時刻・
 /// 確認への答え・クリック・引数付きのコマンド・外部の変更・ジョブを 1 周だけ・ジョブの取消し・マウスのドラッグ・再読込と外部の変更の確認
 /// (docs/review/v0.3-findings.md の §2.7 の 10)、v0.4 の M23 で足した 6 種類 (`file.toggle_read_only`・その確認への答え
 /// (`[A]` / `[E]` / Esc)・再読込 (ジョブまで)・`U+10FF00..` を含む外からの文字列の入力と貼り付け・保存 (ジョブまで)・
-/// 隣とつなげる ASCII の入力)。
+/// 隣とつなげる ASCII の入力)、v0.4 の M25 で足した遅い読込で開く操作 (`slow_open`。先行表示の先頭で止める・取り置いた
+/// 結果を渡す)。
 ///
 /// 初期文書の形 (ビット 12〜14 の値): 0 / 5 = 本文を判定に任せて開く、1〜4 (6・7 は 1・2 と同じ) = 不正なバイトを含むファイルを
 /// UTF-8 / `Shift_JIS` / EUC-JP / UTF-16LE で指定して開く (`invalid_bytes_file`。03 §8.3.1)。ビット 15 が立っていれば、
@@ -490,6 +579,8 @@ pub fn editor_sequence(data: &[u8]) {
         .filter(|id| !id.starts_with("app.quit"))
         .collect();
     let mut revs = BTreeMap::new();
+    // 遅い読込で開いたパスと、開いた時点の中身 (先行表示の不変条件の検査に使う)
+    let mut opened: BTreeMap<String, Vec<u8>> = BTreeMap::new();
     let mut step = 0usize;
     // 再現のとき、操作を 1 つずつ標準エラーに出す (`EVE_FUZZ_TRACE=1`)
     let trace = std::env::var("EVE_FUZZ_TRACE").is_ok_and(|v| v == "1");
@@ -505,7 +596,8 @@ pub fn editor_sequence(data: &[u8]) {
         let mut external = false;
         // (c) 外から入れた文字列の検査の対象 (入れた文字列と、入れる前の今の文書の ID・エスケープ文字の数)
         let mut outside: Option<(String, Option<(DocumentId, usize)>)> = None;
-        match b.u8() % 22 {
+        // 操作の種類。足すときは剰余を増やし、既存の番号を変えない (コミットした corpus の操作の番号は 22 未満)
+        match b.u8() % 23 {
             0 => {
                 let t = b.text(16);
                 log(step, &format!("text {t:?}"));
@@ -639,6 +731,11 @@ pub fn editor_sequence(data: &[u8]) {
                 log(step, &format!("join {t:?}"));
                 h.text(t);
             }
+            22 => {
+                // 遅い読込で開く (先行表示。v0.4 の M25)
+                let what = slow_open(&mut h, &mut b, &mut opened);
+                log(step, &what);
+            }
             _ => {
                 let id = if b.u8() & 1 == 0 {
                     "file.reload"
@@ -669,6 +766,7 @@ pub fn editor_sequence(data: &[u8]) {
         let f = h.frame();
         check_frame(&f, step);
         check_state(&h, &mut revs, step);
+        check_partial(&h, &opened, step);
         if let Some((t, Some((doc, before)))) = outside
             && let Some((now_doc, after)) = escape_count(&h)
             && now_doc == doc

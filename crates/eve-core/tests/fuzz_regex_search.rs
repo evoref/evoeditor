@@ -176,3 +176,31 @@ fn 互換文字の同一視の固定の例は参照と一致する() {
     assert_eq!(compat_reference(r"\P{Sm}"), r"[^\p{Sm}〜‖]");
     assert_eq!(compat_reference("¥"), "¥");
 }
+
+/// 回帰: 単語単位の `([\s\n])` で、行の途中の正本の位置 (一致の終端 8) から探すと、窓が行頭へ戻って次の行まで含み、
+/// 上限 (21 バイト) を超えて「探さない」になっていた (正本の走査は探せる。末尾からの次 (折り返し) が `None` だった)。
+/// proptest が見つけた入力 (バイト列) と、同じ文書で単語単位・糖衣・核の大きさ・上限を変えたもの。
+// verifies: FR-402
+#[test]
+fn 行の途中の正本の位置からの次と前は窓の上限で探さないとしない() {
+    // proptest が見つけた入力を decode した値を直接書く (M24 の (5) で入力の読み方が変わり、同じバイト列では同じ例に
+    // ならないため)
+    let mut c = case(r"([\s\n])", "é\u{212A}a1\t\ra\u{212A}σaé\r\n\r\n");
+    (c.case, c.whole_word, c.sugar, c.core_bytes, c.concat_max) = (Case::Smart, true, false, 2, 21);
+    c.splits = vec![];
+    assert_eq!(check(&c), Ok(Checked::Compared));
+    for core in [1, 2, 3, 5, 8, 13, 40] {
+        for ww in [false, true] {
+            for sugar in [false, true] {
+                for concat_max in [12, 16, 21, 24] {
+                    let mut v = c.clone();
+                    (v.core_bytes, v.whole_word, v.sugar, v.concat_max) =
+                        (core, ww, sugar, concat_max);
+                    if let Err(e) = check(&v) {
+                        panic!("{e}");
+                    }
+                }
+            }
+        }
+    }
+}
