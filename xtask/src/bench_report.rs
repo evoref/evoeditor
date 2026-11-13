@@ -145,6 +145,12 @@ pub(crate) fn verdict(v: &Value) -> Verdict {
             limits(v, 50.0, f64::MAX),
             "開く → 進捗 (100 MB。FR-122 AC-1)",
         ),
+        // v0.4 の M25: 開く → 先頭部分を含む最初の Frame (先行表示、01 FR-122 AC-2)。30 回の p50 で判定し、最大値は参考
+        "BM-104v-100m" | "BM-104v-100m-sjis" => t(
+            "p50 300 ms",
+            limits(v, 300.0, f64::MAX),
+            "開く → 先頭部分を含む最初の Frame の write (先行表示。先に読み終えたら全文)。先行表示だった回の数は JSON の partial_runs",
+        ),
         "BM-512" => t(
             "p99 16 ms",
             limits(v, f64::MAX, 16.0),
@@ -401,6 +407,15 @@ mod tests {
         assert_eq!(
             ok(r#"{"id":"BM-104p-100m","p50_ms":1.2,"p99_ms":90.0}"#),
             "合格"
+        );
+        // 先行表示 (v0.4 の M25) は p50 だけで判定する (最大値・p99 は参考)
+        assert_eq!(
+            ok(r#"{"id":"BM-104v-100m","p50_ms":180.0,"p99_ms":900.0}"#),
+            "合格"
+        );
+        assert_eq!(
+            ok(r#"{"id":"BM-104v-100m-sjis","p50_ms":301.0,"p99_ms":310.0}"#),
+            "不合格"
         );
         assert_eq!(
             ok(r#"{"id":"BM-103b-clip60","p50_ms":0.9,"p99_ms":1.4}"#),

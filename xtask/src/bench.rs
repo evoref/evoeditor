@@ -5,7 +5,7 @@
 //! BM-205 (配布ビルドの exe のサイズ)。
 //! BM-101a (起動から最初の Frame まで) は計測用ビルドの隠しフラグと `bench-trace` (記録の仕組み) が要るので M3 以降。
 //! `--env ENV-W1 --out DIR` を付けると基準機の記録になる: BM-106 と、実バイナリを `ConPTY` で駆動する BM-101b / 102b / 103b / 107
-//! (`evoeditor` の `bm_pty`) も測り、DIR にベンチ ID ごとの JSON と `summary.md` を書く (`bench_report`、09 §5.3)。
+//! など (`evoeditor` の `bm_pty`。v0.4 の M25 から先行表示の BM-104v も) も測り、DIR にベンチ ID ごとの JSON と `summary.md` を書く (`bench_report`、09 §5.3)。
 //! 結果は `target/bench/bench.json` に書く (`bench.yml` が Actions の artifact にする。リポジトリにはコミットしない)。
 //! CI ランナーの値は変動が大きい共有 VM のものなので、判定には使わない (09 §5.1)。`--quick` は動作確認用で、記録には使わない。
 
