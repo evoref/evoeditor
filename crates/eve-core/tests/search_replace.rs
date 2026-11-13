@@ -432,25 +432,61 @@ fn 構文エラーの検索語で置換すると_空の案内ではなく誤り�
     }
 }
 
+// v0.3 までは「改行を含むパターンは未対応のため、置換しませんでした」と示した。v0.4 の M24 の (4) で行をまたいで置き換える
+// verifies: FR-402
 #[test]
-fn 改行を含むパターンで置換すると_未対応と示し_何も置き換えない() {
+fn 改行を含むパターンで置換すると_行をまたいで置き換える() {
     for key in ["alt+a", "enter"] {
         let mut h = Harness::new().with_size(80, 10);
-        h.text("ab");
+        h.text("a\nb c");
+        h.keys("ctrl+home");
         h.keys("ctrl+r alt+r");
         h.text(r"a\nb");
         h.keys("tab");
         h.text("x");
-        assert_eq!(bar_error(&mut h), "✖ 改行を含むパターンは未対応です");
+        h.run_jobs();
+        assert!(h.frame().search.unwrap().error.is_none(), "{key}");
         h.keys(key);
-        assert_eq!(h.doc_text(), "ab", "{key}: 置き換えない");
-        let (_, text, hint) = message_parts(&mut h);
-        assert_eq!(
-            text, "改行を含むパターンは未対応のため、置換しませんでした",
-            "{key}"
-        );
-        assert_eq!(hint, "行ごとに検索します。1 行の中のパターンにしてください");
+        h.run_jobs();
+        assert_eq!(h.doc_text(), "x c", "{key}: 行をまたいで置き換える");
     }
+}
+
+// すべて置換の知らせは、件数に加えて文書の行数の変化を言う (03 §12.5、04 §15.2 の `info.search.replaced`)
+#[test]
+fn すべて置換の知らせは文書の行数の変化を言う() {
+    let replace_all = |doc: &str, find: &str, with: &str| {
+        let mut h = Harness::new().with_size(100, 10);
+        h.text(doc);
+        h.keys("ctrl+home");
+        h.keys("ctrl+r alt+r");
+        h.text(find);
+        h.keys("tab");
+        h.text(with);
+        h.run_jobs();
+        h.keys("alt+a");
+        h.run_jobs();
+        let (_, text, _) = message_parts(&mut h);
+        (h.doc_text(), text)
+    };
+    // 上限の無い検索語は文書の残りを「1 件」として消す。消えた行の数が分かる
+    let (doc, text) = replace_all("1\n2\n3\n4\n", r"(?s)2.*", "");
+    assert_eq!(doc, "1\n");
+    assert_eq!(
+        text,
+        "1 件を置換しました。文書は 3 行減りました (元に戻すで戻せます)"
+    );
+    // 行の数が増える置換
+    let (doc, text) = replace_all("a b c", " ", r"\n");
+    assert_eq!(doc, "a\nb\nc");
+    assert_eq!(
+        text,
+        "2 件を置換しました。文書は 2 行増えました (元に戻すで戻せます)"
+    );
+    // 行の数が変わらない置換は今までの知らせ
+    let (doc, text) = replace_all("a\nb\na", "a", "x");
+    assert_eq!(doc, "x\nb\nx");
+    assert_eq!(text, "2 件を置換しました (元に戻すで戻せます)");
 }
 
 #[test]

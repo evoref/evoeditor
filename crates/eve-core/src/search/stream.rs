@@ -96,7 +96,7 @@ impl Stream<'_> {
         f: &mut OnMatch<'_>,
     ) -> ScanEnd {
         let text = self.text;
-        let internal = self.m.internal;
+        let tuning = self.m.tuning;
         // 最大の長さが有限で単語単位でない検索語は、核を行の途中 (char 境界) で切る。窓は「核 + 最大の長さ」以下になり、行の
         // 長さに依らない。それ以外は核を行の境界に揃える (行の途中で切ると、延ばす分の行を核ごとに読み直して O(n²) になる)
         let mid = self.m.cuts_mid_line();
@@ -107,12 +107,12 @@ impl Stream<'_> {
                 line_ceil(text, x)
             }
         };
-        let mut max_core = internal.core_bytes.max(1);
+        let mut max_core = tuning.core_bytes.max(1);
         if mid && k > 0 {
             // 窓が上限に収まるように核を抑える (収まらない検索語は、始める前に `too_large_for` で断っている)
             let n = self.m.max_len.unwrap_or(0);
             max_core = max_core.min(
-                internal
+                tuning
                     .concat_max
                     .saturating_sub(n.saturating_add(WINDOW_SLACK))
                     .max(1),
@@ -149,14 +149,14 @@ impl Stream<'_> {
             if target == max_core && ext_end - core_end > core_end - core_start {
                 let grown = cut(core_start.saturating_add(ext_end - core_end)).min(end);
                 let grown_ext = self.extend(grown, k);
-                if next_char(text, grown_ext) - hs <= internal.concat_max {
+                if next_char(text, grown_ext) - hs <= tuning.concat_max {
                     (core_end, ext_end) = (grown, grown_ext);
                 }
             }
             let he = next_char(text, ext_end);
             // 窓が上限を超える検索語は、上限なしと同じに扱う (窓は文書の一部なので、文書は上限を超えていて探さない)。
             // 核を行の境界に揃える検索語 (最大の長さが無い・単語単位) だけが、ここで初めて分かる
-            if k > 0 && he - hs > internal.concat_max {
+            if k > 0 && he - hs > tuning.concat_max {
                 return ScanEnd::TooLarge;
             }
             if let Some(r) = ctx.resume.as_mut() {
@@ -214,7 +214,7 @@ impl Stream<'_> {
         f: &mut OnMatch<'_>,
     ) -> ScanEnd {
         let len = self.text.len_bytes();
-        let step = self.m.internal.core_bytes.max(1);
+        let step = self.m.tuning.core_bytes.max(1);
         let cancel = ctx.cancel;
         let clock = ctx.clock;
         let resume = &mut ctx.resume;

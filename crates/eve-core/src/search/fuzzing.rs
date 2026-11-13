@@ -4,7 +4,7 @@
 //!
 //! 入力のバイト列を、検索の条件 (大小区別の 3 値・単語単位・`newline_sugar`・選択範囲)・窓の核の大きさ (1〜40 バイト)・
 //! 連結の上限・時計の進み方・S-04 の部品から組んだ検索語・文書・チャンクの分け方 (`Text` を挿入の繰り返しで作る) に読み替え、
-//! 行をまたぐ検索を内部の設定で開いた走査の入口 (`scan_range`。行の窓・全文の連結・行の経路) を次の参照と比べる。
+//! 走査の入口 (`scan_range`。行の窓・全文の連結・行の経路) を次の参照と比べる。
 //!
 //! - **1 つ目の参照**: 全文を 1 本の文字列にして、同じ書き換えの検索語で `regex` を走らせ、03 §12.1 の選び方 (重ならないものを
 //!   左から・空の一致は採らない・両端が書記素境界・単語単位は両端のそれぞれの行で) で選んだ列。一致の位置、再開の位置と
@@ -34,7 +34,7 @@ use crate::time::{Clock, Tick};
 
 use super::limits::SEARCH_CONCAT_MAX_BYTES;
 use super::{
-    Case, FindJob, LineSpan, ScanCtx, ScanEnd, ScanLimit, SearchInternal, SearchJob, SearchQuery,
+    Case, FindJob, LineSpan, ScanCtx, ScanEnd, ScanLimit, SearchJob, SearchQuery, SearchTuning,
     build_replace_all, find_next, replace_one, run_search, scan_range,
 };
 
@@ -338,8 +338,7 @@ struct RefMatch {
 pub fn check(c: &RegexCase) -> Result<Checked, String> {
     let doc = c.doc.as_str();
     let scope = scope_ranges(doc, c.scope.as_deref());
-    let internal = SearchInternal {
-        multiline: true,
+    let tuning = SearchTuning {
         core_bytes: c.core_bytes.max(1),
         concat_max: c.concat_max,
     };
@@ -349,7 +348,7 @@ pub fn check(c: &RegexCase) -> Result<Checked, String> {
         .with_whole_word(c.whole_word)
         .with_newline_sugar(c.sugar)
         .with_scope(scope.clone().map(Arc::from))
-        .with_internal(internal);
+        .tuned(tuning);
     let Ok(Some(m)) = q.compile() else {
         return Ok(Checked::Skipped("検索語が不正か空"));
     };

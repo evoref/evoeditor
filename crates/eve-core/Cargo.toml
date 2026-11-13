@@ -39,3 +39,5 @@ memory-stats = "1.2.0"
 encoding_rs = "0.8.42"
 eve-docs-tables = { version = "0.3.0", path = "../eve-docs-tables" }
 eve-testkit = { version = "0.3.0", path = "../eve-testkit" }
+# 試験だけが使う口 (検索の窓の核の大きさなど、docs/03 §12.3.1) を、この crate の試験で開く
+eve-core = { path = ".", features = ["test-hooks"] }

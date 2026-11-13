@@ -1,46 +1,47 @@
 //! 行をまたぐ検索の呼び出し側 (docs/03 §12.3.1 の「呼び出し側」、08 §2.5 の M24 の (3))。
 //!
-//! 行をまたぐ検索は M24 の (4) まで利用者に開かないので、eve-core の内部の設定 (`SearchInternal`) で開いて確かめる。全件の
+//! 行をまたぐ検索は M24 の (4) で既定で開いた。ここでは窓の境目と再開の位置を多く作るため、試験の口 (`SearchTuning`、
+//! feature `test-hooks`) で行の窓の核を小さくして確かめる (核の大きさは結果を変えない)。全件の
 //! 走査は文書の先頭から選んだ正本で、件数・次 / 前・すべて置換・1 件置換は正本に従う。一致の集合・次 / 前の繰り返し・すべて
 //! 置換の参照との突き合わせは `fuzz_regex_search.rs` (09 §3.3) が受け持ち、ここは検索バーとエディタの状態の振る舞いを見る。
 
-// 内部の設定と検索の状態を直接使う (試験だけに許す Editor::state_mut、STR-B3)
+// 試験の口と検索の状態を直接使う (試験だけに許す Editor::state_mut、STR-B3)
 #![allow(clippy::disallowed_methods)]
 
 use eve_core::{
     CancelToken, Clock, FindJob, JobOutput, JobResult, LineSpan, ScanCtx, ScanEnd, SearchCount,
-    SearchInternal, SearchJob, SearchQuery, SearchStep, Tick, find_next, run_search, scan_range,
+    SearchJob, SearchQuery, SearchStep, SearchTuning, Tick, find_next, run_search, scan_range,
 };
 use eve_testkit::Harness;
 use eve_testkit::helpers::cell_text;
 use eve_text::{ByteOff, ByteRange, LineIdx, Text, TextRead};
 use eve_view::{Frame, StyleMods};
 
-/// 行をまたぐ検索を開いた設定 (核を小さくして、窓の境目と再開の位置を多く作る)。
-fn internal() -> SearchInternal {
-    SearchInternal {
+/// 行の窓の核を小さくした試験の口 (窓の境目と再開の位置を多く作る)。
+fn tuning() -> SearchTuning {
+    SearchTuning {
         core_bytes: 4,
-        ..SearchInternal::multiline()
+        ..SearchTuning::default()
     }
 }
 
-/// `doc` を開き、内部の設定で行をまたぐ検索を開いた状態。カーソルは文書の先頭。
+/// `doc` を開き、行の窓の核を小さくした状態。カーソルは文書の先頭。
 fn open(doc: &str) -> Harness {
     let mut h = Harness::new()
         .with_size(40, 12)
         .with_file("/w/a.txt", doc.as_bytes());
     h.open("/w/a.txt");
     h.run_jobs();
-    h.editor.state_mut().set_search_internal(internal());
+    h.editor.state_mut().set_search_tuning(tuning());
     h.keys("ctrl+home");
     h
 }
 
-/// 正規表現の検索語 (内部の設定で開いたもの)。
+/// 正規表現の検索語 (行の窓の核を小さくしたもの)。
 fn regex(p: &str) -> SearchQuery {
     SearchQuery::literal(p)
         .with_regex(true)
-        .with_internal(internal())
+        .with_tuning(tuning())
 }
 
 /// 検索バーを開き、正規表現で `p` を入れる (ジョブは走らせない)。
@@ -122,13 +123,21 @@ fn 一致の集合は文書の先頭から選び_件数と現在の一致が正�
 }
 
 #[test]
-fn 既定では行をまたぐ検索語は今までどおり未対応() {
+fn 試験の口なしでも行をまたぐ検索語を探す() {
+    // M24 の (3) までは既定で「未対応」だった。(4) で既定で開いた (核の大きさは既定のまま。結果は核を小さくしたときと同じ)
     let mut h = Harness::new().with_size(40, 12);
-    h.text("a\na");
+    h.text("a\na\na");
     h.keys("ctrl+home");
     bar_regex(&mut h, r"a\na");
     h.run_jobs();
-    assert!(error(&mut h).is_some_and(|e| e.contains("未対応")));
+    assert_eq!(error(&mut h), None);
+    assert_eq!(
+        count(&mut h).as_deref(),
+        Some("1/1"),
+        "先頭から選んだ正本は 1 件"
+    );
+    h.keys("enter");
+    assert_eq!(h.selection_range(), (0, 3));
 }
 
 #[test]
@@ -351,7 +360,12 @@ fn すべて置換は正本の一致を置き換え_キャプチャと_crlf_を�
     h.keys("alt+a");
     h.run_jobs();
     assert_eq!(h.doc_text(), "acbedf");
-    assert!(h.messages().iter().any(|k| k == "info.search.replaced"));
+    // 行の数が 3 から 1 に減ったので、件数に加えて減った行の数を言う (M24 の (4))
+    assert!(
+        h.messages()
+            .iter()
+            .any(|k| k == "info.search.replaced_lines_removed")
+    );
 }
 
 #[test]
@@ -864,10 +878,9 @@ fn 走査の途中で窓が上限を超えたら_届いた一致を捨てて理�
         .with_file("/w/a.txt", doc.as_bytes());
     h.open("/w/a.txt");
     h.run_jobs();
-    h.editor.state_mut().set_search_internal(SearchInternal {
+    h.editor.state_mut().set_search_tuning(SearchTuning {
         core_bytes: 4,
         concat_max: 32,
-        ..SearchInternal::multiline()
     });
     h.keys("ctrl+home");
     bar_regex(&mut h, r"a\n[^\n]*");
@@ -903,9 +916,9 @@ fn 上限の無い検索語は大きな文書では探さず_ジョブを投げ�
         .with_file("/w/a.txt", "a\nb\n".repeat(20).as_bytes());
     h.open("/w/a.txt");
     h.run_jobs();
-    h.editor.state_mut().set_search_internal(SearchInternal {
+    h.editor.state_mut().set_search_tuning(SearchTuning {
         concat_max: 16,
-        ..SearchInternal::multiline()
+        ..SearchTuning::default()
     });
     h.keys("ctrl+r");
     h.keys("alt+r");
@@ -921,7 +934,7 @@ fn 上限の無い検索語は大きな文書では探さず_ジョブを投げ�
     assert!(
         h.messages()
             .iter()
-            .any(|k| k == "msg.search.replace_invalid_regex")
+            .any(|k| k == "msg.search.multiline_too_large")
     );
 }
 
@@ -932,13 +945,17 @@ fn 探さない理由があるとき次_前はメッセージ行に理由を出�
         .with_file("/w/a.txt", "a\nb\n".repeat(20).as_bytes());
     h.open("/w/a.txt");
     h.run_jobs();
-    h.editor.state_mut().set_search_internal(SearchInternal {
+    h.editor.state_mut().set_search_tuning(SearchTuning {
         concat_max: 16,
-        ..SearchInternal::multiline()
+        ..SearchTuning::default()
     });
     bar_regex(&mut h, r"a\n+");
     h.keys("enter");
-    assert!(h.messages().iter().any(|k| k == "msg.search.invalid_regex"));
+    assert!(
+        h.messages()
+            .iter()
+            .any(|k| k == "msg.search.multiline_too_large")
+    );
     assert_eq!(h.selection_range(), (0, 0));
 }
 
@@ -950,9 +967,9 @@ fn 始める前に探さないと決めた検索語も_編集で条件を満た�
         .with_file("/w/a.txt", "a\nb\n".repeat(12).as_bytes());
     h.open("/w/a.txt");
     h.run_jobs();
-    h.editor.state_mut().set_search_internal(SearchInternal {
+    h.editor.state_mut().set_search_tuning(SearchTuning {
         concat_max: 40,
-        ..SearchInternal::multiline()
+        ..SearchTuning::default()
     });
     h.keys("shift+down shift+down shift+down shift+down");
     h.keys("delete");

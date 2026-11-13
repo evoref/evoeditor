@@ -443,6 +443,9 @@ config_keys! {
     /// `file.reload_on_external_change`: 外部変更の扱い (FR-117)。
     reload_on_external_change: ExternalChangePolicy = ExternalChangePolicy::AutoIfUnmodified,
         "file.reload_on_external_change", choice;
+    /// `search.newline_sugar`: 正規表現の `\n` を改行 1 つ (LF・CRLF・単独の CR) に一致させる (docs/03 §12.3.1)。
+    /// 検索バーを開いたときの値で効く。
+    newline_sugar: bool = true, "search.newline_sugar", boolean;
 }
 
 /// 読込の結果。
@@ -455,7 +458,15 @@ pub struct Loaded {
 }
 
 /// 公開キーを持つセクション (公開キーの先頭の名前。並びは `--dump-config` の出力の順、07 §5 の表の順)。
-const SECTIONS: &[&str] = &["editor", "file", "view", "theme", "ui", "clipboard"];
+const SECTIONS: &[&str] = &[
+    "editor",
+    "file",
+    "view",
+    "theme",
+    "ui",
+    "search",
+    "clipboard",
+];
 
 const LOCALES: &[&str] = &["auto", "ja", "en"];
 
