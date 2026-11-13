@@ -474,6 +474,7 @@ done = "Saved {path}"
 escape_merge_cancelled = "Not saved. Highlighted {count} places that would change when reopened (delete the invalid bytes, put a line break between them, or restore the original order)"
 escape_merged = "Saved {path}. {count} places read as different characters when reopened"
 in_place = "Saved {path} by overwriting in place"
+partial_saved = "Saved the partial content to {path} ({size})"
 in_progress = "Saving"
 to_recovery = "Saved to {target}. The original file {path} was not changed"
 unchanged = "No changes (the file was not rewritten)"
@@ -499,6 +500,10 @@ replaced_lines_added = "Replaced {count} matches; the document is {lines} lines 
 replaced_lines_removed = "Replaced {count} matches; the document is {lines} lines shorter (undo restores them)"
 wrapped_backward = "Reached the start of the document, searching from the end"
 wrapped_forward = "Reached the end of the document, searching from the start"
+
+[info.stdin]
+stopped = "Stopped reading standard input and opened what was read ({size}) as read-only"
+terminal = "Standard input is a terminal; opened an empty document without reading it"
 
 [info.swap]
 applied_read_only = "Recovered content applied. The document is read-only because it has invalid bytes; allow editing with {key:file.toggle_read_only} to continue"
@@ -700,6 +705,30 @@ text = "Could not clean up {path}: {reason}"
 [msg.leftover.tmp_opened]
 hint = "Delete it from the prompt at the next start if you do not need it"
 text = "Opened the temporary file read-only. It is the in-progress content of {path} and may be cut off at the end"
+
+[msg.stdin.failed]
+hint = "What was read is lost. To get it, run the command again"
+text = "Reading standard input failed: {reason}"
+
+[msg.stdin.out_of_memory]
+hint = "To get all of it, save the command output to a file and open that"
+text = "Out of memory; opened what was read from standard input ({size}) as read-only"
+
+[msg.stdin.read_failed]
+hint = "Opened what was read ({size}) as read-only. To get all of it, save the command output to a file and open that"
+text = "Reading standard input failed: {reason}"
+
+[msg.stdin.truncated]
+hint = "The rest was not read. To get all of it, save the command output to a file and open that"
+text = "Standard input exceeded {size}; opened what was read as read-only"
+
+[msg.stdin.unreadable]
+hint = "Check the command that writes to standard input and run it again"
+text = "Could not read standard input: {reason}"
+
+[msg.stdin.unsaveable]
+hint = "Restart with --encoding"
+text = "This content cannot be saved"
 
 [msg.swap.found]
 hint = "Open the matching file and recovery will be offered. Delete the .swp folder if you do not need it"
@@ -1071,6 +1100,7 @@ file_attribute = "file with the read-only attribute"
 invalid_bytes = "file with invalid bytes"
 invalid_bytes_collision = "file with invalid bytes and private-use characters"
 large_file_viewer = "huge file (opened read-only by choice)"
+load_incomplete = "content read only partway"
 no_write_permission = "file without write permission"
 stateful_encoding_with_invalid_bytes = "ISO-2022-JP file with invalid bytes"
 user_requested = "opened read-only by request (`--readonly`)"
@@ -1085,6 +1115,10 @@ selection = "({count} chars selected)"
 [status.loading]
 long = "[Loading {percent}%]"
 short = "{percent}%"
+
+[status.loading_bytes]
+long = "[Loading {size}]"
+short = "{size}"
 
 [status.partial]
 long = "[First part {percent}%]"
@@ -1213,6 +1247,10 @@ compat_yen_key = "The Â¥ key often types \\ (U+005C), which is not folded with Â
 ime = "While an IME is on, letter keys do not reach the confirmation dialog as accelerators. Choose with Tab or the arrow keys and Enter"
 chord = "Keys that start with Ctrl+K are pressed as Ctrl+K and then the next key. Esc cancels"
 alt = "On terminals where Alt does not reach the editor (such as the default Terminal.app), use the Ctrl+K alternatives"
+stdin_keys = "When the program writing to evoeditor - (cmd | evoeditor -) reads the terminal (such as cat alone), the two compete for key input"
+stdin_redraw = "If the writer's error output garbles the screen, redraw it with {key:ui.redraw}"
+stdin_powershell = "Windows PowerShell 5.1 pipes replace non-ASCII text with ?. Use PowerShell 7.4 or later, or cmd /c \"evoeditor - < file\""
+stdin_writer = "A writer that ignores write errors (such as ping -t on Windows) keeps running after reading stops; stop it with Ctrl+C after evoeditor exits"
 readme = "Per-terminal settings and known limitations are described in the README"
 
 [ui.palette.category]
@@ -1231,6 +1269,7 @@ ui = "View"
 title = "Open"
 
 [ui.prompt.save_as]
+partial = "partial ({size})"
 title = "Save As"
 
 [ui.prompt.goto_line]
@@ -1266,6 +1305,7 @@ too_small = "The terminal is too small (at least {cols}x{rows} is needed)"
 title = "Unsaved changes"
 message = "{path} has unsaved changes"
 chain = "({index}/{total}) {path} has unsaved changes"
+partial_suffix = "(partial, {size})"
 save = "[S] Save and quit"
 discard = "[D] Discard and quit"
 
@@ -1286,6 +1326,19 @@ message = "Saving {path} has not finished"
 others = "and {count} more"
 wait = "[W] Wait"
 abort = "[Q] Abort the save and quit (unsaved content will be backed up)"
+
+[ui.confirm.stdin_stop]
+title = "Reading standard input"
+message = "If you stop reading, the writing program stops and the rest cannot be read"
+continue = "[Esc] Keep reading"
+open = "[O] Open what was read"
+
+[ui.confirm.stdin_loading]
+title = "Reading standard input"
+message = "Standard input is still being read ({size})"
+chain = "({index}/{total}) Standard input is still being read ({size})"
+open = "[O] Open what was read"
+discard = "[D] Discard"
 
 [ui.confirm.save_all_failed]
 title = "Documents not saved"

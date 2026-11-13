@@ -192,4 +192,8 @@ pub trait Frontend {
     fn suspend(&mut self) {}
     /// `suspend` の後に端末を取り戻す。既定では何もしない。
     fn resume(&mut self) {}
+    /// 端末のモード (raw モード・代替スクリーン・各モード) を入れ直し、次の描画を全面にする。標準入力を読み終えたとき
+    /// (`evoeditor -`、03 §9.2.2 の「端末の初期化の時期」。パイプの書き手が端末のモードを変えたり stderr に書いたり
+    /// して画面が崩れるため) に Host が呼ぶ。Unix の SIGCONT の再初期化と同じ経路 (05 §11.1)。既定では何もしない。
+    fn reinit_terminal(&mut self) {}
 }

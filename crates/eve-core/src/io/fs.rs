@@ -235,6 +235,17 @@ pub trait ReadChunks {
     ///
     /// 読込側は I/O の失敗 (`Io`)、保存側は表現不能 (`Unmappable`)・中断 (`Aborted`)・確保の失敗 (`OutOfMemory`)。
     fn next_chunk(&mut self) -> Result<Option<&[u8]>, ChunkError>;
+
+    /// ブロックせずに、もう届いているチャンクを返す (無ければ・終わりなら `Ok(None)`)。標準入力の読込を止めるとき、読取の
+    /// スレッドが既に読んで積んだ分 (受け渡し待ち) を取り込むのに使う (03 §9.2.2)。ファイルの読み手は使わない (既定は
+    /// 常に `Ok(None)`)。
+    ///
+    /// # Errors
+    ///
+    /// 届いていた読取の失敗。
+    fn next_ready(&mut self) -> Result<Option<&[u8]>, ChunkError> {
+        Ok(None)
+    }
 }
 
 /// `ReadChunks` の失敗。

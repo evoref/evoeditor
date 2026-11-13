@@ -601,7 +601,7 @@ fn 起動時の_行_は完了の時点で移る() {
     slow(&h);
     h.editor.open_initial_files(
         &[InitialFile {
-            path: "/w/a.txt".into(),
+            target: eve_core::InitialTarget::Path("/w/a.txt".into()),
             line: Some(50),
             col: None,
         }],
@@ -866,12 +866,12 @@ fn 起動時の_2_つ目以降のパスは先行表示でも表示を変えな�
     h.editor.open_initial_files(
         &[
             InitialFile {
-                path: "/w/a.txt".into(),
+                target: eve_core::InitialTarget::Path("/w/a.txt".into()),
                 line: None,
                 col: None,
             },
             InitialFile {
-                path: "/w/b.txt".into(),
+                target: eve_core::InitialTarget::Path("/w/b.txt".into()),
                 line: None,
                 col: None,
             },

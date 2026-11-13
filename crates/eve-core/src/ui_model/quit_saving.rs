@@ -3,7 +3,9 @@
 //! 保存ジョブの実行中に `app.quit` を受けたら、各保存の後続を `Quit` にして待つ。5 秒以内に終われば確認を出さずに完了の規則へ
 //! (成功して clean なら終了、失敗なら通常の保存失敗の確認)。5 秒を超えたら「待つ / 保存を中止して終了」を尋ねる。
 //! 「中止して終了」は保存ジョブに取消しを送り、全部の保存ジョブが終わったら、結果に依らず終了する
-//! (`Effect::Quit { rescue: DirtyDocuments }`。dirty な文書の退避は Host が行う)。保存が失敗で終わっていれば、
+//! (`Effect::Quit { rescue: DirtyDocuments }`。dirty な文書の退避は Host が行う)。読込中の標準入力の
+//! 文書 (終了の連鎖で「破棄」の印が付いたものを除く) は、その読込も止めて `StdinDone` を待ち、読み終えた文書を退避の対象に
+//! 入れてから終了する (03 §9.7 (f) 3、§9.2.2)。保存が失敗で終わっていれば、
 //! 失敗の行を終了時の stderr に出す (`stderr.quit_abort.*`)。
 
 use eve_view::{DocumentId, Effect, JobId, QuitRescue, StderrLine};
@@ -33,6 +35,8 @@ pub(crate) struct QuitWait {
 pub(crate) struct QuitAbort {
     /// 終了時の stderr に出す行 (失敗した保存のもの)。
     pub stderr: Vec<StderrLine>,
+    /// 止めた標準入力の読込 (終端の `StdinDone` を待ってから、読み終えた文書を退避して終了する。03 §9.7 (f) 3)。
+    pub stdin: Vec<JobId>,
 }
 
 impl EditorState {
@@ -157,13 +161,32 @@ impl EditorState {
         if id != "abort" {
             return CommandResult::Done;
         }
-        self.ui.quit_abort = Some(QuitAbort::default());
         self.ui.quit_wait = None;
         let jobs = self.saving_jobs();
         for (j, _) in &jobs {
             self.ui.continuations.remove(j);
             self.jobs.cancel(*j);
         }
+        // 読込中の標準入力の文書は黙って捨てない: 受け取った量によらず読込を止め (`Stopped` と同じ。受け渡し待ちの分も
+        // 取り込む)、`StdinDone` を待って、読み終えた文書 (1 バイト以上なら変更あり) を退避してから終了する。終了の連鎖で
+        // 「破棄」の印が付いた文書は待たない (印は Revision に依らず見る。03 §9.7 (f) 3)
+        let stdin: Vec<JobId> = self
+            .io
+            .pending
+            .iter()
+            .filter_map(|(j, p)| match p {
+                Pending::OpenStdin { doc, .. } if !self.quit_discarded(*doc) => Some(*j),
+                _ => None,
+            })
+            .collect();
+        for j in &stdin {
+            self.ui.continuations.remove(j);
+            self.jobs.cancel(*j);
+        }
+        self.ui.quit_abort = Some(QuitAbort {
+            stdin,
+            ..QuitAbort::default()
+        });
         self.quit_abort_check();
         CommandResult::Done
     }
@@ -230,9 +253,13 @@ impl EditorState {
         }
     }
 
-    /// 保存ジョブがすべて終わっていれば、dirty な文書の退避を伴う終了を要求する。
+    /// 保存ジョブと、止めた標準入力の読込がすべて終わっていれば、dirty な文書の退避を伴う終了を要求する。
     pub(crate) fn quit_abort_check(&mut self) {
-        if self.ui.quit_abort.is_none() || !self.saving_jobs().is_empty() {
+        let Some(abort) = self.ui.quit_abort.as_ref() else {
+            return;
+        };
+        let stdin_waiting = abort.stdin.iter().any(|j| self.io.pending.contains_key(j));
+        if stdin_waiting || !self.saving_jobs().is_empty() {
             return;
         }
         let stderr = self

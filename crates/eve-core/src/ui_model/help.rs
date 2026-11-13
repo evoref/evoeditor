@@ -218,6 +218,11 @@ impl EditorState {
             keys::UI_HELP_TERMINAL_IME,
             keys::UI_HELP_TERMINAL_CHORD,
             keys::UI_HELP_TERMINAL_ALT,
+            // 標準入力 (`cmd | evoeditor -`) の既知の制約 (07 §18.5、04 §8.6。v0.4 の M25)
+            keys::UI_HELP_TERMINAL_STDIN_KEYS,
+            keys::UI_HELP_TERMINAL_STDIN_REDRAW,
+            keys::UI_HELP_TERMINAL_STDIN_POWERSHELL,
+            keys::UI_HELP_TERMINAL_STDIN_WRITER,
             keys::UI_HELP_TERMINAL_README,
         ] {
             lines.push(line(HelpLineKind::Body, None, render(k)));

@@ -133,6 +133,9 @@ pub(crate) struct IoState {
     /// 読込の失敗・取消しで閉じる文書のうち、オーバーレイ・検索バーの間は表示を移さずに待っているもの (文書 → 開く前の
     /// 文書。03 §9.2.1 の「失敗・取消し・閉じる」)。
     pub(crate) failed_holds: BTreeMap<DocumentId, Option<DocumentId>>,
+    /// 標準入力の閉じる・終了の確認で「ここまでで開く」を選んだ後、読み終えたときの続き (文書, 続き) のうち、オーバーレイ・
+    /// 検索バーの間は進めずに待っているもの (03 §9.2.2 の「閉じる・終了」。開いているほかの確認・入力を置き換えない)。
+    pub(crate) stdin_conts: Vec<(DocumentId, crate::ui_model::overlay::Continuation)>,
     /// 履歴の破棄を通知した文書 (文書ごとに 1 回)。
     pub(crate) trim_notified: BTreeSet<DocumentId>,
     /// 表現不能の文字の強調 (文書, 作った Revision, 位置)。Revision が変わる (次の編集) まで残る。
@@ -318,6 +321,7 @@ impl EditorState {
                 open_switch: BTreeMap::new(),
                 partial_end_noted: BTreeSet::new(),
                 failed_holds: BTreeMap::new(),
+                stdin_conts: Vec::new(),
                 trim_notified: BTreeSet::new(),
                 unmappable_marks: None,
                 swap: Default::default(),

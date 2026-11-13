@@ -52,6 +52,7 @@ pub(crate) const INFO_SAVE_ESCAPE_MERGE_CANCELLED: &str = "info.save.escape_merg
 pub(crate) const INFO_SAVE_ESCAPE_MERGED: &str = "info.save.escape_merged";
 pub(crate) const INFO_SAVE_IN_PLACE: &str = "info.save.in_place";
 pub(crate) const INFO_SAVE_IN_PROGRESS: &str = "info.save.in_progress";
+pub(crate) const INFO_SAVE_PARTIAL_SAVED: &str = "info.save.partial_saved";
 pub(crate) const INFO_SAVE_TO_RECOVERY: &str = "info.save.to_recovery";
 pub(crate) const INFO_SAVE_UNCHANGED: &str = "info.save.unchanged";
 pub(crate) const INFO_SAVE_ALL_DONE: &str = "info.save_all.done";
@@ -70,6 +71,8 @@ pub(crate) const INFO_SEARCH_REPLACED_LINES_ADDED: &str = "info.search.replaced_
 pub(crate) const INFO_SEARCH_REPLACED_LINES_REMOVED: &str = "info.search.replaced_lines_removed";
 pub(crate) const INFO_SEARCH_WRAPPED_BACKWARD: &str = "info.search.wrapped_backward";
 pub(crate) const INFO_SEARCH_WRAPPED_FORWARD: &str = "info.search.wrapped_forward";
+pub(crate) const INFO_STDIN_STOPPED: &str = "info.stdin.stopped";
+pub(crate) const INFO_STDIN_TERMINAL: &str = "info.stdin.terminal";
 pub(crate) const INFO_SWAP_APPLIED_READ_ONLY: &str = "info.swap.applied_read_only";
 pub(crate) const INFO_SWAP_DISCARDED: &str = "info.swap.discarded";
 pub(crate) const INFO_SWAP_ENCODING_MISMATCH: &str = "info.swap.encoding_mismatch";
@@ -137,6 +140,12 @@ pub(crate) const MSG_SEARCH_PATTERN_TOO_HEAVY: &str = "msg.search.pattern_too_he
 pub(crate) const MSG_SEARCH_PATTERN_TOO_HEAVY_TEXT: &str = "msg.search.pattern_too_heavy.text";
 pub(crate) const MSG_SEARCH_REPLACE_INVALID_REGEX: &str = "msg.search.replace_invalid_regex";
 pub(crate) const MSG_SEARCH_REPLACE_STALE: &str = "msg.search.replace_stale";
+pub(crate) const MSG_STDIN_FAILED: &str = "msg.stdin.failed";
+pub(crate) const MSG_STDIN_OUT_OF_MEMORY: &str = "msg.stdin.out_of_memory";
+pub(crate) const MSG_STDIN_READ_FAILED: &str = "msg.stdin.read_failed";
+pub(crate) const MSG_STDIN_TRUNCATED: &str = "msg.stdin.truncated";
+pub(crate) const MSG_STDIN_UNREADABLE: &str = "msg.stdin.unreadable";
+pub(crate) const MSG_STDIN_UNSAVEABLE: &str = "msg.stdin.unsaveable";
 pub(crate) const MSG_SWAP_CHANGED_SINCE_OFFER: &str = "msg.swap.changed_since_offer";
 pub(crate) const MSG_SWAP_FOUND: &str = "msg.swap.found";
 pub(crate) const MSG_SWAP_OTHER_INSTANCE: &str = "msg.swap.other_instance";
@@ -152,6 +161,8 @@ pub(crate) const STATUS_EXTERNAL_CHANGE_LONG: &str = "status.external_change.lon
 pub(crate) const STATUS_EXTERNAL_CHANGE_SHORT: &str = "status.external_change.short";
 pub(crate) const STATUS_LOADING_LONG: &str = "status.loading.long";
 pub(crate) const STATUS_LOADING_SHORT: &str = "status.loading.short";
+pub(crate) const STATUS_LOADING_BYTES_LONG: &str = "status.loading_bytes.long";
+pub(crate) const STATUS_LOADING_BYTES_SHORT: &str = "status.loading_bytes.short";
 pub(crate) const STATUS_PARTIAL_LONG: &str = "status.partial.long";
 pub(crate) const STATUS_PARTIAL_SHORT: &str = "status.partial.short";
 pub(crate) const STATUS_POSITION_LONG: &str = "status.position.long";
@@ -191,6 +202,7 @@ pub(crate) const UI_CONFIRM_SAVE_ALL_FAILED_NEEDS_CONFIRM: &str =
     "ui.confirm.save_all_failed.needs_confirm";
 pub(crate) const UI_CONFIRM_SWAP_RECOVERY_CHANGED: &str = "ui.confirm.swap_recovery.changed";
 pub(crate) const UI_CONFIRM_SWAP_RECOVERY_SENSITIVE: &str = "ui.confirm.swap_recovery.sensitive";
+pub(crate) const UI_CONFIRM_UNSAVED_PARTIAL_SUFFIX: &str = "ui.confirm.unsaved.partial_suffix";
 pub(crate) const UI_HELP_FOOTER: &str = "ui.help.footer";
 pub(crate) const UI_HELP_INTRO_PALETTE: &str = "ui.help.intro.palette";
 pub(crate) const UI_HELP_INTRO_QUIT: &str = "ui.help.intro.quit";
@@ -225,6 +237,10 @@ pub(crate) const UI_HELP_TERMINAL_ALT: &str = "ui.help.terminal.alt";
 pub(crate) const UI_HELP_TERMINAL_CHORD: &str = "ui.help.terminal.chord";
 pub(crate) const UI_HELP_TERMINAL_IME: &str = "ui.help.terminal.ime";
 pub(crate) const UI_HELP_TERMINAL_README: &str = "ui.help.terminal.readme";
+pub(crate) const UI_HELP_TERMINAL_STDIN_KEYS: &str = "ui.help.terminal.stdin_keys";
+pub(crate) const UI_HELP_TERMINAL_STDIN_POWERSHELL: &str = "ui.help.terminal.stdin_powershell";
+pub(crate) const UI_HELP_TERMINAL_STDIN_REDRAW: &str = "ui.help.terminal.stdin_redraw";
+pub(crate) const UI_HELP_TERMINAL_STDIN_WRITER: &str = "ui.help.terminal.stdin_writer";
 pub(crate) const UI_HELP_TITLE: &str = "ui.help.title";
 pub(crate) const UI_HISTORY_EMPTY: &str = "ui.history.empty";
 pub(crate) const UI_HISTORY_FOOTER: &str = "ui.history.footer";
@@ -241,6 +257,7 @@ pub(crate) const UI_PALETTE_FOOTER: &str = "ui.palette.footer";
 pub(crate) const UI_PALETTE_NO_MATCH: &str = "ui.palette.no_match";
 pub(crate) const UI_PALETTE_PLACEHOLDER: &str = "ui.palette.placeholder";
 pub(crate) const UI_PALETTE_TITLE: &str = "ui.palette.title";
+pub(crate) const UI_PROMPT_SAVE_AS_PARTIAL: &str = "ui.prompt.save_as.partial";
 pub(crate) const UI_READ_ONLY_REASON_BINARY: &str = "ui.read_only_reason.binary";
 pub(crate) const UI_READ_ONLY_REASON_FILE_ATTRIBUTE: &str = "ui.read_only_reason.file_attribute";
 pub(crate) const UI_READ_ONLY_REASON_INVALID_BYTES: &str = "ui.read_only_reason.invalid_bytes";
@@ -248,6 +265,7 @@ pub(crate) const UI_READ_ONLY_REASON_INVALID_BYTES_COLLISION: &str =
     "ui.read_only_reason.invalid_bytes_collision";
 pub(crate) const UI_READ_ONLY_REASON_LARGE_FILE_VIEWER: &str =
     "ui.read_only_reason.large_file_viewer";
+pub(crate) const UI_READ_ONLY_REASON_LOAD_INCOMPLETE: &str = "ui.read_only_reason.load_incomplete";
 pub(crate) const UI_READ_ONLY_REASON_NO_WRITE_PERMISSION: &str =
     "ui.read_only_reason.no_write_permission";
 pub(crate) const UI_READ_ONLY_REASON_STATEFUL: &str =
@@ -267,7 +285,7 @@ pub(crate) const UI_TOO_SMALL: &str = "ui.too_small";
 
 /// すべての定数 (キーの順。試験に使う)。
 #[cfg(test)]
-const ALL: [&str; 245] = [
+const ALL: [&str; 263] = [
     HINT_UI_CANCEL,
     INFO_APP_RELEASE_SUMMARY,
     INFO_APP_UPDATED,
@@ -316,6 +334,7 @@ const ALL: [&str; 245] = [
     INFO_SAVE_ESCAPE_MERGED,
     INFO_SAVE_IN_PLACE,
     INFO_SAVE_IN_PROGRESS,
+    INFO_SAVE_PARTIAL_SAVED,
     INFO_SAVE_TO_RECOVERY,
     INFO_SAVE_UNCHANGED,
     INFO_SAVE_ALL_DONE,
@@ -332,6 +351,8 @@ const ALL: [&str; 245] = [
     INFO_SEARCH_REPLACED_LINES_REMOVED,
     INFO_SEARCH_WRAPPED_BACKWARD,
     INFO_SEARCH_WRAPPED_FORWARD,
+    INFO_STDIN_STOPPED,
+    INFO_STDIN_TERMINAL,
     INFO_SWAP_APPLIED_READ_ONLY,
     INFO_SWAP_DISCARDED,
     INFO_SWAP_ENCODING_MISMATCH,
@@ -397,6 +418,12 @@ const ALL: [&str; 245] = [
     MSG_SEARCH_PATTERN_TOO_HEAVY_TEXT,
     MSG_SEARCH_REPLACE_INVALID_REGEX,
     MSG_SEARCH_REPLACE_STALE,
+    MSG_STDIN_FAILED,
+    MSG_STDIN_OUT_OF_MEMORY,
+    MSG_STDIN_READ_FAILED,
+    MSG_STDIN_TRUNCATED,
+    MSG_STDIN_UNREADABLE,
+    MSG_STDIN_UNSAVEABLE,
     MSG_SWAP_CHANGED_SINCE_OFFER,
     MSG_SWAP_FOUND,
     MSG_SWAP_OTHER_INSTANCE,
@@ -412,6 +439,8 @@ const ALL: [&str; 245] = [
     STATUS_EXTERNAL_CHANGE_SHORT,
     STATUS_LOADING_LONG,
     STATUS_LOADING_SHORT,
+    STATUS_LOADING_BYTES_LONG,
+    STATUS_LOADING_BYTES_SHORT,
     STATUS_PARTIAL_LONG,
     STATUS_PARTIAL_SHORT,
     STATUS_POSITION_LONG,
@@ -444,6 +473,7 @@ const ALL: [&str; 245] = [
     UI_CONFIRM_SAVE_ALL_FAILED_NEEDS_CONFIRM,
     UI_CONFIRM_SWAP_RECOVERY_CHANGED,
     UI_CONFIRM_SWAP_RECOVERY_SENSITIVE,
+    UI_CONFIRM_UNSAVED_PARTIAL_SUFFIX,
     UI_HELP_FOOTER,
     UI_HELP_INTRO_PALETTE,
     UI_HELP_INTRO_QUIT,
@@ -478,6 +508,10 @@ const ALL: [&str; 245] = [
     UI_HELP_TERMINAL_CHORD,
     UI_HELP_TERMINAL_IME,
     UI_HELP_TERMINAL_README,
+    UI_HELP_TERMINAL_STDIN_KEYS,
+    UI_HELP_TERMINAL_STDIN_POWERSHELL,
+    UI_HELP_TERMINAL_STDIN_REDRAW,
+    UI_HELP_TERMINAL_STDIN_WRITER,
     UI_HELP_TITLE,
     UI_HISTORY_EMPTY,
     UI_HISTORY_FOOTER,
@@ -494,11 +528,13 @@ const ALL: [&str; 245] = [
     UI_PALETTE_NO_MATCH,
     UI_PALETTE_PLACEHOLDER,
     UI_PALETTE_TITLE,
+    UI_PROMPT_SAVE_AS_PARTIAL,
     UI_READ_ONLY_REASON_BINARY,
     UI_READ_ONLY_REASON_FILE_ATTRIBUTE,
     UI_READ_ONLY_REASON_INVALID_BYTES,
     UI_READ_ONLY_REASON_INVALID_BYTES_COLLISION,
     UI_READ_ONLY_REASON_LARGE_FILE_VIEWER,
+    UI_READ_ONLY_REASON_LOAD_INCOMPLETE,
     UI_READ_ONLY_REASON_NO_WRITE_PERMISSION,
     UI_READ_ONLY_REASON_STATEFUL,
     UI_READ_ONLY_REASON_USER_REQUESTED,

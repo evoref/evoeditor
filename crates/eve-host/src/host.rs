@@ -519,7 +519,13 @@ impl Host {
                     out.body,
                     JobResult::Progress { .. } | JobResult::SearchBatch { .. }
                 );
+                // 標準入力を読み終えた (EOF・上限・取消し・失敗): 端末のモードを入れ直して全面を描き直す (03 §9.2.2 の
+                // 「端末の初期化の時期」。書き手が端末のモードを変えたり stderr に書いたりして画面が崩れるため)
+                let stdin_done = matches!(out.body, JobResult::StdinDone { .. });
                 self.editor.on_job_result(*out);
+                if stdin_done {
+                    frontend.reinit_terminal();
+                }
                 return ControlFlow::Continue(driven);
             }
             HostMsg::Clipboard { token, result } => self.on_clipboard(token, result),

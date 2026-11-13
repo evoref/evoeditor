@@ -174,6 +174,8 @@ impl EditorState {
             self.io.pending.remove(&id);
             self.jobs.cancel(id);
         }
+        // 保存を中止して終了の待ちの対象 (標準入力の読込) が、文書を閉じて外れた: 終われるかを見直す (03 §9.7 (f) 3)
+        self.quit_abort_check();
     }
 
     /// ジョブの結果を受け取る (02 §5.4)。
@@ -222,7 +224,7 @@ impl EditorState {
                 opts,
                 kind,
             } => self.finish_open(doc, view, path, replace, opts, kind, r),
-            Pending::OpenStdin { doc, view } => self.finish_open_stdin(doc, view, r),
+            Pending::OpenStdin { doc, view } => self.finish_open_stdin(doc, view, cont, r),
             Pending::CheckUnchanged { doc } => self.finish_check(doc, r),
             Pending::ExternalCheck { doc, explicit } => {
                 self.finish_external_check(doc, explicit, r);

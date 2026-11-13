@@ -218,6 +218,50 @@ impl ReadChunks for FakeReader {
             }
         }
     }
+
+    /// 受け渡し待ちの分: 先頭に並んだデータの段 (閉じないパイプ・失敗の段の手前まで) をブロックせずに返す。
+    fn next_ready(&mut self) -> Result<Option<&[u8]>, ChunkError> {
+        if self.done {
+            return Ok(None);
+        }
+        match self.ready_step() {
+            Some(d) => {
+                self.cur = d;
+                Ok(Some(&self.cur))
+            }
+            None => Ok(None),
+        }
+    }
+}
+
+impl FakeReader {
+    /// 先頭の段がデータなら取り出す (遅延の段は進める)。閉じないパイプ (`Hang`)・失敗・終わりなら `None`。
+    fn ready_step(&mut self) -> Option<Vec<u8>> {
+        let mut steps = self
+            .shared
+            .steps
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
+        loop {
+            match steps.front() {
+                Some(StdinStep::Data(_)) => {
+                    let Some(StdinStep::Data(d)) = steps.pop_front() else {
+                        unreachable!("上で確かめた");
+                    };
+                    return Some(d);
+                }
+                Some(StdinStep::Delay(_)) => {
+                    let Some(StdinStep::Delay(ms)) = steps.pop_front() else {
+                        unreachable!("上で確かめた");
+                    };
+                    if let Some(c) = &self.shared.clock {
+                        c.advance(Millis(ms));
+                    }
+                }
+                _ => return None,
+            }
+        }
+    }
 }
 
 impl Drop for FakeReader {

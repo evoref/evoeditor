@@ -20,8 +20,8 @@ pub(crate) struct ShownMessage {
 }
 
 /// 読み取り専用の理由の文言キー (`ui.read_only_reason.*`、04 §15.2)。`InvalidBytes` は、私用文字と衝突した文書 (b)
-/// (`pua_escape == DisabledCollision`) では文言を分ける (03 §8.3.1 の「読み取り専用のときの案内」)。読込が終わって
-/// いない (`LoadIncomplete`、予約) は文言が無いので `None`。
+/// (`pua_escape == DisabledCollision`) では文言を分ける (03 §8.3.1 の「読み取り専用のときの案内」)。標準入力を途中まで
+/// しか読んでいない (`LoadIncomplete`、v0.4 の M25) は `ui.read_only_reason.load_incomplete`。
 pub(crate) fn read_only_reason_key(
     doc: &crate::document::Document,
     r: crate::document::ReadOnlyReason,
@@ -40,7 +40,7 @@ pub(crate) fn read_only_reason_key(
         R::StatefulEncodingWithInvalidBytes => keys::UI_READ_ONLY_REASON_STATEFUL,
         R::Binary => keys::UI_READ_ONLY_REASON_BINARY,
         R::LargeFileViewer => keys::UI_READ_ONLY_REASON_LARGE_FILE_VIEWER,
-        R::LoadIncomplete => return None,
+        R::LoadIncomplete => keys::UI_READ_ONLY_REASON_LOAD_INCOMPLETE,
     })
 }
 

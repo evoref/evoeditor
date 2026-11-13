@@ -16,8 +16,9 @@
 use std::io;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver, SyncSender, TrySendError};
-use std::sync::{Arc, Mutex, PoisonError};
+use std::sync::{Arc, Condvar, Mutex, PoisonError};
 use std::thread::JoinHandle;
+use std::time::{Duration, Instant};
 
 use eve_core::{ChunkError, FsError, FsErrorKind, ReadChunks, StdinSource};
 
@@ -64,10 +65,36 @@ struct Stopper {
     thread: JoinHandle<()>,
 }
 
+/// 標準入力が端末か (03 §9.2.2 の「標準入力が端末」、05 §9.1 / §9.2)。Unix は `isatty(0)`、Windows は標準入力の
+/// ハンドルに `GetConsoleMode` が成功する (コンソール) か、MSYS / Cygwin の擬似端末 (パイプの名前が `msys-` /
+/// `cygwin-` で始まり `-pty` を含む)。std の `IsTerminal` がこの判定をする。`NUL` / `/dev/null` は端末ではない。
+/// Host は `PlatformStdin` を作る前にこれで判定する (端末なら作らずに、空の文書を開く)。
+pub fn stdin_is_terminal() -> bool {
+    std::io::IsTerminal::is_terminal(&std::io::stdin())
+}
+
+/// `eve-stdin` が最初の知らせ (データ・EOF・失敗) をチャネルへ入れたか (端末を初期化する時期、OQ-219 の 9)。
+#[derive(Default)]
+struct Ready {
+    arrived: Mutex<bool>,
+    cond: Condvar,
+}
+
+impl Ready {
+    fn set(&self) {
+        let mut a = self.arrived.lock().unwrap_or_else(PoisonError::into_inner);
+        if !*a {
+            *a = true;
+            self.cond.notify_all();
+        }
+    }
+}
+
 /// 本番の `StdinSource` (05 §9.1 / §9.2)。
 pub struct PlatformStdin {
     shared: Arc<Shared>,
     reader: Mutex<Option<StdinChunks>>,
+    ready: Arc<Ready>,
 }
 
 impl PlatformStdin {
@@ -117,7 +144,9 @@ impl PlatformStdin {
         let (tx, rx) = mpsc::sync_channel::<Msg>(DEPTH);
         let stop = Arc::new(AtomicBool::new(false));
         let finished = Arc::new(AtomicBool::new(false));
-        let (stop2, finished2, tx2) = (stop.clone(), finished.clone(), tx.clone());
+        let ready = Arc::new(Ready::default());
+        let (stop2, finished2, tx2, ready2) =
+            (stop.clone(), finished.clone(), tx.clone(), ready.clone());
         // 標準入力の読取のスレッド (02 §9.1 の表。deps-policy.toml の R11 の許可)
         #[allow(clippy::disallowed_methods)]
         let thread = std::thread::Builder::new()
@@ -127,6 +156,7 @@ impl PlatformStdin {
                     tx: tx2,
                     sent_end: false,
                     finished: finished2,
+                    ready: ready2,
                 };
                 os::read_loop(private, stopped, &stop2, blocking, &mut |m| done.send(m));
             })?;
@@ -150,7 +180,41 @@ impl PlatformStdin {
         Ok(PlatformStdin {
             shared,
             reader: Mutex::new(Some(chunks)),
+            ready,
         })
+    }
+
+    /// 最初のデータか終わり (EOF・読取の失敗) が届くまで待つ (OQ-219 の 9 の「端末の初期化の時期」。Host が端末を
+    /// 初期化する前に呼ぶ)。`timeout` が `None` なら届くまで待つ。届いていれば `true`。待つのはチャネルへ入るまでで、
+    /// データは受け手 (`eve-stdin-job` のジョブ) が後で読む。
+    pub fn wait_ready(&self, timeout: Option<Duration>) -> bool {
+        let deadline = timeout.map(|t| Instant::now() + t);
+        let mut a = self
+            .ready
+            .arrived
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
+        while !*a {
+            a = match deadline {
+                None => self
+                    .ready
+                    .cond
+                    .wait(a)
+                    .unwrap_or_else(PoisonError::into_inner),
+                Some(d) => {
+                    let left = d.saturating_duration_since(Instant::now());
+                    if left.is_zero() {
+                        return false;
+                    }
+                    self.ready
+                        .cond
+                        .wait_timeout(a, left)
+                        .unwrap_or_else(PoisonError::into_inner)
+                        .0
+                }
+            };
+        }
+        true
     }
 }
 
@@ -185,13 +249,18 @@ struct Done {
     tx: SyncSender<Msg>,
     sent_end: bool,
     finished: Arc<AtomicBool>,
+    /// 最初の知らせを入れたら立てる (`PlatformStdin::wait_ready`)。
+    ready: Arc<Ready>,
 }
 
 impl Done {
-    /// 受け手へ送る。受け手が手放していたら `false` (読むのをやめる)。
+    /// 受け手へ送る。受け手が手放していたら `false` (読むのをやめる)。チャネルへ入れた (または受け手が手放した) 後に、
+    /// 最初の知らせが届いたことを立てる。
     fn send(&mut self, m: Msg) -> bool {
         self.sent_end |= matches!(m, Msg::Eof | Msg::Err(_));
-        self.tx.send(m).is_ok()
+        let ok = self.tx.send(m).is_ok();
+        self.ready.set();
+        ok
     }
 }
 
@@ -202,6 +271,7 @@ impl Drop for Done {
                 .tx
                 .send(Msg::Err(io::Error::other("eve-stdin が終わった")));
         }
+        self.ready.set();
         self.finished.store(true, Ordering::Release);
     }
 }
@@ -248,6 +318,39 @@ impl ReadChunks for StdinChunks {
             Err(_) => {
                 self.done = true;
                 Err(ChunkError::Io(FsError::new(FsErrorKind::Other)))
+            }
+        }
+    }
+
+    /// チャネルに積まれた分 (`eve-stdin` が読んで受け渡し待ちにした分) をブロックせずに返す。`wake` の印は読み飛ばす。
+    /// 積まれていなければ `Ok(None)` (読むのをやめるときに取り込む、03 §9.2.2)。
+    fn next_ready(&mut self) -> Result<Option<&[u8]>, ChunkError> {
+        if self.done {
+            return Ok(None);
+        }
+        let Some(rx) = self.rx.as_ref() else {
+            return Ok(None);
+        };
+        loop {
+            match rx.try_recv() {
+                Ok(Msg::Data(v)) => {
+                    self.cur = v;
+                    return Ok(Some(&self.cur));
+                }
+                Ok(Msg::Wake) => {
+                    self.shared.wake_pending.store(false, Ordering::Release);
+                }
+                Ok(Msg::Eof) => {
+                    self.done = true;
+                    return Ok(None);
+                }
+                Ok(Msg::Err(e)) => {
+                    self.done = true;
+                    let mut fe = FsError::new(FsErrorKind::Other);
+                    fe.source = Some(e);
+                    return Err(ChunkError::Io(fe));
+                }
+                Err(_) => return Ok(None),
             }
         }
     }

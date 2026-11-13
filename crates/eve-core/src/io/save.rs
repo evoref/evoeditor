@@ -718,7 +718,15 @@ impl EditorState {
         match r {
             JobResult::Saved { report, .. } => {
                 let report_method = report.method;
+                // 途中まで読んだ標準入力の文書 (`LoadIncomplete`) は、名前を付けて保存が成功したら理由を外す (保存した
+                // ファイルの全体と一致し、読まなかった後半を失う誤解が無い。03 §9.2.2 の「`LoadIncomplete` の外し方」)。
+                // 完了の文言は `info.save.partial_saved` (`{size}` は開いた量)
+                let partial = self.partial_size(doc_id);
                 if let Some(doc) = self.docs.documents.get_mut(&doc_id) {
+                    if partial.is_some() {
+                        doc.read_only
+                            .remove(crate::document::ReadOnlyReason::LoadIncomplete);
+                    }
                     // `file.set_encoding`: 保存が成功したので新しい書式に確定する。違う文字コードで書いたら、往復の検査結果
                     // (旧文字コードのもの) と保持方式の記録を捨てる (状態も対象外に戻る。書いた内容を再エンコードすれば
                     // 同じバイト列になる、03 §8.8)。同じ文字コードなら、表・状態・往復の要約を残す (記録を使って書いたので、
@@ -769,10 +777,18 @@ impl EditorState {
                         keys::INFO_SAVE_ESCAPE_MERGED,
                         &[("path", &path.display()), ("count", &count.to_string())],
                     ),
-                    None if report_method != SaveMethod::InPlace => {
+                    None if report_method != SaveMethod::InPlace && partial.is_none() => {
                         self.message(MessageLevel::Info, keys::INFO_SAVE_DONE, &path.display());
                     }
                     None => {}
+                }
+                // 途中までの文書は、つながりの知らせ (`info.save.escape_merged`) を出した後でも、印を外したことを最後に示す
+                if let Some(size) = partial.as_deref() {
+                    self.show_message(
+                        MessageLevel::Info,
+                        keys::INFO_SAVE_PARTIAL_SAVED,
+                        &[("path", &path.display()), ("size", size)],
+                    );
                 }
                 self.show_save_warning(path, &report.warnings);
                 self.mark_snapshot_update(doc_id);

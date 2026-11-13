@@ -1058,7 +1058,7 @@ v0.1 は単一文書で、バッファ一覧を持たない (別のファイル�
 - 操作 (コンテキスト `help`、07 §11.6): `↑` / `↓` で 1 行、`PgUp` / `PgDn` で 1 画面スクロール。閉じるのは `Esc` (`q` では閉じない。将来のヘルプ内の文字入力と衝突し、モードレスの一貫性を崩すため)。
 - **M9a の実装の範囲**: キー一覧は、解決済みキーマップの全割当をコマンドごとに並べる (コンテキストは区別しない)。「この端末で届かない割当に印を付ける」(§7.8) は **M9b で実装した**: 割当が届かないのは、拡張キーが要る割当 (`[E]`、07 §11.6) で `Capabilities.enhanced_keys` が偽のとき、またはどれかのストロークが `Capabilities.intercepted_keys` (§7.3a の表から eve-tui の定数表 `intercept.rs` が埋める) に載るとき。届かない割当はキーの後ろに `*` を付け、そういう割当が 1 つでもあれば節の注記の下に `ui.help.keys.unreachable` の 1 行を出す。パレット・ヒントバー・`{key:…}` のキーの表記も同じ判定で、届く割当から選ぶ (§7.8)。開くキーは `help.open` = `Ctrl+K H` (`F1` は引き続きパレット)。見出し・節の文言は `ui.help.*` (§15.2)。下端のヒントは `Esc 取消` だけを出す。
 
-- **標準入力の注意 (v0.4 の M25、案)**: 「端末の設定」の節に、標準入力 (`cmd | evoeditor -`) の既知の制約を足す (07 §18.5 と同じ内容。文言は `ui.help.*` の実装の PR で足す): 書き手が端末から読むコマンド (`cat` 単独・対話のスクリプト) ではキー入力を取り合う。書き手の stderr が画面に出たら `ui.redraw` で描き直す。Windows PowerShell 5.1 のパイプは非 ASCII を `?` に置き換える (`--encoding` でも直らない) ので、PowerShell 7.4 以降か `cmd /c "evoeditor - < file"` を使う。Windows で書込の誤りを無視するプログラム (`ping -t` など) は、読むのをやめても動き続ける (evoeditor の終了後に Ctrl+C)。
+- **標準入力の注意 (v0.4 の M25 の (9))**: 「端末の設定」の節の README の行の前に、標準入力 (`cmd | evoeditor -`) の既知の制約を 4 行で出す (07 §18.5 と同じ内容。文言は §15.2 の `ui.help.terminal.stdin_*`): 書き手が端末から読むコマンド (`cat` 単独・対話のスクリプト) ではキー入力を取り合う。書き手の stderr が画面に出たら `ui.redraw` で描き直す。Windows PowerShell 5.1 のパイプは非 ASCII を `?` に置き換える (`--encoding` でも直らない) ので、PowerShell 7.4 以降か `cmd /c "evoeditor - < file"` を使う。Windows で書込の誤りを無視するプログラム (`ping -t` など) は、読むのをやめても動き続ける (evoeditor の終了後に Ctrl+C)。
 
 ### 8.7 ステータスバー (FR-503)
 
@@ -1068,7 +1068,7 @@ v0.1 は単一文書で、バッファ一覧を持たない (別のファイル�
 | 左 2 | 5 | 変更マーカー | `●` / `[+]` | — (常に残す) | — (記号) |
 | 左 3 | 5 | 読み取り専用 | `[RO]` | `RO` | `status.read_only.long` / `.short` |
 | 左 4 | 5 | 機能縮退 (長い行を含む文書は折り返さない。NFR-106、03 §14.4。v0.1 は読み取り専用で先頭 64 KiB だけを表示し、v0.2〜v0.3 は閾値を超える行を char 近似モード (書記素 = char) で表示して「近似表示」と出した。**v0.4 の M25** で書記素の単位にしたので、「折り返さない」意味に改めた。長大行の折り返しを v0.4 に入れたら、この項目を出さない。03 §14.4) | `[長い行: 折り返しなし]` | `折返なし` | `status.degraded.long_line.long` / `.short` |
-| 左 5 | 5 | 読込中 (**v0.4 の M25**: 先行表示 (`Partial`、03 §9.2.1) の間は同じ項目 (`StatusKind::Loading`) を `status.partial.long` / `.short` (`{percent}`) 「[先頭のみ {percent}%]」/「{percent}%」で出す (表示中の文書が先行表示のときだけ。表示していない文書の読込の進捗は `status.loading.*`)。標準入力 (03 §9.2.2) は大きさが分からないので、案 `status.loading_bytes.long` / `.short` (`{size}`) 「[読込中 {size}]」/「{size}」で読んだ量を出す (どちらを出すかは文書の種類で決める。`Progress.total = 0` は空のファイルでも出るので使わない)。標準入力の読込は、その文書を表示しているときだけ出す (ほかの文書の表示中に出る読込中の項目は、ファイルの `file.open` の読込だけ)。標準入力のキーは言語ファイルと一緒に実装の PR で足す) | `[読込中 45%]` | `45%` | `status.loading.long` / `.short`、`status.partial.long` / `.short` |
+| 左 5 | 5 | 読込中 (**v0.4 の M25**: 先行表示 (`Partial`、03 §9.2.1) の間は同じ項目 (`StatusKind::Loading`) を `status.partial.long` / `.short` (`{percent}`) 「[先頭のみ {percent}%]」/「{percent}%」で出す (表示中の文書が先行表示のときだけ。表示していない文書の読込の進捗は `status.loading.*`)。標準入力 (03 §9.2.2) は大きさが分からないので、`status.loading_bytes.long` / `.short` (`{size}`) 「[読込中 {size}]」/「{size}」で読んだ量を出す (どちらを出すかは文書の種類で決める。`Progress.total = 0` は空のファイルでも出るので使わない)。標準入力の読込は、その文書を表示しているときだけ出す (ほかの文書の表示中に出る読込中の項目は、ファイルの `file.open` の読込だけ)。標準入力のキーは M25 の (9) で足した) | `[読込中 45%]` | `45%` | `status.loading.long` / `.short`、`status.partial.long` / `.short` |
 | 左 6 | 5 | 保存中 (保存ジョブの完了を待つ間だけ出る。03 §9.7 の `Saving`) | `[保存中]` | `保存中` | `status.saving.long` / `.short` |
 | 左 7 | 5 | 外部変更 (外部での変更の確認で「無視」を選んでから、保存・再読込・開き直しまで。03 §9.5 の「状態」。v0.3 の M18) | `[外部で変更]` | `外部変更` | `status.external_change.long` / `.short` |
 | 左 8 | 5 | チョード保留 (保留中だけ出る) | `Ctrl+K …` (`Capabilities.ascii_only` が真のときは `Ctrl+K ...` にする案、§3.7、提案、OQ-214) | — | — (キー表記) |
@@ -1360,6 +1360,7 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 | ステータスバー | `status.untitled` | 無題-{n} | 6 (n が 1 桁) |
 | ステータスバー | `status.loading.long` / `.short` | [読込中 {percent}%] / {percent}% | 12、3 (2 桁) |
 | ステータスバー (v0.4。先行表示の間、§8.7) | `status.partial.long` / `.short` | [先頭のみ {percent}%] / {percent}% | 16、3 (2 桁) |
+| ステータスバー (v0.4。標準入力の読込中、§8.7) | `status.loading_bytes.long` / `.short` | [読込中 {size}] / {size} | 16、8 (`12.3 MiB`) |
 | ステータスバー | `status.read_only.long` / `.short` | [RO] / RO | 4、2 |
 | ステータスバー | `status.saving.long` / `.short` | [保存中] / 保存中 | 8、6 |
 | ステータスバー | `status.degraded.long_line.long` / `.short` | [長い行: 折り返しなし] / 折返なし | 22、8 |
@@ -1382,6 +1383,7 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 | パレット (`List.footer`) | `ui.palette.footer` | {matched}/{total} | — |
 | パレット | `ui.palette.placeholder` | コマンドを入力 | 14 |
 | 入力プロンプト (`Prompt.title`) | `ui.prompt.open.title` / `ui.prompt.save_as.title` / `ui.prompt.goto_line.title` / `ui.prompt.encoding.title` / `ui.prompt.arg.title` | 開く / 名前を付けて保存 / 行へ移動 / 文字コードを指定して開く / {arg} | 4、16、8、12、— |
+| 入力プロンプト (`Prompt.title` の後ろ。v0.4 の M25) | `ui.prompt.save_as.partial` (途中まで読んだ標準入力の文書の名前を付けて保存。`ui.prompt.save_as.title` の後ろに空白をはさんで足す、03 §9.2.2) | 途中まで ({size}) | — |
 | 入力プロンプト (`Prompt.hint`) | `ui.prompt.goto_line.hint` / `ui.prompt.encoding.hint` | 行、行:桁、$ (最終行) / UTF-8、Shift_JIS、EUC-JP、ISO-2022-JP、UTF-16LE、UTF-16BE | —、— |
 | 入力プロンプト (`Prompt.error`) | `ui.prompt.goto_line.error.invalid` / `ui.prompt.open.error.empty` / `ui.prompt.save_as.error.empty` / `ui.prompt.encoding.error.invalid` | 行番号を入力してください (例: 12、12:5、$) / パスを入力してください / パスを入力してください / 対応していない文字コードです | — |
 | パレット (実行できない) | `ui.palette.disabled` | 現在は実行できません: {reason} | — |
@@ -1427,6 +1429,7 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 | MessageKey | 出す場面 | ja |
 |---|---|---|
 | `info.save.done` | 保存の成功 (つながりを承認した保存の成功では、代わりに下の `info.save.escape_merged`) | {path} を保存しました |
+| `info.save.partial_saved` | 途中まで読んだ標準入力の文書 (`LoadIncomplete`) の名前を付けて保存の成功 (v0.4 の M25、03 §9.2.2 の「`LoadIncomplete` の外し方」。`info.save.done` の代わりに出し、`LoadIncomplete` を外す)。`{size}` は開いた量 | 途中までの内容を {path} に保存しました ({size}) |
 | `info.save.escape_merged` | 開き直すと文字が変わる箇所の確認 (`ui.confirm.save.escape_merge`) で「このまま保存」を選んだ保存の成功 (v0.4 の M23、03 §8.3.1 の「つながったまま保存した後」)。`info.save.done` に代えて出す (文書の本文はエスケープ文字のまま。自動では再読込しない)。`{count}` は承認したつながりの件数。直接上書きで書いたときは `info.save.in_place` の後に出す。要点を先頭に置き、80 桁で見える長さにする | {path} を保存しました。開き直すと {count} 箇所が別の文字になります |
 | `info.save.unchanged` | 手順 0 (無編集。書き込まない) | 変更はありません (ファイルは書き換えていません) |
 | `info.save.in_progress` | 保存の連鎖の途中 (照合・保存ジョブの待ち、確認・名前の入力の表示中) に、同じ文書の保存要求 (`file.save` / `file.save_as` / `file.set_encoding`) を無視した (03 §9.7 の全状態の遷移表の「無視」。単独の保存の `Saving` への `file.save` はキューに積むので出さない)。ステータスバーの保存中の表示 (`status.saving.*`、§8.7) とは別に 1 回示す | 保存中です |
@@ -1543,6 +1546,7 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 | `ui.confirm.unsaved.chain` | v0.2 の終了の連鎖 (03 §9.8) で、dirty な文書が 2 件以上のときの本文。何件目か (`{index}` / `{total}`) を前置する | ({index}/{total}) {path} には保存されていない変更があります |
 | `ui.confirm.unsaved.save` | 同上 (既定の選択肢。アクセラレータ `S`) | [S] 保存して終了 |
 | `ui.confirm.unsaved.discard` | 同上 (破棄する選択肢。既定にしない。アクセラレータ `D`) | [D] 破棄して終了 |
+| `ui.confirm.unsaved.partial_suffix` | FR-107 の確認 (`ui.confirm.unsaved.*`・`ui.confirm.unsaved_close.*`・`ui.confirm.unsaved_reopen.*`) の `{path}` の後ろに足す。途中まで読んだ標準入力の文書 (`LoadIncomplete`) のとき (v0.4 の M25、03 §9.2.2) | (途中まで {size}) |
 | `info.save_all.done` | 全保存 (`file.save_all`、03 §9.8) で保存した件数。飛ばした文書が無いとき | {saved} 件の文書を保存しました |
 | `info.save_all.done_skipped` | 同上。名前の無い文書・読み取り専用の文書を飛ばしたとき | {saved} 件の文書を保存しました。名前の無い・読み取り専用の {skipped} 件は保存していません |
 | `info.save_all.none` | 全保存で、保存する文書が 1 件も無かったとき | 保存する文書はありません |
@@ -1579,6 +1583,10 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 | `ui.help.terminal.ime` | 端末の設定: IME | IME が ON のとき、文字キーは確認ダイアログのアクセラレータとして届きません。Tab や矢印と Enter で選んでください |
 | `ui.help.terminal.chord` | 端末の設定: チョード | Ctrl+K で始まるキーは、Ctrl+K を押してから次のキーを押します。Esc で取り消せます |
 | `ui.help.terminal.alt` | 端末の設定: Alt が届かない端末 | Alt が届かない端末 (Terminal.app の既定など) では、Ctrl+K を使う代替のキーがあります |
+| `ui.help.terminal.stdin_keys` | 端末の設定: 標準入力の書き手とキー入力の取り合い (v0.4 の M25、§8.6) | 標準入力 (cmd \| evoeditor -) の書き手が端末から読むとき (cat 単独など) は、キー入力を取り合います |
+| `ui.help.terminal.stdin_redraw` | 端末の設定: 書き手の stderr で崩れた画面 (同上) | 書き手のエラー出力で画面が崩れたら、{key:ui.redraw} で描き直してください |
+| `ui.help.terminal.stdin_powershell` | 端末の設定: Windows PowerShell 5.1 のパイプ (同上) | Windows PowerShell 5.1 のパイプは非 ASCII を ? に置き換えます。PowerShell 7.4 以降か cmd /c "evoeditor - < file" を使ってください |
+| `ui.help.terminal.stdin_writer` | 端末の設定: 読むのをやめても止まらない書き手 (同上) | 書込の誤りを無視する書き手 (Windows の ping -t など) は、読むのをやめても動き続けます。evoeditor の終了後に Ctrl+C で止めてください |
 | `ui.help.terminal.readme` | 端末の設定: README | 端末ごとの設定と既知の制約は README に書いてあります |
 | `ui.help.section.search` | ヘルプの節の見出し「検索の書き方」(§8.6。v0.4 の M24 の (4)) | 検索の書き方 |
 | `ui.help.search.intro` | 検索の書き方: 導入 (03 §12.3.1 の「行の終端に一致する書き方」) | 検索バーの正規表現 ([.*] を ON) は行をまたいで探せます。行の終端 (改行) に一致するのは、改行を明示した次の書き方だけです |
@@ -1613,6 +1621,15 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 | `ui.confirm.quit_saving.others` | 同上。保存中の文書が 2 件以上のとき、`{path}` (先頭の 1 件) の後ろに足す。`{count}` は残りの件数 | ほか {count} 件 |
 | `ui.confirm.quit_saving.wait` | 同上 (既定の選択肢。アクセラレータ `W`。`Esc` も同じ) | [W] 待つ |
 | `ui.confirm.quit_saving.abort` | 同上 (中止する選択肢。既定にしない。アクセラレータ `Q`) | [Q] 保存を中止して終了 (保存していない内容は退避します) |
+| `ui.confirm.stdin_stop.title` | 標準入力の文書を表示しているときの `Esc` (OQ-219 の 10 (i)、03 §9.2.2 の「取消し (`Esc`)」、v0.4 の M25)。選択肢は「読み続ける」(既定。`Esc` も同じ) と「ここまでで開く」の 2 つで、共通のキャンセル (`ui.confirm.cancel`) は並べない (同じ意味の表示が 2 つ並ぶため) | 標準入力の読込 |
+| `ui.confirm.stdin_stop.message` | 同上 | 読むのをやめると書き手が止まり、続きは読めません |
+| `ui.confirm.stdin_stop.continue` | 同上 (既定の選択肢。アクセラレータなし。`Esc` も同じ) | [Esc] 読み続ける |
+| `ui.confirm.stdin_stop.open` | 同上 (アクセラレータ `O`。読むのをやめて、読んだところまでを `LoadIncomplete` で開く) | [O] ここまでで開く |
+| `ui.confirm.stdin_loading.title` | 1 バイト以上読んだ読込中の標準入力の文書を閉じる (`buffer.close`)・終了する (`app.quit` の連鎖、03 §9.8) (OQ-219 の 10 (ii)、v0.4 の M25)。キャンセルは共通の `ui.confirm.cancel` | 標準入力の読込 |
+| `ui.confirm.stdin_loading.message` | 同上。`{size}` は受け取った量 | 標準入力を読み込み中です ({size}) |
+| `ui.confirm.stdin_loading.chain` | 同上。終了の連鎖で尋ねる文書が 2 件以上のとき (`ui.confirm.unsaved.chain` と同じ前置き) | ({index}/{total}) 標準入力を読み込み中です ({size}) |
+| `ui.confirm.stdin_loading.open` | 同上 (既定の選択肢。アクセラレータ `O`。読むのをやめて開き、続けて FR-107 の確認に進む) | [O] ここまでで開く |
+| `ui.confirm.stdin_loading.discard` | 同上 (破棄。既定にしない。アクセラレータ `D`。閉じるでは読むのをやめて捨て、終了では連鎖の破棄の印を付ける) | [D] 破棄 |
 
 **読込・開き直し・外部変更** (03 §9.2 / §8 / §9.5 / §9.6、05 §4.5)
 
@@ -1637,7 +1654,9 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 | `info.open.new_file` | 存在しないパスを開いた (新規ファイル。01 FR-101 AC-2) | {path} は無いため、新しいファイルとして開きました (保存すると作成します) |
 | `msg.open.parent_missing` | 存在しないパスを開き、そのフォルダも無い (`JobResult::NewFile` の `parent_missing`、03 §9.2 手順 2)。引数は `{path}` (開いたパス) と `{dir}` (`parent_missing` に入った、無いフォルダ) | {path} のフォルダ {dir} がありません。新しいファイルとして開きましたが、このままでは保存できません / フォルダを作ってから保存するか、別名で保存 ({key:file.save_as}) してください |
 | `info.open.already_open` | 開こうとしたファイルが今の文書と同じ (03 §9.2 手順 0 / 2b) | {path} は既に開いています |
-| `info.open.cancelled` | 読込を取り消した (`Esc`。01 FR-122 AC-1。今の文書はそのまま。v0.4 の M25 では先行表示 (`Partial`、03 §9.2.1) の間の取消しでも出し、先頭も閉じる)。**標準入力 (v0.4 の M25、03 §9.2.2) の `Esc` は取消しではなく、確認 (`ui.confirm.stdin_stop`。下の `msg.open.read_failed` の行の案) の「ここまでで開く」で「読むのをやめて、読んだところまでを開く」** なので、このキーではなく案 `info.stdin.stopped` (`{size}`) 「標準入力を読むのをやめ、ここまで ({size}) を読み取り専用で開きました」/ en: "Stopped reading standard input and opened what was read ({size}) as read-only" を出す (キーは言語ファイルと一緒に実装の PR で足す) | {path} の読込を取り消しました |
+| `info.open.cancelled` | 読込を取り消した (`Esc`。01 FR-122 AC-1。今の文書はそのまま。v0.4 の M25 では先行表示 (`Partial`、03 §9.2.1) の間の取消しでも出し、先頭も閉じる)。**標準入力 (v0.4 の M25、03 §9.2.2) の `Esc` は取消しではなく、確認 (`ui.confirm.stdin_stop`) の「ここまでで開く」で「読むのをやめて、読んだところまでを開く」** なので、このキーではなく下の `info.stdin.stopped` を出す | {path} の読込を取り消しました |
+| `info.stdin.stopped` | 標準入力の文書の `ui.confirm.stdin_stop` / `ui.confirm.stdin_loading` で「ここまでで開く」を選び、1 バイト以上読んでいた (v0.4 の M25、03 §9.2.2。何も読んでいなければ出さない)。`{size}` は開いた量 (受け渡し待ちの分を取り込んだ後の量) | 標準入力を読むのをやめ、ここまで ({size}) を読み取り専用で開きました |
+| `info.stdin.terminal` | `evoeditor -` で標準入力が端末 (読まずに空の無題の文書を開いた。03 §9.2.2、07 §18.5、01 FR-120 AC-2) | 標準入力が端末のため、読まずに空の文書を開きました |
 | `msg.open.partial_unavailable` | 新しく開く読込の間 (本文の無い `Loading` と先行表示の `Partial`、03 §9.2.1。v0.4 の M25) に、検索・置換・行へ移動・すべて選択・文書の末尾まで選択を伸ばす操作を拒否した (先頭の中だけの結果が文書全体の結果に見えるため。保留はしない)。再読込・開き直しの間は出さない (旧本文で検索できる)。同じ理由の拒否が続くときは 1 回にまとめる | 読込中のため使えません / 読込の完了を待つか、{key:ui.cancel} で読込を取り消してください |
 | `info.open.partial_end` | 先行表示 (03 §9.2.1。v0.4 の M25) の間に、先頭の末尾より先へ動こうとした (末尾の行での下・`PageDown`・末尾での右・`cursor.doc_end`・途中で切れた末尾の行の `End`)。カーソルは末尾に止まる。同じ文書の先行表示の間は 1 回。`{size}` は先頭の大きさ | 先頭の {size} だけを表示しています。残りは読込の完了後に表示します |
 | `msg.open.permission_denied` | 読む権限が無い | {path} を読む権限がありません / ファイルの権限を確かめてください |
@@ -1646,7 +1665,13 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 | `msg.open.busy` | 他のプロセスが共有を許さずに開いている (共有違反) | 他のプログラムが {path} を使用中のため読めませんでした / そのプログラムを閉じてから開き直してください |
 | `msg.open.out_of_memory` | 読込用の確保に失敗した (`try_reserve`、03 §9.2。プロセスは続ける) | メモリが足りないため {path} の読込を中止しました / 他のプログラムを閉じてから開き直してください |
 | `msg.open.failed` | 分類できない失敗 (読み始める前) | {path} を開けませんでした: {reason} / パスと権限を確かめてください |
-| `msg.open.read_failed` | 読込の途中の I/O エラー (03 §9.2 の「失敗」。読めた部分は捨てる。確認ダイアログ (再試行・読めた部分を読み取り専用で開く) は v0.4 以降の予約で、v0.1 はメッセージだけ。v0.4 もファイルでは出さない)。**標準入力 (v0.4 の M25、03 §9.2.2) の案** (キーは言語ファイルと一緒に実装の PR で足す): `msg.stdin.read_failed` (`{size}`・`{reason}`。途中の読取の失敗、または最初から読めない) 「標準入力の読込の途中で失敗しました: {reason} / 読めた {size} を読み取り専用で開きました。全部が要るときは、コマンドの出力をファイルに保存してから開いてください」/ en: "Reading standard input failed: {reason} / Opened what was read ({size}) as read-only. To get all of it, save the command output to a file and open that"、`msg.stdin.truncated` (`{size}`。上限 `file.huge_file_warn_bytes` で読むのをやめた) 「標準入力が {size} を超えたため、そこまでを読み取り専用で開きました / 残りは読んでいません。全部が要るときは、コマンドの出力をファイルに保存してから開いてください」/ en: "Standard input exceeded {size}; opened what was read as read-only / The rest was not read. To get all of it, save the command output to a file and open that"、`info.stdin.terminal` (`evoeditor -` で標準入力が端末) 「標準入力が端末のため、読まずに空の文書を開きました」/ en: "Standard input is a terminal; opened an empty document without reading it"、`info.stdin.waiting` (端末を初期化する前に **stderr** へ出す 1 行。OQ-219 の 9 の ★。言語ファイルの前に出すので `stderr.*` の名前空間に置くかは実装の PR で決める) 「標準入力を待っています (Ctrl+C で中止)」/ en: "Waiting for standard input (Ctrl+C to abort)"、`msg.stdin.unsaveable` (書く手段の無い内容を読んだ。不正バイトを含む ISO-2022-JP・私用文字と衝突した内容、03 §9.2.2) 「この内容は保存できません / `--encoding` を付けて起動し直してください」/ en: "This content cannot be saved / Restart with `--encoding`"、`msg.stdin.out_of_memory` (`{size}`。読込の確保に失敗した) 「メモリが足りないため、標準入力のここまで ({size}) を読み取り専用で開きました」/ en: "Out of memory; opened what was read from standard input ({size}) as read-only"、`info.save.partial_saved` (`{path}`・`{size}`。途中まで読んだ標準入力の文書の名前を付けて保存の成功。`LoadIncomplete` を外す) 「途中までの内容を {path} に保存しました ({size})」/ en: "Saved the partial content to {path} ({size})"、`ui.prompt.save_as.partial` (`{size}`。途中まで読んだ文書の名前を付けて保存の入力の案内の後ろに足す) 「途中まで ({size})」/ en: "partial ({size})"、`ui.confirm.unsaved.partial_suffix` (`{size}`。FR-107 の確認 (`ui.confirm.unsaved.*`・`ui.confirm.unsaved_close.*`) の `{path}` の後ろに足す) 「(途中まで {size})」/ en: "(partial, {size})"、`ui.confirm.stdin_stop.*` (OQ-219 の 10 (i)。標準入力の文書の表示中の `Esc`) 見出し「標準入力の読込」、本文「読むのをやめると書き手が止まり、続きは読めません」/ en: "If you stop reading, the writing program stops and the rest cannot be read"、選択肢 `.continue` 「[Esc] 読み続ける」(既定) と `.open` 「[O] ここまでで開く」、`ui.confirm.stdin_loading.*` (OQ-219 の 10 (ii)。1 バイト以上読んだ読込中の標準入力の文書を閉じる・終了する) 本文「標準入力を読み込み中です ({size})」/ en: "Standard input is still being read ({size})"、選択肢 `.open` 「[O] ここまでで開く」(既定)・`.discard` 「[D] 破棄」・`.cancel` 「[Esc] キャンセル」 | {path} の読込の途中で失敗しました: {reason} / もう一度開く ({key:file.open}) か、パスと接続を確かめてください |
+| `msg.open.read_failed` | 読込の途中の I/O エラー (03 §9.2 の「失敗」。読めた部分は捨てる。確認ダイアログ (再試行・読めた部分を読み取り専用で開く) は v0.4 以降の予約で、v0.1 はメッセージだけ。v0.4 もファイルでは出さない)。標準入力 (v0.4 の M25、03 §9.2.2) は下の `msg.stdin.*` / `info.stdin.*`、閉じる・終了と `Esc` の確認は `ui.confirm.stdin_*` (§15.2 の確認の表) | {path} の読込の途中で失敗しました: {reason} / もう一度開く ({key:file.open}) か、パスと接続を確かめてください |
+| `msg.stdin.failed` | 標準入力の読込のパニック (`Failed { Panic }`。読んだ内容は失い、標準入力の文書を閉じる。03 §9.2.2 の「読込の失敗」、v0.4 の M25) | 標準入力の読込が失敗しました: {reason} / 読んだ内容は失われました。全部が要るときは、コマンドを実行し直してください |
+| `msg.stdin.out_of_memory` | 標準入力の読込の確保に失敗した (`StdinEnd::OutOfMemory`。読んだところまでを `LoadIncomplete` で開いた)。`{size}` は開いた量。受け取りが 0 バイトなら下の `msg.stdin.unreadable` | メモリが足りないため、標準入力のここまで ({size}) を読み取り専用で開きました / 全部が要るときは、コマンドの出力をファイルに保存してから開いてください |
+| `msg.stdin.read_failed` | 標準入力の途中の読取の失敗 (`StdinEnd::Error`。読めたところまでを `LoadIncomplete` で開いた)。`{size}` は開いた量。受け取りが 1 バイト以上なら、開いた量が 0 でもこのキー (0 バイトのまま読めなかったときは下の `msg.stdin.unreadable`) | 標準入力の読込の途中で失敗しました: {reason} / 読めた {size} を読み取り専用で開きました。全部が要るときは、コマンドの出力をファイルに保存してから開いてください |
+| `msg.stdin.truncated` | 標準入力が上限 (`file.huge_file_warn_bytes`) を超えて読むのをやめた (`StdinEnd::Limit`)。`{size}` は上限 | 標準入力が {size} を超えたため、そこまでを読み取り専用で開きました / 残りは読んでいません。全部が要るときは、コマンドの出力をファイルに保存してから開いてください |
+| `msg.stdin.unreadable` | 標準入力を 1 バイトも受け取らずに読めなかった (最初から読めない。Host が `StdinSource` を作れなかったときを含む。`StdinEnd::Error`) か、受け取る前に確保に失敗した (`StdinEnd::OutOfMemory`。`{reason}` は `out of memory`)。開いた文書は理由の無い空の文書 (03 §9.2.2 の「読込の失敗」、v0.4 の M25) | 標準入力を読めませんでした: {reason} / 標準入力に渡すコマンドを確かめて、実行し直してください |
+| `msg.stdin.unsaveable` | 書く手段の無い内容を標準入力から読んだ (不正バイトを含む ISO-2022-JP・私用文字と衝突した文書 (b)。03 §9.2.2 の「書く手段の無い文書」) | この内容は保存できません / --encoding を付けて起動し直してください |
 | `msg.open.changed_during_load` | 読み込んでいる間にファイルが変わった (`changed_during_load`、05 §4.5) | 読み込んでいる間に {path} が変更されました / 内容を確かめ、必要なら文字コードを指定して開き直す ({key:file.reopen_with_encoding}) で読み直してください |
 | `info.open.long_line` | 閾値 (1 MiB) を超える行を含む文書を開いた (NFR-106、03 §14.4。v0.2〜v0.3 はその行を char 近似モードで扱うことを示す文言だった。**v0.4 の M25** で書記素の単位にしたので、折り返さないことを示す文言に改めた。長大行の折り返しを v0.4 に入れたら出さない) | {path} には非常に長い行があります。この文書は折り返さずに表示します |
 | `info.open.redetected` | 文字コードの再判定 (03 §8.2.1) | 文字コードを {encoding} と判定し直しました |
@@ -1703,7 +1728,8 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 | `ui.read_only_reason.invalid_bytes_collision` | 同上。`InvalidBytes` のうち、私用文字と衝突した文書 (b) (`pua_escape == DisabledCollision`、03 §8.3 の「衝突」(b)。解除できない) の文言 (v0.4 の M23、03 §8.3.1。`ReadOnlyReason` の変種は増やさず、`pua_escape` で選ぶ)。パレットで `file.toggle_read_only` が淡色のときの理由 (下の表の注記) にも使う | 不正なバイトと私用文字を含むファイル |
 | `ui.read_only_reason.stateful_encoding_with_invalid_bytes` | 同上。`StatefulEncodingWithInvalidBytes` | 不正なバイトを含む ISO-2022-JP のファイル |
 | `ui.read_only_reason.binary` | 同上。`Binary` | バイナリファイル |
-| `ui.read_only_reason.large_file_viewer` | 同上。`LargeFileViewer`。**v0.4 の M25** で付き始める `LoadIncomplete` (標準入力の読込を途中でやめた、03 §9.2.2 / §9.6) の文言は案 `ui.read_only_reason.load_incomplete` 「途中までしか読んでいない内容」/ en: "content read only partway" (キーは言語ファイルと一緒に実装の PR で足す) | 巨大なファイル (読み取り専用で開く指定) |
+| `ui.read_only_reason.large_file_viewer` | 同上。`LargeFileViewer`。`LoadIncomplete` は下の行 | 巨大なファイル (読み取り専用で開く指定) |
+| `ui.read_only_reason.load_incomplete` | 同上。`LoadIncomplete` (標準入力の読込を途中でやめた、03 §9.2.2 / §9.6。v0.4 の M25) | 途中までしか読んでいない内容 |
 | `ui.clipboard_reason.read_failed` | `msg.clipboard.fallback` の `{reason}`。`ClipboardFallbackReason::ReadFailed` (貼り付けの読み取りの失敗。以下の 7 行は eve-core の `ClipboardFallbackReason` と 1 対 1。Host・eve-platform は文字列でなくこの値を渡す) | 読み取れませんでした |
 | `ui.clipboard_reason.write_failed` | 同上。`WriteFailed` (コピーの書込の失敗) | 書き込めませんでした |
 | `ui.clipboard_reason.too_large` | 同上。`TooLarge` (64 MiB の上限を超える、05 §8.1) | 大きすぎてシステムのクリップボードに入りません |
@@ -1786,7 +1812,7 @@ v0.2 以降の診断 (名前だけを予約し、文言はその版で言語フ�
 
 | MessageKey | 内容 | en | ja |
 |---|---|---|---|
-| `cli.help.usage` | 先頭の使い方。v0.4 の M25 で標準入力 (`-`、07 §18.2) を足すとき、案 "Usage: evoeditor [OPTIONS] [--] [FILE \| -]..." / 「使い方: evoeditor [オプション] [--] [ファイル \| -]...」と、`-` の説明の行 (案 `cli.help.stdin` "-  Read standard input into an untitled document" / 「-  標準入力を読んで無題の文書として開きます」) に改める (bin の定数表と一緒に実装の PR で変える) | Usage: evoeditor [OPTIONS] [--] [FILE] | 使い方: evoeditor [オプション] [--] [ファイル] |
+| `cli.help.usage` | 先頭の使い方 (v0.4 の M25 で標準入力の `-` (07 §18.2) を足した) | Usage: evoeditor [OPTIONS] [--] [FILE \| -]... | 使い方: evoeditor [オプション] [--] [ファイル \| -]... |
 | `cli.help.description` | 概要の 1 行 | A modeless text editor for the terminal. | 端末で動く、モードのないテキストエディタです。 |
 | `cli.help.options_title` | オプションの見出し | Options: | オプション: |
 | `cli.help.option.version` | `-V, --version` | Show the version and build information | 版とビルド情報を表示して終了します |
@@ -1802,6 +1828,7 @@ v0.2 以降の診断 (名前だけを予約し、文言はその版で言語フ�
 | `cli.help.option.check_config` (v0.2) | `--check-config` | Check the settings, print the problems, and exit | 設定を確かめて問題を表示し、終了します |
 | `cli.help.option.dump_config` (v0.2) | `--dump-config [--defaults] [--json]` | Print the resolved settings (or the defaults) and exit | 解決した設定 (または既定値) を表示して終了します |
 | `cli.help.option.wait` | `--wait` | Accepted for $EDITOR compatibility; has no effect | $EDITOR に設定するときの互換用です (何もしません) |
+| `cli.help.option.stdin` (v0.4) | `-` (07 §18.2) | Read standard input into an untitled document | 標準入力を読んで無題の文書として開きます |
 | `cli.help.option.end_of_options` | `--` | Treat the rest as file names | 以降をファイル名として扱います |
 | `cli.help.encodings` | `--encoding` に渡せる名前 (07 §5.2 `file.default_encoding` の許容値から `system` を除いたもの) | Encodings: utf-8, utf-8-bom, utf-16le, utf-16be, shift_jis, euc-jp, iso-2022-jp | 使える文字コード名: utf-8, utf-8-bom, utf-16le, utf-16be, shift_jis, euc-jp, iso-2022-jp |
 | `cli.help.exit_codes` | 終了コード (07 §18.4 の v0.1 で出るもの) | Exit codes: 0 normal, 1 runtime error, 2 usage error, 3 errors in the settings (--check-config), 5 no terminal, 70 internal error | 終了コード: 0 正常、1 実行時エラー、2 使い方の誤り、3 設定にエラー (--check-config)、5 端末なし、70 内部エラー |
@@ -1873,6 +1900,7 @@ v0.2 以降の診断 (名前だけを予約し、文言はその版で言語フ�
 | `stderr.unsupported_console` | Windows でコンソールが VT モードを受け付けない (起動前、05 §9.1。終了コード 5) | This console is not supported. Please use Windows Terminal. | この端末は非対応です。Windows Terminal をご利用ください。 |
 | `stderr.background_job` | Unix でバックグラウンドのジョブとして起動された (起動前、端末に触れずに。05 §11.3。終了コード 5。v0.2) | evoeditor cannot run as a background job. Start it in the foreground. | evoeditor はバックグラウンドのジョブでは起動できません。前面 (フォアグラウンド) で起動してください。 |
 | `stderr.quit.waiting_save` | 通常終了 (`app.quit` / `Effect::Quit`) で、端末を復元した後に置換中フラグが上がっていた (保存の完了を待つ前に Host が 1 行出す。待たずに済むときは出さない。複数の保存先があれば 1 行ずつ。02 §9.6、05 §11) | Waiting for the save to finish: {path} | 保存の完了を待っています: {path} |
+| `stderr.stdin.waiting` | `evoeditor -` で標準入力がパイプ・ファイルのとき、最初のデータか終わりが 100 ms の間に届かなければ、端末を初期化する前に出す (OQ-219 の 9 の ★、03 §9.2.2 の「端末の初期化の時期」、v0.4 の M25。言語ファイルの前に出すので bin の定数表に置く。待つ間の Ctrl+C は OS の既定の動作で終わる) | Waiting for standard input (Ctrl+C to abort) | 標準入力を待っています (Ctrl+C で中止) |
 | `stderr.quit_abort.save_failed` | `ui.confirm.quit_saving` で「保存を中止して終了」を選び、保存ジョブが失敗で終わった (下の 3 つ以外の失敗。03 §9.7 (f)。元のファイルは変えていないか、失敗の種類による。端末を復元した後、退避の結果 (`stderr.recovery.*`) の次に出す) | Saving {path} failed before exit: {reason} | 終了の前に {path} の保存が失敗しました: {reason} |
 | `stderr.quit_abort.moved_to_backup` | 同上で、保存が `ReplacedMovedToBackup { backup }` で終わった (元のファイルは退避名に移っている) | Saving {path} failed before exit. The original file was moved to: {backup} | 終了の前に {path} の保存が失敗し、元のファイルは {backup} に移っています。名前を元に戻してください |
 | `stderr.quit_abort.in_place_failed` | 同上で、保存が `InPlaceFailed { backup: Some }` で終わった (ファイルが壊れている可能性がある) | Overwriting {path} failed before exit. The file may be damaged. Backup: {backup} | 終了の前に {path} の直接上書きが失敗しました。ファイルが壊れている可能性があります。書き込む前の内容: {backup} |
