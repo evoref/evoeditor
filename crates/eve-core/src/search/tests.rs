@@ -427,6 +427,43 @@ fn 行をまたぐ規則の単発の検索は正本の位置から探す() {
 }
 
 #[test]
+fn 行の途中の正本の位置から探しても_正本の走査が探せた文書を探さないとしない() {
+    // 単語単位の `[x\n]` (k = 1、核は行の境界に揃える)。正本の走査 (核 2 バイト) の窓は 9 バイトまでで上限に収まる。
+    // 行の途中の正本の一致の終端 4 から探すと、窓は行頭へ戻り、核の大きさを足すと次の行まで含んで 10 バイトになっていた
+    let doc = "ab x\ncd\nef";
+    let t = Text::from(doc);
+    let q = SearchQuery::literal(r"[x\n]")
+        .with_regex(true)
+        .with_case(Case::Sensitive)
+        .with_whole_word(true)
+        .with_newline_sugar(false)
+        .tuned(SearchTuning {
+            core_bytes: 2,
+            concat_max: 9,
+        });
+    let (starts, _, _, limit, _) = run_whole(doc, &q, 0);
+    assert_eq!((starts, limit), (vec![3, 4, 7], None));
+    let f = |from: usize, forward: bool| {
+        find_next(
+            &FindJob {
+                snapshot: &t,
+                query: &q,
+                from: ByteOff(from),
+                forward,
+                resume: &[ByteOff(4)],
+            },
+            Some(&Fixed),
+            &CancelToken::new(),
+        )
+        .map(|o| o.map(|(r, w)| (r.start.0, r.end.0, w)))
+    };
+    assert_eq!(f(4, true), Ok(Some((4, 5, false))));
+    assert_eq!(f(8, true), Ok(Some((3, 4, true))));
+    assert_eq!(f(10, false), Ok(Some((7, 8, false))));
+    assert_eq!(f(3, false), Ok(Some((7, 8, true))));
+}
+
+#[test]
 fn 一件置換は対象の始端から走査の入口で選んだ最初の一致で確かめる() {
     let t = Text::from("ab\r\ncd\r\nef");
     let q = multi(r"(\w)\n(\w)", 4);
