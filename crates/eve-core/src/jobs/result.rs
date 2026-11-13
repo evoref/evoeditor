@@ -101,6 +101,25 @@ pub enum JobResult {
         /// 残っていた保存中フラグから見つけた、中断された保存の痕跡 (直接上書きの中断など、存在するファイルでも返す)。
         interrupted_save: Option<InterruptedSave>,
     },
+    /// 標準入力の読込の終わり (`OpenStdin` の終端。取消しでもこれを返す。03 §9.2.2、v0.4 の M25)。`meta`・`stamp`・
+    /// 内容ハッシュ・中断された保存の痕跡は持たない。
+    StdinDone {
+        /// 読んだところまでの本文。読み終えなかったとき (上限・取消し・失敗・確保の失敗) は最後の文字の境界まで
+        /// (切れた多バイト列は開かない)。
+        text: Text,
+        /// 判定した形式。保持方式の状態は `format.roundtrip.preserve`。
+        format: TextFormat,
+        /// 内容から決まる読み取り専用の理由 (`Binary` / `InvalidBytes` / `StatefulEncodingWithInvalidBytes`、
+        /// `opts.user_read_only` の `UserRequested`、1 バイト以上受け取って読み終えなかったときの `LoadIncomplete`)。
+        detected: ReadOnlyReasons,
+        /// 保持方式の記録 (ファイルと同じ関数で集めて照合したもの。03 §8.7.1)。
+        preserved: PreservedMap,
+        /// 開いた量 (元のバイト数。`text` に復号した分。受け渡し待ち・パイプに残った分・切った多バイト列は含まない)。
+        /// 「途中まで ({size})」の size と `StdinDoc.bytes_read` に使う。
+        bytes: u64,
+        /// 読むのをやめた理由。
+        end: StdinEnd,
+    },
     /// `ReadTheme` の結果。`theme` が `None` なら読めなかった (組込みの `default` で動く)。
     ThemeRead {
         /// 読もうとしたテーマ名。
@@ -278,6 +297,32 @@ pub enum JobResult {
         /// 失敗の理由。
         err: JobError,
     },
+}
+
+/// 標準入力の読込が終わった理由 (`JobResult::StdinDone.end`、03 §9.2.2)。
+#[derive(Debug)]
+#[non_exhaustive]
+pub enum StdinEnd {
+    /// 書き手が閉じた (EOF)。全部を読んだ。
+    Eof,
+    /// 読んだバイト数か復号した本文のバイト数が上限 (`file.huge_file_warn_bytes`) を超えた。
+    Limit,
+    /// 取消し (`CancelToken`) で読むのをやめた。
+    Stopped,
+    /// 途中の読取の失敗 (最初から読めないときも)。
+    Error(FsError),
+    /// 本文の確保に失敗した (`try_reserve`)。構築済みの分を返す。
+    OutOfMemory {
+        /// 確保しようとした量 (バイト)。
+        requested: u64,
+    },
+}
+
+impl StdinEnd {
+    /// 読み終えていない (EOF でない) 終わり方。1 バイト以上読んでいれば `LoadIncomplete` を付ける。
+    pub fn is_incomplete(&self) -> bool {
+        !matches!(self, StdinEnd::Eof)
+    }
 }
 
 /// ジョブの失敗の理由。

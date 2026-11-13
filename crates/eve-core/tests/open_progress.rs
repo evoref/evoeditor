@@ -32,6 +32,7 @@ fn open_results(step_ms: u64, chunk: usize, size: usize) -> Vec<JobOutput> {
     fs.add_file("/w/a.txt", &vec![b'a'; size]);
     fs.set_chunk_size(chunk);
     let ports = JobPorts {
+        stdin: None,
         fs,
         clock,
         paths: Arc::new(FixedPaths::default()),

@@ -56,6 +56,7 @@ pub struct HarnessBuilder {
     files: Vec<(String, Vec<u8>)>,
     dirs: Vec<String>,
     defer_start: bool,
+    stdin: Option<Arc<dyn eve_core::StdinSource>>,
 }
 
 impl HarnessBuilder {
@@ -86,6 +87,12 @@ impl HarnessBuilder {
     /// 偽 FS にファイルを置く (`/w` は常にある)。
     pub fn file(mut self, path: &str, data: &[u8]) -> Self {
         self.files.push((path.to_owned(), data.to_vec()));
+        self
+    }
+
+    /// 標準入力 (`JobPorts.stdin`。`JobKind::OpenStdin` が読む。既定は無し)。
+    pub fn stdin(mut self, stdin: Arc<dyn eve_core::StdinSource>) -> Self {
+        self.stdin = Some(stdin);
         self
     }
 
@@ -137,6 +144,7 @@ impl Harness {
         }
         let paths = Arc::new(FixedPaths::default());
         let jobs = ManualJobSpawner::new(JobPorts {
+            stdin: b.stdin.clone(),
             fs: fs.clone(),
             clock: Arc::new(clock.clone()),
             paths: paths.clone(),

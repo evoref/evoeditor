@@ -295,6 +295,8 @@ trait JobSpawner {                               // メインスレッドから�
         // 直ちに戻る。JobId を単調増加の u64 で採番し (プロセス内で再利用しない)、JobRequest { id, doc, base, kind } を作って
         // 種別で決まる io / bg のワーカーのキューに積む (§9.1。振り分けは eve-host の JobSpawner の実装が持つ。v0.2.0 の実装は `ThreadJobSpawner::is_bg` が検索だけを bg に載せる)。ワーカーは run_job (§9.3) を呼び、結果は HostMsg::Job(JobResult)
     fn cancel(&self, id: JobId);                 // そのジョブの CancelToken を立てるだけ (待たない)。未実行なら run_job を呼ばずに JobResult::Failed { err: JobError::Cancelled } を送る。
+                                                 // 例外: OpenStdin (v0.4 の M25) は取消しが「読むのをやめて開く」意味なので、未実行でも run_job を呼び (run_job は
+                                                 // 開始前の取消しでも StdinDone { end: Stopped } を返す)、StdinSource::wake で待ちを起こす (03 §9.2.2)
 }                                                // 実行中なら run_job がチャンクの区切りで止めて同じ結果を返す (保存は置換・上書きを始めていれば止めずに完了する、§4.5 の「取消し」)。本番は eve-host (固定 2 ワーカー)、テストは ManualJobSpawner
 
 // eve-host が定義する (core は知らない)。Host 自身の bg 作業 (クリップボードの文字列化、§6.3) の投入口。JobRequest ではなく、結果は core に返さない
@@ -370,7 +372,7 @@ trait StdinSource: Send + Sync {                 // v0.4 の M25。eve-platform 
 - **JobSpawner の所有と共有**: 本番の実装 (eve-host) とテストの `ManualJobSpawner` は、どちらも `JobSpawner` と `HostTasks` を実装する 1 つの実体を `Rc` で持ち、`Ports.jobs` (`Rc<dyn JobSpawner>`) と Host (`HostTasks`)・テスト (`run_jobs()`) がメインスレッドの中で共有する。メソッドは `&self` で、JobId の採番とキューは内部可変性 (`Cell` / `RefCell`) で持つ (Editor のメソッドの中から `spawn` しても借用が衝突しない)。
 - **時刻の源**: eve-core の時刻は `Clock::now()` の `Tick` だけ。Host は `step` の **先頭で 1 回** と **各メッセージを処理する直前** と **最後** に `Editor::tick(clock.now())` を呼び (§9.2)、Editor の中の「今」は最後に受けた tick の値とする (コマンドの実行中に Clock を読み直さない。Undo 結合の区切り・チョードの deadline・検索の静止の判定はすべてこの値で行う)。メッセージの処理の直前に tick するので、長いアイドルの後に届いた入力も「その入力を受けた時刻」で判定される。**テスト観点** (09 が書く): 長いアイドル (例: `ManualClock` を 10 秒進める) の後の入力が直前の Undo 単位と結合されないこと、アイドルの後に検索語を 1 文字変えたとき検索の静止 (300 ms) が即座に発火しないこと。壁時計 (UTC の日時)・pid・SID は core では使わない: manifest の `created_at`・退避ディレクトリ名 (形は 05 §7.5)・ログの時刻は eve-host / eve-platform が std で取る。ジョブ (core の `run_job`) が退避ディレクトリを要るとき (「退避先に保存」) も、名前・`created_at`・代替の退避先 (SID) は `FileSystem::write_recovery` (§4.5) の実装が決め、`JobPorts` に壁時計・pid は足さない。テストでのこれらの値の源は 1 つで、09 §3.4 の `MemFs` の行 (時刻は Harness の now、pid と SID は固定値) が定める。
 - テスト実装 (`eve-testkit`) は同じ trait を実装する: `MemFs` (障害注入)、`ManualClock` (`advance(ms)` で進める `Tick`)、`ManualJobSpawner`、一時ディレクトリの `Paths`。
-- **`ManualJobSpawner`** (テストのジョブ実行の唯一の実装): `spawn` はジョブをキューに積むだけで実行しない。テストが `run_jobs()` を呼ぶと、キューのジョブを積まれた順に **同じスレッドで** `run_job` で実行し、`emit` された結果を順に Host の受信口 (inbox) に積む (ジョブの実行中に生まれた結果も同じ順に積む)。`run_jobs()` は Editor のメソッドの外 (Host の step の間) で呼ぶので、Editor を借用中に結果が再入することは起きない。積まれた結果は次の `Host::step` で処理される。`cancel` は本番と同じ意味 (未実行ならキューから外して `Cancelled` を積む)。`HostTasks::spawn_host_task` も同じキューに積み、`run_jobs()` で同じスレッドで実行する (クリップボードの文字列化の模擬)。
+- **`ManualJobSpawner`** (テストのジョブ実行の唯一の実装): `spawn` はジョブをキューに積むだけで実行しない。テストが `run_jobs()` を呼ぶと、キューのジョブを積まれた順に **同じスレッドで** `run_job` で実行し、`emit` された結果を順に Host の受信口 (inbox) に積む (ジョブの実行中に生まれた結果も同じ順に積む)。`run_jobs()` は Editor のメソッドの外 (Host の step の間) で呼ぶので、Editor を借用中に結果が再入することは起きない。積まれた結果は次の `Host::step` で処理される。`cancel` は本番と同じ意味 (未実行ならキューから外して `Cancelled` を積む)。ただし `OpenStdin` (v0.4 の M25) はキューから外さずに残して `CancelToken` を立て、`JobPorts.stdin` の `wake` を呼ぶ (`run_jobs()` で実行し、`StdinDone { end: Stopped }` を積む。本番と同じく、標準入力の取消しは「読むのをやめて開く」意味で、終端は常に `StdinDone`)。`HostTasks::spawn_host_task` も同じキューに積み、`run_jobs()` で同じスレッドで実行する (クリップボードの文字列化の模擬)。
   - **`run_jobs_stale()`**: Revision の不一致を意図的に作る (09 §3.4)。キューのジョブを実行する前に、ハーネスが対象の文書を 1 回編集して (Revision を進めて) から `run_jobs()` と同じ手順で実行する。つまり「`run_jobs()` の前に編集を入れる」ことの短縮形で、ジョブの `base` は編集前の Revision のまま残る。編集はハーネスが Editor の外 (step の間) で入れる。
 - **`ThreadGuard`** (メインスレッドでの I/O の検出、規則 2 / ADR-0020 の自動検査。`ManualJobSpawner` とは別の機構): debug ビルドと feature `test-hooks` で有効。**印 (スレッドローカル) とその検査関数は eve-core に置く** (eve-platform は eve-host を知らないため)。Host は Editor のメソッドを呼んでいる間だけ eve-core の関数で印を立て (RAII のガード)、`MemFs` と本番の Port (eve-platform) の各メソッドの入口は eve-core の関数 `assert_not_main_thread_fs()` を呼び、印が立っていれば panic する (どちらでもないビルドでは空の関数)。`ManualJobSpawner` の `run_jobs()` は印の外で走るので誤検出しない。同じ印で、メインスレッドでの 64 KiB 超の `String` の生成 (クリップボードの文字列化、MR5) とワーカーと共有する `Mutex` の取得 (MR9) も `debug_assert` で検出する。
 
@@ -724,7 +726,7 @@ EditorState
    │                  load_state /*Loading | Partial | Ready | Failed。Partial は v0.4 の M25 (先行表示の間。本文は固定の先頭、03 §9.2.1)*/, load_percent, display: DisplaySettings,
    │                  load_total /*v0.4 の M25: 最後の Progress.total (ファイルの大きさ)。先行表示の行番号の欄の幅の推定に使う (03 §11.4)*/,
    │                  stdin: Option<StdinDoc> /*v0.4 の M25: 標準入力の文書だけ Some (03 §9.2.2)。持ち主は Document で、core だけが書く。
-   │                         StdinDoc { bytes_read: u64 /*読んだバイト数。Progress.bytes で更新し、status.loading_bytes と「途中まで ({size})」の size に使う
+   │                         StdinDoc { bytes_read: u64 /*読んだバイト数。読込の間は Progress.bytes (受け取った量)、読み終えたら StdinDone.bytes (開いた量) にし、status.loading_bytes と「途中まで ({size})」の size に使う
    │                                                   (eve-stdin が受け渡し待ちで持つ分は含まない)*/,
    │                                    pristine: bool /*読み込んだだけ。StdinDone の適用で立て、本文を変える Transaction の適用で外す (Origin を問わない。
    │                                                     駆動 API の Ai / External を含む。読込そのものは Transaction を作らない)。Undo では戻さない。スワップの対象の判定に使う*/ }*/,
@@ -1525,6 +1527,7 @@ fn run_job(req: &JobRequest, ports: &JobPorts, cancel: &CancelToken, emit: &mut 
     // 1 つのジョブを実行する。結果はすべて emit で送る (進捗・検索結果のように 1 つのジョブが複数の結果を送る種別がある)。
     // 最後に送るのは終端の結果 1 つ (Progress と SearchBatch 以外の変種。Search の終端は SearchDone)。cancel は長い処理の区切りで見る
     // (検索: 一定バイト毎、デコード・エンコード: チャンク毎)。立っていたら一時ファイル等を片付けて Failed { err: JobError::Cancelled } を送る。
+    // 例外: OpenStdin (v0.4 の M25) は、開始前に立っていても、読込の途中で立っても StdinDone { end: Stopped } を送る (読んだところまでを開く。03 §9.2.2)
     // 保存 (Save) では main は取り消すとき常に cancel を立て、見るかどうかはジョブが決める: 見るのは乾式走査・metadata / 開く・
     // 置換の前の書込 (一時ファイル・事前バックアップ) だけで、ReplaceFileW の呼出しの開始以降と直接上書きの上書きの開始 (05 §4.4 手順 6) 以降は見ずに
     // 完了まで進めて Saved (または失敗) を送る。手順 5d で InPlacePattern により直接上書きへ切り替わったジョブも同じで、本書込のエンコーダは
@@ -1648,6 +1651,7 @@ enum JobResult {                   // #[non_exhaustive]
                    interrupted_save: Option<InterruptedSave> /*§4.5。存在するファイルでも、直接上書きの中断の痕跡があれば返す*/ },
     StdinDone    { text: Text, format: TextFormat, detected: ReadOnlyReasons /*Binary / InvalidBytes / StatefulEncodingWithInvalidBytes / LoadIncomplete*/,
                    preserved: PreservedMap /*保持方式の記録。ファイルと同じ関数で集める (上限を超えたら Overflow)*/,
+                   bytes: u64 /*開いた量 (text に復号した元のバイト数。受け渡し待ち・パイプに残った分・切った多バイト列は含まない)。StdinDoc.bytes_read と「途中まで ({size})」の size*/,
                    end: StdinEnd /*Eof | Limit (上限) | Stopped (取消し) | Error(FsError) (途中の読取の失敗) | OutOfMemory (try_reserve の失敗。構築済みの分を返す)*/ },
                                                                 // v0.4 の M25 (03 §9.2.2)。OpenStdin の終端 (取消しでもこれを返す)。meta・stamp・内容ハッシュ・interrupted_save を持たない
     // ── 保存 (io、03 §9.3) ──

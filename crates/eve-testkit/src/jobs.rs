@@ -1,7 +1,9 @@
 //! `ManualJobSpawner`: テストのジョブ実行の唯一の実装 (docs/02 §4.4)。
 //!
 //! `spawn` はキューに積むだけで実行しない。テストが `run_jobs` を呼ぶと、積まれた順に **同じスレッドで** `run_job` を
-//! 実行し、結果を inbox に積む。`cancel` は未実行ならキューから外して `Cancelled` を積む。
+//! 実行し、結果を inbox に積む。`cancel` は未実行ならキューから外して `Cancelled` を積む。標準入力の読込 (`OpenStdin`)
+//! だけは、取消しが「読むのをやめて開く」意味 (終端は `StdinDone`、02 §9.3) なので、キューに残して取消しを立て、
+//! `JobPorts.stdin` の `wake` を呼ぶ (本番の `JobSpawner` と同じ)。
 //!
 //! 先行表示 (docs/03 §9.2.1) の試験のために、`run_jobs_until_partial` は最初に `Partial` を送ったジョブの、`Partial` より
 //! 後の結果を取り置く (読込の途中で止まっている状態を作る)。取り置いた結果は `release_held` で inbox に移し、その間の
@@ -139,6 +141,17 @@ impl JobSpawner for ManualJobSpawner {
             },
         };
         let mut q = self.queue.borrow_mut();
+        // 標準入力の読込: 取消しを立てて待ちを起こす (キューに残し、`run_jobs` で `StdinDone { Stopped }` を返させる)
+        if let Some(j) = q
+            .iter()
+            .find(|j| j.req.id == job && matches!(j.req.kind, JobKind::OpenStdin { .. }))
+        {
+            j.cancel.cancel();
+            if let Some(s) = &self.ports.stdin {
+                s.wake();
+            }
+            return;
+        }
         if let Some(pos) = q.iter().position(|j| j.req.id == job) {
             let j = q.remove(pos).expect("位置は直前に見つけた");
             j.cancel.cancel();
@@ -168,6 +181,7 @@ mod tests {
         let fs = Arc::new(MemFs::new(Arc::new(clock.clone())));
         fs.add_file("/w/a.txt", b"hello");
         let ports = JobPorts {
+            stdin: None,
             fs: fs.clone(),
             clock: Arc::new(clock),
             paths: Arc::new(FixedPaths::default()),

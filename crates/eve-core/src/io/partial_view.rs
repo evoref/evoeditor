@@ -517,6 +517,7 @@ pub(crate) fn estimated_lines(doc: &Document) -> usize {
 fn pending_doc(state: &EditorState, p: &Pending) -> Option<DocumentId> {
     match p {
         Pending::Open { doc, .. }
+        | Pending::OpenStdin { doc, .. }
         | Pending::CheckUnchanged { doc }
         | Pending::ExternalCheck { doc, .. }
         | Pending::FindNext { doc, .. }

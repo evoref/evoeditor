@@ -7,7 +7,7 @@
 //! API (`ReplaceFileW`・DACL・SID、Unix の xattr・`renameat2` など) は `sys::windows` / `sys::unix` の安全な関数にする。
 
 // unsafe は OS の API の包み `sys::windows`・`sys::unix` と、OS の API そのものを扱うモジュール `clipboard::win`・`clipboard_test`・
-// `console`・`dll`・`locale`・`session`・`signals`・`term` だけに許す (R5)。アルゴリズムのモジュール (`save`・`unix_fs`・`fs`・
+// `console`・`dll`・`locale`・`session`・`signals`・`stdin::win`・`stdin::unix`・`term` だけに許す (R5)。アルゴリズムのモジュール (`save`・`unix_fs`・`fs`・
 // `fs_common`・`inplace`・`inflight`・`swap_scan`・`hooks` など) には許さない。
 #![deny(unsafe_code)]
 // eve-core の `FsError` は大きい型 (エラーは稀な経路)。値で返す。
@@ -186,6 +186,7 @@ pub mod session;
 #[cfg(unix)]
 pub mod signals;
 mod state_file;
+pub mod stdin;
 mod swap;
 mod swap_scan;
 mod sys;

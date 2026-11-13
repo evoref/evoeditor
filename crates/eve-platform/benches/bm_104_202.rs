@@ -81,6 +81,7 @@ mod imp {
         use eve_platform::dirs::WinPaths;
         use eve_platform::fs::WinFs;
         JobPorts {
+            stdin: None,
             fs: Arc::new(WinFs::default()),
             clock: clock(partial),
             paths: Arc::new(WinPaths::new(
@@ -98,6 +99,7 @@ mod imp {
         use eve_platform::dirs::UnixPaths;
         use eve_platform::unix_fs::UnixFs;
         JobPorts {
+            stdin: None,
             fs: Arc::new(UnixFs::default()),
             clock: clock(partial),
             paths: Arc::new(UnixPaths::new(
@@ -474,6 +476,7 @@ mod imp {
 
         // BM-107e (v0.4 の参考): 保存のジョブの時間 (書く内容は読み捨てる)
         let save_ports = JobPorts {
+            stdin: None,
             fs: Arc::new(DiscardFs {
                 inner: Arc::clone(&ports.fs),
             }),

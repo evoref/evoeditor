@@ -13,9 +13,9 @@ mod result;
 mod run;
 
 pub use kind::{JobKind, JobRequest, MetaPurpose, SaveStrategy};
-pub use ports::{JobPorts, JobSpawner, Ports};
+pub use ports::{JobPorts, JobSpawner, Ports, StdinSource};
 pub use result::{
     ConfigFile, ConfirmAsk, EscapeMergeApproval, EscapeMergeAt, JobError, JobOutput, JobResult,
-    OpenNotes,
+    OpenNotes, StdinEnd,
 };
 pub use run::run_job;

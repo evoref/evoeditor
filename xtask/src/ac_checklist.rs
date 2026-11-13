@@ -264,7 +264,7 @@ mod tests {
                     continue;
                 }
                 let text = std::fs::read_to_string(&f).unwrap_or_default();
-                let body = text.split("#[cfg(test)]").next().unwrap_or("");
+                let body = product_part(&text);
                 for pat in patterns {
                     if body.contains(pat) {
                         found.push(format!("{p}: {pat}"));
@@ -297,14 +297,22 @@ mod tests {
                     continue;
                 }
                 let text = std::fs::read_to_string(&f).unwrap_or_default();
-                // `#[cfg(test)]` の以降は試験のコード
-                let body = text.split("#[cfg(test)]").next().unwrap_or("");
+                let body = product_part(&text);
                 if body.contains("Command::new") || body.contains("CreateProcess") {
                     found.push(p);
                 }
             }
         }
         assert!(found.is_empty(), "プロセスを起動する呼出し: {found:?}");
+    }
+
+    /// ファイルのうち製品のコードの部分。`#[cfg(test)]` の以降は試験のコードとみなし、先頭に `#![cfg(test)]` がある
+    /// ファイル (`#[cfg(test)] mod tests;` で読み込む試験のモジュール) は全体を試験のコードとみなす。
+    fn product_part(text: &str) -> &str {
+        if text.contains("#![cfg(test)]") {
+            return "";
+        }
+        text.split("#[cfg(test)]").next().unwrap_or("")
     }
 
     use super::ac_ids_in;

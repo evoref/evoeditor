@@ -84,6 +84,7 @@ pub(crate) fn start(
     let fs = Arc::new(NativeFs::new(state_dir.as_path()).with_replacing(replacing.clone()));
     let (tx, rx) = channel();
     let job_ports = JobPorts {
+        stdin: None,
         fs: fs.clone(),
         clock: clock.clone(),
         paths: paths.clone(),

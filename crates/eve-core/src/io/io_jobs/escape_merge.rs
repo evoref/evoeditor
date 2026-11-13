@@ -521,6 +521,7 @@ fn run(
     ok: Option<&EscapeMergeApproval>,
 ) -> JobResult {
     let ports = JobPorts {
+        stdin: None,
         fs: Arc::clone(fs) as Arc<dyn crate::io::fs::FileSystem>,
         clock: Arc::new(Clock0),
         paths: Arc::new(Paths0),

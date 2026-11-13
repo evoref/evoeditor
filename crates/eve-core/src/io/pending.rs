@@ -31,6 +31,9 @@ pub(crate) enum Pending {
         /// 用途。`Reopen` / `Reload` は同じ文書・View の中身を差し替える。
         kind: OpenKind,
     },
+    /// 標準入力の読込 (`JobKind::OpenStdin`、03 §9.2.2。v0.4 の M25)。ファイルの読込 (`Open`) とは別の種類に持ち、
+    /// `open_in_progress`・`cancel_loading`・`loading_percent` の対象から外す。
+    OpenStdin { doc: DocumentId, view: ViewId },
     /// 未編集の上書き保存の照合 (03 §9.3 手順 0)。
     CheckUnchanged { doc: DocumentId },
     /// 外部変更の確認 (03 §9.5)。`explicit` は `file.check_external_changes` (フォーカス復帰でない)。
@@ -138,6 +141,7 @@ impl EditorState {
             .iter()
             .filter(|(_, p)| match p {
                 Pending::Open { doc: d, .. }
+                | Pending::OpenStdin { doc: d, .. }
                 | Pending::CheckUnchanged { doc: d }
                 | Pending::ExternalCheck { doc: d, .. } => *d == doc,
                 Pending::ReplaceUnmappable { ask, .. } => ask.doc == doc,
@@ -189,6 +193,9 @@ impl EditorState {
                     d.load_total = total;
                 }
                 self.mark_dirty_render();
+            } else if let Some(Pending::OpenStdin { doc, .. }) = self.io.pending.get(&job) {
+                let doc = *doc;
+                self.on_stdin_progress(doc, bytes);
             }
             return;
         }
@@ -215,6 +222,7 @@ impl EditorState {
                 opts,
                 kind,
             } => self.finish_open(doc, view, path, replace, opts, kind, r),
+            Pending::OpenStdin { doc, view } => self.finish_open_stdin(doc, view, r),
             Pending::CheckUnchanged { doc } => self.finish_check(doc, r),
             Pending::ExternalCheck { doc, explicit } => {
                 self.finish_external_check(doc, explicit, r);

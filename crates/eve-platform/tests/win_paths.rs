@@ -38,6 +38,7 @@ impl ReadChunks for One {
 
 fn ports() -> JobPorts {
     JobPorts {
+        stdin: None,
         fs: Arc::new(WinFs::default()),
         clock: Arc::new(FixedClock),
         paths: Arc::new(WinPaths::new(

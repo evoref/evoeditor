@@ -32,6 +32,7 @@ fn 実スレッドで開き_編集し_保存して_終了する() {
     fs.add_file("/w/a.txt", b"hello");
     let paths = Arc::new(FixedPaths::default());
     let jp = JobPorts {
+        stdin: None,
         fs: fs.clone(),
         clock: clock.clone(),
         paths: paths.clone(),
@@ -128,6 +129,7 @@ fn recv_job(rx: &std::sync::mpsc::Receiver<HostMsg>) -> JobOutput {
 fn ワーカーのパニックは_failed_で返り_ワーカーは生き続ける() {
     let clock = Arc::new(SystemClock::new());
     let jp = JobPorts {
+        stdin: None,
         fs: Arc::new(PanicFs),
         clock,
         paths: Arc::new(FixedPaths::default()),
@@ -199,6 +201,7 @@ fn 待機中のジョブの取消しは_cancelled_で返り_結果は1件だけ(
         release: std::sync::Mutex::new(rrx),
     });
     let jp = JobPorts {
+        stdin: None,
         fs,
         clock,
         paths: Arc::new(FixedPaths::default()),
@@ -240,6 +243,7 @@ fn 検索は_bg_ワーカーで走り_途中経過と終わりが届く() {
     let clock = Arc::new(SystemClock::new());
     let fs = Arc::new(MemFs::new(clock.clone()));
     let jp = JobPorts {
+        stdin: None,
         fs: fs.clone(),
         clock,
         paths: Arc::new(FixedPaths::default()),
@@ -289,6 +293,7 @@ fn 単発の検索とすべて置換は_bg_で走り_io_の保存や読込を待
         release: std::sync::Mutex::new(rrx),
     });
     let jp = JobPorts {
+        stdin: None,
         fs,
         clock,
         paths: Arc::new(FixedPaths::default()),
@@ -362,6 +367,7 @@ fn 計測_全件の走査の途中の単発の検索とすべて置換の待ち(
     let snapshot = eve_text::Text::from(doc.as_str()).snapshot();
     let clock = Arc::new(SystemClock::new());
     let jp = JobPorts {
+        stdin: None,
         fs: Arc::new(MemFs::new(clock.clone())),
         clock,
         paths: Arc::new(FixedPaths::default()),
