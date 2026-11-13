@@ -134,6 +134,19 @@ pub struct Document {
     /// Undo / Redo の適用で、表と履歴が食い違った回数 (起きないはず。03 §8.7.1 の「食い違い」)。eve-core には
     /// ログの出口がまだ無い (02 §9.2 の `LogSink` は Host の部品) ので、件数だけを数え、debug ビルドでは止める。
     preserved_anomalies: u32,
+    /// 標準入力の文書だけ `Some` (`evoeditor -`、03 §9.2.2。v0.4 の M25)。書くのは core だけ。
+    pub stdin: Option<StdinDoc>,
+}
+
+/// 標準入力の文書の欄 (02 §5.1 の `Document.stdin`、03 §9.2.2。v0.4 の M25)。
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct StdinDoc {
+    /// 読んだバイト数 (読込の間は読込ジョブの `Progress.bytes` (受け取った量)、読み終えた後は `StdinDone.bytes` (開いた量))。`status.loading_bytes` と
+    /// 「途中まで ({size})」の size に使う。`eve-stdin` が受け渡し待ちで持つ分は含まない。
+    pub bytes_read: u64,
+    /// 標準入力から読み込んだだけ (`StdinDone` の適用で立て、本文を変える Transaction の適用で外す。`Origin` を問わない。
+    /// Undo で取り消しても戻さない)。スワップの対象の判定に使う (03 §10.2)。
+    pub pristine: bool,
 }
 
 /// 書式の変更が、保持方式の記録の表を丸ごと入れ替えるか (再読込・復旧)。
@@ -236,6 +249,14 @@ impl Document {
             untitled_no: None,
             preserved,
             preserved_anomalies: 0,
+            stdin: None,
+        }
+    }
+
+    /// 標準入力から読み込んだだけの印を外す (本文を変えたとき。戻さない)。
+    fn clear_stdin_pristine(&mut self) {
+        if let Some(s) = self.stdin.as_mut() {
+            s.pristine = false;
         }
     }
 
@@ -447,6 +468,8 @@ impl Document {
         // 2.〜4. 適用前の Snapshot、逆変換、適用。`Text::apply` は検査を先に行い、失敗では何も変えない
         let before = self.text.snapshot();
         self.text.apply(&tx.changes).map_err(ApplyError::Text)?;
+        // 本文を変えたので、標準入力から読み込んだだけの印を外す (03 §9.2.2 の「最初の編集」)
+        self.clear_stdin_pristine();
         let coarse = tx
             .coarse_undo
             .then(|| super::coarse_inverse(&tx.changes, &before, &self.text))
@@ -558,6 +581,7 @@ impl Document {
         let before = self.text.snapshot();
         // 履歴と文書が食い違った場合も、文書は変えない (履歴の不整合は呼び出しの誤り)
         self.text.apply(&changes).map_err(ApplyError::Text)?;
+        self.clear_stdin_pristine();
         self.update_eol_stats(&before, &changes);
         // 保持方式の記録: 表を入れ替えるノード (再読込・復旧) は下の書式と一緒に入れ替える。ほかは写像で戻す・外す
         let swaps = matches!(

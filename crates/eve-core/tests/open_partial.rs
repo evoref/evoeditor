@@ -28,6 +28,7 @@ fn open_job(data: &[u8], chunk: usize, per_chunk_ms: u64, opts: OpenOptions) -> 
     fs.set_chunk_size(chunk);
     fs.set_read_delay(Some((clock.clone(), Millis(per_chunk_ms))));
     let ports = JobPorts {
+        stdin: None,
         fs,
         clock: Arc::new(clock),
         paths: Arc::new(FixedPaths::default()),

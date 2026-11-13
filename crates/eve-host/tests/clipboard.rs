@@ -75,6 +75,7 @@ fn env_init(caps: eve_view::Capabilities, init: HostInit) -> Env {
     fs.add_dir("/w");
     let paths = Arc::new(FixedPaths::default());
     let jp = JobPorts {
+        stdin: None,
         fs: fs.clone(),
         clock: Arc::new(clock.clone()),
         paths: paths.clone(),

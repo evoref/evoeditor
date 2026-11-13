@@ -577,6 +577,7 @@ fn run(
     strategy: SaveStrategy,
 ) -> JobResult {
     let ports = JobPorts {
+        stdin: None,
         fs: Arc::clone(fs) as Arc<dyn FileSystem>,
         clock: Arc::new(Clock0),
         paths: Arc::new(Paths0),

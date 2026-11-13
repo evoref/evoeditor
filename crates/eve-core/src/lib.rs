@@ -31,7 +31,7 @@ pub use document::eol::build_eol_conversion;
 pub use document::{
     Applied, AppliedTx, ApplyError, DisplaySettings, Document, EolStats, HistoryStep,
     LONG_LINE_THRESHOLD, LoadState, NodeId, Origin, PreservedError, PreservedMap, ReadOnlyReason,
-    ReadOnlyReasons, RecordOutcome, TextFormat, Transaction, TransactionMeta, UndoBudget,
+    ReadOnlyReasons, RecordOutcome, StdinDoc, TextFormat, Transaction, TransactionMeta, UndoBudget,
     UndoGroupHint, UndoHistory, count_long_lines, trim_to_total_budget,
 };
 pub use editor::{
@@ -57,7 +57,8 @@ pub use io::secret::is_secret_path;
 pub use io::unmap::{ReplaceCounts, ReplaceTarget};
 pub use jobs::{
     ConfirmAsk, EscapeMergeApproval, EscapeMergeAt, JobError, JobKind, JobOutput, JobPorts,
-    JobRequest, JobResult, JobSpawner, MetaPurpose, OpenNotes, Ports, SaveStrategy, run_job,
+    JobRequest, JobResult, JobSpawner, MetaPurpose, OpenNotes, Ports, SaveStrategy, StdinEnd,
+    StdinSource, run_job,
 };
 /// 行の窓の核の大きさと連結の上限を試験から小さくする口 (feature `test-hooks` のときだけ。配布ビルドには無い、03 §12.3.1)。
 #[cfg(feature = "test-hooks")]

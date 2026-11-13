@@ -28,6 +28,7 @@ pub(crate) mod save_plan;
 pub(crate) mod secret;
 pub(crate) mod snapshot;
 pub(crate) mod startup;
+pub(crate) mod stdin_doc;
 pub(crate) mod swap;
 pub(crate) mod swap_recovery;
 pub(crate) mod unmap;

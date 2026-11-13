@@ -70,6 +70,7 @@ fn main() {
     let (tx, rx) = eve_host::channel();
     let jobs = ThreadJobSpawner::new(
         JobPorts {
+            stdin: None,
             fs: fs.clone(),
             clock: clock.clone(),
             paths: paths.clone(),

@@ -496,6 +496,7 @@ mod tests {
         fs.add_dir("/w");
         let paths = Arc::new(FixedPaths::default());
         let jobs = ManualJobSpawner::new(JobPorts {
+            stdin: None,
             fs: fs.clone(),
             clock: Arc::new(clock.clone()),
             paths: paths.clone(),

@@ -85,6 +85,15 @@ pub enum JobKind {
         /// 開くときの指定 (文字コードの強制など)。
         opts: OpenOptions,
     },
+    /// 標準入力を読んで開く (`evoeditor -`、03 §9.2.2。v0.4 の M25)。`JobPorts.stdin` から `ReadChunks` を取って読む。
+    /// 走らせるのは `io` でも `bg` でもない専用のワーカー `eve-stdin-job` (02 §9.1。OQ-219 の 8)。確認を出さない
+    /// (`read_only_requested` を立てたのと同じ)。`opts` は `forced`・`user_read_only`・`default_eol`・
+    /// `huge_file_warn_bytes` (上限)・`long_line_threshold`・`pending` だけを使う (`partial` は見ない)。取消し (`CancelToken`)
+    /// は「読むのをやめて、読んだところまでを `StdinDone` で返す」意味 (`Failed { Cancelled }` にしない)。
+    OpenStdin {
+        /// 開くときの指定。
+        opts: OpenOptions,
+    },
     /// Snapshot を `encoding` で原子的に保存する (03 §9.3 / §8.6)。表現不能の文字があれば何も書かず `JobResult::Unmappable`。`expected` は書く前と置換の直前に照合する。
     Save {
         /// 保存先のパス。

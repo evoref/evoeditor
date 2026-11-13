@@ -73,6 +73,7 @@ impl Env {
 
     fn ports(&self) -> JobPorts {
         JobPorts {
+            stdin: None,
             fs: Arc::new(self.fs.clone()),
             clock: Arc::new(FixedClock),
             paths: Arc::new(WinPaths::new(

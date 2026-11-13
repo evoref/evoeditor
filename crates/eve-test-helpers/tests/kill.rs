@@ -108,6 +108,7 @@ impl Env {
     /// 開くジョブの結果から、中断の痕跡の報告を得る。
     fn open_report(&self, name: &str) -> (Option<InterruptedSave>, bool) {
         let ports = JobPorts {
+            stdin: None,
             fs: Arc::new(self.fs()),
             clock: Arc::new(FixedClock),
             paths: Arc::new(self.paths()),
@@ -458,6 +459,7 @@ fn 中断の後の保存の成功で前の記録は消える() {
 impl Env {
     fn run(&self, kind: JobKind) -> JobResult {
         let ports = JobPorts {
+            stdin: None,
             fs: Arc::new(self.fs()),
             clock: Arc::new(FixedClock),
             paths: Arc::new(self.paths()),

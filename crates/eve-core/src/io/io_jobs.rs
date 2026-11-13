@@ -100,6 +100,8 @@ pub(crate) fn run_open(
 
 mod partial;
 use partial::{HeadCopy, HeadParams, Redo};
+mod stdin;
+pub(crate) use stdin::run_open_stdin;
 
 /// 先頭の判定の結果 (1 チャンク目で決まる)。
 struct Plan {
@@ -448,51 +450,26 @@ fn open_inner(
     let (preserved, status) = preserved_from_records(&records, enc, dec.invalid_bytes(), &text);
     drop(records);
     roundtrip.preserve = status;
-    let format = TextFormat {
-        encoding: enc,
-        has_bom: dec.has_bom(),
-        default_eol: eol_stats.majority(opts.default_eol.unwrap_or(LineEnding::Lf)),
-        eol_stats,
-        invalid_bytes: dec.invalid_bytes(),
-        pua_escape: dec.pua_mode(),
-        // 本文のエスケープ文字がこの文字コードのバイトか (03 §8.3.1。開く・再読込・文字コードを指定して開き直すで共通)
-        escape_encoding: TextFormat::escape_encoding_on_load(
-            enc,
-            dec.pua_mode(),
-            dec.invalid_bytes(),
-        ),
+    let decoded = DecodedFacts::of(&dec);
+    let format = loaded_format(
+        enc,
+        decoded,
         roundtrip,
-        long_line_threshold,
-        long_lines,
-    };
-    // INV-D7 (03 §22): 読込の直後は、衝突でなければエスケープ文字の数が不正バイトの数と同じ (debug ビルドだけ。全文を走査する)
-    debug_assert!(
-        format.pua_escape == eve_encoding::PuaEscapeMode::DisabledCollision
-            || count_escape_chars(&text) == u64::from(format.invalid_bytes),
-        "INV-D7: エスケープ文字の数 {} と不正バイトの数 {} が合わない",
-        count_escape_chars(&text),
-        format.invalid_bytes
+        line_stats_result(eol_stats, long_lines, &opts, long_line_threshold),
     );
+    debug_assert_inv_d7(&text, &format);
     let mut detected = opts.pending;
     if meta.readonly {
         detected.insert(ReadOnlyReason::FileAttribute);
     }
-    // `UserRequested` は利用者の指定 (`--readonly` など) だけから付ける (03 §9.6)。確認で「読み取り専用で開く」を
-    // 選んだこと (`read_only_requested`) からは付けない。その理由は確認ごとに `pending` と下の判定で決まる (03 §9.2 の表)
-    if opts.user_read_only {
-        detected.insert(ReadOnlyReason::UserRequested);
-    }
-    if binary_confirmed {
-        detected.insert(ReadOnlyReason::Binary);
-    }
-    // 不正バイトがあるとき、または元から真の私用文字と衝突しているとき (03 §8.3) は読み取り専用。
-    // 状態付き符号化 (ISO-2022-JP) は不正バイトを元のバイトに戻して書けないので、理由を分ける
-    if enc.is_stateful() && format.invalid_bytes > 0 {
-        detected.insert(ReadOnlyReason::StatefulEncodingWithInvalidBytes);
-    } else if format.invalid_bytes > 0 || dec.collision_with_invalid() {
-        detected.insert(ReadOnlyReason::InvalidBytes);
-    }
-    // 衝突があっても不正バイトが 0 ならエスケープを使わないので編集できる
+    content_reasons(
+        &mut detected,
+        &opts,
+        enc,
+        &format,
+        decoded,
+        binary_confirmed,
+    );
     // 読込前の stamp を保存の照合に使う。読込中に変わったファイルは、そのまま上書き保存すると照合で Conflict になる
     // 最後まで読み切れたときだけハッシュを付ける (途中で大きさが変わったら付けない)
     let stamp = FileStamp {
@@ -515,6 +492,110 @@ fn open_inner(
         },
         interrupted_save: map_interrupted(ports.fs.as_ref(), &inflight, true),
     }
+}
+
+/// 復号器から読む、形式と読み取り専用の理由に要る値 (開く・標準入力で共通)。標準入力の上限で末尾を切ったときは、
+/// 切った分の不正バイトを除いた値にする (`stdin.rs`)。
+#[derive(Clone, Copy, Debug)]
+struct DecodedFacts {
+    has_bom: bool,
+    invalid_bytes: u32,
+    pua_escape: eve_encoding::PuaEscapeMode,
+    collision_with_invalid: bool,
+}
+
+impl DecodedFacts {
+    fn of(dec: &Decoder) -> DecodedFacts {
+        DecodedFacts {
+            has_bom: dec.has_bom(),
+            invalid_bytes: dec.invalid_bytes(),
+            pua_escape: dec.pua_mode(),
+            collision_with_invalid: dec.collision_with_invalid(),
+        }
+    }
+}
+
+/// 改行の統計の結果と、形式に写す設定の値。
+struct LineFacts {
+    eol_stats: crate::document::EolStats,
+    long_lines: usize,
+    default_eol: LineEnding,
+    long_line_threshold: usize,
+}
+
+fn line_stats_result(
+    eol_stats: crate::document::EolStats,
+    long_lines: usize,
+    opts: &OpenOptions,
+    long_line_threshold: usize,
+) -> LineFacts {
+    LineFacts {
+        eol_stats,
+        long_lines,
+        default_eol: opts.default_eol.unwrap_or(LineEnding::Lf),
+        long_line_threshold,
+    }
+}
+
+/// 読み終えた本文の形式 (開く・標準入力で共通。03 §8.2 / §8.3 / §8.4)。改行の多数派 (同数・改行なしは
+/// `file.default_line_ending`)、閾値 (既定 1 MiB) を超える行の数 (NFR-106、03 §14.4)。
+fn loaded_format(
+    enc: Encoding,
+    d: DecodedFacts,
+    roundtrip: eve_encoding::RoundtripSummary,
+    l: LineFacts,
+) -> TextFormat {
+    TextFormat {
+        encoding: enc,
+        has_bom: d.has_bom,
+        default_eol: l.eol_stats.majority(l.default_eol),
+        eol_stats: l.eol_stats,
+        invalid_bytes: d.invalid_bytes,
+        pua_escape: d.pua_escape,
+        // 本文のエスケープ文字がこの文字コードのバイトか (03 §8.3.1。開く・再読込・文字コードを指定して開き直す・標準入力で共通)
+        escape_encoding: TextFormat::escape_encoding_on_load(enc, d.pua_escape, d.invalid_bytes),
+        roundtrip,
+        long_line_threshold: l.long_line_threshold,
+        long_lines: l.long_lines,
+    }
+}
+
+/// INV-D7 (03 §22): 読込の直後は、衝突でなければエスケープ文字の数が不正バイトの数と同じ (debug ビルドだけ。全文を走査する)
+fn debug_assert_inv_d7(text: &dyn TextRead, format: &TextFormat) {
+    debug_assert!(
+        format.pua_escape == eve_encoding::PuaEscapeMode::DisabledCollision
+            || count_escape_chars(text) == u64::from(format.invalid_bytes),
+        "INV-D7: エスケープ文字の数 {} と不正バイトの数 {} が合わない",
+        count_escape_chars(text),
+        format.invalid_bytes
+    );
+}
+
+/// 利用者の指定と内容から決まる読み取り専用の理由を足す (開く・標準入力で共通。03 §9.2 / §9.6)。
+fn content_reasons(
+    detected: &mut ReadOnlyReasons,
+    opts: &OpenOptions,
+    enc: Encoding,
+    format: &TextFormat,
+    d: DecodedFacts,
+    binary_confirmed: bool,
+) {
+    // `UserRequested` は利用者の指定 (`--readonly` など) だけから付ける (03 §9.6)。確認で「読み取り専用で開く」を
+    // 選んだこと (`read_only_requested`) からは付けない。その理由は確認ごとに `pending` と下の判定で決まる (03 §9.2 の表)
+    if opts.user_read_only {
+        detected.insert(ReadOnlyReason::UserRequested);
+    }
+    if binary_confirmed {
+        detected.insert(ReadOnlyReason::Binary);
+    }
+    // 不正バイトがあるとき、または元から真の私用文字と衝突しているとき (03 §8.3) は読み取り専用。
+    // 状態付き符号化 (ISO-2022-JP) は不正バイトを元のバイトに戻して書けないので、理由を分ける
+    if enc.is_stateful() && format.invalid_bytes > 0 {
+        detected.insert(ReadOnlyReason::StatefulEncodingWithInvalidBytes);
+    } else if format.invalid_bytes > 0 || d.collision_with_invalid {
+        detected.insert(ReadOnlyReason::InvalidBytes);
+    }
+    // 衝突があっても不正バイトが 0 ならエスケープを使わないので編集できる
 }
 
 /// 読込の検査が集めた記録 (`records`) を文書の表にし、保持方式の状態を決める (03 §8.7.1 の「集める側と持つ側」

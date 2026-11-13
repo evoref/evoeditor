@@ -20,6 +20,7 @@ mod jobs;
 mod memfs;
 mod paths;
 pub mod scenario;
+mod stdin;
 mod virtual_screen;
 
 pub use ascii::{AsciiOptions, render_ascii};
@@ -31,4 +32,5 @@ pub use headless::{HeadlessFrontend, HeadlessProbe};
 pub use jobs::ManualJobSpawner;
 pub use memfs::{BytesSource, FsOp, MEMFS_STATE_DIR, MemFs, SourceFailure, WriteStep};
 pub use paths::FixedPaths;
+pub use stdin::{FakeStdin, StdinStep};
 pub use virtual_screen::{Attr, VirtualScreen, WidthConfig};

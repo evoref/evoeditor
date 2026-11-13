@@ -15,7 +15,7 @@ mod history;
 pub(crate) mod preserved;
 mod transaction;
 
-pub use doc::{Applied, AppliedTx, ApplyError, DisplaySettings, Document};
+pub use doc::{Applied, AppliedTx, ApplyError, DisplaySettings, Document, StdinDoc};
 pub(crate) use format::count_escape_chars;
 pub use format::{
     EolStats, FormatChange, FormatState, LONG_LINE_THRESHOLD, LineStatsScanner, LoadState,

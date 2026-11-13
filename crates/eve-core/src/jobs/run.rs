@@ -4,21 +4,22 @@ use crate::jobs::cancel::CancelToken;
 
 use crate::io::fs::FileStamp;
 use crate::io::fspath::FsPath;
-use crate::io::io_jobs::{SaveParams, run_open, run_save};
+use crate::io::io_jobs::{SaveParams, run_open, run_open_stdin, run_save};
 
 use super::{
     ConfigFile, JobError, JobKind, JobOutput, JobPorts, JobRequest, JobResult, MetaPurpose,
 };
 
 /// ジョブを同期的に実行する。eve-host のワーカーとテストが同じ関数を使う (スレッドは呼び出し側が用意する)。
-/// 開始前にキャンセルされていれば何もせず `Failed { Cancelled }` を返す。結果は `emit` に 1 つ渡す。
+/// 開始前にキャンセルされていれば何もせず `Failed { Cancelled }` を返す (`OpenStdin` を除く。標準入力の取消しは「読むのを
+/// やめて開く」意味で、終端は常に `StdinDone`、03 §9.2.2)。結果は `emit` に 1 つ渡す。
 pub fn run_job(
     req: &JobRequest,
     ports: &JobPorts,
     cancel: &CancelToken,
     emit: &mut dyn FnMut(JobOutput),
 ) {
-    if cancel.is_cancelled() {
+    if cancel.is_cancelled() && !matches!(req.kind, JobKind::OpenStdin { .. }) {
         emit(JobOutput {
             job: req.id,
             body: JobResult::Failed {
@@ -37,6 +38,7 @@ pub fn run_job(
             leftovers: crate::io::leftover::scan(&*ports.fs),
         },
         JobKind::Open { path, opts } => run_open(req.id, path, *opts, ports, cancel, emit),
+        JobKind::OpenStdin { opts } => run_open_stdin(req.id, *opts, ports, cancel, emit),
         JobKind::Save {
             path,
             snapshot,
@@ -382,6 +384,7 @@ mod tests {
 
     fn ports(r: Result<FileMeta, FsErrorKind>) -> JobPorts {
         JobPorts {
+            stdin: None,
             fs: Arc::new(StubFs(r)),
             clock: Arc::new(StubClock),
             paths: Arc::new(StubPaths),
@@ -472,6 +475,7 @@ mod tests {
     fn save_cancelled_mid(kind: FsErrorKind) -> JobResult {
         let cancel = CancelToken::new();
         let p = JobPorts {
+            stdin: None,
             fs: Arc::new(CancelledMidSave {
                 cancel: cancel.clone(),
                 kind,

@@ -223,6 +223,7 @@ fn env() -> Env {
     fs.add_dir("/w");
     fs.add_file("/w/a.txt", ORIG);
     let ports = JobPorts {
+        stdin: None,
         fs: fs.clone(),
         clock,
         paths: Arc::new(FixedPaths::default()),
