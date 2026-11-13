@@ -145,7 +145,7 @@ evoeditor (bin) ───────┤
 | `keymap.toml` | `[keys.*]` のみ。`config.toml` の `[keys]` より後に併合 (v0.2) | 起動時 |
 | `themes/<name>.toml` | テーマ 1 つ/ファイル。`theme.name` で選ばれたものだけ読む | 起動時 (選択中のみ)、切替時 |
 | `languages/<name>.toml` | 言語定義 1 つ/ファイル (組込み定義への上書き・追加) | 起動時は索引 (拡張子表) のみ、本体は該当言語の文書を開いたとき (遅延) |
-| `locales/<lang>.toml` | UI 文言の上書き・追加言語 (v0.4。確定 (ユーザー回答、2026-11-11)、OQ-21。同梱の `ja` / `en` はバイナリ内にあり、このディレクトリは要らない) | 起動時 (選択した言語のみ) |
+| `locales/<lang>.toml` | UI 文言の上書き・追加言語 (v0.4。確定 (ユーザー回答、2026-11-11)、OQ-21。同梱の `ja` / `en` はバイナリ内にあり、このディレクトリは要らない) | 起動時 (選択した言語のみ。`config.reload` では読み直さない。`--no-config` では読まない。§17.4) |
 
 ### 3.3 マージ規則
 
@@ -236,6 +236,7 @@ provider = "osc52"
 - `config.show_diagnostics` コマンド (**v0.3 で実装**。v0.2 の予定から送った、PO の決定 2026-11-07): 一覧パネル (意味的モデル `List`) で表示し、Enter で該当ファイルの該当行を開く。一覧に出すのは、ファイル (`config.toml` 等のユーザー層のファイル・`keymap.toml`・テーマファイル `themes/<name>.toml`) と `--set` ごとに **最後に読んだときの診断** (起動時、または `config.reload` で読み直したとき) で、「このバージョンでは未対応」の情報診断も含める (件数の要約とは違い、画面で確かめる手段にする)。各行は `重さ: 本文 / 対処` (`ui.config_diagnostics.item`。対処の無い情報診断は `ui.config_diagnostics.item_no_hint`) と、右の列に `ファイル:行` (行の分からない診断はファイル名だけ)。並びは読んだ順 (ファイルごと、その中は診断の順) で、入力欄で本文と `ファイル:行` を部分一致で絞り込める。Enter はそのファイルを開き (開いていればそのバッファへ切り替え)、該当の行・桁へ移る (行の分からない診断は 1 行目)。ファイルの無い診断 (`--set`) は開かずに `info.config.diagnostic_no_file` を示す。診断が 1 件も無ければ一覧を開かず、メッセージ行に `info.config.no_diagnostics` (「設定の診断はありません」) を出す。一覧の UI は 04 §8.5a。
 - 各診断は NFR-602 に従い「何が起きたか」+「どうすればよいか」を含む: `tab_width は 1〜16 の整数です。"4" は文字列なので既定値 4 を使います。引用符を外してください (config.toml:7)`。v0.1 の公開キーは 7 個なので、未知のキーの綴りの候補 (編集距離 ≤ 2) は公開キーと公開前のキー (§5.13) の両方から探す。
 - CLI (v0.2): `evoeditor --check-config` は診断を標準出力に出して終了する (終了コード §18.4)。CI やドットファイル管理に使う。
+- **ファイル由来の文字列の無害化** (v0.4 の M26 から。NFR-503): 診断に埋める `{item}` (キーの名前)・`{value}` (書かれた値)・`{reason}` (パーサの説明) は、利用者の設定ファイル・キーマップ・テーマファイル・言語ファイルから来た文字列なので、制御文字・双方向の書式文字・方向の印 (§17.4 の検査 4 の範囲) を `<U+XXXX>` の表記に直し、64 文字で切る (超えたら末尾を `…`)。画面 (Frame) に載せる前・ログに書く前・`--check-config` で標準出力へ出す前のどれも同じ関数で行い、`--check-config` は行の全体をその関数に通す (Frame の無害化 (04 §4.9) を通らないため)。
 - 文言はすべて MessageKey 経由 (§17)。
 
 ### 4.4 スキーマの互換性方針
@@ -288,7 +289,7 @@ v0.1 で設定ファイル (`config.toml`、ユーザー層) から読む **公�
 
 | キー | 型 / 値 | 既定 | 説明 | 関連 | P |
 |---|---|---|---|---|---|
-| `default_encoding` | `"utf-8" \| "utf-8-bom" \| "utf-16le" \| "utf-16be" \| "shift_jis" \| "euc-jp" \| "iso-2022-jp" \| "system"` (WHATWG の別名ラベル (`sjis`、`windows-31j` 等) は上の名前に正規化して受理) | `"utf-8"` | 新規ファイル・判定不能時の文字コード。`"system"` は 05 §6 の OS ロケール由来ヒント。**許容値は v0.1 の対応範囲 (01 の「文字コードの対応範囲」、OQ-03) の 7 種と `"system"` に限る**。これ以外 (例 `"windows-1252"`) は列挙値不正として警告 (§4.2) し、既定値 `"utf-8"` を使う (「ラベルとしては有効だが対応外」でも同じ)。許容値を FR-110 (encoding_rs が扱うもの) へ広げるのは v0.4 | FR-108 | v0.1 |
+| `default_encoding` | `"utf-8" \| "utf-8-bom" \| "utf-16le" \| "utf-16be" \| "shift_jis" \| "euc-jp" \| "iso-2022-jp" \| "system"` (WHATWG の別名ラベル (`sjis`、`windows-31j` 等) は上の名前に正規化して受理) | `"utf-8"` | 新規ファイル・判定不能時の文字コード。`"system"` は 05 §6 の OS ロケール由来ヒント。**許容値は v0.1 の対応範囲 (01 の「文字コードの対応範囲」、OQ-03) の 7 種と `"system"` に限る**。これ以外 (例 `"windows-1252"`) は列挙値不正として警告 (§4.2) し、既定値 `"utf-8"` を使う (「ラベルとしては有効だが対応外」でも同じ)。許容値を FR-110 (encoding_rs が扱うもの) へ広げるのは v0.5 以降 (v0.4 から送った、08 §7) | FR-108 | v0.1 |
 | `encoding_detection` | `"auto" \| "utf8-only" \| "off"` | `"auto"` | chardetng 推定の使用 | FR-109 | v0.1 (定数、公開 v0.2) |
 | `detection_candidates` | array of string | ロケール由来 (05 §6 `system` ヒントが `ja` なら `["utf-8", "shift_jis", "euc-jp", "iso-2022-jp"]`、それ以外は `["utf-8"]`) | **推定結果の事後フィルタ**: chardetng 1.0 には候補リストを与える API が無いため、推定結果が候補外なら信頼度を下げ `default_encoding` と比較して採否を決める (03 §8.2 手順 7)。既定値は 05 §6 の `system` ヒントから決める | FR-109 | v0.1 (定数、公開 v0.2) |
 | `default_line_ending` | `"lf" \| "crlf" \| "cr" \| "native"` | **`"lf"`** (全 OS。P6 / NFR-405、05 §6、OQ-04) | 新規ファイルの改行コード。`native` は選択肢として残す | FR-113 | v0.1 |
@@ -311,8 +312,8 @@ v0.1 で設定ファイル (`config.toml`、ユーザー層) から読む **公�
 | `swap.min_interval_ms` | int | `10000` | 連続入力中の書出し間隔の下限 | NFR-307 | v0.2 |
 | `swap.max_bytes` | int (bytes) | `67108864` (64 MiB) | これを超える文書は swap-lite の対象外 (ステータスに表示)。差分ジャーナルは v0.5 以降 | NFR-307 | v0.2 |
 | `swap.exclude_secret_files` | bool | `true` | 秘密ファイルパターン (§5.12.2) に一致する文書をスワップしない (OQ-109)。ワークスペース層の `false` は危険の分類 (§12.3) | NFR-505 | v0.2 |
-| `backup.enabled` | bool | `false` | 保存時バックアップ | FR-119 | v0.4 |
-| `backup.dir` | string (path) | `""` (= `state_dir/backup/fr119/`、05 §7.5。同一ディレクトリの `name~` にするには `"."`) | バックアップ先 (既定は状態ディレクトリ。OQ-108、確定 (ユーザー回答、2026-11-11)) | FR-119 | v0.4 |
+| `backup.enabled` | bool | `false` | 保存時バックアップ | FR-119 | v0.5 以降 (v0.4 から送った、08 §7) |
+| `backup.dir` | string (path) | `""` (= `state_dir/backup/fr119/`、05 §7.5。同一ディレクトリの `name~` にするには `"."`) | バックアップ先 (既定は状態ディレクトリ。OQ-108、確定 (ユーザー回答、2026-11-11)) | FR-119 | v0.5 以降 (v0.4 から送った、08 §7) |
 | `hot_exit` | bool | `false` | 終了時に未保存内容を保持 | OQ-17 | v0.5 |
 
 ### 5.3 `[view]` / `[ui]` — 表示
@@ -326,14 +327,14 @@ v0.1 で設定ファイル (`config.toml`、ユーザー層) から読む **公�
 | `view.rulers` | array of int | `[]` | 桁ガイド | — | v0.5 |
 | `view.scroll_margin` | int | `3` | カーソル周辺の余白行 (04 §10) | — | v0.1 (定数、公開 v0.2) |
 | `view.scroll_margin_horizontal` | int | `8` | 横スクロール時の左右余白列 (04 §10) | FR-506 | v0.1 (定数、公開 v0.2) |
-| `view.cursor_line_highlight` | bool | **`true`** (OQ-125。TrueColor 既定テーマは行の前景・背景の組を確保できる。`mono` では無効) | カーソル行強調 | — | v0.1 (定数、公開 v0.2) |
+| `view.cursor_line_highlight` | bool | **`true`** (OQ-125。TrueColor 既定テーマは行の前景・背景の組を確保できる。`mono` では無効) | カーソル行強調。高コントラストのテーマ (§8.7) では効かない (`ui.cursor_line` が `none`。現在行は行番号の太字で示す) | — | v0.1 (定数、公開 v0.2) |
 | `view.ambiguous_width` | `1 \| 2` | `1` | East Asian Ambiguous の幅。`2` のときは eve-tui が描く罫線・記号が ASCII に縮退する (04 §3.7) | NFR-605 | v0.1 |
 | `view.emoji_width` | `"auto" \| 1 \| 2` | `"auto"` | 絵文字幅の補正。core の `EmojiWidth::{Auto, One, Two}` に写す (`"auto"` → `Auto` = 04 の端末補正 (幅プローブ・端末種別の表) が決めた値、決まらなければ 2。`1` → `One`、`2` → `Two`。03 §13.2) | FR-501 | v0.1 (定数、公開 v0.2) |
 | `view.control_char_style` | `"caret" \| "hex"` | `"hex"` | 制御文字の可視化表記 (`caret` = `^X`、`hex` = `<U+001B>`。C0 と DEL にだけ効き、C1 は常に `<U+0085>` の形。復号できないバイトの `<0xHH>` とは別物、03 §13.2)。空白の可視化 (`view.show_whitespace` の `"minimal"` = 全角スペースとタブ) とは独立で、この値では変わらない | FR-507 | v0.1 (定数、公開 v0.2) |
 | `ui.hint_bar` | bool | `true` | ヒントバー (v0.1 は常時表示)。**v0.2 の M10 で公開・実装した** (`ui.toggle_hint_bar` で実行中に切り替えられる。隠すとその行を本文に使う、04 §3.5 / §8.5。`config.reload` で即時に効く) | FR-504 | v0.1 (定数、公開 v0.2) |
 | `ui.status_bar` | bool | `true` | ステータスバー | FR-503 | v0.1 (定数、公開 v0.2) |
 | `ui.tab_line` | `"auto" \| "always" \| "never"` | `"auto"` (2 バッファ以上で表示) | バッファライン | FR-510 | v0.5 |
-| `ui.locale` | string (BCP 47) / `"auto"` | `"auto"` | UI の言語 (§17.1)。`auto` は環境変数 `EVE_LANG`、OS ロケールの順で決める。`--locale` が最優先。v0.2 の M8 で公開した | NFR-603 | v0.2 |
+| `ui.locale` | string (BCP 47) / `"auto"` | `"auto"` | UI の言語 (§17.1)。`auto` は環境変数 `EVE_LANG`、OS ロケールの順で決める。`--locale` が最優先。v0.2 の M8 で公開した。v0.4 (M26) から、同梱の言語 (`ja` / `en`) に加えて `locales/<lang>.toml` がある言語も選べる。当たらない値は `msg.config.invalid_value` で知らせて次の段へ進む (§17.4、OQ-220) | NFR-603 | v0.2 |
 | `ui.message_timeout_ms` | int | `5000` | 情報メッセージの表示時間 (04 §8.9) | FR-505 | v0.1 (定数、公開 v0.2) |
 | `ui.mouse` | bool | `true` | マウス入力 (v0.2。v0.1 はマウスを捕捉せず端末の選択・スクロールをそのまま使える、04 §6.8)。**v0.2 の M9b で公開・実装した** (`ui.toggle_mouse` で実行中に切り替えられる) | FR-307 | v0.2 |
 | `ui.bell` | `"visual" \| "audible" \| "off"` | `"visual"` | ベル | — | v0.1 (定数、公開 v0.2) |
@@ -348,9 +349,9 @@ v0.1 で設定ファイル (`config.toml`、ユーザー層) から読む **公�
 
 | キー | 型 / 値 | 既定 | 説明 | P |
 |---|---|---|---|---|
-| `name` | string | **`"default"`** (**TrueColor 既定テーマ**、ADR-0027 / OQ-27 **確定 (ユーザー回答)**。本文は端末の既定色、強調ロールだけ前景・背景の RGB の組で定義し、v0.1 は truecolor と mono の段を明示する (256 / 16 は自動近似)。§8.1 / 04 §12.1 C2) | テーマ名 (組込み `default` (v0.1)、`ansi` / `default-dark` / `default-light` (v0.2)、`high-contrast-*` (v0.4)、または `themes/<name>.toml` (v0.2))。v0.1 はテーマが 1 つなので選べない | v0.1 (定数、公開 v0.2) |
+| `name` | string | **`"default"`** (**TrueColor 既定テーマ**、ADR-0027 / OQ-27 **確定 (ユーザー回答)**。本文は端末の既定色、強調ロールだけ前景・背景の RGB の組で定義し、v0.1 は truecolor と mono の段を明示する (256 / 16 は自動近似)。§8.1 / 04 §12.1 C2) | テーマ名 (組込み `default` (v0.1)、`ansi` / `default-dark` / `default-light` (v0.2)、`high-contrast-dark` / `high-contrast-light` (v0.4、§8.7、OQ-221)、または `themes/<name>.toml` (v0.2))。v0.1 はテーマが 1 つなので選べない | v0.1 (定数、公開 v0.2) |
 | `color_mode` | `"auto" \| "truecolor" \| "256" \| "16" \| "none"` | `"auto"` | 色深度判定の上書き。`auto` の判定は 04 §5.2a の判定表が正本 (本書は順序を再掲しない)。段の選択は core (02 §8.2) | v0.1 |
-| `background` | `"auto" \| "dark" \| "light"` | `"auto"` | 背景まで塗るテーマ (`default-dark` / `default-light`、v0.2) の明暗選択。**v0.2 の M9c で公開・実装した** (扱いは §8.6 の 3 本目)。`auto` は `COLORFGBG` ヒント (04 §5.2a、OQ-124) → 判らなければ `dark`。`default` テーマは背景非依存なので本キーを見ない | v0.2 |
+| `background` | `"auto" \| "dark" \| "light"` | `"auto"` | 背景まで塗るテーマ (`default-dark` / `default-light`、v0.2) の明暗選択。**v0.2 の M9c で公開・実装した** (扱いは §8.6 の 3 本目)。`auto` は名前どおり (`COLORFGBG` による推定はしない。§8.6 の 3 本目。OQ-124 の推定は、明暗を名前に含まないテーマを足すときに使う)。`dark` / `light` は対の他方へ替える (名前と逆の値を書くと逆のテーマになる)。`default` / `ansi` は本キーを見ない。v0.4 の `high-contrast-dark` / `high-contrast-light` (§8.7) にも同じく効く | v0.2 |
 | `overrides` | テーブル (スコープ → スタイル) | `{}` | テーマの部分上書き (§8.4) | v0.5 |
 
 ### 5.5 `[search]`
@@ -729,9 +730,9 @@ literal:= '"' ... '"' | number | true | false
 
 - テーマは TOML ファイル 1 つ。**色はテーマが、構造は core が** 持つ。テーマはスコープ名にスタイルを割り当てるだけで、レイアウトや文字 (罫線・アイコン) は変えられない ([ADR-0008](10-decisions.md#adr-0008-viewmodel-による描画分離))。
 - スタイルの解決 (テーマ + Decoration 合成) と **色深度に応じた段の選択** は core が行う (`Capabilities.color_depth`、[02 §8.2](02-architecture.md#82-frame-の構造-擬似コード)、04 §12.1 C1)。Frame には端末が描ける色だけが載り、frontend はセル単位の変換をしない。テーマ作者は TrueColor で書き、mono の段を **明示** する。256 / 16 の段は明示してもよく、省略すると 04 §12.3 の近似で求める (v0.1 の組込みテーマは truecolor と mono だけを書き、256 / 16 は近似)。
-- **組込みテーマと v0.1 の範囲 (ADR-0027 / OQ-27 確定 (ユーザー回答)、04 §12.1 C2)**: v0.1 の既定テーマ **`default`** は **最初から TrueColor 対応** (FR-513)。方式: 本文は端末の既定色 (`default` / `default`) のまま、選択・ステータスバー・検索一致・メッセージなどの **強調ロールだけを前景色と背景色の RGB の組** で定義する。組で定義するので端末の背景が明るくても暗くても強調部分のコントラストを保証でき、背景色の問い合わせ (OSC 11) を要しない。**v0.1 は各ロールの truecolor と mono の 2 段を明示** し (確定 (ユーザー回答)、案 L)、256 / 16 色の端末では truecolor の値から近似する (04 §12.3。v0.1 の対象端末 Windows Terminal・conhost は truecolor)。近似で色の区別が弱くなっても、意味のあるロールは mono と同じ属性・記号を併せ持つので判別できる (NFR-604)。256 / 16 の段の明示値は v0.2 以降の候補 (近似の品質に問題の報告があったとき)。縮退品質の確認は P0 スパイク S-20 (truecolor と mono)。**`ansi`** (ANSI 16 色 + 属性のみ。端末配色に完全に馴染む。SSH 先・16 色端末向け) と背景まで塗る **`default-dark` / `default-light`** は v0.2 (テーマ切替と同時)、**`high-contrast-dark` / `high-contrast-light`** (NFR-604) は v0.4 (FR-707)。
+- **組込みテーマと v0.1 の範囲 (ADR-0027 / OQ-27 確定 (ユーザー回答)、04 §12.1 C2)**: v0.1 の既定テーマ **`default`** は **最初から TrueColor 対応** (FR-513)。方式: 本文は端末の既定色 (`default` / `default`) のまま、選択・ステータスバー・検索一致・メッセージなどの **強調ロールだけを前景色と背景色の RGB の組** で定義する。組で定義するので端末の背景が明るくても暗くても強調部分のコントラストを保証でき、背景色の問い合わせ (OSC 11) を要しない。**v0.1 は各ロールの truecolor と mono の 2 段を明示** し (確定 (ユーザー回答)、案 L)、256 / 16 色の端末では truecolor の値から近似する (04 §12.3。v0.1 の対象端末 Windows Terminal・conhost は truecolor)。近似で色の区別が弱くなっても、意味のあるロールは mono と同じ属性・記号を併せ持つので判別できる (NFR-604)。256 / 16 の段の明示値は v0.2 以降の候補 (近似の品質に問題の報告があったとき)。縮退品質の確認は P0 スパイク S-20 (truecolor と mono)。**`ansi`** (ANSI 16 色 + 属性のみ。端末配色に完全に馴染む。SSH 先・16 色端末向け) と背景まで塗る **`default-dark` / `default-light`** は v0.2 (テーマ切替と同時)、**`high-contrast-dark` / `high-contrast-light`** (NFR-604) は v0.4 (背景を塗るテーマ。ロール表と高コントラスト用の基準は §8.7、OQ-221)。
 - **ロールの形 (組込みテーマ)**: 各ロールの各段は次の 3 形のどれかにする。(i) **前景と背景の組** (強調ロール)、(ii) **色を指定せず属性だけ** (前景・背景とも端末既定。例 太字・反転・下線)、(iii) **前景だけ** (背景は端末既定。淡色の補助表示に限る)。**背景だけを指定して前景を端末既定のままにする形は使わない** (端末の既定前景色が分からないので、明るい背景の端末では暗い背景の上に黒い文字が載って読めなくなる)。
-- **コントラスト基準** (01 FR-513 AC-2 / NFR-604 と同じ基準。WCAG 2.x の相対輝度による比): (i) の組は truecolor の段で **4.5:1 以上**。(iii) の前景は truecolor の段で **白 (`#ffffff`) と黒 (`#000000`) の両方の背景に対して 3.0:1 以上**。(ii) は端末の配色そのままなので検査しない。CI の `xtask check-themes` (09 §3.5) が §8.2 の表を入力に、truecolor と mono の段の欠落・形の違反・比の不足を検査し、近似で求めた 256 / 16 の段については「前景と背景が同じ番号にならない」ことだけを検査する。256 / 16 の段を明示する版 (v0.2 以降の候補) では、(i) は 256 の段で 4.5:1 以上・16 の段は xterm 既定パレット (§8.2 の表の下) を仮定して 3.0:1 以上、(iii) は 256 の段で白・黒の両背景に 3.0:1 以上・16 の段で使ってよい前景は `bright_black` だけ、を加える。256 の段は xterm の 256 色の標準値 (16〜231 は 6×6×6 の立方体、232〜255 は灰色) で計算する。値の見た目の調整は S-20。
+- **コントラスト基準** (01 FR-513 AC-2 / NFR-604 と同じ基準。WCAG 2.x の相対輝度による比): (i) の組は truecolor の段で **4.5:1 以上**。(iii) の前景は truecolor の段で **白 (`#ffffff`) と黒 (`#000000`) の両方の背景に対して 3.0:1 以上**。(ii) は端末の配色そのままなので検査しない。CI の `xtask check-themes` (09 §3.5) が §8.2 の表を入力に、truecolor と mono の段の欠落・形の違反・比の不足を検査し、近似で求めた 256 / 16 の段については「前景と背景が同じ番号にならない」ことだけを検査する。256 / 16 の段を明示する版 (v0.2 以降の候補) では、(i) は 256 の段で 4.5:1 以上・16 の段は xterm 既定パレット (§8.2 の表の下) を仮定して 3.0:1 以上、(iii) は 256 の段で白・黒の両背景に 3.0:1 以上・16 の段で使ってよい前景は `bright_black` だけ、を加える。256 の段は xterm の 256 色の標準値 (16〜231 は 6×6×6 の立方体、232〜255 は灰色) で計算する。値の見た目の調整は S-20。高コントラストのテーマ (v0.4) は、この基準に代えて §8.7 の基準 (7.0:1 など) で検査する。
 
 ### 8.2 書式
 
@@ -917,7 +918,7 @@ tree-sitter のハイライトクエリ (`@keyword.control` 等) のキャプチ
 
 - 淡色の (iii) のロール (`#808080`) は、塗った背景に対しても 3.0:1 以上 (暗 4.2、明 3.8)。比は core の `tests/theme_table.rs` で確かめる。
 - `theme.background` (確定 (ユーザー回答)、2026-10-30): `default-dark` / `default-light` を選んだときだけ効き、`dark` / `light` でその明暗に替える。`auto` (既定) は名前どおりで、`COLORFGBG` による推定はしない (名前で明暗を明示しているため。OQ-124 の推定は、明暗を名前に含まないテーマを足すときに使う)。`default` と `ansi` は見ない。
-- `theme.name` の値は組込みの 4 つ。テーマファイル (`themes/<name>.toml`) は 4 本目。設定を差し替えると (`config.reload` を含む) その場で替わる。
+- `theme.name` の値は組込みの 4 つ (v0.4 の M26 で `high-contrast-dark` / `high-contrast-light` を足して 6 つ。§8.7)。テーマファイル (`themes/<name>.toml`) は 4 本目。設定を差し替えると (`config.reload` を含む) その場で替わる。
 
 **4 本目の実装 (M9c)**: テーマファイル (FR-707)。
 
@@ -925,6 +926,7 @@ tree-sitter のハイライトクエリ (`@keyword.control` 等) のキャプチ
 - 書式は §8.2 のうち `[meta]` の `inherits`、`[palette]`、`[ui]` のロール (`fg` / `bg` / `mods` / `fallback256` / `fallback16` / `mono`)。`inherits` は親から順に重ね (深さ 8、循環はエラー)、どこにも無ければ組込みの `default` が土台 (組込みの `default-dark` 等も親にできる)。書いたロールの書いた項目だけを上書きし、色を書き換えた段の 256 / 16 は、明示が無ければ 04 §12.3 の近似で求める (前景と背景が同じ番号になったら反転)。`ui.text` に背景色があれば背景を塗るテーマとして扱う。`[meta]` の `name` / `background` / `author` / `license` は読み飛ばす。`[syntax]` と `underline` / `underline_color` は v0.5 (「未対応」の情報診断)。
 - 誤りの扱い: 読めない・無い・構文エラー・`inherits` の循環と深さはエラーで、テーマは組込みの `default` で動く。未知のロール・色の表記・パレット名・属性は警告で、その値だけ使わない。診断はファイル名 `themes/<name>.toml` で出す (`--check-config` も確かめ、エラーなら終了コード 3)。
 - 読むのは、起動時は bin (端末の前)、`config.reload` は設定を差し替えた後の io ジョブ (`JobKind::ReadTheme`。名前が同じでもファイルを読み直す)。ワークスペース層の `.eve/themes/` と `theme.overrides` (§8.4) は v0.5。
+- **組込みの名前が優先する**: `theme.name` が組込みの名前なら、同じ名前のテーマファイル (`themes/<name>.toml`) は読まない (§8.3 の順)。v0.4 の M26 で `high-contrast-dark` / `high-contrast-light` を足すと、v0.2〜v0.3 で利用者が同じ名前で作ったテーマファイルは黙って使われなくなる。CHANGELOG に書き (08 §2.5 の M26 の (3))、使い続けるにはファイルの名前を変えるよう案内する。
 
 **実装の分け方 (README §3.6 の 6 を細かくする)**:
 
@@ -932,6 +934,96 @@ tree-sitter のハイライトクエリ (`@keyword.control` 等) のキャプチ
 2. eve-config のテーマの型と組込み `default` (§8.2 の全ロール、4 段)、core の解決と編集面への適用、`Frame.roles` と eve-tui の切替。`check-themes` を編集面のロールにも広げる。
 3. 組込みテーマ `default-dark` / `default-light` / `ansi` と、`theme.name` / `theme.background` の公開 (値の表を本節の後に足す)。
 4. テーマファイル (`themes/*.toml`、`inherits`・`[palette]`)、`config.reload` での読み直し。
+
+### 8.7 高コントラストテーマ (v0.4 の M26。NFR-604)
+
+本節は [OQ-221](10-decisions.md#oq-221-高コントラストテーマの細目-v04-の-m26) (確定 (ユーザー回答、2026-11-14)。推す案のとおり) で決めた (番号は OQ-221 の論点の番号)。04 §12.5 はこの節を参照する。
+
+- **テーマ** (OQ-221 の 1): 組込みテーマ `high-contrast-dark` (黒の背景に白の文字) と `high-contrast-light` (白の背景に黒の文字)。どちらも背景を塗るテーマで、`default-dark` / `default-light` と同じく扱う (§8.6 の 3 本目): 色の段では、各ロールの端末の既定色 (`default`) を `ui.text` の色に置き換え、eve-tui は画面全体を `ui.text` で塗ってから描く。無色の段は塗らない。
+- **選び方**: `theme.name` で選ぶ (§5.4)。`theme.background = "dark"` / `"light"` で対の他方へ替わり、`auto` (既定) は名前どおり (OQ-221 の 4。`with_background` に足す)。名前と逆の値 (`high-contrast-dark` に `light`) を書くと逆のテーマになる。OS のハイコントラストの設定からは選ばない (OQ-221 の 5)。別名 (`high-contrast` など) は足さない。組込みの名前に近い名前 (組込みの名前の接頭辞か、編集距離 2 以下) で `themes/<name>.toml` も無いときは、テーマが無い診断の理由に候補を足す (例 「テーマ high-contrast がありません。high-contrast-dark / high-contrast-light ではありませんか?」。理由の文は今の `theme_file` の「テーマ {name} がありません」と同じ所に置く)。
+- **ロール**: `default` と同じ 26 個 (§8.2。ロール名は公開面。M22〜M25 で増えていない)。値は下の 2 つの表が正本で、`xtask check-themes` が読む (セルの文法は §8.2 の凡例と同じ。表の見出しと列は 11 §8.5 で固定する)。256 と 16 の段も明示値で書く (04 §12.3 の近似を使わない)。形の列は truecolor の段の形で、16 の段で属性や形が違うロール (下の (h9) のため) は表の値が正。
+- **基準** (OQ-221 の 2・3・6。`check-themes` の高コントラスト用の検査、09 §3.5 の (g)。比は WCAG 2.x の相対輝度による比で、256 の段は xterm の 256 色の標準値で計算する):
+  - (h1) truecolor と 256 の段で、本文 (`ui.text`) の組が **7.0:1 以上**。
+  - (h2) 同じ段で、強調ロール (形 (i)) の組が **7.0:1 以上**。
+  - (h3) 同じ段で、前景だけのロール (形 (iii)) の前景が、本文の背景に対して **7.0:1 以上**。
+  - (h4) 同じ段で、`ui.text` を除く形 (i) のロールの背景が、本文の背景に対して **3.0:1 以上** (強調した範囲が、色相を見分けられなくても明るさの差で見える)。
+  - (h5) 16 の段は、端末のパレットで変わるので目安として、xterm の既定パレット (§8.2 の表の下) と Windows Terminal・conhost の既定の配色 (Campbell: `black #0c0c0c`・`red #c50f1f`・`green #13a10e`・`yellow #c19c00`・`blue #0037da`・`magenta #881798`・`cyan #3a96dd`・`white #cccccc`・`bright_black #767676`・`bright_red #e74856`・`bright_green #16c60c`・`bright_yellow #f9f1a5`・`bright_blue #3b78ff`・`bright_magenta #b4009e`・`bright_cyan #61d6d6`・`bright_white #f2f2f2`) の **両方で** (h1)〜(h3) を **4.5:1 以上** ((h4) は課さない)。
+  - (h6) どの段でも `dim` を使わない (mono の段を含む)。`ui.cursor_line` は色の段でも `none` (現在行の帯を付けない)。
+  - (h7) どの段でも、`ui.selection`・`ui.search.match`・`ui.search.current` の属性の組が互いに違う (色を見分けられなくても区別できる)。
+  - (h8) 色の段 (truecolor・256・16。16 は xterm の既定パレット) で、`ui.selection`・`ui.search.match`・`ui.search.current` の背景は、互いに明るさの比を **1.5:1 以上** 取る。取れない組は、`bold` 以外の属性 (`underline` / `reverse`) の差を持つ (太字は端末によって描かれず、差にならない)。
+  - (h9) 16 の段で、`bold` を持つロールの前景が 0〜7 の色 (`black`〜`white`) であってはならない (太字を明るい色で描く端末 (conhost など) で、`black` が `bright_black` になり比が崩れる。例 `red` の背景の `black` の太字は約 1.0:1)。前景が `default` のロールは本文の前景 (`ui.status_bar.chord` は `ui.status_bar` の前景) で判定する。該当するロールは、16 の段だけ `bold` を外すか別の属性に替える。
+  - 加えて、`default` の表と同じ 09 §3.5 の (a)(b)(d)(e): 全ロールの 4 段に値があり、形の列が truecolor の段と一致し、背景だけの段が無く、意味のあるロールの mono が空でなく、表と実装のロール名の集合が一致する。
+- **強調の向き**: (h4) を満たすため、暗いテーマの強調は明るい背景に黒の文字、明るいテーマの強調は暗い背景に白の文字にする (明るいテーマでは、黄色の背景の検索の一致を使わない)。明るいテーマの現在の一致は、(h8) のため黒の背景に白の文字 + 下線 + 太字にする (無色の段の「反転 + 下線」と同じ見た目)。淡色の補助表示 (行番号・`~`・横スクロールの印・実行できない項目・入力欄の案内・空白の記号) は、(h3) を満たす灰色にする (暗 `#c0c0c0`、明 `#404040`。OQ-221 の 3)。無色の段は `default` の mono の段と同じで、空白の記号だけを `dim` の代わりに `bold` にする (OQ-221 の 6)。
+- 括弧内の数値は、形 (i) が「前景と背景の比・背景と本文の背景の比」、形 (iii) と `ui.text` が本文の背景に対する比 (小数第 2 位以下を切り捨て)。16 の段は xterm の既定パレットでの比。Campbell での最小は、暗いテーマが `ui.message.error` の 5.0、明るいテーマが `ui.message.error` の 5.4。
+- **見え方の注記**:
+  - 256 の段では、明るいテーマの警告 (`ui.message.warning`) の黄土色の候補が (h2) を満たさないので、暗い灰色 (`ansi.237`) にする。16 の段では黒にする。どちらも、ステータスバー (黒) の背景と近い・同じになる (`⚠` と太字、出る行の違いで区別する)。
+  - 16 の段は使える色が少なく、明るいテーマでは検索の一致と制御文字が同じ色の組 (`bright_white` / `magenta`) になる (下線の有無と、出る場所で区別する)。暗いテーマの 16 の段の現在の一致は、(h8) と (h9) のため `underline` + `reverse` (明るい緑の文字に黒の背景に見える)。
+  - 端末の配色と逆の明暗のテーマ (暗い配色の端末で `high-contrast-light`) では、端末が描くカーソルの色が背景に近くなり、見えにくいことがある。README で「端末の配色と同じ明暗のテーマを選ぶ」と案内し、08 §2.5 の M26 の (4) の目視の観点に入れる。カーソルの色を OSC 12 / 112 で変える案は、後の版の候補とする (端末の状態を変えるので、復元の経路 (04 §14) に足す必要がある)。
+  - 暗い部屋では、明るいテーマ (と暗いテーマの強調・ステータスバー) の明るい塗りの面積がまぶしいことがある。これも (4) の目視の観点に入れる。
+  - 高コントラストのテーマは truecolor か 256 の段で使うことを README で勧める (16 の段は端末のパレット次第で、基準は目安)。
+- 値は推す案で、端末 (Windows Terminal と conhost) での目視で見直してよい (基準は満たしたまま。09 §8.2 の互換の行)。
+
+#### 8.7.1 high-contrast-dark のロール表
+
+| ロール | 用途 | 形 | truecolor (fg / bg) | 256 (fg / bg) | 16 (fg / bg) | mono |
+|---|---|---|---|---|---|---|
+| `ui.text` | 本文と入力欄の文字。このテーマは背景を塗る (07 §8.6 の `paints`)。ほかのロールの `default` は本文の色 | (i) | `#ffffff` / `#000000` (21.0) | `ansi.231` / `ansi.16` (21.0) | `bright_white` / `black` (21.0) | `none` |
+| `ui.cursor_line` | 現在行の強調。高コントラストのテーマでは付けない (OQ-221 の 3) | (ii) | `none` | `none` | `none` | `none` |
+| `ui.line_number` | ガターの行番号 | (iii) | `#c0c0c0` / `default` (11.5) | `ansi.250` / `default` (11.0) | `white` / `default` (16.6) | `none` |
+| `ui.line_number.active` | 現在行の行番号 | (ii) | `bold` | `bold` | `bold` | `bold` |
+| `ui.eof_marker` | 文書末尾より後の行の `~` | (iii) | `#c0c0c0` / `default` (11.5) | `ansi.250` / `default` (11.0) | `white` / `default` (16.6) | `none` |
+| `ui.scroll_marker` | 横スクロールの続きの印 `‹` / `›` | (iii) | `#c0c0c0` / `default` + `bold` (11.5) | `ansi.250` / `default` + `bold` (11.0) | `white` / `default` (16.6) | `bold` |
+| `ui.selection` | 選択範囲 (編集面・入力欄) | (i) | `#000000` / `#9ccfff` (12.7・12.7) | `ansi.16` / `ansi.153` (13.9・13.9) | `black` / `bright_cyan` (16.7・16.7) | `reverse` |
+| `ui.search.match` | 検索の一致 | (i) | `#000000` / `#ffff00` + `underline` (19.5・19.5) | `ansi.16` / `ansi.226` + `underline` (19.5・19.5) | `black` / `bright_yellow` + `underline` (19.5・19.5) | `underline` |
+| `ui.search.current` | 現在の一致 | (i) | `#000000` / `#ffa64d` + `underline` + `bold` (10.8・10.8) | `ansi.16` / `ansi.215` + `underline` + `bold` (11.5・11.5) | `black` / `bright_green` + `underline` + `reverse` (15.3・15.3) | `reverse` + `underline` |
+| `ui.status_bar` | ステータスバー | (i) | `#000000` / `#ffffff` (21.0・21.0) | `ansi.16` / `ansi.231` (21.0・21.0) | `black` / `bright_white` (21.0・21.0) | `reverse` |
+| `ui.status_bar.chord` | ステータスバーのチョード保留。`ui.status_bar` に重ねる | (ii) | `bold` | `bold` | `underline` | `bold` |
+| `ui.message.info` | 情報メッセージ (先頭に `ℹ`) | (ii) | `default` / `default` | `default` / `default` | `default` / `default` | `none` |
+| `ui.message.warning` | 警告メッセージ (先頭に `⚠`) | (i) | `#000000` / `#ffd75f` + `bold` (15.1・15.1) | `ansi.16` / `ansi.221` + `bold` (15.1・15.1) | `black` / `yellow` (12.3・12.3) | `bold` |
+| `ui.message.error` | エラーメッセージ (先頭に `✖`)、正規表現のエラー | (i) | `#000000` / `#ff9e9e` + `bold` (10.6・10.6) | `ansi.16` / `ansi.217` + `bold` (12.0・12.0) | `black` / `bright_red` (5.2・5.2) | `bold` + `reverse` |
+| `ui.hint_bar` | ヒントバーの説明の語 | (ii) | `default` / `default` | `default` / `default` | `default` / `default` | `none` |
+| `ui.hint_bar.key` | ヒントバーのキー表記 | (i) | `#000000` / `#7fffff` (17.6・17.6) | `ansi.16` / `ansi.123` (17.7・17.7) | `black` / `cyan` (10.6・10.6) | `reverse` |
+| `ui.overlay` | オーバーレイの枠と文字 | (ii) | `default` / `default` | `default` / `default` | `default` / `default` | `none` |
+| `ui.overlay.selected` | 一覧の選択中の行 (行頭に `▶`) | (i) | `#000000` / `#9ccfff` (12.7・12.7) | `ansi.16` / `ansi.153` (13.9・13.9) | `black` / `bright_cyan` (16.7・16.7) | `reverse` |
+| `ui.overlay.match` | パレットの一致箇所 | (ii) | `underline` + `bold` | `underline` + `bold` | `underline` + `bold` | `underline` + `bold` |
+| `ui.overlay.disabled` | パレットの実行できない項目 | (iii) | `#c0c0c0` / `default` (11.5) | `ansi.250` / `default` (11.0) | `white` / `default` (16.6) | `none` |
+| `ui.input.placeholder` | 入力欄が空のときの案内 | (iii) | `#c0c0c0` / `default` (11.5) | `ansi.250` / `default` (11.0) | `white` / `default` (16.6) | `none` |
+| `ui.dialog.button` | 確認ダイアログのボタン | (ii) | `default` / `default` | `default` / `default` | `default` / `default` | `none` |
+| `ui.dialog.button.focused` | フォーカス中のボタン (`▶` 付き) | (ii) | `reverse` + `bold` | `reverse` + `bold` | `reverse` + `bold` | `reverse` + `bold` |
+| `ui.search_bar.toggle_on` | 検索バーの ON のトグル | (ii) | `reverse` | `reverse` | `reverse` | `reverse` |
+| `ui.control_char` | 制御文字・不正バイトの可視記号 | (i) | `#000000` / `#e0a8ff` (11.2・11.2) | `ansi.16` / `ansi.183` (11.4・11.4) | `black` / `white` (16.6・16.6) | `reverse` |
+| `ui.whitespace` | 全角スペース・タブの可視化の記号 | (iii) | `#c0c0c0` / `default` (11.5) | `ansi.250` / `default` (11.0) | `white` / `default` (16.6) | `bold` |
+
+#### 8.7.2 high-contrast-light のロール表
+
+| ロール | 用途 | 形 | truecolor (fg / bg) | 256 (fg / bg) | 16 (fg / bg) | mono |
+|---|---|---|---|---|---|---|
+| `ui.text` | 本文と入力欄の文字。このテーマは背景を塗る (07 §8.6 の `paints`)。ほかのロールの `default` は本文の色 | (i) | `#000000` / `#ffffff` (21.0) | `ansi.16` / `ansi.231` (21.0) | `black` / `bright_white` (21.0) | `none` |
+| `ui.cursor_line` | 現在行の強調。高コントラストのテーマでは付けない (OQ-221 の 3) | (ii) | `none` | `none` | `none` | `none` |
+| `ui.line_number` | ガターの行番号 | (iii) | `#404040` / `default` (10.3) | `ansi.238` / `default` (9.7) | `black` / `default` (21.0) | `none` |
+| `ui.line_number.active` | 現在行の行番号 | (ii) | `bold` | `bold` | `underline` | `bold` |
+| `ui.eof_marker` | 文書末尾より後の行の `~` | (iii) | `#404040` / `default` (10.3) | `ansi.238` / `default` (9.7) | `black` / `default` (21.0) | `none` |
+| `ui.scroll_marker` | 横スクロールの続きの印 `‹` / `›` | (iii) | `#404040` / `default` + `bold` (10.3) | `ansi.238` / `default` + `bold` (9.7) | `black` / `default` (21.0) | `bold` |
+| `ui.selection` | 選択範囲 (編集面・入力欄) | (i) | `#ffffff` / `#0a3d91` (10.0・10.0) | `ansi.231` / `ansi.19` (12.9・12.9) | `bright_white` / `blue` (9.3・9.3) | `reverse` |
+| `ui.search.match` | 検索の一致 | (i) | `#ffffff` / `#005f00` + `underline` (7.9・7.9) | `ansi.231` / `ansi.22` + `underline` (7.9・7.9) | `bright_white` / `magenta` + `underline` (4.6・4.6) | `underline` |
+| `ui.search.current` | 現在の一致 | (i) | `#ffffff` / `#000000` + `underline` + `bold` (21.0・21.0) | `ansi.231` / `ansi.16` + `underline` + `bold` (21.0・21.0) | `bright_white` / `black` + `underline` + `bold` (21.0・21.0) | `reverse` + `underline` |
+| `ui.status_bar` | ステータスバー | (i) | `#ffffff` / `#000000` (21.0・21.0) | `ansi.231` / `ansi.16` (21.0・21.0) | `bright_white` / `black` (21.0・21.0) | `reverse` |
+| `ui.status_bar.chord` | ステータスバーのチョード保留。`ui.status_bar` に重ねる | (ii) | `bold` | `bold` | `bold` | `bold` |
+| `ui.message.info` | 情報メッセージ (先頭に `ℹ`) | (ii) | `default` / `default` | `default` / `default` | `default` / `default` | `none` |
+| `ui.message.warning` | 警告メッセージ (先頭に `⚠`) | (i) | `#ffffff` / `#6b4400` + `bold` (8.5・8.5) | `ansi.231` / `ansi.237` + `bold` (11.3・11.3) | `bright_white` / `black` + `bold` (21.0・21.0) | `bold` |
+| `ui.message.error` | エラーメッセージ (先頭に `✖`)、正規表現のエラー | (i) | `#ffffff` / `#a00000` + `bold` (8.4・8.4) | `ansi.231` / `ansi.124` + `bold` (7.4・7.4) | `bright_white` / `red` + `bold` (5.8・5.8) | `bold` + `reverse` |
+| `ui.hint_bar` | ヒントバーの説明の語 | (ii) | `default` / `default` | `default` / `default` | `default` / `default` | `none` |
+| `ui.hint_bar.key` | ヒントバーのキー表記 | (i) | `#ffffff` / `#005a5a` (8.0・8.0) | `ansi.231` / `ansi.23` (7.4・7.4) | `bright_white` / `blue` (9.3・9.3) | `reverse` |
+| `ui.overlay` | オーバーレイの枠と文字 | (ii) | `default` / `default` | `default` / `default` | `default` / `default` | `none` |
+| `ui.overlay.selected` | 一覧の選択中の行 (行頭に `▶`) | (i) | `#ffffff` / `#0a3d91` (10.0・10.0) | `ansi.231` / `ansi.19` (12.9・12.9) | `bright_white` / `blue` (9.3・9.3) | `reverse` |
+| `ui.overlay.match` | パレットの一致箇所 | (ii) | `underline` + `bold` | `underline` + `bold` | `underline` | `underline` + `bold` |
+| `ui.overlay.disabled` | パレットの実行できない項目 | (iii) | `#404040` / `default` (10.3) | `ansi.238` / `default` (9.7) | `black` / `default` (21.0) | `none` |
+| `ui.input.placeholder` | 入力欄が空のときの案内 | (iii) | `#404040` / `default` (10.3) | `ansi.238` / `default` (9.7) | `black` / `default` (21.0) | `none` |
+| `ui.dialog.button` | 確認ダイアログのボタン | (ii) | `default` / `default` | `default` / `default` | `default` / `default` | `none` |
+| `ui.dialog.button.focused` | フォーカス中のボタン (`▶` 付き) | (ii) | `reverse` + `bold` | `reverse` + `bold` | `reverse` | `reverse` + `bold` |
+| `ui.search_bar.toggle_on` | 検索バーの ON のトグル | (ii) | `reverse` | `reverse` | `reverse` | `reverse` |
+| `ui.control_char` | 制御文字・不正バイトの可視記号 | (i) | `#ffffff` / `#6a1b9a` (9.3・9.3) | `ansi.231` / `ansi.54` (11.4・11.4) | `bright_white` / `magenta` (4.6・4.6) | `reverse` |
+| `ui.whitespace` | 全角スペース・タブの可視化の記号 | (iii) | `#404040` / `default` (10.3) | `ansi.238` / `default` (9.7) | `black` / `default` (21.0) | `bold` |
 
 ---
 
@@ -1496,7 +1588,7 @@ Stage 3 (WASM、§13.1) に移行した場合は `declares.*` を能力ベース
 - 文言はすべて **MessageKey** 経由。コードに英語文字列を直接書かない (lint で検出、09)。
 - **v0.1 の UI 文言は日本語 (`ja`) のみ** (OQ-21、確定 (ユーザー回答))。言語ファイル `locales/ja.toml` をソースツリーに置き、`include_str!` で埋め込む (実行時のファイル読込なし)。**MessageKey による外部化は v0.1 から行う** (コードに文言を直接書かない) ので、後の版で言語を足すときにコードを変えずに済む。キー集合の正は「コードの MessageKey 一覧」で、`ja` はそれと過不足なく一致させる (§17.3)。
 - **言語ファイルに入れる文言** (その版に存在するもの): コマンドの名前と説明 (`cmd.*`)、エラー・警告・情報のメッセージ (`msg.*` の `text` と `hint`、`info.*`)、ヒントバー (`hint.*`)、ステータスバー (`status.*`)、ダイアログ・ラベル (`ui.*`)。設定項目の説明 (`config.*`) とヘルプ画面 (`help.*` の見出しと説明) は、それを画面に出す版 (v0.2 以降) で加える。**言語ファイルに入れないもの**: 識別子 (CommandId、CLI オプション名、設定キー名、テーマのロール名、MessageKey 自体)、ログ (英語のみ)、パレットの照合用の英語の title (定数表、§11.4)、`--help` / `--version` の出力、パニック時・起動前のメッセージと、端末を復元した後に stderr へ出す文言。最後の 3 つは **v0.1 は日本語の行だけ** を出し、**v0.2 (英語 UI と同時) から英語 (ASCII) の行と日本語の行を併記する** (確定 (ユーザー回答)、04 §14.4 / §15.2、OQ-67、01 §4.6)。日本語の行はコンソールなら `WriteConsoleW` (コードページに依らない)、リダイレクト先なら UTF-8 で書く (リダイレクト先を出力コードページ 932 で解釈する環境では化ける。v0.1 の既知の制約で、v0.2 の英語の行はコードページやリダイレクト先によらず読める)。これらも MessageKey (`stderr.*` / `panic.*` / `cli.*`) で識別し、eve-host / bin の定数表に置く (パニックの経路で言語ファイルを引かないため)。目録は 04 §15.2。core が出す stderr の行 (終了時の `Effect::Quit.stderr`) も core は文言を解決せず、キーと引数 (`StderrLine`) で eve-host に渡し、eve-host が定数表から解決する (02 §6.3)。v0.2 の英日併記も eve-host が 1 つの `StderrLine` から英語の行と日本語の行を引いて作る。
-- **v0.2** (確定 (ユーザー回答)、OQ-21。**`locales/en.toml` は M8 で同梱済み**: キー集合・プレースホルダ・`[X]` のアクセラレータ・`〔 〕` の有無が `ja` と一致し、`en` にかな・漢字が無いことを `cargo xtask i18n` が検査する): 英語 UI (`en`。`locales/en.toml` を `ja` と同じく `include_str!` で埋め込む)、言語の選択 (`--locale` > `ui.locale` > 環境変数 `EVE_LANG` > OS ロケール (05 §6.1) > 既定 `ja`。**M8 の 2 本目で実装済み**: 選択は `eve_config::select_locale`。`auto`・空の値は未指定として飛ばし、`--locale` と `EVE_LANG` が同梱の言語に当たらなければログに警告して次の段へ進む。OS ロケールの候補が当たらないときは黙って次の段へ進む。言語は起動時に 1 回だけ決める)、言語の切替、言語間のキー集合の差分の CI 検査 (§17.3)、設定項目の説明 (`config.*`)、起動前・パニック時の英語 (ASCII) の行の併記 (OQ-67)。**v0.4 (確定 (ユーザー回答、2026-11-11)、OQ-21)**: ユーザー層 `locales/<lang>.toml` による上書き・追加言語 (重ね方・実行時の検査・上書きできない名前空間の細部は、v0.4 の M26 の仕様で決める)。同梱の言語ファイルとユーザーの言語ファイルは同じ書式 (§17.2) なので、v0.1 で書式を確定する。v0.1 は `ui.locale`・`--locale`・`EVE_LANG` を持たず、`EVE_LANG` を設定しても読まなかった (`ui.locale` を書くと「このバージョンでは未対応」の情報診断)。
+- **v0.2** (確定 (ユーザー回答)、OQ-21。**`locales/en.toml` は M8 で同梱済み**: キー集合・プレースホルダ・`[X]` のアクセラレータ・`〔 〕` の有無が `ja` と一致し、`en` にかな・漢字が無いことを `cargo xtask i18n` が検査する): 英語 UI (`en`。`locales/en.toml` を `ja` と同じく `include_str!` で埋め込む)、言語の選択 (`--locale` > `ui.locale` > 環境変数 `EVE_LANG` > OS ロケール (05 §6.1) > 既定 `ja`。**M8 の 2 本目で実装済み**: 選択は `eve_config::select_locale`。`auto`・空の値は未指定として飛ばし、`--locale` と `EVE_LANG` が同梱の言語に当たらなければログに警告して次の段へ進む。OS ロケールの候補が当たらないときは黙って次の段へ進む。言語は起動時に 1 回だけ決める)、言語の切替、言語間のキー集合の差分の CI 検査 (§17.3)、設定項目の説明 (`config.*`)、起動前・パニック時の英語 (ASCII) の行の併記 (OQ-67)。**v0.4 (確定 (ユーザー回答、2026-11-11)、OQ-21)**: ユーザー層 `locales/<lang>.toml` による上書き・追加言語 (重ね方・実行時の検査・上書きできない名前空間などの細目は §17.4。OQ-220 (確定 (ユーザー回答、2026-11-14)。推す案のとおり) で決めた)。同梱の言語ファイルとユーザーの言語ファイルは同じ書式 (§17.2) なので、v0.1 で書式を確定する。v0.1 は `ui.locale`・`--locale`・`EVE_LANG` を持たず、`EVE_LANG` を設定しても読まなかった (`ui.locale` を書くと「このバージョンでは未対応」の情報診断)。
 - フォールバック: `ja` にキーがなければ **キー名そのもの** を表示する (空白や例外にしない)。同梱の `ja` とコードの MessageKey 一覧の差分ゼロを CI で保証するので (09 §11)、この経路は開発中のビルドのためにある。開発ビルドでは欠落キーを警告ログ。
 - **サイズと起動時間**: 同梱分は `ja` で約 50 KB (TOML 原文。v0.1 の文言の規模から見込み) で、NFR-205 (8 MB) への影響は小さい。起動時のデシリアライズが NFR-101 の起動の予算 (プロセス内 8 ms) に入るかを BM-101a で確かめる (09 §5)。目安は 1 ms 以下。超えるならビルド時に TOML を静的な表 (キー → 文字列の配列) に変換して埋め込む方式に切り替える (書式は変えない)。
 
@@ -1562,7 +1654,7 @@ TOML では同じキーを文字列とテーブルの両方にはできない (`
 
 上の `ui.*` の目録 (v0.1 で出る文言とその Frame の欄) の正本は 04 §15.1 / §15.2 で、本表はキー空間の規則だけを決める。オーバーレイ・クロームの文言はすべて core が解決して `CellText` で Frame に入れ、frontend は MessageKey を解決しない (02 §8.2)。確認ダイアログ (`ui.confirm.<name>`) の `<name>` は 04 §15.2 の目録と同じで、保存の確認は `ui.confirm.save.<name>` (`ui.confirm.save.overwrite` (名前を付けて保存の保存先に既にファイルがある。既定は「別の名前を入力」)、`ui.confirm.save.atomic_unsupported` (既定は「別名で保存」)、`ui.confirm.save.unmappable_replace` (表現不能文字の置換の一覧。一覧の行は `ui.confirm.save.unmappable_replace.item`、省略の行は `ui.confirm.save.unmappable_replace.more`) 等)、読込の確認は `ui.confirm.open.<name>` (`ui.confirm.open.huge` / `ui.confirm.open.invalid_bytes` / `ui.confirm.open.binary` / `ui.confirm.open.utf32`)、終了・置き換えの確認は `ui.confirm.unsaved` / `ui.confirm.unsaved_replace` / `ui.confirm.unsaved_reopen` / `ui.confirm.quit_saving` の形にする。読込の途中の失敗は v0.1 では確認ではなくメッセージ (`msg.open.read_failed`) で、確認ダイアログは v0.4 以降の予約。読込中の状態の文言は読み取り専用の理由 (`ui.read_only_reason.*`) と分けて `ui.load_state.loading` に置く (04 §15.2)。
 
-プレースホルダは `{name}`、エスケープは `{{`。型は文字列・整数・パス (パスの表示用の短縮 `~/…` は core が Frame 等を作るときの変換関数 1 つに一本化する。host や frontend は短縮しない。02 §4.4)。引数の順序が言語で変わるため **位置引数は使わない**。引数の名前の目録は 04 §15.2 (`{path}` / `{count}` / `{kana}` / `{compat}` / `{guess}` / `{eol}` 等)。`{eol}` は `LF` / `CRLF` / `CR` で翻訳しない。
+プレースホルダは `{name}`、エスケープは `{{` (`{` を出す) と `}}` (`}` を出す)。対応しない `{` / `}` は書かない (同梱の言語ファイルは CI、ユーザーの言語ファイルは §17.4 の検査 6 で拒む)。04 §15.1 / §15.2 の表の `ja` 列は画面に出る形 (`text` と `hint` を ` / ` で並べ、エスケープを解いた形) で、言語ファイルに書く形とは違う。型は文字列・整数・パス (パスの表示用の短縮 `~/…` は core が Frame 等を作るときの変換関数 1 つに一本化する。host や frontend は短縮しない。02 §4.4)。引数の順序が言語で変わるため **位置引数は使わない**。引数の名前の目録は 04 §15.2 (`{path}` / `{count}` / `{kana}` / `{compat}` / `{guess}` / `{eol}` 等)。`{eol}` は `LF` / `CRLF` / `CR` で翻訳しない。
 
 **キーの表記は文言に直書きしない**。`{key:<command_id>}` と書き、表示時に core が **解決済みキーマップ** からそのコマンドの第一割当を引いて表示表記 (04 §7.8) に置き換える。キーマップの変更 (v0.2 の `keymap.toml`) や主修飾 `mod` の解決 (TUI は `Ctrl`) に追従させるため。割当が無い (`keys.preset = "none"` 等) ときは「コマンドパレットから実行」に当たる文言 (`ui.key.via_palette`) に置き換える。`{key:…}` の `command_id` がカタログ (§11.6) に無い場合は CI でエラー (09 §11)。
 
@@ -1573,6 +1665,90 @@ TOML では同じキーを文字列とテーブルの両方にはできない (`
 - 日本語の文言は全角を含むのでセル幅が文字数と一致しない (「文字コード」は 5 文字で 10 セル)。ステータスバー・ヒントバーの項目は意味的モデルで渡し、frontend が表示幅 (全角 = 2 セル、03 §14) で切り詰め・省略する ([02 §8.1](02-architecture.md#81-方針-adr-0008)、04 §3 / §8.7)。v0.1 の画面文言は 04 §15.1 に置く。
 - 日付・数値の書式: 最小限 (千区切りなし、ISO 8601)。ロケール依存の数値書式は導入しない。
 - 文言の品質ゲート (v0.1 から): 同梱の `ja` のキー集合 (複数形の接尾辞を除いた基底キー) とコードの MessageKey 一覧 (言語ファイルに入れない `stderr.*` / `panic.*` / `cli.*` を除く) の差分を CI で検出し、**欠落・余剰ともエラー**。除いた `stderr.*` / `panic.*` / `cli.*` は、コードの MessageKey 一覧 (core が `StderrLine` で使うキーを含む) と eve-host / bin の定数表の差分を同じ CI で検査する (欠落はエラー。v0.2 からは英語と日本語の両方の文言があることも)。`hint.*` の長さ (全角 4 文字 / 半角 8 文字) と、`{key:…}` の CommandId がカタログ (§11.6) にあること、プレースホルダ名がコードの引数名と一致することも CI で検査する (09 §11)。`ja` の語彙・表記の品質は人手のレビュー (11)。言語間のキー集合の差分の検査は、`en` を同梱する v0.2 で加える (`ja` と `en` のそれぞれがコードの MessageKey 一覧と一致し、言語間の差分もゼロ)。
+
+### 17.4 ユーザーの言語ファイル (v0.4 の M26)
+
+利用者が `<config_dir>/locales/<lang>.toml` に置いた文言で、同梱の文言を上書きし、同梱していない言語を足す (01 NFR-603 AC-9)。本節は [OQ-220](10-decisions.md#oq-220-ユーザーの言語ファイルの細目-v04-の-m26) (確定 (ユーザー回答、2026-11-14)。推す案のとおり) で決めた (番号は OQ-220 の論点の番号)。
+
+**信頼の範囲**: 言語ファイルの **意味** (文言が何を言うか) は、`keymap.toml` と同じく、利用者が信頼して置くものとして扱う (誤った・誤解させる訳を検査で見分けることはしない。入手元を確かめるよう README で案内する)。**構造** (端末の制御・資源の量・パニック・ほかのキーとの取り違え) は信頼しない: 下の検査と上限で、どんなファイルでも端末を乱さず、メモリと時間を際限なく使わず、パニックせず、選択肢の押すキーと表示が食い違わないようにする (NFR-305 / NFR-503)。
+
+**置き場所と名前** (OQ-220 の 2):
+
+- `<config_dir>/locales/<lang>.toml` (§3.1 / §3.2。`<config_dir>` は 05 §7.1 で、`EVE_CONFIG_DIR` に従う)。`<lang>` は言語の部分だけで、ISO 639 の 2〜3 字の英小文字 (`fr`・`ko`・`zh`)。
+- **候補の作り方**: bin が起動時に `locales/` を 1 回一覧し、名前が `^[a-z]{2,3}\.toml$` に **完全に一致する** 項目だけを候補にする (大文字小文字を区別しない FS でも、一覧で得た名前の綴りで照合する。`FR.toml`・`zh-TW.toml`・`pt_BR.toml` は候補にしない)。Windows のデバイス名 (`con` / `aux` / `prn` / `nul`) は除く。言語の選択の値 (`--locale`・`ui.locale`・`EVE_LANG`・OS ロケール) から **パスを組み立てない** (候補の集合から選ぶだけ)。地域付きの名前は、後の版で「地域付きを先に探す」を足せる。
+- 規則に合わない `*.toml` (大文字・地域付き・デバイス名など) には、ファイルごとに警告を 1 件出す (案 `msg.config.locale_bad_name`。`--check-config` にも出す)。読まない。
+- **開き方**: 選んだ言語のファイルだけを開き、開いた後のハンドルで通常のファイルであることを確かめる (ディレクトリ・デバイス・FIFO は読まずにファイル全体の問題にする)。Unix では FIFO で止まらないように `O_NONBLOCK` で開き、通常のファイルと確かめてから読む。読むのは最大 **1 MiB + 1 バイト** までで、1 MiB を超えたらファイル全体の問題にする (大きさは開く前の metadata ではなく、読んだ量で決める)。
+- 書式は同梱の言語ファイルと同じ (§17.2)。文字コードは UTF-8 (先頭の BOM は読み飛ばす。設定ファイルと同じ)。`[meta]` は文言ではない。`[meta] language` は任意で、書くならファイル名と同じ言語にする。違えば警告 (案 `msg.config.locale_language_mismatch`、04 §15.2) して、ファイル名の言語として読む。`[meta]` のほかのキーは読み飛ばす。
+- TOML の入れ子の深さは、使う TOML パーサの既定の上限のままにし、上限を外す機能 (無制限の入れ子を許す feature) を有効にしない。深い入れ子のファイルで止まらない・パニックしないことを L0 の試験で確かめる (09 §3.4)。
+- 1 つの文言だけを変えるファイル (`locales/ja.toml` に `[msg.save.failed]` の `text` だけ) も、全訳のファイルも同じ規則で読む。
+
+**言語の選択** (§17.1 の選択順の拡張。OQ-220 の 3):
+
+- 選択順は v0.2 のまま (`--locale` > `ui.locale` > `EVE_LANG` > OS ロケール (05 §6.1) > `ja`)。各段の値の言語の部分 (地域などを落とす。`fr-FR` → `fr`) が、同梱の言語 (`ja` / `en`) か、候補 (上) にある言語に当たれば、その言語を選ぶ。どちらにも当たれば同じ言語で、同梱の文言にユーザーの文言を重ねる (下の「重ね方」)。選択では中身を読まない。
+- **値の形**: 言語タグは `^[A-Za-z]{2,3}([-_][A-Za-z0-9]{1,8})*$` (2〜3 字の英字の言語と、地域などの後続) か `auto` (空の値は `auto` と同じ)。大文字小文字は区別しない。形に合わない `ui.locale` は設定の読込で `msg.config.invalid_value` にする。
+- **見つからないとき**: `--locale` と `EVE_LANG` の言語が同梱の言語にも候補にも無ければ、**警告の診断** (案 `msg.config.locale_not_found`。探した場所 `locales/` の絶対パスと、代わりに使う言語を示す) を出し、次の段へ進む (v0.3 までのログだけの警告を、画面 (メッセージ行と `config.show_diagnostics`) にも出す形に改める)。OS ロケールの段は v0.2 と同じく黙って次の段へ進む。
+- **`ui.locale` の照合**: `ui.locale` が `auto` でなければ、選択に使ったかどうか (`--locale` が先に当たったか) に依らず、同梱の言語と候補の集合に照らし、当たらなければ `msg.config.invalid_value` (`{allowed}` は `auto`・同梱の言語・候補の言語) で知らせる。
+- `--no-config` のときは `locales/` を見ず、同梱の言語だけで選ぶ (テーマファイルと同じ、§8.6)。
+- 実装: `eve_config::Locale` は閉じた列挙 (`Ja` / `En`) から、言語の名前と補う同梱の言語を持つ形にする。`select_locale` には候補の言語の集合を渡す (`locales/` を見るのは bin。eve-config は I/O をしない)。
+
+**重ね方** (OQ-220 の 1):
+
+- 選んだ言語 L の文言は、キーごとに次の順で引く。(1) `locales/L.toml` にあって下の検査に通った文言。(2) 補う言語の同梱の文言。補う言語は、L が同梱の言語ならその言語 (`ja` なら同梱の `ja`)、同梱していない言語 (追加言語) なら `en`。(3) どちらにも無ければキー名 (§17.1 のフォールバック。同梱の言語はコードの MessageKey 一覧と一致するので、開発中のビルドだけの経路)。
+- `msg.*` の `text` と `hint`、確認ダイアログの `.title` / `.message` / `.<choice>`、ステータスの `.long` / `.short` は別のキーとして重ねる (片方だけを変えてよい)。
+- 重ねた結果の文言の表は起動時に 1 回作り、実行中は変えない (下の「読む時期」)。core は選んだ言語の表を持ち (`Arc`。今の `Catalog::builtin` の `&'static` を替える)、Frame・メッセージ・ヘルプの文言をそこから引く。
+- **重ねた表を使わないもの**: (a) パレットの照合 (§11.4) は、重ねる前の同梱の `en` の title (定数表) と表示の title で行う (`cmd.<id>.title` を上書きしても、英語の title での照合は変わらない)。(b) 言語ファイル自身の診断の文言 (下の「警告の出し方」) は、補う言語の同梱の文言で出す。(c) 端末を復元した後に bin が stderr へ出す行 (`exit.rs`。定数表に無いキーを言語ファイルで解決する経路) は、同梱の表だけを使う (パニックと終了の経路にユーザーの文言を入れない)。
+
+**上書きできないキー** (OQ-220 の 4):
+
+- `stderr.*` / `panic.*` / `cli.*` は言語ファイルに入れない文言 (§17.1。eve-host / bin の定数表) で、ユーザーのファイルにも書けない。書くと警告 (案 `msg.config.locale_reserved`) して使わない。パニックの経路と端末を初期化する前 (`--help`・`--version`・設定を読む前の誤り) では言語ファイルを引かず、stderr の行は英語の行と日本語の行の組で UI の言語に依らない (OQ-67) ため。
+- 補う言語の同梱の言語ファイルに無いキー (綴りの誤り・新しい版のためのキー) は使わない。警告は案 `msg.config.locale_unknown_key` で、候補 (近い名前) は付けない (キーの数が多く、候補を探す計算を際限なく増やさないため)。複数形の接尾辞 (`.one` / `.other`) は、同梱の文言がその形で持つキーにだけ書ける (v0.4 の同梱には複数形のキーが無い)。
+- 平らにしたキー (§17.2。入れ子の表と `.` を含む引用符付きのキーは、同じ平らな名前になり得る) が重複したら、最初に現れた文言を使い、後のものは警告 (案 `msg.config.locale_duplicate_key`) して使わない。
+- それ以外の名前空間 (`cmd.*`・`msg.*`・`info.*`・`hint.*`・`status.*`・`ui.*`・`config.*`) はすべて上書きできる。`ext.<plugin_id>.*` はプラグインの版 (v1.X) で決める。
+
+**実行時の検査** (キーごと。OQ-220 の 5): 検査 1〜8 に通らない文言は使わず、補う言語の同梱の文言を出して警告する。検査 9 に通らない文言は、警告して **そのまま使う**。どの場合も起動は止めない。
+
+| # | 検査 | 通らないとき (診断は 04 §15.2) |
+|---|---|---|
+| 1 | 値が文字列 (表の葉) である | 使わない。`msg.config.type_mismatch_no_default` (期待する型は `ui.config.type.string`) |
+| 2 | 長さが **1,024 文字** (Unicode のスカラー値) 以下。根拠: v0.4 の同梱の文言の最大は `ui.confirm.read_only.invalid_bytes.message` の `en` で 246 文字 (`ja` は 154 文字)。その約 4 倍の切りのよい値で、全訳でも余裕があり、1 つの文言で画面の構築とメモリを膨らませない | 使わない。案 `msg.config.locale_too_long` |
+| 3 | 空でない: 表示幅 (03 §13.2) が 1 以上の、目に見える書記素を 1 つ以上含む (空白・書式文字だけの文言は空とみなす) | 使わない。案 `msg.config.locale_empty` |
+| 4 | 文字の種類: 次を含まない。C0 (タブ・改行を含む)・DEL・C1。双方向の書式文字 (U+202A〜U+202E・U+2066〜U+2069) と方向の印 (LRM U+200E・RLM U+200F・ALM U+061C。端末のタイトルの無害化 (eve-core `layout/frame.rs` の `title`) と同じ範囲)。Default_Ignorable_Code_Point (ただし ZWJ U+200D と ZWNJ U+200C は許す: 絵文字の ZWJ 列と、ペルシア語・インドの文字などの正しい綴りに要り、表示を偽装する働きが無いため)。U+2028 / U+2029。非文字 (U+FDD0〜U+FDEF と各面の U+xFFFE / U+xFFFF)。私用領域 (U+E000〜U+F8FF と第 15・16 面) | 使わない。案 `msg.config.locale_control_char` |
+| 5 | 1 つの書記素の中の結合文字 (Mn・Me) は **30 個** まで (Unicode の Stream-Safe Text Format の上限。セルの幅の計算と描画を際限なく重くしない) | 使わない。案 `msg.config.locale_control_char` (同じ診断で、理由の語が違う) |
+| 6 | **括弧の対応** (名前の比較の前に、解決の前に必ず行う): `{` と `}` が対応し、入れ子が無い (`{{` / `}}` はエスケープで数えない)。〔 〕 が対応し、入れ子が無い | 使わない。案 `msg.config.locale_placeholder` |
+| 7 | **プレースホルダ** (`{name}` と `{key:<command_id>}`): 名前の集合が同梱の文言と同じで、**各名前の出現数が同梱の文言の出現数以下** (多重集合で比べる。同じ名前を何度も書いて、差し込む文字列を増やせないようにする)。〔 〕 の有無が同梱の文言と同じ | 使わない。案 `msg.config.locale_placeholder` |
+| 8 | **`[X]` の並び** (英大文字 1 字の角括弧。確認ダイアログの選択肢のアクセラレータ、04 §15.2): 並びが同梱の文言と同じ。同梱の文言が `[X]` で始まるキー (選択肢の文言) では、ユーザーの文言も同じ `[X]` で始まる。全角の似た形 (`［` / `］` と、角括弧の中の全角の英字。`［Ｓ］`・`[Ｓ]` など) を含まない | 使わない。案 `msg.config.locale_accelerator` |
+| 9 | `hint.*` の表示幅が **8 セル** 以内 (全角 4 文字 / 半角 8 文字)。幅は eve-text の表示幅 (03 §13.2) で、曖昧幅は 1 で数える | **警告して、そのまま使う** (ヒントバーの圧縮と省略 (04 §8.8) で項目が落ちるだけで、安全上の問題は無い)。案 `msg.config.locale_hint_width` |
+
+- 比べる「同梱の文言」は補う言語の同梱の文言 (同梱の `ja` と `en` は、プレースホルダ・〔 〕・`[X]` が一致することを CI で検査しているので、どちらと比べても同じ)。
+- 検査の関数は eve-config に置き、`xtask i18n` (09 §6.2) もそれを使う (規則を 2 か所に持たない)。同梱の言語ファイルには、検査 2〜8 を同じ規則で課し、検査 9 は今のまま **エラー** にする。同梱の言語の間だけの規則 (`en` にかな・漢字を入れない、言語の間でキー集合が一致する) はユーザーのファイルに課さない。
+- 検査 4 は端末への注入と表示の偽装 (NFR-503) を防ぐ。Frame に載る文言が制御文字を含まないこと (04 §4.9 の最終の検査) の前に、言語ファイルを読む時点で拒んで場所を示す。右から左に書く言語 (アラビア語・ヘブライ語など) は、方向の印を使えず、端末も双方向の並べ替えをしない (NG11) ので、v0.4 では実用にならない (README に書く)。
+
+**ファイル全体が使えないとき** (OQ-220 の 6): 読めない (権限・I/O の誤り)・通常のファイルでない・UTF-8 でない・TOML の構文エラー・1 MiB を超える、のどれかなら、ファイル全体を使わない。言語の選択はやり直さず、選んだ言語のまま補う言語の同梱の文言で動く (追加言語では、すべての文言が `en` になる)。診断はファイルに 1 件で、重さはエラー (案 `msg.config.locale_syntax` / `msg.config.locale_too_large`)。起動は止めない (01 NFR-603 AC-9)。
+
+**警告の出し方** (OQ-220 の 7):
+
+- 設定の診断 (§4.3) と同じ経路。最初の Frame の後にメッセージ行へ `msg.config.problem` / `msg.config.problems` (`{file}` は `locales/<lang>.toml`、`{line}` は問題の文言を書いた行)、`config.show_diagnostics` の一覧 (行へ開ける)、ログ、`--check-config` (§18.3)。キーごとの問題は 1 件ずつで、重さは警告。ファイル全体の問題 (上) はエラーで、`--check-config` の終了コードは 3 (テーマファイルと同じ、§8.6)。
+- **件数の上限**: 1 つの言語ファイルの診断は、先頭の 100 件と「ほか N 件」の 1 件 (案 `msg.config.locale_more`) までにする (別の版のファイル・壊れたファイルで、一覧とログを際限なく増やさない)。
+- **診断の文言**: 言語ファイルの診断 (`msg.config.locale_*`・要約の `msg.config.problem(s)`) は、補う言語の **同梱の** 文言で出す (重ねた表を使わない。壊れた訳で診断そのものが読めなくなるのを防ぐ)。要約の hint は言語ファイルにも合う形に一般化する (04 §15.2 の案)。
+- **ファイル由来の文字列の無害化** (NFR-503。言語ファイルに限らず、設定ファイル・キーマップ・テーマファイルの診断にも効く。§4.3): 診断に埋める `{item}` (キーの名前)・`{value}` (書かれた値。`[meta] language` の値を含む)・`{reason}` (パーサの説明) は、制御文字・双方向の書式文字・方向の印を `<U+XXXX>` の表記に直し、64 文字で切る (超えたら末尾を `…`)。`--check-config` は標準出力へ出す行の全体を同じ関数で無害化する (Frame を通らないため。§18.3)。ログに書く行も同じ。
+
+**読む時期** (OQ-220 の 8):
+
+- 起動時に、選んだ言語のファイルだけを 1 回読む。設定と同じく、bin が端末の初期化の前に読む (02 §9.5 の手順 2。設定の読込の予算に入る)。
+- `config.reload` では読み直さず、言語も変えない (§17.1「言語は起動時に 1 回だけ決める」と同じ)。ただし、選んだ言語のファイルの大きさと更新日時 (無くなった・現れたを含む) を起動時と比べ、変わっていれば「言語ファイルの変更は、再起動すると反映されます」(案 `info.config.locale_restart`) を知らせる (中身は読まない)。`config.show_diagnostics` の一覧の言語ファイルの診断は、起動時のものを残す (§4.3 の「最後に読んだときの診断」)。
+- `--no-config` では読まない。`--check-config` は、選ばれる言語 (`--locale` を併せて渡せる) のユーザーの言語ファイルも検査し、出力の先頭に **言語の選択の結果** を 1 行出す (使う言語・選んだ段・ユーザーの言語ファイルの絶対パス (無ければ「なし」)・補う言語。案 `ui.config.locale_summary`)。翻訳者は `evoeditor --check-config --locale fr` で全件を確かめる。
+- `--list-commands` / `--dump-keymap` (§18.3) のタイトルは、画面と同じく重ねた表で出し、JSON の `locale` は選んだ言語の名前 (ユーザーの言語なら `fr` など)。`--no-config` では同梱の表だけを使う (`cargo xtask gen-reference` は `--no-config --locale ja` で呼ぶので、生成物はユーザーの言語ファイルに左右されない、09 §11.2)。診断は出さない (`--check-config` で見る)。
+- 起動時間: ファイルが無ければ、`locales/` を 1 回一覧するだけ。全訳のファイル (同梱と同じ大きさ。v0.4 の `ja` は約 60 KB) を読む起動の BM-101a の増分は 1 ms 以下を目安とする (参考値。判定の条件にしない、09 §5.2)。最悪の場合 (1 MiB のファイル・診断の上限の件数) の目安は 02 §9.5 の手順 2。
+
+**翻訳の元の入手と README** (OQ-220 の 9): CLI のオプションは足さない。利用者向けの README (`dist/README.md` / `dist/README.en.md`) に、次を書く。
+
+- 上書きは、変えるキーだけを書く (全文を写さない)。キーの名前は、その版のタグの `locales/ja.toml` / `locales/en.toml` (公開リポジトリ) で調べる。
+- 新しい言語は、補う言語の `en.toml` を写して始める (書いていないキーは英語で出る)。
+- 版を上げたら `evoeditor --check-config` を実行する (新しい版で消えた・増えたキー、検査に通らない文言が分かる)。
+- 言語ファイルは入手元を確かめてから置く (文言の意味は検査しない。上の「信頼の範囲」)。
+- 右から左に書く言語は、v0.4 では実用にならない。
+- `--no-config` (`-N`) で問題を切り分けるときは、`--locale en` などを併せて使う (`-N` では言語ファイルを読まないので、追加言語を選んでいた画面は別の言語になる)。
+- 上書きできないキー (`stderr.*` / `panic.*` / `cli.*`) と、検査の一覧 (上の表)。
 
 ---
 
@@ -1616,18 +1792,18 @@ v0.1 の公開オプションは **5 個** (ADR-0028: 引数解析と `--help` �
 | `--line-ending <lf\|crlf>` | — | 新規ファイルの改行コード (`--set file.default_line_ending=` で代替可) | v0.5 |
 | `--config <file>` | `-c` | ユーザー層の `config.toml` を差し替える (複数可、順にマージ)。**v0.2 の M9c で実装した** (`keymap.toml` は設定ディレクトリのものを読む。読めない・構文エラーのファイルは重ねない) | v0.2 |
 | `--config-dir <dir>` | — | `EVE_CONFIG_DIR` と同じ (環境変数で代替可) | v0.5 |
-| `--no-config` | `-N` | ユーザー層・システム層・ワークスペース層を読まない (既定値のみ。トラブルシュート用。v0.1 は `EVE_CONFIG_DIR` を空のディレクトリに向けて代える)。**v0.2 の M9c で実装した** (v0.2 はユーザー層の `config.toml` と `keymap.toml` を読まない) | v0.2 |
+| `--no-config` | `-N` | ユーザー層・システム層・ワークスペース層を読まない (既定値のみ。トラブルシュート用。v0.1 は `EVE_CONFIG_DIR` を空のディレクトリに向けて代える)。**v0.2 の M9c で実装した** (v0.2 はユーザー層の `config.toml` と `keymap.toml` を読まない。テーマファイルと、v0.4 のユーザーの言語ファイル (§17.4) も読まない) | v0.2 |
 | `--no-workspace-config` | — | ワークスペース層のみ読まない | v0.5 |
 | `--set <key>=<value>` | `-s` | コマンドライン層で 1 項目上書き (TOML 値として解釈。`--set view.wrap=soft`)。**v0.2 の M9c で実装した**: 値を TOML の値として読めなければ文字列として読む (`soft` と書ける)。`=` が無い・キーが空は使い方の誤り (終了コード 2)。値の誤りは設定ファイルと同じ診断 (名前は `--set`)。複数可、後のものが優先 | v0.2 |
 | `--theme <name>` | — | `--set theme.name=` の短縮 | v0.5 |
 | `--keymap <preset>` | — | `--set keys.preset=` の短縮 | v0.5 |
-| `--locale <lang>` | — | UI 言語 (§17.1 の選択順の最上位)。値は `ja` / `en` (地域付きも可)。同梱していない言語名はログに警告を書いて次の段へ進む (使い方の誤りにはしない)。値が無いときは使い方の誤り (終了コード 2)。M8 で実装した | v0.2 |
+| `--locale <lang>` | — | UI 言語 (§17.1 の選択順の最上位)。値は `ja` / `en` (地域付きも可)。v0.4 から `locales/<lang>.toml` がある言語も (§17.4)。同梱していない言語名はログに警告を書いて次の段へ進む (使い方の誤りにはしない)。v0.4 からは、ユーザーの言語ファイルも無い言語名を警告の診断 (案 `msg.config.locale_not_found`。探した場所を示す) にして画面にも出す (§17.4)。値が無いときは使い方の誤り (終了コード 2)。M8 で実装した | v0.2 |
 | `--workspace <dir>` | `-w` | ワークスペースルートを明示 | v0.5 |
 | `--trust` | — | このワークスペースを信頼して起動 (スクリプト用。警告表示) | v0.5 |
 | `--no-session` | — | セッション復元・保存をしない | v0.5 |
 | `--wait` | — | **受理して無視** (TUI は常にブロックする)。`$EDITOR="evoeditor --wait"` と書けるようにするための互換オプション | v0.1 (受理のみ) |
 | `--stdout` | — | 終了時に (最後にアクティブだった) バッファ内容を標準出力へ書き、ファイルには保存しない。`cmd \| evoeditor - --stdout \| next` のパイプフィルタ用 (Could、OQ-99) | v0.5 |
-| `--check-config` | — | 設定を読み診断を出力して終了 (端末初期化なし)。**v0.2 の M9c で実装した**: 診断ごとに `ファイル:行:桁: 本文` と対処の行を標準出力へ (選択中の言語。「未対応」の情報診断も出す)、最後に件数の 1 行 (英日)。エラーがあれば終了コード 3、警告だけなら 0。キーマップは書式だけを確かめる (コマンド名などの照合は起動時の診断) | v0.2 |
+| `--check-config` | — | 設定を読み診断を出力して終了 (端末初期化なし)。**v0.2 の M9c で実装した**: 診断ごとに `ファイル:行:桁: 本文` と対処の行を標準出力へ (選択中の言語。「未対応」の情報診断も出す)、最後に件数の 1 行 (英日)。エラーがあれば終了コード 3、警告だけなら 0。キーマップは書式だけを確かめる (コマンド名などの照合は起動時の診断)。v0.4 から、選ばれる言語のユーザーの言語ファイル (`locales/<lang>.toml`) も検査し (§17.4。`--locale` を併せて渡せる)、出力の先頭に言語の選択の結果を 1 行出す (使う言語・ユーザーの言語ファイルの絶対パス・補う言語)。出力する行の全体を §4.3 の無害化の関数に通す | v0.2 |
 | `--dump-config [--defaults] [--json]` | — | 解決済み設定 (または既定値) を出力。**v0.2 の M9c で実装した**: TOML はセクションごとの公開キーの全項目で、そのまま設定ファイルとして読める。`--json` は平らなキーの表。`--defaults` / `--json` は `--dump-config` の修飾で、単独では使い方の誤り。`--annotated` (注釈付き雛形) は v0.1 は同梱の `config.example.toml`、生成は v0.5 (§4.1) | v0.2 |
 | `--dump-schema` | — | JSON Schema (Could) | v0.5 |
 | `--list-commands [--json]` / `--dump-keymap [--json]` | — | §11.5 / §11.6 (CI 突合用)。**v0.3 の M18 で実装した** (案): 端末を始めずに標準出力へ出し、終了コード 0。`--list-commands` は組込みのコマンドを CommandId の順に、`--dump-keymap` は解決後のキーマップ (組込みの既定に `keymap.toml` のユーザー層を重ねたもの。`--no-config` なら既定だけ。診断は出さず、`--check-config` で見る) を §7.1 のコンテキストの順 (同じコンテキストの中は層の優先順・登録の順) に出す。タイトルは §17.1 の順で選んだ UI の言語 (`--locale` が最上位)。`--json` が無いときは、`--list-commands` は 1 行 1 コマンド (`ID` タブ タイトル タブ 既定キー)、`--dump-keymap` は `keymap.toml` の書式 (§7.5。割当ごとの行末の注釈にタイトルと層)。`--json` の形 (`format` = 1。項目を足すときは版を変えずに足し、意味を変えるときに版を上げる): `--list-commands` は `{ format, locale, commands: [ { id, title, description, kind, args: [ { name, type, required } ], when, permission, hidden, keys: [ { context, key, label, enhanced } ] } ] }`、`--dump-keymap` は `{ format, locale, bindings: [ { context, key, label, command, title, when, layer, enhanced } ] }`。`key` は設定の表記 (§7.2。小文字、`mod` は `ctrl` に解決)、`label` は画面の表記 (04 §7.8 の `key_notation`)、`type` は §11.2 の表記、`permission` は §11.6 の perm 列の表記 (`-` / `read` / `propose` / `ui`)、`when` の空文字列は常に真、`keys` は組込みの既定キーマップの割当。`--json` は `--dump-config` / `--list-commands` / `--dump-keymap` の修飾 (単独では使い方の誤り)。`--help` には出さない | v0.3 (隠し。v0.1 の予定から送った) |
