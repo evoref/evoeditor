@@ -10,6 +10,9 @@
 //!   **BM-103b-search-1m-regex** (`--only 103r`)。
 //! - **BM-108**: 100 MB の文書の中ほどにだけある語を検索欄に打って `Enter` し、読取完了 → 一致の行が編集面に出た最初の
 //!   Frame の `write` まで (`--only 108`。区間の記録 `search.first_match`)。
+//! - **BM-104v-100m / BM-104v-100m-sjis**: 100 MB (UTF-8 / `Shift_JIS`) を `Ctrl+O` で開き、`Enter` の読取完了 → 文書の先頭部分を
+//!   含む最初の Frame の `write` まで (`--only 104v`。区間の記録 `open.content`。先行表示の先頭だった回は印 `open.partial`
+//!   が付くので、その割合も出す。01 FR-122 AC-2、03 §9.2.1)。
 //!
 //! どのビルドでも測る、端末込みの参考値 (`ConPTY` を挟むので実際の Windows Terminal より遅めに出る。判定には使わない):
 //! - **BM-101c / 102c**: spawn → 最初の画面 (ステータスバーの `無題-1` / ファイルの先頭) が端末に届くまで。
@@ -127,7 +130,11 @@ impl Term {
                     marker_flag.store(true, Ordering::Release);
                 }
                 saving.store(all.contains("[+]"), Ordering::Release);
-                loading.store(all.contains("読込中"), Ordering::Release);
+                // 先行表示の間は `[先頭のみ 45%]` (04 §8.7 の status.partial)
+                loading.store(
+                    all.contains("読込中") || all.contains("先頭のみ"),
+                    Ordering::Release,
+                );
             }
         };
         let pty = pty::spawn(cmd, COLS, ROWS, 16384, on_chunk);
@@ -291,7 +298,20 @@ fn ms(d: Duration) -> f64 {
     d.as_secs_f64() * 1000.0
 }
 
-fn report(id: &str, label: &str, mut v: Vec<Duration>, json: bool, quick: bool) {
+fn report(id: &str, label: &str, v: Vec<Duration>, json: bool, quick: bool) {
+    report_with(id, label, v, json, quick, "", "");
+}
+
+/// `report` に、JSON の行へ足す項目 (`extra_json`。`,"k":v` の形) と文の行へ足す説明 (`extra_text`) を添えたもの。
+fn report_with(
+    id: &str,
+    label: &str,
+    mut v: Vec<Duration>,
+    json: bool,
+    quick: bool,
+    extra_json: &str,
+    extra_text: &str,
+) {
     v.sort();
     let (p50, p99, p999, max) = (
         percentile(&v, 0.5),
@@ -301,7 +321,7 @@ fn report(id: &str, label: &str, mut v: Vec<Duration>, json: bool, quick: bool) 
     );
     if json {
         println!(
-            "{{\"id\":\"{id}\",\"n\":{},\"p50_ms\":{:.2},\"p99_ms\":{:.2},\"p999_ms\":{:.2},\"max_ms\":{:.2},\"quick\":{quick}}}",
+            "{{\"id\":\"{id}\",\"n\":{},\"p50_ms\":{:.2},\"p99_ms\":{:.2},\"p999_ms\":{:.2},\"max_ms\":{:.2},\"quick\":{quick}{extra_json}}}",
             v.len(),
             ms(p50),
             ms(p99),
@@ -310,7 +330,7 @@ fn report(id: &str, label: &str, mut v: Vec<Duration>, json: bool, quick: bool) 
         );
     } else {
         println!(
-            "{id} {label}: n={} p50 {:.2} ms / p99 {:.2} ms / p99.9 {:.2} ms / max {:.2} ms",
+            "{id} {label}: n={} p50 {:.2} ms / p99 {:.2} ms / p99.9 {:.2} ms / max {:.2} ms{extra_text}",
             v.len(),
             ms(p50),
             ms(p99),
@@ -639,6 +659,112 @@ fn open_progress(dir: &Path, a: &Path, b: &Path, runs: usize, warmup: usize) -> 
         .skip(warmup)
         .map(|s| ns_dur(s.end_ns - s.start_ns))
         .collect()
+}
+
+/// `make_big` と同じ行を `Shift_JIS` で書いた `mb` MB 以上のファイル (BM-104v-100m-sjis)。同じ名前で作り直さない。
+fn make_big_sjis(dir: &Path, name: &str, mb: usize) -> PathBuf {
+    let path = dir.join(name);
+    if !path.exists() {
+        let line = "0123456789 the quick brown fox 日本語の行です。0123456789\n";
+        let (enc, _, unmappable) = encoding_rs::SHIFT_JIS.encode(line);
+        assert!(!unmappable, "Shift_JIS で書けない文字");
+        let big = enc.repeat(mb * 1024 * 1024 / enc.len() + 1);
+        std::fs::write(&path, &big).expect("大きいファイル");
+    }
+    path
+}
+
+/// 1 回の「開く → 先頭の表示」(BM-104v) の結果: 区間と、先行表示の先頭だったか (`open.partial` の印)。
+struct HeadRun {
+    dur: Duration,
+    partial: bool,
+}
+
+/// BM-104v (01 FR-122 AC-2、09 §5.2、03 §9.2.1 の「計測」): `Ctrl+O` → パス → `Enter` の、`Enter` の読取完了 → 文書の先頭部分を
+/// 含む最初の Frame の `write` (先行表示の先頭。先に読み終えたら全文の最初の Frame)。区間の記録 `open.content` で測り、
+/// 同じ区間に印 `open.partial` があれば先行表示の回と数える。2 つのファイルを交互に開き、読み終えるまで待ってから閉じる
+/// (BM-104p と同じ。開いている文書を開き直すと切り替えになり読み込まない)。
+fn open_head(dir: &Path, a: &Path, b: &Path, runs: usize, warmup: usize) -> Vec<HeadRun> {
+    const VK_ENTER: u64 = 0x0D;
+    let trace = dir.join("open-head.jsonl");
+    let (mut t, _) = Term::start(&[], "", Some(&trace));
+    t.wait("最初の画面", || t.ready.load(Ordering::Acquire));
+    for i in 0..runs + warmup {
+        let p = if i % 2 == 0 { a } else { b };
+        t.send(b"\x0f"); // Ctrl+O
+        thread::sleep(Duration::from_millis(80));
+        t.send(p.to_str().unwrap().as_bytes());
+        thread::sleep(Duration::from_millis(60));
+        t.send(b"\r");
+        // 読込が始まって (進捗か先頭のみの表示) 終わるまで待つ
+        let w = Instant::now();
+        while !t.loading.load(Ordering::Acquire) && w.elapsed() < Duration::from_millis(400) {
+            thread::sleep(Duration::from_millis(2));
+        }
+        let w = Instant::now();
+        while t.loading.load(Ordering::Acquire) && w.elapsed() < WAIT {
+            thread::sleep(Duration::from_millis(5));
+        }
+        thread::sleep(Duration::from_millis(150));
+        t.send(b"\x17"); // Ctrl+W
+        thread::sleep(Duration::from_millis(150));
+    }
+    t.send(b"\x11");
+    assert_eq!(t.wait_exit(WAIT), Some(0), "正常に終了しません");
+    let spans = read_spans(&trace);
+    let _ = std::fs::remove_file(&trace);
+    let partial_starts: Vec<u64> = spans
+        .iter()
+        .filter(|s| s.name == "open.partial" && s.vk == Some(VK_ENTER))
+        .map(|s| s.start_ns)
+        .collect();
+    let heads: Vec<&Span> = spans
+        .iter()
+        .filter(|s| s.name == "open.content" && s.vk == Some(VK_ENTER))
+        .collect();
+    assert_eq!(
+        heads.len(),
+        runs + warmup,
+        "open.content の数が開いた回数と違います"
+    );
+    heads
+        .into_iter()
+        .skip(warmup)
+        .map(|s| HeadRun {
+            dur: ns_dur(s.end_ns - s.start_ns),
+            partial: partial_starts.contains(&s.start_ns),
+        })
+        .collect()
+}
+
+/// BM-104v の結果を出す (区間の統計に、先行表示だった回の数と回ごとの値を添える)。
+fn report_head(id: &str, label: &str, v: &[HeadRun], json: bool, quick: bool) {
+    let partial = v.iter().filter(|r| r.partial).count();
+    let samples: Vec<String> = v.iter().map(|r| format!("{:.2}", ms(r.dur))).collect();
+    let flags: Vec<&str> = v
+        .iter()
+        .map(|r| if r.partial { "1" } else { "0" })
+        .collect();
+    report_with(
+        id,
+        label,
+        v.iter().map(|r| r.dur).collect(),
+        json,
+        quick,
+        &format!(
+            ",\"partial_runs\":{partial},\"samples_ms\":[{}],\"samples_partial\":[{}]",
+            samples.join(","),
+            flags.join(",")
+        ),
+        &format!(
+            " (先行表示 {partial} / {} 回。回ごと: {})",
+            v.len(),
+            v.iter()
+                .map(|r| format!("{:.0}{}", ms(r.dur), if r.partial { "p" } else { "" }))
+                .collect::<Vec<_>>()
+                .join(" ")
+        ),
+    );
 }
 
 /// 「リサイズ → 再描画」(01 §3.0.1): ウィンドウの大きさを 50 ms ごとに変え、最後のリサイズイベントの読取完了 → 新しい大きさの Frame の `write`。
@@ -1021,6 +1147,30 @@ fn main() {
             "BM-104p-100m",
             "開く → 進捗 (100 MB。30 回)",
             v,
+            json,
+            quick,
+        );
+    }
+    if traced && want("104v") {
+        // BM-104v: 100 MB の UTF-8 と Shift_JIS。30 回で p50 と最大値 (09 §5.2)。ウォームアップの 3 回でファイルを OS のキャッシュに載せる
+        let n = if quick { 10 } else { 30 };
+        let ua = make_big(&dir, "big_100mb.txt", 100);
+        let ub = make_big(&dir, "p100_b.txt", 100);
+        let v = open_head(&dir, &ua, &ub, n, 3);
+        report_head(
+            "BM-104v-100m",
+            "開く → 先頭の表示 (UTF-8 100 MB。Enter の読取完了 → 先頭部分を含む最初の Frame の write。30 回)",
+            &v,
+            json,
+            quick,
+        );
+        let sa = make_big_sjis(&dir, "v100_sjis_a.txt", 100);
+        let sb = make_big_sjis(&dir, "v100_sjis_b.txt", 100);
+        let v = open_head(&dir, &sa, &sb, n, 3);
+        report_head(
+            "BM-104v-100m-sjis",
+            "開く → 先頭の表示 (Shift_JIS 100 MB。30 回)",
+            &v,
             json,
             quick,
         );

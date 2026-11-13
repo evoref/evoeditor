@@ -1,6 +1,7 @@
 //! 先行表示の core と表示 (docs/03 §9.2.1、v0.4 の M25 の (2)、01 FR-122 AC-3 / AC-4): 読込が 200 ms を過ぎても終わらない
 //! ときに届く固定の先頭を、読み取り専用の `Partial` の文書として表示し、完了で全文へ差し替える。遅い読込は `MemFs` の
-//! チャンクごとに `ManualClock` を進めて作り、`Harness::run_jobs_until_partial` で先頭を受けた所で止める。
+//! チャンクごとに `ManualClock` を進めて作り、`Harness::run_jobs_until_partial` で先頭を受けた所で止める。末尾に 03 §22.3 の
+//! 先行表示のシナリオ (L3。開く → 先頭 → 拒否 → 完了 → 編集を 1 本で、Frame のゴールデンつき。M25 の 3) を置く。
 
 use eve_config::Config;
 use eve_core::{
@@ -1275,4 +1276,92 @@ fn バッファ一覧で読込中の文書に印を付ける() {
         .collect();
     assert!(details.iter().any(|d| d.ends_with("読込中")), "{details:?}");
     assert!(details.iter().any(|d| d.ends_with("UTF-8")), "{details:?}");
+}
+
+// ---------- シナリオ (03 §22.3 の先行表示。L3、v0.4 の M25 の 3) ----------
+
+/// `Shift_JIS` の行 (`0000 日本語の行です\n` …) を `n` 行。
+fn sjis_lines(n: usize) -> Vec<u8> {
+    let text: String = (0..n).map(|i| format!("{i:04} 日本語の行です\n")).collect();
+    encoding_rs::SHIFT_JIS.encode(&text).0.into_owned()
+}
+
+/// ASCII の Frame をゴールデン (`tests/golden/<name>.frame.ja.txt`) と比べる。
+fn frame_golden(h: &mut Harness, name: &str) {
+    let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join(format!("tests/golden/{name}.frame.ja.txt"));
+    eve_testkit::golden::check(&path, &h.frame_text());
+}
+
+/// 03 §22.3 の先行表示のシナリオ: 遅いディスクの上の `Shift_JIS` のファイルを開くと、読込が 200 ms を過ぎた時点で先頭が
+/// 読み取り専用で表示され (ステータスバーは「先頭のみ」)、編集と検索は理由を示して拒否され、先頭の末尾より先へは進まない。
+/// 読込が終わると全文の文書に切り替わり、カーソルはその場に残り、編集できる。
+// 01 §5.5 の FR-122 AC-3 / AC-4
+#[test]
+fn シナリオ_遅い読込の_shift_jis_は先頭を先に見せ_完了で全文に切り替わる() {
+    // 初期状態: 無題のバッファ、60 × 8 の画面、遅い読込 (64 バイトのチャンクごとに 100 ms)
+    let data = sjis_lines(200);
+    let full = encoding_rs::SHIFT_JIS.decode(&data).0.into_owned();
+    let mut h = Harness::builder()
+        .size(60, 8)
+        .file("/w/sjis.txt", &data)
+        .build();
+    slow(&h);
+
+    // 1. 開いて、先頭が届くところまで読む
+    h.open("/w/sjis.txt");
+    assert!(h.run_jobs_until_partial(), "200 ms を過ぎて先頭が届く");
+    let doc = doc_of(&h, "/w/sjis.txt");
+    assert_eq!(h.doc_id(), doc, "先行表示の時点で表示が切り替わる");
+    assert_eq!(load_state(&h, doc), LoadState::Partial);
+    let shown = text_of(&h, doc);
+    assert!(
+        full.starts_with(&shown) && shown.ends_with('\n') && shown.len() < full.len(),
+        "先頭は全文の接頭辞で、行の区切りで切れる: {shown:?}"
+    );
+    assert_eq!(
+        h.editor
+            .state()
+            .document(doc)
+            .expect("文書")
+            .format
+            .encoding,
+        eve_core::Encoding::ShiftJis
+    );
+    frame_golden(&mut h, "partial_scenario_head");
+
+    // 2. 編集と検索は理由を示して拒否される
+    h.clear_log();
+    h.text("x");
+    h.keys("ctrl+f");
+    assert_eq!(
+        h.messages(),
+        vec!["msg.edit.read_only_loading", "msg.open.partial_unavailable"]
+    );
+    assert_eq!(text_of(&h, doc), shown, "本文は変わらない");
+
+    // 3. 末尾へ動くと先頭の末尾で止まり、その旨が出る
+    h.clear_log();
+    h.keys("ctrl+end");
+    assert_eq!(head(&h), shown.len());
+    assert_eq!(h.messages(), vec!["info.open.partial_end"]);
+
+    // 4. 2 行目の 3 桁目へ戻る
+    h.keys("ctrl+home down right right");
+    let at = head(&h);
+    assert_eq!(at, shown.lines().next().expect("1 行目").len() + 1 + 2);
+
+    // 5. 読込が終わる: 全文に切り替わり、カーソルはその場に残る
+    h.finish_held_jobs();
+    assert_eq!(load_state(&h, doc), LoadState::Ready);
+    assert_eq!(h.doc_text(), full);
+    assert_eq!(head(&h), at, "カーソルを引き継ぐ");
+    assert_eq!(status_item(&mut h, StatusKind::Loading), None);
+    assert!(!h.is_dirty());
+    frame_golden(&mut h, "partial_scenario_complete");
+
+    // 6. 全文になったので編集できる
+    h.text("x");
+    assert!(h.is_dirty());
+    assert!(h.doc_text().starts_with("0000 日本語の行です\n00x01 "));
 }
