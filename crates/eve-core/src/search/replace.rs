@@ -173,10 +173,23 @@ pub fn build_replace_all(
     build_replace_all_in(text, query, replacement, None, cancel)
         .ok()
         .flatten()
+        .map(|b| (b.changes, b.count))
+}
+
+/// すべて置換の結果 (`build_replace_all_in`)。
+#[derive(Debug)]
+pub struct ReplaceAllBuilt {
+    /// 置換の `ChangeSet`。
+    pub changes: eve_text::ChangeSet,
+    /// 置換する件数。
+    pub count: u64,
+    /// そのうち CP932 互換文字の同一視で当たった件数 (同一視を切った検索語で同じ範囲がちょうど一致しない一致、03 §12.4.1)。
+    /// 同一視が効いていない検索語では 0。
+    pub folded: u64,
 }
 
 /// `build_replace_all` と同じで、時計 (行の窓の核の縮めと処理の速さの下限。ジョブからは渡す、03 §12.3.1) を受け、終わり方の
-/// 理由を返す。照合器を作れなければ `Ok(None)`。
+/// 理由を返す。同一視で当たった件数も数える (一致ごとに確かめる、03 §12.4.1 の「置換」)。照合器を作れなければ `Ok(None)`。
 ///
 /// # Errors
 ///
@@ -187,10 +200,12 @@ pub fn build_replace_all_in(
     replacement: &str,
     clock: Option<&dyn Clock>,
     cancel: &CancelToken,
-) -> Result<Option<(eve_text::ChangeSet, u64)>, ScanEnd> {
+) -> Result<Option<ReplaceAllBuilt>, ScanEnd> {
     let Some(m) = query.matcher() else {
         return Ok(None);
     };
+    let check_fold = m.compat_folded();
+    let mut folded = 0u64;
     let mut edits: Vec<eve_text::Edit> = Vec::new();
     let full = ByteRange::new(ByteOff(0), ByteOff(text.len_bytes()));
     // 正規表現では `$1` / `${name}` を一致ごとに展開する (03 §12.5)。リテラルは置換の文字列をそのまま入れる
@@ -201,6 +216,9 @@ pub fn build_replace_all_in(
         resume: None,
     };
     let end = scan_replacements(text, &m, full, &mut ctx, replacement, &mut |r, s| {
+        if check_fold && m.folded_match(text, r) {
+            folded += 1;
+        }
         edits.push(eve_text::Edit {
             range: r,
             insert: if m.expands() {
@@ -219,5 +237,9 @@ pub fn build_replace_all_in(
     let n = edits.len() as u64;
     Ok(eve_text::ChangeSet::from_sorted_edits(text, edits)
         .ok()
-        .map(|cs| (cs, n)))
+        .map(|changes| ReplaceAllBuilt {
+            changes,
+            count: n,
+            folded,
+        }))
 }

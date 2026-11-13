@@ -167,7 +167,8 @@ impl EditorState {
         }
         lines.push(line(HelpLineKind::Body, None, String::new()));
 
-        // 検索の書き方 (v0.4 の M24、04 §8.6): 行をまたぐ書き方とまたがない書き方の表、他の道具との対応、上限
+        // 検索の書き方 (v0.4 の M24、04 §8.6): 行をまたぐ書き方とまたがない書き方の表、他の道具との対応、上限、
+        // CP932 互換文字の同一視の組と `¥` / `‾` を除く注意 (03 §12.4.1)
         section(
             &mut lines,
             HelpSection::Search,
@@ -189,6 +190,8 @@ impl EditorState {
             keys::UI_HELP_SEARCH_OTHER_TOOLS,
             keys::UI_HELP_SEARCH_LIMIT,
             keys::UI_HELP_SEARCH_SUGAR,
+            keys::UI_HELP_SEARCH_COMPAT_FOLD,
+            keys::UI_HELP_SEARCH_COMPAT_EXCLUDE,
         ] {
             lines.push(line(HelpLineKind::Body, None, render(k)));
         }

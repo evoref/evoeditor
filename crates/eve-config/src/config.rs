@@ -446,6 +446,9 @@ config_keys! {
     /// `search.newline_sugar`: 正規表現の `\n` を改行 1 つ (LF・CRLF・単独の CR) に一致させる (docs/03 §12.3.1)。
     /// 検索バーを開いたときの値で効く。
     newline_sugar: bool = true, "search.newline_sugar", boolean;
+    /// `search.cp932_compat_fold`: CP932 互換文字 (〜/～ など 8 組) を検索で同一視する (docs/03 §12.4.1)。
+    /// 検索バーを開いたときの値で効く。
+    cp932_compat_fold: bool = true, "search.cp932_compat_fold", boolean;
 }
 
 /// 読込の結果。

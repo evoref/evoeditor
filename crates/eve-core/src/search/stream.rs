@@ -392,7 +392,7 @@ fn ceil_char(text: &dyn TextRead, x: usize) -> usize {
 }
 
 /// `x` (char 境界) の次の char の終わり (末尾ではそのまま)。
-fn next_char(text: &dyn TextRead, x: usize) -> usize {
+pub(super) fn next_char(text: &dyn TextRead, x: usize) -> usize {
     let len = text.len_bytes();
     if x >= len {
         return len;
@@ -401,7 +401,7 @@ fn next_char(text: &dyn TextRead, x: usize) -> usize {
 }
 
 /// `x` (char 境界) の前の char の始まり (先頭ではそのまま)。
-fn prev_char(text: &dyn TextRead, x: usize) -> usize {
+pub(super) fn prev_char(text: &dyn TextRead, x: usize) -> usize {
     if x == 0 {
         return 0;
     }

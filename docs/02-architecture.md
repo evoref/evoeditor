@@ -1675,7 +1675,8 @@ enum JobResult {                   // #[non_exhaustive]
                             counts: ReplaceCounts /*{ kana: u64 (半角カナ → 全角カナ), compat: u64 (互換文字 → CP932 の文字。03 §8.6 の置換先 (a')), question: u64 (`?` への置換) }。全件の内訳で、合計 kana + compat + question が対象の総数*/ },
                                                                             // core は置換前に対象の一覧を示し、承認後に Origin::System の Transaction として適用する
     // ── すべて置換・改行コードの変換 (03 §12.5 / §8.4) ──
-    ReplaceAllDone { changes: ChangeSet /*投入時の Revision の全文に対する変更*/, count: u64 /*置き換えた一致の数*/ },
+    ReplaceAllDone { changes: ChangeSet /*投入時の Revision の全文に対する変更*/, count: u64 /*置き換えた一致の数*/,
+                     folded: u64 /*v0.4 の M24 の (5): そのうち CP932 互換文字の同一視で当たった数 (03 §12.4.1。知らせを分ける)*/ },
     ConvertEolDone { changes: ChangeSet },                      // count = 0 (変更なし) なら changes は空で、core は文書を変えずに通知だけする
     // ── 検索 (03 §12.2) ──
     SearchBatch  { matches: Vec<ByteRange>,                     // 非終端。一定の件数・時間ごとにまとめる (§9.2)

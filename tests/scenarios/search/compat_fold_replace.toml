@@ -1,0 +1,64 @@
+# 互換文字の同一視ですべて置換すると、置換の文字列は書いたまま入り (もとから `～` だった箇所にも一致して同じ文字に
+# 置き換える)、知らせは同一視で当たった件数を分けて言う。`¥` と `￥` は同一視しない (01 FR-401 AC-5、03 §12.4.1 の「置換」)。
+[meta]
+id = "search/compat_fold_replace"
+title = "互換文字のすべて置換は書いたまま入れ、同一視で当たった件数を分けて知らせる"
+verifies = ["AC-FR-401-5"]
+since = "v0.4"
+tags = ["search", "compat", "replace"]
+
+[setup]
+size = [80, 12]
+
+[setup.fs]
+"a.txt" = { text = "a〜b～c〜\n¥1￥2" }
+
+[[step]]
+open = "a.txt"
+[[step]]
+run_jobs = true
+[[step]]
+keys = "ctrl+r"
+[[step]]
+text = "〜"
+[[step]]
+keys = "tab"
+[[step]]
+text = "～"
+[[step]]
+keys = "alt+a"
+[[step]]
+run_jobs = true
+[[step]]
+keys = "esc"
+[[step]]
+keys = "ctrl+r"
+[[step]]
+keys = "ctrl+a"
+[[step]]
+text = "¥"
+[[step]]
+keys = "tab"
+[[step]]
+keys = "ctrl+a"
+[[step]]
+text = "Y"
+[[step]]
+keys = "alt+a"
+[[step]]
+run_jobs = true
+
+# 3 件を置換し、そのうち 1 件 (もとの `～`) が同一視で当たった
+[[assert]]
+at = 8
+query = { kind = "text" }
+expect = { text = "a～b～c～\n¥1￥2" }
+[[assert]]
+at = 8
+frame_contains = ["3 件を置換しました (うち 1 件は互換文字の同一視で一致。元に戻すで戻せます)"]
+# `¥` は `￥` に一致しない (同一視しない組)
+[[assert]]
+query = { kind = "text" }
+expect = { text = "a～b～c～\nY1￥2" }
+[[assert]]
+frame_contains = ["1 件を置換しました (元に戻すで戻せます)"]

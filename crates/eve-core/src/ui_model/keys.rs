@@ -61,6 +61,11 @@ pub(crate) const INFO_SEARCH_NO_SELECTION: &str = "info.search.no_selection";
 pub(crate) const INFO_SEARCH_REPLACE_EMPTY_QUERY: &str = "info.search.replace_empty_query";
 pub(crate) const INFO_SEARCH_REPLACE_NO_MATCH: &str = "info.search.replace_no_match";
 pub(crate) const INFO_SEARCH_REPLACED: &str = "info.search.replaced";
+pub(crate) const INFO_SEARCH_REPLACED_FOLDED: &str = "info.search.replaced_folded";
+pub(crate) const INFO_SEARCH_REPLACED_FOLDED_LINES_ADDED: &str =
+    "info.search.replaced_folded_lines_added";
+pub(crate) const INFO_SEARCH_REPLACED_FOLDED_LINES_REMOVED: &str =
+    "info.search.replaced_folded_lines_removed";
 pub(crate) const INFO_SEARCH_REPLACED_LINES_ADDED: &str = "info.search.replaced_lines_added";
 pub(crate) const INFO_SEARCH_REPLACED_LINES_REMOVED: &str = "info.search.replaced_lines_removed";
 pub(crate) const INFO_SEARCH_WRAPPED_BACKWARD: &str = "info.search.wrapped_backward";
@@ -199,6 +204,8 @@ pub(crate) const UI_HELP_SECTION_SEARCH: &str = "ui.help.section.search";
 pub(crate) const UI_HELP_SECTION_TERMINAL: &str = "ui.help.section.terminal";
 pub(crate) const UI_HELP_SEARCH_ANCHORS: &str = "ui.help.search.anchors";
 pub(crate) const UI_HELP_SEARCH_CLASS_NEWLINE: &str = "ui.help.search.class_newline";
+pub(crate) const UI_HELP_SEARCH_COMPAT_EXCLUDE: &str = "ui.help.search.compat_exclude";
+pub(crate) const UI_HELP_SEARCH_COMPAT_FOLD: &str = "ui.help.search.compat_fold";
 pub(crate) const UI_HELP_SEARCH_DOT_ALL: &str = "ui.help.search.dot_all";
 pub(crate) const UI_HELP_SEARCH_INTRO: &str = "ui.help.search.intro";
 pub(crate) const UI_HELP_SEARCH_LIMIT: &str = "ui.help.search.limit";
@@ -241,6 +248,7 @@ pub(crate) const UI_READ_ONLY_REASON_STATEFUL: &str =
 pub(crate) const UI_READ_ONLY_REASON_USER_REQUESTED: &str = "ui.read_only_reason.user_requested";
 pub(crate) const UI_SEARCH_COUNT_APPROX: &str = "ui.search.count.approx";
 pub(crate) const UI_SEARCH_COUNT_AT_LEAST: &str = "ui.search.count.at_least";
+pub(crate) const UI_SEARCH_COUNT_COMPAT_SUFFIX: &str = "ui.search.count.compat_suffix";
 pub(crate) const UI_SEARCH_COUNT_EXACT: &str = "ui.search.count.exact";
 pub(crate) const UI_SEARCH_COUNT_NO_MATCH: &str = "ui.search.count.no_match";
 pub(crate) const UI_SEARCH_COUNT_RUNNING: &str = "ui.search.count.running";
@@ -251,7 +259,7 @@ pub(crate) const UI_TOO_SMALL: &str = "ui.too_small";
 
 /// すべての定数 (キーの順。試験に使う)。
 #[cfg(test)]
-const ALL: [&str; 231] = [
+const ALL: [&str; 237] = [
     HINT_UI_CANCEL,
     INFO_APP_RELEASE_SUMMARY,
     INFO_APP_UPDATED,
@@ -309,6 +317,9 @@ const ALL: [&str; 231] = [
     INFO_SEARCH_REPLACE_EMPTY_QUERY,
     INFO_SEARCH_REPLACE_NO_MATCH,
     INFO_SEARCH_REPLACED,
+    INFO_SEARCH_REPLACED_FOLDED,
+    INFO_SEARCH_REPLACED_FOLDED_LINES_ADDED,
+    INFO_SEARCH_REPLACED_FOLDED_LINES_REMOVED,
     INFO_SEARCH_REPLACED_LINES_ADDED,
     INFO_SEARCH_REPLACED_LINES_REMOVED,
     INFO_SEARCH_WRAPPED_BACKWARD,
@@ -438,6 +449,8 @@ const ALL: [&str; 231] = [
     UI_HELP_SECTION_TERMINAL,
     UI_HELP_SEARCH_ANCHORS,
     UI_HELP_SEARCH_CLASS_NEWLINE,
+    UI_HELP_SEARCH_COMPAT_EXCLUDE,
+    UI_HELP_SEARCH_COMPAT_FOLD,
     UI_HELP_SEARCH_DOT_ALL,
     UI_HELP_SEARCH_INTRO,
     UI_HELP_SEARCH_LIMIT,
@@ -476,6 +489,7 @@ const ALL: [&str; 231] = [
     UI_READ_ONLY_REASON_USER_REQUESTED,
     UI_SEARCH_COUNT_APPROX,
     UI_SEARCH_COUNT_AT_LEAST,
+    UI_SEARCH_COUNT_COMPAT_SUFFIX,
     UI_SEARCH_COUNT_EXACT,
     UI_SEARCH_COUNT_NO_MATCH,
     UI_SEARCH_COUNT_RUNNING,

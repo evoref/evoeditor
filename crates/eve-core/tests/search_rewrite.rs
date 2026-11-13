@@ -139,3 +139,99 @@ fn 書き換えの表() {
         &out,
     );
 }
+
+/// CP932 互換文字の同一視の書き換え (03 §12.4.1 の「正規表現」と「リテラル検索」の細目。M24 の (5))。
+const COMPAT_TABLE: &[&str] = &[
+    // リテラルの互換文字 (符号位置で書いたものを含む)
+    "〜",
+    "～",
+    "a―b",
+    r"\x{301C}",
+    r"\x{FFE0}",
+    "(?i)〜",
+    // クラス: 組の片方だけを含めば相手を足す。否定は否定する前の集合に掛ける
+    "[〜]",
+    "[^〜]",
+    "[〜a-c]",
+    r"[\x{2010}-\x{2014}]",
+    r"\p{Sm}",
+    r"\P{Sm}",
+    r"[^\p{Sm}]",
+    r"[\p{Sm}--−]",
+    r"[[〜]&&[～]]",
+    // 行の終端の書き換えと重なるもの
+    r"[〜\n]",
+    r"[^〜\n]",
+    r"(〜)\n(?P<x>―)",
+    // 一致する文字が変わらないもの (元のまま。印も付けない)
+    "[〜～]",
+    r"\S",
+    r"\W",
+    ".",
+    "[^a]",
+    // 同一視しないもの
+    "(?-u:〜)",
+    "¥",
+    "‾",
+    r"\\",
+    "~",
+];
+
+/// リテラル検索で互換文字を含む語 (エスケープして行の窓の経路で探す、03 §12.4.1)。(検索語, 大小の扱い)。
+const COMPAT_LITERALS: &[(&str, Case)] = &[
+    ("〜", Case::Smart),
+    ("x〜y", Case::Smart),
+    ("a.〜", Case::Sensitive),
+    ("Ａ〜", Case::Insensitive),
+    ("k〜", Case::Insensitive),
+    ("¢£", Case::Smart),
+    ("¥", Case::Smart),
+];
+
+#[test]
+fn 互換文字の同一視の書き換えの表() {
+    let mut out = String::from("# pattern\trewritten\tcompat_folded\tunfolded_k\n");
+    for p in COMPAT_TABLE {
+        let q = SearchQuery::literal(p)
+            .with_regex(true)
+            .with_case(Case::Sensitive);
+        let plan = q
+            .analyze()
+            .unwrap_or_else(|e| panic!("{p:?}: {e:?}"))
+            .expect("空でない検索語");
+        let off = SearchQuery::literal(p)
+            .with_regex(true)
+            .with_case(Case::Sensitive)
+            .with_compat_fold(false)
+            .analyze()
+            .unwrap()
+            .unwrap();
+        // 同一視は行の終端の数 (k) を変えない
+        assert_eq!(plan.lines(), off.lines(), "{p}");
+        let _ = writeln!(
+            out,
+            "{p}\t{}\t{}\t{}",
+            plan.regex_pattern().expect("正規表現の経路"),
+            plan.compat_folded(),
+            k_text(off.lines()),
+        );
+    }
+    out.push_str("# literal\tcase\trewritten\tcompat_folded\n");
+    for (p, case) in COMPAT_LITERALS {
+        let plan = SearchQuery::literal(p)
+            .with_case(*case)
+            .analyze()
+            .unwrap()
+            .unwrap();
+        let _ = writeln!(
+            out,
+            "{p}\t{case:?}\t{}\t{}",
+            plan.regex_pattern().unwrap_or("(memmem)"),
+            plan.compat_folded(),
+        );
+    }
+    golden::check(
+        &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/golden/search_rewrite_compat.tsv"),
+        &out,
+    );
+}

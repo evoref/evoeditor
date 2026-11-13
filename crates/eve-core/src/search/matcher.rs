@@ -19,7 +19,7 @@ use super::limits::{
     SEARCH_CONCAT_MAX_BYTES, SEARCH_DFA_SIZE_LIMIT, SEARCH_REGEX_SIZE_LIMIT,
     SEARCH_WINDOW_CORE_BYTES,
 };
-use super::rewrite::{LineSpan, Rewritten, first_line, rewrite};
+use super::rewrite::{LineSpan, Rewritten, compat_partner, first_line, rewrite_with};
 use super::scan::{Discard, ScanLimit};
 
 /// 大文字小文字の扱い (FR-402)。
@@ -59,6 +59,8 @@ pub struct SearchQuery {
     scope: Option<Arc<[ByteRange]>>,
     /// 正規表現の `\n` を改行 1 つ (LF・CRLF・単独の CR) にする糖衣 (`search.newline_sugar`、§12.3.1。既定は `true`)。
     newline_sugar: bool,
+    /// CP932 互換文字の同一視 (`search.cp932_compat_fold`、§12.4.1。既定は `true`)。
+    compat_fold: bool,
     /// 行の窓の核の大きさと連結の上限 (試験だけが既定から小さくする。利用者の設定ではない)。
     tuning: SearchTuning,
     /// 解析とコンパイルの結果の覚え。複製 (検索ジョブに渡すものを含む) と共有し、条件を変えると捨てる (PRF-09)。
@@ -169,6 +171,8 @@ enum Route {
         insensitive: bool,
         /// 置換の文字列の `$1` / `${name}` を展開する (利用者の正規表現のとき)。
         expand: bool,
+        /// k が 0 でも行の窓の経路で探す (互換文字を含むリテラル検索、§12.4.1。行ごとに切り出す経路より速い)。
+        windowed: bool,
     },
 }
 
@@ -223,10 +227,20 @@ impl QueryPlan {
         }
     }
 
+    /// CP932 互換文字の同一視が効いている: 設定が ON で、リテラル検索では検索語が組の文字を含み、正規表現では書き換えで一致する
+    /// 文字が変わった (リテラルの互換文字か、組の片方だけを含むクラス)。検索バーの件数の後ろの印 (§12.4.1) に使う。
+    pub fn compat_folded(&self) -> bool {
+        match &self.route {
+            Route::Regex { rewritten, .. } => rewritten.compat_folded,
+            Route::Memmem { .. } => false,
+        }
+    }
+
     /// 経路の形 (文書に依らない判定、`Shape`)。
     fn shape(&self, tuning: SearchTuning, whole_word: bool) -> Shape {
         Shape {
             regex: matches!(self.route, Route::Regex { .. }),
+            windowed: matches!(self.route, Route::Regex { windowed: true, .. }),
             doc_anchor: self.doc_anchor(),
             heavy: self.heavy(),
             lines: self.lines(),
@@ -252,6 +266,7 @@ impl SearchQuery {
             whole_word: false,
             scope: None,
             newline_sugar: true,
+            compat_fold: true,
             tuning: SearchTuning::default(),
             compiled: Compiled::default(),
         }
@@ -303,6 +318,19 @@ impl SearchQuery {
         self.newline_sugar = sugar;
         self.compiled = Compiled::default();
         self
+    }
+
+    /// CP932 互換文字の同一視 (`search.cp932_compat_fold`、既定は `true`)。リテラル検索と正規表現 (リテラルの文字とクラス)
+    /// の両方に掛かり、置換の文字列には掛けない (§12.4.1)。
+    pub fn with_compat_fold(mut self, fold: bool) -> SearchQuery {
+        self.compat_fold = fold;
+        self.compiled = Compiled::default();
+        self
+    }
+
+    /// CP932 互換文字の同一視の設定 (効いているかは `QueryPlan::compat_folded`)。
+    pub fn compat_fold(&self) -> bool {
+        self.compat_fold
     }
 
     /// 正規表現として探す。
@@ -456,12 +484,18 @@ impl SearchQuery {
             return Ok(None);
         }
         if self.regex {
-            let rewritten = rewrite(&self.pattern, self.insensitive(), self.newline_sugar)?;
+            let rewritten = rewrite_with(
+                &self.pattern,
+                self.insensitive(),
+                self.newline_sugar,
+                self.compat_fold,
+            )?;
             return Ok(Some(QueryPlan {
                 route: Route::Regex {
                     rewritten,
                     insensitive: self.insensitive(),
                     expand: true,
+                    windowed: false,
                 },
             }));
         }
@@ -474,6 +508,24 @@ impl SearchQuery {
         // 1. 大小の区別がある文字を 1 つも含まない検索語 (数字・記号・かな・漢字だけ等) は、
         //    区別しない設定でも区別する設定と同じなので、そのまま memmem で探す
         let fold = self.insensitive() && self.pattern.chars().any(is_cased);
+        // CP932 互換文字を含む検索語 (同一視が ON): エスケープして互換文字を 2 文字のクラスにした正規表現を、行ごとの経路では
+        // なく行の窓の経路 (k は 0) で探す (§12.4.1。memmem と同じ程度に速く、NFR-108 / 109 の目標を外さない)
+        if self.compat_fold && self.pattern.chars().any(|c| compat_partner(c).is_some()) {
+            let rewritten = rewrite_with(
+                &regex::escape(&self.pattern),
+                fold,
+                self.newline_sugar,
+                true,
+            )?;
+            return Ok(Some(QueryPlan {
+                route: Route::Regex {
+                    rewritten,
+                    insensitive: fold,
+                    expand: false,
+                    windowed: true,
+                },
+            }));
+        }
         // 2. ASCII だけで `k` `K` `s` `S` を含まない検索語は、チャンクごとに ASCII を畳み込んで memmem できる。
         //    `k` は K (U+212A KELVIN SIGN)、`s` は ſ (U+017F LATIN SMALL LETTER LONG S) が畳み込まれて一致するので外す
         //    (ASCII 以外から ASCII へ畳み込まれる文字はこの 2 つだけ)。単語単位は一致の両端を行の文脈で調べるので外す
@@ -482,12 +534,18 @@ impl SearchQuery {
             && !self.whole_word;
         if fold && !ascii_fold {
             // 3. それ以外の大小を区別しない検索語は、エスケープして行ごとの正規表現の経路で `(?i)` として探す
-            let rewritten = rewrite(&regex::escape(&self.pattern), true, self.newline_sugar)?;
+            let rewritten = rewrite_with(
+                &regex::escape(&self.pattern),
+                true,
+                self.newline_sugar,
+                false,
+            )?;
             return Ok(Some(QueryPlan {
                 route: Route::Regex {
                     rewritten,
                     insensitive: true,
                     expand: false,
+                    windowed: false,
                 },
             }));
         }
@@ -513,6 +571,7 @@ impl SearchQuery {
                 fold: *fold,
                 chunked: !self.whole_word,
                 regex: None,
+                unfolded: None,
                 heavy: false,
                 expand: false,
                 whole_word: self.whole_word,
@@ -526,6 +585,7 @@ impl SearchQuery {
                 rewritten,
                 insensitive,
                 expand,
+                ..
             } => {
                 let re = build_regex(&rewritten.pattern, *insensitive)?;
                 Matcher {
@@ -534,6 +594,10 @@ impl SearchQuery {
                     fold: false,
                     chunked: false,
                     regex: Some(re),
+                    unfolded: rewritten
+                        .unfolded
+                        .as_ref()
+                        .map(|p| Unfolded::new(p, *insensitive)),
                     heavy: rewritten.heavy,
                     expand: *expand,
                     whole_word: self.whole_word,
@@ -565,6 +629,30 @@ fn build_regex(pattern: &str, insensitive: bool) -> Result<regex::Regex, QueryEr
         })
 }
 
+/// 同一視を切った検索語 (すべて置換で、同一視で当たった一致を数える、§12.4.1 の「置換」)。照合器は使うときに 1 回だけ作る
+/// (検索のジョブでは作らない)。
+struct Unfolded {
+    pattern: String,
+    insensitive: bool,
+    re: OnceLock<Option<regex::Regex>>,
+}
+
+impl Unfolded {
+    fn new(pattern: &str, insensitive: bool) -> Unfolded {
+        Unfolded {
+            pattern: pattern.to_owned(),
+            insensitive,
+            re: OnceLock::new(),
+        }
+    }
+
+    fn regex(&self) -> Option<&regex::Regex> {
+        self.re
+            .get_or_init(|| build_regex(&self.pattern, self.insensitive).ok())
+            .as_ref()
+    }
+}
+
 /// 小文字が 1 文字になる文字だけ小文字にする (`Smart` の大文字の判定用)。
 fn lower_char(c: char) -> char {
     let mut it = c.to_lowercase();
@@ -592,6 +680,8 @@ pub(super) const WINDOW_SLACK: usize = 12;
 pub(crate) struct Shape {
     /// `regex` で探す (利用者の正規表現と §12.4 の 3 のエスケープしたリテラル)。
     regex: bool,
+    /// k が 0 でも行の窓で探す (互換文字を含むリテラル検索、§12.4.1)。
+    windowed: bool,
     /// `\A` などで文書の先頭 / 末尾の意味が要る。
     doc_anchor: bool,
     /// 重い検索語。
@@ -609,7 +699,11 @@ pub(crate) struct Shape {
 impl Shape {
     /// 行の窓・全文の連結の経路で探す (`Matcher::is_stream`)。
     pub(crate) fn is_stream(&self) -> bool {
-        self.regex && (self.doc_anchor || self.heavy || self.lines != LineSpan::Bounded(0))
+        self.regex
+            && (self.windowed
+                || self.doc_anchor
+                || self.heavy
+                || self.lines != LineSpan::Bounded(0))
     }
 
     /// 核を行の途中 (char 境界) で切ってよい (`Matcher::cuts_mid_line`)。
@@ -693,6 +787,8 @@ pub struct Matcher {
     pub(super) chunked: bool,
     /// 正規表現のとき。行ごとに実行する (§12.3)。大小を区別しないリテラルの一部もエスケープしてここで探す (§12.4 の 3)。
     pub(super) regex: Option<regex::Regex>,
+    /// CP932 互換文字の同一視が効いているとき、同一視を切った検索語 (すべて置換で同一視で当たった一致を数える、§12.4.1)。
+    unfolded: Option<Unfolded>,
     /// 重い検索語 (上限のある繰り返しの上限が大きい、§12.3.1 の「重い検索語」)。
     heavy: bool,
     /// 置換文字列の `$1` / `${name}` を展開する (利用者の正規表現のときだけ。リテラルをエスケープしたものは展開しない)。
@@ -784,6 +880,27 @@ impl Matcher {
     /// 置換文字列の `$1` / `${name}` を一致ごとに展開する (利用者の正規表現のとき)。
     pub(super) fn expands(&self) -> bool {
         self.expand
+    }
+
+    /// CP932 互換文字の同一視が効いている (検索語が組の文字を含む・組の片方だけを含むクラスがある、§12.4.1)。
+    pub fn compat_folded(&self) -> bool {
+        self.unfolded.is_some()
+    }
+
+    /// 一致 `r` が同一視で当たった一致か: 同一視を切った検索語で、同じ範囲がちょうど一致しない (§12.4.1 の「置換」)。
+    /// 同一視を切った検索語を `r` の始端から走らせ、最初の一致が `r` そのものかを見る。`^`・`$`・`\b`・`\A`・`\z` の判定は
+    /// 前後の 1 文字で決まるので、`r` の前後 1 文字を付けた文字列の上で探す (文書の端はそのまま端)。同一視が効いていない
+    /// 照合器では常に偽。
+    pub(super) fn folded_match(&self, text: &dyn TextRead, r: ByteRange) -> bool {
+        let Some(re) = self.unfolded.as_ref().and_then(Unfolded::regex) else {
+            return false;
+        };
+        let hs = super::stream::prev_char(text, r.start.0);
+        let he = super::stream::next_char(text, r.end.0);
+        let hay = text.slice_to_string(ByteRange::new(ByteOff(hs), ByteOff(he)));
+        let (s, e) = (r.start.0 - hs, r.end.0 - hs);
+        re.find_at(&hay, s)
+            .is_none_or(|m| (m.start(), m.end()) != (s, e))
     }
 
     /// 1 行の中の一致を左から順に `f` へ渡す。`line_start` は行頭の文書内バイト位置。`want_caps` が真で利用者の正規表現

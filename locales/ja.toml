@@ -490,6 +490,9 @@ no_selection = "選択範囲がありません。選択してから検索バー�
 replace_empty_query = "検索する文字列を入力してください"
 replace_no_match = "置換する箇所はありません"
 replaced = "{count} 件を置換しました (元に戻すで戻せます)"
+replaced_folded = "{count} 件を置換しました (うち {folded} 件は互換文字の同一視で一致。元に戻すで戻せます)"
+replaced_folded_lines_added = "{count} 件を置換しました。文書は {lines} 行増えました (うち {folded} 件は互換文字の同一視で一致。元に戻すで戻せます)"
+replaced_folded_lines_removed = "{count} 件を置換しました。文書は {lines} 行減りました (うち {folded} 件は互換文字の同一視で一致。元に戻すで戻せます)"
 replaced_lines_added = "{count} 件を置換しました。文書は {lines} 行増えました (元に戻すで戻せます)"
 replaced_lines_removed = "{count} 件を置換しました。文書は {lines} 行減りました (元に戻すで戻せます)"
 wrapped_backward = "文書の先頭に達したので、末尾から検索しました"
@@ -1118,6 +1121,7 @@ running = "{found}/…"
 exact = "{current}/{total}"
 at_least = "{current}/{total}+"
 approx = "約 {total}"
+compat_suffix = "互換"
 no_match = "0 件"
 
 [ui.palette.arg]
@@ -1192,6 +1196,8 @@ anchors = "文書の先頭 / 末尾 (^ と $ は行頭 / 行末)"
 other_tools = "Vim の \\_s は [\\s\\n]、\\_. は (?s). と書きます。ripgrep の -U や VS Code と違い、\\s や [^x] は行をまたぎません"
 limit = "何行でもまたげるパターン ((?s).* や \\n+ など) は、16 MiB (UTF-8 のバイト数) 以下の文書だけで探せます。大きな文書では (?s).{{0,1000}} のように回数を限ってください"
 sugar = "設定 search.newline_sugar = false で、\\n は LF の改行だけに一致します (CRLF の改行には一致しません)"
+compat_fold = "互換文字の同一視 (設定 search.cp932_compat_fold、既定は ON): 〜 と ～、‖ と ∥、− と －、¢ と ￠、£ と ￡、¬ と ￢、¦ と ￤、— と ― は、どちらで探しても両方に一致します (正規表現の文字とクラスでも)。置換の文字列は書いたまま入ります。同一視が効いているときは、件数の後ろに「互換」と出ます"
+compat_exclude = "¥ と ￥、‾ と ￣ は同一視しません (半角と全角の違いとして扱います)。¥ キーで入る文字の多くは \\ (U+005C) で、これも ¥ と同一視しません"
 
 [ui.help.terminal]
 ime = "IME が ON のとき、文字キーは確認ダイアログのアクセラレータとして届きません。Tab や矢印と Enter で選んでください"
