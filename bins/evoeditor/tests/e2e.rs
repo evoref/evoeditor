@@ -1614,7 +1614,7 @@ fn 設定の問題はメッセージ行に出てログに書かれる() {
 tab_width = 0
 indent_width = 99
 [search]
-case = \"smart\"
+regex_size_limit = 1
 ",
     )
     .unwrap();
