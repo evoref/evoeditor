@@ -246,12 +246,17 @@ pub(super) fn build_row(
     let has_terminator = t.line_terminator(LineIdx(line)).is_some();
     // 長大行 (折り返さない) は、見える範囲の char だけを単位にする (03 §11.5.1)
     let long = long_index(doc, line);
-    let body = match &long {
-        Some((_, ix)) => std::rc::Rc::new(long_units(doc, ls, ix, left, cols)),
-        None => units_for(doc, line, &line_content(doc, line).1),
+    let (body, long_width) = match &long {
+        Some((_, ix)) => {
+            let (us, width) = long_units(doc, ls, ix, left, cols);
+            (std::rc::Rc::new(us), Some(width))
+        }
+        None => (units_for(doc, line, &line_content(doc, line).1), None),
     };
-    let line_width = match &long {
-        Some((_, ix)) => ix.end().col,
+    let line_width = match long_width {
+        // 長大行 (折り返さない) の幅は、行末の選択の印 (`total < win_end` のときだけ描く) にだけ使う。行末が窓より右なら
+        // 窓の右端で代える (どちらでも印を描かない)。開いた直後に行末まで索引を作らない (03 §14.4 の遅延)
+        Some(width) => width.unwrap_or(left + cols),
         None => body.last().map_or(0, |u| u.col + u.width),
     };
     // 折り返した表示行は、その範囲の単位だけを、行内の先頭の列を 0 (+ ずらし) として並べる
