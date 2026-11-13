@@ -119,6 +119,9 @@ pub struct Document {
     pub load_state: LoadState,
     /// 読込中の進捗 (百分率)。ステータスバーの `[読込中 n%]` に出す。
     pub load_percent: u8,
+    /// 読込中のファイルの大きさ (バイト。読込ジョブの `Progress.total`)。先行表示の間の行番号の欄の幅の推定に使う
+    /// (03 §9.2.1 の「ステータスバー」、§11.4)。読込中でなければ使わない。
+    pub load_total: u64,
     /// 表示の設定 (設定から写す)。
     pub display: DisplaySettings,
     /// レイアウトの覚え (長い行の表示単位・長大行の列の索引)。読み書きするのは `layout/` だけ。
@@ -227,6 +230,7 @@ impl Document {
             external_seen: None,
             load_state: LoadState::Ready,
             load_percent: 0,
+            load_total: 0,
             display: DisplaySettings::default(),
             layout_cache: std::cell::RefCell::default(),
             untitled_no: None,

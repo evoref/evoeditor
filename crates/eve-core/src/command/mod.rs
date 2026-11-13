@@ -300,6 +300,11 @@ impl CommandRegistry {
         if !inv.source.is_user() && spec.permission == Permission::None {
             return CommandResult::Rejected(RejectReason::PermissionDenied);
         }
+        // 新しく開く読込の間 (先行表示の `Partial` と本文の無い `Loading`) の検索・置換・行へ移動・すべて選択・文書の
+        // 末尾まで選択を伸ばす操作は拒否する (03 §9.2.1 の「できない操作」。キー・パレット・マクロ・駆動 API のどれでも)
+        if state.reject_partial_unavailable(inv.id.as_str()) {
+            return CommandResult::Rejected(RejectReason::NotAvailable);
+        }
         if !spec.when.eval(&|name| state.context_value(name)) {
             // 読み取り専用の文書への編集は、条件で止まるときも理由を示す (FR-116 AC-1)
             if spec.kind == CommandKind::Edit
@@ -308,6 +313,11 @@ impl CommandRegistry {
                     .is_some_and(|v| v.truthy())
             {
                 state.notify_read_only();
+            }
+            // 読込中 (`Loading` / 先行表示の `Partial`) の文書へのファイルのコマンド (`file.save` 等) は、黙って拒否せずに
+            // 読込中であることを示す (03 §9.2.1 の「できない操作」)
+            if spec.kind == CommandKind::File {
+                state.notify_loading_busy();
             }
             return CommandResult::Rejected(RejectReason::NotAvailable);
         }
@@ -319,11 +329,16 @@ impl CommandRegistry {
         if spec.kind == CommandKind::Motion {
             state.seal_active_history();
         }
+        // 先行表示の間の前進の移動: 先頭の末尾より先へ動こうとしたら知らせる (03 §9.2.1 の「できる操作」)
+        let end_probe = state.partial_end_probe(inv.id.as_str());
         let mut ctx = CommandCtx {
             state,
             args: &inv.args,
         };
         let res = (spec.handler)(&mut ctx);
+        if let Some(probe) = end_probe {
+            state.note_partial_end(inv.id.as_str(), probe);
+        }
         // 読み取り専用の文書への編集は、理由つきで拒否したことを示す (FR-116 AC-1)
         if matches!(res, CommandResult::Rejected(RejectReason::ReadOnly)) {
             state.notify_read_only();

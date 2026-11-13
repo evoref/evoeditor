@@ -250,11 +250,22 @@ impl EditorState {
                 let note = preserve_note(&format);
                 let encoding = format.encoding;
                 let long_lines = format.long_lines;
+                let was_partial = self
+                    .docs
+                    .documents
+                    .get(&doc_id)
+                    .is_some_and(|d| d.load_state == crate::document::LoadState::Partial);
                 let mut d = Document::from_loaded(text, format, preserved);
                 d.path = Some(path.clone());
                 d.disk_stamp = Some(stamp);
                 d.read_only = detected;
+                // Revision は先頭の続き (`put_document`)。先頭の間の覚えは新しい文書に持ち越さない (03 §9.2.1)
                 self.put_document(doc_id, d);
+                if was_partial {
+                    self.forget_doc_memos(doc_id);
+                    self.snap_views_after_partial(doc_id);
+                }
+                self.io.partial_end_noted.remove(&doc_id);
                 if long_lines > 0 {
                     self.message(
                         MessageLevel::Info,
@@ -327,8 +338,10 @@ impl EditorState {
                 }
                 self.complete_open(doc_id, view, replace);
             }
-            // 確認が要る: 読込中の文書は残したまま確認を出し、回答で先頭から読み直す (03 §9.2)
+            // 確認が要る: 読込中の文書は残したまま確認を出し、回答で先頭から読み直す (03 §9.2)。先行表示の後なら先頭を
+            // 捨てて `Loading` に戻す (03 §9.2.1 の「確認」)
             JobResult::NeedsConfirm { ask, .. } => {
+                self.drop_partial_head(doc_id);
                 self.open_open_confirm(OpenAsk {
                     doc: doc_id,
                     view,
@@ -523,23 +536,10 @@ impl EditorState {
         view: ViewId,
         replace: Option<DocumentId>,
     ) {
-        // 読込の間に別の文書へ切り替えていなければ、新しいバッファへ切り替える (03 §9.8)
-        if let Some(from) = replace
-            && self.active_document() == Some(from)
-        {
-            // 何も入力していない無題のバッファは、開いたファイルで置き換える (何も失わない。起動直後の Ctrl+O で空のバッファが残らない)
-            let pristine = self.docs.documents.get(&from).is_some_and(|d| {
-                d.path.is_none()
-                    && !d.is_dirty()
-                    && d.len_bytes() == 0
-                    && d.load_state == crate::document::LoadState::Ready
-            });
-            if pristine {
-                self.show_view(view, Some(from));
-            } else {
-                self.activate_document(doc);
-            }
-        }
+        // 読込の間に別の文書へ切り替えていなければ、新しいバッファへ切り替える (03 §9.8)。何も入力していない無題の
+        // バッファは、開いたファイルで置き換える (何も失わない。起動直後の Ctrl+O で空のバッファが残らない)。先行表示で
+        // 切り替えた後は切り替え直さない。オーバーレイの間は保留する (03 §9.2.1 の「表示の切り替え」、io/partial_view.rs)
+        self.open_switch_on_complete(doc, view, replace);
         // 起動時の `+行:桁` / `path:行:桁`: 読み終わった文書の位置へ移る (範囲外は丸める)
         if let Some((line, col)) = self.io.open_jumps.remove(&doc) {
             self.jump_to_line_col(view, doc, line, col);
@@ -557,28 +557,46 @@ impl EditorState {
         reason: &str,
     ) {
         self.show_message(level, key, &[("path", &path.display()), ("reason", reason)]);
+        // 先頭も捨てる (03 §9.2.1 の「失敗・取消し・閉じる」。文書ごと閉じる)
+        self.forget_partial_state(doc);
         if self.active_document() == Some(doc) || self.focused_window().is_none() {
-            // 表示中の文書の読込に失敗 (起動時の文書、または読込中に切り替えて表示していた足したバッファ): 失敗した文書は閉じ、
-            // 開く前の文書 (残っていれば)・ほかの文書・無題の文書の順で表示する (再試行できる、03 §9.2 の「失敗」・§9.8)。
-            // 表示を移さずに閉じると、Window が消えた View を指したままになる (fuzz_editor で見つけた)
             self.io.open_jumps.remove(&doc);
-            let others = replace
-                .filter(|r| *r != doc && self.docs.documents.contains_key(r))
-                .or_else(|| self.docs.documents.keys().copied().find(|d| *d != doc));
-            match others {
-                Some(next) => {
-                    self.activate_document(next);
-                    self.close_document(doc);
-                }
-                None => {
-                    let blank = self.blank_document();
-                    let (_, untitled) = self.add_document(blank);
-                    self.show_view(untitled, Some(doc));
-                }
+            // オーバーレイ・検索バーの間は、表示を移さずに先頭だけを捨てて待つ (閉じた後に移す。03 §9.2.1 の「失敗・
+            // 取消し・閉じる」。パレットで選んだコマンドが、開いたときと別の文書に効かないため)
+            if self.focused_window().is_some() && self.auto_switch_blocked() {
+                self.hold_failed_open(doc, replace);
+                return;
             }
+            self.leave_failed_open(doc, replace);
         } else {
             // 表示していない文書 (足したバッファ・起動時に追加で開いた文書) の読込の失敗: 表示中の文書はそのままに、閉じるだけ
             self.close_document(doc);
+        }
+    }
+
+    /// 表示中の文書の読込に失敗 (起動時の文書、または読込中に切り替えて表示していた足したバッファ): 失敗した文書は閉じ、
+    /// 開く前の文書 (残っていれば)・ほかの文書・無題の文書の順で表示する (再試行できる、03 §9.2 の「失敗」・§9.8)。
+    /// 表示を移さずに閉じると、Window が消えた View を指したままになる (`fuzz_editor` で見つけた)。ほかの読込の切り替え元は
+    /// 書き換えない (戻した先を基準に表示を奪わない側に倒す、03 §9.8 の「切り替え元の書き換え」)。表示していなければ
+    /// 閉じるだけ (保留の間に利用者が表示を移したとき)。
+    pub(crate) fn leave_failed_open(&mut self, doc: DocumentId, replace: Option<DocumentId>) {
+        if self.focused_window().is_some() && self.active_document() != Some(doc) {
+            self.close_document(doc);
+            return;
+        }
+        let others = replace
+            .filter(|r| *r != doc && self.docs.documents.contains_key(r))
+            .or_else(|| self.docs.documents.keys().copied().find(|d| *d != doc));
+        match others {
+            Some(next) => {
+                self.activate_document(next);
+                self.close_document(doc);
+            }
+            None => {
+                let blank = self.blank_document();
+                let (_, untitled) = self.add_document(blank);
+                self.show_view(untitled, Some(doc));
+            }
         }
     }
 }

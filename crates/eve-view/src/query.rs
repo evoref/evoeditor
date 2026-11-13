@@ -165,6 +165,9 @@ pub struct DocumentInfo {
 pub enum LoadStateView {
     /// 読込中。`Query::DocumentText` / `Query::Selection` は `QueryError::NotLoaded` になる。
     Loading,
+    /// 読込中で、本文の固定の先頭だけを読み取り専用で先に表示している (先行表示、docs/03 §9.2.1。v0.4 の M25)。
+    /// `Loading` と同じく編集できず、`Query::DocumentText` / `Query::Selection` は `QueryError::NotLoaded` になる。
+    Partial,
     /// 読込が完了した (無題の文書も含む)。本文と Selection を問い合わせられるのはこの状態だけ。
     Ready,
     /// 読込に失敗した。`Loading` と同じく本文と Selection は問い合わせられない。

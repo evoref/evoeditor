@@ -476,9 +476,11 @@ fn 読込を待つ間も今の文書を編集でき_重ねて開いてもよい(
     assert!(matches!(r, CommandResult::Pending(_)), "重ねて開いてもよい");
     s.run_jobs();
     assert_eq!(s.editor.state().documents_len(), 3, "a・b・c の 3 つ");
-    assert_eq!(s.doc_text(), "bbb", "最初に読み終えた b へ切り替わる");
+    // b の完了で b へ切り替わり、c の切り替え元は b に書き換わる (03 §9.8 の「切り替え元の書き換え」)。b を表示した
+    // ままなので、c の完了で c へ切り替わる
+    assert_eq!(s.doc_text(), "ccc", "最後に開いた c へ切り替わる");
     type_text(&mut s, "y");
-    assert_eq!(s.doc_text(), "ybbb", "完了後は編集できる");
+    assert_eq!(s.doc_text(), "yccc", "完了後は編集できる");
 }
 
 #[test]

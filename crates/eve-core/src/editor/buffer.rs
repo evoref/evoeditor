@@ -36,14 +36,21 @@ impl EditorState {
         (ids.len() >= 2).then_some((pos + 1, ids.len()))
     }
 
-    /// 置き換えで読込中の文書か (まだ表示されておらず、読込が終わるまで集合の外のものとして扱う)。
+    /// 置き換えで読込中の文書か (まだ表示されておらず、読込が終わるまで集合の外のものとして扱う)。先行表示 (`Partial`)
+    /// の文書は先頭を表示できるので、一覧に載せる (03 §9.8 の「読込中のバッファ」)。
     fn is_loading_replacement(&self, doc: DocumentId) -> bool {
-        self.io.pending.values().any(|p| {
-            matches!(
-                p,
-                Pending::Open { doc: d, replace: Some(_), .. } if *d == doc
-            )
-        })
+        let loading = self
+            .docs
+            .documents
+            .get(&doc)
+            .is_some_and(|d| d.load_state == crate::document::LoadState::Loading);
+        loading
+            && self.io.pending.values().any(|p| {
+                matches!(
+                    p,
+                    Pending::Open { doc: d, replace: Some(_), .. } if *d == doc
+                )
+            })
     }
 
     /// バッファ一覧の並び: 最近使った順 (表示中の文書が先頭、直前の文書が 2 番目、04 §8.5)。
@@ -166,7 +173,17 @@ impl EditorState {
                     .and_then(|p| p.parent())
                     .map(|d| d.display())
                     .unwrap_or_default();
-                let detail = format!("{dir}  {}", doc.format.encoding.name());
+                // 読込中 (`Loading` / 先行表示の `Partial`) の文書は、文字コードの代わりに「読込中」と出す (03 §9.8 の
+                // 「読込中のバッファ」、04 §8.5。文字コードは読込の完了で決まる)
+                let kind = if matches!(
+                    doc.load_state,
+                    crate::document::LoadState::Loading | crate::document::LoadState::Partial
+                ) {
+                    render(keys::UI_LOAD_STATE_LOADING, &[])
+                } else {
+                    doc.format.encoding.name().to_owned()
+                };
+                let detail = format!("{dir}  {kind}");
                 Some(ListItem {
                     label: cell_text(
                         &format!("{marker}{}", self.buffer_name(*doc_id)),

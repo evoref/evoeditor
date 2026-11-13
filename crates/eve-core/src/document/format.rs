@@ -541,6 +541,9 @@ impl ReadOnlyReasons {
 pub enum LoadState {
     /// 読込中 (再読込中は旧本文を表示し続ける)。
     Loading,
+    /// 読込中で、本文は固定の先頭 (先行表示、03 §9.2.1。v0.4 の M25)。`Loading` と同じく編集できず、dirty にならず、
+    /// 保存・スワップ・緊急退避の対象にならない (判定は `Ready` かどうかで行う)。
+    Partial,
     /// 読込を終えた (新規・無題の文書を含む)。
     #[default]
     Ready,

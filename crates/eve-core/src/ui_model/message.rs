@@ -13,6 +13,8 @@ pub(crate) struct ShownMessage {
     pub level: MessageLevel,
     pub text: String,
     pub hint: Option<String>,
+    /// 文言キー (同じ理由の拒否を 1 回にまとめる判定に使う、04 §15.2)。
+    pub key: String,
     /// 表示した時刻 (Warning は最低 1 秒表示する、04 §8.9)。
     pub shown_at: crate::time::Tick,
 }
@@ -108,6 +110,16 @@ impl EditorState {
     pub(crate) fn notify_read_only(&mut self) {
         use crate::document::ReadOnlyReason as R;
         let doc = self.active_document().and_then(|d| self.document(d));
+        // 読込中 (`Loading` / 先行表示の `Partial`) は理由ではなく状態: 読込を待つか取り消すかを案内する専用の
+        // メッセージ (03 §9.2.1 の「できない操作」、04 §15.2 の `msg.edit.read_only_loading`)
+        if doc.is_some_and(|d| d.load_state != crate::document::LoadState::Ready) {
+            self.show_message(
+                eve_view::MessageLevel::Warn,
+                keys::MSG_EDIT_READ_ONLY_LOADING,
+                &[],
+            );
+            return;
+        }
         let blocking = doc.and_then(crate::document::Document::blocking_read_only_reason);
         let key = match blocking {
             // 解除できない `InvalidBytes`: 衝突の文書 (b) は専用のメッセージ。由来の文字コードの無い文書 (文字コードの違う
@@ -172,6 +184,7 @@ impl EditorState {
             level,
             text,
             hint,
+            key: key.to_owned(),
             shown_at: self.now,
         });
         self.push_event(EditorEvent::MessageShown {
@@ -183,7 +196,8 @@ impl EditorState {
 
     /// キー入力でメッセージを消す (04 §8.9): Info は次のキー入力で、Warning は `Esc` または (最低 1 秒表示した後の)
     /// 次のキー入力で、Error は `Esc` で消える。`Esc` の優先順位 (オーバーレイ・チョード・読込の取消が先) は呼び出し側が決める。
-    pub(crate) fn dismiss_message_on_key(&mut self, is_esc: bool) {
+    /// `Esc` で警告・エラーを消したら `true` (その `Esc` はメッセージを消すことだけを行う、04 §7.5)。
+    pub(crate) fn dismiss_message_on_key(&mut self, is_esc: bool) -> bool {
         let now = self.now;
         let dismiss = match &self.ui.message {
             Some(m) => match m.level {
@@ -195,11 +209,22 @@ impl EditorState {
             },
             None => false,
         };
+        let warn_or_error = self
+            .ui
+            .message
+            .as_ref()
+            .is_some_and(|m| m.level != MessageLevel::Info);
         if dismiss {
             self.ui.message = None;
             self.ui.unread = 0;
             self.mark_dirty_render();
         }
+        dismiss && is_esc && warn_or_error
+    }
+
+    /// 表示中のメッセージの文言キー (同じ理由の拒否を 1 回にまとめる)。
+    pub(crate) fn shown_message_key(&self) -> Option<&str> {
+        self.ui.message.as_ref().map(|m| m.key.as_str())
     }
 
     /// 編集などのコマンドを実行したら Error を消す (カーソル移動では消えない)。

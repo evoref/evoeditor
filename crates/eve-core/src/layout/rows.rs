@@ -122,8 +122,9 @@ impl LineRows {
 }
 
 /// 行番号のガターの幅 (桁数 + 区切りの空白 1)。画面が狭くて本文が入らないときは、ガターを出さない (0)。
+/// 先行表示の間は、ファイルの大きさから推定した行数で決める (完了で確定する。03 §9.2.1 の「ステータスバー」)。
 pub(crate) fn gutter_width(doc: &Document, cols: usize) -> u16 {
-    let lines = doc.text().len_lines().max(1);
+    let lines = crate::io::partial_view::estimated_lines(doc);
     let w = lines.to_string().len().max(2) + 1;
     if cols >= w + 2 {
         super::cells_u16(w)
