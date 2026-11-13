@@ -67,7 +67,6 @@ pub const RESERVED_KEYS: &[&str] = &[
     "process.shell",
     "search.case",
     "search.count_limit",
-    "search.cp932_compat_fold",
     "search.max_matches",
     "search.regex_default",
     "search.regex_size_limit",

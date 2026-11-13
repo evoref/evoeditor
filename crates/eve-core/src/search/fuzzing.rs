@@ -2,7 +2,7 @@
 //! (`fuzz/fuzz_targets/fuzz_regex_search.rs`) と、Windows の CI で回す proptest (`crates/eve-core/tests/fuzz_regex_search.rs`)
 //! が同じ関数を使う (libFuzzer は MSVC 非対応のため、Linux の夜間ジョブだけで fuzz する)。
 //!
-//! 入力のバイト列を、検索の条件 (大小区別の 3 値・単語単位・`newline_sugar`・選択範囲)・窓の核の大きさ (1〜40 バイト)・
+//! 入力のバイト列を、検索の条件 (大小区別の 3 値・単語単位・`newline_sugar`・CP932 互換文字の同一視・選択範囲)・窓の核の大きさ (1〜40 バイト)・
 //! 連結の上限・時計の進み方・S-04 の部品から組んだ検索語・文書・チャンクの分け方 (`Text` を挿入の繰り返しで作る) に読み替え、
 //! 走査の入口 (`scan_range`。行の窓・全文の連結・行の経路) を次の参照と比べる。
 //!
@@ -17,6 +17,9 @@
 //! - **2 つ目の参照** (書き換えの誤りを見つけるため。1 つ目は参照にも同じ書き換えを掛ける): `\r` も、行の終端に 1 文字ずつ
 //!   一致しうる書き方 (`(?s)` の `.`・すべての文字のクラス・要素に `\r` を書いたクラス・`(?-R)`) も含まない検索語について、
 //!   CRLF と CR を LF にそろえた文書で `\n` を LF だけ (糖衣なし) として探し、位置を元の文書へ戻した結果と一致する。
+//!   CP932 互換文字の同一視 (03 §12.4.1) が ON のときは、文書の組の 2 つ目を 1 つ目にもそろえ、検索語の互換文字の部品を
+//!   「そろえた文書の上での同一視の意味」の形 (`compat_reference`。部品の集合を組の 16 文字で調べて作る。書き換えの実装とは
+//!   別の作り方) にした検索語を、同一視 OFF で探す (同一視の書き換えの誤りを見つける)。
 //!
 //! 最悪の入力の上限 (捨てた候補の予算・処理の速さの下限) で打ち切った入力は、打ち切ったことだけを確かめて比べない。
 //! 探さなかった入力 (`ScanEnd::TooLarge`) は、文書が連結の上限を超えることを確かめる。
@@ -92,6 +95,106 @@ const ATOMS: &[(&str, bool)] = &[
     (r"\x{10FF0A}", true),
 ];
 
+/// CP932 互換文字の同一視に関わる部品 (03 §12.4.1。リテラルの互換文字・符号位置・組の片方だけを含むクラス・否定・
+/// Unicode のクラスとその否定・範囲・両方を含むクラス・同一視しない `¥`)。2 つ目の参照では、`compat_reference` の形にする。
+const COMPAT_ATOMS: &[&str] = &[
+    "〜",
+    "～",
+    "−",
+    "￠",
+    "―",
+    "¦",
+    r"\x{FF0D}",
+    "[〜a]",
+    "[^～]",
+    r"\p{Sm}",
+    r"\P{Sm}",
+    r"\p{Pd}",
+    r"[\x{2010}-\x{2014}]",
+    "[〜～]",
+    "¥",
+    // 集合の演算・入れ子・組の両側にまたがる範囲・否定の否定 (03 §12.4.1 の「書き換えの細目」)
+    r"[\p{Sm}--−]",
+    "[[〜]&&[～]]",
+    "[〜-～]",
+    "[‖-∥]",
+    r"[^\P{Sm}]",
+    "[^[^〜]]",
+    r"[\p{Sc}~~[¢]]",
+    r"[\W&&[^\p{Sm}]]",
+];
+
+/// `compat_reference` が組の 16 文字で調べて作れない部品 (否定の入れ子と、集合の演算で組の片方ずつが両辺に分かれるもの) の、
+/// そろえた文書の上での同一視の意味の形。同一視は要素ごとに掛かってから演算と否定が掛かる (03 §12.4.1) ので、手で求めた。
+/// - `[[〜]&&[～]]`: 両辺とも `{〜,～}` になり、共通部分も `{〜,～}`。
+/// - `[^\P{Sm}]`: `\P{Sm}` は「`\p{Sm}` に同一視を掛けた集合」の否定で、その否定は `\p{Sm}` に同一視を掛けた集合。
+/// - `[^[^〜]]`: 否定の否定で `{〜,～}`。
+/// - `[\p{Sc}~~[¢]]`: `\p{Sc}` は組の両側を含むので変わらず、`{¢,￠}` との対称差は `\p{Sc}` から `¢`・`￠` を除いたもの。
+/// - `[\W&&[^\p{Sm}]]`: `\p{Sm}` に同一視を掛けた集合 (`〜`・`‖`・`－` が加わる) の否定との共通部分。
+const COMPAT_REFERENCE_BY_HAND: &[(&str, &str)] = &[
+    ("[[〜]&&[～]]", "〜"),
+    (r"[^\P{Sm}]", r"(?:\p{Sm}|[〜‖])"),
+    ("[^[^〜]]", "〜"),
+    (r"[\p{Sc}~~[¢]]", r"[\p{Sc}--¢]"),
+    (r"[\W&&[^\p{Sm}]]", r"[\W&&[^\p{Sm}〜‖]]"),
+];
+
+/// 同一視の組 (03 §12.4.1。実装の表とは別に書き写す。JIS 系の側, CP932 の側)。
+const COMPAT_PAIRS: [(char, char); 8] = [
+    ('\u{301C}', '\u{FF5E}'),
+    ('\u{2016}', '\u{2225}'),
+    ('\u{2212}', '\u{FF0D}'),
+    ('\u{00A2}', '\u{FFE0}'),
+    ('\u{00A3}', '\u{FFE1}'),
+    ('\u{00AC}', '\u{FFE2}'),
+    ('\u{00A6}', '\u{FFE4}'),
+    ('\u{2014}', '\u{2015}'),
+];
+
+/// 部品 `atom` (1 文字に一致する部品) の、組の 2 つ目を 1 つ目にそろえた文書の上での同一視の意味の形 (2 つ目の参照に使う)。
+/// 同一視の意味は「組のどちらかを含めば両方」(否定は、否定する前の集合に掛けてから否定する) なので、そろえた文書の上では
+/// 1 つ目の文字 `f` に、否定でない部品は `f` か相手が集合にあれば一致し、否定の部品は `f` も相手も集合に無いときだけ一致する。
+/// 集合に入るかは、否定を外した部品を組の 16 文字で `regex` に掛けて調べる (書き換えの実装を使わない)。
+pub fn compat_reference(atom: &str) -> String {
+    if let Some(&(_, r)) = COMPAT_REFERENCE_BY_HAND.iter().find(|(a, _)| *a == atom) {
+        return r.to_owned();
+    }
+    let (inner, body, negated) = if let Some(rest) = atom.strip_prefix("[^") {
+        (
+            format!("[{rest}"),
+            rest.trim_end_matches(']').to_owned(),
+            true,
+        )
+    } else if let Some(rest) = atom.strip_prefix(r"\P") {
+        let p = format!(r"\p{rest}");
+        (p.clone(), p, true)
+    } else {
+        (atom.to_owned(), String::new(), false)
+    };
+    let Ok(re) = regex::Regex::new(&format!("^(?:{inner})$")) else {
+        return atom.to_owned();
+    };
+    let has = |c: char| re.is_match(c.encode_utf8(&mut [0; 4]));
+    // 1 つ目の文字のうち、自分は集合に無く、相手が集合にあるもの (否定でなければ一致に足し、否定なら集合に足してから否定する)
+    let add: String = COMPAT_PAIRS
+        .iter()
+        .filter(|&&(f, s)| !has(f) && has(s))
+        .map(|&(f, _)| f)
+        .collect();
+    if add.is_empty() {
+        atom.to_owned()
+    } else if negated {
+        format!("[^{body}{add}]")
+    } else {
+        format!("(?:{atom}|[{add}])")
+    }
+}
+
+/// 組の 2 つ目を 1 つ目にした文字 (組に無い文字はそのまま)。
+fn compat_first(c: char) -> char {
+    COMPAT_PAIRS.iter().find(|p| p.1 == c).map_or(c, |p| p.0)
+}
+
 /// フラグのグループ `(?flags:…)` のフラグ。
 const FLAGS: &[&str] = &["i", "s", "-m", "U", "-i", "is", "-s", "s-i", "-R"];
 
@@ -132,6 +235,22 @@ const DOC: &[&str] = &[
     "\u{10FF0A}",
     "ab",
     "e\u{301}",
+    // CP932 互換文字の同一視の組の両側と、同一視しない組 (03 §12.4.1)
+    "〜",
+    "～",
+    "−",
+    "－",
+    "¢",
+    "￠",
+    "—",
+    "―",
+    "‖",
+    "∥",
+    "¦",
+    "￤",
+    "¥",
+    "￥",
+    "~",
 ];
 
 /// 置換の文字列 (`$0`・`$1`・名前のグループ。無いグループは空になる)。
@@ -152,6 +271,10 @@ pub struct RegexCase {
     pub whole_word: bool,
     /// `\n` の糖衣 (`search.newline_sugar`)。
     pub sugar: bool,
+    /// CP932 互換文字の同一視 (`search.cp932_compat_fold`)。
+    pub compat_fold: bool,
+    /// 2 つ目の参照に使う、互換文字の部品を `compat_reference` の形にした検索語 (同一視が ON のとき)。
+    pub compat_ref: String,
     /// 選択範囲 (バイト。char 境界へ丸め、昇順で重ならない形に直して使う)。
     pub scope: Option<Vec<(usize, usize)>>,
     /// 窓の核の大きさ (バイト)。
@@ -212,7 +335,7 @@ pub fn decode(data: &[u8]) -> RegexCase {
         dot: false,
         names: 0,
     };
-    let pattern = gen_node(&mut r, 4, &mut info);
+    let (pattern, compat_ref) = gen_node(&mut r, 4, &mut info);
     let n = usize::from(r.byte() % 40);
     let mut doc = String::new();
     for _ in 0..n {
@@ -241,6 +364,8 @@ pub fn decode(data: &[u8]) -> RegexCase {
         case,
         whole_word: opt & 4 != 0,
         sugar: opt & 8 == 0,
+        compat_fold: opt & 64 == 0,
+        compat_ref,
         scope,
         core_bytes,
         concat_max,
@@ -271,41 +396,55 @@ struct PatInfo {
 }
 
 /// 検索語の構文木を 1 つ組む (部品・並び・選択・捕獲・名前の捕獲・捕獲しないグループ・フラグのグループ・繰り返し)。
-fn gen_node(r: &mut Reader<'_>, depth: u32, info: &mut PatInfo) -> String {
+/// 返すのは (検索語, 互換文字の部品を `compat_reference` の形にした検索語)。
+fn gen_node(r: &mut Reader<'_>, depth: u32, info: &mut PatInfo) -> (String, String) {
     let b = r.byte();
     if depth == 0 || b < 112 {
-        let (a, ok) = ATOMS[usize::from(r.byte()) % ATOMS.len()];
+        let i = usize::from(r.byte()) % (ATOMS.len() + COMPAT_ATOMS.len());
+        let Some(&(a, ok)) = ATOMS.get(i) else {
+            let a = COMPAT_ATOMS[i - ATOMS.len()];
+            return (a.to_owned(), compat_reference(a));
+        };
         info.ref2 &= ok;
         info.s_flag |= a == "(?s)";
         info.dot |= a == ".";
-        return a.to_owned();
+        return (a.to_owned(), a.to_owned());
     }
+    let wrap = |(p, q): (String, String), f: &dyn Fn(&str) -> String| (f(&p), f(&q));
     match b % 7 {
         0 => {
             let n = 1 + r.byte() % 4;
-            (0..n).map(|_| gen_node(r, depth - 1, info)).collect()
+            let parts: Vec<(String, String)> =
+                (0..n).map(|_| gen_node(r, depth - 1, info)).collect();
+            (
+                parts.iter().map(|x| x.0.as_str()).collect(),
+                parts.iter().map(|x| x.1.as_str()).collect(),
+            )
         }
         1 => {
             let a = gen_node(r, depth - 1, info);
             let c = gen_node(r, depth - 1, info);
-            format!("(?:{a}|{c})")
+            (
+                format!("(?:{}|{})", a.0, c.0),
+                format!("(?:{}|{})", a.1, c.1),
+            )
         }
-        2 => format!("({})", gen_node(r, depth - 1, info)),
+        2 => wrap(gen_node(r, depth - 1, info), &|x| format!("({x})")),
         3 => {
             info.names += 1;
             let n = info.names;
-            format!("(?P<g{n}>{})", gen_node(r, depth - 1, info))
+            wrap(gen_node(r, depth - 1, info), &|x| format!("(?P<g{n}>{x})"))
         }
-        4 => format!("(?:{})", gen_node(r, depth - 1, info)),
+        4 => wrap(gen_node(r, depth - 1, info), &|x| format!("(?:{x})")),
         5 => {
             let f = FLAGS[usize::from(r.byte()) % FLAGS.len()];
             info.s_flag |= f.contains('s');
             info.ref2 &= !f.contains('R');
-            format!("(?{f}:{})", gen_node(r, depth - 1, info))
+            wrap(gen_node(r, depth - 1, info), &|x| format!("(?{f}:{x})"))
         }
         _ => {
             let q = QUANTS[usize::from(r.byte()) % QUANTS.len()];
-            format!("(?:{}){q}", gen_node(r, depth - 1, info))
+            wrap(gen_node(r, depth - 1, info), &|x| format!("(?:{x}){q}"))
         }
     }
 }
@@ -347,6 +486,7 @@ pub fn check(c: &RegexCase) -> Result<Checked, String> {
         .with_case(c.case)
         .with_whole_word(c.whole_word)
         .with_newline_sugar(c.sugar)
+        .with_compat_fold(c.compat_fold)
         .with_scope(scope.clone().map(Arc::from))
         .tuned(tuning);
     let Ok(Some(m)) = q.compile() else {
@@ -472,6 +612,13 @@ pub fn check(c: &RegexCase) -> Result<Checked, String> {
                 .copied()
                 .filter(|r| r.0 >= from)
                 .collect();
+            // 先頭からの走査が探せた文書は、正本の位置から走査し直しても窓の上限で探さないとしない (03 §12.3.1 の行の窓)
+            if end == ScanEnd::TooLarge {
+                return Err(format!(
+                    "{from} から走査し直すと探さない (窓の上限): {}",
+                    ctx()
+                ));
+            }
             if end == ScanEnd::Done && rest != expect {
                 return Err(format!(
                     "{from} から走査し直した続きが違う: {}\n 実際 {rest:?}\n 期待 {expect:?}",
@@ -580,12 +727,22 @@ pub fn check(c: &RegexCase) -> Result<Checked, String> {
         }
     }
 
-    // 2 つ目の参照: CRLF と CR を LF にそろえた文書で、糖衣なしの `\n` (LF だけ) で探す
-    if c.ref2 && c.sugar && scope.is_none() {
-        let q2 = SearchQuery::literal(&c.pattern)
+    // 2 つ目の参照: CRLF と CR を LF にそろえた文書で、糖衣なしの `\n` (LF だけ) で探す。同一視が ON なら、文書の組の 2 つ目を
+    // 1 つ目にもそろえ、互換文字の部品を `compat_reference` の形にした検索語を同一視 OFF で探す (単語単位は、そろえると単語の
+    // 境界が変わりうるので、そろえて文書が変わるときは比べない)
+    let (norm, map) = normalize(doc, c.compat_fold);
+    let word_safe = !c.whole_word || !c.compat_fold || doc.chars().all(|ch| compat_first(ch) == ch);
+    if c.ref2 && c.sugar && scope.is_none() && word_safe {
+        let pattern2 = if c.compat_fold {
+            c.compat_ref.as_str()
+        } else {
+            c.pattern.as_str()
+        };
+        let q2 = SearchQuery::literal(pattern2)
             .with_regex(true)
             .with_case(c.case)
-            .with_newline_sugar(false);
+            .with_newline_sugar(false)
+            .with_compat_fold(false);
         let p2 = q2
             .analyze()
             .map_err(|e| format!("糖衣なしの解析の誤り {e:?}: {}", ctx()))?
@@ -593,7 +750,6 @@ pub fn check(c: &RegexCase) -> Result<Checked, String> {
         if let Some(p2) = p2
             && let Some(re2) = reference_regex(&p2, !q2.is_case_sensitive())
         {
-            let (norm, map) = normalize(doc);
             let second: Vec<(usize, usize)> = select(&norm, &re2, c.whole_word)
                 .iter()
                 .map(|r| (map[r.s], map[r.e]))
@@ -733,6 +889,12 @@ fn check_callers(
     for &from in &sample(&resume, 4) {
         let (end, rest) = scan(t, m, from, None, None);
         let expect: Vec<(usize, usize)> = want.iter().copied().filter(|r| r.0 >= from).collect();
+        if end == ScanEnd::TooLarge {
+            return Err(format!(
+                "ジョブの再開の位置 {from} から走査し直すと探さない (窓の上限): {}",
+                ctx()
+            ));
+        }
         if end == ScanEnd::Done && rest != expect {
             return Err(format!(
                 "ジョブの再開の位置 {from} から走査し直した続きが違う: {}\n 実際 {rest:?}\n 期待 {expect:?}",
@@ -1061,8 +1223,9 @@ fn apply(doc: &str, cs: &ChangeSet) -> Result<String, String> {
 }
 
 /// CRLF と CR を LF にそろえた文書と、そろえた文書の位置 → 元の文書の位置 (行の終端は元の終端の先頭、その後ろは元の終端の
-/// 後ろへ写す)。
-fn normalize(doc: &str) -> (String, Vec<usize>) {
+/// 後ろへ写す)。`compat` なら CP932 互換文字の組の 2 つ目を 1 つ目にもそろえる (バイト長が変わる組もある。文字の中の位置は
+/// 元の文字の先頭へ写す)。
+fn normalize(doc: &str, compat: bool) -> (String, Vec<usize>) {
     let b = doc.as_bytes();
     let mut out = String::with_capacity(doc.len());
     let mut map = Vec::with_capacity(doc.len() + 1);
@@ -1074,11 +1237,13 @@ fn normalize(doc: &str) -> (String, Vec<usize>) {
             i += if b.get(i + 1) == Some(&b'\n') { 2 } else { 1 };
             continue;
         }
-        let n = doc[i..].chars().next().map_or(1, char::len_utf8);
-        for k in 0..n {
-            map.push(i + k);
+        let ch = doc[i..].chars().next().unwrap_or('\0');
+        let n = ch.len_utf8();
+        let to = if compat { compat_first(ch) } else { ch };
+        for _ in 0..to.len_utf8() {
+            map.push(i);
         }
-        out.push_str(&doc[i..i + n]);
+        out.push(to);
         i += n;
     }
     map.push(doc.len());

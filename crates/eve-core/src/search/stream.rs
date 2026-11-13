@@ -6,7 +6,8 @@
 //!
 //! **窓の作り方**: 核 `[core_start, core_end)` は約 1 MiB (`SEARCH_WINDOW_CORE_BYTES`。重い検索語は 16 KiB から始める) を、
 //! 最大の長さが有限で単語単位でない検索語では char 境界に、それ以外は行の境界に揃えたもの (範囲の始端と、直前の一致が核の
-//! 終わりを越えたときは、行の途中から始まる)。延ばす量は「核の最後のバイトを含む行の後ろの k 行」と「最大の長さ」の小さいほう
+//! 終わりを越えたときは、行の途中から始まる。窓が上限を超えるときは、核を下限 (行の境界に揃える検索語では、核の始端を
+//! 含む行の残り) まで縮めて作り直す)。延ばす量は「核の最後のバイトを含む行の後ろの k 行」と「最大の長さ」の小さいほう
 //! で、窓 = 前の 1 文字 + 核 + 延ばす分 + 後ろの 1 文字を 1 本に複写する。核の中で始まる一致の文字列は、k 個より多くの行の
 //! 終端を含まず最大の長さも越えないので、窓の終わりより手前で終わり、窓の外へ伸びる候補は (全文でも窓でも) 無い。`regex` の
 //! `find_at` は始端より前の文字を `^`・`\b` の判定に使うので、核の中で始まる一致は全文で探したものと同じになる。後ろの 1 文字は
@@ -153,8 +154,17 @@ impl Stream<'_> {
                     (core_end, ext_end) = (grown, grown_ext);
                 }
             }
-            let he = next_char(text, ext_end);
-            // 窓が上限を超える検索語は、上限なしと同じに扱う (窓は文書の一部なので、文書は上限を超えていて探さない)。
+            let mut he = next_char(text, ext_end);
+            // 窓が上限を超えるときは、核を下限 (行の境界に揃える検索語では、核の始端を含む行の残り) まで縮めて作り直す。
+            // 窓が上限を超えるかが核の切り方 (範囲の始端・時計で縮めた核の大きさ) に依らず、核の始端を含む行で決まるように
+            // する (行の途中の再開の位置・正本の一致の終端から走査し直すと、単語単位の窓は行頭へ戻るので、そこから核の大きさを
+            // 足すと次の行まで含み、正本の走査が探せた文書を「探さない」としていた)
+            if k > 0 && he - hs > tuning.concat_max {
+                core_end = cut(core_start.saturating_add(min_core)).min(end);
+                ext_end = self.extend(core_end, k);
+                he = next_char(text, ext_end);
+            }
+            // それでも窓が上限を超える検索語は、上限なしと同じに扱う (窓は文書の一部なので、文書は上限を超えていて探さない)。
             // 核を行の境界に揃える検索語 (最大の長さが無い・単語単位) だけが、ここで初めて分かる
             if k > 0 && he - hs > tuning.concat_max {
                 return ScanEnd::TooLarge;
@@ -392,7 +402,7 @@ fn ceil_char(text: &dyn TextRead, x: usize) -> usize {
 }
 
 /// `x` (char 境界) の次の char の終わり (末尾ではそのまま)。
-fn next_char(text: &dyn TextRead, x: usize) -> usize {
+pub(super) fn next_char(text: &dyn TextRead, x: usize) -> usize {
     let len = text.len_bytes();
     if x >= len {
         return len;
@@ -401,7 +411,7 @@ fn next_char(text: &dyn TextRead, x: usize) -> usize {
 }
 
 /// `x` (char 境界) の前の char の始まり (先頭ではそのまま)。
-fn prev_char(text: &dyn TextRead, x: usize) -> usize {
+pub(super) fn prev_char(text: &dyn TextRead, x: usize) -> usize {
     if x == 0 {
         return 0;
     }

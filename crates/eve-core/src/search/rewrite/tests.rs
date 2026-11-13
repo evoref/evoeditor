@@ -421,3 +421,220 @@ proptest! {
         }
     }
 }
+
+// ---- CP932 互換文字の同一視 (03 §12.4.1、09 §3.2 の検索の拡張の行の (f)) ----
+
+/// 同一視を掛けて書き換える (大小は区別する・糖衣あり)。
+fn folded(p: &str) -> Rewritten {
+    rewrite_with(p, false, true, true).unwrap_or_else(|e| panic!("{p:?}: {e:?}"))
+}
+
+/// 書き換えた検索語が 1 文字 `c` に (文字列の全体として) 一致するか。
+fn one(w: &Rewritten, c: char) -> bool {
+    compile(&format!("^(?:{})$", w.pattern), false).is_match(c.encode_utf8(&mut [0; 4]))
+}
+
+#[test]
+fn 互換文字のリテラルとクラスの書き換えの形() {
+    assert_eq!(folded("〜").pattern, "[〜～]");
+    assert_eq!(folded("a―b").pattern, "a[―—]b");
+    assert_eq!(folded("[〜]").pattern, "[〜～]");
+    // 否定は中の要素に足してから否定する (行の終端を集合から除く書き換えも続けて掛かる)
+    assert_eq!(folded("[^〜]").pattern, r"[[^〜～]--[\n\r]]");
+    // 書き換えても一致する文字が変わらないクラスは元のまま
+    assert_eq!(folded("[〜～]").pattern, "[〜～]");
+    assert!(!folded("[〜～]").compat_folded);
+    for p in [r"\S", r"\W", r"\w", r"\d", ".", "[^a]", r"\p{L}", "abc"] {
+        let w = folded(p);
+        assert!(!w.compat_folded, "{p}");
+        assert_eq!(w.pattern, rewrite(p, false, true).unwrap().pattern, "{p}");
+        assert!(w.unfolded.is_none(), "{p}");
+    }
+    // 同一視を切った検索語は、同一視しない書き換えと同じ
+    let w = folded(r"(〜)\n[^―]");
+    assert!(w.compat_folded);
+    assert_eq!(
+        w.unfolded.as_deref(),
+        Some(
+            rewrite(r"(〜)\n[^―]", false, true)
+                .unwrap()
+                .pattern
+                .as_str()
+        )
+    );
+    assert_eq!(w.lines, rewrite(r"(〜)\n[^―]", false, true).unwrap().lines);
+}
+
+#[test]
+fn 互換文字の組はどの書き方でも両方に一致し_否定はどちらにも一致しない() {
+    for &(a, b) in &COMPAT_PAIRS {
+        for c in [a, b] {
+            let hex = format!("\\x{{{:X}}}", u32::from(c));
+            for p in [
+                c.to_string(),
+                hex.clone(),
+                format!("[{c}]"),
+                format!("[{hex}]"),
+                format!("[{c}-{c}]"),
+                format!("(?i){c}"),
+                format!("[[{c}]x]"),
+                format!("[{c}&&[^x]]"),
+            ] {
+                let w = folded(&p);
+                assert!(one(&w, a) && one(&w, b), "{p} → {}", w.pattern);
+                assert!(w.compat_folded, "{p}");
+            }
+            for p in [format!("[^{c}]"), format!("[^{hex}]"), format!("[^[{c}]]")] {
+                let w = folded(&p);
+                assert!(!one(&w, a) && !one(&w, b), "{p} → {}", w.pattern);
+                assert!(one(&w, 'x'), "{p}");
+            }
+        }
+    }
+    // Unicode のクラス: 足す (`\p`) と差し引く (`\P`)。集合の演算は両辺に掛かってから
+    for (p, yes, no) in [
+        (
+            r"\p{Sm}",
+            &['〜', '～', '‖', '∥', '−', '－'][..],
+            &['a', '¢'][..],
+        ),
+        (
+            r"\P{Sm}",
+            &['a', '¢', '￠'][..],
+            &['〜', '～', '‖', '∥'][..],
+        ),
+        (r"[\p{Sm}--−]", &['〜', '～'][..], &['−', '－'][..]),
+        (
+            r"[\x{2010}-\x{2014}]",
+            &['—', '―', '\u{2010}'][..],
+            &['‖'][..],
+        ),
+        (r"[[〜]&&[～]]", &['〜', '～'][..], &['a'][..]),
+    ] {
+        let w = folded(p);
+        for &c in yes {
+            assert!(one(&w, c), "{p} → {} は {c} に一致する", w.pattern);
+        }
+        for &c in no {
+            assert!(!one(&w, c), "{p} → {} は {c} に一致しない", w.pattern);
+        }
+    }
+    // 同一視しない組と `(?-u)` の範囲
+    for (p, c) in [("¥", '￥'), ("‾", '￣'), (r"\\", '¥'), ("~", '～')] {
+        let w = folded(p);
+        assert!(!one(&w, c), "{p}");
+        assert!(!w.compat_folded, "{p}");
+    }
+    let w = folded("(?-u:〜)");
+    assert!(!w.compat_folded);
+    assert!(!one(&w, '～'));
+}
+
+/// 同一視の性質の試験に使う部品 (互換文字の部品と、ふつうの部品)。
+const FOLD_ATOMS: &[&str] = &[
+    "〜",
+    "～",
+    "−",
+    "￠",
+    "―",
+    "¦",
+    r"\x{FF0D}",
+    "[〜a]",
+    "[^～]",
+    r"\p{Sm}",
+    r"\P{Sm}",
+    r"\p{Pd}",
+    r"[\x{2010}-\x{2014}]",
+    "[〜～]",
+    "¥",
+    r"[\p{Sm}--−]",
+    "[[〜]&&[～]]",
+    "[〜-～]",
+    "[‖-∥]",
+    r"[^\P{Sm}]",
+    "[^[^〜]]",
+    r"[\p{Sc}~~[¢]]",
+    r"[\W&&[^\p{Sm}]]",
+    "a",
+    ".",
+    r"\w",
+    r"\W",
+    r"\S",
+    "[^a]",
+    r"\b",
+    "^",
+    "$",
+];
+
+/// 部品から組んだ (検索語, 2 つ目の参照の検索語)。
+fn fold_pattern() -> impl Strategy<Value = (String, String)> {
+    let leaf = prop::sample::select(FOLD_ATOMS)
+        .prop_map(|a| (a.to_owned(), crate::search::fuzzing::compat_reference(a)));
+    leaf.prop_recursive(3, 16, 4, |inner| {
+        prop_oneof![
+            prop::collection::vec(inner.clone(), 1..4).prop_map(|v| {
+                (
+                    v.iter().map(|x| x.0.as_str()).collect(),
+                    v.iter().map(|x| x.1.as_str()).collect(),
+                )
+            }),
+            (inner.clone(), inner.clone())
+                .prop_map(|(a, b)| (format!("{}|{}", a.0, b.0), format!("{}|{}", a.1, b.1))),
+            inner
+                .clone()
+                .prop_map(|a| (format!("({})", a.0), format!("({})", a.1))),
+            (
+                inner,
+                prop::sample::select(&["?", "*", "+", "{2}", "*?"][..])
+            )
+                .prop_map(|(a, q)| (format!("(?:{}){q}", a.0), format!("(?:{}){q}", a.1))),
+        ]
+    })
+}
+
+/// 文書の文字 (組の両側・同一視しない組・ほかの文字。CR と LF は含めない)。
+const DOC_FOLD: &[char] = &[
+    '〜', '～', '‖', '∥', '−', '－', '¢', '￠', '£', '￡', '¬', '￢', '¦', '￤', '—', '―', '¥',
+    '￥', '‾', '￣', '\\', '~', 'a', 'あ', ' ', '1', '\u{301}',
+];
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(512))]
+
+    // 09 §3.2 の (f): 同一視を掛けた検索語の一致とキャプチャは、文書の組の 2 つ目を 1 つ目にそろえ、部品を「そろえた文書の
+    // 上での同一視の意味」の形 (`compat_reference`。書き換えの実装とは別の作り方) にした検索語で探した結果を、元の位置へ
+    // 戻したものと同じ (組は対称・範囲は元のバイト範囲・捕獲グループの番号は変わらない)
+    #[test]
+    fn 同一視の書き換えはそろえた文書で参照の形を探したのと同じ(
+        (p, r) in fold_pattern(),
+        d in prop::collection::vec(prop::sample::select(DOC_FOLD), 0..24)
+            .prop_map(|v| v.into_iter().collect::<String>()),
+        insensitive: bool,
+    ) {
+        let Ok(w) = rewrite_with(&p, insensitive, true, true) else {
+            return Ok(());
+        };
+        let Some(re) = build(&w.pattern, insensitive) else {
+            return Err(TestCaseError::fail(format!("{p:?} → {:?} を作れない", w.pattern)));
+        };
+        let Some(reference) = build(&r, insensitive) else {
+            return Err(TestCaseError::fail(format!("参照 {r:?} を作れない")));
+        };
+        let mut nd = String::new();
+        let mut map = Vec::new();
+        for (i, c) in d.char_indices() {
+            let n = COMPAT_PAIRS.iter().find(|x| x.1 == c).map_or(c, |x| x.0);
+            for _ in 0..n.len_utf8() {
+                map.push(i);
+            }
+            nd.push(n);
+        }
+        map.push(d.len());
+        let want: Vec<Vec<Option<(usize, usize)>>> = all_captures(&reference, &nd)
+            .into_iter()
+            .map(|c| c.into_iter().map(|g| g.map(|(s, e)| (map[s], map[e]))).collect())
+            .collect();
+        prop_assert_eq!(re.captures_len(), reference.captures_len());
+        prop_assert_eq!(all_captures(&re, &d), want, "{:?} → {:?} / 参照 {:?} / 文書 {:?}", p, w.pattern, r, d);
+    }
+}

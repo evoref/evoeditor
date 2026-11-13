@@ -167,7 +167,8 @@ impl EditorState {
         }
         lines.push(line(HelpLineKind::Body, None, String::new()));
 
-        // 検索の書き方 (v0.4 の M24、04 §8.6): 行をまたぐ書き方とまたがない書き方の表、他の道具との対応、上限
+        // 検索の書き方 (v0.4 の M24、04 §8.6): 行をまたぐ書き方とまたがない書き方の表、他の道具との対応、上限、
+        // CP932 互換文字の同一視の組と `¥` / `‾` を除く注意 (03 §12.4.1)
         section(
             &mut lines,
             HelpSection::Search,
@@ -189,6 +190,20 @@ impl EditorState {
             keys::UI_HELP_SEARCH_OTHER_TOOLS,
             keys::UI_HELP_SEARCH_LIMIT,
             keys::UI_HELP_SEARCH_SUGAR,
+        ] {
+            lines.push(line(HelpLineKind::Body, None, render(k)));
+        }
+        // CP932 互換文字の同一視 (03 §12.4.1、04 §8.6)。80 桁の端末で切れないよう、1 行を 78 セル以下の短い文にする
+        for k in [
+            keys::UI_HELP_SEARCH_COMPAT_INTRO,
+            keys::UI_HELP_SEARCH_COMPAT_PAIRS,
+            keys::UI_HELP_SEARCH_COMPAT_REGEX,
+            keys::UI_HELP_SEARCH_COMPAT_REPLACE,
+            keys::UI_HELP_SEARCH_COMPAT_OFF,
+            keys::UI_HELP_SEARCH_COMPAT_MARK,
+            keys::UI_HELP_SEARCH_COMPAT_MATCH,
+            keys::UI_HELP_SEARCH_COMPAT_EXCLUDE,
+            keys::UI_HELP_SEARCH_COMPAT_YEN_KEY,
         ] {
             lines.push(line(HelpLineKind::Body, None, render(k)));
         }

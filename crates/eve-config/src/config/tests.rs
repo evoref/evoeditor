@@ -486,6 +486,7 @@ fn changed_keys_は変わった公開キーだけを並べ_全キーを網羅す
         "file.long_line_threshold",
         "file.reload_on_external_change",
         "search.newline_sugar",
+        "search.cp932_compat_fold",
     ]
     .into_iter()
     .collect();
@@ -529,6 +530,7 @@ fn 既定値の表記は全公開キーで決まった値() {
         ("file.long_line_threshold", "1048576"),
         ("file.reload_on_external_change", "auto_if_unmodified"),
         ("search.newline_sugar", "true"),
+        ("search.cp932_compat_fold", "true"),
     ];
     assert_eq!(want.len(), KEYS.len());
     for (key, display) in want {
@@ -642,13 +644,14 @@ const INT_KEYS: [&str; 12] = [
     "file.huge_file_warn_bytes",
     "file.long_line_threshold",
 ];
-const BOOL_KEYS: [&str; 6] = [
+const BOOL_KEYS: [&str; 7] = [
     "file.swap.enabled",
     "file.swap.exclude_secret_files",
     "view.wrap_kinsoku",
     "ui.mouse",
     "ui.hint_bar",
     "search.newline_sugar",
+    "search.cp932_compat_fold",
 ];
 
 /// 読んだ結果の診断が 1 件で、そのキーのもの。

@@ -597,6 +597,11 @@ pub fn run_search(
         empty_done(emit, None);
         return;
     };
+    // 同一視が効いている検索語: 同一視を切った照合器もここで作っておく (メインスレッドが件数の印で、今の一致が同一視で
+    // 当たったものかを見分けるのに使う。メインスレッドでは作らない、03 §12.4.1 の「検索バーの表示」)
+    if m.compat_folded() {
+        let _ = m.fold_check();
+    }
     let len = p.snapshot.len_bytes();
     let whole = m.whole_doc();
     let mut batch: Vec<ByteRange> = Vec::new();

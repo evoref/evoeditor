@@ -1,0 +1,60 @@
+# 既定 (`search.cp932_compat_fold = true`) では、CP932 互換文字の組の片方で探すと、もう片方にも一致する。一致の範囲は
+# 文書の元のバイト範囲で、文書は変わらない (01 FR-401 AC-4、03 §12.4.1。`compat_fold_off` と同じ文書・検索語で一致が違う)。
+[meta]
+id = "search/compat_fold_search"
+title = "互換文字の組の片方で探すと両方に一致し、範囲は元のバイト範囲"
+verifies = ["AC-FR-401-4"]
+since = "v0.4"
+tags = ["search", "compat", "config"]
+
+[setup]
+size = [60, 12]
+
+[setup.fs]
+"a.txt" = { text = "1〜2\n3～4\n5¢6￠7" }
+
+[[step]]
+open = "a.txt"
+[[step]]
+run_jobs = true
+[[step]]
+keys = "ctrl+f"
+[[step]]
+text = "～"
+[[step]]
+run_jobs = true
+[[step]]
+keys = "enter"
+[[step]]
+keys = "enter"
+[[step]]
+keys = "ctrl+a"
+[[step]]
+text = "¢"
+[[step]]
+run_jobs = true
+[[step]]
+keys = "enter"
+[[step]]
+keys = "enter"
+
+# `～` (U+FF5E) で探すと `〜` (U+301C、バイト 1〜4) と `～` (バイト 7〜10) の 2 件 (件数の後ろの「互換」は eve-core の試験 `search_compat_fold` で見る)
+[[assert]]
+at = 6
+query = { kind = "selection" }
+expect = { anchor = 1, head = 4 }
+[[assert]]
+at = 7
+query = { kind = "selection" }
+expect = { anchor = 7, head = 10 }
+# `¢` (2 バイト) で `￠` (3 バイト) にも一致し、範囲はそれぞれの元の長さ
+[[assert]]
+at = 11
+query = { kind = "selection" }
+expect = { anchor = 13, head = 15 }
+[[assert]]
+query = { kind = "selection" }
+expect = { anchor = 16, head = 19 }
+[[assert]]
+query = { kind = "text" }
+expect = { text = "1〜2\n3～4\n5¢6￠7" }

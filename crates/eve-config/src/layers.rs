@@ -249,6 +249,7 @@ mod tests {
                 "ui.mouse_wheel_lines",
                 "ui.which_key_delay_ms",
                 "search.newline_sugar",
+                "search.cp932_compat_fold",
                 "clipboard.osc52",
                 "clipboard.osc52_max_bytes",
             ]

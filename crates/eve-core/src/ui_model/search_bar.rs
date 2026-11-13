@@ -37,6 +37,7 @@ impl SearchBarState {
             .with_whole_word(self.whole_word)
             .with_scope(self.in_selection.then(|| self.sel_ranges.clone()))
             .with_newline_sugar(self.newline_sugar)
+            .with_compat_fold(self.compat_fold)
             .tuned(self.tuning);
         let mut last = self.memo.query.borrow_mut();
         match &*last {
@@ -68,7 +69,17 @@ pub(crate) struct SearchBarMemo {
     query: std::cell::RefCell<Option<SearchQuery>>,
     /// 最後に求めた可視行の一致。検索の途中経過の再描画などで、条件が同じ間は可視行を走査し直さない。
     visible: std::cell::RefCell<Option<(VisibleKey, VisibleMatches)>>,
+    /// 最後に確かめた「今の一致が同一視で当たったものか」(件数の印、03 §12.4.1)。キーは (文書, Revision, 一致, 問い合わせ)。
+    folded: std::cell::RefCell<Option<(FoldedKey, bool)>>,
 }
+
+/// 今の一致が同一視で当たったものかの覚えのキー。
+type FoldedKey = (
+    eve_view::DocumentId,
+    eve_view::Revision,
+    ByteRange,
+    SearchQuery,
+);
 
 /// 可視行の強調で、1 行あたり検索する上限 (`SEARCH_SYNC_LINE_MAX`、03 §12.2)。これを超える行は強調しない。
 const SYNC_LINE_MAX: usize = 16 * 1024;
@@ -94,6 +105,8 @@ pub(crate) struct SearchBarState {
     pub refusal: Option<ScanLimit>,
     /// 正規表現の `\n` の糖衣 (`search.newline_sugar`。検索バーを開いたときの設定の値、03 §12.3.1 の「型と状態の持ち主」)。
     pub newline_sugar: bool,
+    /// CP932 互換文字の同一視 (`search.cp932_compat_fold`。検索バーを開いたときの設定の値、03 §12.4.1)。
+    pub compat_fold: bool,
     /// 行の窓の核の大きさと連結の上限 (既定は定数。試験だけが小さくする、`SearchTuning`)。
     pub tuning: SearchTuning,
     /// 入力しているときの検索の起点 (開いたときの選択の始端。一致へ移ったらその一致の始端)。
@@ -165,6 +178,7 @@ impl EditorState {
             refusal: None,
             // 設定の変更は次に検索バーを開いたときから効く (03 §12.3.1 の「型と状態の持ち主」)
             newline_sugar: self.config().newline_sugar,
+            compat_fold: self.config().cp932_compat_fold,
             tuning: self.find.tuning,
             anchor,
             current: None,
@@ -663,6 +677,24 @@ impl EditorState {
             )),
         });
         let query = bar.query();
+        // CP932 互換文字の同一視が効いているときだけ、件数の後ろに印を付ける。今の一致が同一視で当たったものなら、印を
+        // 「互換一致」にする (03 §12.4.1 の「検索バーの表示」、04 §8.4。境界の型は変えない)
+        let folded = query
+            .analyze()
+            .ok()
+            .flatten()
+            .is_some_and(|p| p.compat_folded());
+        let count_text = count_text.map(|t| {
+            if !folded {
+                return t;
+            }
+            let key = if self.current_match_folded(bar, &query) {
+                keys::UI_SEARCH_COUNT_COMPAT_MATCH_SUFFIX
+            } else {
+                keys::UI_SEARCH_COUNT_COMPAT_SUFFIX
+            };
+            format!("{t} {}", render(key, &[]))
+        });
         let error = bar
             .error
             .as_ref()
@@ -732,6 +764,41 @@ impl EditorState {
             error,
             count_text: count_text.map(|t| cell_text(&t, CutPolicy::End)),
         })
+    }
+
+    /// 件数の表示の今の一致が、CP932 互換文字の同一視で当たったものか (同一視を切った検索語が、文書の前後の文脈のまま、
+    /// その範囲にちょうど一致できない、03 §12.4.1)。照合器が `bg` のジョブで作られた後で、重くない検索語の、64 KiB
+    /// (`SEARCH_SYNC_MULTILINE_MAX`) 以下の一致だけを、メインスレッドで確かめる (それ以外は偽 = 「互換」の印)。
+    fn current_match_folded(&self, bar: &SearchBarState, query: &SearchQuery) -> bool {
+        let Some(r) = self.search_current_range(bar.current) else {
+            return false;
+        };
+        if r.end.0 - r.start.0 > SEARCH_SYNC_MULTILINE_MAX
+            || query.shape().is_some_and(|s| s.heavy_guard())
+        {
+            return false;
+        }
+        let Some(doc_id) = self.find.search.as_ref().map(|s| s.doc()) else {
+            return false;
+        };
+        let Some(doc) = self.docs.documents.get(&doc_id) else {
+            return false;
+        };
+        let key: FoldedKey = (doc_id, doc.revision(), r, query.clone());
+        if let Some((k, v)) = &*bar.memo.folded.borrow()
+            && *k == key
+        {
+            return *v;
+        }
+        let Prepared::Ready(m) = query.prepared() else {
+            return false;
+        };
+        let Some(mut check) = m.fold_check_ready() else {
+            return false;
+        };
+        let v = check.folded(doc.text(), r);
+        *bar.memo.folded.borrow_mut() = Some((key, v));
+        v
     }
 
     /// 可視行の一致 (強調する範囲)。保持した一致ではなく、可視行だけを同期検索する (03 §12.2 の「可視範囲のハイライト」)。
@@ -1060,7 +1127,7 @@ impl EditorState {
                 build_replace_all_in(doc.text(), &query, &replacement, None, &CancelToken::new());
             self.find.replace_all_pua = pua;
             match built {
-                Ok(Some((changes, count))) => self.apply_replace_all(doc_id, changes, count),
+                Ok(Some(b)) => self.apply_replace_all(doc_id, b.changes, b.count, b.folded),
                 Ok(None) => {}
                 Err(e) => {
                     if let Some(l) = e.limit() {
@@ -1337,7 +1404,8 @@ impl EditorState {
         self.mark_dirty_render();
     }
 
-    /// 1 件置換を当てる (置換ごとに別の Undo 単位)。カーソルを置換の後ろに置き、そこから次の一致を探し直す。
+    /// 1 件置換を当てる (置換ごとに別の Undo 単位)。カーソルを置換の後ろに置き、そこから次の一致を探し直す。一致した文字列と
+    /// 置換の文字列 (展開した後) が同じなら置き換えず (文書を変えない)、一致の後ろから次の一致へ進む (03 §12.5)。
     fn apply_replace_one(
         &mut self,
         doc_id: eve_view::DocumentId,
@@ -1348,6 +1416,19 @@ impl EditorState {
         let Some(doc) = self.docs.documents.get(&doc_id) else {
             return;
         };
+        if insert.len() == range.end.0 - range.start.0
+            && doc.text().slice_to_string(range) == insert
+        {
+            let view = self.focused_view();
+            if let Some(v) = view {
+                self.set_selection(v, Selection::point(range.end));
+            }
+            if let Some(bar) = &mut self.find.search_bar {
+                bar.anchor = range.end;
+            }
+            self.bar_changed();
+            return;
+        }
         let after = ByteOff(range.start.0 + insert.len());
         let Ok(changes) = eve_text::ChangeSet::from_sorted_edits(
             doc.text(),
@@ -1393,14 +1474,19 @@ impl EditorState {
         revision: eve_view::Revision,
         r: JobResult,
     ) {
-        if let JobResult::ReplaceAllDone { changes, count, .. } = r {
+        if let JobResult::ReplaceAllDone {
+            changes,
+            count,
+            folded,
+        } = r
+        {
             let fresh = self
                 .docs
                 .documents
                 .get(&doc_id)
                 .is_some_and(|d| d.revision() == revision);
             if fresh {
-                self.apply_replace_all(doc_id, changes, count);
+                self.apply_replace_all(doc_id, changes, count, folded);
             } else {
                 self.show_message(MessageLevel::Warn, keys::MSG_SEARCH_REPLACE_STALE, &[]);
             }
@@ -1429,6 +1515,7 @@ impl EditorState {
         doc_id: eve_view::DocumentId,
         changes: eve_text::ChangeSet,
         count: u64,
+        folded: u64,
     ) {
         if count == 0 {
             self.show_message(MessageLevel::Info, keys::INFO_SEARCH_REPLACE_NO_MATCH, &[]);
@@ -1463,18 +1550,38 @@ impl EditorState {
         }
         // 件数に加えて、文書の行数の変化を言う (行をまたぐ置換は 1 件で多くの行を消しうる。上限の無い検索語は文書の残りを
         // 「1 件」として消す。03 §12.3.1 の「置換」、04 §15.2 の `info.search.replaced`)
+        // CP932 互換文字の同一視で当たった一致があれば、その件数を分けて言う (03 §12.4.1 の「置換」)。行数の変化と両方あるときは
+        // 1 つの知らせにまとめ、件数・行数・同一視の件数の順に言う (幅が足りなければ後ろから切れるので、大事なものから並べる)
         let after = lines_of(self);
         let count_s = count.to_string();
-        let (key, lines) = match after.cmp(&before) {
-            std::cmp::Ordering::Less => (keys::INFO_SEARCH_REPLACED_LINES_REMOVED, before - after),
-            std::cmp::Ordering::Greater => (keys::INFO_SEARCH_REPLACED_LINES_ADDED, after - before),
-            std::cmp::Ordering::Equal => (keys::INFO_SEARCH_REPLACED, 0),
+        let folded_s = folded.to_string();
+        let (key, lines) = match (after.cmp(&before), folded > 0) {
+            (std::cmp::Ordering::Less, false) => {
+                (keys::INFO_SEARCH_REPLACED_LINES_REMOVED, before - after)
+            }
+            (std::cmp::Ordering::Greater, false) => {
+                (keys::INFO_SEARCH_REPLACED_LINES_ADDED, after - before)
+            }
+            (std::cmp::Ordering::Equal, false) => (keys::INFO_SEARCH_REPLACED, 0),
+            (std::cmp::Ordering::Less, true) => (
+                keys::INFO_SEARCH_REPLACED_FOLDED_LINES_REMOVED,
+                before - after,
+            ),
+            (std::cmp::Ordering::Greater, true) => (
+                keys::INFO_SEARCH_REPLACED_FOLDED_LINES_ADDED,
+                after - before,
+            ),
+            (std::cmp::Ordering::Equal, true) => (keys::INFO_SEARCH_REPLACED_FOLDED, 0),
         };
         let lines_s = lines.to_string();
         self.show_message(
             MessageLevel::Info,
             key,
-            &[("count", &count_s), ("lines", &lines_s)],
+            &[
+                ("count", &count_s),
+                ("lines", &lines_s),
+                ("folded", &folded_s),
+            ],
         );
         // 置換の文字列の私用文字を表記にしたことは、置換の件数の後に知らせる (黙って文字列にしない、03 §8.3.1)
         let pua = std::mem::take(&mut self.find.replace_all_pua).saturating_mul(count);
