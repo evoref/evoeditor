@@ -1,4 +1,5 @@
-//! 正規表現と単語単位の検索 (docs/03 §12.3 / §12.4、01 FR-402)。行単位で実行する。
+//! 正規表現と単語単位の検索 (docs/03 §12.3 / §12.3.1 / §12.4、01 FR-402)。行をまたがない検索語は行単位で、行の終端を
+//! 明示した検索語は文書全体の意味 (行の窓と全文の連結) で探す (v0.4 の M24 の (4))。
 
 use eve_core::{Case, QueryError, SearchCount, SearchQuery};
 use eve_testkit::Harness;
@@ -95,11 +96,12 @@ fn 日本語を含むパターンと書記素の境界() {
 
 // verifies: FR-402
 #[test]
-fn 構文エラーと複数行は理由つきで拒否する() {
+fn 構文エラーは理由つきで拒否し_改行を含むパターンは探す() {
     assert!(matches!(re("(").compile(), Err(QueryError::Syntax(_))));
     assert!(matches!(re("[").compile(), Err(QueryError::Syntax(_))));
-    assert_eq!(re(r"a\nb").compile().err(), Some(QueryError::Multiline));
-    assert_eq!(re(r"a\rb").compile().err(), Some(QueryError::Multiline));
+    // v0.3 までの「改行を含むパターンは未対応」は v0.4 の M24 の (4) で無くなった (03 §12.3.1)
+    assert!(matches!(re(r"a\nb").compile(), Ok(Some(_))));
+    assert!(matches!(re(r"a\rb").compile(), Ok(Some(_))));
     assert!(
         matches!(re(r"a\\n").compile(), Ok(Some(_))),
         "バックスラッシュ + n の文字"
@@ -115,21 +117,23 @@ fn 構文エラーと複数行は理由つきで拒否する() {
 
 // verifies: FR-402
 #[test]
-fn 行の終端を明示した書き方は符号位置で書いても未対応() {
-    // 03 §12.3.1 の表で行の終端に一致する書き方。行をまたぐ検索は M24 の (4) で開く (08 §2.5)
-    for p in [
-        r"\x0A",
-        r"\x{D}",
-        r"a\u000Ab",
-        r"\r\n",
-        r"[\n]",
-        r"[ \r]",
-        r"[\s\n]+",
-        // 要素に `\n` / `\r` を書いた、すべての文字のクラス (`[\s\S]` は明示しない書き方で、1 行の中で探す)
-        r"[\n\s\S]",
-        r"[\r\n\s\S]+",
+fn 行の終端を明示した書き方は符号位置で書いても行の終端に一致する() {
+    // 03 §12.3.1 の表で行の終端に一致する書き方 (v0.3 では「未対応」、`\x0A` などは v0.3 まで黙って 0 件)
+    let doc = "a\nb\r\nc\rd";
+    for (p, want) in [
+        (r"\x0A", 3),
+        (r"\x{A}", 3),
+        (r"a\u000Ab", 1),
+        (r"\r\n", 1),
+        (r"\x{D}", 1),
+        (r"[\n]", 3),
+        (r"[ \r]", 1),
+        (r"[\s\n]+", 3),
+        // 要素に `\n` / `\r` を書いた、すべての文字のクラスは、全文を 1 つの一致にする
+        (r"[\n\s\S]+", 1),
+        (r"[\r\n\s\S]+", 1),
     ] {
-        assert_eq!(re(p).compile().err(), Some(QueryError::Multiline), "{p}");
+        assert_eq!(count(doc, re(p)), want, "{p}");
     }
     assert!(
         matches!(re(r"\n{0}a").compile(), Ok(Some(_))),
@@ -144,11 +148,29 @@ fn 行の終端を明示しない書き方は_1_行の中で探す() {
     assert_eq!(count("ab\ncd\r\nef\rgh", re(r"[^\n]+")), 4);
     assert_eq!(count("ab\ncd\r\nef\rgh", re(r"[^x]+")), 4);
     assert_eq!(count("a b\na\tb", re(r"a\sb")), 2);
-    // `(?s)` の `.` と `[\s\S]` は、行をまたぐ検索を開くまで (M24 の (4)) 今までどおり 1 行の中で探す
-    assert_eq!(count("axb\na\nb", re(r"(?s)a.b")), 1);
-    assert_eq!(count("a b\na\nb", re(r"a[\s\S]b")), 1);
-    // フラグ `m`・`R` を付けても、1 行ずつ探す間は `^` / `$` は行頭と行末
+    assert_eq!(
+        count("\"a\nb\" \"c\"", re(r#""[^"]*""#)),
+        1,
+        "行をまたがない"
+    );
+    // `(?s)` の `.` と `[\s\S]` は行の終端を明示した書き方で、行をまたぐ (v0.3 までは 1 行の中、M24 の (4))
+    assert_eq!(count("axb\na\nb", re(r"(?s)a.b")), 2);
+    assert_eq!(count("a b\na\nb", re(r"a[\s\S]b")), 2);
+    assert_eq!(count("a\r\nb", re(r"(?s)a.b")), 1, "CRLF は 1 文字に数える");
+    // `^` / `$` は行頭と行末 (CRLF・CR も行の終端)
     assert_eq!(count("ab\r\nab\rab", re("^ab$")), 3);
+}
+
+// verifies: FR-402
+#[test]
+fn 文書の先頭と末尾の記号は文書の端にだけ一致する() {
+    // v0.3 までは 1 行ずつ探したので各行の先頭 / 末尾に一致していた (03 §12.3.1 の「v0.3 からの振る舞いの変化」)
+    assert_eq!(count("ab\nab\nab", re(r"\Aab")), 1);
+    assert_eq!(count("ab\nab\nab", re(r"ab\z")), 1);
+    assert_eq!(count("ab\nab\nab", re(r"(?-m)^ab")), 1);
+    assert_eq!(count("ab\nab\nab", re(r"(?-m)ab$")), 1);
+    // `(?-R)` の `^` / `$` は LF の後ろ / 前と文書の端 (CR・CRLF の行の終端の前後では一致しない)
+    assert_eq!(count("ab\rab\nab", re(r"(?-R)^ab")), 2);
 }
 
 // verifies: FR-402

@@ -59,43 +59,40 @@ pub struct SearchQuery {
     scope: Option<Arc<[ByteRange]>>,
     /// 正規表現の `\n` を改行 1 つ (LF・CRLF・単独の CR) にする糖衣 (`search.newline_sugar`、§12.3.1。既定は `true`)。
     newline_sugar: bool,
-    /// eve-core の内部の設定 (利用者の設定ではない。試験から開く。M24 の (4) で外す)。
-    internal: SearchInternal,
+    /// 行の窓の核の大きさと連結の上限 (試験だけが既定から小さくする。利用者の設定ではない)。
+    tuning: SearchTuning,
     /// 解析とコンパイルの結果の覚え。複製 (検索ジョブに渡すものを含む) と共有し、条件を変えると捨てる (PRF-09)。
     compiled: Compiled,
 }
 
-/// eve-core の内部の設定 (利用者の設定ではない。08 §2.5 の M24 の (2))。行をまたぐ検索は M24 の (4) で利用者に開くので、
-/// それまでは既定で閉じ、試験だけがこれで開く。核の大きさと連結の上限も、試験から小さくする (窓の境目を多く作る) ために持つ。
+/// 行の窓の核の大きさと、全文の連結と窓の大きさの上限 (利用者の設定ではない)。既定は定数 (`SEARCH_WINDOW_CORE_BYTES` /
+/// `SEARCH_CONCAT_MAX_BYTES`) で、試験だけが小さくする (窓の境目を多く作る・上限を小さな文書で確かめる)。外から変える口
+/// (`SearchQuery::with_tuning`・`EditorState::set_search_tuning`) は feature `test-hooks` のときだけある (配布ビルドに
+/// 無い。08 §2.5 の M24 の (4))。どの口からも既定の値より大きくはできない (メモリの上限を外さない)。
 #[doc(hidden)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct SearchInternal {
-    /// 行をまたぎうる検索語 (k ≥ 1・上限なし) と、`\A`・`\z`・`(?-m)` の `^` / `$` を含む検索語を、文書全体の意味で探す
-    /// (行の窓と全文の連結、03 §12.3.1)。最悪の入力の上限 (捨てた候補の予算・処理の速さの下限) も、これを開いたときだけ掛ける
-    /// (打ち切りの理由を呼び出し側が示すのは M24 の (3))。`false` (既定) は v0.3 と同じく 1 行ずつ探す。
-    pub multiline: bool,
-    /// 行の窓の核の大きさ (バイト。1 以上。既定は `SEARCH_WINDOW_CORE_BYTES`)。
+pub struct SearchTuning {
+    /// 行の窓の核の大きさ (バイト。1 以上、`SEARCH_WINDOW_CORE_BYTES` 以下)。
     pub core_bytes: usize,
-    /// 全文の連結と行の窓の大きさの上限 (バイト。既定は `SEARCH_CONCAT_MAX_BYTES`)。
+    /// 全文の連結と行の窓の大きさの上限 (バイト。`SEARCH_CONCAT_MAX_BYTES` 以下)。
     pub concat_max: usize,
 }
 
-impl Default for SearchInternal {
-    fn default() -> SearchInternal {
-        SearchInternal {
-            multiline: false,
+impl Default for SearchTuning {
+    fn default() -> SearchTuning {
+        SearchTuning {
             core_bytes: SEARCH_WINDOW_CORE_BYTES,
             concat_max: SEARCH_CONCAT_MAX_BYTES,
         }
     }
 }
 
-impl SearchInternal {
-    /// 行をまたぐ検索を開いた設定 (核と上限は既定の値)。
-    pub fn multiline() -> SearchInternal {
-        SearchInternal {
-            multiline: true,
-            ..SearchInternal::default()
+impl SearchTuning {
+    /// 既定の値を超えないように丸めたもの (核は 1 以上)。
+    pub(crate) fn clamped(self) -> SearchTuning {
+        SearchTuning {
+            core_bytes: self.core_bytes.clamp(1, SEARCH_WINDOW_CORE_BYTES),
+            concat_max: self.concat_max.min(SEARCH_CONCAT_MAX_BYTES),
         }
     }
 }
@@ -135,14 +132,12 @@ impl std::fmt::Debug for Compiled {
     }
 }
 
-/// 検索語をコンパイルできない理由 (§12.3)。入力中は赤色表示のみで、ジョブは投入しない。
+/// 検索語をコンパイルできない理由 (§12.3)。入力中は赤色表示のみで、ジョブは投入しない。v0.3 までの「改行を含むパターンは
+/// 未対応」(`Multiline`) は、行をまたぐ検索を開いた v0.4 の M24 の (4) で無くなった (§12.3.1)。
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum QueryError {
     /// 正規表現の構文エラー (`regex` の文言を整形したもの)。
     Syntax(String),
-    /// 行の終端を明示した (`\n`・`\r`・`\x0A`・要素として `\n` を書いたクラスなど) パターンで、一致が行をまたぎうるもの。
-    /// 複数行の正規表現は v0.4 の M24 で開く (それまでは未対応。08 §2.5 の M24 の (1)〜(3))。
-    Multiline,
     /// コンパイル後の大きさが上限 (10 MiB) を超える。`bg` のジョブのコンパイルで分かる。
     TooLarge,
 }
@@ -229,33 +224,21 @@ impl QueryPlan {
     }
 
     /// 経路の形 (文書に依らない判定、`Shape`)。
-    fn shape(&self, internal: SearchInternal, whole_word: bool) -> Shape {
+    fn shape(&self, tuning: SearchTuning, whole_word: bool) -> Shape {
         Shape {
             regex: matches!(self.route, Route::Regex { .. }),
-            multiline: internal.multiline,
             doc_anchor: self.doc_anchor(),
             heavy: self.heavy(),
             lines: self.lines(),
             max_len: self.max_len(),
             whole_word,
-            concat_max: internal.concat_max,
+            concat_max: tuning.concat_max,
         }
     }
 
     /// 照合器をメインスレッドで作ってよい (memmem の経路)。
     fn on_main_thread(&self) -> bool {
         matches!(self.route, Route::Memmem { .. })
-    }
-
-    /// 今の版で探せるか。行をまたぐ検索は M24 の (4) で開く。それまでは、行の終端を明示した検索語で一致が行をまたぎうる
-    /// (k が 1 以上・上限なし) ものは未対応 (`\x0A` など符号位置で書いたものを含む)。`(?s)` の `.` と `[\s\S]` などは
-    /// 今までどおり 1 行の中で探す (k を 0 として扱う、08 §2.5 の M24 の (1)〜(3))。内部の設定で開いたとき (`multiline`) は
-    /// どれも探せる。
-    fn supported(&self, multiline: bool) -> Result<(), QueryError> {
-        if !multiline && self.explicit_line_end() && self.lines() != LineSpan::Bounded(0) {
-            return Err(QueryError::Multiline);
-        }
-        Ok(())
     }
 }
 
@@ -269,26 +252,24 @@ impl SearchQuery {
             whole_word: false,
             scope: None,
             newline_sugar: true,
-            internal: SearchInternal::default(),
+            tuning: SearchTuning::default(),
             compiled: Compiled::default(),
         }
     }
 
-    /// eve-core の内部の設定を変える (試験から行をまたぐ検索を開く。利用者の設定ではない、08 §2.5 の M24 の (2))。
-    #[doc(hidden)]
-    pub fn with_internal(mut self, internal: SearchInternal) -> SearchQuery {
-        self.internal = SearchInternal {
-            core_bytes: internal.core_bytes.max(1),
-            ..internal
-        };
+    /// 行の窓の核の大きさと連結の上限を変える (試験だけ。既定の値より大きくはしない、`SearchTuning`)。
+    pub(crate) fn tuned(mut self, tuning: SearchTuning) -> SearchQuery {
+        self.tuning = tuning.clamped();
         self.compiled = Compiled::default();
         self
     }
 
-    /// eve-core の内部の設定。
+    /// 行の窓の核の大きさと連結の上限を変える (feature `test-hooks` の試験の口。配布ビルドには無い)。
+    #[cfg(feature = "test-hooks")]
     #[doc(hidden)]
-    pub fn internal(&self) -> SearchInternal {
-        self.internal
+    #[must_use]
+    pub fn with_tuning(self, tuning: SearchTuning) -> SearchQuery {
+        self.tuned(tuning)
     }
 
     /// 選択範囲内に限る (`None` は文書全体)。範囲は開始位置の昇順で重ならないこと。
@@ -392,7 +373,7 @@ impl SearchQuery {
         }
     }
 
-    /// 照合器。検索語が空・コンパイルできない・行の終端を明示したパターンなら `None` (何にも一致しない)。
+    /// 照合器。検索語が空・コンパイルできないなら `None` (何にも一致しない)。
     /// 理由が要るときは `compile` を使う。正規表現のコンパイルを含むので、`bg` のジョブ (と試験) から呼ぶ。
     pub fn matcher(&self) -> Option<Arc<Matcher>> {
         self.compile().ok().flatten()
@@ -400,7 +381,6 @@ impl SearchQuery {
 
     /// 検索語を解析する (構文の解析と誤りの判定・書き換え・k と最大の長さ。`regex` のコンパイルはしない)。
     /// 検索語が空なら `Ok(None)`。メインスレッドで呼んでよい。結果は覚えて、この問い合わせとその複製で使い回す。
-    /// 今の版で探せない検索語 (`QueryError::Multiline`) も解析の結果を返す (探せるかは `compile` と `known_error` が示す)。
     ///
     /// # Errors
     ///
@@ -419,8 +399,7 @@ impl SearchQuery {
     ///
     /// # Errors
     ///
-    /// 解析の誤り (`analyze` と同じ)、行の終端を明示して行をまたぎうるパターン (`Multiline`。M24 の (4) まで)、
-    /// コンパイル後の大きさの上限の超過 (`TooLarge`)。
+    /// 解析の誤り (`analyze` と同じ)、コンパイル後の大きさの上限の超過 (`TooLarge`)。
     pub fn compile(&self) -> Result<Option<Arc<Matcher>>, QueryError> {
         self.compiled
             .0
@@ -429,7 +408,6 @@ impl SearchQuery {
                 let Some(plan) = self.analyze()? else {
                     return Ok(None);
                 };
-                plan.supported(self.internal.multiline)?;
                 self.build(&plan).map(|m| Some(Arc::new(m)))
             })
             .clone()
@@ -439,7 +417,7 @@ impl SearchQuery {
     /// まだ無ければ `Pending` (同期検索をしない、§12.3.1)。
     pub(crate) fn prepared(&self) -> Prepared {
         let plan = match self.analyze() {
-            Ok(Some(p)) if p.supported(self.internal.multiline).is_ok() => p,
+            Ok(Some(p)) => p,
             _ => return Prepared::Nothing,
         };
         if plan.on_main_thread() {
@@ -456,24 +434,16 @@ impl SearchQuery {
     }
 
     /// 経路の形 (行をまたぐ検索の呼び出し側の規則・探さない理由の判定、`Shape`)。照合器を作らずに解析の結果から求めるので、
-    /// メインスレッドで呼んでよい。検索語が空・解析の誤り・今の版で探せない検索語は `None`。
+    /// メインスレッドで呼んでよい。検索語が空・解析の誤りは `None`。
     pub(crate) fn shape(&self) -> Option<Shape> {
         let plan = self.analyze().ok().flatten()?;
-        plan.supported(self.internal.multiline).ok()?;
-        Some(plan.shape(self.internal, self.whole_word))
+        Some(plan.shape(self.tuning, self.whole_word))
     }
 
-    /// 分かっている誤り: 解析の誤り・今の版で探せない検索語 (`Multiline`) と、`bg` のジョブのコンパイルで分かった誤り
-    /// (`TooLarge`)。コンパイルしない。
+    /// 分かっている誤り: 解析の誤りと、`bg` のジョブのコンパイルで分かった誤り (`TooLarge`)。コンパイルしない。
     pub(crate) fn known_error(&self) -> Option<QueryError> {
-        match self.analyze() {
-            Err(e) => return Some(e),
-            Ok(Some(p)) => {
-                if let Err(e) = p.supported(self.internal.multiline) {
-                    return Some(e);
-                }
-            }
-            Ok(None) => {}
+        if let Err(e) = self.analyze() {
+            return Some(e);
         }
         match self.compiled.0.matcher.get() {
             Some(Err(e)) => Some(e.clone()),
@@ -534,8 +504,8 @@ impl SearchQuery {
     /// 解析の結果から照合器を作る (正規表現の経路は `regex` のコンパイル)。
     fn build(&self, plan: &QueryPlan) -> Result<Matcher, QueryError> {
         let (lines, max_len) = (plan.lines(), plan.max_len());
-        let internal = self.internal;
-        let shape = plan.shape(internal, self.whole_word);
+        let tuning = self.tuning;
+        let shape = plan.shape(tuning, self.whole_word);
         Ok(match &plan.route {
             Route::Memmem { needle, fold } => Matcher {
                 finder: memmem::Finder::new(needle.as_bytes()).into_owned(),
@@ -549,7 +519,7 @@ impl SearchQuery {
                 scope: self.scope.clone(),
                 lines,
                 max_len,
-                internal,
+                tuning,
                 shape,
             },
             Route::Regex {
@@ -570,7 +540,7 @@ impl SearchQuery {
                     scope: self.scope.clone(),
                     lines,
                     max_len,
-                    internal,
+                    tuning,
                     shape,
                 }
             }
@@ -622,8 +592,6 @@ pub(super) const WINDOW_SLACK: usize = 12;
 pub(crate) struct Shape {
     /// `regex` で探す (利用者の正規表現と §12.4 の 3 のエスケープしたリテラル)。
     regex: bool,
-    /// 内部の設定で行をまたぐ検索を開いた。
-    multiline: bool,
     /// `\A` などで文書の先頭 / 末尾の意味が要る。
     doc_anchor: bool,
     /// 重い検索語。
@@ -641,9 +609,7 @@ pub(crate) struct Shape {
 impl Shape {
     /// 行の窓・全文の連結の経路で探す (`Matcher::is_stream`)。
     pub(crate) fn is_stream(&self) -> bool {
-        self.regex
-            && self.multiline
-            && (self.doc_anchor || self.heavy || self.lines != LineSpan::Bounded(0))
+        self.regex && (self.doc_anchor || self.heavy || self.lines != LineSpan::Bounded(0))
     }
 
     /// 核を行の途中 (char 境界) で切ってよい (`Matcher::cuts_mid_line`)。
@@ -685,7 +651,7 @@ impl Shape {
         }
     }
 
-    /// 03 §12.3.1 の「呼び出し側」の規則で探す: 内部の設定で開いていて、一致が行をまたぎうる (k ≥ 1・上限なし) 検索語。
+    /// 03 §12.3.1 の「呼び出し側」の規則で探す: 一致が行をまたぎうる (k ≥ 1・上限なし) 正規表現。
     /// 全件の走査は文書の先頭から (正本) で、カーソル以降の最初の一致は `first_after` で知らせ、再開の位置を記録する。
     /// メインスレッドは入力中の現在の一致と次 / 前のために同期検索をしない (単発のジョブと保持した一致を使う)。
     /// それ以外 (k が 0 の検索語) は v0.3 の規則のまま (カーソルの行から走査する)。
@@ -693,7 +659,7 @@ impl Shape {
         self.is_stream() && self.lines != LineSpan::Bounded(0)
     }
 
-    /// メインスレッドで同期検索をせず、ジョブの結果だけで動く (`whole_doc` か、内部の設定で開いた重い検索語)。入力中の現在の
+    /// メインスレッドで同期検索をせず、ジョブの結果だけで動く (`whole_doc` か、重い検索語)。入力中の現在の
     /// 一致は全件ジョブの `first_after` で、次 / 前は保持した一致か単発のジョブで決める (03 §12.3.1 の「呼び出し側」と
     /// 「重い検索語」)。k が 0 の重い検索語は、走査の順は v0.3 のまま (カーソルの行から) で、同期検索だけをしない。
     pub(crate) fn job_driven(&self) -> bool {
@@ -710,9 +676,9 @@ impl Shape {
         self.lines
     }
 
-    /// 内部の設定で開いた重い検索語 (メインスレッドで同期検索をしない、§12.3.1 の「重い検索語」)。
+    /// 重い検索語 (メインスレッドで同期検索をしない、§12.3.1 の「重い検索語」)。
     pub(crate) fn heavy_guard(&self) -> bool {
-        self.multiline && self.heavy
+        self.heavy
     }
 }
 
@@ -739,16 +705,15 @@ pub struct Matcher {
     pub(super) lines: LineSpan,
     /// 一致の最大の長さ (バイト。上限が無ければ `None`。行の窓を延ばす量の元)。
     pub(super) max_len: Option<usize>,
-    /// eve-core の内部の設定 (行をまたぐ検索を開くか・核の大きさ・連結の上限)。
-    pub(super) internal: SearchInternal,
+    /// 行の窓の核の大きさと連結の上限 (既定は定数。試験だけが小さくする)。
+    pub(super) tuning: SearchTuning,
     /// 経路の形 (文書に依らない判定)。
     shape: Shape,
 }
 
 impl Matcher {
-    /// 1 つの一致が含みうる行の終端のバイトの数の上限 (§12.3.1 の k)。M24 の (4) までは、内部の設定で開かない限り、走査は
-    /// k に依らず 1 行ずつ (`LineScan`) で、行の終端を明示した検索語で k が 1 以上・上限なしのものは照合器を作らない
-    /// (`QueryError::Multiline`)。`(?s)` の `.`・`[\s\S]` などで k が 1 以上・上限なしになったものは、今までどおり 1 行の中で探す。
+    /// 1 つの一致が含みうる行の終端のバイトの数の上限 (§12.3.1 の k)。k が 1 以上・上限なしの検索語は、行の窓・全文の連結で
+    /// 探す (`is_stream`)。
     pub fn lines(&self) -> LineSpan {
         self.lines
     }
@@ -765,7 +730,7 @@ impl Matcher {
         self.shape.cuts_mid_line()
     }
 
-    /// 行の窓・全文の連結の経路で探す: 内部の設定で開いていて、k が 1 以上・上限なしか、`\A` などを含む正規表現。k が 0 の
+    /// 行の窓・全文の連結の経路で探す: k が 1 以上・上限なしか、`\A` などを含む正規表現。k が 0 の
     /// 重い検索語も、取り消しの遅れと処理の速さの下限を掛けるため行の窓で探す (結果は行の経路と同じ、03 §12.3.1 の「実行」)。
     pub fn is_stream(&self) -> bool {
         self.shape.is_stream()

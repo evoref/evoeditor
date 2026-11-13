@@ -362,28 +362,32 @@ fn 正規表現の構文エラーは件数の代わりに理由を示し_検索�
     assert_eq!(total(&mut h), "1/2");
 }
 
+// v0.3 までは「改行を含むパターンは未対応」と示した。v0.4 の M24 の (4) で行をまたいで探す (03 §12.3.1)
+// verifies: FR-402
 #[test]
-fn 改行を含むパターンは未対応と示す() {
+fn 改行を含むパターンは行をまたいで探す() {
     let mut h = Harness::new().with_size(60, 10);
-    h.text("a\nb");
+    h.text("a\nb a\nb");
+    h.keys("ctrl+home");
     h.keys("ctrl+f");
     h.keys("alt+r");
     h.text(r"a\nb");
-    let e = cell_text(&bar(&mut h).error.expect("未対応"));
-    assert!(e.contains("改行を含むパターンは未対応"), "{e}");
+    assert_eq!(total(&mut h), "1/2");
+    assert!(bar(&mut h).error.is_none());
 }
 
-// 行の終端を符号位置で書いた検索語 (`\x0A`) は、黙って 0 件にせず未対応と示す (03 §12.3.1、08 §2.5 の M24 の (1))
+// 行の終端を符号位置で書いた検索語 (`\x0A`) も、`\n` と同じく行の終端に一致する (03 §12.3.1。M24 の (1)〜(3) の間は未対応)
+// verifies: FR-402
 #[test]
-fn 行の終端を符号位置で書いたパターンも未対応と示し_否定のクラスは探せる() {
+fn 行の終端を符号位置で書いたパターンも行をまたいで探し_否定のクラスは_1_行の中() {
     let mut h = Harness::new().with_size(60, 10);
     h.text("ab\ncd");
     h.keys("ctrl+home");
     h.keys("ctrl+f");
     h.keys("alt+r");
     h.text(r"b\x0Ac");
-    let e = cell_text(&bar(&mut h).error.expect("未対応"));
-    assert!(e.contains("改行を含むパターンは未対応"), "{e}");
+    assert_eq!(total(&mut h), "1/1");
+    assert!(bar(&mut h).error.is_none());
     for _ in 0..r"b\x0Ac".len() {
         h.keys("backspace");
     }

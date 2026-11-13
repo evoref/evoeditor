@@ -233,7 +233,8 @@ fn 公開前のキーとセクションは情報診断で_警告にしない() {
             "editor.auto_indent",
             // `editor.undo` は公開キー (total_max_bytes) の接頭辞なので、中に入って個々のキーで報告する
             "editor.undo.max_steps",
-            "search",
+            // `search` は公開キー (newline_sugar) を持つセクションなので、中の個々のキーで報告する
+            "search.case",
             "view.line_numbers"
         ]
     );
@@ -484,6 +485,7 @@ fn changed_keys_は変わった公開キーだけを並べ_全キーを網羅す
         "file.huge_file_warn_bytes",
         "file.long_line_threshold",
         "file.reload_on_external_change",
+        "search.newline_sugar",
     ]
     .into_iter()
     .collect();
@@ -526,6 +528,7 @@ fn 既定値の表記は全公開キーで決まった値() {
         ("file.huge_file_warn_bytes", "536870912"),
         ("file.long_line_threshold", "1048576"),
         ("file.reload_on_external_change", "auto_if_unmodified"),
+        ("search.newline_sugar", "true"),
     ];
     assert_eq!(want.len(), KEYS.len());
     for (key, display) in want {
@@ -639,12 +642,13 @@ const INT_KEYS: [&str; 12] = [
     "file.huge_file_warn_bytes",
     "file.long_line_threshold",
 ];
-const BOOL_KEYS: [&str; 5] = [
+const BOOL_KEYS: [&str; 6] = [
     "file.swap.enabled",
     "file.swap.exclude_secret_files",
     "view.wrap_kinsoku",
     "ui.mouse",
     "ui.hint_bar",
+    "search.newline_sugar",
 ];
 
 /// 読んだ結果の診断が 1 件で、そのキーのもの。

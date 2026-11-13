@@ -1,0 +1,47 @@
+# 設定 `search.newline_sugar = false` では、正規表現の `\n` は LF の改行だけに一致する (CRLF の改行の LF にも、単独の CR にも
+# 一致しない)。既定 (`true`) では改行 1 つ (LF・CRLF・CR のどれか) に一致する (07 §5.5、03 §12.3.1 の表。`newline_sugar_on`
+# と同じ文書・検索語で一致が違う)。
+[meta]
+id = "search/newline_sugar_off"
+title = "search.newline_sugar = false では改行の糖衣を掛けず、LF の改行だけに一致する"
+verifies = ["AC-FR-402-5"]
+since = "v0.4"
+tags = ["search", "regex", "multiline", "config"]
+
+[setup]
+size = [60, 12]
+config = """
+[search]
+newline_sugar = false
+"""
+
+[setup.fs]
+"a.txt" = { text = "a\r\nb\nc\rd" }
+
+[[step]]
+open = "a.txt"
+[[step]]
+run_jobs = true
+[[step]]
+keys = "ctrl+f"
+[[step]]
+keys = "alt+r"
+[[step]]
+text = '\w\n\w'
+[[step]]
+run_jobs = true
+[[step]]
+keys = "enter"
+[[step]]
+keys = "enter"
+
+# 一致は LF の改行をまたぐ 1 件 (バイト 3〜6) だけ。次へで折り返して同じ一致に戻る
+[[assert]]
+at = 7
+query = { kind = "selection" }
+expect = { anchor = 3, head = 6 }
+[[assert]]
+query = { kind = "selection" }
+expect = { anchor = 3, head = 6 }
+[[assert]]
+frame_contains = ["先頭から検索しました"]

@@ -490,6 +490,8 @@ no_selection = "選択範囲がありません。選択してから検索バー�
 replace_empty_query = "検索する文字列を入力してください"
 replace_no_match = "置換する箇所はありません"
 replaced = "{count} 件を置換しました (元に戻すで戻せます)"
+replaced_lines_added = "{count} 件を置換しました。文書は {lines} 行増えました (元に戻すで戻せます)"
+replaced_lines_removed = "{count} 件を置換しました。文書は {lines} 行減りました (元に戻すで戻せます)"
 wrapped_backward = "文書の先頭に達したので、末尾から検索しました"
 wrapped_forward = "文書の末尾に達したので、先頭から検索しました"
 
@@ -842,17 +844,17 @@ text = "{path} は読み取り専用属性のファイルなので上書きで�
 hint = "( ) や [ ] の対応などを確認してください"
 text = "✖ 正規表現が不正: {reason}"
 
-[msg.search.newline_unsupported]
-hint = "行ごとに検索します。1 行の中のパターンにしてください"
-text = "✖ 改行を含むパターンは未対応です"
+[msg.search.multiline_too_large]
+hint = "回数を限ると探せます (例: (?s).{{0,1000}})"
+text = "✖ 探せません: 何行でもまたげるパターン ({mib} MiB を超える文書)"
+
+[msg.search.pattern_too_heavy]
+hint = "繰り返しの回数を小さくするか、.* の範囲を狭めてください"
+text = "✖ 検索語が重すぎるため、検索を打ち切りました"
 
 [msg.search.replace_invalid_regex]
 hint = "( ) や [ ] の対応などを確認してください"
 text = "正規表現が不正なため、置換しませんでした: {reason}"
-
-[msg.search.replace_newline_unsupported]
-hint = "行ごとに検索します。1 行の中のパターンにしてください"
-text = "改行を含むパターンは未対応のため、置換しませんでした"
 
 [msg.search.replace_stale]
 hint = "入力を止めてから、もう一度実行してください"
@@ -1167,6 +1169,7 @@ error = "エラー"
 intro = "はじめに"
 keys = "キー一覧"
 commands = "コマンド一覧"
+search = "検索の書き方"
 terminal = "端末の設定"
 
 [ui.help.intro]
@@ -1177,6 +1180,18 @@ palette = "すべてのコマンドは {key:ui.palette_open} のコマンドパ�
 [ui.help.keys]
 note = "続けて押すキー (例: Ctrl+K S) は、順に押します。同じコマンドに複数のキーがあるときは、コンマで並べます"
 unreachable = "* の付いたキーは、この端末では届きません (コマンドパレットか、ほかのキーで実行できます)"
+
+[ui.help.search]
+intro = "検索バーの正規表現 ([.*] を ON) は行をまたいで探せます。行の終端 (改行) に一致するのは、改行を明示した次の書き方だけです"
+newline = "改行 1 つ (LF・CRLF・CR のどれでも)"
+class_newline = "空白と改行の並び (クラスの要素に \\n を書くと行をまたぐ)"
+dot_all = "どの文字にも、改行 1 つにも一致 (CRLF は 1 文字に数える)"
+single_line = "行をまたがない (1 行の中で一致)"
+newline_run = "改行の続き。\\r\\n+ は CRLF の文書で一致しない"
+anchors = "文書の先頭 / 末尾 (^ と $ は行頭 / 行末)"
+other_tools = "Vim の \\_s は [\\s\\n]、\\_. は (?s). と書きます。ripgrep の -U や VS Code と違い、\\s や [^x] は行をまたぎません"
+limit = "何行でもまたげるパターン ((?s).* や \\n+ など) は、16 MiB (UTF-8 のバイト数) 以下の文書だけで探せます。大きな文書では (?s).{{0,1000}} のように回数を限ってください"
+sugar = "設定 search.newline_sugar = false で、\\n は LF の改行だけに一致します (CRLF の改行には一致しません)"
 
 [ui.help.terminal]
 ime = "IME が ON のとき、文字キーは確認ダイアログのアクセラレータとして届きません。Tab や矢印と Enter で選んでください"

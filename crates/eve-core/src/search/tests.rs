@@ -265,14 +265,14 @@ fn find(
     )
 }
 
-/// 行をまたぐ検索を内部の設定で開いた正規表現 (核は `core` バイト)。
+/// 正規表現 (行の窓の核は `core` バイト)。
 fn multi(p: &str, core: usize) -> SearchQuery {
     SearchQuery::literal(p)
         .with_regex(true)
         .with_case(Case::Sensitive)
-        .with_internal(SearchInternal {
+        .tuned(SearchTuning {
             core_bytes: core,
-            ..SearchInternal::multiline()
+            ..SearchTuning::default()
         })
 }
 
@@ -336,7 +336,7 @@ fn 行をまたぐ規則の全件ジョブは文書の先頭から走査し_firs
     // 起点以降に一致が無ければ first_after は送らない
     let (_, first, ..) = run_whole("a\na\nb", &q, 3);
     assert_eq!(first, None);
-    // 既定 (内部の設定を閉じた) の検索語は今までどおり、カーソルの行から走査し、再開の位置を返さない
+    // 行をまたがない検索語は今までどおり、カーソルの行から走査し、再開の位置を返さない
     let (starts, first, resume, ..) = run_whole("ab\nab\nab", &lit("ab"), 3);
     assert_eq!(starts, [3, 6, 0]);
     assert_eq!((first, resume.len()), (None, 0));
@@ -371,10 +371,9 @@ fn 走査の途中で探さないと分かったら_理由つきの_0_件で終�
     // k = 1 で最大の長さの無い検索語は、核を行の境界に揃える。長い行で窓が上限を超える
     let q = SearchQuery::literal(r"a\n[^\n]*")
         .with_regex(true)
-        .with_internal(SearchInternal {
+        .tuned(SearchTuning {
             core_bytes: 4,
             concat_max: 32,
-            ..SearchInternal::multiline()
         });
     let doc = format!("a\nb\na\nb\n{}\n", "c".repeat(100));
     let (_, _, resume, limit, total) = run_whole(&doc, &q, 0);
@@ -409,9 +408,9 @@ fn 行をまたぐ規則の単発の検索は正本の位置から探す() {
     assert_eq!(f(4, false, &[]), Ok(Some((0, 3, false))));
     assert_eq!(f(0, false, &[]), Ok(Some((4, 7, true))));
     // 探さない検索語は理由を返す
-    let big = multi(r"a\n+", 2).with_internal(SearchInternal {
+    let big = multi(r"a\n+", 2).tuned(SearchTuning {
+        core_bytes: 2,
         concat_max: 4,
-        ..SearchInternal::multiline()
     });
     let r = find_next(
         &FindJob {
@@ -675,9 +674,10 @@ fn 正規表現の照合器はメインスレッドで作らず_memmem_の照合
         Prepared::Nothing
     ));
     assert!(matches!(lit("").prepared(), Prepared::Nothing));
+    // 行をまたぐ検索語も誤りではなく、照合器は同じく `bg` のジョブが作る (v0.3 の「未対応」は M24 の (4) で無くなった)
     let nl = lit(r"a\nb").with_regex(true);
-    assert_eq!(nl.known_error(), Some(QueryError::Multiline));
-    assert!(matches!(nl.prepared(), Prepared::Nothing));
+    assert_eq!(nl.known_error(), None);
+    assert!(matches!(nl.prepared(), Prepared::Pending));
     assert!(
         nl.analyze().unwrap().is_some(),
         "解析の結果は返す (k と書き換え)"

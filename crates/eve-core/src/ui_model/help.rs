@@ -1,6 +1,7 @@
 //! ヘルプ画面 (docs/04 §8.6、07 §11.5、01 FR-514)。
 //!
-//! 全画面のオーバーレイで、節を縦に並べた 1 本のスクロール: 「はじめに」「キー一覧」「コマンド一覧」「端末の設定」。
+//! 全画面のオーバーレイで、節を縦に並べた 1 本のスクロール: 「はじめに」「キー一覧」「コマンド一覧」「検索の書き方」
+//! (v0.4 の M24。03 §12.3.1)「端末の設定」。
 //! キー一覧とコマンド一覧は、解決済みのキーマップとコマンドの一覧から作る。`help.open` は先頭から、
 //! `help.keys` / `help.commands` は該当の節へスクロールして開く。操作は `↑` `↓` `PgUp` `PgDn`、閉じるのは `Esc`。
 
@@ -20,12 +21,24 @@ use crate::ui_model::overlay::Overlay;
 /// ヘルプのキー一覧で、この端末で届かない割当の後ろに付ける印 (04 §8.6)。
 const UNREACHABLE_MARK: &str = "*";
 
+/// 「検索の書き方」の節の表 (書き方, 説明の文言キー)。書き方は正規表現の構文で、言語に依らないのでここに書く
+/// (04 §8.6、03 §12.3.1 の表)。行をまたぐ書き方・またがない書き方・改行の続き・文書の端の順。
+const SEARCH_SYNTAX: [(&str, &str); 6] = [
+    (r"\n", keys::UI_HELP_SEARCH_NEWLINE),
+    (r"[\s\n]*", keys::UI_HELP_SEARCH_CLASS_NEWLINE),
+    (r"(?s).  [\s\S]", keys::UI_HELP_SEARCH_DOT_ALL),
+    (r"\s  [^x]  .", keys::UI_HELP_SEARCH_SINGLE_LINE),
+    (r"(?:\r\n)+  \n+", keys::UI_HELP_SEARCH_NEWLINE_RUN),
+    (r"\A  \z", keys::UI_HELP_SEARCH_ANCHORS),
+];
+
 /// ヘルプの節 (表示順)。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum HelpSection {
     Intro,
     Keys,
     Commands,
+    Search,
     Terminal,
 }
 
@@ -151,6 +164,33 @@ impl EditorState {
                     format!("{title} — {desc}")
                 },
             ));
+        }
+        lines.push(line(HelpLineKind::Body, None, String::new()));
+
+        // 検索の書き方 (v0.4 の M24、04 §8.6): 行をまたぐ書き方とまたがない書き方の表、他の道具との対応、上限
+        section(
+            &mut lines,
+            HelpSection::Search,
+            keys::UI_HELP_SECTION_SEARCH,
+        );
+        lines.push(line(
+            HelpLineKind::Body,
+            None,
+            render(keys::UI_HELP_SEARCH_INTRO),
+        ));
+        for (syntax, k) in SEARCH_SYNTAX {
+            lines.push(line(
+                HelpLineKind::Entry,
+                Some(syntax.to_owned()),
+                render(k),
+            ));
+        }
+        for k in [
+            keys::UI_HELP_SEARCH_OTHER_TOOLS,
+            keys::UI_HELP_SEARCH_LIMIT,
+            keys::UI_HELP_SEARCH_SUGAR,
+        ] {
+            lines.push(line(HelpLineKind::Body, None, render(k)));
         }
         lines.push(line(HelpLineKind::Body, None, String::new()));
 

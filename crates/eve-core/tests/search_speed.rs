@@ -110,7 +110,7 @@ impl eve_core::Clock for Wall {
 #[test]
 #[ignore = "計測用"]
 fn first_after_までの時間() {
-    use eve_core::{JobResult, SearchInternal, SearchJob, run_search};
+    use eve_core::{JobResult, SearchJob, run_search};
     let line =
         "0123456789 the quick brown fox jumps over the lazy dog 日本語の行です。0123456789\n";
     let n = 100 * 1024 * 1024 / line.len();
@@ -130,13 +130,12 @@ fn first_after_までの時間() {
         ),
         (
             r"k = 1 (MARK\nX、先頭から・first_after)",
-            SearchQuery::literal(r"MARK\nX")
-                .with_regex(true)
-                .with_internal(SearchInternal::multiline()),
+            SearchQuery::literal(r"MARK\nX").with_regex(true),
         ),
     ];
     for (name, q) in cases {
         let _ = q.compile();
+        let whole = q.matcher().is_some_and(|m| m.whole_doc());
         for pct in [0usize, 50, 90] {
             let from = len * pct / 100;
             let mut times = Vec::new();
@@ -160,8 +159,7 @@ fn first_after_までの時間() {
                             first_after,
                             matches,
                         } => {
-                            let hit = first_after.is_some()
-                                || (!q.internal().multiline && !matches.is_empty());
+                            let hit = first_after.is_some() || (!whole && !matches.is_empty());
                             if hit && first.is_none() {
                                 first = Some(start.elapsed());
                             }

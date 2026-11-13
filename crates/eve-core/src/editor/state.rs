@@ -176,8 +176,8 @@ pub(crate) struct SearchSet {
     pub(crate) find_wait: Option<crate::search::search_state::StepWait>,
     /// 行をまたぐ検索の規則の次 / 前の待ちを始めた時刻 (100 ms を過ぎたら件数の位置を待ちの表示にする)。
     pub(crate) find_since: Option<Tick>,
-    /// eve-core の内部の設定 (行をまたぐ検索を試験から開く。利用者の設定ではない、08 §2.5 の M24 の (2)・(3))。
-    pub(crate) internal: crate::search::SearchInternal,
+    /// 行の窓の核の大きさと連結の上限 (既定は定数。試験だけが feature `test-hooks` の口で小さくする、03 §12.3.1)。
+    pub(crate) tuning: crate::search::SearchTuning,
     /// 実行中のすべて置換で、置換の文字列 1 つあたりに `<U+10FFNN>` にした私用文字の数 (03 §8.3.1。適用のときに
     /// 件数を掛けて `info.paste.pua_as_text` で知らせる。すべて置換は同時に 1 つだけ)。
     pub(crate) replace_all_pua: u64,
@@ -307,7 +307,7 @@ impl EditorState {
                 find_presses: 0,
                 find_wait: None,
                 find_since: None,
-                internal: crate::search::SearchInternal::default(),
+                tuning: crate::search::SearchTuning::default(),
                 replace_all_pua: 0,
             },
             io: IoState {

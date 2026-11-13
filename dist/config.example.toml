@@ -85,6 +85,11 @@ mouse_wheel_lines = 3
 # 続けて押すキー (Ctrl+K など) の 1 つ目を押してから、次に押せるキーの一覧を出すまでの時間 (ミリ秒。0〜5000)。
 which_key_delay_ms = 500
 
+[search]
+# 正規表現の \n を、改行 1 つ (LF・CRLF・CR のどれか) に一致させるか。false にすると、\n は LF の改行だけに一致します
+# (CRLF の改行には一致しません)。
+newline_sugar = true
+
 [clipboard]
 # 端末の機能 (OSC 52) でクリップボードへ書くか: "auto" (SSH の接続中、または OS のクリップボードを使えないとき) /
 # "always" / "never"。

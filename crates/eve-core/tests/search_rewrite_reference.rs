@@ -626,7 +626,8 @@ fn 表に無い細目の書き換えと一致() {
 }
 
 /// 置換の `$1` / `${name}` (k = 0 の検索語。LF だけの文書と CRLF の文書) が、元の検索語で 1 行ずつ展開した結果 (v0.3)
-/// と同じ (書き換えは捕獲グループを足さない、03 §12.3.1)。
+/// と同じ (書き換えは捕獲グループを足さない、03 §12.3.1)。`\A` / `\z` は v0.4 の M24 の (4) から文書の先頭 / 末尾の意味に
+/// なった (振る舞いの変化) ので、ここでは比べず、下の `文書の端の記号の置換は文書の先頭と末尾だけ` で見る。
 #[test]
 fn 置換の展開は_v0_3_と同じ() {
     let pats = [
@@ -639,8 +640,6 @@ fn 置換の展開は_v0_3_と同じ() {
         (r"^(\S+)$", "<$1>"),
         (r"\b(\w)", "_$1"),
         (r"(?-R)(.)", "($1)"),
-        (r"\A(.)", "($1)"),
-        (r"(.)\z", "($1)"),
     ];
     let docs = [
         "ab cd\nef gh\n",
@@ -668,6 +667,35 @@ fn 置換の展開は_v0_3_と同じ() {
             ));
             assert_eq!(got, replace_v0_3(p, rep, d), "{p} / {rep} / {d:?}");
         }
+    }
+}
+
+/// `\A` / `\z` の置換は、文書の先頭 / 末尾だけで展開する (v0.3 は各行の先頭 / 末尾。03 §12.3.1 の「v0.3 からの振る舞いの変化」)。
+#[test]
+fn 文書の端の記号の置換は文書の先頭と末尾だけ() {
+    for (p, d, want) in [
+        (r"\A(.)", "ab cd\nef gh\n", "(a)b cd\nef gh\n"),
+        (r"\A(.)", "ab\r\ncd", "(a)b\r\ncd"),
+        (r"(.)\z", "ab\ncd", "ab\nc(d)"),
+        (r"(.)\z", "ab\r\ncd\r\n", "ab\r\ncd\r\n"),
+    ] {
+        let q = SearchQuery::literal(p)
+            .with_regex(true)
+            .with_case(Case::Sensitive);
+        let t = Text::from(d);
+        let Some((cs, _)) = build_replace_all(&t, &q, "($1)", &CancelToken::new()) else {
+            assert_eq!(d, want, "{p}: 一致が無ければ置き換えない");
+            continue;
+        };
+        let mut t2 = Text::from(d);
+        // 文書テキストの変更は本来 `Document::apply` の仕事。ここでは置換の ChangeSet の結果だけを見るので直接当てる
+        #[allow(clippy::disallowed_methods)]
+        t2.apply(&cs).unwrap_or_else(|e| panic!("{p}: {e:?}"));
+        let got = t2.slice_to_string(eve_text::ByteRange::new(
+            ByteOff(0),
+            ByteOff(t2.len_bytes()),
+        ));
+        assert_eq!(got, want, "{p} / {d:?}");
     }
 }
 

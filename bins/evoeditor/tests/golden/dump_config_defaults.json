@@ -27,6 +27,7 @@
   "ui.hint_bar": true,
   "ui.mouse_wheel_lines": 3,
   "ui.which_key_delay_ms": 500,
+  "search.newline_sugar": true,
   "clipboard.osc52": "auto",
   "clipboard.osc52_max_bytes": 100000
 }
