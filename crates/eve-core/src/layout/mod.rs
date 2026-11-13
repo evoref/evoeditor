@@ -15,12 +15,12 @@ pub(crate) use cache::LayoutCache;
 pub(crate) use frame::{build_frame, primary_cursor_cell};
 pub(crate) use rows::{cell_text, gutter_width, line_rows, wrap_ctx, wrap_width};
 pub(crate) use units::{
-    byte_at_col, cursor_cell, cursor_col, doc_width_config, is_long_line, long_line_chars,
+    byte_at_col, cursor_cell, cursor_col, doc_width_config, is_long_line, long_line_graphemes,
 };
 // 子モジュール (long・wrap) が `super::` で使う
-use units::{Unit, is_plain_wide};
+use units::{Unit, is_plain_wide, unit_slow};
 #[cfg(test)]
-use units::{unit_slow, units, units_with, width_config};
+use units::{units, units_with, width_config};
 
 mod long;
 pub(crate) mod theme;

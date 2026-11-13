@@ -1,5 +1,6 @@
 //! BM-106: 長大行 (1 行 10 MB、改行なし) の表示・`End`・横スクロール・垂直スクロール・中央挿入 (docs/09-testing-quality.md §5.2、
-//! 01 NFR-106 AC-1)。v0.2 の判定: 閾値 (1 MiB) を超える行は char 近似モード (03 §11.5.1) で扱い、各操作の p99 ≤ 100 ms。
+//! 01 NFR-106 AC-1 / AC-4)。v0.2 の判定: 閾値 (1 MiB) を超える行は char 近似モード (03 §11.5.1) で扱い、各操作の p99 ≤ 100 ms。
+//! v0.4 (M25 の (5)) から書記素の単位の列の索引 (03 §14.4) で扱い、各操作の p99 ≤ 50 ms (Should)。100 ms (Must) は割らない。
 //! ASCII / 日本語 / 絵文字混在の 3 種を別のケースとして測る。
 //! ヘッドレス (core の区間)。**開発機の値は目安で、判定は基準機で行う**。
 //!
@@ -17,7 +18,13 @@
 //! cargo bench -p eve-testkit --bench bm_106
 //! cargo bench -p eve-testkit --bench bm_106 -- --quick   # 動作確認 (回数を減らす。記録には使わない)
 //! cargo bench -p eve-testkit --bench bm_106 -- --json    # 1 行ずつの JSON
+//! cargo bench -p eve-testkit --bench bm_106 -- --only flags     # 1 つのケースだけ
+//! cargo bench -p eve-testkit --bench bm_106 -- --no-reference   # 判定の 3 種だけ
 //! ```
+//!
+//! **参考のケース** (M25 の (5) のレビューで足した。判定には使わず、毎版記録する。09 §5.2): 書記素の分割に回る char が
+//! 続く実在の文字の行 (韓国語の文・異体字セレクタ付きの絵文字を混ぜた行・国旗・絵文字の ZWJ の列・デーヴァナーガリー・
+//! 異体字の IVS)。03 §14.4 の「速さ」のとおり、どれも 100 ms を割らないことを確かめる。
 
 #![allow(clippy::print_stdout, clippy::print_stderr)]
 #![expect(
@@ -55,7 +62,7 @@ fn opened(data: &[u8]) -> Harness {
 
 /// 行の中央の桁 (書記素数。単位の繰り返しの境目) へ移る (ここは測らない)。
 fn goto_mid(h: &mut Harness, unit: &str) {
-    let per_unit = unit.chars().count() as i64;
+    let per_unit = eve_text::grapheme_indices(unit).len() as i64;
     let mid_col = (LINE_BYTES / 2 / unit.len()) as i64 * per_unit + 1;
     h.cmd_with(
         "cursor.goto_line",
@@ -73,12 +80,27 @@ fn main() {
     // 合否が変わる)
     let reopen_runs = runs.min(100);
 
-    let cases: [(&str, &str); 3] = [
-        ("ascii", "abcdefghij"),
-        ("japanese", "日本語のテキスト"),
-        ("emoji", "a日😀b"),
+    let only = args
+        .iter()
+        .position(|a| a == "--only")
+        .and_then(|i| args.get(i + 1));
+    let no_reference = args.iter().any(|a| a == "--no-reference");
+    // (名前, 単位, 参考のケースか)。判定は ascii / japanese / emoji の 3 種 (09 §5.2)
+    let cases: [(&str, &str, bool); 9] = [
+        ("ascii", "abcdefghij", false),
+        ("japanese", "日本語のテキスト", false),
+        ("emoji", "a日😀b", false),
+        ("korean", "한국어 텍스트입니다. ", true),
+        ("emoji_vs16", "a日\u{2764}\u{FE0F}b", true),
+        ("flags", "\u{1F1EF}\u{1F1F5}\u{1F1FA}\u{1F1F8}", true),
+        ("zwj", "\u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467}", true),
+        ("devanagari", "नमस्ते क्षत्रिय ", true),
+        ("ivs", "葛\u{E0100}", true),
     ];
-    for (id, unit) in cases {
+    for (id, unit, ref_case) in cases {
+        if only.is_some_and(|o| o != id) || (no_reference && ref_case) {
+            continue;
+        }
         let line = unit.repeat(LINE_BYTES / unit.len() + 1);
         let mut data = line.into_bytes();
         data.extend_from_slice(b"\nsecond\n");
@@ -163,8 +185,8 @@ fn main() {
         ] {
             v.sort();
             let (p50, p99, max) = (percentile(&v, 0.5), percentile(&v, 0.99), v[v.len() - 1]);
-            // 参考の操作は判定に使わない (09 §5.2)
-            let reference = op == "end_after_insert";
+            // 参考の操作・参考のケースは判定に使わない (09 §5.2)
+            let reference = ref_case || op == "end_after_insert";
             if json {
                 println!(
                     "{{\"id\":\"BM-106\",\"case\":\"{id}\",\"op\":\"{op}\",\"n\":{},\"p50_ms\":{:.2},\"p99_ms\":{:.2},\"max_ms\":{:.2},\"reference\":{reference},\"quick\":{quick}}}",

@@ -48,12 +48,12 @@ fn render(state: &EditorState, key: &str, args: &[(&str, &str)]) -> String {
     state.catalog().render(key, args, &label)
 }
 
-/// 行頭からの書記素数 + 1 (桁。書記素数、04 の `ui.column_unit = "grapheme"`)。長大行は char 数 (03 §11.5.1)。
+/// 行頭からの書記素数 + 1 (桁。書記素数、04 の `ui.column_unit = "grapheme"`)。長大行は列の索引の書記素の数 (03 §14.4)。
 fn grapheme_column(doc: &Document, head: ByteOff) -> usize {
     let t = doc.text();
     let line = t.byte_to_line(head);
     let ls = t.line_to_byte(line);
-    if let Some(n) = crate::layout::long_line_chars(doc, line.0, head.0 - ls.0) {
+    if let Some(n) = crate::layout::long_line_graphemes(doc, line.0, head.0 - ls.0) {
         return n + 1;
     }
     let prefix = t.slice_to_string(ByteRange::new(ls, head));
@@ -116,7 +116,7 @@ pub(crate) fn status_model(
             CutPolicy::Never,
         ));
     }
-    // 長い行を含む文書: 閾値を超える行は char 近似モードで表示する (NFR-106、03 §11.5.1、04 §8.7)
+    // 長い行を含む文書: 折り返さずに表示する (NFR-106、03 §14.4 の「文言」、04 §8.7)
     if doc.format.long_lines > 0 {
         let (long, short) = (
             render(state, keys::STATUS_DEGRADED_LONG_LINE_LONG, &[]),

@@ -429,7 +429,7 @@ enabled = "マウスの操作を有効にしました"
 already_open = "{path} は既に開いています"
 cancelled = "{path} の読込を取り消しました"
 guess_unsupported = "{path} の文字コードは {guess} と推定されましたが、この版では扱えないため {encoding} として開きました / 正しく見えないときは、文字コードを指定して開き直す ({key:file.reopen_with_encoding}) で選び直してください"
-long_line = "{path} には非常に長い行があります。その行は文字を 1 つずつ近似して表示します (結合文字が分かれて見えることがあります)"
+long_line = "{path} には非常に長い行があります。この文書は折り返さずに表示します"
 new_file = "{path} は無いため、新しいファイルとして開きました (保存すると作成します)"
 partial_end = "先頭の {size} だけを表示しています。残りは読込の完了後に表示します"
 preserve_off = "この文書では元のバイト列を覚えていません。元の文字コードで保存すると、一部の文字が同じ文字の別のバイト表現になることがあります"
@@ -1101,8 +1101,8 @@ long = "[外部で変更]"
 short = "外部変更"
 
 [status.degraded.long_line]
-long = "[長い行: 近似表示]"
-short = "近似"
+long = "[長い行: 折り返しなし]"
+short = "折返なし"
 
 [status.encoding]
 bom = "{encoding} BOM"

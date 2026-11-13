@@ -343,9 +343,9 @@ pub(super) fn long_index(doc: &Document, line: usize) -> Option<(usize, std::rc:
     Some((ls, ix))
 }
 
-/// 長大行の、表示列 `left` から `left + cols` までにかかる char の表示の単位 (行全体は展開しない) と、行末がその範囲に
+/// 長大行の、表示列 `left` から `left + cols` までにかかる書記素の表示の単位 (行全体は展開しない) と、行末がその範囲に
 /// あれば行の幅 (範囲より右なら `None`。行末まで索引を作らない、03 §14.4 の遅延)。
-/// 1 char を 1 書記素として `unit_slow` で展開する (幅は索引と同じ)。
+/// 単位は通常の行 (`units_with`) と同じ (印字できる ASCII 1 文字は `Parts::Char`、ほかは `unit_slow`。幅は索引と同じ)。
 pub(super) fn long_units(
     doc: &Document,
     ls: usize,
@@ -358,22 +358,20 @@ pub(super) fn long_units(
     let tab = cfg.tab_width.max(1) as usize;
     let t = doc.text();
     let mut out = Vec::new();
-    let mut buf = [0u8; 4];
     // 右端の列にかかる単位まで (その次の単位で、右が切れていることが分かる)
-    let stop = ix.walk(t, ls, ix.at_col(t, ls, left), |at, c, w| {
+    let stop = ix.walk(t, ls, ix.at_col(t, ls, left), |at, g, w| {
         if at.col > left + cols {
             return false;
         }
-        out.push(if (' '..='~').contains(&c) {
-            Unit {
+        out.push(match g.as_bytes() {
+            &[b @ 0x20..=0x7E] => Unit {
                 col: at.col,
-                parts: Parts::Char(c),
+                parts: Parts::Char(char::from(b)),
                 width: w,
                 byte: at.byte,
                 risky: false,
-            }
-        } else {
-            unit_slow(c.encode_utf8(&mut buf), at.byte, at.col, tab, esc, ws, &cfg)
+            },
+            _ => unit_slow(g, at.byte, at.col, tab, esc, ws, &cfg),
         });
         true
     });
@@ -403,10 +401,10 @@ pub(crate) fn cursor_cell(doc: &Document, line: usize, byte: usize) -> (usize, u
     }
 }
 
-/// 長大行なら、行内の位置 `byte` より前の char 数 (ステータスバーの桁。書記素 = char とみなす、03 §11.5.1)。
-pub(crate) fn long_line_chars(doc: &Document, line: usize, byte: usize) -> Option<usize> {
+/// 長大行なら、行内の位置 `byte` より前の書記素の数 (ステータスバーの桁、03 §14.4 の「使う側」の (b))。
+pub(crate) fn long_line_graphemes(doc: &Document, line: usize, byte: usize) -> Option<usize> {
     let (ls, ix) = long_index(doc, line)?;
-    Some(ix.at_byte(doc.text(), ls, byte).0.chars)
+    Some(ix.at_byte(doc.text(), ls, byte).0.graphemes)
 }
 
 /// 行内のバイト位置 `byte` にあるカーソルの表示列 (行頭から)。移動の目標列もこの表示と同じ幅で数える。

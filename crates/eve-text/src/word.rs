@@ -182,7 +182,7 @@ fn ceil_char(text: &dyn TextRead, mut b: usize) -> usize {
 /// 前の文字種を決めるために `next_word_stop_near` が `pos` の手前から読むバイト数 (長音・踊り字の継承に使う)。
 const NEAR_CONTEXT: usize = 16;
 
-/// `next_word_stop` の窓付きの版 (長大行の char 近似モード、03 §11.5.1)。行全体を読まず、`pos` の後ろ `window` バイト
+/// `next_word_stop` の窓付きの版 (長大行、03 §11.5.1 / §14.4 の「使う側」の (d))。行全体を読まず、`pos` の後ろ `window` バイト
 /// (char の境界へ広げる) と手前の数バイト (前の文字種) だけを見る。窓の中に停止位置が無ければ窓の端に止まる (窓が行末に届いていれば行末)。
 pub fn next_word_stop_near(text: &dyn TextRead, pos: Pos, window: usize) -> Pos {
     let pos = ByteOff(pos.0.min(text.len_bytes()));
@@ -412,7 +412,7 @@ y"
         );
         assert_eq!(classify_grapheme("\u{10FEFF}", None), ScriptClass::Punct);
         assert_eq!(classify_grapheme("\u{E000}", None), ScriptClass::Punct);
-        // 窓付きの版 (長大行の char 近似モード) も同じ
+        // 窓付きの版 (長大行) も同じ
         let t = Text::from(format!("x\nabc{e}{f}def {e}\ny").as_str());
         for p in 2..t.len_bytes() - 2 {
             if !t.is_char_boundary(ByteOff(p)) {
