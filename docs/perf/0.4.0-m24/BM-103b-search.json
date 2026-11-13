@@ -1,0 +1,38 @@
+{
+  "commit": "7f3bed1",
+  "env": "ENV-W1",
+  "id": "BM-103b-search",
+  "quick": false,
+  "results": [
+    {
+      "id": "BM-103b-search",
+      "max_ms": 3.4,
+      "n": 1000,
+      "p50_ms": 1.48,
+      "p999_ms": 3.29,
+      "p99_ms": 2.47,
+      "quick": false,
+      "run": "pty-404-1"
+    },
+    {
+      "id": "BM-103b-search",
+      "max_ms": 2.8,
+      "n": 1000,
+      "p50_ms": 1.47,
+      "p999_ms": 2.72,
+      "p99_ms": 2.43,
+      "quick": false,
+      "run": "pty-404-2"
+    },
+    {
+      "id": "BM-103b-search",
+      "max_ms": 1.98,
+      "n": 1000,
+      "p50_ms": 0.94,
+      "p999_ms": 1.84,
+      "p99_ms": 1.7,
+      "quick": false,
+      "run": "pty-404-3"
+    }
+  ]
+}

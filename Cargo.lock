@@ -401,6 +401,7 @@ dependencies = [
  "eve-platform",
  "eve-text",
  "eve-view",
+ "regex",
  "serde",
  "stats_alloc",
  "toml",
