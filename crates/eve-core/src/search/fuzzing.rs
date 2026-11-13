@@ -472,6 +472,13 @@ pub fn check(c: &RegexCase) -> Result<Checked, String> {
                 .copied()
                 .filter(|r| r.0 >= from)
                 .collect();
+            // 先頭からの走査が探せた文書は、正本の位置から走査し直しても窓の上限で探さないとしない (03 §12.3.1 の行の窓)
+            if end == ScanEnd::TooLarge {
+                return Err(format!(
+                    "{from} から走査し直すと探さない (窓の上限): {}",
+                    ctx()
+                ));
+            }
             if end == ScanEnd::Done && rest != expect {
                 return Err(format!(
                     "{from} から走査し直した続きが違う: {}\n 実際 {rest:?}\n 期待 {expect:?}",
@@ -733,6 +740,12 @@ fn check_callers(
     for &from in &sample(&resume, 4) {
         let (end, rest) = scan(t, m, from, None, None);
         let expect: Vec<(usize, usize)> = want.iter().copied().filter(|r| r.0 >= from).collect();
+        if end == ScanEnd::TooLarge {
+            return Err(format!(
+                "ジョブの再開の位置 {from} から走査し直すと探さない (窓の上限): {}",
+                ctx()
+            ));
+        }
         if end == ScanEnd::Done && rest != expect {
             return Err(format!(
                 "ジョブの再開の位置 {from} から走査し直した続きが違う: {}\n 実際 {rest:?}\n 期待 {expect:?}",
