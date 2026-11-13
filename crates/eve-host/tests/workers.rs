@@ -84,7 +84,7 @@ fn 実スレッドで開き_編集し_保存して_終了する() {
     let code = host.run(
         &mut fe,
         &[eve_core::InitialFile {
-            path: "/w/a.txt".into(),
+            target: eve_core::InitialTarget::Path("/w/a.txt".into()),
             line: None,
             col: None,
         }],

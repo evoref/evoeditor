@@ -16,7 +16,8 @@
 //! - **確保の失敗**: 復号の作業領域の `try_reserve` と、本文が倍になるごとの確保の見込みの確かめ (`probe_reserve`) で
 //!   見つけ、構築済みの分を返す (`StdinEnd::OutOfMemory`)。
 //! - 1 バイト以上受け取って読み終えなかったら `LoadIncomplete` を付ける。開いた量は `StdinDone.bytes`。
-//! - 進捗 `Progress` は受け取ったバイト数を `total = 0` で送る (大きさは分からない)。
+//! - 進捗 `Progress` は受け取ったバイト数を `total = 0` で送る (大きさは分からない)。最初のデータは間引かずに送る
+//!   (core が「1 バイト以上読んだ」を知る唯一の経路。閉じないパイプでは、その後に進捗が来ないことがある)。
 
 use eve_encoding::{DetectOptions, DetectedKind, Detection, RoundtripChecker, detect};
 use eve_text::{TextBuilder, TextRead};
@@ -354,11 +355,23 @@ pub(crate) fn run_open_stdin(
         );
     }
     let mut received: u64 = 0;
+    // 取消しを見た後は、受け渡し待ちの分 (読取のスレッドが既にパイプから読んで積んだ分) をブロックせずに取り込んでから
+    // 終える (書き手の側では渡し済みで、捨てると取り戻せない。03 §9.2.2 の「取消し」)
+    let mut stopping = false;
     let end = loop {
-        if cancel.is_cancelled() {
-            break StdinEnd::Stopped;
-        }
-        let chunk = match reader.next_chunk() {
+        let next = if stopping {
+            match reader.next_ready() {
+                Ok(Some(c)) => Ok(Some(c)),
+                // 積まれた分を取り込み終えた (読取の失敗はここでは問わない。読めた分までを開く)
+                _ => break StdinEnd::Stopped,
+            }
+        } else if cancel.is_cancelled() {
+            stopping = true;
+            continue;
+        } else {
+            reader.next_chunk()
+        };
+        let chunk = match next {
             Ok(Some(c)) => c,
             Ok(None) => break StdinEnd::Eof,
             Err(ChunkError::Io(e)) => break StdinEnd::Error(e),
@@ -368,7 +381,15 @@ pub(crate) fn run_open_stdin(
         if chunk.is_empty() {
             continue;
         }
+        let first_data = received == 0;
         received += chunk.len() as u64;
+        // 最初のデータは、判定と復号 (`feed`) の前に間引かずに送る (core は「1 バイト以上読んだ」を進捗で知る。閉じない
+        // パイプで最初のチャンクの後に書き手が黙ると、以後の進捗は届かないので、送らないと閉じる・終了の確認 (03 §9.2.2) が
+        // 出ずに捨てられる)
+        if first_data {
+            last_progress = ports.clock.now();
+            emit(progress(received));
+        }
         if load.plan.is_none() {
             // 先頭の 64 KiB が揃うまで貯める (03 §9.2.2 の「文字コードの判定」。容量は先に確保した)
             let take = (SNIFF_LEN - sniff.len()).min(chunk.len());
@@ -386,7 +407,7 @@ pub(crate) fn run_open_stdin(
             break end;
         }
         let now = ports.clock.now();
-        if now.saturating_sub(last_progress) >= crate::time::Millis(100) {
+        if !first_data && now.saturating_sub(last_progress) >= crate::time::Millis(100) {
             last_progress = now;
             emit(progress(received));
         }

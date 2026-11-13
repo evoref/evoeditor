@@ -215,3 +215,83 @@ fn ゴールデン_使い方の誤り() {
     );
     golden("usage_error.txt", &String::from_utf8_lossy(&out.stderr));
 }
+
+// verifies: FR-120
+#[test]
+fn 標準入力の_2_つ目と駆動_api_との併用は使い方の誤り() {
+    // `-` は 1 つまで (07 §18.2)。端末を始めずに `stderr.usage.generic` を出して終了コード 2
+    let out = Command::new(EXE)
+        .args(["-", "a.txt", "--", "-"])
+        .output()
+        .expect("起動できる");
+    assert_eq!(out.status.code(), Some(2));
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        err.contains("Standard input (-) can be given only once")
+            && err.contains("標準入力 (-) は 1 つだけ指定できます"),
+        "{err}"
+    );
+    // 配布ビルドの `--headless --rpc stdio` は使い方の誤り (標準入力と一緒でも、標準入力を読まずに終わる)
+    let out = Command::new(EXE)
+        .args(["--headless", "--rpc", "stdio", "-"])
+        .stdin(std::process::Stdio::null())
+        .output()
+        .expect("起動できる");
+    assert_eq!(out.status.code(), Some(2));
+}
+
+// verifies: FR-120
+#[test]
+fn 端末が無ければ標準入力を読まずに終了コード_5_で終わる() {
+    // `ssh host 'cmd | evoeditor -'` を `-t` なしで実行したときと同じ: 標準入力を移して読み始める前に端末を確かめ、
+    // 使えなければ読まずに終わる (03 §9.2.2 の「端末の初期化の時期」)。書き手は開いたまま (データを待たない)
+    #[cfg(unix)]
+    let mut cmd = {
+        // 制御端末を外す (util-linux の `setsid`。無い環境では確かめない)
+        if Command::new("setsid").arg("--version").output().is_err() {
+            return;
+        }
+        let mut c = Command::new("setsid");
+        c.arg(EXE);
+        c
+    };
+    #[cfg(windows)]
+    let mut cmd = {
+        use std::os::windows::process::CommandExt;
+        let mut c = Command::new(EXE);
+        // DETACHED_PROCESS: コンソールを持たない
+        c.creation_flags(0x0000_0008);
+        c
+    };
+    let mut child = cmd
+        .arg("-")
+        .env("TERM", "xterm-256color")
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .expect("起動できる");
+    let writer = child.stdin.take().expect("標準入力の書き端");
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
+    let status = loop {
+        if let Some(s) = child.try_wait().expect("待てる") {
+            break s;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "標準入力を待ち続けている (端末を確かめる前に読み始めた)"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    };
+    assert_eq!(status.code(), Some(5), "端末の初期化の失敗と同じ終了コード");
+    // 待ちの行を出さずに (標準入力を待たずに) 終わった
+    let mut err = String::new();
+    use std::io::Read;
+    let _ = child
+        .stderr
+        .take()
+        .expect("stderr")
+        .read_to_string(&mut err);
+    assert!(!err.contains("Waiting for standard input"), "{err}");
+    drop(writer);
+}

@@ -557,6 +557,12 @@ impl EditorState {
         reason: &str,
     ) {
         self.show_message(level, key, &[("path", &path.display()), ("reason", reason)]);
+        self.drop_failed_open(doc, replace);
+    }
+
+    /// 読込に失敗した文書を閉じる (メッセージは呼び側が出す)。表示中なら §9.8 の順で別の文書を表示する。標準入力の読込の
+    /// 失敗 (パニック、03 §9.2.2) も同じ経路。
+    pub(crate) fn drop_failed_open(&mut self, doc: DocumentId, replace: Option<DocumentId>) {
         // 先頭も捨てる (03 §9.2.1 の「失敗・取消し・閉じる」。文書ごと閉じる)
         self.forget_partial_state(doc);
         if self.active_document() == Some(doc) || self.focused_window().is_none() {

@@ -1,12 +1,14 @@
 //! コマンドラインの解析 (docs/07 §18.1〜§18.3。v0.1 の公開オプションは `--version` `--help` `--readonly` `--encoding` `--`
-//! と、受理して無視する `--wait`。v0.2 で `--locale` を足した)。パーサは外部 crate を使わず、この小さな関数で済ませる (サブコマンドが要る v1.X で見直す、OQ-24)。
+//! と、受理して無視する `--wait`。v0.2 で `--locale` を足した。v0.4 の M25 で標準入力の `-` を足した)。パーサは外部 crate を使わず、この小さな関数で済ませる (サブコマンドが要る v1.X で見直す、OQ-24)。
 
 use std::ffi::OsString;
 
-/// 開くファイル 1 つ (07 §18.2)。
+/// 開くファイル 1 つ (07 §18.2)。標準入力 (`-`、v0.4 の M25) は `stdin` が真で、`path` は `-`。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FileArg {
     pub path: String,
+    /// 標準入力 (`-`。`--` の後ろの `-` も、03 §9.2.2 の「書き方」)。`-` という名前のファイルは `./-` と書く。
+    pub stdin: bool,
     /// 開いた直後に移る行 (`+LINE` / `FILE:LINE`、1 始まり)。`+` 単独は最終行 (`usize::MAX`、範囲外は末尾に丸める)。
     pub line: Option<usize>,
     /// 同じく桁 (書記素数、1 始まり)。
@@ -17,8 +19,16 @@ impl FileArg {
     fn plain(path: String) -> FileArg {
         FileArg {
             path,
+            stdin: false,
             line: None,
             col: None,
+        }
+    }
+
+    fn stdin() -> FileArg {
+        FileArg {
+            stdin: true,
+            ..FileArg::plain("-".to_owned())
         }
     }
 }
@@ -60,7 +70,7 @@ pub enum Cli {
     Help,
     Version,
     Run {
-        /// 開くファイル (0 個なら無題。複数は v0.2、最初のものを表示する)。
+        /// 開くファイル (0 個なら無題。複数は v0.2、最初のものを表示する)。標準入力 (`-`) は 1 つまで。
         files: Vec<FileArg>,
         read_only: bool,
         /// `--encoding` の値 (開く文書の文字コードの指定)。
@@ -87,6 +97,8 @@ pub enum UsageError {
     BadSet(String),
     /// `--log-level` の値が水準の名前でない。
     BadLogLevel(String),
+    /// 標準入力 (`-`) を 2 つ以上書いた (07 §18.2。`stderr.usage.generic`)。
+    StdinTwice,
 }
 
 fn to_string(a: OsString) -> Result<String, UsageError> {
@@ -144,6 +156,7 @@ fn split_position(raw: &str, exists: &dyn Fn(&str) -> bool) -> FileArg {
     {
         return FileArg {
             path: base.to_owned(),
+            stdin: false,
             line: Some(line),
             col,
         };
@@ -170,9 +183,14 @@ pub fn parse(
     let (mut list_commands, mut dump_keymap) = (false, false);
     let mut log_level = None;
     let mut only_positional = false;
+    // `-` は標準入力 (`--` の後ろでも)。`+LINE` はファイルと同じく直後 (後置なら直前) の `-` に掛かる (07 §18.2)
     let add_file =
         |files: &mut Vec<FileArg>, raw: String, pending: &mut Option<(usize, Option<usize>)>| {
-            let mut f = split_position(&raw, exists);
+            let mut f = if raw == "-" {
+                FileArg::stdin()
+            } else {
+                split_position(&raw, exists)
+            };
             if f.line.is_none()
                 && let Some((line, col)) = pending.take()
             {
@@ -264,10 +282,13 @@ pub fn parse(
                 None => ignored.push(s.to_owned()),
             },
             s if s.starts_with('-') && s != "-" => return Err(UsageError::UnknownOption(a)),
-            // `-` (標準入力) は v0.4。いまはファイル名として扱わず未対応として無視する
-            "-" => ignored.push(a),
             _ => add_file(&mut files, a, &mut pending),
         }
+    }
+    // 標準入力は 1 つまで (07 §18.2)。駆動 API (`--headless --rpc stdio`) は標準入力を使うので併用できないが、配布ビルドの
+    // この解析は `--headless` を未知のオプションとして先に拒む
+    if files.iter().filter(|f| f.stdin).count() > 1 {
+        return Err(UsageError::StdinTwice);
     }
     // FILE の後ろに書かれた `+LINE` は最後の FILE に適用する
     if let Some((line, col)) = pending
@@ -336,8 +357,18 @@ mod tests {
     fn f(path: &str, line: Option<usize>, col: Option<usize>) -> FileArg {
         FileArg {
             path: path.to_owned(),
+            stdin: false,
             line,
             col,
+        }
+    }
+
+    /// 標準入力 (`-`)。
+    fn stdin(line: Option<usize>, col: Option<usize>) -> FileArg {
+        FileArg {
+            line,
+            col,
+            ..FileArg::stdin()
         }
     }
 
@@ -663,5 +694,75 @@ mod tests {
             run(vec![f("a.txt", Some(2), Some(3))], false),
             "FILE:LINE:COL が明示されていればそれを使う"
         );
+    }
+
+    // ---- 標準入力の `-` (07 §18.2、03 §9.2.2 の「書き方」。v0.4 の M25) ----
+
+    // verifies: FR-120
+    #[test]
+    fn ハイフンは標準入力() {
+        assert_eq!(p(&["-"]).unwrap(), run(vec![stdin(None, None)], false));
+    }
+
+    #[test]
+    fn 標準入力はファイルと一緒に書いた順に並ぶ() {
+        assert_eq!(
+            p(&["a.txt", "-", "b.txt"]).unwrap(),
+            run(
+                vec![plain("a.txt"), stdin(None, None), plain("b.txt")],
+                false
+            )
+        );
+    }
+
+    #[test]
+    fn 区切りの後のハイフンも標準入力_ハイフンという名前のファイルは_dot_slash() {
+        assert_eq!(
+            p(&["--", "-", "-weird.txt"]).unwrap(),
+            run(vec![stdin(None, None), plain("-weird.txt")], false)
+        );
+        assert_eq!(p(&["./-"]).unwrap(), run(vec![plain("./-")], false));
+        assert_eq!(p(&[r".\-"]).unwrap(), run(vec![plain(r".\-")], false));
+    }
+
+    #[test]
+    fn 標準入力は_1_つまで() {
+        assert_eq!(p(&["-", "-"]).unwrap_err(), UsageError::StdinTwice);
+        assert_eq!(
+            p(&["-", "a.txt", "--", "-"]).unwrap_err(),
+            UsageError::StdinTwice,
+            "区切りの後の - も数える"
+        );
+    }
+
+    #[test]
+    fn プラス_行は直後の標準入力に掛かり_後置なら直前() {
+        assert_eq!(
+            p(&["+10", "-", "a.txt"]).unwrap(),
+            run(vec![stdin(Some(10), None), plain("a.txt")], false)
+        );
+        assert_eq!(
+            p(&["a.txt", "-", "+3:2"]).unwrap(),
+            run(vec![plain("a.txt"), stdin(Some(3), Some(2))], false)
+        );
+    }
+
+    #[test]
+    fn readonly_と_encoding_は標準入力にも掛かる() {
+        let r = p(&["-R", "-e", "shift_jis", "-"]).unwrap();
+        assert!(matches!(
+            &r,
+            Cli::Run { files, read_only: true, encoding: Some(e), .. }
+                if e == "shift_jis" && files == &vec![stdin(None, None)]
+        ));
+    }
+
+    #[test]
+    fn 駆動_api_の標準入力との併用は使い方の誤り() {
+        // 配布ビルドは `--headless` を受け付けない (未知のオプション、終了コード 2)。標準入力と一緒でも同じ
+        assert!(matches!(
+            p(&["--headless", "--rpc", "stdio", "-"]).unwrap_err(),
+            UsageError::UnknownOption(o) if o == "--headless"
+        ));
     }
 }

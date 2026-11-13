@@ -254,8 +254,13 @@ impl EditorState {
         CommandResult::Done
     }
 
-    /// 文書を閉じる要求。dirty なら FR-107 の確認を出す (保存を選んだら保存が成功したときだけ閉じる)。
+    /// 文書を閉じる要求。dirty なら FR-107 の確認を出す (保存を選んだら保存が成功したときだけ閉じる)。1 バイト以上読んだ
+    /// 読込中の標準入力の文書なら、先に `ui.confirm.stdin_loading` を出す。
     pub(crate) fn request_close(&mut self, doc: DocumentId) -> CommandResult {
+        // 1 バイト以上読んだ読込中の標準入力の文書は、ここまでで開くか捨てるかを先に尋ねる (03 §9.2.2 の「閉じる・終了」)
+        if self.confirm_stdin_loading(doc, Continuation::Close(doc)) {
+            return CommandResult::Done;
+        }
         if self.confirm_doc_if_dirty(doc, "unsaved_close", Continuation::Close(doc)) {
             return CommandResult::Done;
         }

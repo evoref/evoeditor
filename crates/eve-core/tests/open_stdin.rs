@@ -1,4 +1,4 @@
-//! 標準入力の読込 (docs/03 §9.2.2、01 FR-120。v0.4 の M25 の (8)「標準入力の土台」): 64 KiB が揃うまで待つ判定
+//! 標準入力の読込 (docs/03 §9.2.2、01 FR-120。v0.4 の M25 の (8)「標準入力の土台」。公開 ((9)) の試験は `stdin_public.rs`): 64 KiB が揃うまで待つ判定
 //! (届き方で結果が変わらない)、確認を出さない読込、保持方式の記録 (ファイルと同じ関数)、上限、取消し・EOF・読めなく
 //! なったとき、`LoadIncomplete` の付け方。偽の `StdinSource` (`eve_testkit::FakeStdin`) で、ジョブ (`run_job`) と core の
 //! ジョブ表 (`Pending::OpenStdin`) を確かめる。
@@ -502,10 +502,39 @@ fn 何も読まずに取り消すと理由の無い空の文書() {
 }
 
 #[test]
-fn 取消しの後に始まったジョブも_stdin_done_を返す() {
+fn 取消しの後に始まったジョブも_stdin_done_を返し_受け渡し待ちの分を取り込む() {
+    // 取消しを見た後は、もう届いている分 (受け渡し待ち) をブロックせずに取り込んでから終える (03 §9.2.2 の「取消し」)。
+    // 閉じないパイプ (`Hang`) の手前までが届いている分
     let cancel = CancelToken::new();
     cancel.cancel();
-    let fake = FakeStdin::chunks(b"abc", 1);
+    let fake = FakeStdin::new([
+        StdinStep::Data(b"ab".to_vec()),
+        StdinStep::Data(b"c".to_vec()),
+        StdinStep::Hang,
+        StdinStep::Data(b"never".to_vec()),
+    ]);
+    let (d, _) = run_stdin_with(
+        Some(fake.clone()),
+        OpenOptions::default(),
+        &cancel,
+        ManualClock::new(),
+    );
+    assert_eq!(d.end, "Stopped");
+    assert_eq!(d.text, "abc");
+    assert_eq!(d.bytes, 3);
+    assert!(d.detected.contains(ReadOnlyReason::LoadIncomplete));
+    assert_eq!(fake.wakes(), 0, "閉じないパイプでは待たない");
+}
+
+#[test]
+fn 取消しで取り込むのは届いている分だけで_失敗の段の先は読まない() {
+    let cancel = CancelToken::new();
+    cancel.cancel();
+    let fake = FakeStdin::new([
+        StdinStep::Data(b"ok".to_vec()),
+        StdinStep::Error(FsErrorKind::Other),
+        StdinStep::Data(b"later".to_vec()),
+    ]);
     let (d, _) = run_stdin_with(
         Some(fake),
         OpenOptions::default(),
@@ -513,7 +542,7 @@ fn 取消しの後に始まったジョブも_stdin_done_を返す() {
         ManualClock::new(),
     );
     assert_eq!(d.end, "Stopped");
-    assert_eq!(d.text, "");
+    assert_eq!(d.text, "ok");
 }
 
 // verifies: FR-120
@@ -630,12 +659,15 @@ fn 読み終えた文書は読み込んだだけの印と読んだ量を持つ()
 }
 
 #[test]
-fn esc_はファイルの読込の取消しで標準入力の読込に触れない() {
-    // (9) で標準入力の文書を表示しているときの `Esc` に確認を足すまで、`cancel_loading` は標準入力の読込を対象にしない
+fn esc_は確認を出すだけで標準入力の読込を取り消さない() {
+    // 表示中の標準入力の文書の `Esc` は確認 (`ui.confirm.stdin_stop`) を出す。答えるまで取り消さない (03 §9.2.2)。
+    // 確認の間に読み終えたら確認を閉じる
     let fake = FakeStdin::chunks(b"abc", 1);
     let mut h = harness(&fake);
     h.keys("esc");
+    assert_eq!(h.editor.state().confirm_name(), Some("stdin_stop"));
     h.run_jobs();
+    assert_eq!(h.editor.state().confirm_name(), None);
     assert_eq!(fake.wakes(), 0, "取り消していない");
     assert_eq!(h.doc_text(), "abc");
     let doc = h.editor.state().active_document().expect("文書");
@@ -669,8 +701,9 @@ fn 取り消した読込の_stdin_done_は採用する() {
     h.run_jobs();
     let d = h.editor.state().document(doc).expect("文書");
     assert_eq!(d.load_state, LoadState::Ready);
-    assert_eq!(h.doc_text(), "", "読む前に取り消した");
-    assert_eq!(d.read_only, ReadOnlyReasons::default());
+    // 読む前に取り消したが、もう届いていた分 (閉じないパイプの手前) は取り込む
+    assert_eq!(h.doc_text(), "abc");
+    assert!(d.read_only.contains(ReadOnlyReason::LoadIncomplete));
 }
 
 /// `harness` の標準入力の読込のジョブ (`ManualJobSpawner` が最初に振る番号。`defer_start` なので、ほかのジョブは無い)。

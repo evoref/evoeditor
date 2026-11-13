@@ -310,7 +310,21 @@ pub fn usage_error(e: &UsageError) -> Bi {
             format!("--set needs key=value (got: {v}). {tail_en}"),
             format!("--set には key=value の形で指定してください (指定: {v})。{tail_ja}"),
         ),
+        // `stderr.usage.generic` (07 §18.2: `-` は 1 つまで)
+        UsageError::StdinTwice => Bi::new(
+            format!("Standard input (-) can be given only once. {tail_en}"),
+            format!("標準入力 (-) は 1 つだけ指定できます。{tail_ja}"),
+        ),
     }
+}
+
+/// `stderr.stdin.waiting`: 標準入力の最初のデータを待つ間に、端末を初期化する前に出す (03 §9.2.2 の「端末の初期化の
+/// 時期」、OQ-219 の 9。04 §15.2)。
+pub fn stdin_waiting() -> Bi {
+    Bi::new(
+        "Waiting for standard input (Ctrl+C to abort)",
+        "標準入力を待っています (Ctrl+C で中止)",
+    )
 }
 
 /// `--crash-report`: クラッシュログが無い。
@@ -362,7 +376,7 @@ pub fn ignored_args(args: &[String]) -> Bi {
 
 /// `--help` の本文 (`cli.help.*`)。オプション名の後ろに英語の説明、次の行に日本語の説明を揃えて出す。
 pub fn help() -> String {
-    const OPTIONS: [(&str, &str, &str); 14] = [
+    const OPTIONS: [(&str, &str, &str); 15] = [
         (
             "-R, --readonly",
             "Open the file read-only",
@@ -429,6 +443,11 @@ pub fn help() -> String {
             "$EDITOR に設定するときの互換用です (何もしません)",
         ),
         (
+            "-",
+            "Read standard input into an untitled document",
+            "標準入力を読んで無題の文書として開きます",
+        ),
+        (
             "--",
             "Treat the rest as file names",
             "以降をファイル名として扱います",
@@ -438,8 +457,8 @@ pub fn help() -> String {
     let mut out = String::new();
     let mut pair = |en: &str, ja: &str| out.push_str(&format!("{en}\n  {ja}\n\n"));
     pair(
-        "Usage: evoeditor [OPTIONS] [--] [FILE]",
-        "使い方: evoeditor [オプション] [--] [ファイル]",
+        "Usage: evoeditor [OPTIONS] [--] [FILE | -]...",
+        "使い方: evoeditor [オプション] [--] [ファイル | -]...",
     );
     pair(
         "A modeless text editor for the terminal.",
@@ -539,9 +558,11 @@ mod tests {
             UsageError::BadEncoding(String::new()),
             UsageError::UnknownOption("--x".into()),
             UsageError::MissingValue("-e".into()),
+            UsageError::StdinTwice,
         ] {
             all.push(usage_error(&e));
         }
+        all.push(stdin_waiting());
         for b in &all {
             assert!(b.en.is_ascii(), "{}", b.en);
             assert!(!b.ja.is_ascii(), "日本語の行がある: {}", b.ja);

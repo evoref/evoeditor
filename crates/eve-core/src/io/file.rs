@@ -75,6 +75,11 @@ impl EditorState {
     /// `Partial`。開く・再読込・開き直しのどれでも) ならその文書の読込だけを、表示中の文書が読込中でなければ、表示して
     /// いない文書の新しく開く読込を取り消す。ほかの文書の再読込・開き直しは取り消さない。取り消すものがあれば `true`。
     pub(crate) fn cancel_loading(&mut self) -> bool {
+        // 表示中の文書が読込中の標準入力の文書なら、取り消さずに読むのをやめるかを尋ねる (03 §9.2.2 の「取消し (`Esc`)」)。
+        // 表示していない標準入力の読込には触れない (下の 2 つはファイルの読込 `Pending::Open` だけを見る)
+        if self.confirm_stdin_stop() {
+            return true;
+        }
         let active = self.active_document();
         let own: Vec<_> = self
             .io

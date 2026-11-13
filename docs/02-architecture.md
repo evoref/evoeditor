@@ -364,7 +364,8 @@ trait StdinSource: Send + Sync {                 // v0.4 の M25。eve-platform 
     // チャネルだけで待つ (時間で区切って空のチャンクを返さない。§14 の NFR-204 の「ポーリング禁止」)。wake の印を受けたら空のチャンク
     // (Ok(Some(&[]))) を返して戻る。EOF は Ok(None)、読取の失敗は ChunkError::Io。ReadChunks を drop したら (取消し・上限・終了)、
     // eve-stdin を OS ごとの方法で起こして止め (Unix は停止の自己パイプ、Windows は CancelSynchronousIo)、eve-stdin が自分で私有の
-    // ハンドル / fd を閉じて終わる (別のスレッドから閉じない。05 §9.1 / §9.2)
+    // ハンドル / fd を閉じて終わる (別のスレッドから閉じない。05 §9.1 / §9.2)。取消し (Stopped) のときジョブは、drop の前に
+    // ReadChunks::next_ready (ブロックしない取り出し。既定は Ok(None)。M25 の (9)) で、チャネルに積まれた分 (受け渡し待ち) を取り込む
 }
 ```
 
@@ -727,7 +728,7 @@ EditorState
    │                  load_total /*v0.4 の M25: 最後の Progress.total (ファイルの大きさ)。先行表示の行番号の欄の幅の推定に使う (03 §11.4)*/,
    │                  stdin: Option<StdinDoc> /*v0.4 の M25: 標準入力の文書だけ Some (03 §9.2.2)。持ち主は Document で、core だけが書く。
    │                         StdinDoc { bytes_read: u64 /*読んだバイト数。読込の間は Progress.bytes (受け取った量)、読み終えたら StdinDone.bytes (開いた量) にし、status.loading_bytes と「途中まで ({size})」の size に使う
-   │                                                   (eve-stdin が受け渡し待ちで持つ分は含まない)*/,
+   │                                                   (パイプに残った分と eve-stdin が読んでいる途中の分は含まない。止めたときは受け渡し待ちの分を取り込んだ後の量)*/,
    │                                    pristine: bool /*読み込んだだけ。StdinDone の適用で立て、本文を変える Transaction の適用で外す (Origin を問わない。
    │                                                     駆動 API の Ai / External を含む。読込そのものは Transaction を作らない)。Undo では戻さない。スワップの対象の判定に使う*/ }*/,
    │                  /*表示層のキャッシュ 2 つ (行の表示単位・長大行の列の索引)。v0.3 の M14 で layout 側へ移す (STR-B2)。v0.4 の M25 の長大行の索引の覚えは、
@@ -811,7 +812,7 @@ Command 実行 ─▶ Transaction 生成 (ChangeSet + selection_before/after + O
 | メソッド | 呼ぶ者・時期 | 内容 |
 |---|---|---|
 | `new(ports: Ports, config: Arc<ResolvedConfig>, caps: Capabilities) -> Editor` | `Host::start` (`Frontend::init` の後、§9.5) | 空の EditorState を作る。I/O もジョブ投入もしない |
-| `open_initial_files(files: &[InitialFile], read_only: bool, forced: Option<Encoding>)` | `Host::start` (最初の大きさを渡した後、最初の Frame の前) | CLI で渡された開き方。`InitialFile { path: String, line: Option<usize>, col: Option<usize> }` (複数のパスと `path:行:桁` / `+行`、v0.2)。**v0.4 の M25 (案)**: 標準入力 (`-`) を表すため、`path` を `target: InitialTarget` に替える (`enum InitialTarget { Path(String), Stdin { terminal: bool } }`)。標準入力が端末かどうかは Host が判定して `terminal` に入れ (05 §9.1 / §9.2)、端末でなければ Host は `JobPorts.stdin` に `StdinSource` を入れる。core は `terminal` なら空の無題の文書と `info.stdin.terminal`、そうでなければ `JobKind::OpenStdin` を投入する (03 §9.2.2。`StdinSource::take` で端末を判定しない)。空なら無題の文書。`read_only` は `--readonly`、`forced` は `--encoding`。パスの正規化 (`Paths::normalize`) と開くジョブの投入は core が行う。1 つのパスだけの `open_initial(path: Option<&str>, read_only: bool)` と `open_initial_with(.., forced)` も持つ (テスト用)。v0.1 の案の `OpenRequest` は置かなかった |
+| `open_initial_files(files: &[InitialFile], read_only: bool, forced: Option<Encoding>)` | `Host::start` (最初の大きさを渡した後、最初の Frame の前) | CLI で渡された開き方。`InitialFile { target: InitialTarget, line: Option<usize>, col: Option<usize> }` (複数のパスと `path:行:桁` / `+行`、v0.2)。**v0.4 の M25 の (9)**: 標準入力 (`-`) を表すため、v0.2 の `path: String` を `target: InitialTarget` に替えた (`enum InitialTarget { Path(String), Stdin { terminal: bool } }`。パスだけのときは `InitialFile::path(p)`)。標準入力が端末かどうかは Host が判定して `terminal` に入れ (05 §9.1 / §9.2)、端末でなければ Host は `JobPorts.stdin` に `StdinSource` を入れる。core は `terminal` なら空の無題の文書と `info.stdin.terminal`、そうでなければ `JobKind::OpenStdin` を投入する (03 §9.2.2。`StdinSource::take` で端末を判定しない)。空なら無題の文書。`read_only` は `--readonly`、`forced` は `--encoding`。パスの正規化 (`Paths::normalize`) と開くジョブの投入は core が行う。1 つのパスだけの `open_initial(path: Option<&str>, read_only: bool)` と `open_initial_with(.., forced)` も持つ (テスト用)。v0.1 の案の `OpenRequest` は置かなかった |
 | `configure(c: StartupConfig)` (v0.3 の M14) | Host (`start` / `run` の前、設定・テーマ・言語・ログの場所などを渡すたび) | 起動の前の設定を当てる。`StartupConfig` の `None` の項目は変えない。Host は `EditorState` に直接触らない (`state_mut()` は試験と testkit だけ。clippy の `disallowed-methods` で製品のコードから禁じる。docs/review/v0.3-findings.md の STR-B3) |
 | `report(r: HostReport)` (v0.3 の M14) | Host (`start` の中: 最初の大きさ。最初の Frame の後: 設定の診断。クリップボードの書込・取得の結果を受けた `step` の中: 切り替えの理由) | Host が知った事実 (`Viewport { cols, rows }`・`ConfigDiagnostics { file, diagnostics }`・`ClipboardFallback { reason }` (v0.3 の M16)) を渡す |
 | `handle_input(window: WindowId, ev: InputEvent)` | Host (`HostMsg::Input`) | キーマップ解決 (§7.2) → コマンド実行 |
@@ -1297,6 +1298,8 @@ trait Frontend {
     fn emergency_restore_info(&self) -> Option<EmergencyRestoreInfo>;            // 受信スレッドが Frontend に触れずに端末を戻すための情報。Host が init の直後に 1 回取得して保持する。
                                                                                    // 端末を持たない frontend (ヘッドレス) は None
     fn suspend(&mut self); fn resume(&mut self);                                  // TUI のみ意味を持つ (ヘッドレスは no-op)
+    fn reinit_terminal(&mut self);                                                // v0.4 の M25: 端末のモードを入れ直して次の描画を全面にする。標準入力を読み終えた (`StdinDone`) ときに
+                                                                                  // Host が呼ぶ (03 §9.2.2。Unix は SIGCONT の再初期化と同じ経路。既定は何もしない)
     fn write_osc52(&mut self, text: &str) -> bool;                                // OSC 52 でクリップボードに書く (05 §8.1、v0.2)。書けたら true。既定の実装は false (端末を持たない frontend)
 }
 
@@ -1543,7 +1546,7 @@ enum JobKind {                     // Port は持たない (run_job が JobPorts
                                                                       // default_eol・huge_file_warn_bytes (上限)・long_line_threshold だけを使い、read_only_requested を立てて読む (確認を出さない)。
                                                                       // CancelToken は「読むのをやめて、読んだところまでを StdinDone で返す」意味 (Failed { Cancelled } にしない)。
                                                                       // 取消しのときは Host が StdinSource::wake を呼んで待ちを起こす (§4.4)。partial は立てない。
-                                                                      // core はジョブ表で Pending::Open とは別の種類 (Pending::OpenStdin の案) に持つ (03 §9.2.2)
+                                                                      // core はジョブ表で Pending::Open とは別の種類 (Pending::OpenStdin) に持つ (03 §9.2.2)
     Save     { path: FsPath, snapshot: Snapshot, encoding: Encoding, bom: bool,
                escape: EscapePolicy /*不正バイトのエスケープ文字の扱い (Restore | AsText | Reject)。core が TextFormat::save_escape_policy で決める (03 §8.3 / §8.3.1。v0.4 の M23 から、Restore は書く文字コードが escape_encoding と同じときだけ)。
                                       v0.1 の案の pua: PuaEscapeMode は、実装 (eve-encoding の EscapePolicy) に合わせて M23 の仕様の PR で改めた*/,
@@ -1635,7 +1638,7 @@ struct JobOutput { job: JobId, body: JobResult }
 // 変種は最初の利用者と同時に足す (#[non_exhaustive] 相当の扱い。境界型ではない)
 enum JobResult {                   // #[non_exhaustive]
     // ── 開く (io、03 §9.2) ──
-    Progress     { bytes: u64, total: u64 },                    // 50 ms 以内に最初の 1 回、以後 10 Hz 以下。OpenStdin (v0.4) は total = 0 を送る (空のファイルも total = 0 なので、大きさが分からないかは文書の種類で判定する、03 §9.2.2)
+    Progress     { bytes: u64, total: u64 },                    // 50 ms 以内に最初の 1 回、以後 10 Hz 以下。OpenStdin (v0.4) は total = 0 を送り、最初のデータの進捗は間引かずに送る (空のファイルも total = 0 なので、大きさが分からないかは文書の種類で判定する、03 §9.2.2)
     Partial      { head: Text /*固定の先頭 (1 MiB まで、行の区切りで切る。全文の接頭辞)*/, format: TextFormat /*先頭の時点の形式。表示にだけ使う*/ },
                                                                 // v0.4 の M25 (03 §9.2.1)。非終端。読込が 200 ms を過ぎても終わらないとき 1 回 (判定のやり直しの後は送り直す)。OpenOptions.partial が立った Open だけが送る
     NeedsConfirm { ask: ConfirmAsk }, // ジョブはここで終了 (下の「確認を待ってブロックしない」)
@@ -1651,7 +1654,7 @@ enum JobResult {                   // #[non_exhaustive]
                    interrupted_save: Option<InterruptedSave> /*§4.5。存在するファイルでも、直接上書きの中断の痕跡があれば返す*/ },
     StdinDone    { text: Text, format: TextFormat, detected: ReadOnlyReasons /*Binary / InvalidBytes / StatefulEncodingWithInvalidBytes / LoadIncomplete*/,
                    preserved: PreservedMap /*保持方式の記録。ファイルと同じ関数で集める (上限を超えたら Overflow)*/,
-                   bytes: u64 /*開いた量 (text に復号した元のバイト数。受け渡し待ち・パイプに残った分・切った多バイト列は含まない)。StdinDoc.bytes_read と「途中まで ({size})」の size*/,
+                   bytes: u64 /*開いた量 (text に復号した元のバイト数。パイプに残った分・切った多バイト列は含まない。Stopped では受け渡し待ちの分を ReadChunks::next_ready で取り込んでから開く。Limit / Error では受け渡し待ちの分も含まない)。StdinDoc.bytes_read と「途中まで ({size})」の size*/,
                    end: StdinEnd /*Eof | Limit (上限) | Stopped (取消し) | Error(FsError) (途中の読取の失敗) | OutOfMemory (try_reserve の失敗。構築済みの分を返す)*/ },
                                                                 // v0.4 の M25 (03 §9.2.2)。OpenStdin の終端 (取消しでもこれを返す)。meta・stamp・内容ハッシュ・interrupted_save を持たない
     // ── 保存 (io、03 §9.3) ──
@@ -1779,7 +1782,7 @@ enum JobError {                    // #[non_exhaustive]
    - **任意の端末機能の有効化の失敗は起動エラーにしない**: ブラケットペーストの有効化 (`?2004h`) や拡張キーボードプロトコルの push が `Unsupported` 等のエラーを返したら、無視して起動を続け、`Capabilities` の該当項目 (`bracketed_paste` / `enhanced_keys`) を false にして知らせる。起動エラーにするのは raw モード・代替スクリーン等の必須の初期化の失敗だけ (04 §14.1)。kitty keyboard protocol の push は Unix だけで行い、Windows では行わない。Windows はブラケットペースト (`?2004h`) を送らない (入力は自前の `ReadConsoleInputW` ループで、貼り付けは個別のキーとして届くのでバースト検出で合成する、04 §6.6。`Capabilities.bracketed_paste` は false)。
 5. 入力スレッドと `io` ワーカーの起動 (`bg` とログスレッドは遅延)。Windows ではセッション終了通知のスレッドも起動する (v0.2。隠しウィンドウの作成はそのスレッドで行い、メインスレッドは待たない。§11.2.1。コストは 09 BM-101a で計測)。クリップボードはここでは初期化しない (§6.3)。
 6. 端末サイズ取得 → `Resize` を core に送る → `Editor::open_initial_files(files, read_only, forced)` (ファイル読込ジョブ投入) → **空/読込中の最初の Frame を即描画**。
-   - **標準入力 (`evoeditor -`、v0.4 の M25)**: 標準入力が端末でないとき、Host は手順 4 の前に `StdinSource` を作って `eve-stdin` を始め、**OQ-219 の 9** により最初のデータか EOF (または上限・読取の失敗) が届くまで手順 4 (端末の初期化) を遅らせる (待つ間は stderr に `info.stdin.waiting` の 1 行。03 §9.2.2 の「端末の初期化の時期」)。この待ちは NFR-101 の起動の区間に含めない。読み終えたら端末のモードを入れ直して全面を描き直す (SIGCONT の再初期化と同じ経路、05 §11.1)
+   - **標準入力 (`evoeditor -`、v0.4 の M25)**: 標準入力が端末でないとき、Host は手順 4 の前に `StdinSource` を作って `eve-stdin` を始め、**OQ-219 の 9** により最初のデータか EOF (または上限・読取の失敗) が届くまで手順 4 (端末の初期化) を遅らせる (待つ間は stderr に `stderr.stdin.waiting` の 1 組。03 §9.2.2 の「端末の初期化の時期」)。この待ちは NFR-101 の起動の区間に含めない。読み終えたら端末のモードを入れ直して全面を描き直す (SIGCONT の再初期化と同じ経路、05 §11.1)。**実装 (M25 の (9))**: bin が `PlatformStdin` を作って `JobPorts.stdin` に入れ (Host の組み立て)、`PlatformStdin::wait_ready` で最初の知らせを待ってから (100 ms の間に届かなければ `stderr.stdin.waiting`)、終了の要求の受信を入れて `Host::run` (手順 4) に進む。待った後にメインの `Arc` を手放し、`ThreadJobSpawner` は標準入力を `io` / `bg` に渡さず `OpenStdin` の投入で `eve-stdin-job` へ移す (`Arc` を最後に手放すのを `eve-stdin-job` にする)。読み終えた (`StdinDone`) ら Host が `Frontend::reinit_terminal` を呼ぶ
 7. 以降、遅延初期化: 検索ワーカー・ログファイル・クリップボード・(v0.6) シンタックス文法・ファイル監視・(v1.L) LSP/AI は必要時に起動。
 
 予算の目安 (プロセス内、p50): 引数解析 0.05 ms → 設定読込 ≤ 2 ms → 端末初期化 ≤ 1 ms (Windows ≤ 2 ms) → スレッド起動 ≤ 0.3 ms → 最初の Frame の生成と書込 ≤ 1 ms。合計は Windows で ≈ 5.4 ms で、NFR-101 (a) の判定値 8 ms に対して約 1.5 倍の余裕。

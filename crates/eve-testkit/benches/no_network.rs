@@ -143,7 +143,7 @@ fn main() {
     });
 
     let files = [InitialFile {
-        path: file.to_string_lossy().into_owned(),
+        target: eve_core::InitialTarget::Path(file.to_string_lossy().into_owned()),
         line: None,
         col: None,
     }];

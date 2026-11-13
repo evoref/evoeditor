@@ -393,12 +393,12 @@ fn 起動時のパスは先頭を送る() {
     h.editor.open_initial_files(
         &[
             eve_core::InitialFile {
-                path: "/w/a.txt".into(),
+                target: eve_core::InitialTarget::Path("/w/a.txt".into()),
                 line: None,
                 col: None,
             },
             eve_core::InitialFile {
-                path: "/w/b.txt".into(),
+                target: eve_core::InitialTarget::Path("/w/b.txt".into()),
                 line: None,
                 col: None,
             },

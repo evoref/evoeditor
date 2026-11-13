@@ -11,7 +11,7 @@ pub use crate::layout::theme::resolve as resolve_theme;
 pub use crate::ui_model::config_report::diagnostic_texts as config_diagnostic_texts;
 pub use host_api::{HostReport, StartupConfig};
 pub(crate) mod query;
-pub use crate::io::startup::InitialFile;
+pub use crate::io::startup::{InitialFile, InitialTarget};
 pub(crate) mod state;
 
 use eve_view::{

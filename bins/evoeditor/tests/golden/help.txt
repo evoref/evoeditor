@@ -1,5 +1,5 @@
-Usage: evoeditor [OPTIONS] [--] [FILE]
-  使い方: evoeditor [オプション] [--] [ファイル]
+Usage: evoeditor [OPTIONS] [--] [FILE | -]...
+  使い方: evoeditor [オプション] [--] [ファイル | -]...
 
 A modeless text editor for the terminal.
   端末で動く、モードのないテキストエディタです。
@@ -32,6 +32,8 @@ Options:
                                        このヘルプを表示して終了します
   --wait                               Accepted for $EDITOR compatibility; has no effect
                                        $EDITOR に設定するときの互換用です (何もしません)
+  -                                    Read standard input into an untitled document
+                                       標準入力を読んで無題の文書として開きます
   --                                   Treat the rest as file names
                                        以降をファイル名として扱います
 

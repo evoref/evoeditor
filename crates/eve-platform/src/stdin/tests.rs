@@ -395,3 +395,53 @@ fn 読取で止まったまま終了しても止まらない() {
     assert!(st.success(), "{st:?}");
     drop(si);
 }
+
+#[test]
+fn 最初のデータが届くまで待ち_届いたら読まずに戻る() {
+    // 端末を初期化する時期 (OQ-219 の 9): Host は最初のデータか EOF がチャネルへ入るまで待つ。データは受け手が後で読む
+    let (r, mut w) = std::io::pipe().expect("パイプ");
+    let s = PlatformStdin::start(private_of(r)).expect("始める");
+    assert!(
+        !s.wait_ready(Some(Duration::from_millis(50))),
+        "何も書かない間は届かない"
+    );
+    w.write_all(b"first").expect("書く");
+    assert!(s.wait_ready(None));
+    assert!(s.wait_ready(Some(Duration::ZERO)), "一度届けば待たない");
+    drop(w);
+    let mut rd = s.take().expect("取れる");
+    let (got, _) = read_all(&mut *rd);
+    assert_eq!(got, b"first", "待つ間に読み捨てない");
+}
+
+#[test]
+fn 何も書かずに閉じたパイプも届いた扱い() {
+    let (r, w) = std::io::pipe().expect("パイプ");
+    let s = PlatformStdin::start(private_of(r)).expect("始める");
+    drop(w);
+    assert!(s.wait_ready(Some(Duration::from_secs(10))), "EOF で戻る");
+}
+
+#[test]
+fn 積まれた分はブロックせずに取り出せ_無ければすぐ戻る() {
+    // 読むのをやめるときに、受け渡し待ちの分を取り込む (03 §9.2.2 の「取消し」)。書き手は開いたまま (閉じないパイプ)
+    let (r, mut w) = std::io::pipe().expect("パイプ");
+    let s = PlatformStdin::start(private_of(r)).expect("始める");
+    w.write_all(b"queued").expect("書く");
+    assert!(s.wait_ready(Some(Duration::from_secs(10))));
+    let mut rd = s.take().expect("取れる");
+    // `wake` の印が先に積まれていても読み飛ばす
+    s.wake();
+    let mut got = Vec::new();
+    let t = Instant::now();
+    while let Some(c) = rd.next_ready().expect("読める") {
+        got.extend_from_slice(c);
+    }
+    assert_eq!(got, b"queued");
+    assert!(
+        rd.next_ready().expect("読める").is_none(),
+        "積まれていなければ待たずに戻る"
+    );
+    assert!(t.elapsed() < Duration::from_secs(5));
+    drop(w);
+}

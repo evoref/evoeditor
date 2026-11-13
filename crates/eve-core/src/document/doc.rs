@@ -382,6 +382,18 @@ impl Document {
         self.history.is_dirty()
     }
 
+    /// 保存点の無い履歴にする (変更あり。保存するまで dirty のまま)。標準入力から読んだ文書 (03 §9.2.2 の「変更あり」)。
+    pub(crate) fn clear_save_point(&mut self) {
+        self.history.clear_save_point();
+    }
+
+    /// 標準入力から 1 バイト以上読んだ文書か (03 §9.2.2 の「変更あり」の条件。開いた量が 0 でも、途中まで
+    /// (`LoadIncomplete`) なら受け取っている)。
+    pub fn stdin_read_any(&self) -> bool {
+        self.stdin.is_some_and(|s| s.bytes_read > 0)
+            || (self.stdin.is_some() && self.read_only.contains(ReadOnlyReason::LoadIncomplete))
+    }
+
     /// 編集できるか (`read_only` が空かつ `load_state == Ready`)。
     pub fn is_editable(&self) -> bool {
         self.read_only.is_empty() && self.load_state == LoadState::Ready

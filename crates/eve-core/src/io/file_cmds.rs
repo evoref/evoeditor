@@ -30,6 +30,7 @@ impl EditorState {
         if doc.load_state != LoadState::Ready {
             return CommandResult::Rejected(RejectReason::NotAvailable);
         }
+        let mut dirtied = false;
         let key = if doc.read_only.is_empty() {
             doc.read_only.insert(ReadOnlyReason::UserRequested);
             keys::INFO_READ_ONLY_SET
@@ -38,12 +39,15 @@ impl EditorState {
                 self.confirm_release_invalid_bytes(doc_id);
                 return CommandResult::Done;
             }
-            release_reasons(doc);
+            dirtied = release_reasons(doc);
             keys::INFO_READ_ONLY_RELEASED
         } else {
             return CommandResult::Rejected(RejectReason::NotAvailable);
         };
         let path = doc.path.as_ref().map(FsPath::display).unwrap_or_default();
+        if dirtied {
+            self.mark_snapshot_update(doc_id);
+        }
         self.message(MessageLevel::Info, key, &path);
         self.mark_dirty_render();
         CommandResult::Done
@@ -134,8 +138,11 @@ impl EditorState {
         else {
             return CommandResult::Rejected(RejectReason::NotAvailable);
         };
-        release_reasons(doc);
+        let dirtied = release_reasons(doc);
         doc.invalid_bytes_released = true;
+        if dirtied {
+            self.mark_snapshot_update(doc_id);
+        }
         self.show_message(
             MessageLevel::Info,
             keys::INFO_READ_ONLY_RELEASED_INVALID_BYTES,
@@ -147,14 +154,22 @@ impl EditorState {
 }
 
 /// 解除できる理由を外す (`FileAttribute` を外したら上書き保存の確認のために記録する、03 §9.6 の M9d の規則)。
-fn release_reasons(doc: &mut crate::document::Document) {
+/// `--readonly` で開いた標準入力の文書 (まだ保存していない) は、`UserRequested` を外した時点で変更ありにする
+/// (03 §9.2.2 の「変更あり」。OQ-219 の 4)。変更ありにしたら `true` (呼び側が退避用の公開物を更新する)。
+fn release_reasons(doc: &mut crate::document::Document) -> bool {
     use crate::document::ReadOnlyReason;
     if doc.read_only.contains(ReadOnlyReason::FileAttribute) {
         doc.attribute_released = true;
     }
+    let user = doc.read_only.contains(ReadOnlyReason::UserRequested);
     doc.read_only.remove(ReadOnlyReason::FileAttribute);
     doc.read_only.remove(ReadOnlyReason::UserRequested);
     doc.read_only.remove(ReadOnlyReason::InvalidBytes);
+    let to_dirty = user && doc.path.is_none() && doc.stdin_read_any() && !doc.is_dirty();
+    if to_dirty {
+        doc.clear_save_point();
+    }
+    to_dirty
 }
 
 /// 本文の最初のエスケープ文字 (`U+10FF00..=U+10FFFF`) のバイト位置と、エスケープ文字の数 (03 §8.3.1 の「確認」:

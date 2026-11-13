@@ -7,17 +7,22 @@
 //! 例外として、標準入力の読込 (`JobKind::OpenStdin`、v0.4 の M25) は `io` / `bg` に載せず、専用のスレッド
 //! `eve-stdin-job` で走らせる (02 §9.1。ADR-0006 の改訂、OQ-219 の 8。閉じないパイプで `io` の読込・保存を止めない)。
 //! そのスレッドはジョブが終わると終わり、**終了のときに待たない** (join しない。02 §9.6)。取消しのときは
-//! `StdinSource::wake` で待ちを起こす (02 §4.4)。
+//! `StdinSource::wake` で待ちを起こす (02 §4.4)。標準入力 (`JobPorts.stdin` の `Arc`) は `io` / `bg` に渡さず、
+//! `OpenStdin` の投入でそのスレッドへ **移す** (`spawner` は弱い参照だけを持つ)。`Arc` を最後に手放すのが
+//! `eve-stdin-job` になり、取った読み手を手放す (`eve-stdin` を止めて、Windows は最大約 0.5 秒待つ) のもそのスレッドで
+//! 起きる (メインのスレッドで手放さない)。
 
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::sync::mpsc::{self, RecvTimeoutError, Sender};
+use std::sync::{Arc, Weak};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
 use eve_core::{
-    CancelToken, JobError, JobKind, JobOutput, JobPorts, JobRequest, JobResult, JobSpawner, run_job,
+    CancelToken, JobError, JobKind, JobOutput, JobPorts, JobRequest, JobResult, JobSpawner,
+    StdinSource, run_job,
 };
 use eve_view::{DocumentId, JobId, Revision};
 
@@ -99,6 +104,11 @@ pub struct ThreadJobSpawner {
     bg: RefCell<Option<Lane>>,
     /// 標準入力の読込のジョブ (`eve-stdin-job` で走っているもの)。取消しのときに `StdinSource::wake` を呼ぶ。
     stdin_job: Cell<Option<JobId>>,
+    /// 標準入力 (まだ `OpenStdin` を投入していない間だけ持つ。投入で `eve-stdin-job` へ移す)。
+    stdin: RefCell<Option<Arc<dyn StdinSource>>>,
+    /// 移した標準入力の弱い参照 (`wake` に使う。強い参照を持ち続けない)。
+    stdin_weak: RefCell<Option<Weak<dyn StdinSource>>>,
+    /// `io` / `bg` のワーカーに渡す Port (`stdin` は入れない)。
     ports: JobPorts,
     tx: Sender<HostMsg>,
 }
@@ -109,7 +119,9 @@ impl ThreadJobSpawner {
     /// # Errors
     ///
     /// `io` ワーカーのスレッドを起動できなかったとき、その OS の誤り。
-    pub fn new(ports: JobPorts, tx: Sender<HostMsg>) -> std::io::Result<ThreadJobSpawner> {
+    pub fn new(mut ports: JobPorts, tx: Sender<HostMsg>) -> std::io::Result<ThreadJobSpawner> {
+        // 標準入力は `OpenStdin` のジョブだけが使う。`io` / `bg` のワーカーには持たせない (02 §4.4)
+        let stdin = ports.stdin.take();
         let io = Lane::start("eve-io", ports.clone(), tx.clone())?;
         Ok(ThreadJobSpawner {
             next_id: Cell::new(1),
@@ -117,9 +129,17 @@ impl ThreadJobSpawner {
             io: RefCell::new(io),
             bg: RefCell::new(None),
             stdin_job: Cell::new(None),
+            stdin: RefCell::new(stdin),
+            stdin_weak: RefCell::new(None),
             ports,
             tx,
         })
+    }
+
+    /// 標準入力を渡す (Host の組み立ての失敗し得る段の後。`new` の `JobPorts.stdin` と同じ扱い)。`OpenStdin` を投入する
+    /// 前に呼ぶ。
+    pub fn set_stdin(&self, stdin: Option<std::sync::Arc<dyn StdinSource>>) {
+        *self.stdin.borrow_mut() = stdin;
     }
 
     /// `bg` ワーカーに回すジョブか。検索 (全件・単発)・すべて置換・1 件置換の確かめ (02 §9.3。v0.4 の M24 で単発の検索とすべて置換を `io` から
@@ -157,7 +177,11 @@ impl JobSpawner for ThreadJobSpawner {
         };
         let sent = if matches!(work.req.kind, JobKind::OpenStdin { .. }) {
             self.stdin_job.set(Some(id));
-            spawn_stdin_job(work, self.ports.clone(), self.tx.clone()).is_ok()
+            // 標準入力を読込のスレッドへ移す (2 回目の投入は標準入力を持たず、最初から読めない)
+            let mut ports = self.ports.clone();
+            ports.stdin = self.stdin.borrow_mut().take();
+            *self.stdin_weak.borrow_mut() = ports.stdin.as_ref().map(Arc::downgrade);
+            spawn_stdin_job(work, ports, self.tx.clone()).is_ok()
         } else if Self::is_bg(&work.req.kind) {
             let mut bg = self.bg.borrow_mut();
             if bg.is_none() {
@@ -198,7 +222,10 @@ impl JobSpawner for ThreadJobSpawner {
 
 impl ThreadJobSpawner {
     fn wake_stdin(&self) {
-        if let Some(s) = &self.ports.stdin {
+        // 読込のスレッドが既に手放していれば何もしない (`upgrade` の一時の参照は、読み手を取った後なので、ここで最後に
+        // 手放しても読み手の drop にはならない)
+        let s = self.stdin_weak.borrow().as_ref().and_then(Weak::upgrade);
+        if let Some(s) = s {
             s.wake();
         }
     }

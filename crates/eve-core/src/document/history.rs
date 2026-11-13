@@ -293,6 +293,12 @@ impl UndoHistory {
         self.total
     }
 
+    /// 保存点を無くす (以後、保存するまで常に dirty)。標準入力から読んだ文書 (03 §9.2.2 の「変更あり」。Undo で読込の
+    /// 直後に戻っても dirty のまま)。
+    pub fn clear_save_point(&mut self) {
+        self.saved = None;
+    }
+
     /// 現在位置を保存点にする (読込完了・新規文書・開き直し・保存完了で保存に使った位置が現在のとき)。
     pub fn mark_saved(&mut self) {
         self.saved = Some(self.current());

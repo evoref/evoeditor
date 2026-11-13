@@ -73,6 +73,7 @@ impl EditorState {
         let hit = self.docs.documents.iter().find_map(|(id, d)| {
             (d.is_dirty()
                 && d.load_state == LoadState::Ready
+                && !d.stdin.is_some_and(|s| s.pristine)
                 && d.len_bytes() as u64 > max
                 && !self.io.swap.notified_large.contains(id))
             .then(|| {
@@ -96,7 +97,8 @@ impl EditorState {
         );
     }
 
-    /// 書いてよい文書なら、その Revision。dirty で読込済み・編集可・上限以下で、秘密ファイルの除外に当たらないもの。
+    /// 書いてよい文書なら、その Revision。dirty で読込済み・編集可・上限以下で、秘密ファイルの除外に当たらず、標準入力から
+    /// 読み込んだだけでないもの。
     fn swap_eligible(&self, id: DocumentId) -> Option<Revision> {
         let cfg = &self.settings.config;
         if !cfg.swap_enabled {
@@ -104,6 +106,11 @@ impl EditorState {
         }
         let d = self.docs.documents.get(&id)?;
         if !d.is_dirty() || d.load_state != LoadState::Ready || !d.read_only.is_empty() {
+            return None;
+        }
+        // 標準入力から読み込んだだけの文書は、最初の編集まで書かない (03 §9.2.2 の「スワップと緊急退避」。緊急退避は
+        // 読み込んだ時点から対象)
+        if d.stdin.is_some_and(|s| s.pristine) {
             return None;
         }
         if d.len_bytes() as u64 > cfg.swap_max_bytes {

@@ -10,6 +10,7 @@ use eve_host::{
     Host, HostInit, NonInteractiveShutdown, ShutdownParts, SystemClock, ThreadJobSpawner, channel,
 };
 use eve_platform::rescue::StateRescue;
+use eve_platform::stdin::PlatformStdin;
 
 use crate::exit::EXIT_ERROR;
 use crate::settings::{
@@ -26,14 +27,20 @@ pub(crate) struct Started {
     pub state_dir: PathBuf,
     pub locale: eve_config::Locale,
     pub color_mode: eve_config::ColorMode,
+    /// 標準入力 (`evoeditor -` で端末でないとき)。bin は最初のデータを待った後に手放す (`Arc` を最後に手放すのを
+    /// 読込のスレッド `eve-stdin-job` にする)。
+    pub stdin: Option<Arc<PlatformStdin>>,
 }
 
 /// Host を組み立てる。作業ディレクトリ・ワーカーを用意できなければ、標準エラーに理由を出して終了コードを返す。
+/// `take_stdin` は標準入力 (`evoeditor -`、端末でないとき) を移して返す。失敗し得る段の後に 1 回だけ呼び、ジョブの
+/// ワーカーに渡す。
 pub(crate) fn start(
     encoding: Option<Encoding>,
     cli_locale: Option<&str>,
     config_args: &cli::ConfigArgs,
     cli_log_level: Option<eve_platform::log::Level>,
+    take_stdin: impl FnOnce() -> Option<Arc<PlatformStdin>>,
 ) -> Result<Started, u8> {
     // 作業ディレクトリ・ディレクトリ・Ports
     let paths = match NativePaths::from_process_env() {
@@ -100,6 +107,10 @@ pub(crate) fn start(
             return Err(EXIT_ERROR);
         }
     };
+    // 標準入力 (`evoeditor -` で端末でないときだけ。`OpenStdin` のジョブだけが使う、03 §9.2.2)。この関数の失敗し得る段
+    // (作業ディレクトリ・ワーカーの起動) の後に移す (失敗で読んだ分を捨てない)
+    let stdin = take_stdin();
+    spawner.set_stdin(stdin.clone().map(|s| s as Arc<dyn eve_core::StdinSource>));
     let ports = Ports {
         fs,
         clock,
@@ -176,5 +187,6 @@ pub(crate) fn start(
         state_dir: state_dir.as_path().to_path_buf(),
         locale,
         color_mode,
+        stdin,
     })
 }

@@ -99,6 +99,11 @@ pub(crate) enum ConfirmAction {
     EscapeMerge(Box<crate::io::escape_merge::EscapeMergeAsk>),
     /// 不正バイトを含む文書の「編集を許可」の確認 (編集を許可 / 文字コードを指定して開き直す / キャンセル、03 §8.3.1)。
     ReleaseInvalidBytes(DocumentId),
+    /// 標準入力の文書の表示中の `Esc` (読み続ける / ここまでで開く、03 §9.2.2。OQ-219 の 10 (i))。
+    StdinStop(DocumentId),
+    /// 1 バイト以上読んだ読込中の標準入力の文書を閉じる・終了する (ここまでで開く / 破棄 / キャンセル、03 §9.2.2。
+    /// OQ-219 の 10 (ii))。
+    StdinLoading { doc: DocumentId, cont: Continuation },
     /// 置換の一覧の確認 (置換して保存 / キャンセル、03 §8.6)。`revision` は `ChangeSet` を作った時点の文書の Revision。
     UnmappableReplace {
         ask: crate::io::unmappable::UnmappableAsk,
@@ -166,13 +171,25 @@ impl EditorState {
             .as_ref()
             .map(|p| p.display())
             .unwrap_or_else(|| self.untitled_label(doc));
+        // 途中まで読んだ標準入力の文書は、名前の後ろに「(途中まで {size})」を足す (03 §9.2.2 の「`LoadIncomplete` の外し方」)
+        let path = match self.partial_size(doc_id) {
+            Some(size) => {
+                let suffix = self.catalog().render(
+                    keys::UI_CONFIRM_UNSAVED_PARTIAL_SUFFIX,
+                    &[("size", &size)],
+                    &|_| None,
+                );
+                format!("{path} {suffix}")
+            }
+            None => path,
+        };
         let mut args = vec![("path".to_owned(), path)];
         // 終了の連鎖で尋ねる文書が 2 件以上なら、何件目かを前置する
         if cont == Continuation::Quit
-            && let Some(chain) = self.ui.quit_chain.as_ref().filter(|c| c.total() >= 2)
+            && let Some((index, total)) = self.quit_chain_position()
         {
-            args.push(("index".to_owned(), (chain.done + 1).to_string()));
-            args.push(("total".to_owned(), chain.total().to_string()));
+            args.push(("index".to_owned(), index.to_string()));
+            args.push(("total".to_owned(), total.to_string()));
         }
         self.set_overlay(Some(Overlay::Confirm(Box::new(ConfirmState {
             name,
@@ -186,6 +203,12 @@ impl EditorState {
         }))));
         self.mark_dirty_render();
         true
+    }
+
+    /// 終了の連鎖で尋ねる文書が 2 件以上のときの (何件目, 総数)。1 件だけ・連鎖の外なら `None`。
+    pub(crate) fn quit_chain_position(&self) -> Option<(usize, usize)> {
+        let chain = self.ui.quit_chain.as_ref().filter(|c| c.total() >= 2)?;
+        Some((chain.done + 1, chain.total()))
     }
 
     /// 確認ダイアログを出す (種類は `action`)。
@@ -207,7 +230,11 @@ impl EditorState {
                 }
                 ConfirmAction::Open(ask) => self.open_aborted(ask),
                 // 終了の連鎖のキャンセル: 連鎖全体を中止し、破棄の印をすべて無効にする (文書は元のまま)
-                ConfirmAction::Unsaved(Continuation::Quit) => self.ui.quit_chain = None,
+                ConfirmAction::Unsaved(Continuation::Quit)
+                | ConfirmAction::StdinLoading {
+                    cont: Continuation::Quit,
+                    ..
+                } => self.ui.quit_chain = None,
                 ConfirmAction::Unmappable(ask) | ConfirmAction::UnmappableReplace { ask, .. } => {
                     self.unmappable_cancelled(ask)
                 }
@@ -251,6 +278,8 @@ impl EditorState {
             ConfirmAction::Unmappable(ask) => self.choose_unmappable(ask, id),
             ConfirmAction::EscapeMerge(ask) => self.choose_escape_merge(*ask),
             ConfirmAction::ReleaseInvalidBytes(doc) => self.choose_release_invalid_bytes(doc, id),
+            ConfirmAction::StdinStop(doc) => self.choose_stdin_stop(doc, id),
+            ConfirmAction::StdinLoading { doc, cont } => self.choose_stdin_loading(doc, cont, id),
             ConfirmAction::UnmappableReplace {
                 ask,
                 changes,
@@ -329,14 +358,18 @@ impl EditorState {
         self.advance_quit_chain()
     }
 
-    /// 確認が要る文書。dirty な全文書から、破棄の印が有効なもの (Revision が変わっていない) を除く。
+    /// 確認が要る文書。dirty な全文書 (と、1 バイト以上読んだ読込中の標準入力の文書。03 §9.8 の例外) から、破棄の印が
+    /// 有効なもの (Revision が変わっていない) を除く。
     /// アクティブな文書を先頭に、残りは開いた順。
     fn quit_targets(&self, discarded: &[(DocumentId, Revision)]) -> Vec<DocumentId> {
         let mut ids: Vec<DocumentId> = self
             .docs
             .documents
             .iter()
-            .filter(|(id, d)| d.is_dirty() && !discarded.contains(&(**id, d.revision())))
+            .filter(|(id, d)| {
+                (d.is_dirty() || self.stdin_loading_with_bytes(**id))
+                    && !discarded.contains(&(**id, d.revision()))
+            })
             .map(|(id, _)| *id)
             .collect();
         if let Some(i) = self
@@ -360,7 +393,9 @@ impl EditorState {
         };
         // 保存して clean になった・閉じた文書は済んだものとして外す
         while let Some(&head) = chain.remaining.first() {
-            if self.document(head).is_some_and(|d| d.is_dirty()) {
+            if self.document(head).is_some_and(|d| d.is_dirty())
+                || self.stdin_loading_with_bytes(head)
+            {
                 break;
             }
             chain.remaining.remove(0);
@@ -376,8 +411,20 @@ impl EditorState {
         let head = chain.remaining[0];
         self.ui.quit_chain = Some(chain);
         self.activate_document(head);
-        self.confirm_doc_if_dirty(head, "unsaved", Continuation::Quit);
+        // 読込中の標準入力の文書は、FR-107 の確認の前に、ここまでで開くか捨てるかを尋ねる (03 §9.2.2 の「閉じる・終了」)
+        if !self.confirm_stdin_loading(head, Continuation::Quit) {
+            self.confirm_doc_if_dirty(head, "unsaved", Continuation::Quit);
+        }
         CommandResult::Done
+    }
+
+    /// 終了の連鎖で「破棄」の印が付いた文書か (Revision は問わない。読込中の標準入力の文書の Revision は読み終えるまで
+    /// 変わらない)。保存を中止して終了で、その文書の読込を待たずに捨てるかの判定に使う (03 §9.7 (f) 3)。
+    pub(crate) fn quit_discarded(&self, doc: DocumentId) -> bool {
+        self.ui
+            .quit_chain
+            .as_ref()
+            .is_some_and(|c| c.discarded.iter().any(|(d, _)| *d == doc))
     }
 
     /// 連鎖の確認中の文書。
@@ -394,7 +441,7 @@ impl EditorState {
     }
 
     /// 終了の連鎖で「破棄」: 内容は残して印だけ付け、次へ進む。
-    fn quit_discard_head(&mut self) -> CommandResult {
+    pub(crate) fn quit_discard_head(&mut self) -> CommandResult {
         if let Some(chain) = self.ui.quit_chain.as_mut()
             && !chain.remaining.is_empty()
         {

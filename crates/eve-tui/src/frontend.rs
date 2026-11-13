@@ -145,12 +145,12 @@ impl TuiFrontend {
         self.emitter.invalidate();
     }
 
-    /// Unix: `app.suspend` (05 §11.3)。端末を復元してから自分に SIGTSTP を送って止まる。`fg` で再開したら (SIGCONT)、
+    /// Unix: `app.suspend` (05 §11.3)。端末を復元してから自分のプロセスグループに SIGTSTP を送って止まる。`fg` で再開したら (SIGCONT)、
     /// 再初期化の印を立てる (入力スレッドも SIGCONT で立てる。`wake_after` が描画を起こし、`reinit_if_continued` が入れ直す)。
     #[cfg(unix)]
     fn suspend(&mut self) {
         self.restore();
-        crate::input::unix::stop_self();
+        crate::input::unix::stop_job();
         if let Some(i) = self.input.as_ref() {
             i.request_reinit();
         }
@@ -163,6 +163,31 @@ impl TuiFrontend {
             _ => Err(io::Error::from(io::ErrorKind::NotConnected)),
         }
     }
+}
+
+/// 端末を使えるかだけを確かめる (`TERM=dumb` でない、入力・描画の端末を開ける)。モードは変えない。`Frontend::init` の
+/// 失敗のうち、端末を変える前に分かるものを先に見る。標準入力 (`evoeditor -`) を移して読み始める前に Host (bin) が呼び、
+/// 失敗したら標準入力を読まずに `init` の失敗と同じ経路 (終了コード 5) で終わる (03 §9.2.2 の「端末の初期化の時期」)。
+/// 端末を開けても、VT への切替・raw モードの設定は `init` で失敗し得る (そのときは読んだ分を失う。既知の制約)。
+///
+/// # Errors
+///
+/// `init` と同じ種類の `FrontendError` (`UnusableTerminal` / `ConsoleOutput` / `ConsoleInput`)。
+pub fn probe_terminal() -> Result<(), FrontendError> {
+    check_usable(&ProcessEnv)
+        .map_err(|_| FrontendError::new(FrontendErrorKind::UnusableTerminal))?;
+    #[cfg(unix)]
+    crate::input::unix::probe_tty().map_err(|e| err(FrontendErrorKind::ConsoleInput, &e))?;
+    #[cfg(windows)]
+    crate::input::win::probe_console().map_err(|(input, e)| {
+        let kind = if input {
+            FrontendErrorKind::ConsoleInput
+        } else {
+            FrontendErrorKind::ConsoleOutput
+        };
+        err(kind, &e)
+    })?;
+    Ok(())
 }
 
 impl Default for TuiFrontend {
@@ -317,6 +342,29 @@ impl Frontend for TuiFrontend {
             return Some(std::time::Duration::ZERO);
         }
         None
+    }
+
+    /// 標準入力を読み終えたとき (03 §9.2.2): 端末のモードを入れ直して、次の描画を全面にする。Unix は SIGCONT の
+    /// 再初期化と同じ印を立てる (`reinit_if_continued` が raw モード・代替スクリーン・各モード・マウスを入れ直す)。
+    /// Windows はコンソールの入出力のモードを入れ直し、代替スクリーンとマウスを入れ直す。
+    fn reinit_terminal(&mut self) {
+        #[cfg(unix)]
+        if let Some(i) = self.input.as_ref() {
+            i.request_reinit();
+        }
+        #[cfg(windows)]
+        if self.entered {
+            if let Some(o) = self.out.as_mut() {
+                o.reapply_mode();
+            }
+            if let Some(i) = self.input.as_mut() {
+                i.reapply_mode();
+            }
+            self.enter_screen();
+            let mouse = self.mouse;
+            self.set_mouse(mouse);
+            self.emitter.invalidate();
+        }
     }
 
     fn write_osc52(&mut self, text: &str) -> bool {

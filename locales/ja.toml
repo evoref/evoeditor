@@ -472,6 +472,7 @@ done = "{path} を保存しました"
 escape_merge_cancelled = "保存しませんでした。開き直すと文字が変わる {count} 箇所を強調しました (不正なバイトを消す・間に改行を入れる・元の並びに戻すと直ります)"
 escape_merged = "{path} を保存しました。開き直すと {count} 箇所が別の文字になります"
 in_place = "{path} を直接上書きで保存しました"
+partial_saved = "途中までの内容を {path} に保存しました ({size})"
 in_progress = "保存中です"
 to_recovery = "退避先 {target} に保存しました。元のファイル {path} は変更していません"
 unchanged = "変更はありません (ファイルは書き換えていません)"
@@ -497,6 +498,10 @@ replaced_lines_added = "{count} 件を置換しました。文書は {lines} 行
 replaced_lines_removed = "{count} 件を置換しました。文書は {lines} 行減りました (元に戻すで戻せます)"
 wrapped_backward = "文書の先頭に達したので、末尾から検索しました"
 wrapped_forward = "文書の末尾に達したので、先頭から検索しました"
+
+[info.stdin]
+stopped = "標準入力を読むのをやめ、ここまで ({size}) を読み取り専用で開きました"
+terminal = "標準入力が端末のため、読まずに空の文書を開きました"
 
 [info.swap]
 applied_read_only = "復旧内容を適用しました。不正なバイトを含むため読み取り専用です。{key:file.toggle_read_only} で編集を許可すると続けられます"
@@ -698,6 +703,30 @@ text = "{path} の後始末に失敗しました: {reason}"
 [msg.leftover.tmp_opened]
 hint = "不要なら次の起動で削除を選んでください"
 text = "一時ファイルを読み取り専用で開きました。{path} の保存の途中の内容で、末尾が切れている可能性があります"
+
+[msg.stdin.failed]
+hint = "読んだ内容は失われました。全部が要るときは、コマンドを実行し直してください"
+text = "標準入力の読込が失敗しました: {reason}"
+
+[msg.stdin.out_of_memory]
+hint = "全部が要るときは、コマンドの出力をファイルに保存してから開いてください"
+text = "メモリが足りないため、標準入力のここまで ({size}) を読み取り専用で開きました"
+
+[msg.stdin.read_failed]
+hint = "読めた {size} を読み取り専用で開きました。全部が要るときは、コマンドの出力をファイルに保存してから開いてください"
+text = "標準入力の読込の途中で失敗しました: {reason}"
+
+[msg.stdin.truncated]
+hint = "残りは読んでいません。全部が要るときは、コマンドの出力をファイルに保存してから開いてください"
+text = "標準入力が {size} を超えたため、そこまでを読み取り専用で開きました"
+
+[msg.stdin.unreadable]
+hint = "標準入力に渡すコマンドを確かめて、実行し直してください"
+text = "標準入力を読めませんでした: {reason}"
+
+[msg.stdin.unsaveable]
+hint = "--encoding を付けて起動し直してください"
+text = "この内容は保存できません"
 
 [msg.swap.found]
 hint = "該当のファイルを開くと復旧を提案します。要らなければ .swp フォルダを削除してください"
@@ -1069,6 +1098,7 @@ file_attribute = "読み取り専用属性のファイル"
 invalid_bytes = "不正なバイトを含むファイル"
 invalid_bytes_collision = "不正なバイトと私用文字を含むファイル"
 large_file_viewer = "巨大なファイル (読み取り専用で開く指定)"
+load_incomplete = "途中までしか読んでいない内容"
 no_write_permission = "書き込む権限のないファイル"
 stateful_encoding_with_invalid_bytes = "不正なバイトを含む ISO-2022-JP のファイル"
 user_requested = "読み取り専用で開く指定 (`--readonly`)"
@@ -1083,6 +1113,10 @@ selection = "({count} 文字選択)"
 [status.loading]
 long = "[読込中 {percent}%]"
 short = "{percent}%"
+
+[status.loading_bytes]
+long = "[読込中 {size}]"
+short = "{size}"
 
 [status.partial]
 long = "[先頭のみ {percent}%]"
@@ -1211,6 +1245,10 @@ compat_yen_key = "¥ キーで入る文字の多くは \\ (U+005C) で、これ�
 ime = "IME が ON のとき、文字キーは確認ダイアログのアクセラレータとして届きません。Tab や矢印と Enter で選んでください"
 chord = "Ctrl+K で始まるキーは、Ctrl+K を押してから次のキーを押します。Esc で取り消せます"
 alt = "Alt が届かない端末 (Terminal.app の既定など) では、Ctrl+K を使う代替のキーがあります"
+stdin_keys = "標準入力 (cmd | evoeditor -) の書き手が端末から読むとき (cat 単独など) は、キー入力を取り合います"
+stdin_redraw = "書き手のエラー出力で画面が崩れたら、{key:ui.redraw} で描き直してください"
+stdin_powershell = "Windows PowerShell 5.1 のパイプは非 ASCII を ? に置き換えます。PowerShell 7.4 以降か cmd /c \"evoeditor - < file\" を使ってください"
+stdin_writer = "書込の誤りを無視する書き手 (Windows の ping -t など) は、読むのをやめても動き続けます。evoeditor の終了後に Ctrl+C で止めてください"
 readme = "端末ごとの設定と既知の制約は README に書いてあります"
 
 [ui.palette.category]
@@ -1229,6 +1267,7 @@ ui = "画面"
 title = "開く"
 
 [ui.prompt.save_as]
+partial = "途中まで ({size})"
 title = "名前を付けて保存"
 
 [ui.prompt.goto_line]
@@ -1264,6 +1303,7 @@ too_small = "端末が小さすぎます ({cols}x{rows} 以上が必要)"
 title = "未保存の変更"
 message = "{path} には保存されていない変更があります"
 chain = "({index}/{total}) {path} には保存されていない変更があります"
+partial_suffix = "(途中まで {size})"
 save = "[S] 保存して終了"
 discard = "[D] 破棄して終了"
 
@@ -1284,6 +1324,19 @@ message = "{path} の保存が終わっていません"
 others = "ほか {count} 件"
 wait = "[W] 待つ"
 abort = "[Q] 保存を中止して終了 (保存していない内容は退避します)"
+
+[ui.confirm.stdin_stop]
+title = "標準入力の読込"
+message = "読むのをやめると書き手が止まり、続きは読めません"
+continue = "[Esc] 読み続ける"
+open = "[O] ここまでで開く"
+
+[ui.confirm.stdin_loading]
+title = "標準入力の読込"
+message = "標準入力を読み込み中です ({size})"
+chain = "({index}/{total}) 標準入力を読み込み中です ({size})"
+open = "[O] ここまでで開く"
+discard = "[D] 破棄"
 
 [ui.confirm.save_all_failed]
 title = "保存できなかった文書"

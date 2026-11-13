@@ -12,7 +12,8 @@ use std::thread::{self, JoinHandle};
 
 use eve_view::{CellSize, InputEvent};
 use windows_sys::Win32::Foundation::{
-    GENERIC_READ, GENERIC_WRITE, HANDLE, INVALID_HANDLE_VALUE, WAIT_OBJECT_0, WAIT_TIMEOUT,
+    CloseHandle, GENERIC_READ, GENERIC_WRITE, HANDLE, INVALID_HANDLE_VALUE, WAIT_OBJECT_0,
+    WAIT_TIMEOUT,
 };
 use windows_sys::Win32::Storage::FileSystem::{
     CreateFileW, FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING,
@@ -67,6 +68,46 @@ fn open_console(name: &str) -> io::Result<HANDLE> {
     Ok(h)
 }
 
+/// 入力モード (05 §9.1): 起動時のモード `saved` から `ENABLE_PROCESSED_INPUT` / `ENABLE_LINE_INPUT` /
+/// `ENABLE_ECHO_INPUT` / `ENABLE_VIRTUAL_TERMINAL_INPUT` / `ENABLE_MOUSE_INPUT` を落とし、`ENABLE_WINDOW_INPUT` を立てる。
+fn input_mode(saved: u32) -> u32 {
+    let mut mode = saved
+        & !(ENABLE_PROCESSED_INPUT
+            | ENABLE_LINE_INPUT
+            | ENABLE_ECHO_INPUT
+            | ENABLE_VIRTUAL_TERMINAL_INPUT
+            | ENABLE_MOUSE_INPUT);
+    mode |= ENABLE_WINDOW_INPUT;
+    if mode & ENABLE_QUICK_EDIT_MODE != 0 {
+        // 簡易編集モードを保つには拡張フラグも立てる必要がある (SetConsoleMode の仕様)
+        mode |= ENABLE_EXTENDED_FLAGS;
+    }
+    mode
+}
+
+/// 入力・描画に使うコンソール (`CONIN$` / `CONOUT$`) を開けて、`GetConsoleMode` が成功するかだけを確かめる (モードは
+/// 変えない)。標準入力を移して読み始める前に Host (bin) が呼ぶ (03 §9.2.2 の「端末の初期化の時期」)。失敗したら
+/// `(入力か, OS の誤り)`。
+///
+/// # Errors
+///
+/// どちらかを開けない、またはコンソールでない (`GetConsoleMode` が失敗する) とき。
+pub fn probe_console() -> Result<(), (bool, io::Error)> {
+    for (name, input) in [("CONOUT$", false), ("CONIN$", true)] {
+        let h = open_console(name).map_err(|e| (input, e))?;
+        let mut mode = 0u32;
+        // SAFETY: `h` は開いたハンドル、`mode` は書込先の有効な u32。
+        let ok = unsafe { GetConsoleMode(h, &raw mut mode) } != 0;
+        let err = (!ok).then(io::Error::last_os_error);
+        // SAFETY: `h` はここで開いたハンドルで、ほかに持ち主は無い。
+        unsafe { CloseHandle(h) };
+        if let Some(e) = err {
+            return Err((input, e));
+        }
+    }
+    Ok(())
+}
+
 impl ConsoleInput {
     /// `CONIN$` / `CONOUT$` を開き、入力モードを設定する (05 §9.1 の入力モード)。
     /// `ENABLE_PROCESSED_INPUT` / `ENABLE_LINE_INPUT` / `ENABLE_ECHO_INPUT` / `ENABLE_VIRTUAL_TERMINAL_INPUT` /
@@ -83,17 +124,7 @@ impl ConsoleInput {
         if unsafe { GetConsoleMode(input, &raw mut saved) } == 0 {
             return Err(io::Error::last_os_error());
         }
-        let mut mode = saved
-            & !(ENABLE_PROCESSED_INPUT
-                | ENABLE_LINE_INPUT
-                | ENABLE_ECHO_INPUT
-                | ENABLE_VIRTUAL_TERMINAL_INPUT
-                | ENABLE_MOUSE_INPUT);
-        mode |= ENABLE_WINDOW_INPUT;
-        if mode & ENABLE_QUICK_EDIT_MODE != 0 {
-            // 簡易編集モードを保つには拡張フラグも立てる必要がある (SetConsoleMode の仕様)
-            mode |= ENABLE_EXTENDED_FLAGS;
-        }
+        let mode = input_mode(saved);
         // SAFETY: `input` は有効なコンソール入力のハンドル。
         if unsafe { SetConsoleMode(input, mode) } == 0 {
             return Err(io::Error::last_os_error());
@@ -139,6 +170,14 @@ impl ConsoleInput {
     /// 起動時に保存した入力のモード (緊急の端末復元に渡す)。
     pub fn saved_mode(&self) -> u32 {
         self.saved_mode
+    }
+
+    /// 入力モードを入れ直す (標準入力を読み終えたとき。パイプの書き手がコンソールのモードを変えていることがある、
+    /// 03 §9.2.2)。マウスの入力は呼び側が `set_mouse` で入れ直す。失敗しても入力は続けられるので無視する。
+    pub fn reapply_mode(&mut self) {
+        self.restored = false;
+        // SAFETY: `input` は `open` で得た有効なコンソール入力のハンドル。
+        unsafe { SetConsoleMode(self.input.0, input_mode(self.saved_mode)) };
     }
 
     /// 入力モードを元に戻す (どの終了経路でも呼ぶ。2 回目以降は何もしない)。
@@ -484,6 +523,17 @@ impl ConsoleOut {
     /// 起動時に保存した出力のモード (緊急の端末復元に渡す)。
     pub fn saved_mode(&self) -> u32 {
         self.saved_mode
+    }
+
+    /// 出力モード (VT) を入れ直す (標準入力を読み終えたとき、03 §9.2.2)。失敗しても描画は試すので無視する。
+    pub fn reapply_mode(&mut self) {
+        // SAFETY: `handle` は `open` で得た有効なコンソール出力のハンドル。
+        unsafe {
+            SetConsoleMode(
+                self.handle.0,
+                self.saved_mode | ENABLE_VIRTUAL_TERMINAL_PROCESSING | DISABLE_NEWLINE_AUTO_RETURN,
+            )
+        };
     }
 
     /// 退避しておいた端末タイトルとコンソールモードを戻す (冪等。失敗しても続ける)。

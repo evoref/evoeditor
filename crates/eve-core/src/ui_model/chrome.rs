@@ -135,9 +135,29 @@ pub(crate) fn status_model(
     // 新しく開く読込の進捗を出す (03 §9.2.1 の「ステータスバー」、§9.8 の「読込中のバッファ」)。先行表示の間は
     // `status.partial.*` (02 §5.1: 読込中は `Loading` / `Partial` から導出する)
     let shown_loading = matches!(doc.load_state, LoadState::Loading | LoadState::Partial);
+    // 標準入力の読込は大きさが分からないので、割合ではなく読んだ量を出す (文書の種類で決める。03 §9.2.2 の「文書」、
+    // 04 §8.7)。表示していない標準入力の読込は出さない (`loading_percent` はファイルの読込だけ)
+    let stdin_loading = shown_loading.then_some(doc.stdin).flatten();
+    if let Some(s) = stdin_loading {
+        let size = crate::io::open::human_size(s.bytes_read);
+        let a = [("size", size.as_str())];
+        let (long, short) = (
+            render(state, keys::STATUS_LOADING_BYTES_LONG, &a),
+            render(state, keys::STATUS_LOADING_BYTES_SHORT, &a),
+        );
+        items.push(item(
+            StatusKind::Loading,
+            &long,
+            Some(&short),
+            5,
+            Left,
+            CutPolicy::Never,
+        ));
+    }
     let loading = shown_loading
         .then_some(doc.load_percent)
-        .or_else(|| state.loading_percent());
+        .or_else(|| state.loading_percent())
+        .filter(|_| stdin_loading.is_none());
     if let Some(percent) = loading {
         let percent = percent.to_string();
         let a = [("percent", percent.as_str())];
@@ -302,9 +322,14 @@ pub(crate) fn overlay_models(state: &EditorState) -> Vec<OverlayModel> {
                     destructive: d.destructive,
                 })
                 .collect();
-            // キャンセルは最後 (`Esc`)。「中止」の選択肢を自分で持つ確認 (不正バイトが多いファイル) では、
-            // 同じ意味の表示が 2 つ並ばないよう付けない (`Esc` は変わらずキャンセルの番号に届く)
-            if !c.choices.iter().any(|d| d.id == "abort") {
+            // キャンセルは最後 (`Esc`)。「中止」の選択肢を自分で持つ確認 (不正バイトが多いファイル) と、`Esc` と同じ意味の
+            // 「読み続ける」を持つ確認 (`ui.confirm.stdin_stop`) では、同じ意味の表示が 2 つ並ばないよう付けない (`Esc` は
+            // 変わらずキャンセルの番号に届く)
+            if !c
+                .choices
+                .iter()
+                .any(|d| d.id == "abort" || d.id == "continue")
+            {
                 choices.push(Choice {
                     id: ChoiceId(u16::try_from(c.cancel_index()).unwrap_or(u16::MAX)),
                     label: cell_text(
@@ -359,11 +384,20 @@ pub(crate) fn overlay_models(state: &EditorState) -> Vec<OverlayModel> {
                     CutPolicy::End,
                 )
             });
+            let mut title = render(state, &format!("ui.prompt.{name}.title"), &[]);
+            // 途中まで読んだ標準入力の文書の名前を付けて保存は、案内の後ろに「途中まで ({size})」を足す (03 §9.2.2)
+            if let crate::ui_model::overlay::PromptKind::SaveAs { doc, .. } = &p.kind
+                && let Some(size) = state.partial_size(*doc)
+            {
+                title.push(' ');
+                title.push_str(&render(
+                    state,
+                    keys::UI_PROMPT_SAVE_AS_PARTIAL,
+                    &[("size", &size)],
+                ));
+            }
             vec![OverlayModel::Prompt {
-                title: cell_text(
-                    &render(state, &format!("ui.prompt.{name}.title"), &[]),
-                    CutPolicy::Never,
-                ),
+                title: cell_text(&title, CutPolicy::Never),
                 input,
                 hint,
                 error,

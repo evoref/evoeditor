@@ -397,6 +397,7 @@ impl EditorState {
         if self.auto_switch_blocked() {
             return;
         }
+        self.flush_stdin_continuations();
         let holds: Vec<(DocumentId, Option<DocumentId>)> =
             std::mem::take(&mut self.io.failed_holds)
                 .into_iter()

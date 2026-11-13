@@ -15,26 +15,55 @@ use crate::ui_model::keys;
 use crate::view::motion::line_col_byte;
 use eve_text::{Selection, TextRead};
 
-/// 起動時に開くファイル 1 つ。
+/// 起動時に開くもの (02 §5.4)。パスか標準入力 (`evoeditor -`、03 §9.2.2。v0.4 の M25)。
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum InitialTarget {
+    /// 入力されたままのパス。
+    Path(String),
+    /// 標準入力。`terminal` は Host が判定した「標準入力が端末」(05 §9.1 / §9.2)。端末なら読まずに空の無題の文書を開き
+    /// `info.stdin.terminal` を出す。端末でなければ `JobKind::OpenStdin` を投入する (Host は `JobPorts.stdin` に
+    /// `StdinSource` を入れる。作れなかったときは入れず、読込は「最初から読めない」で終わる)。
+    Stdin {
+        /// 標準入力が端末。
+        terminal: bool,
+    },
+}
+
+/// 起動時に開くもの 1 つ。
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct InitialFile {
-    /// 入力されたままのパス。
-    pub path: String,
-    /// 開いた直後に移る行 (1 始まり)。
+    /// 開くもの (パスか標準入力)。
+    pub target: InitialTarget,
+    /// 開いた直後に移る行 (1 始まり)。標準入力は読み終えた時点で移る。
     pub line: Option<usize>,
     /// 同じく桁 (1 始まり、書記素数)。行が無ければ使わない。
     pub col: Option<usize>,
 }
 
+impl InitialFile {
+    /// 位置の指定の無いパス。
+    pub fn path(path: impl Into<String>) -> InitialFile {
+        InitialFile {
+            target: InitialTarget::Path(path.into()),
+            line: None,
+            col: None,
+        }
+    }
+}
+
 impl EditorState {
-    /// 先頭のファイルを表示する文書として開き、残りを読込中のバッファとして足す。
+    /// 先頭のものを表示する文書として開き、残りを読込中のバッファとして足す。標準入力 (`InitialTarget::Stdin`) も
+    /// 書いた順に足す (03 §9.2.2 の「書き方」)。
     pub(crate) fn open_initial_files(&mut self, files: &[InitialFile], opts: OpenOptions) {
         for (i, f) in files.iter().enumerate() {
-            let doc = if i == 0 {
-                self.open_path(&f.path, opts);
-                self.active_document()
-            } else {
-                self.open_additional(&f.path, opts)
+            let doc = match &f.target {
+                InitialTarget::Path(p) if i == 0 => {
+                    self.open_path(p, opts);
+                    self.active_document()
+                }
+                InitialTarget::Path(p) => self.open_additional(p, opts),
+                InitialTarget::Stdin { terminal: true } => Some(self.open_stdin_terminal()),
+                InitialTarget::Stdin { terminal: false } => Some(self.open_stdin(opts)),
             };
             if let (Some(doc), Some(line)) = (doc, f.line) {
                 self.io.open_jumps.insert(doc, (line, f.col.unwrap_or(1)));
