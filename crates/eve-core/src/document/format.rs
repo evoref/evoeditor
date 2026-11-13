@@ -14,7 +14,7 @@ pub struct EolStats {
     pub cr: usize,
 }
 
-/// 長大行の閾値の既定 (`file.long_line_threshold`)。これを超える行は char 近似モードで扱う (NFR-106、03 §11.5.1)。
+/// 長大行の閾値の既定 (`file.long_line_threshold`)。これを超える行は列の索引で扱い、その行を含む文書は折り返さない (NFR-106、03 §14.4)。
 pub const LONG_LINE_THRESHOLD: usize = 1 << 20;
 
 /// 閾値 `threshold` (バイト) を超える行の数。チャンクを 1 回走査する (読込ジョブと `Document::from_text` で使う)。

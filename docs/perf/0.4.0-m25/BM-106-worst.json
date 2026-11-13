@@ -1,0 +1,5385 @@
+{
+  "develop": [
+    {
+      "case": "japanese",
+      "max": 16.16,
+      "op": "open",
+      "p50": 15.72,
+      "p99": 16.16,
+      "round": 1
+    },
+    {
+      "case": "japanese",
+      "max": 12.11,
+      "op": "end",
+      "p50": 11.95,
+      "p99": 12.11,
+      "round": 1
+    },
+    {
+      "case": "japanese",
+      "max": 0.06,
+      "op": "right",
+      "p50": 0.05,
+      "p99": 0.06,
+      "round": 1
+    },
+    {
+      "case": "japanese",
+      "max": 0.3,
+      "op": "left_mid",
+      "p50": 0.26,
+      "p99": 0.3,
+      "round": 1
+    },
+    {
+      "case": "japanese",
+      "max": 0.79,
+      "op": "ctrl_right",
+      "p50": 0.69,
+      "p99": 0.79,
+      "round": 1
+    },
+    {
+      "case": "japanese",
+      "max": 0.37,
+      "op": "insert_mid",
+      "p50": 0.31,
+      "p99": 0.37,
+      "round": 1
+    },
+    {
+      "case": "japanese",
+      "max": 8.53,
+      "op": "end_after_insert",
+      "p50": 8.47,
+      "p99": 8.53,
+      "round": 1
+    },
+    {
+      "case": "emoji",
+      "max": 16.34,
+      "op": "open",
+      "p50": 14.67,
+      "p99": 16.34,
+      "round": 1
+    },
+    {
+      "case": "emoji",
+      "max": 12.88,
+      "op": "end",
+      "p50": 12.33,
+      "p99": 12.88,
+      "round": 1
+    },
+    {
+      "case": "emoji",
+      "max": 0.06,
+      "op": "right",
+      "p50": 0.05,
+      "p99": 0.06,
+      "round": 1
+    },
+    {
+      "case": "emoji",
+      "max": 0.16,
+      "op": "left_mid",
+      "p50": 0.15,
+      "p99": 0.16,
+      "round": 1
+    },
+    {
+      "case": "emoji",
+      "max": 1.06,
+      "op": "ctrl_right",
+      "p50": 0.88,
+      "p99": 1.06,
+      "round": 1
+    },
+    {
+      "case": "emoji",
+      "max": 0.21,
+      "op": "insert_mid",
+      "p50": 0.18,
+      "p99": 0.21,
+      "round": 1
+    },
+    {
+      "case": "emoji",
+      "max": 10.11,
+      "op": "end_after_insert",
+      "p50": 9.92,
+      "p99": 10.11,
+      "round": 1
+    },
+    {
+      "case": "comb_max",
+      "max": 11.39,
+      "op": "open",
+      "p50": 11.07,
+      "p99": 11.39,
+      "round": 1
+    },
+    {
+      "case": "comb_max",
+      "max": 14.89,
+      "op": "end",
+      "p50": 14.83,
+      "p99": 14.89,
+      "round": 1
+    },
+    {
+      "case": "comb_max",
+      "max": 0.13,
+      "op": "right",
+      "p50": 0.08,
+      "p99": 0.13,
+      "round": 1
+    },
+    {
+      "case": "comb_max",
+      "max": 0.43,
+      "op": "left_mid",
+      "p50": 0.4,
+      "p99": 0.43,
+      "round": 1
+    },
+    {
+      "case": "comb_max",
+      "max": 0.15,
+      "op": "ctrl_right",
+      "p50": 0.07,
+      "p99": 0.15,
+      "round": 1
+    },
+    {
+      "case": "comb_max",
+      "max": 0.1,
+      "op": "insert_mid",
+      "p50": 0.08,
+      "p99": 0.1,
+      "round": 1
+    },
+    {
+      "case": "comb_max",
+      "max": 0.08,
+      "op": "end_after_insert",
+      "p50": 0.08,
+      "p99": 0.08,
+      "round": 1
+    },
+    {
+      "case": "comb_inf",
+      "max": 27.9,
+      "op": "open",
+      "p50": 22.59,
+      "p99": 27.9,
+      "round": 1
+    },
+    {
+      "case": "comb_inf",
+      "max": 41.78,
+      "op": "end",
+      "p50": 23.08,
+      "p99": 41.78,
+      "round": 1
+    },
+    {
+      "case": "comb_inf",
+      "max": 0.13,
+      "op": "right",
+      "p50": 0.12,
+      "p99": 0.13,
+      "round": 1
+    },
+    {
+      "case": "comb_inf",
+      "max": 0.8,
+      "op": "left_mid",
+      "p50": 0.6,
+      "p99": 0.8,
+      "round": 1
+    },
+    {
+      "case": "comb_inf",
+      "max": 0.35,
+      "op": "ctrl_right",
+      "p50": 0.1,
+      "p99": 0.35,
+      "round": 1
+    },
+    {
+      "case": "comb_inf",
+      "max": 0.46,
+      "op": "insert_mid",
+      "p50": 0.13,
+      "p99": 0.46,
+      "round": 1
+    },
+    {
+      "case": "comb_inf",
+      "max": 0.26,
+      "op": "end_after_insert",
+      "p50": 0.26,
+      "p99": 0.26,
+      "round": 1
+    },
+    {
+      "case": "jamo_L",
+      "max": 32.11,
+      "op": "open",
+      "p50": 21.87,
+      "p99": 32.11,
+      "round": 1
+    },
+    {
+      "case": "jamo_L",
+      "max": 29.43,
+      "op": "end",
+      "p50": 16.89,
+      "p99": 29.43,
+      "round": 1
+    },
+    {
+      "case": "jamo_L",
+      "max": 0.09,
+      "op": "right",
+      "p50": 0.08,
+      "p99": 0.09,
+      "round": 1
+    },
+    {
+      "case": "jamo_L",
+      "max": 0.57,
+      "op": "left_mid",
+      "p50": 0.45,
+      "p99": 0.57,
+      "round": 1
+    },
+    {
+      "case": "jamo_L",
+      "max": 0.27,
+      "op": "ctrl_right",
+      "p50": 0.08,
+      "p99": 0.27,
+      "round": 1
+    },
+    {
+      "case": "jamo_L",
+      "max": 0.11,
+      "op": "insert_mid",
+      "p50": 0.08,
+      "p99": 0.11,
+      "round": 1
+    },
+    {
+      "case": "jamo_L",
+      "max": 0.33,
+      "op": "end_after_insert",
+      "p50": 0.2,
+      "p99": 0.33,
+      "round": 1
+    },
+    {
+      "case": "jamo_LVT",
+      "max": 26.77,
+      "op": "open",
+      "p50": 21.53,
+      "p99": 26.77,
+      "round": 1
+    },
+    {
+      "case": "jamo_LVT",
+      "max": 20.49,
+      "op": "end",
+      "p50": 17.36,
+      "p99": 20.49,
+      "round": 1
+    },
+    {
+      "case": "jamo_LVT",
+      "max": 0.08,
+      "op": "right",
+      "p50": 0.06,
+      "p99": 0.08,
+      "round": 1
+    },
+    {
+      "case": "jamo_LVT",
+      "max": 0.24,
+      "op": "left_mid",
+      "p50": 0.19,
+      "p99": 0.24,
+      "round": 1
+    },
+    {
+      "case": "jamo_LVT",
+      "max": 2.2,
+      "op": "ctrl_right",
+      "p50": 2.12,
+      "p99": 2.2,
+      "round": 1
+    },
+    {
+      "case": "jamo_LVT",
+      "max": 0.27,
+      "op": "insert_mid",
+      "p50": 0.24,
+      "p99": 0.27,
+      "round": 1
+    },
+    {
+      "case": "jamo_LVT",
+      "max": 2.52,
+      "op": "end_after_insert",
+      "p50": 2.5,
+      "p99": 2.52,
+      "round": 1
+    },
+    {
+      "case": "hangul",
+      "max": 21.74,
+      "op": "open",
+      "p50": 20.89,
+      "p99": 21.74,
+      "round": 1
+    },
+    {
+      "case": "hangul",
+      "max": 21.49,
+      "op": "end",
+      "p50": 21.3,
+      "p99": 21.49,
+      "round": 1
+    },
+    {
+      "case": "hangul",
+      "max": 0.1,
+      "op": "right",
+      "p50": 0.08,
+      "p99": 0.1,
+      "round": 1
+    },
+    {
+      "case": "hangul",
+      "max": 0.24,
+      "op": "left_mid",
+      "p50": 0.2,
+      "p99": 0.24,
+      "round": 1
+    },
+    {
+      "case": "hangul",
+      "max": 3.12,
+      "op": "ctrl_right",
+      "p50": 2.09,
+      "p99": 3.12,
+      "round": 1
+    },
+    {
+      "case": "hangul",
+      "max": 0.27,
+      "op": "insert_mid",
+      "p50": 0.24,
+      "p99": 0.27,
+      "round": 1
+    },
+    {
+      "case": "hangul",
+      "max": 16.62,
+      "op": "end_after_insert",
+      "p50": 16.57,
+      "p99": 16.62,
+      "round": 1
+    },
+    {
+      "case": "flags",
+      "max": 24.48,
+      "op": "open",
+      "p50": 20.48,
+      "p99": 24.48,
+      "round": 1
+    },
+    {
+      "case": "flags",
+      "max": 18.2,
+      "op": "end",
+      "p50": 17.57,
+      "p99": 18.2,
+      "round": 1
+    },
+    {
+      "case": "flags",
+      "max": 0.09,
+      "op": "right",
+      "p50": 0.08,
+      "p99": 0.09,
+      "round": 1
+    },
+    {
+      "case": "flags",
+      "max": 0.17,
+      "op": "left_mid",
+      "p50": 0.11,
+      "p99": 0.17,
+      "round": 1
+    },
+    {
+      "case": "flags",
+      "max": 0.89,
+      "op": "ctrl_right",
+      "p50": 0.71,
+      "p99": 0.89,
+      "round": 1
+    },
+    {
+      "case": "flags",
+      "max": 0.18,
+      "op": "insert_mid",
+      "p50": 0.13,
+      "p99": 0.18,
+      "round": 1
+    },
+    {
+      "case": "flags",
+      "max": 5.18,
+      "op": "end_after_insert",
+      "p50": 4.26,
+      "p99": 5.18,
+      "round": 1
+    },
+    {
+      "case": "zwj_family",
+      "max": 26.08,
+      "op": "open",
+      "p50": 20.97,
+      "p99": 26.08,
+      "round": 1
+    },
+    {
+      "case": "zwj_family",
+      "max": 26.73,
+      "op": "end",
+      "p50": 17.19,
+      "p99": 26.73,
+      "round": 1
+    },
+    {
+      "case": "zwj_family",
+      "max": 0.13,
+      "op": "right",
+      "p50": 0.08,
+      "p99": 0.13,
+      "round": 1
+    },
+    {
+      "case": "zwj_family",
+      "max": 0.76,
+      "op": "left_mid",
+      "p50": 0.48,
+      "p99": 0.76,
+      "round": 1
+    },
+    {
+      "case": "zwj_family",
+      "max": 0.69,
+      "op": "ctrl_right",
+      "p50": 0.6,
+      "p99": 0.69,
+      "round": 1
+    },
+    {
+      "case": "zwj_family",
+      "max": 0.89,
+      "op": "insert_mid",
+      "p50": 0.59,
+      "p99": 0.89,
+      "round": 1
+    },
+    {
+      "case": "zwj_family",
+      "max": 0.2,
+      "op": "end_after_insert",
+      "p50": 0.19,
+      "p99": 0.2,
+      "round": 1
+    },
+    {
+      "case": "zwj_inf",
+      "max": 20.39,
+      "op": "open",
+      "p50": 19.69,
+      "p99": 20.39,
+      "round": 1
+    },
+    {
+      "case": "zwj_inf",
+      "max": 17.22,
+      "op": "end",
+      "p50": 17.08,
+      "p99": 17.22,
+      "round": 1
+    },
+    {
+      "case": "zwj_inf",
+      "max": 0.1,
+      "op": "right",
+      "p50": 0.09,
+      "p99": 0.1,
+      "round": 1
+    },
+    {
+      "case": "zwj_inf",
+      "max": 0.78,
+      "op": "left_mid",
+      "p50": 0.5,
+      "p99": 0.78,
+      "round": 1
+    },
+    {
+      "case": "zwj_inf",
+      "max": 0.19,
+      "op": "ctrl_right",
+      "p50": 0.08,
+      "p99": 0.19,
+      "round": 1
+    },
+    {
+      "case": "zwj_inf",
+      "max": 0.13,
+      "op": "insert_mid",
+      "p50": 0.08,
+      "p99": 0.13,
+      "round": 1
+    },
+    {
+      "case": "zwj_inf",
+      "max": 0.2,
+      "op": "end_after_insert",
+      "p50": 0.19,
+      "p99": 0.2,
+      "round": 1
+    },
+    {
+      "case": "indic",
+      "max": 22.8,
+      "op": "open",
+      "p50": 21.26,
+      "p99": 22.8,
+      "round": 1
+    },
+    {
+      "case": "indic",
+      "max": 17.27,
+      "op": "end",
+      "p50": 17.0,
+      "p99": 17.27,
+      "round": 1
+    },
+    {
+      "case": "indic",
+      "max": 0.08,
+      "op": "right",
+      "p50": 0.07,
+      "p99": 0.08,
+      "round": 1
+    },
+    {
+      "case": "indic",
+      "max": 0.53,
+      "op": "left_mid",
+      "p50": 0.44,
+      "p99": 0.53,
+      "round": 1
+    },
+    {
+      "case": "indic",
+      "max": 2.23,
+      "op": "ctrl_right",
+      "p50": 1.85,
+      "p99": 2.23,
+      "round": 1
+    },
+    {
+      "case": "indic",
+      "max": 1.13,
+      "op": "insert_mid",
+      "p50": 0.54,
+      "p99": 1.13,
+      "round": 1
+    },
+    {
+      "case": "indic",
+      "max": 8.4,
+      "op": "end_after_insert",
+      "p50": 8.06,
+      "p99": 8.4,
+      "round": 1
+    },
+    {
+      "case": "prepend",
+      "max": 17.85,
+      "op": "open",
+      "p50": 17.28,
+      "p99": 17.85,
+      "round": 1
+    },
+    {
+      "case": "prepend",
+      "max": 22.71,
+      "op": "end",
+      "p50": 22.26,
+      "p99": 22.71,
+      "round": 1
+    },
+    {
+      "case": "prepend",
+      "max": 0.07,
+      "op": "right",
+      "p50": 0.07,
+      "p99": 0.07,
+      "round": 1
+    },
+    {
+      "case": "prepend",
+      "max": 0.53,
+      "op": "left_mid",
+      "p50": 0.48,
+      "p99": 0.53,
+      "round": 1
+    },
+    {
+      "case": "prepend",
+      "max": 2.66,
+      "op": "ctrl_right",
+      "p50": 2.48,
+      "p99": 2.66,
+      "round": 1
+    },
+    {
+      "case": "prepend",
+      "max": 0.73,
+      "op": "insert_mid",
+      "p50": 0.59,
+      "p99": 0.73,
+      "round": 1
+    },
+    {
+      "case": "prepend",
+      "max": 16.08,
+      "op": "end_after_insert",
+      "p50": 15.97,
+      "p99": 16.08,
+      "round": 1
+    },
+    {
+      "case": "ivs",
+      "max": 20.44,
+      "op": "open",
+      "p50": 20.18,
+      "p99": 20.44,
+      "round": 1
+    },
+    {
+      "case": "ivs",
+      "max": 19.42,
+      "op": "end",
+      "p50": 17.99,
+      "p99": 19.42,
+      "round": 1
+    },
+    {
+      "case": "ivs",
+      "max": 0.13,
+      "op": "right",
+      "p50": 0.08,
+      "p99": 0.13,
+      "round": 1
+    },
+    {
+      "case": "ivs",
+      "max": 0.48,
+      "op": "left_mid",
+      "p50": 0.41,
+      "p99": 0.48,
+      "round": 1
+    },
+    {
+      "case": "ivs",
+      "max": 1.02,
+      "op": "ctrl_right",
+      "p50": 0.93,
+      "p99": 1.02,
+      "round": 1
+    },
+    {
+      "case": "ivs",
+      "max": 0.8,
+      "op": "insert_mid",
+      "p50": 0.5,
+      "p99": 0.8,
+      "round": 1
+    },
+    {
+      "case": "ivs",
+      "max": 6.23,
+      "op": "end_after_insert",
+      "p50": 6.1,
+      "p99": 6.23,
+      "round": 1
+    },
+    {
+      "case": "thai",
+      "max": 22.46,
+      "op": "open",
+      "p50": 21.5,
+      "p99": 22.46,
+      "round": 1
+    },
+    {
+      "case": "thai",
+      "max": 17.59,
+      "op": "end",
+      "p50": 17.02,
+      "p99": 17.59,
+      "round": 1
+    },
+    {
+      "case": "thai",
+      "max": 0.1,
+      "op": "right",
+      "p50": 0.09,
+      "p99": 0.1,
+      "round": 1
+    },
+    {
+      "case": "thai",
+      "max": 0.33,
+      "op": "left_mid",
+      "p50": 0.31,
+      "p99": 0.33,
+      "round": 1
+    },
+    {
+      "case": "thai",
+      "max": 4.28,
+      "op": "ctrl_right",
+      "p50": 4.13,
+      "p99": 4.28,
+      "round": 1
+    },
+    {
+      "case": "thai",
+      "max": 0.51,
+      "op": "insert_mid",
+      "p50": 0.37,
+      "p99": 0.51,
+      "round": 1
+    },
+    {
+      "case": "thai",
+      "max": 11.56,
+      "op": "end_after_insert",
+      "p50": 11.49,
+      "p99": 11.56,
+      "round": 1
+    },
+    {
+      "case": "escape",
+      "max": 7.43,
+      "op": "open",
+      "p50": 6.1,
+      "p99": 7.43,
+      "round": 1
+    },
+    {
+      "case": "escape",
+      "max": 0.09,
+      "op": "end",
+      "p50": 0.09,
+      "p99": 0.09,
+      "round": 1
+    },
+    {
+      "case": "escape",
+      "max": 0.22,
+      "op": "right",
+      "p50": 0.09,
+      "p99": 0.22,
+      "round": 1
+    },
+    {
+      "case": "escape",
+      "max": 0.1,
+      "op": "left_mid",
+      "p50": 0.08,
+      "p99": 0.1,
+      "round": 1
+    },
+    {
+      "case": "escape",
+      "max": 0.08,
+      "op": "ctrl_right",
+      "p50": 0.08,
+      "p99": 0.08,
+      "round": 1
+    },
+    {
+      "case": "escape",
+      "max": 0.08,
+      "op": "insert_mid",
+      "p50": 0.08,
+      "p99": 0.08,
+      "round": 1
+    },
+    {
+      "case": "escape",
+      "max": 0.08,
+      "op": "end_after_insert",
+      "p50": 0.08,
+      "p99": 0.08,
+      "round": 1
+    },
+    {
+      "case": "emoji_fe0f",
+      "max": 28.24,
+      "op": "open",
+      "p50": 19.5,
+      "p99": 28.24,
+      "round": 1
+    },
+    {
+      "case": "emoji_fe0f",
+      "max": 21.06,
+      "op": "end",
+      "p50": 19.52,
+      "p99": 21.06,
+      "round": 1
+    },
+    {
+      "case": "emoji_fe0f",
+      "max": 0.13,
+      "op": "right",
+      "p50": 0.08,
+      "p99": 0.13,
+      "round": 1
+    },
+    {
+      "case": "emoji_fe0f",
+      "max": 0.39,
+      "op": "left_mid",
+      "p50": 0.27,
+      "p99": 0.39,
+      "round": 1
+    },
+    {
+      "case": "emoji_fe0f",
+      "max": 1.47,
+      "op": "ctrl_right",
+      "p50": 1.3,
+      "p99": 1.47,
+      "round": 1
+    },
+    {
+      "case": "emoji_fe0f",
+      "max": 0.45,
+      "op": "insert_mid",
+      "p50": 0.32,
+      "p99": 0.45,
+      "round": 1
+    },
+    {
+      "case": "emoji_fe0f",
+      "max": 14.77,
+      "op": "end_after_insert",
+      "p50": 12.93,
+      "p99": 14.77,
+      "round": 1
+    },
+    {
+      "case": "japanese",
+      "max": 16.55,
+      "op": "open",
+      "p50": 15.46,
+      "p99": 16.55,
+      "round": 2
+    },
+    {
+      "case": "japanese",
+      "max": 12.19,
+      "op": "end",
+      "p50": 11.92,
+      "p99": 12.19,
+      "round": 2
+    },
+    {
+      "case": "japanese",
+      "max": 0.06,
+      "op": "right",
+      "p50": 0.05,
+      "p99": 0.06,
+      "round": 2
+    },
+    {
+      "case": "japanese",
+      "max": 0.31,
+      "op": "left_mid",
+      "p50": 0.25,
+      "p99": 0.31,
+      "round": 2
+    },
+    {
+      "case": "japanese",
+      "max": 0.77,
+      "op": "ctrl_right",
+      "p50": 0.7,
+      "p99": 0.77,
+      "round": 2
+    },
+    {
+      "case": "japanese",
+      "max": 0.37,
+      "op": "insert_mid",
+      "p50": 0.31,
+      "p99": 0.37,
+      "round": 2
+    },
+    {
+      "case": "japanese",
+      "max": 8.56,
+      "op": "end_after_insert",
+      "p50": 8.28,
+      "p99": 8.56,
+      "round": 2
+    },
+    {
+      "case": "emoji",
+      "max": 14.67,
+      "op": "open",
+      "p50": 14.01,
+      "p99": 14.67,
+      "round": 2
+    },
+    {
+      "case": "emoji",
+      "max": 12.13,
+      "op": "end",
+      "p50": 11.92,
+      "p99": 12.13,
+      "round": 2
+    },
+    {
+      "case": "emoji",
+      "max": 0.06,
+      "op": "right",
+      "p50": 0.05,
+      "p99": 0.06,
+      "round": 2
+    },
+    {
+      "case": "emoji",
+      "max": 0.24,
+      "op": "left_mid",
+      "p50": 0.2,
+      "p99": 0.24,
+      "round": 2
+    },
+    {
+      "case": "emoji",
+      "max": 1.04,
+      "op": "ctrl_right",
+      "p50": 0.84,
+      "p99": 1.04,
+      "round": 2
+    },
+    {
+      "case": "emoji",
+      "max": 0.2,
+      "op": "insert_mid",
+      "p50": 0.17,
+      "p99": 0.2,
+      "round": 2
+    },
+    {
+      "case": "emoji",
+      "max": 9.94,
+      "op": "end_after_insert",
+      "p50": 9.87,
+      "p99": 9.94,
+      "round": 2
+    },
+    {
+      "case": "comb_max",
+      "max": 11.26,
+      "op": "open",
+      "p50": 11.22,
+      "p99": 11.26,
+      "round": 2
+    },
+    {
+      "case": "comb_max",
+      "max": 15.68,
+      "op": "end",
+      "p50": 15.35,
+      "p99": 15.68,
+      "round": 2
+    },
+    {
+      "case": "comb_max",
+      "max": 0.08,
+      "op": "right",
+      "p50": 0.08,
+      "p99": 0.08,
+      "round": 2
+    },
+    {
+      "case": "comb_max",
+      "max": 0.43,
+      "op": "left_mid",
+      "p50": 0.4,
+      "p99": 0.43,
+      "round": 2
+    },
+    {
+      "case": "comb_max",
+      "max": 0.15,
+      "op": "ctrl_right",
+      "p50": 0.07,
+      "p99": 0.15,
+      "round": 2
+    },
+    {
+      "case": "comb_max",
+      "max": 0.1,
+      "op": "insert_mid",
+      "p50": 0.07,
+      "p99": 0.1,
+      "round": 2
+    },
+    {
+      "case": "comb_max",
+      "max": 0.08,
+      "op": "end_after_insert",
+      "p50": 0.08,
+      "p99": 0.08,
+      "round": 2
+    },
+    {
+      "case": "comb_inf",
+      "max": 15.48,
+      "op": "open",
+      "p50": 15.16,
+      "p99": 15.48,
+      "round": 2
+    },
+    {
+      "case": "comb_inf",
+      "max": 15.8,
+      "op": "end",
+      "p50": 14.37,
+      "p99": 15.8,
+      "round": 2
+    },
+    {
+      "case": "comb_inf",
+      "max": 0.08,
+      "op": "right",
+      "p50": 0.07,
+      "p99": 0.08,
+      "round": 2
+    },
+    {
+      "case": "comb_inf",
+      "max": 0.43,
+      "op": "left_mid",
+      "p50": 0.39,
+      "p99": 0.43,
+      "round": 2
+    },
+    {
+      "case": "comb_inf",
+      "max": 0.23,
+      "op": "ctrl_right",
+      "p50": 0.07,
+      "p99": 0.23,
+      "round": 2
+    },
+    {
+      "case": "comb_inf",
+      "max": 0.09,
+      "op": "insert_mid",
+      "p50": 0.07,
+      "p99": 0.09,
+      "round": 2
+    },
+    {
+      "case": "comb_inf",
+      "max": 0.17,
+      "op": "end_after_insert",
+      "p50": 0.17,
+      "p99": 0.17,
+      "round": 2
+    },
+    {
+      "case": "jamo_L",
+      "max": 35.23,
+      "op": "open",
+      "p50": 21.33,
+      "p99": 35.23,
+      "round": 2
+    },
+    {
+      "case": "jamo_L",
+      "max": 21.51,
+      "op": "end",
+      "p50": 16.96,
+      "p99": 21.51,
+      "round": 2
+    },
+    {
+      "case": "jamo_L",
+      "max": 0.06,
+      "op": "right",
+      "p50": 0.05,
+      "p99": 0.06,
+      "round": 2
+    },
+    {
+      "case": "jamo_L",
+      "max": 0.56,
+      "op": "left_mid",
+      "p50": 0.47,
+      "p99": 0.56,
+      "round": 2
+    },
+    {
+      "case": "jamo_L",
+      "max": 0.29,
+      "op": "ctrl_right",
+      "p50": 0.08,
+      "p99": 0.29,
+      "round": 2
+    },
+    {
+      "case": "jamo_L",
+      "max": 0.23,
+      "op": "insert_mid",
+      "p50": 0.09,
+      "p99": 0.23,
+      "round": 2
+    },
+    {
+      "case": "jamo_L",
+      "max": 0.39,
+      "op": "end_after_insert",
+      "p50": 0.2,
+      "p99": 0.39,
+      "round": 2
+    },
+    {
+      "case": "jamo_LVT",
+      "max": 21.64,
+      "op": "open",
+      "p50": 14.56,
+      "p99": 21.64,
+      "round": 2
+    },
+    {
+      "case": "jamo_LVT",
+      "max": 17.41,
+      "op": "end",
+      "p50": 11.23,
+      "p99": 17.41,
+      "round": 2
+    },
+    {
+      "case": "jamo_LVT",
+      "max": 0.04,
+      "op": "right",
+      "p50": 0.04,
+      "p99": 0.04,
+      "round": 2
+    },
+    {
+      "case": "jamo_LVT",
+      "max": 0.17,
+      "op": "left_mid",
+      "p50": 0.13,
+      "p99": 0.17,
+      "round": 2
+    },
+    {
+      "case": "jamo_LVT",
+      "max": 1.42,
+      "op": "ctrl_right",
+      "p50": 1.39,
+      "p99": 1.42,
+      "round": 2
+    },
+    {
+      "case": "jamo_LVT",
+      "max": 0.18,
+      "op": "insert_mid",
+      "p50": 0.15,
+      "p99": 0.18,
+      "round": 2
+    },
+    {
+      "case": "jamo_LVT",
+      "max": 2.52,
+      "op": "end_after_insert",
+      "p50": 1.72,
+      "p99": 2.52,
+      "round": 2
+    },
+    {
+      "case": "hangul",
+      "max": 32.44,
+      "op": "open",
+      "p50": 31.16,
+      "p99": 32.44,
+      "round": 2
+    },
+    {
+      "case": "hangul",
+      "max": 36.98,
+      "op": "end",
+      "p50": 28.91,
+      "p99": 36.98,
+      "round": 2
+    },
+    {
+      "case": "hangul",
+      "max": 0.07,
+      "op": "right",
+      "p50": 0.05,
+      "p99": 0.07,
+      "round": 2
+    },
+    {
+      "case": "hangul",
+      "max": 0.55,
+      "op": "left_mid",
+      "p50": 0.21,
+      "p99": 0.55,
+      "round": 2
+    },
+    {
+      "case": "hangul",
+      "max": 3.41,
+      "op": "ctrl_right",
+      "p50": 2.56,
+      "p99": 3.41,
+      "round": 2
+    },
+    {
+      "case": "hangul",
+      "max": 0.75,
+      "op": "insert_mid",
+      "p50": 0.33,
+      "p99": 0.75,
+      "round": 2
+    },
+    {
+      "case": "hangul",
+      "max": 17.29,
+      "op": "end_after_insert",
+      "p50": 16.38,
+      "p99": 17.29,
+      "round": 2
+    },
+    {
+      "case": "flags",
+      "max": 20.41,
+      "op": "open",
+      "p50": 20.11,
+      "p99": 20.41,
+      "round": 2
+    },
+    {
+      "case": "flags",
+      "max": 18.0,
+      "op": "end",
+      "p50": 17.59,
+      "p99": 18.0,
+      "round": 2
+    },
+    {
+      "case": "flags",
+      "max": 0.11,
+      "op": "right",
+      "p50": 0.08,
+      "p99": 0.11,
+      "round": 2
+    },
+    {
+      "case": "flags",
+      "max": 0.19,
+      "op": "left_mid",
+      "p50": 0.11,
+      "p99": 0.19,
+      "round": 2
+    },
+    {
+      "case": "flags",
+      "max": 0.95,
+      "op": "ctrl_right",
+      "p50": 0.7,
+      "p99": 0.95,
+      "round": 2
+    },
+    {
+      "case": "flags",
+      "max": 0.16,
+      "op": "insert_mid",
+      "p50": 0.13,
+      "p99": 0.16,
+      "round": 2
+    },
+    {
+      "case": "flags",
+      "max": 4.67,
+      "op": "end_after_insert",
+      "p50": 4.42,
+      "p99": 4.67,
+      "round": 2
+    },
+    {
+      "case": "zwj_family",
+      "max": 21.14,
+      "op": "open",
+      "p50": 20.61,
+      "p99": 21.14,
+      "round": 2
+    },
+    {
+      "case": "zwj_family",
+      "max": 17.79,
+      "op": "end",
+      "p50": 17.46,
+      "p99": 17.79,
+      "round": 2
+    },
+    {
+      "case": "zwj_family",
+      "max": 0.09,
+      "op": "right",
+      "p50": 0.08,
+      "p99": 0.09,
+      "round": 2
+    },
+    {
+      "case": "zwj_family",
+      "max": 0.99,
+      "op": "left_mid",
+      "p50": 0.51,
+      "p99": 0.99,
+      "round": 2
+    },
+    {
+      "case": "zwj_family",
+      "max": 0.99,
+      "op": "ctrl_right",
+      "p50": 0.5,
+      "p99": 0.99,
+      "round": 2
+    },
+    {
+      "case": "zwj_family",
+      "max": 1.06,
+      "op": "insert_mid",
+      "p50": 0.66,
+      "p99": 1.06,
+      "round": 2
+    },
+    {
+      "case": "zwj_family",
+      "max": 0.32,
+      "op": "end_after_insert",
+      "p50": 0.21,
+      "p99": 0.32,
+      "round": 2
+    },
+    {
+      "case": "zwj_inf",
+      "max": 20.16,
+      "op": "open",
+      "p50": 19.12,
+      "p99": 20.16,
+      "round": 2
+    },
+    {
+      "case": "zwj_inf",
+      "max": 17.21,
+      "op": "end",
+      "p50": 17.1,
+      "p99": 17.21,
+      "round": 2
+    },
+    {
+      "case": "zwj_inf",
+      "max": 0.15,
+      "op": "right",
+      "p50": 0.09,
+      "p99": 0.15,
+      "round": 2
+    },
+    {
+      "case": "zwj_inf",
+      "max": 0.66,
+      "op": "left_mid",
+      "p50": 0.5,
+      "p99": 0.66,
+      "round": 2
+    },
+    {
+      "case": "zwj_inf",
+      "max": 0.19,
+      "op": "ctrl_right",
+      "p50": 0.08,
+      "p99": 0.19,
+      "round": 2
+    },
+    {
+      "case": "zwj_inf",
+      "max": 0.12,
+      "op": "insert_mid",
+      "p50": 0.08,
+      "p99": 0.12,
+      "round": 2
+    },
+    {
+      "case": "zwj_inf",
+      "max": 0.2,
+      "op": "end_after_insert",
+      "p50": 0.19,
+      "p99": 0.2,
+      "round": 2
+    },
+    {
+      "case": "indic",
+      "max": 23.1,
+      "op": "open",
+      "p50": 20.83,
+      "p99": 23.1,
+      "round": 2
+    },
+    {
+      "case": "indic",
+      "max": 17.92,
+      "op": "end",
+      "p50": 17.55,
+      "p99": 17.92,
+      "round": 2
+    },
+    {
+      "case": "indic",
+      "max": 0.13,
+      "op": "right",
+      "p50": 0.07,
+      "p99": 0.13,
+      "round": 2
+    },
+    {
+      "case": "indic",
+      "max": 0.6,
+      "op": "left_mid",
+      "p50": 0.45,
+      "p99": 0.6,
+      "round": 2
+    },
+    {
+      "case": "indic",
+      "max": 1.86,
+      "op": "ctrl_right",
+      "p50": 1.8,
+      "p99": 1.86,
+      "round": 2
+    },
+    {
+      "case": "indic",
+      "max": 0.62,
+      "op": "insert_mid",
+      "p50": 0.54,
+      "p99": 0.62,
+      "round": 2
+    },
+    {
+      "case": "indic",
+      "max": 8.36,
+      "op": "end_after_insert",
+      "p50": 8.23,
+      "p99": 8.36,
+      "round": 2
+    },
+    {
+      "case": "prepend",
+      "max": 18.35,
+      "op": "open",
+      "p50": 18.03,
+      "p99": 18.35,
+      "round": 2
+    },
+    {
+      "case": "prepend",
+      "max": 22.77,
+      "op": "end",
+      "p50": 22.47,
+      "p99": 22.77,
+      "round": 2
+    },
+    {
+      "case": "prepend",
+      "max": 0.09,
+      "op": "right",
+      "p50": 0.07,
+      "p99": 0.09,
+      "round": 2
+    },
+    {
+      "case": "prepend",
+      "max": 0.82,
+      "op": "left_mid",
+      "p50": 0.48,
+      "p99": 0.82,
+      "round": 2
+    },
+    {
+      "case": "prepend",
+      "max": 3.1,
+      "op": "ctrl_right",
+      "p50": 2.51,
+      "p99": 3.1,
+      "round": 2
+    },
+    {
+      "case": "prepend",
+      "max": 0.68,
+      "op": "insert_mid",
+      "p50": 0.59,
+      "p99": 0.68,
+      "round": 2
+    },
+    {
+      "case": "prepend",
+      "max": 16.63,
+      "op": "end_after_insert",
+      "p50": 16.04,
+      "p99": 16.63,
+      "round": 2
+    },
+    {
+      "case": "ivs",
+      "max": 21.71,
+      "op": "open",
+      "p50": 20.38,
+      "p99": 21.71,
+      "round": 2
+    },
+    {
+      "case": "ivs",
+      "max": 18.0,
+      "op": "end",
+      "p50": 17.9,
+      "p99": 18.0,
+      "round": 2
+    },
+    {
+      "case": "ivs",
+      "max": 0.14,
+      "op": "right",
+      "p50": 0.08,
+      "p99": 0.14,
+      "round": 2
+    },
+    {
+      "case": "ivs",
+      "max": 0.46,
+      "op": "left_mid",
+      "p50": 0.41,
+      "p99": 0.46,
+      "round": 2
+    },
+    {
+      "case": "ivs",
+      "max": 1.12,
+      "op": "ctrl_right",
+      "p50": 0.95,
+      "p99": 1.12,
+      "round": 2
+    },
+    {
+      "case": "ivs",
+      "max": 0.61,
+      "op": "insert_mid",
+      "p50": 0.5,
+      "p99": 0.61,
+      "round": 2
+    },
+    {
+      "case": "ivs",
+      "max": 6.1,
+      "op": "end_after_insert",
+      "p50": 6.02,
+      "p99": 6.1,
+      "round": 2
+    },
+    {
+      "case": "thai",
+      "max": 21.91,
+      "op": "open",
+      "p50": 21.4,
+      "p99": 21.91,
+      "round": 2
+    },
+    {
+      "case": "thai",
+      "max": 18.59,
+      "op": "end",
+      "p50": 16.9,
+      "p99": 18.59,
+      "round": 2
+    },
+    {
+      "case": "thai",
+      "max": 0.1,
+      "op": "right",
+      "p50": 0.09,
+      "p99": 0.1,
+      "round": 2
+    },
+    {
+      "case": "thai",
+      "max": 0.5,
+      "op": "left_mid",
+      "p50": 0.31,
+      "p99": 0.5,
+      "round": 2
+    },
+    {
+      "case": "thai",
+      "max": 6.26,
+      "op": "ctrl_right",
+      "p50": 4.48,
+      "p99": 6.26,
+      "round": 2
+    },
+    {
+      "case": "thai",
+      "max": 0.43,
+      "op": "insert_mid",
+      "p50": 0.37,
+      "p99": 0.43,
+      "round": 2
+    },
+    {
+      "case": "thai",
+      "max": 11.93,
+      "op": "end_after_insert",
+      "p50": 11.53,
+      "p99": 11.93,
+      "round": 2
+    },
+    {
+      "case": "escape",
+      "max": 6.47,
+      "op": "open",
+      "p50": 6.32,
+      "p99": 6.47,
+      "round": 2
+    },
+    {
+      "case": "escape",
+      "max": 0.09,
+      "op": "end",
+      "p50": 0.09,
+      "p99": 0.09,
+      "round": 2
+    },
+    {
+      "case": "escape",
+      "max": 0.13,
+      "op": "right",
+      "p50": 0.08,
+      "p99": 0.13,
+      "round": 2
+    },
+    {
+      "case": "escape",
+      "max": 0.09,
+      "op": "left_mid",
+      "p50": 0.08,
+      "p99": 0.09,
+      "round": 2
+    },
+    {
+      "case": "escape",
+      "max": 0.08,
+      "op": "ctrl_right",
+      "p50": 0.08,
+      "p99": 0.08,
+      "round": 2
+    },
+    {
+      "case": "escape",
+      "max": 0.11,
+      "op": "insert_mid",
+      "p50": 0.08,
+      "p99": 0.11,
+      "round": 2
+    },
+    {
+      "case": "escape",
+      "max": 0.14,
+      "op": "end_after_insert",
+      "p50": 0.09,
+      "p99": 0.14,
+      "round": 2
+    },
+    {
+      "case": "emoji_fe0f",
+      "max": 20.6,
+      "op": "open",
+      "p50": 19.74,
+      "p99": 20.6,
+      "round": 2
+    },
+    {
+      "case": "emoji_fe0f",
+      "max": 19.5,
+      "op": "end",
+      "p50": 19.41,
+      "p99": 19.5,
+      "round": 2
+    },
+    {
+      "case": "emoji_fe0f",
+      "max": 0.13,
+      "op": "right",
+      "p50": 0.1,
+      "p99": 0.13,
+      "round": 2
+    },
+    {
+      "case": "emoji_fe0f",
+      "max": 0.48,
+      "op": "left_mid",
+      "p50": 0.27,
+      "p99": 0.48,
+      "round": 2
+    },
+    {
+      "case": "emoji_fe0f",
+      "max": 1.48,
+      "op": "ctrl_right",
+      "p50": 1.37,
+      "p99": 1.48,
+      "round": 2
+    },
+    {
+      "case": "emoji_fe0f",
+      "max": 0.4,
+      "op": "insert_mid",
+      "p50": 0.32,
+      "p99": 0.4,
+      "round": 2
+    },
+    {
+      "case": "emoji_fe0f",
+      "max": 13.21,
+      "op": "end_after_insert",
+      "p50": 8.89,
+      "p99": 13.21,
+      "round": 2
+    },
+    {
+      "case": "japanese",
+      "max": 16.56,
+      "op": "open",
+      "p50": 15.33,
+      "p99": 16.56,
+      "round": 3
+    },
+    {
+      "case": "japanese",
+      "max": 11.96,
+      "op": "end",
+      "p50": 11.82,
+      "p99": 11.96,
+      "round": 3
+    },
+    {
+      "case": "japanese",
+      "max": 0.06,
+      "op": "right",
+      "p50": 0.05,
+      "p99": 0.06,
+      "round": 3
+    },
+    {
+      "case": "japanese",
+      "max": 0.3,
+      "op": "left_mid",
+      "p50": 0.25,
+      "p99": 0.3,
+      "round": 3
+    },
+    {
+      "case": "japanese",
+      "max": 0.76,
+      "op": "ctrl_right",
+      "p50": 0.68,
+      "p99": 0.76,
+      "round": 3
+    },
+    {
+      "case": "japanese",
+      "max": 0.37,
+      "op": "insert_mid",
+      "p50": 0.31,
+      "p99": 0.37,
+      "round": 3
+    },
+    {
+      "case": "japanese",
+      "max": 8.52,
+      "op": "end_after_insert",
+      "p50": 8.18,
+      "p99": 8.52,
+      "round": 3
+    },
+    {
+      "case": "emoji",
+      "max": 14.43,
+      "op": "open",
+      "p50": 13.91,
+      "p99": 14.43,
+      "round": 3
+    },
+    {
+      "case": "emoji",
+      "max": 12.07,
+      "op": "end",
+      "p50": 12.05,
+      "p99": 12.07,
+      "round": 3
+    },
+    {
+      "case": "emoji",
+      "max": 0.06,
+      "op": "right",
+      "p50": 0.05,
+      "p99": 0.06,
+      "round": 3
+    },
+    {
+      "case": "emoji",
+      "max": 0.16,
+      "op": "left_mid",
+      "p50": 0.14,
+      "p99": 0.16,
+      "round": 3
+    },
+    {
+      "case": "emoji",
+      "max": 1.03,
+      "op": "ctrl_right",
+      "p50": 0.85,
+      "p99": 1.03,
+      "round": 3
+    },
+    {
+      "case": "emoji",
+      "max": 0.2,
+      "op": "insert_mid",
+      "p50": 0.17,
+      "p99": 0.2,
+      "round": 3
+    },
+    {
+      "case": "emoji",
+      "max": 9.84,
+      "op": "end_after_insert",
+      "p50": 9.69,
+      "p99": 9.84,
+      "round": 3
+    },
+    {
+      "case": "comb_max",
+      "max": 11.32,
+      "op": "open",
+      "p50": 11.04,
+      "p99": 11.32,
+      "round": 3
+    },
+    {
+      "case": "comb_max",
+      "max": 14.4,
+      "op": "end",
+      "p50": 14.36,
+      "p99": 14.4,
+      "round": 3
+    },
+    {
+      "case": "comb_max",
+      "max": 0.08,
+      "op": "right",
+      "p50": 0.08,
+      "p99": 0.08,
+      "round": 3
+    },
+    {
+      "case": "comb_max",
+      "max": 0.42,
+      "op": "left_mid",
+      "p50": 0.4,
+      "p99": 0.42,
+      "round": 3
+    },
+    {
+      "case": "comb_max",
+      "max": 0.15,
+      "op": "ctrl_right",
+      "p50": 0.07,
+      "p99": 0.15,
+      "round": 3
+    },
+    {
+      "case": "comb_max",
+      "max": 0.1,
+      "op": "insert_mid",
+      "p50": 0.07,
+      "p99": 0.1,
+      "round": 3
+    },
+    {
+      "case": "comb_max",
+      "max": 0.08,
+      "op": "end_after_insert",
+      "p50": 0.08,
+      "p99": 0.08,
+      "round": 3
+    },
+    {
+      "case": "comb_inf",
+      "max": 16.08,
+      "op": "open",
+      "p50": 15.32,
+      "p99": 16.08,
+      "round": 3
+    },
+    {
+      "case": "comb_inf",
+      "max": 14.43,
+      "op": "end",
+      "p50": 14.32,
+      "p99": 14.43,
+      "round": 3
+    },
+    {
+      "case": "comb_inf",
+      "max": 0.09,
+      "op": "right",
+      "p50": 0.07,
+      "p99": 0.09,
+      "round": 3
+    },
+    {
+      "case": "comb_inf",
+      "max": 0.44,
+      "op": "left_mid",
+      "p50": 0.39,
+      "p99": 0.44,
+      "round": 3
+    },
+    {
+      "case": "comb_inf",
+      "max": 0.24,
+      "op": "ctrl_right",
+      "p50": 0.07,
+      "p99": 0.24,
+      "round": 3
+    },
+    {
+      "case": "comb_inf",
+      "max": 0.09,
+      "op": "insert_mid",
+      "p50": 0.07,
+      "p99": 0.09,
+      "round": 3
+    },
+    {
+      "case": "comb_inf",
+      "max": 0.18,
+      "op": "end_after_insert",
+      "p50": 0.16,
+      "p99": 0.18,
+      "round": 3
+    },
+    {
+      "case": "jamo_L",
+      "max": 26.0,
+      "op": "open",
+      "p50": 16.66,
+      "p99": 26.0,
+      "round": 3
+    },
+    {
+      "case": "jamo_L",
+      "max": 18.05,
+      "op": "end",
+      "p50": 12.05,
+      "p99": 18.05,
+      "round": 3
+    },
+    {
+      "case": "jamo_L",
+      "max": 0.06,
+      "op": "right",
+      "p50": 0.05,
+      "p99": 0.06,
+      "round": 3
+    },
+    {
+      "case": "jamo_L",
+      "max": 0.34,
+      "op": "left_mid",
+      "p50": 0.3,
+      "p99": 0.34,
+      "round": 3
+    },
+    {
+      "case": "jamo_L",
+      "max": 0.18,
+      "op": "ctrl_right",
+      "p50": 0.05,
+      "p99": 0.18,
+      "round": 3
+    },
+    {
+      "case": "jamo_L",
+      "max": 0.08,
+      "op": "insert_mid",
+      "p50": 0.05,
+      "p99": 0.08,
+      "round": 3
+    },
+    {
+      "case": "jamo_L",
+      "max": 0.13,
+      "op": "end_after_insert",
+      "p50": 0.13,
+      "p99": 0.13,
+      "round": 3
+    },
+    {
+      "case": "jamo_LVT",
+      "max": 22.83,
+      "op": "open",
+      "p50": 16.55,
+      "p99": 22.83,
+      "round": 3
+    },
+    {
+      "case": "jamo_LVT",
+      "max": 17.91,
+      "op": "end",
+      "p50": 11.74,
+      "p99": 17.91,
+      "round": 3
+    },
+    {
+      "case": "jamo_LVT",
+      "max": 0.05,
+      "op": "right",
+      "p50": 0.04,
+      "p99": 0.05,
+      "round": 3
+    },
+    {
+      "case": "jamo_LVT",
+      "max": 0.23,
+      "op": "left_mid",
+      "p50": 0.2,
+      "p99": 0.23,
+      "round": 3
+    },
+    {
+      "case": "jamo_LVT",
+      "max": 2.64,
+      "op": "ctrl_right",
+      "p50": 2.24,
+      "p99": 2.64,
+      "round": 3
+    },
+    {
+      "case": "jamo_LVT",
+      "max": 0.39,
+      "op": "insert_mid",
+      "p50": 0.24,
+      "p99": 0.39,
+      "round": 3
+    },
+    {
+      "case": "jamo_LVT",
+      "max": 2.93,
+      "op": "end_after_insert",
+      "p50": 2.52,
+      "p99": 2.93,
+      "round": 3
+    },
+    {
+      "case": "hangul",
+      "max": 19.58,
+      "op": "open",
+      "p50": 15.18,
+      "p99": 19.58,
+      "round": 3
+    },
+    {
+      "case": "hangul",
+      "max": 14.55,
+      "op": "end",
+      "p50": 14.13,
+      "p99": 14.55,
+      "round": 3
+    },
+    {
+      "case": "hangul",
+      "max": 0.07,
+      "op": "right",
+      "p50": 0.05,
+      "p99": 0.07,
+      "round": 3
+    },
+    {
+      "case": "hangul",
+      "max": 0.28,
+      "op": "left_mid",
+      "p50": 0.19,
+      "p99": 0.28,
+      "round": 3
+    },
+    {
+      "case": "hangul",
+      "max": 2.2,
+      "op": "ctrl_right",
+      "p50": 2.09,
+      "p99": 2.2,
+      "round": 3
+    },
+    {
+      "case": "hangul",
+      "max": 0.76,
+      "op": "insert_mid",
+      "p50": 0.24,
+      "p99": 0.76,
+      "round": 3
+    },
+    {
+      "case": "hangul",
+      "max": 17.65,
+      "op": "end_after_insert",
+      "p50": 16.53,
+      "p99": 17.65,
+      "round": 3
+    },
+    {
+      "case": "flags",
+      "max": 22.53,
+      "op": "open",
+      "p50": 14.1,
+      "p99": 22.53,
+      "round": 3
+    },
+    {
+      "case": "flags",
+      "max": 17.69,
+      "op": "end",
+      "p50": 13.05,
+      "p99": 17.69,
+      "round": 3
+    },
+    {
+      "case": "flags",
+      "max": 0.06,
+      "op": "right",
+      "p50": 0.05,
+      "p99": 0.06,
+      "round": 3
+    },
+    {
+      "case": "flags",
+      "max": 0.18,
+      "op": "left_mid",
+      "p50": 0.15,
+      "p99": 0.18,
+      "round": 3
+    },
+    {
+      "case": "flags",
+      "max": 0.87,
+      "op": "ctrl_right",
+      "p50": 0.74,
+      "p99": 0.87,
+      "round": 3
+    },
+    {
+      "case": "flags",
+      "max": 0.15,
+      "op": "insert_mid",
+      "p50": 0.13,
+      "p99": 0.15,
+      "round": 3
+    },
+    {
+      "case": "flags",
+      "max": 4.45,
+      "op": "end_after_insert",
+      "p50": 4.32,
+      "p99": 4.45,
+      "round": 3
+    },
+    {
+      "case": "zwj_family",
+      "max": 30.2,
+      "op": "open",
+      "p50": 22.02,
+      "p99": 30.2,
+      "round": 3
+    },
+    {
+      "case": "zwj_family",
+      "max": 22.82,
+      "op": "end",
+      "p50": 17.37,
+      "p99": 22.82,
+      "round": 3
+    },
+    {
+      "case": "zwj_family",
+      "max": 0.06,
+      "op": "right",
+      "p50": 0.05,
+      "p99": 0.06,
+      "round": 3
+    },
+    {
+      "case": "zwj_family",
+      "max": 0.89,
+      "op": "left_mid",
+      "p50": 0.48,
+      "p99": 0.89,
+      "round": 3
+    },
+    {
+      "case": "zwj_family",
+      "max": 0.62,
+      "op": "ctrl_right",
+      "p50": 0.51,
+      "p99": 0.62,
+      "round": 3
+    },
+    {
+      "case": "zwj_family",
+      "max": 1.23,
+      "op": "insert_mid",
+      "p50": 0.6,
+      "p99": 1.23,
+      "round": 3
+    },
+    {
+      "case": "zwj_family",
+      "max": 0.2,
+      "op": "end_after_insert",
+      "p50": 0.2,
+      "p99": 0.2,
+      "round": 3
+    },
+    {
+      "case": "zwj_inf",
+      "max": 20.41,
+      "op": "open",
+      "p50": 20.11,
+      "p99": 20.41,
+      "round": 3
+    },
+    {
+      "case": "zwj_inf",
+      "max": 18.28,
+      "op": "end",
+      "p50": 17.43,
+      "p99": 18.28,
+      "round": 3
+    },
+    {
+      "case": "zwj_inf",
+      "max": 0.17,
+      "op": "right",
+      "p50": 0.09,
+      "p99": 0.17,
+      "round": 3
+    },
+    {
+      "case": "zwj_inf",
+      "max": 0.7,
+      "op": "left_mid",
+      "p50": 0.5,
+      "p99": 0.7,
+      "round": 3
+    },
+    {
+      "case": "zwj_inf",
+      "max": 0.19,
+      "op": "ctrl_right",
+      "p50": 0.09,
+      "p99": 0.19,
+      "round": 3
+    },
+    {
+      "case": "zwj_inf",
+      "max": 0.14,
+      "op": "insert_mid",
+      "p50": 0.08,
+      "p99": 0.14,
+      "round": 3
+    },
+    {
+      "case": "zwj_inf",
+      "max": 0.2,
+      "op": "end_after_insert",
+      "p50": 0.2,
+      "p99": 0.2,
+      "round": 3
+    },
+    {
+      "case": "indic",
+      "max": 22.54,
+      "op": "open",
+      "p50": 21.69,
+      "p99": 22.54,
+      "round": 3
+    },
+    {
+      "case": "indic",
+      "max": 18.97,
+      "op": "end",
+      "p50": 17.56,
+      "p99": 18.97,
+      "round": 3
+    },
+    {
+      "case": "indic",
+      "max": 0.08,
+      "op": "right",
+      "p50": 0.07,
+      "p99": 0.08,
+      "round": 3
+    },
+    {
+      "case": "indic",
+      "max": 0.93,
+      "op": "left_mid",
+      "p50": 0.49,
+      "p99": 0.93,
+      "round": 3
+    },
+    {
+      "case": "indic",
+      "max": 2.86,
+      "op": "ctrl_right",
+      "p50": 1.95,
+      "p99": 2.86,
+      "round": 3
+    },
+    {
+      "case": "indic",
+      "max": 1.15,
+      "op": "insert_mid",
+      "p50": 0.54,
+      "p99": 1.15,
+      "round": 3
+    },
+    {
+      "case": "indic",
+      "max": 8.55,
+      "op": "end_after_insert",
+      "p50": 8.35,
+      "p99": 8.55,
+      "round": 3
+    },
+    {
+      "case": "prepend",
+      "max": 18.08,
+      "op": "open",
+      "p50": 17.44,
+      "p99": 18.08,
+      "round": 3
+    },
+    {
+      "case": "prepend",
+      "max": 23.93,
+      "op": "end",
+      "p50": 22.98,
+      "p99": 23.93,
+      "round": 3
+    },
+    {
+      "case": "prepend",
+      "max": 0.08,
+      "op": "right",
+      "p50": 0.07,
+      "p99": 0.08,
+      "round": 3
+    },
+    {
+      "case": "prepend",
+      "max": 0.91,
+      "op": "left_mid",
+      "p50": 0.48,
+      "p99": 0.91,
+      "round": 3
+    },
+    {
+      "case": "prepend",
+      "max": 2.65,
+      "op": "ctrl_right",
+      "p50": 2.49,
+      "p99": 2.65,
+      "round": 3
+    },
+    {
+      "case": "prepend",
+      "max": 0.84,
+      "op": "insert_mid",
+      "p50": 0.59,
+      "p99": 0.84,
+      "round": 3
+    },
+    {
+      "case": "prepend",
+      "max": 16.37,
+      "op": "end_after_insert",
+      "p50": 16.12,
+      "p99": 16.37,
+      "round": 3
+    },
+    {
+      "case": "ivs",
+      "max": 24.38,
+      "op": "open",
+      "p50": 19.92,
+      "p99": 24.38,
+      "round": 3
+    },
+    {
+      "case": "ivs",
+      "max": 19.85,
+      "op": "end",
+      "p50": 17.88,
+      "p99": 19.85,
+      "round": 3
+    },
+    {
+      "case": "ivs",
+      "max": 0.09,
+      "op": "right",
+      "p50": 0.08,
+      "p99": 0.09,
+      "round": 3
+    },
+    {
+      "case": "ivs",
+      "max": 0.71,
+      "op": "left_mid",
+      "p50": 0.41,
+      "p99": 0.71,
+      "round": 3
+    },
+    {
+      "case": "ivs",
+      "max": 1.62,
+      "op": "ctrl_right",
+      "p50": 1.59,
+      "p99": 1.62,
+      "round": 3
+    },
+    {
+      "case": "ivs",
+      "max": 1.13,
+      "op": "insert_mid",
+      "p50": 0.49,
+      "p99": 1.13,
+      "round": 3
+    },
+    {
+      "case": "ivs",
+      "max": 6.66,
+      "op": "end_after_insert",
+      "p50": 5.99,
+      "p99": 6.66,
+      "round": 3
+    },
+    {
+      "case": "thai",
+      "max": 24.63,
+      "op": "open",
+      "p50": 23.74,
+      "p99": 24.63,
+      "round": 3
+    },
+    {
+      "case": "thai",
+      "max": 22.55,
+      "op": "end",
+      "p50": 17.51,
+      "p99": 22.55,
+      "round": 3
+    },
+    {
+      "case": "thai",
+      "max": 0.37,
+      "op": "right",
+      "p50": 0.09,
+      "p99": 0.37,
+      "round": 3
+    },
+    {
+      "case": "thai",
+      "max": 0.51,
+      "op": "left_mid",
+      "p50": 0.31,
+      "p99": 0.51,
+      "round": 3
+    },
+    {
+      "case": "thai",
+      "max": 5.7,
+      "op": "ctrl_right",
+      "p50": 4.56,
+      "p99": 5.7,
+      "round": 3
+    },
+    {
+      "case": "thai",
+      "max": 0.88,
+      "op": "insert_mid",
+      "p50": 0.37,
+      "p99": 0.88,
+      "round": 3
+    },
+    {
+      "case": "thai",
+      "max": 12.82,
+      "op": "end_after_insert",
+      "p50": 10.1,
+      "p99": 12.82,
+      "round": 3
+    },
+    {
+      "case": "escape",
+      "max": 4.61,
+      "op": "open",
+      "p50": 4.14,
+      "p99": 4.61,
+      "round": 3
+    },
+    {
+      "case": "escape",
+      "max": 0.06,
+      "op": "end",
+      "p50": 0.06,
+      "p99": 0.06,
+      "round": 3
+    },
+    {
+      "case": "escape",
+      "max": 0.07,
+      "op": "right",
+      "p50": 0.05,
+      "p99": 0.07,
+      "round": 3
+    },
+    {
+      "case": "escape",
+      "max": 0.39,
+      "op": "left_mid",
+      "p50": 0.05,
+      "p99": 0.39,
+      "round": 3
+    },
+    {
+      "case": "escape",
+      "max": 0.05,
+      "op": "ctrl_right",
+      "p50": 0.05,
+      "p99": 0.05,
+      "round": 3
+    },
+    {
+      "case": "escape",
+      "max": 0.06,
+      "op": "insert_mid",
+      "p50": 0.05,
+      "p99": 0.06,
+      "round": 3
+    },
+    {
+      "case": "escape",
+      "max": 0.05,
+      "op": "end_after_insert",
+      "p50": 0.05,
+      "p99": 0.05,
+      "round": 3
+    },
+    {
+      "case": "emoji_fe0f",
+      "max": 31.48,
+      "op": "open",
+      "p50": 20.37,
+      "p99": 31.48,
+      "round": 3
+    },
+    {
+      "case": "emoji_fe0f",
+      "max": 38.6,
+      "op": "end",
+      "p50": 31.89,
+      "p99": 38.6,
+      "round": 3
+    },
+    {
+      "case": "emoji_fe0f",
+      "max": 0.08,
+      "op": "right",
+      "p50": 0.07,
+      "p99": 0.08,
+      "round": 3
+    },
+    {
+      "case": "emoji_fe0f",
+      "max": 0.37,
+      "op": "left_mid",
+      "p50": 0.27,
+      "p99": 0.37,
+      "round": 3
+    },
+    {
+      "case": "emoji_fe0f",
+      "max": 1.45,
+      "op": "ctrl_right",
+      "p50": 1.29,
+      "p99": 1.45,
+      "round": 3
+    },
+    {
+      "case": "emoji_fe0f",
+      "max": 0.57,
+      "op": "insert_mid",
+      "p50": 0.33,
+      "p99": 0.57,
+      "round": 3
+    },
+    {
+      "case": "emoji_fe0f",
+      "max": 13.52,
+      "op": "end_after_insert",
+      "p50": 8.81,
+      "p99": 13.52,
+      "round": 3
+    }
+  ],
+  "env": "ENV-W1",
+  "grapheme": [
+    {
+      "case": "japanese",
+      "max": 16.32,
+      "op": "open",
+      "p50": 14.95,
+      "p99": 16.32,
+      "round": 1
+    },
+    {
+      "case": "japanese",
+      "max": 14.82,
+      "op": "end",
+      "p50": 12.82,
+      "p99": 14.82,
+      "round": 1
+    },
+    {
+      "case": "japanese",
+      "max": 0.07,
+      "op": "right",
+      "p50": 0.05,
+      "p99": 0.07,
+      "round": 1
+    },
+    {
+      "case": "japanese",
+      "max": 0.11,
+      "op": "left_mid",
+      "p50": 0.06,
+      "p99": 0.11,
+      "round": 1
+    },
+    {
+      "case": "japanese",
+      "max": 0.54,
+      "op": "ctrl_right",
+      "p50": 0.47,
+      "p99": 0.54,
+      "round": 1
+    },
+    {
+      "case": "japanese",
+      "max": 0.14,
+      "op": "insert_mid",
+      "p50": 0.07,
+      "p99": 0.14,
+      "round": 1
+    },
+    {
+      "case": "japanese",
+      "max": 11.16,
+      "op": "end_after_insert",
+      "p50": 10.42,
+      "p99": 11.16,
+      "round": 1
+    },
+    {
+      "case": "emoji",
+      "max": 14.56,
+      "op": "open",
+      "p50": 14.08,
+      "p99": 14.56,
+      "round": 1
+    },
+    {
+      "case": "emoji",
+      "max": 14.66,
+      "op": "end",
+      "p50": 14.63,
+      "p99": 14.66,
+      "round": 1
+    },
+    {
+      "case": "emoji",
+      "max": 0.07,
+      "op": "right",
+      "p50": 0.05,
+      "p99": 0.07,
+      "round": 1
+    },
+    {
+      "case": "emoji",
+      "max": 0.1,
+      "op": "left_mid",
+      "p50": 0.06,
+      "p99": 0.1,
+      "round": 1
+    },
+    {
+      "case": "emoji",
+      "max": 1.07,
+      "op": "ctrl_right",
+      "p50": 0.75,
+      "p99": 1.07,
+      "round": 1
+    },
+    {
+      "case": "emoji",
+      "max": 0.1,
+      "op": "insert_mid",
+      "p50": 0.07,
+      "p99": 0.1,
+      "round": 1
+    },
+    {
+      "case": "emoji",
+      "max": 11.75,
+      "op": "end_after_insert",
+      "p50": 11.71,
+      "p99": 11.75,
+      "round": 1
+    },
+    {
+      "case": "comb_max",
+      "max": 16.94,
+      "op": "open",
+      "p50": 16.56,
+      "p99": 16.94,
+      "round": 1
+    },
+    {
+      "case": "comb_max",
+      "max": 17.92,
+      "op": "end",
+      "p50": 17.44,
+      "p99": 17.92,
+      "round": 1
+    },
+    {
+      "case": "comb_max",
+      "max": 6.02,
+      "op": "right",
+      "p50": 5.62,
+      "p99": 6.02,
+      "round": 1
+    },
+    {
+      "case": "comb_max",
+      "max": 5.96,
+      "op": "left_mid",
+      "p50": 5.67,
+      "p99": 5.96,
+      "round": 1
+    },
+    {
+      "case": "comb_max",
+      "max": 9.44,
+      "op": "ctrl_right",
+      "p50": 5.67,
+      "p99": 9.44,
+      "round": 1
+    },
+    {
+      "case": "comb_max",
+      "max": 12.15,
+      "op": "insert_mid",
+      "p50": 8.99,
+      "p99": 12.15,
+      "round": 1
+    },
+    {
+      "case": "comb_max",
+      "max": 9.01,
+      "op": "end_after_insert",
+      "p50": 8.58,
+      "p99": 9.01,
+      "round": 1
+    },
+    {
+      "case": "comb_inf",
+      "max": 32.56,
+      "op": "open",
+      "p50": 32.02,
+      "p99": 32.56,
+      "round": 1
+    },
+    {
+      "case": "comb_inf",
+      "max": 28.91,
+      "op": "end",
+      "p50": 27.92,
+      "p99": 28.91,
+      "round": 1
+    },
+    {
+      "case": "comb_inf",
+      "max": 13.61,
+      "op": "right",
+      "p50": 8.66,
+      "p99": 13.61,
+      "round": 1
+    },
+    {
+      "case": "comb_inf",
+      "max": 9.17,
+      "op": "left_mid",
+      "p50": 8.32,
+      "p99": 9.17,
+      "round": 1
+    },
+    {
+      "case": "comb_inf",
+      "max": 9.01,
+      "op": "ctrl_right",
+      "p50": 8.49,
+      "p99": 9.01,
+      "round": 1
+    },
+    {
+      "case": "comb_inf",
+      "max": 11.8,
+      "op": "insert_mid",
+      "p50": 8.57,
+      "p99": 11.8,
+      "round": 1
+    },
+    {
+      "case": "comb_inf",
+      "max": 8.62,
+      "op": "end_after_insert",
+      "p50": 8.27,
+      "p99": 8.62,
+      "round": 1
+    },
+    {
+      "case": "jamo_L",
+      "max": 23.27,
+      "op": "open",
+      "p50": 22.32,
+      "p99": 23.27,
+      "round": 1
+    },
+    {
+      "case": "jamo_L",
+      "max": 14.68,
+      "op": "end",
+      "p50": 14.08,
+      "p99": 14.68,
+      "round": 1
+    },
+    {
+      "case": "jamo_L",
+      "max": 0.27,
+      "op": "right",
+      "p50": 0.24,
+      "p99": 0.27,
+      "round": 1
+    },
+    {
+      "case": "jamo_L",
+      "max": 0.67,
+      "op": "left_mid",
+      "p50": 0.39,
+      "p99": 0.67,
+      "round": 1
+    },
+    {
+      "case": "jamo_L",
+      "max": 0.51,
+      "op": "ctrl_right",
+      "p50": 0.25,
+      "p99": 0.51,
+      "round": 1
+    },
+    {
+      "case": "jamo_L",
+      "max": 0.24,
+      "op": "insert_mid",
+      "p50": 0.22,
+      "p99": 0.24,
+      "round": 1
+    },
+    {
+      "case": "jamo_L",
+      "max": 0.47,
+      "op": "end_after_insert",
+      "p50": 0.27,
+      "p99": 0.47,
+      "round": 1
+    },
+    {
+      "case": "jamo_LVT",
+      "max": 23.34,
+      "op": "open",
+      "p50": 21.76,
+      "p99": 23.34,
+      "round": 1
+    },
+    {
+      "case": "jamo_LVT",
+      "max": 37.72,
+      "op": "end",
+      "p50": 36.07,
+      "p99": 37.72,
+      "round": 1
+    },
+    {
+      "case": "jamo_LVT",
+      "max": 0.12,
+      "op": "right",
+      "p50": 0.09,
+      "p99": 0.12,
+      "round": 1
+    },
+    {
+      "case": "jamo_LVT",
+      "max": 0.26,
+      "op": "left_mid",
+      "p50": 0.14,
+      "p99": 0.26,
+      "round": 1
+    },
+    {
+      "case": "jamo_LVT",
+      "max": 2.12,
+      "op": "ctrl_right",
+      "p50": 2.04,
+      "p99": 2.12,
+      "round": 1
+    },
+    {
+      "case": "jamo_LVT",
+      "max": 0.19,
+      "op": "insert_mid",
+      "p50": 0.15,
+      "p99": 0.19,
+      "round": 1
+    },
+    {
+      "case": "jamo_LVT",
+      "max": 4.97,
+      "op": "end_after_insert",
+      "p50": 4.8,
+      "p99": 4.97,
+      "round": 1
+    },
+    {
+      "case": "hangul",
+      "max": 21.22,
+      "op": "open",
+      "p50": 20.41,
+      "p99": 21.22,
+      "round": 1
+    },
+    {
+      "case": "hangul",
+      "max": 25.99,
+      "op": "end",
+      "p50": 23.99,
+      "p99": 25.99,
+      "round": 1
+    },
+    {
+      "case": "hangul",
+      "max": 0.13,
+      "op": "right",
+      "p50": 0.08,
+      "p99": 0.13,
+      "round": 1
+    },
+    {
+      "case": "hangul",
+      "max": 0.15,
+      "op": "left_mid",
+      "p50": 0.1,
+      "p99": 0.15,
+      "round": 1
+    },
+    {
+      "case": "hangul",
+      "max": 2.03,
+      "op": "ctrl_right",
+      "p50": 2.02,
+      "p99": 2.03,
+      "round": 1
+    },
+    {
+      "case": "hangul",
+      "max": 0.19,
+      "op": "insert_mid",
+      "p50": 0.12,
+      "p99": 0.19,
+      "round": 1
+    },
+    {
+      "case": "hangul",
+      "max": 20.4,
+      "op": "end_after_insert",
+      "p50": 17.83,
+      "p99": 20.4,
+      "round": 1
+    },
+    {
+      "case": "flags",
+      "max": 22.32,
+      "op": "open",
+      "p50": 20.43,
+      "p99": 22.32,
+      "round": 1
+    },
+    {
+      "case": "flags",
+      "max": 39.5,
+      "op": "end",
+      "p50": 35.59,
+      "p99": 39.5,
+      "round": 1
+    },
+    {
+      "case": "flags",
+      "max": 0.09,
+      "op": "right",
+      "p50": 0.09,
+      "p99": 0.09,
+      "round": 1
+    },
+    {
+      "case": "flags",
+      "max": 0.26,
+      "op": "left_mid",
+      "p50": 0.09,
+      "p99": 0.26,
+      "round": 1
+    },
+    {
+      "case": "flags",
+      "max": 0.86,
+      "op": "ctrl_right",
+      "p50": 0.7,
+      "p99": 0.86,
+      "round": 1
+    },
+    {
+      "case": "flags",
+      "max": 0.29,
+      "op": "insert_mid",
+      "p50": 0.11,
+      "p99": 0.29,
+      "round": 1
+    },
+    {
+      "case": "flags",
+      "max": 10.49,
+      "op": "end_after_insert",
+      "p50": 9.79,
+      "p99": 10.49,
+      "round": 1
+    },
+    {
+      "case": "zwj_family",
+      "max": 22.38,
+      "op": "open",
+      "p50": 22.0,
+      "p99": 22.38,
+      "round": 1
+    },
+    {
+      "case": "zwj_family",
+      "max": 30.81,
+      "op": "end",
+      "p50": 30.35,
+      "p99": 30.81,
+      "round": 1
+    },
+    {
+      "case": "zwj_family",
+      "max": 0.17,
+      "op": "right",
+      "p50": 0.09,
+      "p99": 0.17,
+      "round": 1
+    },
+    {
+      "case": "zwj_family",
+      "max": 0.17,
+      "op": "left_mid",
+      "p50": 0.13,
+      "p99": 0.17,
+      "round": 1
+    },
+    {
+      "case": "zwj_family",
+      "max": 0.14,
+      "op": "ctrl_right",
+      "p50": 0.13,
+      "p99": 0.14,
+      "round": 1
+    },
+    {
+      "case": "zwj_family",
+      "max": 0.2,
+      "op": "insert_mid",
+      "p50": 0.15,
+      "p99": 0.2,
+      "round": 1
+    },
+    {
+      "case": "zwj_family",
+      "max": 0.11,
+      "op": "end_after_insert",
+      "p50": 0.1,
+      "p99": 0.11,
+      "round": 1
+    },
+    {
+      "case": "zwj_inf",
+      "max": 22.4,
+      "op": "open",
+      "p50": 21.27,
+      "p99": 22.4,
+      "round": 1
+    },
+    {
+      "case": "zwj_inf",
+      "max": 16.48,
+      "op": "end",
+      "p50": 15.64,
+      "p99": 16.48,
+      "round": 1
+    },
+    {
+      "case": "zwj_inf",
+      "max": 1.38,
+      "op": "right",
+      "p50": 0.71,
+      "p99": 1.38,
+      "round": 1
+    },
+    {
+      "case": "zwj_inf",
+      "max": 1.58,
+      "op": "left_mid",
+      "p50": 0.9,
+      "p99": 1.58,
+      "round": 1
+    },
+    {
+      "case": "zwj_inf",
+      "max": 1.06,
+      "op": "ctrl_right",
+      "p50": 0.72,
+      "p99": 1.06,
+      "round": 1
+    },
+    {
+      "case": "zwj_inf",
+      "max": 1.23,
+      "op": "insert_mid",
+      "p50": 0.67,
+      "p99": 1.23,
+      "round": 1
+    },
+    {
+      "case": "zwj_inf",
+      "max": 1.37,
+      "op": "end_after_insert",
+      "p50": 0.7,
+      "p99": 1.37,
+      "round": 1
+    },
+    {
+      "case": "indic",
+      "max": 23.5,
+      "op": "open",
+      "p50": 20.31,
+      "p99": 23.5,
+      "round": 1
+    },
+    {
+      "case": "indic",
+      "max": 31.8,
+      "op": "end",
+      "p50": 31.32,
+      "p99": 31.8,
+      "round": 1
+    },
+    {
+      "case": "indic",
+      "max": 0.25,
+      "op": "right",
+      "p50": 0.09,
+      "p99": 0.25,
+      "round": 1
+    },
+    {
+      "case": "indic",
+      "max": 0.14,
+      "op": "left_mid",
+      "p50": 0.1,
+      "p99": 0.14,
+      "round": 1
+    },
+    {
+      "case": "indic",
+      "max": 1.92,
+      "op": "ctrl_right",
+      "p50": 1.52,
+      "p99": 1.92,
+      "round": 1
+    },
+    {
+      "case": "indic",
+      "max": 0.33,
+      "op": "insert_mid",
+      "p50": 0.12,
+      "p99": 0.33,
+      "round": 1
+    },
+    {
+      "case": "indic",
+      "max": 15.92,
+      "op": "end_after_insert",
+      "p50": 14.43,
+      "p99": 15.92,
+      "round": 1
+    },
+    {
+      "case": "prepend",
+      "max": 18.93,
+      "op": "open",
+      "p50": 16.78,
+      "p99": 18.93,
+      "round": 1
+    },
+    {
+      "case": "prepend",
+      "max": 80.62,
+      "op": "end",
+      "p50": 78.38,
+      "p99": 80.62,
+      "round": 1
+    },
+    {
+      "case": "prepend",
+      "max": 0.08,
+      "op": "right",
+      "p50": 0.07,
+      "p99": 0.08,
+      "round": 1
+    },
+    {
+      "case": "prepend",
+      "max": 0.31,
+      "op": "left_mid",
+      "p50": 0.1,
+      "p99": 0.31,
+      "round": 1
+    },
+    {
+      "case": "prepend",
+      "max": 3.41,
+      "op": "ctrl_right",
+      "p50": 2.78,
+      "p99": 3.41,
+      "round": 1
+    },
+    {
+      "case": "prepend",
+      "max": 0.22,
+      "op": "insert_mid",
+      "p50": 0.11,
+      "p99": 0.22,
+      "round": 1
+    },
+    {
+      "case": "prepend",
+      "max": 66.16,
+      "op": "end_after_insert",
+      "p50": 58.06,
+      "p99": 66.16,
+      "round": 1
+    },
+    {
+      "case": "ivs",
+      "max": 21.28,
+      "op": "open",
+      "p50": 18.43,
+      "p99": 21.28,
+      "round": 1
+    },
+    {
+      "case": "ivs",
+      "max": 42.95,
+      "op": "end",
+      "p50": 42.68,
+      "p99": 42.95,
+      "round": 1
+    },
+    {
+      "case": "ivs",
+      "max": 0.1,
+      "op": "right",
+      "p50": 0.09,
+      "p99": 0.1,
+      "round": 1
+    },
+    {
+      "case": "ivs",
+      "max": 0.22,
+      "op": "left_mid",
+      "p50": 0.18,
+      "p99": 0.22,
+      "round": 1
+    },
+    {
+      "case": "ivs",
+      "max": 0.67,
+      "op": "ctrl_right",
+      "p50": 0.64,
+      "p99": 0.67,
+      "round": 1
+    },
+    {
+      "case": "ivs",
+      "max": 0.17,
+      "op": "insert_mid",
+      "p50": 0.13,
+      "p99": 0.17,
+      "round": 1
+    },
+    {
+      "case": "ivs",
+      "max": 13.62,
+      "op": "end_after_insert",
+      "p50": 13.39,
+      "p99": 13.62,
+      "round": 1
+    },
+    {
+      "case": "thai",
+      "max": 25.47,
+      "op": "open",
+      "p50": 20.55,
+      "p99": 25.47,
+      "round": 1
+    },
+    {
+      "case": "thai",
+      "max": 25.05,
+      "op": "end",
+      "p50": 24.28,
+      "p99": 25.05,
+      "round": 1
+    },
+    {
+      "case": "thai",
+      "max": 0.11,
+      "op": "right",
+      "p50": 0.1,
+      "p99": 0.11,
+      "round": 1
+    },
+    {
+      "case": "thai",
+      "max": 0.18,
+      "op": "left_mid",
+      "p50": 0.12,
+      "p99": 0.18,
+      "round": 1
+    },
+    {
+      "case": "thai",
+      "max": 4.74,
+      "op": "ctrl_right",
+      "p50": 4.24,
+      "p99": 4.74,
+      "round": 1
+    },
+    {
+      "case": "thai",
+      "max": 0.44,
+      "op": "insert_mid",
+      "p50": 0.14,
+      "p99": 0.44,
+      "round": 1
+    },
+    {
+      "case": "thai",
+      "max": 17.22,
+      "op": "end_after_insert",
+      "p50": 16.55,
+      "p99": 17.22,
+      "round": 1
+    },
+    {
+      "case": "escape",
+      "max": 9.38,
+      "op": "open",
+      "p50": 6.35,
+      "p99": 9.38,
+      "round": 1
+    },
+    {
+      "case": "escape",
+      "max": 0.11,
+      "op": "end",
+      "p50": 0.09,
+      "p99": 0.11,
+      "round": 1
+    },
+    {
+      "case": "escape",
+      "max": 0.13,
+      "op": "right",
+      "p50": 0.08,
+      "p99": 0.13,
+      "round": 1
+    },
+    {
+      "case": "escape",
+      "max": 0.09,
+      "op": "left_mid",
+      "p50": 0.08,
+      "p99": 0.09,
+      "round": 1
+    },
+    {
+      "case": "escape",
+      "max": 0.08,
+      "op": "ctrl_right",
+      "p50": 0.08,
+      "p99": 0.08,
+      "round": 1
+    },
+    {
+      "case": "escape",
+      "max": 0.08,
+      "op": "insert_mid",
+      "p50": 0.08,
+      "p99": 0.08,
+      "round": 1
+    },
+    {
+      "case": "escape",
+      "max": 0.08,
+      "op": "end_after_insert",
+      "p50": 0.08,
+      "p99": 0.08,
+      "round": 1
+    },
+    {
+      "case": "emoji_fe0f",
+      "max": 20.42,
+      "op": "open",
+      "p50": 18.59,
+      "p99": 20.42,
+      "round": 1
+    },
+    {
+      "case": "emoji_fe0f",
+      "max": 42.04,
+      "op": "end",
+      "p50": 41.1,
+      "p99": 42.04,
+      "round": 1
+    },
+    {
+      "case": "emoji_fe0f",
+      "max": 0.15,
+      "op": "right",
+      "p50": 0.08,
+      "p99": 0.15,
+      "round": 1
+    },
+    {
+      "case": "emoji_fe0f",
+      "max": 0.18,
+      "op": "left_mid",
+      "p50": 0.14,
+      "p99": 0.18,
+      "round": 1
+    },
+    {
+      "case": "emoji_fe0f",
+      "max": 1.33,
+      "op": "ctrl_right",
+      "p50": 1.17,
+      "p99": 1.33,
+      "round": 1
+    },
+    {
+      "case": "emoji_fe0f",
+      "max": 0.21,
+      "op": "insert_mid",
+      "p50": 0.17,
+      "p99": 0.21,
+      "round": 1
+    },
+    {
+      "case": "emoji_fe0f",
+      "max": 32.64,
+      "op": "end_after_insert",
+      "p50": 28.22,
+      "p99": 32.64,
+      "round": 1
+    },
+    {
+      "case": "japanese",
+      "max": 15.97,
+      "op": "open",
+      "p50": 15.13,
+      "p99": 15.97,
+      "round": 2
+    },
+    {
+      "case": "japanese",
+      "max": 15.21,
+      "op": "end",
+      "p50": 12.96,
+      "p99": 15.21,
+      "round": 2
+    },
+    {
+      "case": "japanese",
+      "max": 0.11,
+      "op": "right",
+      "p50": 0.05,
+      "p99": 0.11,
+      "round": 2
+    },
+    {
+      "case": "japanese",
+      "max": 0.11,
+      "op": "left_mid",
+      "p50": 0.06,
+      "p99": 0.11,
+      "round": 2
+    },
+    {
+      "case": "japanese",
+      "max": 0.61,
+      "op": "ctrl_right",
+      "p50": 0.48,
+      "p99": 0.61,
+      "round": 2
+    },
+    {
+      "case": "japanese",
+      "max": 0.12,
+      "op": "insert_mid",
+      "p50": 0.07,
+      "p99": 0.12,
+      "round": 2
+    },
+    {
+      "case": "japanese",
+      "max": 11.15,
+      "op": "end_after_insert",
+      "p50": 9.95,
+      "p99": 11.15,
+      "round": 2
+    },
+    {
+      "case": "emoji",
+      "max": 15.01,
+      "op": "open",
+      "p50": 14.47,
+      "p99": 15.01,
+      "round": 2
+    },
+    {
+      "case": "emoji",
+      "max": 14.78,
+      "op": "end",
+      "p50": 14.7,
+      "p99": 14.78,
+      "round": 2
+    },
+    {
+      "case": "emoji",
+      "max": 0.06,
+      "op": "right",
+      "p50": 0.05,
+      "p99": 0.06,
+      "round": 2
+    },
+    {
+      "case": "emoji",
+      "max": 0.09,
+      "op": "left_mid",
+      "p50": 0.06,
+      "p99": 0.09,
+      "round": 2
+    },
+    {
+      "case": "emoji",
+      "max": 0.86,
+      "op": "ctrl_right",
+      "p50": 0.73,
+      "p99": 0.86,
+      "round": 2
+    },
+    {
+      "case": "emoji",
+      "max": 0.1,
+      "op": "insert_mid",
+      "p50": 0.07,
+      "p99": 0.1,
+      "round": 2
+    },
+    {
+      "case": "emoji",
+      "max": 11.7,
+      "op": "end_after_insert",
+      "p50": 11.62,
+      "p99": 11.7,
+      "round": 2
+    },
+    {
+      "case": "comb_max",
+      "max": 16.99,
+      "op": "open",
+      "p50": 16.59,
+      "p99": 16.99,
+      "round": 2
+    },
+    {
+      "case": "comb_max",
+      "max": 17.75,
+      "op": "end",
+      "p50": 17.48,
+      "p99": 17.75,
+      "round": 2
+    },
+    {
+      "case": "comb_max",
+      "max": 6.05,
+      "op": "right",
+      "p50": 5.62,
+      "p99": 6.05,
+      "round": 2
+    },
+    {
+      "case": "comb_max",
+      "max": 6.25,
+      "op": "left_mid",
+      "p50": 5.61,
+      "p99": 6.25,
+      "round": 2
+    },
+    {
+      "case": "comb_max",
+      "max": 5.61,
+      "op": "ctrl_right",
+      "p50": 5.6,
+      "p99": 5.61,
+      "round": 2
+    },
+    {
+      "case": "comb_max",
+      "max": 15.06,
+      "op": "insert_mid",
+      "p50": 9.01,
+      "p99": 15.06,
+      "round": 2
+    },
+    {
+      "case": "comb_max",
+      "max": 9.72,
+      "op": "end_after_insert",
+      "p50": 8.47,
+      "p99": 9.72,
+      "round": 2
+    },
+    {
+      "case": "comb_inf",
+      "max": 32.96,
+      "op": "open",
+      "p50": 31.16,
+      "p99": 32.96,
+      "round": 2
+    },
+    {
+      "case": "comb_inf",
+      "max": 28.12,
+      "op": "end",
+      "p50": 27.67,
+      "p99": 28.12,
+      "round": 2
+    },
+    {
+      "case": "comb_inf",
+      "max": 12.4,
+      "op": "right",
+      "p50": 8.71,
+      "p99": 12.4,
+      "round": 2
+    },
+    {
+      "case": "comb_inf",
+      "max": 10.32,
+      "op": "left_mid",
+      "p50": 8.72,
+      "p99": 10.32,
+      "round": 2
+    },
+    {
+      "case": "comb_inf",
+      "max": 13.39,
+      "op": "ctrl_right",
+      "p50": 8.35,
+      "p99": 13.39,
+      "round": 2
+    },
+    {
+      "case": "comb_inf",
+      "max": 11.7,
+      "op": "insert_mid",
+      "p50": 8.41,
+      "p99": 11.7,
+      "round": 2
+    },
+    {
+      "case": "comb_inf",
+      "max": 8.64,
+      "op": "end_after_insert",
+      "p50": 8.09,
+      "p99": 8.64,
+      "round": 2
+    },
+    {
+      "case": "jamo_L",
+      "max": 24.57,
+      "op": "open",
+      "p50": 21.27,
+      "p99": 24.57,
+      "round": 2
+    },
+    {
+      "case": "jamo_L",
+      "max": 15.94,
+      "op": "end",
+      "p50": 14.02,
+      "p99": 15.94,
+      "round": 2
+    },
+    {
+      "case": "jamo_L",
+      "max": 0.68,
+      "op": "right",
+      "p50": 0.24,
+      "p99": 0.68,
+      "round": 2
+    },
+    {
+      "case": "jamo_L",
+      "max": 0.47,
+      "op": "left_mid",
+      "p50": 0.31,
+      "p99": 0.47,
+      "round": 2
+    },
+    {
+      "case": "jamo_L",
+      "max": 0.31,
+      "op": "ctrl_right",
+      "p50": 0.22,
+      "p99": 0.31,
+      "round": 2
+    },
+    {
+      "case": "jamo_L",
+      "max": 0.31,
+      "op": "insert_mid",
+      "p50": 0.22,
+      "p99": 0.31,
+      "round": 2
+    },
+    {
+      "case": "jamo_L",
+      "max": 0.26,
+      "op": "end_after_insert",
+      "p50": 0.25,
+      "p99": 0.26,
+      "round": 2
+    },
+    {
+      "case": "jamo_LVT",
+      "max": 27.5,
+      "op": "open",
+      "p50": 21.84,
+      "p99": 27.5,
+      "round": 2
+    },
+    {
+      "case": "jamo_LVT",
+      "max": 34.56,
+      "op": "end",
+      "p50": 33.84,
+      "p99": 34.56,
+      "round": 2
+    },
+    {
+      "case": "jamo_LVT",
+      "max": 0.1,
+      "op": "right",
+      "p50": 0.09,
+      "p99": 0.1,
+      "round": 2
+    },
+    {
+      "case": "jamo_LVT",
+      "max": 0.2,
+      "op": "left_mid",
+      "p50": 0.13,
+      "p99": 0.2,
+      "round": 2
+    },
+    {
+      "case": "jamo_LVT",
+      "max": 3.9,
+      "op": "ctrl_right",
+      "p50": 2.28,
+      "p99": 3.9,
+      "round": 2
+    },
+    {
+      "case": "jamo_LVT",
+      "max": 0.29,
+      "op": "insert_mid",
+      "p50": 0.25,
+      "p99": 0.29,
+      "round": 2
+    },
+    {
+      "case": "jamo_LVT",
+      "max": 7.36,
+      "op": "end_after_insert",
+      "p50": 4.63,
+      "p99": 7.36,
+      "round": 2
+    },
+    {
+      "case": "hangul",
+      "max": 21.48,
+      "op": "open",
+      "p50": 20.52,
+      "p99": 21.48,
+      "round": 2
+    },
+    {
+      "case": "hangul",
+      "max": 30.89,
+      "op": "end",
+      "p50": 24.53,
+      "p99": 30.89,
+      "round": 2
+    },
+    {
+      "case": "hangul",
+      "max": 0.11,
+      "op": "right",
+      "p50": 0.08,
+      "p99": 0.11,
+      "round": 2
+    },
+    {
+      "case": "hangul",
+      "max": 0.14,
+      "op": "left_mid",
+      "p50": 0.1,
+      "p99": 0.14,
+      "round": 2
+    },
+    {
+      "case": "hangul",
+      "max": 2.19,
+      "op": "ctrl_right",
+      "p50": 2.02,
+      "p99": 2.19,
+      "round": 2
+    },
+    {
+      "case": "hangul",
+      "max": 0.49,
+      "op": "insert_mid",
+      "p50": 0.16,
+      "p99": 0.49,
+      "round": 2
+    },
+    {
+      "case": "hangul",
+      "max": 19.34,
+      "op": "end_after_insert",
+      "p50": 18.06,
+      "p99": 19.34,
+      "round": 2
+    },
+    {
+      "case": "flags",
+      "max": 21.27,
+      "op": "open",
+      "p50": 20.61,
+      "p99": 21.27,
+      "round": 2
+    },
+    {
+      "case": "flags",
+      "max": 40.81,
+      "op": "end",
+      "p50": 35.93,
+      "p99": 40.81,
+      "round": 2
+    },
+    {
+      "case": "flags",
+      "max": 0.23,
+      "op": "right",
+      "p50": 0.09,
+      "p99": 0.23,
+      "round": 2
+    },
+    {
+      "case": "flags",
+      "max": 0.15,
+      "op": "left_mid",
+      "p50": 0.09,
+      "p99": 0.15,
+      "round": 2
+    },
+    {
+      "case": "flags",
+      "max": 0.75,
+      "op": "ctrl_right",
+      "p50": 0.66,
+      "p99": 0.75,
+      "round": 2
+    },
+    {
+      "case": "flags",
+      "max": 0.15,
+      "op": "insert_mid",
+      "p50": 0.11,
+      "p99": 0.15,
+      "round": 2
+    },
+    {
+      "case": "flags",
+      "max": 8.54,
+      "op": "end_after_insert",
+      "p50": 8.48,
+      "p99": 8.54,
+      "round": 2
+    },
+    {
+      "case": "zwj_family",
+      "max": 25.98,
+      "op": "open",
+      "p50": 20.96,
+      "p99": 25.98,
+      "round": 2
+    },
+    {
+      "case": "zwj_family",
+      "max": 29.72,
+      "op": "end",
+      "p50": 28.59,
+      "p99": 29.72,
+      "round": 2
+    },
+    {
+      "case": "zwj_family",
+      "max": 0.1,
+      "op": "right",
+      "p50": 0.09,
+      "p99": 0.1,
+      "round": 2
+    },
+    {
+      "case": "zwj_family",
+      "max": 0.49,
+      "op": "left_mid",
+      "p50": 0.13,
+      "p99": 0.49,
+      "round": 2
+    },
+    {
+      "case": "zwj_family",
+      "max": 0.14,
+      "op": "ctrl_right",
+      "p50": 0.13,
+      "p99": 0.14,
+      "round": 2
+    },
+    {
+      "case": "zwj_family",
+      "max": 0.37,
+      "op": "insert_mid",
+      "p50": 0.2,
+      "p99": 0.37,
+      "round": 2
+    },
+    {
+      "case": "zwj_family",
+      "max": 0.13,
+      "op": "end_after_insert",
+      "p50": 0.1,
+      "p99": 0.13,
+      "round": 2
+    },
+    {
+      "case": "zwj_inf",
+      "max": 25.09,
+      "op": "open",
+      "p50": 20.16,
+      "p99": 25.09,
+      "round": 2
+    },
+    {
+      "case": "zwj_inf",
+      "max": 15.52,
+      "op": "end",
+      "p50": 15.41,
+      "p99": 15.52,
+      "round": 2
+    },
+    {
+      "case": "zwj_inf",
+      "max": 1.02,
+      "op": "right",
+      "p50": 0.69,
+      "p99": 1.02,
+      "round": 2
+    },
+    {
+      "case": "zwj_inf",
+      "max": 1.04,
+      "op": "left_mid",
+      "p50": 0.89,
+      "p99": 1.04,
+      "round": 2
+    },
+    {
+      "case": "zwj_inf",
+      "max": 0.94,
+      "op": "ctrl_right",
+      "p50": 0.69,
+      "p99": 0.94,
+      "round": 2
+    },
+    {
+      "case": "zwj_inf",
+      "max": 0.82,
+      "op": "insert_mid",
+      "p50": 0.66,
+      "p99": 0.82,
+      "round": 2
+    },
+    {
+      "case": "zwj_inf",
+      "max": 0.88,
+      "op": "end_after_insert",
+      "p50": 0.71,
+      "p99": 0.88,
+      "round": 2
+    },
+    {
+      "case": "indic",
+      "max": 21.75,
+      "op": "open",
+      "p50": 19.05,
+      "p99": 21.75,
+      "round": 2
+    },
+    {
+      "case": "indic",
+      "max": 36.0,
+      "op": "end",
+      "p50": 28.68,
+      "p99": 36.0,
+      "round": 2
+    },
+    {
+      "case": "indic",
+      "max": 0.11,
+      "op": "right",
+      "p50": 0.09,
+      "p99": 0.11,
+      "round": 2
+    },
+    {
+      "case": "indic",
+      "max": 0.2,
+      "op": "left_mid",
+      "p50": 0.14,
+      "p99": 0.2,
+      "round": 2
+    },
+    {
+      "case": "indic",
+      "max": 1.56,
+      "op": "ctrl_right",
+      "p50": 1.42,
+      "p99": 1.56,
+      "round": 2
+    },
+    {
+      "case": "indic",
+      "max": 0.22,
+      "op": "insert_mid",
+      "p50": 0.12,
+      "p99": 0.22,
+      "round": 2
+    },
+    {
+      "case": "indic",
+      "max": 14.27,
+      "op": "end_after_insert",
+      "p50": 13.78,
+      "p99": 14.27,
+      "round": 2
+    },
+    {
+      "case": "prepend",
+      "max": 18.07,
+      "op": "open",
+      "p50": 17.49,
+      "p99": 18.07,
+      "round": 2
+    },
+    {
+      "case": "prepend",
+      "max": 82.75,
+      "op": "end",
+      "p50": 77.1,
+      "p99": 82.75,
+      "round": 2
+    },
+    {
+      "case": "prepend",
+      "max": 0.08,
+      "op": "right",
+      "p50": 0.07,
+      "p99": 0.08,
+      "round": 2
+    },
+    {
+      "case": "prepend",
+      "max": 0.11,
+      "op": "left_mid",
+      "p50": 0.08,
+      "p99": 0.11,
+      "round": 2
+    },
+    {
+      "case": "prepend",
+      "max": 2.45,
+      "op": "ctrl_right",
+      "p50": 2.06,
+      "p99": 2.45,
+      "round": 2
+    },
+    {
+      "case": "prepend",
+      "max": 0.14,
+      "op": "insert_mid",
+      "p50": 0.1,
+      "p99": 0.14,
+      "round": 2
+    },
+    {
+      "case": "prepend",
+      "max": 57.49,
+      "op": "end_after_insert",
+      "p50": 54.35,
+      "p99": 57.49,
+      "round": 2
+    },
+    {
+      "case": "ivs",
+      "max": 19.56,
+      "op": "open",
+      "p50": 18.43,
+      "p99": 19.56,
+      "round": 2
+    },
+    {
+      "case": "ivs",
+      "max": 46.13,
+      "op": "end",
+      "p50": 40.81,
+      "p99": 46.13,
+      "round": 2
+    },
+    {
+      "case": "ivs",
+      "max": 0.1,
+      "op": "right",
+      "p50": 0.09,
+      "p99": 0.1,
+      "round": 2
+    },
+    {
+      "case": "ivs",
+      "max": 0.21,
+      "op": "left_mid",
+      "p50": 0.17,
+      "p99": 0.21,
+      "round": 2
+    },
+    {
+      "case": "ivs",
+      "max": 0.68,
+      "op": "ctrl_right",
+      "p50": 0.63,
+      "p99": 0.68,
+      "round": 2
+    },
+    {
+      "case": "ivs",
+      "max": 0.2,
+      "op": "insert_mid",
+      "p50": 0.13,
+      "p99": 0.2,
+      "round": 2
+    },
+    {
+      "case": "ivs",
+      "max": 14.76,
+      "op": "end_after_insert",
+      "p50": 13.34,
+      "p99": 14.76,
+      "round": 2
+    },
+    {
+      "case": "thai",
+      "max": 24.34,
+      "op": "open",
+      "p50": 21.18,
+      "p99": 24.34,
+      "round": 2
+    },
+    {
+      "case": "thai",
+      "max": 23.39,
+      "op": "end",
+      "p50": 22.96,
+      "p99": 23.39,
+      "round": 2
+    },
+    {
+      "case": "thai",
+      "max": 0.37,
+      "op": "right",
+      "p50": 0.15,
+      "p99": 0.37,
+      "round": 2
+    },
+    {
+      "case": "thai",
+      "max": 0.36,
+      "op": "left_mid",
+      "p50": 0.12,
+      "p99": 0.36,
+      "round": 2
+    },
+    {
+      "case": "thai",
+      "max": 4.61,
+      "op": "ctrl_right",
+      "p50": 3.85,
+      "p99": 4.61,
+      "round": 2
+    },
+    {
+      "case": "thai",
+      "max": 0.17,
+      "op": "insert_mid",
+      "p50": 0.14,
+      "p99": 0.17,
+      "round": 2
+    },
+    {
+      "case": "thai",
+      "max": 16.42,
+      "op": "end_after_insert",
+      "p50": 15.67,
+      "p99": 16.42,
+      "round": 2
+    },
+    {
+      "case": "escape",
+      "max": 6.38,
+      "op": "open",
+      "p50": 6.26,
+      "p99": 6.38,
+      "round": 2
+    },
+    {
+      "case": "escape",
+      "max": 0.09,
+      "op": "end",
+      "p50": 0.09,
+      "p99": 0.09,
+      "round": 2
+    },
+    {
+      "case": "escape",
+      "max": 0.09,
+      "op": "right",
+      "p50": 0.08,
+      "p99": 0.09,
+      "round": 2
+    },
+    {
+      "case": "escape",
+      "max": 0.15,
+      "op": "left_mid",
+      "p50": 0.08,
+      "p99": 0.15,
+      "round": 2
+    },
+    {
+      "case": "escape",
+      "max": 0.1,
+      "op": "ctrl_right",
+      "p50": 0.08,
+      "p99": 0.1,
+      "round": 2
+    },
+    {
+      "case": "escape",
+      "max": 0.09,
+      "op": "insert_mid",
+      "p50": 0.08,
+      "p99": 0.09,
+      "round": 2
+    },
+    {
+      "case": "escape",
+      "max": 0.08,
+      "op": "end_after_insert",
+      "p50": 0.08,
+      "p99": 0.08,
+      "round": 2
+    },
+    {
+      "case": "emoji_fe0f",
+      "max": 19.72,
+      "op": "open",
+      "p50": 18.36,
+      "p99": 19.72,
+      "round": 2
+    },
+    {
+      "case": "emoji_fe0f",
+      "max": 41.12,
+      "op": "end",
+      "p50": 39.79,
+      "p99": 41.12,
+      "round": 2
+    },
+    {
+      "case": "emoji_fe0f",
+      "max": 0.18,
+      "op": "right",
+      "p50": 0.08,
+      "p99": 0.18,
+      "round": 2
+    },
+    {
+      "case": "emoji_fe0f",
+      "max": 0.18,
+      "op": "left_mid",
+      "p50": 0.14,
+      "p99": 0.18,
+      "round": 2
+    },
+    {
+      "case": "emoji_fe0f",
+      "max": 1.26,
+      "op": "ctrl_right",
+      "p50": 1.17,
+      "p99": 1.26,
+      "round": 2
+    },
+    {
+      "case": "emoji_fe0f",
+      "max": 0.74,
+      "op": "insert_mid",
+      "p50": 0.17,
+      "p99": 0.74,
+      "round": 2
+    },
+    {
+      "case": "emoji_fe0f",
+      "max": 28.64,
+      "op": "end_after_insert",
+      "p50": 26.88,
+      "p99": 28.64,
+      "round": 2
+    },
+    {
+      "case": "japanese",
+      "max": 16.57,
+      "op": "open",
+      "p50": 15.29,
+      "p99": 16.57,
+      "round": 3
+    },
+    {
+      "case": "japanese",
+      "max": 12.92,
+      "op": "end",
+      "p50": 12.85,
+      "p99": 12.92,
+      "round": 3
+    },
+    {
+      "case": "japanese",
+      "max": 0.07,
+      "op": "right",
+      "p50": 0.05,
+      "p99": 0.07,
+      "round": 3
+    },
+    {
+      "case": "japanese",
+      "max": 0.11,
+      "op": "left_mid",
+      "p50": 0.06,
+      "p99": 0.11,
+      "round": 3
+    },
+    {
+      "case": "japanese",
+      "max": 0.55,
+      "op": "ctrl_right",
+      "p50": 0.48,
+      "p99": 0.55,
+      "round": 3
+    },
+    {
+      "case": "japanese",
+      "max": 0.13,
+      "op": "insert_mid",
+      "p50": 0.07,
+      "p99": 0.13,
+      "round": 3
+    },
+    {
+      "case": "japanese",
+      "max": 11.11,
+      "op": "end_after_insert",
+      "p50": 11.02,
+      "p99": 11.11,
+      "round": 3
+    },
+    {
+      "case": "emoji",
+      "max": 14.69,
+      "op": "open",
+      "p50": 14.33,
+      "p99": 14.69,
+      "round": 3
+    },
+    {
+      "case": "emoji",
+      "max": 14.68,
+      "op": "end",
+      "p50": 14.63,
+      "p99": 14.68,
+      "round": 3
+    },
+    {
+      "case": "emoji",
+      "max": 0.06,
+      "op": "right",
+      "p50": 0.05,
+      "p99": 0.06,
+      "round": 3
+    },
+    {
+      "case": "emoji",
+      "max": 0.08,
+      "op": "left_mid",
+      "p50": 0.06,
+      "p99": 0.08,
+      "round": 3
+    },
+    {
+      "case": "emoji",
+      "max": 0.87,
+      "op": "ctrl_right",
+      "p50": 0.74,
+      "p99": 0.87,
+      "round": 3
+    },
+    {
+      "case": "emoji",
+      "max": 0.11,
+      "op": "insert_mid",
+      "p50": 0.07,
+      "p99": 0.11,
+      "round": 3
+    },
+    {
+      "case": "emoji",
+      "max": 11.81,
+      "op": "end_after_insert",
+      "p50": 11.73,
+      "p99": 11.81,
+      "round": 3
+    },
+    {
+      "case": "comb_max",
+      "max": 16.74,
+      "op": "open",
+      "p50": 16.66,
+      "p99": 16.74,
+      "round": 3
+    },
+    {
+      "case": "comb_max",
+      "max": 17.82,
+      "op": "end",
+      "p50": 17.58,
+      "p99": 17.82,
+      "round": 3
+    },
+    {
+      "case": "comb_max",
+      "max": 5.98,
+      "op": "right",
+      "p50": 5.6,
+      "p99": 5.98,
+      "round": 3
+    },
+    {
+      "case": "comb_max",
+      "max": 5.97,
+      "op": "left_mid",
+      "p50": 5.6,
+      "p99": 5.97,
+      "round": 3
+    },
+    {
+      "case": "comb_max",
+      "max": 5.83,
+      "op": "ctrl_right",
+      "p50": 5.62,
+      "p99": 5.83,
+      "round": 3
+    },
+    {
+      "case": "comb_max",
+      "max": 6.27,
+      "op": "insert_mid",
+      "p50": 5.46,
+      "p99": 6.27,
+      "round": 3
+    },
+    {
+      "case": "comb_max",
+      "max": 9.1,
+      "op": "end_after_insert",
+      "p50": 8.69,
+      "p99": 9.1,
+      "round": 3
+    },
+    {
+      "case": "comb_inf",
+      "max": 47.76,
+      "op": "open",
+      "p50": 31.9,
+      "p99": 47.76,
+      "round": 3
+    },
+    {
+      "case": "comb_inf",
+      "max": 46.32,
+      "op": "end",
+      "p50": 27.59,
+      "p99": 46.32,
+      "round": 3
+    },
+    {
+      "case": "comb_inf",
+      "max": 9.83,
+      "op": "right",
+      "p50": 8.6,
+      "p99": 9.83,
+      "round": 3
+    },
+    {
+      "case": "comb_inf",
+      "max": 8.85,
+      "op": "left_mid",
+      "p50": 8.15,
+      "p99": 8.85,
+      "round": 3
+    },
+    {
+      "case": "comb_inf",
+      "max": 9.25,
+      "op": "ctrl_right",
+      "p50": 8.3,
+      "p99": 9.25,
+      "round": 3
+    },
+    {
+      "case": "comb_inf",
+      "max": 9.42,
+      "op": "insert_mid",
+      "p50": 8.35,
+      "p99": 9.42,
+      "round": 3
+    },
+    {
+      "case": "comb_inf",
+      "max": 8.53,
+      "op": "end_after_insert",
+      "p50": 7.82,
+      "p99": 8.53,
+      "round": 3
+    },
+    {
+      "case": "jamo_L",
+      "max": 23.02,
+      "op": "open",
+      "p50": 21.27,
+      "p99": 23.02,
+      "round": 3
+    },
+    {
+      "case": "jamo_L",
+      "max": 14.85,
+      "op": "end",
+      "p50": 13.22,
+      "p99": 14.85,
+      "round": 3
+    },
+    {
+      "case": "jamo_L",
+      "max": 0.25,
+      "op": "right",
+      "p50": 0.24,
+      "p99": 0.25,
+      "round": 3
+    },
+    {
+      "case": "jamo_L",
+      "max": 0.68,
+      "op": "left_mid",
+      "p50": 0.39,
+      "p99": 0.68,
+      "round": 3
+    },
+    {
+      "case": "jamo_L",
+      "max": 0.33,
+      "op": "ctrl_right",
+      "p50": 0.22,
+      "p99": 0.33,
+      "round": 3
+    },
+    {
+      "case": "jamo_L",
+      "max": 0.25,
+      "op": "insert_mid",
+      "p50": 0.22,
+      "p99": 0.25,
+      "round": 3
+    },
+    {
+      "case": "jamo_L",
+      "max": 0.26,
+      "op": "end_after_insert",
+      "p50": 0.25,
+      "p99": 0.26,
+      "round": 3
+    },
+    {
+      "case": "jamo_LVT",
+      "max": 21.72,
+      "op": "open",
+      "p50": 20.96,
+      "p99": 21.72,
+      "round": 3
+    },
+    {
+      "case": "jamo_LVT",
+      "max": 32.65,
+      "op": "end",
+      "p50": 32.47,
+      "p99": 32.65,
+      "round": 3
+    },
+    {
+      "case": "jamo_LVT",
+      "max": 0.15,
+      "op": "right",
+      "p50": 0.09,
+      "p99": 0.15,
+      "round": 3
+    },
+    {
+      "case": "jamo_LVT",
+      "max": 0.2,
+      "op": "left_mid",
+      "p50": 0.13,
+      "p99": 0.2,
+      "round": 3
+    },
+    {
+      "case": "jamo_LVT",
+      "max": 2.19,
+      "op": "ctrl_right",
+      "p50": 2.11,
+      "p99": 2.19,
+      "round": 3
+    },
+    {
+      "case": "jamo_LVT",
+      "max": 0.2,
+      "op": "insert_mid",
+      "p50": 0.15,
+      "p99": 0.2,
+      "round": 3
+    },
+    {
+      "case": "jamo_LVT",
+      "max": 5.41,
+      "op": "end_after_insert",
+      "p50": 4.64,
+      "p99": 5.41,
+      "round": 3
+    },
+    {
+      "case": "hangul",
+      "max": 22.49,
+      "op": "open",
+      "p50": 20.82,
+      "p99": 22.49,
+      "round": 3
+    },
+    {
+      "case": "hangul",
+      "max": 27.08,
+      "op": "end",
+      "p50": 23.71,
+      "p99": 27.08,
+      "round": 3
+    },
+    {
+      "case": "hangul",
+      "max": 0.15,
+      "op": "right",
+      "p50": 0.08,
+      "p99": 0.15,
+      "round": 3
+    },
+    {
+      "case": "hangul",
+      "max": 0.18,
+      "op": "left_mid",
+      "p50": 0.14,
+      "p99": 0.18,
+      "round": 3
+    },
+    {
+      "case": "hangul",
+      "max": 2.91,
+      "op": "ctrl_right",
+      "p50": 2.47,
+      "p99": 2.91,
+      "round": 3
+    },
+    {
+      "case": "hangul",
+      "max": 0.16,
+      "op": "insert_mid",
+      "p50": 0.12,
+      "p99": 0.16,
+      "round": 3
+    },
+    {
+      "case": "hangul",
+      "max": 17.77,
+      "op": "end_after_insert",
+      "p50": 17.71,
+      "p99": 17.77,
+      "round": 3
+    },
+    {
+      "case": "flags",
+      "max": 20.98,
+      "op": "open",
+      "p50": 20.31,
+      "p99": 20.98,
+      "round": 3
+    },
+    {
+      "case": "flags",
+      "max": 41.27,
+      "op": "end",
+      "p50": 35.39,
+      "p99": 41.27,
+      "round": 3
+    },
+    {
+      "case": "flags",
+      "max": 0.1,
+      "op": "right",
+      "p50": 0.09,
+      "p99": 0.1,
+      "round": 3
+    },
+    {
+      "case": "flags",
+      "max": 0.19,
+      "op": "left_mid",
+      "p50": 0.1,
+      "p99": 0.19,
+      "round": 3
+    },
+    {
+      "case": "flags",
+      "max": 0.75,
+      "op": "ctrl_right",
+      "p50": 0.67,
+      "p99": 0.75,
+      "round": 3
+    },
+    {
+      "case": "flags",
+      "max": 0.16,
+      "op": "insert_mid",
+      "p50": 0.12,
+      "p99": 0.16,
+      "round": 3
+    },
+    {
+      "case": "flags",
+      "max": 8.57,
+      "op": "end_after_insert",
+      "p50": 8.51,
+      "p99": 8.57,
+      "round": 3
+    },
+    {
+      "case": "zwj_family",
+      "max": 21.21,
+      "op": "open",
+      "p50": 20.49,
+      "p99": 21.21,
+      "round": 3
+    },
+    {
+      "case": "zwj_family",
+      "max": 28.36,
+      "op": "end",
+      "p50": 27.68,
+      "p99": 28.36,
+      "round": 3
+    },
+    {
+      "case": "zwj_family",
+      "max": 0.1,
+      "op": "right",
+      "p50": 0.09,
+      "p99": 0.1,
+      "round": 3
+    },
+    {
+      "case": "zwj_family",
+      "max": 0.2,
+      "op": "left_mid",
+      "p50": 0.13,
+      "p99": 0.2,
+      "round": 3
+    },
+    {
+      "case": "zwj_family",
+      "max": 0.15,
+      "op": "ctrl_right",
+      "p50": 0.13,
+      "p99": 0.15,
+      "round": 3
+    },
+    {
+      "case": "zwj_family",
+      "max": 0.21,
+      "op": "insert_mid",
+      "p50": 0.15,
+      "p99": 0.21,
+      "round": 3
+    },
+    {
+      "case": "zwj_family",
+      "max": 0.11,
+      "op": "end_after_insert",
+      "p50": 0.1,
+      "p99": 0.11,
+      "round": 3
+    },
+    {
+      "case": "zwj_inf",
+      "max": 20.53,
+      "op": "open",
+      "p50": 20.12,
+      "p99": 20.53,
+      "round": 3
+    },
+    {
+      "case": "zwj_inf",
+      "max": 15.19,
+      "op": "end",
+      "p50": 14.95,
+      "p99": 15.19,
+      "round": 3
+    },
+    {
+      "case": "zwj_inf",
+      "max": 0.91,
+      "op": "right",
+      "p50": 0.69,
+      "p99": 0.91,
+      "round": 3
+    },
+    {
+      "case": "zwj_inf",
+      "max": 1.0,
+      "op": "left_mid",
+      "p50": 0.88,
+      "p99": 1.0,
+      "round": 3
+    },
+    {
+      "case": "zwj_inf",
+      "max": 0.74,
+      "op": "ctrl_right",
+      "p50": 0.68,
+      "p99": 0.74,
+      "round": 3
+    },
+    {
+      "case": "zwj_inf",
+      "max": 0.88,
+      "op": "insert_mid",
+      "p50": 0.67,
+      "p99": 0.88,
+      "round": 3
+    },
+    {
+      "case": "zwj_inf",
+      "max": 0.76,
+      "op": "end_after_insert",
+      "p50": 0.69,
+      "p99": 0.76,
+      "round": 3
+    },
+    {
+      "case": "indic",
+      "max": 21.54,
+      "op": "open",
+      "p50": 19.24,
+      "p99": 21.54,
+      "round": 3
+    },
+    {
+      "case": "indic",
+      "max": 29.6,
+      "op": "end",
+      "p50": 28.63,
+      "p99": 29.6,
+      "round": 3
+    },
+    {
+      "case": "indic",
+      "max": 0.1,
+      "op": "right",
+      "p50": 0.09,
+      "p99": 0.1,
+      "round": 3
+    },
+    {
+      "case": "indic",
+      "max": 0.15,
+      "op": "left_mid",
+      "p50": 0.1,
+      "p99": 0.15,
+      "round": 3
+    },
+    {
+      "case": "indic",
+      "max": 1.47,
+      "op": "ctrl_right",
+      "p50": 1.41,
+      "p99": 1.47,
+      "round": 3
+    },
+    {
+      "case": "indic",
+      "max": 0.19,
+      "op": "insert_mid",
+      "p50": 0.12,
+      "p99": 0.19,
+      "round": 3
+    },
+    {
+      "case": "indic",
+      "max": 17.52,
+      "op": "end_after_insert",
+      "p50": 14.14,
+      "p99": 17.52,
+      "round": 3
+    },
+    {
+      "case": "prepend",
+      "max": 17.79,
+      "op": "open",
+      "p50": 16.81,
+      "p99": 17.79,
+      "round": 3
+    },
+    {
+      "case": "prepend",
+      "max": 76.25,
+      "op": "end",
+      "p50": 75.1,
+      "p99": 76.25,
+      "round": 3
+    },
+    {
+      "case": "prepend",
+      "max": 0.14,
+      "op": "right",
+      "p50": 0.1,
+      "p99": 0.14,
+      "round": 3
+    },
+    {
+      "case": "prepend",
+      "max": 0.12,
+      "op": "left_mid",
+      "p50": 0.08,
+      "p99": 0.12,
+      "round": 3
+    },
+    {
+      "case": "prepend",
+      "max": 2.25,
+      "op": "ctrl_right",
+      "p50": 2.14,
+      "p99": 2.25,
+      "round": 3
+    },
+    {
+      "case": "prepend",
+      "max": 0.14,
+      "op": "insert_mid",
+      "p50": 0.1,
+      "p99": 0.14,
+      "round": 3
+    },
+    {
+      "case": "prepend",
+      "max": 54.53,
+      "op": "end_after_insert",
+      "p50": 53.51,
+      "p99": 54.53,
+      "round": 3
+    },
+    {
+      "case": "ivs",
+      "max": 21.35,
+      "op": "open",
+      "p50": 17.98,
+      "p99": 21.35,
+      "round": 3
+    },
+    {
+      "case": "ivs",
+      "max": 45.94,
+      "op": "end",
+      "p50": 42.53,
+      "p99": 45.94,
+      "round": 3
+    },
+    {
+      "case": "ivs",
+      "max": 0.27,
+      "op": "right",
+      "p50": 0.1,
+      "p99": 0.27,
+      "round": 3
+    },
+    {
+      "case": "ivs",
+      "max": 0.15,
+      "op": "left_mid",
+      "p50": 0.12,
+      "p99": 0.15,
+      "round": 3
+    },
+    {
+      "case": "ivs",
+      "max": 0.67,
+      "op": "ctrl_right",
+      "p50": 0.64,
+      "p99": 0.67,
+      "round": 3
+    },
+    {
+      "case": "ivs",
+      "max": 0.18,
+      "op": "insert_mid",
+      "p50": 0.13,
+      "p99": 0.18,
+      "round": 3
+    },
+    {
+      "case": "ivs",
+      "max": 16.86,
+      "op": "end_after_insert",
+      "p50": 13.91,
+      "p99": 16.86,
+      "round": 3
+    },
+    {
+      "case": "thai",
+      "max": 21.28,
+      "op": "open",
+      "p50": 19.82,
+      "p99": 21.28,
+      "round": 3
+    },
+    {
+      "case": "thai",
+      "max": 24.09,
+      "op": "end",
+      "p50": 23.04,
+      "p99": 24.09,
+      "round": 3
+    },
+    {
+      "case": "thai",
+      "max": 0.36,
+      "op": "right",
+      "p50": 0.07,
+      "p99": 0.36,
+      "round": 3
+    },
+    {
+      "case": "thai",
+      "max": 0.15,
+      "op": "left_mid",
+      "p50": 0.12,
+      "p99": 0.15,
+      "round": 3
+    },
+    {
+      "case": "thai",
+      "max": 4.03,
+      "op": "ctrl_right",
+      "p50": 3.89,
+      "p99": 4.03,
+      "round": 3
+    },
+    {
+      "case": "thai",
+      "max": 0.17,
+      "op": "insert_mid",
+      "p50": 0.14,
+      "p99": 0.17,
+      "round": 3
+    },
+    {
+      "case": "thai",
+      "max": 17.85,
+      "op": "end_after_insert",
+      "p50": 15.66,
+      "p99": 17.85,
+      "round": 3
+    },
+    {
+      "case": "escape",
+      "max": 6.41,
+      "op": "open",
+      "p50": 6.08,
+      "p99": 6.41,
+      "round": 3
+    },
+    {
+      "case": "escape",
+      "max": 0.11,
+      "op": "end",
+      "p50": 0.09,
+      "p99": 0.11,
+      "round": 3
+    },
+    {
+      "case": "escape",
+      "max": 0.1,
+      "op": "right",
+      "p50": 0.08,
+      "p99": 0.1,
+      "round": 3
+    },
+    {
+      "case": "escape",
+      "max": 0.08,
+      "op": "left_mid",
+      "p50": 0.08,
+      "p99": 0.08,
+      "round": 3
+    },
+    {
+      "case": "escape",
+      "max": 0.13,
+      "op": "ctrl_right",
+      "p50": 0.08,
+      "p99": 0.13,
+      "round": 3
+    },
+    {
+      "case": "escape",
+      "max": 0.13,
+      "op": "insert_mid",
+      "p50": 0.08,
+      "p99": 0.13,
+      "round": 3
+    },
+    {
+      "case": "escape",
+      "max": 0.1,
+      "op": "end_after_insert",
+      "p50": 0.08,
+      "p99": 0.1,
+      "round": 3
+    },
+    {
+      "case": "emoji_fe0f",
+      "max": 19.25,
+      "op": "open",
+      "p50": 18.5,
+      "p99": 19.25,
+      "round": 3
+    },
+    {
+      "case": "emoji_fe0f",
+      "max": 40.95,
+      "op": "end",
+      "p50": 39.62,
+      "p99": 40.95,
+      "round": 3
+    },
+    {
+      "case": "emoji_fe0f",
+      "max": 0.09,
+      "op": "right",
+      "p50": 0.08,
+      "p99": 0.09,
+      "round": 3
+    },
+    {
+      "case": "emoji_fe0f",
+      "max": 0.17,
+      "op": "left_mid",
+      "p50": 0.14,
+      "p99": 0.17,
+      "round": 3
+    },
+    {
+      "case": "emoji_fe0f",
+      "max": 1.37,
+      "op": "ctrl_right",
+      "p50": 1.17,
+      "p99": 1.37,
+      "round": 3
+    },
+    {
+      "case": "emoji_fe0f",
+      "max": 0.2,
+      "op": "insert_mid",
+      "p50": 0.17,
+      "p99": 0.2,
+      "round": 3
+    },
+    {
+      "case": "emoji_fe0f",
+      "max": 26.75,
+      "op": "end_after_insert",
+      "p50": 26.31,
+      "p99": 26.75,
+      "round": 3
+    }
+  ],
+  "id": "BM-106-worst",
+  "note": "最悪の入力 (10 MB の 1 行。実在の文字の繰り返しと病的な入力) の、開く・開いた直後の End・中央挿入の直後の End など。各 5 回の p50 / p99 / 最大 (ms)。develop (681e9fc) とこの版を交互に 3 ラウンド (round)。M25 の (5) のレビューの計測のプログラム (リポジトリの外。Harness で 120 × 40) で測った参考の値"
+}

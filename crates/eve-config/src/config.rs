@@ -447,7 +447,7 @@ config_keys! {
     /// `file.huge_file_warn_bytes`: これを超えるファイルは開く前に警告する (FR-127、docs/03 §11.2)。
     huge_file_warn_bytes: u64 = 512 * 1024 * 1024,
         "file.huge_file_warn_bytes", int(1_048_576, 1 << 40);
-    /// `file.long_line_threshold`: これを超える行を長大行として扱う (NFR-106、docs/03 §11.5)。
+    /// `file.long_line_threshold`: これを超える行を長大行として扱う (NFR-106、docs/03 §11.5 / §14.4)。
     /// 下限は長大行で表示する先頭 (64 KiB)。
     long_line_threshold: u64 = 1024 * 1024, "file.long_line_threshold", int(65_536, 1 << 30);
     /// `file.reload_on_external_change`: 外部変更の扱い (FR-117)。
