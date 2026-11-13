@@ -2,6 +2,8 @@
 //! 標準入力そのものの移し替え (`from_process_stdin`) は、この試験のバイナリを子プロセスとして起こして確かめる
 //! (試験のプロセスの標準入力を書き換えないため)。
 
+#![cfg(test)]
+
 use std::io::{Read, Write};
 use std::time::{Duration, Instant};
 
