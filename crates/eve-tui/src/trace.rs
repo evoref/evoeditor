@@ -10,7 +10,10 @@
 //!   (01 §3.0.1 の (b) プロセス内全体。NFR-103 の判定区間)。複数の入力が溜まったときは、最も古い読み終えの時刻から測る。
 //! - `startup.first_frame`: `main` 入口 → 最初の Frame の `write` が戻った時刻 (起動 (a) プロセス内。NFR-101)。
 //! - `startup.first_content`: 同じ始点 → 本文が見える最初の Frame の `write` が戻った時刻 (ファイルを開く起動。NFR-102)。
-//!   どちらも `fields.wall_main_unix_ns` / `fields.wall_end_unix_ns` に、同じ 2 点の壁時計 (UNIX 紀元からの ns) を入れる
+//! - `startup.first_loaded`: 同じ始点 → 本文が見え、読込の進捗が出ていない最初の Frame の `write` が戻った時刻 (読み終えた
+//!   文書の最初の Frame。標準入力の起動 `cmd | evoeditor -` の BM-120、03 §9.2.2。先行表示 (03 §9.2.1) の先頭の Frame は
+//!   進捗も出ているので数えない)。
+//!   3 つとも `fields.wall_main_unix_ns` / `fields.wall_end_unix_ns` に、同じ 2 点の壁時計 (UNIX 紀元からの ns) を入れる
 //!   (計測ハーネスの spawn 時刻と比べて、起動 (b) spawn からを求める)。
 //!
 //! `input.to_flush` の `fields` には、区間の内訳 (`sent_ns` = 入力をホストの受信口へ送り終えた時刻、`render_ns` = ホストが描画を
@@ -68,6 +71,8 @@ mod imp {
     static RESIZE: AtomicU64 = AtomicU64::new(0);
     static FIRST_DONE: AtomicBool = AtomicBool::new(false);
     static CONTENT_DONE: AtomicBool = AtomicBool::new(false);
+    /// 本文が見え、読込の進捗が出ていない Frame (読み終えた文書の最初の Frame) を書いた。
+    static LOADED_DONE: AtomicBool = AtomicBool::new(false);
     static EXIT_AFTER_FIRST: AtomicBool = AtomicBool::new(false);
 
     fn wall_ns() -> u128 {
@@ -164,9 +169,11 @@ mod imp {
         let thread = std::thread::current().name().unwrap_or("?").to_owned();
         let first = !FIRST_DONE.swap(true, Ordering::AcqRel);
         let first_content = content && !CONTENT_DONE.swap(true, Ordering::AcqRel);
+        let first_loaded = content && !progress && !LOADED_DONE.swap(true, Ordering::AcqRel);
         for (name, hit) in [
             ("startup.first_frame", first),
             ("startup.first_content", first_content),
+            ("startup.first_loaded", first_loaded),
         ] {
             if hit {
                 let mut l = String::new();

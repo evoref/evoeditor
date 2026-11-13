@@ -15,6 +15,10 @@
 //! - **BM-104v-100m / BM-104v-100m-sjis**: 100 MB (UTF-8 / `Shift_JIS`) を `Ctrl+O` で開き、`Enter` の読取完了 → 文書の先頭部分を
 //!   含む最初の Frame の `write` まで (`--only 104v`。区間の記録 `open.content`。先行表示の先頭だった回は印 `open.partial`
 //!   が付くので、その割合も出す。01 FR-122 AC-2、03 §9.2.1)。
+//! - **BM-120-100m** (参考): 100 MB の UTF-8 を `cmd /d /c <書き手> | evoeditor -` のパイプで渡して起動し、`main` 入口 →
+//!   読み終えた文書の最初の Frame の `write` まで (`--only 120`。区間の記録 `startup.first_loaded`。03 §9.2.2、09 §5.2)。
+//!   書き手はこの計測の実行ファイル自身 (`--pipe-writer <file>`)。比べる相手として、同じファイルを BM-104-100m と同じ手順
+//!   (読込ジョブで開く → 完了、プロセス内) と、起動時のパスで開く起動 (同じ区間) を、回ごとに交互に測る。
 //!
 //! どのビルドでも測る、端末込みの参考値 (`ConPTY` を挟むので実際の Windows Terminal より遅めに出る。判定には使わない):
 //! - **BM-101c / 102c**: spawn → 最初の画面 (ステータスバーの `無題-1` / ファイルの先頭) が端末に届くまで。
@@ -89,13 +93,24 @@ impl Term {
         trace: Option<&Path>,
         env: &[(&str, &str)],
     ) -> (Term, Instant) {
+        Term::start_exe(EXE, args, marker, trace, env)
+    }
+
+    /// `start_env` の、起こす実行ファイル `exe` を選べるもの (BM-120 は `cmd.exe` にパイプを組ませる)。
+    fn start_exe(
+        exe: &str,
+        args: &[&str],
+        marker: &'static str,
+        trace: Option<&Path>,
+        env: &[(&str, &str)],
+    ) -> (Term, Instant) {
         static SEQ: AtomicUsize = AtomicUsize::new(0);
         let state = std::env::temp_dir().join(format!(
             "evo-bench-state-{}-{}",
             std::process::id(),
             SEQ.fetch_add(1, Ordering::Relaxed)
         ));
-        let mut cmd = pty::command(EXE, args, &state);
+        let mut cmd = pty::command(exe, args, &state);
         // 設定ディレクトリは無い (設定ファイルなし)
         cmd.env("EVE_CONFIG_DIR", state.join("no-config"));
         if let Some(t) = trace {
@@ -769,6 +784,246 @@ fn report_head(id: &str, label: &str, v: &[HeadRun], json: bool, quick: bool) {
     );
 }
 
+/// 平均の行長が約 80 バイトの UTF-8 (ASCII と日本語の行が 1:2。`eve-platform` の `bm_104_202` の BM-104-100m と同じ行の並び)
+/// を `mb` MB 以上。BM-120-100m の入力 (09 §5.2)。同じ名前で作り直さない。
+fn make_corpus_80(dir: &Path, name: &str, mb: usize) -> PathBuf {
+    let path = dir.join(name);
+    if !path.exists() {
+        let bytes = mb * 1024 * 1024;
+        let mut out = String::with_capacity(bytes + 128);
+        let mut i = 0u64;
+        while out.len() < bytes {
+            if i.is_multiple_of(3) {
+                out.push_str(&format!(
+                    "{i:08} 日本語の行です。テキストエディタの試験データ。0123456789\n"
+                ));
+            } else {
+                out.push_str(&format!(
+                    "{i:08} the quick brown fox jumps over the lazy dog 0123456789 abcdef\n"
+                ));
+            }
+            i += 1;
+        }
+        std::fs::write(&path, &out).expect("BM-120 の入力");
+    }
+    path
+}
+
+/// BM-120 のパイプの書き手 (`cmd` のパイプの左側として、この計測の実行ファイル自身を `--pipe-writer <file>` で起こす)。
+/// ファイルを 1 MiB ずつ標準出力 (パイプ) へ書き、書き終えたら終わる (パイプが閉じて、読み手は EOF になる)。読み手が先に
+/// 閉じた (書込の失敗) ときも黙って終わる (書き手が止まり続けない)。
+fn pipe_writer(path: &Path) {
+    use std::io::Read;
+    let Ok(mut f) = std::fs::File::open(path) else {
+        return;
+    };
+    let mut out = std::io::stdout().lock();
+    let mut buf = vec![0u8; 1024 * 1024];
+    loop {
+        let n = match f.read(&mut buf) {
+            Ok(0) | Err(_) => break,
+            Ok(n) => n,
+        };
+        if out.write_all(&buf[..n]).is_err() {
+            return;
+        }
+    }
+    let _ = out.flush();
+}
+
+/// `cmd /c` の行にそのまま置けるパスか (空白・引用符・`cmd` の特殊文字を含まない。含むと引数の区切りが変わる)。
+#[cfg(windows)]
+fn cmd_safe(p: &str) -> bool {
+    !p.is_empty() && !p.chars().any(|c| " \t\"&|<>^%()!".contains(c))
+}
+
+/// 起動 (`main` 入口) → 読み終えた文書の最初の Frame の `write` (区間の記録 `startup.first_loaded`)。
+/// 子 (`cmd` または `evoeditor`) を起こし、文書の先頭の目印が出て読込の表示が消えたら終了させて、記録を読む。
+/// `dirty`: 読み終えた文書が変更あり (標準入力の文書。03 §9.2.2 の「変更あり」) で、終了で未保存の確認が出る。
+#[cfg(windows)]
+fn startup_loaded(t: Term, trace: &Path, dirty: bool) -> Duration {
+    t.wait("読み終えた文書", || {
+        t.marker.load(Ordering::Acquire) && !t.loading.load(Ordering::Acquire)
+    });
+    let mut t = t;
+    t.send(b"\x11"); // Ctrl+Q
+    if dirty {
+        // 未保存の確認 (FR-107) で破棄 (d) する
+        t.wait("未保存の確認", || {
+            t.parser
+                .lock()
+                .unwrap()
+                .screen()
+                .contents()
+                .contains("破棄")
+        });
+        t.send(b"d");
+    }
+    let code = t.wait_exit(WAIT);
+    assert_eq!(code, Some(0), "正常に終了しません");
+    let spans = read_spans(trace);
+    let _ = std::fs::remove_file(trace);
+    let hit = spans
+        .iter()
+        .find(|s| s.name == "startup.first_loaded")
+        .expect("startup.first_loaded の記録がありません");
+    ns_dur(hit.end_ns - hit.start_ns)
+}
+
+/// BM-104-100m と同じ手順 (`eve-platform` の `bm_104_202`: 実ファイルを core の読込ジョブ `run_job` で開く → 完了。
+/// 時計は止めたまま (先行表示を出さない)) で、`path` を 1 回開く時間。BM-120 の比べる相手を同じ回の中で測るために置く。
+#[cfg(windows)]
+fn open_job(path: &Path) -> Duration {
+    use eve_core::{
+        CancelToken, Clock, FsPath, JobKind, JobPorts, JobRequest, JobResult, OpenOptions, Tick,
+        run_job,
+    };
+    use eve_platform::dirs::{Dirs, WinPaths};
+    use eve_platform::fs::WinFs;
+    use eve_platform::path::PathCtx;
+    use eve_view::{JobId, Revision};
+
+    struct FixedClock;
+    impl Clock for FixedClock {
+        fn now(&self) -> Tick {
+            Tick(0)
+        }
+    }
+    let ports = JobPorts {
+        stdin: None,
+        fs: Arc::new(WinFs::default()),
+        clock: Arc::new(FixedClock),
+        paths: Arc::new(WinPaths::new(
+            Dirs::resolve(&|_| None),
+            PathCtx {
+                cwd: "C:\\".to_owned(),
+                home: None,
+            },
+        )),
+    };
+    let req = JobRequest {
+        id: JobId(1),
+        doc: None,
+        base: Revision(0),
+        kind: JobKind::Open {
+            path: FsPath::new(path.to_path_buf()),
+            opts: OpenOptions::default(),
+        },
+    };
+    let mut out = Vec::new();
+    let t = Instant::now();
+    run_job(&req, &ports, &CancelToken::new(), &mut |r| out.push(r));
+    let d = t.elapsed();
+    let body = out.pop().expect("結果がある").body;
+    assert!(
+        matches!(body, JobResult::Complete { .. }),
+        "BM-104-100m の手順で開けませんでした"
+    );
+    drop(body);
+    d
+}
+
+/// BM-120 の回ごとの値: 標準入力の起動・BM-104-100m の手順・起動時のパスで開く起動。
+#[cfg(windows)]
+struct StdinRounds {
+    stdin: Vec<Duration>,
+    open: Vec<Duration>,
+    file: Vec<Duration>,
+}
+
+/// BM-120-100m (09 §5.2、03 §9.2.2): 1 回ごとに次の 3 つを続けて測る (この機械は速さの状態が時間で変わるので、比は
+/// 同じ回の組から出す)。ウォームアップの `warmup` 回は捨てる (ファイルを OS のキャッシュに載せる)。
+/// 1. 標準入力: `cmd /d /c <この実行ファイル> --pipe-writer <file> | evoeditor -` (パイプの書き手は計測の側が用意する)。
+/// 2. BM-104-100m の手順 (`open_job`)。
+/// 3. 起動時のパス: `evoeditor <file>` (1 と同じ区間。差がパイプの経路の分)。
+#[cfg(windows)]
+fn stdin_rounds(dir: &Path, file: &Path, runs: usize, warmup: usize) -> StdinRounds {
+    let me = std::env::current_exe().expect("計測の実行ファイル");
+    let me = me.to_str().expect("計測の実行ファイルのパス");
+    let file_s = file.to_str().expect("入力のパス");
+    for p in [me, file_s, EXE] {
+        assert!(
+            cmd_safe(p),
+            "cmd の行に置けないパスです (空白・引用符・特殊文字を含まない場所で測ってください): {p}"
+        );
+    }
+    let mut r = StdinRounds {
+        stdin: Vec::new(),
+        open: Vec::new(),
+        file: Vec::new(),
+    };
+    for i in 0..runs + warmup {
+        let trace = dir.join(format!("stdin-{i}.jsonl"));
+        let (t, _) = Term::start_exe(
+            "cmd.exe",
+            &["/d", "/c", me, "--pipe-writer", file_s, "|", EXE, "-"],
+            "00000000",
+            Some(&trace),
+            &[],
+        );
+        let s = startup_loaded(t, &trace, true);
+        let o = open_job(file);
+        let trace = dir.join(format!("file-{i}.jsonl"));
+        let (t, _) = Term::start(&[file_s], "00000000", Some(&trace));
+        let f = startup_loaded(t, &trace, false);
+        if i >= warmup {
+            r.stdin.push(s);
+            r.open.push(o);
+            r.file.push(f);
+        }
+    }
+    r
+}
+
+/// 中央値 (`percentile` の 0.5)。
+#[cfg(windows)]
+fn median(v: &[Duration]) -> Duration {
+    let mut v = v.to_vec();
+    v.sort();
+    percentile(&v, 0.5)
+}
+
+/// 組ごとの比 `a[i] / b[i]` の中央値。
+#[cfg(windows)]
+fn pair_ratio(a: &[Duration], b: &[Duration]) -> f64 {
+    let mut r: Vec<f64> = a
+        .iter()
+        .zip(b)
+        .map(|(x, y)| x.as_secs_f64() / y.as_secs_f64())
+        .collect();
+    r.sort_by(f64::total_cmp);
+    r[((r.len() as f64 - 1.0) * 0.5).round() as usize]
+}
+
+/// BM-120-100m の結果を出す (区間の統計に、比べる相手の p50 と回ごとの値、組ごとの比の中央値を添える)。
+#[cfg(windows)]
+fn report_stdin(r: &StdinRounds, json: bool, quick: bool) {
+    let list = |v: &[Duration]| {
+        v.iter()
+            .map(|d| format!("{:.2}", ms(*d)))
+            .collect::<Vec<_>>()
+            .join(",")
+    };
+    let (open_p50, file_p50) = (ms(median(&r.open)), ms(median(&r.file)));
+    let (ratio, ratio_file) = (pair_ratio(&r.stdin, &r.open), pair_ratio(&r.stdin, &r.file));
+    report_with(
+        "BM-120-100m",
+        "標準入力の起動 (cmd | evoeditor -、UTF-8 100 MB。main 入口 → 読み終えた文書の最初の Frame の write。30 回)",
+        r.stdin.clone(),
+        json,
+        quick,
+        &format!(
+            ",\"samples_ms\":[{}],\"pair_id\":\"BM-104-100m\",\"pair_p50_ms\":{open_p50:.2},\"pair_samples_ms\":[{}],\"ratio_bm104\":{ratio:.3},\"file_p50_ms\":{file_p50:.2},\"file_samples_ms\":[{}],\"ratio_file\":{ratio_file:.3}",
+            list(&r.stdin),
+            list(&r.open),
+            list(&r.file)
+        ),
+        &format!(
+            " (同じ回の BM-104-100m の手順 p50 {open_p50:.2} ms、比 {ratio:.2} / 起動時のパス p50 {file_p50:.2} ms、比 {ratio_file:.2}。比は組ごとの比の中央値)"
+        ),
+    );
+}
+
 /// 「リサイズ → 再描画」(01 §3.0.1): ウィンドウの大きさを 50 ms ごとに変え、最後のリサイズイベントの読取完了 → 新しい大きさの Frame の `write`。
 fn resize_redraw(dir: &Path, runs: usize, warmup: usize) -> Vec<Duration> {
     let trace = dir.join("resize.jsonl");
@@ -1051,6 +1306,11 @@ fn search_load_multiline(dir: &Path, runs: usize, warmup: usize) -> Vec<Duration
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
+    // BM-120 のパイプの書き手として起こされた (計測ではない)
+    if let Some(i) = args.iter().position(|a| a == "--pipe-writer") {
+        pipe_writer(Path::new(&args[i + 1]));
+        return;
+    }
     let json = args.iter().any(|a| a == "--json");
     let runs: usize = args
         .iter()
@@ -1262,6 +1522,14 @@ fn main() {
             json,
             quick,
         );
+    }
+    #[cfg(windows)]
+    if traced && want("120") {
+        // BM-120-100m: 標準入力の起動 (参考)。比べる相手 (BM-104-100m と同じ手順、起動時のパス) と回ごとに交互に測る
+        let n = if quick { 10 } else { 30 };
+        let file = make_corpus_80(&dir, "stdin_100mb.txt", 100);
+        let r = stdin_rounds(&dir, &file, n, 3);
+        report_stdin(&r, json, quick);
     }
     if traced && want("512") {
         let v = resize_redraw(&dir, runs, warmup);
