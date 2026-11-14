@@ -196,7 +196,7 @@ fn 公開前の_ui_キーは未対応の情報診断になり_画面に出ない
     assert!(actual.is_empty(), "{actual:?}");
 }
 
-// NFR-603 AC-3 (v0.2。チェックリストは v0.2 のゲートで作る)
+// verifies: AC-NFR-603-3
 #[test]
 fn 言語を英語にすると設定の問題の要約が英語になる() {
     use eve_config::Locale;

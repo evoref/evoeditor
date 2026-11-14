@@ -153,7 +153,7 @@ fn confirm_name(h: &Harness) -> Option<String> {
 
 // ---- 起動の経路 (02 §5.4、03 §9.2.2 の「起動の経路」「標準入力が端末」) ----
 
-// verifies: FR-120
+// verifies: AC-FR-120-2
 #[test]
 fn 標準入力が端末なら読まずに空の無題の文書を開いて知らせる() {
     let fake = FakeStdin::chunks(b"never read", 4);
@@ -170,7 +170,7 @@ fn 標準入力が端末なら読まずに空の無題の文書を開いて知�
     assert!(h.messages().contains(&"info.stdin.terminal".to_owned()));
 }
 
-// verifies: FR-120
+// verifies: AC-FR-120-1
 #[test]
 fn 起動の標準入力は書いた順に足し_最初のものを表示する() {
     let fake = FakeStdin::chunks(b"from stdin\n", 3);
@@ -217,7 +217,7 @@ fn ステータスバーは読込中の量を出す() {
 
 // ---- 変更あり (03 §9.2.2 の「変更あり」、OQ-219 の 4、01 FR-120 AC-3) ----
 
-// verifies: FR-120
+// verifies: AC-FR-120-3
 #[test]
 fn 読み込んだ内容は変更ありで_undo_で戻っても変更あり() {
     let fake = FakeStdin::chunks(b"log\n", 2);
@@ -234,7 +234,7 @@ fn 読み込んだ内容は変更ありで_undo_で戻っても変更あり() {
     assert_eq!(h.quit_code(), None);
 }
 
-// verifies: FR-120
+// verifies: AC-FR-120-3
 #[test]
 fn readonly_は変更なしで_解除すると変更ありになる() {
     let fake = FakeStdin::chunks(b"log\n", 2);
@@ -414,7 +414,7 @@ fn パニックで終わった読込は知らせて文書を閉じる() {
 
 // ---- `Esc` の確認 (03 §9.2.2 の「取消し (`Esc`)」、OQ-219 の 10 (i)、01 FR-120 AC-4) ----
 
-// verifies: FR-120
+// verifies: AC-FR-120-4
 #[test]
 fn 表示中の_esc_は確認を出し_ここまでで開くで読むのをやめる() {
     let fake = FakeStdin::new([StdinStep::Hang]);
@@ -600,7 +600,7 @@ fn 終了の連鎖のキャンセルは連鎖を止めて読み続ける() {
 
 // ---- 緊急退避とスワップ (03 §9.2.2 の「スワップと緊急退避」、OQ-219 の 5) ----
 
-// verifies: FR-120
+// verifies: AC-FR-120-3
 #[test]
 fn 読み込んだ時点から退避の対象で_sensitive_を立てる() {
     let fake = FakeStdin::chunks(b"secret\n", 3);
@@ -623,7 +623,7 @@ fn 読み込んだ時点から退避の対象で_sensitive_を立てる() {
     assert!(h.editor.emergency_snapshot(doc).expect("dirty").sensitive);
 }
 
-// verifies: FR-120
+// verifies: AC-FR-120-3
 #[test]
 fn スワップは最初の編集から書く() {
     let fake = FakeStdin::chunks(b"log\n", 2);
@@ -642,7 +642,7 @@ fn スワップは最初の編集から書く() {
 
 // ---- `LoadIncomplete` の外し方 (03 §9.2.2、OQ-219 の 6) ----
 
-// verifies: FR-120
+// verifies: AC-FR-120-4
 #[test]
 fn 名前を付けて保存が成功したら途中までの印を外す() {
     let fake = FakeStdin::new([StdinStep::Hang]);

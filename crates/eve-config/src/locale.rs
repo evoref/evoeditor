@@ -230,8 +230,7 @@ mod tests {
         Locale::from_tag("fr").unwrap()
     }
 
-    // NFR-603 AC-3 (v0.2。チェックリストは v0.2 のゲートで作る)
-    // verifies: NFR-603
+    // verifies: AC-NFR-603-3
     #[test]
     fn 言語タグは地域を落として当てる() {
         assert_eq!(Locale::parse("ja"), Some(Locale::Ja));
@@ -245,7 +244,7 @@ mod tests {
         assert_eq!(Locale::parse(""), None);
     }
 
-    // verifies: NFR-603
+    // verifies: AC-NFR-603-3, AC-NFR-603-9
     #[test]
     fn 言語タグの形と言語の部分() {
         for (tag, want) in [
@@ -285,7 +284,7 @@ mod tests {
         assert_eq!(Locale::default(), Locale::Ja);
     }
 
-    // verifies: NFR-603
+    // verifies: AC-NFR-603-9
     #[test]
     fn 言語ファイルの名前の規則() {
         for (name, want) in [
@@ -317,7 +316,7 @@ mod tests {
         }
     }
 
-    // NFR-603 AC-3 (v0.2。チェックリストは v0.2 のゲートで作る)
+    // verifies: AC-NFR-603-3
     #[test]
     fn 選択順は_cli_設定_環境変数_os_既定() {
         let all = select_locale(Some("en"), Some(Locale::Ja), Some("ja"), Some("ja-JP"), &[]);
@@ -332,8 +331,7 @@ mod tests {
         assert_eq!((d.locale, d.source), (Locale::Ja, LocaleSource::Default));
     }
 
-    // NFR-603 AC-3 (v0.2。チェックリストは v0.2 のゲートで作る)
-    // verifies: NFR-603
+    // verifies: AC-NFR-603-3, AC-NFR-603-9
     #[test]
     fn 未知の言語名は警告して次の段へ進む() {
         let c = select_locale(Some("fr"), None, Some("en"), Some("ja-JP"), &[]);
@@ -369,7 +367,7 @@ mod tests {
         assert!(c.warnings.is_empty(), "{:?}", c.warnings);
     }
 
-    // verifies: NFR-603
+    // verifies: AC-NFR-603-9
     #[test]
     fn どの段でも候補の言語を選べる() {
         let av = [fr()];
@@ -384,7 +382,7 @@ mod tests {
         assert!(o.warnings.is_empty(), "{:?}", o.warnings);
     }
 
-    // verifies: NFR-603
+    // verifies: AC-NFR-603-9
     #[test]
     fn 候補に無い設定の言語は黙って次の段へ進む() {
         // `ui.locale` の照合の診断は `check_ui_locale` が出すので、ここでは警告しない

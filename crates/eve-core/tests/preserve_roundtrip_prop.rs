@@ -164,20 +164,19 @@ fn run(enc: Encoding, strat: impl Strategy<Value = Vec<u8>>, cases: u32, min_che
     );
 }
 
-// 01 §5.5 の NFR-303 AC-5 / AC-6 (v0.4 の AC は `tests/ac-checklist.toml` の対象外なので、要件 ID で印を付ける)
-// verifies: NFR-303
+// verifies: AC-NFR-303-5
 #[test]
 fn shift_jis_は保持が効く文書なら未編集の保存も末尾への入力の後の保存も元のバイト列を保つ() {
     run(Encoding::ShiftJis, sjis_lines(), 400, 100);
 }
 
-// verifies: NFR-303
+// verifies: AC-NFR-303-5
 #[test]
 fn euc_jp_は保持が効く文書なら未編集の保存も末尾への入力の後の保存も元のバイト列を保つ() {
     run(Encoding::EucJp, euc_lines(), 400, 100);
 }
 
-// verifies: NFR-303
+// verifies: AC-NFR-303-6
 #[test]
 fn iso_2022_jp_は保持が効く文書なら未編集の保存も末尾への入力の後の保存も元のバイト列を保つ() {
     run(Encoding::Iso2022Jp, iso_lines(), 400, 100);

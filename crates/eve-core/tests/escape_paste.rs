@@ -125,7 +125,7 @@ fn copy_escape(h: &mut Harness) {
 
 // ---------- コピー ----------
 
-// verifies: NFR-304
+// verifies: AC-NFR-304-4
 #[test]
 fn コピーはシステムのクリップボードへ表記の文字列を渡し_文書は変えない() {
     let mut h = sjis_env();
@@ -137,7 +137,7 @@ fn コピーはシステムのクリップボードへ表記の文字列を渡�
     assert_eq!(h.doc_text(), format!("ab{ESC_A0}c\n"));
 }
 
-// verifies: NFR-304
+// verifies: AC-NFR-304-4
 #[test]
 fn 大きい選択のハンドルも_to_text_で表記の文字列になる() {
     let mut h = env();
@@ -160,7 +160,7 @@ fn 大きい選択のハンドルも_to_text_で表記の文字列になる() {
     assert_eq!(text.len(), bytes.len() + 5);
 }
 
-// verifies: NFR-304
+// verifies: AC-NFR-304-4
 #[test]
 fn 衝突の文書のコピーは私用文字のままシステムのクリップボードへ渡す() {
     let mut h = env();
@@ -176,7 +176,7 @@ fn 衝突の文書のコピーは私用文字のままシステムのクリッ�
 
 // ---------- 貼り付け: コピー元 × 貼り付け先の表 ----------
 
-// verifies: NFR-304
+// verifies: AC-NFR-304-4
 #[test]
 fn 同じ文書で切り取り_貼り付けるとバイトのまま入り_保存で同じバイトに戻る() {
     let mut h = sjis_env();
@@ -197,7 +197,7 @@ fn 同じ文書で切り取り_貼り付けるとバイトのまま入り_保存
     assert_eq!(h.fs.read("/w/sjis.txt").unwrap(), b"abc\xA0\n");
 }
 
-// verifies: NFR-304
+// verifies: AC-NFR-304-4
 #[test]
 fn 端末からの貼り付けも内部レジスタと照合する() {
     let mut h = sjis_env();
@@ -221,7 +221,7 @@ fn paste_into(path: &str, bytes: &[u8], enc: Encoding) -> (String, Vec<String>) 
     (h.doc_text(), paste_notices(&h))
 }
 
-// verifies: NFR-304
+// verifies: AC-NFR-304-4
 #[test]
 fn 別の文字コードのバイトの文書には表記の文字列で入れて知らせる() {
     let (text, notices) = paste_into("/w/euc.txt", b"q\xFF\n", Encoding::EucJp);
@@ -229,7 +229,7 @@ fn 別の文字コードのバイトの文書には表記の文字列で入れ�
     assert_eq!(notices, vec!["info.paste.escape_as_text"]);
 }
 
-// verifies: NFR-304
+// verifies: AC-NFR-304-4
 #[test]
 fn 不正バイトの無い文書には表記の文字列で入れて知らせる() {
     let (text, notices) = paste_into("/w/u.txt", b"q\n", Encoding::Utf8);
@@ -241,7 +241,7 @@ fn 不正バイトの無い文書には表記の文字列で入れて知らせ�
     assert_eq!(notices, vec!["info.paste.escape_as_text"]);
 }
 
-// verifies: NFR-304
+// verifies: AC-NFR-304-4
 #[test]
 fn 不正バイトの無い_iso_2022_jp_の文書には表記の文字列で入れて知らせる() {
     let (text, notices) = paste_into("/w/j.txt", b"q\n", Encoding::Iso2022Jp);
@@ -249,7 +249,7 @@ fn 不正バイトの無い_iso_2022_jp_の文書には表記の文字列で入�
     assert_eq!(notices, vec!["info.paste.escape_as_text"]);
 }
 
-// verifies: NFR-304
+// verifies: AC-NFR-304-4
 #[test]
 fn 衝突の文書_a_には表記の文字列で入れて知らせる() {
     let (text, notices) = paste_into("/w/c.txt", "q\u{10FF80}".as_bytes(), Encoding::Utf8);
@@ -257,7 +257,7 @@ fn 衝突の文書_a_には表記の文字列で入れて知らせる() {
     assert_eq!(notices, vec!["info.paste.escape_as_text"]);
 }
 
-// verifies: NFR-304
+// verifies: AC-NFR-304-4
 #[test]
 fn 衝突の文書の私用文字は_バイトの文書へはコードポイントの表記で_衝突の文書へはそのまま() {
     let mut h = env();
@@ -282,7 +282,7 @@ fn 衝突の文書の私用文字は_バイトの文書へはコードポイン�
 
 // ---------- 照合が外れる ----------
 
-// verifies: NFR-304
+// verifies: AC-NFR-304-4
 #[test]
 fn クリップボードが別の文字列に替わっていれば内部レジスタを使わず知らせる() {
     let mut h = sjis_env();
@@ -299,7 +299,7 @@ fn クリップボードが別の文字列に替わっていれば内部レジ�
     );
 }
 
-// verifies: NFR-304
+// verifies: AC-NFR-304-4
 #[test]
 fn 空白が変わった文字列は一致しない() {
     let mut h = sjis_env();
@@ -311,7 +311,7 @@ fn 空白が変わった文字列は一致しない() {
     assert_eq!(paste_notices(&h), vec!["info.paste.notation_as_text"]);
 }
 
-// verifies: NFR-304
+// verifies: AC-NFR-304-4
 #[test]
 fn 表記の形の知らせは内部レジスタがエスケープ文字を含む表記のコピーのときだけ() {
     // エスケープ文字を含まないコピー (バイトの文書の "a") では知らせない
@@ -334,7 +334,7 @@ fn 表記の形の知らせは内部レジスタがエスケープ文字を含�
 
 // 不正バイトを含む ISO-2022-JP (状態付き・不正バイトあり。読み取り専用だがコピーはできる) のエスケープ文字は 1 バイトの
 // 意味を持つが、どこに貼ってもバイトとしては運べない。文字列になったことを知らせる (M23 の 5 本目のレビューの再現 r2)
-// verifies: NFR-304
+// verifies: AC-NFR-304-4
 #[test]
 fn 状態付きで不正バイトのある文書からのコピーは表記の文字列で入れて知らせる() {
     let mut h = env();
@@ -357,7 +357,7 @@ fn 状態付きで不正バイトのある文書からのコピーは表記の�
 
 // 衝突の文書 (b) (不正バイトと真の私用文字の両方。区別できない) からのコピーは、衝突の文書 (a) へも `<U+10FFNN>` の
 // 文字列にする (私用文字のまま入れると、元は 1 バイトだった 0x9A が保存で 4 バイトになる。レビューの再現 r3)
-// verifies: NFR-304
+// verifies: AC-NFR-304-4
 #[test]
 fn 衝突の文書_b_からのコピーは衝突の文書_a_へもコードポイントの表記で入れて知らせる() {
     let mut h = env();
@@ -394,7 +394,7 @@ fn 衝突の文書_b_からのコピーは衝突の文書_a_へもコードポ�
 
 // Windows のクリップボードの取得は最初の NUL で切れる (05 §8.1)。NUL で切れた文字列が届いても内部のコピーとみなし、
 // 内部レジスタの全体を入れる (NUL より後ろを黙って失わない。レビューの再現 r4)
-// verifies: NFR-304
+// verifies: AC-NFR-304-4
 #[test]
 fn nul_を含む範囲の切り取りと貼り付けは_nul_で切れて届いても全体が戻る() {
     let mut h = sjis_env();
@@ -437,7 +437,7 @@ fn plain_env() -> Harness {
 
 // SSH (取得は常に `Unsupported`) などでは、エディタ内の `edit.paste` は内部レジスタを入れ、端末からの貼り付けは
 // 届いた文字列を入れる (05 §8.1 が案内している経路)
-// verifies: NFR-304
+// verifies: AC-NFR-304-4
 #[test]
 fn 取得できない環境でも端末からの貼り付けは届いた文字列が入る() {
     for reason in [
@@ -458,7 +458,7 @@ fn 取得できない環境でも端末からの貼り付けは届いた文字�
     }
 }
 
-// verifies: NFR-304
+// verifies: AC-NFR-304-4
 #[test]
 fn 取得の上限超過の後に別のアプリでコピーした文字列は届いたとおりに入る() {
     let mut h = plain_env();
@@ -469,7 +469,7 @@ fn 取得の上限超過の後に別のアプリでコピーした文字列は�
 
 // 書き出しの失敗は知らせるだけで、照合の規則は変えない (03 §8.3.1。前のコピーの失敗が遅れて届いても、次のコピーの
 // 貼り付けを内部レジスタにすり替えない)
-// verifies: NFR-304
+// verifies: AC-NFR-304-4
 #[test]
 fn 書き出しの失敗の後も_届いた文字列が内部レジスタと違えば届いた文字列が入る() {
     for reason in [
@@ -502,7 +502,7 @@ fn 書き出しの失敗の後も_届いた文字列が内部レジスタと違�
     }
 }
 
-// verifies: NFR-304
+// verifies: AC-NFR-304-4
 #[test]
 fn 読めなかった貼り付けは内部レジスタを使う() {
     let mut h = sjis_env();
@@ -515,7 +515,7 @@ fn 読めなかった貼り付けは内部レジスタを使う() {
 }
 
 // 64 KiB 以上の内部レジスタ (Handle で渡す) からも、経路 (1) でバイトのまま入る
-// verifies: NFR-304
+// verifies: AC-NFR-304-4
 #[test]
 fn 大きい内部レジスタからもバイトのまま貼り付ける() {
     let mut h = env();
@@ -543,7 +543,7 @@ fn 大きい内部レジスタからもバイトのまま貼り付ける() {
     assert_eq!(h.fs.read("/w/big.txt").unwrap(), want, "バイトのまま");
 }
 
-// verifies: NFR-304
+// verifies: AC-NFR-304-4
 #[test]
 fn crlf_の文書からのコピーは改行が_lf_で届いても一致する() {
     let mut h = env();
@@ -595,7 +595,7 @@ fn tail(h: &Harness, bytes_text: usize) -> String {
     t.chars().skip(bytes_text).collect()
 }
 
-// verifies: NFR-304
+// verifies: AC-NFR-304-4
 #[test]
 fn 外から貼った私用文字はコードポイントの表記にして知らせる() {
     for (path, bytes, enc, notation) in targets() {
@@ -630,7 +630,7 @@ fn 外から貼った私用文字はコードポイントの表記にして知�
     }
 }
 
-// verifies: NFR-304
+// verifies: AC-NFR-304-4
 #[test]
 fn 打った私用文字と_edit_insert_text_の私用文字はコードポイントの表記にして知らせる() {
     for (path, bytes, enc, notation) in targets() {
@@ -679,7 +679,7 @@ fn search_field(h: &mut Harness) -> (String, usize) {
     )
 }
 
-// verifies: NFR-304
+// verifies: AC-NFR-304-4
 #[test]
 fn 置換の文字列の私用文字はコードポイントの表記にして知らせる() {
     for (path, bytes, enc, notation) in targets() {
@@ -720,7 +720,7 @@ fn 置換の文字列の私用文字はコードポイントの表記にして�
     }
 }
 
-// verifies: NFR-304
+// verifies: AC-NFR-304-4
 #[test]
 fn 正規表現の置換の参照が運ぶエスケープ文字はバイトのまま_文字どおりの私用文字は表記にする() {
     let mut h = target_env("/w/sjis.txt", b"ab\xA0c\n", Encoding::ShiftJis);
@@ -798,7 +798,7 @@ fn プロンプトの欄には文字列のまま入れて知らせない() {
 
 // ---------- 文書の中の操作 ----------
 
-// verifies: NFR-304
+// verifies: AC-NFR-304-4
 #[test]
 fn 行の複製と移動はエスケープ文字をそのまま運ぶ() {
     let mut h = env();

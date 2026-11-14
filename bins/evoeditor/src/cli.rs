@@ -698,7 +698,7 @@ mod tests {
 
     // ---- 標準入力の `-` (07 §18.2、03 §9.2.2 の「書き方」。v0.4 の M25) ----
 
-    // verifies: FR-120
+    // verifies: AC-FR-120-1
     #[test]
     fn ハイフンは標準入力() {
         assert_eq!(p(&["-"]).unwrap(), run(vec![stdin(None, None)], false));

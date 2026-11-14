@@ -182,7 +182,7 @@ fn releasable_cases() -> Vec<(Encoding, Vec<u8>, (usize, usize))> {
 
 // ---------- (a) 解除と確認 ----------
 
-// verifies: NFR-304, FR-116
+// verifies: AC-NFR-304-4, FR-116
 #[test]
 fn 解除できる文書で確認が出て_キャンセルでは変えず_編集を許可で編集できる() {
     for (enc, bytes, (line, col)) in releasable_cases() {
@@ -236,7 +236,7 @@ fn 解除できる文書で確認が出て_キャンセルでは変えず_編集
     }
 }
 
-// verifies: FR-127, NFR-304
+// verifies: FR-127, AC-NFR-304-4
 #[test]
 fn 不正バイトの比率の確認で読み取り専用で開いた文書も解除できる() {
     let mut h = Harness::new().with_file("/w/bad.txt", b"ok \x9A\xFF end\n");
@@ -252,7 +252,7 @@ fn 不正バイトの比率の確認で読み取り専用で開いた文書も�
     assert_eq!(h.doc_text(), "ok \u{10FF9A}\u{10FFFF} end\n!");
 }
 
-// verifies: FR-111, NFR-304
+// verifies: FR-111, AC-NFR-304-4
 #[test]
 fn 確認の_e_で文字コードの入力に進み_指定した文字コードで開き直す() {
     let mut h = opened(&[b"a\x82\xA0b\n", PAD.as_bytes()].concat(), Encoding::Utf8);
@@ -268,7 +268,7 @@ fn 確認の_e_で文字コードの入力に進み_指定した文字コード�
     assert!(doc(&h).is_editable(), "{:?}", reasons(&h));
 }
 
-// verifies: NFR-304
+// verifies: AC-NFR-304-4
 #[test]
 fn 無題の文書の確認には開き直しの選択肢を出さない() {
     // 無題の文書への復旧で由来の文字コードが付いた文書 (03 §8.3.1 の細目 (d))
@@ -310,7 +310,7 @@ fn assert_not_releasable(h: &mut Harness, reason_text: &str, key: &str, hint_has
     assert!(!hint.contains("確認の後に編集"), "{hint}");
 }
 
-// verifies: NFR-304, FR-116
+// verifies: AC-NFR-304-4, FR-116
 #[test]
 fn 私用文字と衝突した文書は解除できず_理由の文言を分ける() {
     // 真の私用文字 U+10FF41 と不正バイト 0x80 の両方 (衝突の文書 (b))
@@ -328,7 +328,7 @@ fn 私用文字と衝突した文書は解除できず_理由の文言を分け�
     );
 }
 
-// verifies: NFR-304, FR-116
+// verifies: AC-NFR-304-4, FR-116
 #[test]
 fn 不正バイトを含む_iso_2022_jp_は解除できない() {
     let mut h = opened(
@@ -389,7 +389,7 @@ fn 巨大ファイルとして開いた不正バイトの文書は解除でき�
     assert!(text.contains("巨大なファイル"), "{text}");
 }
 
-// verifies: NFR-304, FR-116
+// verifies: AC-NFR-304-4, FR-116
 #[test]
 fn 解除できる不正バイトの文書の編集の拒否は切替の案内を先頭に出す() {
     let mut h = opened(&[b"a\x80b\n", PAD.as_bytes()].concat(), Encoding::Utf8);
@@ -418,7 +418,7 @@ fn 解除できる不正バイトの文書の編集の拒否は切替の案内�
 
 // ---------- 切替の繰り返し・属性との組 ----------
 
-// verifies: FR-116, NFR-304
+// verifies: FR-116, AC-NFR-304-4
 #[test]
 fn 解除した後にもう一度切り替えると確認なしに読み取り専用にし_次の解除も確認なし() {
     let mut h = opened(&[b"a\x80b\n", PAD.as_bytes()].concat(), Encoding::Utf8);
@@ -434,7 +434,7 @@ fn 解除した後にもう一度切り替えると確認なしに読み取り�
     assert!(h.messages().contains(&"info.read_only.released".to_owned()));
 }
 
-// verifies: FR-116, FR-106, NFR-304
+// verifies: FR-116, FR-106, AC-NFR-304-4
 #[test]
 fn 属性と不正バイトの両方の文書は確認の後に両方を外し_上書き保存は属性の確認を経る() {
     let bytes = [b"a\x80b\n", PAD.as_bytes()].concat();
@@ -467,7 +467,7 @@ fn 属性と不正バイトの両方の文書は確認の後に両方を外し_�
 
 // ---------- (b) 保存 (NFR-304 AC-4) ----------
 
-// verifies: NFR-304
+// verifies: AC-NFR-304-4
 #[test]
 fn 解除の後に不正バイト以外を編集して保存すると不正バイトは元のバイト値のまま同じ順で残る() {
     for (enc, bytes, _) in releasable_cases() {
@@ -495,7 +495,7 @@ fn 解除の後に不正バイト以外を編集して保存すると不正バ�
     }
 }
 
-// verifies: NFR-304
+// verifies: AC-NFR-304-4
 #[test]
 fn 不正バイトを含む行を上に動かして保存するとバイトのまま移る() {
     let rest = [b"x\xA0y\n", PAD.as_bytes()].concat();
@@ -514,7 +514,7 @@ fn 不正バイトを含む行を上に動かして保存するとバイトの�
 
 // ---------- 解除の持ち越し (再読込・開き直し・新しく開く) ----------
 
-// verifies: NFR-304, FR-117
+// verifies: AC-NFR-304-4, FR-117
 #[test]
 fn 解除した文書を再読込すると解除を持ち越し_再読込の_undo_redo_ができる() {
     let mut h = opened(&[b"a\x80b\n", PAD.as_bytes()].concat(), Encoding::Utf8);
@@ -548,7 +548,7 @@ fn 解除した文書を再読込すると解除を持ち越し_再読込の_und
     );
 }
 
-// verifies: NFR-304, FR-117
+// verifies: AC-NFR-304-4, FR-117
 #[test]
 fn 外部変更からの再読込でも解除を持ち越す() {
     let mut h = opened(&[b"a\x80b\n", PAD.as_bytes()].concat(), Encoding::Utf8);
@@ -562,7 +562,7 @@ fn 外部変更からの再読込でも解除を持ち越す() {
     assert!(doc(&h).is_editable(), "{:?}", reasons(&h));
 }
 
-// verifies: NFR-304, FR-117
+// verifies: AC-NFR-304-4, FR-117
 #[test]
 fn 解除していない文書の再読込では読み取り専用のままで_元に戻せないと示す() {
     let mut h = opened(&[b"a\x80b\n", PAD.as_bytes()].concat(), Encoding::Utf8);
@@ -582,7 +582,7 @@ fn 解除していない文書の再読込では読み取り専用のままで_�
     assert!(doc(&h).is_editable(), "解除は Undo で戻らない");
 }
 
-// verifies: NFR-304, FR-117
+// verifies: AC-NFR-304-4, FR-117
 #[test]
 fn 再読込で私用文字と衝突した内容になったら解除を持ち越さない() {
     let mut h = opened(&[b"a\x80b\n", PAD.as_bytes()].concat(), Encoding::Utf8);
@@ -607,7 +607,7 @@ fn 再読込で私用文字と衝突した内容になったら解除を持ち�
     );
 }
 
-// verifies: NFR-304, FR-111
+// verifies: AC-NFR-304-4, FR-111
 #[test]
 fn 解除した文書を文字コードを指定して開き直すと読み取り専用に戻る() {
     let mut h = opened(&[b"a\x80b\n", PAD.as_bytes()].concat(), Encoding::Utf8);
@@ -624,7 +624,7 @@ fn 解除した文書を文字コードを指定して開き直すと読み取�
     assert_eq!(h.overlay(), "dialog");
 }
 
-// verifies: NFR-304
+// verifies: AC-NFR-304-4
 #[test]
 fn 解除した文書を閉じて新しく開くと読み取り専用に戻る() {
     let mut h = opened(&[b"a\x80b\n", PAD.as_bytes()].concat(), Encoding::Utf8);
@@ -684,7 +684,7 @@ fn with_swap(bytes: &[u8], body: SwapBody, enc: Encoding) -> Harness {
 
 // 異常終了の後に開くと、不正バイトを含む文書は InvalidBytes で読み取り専用に戻るが、復旧が提案される。適用すると
 // 内容が一致し、読み取り専用のまま案内が出る。解除して編集を続け、保存すると不正バイトが元のまま残る
-// verifies: NFR-304, FR-118, NFR-307
+// verifies: AC-NFR-304-4, FR-118, NFR-307
 #[test]
 fn 解除して編集した文書の異常終了から復旧し_解除して続けられる() {
     let bytes = [
@@ -757,7 +757,7 @@ fn 解除して編集した文書の異常終了から復旧し_解除して続�
     assert_eq!(h.fs_read("/w/a.txt").unwrap(), want);
 }
 
-// verifies: NFR-304, FR-118
+// verifies: AC-NFR-304-4, FR-118
 #[test]
 fn 復旧を適用した後に解除すると復旧の_undo_ができる() {
     let bytes = [b"a\x80b\n", PAD.as_bytes()].concat();
@@ -782,7 +782,7 @@ fn 復旧を適用した後に解除すると復旧の_undo_ができる() {
     assert!(doc(&h).is_editable());
 }
 
-// verifies: NFR-304, FR-118
+// verifies: AC-NFR-304-4, FR-118
 #[test]
 fn 解除した文書に復旧を適用すると解除の記録を付け直す() {
     let bytes = [b"a\x80b\n", PAD.as_bytes()].concat();
@@ -892,7 +892,7 @@ fn count_of(h: &Harness, key: &str) -> usize {
 // 判定が外れて UTF-8 + 不正バイトで開いた Shift_JIS のファイルに、Shift_JIS で書かれたスワップがある。提案すると、
 // 適用・解除・保存で Shift_JIS のファイルが確認なしに UTF-8 で書かれる (レビューの再現)。提案せずに案内し、利用者が
 // Shift_JIS で開き直すと提案して、Shift_JIS のバイト列で保存する
-// verifies: NFR-304, FR-118, FR-111
+// verifies: AC-NFR-304-4, FR-118, FR-111
 #[test]
 fn 文字コードの違うスワップは提案せずに案内し_その文字コードで開き直すと提案する() {
     let bytes = sjis("ｱｲｳｴｵ\n");
@@ -966,7 +966,7 @@ fn 文字コードの違うスワップは提案せずに案内し_その文字�
 
 // 同じく文字コードの違う (エスケープ文字を持つ) スワップ。開き直した先も不正バイトを含む (理由が InvalidBytes だけの)
 // 文書なら、提案 → 適用 → 解除 → 保存で、不正バイトも元のバイトのまま Shift_JIS で書く
-// verifies: NFR-304, FR-118
+// verifies: AC-NFR-304-4, FR-118
 #[test]
 fn 文字コードの違うスワップは開き直した不正バイトの文書に適用し_解除して保存できる() {
     let bytes = [
@@ -1028,7 +1028,7 @@ fn 文字コードの違うスワップは開き直した不正バイトの文�
 // 由来の文字コードの無い文書 (`escape_encoding == None`) の InvalidBytes は解除できない (03 §8.3.1 の「解除できる
 // 文書」)。同じ文字コードでも pua_escaped が偽のスワップを適用すると、この状態になる。確認は「元のバイトに戻る」と
 // 事実と違う説明になり、保存も E3 で止まるため。編集の拒否は切替の案内をしない一般のメッセージ
-// verifies: NFR-304, FR-116
+// verifies: AC-NFR-304-4, FR-116
 #[test]
 fn 由来の文字コードの無い文書の不正バイトは解除できない() {
     let bytes = [b"a\x80b\n", PAD.as_bytes()].concat();
@@ -1056,7 +1056,7 @@ fn 由来の文字コードの無い文書の不正バイトは解除できな�
 }
 
 // 解除した文書の再読込で、不正バイトの比率の確認 (FR-127) に「読み取り専用で開く」と答えたら、解除を持ち越さない
-// verifies: NFR-304, FR-127, FR-117
+// verifies: AC-NFR-304-4, FR-127, FR-117
 #[test]
 fn 再読込の比率の確認で読み取り専用を選ぶと解除を持ち越さない() {
     let mut h = opened(&[b"a\x80b\n", PAD.as_bytes()].concat(), Encoding::Utf8);
@@ -1081,7 +1081,7 @@ fn 再読込の比率の確認で読み取り専用を選ぶと解除を持ち�
 
 // 本文が同じ復旧を、解除した文書に適用しても、記録を消して読み取り専用に戻す (全置換は恒等の ChangeSet にならず、
 // 書式の変更が当たる)
-// verifies: NFR-304, FR-118
+// verifies: AC-NFR-304-4, FR-118
 #[test]
 fn 本文が同じ復旧でも記録を消して読み取り専用に戻す() {
     let bytes = [b"a\x80b\n", PAD.as_bytes()].concat();
@@ -1117,7 +1117,7 @@ fn 本文が同じ復旧でも記録を消して読み取り専用に戻す() {
 
 // 確認の不正なバイトの数と最初の位置は、本文のエスケープ文字から求める (復旧で本文が変わると、読込の数 (2 個) と
 // 合わない)
-// verifies: NFR-304
+// verifies: AC-NFR-304-4
 #[test]
 fn 復旧の後の確認の数と位置は本文のエスケープ文字から求める() {
     let bytes = [b"a\x80b\x81c\n", PAD.as_bytes()].concat();

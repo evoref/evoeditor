@@ -68,7 +68,7 @@ fn erase_issue(p: Option<&LocaleProblem>) -> Option<LocaleProblem> {
     })
 }
 
-// verifies: NFR-603
+// verifies: AC-NFR-603-9
 #[test]
 fn 検査_2_から_9_の表() {
     let marks31 = format!("e{}", "\u{0301}".repeat(31));
@@ -527,7 +527,7 @@ fn locale(p: LocaleProblem) -> DiagKind {
     DiagKind::Locale(p)
 }
 
-// verifies: NFR-603
+// verifies: AC-NFR-603-9
 #[test]
 fn 一つの文言だけを上書きし_ほかは同梱のまま() {
     let f = load("[msg.save.failed]\ntext = \"{path}: 保存失敗 ({reason})\"\n");
@@ -546,7 +546,7 @@ fn 一つの文言だけを上書きし_ほかは同梱のまま() {
     assert_eq!(c.len(), base().len());
 }
 
-// verifies: NFR-603
+// verifies: AC-NFR-603-9
 #[test]
 fn 重ね方の表() {
     // (本文, 期待する診断 (キー, 種類, 行), 重ねた後に確かめるキーと文言)
@@ -752,7 +752,7 @@ fn language_mismatch_の値は書かれた値() {
     assert_eq!(f.diagnostics[0].value, "f\u{1B}r");
 }
 
-// verifies: NFR-603
+// verifies: AC-NFR-603-9
 #[test]
 fn ファイル全体の問題はエラー一件で全体を使わない() {
     let b = base();
@@ -826,7 +826,7 @@ fn ファイル全体の問題はエラー一件で全体を使わない() {
     }
 }
 
-// verifies: NFR-603
+// verifies: AC-NFR-603-9
 #[test]
 fn 診断は_100_件と_ほか_n_件() {
     let mut src = String::new();
@@ -859,7 +859,7 @@ fn 診断の行と桁() {
     assert_eq!(pos, [(2, 3), (5, 1)]);
 }
 
-// verifies: NFR-603
+// verifies: AC-NFR-603-9
 #[test]
 fn 深い入れ子は止まらずパニックしない() {
     let n = 5000;
@@ -988,7 +988,7 @@ fn キーの長さの上限の境界() {
     }
 }
 
-// verifies: NFR-603
+// verifies: AC-NFR-603-9
 #[test]
 fn 補う言語() {
     assert!(std::ptr::eq(Catalog::base_for("ja"), Catalog::builtin_ja()));
@@ -1063,7 +1063,7 @@ fn 問題の文言のキーの種別() {
     );
 }
 
-// verifies: NFR-603
+// verifies: AC-NFR-603-9
 #[test]
 fn 同梱の言語ファイルは検査_2_から_9_に通る() {
     let (ja, en) = (Catalog::builtin_ja(), Catalog::builtin_en());
@@ -1172,7 +1172,7 @@ fn ヒントの幅は_zwnj_を可視化の記号の幅で数える() {
     assert_eq!(hint_width("保存"), 4);
 }
 
-// verifies: NFR-603
+// verifies: AC-NFR-603-9
 #[test]
 fn プレースホルダの問題は何が合わないかを分ける() {
     let issue = |text: &str, builtin: &str| match check_text("a.b", text, builtin) {
@@ -1192,7 +1192,7 @@ fn プレースホルダの問題は何が合わないかを分ける() {
     assert_eq!(issue("x {path}", "y {path}"), None);
 }
 
-// verifies: NFR-603
+// verifies: AC-NFR-603-9
 #[test]
 fn 訳の無いキーは書いていない同梱のキー() {
     let f = load("[status]\nuntitled = \"x-{n}\"\n[hint.app]\nquit = \"\\u001B\"\n");

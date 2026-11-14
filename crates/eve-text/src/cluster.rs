@@ -674,7 +674,7 @@ mod tests {
         println!("// {} 区間", ranges.len());
     }
 
-    // verifies: NFR-106
+    // verifies: AC-NFR-106-5
     #[test]
     fn 分類は全コードポイントで書記素の分割の振る舞いから作り直した分類と同じ() {
         let mut differ = Vec::new();
@@ -743,7 +743,7 @@ mod tests {
         ]
     }
 
-    // verifies: NFR-106
+    // verifies: AC-NFR-106-5
     #[test]
     fn 表引きの分割は書記素の分割と同じ境界になる_乱数() {
         let cases = std::env::var("PROPTEST_CASES")

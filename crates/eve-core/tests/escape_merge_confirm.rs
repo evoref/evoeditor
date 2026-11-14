@@ -177,7 +177,7 @@ fn last_message(h: &Harness) -> Option<String> {
 
 // ---------- 確認の表示 ----------
 
-// verifies: NFR-304
+// verifies: AC-NFR-304-5
 #[test]
 fn つながる保存は何も書かずに確認を出し_件数と最初の位置と変わる範囲と一覧を示す() {
     let mut s = sjis_joined();
@@ -282,7 +282,7 @@ fn 末尾まで戻らないつながりは_ファイルの末尾まで_と示す
 
 // ---------- キャンセル ----------
 
-// verifies: NFR-304
+// verifies: AC-NFR-304-5
 #[test]
 fn キャンセルは書かずにカーソルを最初の位置へ移し_全部の位置を強調して知らせる() {
     let mut s = sjis_joined();
@@ -332,7 +332,7 @@ fn キャンセルの後につながりを直せばそのまま保存できる()
 
 // ---------- このまま保存 ----------
 
-// verifies: NFR-304
+// verifies: AC-NFR-304-5
 #[test]
 fn このまま保存で書き_開き直すとつながった文字として読まれる() {
     let mut s = sjis_joined();
@@ -688,7 +688,7 @@ fn sjis_released() -> Harness {
     s
 }
 
-// verifies: NFR-304
+// verifies: AC-NFR-304-6
 #[test]
 fn エスケープ文字が理由の_e3_は不正なバイトの説明を本文にする() {
     let mut s = sjis_released();

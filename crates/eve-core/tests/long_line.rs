@@ -234,7 +234,7 @@ fn status_text(h: &mut Harness, kind: StatusKind) -> String {
         .unwrap_or_default()
 }
 
-// verifies: NFR-106
+// verifies: AC-NFR-106-5
 #[test]
 fn 長大行でもカーソルの移動_桁_表示は書記素の単位() {
     // 01 NFR-106 AC-5: 結合文字・ZWJ の列・国旗・ハングルの字母の列の途中にカーソルが止まらず、桁は書記素の数、
@@ -404,7 +404,7 @@ fn position(f: &eve_view::Frame) -> String {
         .unwrap_or_default()
 }
 
-// verifies: NFR-106
+// verifies: AC-NFR-106-5
 #[test]
 fn 長大行の経路は通常の行と同じ_写す範囲と記録点をまたぐ乱数の行() {
     // 03 §14.4 の「正しさの確かめ」・01 NFR-106 AC-5: 本物の経路 (写す範囲 12 KiB / 64 KiB の端と記録点 4 KiB をまたぐ
@@ -504,7 +504,7 @@ fn 長大行の経路は通常の行と同じ_写す範囲と記録点をまた�
 
 /// 既知の制約 (03 §14.4 の「1 書記素の上限」、01 NFR-106 AC-5): 4 KiB を超える 1 書記素は長大行では 4 KiB で切るので、
 /// その後ろの桁が通常の行より 1 つ多くなる。
-// verifies: NFR-106
+// verifies: AC-NFR-106-5
 #[test]
 fn 上限を超える書記素の後ろでは桁が通常の行と食い違う_既知の制約() {
     let mut line = "a".repeat(70_000);

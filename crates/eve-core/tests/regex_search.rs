@@ -21,7 +21,7 @@ fn re(p: &str) -> SearchQuery {
     SearchQuery::literal(p).with_regex(true)
 }
 
-// verifies: FR-402
+// verifies: AC-FR-402-1
 #[test]
 fn 正規表現で数える() {
     assert_eq!(count("a1 b22 c333", re(r"\d+")), 3);
@@ -34,7 +34,7 @@ fn 正規表現で数える() {
     assert_eq!(count("foo.bar", SearchQuery::literal(".")), 1);
 }
 
-// verifies: FR-402
+// verifies: AC-FR-402-1
 #[test]
 fn 行頭と行末の記号は行ごとに働く() {
     assert_eq!(count("ab\nab\nab", re("^ab$")), 3);
@@ -94,7 +94,7 @@ fn 日本語を含むパターンと書記素の境界() {
     );
 }
 
-// verifies: FR-402
+// verifies: AC-FR-402-2, AC-FR-402-5
 #[test]
 fn 構文エラーは理由つきで拒否し_改行を含むパターンは探す() {
     assert!(matches!(re("(").compile(), Err(QueryError::Syntax(_))));
@@ -115,7 +115,7 @@ fn 構文エラーは理由つきで拒否し_改行を含むパターンは探�
     ));
 }
 
-// verifies: FR-402
+// verifies: AC-FR-402-7
 #[test]
 fn 行の終端を明示した書き方は符号位置で書いても行の終端に一致する() {
     // 03 §12.3.1 の表で行の終端に一致する書き方 (v0.3 では「未対応」、`\x0A` などは v0.3 まで黙って 0 件)
@@ -141,7 +141,7 @@ fn 行の終端を明示した書き方は符号位置で書いても行の終�
     );
 }
 
-// verifies: FR-402
+// verifies: AC-FR-402-7
 #[test]
 fn 行の終端を明示しない書き方は_1_行の中で探す() {
     // 否定・略記のクラスは行の終端を集合から除く。`[^\n]` は CR にも一致しない (03 §12.3.1)
@@ -161,7 +161,7 @@ fn 行の終端を明示しない書き方は_1_行の中で探す() {
     assert_eq!(count("ab\r\nab\rab", re("^ab$")), 3);
 }
 
-// verifies: FR-402
+// verifies: AC-FR-402-7
 #[test]
 fn 文書の先頭と末尾の記号は文書の端にだけ一致する() {
     // v0.3 までは 1 行ずつ探したので各行の先頭 / 末尾に一致していた (03 §12.3.1 の「v0.3 からの振る舞いの変化」)
@@ -173,7 +173,7 @@ fn 文書の先頭と末尾の記号は文書の端にだけ一致する() {
     assert_eq!(count("ab\rab\nab", re(r"(?-R)^ab")), 2);
 }
 
-// verifies: FR-402
+// verifies: AC-FR-402-2
 #[test]
 fn 構文エラーのときは何にも一致しない() {
     assert_eq!(count("a(b", re("(")), 0);

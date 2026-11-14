@@ -30,7 +30,7 @@ fn reload(h: &mut Harness) {
     h.run_jobs();
 }
 
-// verifies: NFR-603
+// verifies: AC-NFR-603-9
 #[test]
 fn ja_の_1_つの文言の上書きが画面に出て_書いていないキーは同梱の_ja_になる() {
     let (locale, cat, diags) = overlay_catalog("ja", "[status]\nuntitled = \"名無し-{n}\"\n");
@@ -47,7 +47,7 @@ fn ja_の_1_つの文言の上書きが画面に出て_書いていないキー�
     assert!(!h.frame_text().contains("info.config"));
 }
 
-// verifies: NFR-603
+// verifies: AC-NFR-603-9
 #[test]
 fn 追加言語の表で無いキーは_en_の文言になる() {
     let (locale, cat, diags) = overlay_catalog(
@@ -64,7 +64,7 @@ fn 追加言語の表で無いキーは_en_の文言になる() {
     assert_eq!(text, "There are no settings diagnostics");
 }
 
-// verifies: NFR-603
+// verifies: AC-NFR-603-9
 // verifies: NFR-503
 #[test]
 fn 使わなかった文言は同梱のままで_診断は同梱の文言で出る() {
@@ -108,7 +108,7 @@ fn 使わなかった文言は同梱のままで_診断は同梱の文言で出�
     );
 }
 
-// verifies: NFR-603
+// verifies: AC-NFR-603-9
 #[test]
 fn パレットの照合は上書きした_title_に依らず英語の_title_で当たる() {
     let (locale, cat, diags) = overlay_catalog(
@@ -143,7 +143,7 @@ fn パレットの照合は上書きした_title_に依らず英語の_title_で
     );
 }
 
-// verifies: NFR-603
+// verifies: AC-NFR-603-9
 #[test]
 fn 言語ファイルが変わっていれば読み直しで再起動を促す() {
     let mut h = Harness::new();
@@ -179,7 +179,7 @@ fn 言語ファイルが変わっていれば読み直しで再起動を促す()
     assert_eq!(text, "言語ファイルの変更は、再起動すると有効になります");
 }
 
-// verifies: NFR-603
+// verifies: AC-NFR-603-9
 #[test]
 fn 起動中に置いた言語を_ui_locale_に書いて読み直すと見つからないとせず再起動を促す() {
     let mut h = Harness::new();
@@ -211,7 +211,7 @@ fn 起動中に置いた言語を_ui_locale_に書いて読み直すと見つか
     );
 }
 
-// verifies: NFR-603
+// verifies: AC-NFR-603-9
 #[test]
 fn 読み直しでも_ui_locale_を候補と照らし_言語ファイルの診断は残す() {
     let fr = Locale::from_tag("fr").unwrap();
@@ -253,7 +253,7 @@ fn 読み直しでも_ui_locale_を候補と照らし_言語ファイルの診�
     );
 }
 
-// verifies: NFR-603
+// verifies: AC-NFR-603-9
 #[test]
 fn 複数の問題の要約を上書きしても言語ファイルの診断は同梱の文言で出る() {
     let src = "[msg.config.problems]\ntext = \"上書き {count} {detail}\"\n\

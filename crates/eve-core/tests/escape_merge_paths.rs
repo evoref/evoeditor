@@ -407,7 +407,7 @@ fn gen_toks(enc: Encoding, rng: &mut Rng, alpha: &[char], len: usize) -> Vec<Tok
         .collect()
 }
 
-// verifies: NFR-304
+// verifies: AC-NFR-304-5
 #[test]
 fn 乱数の本文の保存を出力の全体の復号と突き合わせる() {
     let n = n_cases();

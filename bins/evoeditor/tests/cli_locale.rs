@@ -57,7 +57,7 @@ fn listing(cfg: &Path, lang: &str, args: &[&str]) -> (String, String) {
     (v["locale"].as_str().unwrap().to_owned(), title)
 }
 
-// verifies: NFR-603
+// verifies: AC-NFR-603-9
 #[test]
 fn 追加言語のファイルを見つけ_locale_と_eve_lang_で選べる() {
     let d = dir("pick");
@@ -97,7 +97,7 @@ fn 追加言語のファイルを見つけ_locale_と_eve_lang_で選べる() {
     let _ = std::fs::remove_dir_all(&d);
 }
 
-// verifies: NFR-603
+// verifies: AC-NFR-603-9
 #[test]
 fn 同梱の言語のファイルは同じ言語に重ねる() {
     let d = dir("ja");
@@ -114,7 +114,7 @@ fn 同梱の言語のファイルは同じ言語に重ねる() {
     let _ = std::fs::remove_dir_all(&d);
 }
 
-// verifies: NFR-603
+// verifies: AC-NFR-603-9
 #[test]
 fn 規則に合わない名前は読まずに警告する() {
     let d = dir("names");
@@ -143,7 +143,7 @@ fn 規則に合わない名前は読まずに警告する() {
     let _ = std::fs::remove_dir_all(&d);
 }
 
-// verifies: NFR-603
+// verifies: AC-NFR-603-9
 #[test]
 fn 見つからない言語は探した場所と代わりの言語を示す() {
     let d = dir("missing");
@@ -202,7 +202,7 @@ fn 見つからない言語は探した場所と代わりの言語を示す() {
     let _ = std::fs::remove_dir_all(&d);
 }
 
-// verifies: NFR-603
+// verifies: AC-NFR-603-3, AC-NFR-603-9
 #[test]
 fn eve_lang_の_codeset_と_modifier_は落として当てる() {
     let d = dir("posix");
@@ -214,7 +214,7 @@ fn eve_lang_の_codeset_と_modifier_は落として当てる() {
     let _ = std::fs::remove_dir_all(&d);
 }
 
-// verifies: NFR-603
+// verifies: AC-NFR-603-9
 #[test]
 fn ui_locale_は使える言語と照らす() {
     let d = dir("ui-locale");
@@ -244,7 +244,7 @@ fn ui_locale_は使える言語と照らす() {
     let _ = std::fs::remove_dir_all(&d);
 }
 
-// verifies: NFR-603
+// verifies: AC-NFR-603-9
 // verifies: NFR-503
 #[test]
 fn check_config_は先頭に選択の結果を出し_言語ファイルを検査する() {
@@ -310,7 +310,7 @@ fn check_config_は先頭に選択の結果を出し_言語ファイルを検査
     let _ = std::fs::remove_dir_all(&d);
 }
 
-// verifies: NFR-603
+// verifies: AC-NFR-603-9
 #[test]
 fn 大きすぎるファイルと_utf8_でないファイルは全体を使わない() {
     let d = dir("whole");
@@ -365,7 +365,7 @@ fn run_within(cfg: &Path, args: &[&str]) -> (i32, String) {
     (status.code().unwrap_or(-1), out)
 }
 
-// verifies: NFR-603
+// verifies: AC-NFR-603-9
 #[test]
 fn ディレクトリを言語ファイルの名前で置いても止まらない() {
     let d = dir("not-regular");
@@ -380,7 +380,7 @@ fn ディレクトリを言語ファイルの名前で置いても止まらな�
 }
 
 // FIFO は書き手がいなくても開くときに止まらず、通常のファイルでないとして読まない (07 §17.4。Unix は O_NONBLOCK で開く)
-// verifies: NFR-603
+// verifies: AC-NFR-603-9
 #[cfg(unix)]
 #[test]
 fn fifo_を言語ファイルの名前で置いても止まらない() {
@@ -397,7 +397,7 @@ fn fifo_を言語ファイルの名前で置いても止まらない() {
     let _ = std::fs::remove_dir_all(&d);
 }
 
-// verifies: NFR-603
+// verifies: AC-NFR-603-9
 #[test]
 fn check_config_は追加言語の訳の無いキーを出し_全件を数える() {
     let d = dir("untranslated");

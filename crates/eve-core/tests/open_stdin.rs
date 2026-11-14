@@ -143,7 +143,7 @@ fn sjis_text(n: usize) -> Vec<u8> {
     v
 }
 
-// verifies: FR-120
+// verifies: AC-FR-120-1
 #[test]
 fn eof_まで読んだ内容を開き_開いた量を返す() {
     let (d, progress) = run_stdin(
@@ -165,7 +165,7 @@ fn eof_まで読んだ内容を開き_開いた量を返す() {
     assert_eq!(d.bytes, 12, "開いた量");
 }
 
-// verifies: FR-120
+// verifies: AC-FR-120-5
 #[test]
 fn 一バイトずつ届いても_まとめて届いても_同じ結果() {
     // 64 KiB を超える Shift_JIS (先頭の 1 バイトだけでは判定できない)
@@ -193,7 +193,7 @@ fn 一バイトずつ届いても_まとめて届いても_同じ結果() {
     assert_eq!(a.format.encoding, Encoding::ShiftJis);
 }
 
-// verifies: FR-120
+// verifies: AC-FR-120-5
 #[test]
 fn 判定と保持方式の記録はファイルと同じ() {
     for bytes in [sjis_text(3000), sjis_text(10)] {
@@ -210,7 +210,7 @@ fn 判定と保持方式の記録はファイルと同じ() {
     }
 }
 
-// verifies: FR-120
+// verifies: AC-FR-120-5
 #[test]
 fn バイナリと不正バイトの多い内容は確認を出さずに読み取り専用で開く() {
     let mut bin = b"\x00\x01\x02binary".to_vec();
@@ -233,7 +233,7 @@ fn バイナリと不正バイトの多い内容は確認を出さずに読み�
     assert_eq!(d.format.invalid_bytes, 4);
 }
 
-// verifies: FR-120
+// verifies: AC-FR-120-5
 #[test]
 fn encoding_の指定は判定しない_readonly_は利用者の理由() {
     let (b, _, _) = encoding_rs::EUC_JP.encode("日本語");
@@ -257,7 +257,7 @@ fn limited(limit: u64) -> OpenOptions {
     }
 }
 
-// verifies: FR-120
+// verifies: AC-FR-120-4
 #[test]
 fn 上限は読んだバイト数で_文字の境界の手前まで() {
     // 「あ」は 3 バイト: 100 バイトの上限は 33 文字 (99 バイト) で切る (途中の 1 バイトを不正バイトにしない)
@@ -272,7 +272,7 @@ fn 上限は読んだバイト数で_文字の境界の手前まで() {
     }
 }
 
-// verifies: FR-120
+// verifies: AC-FR-120-4
 #[test]
 fn 上限は復号した本文のバイト数でも見る() {
     // 半角カナ (Shift_JIS の 1 バイト) は UTF-8 で 3 バイト: 90 バイトの上限は 30 文字
@@ -289,7 +289,7 @@ fn 上限は復号した本文のバイト数でも見る() {
     assert!(a.detected.contains(ReadOnlyReason::LoadIncomplete));
 }
 
-// verifies: FR-120
+// verifies: AC-FR-120-4
 #[test]
 fn 上限ちょうどで終わる入力は読み終えた扱い() {
     let bytes = vec![b'a'; 100];
@@ -304,7 +304,7 @@ fn 上限ちょうどで終わる入力は読み終えた扱い() {
     assert_eq!(d.text.len(), 100);
 }
 
-// verifies: FR-120
+// verifies: AC-FR-120-4
 #[test]
 fn 上限が判定の前でも切る() {
     // 上限 (10 バイト) が先頭の 64 KiB より小さい: 判定は貯めた分で行い、本文は上限まで
@@ -335,7 +335,7 @@ fn stopped(steps: Vec<StdinStep>) -> (Done, FakeStdin) {
     (d, fake)
 }
 
-// verifies: FR-120
+// verifies: AC-FR-120-4
 #[test]
 fn 取消しは読んだところまでを返す() {
     let (d, fake) = stopped(vec![
@@ -352,7 +352,7 @@ fn 取消しは読んだところまでを返す() {
     assert_eq!(fake.wakes(), 1);
 }
 
-// verifies: FR-120
+// verifies: AC-FR-120-4
 #[test]
 fn 取消し_失敗は文字の境界で切り_切れた多バイト列を開かない() {
     // 「い」(E3 81 84) の 2 バイトまで届いたところで取り消す
@@ -408,7 +408,7 @@ fn iso_long_kanji(lines: usize) -> Vec<u8> {
     b.into_owned()
 }
 
-// verifies: FR-120
+// verifies: AC-FR-120-4
 #[test]
 fn iso_2022_jp_の漢字の区間で上限に届いても文字の境界で切る() {
     let bytes = iso_long_kanji(30);
@@ -447,7 +447,7 @@ fn iso_2022_jp_の漢字の区間で上限に届いても文字の境界で切�
     assert_eq!(d.detected, ReadOnlyReasons::default());
 }
 
-// verifies: FR-120
+// verifies: AC-FR-120-4
 #[test]
 fn 判定の後の上限も開いた量の接頭辞と同じ() {
     // 64 KiB を超えてから上限に届く (判定は貯めた 64 KiB で行い、その後に上限で切る)
@@ -492,7 +492,7 @@ fn 判定の後の上限も開いた量の接頭辞と同じ() {
     }
 }
 
-// verifies: FR-120
+// verifies: AC-FR-120-4
 #[test]
 fn 何も読まずに取り消すと理由の無い空の文書() {
     let (d, _) = stopped(vec![]);
@@ -545,7 +545,7 @@ fn 取消しで取り込むのは届いている分だけで_失敗の段の先�
     assert_eq!(d.text, "ok");
 }
 
-// verifies: FR-120
+// verifies: AC-FR-120-4
 #[test]
 fn 途中で読めなくなったら読んだところまで() {
     let fake = FakeStdin::new([
@@ -582,7 +582,7 @@ fn port_が無い_読み手を_2_回取る_ときは最初から読めない() {
     assert_eq!(d.text, "");
 }
 
-// verifies: FR-120
+// verifies: AC-FR-120-4
 #[test]
 fn 進捗は_10_hz_以下で読んだバイト数を送る() {
     let clock = ManualClock::new();

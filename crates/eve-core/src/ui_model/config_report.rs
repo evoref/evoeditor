@@ -835,7 +835,7 @@ mod tests {
         assert!(text.starts_with("ai<U+0007> "), "{text}");
     }
 
-    // verifies: NFR-603
+    // verifies: AC-NFR-603-9
     #[test]
     fn 言語ファイルの診断はどの種類も文言と理由の語を解決する() {
         use eve_config::{CharClass, LocaleProblem as L};
@@ -1086,7 +1086,7 @@ mod tests {
 
     // メッセージ行は対処 (hint) を省略せずに本文を詰める (04 §8.9) ので、言語ファイルの診断の対処は短くし、80 桁でも
     // 何が起きたかの本文が残るようにする (04 §15.2 の「共通の規則」)
-    // verifies: NFR-603
+    // verifies: AC-NFR-603-9
     #[test]
     fn 言語ファイルの診断の対処は短く_80_桁で本文が残る() {
         use eve_config::hint_width;
@@ -1118,7 +1118,7 @@ mod tests {
         }
     }
 
-    // verifies: NFR-603
+    // verifies: AC-NFR-603-9
     #[test]
     fn 見つからない言語の探した場所は一覧と_check_config_の形だけに出す() {
         let d = Diagnostic {

@@ -44,7 +44,7 @@ fn big_doc() -> Vec<u8> {
     unit.repeat(n)
 }
 
-// verifies: FR-402
+// verifies: AC-FR-402-9
 #[test]
 fn 上限の無いパターンは_16_mib_を超える文書では探さず_理由と回数を限る書き方を示す() {
     let doc = big_doc();
@@ -78,7 +78,7 @@ fn 上限の無いパターンは_16_mib_を超える文書では探さず_理�
     assert_eq!(h.doc_text().len(), doc.len(), "文書は変わらない");
 }
 
-// verifies: FR-402
+// verifies: AC-FR-402-9
 #[test]
 fn 案内の書き方は重くなく_16_mib_を超える文書でも探せる() {
     // hint の例 `(?s).{0,1000}` は、書き換えた後も重い検索語に当たらず、行の数に上限があり、最大の長さが有限
@@ -97,7 +97,7 @@ fn 案内の書き方は重くなく_16_mib_を超える文書でも探せる() 
     assert!(h.pending_jobs() > 0);
 }
 
-// verifies: FR-402
+// verifies: AC-FR-402-9
 #[test]
 fn 上限の無いパターンは_16_mib_以下の文書では探す() {
     let mut h = open_bar(b"x a\nb\nc b y");
@@ -108,7 +108,7 @@ fn 上限の無いパターンは_16_mib_以下の文書では探す() {
     assert_eq!(h.selection_range(), (2, 9), "最後の b まで (貪欲)");
 }
 
-// verifies: FR-402
+// verifies: AC-FR-402-9
 #[test]
 fn 重すぎる検索語は打ち切って理由を示す() {
     // 上限の無い重い検索語は、全文の連結に入れずに始める前に打ち切る (03 §12.3.1 の「取り消しの遅れ」)
@@ -129,7 +129,7 @@ fn 重すぎる検索語は打ち切って理由を示す() {
     );
 }
 
-// verifies: FR-402
+// verifies: AC-FR-402-8
 #[test]
 fn crlf_を_cr_と_lf_に分けて一致しない() {
     for (doc, p, want) in [
@@ -150,7 +150,7 @@ fn crlf_を_cr_と_lf_に分けて一致しない() {
     }
 }
 
-// verifies: FR-402
+// verifies: AC-FR-402-5
 #[test]
 fn 前へも行をまたぐ一致へ移り_画面で強調する() {
     let mut h = open_bar(b"a\nb x a\r\nb y a\rb");

@@ -1,7 +1,8 @@
 //! `tests/ac-checklist.toml` の軽い検査 (docs/11-dev-workflow.md §3.3)。v0.1 の `xtask trace` の代用。
 //!
 //! (1) 01 §5.1〜§5.4 の v0.1 の AC がすべてチェックリストにあり、チェックリストに余計な項目がない。
-//! (2) テストの `verifies:` に書かれた AC ID がすべて 01 に存在する (打ち間違いの検出)。
+//! (2) テストの `verifies:` に書かれた AC ID がすべて 01 に存在する (打ち間違いの検出)。v0.1 の AC (§5.1〜§5.4) か、
+//!     §5.5 の後の版の行の AC (`AC-NFR-603-9` など。後の版の AC はチェックリストに載せず、`xtask trace` の行列が受ける)
 //! (3) `status = "done"` の項目は、`verified_by` に実在する検証の実体が 1 つ以上ある:
 //!     - テスト関数名: その試験に同じ AC ID の `verifies:` がある (走査の規則は `crate::verifies`)。`<fn>` か `<file>::<fn>` で書く。
 //!       関数名だけで書いて、同じ名前の試験が別のファイルにもあれば誤り
@@ -94,8 +95,9 @@ pub fn run() -> Result<(), String> {
         .iter()
         .flat_map(|v| v.ids.iter().flat_map(|i| ac_ids_in(i)))
         .collect();
+    let later = crate::trace::later_ac_ids(&doc01)?;
     for id in &mentioned {
-        if !in_docs.contains(id.as_str()) {
+        if !in_docs.contains(id.as_str()) && !later.contains(id) {
             errors.push(format!(
                 "(2) ソースの `verifies: {id}` は 01 に存在しません"
             ));
@@ -316,6 +318,23 @@ mod tests {
     }
 
     use super::ac_ids_in;
+
+    /// 01 §5.5 の後の版の AC (v0.4 の `AC-NFR-603-9` など) を `verifies:` に書いても、打ち間違い (2) にしない。
+    #[test]
+    fn 後の版の_ac_は_verifies_に書いてよい() {
+        let doc01 = read_text(&workspace_root().join("docs/01-requirements.md")).unwrap();
+        let later = crate::trace::later_ac_ids(&doc01).unwrap();
+        for id in [
+            "AC-NFR-603-9",
+            "AC-NFR-604-2",
+            "AC-FR-122-3",
+            "AC-NFR-303-5",
+        ] {
+            assert!(later.contains(id), "{id}");
+        }
+        assert!(!later.contains("AC-FR-105-1"), "v0.1 の AC は §5.5 に無い");
+        run().unwrap();
+    }
 
     #[test]
     fn verifies_行から_ac_id_を取り出す() {

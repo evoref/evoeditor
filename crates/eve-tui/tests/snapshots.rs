@@ -277,7 +277,7 @@ fn high_contrast_chord(theme: &str, depth: ColorDepth) {
     );
 }
 
-// verifies: NFR-604
+// verifies: AC-NFR-604-2
 #[test]
 fn 高コントラスト_チョードの保留はステータスバーの色に重ねる() {
     for depth in [ColorDepth::TrueColor, ColorDepth::Ansi16] {
@@ -286,7 +286,7 @@ fn 高コントラスト_チョードの保留はステータスバーの色に�
     }
 }
 
-// verifies: NFR-604
+// verifies: AC-NFR-604-2
 #[test]
 fn 高コントラスト_暗い_4_段() {
     for depth in [
@@ -299,7 +299,7 @@ fn 高コントラスト_暗い_4_段() {
     }
 }
 
-// verifies: NFR-604
+// verifies: AC-NFR-604-2
 #[test]
 fn 高コントラスト_明るい_4_段() {
     for depth in [

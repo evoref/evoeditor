@@ -124,7 +124,7 @@ v0.2 の Linux の受入は、開発 PC の **WSL2 (Ubuntu)** を **Windows Term
 
 ## N. 標準入力 (v0.4 の M25。記録は `stdin.md`)
 
-`cmd | evoeditor -` で標準入力を開く手の確認 (05 §9.4 の「標準入力の手での確認」、03 §9.2.2、07 §18.5)。雛形は [`_template/stdin.md`](_template/stdin.md)。
+`cmd | evoeditor -` で標準入力を開く手の確認 (05 §9.4 の「標準入力の手での確認」、03 §9.2.2、07 §18.5、01 FR-120 AC-1・AC-2・AC-4)。雛形は [`_template/stdin.md`](_template/stdin.md)。
 
 **確かめる環境**: Windows Terminal (PowerShell 7 と cmd)・conhost・VS Code の統合端末・mintty (Git Bash)・Windows PowerShell 5.1 のパイプ・WSL からの interop (WSL の中から `cmd.exe /c "… | evoeditor.exe -"` と、WSL の側のパイプ `cat … | evoeditor -`)・tmux の中 (WSL)・`ssh -t` 越し (Linux のホストへ)。環境に当てはまらない項目 (Windows の N3・N5) は「—」と書く。
 
@@ -140,7 +140,7 @@ v0.2 の Linux の受入は、開発 PC の **WSL2 (Ubuntu)** を **Windows Term
 
 ## P. 高コントラストテーマ (v0.4 の M26。記録は `high-contrast.md`)
 
-組込みテーマ `high-contrast-dark` / `high-contrast-light` を端末で目で確かめる (08 §2.5 の M26 の (4)、09 §8.2 の互換の行、07 §8.7、04 §12.5、NFR-604)。雛形は [`_template/high-contrast.md`](_template/high-contrast.md)。値 (07 §8.7 の表) は、この確認で見直してよい (基準は満たしたまま、表と実装を同じ PR で直す)。
+組込みテーマ `high-contrast-dark` / `high-contrast-light` を端末で目で確かめる (08 §2.5 の M26 の (4)、09 §8.2 の互換の行、07 §8.7、04 §12.5、NFR-604 AC-2 の M)。雛形は [`_template/high-contrast.md`](_template/high-contrast.md)。値 (07 §8.7 の表) は、この確認で見直してよい (基準は満たしたまま、表と実装を同じ PR で直す)。
 
 **確かめる環境**: Windows Terminal と conhost。テーマは `high-contrast-dark` と `high-contrast-light` の両方。色の段は truecolor・256・16 (conhost で truecolor・256 が描けない場合は、描けた段だけを確かめ、記録に「—」と書く)。
 

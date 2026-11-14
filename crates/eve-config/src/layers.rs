@@ -328,7 +328,7 @@ mod tests {
         assert_eq!(resolve(&[a, broken], &[]).theme_name_at, at("a.toml", 2, 1));
     }
 
-    // verifies: NFR-603
+    // verifies: AC-NFR-603-9
     #[test]
     fn ui_locale_は使える言語と照らし_当たらなければ書いた所で知らせる() {
         let fr = crate::Locale::from_tag("fr").unwrap();

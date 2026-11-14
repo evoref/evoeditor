@@ -199,7 +199,7 @@ fn delete_escape(s: &mut Harness) {
     assert_eq!(s.doc_text(), "abc\n");
 }
 
-// verifies: NFR-304
+// verifies: AC-NFR-304-6
 #[test]
 fn エスケープ文字を消して別の文字コードで保存し_undo_で戻したエスケープ文字は元のバイトに戻さない()
 {
@@ -410,7 +410,7 @@ fn invalid_bytes_reason(s: &Harness) -> bool {
     doc(s).read_only.contains(ReadOnlyReason::InvalidBytes)
 }
 
-// verifies: NFR-304
+// verifies: AC-NFR-304-4
 #[test]
 fn 同じ文字コードの復旧は元のバイトに戻し_読込と同じく読み取り専用にし_復旧の_undo_で前の値に戻る()
 {
@@ -446,7 +446,7 @@ fn 同じ文字コードの復旧は元のバイトに戻し_読込と同じく�
 
 // データの損失のレビューの再現 (1): 復旧で Some になった文書が編集できると、外から入れた私用文字 (Shift_JIS の文書の
 // エスケープ文字のコピー・他のアプリの U+10FFA0) が、保存で生の 1 バイト (0xA0) になっていた
-// verifies: NFR-304
+// verifies: AC-NFR-304-4
 #[test]
 fn 復旧で由来の文字コードが付いた文書には外から私用文字を入れられず_生のバイトで書かれない() {
     let mut s = recovered(swap_body("x\u{10FF80}y", Encoding::Utf8, true));
@@ -463,7 +463,7 @@ fn 復旧で由来の文字コードが付いた文書には外から私用文�
     );
 }
 
-// verifies: NFR-304
+// verifies: AC-NFR-304-6
 #[test]
 fn 文字コードの違う復旧のエスケープ文字は元のバイトに戻さない() {
     let mut s = recovered(swap_body("x\u{10FFA0}y", Encoding::ShiftJis, true));

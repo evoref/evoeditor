@@ -92,7 +92,7 @@ fn lines(n: usize) -> Vec<u8> {
         .collect()
 }
 
-// 01 §5.5 の FR-122 AC-3
+// verifies: AC-FR-122-3
 #[test]
 fn 先頭は_200_ms_を過ぎた最初のチャンクの区切りで_1_回だけ送る() {
     let data = lines(400_000); // 12 バイトの行。約 4.6 MiB
@@ -124,7 +124,7 @@ fn 先頭は_200_ms_を過ぎた最初のチャンクの区切りで_1_回だけ
     assert_eq!(format.roundtrip, Default::default(), "往復の要約は送らない");
 }
 
-// 01 §5.5 の FR-122 AC-3
+// verifies: AC-FR-122-3
 #[test]
 fn 二百_ms_の前に読み終える読込は先頭を送らない() {
     let data = lines(1000);
@@ -144,7 +144,7 @@ fn 二百_ms_の前に読み終える読込は先頭を送らない() {
     assert_eq!(heads(&out).len(), 0);
 }
 
-// 01 §5.5 の FR-122 AC-3
+// verifies: AC-FR-122-3
 #[test]
 fn partial_が立っていなければ送らない() {
     let out = open_job(&lines(200_000), 256 * 1024, 100, OpenOptions::default());
@@ -363,7 +363,7 @@ fn run_count_partials(h: &mut Harness) -> usize {
     n
 }
 
-// 01 §5.5 の FR-122 AC-4
+// verifies: AC-FR-122-4
 #[test]
 fn file_open_は先頭を送り_再読込と開き直しは送らない() {
     let data = lines(100);
@@ -381,7 +381,7 @@ fn file_open_は先頭を送り_再読込と開き直しは送らない() {
     assert_eq!(run_count_partials(&mut h), 0, "開き直し");
 }
 
-// 01 §5.5 の FR-122 AC-4
+// verifies: AC-FR-122-4
 #[test]
 fn 起動時のパスは先頭を送る() {
     let mut h = Harness::builder()

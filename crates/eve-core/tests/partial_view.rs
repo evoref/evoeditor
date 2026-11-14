@@ -90,7 +90,7 @@ fn partial_shown(path: &str, data: &[u8]) -> (Harness, DocumentId) {
 
 // ---------- 表示とステータスバー ----------
 
-// 01 §5.5 の FR-122 AC-3
+// verifies: AC-FR-122-3
 #[test]
 fn 先頭が読み取り専用で表示され_ステータスバーに先頭のみと出る() {
     let data = lines(100);
@@ -158,7 +158,7 @@ fn 行番号の欄の幅はファイルの大きさから推定し_完了で確�
 
 // ---------- できない操作 ----------
 
-// 01 §5.5 の FR-122 AC-3
+// verifies: AC-FR-122-3
 #[test]
 fn 編集と_undo_は読込中として拒否する() {
     let (mut h, doc) = partial_shown("/w/a.txt", &lines(100));
@@ -178,7 +178,7 @@ fn 編集と_undo_は読込中として拒否する() {
     assert!(!h.is_dirty());
 }
 
-// 01 §5.5 の FR-122 AC-3
+// verifies: AC-FR-122-3
 #[test]
 fn 検索_置換_行へ移動_すべて選択_末尾まで選択は_partial_unavailable_で拒否する() {
     let (mut h, doc) = partial_shown("/w/a.txt", &lines(100));
@@ -235,7 +235,7 @@ fn 検索_置換_行へ移動_すべて選択_末尾まで選択は_partial_unav
     assert_eq!(load_state(&h, doc), LoadState::Partial);
 }
 
-// 01 §5.5 の FR-122 AC-3
+// verifies: AC-FR-122-3
 #[test]
 fn 本文の無い新しく開く読込の_loading_でも拒否する() {
     // 起動時の最初のパス: 読込中の文書を最初から表示している
@@ -260,7 +260,7 @@ fn 本文の無い新しく開く読込の_loading_でも拒否する() {
     );
 }
 
-// 01 §5.5 の FR-122 AC-3 / AC-4
+// verifies: AC-FR-122-3, AC-FR-122-4
 #[test]
 fn 再読込の間は旧本文で検索できる() {
     let mut h = Harness::new().with_file("/w/a.txt", b"hello\nworld\n");
@@ -280,7 +280,7 @@ fn 再読込の間は旧本文で検索できる() {
     );
 }
 
-// 01 §5.5 の FR-122 AC-3
+// verifies: AC-FR-122-3
 #[test]
 fn 名前を付けて保存は名前を尋ねずに拒否し_ほかの保存の入口も書かない() {
     let data = lines(100);
@@ -319,7 +319,7 @@ fn 名前を付けて保存は名前を尋ねずに拒否し_ほかの保存の�
     assert_eq!(load_state(&h, doc), LoadState::Partial);
 }
 
-// 01 §5.5 の FR-122 AC-4
+// verifies: AC-FR-122-4
 #[test]
 fn 先行表示の文書はスワップと緊急退避の対象にならない() {
     let mut h = Harness::new().with_file("/w/a.txt", &lines(100));
@@ -351,7 +351,7 @@ fn 先行表示の文書はスワップと緊急退避の対象にならない()
 
 // ---------- できる操作 ----------
 
-// 01 §5.5 の FR-122 AC-3
+// verifies: AC-FR-122-3
 #[test]
 fn スクロール_カーソルの移動_選択とコピー_バッファの切替ができる() {
     let (mut h, doc) = partial_shown("/w/a.txt", &lines(100));
@@ -415,7 +415,7 @@ fn バッファ一覧に先行表示の文書が載る() {
     );
 }
 
-// 01 §5.5 の FR-122 AC-3
+// verifies: AC-FR-122-3
 #[test]
 fn 先頭の末尾より先へは動かず_partial_end_を_1_回だけ出す() {
     let (mut h, doc) = partial_shown("/w/a.txt", &lines(100));
@@ -450,7 +450,7 @@ fn 末尾の行での下と_pagedown_でも知らせる() {
 
 // ---------- 全文への差し替え ----------
 
-// 01 §5.5 の FR-122 AC-3
+// verifies: AC-FR-122-3
 #[test]
 fn 完了でカーソル_選択_スクロールを引き継ぎ_revision_は続き() {
     let data = lines(100);
@@ -513,7 +513,7 @@ fn send_head(h: &mut Harness, job: eve_view::JobId, head: &str) {
     });
 }
 
-// 01 §5.5 の FR-122 AC-3
+// verifies: AC-FR-122-3
 #[test]
 fn 完了で書記素の途中に来た位置は境界へ寄る() {
     // 全文は「e + 結合アキュート」。先頭は e だけ (末尾の書記素に、全文では結合する文字が続く)
@@ -536,7 +536,7 @@ fn 完了で書記素の途中に来た位置は境界へ寄る() {
     );
 }
 
-// 01 §5.5 の FR-122 AC-3
+// verifies: AC-FR-122-3
 #[test]
 fn 判定のやり直しの先頭は差し替えて位置を先頭に戻す() {
     let mut h = Harness::new().with_file("/w/a.txt", b"bbb\nbbb\nbbb\n");
@@ -557,7 +557,7 @@ fn 判定のやり直しの先頭は差し替えて位置を先頭に戻す() {
     assert_eq!(h.doc_text(), "bbb\nbbb\nbbb\n");
 }
 
-// 01 §5.5 の FR-122 AC-3
+// verifies: AC-FR-122-3
 #[test]
 fn 長大行の覚えを全文に持ち越さない() {
     // 閾値 256 バイトの長大行。先頭 (行の途中で切る) で桁の索引を作った後、完了の全文で行末の桁が全文の値になる
@@ -591,7 +591,7 @@ fn 長大行の覚えを全文に持ち越さない() {
     assert!(pos.contains("401"), "全文の行末の桁: {pos}");
 }
 
-// 01 §5.5 の FR-122 AC-3
+// verifies: AC-FR-122-3
 #[test]
 fn 起動時の_行_は完了の時点で移る() {
     let mut h = Harness::builder()
@@ -649,7 +649,7 @@ fn 先行表示の後の確認は先頭を捨てて_loading_に戻す() {
     );
 }
 
-// 01 §5.5 の FR-122 AC-3
+// verifies: AC-FR-122-3
 #[test]
 fn 失敗では先頭を閉じ_無題のバッファを同じ番号のまま表示に戻す() {
     let data = lines(100);
@@ -664,7 +664,7 @@ fn 失敗では先頭を閉じ_無題のバッファを同じ番号のまま表�
     assert!(h.messages().iter().any(|m| m.starts_with("msg.open")));
 }
 
-// 01 §5.5 の FR-122 AC-3
+// verifies: AC-FR-122-3
 #[test]
 fn 取消しでは先頭を閉じ_開く前の文書を表示する() {
     let mut h = Harness::new().with_file("/w/a.txt", &lines(100));
@@ -686,7 +686,7 @@ fn 取消しでは先頭を閉じ_開く前の文書を表示する() {
     assert_eq!(h.editor.state().documents_len(), 1);
 }
 
-// 01 §5.5 の FR-122 AC-3
+// verifies: AC-FR-122-3
 #[test]
 fn 閉じると確認なしで先頭を捨てる() {
     let (mut h, doc) = partial_shown("/w/a.txt", &lines(100));
@@ -708,7 +708,7 @@ fn 閉じると確認なしで先頭を捨てる() {
 
 // ---------- 何も入力していない無題のバッファ ----------
 
-// 01 §5.5 の FR-122 AC-4
+// verifies: AC-FR-122-4
 #[test]
 fn 無題のバッファは先行表示では閉じず_完了で閉じる() {
     let (mut h, doc) = partial_shown("/w/a.txt", &lines(100));
@@ -746,7 +746,7 @@ fn 先行表示の後に無題のバッファへ入力していたら完了で�
 
 // ---------- 表示の切り替え ----------
 
-// 01 §5.5 の FR-122 AC-4
+// verifies: AC-FR-122-4
 #[test]
 fn 先行表示で切り替えた後に元の文書へ戻すと完了でも切り替わらない() {
     let mut h = Harness::new().with_file("/w/a.txt", &lines(100));
@@ -778,7 +778,7 @@ fn 先行表示の前に別の文書へ切り替えていたら切り替えな�
     assert_eq!(h.doc_id(), other);
 }
 
-// 01 §5.5 の FR-122 AC-4
+// verifies: AC-FR-122-4
 #[test]
 fn 名前を付けて保存の入力の間は切り替えを保留し_入力は開いた時点の文書を書く() {
     let mut h = Harness::new().with_file("/w/a.txt", &lines(100));
@@ -895,7 +895,7 @@ fn 起動時の_2_つ目以降のパスは先行表示でも表示を変えな�
 
 // ---------- Esc の範囲 ----------
 
-// 01 §5.5 の FR-122 AC-3
+// verifies: AC-FR-122-3
 #[test]
 fn esc_は表示中の文書の読込だけを取り消し_表示していない文書の読込は残す() {
     let mut h = Harness::new()
@@ -973,7 +973,7 @@ fn dirty(h: &Harness, doc: DocumentId) -> bool {
     h.editor.state().document(doc).expect("文書").is_dirty()
 }
 
-// 01 §5.5 の FR-122 AC-3 / AC-4
+// verifies: AC-FR-122-3, AC-FR-122-4
 #[test]
 fn 先頭を取り消して元の文書へ戻った後に_続けて開いた読込は表示を奪わない() {
     let mut h = Harness::new()
@@ -1050,7 +1050,7 @@ fn 検索バーに入力している間は完了の切り替えを保留し_検�
     assert_eq!(h.doc_id(), b, "検索バーを閉じた後に切り替える");
 }
 
-// 01 §5.5 の FR-122 AC-4
+// verifies: AC-FR-122-4
 #[test]
 fn 検索バーに入力している間は先行表示の切り替えも保留する() {
     let mut h = Harness::new().with_file("/w/a.txt", &lines(100));
@@ -1079,7 +1079,7 @@ fn 検索バーに入力している間は先行表示の切り替えも保留�
     assert_eq!(load_state(&h, a), LoadState::Partial);
 }
 
-// 01 §5.5 の FR-122 AC-3
+// verifies: AC-FR-122-3
 #[test]
 fn 警告を消す_esc_は読込を取り消さず_もう一度の_esc_で取り消す() {
     let (mut h, a) = partial_shown("/w/a.txt", &lines(100));
@@ -1103,7 +1103,7 @@ fn 警告を消す_esc_は読込を取り消さず_もう一度の_esc_で取り
     assert!(h.messages().contains(&"info.open.cancelled".to_owned()));
 }
 
-// 01 §5.5 の FR-122 AC-3
+// verifies: AC-FR-122-3
 #[test]
 fn パレットの間の読込の失敗は表示を移さず_選んだコマンドは開く前の文書に効かない() {
     let mut h = Harness::new()
@@ -1148,7 +1148,7 @@ fn 表示から外した無題をオーバーレイの間は閉じない() {
     assert_eq!(h.doc_id(), doc);
 }
 
-// 01 §5.5 の FR-122 AC-3
+// verifies: AC-FR-122-3
 #[test]
 fn 先頭の文書の上書き保存は読込中であることを示す() {
     let (mut h, _) = partial_shown("/w/a.txt", &lines(100));
@@ -1296,7 +1296,7 @@ fn frame_golden(h: &mut Harness, name: &str) {
 /// 03 §22.3 の先行表示のシナリオ: 遅いディスクの上の `Shift_JIS` のファイルを開くと、読込が 200 ms を過ぎた時点で先頭が
 /// 読み取り専用で表示され (ステータスバーは「先頭のみ」)、編集と検索は理由を示して拒否され、先頭の末尾より先へは進まない。
 /// 読込が終わると全文の文書に切り替わり、カーソルはその場に残り、編集できる。
-// 01 §5.5 の FR-122 AC-3 / AC-4
+// verifies: AC-FR-122-3, AC-FR-122-4
 #[test]
 fn シナリオ_遅い読込の_shift_jis_は先頭を先に見せ_完了で全文に切り替わる() {
     // 初期状態: 無題のバッファ、60 × 8 の画面、遅い読込 (64 バイトのチャンクごとに 100 ms)
