@@ -126,7 +126,7 @@ fn painted(want: Style, text: Style) -> Style {
     }
 }
 
-// verifies: NFR-604
+// verifies: AC-NFR-604-2
 #[test]
 fn 高コントラストのテーマは_07_の表の全ロールの_4_段と一致する() {
     use eve_docs_tables::theme::{HIGH_CONTRAST_TABLES, parse_high_contrast, parse_roles};

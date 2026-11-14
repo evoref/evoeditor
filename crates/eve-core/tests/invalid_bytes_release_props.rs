@@ -144,7 +144,7 @@ fn check(h: &Harness, step: &str) -> Result<(), TestCaseError> {
 proptest! {
     #![proptest_config(ProptestConfig { cases: 48, ..ProptestConfig::default() })]
 
-    // verifies: NFR-304
+    // verifies: AC-NFR-304-4
     #[test]
     fn 解除した文書は_undo_redo_再読込の後も_バイトの文書なら_invalid_bytes_が無い(
         which in 0usize..4,

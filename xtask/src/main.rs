@@ -79,7 +79,7 @@ const USAGE: &str = "\
   gen-corpus          巨大・長大のコーパスの生成 (--seed N --out DIR --only a,b --with-1gb --list)
   scenario            シナリオ DSL (tests/scenarios) の実行 (run [<部分一致>] [--print-frame]) と検証 (check)
   spec-index          仕様書の索引 docs/spec-index.toml の生成 (--check: 最新性・重複・spec: の参照の検査。--show <ID>: 本文)
-  trace               仕様と試験の対応の検査と docs/traceability.md の生成 (--check: 存在しない ID と行列の最新性)
+  trace               仕様と試験の対応の検査と docs/traceability.md の生成 (--check: 存在しない ID と行列の最新性。--version vX.Y: 警告をその版の行に絞る)
   crash-consistency   保存のクラッシュ一貫性の検査 (NFR-301。LazyFS で電源断を模擬。--lazyfs BIN --root DIR、--no-lazyfs は空回し。Linux)
   no-network          無通信の検査 (NFR-501 AC-2。シナリオを strace -e trace=network の下で走らせる。Linux)
   perf-diff           基準との性能の比較 (--base <ref> --mode instr|time|allocs --out FILE。劣化は警告だけ)

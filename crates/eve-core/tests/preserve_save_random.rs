@@ -368,8 +368,7 @@ fn run_all(encs: &[Encoding], seeds: impl Iterator<Item = u64>, join: bool) -> C
     c
 }
 
-// 01 §5.5 の NFR-303 AC-5〜AC-7
-// verifies: NFR-303
+// verifies: AC-NFR-303-5, AC-NFR-303-6, AC-NFR-303-7
 #[test]
 fn 保存したファイルと保存点の名前を付けて保存が一致し_全部_undo_すると元のファイルになる() {
     let c = run_all(
@@ -393,7 +392,7 @@ fn 保存したファイルと保存点の名前を付けて保存が一致し_�
 }
 
 // 01 §5.5 の NFR-303 AC-6・AC-7 (行の結合で行の内容の全体でなくなった記録は、編集した行と同じく正規形で書く)
-// verifies: NFR-303
+// verifies: AC-NFR-303-6, AC-NFR-303-7
 #[test]
 fn iso_2022_jp_の行の結合を多くしても_保存点の出力は直前の保存と一致する() {
     let c = run_all(

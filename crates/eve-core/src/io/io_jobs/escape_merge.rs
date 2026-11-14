@@ -389,7 +389,7 @@ fn check(enc: Encoding, bom: bool, toks: Vec<Tok>) -> Result<(), TestCaseError> 
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(256))]
 
-    // verifies: NFR-304
+    // verifies: AC-NFR-304-5
     #[test]
     fn つながりの局所の検査は出力の全体の復号と同値で_乾式走査と本番で同じ(
         e in 0usize..5,
@@ -563,7 +563,7 @@ fn merge_of(r: &JobResult) -> Option<EscapeMergeApproval> {
     }
 }
 
-// verifies: NFR-304
+// verifies: AC-NFR-304-5
 #[test]
 fn つながりがあれば原子的保存でも直接上書きでも何も書かずに_escape_merge_を返す() {
     let original = b"original\n".to_vec();
@@ -751,7 +751,7 @@ fn 表現不能とつながりが両方あれば表現不能が先() {
 
 // 回帰: BOM 付きの不正バイトを含む UTF-8 / UTF-16 の文書は、確認 (ii) が BOM を読み飛ばさずに毎回 VerifyFailed になって
 // いた (03 §8.3.1 の「復号する範囲」)。書いた BOM を除いて復号するので、元のファイルとバイト単位で一致して書ける
-// verifies: NFR-304
+// verifies: AC-NFR-304-4, AC-NFR-304-5
 #[test]
 fn bom_付きの不正バイトを含む文書は_verify_failed_にならない() {
     let files: [(Encoding, &[u8]); 4] = [

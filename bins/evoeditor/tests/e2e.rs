@@ -626,7 +626,7 @@ v = "x"
 }
 
 // ユーザーの言語ファイル (07 §17.4): 重ねた文言が画面に出て、見つからない言語 (`--locale`) の診断もメッセージ行に出る
-// verifies: NFR-603
+// verifies: AC-NFR-603-9
 #[test]
 fn 言語ファイルの文言が画面に出て_見つからない言語は画面で知らせる() {
     let dir = temp_dir("user-locale");
@@ -901,8 +901,7 @@ fn 区分_b_を含むファイルの別の行に入力して保存する(
     let _ = std::fs::remove_dir_all(dir);
 }
 
-// 01 §5.5 の NFR-303 AC-5 (v0.4 の AC は `tests/ac-checklist.toml` の対象外なので、要件 ID で印を付ける)
-// verifies: NFR-303
+// verifies: AC-NFR-303-5
 #[test]
 fn shift_jis_の区分_b_の文字を含むファイルは別の行に入力して保存しても元のバイト列のまま() {
     // 1 行目: 区分B: ￢ (IBM 拡張の重複符号化 0xFA54。再符号化すると 0x81CA になる) です。
@@ -925,7 +924,7 @@ fn shift_jis_の区分_b_の文字を含むファイルは別の行に入力し�
 }
 
 // 01 §5.5 の NFR-303 AC-5。EUC-JP の補助漢字は、v0.3 までは表現不能で保存が止まった (FR-112 AC-4 (b))
-// verifies: NFR-303
+// verifies: AC-NFR-303-5
 #[test]
 fn euc_jp_の補助漢字を含むファイルは別の行に入力して保存しても元のバイト列のまま() {
     // 1 行目: 補助漢字: 丂 (JIS X 0212 の 0x8FB0A1。符号化できない)
@@ -964,7 +963,7 @@ fn 不正バイトを含む_shift_jis_のファイル(line1_tail: &[u8]) -> (Vec
 
 // 01 §5.5 の NFR-304 AC-4。読み取り専用で開く → 編集を拒否する案内 → パレットで「編集を許可」→ 確認で [A] → 別の行に
 // 入力 → 保存 → 終了。ファイルは「元のバイト列 + 入力分」になる (不正バイト 0xA0 はそのまま残る)
-// verifies: NFR-304
+// verifies: AC-NFR-304-4
 #[test]
 fn 不正バイトを含むファイルは_編集を許可して別の行に入力して保存すると元のバイト列のまま() {
     let dir = temp_dir("invalid-bytes-edit");
@@ -1014,7 +1013,7 @@ fn 不正バイトを含むファイルは_編集を許可して別の行に入�
 
 // 01 §5.5 の NFR-304 AC-5。Shift_JIS の 0x81 (行末の不正バイト) の直後に `@` を入れて保存すると、0x81 0x40 が別の文字
 // (U+3000) になるので、ファイルに書く前の確認が出る。Esc (キャンセル) ではファイルは変わらない
-// verifies: NFR-304
+// verifies: AC-NFR-304-5
 #[test]
 fn 不正バイトが隣とつながる保存は確認が出て_キャンセルすると何も書かない() {
     let dir = temp_dir("invalid-bytes-merge");
@@ -2353,7 +2352,7 @@ fn assert_english_ui(s: &Session) {
     assert!(!s.screen().contains("終了"), "{}", s.screen());
 }
 
-// NFR-603 AC-3 (v0.2。チェックリストは v0.2 のゲートで作る)
+// verifies: AC-NFR-603-3
 #[test]
 fn locale_オプションで画面が英語になる() {
     let mut s = Session::start(&["--locale", "en"]);
@@ -2363,7 +2362,7 @@ fn locale_オプションで画面が英語になる() {
     assert_eq!(s.wait_exit(), 0);
 }
 
-// NFR-603 AC-3 (v0.2。チェックリストは v0.2 のゲートで作る)
+// verifies: AC-NFR-603-3
 #[test]
 fn eve_lang_で画面が英語になり_locale_オプションが優先する() {
     let mut s = Session::start_with(&[], None, &[("EVE_LANG", "en_US")]);
@@ -2379,7 +2378,7 @@ fn eve_lang_で画面が英語になり_locale_オプションが優先する() 
     assert_eq!(s.wait_exit(), 0);
 }
 
-// NFR-603 AC-3 (v0.2。チェックリストは v0.2 のゲートで作る)
+// verifies: AC-NFR-603-3
 #[test]
 fn 設定の_ui_locale_は環境変数より優先し_未知の言語は次の段へ進む() {
     let cfg = temp_dir("cfg-locale");

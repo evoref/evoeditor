@@ -129,8 +129,7 @@ fn sjis_b() -> (Vec<u8>, Vec<u8>, Vec<u8>) {
     (l1, l2, l3)
 }
 
-// 01 §5.5 の NFR-303 AC-5 (v0.4 の AC は `tests/ac-checklist.toml` の対象外なので、要件 ID で印を付ける)
-// verifies: NFR-303
+// verifies: AC-NFR-303-5
 #[test]
 fn shift_jis_の区分_b_でない所を編集して保存すると編集していない範囲はバイト一致する() {
     let (l1, l2, l3) = sjis_b();
@@ -176,8 +175,7 @@ fn shift_jis_の区分_b_でない所を編集して保存すると編集して�
     assert!(doc(&h).format.roundtrip.lossy_lines > 0);
 }
 
-// 01 §5.5 の NFR-303 AC-5 (v0.4 の AC は `tests/ac-checklist.toml` の対象外なので、要件 ID で印を付ける)
-// verifies: NFR-303
+// verifies: AC-NFR-303-5
 #[test]
 fn euc_jp_の補助漢字と別のコードに写る文字は_編集していなければ元のバイト列で書く() {
     // 補助漢字 丂 (0x8FB0A1。復号専用)、0x8FA2B7 (～ U+FF5E。再符号化すると 0xA1C1)
@@ -219,8 +217,7 @@ fn iso_d() -> Vec<&'static [u8]> {
     ]
 }
 
-// 01 §5.5 の NFR-303 AC-6 (v0.4 の AC は `tests/ac-checklist.toml` の対象外なので、要件 ID で印を付ける)
-// verifies: NFR-303
+// verifies: AC-NFR-303-6
 #[test]
 fn iso_2022_jp_の編集していない_ascii_状態で始まり終わる行はバイト一致する() {
     let lines = iso_d();
@@ -245,8 +242,7 @@ fn iso_2022_jp_の編集していない_ascii_状態で始まり終わる行は�
     assert_valid(&h);
 }
 
-// 01 §5.5 の NFR-303 AC-7 (v0.4 の AC は `tests/ac-checklist.toml` の対象外なので、要件 ID で印を付ける)
-// verifies: NFR-303
+// verifies: AC-NFR-303-7
 #[test]
 fn 編集した範囲には元のバイト列を書かず_undo_で戻した範囲は元のバイト列で書く() {
     // a￢￢b (￢ は IBM 拡張の重複 0xFA54。2 つで 1 件の記録)
@@ -414,7 +410,7 @@ const ISO_TWO: &[u8] = b"\x1B$@$\"\x1B(B\n\x1B$@$$\x1B(B\nabc\n";
 
 // 行を結合して行の内容の全体でなくなった行の記録は、その行を編集した行と同じ (区分 C): 確認なしに正規形で書く。記録は
 // 表に残るので、Undo で行を分けて保存すると元のバイト列に戻る (01 §5.5 の NFR-303 AC-7、03 §8.7.1)
-// verifies: NFR-303
+// verifies: AC-NFR-303-6, AC-NFR-303-7
 #[test]
 fn iso_2022_jp_で記録の行を結合すると確認なしに正規形で書き_undo_して保存すると元のファイルに戻る()
 {
@@ -483,7 +479,7 @@ const SJIS_RUN: &[u8] = b"a\xFA\x54\xFA\x54b\n";
 
 // 03 §8.7.1: 隣り合う区分 B の文字の並びの内側への挿入は、並びの全体を編集したものと扱う (並びの全部が代表バイト列)。
 // 並びの端への挿入は記録を残す
-// verifies: NFR-303
+// verifies: AC-NFR-303-5
 #[test]
 fn 隣り合う区分_b_の文字の間への挿入は並びの全部を代表バイト列にし_端への挿入は元のバイト列を残す()
 {

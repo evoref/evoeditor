@@ -335,7 +335,7 @@ enabeld = true
     assert!(matches!(ks[1].1, DiagKind::UnknownKey { .. }));
 }
 
-// NFR-603 AC-3 (v0.2。チェックリストは v0.2 のゲートで作る)
+// verifies: AC-NFR-603-3
 #[test]
 fn ui_locale_は言語タグか_auto() {
     use crate::Locale;
@@ -354,7 +354,7 @@ fn ui_locale_は言語タグか_auto() {
     assert_eq!(Config::default().ui_locale, None);
 }
 
-// verifies: NFR-603
+// verifies: AC-NFR-603-9
 #[test]
 fn ui_locale_の形の誤りは警告して_auto_のまま() {
     // 値の形 (07 §17.4) に合う言語は、同梱していなくても読む (使える言語との照合は `check_ui_locale`)

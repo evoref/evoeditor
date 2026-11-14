@@ -193,8 +193,7 @@ fn assert_preserved_b(enc: Encoding, orig: &[u8], label: &str) {
     assert_eq!(s.fs.read("/w/c.txt").unwrap(), want, "{label}: 別の行");
 }
 
-// 01 §5.5 の NFR-303 AC-5 / AC-6 (v0.4 の AC は `tests/ac-checklist.toml` の対象外なので、要件 ID で印を付ける)
-// verifies: NFR-303
+// verifies: AC-NFR-303-5
 #[test]
 fn shift_jis_の重複符号化は区分_b_として検出され_元のバイト列で保存される() {
     // NEC/IBM 拡張の重複 (¬ の 0xEEF9 / 0xFA54)、NEC 特殊文字の ≒ 0x8790、NEC 選定 IBM 拡張の 0xED40 / 0xEEEF
@@ -215,8 +214,7 @@ fn shift_jis_の重複符号化は区分_b_として検出され_元のバイト
     }
 }
 
-// 01 §5.5 の NFR-303 AC-5 / AC-6 (v0.4 の AC は `tests/ac-checklist.toml` の対象外なので、要件 ID で印を付ける)
-// verifies: NFR-303
+// verifies: AC-NFR-303-5
 #[test]
 fn euc_jp_の補助漢字と別のコードに写る文字は区分_b_として検出され_元のバイト列で保存される() {
     // JIS X 0212 の補助漢字 (丂 0x8FB0A1。v0.3 までは表現不能で止まった)、0x8FA2AF (˘)、0x8FA2B7 (～ U+FF5E。再符号化で
@@ -357,8 +355,7 @@ fn assert_preserved_d(case: &[u8], crlf: bool, label: &str) {
     );
 }
 
-// 01 §5.5 の NFR-303 AC-5 / AC-6 (v0.4 の AC は `tests/ac-checklist.toml` の対象外なので、要件 ID で印を付ける)
-// verifies: NFR-303
+// verifies: AC-NFR-303-6
 #[test]
 fn iso_2022_jp_の区分_d_のうち_ascii_状態で始まり終わる行は元のバイト列で保存される() {
     for (name, case) in ISO_D_PRESERVED {
@@ -379,8 +376,7 @@ const ISO_D_PARTIAL: [&[u8]; 7] = [
     b"\x1B(I1\x1B(B\n",
 ];
 
-// 01 §5.5 の NFR-303 AC-5 / AC-6 (v0.4 の AC は `tests/ac-checklist.toml` の対象外なので、要件 ID で印を付ける)
-// verifies: NFR-303
+// verifies: AC-NFR-303-6
 #[test]
 fn iso_2022_jp_で_ascii_状態で始まらない行と終わらない行は確認の後その行だけ正規形で書かれる() {
     let file = ISO_D_PARTIAL.concat();
@@ -674,7 +670,7 @@ fn release_invalid_bytes(h: &mut Harness, label: &str) {
     assert!(doc(h).is_editable(), "{label}");
 }
 
-// verifies: NFR-304
+// verifies: AC-NFR-304-4
 #[test]
 fn 不正バイトを含むファイルは_解除して不正バイト以外を編集し同じ文字コードで保存するとバイト一致する()
  {
@@ -715,7 +711,7 @@ fn 不正バイトを含むファイルは_解除して不正バイト以外を�
     }
 }
 
-// verifies: NFR-304
+// verifies: AC-NFR-304-6
 #[test]
 fn 不正バイトを含むファイルを別の文字コードで保存しようとすると_表現不能の確認で何も書かない() {
     for (label, enc, parts) in invalid_byte_corpus() {

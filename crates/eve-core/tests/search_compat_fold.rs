@@ -116,7 +116,7 @@ const CASES: [Case; 3] = [Case::Smart, Case::Sensitive, Case::Insensitive];
 
 // ---- リテラル検索 ----
 
-// verifies: FR-401
+// verifies: AC-FR-401-4
 #[test]
 fn 八組のどちらで探しても両方に一致し_範囲は文書の元のバイト範囲() {
     let doc = utf8_corpus();
@@ -146,7 +146,7 @@ fn 八組のどちらで探しても両方に一致し_範囲は文書の元の�
     }
 }
 
-// verifies: FR-401
+// verifies: AC-FR-401-4
 #[test]
 fn 設定が_off_なら書いた文字だけに一致する() {
     let doc = utf8_corpus();
@@ -161,7 +161,7 @@ fn 設定が_off_なら書いた文字だけに一致する() {
     }
 }
 
-// verifies: FR-401
+// verifies: AC-FR-401-5
 #[test]
 fn 円記号とオーバーラインと逆斜線とチルダは同一視しない() {
     let doc = utf8_corpus();
@@ -197,7 +197,7 @@ fn regex_escape(c: char) -> String {
     }
 }
 
-// verifies: FR-401
+// verifies: AC-FR-401-4
 #[test]
 fn 大小の区別のある文字と組み合わせても_大小の区別と同一視の両方が掛かる() {
     // `Ａ` (全角の大文字) は大小の区別がある。Insensitive では `ａ` にも、同一視で `～` にも一致する
@@ -218,7 +218,7 @@ fn 大小の区別のある文字と組み合わせても_大小の区別と同�
     assert_eq!(find_all("K～ \u{212A}〜 k～", &q).len(), 3);
 }
 
-// verifies: FR-401
+// verifies: AC-FR-401-4
 #[test]
 fn 単語単位の境界は文書の元の文字で調べる() {
     for doc in [
@@ -254,7 +254,7 @@ fn 単語単位の境界は文書の元の文字で調べる() {
     );
 }
 
-// verifies: FR-401
+// verifies: AC-FR-401-4
 #[test]
 fn 選択範囲内の検索でも同一視する() {
     let doc = utf8_corpus();
@@ -275,7 +275,7 @@ fn 選択範囲内の検索でも同一視する() {
 
 // ---- 正規表現 ----
 
-// verifies: FR-401
+// verifies: AC-FR-401-4
 #[test]
 fn 正規表現のリテラルの文字とクラスと符号位置に掛かる() {
     let doc = utf8_corpus();
@@ -311,7 +311,7 @@ fn 正規表現のリテラルの文字とクラスと符号位置に掛かる()
     }
 }
 
-// verifies: FR-401
+// verifies: AC-FR-401-4
 #[test]
 fn unicode_のクラスと範囲は組の片方を含めば相手も含める() {
     let doc = utf8_corpus();
@@ -340,7 +340,7 @@ fn unicode_のクラスと範囲は組の片方を含めば相手も含める() 
     assert!(!find_all(&doc, &q).iter().any(|r| &doc[r.0..r.1] == "〜"));
 }
 
-// verifies: FR-401
+// verifies: AC-FR-401-4
 #[test]
 fn 一致する文字が変わらないクラスには印を付けない() {
     for p in [
@@ -401,7 +401,7 @@ fn 非_unicode_の範囲には掛けない() {
 
 // ---- 置換 ----
 
-// verifies: FR-401
+// verifies: AC-FR-401-5
 #[test]
 fn 置換の文字列は書いたまま入り_同一視で当たった件数を数える() {
     let cancel = CancelToken::new();
@@ -478,7 +478,7 @@ fn replace_all(doc: &str, q: &SearchQuery, rep: &str) -> (String, u64, u64) {
 // 同一視で当たった件数は「同一視を切った検索語が、文書の前後の文脈のまま、その範囲にちょうど一致できない一致」(03 §12.4.1 の
 // 「置換」、OQ-218 の 6 の改訂)。一致の後ろの文字列を切ったところで `$`・`\b`・`\z` が偽って成り立たず、選択の優先にも
 // 左右されない (レビューの指摘から)
-// verifies: FR-401
+// verifies: AC-FR-401-5
 #[test]
 fn 同一視で当たった件数は文書の文脈のまま範囲にちょうど一致できるかで数える() {
     // `a` は同一視していない一致 (`b$` などは文書の上では偽)
@@ -588,7 +588,7 @@ fn open_bar(doc: &str, fold: Option<bool>, replace: bool) -> Harness {
     h
 }
 
-// verifies: FR-401
+// verifies: AC-FR-401-4
 #[test]
 fn 設定_search_cp932_compat_fold_は未設定で_on_で_検索バーを開いたときの値で効く() {
     let count = |fold: Option<bool>| {
@@ -609,7 +609,7 @@ fn 設定_search_cp932_compat_fold_は未設定で_on_で_検索バーを開い�
     assert!(loaded.diagnostics.is_empty(), "{:?}", loaded.diagnostics);
 }
 
-// verifies: FR-401
+// verifies: AC-FR-401-4
 #[test]
 fn 件数の印は同一視が効いているときだけ付く() {
     let mut h = open_bar("a〜b a～b\nx", None, false);
@@ -642,7 +642,7 @@ fn 件数の印は同一視が効いているときだけ付く() {
     assert_eq!(bar_count(&mut h), "1/2 互換一致");
 }
 
-// verifies: FR-401
+// verifies: AC-FR-401-4
 #[test]
 fn 入力すると両方の一致を強調し_次へで移る() {
     let mut h = open_bar("a〜b a～b", None, false);
@@ -655,7 +655,7 @@ fn 入力すると両方の一致を強調し_次へで移る() {
     assert_eq!(h.doc_text(), "a〜b a～b", "文書は変わらない");
 }
 
-// verifies: FR-401
+// verifies: AC-FR-401-5
 #[test]
 fn すべて置換の知らせは同一視で当たった件数を分けて言う() {
     let mut h = open_bar("〜 ～ 〜", None, true);
@@ -736,7 +736,7 @@ fn 一件置換で文字が変わらない一致は置き換えず次へ進む()
 
 // 今の一致が同一視で当たったものなら、件数の後ろの印が「互換一致」になる。次へで 1 件ずつ見て、片方だけを 1 件置換で直せる
 // (03 §12.4.1 の「検索バーの表示」、OQ-218 の 7 の改訂)
-// verifies: FR-401
+// verifies: AC-FR-401-4, AC-FR-401-5
 #[test]
 fn 今の一致が同一視で当たったものなら互換一致と出し_片方だけを一件置換で直せる() {
     let mut h = open_bar("〜 ～ 〜", None, true);
@@ -781,7 +781,7 @@ fn 今の一致が同一視で当たったものなら互換一致と出し_片�
     assert_eq!(bar_count(&mut h), "1/1 compat match");
 }
 
-// verifies: FR-401
+// verifies: AC-FR-401-5
 #[test]
 fn 行数が変わり同一視でも当たったすべて置換は_1_つの知らせにまとめる() {
     let mut h = open_bar("a〜\nb～\nc", None, true);
@@ -827,7 +827,7 @@ fn 行数が変わり同一視でも当たったすべて置換は_1_つの知�
     assert!(h.messages().iter().any(|k| k == "info.search.replaced"));
 }
 
-// verifies: FR-401
+// verifies: AC-FR-401-5
 #[test]
 fn 一件置換は書いたまま入れる() {
     let mut h = open_bar("a～b", None, true);
@@ -840,7 +840,7 @@ fn 一件置換は書いたまま入れる() {
     assert_eq!(h.doc_text(), "a〜b");
 }
 
-// verifies: FR-401
+// verifies: AC-FR-401-4
 #[test]
 fn shift_jis_の文書の_cp932_の側にも_jis_の側の文字で一致し_文書とバイト列は変わらない() {
     let mut h = Harness::new()

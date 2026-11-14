@@ -111,7 +111,7 @@ fn キーマップと設定の診断を並べ_入力で絞り込める() {
     assert_eq!(cursor_line(&h), 1);
 }
 
-// verifies: NFR-604
+// verifies: AC-NFR-604-2
 #[test]
 fn テーマが無い診断は_theme_name_を書いた行で出し_設定の診断に足す() {
     let mut h = Harness::new();

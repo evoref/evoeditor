@@ -8,7 +8,7 @@ use proptest::prelude::*;
 #[path = "common/merge_check.rs"]
 mod merge_check;
 
-// verifies: NFR-304
+// verifies: AC-NFR-304-5
 #[test]
 fn 長さ_3_までの総当たりで_局所の検査と全体の復号が一致する() {
     // エスケープ文字 (つながりやすい先頭・継続・BOM のバイト) と、つながりの相手になる文字

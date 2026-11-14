@@ -73,7 +73,7 @@ fn sjis_joined() -> Harness {
     s
 }
 
-// verifies: NFR-304
+// verifies: AC-NFR-304-5
 #[test]
 fn つながる保存は何も書かずに確認を出す() {
     let mut s = sjis_joined();
@@ -120,7 +120,7 @@ fn つながりを戻せば元のバイトのまま保存できる() {
 
 // 回帰: BOM 付きの不正バイトを含む UTF-8 / UTF-16 の文書は、確認 (ii) が BOM を読み飛ばさずに毎回 VerifyFailed になって
 // いた (03 §8.3.1 の「復号する範囲」)。編集して上書き保存すると、BOM と不正バイトが元のまま残る
-// verifies: NFR-304
+// verifies: AC-NFR-304-4, AC-NFR-304-5
 #[test]
 fn bom_付きの不正バイトを含む文書を編集して保存できる() {
     let cases: [(Encoding, Vec<u8>, &[u8]); 2] = [
@@ -166,7 +166,7 @@ fn utf16le(s: &str) -> Vec<u8> {
 
 // 先頭が別の文字コードの BOM の並びの不正バイトで始まるファイルを、未編集のまま名前を付けて保存すると、元のファイルと
 // バイト単位で同じものを書く (03 §8.3.1 の「検出しないもの」。同じ文字コードを指定して開き直せば元に戻る)
-// verifies: NFR-304
+// verifies: AC-NFR-304-5
 #[test]
 fn 先頭が別の文字コードの_bom_の並びのファイルも未編集なら名前を付けて保存できる() {
     let cases: [(Encoding, &[u8]); 5] = [

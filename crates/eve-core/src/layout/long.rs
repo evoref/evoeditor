@@ -1796,7 +1796,7 @@ mod tests {
             Ok(())
         }
 
-        // verifies: NFR-106
+        // verifies: AC-NFR-106-5
         #[test]
         fn 長大行の経路は通常の行の経路と表示_カーソル_列_桁が同じ() {
             let _step = StepGuard::set(TEST_STEP_BYTES);

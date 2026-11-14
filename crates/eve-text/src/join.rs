@@ -205,7 +205,7 @@ mod tests {
         );
     }
 
-    // verifies: NFR-106
+    // verifies: AC-NFR-106-5
     #[test]
     fn 表の_unicode_の版は書記素の分割の版と同じ() {
         assert_eq!(
@@ -215,7 +215,7 @@ mod tests {
         );
     }
 
-    // verifies: NFR-106
+    // verifies: AC-NFR-106-5
     #[test]
     fn 表は全コードポイントで書記素の分割の振る舞いから作り直した表と同じ() {
         let mut differ = Vec::new();
@@ -302,7 +302,7 @@ mod tests {
     /// 表に無い char は、表に無い代表の char の後ろでも前でも結合しない (`Extended_Pictographic` は ZWJ の後ろ (GB11)、
     /// `InCB` の Consonant は Linker の後ろ (`GB9c`)、ハングルの音節は L の後ろ・V / T の前 (GB6〜8) でだけ隣と結合し、
     /// その ZWJ・Linker・字母は表にある)。
-    // verifies: NFR-106
+    // verifies: AC-NFR-106-5
     #[test]
     fn 表に無い_char_の後ろでも前でも表に無い_char_は結合しない() {
         let all = || (0..=0x10_FFFFu32).filter_map(char::from_u32);

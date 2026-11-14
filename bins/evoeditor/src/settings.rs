@@ -478,7 +478,7 @@ mod tests {
         );
     }
 
-    // verifies: NFR-603
+    // verifies: AC-NFR-603-9
     #[test]
     fn 言語ファイルの一覧は名前の規則で候補と警告に分ける() {
         let d = std::env::temp_dir().join(format!("evo-list-locales-{}", std::process::id()));
