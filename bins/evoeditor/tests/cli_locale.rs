@@ -88,8 +88,12 @@ fn 追加言語のファイルを見つけ_locale_と_eve_lang_で選べる() {
         listing(&d, "ja", &["--no-config", "--locale", "en"]),
         ("en".to_owned(), "Save".to_owned())
     );
+    // 次の段は OS の言語 (試験を回す機械で ja か en) なので、fr でないことだけを見る
     let (locale, _) = listing(&d, "fr", &["--no-config"]);
-    assert_eq!(locale, "ja", "-N では fr は見つからず、次の段へ進む");
+    assert!(
+        locale == "ja" || locale == "en",
+        "-N では fr は見つからず、次の段へ進む: {locale}"
+    );
     let _ = std::fs::remove_dir_all(&d);
 }
 
@@ -143,26 +147,45 @@ fn 規則に合わない名前は読まずに警告する() {
 #[test]
 fn 見つからない言語は探した場所と代わりの言語を示す() {
     let d = dir("missing");
+    // --locale と EVE_LANG がどちらも見つからないと OS の言語の段へ進む。文言はその言語 (試験を回す機械で ja か en)
     let (code, out) = run_env(&d, "de_DE", &["--check-config", "--locale", "xx"]);
     assert_eq!(code, 0, "{out}");
     let locales = std::path::absolute(d.join("locales")).unwrap();
-    assert!(
-        out.contains("--locale: 言語 xx の言語ファイルがありません"),
-        "{out}"
-    );
-    // 探した場所は --check-config (と一覧) の対処の後にだけ出す
-    assert!(
-        out.contains(&format!(
-            "  locales/ に置くか ja / en を指定 (探した場所: {})",
-            locales.display()
-        )),
-        "{out}"
-    );
-    assert!(out.contains("(いまは ja)"), "{out}");
-    assert!(
-        out.contains("EVE_LANG: 言語 de_DE の言語ファイルがありません"),
-        "{out}"
-    );
+    if out.lines().next().unwrap().starts_with("言語: ") {
+        assert!(
+            out.contains("--locale: 言語 xx の言語ファイルがありません"),
+            "{out}"
+        );
+        // 探した場所は --check-config (と一覧) の対処の後にだけ出す
+        assert!(
+            out.contains(&format!(
+                "  locales/ に置くか ja / en を指定 (探した場所: {})",
+                locales.display()
+            )),
+            "{out}"
+        );
+        assert!(out.contains("(いまは ja)"), "{out}");
+        assert!(
+            out.contains("EVE_LANG: 言語 de_DE の言語ファイルがありません"),
+            "{out}"
+        );
+    } else {
+        assert!(
+            out.contains("--locale: There is no language file for xx (en is used)"),
+            "{out}"
+        );
+        assert!(
+            out.contains(&format!(
+                "  Add it to locales/ or use ja or en (searched: {})",
+                locales.display()
+            )),
+            "{out}"
+        );
+        assert!(
+            out.contains("EVE_LANG: There is no language file for de_DE (en is used)"),
+            "{out}"
+        );
+    }
     // 形に合わない値からもパスを組み立てない
     let (_, out) = run(&d, &["--check-config", "--locale", "../x"]);
     assert!(
@@ -276,8 +299,14 @@ fn check_config_は先頭に選択の結果を出し_言語ファイルを検査
         out.lines().next().unwrap(),
         "Language: en (--locale), fallback: en"
     );
-    let (_, out) = run_env(&d, "", &["--check-config", "--no-config"]);
-    assert!(out.lines().next().unwrap().starts_with("言語: "), "{out}");
+    let (_, out) = run(&d, &["--check-config", "--no-config"]);
+    assert!(
+        out.lines()
+            .next()
+            .unwrap()
+            .starts_with("言語: ja (EVE_LANG)"),
+        "{out}"
+    );
     let _ = std::fs::remove_dir_all(&d);
 }
 
