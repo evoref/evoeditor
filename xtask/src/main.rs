@@ -13,7 +13,7 @@
 //! - `gen-reference`: 生成リファレンス docs/reference/* の生成 (`--check` で最新性と 07 §11.6 のカタログとの突合。docs/09 §11.2)
 //! - `check-ac-checklist`: `tests/ac-checklist.toml` の検査 (docs/11 §3.3)
 //! - `bench`: ベンチの記録 (docs/09 §5.2)
-//! - `check-themes`: 組込みテーマのロール表の検査 (docs/09 §3.5、docs/07 §8.2)
+//! - `check-themes`: 組込みテーマのロール表の検査 (docs/09 §3.5、docs/07 §8.2・§8.7)
 //! - `i18n`: UI 文言の検査 (docs/09 §6.2、docs/07 §17)
 //! - `gen-corpus`: 巨大・長大のコーパスの決定的な生成 (docs/09 §4)
 //! - `scenario`: シナリオ DSL の実行と検証 (`run [<部分一致>] [--print-frame]` / `check`。docs/11 §6.3)
@@ -74,7 +74,7 @@ const USAGE: &str = "\
   check-ac-checklist  tests/ac-checklist.toml の検査 (check の一部)
   bench               ベンチの記録 (BM-103a・BM-205 → target/bench/bench.json。--quick は動作確認用。
                       --env ENV-W1 --out DIR: 基準機の記録 (BM-106・端末込みの BM-101b/102b/103b/107 も測り、DIR に JSON と summary.md)
-  check-themes        組込みテーマのロール表の検査 (07 §8.2。truecolor と mono・コントラスト・実装との突合)
+  check-themes        組込みテーマのロール表の検査 (07 §8.2・§8.7。4 段の値・コントラスト・高コントラストの基準・実装との突合)
   i18n                UI 文言の検査 (04 §15.2 の目録・07 §11.6 のカタログ・locales/ja.toml)
   gen-corpus          巨大・長大のコーパスの生成 (--seed N --out DIR --only a,b --with-1gb --list)
   scenario            シナリオ DSL (tests/scenarios) の実行 (run [<部分一致>] [--print-frame]) と検証 (check)

@@ -57,6 +57,12 @@ pub enum DiagKind {
     },
     /// キーマップ (`keymap.toml`) の問題。`Diagnostic.key` は書かれたキー、`value` は書かれたコマンドなど。
     Keymap(KeymapProblem),
+    /// テーマが無い (組込みの名前でも `themes/<name>.toml` でもない。07 §8.6 / §8.7)。エラーで、テーマは組込みの
+    /// `default` で描く。`Diagnostic.key` は `theme.name` か `inherits`、`value` は書かれた名前。位置は名前を書いた所。
+    ThemeNotFound {
+        /// 組込みの名前に近い名前 (`theme::near_builtin_names`)。無ければ空。
+        candidates: Vec<&'static str>,
+    },
 }
 
 /// キーマップの問題の種類 (docs/07 §7.4・§7.6)。いずれも該当の割当だけを無効にする。
@@ -856,7 +862,7 @@ fn nearest<'a>(name: &str, candidates: &[&'a str]) -> Option<&'a str> {
         .map(|(_, c)| c)
 }
 
-fn distance(a: &str, b: &str) -> usize {
+pub(crate) fn distance(a: &str, b: &str) -> usize {
     let a: Vec<char> = a.chars().collect();
     let b: Vec<char> = b.chars().collect();
     let mut prev: Vec<usize> = (0..=b.len()).collect();

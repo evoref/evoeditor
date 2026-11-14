@@ -23,5 +23,7 @@ pub use config::{
     is_theme_name, load_str, load_str_onto,
 };
 pub use keymap::{KeyAction, KeymapEntry, KeymapFile, load_keymap_str};
-pub use layers::{Resolved, SET_SOURCE, Source, dump, load_set, resolve, values};
+pub use layers::{
+    KeyOrigin, Resolved, SET_SOURCE, Source, dump, load_set, merge_reports, resolve, values,
+};
 pub use locale::{Locale, LocaleChoice, LocaleSource, LocaleWarning, select_locale};

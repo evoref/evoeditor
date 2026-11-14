@@ -1,0 +1,18 @@
+ 1│こんにちは、世界
+ 2│hello Fox ^[ Foo
+ 3│>   タブと[]全角スペース
+ 4│
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+memo.txt Ctrl+K …                                            行 1, 桁 1 UTF-8 LF
+
+Esc 取消
+cursor: Some(CellPos { col: 3, row: 0 })

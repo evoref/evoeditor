@@ -66,9 +66,9 @@
   この設定ファイルは書式が正しくないため使っていません: inherits が循環しています (cycle_a)
   該当の行を直してください。直すまでは既定値で動きます
 ## theme: missing (themes/missing.toml, 使える: false)
-0:0	Error		""
-  この設定ファイルは書式が正しくないため使っていません: テーマ missing がありません
-  該当の行を直してください。直すまでは既定値で動きます
+0:0	Error	theme.name	"missing"
+  テーマ missing がありません
+  組込みのテーマか、themes/ に置いたテーマファイルの名前を書きます。今は default で描いています
 ## theme: broken (themes/broken.toml, 使える: false)
 1:4	Error		""
   この設定ファイルは書式が正しくないため使っていません: unclosed table, expected `]`

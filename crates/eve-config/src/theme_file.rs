@@ -128,7 +128,8 @@ struct RoleSpec {
 /// 解析したテーマファイル 1 つ。
 #[derive(Clone, Debug, Default)]
 struct Parsed {
-    inherits: Option<String>,
+    /// `[meta] inherits` の値と、その値の (行, 桁)。
+    inherits: Option<(String, (u32, u32))>,
     /// (ロール名, 書き換え, ロールのキーの (行, 桁))。位置は知らないロールの診断に使う。
     roles: Vec<(String, RoleSpec, (u32, u32))>,
 }
@@ -377,8 +378,10 @@ fn parse(text: &str) -> (Option<Parsed>, Vec<Diagnostic>) {
         match (name, v.get_ref()) {
             ("palette", _) => {}
             ("meta", DeValue::Table(m)) => {
-                if let Some(DeValue::String(s)) = m.get("inherits").map(|v| v.get_ref()) {
-                    out.inherits = Some(s.to_string());
+                if let Some(v) = m.get("inherits")
+                    && let DeValue::String(s) = v.get_ref()
+                {
+                    out.inherits = Some((s.to_string(), cx.pos(v.span().start)));
                 }
             }
             ("ui", DeValue::Table(ui)) => {
@@ -454,10 +457,35 @@ fn apply(base: Role, spec: &RoleSpec) -> Role {
     }
 }
 
-/// テーマ `name` を読む。`read(name)` は `themes/<name>.toml` の本文 (無ければ `Ok(None)`、読めなければ理由) を返す。
-/// 戻り値は (テーマ、ファイルごとの診断)。テーマが `None` なら組込みの `default` を使う。組込みの名前はファイルを読まない。
+/// テーマが無いときの診断 (07 §8.7、04 §15.2 の `msg.config.theme_not_found`)。組込みの名前に近い名前なら候補を持つ。
+fn not_found(key: &str, name: &str, (line, column): (u32, u32)) -> Diagnostic {
+    Diagnostic {
+        severity: Severity::Error,
+        kind: DiagKind::ThemeNotFound {
+            candidates: crate::theme::near_builtin_names(name),
+        },
+        key: key.to_owned(),
+        value: name.to_owned(),
+        line,
+        column,
+    }
+}
+
+/// テーマ `name` を読む (`load_theme_at` の、`theme.name` を書いた所が分からない形)。
 pub fn load_theme(
     name: &str,
+    read: &dyn Fn(&str) -> Result<Option<String>, String>,
+) -> (Option<Theme>, Vec<(String, Vec<Diagnostic>)>) {
+    load_theme_at(name, None, read)
+}
+
+/// テーマ `name` を読む。`read(name)` は `themes/<name>.toml` の本文 (無ければ `Ok(None)`、読めなければ理由) を返す。
+/// 戻り値は (テーマ、ファイルごとの診断)。テーマが `None` なら組込みの `default` を使う。組込みの名前はファイルを読まない。
+/// テーマが無いときの診断 (`DiagKind::ThemeNotFound`) は、名前を書いた所で出す: `name` なら `origin` (`theme.name` を
+/// 書いた設定ファイルの行か `--set`。`None` なら `themes/<name>.toml`)、`inherits` の親なら、それを書いたテーマファイルの行。
+pub fn load_theme_at(
+    name: &str,
+    origin: Option<&crate::KeyOrigin>,
     read: &dyn Fn(&str) -> Result<Option<String>, String>,
 ) -> (Option<Theme>, Vec<(String, Vec<Diagnostic>)>) {
     let mut reports: Vec<(String, Vec<Diagnostic>)> = Vec::new();
@@ -479,6 +507,11 @@ pub fn load_theme(
     let mut chain: Vec<(String, Parsed)> = Vec::new();
     let mut seen: Vec<String> = Vec::new();
     let mut cur = name.to_owned();
+    // 今の名前を書いた所 (層の名前, キー, (行, 桁))
+    let mut written_at: (String, &str, (u32, u32)) = match origin {
+        Some(o) => (o.source.clone(), "theme.name", (o.line, o.column)),
+        None => (format!("themes/{name}.toml"), "theme.name", (0, 0)),
+    };
     let base = loop {
         if let Some(t) = builtin(&cur) {
             break t;
@@ -512,7 +545,8 @@ pub fn load_theme(
         let text = match read(&cur) {
             Ok(Some(t)) => t,
             Ok(None) => {
-                error(&file, format!("テーマ {cur} がありません"), &mut reports);
+                let (at_file, key, pos) = written_at;
+                crate::merge_reports(&mut reports, [(at_file, vec![not_found(key, &cur, pos)])]);
                 return (None, reports);
             }
             Err(e) => {
@@ -529,7 +563,13 @@ pub fn load_theme(
             debug_assert!(failed);
             return (None, reports);
         };
-        cur = p.inherits.clone().unwrap_or_else(|| "default".to_owned());
+        match &p.inherits {
+            Some((parent, pos)) => {
+                written_at = (file.clone(), "inherits", *pos);
+                cur = parent.clone();
+            }
+            None => cur = "default".to_owned(),
+        }
         chain.push((file, p));
     };
     let mut roles = base.roles;
@@ -715,7 +755,81 @@ mod tests {
 
     #[test]
     fn 組込みの名前はファイルを読まない() {
-        let (t, reports) = load_theme("ansi", &|_| panic!("読まない"));
-        assert!(t.is_some() && reports.is_empty());
+        for name in ["ansi", "high-contrast-dark", "high-contrast-light"] {
+            let (t, reports) = load_theme(name, &|_| panic!("読まない"));
+            assert!(t.is_some() && reports.is_empty(), "{name}");
+        }
+    }
+
+    /// テーマが無いときの診断 1 件 (層の名前, 診断)。
+    fn missing(
+        name: &str,
+        origin: Option<&crate::KeyOrigin>,
+        list: &'static [(&'static str, &'static str)],
+    ) -> (String, Diagnostic) {
+        let (t, reports) = load_theme_at(name, origin, &files(list));
+        assert!(t.is_none());
+        match &reports[..] {
+            [(file, ds)] => match &ds[..] {
+                [d] => (file.clone(), d.clone()),
+                other => panic!("{other:?}"),
+            },
+            other => panic!("{other:?}"),
+        }
+    }
+
+    #[test]
+    fn テーマが無いときは名前を書いた所で知らせ_近い組込みの名前を候補にする() {
+        let origin = crate::KeyOrigin {
+            source: "config.toml".to_owned(),
+            line: 3,
+            column: 1,
+        };
+        let (file, d) = missing("high-contrast", Some(&origin), &[]);
+        assert_eq!(file, "config.toml");
+        assert_eq!(
+            (
+                d.severity,
+                d.key.as_str(),
+                d.value.as_str(),
+                d.line,
+                d.column
+            ),
+            (Severity::Error, "theme.name", "high-contrast", 3, 1)
+        );
+        assert_eq!(
+            d.kind,
+            DiagKind::ThemeNotFound {
+                candidates: vec!["high-contrast-dark", "high-contrast-light"]
+            }
+        );
+        let (_, d) = missing("nothere", Some(&origin), &[]);
+        assert_eq!(d.kind, DiagKind::ThemeNotFound { candidates: vec![] });
+        // 書いた所が分からなければ themes/<name>.toml
+        let (file, d) = missing("High-Contrast-Drak", None, &[]);
+        assert_eq!(
+            (file.as_str(), d.line),
+            ("themes/High-Contrast-Drak.toml", 0)
+        );
+        assert_eq!(
+            d.kind,
+            DiagKind::ThemeNotFound {
+                candidates: vec!["high-contrast-dark"]
+            }
+        );
+        // inherits の親が無ければ、inherits を書いたテーマファイルの行
+        let (file, d) = missing(
+            "child",
+            Some(&origin),
+            &[("child", "[meta]\n  inherits = \"high-contrast\"\n")],
+        );
+        assert_eq!(file, "themes/child.toml");
+        assert_eq!(
+            (d.key.as_str(), d.value.as_str(), d.line, d.column),
+            ("inherits", "high-contrast", 2, 14)
+        );
+        // ファイルがあれば候補を出さずにそれを読む
+        let (t, reports) = load_theme("high-contrast", &files(&[("high-contrast", "[ui]\n")]));
+        assert!(t.is_some() && reports.is_empty(), "{reports:?}");
     }
 }

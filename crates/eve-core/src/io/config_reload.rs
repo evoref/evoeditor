@@ -54,6 +54,7 @@ impl EditorState {
             JobKind::ReadTheme {
                 dir,
                 name: name.clone(),
+                origin: self.io.theme_name_at.clone(),
             },
         );
         self.io.pending.insert(job, Pending::ThemeRead);
@@ -70,10 +71,16 @@ impl EditorState {
         else {
             return;
         };
-        // 一覧 (`config.show_diagnostics`) のテーマファイルの診断は、読み直した結果に置き換える
+        // 一覧 (`config.show_diagnostics`) のテーマの診断は、読み直した結果に置き換える。テーマが無い診断は
+        // `theme.name` を書いた設定ファイルの名前で出す (07 §8.7) ので、そのファイルの診断には足す
         self.forget_config_diagnostics(EditorState::is_theme_diagnostic_file);
+        self.forget_theme_not_found();
         for (file, diags) in &reports {
-            self.report_config(file, diags);
+            if EditorState::is_theme_diagnostic_file(file) {
+                self.report_config(file, diags);
+            } else {
+                self.report_config_more(file, diags);
+            }
         }
         self.set_user_theme(&name, theme);
     }
@@ -204,6 +211,7 @@ impl EditorState {
             );
         } else {
             changed = eve_config::changed_keys(self.config(), &resolved.config);
+            self.io.theme_name_at = resolved.theme_name_at.clone();
             self.apply_reloaded_config(resolved.config);
             // 組込みのテーマに替えたときは読まないので、前のテーマファイルの診断をここで消す
             self.forget_config_diagnostics(EditorState::is_theme_diagnostic_file);

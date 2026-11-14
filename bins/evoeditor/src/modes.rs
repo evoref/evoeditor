@@ -29,8 +29,10 @@ pub(crate) fn check_config(args: &cli::ConfigArgs, cli_locale: Option<&str>) -> 
     if !keymap.diagnostics.is_empty() {
         reports.push((KEYMAP_FILE.to_owned(), keymap.diagnostics.clone()));
     }
-    if let Some((_, _, theme_reports)) = load_user_theme(&src, &resolved.config) {
-        reports.extend(theme_reports);
+    if let Some((_, _, theme_reports)) =
+        load_user_theme(&src, &resolved.config, resolved.theme_name_at.as_ref())
+    {
+        eve_config::merge_reports(&mut reports, theme_reports);
     }
     let mut out = std::io::stdout().lock();
     let mut shown = 0;

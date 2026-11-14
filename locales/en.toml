@@ -582,6 +582,10 @@ text = "{file} has errors, so the previous settings are kept"
 hint = "Fix the line shown. Until then the defaults are used"
 text = "This configuration file is not used because its syntax is invalid: {reason}"
 
+[msg.config.theme_not_found]
+hint = "〔Set {item} to {candidates}. 〕Write the name of a built-in theme or of a theme file in themes/. The default theme is used for now"
+text = "There is no theme named {value}"
+
 [msg.config.type_mismatch]
 hint = "Write it as {expected}. This item uses the default {default}"
 text = "The type of the value of {item} is wrong (found: {actual})"

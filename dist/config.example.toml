@@ -68,9 +68,12 @@ show_whitespace = "minimal"
 [theme]
 # 色の段階: "auto" (端末から判定) / "truecolor" / "256" / "16" / "none" (装飾のみ)。
 color_mode = "auto"
-# テーマ: "default" / "default-dark" / "default-light" / "ansi"、または themes/<名前>.toml の名前。
+# テーマ: "default" / "default-dark" / "default-light" / "ansi" / "high-contrast-dark" / "high-contrast-light"、
+# または themes/<名前>.toml の名前。high-contrast-* は文字と背景の明るさの差を大きくしたテーマで、端末の配色と同じ明暗を
+# 選び、truecolor か 256 色で使ってください。
 name = "default"
-# 背景を塗るテーマ (default-dark / default-light) の明暗: "auto" (端末から判定) / "dark" / "light"。
+# 背景を塗るテーマ (default-dark / default-light / high-contrast-dark / high-contrast-light) の明暗: "auto" (名前どおり) /
+# "dark" / "light"。名前と逆の値にすると、逆の明暗のテーマになります。
 background = "auto"
 
 [ui]

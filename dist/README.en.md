@@ -17,7 +17,7 @@ Supported operating systems are **Windows 11 (x86_64)** and **Linux (x86_64 / aa
 - It writes what you are editing to a swap file about 2 seconds after your last input. If you open the same file after a forced termination or a power loss, it offers to recover the content. On abnormal termination, when the terminal is closed, and on logoff, it rescues unsaved content.
 - You can open several documents and switch between them.
 - Search (regular expressions, whole words, within the selection) and replace (one at a time or all). For huge files, it keeps accepting input while loading and searching. Lines longer than 1 MiB can be edited too.
-- Undo and redo, duplicating and moving lines, soft wrap, mouse, themes, whitespace display, and changing key bindings (`keymap.toml`).
+- Undo and redo, duplicating and moving lines, soft wrap, mouse, themes (including high-contrast ones), whitespace display, and changing key bindings (`keymap.toml`).
 - The user interface is in Japanese or English (`--locale ja|en`, the setting `[ui] locale`).
 - The help screen (`Ctrl+K H`) lists the keys and commands.
 
@@ -128,6 +128,18 @@ evoeditor --help
 ### Configuration
 
 A configuration file is not required. To change settings, copy the bundled [config.example.toml](config.example.toml) to `%APPDATA%\evoeditor\config.toml` on Windows, or to `~/.config/evoeditor/config.toml` on Linux (under `XDG_CONFIG_HOME` if you set it), and edit it (create the folder if it does not exist). Mistakes do not stop startup; only the affected item falls back to its default, and you are told about it.
+
+### High-contrast themes
+
+Two built-in themes increase the difference in brightness between text and background: `high-contrast-dark` (white text on a black background) and `high-contrast-light` (black text on a white background). They are not selected from the high-contrast setting of the OS; select one yourself.
+
+- **Try one**: `evoeditor --set theme.name=high-contrast-dark` uses it for that run only, without changing the configuration file.
+- **Select one**: write, for example, `name = "high-contrast-dark"` under `[theme]` in the configuration file. While the editor is running, "Reload Settings" in the command palette switches to it (restarting also works).
+- **Brightness**: choose the theme whose brightness matches your terminal's color scheme. With the opposite one (for example `high-contrast-light` in a terminal with a dark color scheme), the cursor drawn by the terminal can be close to the background color and hard to see.
+- **Color depth**: use them with truecolor (24-bit color) or 256 colors. With 16 colors, the colors depend on the terminal's color scheme, so the contrast is only a guide. The depth is detected from the terminal; if it is wrong, set it with `color_mode` under `[theme]` (`"truecolor"` / `"256"` / `"16"` / `"none"`). Setting a depth the terminal cannot draw garbles the colors. A change to `color_mode` takes effect after a restart.
+- **Keep `background` at `"auto"`**: `background` under `[theme]` also switches the brightness of the high-contrast themes. The opposite of the name (`"light"` for `high-contrast-dark`) gives the opposite theme, so keep it at `"auto"` (the default) when you select a high-contrast theme.
+- **If you mistype the name**: when the theme is not found, the default theme is used, and close names are suggested (for example "There is no theme named high-contrast"). Check with `evoeditor --check-config` or "Show Settings Diagnostics" in the command palette.
+- **Theme files with the same name**: your own theme files go in `themes/` in the same folder as the configuration file (`%APPDATA%\evoeditor\themes\` on Windows, `~/.config/evoeditor/themes/` on Linux). A file with the same name as a built-in theme (such as `themes/high-contrast-dark.toml`) is not read, and you are not told. A theme file whose `inherits` names one of them also inherits from the built-in theme. To keep using your own file, rename it and change the `theme.name` / `inherits` that refer to it.
 
 ## Updating
 

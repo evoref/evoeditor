@@ -53,11 +53,13 @@ pub(crate) fn config_sources(
 }
 
 /// `theme.name` が組込みでなければ、テーマファイル (`themes/<name>.toml`、`inherits` の親も) を読む (07 §8.6)。
-/// 戻り値は (名前, テーマ (読めなければ `None`)、ファイルごとの診断)。組込みなら `None`。
+/// 戻り値は (名前, テーマ (読めなければ `None`)、ファイルごとの診断)。組込みなら `None`。`origin` は `theme.name` を
+/// 書いた所 (`Resolved.theme_name_at`。テーマが無いときの診断をそこで出す、07 §8.7)。
 #[allow(clippy::type_complexity)]
 pub(crate) fn load_user_theme(
     src: &eve_core::ConfigSources,
     config: &eve_config::Config,
+    origin: Option<&eve_config::KeyOrigin>,
 ) -> Option<(
     String,
     Option<eve_config::theme::Theme>,
@@ -72,7 +74,7 @@ pub(crate) fn load_user_theme(
         Some(dir) => read_source(dir.join(format!("{n}.toml")).as_path()),
         None => Ok(None),
     };
-    let (theme, reports) = eve_config::theme_file::load_theme(&name, &read);
+    let (theme, reports) = eve_config::theme_file::load_theme_at(&name, origin, &read);
     Some((name, theme, reports))
 }
 
