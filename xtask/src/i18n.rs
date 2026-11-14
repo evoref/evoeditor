@@ -12,19 +12,26 @@
 //!    `cmd.<id>.title` / `cmd.<id>.description`、ヒントの文脈 (`normal` / `overlay`) を持つ ID の `hint.<id>`) と
 //!    比べる。欠落も余剰もエラー。無ければ、その旨を表示してこの項目だけ飛ばす (言語ファイルは `MessageKey` を
 //!    実装するマイルストーンで作る)。
+//! 4. 同梱の言語ファイルの各文言に、ユーザーの言語ファイルと同じ検査の関数 (`eve_config::check_text`、07 §17.4 の
+//!    検査 2〜9) を課す。検査 9 (ヒントの幅) も警告ではなくエラーにする。言語の間 (`ja` と `en`) では、互いを
+//!    同梱の文言として検査 6〜8 (括弧の対応・プレースホルダの多重集合と 〔 〕・`[X]` の並びと位置) を課す
+//!    (両方向に課すので、プレースホルダの名前と数が一致する)。
 //!
 //! コードの `MessageKey` の列挙との突合は、その列挙ができてから足す。
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use eve_config::{
+    HINT_MAX_WIDTH, LOCALE_MAX_TEXT_CHARS, LocaleProblem, TextCheck, check_text, hint_width,
+};
 use eve_docs_tables::strip_parentheticals;
 
 use crate::util::{read_text, workspace_root};
 
 /// 言語ファイルに入れない (eve-host の定数表に置く) キーの接頭辞。
 const NOT_IN_LOCALE: [&str; 3] = ["stderr.", "panic.", "cli."];
-/// ヒントの幅の上限 (表示幅 8 セル = 全角 4 文字 / 半角 8 文字、NFR-603)。
-const HINT_MAX_CELLS: usize = 8;
+/// ヒントの幅の上限 (表示幅 8 セル = 全角 4 文字 / 半角 8 文字、NFR-603)。言語ファイルの検査 9 と同じ値。
+const HINT_MAX_CELLS: usize = HINT_MAX_WIDTH;
 
 /// 目録の 1 行。
 struct Entry {
@@ -33,47 +40,40 @@ struct Entry {
     line: usize,
 }
 
-/// 文字の表示幅の近似 (全角・半角カナ以外の幅広の文字を 2、それ以外を 1)。
-/// eve-text の幅の計算ができるまでの、この検査だけの近似。
-fn cells(s: &str) -> usize {
-    s.chars()
-        .map(|c| match c as u32 {
-            0x1100..=0x115F
-            | 0x2E80..=0x303E
-            | 0x3041..=0x33FF
-            | 0x3400..=0x4DBF
-            | 0x4E00..=0x9FFF
-            | 0xA000..=0xA4CF
-            | 0xAC00..=0xD7A3
-            | 0xF900..=0xFAFF
-            | 0xFE30..=0xFE6F
-            | 0xFF00..=0xFF60
-            | 0xFFE0..=0xFFE6 => 2,
-            _ => 1,
-        })
-        .sum()
-}
-
 /// かな・漢字 (半角カナを含む)。〔 〕・矢印・★・… などの記号は含めない。
 fn is_cjk_text(c: char) -> bool {
     matches!(c as u32, 0x3041..=0x30FF | 0x3400..=0x9FFF | 0xFF66..=0xFF9F)
 }
 
-/// 文言の `{name}` と `{key:id}` の名前の集合 (`{{` は除く)。読み方は言語ファイルの解決と同じ (eve-config)。
-fn placeholders(s: &str) -> BTreeSet<String> {
-    eve_config::placeholders(s)
-        .into_iter()
-        .map(str::to_owned)
-        .collect()
+/// 07 §17.4 の検査に通らなかった理由 (検査の報告用)。
+fn describe(p: &LocaleProblem) -> String {
+    match p {
+        LocaleProblem::TooLong { count } => {
+            format!("長さ {count} 文字が上限 {LOCALE_MAX_TEXT_CHARS} 文字を超えています (検査 2)")
+        }
+        LocaleProblem::Empty => "目に見える文字がありません (検査 3)".to_owned(),
+        LocaleProblem::BadChar { class, code } => {
+            format!("使えない文字 U+{code:04X} ({class:?}) があります (検査 4・5)")
+        }
+        LocaleProblem::Placeholder { expected } => format!(
+            "括弧の対応・プレースホルダの名前と数・〔 〕 の有無が合いません (相手: {expected:?}) (検査 6・7)"
+        ),
+        LocaleProblem::Accelerator => {
+            "`[X]` の並び・位置が合わないか、全角の似た形があります (検査 8)".to_owned()
+        }
+        LocaleProblem::HintWidth { width } => {
+            format!("ヒントの表示幅 {width} が {HINT_MAX_CELLS} セルを超えています (検査 9)")
+        }
+        other => format!("{other:?}"),
+    }
 }
 
-/// 文言の `[X]` (大文字 1 字の角括弧) の並び。確認ダイアログのアクセラレータ。
-fn accelerators(s: &str) -> Vec<char> {
-    let cs: Vec<char> = s.chars().collect();
-    cs.windows(3)
-        .filter(|w| w[0] == '[' && w[2] == ']' && w[1].is_ascii_uppercase())
-        .map(|w| w[1])
-        .collect()
+/// 文言の検査 (07 §17.4 の検査 2〜9)。同梱の言語ファイルでは、検査 9 の警告もエラーにする。
+fn text_problem(key: &str, text: &str, builtin: &str) -> Option<LocaleProblem> {
+    match check_text(key, text, builtin) {
+        TextCheck::Pass => None,
+        TextCheck::Warn(p) | TextCheck::Reject(p) => Some(p),
+    }
 }
 
 fn braces_balanced(s: &str) -> bool {
@@ -232,7 +232,7 @@ pub fn run() -> Result<(), String> {
                 e.line, e.key
             ));
         }
-        if e.key.starts_with("hint.") && cells(&strip_parentheticals(&e.ja)) > HINT_MAX_CELLS {
+        if e.key.starts_with("hint.") && hint_width(&strip_parentheticals(&e.ja)) > HINT_MAX_CELLS {
             errors.push(format!(
                 "04 §15.2 行 {}: `{}` のヒントが表示幅 {HINT_MAX_CELLS} セルを超えています",
                 e.line, e.key
@@ -369,8 +369,12 @@ pub fn run() -> Result<(), String> {
                         "locales/{lang}.toml: `{k}` に日本語の文字があります ({v})"
                     ));
                 }
-                if k.starts_with("hint.") && cells(v) > HINT_MAX_CELLS {
-                    errors.push(format!("locales/{lang}.toml: `{k}` のヒントが表示幅 {HINT_MAX_CELLS} セルを超えています ({v})"));
+                // ユーザーの言語ファイルと同じ検査 (07 §17.4 の検査 2〜9。ヒントの幅もエラー)
+                if let Some(p) = text_problem(k, v, v) {
+                    errors.push(format!(
+                        "locales/{lang}.toml: `{k}`: {} ({v:?})",
+                        describe(&p)
+                    ));
                 }
             }
             println!(
@@ -385,26 +389,23 @@ pub fn run() -> Result<(), String> {
         }
     }
 
-    // 同梱の言語の間: 同じキーは同じプレースホルダ (`{name}`・`{key:id}`) を持つ。位置の違いは言語の自由 (07 §17.2)
+    // 同梱の言語の間: 互いを同梱の文言として検査 6〜8 を課す (プレースホルダ (`{name}`・`{key:id}`) の名前と数、
+    // 〔 〕 (条件付きの文) の有無、確認ダイアログの選択肢の `[X]` (コードが決めている押すキー) の並びと位置)。
+    // 両方向に課すので、名前と数は一致する。位置の違いは言語の自由 (07 §17.2)。単独の検査 (上) に通らない文言は除く
     if let (Some(ja), Some(en)) = (haves.get("ja"), haves.get("en")) {
         for (k, jv) in ja {
-            if let Some(ev) = en.get(k) {
-                let (pj, pe) = (placeholders(jv), placeholders(ev));
-                if pj != pe {
-                    errors.push(format!(
-                        "locales/en.toml: `{k}` のプレースホルダが ja と違います (ja: {pj:?} / en: {pe:?})"
-                    ));
+            let Some(ev) = en.get(k) else { continue };
+            for (lang, other, mine, theirs) in [("en", "ja", ev, jv), ("ja", "en", jv, ev)] {
+                if mine == NOT_A_STRING
+                    || theirs == NOT_A_STRING
+                    || text_problem(k, mine, mine).is_some()
+                {
+                    continue;
                 }
-                // 〔 〕 (条件付きの文) の有無も揃える
-                if jv.contains('〔') != ev.contains('〔') {
+                if let Some(p) = text_problem(k, mine, theirs) {
                     errors.push(format!(
-                        "locales/en.toml: `{k}` の 〔 〕 が ja と揃っていません"
-                    ));
-                }
-                // 確認ダイアログの選択肢の `[X]` (アクセラレータ) の文字は言語で変えない (コードが決めている)
-                if accelerators(jv) != accelerators(ev) {
-                    errors.push(format!(
-                        "locales/en.toml: `{k}` の `[X]` のアクセラレータが ja と違います"
+                        "locales/{lang}.toml: `{k}` が {other} の文言と合いません: {}",
+                        describe(&p)
                     ));
                 }
             }
@@ -426,21 +427,17 @@ pub fn run() -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     #[test]
-    fn プレースホルダの集合() {
-        let p = placeholders("{path} を {{ 開く }} {key:file.save} {count}");
-        let v: Vec<&str> = p.iter().map(String::as_str).collect();
-        assert_eq!(v, ["count", "key:file.save", "path"]);
-        assert!(placeholders("なし").is_empty());
-    }
-
-    #[test]
-    fn アクセラレータの並び() {
-        assert_eq!(accelerators("[S] 保存して終了"), ['S']);
-        assert_eq!(accelerators("`[K] a` ★ / `[C] b`"), ['K', 'C']);
-        let actual = accelerators("[Esc] Cancel");
-        assert!(actual.is_empty(), "{actual:?}");
-        let actual = accelerators("[a] x");
-        assert!(actual.is_empty(), "{actual:?}");
+    fn 言語の間の検査は同梱の文言と比べる() {
+        // プレースホルダの名前と数・〔 〕・`[X]` が違えば通らない (両方向に課すので、片方が多いのも拾う)
+        assert!(text_problem("a.b", "{path}", "{path} {reason}").is_some());
+        assert!(text_problem("a.b", "{path} {path}", "{path}").is_some());
+        assert!(text_problem("a.b", "{path}", "{path}〔 ({tmp})〕").is_some());
+        assert!(text_problem("a.b", "[D] Discard", "[S] 保存").is_some());
+        assert!(text_problem("a.b", "{reason}: {path}", "{path} {reason}").is_none());
+        assert!(text_problem("a.b", "[S] Save", "[S] 保存").is_none());
+        // ヒントの幅 (検査 9) もエラーとして拾う
+        assert!(text_problem("hint.app.quit", "終了します", "終了します").is_some());
+        assert!(describe(&LocaleProblem::HintWidth { width: 10 }).contains("10"));
     }
 
     #[test]
@@ -462,10 +459,11 @@ mod tests {
     }
 
     #[test]
-    fn 表示幅の近似() {
-        assert_eq!(cells("abc"), 3);
-        assert_eq!(cells("保存"), 4);
-        assert_eq!(cells("保存a"), 5);
+    fn 目録のヒントの幅は言語ファイルと同じ関数で数える() {
+        assert_eq!(hint_width("abc"), 3);
+        assert_eq!(hint_width("保存"), 4);
+        assert_eq!(hint_width("保存a"), 5);
+        assert_eq!(hint_width("→→"), 2, "曖昧幅は 1");
     }
 
     #[test]

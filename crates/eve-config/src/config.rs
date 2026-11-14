@@ -63,6 +63,9 @@ pub enum DiagKind {
         /// 組込みの名前に近い名前 (`theme::near_builtin_names`)。無ければ空。
         candidates: Vec<&'static str>,
     },
+    /// ユーザーの言語ファイル (`locales/<lang>.toml`) の問題 (07 §17.4)。`Diagnostic.key` は平らにした文言のキー
+    /// (ファイル全体の問題では空)。値が文字列でない文言は `TypeMismatch` (期待する型は `string`) で表す。
+    Locale(crate::LocaleProblem),
 }
 
 /// キーマップの問題の種類 (docs/07 §7.4・§7.6)。いずれも該当の割当だけを無効にする。

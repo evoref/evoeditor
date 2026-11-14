@@ -411,6 +411,35 @@ pub fn diagnostic_texts(cat: &eve_config::Catalog, d: &Diagnostic) -> (String, S
             }
             "theme_not_found"
         }
+        // ユーザーの言語ファイルの診断 (07 §17.4)。まだどこからも作らない (M26 の (2) で読込に載せ、文言を言語ファイルに
+        // 足す。理由の語 (`{reason}` の `ui.config.locale_char.*` など) も (2) で決める)
+        DiagKind::Locale(p) => {
+            use eve_config::LocaleProblem as L;
+            match p {
+                L::Syntax { message } => args.push(("reason", message.clone())),
+                L::LanguageMismatch { lang } => args.push(("lang", lang.clone())),
+                L::TooLong { count } | L::More { count } => {
+                    args.push(("count", count.to_string()));
+                }
+                L::BadChar { code, .. } => args.push(("reason", format!("<U+{code:04X}>"))),
+                L::Placeholder { expected } => {
+                    let list: Vec<String> = expected.iter().map(|n| format!("{{{n}}}")).collect();
+                    args.push(("expected", list.join(", ")));
+                }
+                L::HintWidth { width } => args.push(("width", width.to_string())),
+                L::NotUtf8
+                | L::InlineValue
+                | L::TooDeep
+                | L::TooManyKeys
+                | L::TooLarge
+                | L::UnknownKey
+                | L::Reserved
+                | L::DuplicateKey
+                | L::Empty
+                | L::Accelerator => {}
+            }
+            p.message_name()
+        }
         DiagKind::InvalidValue { allowed } => {
             args.push(("allowed", allowed.join(", ")));
             args.push(("default", default.to_owned()));
