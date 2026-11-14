@@ -1,8 +1,9 @@
 //! テスト用の補助プロセス (docs/02 §4.1、09 §3.6 の保存途中 kill)。`save` は実ファイルシステムで 1 回保存し、環境変数
 //! `EVE_TEST_HOOK=<切断点>` を指していれば、その地点でプロセスを後始末なしで強制終了する (`eve-platform` の `test-hooks`)。
 //!
-//! `clip-delay --hold <ms>` はクリップボードを開いたまま保持し、`clip-delay --delay-render <ms> --text <文字列> [--lifetime <ms>]` は
-//! 遅延レンダリングで登録して応答を遅らせる (準備ができたら標準出力に `ready` を出す)。`clip-read` は今のクリップボードのテキストを出す
+//! `clip-delay --hold <ms>` はクリップボードを開いたまま保持し、`clip-delay --delay-render <ms> --text <文字列> [--lifetime <ms>]
+//! [--for-pid <pid>]` は遅延レンダリングで登録して応答を遅らせる (`--for-pid` を付けると、そのプロセスの取得にだけ応える。準備が
+//! できたら標準出力に `ready` を出す)。`clip-read` は今のクリップボードのテキストを出す
 //! (09 §3.4、実クリップボードの失敗と遅延の検査)。
 //!
 //! `console-event <pid> <ctrl-c|ctrl-break>` は、別プロセスのコンソールにコントロールイベントを送る (09 §3.6 (8))。
@@ -187,7 +188,7 @@ fn console_event(args: &[String]) -> ExitCode {
     }
 }
 
-/// `clip-delay --hold <ms>` / `clip-delay --delay-render <ms> --text <文字列> [--lifetime <ms>]`。
+/// `clip-delay --hold <ms>` / `clip-delay --delay-render <ms> --text <文字列> [--lifetime <ms>] [--for-pid <pid>]`。
 #[cfg(windows)]
 fn clip_delay(args: &[String]) -> ExitCode {
     use eve_platform::clipboard_test::{hold, serve_delayed};
@@ -214,14 +215,15 @@ fn clip_delay(args: &[String]) -> ExitCode {
         let lifetime = flag("--lifetime")
             .and_then(|v| v.parse::<u64>().ok())
             .unwrap_or(30_000);
-        return if serve_delayed(&text, delay, lifetime, ready) {
+        let for_pid = flag("--for-pid").and_then(|v| v.parse::<u32>().ok());
+        return if serve_delayed(&text, delay, lifetime, for_pid, ready) {
             ExitCode::SUCCESS
         } else {
             ExitCode::from(3)
         };
     }
     eprintln!(
-        "使い方: eve-test-helpers clip-delay --hold <ms> | --delay-render <ms> --text <文字列> [--lifetime <ms>]"
+        "使い方: eve-test-helpers clip-delay --hold <ms> | --delay-render <ms> --text <文字列> [--lifetime <ms>] [--for-pid <pid>]"
     );
     ExitCode::from(2)
 }

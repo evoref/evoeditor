@@ -9,12 +9,13 @@ use std::time::Duration;
 
 use windows_sys::Win32::Foundation::{GlobalFree, HANDLE, HWND, LPARAM, LRESULT, WPARAM};
 use windows_sys::Win32::System::DataExchange::{
-    CloseClipboard, EmptyClipboard, OpenClipboard, SetClipboardData,
+    CloseClipboard, EmptyClipboard, GetOpenClipboardWindow, OpenClipboard, SetClipboardData,
 };
 use windows_sys::Win32::System::Memory::{GMEM_MOVEABLE, GlobalAlloc, GlobalLock, GlobalUnlock};
 use windows_sys::Win32::UI::WindowsAndMessaging::{
-    CreateWindowExW, DefWindowProcW, DispatchMessageW, GetMessageW, HWND_MESSAGE, KillTimer, MSG,
-    PostQuitMessage, RegisterClassW, SetTimer, TranslateMessage, WM_TIMER, WNDCLASSW,
+    CreateWindowExW, DefWindowProcW, DispatchMessageW, GetMessageW, GetWindowThreadProcessId,
+    HWND_MESSAGE, KillTimer, MSG, PostQuitMessage, RegisterClassW, SetTimer, TranslateMessage,
+    WM_TIMER, WNDCLASSW,
 };
 
 use crate::clipboard::{ClipboardProvider, WinClipboard};
@@ -22,8 +23,21 @@ use crate::clipboard::{ClipboardProvider, WinClipboard};
 const CF_UNICODETEXT: u32 = 13;
 const WM_RENDERFORMAT: u32 = 0x0305;
 
-/// 遅延レンダリングで返す文字列と、応答の遅れ (ミリ秒)。
-static SERVED: OnceLock<(Vec<u16>, u64)> = OnceLock::new();
+/// 遅延レンダリングで返す文字列、応答の遅れ (ミリ秒)、応える相手のプロセス ID (`None` は誰にでも)。
+static SERVED: OnceLock<(Vec<u16>, u64, Option<u32>)> = OnceLock::new();
+
+/// 今クリップボードを開いているウィンドウのプロセス ID (開いていない・所有者なしで開いているなら 0)。
+fn opener_pid() -> u32 {
+    let mut pid = 0u32;
+    // SAFETY: 引数なしの問合せと、得たウィンドウのプロセス ID の問合せ (`pid` は有効な書込先。NULL のウィンドウなら 0 を返す)。
+    unsafe {
+        let h = GetOpenClipboardWindow();
+        if !h.is_null() {
+            GetWindowThreadProcessId(h, &raw mut pid);
+        }
+    }
+    pid
+}
 
 /// クリップボードのテキストを読む (補助プロセス `clip-read`)。
 pub fn read_text() -> Option<String> {
@@ -47,7 +61,15 @@ pub fn hold(ms: u64, ready: impl FnOnce()) -> bool {
 unsafe extern "system" fn wnd_proc(h: HWND, m: u32, w: WPARAM, l: LPARAM) -> LRESULT {
     match m {
         WM_RENDERFORMAT if w == CF_UNICODETEXT as usize => {
-            if let Some((units, delay)) = SERVED.get() {
+            if let Some((units, delay, for_pid)) = SERVED.get() {
+                // 相手を決めているなら、他のプロセス (クリップボードの変化を見て直ちに読む常駐のアプリ。WSLg・リモート
+                // デスクトップのクリップボードの転送 (msrdc) など) には描画せずに直ちに返す。その相手の取得は NULL で終わり、
+                // 形式は遅延のまま残るので、相手のプロセスの取得が来たときに改めて `WM_RENDERFORMAT` が届く。描画を遅らせて
+                // 応えると、その常駐のアプリが遅れの間クリップボードを開いたままにし、相手のプロセスは開けずに
+                // (取得の遅れではなく) 開けない失敗の経路に入る
+                if for_pid.is_some_and(|p| opener_pid() != p) {
+                    return 0;
+                }
                 std::thread::sleep(Duration::from_millis(*delay));
                 // SAFETY: 確保したグローバルメモリに UTF-16 + NUL を書いて OS に渡す (失敗時は解放する)。
                 unsafe {
@@ -83,10 +105,17 @@ unsafe extern "system" fn wnd_proc(h: HWND, m: u32, w: WPARAM, l: LPARAM) -> LRE
 }
 
 /// 遅延レンダリングで `text` を登録し、`lifetime_ms` の間 `WM_RENDERFORMAT` に `delay_ms` 遅れて応答する。
+/// `for_pid` を指定すると、そのプロセスの取得にだけ応え、他のプロセスの取得には描画せずに直ちに返す。
 /// 登録できたら `ready` を呼び (標準出力で「準備完了」を知らせる用)、期間が過ぎるまでメッセージループを回す。
-pub fn serve_delayed(text: &str, delay_ms: u64, lifetime_ms: u64, ready: impl FnOnce()) -> bool {
+pub fn serve_delayed(
+    text: &str,
+    delay_ms: u64,
+    lifetime_ms: u64,
+    for_pid: Option<u32>,
+    ready: impl FnOnce(),
+) -> bool {
     let units: Vec<u16> = text.encode_utf16().collect();
-    let _ = SERVED.set((units, delay_ms));
+    let _ = SERVED.set((units, delay_ms, for_pid));
     let class: Vec<u16> = "EveClipDelay\0".encode_utf16().collect();
     // SAFETY: ウィンドウクラスの登録とメッセージ専用ウィンドウの作成、クリップボードの所有。文字列は NUL 終端の UTF-16。
     unsafe {
