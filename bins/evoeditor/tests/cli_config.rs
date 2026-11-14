@@ -190,6 +190,7 @@ fn ゴールデン_既定の設定の_json() {
     let (code, out) = run(&d, &["--dump-config", "--defaults", "--json"]);
     assert_eq!(code, 0, "{out}");
     golden("dump_config_defaults.json", &out);
+    let _ = std::fs::remove_dir_all(&d);
 }
 
 #[test]

@@ -43,6 +43,8 @@ struct Session {
     // pty を閉じないよう保持する (`close_console` で手放すと CTRL_CLOSE_EVENT が起きる)
     master: Option<Box<dyn MasterPty + Send>>,
     state: PathBuf,
+    /// 状態ディレクトリをこのセッションが作ったか (作ったものだけを、成功で終わるときに `Drop` で消す)。
+    owns_state: bool,
 }
 
 impl Session {
@@ -58,6 +60,7 @@ impl Session {
     /// 環境変数を足して起動する (`EVE_TEST_HOOK` など)。
     fn start_with(args: &[&str], state: Option<PathBuf>, envs: &[(&str, &str)]) -> Session {
         // 利用者の状態ディレクトリを汚さない (保存中フラグ・退避はここに書く)
+        let owns_state = state.is_none();
         let state = state.unwrap_or_else(|| {
             let dir = std::env::temp_dir().join(format!(
                 "evo-e2e-state-{}-{}",
@@ -111,6 +114,7 @@ enabled = {swap}
             raw,
             master: Some(pty.master),
             state,
+            owns_state,
         }
     }
 
@@ -262,6 +266,13 @@ enabled = {swap}
 impl Drop for Session {
     fn drop(&mut self) {
         let _ = self.child.kill();
+        // 自分で作った状態ディレクトリを消す (試験ごとに %TEMP% に残さない)。試験が落ちたとき (panic の巻き戻し) は、
+        // 退避・ログを後から見られるよう残す。子が終わってファイルを手放してから消す。前のセッションの状態ディレクトリを
+        // 引き継いだセッション (`start_in` に渡した) は消さない (作ったセッションが後で消す)
+        if self.owns_state && !thread::panicking() {
+            let _ = self.child.wait();
+            let _ = std::fs::remove_dir_all(&self.state);
+        }
     }
 }
 
@@ -1833,7 +1844,11 @@ fn 取得が遅くても入力は止まらず_2_秒で内部レジスタに切�
     s.send(b"\x01\x03"); // Ctrl+A, Ctrl+C: 内部レジスタに入る
     thread::sleep(Duration::from_millis(500));
     s.send(b"\x1b[F");
-    // 他のアプリが遅延レンダリングで所有し、応答を 6 秒遅らせる
+    // 他のアプリが遅延レンダリングで所有し、evoeditor の取得への応答を 6 秒遅らせる。応えるのは evoeditor だけにする
+    // (クリップボードの変化を見て直ちに読む常駐のアプリ (WSLg・リモートデスクトップの転送の msrdc など) に遅れて応えると、
+    // その間そのアプリがクリップボードを開いたままにし、evoeditor は開けずに直ちに内部レジスタへ切り替わる。取得の遅れの
+    // 経路を通らない)
+    let pid = s.child.process_id().expect("pid").to_string();
     let mut helper = spawn_clip_helper(&[
         "clip-delay",
         "--delay-render",
@@ -1842,6 +1857,8 @@ fn 取得が遅くても入力は止まらず_2_秒で内部レジスタに切�
         "SLOW",
         "--lifetime",
         "15000",
+        "--for-pid",
+        &pid,
     ]);
     let t = Instant::now();
     s.send(b"\x16"); // Ctrl+V
