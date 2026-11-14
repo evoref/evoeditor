@@ -80,6 +80,30 @@ impl Catalog {
         EN.get_or_init(|| Catalog::parse(BUILTIN_EN).expect("同梱の locales/en.toml は読める"))
     }
 
+    /// 言語 `language` (`ja`・`fr` など、言語の部分の名前) を補う同梱の表 (07 §17.4 の「重ね方」): 同梱の言語ならその言語、
+    /// 同梱していない言語 (追加言語) なら `en`。大文字小文字は区別しない。
+    pub fn base_for(language: &str) -> &'static Catalog {
+        if language.eq_ignore_ascii_case("ja") {
+            Catalog::builtin_ja()
+        } else {
+            Catalog::builtin_en()
+        }
+    }
+
+    /// 補う言語の同梱の表 `self` に、ユーザーの言語ファイルの検査に通った文言を重ねた表 (07 §17.4)。`file` は
+    /// [`load_locale_file`](crate::load_locale_file) に同じ表を渡して読んだもの。`self` に無いキーは足さない
+    /// (書かれていないキーは `self` の文言のまま)。起動時に 1 回作り、実行中は変えない。
+    #[must_use]
+    pub fn overlay(&self, file: &crate::LocaleFile) -> Catalog {
+        let mut entries = self.entries.clone();
+        for (k, v) in file.texts() {
+            if let Some(slot) = entries.get_mut(k) {
+                slot.clone_from(v);
+            }
+        }
+        Catalog { entries }
+    }
+
     /// キーの文言。無ければ `None`。
     pub fn get(&self, key: &str) -> Option<&str> {
         self.entries.get(key).map(String::as_str)

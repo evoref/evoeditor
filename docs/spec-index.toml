@@ -4353,7 +4353,7 @@ title = "復元の挙動"
 id = "07 §17"
 file = "docs/07-config-extensibility.md"
 line = 1587
-end = 1757
+end = 1761
 title = "国際化 (UI 文言)"
 
 [[section]]
@@ -4381,105 +4381,105 @@ title = "表示上の注意"
 id = "07 §17.4"
 file = "docs/07-config-extensibility.md"
 line = 1672
-end = 1757
+end = 1761
 title = "ユーザーの言語ファイル (v0.4 の M26)"
 
 [[section]]
 id = "07 §18"
 file = "docs/07-config-extensibility.md"
-line = 1758
-end = 1910
+line = 1762
+end = 1914
 title = "CLI 仕様"
 
 [[section]]
 id = "07 §18.1"
 file = "docs/07-config-extensibility.md"
-line = 1760
-end = 1773
+line = 1764
+end = 1777
 title = "書式"
 
 [[section]]
 id = "07 §18.2"
 file = "docs/07-config-extensibility.md"
-line = 1774
-end = 1786
+line = 1778
+end = 1790
 title = "位置引数"
 
 [[section]]
 id = "07 §18.3"
 file = "docs/07-config-extensibility.md"
-line = 1787
-end = 1834
+line = 1791
+end = 1838
 title = "オプション"
 
 [[section]]
 id = "07 §18.4"
 file = "docs/07-config-extensibility.md"
-line = 1835
-end = 1849
+line = 1839
+end = 1853
 title = "終了コード"
 
 [[section]]
 id = "07 §18.5"
 file = "docs/07-config-extensibility.md"
-line = 1850
-end = 1858
+line = 1854
+end = 1862
 title = "標準入力・標準出力"
 
 [[section]]
 id = "07 §18.6"
 file = "docs/07-config-extensibility.md"
-line = 1859
-end = 1874
+line = 1863
+end = 1878
 title = "`$EDITOR` / `$GIT_EDITOR` / `$VISUAL` として使われたとき"
 
 [[section]]
 id = "07 §18.7"
 file = "docs/07-config-extensibility.md"
-line = 1875
-end = 1878
+line = 1879
+end = 1882
 title = "シェル補完"
 
 [[section]]
 id = "07 §18.8"
 file = "docs/07-config-extensibility.md"
-line = 1879
-end = 1910
+line = 1883
+end = 1914
 title = "更新に関わる予約 (`--check-update` と前回起動した版の記録)"
 
 [[section]]
 id = "07 §19"
 file = "docs/07-config-extensibility.md"
-line = 1911
-end = 1939
+line = 1915
+end = 1943
 title = "サードパーティ拡張のライセンスと信頼"
 
 [[section]]
 id = "07 §19.1"
 file = "docs/07-config-extensibility.md"
-line = 1913
-end = 1921
+line = 1917
+end = 1925
 title = "配布物の種類と危険度"
 
 [[section]]
 id = "07 §19.2"
 file = "docs/07-config-extensibility.md"
-line = 1922
-end = 1928
+line = 1926
+end = 1932
 title = "ライセンス"
 
 [[section]]
 id = "07 §19.3"
 file = "docs/07-config-extensibility.md"
-line = 1929
-end = 1939
+line = 1933
+end = 1943
 title = "信頼の段階"
 
 [[section]]
 id = "07 §20"
 file = "docs/07-config-extensibility.md"
-line = 1940
-end = 1956
+line = 1944
+end = 1960
 title = "未決事項"
 
 [[section]]
@@ -5018,7 +5018,7 @@ title = "決定記録 (ADR)"
 id = "10 §2"
 file = "docs/10-decisions.md"
 line = 770
-end = 1620
+end = 1621
 title = "未決事項 (Open Questions)"
 
 [[section]]
@@ -5081,7 +5081,7 @@ title = "OQ-161 以降 (仕上げ段階の追加起票)"
 id = "10 §2.9"
 file = "docs/10-decisions.md"
 line = 1336
-end = 1620
+end = 1621
 title = "OQ-176 以降 (並行修正での追加起票)"
 
 [[section]]
@@ -8618,67 +8618,67 @@ section = "07 §3.1"
 [[id]]
 id = "OQ-94"
 file = "docs/07-config-extensibility.md"
-line = 1946
+line = 1950
 section = "07 §20"
 
 [[id]]
 id = "OQ-95"
 file = "docs/07-config-extensibility.md"
-line = 1947
+line = 1951
 section = "07 §20"
 
 [[id]]
 id = "OQ-35"
 file = "docs/07-config-extensibility.md"
-line = 1948
+line = 1952
 section = "07 §20"
 
 [[id]]
 id = "OQ-96"
 file = "docs/07-config-extensibility.md"
-line = 1949
+line = 1953
 section = "07 §20"
 
 [[id]]
 id = "OQ-43"
 file = "docs/07-config-extensibility.md"
-line = 1950
+line = 1954
 section = "07 §20"
 
 [[id]]
 id = "OQ-98"
 file = "docs/07-config-extensibility.md"
-line = 1951
+line = 1955
 section = "07 §20"
 
 [[id]]
 id = "OQ-99"
 file = "docs/07-config-extensibility.md"
-line = 1952
+line = 1956
 section = "07 §20"
 
 [[id]]
 id = "OQ-141"
 file = "docs/07-config-extensibility.md"
-line = 1953
+line = 1957
 section = "07 §20"
 
 [[id]]
 id = "OQ-142"
 file = "docs/07-config-extensibility.md"
-line = 1954
+line = 1958
 section = "07 §20"
 
 [[id]]
 id = "OQ-120"
 file = "docs/07-config-extensibility.md"
-line = 1955
+line = 1959
 section = "07 §20"
 
 [[id]]
 id = "OQ-124"
 file = "docs/07-config-extensibility.md"
-line = 1956
+line = 1960
 section = "07 §20"
 
 [[id]]
@@ -11444,7 +11444,7 @@ section = "10 §2.9"
 [[id]]
 id = "OQ-221"
 file = "docs/10-decisions.md"
-line = 1583
+line = 1584
 section = "10 §2.9"
 
 [[id]]

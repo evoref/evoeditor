@@ -313,6 +313,7 @@ dependencies = [
 name = "eve-config"
 version = "0.3.0"
 dependencies = [
+ "eve-text",
  "proptest",
  "toml",
 ]
