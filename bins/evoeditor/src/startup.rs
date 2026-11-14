@@ -120,15 +120,18 @@ pub(crate) fn start(
     let config = loaded.config;
     let mut config_reports = loaded.reports;
     // テーマファイル (組込みでない `theme.name`)。読めなければ default で動き、診断を出す
-    let user_theme = load_user_theme(&sources, &config).map(|(name, theme, reports)| {
-        for (file, diags) in &reports {
-            for d in diags {
-                logger.log(log_level(d.severity), &describe(file, d));
+    let theme_name_at = loaded.theme_name_at.as_ref();
+    let user_theme =
+        load_user_theme(&sources, &config, theme_name_at).map(|(name, theme, reports)| {
+            for (file, diags) in &reports {
+                for d in diags {
+                    logger.log(log_level(d.severity), &describe(file, d));
+                }
             }
-        }
-        config_reports.extend(reports);
-        (name, theme)
-    });
+            // テーマが無い診断は `theme.name` を書いた設定ファイルの名前で出すので、そのファイルの診断に足す (07 §8.7)
+            eve_config::merge_reports(&mut config_reports, reports);
+            (name, theme)
+        });
     for d in &keymap.diagnostics {
         logger.log(log_level(d.severity), &describe(KEYMAP_FILE, d));
     }

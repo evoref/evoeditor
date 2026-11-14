@@ -56,6 +56,8 @@ pub enum JobKind {
         dir: FsPath,
         /// テーマ名 (拡張子 `.toml` を除いたファイル名)。
         name: String,
+        /// `theme.name` を書いた所 (テーマが無いときの診断の場所、07 §8.7)。分からなければ `None`。
+        origin: Option<eve_config::KeyOrigin>,
     },
     /// 設定ファイル (ユーザー層の `config.toml` を順に) と `keymap.toml` を読む (`config.reload`、07 §6)。
     ReadConfig {

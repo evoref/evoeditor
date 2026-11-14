@@ -120,6 +120,8 @@ pub(crate) struct IoState {
     pub(crate) closing_snapshots: BTreeMap<DocumentId, crate::io::snapshot::DocSnapshot>,
     /// 設定の読込元 (`None` は設定ディレクトリの既定の 2 ファイル)。
     pub(crate) config_sources: Option<crate::io::config_reload::ConfigSources>,
+    /// 最後に読み直した設定で `theme.name` を書いた所 (テーマが無いときの診断の場所、07 §8.7)。
+    pub(crate) theme_name_at: Option<eve_config::KeyOrigin>,
     /// 未完了のジョブと、その結果の宛先。
     pub(crate) pending: BTreeMap<JobId, Pending>,
     /// 実行中の全保存 (`file.save_all`、03 §9.8)。無ければ `None`。
@@ -333,6 +335,7 @@ impl EditorState {
                 system_encoding: None,
                 log_path: None,
                 config_sources: None,
+                theme_name_at: None,
             },
             settings: Settings {
                 config: eve_config::Config::default(),

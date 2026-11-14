@@ -865,6 +865,16 @@ fn theme_name_と_file_default_encoding_の不正は警告して既定値() {
 }
 
 #[test]
+fn theme_name_は組込みの高コントラストのテーマを受け付ける() {
+    for name in ["high-contrast-dark", "high-contrast-light"] {
+        let l = load_str(&format!("theme.name = \"{name}\"\n"));
+        assert!(l.diagnostics.is_empty(), "{name}: {:?}", l.diagnostics);
+        assert_eq!(l.config.theme_name, name);
+        assert!(crate::theme::BUILTIN_NAMES.contains(&name));
+    }
+}
+
+#[test]
 fn テーマの名前は英数字とハイフンと下線の_1_から_64_文字() {
     let ok64 = "a".repeat(64);
     let ng65 = "a".repeat(65);

@@ -233,7 +233,7 @@ pub fn run_job(
                 err: JobError::Fs(err),
             },
         },
-        JobKind::ReadTheme { dir, name } => {
+        JobKind::ReadTheme { dir, name, origin } => {
             let read = |n: &str| -> Result<Option<String>, String> {
                 match read_config_file(&*ports.fs, &dir.join(format!("{n}.toml"))) {
                     Ok(Some(b)) => String::from_utf8(b)
@@ -243,7 +243,8 @@ pub fn run_job(
                     Err(e) => Err(e),
                 }
             };
-            let (theme, reports) = eve_config::theme_file::load_theme(name, &read);
+            let (theme, reports) =
+                eve_config::theme_file::load_theme_at(name, origin.as_ref(), &read);
             JobResult::ThemeRead {
                 name: name.clone(),
                 theme,

@@ -37,6 +37,39 @@ impl EditorState {
                 .config_diagnostics
                 .push((file.to_owned(), diagnostics.to_vec()));
         }
+        self.show_config_problems(file, diagnostics);
+    }
+
+    /// `report_config` と同じだが、一覧のそのファイルの診断を置き換えずに足す (テーマが無い診断を、`theme.name` を
+    /// 書いた設定ファイルの名前で出すとき。07 §8.7)。
+    pub(crate) fn report_config_more(&mut self, file: &str, diagnostics: &[Diagnostic]) {
+        if !diagnostics.is_empty() {
+            match self
+                .ui
+                .config_diagnostics
+                .iter_mut()
+                .find(|(f, _)| f == file)
+            {
+                Some((_, ds)) => ds.extend(diagnostics.iter().cloned()),
+                None => self
+                    .ui
+                    .config_diagnostics
+                    .push((file.to_owned(), diagnostics.to_vec())),
+            }
+        }
+        self.show_config_problems(file, diagnostics);
+    }
+
+    /// 一覧から、テーマが無い診断 (`DiagKind::ThemeNotFound`) を消す (テーマを読み直す前)。
+    pub(crate) fn forget_theme_not_found(&mut self) {
+        for (_, ds) in &mut self.ui.config_diagnostics {
+            ds.retain(|d| !matches!(d.kind, DiagKind::ThemeNotFound { .. }));
+        }
+        self.ui.config_diagnostics.retain(|(_, ds)| !ds.is_empty());
+    }
+
+    /// 診断を 1 件または要約 1 件のメッセージにする (`report_config` の画面の側)。
+    fn show_config_problems(&mut self, file: &str, diagnostics: &[Diagnostic]) {
         // 「このバージョンでは未対応」の情報診断は画面に出さず、件数にも数えない (07 §4.3)
         let shown: Vec<&Diagnostic> = diagnostics
             .iter()
@@ -370,6 +403,14 @@ pub fn diagnostic_texts(cat: &eve_config::Catalog, d: &Diagnostic) -> (String, S
                 P::EscapeKey => "keymap_escape_key",
             }
         }
+        DiagKind::ThemeNotFound { candidates } => {
+            // 候補は `"…"` で囲んで ` / ` でつなぐ。無ければ 〔 〕 の文を省く (04 §15.2)
+            if !candidates.is_empty() {
+                let quoted: Vec<String> = candidates.iter().map(|c| format!("\"{c}\"")).collect();
+                args.push(("candidates", quoted.join(" / ")));
+            }
+            "theme_not_found"
+        }
         DiagKind::InvalidValue { allowed } => {
             args.push(("allowed", allowed.join(", ")));
             args.push(("default", default.to_owned()));
@@ -408,6 +449,42 @@ mod tests {
             assert!(text.starts_with("ai "), "{text}");
             assert!(!text.contains("msg.config"), "{text}");
             assert_eq!(hint, "");
+        }
+    }
+
+    #[test]
+    fn テーマが無い診断は候補を対処に入れ_候補が無ければその文を省く() {
+        let d = |candidates| Diagnostic {
+            severity: Severity::Error,
+            kind: DiagKind::ThemeNotFound { candidates },
+            key: "theme.name".to_owned(),
+            value: "high-contrast".to_owned(),
+            line: 3,
+            column: 1,
+        };
+        let with = d(vec!["high-contrast-dark", "high-contrast-light"]);
+        let (text, hint) = diagnostic_texts(Catalog::builtin_ja(), &with);
+        assert_eq!(text, "テーマ high-contrast がありません");
+        assert!(
+            hint.starts_with(
+                "theme.name を \"high-contrast-dark\" / \"high-contrast-light\" にしてください。"
+            ),
+            "{hint}"
+        );
+        assert!(hint.ends_with("今は default で描いています"), "{hint}");
+        let (text, hint) = diagnostic_texts(Catalog::builtin_en(), &with);
+        assert_eq!(text, "There is no theme named high-contrast");
+        assert!(
+            hint.starts_with(
+                "Set theme.name to \"high-contrast-dark\" / \"high-contrast-light\". "
+            ),
+            "{hint}"
+        );
+        let without = d(Vec::new());
+        for cat in [Catalog::builtin_ja(), Catalog::builtin_en()] {
+            let (_, hint) = diagnostic_texts(cat, &without);
+            assert!(!hint.contains("high-contrast"), "{hint}");
+            assert!(!hint.contains('{') && !hint.contains('〔'), "{hint}");
         }
     }
 

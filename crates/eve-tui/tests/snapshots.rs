@@ -211,6 +211,107 @@ fn 色の段_256_色() {
     check_look("depth-ansi256", &mut h, look);
 }
 
+// ---- 高コントラストのテーマ (07 §8.7、09 §3.5 の (g)) ----
+
+/// 制御文字と、大文字を含む検索語 (`Fo`) に何度も一致する語を含む文書。
+const HC_MEMO: &str = "こんにちは、世界\nhello Fox \u{1b} Foo\n\tタブと　全角スペース\n";
+
+/// テーマ `theme` (設定ファイルから。eve-tui は設定の型を知らない) と色の段 `depth` で、`HC_MEMO` を開いた Harness。
+fn high_contrast_opened(theme: &str, depth: ColorDepth) -> Harness {
+    let mut h = Harness::new()
+        .with_size(80, 14)
+        .with_caps(Capabilities {
+            color_depth: depth,
+            ..Capabilities::default()
+        })
+        .with_file("/memo.txt", HC_MEMO.as_bytes());
+    h.fs.add_file(
+        "/evo/config/config.toml",
+        format!("[theme]\nname = \"{theme}\"\n").as_bytes(),
+    );
+    h.cmd("config.reload");
+    h.run_jobs();
+    h.open("/memo.txt");
+    h.run_jobs();
+    h
+}
+
+fn depth_label(depth: ColorDepth) -> &'static str {
+    match depth {
+        ColorDepth::Mono => "mono",
+        ColorDepth::Ansi16 => "ansi16",
+        ColorDepth::Ansi256 => "ansi256",
+        _ => "truecolor",
+    }
+}
+
+/// 1 行目の先頭の 3 文字を選んでから、検索バーで `Fo` を探した画面。選択 (1 行目)・現在の一致 (`Fox`)・検索の一致
+/// (`Foo`)・大文字小文字のトグルの ON (`[Aa~]`。大文字を含むので区別している)・ステータスバー・ヒントバー・行番号
+/// (現在の行番号を含む)・空白と制御文字の記号・`~` が 1 枚に出る。
+fn high_contrast(theme: &str, depth: ColorDepth) {
+    let mut h = high_contrast_opened(theme, depth);
+    h.keys("shift+right shift+right shift+right");
+    h.keys("ctrl+f");
+    h.text("Fo");
+    h.run_jobs();
+    let look = Look {
+        depth,
+        ..DEFAULT_LOOK
+    };
+    check_look(&format!("{theme}-{}", depth_label(depth)), &mut h, look);
+}
+
+/// `Ctrl+K` を押してチョードを保留した画面 (ステータスバーの上に `ui.status_bar.chord` を重ねる。07 §8.6 の
+/// 「重ねるロール」はステータスバーの色を通す)。
+fn high_contrast_chord(theme: &str, depth: ColorDepth) {
+    let mut h = high_contrast_opened(theme, depth);
+    h.keys("ctrl+k");
+    let look = Look {
+        depth,
+        ..DEFAULT_LOOK
+    };
+    check_look(
+        &format!("{theme}-{}-chord", depth_label(depth)),
+        &mut h,
+        look,
+    );
+}
+
+// verifies: NFR-604
+#[test]
+fn 高コントラスト_チョードの保留はステータスバーの色に重ねる() {
+    for depth in [ColorDepth::TrueColor, ColorDepth::Ansi16] {
+        high_contrast_chord("high-contrast-dark", depth);
+        high_contrast_chord("high-contrast-light", depth);
+    }
+}
+
+// verifies: NFR-604
+#[test]
+fn 高コントラスト_暗い_4_段() {
+    for depth in [
+        ColorDepth::TrueColor,
+        ColorDepth::Ansi256,
+        ColorDepth::Ansi16,
+        ColorDepth::Mono,
+    ] {
+        high_contrast("high-contrast-dark", depth);
+    }
+}
+
+// verifies: NFR-604
+#[test]
+fn 高コントラスト_明るい_4_段() {
+    for depth in [
+        ColorDepth::TrueColor,
+        ColorDepth::Ansi256,
+        ColorDepth::Ansi16,
+        ColorDepth::Mono,
+    ] {
+        high_contrast("high-contrast-light", depth);
+    }
+}
+
 #[test]
 fn ascii_の記号に縮退した画面() {
     let mut h = opened(Harness::new().with_size(80, 14).with_caps(Capabilities {

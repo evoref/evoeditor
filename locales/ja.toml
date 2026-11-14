@@ -580,6 +580,10 @@ text = "{file} にエラーがあるため、前の設定のままにしまし�
 hint = "該当の行を直してください。直すまでは既定値で動きます"
 text = "この設定ファイルは書式が正しくないため使っていません: {reason}"
 
+[msg.config.theme_not_found]
+hint = "〔{item} を {candidates} にしてください。〕組込みのテーマか、themes/ に置いたテーマファイルの名前を書きます。今は default で描いています"
+text = "テーマ {value} がありません"
+
 [msg.config.type_mismatch]
 hint = "{expected} で書いてください。この項目は既定値 {default} を使います"
 text = "{item} の値の型が違います (書かれた型: {actual})"

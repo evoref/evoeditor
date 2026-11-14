@@ -1,0 +1,17 @@
+0: 0-2 Indexed(250) Indexed(16) BOLD | 3-8 Indexed(16) Indexed(153) NONE | 9-79 Indexed(231) Indexed(16) NONE
+1: 0-2 Indexed(250) Indexed(16) NONE | 3-8 Indexed(231) Indexed(16) NONE | 9-10 Indexed(16) Indexed(215) BOLD | UNDERLINED | 11-12 Indexed(231) Indexed(16) NONE | 13-14 Indexed(16) Indexed(183) NONE | 15-15 Indexed(231) Indexed(16) NONE | 16-17 Indexed(16) Indexed(226) UNDERLINED | 18-79 Indexed(231) Indexed(16) NONE
+2: 0-6 Indexed(250) Indexed(16) NONE | 7-12 Indexed(231) Indexed(16) NONE | 13-14 Indexed(250) Indexed(16) NONE | 15-79 Indexed(231) Indexed(16) NONE
+3: 0-2 Indexed(250) Indexed(16) NONE | 3-79 Indexed(231) Indexed(16) NONE
+4: 0-0 Indexed(250) Indexed(16) NONE | 1-79 Indexed(231) Indexed(16) NONE
+5: 0-0 Indexed(250) Indexed(16) NONE | 1-79 Indexed(231) Indexed(16) NONE
+6: 0-0 Indexed(250) Indexed(16) NONE | 1-79 Indexed(231) Indexed(16) NONE
+7: 0-0 Indexed(250) Indexed(16) NONE | 1-79 Indexed(231) Indexed(16) NONE
+8: 0-0 Indexed(250) Indexed(16) NONE | 1-79 Indexed(231) Indexed(16) NONE
+9: 0-0 Indexed(250) Indexed(16) NONE | 1-79 Indexed(231) Indexed(16) NONE
+10: 0-0 Indexed(250) Indexed(16) NONE | 1-79 Indexed(231) Indexed(16) NONE
+11: 0-0 Indexed(250) Indexed(16) NONE | 1-79 Indexed(231) Indexed(16) NONE
+12: 0-0 Indexed(250) Indexed(16) NONE | 1-79 Indexed(231) Indexed(16) NONE
+13: 0-54 Indexed(231) Indexed(16) NONE | 55-59 Indexed(231) Indexed(16) REVERSED | 60-79 Indexed(231) Indexed(16) NONE
+14: 0-79 Indexed(16) Indexed(231) NONE
+15: 0-79 Indexed(231) Indexed(16) NONE
+16: 0-2 Indexed(16) Indexed(123) NONE | 3-9 Indexed(231) Indexed(16) NONE | 10-14 Indexed(16) Indexed(123) NONE | 15-21 Indexed(231) Indexed(16) NONE | 22-26 Indexed(16) Indexed(123) NONE | 27-79 Indexed(231) Indexed(16) NONE

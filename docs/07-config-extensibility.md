@@ -224,7 +224,8 @@ provider = "osc52"
 | キー表記の構文エラー | 警告。該当割当のみ無効 | `"ctl+s"` |
 | キーの衝突 (FR-608) | 情報。同じコンテキスト・同じキーを **別の定義行で重複** 定義した場合は後勝ちで解決した上で通知 (配列値 `[ {…}, {…} ]` は先頭から `when` が真の最初を採用する正規の書き方で、衝突ではない。02 §7.2 K4)。プレフィックス衝突 (`ctrl+k` 単体と `ctrl+k ctrl+c` の両方) は警告し、単体側を無効化 (02 §7.2 K3) | §7.6 |
 | 廃止キー (リネーム済み) | 情報。新名称へ自動変換して適用。`--fix-config` で書き換え提案 (Could) | `editor.tabsize` → `editor.tab_width` |
-| 存在しないテーマ / 言語 / ロケール名 | 警告。既定にフォールバック | `theme.name = "solarized"` |
+| 存在しないテーマ | エラー (`msg.config.theme_not_found`)。組込みの `default` で描く。場所は `theme.name` を書いた設定ファイルの行 (`--set` なら `--set`)。組込みの名前に近い名前なら候補を対処に入れる (§8.7) | `theme.name = "solarized"` |
+| 存在しない言語 / ロケール名 | 警告。既定にフォールバック | `ui.locale = "xx"` |
 | 信頼されていないワークスペースの危険項目 | 情報 (「信頼すると適用されます」)。適用しない | §12.3 |
 | 安全性違反 (`${...}` 展開でパス外参照、コマンド文字列に shell メタ文字 等) | エラー。項目を無効化 | §9.5 |
 
@@ -917,6 +918,7 @@ tree-sitter のハイライトクエリ (`@keyword.control` 等) のキャプチ
 | `ansi` | `default` の全ロールで、16 の段の値を全段に使う (端末の配色に馴染む。16 色端末・SSH 先向け、04 §12.1 C3) | 端末の既定色 |
 
 - 淡色の (iii) のロール (`#808080`) は、塗った背景に対しても 3.0:1 以上 (暗 4.2、明 3.8)。比は core の `tests/theme_table.rs` で確かめる。
+- **重ねるロールは塗らない** (v0.4 の M26 の (3) で直した): ほかのロールの上に重ねて属性だけを足すロール (**重ねるロール**: `ui.status_bar.chord` (`ui.status_bar` の上)・`ui.line_number.active` (`ui.line_number` の上)・`ui.overlay.match` (`ui.overlay` と `ui.overlay.selected` の上)・`ui.search_bar.toggle_on` (検索バーの地の `ui.overlay` の上)) は、端末の既定色を本文の色に置き換えず、既定色のまま下のロールの色を通す。置き換えると、ステータスバーのチョードや一覧の選択中の行の一致が本文の色になり、下の色を隠す。ほかのロールは単独でも描くので置き換える (`ui.dialog.button.focused` は確認ダイアログで単独に描く)。重ねるロールを足すときは、この一覧と `eve_config::theme` の表に足す。
 - `theme.background` (確定 (ユーザー回答)、2026-10-30): `default-dark` / `default-light` を選んだときだけ効き、`dark` / `light` でその明暗に替える。`auto` (既定) は名前どおりで、`COLORFGBG` による推定はしない (名前で明暗を明示しているため。OQ-124 の推定は、明暗を名前に含まないテーマを足すときに使う)。`default` と `ansi` は見ない。
 - `theme.name` の値は組込みの 4 つ (v0.4 の M26 で `high-contrast-dark` / `high-contrast-light` を足して 6 つ。§8.7)。テーマファイル (`themes/<name>.toml`) は 4 本目。設定を差し替えると (`config.reload` を含む) その場で替わる。
 
@@ -924,7 +926,7 @@ tree-sitter のハイライトクエリ (`@keyword.control` 等) のキャプチ
 
 - `theme.name` は組込みの名前か、英数字・`-`・`_` だけの 1〜64 文字 (パスの区切りや `..` は使えない。それ以外は値の誤りの警告)。組込みでなければ `<設定ディレクトリ>/themes/<name>.toml` を読む (`--no-config` のときは読まない)。`Config` は文字列を持つので `Copy` でなくなった (`Clone`)。
 - 書式は §8.2 のうち `[meta]` の `inherits`、`[palette]`、`[ui]` のロール (`fg` / `bg` / `mods` / `fallback256` / `fallback16` / `mono`)。`inherits` は親から順に重ね (深さ 8、循環はエラー)、どこにも無ければ組込みの `default` が土台 (組込みの `default-dark` 等も親にできる)。書いたロールの書いた項目だけを上書きし、色を書き換えた段の 256 / 16 は、明示が無ければ 04 §12.3 の近似で求める (前景と背景が同じ番号になったら反転)。`ui.text` に背景色があれば背景を塗るテーマとして扱う。`[meta]` の `name` / `background` / `author` / `license` は読み飛ばす。`[syntax]` と `underline` / `underline_color` は v0.5 (「未対応」の情報診断)。
-- 誤りの扱い: 読めない・無い・構文エラー・`inherits` の循環と深さはエラーで、テーマは組込みの `default` で動く。未知のロール・色の表記・パレット名・属性は警告で、その値だけ使わない。診断はファイル名 `themes/<name>.toml` で出す (`--check-config` も確かめ、エラーなら終了コード 3)。
+- 誤りの扱い: 読めない・無い・構文エラー・`inherits` の循環と深さはエラーで、テーマは組込みの `default` で動く。未知のロール・色の表記・パレット名・属性は警告で、その値だけ使わない。診断はファイル名 `themes/<name>.toml` で出す (`--check-config` も確かめ、エラーなら終了コード 3)。ただし、テーマが無い (組込みの名前でもテーマファイルでもない) ときは `msg.config.theme_not_found` にし、名前を書いた所 (`theme.name` の設定ファイルの行、`--set`、または `inherits` のテーマファイルの行) で出す (v0.4 の M26 の (3)。§8.7)。
 - 読むのは、起動時は bin (端末の前)、`config.reload` は設定を差し替えた後の io ジョブ (`JobKind::ReadTheme`。名前が同じでもファイルを読み直す)。ワークスペース層の `.eve/themes/` と `theme.overrides` (§8.4) は v0.5。
 - **組込みの名前が優先する**: `theme.name` が組込みの名前なら、同じ名前のテーマファイル (`themes/<name>.toml`) は読まない (§8.3 の順)。v0.4 の M26 で `high-contrast-dark` / `high-contrast-light` を足すと、v0.2〜v0.3 で利用者が同じ名前で作ったテーマファイルは黙って使われなくなる。CHANGELOG に書き (08 §2.5 の M26 の (3))、使い続けるにはファイルの名前を変えるよう案内する。
 
@@ -939,8 +941,8 @@ tree-sitter のハイライトクエリ (`@keyword.control` 等) のキャプチ
 
 本節は [OQ-221](10-decisions.md#oq-221-高コントラストテーマの細目-v04-の-m26) (確定 (ユーザー回答、2026-11-14)。推す案のとおり) で決めた (番号は OQ-221 の論点の番号)。04 §12.5 はこの節を参照する。
 
-- **テーマ** (OQ-221 の 1): 組込みテーマ `high-contrast-dark` (黒の背景に白の文字) と `high-contrast-light` (白の背景に黒の文字)。どちらも背景を塗るテーマで、`default-dark` / `default-light` と同じく扱う (§8.6 の 3 本目): 色の段では、各ロールの端末の既定色 (`default`) を `ui.text` の色に置き換え、eve-tui は画面全体を `ui.text` で塗ってから描く。無色の段は塗らない。
-- **選び方**: `theme.name` で選ぶ (§5.4)。`theme.background = "dark"` / `"light"` で対の他方へ替わり、`auto` (既定) は名前どおり (OQ-221 の 4。`with_background` に足す)。名前と逆の値 (`high-contrast-dark` に `light`) を書くと逆のテーマになる。OS のハイコントラストの設定からは選ばない (OQ-221 の 5)。別名 (`high-contrast` など) は足さない。組込みの名前に近い名前 (組込みの名前の接頭辞か、編集距離 2 以下) で `themes/<name>.toml` も無いときは、テーマが無い診断の理由に候補を足す (例 「テーマ high-contrast がありません。high-contrast-dark / high-contrast-light ではありませんか?」。理由の文は今の `theme_file` の「テーマ {name} がありません」と同じ所に置く)。
+- **テーマ** (OQ-221 の 1): 組込みテーマ `high-contrast-dark` (黒の背景に白の文字) と `high-contrast-light` (白の背景に黒の文字)。どちらも背景を塗るテーマで、`default-dark` / `default-light` と同じく扱う (§8.6 の 3 本目): 色の段では、各ロールの端末の既定色 (`default`) を `ui.text` の色に置き換え (重ねるロールは置き換えず、下のロールの色を通す。§8.6 の 3 本目)、eve-tui は画面全体を `ui.text` で塗ってから描く。無色の段は塗らない。
+- **選び方**: `theme.name` で選ぶ (§5.4)。`theme.background = "dark"` / `"light"` で対の他方へ替わり、`auto` (既定) は名前どおり (OQ-221 の 4。`with_background` に足す)。名前と逆の値 (`high-contrast-dark` に `light`) を書くと逆のテーマになる。OS のハイコントラストの設定からは選ばない (OQ-221 の 5)。別名 (`high-contrast` など) は足さない。テーマが組込みの名前でも `themes/<name>.toml` でもないときは、テーマが無い診断 (`msg.config.theme_not_found`。エラー。テーマは組込みの `default` で描く。04 §15.2) を出す。場所は `theme.name` を書いた設定ファイルとその行 (`--set` で書いたときは `--set`)、`inherits` で書いた名前なら、そのテーマファイルの `inherits` の行。組込みの名前に近い名前 (組込みの名前の接頭辞か、編集距離 2 以下。どちらも大文字小文字を区別しない) なら、候補を診断の対処に入れる (例 本文「テーマ high-contrast がありません」、対処「theme.name を "high-contrast-dark" / "high-contrast-light" にしてください。…」)。
 - **ロール**: `default` と同じ 26 個 (§8.2。ロール名は公開面。M22〜M25 で増えていない)。値は下の 2 つの表が正本で、`xtask check-themes` が読む (セルの文法は §8.2 の凡例と同じ。表の見出しと列は 11 §8.5 で固定する)。256 と 16 の段も明示値で書く (04 §12.3 の近似を使わない)。形の列は truecolor の段の形で、16 の段で属性や形が違うロール (下の (h9) のため) は表の値が正。
 - **基準** (OQ-221 の 2・3・6。`check-themes` の高コントラスト用の検査、09 §3.5 の (g)。比は WCAG 2.x の相対輝度による比で、256 の段は xterm の 256 色の標準値で計算する):
   - (h1) truecolor と 256 の段で、本文 (`ui.text`) の組が **7.0:1 以上**。
@@ -950,14 +952,15 @@ tree-sitter のハイライトクエリ (`@keyword.control` 等) のキャプチ
   - (h5) 16 の段は、端末のパレットで変わるので目安として、xterm の既定パレット (§8.2 の表の下) と Windows Terminal・conhost の既定の配色 (Campbell: `black #0c0c0c`・`red #c50f1f`・`green #13a10e`・`yellow #c19c00`・`blue #0037da`・`magenta #881798`・`cyan #3a96dd`・`white #cccccc`・`bright_black #767676`・`bright_red #e74856`・`bright_green #16c60c`・`bright_yellow #f9f1a5`・`bright_blue #3b78ff`・`bright_magenta #b4009e`・`bright_cyan #61d6d6`・`bright_white #f2f2f2`) の **両方で** (h1)〜(h3) を **4.5:1 以上** ((h4) は課さない)。
   - (h6) どの段でも `dim` を使わない (mono の段を含む)。`ui.cursor_line` は色の段でも `none` (現在行の帯を付けない)。
   - (h7) どの段でも、`ui.selection`・`ui.search.match`・`ui.search.current` の属性の組が互いに違う (色を見分けられなくても区別できる)。
-  - (h8) 色の段 (truecolor・256・16。16 は xterm の既定パレット) で、`ui.selection`・`ui.search.match`・`ui.search.current` の背景は、互いに明るさの比を **1.5:1 以上** 取る。取れない組は、`bold` 以外の属性 (`underline` / `reverse`) の差を持つ (太字は端末によって描かれず、差にならない)。
-  - (h9) 16 の段で、`bold` を持つロールの前景が 0〜7 の色 (`black`〜`white`) であってはならない (太字を明るい色で描く端末 (conhost など) で、`black` が `bright_black` になり比が崩れる。例 `red` の背景の `black` の太字は約 1.0:1)。前景が `default` のロールは本文の前景 (`ui.status_bar.chord` は `ui.status_bar` の前景) で判定する。該当するロールは、16 の段だけ `bold` を外すか別の属性に替える。
+  - (h8) 色の段 (truecolor・256・16。16 は xterm の既定パレット) で、`ui.selection`・`ui.search.match`・`ui.search.current` の背景は、互いに明るさの比を **1.5:1 以上** 取る。取れない組は、`bold` 以外の属性 (`underline` / `reverse`) の差を持つ (太字は端末によって描かれず、差にならない)。背景は見た目の背景で比べる (`reverse` を持つ段は前景の色が背景に見えるので、前景の色で計算する。`default` は本文の色)。
+  - (h9) 16 の段で、`bold` を持つロールの前景が 0〜7 の色 (`black`〜`white`) であってはならない (太字を明るい色で描く端末 (conhost など) で、`black` が `bright_black` になり比が崩れる。例 `red` の背景の `black` の太字は約 1.0:1)。前景が `default` のロールは本文の前景で判定し、重ねるロール (§8.6 の 3 本目) は下のロールの前景で判定する (`ui.status_bar.chord` は `ui.status_bar`、`ui.line_number.active` は `ui.line_number`、`ui.overlay.match` は `ui.overlay` と `ui.overlay.selected` の両方、`ui.search_bar.toggle_on` は `ui.overlay`)。該当するロールは、16 の段だけ `bold` を外すか別の属性に替える。
+  - (h10) 色の段 (truecolor・256・16) で、前景だけのロール (形 (iii)。淡い補助表示) の前景は、本文 (`ui.text`) の前景と違う色にする (行番号・空白の記号・`~` を本文と見分ける。16 の段は、暗いテーマが `cyan`、明るいテーマが `blue`)。
   - 加えて、`default` の表と同じ 09 §3.5 の (a)(b)(d)(e): 全ロールの 4 段に値があり、形の列が truecolor の段と一致し、背景だけの段が無く、意味のあるロールの mono が空でなく、表と実装のロール名の集合が一致する。
 - **強調の向き**: (h4) を満たすため、暗いテーマの強調は明るい背景に黒の文字、明るいテーマの強調は暗い背景に白の文字にする (明るいテーマでは、黄色の背景の検索の一致を使わない)。明るいテーマの現在の一致は、(h8) のため黒の背景に白の文字 + 下線 + 太字にする (無色の段の「反転 + 下線」と同じ見た目)。淡色の補助表示 (行番号・`~`・横スクロールの印・実行できない項目・入力欄の案内・空白の記号) は、(h3) を満たす灰色にする (暗 `#c0c0c0`、明 `#404040`。OQ-221 の 3)。無色の段は `default` の mono の段と同じで、空白の記号だけを `dim` の代わりに `bold` にする (OQ-221 の 6)。
 - 括弧内の数値は、形 (i) が「前景と背景の比・背景と本文の背景の比」、形 (iii) と `ui.text` が本文の背景に対する比 (小数第 2 位以下を切り捨て)。16 の段は xterm の既定パレットでの比。Campbell での最小は、暗いテーマが `ui.message.error` の 5.0、明るいテーマが `ui.message.error` の 5.4。
 - **見え方の注記**:
-  - 256 の段では、明るいテーマの警告 (`ui.message.warning`) の黄土色の候補が (h2) を満たさないので、暗い灰色 (`ansi.237`) にする。16 の段では黒にする。どちらも、ステータスバー (黒) の背景と近い・同じになる (`⚠` と太字、出る行の違いで区別する)。
-  - 16 の段は使える色が少なく、明るいテーマでは検索の一致と制御文字が同じ色の組 (`bright_white` / `magenta`) になる (下線の有無と、出る場所で区別する)。暗いテーマの 16 の段の現在の一致は、(h8) と (h9) のため `underline` + `reverse` (明るい緑の文字に黒の背景に見える)。
+  - 256 の段では、明るいテーマの警告 (`ui.message.warning`) の黄土色の候補が (h2) を満たさないので、暗い灰色 (`ansi.237`) にする。ステータスバー (黒) の背景と近くなる (`⚠` と太字、出る行の違いで区別する)。16 の段は (h4) を課さないので、黄色の背景に黒の文字にしてステータスバーの組 (黒の背景に白) と分ける (太字は (h9) のため付けない)。
+  - 16 の段は使える色が少なく、明るいテーマでは検索の一致と制御文字が同じ色の組 (`bright_white` / `magenta`) になる (下線の有無と、出る場所で区別する)。暗いテーマの 16 の段の現在の一致は、青の背景に明るい白の文字 + 下線 + 太字にする (ほかの一致の明るい黄色の背景と明るさで分ける)。暗いテーマの 16 の段の現在の行番号と一覧の一致は、(h9) のため太字の代わりに下線にする (下の淡い表示の `cyan` と、選択中の行の `black` の前景に重なるため)。
   - 端末の配色と逆の明暗のテーマ (暗い配色の端末で `high-contrast-light`) では、端末が描くカーソルの色が背景に近くなり、見えにくいことがある。README で「端末の配色と同じ明暗のテーマを選ぶ」と案内し、08 §2.5 の M26 の (4) の目視の観点に入れる。カーソルの色を OSC 12 / 112 で変える案は、後の版の候補とする (端末の状態を変えるので、復元の経路 (04 §14) に足す必要がある)。
   - 暗い部屋では、明るいテーマ (と暗いテーマの強調・ステータスバー) の明るい塗りの面積がまぶしいことがある。これも (4) の目視の観点に入れる。
   - 高コントラストのテーマは truecolor か 256 の段で使うことを README で勧める (16 の段は端末のパレット次第で、基準は目安)。
@@ -969,13 +972,13 @@ tree-sitter のハイライトクエリ (`@keyword.control` 等) のキャプチ
 |---|---|---|---|---|---|---|
 | `ui.text` | 本文と入力欄の文字。このテーマは背景を塗る (07 §8.6 の `paints`)。ほかのロールの `default` は本文の色 | (i) | `#ffffff` / `#000000` (21.0) | `ansi.231` / `ansi.16` (21.0) | `bright_white` / `black` (21.0) | `none` |
 | `ui.cursor_line` | 現在行の強調。高コントラストのテーマでは付けない (OQ-221 の 3) | (ii) | `none` | `none` | `none` | `none` |
-| `ui.line_number` | ガターの行番号 | (iii) | `#c0c0c0` / `default` (11.5) | `ansi.250` / `default` (11.0) | `white` / `default` (16.6) | `none` |
-| `ui.line_number.active` | 現在行の行番号 | (ii) | `bold` | `bold` | `bold` | `bold` |
-| `ui.eof_marker` | 文書末尾より後の行の `~` | (iii) | `#c0c0c0` / `default` (11.5) | `ansi.250` / `default` (11.0) | `white` / `default` (16.6) | `none` |
-| `ui.scroll_marker` | 横スクロールの続きの印 `‹` / `›` | (iii) | `#c0c0c0` / `default` + `bold` (11.5) | `ansi.250` / `default` + `bold` (11.0) | `white` / `default` (16.6) | `bold` |
+| `ui.line_number` | ガターの行番号 | (iii) | `#c0c0c0` / `default` (11.5) | `ansi.250` / `default` (11.0) | `cyan` / `default` (10.6) | `none` |
+| `ui.line_number.active` | 現在行の行番号 | (ii) | `bold` | `bold` | `underline` | `bold` |
+| `ui.eof_marker` | 文書末尾より後の行の `~` | (iii) | `#c0c0c0` / `default` (11.5) | `ansi.250` / `default` (11.0) | `cyan` / `default` (10.6) | `none` |
+| `ui.scroll_marker` | 横スクロールの続きの印 `‹` / `›` | (iii) | `#c0c0c0` / `default` + `bold` (11.5) | `ansi.250` / `default` + `bold` (11.0) | `cyan` / `default` (10.6) | `bold` |
 | `ui.selection` | 選択範囲 (編集面・入力欄) | (i) | `#000000` / `#9ccfff` (12.7・12.7) | `ansi.16` / `ansi.153` (13.9・13.9) | `black` / `bright_cyan` (16.7・16.7) | `reverse` |
 | `ui.search.match` | 検索の一致 | (i) | `#000000` / `#ffff00` + `underline` (19.5・19.5) | `ansi.16` / `ansi.226` + `underline` (19.5・19.5) | `black` / `bright_yellow` + `underline` (19.5・19.5) | `underline` |
-| `ui.search.current` | 現在の一致 | (i) | `#000000` / `#ffa64d` + `underline` + `bold` (10.8・10.8) | `ansi.16` / `ansi.215` + `underline` + `bold` (11.5・11.5) | `black` / `bright_green` + `underline` + `reverse` (15.3・15.3) | `reverse` + `underline` |
+| `ui.search.current` | 現在の一致 | (i) | `#000000` / `#ffa64d` + `underline` + `bold` (10.8・10.8) | `ansi.16` / `ansi.215` + `underline` + `bold` (11.5・11.5) | `bright_white` / `blue` + `underline` + `bold` (9.3・2.2) | `reverse` + `underline` |
 | `ui.status_bar` | ステータスバー | (i) | `#000000` / `#ffffff` (21.0・21.0) | `ansi.16` / `ansi.231` (21.0・21.0) | `black` / `bright_white` (21.0・21.0) | `reverse` |
 | `ui.status_bar.chord` | ステータスバーのチョード保留。`ui.status_bar` に重ねる | (ii) | `bold` | `bold` | `underline` | `bold` |
 | `ui.message.info` | 情報メッセージ (先頭に `ℹ`) | (ii) | `default` / `default` | `default` / `default` | `default` / `default` | `none` |
@@ -985,14 +988,14 @@ tree-sitter のハイライトクエリ (`@keyword.control` 等) のキャプチ
 | `ui.hint_bar.key` | ヒントバーのキー表記 | (i) | `#000000` / `#7fffff` (17.6・17.6) | `ansi.16` / `ansi.123` (17.7・17.7) | `black` / `cyan` (10.6・10.6) | `reverse` |
 | `ui.overlay` | オーバーレイの枠と文字 | (ii) | `default` / `default` | `default` / `default` | `default` / `default` | `none` |
 | `ui.overlay.selected` | 一覧の選択中の行 (行頭に `▶`) | (i) | `#000000` / `#9ccfff` (12.7・12.7) | `ansi.16` / `ansi.153` (13.9・13.9) | `black` / `bright_cyan` (16.7・16.7) | `reverse` |
-| `ui.overlay.match` | パレットの一致箇所 | (ii) | `underline` + `bold` | `underline` + `bold` | `underline` + `bold` | `underline` + `bold` |
-| `ui.overlay.disabled` | パレットの実行できない項目 | (iii) | `#c0c0c0` / `default` (11.5) | `ansi.250` / `default` (11.0) | `white` / `default` (16.6) | `none` |
-| `ui.input.placeholder` | 入力欄が空のときの案内 | (iii) | `#c0c0c0` / `default` (11.5) | `ansi.250` / `default` (11.0) | `white` / `default` (16.6) | `none` |
+| `ui.overlay.match` | パレットの一致箇所 | (ii) | `underline` + `bold` | `underline` + `bold` | `underline` | `underline` + `bold` |
+| `ui.overlay.disabled` | パレットの実行できない項目 | (iii) | `#c0c0c0` / `default` (11.5) | `ansi.250` / `default` (11.0) | `cyan` / `default` (10.6) | `none` |
+| `ui.input.placeholder` | 入力欄が空のときの案内 | (iii) | `#c0c0c0` / `default` (11.5) | `ansi.250` / `default` (11.0) | `cyan` / `default` (10.6) | `none` |
 | `ui.dialog.button` | 確認ダイアログのボタン | (ii) | `default` / `default` | `default` / `default` | `default` / `default` | `none` |
 | `ui.dialog.button.focused` | フォーカス中のボタン (`▶` 付き) | (ii) | `reverse` + `bold` | `reverse` + `bold` | `reverse` + `bold` | `reverse` + `bold` |
 | `ui.search_bar.toggle_on` | 検索バーの ON のトグル | (ii) | `reverse` | `reverse` | `reverse` | `reverse` |
 | `ui.control_char` | 制御文字・不正バイトの可視記号 | (i) | `#000000` / `#e0a8ff` (11.2・11.2) | `ansi.16` / `ansi.183` (11.4・11.4) | `black` / `white` (16.6・16.6) | `reverse` |
-| `ui.whitespace` | 全角スペース・タブの可視化の記号 | (iii) | `#c0c0c0` / `default` (11.5) | `ansi.250` / `default` (11.0) | `white` / `default` (16.6) | `bold` |
+| `ui.whitespace` | 全角スペース・タブの可視化の記号 | (iii) | `#c0c0c0` / `default` (11.5) | `ansi.250` / `default` (11.0) | `cyan` / `default` (10.6) | `bold` |
 
 #### 8.7.2 high-contrast-light のロール表
 
@@ -1000,30 +1003,30 @@ tree-sitter のハイライトクエリ (`@keyword.control` 等) のキャプチ
 |---|---|---|---|---|---|---|
 | `ui.text` | 本文と入力欄の文字。このテーマは背景を塗る (07 §8.6 の `paints`)。ほかのロールの `default` は本文の色 | (i) | `#000000` / `#ffffff` (21.0) | `ansi.16` / `ansi.231` (21.0) | `black` / `bright_white` (21.0) | `none` |
 | `ui.cursor_line` | 現在行の強調。高コントラストのテーマでは付けない (OQ-221 の 3) | (ii) | `none` | `none` | `none` | `none` |
-| `ui.line_number` | ガターの行番号 | (iii) | `#404040` / `default` (10.3) | `ansi.238` / `default` (9.7) | `black` / `default` (21.0) | `none` |
+| `ui.line_number` | ガターの行番号 | (iii) | `#404040` / `default` (10.3) | `ansi.238` / `default` (9.7) | `blue` / `default` (9.3) | `none` |
 | `ui.line_number.active` | 現在行の行番号 | (ii) | `bold` | `bold` | `underline` | `bold` |
-| `ui.eof_marker` | 文書末尾より後の行の `~` | (iii) | `#404040` / `default` (10.3) | `ansi.238` / `default` (9.7) | `black` / `default` (21.0) | `none` |
-| `ui.scroll_marker` | 横スクロールの続きの印 `‹` / `›` | (iii) | `#404040` / `default` + `bold` (10.3) | `ansi.238` / `default` + `bold` (9.7) | `black` / `default` (21.0) | `bold` |
+| `ui.eof_marker` | 文書末尾より後の行の `~` | (iii) | `#404040` / `default` (10.3) | `ansi.238` / `default` (9.7) | `blue` / `default` (9.3) | `none` |
+| `ui.scroll_marker` | 横スクロールの続きの印 `‹` / `›` | (iii) | `#404040` / `default` + `bold` (10.3) | `ansi.238` / `default` + `bold` (9.7) | `blue` / `default` (9.3) | `bold` |
 | `ui.selection` | 選択範囲 (編集面・入力欄) | (i) | `#ffffff` / `#0a3d91` (10.0・10.0) | `ansi.231` / `ansi.19` (12.9・12.9) | `bright_white` / `blue` (9.3・9.3) | `reverse` |
 | `ui.search.match` | 検索の一致 | (i) | `#ffffff` / `#005f00` + `underline` (7.9・7.9) | `ansi.231` / `ansi.22` + `underline` (7.9・7.9) | `bright_white` / `magenta` + `underline` (4.6・4.6) | `underline` |
 | `ui.search.current` | 現在の一致 | (i) | `#ffffff` / `#000000` + `underline` + `bold` (21.0・21.0) | `ansi.231` / `ansi.16` + `underline` + `bold` (21.0・21.0) | `bright_white` / `black` + `underline` + `bold` (21.0・21.0) | `reverse` + `underline` |
 | `ui.status_bar` | ステータスバー | (i) | `#ffffff` / `#000000` (21.0・21.0) | `ansi.231` / `ansi.16` (21.0・21.0) | `bright_white` / `black` (21.0・21.0) | `reverse` |
 | `ui.status_bar.chord` | ステータスバーのチョード保留。`ui.status_bar` に重ねる | (ii) | `bold` | `bold` | `bold` | `bold` |
 | `ui.message.info` | 情報メッセージ (先頭に `ℹ`) | (ii) | `default` / `default` | `default` / `default` | `default` / `default` | `none` |
-| `ui.message.warning` | 警告メッセージ (先頭に `⚠`) | (i) | `#ffffff` / `#6b4400` + `bold` (8.5・8.5) | `ansi.231` / `ansi.237` + `bold` (11.3・11.3) | `bright_white` / `black` + `bold` (21.0・21.0) | `bold` |
+| `ui.message.warning` | 警告メッセージ (先頭に `⚠`) | (i) | `#ffffff` / `#6b4400` + `bold` (8.5・8.5) | `ansi.231` / `ansi.237` + `bold` (11.3・11.3) | `black` / `yellow` (12.3・1.7) | `bold` |
 | `ui.message.error` | エラーメッセージ (先頭に `✖`)、正規表現のエラー | (i) | `#ffffff` / `#a00000` + `bold` (8.4・8.4) | `ansi.231` / `ansi.124` + `bold` (7.4・7.4) | `bright_white` / `red` + `bold` (5.8・5.8) | `bold` + `reverse` |
 | `ui.hint_bar` | ヒントバーの説明の語 | (ii) | `default` / `default` | `default` / `default` | `default` / `default` | `none` |
 | `ui.hint_bar.key` | ヒントバーのキー表記 | (i) | `#ffffff` / `#005a5a` (8.0・8.0) | `ansi.231` / `ansi.23` (7.4・7.4) | `bright_white` / `blue` (9.3・9.3) | `reverse` |
 | `ui.overlay` | オーバーレイの枠と文字 | (ii) | `default` / `default` | `default` / `default` | `default` / `default` | `none` |
 | `ui.overlay.selected` | 一覧の選択中の行 (行頭に `▶`) | (i) | `#ffffff` / `#0a3d91` (10.0・10.0) | `ansi.231` / `ansi.19` (12.9・12.9) | `bright_white` / `blue` (9.3・9.3) | `reverse` |
 | `ui.overlay.match` | パレットの一致箇所 | (ii) | `underline` + `bold` | `underline` + `bold` | `underline` | `underline` + `bold` |
-| `ui.overlay.disabled` | パレットの実行できない項目 | (iii) | `#404040` / `default` (10.3) | `ansi.238` / `default` (9.7) | `black` / `default` (21.0) | `none` |
-| `ui.input.placeholder` | 入力欄が空のときの案内 | (iii) | `#404040` / `default` (10.3) | `ansi.238` / `default` (9.7) | `black` / `default` (21.0) | `none` |
+| `ui.overlay.disabled` | パレットの実行できない項目 | (iii) | `#404040` / `default` (10.3) | `ansi.238` / `default` (9.7) | `blue` / `default` (9.3) | `none` |
+| `ui.input.placeholder` | 入力欄が空のときの案内 | (iii) | `#404040` / `default` (10.3) | `ansi.238` / `default` (9.7) | `blue` / `default` (9.3) | `none` |
 | `ui.dialog.button` | 確認ダイアログのボタン | (ii) | `default` / `default` | `default` / `default` | `default` / `default` | `none` |
 | `ui.dialog.button.focused` | フォーカス中のボタン (`▶` 付き) | (ii) | `reverse` + `bold` | `reverse` + `bold` | `reverse` | `reverse` + `bold` |
 | `ui.search_bar.toggle_on` | 検索バーの ON のトグル | (ii) | `reverse` | `reverse` | `reverse` | `reverse` |
 | `ui.control_char` | 制御文字・不正バイトの可視記号 | (i) | `#ffffff` / `#6a1b9a` (9.3・9.3) | `ansi.231` / `ansi.54` (11.4・11.4) | `bright_white` / `magenta` (4.6・4.6) | `reverse` |
-| `ui.whitespace` | 全角スペース・タブの可視化の記号 | (iii) | `#404040` / `default` (10.3) | `ansi.238` / `default` (9.7) | `black` / `default` (21.0) | `bold` |
+| `ui.whitespace` | 全角スペース・タブの可視化の記号 | (iii) | `#404040` / `default` (10.3) | `ansi.238` / `default` (9.7) | `blue` / `default` (9.3) | `bold` |
 
 ---
 

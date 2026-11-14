@@ -111,6 +111,37 @@ fn キーマップと設定の診断を並べ_入力で絞り込める() {
     assert_eq!(cursor_line(&h), 1);
 }
 
+// verifies: NFR-604
+#[test]
+fn テーマが無い診断は_theme_name_を書いた行で出し_設定の診断に足す() {
+    let mut h = Harness::new();
+    h.fs.add_file(
+        CONFIG,
+        b"[editor]\ntab_width = 99\n[theme]\nname = \"High-Contrast\"\n",
+    );
+    reload(&mut h);
+    h.cmd("config.show_diagnostics");
+    let (_, rows, places) = list(&mut h);
+    assert_eq!(places, ["config.toml:2", "config.toml:4"], "{rows:?}");
+    assert!(
+        rows[1].starts_with("エラー: テーマ High-Contrast がありません / theme.name を \"high-contrast-dark\" / \"high-contrast-light\" にしてください。"),
+        "{rows:?}"
+    );
+    h.keys("down enter");
+    h.run_jobs();
+    assert_eq!(h.doc_path().as_deref(), Some(CONFIG));
+    assert_eq!(cursor_line(&h), 3, "theme.name の行へ移る");
+    // 直して読み直すと、テーマが無い診断は消える (設定の診断は残る)
+    h.fs.add_file(
+        CONFIG,
+        b"[editor]\ntab_width = 99\n[theme]\nname = \"high-contrast-dark\"\n",
+    );
+    reload(&mut h);
+    h.cmd("config.show_diagnostics");
+    let (_, rows, places) = list(&mut h);
+    assert_eq!(places, ["config.toml:2"], "{rows:?}");
+}
+
 #[test]
 fn 未対応の項目の情報診断も一覧に出す() {
     let mut h = Harness::new();
