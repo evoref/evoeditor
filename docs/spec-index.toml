@@ -412,7 +412,7 @@ title = "アーキテクチャ上の主要判断 (要約)"
 id = "02 §4"
 file = "docs/02-architecture.md"
 line = 154
-end = 704
+end = 705
 title = "crate 構成 (Cargo workspace)"
 
 [[section]]
@@ -447,441 +447,441 @@ title = "Ports (core が定義し、外側が実装する trait)"
 id = "02 §4.5"
 file = "docs/02-architecture.md"
 line = 418
-end = 645
+end = 646
 title = "FileSystem Port (正本)"
 
 [[section]]
 id = "02 §4.6"
 file = "docs/02-architecture.md"
-line = 646
-end = 684
+line = 647
+end = 685
 title = "eve-core のモジュール所有境界"
 
 [[section]]
 id = "02 §4.7"
 file = "docs/02-architecture.md"
-line = 685
-end = 704
+line = 686
+end = 705
 title = "v0.1 の対象 OS と移植性の維持"
 
 [[section]]
 id = "02 §5"
 file = "docs/02-architecture.md"
-line = 705
-end = 877
+line = 706
+end = 878
 title = "状態モデル"
 
 [[section]]
 id = "02 §5.1"
 file = "docs/02-architecture.md"
-line = 707
-end = 779
+line = 708
+end = 780
 title = "所有構造"
 
 [[section]]
 id = "02 §5.2"
 file = "docs/02-architecture.md"
-line = 780
-end = 796
+line = 781
+end = 797
 title = "変更の唯一の経路"
 
 [[section]]
 id = "02 §5.3"
 file = "docs/02-architecture.md"
-line = 797
-end = 807
+line = 798
+end = 808
 title = "Revision とスナップショット"
 
 [[section]]
 id = "02 §5.4"
 file = "docs/02-architecture.md"
-line = 808
-end = 877
+line = 809
+end = 878
 title = "Editor の公開 API (正本)"
 
 [[section]]
 id = "02 §6"
 file = "docs/02-architecture.md"
-line = 878
-end = 1002
+line = 879
+end = 1003
 title = "コマンド / アクション駆動設計"
 
 [[section]]
 id = "02 §6.1"
 file = "docs/02-architecture.md"
-line = 880
-end = 919
+line = 881
+end = 920
 title = "基本方針 ([ADR-0007](10-decisions.md#adr-0007-コマンド駆動設計))"
 
 [[section]]
 id = "02 §6.2"
 file = "docs/02-architecture.md"
-line = 920
-end = 928
+line = 921
+end = 929
 title = "命名規約 (案)"
 
 [[section]]
 id = "02 §6.3"
 file = "docs/02-architecture.md"
-line = 929
-end = 989
+line = 930
+end = 990
 title = "コマンド・Transaction・Effect の関係"
 
 [[section]]
 id = "02 §6.4"
 file = "docs/02-architecture.md"
-line = 990
-end = 993
+line = 991
+end = 994
 title = "when コンテキスト"
 
 [[section]]
 id = "02 §6.5"
 file = "docs/02-architecture.md"
-line = 994
-end = 1002
+line = 995
+end = 1003
 title = "利点とトレードオフ"
 
 [[section]]
 id = "02 §7"
 file = "docs/02-architecture.md"
-line = 1003
-end = 1100
+line = 1004
+end = 1101
 title = "入力抽象 (Key / Mouse / Text / IME)"
 
 [[section]]
 id = "02 §7.1"
 file = "docs/02-architecture.md"
-line = 1005
-end = 1058
+line = 1006
+end = 1059
 title = "InputEvent (eve-view)"
 
 [[section]]
 id = "02 §7.2"
 file = "docs/02-architecture.md"
-line = 1059
-end = 1096
+line = 1060
+end = 1097
 title = "キーマップ解決は core で行う"
 
 [[section]]
 id = "02 §7.3"
 file = "docs/02-architecture.md"
-line = 1097
-end = 1100
+line = 1098
+end = 1101
 title = "マウス"
 
 [[section]]
 id = "02 §8"
 file = "docs/02-architecture.md"
-line = 1101
-end = 1243
+line = 1102
+end = 1244
 title = "状態と描画の分離 (ViewModel)"
 
 [[section]]
 id = "02 §8.1"
 file = "docs/02-architecture.md"
-line = 1103
-end = 1114
+line = 1104
+end = 1115
 title = "方針 ([ADR-0008](10-decisions.md#adr-0008-viewmodel-による描画分離))"
 
 [[section]]
 id = "02 §8.2"
 file = "docs/02-architecture.md"
-line = 1115
-end = 1210
+line = 1116
+end = 1211
 title = "Frame の構造 (擬似コード)"
 
 [[section]]
 id = "02 §8.3"
 file = "docs/02-architecture.md"
-line = 1211
-end = 1215
+line = 1212
+end = 1216
 title = "レイアウト責任"
 
 [[section]]
 id = "02 §8.4"
 file = "docs/02-architecture.md"
-line = 1216
-end = 1243
+line = 1217
+end = 1244
 title = "境界型の契約と凍結段階"
 
 [[section]]
 id = "02 §9"
 file = "docs/02-architecture.md"
-line = 1244
-end = 1815
+line = 1245
+end = 1819
 title = "イベントループとスレッドモデル"
 
 [[section]]
 id = "02 §9.1"
 file = "docs/02-architecture.md"
-line = 1246
-end = 1281
+line = 1247
+end = 1282
 title = "スレッド一覧 ([ADR-0006](10-decisions.md#adr-0006-スレッドモデルと-async-境界))"
 
 [[section]]
 id = "02 §9.2"
 file = "docs/02-architecture.md"
-line = 1282
-end = 1517
+line = 1283
+end = 1521
 title = "メインループ (擬似コード)"
 
 [[section]]
 id = "02 §9.3"
 file = "docs/02-architecture.md"
-line = 1518
-end = 1765
+line = 1522
+end = 1769
 title = "ジョブとキャンセル"
 
 [[section]]
 id = "02 §9.4"
 file = "docs/02-architecture.md"
-line = 1766
-end = 1772
+line = 1770
+end = 1776
 title = "async 境界"
 
 [[section]]
 id = "02 §9.5"
 file = "docs/02-architecture.md"
-line = 1773
-end = 1789
+line = 1777
+end = 1793
 title = "起動シーケンス (NFR-101 対応)"
 
 [[section]]
 id = "02 §9.6"
 file = "docs/02-architecture.md"
-line = 1790
-end = 1815
+line = 1794
+end = 1819
 title = "終了・シグナル"
 
 [[section]]
 id = "02 §10"
 file = "docs/02-architecture.md"
-line = 1816
-end = 2023
+line = 1820
+end = 2027
 title = "拡張点 (Extension Points) とプラグイン方針"
 
 [[section]]
 id = "02 §10.1"
 file = "docs/02-architecture.md"
-line = 1818
-end = 1924
+line = 1822
+end = 1928
 title = "MVP 時点で用意する拡張点 (内部 API)"
 
 [[section]]
 id = "02 §10.2"
 file = "docs/02-architecture.md"
-line = 1925
-end = 1983
+line = 1929
+end = 1987
 title = "AI 連携のアーキテクチャ上の位置づけ ([ADR-0013](10-decisions.md#adr-0013-ai-連携の基本方針))"
 
 [[section]]
 id = "02 §10.2.1"
 file = "docs/02-architecture.md"
-line = 1953
-end = 1983
+line = 1957
+end = 1987
 title = "Proposal モデル (正本)"
 
 [[section]]
 id = "02 §10.3"
 file = "docs/02-architecture.md"
-line = 1984
-end = 1989
+line = 1988
+end = 1993
 title = "外部プラグイン機構 ([ADR-0014](10-decisions.md#adr-0014-拡張プラグイン機構の方針))"
 
 [[section]]
 id = "02 §10.4"
 file = "docs/02-architecture.md"
-line = 1990
-end = 2007
+line = 1994
+end = 2011
 title = "権限モデル (AI・プラグイン共通、骨子)"
 
 [[section]]
 id = "02 §10.5"
 file = "docs/02-architecture.md"
-line = 2008
-end = 2023
+line = 2012
+end = 2027
 title = "駆動 API (Stage D)"
 
 [[section]]
 id = "02 §11"
 file = "docs/02-architecture.md"
-line = 2024
-end = 2132
+line = 2028
+end = 2136
 title = "エラー処理・パニック・ログ"
 
 [[section]]
 id = "02 §11.1"
 file = "docs/02-architecture.md"
-line = 2026
-end = 2036
+line = 2030
+end = 2040
 title = "エラー処理方針 ([ADR-0012](10-decisions.md#adr-0012-エラー処理とログ))"
 
 [[section]]
 id = "02 §11.2"
 file = "docs/02-architecture.md"
-line = 2037
-end = 2122
+line = 2041
+end = 2126
 title = "パニック時の扱い (NFR-302)"
 
 [[section]]
 id = "02 §11.2.1"
 file = "docs/02-architecture.md"
-line = 2045
-end = 2117
+line = 2049
+end = 2121
 title = "緊急退避の方式 (正本、ADR-0023)"
 
 [[section]]
 id = "02 §11.2.2"
 file = "docs/02-architecture.md"
-line = 2118
-end = 2122
+line = 2122
+end = 2126
 title = "メモリ不足とスタックオーバーフロー"
 
 [[section]]
 id = "02 §11.3"
 file = "docs/02-architecture.md"
-line = 2123
-end = 2132
+line = 2127
+end = 2136
 title = "ログ"
 
 [[section]]
 id = "02 §12"
 file = "docs/02-architecture.md"
-line = 2133
-end = 2179
+line = 2137
+end = 2183
 title = "後続文書との責務境界"
 
 [[section]]
 id = "02 §12.1"
 file = "docs/02-architecture.md"
-line = 2135
-end = 2148
+line = 2139
+end = 2152
 title = "文書と crate の対応"
 
 [[section]]
 id = "02 §12.2"
 file = "docs/02-architecture.md"
-line = 2149
-end = 2175
+line = 2153
+end = 2179
 title = "境界をまたぐ型の所有者"
 
 [[section]]
 id = "02 §12.3"
 file = "docs/02-architecture.md"
-line = 2176
-end = 2179
+line = 2180
+end = 2183
 title = "正本マップ (本書が正本の概念)"
 
 [[section]]
 id = "02 §13"
 file = "docs/02-architecture.md"
-line = 2180
-end = 2283
+line = 2184
+end = 2287
 title = "主要クレート選定"
 
 [[section]]
 id = "02 §13.0"
 file = "docs/02-architecture.md"
-line = 2184
-end = 2187
+line = 2188
+end = 2191
 title = "依存追加の評価基準"
 
 [[section]]
 id = "02 §13.1"
 file = "docs/02-architecture.md"
-line = 2188
-end = 2194
+line = 2192
+end = 2198
 title = "テキストバッファ"
 
 [[section]]
 id = "02 §13.2"
 file = "docs/02-architecture.md"
-line = 2195
-end = 2203
+line = 2199
+end = 2207
 title = "端末 / TUI"
 
 [[section]]
 id = "02 §13.3"
 file = "docs/02-architecture.md"
-line = 2204
-end = 2211
+line = 2208
+end = 2215
 title = "Unicode"
 
 [[section]]
 id = "02 §13.4"
 file = "docs/02-architecture.md"
-line = 2212
-end = 2240
+line = 2216
+end = 2244
 title = "文字コード"
 
 [[section]]
 id = "02 §13.5"
 file = "docs/02-architecture.md"
-line = 2241
-end = 2250
+line = 2245
+end = 2254
 title = "検索"
 
 [[section]]
 id = "02 §13.6"
 file = "docs/02-architecture.md"
-line = 2251
-end = 2259
+line = 2255
+end = 2263
 title = "並行処理"
 
 [[section]]
 id = "02 §13.7"
 file = "docs/02-architecture.md"
-line = 2260
-end = 2283
+line = 2264
+end = 2287
 title = "その他"
 
 [[section]]
 id = "02 §14"
 file = "docs/02-architecture.md"
-line = 2284
-end = 2319
+line = 2288
+end = 2323
 title = "性能設計の要点"
 
 [[section]]
 id = "02 §14.1"
 file = "docs/02-architecture.md"
-line = 2299
-end = 2319
+line = 2303
+end = 2323
 title = "メモリと安定性の規則"
 
 [[section]]
 id = "02 §15"
 file = "docs/02-architecture.md"
-line = 2320
-end = 2336
+line = 2324
+end = 2340
 title = "セキュリティ境界"
 
 [[section]]
 id = "02 §16"
 file = "docs/02-architecture.md"
-line = 2337
-end = 2356
+line = 2341
+end = 2360
 title = "frontend 境界チェックリスト"
 
 [[section]]
 id = "02 §17"
 file = "docs/02-architecture.md"
-line = 2357
-end = 2420
+line = 2361
+end = 2424
 title = "AI 連携に適した開発構成"
 
 [[section]]
 id = "02 §17.1"
 file = "docs/02-architecture.md"
-line = 2361
-end = 2405
+line = 2365
+end = 2409
 title = "リポジトリ構成 (案)"
 
 [[section]]
 id = "02 §17.2"
 file = "docs/02-architecture.md"
-line = 2406
-end = 2420
+line = 2410
+end = 2424
 title = "構造上の規約"
 
 [[section]]
@@ -2358,7 +2358,7 @@ title = "リサイズ・サスペンド・その他のシグナル"
 id = "04 §15"
 file = "docs/04-tui-design.md"
 line = 1335
-end = 1960
+end = 1980
 title = "日本語環境での考慮事項 (まとめ)"
 
 [[section]]
@@ -2372,56 +2372,56 @@ title = "v0.1 の画面文言 (ja)"
 id = "04 §15.2"
 file = "docs/04-tui-design.md"
 line = 1416
-end = 1960
+end = 1980
 title = "保存・読込・退避・パニックの文言目録"
 
 [[section]]
 id = "04 §16"
 file = "docs/04-tui-design.md"
-line = 1961
-end = 1999
+line = 1981
+end = 2019
 title = "共通化する部分 / しない部分"
 
 [[section]]
 id = "04 §17"
 file = "docs/04-tui-design.md"
-line = 2000
-end = 2043
+line = 2020
+end = 2063
 title = "版ごとの範囲"
 
 [[section]]
 id = "04 §17.1"
 file = "docs/04-tui-design.md"
-line = 2004
-end = 2029
+line = 2024
+end = 2049
 title = "v0.1 で実装する (最小核)"
 
 [[section]]
 id = "04 §17.2"
 file = "docs/04-tui-design.md"
-line = 2030
-end = 2033
+line = 2050
+end = 2053
 title = "v0.2 (日常の不足を埋める)"
 
 [[section]]
 id = "04 §17.3"
 file = "docs/04-tui-design.md"
-line = 2034
-end = 2037
+line = 2054
+end = 2057
 title = "v0.4"
 
 [[section]]
 id = "04 §17.4"
 file = "docs/04-tui-design.md"
-line = 2038
-end = 2043
+line = 2058
+end = 2063
 title = "v0.5 以降"
 
 [[section]]
 id = "04 §18"
 file = "docs/04-tui-design.md"
-line = 2044
-end = 2060
+line = 2064
+end = 2080
 title = "未決事項"
 
 [[section]]
@@ -4353,7 +4353,7 @@ title = "復元の挙動"
 id = "07 §17"
 file = "docs/07-config-extensibility.md"
 line = 1587
-end = 1761
+end = 1762
 title = "国際化 (UI 文言)"
 
 [[section]]
@@ -4381,105 +4381,105 @@ title = "表示上の注意"
 id = "07 §17.4"
 file = "docs/07-config-extensibility.md"
 line = 1672
-end = 1761
+end = 1762
 title = "ユーザーの言語ファイル (v0.4 の M26)"
 
 [[section]]
 id = "07 §18"
 file = "docs/07-config-extensibility.md"
-line = 1762
-end = 1914
+line = 1763
+end = 1915
 title = "CLI 仕様"
 
 [[section]]
 id = "07 §18.1"
 file = "docs/07-config-extensibility.md"
-line = 1764
-end = 1777
+line = 1765
+end = 1778
 title = "書式"
 
 [[section]]
 id = "07 §18.2"
 file = "docs/07-config-extensibility.md"
-line = 1778
-end = 1790
+line = 1779
+end = 1791
 title = "位置引数"
 
 [[section]]
 id = "07 §18.3"
 file = "docs/07-config-extensibility.md"
-line = 1791
-end = 1838
+line = 1792
+end = 1839
 title = "オプション"
 
 [[section]]
 id = "07 §18.4"
 file = "docs/07-config-extensibility.md"
-line = 1839
-end = 1853
+line = 1840
+end = 1854
 title = "終了コード"
 
 [[section]]
 id = "07 §18.5"
 file = "docs/07-config-extensibility.md"
-line = 1854
-end = 1862
+line = 1855
+end = 1863
 title = "標準入力・標準出力"
 
 [[section]]
 id = "07 §18.6"
 file = "docs/07-config-extensibility.md"
-line = 1863
-end = 1878
+line = 1864
+end = 1879
 title = "`$EDITOR` / `$GIT_EDITOR` / `$VISUAL` として使われたとき"
 
 [[section]]
 id = "07 §18.7"
 file = "docs/07-config-extensibility.md"
-line = 1879
-end = 1882
+line = 1880
+end = 1883
 title = "シェル補完"
 
 [[section]]
 id = "07 §18.8"
 file = "docs/07-config-extensibility.md"
-line = 1883
-end = 1914
+line = 1884
+end = 1915
 title = "更新に関わる予約 (`--check-update` と前回起動した版の記録)"
 
 [[section]]
 id = "07 §19"
 file = "docs/07-config-extensibility.md"
-line = 1915
-end = 1943
+line = 1916
+end = 1944
 title = "サードパーティ拡張のライセンスと信頼"
 
 [[section]]
 id = "07 §19.1"
 file = "docs/07-config-extensibility.md"
-line = 1917
-end = 1925
+line = 1918
+end = 1926
 title = "配布物の種類と危険度"
 
 [[section]]
 id = "07 §19.2"
 file = "docs/07-config-extensibility.md"
-line = 1926
-end = 1932
+line = 1927
+end = 1933
 title = "ライセンス"
 
 [[section]]
 id = "07 §19.3"
 file = "docs/07-config-extensibility.md"
-line = 1933
-end = 1943
+line = 1934
+end = 1944
 title = "信頼の段階"
 
 [[section]]
 id = "07 §20"
 file = "docs/07-config-extensibility.md"
-line = 1944
-end = 1960
+line = 1945
+end = 1961
 title = "未決事項"
 
 [[section]]
@@ -5018,7 +5018,7 @@ title = "決定記録 (ADR)"
 id = "10 §2"
 file = "docs/10-decisions.md"
 line = 770
-end = 1621
+end = 1622
 title = "未決事項 (Open Questions)"
 
 [[section]]
@@ -5081,7 +5081,7 @@ title = "OQ-161 以降 (仕上げ段階の追加起票)"
 id = "10 §2.9"
 file = "docs/10-decisions.md"
 line = 1336
-end = 1621
+end = 1622
 title = "OQ-176 以降 (並行修正での追加起票)"
 
 [[section]]
@@ -7040,73 +7040,73 @@ section = "02 §4.3"
 [[id]]
 id = "MR1"
 file = "docs/02-architecture.md"
-line = 2305
+line = 2309
 section = "02 §14.1"
 
 [[id]]
 id = "MR2"
 file = "docs/02-architecture.md"
-line = 2306
+line = 2310
 section = "02 §14.1"
 
 [[id]]
 id = "MR3"
 file = "docs/02-architecture.md"
-line = 2307
+line = 2311
 section = "02 §14.1"
 
 [[id]]
 id = "MR4"
 file = "docs/02-architecture.md"
-line = 2308
+line = 2312
 section = "02 §14.1"
 
 [[id]]
 id = "MR5"
 file = "docs/02-architecture.md"
-line = 2309
+line = 2313
 section = "02 §14.1"
 
 [[id]]
 id = "MR6"
 file = "docs/02-architecture.md"
-line = 2310
+line = 2314
 section = "02 §14.1"
 
 [[id]]
 id = "MR7"
 file = "docs/02-architecture.md"
-line = 2311
+line = 2315
 section = "02 §14.1"
 
 [[id]]
 id = "MR8"
 file = "docs/02-architecture.md"
-line = 2312
+line = 2316
 section = "02 §14.1"
 
 [[id]]
 id = "MR9"
 file = "docs/02-architecture.md"
-line = 2313
+line = 2317
 section = "02 §14.1"
 
 [[id]]
 id = "MR10"
 file = "docs/02-architecture.md"
-line = 2314
+line = 2318
 section = "02 §14.1"
 
 [[id]]
 id = "MR11"
 file = "docs/02-architecture.md"
-line = 2315
+line = 2319
 section = "02 §14.1"
 
 [[id]]
 id = "MR12"
 file = "docs/02-architecture.md"
-line = 2316
+line = 2320
 section = "02 §14.1"
 
 [[id]]
@@ -7934,67 +7934,67 @@ section = "04 §12.1"
 [[id]]
 id = "OQ-33"
 file = "docs/04-tui-design.md"
-line = 2050
+line = 2070
 section = "04 §18"
 
 [[id]]
 id = "OQ-61"
 file = "docs/04-tui-design.md"
-line = 2051
+line = 2071
 section = "04 §18"
 
 [[id]]
 id = "OQ-64"
 file = "docs/04-tui-design.md"
-line = 2052
+line = 2072
 section = "04 §18"
 
 [[id]]
 id = "OQ-66"
 file = "docs/04-tui-design.md"
-line = 2053
+line = 2073
 section = "04 §18"
 
 [[id]]
 id = "OQ-68"
 file = "docs/04-tui-design.md"
-line = 2054
+line = 2074
 section = "04 §18"
 
 [[id]]
 id = "OQ-180"
 file = "docs/04-tui-design.md"
-line = 2055
+line = 2075
 section = "04 §18"
 
 [[id]]
 id = "OQ-181"
 file = "docs/04-tui-design.md"
-line = 2056
+line = 2076
 section = "04 §18"
 
 [[id]]
 id = "OQ-182"
 file = "docs/04-tui-design.md"
-line = 2057
+line = 2077
 section = "04 §18"
 
 [[id]]
 id = "OQ-183"
 file = "docs/04-tui-design.md"
-line = 2058
+line = 2078
 section = "04 §18"
 
 [[id]]
 id = "OQ-184"
 file = "docs/04-tui-design.md"
-line = 2059
+line = 2079
 section = "04 §18"
 
 [[id]]
 id = "OQ-124"
 file = "docs/04-tui-design.md"
-line = 2060
+line = 2080
 section = "04 §18"
 
 [[id]]
@@ -8618,67 +8618,67 @@ section = "07 §3.1"
 [[id]]
 id = "OQ-94"
 file = "docs/07-config-extensibility.md"
-line = 1950
+line = 1951
 section = "07 §20"
 
 [[id]]
 id = "OQ-95"
 file = "docs/07-config-extensibility.md"
-line = 1951
+line = 1952
 section = "07 §20"
 
 [[id]]
 id = "OQ-35"
 file = "docs/07-config-extensibility.md"
-line = 1952
+line = 1953
 section = "07 §20"
 
 [[id]]
 id = "OQ-96"
 file = "docs/07-config-extensibility.md"
-line = 1953
+line = 1954
 section = "07 §20"
 
 [[id]]
 id = "OQ-43"
 file = "docs/07-config-extensibility.md"
-line = 1954
+line = 1955
 section = "07 §20"
 
 [[id]]
 id = "OQ-98"
 file = "docs/07-config-extensibility.md"
-line = 1955
+line = 1956
 section = "07 §20"
 
 [[id]]
 id = "OQ-99"
 file = "docs/07-config-extensibility.md"
-line = 1956
+line = 1957
 section = "07 §20"
 
 [[id]]
 id = "OQ-141"
 file = "docs/07-config-extensibility.md"
-line = 1957
+line = 1958
 section = "07 §20"
 
 [[id]]
 id = "OQ-142"
 file = "docs/07-config-extensibility.md"
-line = 1958
+line = 1959
 section = "07 §20"
 
 [[id]]
 id = "OQ-120"
 file = "docs/07-config-extensibility.md"
-line = 1959
+line = 1960
 section = "07 §20"
 
 [[id]]
 id = "OQ-124"
 file = "docs/07-config-extensibility.md"
-line = 1960
+line = 1961
 section = "07 §20"
 
 [[id]]
@@ -11444,7 +11444,7 @@ section = "10 §2.9"
 [[id]]
 id = "OQ-221"
 file = "docs/10-decisions.md"
-line = 1584
+line = 1585
 section = "10 §2.9"
 
 [[id]]

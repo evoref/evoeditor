@@ -31,8 +31,10 @@ pub const LOCALE_MAX_TEXT_CHARS: usize = 1024;
 pub const LOCALE_MAX_MARKS: usize = 30;
 /// ヒント (`hint.*`) の表示幅の上限 (セル。検査 9)。
 pub const HINT_MAX_WIDTH: usize = 8;
-/// 1 つの言語ファイルの診断の件数の上限 (07 §17.4。超えた分は「ほか N 件」の 1 件にまとめる)。
+/// 1 つの言語ファイルの診断の件数の上限 (07 §17.4。超えた分は「ほか N 件」の 1 件にまとめる)。画面・ログで使う。
 pub const LOCALE_MAX_DIAGNOSTICS: usize = 100;
+/// `--check-config` での 1 つの言語ファイルの診断の件数の上限 (07 §17.4。全件を確かめるための出力なので大きくする)。
+pub const LOCALE_CHECK_MAX_DIAGNOSTICS: usize = 10_000;
 /// 言語ファイルに書けない (eve-host / bin の定数表に置く) キーの接頭辞 (07 §17.1・§17.4)。
 pub const LOCALE_RESERVED_PREFIXES: [&str; 3] = ["stderr.", "panic.", "cli."];
 
@@ -61,6 +63,24 @@ pub enum LocaleProblem {
     NotUtf8,
     /// ファイル全体: 1 MiB を超える (エラー)。
     TooLarge,
+    /// ファイル全体: 読めない (権限・I/O の誤り。エラー)。開くのは bin (07 §17.4 の「開き方」)。
+    Unreadable {
+        /// OS の説明文 (表示の前に無害化する)。
+        message: String,
+    },
+    /// ファイル全体: 通常のファイルでない (ディレクトリ・デバイス・FIFO。エラー)。開いた後のハンドルで確かめる (bin)。
+    NotRegular,
+    /// `locales/` にある `*.toml` の名前が規則 (`^[a-z]{2,3}\.toml$`、デバイス名を除く) に合わない (警告。読まない)。
+    /// `Diagnostic.value` はその名前。
+    BadName,
+    /// `--locale` / `EVE_LANG` の言語が、同梱の言語にも `locales/` の候補にも無い (警告。次の段へ進む)。
+    /// `Diagnostic.value` は書かれた値。
+    NotFound {
+        /// 探した `locales/` の絶対パス。
+        dir: String,
+        /// 代わりに使う言語。
+        lang: String,
+    },
     /// ファイル全体: インラインの表 (`{ … }`) か配列 (`[ … ]`・`[[ … ]]`) がある (エラー)。位置は最初の `{` / `[`。
     InlineValue,
     /// ファイル全体: 表の見出しと点のキーを合わせた段数が上限 (8 段) を超えるキーがある (エラー)。位置はその行の
@@ -98,10 +118,12 @@ pub enum LocaleProblem {
     Placeholder {
         /// 同梱の文言のプレースホルダの名前 (現れる順。同じ名前は現れる数だけ並ぶ)。
         expected: Vec<String>,
+        /// 何が合わないか (理由の語を選ぶ)。
+        issue: PlaceholderIssue,
     },
     /// 検査 8: `[X]` の並び・位置が同梱の文言と違う、または全角の似た形を含む。
     Accelerator,
-    /// 検査 9: ヒントの表示幅が上限を超える (警告して、そのまま使う)。
+    /// 検査 9: ヒントの表示幅が上限を超える (情報として知らせて、そのまま使う。画面の要約には出さない)。
     HintWidth {
         /// 表示幅 (セル)。
         width: usize,
@@ -111,6 +133,42 @@ pub enum LocaleProblem {
         /// 省いた件数。
         count: usize,
     },
+    /// 同梱していない言語のファイルで、補う言語の同梱の文言にあって書いていない (訳の無い) キーの数 (情報。`--check-config`
+    /// だけに出す、07 §17.4)。
+    Untranslated {
+        /// 訳の無いキーの数。
+        count: usize,
+    },
+    /// 訳の無いキー 1 つ (情報。`--check-config` だけに出す)。`Diagnostic.key` はそのキー。
+    UntranslatedKey,
+}
+
+/// プレースホルダの検査 (検査 6・7) で何が合わないか。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PlaceholderIssue {
+    /// `{` / `}` か 〔 〕 の対応が取れていない (検査 6)。
+    Unbalanced,
+    /// 〔 〕 の有無か、プレースホルダの 〔 〕 の内と外の側が同梱と違う。
+    Conditional,
+    /// 同梱に無い名前のプレースホルダがある。
+    Unknown,
+    /// 同梱のプレースホルダが無い。
+    Missing,
+    /// 同じ名前を同梱より多く書いた。
+    TooMany,
+}
+
+impl PlaceholderIssue {
+    /// 理由の語のキーの部分 (`ui.config.locale_placeholder.<これ>`)。
+    pub fn name(self) -> &'static str {
+        match self {
+            PlaceholderIssue::Unbalanced => "unbalanced",
+            PlaceholderIssue::Conditional => "conditional",
+            PlaceholderIssue::Unknown => "unknown",
+            PlaceholderIssue::Missing => "missing",
+            PlaceholderIssue::TooMany => "too_many",
+        }
+    }
 }
 
 impl LocaleProblem {
@@ -118,11 +176,16 @@ impl LocaleProblem {
     pub fn message_name(&self) -> &'static str {
         match self {
             LocaleProblem::Syntax { .. }
-            | LocaleProblem::NotUtf8
             | LocaleProblem::InlineValue
             | LocaleProblem::TooDeep
             | LocaleProblem::TooManyKeys => "locale_syntax",
+            LocaleProblem::NotUtf8 => "locale_not_utf8",
+            LocaleProblem::Unreadable { .. } | LocaleProblem::NotRegular => "locale_unreadable",
             LocaleProblem::TooLarge => "locale_too_large",
+            LocaleProblem::BadName => "locale_bad_name",
+            // 探していない (`--no-config` など) ときは、場所を示さない別の文
+            LocaleProblem::NotFound { dir, .. } if dir.is_empty() => "locale_not_found_no_config",
+            LocaleProblem::NotFound { .. } => "locale_not_found",
             LocaleProblem::LanguageMismatch { .. } => "locale_language_mismatch",
             LocaleProblem::UnknownKey => "locale_unknown_key",
             LocaleProblem::Reserved => "locale_reserved",
@@ -134,6 +197,8 @@ impl LocaleProblem {
             LocaleProblem::Accelerator => "locale_accelerator",
             LocaleProblem::HintWidth { .. } => "locale_hint_width",
             LocaleProblem::More { .. } => "locale_more",
+            LocaleProblem::Untranslated { .. } => "locale_untranslated",
+            LocaleProblem::UntranslatedKey => "locale_untranslated_key",
         }
     }
 }
@@ -174,14 +239,15 @@ pub fn check_text(key: &str, text: &str, builtin: &str) -> TextCheck {
     }
     // 6. 括弧の対応 (名前の比較の前に必ず行う)
     let base = Template::scan(builtin);
-    let expected = || LocaleProblem::Placeholder {
+    let expected = |issue| LocaleProblem::Placeholder {
         expected: base
             .as_ref()
             .map(|b| b.names.iter().map(|n| (*n).to_owned()).collect())
             .unwrap_or_default(),
+        issue,
     };
     let Some(user) = Template::scan(text) else {
-        return TextCheck::Reject(expected());
+        return TextCheck::Reject(expected(PlaceholderIssue::Unbalanced));
     };
     // 5. 続く結合文字の数 (〔 〕・プレースホルダ・ZWJ / ZWNJ は数を戻さない)
     for form in [&user.unwrapped, &user.removed] {
@@ -193,9 +259,13 @@ pub fn check_text(key: &str, text: &str, builtin: &str) -> TextCheck {
         }
     }
     // 3. 目に見える書記素を 1 つ以上含む (〔 〕 を中身ごと消した形で)
-    // 空白でない ASCII の文字があれば目に見える (書記素に分けずに済む、よくある場合)
+    // 空白でない ASCII の文字か、かな・CJK 統合漢字 (どれも幅を持つ基底の文字) があれば目に見える (書記素に分けずに
+    // 済む、よくある場合)
     if !user.outside_placeholder
-        && !user.removed.chars().any(|c| c.is_ascii_graphic())
+        && !user.removed.chars().any(|c| {
+            c.is_ascii_graphic()
+                || matches!(c, '\u{3041}'..='\u{3096}' | '\u{30A1}'..='\u{30FA}' | '\u{4E00}'..='\u{9FFF}')
+        })
         && !eve_text::grapheme_indices(&user.removed)
             .iter()
             .any(|(_, g)| is_visible(g))
@@ -203,12 +273,14 @@ pub fn check_text(key: &str, text: &str, builtin: &str) -> TextCheck {
         return TextCheck::Reject(LocaleProblem::Empty);
     }
     // 7. プレースホルダの多重集合 (〔 〕 の中と外のそれぞれ) と 〔 〕 の有無
-    let fits = match &base {
-        Some(b) => user.fits(b),
-        None => user.names.is_empty() && !user.conditional,
+    let issue = match &base {
+        Some(b) => user.misfit(b),
+        None if user.conditional => Some(PlaceholderIssue::Conditional),
+        None if !user.names.is_empty() => Some(PlaceholderIssue::Unknown),
+        None => None,
     };
-    if !fits {
-        return TextCheck::Reject(expected());
+    if let Some(issue) = issue {
+        return TextCheck::Reject(expected(issue));
     }
     // 8. `[X]` の並びと位置、全角の似た形 (3 つの形のそれぞれで同梱の同じ形と比べる)
     let base_forms: [&str; 3] = match &base {
@@ -359,7 +431,8 @@ impl<'a> Template<'a> {
     }
 
     /// 〔 〕 の外と中のそれぞれで、名前の集合が `base` と同じで、各名前の出現数が `base` 以下。〔 〕 の有無が同じ (検査 7)。
-    fn fits(&self, base: &Template<'_>) -> bool {
+    /// 合わなければ、何が合わないか (〔 〕 の有無 → 同梱に無い名前 → 足りない名前 → 多すぎる名前の順に見る)。
+    fn misfit(&self, base: &Template<'_>) -> Option<PlaceholderIssue> {
         fn count<'s>(names: &[&'s str]) -> BTreeMap<&'s str, usize> {
             let mut m = BTreeMap::new();
             for n in names {
@@ -367,16 +440,43 @@ impl<'a> Template<'a> {
             }
             m
         }
-        fn within(mine: &[&str], theirs: &[&str]) -> bool {
+        fn within(mine: &[&str], theirs: &[&str], all: &[&str]) -> Option<PlaceholderIssue> {
+            // よくある場合 (同じ並び・プレースホルダなし) は数えずに決める
+            if mine == theirs {
+                return None;
+            }
             let (mine, theirs) = (count(mine), count(theirs));
-            mine.keys().eq(theirs.keys())
-                && mine
-                    .iter()
-                    .all(|(n, c)| theirs.get(n).is_some_and(|t| c <= t))
+            if let Some(n) = mine.keys().find(|n| !theirs.contains_key(*n)) {
+                // 同梱の反対の側にある名前は、〔 〕 の内と外を取り違えたもの
+                return Some(if all.contains(n) {
+                    PlaceholderIssue::Conditional
+                } else {
+                    PlaceholderIssue::Unknown
+                });
+            }
+            if theirs.keys().any(|n| !mine.contains_key(n)) {
+                return Some(PlaceholderIssue::Missing);
+            }
+            mine.iter()
+                .any(|(n, c)| theirs.get(n).is_some_and(|t| c > t))
+                .then_some(PlaceholderIssue::TooMany)
         }
-        self.conditional == base.conditional
-            && within(&self.outside, &base.outside)
-            && within(&self.inside, &base.inside)
+        if self.conditional != base.conditional {
+            return Some(PlaceholderIssue::Conditional);
+        }
+        // 両方の側を見て、取り違え・同梱に無い名前を、足りない・多すぎるより先に知らせる
+        let rank = |i: &PlaceholderIssue| match i {
+            PlaceholderIssue::Conditional | PlaceholderIssue::Unknown => 0,
+            PlaceholderIssue::Missing => 1,
+            _ => 2,
+        };
+        [
+            within(&self.outside, &base.outside, &base.names),
+            within(&self.inside, &base.inside, &base.names),
+        ]
+        .into_iter()
+        .flatten()
+        .min_by_key(rank)
     }
 }
 
@@ -433,6 +533,23 @@ pub struct LocaleFile {
 }
 
 impl LocaleFile {
+    /// ファイル全体が使えない (開けない・読めない・通常のファイルでない) ときの形: 文言は無く、エラーの診断が 1 件
+    /// (07 §17.4 の「ファイル全体が使えないとき」)。開くのは bin なので、その結果をここで同じ形にする。
+    pub fn unusable(language: &str, problem: LocaleProblem) -> LocaleFile {
+        LocaleFile {
+            language: language.to_owned(),
+            texts: BTreeMap::new(),
+            diagnostics: vec![Diagnostic {
+                severity: Severity::Error,
+                kind: DiagKind::Locale(problem),
+                key: String::new(),
+                value: String::new(),
+                line: 0,
+                column: 0,
+            }],
+        }
+    }
+
     /// ファイル名の言語 (`fr` など)。
     pub fn language(&self) -> &str {
         &self.language
@@ -451,6 +568,15 @@ impl LocaleFile {
     /// 問題の列を取り出す。
     pub fn into_diagnostics(self) -> Vec<Diagnostic> {
         self.diagnostics
+    }
+
+    /// 補う言語の同梱の表 `base` にあって、このファイルに書いていない (訳の無い) キー (昇順)。検査に通らなかった・重複した
+    /// キーは書いたものとして数えない (それぞれの診断がある)。追加言語の `--check-config` で使う (07 §17.4)。
+    pub fn untranslated<'b>(&self, base: &'b Catalog) -> Vec<&'b str> {
+        let mentioned: BTreeSet<&str> = self.diagnostics.iter().map(|d| d.key.as_str()).collect();
+        base.keys()
+            .filter(|k| !self.texts.contains_key(*k) && !mentioned.contains(k))
+            .collect()
     }
 
     /// ファイル全体の問題 (エラー) があって、ファイル全体を使わなかったか。
@@ -623,7 +749,8 @@ pub fn load_locale_file(
                         out.texts.insert(key, text.to_owned());
                     }
                     TextCheck::Warn(p) => {
-                        sink.push(Severity::Warning, p, key.clone(), "", leaf.at);
+                        // 検査 9 (ヒントの幅) は情報: 使い、画面の要約には出さず件数にも数えない (07 §17.4)
+                        sink.push(Severity::Info, p, key.clone(), "", leaf.at);
                         out.texts.insert(key, text.to_owned());
                     }
                     TextCheck::Reject(p) => sink.push(Severity::Warning, p, key, "", leaf.at),

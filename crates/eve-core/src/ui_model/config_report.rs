@@ -17,6 +17,15 @@ use crate::ui_model::palette::{PaletteState, WINDOW, find, lower_graphemes};
 /// テーマファイルの診断の表示名の接頭辞 (`themes/<name>.toml`。eve-config の `load_theme`)。
 const THEME_PREFIX: &str = "themes/";
 
+/// ユーザーの言語ファイルの診断の表示名の接頭辞 (`locales/<lang>.toml`。名前の規則に合わないファイルの診断は `locales/`、
+/// 07 §17.4)。
+pub const LOCALES_PREFIX: &str = "locales/";
+
+/// 見つからない言語の診断 (`msg.config.locale_not_found`) の表示名 (その値を書いた所)。
+pub const LOCALE_CLI_SOURCE: &str = "--locale";
+/// 同上 (環境変数)。
+pub const LOCALE_ENV_SOURCE: &str = "EVE_LANG";
+
 /// 型の語 (`ui.config.type.*`) のキー。toml の型名から。
 fn type_key(toml_type: &str) -> String {
     let t = match toml_type {
@@ -27,6 +36,13 @@ fn type_key(toml_type: &str) -> String {
 }
 
 impl EditorState {
+    /// 言語ファイル・言語の選択の診断を出す (07 §17.4)。`report_config` と同じだが、文言を補う言語の同梱の表で出し、
+    /// `config.reload` でも一覧に残す。
+    pub fn report_locale(&mut self, file: &str, diagnostics: &[Diagnostic]) {
+        self.ui.locale_reports.insert(file.to_owned());
+        self.report_config(file, diagnostics);
+    }
+
     /// 診断を 1 件または要約 1 件のメッセージ (`warn`) にして出す。0 件なら何もしない。
     /// 最初の Frame の後に呼ぶ (起動を妨げない、FR-703)。
     pub fn report_config(&mut self, file: &str, diagnostics: &[Diagnostic]) {
@@ -78,11 +94,25 @@ impl EditorState {
         let Some(&first) = shown.first() else {
             return;
         };
-        let (detail, hint) = self.diagnostic_texts(first);
-        let line = first.line.to_string();
+        let (detail, hint) = diagnostic_texts(self.report_catalog(file, first), first);
+        // 行の分からない診断 (`--set`・言語ファイルの名前と言語の選択・ファイル全体の問題) は `:{line}` を省く
+        let line = if first.line == 0 {
+            String::new()
+        } else {
+            first.line.to_string()
+        };
+        // 言語ファイル・言語の選択の診断の要約も、補う言語の同梱の文言で出す (07 §17.4)
+        let locale = self.uses_builtin_texts(file, first);
+        let show = |st: &mut EditorState, key: &str, args: &[(&str, &str)]| {
+            if locale {
+                st.show_builtin_message(MessageLevel::Warn, key, args);
+            } else {
+                st.show_message(MessageLevel::Warn, key, args);
+            }
+        };
         if shown.len() == 1 {
-            self.show_message(
-                MessageLevel::Warn,
+            show(
+                self,
                 keys::MSG_CONFIG_PROBLEM,
                 &[
                     ("file", file),
@@ -92,23 +122,29 @@ impl EditorState {
                 ],
             );
         } else {
-            let count = shown.len().to_string();
-            let log = self
-                .io
-                .log_path
-                .clone()
-                .unwrap_or_else(|| "ログなし".to_owned());
-            self.show_message(
-                MessageLevel::Warn,
+            // 「ほか N 件」の 1 件は、省いた件数として数える
+            let count = problem_count(&shown).to_string();
+            show(
+                self,
                 keys::MSG_CONFIG_PROBLEMS,
-                &[("count", &count), ("detail", &detail), ("log", &log)],
+                &[("count", &count), ("detail", &detail)],
             );
         }
     }
 
-    /// 診断 1 件の種別の文言 (本文, 対処)。
-    fn diagnostic_texts(&self, d: &Diagnostic) -> (String, String) {
-        diagnostic_texts(self.catalog(), d)
+    /// 診断の文言を補う言語の同梱の表で出すか: 言語ファイル・言語の選択の診断 (`report_locale` で渡されたファイルか、
+    /// 言語ファイルの種類の診断。設定ファイルの `ui.locale` の見つからない言語を含む)。
+    fn uses_builtin_texts(&self, file: &str, d: &Diagnostic) -> bool {
+        self.ui.locale_reports.contains(file) || matches!(d.kind, DiagKind::Locale(_))
+    }
+
+    /// 診断 `d` (表示名 `file`) の文言を引く表: 言語ファイル・言語の選択の診断は補う言語の同梱の表、ほかは選んだ言語の表。
+    fn report_catalog(&self, file: &str, d: &Diagnostic) -> &eve_config::Catalog {
+        if self.uses_builtin_texts(file, d) {
+            self.builtin_catalog()
+        } else {
+            self.catalog()
+        }
     }
 
     /// 覚えている診断のうち、`drop` が真のファイルのものを忘れる (読み直す前に、読み直すファイルの分を消す)。
@@ -121,10 +157,12 @@ impl EditorState {
         file.starts_with(THEME_PREFIX)
     }
 
-    /// 一覧の 1 行の文言: `{level}: {text} / {hint}` (対処が無ければ `{level}: {text}`)。
-    fn config_diagnostic_line(&self, d: &Diagnostic) -> String {
-        let (text, hint) = self.diagnostic_texts(d);
-        let level = self.catalog().render(
+    /// 一覧の 1 行の文言: `{level}: {text} / {hint}` (対処が無ければ `{level}: {text}`)。言語ファイルの診断の行は、
+    /// 補う言語の同梱の文言で出す (07 §17.4)。
+    fn config_diagnostic_line(&self, file: &str, d: &Diagnostic) -> String {
+        let cat = self.report_catalog(file, d);
+        let (text, hint) = diagnostic_texts_long(cat, d);
+        let level = cat.render(
             match d.severity {
                 Severity::Error => keys::UI_HISTORY_LEVEL_ERROR,
                 Severity::Warning => keys::UI_HISTORY_LEVEL_WARN,
@@ -140,7 +178,7 @@ impl EditorState {
             args.push(("hint", hint.as_str()));
             keys::UI_CONFIG_DIAGNOSTICS_ITEM
         };
-        self.catalog().render(key, &args, &|_| None)
+        cat.render(key, &args, &|_| None)
     }
 
     /// 一覧の右の列: `ファイル:行` (行の分からない診断はファイルだけ)。
@@ -160,7 +198,7 @@ impl EditorState {
         for (fi, (file, diags)) in self.ui.config_diagnostics.iter().enumerate() {
             for (di, d) in diags.iter().enumerate() {
                 let hit = q.is_empty()
-                    || find(&lower_graphemes(&self.config_diagnostic_line(d)), &q).is_some()
+                    || find(&lower_graphemes(&self.config_diagnostic_line(file, d)), &q).is_some()
                     || find(
                         &lower_graphemes(&Self::config_diagnostic_place(file, d)),
                         &q,
@@ -196,6 +234,15 @@ impl EditorState {
         }
         if file == KEYMAP_FILE {
             return src.keymap;
+        }
+        // 言語ファイル (`locales/<lang>.toml`)。名前の規則に合わないファイルの診断 (`locales/`) は開かない。表示名が同じ
+        // `--config` のファイルと取り違えないよう、言語ファイルの経路で渡された表示名だけを見る
+        if self.ui.locale_reports.contains(file) {
+            let name = file.strip_prefix(LOCALES_PREFIX)?;
+            return src
+                .locales
+                .filter(|_| eve_config::Locale::from_file_name(name).is_some())
+                .map(|dir| dir.join(name));
         }
         let theme = file.strip_prefix(THEME_PREFIX)?;
         src.themes.map(|dir| dir.join(theme))
@@ -277,7 +324,7 @@ impl EditorState {
                 let (file, diags) = &self.ui.config_diagnostics[fi];
                 let d = &diags[di];
                 ListItem {
-                    label: cell_text(&self.config_diagnostic_line(d), CutPolicy::End),
+                    label: cell_text(&self.config_diagnostic_line(file, d), CutPolicy::End),
                     detail: Some(cell_text(
                         &Self::config_diagnostic_place(file, d),
                         CutPolicy::Middle,
@@ -351,20 +398,26 @@ pub(crate) fn register(r: &mut CommandRegistry) {
 }
 
 /// 診断 1 件の種別の文言 (本文, 対処)。`--check-config` (端末を使わない) も使う。
+///
+/// 診断に埋めるファイル由来の文字列 (`{item}` (キーの名前)・`{value}` (書かれた値)・`{reason}` (パーサや OS の説明)) は、
+/// 設定ファイル・キーマップ・テーマファイル・言語ファイルのどれから来たものも、埋める前に無害化する (制御文字などを
+/// `<U+XXXX>` に直し、64 文字で切る。07 §4.3、01 NFR-503)。
 pub fn diagnostic_texts(cat: &eve_config::Catalog, d: &Diagnostic) -> (String, String) {
+    use eve_config::sanitize_untrusted as clean;
     let default = default_display(&d.key);
-    let mut args: Vec<(&str, String)> = vec![("item", d.key.clone()), ("value", d.value.clone())];
+    let word = |key: &str, args: &[(&str, &str)]| cat.render(key, args, &|_| None);
+    let mut args: Vec<(&str, String)> = vec![("item", clean(&d.key)), ("value", clean(&d.value))];
     let kind = match &d.kind {
         // 「このバージョンでは未対応」は情報の 1 文だけ (`info.config.unsupported`、07 §4.3。対処は無い)
         DiagKind::Unsupported => {
-            let item = [("item", d.key.as_str())];
+            let item = clean(&d.key);
             return (
-                cat.render(keys::INFO_CONFIG_UNSUPPORTED, &item, &|_| None),
+                word(keys::INFO_CONFIG_UNSUPPORTED, &[("item", &item)]),
                 String::new(),
             );
         }
         DiagKind::Syntax { message } => {
-            args.push(("reason", message.clone()));
+            args.push(("reason", clean(message)));
             "syntax"
         }
         DiagKind::UnknownKey { suggestion } => {
@@ -374,11 +427,10 @@ pub fn diagnostic_texts(cat: &eve_config::Catalog, d: &Diagnostic) -> (String, S
             "unknown_key"
         }
         DiagKind::TypeMismatch { expected, found } => {
-            let word = |t: &str| cat.render(&type_key(t), &[], &|_| None);
-            args.push(("expected", word(expected)));
-            args.push(("actual", word(found)));
+            args.push(("expected", word(&type_key(expected), &[])));
+            args.push(("actual", word(&type_key(found), &[])));
             args.push(("default", default.to_owned()));
-            // 既定値を持たない項目 (節が表でない・テーマの値) は、既定値の文の無い文言にする (04 §15.2)
+            // 既定値を持たない項目 (節が表でない・テーマの値・言語ファイルの文言) は、既定値の文の無い文言にする (04 §15.2)
             if default.is_empty() {
                 "type_mismatch_no_default"
             } else {
@@ -411,33 +463,27 @@ pub fn diagnostic_texts(cat: &eve_config::Catalog, d: &Diagnostic) -> (String, S
             }
             "theme_not_found"
         }
-        // ユーザーの言語ファイルの診断 (07 §17.4)。まだどこからも作らない (M26 の (2) で読込に載せ、文言を言語ファイルに
-        // 足す。理由の語 (`{reason}` の `ui.config.locale_char.*` など) も (2) で決める)
+        // ユーザーの言語ファイルの診断 (07 §17.4、04 §15.2)。理由の語は `ui.config.locale_reason.*` (ファイル全体の問題)・
+        // `ui.config.locale_char.*` (使えない文字の種類)・`ui.config.locale_placeholder.*` (差し込みの違い)
         DiagKind::Locale(p) => {
-            use eve_config::LocaleProblem as L;
-            match p {
-                L::Syntax { message } => args.push(("reason", message.clone())),
-                L::LanguageMismatch { lang } => args.push(("lang", lang.clone())),
-                L::TooLong { count } | L::More { count } => {
-                    args.push(("count", count.to_string()));
-                }
-                L::BadChar { code, .. } => args.push(("reason", format!("<U+{code:04X}>"))),
-                L::Placeholder { expected } => {
-                    let list: Vec<String> = expected.iter().map(|n| format!("{{{n}}}")).collect();
-                    args.push(("expected", list.join(", ")));
-                }
-                L::HintWidth { width } => args.push(("width", width.to_string())),
-                L::NotUtf8
-                | L::InlineValue
-                | L::TooDeep
-                | L::TooManyKeys
-                | L::TooLarge
-                | L::UnknownKey
-                | L::Reserved
-                | L::DuplicateKey
-                | L::Empty
-                | L::Accelerator => {}
+            // 訳の無いキー (`--check-config` だけに出す情報) は 1 文
+            if matches!(
+                p,
+                eve_config::LocaleProblem::Untranslated { .. }
+                    | eve_config::LocaleProblem::UntranslatedKey
+            ) {
+                let count = match p {
+                    eve_config::LocaleProblem::Untranslated { count } => count.to_string(),
+                    _ => String::new(),
+                };
+                let item = clean(&d.key);
+                let key = format!("info.config.{}", p.message_name());
+                return (
+                    word(&key, &[("count", &count), ("item", &item)]),
+                    String::new(),
+                );
             }
+            locale_args(cat, p, &mut args);
             p.message_name()
         }
         DiagKind::InvalidValue { allowed } => {
@@ -456,6 +502,140 @@ pub fn diagnostic_texts(cat: &eve_config::Catalog, d: &Diagnostic) -> (String, S
         cat.render(&key("text"), &refs, &|_| None),
         cat.render(&key("hint"), &refs, &|_| None),
     )
+}
+
+/// 言語ファイルの診断 (`msg.config.locale_*`) の引数。理由の語は `cat` で解決する。
+fn locale_args(
+    cat: &eve_config::Catalog,
+    p: &eve_config::LocaleProblem,
+    args: &mut Vec<(&str, String)>,
+) {
+    use eve_config::LocaleProblem as L;
+    let word = |key: &str, a: &[(&str, &str)]| cat.render(key, a, &|_| None);
+    let reason = |name: &str| word(&format!("ui.config.locale_reason.{name}"), &[]);
+    match p {
+        L::Syntax { message } => args.push(("reason", eve_config::sanitize_untrusted(message))),
+        L::Unreadable { message } => args.push(("reason", eve_config::sanitize_untrusted(message))),
+        L::InlineValue => args.push(("reason", reason("inline_value"))),
+        L::TooDeep => args.push(("reason", reason("too_deep"))),
+        L::TooManyKeys => args.push(("reason", reason("too_many_keys"))),
+        L::NotRegular => args.push(("reason", reason("not_regular"))),
+        L::TooLarge => args.push(("size", reason("too_large"))),
+        L::NotFound { dir, lang } => {
+            // パスは切らない (場所を示すため)。制御文字などだけを直す
+            args.push(("dir", eve_config::escape_untrusted(dir)));
+            args.push(("lang", lang.clone()));
+        }
+        L::LanguageMismatch { lang } => args.push(("lang", lang.clone())),
+        L::TooLong { count } | L::More { count } => args.push(("count", count.to_string())),
+        L::BadChar { class, code } => {
+            let cp = *code;
+            let code = format!("<U+{cp:04X}>");
+            let name = match class {
+                eve_config::CharClass::Control => "control",
+                // 異体字セレクタ (U+FE0F の絵文字の列・IVS) は書式文字の中で別の語にする
+                eve_config::CharClass::Format
+                    if (0xFE00..=0xFE0F).contains(&cp) || (0xE0100..=0xE01EF).contains(&cp) =>
+                {
+                    "variation_selector"
+                }
+                eve_config::CharClass::Format => "format",
+                eve_config::CharClass::PrivateUse => "private_use",
+                eve_config::CharClass::Noncharacter => "noncharacter",
+                eve_config::CharClass::CombiningMarks => "combining_marks",
+            };
+            args.push((
+                "reason",
+                word(&format!("ui.config.locale_char.{name}"), &[("code", &code)]),
+            ));
+        }
+        L::Placeholder { expected, issue } => {
+            args.push(("expected", expected_placeholders(expected)));
+            args.push((
+                "reason",
+                word(
+                    &format!("ui.config.locale_placeholder.{}", issue.name()),
+                    &[],
+                ),
+            ));
+        }
+        L::HintWidth { width } => args.push(("width", width.to_string())),
+        L::NotUtf8
+        | L::BadName
+        | L::UnknownKey
+        | L::Reserved
+        | L::DuplicateKey
+        | L::Empty
+        | L::Accelerator
+        | L::Untranslated { .. }
+        | L::UntranslatedKey => {}
+    }
+}
+
+/// `diagnostic_texts` の、一覧 (`config.show_diagnostics`) と `--check-config` の形: 見つからない言語の診断の対処に、
+/// 探した場所 (`ui.config.locale_searched`) を足す (メッセージ行には長いパスを出さない、04 §15.2)。
+pub fn diagnostic_texts_long(cat: &eve_config::Catalog, d: &Diagnostic) -> (String, String) {
+    let (text, mut hint) = diagnostic_texts(cat, d);
+    if let DiagKind::Locale(eve_config::LocaleProblem::NotFound { dir, .. }) = &d.kind
+        && !dir.is_empty()
+    {
+        let dir = eve_config::escape_untrusted(dir);
+        let searched = cat.render("ui.config.locale_searched", &[("dir", &dir)], &|_| None);
+        hint = if hint.is_empty() {
+            searched
+        } else {
+            format!("{hint} {searched}")
+        };
+    }
+    (text, hint)
+}
+
+/// 診断の種類の名前 (`msg.config.<これ>` の部分。「未対応」は `unsupported`)。ログの行に使う (英語のみ、05 §7.3)。
+pub fn diagnostic_kind(d: &Diagnostic) -> &'static str {
+    match &d.kind {
+        DiagKind::Unsupported => "unsupported",
+        DiagKind::Syntax { .. } => "syntax",
+        DiagKind::UnknownKey { .. } => "unknown_key",
+        DiagKind::TypeMismatch { .. } => "type_mismatch",
+        DiagKind::OutOfRange { .. } => "out_of_range",
+        DiagKind::InvalidValue { .. } => "invalid_value",
+        DiagKind::Keymap(_) => "keymap",
+        DiagKind::ThemeNotFound { .. } => "theme_not_found",
+        DiagKind::Locale(p) => p.message_name(),
+    }
+}
+
+/// 診断の件数 (要約と `--check-config` の件数の行): 「ほか N 件」(`locale_more`) の 1 件は N 件と数える。
+pub fn problem_count(diags: &[&Diagnostic]) -> usize {
+    diags
+        .iter()
+        .map(|d| match &d.kind {
+            DiagKind::Locale(eve_config::LocaleProblem::More { count }) => *count,
+            _ => 1,
+        })
+        .sum()
+}
+
+/// `msg.config.locale_placeholder` の `{expected}` (04 §15.2): 同梱の文言のプレースホルダを、現れる順に波括弧付きで
+/// `, ` で並べる。同じ名前は 1 回だけ書き、2 回以上現れるものは ` ×N` (N は現れる数。ユーザーの文言で使える上限) を付ける。
+fn expected_placeholders(names: &[String]) -> String {
+    let mut seen: Vec<(&str, usize)> = Vec::new();
+    for n in names {
+        match seen.iter_mut().find(|(s, _)| *s == n.as_str()) {
+            Some((_, c)) => *c += 1,
+            None => seen.push((n.as_str(), 1)),
+        }
+    }
+    seen.iter()
+        .map(|(n, c)| {
+            if *c > 1 {
+                format!("{{{n}}} ×{c}")
+            } else {
+                format!("{{{n}}}")
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 #[cfg(test)]
@@ -538,7 +718,7 @@ mod tests {
             d(
                 "ui.selection.fg",
                 DiagKind::InvalidValue {
-                    allowed: &["#rrggbb"],
+                    allowed: vec!["#rrggbb".to_owned()],
                 },
             ),
         ];
@@ -559,5 +739,384 @@ mod tests {
         );
         let (_, ja) = diagnostic_texts(Catalog::builtin_ja(), &t);
         assert!(ja.ends_with("既定値 4 を使います"), "{ja}");
+    }
+
+    // verifies: NFR-503
+    #[test]
+    fn 診断に埋めるファイル由来の文字列を無害化する() {
+        let d = Diagnostic {
+            severity: Severity::Warning,
+            kind: DiagKind::InvalidValue {
+                allowed: vec!["a".to_owned()],
+            },
+            key: "editor.x\u{1b}[2J".to_owned(),
+            value: format!("\u{202e}{}", "v".repeat(100)),
+            line: 1,
+            column: 1,
+        };
+        for cat in [Catalog::builtin_ja(), Catalog::builtin_en()] {
+            let (text, hint) = diagnostic_texts(cat, &d);
+            for s in [&text, &hint] {
+                assert!(
+                    !s.chars().any(|c| c.is_control() || c == '\u{202e}'),
+                    "{s:?}"
+                );
+            }
+            assert!(text.contains("editor.x<U+001B>[2J"), "{text}");
+            assert!(text.contains("<U+202E>vvv"), "{text}");
+            assert!(text.contains('…'), "64 文字で切る: {text}");
+        }
+        // パーサの説明 (`{reason}`) も
+        let s = Diagnostic {
+            severity: Severity::Error,
+            kind: DiagKind::Syntax {
+                message: "bad\nline\u{9b}".to_owned(),
+            },
+            key: String::new(),
+            value: String::new(),
+            line: 0,
+            column: 0,
+        };
+        let (text, _) = diagnostic_texts(Catalog::builtin_ja(), &s);
+        assert!(text.ends_with("bad<U+000A>line<U+009B>"), "{text}");
+        // 「未対応」の情報診断の `{item}` も
+        let u = Diagnostic {
+            severity: Severity::Info,
+            kind: DiagKind::Unsupported,
+            key: "ai\u{7}".to_owned(),
+            value: String::new(),
+            line: 1,
+            column: 1,
+        };
+        let (text, _) = diagnostic_texts(Catalog::builtin_en(), &u);
+        assert!(text.starts_with("ai<U+0007> "), "{text}");
+    }
+
+    // verifies: NFR-603
+    #[test]
+    fn 言語ファイルの診断はどの種類も文言と理由の語を解決する() {
+        use eve_config::{CharClass, LocaleProblem as L};
+        let problems = vec![
+            L::Syntax {
+                message: "expected `=`".to_owned(),
+            },
+            L::NotUtf8,
+            L::TooLarge,
+            L::InlineValue,
+            L::TooDeep,
+            L::TooManyKeys,
+            L::Unreadable {
+                message: "denied".to_owned(),
+            },
+            L::NotRegular,
+            L::BadName,
+            L::NotFound {
+                dir: "/c/locales".to_owned(),
+                lang: "ja".to_owned(),
+            },
+            L::LanguageMismatch {
+                lang: "fr".to_owned(),
+            },
+            L::UnknownKey,
+            L::Reserved,
+            L::DuplicateKey,
+            L::TooLong { count: 2000 },
+            L::Empty,
+            L::BadChar {
+                class: CharClass::Control,
+                code: 0x1b,
+            },
+            L::BadChar {
+                class: CharClass::Format,
+                code: 0x202e,
+            },
+            L::BadChar {
+                class: CharClass::PrivateUse,
+                code: 0xe000,
+            },
+            L::BadChar {
+                class: CharClass::Noncharacter,
+                code: 0xfffe,
+            },
+            L::BadChar {
+                class: CharClass::CombiningMarks,
+                code: 0x301,
+            },
+            L::BadChar {
+                class: CharClass::Format,
+                code: 0xfe0f,
+            },
+            L::Placeholder {
+                expected: vec!["path".to_owned()],
+                issue: eve_config::PlaceholderIssue::Missing,
+            },
+            L::Placeholder {
+                expected: Vec::new(),
+                issue: eve_config::PlaceholderIssue::Unbalanced,
+            },
+            L::Placeholder {
+                expected: vec!["a".to_owned()],
+                issue: eve_config::PlaceholderIssue::Conditional,
+            },
+            L::Placeholder {
+                expected: vec!["a".to_owned()],
+                issue: eve_config::PlaceholderIssue::Unknown,
+            },
+            L::Placeholder {
+                expected: vec!["a".to_owned()],
+                issue: eve_config::PlaceholderIssue::TooMany,
+            },
+            L::NotFound {
+                dir: String::new(),
+                lang: "ja".to_owned(),
+            },
+            L::Accelerator,
+            L::HintWidth { width: 12 },
+            L::More { count: 3 },
+        ];
+        for p in problems {
+            let d = Diagnostic {
+                severity: Severity::Warning,
+                kind: DiagKind::Locale(p.clone()),
+                key: "msg.save.failed.text".to_owned(),
+                value: "zz".to_owned(),
+                line: 2,
+                column: 1,
+            };
+            for cat in [Catalog::builtin_ja(), Catalog::builtin_en()] {
+                let (text, hint) = diagnostic_texts(cat, &d);
+                for s in [&text, &hint] {
+                    assert!(!s.is_empty(), "{p:?}");
+                    assert!(
+                        !s.contains("msg.config")
+                            && !s.contains("ui.config")
+                            && ![
+                                "{item",
+                                "{value",
+                                "{reason",
+                                "{count",
+                                "{dir",
+                                "{lang",
+                                "{size",
+                                "{width",
+                                "{code",
+                                "{expected",
+                            ]
+                            .iter()
+                            .any(|n| s.contains(n)),
+                        "{p:?}: {s}"
+                    );
+                }
+            }
+        }
+        let reason = |p| {
+            let d = Diagnostic {
+                severity: Severity::Error,
+                kind: DiagKind::Locale(p),
+                key: String::new(),
+                value: String::new(),
+                line: 0,
+                column: 0,
+            };
+            diagnostic_texts(Catalog::builtin_ja(), &d).0
+        };
+        assert_eq!(
+            reason(L::TooLarge),
+            "この言語ファイルは大きすぎるため使っていません (1 MiB を超えています)"
+        );
+        assert_eq!(
+            reason(L::NotRegular),
+            "この言語ファイルを読めないため使っていません: 通常のファイルではありません"
+        );
+        assert_eq!(
+            reason(L::BadChar {
+                class: CharClass::Control,
+                code: 0x1b
+            }),
+            " の文言に使えない文字があります (制御文字 <U+001B>)"
+        );
+    }
+
+    #[test]
+    fn 差し込みの一覧は同じ名前を_1_回にして数を付ける() {
+        let names = |v: &[&str]| v.iter().map(|s| (*s).to_owned()).collect::<Vec<_>>();
+        assert_eq!(
+            super::expected_placeholders(&names(&["path", "reason", "path"])),
+            "{path} ×2, {reason}"
+        );
+        assert_eq!(
+            super::expected_placeholders(&names(&["key:file.save"])),
+            "{key:file.save}"
+        );
+        assert_eq!(super::expected_placeholders(&[]), "");
+        let d = Diagnostic {
+            severity: Severity::Warning,
+            kind: DiagKind::Locale(eve_config::LocaleProblem::Placeholder {
+                expected: names(&["n", "n"]),
+                issue: eve_config::PlaceholderIssue::TooMany,
+            }),
+            key: "status.untitled".to_owned(),
+            value: String::new(),
+            line: 1,
+            column: 1,
+        };
+        let (text, hint) = diagnostic_texts(Catalog::builtin_ja(), &d);
+        assert!(
+            text.ends_with("(同じ差し込みが多すぎます)。使うもの: {n} ×2"),
+            "{text}"
+        );
+        assert_eq!(hint, "同梱と同じ差し込みを使ってください");
+        let none = Diagnostic {
+            kind: DiagKind::Locale(eve_config::LocaleProblem::Placeholder {
+                expected: Vec::new(),
+                issue: eve_config::PlaceholderIssue::Unknown,
+            }),
+            ..d
+        };
+        let (text, _) = diagnostic_texts(Catalog::builtin_en(), &none);
+        assert!(
+            text.ends_with("(an unknown placeholder)"),
+            "空なら 〔 〕 の文を省く: {text}"
+        );
+    }
+
+    /// 言語ファイルの診断のすべての種類 (同梱の ja / en の文言で出す)。
+    fn locale_problems() -> Vec<eve_config::LocaleProblem> {
+        use eve_config::{CharClass, LocaleProblem as L, PlaceholderIssue as I};
+        let mut v = vec![
+            L::Syntax {
+                message: "expected `=`".to_owned(),
+            },
+            L::NotUtf8,
+            L::TooLarge,
+            L::InlineValue,
+            L::TooDeep,
+            L::TooManyKeys,
+            L::Unreadable {
+                message: "Access is denied. (os error 5)".to_owned(),
+            },
+            L::NotRegular,
+            L::BadName,
+            L::NotFound {
+                dir: "C:\\Users\\someone\\AppData\\Roaming\\evoeditor\\locales".to_owned(),
+                lang: "ja".to_owned(),
+            },
+            L::NotFound {
+                dir: String::new(),
+                lang: "ja".to_owned(),
+            },
+            L::LanguageMismatch {
+                lang: "fr".to_owned(),
+            },
+            L::UnknownKey,
+            L::Reserved,
+            L::DuplicateKey,
+            L::TooLong { count: 2000 },
+            L::Empty,
+            L::Accelerator,
+            L::HintWidth { width: 12 },
+            L::More { count: 3 },
+        ];
+        for class in [
+            CharClass::Control,
+            CharClass::Format,
+            CharClass::PrivateUse,
+            CharClass::Noncharacter,
+            CharClass::CombiningMarks,
+        ] {
+            v.push(L::BadChar { class, code: 0x1b });
+        }
+        for issue in [
+            I::Unbalanced,
+            I::Conditional,
+            I::Unknown,
+            I::Missing,
+            I::TooMany,
+        ] {
+            v.push(L::Placeholder {
+                expected: vec!["path".to_owned(), "reason".to_owned()],
+                issue,
+            });
+        }
+        v
+    }
+
+    // メッセージ行は対処 (hint) を省略せずに本文を詰める (04 §8.9) ので、言語ファイルの診断の対処は短くし、80 桁でも
+    // 何が起きたかの本文が残るようにする (04 §15.2 の「共通の規則」)
+    // verifies: NFR-603
+    #[test]
+    fn 言語ファイルの診断の対処は短く_80_桁で本文が残る() {
+        use eve_config::hint_width;
+        // メッセージ行の 1 行: 印 (1 セル) と空白、本文、空白 2 つ、対処 (eve-tui の `render_message`)
+        const COLS: usize = 80;
+        const HINT_MAX: usize = 40;
+        for cat in [Catalog::builtin_ja(), Catalog::builtin_en()] {
+            for p in locale_problems() {
+                let d = Diagnostic {
+                    severity: Severity::Warning,
+                    kind: DiagKind::Locale(p.clone()),
+                    key: "ui.confirm.save.unmappable_replace.message".to_owned(),
+                    value: "zz".to_owned(),
+                    line: 123,
+                    column: 1,
+                };
+                let (_, hint) = diagnostic_texts(cat, &d);
+                assert!(
+                    hint_width(&hint) <= HINT_MAX,
+                    "{p:?}: {hint} ({})",
+                    hint_width(&hint)
+                );
+                assert!(COLS - 2 - 2 - hint_width(&hint) >= 36, "{p:?}");
+            }
+            // 2 件以上の要約の対処も短い (ログのパスを出さない)
+            let problems = cat.render("msg.config.problems.hint", &[], &|_| None);
+            assert!(hint_width(&problems) <= HINT_MAX, "{problems}");
+            assert!(!problems.contains('{'), "{problems}");
+        }
+    }
+
+    // verifies: NFR-603
+    #[test]
+    fn 見つからない言語の探した場所は一覧と_check_config_の形だけに出す() {
+        let d = Diagnostic {
+            severity: Severity::Warning,
+            kind: DiagKind::Locale(eve_config::LocaleProblem::NotFound {
+                dir: "/home/u/.config/evoeditor/locales".to_owned(),
+                lang: "ja".to_owned(),
+            }),
+            key: String::new(),
+            value: "fr".to_owned(),
+            line: 0,
+            column: 0,
+        };
+        let (_, short) = diagnostic_texts(Catalog::builtin_ja(), &d);
+        assert!(!short.contains("/home/u"), "{short}");
+        assert_eq!(short, "locales/ に置くか ja / en を指定");
+        let (_, long) = super::diagnostic_texts_long(Catalog::builtin_ja(), &d);
+        assert_eq!(
+            long,
+            "locales/ に置くか ja / en を指定 (探した場所: /home/u/.config/evoeditor/locales)"
+        );
+        // 探していない (`--no-config`) ときは別の文
+        let n = Diagnostic {
+            kind: DiagKind::Locale(eve_config::LocaleProblem::NotFound {
+                dir: String::new(),
+                lang: "en".to_owned(),
+            }),
+            ..d
+        };
+        let (_, hint) = super::diagnostic_texts_long(Catalog::builtin_ja(), &n);
+        assert_eq!(hint, "言語ファイルを読まない起動です");
+        // 異体字セレクタは別の語
+        let vs = Diagnostic {
+            kind: DiagKind::Locale(eve_config::LocaleProblem::BadChar {
+                class: eve_config::CharClass::Format,
+                code: 0xfe0f,
+            }),
+            key: "a.b".to_owned(),
+            ..n
+        };
+        let (text, _) = diagnostic_texts(Catalog::builtin_ja(), &vs);
+        assert!(text.ends_with("(異体字セレクタ <U+FE0F>)"), "{text}");
     }
 }

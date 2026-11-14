@@ -238,7 +238,7 @@ pub fn run_job(
                 match read_config_file(&*ports.fs, &dir.join(format!("{n}.toml"))) {
                     Ok(Some(b)) => String::from_utf8(b)
                         .map(Some)
-                        .map_err(|_| "UTF-8 として読めません".to_owned()),
+                        .map_err(|_| "not valid UTF-8".to_owned()),
                     Ok(None) => Ok(None),
                     Err(e) => Err(e),
                 }
@@ -251,12 +251,19 @@ pub fn run_job(
                 reports,
             }
         }
-        JobKind::ReadConfig { files, keymap } => JobResult::ConfigRead {
+        JobKind::ReadConfig {
+            files,
+            keymap,
+            locales,
+        } => JobResult::ConfigRead {
             config: files
                 .iter()
                 .map(|f| read_config_file(&*ports.fs, f))
                 .collect(),
             keymap: keymap.as_ref().map(|k| read_config_file(&*ports.fs, k)),
+            locales: locales.as_ref().map(|(dir, chosen)| {
+                crate::io::config_reload::scan_locales(&*ports.fs, dir, *chosen)
+            }),
         },
         JobKind::Metadata { path, purpose } => match ports.fs.metadata(path) {
             Ok(meta) => {

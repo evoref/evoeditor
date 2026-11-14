@@ -53,6 +53,7 @@ pub struct HarnessBuilder {
     caps: Option<Capabilities>,
     config: Option<eve_config::Config>,
     locale: Option<eve_config::Locale>,
+    catalog: Option<Arc<eve_config::Catalog>>,
     files: Vec<(String, Vec<u8>)>,
     dirs: Vec<String>,
     defer_start: bool,
@@ -81,6 +82,18 @@ impl HarnessBuilder {
     /// UI の言語 (既定は `ja`)。
     pub fn locale(mut self, locale: eve_config::Locale) -> Self {
         self.locale = Some(locale);
+        self
+    }
+
+    /// UI の言語と、その文言の表 (同梱の表にユーザーの言語ファイルを重ねたもの、07 §17.4)。ファイルを介さずに
+    /// 重ねた表を渡す (09 §3.4 の「重ねた結果の文言」)。表は [`crate::overlay_catalog`] で作れる。
+    pub fn catalog(
+        mut self,
+        locale: eve_config::Locale,
+        catalog: Arc<eve_config::Catalog>,
+    ) -> Self {
+        self.locale = Some(locale);
+        self.catalog = Some(catalog);
         self
     }
 
@@ -165,6 +178,7 @@ impl Harness {
         if let Some(locale) = b.locale {
             editor.configure(eve_core::StartupConfig {
                 locale: Some(locale),
+                catalog: b.catalog,
                 ..Default::default()
             });
         }
@@ -232,6 +246,21 @@ impl Harness {
     pub fn with_locale(mut self, locale: eve_config::Locale) -> Harness {
         self.editor.configure(eve_core::StartupConfig {
             locale: Some(locale),
+            ..Default::default()
+        });
+        self
+    }
+
+    /// UI の言語と、その文言の表 (同梱の表にユーザーの言語ファイルを重ねたもの、07 §17.4) を渡す。ファイルを介さない
+    /// (09 §3.4 の「重ねた結果の文言」)。表は [`crate::overlay_catalog`] で作れる。
+    pub fn with_catalog(
+        mut self,
+        locale: eve_config::Locale,
+        catalog: Arc<eve_config::Catalog>,
+    ) -> Harness {
+        self.editor.configure(eve_core::StartupConfig {
+            locale: Some(locale),
+            catalog: Some(catalog),
             ..Default::default()
         });
         self

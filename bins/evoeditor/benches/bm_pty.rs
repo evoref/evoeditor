@@ -4,6 +4,9 @@
 //! 仕様 (01 §3.0.1) の区間で測る。これが判定に使う値:
 //! - **BM-101a / 102a**: `main` 入口 → 最初の Frame の `write` が戻るまで (起動 (a) プロセス内)。ファイル指定なし / 1 MB のファイル。
 //! - **BM-101b / 102b**: 計測ハーネスが spawn した時刻 → 同じ終点 (起動 (b) spawn から。壁時計で比べる)。
+//! - **BM-101a-locale** (参考、v0.4 の M26): BM-101a と同じ区間を、設定ディレクトリに全訳のユーザーの言語ファイル
+//!   (`locales/ja.toml` に同梱の `ja` の写し) を置いて測る (`--only 101l`)。BM-101a との差が言語ファイルの読込・検査・重ね合わせの
+//!   増分 (目安は 07 §17.4。判定の条件にしない、09 §5.2)。同じ回に BM-101a と交互に測り、差の中央値も出す。
 //! - **BM-103b**: 入力スレッドが入力を読み終えた時刻 → 描画の `write` が戻るまで (判定区間 (b))。打鍵間隔 30 ms。
 //! - **BM-107**: 100 MB の文書の保存中のカーソル移動の同じ区間 (01 NFR-107 AC-1。NFR-103 の値を維持するか)。
 //! - **BM-103b-search-1m**: 1 MB の文書の検索欄への入力 (一致を強調し直す) の同じ区間 (`--only 103s`)。正規表現のモードは
@@ -395,16 +398,51 @@ fn startup(
     runs: usize,
     warmup: usize,
 ) -> (Vec<Duration>, Vec<Duration>) {
+    startup_env(dir, file, runs, warmup, &[])
+}
+
+/// 起動 (a) の区間を、全訳のユーザーの言語ファイルを置いた設定ディレクトリ (`with_locale`) と置かない起動とで、回ごとに
+/// 交互に測る (BM-101a-locale。参考)。戻り値は (言語ファイルあり, なし)。
+fn startup_locale_pair(dir: &Path, runs: usize, warmup: usize) -> (Vec<Duration>, Vec<Duration>) {
+    let conf = dir.join("locale-config");
+    std::fs::create_dir_all(conf.join("locales")).expect("設定ディレクトリ");
+    std::fs::write(
+        conf.join("locales").join("ja.toml"),
+        include_str!("../../../locales/ja.toml"),
+    )
+    .expect("言語ファイル");
+    let conf = conf.to_str().unwrap().to_owned();
+    let env = [("EVE_CONFIG_DIR", conf.as_str()), ("EVE_LANG", "ja")];
+    let (mut with, mut without) = (Vec::new(), Vec::new());
+    for i in 0..runs + warmup {
+        let (a, _) = startup_env(dir, None, 1, 0, &env);
+        let (b, _) = startup_env(dir, None, 1, 0, &[("EVE_LANG", "ja")]);
+        if i >= warmup {
+            with.extend(a);
+            without.extend(b);
+        }
+    }
+    (with, without)
+}
+
+/// `startup` に、子プロセスの環境変数 `env` を足したもの。
+fn startup_env(
+    dir: &Path,
+    file: Option<&Path>,
+    runs: usize,
+    warmup: usize,
+    env: &[(&str, &str)],
+) -> (Vec<Duration>, Vec<Duration>) {
     let (mut a, mut b) = (Vec::new(), Vec::new());
     for i in 0..runs + warmup {
         let trace = dir.join(format!("startup-{i}.jsonl"));
         let (mut t, name) = match file {
             None => (
-                Term::start(&["--bench-exit-after-first-frame"], "", Some(&trace)).0,
+                Term::start_env(&["--bench-exit-after-first-frame"], "", Some(&trace), env).0,
                 "startup.first_frame",
             ),
             Some(f) => {
-                let t = Term::start(&[f.to_str().unwrap()], "00000000", Some(&trace)).0;
+                let t = Term::start_env(&[f.to_str().unwrap()], "00000000", Some(&trace), env).0;
                 t.wait("ファイルの先頭", || t.marker.load(Ordering::Acquire));
                 let mut t = t;
                 t.send(b"\x11"); // Ctrl+Q (未編集なので確認なしで終わる)
@@ -1347,6 +1385,36 @@ fn main() {
             quick,
         );
         report("BM-101b", "起動 (b) spawn → 最初の Frame", b, json, quick);
+    }
+    if traced && want("101l") {
+        let (with, without) = startup_locale_pair(&dir, runs, warmup);
+        let mut diff: Vec<f64> = with
+            .iter()
+            .zip(&without)
+            .map(|(a, b)| a.as_secs_f64() * 1e3 - b.as_secs_f64() * 1e3)
+            .collect();
+        diff.sort_by(f64::total_cmp);
+        let mut base = without.clone();
+        base.sort();
+        let extra_json = format!(
+            ",\"pair_id\":\"BM-101a\",\"pair_p50_ms\":{:.2},\"diff_p50_ms\":{:.2}",
+            ms(percentile(&base, 0.5)),
+            diff[diff.len() / 2]
+        );
+        let extra_text = format!(
+            "  同じ回の BM-101a (言語ファイルなし) の p50 {:.2} ms、増分の中央値 {:.2} ms",
+            ms(percentile(&base, 0.5)),
+            diff[diff.len() / 2]
+        );
+        report_with(
+            "BM-101a-locale",
+            "起動 (a) main 入口 → 最初の Frame (全訳のユーザーの言語ファイル、参考)",
+            with,
+            json,
+            quick,
+            &extra_json,
+            &extra_text,
+        );
     }
     if traced && want("102") {
         let file = make_one_mb(&dir);

@@ -647,7 +647,7 @@ v0.1 で実装するのは **Windows の列** (Known Folders に当たる `%APPD
 
 | 用途 | Linux / macOS | Windows | 内容 |
 |---|---|---|---|
-| 設定 (`config_dir`) | `$XDG_CONFIG_HOME/evoeditor` → `~/.config/evoeditor` | `%APPDATA%\evoeditor` (Roaming) | `config.toml`, `keymap.toml`, `themes/`, `languages/`, `locales/` (v0.4。ユーザーの言語ファイル、07 §17.4) (07) |
+| 設定 (`config_dir`) | `$XDG_CONFIG_HOME/evoeditor` → `~/.config/evoeditor` | `%APPDATA%\evoeditor` (Roaming) | `config.toml`, `keymap.toml`, `themes/`, `languages/`, `locales/` (v0.4。ユーザーの言語ファイル `<lang>.toml`、07 §17.4。起動時に bin が 1 回一覧し、選んだ言語のファイルだけを、開いた後に通常のファイルと確かめて読む (Unix は `O_NONBLOCK` で開く)。`--no-config` では見ない) (07) |
 | 状態 (`state_dir`) | `$XDG_STATE_HOME/evoeditor` → `~/.local/state/evoeditor` | `%LOCALAPPDATA%\evoeditor\state` | `log/`, `swap/`, `recovery/`, `sessions/`, `backup/`, `history` (検索履歴), `last_version.toml` (前回起動した版、v0.2、07 §18.8) |
 | データ (`data_dir`) | `$XDG_DATA_HOME/evoeditor` → `~/.local/share/evoeditor` | `%LOCALAPPDATA%\evoeditor\data` | 追加文法・辞書など機械生成でない永続データ (v0.6+) |
 | キャッシュ (`cache_dir`) | `$XDG_CACHE_HOME/evoeditor` → `~/.cache/evoeditor` | `%LOCALAPPDATA%\evoeditor\cache` | 再生成可能なもの (tree-sitter 解析キャッシュ等。v0.6+) |

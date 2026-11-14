@@ -52,8 +52,8 @@ pub enum DiagKind {
     },
     /// 列挙値が不正。許容値を提示する。
     InvalidValue {
-        /// 許容する値 (診断に出す順)。
-        allowed: &'static [&'static str],
+        /// 許容する値 (診断に出す順)。`ui.locale` では、`locales/` にある言語を含む (07 §17.4) ので実行時に作る。
+        allowed: Vec<String>,
     },
     /// キーマップ (`keymap.toml`) の問題。`Diagnostic.key` は書かれたキー、`value` は書かれたコマンドなど。
     Keymap(KeymapProblem),
@@ -130,7 +130,7 @@ impl ConfigValue for String {
 
 impl ConfigValue for Option<crate::Locale> {
     fn toml(&self) -> String {
-        format!("\"{}\"", self.map_or("auto", |l| l.code()))
+        format!("\"{}\"", self.as_ref().map_or("auto", crate::Locale::code))
     }
 }
 
@@ -661,10 +661,12 @@ impl Cx<'_> {
         self.set_value(v);
     }
 
-    fn invalid(&mut self, key: &str, allowed: &'static [&'static str], v: &Spanned<DeValue<'_>>) {
+    fn invalid(&mut self, key: &str, allowed: &[&str], v: &Spanned<DeValue<'_>>) {
         self.diag(
             Severity::Warning,
-            DiagKind::InvalidValue { allowed },
+            DiagKind::InvalidValue {
+                allowed: allowed.iter().map(|a| (*a).to_owned()).collect(),
+            },
             key.to_owned(),
             v.span().start,
         );
@@ -803,16 +805,18 @@ fn read_theme_name(cx: &mut Cx<'_>, key: &str, v: &Spanned<DeValue<'_>>) -> Opti
     }
 }
 
-/// `ui.locale`: 言語タグか `auto` (`Some(None)`)。
+/// `ui.locale`: 言語タグか `auto` (`Some(None)`。空の値も `auto` と同じ)。ここでは値の形だけを見る (07 §17.4)。使える言語
+/// (同梱の言語と `locales/` の候補) との照合は、候補を知っている bin と `config.reload` が [`check_ui_locale`](crate::check_ui_locale)
+/// で行う。
 fn read_locale(
     cx: &mut Cx<'_>,
     key: &str,
     v: &Spanned<DeValue<'_>>,
 ) -> Option<Option<crate::Locale>> {
     let s = cx.raw_string(key, v)?;
-    if s.trim().eq_ignore_ascii_case("auto") {
+    if s.trim().is_empty() || s.trim().eq_ignore_ascii_case("auto") {
         Some(None)
-    } else if let Some(l) = crate::Locale::parse(&s) {
+    } else if let Some(l) = crate::Locale::from_tag(&s) {
         Some(Some(l))
     } else {
         cx.invalid(key, LOCALES, v);

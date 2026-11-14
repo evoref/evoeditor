@@ -198,3 +198,4 @@ pub mod term;
 mod toml_lite;
 #[cfg(unix)]
 pub mod unix_fs;
+pub mod user_file;

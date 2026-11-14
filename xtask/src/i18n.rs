@@ -55,8 +55,8 @@ fn describe(p: &LocaleProblem) -> String {
         LocaleProblem::BadChar { class, code } => {
             format!("使えない文字 U+{code:04X} ({class:?}) があります (検査 4・5)")
         }
-        LocaleProblem::Placeholder { expected } => format!(
-            "括弧の対応・プレースホルダの名前と数・〔 〕 の有無が合いません (相手: {expected:?}) (検査 6・7)"
+        LocaleProblem::Placeholder { expected, issue } => format!(
+            "括弧の対応・プレースホルダの名前と数・〔 〕 の有無が合いません (相手: {expected:?}、{issue:?}) (検査 6・7)"
         ),
         LocaleProblem::Accelerator => {
             "`[X]` の並び・位置が合わないか、全角の似た形があります (検査 8)".to_owned()

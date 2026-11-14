@@ -31,7 +31,7 @@ description = "設定ファイル (config.toml と keymap.toml) を読み直し�
 title = "設定を読み直す"
 
 [cmd.config.show_diagnostics]
-description = "設定ファイル・キーマップ・テーマの問題を一覧で表示します。Enter で該当のファイルの該当の行を開きます。"
+description = "設定ファイル・キーマップ・テーマ・言語ファイルの問題を一覧で表示します。Enter で該当のファイルの該当の行を開きます。"
 title = "設定の診断を表示"
 
 [cmd.cursor.doc_end]
@@ -401,6 +401,9 @@ unsupported = "{option} はこのバージョンでは使えないため無視�
 
 [info.config]
 diagnostic_no_file = "{file} の診断は、ファイルに書かれたものではないため開けません"
+locale_restart = "言語ファイルの変更は、再起動すると有効になります"
+locale_untranslated = "訳の無いキーが {count} 件あります (英語で出ます)"
+locale_untranslated_key = "{item} の訳がありません"
 no_diagnostics = "設定の診断はありません"
 reload_restart = "次の項目は再起動すると有効になります: {keys}"
 reload_unchanged = "設定を読み直しました (変わった項目はありません)"
@@ -560,16 +563,88 @@ text = "{item} は、既定の続けて押すキー (Ctrl+K など) の先頭で
 hint = "既定の割当を残しました。別のキーにしてください"
 text = "{item} の割当だと、終了・コマンドパレット・取消のどれかに届かなくなります"
 
+[msg.config.locale_accelerator]
+hint = "同梱と同じ英字を同じ順に書いてください"
+text = "{item} の [S] のような角括弧の英字が同梱の文言と違います"
+
+[msg.config.locale_bad_name]
+hint = "fr.toml のような英小文字 2〜3 字の名前に"
+text = "{value} は言語ファイルの名前の規則に合わないため読みません"
+
+[msg.config.locale_control_char]
+hint = "その文字を除いてください"
+text = "{item} の文言に使えない文字があります ({reason})"
+
+[msg.config.locale_duplicate_key]
+hint = "どちらかを消してください"
+text = "{item} が 2 回書かれています。最初のものだけを見ます"
+
+[msg.config.locale_empty]
+hint = "〔 〕 の外に文字を書いてください"
+text = "{item} の文言に表示される文字がありません"
+
+[msg.config.locale_hint_width]
+hint = "全角 4 文字・半角 8 文字以内を勧めます"
+text = "{item} のヒントは長いので、狭い画面では落ちることがあります (表示幅 {width})"
+
+[msg.config.locale_language_mismatch]
+hint = "{lang} として読みました"
+text = "[meta] の language の値 {value} がファイル名と違います"
+
+[msg.config.locale_more]
+hint = "--check-config で全件を見られます"
+text = "この言語ファイルには、ほかに {count} 件の問題があります"
+
+[msg.config.locale_not_found]
+hint = "locales/ に置くか ja / en を指定"
+text = "言語 {value} の言語ファイルがありません (いまは {lang})"
+
+[msg.config.locale_not_found_no_config]
+hint = "言語ファイルを読まない起動です"
+text = "言語 {value} の言語ファイルがありません (いまは {lang})"
+
+[msg.config.locale_not_utf8]
+hint = "UTF-8 で保存し直してください"
+text = "この言語ファイルは UTF-8 で書かれていないため使っていません"
+
+[msg.config.locale_placeholder]
+hint = "同梱と同じ差し込みを使ってください"
+text = "{item} の差し込み ({{…}} の部分) が同梱の文言と合いません ({reason})〔。使うもの: {expected}〕"
+
+[msg.config.locale_reserved]
+hint = "終了時・異常終了時・--help の文言です"
+text = "{item} の文言は言語ファイルでは変えられません"
+
+[msg.config.locale_syntax]
+hint = "表示された行かファイルを直してください"
+text = "この言語ファイルは書式が正しくないため使っていません: {reason}"
+
+[msg.config.locale_too_large]
+hint = "1 MiB 以下にしてください"
+text = "この言語ファイルは大きすぎるため使っていません ({size})"
+
+[msg.config.locale_too_long]
+hint = "1,024 文字以下にしてください"
+text = "{item} の文言が長すぎます ({count} 文字)"
+
+[msg.config.locale_unknown_key]
+hint = "綴りと、使っている版を確かめてください"
+text = "{item} という文言のキーはありません"
+
+[msg.config.locale_unreadable]
+hint = "読める通常のファイルか確かめてください"
+text = "この言語ファイルを読めないため使っていません: {reason}"
+
 [msg.config.out_of_range]
 hint = "{range} で指定してください。この項目は {default} を使います"
 text = "{item} の値 {value} は範囲外です"
 
 [msg.config.problem]
 hint = "{hint}"
-text = "設定の問題 ({file}:{line}): {detail}"
+text = "設定の問題 ({file}〔:{line}〕): {detail}"
 
 [msg.config.problems]
-hint = "該当の項目は既定値を使っています。全件はログ ({log}) を見てください"
+hint = "一覧は「設定の診断を表示」で見られます"
 text = "設定に {count} 件の問題があります。最初の 1 件: {detail}"
 
 [msg.config.reload_kept]
@@ -895,6 +970,40 @@ text = "正規表現が不正なため、置換しませんでした: {reason}"
 [msg.search.replace_stale]
 hint = "入力を止めてから、もう一度実行してください"
 text = "編集が続いたため、すべて置換を中止しました"
+
+[ui.config]
+locale_searched = "(探した場所: {dir})"
+locale_summary = "言語: {lang} ({source})〔、言語ファイル: {file}〕、補う言語: {base}"
+locale_unused = "(使っていません)"
+
+[ui.config.locale_char]
+combining_marks = "30 個を超えて続く結合文字 {code}"
+control = "制御文字 {code}"
+format = "書式文字 {code}"
+noncharacter = "非文字 {code}"
+private_use = "私用領域の文字 {code}"
+variation_selector = "異体字セレクタ {code}"
+
+[ui.config.locale_placeholder]
+conditional = "〔 〕 の使い方が違います"
+missing = "差し込みが足りません"
+too_many = "同じ差し込みが多すぎます"
+unbalanced = "括弧の対応が取れていません"
+unknown = "使えない差し込みがあります"
+
+[ui.config.locale_reason]
+inline_value = "インラインの表と配列は書けません"
+not_regular = "通常のファイルではありません"
+too_deep = "8 段を超えるキーがあります"
+too_large = "1 MiB を超えています"
+too_many_keys = "キーの段の数が 20,000 を超えています"
+
+[ui.config.locale_source]
+cli = "--locale"
+config = "ui.locale"
+default = "既定"
+env = "EVE_LANG"
+os = "OS の言語"
 
 [ui.config.type]
 array = "配列"

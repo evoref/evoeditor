@@ -10,12 +10,12 @@ Options:
                                        読み取り専用で開きます
   -e, --encoding <label>               Open the file with the given encoding
                                        文字コードを指定して開きます
-  --locale <lang>                      Set the UI language: ja or en (overrides ui.locale and EVE_LANG)
-                                       画面の言語を指定します: ja / en (設定 ui.locale と EVE_LANG より優先)
+  --locale <lang>                      Set the UI language: ja, en, or a language with a file in locales/ (overrides ui.locale and EVE_LANG)
+                                       画面の言語を指定します: ja / en、または locales/ に言語ファイルを置いた言語 (設定 ui.locale と EVE_LANG より優先)
   -c, --config <file>                  Read this settings file instead of config.toml (repeatable; later files win)
                                        config.toml の代わりにこの設定ファイルを読みます (複数指定可。後のものが優先)
-  -N, --no-config                      Do not read config.toml or keymap.toml (use the defaults)
-                                       config.toml と keymap.toml を読みません (既定値で動きます)
+  -N, --no-config                      Do not read config.toml, keymap.toml, theme files, or language files (use the defaults)
+                                       config.toml・keymap.toml・テーマファイル・言語ファイルを読みません (既定値で動きます)
   -s, --set <key>=<value>              Override one setting (e.g. --set view.wrap=soft)
                                        設定を 1 項目上書きします (例: --set view.wrap=soft)
   --log-level <level>                  Set the log level: error, warn, info, debug, or trace (overrides EVE_LOG)

@@ -414,7 +414,8 @@ fn check_assert(h: &mut Harness, a: &Assert, k: usize, dir: Option<&Path>) -> Ve
         }
     }
     if let Some(name) = &a.frame {
-        let lang = h.editor.state().locale().code();
+        let locale = h.editor.state().locale();
+        let lang = locale.code();
         match dir {
             Some(d) => {
                 let path = d.join(format!("{name}.frame.{lang}.txt"));

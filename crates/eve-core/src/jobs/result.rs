@@ -135,6 +135,8 @@ pub enum JobResult {
         config: Vec<ConfigFile>,
         /// `keymap` を読まない (`--no-config`) ときは `None`。
         keymap: Option<ConfigFile>,
+        /// `locales` を一覧した結果。調べなかったときは `None`。
+        locales: Option<crate::io::config_reload::LocaleScan>,
     },
     /// 起動時の退避ディレクトリの走査の結果 (新しい順ではなく列挙した順。main が整えて案内する)。
     RecoveryFound {

@@ -31,6 +31,59 @@ pub struct ConfigSources {
     pub sets: Vec<String>,
     /// テーマファイルの置き場 (`<設定ディレクトリ>/themes`)。`None` は読まない。
     pub themes: Option<crate::FsPath>,
+    /// ユーザーの言語ファイルの置き場 (`<設定ディレクトリ>/locales`、07 §17.4)。`None` は見ない (`--no-config`)。
+    /// 読むのは起動時の bin だけで、ここは診断の一覧から開くときと、`config.reload` で変わったかを見るときに使う。
+    pub locales: Option<crate::FsPath>,
+}
+
+/// 起動時に bin が決めた、ユーザーの言語ファイルの事実 (07 §17.4)。`config.reload` は言語ファイルの中身を読み直さず、
+/// `locales/` を 1 回一覧して ([`LocaleScan`]) ここと比べ、変わっていれば再起動を促すだけにする。
+#[derive(Clone, Debug, Default)]
+pub struct LocaleFiles {
+    /// 起動時に `locales/` で見つけた候補の言語 (名前の順)。
+    pub available: Vec<eve_config::Locale>,
+    /// 一覧する `locales/`。`None` は見ない (`--no-config`)。
+    pub dir: Option<crate::FsPath>,
+    /// 選んだ言語。
+    pub chosen: eve_config::Locale,
+    /// 起動時の、選んだ言語のファイル (一覧で得た名前のもの) の (大きさ, 更新日時)。無かった・調べられなかったときは `None`。
+    pub stamp: Option<(u64, crate::FileTime)>,
+}
+
+/// `locales/` を一覧した結果 (07 §17.4。中身は読まない)。
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct LocaleScan {
+    /// 候補の言語 (名前の規則 `^[a-z]{2,3}\.toml$` に合うもの。名前の順)。
+    pub available: Vec<eve_config::Locale>,
+    /// `chosen` の言語のファイル (一覧で得た名前のもの) の (大きさ, 更新日時)。無い・調べられないときは `None`。
+    pub stamp: Option<(u64, crate::FileTime)>,
+}
+
+/// `dir` (`locales/`) を 1 回一覧して候補を作り、`chosen` の言語のファイルの大きさと更新日時を調べる (中身は読まない)。
+/// パスは一覧で得た名前で組み立てる (選択の値から組み立てない。大文字小文字を区別しない FS でも綴りで照合する)。
+/// ディレクトリが無い・一覧できないときは候補なし。
+pub fn scan_locales(
+    fs: &dyn crate::io::fs::FileSystem,
+    dir: &crate::FsPath,
+    chosen: eve_config::Locale,
+) -> LocaleScan {
+    let mut found: Vec<(eve_config::Locale, String)> = fs
+        .list_dir_names(dir)
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|n| eve_config::Locale::from_file_name(&n).map(|l| (l, n)))
+        .collect();
+    found.sort();
+    found.dedup_by_key(|(l, _)| *l);
+    let stamp = found
+        .iter()
+        .find(|(l, _)| *l == chosen)
+        .and_then(|(_, n)| fs.metadata(&dir.join(n)).ok())
+        .map(|m| (m.len, m.mtime));
+    LocaleScan {
+        available: found.into_iter().map(|(l, _)| l).collect(),
+        stamp,
+    }
 }
 
 impl EditorState {
@@ -95,7 +148,7 @@ fn text_of(f: &ConfigFile) -> Result<Option<String>, String> {
         Ok(None) => Ok(None),
         Ok(Some(bytes)) => match std::str::from_utf8(bytes) {
             Ok(t) => Ok(Some(t.strip_prefix('\u{feff}').unwrap_or(t).to_owned())),
-            Err(_) => Err("UTF-8 として読めません".to_owned()),
+            Err(_) => Err("not valid UTF-8".to_owned()),
         },
         Err(e) => Err(e.clone()),
     }
@@ -120,6 +173,7 @@ impl EditorState {
             keymap: Some(dir.join(KEYMAP_FILE)),
             sets: Vec::new(),
             themes: Some(dir.join("themes")),
+            locales: Some(dir.join("locales")),
         }
     }
 }
@@ -158,6 +212,12 @@ impl EditorState {
             JobKind::ReadConfig {
                 files: src.files.iter().map(|(_, p)| p.clone()).collect(),
                 keymap: src.keymap.clone(),
+                locales: self
+                    .io
+                    .locale_files
+                    .dir
+                    .clone()
+                    .map(|d| (d, self.io.locale_files.chosen)),
             },
         );
         self.io.pending.insert(job, Pending::ConfigReload);
@@ -166,9 +226,26 @@ impl EditorState {
 
     /// 読込の結果。`config.toml` はここで差し替え、`keymap.toml` は解析の結果を Editor に渡す (キーマップは Editor が持つ)。
     pub(crate) fn finish_config_reload(&mut self, r: JobResult) {
-        let JobResult::ConfigRead { config, keymap, .. } = r else {
+        let JobResult::ConfigRead {
+            config,
+            keymap,
+            locales,
+        } = r
+        else {
             return;
         };
+        // 言語ファイルは読み直さない。`locales/` の候補か、選んだ言語のファイルが起動時から変わっていれば (無くなった・
+        // 現れたを含む)、要約の後に再起動を促す (07 §17.4 の「読む時期」)
+        let files = &self.io.locale_files;
+        self.io.locale_restart = locales
+            .as_ref()
+            .is_some_and(|s| s.stamp != files.stamp || s.available != files.available);
+        // `ui.locale` は今の候補と照らす (新しく置いた言語を「見つからない」にしない。選ぶのは再起動の後)
+        let available = locales.map_or_else(|| files.available.clone(), |s| s.available);
+        let dir = files
+            .dir
+            .as_ref()
+            .map_or_else(String::new, crate::FsPath::display);
         let src = self.config_sources();
         let sources: Vec<eve_config::Source> = src
             .files
@@ -179,7 +256,8 @@ impl EditorState {
                 text: text_of(f),
             })
             .collect();
-        let resolved = eve_config::resolve(&sources, &src.sets);
+        let mut resolved = eve_config::resolve(&sources, &src.sets);
+        eve_config::check_ui_locale(&mut resolved, &available, &dir, self.locale());
         let keymap: KeymapFile = match keymap.as_ref().map(text_of) {
             None | Some(Ok(None)) => KeymapFile::default(),
             Some(Ok(Some(t))) => eve_config::load_keymap_str(&t),
@@ -190,9 +268,13 @@ impl EditorState {
         };
         let mut changed: Vec<&'static str> = Vec::new();
         // 一覧 (`config.show_diagnostics`) の設定ファイル (と `--set`) の診断は、読み直した結果に置き換える。
-        // キーマップの診断は `finish_reload_keymap` で置き換え、テーマの診断はテーマを読み直すときに置き換える
+        // キーマップの診断は `finish_reload_keymap` で置き換え、テーマの診断はテーマを読み直すときに置き換える。
+        // 言語ファイル・言語の選択の診断は起動時のものを残す (読み直さない、07 §17.4)
+        let locale_reports = self.ui.locale_reports.clone();
         self.forget_config_diagnostics(|f| {
-            f != KEYMAP_FILE && !EditorState::is_theme_diagnostic_file(f)
+            f != KEYMAP_FILE
+                && !EditorState::is_theme_diagnostic_file(f)
+                && !locale_reports.contains(f)
         });
         for (name, diags) in &resolved.reports {
             self.report_config(name, diags);
@@ -237,6 +319,7 @@ impl EditorState {
         }
         if changed.is_empty() {
             self.show_message(MessageLevel::Info, keys::INFO_CONFIG_RELOAD_UNCHANGED, &[]);
+            self.notify_locale_restart();
             return;
         }
         let keys = changed.join(", ");
@@ -256,6 +339,14 @@ impl EditorState {
                 keys::INFO_CONFIG_RELOAD_RESTART,
                 &[("keys", &restart.join(", "))],
             );
+        }
+        self.notify_locale_restart();
+    }
+
+    /// 言語ファイルが起動時から変わっていたら、再起動を促す (`info.config.locale_restart`、07 §17.4)。
+    fn notify_locale_restart(&mut self) {
+        if std::mem::take(&mut self.io.locale_restart) {
+            self.show_message(MessageLevel::Info, keys::INFO_CONFIG_LOCALE_RESTART, &[]);
         }
     }
 }

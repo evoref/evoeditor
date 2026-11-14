@@ -33,7 +33,7 @@ description = "Reload the settings files (config.toml and keymap.toml) without r
 title = "Reload Settings"
 
 [cmd.config.show_diagnostics]
-description = "List the problems in the settings file, the keymap and the theme. Press Enter to open the file at that line."
+description = "List the problems in the settings file, the keymap, the theme and the language file. Press Enter to open the file at that line."
 title = "Show Settings Diagnostics"
 
 [cmd.cursor.doc_end]
@@ -403,6 +403,9 @@ unsupported = "{option} is not available in this version and was ignored"
 
 [info.config]
 diagnostic_no_file = "The diagnostic for {file} was not written in a file, so there is nothing to open"
+locale_restart = "Changes to language files take effect after a restart"
+locale_untranslated = "{count} keys have no translation (shown in English)"
+locale_untranslated_key = "{item} has no translation"
 no_diagnostics = "There are no settings diagnostics"
 reload_restart = "These items take effect after a restart: {keys}"
 reload_unchanged = "Reloaded the settings (nothing changed)"
@@ -562,16 +565,88 @@ text = "{item} is the first key of a default key sequence (such as Ctrl+K)"
 hint = "The default binding was kept. Choose another key"
 text = "The binding {item} would make quit, the command palette or cancel unreachable"
 
+[msg.config.locale_accelerator]
+hint = "Use the same letters in the same order"
+text = "The bracketed letters like [S] in {item} differ from the built-in text"
+
+[msg.config.locale_bad_name]
+hint = "Use 2-3 lowercase letters (fr.toml)"
+text = "{value} is not read because its name does not follow the rule for language files"
+
+[msg.config.locale_control_char]
+hint = "Remove that character"
+text = "The text of {item} contains a character that cannot be used ({reason})"
+
+[msg.config.locale_duplicate_key]
+hint = "Remove one of them"
+text = "{item} is written twice; only the first one is read"
+
+[msg.config.locale_empty]
+hint = "Write visible text outside 〔 〕"
+text = "The text of {item} has no visible characters"
+
+[msg.config.locale_hint_width]
+hint = "8 columns or less is recommended"
+text = "The hint {item} is long, so it may be dropped on narrow screens (width {width})"
+
+[msg.config.locale_language_mismatch]
+hint = "Read as {lang}"
+text = "The language value {value} in [meta] does not match the file name"
+
+[msg.config.locale_more]
+hint = "Run --check-config to see all"
+text = "This language file has {count} more problems"
+
+[msg.config.locale_not_found]
+hint = "Add it to locales/ or use ja or en"
+text = "There is no language file for {value} ({lang} is used)"
+
+[msg.config.locale_not_found_no_config]
+hint = "Language files are not read in this run"
+text = "There is no language file for {value} ({lang} is used)"
+
+[msg.config.locale_not_utf8]
+hint = "Save it again as UTF-8"
+text = "This language file is not used because it is not UTF-8"
+
+[msg.config.locale_placeholder]
+hint = "Use the built-in placeholders"
+text = "The placeholders ({{…}} parts) in {item} do not match the built-in text ({reason})〔. Expected: {expected}〕"
+
+[msg.config.locale_reserved]
+hint = "Exit, crash and --help text is fixed"
+text = "The text of {item} cannot be changed in a language file"
+
+[msg.config.locale_syntax]
+hint = "Fix the line shown, or the file"
+text = "This language file is not used because it is not valid: {reason}"
+
+[msg.config.locale_too_large]
+hint = "Keep it within 1 MiB"
+text = "This language file is not used because it is too large ({size})"
+
+[msg.config.locale_too_long]
+hint = "Keep it within 1,024 characters"
+text = "The text of {item} is too long ({count} characters)"
+
+[msg.config.locale_unknown_key]
+hint = "Check the spelling and the version"
+text = "There is no text key named {item}"
+
+[msg.config.locale_unreadable]
+hint = "Check that it is a readable file"
+text = "This language file is not used because it cannot be read: {reason}"
+
 [msg.config.out_of_range]
 hint = "Specify a value in {range}. This item uses {default}"
 text = "The value {value} of {item} is out of range"
 
 [msg.config.problem]
 hint = "{hint}"
-text = "Configuration problem ({file}:{line}): {detail}"
+text = "Configuration problem ({file}〔:{line}〕): {detail}"
 
 [msg.config.problems]
-hint = "The affected items use their defaults. See the log ({log}) for all of them"
+hint = "See Show Settings Diagnostics for all"
 text = "There are {count} problems in the configuration. The first: {detail}"
 
 [msg.config.reload_kept]
@@ -897,6 +972,40 @@ text = "Nothing was replaced: invalid regular expression: {reason}"
 [msg.search.replace_stale]
 hint = "Stop typing and run it again"
 text = "Replace All was cancelled because editing continued"
+
+[ui.config]
+locale_searched = "(searched: {dir})"
+locale_summary = "Language: {lang} ({source})〔, language file: {file}〕, fallback: {base}"
+locale_unused = "(not used)"
+
+[ui.config.locale_char]
+combining_marks = "more than 30 combining marks in a row {code}"
+control = "control character {code}"
+format = "formatting character {code}"
+noncharacter = "noncharacter {code}"
+private_use = "private-use character {code}"
+variation_selector = "variation selector {code}"
+
+[ui.config.locale_placeholder]
+conditional = "different use of 〔 〕"
+missing = "a placeholder is missing"
+too_many = "a placeholder is used too often"
+unbalanced = "unbalanced brackets"
+unknown = "an unknown placeholder"
+
+[ui.config.locale_reason]
+inline_value = "inline tables and arrays cannot be used"
+not_regular = "it is not a regular file"
+too_deep = "a key has more than 8 levels"
+too_large = "over 1 MiB"
+too_many_keys = "there are more than 20,000 key levels in total"
+
+[ui.config.locale_source]
+cli = "--locale"
+config = "ui.locale"
+default = "default"
+env = "EVE_LANG"
+os = "OS language"
 
 [ui.config.type]
 array = "an array"

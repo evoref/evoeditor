@@ -1,5 +1,9 @@
 use super::*;
 
+fn owned(list: &[&str]) -> Vec<String> {
+    list.iter().map(|s| (*s).to_owned()).collect()
+}
+
 fn kinds(l: &Loaded) -> Vec<(&str, &DiagKind)> {
     l.diagnostics
         .iter()
@@ -159,7 +163,7 @@ fn 列挙値の不正は許容値を提示する() {
         vec![(
             "file.default_line_ending",
             &DiagKind::InvalidValue {
-                allowed: &["lf", "crlf", "cr", "native"]
+                allowed: owned(&["lf", "crlf", "cr", "native"])
             }
         )]
     );
@@ -350,16 +354,32 @@ fn ui_locale_は言語タグか_auto() {
     assert_eq!(Config::default().ui_locale, None);
 }
 
+// verifies: NFR-603
 #[test]
-fn ui_locale_の不正な値は警告して_auto_のまま() {
-    let l = load_str("[ui]\nlocale = \"fr\"\n");
+fn ui_locale_の形の誤りは警告して_auto_のまま() {
+    // 値の形 (07 §17.4) に合う言語は、同梱していなくても読む (使える言語との照合は `check_ui_locale`)
+    let l = load_str("[ui]\nlocale = \"fr-FR\"\n");
+    assert!(l.diagnostics.is_empty(), "{:?}", l.diagnostics);
+    assert_eq!(
+        l.config.ui_locale.map(|l| l.code().to_owned()).as_deref(),
+        Some("fr")
+    );
+    let l = load_str("[ui]\nlocale = \"\"\n");
+    assert!(
+        l.diagnostics.is_empty(),
+        "空は auto と同じ: {:?}",
+        l.diagnostics
+    );
+    assert_eq!(l.config.ui_locale, None);
+    let l = load_str("[ui]\nlocale = \"../fr\"\n");
     assert_eq!(l.config.ui_locale, None);
     assert_eq!(l.diagnostics.len(), 1);
     assert!(matches!(
         &l.diagnostics[0].kind,
-        DiagKind::InvalidValue { allowed } if allowed.contains(&"en")
+        DiagKind::InvalidValue { allowed } if allowed.iter().any(|a| a == "en")
     ));
     assert_eq!(l.diagnostics[0].key, "ui.locale");
+    assert_eq!(l.diagnostics[0].value, "../fr");
     let l = load_str("[ui]\nlocale = 3\n");
     assert!(matches!(
         &l.diagnostics[0].kind,
@@ -782,7 +802,7 @@ fn 列挙値の不正は書かれた値と位置を記録する() {
     assert_eq!(
         d.kind,
         DiagKind::InvalidValue {
-            allowed: WrapMode::NAMES
+            allowed: owned(WrapMode::NAMES)
         }
     );
     assert_eq!(d.value, "hard");
@@ -845,7 +865,7 @@ fn theme_name_と_file_default_encoding_の不正は警告して既定値() {
     assert_eq!(
         d.kind,
         DiagKind::InvalidValue {
-            allowed: crate::theme::BUILTIN_NAMES
+            allowed: owned(crate::theme::BUILTIN_NAMES)
         }
     );
     assert_eq!(d.value, "a/b");
@@ -858,7 +878,7 @@ fn theme_name_と_file_default_encoding_の不正は警告して既定値() {
     assert_eq!(
         d.kind,
         DiagKind::InvalidValue {
-            allowed: DefaultEncoding::NAMES
+            allowed: owned(DefaultEncoding::NAMES)
         }
     );
     assert_eq!(d.value, "klingon");
@@ -1044,7 +1064,7 @@ fn 検索の_4_キーの範囲外と不正な値は警告して既定値に戻�
     assert_eq!(
         d.kind,
         DiagKind::InvalidValue {
-            allowed: SearchCase::NAMES
+            allowed: owned(SearchCase::NAMES)
         }
     );
     assert_eq!(d.value, "Smart");

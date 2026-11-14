@@ -7,6 +7,7 @@ pub(crate) const HINT_UI_CANCEL: &str = "hint.ui.cancel";
 pub(crate) const INFO_APP_RELEASE_SUMMARY: &str = "info.app.release_summary";
 pub(crate) const INFO_APP_UPDATED: &str = "info.app.updated";
 pub(crate) const INFO_CONFIG_DIAGNOSTIC_NO_FILE: &str = "info.config.diagnostic_no_file";
+pub(crate) const INFO_CONFIG_LOCALE_RESTART: &str = "info.config.locale_restart";
 pub(crate) const INFO_CONFIG_NO_DIAGNOSTICS: &str = "info.config.no_diagnostics";
 pub(crate) const INFO_CONFIG_RELOAD_RESTART: &str = "info.config.reload_restart";
 pub(crate) const INFO_CONFIG_RELOAD_UNCHANGED: &str = "info.config.reload_unchanged";
@@ -285,11 +286,12 @@ pub(crate) const UI_TOO_SMALL: &str = "ui.too_small";
 
 /// すべての定数 (キーの順。試験に使う)。
 #[cfg(test)]
-const ALL: [&str; 263] = [
+const ALL: [&str; 264] = [
     HINT_UI_CANCEL,
     INFO_APP_RELEASE_SUMMARY,
     INFO_APP_UPDATED,
     INFO_CONFIG_DIAGNOSTIC_NO_FILE,
+    INFO_CONFIG_LOCALE_RESTART,
     INFO_CONFIG_NO_DIAGNOSTICS,
     INFO_CONFIG_RELOAD_RESTART,
     INFO_CONFIG_RELOAD_UNCHANGED,
