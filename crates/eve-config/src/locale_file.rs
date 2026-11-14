@@ -762,139 +762,34 @@ pub fn load_locale_file(
     out
 }
 
-/// 字句の走査で見ている行の部分。
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum Part {
-    /// 行の先頭 (空白だけが前にある)。
-    Line,
-    /// 表の見出し `[ … ]` の中。
-    Header,
-    /// 見出しの後 (注釈だけが書ける)。
-    AfterHeader,
-    /// キー (`=` の前)。
-    Key,
-    /// 値 (`=` の後)。
-    Value,
-}
-
-/// 構文を読む前の字句の走査 (07 §17.4 の「ファイル全体が使えないとき」)。文字列と注釈の外を見て、次の最初のものの
-/// バイト位置と種類を返す。
+/// 構文を読む前の字句の走査 (07 §17.4 の「ファイル全体が使えないとき」。走査は設定ファイルと共通の
+/// [`crate::toml_scan::scan`])。文字列と注釈の外を見て、次の最初のもののバイト位置と種類を返す。
 /// - インラインの表の `{` と、表の見出しでない `[` (配列の値・配列の表 `[[`・見出しの中の `[`) → `InlineValue`。
 ///   表の見出しの `[` は、行の先頭の 1 つだけ。
 /// - 表の見出しと点のキーを合わせた段数が [`MAX_KEY_DEPTH`] を超えるキー → `TooDeep` (位置はその行の見出しかキーの先頭)。
 /// - キーの段の総数が [`MAX_KEY_SEGMENTS`] を超える → `TooManyKeys` (位置は超えた行の見出しかキーの先頭)。
 ///
-/// 文字列は TOML の 4 種 (`"…"`・`'…'`・`"""…"""`・`'''…'''`) を読み飛ばす。閉じていない文字列や、ほかの書き方の誤りは、
-/// この後でパーサが構文エラーにする (ここでは入れ子の深さと量を作る書き方だけを拒む)。
+/// 閉じていない文字列や、ほかの書き方の誤りは、この後でパーサが構文エラーにする (ここでは入れ子の深さと量を作る書き方
+/// だけを拒む)。
 fn scan_structure(text: &str) -> Option<(usize, LocaleProblem)> {
-    let b = text.as_bytes();
-    let mut i = 0;
-    let mut part = Part::Line;
-    let mut header_depth = 0usize;
-    let mut depth = 0usize;
-    let mut start = 0usize;
-    let mut segments = 0usize;
-    while let Some(&c) = b.get(i) {
-        match c {
-            b'\n' => {
-                part = Part::Line;
-                i += 1;
-                continue;
-            }
-            b' ' | b'\t' | b'\r' => {
-                i += 1;
-                continue;
-            }
-            b'#' => {
-                while b.get(i).is_some_and(|&x| x != b'\n') {
-                    i += 1;
-                }
-                continue;
-            }
-            _ => {}
+    use crate::toml_scan::{Event, scan};
+    let mut total = 0usize;
+    scan(text, |e| match e {
+        Event::Open { at, .. } | Event::ArrayHeader { at } => {
+            Some((at, LocaleProblem::InlineValue))
         }
-        if part == Part::Line {
-            start = i;
-            depth = 1;
-            match c {
-                b'[' if b.get(i + 1) == Some(&b'[') => {
-                    return Some((i, LocaleProblem::InlineValue));
-                }
-                b'[' => {
-                    part = Part::Header;
-                    i += 1;
-                    continue;
-                }
-                // この文字はキーの最初の文字として、下で読み直す
-                _ => part = Part::Key,
+        Event::Key {
+            start,
+            segments,
+            depth,
+        } => {
+            if depth > MAX_KEY_DEPTH {
+                return Some((start, LocaleProblem::TooDeep));
             }
+            total += segments;
+            (total > MAX_KEY_SEGMENTS).then_some((start, LocaleProblem::TooManyKeys))
         }
-        match c {
-            b'"' | b'\'' => {
-                i = skip_string(b, i);
-                continue;
-            }
-            b'{' | b'[' => return Some((i, LocaleProblem::InlineValue)),
-            b'.' if matches!(part, Part::Header | Part::Key) => depth += 1,
-            b']' if part == Part::Header => {
-                if depth > MAX_KEY_DEPTH {
-                    return Some((start, LocaleProblem::TooDeep));
-                }
-                segments += depth;
-                if segments > MAX_KEY_SEGMENTS {
-                    return Some((start, LocaleProblem::TooManyKeys));
-                }
-                header_depth = depth;
-                part = Part::AfterHeader;
-            }
-            b'=' if part == Part::Key => {
-                if header_depth + depth > MAX_KEY_DEPTH {
-                    return Some((start, LocaleProblem::TooDeep));
-                }
-                segments += depth;
-                if segments > MAX_KEY_SEGMENTS {
-                    return Some((start, LocaleProblem::TooManyKeys));
-                }
-                part = Part::Value;
-            }
-            _ => {}
-        }
-        i += 1;
-    }
-    None
-}
-
-/// `b[start]` (`"` か `'`) から始まる文字列の次の位置。基本の文字列 (`"`) だけが `\` のエスケープを持つ。1 行の文字列は
-/// 改行で終わる (閉じていない。パーサが構文エラーにする)。
-fn skip_string(b: &[u8], start: usize) -> usize {
-    let q = b[start];
-    let basic = q == b'"';
-    let triple = b.get(start + 1) == Some(&q) && b.get(start + 2) == Some(&q);
-    let mut i = start + if triple { 3 } else { 1 };
-    while let Some(&c) = b.get(i) {
-        if basic && c == b'\\' {
-            i += 2;
-            continue;
-        }
-        if !triple && c == b'\n' {
-            return i;
-        }
-        if c == q {
-            if !triple {
-                return i + 1;
-            }
-            if b.get(i + 1) == Some(&q) && b.get(i + 2) == Some(&q) {
-                // 閉じの `"""` の後に続く引用符 (2 つまで) は中身
-                let mut end = i + 3;
-                while end < i + 5 && b.get(end) == Some(&q) {
-                    end += 1;
-                }
-                return end;
-            }
-        }
-        i += 1;
-    }
-    b.len()
+    })
 }
 
 /// 葉の種類。

@@ -18,6 +18,7 @@ pub mod reserved;
 mod sanitize;
 pub mod theme;
 pub mod theme_file;
+mod toml_scan;
 
 pub use catalog::{Catalog, CatalogError, base_key, placeholders};
 pub use chars::{CharClass, forbidden_char};
@@ -39,3 +40,4 @@ pub use locale_file::{
     PlaceholderIssue, TextCheck, check_text, hint_width, load_locale_file,
 };
 pub use sanitize::{UNTRUSTED_MAX_CHARS, escape_untrusted, sanitize_untrusted};
+pub use toml_scan::{StructureProblem, TOML_MAX_KEY_DEPTH, TOML_MAX_NESTING};

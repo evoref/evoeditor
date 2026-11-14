@@ -1005,6 +1005,10 @@ default = "既定"
 env = "EVE_LANG"
 os = "OS の言語"
 
+[ui.config.syntax_reason]
+key_depth = "16 段を超えるキーがあります"
+nesting = "インラインの表と配列の入れ子が 16 段を超えています"
+
 [ui.config.type]
 array = "配列"
 bool = "真偽値 (`true` か `false`)"

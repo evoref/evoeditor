@@ -1007,6 +1007,10 @@ default = "default"
 env = "EVE_LANG"
 os = "OS language"
 
+[ui.config.syntax_reason]
+key_depth = "a key has more than 16 levels"
+nesting = "inline tables and arrays are nested more than 16 levels deep"
+
 [ui.config.type]
 array = "an array"
 bool = "a boolean (`true` or `false`)"
