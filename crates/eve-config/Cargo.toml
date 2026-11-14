@@ -14,7 +14,7 @@ workspace = true
 
 [dependencies]
 # 言語ファイルの検査の書記素と表示幅 (07 §17.4 の検査 3・5・9。03 §13.2 の幅と同じ関数を使う)
-eve-text = { version = "0.3.0", path = "../eve-text" }
+eve-text = { version = "0.4.0-rc.1", path = "../eve-text" }
 toml = "1.1.8"
 
 [dev-dependencies]

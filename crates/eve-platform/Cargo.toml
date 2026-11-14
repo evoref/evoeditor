@@ -17,14 +17,14 @@ workspace = true
 test-hooks = []
 
 [dependencies]
-eve-core = { version = "0.3.0", path = "../eve-core" }
-eve-text = { version = "0.3.0", path = "../eve-text" }
+eve-core = { version = "0.4.0-rc.1", path = "../eve-core" }
+eve-text = { version = "0.4.0-rc.1", path = "../eve-text" }
 xxhash-rust = { version = "0.8.19", features = ["xxh3"] }
 
 [dev-dependencies]
-eve-view = { version = "0.3.0", path = "../eve-view" }
+eve-view = { version = "0.4.0-rc.1", path = "../eve-view" }
 # FileSystem の契約試験 (eve_testkit::fs_contract を MemFs と同じく実 FS に掛ける。tests/fs_contract.rs だけが使う)
-eve-testkit = { version = "0.3.0", path = "../eve-testkit" }
+eve-testkit = { version = "0.4.0-rc.1", path = "../eve-testkit" }
 memory-stats = "1.2.0"
 encoding_rs = "0.8.42"
 
