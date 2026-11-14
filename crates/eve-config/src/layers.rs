@@ -168,7 +168,7 @@ pub fn load_set(base: Config, arg: &str) -> Option<Loaded> {
     let syntax = as_toml
         .diagnostics
         .iter()
-        .any(|d| matches!(d.kind, DiagKind::Syntax { .. }));
+        .any(|d| matches!(d.kind, DiagKind::Syntax { .. } | DiagKind::Structure(_)));
     if !syntax {
         return Some(as_toml);
     }

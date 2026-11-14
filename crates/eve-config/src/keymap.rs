@@ -182,6 +182,11 @@ pub fn load_keymap_str(text: &str) -> KeymapFile {
         text,
         out: KeymapFile::default(),
     };
+    // 構文を読む前に、深い入れ子を作る書き方を拒む (07 §4.2。パーサがスタックを使い切らないように)
+    if let Some(d) = crate::toml_scan::structure_diagnostic(text) {
+        cx.out.diagnostics.push(d);
+        return cx.out;
+    }
     let root = match DeTable::parse(text) {
         Ok(t) => t,
         Err(e) => {

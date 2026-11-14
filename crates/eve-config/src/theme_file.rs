@@ -349,6 +349,11 @@ fn parse(text: &str) -> (Option<Parsed>, Vec<Diagnostic>) {
         diags: Vec::new(),
         palette: BTreeMap::new(),
     };
+    // 構文を読む前に、深い入れ子を作る書き方を拒む (07 §4.2。パーサがスタックを使い切らないように)
+    if let Some(d) = crate::toml_scan::structure_diagnostic(text) {
+        cx.diags.push(d);
+        return (None, cx.diags);
+    }
     let root = match DeTable::parse(text) {
         Ok(t) => t,
         Err(e) => {

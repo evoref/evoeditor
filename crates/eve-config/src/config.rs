@@ -29,6 +29,9 @@ pub enum DiagKind {
         /// TOML パーサの説明文。
         message: String,
     },
+    /// 書ける構造の上限 (インラインの表・配列の入れ子と、キーの段数) を超えた (07 §4.2)。構文を読む前に見つけ、
+    /// 構文エラーと同じくファイル全体を無視する (エラー)。文言は構文エラーと同じで、理由の語が違う。
+    Structure(crate::StructureProblem),
     /// 未知のキー・セクション。`suggestion` は編集距離 2 以下の公開キー。
     UnknownKey {
         /// 編集距離 2 以下の公開キー。近いものが無ければ `None`。
@@ -528,6 +531,11 @@ pub fn load_str_onto(base: Config, text: &str) -> Loaded {
             diagnostics: Vec::new(),
         },
     };
+    // 構文を読む前に、深い入れ子を作る書き方を拒む (07 §4.2。パーサがスタックを使い切らないように)
+    if let Some(d) = crate::toml_scan::structure_diagnostic(text) {
+        cx.out.diagnostics.push(d);
+        return cx.out;
+    }
     let root = match DeTable::parse(text) {
         Ok(t) => t,
         Err(e) => {

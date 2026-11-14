@@ -420,6 +420,12 @@ pub fn diagnostic_texts(cat: &eve_config::Catalog, d: &Diagnostic) -> (String, S
             args.push(("reason", clean(message)));
             "syntax"
         }
+        // 書ける構造の上限を超えた (07 §4.2)。構文エラーと同じ文言で、`{reason}` は理由の語 (`ui.config.syntax_reason.*`)
+        DiagKind::Structure(p) => {
+            let reason = word(&format!("ui.config.syntax_reason.{}", p.reason_name()), &[]);
+            args.push(("reason", reason));
+            "syntax"
+        }
         DiagKind::UnknownKey { suggestion } => {
             if let Some(s) = suggestion {
                 args.push(("suggestion", s.clone()));
@@ -594,7 +600,7 @@ pub fn diagnostic_texts_long(cat: &eve_config::Catalog, d: &Diagnostic) -> (Stri
 pub fn diagnostic_kind(d: &Diagnostic) -> &'static str {
     match &d.kind {
         DiagKind::Unsupported => "unsupported",
-        DiagKind::Syntax { .. } => "syntax",
+        DiagKind::Syntax { .. } | DiagKind::Structure(_) => "syntax",
         DiagKind::UnknownKey { .. } => "unknown_key",
         DiagKind::TypeMismatch { .. } => "type_mismatch",
         DiagKind::OutOfRange { .. } => "out_of_range",
@@ -642,6 +648,43 @@ fn expected_placeholders(names: &[String]) -> String {
 mod tests {
     use super::diagnostic_texts;
     use eve_config::{Catalog, DiagKind, Diagnostic, Severity};
+
+    // verifies: FR-703
+    #[test]
+    fn 書ける構造の上限の診断は構文エラーの文言に理由の語を入れる() {
+        use eve_config::StructureProblem as P;
+        for (p, ja, en) in [
+            (
+                P::Nesting,
+                "インラインの表と配列の入れ子が 16 段を超えています",
+                "nested more than 16 levels deep",
+            ),
+            (
+                P::KeyDepth,
+                "16 段を超えるキーがあります",
+                "a key has more than 16 levels",
+            ),
+        ] {
+            let d = Diagnostic {
+                severity: Severity::Error,
+                kind: DiagKind::Structure(p),
+                key: String::new(),
+                value: String::new(),
+                line: 1,
+                column: 5,
+            };
+            assert_eq!(super::diagnostic_kind(&d), "syntax");
+            let (text, hint) = diagnostic_texts(Catalog::builtin_ja(), &d);
+            assert!(
+                text.starts_with("この設定ファイルは書式が正しくない"),
+                "{text}"
+            );
+            assert!(text.ends_with(ja), "{text}");
+            assert_ne!(hint, "");
+            let (text, _) = diagnostic_texts(Catalog::builtin_en(), &d);
+            assert!(text.ends_with(en), "{text}");
+        }
+    }
 
     #[test]
     fn 未対応の診断は情報の文言で対処は空() {

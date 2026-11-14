@@ -1779,7 +1779,7 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 
 | MessageKey | 出す場面 (07 §4.2) | ja |
 |---|---|---|
-| `msg.config.syntax` | TOML 構文エラー。そのファイル全体を使わない。`{reason}` は構文エラーの短い説明 (パーサの出力を分類し無害化したもの) | この設定ファイルは書式が正しくないため使っていません: {reason} / 該当の行を直してください。直すまでは既定値で動きます |
+| `msg.config.syntax` | TOML 構文エラー。そのファイル全体を使わない。`{reason}` は構文エラーの短い説明 (パーサの出力を分類し無害化したもの)。書ける構造の上限 (07 §4.2。設定ファイル・キーマップ・テーマファイル) を超えるときも同じ文言で、`{reason}` は理由の語 (`ui.config.syntax_reason.*`) | この設定ファイルは書式が正しくないため使っていません: {reason} / 該当の行を直してください。直すまでは既定値で動きます |
 | `msg.config.theme_not_found` (v0.4) | テーマが無い (組込みの名前でも `themes/<name>.toml` でもない。07 §8.6 / §8.7)。エラーで、テーマは組込みの `default` で描く。`{item}` は `theme.name` (`inherits` で書いた名前なら `inherits`)、`{value}` は書かれた名前、`{candidates}` は組込みの名前に近い名前 (接頭辞か編集距離 2 以下。大文字小文字を区別しない) を `"…"` で囲んで ` / ` でつないだもの。候補が無ければ 〔 〕 の文を省く。`{file}:{line}` は `theme.name` を書いた設定ファイルの行 (`--set` なら `--set`)、`inherits` ならそれを書いたテーマファイルの行 | テーマ {value} がありません / 〔{item} を {candidates} にしてください。〕組込みのテーマか、themes/ に置いたテーマファイルの名前を書きます。今は default で描いています |
 | `msg.config.unknown_key` | 未知のキー。`{suggestion}` は編集距離 ≤ 2 の候補 (公開キーと公開前のキー (07 §5.13) の両方から探す)。候補が無ければ 〔 〕 の文を省く | {item} という設定項目はありません / 〔{suggestion} ではありませんか?〕設定できる項目は同梱の config.example.toml を見てください |
 | `msg.config.keymap_unknown_context` | キーマップ (`keymap.toml`) の診断。知らないコンテキスト名 | {item} のコンテキスト名は使えません / 使える名前: global, editor, search, prompt, palette, list, dialog, help。この割当は使いません |
@@ -1824,6 +1824,8 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 | `ui.config.locale_reason.too_many_keys` (v0.4) | 同上 | キーの段の数が 20,000 を超えています |
 | `ui.config.locale_reason.not_regular` (v0.4) | `msg.config.locale_unreadable` の `{reason}` | 通常のファイルではありません |
 | `ui.config.locale_reason.too_large` (v0.4) | `msg.config.locale_too_large` の `{size}` | 1 MiB を超えています |
+| `ui.config.syntax_reason.nesting` (v0.4) | `msg.config.syntax` の `{reason}` (書ける構造の上限、07 §4.2)。インラインの表・配列の入れ子が 16 段を超える | インラインの表と配列の入れ子が 16 段を超えています |
+| `ui.config.syntax_reason.key_depth` (v0.4) | 同上。見出しと点のキーを合わせて 16 段を超えるキーがある | 16 段を超えるキーがあります |
 | `ui.config.locale_char.control` (v0.4) | `msg.config.locale_control_char` の `{reason}` (使えない文字の種類)。`{code}` は最初の文字の `<U+XXXX>`。C0・DEL・C1 と U+2028 / U+2029 | 制御文字 {code} |
 | `ui.config.locale_char.format` (v0.4) | 同上。書式文字 (Cf) と Default_Ignorable_Code_Point (双方向の書式文字・方向の印・異体字セレクタ・タグ文字を含む) | 書式文字 {code} |
 | `ui.config.locale_char.variation_selector` (v0.4) | 同上。書式文字のうち異体字セレクタ (U+FE00〜U+FE0F・U+E0100〜U+E01EF。U+FE0F を含む絵文字の列・IVS) | 異体字セレクタ {code} |
