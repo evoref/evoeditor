@@ -168,14 +168,15 @@ dependencies = [
 
 [[package]]
 name = "eve-config"
-version = "0.3.0"
+version = "0.4.0-rc.1"
 dependencies = [
+ "eve-text",
  "toml",
 ]
 
 [[package]]
 name = "eve-core"
-version = "0.3.0"
+version = "0.4.0-rc.1"
 dependencies = [
  "eve-config",
  "eve-encoding",
@@ -183,13 +184,14 @@ dependencies = [
  "eve-view",
  "memchr",
  "regex",
+ "regex-automata",
  "regex-syntax",
  "twox-hash",
 ]
 
 [[package]]
 name = "eve-encoding"
-version = "0.3.0"
+version = "0.4.0-rc.1"
 dependencies = [
  "chardetng",
  "encoding_rs",
@@ -208,7 +210,7 @@ dependencies = [
 
 [[package]]
 name = "eve-host"
-version = "0.3.0"
+version = "0.4.0-rc.1"
 dependencies = [
  "arc-swap",
  "eve-config",
@@ -219,7 +221,7 @@ dependencies = [
 
 [[package]]
 name = "eve-platform"
-version = "0.3.0"
+version = "0.4.0-rc.1"
 dependencies = [
  "eve-core",
  "eve-text",
@@ -231,7 +233,7 @@ dependencies = [
 
 [[package]]
 name = "eve-testkit"
-version = "0.3.0"
+version = "0.4.0-rc.1"
 dependencies = [
  "eve-config",
  "eve-core",
@@ -245,7 +247,7 @@ dependencies = [
 
 [[package]]
 name = "eve-text"
-version = "0.3.0"
+version = "0.4.0-rc.1"
 dependencies = [
  "ropey",
  "unicode-segmentation",
@@ -254,7 +256,7 @@ dependencies = [
 
 [[package]]
 name = "eve-tui"
-version = "0.3.0"
+version = "0.4.0-rc.1"
 dependencies = [
  "eve-host",
  "eve-view",
@@ -267,7 +269,7 @@ dependencies = [
 
 [[package]]
 name = "eve-view"
-version = "0.3.0"
+version = "0.4.0-rc.1"
 
 [[package]]
 name = "find-msvc-tools"

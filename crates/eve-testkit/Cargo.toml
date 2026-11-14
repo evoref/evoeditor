@@ -13,11 +13,11 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
-eve-core = { version = "0.3.0", path = "../eve-core" }
-eve-view = { version = "0.3.0", path = "../eve-view" }
-eve-host = { version = "0.3.0", path = "../eve-host" }
-eve-config = { version = "0.3.0", path = "../eve-config" }
-eve-text = { version = "0.3.0", path = "../eve-text" }
+eve-core = { version = "0.4.0-rc.1", path = "../eve-core" }
+eve-view = { version = "0.4.0-rc.1", path = "../eve-view" }
+eve-host = { version = "0.4.0-rc.1", path = "../eve-host" }
+eve-config = { version = "0.4.0-rc.1", path = "../eve-config" }
+eve-text = { version = "0.4.0-rc.1", path = "../eve-text" }
 # シナリオ DSL (TOML) の読み込み (docs/11 §6.3、v0.2)
 serde = { version = "1.0.229", features = ["derive"] }
 toml = "1.1.8"
@@ -25,7 +25,7 @@ unicode-width = "0.2"
 
 [dev-dependencies]
 # no_network の実 FS (bench だけが使う。ライブラリの本体は eve-platform に依存しない)
-eve-platform = { version = "0.3.0", path = "../eve-platform" }
+eve-platform = { version = "0.4.0-rc.1", path = "../eve-platform" }
 # 確保の回数の計測 (bench の bm_allocs だけ。自前の unsafe を書かずに GlobalAlloc を数える。2026-11-05 PO、02 §13.0)
 stats_alloc = "0.1.10"
 # BM-109m の比べる相手 (全文を連結して探す参照、09 §5.2。bench の bm_109 だけ)。eve-core が既に使う crate で、feature も
