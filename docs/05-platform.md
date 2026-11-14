@@ -71,7 +71,7 @@
 | 移植性の検査 (出荷しない) | Linux x86_64 (v0.1) | PR ごとに CI で Linux CI の対象 crate (core 系 crate + `eve-host` + `eve-testkit`、02 §4.7) のコンパイルとヘッドレスのテストを行う (09 §6)。配布物は作らず、「対応」とは呼ばない。core 系 crate が OS 非依存であることを守るための検査 |
 | Tier C | 非対応リスト | 報告は受けるが修正を約束しない |
 
-**v0.1 で「対応」と呼ぶのは Windows x86_64 (Windows 11) の Windows Terminal と conhost だけ** である (確定 (ユーザー回答)、OQ-15)。開発環境は Windows のみで、macOS / Linux の実機確認の手段が無いので、**v0.1 では macOS / Linux を出荷しない** (動作未確認のまま配布することもしない)。正本は [01 §4.6](01-requirements.md#46-v01-の既知の制約-リリースノートとヘルプに明記する) で、リリースノートと README にも載せる。
+**v0.1 で「対応」と呼ぶのは Windows x86_64 (Windows 11) の Windows Terminal と conhost だけ** である (確定 (ユーザー回答)、OQ-15)。開発環境は Windows のみで、macOS / Linux の実機確認の手段が無いので、**v0.1 では macOS / Linux を出荷しない** (動作未確認のまま配布することもしない)。正本は [01 §4.6](01-requirements.md#46-既知の制約-リリースノートとヘルプに明記する) で、リリースノートと README にも載せる。
 
 | OS | v0.1 の状況 | 内容 |
 |---|---|---|
