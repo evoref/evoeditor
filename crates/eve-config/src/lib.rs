@@ -29,12 +29,13 @@ pub use config::{
 };
 pub use keymap::{KeyAction, KeymapEntry, KeymapFile, load_keymap_str};
 pub use layers::{
-    KeyOrigin, Resolved, SET_SOURCE, Source, dump, load_set, merge_reports, resolve, values,
+    KeyOrigin, Resolved, SET_SOURCE, Source, check_ui_locale, dump, load_set, merge_reports,
+    resolve, values,
 };
 pub use locale::{Locale, LocaleChoice, LocaleSource, LocaleWarning, select_locale};
 pub use locale_file::{
-    HINT_MAX_WIDTH, LOCALE_MAX_BYTES, LOCALE_MAX_DIAGNOSTICS, LOCALE_MAX_MARKS,
-    LOCALE_MAX_TEXT_CHARS, LOCALE_RESERVED_PREFIXES, LocaleFile, LocaleProblem, TextCheck,
-    check_text, hint_width, load_locale_file,
+    HINT_MAX_WIDTH, LOCALE_CHECK_MAX_DIAGNOSTICS, LOCALE_MAX_BYTES, LOCALE_MAX_DIAGNOSTICS,
+    LOCALE_MAX_MARKS, LOCALE_MAX_TEXT_CHARS, LOCALE_RESERVED_PREFIXES, LocaleFile, LocaleProblem,
+    PlaceholderIssue, TextCheck, check_text, hint_width, load_locale_file,
 };
 pub use sanitize::{UNTRUSTED_MAX_CHARS, escape_untrusted, sanitize_untrusted};

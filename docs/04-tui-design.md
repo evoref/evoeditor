@@ -1772,8 +1772,8 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 |---|---|---|
 | `info.cli.unsupported` | 後の版で使う予約のオプション・`+LINE` を渡した (07 §18.3) | {option} はこのバージョンでは使えないため無視しました |
 | `msg.cli.directory` | 位置引数にフォルダを渡した (07 §18.2。v0.1 は無題の文書を開く) | {path} はフォルダなので開けません。無題の文書を開きました / ファイルのパスを指定して起動してください |
-| `msg.config.problem` | 設定の診断が 1 件 (07 §4.3) | 設定の問題 ({file}:{line}): {detail} / {hint} |
-| `msg.config.problems` | 設定の診断が 2 件以上 | 設定に {count} 件の問題があります。最初の 1 件: {detail} / 該当の項目は既定値を使っています。全件はログ ({log}) を見てください |
+| `msg.config.problem` | 設定の診断が 1 件 (07 §4.3)。行の分からない診断 (`--set`・言語ファイルの名前と言語の選択・ファイル全体の問題など。v0.4 の M26 から) は `{line}` を空にして 〔 〕 の部分を省く | 設定の問題 ({file}〔:{line}〕): {detail} / {hint} |
+| `msg.config.problems` | 設定の診断が 2 件以上 (v0.4 の M26 から、言語ファイルの診断を含む。「ほか N 件」は N 件と数える。hint は、80 桁のメッセージ行で本文 (要約) が切り詰められて消えないよう、ログのパスを外して短くした (対処は省略しない、§8.9。ログの場所は一覧と `--check-config` で分かる)) | 設定に {count} 件の問題があります。最初の 1 件: {detail} / 一覧は「設定の診断を表示」で見られます |
 
 上の `msg.config.problem` / `msg.config.problems` の `{detail}` と `{hint}` には、診断 1 件の **種別のキー** (下の表) の `text` と `hint` を入れる (`{file}:{line}` は診断の位置で、種別の文言には含めない)。種別は 07 §4.2 の検査の種類に対応する。
 
@@ -1795,51 +1795,71 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 | `msg.config.out_of_range` | 範囲外。`{range}` は許容範囲 (例 `1〜16`)。`{default}` は戻した値 (丸める項目 (07 §4.2) は丸めた値) | {item} の値 {value} は範囲外です / {range} で指定してください。この項目は {default} を使います |
 | `msg.config.invalid_value` | 列挙値不正 (`file.default_encoding` の許容値外を含む)。`{allowed}` は許容値を `, ` で並べたもの | {item} の値 {value} は使えません / 使える値: {allowed}。この項目は既定値 {default} を使います |
 | `msg.config.invalid_value_no_default` | 列挙値不正のうち、既定値を持たない項目 (テーマファイルの色 `ui.selection.fg = "nope"` など)。`msg.config.invalid_value` の `{default}` が空になる場面の代わりに出す。該当の値は使わない | {item} の値 {value} は使えません / 使える値: {allowed}。この項目は使いません |
+| `msg.config.locale_syntax` (v0.4) | 言語ファイル (`locales/<lang>.toml`、07 §17.4) のファイル全体の問題 (エラー。ファイル全体を使わない): TOML の構文エラー・書ける構造の上限を超える (インラインの表・配列、8 段を超えるキー、2 万を超えるキーの段)。`{reason}` は構文エラーならパーサの説明 (無害化したもの)、ほかは理由の語 (`ui.config.locale_reason.*`)。行が分からないこともあるので、hint は行の有無に依らず成り立つ形 | この言語ファイルは書式が正しくないため使っていません: {reason} / 表示された行かファイルを直してください |
+| `msg.config.locale_unreadable` (v0.4) | 同上。読めない (権限・I/O の誤り) か、通常のファイルでない (ディレクトリ・デバイス・FIFO)。`{reason}` は OS の説明 (無害化したもの) か、理由の語 `ui.config.locale_reason.not_regular` | この言語ファイルを読めないため使っていません: {reason} / 読める通常のファイルか確かめてください |
+| `msg.config.locale_not_utf8` (v0.4) | 同上。UTF-8 でない (先頭の BOM は読み飛ばす) | この言語ファイルは UTF-8 で書かれていないため使っていません / UTF-8 で保存し直してください |
+| `msg.config.locale_too_large` (v0.4) | 同上。1 MiB を超える。`{size}` は `ui.config.locale_reason.too_large` (読むのは 1 MiB + 1 バイトまでなので、大きさは「1 MiB を超える」とだけ示す) | この言語ファイルは大きすぎるため使っていません ({size}) / 1 MiB 以下にしてください |
+| `msg.config.locale_bad_name` (v0.4) | `locales/` にある `*.toml` の名前が規則 (`^[a-z]{2,3}\.toml$`、デバイス名を除く) に合わない (警告。読まない)。`{value}` はそのファイルの名前、要約の `{file}` は `locales/` | {value} は言語ファイルの名前の規則に合わないため読みません / fr.toml のような英小文字 2〜3 字の名前に |
+| `msg.config.locale_not_found` (v0.4) | `--locale` / `EVE_LANG` / `ui.locale` の言語 (値の形に合うもの) が、同梱の言語にも `locales/` の候補にも無い (警告。次の段へ進む)。`{value}` は書かれた値、`{lang}` は代わりに使う言語。探した場所はメッセージ行に出さず、一覧と `--check-config` の対処の後に `ui.config.locale_searched` で足す。要約の `{file}` は `--locale` / `EVE_LANG` (`ui.locale` は書いた設定ファイルと行)。文言は補う言語の同梱の文言 (言語の選択の診断) | 言語 {value} の言語ファイルがありません (いまは {lang}) / locales/ に置くか ja / en を指定 |
+| `msg.config.locale_not_found_no_config` (v0.4) | 同上。ただし `locales/` を探していない (`--no-config`、または設定ディレクトリが無い) とき。探した場所を示さない | 言語 {value} の言語ファイルがありません (いまは {lang}) / 言語ファイルを読まない起動です |
+| `msg.config.locale_language_mismatch` (v0.4) | `[meta] language` がファイル名の言語と違う (言語タグの形でない値を含む。警告。ファイル名の言語として読む)。`{value}` は書かれた値、`{lang}` はファイル名の言語 | [meta] の language の値 {value} がファイル名と違います / {lang} として読みました |
+| `msg.config.locale_unknown_key` (v0.4) | 言語ファイルのキーごとの問題 (警告。その文言は使わず、同梱の文言を使う)。補う言語の同梱の言語ファイルに無いキー。候補は付けない | {item} という文言のキーはありません / 綴りと、使っている版を確かめてください |
+| `msg.config.locale_reserved` (v0.4) | 同上。`stderr.*` / `panic.*` / `cli.*` のキー | {item} の文言は言語ファイルでは変えられません / 終了時・異常終了時・--help の文言です |
+| `msg.config.locale_duplicate_key` (v0.4) | 同上。平らにしたキーが重複した。最初のものが検査に通らないときも後のものは使わない (07 §17.4) | {item} が 2 回書かれています。最初のものだけを見ます / どちらかを消してください |
+| `msg.config.locale_too_long` (v0.4) | 同上。1,024 文字を超える (検査 2)。`{count}` は文字数 | {item} の文言が長すぎます ({count} 文字) / 1,024 文字以下にしてください |
+| `msg.config.locale_empty` (v0.4) | 同上。目に見える文字が無い (検査 3。〔 〕 の中は値が無いと消えるので数えない) | {item} の文言に表示される文字がありません / 〔 〕 の外に文字を書いてください |
+| `msg.config.locale_control_char` (v0.4) | 同上。使えない文字を含む (検査 4)、または結合文字が続きすぎる (検査 5)。`{reason}` は理由の語 (`ui.config.locale_char.*`。異体字セレクタは `variation_selector`) に最初の文字の `<U+XXXX>` を入れたもの | {item} の文言に使えない文字があります ({reason}) / その文字を除いてください |
+| `msg.config.locale_placeholder` (v0.4) | 同上。括弧の対応 (検査 6)、プレースホルダの名前と数・〔 〕 の有無 (検査 7) が合わない。`{reason}` は何が合わないか (`ui.config.locale_placeholder.*`)。`{expected}` は同梱の文言のプレースホルダを、現れる順に波括弧付きで `, ` で並べたもの。同じ名前は 1 回だけ書き、2 回以上現れる名前には ` ×N` (N は同梱の文言に現れる数で、使える上限) を付ける (例 `{path} ×2, {reason}`)。無ければ空で、〔 〕 の文を省く | {item} の差し込み ({…} の部分) が同梱の文言と合いません ({reason})〔。使うもの: {expected}〕 / 同梱と同じ差し込みを使ってください |
+| `msg.config.locale_accelerator` (v0.4) | 同上。`[X]` の並び・位置が同梱の文言と違う、または全角の似た形を含む (検査 8) | {item} の [S] のような角括弧の英字が同梱の文言と違います / 同梱と同じ英字を同じ順に書いてください |
+| `msg.config.locale_hint_width` (v0.4) | 同上。ただし重さは **情報** で、**その文言を使う** (画面の要約に出さず件数にも数えない。一覧と `--check-config` には出す)。`hint.*` の表示幅が 8 セルを超える (検査 9)。`{width}` は表示幅 | {item} のヒントは長いので、狭い画面では落ちることがあります (表示幅 {width}) / 全角 4 文字・半角 8 文字以内を勧めます |
+| `msg.config.locale_more` (v0.4) | 1 つの言語ファイル (と、名前の規則に合わないファイルの一覧) の診断が 100 件 (`--check-config` では 1 万件) を超えた。`{count}` は省いた件数。要約と `--check-config` の件数は N 件と数える | この言語ファイルには、ほかに {count} 件の問題があります / --check-config で全件を見られます |
 | `ui.config.type.integer` | `{actual}` / `{expected}` に入れる型の語 | 整数 |
 | `ui.config.type.float` | `{actual}` / `{expected}` に入れる型の語 | 小数 |
 | `ui.config.type.string` | `{actual}` / `{expected}` に入れる型の語 | 文字列 |
 | `ui.config.type.bool` | `{actual}` / `{expected}` に入れる型の語 | 真偽値 (`true` か `false`) |
 | `ui.config.type.array` | `{actual}` / `{expected}` に入れる型の語 | 配列 |
 | `ui.config.type.table` | `{actual}` / `{expected}` に入れる型の語 | テーブル |
+| `ui.config.locale_reason.inline_value` (v0.4) | 同上 | インラインの表と配列は書けません |
+| `ui.config.locale_reason.too_deep` (v0.4) | 同上 | 8 段を超えるキーがあります |
+| `ui.config.locale_reason.too_many_keys` (v0.4) | 同上 | キーの段の数が 20,000 を超えています |
+| `ui.config.locale_reason.not_regular` (v0.4) | `msg.config.locale_unreadable` の `{reason}` | 通常のファイルではありません |
+| `ui.config.locale_reason.too_large` (v0.4) | `msg.config.locale_too_large` の `{size}` | 1 MiB を超えています |
+| `ui.config.locale_char.control` (v0.4) | `msg.config.locale_control_char` の `{reason}` (使えない文字の種類)。`{code}` は最初の文字の `<U+XXXX>`。C0・DEL・C1 と U+2028 / U+2029 | 制御文字 {code} |
+| `ui.config.locale_char.format` (v0.4) | 同上。書式文字 (Cf) と Default_Ignorable_Code_Point (双方向の書式文字・方向の印・異体字セレクタ・タグ文字を含む) | 書式文字 {code} |
+| `ui.config.locale_char.variation_selector` (v0.4) | 同上。書式文字のうち異体字セレクタ (U+FE00〜U+FE0F・U+E0100〜U+E01EF。U+FE0F を含む絵文字の列・IVS) | 異体字セレクタ {code} |
+| `ui.config.locale_char.private_use` (v0.4) | 同上。私用領域 | 私用領域の文字 {code} |
+| `ui.config.locale_char.noncharacter` (v0.4) | 同上。非文字 | 非文字 {code} |
+| `ui.config.locale_char.combining_marks` (v0.4) | 同上。結合文字が 30 個を超えて続く (検査 5)。`{code}` は 31 個目の結合文字 | 30 個を超えて続く結合文字 {code} |
+| `ui.config.locale_summary` (v0.4) | `--check-config` の出力の先頭の 1 行 (07 §17.4)。`{lang}` は使う言語、`{source}` は選んだ段 (`ui.config.locale_source.*`)、`{file}` はユーザーの言語ファイルの絶対パス (無ければ 〔 〕 ごと省く)、`{base}` は補う言語 | 言語: {lang} ({source})〔、言語ファイル: {file}〕、補う言語: {base} |
+| `ui.config.locale_unused` (v0.4) | `ui.config.locale_summary` の `{file}` の後に添える。選んだ言語のファイルを、ファイル全体の問題で使っていない | (使っていません) |
+| `ui.config.locale_searched` (v0.4) | 一覧 (`config.show_diagnostics`) と `--check-config` で、`msg.config.locale_not_found` の対処の後に足す。`{dir}` は探した `locales/` の絶対パス (メッセージ行には出さない) | (探した場所: {dir}) |
+| `ui.config.locale_placeholder.unbalanced` (v0.4) | `msg.config.locale_placeholder` の `{reason}` (何が合わないか)。`{` / `}` か 〔 〕 の対応 (検査 6) | 括弧の対応が取れていません |
+| `ui.config.locale_placeholder.conditional` (v0.4) | 同上。〔 〕 の有無か、差し込みの 〔 〕 の内と外の側が同梱と違う | 〔 〕 の使い方が違います |
+| `ui.config.locale_placeholder.unknown` (v0.4) | 同上。同梱に無い名前の差し込みがある | 使えない差し込みがあります |
+| `ui.config.locale_placeholder.missing` (v0.4) | 同上。同梱の差し込みが無い | 差し込みが足りません |
+| `ui.config.locale_placeholder.too_many` (v0.4) | 同上。同じ名前を同梱より多く書いた | 同じ差し込みが多すぎます |
+| `ui.config.locale_source.cli` (v0.4) | `ui.config.locale_summary` の `{source}`。`--locale` で選んだ | --locale |
+| `ui.config.locale_source.config` (v0.4) | 同上。設定 `ui.locale` で選んだ | ui.locale |
+| `ui.config.locale_source.env` (v0.4) | 同上。環境変数 `EVE_LANG` で選んだ | EVE_LANG |
+| `ui.config.locale_source.os` (v0.4) | 同上。OS の言語で選んだ | OS の言語 |
+| `ui.config.locale_source.default` (v0.4) | 同上。どの段にも当たらず既定の `ja` | 既定 |
 | `info.config.reloaded` | `config.reload` で設定を読み直し、項目が変わった (07 §6 の規則 4。`{keys}` は変わったキーをコンマで並べたもの。`keymap.toml` が変わったら `keymap.toml` も入る) | 設定を読み直しました。{count} 項目が変わりました: {keys} |
 | `info.config.reload_unchanged` | 同上。変わった項目が無い | 設定を読み直しました (変わった項目はありません) |
 | `info.config.reload_restart` | 同上。変わった項目に、再起動しないと効かないもの (`theme.color_mode` / `view.ambiguous_width` / `ui.locale`) がある | 次の項目は再起動すると有効になります: {keys} |
+| `info.config.locale_restart` (v0.4) | 同上。選んだ言語のユーザーの言語ファイルの大きさか更新日時が起動時と違う (無くなった・現れたを含む。中身は読まない、07 §17.4)。変わった項目の要約の後に出す | 言語ファイルの変更は、再起動すると有効になります |
+| `info.config.locale_untranslated` (v0.4) | `--check-config` だけに出す情報 (画面・ログには出さない)。同梱していない言語のファイルで、補う言語の同梱の文言にあって書いていないキーの数 `{count}` | 訳の無いキーが {count} 件あります (英語で出ます) |
+| `info.config.locale_untranslated_key` (v0.4) | 同上。訳の無いキー 1 つ (`{item}`)。1 つのファイルで 1 万件と「ほか N 件」まで | {item} の訳がありません |
 | `msg.config.reload_kept` | 同上。ファイルにエラー (構文エラー・読めない) があり、そのファイルは前の設定のまま (07 §6 の規則 1。診断は `msg.config.problem` で別に出す) | {file} にエラーがあるため、前の設定のままにしました / エラーを直してから、もう一度読み直してください |
 | `info.config.no_diagnostics` | `config.show_diagnostics` (07 §4.3、v0.3) で、診断が 1 件も無い (一覧を開かない) | 設定の診断はありません |
-| `info.config.diagnostic_no_file` | 同上。一覧で選んだ診断が、ファイルに書かれたものではない (`--set` の値) ので開けない。`{file}` は `--set` | {file} の診断は、ファイルに書かれたものではないため開けません |
+| `info.config.diagnostic_no_file` | 同上。一覧で選んだ診断が、ファイルに書かれたものではない (`--set` の値、v0.4 の M26 から `--locale` / `EVE_LANG` の見つからない言語と、名前の規則に合わない言語ファイルの一覧 `locales/`) ので開けない。`{file}` は `--set` / `--locale` / `EVE_LANG` / `locales/` | {file} の診断は、ファイルに書かれたものではないため開けません |
 | `info.config.unsupported` (v0.2) | 公開前のキー・予約のセクション・後の版の値 (07 §5 冒頭の「このバージョンでは未対応」)。v0.1 は画面に出さず、件数にも数えず、ログにだけ書く (07 §4.3)。`config.show_diagnostics` (v0.2) の一覧で使う | {item} はこのバージョンでは未対応のため無視しました |
 
 v0.2 以降の診断 (名前だけを予約し、文言はその版で言語ファイルに加える): `msg.config.unknown_command` (キーマップの未知のコマンド ID)、`msg.config.invalid_key_notation` (キー表記の構文エラー)、`msg.config.chord_prefix` (プレフィックス衝突)、`msg.config.unknown_name` (存在しないテーマ・言語・ロケール名)、`info.config.key_conflict` (同一キーの重複)、`info.config.deprecated_key` (廃止キーの自動変換)、`info.config.ignored_workspace` (所有者検査で無視したワークスペース設定、v0.5)、`info.config.pending_trust` (信頼待ちの危険項目、v0.5)、`msg.config.unsafe_value` (安全性違反、v0.5)。
 
-**ユーザーの言語ファイルの診断 (v0.4 の M26、案。07 §17.4、OQ-220)**: 下のキーは案で、M26 の (2) の実装の PR で言語ファイル (`locales/ja.toml` / `en.toml`) と一緒に上の表の行に移す (表の行にすると `xtask i18n` が言語ファイルとの突合で欠落とみなすため、それまでは表の外に置く)。ここに書いた文言は画面に出る形で、言語ファイルでは `{…}` を文字として出す部分を `{{…}}` と書く (07 §17.2)。
+**ユーザーの言語ファイルの診断 (v0.4 の M26。07 §17.4、OQ-220)**: キーと文言は上の表の行 (`msg.config.locale_*`・`ui.config.locale_*`・`info.config.locale_restart`)。M26 の (2) の実装の PR で、案から表の行に移した。
 
-- **共通の規則**: `msg.config.problem` / `msg.config.problems` の `{file}` は `locales/<lang>.toml`、`{item}` は文言のキー。言語ファイルの診断の文言は、補う言語の **同梱の** 文言で出す (重ねた表を使わない)。`{item}` / `{value}` / `{reason}` は 07 §4.3 の無害化 (制御文字などを `<U+XXXX>` に、64 文字で切る) を通してから埋める。キーごとの問題は警告で、その文言には補う言語の同梱の文言を使う (`locale_hint_width` だけは書いた文言を使う)。ファイル全体の問題はエラーで、ファイル全体を使わない。1 つのファイルの診断は 100 件までで、残りは `msg.config.locale_more` の 1 件にまとめる。
+- **共通の規則**: `msg.config.problem` / `msg.config.problems` の `{file}` は `locales/<lang>.toml` (名前の規則に合わないファイルは `locales/`、見つからない言語は `--locale` / `EVE_LANG`)、`{item}` は文言のキー。言語ファイル・言語の選択の診断の文言と、その要約 (`msg.config.problem(s)`)・`config.show_diagnostics` の一覧の行は、補う言語の **同梱の** 文言で出す (重ねた表を使わない)。`--check-config` の出力も同じで、先頭の行 (`ui.config.locale_summary`) も同梱の文言で出す。`{item}` / `{value}` / `{reason}` は 07 §4.3 の無害化 (制御文字などを `<U+XXXX>` に、64 文字で切る) を通してから埋める (設定ファイル・キーマップ・テーマファイルの診断も同じ)。`{dir}` (パス) は切らずに `<U+XXXX>` への置き換えだけをする。キーごとの問題は警告で、その文言には補う言語の同梱の文言を使う (`locale_hint_width` だけは書いた文言を使う)。ファイル全体の問題 (`locale_syntax` / `locale_unreadable` / `locale_too_large`) はエラーで、ファイル全体を使わない。1 つのファイルの診断は 100 件 (`--check-config` では 1 万件) までで、残りは `msg.config.locale_more` の 1 件にまとめる。**対処 (hint) は短くする** (ja で 20 字・40 セル程度まで、en で 40 字まで): メッセージ行は対処を省略せずに本文を詰めるので (§8.9)、80 桁で本文 (何が起きたか) が残るようにする。「同梱の文言を使います」の旨は要約の文と一覧で分かるので、各文言の対処には書かない。
 - **既存のキーを使うもの**: 値が文字列でない文言は `msg.config.type_mismatch_no_default` (期待する型は `ui.config.type.string`)。`ui.locale` の値の形が合わない・使える言語に当たらないときは `msg.config.invalid_value` (`{allowed}` は `auto`・同梱の言語・`locales/` にある言語。予約の `msg.config.unknown_name` は使わない)。
-- **既存のキーの文言を改めるもの**:
-  - `msg.config.problems` の hint を、言語ファイルにも合う形に一般化する。ja「問題のある項目は使わず、既定値か同梱の文言で動いています。全件はログ ({log}) を見てください」/ en "Items with problems are not used; the defaults or the built-in text are used instead. See the log ({log}) for all of them"。
-  - `cli.help.option.locale` (bin の定数表。下の「`--help` の本文」の表) を、ユーザーの言語を含む形にする。en "Set the UI language: ja, en, or a language with a file in locales/ (overrides ui.locale and EVE_LANG)" / ja「画面の言語を指定します: ja / en、または locales/ に言語ファイルを置いた言語 (設定 ui.locale と EVE_LANG より優先)」。
-- **ファイル全体の問題 (エラー)**:
-  - `msg.config.locale_syntax`: 読めない・通常のファイルでない・UTF-8 でない・TOML の構文エラー・書ける構造の上限を超える (インラインの表・配列、8 段を超えるキー、2 万を超えるキーの段。07 §17.4。理由の語は M26 の (2) で決める)。`{reason}` は `msg.config.syntax` と同じ短い説明。行が分からないこともあるので、hint は行の有無に依らず成り立つ形にする。ja「この言語ファイルは書式が正しくないため使っていません: {reason}」/「表示された行 (行が無いときはファイル全体) を直してください。直すまでは同梱の文言で動きます」。en "This language file is not used because it is not valid: {reason}" / "Fix the line shown (or the file, if no line is shown). Until then, the built-in text is used."
-  - `msg.config.locale_too_large`: 1 MiB を超える。`{size}` は読んだ大きさ (「1 MiB を超える」)。ja「この言語ファイルは大きすぎるため使っていません ({size})」/「1 MiB 以下にしてください。直すまでは同梱の文言で動きます」。en "This language file is not used because it is too large ({size})" / "Keep it under 1 MiB. Until then, the built-in text is used."
-- **ファイルの名前と言語の選択 (警告)**:
-  - `msg.config.locale_bad_name`: `locales/` にある `*.toml` の名前が規則 (`^[a-z]{2,3}\.toml$`、デバイス名を除く) に合わない。`{value}` はそのファイルの名前 (要約の `{file}` は `locales/`)。ja「{value} は言語ファイルの名前の規則に合わないため読みません」/「言語の部分だけの英小文字 2〜3 字の名前 (例 fr.toml) にしてください」。en "{value} is not read because its name does not follow the rule for language files" / "Name it with 2 or 3 lowercase letters for the language only (for example fr.toml)."
-  - `msg.config.locale_not_found`: `--locale` / `EVE_LANG` の言語が、同梱の言語にも `locales/` の候補にも無い。`{value}` は書かれた値、`{dir}` は探した `locales/` の絶対パス、`{lang}` は代わりに使う言語。ja「言語 {value} の言語ファイルがありません」/「{dir} に言語ファイルを置くか、ja / en を指定してください。いまは {lang} で表示しています」。en "There is no language file for {value}" / "Put a language file in {dir}, or choose ja or en. {lang} is used for now."
-  - `msg.config.locale_language_mismatch`: `[meta] language` がファイル名の言語と違う。`{value}` は書かれた値、`{lang}` はファイル名の言語。ja「[meta] の language の値 {value} がファイル名と違います」/「ファイル名の言語 ({lang}) として読みました。language の値を直すか、消してください」。en "The language value {value} in [meta] does not match the file name" / "The file was read as {lang}. Fix or remove the language value."
-- **キーごとの問題 (警告。その文言は使わず、同梱の文言を使う)**:
-  - `msg.config.locale_unknown_key`: 同梱の言語ファイルに無いキー。候補は付けない。ja「{item} という文言のキーはありません」/「綴りを確かめてください。新しい版のための文言なら、この版では使いません」。en "There is no text key named {item}" / "Check the spelling. If it is for a newer version, it is not used in this version."
-  - `msg.config.locale_reserved`: `stderr.*` / `panic.*` / `cli.*` のキー。ja「{item} の文言は言語ファイルでは変えられません」/「終了時・異常終了時・--help の文言は変えられません。この文言は使いません」。en "The text of {item} cannot be changed in a language file" / "Messages printed on exit, on a crash, and by --help cannot be changed. This text is not used."
-  - `msg.config.locale_duplicate_key`: 平らにしたキーが重複した。最初のものが検査に通らないときも後のものは使わない (07 §17.4)。ja「{item} が 2 回書かれています」/「最初に書いたものだけを見て (それが使えなければ同梱の文言)、この文言は使いません。どちらかを消してください」。en "{item} is written twice" / "Only the first one is read (if it cannot be used, the built-in text is used), and this one is not used. Remove one of them."
-  - `msg.config.locale_too_long`: 1,024 文字を超える。`{count}` は文字数。ja「{item} の文言が長すぎます ({count} 文字)」/「1,024 文字以下にしてください。この文言は同梱のものを使います」。en "The text of {item} is too long ({count} characters)" / "Keep it within 1,024 characters. The built-in text is used instead."
-  - `msg.config.locale_empty`: 目に見える文字が無い。ja「{item} の文言に表示される文字がありません」/「文言を書くか、その行を消してください。この文言は同梱のものを使います」。en "The text of {item} has no visible characters" / "Write the text or remove the line. The built-in text is used instead."
-  - `msg.config.locale_control_char`: 使えない文字 (07 §17.4 の検査 4) を含む、または結合文字が多すぎる (検査 5)。`{reason}` は理由の語 (`ui.config.locale_char.*` の案: 制御文字・書式文字・私用領域・非文字・結合文字の数) と最初の文字の `<U+XXXX>`。ja「{item} の文言に使えない文字があります ({reason})」/「改行・タブ・エスケープ・書式文字などを除いてください。この文言は同梱のものを使います」。en "The text of {item} contains a character that cannot be used ({reason})" / "Remove newlines, tabs, escapes, formatting characters, and the like. The built-in text is used instead."
-  - `msg.config.locale_placeholder`: 括弧の対応 (検査 6)、プレースホルダの名前と数・〔 〕 の有無 (検査 7) が合わない。`{expected}` は同梱の文言のプレースホルダを波括弧付きで `, ` で並べたもの (無ければ空で、〔 〕 の文を省く)。ja「{item} の差し込み ({…} の部分) が同梱の文言と合いません」/「同梱の文言と同じ差し込みを、同じ数以下で使ってください〔 (使うもの: {expected})〕。この文言は同梱のものを使います」。en "The placeholders ({…} parts) in {item} do not match the built-in text" / "Use the same placeholders as the built-in text, no more times than it does〔 (expected: {expected})〕. The built-in text is used instead."
-  - `msg.config.locale_accelerator`: `[X]` の並び・位置が同梱の文言と違う、または全角の似た形を含む。ja「{item} の [S] のような角括弧の英字が同梱の文言と違います」/「角括弧の英字は押すキーなので変えられません。同梱の文言と同じ文字を同じ順に、選択肢では先頭に書いてください。この文言は同梱のものを使います」。en "The bracketed letters like [S] in {item} differ from the built-in text" / "They are the keys to press and cannot be changed. Write the same letters in the same order, at the start of a choice. The built-in text is used instead."
-- **キーごとの問題 (警告。その文言を使う)**:
-  - `msg.config.locale_hint_width`: `hint.*` の表示幅が 8 セルを超える。`{width}` は表示幅。ja「{item} のヒントが長すぎます (表示幅 {width})」/「この文言を使いますが、狭い画面ではヒントバーから落ちることがあります。全角 4 文字・半角 8 文字以内を勧めます」。en "The hint {item} is long (width {width})" / "It is used, but it may be dropped from the hint bar on narrow screens. Keep it within 8 columns."
-- **件数の上限と再読込・`--check-config`**:
-  - `msg.config.locale_more`: 1 つのファイルの診断が 100 件を超えた。`{count}` は省いた件数。ja「この言語ファイルには、ほかに {count} 件の問題があります」/「--check-config で全件を確かめてください」。en "This language file has {count} more problems" / "Run --check-config to see all of them."
-  - `info.config.locale_restart`: `config.reload` で、選んだ言語のファイルの大きさか更新日時が起動時と違う (無くなった・現れたを含む)。ja「言語ファイルの変更は、再起動すると反映されます」。en "Changes to the language file take effect after a restart"
-  - `ui.config.locale_summary`: `--check-config` の出力の先頭の 1 行。`{lang}` は使う言語、`{source}` は選んだ段 (`ui.config.locale_source.*` の案: `--locale`・ui.locale・EVE_LANG・OS・既定)、`{file}` はユーザーの言語ファイルの絶対パス (無ければ 〔 〕 ごと省く)、`{base}` は補う言語。ja「言語: {lang} ({source})〔、言語ファイル: {file}〕、補う言語: {base}」。en "Language: {lang} ({source})〔, language file: {file}〕, fallback: {base}"
 
 **`--help` の本文** (`cli.help.*`。07 §18.1 / §17.1。端末を初期化する前に stdout へ出す。言語ファイルに入れず bin の定数表に置く。**v0.1 は日本語の行だけ**、v0.2 から英語 (ASCII) の行と日本語の行を併記。オプション名・文字コード名・終了コードの数字は翻訳しない。表示は上から、オプションの行は `-R, --readonly` のようなオプション名の後ろに説明を揃えて出す)
 
@@ -1852,9 +1872,9 @@ v0.2 以降の診断 (名前だけを予約し、文言はその版で言語フ�
 | `cli.help.option.help` | `-h, --help` | Show this help | このヘルプを表示して終了します |
 | `cli.help.option.readonly` | `-R, --readonly` | Open the file read-only | 読み取り専用で開きます |
 | `cli.help.option.encoding` | `-e, --encoding <label>` | Open the file with the given encoding | 文字コードを指定して開きます |
-| `cli.help.option.locale` (v0.2) | `--locale <lang>` | Set the UI language: ja or en (overrides ui.locale and EVE_LANG) | 画面の言語を指定します: ja / en (設定 ui.locale と EVE_LANG より優先) |
+| `cli.help.option.locale` (v0.2) | `--locale <lang>` | Set the UI language: ja, en, or a language with a file in locales/ (overrides ui.locale and EVE_LANG) | 画面の言語を指定します: ja / en、または locales/ に言語ファイルを置いた言語 (設定 ui.locale と EVE_LANG より優先) |
 | `cli.help.option.config` (v0.2) | `-c, --config <file>` | Read this settings file instead of config.toml (repeatable; later files win) | config.toml の代わりにこの設定ファイルを読みます (複数指定可。後のものが優先) |
-| `cli.help.option.no_config` (v0.2) | `-N, --no-config` | Do not read config.toml or keymap.toml (use the defaults) | config.toml と keymap.toml を読みません (既定値で動きます) |
+| `cli.help.option.no_config` (v0.2) | `-N, --no-config` | Do not read config.toml, keymap.toml, theme files, or language files (use the defaults) | config.toml・keymap.toml・テーマファイル・言語ファイルを読みません (既定値で動きます) |
 | `cli.help.option.set` (v0.2) | `-s, --set <key>=<value>` | Override one setting (e.g. --set view.wrap=soft) | 設定を 1 項目上書きします (例: --set view.wrap=soft) |
 | `cli.help.option.log_level` (v0.2) | `--log-level <level>` | Set the log level: error, warn, info, debug, or trace (overrides EVE_LOG) | ログの水準を指定します: error / warn / info / debug / trace (EVE_LOG より優先) |
 | `cli.help.option.crash_report` (v0.2) | `--crash-report` | Show the latest crash log and exit | 最新のクラッシュログを表示して終了します |

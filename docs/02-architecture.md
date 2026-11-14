@@ -425,6 +425,7 @@ trait FileSystem: Send + Sync {
     fn metadata(&self, path: &FsPath) -> Result<FileMeta, FsError>;          // stat 相当 (シンボリックリンクは辿る。リンク自体の情報は FileMeta.link)。
                                                                              // パスが無いとき、親フォルダも無ければ NotFound + ParentMissing { dir }、親があれば NotFound (detail なし)
     fn canonicalize(&self, path: &FsPath) -> Result<FsPath, FsError>;
+    fn list_dir_names(&self, dir: &FsPath) -> Result<Vec<String>, FsError>; // v0.4 (M26): ディレクトリの項目の名前 (UTF-8 で表せるものだけ、並びは問わない)。`config.reload` が `locales/` を一覧する (07 §17.4。中身は読まない)。既定は Unsupported
     fn open_read(&self, path: &FsPath) -> Result<Box<dyn ReadChunks + Send>, FsError>; // チャンク読込 (既定 1 MiB)。キャンセルはジョブが next_chunk の間で CancelToken を見る (§4.4)。
                                                                              // NotFound の区別は metadata と同じ (親フォルダが無ければ ParentMissing)
     fn write_atomic(&self, path: &FsPath, data: &mut dyn ReadChunks, opts: &SaveOptions) -> Result<SaveReport, FsError>; // data の失敗 (ChunkError) で書込を止め、一時ファイルを消して SourceFailed を返す。ただし ChunkError::Io(e) (読込側の変種。core のエンコーダは返さない) を受けたときは中の e をそのまま返す (v0.3 の M16 で実装に合わせて明記)
@@ -1484,9 +1485,12 @@ struct HostInit {
     config: Option<Config>,                                   // 解決済みの設定 (07 §5.0)。None は既定のまま
     config_reports: Vec<(String, Vec<Diagnostic>)>,          // 設定の診断 (表示名, 診断)。最初の Frame の後に出す (07 §4.3)
     user_theme: Option<(String, Option<Theme>)>,              // テーマファイルのテーマ (読めなければ None、07 §8.6)
-    config_sources: Option<ConfigSources>,                    // config.reload が読み直す元 (07 §6)
+    config_sources: Option<ConfigSources>,                    // config.reload が読み直す元 (07 §6)。v0.4 の M26 から locales: Option<FsPath> (言語ファイルの置き場、07 §17.4) を持つ
     keymap: Option<(String, KeymapFile)>,                     // keymap.toml (表示名, 中身)。診断は config_reports の後に積む
-    locale: Option<Locale>,                                   // UI の言語 (07 §17.1)
+    locale: Option<Locale>,                                   // UI の言語 (07 §17.1)。v0.4 の M26 から言語の名前と補う同梱の言語を持つ形 (07 §17.4)
+    catalog: Option<Arc<Catalog>>,                            // v0.4 の M26。選んだ言語の文言の表 (同梱の表にユーザーの言語ファイルを重ねたもの)。locale が Some のときだけ当てる
+    locale_files: Option<LocaleFiles>,                        // v0.4 の M26。候補の言語・locales/・選んだ言語・そのファイルの起動時の (大きさ, 更新日時)。config.reload が比べる。locale が Some のときだけ当てる
+    locale_reports: Vec<(String, Vec<Diagnostic>)>,          // v0.4 の M26。言語ファイル・言語の選択の診断。HostReport::LocaleDiagnostics で、キーマップの診断の後に出す (文言は同梱の表、config.reload でも残す)
     log_path: Option<String>,                                 // 設定の問題の要約に出すログの場所
     system_encoding: Option<Encoding>,                        // OS のロケール由来の文字コード (05 §6)
     clipboard: Option<Arc<dyn ClipboardProvider>>,            // 無ければ内部レジスタだけ。trait は eve-platform が定義し eve-host が再公開する
@@ -1502,7 +1506,7 @@ trait RescueWriter: Send + Sync {
 }
 ```
 
-- **当てる順**: `Host::with_channel` は `HostInit` を Editor に次の順で 1 項目ずつ当てる (v0.2.0 の bin の setter の順と同じ): 設定 → テーマ (設定の `theme.name` の後) → 設定の読込元 → キーマップ → UI の言語 → ログの場所 → OS の文字コード。設定の診断は `config_reports` → キーマップの診断の順に積む。
+- **当てる順**: `Host::with_channel` は `HostInit` を Editor に次の順で 1 項目ずつ当てる (v0.2.0 の bin の setter の順と同じ): 設定 → テーマ (設定の `theme.name` の後) → 設定の読込元 → キーマップ → UI の言語 (と、同じ `StartupConfig` で文言の表 `catalog` と言語ファイルの事実 `locale_files`。言語を当てると同梱の表に戻るので、表は言語の後に当てる。`locale` が `None` なのに 2 つを渡すのは誤りで、debug ビルドの `debug_assert` が止める) → ログの場所 → OS の文字コード。設定の診断は `config_reports` → キーマップの診断 → `locale_reports` の順に積む。
 - **部品の差し替え**: 下の表の部品は、呼び出し側が `Ports` と `HostInit` の欄に偽物を入れて差し替える (テストの Harness、09 §3.4)。ログの出力先 (`LogSink`) は v0.3 の実装に無い (ログは bin が開き、`HostInit` に載るのは場所の表示名だけ)。部品を作る手順まで Host が持つ builder (`HostBuilder`: 置換中の計数を渡して `fs` を作らせる、`HostJobs`、`LogSink`、設定の読込を Host に移す) は、駆動モードの `--fake-ports` (§10.5) か組込みの最初の利用者の版で `HostInit` を包む形で足す (§9.5 と OQ-176 の `HostBuilder` はその案)。
 
 | 部品 | 本番 (既定) | テスト (`eve-testkit` の Harness) | `--fake-ports` (v0.2、§10.5) |
@@ -1591,7 +1595,7 @@ enum JobKind {                     // Port は持たない (run_job が JobPorts
                                                                       // JobRequest の doc は None (文書に属さない。base は使わない。結果の採否は文書に依らない)
     LeftoverAct { leftover: Box<Leftover>, op: LeftoverOp },         // io (v0.2)。置換途中の痕跡の提案への答え (退避名を戻す・消す、05 §4.6)
     LastVersion { current: String },                                  // io (v0.2)。前回起動した版の記録 (last_version.toml) を読んで今の版と比べ、書き直す (FR-518、07 §18.8)
-    ReadConfig { files: Vec<FsPath>, keymap: Option<FsPath> },        // io (v0.2)。config.reload の設定ファイルとキーマップの読込 (07 §6)
+    ReadConfig { files: Vec<FsPath>, keymap: Option<FsPath>, locales: Option<(FsPath, Locale)> },        // io (v0.2)。config.reload の設定ファイルとキーマップの読込 (07 §6)
     ReadTheme { dir: FsPath, name: String },                          // io (v0.2)。テーマファイルを inherits の親までたどって読む (07 §8.6)
 }
 struct OpenOptions {               // 開くジョブの指定 (Copy)。確認 (ConfirmAsk) の回答で立てて先頭から再投入する。前の回答で立てたものは引き継ぐ (選択肢の正本は 03 §9.2 の表)
@@ -1704,7 +1708,7 @@ enum JobResult {                   // #[non_exhaustive]
                       swaps: Vec<SwapEntry>, leftovers: Vec<Leftover> /*v0.2: 置換途中の痕跡の提案、新しい順。05 §4.6*/ }, // RecoveryScan の結果 (io)
     LeftoverDone,                                            // v0.2
     // ── 設定・テーマ・版の記録 (v0.2、07 §6 / §8.6 / §18.8) ──
-    ConfigRead   { config: Vec<ConfigFile>, keymap: Option<ConfigFile> },
+    ConfigRead   { config: Vec<ConfigFile>, keymap: Option<ConfigFile>, locales: Option<LocaleScan> },
     ThemeRead    { name: String, theme: Option<Theme>, reports: Vec<(String, Vec<Diagnostic>)> },
     LastVersionChecked { outcome: LastVersionOutcome },
     // ── 共通 ──
@@ -1775,7 +1779,7 @@ enum JobError {                    // #[non_exhaustive]
 順序の要点: **設定読込 (`Host::new`) → `Frontend::init(&FrontendConfig)` (端末初期化と Capabilities の判定) → `Editor::new(ports, config, caps)` → `start_input` → `Editor::open_initial` → 最初の Frame** (`Frontend::init` 以降は `Host::start`)。bin は `Host::new(args)?.run(&mut frontend)` を呼ぶだけで (`Host::new` は `HostBuilder` の既定の組み立て、§9.2)、`run` は `start` の後にループに入る。外部のループで駆動する場合は `start` を呼んでからそのループで `step` を呼ぶ (§9.2)。
 
 1. 引数解析 (軽量パーサ)。`--version` / `--help` はここで終了。
-2. 設定読込 (**メインスレッドで同期**。ADR-0020 の例外。数 KB の TOML、予算 ≤ 2 ms (p50。テーマの段の解決と同梱の言語ファイルの読込を含む。07 §3.2、09 BM-101a の内訳と同じ。v0.4 のユーザーの言語ファイル (07 §17.4) も、選んだ言語のものだけをここで読み、同梱の文言に重ねる。全訳のファイルでの増分は 1 ms 以下が目安 (参考値)。最悪の場合 (上限の 1 MiB のファイルで、診断が 1 ファイルの上限の 100 件と「ほか N 件」に達する) でも、読込・検査・重ね合わせは 20 ms 以内を目安とし (参考値。BM-101a の参考の行で測る)、起動は止めない。M26 の (1) の計測 (開発機の release ビルドで、ヒープの使用量の山を数えた参考値): 書ける構造の上限 (07 §17.4。インラインの表・配列を書けず、キーは 8 段まで、キーの段の総数は 2 万まで) の近くまで表とキーを並べた 1 MiB のファイルで約 20 ms・約 27 MiB、上限を超えて構文を読む前に拒むファイル (配列・インラインの表・深いキー・2 万を超えるキーの段) は 1 ms 未満・0.1 MiB、全訳のファイル (約 60 KB) は約 3 ms・約 1 MiB (全訳の増分の目安 1 ms を超えるので、BM-101a の参考の行で見直す)。上限を置く前は、配列を並べた 1 MiB のファイルで約 113 MiB・110 ms、深い表を並べたファイルで約 310 MiB・240 ms だった。ファイルの一覧・開き方・上限は 07 §17.4)、正規表現は遅延コンパイル。エラーは保留して後で表示)。テーマ解決で 4 段の Style 表を作る (色の数はたかだか数十)。保留した診断は `Editor::new` の直後に `Editor::report(HostReport::ConfigDiagnostics(..))` で core に渡し、core が最初の Frame の後に示す (§5.4、07 §4.3)。
+2. 設定読込 (**メインスレッドで同期**。ADR-0020 の例外。数 KB の TOML、予算 ≤ 2 ms (p50。テーマの段の解決と同梱の言語ファイルの読込を含む。07 §3.2、09 BM-101a の内訳と同じ。v0.4 のユーザーの言語ファイル (07 §17.4) も、選んだ言語のものだけをここで読み、同梱の文言に重ねる。全訳のファイルでの増分は 3 ms 以下が目安 (参考値。M26 の (2) で 1 ms から改めた。下の計測と 07 §17.4)。最悪の場合 (上限の 1 MiB のファイルで、診断が 1 ファイルの上限の 100 件と「ほか N 件」に達する) でも、読込・検査・重ね合わせは 20 ms 以内を目安とし (参考値。BM-101a の参考の行で測る)、起動は止めない。M26 の (1) の計測 (開発機の release ビルドで、ヒープの使用量の山を数えた参考値): 書ける構造の上限 (07 §17.4。インラインの表・配列を書けず、キーは 8 段まで、キーの段の総数は 2 万まで) の近くまで表とキーを並べた 1 MiB のファイルで約 20 ms・約 27 MiB、上限を超えて構文を読む前に拒むファイル (配列・インラインの表・深いキー・2 万を超えるキーの段) は 1 ms 未満・0.1 MiB、全訳のファイル (約 60 KB) は約 3 ms・約 1 MiB。M26 の (2) で、よくある文字 (ASCII・かな・CJK 統合漢字) の表を引かない近道を検査に足して約 2.2 ms (検査が約 0.8 ms、位置付きの構文の木が約 0.3 ms、重ね合わせが約 0.15 ms) になり、BM-101a の参考の行 (同じ回に交互に測った言語ファイルの無い起動との差の中央値、開発機で 100 回) は約 3.0 ms (言語ファイルの無い起動は約 3.1 ms) だった。目安を 3 ms に改めた。上限を置く前は、配列を並べた 1 MiB のファイルで約 113 MiB・110 ms、深い表を並べたファイルで約 310 MiB・240 ms だった。ファイルの一覧・開き方・上限は 07 §17.4)、正規表現は遅延コンパイル。エラーは保留して後で表示)。テーマ解決で 4 段の Style 表を作る (色の数はたかだか数十)。保留した診断は `Editor::new` の直後に `Editor::report(HostReport::ConfigDiagnostics(..))` で core に渡し、core が最初の Frame の後に示す (§5.4、07 §4.3)。
    - **大きすぎる設定と遅い設定ディレクトリへの備え** (提案、OQ-190): (a) `config.toml` が **1 MiB** を超えたら読まずに (内容を解析せず) 診断を 1 件出し、ユーザー層を欠いた状態 (既定値) で起動する (数 KB を想定した 2 ms の予算と NFR-101 を守る。TOML 構文エラーと同じ「そのファイルを無視」の扱い、07 §3.3)。(b) 設定の読込を `io` ワーカーのジョブで行い、メインは最大 **200 ms** だけ待つ。間に合わなければ既定値で起動を続け、届いた時点で反映する (ネットワーク上のホーム・`EVE_CONFIG_DIR` で読込が止まっても起動が止まらない)。後から反映するときは、`FrontendConfig` に載る項目 (`Frontend::init` に渡し済み) だけは次の起動から効くことを診断で示す。(b) を採るなら §4.4 規則 4 の例外 (メインスレッドでの同期の読込) は不要になる。
 3. ログの準備 (購読者の登録だけ。**ファイルを開く・state_dir を作るのは最初の warn 以上のイベントまで遅延**。既定レベル warn。`EVE_LOG` は単純なレベル名のみ受理)。
 4. `Frontend::init(&FrontendConfig)` で端末初期化 (raw モード、代替スクリーン、ブラケットペースト (Unix のみ。Windows は送らない)。拡張キーボードプロトコル (kitty keyboard protocol) の有効化は v0.2 で入れ、そのときも **問い合わせず無条件に push** する。v0.1 は push しない (ADR-0039、01 FR-606))。端末への能力問い合わせは起動経路で行わない (応答待ちが NFR-101 を圧迫し、応答の解析が入力ストリームと混ざるため)。能力は受信したイベントの形式から後で判明し `CapabilitiesChanged` で core に伝える。色深度は `theme.color_mode` と環境変数だけで判定する (04 §5)。`init` が返した Capabilities で `Editor::new` を呼ぶ。`init` の直後に `Frontend::emergency_restore_info()` を取得して保持する (受信スレッドが使う、§9.6)。Unix では、同じ値で異常終了のシグナル (SIGSEGV など) のハンドラ `term::install_crash_restore` も付ける (端末の復元だけを行う、05 §11.1)。

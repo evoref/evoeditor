@@ -687,6 +687,24 @@ impl FileSystem for MemFs {
         Err(not_found(&s, path))
     }
 
+    fn list_dir_names(&self, dir: &FsPath) -> Result<Vec<String>, FsError> {
+        let s = self.st();
+        let in_dir = |p: &FsPath| p.as_path().parent() == Some(dir.as_path());
+        if !s.dirs.contains(dir) && !s.files.keys().any(in_dir) {
+            return Err(not_found(&s, dir));
+        }
+        let child = |p: &FsPath| {
+            (p.as_path().parent() == Some(dir.as_path()))
+                .then(|| p.as_path().file_name()?.to_str().map(str::to_owned))
+                .flatten()
+        };
+        Ok(s.files
+            .keys()
+            .chain(s.dirs.iter())
+            .filter_map(child)
+            .collect())
+    }
+
     fn canonicalize(&self, path: &FsPath) -> Result<FsPath, FsError> {
         let mut s = self.st();
         injected(&mut s, FsOp::Canonicalize)?;

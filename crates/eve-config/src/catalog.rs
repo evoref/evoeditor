@@ -7,7 +7,7 @@
 
 use std::collections::BTreeMap;
 use std::fmt;
-use std::sync::OnceLock;
+use std::sync::{Arc, OnceLock};
 
 /// 言語ファイルを読めなかった。
 #[derive(Debug, PartialEq, Eq)]
@@ -58,15 +58,24 @@ impl Catalog {
     ///
     /// 同梱の `locales/ja.toml` が読めないとき (開発中の誤り。CI の試験が防ぐ)。
     pub fn builtin_ja() -> &'static Catalog {
-        static JA: OnceLock<Catalog> = OnceLock::new();
-        JA.get_or_init(|| Catalog::parse(BUILTIN_JA).expect("同梱の locales/ja.toml は読める"))
+        shared_ja()
     }
 
-    /// 言語に対応する同梱のカタログ。
+    /// 言語の同梱のカタログ。同梱していない言語 (追加言語) は、補う言語 ([`Locale::base`](crate::Locale::base)) の `en`。
     pub fn builtin(locale: crate::Locale) -> &'static Catalog {
-        match locale {
-            crate::Locale::Ja => Catalog::builtin_ja(),
-            crate::Locale::En => Catalog::builtin_en(),
+        if locale.base() == crate::Locale::Ja {
+            Catalog::builtin_ja()
+        } else {
+            Catalog::builtin_en()
+        }
+    }
+
+    /// [`Catalog::builtin`] の表を共有で持つ (`Arc`。core が選んだ言語の表を持つ形、07 §17.4。複製しない)。
+    pub fn builtin_shared(locale: crate::Locale) -> Arc<Catalog> {
+        if locale.base() == crate::Locale::Ja {
+            Arc::clone(shared_ja())
+        } else {
+            Arc::clone(shared_en())
         }
     }
 
@@ -76,8 +85,7 @@ impl Catalog {
     ///
     /// 同梱の `locales/en.toml` が読めないとき (開発中の誤り。CI の試験が防ぐ)。
     pub fn builtin_en() -> &'static Catalog {
-        static EN: OnceLock<Catalog> = OnceLock::new();
-        EN.get_or_init(|| Catalog::parse(BUILTIN_EN).expect("同梱の locales/en.toml は読める"))
+        shared_en()
     }
 
     /// 言語 `language` (`ja`・`fr` など、言語の部分の名前) を補う同梱の表 (07 §17.4 の「重ね方」): 同梱の言語ならその言語、
@@ -189,6 +197,22 @@ impl Catalog {
         out.push_str(rest);
         out
     }
+}
+
+/// 同梱の `ja` の表 (1 回だけ読む)。
+fn shared_ja() -> &'static Arc<Catalog> {
+    static JA: OnceLock<Arc<Catalog>> = OnceLock::new();
+    JA.get_or_init(|| {
+        Arc::new(Catalog::parse(BUILTIN_JA).expect("同梱の locales/ja.toml は読める"))
+    })
+}
+
+/// 同梱の `en` の表 (1 回だけ読む)。
+fn shared_en() -> &'static Arc<Catalog> {
+    static EN: OnceLock<Arc<Catalog>> = OnceLock::new();
+    EN.get_or_init(|| {
+        Arc::new(Catalog::parse(BUILTIN_EN).expect("同梱の locales/en.toml は読める"))
+    })
 }
 
 /// 条件付きの文 〔 〕 (04 §15.2): 中の引数がすべて値を持つときだけ中身を出し、〔 〕 は表示しない。

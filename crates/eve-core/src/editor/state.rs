@@ -111,6 +111,9 @@ pub(crate) struct Settings {
     pub(crate) config: eve_config::Config,
     /// 選択済みの UI の言語 (07 §17.1)。起動時に Host が `Editor::set_locale` で渡す。
     pub(crate) locale: eve_config::Locale,
+    /// 選んだ言語の文言の表 (07 §17.4。同梱の表にユーザーの言語ファイルを重ねたもの。起動時に 1 回作り、実行中は変えない)。
+    /// 言語を選ぶと、補う言語の同梱の表になる。
+    pub(crate) catalog: std::sync::Arc<eve_config::Catalog>,
 }
 
 /// io: 投入したジョブの表・全保存・開いた後の移動先・スワップ・起動時の痕跡・確認の済んだ印・表現不能の印・ログの場所・システムの文字コード・設定の出所・閉じた文書の退避 (`EditorState` の部分、docs/review/v0.3-findings.md の STR-B2)。
@@ -122,6 +125,10 @@ pub(crate) struct IoState {
     pub(crate) config_sources: Option<crate::io::config_reload::ConfigSources>,
     /// 最後に読み直した設定で `theme.name` を書いた所 (テーマが無いときの診断の場所、07 §8.7)。
     pub(crate) theme_name_at: Option<eve_config::KeyOrigin>,
+    /// ユーザーの言語ファイルの事実 (起動時に bin が決めたもの、07 §17.4)。`config.reload` が使う。
+    pub(crate) locale_files: crate::io::config_reload::LocaleFiles,
+    /// `config.reload` で、選んだ言語のファイルが起動時から変わっていた (要約の後に再起動を促す)。
+    pub(crate) locale_restart: bool,
     /// 未完了のジョブと、その結果の宛先。
     pub(crate) pending: BTreeMap<JobId, Pending>,
     /// 実行中の全保存 (`file.save_all`、03 §9.8)。無ければ `None`。
@@ -208,6 +215,9 @@ pub(crate) struct UiState {
     /// 設定・キーマップ・テーマのファイルの診断 (ファイルの表示名, 診断)。最後に読んだときのもの
     /// (`config.show_diagnostics`、07 §4.3)。診断の無いファイルは載せない。
     pub(crate) config_diagnostics: Vec<(String, Vec<eve_config::Diagnostic>)>,
+    /// 言語ファイル・言語の選択の診断の表示名 (`HostReport::LocaleDiagnostics` で渡されたもの、07 §17.4)。文言は補う言語の
+    /// 同梱の表で出し、`config.reload` でも残す。表示名の文字列ではなく、渡された経路で見分ける。
+    pub(crate) locale_reports: std::collections::BTreeSet<String>,
     /// 表示中のメッセージ (解決済み)。
     pub(crate) message: Option<crate::ui_model::message::ShownMessage>,
     /// 未読のメッセージの数。
@@ -297,6 +307,7 @@ impl EditorState {
                 quit_abort: None,
                 quit_code: 0,
                 config_diagnostics: Vec::new(),
+                locale_reports: std::collections::BTreeSet::new(),
                 message: None,
                 unread: 0,
                 message_log: std::collections::VecDeque::new(),
@@ -336,10 +347,13 @@ impl EditorState {
                 log_path: None,
                 config_sources: None,
                 theme_name_at: None,
+                locale_files: crate::io::config_reload::LocaleFiles::default(),
+                locale_restart: false,
             },
             settings: Settings {
                 config: eve_config::Config::default(),
                 locale: eve_config::Locale::default(),
+                catalog: eve_config::Catalog::builtin_shared(eve_config::Locale::default()),
                 user_theme: None,
                 roles: std::sync::Arc::new(crate::layout::theme::resolve(
                     "default",
@@ -404,9 +418,17 @@ impl EditorState {
         }
     }
 
-    /// UI の言語を選ぶ。以後の文言はその言語のカタログで解決する。
+    /// UI の言語を選ぶ。以後の文言はその言語の同梱のカタログ (同梱していない言語は補う言語 `en`) で解決する。
+    /// ユーザーの言語ファイルを重ねた表は、この後に [`EditorState::set_catalog`] で渡す。
     pub fn set_locale(&mut self, locale: eve_config::Locale) {
         self.settings.locale = locale;
+        self.settings.catalog = eve_config::Catalog::builtin_shared(locale);
+        self.out.needs_render = true;
+    }
+
+    /// 選んだ言語の文言の表を差し替える (同梱の表にユーザーの言語ファイルを重ねたもの、07 §17.4)。
+    pub fn set_catalog(&mut self, catalog: std::sync::Arc<eve_config::Catalog>) {
+        self.settings.catalog = catalog;
         self.out.needs_render = true;
     }
 

@@ -195,7 +195,9 @@ impl Cx<'_> {
         if c.is_none() {
             self.warn(
                 DiagKind::InvalidValue {
-                    allowed: &["#rrggbb", "#rgb", "ansi.<name>", "ansi.<0-255>", "default"],
+                    allowed: ["#rrggbb", "#rgb", "ansi.<name>", "ansi.<0-255>", "default"]
+                        .map(str::to_owned)
+                        .to_vec(),
                 },
                 key,
                 s,
@@ -234,14 +236,16 @@ impl Cx<'_> {
                 _ => {
                     self.warn(
                         DiagKind::InvalidValue {
-                            allowed: &[
+                            allowed: [
                                 "bold",
                                 "underline",
                                 "reverse",
                                 "dim",
                                 "italic",
                                 "strikethrough",
-                            ],
+                            ]
+                            .map(str::to_owned)
+                            .to_vec(),
                         },
                         key,
                         &word,

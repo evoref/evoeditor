@@ -389,8 +389,8 @@ pub fn help() -> String {
         ),
         (
             "--locale <lang>",
-            "Set the UI language: ja or en (overrides ui.locale and EVE_LANG)",
-            "画面の言語を指定します: ja / en (設定 ui.locale と EVE_LANG より優先)",
+            "Set the UI language: ja, en, or a language with a file in locales/ (overrides ui.locale and EVE_LANG)",
+            "画面の言語を指定します: ja / en、または locales/ に言語ファイルを置いた言語 (設定 ui.locale と EVE_LANG より優先)",
         ),
         (
             "-c, --config <file>",
@@ -399,8 +399,8 @@ pub fn help() -> String {
         ),
         (
             "-N, --no-config",
-            "Do not read config.toml or keymap.toml (use the defaults)",
-            "config.toml と keymap.toml を読みません (既定値で動きます)",
+            "Do not read config.toml, keymap.toml, theme files, or language files (use the defaults)",
+            "config.toml・keymap.toml・テーマファイル・言語ファイルを読みません (既定値で動きます)",
         ),
         (
             "-s, --set <key>=<value>",

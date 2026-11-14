@@ -57,8 +57,13 @@ pub(crate) struct LoggedMessage {
 }
 
 impl EditorState {
-    /// 選択中の言語の文言カタログ。
-    pub fn catalog(&self) -> &'static Catalog {
+    /// 選択中の言語の文言カタログ (ユーザーの言語ファイルを重ねた表、07 §17.4)。
+    pub fn catalog(&self) -> &Catalog {
+        &self.settings.catalog
+    }
+
+    /// 選択中の言語を補う言語の **同梱の** カタログ (重ねる前の表)。言語ファイル自身の診断に使う (07 §17.4)。
+    pub fn builtin_catalog(&self) -> &'static Catalog {
         Catalog::builtin(self.settings.locale)
     }
 
@@ -154,10 +159,32 @@ impl EditorState {
 
     /// カタログのキー `key` の文言を `args` で埋めてメッセージに出し、履歴に積む。`<key>.text` / `<key>.hint` があればその 2 つを使う。
     pub fn show_message(&mut self, level: MessageLevel, key: &str, args: &[(&str, &str)]) {
-        let cat = self.catalog();
+        let (text, hint) = self.resolve_message(self.catalog(), key, args);
+        self.push_message(level, key, text, hint);
+    }
+
+    /// `show_message` の、補う言語の **同梱の** カタログで解決するもの (言語ファイルの診断の要約。重ねた表が壊れていても
+    /// 読めるように、07 §17.4)。
+    pub(crate) fn show_builtin_message(
+        &mut self,
+        level: MessageLevel,
+        key: &str,
+        args: &[(&str, &str)],
+    ) {
+        let (text, hint) = self.resolve_message(self.builtin_catalog(), key, args);
+        self.push_message(level, key, text, hint);
+    }
+
+    /// メッセージ `key` の (本文, 対処)。`<key>.text` / `<key>.hint` があればその 2 つ、無ければ 1 つの文。
+    fn resolve_message(
+        &self,
+        cat: &Catalog,
+        key: &str,
+        args: &[(&str, &str)],
+    ) -> (String, Option<String>) {
         let label = |c: &str| self.key_label(c);
         let text_key = format!("{key}.text");
-        let (text, hint) = if cat.contains(&text_key) {
+        if cat.contains(&text_key) {
             let hint_key = format!("{key}.hint");
             (
                 cat.render(&text_key, args, &label),
@@ -166,7 +193,11 @@ impl EditorState {
             )
         } else {
             (cat.render(key, args, &label), None)
-        };
+        }
+    }
+
+    /// 解決したメッセージを出して履歴に積む。
+    fn push_message(&mut self, level: MessageLevel, key: &str, text: String, hint: Option<String>) {
         // 表示中のメッセージが読まれる前に置き換わったら、未読として数える (履歴は `ui.message_history` で見る)
         if self.ui.message.is_some() {
             self.ui.unread = self.ui.unread.saturating_add(1);

@@ -53,6 +53,18 @@ fn bad(class: CharClass, c: char) -> Option<LocaleProblem> {
 fn placeholder(names: &[&str]) -> Option<LocaleProblem> {
     Some(LocaleProblem::Placeholder {
         expected: names.iter().map(|s| (*s).to_owned()).collect(),
+        issue: PlaceholderIssue::Unbalanced,
+    })
+}
+
+/// 表の比べ方: プレースホルダの問題は、何が合わないか (`issue`、別の試験で見る) を除いて比べる。
+fn erase_issue(p: Option<&LocaleProblem>) -> Option<LocaleProblem> {
+    p.cloned().map(|p| match p {
+        LocaleProblem::Placeholder { expected, .. } => LocaleProblem::Placeholder {
+            expected,
+            issue: PlaceholderIssue::Unbalanced,
+        },
+        other => other,
     })
 }
 
@@ -493,7 +505,7 @@ fn 検査_2_から_9_の表() {
     for (key, text, builtin, want_used, want) in &cases {
         let got = check_text(key, text, builtin);
         assert_eq!(used(&got), *want_used, "{key} {text:?}: {got:?}");
-        assert_eq!(problem(&got), want.as_ref(), "{key} {text:?}");
+        assert_eq!(erase_issue(problem(&got)), want.clone(), "{key} {text:?}");
         if let Some(LocaleProblem::HintWidth { .. }) = want {
             assert!(matches!(got, TextCheck::Warn(_)), "{got:?}");
         }
@@ -658,6 +670,7 @@ fn 重ね方の表() {
                 "msg.save.failed.text",
                 locale(LocaleProblem::Placeholder {
                     expected: vec!["path".into(), "reason".into()],
+                    issue: PlaceholderIssue::TooMany,
                 }),
                 2,
             )],
@@ -713,10 +726,14 @@ fn 重ね方の表() {
             .map(|(k, d, l)| (k.to_owned(), d, l))
             .collect();
         assert_eq!(kinds(&f), want, "{src}");
+        // キーごとの問題は警告。検査 9 (ヒントの幅) だけは情報 (使って、画面の要約に出さない)
         assert!(
-            f.diagnostics
-                .iter()
-                .all(|d| d.severity == Severity::Warning),
+            f.diagnostics.iter().all(|d| d.severity
+                == if matches!(d.kind, DiagKind::Locale(LocaleProblem::HintWidth { .. })) {
+                    Severity::Info
+                } else {
+                    Severity::Warning
+                }),
             "{src}"
         );
         let c = base().overlay(&f);
@@ -1016,7 +1033,10 @@ fn 問題の文言のキーの種別() {
             class: CharClass::Control,
             code: 0,
         },
-        LocaleProblem::Placeholder { expected: vec![] },
+        LocaleProblem::Placeholder {
+            expected: vec![],
+            issue: PlaceholderIssue::Missing,
+        },
         LocaleProblem::Accelerator,
         LocaleProblem::HintWidth { width: 0 },
         LocaleProblem::More { count: 0 },
@@ -1026,7 +1046,7 @@ fn 問題の文言のキーの種別() {
         names,
         [
             "locale_syntax",
-            "locale_syntax",
+            "locale_not_utf8",
             "locale_too_large",
             "locale_language_mismatch",
             "locale_unknown_key",
@@ -1150,4 +1170,39 @@ fn ヒントの幅は_zwnj_を可視化の記号の幅で数える() {
     assert_eq!(hint_width("a\u{200C}b"), 2 + "<ZWNJ>".len());
     assert_eq!(hint_width("→→"), 2, "曖昧幅は 1");
     assert_eq!(hint_width("保存"), 4);
+}
+
+// verifies: NFR-603
+#[test]
+fn プレースホルダの問題は何が合わないかを分ける() {
+    let issue = |text: &str, builtin: &str| match check_text("a.b", text, builtin) {
+        TextCheck::Reject(LocaleProblem::Placeholder { issue, .. }) => Some(issue),
+        _ => None,
+    };
+    use PlaceholderIssue as I;
+    assert_eq!(issue("{path", "{path}"), Some(I::Unbalanced));
+    assert_eq!(issue("x {other}", "{path} y"), Some(I::Unknown));
+    assert_eq!(issue("x", "{path} y"), Some(I::Missing));
+    assert_eq!(issue("{path}{path}", "{path} y"), Some(I::TooMany));
+    assert_eq!(issue("{tmp} x", "x〔{tmp}〕"), Some(I::Conditional));
+    assert_eq!(
+        issue("x 〔{path}〕 y", "{path}〔 z〕"),
+        Some(I::Conditional)
+    );
+    assert_eq!(issue("x {path}", "y {path}"), None);
+}
+
+// verifies: NFR-603
+#[test]
+fn 訳の無いキーは書いていない同梱のキー() {
+    let f = load("[status]\nuntitled = \"x-{n}\"\n[hint.app]\nquit = \"\\u001B\"\n");
+    let b = base();
+    let missing = f.untranslated(&b);
+    assert!(!missing.contains(&"status.untitled"));
+    assert!(
+        !missing.contains(&"hint.app.quit"),
+        "診断のあるキーは数えない"
+    );
+    assert!(missing.contains(&"msg.save.failed.text"));
+    assert_eq!(missing.len(), b.len() - 2);
 }

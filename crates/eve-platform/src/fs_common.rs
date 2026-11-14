@@ -41,6 +41,15 @@ pub(crate) fn link_info(p: &Path) -> Option<LinkInfo> {
 }
 
 /// `metadata` の失敗の写像。リンクは在るがリンク先が無い (ダングリング) なら `NotFound` + `DanglingLink`、それ以外は OS の写像。
+/// ディレクトリの項目の名前 (UTF-8 で表せるものだけ。`FileSystem::list_dir_names`)。
+pub(crate) fn list_dir_names(dir: &FsPath) -> Result<Vec<String>, FsError> {
+    let entries = fs::read_dir(dir.as_path()).map_err(|e| metadata_error(e, dir))?;
+    Ok(entries
+        .flatten()
+        .filter_map(|e| e.file_name().into_string().ok())
+        .collect())
+}
+
 pub(crate) fn metadata_error(e: io::Error, path: &FsPath) -> FsError {
     let p = path.as_path();
     if e.kind() == io::ErrorKind::NotFound

@@ -53,6 +53,13 @@ pub enum CharClass {
 /// この範囲を `<U+XXXX>` にする。結合文字の数 (検査 5) は文字 1 つでは決まらないので、ここでは返さない。
 pub fn forbidden_char(c: char) -> Option<CharClass> {
     let cp = u32::from(c);
+    // よくある場合を表を引かずに決める: ASCII の印字できる文字と、かな・CJK 統合漢字 (どの種類にも当たらない)
+    if (0x20..0x7F).contains(&cp)
+        || (0x3041..=0x30FF).contains(&cp)
+        || (0x4E00..=0x9FFF).contains(&cp)
+    {
+        return None;
+    }
     // char::is_control は一般カテゴリ Cc (C0・DEL・C1) と同じ
     if c.is_control() || matches!(c, '\u{2028}' | '\u{2029}') {
         return Some(CharClass::Control);
@@ -78,7 +85,9 @@ pub(crate) fn is_joiner(c: char) -> bool {
 
 /// 一般カテゴリが Mn か Me (結合文字) か。
 pub(crate) fn is_combining_mark(c: char) -> bool {
-    in_ranges(u32::from(c), MARKS)
+    let cp = u32::from(c);
+    // 結合文字は U+0300 から (よくある ASCII・ラテン文字で表を引かない)
+    cp >= 0x0300 && in_ranges(cp, MARKS)
 }
 
 fn in_ranges(cp: u32, table: &[(u32, u32)]) -> bool {

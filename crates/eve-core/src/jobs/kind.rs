@@ -65,6 +65,9 @@ pub enum JobKind {
         files: Vec<FsPath>,
         /// 読む `keymap.toml`。`--no-config` のときは `None`。
         keymap: Option<FsPath>,
+        /// 一覧する `locales/` と選んだ言語 (候補と、選んだ言語のファイルの大きさと更新日時だけを調べる。中身は読まない、
+        /// 07 §17.4)。`None` は調べない。
+        locales: Option<(FsPath, eve_config::Locale)>,
     },
     /// ファイルの `metadata` と Stamp を調べる。
     Metadata {

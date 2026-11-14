@@ -134,6 +134,8 @@ pub struct Host {
     config: eve_config::Config,
     /// 設定ファイルの診断 (名前, 診断)。最初の Frame の後にメッセージとして出す (07 §4.3、FR-703)。
     config_report: Vec<(String, Vec<eve_config::Diagnostic>)>,
+    /// 言語ファイル・言語の選択の診断 (表示名, 診断)。設定の診断の後に `HostReport::LocaleDiagnostics` で出す (07 §17.4)。
+    locale_report: Vec<(String, Vec<eve_config::Diagnostic>)>,
 }
 
 /// Host を作るときに渡すもの (docs/02 §9.2 の「Host の組み立て」)。`Default` は何も渡さない形 (既定の設定・内部レジスタだけ・
@@ -154,6 +156,14 @@ pub struct HostInit {
     pub keymap: Option<(String, eve_config::KeymapFile)>,
     /// UI の言語 (選択順は `eve_config::select_locale`、07 §17.1)。
     pub locale: Option<eve_config::Locale>,
+    /// 選んだ言語の文言の表 (同梱の表にユーザーの言語ファイルを重ねたもの、07 §17.4)。`None` は `locale` の同梱の表。
+    /// `locale` が `Some` のときだけ当てる (言語の後に当てないと、言語を当てたときに同梱の表に戻るため)。
+    pub catalog: Option<Arc<eve_config::Catalog>>,
+    /// ユーザーの言語ファイルの事実 (候補の言語と、選んだ言語のファイルの起動時の大きさと更新日時。07 §17.4)。
+    /// `catalog` と同じく、`locale` が `Some` のときだけ当てる。
+    pub locale_files: Option<eve_core::LocaleFiles>,
+    /// 言語ファイル・言語の選択の診断 (表示名, 診断)。`config_reports` とキーマップの診断の後に出す (07 §17.4)。
+    pub locale_reports: Vec<(String, Vec<eve_config::Diagnostic>)>,
     /// ログファイルの場所 (設定の問題の要約に出す)。
     pub log_path: Option<String>,
     /// OS のロケール由来の文字コードのヒント (`file.default_encoding = "system"`、05 §6)。
@@ -174,8 +184,9 @@ impl Host {
 
     /// 受信口を外で作った Host (`ThreadJobSpawner` のように、Host より先に送信口が要る Port のため)。
     /// `init` は Editor に次の順で 1 項目ずつ当てる (v0.2.0 の bin の setter の順と同じ。テーマは設定の `theme.name` の後):
-    /// 設定 → テーマ → 設定の読込元 → キーマップ → UI の言語 → ログの場所 → OS の文字コード。
-    /// 設定の診断は `config_reports` → キーマップの診断の順に積み、`start` の最初の Frame の後に出す。
+    /// 設定 → テーマ → 設定の読込元 → キーマップ → UI の言語 (と、その文言の表・言語ファイルの事実) → ログの場所 →
+    /// OS の文字コード。
+    /// 設定の診断は `config_reports` → キーマップの診断 → `locale_reports` の順に積み、`start` の最初の Frame の後に出す。
     pub fn with_channel(
         ports: Ports,
         (tx, inbox): (Sender<HostMsg>, Receiver<HostMsg>),
@@ -190,6 +201,9 @@ impl Host {
             config_sources,
             keymap,
             locale,
+            catalog,
+            locale_files,
+            locale_reports,
             log_path,
             system_encoding,
             clipboard,
@@ -228,9 +242,15 @@ impl Host {
                 config_report.push((file, diagnostics));
             }
         }
+        debug_assert!(
+            locale.is_some() || (catalog.is_none() && locale_files.is_none()),
+            "catalog と locale_files は locale と一緒に渡す"
+        );
         if let Some(l) = locale {
             editor.configure(StartupConfig {
                 locale: Some(l),
+                catalog,
+                locale_files,
                 ..Default::default()
             });
         }
@@ -271,6 +291,10 @@ impl Host {
             }),
             config: config.unwrap_or_default(),
             config_report,
+            locale_report: locale_reports
+                .into_iter()
+                .filter(|(_, d)| !d.is_empty())
+                .collect(),
         }
     }
 
@@ -380,6 +404,13 @@ impl Host {
         // 設定の診断は最初の Frame の後に出す (起動を妨げない、07 §4.3)
         for (file, diagnostics) in std::mem::take(&mut self.config_report) {
             self.editor.report(eve_core::HostReport::ConfigDiagnostics {
+                file: &file,
+                diagnostics: &diagnostics,
+            });
+            self.render(frontend);
+        }
+        for (file, diagnostics) in std::mem::take(&mut self.locale_report) {
+            self.editor.report(eve_core::HostReport::LocaleDiagnostics {
                 file: &file,
                 diagnostics: &diagnostics,
             });

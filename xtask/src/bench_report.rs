@@ -185,6 +185,13 @@ pub(crate) fn verdict(v: &Value) -> Verdict {
             None,
             "標準入力の起動 (`cmd | evoeditor -`、UTF-8 100 MB): main 入口 → 読み終えた文書の最初の Frame の write。比は判定に使わない",
         ),
+        // v0.4 の M26: 全訳のユーザーの言語ファイルを置いた起動 (参考、09 §5.2)。同じ回に交互に測った BM-101a との差の中央値を
+        // JSON の diff_p50_ms に持つ。目安 (07 §17.4) は判定に使わない
+        "BM-101a-locale" => t(
+            "(参考)",
+            None,
+            "main 入口 → 最初の Frame の write (全訳のユーザーの言語ファイル `locales/ja.toml`)。BM-101a との差が言語ファイルの増分",
+        ),
         "BM-512" => t(
             "p99 16 ms",
             limits(v, f64::MAX, 16.0),

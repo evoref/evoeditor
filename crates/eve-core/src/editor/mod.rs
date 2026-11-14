@@ -6,9 +6,16 @@
 
 pub(crate) mod buffer;
 mod host_api;
-pub use crate::io::config_reload::{CONFIG_FILE, ConfigSources, KEYMAP_FILE};
+pub use crate::io::config_reload::{
+    CONFIG_FILE, ConfigSources, KEYMAP_FILE, LocaleFiles, LocaleScan, scan_locales,
+};
 pub use crate::layout::theme::resolve as resolve_theme;
 pub use crate::ui_model::config_report::diagnostic_texts as config_diagnostic_texts;
+pub use crate::ui_model::config_report::{
+    LOCALE_CLI_SOURCE, LOCALE_ENV_SOURCE, LOCALES_PREFIX,
+    diagnostic_kind as config_diagnostic_kind,
+    diagnostic_texts_long as config_diagnostic_texts_long, problem_count as config_problem_count,
+};
 pub use host_api::{HostReport, StartupConfig};
 pub(crate) mod query;
 pub use crate::io::startup::{InitialFile, InitialTarget};

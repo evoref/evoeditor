@@ -28,6 +28,16 @@ pub trait FileSystem: Send + Sync {
     /// パスが無い・辿れない (`NotFound` など)。区別は `metadata` と同じ。
     fn canonicalize(&self, path: &FsPath) -> Result<FsPath, FsError>;
 
+    /// ディレクトリの項目の名前 (UTF-8 で表せるものだけ。並びは問わない)。`config.reload` が `locales/` を一覧するのに使う
+    /// (07 §17.4。中身は読まない)。既定は `Unsupported` (一覧しない Port)。
+    ///
+    /// # Errors
+    ///
+    /// ディレクトリが無い (`NotFound`)・読めない。
+    fn list_dir_names(&self, _dir: &FsPath) -> Result<Vec<String>, FsError> {
+        Err(FsError::new(FsErrorKind::Unsupported))
+    }
+
     /// チャンク読込 (既定 1 MiB)。キャンセルは、ジョブが `next_chunk` の間で `CancelToken` を見る。
     ///
     /// # Errors

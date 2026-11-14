@@ -572,6 +572,77 @@ fn 設定ディレクトリが無くても使え_設定ディレクトリは作�
     let _ = std::fs::remove_dir_all(dir);
 }
 
+// ファイル由来の文字列の無害化 (07 §4.3、NFR-503): 設定ファイルのキーと値の ESC・OSC・CSI・C1 は、ログの行にも生のまま残らない
+// verifies: NFR-503
+#[test]
+fn 設定のキーと値の制御文字はログに残らない() {
+    let cfg = temp_dir("cfg-ctl");
+    std::fs::create_dir_all(cfg.join("locales")).unwrap();
+    std::fs::write(
+        cfg.join("config.toml"),
+        r#"[editor]
+"x\u001B[2J\u009Bq" = 1
+[file]
+default_encoding = "a\u001B]0;t\u0007"
+"#,
+    )
+    .unwrap();
+    std::fs::write(
+        cfg.join("locales").join("ja.toml"),
+        r#"["k\u001B[31m"]
+v = "x"
+"#,
+    )
+    .unwrap();
+    let mut s = Session::start_with(&[], None, &[("EVE_CONFIG_DIR", cfg.to_str().unwrap())]);
+    s.wait_ready();
+    s.wait_for("言語ファイルの問題", |t| {
+        t.contains("設定の問題 (locales/ja.toml")
+    });
+    s.send(CTRL_Q);
+    assert_eq!(s.wait_exit(), 0);
+    let text =
+        std::fs::read_to_string(s.state.join("log").join("evoeditor.log")).unwrap_or_default();
+    assert!(text.contains("<U+001B>"), "{text}");
+    assert!(
+        !text
+            .chars()
+            .any(|c| c.is_control() && c != '\n' && c != '\r'),
+        "{text:?}"
+    );
+    let _ = std::fs::remove_dir_all(&s.state);
+    let _ = std::fs::remove_dir_all(&cfg);
+}
+
+// ユーザーの言語ファイル (07 §17.4): 重ねた文言が画面に出て、見つからない言語 (`--locale`) の診断もメッセージ行に出る
+// verifies: NFR-603
+#[test]
+fn 言語ファイルの文言が画面に出て_見つからない言語は画面で知らせる() {
+    let dir = temp_dir("user-locale");
+    let cfg = dir.join("cfg");
+    std::fs::create_dir_all(cfg.join("locales")).unwrap();
+    std::fs::write(
+        cfg.join("locales").join("ja.toml"),
+        "[hint.app]
+quit = \"おわり\"
+",
+    )
+    .unwrap();
+    let mut s = Session::start_with(
+        &["--locale", "xx"],
+        None,
+        &[("EVE_CONFIG_DIR", cfg.to_str().unwrap())],
+    );
+    s.wait_ready();
+    s.wait_for("重ねた文言と見つからない言語の診断", |t| {
+        t.contains("おわり") && t.contains("言語 xx の言語ファイルがありません")
+    });
+    s.send(CTRL_Q);
+    assert_eq!(s.wait_exit(), 0);
+    let _ = std::fs::remove_dir_all(&s.state);
+    let _ = std::fs::remove_dir_all(dir);
+}
+
 /// 状態ディレクトリのログ (`log/evoeditor.log`)。退避の試験が落ちたときに、退避の段の時間 (遅いときだけ書く) を見るため
 /// (Issue #342)。
 fn state_log(s: &Session) -> String {
