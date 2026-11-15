@@ -16,7 +16,9 @@
 //! - **変わる範囲** (`track_range`): つながりの位置から、区切らない復号器 (開き直しと同じ 1 本) を単位ごとに進め、
 //!   つながりの位置より後ろのある単位で、復号器の出したものがその単位の文字で終わり、復号器に持ち越しが無くなったら、
 //!   その単位の前で範囲を閉じる。重なる範囲は 1 つにまとめ、本文の文字数と行数を合計する。文書の末尾まで閉じず、末尾で
-//!   持ち越しが残れば `to_eof`。
+//!   持ち越しが残れば `to_eof`。並びの局所の検査が決まらない間 (つながりの位置がまだ分からない) は閉じず、閉じる候補を
+//!   覚えておき、決まったつながりの位置と照らして片付ける (UTF-16 では、局所の復号器が並びの 2 単位以上前から持ち越して
+//!   いる間に、区切らない復号器の持ち越しが無くなることがある。EUC-JP でも候補の経路は通るが、結果は変わらない)。
 //!
 //! 呼び出し側 (eve-core の保存の符号化の流れ) は、`is_idle` が真の間はエスケープ文字の無い区間をまとめて符号化して `bulk` で
 //! 知らせ、偽の間は単位ごとに符号化して `unit` で知らせる (費用は並びとつながりの周りだけに掛かる)。
@@ -99,10 +101,13 @@ struct Changed {
     /// 範囲の中の、最後のつながりの位置。範囲を閉じるのは、これより後ろの単位の前だけ。
     p_last: u64,
     buf: String,
+    /// 局所の検査が決まっていない並びの途中で、閉じられそうだった単位 (通し番号と、その前の行の数え方の状態)。
+    /// 決まるつながりの位置より前と分かった候補は捨てるので、数件に収まる (`close_if`)。
+    cands: Vec<(u64, Lines)>,
 }
 
 /// 変わる範囲の行数を数える (03 §2.4 の行: LF・CR・CRLF)。最初の範囲が開いてから数え始める。
-#[derive(Default)]
+#[derive(Default, Clone)]
 struct Lines {
     active: bool,
     line: u64,
@@ -159,6 +164,9 @@ impl Lines {
 
 /// つながりの検出器 (モジュールの説明を参照)。
 pub struct MergeScanner {
+    /// 試験用: 変わる範囲の候補 (`Changed::cands`) の数の最大。
+    #[cfg(test)]
+    max_cands: usize,
     enc: Encoding,
     bom_written: bool,
     track_range: bool,
@@ -192,6 +200,8 @@ impl MergeScanner {
             local: Decoder::new(enc, false),
             buf: String::new(),
             run: None,
+            #[cfg(test)]
+            max_cands: 0,
             total: 0,
             recorded: Vec::new(),
             digest,
@@ -338,7 +348,8 @@ impl MergeScanner {
             && let Some(k) = run.mismatch
         {
             let p = run.char_start + k;
-            self.on_flag(p);
+            let s = run.char_start;
+            self.settle(s, Some(p));
         }
     }
 
@@ -361,6 +372,7 @@ impl MergeScanner {
         let Some(k) = run.mismatch else {
             // つながらない: 区切りを外す (確認 (ii) は、この並びと直後の単位もふつうに突き合わせる)
             self.regions.pop_back();
+            self.settle(run.char_start, None);
             return;
         };
         if let Some(r) = self.regions.back_mut() {
@@ -396,23 +408,56 @@ impl MergeScanner {
             self.recorded.push(at);
         }
         if !early {
-            self.on_flag(p);
+            self.settle(run.char_start, Some(p));
         }
     }
 
-    /// つながりを位置 `p` に見つけた: 変わる範囲を開く (開いていれば広げる)。
-    fn on_flag(&mut self, p: u64) {
+    /// 並び (先頭 `s`) の局所の検査が決まった (`flag` はつながりの位置。つながらなければ None)。並びの途中で覚えた
+    /// 閉じる候補を、決まったつながりの位置と照らして片付ける。
+    fn settle(&mut self, s: u64, flag: Option<u64>) {
         let Some(c) = self.changed.as_mut() else {
             return;
         };
-        if c.open {
-            c.p_last = c.p_last.max(p);
-        } else {
+        let cands = std::mem::take(&mut c.cands);
+        let mut pending = flag;
+        if !c.open
+            && let Some(p) = pending.take()
+        {
             c.open = true;
             c.start = p;
             c.p_last = p;
-            // 並びのエスケープ文字は改行ではない: 位置の行を数える
             self.lines.touch('\u{10FF00}');
+        }
+        for (t, snap) in cands {
+            if !c.open {
+                break;
+            }
+            if let Some(p) = pending
+                && p <= t
+            {
+                c.p_last = c.p_last.max(p);
+                pending = None;
+            }
+            if t > c.p_last {
+                self.changed_chars += t - c.start;
+                c.open = false;
+                self.lines = snap;
+                // 写しは単位 t の前の状態。t より後ろの並びのエスケープ文字は改行ではない (直前の CR と、並びの後ろの
+                // LF を CRLF と見ない)
+                self.lines.prev_cr = false;
+                if t > s {
+                    self.lines.touch('\u{10FF00}');
+                }
+                if let Some(p) = pending.take() {
+                    c.open = true;
+                    c.start = p;
+                    c.p_last = p;
+                    self.lines.touch('\u{10FF00}');
+                }
+            }
+        }
+        if let Some(p) = pending {
+            c.p_last = c.p_last.max(p);
         }
     }
 
@@ -432,9 +477,31 @@ impl MergeScanner {
         if !resync {
             return;
         }
+        // 並びの局所の検査が決まらない間の、つながりの位置の下限。決まる位置は、そのときの一致の数
+        // (`matched`。減らない) か、それを並びの最後に丸めたものなので、今の一致の数から求めた位置より前には来ない
+        let undecided = self.run.as_ref().and_then(|r| {
+            r.mismatch
+                .is_none()
+                .then(|| r.char_start + r.matched.min(r.len.saturating_sub(1)))
+        });
         let Some(c) = self.changed.as_mut() else {
             return;
         };
+        if let Some(lo) = undecided {
+            // 並びの局所の検査がまだ決まらない (つながりの位置がこの単位より前かもしれない): 候補として覚える。
+            // 下限より前の候補は、つながりの位置より前と決まっている: 範囲が閉じていれば要らず (開くのはつながりの
+            // 位置から)、前の並びから開いていれば最初の 1 つで閉じるので、2 つ目以降は要らない
+            // (並びが長くても候補は局所の復号器の持ち越しの分だけになる。03 §9.3 のメモリ)
+            c.cands.push((char_index, self.lines.clone()));
+            let from = usize::from(c.open).min(c.cands.len());
+            let to = from + c.cands[from..].partition_point(|(t, _)| *t < lo);
+            c.cands.drain(from..to);
+            #[cfg(test)]
+            {
+                self.max_cands = self.max_cands.max(c.cands.len());
+            }
+            return;
+        }
         if c.open && char_index > c.p_last {
             self.changed_chars += char_index - c.start;
             c.open = false;
@@ -460,6 +527,7 @@ impl Changed {
             start: 0,
             p_last: 0,
             buf: String::new(),
+            cands: Vec::new(),
         }
     }
 }
@@ -511,6 +579,8 @@ mod tests {
         report: MergeReport,
         /// 終わりに残った区切り (つながる並びだけ)。
         regions: Vec<MergeRegion>,
+        /// 変わる範囲の候補の数の最大。
+        max_cands: usize,
     }
 
     /// 部品を 1 文字ずつ符号化して検出器に渡す (保存の符号化の流れの単位ごとの経路と同じ)。
@@ -548,6 +618,7 @@ mod tests {
             bytes: out,
             report: s.report(),
             regions: s.regions_mut().iter().copied().collect(),
+            max_cands: s.max_cands,
         }
     }
 
@@ -763,6 +834,58 @@ mod tests {
             assert_eq!(d.is_neutral(), want, "{enc:?} {bytes:02X?}");
             d.reset();
             assert!(d.is_neutral());
+        }
+    }
+
+    // 夜間の性質テスト (2026-11-14) の反例を縮めたもの: UTF-16LE で、2 つ目の並び (位置 2〜5) の局所の検査が決まる前に、
+    // 区切らない復号器の持ち越しが位置 4 で無くなる。範囲は [0, 4) の 4 文字で、末尾の <DC> は開き直しでも <DC> に戻る
+    #[test]
+    fn utf16_の並びの検査が決まる前に範囲を閉じない() {
+        let o = scan(
+            Encoding::Utf16Le,
+            false,
+            &[
+                U::E(0xE3),
+                U::S("a"),
+                U::E(0xE3),
+                U::E(0xD8),
+                U::E(0xDC),
+                U::E(0xDC),
+            ],
+        );
+        assert_eq!(o.report.total, 2);
+        assert_eq!(range(&o.report), (4, 1, false));
+    }
+
+    // 夜間の性質テスト (2026-11-14、`eve-core` の `つながりの局所の検査は出力の全体の復号と同値で_乾式走査と本番で同じ`)
+    // の最小の反例そのもの (14 文字)。直す前は (16, 1, true) で、文書の長さを超えていた
+    #[test]
+    fn utf16_の夜間の反例の範囲は文書に収まる() {
+        let mut units: Vec<U<'_>> = (0..3).map(|_| U::E(0xE3)).collect();
+        units.push(U::E(0x0A));
+        units.extend((0..5).map(|_| U::E(0xE3)));
+        units.extend([U::S("a"), U::E(0xE3), U::E(0xD8), U::E(0xDC), U::E(0xDC)]);
+        let o = scan(Encoding::Utf16Le, false, &units);
+        assert_eq!(o.bytes.len(), 15);
+        assert_eq!(o.report.total, 2);
+        assert_eq!(range(&o.report), (12, 1, false));
+    }
+
+    // 不正バイトが長く続いても、変わる範囲の候補は数件に収まる (乾式走査のメモリは並びの長さに依らない、03 §9.3)
+    #[test]
+    fn 長い並びでも範囲の候補は増えない() {
+        for (enc, b) in [
+            (Encoding::Utf8, 0x80),
+            (Encoding::ShiftJis, 0xA0),
+            (Encoding::Utf16Le, 0xDC),
+            (Encoding::Utf16Be, 0xDC),
+            (Encoding::EucJp, 0x8F),
+        ] {
+            let mut units = vec![U::S("a")];
+            units.extend((0..20_000).map(|_| U::E(b)));
+            units.push(U::S("a"));
+            let o = scan(enc, false, &units);
+            assert!(o.max_cands <= 4, "{enc:?}: {}", o.max_cands);
         }
     }
 }
