@@ -18,7 +18,7 @@
 //!   その単位の前で範囲を閉じる。重なる範囲は 1 つにまとめ、本文の文字数と行数を合計する。文書の末尾まで閉じず、末尾で
 //!   持ち越しが残れば `to_eof`。並びの局所の検査が決まらない間 (つながりの位置がまだ分からない) は閉じず、閉じる候補を
 //!   覚えておき、決まったつながりの位置と照らして片付ける (UTF-16 では、局所の復号器が並びの 2 単位以上前から持ち越して
-//!   いる間に、区切らない復号器の持ち越しが無くなることがある)。
+//!   いる間に、区切らない復号器の持ち越しが無くなることがある。EUC-JP でも候補の経路は通るが、結果は変わらない)。
 //!
 //! 呼び出し側 (eve-core の保存の符号化の流れ) は、`is_idle` が真の間はエスケープ文字の無い区間をまとめて符号化して `bulk` で
 //! 知らせ、偽の間は単位ごとに符号化して `unit` で知らせる (費用は並びとつながりの周りだけに掛かる)。
@@ -102,6 +102,7 @@ struct Changed {
     p_last: u64,
     buf: String,
     /// 局所の検査が決まっていない並びの途中で、閉じられそうだった単位 (通し番号と、その前の行の数え方の状態)。
+    /// 決まるつながりの位置より前と分かった候補は捨てるので、数件に収まる (`close_if`)。
     cands: Vec<(u64, Lines)>,
 }
 
@@ -163,6 +164,9 @@ impl Lines {
 
 /// つながりの検出器 (モジュールの説明を参照)。
 pub struct MergeScanner {
+    /// 試験用: 変わる範囲の候補 (`Changed::cands`) の数の最大。
+    #[cfg(test)]
+    max_cands: usize,
     enc: Encoding,
     bom_written: bool,
     track_range: bool,
@@ -196,6 +200,8 @@ impl MergeScanner {
             local: Decoder::new(enc, false),
             buf: String::new(),
             run: None,
+            #[cfg(test)]
+            max_cands: 0,
             total: 0,
             recorded: Vec::new(),
             digest,
@@ -436,6 +442,9 @@ impl MergeScanner {
                 self.changed_chars += t - c.start;
                 c.open = false;
                 self.lines = snap;
+                // 写しは単位 t の前の状態。t より後ろの並びのエスケープ文字は改行ではない (直前の CR と、並びの後ろの
+                // LF を CRLF と見ない)
+                self.lines.prev_cr = false;
                 if t > s {
                     self.lines.touch('\u{10FF00}');
                 }
@@ -468,13 +477,29 @@ impl MergeScanner {
         if !resync {
             return;
         }
-        let undecided = self.run.as_ref().is_some_and(|r| r.mismatch.is_none());
+        // 並びの局所の検査が決まらない間の、つながりの位置の下限。決まる位置は、そのときの一致の数
+        // (`matched`。減らない) か、それを並びの最後に丸めたものなので、今の一致の数から求めた位置より前には来ない
+        let undecided = self.run.as_ref().and_then(|r| {
+            r.mismatch
+                .is_none()
+                .then(|| r.char_start + r.matched.min(r.len.saturating_sub(1)))
+        });
         let Some(c) = self.changed.as_mut() else {
             return;
         };
-        if undecided {
-            // 並びの局所の検査がまだ決まらない (つながりの位置がこの単位より前かもしれない): 候補として覚える
+        if let Some(lo) = undecided {
+            // 並びの局所の検査がまだ決まらない (つながりの位置がこの単位より前かもしれない): 候補として覚える。
+            // 下限より前の候補は、つながりの位置より前と決まっている: 範囲が閉じていれば要らず (開くのはつながりの
+            // 位置から)、前の並びから開いていれば最初の 1 つで閉じるので、2 つ目以降は要らない
+            // (並びが長くても候補は局所の復号器の持ち越しの分だけになる。03 §9.3 のメモリ)
             c.cands.push((char_index, self.lines.clone()));
+            let from = usize::from(c.open).min(c.cands.len());
+            let to = from + c.cands[from..].partition_point(|(t, _)| *t < lo);
+            c.cands.drain(from..to);
+            #[cfg(test)]
+            {
+                self.max_cands = self.max_cands.max(c.cands.len());
+            }
             return;
         }
         if c.open && char_index > c.p_last {
@@ -554,6 +579,8 @@ mod tests {
         report: MergeReport,
         /// 終わりに残った区切り (つながる並びだけ)。
         regions: Vec<MergeRegion>,
+        /// 変わる範囲の候補の数の最大。
+        max_cands: usize,
     }
 
     /// 部品を 1 文字ずつ符号化して検出器に渡す (保存の符号化の流れの単位ごとの経路と同じ)。
@@ -591,6 +618,7 @@ mod tests {
             bytes: out,
             report: s.report(),
             regions: s.regions_mut().iter().copied().collect(),
+            max_cands: s.max_cands,
         }
     }
 
@@ -841,5 +869,23 @@ mod tests {
         assert_eq!(o.bytes.len(), 15);
         assert_eq!(o.report.total, 2);
         assert_eq!(range(&o.report), (12, 1, false));
+    }
+
+    // 不正バイトが長く続いても、変わる範囲の候補は数件に収まる (乾式走査のメモリは並びの長さに依らない、03 §9.3)
+    #[test]
+    fn 長い並びでも範囲の候補は増えない() {
+        for (enc, b) in [
+            (Encoding::Utf8, 0x80),
+            (Encoding::ShiftJis, 0xA0),
+            (Encoding::Utf16Le, 0xDC),
+            (Encoding::Utf16Be, 0xDC),
+            (Encoding::EucJp, 0x8F),
+        ] {
+            let mut units = vec![U::S("a")];
+            units.extend((0..20_000).map(|_| U::E(b)));
+            units.push(U::S("a"));
+            let o = scan(enc, false, &units);
+            assert!(o.max_cands <= 4, "{enc:?}: {}", o.max_cands);
+        }
     }
 }
