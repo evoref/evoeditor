@@ -1,0 +1,17 @@
+{
+  "commit": "90b2c81",
+  "env": "ENV-W1",
+  "id": "BM-104p-100m",
+  "quick": false,
+  "results": [
+    {
+      "id": "BM-104p-100m",
+      "max_ms": 1.45,
+      "n": 30,
+      "p50_ms": 0.94,
+      "p999_ms": 1.45,
+      "p99_ms": 1.45,
+      "quick": false
+    }
+  ]
+}

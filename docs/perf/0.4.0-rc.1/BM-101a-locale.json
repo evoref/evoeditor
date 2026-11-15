@@ -1,0 +1,20 @@
+{
+  "commit": "90b2c81",
+  "env": "ENV-W1",
+  "id": "BM-101a-locale",
+  "quick": false,
+  "results": [
+    {
+      "diff_p50_ms": 3.13,
+      "id": "BM-101a-locale",
+      "max_ms": 10.75,
+      "n": 1000,
+      "p50_ms": 6.38,
+      "p999_ms": 9.76,
+      "p99_ms": 7.99,
+      "pair_id": "BM-101a",
+      "pair_p50_ms": 3.22,
+      "quick": false
+    }
+  ]
+}

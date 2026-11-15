@@ -1,0 +1,32 @@
+{
+  "commit": "90b2c81",
+  "env": "ENV-W1",
+  "id": "BM-109m-heavy",
+  "quick": false,
+  "results": [
+    {
+      "compile_ms": 4.08,
+      "id": "BM-109m-heavy",
+      "matches": 0,
+      "max_ms": 150.0,
+      "mb": 100,
+      "min_ms": 149.0,
+      "n": 5,
+      "p50_ms": 149.4,
+      "quick": false,
+      "ratio": 1.09,
+      "ratio_max": 1.09,
+      "ratio_min": 1.09,
+      "ref_p50_ms": 137.1,
+      "sync100_max_ms": 0.155,
+      "sync100_n": 80,
+      "sync100_p50_ms": 0.049,
+      "sync100_p99_ms": 0.152,
+      "sync_max_ms": 8.059,
+      "sync_n": 80,
+      "sync_p50_ms": 0.063,
+      "sync_p99_ms": 5.473,
+      "sync_positions": 4
+    }
+  ]
+}

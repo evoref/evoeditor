@@ -1,0 +1,22 @@
+{
+  "commit": "90b2c81",
+  "env": "ENV-W1",
+  "id": "BM-109-compat",
+  "quick": false,
+  "results": [
+    {
+      "id": "BM-109-compat",
+      "matches": 0,
+      "max_ms": 16.4,
+      "mb": 100,
+      "min_ms": 15.5,
+      "n": 5,
+      "p50_ms": 15.8,
+      "quick": false,
+      "ratio": 0.72,
+      "ratio_max": 0.74,
+      "ratio_min": 0.71,
+      "ref_p50_ms": 21.9
+    }
+  ]
+}

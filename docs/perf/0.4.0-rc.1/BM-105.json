@@ -1,0 +1,13 @@
+{
+  "id": "BM-105",
+  "commit": "90b2c81",
+  "env": "ENV-W1",
+  "quick": false,
+  "note": "xtask bench の一式に入っていないので、cargo bench -p eve-testkit --bench bm_105 (標準出力の文) を手で写した。ヘッドレス (Harness・MemFs)。1,100 回のうち先頭 100 回はウォームアップ",
+  "results": [
+    {"id": "BM-105", "case": "utf8-100m", "op": "insert_mid", "n": 1000, "p50_ms": 0.0049, "p99_ms": 0.0060, "max_ms": 0.0303, "quick": false},
+    {"id": "BM-105", "case": "utf8-100m", "op": "undo", "n": 1000, "p50_ms": 0.0054, "p99_ms": 0.0067, "max_ms": 0.0141, "quick": false},
+    {"id": "BM-105", "case": "sjis-100m-records", "op": "insert_mid", "n": 1000, "p50_ms": 0.0191, "p99_ms": 0.0220, "max_ms": 0.0658, "records": 689853, "reference": true, "quick": false},
+    {"id": "BM-105", "case": "sjis-100m-records", "op": "undo", "n": 1000, "p50_ms": 0.0192, "p99_ms": 0.0218, "max_ms": 0.0420, "records": 689853, "reference": true, "quick": false}
+  ]
+}
