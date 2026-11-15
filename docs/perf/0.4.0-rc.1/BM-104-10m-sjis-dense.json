@@ -1,0 +1,21 @@
+{
+  "commit": "90b2c81",
+  "env": "ENV-W1",
+  "id": "BM-104-10m-sjis-dense",
+  "quick": false,
+  "results": [
+    {
+      "id": "BM-104-10m-sjis-dense",
+      "max_ms": 165.2,
+      "mem_delta_bytes": 19308544,
+      "mem_limit_bytes": 33530655,
+      "p50_ms": 161.6,
+      "p99_ms": 165.2,
+      "partial": false,
+      "quick": false,
+      "records": 285976,
+      "runs": 30,
+      "size_bytes": 10485785
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "commit": "90b2c81",
+  "env": "ENV-W1",
+  "id": "BM-109m-nl-none-1line",
+  "quick": false,
+  "results": [
+    {
+      "id": "BM-109m-nl-none-1line",
+      "matches": 0,
+      "max_ms": 2.2,
+      "mb": 10,
+      "min_ms": 2.1,
+      "n": 5,
+      "p50_ms": 2.1,
+      "quick": false,
+      "ratio": 0.45,
+      "ratio_max": 0.46,
+      "ratio_min": 0.45,
+      "ref_p50_ms": 4.7
+    }
+  ]
+}

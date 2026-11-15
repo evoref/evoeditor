@@ -1,0 +1,21 @@
+{
+  "commit": "90b2c81",
+  "env": "ENV-W1",
+  "id": "BM-104-10m-eucjp-dense",
+  "quick": false,
+  "results": [
+    {
+      "id": "BM-104-10m-eucjp-dense",
+      "max_ms": 198.9,
+      "mem_delta_bytes": 19279872,
+      "mem_limit_bytes": 33058062,
+      "p50_ms": 186.0,
+      "p99_ms": 198.9,
+      "partial": false,
+      "quick": false,
+      "records": 278384,
+      "runs": 30,
+      "size_bytes": 10485794
+    }
+  ]
+}

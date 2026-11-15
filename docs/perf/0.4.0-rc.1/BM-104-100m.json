@@ -1,0 +1,21 @@
+{
+  "commit": "90b2c81",
+  "env": "ENV-W1",
+  "id": "BM-104-100m",
+  "quick": false,
+  "results": [
+    {
+      "id": "BM-104-100m",
+      "max_ms": 102.1,
+      "mem_delta_bytes": 121585664,
+      "mem_limit_bytes": 173015172,
+      "p50_ms": 89.1,
+      "p99_ms": 102.1,
+      "partial": false,
+      "quick": false,
+      "records": 0,
+      "runs": 30,
+      "size_bytes": 104857688
+    }
+  ]
+}
