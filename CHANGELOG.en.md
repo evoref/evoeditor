@@ -11,7 +11,15 @@ The Japanese version ([CHANGELOG.md](CHANGELOG.md)) is authoritative. Both are u
 
 ## [Unreleased]
 
-## [0.4.0-rc.1] - TBD
+## [0.4.0-rc.2] - TBD
+
+The second release candidate of v0.4. It fixes one bug found in 0.4.0-rc.1. Everything else is the same as [0.4.0-rc.1].
+
+### Fixed
+
+- **Size of the changed range shown when saving a UTF-16 document**: When saving a UTF-16 document that contains invalid bytes, and a restored byte joins with its neighbor, the confirmation ("N characters will become different characters when reopened") could show more characters and lines than actually change (sometimes more than the document length, or wrongly "to the end of the file"). It now shows the correct range. Whether the confirmation appears, and what is written after you approve, were already correct; no data was lost. UTF-8, Shift_JIS and EUC-JP were not affected.
+
+## [0.4.0-rc.1] - 2026-11-16
 
 This is the release candidate for v0.4, the version that completes Japanese text and large files. **In Shift_JIS, EUC-JP, and ISO-2022-JP files, the parts you did not edit are saved with their original bytes, and files with invalid bytes can now be edited after a confirmation.** It also adds multi-line regular expressions and matching of CP932 compatibility characters, early display of large files, faster and grapheme-accurate long lines, standard input (`cmd | evoeditor -`), user language files, high-contrast themes, and more. The downloads are the Windows zip and the Linux tar.gz on GitHub Releases; installation, updates, and known limitations are in the bundled `README.en.md` (Japanese: `README.md`). When you update from v0.3.0, your settings files keep working. Changes in behavior are listed under "Behavior changes" below.
 
