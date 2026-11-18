@@ -8,7 +8,7 @@ docs/09 §8.2 の「リリースのチェックリスト」(上の表・v0.2 の
 
 - 版: 0.4.0-rc.2 (プレリリース。タグは `develop` の先頭に人が付ける、09 §9.2)
 - rc.1 からの変更: 夜間の性質テストが見つけた UTF-16 のつながりの範囲の誤りの修正 (#567) と、版上げ (#569) だけ。rc.1 の判定と記録は [`../0.4.0-rc.1/release-checklist.md`](../0.4.0-rc.1/release-checklist.md)
-- **判定の結果: 保留 (結果待ち)**。夜間ジョブの残りと、定時の夜間ジョブの 3 日の観測を待つ
+- **判定の結果: 合格 (下書き: Claude、2026-11-18)**。すべてのゲートが合格または対象外。最終の判定は PO
 - 判定した人 / 日付: 下書き: Claude / 2026-11-16。**最終の判定は PO** (この PR のマージをもって確認とする)
 - 判定コミットの確認: [x] (2026-11-16。判定コミットは PR #569 (版上げ) のマージコミットで、`develop` の先頭)
 - 凍結: 判定から昇格・タグまで `develop` への merge を保留する (09 §9.2)。この後に入れてよい変更は `docs/compat/0.4.0-rc.2/`・`docs/perf/0.4.0-rc.2/`・`tests/ac-checklist.toml` だけ。ほかを入れたらゲートをやり直す。
@@ -20,10 +20,10 @@ docs/09 §8.2 の「リリースのチェックリスト」(上の表・v0.2 の
 
 | ゲート | 条件の正本 | 判定 | 根拠 | 確認者 | 日付 |
 |---|---|---|---|---|---|
-| (a) v0.3 のゲートの続き | 試験とゴールデン、clippy と `missing_docs`、仕様の検査、`CONTRACT_VERSION` は 0 (08 §2.4 の (a)・(c)・(d)・(f)) | 保留 (定時の夜間ジョブの観測を待つ) | 判定コミットの CI (全ジョブ成功): <https://github.com/evoref/evoeditor/actions/runs/43767889322>。rc.1 から既存のゴールデンの更新は無い。判定コミットの手動実行の proptest 拡張 (`PROPTEST_CASES=10000`) を含む試験 2,554 件がすべて成功: <https://github.com/evoref/evoeditor/actions/runs/43785252824>。定時の夜間ジョブは下の (d) | Claude (下書き) | 2026-11-16 |
+| (a) v0.3 のゲートの続き | 試験とゴールデン、clippy と `missing_docs`、仕様の検査、`CONTRACT_VERSION` は 0 (08 §2.4 の (a)・(c)・(d)・(f)) | 合格 | 判定コミットの CI (全ジョブ成功): <https://github.com/evoref/evoeditor/actions/runs/43767889322>。rc.1 から既存のゴールデンの更新は無い。判定コミットの手動実行の proptest 拡張 (`PROPTEST_CASES=10000`) を含む試験 2,554 件がすべて成功: <https://github.com/evoref/evoeditor/actions/runs/43785252824>。定時の夜間ジョブ 3 日分も成功 (下の (d)) | Claude (下書き) | 2026-11-18 |
 | (b) 往復コーパスのバイト一致 | 01 §5.5 の NFR-303 AC-5〜AC-7 と NFR-304 AC-4〜AC-6 の試験が通る | 合格 | 判定コミットの CI の `test (windows)`・`test (linux)` (上と同じ実行) | Claude (下書き) | 2026-11-16 |
 | (c) 性能 | 基準機の BM が v0.3.0 の記録から劣化しない (差があれば理由を所見に書く)。BM-104v p50 ≤ 300 ms (Must)。BM-106 の 5 つの操作 p99 ≤ 50 ms (Should)。BM-103b-search-multiline(-1m) p50 2 / p99 8 ms (Must) | 合格 (rc.1 の記録を流用) | [`../../perf/0.4.0-rc.1/summary.md`](../../perf/0.4.0-rc.1/summary.md)。rc.1 からの変更 (#567) は保存の前の検査 (`crates/eve-encoding/src/merge.rs`) だけで、BM の経路に入らない。BM-102a の劣化は rc.1 の所見のとおり v0.5 で直す (PO の判断 2026-11-15) | Claude (下書き)、PO の判断 | 2026-11-16 |
-| (d) fuzz | 判定コミットで 5 つのターゲットをそれぞれ 1 時間回してクラッシュ 0。夜間 fuzz の観測 (3 日で可、PO の判断 2026-11-15) | 1 時間の実行は合格。観測は保留 (3 日目を待つ) | 判定コミットの手動実行 (`fuzz_seconds=3600`)。1 本目 `only=fuzz:fuzz_decode+fuzz_editor+fuzz_encode`: 3 つとも 3600 秒でクラッシュ 0 件: <https://github.com/evoref/evoeditor/actions/runs/43767943963>。2 本目 `only=fuzz:fuzz_regex_search+fuzz_vt_input,crash`: 2 つとも 3600 秒でクラッシュ 0 件: <https://github.com/evoref/evoeditor/actions/runs/43804078213>。判定コミットを対象にした定時の実行の 3 日分: 1 日目 (2026-11-15 (UTC)) 成功 <https://github.com/evoref/evoeditor/actions/runs/43769461208>。2 日目 (2026-11-16 (UTC)) 成功 <https://github.com/evoref/evoeditor/actions/runs/43996598086>。3 日目は結果待ち | Claude (下書き) | 2026-11-16 |
+| (d) fuzz | 判定コミットで 5 つのターゲットをそれぞれ 1 時間回してクラッシュ 0。夜間 fuzz の観測 (3 日で可、PO の判断 2026-11-15) | 合格 | 判定コミットの手動実行 (`fuzz_seconds=3600`)。1 本目 `only=fuzz:fuzz_decode+fuzz_editor+fuzz_encode`: 3 つとも 3600 秒でクラッシュ 0 件: <https://github.com/evoref/evoeditor/actions/runs/43767943963>。2 本目 `only=fuzz:fuzz_regex_search+fuzz_vt_input,crash`: 2 つとも 3600 秒でクラッシュ 0 件: <https://github.com/evoref/evoeditor/actions/runs/43804078213>。判定コミットを対象にした定時の実行の 3 日分: 1 日目 (2026-11-15 (UTC)) 成功 <https://github.com/evoref/evoeditor/actions/runs/43769461208>。2 日目 (2026-11-16 (UTC)) 成功 <https://github.com/evoref/evoeditor/actions/runs/43996598086>。3 日目 (2026-11-17 (UTC)) 成功 <https://github.com/evoref/evoeditor/actions/runs/44208474811>。3 日とも `develop` の先頭 = 判定コミットを試験し、fuzz の 5 つはクラッシュ 0 件 | Claude (下書き) | 2026-11-18 |
 | (e) Could の 3 項目 | FR-110・FR-119・幅プローブは v0.5 以降に送った (08 §7) | 対象外 (v0.5 以降へ。PO の決定 2026-11-14) | 08 §7 の繰り越しの表 (#555) | Claude (下書き) | 2026-11-16 |
 
 ## 09 §8.2 のリリースのチェックリスト
@@ -41,7 +41,7 @@ docs/09 §8.2 の「リリースのチェックリスト」(上の表・v0.2 の
 | データ保全 (Unix) | Unix の kill テスト (Linux CI) と、判定コミットでの LazyFS のクラッシュ一貫性 (`only=crash`) が ext4 / xfs / btrfs で合格 | 合格 | Unix の kill テストは判定コミットの CI の `test (linux)` (上と同じ実行) で合格。LazyFS のクラッシュ一貫性は判定コミットの手動実行で ext4・xfs・btrfs とも 13 件すべて合格: <https://github.com/evoref/evoeditor/actions/runs/43804078213> | Claude (下書き) | 2026-11-16 |
 | セキュリティ (依存) | `cargo audit` / `deny advisories` がクリーン | 合格 | 判定コミットの CI の `deps` ジョブ (上と同じ実行)。夜間の `cargo audit` と deny advisories は、判定コミットの手動実行 (`only=proptest,audit,soak`) で本体 (170 crate) と `fuzz/` (91 crate) の両方で成功 (RustSec の 1,509 件で照合): <https://github.com/evoref/evoeditor/actions/runs/43785252824>。本体の情報の警告 RUSTSEC-2026-0486 (`rustix` の unsound) は rc.1 の所見と同じで影響なし | Claude (下書き) | 2026-11-16 |
 | セキュリティ (リリース前の確認) | 09 §8.2 の (a) DLL の検索順、(b) UNC パス | 合格 | (a) 判定コミットの CI の `build-release-smoke` (上と同じ実行)。(b) rc.1 から変更なし | Claude (下書き) | 2026-11-16 |
-| fuzz | 09 §8.2 の v0.4 の表 | 1 時間の実行は合格。観測は保留 (結果待ち) | 上の (d) | Claude (下書き) | 2026-11-16 |
+| fuzz | 09 §8.2 の v0.4 の表 | 合格 | 上の (d) | Claude (下書き) | 2026-11-18 |
 | 長時間 (観察) | BM-306 の 1 時間の soak の推移を所見に書く (ゲートにしない) | 観察済み | 判定コミットで 60 分: RSS 37.6 → 38.7 MiB (傾きからの増加 -0.2 MiB)、入力 → Frame の p99 0.180 → 0.179 ms、「平坦」(上の「セキュリティ (依存)」と同じ実行) | Claude | 2026-11-16 |
 | MSRV | CI の `msrv` ジョブが判定コミットで通る | 合格 | 判定コミットの CI の `msrv` ジョブ (上と同じ実行) | Claude (下書き) | 2026-11-16 |
 | 契約 | `CONTRACT_VERSION` は 0 のまま。`eve-view` への追加は `#[non_exhaustive]` の型への追加だけ (C2) | 合格 | rc.1 から `eve-view` の変更なし | Claude (下書き) | 2026-11-16 |
