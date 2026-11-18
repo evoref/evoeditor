@@ -11,17 +11,9 @@ The Japanese version ([CHANGELOG.md](CHANGELOG.md)) is authoritative. Both are u
 
 ## [Unreleased]
 
-## [0.4.0-rc.2] - TBD
+## [0.4.0] - 2026-11-19
 
-The second release candidate of v0.4. It fixes one bug found in 0.4.0-rc.1. Everything else is the same as [0.4.0-rc.1].
-
-### Fixed
-
-- **Size of the changed range shown when saving a UTF-16 document**: When saving a UTF-16 document that contains invalid bytes, and a restored byte joins with its neighbor, the confirmation ("N characters will become different characters when reopened") could show more characters and lines than actually change (sometimes more than the document length, or wrongly "to the end of the file"). It now shows the correct range. Whether the confirmation appears, and what is written after you approve, were already correct; no data was lost. UTF-8, Shift_JIS and EUC-JP were not affected.
-
-## [0.4.0-rc.1] - 2026-11-16
-
-This is the release candidate for v0.4, the version that completes Japanese text and large files. **In Shift_JIS, EUC-JP, and ISO-2022-JP files, the parts you did not edit are saved with their original bytes, and files with invalid bytes can now be edited after a confirmation.** It also adds multi-line regular expressions and matching of CP932 compatibility characters, early display of large files, faster and grapheme-accurate long lines, standard input (`cmd | evoeditor -`), user language files, high-contrast themes, and more. The downloads are the Windows zip and the Linux tar.gz on GitHub Releases; installation, updates, and known limitations are in the bundled `README.en.md` (Japanese: `README.md`). When you update from v0.3.0, your settings files keep working. Changes in behavior are listed under "Behavior changes" below.
+This is the first release of v0.4, the version that completes Japanese text and large files. **In Shift_JIS, EUC-JP, and ISO-2022-JP files, the parts you did not edit are saved with their original bytes, and files with invalid bytes can now be edited after a confirmation.** It also adds multi-line regular expressions and matching of CP932 compatibility characters, early display of large files, faster and grapheme-accurate long lines, standard input (`cmd | evoeditor -`), user language files, high-contrast themes, and more. The downloads are the Windows zip and the Linux tar.gz on GitHub Releases; installation, updates, and known limitations are in the bundled `README.en.md` (Japanese: `README.md`). When you update from v0.3.0, your settings files keep working. Changes in behavior are listed under "Behavior changes" below. The product code is unchanged from [0.4.0-rc.2].
 
 ### Added
 
@@ -94,6 +86,14 @@ The same query or setting as in v0.3 gives a different result:
 - **Save As could save a different document when another file finished loading while you typed the name**: if you opened Save As on the current document while another file was still loading, the display could switch to the newly loaded file before you confirmed, and the switched-to document was saved instead. Choosing Overwrite in the following confirmation overwrote the original file with the other document's contents, and the original document stayed unsaved. The Save As, Set Encoding and Reopen with Encoding inputs, and the file-name input opened from save confirmations (such as after a failed save), now act on the document they were opened for. If that document has been closed in the meantime, nothing is done and a message says so.
 - **With themes that paint the background (`default-dark` / `default-light`), items drawn on top hid the color below**: the pending chord in the status bar (`Ctrl+K …`) and the matched characters in the selected row of the command palette were painted in the body colors, breaking the status bar and the band of the selected row. They now keep the colors below and only add bold or underline. The current line number is now bold in the same color as the other line numbers (as in the `default` theme).
 - **Reading a config file, keymap or theme file with deep nesting crashed on startup**: a file (even one of about 10 KB) that combined nested inline tables or arrays with dotted keys used up the stack while being read at startup, so the process crashed and could not start until the file was removed. Before parsing, files with inline tables and arrays nested more than 16 levels deep, or with a key that has more than 16 levels (table headers and dotted keys together), are now detected and, like a syntax error, the file is not used and startup continues (the diagnostic says the file is not used because its format is invalid, with the reason). Files written in the current formats are all less than half as deep as these limits and are not affected.
+
+## [0.4.0-rc.2] - 2026-11-18
+
+The second release candidate of v0.4.0. It fixes a bug found in 0.4.0-rc.1 (when saving a UTF-16 document that contains invalid bytes, the confirmation could show a larger changed range than actually changes). Its contents are included in [0.4.0].
+
+## [0.4.0-rc.1] - 2026-11-16
+
+The first release candidate of v0.4.0. Its contents are included in [0.4.0], except for the bug fixed in [0.4.0-rc.2] above.
 
 ## [0.3.0] - 2026-11-08
 
