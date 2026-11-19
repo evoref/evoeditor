@@ -8,7 +8,7 @@ docs/09 §8.2 の「リリースのチェックリスト」(上の表・v0.2 の
 
 - 版: 0.4.0 (正式版。`develop` → `main` で昇格する、docs/09 §9.2 手順 4)
 - rc.2 からの変更: 版上げ (#573。workspace の版と CHANGELOG だけ) と、v0.3.0 の `main` の取り込み (#574。ファイルの差分なし)。`git diff 0c34ac7 e4e6f15` は `docs/compat/` を除くと `Cargo.toml`・`Cargo.lock` の版の行と `CHANGELOG.md`・`CHANGELOG.en.md` だけ。rc.2 の判定と記録は [`../0.4.0-rc.2/release-checklist.md`](../0.4.0-rc.2/release-checklist.md)
-- **判定の結果: 合格 (下書き: Claude、2026-11-19)**。すべてのゲートが合格または対象外。最終の判定は PO
+- **判定の結果: 合格 (PO の判定 2026-11-19)**。すべてのゲートが合格または対象外 (下書き: Claude)
 - 判定した人 / 日付: 下書き: Claude / 2026-11-19。**最終の判定は PO** (この PR のマージをもって確認とする)
 - 判定コミットの確認 (`git merge-base --is-ancestor develop <SHA>` と `git merge-base --is-ancestor main <SHA>` が真): [x] (2026-11-18。判定コミットは PR #574 (`main` の取り込み) のマージコミットで、`develop` の先頭。`main` (v0.3.0、0db83ed) はその祖先。版上げ #573 の後に v0.3.0 の取り込み漏れが見つかったので、#574 を入れてから判定コミットを決めた)
 - 凍結: 判定から昇格・タグまで `develop` への merge を保留する (09 §9.2)。この後に入れてよい変更は `docs/compat/0.4.0/`・`docs/perf/0.4.0/`・`tests/ac-checklist.toml` だけ。ほかを入れたらゲートをやり直す。
