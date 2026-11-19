@@ -661,6 +661,38 @@ fn state_log(s: &Session) -> String {
         .unwrap_or_else(|_| "(ログなし)".to_owned())
 }
 
+/// 時間の判定を基準機の手動実行で行う明示の指定 (`EVE_PERF_STRICT`) があるか (docs/09 §3.6 の「時間の判定」)。
+fn perf_strict() -> bool {
+    std::env::var_os("EVE_PERF_STRICT").is_some()
+}
+
+/// 緊急退避の区間の時間を記録する (docs/09 §3.6 の「時間の判定」)。CI では stderr に出すだけで合否にしない (共有ランナーの
+/// 時間はノイズが大きい)。`EVE_PERF_STRICT` があるときだけ、02 §11.2.1 の予算 `budget` の内であることを判定する。
+/// 製品が `evoeditor.log` に書いた退避の段の時間 (「退避」を含む行) も添える。
+///
+/// `took` は外から測った区間の幅: 届いた時刻は送る操作 (補助プロセス・`kill`) の前と後の間のどこかなので、送った後から測った
+/// 値 (短め) から、送る前から測った値 (長め) まで。判定は短めの値で行う (送る操作の遅れを製品の時間に数えない)。
+fn record_rescue_time(
+    s: &Session,
+    scenario: &str,
+    span: &str,
+    took: std::ops::RangeInclusive<Duration>,
+    budget: Duration,
+) {
+    let (short, long) = (*took.start(), *took.end());
+    let log = state_log(s);
+    eprintln!("[時間の記録] {scenario}: {span} {short:?} 〜 {long:?} (予算 {budget:?})");
+    for line in log.lines().filter(|l| l.contains("退避")) {
+        eprintln!("[時間の記録]   {line}");
+    }
+    if perf_strict() {
+        assert!(
+            short <= budget,
+            "{scenario}: {span} {short:?} が予算 {budget:?} を超えた\n--- log\n{log}"
+        );
+    }
+}
+
 /// 退避の試験が落ちたときの材料 (Issue #342): 閉じてから子が終わるまでの経過時間、退避ディレクトリのファイルの一覧と大きさ、
 /// `evoeditor.log` の中身。外から終わらされた (猶予切れ)・予算切れ・書込の失敗を、後から見分ける。
 #[cfg(any(windows, feature = "test-hooks"))]
@@ -709,6 +741,15 @@ fn コンソールを閉じると未保存の内容を退避して終了する()
         "コンソールを閉じたら終了する (CTRL_CLOSE は約 5 秒で強制終了される)\n{}",
         rescue_report(&s, exited_after)
     );
+    if let Some(took) = exited_after {
+        record_rescue_time(
+            &s,
+            "CTRL_CLOSE",
+            "閉じてから終了まで",
+            took..=took,
+            Duration::from_millis(4500),
+        );
+    }
     // 退避ディレクトリ: <UTC timestamp>-<pid>/ に本文と manifest
     let dirs: Vec<_> = std::fs::read_dir(&recovery)
         .map(|rd| {
@@ -1236,12 +1277,24 @@ fn コンソールイベントで退避して終了する(kind: &str) {
     type_slowly(&s, "unsaved text");
     s.wait_for("入力が見える", |t| t.contains("unsaved text"));
     let pid = s.child.process_id().expect("pid");
+    let before = Instant::now();
     let st = std::process::Command::new(helper_exe())
         .args(["console-event", &pid.to_string(), kind])
         .status()
         .unwrap();
     assert!(st.success(), "console-event: {st:?}");
-    assert_eq!(s.exit_within(Duration::from_secs(5)), Some(130));
+    let after = Instant::now();
+    // 上限はハングの検出だけ (時間の判定は下の記録。合計 5 s は基準機で判定する)
+    let code = s.exit_within(WAIT);
+    let end = Instant::now();
+    assert_eq!(code, Some(130), "--- log\n{}", state_log(&s));
+    record_rescue_time(
+        &s,
+        kind,
+        "受信から終了まで",
+        end - after..=end - before,
+        Duration::from_secs(5),
+    );
     s.wait_raw("[?1049l");
     let dirs: Vec<_> = std::fs::read_dir(s.state.join("recovery"))
         .unwrap()
@@ -1303,9 +1356,20 @@ fn シグナルで退避して同じシグナルで終わる(name: &str, want: &
     s.wait_ready();
     type_slowly(&s, "unsaved text");
     s.wait_for("入力が見える", |t| t.contains("unsaved text"));
+    let before = Instant::now();
     s.signal(name);
-    let st = s.status_within(Duration::from_secs(5)).expect("終了する");
+    let after = Instant::now();
+    // 上限はハングの検出だけ (時間の判定は下の記録。合計 5 s は基準機で判定する)
+    let st = s.status_within(WAIT).expect("終了する");
+    let end = Instant::now();
     assert_eq!(st.signal(), Some(want), "同じシグナルで終わる: {st}");
+    record_rescue_time(
+        &s,
+        &format!("SIG{name}"),
+        "受信から終了まで",
+        end - after..=end - before,
+        Duration::from_secs(5),
+    );
     s.wait_raw("\x1b[?1049l");
     assert!(s.raw_text().contains("\x1b[?1049l"), "端末を戻した");
     let dirs = recovery_dirs(&s.state);
@@ -1366,14 +1430,22 @@ fn メインが止まっていても_sigterm_で端末を戻して同じシグ�
     let before = Instant::now();
     s.signal("TERM");
     let after = Instant::now();
-    let st = s.status_within(Duration::from_secs(8)).expect("終了する");
+    // 上限はハングの検出だけ (時間の判定は下の記録。合計 5 s は基準機で判定する)
+    let st = s.status_within(WAIT).expect("終了する");
     let end = Instant::now();
     assert_eq!(st.signal(), Some("Terminated"), "{st}");
+    // 下限はメインの終了を待ったことの検査 (負荷で縮むことはないので CI でも判定する)
     assert!(
-        end - before >= Duration::from_secs(2) && end - after < Duration::from_millis(5500),
-        "メインの終了を 2 秒待ち、合計 5 秒の内で終わる: {:?} 〜 {:?}",
-        end - after,
+        end - before >= Duration::from_secs(2),
+        "メインの終了を 2 秒待つ: {:?}",
         end - before
+    );
+    record_rescue_time(
+        &s,
+        "SIGTERM (main_stall)",
+        "受信から終了まで",
+        end - after..=end - before,
+        Duration::from_secs(5),
     );
     s.wait_raw("\x1b[?1049l");
     assert!(s.raw_text().contains("\x1b[?1049l"), "端末を戻した");
@@ -1464,14 +1536,22 @@ fn メインが止まっていても_ctrl_break_で端末を戻して終了す�
         .unwrap();
     assert!(st.success(), "console-event: {st:?}");
     let after = Instant::now();
-    let code = s.exit_within(Duration::from_secs(8));
+    // 上限はハングの検出だけ (時間の判定は下の記録。合計 5 s は基準機で判定する)
+    let code = s.exit_within(WAIT);
     let end = Instant::now();
     assert_eq!(code, Some(130), "{:?}", end - before);
+    // 下限はメインの終了を待ったことの検査 (負荷で縮むことはないので CI でも判定する)
     assert!(
-        end - before >= Duration::from_secs(2) && end - after < Duration::from_millis(5500),
-        "メインの終了を 2 秒待ち、合計 5 秒の内で終わる: {:?} 〜 {:?}",
-        end - after,
+        end - before >= Duration::from_secs(2),
+        "メインの終了を 2 秒待つ: {:?}",
         end - before
+    );
+    record_rescue_time(
+        &s,
+        "ctrl-break (main_stall)",
+        "受信から終了まで",
+        end - after..=end - before,
+        Duration::from_secs(5),
     );
     s.wait_raw("\x1b[?1049l");
     assert!(s.raw_text().contains("\x1b[?1049l"), "端末を戻した");
@@ -1513,11 +1593,15 @@ fn メインが止まっていてもコンソールを閉じると未保存の�
         "強制終了までに終わる\n{}",
         rescue_report(&s, exited_after)
     );
-    assert!(
-        exited_after.is_some_and(|d| d < Duration::from_millis(4500)),
-        "受信から 4.5 秒の内に退避が書かれて終わる\n{}",
-        rescue_report(&s, exited_after)
-    );
+    if let Some(took) = exited_after {
+        record_rescue_time(
+            &s,
+            "CTRL_CLOSE (main_stall)",
+            "閉じてから終了まで",
+            took..=took,
+            Duration::from_millis(4500),
+        );
+    }
     let dirs: Vec<_> = std::fs::read_dir(&recovery)
         .map(|rd| {
             rd.flatten()

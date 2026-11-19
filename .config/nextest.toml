@@ -23,6 +23,12 @@ slow-timeout = { period = "60s", terminate-after = 5 }
 filter = 'package(evoeditor) & binary(e2e)'
 test-group = 'e2e'
 
+# 時間の記録 (docs/09 §3.6 の「時間の判定」): 緊急退避の時間は CI では合否にせず、試験が stderr に出す `[時間の記録]` を
+# ログに残す。合格した試験の出力は既定では出ないので、退避の時間を測る試験だけ出す。
+[[profile.ci.overrides]]
+filter = '(package(evoeditor) & binary(e2e) & test(/退避|ctrl_break|sigterm|sighup|sigint|シグナル/)) | (package(eve-platform) & binary(rescue) & test(/100_mb/))'
+success-output = "final"
+
 # L5 の E2E (ConPTY、feature test-hooks)。端末の挙動は揺れるので、ここだけ retries を許す。
 # ジョブ (ci.yml の e2e) が `-p evoeditor --test e2e` で使う。test-hooks のシナリオは M3 以降。
 [profile.e2e]
@@ -33,6 +39,11 @@ slow-timeout = { period = "60s", terminate-after = 5 }
 [[profile.e2e.overrides]]
 filter = 'package(evoeditor) & binary(e2e)'
 test-group = 'e2e'
+
+# 時間の記録 (上の profile.ci と同じ。docs/09 §3.6)
+[[profile.e2e.overrides]]
+filter = 'package(evoeditor) & binary(e2e) & test(/退避|ctrl_break|sigterm|sighup|sigint|シグナル/)'
+success-output = "final"
 
 # 夜間 (`cargo xtask nightly` の proptest 拡張。PROPTEST_CASES=10000)。1 テストが数分かかることがあるので、
 # `ci` の 5 分で打ち切らず、1 時間まで許す (ハングは step 全体の時間の上限 XTASK_STEP_TIMEOUT_SECS で止める)。retries は付けない。
