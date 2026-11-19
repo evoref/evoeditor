@@ -579,7 +579,7 @@ SOFTWARE.
 
 利用している crate:
 
-- arc-swap 1.9.3 (https://github.com/vorner/arc-swap)
+- arc-swap 1.9.5 (https://github.com/vorner/arc-swap)
 
 ```text
 Copyright (c) 2017 arc-swap developers
@@ -755,9 +755,9 @@ DEALINGS IN THE SOFTWARE.
 
 利用している crate:
 
-- serde_spanned 1.1.2 (https://github.com/toml-rs/toml)
-- toml 1.2.0+spec-1.1.0 (https://github.com/toml-rs/toml)
-- toml_datetime 1.1.2+spec-1.1.0 (https://github.com/toml-rs/toml)
+- serde_spanned 1.1.3 (https://github.com/toml-rs/toml)
+- toml 1.2.1+spec-1.1.0 (https://github.com/toml-rs/toml)
+- toml_datetime 1.1.3+spec-1.1.0 (https://github.com/toml-rs/toml)
 - toml_parser 1.1.5+spec-1.1.0 (https://github.com/toml-rs/toml)
 - toml_writer 1.2.0+spec-1.1.0 (https://github.com/toml-rs/toml)
 
