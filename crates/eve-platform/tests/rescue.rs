@@ -525,7 +525,7 @@ fn 合計_100_mb_の_dirty_文書の退避が_5_秒以内に完了する() {
     );
     let elapsed = t.elapsed();
     eprintln!(
-        "100 MB の退避: {elapsed:?} (complete = {}, stored = {}, written = {})",
+        "[時間の記録] 100 MB の退避: {elapsed:?} (予算 5 s、complete = {}, stored = {}, written = {})",
         out.complete, out.stored, out.written
     );
     let dir = out.dir.clone().expect("退避先ができる");
@@ -549,8 +549,7 @@ fn 合計_100_mb_の_dirty_文書の退避が_5_秒以内に完了する() {
         full_files, out.stored,
         "OS に渡したと記録した文書は全文が書かれている"
     );
-    // 予算 (5 秒) を超えても、最後の fsync の分を除いて大きくは超えない
-    assert!(elapsed < Duration::from_secs(5 + 5), "{elapsed:?}");
+    // 時間は CI では上の記録だけにし、合否にしない (docs/09 §3.6 の「時間の判定」)
     if strict {
         assert!(elapsed < Duration::from_secs(5), "{elapsed:?}");
         assert_eq!(
