@@ -29,6 +29,9 @@ pub enum DiagKind {
         /// TOML パーサの説明文。
         message: String,
     },
+    /// 書ける構造の上限 (インラインの表・配列の入れ子と、キーの段数) を超えた (07 §4.2)。構文を読む前に見つけ、
+    /// 構文エラーと同じくファイル全体を無視する (エラー)。文言は構文エラーと同じで、理由の語が違う。
+    Structure(crate::StructureProblem),
     /// 未知のキー・セクション。`suggestion` は編集距離 2 以下の公開キー。
     UnknownKey {
         /// 編集距離 2 以下の公開キー。近いものが無ければ `None`。
@@ -52,11 +55,20 @@ pub enum DiagKind {
     },
     /// 列挙値が不正。許容値を提示する。
     InvalidValue {
-        /// 許容する値 (診断に出す順)。
-        allowed: &'static [&'static str],
+        /// 許容する値 (診断に出す順)。`ui.locale` では、`locales/` にある言語を含む (07 §17.4) ので実行時に作る。
+        allowed: Vec<String>,
     },
     /// キーマップ (`keymap.toml`) の問題。`Diagnostic.key` は書かれたキー、`value` は書かれたコマンドなど。
     Keymap(KeymapProblem),
+    /// テーマが無い (組込みの名前でも `themes/<name>.toml` でもない。07 §8.6 / §8.7)。エラーで、テーマは組込みの
+    /// `default` で描く。`Diagnostic.key` は `theme.name` か `inherits`、`value` は書かれた名前。位置は名前を書いた所。
+    ThemeNotFound {
+        /// 組込みの名前に近い名前 (`theme::near_builtin_names`)。無ければ空。
+        candidates: Vec<&'static str>,
+    },
+    /// ユーザーの言語ファイル (`locales/<lang>.toml`) の問題 (07 §17.4)。`Diagnostic.key` は平らにした文言のキー
+    /// (ファイル全体の問題では空)。値が文字列でない文言は `TypeMismatch` (期待する型は `string`) で表す。
+    Locale(crate::LocaleProblem),
 }
 
 /// キーマップの問題の種類 (docs/07 §7.4・§7.6)。いずれも該当の割当だけを無効にする。
@@ -121,7 +133,7 @@ impl ConfigValue for String {
 
 impl ConfigValue for Option<crate::Locale> {
     fn toml(&self) -> String {
-        format!("\"{}\"", self.map_or("auto", |l| l.code()))
+        format!("\"{}\"", self.as_ref().map_or("auto", crate::Locale::code))
     }
 }
 
@@ -171,6 +183,16 @@ config_enum! {
         Tab = "tab",
         /// スペース (幅は `editor.indent_width`)。
         Space = "space",
+    }
+
+    /// 検索の大文字小文字の区別の既定 (`search.case`、03 §12.1、07 §5.5)。
+    SearchCase {
+        /// 検索語に大文字を含めば区別し、含まなければ区別しない (既定)。
+        Smart = "smart",
+        /// いつも区別する。
+        Sensitive = "sensitive",
+        /// いつも区別しない。
+        Insensitive = "insensitive",
     }
 
     /// Backspace の削除の単位 (`editor.backspace_unit`、03 §13.1、OQ-45)。
@@ -437,12 +459,29 @@ config_keys! {
     /// `file.huge_file_warn_bytes`: これを超えるファイルは開く前に警告する (FR-127、docs/03 §11.2)。
     huge_file_warn_bytes: u64 = 512 * 1024 * 1024,
         "file.huge_file_warn_bytes", int(1_048_576, 1 << 40);
-    /// `file.long_line_threshold`: これを超える行を長大行として扱う (NFR-106、docs/03 §11.5)。
+    /// `file.long_line_threshold`: これを超える行を長大行として扱う (NFR-106、docs/03 §11.5 / §14.4)。
     /// 下限は長大行で表示する先頭 (64 KiB)。
     long_line_threshold: u64 = 1024 * 1024, "file.long_line_threshold", int(65_536, 1 << 30);
     /// `file.reload_on_external_change`: 外部変更の扱い (FR-117)。
     reload_on_external_change: ExternalChangePolicy = ExternalChangePolicy::AutoIfUnmodified,
         "file.reload_on_external_change", choice;
+    /// `search.newline_sugar`: 正規表現の `\n` を改行 1 つ (LF・CRLF・単独の CR) に一致させる (docs/03 §12.3.1)。
+    /// 検索バーを開いたときの値で効く。
+    newline_sugar: bool = true, "search.newline_sugar", boolean;
+    /// `search.cp932_compat_fold`: CP932 互換文字 (〜/～ など 8 組) を検索で同一視する (docs/03 §12.4.1)。
+    /// 検索バーを開いたときの値で効く。
+    cp932_compat_fold: bool = true, "search.cp932_compat_fold", boolean;
+    /// `search.case`: 検索バーを開いたときの大文字小文字の区別 (docs/03 §12.1。`search.toggle_case` で巡回)。
+    /// 検索バーを開いたときの値で効く。
+    search_case: SearchCase = SearchCase::Smart, "search.case", choice;
+    /// `search.regex_default`: 検索バーを開いたときに正規表現のモードにするか (docs/03 §12.1。`search.toggle_regex` で切り替え)。
+    /// 検索バーを開いたときの値で効く。
+    regex_default: bool = false, "search.regex_default", boolean;
+    /// `search.max_matches`: 保持する一致の上限 (docs/03 §12.2)。検索バーを開いたときの値で効く。
+    max_matches: u32 = 10_000, "search.max_matches", int(100, 1_000_000);
+    /// `search.count_limit`: 一致の件数を数える上限 (FR-404、docs/03 §12.2)。超えたら打ち切って「N+」と出す。
+    /// 検索バーを開いたときの値で効く。
+    count_limit: u64 = 1_000_000, "search.count_limit", int(1_000, 1_000_000_000);
 }
 
 /// 読込の結果。
@@ -455,7 +494,15 @@ pub struct Loaded {
 }
 
 /// 公開キーを持つセクション (公開キーの先頭の名前。並びは `--dump-config` の出力の順、07 §5 の表の順)。
-const SECTIONS: &[&str] = &["editor", "file", "view", "theme", "ui", "clipboard"];
+const SECTIONS: &[&str] = &[
+    "editor",
+    "file",
+    "view",
+    "theme",
+    "ui",
+    "search",
+    "clipboard",
+];
 
 const LOCALES: &[&str] = &["auto", "ja", "en"];
 
@@ -484,6 +531,11 @@ pub fn load_str_onto(base: Config, text: &str) -> Loaded {
             diagnostics: Vec::new(),
         },
     };
+    // 構文を読む前に、深い入れ子を作る書き方を拒む (07 §4.2。パーサがスタックを使い切らないように)
+    if let Some(d) = crate::toml_scan::structure_diagnostic(text) {
+        cx.out.diagnostics.push(d);
+        return cx.out;
+    }
     let root = match DeTable::parse(text) {
         Ok(t) => t,
         Err(e) => {
@@ -617,10 +669,12 @@ impl Cx<'_> {
         self.set_value(v);
     }
 
-    fn invalid(&mut self, key: &str, allowed: &'static [&'static str], v: &Spanned<DeValue<'_>>) {
+    fn invalid(&mut self, key: &str, allowed: &[&str], v: &Spanned<DeValue<'_>>) {
         self.diag(
             Severity::Warning,
-            DiagKind::InvalidValue { allowed },
+            DiagKind::InvalidValue {
+                allowed: allowed.iter().map(|a| (*a).to_owned()).collect(),
+            },
             key.to_owned(),
             v.span().start,
         );
@@ -759,16 +813,18 @@ fn read_theme_name(cx: &mut Cx<'_>, key: &str, v: &Spanned<DeValue<'_>>) -> Opti
     }
 }
 
-/// `ui.locale`: 言語タグか `auto` (`Some(None)`)。
+/// `ui.locale`: 言語タグか `auto` (`Some(None)`。空の値も `auto` と同じ)。ここでは値の形だけを見る (07 §17.4)。使える言語
+/// (同梱の言語と `locales/` の候補) との照合は、候補を知っている bin と `config.reload` が [`check_ui_locale`](crate::check_ui_locale)
+/// で行う。
 fn read_locale(
     cx: &mut Cx<'_>,
     key: &str,
     v: &Spanned<DeValue<'_>>,
 ) -> Option<Option<crate::Locale>> {
     let s = cx.raw_string(key, v)?;
-    if s.trim().eq_ignore_ascii_case("auto") {
+    if s.trim().is_empty() || s.trim().eq_ignore_ascii_case("auto") {
         Some(None)
-    } else if let Some(l) = crate::Locale::parse(&s) {
+    } else if let Some(l) = crate::Locale::from_tag(&s) {
         Some(Some(l))
     } else {
         cx.invalid(key, LOCALES, v);
@@ -821,7 +877,7 @@ fn nearest<'a>(name: &str, candidates: &[&'a str]) -> Option<&'a str> {
         .map(|(_, c)| c)
 }
 
-fn distance(a: &str, b: &str) -> usize {
+pub(crate) fn distance(a: &str, b: &str) -> usize {
     let a: Vec<char> = a.chars().collect();
     let b: Vec<char> = b.chars().collect();
     let mut prev: Vec<usize> = (0..=b.len()).collect();

@@ -112,21 +112,21 @@ default-dark	TrueColor	ui.hint_bar	Rgb(212, 212, 212)	Rgb(30, 30, 30)	0x00
 default-dark	TrueColor	ui.hint_bar.key	Rgb(26, 26, 26)	Rgb(143, 208, 255)	0x00
 default-dark	TrueColor	ui.input.placeholder	Rgb(128, 128, 128)	Rgb(30, 30, 30)	0x00
 default-dark	TrueColor	ui.line_number	Rgb(128, 128, 128)	Rgb(30, 30, 30)	0x00
-default-dark	TrueColor	ui.line_number.active	Rgb(212, 212, 212)	Rgb(30, 30, 30)	0x01
+default-dark	TrueColor	ui.line_number.active	Default	Default	0x01
 default-dark	TrueColor	ui.message.error	Rgb(255, 255, 255)	Rgb(179, 38, 30)	0x01
 default-dark	TrueColor	ui.message.info	Rgb(212, 212, 212)	Rgb(30, 30, 30)	0x00
 default-dark	TrueColor	ui.message.warning	Rgb(26, 26, 26)	Rgb(224, 165, 59)	0x01
 default-dark	TrueColor	ui.overlay	Rgb(212, 212, 212)	Rgb(30, 30, 30)	0x00
 default-dark	TrueColor	ui.overlay.disabled	Rgb(128, 128, 128)	Rgb(30, 30, 30)	0x00
-default-dark	TrueColor	ui.overlay.match	Rgb(212, 212, 212)	Rgb(30, 30, 30)	0x03
+default-dark	TrueColor	ui.overlay.match	Default	Default	0x03
 default-dark	TrueColor	ui.overlay.selected	Rgb(238, 240, 246)	Rgb(59, 91, 181)	0x00
 default-dark	TrueColor	ui.scroll_marker	Rgb(128, 128, 128)	Rgb(30, 30, 30)	0x01
 default-dark	TrueColor	ui.search.current	Rgb(26, 26, 26)	Rgb(240, 148, 90)	0x03
 default-dark	TrueColor	ui.search.match	Rgb(26, 26, 26)	Rgb(230, 200, 74)	0x02
-default-dark	TrueColor	ui.search_bar.toggle_on	Rgb(212, 212, 212)	Rgb(30, 30, 30)	0x04
+default-dark	TrueColor	ui.search_bar.toggle_on	Default	Default	0x04
 default-dark	TrueColor	ui.selection	Rgb(238, 240, 246)	Rgb(59, 91, 181)	0x00
 default-dark	TrueColor	ui.status_bar	Rgb(232, 232, 232)	Rgb(47, 51, 64)	0x00
-default-dark	TrueColor	ui.status_bar.chord	Rgb(212, 212, 212)	Rgb(30, 30, 30)	0x01
+default-dark	TrueColor	ui.status_bar.chord	Default	Default	0x01
 default-dark	TrueColor	ui.text	Rgb(212, 212, 212)	Rgb(30, 30, 30)	0x00
 default-dark	TrueColor	ui.whitespace	Rgb(128, 128, 128)	Rgb(30, 30, 30)	0x00
 default-dark	Ansi256	ui.control_char	Ansi(231)	Ansi(91)	0x00
@@ -138,21 +138,21 @@ default-dark	Ansi256	ui.hint_bar	Ansi(252)	Ansi(234)	0x00
 default-dark	Ansi256	ui.hint_bar.key	Ansi(233)	Ansi(117)	0x00
 default-dark	Ansi256	ui.input.placeholder	Ansi(244)	Ansi(234)	0x00
 default-dark	Ansi256	ui.line_number	Ansi(244)	Ansi(234)	0x00
-default-dark	Ansi256	ui.line_number.active	Ansi(252)	Ansi(234)	0x01
+default-dark	Ansi256	ui.line_number.active	Default	Default	0x01
 default-dark	Ansi256	ui.message.error	Ansi(231)	Ansi(124)	0x01
 default-dark	Ansi256	ui.message.info	Ansi(252)	Ansi(234)	0x00
 default-dark	Ansi256	ui.message.warning	Ansi(233)	Ansi(179)	0x01
 default-dark	Ansi256	ui.overlay	Ansi(252)	Ansi(234)	0x00
 default-dark	Ansi256	ui.overlay.disabled	Ansi(244)	Ansi(234)	0x00
-default-dark	Ansi256	ui.overlay.match	Ansi(252)	Ansi(234)	0x03
+default-dark	Ansi256	ui.overlay.match	Default	Default	0x03
 default-dark	Ansi256	ui.overlay.selected	Ansi(255)	Ansi(61)	0x00
 default-dark	Ansi256	ui.scroll_marker	Ansi(244)	Ansi(234)	0x01
 default-dark	Ansi256	ui.search.current	Ansi(233)	Ansi(209)	0x03
 default-dark	Ansi256	ui.search.match	Ansi(233)	Ansi(221)	0x02
-default-dark	Ansi256	ui.search_bar.toggle_on	Ansi(252)	Ansi(234)	0x04
+default-dark	Ansi256	ui.search_bar.toggle_on	Default	Default	0x04
 default-dark	Ansi256	ui.selection	Ansi(255)	Ansi(61)	0x00
 default-dark	Ansi256	ui.status_bar	Ansi(254)	Ansi(237)	0x00
-default-dark	Ansi256	ui.status_bar.chord	Ansi(252)	Ansi(234)	0x01
+default-dark	Ansi256	ui.status_bar.chord	Default	Default	0x01
 default-dark	Ansi256	ui.text	Ansi(252)	Ansi(234)	0x00
 default-dark	Ansi256	ui.whitespace	Ansi(244)	Ansi(234)	0x00
 default-dark	Ansi16	ui.control_char	Ansi(15)	Ansi(5)	0x00
@@ -164,21 +164,21 @@ default-dark	Ansi16	ui.hint_bar	Ansi(7)	Ansi(0)	0x00
 default-dark	Ansi16	ui.hint_bar.key	Ansi(0)	Ansi(6)	0x00
 default-dark	Ansi16	ui.input.placeholder	Ansi(8)	Ansi(0)	0x00
 default-dark	Ansi16	ui.line_number	Ansi(8)	Ansi(0)	0x00
-default-dark	Ansi16	ui.line_number.active	Ansi(7)	Ansi(0)	0x01
+default-dark	Ansi16	ui.line_number.active	Default	Default	0x01
 default-dark	Ansi16	ui.message.error	Ansi(15)	Ansi(1)	0x01
 default-dark	Ansi16	ui.message.info	Ansi(7)	Ansi(0)	0x00
 default-dark	Ansi16	ui.message.warning	Ansi(0)	Ansi(3)	0x01
 default-dark	Ansi16	ui.overlay	Ansi(7)	Ansi(0)	0x00
 default-dark	Ansi16	ui.overlay.disabled	Ansi(8)	Ansi(0)	0x00
-default-dark	Ansi16	ui.overlay.match	Ansi(7)	Ansi(0)	0x03
+default-dark	Ansi16	ui.overlay.match	Default	Default	0x03
 default-dark	Ansi16	ui.overlay.selected	Ansi(15)	Ansi(4)	0x00
 default-dark	Ansi16	ui.scroll_marker	Ansi(8)	Ansi(0)	0x01
 default-dark	Ansi16	ui.search.current	Ansi(0)	Ansi(11)	0x03
 default-dark	Ansi16	ui.search.match	Ansi(0)	Ansi(3)	0x02
-default-dark	Ansi16	ui.search_bar.toggle_on	Ansi(7)	Ansi(0)	0x04
+default-dark	Ansi16	ui.search_bar.toggle_on	Default	Default	0x04
 default-dark	Ansi16	ui.selection	Ansi(15)	Ansi(4)	0x00
 default-dark	Ansi16	ui.status_bar	Ansi(7)	Ansi(0)	0x04
-default-dark	Ansi16	ui.status_bar.chord	Ansi(7)	Ansi(0)	0x01
+default-dark	Ansi16	ui.status_bar.chord	Default	Default	0x01
 default-dark	Ansi16	ui.text	Ansi(7)	Ansi(0)	0x00
 default-dark	Ansi16	ui.whitespace	Ansi(8)	Ansi(0)	0x00
 default-dark	Mono	ui.control_char	Default	Default	0x04
@@ -216,21 +216,21 @@ default-light	TrueColor	ui.hint_bar	Rgb(30, 30, 30)	Rgb(250, 250, 250)	0x00
 default-light	TrueColor	ui.hint_bar.key	Rgb(26, 26, 26)	Rgb(143, 208, 255)	0x00
 default-light	TrueColor	ui.input.placeholder	Rgb(128, 128, 128)	Rgb(250, 250, 250)	0x00
 default-light	TrueColor	ui.line_number	Rgb(128, 128, 128)	Rgb(250, 250, 250)	0x00
-default-light	TrueColor	ui.line_number.active	Rgb(30, 30, 30)	Rgb(250, 250, 250)	0x01
+default-light	TrueColor	ui.line_number.active	Default	Default	0x01
 default-light	TrueColor	ui.message.error	Rgb(255, 255, 255)	Rgb(179, 38, 30)	0x01
 default-light	TrueColor	ui.message.info	Rgb(30, 30, 30)	Rgb(250, 250, 250)	0x00
 default-light	TrueColor	ui.message.warning	Rgb(26, 26, 26)	Rgb(224, 165, 59)	0x01
 default-light	TrueColor	ui.overlay	Rgb(30, 30, 30)	Rgb(250, 250, 250)	0x00
 default-light	TrueColor	ui.overlay.disabled	Rgb(128, 128, 128)	Rgb(250, 250, 250)	0x00
-default-light	TrueColor	ui.overlay.match	Rgb(30, 30, 30)	Rgb(250, 250, 250)	0x03
+default-light	TrueColor	ui.overlay.match	Default	Default	0x03
 default-light	TrueColor	ui.overlay.selected	Rgb(238, 240, 246)	Rgb(59, 91, 181)	0x00
 default-light	TrueColor	ui.scroll_marker	Rgb(128, 128, 128)	Rgb(250, 250, 250)	0x01
 default-light	TrueColor	ui.search.current	Rgb(26, 26, 26)	Rgb(240, 148, 90)	0x03
 default-light	TrueColor	ui.search.match	Rgb(26, 26, 26)	Rgb(230, 200, 74)	0x02
-default-light	TrueColor	ui.search_bar.toggle_on	Rgb(30, 30, 30)	Rgb(250, 250, 250)	0x04
+default-light	TrueColor	ui.search_bar.toggle_on	Default	Default	0x04
 default-light	TrueColor	ui.selection	Rgb(238, 240, 246)	Rgb(59, 91, 181)	0x00
 default-light	TrueColor	ui.status_bar	Rgb(232, 232, 232)	Rgb(47, 51, 64)	0x00
-default-light	TrueColor	ui.status_bar.chord	Rgb(30, 30, 30)	Rgb(250, 250, 250)	0x01
+default-light	TrueColor	ui.status_bar.chord	Default	Default	0x01
 default-light	TrueColor	ui.text	Rgb(30, 30, 30)	Rgb(250, 250, 250)	0x00
 default-light	TrueColor	ui.whitespace	Rgb(128, 128, 128)	Rgb(250, 250, 250)	0x00
 default-light	Ansi256	ui.control_char	Ansi(231)	Ansi(91)	0x00
@@ -242,21 +242,21 @@ default-light	Ansi256	ui.hint_bar	Ansi(235)	Ansi(255)	0x00
 default-light	Ansi256	ui.hint_bar.key	Ansi(233)	Ansi(117)	0x00
 default-light	Ansi256	ui.input.placeholder	Ansi(244)	Ansi(255)	0x00
 default-light	Ansi256	ui.line_number	Ansi(244)	Ansi(255)	0x00
-default-light	Ansi256	ui.line_number.active	Ansi(235)	Ansi(255)	0x01
+default-light	Ansi256	ui.line_number.active	Default	Default	0x01
 default-light	Ansi256	ui.message.error	Ansi(231)	Ansi(124)	0x01
 default-light	Ansi256	ui.message.info	Ansi(235)	Ansi(255)	0x00
 default-light	Ansi256	ui.message.warning	Ansi(233)	Ansi(179)	0x01
 default-light	Ansi256	ui.overlay	Ansi(235)	Ansi(255)	0x00
 default-light	Ansi256	ui.overlay.disabled	Ansi(244)	Ansi(255)	0x00
-default-light	Ansi256	ui.overlay.match	Ansi(235)	Ansi(255)	0x03
+default-light	Ansi256	ui.overlay.match	Default	Default	0x03
 default-light	Ansi256	ui.overlay.selected	Ansi(255)	Ansi(61)	0x00
 default-light	Ansi256	ui.scroll_marker	Ansi(244)	Ansi(255)	0x01
 default-light	Ansi256	ui.search.current	Ansi(233)	Ansi(209)	0x03
 default-light	Ansi256	ui.search.match	Ansi(233)	Ansi(221)	0x02
-default-light	Ansi256	ui.search_bar.toggle_on	Ansi(235)	Ansi(255)	0x04
+default-light	Ansi256	ui.search_bar.toggle_on	Default	Default	0x04
 default-light	Ansi256	ui.selection	Ansi(255)	Ansi(61)	0x00
 default-light	Ansi256	ui.status_bar	Ansi(254)	Ansi(237)	0x00
-default-light	Ansi256	ui.status_bar.chord	Ansi(235)	Ansi(255)	0x01
+default-light	Ansi256	ui.status_bar.chord	Default	Default	0x01
 default-light	Ansi256	ui.text	Ansi(235)	Ansi(255)	0x00
 default-light	Ansi256	ui.whitespace	Ansi(244)	Ansi(255)	0x00
 default-light	Ansi16	ui.control_char	Ansi(15)	Ansi(5)	0x00
@@ -268,21 +268,21 @@ default-light	Ansi16	ui.hint_bar	Ansi(0)	Ansi(15)	0x00
 default-light	Ansi16	ui.hint_bar.key	Ansi(0)	Ansi(6)	0x00
 default-light	Ansi16	ui.input.placeholder	Ansi(8)	Ansi(15)	0x00
 default-light	Ansi16	ui.line_number	Ansi(8)	Ansi(15)	0x00
-default-light	Ansi16	ui.line_number.active	Ansi(0)	Ansi(15)	0x01
+default-light	Ansi16	ui.line_number.active	Default	Default	0x01
 default-light	Ansi16	ui.message.error	Ansi(15)	Ansi(1)	0x01
 default-light	Ansi16	ui.message.info	Ansi(0)	Ansi(15)	0x00
 default-light	Ansi16	ui.message.warning	Ansi(0)	Ansi(3)	0x01
 default-light	Ansi16	ui.overlay	Ansi(0)	Ansi(15)	0x00
 default-light	Ansi16	ui.overlay.disabled	Ansi(8)	Ansi(15)	0x00
-default-light	Ansi16	ui.overlay.match	Ansi(0)	Ansi(15)	0x03
+default-light	Ansi16	ui.overlay.match	Default	Default	0x03
 default-light	Ansi16	ui.overlay.selected	Ansi(15)	Ansi(4)	0x00
 default-light	Ansi16	ui.scroll_marker	Ansi(8)	Ansi(15)	0x01
 default-light	Ansi16	ui.search.current	Ansi(0)	Ansi(11)	0x03
 default-light	Ansi16	ui.search.match	Ansi(0)	Ansi(3)	0x02
-default-light	Ansi16	ui.search_bar.toggle_on	Ansi(0)	Ansi(15)	0x04
+default-light	Ansi16	ui.search_bar.toggle_on	Default	Default	0x04
 default-light	Ansi16	ui.selection	Ansi(15)	Ansi(4)	0x00
 default-light	Ansi16	ui.status_bar	Ansi(0)	Ansi(15)	0x04
-default-light	Ansi16	ui.status_bar.chord	Ansi(0)	Ansi(15)	0x01
+default-light	Ansi16	ui.status_bar.chord	Default	Default	0x01
 default-light	Ansi16	ui.text	Ansi(0)	Ansi(15)	0x00
 default-light	Ansi16	ui.whitespace	Ansi(8)	Ansi(15)	0x00
 default-light	Mono	ui.control_char	Default	Default	0x04
@@ -415,3 +415,211 @@ ansi	Mono	ui.status_bar	Default	Default	0x04
 ansi	Mono	ui.status_bar.chord	Default	Default	0x01
 ansi	Mono	ui.text	Default	Default	0x00
 ansi	Mono	ui.whitespace	Default	Default	0x08
+high-contrast-dark	TrueColor	ui.control_char	Rgb(0, 0, 0)	Rgb(224, 168, 255)	0x00
+high-contrast-dark	TrueColor	ui.cursor_line	Rgb(255, 255, 255)	Rgb(0, 0, 0)	0x00
+high-contrast-dark	TrueColor	ui.dialog.button	Rgb(255, 255, 255)	Rgb(0, 0, 0)	0x00
+high-contrast-dark	TrueColor	ui.dialog.button.focused	Rgb(255, 255, 255)	Rgb(0, 0, 0)	0x05
+high-contrast-dark	TrueColor	ui.eof_marker	Rgb(192, 192, 192)	Rgb(0, 0, 0)	0x00
+high-contrast-dark	TrueColor	ui.hint_bar	Rgb(255, 255, 255)	Rgb(0, 0, 0)	0x00
+high-contrast-dark	TrueColor	ui.hint_bar.key	Rgb(0, 0, 0)	Rgb(127, 255, 255)	0x00
+high-contrast-dark	TrueColor	ui.input.placeholder	Rgb(192, 192, 192)	Rgb(0, 0, 0)	0x00
+high-contrast-dark	TrueColor	ui.line_number	Rgb(192, 192, 192)	Rgb(0, 0, 0)	0x00
+high-contrast-dark	TrueColor	ui.line_number.active	Default	Default	0x01
+high-contrast-dark	TrueColor	ui.message.error	Rgb(0, 0, 0)	Rgb(255, 158, 158)	0x01
+high-contrast-dark	TrueColor	ui.message.info	Rgb(255, 255, 255)	Rgb(0, 0, 0)	0x00
+high-contrast-dark	TrueColor	ui.message.warning	Rgb(0, 0, 0)	Rgb(255, 215, 95)	0x01
+high-contrast-dark	TrueColor	ui.overlay	Rgb(255, 255, 255)	Rgb(0, 0, 0)	0x00
+high-contrast-dark	TrueColor	ui.overlay.disabled	Rgb(192, 192, 192)	Rgb(0, 0, 0)	0x00
+high-contrast-dark	TrueColor	ui.overlay.match	Default	Default	0x03
+high-contrast-dark	TrueColor	ui.overlay.selected	Rgb(0, 0, 0)	Rgb(156, 207, 255)	0x00
+high-contrast-dark	TrueColor	ui.scroll_marker	Rgb(192, 192, 192)	Rgb(0, 0, 0)	0x01
+high-contrast-dark	TrueColor	ui.search.current	Rgb(0, 0, 0)	Rgb(255, 166, 77)	0x03
+high-contrast-dark	TrueColor	ui.search.match	Rgb(0, 0, 0)	Rgb(255, 255, 0)	0x02
+high-contrast-dark	TrueColor	ui.search_bar.toggle_on	Default	Default	0x04
+high-contrast-dark	TrueColor	ui.selection	Rgb(0, 0, 0)	Rgb(156, 207, 255)	0x00
+high-contrast-dark	TrueColor	ui.status_bar	Rgb(0, 0, 0)	Rgb(255, 255, 255)	0x00
+high-contrast-dark	TrueColor	ui.status_bar.chord	Default	Default	0x01
+high-contrast-dark	TrueColor	ui.text	Rgb(255, 255, 255)	Rgb(0, 0, 0)	0x00
+high-contrast-dark	TrueColor	ui.whitespace	Rgb(192, 192, 192)	Rgb(0, 0, 0)	0x00
+high-contrast-dark	Ansi256	ui.control_char	Ansi(16)	Ansi(183)	0x00
+high-contrast-dark	Ansi256	ui.cursor_line	Ansi(231)	Ansi(16)	0x00
+high-contrast-dark	Ansi256	ui.dialog.button	Ansi(231)	Ansi(16)	0x00
+high-contrast-dark	Ansi256	ui.dialog.button.focused	Ansi(231)	Ansi(16)	0x05
+high-contrast-dark	Ansi256	ui.eof_marker	Ansi(250)	Ansi(16)	0x00
+high-contrast-dark	Ansi256	ui.hint_bar	Ansi(231)	Ansi(16)	0x00
+high-contrast-dark	Ansi256	ui.hint_bar.key	Ansi(16)	Ansi(123)	0x00
+high-contrast-dark	Ansi256	ui.input.placeholder	Ansi(250)	Ansi(16)	0x00
+high-contrast-dark	Ansi256	ui.line_number	Ansi(250)	Ansi(16)	0x00
+high-contrast-dark	Ansi256	ui.line_number.active	Default	Default	0x01
+high-contrast-dark	Ansi256	ui.message.error	Ansi(16)	Ansi(217)	0x01
+high-contrast-dark	Ansi256	ui.message.info	Ansi(231)	Ansi(16)	0x00
+high-contrast-dark	Ansi256	ui.message.warning	Ansi(16)	Ansi(221)	0x01
+high-contrast-dark	Ansi256	ui.overlay	Ansi(231)	Ansi(16)	0x00
+high-contrast-dark	Ansi256	ui.overlay.disabled	Ansi(250)	Ansi(16)	0x00
+high-contrast-dark	Ansi256	ui.overlay.match	Default	Default	0x03
+high-contrast-dark	Ansi256	ui.overlay.selected	Ansi(16)	Ansi(153)	0x00
+high-contrast-dark	Ansi256	ui.scroll_marker	Ansi(250)	Ansi(16)	0x01
+high-contrast-dark	Ansi256	ui.search.current	Ansi(16)	Ansi(215)	0x03
+high-contrast-dark	Ansi256	ui.search.match	Ansi(16)	Ansi(226)	0x02
+high-contrast-dark	Ansi256	ui.search_bar.toggle_on	Default	Default	0x04
+high-contrast-dark	Ansi256	ui.selection	Ansi(16)	Ansi(153)	0x00
+high-contrast-dark	Ansi256	ui.status_bar	Ansi(16)	Ansi(231)	0x00
+high-contrast-dark	Ansi256	ui.status_bar.chord	Default	Default	0x01
+high-contrast-dark	Ansi256	ui.text	Ansi(231)	Ansi(16)	0x00
+high-contrast-dark	Ansi256	ui.whitespace	Ansi(250)	Ansi(16)	0x00
+high-contrast-dark	Ansi16	ui.control_char	Ansi(0)	Ansi(7)	0x00
+high-contrast-dark	Ansi16	ui.cursor_line	Ansi(15)	Ansi(0)	0x00
+high-contrast-dark	Ansi16	ui.dialog.button	Ansi(15)	Ansi(0)	0x00
+high-contrast-dark	Ansi16	ui.dialog.button.focused	Ansi(15)	Ansi(0)	0x05
+high-contrast-dark	Ansi16	ui.eof_marker	Ansi(6)	Ansi(0)	0x00
+high-contrast-dark	Ansi16	ui.hint_bar	Ansi(15)	Ansi(0)	0x00
+high-contrast-dark	Ansi16	ui.hint_bar.key	Ansi(0)	Ansi(6)	0x00
+high-contrast-dark	Ansi16	ui.input.placeholder	Ansi(6)	Ansi(0)	0x00
+high-contrast-dark	Ansi16	ui.line_number	Ansi(6)	Ansi(0)	0x00
+high-contrast-dark	Ansi16	ui.line_number.active	Default	Default	0x02
+high-contrast-dark	Ansi16	ui.message.error	Ansi(0)	Ansi(9)	0x00
+high-contrast-dark	Ansi16	ui.message.info	Ansi(15)	Ansi(0)	0x00
+high-contrast-dark	Ansi16	ui.message.warning	Ansi(0)	Ansi(3)	0x00
+high-contrast-dark	Ansi16	ui.overlay	Ansi(15)	Ansi(0)	0x00
+high-contrast-dark	Ansi16	ui.overlay.disabled	Ansi(6)	Ansi(0)	0x00
+high-contrast-dark	Ansi16	ui.overlay.match	Default	Default	0x02
+high-contrast-dark	Ansi16	ui.overlay.selected	Ansi(0)	Ansi(14)	0x00
+high-contrast-dark	Ansi16	ui.scroll_marker	Ansi(6)	Ansi(0)	0x00
+high-contrast-dark	Ansi16	ui.search.current	Ansi(15)	Ansi(4)	0x03
+high-contrast-dark	Ansi16	ui.search.match	Ansi(0)	Ansi(11)	0x02
+high-contrast-dark	Ansi16	ui.search_bar.toggle_on	Default	Default	0x04
+high-contrast-dark	Ansi16	ui.selection	Ansi(0)	Ansi(14)	0x00
+high-contrast-dark	Ansi16	ui.status_bar	Ansi(0)	Ansi(15)	0x00
+high-contrast-dark	Ansi16	ui.status_bar.chord	Default	Default	0x02
+high-contrast-dark	Ansi16	ui.text	Ansi(15)	Ansi(0)	0x00
+high-contrast-dark	Ansi16	ui.whitespace	Ansi(6)	Ansi(0)	0x00
+high-contrast-dark	Mono	ui.control_char	Default	Default	0x04
+high-contrast-dark	Mono	ui.cursor_line	Default	Default	0x00
+high-contrast-dark	Mono	ui.dialog.button	Default	Default	0x00
+high-contrast-dark	Mono	ui.dialog.button.focused	Default	Default	0x05
+high-contrast-dark	Mono	ui.eof_marker	Default	Default	0x00
+high-contrast-dark	Mono	ui.hint_bar	Default	Default	0x00
+high-contrast-dark	Mono	ui.hint_bar.key	Default	Default	0x04
+high-contrast-dark	Mono	ui.input.placeholder	Default	Default	0x00
+high-contrast-dark	Mono	ui.line_number	Default	Default	0x00
+high-contrast-dark	Mono	ui.line_number.active	Default	Default	0x01
+high-contrast-dark	Mono	ui.message.error	Default	Default	0x05
+high-contrast-dark	Mono	ui.message.info	Default	Default	0x00
+high-contrast-dark	Mono	ui.message.warning	Default	Default	0x01
+high-contrast-dark	Mono	ui.overlay	Default	Default	0x00
+high-contrast-dark	Mono	ui.overlay.disabled	Default	Default	0x00
+high-contrast-dark	Mono	ui.overlay.match	Default	Default	0x03
+high-contrast-dark	Mono	ui.overlay.selected	Default	Default	0x04
+high-contrast-dark	Mono	ui.scroll_marker	Default	Default	0x01
+high-contrast-dark	Mono	ui.search.current	Default	Default	0x06
+high-contrast-dark	Mono	ui.search.match	Default	Default	0x02
+high-contrast-dark	Mono	ui.search_bar.toggle_on	Default	Default	0x04
+high-contrast-dark	Mono	ui.selection	Default	Default	0x04
+high-contrast-dark	Mono	ui.status_bar	Default	Default	0x04
+high-contrast-dark	Mono	ui.status_bar.chord	Default	Default	0x01
+high-contrast-dark	Mono	ui.text	Default	Default	0x00
+high-contrast-dark	Mono	ui.whitespace	Default	Default	0x01
+high-contrast-light	TrueColor	ui.control_char	Rgb(255, 255, 255)	Rgb(106, 27, 154)	0x00
+high-contrast-light	TrueColor	ui.cursor_line	Rgb(0, 0, 0)	Rgb(255, 255, 255)	0x00
+high-contrast-light	TrueColor	ui.dialog.button	Rgb(0, 0, 0)	Rgb(255, 255, 255)	0x00
+high-contrast-light	TrueColor	ui.dialog.button.focused	Rgb(0, 0, 0)	Rgb(255, 255, 255)	0x05
+high-contrast-light	TrueColor	ui.eof_marker	Rgb(64, 64, 64)	Rgb(255, 255, 255)	0x00
+high-contrast-light	TrueColor	ui.hint_bar	Rgb(0, 0, 0)	Rgb(255, 255, 255)	0x00
+high-contrast-light	TrueColor	ui.hint_bar.key	Rgb(255, 255, 255)	Rgb(0, 90, 90)	0x00
+high-contrast-light	TrueColor	ui.input.placeholder	Rgb(64, 64, 64)	Rgb(255, 255, 255)	0x00
+high-contrast-light	TrueColor	ui.line_number	Rgb(64, 64, 64)	Rgb(255, 255, 255)	0x00
+high-contrast-light	TrueColor	ui.line_number.active	Default	Default	0x01
+high-contrast-light	TrueColor	ui.message.error	Rgb(255, 255, 255)	Rgb(160, 0, 0)	0x01
+high-contrast-light	TrueColor	ui.message.info	Rgb(0, 0, 0)	Rgb(255, 255, 255)	0x00
+high-contrast-light	TrueColor	ui.message.warning	Rgb(255, 255, 255)	Rgb(107, 68, 0)	0x01
+high-contrast-light	TrueColor	ui.overlay	Rgb(0, 0, 0)	Rgb(255, 255, 255)	0x00
+high-contrast-light	TrueColor	ui.overlay.disabled	Rgb(64, 64, 64)	Rgb(255, 255, 255)	0x00
+high-contrast-light	TrueColor	ui.overlay.match	Default	Default	0x03
+high-contrast-light	TrueColor	ui.overlay.selected	Rgb(255, 255, 255)	Rgb(10, 61, 145)	0x00
+high-contrast-light	TrueColor	ui.scroll_marker	Rgb(64, 64, 64)	Rgb(255, 255, 255)	0x01
+high-contrast-light	TrueColor	ui.search.current	Rgb(255, 255, 255)	Rgb(0, 0, 0)	0x03
+high-contrast-light	TrueColor	ui.search.match	Rgb(255, 255, 255)	Rgb(0, 95, 0)	0x02
+high-contrast-light	TrueColor	ui.search_bar.toggle_on	Default	Default	0x04
+high-contrast-light	TrueColor	ui.selection	Rgb(255, 255, 255)	Rgb(10, 61, 145)	0x00
+high-contrast-light	TrueColor	ui.status_bar	Rgb(255, 255, 255)	Rgb(0, 0, 0)	0x00
+high-contrast-light	TrueColor	ui.status_bar.chord	Default	Default	0x01
+high-contrast-light	TrueColor	ui.text	Rgb(0, 0, 0)	Rgb(255, 255, 255)	0x00
+high-contrast-light	TrueColor	ui.whitespace	Rgb(64, 64, 64)	Rgb(255, 255, 255)	0x00
+high-contrast-light	Ansi256	ui.control_char	Ansi(231)	Ansi(54)	0x00
+high-contrast-light	Ansi256	ui.cursor_line	Ansi(16)	Ansi(231)	0x00
+high-contrast-light	Ansi256	ui.dialog.button	Ansi(16)	Ansi(231)	0x00
+high-contrast-light	Ansi256	ui.dialog.button.focused	Ansi(16)	Ansi(231)	0x05
+high-contrast-light	Ansi256	ui.eof_marker	Ansi(238)	Ansi(231)	0x00
+high-contrast-light	Ansi256	ui.hint_bar	Ansi(16)	Ansi(231)	0x00
+high-contrast-light	Ansi256	ui.hint_bar.key	Ansi(231)	Ansi(23)	0x00
+high-contrast-light	Ansi256	ui.input.placeholder	Ansi(238)	Ansi(231)	0x00
+high-contrast-light	Ansi256	ui.line_number	Ansi(238)	Ansi(231)	0x00
+high-contrast-light	Ansi256	ui.line_number.active	Default	Default	0x01
+high-contrast-light	Ansi256	ui.message.error	Ansi(231)	Ansi(124)	0x01
+high-contrast-light	Ansi256	ui.message.info	Ansi(16)	Ansi(231)	0x00
+high-contrast-light	Ansi256	ui.message.warning	Ansi(231)	Ansi(237)	0x01
+high-contrast-light	Ansi256	ui.overlay	Ansi(16)	Ansi(231)	0x00
+high-contrast-light	Ansi256	ui.overlay.disabled	Ansi(238)	Ansi(231)	0x00
+high-contrast-light	Ansi256	ui.overlay.match	Default	Default	0x03
+high-contrast-light	Ansi256	ui.overlay.selected	Ansi(231)	Ansi(19)	0x00
+high-contrast-light	Ansi256	ui.scroll_marker	Ansi(238)	Ansi(231)	0x01
+high-contrast-light	Ansi256	ui.search.current	Ansi(231)	Ansi(16)	0x03
+high-contrast-light	Ansi256	ui.search.match	Ansi(231)	Ansi(22)	0x02
+high-contrast-light	Ansi256	ui.search_bar.toggle_on	Default	Default	0x04
+high-contrast-light	Ansi256	ui.selection	Ansi(231)	Ansi(19)	0x00
+high-contrast-light	Ansi256	ui.status_bar	Ansi(231)	Ansi(16)	0x00
+high-contrast-light	Ansi256	ui.status_bar.chord	Default	Default	0x01
+high-contrast-light	Ansi256	ui.text	Ansi(16)	Ansi(231)	0x00
+high-contrast-light	Ansi256	ui.whitespace	Ansi(238)	Ansi(231)	0x00
+high-contrast-light	Ansi16	ui.control_char	Ansi(15)	Ansi(5)	0x00
+high-contrast-light	Ansi16	ui.cursor_line	Ansi(0)	Ansi(15)	0x00
+high-contrast-light	Ansi16	ui.dialog.button	Ansi(0)	Ansi(15)	0x00
+high-contrast-light	Ansi16	ui.dialog.button.focused	Ansi(0)	Ansi(15)	0x04
+high-contrast-light	Ansi16	ui.eof_marker	Ansi(4)	Ansi(15)	0x00
+high-contrast-light	Ansi16	ui.hint_bar	Ansi(0)	Ansi(15)	0x00
+high-contrast-light	Ansi16	ui.hint_bar.key	Ansi(15)	Ansi(4)	0x00
+high-contrast-light	Ansi16	ui.input.placeholder	Ansi(4)	Ansi(15)	0x00
+high-contrast-light	Ansi16	ui.line_number	Ansi(4)	Ansi(15)	0x00
+high-contrast-light	Ansi16	ui.line_number.active	Default	Default	0x02
+high-contrast-light	Ansi16	ui.message.error	Ansi(15)	Ansi(1)	0x01
+high-contrast-light	Ansi16	ui.message.info	Ansi(0)	Ansi(15)	0x00
+high-contrast-light	Ansi16	ui.message.warning	Ansi(0)	Ansi(3)	0x00
+high-contrast-light	Ansi16	ui.overlay	Ansi(0)	Ansi(15)	0x00
+high-contrast-light	Ansi16	ui.overlay.disabled	Ansi(4)	Ansi(15)	0x00
+high-contrast-light	Ansi16	ui.overlay.match	Default	Default	0x02
+high-contrast-light	Ansi16	ui.overlay.selected	Ansi(15)	Ansi(4)	0x00
+high-contrast-light	Ansi16	ui.scroll_marker	Ansi(4)	Ansi(15)	0x00
+high-contrast-light	Ansi16	ui.search.current	Ansi(15)	Ansi(0)	0x03
+high-contrast-light	Ansi16	ui.search.match	Ansi(15)	Ansi(5)	0x02
+high-contrast-light	Ansi16	ui.search_bar.toggle_on	Default	Default	0x04
+high-contrast-light	Ansi16	ui.selection	Ansi(15)	Ansi(4)	0x00
+high-contrast-light	Ansi16	ui.status_bar	Ansi(15)	Ansi(0)	0x00
+high-contrast-light	Ansi16	ui.status_bar.chord	Default	Default	0x01
+high-contrast-light	Ansi16	ui.text	Ansi(0)	Ansi(15)	0x00
+high-contrast-light	Ansi16	ui.whitespace	Ansi(4)	Ansi(15)	0x00
+high-contrast-light	Mono	ui.control_char	Default	Default	0x04
+high-contrast-light	Mono	ui.cursor_line	Default	Default	0x00
+high-contrast-light	Mono	ui.dialog.button	Default	Default	0x00
+high-contrast-light	Mono	ui.dialog.button.focused	Default	Default	0x05
+high-contrast-light	Mono	ui.eof_marker	Default	Default	0x00
+high-contrast-light	Mono	ui.hint_bar	Default	Default	0x00
+high-contrast-light	Mono	ui.hint_bar.key	Default	Default	0x04
+high-contrast-light	Mono	ui.input.placeholder	Default	Default	0x00
+high-contrast-light	Mono	ui.line_number	Default	Default	0x00
+high-contrast-light	Mono	ui.line_number.active	Default	Default	0x01
+high-contrast-light	Mono	ui.message.error	Default	Default	0x05
+high-contrast-light	Mono	ui.message.info	Default	Default	0x00
+high-contrast-light	Mono	ui.message.warning	Default	Default	0x01
+high-contrast-light	Mono	ui.overlay	Default	Default	0x00
+high-contrast-light	Mono	ui.overlay.disabled	Default	Default	0x00
+high-contrast-light	Mono	ui.overlay.match	Default	Default	0x03
+high-contrast-light	Mono	ui.overlay.selected	Default	Default	0x04
+high-contrast-light	Mono	ui.scroll_marker	Default	Default	0x01
+high-contrast-light	Mono	ui.search.current	Default	Default	0x06
+high-contrast-light	Mono	ui.search.match	Default	Default	0x02
+high-contrast-light	Mono	ui.search_bar.toggle_on	Default	Default	0x04
+high-contrast-light	Mono	ui.selection	Default	Default	0x04
+high-contrast-light	Mono	ui.status_bar	Default	Default	0x04
+high-contrast-light	Mono	ui.status_bar.chord	Default	Default	0x01
+high-contrast-light	Mono	ui.text	Default	Default	0x00
+high-contrast-light	Mono	ui.whitespace	Default	Default	0x01

@@ -1,0 +1,22 @@
+{
+  "commit": "90b2c81",
+  "env": "ENV-W1",
+  "id": "BM-109m-nl-digits",
+  "quick": false,
+  "results": [
+    {
+      "id": "BM-109m-nl-digits",
+      "matches": 453929,
+      "max_ms": 118.5,
+      "mb": 100,
+      "min_ms": 117.8,
+      "n": 5,
+      "p50_ms": 118.2,
+      "quick": false,
+      "ratio": 0.72,
+      "ratio_max": 0.72,
+      "ratio_min": 0.71,
+      "ref_p50_ms": 164.8
+    }
+  ]
+}

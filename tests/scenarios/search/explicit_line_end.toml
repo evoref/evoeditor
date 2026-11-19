@@ -1,0 +1,47 @@
+# 行の終端に一致するのは、行の終端を明示した書き方だけ。`[^"]` は v0.3 と同じく 1 行の中で一致し、`\n` を書き足すと行をまたぐ
+# (FR-402 AC-7、03 §12.3.1 の「行の終端に一致する書き方」)。
+[meta]
+id = "search/explicit_line_end"
+title = "否定のクラスは行をまたがず、改行を明示した書き方だけが行をまたぐ"
+verifies = ["AC-FR-402-7"]
+since = "v0.4"
+tags = ["search", "regex", "multiline"]
+
+[setup]
+size = [60, 12]
+
+[setup.fs]
+"a.txt" = { text = "say \"a\nb\" ok" }
+
+[[step]]
+open = "a.txt"
+[[step]]
+run_jobs = true
+[[step]]
+keys = "ctrl+f"
+[[step]]
+keys = "alt+r"
+[[step]]
+text = '"[^"]*"'
+[[step]]
+run_jobs = true
+[[step]]
+keys = "enter"
+[[step]]
+keys = "backspace"
+[[step]]
+text = '\n[^"]*"'
+[[step]]
+run_jobs = true
+[[step]]
+keys = "enter"
+
+# `"[^"]*"` は行をまたがないので一致が無く、次へで選択は動かない
+[[assert]]
+at = 7
+query = { kind = "selection" }
+expect = { anchor = 0, head = 0 }
+# 改行 (`\n`) を書き足した `"[^"]*\n[^"]*"` は、行をまたいで引用符の対に一致する
+[[assert]]
+query = { kind = "selection" }
+expect = { anchor = 4, head = 9 }

@@ -1,6 +1,6 @@
 //! 単一受信口のメッセージ (docs/02 §9.2)。変種は最初の利用者の版で足す。
 
-use eve_core::JobResult;
+use eve_core::JobOutput;
 use eve_view::{InputEvent, WindowId};
 
 /// プロセスの終了コード (値の正本は 07 §18.4)。
@@ -47,7 +47,7 @@ pub enum HostMsg {
     /// 入力スレッド (TUI)。
     Input(WindowId, InputEvent),
     /// `io` / `bg` ワーカー。
-    Job(Box<JobResult>),
+    Job(Box<JobOutput>),
     /// シグナル・コンソールイベント。
     Signal(SignalKind),
     /// 入力スレッドの死亡・非メインスレッドのパニック。

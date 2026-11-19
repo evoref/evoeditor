@@ -41,6 +41,104 @@ struct RsDecoder {
     has_bom: bool,
     invalid_bytes: u32,
     collision: bool,
+    /// 復号器が消費した入力のバイト数 (BOM を除く)。UTF-16 の持ち越しの判定 (`is_neutral`) に使う。
+    consumed: u64,
+    /// `last = true` で呼んだ (`encoding_rs` の復号器は、その後に使えない)。
+    finished: bool,
+    /// ISO-2022-JP の文字の境界の追跡 (`at_char_boundary`)。ほかの文字コードは `None`。
+    iso: Option<IsoTracker>,
+}
+
+/// ISO-2022-JP の復号器の状態 (WHATWG Encoding の ISO-2022-JP decoder の状態と同じ遷移)。`encoding_rs` は状態を見せない
+/// ので、渡したバイト列から同じ遷移で追い、持ち越しのバイトがあるか (`Trail` / `EscStart` / `Esc`) だけを答える。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum IsoState {
+    Ascii,
+    Roman,
+    Katakana,
+    Lead,
+    Trail,
+    EscStart,
+    /// エスケープ列の 2 バイト目 (`$` か `(`) を受けた。
+    Esc(u8),
+}
+
+#[derive(Clone, Copy, Debug)]
+struct IsoTracker {
+    state: IsoState,
+    /// エスケープ列の後に戻る状態 (WHATWG の output state)。
+    output: IsoState,
+}
+
+impl IsoTracker {
+    fn new() -> IsoTracker {
+        IsoTracker {
+            state: IsoState::Ascii,
+            output: IsoState::Ascii,
+        }
+    }
+
+    fn at_boundary(&self) -> bool {
+        matches!(
+            self.state,
+            IsoState::Ascii | IsoState::Roman | IsoState::Katakana | IsoState::Lead
+        )
+    }
+
+    fn feed(&mut self, bytes: &[u8]) {
+        for &b in bytes {
+            self.byte(b);
+        }
+    }
+
+    fn byte(&mut self, b: u8) {
+        match self.state {
+            IsoState::Ascii | IsoState::Roman | IsoState::Katakana => {
+                if b == 0x1B {
+                    self.state = IsoState::EscStart;
+                }
+            }
+            IsoState::Lead => match b {
+                0x1B => self.state = IsoState::EscStart,
+                0x21..=0x7E => self.state = IsoState::Trail,
+                _ => {}
+            },
+            IsoState::Trail => {
+                self.state = if b == 0x1B {
+                    IsoState::EscStart
+                } else {
+                    IsoState::Lead
+                };
+            }
+            IsoState::EscStart => {
+                if b == b'$' || b == b'(' {
+                    self.state = IsoState::Esc(b);
+                } else {
+                    // 読み直す (prepend)
+                    self.state = self.output;
+                    self.byte(b);
+                }
+            }
+            IsoState::Esc(lead) => {
+                let next = match (lead, b) {
+                    (b'(', b'B') => Some(IsoState::Ascii),
+                    (b'(', b'J') => Some(IsoState::Roman),
+                    (b'(', b'I') => Some(IsoState::Katakana),
+                    (b'$', b'@' | b'B') => Some(IsoState::Lead),
+                    _ => None,
+                };
+                if let Some(n) = next {
+                    self.state = n;
+                    self.output = n;
+                } else {
+                    // lead とこのバイトを読み直す (prepend)
+                    self.state = self.output;
+                    self.byte(lead);
+                    self.byte(b);
+                }
+            }
+        }
+    }
 }
 
 impl Decoder {
@@ -59,9 +157,56 @@ impl Decoder {
                 has_bom: false,
                 invalid_bytes: 0,
                 collision: false,
+                consumed: 0,
+                finished: false,
+                iso: (enc == Encoding::Iso2022Jp).then(IsoTracker::new),
             })),
         };
         Decoder { enc, inner }
+    }
+
+    /// 初期状態に戻す (BOM は読み飛ばさない。`Decoder::new(enc, false)` と同じ状態)。作業の領域は使い回す
+    /// (つながりの局所の検査と区切った確認 (ii) が、並びごとに復号器を作り直さない。03 §8.3.1)。
+    pub fn reset(&mut self) {
+        match &mut self.inner {
+            Inner::Utf8(d) => *d = Utf8Decoder::new(false),
+            Inner::Rs(d) => {
+                d.dec = d.enc.rs().new_decoder_without_bom_handling();
+                d.history.clear();
+                d.skip_bom = false;
+                d.at_start = true;
+                d.start_carry.clear();
+                d.has_bom = false;
+                d.invalid_bytes = 0;
+                d.collision = false;
+                d.consumed = 0;
+                d.finished = false;
+                if d.iso.is_some() {
+                    d.iso = Some(IsoTracker::new());
+                }
+            }
+        }
+    }
+
+    /// 持ち越し (途中で切れた多バイト列・UTF-16 の奇数のバイトと対になる前の上位サロゲート) が無いか。持ち越しが無い
+    /// 状態は初期状態と同じに振る舞う (WHATWG の復号器は先読みをしない)。`last = true` で呼んだ後は真。
+    /// つながりの変わる範囲 (03 §8.3.1 の「示す位置と変わる範囲」) が、復号の側と符号化の側の境界が再び一致したかを見るのに使う。
+    pub fn is_neutral(&self) -> bool {
+        match &self.inner {
+            Inner::Utf8(d) => d.is_neutral(),
+            Inner::Rs(d) => d.is_neutral(),
+        }
+    }
+
+    /// 文字の境界にいるか: 持ち越しのバイト (途中で切れた多バイト列・UTF-16 の奇数のバイトと対になる前の上位サロゲート・
+    /// ISO-2022-JP の途中のエスケープ列と 2 バイトの組の 1 バイト目) が無い。`is_neutral` と違い、状態付き符号化の
+    /// 状態 (ISO-2022-JP の漢字の区間) は問わない。真のとき、ここまでの出力は、ここまでの入力を `last = true` で
+    /// 復号した結果と同じ (持ち越しを不正バイトとして出さない)。標準入力を途中で切る位置に使う (03 §9.2.2)。
+    pub fn at_char_boundary(&self) -> bool {
+        match &self.inner {
+            Inner::Utf8(d) => d.is_neutral(),
+            Inner::Rs(d) => d.at_char_boundary(),
+        }
     }
 
     pub fn encoding(&self) -> Encoding {
@@ -118,7 +263,55 @@ impl Decoder {
 }
 
 impl RsDecoder {
+    fn is_neutral(&self) -> bool {
+        if self.finished {
+            return true;
+        }
+        if !self.start_carry.is_empty() {
+            return false;
+        }
+        if self.enc.is_utf16() {
+            // encoding_rs は UTF-16 の復号器の状態を見せない。消費したバイトの数が偶数で、最後の 16 ビットの単位が上位
+            // サロゲート (D800..DBFF) でなければ持ち越しは無い (上位サロゲートは、どの経路で読んでも次の単位を待つ)
+            if !self.consumed.is_multiple_of(2) {
+                return false;
+            }
+            let n = self.history.len();
+            if self.consumed == 0 || n < 2 {
+                return true;
+            }
+            let (a, b) = (self.history[n - 2], self.history[n - 1]);
+            let unit = if self.enc == Encoding::Utf16Le {
+                u16::from_le_bytes([a, b])
+            } else {
+                u16::from_be_bytes([a, b])
+            };
+            return !(0xD800..=0xDBFF).contains(&unit);
+        }
+        // Shift_JIS・EUC-JP・ISO-2022-JP: encoding_rs は、持ち越しの無い状態でだけ `Some` を返す (状態を変えない)
+        self.dec.latin1_byte_compatible_up_to(&[]).is_some()
+    }
+
+    fn at_char_boundary(&self) -> bool {
+        if self.finished {
+            return true;
+        }
+        match &self.iso {
+            Some(t) => t.at_boundary() && self.start_carry.is_empty(),
+            None => self.is_neutral(),
+        }
+    }
+
     fn decode(&mut self, chunk: &[u8], last: bool, out: &mut String) {
+        if let Some(t) = self.iso.as_mut() {
+            t.feed(chunk);
+        }
+        self.decode_inner(chunk, last, out);
+        // 呼び終えた後に is_neutral が encoding_rs の終えた復号器を問い合わせない (問い合わせるとパニックする)
+        self.finished |= last;
+    }
+
+    fn decode_inner(&mut self, chunk: &[u8], last: bool, out: &mut String) {
         if self.at_start {
             // UTF-16 の BOM の判定には先頭 2 バイトが要る
             self.start_carry.extend_from_slice(chunk);
@@ -183,6 +376,7 @@ impl RsDecoder {
     }
 
     fn remember(&mut self, consumed: &[u8]) {
+        self.consumed = self.consumed.wrapping_add(consumed.len() as u64);
         self.history.extend_from_slice(consumed);
         if self.history.len() > HISTORY * 2 {
             let cut = self.history.len() - HISTORY;
@@ -238,6 +432,52 @@ mod tests {
                 );
             }
         }
+    }
+
+    /// `at_char_boundary` が真の位置で切った出力は、その接頭辞を `last = true` で復号した結果と同じ (標準入力の切り方)。
+    fn check_boundaries(enc: Encoding, bytes: &[u8]) -> usize {
+        let mut d = Decoder::new(enc, false);
+        let mut out = String::new();
+        let mut hits = 0;
+        for (i, b) in bytes.iter().enumerate() {
+            d.decode(std::slice::from_ref(b), false, &mut out);
+            if d.at_char_boundary() {
+                hits += 1;
+                let mut whole = Decoder::new(enc, false);
+                let mut w = String::new();
+                whole.decode(&bytes[..=i], true, &mut w);
+                assert_eq!(out, w, "{enc:?} の {i} バイト目の後");
+            }
+        }
+        hits
+    }
+
+    #[test]
+    fn 文字の境界で切った出力は接頭辞の復号と同じ() {
+        // ISO-2022-JP: 漢字の区間の中でも、組の直後は境界。不正なエスケープ列・組の途中のエスケープも混ぜる
+        let iso = b"\x1B$BF|K\\8l\x1B(Babc\x1B$B$\x1B(J\\\x1B(I1\x1B$\x1B(Bz\x1B$Bx\x1BX\n\x1B$B\x1B$\x1B$";
+        let n = check_boundaries(Encoding::Iso2022Jp, iso);
+        assert!(n > 10, "{n}");
+        let mut d = Decoder::new(Encoding::Iso2022Jp, false);
+        let mut o = String::new();
+        d.decode(b"\x1B$BF", false, &mut o);
+        assert!(!d.at_char_boundary(), "組の 1 バイト目");
+        d.decode(b"|", false, &mut o);
+        assert!(d.at_char_boundary(), "組の直後 (漢字の状態のまま)");
+        assert!(!d.is_neutral(), "is_neutral は漢字の状態で偽");
+        d.decode(b"\x1B$", false, &mut o);
+        assert!(!d.at_char_boundary(), "エスケープ列の途中");
+        check_boundaries(Encoding::ShiftJis, b"\x93\xFA\x96\x7Ba\x81\xFF\xB1\x81\x81");
+        check_boundaries(
+            Encoding::EucJp,
+            b"\xC6\xFC\x8F\xB0\xA1\x8E\xB1a\xC6\x8F\xFF",
+        );
+        check_boundaries(
+            Encoding::Utf16Le,
+            b"a\x00\x3D\xD8\x00\xDE\x3D\xD8b\x00\x3D\xD8\x3D\xD8\x00",
+        );
+        check_boundaries(Encoding::Utf8, "aあ😀\u{301}".as_bytes());
+        check_boundaries(Encoding::Utf8, b"\xE3\xE3\x81\x82\xF0\x9F\x98x");
     }
 
     #[test]

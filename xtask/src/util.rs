@@ -13,6 +13,17 @@ pub fn workspace_root() -> PathBuf {
         .to_path_buf()
 }
 
+/// cargo のビルドの出力先 (`cargo metadata` の `target_directory`)。
+/// 環境変数 `CARGO_TARGET_DIR` と設定の `build.target-dir` を反映する。求められなければ `<リポジトリ>/target`。
+/// ビルドの成果物 (`release/evoeditor.exe` など) を探すときに使う。xtask 自身の出力 (`target/dist` など) の置き場所は変えない。
+pub fn cargo_target_dir() -> PathBuf {
+    run_capture(Command::new("cargo").args(["metadata", "--format-version", "1", "--no-deps"]))
+        .ok()
+        .and_then(|json| serde_json::from_str::<serde_json::Value>(&json).ok())
+        .and_then(|v| v["target_directory"].as_str().map(PathBuf::from))
+        .unwrap_or_else(|| workspace_root().join("target"))
+}
+
 /// UTF-8 のテキストファイルを読む。改行は LF に揃える (CRLF の作業ツリーでも同じ結果にする)。
 pub fn read_text(path: &Path) -> Result<String, String> {
     fs::read_to_string(path)

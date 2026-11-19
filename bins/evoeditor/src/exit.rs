@@ -21,7 +21,8 @@ pub(crate) const EXIT_TERMINAL: u8 = 5;
 pub(crate) const EXIT_PANIC: u8 = 70;
 
 /// 端末の復元の後に出す行 (`Effect::Quit` の `stderr` と起動の失敗)。定数表 (英語の行、日本語の行の順) にあるキーはそれで、
-/// 無ければ選択中の言語のカタログで解決し、それも無ければキー名を出す。
+/// 無ければ選択中の言語の **同梱の** カタログ (ユーザーの言語ファイルを重ねない。終了の経路にユーザーの文言を入れない、
+/// 07 §17.4) で解決し、それも無ければキー名を出す。
 fn print_exit_lines(host: &mut Host, locale: eve_config::Locale) {
     let lines = host.take_exit_stderr();
     if lines.is_empty() {

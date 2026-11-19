@@ -362,15 +362,130 @@ fn 正規表現の構文エラーは件数の代わりに理由を示し_検索�
     assert_eq!(total(&mut h), "1/2");
 }
 
+// v0.3 までは「改行を含むパターンは未対応」と示した。v0.4 の M24 の (4) で行をまたいで探す (03 §12.3.1)
+// verifies: AC-FR-402-5
 #[test]
-fn 改行を含むパターンは未対応と示す() {
+fn 改行を含むパターンは行をまたいで探す() {
     let mut h = Harness::new().with_size(60, 10);
-    h.text("a\nb");
+    h.text("a\nb a\nb");
+    h.keys("ctrl+home");
     h.keys("ctrl+f");
     h.keys("alt+r");
     h.text(r"a\nb");
-    let e = cell_text(&bar(&mut h).error.expect("未対応"));
-    assert!(e.contains("改行を含むパターンは未対応"), "{e}");
+    assert_eq!(total(&mut h), "1/2");
+    assert!(bar(&mut h).error.is_none());
+}
+
+// 行の終端を符号位置で書いた検索語 (`\x0A`) も、`\n` と同じく行の終端に一致する (03 §12.3.1。M24 の (1)〜(3) の間は未対応)
+// verifies: AC-FR-402-7
+#[test]
+fn 行の終端を符号位置で書いたパターンも行をまたいで探し_否定のクラスは_1_行の中() {
+    let mut h = Harness::new().with_size(60, 10);
+    h.text("ab\ncd");
+    h.keys("ctrl+home");
+    h.keys("ctrl+f");
+    h.keys("alt+r");
+    h.text(r"b\x0Ac");
+    assert_eq!(total(&mut h), "1/1");
+    assert!(bar(&mut h).error.is_none());
+    for _ in 0..r"b\x0Ac".len() {
+        h.keys("backspace");
+    }
+    // `[^\n]` は 1 行の中で一致する (行の終端に一致しない書き方)
+    h.text(r"[^\n]+");
+    assert!(bar(&mut h).error.is_none());
+    assert_eq!(total(&mut h), "1/2");
+}
+
+// 正規表現のコンパイルは検索のジョブで行う。強調と現在の一致は、最初のジョブの結果が届くまで出ない (03 §12.3.1)
+#[test]
+fn 正規表現の強調は検索のジョブの結果が届いてから出る() {
+    let mut h = Harness::new().with_size(40, 10);
+    h.text("foo bar foo");
+    h.keys("ctrl+home");
+    h.keys("ctrl+f");
+    h.keys("alt+r");
+    h.text("fo+");
+    let f = h.frame();
+    assert_eq!(
+        marked(&f, StyleMods::UNDERLINE).replace('|', ""),
+        "",
+        "照合器ができるまで強調しない"
+    );
+    h.run_jobs();
+    let f = h.frame();
+    assert_eq!(marked(&f, StyleMods::UNDERLINE).replace('|', ""), "foofoo");
+    let cur = marked(&f, StyleMods::UNDERLINE | StyleMods::BOLD);
+    assert!(cur.starts_with("foo"), "現在の一致も強調する: {cur}");
+    h.keys("enter");
+    assert_eq!(h.selection_range(), (0, 3), "Enter で現在の一致を確定する");
+    // memmem の経路のリテラルは、今どおり入力の時点で強調する
+    let mut h = Harness::new().with_size(40, 10);
+    h.text("foo bar foo");
+    h.keys("ctrl+home");
+    h.keys("ctrl+f");
+    h.text("foo");
+    let f = h.frame();
+    assert_eq!(marked(&f, StyleMods::UNDERLINE).replace('|', ""), "foofoo");
+}
+
+// コンパイル後の大きさの上限の超過は、構文は正しいのでジョブのコンパイルで分かる (03 §12.3.1)
+#[test]
+fn 大きすぎる正規表現はジョブのコンパイルで分かり_検索バーに理由を示す() {
+    let mut h = Harness::new().with_size(60, 10);
+    h.text("abc");
+    h.keys("ctrl+f");
+    h.keys("alt+r");
+    h.text("(?:[a-z]{1000}){1000}");
+    assert!(
+        bar(&mut h).error.is_none(),
+        "メインスレッドの解析では分からない"
+    );
+    h.run_jobs();
+    let b = bar(&mut h);
+    let e = cell_text(&b.error.expect("大きすぎる"));
+    assert!(e.contains("pattern too large"), "{e}");
+    assert!(b.count_text.is_none(), "件数は出さない");
+}
+
+// 照合器ができる前に `Enter` で単発のジョブへ移っても、ジョブのコンパイルで分かった誤りは検索バーに示す
+// (0 件と出さない。03 §12.3.1 の「メインスレッドでのコンパイル」)
+#[test]
+fn 大きすぎる正規表現を_enter_の後に知っても_検索バーに理由を示す() {
+    let mut h = Harness::new().with_size(60, 10);
+    h.text("abc");
+    h.keys("ctrl+f");
+    h.keys("alt+r");
+    h.text("(?:[a-z]{1000}){1000}");
+    h.keys("enter");
+    h.run_jobs();
+    let b = bar(&mut h);
+    let e = cell_text(&b.error.expect("大きすぎる"));
+    assert!(e.contains("pattern too large"), "{e}");
+    assert!(b.count_text.is_none(), "件数 (0 件) は出さない");
+    assert_eq!(h.selection_range(), (3, 3), "移らない");
+}
+
+// 照合器ができる前の `Enter` (`search.next`) は、同期検索をせずに単発のジョブで探し、届いたら移る (03 §12.3.1)
+#[test]
+fn 照合器ができる前の_enter_は単発のジョブで移る() {
+    let mut h = Harness::new().with_size(60, 10);
+    h.text("xx foo bar foo");
+    h.keys("ctrl+home");
+    h.keys("ctrl+f");
+    h.keys("alt+r");
+    h.text("fo+");
+    h.keys("enter");
+    assert_eq!(
+        h.selection_range(),
+        (0, 0),
+        "ジョブの結果が届くまで移らない"
+    );
+    h.run_jobs();
+    assert_eq!(h.selection_range(), (3, 6));
+    h.keys("enter");
+    h.run_jobs();
+    assert_eq!(h.selection_range(), (11, 14), "照合器ができた後は今どおり");
 }
 
 #[test]
@@ -423,4 +538,120 @@ fn 検索欄でも単語の移動と削除と全選択が効き_文書は動か�
     let typed: String = b.input.cells.iter().map(|c| c.text.as_str()).collect();
     assert_eq!((typed.as_str(), b.input.selection), ("two", None));
     assert_eq!(h.doc_text(), "one two three", "文書は編集されない");
+}
+
+/// `toml` を設定として読んでから、`doc` を開いて検索バーを開く (設定を渡さないときは既定)。
+fn open_with(doc: &str, toml: Option<&str>) -> Harness {
+    let mut h = Harness::new()
+        .with_size(60, 10)
+        .with_file("/w/a.txt", doc.as_bytes());
+    if let Some(src) = toml {
+        let loaded = eve_config::load_str(src);
+        assert!(loaded.diagnostics.is_empty(), "{:?}", loaded.diagnostics);
+        h.editor.configure(eve_core::StartupConfig {
+            config: Some(loaded.config),
+            ..Default::default()
+        });
+    }
+    h.open("/w/a.txt");
+    h.run_jobs();
+    h.keys("ctrl+home");
+    h.keys("ctrl+f");
+    h
+}
+
+fn count_of(h: &mut Harness) -> String {
+    h.run_jobs();
+    cell_text(&bar(h).count_text.expect("件数がある"))
+}
+
+// verifies: FR-402
+#[test]
+fn 設定_search_case_は未設定で_smart_で_検索バーを開いたときの初期値になる() {
+    let search = |toml: Option<&str>| {
+        let mut h = open_with("abc Abc ABC", toml);
+        h.text("abc");
+        count_of(&mut h)
+    };
+    assert_eq!(
+        search(None),
+        "1/3",
+        "既定は smart (小文字だけの検索語は区別しない)"
+    );
+    assert_eq!(search(Some("[search]\ncase = \"smart\"\n")), "1/3");
+    assert_eq!(search(Some("[search]\ncase = \"sensitive\"\n")), "1/1");
+    assert_eq!(search(Some("[search]\ncase = \"insensitive\"\n")), "1/3");
+    // 大文字を含む検索語は smart では区別し、insensitive では区別しない
+    let mut h = open_with("abc Abc ABC", Some("[search]\ncase = \"insensitive\"\n"));
+    h.text("Abc");
+    assert_eq!(count_of(&mut h), "1/3");
+    let mut h = open_with("abc Abc ABC", None);
+    h.text("Abc");
+    assert_eq!(count_of(&mut h), "1/1");
+    // 巡回は設定の値から始まる: sensitive → insensitive → smart
+    let mut h = open_with("abc Abc ABC", Some("[search]\ncase = \"sensitive\"\n"));
+    h.text("abc");
+    assert_eq!(count_of(&mut h), "1/1");
+    h.keys("alt+c");
+    assert_eq!(count_of(&mut h), "1/3", "sensitive の次は insensitive");
+}
+
+// verifies: FR-402
+#[test]
+fn 設定_search_regex_default_は未設定で_false_で_検索バーを開いたときの初期値になる() {
+    let search = |toml: Option<&str>| {
+        let mut h = open_with("a1 b22 c333", toml);
+        h.text(r"\d+");
+        count_of(&mut h)
+    };
+    assert_eq!(search(None), "0 件", "既定は文字どおりの検索");
+    assert_eq!(search(Some("[search]\nregex_default = false\n")), "0 件");
+    assert_eq!(search(Some("[search]\nregex_default = true\n")), "1/3");
+    // 開いたあとの切り替えは、設定の値から反転する
+    let mut h = open_with("a1 b22 c333", Some("[search]\nregex_default = true\n"));
+    h.keys("alt+r");
+    h.text(r"\d+");
+    assert_eq!(count_of(&mut h), "0 件");
+}
+
+// verifies: AC-FR-404-2
+#[test]
+fn 設定_search_count_limit_は数える上限で_検索バーを開いたときの値で効く() {
+    let doc = "a\n".repeat(1_500);
+    let mut h = open_with(&doc, Some("[search]\ncount_limit = 1000\n"));
+    h.text("a");
+    let count = count_of(&mut h);
+    assert!(count.contains("1000"), "{count}");
+    assert!(!count.contains("1500"), "{count}");
+    assert!(count.contains('+') || count.contains("以上"), "{count}");
+    // 上限より少なければ、全件を数える
+    let mut h = open_with(&doc, Some("[search]\ncount_limit = 2000\n"));
+    h.text("a");
+    assert_eq!(count_of(&mut h), "1/1500");
+    // 未設定は既定の 100 万件で、1500 件は全件を数える
+    let mut h = open_with(&doc, None);
+    h.text("a");
+    assert_eq!(count_of(&mut h), "1/1500");
+}
+
+// verifies: AC-FR-404-2
+#[test]
+fn 設定_search_max_matches_は保持の上限で_超えると現在の番号を出さず_次へは同期検索で動く() {
+    let doc = "a\n".repeat(150);
+    // 100 件までしか保持しない: 件数は全部数えるが、現在の番号は出さない ("-")
+    let mut h = open_with(&doc, Some("[search]\nmax_matches = 100\n"));
+    h.text("a");
+    assert_eq!(count_of(&mut h), "-/150");
+    // 保持していない一致へも次へで移れる (件数はそのまま)
+    for _ in 0..120 {
+        h.keys("f3");
+    }
+    assert_eq!(count_of(&mut h), "-/150");
+    // 未設定 (既定 10,000 件) と上限以上の設定は、全件を保持して番号を出す
+    let mut h = open_with(&doc, None);
+    h.text("a");
+    assert_eq!(count_of(&mut h), "1/150");
+    let mut h = open_with(&doc, Some("[search]\nmax_matches = 150\n"));
+    h.text("a");
+    assert_eq!(count_of(&mut h), "1/150");
 }

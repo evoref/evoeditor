@@ -2,8 +2,13 @@
 //!
 //! 判定は位置の前後 `CONTEXT` バイトを連結した小さなバッファの上で行う (§13.1)。それより長い結合列は正確さを諦める
 //! (バッファの端を境界として扱う)。地域指示記号 (国旗) の対の偶奇も同じ制約を受ける (§14 の既知の制約)。
+//!
+//! 不正バイトのエスケープ文字 (`U+10FF00..=U+10FFFF`、§8.3) の前後は、UAX #29 に依らず常に境界とする (§8.3.1 の
+//! 「書記素と単語」)。文書の `pua_escape` は見ない (この層は文書の状態を知らない)。境界の集合は
+//! 「UAX #29 の境界 ∪ エスケープ文字の前後」で、文書の位置で求める関数 (`is_grapheme_boundary` など) と、
+//! 文字列を分ける `str_graphemes` が同じ規則を使う。
 
-use unicode_segmentation::GraphemeCursor;
+use unicode_segmentation::{GraphemeCursor, GraphemeIndices, UnicodeSegmentation};
 
 use crate::changeset::Bias;
 use crate::text::TextRead;
@@ -60,6 +65,75 @@ fn never_joins(c: char) -> bool {
         | 0xFF01..=0xFF5E) // 全角の ASCII
 }
 
+/// 不正バイトのエスケープ文字 (`U+10FF00..=U+10FFFF`、03 §8.3) か。UTF-8 では `F4 8F BC..=BF xx` の 4 バイト。
+pub(crate) fn is_escape_char(c: char) -> bool {
+    matches!(c, '\u{10FF00}'..='\u{10FFFF}')
+}
+
+/// エスケープ文字の UTF-8 のバイト数。
+const ESCAPE_LEN: usize = 4;
+
+/// 文字列がエスケープ文字を含み得るか (先頭バイト 0xF4 の有無だけを見る安い判定)。
+fn may_contain_escape(s: &str) -> bool {
+    s.len() >= ESCAPE_LEN && s.as_bytes().contains(&0xF4)
+}
+
+/// `s` の内側 (両端を除く) で、エスケープ文字の前後に当たる最初の位置。無ければ `None`。
+fn first_escape_cut(s: &str) -> Option<usize> {
+    let cut = if s.chars().next().is_some_and(is_escape_char) {
+        ESCAPE_LEN
+    } else {
+        s.char_indices().find(|&(_, c)| is_escape_char(c))?.0
+    };
+    (cut < s.len()).then_some(cut)
+}
+
+/// `s` の内側 (両端を除く) で、エスケープ文字の前後に当たる最後の位置。無ければ `None`。
+fn last_escape_cut(s: &str) -> Option<usize> {
+    let cut = if s.chars().next_back().is_some_and(is_escape_char) {
+        s.len() - ESCAPE_LEN
+    } else {
+        s.char_indices().rfind(|&(_, c)| is_escape_char(c))?.0 + ESCAPE_LEN
+    };
+    (cut > 0).then_some(cut)
+}
+
+/// 文字列の書記素 (先頭からのバイト位置, 書記素) の列 (§13.1)。UAX #29 (`unicode-segmentation`) の境界に、
+/// エスケープ文字の前後を足したもの。文書の位置で求める `is_grapheme_boundary` などと同じ境界になる
+/// (文書は窓の大きさの制約を受ける)。
+pub(crate) fn str_graphemes(s: &str) -> StrGraphemes<'_> {
+    StrGraphemes {
+        inner: s.grapheme_indices(true),
+        rest: None,
+    }
+}
+
+/// `str_graphemes` の反復子。
+pub(crate) struct StrGraphemes<'a> {
+    inner: GraphemeIndices<'a>,
+    /// UAX #29 の 1 書記素をエスケープ文字の前後で切ったときの、まだ返していない残り。
+    rest: Option<(usize, &'a str)>,
+}
+
+impl<'a> Iterator for StrGraphemes<'a> {
+    type Item = (usize, &'a str);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let (off, g) = match self.rest.take() {
+            Some(r) => r,
+            None => self.inner.next()?,
+        };
+        if !may_contain_escape(g) {
+            return Some((off, g));
+        }
+        let Some(n) = first_escape_cut(g) else {
+            return Some((off, g));
+        };
+        self.rest = Some((off + n, &g[n..]));
+        Some((off, &g[..n]))
+    }
+}
+
 /// char 境界 `pos` から始まる文字 (末尾なら `None`)。チャンクの中で読む (確保しない)。
 fn char_after(text: &dyn TextRead, pos: usize) -> Option<char> {
     let (chunk, start) = text.chunk_at(ByteOff(pos));
@@ -89,8 +163,13 @@ pub fn is_grapheme_boundary(text: &dyn TextRead, pos: Pos) -> bool {
     is_boundary_window(text, pos.0)
 }
 
-/// `is_grapheme_boundary` の窓の経路 (`0 < pos < len` の char 境界)。
+/// `is_grapheme_boundary` の窓の経路 (`0 < pos < len` の char 境界)。エスケープ文字の前後は常に境界。
 fn is_boundary_window(text: &dyn TextRead, pos: usize) -> bool {
+    if char_before(text, pos).is_some_and(is_escape_char)
+        || char_after(text, pos).is_some_and(is_escape_char)
+    {
+        return true;
+    }
     with_window(text, pos, |buf, rel, _| {
         GraphemeCursor::new(rel, buf.len(), true)
             .is_boundary(buf, 0)
@@ -115,12 +194,19 @@ pub fn next_grapheme_boundary(text: &dyn TextRead, pos: Pos) -> Pos {
     next_boundary_window(text, p)
 }
 
-/// `next_grapheme_boundary` の窓の経路 (`p < len` の char 境界)。
+/// `next_grapheme_boundary` の窓の経路 (`p < len` の char 境界)。UAX #29 の次の境界までにエスケープ文字があれば、
+/// その前 (`p` がエスケープ文字ならその後ろ) で止まる。
 fn next_boundary_window(text: &dyn TextRead, p: usize) -> Pos {
     let len = text.len_bytes();
     let next = with_window(text, p, |buf, rel, lo| {
         let mut cur = GraphemeCursor::new(rel, buf.len(), true);
-        cur.next_boundary(buf, 0).ok().flatten().map(|b| lo + b)
+        let uax = cur.next_boundary(buf, 0).ok().flatten();
+        let seg = &buf[rel..uax.unwrap_or(buf.len())];
+        let cut = may_contain_escape(seg)
+            .then(|| first_escape_cut(seg))
+            .flatten()
+            .map(|n| rel + n);
+        cut.or(uax).map(|b| lo + b)
     });
     // 進まないことはないが、保険として必ず 1 バイト以上進める
     ByteOff(next.unwrap_or(len).clamp(p + 1, len))
@@ -142,11 +228,19 @@ pub fn prev_grapheme_boundary(text: &dyn TextRead, pos: Pos) -> Pos {
     prev_boundary_window(text, p)
 }
 
-/// `prev_grapheme_boundary` の窓の経路 (`0 < p` の char 境界)。
+/// `prev_grapheme_boundary` の窓の経路 (`0 < p` の char 境界)。UAX #29 の前の境界から `p` までにエスケープ文字があれば、
+/// その後ろ (`p` の直前がエスケープ文字ならその前) で止まる。
 fn prev_boundary_window(text: &dyn TextRead, p: usize) -> Pos {
     let prev = with_window(text, p, |buf, rel, lo| {
         let mut cur = GraphemeCursor::new(rel, buf.len(), true);
-        cur.prev_boundary(buf, 0).ok().flatten().map(|b| lo + b)
+        let uax = cur.prev_boundary(buf, 0).ok().flatten();
+        let start = uax.unwrap_or(0);
+        let seg = &buf[start..rel];
+        let cut = may_contain_escape(seg)
+            .then(|| last_escape_cut(seg))
+            .flatten()
+            .map(|k| start + k);
+        cut.or(uax).map(|b| lo + b)
     });
     ByteOff(prev.unwrap_or(0).min(p - 1))
 }
@@ -355,6 +449,7 @@ mod tests {
             1 => Just('\u{0915}'),
             1 => Just('\u{094D}'),
             1 => Just('\u{0600}'),
+            2 => proptest::char::range('\u{10FF00}', '\u{10FFFF}'),
         ]
     }
 
@@ -415,6 +510,43 @@ mod tests {
 {runner}"
             );
         }
+    }
+
+    #[test]
+    fn エスケープ文字の判定は範囲の両端を含む() {
+        assert!(is_escape_char('\u{10FF00}') && is_escape_char('\u{10FFFF}'));
+        assert!(!is_escape_char('\u{10FEFF}') && !is_escape_char('\u{F8FF}'));
+        // UTF-8 の先頭バイトは 0xF4 (安い判定の前提)
+        for c in ['\u{10FF00}', '\u{10FF9A}', '\u{10FFFF}'] {
+            assert_eq!(c.len_utf8(), ESCAPE_LEN);
+            assert_eq!(c.to_string().as_bytes()[0], 0xF4);
+        }
+    }
+
+    #[test]
+    fn 文字列の分割で内側の切れ目だけを返す() {
+        let e = "\u{10FF80}";
+        assert_eq!(first_escape_cut(e), None, "エスケープ文字 1 つは切らない");
+        assert_eq!(last_escape_cut(e), None);
+        assert_eq!(first_escape_cut(&format!("{e}\u{301}")), Some(4));
+        assert_eq!(last_escape_cut(&format!("{e}\u{301}")), Some(4));
+        assert_eq!(first_escape_cut(&format!("\u{600}{e}")), Some(2));
+        assert_eq!(last_escape_cut(&format!("\u{600}{e}")), Some(2));
+        assert_eq!(first_escape_cut(&format!("\u{600}{e}\u{301}")), Some(2));
+        assert_eq!(last_escape_cut(&format!("\u{600}{e}\u{301}")), Some(6));
+        assert_eq!(first_escape_cut("e\u{301}"), None);
+        let s = format!("a\u{600}{e}\u{301}\u{301}b");
+        let parts: Vec<_> = str_graphemes(&s).collect();
+        assert_eq!(
+            parts,
+            [
+                (0, "a"),
+                (1, "\u{600}"),
+                (3, e),
+                (7, "\u{301}\u{301}"),
+                (11, "b")
+            ]
+        );
     }
 
     #[test]

@@ -1,0 +1,38 @@
+{
+  "commit": "7f3bed1",
+  "env": "ENV-W1",
+  "id": "BM-109-compat",
+  "quick": false,
+  "results": [
+    {
+      "id": "BM-109-compat",
+      "matches": 0,
+      "max_ms": 16.2,
+      "mb": 100,
+      "min_ms": 15.7,
+      "n": 5,
+      "p50_ms": 15.9,
+      "quick": false,
+      "ratio": 0.72,
+      "ratio_max": 0.74,
+      "ratio_min": 0.72,
+      "ref_p50_ms": 22.0,
+      "run": "bm_109-1"
+    },
+    {
+      "id": "BM-109-compat",
+      "matches": 0,
+      "max_ms": 20.0,
+      "mb": 100,
+      "min_ms": 15.9,
+      "n": 5,
+      "p50_ms": 16.0,
+      "quick": false,
+      "ratio": 0.71,
+      "ratio_max": 0.72,
+      "ratio_min": 0.68,
+      "ref_p50_ms": 22.3,
+      "run": "bm_109-2"
+    }
+  ]
+}

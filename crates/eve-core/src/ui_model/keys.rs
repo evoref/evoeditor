@@ -7,6 +7,7 @@ pub(crate) const HINT_UI_CANCEL: &str = "hint.ui.cancel";
 pub(crate) const INFO_APP_RELEASE_SUMMARY: &str = "info.app.release_summary";
 pub(crate) const INFO_APP_UPDATED: &str = "info.app.updated";
 pub(crate) const INFO_CONFIG_DIAGNOSTIC_NO_FILE: &str = "info.config.diagnostic_no_file";
+pub(crate) const INFO_CONFIG_LOCALE_RESTART: &str = "info.config.locale_restart";
 pub(crate) const INFO_CONFIG_NO_DIAGNOSTICS: &str = "info.config.no_diagnostics";
 pub(crate) const INFO_CONFIG_RELOAD_RESTART: &str = "info.config.reload_restart";
 pub(crate) const INFO_CONFIG_RELOAD_UNCHANGED: &str = "info.config.reload_unchanged";
@@ -27,10 +28,20 @@ pub(crate) const INFO_OPEN_ALREADY_OPEN: &str = "info.open.already_open";
 pub(crate) const INFO_OPEN_CANCELLED: &str = "info.open.cancelled";
 pub(crate) const INFO_OPEN_GUESS_UNSUPPORTED: &str = "info.open.guess_unsupported";
 pub(crate) const INFO_OPEN_LONG_LINE: &str = "info.open.long_line";
-pub(crate) const INFO_OPEN_LOSSY_ROUNDTRIP: &str = "info.open.lossy_roundtrip";
 pub(crate) const INFO_OPEN_NEW_FILE: &str = "info.open.new_file";
+pub(crate) const INFO_OPEN_PARTIAL_END: &str = "info.open.partial_end";
+pub(crate) const INFO_OPEN_PRESERVE_OFF: &str = "info.open.preserve_off";
+pub(crate) const INFO_OPEN_PRESERVE_PARTIAL: &str = "info.open.preserve_partial";
 pub(crate) const INFO_OPEN_REDETECTED: &str = "info.open.redetected";
+pub(crate) const INFO_PASTE_AS_BYTES: &str = "info.paste.as_bytes";
+pub(crate) const INFO_PASTE_ESCAPE_AS_TEXT: &str = "info.paste.escape_as_text";
+pub(crate) const INFO_PASTE_NOTATION_AS_TEXT: &str = "info.paste.notation_as_text";
+pub(crate) const INFO_PASTE_PUA_AS_TEXT: &str = "info.paste.pua_as_text";
+pub(crate) const INFO_PASTE_SEARCH_NOTATION: &str = "info.paste.search_notation";
+pub(crate) const INFO_PROMPT_TARGET_CLOSED: &str = "info.prompt.target_closed";
 pub(crate) const INFO_READ_ONLY_RELEASED: &str = "info.read_only.released";
+pub(crate) const INFO_READ_ONLY_RELEASED_INVALID_BYTES: &str =
+    "info.read_only.released_invalid_bytes";
 pub(crate) const INFO_READ_ONLY_SET: &str = "info.read_only.set";
 pub(crate) const INFO_RELOAD_BUSY: &str = "info.reload.busy";
 pub(crate) const INFO_RELOAD_DONE: &str = "info.reload.done";
@@ -38,8 +49,11 @@ pub(crate) const INFO_RELOAD_DONE_READ_ONLY: &str = "info.reload.done_read_only"
 pub(crate) const INFO_REOPEN_HISTORY_CLEARED: &str = "info.reopen.history_cleared";
 pub(crate) const INFO_SAVE_ABORTED: &str = "info.save.aborted";
 pub(crate) const INFO_SAVE_DONE: &str = "info.save.done";
+pub(crate) const INFO_SAVE_ESCAPE_MERGE_CANCELLED: &str = "info.save.escape_merge_cancelled";
+pub(crate) const INFO_SAVE_ESCAPE_MERGED: &str = "info.save.escape_merged";
 pub(crate) const INFO_SAVE_IN_PLACE: &str = "info.save.in_place";
 pub(crate) const INFO_SAVE_IN_PROGRESS: &str = "info.save.in_progress";
+pub(crate) const INFO_SAVE_PARTIAL_SAVED: &str = "info.save.partial_saved";
 pub(crate) const INFO_SAVE_TO_RECOVERY: &str = "info.save.to_recovery";
 pub(crate) const INFO_SAVE_UNCHANGED: &str = "info.save.unchanged";
 pub(crate) const INFO_SAVE_ALL_DONE: &str = "info.save_all.done";
@@ -49,9 +63,20 @@ pub(crate) const INFO_SEARCH_NO_SELECTION: &str = "info.search.no_selection";
 pub(crate) const INFO_SEARCH_REPLACE_EMPTY_QUERY: &str = "info.search.replace_empty_query";
 pub(crate) const INFO_SEARCH_REPLACE_NO_MATCH: &str = "info.search.replace_no_match";
 pub(crate) const INFO_SEARCH_REPLACED: &str = "info.search.replaced";
+pub(crate) const INFO_SEARCH_REPLACED_FOLDED: &str = "info.search.replaced_folded";
+pub(crate) const INFO_SEARCH_REPLACED_FOLDED_LINES_ADDED: &str =
+    "info.search.replaced_folded_lines_added";
+pub(crate) const INFO_SEARCH_REPLACED_FOLDED_LINES_REMOVED: &str =
+    "info.search.replaced_folded_lines_removed";
+pub(crate) const INFO_SEARCH_REPLACED_LINES_ADDED: &str = "info.search.replaced_lines_added";
+pub(crate) const INFO_SEARCH_REPLACED_LINES_REMOVED: &str = "info.search.replaced_lines_removed";
 pub(crate) const INFO_SEARCH_WRAPPED_BACKWARD: &str = "info.search.wrapped_backward";
 pub(crate) const INFO_SEARCH_WRAPPED_FORWARD: &str = "info.search.wrapped_forward";
+pub(crate) const INFO_STDIN_STOPPED: &str = "info.stdin.stopped";
+pub(crate) const INFO_STDIN_TERMINAL: &str = "info.stdin.terminal";
+pub(crate) const INFO_SWAP_APPLIED_READ_ONLY: &str = "info.swap.applied_read_only";
 pub(crate) const INFO_SWAP_DISCARDED: &str = "info.swap.discarded";
+pub(crate) const INFO_SWAP_ENCODING_MISMATCH: &str = "info.swap.encoding_mismatch";
 pub(crate) const INFO_SWAP_RECOVERED: &str = "info.swap.recovered";
 pub(crate) const INFO_UNDO_HISTORY_TRIMMED: &str = "info.undo.history_trimmed";
 pub(crate) const MSG_CLIPBOARD_FALLBACK: &str = "msg.clipboard.fallback";
@@ -59,6 +84,11 @@ pub(crate) const MSG_CONFIG_PROBLEM: &str = "msg.config.problem";
 pub(crate) const MSG_CONFIG_PROBLEMS: &str = "msg.config.problems";
 pub(crate) const MSG_CONFIG_RELOAD_KEPT: &str = "msg.config.reload_kept";
 pub(crate) const MSG_EDIT_READ_ONLY: &str = "msg.edit.read_only";
+pub(crate) const MSG_EDIT_READ_ONLY_BINARY: &str = "msg.edit.read_only_binary";
+pub(crate) const MSG_EDIT_READ_ONLY_INVALID_BYTES: &str = "msg.edit.read_only_invalid_bytes";
+pub(crate) const MSG_EDIT_READ_ONLY_LOADING: &str = "msg.edit.read_only_loading";
+pub(crate) const MSG_EDIT_READ_ONLY_PUA_COLLISION: &str = "msg.edit.read_only_pua_collision";
+pub(crate) const MSG_EDIT_READ_ONLY_STATEFUL: &str = "msg.edit.read_only_stateful";
 pub(crate) const MSG_EOL_CONVERT_STALE: &str = "msg.eol.convert_stale";
 pub(crate) const MSG_EXTERNAL_CHECK_FAILED: &str = "msg.external.check_failed";
 pub(crate) const MSG_LEFTOVER_FAILED: &str = "msg.leftover.failed";
@@ -74,6 +104,7 @@ pub(crate) const MSG_OPEN_INTERRUPTED_SAVE_NO_BACKUP: &str = "msg.open.interrupt
 pub(crate) const MSG_OPEN_NOT_A_FILE: &str = "msg.open.not_a_file";
 pub(crate) const MSG_OPEN_OUT_OF_MEMORY: &str = "msg.open.out_of_memory";
 pub(crate) const MSG_OPEN_PARENT_MISSING: &str = "msg.open.parent_missing";
+pub(crate) const MSG_OPEN_PARTIAL_UNAVAILABLE: &str = "msg.open.partial_unavailable";
 pub(crate) const MSG_OPEN_PERMISSION_DENIED: &str = "msg.open.permission_denied";
 pub(crate) const MSG_OPEN_RESERVED_NAME: &str = "msg.open.reserved_name";
 pub(crate) const MSG_RECOVERY_FOUND: &str = "msg.recovery.found";
@@ -101,10 +132,21 @@ pub(crate) const MSG_SAVE_PERMISSION_NARROWED: &str = "msg.save.permission_narro
 pub(crate) const MSG_SAVE_READ_ONLY_FS: &str = "msg.save.read_only_fs";
 pub(crate) const MSG_SAVE_RECOVERY_FAILED: &str = "msg.save.recovery_failed";
 pub(crate) const MSG_SAVE_TMP_NOT_REMOVED: &str = "msg.save.tmp_not_removed";
+pub(crate) const MSG_SAVE_VERIFY_FAILED: &str = "msg.save.verify_failed";
 pub(crate) const MSG_SAVE_AS_SAME_FILE_READ_ONLY: &str = "msg.save_as.same_file_read_only";
 pub(crate) const MSG_SEARCH_INVALID_REGEX_TEXT: &str = "msg.search.invalid_regex.text";
-pub(crate) const MSG_SEARCH_NEWLINE_UNSUPPORTED_TEXT: &str = "msg.search.newline_unsupported.text";
+pub(crate) const MSG_SEARCH_MULTILINE_TOO_LARGE: &str = "msg.search.multiline_too_large";
+pub(crate) const MSG_SEARCH_MULTILINE_TOO_LARGE_TEXT: &str = "msg.search.multiline_too_large.text";
+pub(crate) const MSG_SEARCH_PATTERN_TOO_HEAVY: &str = "msg.search.pattern_too_heavy";
+pub(crate) const MSG_SEARCH_PATTERN_TOO_HEAVY_TEXT: &str = "msg.search.pattern_too_heavy.text";
+pub(crate) const MSG_SEARCH_REPLACE_INVALID_REGEX: &str = "msg.search.replace_invalid_regex";
 pub(crate) const MSG_SEARCH_REPLACE_STALE: &str = "msg.search.replace_stale";
+pub(crate) const MSG_STDIN_FAILED: &str = "msg.stdin.failed";
+pub(crate) const MSG_STDIN_OUT_OF_MEMORY: &str = "msg.stdin.out_of_memory";
+pub(crate) const MSG_STDIN_READ_FAILED: &str = "msg.stdin.read_failed";
+pub(crate) const MSG_STDIN_TRUNCATED: &str = "msg.stdin.truncated";
+pub(crate) const MSG_STDIN_UNREADABLE: &str = "msg.stdin.unreadable";
+pub(crate) const MSG_STDIN_UNSAVEABLE: &str = "msg.stdin.unsaveable";
 pub(crate) const MSG_SWAP_CHANGED_SINCE_OFFER: &str = "msg.swap.changed_since_offer";
 pub(crate) const MSG_SWAP_FOUND: &str = "msg.swap.found";
 pub(crate) const MSG_SWAP_OTHER_INSTANCE: &str = "msg.swap.other_instance";
@@ -120,6 +162,10 @@ pub(crate) const STATUS_EXTERNAL_CHANGE_LONG: &str = "status.external_change.lon
 pub(crate) const STATUS_EXTERNAL_CHANGE_SHORT: &str = "status.external_change.short";
 pub(crate) const STATUS_LOADING_LONG: &str = "status.loading.long";
 pub(crate) const STATUS_LOADING_SHORT: &str = "status.loading.short";
+pub(crate) const STATUS_LOADING_BYTES_LONG: &str = "status.loading_bytes.long";
+pub(crate) const STATUS_LOADING_BYTES_SHORT: &str = "status.loading_bytes.short";
+pub(crate) const STATUS_PARTIAL_LONG: &str = "status.partial.long";
+pub(crate) const STATUS_PARTIAL_SHORT: &str = "status.partial.short";
 pub(crate) const STATUS_POSITION_LONG: &str = "status.position.long";
 pub(crate) const STATUS_POSITION_SHORT: &str = "status.position.short";
 pub(crate) const STATUS_READ_ONLY_LONG: &str = "status.read_only.long";
@@ -139,6 +185,16 @@ pub(crate) const UI_CONFIG_DIAGNOSTICS_TITLE: &str = "ui.config_diagnostics.titl
 pub(crate) const UI_CONFIRM_CANCEL: &str = "ui.confirm.cancel";
 pub(crate) const UI_CONFIRM_NAV_HINT: &str = "ui.confirm.nav_hint";
 pub(crate) const UI_CONFIRM_QUIT_SAVING_OTHERS: &str = "ui.confirm.quit_saving.others";
+pub(crate) const UI_CONFIRM_READ_ONLY_INVALID_BYTES_DETAIL_COPY: &str =
+    "ui.confirm.read_only.invalid_bytes.detail_copy";
+pub(crate) const UI_CONFIRM_READ_ONLY_INVALID_BYTES_DETAIL_DELETE: &str =
+    "ui.confirm.read_only.invalid_bytes.detail_delete";
+pub(crate) const UI_CONFIRM_READ_ONLY_INVALID_BYTES_DETAIL_MERGE: &str =
+    "ui.confirm.read_only.invalid_bytes.detail_merge";
+pub(crate) const UI_CONFIRM_READ_ONLY_INVALID_BYTES_DETAIL_RESTORE: &str =
+    "ui.confirm.read_only.invalid_bytes.detail_restore";
+pub(crate) const UI_CONFIRM_SAVE_ESCAPE_MERGE_ITEM: &str = "ui.confirm.save.escape_merge.item";
+pub(crate) const UI_CONFIRM_SAVE_ESCAPE_MERGE_MORE: &str = "ui.confirm.save.escape_merge.more";
 pub(crate) const UI_CONFIRM_SAVE_UNMAPPABLE_REPLACE_ITEM: &str =
     "ui.confirm.save.unmappable_replace.item";
 pub(crate) const UI_CONFIRM_SAVE_UNMAPPABLE_REPLACE_MORE: &str =
@@ -147,6 +203,7 @@ pub(crate) const UI_CONFIRM_SAVE_ALL_FAILED_NEEDS_CONFIRM: &str =
     "ui.confirm.save_all_failed.needs_confirm";
 pub(crate) const UI_CONFIRM_SWAP_RECOVERY_CHANGED: &str = "ui.confirm.swap_recovery.changed";
 pub(crate) const UI_CONFIRM_SWAP_RECOVERY_SENSITIVE: &str = "ui.confirm.swap_recovery.sensitive";
+pub(crate) const UI_CONFIRM_UNSAVED_PARTIAL_SUFFIX: &str = "ui.confirm.unsaved.partial_suffix";
 pub(crate) const UI_HELP_FOOTER: &str = "ui.help.footer";
 pub(crate) const UI_HELP_INTRO_PALETTE: &str = "ui.help.intro.palette";
 pub(crate) const UI_HELP_INTRO_QUIT: &str = "ui.help.intro.quit";
@@ -156,11 +213,35 @@ pub(crate) const UI_HELP_KEYS_UNREACHABLE: &str = "ui.help.keys.unreachable";
 pub(crate) const UI_HELP_SECTION_COMMANDS: &str = "ui.help.section.commands";
 pub(crate) const UI_HELP_SECTION_INTRO: &str = "ui.help.section.intro";
 pub(crate) const UI_HELP_SECTION_KEYS: &str = "ui.help.section.keys";
+pub(crate) const UI_HELP_SECTION_SEARCH: &str = "ui.help.section.search";
 pub(crate) const UI_HELP_SECTION_TERMINAL: &str = "ui.help.section.terminal";
+pub(crate) const UI_HELP_SEARCH_ANCHORS: &str = "ui.help.search.anchors";
+pub(crate) const UI_HELP_SEARCH_CLASS_NEWLINE: &str = "ui.help.search.class_newline";
+pub(crate) const UI_HELP_SEARCH_COMPAT_EXCLUDE: &str = "ui.help.search.compat_exclude";
+pub(crate) const UI_HELP_SEARCH_COMPAT_INTRO: &str = "ui.help.search.compat_intro";
+pub(crate) const UI_HELP_SEARCH_COMPAT_MARK: &str = "ui.help.search.compat_mark";
+pub(crate) const UI_HELP_SEARCH_COMPAT_MATCH: &str = "ui.help.search.compat_match";
+pub(crate) const UI_HELP_SEARCH_COMPAT_OFF: &str = "ui.help.search.compat_off";
+pub(crate) const UI_HELP_SEARCH_COMPAT_PAIRS: &str = "ui.help.search.compat_pairs";
+pub(crate) const UI_HELP_SEARCH_COMPAT_REGEX: &str = "ui.help.search.compat_regex";
+pub(crate) const UI_HELP_SEARCH_COMPAT_REPLACE: &str = "ui.help.search.compat_replace";
+pub(crate) const UI_HELP_SEARCH_COMPAT_YEN_KEY: &str = "ui.help.search.compat_yen_key";
+pub(crate) const UI_HELP_SEARCH_DOT_ALL: &str = "ui.help.search.dot_all";
+pub(crate) const UI_HELP_SEARCH_INTRO: &str = "ui.help.search.intro";
+pub(crate) const UI_HELP_SEARCH_LIMIT: &str = "ui.help.search.limit";
+pub(crate) const UI_HELP_SEARCH_NEWLINE: &str = "ui.help.search.newline";
+pub(crate) const UI_HELP_SEARCH_NEWLINE_RUN: &str = "ui.help.search.newline_run";
+pub(crate) const UI_HELP_SEARCH_OTHER_TOOLS: &str = "ui.help.search.other_tools";
+pub(crate) const UI_HELP_SEARCH_SINGLE_LINE: &str = "ui.help.search.single_line";
+pub(crate) const UI_HELP_SEARCH_SUGAR: &str = "ui.help.search.sugar";
 pub(crate) const UI_HELP_TERMINAL_ALT: &str = "ui.help.terminal.alt";
 pub(crate) const UI_HELP_TERMINAL_CHORD: &str = "ui.help.terminal.chord";
 pub(crate) const UI_HELP_TERMINAL_IME: &str = "ui.help.terminal.ime";
 pub(crate) const UI_HELP_TERMINAL_README: &str = "ui.help.terminal.readme";
+pub(crate) const UI_HELP_TERMINAL_STDIN_KEYS: &str = "ui.help.terminal.stdin_keys";
+pub(crate) const UI_HELP_TERMINAL_STDIN_POWERSHELL: &str = "ui.help.terminal.stdin_powershell";
+pub(crate) const UI_HELP_TERMINAL_STDIN_REDRAW: &str = "ui.help.terminal.stdin_redraw";
+pub(crate) const UI_HELP_TERMINAL_STDIN_WRITER: &str = "ui.help.terminal.stdin_writer";
 pub(crate) const UI_HELP_TITLE: &str = "ui.help.title";
 pub(crate) const UI_HISTORY_EMPTY: &str = "ui.history.empty";
 pub(crate) const UI_HISTORY_FOOTER: &str = "ui.history.footer";
@@ -168,6 +249,7 @@ pub(crate) const UI_HISTORY_LEVEL_ERROR: &str = "ui.history.level.error";
 pub(crate) const UI_HISTORY_LEVEL_INFO: &str = "ui.history.level.info";
 pub(crate) const UI_HISTORY_LEVEL_WARN: &str = "ui.history.level.warn";
 pub(crate) const UI_HISTORY_TITLE: &str = "ui.history.title";
+pub(crate) const UI_LOAD_STATE_LOADING: &str = "ui.load_state.loading";
 pub(crate) const UI_PALETTE_ARG_ENCODING: &str = "ui.palette.arg.encoding";
 pub(crate) const UI_PALETTE_ARG_EOL: &str = "ui.palette.arg.eol";
 pub(crate) const UI_PALETTE_ARG_TITLE: &str = "ui.palette.arg_title";
@@ -176,8 +258,24 @@ pub(crate) const UI_PALETTE_FOOTER: &str = "ui.palette.footer";
 pub(crate) const UI_PALETTE_NO_MATCH: &str = "ui.palette.no_match";
 pub(crate) const UI_PALETTE_PLACEHOLDER: &str = "ui.palette.placeholder";
 pub(crate) const UI_PALETTE_TITLE: &str = "ui.palette.title";
+pub(crate) const UI_PROMPT_SAVE_AS_PARTIAL: &str = "ui.prompt.save_as.partial";
+pub(crate) const UI_READ_ONLY_REASON_BINARY: &str = "ui.read_only_reason.binary";
+pub(crate) const UI_READ_ONLY_REASON_FILE_ATTRIBUTE: &str = "ui.read_only_reason.file_attribute";
+pub(crate) const UI_READ_ONLY_REASON_INVALID_BYTES: &str = "ui.read_only_reason.invalid_bytes";
+pub(crate) const UI_READ_ONLY_REASON_INVALID_BYTES_COLLISION: &str =
+    "ui.read_only_reason.invalid_bytes_collision";
+pub(crate) const UI_READ_ONLY_REASON_LARGE_FILE_VIEWER: &str =
+    "ui.read_only_reason.large_file_viewer";
+pub(crate) const UI_READ_ONLY_REASON_LOAD_INCOMPLETE: &str = "ui.read_only_reason.load_incomplete";
+pub(crate) const UI_READ_ONLY_REASON_NO_WRITE_PERMISSION: &str =
+    "ui.read_only_reason.no_write_permission";
+pub(crate) const UI_READ_ONLY_REASON_STATEFUL: &str =
+    "ui.read_only_reason.stateful_encoding_with_invalid_bytes";
+pub(crate) const UI_READ_ONLY_REASON_USER_REQUESTED: &str = "ui.read_only_reason.user_requested";
 pub(crate) const UI_SEARCH_COUNT_APPROX: &str = "ui.search.count.approx";
 pub(crate) const UI_SEARCH_COUNT_AT_LEAST: &str = "ui.search.count.at_least";
+pub(crate) const UI_SEARCH_COUNT_COMPAT_MATCH_SUFFIX: &str = "ui.search.count.compat_match_suffix";
+pub(crate) const UI_SEARCH_COUNT_COMPAT_SUFFIX: &str = "ui.search.count.compat_suffix";
 pub(crate) const UI_SEARCH_COUNT_EXACT: &str = "ui.search.count.exact";
 pub(crate) const UI_SEARCH_COUNT_NO_MATCH: &str = "ui.search.count.no_match";
 pub(crate) const UI_SEARCH_COUNT_RUNNING: &str = "ui.search.count.running";
@@ -188,11 +286,12 @@ pub(crate) const UI_TOO_SMALL: &str = "ui.too_small";
 
 /// すべての定数 (キーの順。試験に使う)。
 #[cfg(test)]
-const ALL: [&str; 177] = [
+const ALL: [&str; 264] = [
     HINT_UI_CANCEL,
     INFO_APP_RELEASE_SUMMARY,
     INFO_APP_UPDATED,
     INFO_CONFIG_DIAGNOSTIC_NO_FILE,
+    INFO_CONFIG_LOCALE_RESTART,
     INFO_CONFIG_NO_DIAGNOSTICS,
     INFO_CONFIG_RELOAD_RESTART,
     INFO_CONFIG_RELOAD_UNCHANGED,
@@ -213,10 +312,19 @@ const ALL: [&str; 177] = [
     INFO_OPEN_CANCELLED,
     INFO_OPEN_GUESS_UNSUPPORTED,
     INFO_OPEN_LONG_LINE,
-    INFO_OPEN_LOSSY_ROUNDTRIP,
     INFO_OPEN_NEW_FILE,
+    INFO_OPEN_PARTIAL_END,
+    INFO_OPEN_PRESERVE_OFF,
+    INFO_OPEN_PRESERVE_PARTIAL,
     INFO_OPEN_REDETECTED,
+    INFO_PASTE_AS_BYTES,
+    INFO_PASTE_ESCAPE_AS_TEXT,
+    INFO_PASTE_NOTATION_AS_TEXT,
+    INFO_PASTE_PUA_AS_TEXT,
+    INFO_PASTE_SEARCH_NOTATION,
+    INFO_PROMPT_TARGET_CLOSED,
     INFO_READ_ONLY_RELEASED,
+    INFO_READ_ONLY_RELEASED_INVALID_BYTES,
     INFO_READ_ONLY_SET,
     INFO_RELOAD_BUSY,
     INFO_RELOAD_DONE,
@@ -224,8 +332,11 @@ const ALL: [&str; 177] = [
     INFO_REOPEN_HISTORY_CLEARED,
     INFO_SAVE_ABORTED,
     INFO_SAVE_DONE,
+    INFO_SAVE_ESCAPE_MERGE_CANCELLED,
+    INFO_SAVE_ESCAPE_MERGED,
     INFO_SAVE_IN_PLACE,
     INFO_SAVE_IN_PROGRESS,
+    INFO_SAVE_PARTIAL_SAVED,
     INFO_SAVE_TO_RECOVERY,
     INFO_SAVE_UNCHANGED,
     INFO_SAVE_ALL_DONE,
@@ -235,9 +346,18 @@ const ALL: [&str; 177] = [
     INFO_SEARCH_REPLACE_EMPTY_QUERY,
     INFO_SEARCH_REPLACE_NO_MATCH,
     INFO_SEARCH_REPLACED,
+    INFO_SEARCH_REPLACED_FOLDED,
+    INFO_SEARCH_REPLACED_FOLDED_LINES_ADDED,
+    INFO_SEARCH_REPLACED_FOLDED_LINES_REMOVED,
+    INFO_SEARCH_REPLACED_LINES_ADDED,
+    INFO_SEARCH_REPLACED_LINES_REMOVED,
     INFO_SEARCH_WRAPPED_BACKWARD,
     INFO_SEARCH_WRAPPED_FORWARD,
+    INFO_STDIN_STOPPED,
+    INFO_STDIN_TERMINAL,
+    INFO_SWAP_APPLIED_READ_ONLY,
     INFO_SWAP_DISCARDED,
+    INFO_SWAP_ENCODING_MISMATCH,
     INFO_SWAP_RECOVERED,
     INFO_UNDO_HISTORY_TRIMMED,
     MSG_CLIPBOARD_FALLBACK,
@@ -245,6 +365,11 @@ const ALL: [&str; 177] = [
     MSG_CONFIG_PROBLEMS,
     MSG_CONFIG_RELOAD_KEPT,
     MSG_EDIT_READ_ONLY,
+    MSG_EDIT_READ_ONLY_BINARY,
+    MSG_EDIT_READ_ONLY_INVALID_BYTES,
+    MSG_EDIT_READ_ONLY_LOADING,
+    MSG_EDIT_READ_ONLY_PUA_COLLISION,
+    MSG_EDIT_READ_ONLY_STATEFUL,
     MSG_EOL_CONVERT_STALE,
     MSG_EXTERNAL_CHECK_FAILED,
     MSG_LEFTOVER_FAILED,
@@ -259,6 +384,7 @@ const ALL: [&str; 177] = [
     MSG_OPEN_NOT_A_FILE,
     MSG_OPEN_OUT_OF_MEMORY,
     MSG_OPEN_PARENT_MISSING,
+    MSG_OPEN_PARTIAL_UNAVAILABLE,
     MSG_OPEN_PERMISSION_DENIED,
     MSG_OPEN_RESERVED_NAME,
     MSG_RECOVERY_FOUND,
@@ -285,10 +411,21 @@ const ALL: [&str; 177] = [
     MSG_SAVE_READ_ONLY_FS,
     MSG_SAVE_RECOVERY_FAILED,
     MSG_SAVE_TMP_NOT_REMOVED,
+    MSG_SAVE_VERIFY_FAILED,
     MSG_SAVE_AS_SAME_FILE_READ_ONLY,
     MSG_SEARCH_INVALID_REGEX_TEXT,
-    MSG_SEARCH_NEWLINE_UNSUPPORTED_TEXT,
+    MSG_SEARCH_MULTILINE_TOO_LARGE,
+    MSG_SEARCH_MULTILINE_TOO_LARGE_TEXT,
+    MSG_SEARCH_PATTERN_TOO_HEAVY,
+    MSG_SEARCH_PATTERN_TOO_HEAVY_TEXT,
+    MSG_SEARCH_REPLACE_INVALID_REGEX,
     MSG_SEARCH_REPLACE_STALE,
+    MSG_STDIN_FAILED,
+    MSG_STDIN_OUT_OF_MEMORY,
+    MSG_STDIN_READ_FAILED,
+    MSG_STDIN_TRUNCATED,
+    MSG_STDIN_UNREADABLE,
+    MSG_STDIN_UNSAVEABLE,
     MSG_SWAP_CHANGED_SINCE_OFFER,
     MSG_SWAP_FOUND,
     MSG_SWAP_OTHER_INSTANCE,
@@ -304,6 +441,10 @@ const ALL: [&str; 177] = [
     STATUS_EXTERNAL_CHANGE_SHORT,
     STATUS_LOADING_LONG,
     STATUS_LOADING_SHORT,
+    STATUS_LOADING_BYTES_LONG,
+    STATUS_LOADING_BYTES_SHORT,
+    STATUS_PARTIAL_LONG,
+    STATUS_PARTIAL_SHORT,
     STATUS_POSITION_LONG,
     STATUS_POSITION_SHORT,
     STATUS_READ_ONLY_LONG,
@@ -323,11 +464,18 @@ const ALL: [&str; 177] = [
     UI_CONFIRM_CANCEL,
     UI_CONFIRM_NAV_HINT,
     UI_CONFIRM_QUIT_SAVING_OTHERS,
+    UI_CONFIRM_READ_ONLY_INVALID_BYTES_DETAIL_COPY,
+    UI_CONFIRM_READ_ONLY_INVALID_BYTES_DETAIL_DELETE,
+    UI_CONFIRM_READ_ONLY_INVALID_BYTES_DETAIL_MERGE,
+    UI_CONFIRM_READ_ONLY_INVALID_BYTES_DETAIL_RESTORE,
+    UI_CONFIRM_SAVE_ESCAPE_MERGE_ITEM,
+    UI_CONFIRM_SAVE_ESCAPE_MERGE_MORE,
     UI_CONFIRM_SAVE_UNMAPPABLE_REPLACE_ITEM,
     UI_CONFIRM_SAVE_UNMAPPABLE_REPLACE_MORE,
     UI_CONFIRM_SAVE_ALL_FAILED_NEEDS_CONFIRM,
     UI_CONFIRM_SWAP_RECOVERY_CHANGED,
     UI_CONFIRM_SWAP_RECOVERY_SENSITIVE,
+    UI_CONFIRM_UNSAVED_PARTIAL_SUFFIX,
     UI_HELP_FOOTER,
     UI_HELP_INTRO_PALETTE,
     UI_HELP_INTRO_QUIT,
@@ -337,11 +485,35 @@ const ALL: [&str; 177] = [
     UI_HELP_SECTION_COMMANDS,
     UI_HELP_SECTION_INTRO,
     UI_HELP_SECTION_KEYS,
+    UI_HELP_SECTION_SEARCH,
     UI_HELP_SECTION_TERMINAL,
+    UI_HELP_SEARCH_ANCHORS,
+    UI_HELP_SEARCH_CLASS_NEWLINE,
+    UI_HELP_SEARCH_COMPAT_EXCLUDE,
+    UI_HELP_SEARCH_COMPAT_INTRO,
+    UI_HELP_SEARCH_COMPAT_MARK,
+    UI_HELP_SEARCH_COMPAT_MATCH,
+    UI_HELP_SEARCH_COMPAT_OFF,
+    UI_HELP_SEARCH_COMPAT_PAIRS,
+    UI_HELP_SEARCH_COMPAT_REGEX,
+    UI_HELP_SEARCH_COMPAT_REPLACE,
+    UI_HELP_SEARCH_COMPAT_YEN_KEY,
+    UI_HELP_SEARCH_DOT_ALL,
+    UI_HELP_SEARCH_INTRO,
+    UI_HELP_SEARCH_LIMIT,
+    UI_HELP_SEARCH_NEWLINE,
+    UI_HELP_SEARCH_NEWLINE_RUN,
+    UI_HELP_SEARCH_OTHER_TOOLS,
+    UI_HELP_SEARCH_SINGLE_LINE,
+    UI_HELP_SEARCH_SUGAR,
     UI_HELP_TERMINAL_ALT,
     UI_HELP_TERMINAL_CHORD,
     UI_HELP_TERMINAL_IME,
     UI_HELP_TERMINAL_README,
+    UI_HELP_TERMINAL_STDIN_KEYS,
+    UI_HELP_TERMINAL_STDIN_POWERSHELL,
+    UI_HELP_TERMINAL_STDIN_REDRAW,
+    UI_HELP_TERMINAL_STDIN_WRITER,
     UI_HELP_TITLE,
     UI_HISTORY_EMPTY,
     UI_HISTORY_FOOTER,
@@ -349,6 +521,7 @@ const ALL: [&str; 177] = [
     UI_HISTORY_LEVEL_INFO,
     UI_HISTORY_LEVEL_WARN,
     UI_HISTORY_TITLE,
+    UI_LOAD_STATE_LOADING,
     UI_PALETTE_ARG_ENCODING,
     UI_PALETTE_ARG_EOL,
     UI_PALETTE_ARG_TITLE,
@@ -357,8 +530,20 @@ const ALL: [&str; 177] = [
     UI_PALETTE_NO_MATCH,
     UI_PALETTE_PLACEHOLDER,
     UI_PALETTE_TITLE,
+    UI_PROMPT_SAVE_AS_PARTIAL,
+    UI_READ_ONLY_REASON_BINARY,
+    UI_READ_ONLY_REASON_FILE_ATTRIBUTE,
+    UI_READ_ONLY_REASON_INVALID_BYTES,
+    UI_READ_ONLY_REASON_INVALID_BYTES_COLLISION,
+    UI_READ_ONLY_REASON_LARGE_FILE_VIEWER,
+    UI_READ_ONLY_REASON_LOAD_INCOMPLETE,
+    UI_READ_ONLY_REASON_NO_WRITE_PERMISSION,
+    UI_READ_ONLY_REASON_STATEFUL,
+    UI_READ_ONLY_REASON_USER_REQUESTED,
     UI_SEARCH_COUNT_APPROX,
     UI_SEARCH_COUNT_AT_LEAST,
+    UI_SEARCH_COUNT_COMPAT_MATCH_SUFFIX,
+    UI_SEARCH_COUNT_COMPAT_SUFFIX,
     UI_SEARCH_COUNT_EXACT,
     UI_SEARCH_COUNT_NO_MATCH,
     UI_SEARCH_COUNT_RUNNING,

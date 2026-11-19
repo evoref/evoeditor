@@ -1,6 +1,6 @@
 //! `fuzz_editor` の本体 (`eve_testkit::fuzzing::editor_sequence`) を、決定的な乱数で作った入力で回す (docs/09 §3.3、NFR-305)。
 //! libFuzzer は MSVC 非対応なので、Windows の CI ではこれで同じ不変条件を確かめる。本格の探索は Linux の夜間の `fuzz_editor`。
-//! 回数は `EVE_FUZZ_EDITOR_CASES` (既定 300) で変えられる。
+//! 回数は `EVE_FUZZ_EDITOR_CASES` (既定 200) で変えられる。
 #![expect(
     clippy::cast_possible_truncation,
     reason = "テスト用の数値変換。値は小さく収まる"
@@ -32,7 +32,7 @@ fn 任意の入力列でパニックせず_frame_と状態の不変条件を保�
     let cases: u64 = std::env::var("EVE_FUZZ_EDITOR_CASES")
         .ok()
         .and_then(|v| v.parse().ok())
-        .unwrap_or(300);
+        .unwrap_or(200);
     // 日本語・制御文字・CRLF・不正な UTF-8 を混ぜた種の文書
     let seeds: [&[u8]; 4] = [
         b"hello\r\nworld\r\n",
@@ -43,8 +43,14 @@ fn 任意の入力列でパニックせず_frame_と状態の不変条件を保�
     let mut rng = Rng(0x9E37_79B9_7F4A_7C15);
     for i in 0..cases {
         let seed = seeds[(i % seeds.len() as u64) as usize];
+        // 初期文書の形 (ビット 12〜14): 4 ケースに 1 ケースは、不正なバイトを含むファイルを文字コードを指定して開く
+        // (1 UTF-8 / 2 Shift_JIS / 3 EUC-JP / 4 UTF-16LE を順に)。ビット 15: 5 ケースに 1 ケースはスワップ (復旧の提案) を積む。
+        // 不正バイトの文書は詰め物が長く、操作が最後まで続くので、1 ケースの時間は 3 倍ほどかかる (既定の件数はそれで決めた)
+        let form = if i % 4 == 1 { 1 + (i / 4) % 4 } else { 0 } as u16;
+        let swap = u16::from(i % 5 == 3) << 15;
+        let head = seed.len() as u16 | form << 12 | swap;
         let mut data = Vec::new();
-        data.extend_from_slice(&(seed.len() as u16).to_le_bytes());
+        data.extend_from_slice(&head.to_le_bytes());
         data.extend_from_slice(seed);
         let n = 2 + (rng.next() % 400) as usize;
         data.extend(rng.bytes(n));

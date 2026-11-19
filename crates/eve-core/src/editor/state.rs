@@ -111,6 +111,9 @@ pub(crate) struct Settings {
     pub(crate) config: eve_config::Config,
     /// 選択済みの UI の言語 (07 §17.1)。起動時に Host が `Editor::set_locale` で渡す。
     pub(crate) locale: eve_config::Locale,
+    /// 選んだ言語の文言の表 (07 §17.4。同梱の表にユーザーの言語ファイルを重ねたもの。起動時に 1 回作り、実行中は変えない)。
+    /// 言語を選ぶと、補う言語の同梱の表になる。
+    pub(crate) catalog: std::sync::Arc<eve_config::Catalog>,
 }
 
 /// io: 投入したジョブの表・全保存・開いた後の移動先・スワップ・起動時の痕跡・確認の済んだ印・表現不能の印・ログの場所・システムの文字コード・設定の出所・閉じた文書の退避 (`EditorState` の部分、docs/review/v0.3-findings.md の STR-B2)。
@@ -120,12 +123,28 @@ pub(crate) struct IoState {
     pub(crate) closing_snapshots: BTreeMap<DocumentId, crate::io::snapshot::DocSnapshot>,
     /// 設定の読込元 (`None` は設定ディレクトリの既定の 2 ファイル)。
     pub(crate) config_sources: Option<crate::io::config_reload::ConfigSources>,
+    /// 最後に読み直した設定で `theme.name` を書いた所 (テーマが無いときの診断の場所、07 §8.7)。
+    pub(crate) theme_name_at: Option<eve_config::KeyOrigin>,
+    /// ユーザーの言語ファイルの事実 (起動時に bin が決めたもの、07 §17.4)。`config.reload` が使う。
+    pub(crate) locale_files: crate::io::config_reload::LocaleFiles,
+    /// `config.reload` で、選んだ言語のファイルが起動時から変わっていた (要約の後に再起動を促す)。
+    pub(crate) locale_restart: bool,
     /// 未完了のジョブと、その結果の宛先。
     pub(crate) pending: BTreeMap<JobId, Pending>,
     /// 実行中の全保存 (`file.save_all`、03 §9.8)。無ければ `None`。
     pub(crate) save_all: Option<crate::io::save_all::SaveAll>,
     /// 読込が終わったらカーソルを移す位置 (行, 桁。ともに 1 始まり。起動時の `+行:桁`、07 §18.2)。
     pub(crate) open_jumps: BTreeMap<DocumentId, (usize, usize)>,
+    /// `file.open` の読込の表示の切り替え (先行表示の時点・完了の時点と、オーバーレイの間の保留。03 §9.2.1)。
+    pub(crate) open_switch: BTreeMap<DocumentId, crate::io::partial_view::OpenSwitch>,
+    /// 先行表示の間に `info.open.partial_end` を出した文書 (同じ文書の先行表示の間は 1 回だけ、03 §9.2.1)。
+    pub(crate) partial_end_noted: BTreeSet<DocumentId>,
+    /// 読込の失敗・取消しで閉じる文書のうち、オーバーレイ・検索バーの間は表示を移さずに待っているもの (文書 → 開く前の
+    /// 文書。03 §9.2.1 の「失敗・取消し・閉じる」)。
+    pub(crate) failed_holds: BTreeMap<DocumentId, Option<DocumentId>>,
+    /// 標準入力の閉じる・終了の確認で「ここまでで開く」を選んだ後、読み終えたときの続き (文書, 続き) のうち、オーバーレイ・
+    /// 検索バーの間は進めずに待っているもの (03 §9.2.2 の「閉じる・終了」。開いているほかの確認・入力を置き換えない)。
+    pub(crate) stdin_conts: Vec<(DocumentId, crate::ui_model::overlay::Continuation)>,
     /// 履歴の破棄を通知した文書 (文書ごとに 1 回)。
     pub(crate) trim_notified: BTreeSet<DocumentId>,
     /// 表現不能の文字の強調 (文書, 作った Revision, 位置)。Revision が変わる (次の編集) まで残る。
@@ -138,6 +157,13 @@ pub(crate) struct IoState {
     pub(crate) lossy_ok: Option<(DocumentId, eve_view::Revision)>,
     /// 「読み取り専用を解除して保存」を承認した (文書, Revision)。同じ Revision の保存では確認を繰り返さない。
     pub(crate) readonly_ok: Option<(DocumentId, eve_view::Revision)>,
+    /// エスケープ文字のつながりの確認で「このまま保存」を選んだ (文書, 結果の base Revision, 承認した結果) (03 §8.3.1 の
+    /// 「承認」、§9.7 の `SaveApprovals`)。保存を投入するたびに、文書と今の Revision が同じならジョブに渡す。
+    pub(crate) escape_merge_ok: Option<(
+        DocumentId,
+        eve_view::Revision,
+        crate::jobs::EscapeMergeApproval,
+    )>,
     /// ダングリングのリンクのリンク先への作成を承認した (文書, パス)。次の 1 回の保存で使って消す。
     pub(crate) link_create_ok: Option<(DocumentId, crate::FsPath)>,
     /// ログファイルの場所 (設定の問題の要約に出す)。
@@ -156,6 +182,17 @@ pub(crate) struct SearchSet {
     pub(crate) research: Option<(eve_view::Revision, Tick)>,
     /// 単発の検索ジョブ (進行中の 1 つだけ)。
     pub(crate) find_job: Option<eve_view::JobId>,
+    /// 単発の検索ジョブを待つ間に同じ向きの次 / 前を押した回数 (行をまたぐ検索の規則。届いて移った後に続ける、03 §12.3.1)。
+    pub(crate) find_presses: u32,
+    /// 全件ジョブの結果を待っている次 / 前 (行をまたぐ検索の規則、03 §12.3.1 の「次 / 前」の (4))。
+    pub(crate) find_wait: Option<crate::search::search_state::StepWait>,
+    /// 行をまたぐ検索の規則の次 / 前の待ちを始めた時刻 (100 ms を過ぎたら件数の位置を待ちの表示にする)。
+    pub(crate) find_since: Option<Tick>,
+    /// 行の窓の核の大きさと連結の上限 (既定は定数。試験だけが feature `test-hooks` の口で小さくする、03 §12.3.1)。
+    pub(crate) tuning: crate::search::SearchTuning,
+    /// 実行中のすべて置換で、置換の文字列 1 つあたりに `<U+10FFNN>` にした私用文字の数 (03 §8.3.1。適用のときに
+    /// 件数を掛けて `info.paste.pua_as_text` で知らせる。すべて置換は同時に 1 つだけ)。
+    pub(crate) replace_all_pua: u64,
 }
 
 /// UI: オーバーレイと保存の連鎖・パレット・メッセージ行とその履歴・終了の連鎖と保存中の終了・後で実行するコマンド (`EditorState` の部分、docs/review/v0.3-findings.md の STR-B2)。
@@ -178,6 +215,9 @@ pub(crate) struct UiState {
     /// 設定・キーマップ・テーマのファイルの診断 (ファイルの表示名, 診断)。最後に読んだときのもの
     /// (`config.show_diagnostics`、07 §4.3)。診断の無いファイルは載せない。
     pub(crate) config_diagnostics: Vec<(String, Vec<eve_config::Diagnostic>)>,
+    /// 言語ファイル・言語の選択の診断の表示名 (`HostReport::LocaleDiagnostics` で渡されたもの、07 §17.4)。文言は補う言語の
+    /// 同梱の表で出し、`config.reload` でも残す。表示名の文字列ではなく、渡された経路で見分ける。
+    pub(crate) locale_reports: std::collections::BTreeSet<String>,
     /// 表示中のメッセージ (解決済み)。
     pub(crate) message: Option<crate::ui_model::message::ShownMessage>,
     /// 未読のメッセージの数。
@@ -267,6 +307,7 @@ impl EditorState {
                 quit_abort: None,
                 quit_code: 0,
                 config_diagnostics: Vec::new(),
+                locale_reports: std::collections::BTreeSet::new(),
                 message: None,
                 unread: 0,
                 message_log: std::collections::VecDeque::new(),
@@ -279,26 +320,40 @@ impl EditorState {
                 search_bar: None,
                 research: None,
                 find_job: None,
+                find_presses: 0,
+                find_wait: None,
+                find_since: None,
+                tuning: crate::search::SearchTuning::default(),
+                replace_all_pua: 0,
             },
             io: IoState {
                 closing_snapshots: BTreeMap::new(),
                 pending: BTreeMap::new(),
                 save_all: None,
                 open_jumps: BTreeMap::new(),
+                open_switch: BTreeMap::new(),
+                partial_end_noted: BTreeSet::new(),
+                failed_holds: BTreeMap::new(),
+                stdin_conts: Vec::new(),
                 trim_notified: BTreeSet::new(),
                 unmappable_marks: None,
                 swap: Default::default(),
                 leftovers: Vec::new(),
                 lossy_ok: None,
                 readonly_ok: None,
+                escape_merge_ok: None,
                 link_create_ok: None,
                 system_encoding: None,
                 log_path: None,
                 config_sources: None,
+                theme_name_at: None,
+                locale_files: crate::io::config_reload::LocaleFiles::default(),
+                locale_restart: false,
             },
             settings: Settings {
                 config: eve_config::Config::default(),
                 locale: eve_config::Locale::default(),
+                catalog: eve_config::Catalog::builtin_shared(eve_config::Locale::default()),
                 user_theme: None,
                 roles: std::sync::Arc::new(crate::layout::theme::resolve(
                     "default",
@@ -363,9 +418,17 @@ impl EditorState {
         }
     }
 
-    /// UI の言語を選ぶ。以後の文言はその言語のカタログで解決する。
+    /// UI の言語を選ぶ。以後の文言はその言語の同梱のカタログ (同梱していない言語は補う言語 `en`) で解決する。
+    /// ユーザーの言語ファイルを重ねた表は、この後に [`EditorState::set_catalog`] で渡す。
     pub fn set_locale(&mut self, locale: eve_config::Locale) {
         self.settings.locale = locale;
+        self.settings.catalog = eve_config::Catalog::builtin_shared(locale);
+        self.out.needs_render = true;
+    }
+
+    /// 選んだ言語の文言の表を差し替える (同梱の表にユーザーの言語ファイルを重ねたもの、07 §17.4)。
+    pub fn set_catalog(&mut self, catalog: std::sync::Arc<eve_config::Catalog>) {
+        self.settings.catalog = catalog;
         self.out.needs_render = true;
     }
 
@@ -769,6 +832,8 @@ impl EditorState {
         self.enforce_total_undo_budget();
         // 選択範囲内の検索の範囲も、同じ変更で写像する (03 §12.5)
         self.map_search_scope(doc, &a.changes);
+        // 行をまたぐ検索の再開の位置も、編集した行より前のものだけを残す (03 §12.3.1)
+        self.map_search_marks(doc, &a.changes, a.old_revision);
         let Some(document) = self.docs.documents.get(&doc) else {
             return;
         };
@@ -1067,9 +1132,7 @@ impl EditorState {
         match name {
             "doc.read_only" => doc.map_or(b(false), |d| b(!d.is_editable())),
             "doc.has_path" => b(doc.is_some_and(|d| d.path.is_some())),
-            "doc.read_only_releasable" => b(doc.is_some_and(|d| {
-                d.load_state == crate::document::LoadState::Ready && d.read_only.releasable()
-            })),
+            "doc.read_only_releasable" => b(doc.is_some_and(Document::read_only_releasable)),
             "doc.modified" => b(doc.is_some_and(Document::is_dirty)),
             "selection.empty" => b(view.is_none_or(|v| v.selection.iter().all(|r| r.is_empty()))),
             "overlay.active" => Some(CtxValue::Str(self.overlay_name().to_owned())),

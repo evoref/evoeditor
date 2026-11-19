@@ -1,8 +1,36 @@
 //! 不正バイト・曖昧幅・往復コーパス (AC の棚卸しの穴埋め): 不正バイトとコードポイントの表記、曖昧幅、往復コーパスの保存、チャンク境界の不正バイト。
 
 use eve_config::Config;
-use eve_core::Args;
+use eve_core::{Args, Encoding, OpenOptions};
 use eve_testkit::Harness;
+
+/// カーソルの位置に `text` をそのまま入れる (挿入の入口の規則 (03 §8.3.1) を通さない試験だけの近道)。v0.4 の M23 から、
+/// 貼り付け・入力で外から来た `U+10FF00..` は `<U+10FFNN>` の文字列になるので、エスケープ文字が不正バイトの無い文書の
+/// 本文にある状況 (違う文字コードで保存した後の Undo など) は、これで作る。
+fn inject(h: &mut Harness, text: &str) {
+    let id = h.doc_id();
+    let st = h.editor.state_mut();
+    let at = st
+        .first_window()
+        .and_then(|w| st.window_view(w))
+        .and_then(|v| st.view(v))
+        .map(|v| v.selection.primary().head)
+        .unwrap();
+    let d = st.document(id).unwrap();
+    let cs = eve_text::ChangeSet::from_sorted_edits(
+        &d.snapshot(),
+        [eve_text::Edit {
+            range: eve_text::ByteRange::new(at, at),
+            insert: text.into(),
+        }],
+    )
+    .unwrap();
+    st.apply_transaction(
+        id,
+        eve_core::Transaction::new(cs, eve_core::Origin::Paste, eve_core::Tick(0)),
+    )
+    .unwrap();
+}
 
 fn row0(h: &mut Harness) -> String {
     h.frame().panes[0].rows[0]
@@ -36,6 +64,103 @@ fn 不正バイトは_0x_形式で_c1_制御文字は_u_形式で書き分ける
     h.paste("a\u{85}b");
     let r = row0(&mut h);
     assert!(r.contains("<U+0085>") && !r.contains("<0x85>"), "{r}");
+}
+
+/// 文字コードを指定して開く (開くときの確認が出ていれば、読み取り専用で開く)。
+fn opened_as(bytes: &[u8], enc: Encoding) -> Harness {
+    let mut h = Harness::new().with_size(60, 4).with_file("/w/a.txt", bytes);
+    h.editor.state_mut().open_path(
+        "/w/a.txt",
+        OpenOptions {
+            forced: Some(enc),
+            ..OpenOptions::default()
+        },
+    );
+    h.run_jobs();
+    if h.overlay() == "dialog" {
+        h.keys("r");
+        h.run_jobs();
+    }
+    h
+}
+
+/// 1 行目の行頭と行末のカーソルの列の差 (行の表示幅)。
+fn row0_width_by_cursor(h: &mut Harness) -> u16 {
+    h.keys("home");
+    let a = h.frame().panes[0].cursors[0].col;
+    h.keys("end");
+    let b = h.frame().panes[0].cursors[0].col;
+    b - a
+}
+
+// 状態付き符号化 (ISO-2022-JP) でも、不正バイトは他の文字コードと同じ `<0xHH>` (幅 6) で表示する。カーソルの列も同じ幅で
+// 数える (03 §8.3 の「状態付き符号化」と「表示」、OQ-207)
+// verifies: AC-NFR-304-3
+#[test]
+fn iso_2022_jp_の不正バイトも_0x_形式で表示し_幅_6_で数える() {
+    // JIS X 0208 状態のまま改行する行: LF (0x0A) が不正バイトになり、行は分かれない
+    let mut h = opened_as(b"\x1B$B$\"\n\x1B(Bx", Encoding::Iso2022Jp);
+    let r = row0(&mut h);
+    assert!(r.starts_with("あ<0x0A>x"), "{r:?}");
+    assert!(!r.contains('\u{10FF0A}'), "{r:?}");
+    assert_eq!(row0_width_by_cursor(&mut h), 2 + 6 + 1);
+}
+
+// 不正バイトの無い ISO-2022-JP の文書 (編集できる) の本文にあるエスケープ文字も、他の文字コードの文書と同じく `<0xHH>`
+// で表示する (通常の私用文字として描くのは、元のファイルが真にこの範囲の文字を含む `DisabledCollision` の文書だけ)。
+// v0.4 の M23 から、貼り付けでは `<U+10FF80>` の文字列になるので (03 §8.3.1)、規則を通さずに入れる
+#[test]
+fn 不正バイトの無い_iso_2022_jp_の文書の本文にあるエスケープ文字も_0x_形式で表示する() {
+    let mut h = opened_as(b"\x1B$B$\"\x1B(B\n", Encoding::Iso2022Jp);
+    inject(&mut h, "\u{10FF80}");
+    let r = row0(&mut h);
+    assert!(r.contains("<0x80>あ"), "{r:?}");
+    assert_eq!(row0_width_by_cursor(&mut h), 6 + 2);
+}
+
+#[test]
+fn shift_jis_の不正バイトの表示と_真の私用文字を含む_utf8_の表示は変わらない() {
+    // Shift_JIS の不正バイト (0xFD)
+    let mut h = opened_as(b"a\xFDb\n", Encoding::ShiftJis);
+    let r = row0(&mut h);
+    assert!(r.contains("a<0xFD>b"), "{r:?}");
+    // 元のファイルが真に U+10FF80 を含む UTF-8 (DisabledCollision): 通常の私用文字として描き、記号にしない
+    let mut h = opened_as("a\u{10FF80}b\n".as_bytes(), Encoding::Utf8);
+    let r = row0(&mut h);
+    assert!(!r.contains("<0x80>"), "{r:?}");
+}
+
+/// 1 行目の行頭から → を押すたびのカーソルの列 (行頭からの相対) と、← で戻るときの列。
+fn cursor_cols_by_arrows(h: &mut Harness, steps: usize) -> (Vec<u16>, Vec<u16>) {
+    h.keys("ctrl+home");
+    let base = h.frame().panes[0].cursors[0].col;
+    let mut right = Vec::new();
+    for _ in 0..steps {
+        h.keys("right");
+        right.push(h.frame().panes[0].cursors[0].col - base);
+    }
+    let mut left = Vec::new();
+    for _ in 0..steps {
+        h.keys("left");
+        left.push(h.frame().panes[0].cursors[0].col - base);
+    }
+    (right, left)
+}
+
+// 不正バイトの直後に結合文字があっても、カーソルは `<0x9A>` と結合文字の間に止まる (エスケープ文字の前後は常に書記素の
+// 境界、03 §8.3.1 の「書記素と単語」・§13.1)。カーソルの列は表示の単位 (`<0x9A>` の 6 セル、孤立した結合文字の 1 セル) と一致する。
+// 不正バイトを含む文書は読み取り専用だが、カーソルは動かせる
+// spec: 03 §8.3.1
+#[test]
+fn 不正バイトの直後の結合文字の前でカーソルが止まる() {
+    // a, 不正バイト 0x9A, U+0301 (CC 81), U+FE0F (EF B8 8F), b
+    let mut h = opened(b"a\x9A\xCC\x81\x9A\xEF\xB8\x8Fb\n");
+    let r = row0(&mut h);
+    assert!(r.starts_with("a<0x9A>"), "{r:?}");
+    let (right, left) = cursor_cols_by_arrows(&mut h, 5);
+    // a (1) → <0x9A> (6) → ◌́ (1) → <0x9A> (6) → 単独の VS16 (<VS16> の 6) → b
+    assert_eq!(right, [1, 7, 8, 14, 20]);
+    assert_eq!(left, [14, 8, 7, 1, 0]);
 }
 
 // verifies: AC-NFR-605-1

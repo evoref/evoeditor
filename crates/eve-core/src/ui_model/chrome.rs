@@ -48,12 +48,12 @@ fn render(state: &EditorState, key: &str, args: &[(&str, &str)]) -> String {
     state.catalog().render(key, args, &label)
 }
 
-/// 行頭からの書記素数 + 1 (桁。書記素数、04 の `ui.column_unit = "grapheme"`)。長大行は char 数 (03 §11.5.1)。
+/// 行頭からの書記素数 + 1 (桁。書記素数、04 の `ui.column_unit = "grapheme"`)。長大行は列の索引の書記素の数 (03 §14.4)。
 fn grapheme_column(doc: &Document, head: ByteOff) -> usize {
     let t = doc.text();
     let line = t.byte_to_line(head);
     let ls = t.line_to_byte(line);
-    if let Some(n) = crate::layout::long_line_chars(doc, line.0, head.0 - ls.0) {
+    if let Some(n) = crate::layout::long_line_graphemes(doc, line.0, head.0 - ls.0) {
         return n + 1;
     }
     let prefix = t.slice_to_string(ByteRange::new(ls, head));
@@ -116,7 +116,7 @@ pub(crate) fn status_model(
             CutPolicy::Never,
         ));
     }
-    // 長い行を含む文書: 閾値を超える行は char 近似モードで表示する (NFR-106、03 §11.5.1、04 §8.7)
+    // 長い行を含む文書: 折り返さずに表示する (NFR-106、03 §14.4 の「文言」、04 §8.7)
     if doc.format.long_lines > 0 {
         let (long, short) = (
             render(state, keys::STATUS_DEGRADED_LONG_LINE_LONG, &[]),
@@ -131,17 +131,42 @@ pub(crate) fn status_model(
             CutPolicy::Never,
         ));
     }
-    // 読込中: 読込中の文書そのもの、または置き換えの途中で旧文書を見せている間 (03 §9.2) に進捗を出す
-    let loading = (doc.load_state == LoadState::Loading)
+    // 読込中: 表示中の文書が読込中 (`Loading` / `Partial`) ならその文書の進捗を、そうでなければ表示していない文書の
+    // 新しく開く読込の進捗を出す (03 §9.2.1 の「ステータスバー」、§9.8 の「読込中のバッファ」)。先行表示の間は
+    // `status.partial.*` (02 §5.1: 読込中は `Loading` / `Partial` から導出する)
+    let shown_loading = matches!(doc.load_state, LoadState::Loading | LoadState::Partial);
+    // 標準入力の読込は大きさが分からないので、割合ではなく読んだ量を出す (文書の種類で決める。03 §9.2.2 の「文書」、
+    // 04 §8.7)。表示していない標準入力の読込は出さない (`loading_percent` はファイルの読込だけ)
+    let stdin_loading = shown_loading.then_some(doc.stdin).flatten();
+    if let Some(s) = stdin_loading {
+        let size = crate::io::open::human_size(s.bytes_read);
+        let a = [("size", size.as_str())];
+        let (long, short) = (
+            render(state, keys::STATUS_LOADING_BYTES_LONG, &a),
+            render(state, keys::STATUS_LOADING_BYTES_SHORT, &a),
+        );
+        items.push(item(
+            StatusKind::Loading,
+            &long,
+            Some(&short),
+            5,
+            Left,
+            CutPolicy::Never,
+        ));
+    }
+    let loading = shown_loading
         .then_some(doc.load_percent)
-        .or_else(|| state.loading_percent());
+        .or_else(|| state.loading_percent())
+        .filter(|_| stdin_loading.is_none());
     if let Some(percent) = loading {
         let percent = percent.to_string();
         let a = [("percent", percent.as_str())];
-        let (long, short) = (
-            render(state, keys::STATUS_LOADING_LONG, &a),
-            render(state, keys::STATUS_LOADING_SHORT, &a),
-        );
+        let (long_key, short_key) = if doc.load_state == LoadState::Partial {
+            (keys::STATUS_PARTIAL_LONG, keys::STATUS_PARTIAL_SHORT)
+        } else {
+            (keys::STATUS_LOADING_LONG, keys::STATUS_LOADING_SHORT)
+        };
+        let (long, short) = (render(state, long_key, &a), render(state, short_key, &a));
         items.push(item(
             StatusKind::Loading,
             &long,
@@ -279,7 +304,9 @@ pub(crate) fn overlay_models(state: &EditorState) -> Vec<OverlayModel> {
                 .map(|(k, v)| (k.as_str(), v.as_str()))
                 .collect();
             // 終了の連鎖 (03 §9.8) は何件目かを前置した本文を使う
-            let message_leaf = if c.args.iter().any(|(k, _)| k == "index") {
+            let message_leaf = if let Some(leaf) = c.message {
+                leaf
+            } else if c.args.iter().any(|(k, _)| k == "index") {
                 "chain"
             } else {
                 "message"
@@ -295,9 +322,14 @@ pub(crate) fn overlay_models(state: &EditorState) -> Vec<OverlayModel> {
                     destructive: d.destructive,
                 })
                 .collect();
-            // キャンセルは最後 (`Esc`)。「中止」の選択肢を自分で持つ確認 (不正バイトが多いファイル) では、
-            // 同じ意味の表示が 2 つ並ばないよう付けない (`Esc` は変わらずキャンセルの番号に届く)
-            if !c.choices.iter().any(|d| d.id == "abort") {
+            // キャンセルは最後 (`Esc`)。「中止」の選択肢を自分で持つ確認 (不正バイトが多いファイル) と、`Esc` と同じ意味の
+            // 「読み続ける」を持つ確認 (`ui.confirm.stdin_stop`) では、同じ意味の表示が 2 つ並ばないよう付けない (`Esc` は
+            // 変わらずキャンセルの番号に届く)
+            if !c
+                .choices
+                .iter()
+                .any(|d| d.id == "abort" || d.id == "continue")
+            {
                 choices.push(Choice {
                     id: ChoiceId(u16::try_from(c.cancel_index()).unwrap_or(u16::MAX)),
                     label: cell_text(
@@ -352,11 +384,20 @@ pub(crate) fn overlay_models(state: &EditorState) -> Vec<OverlayModel> {
                     CutPolicy::End,
                 )
             });
+            let mut title = render(state, &format!("ui.prompt.{name}.title"), &[]);
+            // 途中まで読んだ標準入力の文書の名前を付けて保存は、案内の後ろに「途中まで ({size})」を足す (03 §9.2.2)
+            if let crate::ui_model::overlay::PromptKind::SaveAs { doc, .. } = &p.kind
+                && let Some(size) = state.partial_size(*doc)
+            {
+                title.push(' ');
+                title.push_str(&render(
+                    state,
+                    keys::UI_PROMPT_SAVE_AS_PARTIAL,
+                    &[("size", &size)],
+                ));
+            }
             vec![OverlayModel::Prompt {
-                title: cell_text(
-                    &render(state, &format!("ui.prompt.{name}.title"), &[]),
-                    CutPolicy::Never,
-                ),
+                title: cell_text(&title, CutPolicy::Never),
                 input,
                 hint,
                 error,

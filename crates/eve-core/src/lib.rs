@@ -30,18 +30,20 @@ mod search;
 pub use document::eol::build_eol_conversion;
 pub use document::{
     Applied, AppliedTx, ApplyError, DisplaySettings, Document, EolStats, HistoryStep,
-    LONG_LINE_THRESHOLD, LoadState, NodeId, Origin, ReadOnlyReason, ReadOnlyReasons, RecordOutcome,
-    TextFormat, Transaction, TransactionMeta, UndoBudget, UndoGroupHint, UndoHistory,
-    count_long_lines, trim_to_total_budget,
+    LONG_LINE_THRESHOLD, LoadState, NodeId, Origin, PreservedError, PreservedMap, ReadOnlyReason,
+    ReadOnlyReasons, RecordOutcome, StdinDoc, TextFormat, Transaction, TransactionMeta, UndoBudget,
+    UndoGroupHint, UndoHistory, count_long_lines, trim_to_total_budget,
 };
 pub use editor::{
     Affinity, ArgValue, Args, Binding, CONFIG_FILE, CONTEXT_VARS, CommandCtx, CommandInvocation,
     CommandKind, CommandRegistry, CommandResult, CommandSpec, ConfigSources, ContextExpr, CtxValue,
-    DocSnapshot, Editor, EditorState, Handler, HostReport, InitialFile, InvocationSource,
-    KEYMAP_FILE, KeyParseError, Keymap, Layer, ParseError, Permission, RejectReason, Resolution,
-    ScrollPos, SearchCount, SearchStep, StartupConfig, View, Window, WrapMode, WrapSettings,
-    config_diagnostic_texts, format_stroke, normalize_eol, parse_sequence, parse_stroke,
-    resolve_theme,
+    DocSnapshot, Editor, EditorState, Handler, HostReport, InitialFile, InitialTarget,
+    InvocationSource, KEYMAP_FILE, KeyParseError, Keymap, LOCALE_CLI_SOURCE, LOCALE_ENV_SOURCE,
+    LOCALES_PREFIX, Layer, LocaleFiles, LocaleScan, ParseError, Permission, RejectReason,
+    Resolution, ScrollPos, SearchCount, SearchStep, StartupConfig, View, Window, WrapMode,
+    WrapSettings, config_diagnostic_kind, config_diagnostic_texts, config_diagnostic_texts_long,
+    config_problem_count, format_stroke, normalize_eol, parse_sequence, parse_stroke,
+    resolve_theme, scan_locales,
 };
 pub use eve_encoding::Encoding;
 pub use eve_view::DocumentId;
@@ -56,11 +58,21 @@ pub use io::rescue::{RescueError, RescueOutcome, RescueReason, RescueWriter};
 pub use io::secret::is_secret_path;
 pub use io::unmap::{ReplaceCounts, ReplaceTarget};
 pub use jobs::{
-    ConfirmAsk, JobError, JobKind, JobPorts, JobRequest, JobResult, JobSpawner, MetaPurpose,
-    OpenNotes, Ports, SaveStrategy, run_job,
+    ConfirmAsk, EscapeMergeApproval, EscapeMergeAt, JobError, JobKind, JobOutput, JobPorts,
+    JobRequest, JobResult, JobSpawner, MetaPurpose, OpenNotes, Ports, SaveStrategy, StdinEnd,
+    StdinSource, run_job,
 };
+/// 行の窓の核の大きさと連結の上限を試験から小さくする口 (feature `test-hooks` のときだけ。配布ビルドには無い、03 §12.3.1)。
+#[cfg(feature = "test-hooks")]
+#[doc(hidden)]
+pub use search::SearchTuning;
+/// `fuzz_regex_search` の本体 (docs/09 §3.3)。cargo-fuzz のターゲットと、CI の proptest が同じ関数を使う。
+#[doc(hidden)]
+pub use search::fuzzing as search_fuzzing;
 pub use search::{
-    Case, Matcher, QueryError, SearchJob, SearchQuery, build_replace_all, find_next,
-    replacement_for, run_search, scan_bytes, unescape_replacement,
+    Case, FindJob, LineSpan, Matcher, QueryError, QueryPlan, ReplaceAllBuilt,
+    SEARCH_CONCAT_MAX_BYTES, SEARCH_WINDOW_CORE_BYTES, ScanCtx, ScanEnd, ScanLimit, SearchJob,
+    SearchQuery, build_replace_all, build_replace_all_in, find_next, replace_one, replacement_for,
+    run_search, scan_bytes, scan_range, unescape_replacement,
 };
 pub use time::{Clock, Millis, Tick};

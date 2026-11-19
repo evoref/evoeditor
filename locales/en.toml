@@ -33,7 +33,7 @@ description = "Reload the settings files (config.toml and keymap.toml) without r
 title = "Reload Settings"
 
 [cmd.config.show_diagnostics]
-description = "List the problems in the settings file, the keymap and the theme. Press Enter to open the file at that line."
+description = "List the problems in the settings file, the keymap, the theme and the language file. Press Enter to open the file at that line."
 title = "Show Settings Diagnostics"
 
 [cmd.cursor.doc_end]
@@ -185,7 +185,7 @@ description = "Reload the file from disk."
 title = "Reload"
 
 [cmd.file.toggle_read_only]
-description = "Clear read-only, or make an editable document read-only."
+description = "Clear read-only, or make an editable document read-only. Files with invalid bytes can also be made editable after a confirmation."
 title = "Toggle read-only"
 
 [cmd.file.reopen_with_encoding]
@@ -395,7 +395,7 @@ list_next = "Next"
 palette_open = "Commands"
 
 [info.app]
-release_summary = "Reorganizes and speeds up the internals and fixes data-safety and correctness bugs. Also adds Save and Quit, word editing in input fields, and more. See the release notes for details"
+release_summary = "Saves the parts you did not edit with their original bytes, and lets you edit documents with invalid bytes. Also adds multi-line regular expressions, standard input, high-contrast themes, and more. See the release notes for details"
 updated = "Updated to evoeditor {version}: {summary}"
 
 [info.cli]
@@ -403,6 +403,9 @@ unsupported = "{option} is not available in this version and was ignored"
 
 [info.config]
 diagnostic_no_file = "The diagnostic for {file} was not written in a file, so there is nothing to open"
+locale_restart = "Changes to language files take effect after a restart"
+locale_untranslated = "{count} keys have no translation (shown in English)"
+locale_untranslated_key = "{item} has no translation"
 no_diagnostics = "There are no settings diagnostics"
 reload_restart = "These items take effect after a restart: {keys}"
 reload_unchanged = "Reloaded the settings (nothing changed)"
@@ -431,13 +434,23 @@ enabled = "Mouse support is on"
 already_open = "{path} is already open"
 cancelled = "Cancelled loading {path}"
 guess_unsupported = "The encoding of {path} was guessed as {guess}, which is not supported in this version, so it was opened as {encoding} / If it looks wrong, choose another with Reopen with Encoding ({key:file.reopen_with_encoding})"
-long_line = "{path} has a very long line. That line is shown approximately, one character at a time (combining marks may look separated)"
-lossy_roundtrip = "In this encoding, some characters in the edited places may be saved as different bytes ({count} places)"
+long_line = "{path} has very long lines. This document is shown without wrapping"
 new_file = "{path} does not exist, so it was opened as a new file (saving creates it)"
+partial_end = "Showing only the first {size}. The rest appears when loading finishes"
+preserve_off = "The original bytes of this document were not kept. Saving in the original encoding may write some characters as different bytes"
+preserve_partial = "The original bytes of {count} lines could not be kept. Saving after an edit may change how escape sequences are written on these lines (the characters do not change)"
 redetected = "Re-detected the encoding as {encoding}"
 
 [info.paste]
 first_line_only = "Only the first line was pasted into the input field"
+as_bytes = "Pasted {count} invalid bytes as bytes"
+escape_as_text = "{count} invalid bytes were pasted as <0xNN> text, because this document cannot hold them as bytes"
+notation_as_text = "The clipboard differs from the copy made in the editor, so text like <0xNN> was pasted as plain text"
+pua_as_text = "{count} private-use characters (U+10FF00 to U+10FFFF) cannot be inserted as is, so they were inserted as <U+XXXX> text"
+search_notation = "Text like <0xNN> does not match invalid bytes. Search with the regular expression \\x{{10FFNN}}"
+
+[info.prompt]
+target_closed = "The document this input was for has been closed, so nothing was done"
 
 [info.recovery]
 old = "{count} backups are older than 30 days: {dir}"
@@ -455,12 +468,16 @@ history_cleared = "Reopened as {encoding}. The undo history was cleared"
 
 [info.read_only]
 released = "Read-only cleared"
+released_invalid_bytes = "Editing allowed (each invalid byte can be edited as one <0xNN> character)"
 set = "Made read-only"
 
 [info.save]
 aborted = "Save cancelled ({path} was not changed)"
 done = "Saved {path}"
+escape_merge_cancelled = "Not saved. Highlighted {count} places that would change when reopened (delete the invalid bytes, put a line break between them, or restore the original order)"
+escape_merged = "Saved {path}. {count} places read as different characters when reopened"
 in_place = "Saved {path} by overwriting in place"
+partial_saved = "Saved the partial content to {path} ({size})"
 in_progress = "Saving"
 to_recovery = "Saved to {target}. The original file {path} was not changed"
 unchanged = "No changes (the file was not rewritten)"
@@ -479,11 +496,22 @@ no_selection = "There is no selection. Select text, then open the search bar"
 replace_empty_query = "Enter the text to search for"
 replace_no_match = "Nothing to replace"
 replaced = "Replaced {count} matches (undo restores them)"
+replaced_folded = "Replaced {count} matches ({folded} matched through compat folding; undo restores them)"
+replaced_folded_lines_added = "Replaced {count} matches; the document is {lines} lines longer ({folded} matched through compat folding; undo restores them)"
+replaced_folded_lines_removed = "Replaced {count} matches; the document is {lines} lines shorter ({folded} matched through compat folding; undo restores them)"
+replaced_lines_added = "Replaced {count} matches; the document is {lines} lines longer (undo restores them)"
+replaced_lines_removed = "Replaced {count} matches; the document is {lines} lines shorter (undo restores them)"
 wrapped_backward = "Reached the start of the document, searching from the end"
 wrapped_forward = "Reached the end of the document, searching from the start"
 
+[info.stdin]
+stopped = "Stopped reading standard input and opened what was read ({size}) as read-only"
+terminal = "Standard input is a terminal; opened an empty document without reading it"
+
 [info.swap]
+applied_read_only = "Recovered content applied. The document is read-only because it has invalid bytes; allow editing with {key:file.toggle_read_only} to continue"
 discarded = "Discarded the swap"
+encoding_mismatch = "The unsaved content of {path} was written as {encoding}. Reopen with {encoding} ({key:file.reopen_with_encoding}) to be offered the recovery"
 recovered = "Applied the recovered content. {path} does not change until you save"
 
 [info.undo]
@@ -537,16 +565,88 @@ text = "{item} is the first key of a default key sequence (such as Ctrl+K)"
 hint = "The default binding was kept. Choose another key"
 text = "The binding {item} would make quit, the command palette or cancel unreachable"
 
+[msg.config.locale_accelerator]
+hint = "Use the same letters in the same order"
+text = "The bracketed letters like [S] in {item} differ from the built-in text"
+
+[msg.config.locale_bad_name]
+hint = "Use 2-3 lowercase letters (fr.toml)"
+text = "{value} is not read because its name does not follow the rule for language files"
+
+[msg.config.locale_control_char]
+hint = "Remove that character"
+text = "The text of {item} contains a character that cannot be used ({reason})"
+
+[msg.config.locale_duplicate_key]
+hint = "Remove one of them"
+text = "{item} is written twice; only the first one is read"
+
+[msg.config.locale_empty]
+hint = "Write visible text outside 〔 〕"
+text = "The text of {item} has no visible characters"
+
+[msg.config.locale_hint_width]
+hint = "8 columns or less is recommended"
+text = "The hint {item} is long, so it may be dropped on narrow screens (width {width})"
+
+[msg.config.locale_language_mismatch]
+hint = "Read as {lang}"
+text = "The language value {value} in [meta] does not match the file name"
+
+[msg.config.locale_more]
+hint = "Run --check-config to see all"
+text = "This language file has {count} more problems"
+
+[msg.config.locale_not_found]
+hint = "Add it to locales/ or use ja or en"
+text = "There is no language file for {value} ({lang} is used)"
+
+[msg.config.locale_not_found_no_config]
+hint = "Language files are not read in this run"
+text = "There is no language file for {value} ({lang} is used)"
+
+[msg.config.locale_not_utf8]
+hint = "Save it again as UTF-8"
+text = "This language file is not used because it is not UTF-8"
+
+[msg.config.locale_placeholder]
+hint = "Use the built-in placeholders"
+text = "The placeholders ({{…}} parts) in {item} do not match the built-in text ({reason})〔. Expected: {expected}〕"
+
+[msg.config.locale_reserved]
+hint = "Exit, crash and --help text is fixed"
+text = "The text of {item} cannot be changed in a language file"
+
+[msg.config.locale_syntax]
+hint = "Fix the line shown, or the file"
+text = "This language file is not used because it is not valid: {reason}"
+
+[msg.config.locale_too_large]
+hint = "Keep it within 1 MiB"
+text = "This language file is not used because it is too large ({size})"
+
+[msg.config.locale_too_long]
+hint = "Keep it within 1,024 characters"
+text = "The text of {item} is too long ({count} characters)"
+
+[msg.config.locale_unknown_key]
+hint = "Check the spelling and the version"
+text = "There is no text key named {item}"
+
+[msg.config.locale_unreadable]
+hint = "Check that it is a readable file"
+text = "This language file is not used because it cannot be read: {reason}"
+
 [msg.config.out_of_range]
 hint = "Specify a value in {range}. This item uses {default}"
 text = "The value {value} of {item} is out of range"
 
 [msg.config.problem]
 hint = "{hint}"
-text = "Configuration problem ({file}:{line}): {detail}"
+text = "Configuration problem ({file}〔:{line}〕): {detail}"
 
 [msg.config.problems]
-hint = "The affected items use their defaults. See the log ({log}) for all of them"
+hint = "See Show Settings Diagnostics for all"
 text = "There are {count} problems in the configuration. The first: {detail}"
 
 [msg.config.reload_kept]
@@ -556,6 +656,10 @@ text = "{file} has errors, so the previous settings are kept"
 [msg.config.syntax]
 hint = "Fix the line shown. Until then the defaults are used"
 text = "This configuration file is not used because its syntax is invalid: {reason}"
+
+[msg.config.theme_not_found]
+hint = "〔Set {item} to {candidates}. 〕Write the name of a built-in theme or of a theme file in themes/. The default theme is used for now"
+text = "There is no theme named {value}"
 
 [msg.config.type_mismatch]
 hint = "Write it as {expected}. This item uses the default {default}"
@@ -572,6 +676,26 @@ text = "There is no configuration item named {item}"
 [msg.edit.read_only]
 hint = "If it is due to attributes or permissions, save under another name ({key:file.save_as}) and edit that. If the encoding was misdetected, reopen with an encoding ({key:file.reopen_with_encoding})"
 text = "Cannot edit because the document is read-only ({reason})"
+
+[msg.edit.read_only_invalid_bytes]
+hint = "Use {key:file.toggle_read_only} to edit after a confirmation. If the text is garbled, reopen with {key:file.reopen_with_encoding}"
+text = "Read-only because the file has invalid bytes"
+
+[msg.edit.read_only_loading]
+hint = "Wait for loading to finish, or press {key:ui.cancel} to cancel it"
+text = "Cannot edit while the file is loading"
+
+[msg.edit.read_only_pua_collision]
+hint = "Reopen it with another encoding ({key:file.reopen_with_encoding})"
+text = "Cannot edit or save because the file has both invalid bytes and private-use characters"
+
+[msg.edit.read_only_stateful]
+hint = "Reopen it as UTF-8 or another encoding ({key:file.reopen_with_encoding}) to edit"
+text = "An ISO-2022-JP file with invalid bytes cannot be edited"
+
+[msg.edit.read_only_binary]
+hint = "If it is text, reopen it with an encoding ({key:file.reopen_with_encoding})"
+text = "Binary files cannot be edited"
 
 [msg.edit.replacing]
 hint = "Please wait until loading finishes. Press {key:ui.cancel} to cancel the load"
@@ -625,6 +749,10 @@ text = "Loading {path} was stopped because memory ran out"
 hint = "Create the folder and then save, or save under another name ({key:file.save_as})"
 text = "The folder {dir} of {path} does not exist. It was opened as a new file, but it cannot be saved as is"
 
+[msg.open.partial_unavailable]
+hint = "Wait for loading to finish, or press {key:ui.cancel} to cancel it"
+text = "Not available while the file is loading"
+
 [msg.open.permission_denied]
 hint = "Check the file's permissions"
 text = "You do not have permission to read {path}"
@@ -656,6 +784,30 @@ text = "Could not clean up {path}: {reason}"
 [msg.leftover.tmp_opened]
 hint = "Delete it from the prompt at the next start if you do not need it"
 text = "Opened the temporary file read-only. It is the in-progress content of {path} and may be cut off at the end"
+
+[msg.stdin.failed]
+hint = "What was read is lost. To get it, run the command again"
+text = "Reading standard input failed: {reason}"
+
+[msg.stdin.out_of_memory]
+hint = "To get all of it, save the command output to a file and open that"
+text = "Out of memory; opened what was read from standard input ({size}) as read-only"
+
+[msg.stdin.read_failed]
+hint = "Opened what was read ({size}) as read-only. To get all of it, save the command output to a file and open that"
+text = "Reading standard input failed: {reason}"
+
+[msg.stdin.truncated]
+hint = "The rest was not read. To get all of it, save the command output to a file and open that"
+text = "Standard input exceeded {size}; opened what was read as read-only"
+
+[msg.stdin.unreadable]
+hint = "Check the command that writes to standard input and run it again"
+text = "Could not read standard input: {reason}"
+
+[msg.stdin.unsaveable]
+hint = "Restart with --encoding"
+text = "This content cannot be saved"
 
 [msg.swap.found]
 hint = "Open the matching file and recovery will be offered. Delete the .swp folder if you do not need it"
@@ -785,6 +937,10 @@ text = "Could not save to the recovery folder: {reason}. The original file {path
 hint = "Delete {tmp} if you do not need it. Until then, the next save asks about a hard link"
 text = "Saved {path}, but the temporary file {tmp} could not be deleted (it is the same file as the saved one)"
 
+[msg.save.verify_failed]
+hint = "The original bytes are no longer kept. Save again ({key:file.save}) to save without them, after a confirmation"
+text = "Stopped saving {path}: the content to be written did not read back as the document text (this may be a bug). The file was not changed"
+
 [msg.save_as.not_a_file]
 hint = "Enter a different file name"
 text = "{path} is not a file (it may be a folder)"
@@ -801,13 +957,59 @@ text = "{path} has the read-only attribute and cannot be overwritten"
 hint = "Check that ( ) and [ ] are balanced"
 text = "✖ Invalid regular expression: {reason}"
 
-[msg.search.newline_unsupported]
-hint = "Search works line by line. Use a pattern within one line"
-text = "✖ Patterns that contain a newline are not supported"
+[msg.search.multiline_too_large]
+hint = "Limit the repetition to search, e.g. (?s).{{0,1000}}"
+text = "✖ Can't search: the pattern can span any number of lines (document over {mib} MiB)"
+
+[msg.search.pattern_too_heavy]
+hint = "Use smaller repetition counts or narrow down .*"
+text = "✖ The search was stopped because the pattern is too heavy"
+
+[msg.search.replace_invalid_regex]
+hint = "Check that ( ) and [ ] are balanced"
+text = "Nothing was replaced: invalid regular expression: {reason}"
 
 [msg.search.replace_stale]
 hint = "Stop typing and run it again"
 text = "Replace All was cancelled because editing continued"
+
+[ui.config]
+locale_searched = "(searched: {dir})"
+locale_summary = "Language: {lang} ({source})〔, language file: {file}〕, fallback: {base}"
+locale_unused = "(not used)"
+
+[ui.config.locale_char]
+combining_marks = "more than 30 combining marks in a row {code}"
+control = "control character {code}"
+format = "formatting character {code}"
+noncharacter = "noncharacter {code}"
+private_use = "private-use character {code}"
+variation_selector = "variation selector {code}"
+
+[ui.config.locale_placeholder]
+conditional = "different use of 〔 〕"
+missing = "a placeholder is missing"
+too_many = "a placeholder is used too often"
+unbalanced = "unbalanced brackets"
+unknown = "an unknown placeholder"
+
+[ui.config.locale_reason]
+inline_value = "inline tables and arrays cannot be used"
+not_regular = "it is not a regular file"
+too_deep = "a key has more than 8 levels"
+too_large = "over 1 MiB"
+too_many_keys = "there are more than 20,000 key levels in total"
+
+[ui.config.locale_source]
+cli = "--locale"
+config = "ui.locale"
+default = "default"
+env = "EVE_LANG"
+os = "OS language"
+
+[ui.config.syntax_reason]
+key_depth = "a key has more than 16 levels"
+nesting = "inline tables and arrays are nested more than 16 levels deep"
 
 [ui.config.type]
 array = "an array"
@@ -900,6 +1102,12 @@ message = "{count} places will be saved as different bytes for the same characte
 save = "[S] Save"
 alt = "[A] Save as"
 
+[ui.confirm.save.roundtrip_unchecked]
+title = "May be saved with different bytes"
+message = "This document has parts whose original bytes were not kept. Some characters may be saved as different bytes for the same character"
+save = "[S] Save"
+alt = "[A] Save as"
+
 [ui.confirm.save.escape_normalized]
 title = "Escape notation changes"
 message = "The escape notation changes on {count} lines (the characters do not change)"
@@ -964,6 +1172,15 @@ title = "Characters that cannot be represented"
 message = "{count} characters cannot be represented in {encoding} (first: line {line}, column {col})"
 utf8 = "[U] Save as UTF-8"
 replace = "[R] Replace and save"
+escape_message = "{count} invalid bytes (<0xNN>) cannot be saved in {encoding} (first: line {line}, column {col})〔; {others} other characters cannot be represented either〕. Delete them or retype the correct characters, then save"
+
+[ui.confirm.save.escape_merge]
+title = "Text that changes when reopened"
+message = "At {count} places, invalid bytes join the bytes or characters after them and read as different characters when reopened (first: line {line}, column {col}). {chars} characters ({lines} lines) in total would change. Nothing has been saved yet"
+message_to_eof = "At {count} places, invalid bytes join the bytes or characters after them and read as different characters when reopened (first: line {line}, column {col}). Everything from there to the end of the file would change. Nothing has been saved yet"
+item = "line {line}, column {col}: {before} → {after}"
+more = "and {count} more"
+save = "[S] Save as is"
 
 [ui.confirm.save.unmappable_replace]
 title = "Confirm replacement"
@@ -971,6 +1188,16 @@ message = "The following {total} characters will be replaced and saved as {encod
 replace = "[R] Replace and save"
 item = "line {line}, column {col}: {char} ({codepoint}) → {replacement}"
 more = "and {count} more"
+
+[ui.confirm.read_only.invalid_bytes]
+title = "Editing a document with invalid bytes"
+message = "{path} has {count} invalid bytes for {encoding}〔 (first: line {line}, column {col})〕. If you allow editing, you can delete or move each one as a single <0xNN> character. If the text looks garbled, reopen with the right encoding instead of editing"
+detail_restore = "When saved, the remaining <0xNN> are written back as the original bytes"
+detail_delete = "Deleting one removes that byte from the file (undo can bring it back before saving)"
+detail_merge = "If one ends up joined with the text next to it, it reads as a different character when reopened (you are asked before saving)"
+detail_copy = "Pasted into other applications, it becomes the text <0xNN>"
+release = "[A] Allow editing"
+reopen = "[E] Reopen with encoding"
 
 [ui.load_state]
 loading = "Loading"
@@ -988,7 +1215,9 @@ write_failed = "it could not be written"
 binary = "binary file"
 file_attribute = "file with the read-only attribute"
 invalid_bytes = "file with invalid bytes"
+invalid_bytes_collision = "file with invalid bytes and private-use characters"
 large_file_viewer = "huge file (opened read-only by choice)"
+load_incomplete = "content read only partway"
 no_write_permission = "file without write permission"
 stateful_encoding_with_invalid_bytes = "ISO-2022-JP file with invalid bytes"
 user_requested = "opened read-only by request (`--readonly`)"
@@ -1004,6 +1233,14 @@ selection = "({count} chars selected)"
 long = "[Loading {percent}%]"
 short = "{percent}%"
 
+[status.loading_bytes]
+long = "[Loading {size}]"
+short = "{size}"
+
+[status.partial]
+long = "[First part {percent}%]"
+short = "{percent}%"
+
 [status.read_only]
 long = "[RO]"
 short = "RO"
@@ -1017,8 +1254,8 @@ long = "[Changed on disk]"
 short = "Changed"
 
 [status.degraded.long_line]
-long = "[Long line: approximate]"
-short = "Approx"
+long = "[Long lines: no wrap]"
+short = "No wrap"
 
 [status.encoding]
 bom = "{encoding} BOM"
@@ -1037,6 +1274,8 @@ running = "{found}/…"
 exact = "{current}/{total}"
 at_least = "{current}/{total}+"
 approx = "~{total}"
+compat_suffix = "compat"
+compat_match_suffix = "compat match"
 no_match = "0 matches"
 
 [ui.palette.arg]
@@ -1088,6 +1327,7 @@ error = "Error"
 intro = "Getting started"
 keys = "Keys"
 commands = "Commands"
+search = "Writing search patterns"
 terminal = "Terminal settings"
 
 [ui.help.intro]
@@ -1099,10 +1339,35 @@ palette = "Find and run any command from the command palette with {key:ui.palett
 note = "Keys written like Ctrl+K S are pressed one after another. Several keys for one command are separated by commas"
 unreachable = "Keys marked * do not reach the editor in this terminal (use the command palette or another key)"
 
+[ui.help.search]
+intro = "Regular expressions in the search bar ([.*] on) can match across lines. Only the following forms, which spell out a line break, match line ends"
+newline = "One line break (LF, CRLF or CR)"
+class_newline = "A run of spaces and line breaks (a class with \\n as a member spans lines)"
+dot_all = "Any character or one line break (CRLF counts as one character)"
+single_line = "Do not span lines (match within one line)"
+newline_run = "A run of line breaks. \\r\\n+ does not match in a CRLF document"
+anchors = "Start / end of the document (^ and $ are the start / end of a line)"
+other_tools = "Write Vim's \\_s as [\\s\\n] and \\_. as (?s). Unlike ripgrep -U or VS Code, \\s and [^x] do not span lines"
+limit = "Patterns that can span any number of lines (such as (?s).* or \\n+) are searched only in documents up to 16 MiB (UTF-8 bytes). In larger documents, limit the repetition, e.g. (?s).{{0,1000}}"
+sugar = "With search.newline_sugar = false in the settings, \\n matches only LF line breaks (not CRLF)"
+compat_intro = "Compatible characters: in each of these 8 pairs, either one matches both"
+compat_pairs = "〜～ ‖∥ −－ ¢￠ £￡ ¬￢ ¦￤ —―"
+compat_regex = "This also applies to characters and classes in regular expressions"
+compat_replace = "Replacement text is inserted as written (replacing − with - also changes －)"
+compat_off = "To turn it off, set search.cp932_compat_fold = false"
+compat_mark = "When folding is in effect, \"compat\" follows the count (e.g. 3/10 compat)"
+compat_match = "Shown as \"2/5 compat match\" when the current match was found by folding"
+compat_exclude = "¥ and ￥, ‾ and ￣, ~ and ～ are not folded"
+compat_yen_key = "The ¥ key often types \\ (U+005C), which is not folded with ¥ either"
+
 [ui.help.terminal]
 ime = "While an IME is on, letter keys do not reach the confirmation dialog as accelerators. Choose with Tab or the arrow keys and Enter"
 chord = "Keys that start with Ctrl+K are pressed as Ctrl+K and then the next key. Esc cancels"
 alt = "On terminals where Alt does not reach the editor (such as the default Terminal.app), use the Ctrl+K alternatives"
+stdin_keys = "When the program writing to evoeditor - (cmd | evoeditor -) reads the terminal (such as cat alone), the two compete for key input"
+stdin_redraw = "If the writer's error output garbles the screen, redraw it with {key:ui.redraw}"
+stdin_powershell = "Windows PowerShell 5.1 pipes replace non-ASCII text with ?. Use PowerShell 7.4 or later, or cmd /c \"evoeditor - < file\""
+stdin_writer = "A writer that ignores write errors (such as ping -t on Windows) keeps running after reading stops; stop it with Ctrl+C after evoeditor exits"
 readme = "Per-terminal settings and known limitations are described in the README"
 
 [ui.palette.category]
@@ -1121,6 +1386,7 @@ ui = "View"
 title = "Open"
 
 [ui.prompt.save_as]
+partial = "partial ({size})"
 title = "Save As"
 
 [ui.prompt.goto_line]
@@ -1156,6 +1422,7 @@ too_small = "The terminal is too small (at least {cols}x{rows} is needed)"
 title = "Unsaved changes"
 message = "{path} has unsaved changes"
 chain = "({index}/{total}) {path} has unsaved changes"
+partial_suffix = "(partial, {size})"
 save = "[S] Save and quit"
 discard = "[D] Discard and quit"
 
@@ -1176,6 +1443,19 @@ message = "Saving {path} has not finished"
 others = "and {count} more"
 wait = "[W] Wait"
 abort = "[Q] Abort the save and quit (unsaved content will be backed up)"
+
+[ui.confirm.stdin_stop]
+title = "Reading standard input"
+message = "If you stop reading, the writing program stops and the rest cannot be read"
+continue = "[Esc] Keep reading"
+open = "[O] Open what was read"
+
+[ui.confirm.stdin_loading]
+title = "Reading standard input"
+message = "Standard input is still being read ({size})"
+chain = "({index}/{total}) Standard input is still being read ({size})"
+open = "[O] Open what was read"
+discard = "[D] Discard"
 
 [ui.confirm.save_all_failed]
 title = "Documents not saved"

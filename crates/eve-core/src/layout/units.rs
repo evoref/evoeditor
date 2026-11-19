@@ -13,7 +13,7 @@ use crate::document::Document;
 
 use super::CharWidth;
 use super::ColIndex;
-use super::cache::{LongKey, UnitsKey};
+use super::cache::{LongEntry, LongRule, UnitsKey};
 
 /// 空白の可視化の記号 (タブの `>` と続きの空白、全角スペースの `[]`) か。それ以外の記号は制御文字・不可視文字。
 pub(super) fn is_whitespace_mark(text: &str) -> bool {
@@ -194,7 +194,9 @@ pub(super) fn unit_slow(
         // 可視化しないときも、端末の全角の空白の描き方に頼らず ASCII の空白 2 つで描く
         parts.push((if ws { "[]" } else { "  " }.to_owned(), 2, ws));
     } else if esc && g.chars().any(|c| unescape_char(c).is_some()) {
-        // 不正バイトのエスケープ文字は 1 文字ずつ `<0xHH>` にする (結合文字などと同じ書記素になることがある)
+        // 不正バイトのエスケープ文字は 1 文字ずつ `<0xHH>` にする。書記素の境界はエスケープ文字の前後に必ずある
+        // (03 §13.1、`first_grapheme`) ので、ここに来る書記素はエスケープ文字 1 つで、表示の単位とカーソル・削除の
+        // 単位が一致する。1 書記素に複数の文字が来ても (呼び出し側の誤り) 文字ごとに描く
         let mut run = String::new();
         for c in g.chars() {
             if let Some(b) = unescape_char(c) {
@@ -306,7 +308,8 @@ pub(crate) fn is_long_line(doc: &Document, line: usize) -> bool {
 const LONG_CACHE_LINES: usize = 4;
 
 /// 行 `line` が長大行 (バイト長が文書の閾値を超える、03 §11.5.1) なら、その (行頭, 列の索引)。
-/// 索引は Revision・行・幅の設定が同じ間は覚えを使う (編集のたびに 1 回走査し直す)。
+/// 索引は (行頭の位置, 表示の設定) で覚え、要る位置までしか作らない (遅延。03 §14.4)。本文が変わったときの引き継ぎは
+/// `LayoutCache::on_change` (編集では変更の位置より前の記録点を残す)。
 pub(super) fn long_index(doc: &Document, line: usize) -> Option<(usize, std::rc::Rc<ColIndex>)> {
     use std::rc::Rc;
     if !is_long_line(doc, line) {
@@ -317,60 +320,71 @@ pub(super) fn long_index(doc: &Document, line: usize) -> Option<(usize, std::rc:
     let (ls, le) = (t.line_to_byte(l).0, t.line_end_byte(l).0);
     let esc = esc_enabled(doc);
     let cfg = doc_width_config(doc);
-    let key: LongKey = (doc.revision(), line, esc, cfg.tab_width, cfg.ambiguous_wide);
+    let rule: LongRule = (esc, cfg.tab_width, cfg.ambiguous_wide);
+    let rev = doc.revision();
     let mut cache = doc.layout_cache.borrow_mut();
     let entries = &mut cache.long;
-    // 古い Revision の索引は使えないので捨てる
-    entries.retain(|(k, _)| k.0 == key.0);
-    if let Some((_, ix)) = entries.iter().find(|(k, _)| *k == key) {
-        return Some((ls, ix.clone()));
+    // 今の Revision に引き継がれなかった索引は使えないので捨てる (本文を変える経路はすべて `on_change` を通るので、
+    // 残っていれば今の本文に対して正しい)。同じ行頭で長さの違う索引 (起きないはず) も捨てる
+    entries.retain(|e| e.rev == rev && (e.ls != ls || e.ix.len() == le - ls));
+    if let Some(e) = entries.iter().find(|e| e.ls == ls && e.rule == rule) {
+        return Some((ls, e.ix.clone()));
     }
-    let ix = Rc::new(ColIndex::build(t, ls, le, CharWidth::new(esc, cfg)));
+    let ix = Rc::new(ColIndex::new(le - ls, CharWidth::new(esc, cfg)));
     if entries.len() >= LONG_CACHE_LINES {
         entries.remove(0);
     }
-    entries.push((key, ix.clone()));
+    entries.push(LongEntry {
+        rev,
+        ls,
+        rule,
+        ix: ix.clone(),
+    });
     Some((ls, ix))
 }
 
-/// 長大行の、表示列 `left` から `left + cols` までにかかる char の表示の単位 (行全体は展開しない)。
-/// 1 char を 1 書記素として `unit_slow` で展開する (幅は索引と同じ)。
+/// 長大行の、表示列 `left` から `left + cols` までにかかる書記素の表示の単位 (行全体は展開しない) と、行末がその範囲に
+/// あれば行の幅 (範囲より右なら `None`。行末まで索引を作らない、03 §14.4 の遅延)。
+/// 単位は通常の行 (`units_with`) と同じ (印字できる ASCII 1 文字は `Parts::Char`、ほかは `unit_slow`。幅は索引と同じ)。
 pub(super) fn long_units(
     doc: &Document,
     ls: usize,
     ix: &ColIndex,
     left: usize,
     cols: usize,
-) -> Vec<Unit> {
+) -> (Vec<Unit>, Option<usize>) {
     let cfg = doc_width_config(doc);
     let (esc, ws) = (esc_enabled(doc), doc.display.show_whitespace);
     let tab = cfg.tab_width.max(1) as usize;
     let t = doc.text();
     let mut out = Vec::new();
-    let mut buf = [0u8; 4];
     // 右端の列にかかる単位まで (その次の単位で、右が切れていることが分かる)
-    ix.walk(t, ls, ix.at_col(t, ls, left), |at, c, w| {
+    let stop = ix.walk(t, ls, ix.at_col(t, ls, left), |at, g, w| {
         if at.col > left + cols {
             return false;
         }
-        out.push(if (' '..='~').contains(&c) {
-            Unit {
+        out.push(match g.as_bytes() {
+            &[b @ 0x20..=0x7E] => Unit {
                 col: at.col,
-                parts: Parts::Char(c),
+                parts: Parts::Char(char::from(b)),
                 width: w,
                 byte: at.byte,
                 risky: false,
-            }
-        } else {
-            unit_slow(c.encode_utf8(&mut buf), at.byte, at.col, tab, esc, ws, &cfg)
+            },
+            _ => unit_slow(g, at.byte, at.col, tab, esc, ws, &cfg),
         });
         true
     });
-    out
+    // 行末で止まったなら、その表示列が行の幅。途中で止まったなら、行の幅は `left + cols` より大きい
+    let width = (stop.byte >= ix.len()).then_some(stop.col);
+    (out, width)
 }
 
+/// 本文の `U+10FF00..FF` を不正バイトのエスケープとして `<0xHH>` (幅 6) で表示するか (03 §8.3 の「表示」、§13.2)。
+/// 状態付き符号化 (`DisabledStateful`。ISO-2022-JP) も表示は他の文字コードと同じ (バイトに戻さないのは保存だけ、
+/// OQ-207)。通常の私用文字として扱うのは、元のファイルが真にこの範囲の文字を含む `DisabledCollision` だけ。
 fn esc_enabled(doc: &Document) -> bool {
-    doc.format.pua_escape == PuaEscapeMode::Enabled
+    doc.format.pua_escape != PuaEscapeMode::DisabledCollision
 }
 
 /// 行内のバイト位置 `byte` にあるカーソルの (表示列, そのセルの幅)。行末では (行の幅, 1)。
@@ -387,10 +401,10 @@ pub(crate) fn cursor_cell(doc: &Document, line: usize, byte: usize) -> (usize, u
     }
 }
 
-/// 長大行なら、行内の位置 `byte` より前の char 数 (ステータスバーの桁。書記素 = char とみなす、03 §11.5.1)。
-pub(crate) fn long_line_chars(doc: &Document, line: usize, byte: usize) -> Option<usize> {
+/// 長大行なら、行内の位置 `byte` より前の書記素の数 (ステータスバーの桁、03 §14.4 の「使う側」の (b))。
+pub(crate) fn long_line_graphemes(doc: &Document, line: usize, byte: usize) -> Option<usize> {
     let (ls, ix) = long_index(doc, line)?;
-    Some(ix.at_byte(doc.text(), ls, byte).0.chars)
+    Some(ix.at_byte(doc.text(), ls, byte).0.graphemes)
 }
 
 /// 行内のバイト位置 `byte` にあるカーソルの表示列 (行頭から)。移動の目標列もこの表示と同じ幅で数える。
@@ -476,6 +490,37 @@ mod tests {
             );
         }
         assert!(units("", false, &cfg).is_empty());
+    }
+
+    /// エスケープ文字は直後の結合文字・異体字セレクタ・ZWJ と別の単位になり、単位の境目はカーソル・削除の単位
+    /// (書記素の境界、03 §13.1) と一致する (03 §8.3.1 の「書記素と単語」)。
+    #[test]
+    fn エスケープ文字は直後の結合文字と別の単位になる() {
+        let cfg = width_config();
+        let line = "a\u{10FF9A}\u{301}\u{10FF80}\u{200D}b";
+        let us = units(line, true, &cfg);
+        let got: Vec<(usize, usize, usize)> = us.iter().map(|u| (u.byte, u.col, u.width)).collect();
+        // a | <0x9A> | ◌́ | <0x80> | <ZWJ> | b
+        assert_eq!(
+            got,
+            [
+                (0, 0, 1),
+                (1, 1, 6),
+                (5, 7, 1),
+                (7, 8, 6),
+                (11, 14, 5),
+                (14, 19, 1)
+            ]
+        );
+        assert_eq!(us[1].parts_vec(), [("<0x9A>".to_owned(), 6, true)]);
+        let text = eve_text::Text::from(line);
+        for u in us.iter() {
+            assert!(
+                eve_text::is_grapheme_boundary(&text, ByteOff(u.byte)),
+                "{}",
+                u.byte
+            );
+        }
     }
 
     /// 基準: 全ての書記素を一般の経路で展開する。

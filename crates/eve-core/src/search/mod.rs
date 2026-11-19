@@ -1,23 +1,42 @@
-//! リテラル検索の基盤 (docs/03 §12、01 FR-401・FR-402・FR-404)。
+//! 文書内検索の基盤 (docs/03 §12、01 FR-401・FR-402・FR-404)。
 //!
-//! 検索語は 1 行の入力欄から来るので改行を含まない。一致は行をまたがないため、**行ごと**に走査する
+//! 検索語は 1 行の入力欄から来るので改行を含まない。v0.3 までの一致は行をまたがないため、**行ごと**に走査する
 //! (チャンクの境界を気にしなくてよい)。一致は重ならないものを左から順に取り、両端が書記素境界でない候補は捨てる (§12.1)。
+//! 行をまたぎうる正規表現 (v0.4、§12.3.1) は行の窓と全文の連結 (`stream`) で探す。
 //!
-//! 大小を区別しない照合は、1 文字ずつ小文字へ畳み込んだ文字列どうしで行う。畳み込めるのは小文字が 1 文字になる
-//! 文字だけで、それ以外 (`İ` など) はそのままにする。これは Unicode の単純ケースフォールディングとほぼ同じだが、
-//! `ſ` (U+017F) と `s` は同一視しない (§12.4 の実装メモ)。
+//! 大小を区別しない照合の意味は Unicode の単純ケースフォールディング (`regex` の `(?i)` と同じ。`k` と K (U+212A)、
+//! `s` と `ſ` (U+017F) も一致する)。ASCII だけで `k` `K` `s` `S` を含まない検索語は ASCII の大小を畳み込んだ memmem で、
+//! それ以外は検索語をエスケープした正規表現の `(?i)` で探す (§12.4)。
+//!
+//! 正規表現は、検索語を AST の段で書き換えてから `regex` に渡す (§12.3.1、`rewrite`)。CRLF を CR と LF に分けて
+//! 一致させず、行の終端を明示した書き方だけが行の終端に一致する。
 //!
 //! spec: 03 §12
 
+#[doc(hidden)]
+pub mod fuzzing;
+mod limits;
+mod lines;
 mod matcher;
 mod replace;
+mod rewrite;
 mod scan;
+mod stream;
 
-pub use matcher::{Case, Matcher, QueryError, SearchQuery};
-pub use replace::{build_replace_all, replacement_for, unescape_replacement};
+pub use limits::{SEARCH_CONCAT_MAX_BYTES, SEARCH_WINDOW_CORE_BYTES};
+pub(crate) use limits::{SEARCH_FIND_WAIT_MS, SEARCH_SYNC_MULTILINE_MAX};
+pub use matcher::{Case, Matcher, QueryError, QueryPlan, SearchQuery, SearchTuning};
+pub(crate) use matcher::{Prepared, Shape};
+pub use replace::{
+    ReplaceAllBuilt, build_replace_all, build_replace_all_in, replace_one, replace_one_job,
+    replacement_for, unescape_replacement,
+};
+pub use rewrite::LineSpan;
 #[cfg(test)]
 use scan::scan_lines;
-pub use scan::{SearchJob, find_next, run_search, scan_bytes};
+pub use scan::{
+    FindJob, ScanCtx, ScanEnd, ScanLimit, SearchJob, find_next, run_search, scan_bytes, scan_range,
+};
 
 pub(crate) mod search_state;
 

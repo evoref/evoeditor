@@ -48,10 +48,17 @@ impl EditorState {
                 continue;
             };
             let expected = doc.disk_stamp.map_or(Expect::Absent, Expect::Stamp);
-            // 書く前の確認 (区分 B、03 §8.6 E2'・読み取り専用を解除して保存、FR-116) が要る文書は保存しない
+            // 状態付きの文字コードで不正バイトを含む文書は書けない (03 §9.7 の「連鎖の開始時の拒否」)。保存せず、理由を添えて
+            // 失敗の一覧に載せる (全保存は文書ごとのメッセージを出さない)
+            if crate::io::save::stateful_invalid(doc, None) {
+                let reason = self.message_text(keys::MSG_SAVE_ENCODING_UNSUPPORTED_ISO2022, &[]);
+                batch.failed.push((path.display(), reason));
+                continue;
+            }
+            // 書く前の確認 (保存の前の確認、03 §8.6 E2'・§8.7.1。読み取り専用を解除して保存、FR-116) が要る文書は保存しない
             let needs_readonly_ok =
                 doc.attribute_released && self.io.readonly_ok != Some((id, doc.revision()));
-            if (doc.format.roundtrip.lossy_lines > 0
+            if (crate::io::open::preconfirm(doc, doc.format.encoding).is_some()
                 && self.io.lossy_ok != Some((id, doc.revision())))
                 || needs_readonly_ok
             {
@@ -109,6 +116,10 @@ impl EditorState {
             },
             JobResult::Failed { err, .. } => crate::io::file::reason_label(err),
             JobResult::Unmappable { .. } => "unmappable".to_owned(),
+            // エスケープ文字のつながり (03 §8.3.1): 確認が要るので保存しない (何も書いていない)
+            JobResult::EscapeMerge { .. } => {
+                self.message_text(keys::UI_CONFIRM_SAVE_ALL_FAILED_NEEDS_CONFIRM, &[])
+            }
             _ => "failed".to_owned(),
         };
         let batch = self.io.save_all.as_mut()?;
@@ -173,6 +184,7 @@ impl EditorState {
                 .collect(),
             default: 0,
             focused: 0,
+            message: None,
             action: ConfirmAction::Notice,
         });
     }

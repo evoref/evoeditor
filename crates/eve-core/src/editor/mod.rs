@@ -6,12 +6,19 @@
 
 pub(crate) mod buffer;
 mod host_api;
-pub use crate::io::config_reload::{CONFIG_FILE, ConfigSources, KEYMAP_FILE};
+pub use crate::io::config_reload::{
+    CONFIG_FILE, ConfigSources, KEYMAP_FILE, LocaleFiles, LocaleScan, scan_locales,
+};
 pub use crate::layout::theme::resolve as resolve_theme;
 pub use crate::ui_model::config_report::diagnostic_texts as config_diagnostic_texts;
+pub use crate::ui_model::config_report::{
+    LOCALE_CLI_SOURCE, LOCALE_ENV_SOURCE, LOCALES_PREFIX,
+    diagnostic_kind as config_diagnostic_kind,
+    diagnostic_texts_long as config_diagnostic_texts_long, problem_count as config_problem_count,
+};
 pub use host_api::{HostReport, StartupConfig};
 pub(crate) mod query;
-pub use crate::io::startup::InitialFile;
+pub use crate::io::startup::{InitialFile, InitialTarget};
 pub(crate) mod state;
 
 use eve_view::{
@@ -166,6 +173,7 @@ impl Editor {
             self.which_key_shown = true;
             self.state.mark_dirty_render();
         }
+        self.state.flush_open_switches();
     }
 
     /// which-key を出すまでの時間 (`ui.which_key_delay_ms`、既定 500 ms)。
@@ -183,6 +191,7 @@ impl Editor {
     pub fn next_deadline(&self) -> Option<Tick> {
         [
             self.state.search_deadline(),
+            self.state.search_wait_deadline(),
             self.state.swap_deadline(),
             self.state.quit_wait_deadline(),
             self.state.mouse_deadline(),
@@ -205,6 +214,8 @@ impl Editor {
                 &CommandInvocation::new(&id, InvocationSource::Palette).with_args(args),
             );
         }
+        // オーバーレイを閉じたら、保留した表示の切り替えを行う (03 §9.2.1 の「表示の切り替え」)
+        self.state.flush_open_switches();
         res
     }
 
@@ -221,10 +232,11 @@ impl Editor {
     }
 
     /// ジョブの結果を受け取る (Host が `HostMsg::Job` で呼ぶ)。
-    pub fn on_job_result(&mut self, r: crate::jobs::JobResult) {
+    pub fn on_job_result(&mut self, r: crate::jobs::JobOutput) {
         self.state.on_job_result(r);
         // `config.reload` の結果: キーマップは Editor が持つので、ここで差し替える
         self.finish_reload_keymap();
+        self.state.flush_open_switches();
     }
 
     /// 起動時の開き方 (`Host::start` が最初の `Resize` の後に呼ぶ)。パスがなければ無題の文書 (FR-124)。
@@ -295,7 +307,13 @@ impl Editor {
                     let chord_pending = !self.keymap.pending().is_empty();
                     // 保留中の Esc は保留を取り消す (メッセージは消さない、04 §8.9 の Esc の優先順位)
                     if !(is_esc && (chord_pending || self.state.overlay_kind() != "")) {
-                        self.state.dismiss_message_on_key(is_esc);
+                        let esc_dismissed = self.state.dismiss_message_on_key(is_esc);
+                        // 1 回の `Esc` は 1 つだけを行う (04 §7.5): オーバーレイ・検索バーが無いときに警告・エラーを
+                        // 消した `Esc` は、読込の取消しなど後ろの層 (`ui.cancel`) を行わない
+                        if esc_dismissed && self.state.find.search_bar.is_none() {
+                            self.state.flush_open_switches();
+                            return;
+                        }
                     }
                     self.on_key(KeyStroke {
                         mods: k.mods,
@@ -314,8 +332,11 @@ impl Editor {
                 self.keymap.clear_pending();
                 if self.state.is_dialog() {
                     // 確認ダイアログでは貼り付けを捨てる (選択肢が実行されないように)
-                } else if !self.state.prompt_paste(&s) {
-                    crate::command::edit::paste_text(&mut self.state, &s);
+                } else if self.state.prompt_paste(&s) {
+                    // 入力欄には届いた文字列のまま入れる (03 §8.3.1 の「入力欄」)
+                    self.state.notify_field_paste(&s);
+                } else {
+                    crate::command::edit::paste_text(&mut self.state, Some(&s));
                 }
             }
             InputEvent::Mouse(m) => {
@@ -333,6 +354,8 @@ impl Editor {
             }
             _ => {}
         }
+        // オーバーレイを閉じたら、保留した表示の切り替えを行う (03 §9.2.1 の「表示の切り替え」)
+        self.state.flush_open_switches();
     }
 
     /// 編集面にフォーカスがあるときのコンテキストの参照順 (07 §7.1)。

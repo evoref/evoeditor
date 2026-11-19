@@ -224,12 +224,56 @@ fn 正規表現の置換は_キャプチャを展開する() {
     h.text(r"(\w+)=(\d)");
     h.keys("tab");
     h.text("$2:${1}!");
+    // 正規表現の照合器は検索のジョブがコンパイルする (03 §12.3.1)。置換の前にジョブを走らせる
+    h.run_jobs();
     h.keys("alt+a");
     assert_eq!(h.doc_text(), "1:foo! 2:bar!");
     assert_eq!(message(&mut h), "2 件を置換しました (元に戻すで戻せます)");
     h.keys("esc");
     h.keys("ctrl+z");
     assert_eq!(h.doc_text(), "foo=1 bar=2", "1 回の Undo で戻る");
+}
+
+// 照合器ができる前のすべて置換は、小さい文書でもメインスレッドでコンパイルせず、ジョブで作る (03 §12.3.1)
+#[test]
+fn 照合器ができる前のすべて置換は_小さい文書でもジョブで作る() {
+    let mut h = Harness::new().with_size(60, 10);
+    h.text("foo=1 bar=2");
+    h.keys("ctrl+r");
+    h.keys("alt+r");
+    h.text(r"(\w+)=(\d)");
+    h.keys("tab");
+    h.text("$2:$1");
+    h.keys("alt+a");
+    assert_eq!(
+        h.doc_text(),
+        "foo=1 bar=2",
+        "ジョブの結果が届くまで変えない"
+    );
+    h.run_jobs();
+    assert_eq!(h.doc_text(), "1:foo 2:bar");
+    assert_eq!(message(&mut h), "2 件を置換しました (元に戻すで戻せます)");
+    h.keys("esc");
+    h.keys("ctrl+z");
+    assert_eq!(h.doc_text(), "foo=1 bar=2", "1 回の Undo で戻る");
+}
+
+// ジョブのコンパイルで分かった誤り (大きさの上限の超過) は、すべて置換でもメッセージ行と検索バーに示す
+#[test]
+fn 照合器ができる前のすべて置換で大きすぎる正規表現は理由を示す() {
+    let mut h = Harness::new().with_size(60, 10);
+    h.text("abc");
+    h.keys("ctrl+r");
+    h.keys("alt+r");
+    h.text("(?:[a-z]{1000}){1000}");
+    h.keys("tab");
+    h.text("x");
+    h.keys("alt+a");
+    h.run_jobs();
+    assert_eq!(h.doc_text(), "abc");
+    assert!(message(&mut h).contains("pattern too large"));
+    let e = cell_text(&h.frame().search.unwrap().error.expect("大きすぎる"));
+    assert!(e.contains("pattern too large"), "{e}");
 }
 
 #[test]
@@ -241,6 +285,8 @@ fn 正規表現の置換は_改行と_ドルを扱う() {
     h.text(",");
     h.keys("tab");
     h.text(r"\n");
+    // 正規表現の照合器は検索のジョブがコンパイルする (03 §12.3.1)。置換の前にジョブを走らせる
+    h.run_jobs();
     h.keys("alt+a");
     assert_eq!(h.doc_text(), "a\nb\nc", "\n は既定の改行 (LF)");
 
@@ -251,6 +297,8 @@ fn 正規表現の置換は_改行と_ドルを扱う() {
     h.text(r"\d");
     h.keys("tab");
     h.text("$$ 100");
+    // 正規表現の照合器は検索のジョブがコンパイルする (03 §12.3.1)。置換の前にジョブを走らせる
+    h.run_jobs();
     h.keys("alt+a");
     assert_eq!(h.doc_text(), "price $ 100", "$$ は $");
 
@@ -261,6 +309,8 @@ fn 正規表現の置換は_改行と_ドルを扱う() {
     h.text("-");
     h.keys("tab");
     h.text(r"\\n"); // バックスラッシュ 2 つと n
+    // 正規表現の照合器は検索のジョブがコンパイルする (03 §12.3.1)。置換の前にジョブを走らせる
+    h.run_jobs();
     h.keys("alt+a");
     assert_eq!(
         h.doc_text(),
@@ -278,6 +328,8 @@ fn 単語単位のすべて置換() {
     h.text("foo");
     h.keys("tab");
     h.text("X");
+    // 単語単位の大小無視のリテラルは、エスケープした正規表現で探す (03 §12.4 の 3)。照合器は検索のジョブが作る
+    h.run_jobs();
     h.keys("alt+a");
     assert_eq!(h.doc_text(), "X foobar barfoo X");
 }
@@ -326,9 +378,165 @@ fn 選択した一致を置換し_正規表現ではキャプチャを展開す�
     h.keys("tab");
     h.text("$2=$1");
     h.keys("shift+tab");
+    // 正規表現の照合器は検索のジョブがコンパイルし、届いてから入力中の現在の一致を強調する (03 §12.3.1)
+    h.run_jobs();
     h.keys("enter"); // 1 つ目の一致を選択
     h.keys("enter"); // 2 つ目へ (選択)
     h.keys("tab");
     h.keys("enter"); // 選択している 2 つ目を置換
     assert_eq!(h.doc_text(), "k1=v1 v2=k2");
+}
+
+// ---- 検索語をコンパイルできないときの置換 (04 §8.4) ----
+
+/// 今のメッセージの (レベル, 本文, 対処)。
+fn message_parts(h: &mut Harness) -> (eve_view::MessageLevel, String, String) {
+    let m = h.frame().messages.current.expect("メッセージ");
+    (
+        m.level,
+        cell_text(&m.text),
+        m.hint.map(|t| cell_text(&t)).unwrap_or_default(),
+    )
+}
+
+/// 検索バーの件数の位置に出ている誤り。
+fn bar_error(h: &mut Harness) -> String {
+    cell_text(&h.frame().search.unwrap().error.expect("誤り"))
+}
+
+#[test]
+fn 構文エラーの検索語で置換すると_空の案内ではなく誤りを示し_何も置き換えない() {
+    for key in ["alt+a", "enter"] {
+        let mut h = Harness::new().with_size(80, 10);
+        h.text("a(b a(b");
+        h.keys("ctrl+r alt+r");
+        h.text("a(b");
+        h.keys("tab");
+        h.text("x");
+        let shown = bar_error(&mut h);
+        let reason = shown
+            .strip_prefix("✖ 正規表現が不正: ")
+            .expect("検索バーの誤り")
+            .to_owned();
+        h.keys(key);
+        assert_eq!(h.doc_text(), "a(b a(b", "{key}: 置き換えない");
+        let (level, text, hint) = message_parts(&mut h);
+        assert_ne!(text, "検索する文字列を入力してください", "{key}");
+        assert_eq!(
+            text,
+            format!("正規表現が不正なため、置換しませんでした: {reason}"),
+            "{key}: 検索バーの誤りと同じ理由"
+        );
+        assert_eq!(hint, "( ) や [ ] の対応などを確認してください");
+        assert_eq!(level, eve_view::MessageLevel::Warn);
+    }
+}
+
+// v0.3 までは「改行を含むパターンは未対応のため、置換しませんでした」と示した。v0.4 の M24 の (4) で行をまたいで置き換える
+// verifies: AC-FR-402-5
+#[test]
+fn 改行を含むパターンで置換すると_行をまたいで置き換える() {
+    for key in ["alt+a", "enter"] {
+        let mut h = Harness::new().with_size(80, 10);
+        h.text("a\nb c");
+        h.keys("ctrl+home");
+        h.keys("ctrl+r alt+r");
+        h.text(r"a\nb");
+        h.keys("tab");
+        h.text("x");
+        h.run_jobs();
+        assert!(h.frame().search.unwrap().error.is_none(), "{key}");
+        h.keys(key);
+        h.run_jobs();
+        assert_eq!(h.doc_text(), "x c", "{key}: 行をまたいで置き換える");
+    }
+}
+
+// すべて置換の知らせは、件数に加えて文書の行数の変化を言う (03 §12.5、04 §15.2 の `info.search.replaced`)
+#[test]
+fn すべて置換の知らせは文書の行数の変化を言う() {
+    let replace_all = |doc: &str, find: &str, with: &str| {
+        let mut h = Harness::new().with_size(100, 10);
+        h.text(doc);
+        h.keys("ctrl+home");
+        h.keys("ctrl+r alt+r");
+        h.text(find);
+        h.keys("tab");
+        h.text(with);
+        h.run_jobs();
+        h.keys("alt+a");
+        h.run_jobs();
+        let (_, text, _) = message_parts(&mut h);
+        (h.doc_text(), text)
+    };
+    // 上限の無い検索語は文書の残りを「1 件」として消す。消えた行の数が分かる
+    let (doc, text) = replace_all("1\n2\n3\n4\n", r"(?s)2.*", "");
+    assert_eq!(doc, "1\n");
+    assert_eq!(
+        text,
+        "1 件を置換しました。文書は 3 行減りました (元に戻すで戻せます)"
+    );
+    // 行の数が増える置換
+    let (doc, text) = replace_all("a b c", " ", r"\n");
+    assert_eq!(doc, "a\nb\nc");
+    assert_eq!(
+        text,
+        "2 件を置換しました。文書は 2 行増えました (元に戻すで戻せます)"
+    );
+    // 行の数が変わらない置換は今までの知らせ
+    let (doc, text) = replace_all("a\nb\na", "a", "x");
+    assert_eq!(doc, "x\nb\nx");
+    assert_eq!(text, "2 件を置換しました (元に戻すで戻せます)");
+}
+
+#[test]
+fn 検索語が空なら_1_件置換でも空の案内を出す() {
+    let mut h = Harness::new().with_size(60, 10);
+    h.text("abc");
+    h.keys("ctrl+r tab");
+    h.text("x");
+    h.keys("enter");
+    assert_eq!(message(&mut h), "検索する文字列を入力してください");
+    assert_eq!(h.doc_text(), "abc");
+}
+
+// ---- 大小を区別しない置換 (03 §12.4、OQ-196) ----
+
+#[test]
+fn 大小を区別しない置換は_long_s_とケルビン記号にも一致する() {
+    let mut h = Harness::new().with_size(60, 10);
+    h.text("class CLASS cla\u{17F}s \u{212A}ick");
+    setup(&mut h, "class", "x");
+    // `s` を含む大小無視のリテラルは、エスケープした正規表現で探す (03 §12.4 の 3)。照合器は検索のジョブが作る
+    h.run_jobs();
+    h.keys("alt+a");
+    assert_eq!(h.doc_text(), "x x x \u{212A}ick");
+    assert_eq!(message(&mut h), "3 件を置換しました (元に戻すで戻せます)");
+    let mut h = Harness::new().with_size(60, 10);
+    h.text("kick KICK \u{212A}ick");
+    setup(&mut h, "kick", "y");
+    h.run_jobs();
+    h.keys("alt+a");
+    assert_eq!(h.doc_text(), "y y y");
+}
+
+#[test]
+fn 大小を区別しないリテラルの置換は_正規表現の経路で探しても置換文字列を展開しない() {
+    // `k` を含む大小無視のリテラルは、エスケープした正規表現で探す (03 §12.4 の 3)。置換文字列はリテラルのまま
+    let mut h = Harness::new().with_size(60, 10);
+    h.text("Kelvin kelvin");
+    h.keys("ctrl+home");
+    setup(&mut h, "kelvin", "$1${0}");
+    // 照合器 (エスケープした正規表現) は検索のジョブが作る。届くまでの置換欄の Enter は何もしない (03 §12.3.1)
+    h.keys("enter");
+    assert_eq!(
+        h.doc_text(),
+        "Kelvin kelvin",
+        "照合器が届く前は置き換えない"
+    );
+    h.run_jobs();
+    h.keys("enter");
+    assert_eq!(h.doc_text(), "$1${0} kelvin", "1 件置換");
+    h.keys("alt+a");
+    assert_eq!(h.doc_text(), "$1${0} $1${0}", "すべて置換");
 }

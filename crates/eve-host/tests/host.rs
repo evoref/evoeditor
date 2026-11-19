@@ -29,6 +29,7 @@ fn env_with(init: HostInit) -> Env {
     fs.add_dir("/w");
     let paths = Arc::new(FixedPaths::default());
     let jp = JobPorts {
+        stdin: None,
         fs: fs.clone(),
         clock: Arc::new(clock.clone()),
         paths: paths.clone(),
@@ -160,7 +161,7 @@ fn ジョブの進捗は間引かれ_完了は待たせずに描く() {
         .jobs
         .take_results()
         .into_iter()
-        .partition(|r| matches!(r, eve_core::JobResult::Progress { .. }));
+        .partition(|r| matches!(r.body, eve_core::JobResult::Progress { .. }));
     for r in progress {
         e.host.step(&mut e.fe, HostMsg::Job(Box::new(r)));
     }

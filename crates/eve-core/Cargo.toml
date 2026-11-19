@@ -17,13 +17,23 @@ workspace = true
 test-hooks = []
 
 [dependencies]
-eve-text = { version = "0.3.0", path = "../eve-text" }
-eve-encoding = { version = "0.3.0", path = "../eve-encoding" }
-eve-view = { version = "0.3.0", path = "../eve-view" }
-eve-config = { version = "0.3.0", path = "../eve-config" }
+eve-text = { version = "0.4.0", path = "../eve-text" }
+eve-encoding = { version = "0.4.0", path = "../eve-encoding" }
+eve-view = { version = "0.4.0", path = "../eve-view" }
+eve-config = { version = "0.4.0", path = "../eve-config" }
 memchr = "2.8.3"
-# 正規表現 (docs/03 §12.3)。線形時間保証。行単位で実行する。Unicode は既定で有効
-regex = { version = "1", default-features = false, features = ["std", "unicode", "perf-inline", "perf-literal"] }
+# 正規表現 (docs/03 §12.3)。線形時間保証。行単位で実行する。Unicode は既定で有効。
+# `perf` は実行部分 (遅延 DFA・バックトラック・ワンパス) を含む。外すと、文字クラスで始まるパターンなどが PikeVM だけで
+# 走り、10 倍以上遅くなる (BM-109r-digits)。クレートは増えない (実行ファイルは約 0.2 MB 増える)
+regex = { version = "1", default-features = false, features = ["std", "unicode", "perf"] }
+# 検索語の構文木の書き換えと、一致がまたぐ行の数の上限・最大の長さの計算 (docs/03 §12.3.1、02 §13.5)。`regex` の依存として
+# 既に入っている crate で、数は増えない。feature は `regex` の `std`・`unicode` とそろえ、`regex` と一緒に上げる
+# (版が重複したら `cargo xtask check-deps` が失敗にする)
+regex-syntax = { version = "0.8.11", default-features = false, features = ["std", "unicode"] }
+# すべて置換で、CP932 互換文字の同一視で当たった一致を数える (同一視を切った検索語が一致の範囲にちょうど一致できるかを、文書の
+# 前後の文脈のまま、始端に固定して範囲の中だけで探す。`regex` の API では範囲の終端の文脈を保ったまま固定の検索ができない。
+# docs/03 §12.4.1)。`regex` の依存として既に入っている crate で、数は増えない。feature は `regex` が既に有効にしているものだけ
+regex-automata = { version = "0.4.18", default-features = false, features = ["std", "syntax", "nfa-pikevm", "unicode"] }
 # 内容ハッシュ XXH3-64 (docs/05 §5.5)。純 Rust
 twox-hash = { version = "2.1.5", default-features = false, features = ["std", "xxhash3_64"] }
 
@@ -31,5 +41,7 @@ twox-hash = { version = "2.1.5", default-features = false, features = ["std", "x
 proptest = "1.12.0"
 memory-stats = "1.2.0"
 encoding_rs = "0.8.42"
-eve-docs-tables = { version = "0.3.0", path = "../eve-docs-tables" }
-eve-testkit = { version = "0.3.0", path = "../eve-testkit" }
+eve-docs-tables = { version = "0.4.0", path = "../eve-docs-tables" }
+eve-testkit = { version = "0.4.0", path = "../eve-testkit" }
+# 試験だけが使う口 (検索の窓の核の大きさなど、docs/03 §12.3.1) を、この crate の試験で開く
+eve-core = { path = ".", features = ["test-hooks"] }

@@ -69,12 +69,12 @@ pub fn run(args: &[String]) -> Result<(), String> {
                     .args(["build", "--release", "-p", "evoeditor", "--target", target])
                     .env("CARGO_PROFILE_RELEASE_STRIP", "none"),
             )?;
-            crate::check_dist::release_exe(&root, Some(target))
+            crate::check_dist::release_exe(Some(target))
         }
         None => {
             println!("▶ 配布ビルド");
             run_capture(Command::new("cargo").args(["build", "--release", "-p", "evoeditor"]))?;
-            root.join("target/release/evoeditor.exe")
+            crate::check_dist::release_exe(None)
         }
     };
 

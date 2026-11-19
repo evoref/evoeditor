@@ -1,5 +1,9 @@
 use super::*;
 
+fn owned(list: &[&str]) -> Vec<String> {
+    list.iter().map(|s| (*s).to_owned()).collect()
+}
+
 fn kinds(l: &Loaded) -> Vec<(&str, &DiagKind)> {
     l.diagnostics
         .iter()
@@ -159,7 +163,7 @@ fn 列挙値の不正は許容値を提示する() {
         vec![(
             "file.default_line_ending",
             &DiagKind::InvalidValue {
-                allowed: &["lf", "crlf", "cr", "native"]
+                allowed: owned(&["lf", "crlf", "cr", "native"])
             }
         )]
     );
@@ -217,7 +221,7 @@ fn 日本語を含む行でも桁は文字数で数える() {
 #[test]
 fn 公開前のキーとセクションは情報診断で_警告にしない() {
     let l = load_str(
-        "[editor]\nauto_indent = false\n[editor.undo]\nmax_steps = 5\n[search]\ncase = \"smart\"\n[view]\nline_numbers = \"off\"\n",
+        "[editor]\nauto_indent = false\n[editor.undo]\nmax_steps = 5\n[search]\nregex_size_limit = 1\n[view]\nline_numbers = \"off\"\n",
     );
     assert_eq!(l.config, Config::default());
     assert_eq!(l.diagnostics.len(), 4, "{:?}", l.diagnostics);
@@ -233,7 +237,8 @@ fn 公開前のキーとセクションは情報診断で_警告にしない() {
             "editor.auto_indent",
             // `editor.undo` は公開キー (total_max_bytes) の接頭辞なので、中に入って個々のキーで報告する
             "editor.undo.max_steps",
-            "search",
+            // `search` は公開キー (newline_sugar) を持つセクションなので、中の個々のキーで報告する
+            "search.regex_size_limit",
             "view.line_numbers"
         ]
     );
@@ -330,7 +335,7 @@ enabeld = true
     assert!(matches!(ks[1].1, DiagKind::UnknownKey { .. }));
 }
 
-// NFR-603 AC-3 (v0.2。チェックリストは v0.2 のゲートで作る)
+// verifies: AC-NFR-603-3
 #[test]
 fn ui_locale_は言語タグか_auto() {
     use crate::Locale;
@@ -349,16 +354,32 @@ fn ui_locale_は言語タグか_auto() {
     assert_eq!(Config::default().ui_locale, None);
 }
 
+// verifies: AC-NFR-603-9
 #[test]
-fn ui_locale_の不正な値は警告して_auto_のまま() {
-    let l = load_str("[ui]\nlocale = \"fr\"\n");
+fn ui_locale_の形の誤りは警告して_auto_のまま() {
+    // 値の形 (07 §17.4) に合う言語は、同梱していなくても読む (使える言語との照合は `check_ui_locale`)
+    let l = load_str("[ui]\nlocale = \"fr-FR\"\n");
+    assert!(l.diagnostics.is_empty(), "{:?}", l.diagnostics);
+    assert_eq!(
+        l.config.ui_locale.map(|l| l.code().to_owned()).as_deref(),
+        Some("fr")
+    );
+    let l = load_str("[ui]\nlocale = \"\"\n");
+    assert!(
+        l.diagnostics.is_empty(),
+        "空は auto と同じ: {:?}",
+        l.diagnostics
+    );
+    assert_eq!(l.config.ui_locale, None);
+    let l = load_str("[ui]\nlocale = \"../fr\"\n");
     assert_eq!(l.config.ui_locale, None);
     assert_eq!(l.diagnostics.len(), 1);
     assert!(matches!(
         &l.diagnostics[0].kind,
-        DiagKind::InvalidValue { allowed } if allowed.contains(&"en")
+        DiagKind::InvalidValue { allowed } if allowed.iter().any(|a| a == "en")
     ));
     assert_eq!(l.diagnostics[0].key, "ui.locale");
+    assert_eq!(l.diagnostics[0].value, "../fr");
     let l = load_str("[ui]\nlocale = 3\n");
     assert!(matches!(
         &l.diagnostics[0].kind,
@@ -484,6 +505,12 @@ fn changed_keys_は変わった公開キーだけを並べ_全キーを網羅す
         "file.huge_file_warn_bytes",
         "file.long_line_threshold",
         "file.reload_on_external_change",
+        "search.newline_sugar",
+        "search.cp932_compat_fold",
+        "search.case",
+        "search.regex_default",
+        "search.max_matches",
+        "search.count_limit",
     ]
     .into_iter()
     .collect();
@@ -526,6 +553,12 @@ fn 既定値の表記は全公開キーで決まった値() {
         ("file.huge_file_warn_bytes", "536870912"),
         ("file.long_line_threshold", "1048576"),
         ("file.reload_on_external_change", "auto_if_unmodified"),
+        ("search.newline_sugar", "true"),
+        ("search.cp932_compat_fold", "true"),
+        ("search.case", "smart"),
+        ("search.regex_default", "false"),
+        ("search.max_matches", "10000"),
+        ("search.count_limit", "1000000"),
     ];
     assert_eq!(want.len(), KEYS.len());
     for (key, display) in want {
@@ -540,9 +573,10 @@ fn 既定値の表記は全公開キーで決まった値() {
 /// 列挙値の許容値 (診断の「使える値: …」) の並びを固定する。
 #[test]
 fn 列挙値の許容値は決まった並び() {
-    let cases: [(&[&str], &[&str]); 11] = [
+    let cases: [(&[&str], &[&str]); 12] = [
         (IndentUnit::NAMES, &["tab", "space"]),
         (BackspaceUnit::NAMES, &["grapheme", "codepoint"]),
+        (SearchCase::NAMES, &["smart", "sensitive", "insensitive"]),
         (ThemeBackground::NAMES, &["auto", "dark", "light"]),
         (ShowWhitespace::NAMES, &["off", "minimal"]),
         (Osc52Policy::NAMES, &["auto", "always", "never"]),
@@ -625,7 +659,7 @@ fn 配布する設定例は全公開キーを既定値で書く() {
 }
 
 /// 公開キーを型ごとに分ける (読み方の宣言の表との突合も兼ねる)。
-const INT_KEYS: [&str; 12] = [
+const INT_KEYS: [&str; 14] = [
     "editor.tab_width",
     "editor.indent_width",
     "view.ambiguous_width",
@@ -638,13 +672,18 @@ const INT_KEYS: [&str; 12] = [
     "clipboard.osc52_max_bytes",
     "file.huge_file_warn_bytes",
     "file.long_line_threshold",
+    "search.max_matches",
+    "search.count_limit",
 ];
-const BOOL_KEYS: [&str; 5] = [
+const BOOL_KEYS: [&str; 8] = [
     "file.swap.enabled",
     "file.swap.exclude_secret_files",
     "view.wrap_kinsoku",
     "ui.mouse",
     "ui.hint_bar",
+    "search.newline_sugar",
+    "search.cp932_compat_fold",
+    "search.regex_default",
 ];
 
 /// 読んだ結果の診断が 1 件で、そのキーのもの。
@@ -763,7 +802,7 @@ fn 列挙値の不正は書かれた値と位置を記録する() {
     assert_eq!(
         d.kind,
         DiagKind::InvalidValue {
-            allowed: WrapMode::NAMES
+            allowed: owned(WrapMode::NAMES)
         }
     );
     assert_eq!(d.value, "hard");
@@ -826,7 +865,7 @@ fn theme_name_と_file_default_encoding_の不正は警告して既定値() {
     assert_eq!(
         d.kind,
         DiagKind::InvalidValue {
-            allowed: crate::theme::BUILTIN_NAMES
+            allowed: owned(crate::theme::BUILTIN_NAMES)
         }
     );
     assert_eq!(d.value, "a/b");
@@ -839,10 +878,20 @@ fn theme_name_と_file_default_encoding_の不正は警告して既定値() {
     assert_eq!(
         d.kind,
         DiagKind::InvalidValue {
-            allowed: DefaultEncoding::NAMES
+            allowed: owned(DefaultEncoding::NAMES)
         }
     );
     assert_eq!(d.value, "klingon");
+}
+
+#[test]
+fn theme_name_は組込みの高コントラストのテーマを受け付ける() {
+    for name in ["high-contrast-dark", "high-contrast-light"] {
+        let l = load_str(&format!("theme.name = \"{name}\"\n"));
+        assert!(l.diagnostics.is_empty(), "{name}: {:?}", l.diagnostics);
+        assert_eq!(l.config.theme_name, name);
+        assert!(crate::theme::BUILTIN_NAMES.contains(&name));
+    }
 }
 
 #[test]
@@ -958,4 +1007,65 @@ fn 文字コードの別名はすべて正規名に寄せる() {
         }
     }
     assert_eq!(encoding("latin1"), None);
+}
+
+// verifies: FR-402, FR-404
+#[test]
+fn 検索の_4_キーは未設定で既定値_設定した値を読み_予約の診断を出さない() {
+    let d = Config::default();
+    assert_eq!(d.search_case, SearchCase::Smart);
+    assert!(!d.regex_default);
+    assert_eq!(d.max_matches, 10_000);
+    assert_eq!(d.count_limit, 1_000_000);
+    let l = load_str(
+        "[search]\ncase = \"insensitive\"\nregex_default = true\nmax_matches = 500\ncount_limit = 2_000\n",
+    );
+    assert!(l.diagnostics.is_empty(), "{:?}", l.diagnostics);
+    assert_eq!(l.config.search_case, SearchCase::Insensitive);
+    assert!(l.config.regex_default);
+    assert_eq!(l.config.max_matches, 500);
+    assert_eq!(l.config.count_limit, 2_000);
+    for name in SearchCase::NAMES {
+        let l = load_str(&format!("search.case = \"{name}\"\n"));
+        assert!(l.diagnostics.is_empty(), "{name}");
+        assert_eq!(l.config.search_case.name(), *name);
+    }
+}
+
+// verifies: FR-402, FR-404
+#[test]
+fn 検索の_4_キーの範囲外と不正な値は警告して既定値に戻す() {
+    // 範囲の端は含む
+    for (src, ok) in [
+        ("search.max_matches = 100", true),
+        ("search.max_matches = 1000000", true),
+        ("search.max_matches = 99", false),
+        ("search.max_matches = 1000001", false),
+        ("search.count_limit = 1000", true),
+        ("search.count_limit = 1000000000", true),
+        ("search.count_limit = 999", false),
+        ("search.count_limit = 1000000001", false),
+    ] {
+        let l = load_str(src);
+        if ok {
+            assert!(l.diagnostics.is_empty(), "{src}: {:?}", l.diagnostics);
+        } else {
+            assert_eq!(l.config.max_matches, 10_000, "{src}");
+            assert_eq!(l.config.count_limit, 1_000_000, "{src}");
+            let key = src.split(' ').next().unwrap();
+            let d = only_diag(&l, key);
+            assert_eq!(d.severity, Severity::Warning, "{src}");
+            assert!(matches!(d.kind, DiagKind::OutOfRange { .. }), "{src}");
+        }
+    }
+    let l = load_str("search.case = \"Smart\"\n");
+    assert_eq!(l.config.search_case, SearchCase::Smart);
+    let d = only_diag(&l, "search.case");
+    assert_eq!(
+        d.kind,
+        DiagKind::InvalidValue {
+            allowed: owned(SearchCase::NAMES)
+        }
+    );
+    assert_eq!(d.value, "Smart");
 }

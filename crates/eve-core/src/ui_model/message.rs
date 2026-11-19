@@ -13,8 +13,35 @@ pub(crate) struct ShownMessage {
     pub level: MessageLevel,
     pub text: String,
     pub hint: Option<String>,
+    /// 文言キー (同じ理由の拒否を 1 回にまとめる判定に使う、04 §15.2)。
+    pub key: String,
     /// 表示した時刻 (Warning は最低 1 秒表示する、04 §8.9)。
     pub shown_at: crate::time::Tick,
+}
+
+/// 読み取り専用の理由の文言キー (`ui.read_only_reason.*`、04 §15.2)。`InvalidBytes` は、私用文字と衝突した文書 (b)
+/// (`pua_escape == DisabledCollision`) では文言を分ける (03 §8.3.1 の「読み取り専用のときの案内」)。標準入力を途中まで
+/// しか読んでいない (`LoadIncomplete`、v0.4 の M25) は `ui.read_only_reason.load_incomplete`。
+pub(crate) fn read_only_reason_key(
+    doc: &crate::document::Document,
+    r: crate::document::ReadOnlyReason,
+) -> Option<&'static str> {
+    use crate::document::ReadOnlyReason as R;
+    Some(match r {
+        R::FileAttribute => keys::UI_READ_ONLY_REASON_FILE_ATTRIBUTE,
+        R::UserRequested => keys::UI_READ_ONLY_REASON_USER_REQUESTED,
+        R::NoWritePermission => keys::UI_READ_ONLY_REASON_NO_WRITE_PERMISSION,
+        R::InvalidBytes
+            if doc.format.pua_escape == eve_encoding::PuaEscapeMode::DisabledCollision =>
+        {
+            keys::UI_READ_ONLY_REASON_INVALID_BYTES_COLLISION
+        }
+        R::InvalidBytes => keys::UI_READ_ONLY_REASON_INVALID_BYTES,
+        R::StatefulEncodingWithInvalidBytes => keys::UI_READ_ONLY_REASON_STATEFUL,
+        R::Binary => keys::UI_READ_ONLY_REASON_BINARY,
+        R::LargeFileViewer => keys::UI_READ_ONLY_REASON_LARGE_FILE_VIEWER,
+        R::LoadIncomplete => keys::UI_READ_ONLY_REASON_LOAD_INCOMPLETE,
+    })
 }
 
 /// 履歴に残すメッセージの上限 (04 §8.9、02 §14.1 MR8)。
@@ -30,8 +57,13 @@ pub(crate) struct LoggedMessage {
 }
 
 impl EditorState {
-    /// 選択中の言語の文言カタログ。
-    pub fn catalog(&self) -> &'static Catalog {
+    /// 選択中の言語の文言カタログ (ユーザーの言語ファイルを重ねた表、07 §17.4)。
+    pub fn catalog(&self) -> &Catalog {
+        &self.settings.catalog
+    }
+
+    /// 選択中の言語を補う言語の **同梱の** カタログ (重ねる前の表)。言語ファイル自身の診断に使う (07 §17.4)。
+    pub fn builtin_catalog(&self) -> &'static Catalog {
         Catalog::builtin(self.settings.locale)
     }
 
@@ -77,43 +109,82 @@ impl EditorState {
     }
 
     /// 読み取り専用の文書を編集しようとした: 理由つきで拒否したことを示す (`msg.edit.read_only`、FR-116 AC-1)。
+    /// v0.4 の M23 から、理由ごとにメッセージを分ける (03 §8.3.1 の「読み取り専用のときの案内」、04 §15.2): 解除できない
+    /// 理由があればそれ (衝突の文書 (b)・ISO-2022-JP・バイナリは専用のメッセージ。ほかは `msg.edit.read_only` に
+    /// その理由)、無ければ `InvalidBytes` (切替で、確認の後に編集できる)、どちらでもなければ `msg.edit.read_only`。
     pub(crate) fn notify_read_only(&mut self) {
         use crate::document::ReadOnlyReason as R;
-        let reason = self
-            .active_document()
-            .and_then(|d| self.document(d))
-            .and_then(|d| d.read_only.primary())
-            .and_then(|r| {
-                Some(match r {
-                    R::FileAttribute => "file_attribute",
-                    R::UserRequested => "user_requested",
-                    R::NoWritePermission => "no_write_permission",
-                    R::InvalidBytes => "invalid_bytes",
-                    R::StatefulEncodingWithInvalidBytes => "stateful_encoding_with_invalid_bytes",
-                    R::Binary => "binary",
-                    R::LargeFileViewer => "large_file_viewer",
-                    // 読込が終わっていない (v0.4 の Partial)。理由の文言は無い
-                    R::LoadIncomplete => return None,
-                })
+        let doc = self.active_document().and_then(|d| self.document(d));
+        // 読込中 (`Loading` / 先行表示の `Partial`) は理由ではなく状態: 読込を待つか取り消すかを案内する専用の
+        // メッセージ (03 §9.2.1 の「できない操作」、04 §15.2 の `msg.edit.read_only_loading`)
+        if doc.is_some_and(|d| d.load_state != crate::document::LoadState::Ready) {
+            self.show_message(
+                eve_view::MessageLevel::Warn,
+                keys::MSG_EDIT_READ_ONLY_LOADING,
+                &[],
+            );
+            return;
+        }
+        let blocking = doc.and_then(crate::document::Document::blocking_read_only_reason);
+        let key = match blocking {
+            // 解除できない `InvalidBytes`: 衝突の文書 (b) は専用のメッセージ。由来の文字コードの無い文書 (文字コードの違う
+            // 復旧の後など) は、切替の案内をしない一般のメッセージ (`{reason}` は「不正なバイトを含むファイル」)
+            Some(R::InvalidBytes)
+                if doc.is_some_and(|d| {
+                    d.format.pua_escape == eve_encoding::PuaEscapeMode::DisabledCollision
+                }) =>
+            {
+                keys::MSG_EDIT_READ_ONLY_PUA_COLLISION
+            }
+            Some(R::StatefulEncodingWithInvalidBytes) => keys::MSG_EDIT_READ_ONLY_STATEFUL,
+            Some(R::Binary) => keys::MSG_EDIT_READ_ONLY_BINARY,
+            Some(_) => keys::MSG_EDIT_READ_ONLY,
+            None if doc.is_some_and(|d| d.read_only.contains(R::InvalidBytes)) => {
+                keys::MSG_EDIT_READ_ONLY_INVALID_BYTES
+            }
+            None => keys::MSG_EDIT_READ_ONLY,
+        };
+        // `{reason}` は解除できない理由、無ければ優先順で先頭の理由
+        let reason = doc
+            .and_then(|d| {
+                let r = d
+                    .blocking_read_only_reason()
+                    .or_else(|| d.read_only.primary())?;
+                read_only_reason_key(d, r)
             })
-            .map(|k| {
-                self.catalog()
-                    .render(&format!("ui.read_only_reason.{k}"), &[], &|_| None)
-            })
+            .map(|k| self.catalog().render(k, &[], &|_| None))
             .unwrap_or_default();
-        self.show_message(
-            eve_view::MessageLevel::Warn,
-            keys::MSG_EDIT_READ_ONLY,
-            &[("reason", &reason)],
-        );
+        self.show_message(eve_view::MessageLevel::Warn, key, &[("reason", &reason)]);
     }
 
     /// カタログのキー `key` の文言を `args` で埋めてメッセージに出し、履歴に積む。`<key>.text` / `<key>.hint` があればその 2 つを使う。
     pub fn show_message(&mut self, level: MessageLevel, key: &str, args: &[(&str, &str)]) {
-        let cat = self.catalog();
+        let (text, hint) = self.resolve_message(self.catalog(), key, args);
+        self.push_message(level, key, text, hint);
+    }
+
+    /// `show_message` の、補う言語の **同梱の** カタログで解決するもの (言語ファイルの診断の要約。重ねた表が壊れていても
+    /// 読めるように、07 §17.4)。
+    pub(crate) fn show_builtin_message(
+        &mut self,
+        level: MessageLevel,
+        key: &str,
+        args: &[(&str, &str)],
+    ) {
+        let (text, hint) = self.resolve_message(self.builtin_catalog(), key, args);
+        self.push_message(level, key, text, hint);
+    }
+
+    /// メッセージ `key` の (本文, 対処)。`<key>.text` / `<key>.hint` があればその 2 つ、無ければ 1 つの文。
+    fn resolve_message(
+        &self,
+        cat: &Catalog,
+        key: &str,
+        args: &[(&str, &str)],
+    ) -> (String, Option<String>) {
         let label = |c: &str| self.key_label(c);
         let text_key = format!("{key}.text");
-        let (text, hint) = if cat.contains(&text_key) {
+        if cat.contains(&text_key) {
             let hint_key = format!("{key}.hint");
             (
                 cat.render(&text_key, args, &label),
@@ -122,7 +193,11 @@ impl EditorState {
             )
         } else {
             (cat.render(key, args, &label), None)
-        };
+        }
+    }
+
+    /// 解決したメッセージを出して履歴に積む。
+    fn push_message(&mut self, level: MessageLevel, key: &str, text: String, hint: Option<String>) {
         // 表示中のメッセージが読まれる前に置き換わったら、未読として数える (履歴は `ui.message_history` で見る)
         if self.ui.message.is_some() {
             self.ui.unread = self.ui.unread.saturating_add(1);
@@ -140,6 +215,7 @@ impl EditorState {
             level,
             text,
             hint,
+            key: key.to_owned(),
             shown_at: self.now,
         });
         self.push_event(EditorEvent::MessageShown {
@@ -151,7 +227,8 @@ impl EditorState {
 
     /// キー入力でメッセージを消す (04 §8.9): Info は次のキー入力で、Warning は `Esc` または (最低 1 秒表示した後の)
     /// 次のキー入力で、Error は `Esc` で消える。`Esc` の優先順位 (オーバーレイ・チョード・読込の取消が先) は呼び出し側が決める。
-    pub(crate) fn dismiss_message_on_key(&mut self, is_esc: bool) {
+    /// `Esc` で警告・エラーを消したら `true` (その `Esc` はメッセージを消すことだけを行う、04 §7.5)。
+    pub(crate) fn dismiss_message_on_key(&mut self, is_esc: bool) -> bool {
         let now = self.now;
         let dismiss = match &self.ui.message {
             Some(m) => match m.level {
@@ -163,11 +240,22 @@ impl EditorState {
             },
             None => false,
         };
+        let warn_or_error = self
+            .ui
+            .message
+            .as_ref()
+            .is_some_and(|m| m.level != MessageLevel::Info);
         if dismiss {
             self.ui.message = None;
             self.ui.unread = 0;
             self.mark_dirty_render();
         }
+        dismiss && is_esc && warn_or_error
+    }
+
+    /// 表示中のメッセージの文言キー (同じ理由の拒否を 1 回にまとめる)。
+    pub(crate) fn shown_message_key(&self) -> Option<&str> {
+        self.ui.message.as_ref().map(|m| m.key.as_str())
     }
 
     /// 編集などのコマンドを実行したら Error を消す (カーソル移動では消えない)。

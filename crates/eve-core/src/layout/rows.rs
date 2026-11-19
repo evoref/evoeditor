@@ -122,8 +122,9 @@ impl LineRows {
 }
 
 /// 行番号のガターの幅 (桁数 + 区切りの空白 1)。画面が狭くて本文が入らないときは、ガターを出さない (0)。
+/// 先行表示の間は、ファイルの大きさから推定した行数で決める (完了で確定する。03 §9.2.1 の「ステータスバー」)。
 pub(crate) fn gutter_width(doc: &Document, cols: usize) -> u16 {
-    let lines = doc.text().len_lines().max(1);
+    let lines = crate::io::partial_view::estimated_lines(doc);
     let w = lines.to_string().len().max(2) + 1;
     if cols >= w + 2 {
         super::cells_u16(w)
@@ -243,14 +244,19 @@ pub(super) fn build_row(
         t.line_end_byte(LineIdx(line)).0,
     );
     let has_terminator = t.line_terminator(LineIdx(line)).is_some();
-    // 長大行 (折り返さない) は、見える範囲の char だけを単位にする (03 §11.5.1)
+    // 長大行 (折り返さない) は、見える範囲の書記素だけを単位にする (03 §14.4 の「使う側」の (a))
     let long = long_index(doc, line);
-    let body = match &long {
-        Some((_, ix)) => std::rc::Rc::new(long_units(doc, ls, ix, left, cols)),
-        None => units_for(doc, line, &line_content(doc, line).1),
+    let (body, long_width) = match &long {
+        Some((_, ix)) => {
+            let (us, width) = long_units(doc, ls, ix, left, cols);
+            (std::rc::Rc::new(us), Some(width))
+        }
+        None => (units_for(doc, line, &line_content(doc, line).1), None),
     };
-    let line_width = match &long {
-        Some((_, ix)) => ix.end().col,
+    let line_width = match long_width {
+        // 長大行 (折り返さない) の幅は、行末の選択の印 (`total < win_end` のときだけ描く) にだけ使う。行末が窓より右なら
+        // 窓の右端で代える (どちらでも印を描かない)。開いた直後に行末まで索引を作らない (03 §14.4 の遅延)
+        Some(width) => width.unwrap_or(left + cols),
         None => body.last().map_or(0, |u| u.col + u.width),
     };
     // 折り返した表示行は、その範囲の単位だけを、行内の先頭の列を 0 (+ ずらし) として並べる
@@ -275,7 +281,10 @@ pub(super) fn build_row(
         sel.get(i).is_some_and(|&(s, _)| s <= byte_abs)
     };
     let (win_start, win_end) = (left, left + cols);
-    let (mut clipped_left, mut clipped_right, mut risky) = (false, false, false);
+    // 長大行は窓の左端より前の単位を作らないので、左が切れていることを先に決める (通常の行では、`left > 0` なら行頭の単位が
+    // 窓より左にかかって切れる。単位の幅は 0 にならない)
+    let (mut clipped_left, mut clipped_right, mut risky) =
+        (long.is_some() && left > 0 && le > ls, false, false);
     let mut spans: Vec<Span> = Vec::new();
     let mut wide_tail = false;
     'units: for u in us.clone() {

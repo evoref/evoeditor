@@ -7,7 +7,7 @@ use crate::document::NodeId;
 use crate::io::fs::Expect;
 use crate::io::fspath::FsPath;
 use crate::io::io_jobs::OpenOptions;
-use crate::jobs::JobResult;
+use crate::jobs::{JobOutput, JobResult};
 use eve_encoding::Encoding;
 
 use super::open::*;
@@ -31,6 +31,9 @@ pub(crate) enum Pending {
         /// 用途。`Reopen` / `Reload` は同じ文書・View の中身を差し替える。
         kind: OpenKind,
     },
+    /// 標準入力の読込 (`JobKind::OpenStdin`、03 §9.2.2。v0.4 の M25)。ファイルの読込 (`Open`) とは別の種類に持ち、
+    /// `open_in_progress`・`cancel_loading`・`loading_percent` の対象から外す。
+    OpenStdin { doc: DocumentId, view: ViewId },
     /// 未編集の上書き保存の照合 (03 §9.3 手順 0)。
     CheckUnchanged { doc: DocumentId },
     /// 外部変更の確認 (03 §9.5)。`explicit` は `file.check_external_changes` (フォーカス復帰でない)。
@@ -51,6 +54,14 @@ pub(crate) enum Pending {
     ReplaceAll {
         doc: DocumentId,
         revision: eve_view::Revision,
+    },
+    /// 1 件置換の対象の確かめ (重い検索語・上限の無い検索語、03 §12.3.1 の「置換」)。`pua` は置換の文字列の私用文字を表記に
+    /// した数。
+    ReplaceOne {
+        doc: DocumentId,
+        revision: eve_view::Revision,
+        range: eve_text::ByteRange,
+        pua: u64,
     },
     /// 起動時の退避ディレクトリの走査。
     RecoveryScan,
@@ -94,7 +105,25 @@ pub(crate) enum Pending {
         expected: Expect,
         /// `file.set_encoding` の新しい書式。保存の成功で文書の書式に確定する。
         fmt: Option<NewFormat>,
+        /// 保存方式 (確認の後に同じ保存をやり直すとき、直接上書きを保つ)。
+        strategy: crate::jobs::SaveStrategy,
+        /// つながりの承認 (03 §8.3.1) を渡して投入したときの、承認したつながりの件数。成功の完了のメッセージを
+        /// `info.save.escape_merged` にする。
+        merged: Option<u64>,
     },
+}
+
+/// 保存ジョブの文脈 (`Pending::Save` のうち、結果の処理に渡すもの)。
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct SaveCtx {
+    pub doc: DocumentId,
+    pub at: NodeId,
+    /// 投入時の文書の Revision (結果の base)。
+    pub revision: eve_view::Revision,
+    pub expected: Expect,
+    pub fmt: Option<NewFormat>,
+    pub strategy: crate::jobs::SaveStrategy,
+    pub merged: Option<u64>,
 }
 
 /// `file.set_encoding` が保存に渡す新しい書式 (保存が成功するまで文書の書式は変えない、03 §8.8)。
@@ -112,12 +141,15 @@ impl EditorState {
             .iter()
             .filter(|(_, p)| match p {
                 Pending::Open { doc: d, .. }
+                | Pending::OpenStdin { doc: d, .. }
                 | Pending::CheckUnchanged { doc: d }
                 | Pending::ExternalCheck { doc: d, .. } => *d == doc,
                 Pending::ReplaceUnmappable { ask, .. } => ask.doc == doc,
                 Pending::Search => self.find.search.as_ref().is_some_and(|s| s.doc() == doc),
                 Pending::FindNext { doc: d, .. } => *d == doc,
-                Pending::ReplaceAll { doc: d, .. } => *d == doc,
+                Pending::ReplaceAll { doc: d, .. } | Pending::ReplaceOne { doc: d, .. } => {
+                    *d == doc
+                }
                 Pending::ConvertEol(c) => c.doc == doc,
                 // 保存ジョブは取り消さず、完了を待つ (03 §9.2 の「閉じる手順」。ユーザーが求めた保存を中断しない)
                 Pending::Save { .. }
@@ -142,11 +174,13 @@ impl EditorState {
             self.io.pending.remove(&id);
             self.jobs.cancel(id);
         }
+        // 保存を中止して終了の待ちの対象 (標準入力の読込) が、文書を閉じて外れた: 終われるかを見直す (03 §9.7 (f) 3)
+        self.quit_abort_check();
     }
 
     /// ジョブの結果を受け取る (02 §5.4)。
-    pub fn on_job_result(&mut self, r: JobResult) {
-        let job = r.job();
+    pub fn on_job_result(&mut self, out: JobOutput) {
+        let JobOutput { job, body: r } = out;
         // 読込の進捗は終わりではない。待ちの記録は残して、読込中の文書の進捗だけ更新する
         if let JobResult::Progress { bytes, total, .. } = r {
             if let Some(Pending::Open { doc, .. }) = self.io.pending.get(&job) {
@@ -158,14 +192,23 @@ impl EditorState {
                 let doc = *doc;
                 if let Some(d) = self.docs.documents.get_mut(&doc) {
                     d.load_percent = pct;
+                    d.load_total = total;
                 }
                 self.mark_dirty_render();
+            } else if let Some(Pending::OpenStdin { doc, .. }) = self.io.pending.get(&job) {
+                let doc = *doc;
+                self.on_stdin_progress(doc, bytes);
             }
+            return;
+        }
+        // 先行表示の先頭 (03 §9.2.1) も終わりではない。待ちの記録は残して、文書を先頭にする (io/partial_view.rs)
+        if let JobResult::Partial { head, format } = r {
+            self.on_open_partial(job, head, format);
             return;
         }
         // 検索は途中経過が複数届く。待ちの記録は終わりまで残す
         if matches!(self.io.pending.get(&job), Some(Pending::Search)) {
-            self.on_search_result(r);
+            self.on_search_result(JobOutput { job, body: r });
             return;
         }
         let cont = self.ui.continuations.remove(&job);
@@ -181,6 +224,7 @@ impl EditorState {
                 opts,
                 kind,
             } => self.finish_open(doc, view, path, replace, opts, kind, r),
+            Pending::OpenStdin { doc, view } => self.finish_open_stdin(doc, view, cont, r),
             Pending::CheckUnchanged { doc } => self.finish_check(doc, r),
             Pending::ExternalCheck { doc, explicit } => {
                 self.finish_external_check(doc, explicit, r);
@@ -194,6 +238,12 @@ impl EditorState {
             } => self.finish_find_next(doc, revision, cursor, forward, r),
             Pending::ConvertEol(c) => self.finish_eol_conversion(c, r),
             Pending::ReplaceAll { doc, revision } => self.finish_replace_all(doc, revision, r),
+            Pending::ReplaceOne {
+                doc,
+                revision,
+                range,
+                pua,
+            } => self.finish_replace_one(doc, revision, range, pua, r),
             Pending::WriteRecovery { path, release } => {
                 self.finish_write_recovery(&path, r);
                 if let Some(doc) = release {
@@ -226,12 +276,35 @@ impl EditorState {
                 path,
                 expected,
                 fmt,
+                strategy,
+                merged,
             } => {
+                let job_ctx = SaveCtx {
+                    doc,
+                    at,
+                    revision,
+                    expected,
+                    fmt,
+                    strategy,
+                    merged,
+                };
                 let saved = matches!(r, JobResult::Saved { .. });
+                // 保持方式の記録を使う保存の確かめ (03 §8.6 E2 の確認 (i)・(ii)) で止まった: 記録を全部捨てて「保持なし」に
+                // する (03 §8.7.1 の「保存」。同じ表を渡し続けると、同じ文字コードで二度と保存できない)。全保存・「保存を
+                // 中止して終了」の経路を含めて、ここで 1 回だけ行う
+                if matches!(
+                    r,
+                    JobResult::Failed {
+                        err: crate::jobs::JobError::VerifyFailed
+                    }
+                ) && let Some(d) = self.docs.documents.get_mut(&doc)
+                {
+                    d.abandon_preserved();
+                }
                 // 「保存を中止して終了」の最中: 成功は採用し、失敗は終了時の stderr に残す。確認も後続も出さない
                 if self.ui.quit_abort.is_some() {
                     if !self.quit_abort_save_result(&path, &r) {
-                        self.finish_save(doc, at, revision, &path, expected, fmt, None, r);
+                        self.finish_save(&job_ctx, &path, None, r);
                     }
                     self.release_closing_snapshot(doc, &path, saved);
                     self.quit_abort_check();
@@ -241,7 +314,7 @@ impl EditorState {
                 // 全保存の 1 件の失敗は、確認を出さず記録するだけ (03 §9.8)
                 let in_batch = self.save_all_failed(job, doc, &path, &r);
                 if in_batch != Some(true) {
-                    self.finish_save(doc, at, revision, &path, expected, fmt, cont, r);
+                    self.finish_save(&job_ctx, &path, cont, r);
                 }
                 self.release_closing_snapshot(doc, &path, saved);
                 if in_batch.is_some() {

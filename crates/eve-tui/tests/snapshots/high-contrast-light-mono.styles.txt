@@ -1,0 +1,6 @@
+0: 0-2 Reset Reset BOLD | 3-8 Reset Reset REVERSED
+1: 9-10 Reset Reset UNDERLINED | REVERSED | 13-14 Reset Reset REVERSED | 16-17 Reset Reset UNDERLINED
+2: 3-6 Reset Reset BOLD | 13-14 Reset Reset BOLD
+13: 55-59 Reset Reset REVERSED
+14: 0-79 Reset Reset REVERSED
+16: 0-2 Reset Reset REVERSED | 10-14 Reset Reset REVERSED | 22-26 Reset Reset REVERSED

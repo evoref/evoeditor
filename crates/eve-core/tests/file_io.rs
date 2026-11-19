@@ -476,9 +476,11 @@ fn 読込を待つ間も今の文書を編集でき_重ねて開いてもよい(
     assert!(matches!(r, CommandResult::Pending(_)), "重ねて開いてもよい");
     s.run_jobs();
     assert_eq!(s.editor.state().documents_len(), 3, "a・b・c の 3 つ");
-    assert_eq!(s.doc_text(), "bbb", "最初に読み終えた b へ切り替わる");
+    // b の完了で b へ切り替わり、c の切り替え元は b に書き換わる (03 §9.8 の「切り替え元の書き換え」)。b を表示した
+    // ままなので、c の完了で c へ切り替わる
+    assert_eq!(s.doc_text(), "ccc", "最後に開いた c へ切り替わる");
     type_text(&mut s, "y");
-    assert_eq!(s.doc_text(), "ybbb", "完了後は編集できる");
+    assert_eq!(s.doc_text(), "yccc", "完了後は編集できる");
 }
 
 #[test]
@@ -751,6 +753,41 @@ fn edited_save_fails(s: &mut Harness, kind: eve_core::FsErrorKind) {
 
 fn dialog_open(s: &Harness) -> bool {
     s.overlay() == "dialog"
+}
+
+// 直接上書きは、乾式走査で求めた長さのとおりに書く。本文を全部消した BOM 付きの文書は、出力が BOM だけになる。
+// 乾式走査が BOM を数え忘れると、長さが合わずに保存が失敗していた (M22 の 1 で直した)
+#[test]
+fn 本文を全部消した_bom_付きの文書を直接上書きで保存できる() {
+    for (name, src, want) in [
+        ("utf8", &b"\xEF\xBB\xBFabc"[..], &b"\xEF\xBB\xBF"[..]),
+        ("utf16le", &b"\xFF\xFEa\x00b\x00c\x00"[..], &b"\xFF\xFE"[..]),
+    ] {
+        let mut s = env();
+        s.fs.add_file("/w/a.txt", src);
+        open(&mut s, "/w/a.txt");
+        assert!(doc(&s).1.format.has_bom, "{name}");
+        s.cmd("cursor.doc_end");
+        for _ in 0..3 {
+            keys(&mut s, "backspace");
+        }
+        assert_eq!(doc(&s).1.to_string_lossy(), "", "{name}");
+        messages(&mut s);
+        s.fs.fail_next(
+            eve_testkit::FsOp::WriteAtomic,
+            eve_core::FsErrorKind::AtomicUnsupported,
+        );
+        run(&mut s, "file.save", Args::new());
+        assert!(dialog_open(&s), "{name}: 確認が出る");
+        type_text(&mut s, "o");
+        s.run_jobs();
+        assert_eq!(s.fs.read("/w/a.txt").unwrap(), want, "{name}");
+        assert!(!doc(&s).1.is_dirty(), "{name}");
+        assert!(
+            messages(&mut s).contains(&"info.save.in_place".to_owned()),
+            "{name}"
+        );
+    }
 }
 
 // verifies: AC-FR-105-2

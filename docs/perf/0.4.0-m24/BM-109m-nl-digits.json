@@ -1,0 +1,38 @@
+{
+  "commit": "7f3bed1",
+  "env": "ENV-W1",
+  "id": "BM-109m-nl-digits",
+  "quick": false,
+  "results": [
+    {
+      "id": "BM-109m-nl-digits",
+      "matches": 453929,
+      "max_ms": 125.0,
+      "mb": 100,
+      "min_ms": 120.1,
+      "n": 5,
+      "p50_ms": 120.7,
+      "quick": false,
+      "ratio": 0.74,
+      "ratio_max": 0.75,
+      "ratio_min": 0.72,
+      "ref_p50_ms": 165.2,
+      "run": "bm_109-1"
+    },
+    {
+      "id": "BM-109m-nl-digits",
+      "matches": 453929,
+      "max_ms": 275.7,
+      "mb": 100,
+      "min_ms": 257.3,
+      "n": 5,
+      "p50_ms": 270.1,
+      "quick": false,
+      "ratio": 0.85,
+      "ratio_max": 0.87,
+      "ratio_min": 0.79,
+      "ref_p50_ms": 325.2,
+      "run": "bm_109-2"
+    }
+  ]
+}

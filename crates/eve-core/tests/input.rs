@@ -25,6 +25,7 @@ impl Scene {
         let fs = Arc::new(MemFs::new(Arc::new(clock.clone())));
         let paths = Arc::new(FixedPaths::default());
         let jp = eve_core::JobPorts {
+            stdin: None,
             fs: fs.clone(),
             clock: Arc::new(clock.clone()),
             paths: paths.clone(),

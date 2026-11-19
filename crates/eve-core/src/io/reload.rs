@@ -117,6 +117,8 @@ impl EditorState {
             default_eol: Some(self.config_eol()),
             huge_file_warn_bytes: Some(self.config().huge_file_warn_bytes),
             long_line_threshold: Some(self.config_long_line_threshold()),
+            // 再読込・開き直しの間は旧本文を表示し続けるので、先行表示は要らない (03 §9.2.1 の「対象」)
+            partial: false,
             ..OpenOptions::default()
         };
         self.mark_dirty_render();
@@ -152,8 +154,10 @@ impl EditorState {
         path: &FsPath,
         text: eve_text::Text,
         mut format: crate::document::TextFormat,
+        preserved: crate::document::PreservedMap,
         stamp: crate::io::fs::FileStamp,
         detected: crate::document::ReadOnlyReasons,
+        read_only_requested: bool,
     ) {
         use crate::document::{FormatChange, FormatState, Origin, Transaction};
         use eve_text::{ByteOff, ChangeSet, InsertText, Op, Selection, TextRead};
@@ -161,19 +165,33 @@ impl EditorState {
         if let Some(d) = self.docs.documents.get_mut(&doc_id) {
             d.attribute_released = false;
             d.external_seen = None;
+            // 再読込の確認 (不正バイトの比率、FR-127) で「読み取り専用で開く」を選んだ: 解除を持ち越さず、記録も消す
+            // (利用者が読み取り専用を選んだので、Undo / Redo でも外さない。03 §8.3.1 の細目 (a))
+            if read_only_requested {
+                d.invalid_bytes_released = false;
+            }
         }
         let Some(old) = self.docs.documents.get(&doc_id) else {
             return;
         };
+        // 「編集を許可」(不正バイトの解除) は同じ文書の再読込では持ち越す: 新しい読込に不正バイトがあっても
+        // `InvalidBytes` を付けない (03 §8.3.1 の「解除の持ち越し」、§8.8)。新しい内容がバイトの文書でない (私用文字と
+        // 衝突した内容 (衝突の文書 (b)) など、解除できない文書) ときは、持ち越さずに付ける
+        let mut detected = detected;
+        if old.invalid_bytes_released && format.is_bytes_document() {
+            detected.remove(crate::document::ReadOnlyReason::InvalidBytes);
+        }
         format.eol_stats = crate::document::EolStats::count(&text);
         let change = FormatChange::Reload {
             before: FormatState {
                 format: old.format.clone(),
                 read_only: old.read_only,
+                preserved: old.preserved().clone(),
             },
             after: FormatState {
                 format,
                 read_only: detected,
+                preserved,
             },
         };
         // 全置換。新全文は読込の rope を共有し (複写しない)、旧全文は逆変換が旧 rope を共有する (03 §9.5、SAF-33)
@@ -240,12 +258,23 @@ impl EditorState {
             JobResult::Complete {
                 text,
                 format,
+                preserved,
                 stamp,
                 changed_during_load,
                 detected,
                 ..
             } if kind == OpenKind::Reload => {
-                self.apply_reload(doc_id, view, &path, text, format, stamp, detected);
+                self.apply_reload(
+                    doc_id,
+                    view,
+                    &path,
+                    text,
+                    format,
+                    preserved,
+                    stamp,
+                    detected,
+                    opts.read_only_requested,
+                );
                 if changed_during_load {
                     self.message(
                         MessageLevel::Warn,
@@ -257,13 +286,16 @@ impl EditorState {
             JobResult::Complete {
                 text,
                 format,
+                preserved,
                 stamp,
                 changed_during_load,
                 detected,
                 ..
             } => {
                 let encoding = format.encoding;
-                let mut d = Document::from_text(text, format);
+                let note = crate::io::open::preserve_note(&format);
+                // 保持方式の記録も新しい読込の結果に入れ替える (03 §8.8 / §8.7.1)
+                let mut d = Document::from_loaded(text, format, preserved);
                 d.path = Some(path.clone());
                 d.disk_stamp = Some(stamp);
                 d.read_only = detected;
@@ -283,6 +315,8 @@ impl EditorState {
                         &path.display(),
                     );
                 }
+                // 読込の完了時の保持方式の通知 (03 §8.7.1)。履歴を消した通知を現在のメッセージにするため、先に出す
+                self.show_preserve_note(note);
                 self.show_message(
                     MessageLevel::Info,
                     keys::INFO_REOPEN_HISTORY_CLEARED,

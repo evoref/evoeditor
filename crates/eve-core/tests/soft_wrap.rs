@@ -132,8 +132,7 @@ fn 選択と検索の強調は表示行をまたいで付く() {
     let f = h.frame();
     // 選択はテーマの `ui.selection` (色の段は背景色、無色の段は反転)
     let sel = f.roles.get("ui.selection");
-    for i in 0..2 {
-        let r = &f.panes[0].rows[i];
+    for (i, r) in f.panes[0].rows.iter().enumerate().take(2) {
         assert!(
             r.spans.iter().any(
                 |s| s.style.bg == sel.bg && s.style.bg != eve_view::Color::Default

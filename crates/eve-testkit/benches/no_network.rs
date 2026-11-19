@@ -70,6 +70,7 @@ fn main() {
     let (tx, rx) = eve_host::channel();
     let jobs = ThreadJobSpawner::new(
         JobPorts {
+            stdin: None,
             fs: fs.clone(),
             clock: clock.clone(),
             paths: paths.clone(),
@@ -142,7 +143,7 @@ fn main() {
     });
 
     let files = [InitialFile {
-        path: file.to_string_lossy().into_owned(),
+        target: eve_core::InitialTarget::Path(file.to_string_lossy().into_owned()),
         line: None,
         col: None,
     }];

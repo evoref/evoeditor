@@ -1,0 +1,67 @@
+# `\n` を含む正規表現が行をまたいで一致し (文書の改行は LF・CRLF・CR のどれでも)、件数・次へ・すべて置換が、文書の先頭から
+# 選んだ一致に従う。すべて置換の知らせは、文書の行数の変化も言う (FR-402 AC-5・AC-6、03 §12.3.1)。
+[meta]
+id = "search/multiline_move_replace"
+title = "改行を含む正規表現が LF・CRLF・CR の改行をまたいで一致し、次へで移り、すべて置換できる"
+verifies = ["AC-FR-402-5", "AC-FR-402-6"]
+since = "v0.4"
+tags = ["search", "regex", "multiline"]
+
+[setup]
+size = [60, 12]
+
+[setup.fs]
+"a.txt" = { text = "foo\nbar x foo\r\nbar y foo\rbar\n" }
+
+[[step]]
+open = "a.txt"
+[[step]]
+run_jobs = true
+[[step]]
+keys = "ctrl+f"
+[[step]]
+keys = "alt+r"
+[[step]]
+text = 'foo\nbar'
+[[step]]
+run_jobs = true
+[[step]]
+keys = "enter"
+[[step]]
+keys = "enter"
+[[step]]
+keys = "enter"
+[[step]]
+keys = "enter"
+[[step]]
+keys = "ctrl+r"
+[[step]]
+text = "X"
+[[step]]
+keys = "alt+a"
+[[step]]
+run_jobs = true
+
+# 一致は 3 件 (LF・CRLF・CR の改行)。次へで、LF の一致 → CRLF の一致 → CR の一致 → 折り返して先頭
+[[assert]]
+at = 7
+query = { kind = "selection" }
+expect = { anchor = 0, head = 7 }
+[[assert]]
+at = 8
+query = { kind = "selection" }
+expect = { anchor = 10, head = 18 }
+[[assert]]
+at = 9
+query = { kind = "selection" }
+expect = { anchor = 21, head = 28 }
+[[assert]]
+at = 10
+query = { kind = "selection" }
+expect = { anchor = 0, head = 7 }
+# すべて置換は 3 件を 1 回で置き換え、消えた行の数を言う
+[[assert]]
+query = { kind = "text" }
+expect = { text = "X x X y X\n" }
+[[assert]]
+frame_contains = ["3 件を置換しました。文書は 3 行減りました"]

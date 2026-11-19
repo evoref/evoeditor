@@ -119,6 +119,10 @@ fn fs_kind(path: &Path) -> FsKind {
 }
 
 impl FileSystem for WinFs {
+    fn list_dir_names(&self, dir: &FsPath) -> Result<Vec<String>, FsError> {
+        crate::fs_common::list_dir_names(dir)
+    }
+
     fn rename_no_replace(&self, from: &FsPath, to: &FsPath) -> Result<(), FsError> {
         crate::sys::rename_no_replace(from.as_path(), to.as_path()).map_err(|e| map_io_error(e, to))
     }

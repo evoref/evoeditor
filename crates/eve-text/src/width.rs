@@ -11,6 +11,8 @@
 
 use unicode_width::UnicodeWidthStr;
 
+use crate::grapheme::str_graphemes;
+
 /// 表示幅の上限 (可視記号を含む。§13.2 の「最大 48」)。
 pub const MAX_GRAPHEME_WIDTH: u8 = 48;
 
@@ -293,9 +295,8 @@ fn base_width(g: &str, rest: &str, cfg: &WidthConfig) -> usize {
 
 /// 1 行の文字列の表示幅 (セル数)。タブは次のタブストップまで進める。改行は含めない行の内容を渡す。
 pub fn str_display_width(s: &str, cfg: &WidthConfig) -> usize {
-    use unicode_segmentation::UnicodeSegmentation;
     let tab = cfg.tab_width.max(1) as usize;
-    s.graphemes(true).fold(0, |col, g| {
+    str_graphemes(s).fold(0, |col, (_, g)| {
         if g == "	" {
             col + tab - col % tab
         } else {
@@ -307,10 +308,9 @@ pub fn str_display_width(s: &str, cfg: &WidthConfig) -> usize {
 /// 表示列 `dcol` に対応する、行内のバイト位置 (書記素境界)。全角の右半分のようにセルの途中に当たる列は、
 /// その書記素の前に寄せる (`Bias::Before`、03 §3.2 の `display_to_pos`)。行の幅を超える列は行末。
 pub fn display_col_to_byte(line: &str, dcol: usize, cfg: &WidthConfig) -> usize {
-    use unicode_segmentation::UnicodeSegmentation;
     let tab = cfg.tab_width.max(1) as usize;
     let mut col = 0usize;
-    for (i, g) in line.grapheme_indices(true) {
+    for (i, g) in str_graphemes(line) {
         if col >= dcol {
             return i;
         }
@@ -328,15 +328,15 @@ pub fn display_col_to_byte(line: &str, dcol: usize, cfg: &WidthConfig) -> usize 
 }
 
 /// 文字列の先頭の書記素 (空なら空文字列)。1 つだけ必要なときに、全体を分割しないで済む。
+/// 書記素の境界は `is_grapheme_boundary` と同じ (エスケープ文字の前後は常に境界、03 §13.1)。
 pub fn first_grapheme(s: &str) -> &str {
-    use unicode_segmentation::UnicodeSegmentation;
-    s.graphemes(true).next().unwrap_or("")
+    str_graphemes(s).next().map_or("", |(_, g)| g)
 }
 
 /// 行の文字列を書記素に分け、各書記素の (行内のバイト位置, 文字列) を返す。
+/// 書記素の境界は `is_grapheme_boundary` と同じ (エスケープ文字の前後は常に境界、03 §13.1)。
 pub fn grapheme_indices(s: &str) -> Vec<(usize, &str)> {
-    use unicode_segmentation::UnicodeSegmentation;
-    s.grapheme_indices(true).collect()
+    str_graphemes(s).collect()
 }
 
 /// 1 書記素の表示 (Frame の `Span` の素材)。`base` は元の文字 (または代替の記号)、`marks` は不可視文字の記号。

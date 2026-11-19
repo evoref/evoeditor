@@ -22,7 +22,7 @@ use eve_core::{
 use eve_view::{KeyCode, KeyStroke, Modifiers};
 
 use crate::exit::EXIT_ERROR;
-use crate::settings::{choose_locale, config_sources, load_config, load_keymap};
+use crate::settings::{LocaleRead, config_sources, load_config, load_keymap, setup_locale};
 use crate::{NativePaths, cli};
 
 /// 出力の形の版。
@@ -328,15 +328,18 @@ pub(crate) fn dump_keymap_text(cat: &Catalog, locale: &str, km: &Keymap, json: b
     out
 }
 
-/// UI の言語の選択 (`--locale` > `ui.locale` > `EVE_LANG` > OS、07 §17.1) と、そのカタログ。
+/// UI の言語の選択 (`--locale` > `ui.locale` > `EVE_LANG` > OS、07 §17.1) と、そのカタログ (画面と同じく、ユーザーの
+/// 言語ファイルを重ねた表。`--no-config` では同梱の表だけ。07 §17.4)。言語の名前は JSON の `locale` に出す。診断は出さない
+/// (`--check-config` で見る)。
 fn locale_of(
     paths: &NativePaths,
     args: &cli::ConfigArgs,
     cli_locale: Option<&str>,
-) -> (&'static Catalog, &'static str) {
-    let config = load_config(&config_sources(paths, args)).config;
-    let locale = choose_locale(cli_locale, &config).locale;
-    (Catalog::builtin(locale), locale.code())
+) -> (std::sync::Arc<Catalog>, String) {
+    let src = config_sources(paths, args);
+    let mut resolved = load_config(&src);
+    let setup = setup_locale(&src, cli_locale, &mut resolved, LocaleRead::STARTUP);
+    (setup.catalog, setup.choice.locale.code().to_owned())
 }
 
 /// `--list-commands [--json]`: 組込みのコマンドの一覧を出し、終える。
@@ -345,7 +348,7 @@ pub(crate) fn list_commands(args: &cli::ConfigArgs, cli_locale: Option<&str>, js
         return EXIT_ERROR;
     };
     let (cat, code) = locale_of(&paths, args, cli_locale);
-    print!("{}", list_commands_text(cat, code, json));
+    print!("{}", list_commands_text(&cat, &code, json));
     0
 }
 
@@ -358,7 +361,7 @@ pub(crate) fn dump_keymap(args: &cli::ConfigArgs, cli_locale: Option<&str>, json
     let (cat, code) = locale_of(&paths, args, cli_locale);
     let file = load_keymap(&config_sources(&paths, args));
     let (km, _) = resolve_keymap(&file);
-    print!("{}", dump_keymap_text(cat, code, &km, json));
+    print!("{}", dump_keymap_text(&cat, &code, &km, json));
     0
 }
 

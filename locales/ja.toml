@@ -31,7 +31,7 @@ description = "設定ファイル (config.toml と keymap.toml) を読み直し�
 title = "設定を読み直す"
 
 [cmd.config.show_diagnostics]
-description = "設定ファイル・キーマップ・テーマの問題を一覧で表示します。Enter で該当のファイルの該当の行を開きます。"
+description = "設定ファイル・キーマップ・テーマ・言語ファイルの問題を一覧で表示します。Enter で該当のファイルの該当の行を開きます。"
 title = "設定の診断を表示"
 
 [cmd.cursor.doc_end]
@@ -183,7 +183,7 @@ description = "ファイルを読み込み直します。"
 title = "再読込"
 
 [cmd.file.toggle_read_only]
-description = "読み取り専用を解除します。編集できる文書では読み取り専用にします。"
+description = "読み取り専用を解除します。編集できる文書では読み取り専用にします。不正なバイトを含むファイルも、確認の後に編集できます。"
 title = "読み取り専用の切替"
 
 [cmd.file.reopen_with_encoding]
@@ -393,7 +393,7 @@ list_next = "次へ"
 palette_open = "コマンド"
 
 [info.app]
-release_summary = "内部を整理して効率化し、データの保全と正しさの不具合を直しました。保存して終了、入力欄での単語の編集なども加わりました。詳しくはリリースノートを見てください"
+release_summary = "編集していない所を元のバイト列のまま保存し、不正なバイトを含む文書も編集できるようにしました。行をまたぐ正規表現、標準入力、高コントラストのテーマなども加わりました。詳しくはリリースノートを見てください"
 updated = "evoeditor {version} に更新しました: {summary}"
 
 [info.cli]
@@ -401,6 +401,9 @@ unsupported = "{option} はこのバージョンでは使えないため無視�
 
 [info.config]
 diagnostic_no_file = "{file} の診断は、ファイルに書かれたものではないため開けません"
+locale_restart = "言語ファイルの変更は、再起動すると有効になります"
+locale_untranslated = "訳の無いキーが {count} 件あります (英語で出ます)"
+locale_untranslated_key = "{item} の訳がありません"
 no_diagnostics = "設定の診断はありません"
 reload_restart = "次の項目は再起動すると有効になります: {keys}"
 reload_unchanged = "設定を読み直しました (変わった項目はありません)"
@@ -429,13 +432,23 @@ enabled = "マウスの操作を有効にしました"
 already_open = "{path} は既に開いています"
 cancelled = "{path} の読込を取り消しました"
 guess_unsupported = "{path} の文字コードは {guess} と推定されましたが、この版では扱えないため {encoding} として開きました / 正しく見えないときは、文字コードを指定して開き直す ({key:file.reopen_with_encoding}) で選び直してください"
-long_line = "{path} には非常に長い行があります。その行は文字を 1 つずつ近似して表示します (結合文字が分かれて見えることがあります)"
-lossy_roundtrip = "この文字コードでは、編集した箇所の一部の文字が保存時に別のバイト列になることがあります ({count} 箇所)"
+long_line = "{path} には非常に長い行があります。この文書は折り返さずに表示します"
 new_file = "{path} は無いため、新しいファイルとして開きました (保存すると作成します)"
+partial_end = "先頭の {size} だけを表示しています。残りは読込の完了後に表示します"
+preserve_off = "この文書では元のバイト列を覚えていません。元の文字コードで保存すると、一部の文字が同じ文字の別のバイト表現になることがあります"
+preserve_partial = "{count} 行は元のバイト列を覚えられませんでした。編集して保存すると、これらの行はエスケープシーケンスの書き方が変わることがあります (文字は変わりません)"
 redetected = "文字コードを {encoding} と判定し直しました"
 
 [info.paste]
 first_line_only = "入力欄には最初の行だけを貼り付けました"
+as_bytes = "不正なバイト {count} 個を、バイトのまま貼り付けました"
+escape_as_text = "不正なバイト {count} 個は、この文書ではバイトとして扱えないため <0xNN> の文字列として貼り付けました"
+notation_as_text = "クリップボードの内容がエディタ内のコピーと違うため、<0xNN> の形の文字列は文字列のまま貼り付けました"
+pua_as_text = "私用文字 (U+10FF00〜U+10FFFF) {count} 個は、そのままでは入れられないため <U+XXXX> の文字列にしました"
+search_notation = "<0xNN> の文字列は不正なバイトに一致しません。正規表現の \\x{{10FFNN}} で探せます"
+
+[info.prompt]
+target_closed = "入力の対象の文書が閉じられたため、何もしませんでした"
 
 [info.recovery]
 old = "30 日より古い退避が {count} 件あります: {dir}"
@@ -453,12 +466,16 @@ history_cleared = "{encoding} で開き直しました。元に戻す履歴は�
 
 [info.read_only]
 released = "読み取り専用を解除しました"
+released_invalid_bytes = "編集を許可しました (不正なバイトは <0xNN> の 1 文字として編集できます)"
 set = "読み取り専用にしました"
 
 [info.save]
 aborted = "保存を中止しました ({path} は書き換えていません)"
 done = "{path} を保存しました"
+escape_merge_cancelled = "保存しませんでした。開き直すと文字が変わる {count} 箇所を強調しました (不正なバイトを消す・間に改行を入れる・元の並びに戻すと直ります)"
+escape_merged = "{path} を保存しました。開き直すと {count} 箇所が別の文字になります"
 in_place = "{path} を直接上書きで保存しました"
+partial_saved = "途中までの内容を {path} に保存しました ({size})"
 in_progress = "保存中です"
 to_recovery = "退避先 {target} に保存しました。元のファイル {path} は変更していません"
 unchanged = "変更はありません (ファイルは書き換えていません)"
@@ -477,11 +494,22 @@ no_selection = "選択範囲がありません。選択してから検索バー�
 replace_empty_query = "検索する文字列を入力してください"
 replace_no_match = "置換する箇所はありません"
 replaced = "{count} 件を置換しました (元に戻すで戻せます)"
+replaced_folded = "{count} 件を置換しました (互換文字の同一視で一致したのは {folded} 件。元に戻すで戻せます)"
+replaced_folded_lines_added = "{count} 件を置換しました。文書は {lines} 行増えました (互換文字の同一視で一致したのは {folded} 件。元に戻すで戻せます)"
+replaced_folded_lines_removed = "{count} 件を置換しました。文書は {lines} 行減りました (互換文字の同一視で一致したのは {folded} 件。元に戻すで戻せます)"
+replaced_lines_added = "{count} 件を置換しました。文書は {lines} 行増えました (元に戻すで戻せます)"
+replaced_lines_removed = "{count} 件を置換しました。文書は {lines} 行減りました (元に戻すで戻せます)"
 wrapped_backward = "文書の先頭に達したので、末尾から検索しました"
 wrapped_forward = "文書の末尾に達したので、先頭から検索しました"
 
+[info.stdin]
+stopped = "標準入力を読むのをやめ、ここまで ({size}) を読み取り専用で開きました"
+terminal = "標準入力が端末のため、読まずに空の文書を開きました"
+
 [info.swap]
+applied_read_only = "復旧内容を適用しました。不正なバイトを含むため読み取り専用です。{key:file.toggle_read_only} で編集を許可すると続けられます"
 discarded = "スワップを破棄しました"
+encoding_mismatch = "{path} の未保存の内容は {encoding} で書かれています。文字コードを指定して開き直す ({key:file.reopen_with_encoding}) で {encoding} を選ぶと、復旧を提案します"
 recovered = "復旧内容を適用しました。保存するまで {path} は変わりません"
 
 [info.undo]
@@ -535,16 +563,88 @@ text = "{item} は、既定の続けて押すキー (Ctrl+K など) の先頭で
 hint = "既定の割当を残しました。別のキーにしてください"
 text = "{item} の割当だと、終了・コマンドパレット・取消のどれかに届かなくなります"
 
+[msg.config.locale_accelerator]
+hint = "同梱と同じ英字を同じ順に書いてください"
+text = "{item} の [S] のような角括弧の英字が同梱の文言と違います"
+
+[msg.config.locale_bad_name]
+hint = "fr.toml のような英小文字 2〜3 字の名前に"
+text = "{value} は言語ファイルの名前の規則に合わないため読みません"
+
+[msg.config.locale_control_char]
+hint = "その文字を除いてください"
+text = "{item} の文言に使えない文字があります ({reason})"
+
+[msg.config.locale_duplicate_key]
+hint = "どちらかを消してください"
+text = "{item} が 2 回書かれています。最初のものだけを見ます"
+
+[msg.config.locale_empty]
+hint = "〔 〕 の外に文字を書いてください"
+text = "{item} の文言に表示される文字がありません"
+
+[msg.config.locale_hint_width]
+hint = "全角 4 文字・半角 8 文字以内を勧めます"
+text = "{item} のヒントは長いので、狭い画面では落ちることがあります (表示幅 {width})"
+
+[msg.config.locale_language_mismatch]
+hint = "{lang} として読みました"
+text = "[meta] の language の値 {value} がファイル名と違います"
+
+[msg.config.locale_more]
+hint = "--check-config で全件を見られます"
+text = "この言語ファイルには、ほかに {count} 件の問題があります"
+
+[msg.config.locale_not_found]
+hint = "locales/ に置くか ja / en を指定"
+text = "言語 {value} の言語ファイルがありません (いまは {lang})"
+
+[msg.config.locale_not_found_no_config]
+hint = "言語ファイルを読まない起動です"
+text = "言語 {value} の言語ファイルがありません (いまは {lang})"
+
+[msg.config.locale_not_utf8]
+hint = "UTF-8 で保存し直してください"
+text = "この言語ファイルは UTF-8 で書かれていないため使っていません"
+
+[msg.config.locale_placeholder]
+hint = "同梱と同じ差し込みを使ってください"
+text = "{item} の差し込み ({{…}} の部分) が同梱の文言と合いません ({reason})〔。使うもの: {expected}〕"
+
+[msg.config.locale_reserved]
+hint = "終了時・異常終了時・--help の文言です"
+text = "{item} の文言は言語ファイルでは変えられません"
+
+[msg.config.locale_syntax]
+hint = "表示された行かファイルを直してください"
+text = "この言語ファイルは書式が正しくないため使っていません: {reason}"
+
+[msg.config.locale_too_large]
+hint = "1 MiB 以下にしてください"
+text = "この言語ファイルは大きすぎるため使っていません ({size})"
+
+[msg.config.locale_too_long]
+hint = "1,024 文字以下にしてください"
+text = "{item} の文言が長すぎます ({count} 文字)"
+
+[msg.config.locale_unknown_key]
+hint = "綴りと、使っている版を確かめてください"
+text = "{item} という文言のキーはありません"
+
+[msg.config.locale_unreadable]
+hint = "読める通常のファイルか確かめてください"
+text = "この言語ファイルを読めないため使っていません: {reason}"
+
 [msg.config.out_of_range]
 hint = "{range} で指定してください。この項目は {default} を使います"
 text = "{item} の値 {value} は範囲外です"
 
 [msg.config.problem]
 hint = "{hint}"
-text = "設定の問題 ({file}:{line}): {detail}"
+text = "設定の問題 ({file}〔:{line}〕): {detail}"
 
 [msg.config.problems]
-hint = "該当の項目は既定値を使っています。全件はログ ({log}) を見てください"
+hint = "一覧は「設定の診断を表示」で見られます"
 text = "設定に {count} 件の問題があります。最初の 1 件: {detail}"
 
 [msg.config.reload_kept]
@@ -554,6 +654,10 @@ text = "{file} にエラーがあるため、前の設定のままにしまし�
 [msg.config.syntax]
 hint = "該当の行を直してください。直すまでは既定値で動きます"
 text = "この設定ファイルは書式が正しくないため使っていません: {reason}"
+
+[msg.config.theme_not_found]
+hint = "〔{item} を {candidates} にしてください。〕組込みのテーマか、themes/ に置いたテーマファイルの名前を書きます。今は default で描いています"
+text = "テーマ {value} がありません"
 
 [msg.config.type_mismatch]
 hint = "{expected} で書いてください。この項目は既定値 {default} を使います"
@@ -570,6 +674,26 @@ text = "{item} という設定項目はありません"
 [msg.edit.read_only]
 hint = "属性・権限が理由なら、名前を付けて保存 ({key:file.save_as}) した先で編集できます。文字コードの誤判定なら、文字コードを指定して開き直す ({key:file.reopen_with_encoding}) で直せます"
 text = "読み取り専用のため編集できません ({reason})"
+
+[msg.edit.read_only_invalid_bytes]
+hint = "{key:file.toggle_read_only} で、確認の後に編集できます。文字化けなら {key:file.reopen_with_encoding} で開き直してください"
+text = "不正なバイトを含むため読み取り専用です"
+
+[msg.edit.read_only_loading]
+hint = "読込の完了を待つか、{key:ui.cancel} で読込を取り消してください"
+text = "読込中のため編集できません"
+
+[msg.edit.read_only_pua_collision]
+hint = "{key:file.reopen_with_encoding} で別の文字コードとして開き直してください"
+text = "不正なバイトと私用文字の両方を含むため、編集も保存もできません"
+
+[msg.edit.read_only_stateful]
+hint = "{key:file.reopen_with_encoding} で UTF-8 などとして開き直すと編集できます"
+text = "不正なバイトを含む ISO-2022-JP のファイルは編集できません"
+
+[msg.edit.read_only_binary]
+hint = "テキストなら {key:file.reopen_with_encoding} で文字コードを指定して開き直してください"
+text = "バイナリファイルは編集できません"
 
 [msg.edit.replacing]
 hint = "読込が終わるまでお待ちください。やめるときは {key:ui.cancel} で読込を取り消せます"
@@ -623,6 +747,10 @@ text = "メモリが足りないため {path} の読込を中止しました"
 hint = "フォルダを作ってから保存するか、別名で保存 ({key:file.save_as}) してください"
 text = "{path} のフォルダ {dir} がありません。新しいファイルとして開きましたが、このままでは保存できません"
 
+[msg.open.partial_unavailable]
+hint = "読込の完了を待つか、{key:ui.cancel} で読込を取り消してください"
+text = "読込中のため使えません"
+
 [msg.open.permission_denied]
 hint = "ファイルの権限を確かめてください"
 text = "{path} を読む権限がありません"
@@ -654,6 +782,30 @@ text = "{path} の後始末に失敗しました: {reason}"
 [msg.leftover.tmp_opened]
 hint = "不要なら次の起動で削除を選んでください"
 text = "一時ファイルを読み取り専用で開きました。{path} の保存の途中の内容で、末尾が切れている可能性があります"
+
+[msg.stdin.failed]
+hint = "読んだ内容は失われました。全部が要るときは、コマンドを実行し直してください"
+text = "標準入力の読込が失敗しました: {reason}"
+
+[msg.stdin.out_of_memory]
+hint = "全部が要るときは、コマンドの出力をファイルに保存してから開いてください"
+text = "メモリが足りないため、標準入力のここまで ({size}) を読み取り専用で開きました"
+
+[msg.stdin.read_failed]
+hint = "読めた {size} を読み取り専用で開きました。全部が要るときは、コマンドの出力をファイルに保存してから開いてください"
+text = "標準入力の読込の途中で失敗しました: {reason}"
+
+[msg.stdin.truncated]
+hint = "残りは読んでいません。全部が要るときは、コマンドの出力をファイルに保存してから開いてください"
+text = "標準入力が {size} を超えたため、そこまでを読み取り専用で開きました"
+
+[msg.stdin.unreadable]
+hint = "標準入力に渡すコマンドを確かめて、実行し直してください"
+text = "標準入力を読めませんでした: {reason}"
+
+[msg.stdin.unsaveable]
+hint = "--encoding を付けて起動し直してください"
+text = "この内容は保存できません"
 
 [msg.swap.found]
 hint = "該当のファイルを開くと復旧を提案します。要らなければ .swp フォルダを削除してください"
@@ -783,6 +935,10 @@ text = "退避先に保存できませんでした: {reason}。元のファイ�
 hint = "要らなければ {tmp} を消してください。消すまでは次の保存でハードリンクの確認が出ます"
 text = "{path} を保存しましたが、一時ファイル {tmp} を消せませんでした (保存したファイルと同じ実体です)"
 
+[msg.save.verify_failed]
+hint = "元のバイト列を覚えるのをやめました。もう一度保存 ({key:file.save}) すると、確認の後に、覚えたバイト列を使わずに保存します"
+text = "{path} の保存を中止しました。書き出す内容を読み直すと本文と一致しなかったためです (不具合の可能性があります)。ファイルは変更していません"
+
 [msg.save_as.not_a_file]
 hint = "別のファイル名を入力してください"
 text = "{path} はファイルではありません (フォルダ等)"
@@ -799,13 +955,59 @@ text = "{path} は読み取り専用属性のファイルなので上書きで�
 hint = "( ) や [ ] の対応などを確認してください"
 text = "✖ 正規表現が不正: {reason}"
 
-[msg.search.newline_unsupported]
-hint = "行ごとに検索します。1 行の中のパターンにしてください"
-text = "✖ 改行を含むパターンは未対応です"
+[msg.search.multiline_too_large]
+hint = "回数を限ると探せます (例: (?s).{{0,1000}})"
+text = "✖ 探せません: 何行でもまたげるパターン ({mib} MiB を超える文書)"
+
+[msg.search.pattern_too_heavy]
+hint = "繰り返しの回数を小さくするか、.* の範囲を狭めてください"
+text = "✖ 検索語が重すぎるため、検索を打ち切りました"
+
+[msg.search.replace_invalid_regex]
+hint = "( ) や [ ] の対応などを確認してください"
+text = "正規表現が不正なため、置換しませんでした: {reason}"
 
 [msg.search.replace_stale]
 hint = "入力を止めてから、もう一度実行してください"
 text = "編集が続いたため、すべて置換を中止しました"
+
+[ui.config]
+locale_searched = "(探した場所: {dir})"
+locale_summary = "言語: {lang} ({source})〔、言語ファイル: {file}〕、補う言語: {base}"
+locale_unused = "(使っていません)"
+
+[ui.config.locale_char]
+combining_marks = "30 個を超えて続く結合文字 {code}"
+control = "制御文字 {code}"
+format = "書式文字 {code}"
+noncharacter = "非文字 {code}"
+private_use = "私用領域の文字 {code}"
+variation_selector = "異体字セレクタ {code}"
+
+[ui.config.locale_placeholder]
+conditional = "〔 〕 の使い方が違います"
+missing = "差し込みが足りません"
+too_many = "同じ差し込みが多すぎます"
+unbalanced = "括弧の対応が取れていません"
+unknown = "使えない差し込みがあります"
+
+[ui.config.locale_reason]
+inline_value = "インラインの表と配列は書けません"
+not_regular = "通常のファイルではありません"
+too_deep = "8 段を超えるキーがあります"
+too_large = "1 MiB を超えています"
+too_many_keys = "キーの段の数が 20,000 を超えています"
+
+[ui.config.locale_source]
+cli = "--locale"
+config = "ui.locale"
+default = "既定"
+env = "EVE_LANG"
+os = "OS の言語"
+
+[ui.config.syntax_reason]
+key_depth = "16 段を超えるキーがあります"
+nesting = "インラインの表と配列の入れ子が 16 段を超えています"
 
 [ui.config.type]
 array = "配列"
@@ -898,6 +1100,12 @@ message = "{count} 箇所が、同じ文字の別のバイト表現で保存さ�
 save = "[S] 保存"
 alt = "[A] 別名で保存"
 
+[ui.confirm.save.roundtrip_unchecked]
+title = "別のバイト表現で保存されるかもしれません"
+message = "この文書では、元のバイト列を覚えていない範囲があります。同じ文字の別のバイト表現で保存される箇所があるかもしれません"
+save = "[S] 保存"
+alt = "[A] 別名で保存"
+
 [ui.confirm.save.escape_normalized]
 title = "エスケープの書き方が変わります"
 message = "{count} 行でエスケープシーケンスの書き方が変わります (文字は変わりません)"
@@ -962,6 +1170,15 @@ title = "表現できない文字"
 message = "{count} 個の文字は {encoding} で表せません (最初: 行 {line}, 桁 {col})"
 utf8 = "[U] UTF-8 で保存"
 replace = "[R] 置換して保存"
+escape_message = "不正なバイト (<0xNN>) {count} 個は {encoding} では保存できません (最初: 行 {line}, 桁 {col})〔。ほかに表せない文字が {others} 個あります〕。消すか正しい文字に打ち直してから保存してください"
+
+[ui.confirm.save.escape_merge]
+title = "開き直すと文字が変わる箇所"
+message = "{count} 箇所で、不正なバイトが続くバイトや文字とつながり、開き直すと別の文字として読まれます (最初: 行 {line}, 桁 {col})。合わせて {chars} 文字 ({lines} 行) が別の文字になります。まだ保存していません"
+message_to_eof = "{count} 箇所で、不正なバイトが続くバイトや文字とつながり、開き直すと別の文字として読まれます (最初: 行 {line}, 桁 {col})。そこからファイルの末尾まで別の文字になります。まだ保存していません"
+item = "行 {line}, 桁 {col}: {before} → {after}"
+more = "ほか {count} 箇所"
+save = "[S] このまま保存"
 
 [ui.confirm.save.unmappable_replace]
 title = "置換の確認"
@@ -969,6 +1186,16 @@ message = "次の {total} 個の文字を置き換えて {encoding} で保存し
 replace = "[R] 置換して保存"
 item = "行 {line}, 桁 {col}: {char} ({codepoint}) → {replacement}"
 more = "ほか {count} 個"
+
+[ui.confirm.read_only.invalid_bytes]
+title = "不正なバイトを含む文書の編集"
+message = "{path} には {encoding} として不正なバイトが {count} 個あります〔 (最初: 行 {line}, 桁 {col})〕。編集を許可すると、それぞれを <0xNN> の 1 文字として消したり動かしたりできます。文字化けして見えるときは、編集せずに文字コードを指定して開き直してください"
+detail_restore = "保存すると、残っている <0xNN> は元のバイトに戻ります"
+detail_delete = "消すと、そのバイトはファイルから無くなります (保存の前なら元に戻すで戻せます)"
+detail_merge = "隣の文字とつながると、開き直したときに別の文字になります (保存の前に確認します)"
+detail_copy = "他のアプリに貼ると <0xNN> という文字列になります"
+release = "[A] 編集を許可"
+reopen = "[E] 文字コードを指定して開き直す"
 
 [ui.load_state]
 loading = "読込中"
@@ -986,7 +1213,9 @@ write_failed = "書き込めませんでした"
 binary = "バイナリファイル"
 file_attribute = "読み取り専用属性のファイル"
 invalid_bytes = "不正なバイトを含むファイル"
+invalid_bytes_collision = "不正なバイトと私用文字を含むファイル"
 large_file_viewer = "巨大なファイル (読み取り専用で開く指定)"
+load_incomplete = "途中までしか読んでいない内容"
 no_write_permission = "書き込む権限のないファイル"
 stateful_encoding_with_invalid_bytes = "不正なバイトを含む ISO-2022-JP のファイル"
 user_requested = "読み取り専用で開く指定 (`--readonly`)"
@@ -1002,6 +1231,14 @@ selection = "({count} 文字選択)"
 long = "[読込中 {percent}%]"
 short = "{percent}%"
 
+[status.loading_bytes]
+long = "[読込中 {size}]"
+short = "{size}"
+
+[status.partial]
+long = "[先頭のみ {percent}%]"
+short = "{percent}%"
+
 [status.read_only]
 long = "[RO]"
 short = "RO"
@@ -1015,8 +1252,8 @@ long = "[外部で変更]"
 short = "外部変更"
 
 [status.degraded.long_line]
-long = "[長い行: 近似表示]"
-short = "近似"
+long = "[長い行: 折り返しなし]"
+short = "折返なし"
 
 [status.encoding]
 bom = "{encoding} BOM"
@@ -1035,6 +1272,8 @@ running = "{found}/…"
 exact = "{current}/{total}"
 at_least = "{current}/{total}+"
 approx = "約 {total}"
+compat_suffix = "互換"
+compat_match_suffix = "互換一致"
 no_match = "0 件"
 
 [ui.palette.arg]
@@ -1086,6 +1325,7 @@ error = "エラー"
 intro = "はじめに"
 keys = "キー一覧"
 commands = "コマンド一覧"
+search = "検索の書き方"
 terminal = "端末の設定"
 
 [ui.help.intro]
@@ -1097,10 +1337,35 @@ palette = "すべてのコマンドは {key:ui.palette_open} のコマンドパ�
 note = "続けて押すキー (例: Ctrl+K S) は、順に押します。同じコマンドに複数のキーがあるときは、コンマで並べます"
 unreachable = "* の付いたキーは、この端末では届きません (コマンドパレットか、ほかのキーで実行できます)"
 
+[ui.help.search]
+intro = "検索バーの正規表現 ([.*] を ON) は行をまたいで探せます。行の終端 (改行) に一致するのは、改行を明示した次の書き方だけです"
+newline = "改行 1 つ (LF・CRLF・CR のどれでも)"
+class_newline = "空白と改行の並び (クラスの要素に \\n を書くと行をまたぐ)"
+dot_all = "どの文字にも、改行 1 つにも一致 (CRLF は 1 文字に数える)"
+single_line = "行をまたがない (1 行の中で一致)"
+newline_run = "改行の続き。\\r\\n+ は CRLF の文書で一致しない"
+anchors = "文書の先頭 / 末尾 (^ と $ は行頭 / 行末)"
+other_tools = "Vim の \\_s は [\\s\\n]、\\_. は (?s). と書きます。ripgrep の -U や VS Code と違い、\\s や [^x] は行をまたぎません"
+limit = "何行でもまたげるパターン ((?s).* や \\n+ など) は、16 MiB (UTF-8 のバイト数) 以下の文書だけで探せます。大きな文書では (?s).{{0,1000}} のように回数を限ってください"
+sugar = "設定 search.newline_sugar = false で、\\n は LF の改行だけに一致します (CRLF の改行には一致しません)"
+compat_intro = "互換文字の同一視: 次の 8 組は、どちらで探しても両方に一致します"
+compat_pairs = "〜～ ‖∥ −－ ¢￠ £￡ ¬￢ ¦￤ —―"
+compat_regex = "正規表現の文字とクラスにも掛かります"
+compat_replace = "置換の文字列は書いたまま入ります (− を - にすると、－ も - になります)"
+compat_off = "切るときは、設定を search.cp932_compat_fold = false にします"
+compat_mark = "同一視が効いていると、件数の後ろに「互換」と出ます (例: 3/10 互換)"
+compat_match = "今の一致が同一視で当たったものなら「互換一致」と出ます (例: 2/5 互換一致)"
+compat_exclude = "¥ と ￥、‾ と ￣、~ と ～ は同一視しません"
+compat_yen_key = "¥ キーで入る文字の多くは \\ (U+005C) で、これも ¥ と同一視しません"
+
 [ui.help.terminal]
 ime = "IME が ON のとき、文字キーは確認ダイアログのアクセラレータとして届きません。Tab や矢印と Enter で選んでください"
 chord = "Ctrl+K で始まるキーは、Ctrl+K を押してから次のキーを押します。Esc で取り消せます"
 alt = "Alt が届かない端末 (Terminal.app の既定など) では、Ctrl+K を使う代替のキーがあります"
+stdin_keys = "標準入力 (cmd | evoeditor -) の書き手が端末から読むとき (cat 単独など) は、キー入力を取り合います"
+stdin_redraw = "書き手のエラー出力で画面が崩れたら、{key:ui.redraw} で描き直してください"
+stdin_powershell = "Windows PowerShell 5.1 のパイプは非 ASCII を ? に置き換えます。PowerShell 7.4 以降か cmd /c \"evoeditor - < file\" を使ってください"
+stdin_writer = "書込の誤りを無視する書き手 (Windows の ping -t など) は、読むのをやめても動き続けます。evoeditor の終了後に Ctrl+C で止めてください"
 readme = "端末ごとの設定と既知の制約は README に書いてあります"
 
 [ui.palette.category]
@@ -1119,6 +1384,7 @@ ui = "画面"
 title = "開く"
 
 [ui.prompt.save_as]
+partial = "途中まで ({size})"
 title = "名前を付けて保存"
 
 [ui.prompt.goto_line]
@@ -1154,6 +1420,7 @@ too_small = "端末が小さすぎます ({cols}x{rows} 以上が必要)"
 title = "未保存の変更"
 message = "{path} には保存されていない変更があります"
 chain = "({index}/{total}) {path} には保存されていない変更があります"
+partial_suffix = "(途中まで {size})"
 save = "[S] 保存して終了"
 discard = "[D] 破棄して終了"
 
@@ -1174,6 +1441,19 @@ message = "{path} の保存が終わっていません"
 others = "ほか {count} 件"
 wait = "[W] 待つ"
 abort = "[Q] 保存を中止して終了 (保存していない内容は退避します)"
+
+[ui.confirm.stdin_stop]
+title = "標準入力の読込"
+message = "読むのをやめると書き手が止まり、続きは読めません"
+continue = "[Esc] 読み続ける"
+open = "[O] ここまでで開く"
+
+[ui.confirm.stdin_loading]
+title = "標準入力の読込"
+message = "標準入力を読み込み中です ({size})"
+chain = "({index}/{total}) 標準入力を読み込み中です ({size})"
+open = "[O] ここまでで開く"
+discard = "[D] 破棄"
 
 [ui.confirm.save_all_failed]
 title = "保存できなかった文書"

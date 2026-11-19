@@ -1,0 +1,40 @@
+# 設定 `search.cp932_compat_fold = false` では、互換文字は書いた文字だけに一致し、件数の後ろの印も出ない
+# (01 FR-401 AC-4、07 §5.5。`compat_fold_search` と同じ文書・検索語で一致が違う)。
+[meta]
+id = "search/compat_fold_off"
+title = "search.cp932_compat_fold = false では書いた文字だけに一致し、印は出ない"
+verifies = ["AC-FR-401-4"]
+since = "v0.4"
+tags = ["search", "compat", "config"]
+
+[setup]
+size = [60, 12]
+config = """
+[search]
+cp932_compat_fold = false
+"""
+
+[setup.fs]
+"a.txt" = { text = "1〜2\n3～4\n5¢6￠7" }
+
+[[step]]
+open = "a.txt"
+[[step]]
+run_jobs = true
+[[step]]
+keys = "ctrl+f"
+[[step]]
+text = "～"
+[[step]]
+run_jobs = true
+[[step]]
+keys = "enter"
+[[step]]
+keys = "enter"
+
+# `～` (バイト 7〜10) の 1 件だけ (次へで折り返して同じ一致に戻る。件数と印は eve-core の試験 `search_compat_fold` で見る)
+[[assert]]
+query = { kind = "selection" }
+expect = { anchor = 7, head = 10 }
+[[assert]]
+frame_contains = ["先頭から検索しました"]

@@ -9,7 +9,9 @@
 #![forbid(unsafe_code)]
 
 mod changeset;
+mod cluster;
 mod grapheme;
+mod join;
 mod selection;
 mod text;
 mod types;
@@ -20,10 +22,12 @@ pub use changeset::{
     Bias, ChangeSet, ChangeSetError, ComposeError, Edit, EditError, InsertText, Op, OverlapKind,
     RangeMap,
 };
+pub use cluster::first_grapheme_len;
 pub use grapheme::{
     CONTEXT as GRAPHEME_CONTEXT, is_grapheme_boundary, next_grapheme_boundary,
     prev_grapheme_boundary, snap_to_grapheme, snap_to_nearest_grapheme,
 };
+pub use join::{GRAPHEME_JOIN_UNICODE_VERSION, may_join_grapheme};
 pub use selection::{MapPolicy, Range, Selection};
 pub use text::{Chunks, Snapshot, Text, TextBuilder, TextRead};
 pub use types::{ByteOff, ByteRange, CharIdx, LineEnding, LineIdx, Pos, Utf16Off};

@@ -52,7 +52,74 @@ pub(crate) struct LossyAsk {
     pub fmt: Option<NewFormat>,
 }
 
+/// 保存の前の確認 (03 §8.6 E2'、§8.7.1) の文言の選び方。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum PreConfirm {
+    /// 保持できなかった箇所の数を言える: `Shift_JIS` / EUC-JP は `ui.confirm.save.lossy_roundtrip`、ISO-2022-JP は
+    /// `ui.confirm.save.escape_normalized`。
+    Count(u64),
+    /// 数を言えない (「保持なし」の文書、検査を打ち切った文書): `ui.confirm.save.roundtrip_unchecked`。
+    Unchecked,
+}
+
+/// 文書 `doc` を文字コード `out` で書く前に、確認 (03 §8.6 E2') が要るか。要らなければ `None`。
+///
+/// 元の文字コードで書くときだけ出す (別の文字コードへの変換は E1 / E3 で扱う)。未編集かどうかは見ない (名前を付けて
+/// 保存・`file.set_encoding` では未編集でも書く。未編集の上書き保存は手順 0 で書かないので、ここへ来ない)。保持方式の
+/// 状態ごとの条件:
+/// - 保持が効いている (`Active`): 読込の時点で保持できなかった箇所 (`unpreserved`。ISO-2022-JP の、ASCII 状態で
+///   始まらない・終わらない差のある行) が 1 以上なら、その数で出す。0 なら出さない (編集した範囲の区分 B の文字が
+///   代表バイト列になるのは区分 C で、確認しない。行を結合して行の内容の全体でなくなった ISO-2022-JP の行の記録も、
+///   編集した行と同じ区分 C)。
+/// - 「保持なし」(`Unavailable`): 理由が `VerifyFailed` (読込・保存の確かめに失敗した。記録があった文書だけ) なら
+///   無条件で、ほかは読込時の検査で区分 B / D の箇所を見つけた (`lossy_lines > 0`) か検査を打ち切った (`incomplete`)
+///   文書だけ、数を言わずに出す。補助漢字・半角カナなど復号専用の文字の行 (`unmappable_lines`) だけの文書は出さない
+///   (保存は必ず E3 で止まり、確認の文が事実と合わない。v0.3 と同じく E3 に任せる)。理由が `InvalidBytes` (不正バイト
+///   を含む ISO-2022-JP) は、保存の連鎖の開始で拒否する (03 §8.3) ので出さない。
+/// - 対象外 (`NotApplicable`。区分 A の文字コード・新規文書・違う文字コードで保存した後): 出さない。
+pub(crate) fn preconfirm(doc: &Document, out: eve_encoding::Encoding) -> Option<PreConfirm> {
+    if out != doc.format.encoding {
+        return None;
+    }
+    preserve_kind(&doc.format)
+}
+
+/// 保存の前の確認と読込の完了時の通知に共通の条件 (`preconfirm` の説明)。
+fn preserve_kind(format: &crate::document::TextFormat) -> Option<PreConfirm> {
+    use eve_encoding::{NoPreserveReason, PreserveStatus};
+    let rt = &format.roundtrip;
+    match rt.preserve {
+        PreserveStatus::Active { unpreserved } => {
+            (unpreserved > 0).then_some(PreConfirm::Count(u64::from(unpreserved)))
+        }
+        PreserveStatus::Unavailable(NoPreserveReason::InvalidBytes) => None,
+        PreserveStatus::Unavailable(NoPreserveReason::VerifyFailed) => Some(PreConfirm::Unchecked),
+        PreserveStatus::Unavailable(_) => {
+            (rt.lossy_lines > 0 || rt.incomplete).then_some(PreConfirm::Unchecked)
+        }
+        PreserveStatus::NotApplicable => None,
+    }
+}
+
+/// 読込の完了時の、保持方式の通知 (03 §8.7.1 の「読込の完了時の通知」): (`MessageKey`, 数)。条件は保存の前の確認
+/// (`preconfirm`) と同じ: 保持できなかった箇所がある文書は数を言う `info.open.preserve_partial`、「保持なし」は数を
+/// 言わない `info.open.preserve_off`。保持が効いている文書 (保持できなかった箇所が無い) と、区分 B / D の箇所の無い
+/// 文書では `None` (v0.3 までの `info.open.lossy_roundtrip` は出さない)。
+pub(crate) fn preserve_note(format: &crate::document::TextFormat) -> Option<(&'static str, u64)> {
+    match preserve_kind(format)? {
+        PreConfirm::Count(n) => Some((keys::INFO_OPEN_PRESERVE_PARTIAL, n)),
+        PreConfirm::Unchecked => Some((keys::INFO_OPEN_PRESERVE_OFF, 0)),
+    }
+}
+
 impl EditorState {
+    /// 読込の完了時の保持方式の通知を出す (`preserve_note`)。
+    pub(crate) fn show_preserve_note(&mut self, note: Option<(&'static str, u64)>) {
+        if let Some((key, count)) = note {
+            self.show_message(MessageLevel::Info, key, &[("count", &count.to_string())]);
+        }
+    }
+
     /// 保存先がダングリングのシンボリックリンク: リンク先を示して、リンク先に作成するかを尋ねる (FR-106、05 §4.1)。
     pub(crate) fn open_dangling_link(&mut self, ask: SaveFailedAsk, target: String) {
         use crate::ui_model::overlay::{ChoiceDef, ConfirmAction, ConfirmState};
@@ -70,6 +137,7 @@ impl EditorState {
             details: Vec::new(),
             default: 0,
             focused: 0,
+            message: None,
             action: ConfirmAction::DanglingLink(ask),
         });
     }
@@ -88,14 +156,14 @@ impl EditorState {
         self.start_save_fmt(doc, path, expected, cont, fmt)
     }
 
-    /// 区分 B (ISO-2022-JP は区分 D のエスケープの書き方) の確認を出す。選択肢: 保存 / 別名で保存。
-    /// 区分 B は別名が既定、区分 D は文字が変わらないので保存が既定 (04 §15.2)。
-    pub(crate) fn open_lossy(&mut self, ask: LossyAsk) {
+    /// 保存の前の確認 (03 §8.6 E2') を出す。選択肢: 保存 / 別名で保存。条件と文言の選び方は `preconfirm`。
+    /// 区分 B は別名が既定、区分 D (ISO-2022-JP のエスケープの書き方) は文字が変わらないので保存が既定 (04 §15.2)。
+    /// 数を言えない文書 (「保持なし」・検査を打ち切った) は専用の文言にし、別名を既定にする (03 §8.7.1、Issue #495)。
+    pub(crate) fn open_lossy(&mut self, ask: LossyAsk, kind: PreConfirm) {
         use crate::ui_model::overlay::{ChoiceDef, ConfirmAction, ConfirmState};
         let Some(doc) = self.docs.documents.get(&ask.doc) else {
             return;
         };
-        let count = doc.format.roundtrip.lossy_lines;
         let example = doc
             .format
             .roundtrip
@@ -103,10 +171,12 @@ impl EditorState {
             .first()
             .map(u64::to_string)
             .unwrap_or_default();
-        let (name, default) = if doc.format.encoding.is_stateful() {
-            ("save.escape_normalized", 0)
-        } else {
-            ("save.lossy_roundtrip", 1)
+        let (name, default, count) = match kind {
+            PreConfirm::Unchecked => ("save.roundtrip_unchecked", 1, 0),
+            PreConfirm::Count(n) if doc.format.encoding.is_stateful() => {
+                ("save.escape_normalized", 0, n)
+            }
+            PreConfirm::Count(n) => ("save.lossy_roundtrip", 1, n),
         };
         let choice = |id: &'static str, accel: char| ChoiceDef {
             id,
@@ -123,6 +193,7 @@ impl EditorState {
             details: Vec::new(),
             default,
             focused: default,
+            message: None,
             action: ConfirmAction::Lossy(ask),
         });
     }
@@ -144,7 +215,7 @@ impl EditorState {
             return self.start_save_with(doc, path, expected, cont, strategy, fmt);
         }
         // 別名で保存: 名前の入力へ (保存の後に続ける操作は引き継ぐ)
-        self.open_prompt(PromptKind::SaveAs { then: cont }, String::new());
+        self.open_prompt(PromptKind::SaveAs { doc, then: cont }, String::new());
         CommandResult::Done
     }
 
@@ -167,6 +238,7 @@ impl EditorState {
             JobResult::Complete {
                 text,
                 format,
+                preserved,
                 meta: _,
                 stamp,
                 changed_during_load,
@@ -175,14 +247,25 @@ impl EditorState {
                 interrupted_save,
                 ..
             } => {
-                let lossy = format.roundtrip.lossy_lines;
+                let note = preserve_note(&format);
                 let encoding = format.encoding;
                 let long_lines = format.long_lines;
-                let mut d = Document::from_text(text, format);
+                let was_partial = self
+                    .docs
+                    .documents
+                    .get(&doc_id)
+                    .is_some_and(|d| d.load_state == crate::document::LoadState::Partial);
+                let mut d = Document::from_loaded(text, format, preserved);
                 d.path = Some(path.clone());
                 d.disk_stamp = Some(stamp);
                 d.read_only = detected;
+                // Revision は先頭の続き (`put_document`)。先頭の間の覚えは新しい文書に持ち越さない (03 §9.2.1)
                 self.put_document(doc_id, d);
+                if was_partial {
+                    self.forget_doc_memos(doc_id);
+                    self.snap_views_after_partial(doc_id);
+                }
+                self.io.partial_end_noted.remove(&doc_id);
                 if long_lines > 0 {
                     self.message(
                         MessageLevel::Info,
@@ -198,13 +281,7 @@ impl EditorState {
                     );
                 }
                 // 文字コードに関する通知 (最後に出したものが現在のメッセージ)
-                if lossy > 0 {
-                    self.show_message(
-                        MessageLevel::Info,
-                        keys::INFO_OPEN_LOSSY_ROUNDTRIP,
-                        &[("count", &lossy.to_string())],
-                    );
-                }
+                self.show_preserve_note(note);
                 if let Some(e) = notes.redetected {
                     self.show_message(
                         MessageLevel::Info,
@@ -261,8 +338,10 @@ impl EditorState {
                 }
                 self.complete_open(doc_id, view, replace);
             }
-            // 確認が要る: 読込中の文書は残したまま確認を出し、回答で先頭から読み直す (03 §9.2)
+            // 確認が要る: 読込中の文書は残したまま確認を出し、回答で先頭から読み直す (03 §9.2)。先行表示の後なら先頭を
+            // 捨てて `Loading` に戻す (03 §9.2.1 の「確認」)
             JobResult::NeedsConfirm { ask, .. } => {
+                self.drop_partial_head(doc_id);
                 self.open_open_confirm(OpenAsk {
                     doc: doc_id,
                     view,
@@ -343,6 +422,7 @@ impl EditorState {
             details: Vec::new(),
             default: 0,
             focused: 0,
+            message: None,
             action: ConfirmAction::Open(ask),
         });
     }
@@ -362,7 +442,10 @@ impl EditorState {
                     ConfirmAsk::Binary | ConfirmAsk::UnsupportedBom { .. } => {
                         opts.pending.insert(crate::document::ReadOnlyReason::Binary);
                     }
-                    _ => {}
+                    // 不正バイトの比率の確認の理由は `InvalidBytes` (ISO-2022-JP なら `StatefulEncodingWithInvalidBytes`) だけ
+                    // (03 §9.2 の表)。読込の結果 (`Complete.detected`) が付けるので、ここでは足さない (再判定 (03 §8.2.1) で
+                    // 不正バイトが 0 になった本文に理由を残さないため)。`UserRequested` も付けない (`--readonly` だけの理由)
+                    ConfirmAsk::ManyInvalidBytes { .. } => {}
                 }
                 self.respawn_open(ask, opts)
             }
@@ -453,23 +536,10 @@ impl EditorState {
         view: ViewId,
         replace: Option<DocumentId>,
     ) {
-        // 読込の間に別の文書へ切り替えていなければ、新しいバッファへ切り替える (03 §9.8)
-        if let Some(from) = replace
-            && self.active_document() == Some(from)
-        {
-            // 何も入力していない無題のバッファは、開いたファイルで置き換える (何も失わない。起動直後の Ctrl+O で空のバッファが残らない)
-            let pristine = self.docs.documents.get(&from).is_some_and(|d| {
-                d.path.is_none()
-                    && !d.is_dirty()
-                    && d.len_bytes() == 0
-                    && d.load_state == crate::document::LoadState::Ready
-            });
-            if pristine {
-                self.show_view(view, Some(from));
-            } else {
-                self.activate_document(doc);
-            }
-        }
+        // 読込の間に別の文書へ切り替えていなければ、新しいバッファへ切り替える (03 §9.8)。何も入力していない無題の
+        // バッファは、開いたファイルで置き換える (何も失わない。起動直後の Ctrl+O で空のバッファが残らない)。先行表示で
+        // 切り替えた後は切り替え直さない。オーバーレイの間は保留する (03 §9.2.1 の「表示の切り替え」、io/partial_view.rs)
+        self.open_switch_on_complete(doc, view, replace);
         // 起動時の `+行:桁` / `path:行:桁`: 読み終わった文書の位置へ移る (範囲外は丸める)
         if let Some((line, col)) = self.io.open_jumps.remove(&doc) {
             self.jump_to_line_col(view, doc, line, col);
@@ -487,28 +557,52 @@ impl EditorState {
         reason: &str,
     ) {
         self.show_message(level, key, &[("path", &path.display()), ("reason", reason)]);
+        self.drop_failed_open(doc, replace);
+    }
+
+    /// 読込に失敗した文書を閉じる (メッセージは呼び側が出す)。表示中なら §9.8 の順で別の文書を表示する。標準入力の読込の
+    /// 失敗 (パニック、03 §9.2.2) も同じ経路。
+    pub(crate) fn drop_failed_open(&mut self, doc: DocumentId, replace: Option<DocumentId>) {
+        // 先頭も捨てる (03 §9.2.1 の「失敗・取消し・閉じる」。文書ごと閉じる)
+        self.forget_partial_state(doc);
         if self.active_document() == Some(doc) || self.focused_window().is_none() {
-            // 表示中の文書の読込に失敗 (起動時の文書、または読込中に切り替えて表示していた足したバッファ): 失敗した文書は閉じ、
-            // 開く前の文書 (残っていれば)・ほかの文書・無題の文書の順で表示する (再試行できる、03 §9.2 の「失敗」・§9.8)。
-            // 表示を移さずに閉じると、Window が消えた View を指したままになる (fuzz_editor で見つけた)
             self.io.open_jumps.remove(&doc);
-            let others = replace
-                .filter(|r| *r != doc && self.docs.documents.contains_key(r))
-                .or_else(|| self.docs.documents.keys().copied().find(|d| *d != doc));
-            match others {
-                Some(next) => {
-                    self.activate_document(next);
-                    self.close_document(doc);
-                }
-                None => {
-                    let blank = self.blank_document();
-                    let (_, untitled) = self.add_document(blank);
-                    self.show_view(untitled, Some(doc));
-                }
+            // オーバーレイ・検索バーの間は、表示を移さずに先頭だけを捨てて待つ (閉じた後に移す。03 §9.2.1 の「失敗・
+            // 取消し・閉じる」。パレットで選んだコマンドが、開いたときと別の文書に効かないため)
+            if self.focused_window().is_some() && self.auto_switch_blocked() {
+                self.hold_failed_open(doc, replace);
+                return;
             }
+            self.leave_failed_open(doc, replace);
         } else {
             // 表示していない文書 (足したバッファ・起動時に追加で開いた文書) の読込の失敗: 表示中の文書はそのままに、閉じるだけ
             self.close_document(doc);
+        }
+    }
+
+    /// 表示中の文書の読込に失敗 (起動時の文書、または読込中に切り替えて表示していた足したバッファ): 失敗した文書は閉じ、
+    /// 開く前の文書 (残っていれば)・ほかの文書・無題の文書の順で表示する (再試行できる、03 §9.2 の「失敗」・§9.8)。
+    /// 表示を移さずに閉じると、Window が消えた View を指したままになる (`fuzz_editor` で見つけた)。ほかの読込の切り替え元は
+    /// 書き換えない (戻した先を基準に表示を奪わない側に倒す、03 §9.8 の「切り替え元の書き換え」)。表示していなければ
+    /// 閉じるだけ (保留の間に利用者が表示を移したとき)。
+    pub(crate) fn leave_failed_open(&mut self, doc: DocumentId, replace: Option<DocumentId>) {
+        if self.focused_window().is_some() && self.active_document() != Some(doc) {
+            self.close_document(doc);
+            return;
+        }
+        let others = replace
+            .filter(|r| *r != doc && self.docs.documents.contains_key(r))
+            .or_else(|| self.docs.documents.keys().copied().find(|d| *d != doc));
+        match others {
+            Some(next) => {
+                self.activate_document(next);
+                self.close_document(doc);
+            }
+            None => {
+                let blank = self.blank_document();
+                let (_, untitled) = self.add_document(blank);
+                self.show_view(untitled, Some(doc));
+            }
         }
     }
 }

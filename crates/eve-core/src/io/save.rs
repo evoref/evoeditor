@@ -3,7 +3,6 @@
 
 use eve_view::{DocumentId, EditorEvent, MessageLevel};
 
-use crate::document::NodeId;
 use crate::io::fs::{
     Expect, FsError, FsErrorDetail, FsErrorKind, HardlinkPolicy, InPlaceBackup, SaveMethod,
 };
@@ -60,7 +59,41 @@ pub(crate) enum FallbackKind {
     NoBackup,
 }
 
+/// 保存の連鎖の開始時に拒否する文書か (03 §9.7 の「連鎖の開始時の拒否」、§8.3 の (a)、OQ-207): 書く文字コード
+/// (`fmt` が無ければ文書の今の文字コード) が状態付き (ISO-2022-JP) で、文書が不正バイトを含む (`invalid_bytes > 0`)。
+/// 状態付き符号化では不正バイトを元のバイトに戻して書けないため。判断はここだけで行う。
+pub(crate) fn stateful_invalid(doc: &crate::document::Document, fmt: Option<NewFormat>) -> bool {
+    let out_encoding = fmt.map_or(doc.format.encoding, |f| f.encoding);
+    out_encoding.is_stateful() && doc.format.invalid_bytes > 0
+}
+
 impl EditorState {
+    /// 保存の連鎖の開始時の拒否: 文書が `stateful_invalid` に当たれば、
+    /// `msg.save.encoding_unsupported_iso2022` を示して `true` を返す。呼び側はジョブを投入せず、名前の入力・照合・確認の
+    /// どれにも進まず、後続 (`cont`) も実行しない (文書・書式は変えない)。
+    /// 保存の連鎖の入口 (`file.save`・`file.save_as`・`file.set_encoding`・`AskUnsaved` の「保存」・全保存) は、
+    /// 書式が決まった直後にこれを呼ぶ。`start_save_with` も投入の前に呼ぶ (入口を経ずに投入し直す経路の受け止め)。
+    /// 読込が済んでいない文書は対象にしない (読込中の拒否は各入口の規則に任せる)。
+    pub(crate) fn reject_stateful_invalid(
+        &mut self,
+        doc_id: DocumentId,
+        fmt: Option<NewFormat>,
+    ) -> bool {
+        let Some(doc) = self.docs.documents.get(&doc_id) else {
+            return false;
+        };
+        if doc.load_state != crate::document::LoadState::Ready || !stateful_invalid(doc, fmt) {
+            return false;
+        }
+        let shown = doc.path.as_ref().map(FsPath::display).unwrap_or_default();
+        self.show_message(
+            MessageLevel::Error,
+            keys::MSG_SAVE_ENCODING_UNSUPPORTED_ISO2022,
+            &[("path", &shown)],
+        );
+        true
+    }
+
     /// 確認で「保存」を選んだ後: `doc_id` を保存し、成功したら `cont` を続ける。パスがなければ名前を尋ねてから保存する。
     /// 対象はアクティブ文書ではなく `doc_id` (保存の連鎖は保存した文書に属する、03 §9.8)。
     pub(crate) fn save_doc_then(
@@ -68,9 +101,9 @@ impl EditorState {
         doc_id: DocumentId,
         cont: Continuation,
     ) -> CommandResult {
-        let Some(doc) = self.document(doc_id) else {
+        if self.document(doc_id).is_none() {
             return CommandResult::Rejected(RejectReason::NoTarget);
-        };
+        }
         // 保存中なら、その保存の完了後に続ける (二重に保存しない)
         let in_flight = self.io.pending.iter().find_map(|(job, p)| match p {
             Pending::Save { doc, .. } if *doc == doc_id => Some(*job),
@@ -80,8 +113,21 @@ impl EditorState {
             self.ui.continuations.insert(job, cont);
             return CommandResult::Pending(job);
         }
+        // 名前の入力 (無題・読み取り専用) より先に拒否する。後続 (終了・閉じる・開き直し) も行わない (03 §9.7)
+        if self.reject_stateful_invalid(doc_id, None) {
+            return CommandResult::Rejected(RejectReason::NotAvailable);
+        }
+        let Some(doc) = self.document(doc_id) else {
+            return CommandResult::Rejected(RejectReason::NoTarget);
+        };
         let Some(path) = doc.path.clone() else {
-            self.open_prompt(PromptKind::SaveAs { then: Some(cont) }, String::new());
+            self.open_prompt(
+                PromptKind::SaveAs {
+                    doc: doc_id,
+                    then: Some(cont),
+                },
+                String::new(),
+            );
             return CommandResult::Done;
         };
         if doc.load_state != crate::document::LoadState::Ready {
@@ -91,32 +137,46 @@ impl EditorState {
         // 読み取り専用 (`--readonly`・書込権限なし・不正バイト等) の文書は同じパスへ書かず、名前を尋ねる
         // (03 §9.7 の AskUnsaved の行。docs/review/v0.3-findings.md の SAF-18)
         if !doc.read_only.is_empty() {
-            self.open_prompt(PromptKind::SaveAs { then: Some(cont) }, path.display());
+            self.open_prompt(
+                PromptKind::SaveAs {
+                    doc: doc_id,
+                    then: Some(cont),
+                },
+                path.display(),
+            );
             return CommandResult::Done;
         }
         let expected = doc.disk_stamp.map_or(Expect::Absent, Expect::Stamp);
         self.start_save(doc_id, path, expected, Some(cont))
     }
 
-    /// 名前を付けて保存 (パスを指定する)。
+    /// 文書 `doc_id` を名前を付けて保存する (パスを指定する)。対象は名前の入力を開いた時点の文書で、確定の時点の
+    /// 表示中の文書ではない (03 §9.6・§9.8 の「入力・確認の対象」)。
     pub(crate) fn request_save_as(
         &mut self,
+        doc_id: DocumentId,
         raw_path: &str,
         cont: Option<Continuation>,
     ) -> CommandResult {
-        self.request_save_as_fmt(raw_path, cont, None)
+        self.request_save_as_fmt(doc_id, raw_path, cont, None)
     }
 
     /// `request_save_as` に新しい書式を渡す版 (`file.set_encoding` の無題・読み取り専用の文書、03 §8.8)。
     pub(crate) fn request_save_as_fmt(
         &mut self,
+        doc_id: DocumentId,
         raw_path: &str,
         cont: Option<Continuation>,
         fmt: Option<NewFormat>,
     ) -> CommandResult {
-        let Some(doc_id) = self.active_document() else {
+        if self.document(doc_id).is_none() {
             return CommandResult::Rejected(RejectReason::NoTarget);
-        };
+        }
+        // 保存先を調べる前に拒否する (03 §9.7 の「連鎖の開始時の拒否」)。名前の入力の後の呼び出しでは、入力の前の
+        // 拒否を経ているので、ここで拒否するのは待つ間に書式が変わったときだけ
+        if self.reject_stateful_invalid(doc_id, fmt) {
+            return CommandResult::Rejected(RejectReason::NotAvailable);
+        }
         let Ok(path) = self.paths.normalize(raw_path) else {
             self.show_message(
                 MessageLevel::Error,
@@ -208,6 +268,16 @@ impl EditorState {
             self.message(MessageLevel::Info, keys::INFO_RELOAD_BUSY, &shown);
             return CommandResult::Rejected(RejectReason::NotAvailable);
         }
+        // 状態付き符号化 (ISO-2022-JP) で不正バイトを含む文書は保存しない (03 §8.3 (a)。不正バイトを失わないため)。
+        // 入口 (`file.save` 等) は名前の入力の前に同じ判断で拒否している。ここは入口を経ずに投入し直す経路
+        // (確認の後の再投入・E3 の「UTF-8 で保存」等) の受け止めで、保存の前の確認のどれよりも先に拒否する
+        // (03 §9.7 の「連鎖の開始時の拒否」)
+        if self.reject_stateful_invalid(doc_id, fmt) {
+            return CommandResult::Rejected(RejectReason::NotAvailable);
+        }
+        let Some(doc) = self.docs.documents.get_mut(&doc_id) else {
+            return CommandResult::Rejected(RejectReason::NoTarget);
+        };
         // 読み取り専用属性を解除した文書の上書き保存は、「読み取り専用を解除して保存」の確認を経る (FR-116、03 §9.3 手順 1)。
         // 承認した Revision では繰り返さない
         let clear_readonly = doc.attribute_released && doc.path.as_ref() == Some(&path);
@@ -224,12 +294,11 @@ impl EditorState {
             return CommandResult::Done;
         }
         let out_encoding = fmt.map_or(doc.format.encoding, |f| f.encoding);
-        // 区分 B / D: 元の文字コードのまま、別のバイト表現で保存される箇所がある文書を編集して保存するときは、
-        // 書き込む前に確認する (FR-112 AC-4 (a)・NFR-303、03 §8.6 E2')。無編集の上書き保存は書き込まないので出ない。
-        // 承認した Revision では繰り返さない
-        if out_encoding == doc.format.encoding
-            && doc.format.roundtrip.lossy_lines > 0
-            && doc.is_dirty()
+        // 保存の前の確認 (FR-112 AC-4 (a)・NFR-303、03 §8.6 E2'・§8.7.1): 元の文字コードのまま書くと、元のバイト列を
+        // 覚えていない区分 B / D の箇所が別のバイト表現になり得る文書 (「保持なし」「保持できなかった箇所がある」) で、
+        // 書き込む前に確認する。v0.4 は未編集の文書でも出す (名前を付けて保存・`file.set_encoding` で同じ文字コード。
+        // 未編集の上書き保存は手順 0 で書き込まないので、ここへ来ない)。承認した Revision では繰り返さない
+        if let Some(kind) = super::open::preconfirm(doc, out_encoding)
             && self.io.lossy_ok != Some((doc_id, doc.revision()))
         {
             let ask = LossyAsk {
@@ -240,17 +309,8 @@ impl EditorState {
                 strategy,
                 fmt,
             };
-            self.open_lossy(ask);
+            self.open_lossy(ask, kind);
             return CommandResult::Done;
-        }
-        // 状態付き符号化 (ISO-2022-JP) で不正バイトを含む文書は保存しない (03 §8.3 (a)。不正バイトを失わないため)
-        if out_encoding.is_stateful() && doc.format.invalid_bytes > 0 {
-            self.show_message(
-                MessageLevel::Error,
-                keys::MSG_SAVE_ENCODING_UNSUPPORTED_ISO2022,
-                &[("path", &path.display())],
-            );
-            return CommandResult::Rejected(RejectReason::NotAvailable);
         }
         let (encoding, bom, escape) = (
             out_encoding,
@@ -258,6 +318,17 @@ impl EditorState {
             doc.format.save_escape_policy(out_encoding),
         );
         let revision = doc.revision();
+        // つながりの承認 (03 §8.3.1 の「承認」、§9.7 の表の `escape_merge_ok` の列): 投入のたびに `SaveApprovals` から、
+        // この文書の今の Revision のものを引く (無ければ `None`)。ジョブは結果が承認と同じときだけ止めずに書く
+        let escape_merge_ok = self
+            .io
+            .escape_merge_ok
+            .as_ref()
+            .filter(|(d, r, _)| *d == doc_id && *r == revision)
+            .map(|(_, _, a)| a.clone());
+        let merged = escape_merge_ok.as_ref().map(|a| a.total);
+        // 保持方式の記録の、保存を始めた時点の版 (複製は O(1)。03 §9.3 手順 4)。Snapshot と同じ時点で取る
+        let preserved = doc.preserved_for(out_encoding);
         let (snapshot, at) = doc.begin_save();
         let job = self.jobs.spawn(
             Some(doc_id),
@@ -272,6 +343,8 @@ impl EditorState {
                 strategy,
                 clear_readonly,
                 create_link_target,
+                preserved,
+                escape_merge_ok,
             },
         );
         if let Some(c) = cont {
@@ -286,6 +359,8 @@ impl EditorState {
                 path,
                 expected,
                 fmt,
+                strategy,
+                merged,
             },
         );
         CommandResult::Pending(job)
@@ -378,6 +453,7 @@ impl EditorState {
             details: Vec::new(),
             default,
             focused: default,
+            message: None,
             action: ConfirmAction::SaveFailed(ask),
         });
     }
@@ -412,7 +488,7 @@ impl EditorState {
             }
             // 別名で保存: 名前の入力へ (保存の後に続ける操作は引き継ぐ)
             _ => {
-                self.open_prompt(PromptKind::SaveAs { then: cont }, String::new());
+                self.open_prompt(PromptKind::SaveAs { doc, then: cont }, String::new());
                 CommandResult::Done
             }
         }
@@ -489,6 +565,7 @@ impl EditorState {
             details: Vec::new(),
             default,
             focused: default,
+            message: None,
             action: ConfirmAction::Fallback(ask),
         });
     }
@@ -508,6 +585,7 @@ impl EditorState {
             details: Vec::new(),
             default: 0,
             focused: 0,
+            message: None,
             action: ConfirmAction::ClearReadOnly(ask),
         });
     }
@@ -528,7 +606,7 @@ impl EditorState {
             }
             return self.start_save_with(doc, path, expected, cont, strategy, fmt);
         }
-        self.open_prompt(PromptKind::SaveAs { then: cont }, String::new());
+        self.open_prompt(PromptKind::SaveAs { doc, then: cont }, String::new());
         CommandResult::Done
     }
 
@@ -573,7 +651,7 @@ impl EditorState {
         match strategy {
             Some(s) => self.start_save_with(doc, path, expected, cont, s, fmt),
             None => {
-                self.open_prompt(PromptKind::SaveAs { then: cont }, String::new());
+                self.open_prompt(PromptKind::SaveAs { doc, then: cont }, String::new());
                 CommandResult::Done
             }
         }
@@ -622,28 +700,47 @@ impl EditorState {
         }
     }
 
-    #[allow(clippy::too_many_arguments)] // 保存ジョブの文脈 (Pending::Save) をそのまま受ける
     pub(crate) fn finish_save(
         &mut self,
-        doc_id: DocumentId,
-        at: NodeId,
-        revision: eve_view::Revision,
+        job: &SaveCtx,
         path: &FsPath,
-        expected: Expect,
-        fmt: Option<NewFormat>,
         cont: Option<Continuation>,
         r: JobResult,
     ) {
+        let SaveCtx {
+            doc: doc_id,
+            at,
+            revision,
+            expected,
+            fmt,
+            ..
+        } = *job;
         match r {
             JobResult::Saved { report, .. } => {
                 let report_method = report.method;
+                // 途中まで読んだ標準入力の文書 (`LoadIncomplete`) は、名前を付けて保存が成功したら理由を外す (保存した
+                // ファイルの全体と一致し、読まなかった後半を失う誤解が無い。03 §9.2.2 の「`LoadIncomplete` の外し方」)。
+                // 完了の文言は `info.save.partial_saved` (`{size}` は開いた量)
+                let partial = self.partial_size(doc_id);
                 if let Some(doc) = self.docs.documents.get_mut(&doc_id) {
-                    // `file.set_encoding`: 保存が成功したので新しい書式に確定する。往復の検査結果は旧文字コードのものなので捨てる
-                    // (書いた内容を再エンコードすれば同じバイト列になる、03 §8.8)
+                    if partial.is_some() {
+                        doc.read_only
+                            .remove(crate::document::ReadOnlyReason::LoadIncomplete);
+                    }
+                    // `file.set_encoding`: 保存が成功したので新しい書式に確定する。違う文字コードで書いたら、往復の検査結果
+                    // (旧文字コードのもの) と保持方式の記録を捨てる (状態も対象外に戻る。書いた内容を再エンコードすれば
+                    // 同じバイト列になる、03 §8.8)。同じ文字コードなら、表・状態・往復の要約を残す (記録を使って書いたので、
+                    // 記録は有効なまま。v0.3 までの「要約を空にする」は違う文字コードへ変えたときだけ、03 §8.7.1)
+                    // 違う文字コードで書いたら、本文のエスケープ文字の由来の文字コードも捨てる (`None`。この後に Undo で
+                    // エスケープ文字が戻っても元のバイトに戻さない、03 §8.3.1)。同じ文字コードなら変えない
                     if let Some(f) = fmt {
+                        if f.encoding != doc.format.encoding {
+                            doc.format.roundtrip = Default::default();
+                            doc.clear_preserved();
+                            doc.forget_escape_encoding();
+                        }
                         doc.format.encoding = f.encoding;
                         doc.format.has_bom = f.bom;
-                        doc.format.roundtrip = Default::default();
                     }
                     // 名前を付けて保存 (別のパスへ書いた) では、元のファイルに由来する読み取り専用の理由
                     // (属性・書込権限なし) を外す。書き込めた保存先の文書は編集できる (FR-116 AC-4、03 §9.6)。
@@ -664,12 +761,35 @@ impl EditorState {
                     revision,
                     path: path.display(),
                 });
-                let key = if report_method == SaveMethod::InPlace {
-                    keys::INFO_SAVE_IN_PLACE
-                } else {
-                    keys::INFO_SAVE_DONE
-                };
-                self.message(MessageLevel::Info, key, &path.display());
+                // 直接上書きで書いたことは 1 回示す (03 §9.3 手順 7)。つながりを承認した保存の完了は、`info.save.done` に
+                // 代えて `info.save.escape_merged` にする (03 §8.3.1 の「つながったまま保存した後」)。直接上書きでは
+                // `info.save.in_place` の後に出す (完了の要点を最後に残す)
+                if report_method == SaveMethod::InPlace {
+                    self.message(
+                        MessageLevel::Info,
+                        keys::INFO_SAVE_IN_PLACE,
+                        &path.display(),
+                    );
+                }
+                match job.merged {
+                    Some(count) => self.show_message(
+                        MessageLevel::Info,
+                        keys::INFO_SAVE_ESCAPE_MERGED,
+                        &[("path", &path.display()), ("count", &count.to_string())],
+                    ),
+                    None if report_method != SaveMethod::InPlace && partial.is_none() => {
+                        self.message(MessageLevel::Info, keys::INFO_SAVE_DONE, &path.display());
+                    }
+                    None => {}
+                }
+                // 途中までの文書は、つながりの知らせ (`info.save.escape_merged`) を出した後でも、印を外したことを最後に示す
+                if let Some(size) = partial.as_deref() {
+                    self.show_message(
+                        MessageLevel::Info,
+                        keys::INFO_SAVE_PARTIAL_SAVED,
+                        &[("path", &path.display()), ("size", size)],
+                    );
+                }
                 self.show_save_warning(path, &report.warnings);
                 self.mark_snapshot_update(doc_id);
                 // 保存の後に続ける操作 (開く・新規作成・終了)。保存が失敗したときは続けない
@@ -694,8 +814,9 @@ impl EditorState {
             JobResult::Unmappable {
                 total,
                 recorded,
+                escapes_unmappable,
+                escapes_restored,
                 encoding,
-                ..
             } if self.docs.documents.contains_key(&doc_id) && !recorded.is_empty() => {
                 // 該当箇所 (先頭 100 件) を強調する。次の編集まで残す (03 §8.6)
                 let indices: Vec<u64> = recorded.iter().map(|u| u.char_index).collect();
@@ -712,7 +833,18 @@ impl EditorState {
                     },
                     total,
                     encoding,
-                    recorded.iter().any(|u| is_escape_char(u.ch)),
+                    // 記録した先頭 100 件ではなく、全件で数えたエスケープ文字の数で判定する (03 §8.6 の「E3 の選択肢」)。
+                    // 元のバイトに戻したエスケープ文字があれば、UTF-8 では表現不能になるので「UTF-8 で保存」も出さない
+                    // (03 §8.3.1 の「E3 との関係」)
+                    EscapesInSave {
+                        unmappable: escapes_unmappable,
+                        restored: escapes_restored > 0,
+                        // 本文の「最初」はエスケープ文字の最初 (記録した先頭 100 件に無ければ表現不能の最初)
+                        first: recorded
+                            .iter()
+                            .find(|u| is_escape_char(u.ch))
+                            .map(|u| u.char_index),
+                    },
                 );
             }
             JobResult::Unmappable { total, .. } => {
@@ -722,6 +854,50 @@ impl EditorState {
                     &[
                         ("path", &path.display()),
                         ("reason", &format!("unmappable ({total})")),
+                    ],
+                );
+            }
+            // エスケープ文字を戻したバイトが隣とつながる (03 §8.3.1): 何も書いていない。書く前の確認
+            // (`ui.confirm.save.escape_merge`) を出す。後続 (終了・置き換え・開き直し) は「このまま保存」で保ち、
+            // キャンセルで捨てる (03 §9.7 (e))
+            JobResult::EscapeMerge {
+                total,
+                recorded,
+                digest,
+                changed_chars,
+                changed_lines,
+                to_eof,
+            } if self.docs.documents.contains_key(&doc_id) && !recorded.is_empty() => {
+                self.open_escape_merge(
+                    super::escape_merge::EscapeMergeAsk {
+                        doc: doc_id,
+                        path: path.clone(),
+                        expected,
+                        cont,
+                        strategy: job.strategy,
+                        fmt,
+                        base: revision,
+                        approval: crate::jobs::EscapeMergeApproval {
+                            total,
+                            recorded,
+                            digest,
+                        },
+                    },
+                    super::escape_merge::MergeExtent {
+                        chars: changed_chars,
+                        lines: changed_lines,
+                        to_eof,
+                    },
+                );
+            }
+            // 閉じた文書 (確認を出す先が無い): 保存の失敗として示す (退避先への書込は結果の処理が行う)
+            JobResult::EscapeMerge { total, .. } => {
+                self.show_message(
+                    MessageLevel::Error,
+                    keys::MSG_SAVE_FAILED,
+                    &[
+                        ("path", &path.display()),
+                        ("reason", &format!("escape merge ({total})")),
                     ],
                 );
             }
@@ -855,6 +1031,8 @@ impl EditorState {
                 let (level, key) = match err {
                     JobError::Cancelled => (MessageLevel::Info, keys::INFO_SAVE_ABORTED),
                     JobError::Fs(e) => (MessageLevel::Error, save_error_key(&e)),
+                    // 確認 (ii) の不一致 (03 §8.6 E2): 何も書いていない。別名で保存・退避先に保存を選べる
+                    JobError::VerifyFailed => (MessageLevel::Error, keys::MSG_SAVE_VERIFY_FAILED),
                     _ => (MessageLevel::Error, keys::MSG_SAVE_FAILED),
                 };
                 let backup = match &err_backup {

@@ -1,10 +1,11 @@
 //! `cargo xtask bench`: ベンチの記録 (docs/09-testing-quality.md §5.2 / §6、docs/11 §1)。
 //!
 //! 記録するもの: BM-103a (キー入力の core 区間、ヘッドレス。診断用)、BM-104 / BM-202 (サイズ別オープンの時間とメモリ、実ファイル。診断用。
-//! 判定は基準機)、BM-205 (配布ビルドの exe のサイズ)。
+//! 判定は基準機。v0.4 から区分 B の箇所が密なファイル `-dense` も参考に)、BM-107e (保存のジョブの時間。v0.4 の参考)、
+//! BM-205 (配布ビルドの exe のサイズ)。
 //! BM-101a (起動から最初の Frame まで) は計測用ビルドの隠しフラグと `bench-trace` (記録の仕組み) が要るので M3 以降。
 //! `--env ENV-W1 --out DIR` を付けると基準機の記録になる: BM-106 と、実バイナリを `ConPTY` で駆動する BM-101b / 102b / 103b / 107
-//! (`evoeditor` の `bm_pty`) も測り、DIR にベンチ ID ごとの JSON と `summary.md` を書く (`bench_report`、09 §5.3)。
+//! など (`evoeditor` の `bm_pty`。v0.4 の M25 から先行表示の BM-104v と、標準入力の起動の BM-120 (参考) も) も測り、DIR にベンチ ID ごとの JSON と `summary.md` を書く (`bench_report`、09 §5.3)。
 //! 結果は `target/bench/bench.json` に書く (`bench.yml` が Actions の artifact にする。リポジトリにはコミットしない)。
 //! CI ランナーの値は変動が大きい共有 VM のものなので、判定には使わない (09 §5.1)。`--quick` は動作確認用で、記録には使わない。
 
@@ -87,8 +88,10 @@ pub fn run_all(args: &[String]) -> Result<(), String> {
         results.push(line.to_owned());
     }
 
-    // BM-109 (100 MB のリテラル検索の全件の走査、ヘッドレス。参考値。docs/review/v0.3-findings.md の §3.3 の 5)
-    println!("▶ BM-109 (リテラル検索の全件の走査)");
+    // BM-109 (100 MB のリテラル検索の全件の走査、ヘッドレス。参考値。docs/review/v0.3-findings.md の §3.3 の 5) と、
+    // BM-109r (行単位の方式の全件の走査。v0.4 の S-04 で比べる相手、09 §5.2)。v0.4 の M24 から、行をまたぐ正規表現の
+    // BM-109m (全文の連結の参照と交互に 5 巡回す) と、CP932 互換文字の同一視の BM-109-compat も同じベンチが出す
+    println!("▶ BM-109 / BM-109r / BM-109m / BM-109-compat (検索の全件の走査)");
     let mut cmd = Command::new("cargo");
     cmd.args([
         "bench",
@@ -105,7 +108,11 @@ pub fn run_all(args: &[String]) -> Result<(), String> {
     let out = run_capture(&mut cmd)?;
     let lines: Vec<&str> = out
         .lines()
-        .filter(|l| l.starts_with("{\"id\":\"BM-109-"))
+        .filter(|l| {
+            l.starts_with("{\"id\":\"BM-109-")
+                || l.starts_with("{\"id\":\"BM-109r-")
+                || l.starts_with("{\"id\":\"BM-109m-")
+        })
         .collect();
     if lines.is_empty() {
         return Err("BM-109 の結果の行が見つかりません".to_owned());
@@ -115,9 +122,10 @@ pub fn run_all(args: &[String]) -> Result<(), String> {
         results.push(l.to_owned());
     }
 
-    // BM-104 / BM-202 (サイズ別オープンの時間とメモリ。実ファイル、Windows)。S-02 の最終判定の材料 (09 §5.2)
+    // BM-104 / BM-202 (サイズ別オープンの時間とメモリ。実ファイル、Windows)。S-02 の最終判定の材料 (09 §5.2)。
+    // v0.4 から、区分 B の箇所が密なファイルの読込 (`-dense`) と、保存のジョブの時間 BM-107e (参考) も同じベンチが出す
     if cfg!(windows) {
-        println!("▶ BM-104 / BM-202 (サイズ別オープンの時間とメモリ)");
+        println!("▶ BM-104 / BM-202 / BM-107e (サイズ別オープンの時間とメモリ、保存のジョブ)");
         let mut cmd = Command::new("cargo");
         cmd.args([
             "bench",
@@ -134,7 +142,7 @@ pub fn run_all(args: &[String]) -> Result<(), String> {
         let out = run_capture(&mut cmd)?;
         let lines: Vec<&str> = out
             .lines()
-            .filter(|l| l.starts_with("{\"id\":\"BM-104"))
+            .filter(|l| l.starts_with("{\"id\":\"BM-104") || l.starts_with("{\"id\":\"BM-107e-"))
             .collect();
         if lines.is_empty() {
             return Err("BM-104 の結果の行が見つかりません".to_owned());
@@ -200,11 +208,7 @@ pub fn run_all(args: &[String]) -> Result<(), String> {
 
     println!("▶ BM-205 (配布ビルドの exe のサイズ)");
     run_capture(Command::new("cargo").args(["build", "--release", "-p", "evoeditor"]))?;
-    let exe = root.join("target/release").join(if cfg!(windows) {
-        "evoeditor.exe"
-    } else {
-        "evoeditor"
-    });
+    let exe = crate::check_dist::release_exe(None);
     let bytes = std::fs::metadata(&exe)
         .map_err(|e| format!("{}: {e}", exe.display()))?
         .len();

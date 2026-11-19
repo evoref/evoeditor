@@ -49,23 +49,50 @@ impl EditorState {
             .any(|p| matches!(p, Pending::Save { doc, .. } | Pending::CheckUnchanged { doc } if *doc == doc_id))
     }
 
-    /// 進行中の読込 (開く・開き直し・再読込) の進捗 (百分率)。無ければ `None`。
-    pub(crate) fn loading_percent(&self) -> Option<u8> {
-        self.io.pending.values().find_map(|p| match p {
-            Pending::Open { doc, .. } => self.docs.documents.get(doc).map(|d| d.load_percent),
+    /// 表示していない文書の、新しく開く読込 (`file.open`・起動時の 2 つ目以降のパス) のジョブ。ステータスバーが
+    /// 読込中として示し、`Esc` が取り消す読込 (表示中の文書が読込中でないとき。03 §9.8 の「読込中のバッファ」)。
+    /// ほかの文書の再読込・開き直しは含めない。
+    fn hidden_open_loads(&self) -> impl Iterator<Item = (eve_view::JobId, DocumentId)> + '_ {
+        let active = self.active_document();
+        self.io.pending.iter().filter_map(move |(id, p)| match p {
+            Pending::Open {
+                doc,
+                kind: OpenKind::Open,
+                ..
+            } if Some(*doc) != active => Some((*id, *doc)),
             _ => None,
         })
     }
 
-    /// 読込中の文書の読込ジョブを取り消す。取り消すものがあれば `true`。
+    /// 表示していない文書の新しく開く読込 (`hidden_open_loads`) の進捗 (百分率)。無ければ `None`。
+    /// 表示中の文書が読込中なら、ステータスバーはその文書の進捗を出す (`ui_model/chrome.rs`)。
+    pub(crate) fn loading_percent(&self) -> Option<u8> {
+        self.hidden_open_loads()
+            .find_map(|(_, doc)| self.docs.documents.get(&doc).map(|d| d.load_percent))
+    }
+
+    /// `Esc` (`ui.cancel`) で読込を取り消す (03 §9.8 の「読込中のバッファ」)。表示中の文書が読込中 (`Loading` /
+    /// `Partial`。開く・再読込・開き直しのどれでも) ならその文書の読込だけを、表示中の文書が読込中でなければ、表示して
+    /// いない文書の新しく開く読込を取り消す。ほかの文書の再読込・開き直しは取り消さない。取り消すものがあれば `true`。
     pub(crate) fn cancel_loading(&mut self) -> bool {
-        let ids: Vec<_> = self
+        // 表示中の文書が読込中の標準入力の文書なら、取り消さずに読むのをやめるかを尋ねる (03 §9.2.2 の「取消し (`Esc`)」)。
+        // 表示していない標準入力の読込には触れない (下の 2 つはファイルの読込 `Pending::Open` だけを見る)
+        if self.confirm_stdin_stop() {
+            return true;
+        }
+        let active = self.active_document();
+        let own: Vec<_> = self
             .io
             .pending
             .iter()
-            .filter(|(_, p)| matches!(p, Pending::Open { .. }))
+            .filter(|(_, p)| matches!(p, Pending::Open { doc, .. } if Some(*doc) == active))
             .map(|(id, _)| *id)
             .collect();
+        let ids: Vec<_> = if own.is_empty() {
+            self.hidden_open_loads().map(|(id, _)| id).collect()
+        } else {
+            own
+        };
         for id in &ids {
             self.jobs.cancel(*id);
         }
@@ -91,6 +118,8 @@ impl EditorState {
     /// (結果が失敗なら退避先に書く。03 §9.2 の閉じる手順 (a))。
     pub fn close_document(&mut self, doc: DocumentId) {
         self.io.open_jumps.remove(&doc);
+        // 先行表示の先頭は文書ごと捨てる (03 §9.2.1 の「失敗・取消し・閉じる」)
+        self.forget_partial_state(doc);
         self.docs.views.retain(|_, v| v.doc != doc);
         let saving = self
             .io
@@ -113,6 +142,8 @@ impl EditorState {
     /// すでに文書があるときは、読込が終わるまで今の文書を表示し続け、完了で置き換える。
     pub fn open_path(&mut self, raw_path: &str, opts: OpenOptions) -> CommandResult {
         let opts = OpenOptions {
+            // 新しく開く読込なので、先行表示を送ってよい (03 §9.2.1。再読込・開き直しは io/reload.rs で立てない)
+            partial: true,
             default_eol: opts.default_eol.or(Some(self.config_eol())),
             huge_file_warn_bytes: opts
                 .huge_file_warn_bytes
@@ -185,12 +216,22 @@ impl EditorState {
         let Some(doc_id) = self.active_document() else {
             return CommandResult::Rejected(RejectReason::NoTarget);
         };
+        // 名前の入力 (無題の文書)・未編集の照合 (手順 0) より先に拒否する (03 §9.7 の「連鎖の開始時の拒否」)
+        if self.reject_stateful_invalid(doc_id, None) {
+            return CommandResult::Rejected(RejectReason::NotAvailable);
+        }
         let Some(doc) = self.document(doc_id) else {
             return CommandResult::Rejected(RejectReason::NoTarget);
         };
         let Some(path) = doc.path.clone() else {
             // パスがなければ名前を尋ねる
-            self.open_prompt(PromptKind::SaveAs { then: None }, String::new());
+            self.open_prompt(
+                PromptKind::SaveAs {
+                    doc: doc_id,
+                    then: None,
+                },
+                String::new(),
+            );
             return CommandResult::Done;
         };
         if self.save_in_progress(doc_id) {
@@ -226,6 +267,17 @@ impl EditorState {
         let Some(doc_id) = self.active_document() else {
             return CommandResult::Rejected(RejectReason::NoTarget);
         };
+        self.set_encoding_for(doc_id, enc, bom)
+    }
+
+    /// `set_encoding` の対象を文書 `doc_id` に固定する版 (文字コードの入力の確定。対象は入力を開いた時点の文書、
+    /// 03 §9.8 の「入力・確認の対象」)。
+    pub(crate) fn set_encoding_for(
+        &mut self,
+        doc_id: DocumentId,
+        enc: Option<Encoding>,
+        bom: Option<bool>,
+    ) -> CommandResult {
         let Some(doc) = self.docs.documents.get(&doc_id) else {
             return CommandResult::Rejected(RejectReason::NoTarget);
         };
@@ -233,7 +285,7 @@ impl EditorState {
             return CommandResult::Rejected(RejectReason::NotAvailable);
         }
         let Some(enc) = enc else {
-            self.open_prompt(PromptKind::SetEncoding { bom }, String::new());
+            self.open_prompt(PromptKind::SetEncoding { doc: doc_id, bom }, String::new());
             return CommandResult::Done;
         };
         // BOM: UTF-16 は付ける、UTF-8 は今の文書のまま、それ以外は BOM を持たない (指定しても誤りにしない)
@@ -245,6 +297,13 @@ impl EditorState {
         let fmt = NewFormat {
             encoding: enc,
             bom: has_bom,
+        };
+        // 書式が決まった直後、名前の入力 (無題・読み取り専用の文書) より先に拒否する (03 §9.7 の「連鎖の開始時の拒否」)
+        if self.reject_stateful_invalid(doc_id, Some(fmt)) {
+            return CommandResult::Rejected(RejectReason::NotAvailable);
+        }
+        let Some(doc) = self.docs.documents.get(&doc_id) else {
+            return CommandResult::Rejected(RejectReason::NoTarget);
         };
         let path = doc.path.clone();
         if self.save_in_progress(doc_id) {
@@ -259,7 +318,7 @@ impl EditorState {
             }
             other => {
                 let initial = other.as_ref().map(FsPath::display).unwrap_or_default();
-                self.open_prompt(PromptKind::SaveAsFormat { fmt }, initial);
+                self.open_prompt(PromptKind::SaveAsFormat { doc: doc_id, fmt }, initial);
                 CommandResult::Done
             }
         }
@@ -270,6 +329,16 @@ impl EditorState {
         let Some(doc_id) = self.active_document() else {
             return CommandResult::Rejected(RejectReason::NoTarget);
         };
+        self.reopen_with_encoding_for(doc_id, enc)
+    }
+
+    /// `reopen_with_encoding` の対象を文書 `doc_id` に固定する版 (文字コードの入力の確定・「編集を許可」の確認の
+    /// 「文字コードを指定して開き直す」。対象は入力・確認を開いた時点の文書、03 §9.8 の「入力・確認の対象」)。
+    pub(crate) fn reopen_with_encoding_for(
+        &mut self,
+        doc_id: DocumentId,
+        enc: Option<Encoding>,
+    ) -> CommandResult {
         let Some(doc) = self.docs.documents.get(&doc_id) else {
             return CommandResult::Rejected(RejectReason::NoTarget);
         };
@@ -290,7 +359,7 @@ impl EditorState {
             return CommandResult::Rejected(RejectReason::NotAvailable);
         }
         let Some(enc) = enc else {
-            self.open_prompt(PromptKind::ReopenEncoding, String::new());
+            self.open_prompt(PromptKind::ReopenEncoding { doc: doc_id }, String::new());
             return CommandResult::Done;
         };
         if self.confirm_doc_if_dirty(doc_id, "unsaved_reopen", Continuation::Reopen(doc_id, enc)) {
@@ -336,6 +405,7 @@ impl EditorState {
                 details: Vec::new(),
                 default: 1,
                 focused: 1,
+                message: None,
                 action: ConfirmAction::Reload(doc_id),
             });
             return CommandResult::Done;
@@ -351,6 +421,7 @@ pub(crate) fn reason_label(err: &JobError) -> String {
         JobError::Panic => "panic".to_owned(),
         JobError::OutOfMemory { .. } => "out of memory".to_owned(),
         JobError::Cancelled => "cancelled".to_owned(),
+        JobError::VerifyFailed => "verify failed".to_owned(),
     }
 }
 

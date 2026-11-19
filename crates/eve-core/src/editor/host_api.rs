@@ -17,8 +17,12 @@ pub struct StartupConfig {
     pub user_theme: Option<(String, Option<eve_config::theme::Theme>)>,
     /// 設定の読込元 (`config.reload` が同じ元を読み直す、07 §6)。
     pub config_sources: Option<ConfigSources>,
-    /// UI の言語 (07 §17.1)。
+    /// UI の言語 (07 §17.1)。文言の表は、その言語の同梱の表になる。
     pub locale: Option<eve_config::Locale>,
+    /// 選んだ言語の文言の表 (同梱の表にユーザーの言語ファイルを重ねたもの、07 §17.4)。`locale` の後に当てる。
+    pub catalog: Option<std::sync::Arc<eve_config::Catalog>>,
+    /// ユーザーの言語ファイルの事実 (候補の言語・選んだ言語のファイルの起動時の大きさと更新日時。07 §17.4)。
+    pub locale_files: Option<crate::io::config_reload::LocaleFiles>,
 }
 
 /// 起動の後に Host が Editor に知らせる事実。
@@ -35,6 +39,14 @@ pub enum HostReport<'a> {
         /// 設定ファイルの表示名。
         file: &'a str,
         /// そのファイルの診断。
+        diagnostics: &'a [eve_config::Diagnostic],
+    },
+    /// ユーザーの言語ファイル・言語の選択の診断 (07 §17.4)。`ConfigDiagnostics` と同じ経路で出すが、文言は補う言語の
+    /// 同梱の表で出し、`config.reload` でも一覧に残す。`file` は `locales/<lang>.toml`・`locales/`・`--locale`・`EVE_LANG`。
+    LocaleDiagnostics {
+        /// 表示名。
+        file: &'a str,
+        /// その診断。
         diagnostics: &'a [eve_config::Diagnostic],
     },
     /// システムのクリップボードを使えず、内部レジスタに切り替えた (書込・取得の失敗、非対応、上限の超過、取得の期限切れ。
@@ -68,6 +80,12 @@ impl Editor {
         if let Some(locale) = c.locale {
             st.set_locale(locale);
         }
+        if let Some(catalog) = c.catalog {
+            st.set_catalog(catalog);
+        }
+        if let Some(files) = c.locale_files {
+            st.io.locale_files = files;
+        }
     }
 
     /// Host が知った事実を渡す。
@@ -76,6 +94,9 @@ impl Editor {
             HostReport::Viewport { cols, rows } => self.state.set_viewport(cols, rows),
             HostReport::ConfigDiagnostics { file, diagnostics } => {
                 self.state.report_config(file, diagnostics);
+            }
+            HostReport::LocaleDiagnostics { file, diagnostics } => {
+                self.state.report_locale(file, diagnostics);
             }
             HostReport::ClipboardFallback { reason } => {
                 self.state.notify_clipboard_fallback(reason)

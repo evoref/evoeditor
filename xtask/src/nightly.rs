@@ -2,7 +2,10 @@
 //! チェックアウトしたコードのこのコマンドを呼ぶ (手順の中身は対象のブランチの `xtask` にあるので、トリガを直さずに済む)。Linux 前提。
 //!
 //! v0.1 の手順 (`--only` で絞れる):
-//! - `fuzz`: `fuzz_decode`・`fuzz_editor` (v0.2)・`fuzz_encode`・`fuzz_vt_input` (v0.3) を、それぞれ `--fuzz-seconds` (既定 1200 秒。09 §6.3 の v0.2)。`-close_fd_mask=3` で入力とスタックをログに出さない。クラッシュ入力は
+//! - `fuzz`: `fuzz_decode`・`fuzz_editor` (v0.2)・`fuzz_encode`・`fuzz_vt_input` (v0.3)・`fuzz_regex_search` (v0.4) を、それぞれ `--fuzz-seconds` (既定 960 秒。5 つの合計 80 分。09 §6.3)。
+//!   ターゲットを絞らないときは、5 つの合計が `FUZZ_TOTAL_SECONDS` (80 分) を超えないように 1 つの時間を抑える (既定のブランチの
+//!   nightly.yml が古い既定の 1200 秒を渡しても、夜間の段がジョブの上限 240 分に収まるように)。
+//!   `--only fuzz:fuzz_decode+fuzz_editor` のように回すターゲットを絞れる (リリース前の各 1 時間、09 §8.2。5 つ × 1 時間はジョブの上限 240 分に収まらない)。`-close_fd_mask=3` で入力とスタックをログに出さない。クラッシュ入力は
 //!   `.github/fuzz-recipients.txt` の公開鍵で `age` により暗号化し、平文は消す (artifact に上げるのは暗号化したものだけ)。
 //! - `proptest`: `PROPTEST_CASES=10000` で Linux CI の対象 crate のテスト。
 //! - `audit`: `cargo audit` と `cargo deny check advisories` (本体と `fuzz/`)。例外は `deny.toml` の `[advisories] ignore` の 1 か所。
@@ -47,23 +50,17 @@ const STEPS: [&str; 6] = ["fuzz", "proptest", "audit", "coverage", "crash", "soa
 
 pub fn run_all(args: &[String]) -> Result<(), String> {
     let explicit = flag(args, "--only").is_some();
-    let only: Vec<String> = flag(args, "--only")
-        .map(|v| v.split(',').map(str::to_owned).collect())
-        .unwrap_or_else(|| STEPS.iter().map(|s| (*s).to_owned()).collect());
-    for o in &only {
-        if !STEPS.contains(&o.as_str()) {
-            return Err(format!(
-                "知らない手順です: {o} (fuzz / proptest / audit / coverage / crash / soak)"
-            ));
-        }
-    }
+    let (only, fuzz_targets) = match flag(args, "--only") {
+        Some(v) => parse_only(v)?,
+        None => (STEPS.iter().map(|s| (*s).to_owned()).collect(), None),
+    };
     let fuzz_seconds: u64 = flag(args, "--fuzz-seconds")
         .map(|v| {
             v.parse()
                 .map_err(|_| format!("--fuzz-seconds が数ではありません: {v}"))
         })
         .transpose()?
-        .unwrap_or(1200);
+        .unwrap_or(FUZZ_SECONDS_DEFAULT);
     let seed: u64 = flag(args, "--seed")
         .map(|v| {
             v.parse()
@@ -105,7 +102,13 @@ pub fn run_all(args: &[String]) -> Result<(), String> {
             continue;
         }
         let r = match *step {
-            "fuzz" => fuzz(fuzz_seconds, seed, &out_dir, &mut summary),
+            "fuzz" => fuzz(
+                fuzz_targets.as_deref().unwrap_or(&FUZZ_TARGETS),
+                fuzz_seconds_for(fuzz_seconds, fuzz_targets.is_some()),
+                seed,
+                &out_dir,
+                &mut summary,
+            ),
             "soak" => soak(soak_minutes.unwrap_or(60), &out_dir, &mut summary),
             "proptest" => proptest(),
             "audit" => audit(),
@@ -131,6 +134,42 @@ pub fn run_all(args: &[String]) -> Result<(), String> {
     }
 }
 
+/// `--only` の値を読む: 手順のカンマ区切り。fuzz は `fuzz:<ターゲット>+<ターゲット>` で回すターゲットを絞れる
+/// (例 `fuzz:fuzz_decode+fuzz_editor,audit`。リリース前の各 1 時間の fuzz を、ジョブの上限 240 分に収めるため、09 §8.2)。
+/// 返すのは (手順, 絞ったときの fuzz のターゲット)。
+fn parse_only(v: &str) -> Result<(Vec<String>, Option<Vec<&'static str>>), String> {
+    let mut steps = Vec::new();
+    let mut targets = None;
+    for item in v.split(',') {
+        let (step, rest) = item
+            .split_once(':')
+            .map_or((item, None), |(a, b)| (a, Some(b)));
+        if !STEPS.contains(&step) {
+            return Err(format!(
+                "知らない手順です: {step} (fuzz / proptest / audit / coverage / crash / soak)"
+            ));
+        }
+        if let Some(rest) = rest {
+            if step != "fuzz" {
+                return Err(format!("ターゲットを絞れるのは fuzz だけです: {item}"));
+            }
+            let mut list = Vec::new();
+            for t in rest.split('+') {
+                let known = FUZZ_TARGETS.iter().find(|k| **k == t).ok_or_else(|| {
+                    format!(
+                        "知らない fuzz のターゲットです: {t} ({})",
+                        FUZZ_TARGETS.join(" / ")
+                    )
+                })?;
+                list.push(*known);
+            }
+            targets = Some(list);
+        }
+        steps.push(step.to_owned());
+    }
+    Ok((steps, targets))
+}
+
 fn flag<'a>(args: &'a [String], name: &str) -> Option<&'a String> {
     args.iter()
         .position(|a| a == name)
@@ -153,16 +192,44 @@ fn commit() -> String {
 /// libFuzzer が書く、失敗した入力のファイル名の接頭辞。
 const CRASH_PREFIXES: [&str; 3] = ["crash-", "oom-", "timeout-"];
 
-/// fuzz のターゲット (docs/09 §3.3)。それぞれ `--fuzz-seconds` 秒ずつ回す。
-const FUZZ_TARGETS: [&str; 4] = ["fuzz_decode", "fuzz_editor", "fuzz_encode", "fuzz_vt_input"];
+/// 1 つのターゲットを回す時間の既定 (秒)。5 つで合計 80 分。
+const FUZZ_SECONDS_DEFAULT: u64 = 960;
 
-fn fuzz(seconds: u64, seed: u64, out_dir: &Path, summary: &mut Vec<String>) -> Result<(), String> {
+/// ターゲットを絞らない夜間の fuzz の合計の上限 (秒)。夜間の段 (fuzz・proptest・audit・coverage・crash・soak) がジョブの上限
+/// 240 分に収まるように (09 §8.2。v0.4 の M24 で 5 つ目を足したとき、20 分 × 5 では段の合計が 240 分に迫った)。
+const FUZZ_TOTAL_SECONDS: u64 = 80 * 60;
+
+/// 1 つのターゲットを回す時間。ターゲットを絞らないときは、合計が `FUZZ_TOTAL_SECONDS` を超えないように抑える (リリース前の
+/// 各 1 時間は、ターゲットを `--only fuzz:<…>` で絞って回すので抑えない)。
+fn fuzz_seconds_for(seconds: u64, narrowed: bool) -> u64 {
+    if narrowed {
+        return seconds;
+    }
+    seconds.min(FUZZ_TOTAL_SECONDS / FUZZ_TARGETS.len() as u64)
+}
+
+/// fuzz のターゲット (docs/09 §3.3)。それぞれ `--fuzz-seconds` 秒ずつ回す。
+const FUZZ_TARGETS: [&str; 5] = [
+    "fuzz_decode",
+    "fuzz_editor",
+    "fuzz_encode",
+    "fuzz_vt_input",
+    "fuzz_regex_search",
+];
+
+fn fuzz(
+    targets: &[&str],
+    seconds: u64,
+    seed: u64,
+    out_dir: &Path,
+    summary: &mut Vec<String>,
+) -> Result<(), String> {
     let artifacts = out_dir.join("fuzz-artifacts");
     let _ = std::fs::remove_dir_all(&artifacts);
     std::fs::create_dir_all(&artifacts).map_err(|e| format!("{}: {e}", artifacts.display()))?;
     let host = host_triple()?;
     let mut errs = Vec::new();
-    for target in FUZZ_TARGETS {
+    for &target in targets {
         if let Err(e) = fuzz_one(target, &host, seconds, seed, &artifacts, summary) {
             errs.push(e);
         }
@@ -503,6 +570,27 @@ mod tests {
                 "ci.yml と Cargo.toml の linux-ci-crates が違う: {l}"
             );
         }
+    }
+
+    #[test]
+    fn only_で_fuzz_のターゲットを絞る() {
+        let (steps, t) = parse_only("fuzz:fuzz_decode+fuzz_editor,audit").unwrap();
+        assert_eq!(steps, ["fuzz", "audit"]);
+        assert_eq!(t, Some(vec!["fuzz_decode", "fuzz_editor"]));
+        // 絞らない夜間は合計 80 分 (1 つ 960 秒) に抑え、絞ったリリース前の 1 時間は抑えない
+        assert_eq!(fuzz_seconds_for(1200, false), 960);
+        assert_eq!(fuzz_seconds_for(600, false), 600);
+        assert_eq!(fuzz_seconds_for(3600, true), 3600);
+        assert_eq!(
+            FUZZ_SECONDS_DEFAULT * FUZZ_TARGETS.len() as u64,
+            FUZZ_TOTAL_SECONDS
+        );
+        let (steps, t) = parse_only("fuzz,crash").unwrap();
+        assert_eq!(steps, ["fuzz", "crash"]);
+        assert_eq!(t, None);
+        assert!(parse_only("fuzz:fuzz_nothing").is_err());
+        assert!(parse_only("audit:fuzz_decode").is_err());
+        assert!(parse_only("fuzzz").is_err());
     }
 
     #[test]

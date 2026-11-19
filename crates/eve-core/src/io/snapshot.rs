@@ -20,7 +20,8 @@ pub struct DocSnapshot {
     pub revision: Revision,
     /// 保存点がある (= ディスク上に保存済みの版がある)。復旧の案内に使う。
     pub saved_node_exists: bool,
-    /// 秘密ファイルのパターンに一致する (パターンの正本は 07。`is_secret_path` で判定する)。
+    /// 秘密ファイルのパターンに一致する (パターンの正本は 07。`is_secret_path` で判定する)、または標準入力から読んだ文書
+    /// (03 §9.2.2)。
     pub sensitive: bool,
     /// ファイルのパス。無題の文書は `None`。
     pub path: Option<FsPath>,
@@ -60,8 +61,9 @@ impl crate::editor::state::EditorState {
             format: d.format.clone(),
             revision: d.revision(),
             saved_node_exists: d.history().saved().is_some(),
-            // 秘密ファイルパターン (docs/07 §5.12.2) に一致する文書。退避の manifest の `sensitive` と、終了時の削除の案内になる
-            sensitive: d.path.as_ref().is_some_and(crate::is_secret_path),
+            // 秘密ファイルパターン (docs/07 §5.12.2) に一致する文書と、標準入力から読んだ文書 (常に。03 §9.2.2 の
+            // 「スワップと緊急退避」、OQ-219 の 5)。退避の manifest の `sensitive` と、終了時の削除の案内になる
+            sensitive: d.stdin.is_some() || d.path.as_ref().is_some_and(crate::is_secret_path),
             path: d.path.clone(),
             untitled_name: d.path.is_none().then(|| self.untitled_label(d)),
         })

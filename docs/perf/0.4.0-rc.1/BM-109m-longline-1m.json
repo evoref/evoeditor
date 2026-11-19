@@ -1,0 +1,28 @@
+{
+  "commit": "90b2c81",
+  "env": "ENV-W1",
+  "id": "BM-109m-longline-1m",
+  "quick": false,
+  "results": [
+    {
+      "id": "BM-109m-longline-1m",
+      "lines": 53,
+      "matches": 15,
+      "max_ms": 0.6,
+      "mb": 1,
+      "min_ms": 0.4,
+      "n": 5,
+      "p50_ms": 0.4,
+      "quick": false,
+      "ratio": 0.58,
+      "ratio_max": 0.67,
+      "ratio_min": 0.49,
+      "ref_p50_ms": 0.8,
+      "sync_max_ms": 0.028,
+      "sync_n": 80,
+      "sync_p50_ms": 0.006,
+      "sync_p99_ms": 0.01,
+      "sync_positions": 4
+    }
+  ]
+}

@@ -283,6 +283,10 @@ fn fsync_dir(dir: &Path) -> bool {
 }
 
 impl FileSystem for UnixFs {
+    fn list_dir_names(&self, dir: &FsPath) -> Result<Vec<String>, FsError> {
+        crate::fs_common::list_dir_names(dir)
+    }
+
     fn metadata(&self, path: &FsPath) -> Result<FileMeta, FsError> {
         let p = path.as_path();
         fs::metadata(p)

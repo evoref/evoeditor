@@ -1,0 +1,18 @@
+ 1│こんにちは、世界
+ 2│hello Fox ^[ Foo
+ 3│>   タブと[]全角スペース
+ 4│
+~
+~
+~
+~
+~
+~
+~
+~
+~
+検索: Fo                                               [Aa~] [.*] [ab] [sel] 1/2
+memo.txt                                        (3 文字選択) 行 1, 桁 4 UTF-8 LF
+
+Esc 取消  Enter 次へ  Alt+C 大小
+cursor: Some(CellPos { col: 8, row: 13 })

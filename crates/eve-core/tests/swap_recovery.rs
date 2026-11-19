@@ -45,6 +45,7 @@ fn entry(dir: &str, path: Option<&str>, owner: SwapOwner, readable: bool) -> Swa
             nanos: 0,
         }),
         readable,
+        encoding: None,
     }
 }
 
@@ -54,6 +55,7 @@ fn body(text: &str) -> SwapBody {
         encoding: Encoding::Utf8,
         has_bom: false,
         default_eol: LineEnding::Lf,
+        pua_escaped: false,
     }
 }
 
@@ -90,6 +92,7 @@ fn 無題で空の文書に_無題のスワップを提案し_適用すると_di
             encoding: Encoding::ShiftJis,
             has_bom: false,
             default_eol: LineEnding::Crlf,
+            pua_escaped: false,
         }),
     )]);
     assert_eq!(h.overlay(), "dialog", "{:?}", h.messages());
@@ -175,6 +178,7 @@ fn パスのある文書は開いた形式のまま本文だけ置き換える()
             encoding: Encoding::ShiftJis,
             has_bom: true,
             default_eol: LineEnding::Crlf,
+            pua_escaped: false,
         }),
     )]);
     h.answer(0);

@@ -66,9 +66,9 @@
   This configuration file is not used because its syntax is invalid: inherits が循環しています (cycle_a)
   Fix the line shown. Until then the defaults are used
 ## theme: missing (themes/missing.toml, 使える: false)
-0:0	Error		""
-  This configuration file is not used because its syntax is invalid: テーマ missing がありません
-  Fix the line shown. Until then the defaults are used
+0:0	Error	theme.name	"missing"
+  There is no theme named missing
+  Write the name of a built-in theme or of a theme file in themes/. The default theme is used for now
 ## theme: broken (themes/broken.toml, 使える: false)
 1:4	Error		""
   This configuration file is not used because its syntax is invalid: unclosed table, expected `]`

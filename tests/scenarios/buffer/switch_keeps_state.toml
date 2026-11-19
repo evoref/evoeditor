@@ -25,10 +25,11 @@ open = "b.txt"
 open = "c.txt"
 [[step]]
 run_jobs = true
+# 読込の完了で b、続けて c へ切り替わる (c の切り替え元は b に書き換わる、03 §9.8)。c から開いた順に 2 つ戻って a へ
 [[step]]
-cmd = "buffer.next"
+cmd = "buffer.prev"
 [[step]]
-cmd = "buffer.next"
+cmd = "buffer.prev"
 [[step]]
 keys = "ctrl+z"
 

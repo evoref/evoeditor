@@ -12,6 +12,7 @@ use crate::ascii::{AsciiOptions, render_ascii};
 struct Shared {
     frames: Vec<Frame>,
     restored: u32,
+    reinits: u32,
     sink: Option<InputSink>,
     osc52: Vec<String>,
 }
@@ -74,6 +75,15 @@ impl HeadlessProbe {
     pub fn restore_count(&self) -> u32 {
         self.0.lock().unwrap().restored
     }
+
+    /// `reinit_terminal` が呼ばれた回数 (標準入力を読み終えたときに 1 回、docs/03 §9.2.2)。
+    ///
+    /// # Panics
+    ///
+    /// 内部の `Mutex` が汚れているとき。
+    pub fn reinit_count(&self) -> u32 {
+        self.0.lock().unwrap().reinits
+    }
 }
 
 /// 端末を持たない `Frontend`。`render` された `Frame` を記録し、`Effect` は処理しない (`Unhandled`)。
@@ -134,6 +144,10 @@ impl Frontend for HeadlessFrontend {
 
     fn apply_effect(&mut self, _eff: &Effect) -> EffectOutcome {
         EffectOutcome::Unhandled
+    }
+
+    fn reinit_terminal(&mut self) {
+        self.shared.0.lock().unwrap().reinits += 1;
     }
 
     fn restore(&mut self) {

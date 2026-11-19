@@ -1,0 +1,47 @@
+# 既定 (`search.newline_sugar = true`) では、正規表現の `\n` は改行 1 つ (LF・CRLF・CR のどれか) に一致する
+# (07 §5.5、03 §12.3.1 の表。`newline_sugar_off` と同じ文書・検索語で一致が違う)。
+[meta]
+id = "search/newline_sugar_on"
+title = "既定では改行の糖衣が LF・CRLF・CR のどの改行にも一致する"
+verifies = ["AC-FR-402-5"]
+since = "v0.4"
+tags = ["search", "regex", "multiline", "config"]
+
+[setup]
+size = [60, 12]
+
+[setup.fs]
+"a.txt" = { text = "a\r\nb\nc\rd" }
+
+[[step]]
+open = "a.txt"
+[[step]]
+run_jobs = true
+[[step]]
+keys = "ctrl+f"
+[[step]]
+keys = "alt+r"
+[[step]]
+text = '\w\n\w'
+[[step]]
+run_jobs = true
+[[step]]
+keys = "enter"
+[[step]]
+keys = "enter"
+[[step]]
+keys = "enter"
+
+# CRLF をまたぐ一致 (バイト 0〜4) と CR をまたぐ一致 (5〜8) の 2 件。重ならない一致を左から選ぶので、LF をまたぐ
+# 3〜6 は 1 件目と重なって採らない。3 回目の次へで折り返す
+[[assert]]
+at = 7
+query = { kind = "selection" }
+expect = { anchor = 0, head = 4 }
+[[assert]]
+at = 8
+query = { kind = "selection" }
+expect = { anchor = 5, head = 8 }
+[[assert]]
+query = { kind = "selection" }
+expect = { anchor = 0, head = 4 }

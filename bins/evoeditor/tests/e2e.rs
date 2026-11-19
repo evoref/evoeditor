@@ -43,6 +43,8 @@ struct Session {
     // pty を閉じないよう保持する (`close_console` で手放すと CTRL_CLOSE_EVENT が起きる)
     master: Option<Box<dyn MasterPty + Send>>,
     state: PathBuf,
+    /// 状態ディレクトリをこのセッションが作ったか (作ったものだけを、成功で終わるときに `Drop` で消す)。
+    owns_state: bool,
 }
 
 impl Session {
@@ -58,6 +60,7 @@ impl Session {
     /// 環境変数を足して起動する (`EVE_TEST_HOOK` など)。
     fn start_with(args: &[&str], state: Option<PathBuf>, envs: &[(&str, &str)]) -> Session {
         // 利用者の状態ディレクトリを汚さない (保存中フラグ・退避はここに書く)
+        let owns_state = state.is_none();
         let state = state.unwrap_or_else(|| {
             let dir = std::env::temp_dir().join(format!(
                 "evo-e2e-state-{}-{}",
@@ -111,6 +114,7 @@ enabled = {swap}
             raw,
             master: Some(pty.master),
             state,
+            owns_state,
         }
     }
 
@@ -262,6 +266,13 @@ enabled = {swap}
 impl Drop for Session {
     fn drop(&mut self) {
         let _ = self.child.kill();
+        // 自分で作った状態ディレクトリを消す (試験ごとに %TEMP% に残さない)。試験が落ちたとき (panic の巻き戻し) は、
+        // 退避・ログを後から見られるよう残す。子が終わってファイルを手放してから消す。前のセッションの状態ディレクトリを
+        // 引き継いだセッション (`start_in` に渡した) は消さない (作ったセッションが後で消す)
+        if self.owns_state && !thread::panicking() {
+            let _ = self.child.wait();
+            let _ = std::fs::remove_dir_all(&self.state);
+        }
     }
 }
 
@@ -474,21 +485,38 @@ fn run_from_palette(s: &Session, query: &str) {
     s.send(b"\r");
 }
 
+/// コミットメッセージのひな形 (1 行目は空。`#` の行は、読込が済んだことを画面で確かめるための本文)。
+const COMMIT_TEMPLATE: &[u8] = b"\n# message\n";
+
+/// [`COMMIT_TEMPLATE`] の読込が済むまで待つ。
+///
+/// ファイル名は読込の前からタブに出る。読込中の文書は編集できず、その間に打った文字は捨てられるので、
+/// 本文が見えるまで待ってから打つ。
+fn wait_commit_loaded(s: &Session) {
+    s.wait_for("本文", |t| {
+        t.contains("COMMIT_EDITMSG") && t.contains("# message")
+    });
+}
+
 // 失敗として終了 (`app.quit_with_error`、07 §18.4): 未保存の確認の後、保存せずに終了コード 4 で終わる
 #[test]
 fn 失敗として終了はパレットから実行して終了コード_4() {
     let dir = temp_dir("quit_error");
     let path = dir.join("COMMIT_EDITMSG");
-    std::fs::write(&path, b"\n").unwrap();
+    std::fs::write(&path, COMMIT_TEMPLATE).unwrap();
     let mut s = Session::start(&[path.to_str().unwrap()]);
-    s.wait_for("最初の画面", |t| t.contains("COMMIT_EDITMSG"));
+    wait_commit_loaded(&s);
     type_slowly(&s, "wip");
     s.wait_for("編集した", |t| t.contains("[+]"));
     run_from_palette(&s, "app.quit_with_error");
     s.wait_for("未保存の確認", |t| t.contains("[D]"));
     s.send(b"d");
     assert_eq!(s.wait_exit(), 4);
-    assert_eq!(std::fs::read(&path).unwrap(), b"\n", "保存していない");
+    assert_eq!(
+        std::fs::read(&path).unwrap(),
+        COMMIT_TEMPLATE,
+        "保存していない"
+    );
     let _ = std::fs::remove_dir_all(dir);
 }
 
@@ -497,14 +525,14 @@ fn 失敗として終了はパレットから実行して終了コード_4() {
 fn 保存して終了はパレットから実行して保存し終了コード_0() {
     let dir = temp_dir("save_quit");
     let path = dir.join("COMMIT_EDITMSG");
-    std::fs::write(&path, b"\n").unwrap();
+    std::fs::write(&path, COMMIT_TEMPLATE).unwrap();
     let mut s = Session::start(&[path.to_str().unwrap()]);
-    s.wait_for("最初の画面", |t| t.contains("COMMIT_EDITMSG"));
+    wait_commit_loaded(&s);
     type_slowly(&s, "fix");
     s.wait_for("編集した", |t| t.contains("[+]"));
     run_from_palette(&s, "app.save_and_quit");
     assert_eq!(s.wait_exit(), 0);
-    assert_eq!(std::fs::read(&path).unwrap(), b"fix\n");
+    assert_eq!(std::fs::read(&path).unwrap(), b"fix\n# message\n");
     let _ = std::fs::remove_dir_all(dir);
 }
 
@@ -552,6 +580,77 @@ fn 設定ディレクトリが無くても使え_設定ディレクトリは作�
     assert_eq!(s.wait_exit(), 0);
     assert_eq!(std::fs::read(&path).unwrap(), b"hello");
     assert!(!missing.exists(), "設定ディレクトリは作らない");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+// ファイル由来の文字列の無害化 (07 §4.3、NFR-503): 設定ファイルのキーと値の ESC・OSC・CSI・C1 は、ログの行にも生のまま残らない
+// verifies: NFR-503
+#[test]
+fn 設定のキーと値の制御文字はログに残らない() {
+    let cfg = temp_dir("cfg-ctl");
+    std::fs::create_dir_all(cfg.join("locales")).unwrap();
+    std::fs::write(
+        cfg.join("config.toml"),
+        r#"[editor]
+"x\u001B[2J\u009Bq" = 1
+[file]
+default_encoding = "a\u001B]0;t\u0007"
+"#,
+    )
+    .unwrap();
+    std::fs::write(
+        cfg.join("locales").join("ja.toml"),
+        r#"["k\u001B[31m"]
+v = "x"
+"#,
+    )
+    .unwrap();
+    let mut s = Session::start_with(&[], None, &[("EVE_CONFIG_DIR", cfg.to_str().unwrap())]);
+    s.wait_ready();
+    s.wait_for("言語ファイルの問題", |t| {
+        t.contains("設定の問題 (locales/ja.toml")
+    });
+    s.send(CTRL_Q);
+    assert_eq!(s.wait_exit(), 0);
+    let text =
+        std::fs::read_to_string(s.state.join("log").join("evoeditor.log")).unwrap_or_default();
+    assert!(text.contains("<U+001B>"), "{text}");
+    assert!(
+        !text
+            .chars()
+            .any(|c| c.is_control() && c != '\n' && c != '\r'),
+        "{text:?}"
+    );
+    let _ = std::fs::remove_dir_all(&s.state);
+    let _ = std::fs::remove_dir_all(&cfg);
+}
+
+// ユーザーの言語ファイル (07 §17.4): 重ねた文言が画面に出て、見つからない言語 (`--locale`) の診断もメッセージ行に出る
+// verifies: AC-NFR-603-9
+#[test]
+fn 言語ファイルの文言が画面に出て_見つからない言語は画面で知らせる() {
+    let dir = temp_dir("user-locale");
+    let cfg = dir.join("cfg");
+    std::fs::create_dir_all(cfg.join("locales")).unwrap();
+    std::fs::write(
+        cfg.join("locales").join("ja.toml"),
+        "[hint.app]
+quit = \"おわり\"
+",
+    )
+    .unwrap();
+    let mut s = Session::start_with(
+        &["--locale", "xx"],
+        None,
+        &[("EVE_CONFIG_DIR", cfg.to_str().unwrap())],
+    );
+    s.wait_ready();
+    s.wait_for("重ねた文言と見つからない言語の診断", |t| {
+        t.contains("おわり") && t.contains("言語 xx の言語ファイルがありません")
+    });
+    s.send(CTRL_Q);
+    assert_eq!(s.wait_exit(), 0);
+    let _ = std::fs::remove_dir_all(&s.state);
     let _ = std::fs::remove_dir_all(dir);
 }
 
@@ -763,6 +862,213 @@ fn shift_jis_のファイルを開いて文字コードを表示する() {
     });
     s.send(CTRL_Q);
     assert_eq!(s.wait_exit(), 0);
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// 保持方式 (03 §8.6 E2、§8.7.1。01 NFR-303 AC-5): 再符号化で別のバイト列になる文字 (区分 B) を 1 行目に持つ `bytes` を、
+/// `encoding` を指定して開き、2 行目の行頭に 1 文字入力して保存・終了する。確認は出ず (出れば保存が済まず `[+]` が残る)、
+/// ファイルは「元のバイト列 + 入力した 1 文字」になる。
+fn 区分_b_を含むファイルの別の行に入力して保存する(
+    name: &str,
+    encoding: &str,
+    label: &str,
+    line1: &[u8],
+    line2: &[u8],
+    typed: (&str, &[u8]),
+    shown: &str,
+) {
+    let dir = temp_dir(name);
+    let path = dir.join("preserve.txt");
+    let orig = [line1, b"\n", line2, b"\n"].concat();
+    std::fs::write(&path, &orig).unwrap();
+    let mut s = Session::start(&["--encoding", encoding, "+2", path.to_str().unwrap()]);
+    // 読込が済んで (2 行目が見え、その行頭にカーソルがある) から打つ。待たずに打つと読込中の入力は捨てられる
+    s.wait_for("本文と文字コードと 2 行目への移動", |t| {
+        t.contains(shown) && t.contains(label) && t.contains("行 2, 桁 1")
+    });
+    type_slowly(&s, typed.0);
+    s.wait_for("変更あり", |t| t.contains("[+]"));
+    s.send(CTRL_S);
+    s.wait_for("保存した (確認は出ない)", |t| !t.contains("[+]"));
+    s.send(CTRL_Q);
+    assert_eq!(s.wait_exit(), 0, "保存済みなので確認なしで終了する");
+    let want = [line1, b"\n", typed.1, line2, b"\n"].concat();
+    assert_eq!(
+        std::fs::read(&path).unwrap(),
+        want,
+        "編集していない範囲は元のバイト列のまま"
+    );
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+// verifies: AC-NFR-303-5
+#[test]
+fn shift_jis_の区分_b_の文字を含むファイルは別の行に入力して保存しても元のバイト列のまま() {
+    // 1 行目: 区分B: ￢ (IBM 拡張の重複符号化 0xFA54。再符号化すると 0x81CA になる) です。
+    let line1 = [
+        encoding_rs::SHIFT_JIS.encode("区分B: ").0.as_ref(),
+        b"\xFA\x54",
+        encoding_rs::SHIFT_JIS.encode("です。").0.as_ref(),
+    ]
+    .concat();
+    let line2 = encoding_rs::SHIFT_JIS.encode("編集する行").0.into_owned();
+    区分_b_を含むファイルの別の行に入力して保存する(
+        "preserve-sjis",
+        "shift_jis",
+        "Shift_JIS",
+        &line1,
+        &line2,
+        ("x", b"x"),
+        "区分B: ￢です。",
+    );
+}
+
+// 01 §5.5 の NFR-303 AC-5。EUC-JP の補助漢字は、v0.3 までは表現不能で保存が止まった (FR-112 AC-4 (b))
+// verifies: AC-NFR-303-5
+#[test]
+fn euc_jp_の補助漢字を含むファイルは別の行に入力して保存しても元のバイト列のまま() {
+    // 1 行目: 補助漢字: 丂 (JIS X 0212 の 0x8FB0A1。符号化できない)
+    let line1 = [
+        encoding_rs::EUC_JP.encode("補助漢字: ").0.as_ref(),
+        b"\x8F\xB0\xA1",
+    ]
+    .concat();
+    let line2 = encoding_rs::EUC_JP.encode("編集する行").0.into_owned();
+    区分_b_を含むファイルの別の行に入力して保存する(
+        "preserve-euc",
+        "euc-jp",
+        "EUC-JP",
+        &line1,
+        &line2,
+        ("x", b"x"),
+        "補助漢字: 丂",
+    );
+}
+
+/// 不正バイトを含む `Shift_JIS` のファイル (v0.4 の M23。01 NFR-304 AC-4 / AC-5): 1 行目に単独の 0xA0 (不正バイト)、2 行目が
+/// 編集する行。不正バイトの比率の確認 (1% 超) を出さないよう、後ろに ASCII の詰め物を置く。
+fn 不正バイトを含む_shift_jis_のファイル(line1_tail: &[u8]) -> (Vec<u8>, Vec<u8>) {
+    let line1 = [
+        encoding_rs::SHIFT_JIS.encode("日本語の行").0.as_ref(),
+        line1_tail,
+    ]
+    .concat();
+    let line2 = encoding_rs::SHIFT_JIS.encode("編集する行").0.into_owned();
+    let pad = "0123456789".repeat(40);
+    (
+        line1.clone(),
+        [&line1[..], b"\n", &line2, b"\n", pad.as_bytes(), b"\n"].concat(),
+    )
+}
+
+// 01 §5.5 の NFR-304 AC-4。読み取り専用で開く → 編集を拒否する案内 → パレットで「編集を許可」→ 確認で [A] → 別の行に
+// 入力 → 保存 → 終了。ファイルは「元のバイト列 + 入力分」になる (不正バイト 0xA0 はそのまま残る)
+// verifies: AC-NFR-304-4
+#[test]
+fn 不正バイトを含むファイルは_編集を許可して別の行に入力して保存すると元のバイト列のまま() {
+    let dir = temp_dir("invalid-bytes-edit");
+    let path = dir.join("invalid.txt");
+    let (_, orig) = 不正バイトを含む_shift_jis_のファイル(b"\xA0");
+    std::fs::write(&path, &orig).unwrap();
+    let mut s = Session::start(&["--encoding", "shift_jis", "+2", path.to_str().unwrap()]);
+    // 読込が済んで (2 行目が見え、不正バイトが <0xA0> で見え、読み取り専用で、その行頭にカーソルがある) から打つ
+    s.wait_for("本文と読み取り専用と 2 行目への移動", |t| {
+        t.contains("編集する行")
+            && t.contains("<0xA0>")
+            && t.contains("RO")
+            && t.contains("行 2, 桁 1")
+    });
+    // 読み取り専用では入力できず、案内が出る
+    type_slowly(&s, "x");
+    s.wait_for("編集の拒否の案内", |t| {
+        t.contains("確認の後に編集できます")
+    });
+    assert!(!s.screen().contains("[+]"), "入力されない:\n{}", s.screen());
+    // パレットで「読み取り専用の切替」→ 確認 → [A] 編集を許可
+    run_from_palette(&s, "file.toggle_read_only");
+    s.wait_for("編集を許可の確認", |t| {
+        t.contains("不正なバイトを含む文書の編集") && t.contains("[A]")
+    });
+    s.send(b"a");
+    s.wait_for("編集を許可した", |t| {
+        t.contains("編集を許可しました")
+    });
+    // 別の行 (2 行目の行頭) に入力して保存する。つながらないので確認は出ない
+    type_slowly(&s, "x");
+    s.wait_for("変更あり", |t| t.contains("[+]"));
+    s.send(CTRL_S);
+    s.wait_for("保存した (確認は出ない)", |t| !t.contains("[+]"));
+    s.send(CTRL_Q);
+    assert_eq!(s.wait_exit(), 0, "保存済みなので確認なしで終了する");
+    let (line1, _) = 不正バイトを含む_shift_jis_のファイル(b"\xA0");
+    let split = line1.len() + 1;
+    let want = [&orig[..split], b"x", &orig[split..]].concat();
+    assert_eq!(
+        std::fs::read(&path).unwrap(),
+        want,
+        "不正バイトは元のバイトのまま、入力した 1 文字だけが増える"
+    );
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+// 01 §5.5 の NFR-304 AC-5。Shift_JIS の 0x81 (行末の不正バイト) の直後に `@` を入れて保存すると、0x81 0x40 が別の文字
+// (U+3000) になるので、ファイルに書く前の確認が出る。Esc (キャンセル) ではファイルは変わらない
+// verifies: AC-NFR-304-5
+#[test]
+fn 不正バイトが隣とつながる保存は確認が出て_キャンセルすると何も書かない() {
+    let dir = temp_dir("invalid-bytes-merge");
+    let path = dir.join("merge.txt");
+    let (_, orig) = 不正バイトを含む_shift_jis_のファイル(b"\x81");
+    std::fs::write(&path, &orig).unwrap();
+    let mut s = Session::start(&["--encoding", "shift_jis", "+1:7", path.to_str().unwrap()]);
+    s.wait_for(
+        "本文と読み取り専用と <0x81> の直後への移動",
+        |t| {
+            t.contains("編集する行")
+                && t.contains("<0x81>")
+                && t.contains("RO")
+                && t.contains("行 1, 桁 7")
+        },
+    );
+    run_from_palette(&s, "file.toggle_read_only");
+    s.wait_for("編集を許可の確認", |t| {
+        t.contains("不正なバイトを含む文書の編集") && t.contains("[A]")
+    });
+    s.send(b"a");
+    s.wait_for("編集を許可した", |t| {
+        t.contains("編集を許可しました")
+    });
+    // 1 行目の末尾 (<0x81> の直後) に `@` を入れて保存する
+    s.send(b"\x1b[F");
+    thread::sleep(Duration::from_millis(300));
+    type_slowly(&s, "@");
+    s.wait_for("変更あり", |t| t.contains("[+]"));
+    s.send(CTRL_S);
+    s.wait_for("つながりの確認", |t| {
+        t.contains("開き直すと文字が変わる箇所") && t.contains("[S]")
+    });
+    assert_eq!(
+        std::fs::read(&path).unwrap(),
+        orig,
+        "確認の間は何も書かない"
+    );
+    // Esc でキャンセル: 保存せず、ファイルは変わらない
+    s.send(b"\x1b");
+    s.wait_for("保存しなかった", |t| {
+        t.contains("保存しませんでした")
+    });
+    assert!(s.screen().contains("[+]"), "未保存のまま:\n{}", s.screen());
+    assert_eq!(
+        std::fs::read(&path).unwrap(),
+        orig,
+        "キャンセルでは書かない"
+    );
+    // 確認の後の終了: 未保存の確認で破棄する
+    s.send(CTRL_Q);
+    s.wait_for("未保存の確認", |t| t.contains("[D]"));
+    s.send(b"d");
+    assert_eq!(s.wait_exit(), 0);
+    assert_eq!(std::fs::read(&path).unwrap(), orig);
     let _ = std::fs::remove_dir_all(dir);
 }
 
@@ -1389,7 +1695,7 @@ fn 設定の問題はメッセージ行に出てログに書かれる() {
 tab_width = 0
 indent_width = 99
 [search]
-case = \"smart\"
+regex_size_limit = 1
 ",
     )
     .unwrap();
@@ -1537,7 +1843,11 @@ fn 取得が遅くても入力は止まらず_2_秒で内部レジスタに切�
     s.send(b"\x01\x03"); // Ctrl+A, Ctrl+C: 内部レジスタに入る
     thread::sleep(Duration::from_millis(500));
     s.send(b"\x1b[F");
-    // 他のアプリが遅延レンダリングで所有し、応答を 6 秒遅らせる
+    // 他のアプリが遅延レンダリングで所有し、evoeditor の取得への応答を 6 秒遅らせる。応えるのは evoeditor だけにする
+    // (クリップボードの変化を見て直ちに読む常駐のアプリ (WSLg・リモートデスクトップの転送の msrdc など) に遅れて応えると、
+    // その間そのアプリがクリップボードを開いたままにし、evoeditor は開けずに直ちに内部レジスタへ切り替わる。取得の遅れの
+    // 経路を通らない)
+    let pid = s.child.process_id().expect("pid").to_string();
     let mut helper = spawn_clip_helper(&[
         "clip-delay",
         "--delay-render",
@@ -1546,6 +1856,8 @@ fn 取得が遅くても入力は止まらず_2_秒で内部レジスタに切�
         "SLOW",
         "--lifetime",
         "15000",
+        "--for-pid",
+        &pid,
     ]);
     let t = Instant::now();
     s.send(b"\x16"); // Ctrl+V
@@ -2040,7 +2352,7 @@ fn assert_english_ui(s: &Session) {
     assert!(!s.screen().contains("終了"), "{}", s.screen());
 }
 
-// NFR-603 AC-3 (v0.2。チェックリストは v0.2 のゲートで作る)
+// verifies: AC-NFR-603-3
 #[test]
 fn locale_オプションで画面が英語になる() {
     let mut s = Session::start(&["--locale", "en"]);
@@ -2050,7 +2362,7 @@ fn locale_オプションで画面が英語になる() {
     assert_eq!(s.wait_exit(), 0);
 }
 
-// NFR-603 AC-3 (v0.2。チェックリストは v0.2 のゲートで作る)
+// verifies: AC-NFR-603-3
 #[test]
 fn eve_lang_で画面が英語になり_locale_オプションが優先する() {
     let mut s = Session::start_with(&[], None, &[("EVE_LANG", "en_US")]);
@@ -2066,7 +2378,7 @@ fn eve_lang_で画面が英語になり_locale_オプションが優先する() 
     assert_eq!(s.wait_exit(), 0);
 }
 
-// NFR-603 AC-3 (v0.2。チェックリストは v0.2 のゲートで作る)
+// verifies: AC-NFR-603-3
 #[test]
 fn 設定の_ui_locale_は環境変数より優先し_未知の言語は次の段へ進む() {
     let cfg = temp_dir("cfg-locale");

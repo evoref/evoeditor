@@ -47,7 +47,7 @@ fn status(h: &mut Harness, kind: StatusKind) -> String {
 
 fn file(path: &str) -> InitialFile {
     InitialFile {
-        path: path.to_owned(),
+        target: eve_core::InitialTarget::Path(path.to_owned()),
         line: None,
         col: None,
     }
@@ -55,7 +55,7 @@ fn file(path: &str) -> InitialFile {
 
 fn at(path: &str, line: usize, col: Option<usize>) -> InitialFile {
     InitialFile {
-        path: path.to_owned(),
+        target: eve_core::InitialTarget::Path(path.to_owned()),
         line: Some(line),
         col,
     }

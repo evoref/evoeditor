@@ -12,7 +12,7 @@
 //! - 入力スレッドの停止 (docs/review/v0.3-findings.md の SAF-30): `ConsoleInput` の drop で停止の自己パイプの書き端を閉じ、
 //!   スレッドは `poll` で気づいて終わる。端末の fd は `Arc<OwnedFd>` でスレッドと共有し、スレッドが終わるまで閉じない
 //!   (閉じた fd の番号が別のファイルに再利用されても、それを読まない)。
-//! - サスペンド (`app.suspend`、05 §11.3): frontend が端末を復元してから `stop_self` で止まる。再開は上の SIGCONT と同じ経路。
+//! - サスペンド (`app.suspend`、05 §11.3): frontend が端末を復元してから `stop_job` (プロセスグループごと) で止まる。再開は上の SIGCONT と同じ経路。
 //!   入力スレッドは止めない (`restore` は停止を伴わない)。
 
 #![allow(unsafe_code)]
@@ -268,14 +268,26 @@ impl ConsoleOut {
     pub fn restore(&mut self) {}
 }
 
-/// 自分だけに SIGTSTP を送って止まる (プロセスグループには送らない。シェル・tmux が前面のジョブとして止める、05 §11.3)。
-/// SIGTSTP は受信を登録しないので既定の動作 (停止) になり、再開 (SIGCONT) まで戻らない。親が SIGTSTP を無視させて起動した
-/// (ジョブ制御の無いシェル) ときは止まらずにすぐ戻る (呼び側は再開と同じに扱う)。
-pub fn stop_self() {
-    // SAFETY: 自分のプロセスにシグナルを送るだけ。
+/// 自分のプロセスグループ全体に SIGTSTP を送って止まる (`kill(0, SIGTSTP)`。Vim と同じ。05 §11.3、v0.4 の M25 で
+/// 自分だけ (`kill(getpid(), ..)`) から改めた)。書き手が生きているパイプライン (`tail -f log | evoeditor -`) や、親が子を
+/// 待つ形 (`git commit` の `$EDITOR`) でも、前面のジョブ全体が止まり、シェルに戻る。SIGTSTP は受信を登録しないので
+/// 既定の動作 (停止) になり、再開 (SIGCONT) まで戻らない。親が SIGTSTP を無視させて起動した (ジョブ制御の無いシェル)
+/// ときは止まらずにすぐ戻る (呼び側は再開と同じに扱う)。
+pub fn stop_job() {
+    // SAFETY: 自分のプロセスグループにシグナルを送るだけ (`pid = 0` は呼び出し側のプロセスグループ)。
     unsafe {
-        libc::kill(libc::getpid(), libc::SIGTSTP);
+        libc::kill(0, libc::SIGTSTP);
     }
+}
+
+/// 入力・描画に使う端末 (`/dev/tty`) を開けるかだけを確かめる (モードは変えない)。標準入力を移して読み始める前に
+/// Host (bin) が呼ぶ (03 §9.2.2 の「端末の初期化の時期」。開けないまま読み始めると、端末の初期化の失敗で読んだ分を失う)。
+///
+/// # Errors
+///
+/// `/dev/tty` を開けない (制御端末が無い: `ssh host 'cmd | evoeditor -'` を `-t` なしで実行した、cron など) とき。
+pub fn probe_tty() -> io::Result<()> {
+    open_tty(true).map(drop)
 }
 
 /// バックグラウンドのジョブとして起動されたか (端末の前面のプロセスグループが自分のでない、05 §11.3)。端末を raw にする前に

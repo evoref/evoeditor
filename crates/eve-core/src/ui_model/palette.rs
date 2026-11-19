@@ -367,9 +367,11 @@ impl EditorState {
             || self.disabled_reason_key(e).is_none()
     }
 
-    /// `when` が偽の理由の文言キーの末尾 (`ui.palette.reason.*`)。実行できるなら `None`。
+    /// `when` が偽の理由の文言キー (`ui.palette.reason.*`)。実行できるなら `None`。
     /// パレットが出ている間は `overlay.active` が `palette` なので、出ていない状態で評価する。
-    fn disabled_reason_key(&self, e: &PaletteEntry) -> Option<&'static str> {
+    /// `doc.read_only_releasable` を見るコマンド (`file.toggle_read_only`) が淡色のときは、解除できない理由
+    /// (`ui.read_only_reason.*`。衝突の文書 (b) は文言を分ける) を示す (03 §8.3.1、v0.4 の M23)。
+    fn disabled_reason_key(&self, e: &PaletteEntry) -> Option<String> {
         let lookup = |n: &str| {
             if n == "overlay.active" {
                 Some(CtxValue::Str(String::new()))
@@ -379,6 +381,20 @@ impl EditorState {
         };
         if e.when.eval(&lookup) {
             return None;
+        }
+        if e.when
+            .vars()
+            .iter()
+            .any(|v| v == "doc.read_only_releasable")
+            && let Some(key) = self
+                .active_document()
+                .and_then(|id| self.document(id))
+                .and_then(|d| {
+                    let r = d.blocking_read_only_reason()?;
+                    crate::ui_model::message::read_only_reason_key(d, r)
+                })
+        {
+            return Some(key.to_owned());
         }
         let key = e
             .when
@@ -392,7 +408,7 @@ impl EditorState {
                 _ => None,
             })
             .unwrap_or("unavailable");
-        Some(key)
+        Some(format!("ui.palette.reason.{key}"))
     }
 
     pub(crate) fn open_palette(&mut self) -> CommandResult {
@@ -597,7 +613,7 @@ impl EditorState {
             .map(|h| {
                 let e = &self.ui.palette_entries[h.entry];
                 let disabled_reason = self.disabled_reason_key(e).map(|k| {
-                    let why = render(&format!("ui.palette.reason.{k}"), &[]);
+                    let why = render(&k, &[]);
                     let text = render(keys::UI_PALETTE_DISABLED, &[("reason", &why)]);
                     cell_text(&text, CutPolicy::End)
                 });

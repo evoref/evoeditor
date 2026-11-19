@@ -1,0 +1,16 @@
+{
+  "commit": "90b2c81",
+  "env": "ENV-W1",
+  "id": "BM-109r-ks-1line",
+  "quick": false,
+  "results": [
+    {
+      "id": "BM-109r-ks-1line",
+      "matches": 90786,
+      "mb": 10,
+      "n": 3,
+      "p50_ms": 23.9,
+      "quick": false
+    }
+  ]
+}

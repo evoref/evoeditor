@@ -1,0 +1,47 @@
+# 行をまたぐ正規表現の 1 件置換で、キャプチャ (`$1` / `$2`) を展開する。置き換えるたびに次の一致を探し、CRLF の改行をまたぐ
+# 一致も置き換える (FR-402 AC-5、03 §12.3.1 の「置換」)。
+[meta]
+id = "search/multiline_capture_replace"
+title = "行をまたぐ一致の 1 件置換で $1 / $2 を展開し、CRLF をまたぐ一致も置き換える"
+verifies = ["AC-FR-402-5"]
+since = "v0.4"
+tags = ["search", "regex", "multiline", "replace"]
+
+[setup]
+size = [60, 12]
+
+[setup.fs]
+"a.txt" = { text = "k1:\nv1;\nk2:\r\nv2;" }
+
+[[step]]
+open = "a.txt"
+[[step]]
+run_jobs = true
+[[step]]
+keys = "ctrl+r"
+[[step]]
+keys = "alt+r"
+[[step]]
+text = '(\w+):\n(\w+)'
+[[step]]
+keys = "tab"
+[[step]]
+text = "$2=$1"
+[[step]]
+run_jobs = true
+[[step]]
+keys = "enter"
+[[step]]
+run_jobs = true
+[[step]]
+keys = "enter"
+[[step]]
+run_jobs = true
+
+[[assert]]
+at = 9
+query = { kind = "text" }
+expect = { text = "v1=k1;\nk2:\r\nv2;" }
+[[assert]]
+query = { kind = "text" }
+expect = { text = "v1=k1;\nv2=k2;" }

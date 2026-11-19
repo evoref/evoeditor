@@ -55,7 +55,7 @@ impl EditorState {
         }
     }
 
-    fn take_overlay(&mut self) -> Option<Overlay> {
+    pub(crate) fn take_overlay(&mut self) -> Option<Overlay> {
         let old = self.ui.overlay.take();
         if old.is_some()
             && let Some(window) = self.focused_window()
@@ -66,6 +66,15 @@ impl EditorState {
             });
         }
         old
+    }
+
+    /// 出ている確認ダイアログの名前 (`ui.confirm.<name>` の `<name>`)。確認が出ていなければ `None` (試験用)。
+    #[doc(hidden)]
+    pub fn confirm_name(&self) -> Option<&'static str> {
+        match &self.ui.overlay {
+            Some(Overlay::Confirm(c)) => Some(c.name),
+            _ => None,
+        }
     }
 
     /// 出ているオーバーレイの種類。条件式 `overlay.active` の値と同じ (07 §7.3、11 §6.3 の `overlay`):

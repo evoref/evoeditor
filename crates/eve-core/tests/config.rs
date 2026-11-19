@@ -156,7 +156,7 @@ fn 空の既存ファイルと改行のないファイルの改行は設定に�
 #[test]
 fn 未対応の情報診断は画面に出さない() {
     let mut h = Harness::new();
-    let l = load_str("[editor]\nauto_indent = false\n[search]\ncase = \"smart\"\n");
+    let l = load_str("[editor]\nauto_indent = false\n[search]\nregex_size_limit = 1\n");
     assert_eq!(l.diagnostics.len(), 2);
     h.clear_log();
     h.editor
@@ -196,7 +196,7 @@ fn 公開前の_ui_キーは未対応の情報診断になり_画面に出ない
     assert!(actual.is_empty(), "{actual:?}");
 }
 
-// NFR-603 AC-3 (v0.2。チェックリストは v0.2 のゲートで作る)
+// verifies: AC-NFR-603-3
 #[test]
 fn 言語を英語にすると設定の問題の要約が英語になる() {
     use eve_config::Locale;

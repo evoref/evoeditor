@@ -35,6 +35,7 @@ impl Editor {
                         dirty: d.is_dirty(),
                         load_state: match d.load_state {
                             LoadState::Loading => LoadStateView::Loading,
+                            LoadState::Partial => LoadStateView::Partial,
                             LoadState::Ready => LoadStateView::Ready,
                             LoadState::Failed => LoadStateView::Failed,
                         },

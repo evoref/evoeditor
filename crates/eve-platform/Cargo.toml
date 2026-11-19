@@ -17,14 +17,14 @@ workspace = true
 test-hooks = []
 
 [dependencies]
-eve-core = { version = "0.3.0", path = "../eve-core" }
-eve-text = { version = "0.3.0", path = "../eve-text" }
+eve-core = { version = "0.4.0", path = "../eve-core" }
+eve-text = { version = "0.4.0", path = "../eve-text" }
 xxhash-rust = { version = "0.8.19", features = ["xxh3"] }
 
 [dev-dependencies]
-eve-view = { version = "0.3.0", path = "../eve-view" }
+eve-view = { version = "0.4.0", path = "../eve-view" }
 # FileSystem の契約試験 (eve_testkit::fs_contract を MemFs と同じく実 FS に掛ける。tests/fs_contract.rs だけが使う)
-eve-testkit = { version = "0.3.0", path = "../eve-testkit" }
+eve-testkit = { version = "0.4.0", path = "../eve-testkit" }
 memory-stats = "1.2.0"
 encoding_rs = "0.8.42"
 
@@ -44,6 +44,8 @@ windows-sys = { version = "0.61", features = [
     "Win32_System_Console",
     "Win32_System_LibraryLoader",
     "Win32_System_DataExchange",
+    # CancelSynchronousIo (標準入力の読取の停止、05 §9.1。v0.4 の M25)
+    "Win32_System_IO",
     "Win32_System_Memory",
     "Win32_System_Ole",
     "Win32_System_Shutdown",

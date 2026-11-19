@@ -134,12 +134,30 @@ fn 不正バイトのエスケープと_pua_を保つ() {
     let state = tmp("pua");
     let w = StateRescue::new(Some(state.join("s")));
     let text = format!("a{}b\u{FF9E}", eve_encoding_escape(0x9A));
-    let d = doc(1, &text, None, |f| f.invalid_bytes = 1);
+    // 読込で不正バイトを見つけた文書 (エスケープ文字は文書の文字コードのバイト、03 §8.3.1)
+    let d = doc(1, &text, None, |f| {
+        f.invalid_bytes = 1;
+        f.escape_encoding = Some(f.encoding);
+    });
     let out = w.write(&[d], RescueReason::Fatal, Instant::now(), AMPLE);
     let dir = out.dir.unwrap();
     let body = fs::read_to_string(dir.join("1-無題-1.txt")).unwrap();
     assert_eq!(body, text, "内部の UTF-8 のまま (PUA を保つ)");
     assert!(manifest(&dir).contains("pua_escaped = true"));
+    let _ = fs::remove_dir_all(state);
+}
+
+// manifest の `pua_escaped` は `escape_encoding.is_some()` (v0.4 の M23。02 §11.2.1)。読込の数 (`invalid_bytes`) が
+// 残っていても、違う文字コードで保存した後などで `None` なら偽 (復旧でエスケープ文字を元のバイトに戻させない)
+#[test]
+fn エスケープ文字の由来の文字コードが無ければ_pua_escaped_は偽() {
+    let state = tmp("pua-none");
+    let w = StateRescue::new(Some(state.join("s")));
+    let text = format!("a{}b", eve_encoding_escape(0x9A));
+    let d = doc(1, &text, None, |f| f.invalid_bytes = 1);
+    let out = w.write(&[d], RescueReason::Fatal, Instant::now(), AMPLE);
+    let dir = out.dir.unwrap();
+    assert!(manifest(&dir).contains("pua_escaped = false"));
     let _ = fs::remove_dir_all(state);
 }
 

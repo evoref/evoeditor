@@ -1,0 +1,38 @@
+{
+  "commit": "7f3bed1",
+  "env": "ENV-W1",
+  "id": "BM-109m-nl-none-1line",
+  "quick": false,
+  "results": [
+    {
+      "id": "BM-109m-nl-none-1line",
+      "matches": 0,
+      "max_ms": 2.4,
+      "mb": 10,
+      "min_ms": 2.1,
+      "n": 5,
+      "p50_ms": 2.3,
+      "quick": false,
+      "ratio": 0.48,
+      "ratio_max": 0.52,
+      "ratio_min": 0.45,
+      "ref_p50_ms": 4.6,
+      "run": "bm_109-1"
+    },
+    {
+      "id": "BM-109m-nl-none-1line",
+      "matches": 0,
+      "max_ms": 2.5,
+      "mb": 10,
+      "min_ms": 2.3,
+      "n": 5,
+      "p50_ms": 2.4,
+      "quick": false,
+      "ratio": 0.48,
+      "ratio_max": 0.52,
+      "ratio_min": 0.45,
+      "ref_p50_ms": 4.9,
+      "run": "bm_109-2"
+    }
+  ]
+}

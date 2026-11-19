@@ -126,6 +126,11 @@ fn 終了したプロセスのスワップは_stale_で_要約と本文を読め
     assert_eq!(e.revision, 9);
     assert!(e.readable && !e.sensitive);
     assert!(e.modified.is_some(), "manifest の更新時刻");
+    assert_eq!(
+        e.encoding,
+        Some(eve_core::Encoding::Utf8),
+        "manifest の文字コード (本文を読まずに提案の条件に使う)"
+    );
     assert_eq!(e.len, "こんにちは\r\n世界".len() as u64);
     assert_eq!(
         e.path.as_ref().unwrap().display(),
@@ -137,8 +142,33 @@ fn 終了したプロセスのスワップは_stale_で_要約と本文を読め
     assert_eq!(body.encoding, eve_core::Encoding::Utf8);
     assert!(!body.has_bom);
     assert_eq!(body.default_eol, eve_text::LineEnding::Crlf);
+    assert!(
+        !body.pua_escaped,
+        "エスケープ文字の由来の文字コードが無い文書"
+    );
     let _ = fs::remove_dir_all(state);
     let _ = fs::remove_dir_all(work);
+}
+
+// manifest の `pua_escaped` (`escape_encoding.is_some()`) を書いて読み戻す (03 §8.3.1。復旧の適用で使う)
+#[test]
+fn スワップの_pua_escaped_を書いて読み戻す() {
+    let state = tmp("pua");
+    let w = NativeFs::new(&state);
+    let mut d = doc(4, 2, "a\u{10FF80}b", None);
+    d.format.encoding = eve_core::Encoding::ShiftJis;
+    d.format.invalid_bytes = 1;
+    d.format.escape_encoding = Some(eve_core::Encoding::ShiftJis);
+    w.write_swap(&d).unwrap();
+    let pid = dead_pid();
+    as_other_process(&state, pid, false);
+    let v = w.list_swaps().unwrap();
+    assert_eq!(v.len(), 1);
+    let body = w.read_swap(&v[0]).unwrap();
+    assert!(body.pua_escaped);
+    assert_eq!(body.encoding, eve_core::Encoding::ShiftJis);
+    assert_eq!(body.text, "a\u{10FF80}b", "エスケープ文字のまま");
+    let _ = fs::remove_dir_all(state);
 }
 
 #[test]
@@ -284,6 +314,7 @@ fn 状態ディレクトリが無ければ空_消すのは未対応() {
         sensitive: false,
         modified: None,
         readable: false,
+        encoding: None,
     };
     assert_eq!(
         w.remove_swap(&e).unwrap_err().kind,

@@ -16,6 +16,7 @@ use crate::editor::state::EditorState;
 use crate::ui_model::keys;
 use crate::ui_model::overlay::{ChoiceDef, ConfirmAction, ConfirmState};
 use crate::{DocumentId, FsPath, JobError, JobKind, JobResult, SwapEntry, SwapOwner};
+use eve_encoding::PuaEscapeMode;
 
 use crate::io::pending::Pending;
 use eve_view::MessageLevel;
@@ -28,6 +29,36 @@ fn same_path(a: &FsPath, b: &FsPath) -> bool {
     } else {
         a == b
     }
+}
+
+/// 復旧 (本文の全体を置き換える) を適用した後の `escape_encoding` と `pua_escape` (03 §8.3.1 の「エスケープ文字の由来の
+/// 文字コード」の表の「復旧の適用」の行)。`format` は適用する文書の書式 (無題の文書はスワップの文字コード・BOM・改行を
+/// 写した後)。本文がスワップのものに替わるので、エスケープ文字の意味はディスクではなくスワップ (manifest) に従う。
+///
+/// - manifest の `pua_escaped` が偽: スワップの本文のエスケープ文字はバイトではないので `None`。`pua_escape` は変えない。
+/// - 真: 衝突の文書 (`DisabledCollision`) は `Enabled` にする (スワップの私用文字は不正バイトの印。衝突の扱い (`AsText`)
+///   で私用文字の UTF-8 として書かない)。状態付き (`DisabledStateful`) はそのまま。そのうえで、manifest の `encoding` が
+///   文書の文字コードと同じで `Enabled`、状態付きの文字コードでなければ `Some(encoding)` (ディスクのファイルが不正
+///   バイトを含まなくなっていても。無題の文書はスワップの文字コードを引き継ぐので、ここに当たる)、ほかは `None`。
+///
+/// 本文が同じ復旧 (全置換が恒等) は `Document::apply` が書式を変えない (エスケープ文字の意味も今の値のまま)。
+pub(crate) fn recovered_escape(
+    format: &crate::document::TextFormat,
+    pua_escaped: bool,
+    manifest_encoding: crate::Encoding,
+) -> (Option<crate::Encoding>, PuaEscapeMode) {
+    if !pua_escaped {
+        return (None, format.pua_escape);
+    }
+    let mode = match format.pua_escape {
+        PuaEscapeMode::DisabledCollision => PuaEscapeMode::Enabled,
+        m => m,
+    };
+    let esc = (manifest_encoding == format.encoding
+        && mode == PuaEscapeMode::Enabled
+        && !manifest_encoding.is_stateful())
+    .then_some(manifest_encoding);
+    (esc, mode)
 }
 
 impl EditorState {
@@ -87,10 +118,17 @@ impl EditorState {
         let Some(d) = self.docs.documents.get(&id) else {
             return;
         };
-        // 編集中の内容を上書きしないよう、読込済みで何も編集していない文書にだけ出す
-        if d.load_state != LoadState::Ready || d.is_dirty() || !d.read_only.is_empty() {
+        // 編集中の内容を上書きしないよう、読込済みで何も編集していない文書にだけ出す。読み取り専用の文書には出さないが、
+        // 理由が `InvalidBytes` だけのバイトの文書には出す (03 §10.3 の M23: 不正バイトを含む文書を解除して編集した後の
+        // スワップは、次に開くと読み取り専用に戻るため)。ただしその文書には、スワップの文字コード (manifest の
+        // `encoding`) が文書の文字コードと同じ候補だけを出す (判定が外れて別の文字コードで開いた文書に適用して解除する
+        // と、元のファイルを確認なしに別の文字コードで書くため)
+        if d.load_state != LoadState::Ready || d.is_dirty() || !d.recovery_allowed() {
             return;
         }
+        let read_only = !d.read_only.is_empty();
+        let doc_encoding = d.format.encoding;
+        let same_encoding = |e: &SwapEntry| !read_only || e.encoding == Some(doc_encoding);
         let blank_untitled = d.path.is_none() && d.len_bytes() == 0;
         let matching = |e: &SwapEntry| match (&e.path, &d.path) {
             (Some(a), Some(b)) => same_path(a, b),
@@ -104,10 +142,30 @@ impl EditorState {
             .candidates
             .iter()
             .enumerate()
-            .filter(|(_, e)| matching(e))
+            .filter(|(_, e)| matching(e) && same_encoding(e))
             .max_by_key(|(_, e)| e.modified.map(|t| (t.secs, t.nanos)))
             .map(|(i, _)| i)
         else {
+            // 文字コードの違う候補だけがある: 提案せず (候補は残す)、その文字コードで開き直す案内を 1 回だけ出す
+            let mismatch = self
+                .io
+                .swap
+                .candidates
+                .iter()
+                .filter(|e| matching(e))
+                .max_by_key(|e| e.modified.map(|t| (t.secs, t.nanos)))
+                .and_then(|e| Some((e.dir.clone(), e.encoding?)));
+            let name = d.path.as_ref().map(FsPath::display);
+            if let (Some((dir, enc)), Some(name)) = (mismatch, name)
+                && !self.io.swap.mismatch_notified.contains(&(id, dir.clone()))
+            {
+                self.io.swap.mismatch_notified.push((id, dir));
+                self.show_message(
+                    MessageLevel::Info,
+                    keys::INFO_SWAP_ENCODING_MISMATCH,
+                    &[("path", &name), ("encoding", enc.name())],
+                );
+            }
             return;
         };
         let entry = self.io.swap.candidates.remove(i);
@@ -160,6 +218,7 @@ impl EditorState {
             details,
             default: 0,
             focused: 0,
+            message: None,
             action: ConfirmAction::SwapRecovery {
                 entry: Box::new(entry),
                 doc: id,
@@ -263,17 +322,23 @@ impl EditorState {
         let Some(d) = self.docs.documents.get_mut(&doc) else {
             return;
         };
-        if d.revision() != revision || !d.read_only.is_empty() {
+        if d.revision() != revision || !d.recovery_allowed() {
             // 提案の後で文書が変わった: 適用しない。スワップは残し、もう一度提案できるようにする
             self.show_message(MessageLevel::Warn, keys::MSG_SWAP_CHANGED_SINCE_OFFER, &[]);
             self.io.swap.candidates.push(entry);
             return;
         }
-        // 無題の文書は、スワップの形式 (文字コード・BOM・改行) を引き継ぐ。パスのある文書は開いた形式のまま
-        if d.path.is_none() {
-            d.format.encoding = body.encoding;
-            d.format.has_bom = body.has_bom;
-            d.format.default_eol = body.default_eol;
+        // 読み取り専用 (理由が `InvalidBytes` だけ) の文書には、本文の文字コードが文書と同じスワップだけを適用する
+        // (提案の条件の二重の防御。manifest の `encoding` と本文の読込の間に書き換わった場合など)
+        if !d.read_only.is_empty() && body.encoding != d.format.encoding {
+            let name = d.path.as_ref().map(FsPath::display).unwrap_or_default();
+            self.show_message(
+                MessageLevel::Info,
+                keys::INFO_SWAP_ENCODING_MISMATCH,
+                &[("path", &name), ("encoding", body.encoding.name())],
+            );
+            self.io.swap.candidates.push(entry);
+            return;
         }
         let name = entry
             .path
@@ -287,7 +352,7 @@ impl EditorState {
                     .map(|d| self.untitled_label(d))
             })
             .unwrap_or_default();
-        let Some(d) = self.docs.documents.get(&doc) else {
+        let Some(d) = self.docs.documents.get_mut(&doc) else {
             return;
         };
         let all = ByteRange::all(d.len_bytes());
@@ -305,17 +370,52 @@ impl EditorState {
             );
             return;
         };
-        let tx = Transaction::new(cs, Origin::Recovery, self.now);
+        // 無題の文書は、スワップの形式 (文字コード・BOM・改行) を引き継ぐ。パスのある文書は開いた形式のまま。
+        // 適用に失敗したら元の形式に戻す (下の `Err`)
+        let saved_format = d.path.is_none().then(|| d.format.clone());
+        // 復旧では「編集を許可」を持ち越さない (03 §8.3.1 の「解除の持ち越し」: 復旧では付け直す)。書式の変更を
+        // 適用する前に記録を消す (記録があると `InvalidBytes` を付けないため)。適用に失敗したら戻す
+        let saved_released = std::mem::take(&mut d.invalid_bytes_released);
+        if d.path.is_none() {
+            // 文字コードを変えるので、今の文字コードのものでない `escape_encoding` は残さない (不変条件、03 §8.3.1)
+            if d.format.escape_encoding != Some(body.encoding) {
+                d.format.escape_encoding = None;
+            }
+            d.format.encoding = body.encoding;
+            d.format.has_bom = body.has_bom;
+            d.format.default_eol = body.default_eol;
+        }
+        // 本文のエスケープ文字がどの文字コードのバイトか (03 §8.3.1 の「エスケープ文字の由来の文字コード」の表の
+        // 「復旧の適用」の行)。Undo では前の値に戻る (`FormatChange::Recovery` に持たせる)
+        let (escape_encoding, pua_escape) =
+            recovered_escape(&d.format, body.pua_escaped, body.encoding);
+        let tx = Transaction::new(cs, Origin::Recovery, self.now)
+            .with_format_change(d.recovery_change(escape_encoding, pua_escape));
         match self.apply_transaction(doc, tx) {
             Ok(_) => {
                 self.io.swap.recovered.entry(doc).or_default().push(entry);
-                self.show_message(
-                    MessageLevel::Info,
-                    keys::INFO_SWAP_RECOVERED,
-                    &[("path", &name)],
-                );
+                // 適用した後も読み取り専用 (不正バイトを含む文書) なら、切替で編集を許可すると続けられることを示す
+                // (03 §10.3。`Origin::Recovery` は読み取り専用の拒否の例外)
+                let read_only = self
+                    .docs
+                    .documents
+                    .get(&doc)
+                    .is_some_and(|d| !d.read_only.is_empty());
+                let key = if read_only {
+                    keys::INFO_SWAP_APPLIED_READ_ONLY
+                } else {
+                    keys::INFO_SWAP_RECOVERED
+                };
+                self.show_message(MessageLevel::Info, key, &[("path", &name)]);
             }
             Err(_) => {
+                // 文書は変わっていない。無題の文書に写した形式と、解除の記録も戻す
+                if let Some(d) = self.docs.documents.get_mut(&doc) {
+                    d.invalid_bytes_released = saved_released;
+                    if let Some(f) = saved_format {
+                        d.format = f;
+                    }
+                }
                 self.show_message(
                     MessageLevel::Error,
                     keys::MSG_SWAP_READ_FAILED,
@@ -329,7 +429,7 @@ impl EditorState {
     /// 他のプロセスのスワップを消したジョブの結果。
     pub(crate) fn finish_swap_remove(&mut self, entry: &SwapEntry, notify: bool, r: JobResult) {
         match r {
-            JobResult::SwapRemoved { .. } => {
+            JobResult::SwapRemoved => {
                 if notify {
                     self.show_message(MessageLevel::Info, keys::INFO_SWAP_DISCARDED, &[]);
                 }
@@ -384,5 +484,77 @@ impl EditorState {
     /// 正常終了のとき、Host が消す古いスワップ (適用したが、まだ消していないもの)。
     pub(crate) fn swap_recovered_leftovers(&self) -> Vec<SwapEntry> {
         self.io.swap.recovered.values().flatten().cloned().collect()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::recovered_escape;
+    use crate::Encoding;
+    use crate::document::TextFormat;
+    use eve_encoding::PuaEscapeMode;
+
+    fn fmt(
+        encoding: Encoding,
+        pua_escape: PuaEscapeMode,
+        escape_encoding: Option<Encoding>,
+    ) -> TextFormat {
+        TextFormat {
+            encoding,
+            pua_escape,
+            escape_encoding,
+            ..TextFormat::new_document()
+        }
+    }
+
+    // 03 §8.3.1 の「エスケープ文字の由来の文字コード」の表の「復旧の適用」の行
+    #[test]
+    fn 復旧の適用で決まる由来の文字コード() {
+        use Encoding::{Iso2022Jp, ShiftJis, Utf8};
+        use PuaEscapeMode::{DisabledCollision, DisabledStateful, Enabled};
+        // pua_escaped が偽なら None (前の値が Some でも。本文を置き換えるので)。pua_escape は変えない
+        for before in [None, Some(Utf8)] {
+            assert_eq!(
+                recovered_escape(&fmt(Utf8, Enabled, before), false, Utf8),
+                (None, Enabled)
+            );
+        }
+        assert_eq!(
+            recovered_escape(&fmt(Utf8, DisabledCollision, None), false, Utf8),
+            (None, DisabledCollision)
+        );
+        // 同じ文字コードで Enabled なら Some (ディスクのファイルが不正バイトを含まなくても)
+        assert_eq!(
+            recovered_escape(&fmt(Utf8, Enabled, None), true, Utf8),
+            (Some(Utf8), Enabled)
+        );
+        assert_eq!(
+            recovered_escape(&fmt(ShiftJis, Enabled, Some(ShiftJis)), true, ShiftJis),
+            (Some(ShiftJis), Enabled)
+        );
+        // 文字コードが違えば None (前の値が Some でも)
+        assert_eq!(
+            recovered_escape(&fmt(Utf8, Enabled, Some(Utf8)), true, ShiftJis),
+            (None, Enabled)
+        );
+        // 衝突の文書は Enabled にして、表のとおり
+        assert_eq!(
+            recovered_escape(&fmt(Utf8, DisabledCollision, None), true, Utf8),
+            (Some(Utf8), Enabled)
+        );
+        assert_eq!(
+            recovered_escape(&fmt(Utf8, DisabledCollision, None), true, ShiftJis),
+            (None, Enabled)
+        );
+        // 状態付きの文書は None のまま
+        assert_eq!(
+            recovered_escape(&fmt(Iso2022Jp, DisabledStateful, None), true, Iso2022Jp),
+            (None, DisabledStateful)
+        );
+        // 状態付きの文字コードを写した無題の文書 (Enabled) も None
+        assert_eq!(
+            recovered_escape(&fmt(Iso2022Jp, Enabled, None), true, Iso2022Jp),
+            (None, Enabled)
+        );
     }
 }

@@ -53,9 +53,11 @@ pub struct HarnessBuilder {
     caps: Option<Capabilities>,
     config: Option<eve_config::Config>,
     locale: Option<eve_config::Locale>,
+    catalog: Option<Arc<eve_config::Catalog>>,
     files: Vec<(String, Vec<u8>)>,
     dirs: Vec<String>,
     defer_start: bool,
+    stdin: Option<Arc<dyn eve_core::StdinSource>>,
 }
 
 impl HarnessBuilder {
@@ -83,9 +85,27 @@ impl HarnessBuilder {
         self
     }
 
+    /// UI の言語と、その文言の表 (同梱の表にユーザーの言語ファイルを重ねたもの、07 §17.4)。ファイルを介さずに
+    /// 重ねた表を渡す (09 §3.4 の「重ねた結果の文言」)。表は [`crate::overlay_catalog`] で作れる。
+    pub fn catalog(
+        mut self,
+        locale: eve_config::Locale,
+        catalog: Arc<eve_config::Catalog>,
+    ) -> Self {
+        self.locale = Some(locale);
+        self.catalog = Some(catalog);
+        self
+    }
+
     /// 偽 FS にファイルを置く (`/w` は常にある)。
     pub fn file(mut self, path: &str, data: &[u8]) -> Self {
         self.files.push((path.to_owned(), data.to_vec()));
+        self
+    }
+
+    /// 標準入力 (`JobPorts.stdin`。`JobKind::OpenStdin` が読む。既定は無し)。
+    pub fn stdin(mut self, stdin: Arc<dyn eve_core::StdinSource>) -> Self {
+        self.stdin = Some(stdin);
         self
     }
 
@@ -137,6 +157,7 @@ impl Harness {
         }
         let paths = Arc::new(FixedPaths::default());
         let jobs = ManualJobSpawner::new(JobPorts {
+            stdin: b.stdin.clone(),
             fs: fs.clone(),
             clock: Arc::new(clock.clone()),
             paths: paths.clone(),
@@ -157,6 +178,7 @@ impl Harness {
         if let Some(locale) = b.locale {
             editor.configure(eve_core::StartupConfig {
                 locale: Some(locale),
+                catalog: b.catalog,
                 ..Default::default()
             });
         }
@@ -224,6 +246,21 @@ impl Harness {
     pub fn with_locale(mut self, locale: eve_config::Locale) -> Harness {
         self.editor.configure(eve_core::StartupConfig {
             locale: Some(locale),
+            ..Default::default()
+        });
+        self
+    }
+
+    /// UI の言語と、その文言の表 (同梱の表にユーザーの言語ファイルを重ねたもの、07 §17.4) を渡す。ファイルを介さない
+    /// (09 §3.4 の「重ねた結果の文言」)。表は [`crate::overlay_catalog`] で作れる。
+    pub fn with_catalog(
+        mut self,
+        locale: eve_config::Locale,
+        catalog: Arc<eve_config::Catalog>,
+    ) -> Harness {
+        self.editor.configure(eve_core::StartupConfig {
+            locale: Some(locale),
+            catalog: Some(catalog),
             ..Default::default()
         });
         self
@@ -360,6 +397,49 @@ impl Harness {
             }
         }
         self.collect();
+    }
+
+    /// `run_jobs` と同じだが、各結果を `Editor` に渡す前に `seen` に見せる (途中経過・先行表示の先頭など、`Editor` の
+    /// 状態に残らない結果を確かめる試験用)。
+    pub fn run_jobs_with(&mut self, mut seen: impl FnMut(&eve_core::JobOutput)) {
+        loop {
+            self.jobs.run_jobs();
+            let results = self.jobs.take_results();
+            if results.is_empty() {
+                break;
+            }
+            for r in results {
+                seen(&r);
+                self.editor.tick(self.clock.now());
+                self.editor.on_job_result(r);
+            }
+        }
+        self.collect();
+    }
+
+    /// 積まれたジョブを実行し、最初に先行表示の先頭 (`JobResult::Partial`) を送ったジョブの、先頭までの結果を `Editor` に
+    /// 渡す (docs/03 §9.2.1)。先頭より後の結果 (進捗・完了) は取り置き、`finish_held_jobs` で渡す (その間に `Editor` が
+    /// 読込を取り消すと `Cancelled` に替わる)。先頭を送ったジョブがあれば `true`。
+    pub fn run_jobs_until_partial(&mut self) -> bool {
+        let hit = self.jobs.run_jobs_until_partial();
+        for r in self.jobs.take_results() {
+            self.editor.tick(self.clock.now());
+            self.editor.on_job_result(r);
+        }
+        self.collect();
+        hit
+    }
+
+    /// `run_jobs_until_partial` で取り置いた結果を渡し、残りのジョブも実行する (`run_jobs`)。
+    pub fn finish_held_jobs(&mut self) {
+        self.jobs.release_held();
+        self.run_jobs();
+    }
+
+    /// `run_jobs_until_partial` で取り置いた結果を渡し、次に先頭を送るジョブまで進める (起動時の複数のパスなど)。
+    pub fn finish_held_jobs_until_partial(&mut self) -> bool {
+        self.jobs.release_held();
+        self.run_jobs_until_partial()
     }
 
     /// 実行待ちのジョブを 1 周だけ実行し、結果を `Editor` に渡す (結果から再投入されたジョブは走らせない)。

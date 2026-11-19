@@ -112,12 +112,14 @@ fn スワップから復旧した無題は_適用した文書の番号のまま(
                 nanos: 0,
             }),
             readable: true,
+            encoding: None,
         },
         Some(eve_core::SwapBody {
             text: "hello".to_owned(),
             encoding: eve_core::Encoding::Utf8,
             has_bom: false,
             default_eol: eve_text::LineEnding::Lf,
+            pua_escaped: false,
         }),
     );
     h.run_jobs();

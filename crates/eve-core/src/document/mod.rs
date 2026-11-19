@@ -1,7 +1,7 @@
 //! 文書 (docs/03 §6〜§7)。`Document`・`Transaction`・Undo 履歴。文書テキストを変える唯一の経路 (`Document::apply`) も
 //! ここに閉じる (docs/02 §5.2。`eve_text::Text::apply` は clippy の `disallowed_methods` で、このモジュール以外から呼べない)。
 //!
-//! spec: 02 §5.1, 02 §5.2, 03 §6, 03 §7, 03 §8.4 (改行コードの変換)
+//! spec: 02 §5.1, 02 §5.2, 03 §6, 03 §7, 03 §8.4 (改行コードの変換), 03 §8.7.1 (保持方式の記録の表)
 
 // 文書テキストを変える経路はこのモジュールに閉じる (clippy.toml の `eve_text::Text::apply`)
 #![allow(clippy::disallowed_methods)]
@@ -11,14 +11,18 @@ pub(crate) mod eol;
 pub(crate) mod eol_cmd;
 mod format;
 mod history;
+// 保持方式の記録の表 (03 §8.7.1、M22 の 4・5)
+pub(crate) mod preserved;
 mod transaction;
 
-pub use doc::{Applied, AppliedTx, ApplyError, DisplaySettings, Document};
+pub use doc::{Applied, AppliedTx, ApplyError, DisplaySettings, Document, StdinDoc};
+pub(crate) use format::count_escape_chars;
 pub use format::{
-    EolStats, FormatChange, FormatState, LONG_LINE_THRESHOLD, LoadState, ReadOnlyReason,
-    ReadOnlyReasons, TextFormat, count_long_lines,
+    EolStats, FormatChange, FormatState, LONG_LINE_THRESHOLD, LineStatsScanner, LoadState,
+    ReadOnlyReason, ReadOnlyReasons, TextFormat, count_long_lines,
 };
 pub use history::{HistoryStep, NodeId, RecordOutcome, UndoBudget, UndoHistory};
+pub use preserved::{PreservedError, PreservedMap};
 pub use transaction::{Origin, Transaction, TransactionMeta, UndoGroupHint};
 
 /// プロセス全体の Undo 履歴の上限 (NFR-203、03 §7.5)。`docs` の履歴の会計値の合計が `limit` を超えている間、

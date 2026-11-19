@@ -37,6 +37,8 @@ pub(crate) struct SwapState {
     notified_large: std::collections::BTreeSet<DocumentId>,
     /// 復旧を適用した古いスワップ。新しいスワップが書けるか、文書が保存されるまで消さない。
     pub(crate) recovered: BTreeMap<DocumentId, Vec<crate::SwapEntry>>,
+    /// 文字コードが違うので提案しなかった (`info.swap.encoding_mismatch` を出した) 文書と候補 (1 組につき 1 回)。
+    pub(crate) mismatch_notified: Vec<(DocumentId, FsPath)>,
 }
 
 #[derive(Default)]
@@ -71,6 +73,7 @@ impl EditorState {
         let hit = self.docs.documents.iter().find_map(|(id, d)| {
             (d.is_dirty()
                 && d.load_state == LoadState::Ready
+                && !d.stdin.is_some_and(|s| s.pristine)
                 && d.len_bytes() as u64 > max
                 && !self.io.swap.notified_large.contains(id))
             .then(|| {
@@ -94,7 +97,8 @@ impl EditorState {
         );
     }
 
-    /// 書いてよい文書なら、その Revision。dirty で読込済み・編集可・上限以下で、秘密ファイルの除外に当たらないもの。
+    /// 書いてよい文書なら、その Revision。dirty で読込済み・編集可・上限以下で、秘密ファイルの除外に当たらず、標準入力から
+    /// 読み込んだだけでないもの。
     fn swap_eligible(&self, id: DocumentId) -> Option<Revision> {
         let cfg = &self.settings.config;
         if !cfg.swap_enabled {
@@ -102,6 +106,11 @@ impl EditorState {
         }
         let d = self.docs.documents.get(&id)?;
         if !d.is_dirty() || d.load_state != LoadState::Ready || !d.read_only.is_empty() {
+            return None;
+        }
+        // 標準入力から読み込んだだけの文書は、最初の編集まで書かない (03 §9.2.2 の「スワップと緊急退避」。緊急退避は
+        // 読み込んだ時点から対象)
+        if d.stdin.is_some_and(|s| s.pristine) {
             return None;
         }
         if d.len_bytes() as u64 > cfg.swap_max_bytes {
@@ -296,7 +305,7 @@ impl EditorState {
         };
         let inflight = e.inflight.take();
         match r {
-            JobResult::SwapWritten { .. } => {
+            JobResult::SwapWritten => {
                 if let Some((_, rev)) = inflight {
                     e.written = Some(rev);
                 }
@@ -318,7 +327,7 @@ impl EditorState {
         };
         e.discarding = None;
         match r {
-            JobResult::SwapDiscarded { .. } => {
+            JobResult::SwapDiscarded => {
                 self.io.swap.docs.remove(&doc);
             }
             JobResult::Failed {

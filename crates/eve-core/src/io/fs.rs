@@ -28,6 +28,16 @@ pub trait FileSystem: Send + Sync {
     /// パスが無い・辿れない (`NotFound` など)。区別は `metadata` と同じ。
     fn canonicalize(&self, path: &FsPath) -> Result<FsPath, FsError>;
 
+    /// ディレクトリの項目の名前 (UTF-8 で表せるものだけ。並びは問わない)。`config.reload` が `locales/` を一覧するのに使う
+    /// (07 §17.4。中身は読まない)。既定は `Unsupported` (一覧しない Port)。
+    ///
+    /// # Errors
+    ///
+    /// ディレクトリが無い (`NotFound`)・読めない。
+    fn list_dir_names(&self, _dir: &FsPath) -> Result<Vec<String>, FsError> {
+        Err(FsError::new(FsErrorKind::Unsupported))
+    }
+
     /// チャンク読込 (既定 1 MiB)。キャンセルは、ジョブが `next_chunk` の間で `CancelToken` を見る。
     ///
     /// # Errors
@@ -235,6 +245,17 @@ pub trait ReadChunks {
     ///
     /// 読込側は I/O の失敗 (`Io`)、保存側は表現不能 (`Unmappable`)・中断 (`Aborted`)・確保の失敗 (`OutOfMemory`)。
     fn next_chunk(&mut self) -> Result<Option<&[u8]>, ChunkError>;
+
+    /// ブロックせずに、もう届いているチャンクを返す (無ければ・終わりなら `Ok(None)`)。標準入力の読込を止めるとき、読取の
+    /// スレッドが既に読んで積んだ分 (受け渡し待ち) を取り込むのに使う (03 §9.2.2)。ファイルの読み手は使わない (既定は
+    /// 常に `Ok(None)`)。
+    ///
+    /// # Errors
+    ///
+    /// 届いていた読取の失敗。
+    fn next_ready(&mut self) -> Result<Option<&[u8]>, ChunkError> {
+        Ok(None)
+    }
 }
 
 /// `ReadChunks` の失敗。
@@ -415,6 +436,9 @@ pub struct SwapEntry {
     /// 本文を読める。未知の `format_version`・壊れた manifest・書きかけ (`written = false`) は `false`
     /// (その場合 core は適用を提案せず、場所だけを示す。移動も削除もしない、05 §7.5)。
     pub readable: bool,
+    /// manifest の `encoding` (書いた時点の文書の文字コード)。読めなければ `None`。理由が `InvalidBytes` だけの読み取り
+    /// 専用の文書には、これが文書の文字コードと同じときだけ復旧を提案する (03 §10.3、v0.4 の M23)。
+    pub encoding: Option<crate::Encoding>,
 }
 
 /// スワップの本文と、元の形式 (無題の文書に適用するとき、開いている文書に写す)。本文は内部の UTF-8 のまま (PUA エスケープ保持)。
@@ -428,6 +452,9 @@ pub struct SwapBody {
     pub has_bom: bool,
     /// 元の文書の既定の改行コード。
     pub default_eol: eve_text::LineEnding,
+    /// manifest の `pua_escaped` (02 §11.2.1): 本文のエスケープ文字が `encoding` のバイトか (書いた文書の
+    /// `escape_encoding.is_some()`)。復旧の適用で `escape_encoding` を決めるのに使う (03 §8.3.1)。
+    pub pua_escaped: bool,
 }
 
 // ---------- 保存中フラグと中断の痕跡 (02 §4.5、05 §4.6 / §7.5) ----------

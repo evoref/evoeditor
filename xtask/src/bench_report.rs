@@ -62,10 +62,37 @@ pub(crate) fn verdict(v: &Value) -> Verdict {
             "spawn → 本文の最初の Frame の write (1 MB、壁時計)",
         ),
         "BM-103a" => t("(診断用)", None, "core 区間のみ。判定は BM-103b"),
+        // v0.4 の M24: CP932 互換文字を含むリテラル (同一視 ON、行の窓の経路)。BM-109 と同じく NFR-109 の目標で記録する
+        "BM-109-compat" => t(
+            "(参考) NFR-109 の目安 300 ms (許容 1 s)",
+            None,
+            "100 MB の互換文字を含むリテラル検索の全件の走査 (ヘッドレス。同一視 OFF と交互に 5 巡の中央値、比は JSON の ratio)",
+        ),
         id if id.starts_with("BM-109-") => t(
             "(参考)",
             None,
             "100 MB のリテラル検索の全件の走査 (ヘッドレス。NFR-109)",
+        ),
+        id if id.starts_with("BM-109r-") && id.ends_with("-1line") => t(
+            "(参考)",
+            None,
+            "10 MB の 1 行の、行単位の方式の検索の全件の走査 (ヘッドレス。S-04 で比べる相手)",
+        ),
+        id if id.starts_with("BM-109r-") => t(
+            "(参考)",
+            None,
+            "100 MB の、行単位の方式の検索の全件の走査 (ヘッドレス。S-04 で比べる相手)",
+        ),
+        // v0.4 の M24: 行をまたぐ正規表現 (行の窓・全文の連結) と、M24 の参考の計測 (09 §5.2)
+        "BM-109m-nextprev" => t(
+            "(参考)",
+            None,
+            "100 MB・k ≥ 1 の、保持に無い位置からの次 / 前 (単発のジョブを含む。ヘッドレス)。p50 は次の 1 回、前と 5 回の連打は JSON",
+        ),
+        id if id.starts_with("BM-109m-") => t(
+            "(参考)",
+            None,
+            "行をまたぐ正規表現の全件の走査 (ヘッドレス。全文の連結の参照と交互に 5 巡の中央値、比は JSON の ratio)",
         ),
         "BM-103a-wrap" => t(
             "(診断用)",
@@ -105,6 +132,17 @@ pub(crate) fn verdict(v: &Value) -> Verdict {
             limits(v, 2.0, 8.0),
             "1 MB の文書の検索欄への正規表現の入力 (一致を強調し直す)",
         ),
+        // v0.4 の M24 (09 §5.2): 行をまたぐ正規表現の入力 (Must。NFR-103、FR-404 AC-1)
+        "BM-103b-search-multiline-1m" => t(
+            "NFR-103 を維持 (p50 2 ms / p99 8 ms)",
+            limits(v, 2.0, 8.0),
+            "1 MB の文書の検索欄への行をまたぐ正規表現の入力 (可視範囲を同期検索で強調し直す)",
+        ),
+        "BM-103b-search-multiline" => t(
+            "NFR-103 を維持 (p50 2 ms / p99 8 ms)",
+            limits(v, 2.0, 8.0),
+            "100 MB の行をまたぐ正規表現の全件検索中のキー入力 (FR-404 AC-1)",
+        ),
         "BM-108" => t(
             "(参考) NFR-108 の目安 50 ms (許容 200 ms)",
             None,
@@ -135,6 +173,25 @@ pub(crate) fn verdict(v: &Value) -> Verdict {
             limits(v, 50.0, f64::MAX),
             "開く → 進捗 (100 MB。FR-122 AC-1)",
         ),
+        // v0.4 の M25: 開く → 先頭部分を含む最初の Frame (先行表示、01 FR-122 AC-2)。30 回の p50 で判定し、最大値は参考
+        "BM-104v-100m" | "BM-104v-100m-sjis" => t(
+            "p50 300 ms",
+            limits(v, 300.0, f64::MAX),
+            "開く → 先頭部分を含む最初の Frame の write (先行表示。先に読み終えたら全文)。先行表示だった回の数は JSON の partial_runs",
+        ),
+        // v0.4 の M25 の 10: 標準入力の起動 (参考、09 §5.2)。同じ回に交互に測った BM-104-100m の手順との比を備考に足す
+        "BM-120-100m" => t(
+            "(参考)",
+            None,
+            "標準入力の起動 (`cmd | evoeditor -`、UTF-8 100 MB): main 入口 → 読み終えた文書の最初の Frame の write。比は判定に使わない",
+        ),
+        // v0.4 の M26: 全訳のユーザーの言語ファイルを置いた起動 (参考、09 §5.2)。同じ回に交互に測った BM-101a との差の中央値を
+        // JSON の diff_p50_ms に持つ。目安 (07 §17.4) は判定に使わない
+        "BM-101a-locale" => t(
+            "(参考)",
+            None,
+            "main 入口 → 最初の Frame の write (全訳のユーザーの言語ファイル `locales/ja.toml`)。BM-101a との差が言語ファイルの増分",
+        ),
         "BM-512" => t(
             "p99 16 ms",
             limits(v, f64::MAX, 16.0),
@@ -152,6 +209,17 @@ pub(crate) fn verdict(v: &Value) -> Verdict {
         ),
         "BM-106" => t("p99 100 ms", limits(v, f64::MAX, 100.0), ""),
         "BM-205" => t("(記録)", None, "配布ビルドの exe のサイズ"),
+        // v0.4 (参考): 保持方式の記録の費用 (09 §5.2 の BM-104 / BM-202 の「v0.4 (参考)」)。メモリの基準は並べて示すだけ
+        id if id.starts_with("BM-104-10m-") => t(
+            "(参考) メモリ: デコード後 × 1.5 + 15 MB",
+            None,
+            "全読込完了。区分 B の箇所が密な 10 MB (`-dense`) と、比べる相手のふつうの Shift_JIS (保持方式の記録の費用、03 §8.7.1)",
+        ),
+        id if id.starts_with("BM-107e-") => t(
+            "(参考)",
+            None,
+            "保存のジョブの時間 (Shift_JIS 100 MB、書く内容は読み捨てる)。`-dense` は記録を使う保存、`-dense-norec` は同じ文書を記録を使わずに (03 §8.7.1)",
+        ),
         _ if id.starts_with("BM-104") => {
             // 全読込完了の p50 の目標 (NFR-104)。Shift_JIS は 1.5 倍まで
             let (target, limit_ms) = match id {
@@ -199,6 +267,26 @@ fn label(v: &Value) -> String {
             s.push_str(x);
         }
     }
+    s
+}
+
+/// 同じ回に交互に測った比べる相手 (`pair_id`) との比の備考 (BM-120-100m の BM-104-100m との比。09 §5.2)。
+/// 比 (`ratio_bm104`) は組ごとの比の中央値。相手が無ければ空。
+fn pair_note(v: &Value) -> String {
+    let (Some(pair), Some(p50), Some(ratio)) = (
+        v.get("pair_id").and_then(Value::as_str),
+        f(v, "pair_p50_ms"),
+        f(v, "ratio_bm104"),
+    ) else {
+        return String::new();
+    };
+    let mut s = format!("。同じ回に交互に測った {pair} の手順 (p50 {p50:.2} ms) との比 {ratio:.2}");
+    if let (Some(fp), Some(fr)) = (f(v, "file_p50_ms"), f(v, "ratio_file")) {
+        s.push_str(&format!(
+            "、起動時のパスで開く起動 (p50 {fp:.2} ms) との比 {fr:.2}"
+        ));
+    }
+    s.push_str(" (組ごとの比の中央値)");
     s
 }
 
@@ -279,11 +367,12 @@ pub(crate) fn write(
                 fmt_ms(v, "max_ms"),
             )
         };
-        let note = if v.get("bytes").is_some() {
+        let mut note = if v.get("bytes").is_some() {
             format!("{} バイト。{}", v["bytes"], ver.note)
         } else {
             ver.note.to_owned()
         };
+        note.push_str(&pair_note(v));
         md.push_str(&format!(
             "| {} | {n} | {p50} | {p99} | {p999} | {max} | {} | {} | {note} |\n",
             label(v),
@@ -340,6 +429,24 @@ mod tests {
         assert_eq!(slow.verdict, "不合格");
     }
 
+    // v0.4 の保持方式の記録の費用 (09 §5.2 の BM-104 / BM-202 / BM-107e の「v0.4 (参考)」) は合否を付けない
+    #[test]
+    fn 保持方式の計測は参考() {
+        for s in [
+            r#"{"id":"BM-104-10m-sjis","p50_ms":40.0,"mem_delta_bytes":300,"mem_limit_bytes":200}"#,
+            r#"{"id":"BM-104-10m-sjis-dense","p50_ms":200.0,"mem_delta_bytes":1,"mem_limit_bytes":2}"#,
+            r#"{"id":"BM-104-10m-iso2022jp-dense","p50_ms":200.0}"#,
+            r#"{"id":"BM-107e-100m-sjis-dense","p50_ms":800.0,"max_ms":900.0}"#,
+        ] {
+            assert_eq!(verdict(&v(s)).verdict, "参考", "{s}");
+        }
+        // 既存の 10 MB (UTF-8) は従来どおり判定する
+        let u = verdict(&v(
+            r#"{"id":"BM-104-10m","p50_ms":200.0,"mem_delta_bytes":1,"mem_limit_bytes":2}"#,
+        ));
+        assert_eq!(u.verdict, "不合格");
+    }
+
     #[test]
     fn 負荷下と進捗とリサイズとアイドルの判定() {
         let ok = |s: &str| verdict(&v(s)).verdict;
@@ -363,6 +470,15 @@ mod tests {
             ok(r#"{"id":"BM-104p-100m","p50_ms":1.2,"p99_ms":90.0}"#),
             "合格"
         );
+        // 先行表示 (v0.4 の M25) は p50 だけで判定する (最大値・p99 は参考)
+        assert_eq!(
+            ok(r#"{"id":"BM-104v-100m","p50_ms":180.0,"p99_ms":900.0}"#),
+            "合格"
+        );
+        assert_eq!(
+            ok(r#"{"id":"BM-104v-100m-sjis","p50_ms":301.0,"p99_ms":310.0}"#),
+            "不合格"
+        );
         assert_eq!(
             ok(r#"{"id":"BM-103b-clip60","p50_ms":0.9,"p99_ms":1.4}"#),
             "合格"
@@ -379,6 +495,64 @@ mod tests {
         assert_eq!(ok(r#"{"id":"BM-201","value":25.0,"unit":"MB"}"#), "不合格");
         assert_eq!(ok(r#"{"id":"BM-204","value":0.0,"unit":"%"}"#), "合格");
         assert_eq!(ok(r#"{"id":"BM-204","value":0.3,"unit":"%"}"#), "不合格");
+    }
+
+    // v0.4 の M24 (09 §5.2): 行をまたぐ検索の入力は NFR-103 で判定し、全件の走査 (BM-109m / BM-109-compat) は参考
+    #[test]
+    fn 行をまたぐ検索の計測() {
+        let ok = |s: &str| verdict(&v(s)).verdict;
+        assert_eq!(
+            ok(r#"{"id":"BM-103b-search-multiline-1m","p50_ms":1.2,"p99_ms":1.9}"#),
+            "合格"
+        );
+        assert_eq!(
+            ok(r#"{"id":"BM-103b-search-multiline","p50_ms":1.2,"p99_ms":9.0}"#),
+            "不合格"
+        );
+        for s in [
+            r#"{"id":"BM-109m-nl-ja","p50_ms":300.0,"ratio":0.9}"#,
+            r#"{"id":"BM-109m-unbounded-1line","p50_ms":20.0}"#,
+            r#"{"id":"BM-109m-nextprev","p50_ms":1.0}"#,
+            r#"{"id":"BM-109-compat","p50_ms":16.0}"#,
+        ] {
+            assert_eq!(ok(s), "参考", "{s}");
+        }
+        assert!(
+            verdict(&v(r#"{"id":"BM-109-compat","p50_ms":16.0}"#))
+                .target
+                .contains("300 ms")
+        );
+    }
+
+    // v0.4 の M25 の 10 (09 §5.2): 標準入力の起動は参考。比べる相手との比を備考に出す
+    #[test]
+    fn 標準入力の起動は参考で比を備考に出す() {
+        let row = v(
+            r#"{"id":"BM-120-100m","n":30,"p50_ms":95.0,"p99_ms":120.0,"max_ms":120.0,"pair_id":"BM-104-100m","pair_p50_ms":150.0,"ratio_bm104":0.633,"file_p50_ms":100.0,"ratio_file":0.95}"#,
+        );
+        let ver = verdict(&row);
+        assert_eq!(ver.verdict, "参考");
+        assert_eq!(ver.target, "(参考)");
+        let note = pair_note(&row);
+        assert!(note.contains("BM-104-100m"), "{note}");
+        assert!(note.contains("p50 150.00 ms"), "{note}");
+        assert!(note.contains("比 0.63"), "{note}");
+        assert!(note.contains("比 0.95"), "{note}");
+        // 相手の無い行は備考を足さない
+        assert_eq!(pair_note(&v(r#"{"id":"BM-104-100m","p50_ms":150.0}"#)), "");
+
+        let dir = std::env::temp_dir().join(format!("xtask-bench-report-{}", std::process::id()));
+        write(&dir, "ENV-W1", "abc1234", false, &[row.to_string()]).unwrap();
+        let md = std::fs::read_to_string(dir.join("summary.md")).unwrap();
+        let json = std::fs::read_to_string(dir.join("BM-120-100m.json")).unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+        let line = md
+            .lines()
+            .find(|l| l.starts_with("| BM-120-100m |"))
+            .expect("BM-120-100m の行");
+        assert!(line.contains("| 参考 |"), "{line}");
+        assert!(line.contains("との比 0.63"), "{line}");
+        assert!(json.contains("\"ratio_bm104\""), "{json}");
     }
 
     #[test]

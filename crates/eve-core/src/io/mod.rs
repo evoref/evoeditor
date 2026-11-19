@@ -4,6 +4,7 @@
 //! spec: 03 §9, 03 §10, 02 §4.5, 05 §4, 05 §7
 pub(crate) mod config_reload;
 pub(crate) mod content_hash;
+pub(crate) mod escape_merge;
 pub(crate) mod external;
 pub(crate) mod file;
 pub(crate) mod file_cmds;
@@ -15,6 +16,7 @@ pub(crate) mod last_version;
 pub(crate) mod leftover;
 pub(crate) mod leftover_offer;
 pub(crate) mod open;
+pub(crate) mod partial_view;
 pub(crate) mod paths;
 pub(crate) mod pending;
 pub(crate) mod reload;
@@ -22,9 +24,11 @@ pub(crate) mod replacing;
 pub(crate) mod rescue;
 pub(crate) mod save;
 pub(crate) mod save_all;
+pub(crate) mod save_plan;
 pub(crate) mod secret;
 pub(crate) mod snapshot;
 pub(crate) mod startup;
+pub(crate) mod stdin_doc;
 pub(crate) mod swap;
 pub(crate) mod swap_recovery;
 pub(crate) mod unmap;

@@ -30,6 +30,9 @@ allowed_files = [
     { crate = "eve-platform", file = "src/session.rs" },
     { crate = "eve-platform", file = "src/signals.rs" },
     { crate = "eve-platform", file = "src/term_unix.rs" },
+    # 標準入力の読取 `eve-stdin` (02 §9.1、v0.4 の M25。ADR-0006 の改訂、OQ-219 の 8)。読込のジョブの `eve-stdin-job` は
+    # eve-host (許可された crate) の `src/workers.rs` が作る
+    { crate = "eve-platform", file = "src/stdin/mod.rs" },
     # NFR-501 AC-2 のシナリオで入力を送る試験用のスレッド (docs/09 §3.6)
     { crate = "eve-testkit", file = "benches/no_network.rs" },
 ]
