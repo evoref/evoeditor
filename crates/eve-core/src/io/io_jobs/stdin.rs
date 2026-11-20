@@ -397,7 +397,9 @@ pub(crate) fn run_open_stdin(
             if sniff.len() == SNIFF_LEN {
                 load.start(&sniff, false);
                 load.feed(&sniff);
-                sniff = Vec::new();
+                // 判定の後は使わないので、64 KiB を手放す
+                sniff.clear();
+                sniff.shrink_to_fit();
                 load.feed(&chunk[take..]);
             }
         } else {
