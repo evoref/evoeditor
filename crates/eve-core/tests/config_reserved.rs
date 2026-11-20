@@ -8,7 +8,7 @@
 
 use std::collections::BTreeSet;
 
-use eve_config::reserved::{RESERVED_KEYS, RESERVED_SECTIONS};
+use eve_config::reserved::{CONDITIONAL_SECTIONS, RESERVED_KEYS, RESERVED_SECTIONS};
 use eve_docs_tables::{identifiers, section, strip_parentheticals, tables_in};
 
 const DOC: &str = include_str!("../../../docs/07-config-extensibility.md");
@@ -115,6 +115,52 @@ fn 公開前のセクションは_07_の_5_のセクションのうち公開キ�
     let mut have: Vec<&str> = RESERVED_SECTIONS.to_vec();
     have.sort_unstable();
     assert_eq!(have, want.iter().map(|s| s.as_str()).collect::<Vec<_>>());
+}
+
+#[test]
+fn 条件付きセクションの名前は_07_の_3_4_の表の条件キーと一致する() {
+    let body = section(DOC, "### 3.4 条件付きセクション (NFR-405)").expect("07 §3.4 を読める");
+    let tables = tables_in(&body);
+    let t = tables
+        .iter()
+        .find(|t| t.column("条件キー").is_some())
+        .expect("07 §3.4 に条件キーの表がある");
+    let col = t.column("条件キー").expect("条件キーの列");
+    // `os.<name>` → `os`
+    let mut want: Vec<String> = t
+        .rows
+        .iter()
+        .flat_map(|r| identifiers(&r.cells[col]))
+        .map(|id| id[..id.find('.').unwrap_or(id.len())].to_owned())
+        .collect();
+    want.sort_unstable();
+    want.dedup();
+    assert_eq!(
+        CONDITIONAL_SECTIONS, want,
+        "eve-config の reserved.rs の CONDITIONAL_SECTIONS を 07 §3.4 の表に合わせる (昇順)"
+    );
+    // 公開キーのセクションや公開前のセクションとは重ならない
+    for c in CONDITIONAL_SECTIONS {
+        assert!(!RESERVED_SECTIONS.contains(c), "{c}");
+        assert!(
+            !public_keys()
+                .iter()
+                .any(|k| k.starts_with(&format!("{c}."))),
+            "{c}"
+        );
+    }
+    // 書くと未知のキーの警告ではなく、未対応の情報診断になる
+    for c in CONDITIONAL_SECTIONS {
+        let l = eve_config::load_str(&format!("[{c}.x.editor]\ntab_width = 2\n"));
+        assert_eq!(l.config, eve_config::Config::default(), "{c}");
+        assert_eq!(l.diagnostics.len(), 1, "{c}: {:?}", l.diagnostics);
+        assert_eq!(l.diagnostics[0].severity, eve_config::Severity::Info, "{c}");
+        assert_eq!(
+            l.diagnostics[0].kind,
+            eve_config::DiagKind::Unsupported,
+            "{c}"
+        );
+    }
 }
 
 #[test]
