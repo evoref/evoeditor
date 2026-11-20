@@ -183,7 +183,7 @@ crate の接頭辞 `eve-` と bin の名前 `evoeditor` は [OQ-01](10-decisions
 
 > **cargo feature**: `test-hooks` (パニック注入コマンド `internal.debug_panic`、保存途中 kill フック、`--bench-*` 隠しフラグ、検索の行の窓の核の大きさと連結の上限を試験から小さくする口 `SearchTuning` (v0.4 の M24 の (4)。既定の値より大きくはできない、03 §12.3.1)。09 §3) は eve-core / eve-host / eve-platform に置き、**配布ビルドでは無効**。`bench-trace` (tracing-subscriber / tracing-chrome による計測。span を JSON lines で `EVE_TRACE_FILE` に出す、§11.3) も配布ビルドでは無効。**計測用ビルド** = release プロファイル + `test-hooks` + `bench-trace` (09 §5 のベンチはこのビルドで測る)。`headless` (bin、駆動 API) は v0.2 以降に dev のみで入れる (ADR-0039、配布同梱は OQ-120)。`eve-encoding` の `legacy` (Shift_JIS 等。無効にすると UTF-8/16 のみ、組込み用途で依存を減らす)、`ai` / `lsp` (tokio 系の分離、§9.4)、`ai-remote` (クラウド用の TLS。ローカル LLM だけを使うビルドは TLS 依存を含まない、ADR-0034)。
 >
-> **配布ビルドで `eve-view` の `serde` が有効になる条件**: (a) 駆動 API (sidecar モードを含む) を配布ビルドに同梱すると決めた場合 (OQ-120。v0.5 着手前に判断。06 の MCP サーバ (v1.L-b 候補) はこれを前提にする)、(b) feature `ai` を有効にしたビルド (v1.L 以降。eve-ai → eve-protocol → eve-view の `serde`)。どちらにも当たらない v0.x の配布ビルドでは無効で、`xtask check-deps` が検査する (09)。
+> **配布ビルドで `eve-view` の `serde` が有効になる条件**: (a) 駆動 API (sidecar モードを含む) を配布ビルドに同梱すると決めた場合 (OQ-120。v0.x は同梱しない (確定、2026-11-20)。1.0 以降は駆動 API の実装と S-21 の後に判断。06 の MCP サーバ (v1.L-b 候補) はこれを前提にする)、(b) feature `ai` を有効にしたビルド (v1.L 以降。eve-ai → eve-protocol → eve-view の `serde`)。どちらにも当たらない v0.x の配布ビルドでは無効で、`xtask check-deps` が検査する (09)。
 
 > crate 数は「境界を型で強制したい箇所」と「1 作業者 (人間または AI エージェント) の作業集合として独立させたい箇所」に絞った。`eve-text` / `eve-encoding` / `eve-view` を core から分けるのは、(1) テキスト層・文字コード層を単独でベンチ・fuzz・再利用したい、(2) frontend が core 内部型に触れず境界型だけに依存できるようにする、ため。frontend (`eve-tui`) が直接依存するのは `eve-view` と `eve-host` だけで (§4.2 の図の矢印のとおり)、**参照してよいのは `eve-host` の `Frontend` / `Host` / `HostMsg`** とする。`eve-core` には直接依存しない (dev 依存を除く。eve-tui の統合テストは `eve-core` を dev 依存にする、09 §6.2 の `docs-tables`・§4.2 の図の `dev` の点線。`Frontend` は `Frame` / `Effect` / `InputEvent` (eve-view) だけを受け渡すので `Editor` を要しない。`eve-core` へは `eve-host` を通して推移的に届くだけ)。`eve-config` と `eve-platform` には依存しない (設定は `FrontendConfig` で受け取る、§9.2)。
 
@@ -1087,7 +1087,7 @@ InputEvent::Text ─▶ チョード保留中、または captures_text を宣�
 | K2 純プレフィックス | タイムアウトしない (無期限保留)。`Esc` で取消。**保留中の `Esc` は、他のどの層 (オーバーレイを閉じる処理を含む) よりも先に保留だけを取り消し、「未割当」の通知は出さない** (オーバーレイ上でチョードを始めて `Esc` を押しても、オーバーレイは閉じない。もう一度 `Esc` を押すとオーバーレイが閉じる。04 §7.5 の優先順の先頭)。保留中はヒントバー/which-key (v0.2) に続きを表示 | 初心者・運動機能への配慮。時間制限で操作が失敗しない |
 | K3 曖昧 | 「完全一致かつプレフィックス」は層が `chord_timeout_ms` (07) を宣言した場合のみ許し、deadline (Clock 由来) で完全一致側を実行。既定キーマップには作らない。ユーザー設定で生じたら警告 + チョード優先 (07 §7.6) | タイムアウト依存を Vim 層等の明示 opt-in に限定 |
 | K4 同一層・同一キー | 配列値は先頭から順に when が真の最初を採用 (先勝ち)。別々の定義行が同じキーを定義した場合は後勝ち + 情報診断 | 07 §7.1 の配列書式と 04 §7.5 の上書きを両立 |
-| K5 層の優先 | overlay 固有 > モード > ワークスペース > ユーザー > 既定。ワークスペース層は追加のみで既存割当を上書きできない (提案中、OQ-35)。各層の中で参照するコンテキスト (`global` / `editor` / `search` / `prompt` / `palette` / `list` / `dialog` / `help`) とその参照順の正本は 07 §7.1。`Frame.focus` (§8.2) が `SearchBar` のときのコンテキストは `search`、確認ダイアログは `dialog` だけを参照する (モーダル) | 高い層ほど文脈が具体的 |
+| K5 層の優先 | overlay 固有 > モード > ワークスペース > ユーザー > 既定。ワークスペース層は追加のみで既存割当を上書きできない (OQ-35。確定 (ユーザー回答、2026-11-20))。各層の中で参照するコンテキスト (`global` / `editor` / `search` / `prompt` / `palette` / `list` / `dialog` / `help`) とその参照順の正本は 07 §7.1。`Frame.focus` (§8.2) が `SearchBar` のときのコンテキストは `search`、確認ダイアログは `dialog` だけを参照する (モーダル) | 高い層ほど文脈が具体的 |
 | K6 修飾 `mod` | キーマップ書式に主修飾 `mod` を置き、正準化時に解決する: TUI (全 OS) = `ctrl`。既定キーマップは `mod+s` 等で書く。表示は解決後の名前 (確定 (ユーザー回答)、OQ-29) | 主修飾の解決を 1 箇所にまとめ、キーマップの書き方を固定する |
 | K7 Release | core は Release を受け取らない (§7.1) | 端末差の吸収 |
 | K8 区別困難キー | Ctrl+H/Backspace、Ctrl+I/Tab 等は eve-tui が正規化してから渡す。core は Capabilities.enhanced_keys を見て、区別できないキーにしか割り当てられていない Must 操作がないことを検査できる (FR-606、09 の到達性検査) | 端末の癖を core に持ち込まない |
@@ -2281,7 +2281,7 @@ sensitive = false                     # 任意 (無ければ false)。秘密フ�
 | 秘密値のゼロ化・SSE 解析 (v1.L) | zeroize/secrecy 系、SSE パーサ | v1.L の依存追加チェックリストで評価 |
 | ハッシュ (外部変更検知・保存中フラグのキー) | XXH3-64 の純 Rust の実装。`eve-core` の内容ハッシュ (`ContentHash([u8; 8])`、§4.5) は `twox-hash`、`eve-platform` の保存中フラグの置き場所のキー (`hash(path)`、05 §4.6 / §7.5) は `xxhash-rust` (`eve-platform` は `eve-core` に依存できないため別の crate。同じアルゴリズムなので、どちらかにそろえるのは v0.2 の整理の候補) | C/asm 依存を v0.x に入れない (05 §17.2)。暗号学的な強度は要らない (偶然の一致を避ければ足りる) |
 | C ランタイム (Windows) | 静的リンク (`+crt-static`)。`.cargo/config.toml` に `[target.x86_64-pc-windows-msvc] rustflags = ["-C", "target-feature=+crt-static"]` を書く (§17.1) | 確定 (ユーザー回答)。配布物が VC++ 再頒布可能パッケージに依存しない (単一の実行ファイルで動く) |
-| JSON (駆動 API) | serde_json (dev feature `headless` のみ。v0.2 以降) | 配布同梱は OQ-120 |
+| JSON (駆動 API) | serde_json (dev feature `headless` のみ。v0.2 以降) | 配布同梱は OQ-120 (v0.x は同梱しない) |
 | テスト | `eve_testkit::golden::check` (テキストのゴールデン。`EVE_UPDATE_GOLDEN=1` で作る・書き換える。insta は入れない、2026-11-05)、proptest、cargo-fuzz | 09 で確定 |
 | アロケータ | システム既定 | C を含むアロケータは使わない。musl の malloc の性能は OQ-112 で計測 |
 
