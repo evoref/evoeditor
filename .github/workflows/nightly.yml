@@ -3,6 +3,8 @@
 # 手動実行では引数 ref で上書き) をチェックアウトし、そのコードの `cargo xtask nightly` を入口にする (手順の中身は xtask にある)。
 # 中身: fuzz の 5 つのターゲット (v0.4。各 16 分、合計 80 分。ターゲットを絞らないときは xtask が合計 80 分に抑える)・proptest 拡張 (PROPTEST_CASES=10000)・cargo audit / deny advisories (本体と fuzz/)・coverage (報告のみ)・
 # 保存のクラッシュ一貫性 (v0.2。LazyFS で電源断を模擬する、NFR-301)・長時間の soak (v0.2。BM-306 を 60 分。観察のみ、NFR-306)。
+# 別のジョブ beta (linux): beta のツールチェーンで fmt・clippy・nextest (09 §6.3。2026-11-20 に足した。記録のみで、失敗しても実行の成否に数えない)。
+# schedule は既定ブランチ (main) の定義で動くので、beta のジョブが定時に走るのは、この定義が main に入った後 (v0.5.0 の昇格)。
 # fuzz のクラッシュ入力は `.github/fuzz-recipients.txt` の公開鍵で age により暗号化したものだけを artifact に上げる (平文は消す)。
 name: nightly
 
@@ -20,7 +22,7 @@ on:
         required: false
         default: "600"
       only:
-        description: "実行する手順を絞る (fuzz,proptest,audit,coverage,crash,soak のカンマ区切り。空なら全部)。fuzz は fuzz:fuzz_decode+fuzz_editor でターゲットを絞れる (リリース前の 1 時間、docs/09 §8.2)"
+        description: "実行する手順を絞る (fuzz,proptest,audit,coverage,crash,soak のカンマ区切り。空なら全部)。fuzz は fuzz:fuzz_decode+fuzz_editor でターゲットを絞れる (リリース前の 1 時間、docs/09 §8.2)。beta だけを回すときは beta (単独で。beta のジョブだけが走る)"
         required: false
         default: ""
       soak_minutes:
@@ -57,6 +59,8 @@ defaults:
 jobs:
   nightly:
     name: nightly (linux)
+    # only=beta の手動実行では、beta のジョブだけを走らせる
+    if: inputs.only != 'beta'
     runs-on: ubuntu-24.04
     timeout-minutes: 240
     # 起票 (ジョブの失敗とクラッシュの件数だけを書く、09 §6.3) のために issues: write をこのジョブに限って足す
@@ -162,3 +166,48 @@ jobs:
             body="${body}"$'\n\n```\n'"$(cat target/nightly/summary.txt)"$'\n```'
           fi
           gh issue create --title "nightly: 失敗 ($(date -u +%Y-%m-%d))" --body "${body}"
+
+  # beta の検査 (docs/09 §6.3): 次の安定版で増える clippy の lint や rustc の警告を、安定版になる前に見つける (Rust 1.100 の #537 / #538)。
+  # 夜間の段 (上のジョブ) の時間の上限 240 分を使わないように、別のジョブにして並行に走らせる。記録のみ: continue-on-error で
+  # 実行の成否に数えず、定時の実行で失敗したときだけ起票する。手順の中身は xtask (`cargo xtask nightly --only beta`) にある。
+  beta:
+    name: beta (linux)
+    if: inputs.only == '' || inputs.only == 'beta'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    continue-on-error: true
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref || vars.NIGHTLY_REF || 'develop' }}
+          persist-credentials: false
+      # xtask は stable でビルドする。beta のツールチェーン (clippy・rustfmt・Windows のターゲット) は xtask が入れる
+      - name: Rust (stable)
+        run: rustup toolchain install stable --profile minimal --no-self-update && rustup default stable
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          shared-key: linux-beta
+      - uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
+        with:
+          tool: cargo-nextest@0.9.148
+      - name: cargo xtask nightly --only beta
+        run: cargo xtask nightly --only beta
+      - name: 要約
+        if: always()
+        run: |
+          if [ -f target/nightly/summary.txt ]; then
+            { echo '## beta'; echo '```'; cat target/nightly/summary.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: 失敗の起票
+        if: failure() && github.event_name == 'schedule'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          body="nightly の beta の検査が失敗しました (次の安定版の前に直す、docs/09 §6.3): ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          if [ -f target/nightly/summary.txt ]; then
+            body="${body}"$'\n\n```\n'"$(cat target/nightly/summary.txt)"$'\n```'
+          fi
+          gh issue create --title "nightly: beta の検査で失敗 ($(date -u +%Y-%m-%d))" --body "${body}"

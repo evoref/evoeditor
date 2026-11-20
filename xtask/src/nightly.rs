@@ -18,6 +18,10 @@
 //!   渡したときだけ走らせる (nightly.yml が 60 を渡す。定時の実行が古い nightly.yml (時間の上限が足りない) で動くときは
 //!   飛ばす)。RSS と入力の遅延の推移を `target/nightly/soak.jsonl` に書き、要約に傾向を 1 行で出す。**観察のみで失敗にしない**
 //!   (09 §6.3、§8.2 の v0.2 の表)。`--only soak` と明示して `--soak-minutes` が無ければ 60 分。
+//! - `beta` (v0.5 の準備、2026-11-20): 次の安定版で増える clippy の lint や rustc の警告を、安定版になる前に見つける
+//!   (Rust 1.100 の #537 / #538)。beta のツールチェーンを入れ、fmt・clippy (Linux CI の対象 crate と、Windows のターゲットの
+//!   workspace 全体)・nextest (Linux CI の対象 crate) を回し、要約に beta の版を書く。**`--only beta` と明示したときだけ走る**
+//!   (nightly.yml の別のジョブ `beta (linux)` が呼ぶ。夜間の段の時間の上限 240 分を使わない)。記録のみでゲートにしない (09 §6.3)。
 //!
 //! 結果の要約は `target/nightly/summary.txt` (ターゲット名・コミット・seed・クラッシュの件数・暗号化した artifact の名前だけ。
 //! 入力の内容・ハッシュ・スタックは書かない)。
@@ -46,7 +50,14 @@ fn linux_crates() -> Result<Vec<String>, String> {
         .collect()
 }
 
+/// `--only` を付けない実行で回す手順。
 const STEPS: [&str; 6] = ["fuzz", "proptest", "audit", "coverage", "crash", "soak"];
+
+/// `--only` で明示したときだけ回す手順 (09 §6.3。nightly.yml の別のジョブが呼ぶ)。
+const EXPLICIT_STEPS: [&str; 1] = ["beta"];
+
+/// beta の検査で clippy を走らせる Windows のターゲット (Linux から Windows だけのコードを検査する。リンクはしない)。
+const WINDOWS_TARGET: &str = "x86_64-pc-windows-msvc";
 
 pub fn run_all(args: &[String]) -> Result<(), String> {
     let explicit = flag(args, "--only").is_some();
@@ -82,7 +93,11 @@ pub fn run_all(args: &[String]) -> Result<(), String> {
     let mut failures: Vec<String> = Vec::new();
     summary.push(format!("commit: {}", commit()));
 
-    for step in STEPS.iter().filter(|s| only.iter().any(|o| o == *s)) {
+    for step in STEPS
+        .iter()
+        .chain(EXPLICIT_STEPS.iter())
+        .filter(|s| only.iter().any(|o| o == *s))
+    {
         if *step == "crash" && skip_crash(explicit, std::env::var_os("LAZYFS_BIN").is_some()) {
             println!(
                 "▶ crash: LAZYFS_BIN が無いので飛ばします (--only crash で明示すると失敗にします)"
@@ -113,6 +128,7 @@ pub fn run_all(args: &[String]) -> Result<(), String> {
             "proptest" => proptest(),
             "audit" => audit(),
             "coverage" => coverage(&out_dir),
+            "beta" => beta(&mut summary),
             _ => crate::crash_consistency::run_cmd(&[]),
         };
         match r {
@@ -144,9 +160,9 @@ fn parse_only(v: &str) -> Result<(Vec<String>, Option<Vec<&'static str>>), Strin
         let (step, rest) = item
             .split_once(':')
             .map_or((item, None), |(a, b)| (a, Some(b)));
-        if !STEPS.contains(&step) {
+        if !STEPS.contains(&step) && !EXPLICIT_STEPS.contains(&step) {
             return Err(format!(
-                "知らない手順です: {step} (fuzz / proptest / audit / coverage / crash / soak)"
+                "知らない手順です: {step} (fuzz / proptest / audit / coverage / crash / soak / beta)"
             ));
         }
         if let Some(rest) = rest {
@@ -526,6 +542,74 @@ fn soak_line(v: &serde_json::Value) -> String {
 }
 
 /// `crash` を飛ばすか: 手順を明示せず (`--only` なし)、LazyFS が用意されていないとき。
+/// 手順 `beta` (09 §6.3): beta のツールチェーンで fmt・clippy・nextest を回す。3 つとも回してから、失敗をまとめて返す。
+fn beta(summary: &mut Vec<String>) -> Result<(), String> {
+    run(
+        "beta のツールチェーン",
+        Command::new("rustup").args([
+            "toolchain",
+            "install",
+            "beta",
+            "--profile",
+            "minimal",
+            "--component",
+            "clippy,rustfmt",
+            "--target",
+            WINDOWS_TARGET,
+            "--no-self-update",
+        ]),
+    )?;
+    let version = run_capture(Command::new("rustc").args(["+beta", "-V"]))?;
+    summary.push(format!("beta: {}", version.trim()));
+
+    let crates = linux_crates()?;
+    let mut fmt = Command::new("cargo");
+    fmt.args(["+beta", "fmt", "--all", "--check"]);
+    let mut clippy_linux = Command::new("cargo");
+    clippy_linux.args(["+beta", "clippy"]);
+    for c in &crates {
+        clippy_linux.args(["-p", c]);
+    }
+    clippy_linux.args(CLIPPY_ARGS);
+    let mut clippy_windows = Command::new("cargo");
+    clippy_windows
+        .args(["+beta", "clippy", "--target", WINDOWS_TARGET, "--workspace"])
+        .args(CLIPPY_ARGS);
+    let mut test = Command::new("cargo");
+    test.args([
+        "+beta",
+        "nextest",
+        "run",
+        "--profile",
+        "ci",
+        "--no-tests=pass",
+    ]);
+    for c in &crates {
+        test.args(["-p", c]);
+    }
+
+    let mut failed = Vec::new();
+    for (label, cmd) in [
+        ("beta: fmt", &mut fmt),
+        ("beta: clippy (linux)", &mut clippy_linux),
+        ("beta: clippy (windows のターゲット)", &mut clippy_windows),
+        ("beta: nextest (linux)", &mut test),
+    ] {
+        if let Err(e) = run(label, cmd) {
+            summary.push(format!("{label}: 失敗"));
+            failed.push(e);
+        }
+    }
+    if failed.is_empty() {
+        Ok(())
+    } else {
+        Err(failed.join("\n"))
+    }
+}
+
+/// beta の clippy の引数 (ci.yml の clippy と同じ: 全ターゲット・全 feature、警告を失敗にする)。
+const CLIPPY_ARGS: [&str; 5] = ["--all-targets", "--all-features", "--", "-D", "warnings"];
+
 fn skip_crash(explicit: bool, has_lazyfs: bool) -> bool {
     !explicit && !has_lazyfs
 }
@@ -591,6 +675,16 @@ mod tests {
         assert!(parse_only("fuzz:fuzz_nothing").is_err());
         assert!(parse_only("audit:fuzz_decode").is_err());
         assert!(parse_only("fuzzz").is_err());
+        let (steps, t) = parse_only("beta").unwrap();
+        assert_eq!(steps, ["beta"]);
+        assert_eq!(t, None);
+        assert!(parse_only("beta:fuzz_decode").is_err());
+    }
+
+    #[test]
+    fn beta_は_only_を付けない実行に入らない() {
+        assert!(!STEPS.contains(&"beta"));
+        assert!(EXPLICIT_STEPS.contains(&"beta"));
     }
 
     #[test]
