@@ -32,10 +32,10 @@ pub enum StdinKind {
     /// 端末 (読まない)。
     Terminal,
     /// ふつうのファイル (`evoeditor - < file`)。起動し直せば同じ内容を読める (流し直せる)。書く手段の無い内容
-    /// (`msg.stdin.unsaveable_rerun`) で `--encoding` を付けて起動し直すことを案内する。
+    /// (`msg.stdin.unsaveable`) で `--encoding` を付けて起動し直すことを案内する。
     File,
     /// パイプ・デバイスなど、ファイルでないもの。流し直せるかは分からない (閉じないパイプ・一度きりの出力) ので、
-    /// 起動し直す案内を出さない (`msg.stdin.unsaveable`)。
+    /// 起動し直す案内を出さない (`msg.stdin.unsaveable_copy`)。
     Stream,
 }
 

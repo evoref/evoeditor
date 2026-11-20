@@ -8,8 +8,8 @@
 //!   `info.stdin.terminal`、端末でなければ `Loading` の無題の文書と `JobKind::OpenStdin`。
 //! - **終端** (`StdinDone`): 読み終えた (`end` のどれでも、1 バイト以上読んだ) 文書は変更あり (保存点の無い履歴)。
 //!   `--readonly` (理由 `UserRequested`) は変更なしで、解除した時点で変更ありにする (`io/file_cmds.rs`)。`end` ごとに
-//!   メッセージを出し分け、書く手段の無い内容には `msg.stdin.unsaveable` (標準入力がふつうのファイルなら、起動し直す
-//!   案内の付いた `msg.stdin.unsaveable_rerun`) を足す。
+//!   メッセージを出し分け、書く手段の無い内容には `msg.stdin.unsaveable` (起動し直す案内。標準入力がふつうのファイルの
+//!   とき) か `msg.stdin.unsaveable_copy` (選択してコピーできる案内。それ以外) を足す。
 //! - **止める・捨てる操作の確認** (OQ-219 の 10): 表示中の `Esc` は `ui.confirm.stdin_stop`、1 バイト以上読んだ読込中の
 //!   文書を閉じる・終了するときは `ui.confirm.stdin_loading` (閉じる・終了の連鎖に入る)。
 //! - **パニック** (`Failed`): 読んだ内容は失い、文書を閉じる (`msg.stdin.failed`)。
@@ -456,9 +456,9 @@ impl EditorState {
 /// 出力) ので、選択してコピーできることだけを示す。
 fn unsaveable_key(replayable: bool) -> &'static str {
     if replayable {
-        keys::MSG_STDIN_UNSAVEABLE_RERUN
-    } else {
         keys::MSG_STDIN_UNSAVEABLE
+    } else {
+        keys::MSG_STDIN_UNSAVEABLE_COPY
     }
 }
 

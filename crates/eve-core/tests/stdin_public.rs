@@ -6,11 +6,11 @@
 use std::sync::Arc;
 
 use eve_core::{
-    CancelToken, CommandResult, Encoding, InitialFile, InitialTarget, JobError, JobKind, JobOutput,
-    JobPorts, JobRequest, JobResult, LoadState, OpenOptions, ReadOnlyReason, StdinEnd, StdinKind,
-    StdinSource, run_job,
+    CancelToken, CommandResult, Encoding, FsErrorKind, InitialFile, InitialTarget, JobError,
+    JobKind, JobOutput, JobPorts, JobRequest, JobResult, LoadState, OpenOptions, ReadOnlyReason,
+    StdinEnd, StdinKind, StdinSource, run_job,
 };
-use eve_testkit::{FakeStdin, FixedPaths, Harness, ManualClock, MemFs, StdinStep};
+use eve_testkit::{FakeStdin, FixedPaths, FsOp, Harness, ManualClock, MemFs, StdinStep};
 use eve_view::{DocumentId, Effect, JobId, Revision};
 
 /// `harness` の標準入力の読込のジョブ (`defer_start` で最初に振られる番号)。
@@ -309,6 +309,47 @@ fn readonly_の標準入力の文書も変更なしのまま緊急退避の対�
 }
 
 #[test]
+fn 保存中に閉じた_readonly_の標準入力の文書は保存に失敗したら退避先に書く() {
+    // 03 §9.2 の閉じる手順 (a)・§9.8 の不変条件 4: 名前を付けて保存の途中で閉じた文書は、保存の結果が届くまで緊急退避の
+    // 対象に残り、失敗したら退避先に書く。`--readonly` の標準入力の文書 (変更なし) も同じ (v0.5 の M29)
+    let fake = FakeStdin::chunks(b"journal\n", 3);
+    let (mut h, doc) = harness_with(
+        &fake,
+        OpenOptions {
+            user_read_only: true,
+            ..OpenOptions::default()
+        },
+    );
+    h.run_jobs();
+    assert!(!h.is_dirty(), "--readonly は変更なし");
+    h.cmd_with(
+        "file.save_as",
+        eve_core::Args::new().with_str("path", "/w/journal.txt"),
+    );
+    assert_eq!(h.pending_jobs(), 1, "保存ジョブが実行待ち");
+    h.editor.state_mut().close_document(doc);
+    assert!(
+        h.editor.emergency_snapshot(doc).is_some(),
+        "保存の結果が届くまで退避の対象に残す"
+    );
+    h.fs.fail_next(FsOp::WriteAtomic, FsErrorKind::PermissionDenied);
+    // 1 周目: 保存の失敗。閉じた文書なので確認は出さず、退避先への書込 (`JobKind::WriteRecovery`) を投入する
+    h.run_jobs_once();
+    assert_eq!(h.overlay(), "", "閉じた文書に確認は出さない");
+    assert_eq!(h.pending_jobs(), 1, "退避先への書込を投入する");
+    assert!(
+        h.editor.emergency_snapshot(doc).is_some(),
+        "退避先に書き終えるまで残す"
+    );
+    // 2 周目: 退避先に書く
+    h.run_jobs();
+    let written = h.fs.recovery_written();
+    assert_eq!(written.len(), 1, "退避先に 1 件");
+    assert_eq!(written[0], b"journal\n");
+    assert!(h.editor.emergency_snapshot(doc).is_none());
+}
+
+#[test]
 fn readonly_でも何も読まなかった標準入力の文書は退避しない() {
     let fake = FakeStdin::new([]);
     let (mut h, doc) = harness_with(
@@ -483,12 +524,14 @@ fn 書く手段の無い内容は開いた時点で知らせる() {
     );
     h.run_jobs();
     assert!(
-        h.messages().contains(&"msg.stdin.unsaveable".to_owned()),
+        h.messages()
+            .contains(&"msg.stdin.unsaveable_copy".to_owned()),
         "{:?}",
         h.messages()
     );
 }
 
+// verifies: AC-FR-120-5
 #[test]
 fn 書く手段の無い内容の案内はパイプでは起動し直すことを言わない() {
     // 03 §9.2.2 の「書く手段の無い文書」(v0.5 の M29): パイプは流し直せるか分からないので、選択してコピーできることだけ
@@ -502,11 +545,11 @@ fn 書く手段の無い内容の案内はパイプでは起動し直すこと�
     h.run_jobs();
     let msgs = h.messages();
     assert!(
-        msgs.contains(&"msg.stdin.unsaveable".to_owned()),
+        msgs.contains(&"msg.stdin.unsaveable_copy".to_owned()),
         "{msgs:?}"
     );
     assert!(
-        !msgs.contains(&"msg.stdin.unsaveable_rerun".to_owned()),
+        !msgs.contains(&"msg.stdin.unsaveable".to_owned()),
         "{msgs:?}"
     );
     // ふつうのファイル (`evoeditor - < file`) は流し直せるので、`--encoding` を付けて起動し直すことを案内する
@@ -514,23 +557,24 @@ fn 書く手段の無い内容の案内はパイプでは起動し直すこと�
     h.run_jobs();
     let msgs = h.messages();
     assert!(
-        msgs.contains(&"msg.stdin.unsaveable_rerun".to_owned()),
+        msgs.contains(&"msg.stdin.unsaveable".to_owned()),
         "{msgs:?}"
     );
     assert!(
-        !msgs.contains(&"msg.stdin.unsaveable".to_owned()),
+        !msgs.contains(&"msg.stdin.unsaveable_copy".to_owned()),
         "{msgs:?}"
     );
 }
 
+// verifies: AC-FR-120-5
 #[test]
 fn 起動の標準入力の種類が書く手段の無い内容の案内に届く() {
     // 不正バイトの多い内容は確認を出さずに読み取り専用で開く。`--encoding` は起動の `forced` で渡す
     let mut bytes = b"\x1b$B$\"\x1b(B ".to_vec();
     bytes.extend_from_slice(b"\x1b$B\xff\xfe\x1b(B\n");
     for (kind, key) in [
-        (StdinKind::File, "msg.stdin.unsaveable_rerun"),
-        (StdinKind::Stream, "msg.stdin.unsaveable"),
+        (StdinKind::File, "msg.stdin.unsaveable"),
+        (StdinKind::Stream, "msg.stdin.unsaveable_copy"),
     ] {
         let mut h = Harness::builder()
             .defer_start()
@@ -1106,9 +1150,8 @@ fn 保存を中止して終了の待ちの間に標準入力の文書を閉じ�
 }
 
 #[test]
-fn 保存を中止して終了は_readonly_の標準入力も待つが退避しない() {
-    // `--readonly` の標準入力の文書は緊急退避 (シグナル・パニック) の対象だが、確認なしで終わる終了では通常の終了と
-    // 同じく捨てる (03 §9.7 (f)・§10.1 の「対象」)
+fn 保存を中止して終了は_readonly_の標準入力も待って退避する() {
+    // 読込中の `--readonly` の標準入力の文書も止めて終端を待ち、変更なしのまま退避の対象にする (03 §9.7 (f) 3)
     let fake = FakeStdin::new([StdinStep::Hang]);
     let (mut h, stdin_doc, save, job) = quit_saving_with_stdin(&fake, 8);
     h.answer(1);
@@ -1130,9 +1173,57 @@ fn 保存を中止して終了は_readonly_の標準入力も待つが退避し�
     assert_eq!(quit_rescue(&h), Some(eve_view::QuitRescue::DirtyDocuments));
     assert!(!doc_of(&h, stdin_doc).is_dirty());
     assert!(
-        h.editor.emergency_snapshot(stdin_doc).is_none(),
-        "--readonly は変更なしで退避しない"
+        h.editor.emergency_snapshot(stdin_doc).is_some(),
+        "--readonly で変更なしでも退避する"
     );
+}
+
+// verifies: AC-FR-120-3
+#[test]
+fn 保存を中止して終了は読み終えた_readonly_の標準入力の文書を退避の対象に残す() {
+    // 03 §9.7 (f)・§10.1 の「対象」(v0.5 の M29): 「保存を中止して終了」の退避の対象は緊急退避と同じ。読み終えた時点で
+    // 公開した `--readonly` の標準入力の文書 (変更なし) を、終了の要求で外さない (確認の文言「保存していない内容は退避します」)
+    let fake = FakeStdin::chunks(b"ro\n", 2);
+    let mut h = Harness::builder()
+        .defer_start()
+        .stdin(Arc::new(fake.clone()))
+        .file("/w/a.txt", b"abc")
+        .build();
+    h.editor
+        .open_initial_files(&[InitialFile::path("/w/a.txt")], false, None);
+    h.started();
+    h.run_jobs();
+    h.text("x");
+    let stdin_doc = h.editor.state_mut().open_stdin(
+        OpenOptions {
+            user_read_only: true,
+            ..OpenOptions::default()
+        },
+        StdinKind::Stream,
+    );
+    // 1. 標準入力を読み終える
+    h.run_jobs();
+    assert!(!doc_of(&h, stdin_doc).is_dirty(), "--readonly は変更なし");
+    assert!(h.editor.emergency_snapshot(stdin_doc).is_some());
+    // 2. 公開物の差し替えの知らせを一度空にする (Host は読み終えた時点でスロットに入れた)
+    let _ = h.editor.take_snapshot_updates();
+    // 3. a.txt の保存を詰まらせて (ジョブを走らせない)、「保存を中止して終了」に進む
+    let CommandResult::Pending(save) = h.cmd("file.save") else {
+        panic!("保存ジョブを投入する");
+    };
+    h.cmd("app.quit");
+    h.advance_ms(5000);
+    assert_eq!(confirm_name(&h).as_deref(), Some("quit_saving"));
+    h.answer(1);
+    deliver(&mut h, vec![cancelled(save)]);
+    assert_eq!(quit_rescue(&h), Some(eve_view::QuitRescue::DirtyDocuments));
+    // 4. 退避の対象のまま (スロットを空にする知らせが出ても、公開物は残る)
+    let snap = h
+        .editor
+        .emergency_snapshot(stdin_doc)
+        .expect("--readonly で変更なしでも退避の対象のまま");
+    assert!(snap.sensitive);
+    assert_eq!(snap.to_vec(), b"ro\n");
 }
 
 #[test]

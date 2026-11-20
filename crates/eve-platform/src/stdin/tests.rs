@@ -367,6 +367,7 @@ fn 標準入力が空のもの_ファイルのときも読める() {
     );
 }
 
+// verifies: AC-FR-120-5
 #[test]
 fn 標準入力がふつうのファイルのときだけ流し直せると判定する() {
     if std::env::var_os(CHILD_ENV).is_some() {

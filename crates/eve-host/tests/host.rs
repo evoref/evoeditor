@@ -24,12 +24,17 @@ fn env() -> Env {
 }
 
 fn env_with(init: HostInit) -> Env {
+    env_stdin(init, None)
+}
+
+/// `env_with` の、読込のジョブに標準入力 (`StdinSource`) を渡す版。
+fn env_stdin(init: HostInit, stdin: Option<Arc<dyn eve_core::StdinSource>>) -> Env {
     let clock = ManualClock::new();
     let fs = Arc::new(MemFs::new(Arc::new(clock.clone())));
     fs.add_dir("/w");
     let paths = Arc::new(FixedPaths::default());
     let jp = JobPorts {
-        stdin: None,
+        stdin,
         fs: fs.clone(),
         clock: Arc::new(clock.clone()),
         paths: paths.clone(),
@@ -65,6 +70,19 @@ impl Env {
 
     fn ascii(&self) -> String {
         self.probe.last_ascii(AsciiOptions::default()).unwrap()
+    }
+
+    /// 積まれたジョブを実行し、結果を Host に返す (最後の `step` の結果)。
+    fn run_jobs(&mut self) -> StepOutcome {
+        self.jobs.run_jobs();
+        let mut out = StepOutcome::Continue;
+        for r in self.jobs.take_results() {
+            out = self.host.step(&mut self.fe, HostMsg::Job(Box::new(r)));
+            if matches!(out, StepOutcome::Exit(_)) {
+                break;
+            }
+        }
+        out
     }
 }
 
@@ -418,4 +436,98 @@ fn 保存を中止して終了すると_dirty_な文書を退避してから_res
         "「保存を中止して終了」の退避は時間予算なし (02 §11.2.1)"
     );
     assert_eq!(e.probe.restore_count(), 1);
+}
+
+// ---- `--readonly` で開いた標準入力の文書の退避 (03 §9.2.2 の「スワップと緊急退避」・§10.1 の「対象」、v0.5 の M29) ----
+
+/// 退避の書き手のスパイと、標準入力を渡した Env。
+fn with_spy_stdin(fake: &eve_testkit::FakeStdin) -> (Env, Arc<Spy>) {
+    let spy = Arc::new(Spy::default());
+    let e = env_stdin(
+        HostInit {
+            rescue_writer: Some(spy.clone()),
+            ..HostInit::default()
+        },
+        Some(Arc::new(fake.clone())),
+    );
+    (e, spy)
+}
+
+// verifies: AC-FR-120-3
+#[test]
+fn シグナルの緊急退避は_readonly_の標準入力の文書も数に入れる() {
+    // `cmd | evoeditor --readonly -` を読み終えた後に端末が切れた (SIGHUP): 変更なしでも、読み直せないので退避する
+    let fake = eve_testkit::FakeStdin::chunks(
+        b"journal
+",
+        3,
+    );
+    let (mut e, spy) = with_spy_stdin(&fake);
+    e.host
+        .start(
+            &mut e.fe,
+            &[eve_core::InitialFile {
+                target: eve_core::InitialTarget::Stdin(eve_core::StdinKind::Stream),
+                line: None,
+                col: None,
+            }],
+            true,
+        )
+        .unwrap();
+    assert_eq!(e.run_jobs(), StepOutcome::Continue);
+    assert_eq!(
+        e.host.emergency_slots().len(),
+        1,
+        "読み終えた時点で公開する"
+    );
+    assert_eq!(
+        e.host.step(&mut e.fe, HostMsg::Signal(SignalKind::Hangup)),
+        StepOutcome::Exit(ExitCode::INTERRUPTED)
+    );
+    assert_eq!(*spy.calls.lock().unwrap(), vec![(RescueReason::Signal, 1)]);
+}
+
+#[expect(
+    clippy::disallowed_methods,
+    reason = "試験: 起動の後に `--readonly` の標準入力の文書を足すため、EditorState::open_stdin を直に呼ぶ"
+)]
+// verifies: AC-FR-120-3
+#[test]
+fn 保存を中止して終了の退避は_readonly_の標準入力の文書も数に入れる() {
+    // 03 §9.7 (f): 「保存を中止して終了」の退避の対象は緊急退避と同じ (確認の文言「保存していない内容は退避します」)
+    let fake = eve_testkit::FakeStdin::chunks(
+        b"journal
+",
+        3,
+    );
+    let (mut e, spy) = with_spy_stdin(&fake);
+    e.fs.set_file(&eve_core::FsPath::from("/w/a.txt"), b"hello");
+    e.start();
+    e.host.editor_mut().open_initial(Some("/w/a.txt"), false);
+    e.run_jobs();
+    // a.txt を表示したまま、`--readonly` の標準入力の文書を足して読み終える
+    let stdin_doc = e.host.editor_mut().state_mut().open_stdin(
+        eve_core::OpenOptions {
+            user_read_only: true,
+            ..eve_core::OpenOptions::default()
+        },
+        eve_core::StdinKind::Stream,
+    );
+    e.run_jobs();
+    let d = e.host.editor().state().document(stdin_doc).expect("文書");
+    assert!(!d.is_dirty(), "--readonly は変更なし");
+    e.input(InputEvent::Text("x".into()));
+    let key = |c: char, m: Modifiers| InputEvent::Key(KeyEvent::press(KeyCode::Char(c), m));
+    // a.txt の保存を始める (ジョブは実行待ちのまま) → 終了 → 5 秒を超えたら確認が出る → 「保存を中止して終了」
+    e.input(key('s', Modifiers::CTRL));
+    assert_eq!(e.input(key('q', Modifiers::CTRL)), StepOutcome::Continue);
+    e.clock.advance(eve_core::Millis(5000));
+    e.host.step(&mut e.fe, HostMsg::Tick);
+    e.input(key('q', Modifiers::NONE));
+    assert_eq!(e.run_jobs(), StepOutcome::Exit(ExitCode::OK));
+    assert_eq!(
+        *spy.calls.lock().unwrap(),
+        vec![(RescueReason::QuitAbortedSave, 2)],
+        "取り消した保存の a.txt と、--readonly の標準入力の文書"
+    );
 }

@@ -64,12 +64,16 @@ pub(super) struct Stopped;
 /// 標準入力のハンドルがふつうのファイルか (`GetFileType` が `FILE_TYPE_DISK`。パイプは `FILE_TYPE_PIPE`、コンソールと
 /// `NUL` は `FILE_TYPE_CHAR`)。ハンドルが無い・無効なら `false`。
 pub(super) fn stdin_is_file() -> bool {
-    // SAFETY: 引数の無い問い合わせ。
+    // SAFETY: 引数は定数 `STD_INPUT_HANDLE` で、ポインタを渡さない。プロセスの標準ハンドルの表を読むだけで、返った
+    // ハンドルの所有権は受け取らない (閉じない)。失敗・未設定は null / `INVALID_HANDLE_VALUE` で返り、下で弾く。
     let h = unsafe { GetStdHandle(STD_INPUT_HANDLE) };
     if h.is_null() || h == INVALID_HANDLE_VALUE {
         return false;
     }
-    // SAFETY: 種類を問い合わせるだけで、ハンドルを変えない (無効な値なら `FILE_TYPE_UNKNOWN` が返る)。
+    // SAFETY: `h` はこの関数の間だけ借りるハンドルで、閉じない・複製しない。種類を問い合わせるだけで、ハンドルの状態を
+    // 変えない (無効な値なら `FILE_TYPE_UNKNOWN` が返る)。標準入力を差し替える `take_process_stdin` (`SetStdHandle`
+    // で `NUL` を置き、元を閉じる) は、Host (bin) の同じスレッドがこの判定の後に呼ぶので、問い合わせの間に `h` が
+    // 閉じられたり差し替わったりしない。
     unsafe { GetFileType(h) == FILE_TYPE_DISK }
 }
 

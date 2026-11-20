@@ -68,9 +68,7 @@ impl crate::editor::state::EditorState {
             return self.io.closing_snapshots.get(&doc).cloned();
         };
         let in_scope = match scope {
-            SnapshotScope::Rescue => {
-                d.is_dirty() || (d.stdin_unsaved() && !self.io.rescue_dirty_only)
-            }
+            SnapshotScope::Rescue => d.is_dirty() || d.stdin_unsaved(),
             SnapshotScope::Dirty => d.is_dirty(),
             SnapshotScope::Any => true,
         };

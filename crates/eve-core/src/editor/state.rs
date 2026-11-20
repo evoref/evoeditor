@@ -121,9 +121,6 @@ pub(crate) struct IoState {
     /// 閉じた文書のうち、保存ジョブが実行中のものの退避用の公開物 (03 §9.2 の閉じる手順 (a)、§9.8 の不変条件 4)。
     /// 保存の結果が届くまで緊急退避の対象に残し、保存が成功したら外し、失敗したら退避先に書く。
     pub(crate) closing_snapshots: BTreeMap<DocumentId, crate::io::snapshot::DocSnapshot>,
-    /// 「保存を中止して終了」の終了を要求した (03 §9.7 (f))。以後の緊急退避の対象は dirty な文書だけにする (`--readonly`
-    /// で開いた標準入力の文書は、確認なしで終わる終了では通常の終了と同じく捨てる。03 §10.1 の「対象」)。
-    pub(crate) rescue_dirty_only: bool,
     /// 設定の読込元 (`None` は設定ディレクトリの既定の 2 ファイル)。
     pub(crate) config_sources: Option<crate::io::config_reload::ConfigSources>,
     /// 最後に読み直した設定で `theme.name` を書いた所 (テーマが無いときの診断の場所、07 §8.7)。
@@ -331,7 +328,6 @@ impl EditorState {
             },
             io: IoState {
                 closing_snapshots: BTreeMap::new(),
-                rescue_dirty_only: false,
                 pending: BTreeMap::new(),
                 save_all: None,
                 open_jumps: BTreeMap::new(),

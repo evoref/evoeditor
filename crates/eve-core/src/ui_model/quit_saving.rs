@@ -253,7 +253,8 @@ impl EditorState {
         }
     }
 
-    /// 保存ジョブと、止めた標準入力の読込がすべて終わっていれば、dirty な文書の退避を伴う終了を要求する。
+    /// 保存ジョブと、止めた標準入力の読込がすべて終わっていれば、緊急退避の対象 (dirty な文書と、まだ名前を付けて保存して
+    /// いない標準入力の文書) の退避を伴う終了を要求する。
     pub(crate) fn quit_abort_check(&mut self) {
         let Some(abort) = self.ui.quit_abort.as_ref() else {
             return;
@@ -268,19 +269,8 @@ impl EditorState {
             .take()
             .map(|a| a.stderr)
             .unwrap_or_default();
-        // 退避するのは dirty な文書だけ: `--readonly` で開いた標準入力の文書 (dirty でなくても緊急退避の対象) は、確認なしで
-        // 終わる終了では通常の終了と同じく捨てる (03 §9.7 (f)・§10.1 の「対象」)。Host は終了の前に公開物を差し替える
-        self.io.rescue_dirty_only = true;
-        let clean: Vec<_> = self
-            .docs
-            .documents
-            .iter()
-            .filter(|(_, d)| d.stdin_unsaved() && !d.is_dirty())
-            .map(|(id, _)| *id)
-            .collect();
-        for doc in clean {
-            self.mark_snapshot_update(doc);
-        }
+        // 退避の対象は緊急退避と同じ (`--readonly` で開いた標準入力の文書も、dirty でなくても退避する。03 §9.7 (f)・
+        // §10.1 の「対象」)。Host は公開物のスロットから退避する
         self.push_effect(Effect::Quit {
             // 終了の要求のコード (`app.quit_with_error` なら 4、07 §18.4)
             code: self.ui.quit_code,
