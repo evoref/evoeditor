@@ -17,6 +17,11 @@ pub const RESERVED_SECTIONS: &[&str] = &[
     "workspace",
 ];
 
+/// 条件付きセクションの条件の名前 (`[os.*]`・`[env.*]`・`[frontend.*]`・`[host.*]`。docs/07 §3.4 の表の `条件キー` 列)。
+/// 解決は v0.5 の M33 (NFR-405) で入れる。それまでは予約のセクションと同じく、書くとセクションごとに
+/// 「このバージョンでは未対応」の情報診断にして中身を使わない。表との一致は eve-core の試験 `config_reserved` が確かめる。
+pub const CONDITIONAL_SECTIONS: &[&str] = &["env", "frontend", "host", "os"];
+
 /// 公開前のキー (フルキー)。
 pub const RESERVED_KEYS: &[&str] = &[
     "clipboard.command.copy",
