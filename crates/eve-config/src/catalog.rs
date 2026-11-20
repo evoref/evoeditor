@@ -4,10 +4,17 @@
 //! `[meta]` は文言ではない。`{key:<command_id>}` は呼び出し側が渡す関数で解決済みキーマップのキー表記に置き換え、
 //! 割当がなければ `ui.key.via_palette` の文言にする。`{{` は `{` のエスケープ。引数の位置指定は使わない。
 //! キーが無ければキー名そのものを返す (空白や例外にしない)。
+//!
+//! 同梱の言語 (`locales/*.toml`) は、起動時に TOML を解析せず、`cargo xtask gen-locales` が生成した静的な表
+//! (`locales_gen.rs`。キー → 文字列の、キーの昇順の配列) をそのまま使う (07 §17.1)。ユーザーの言語ファイルは
+//! その上に重ねる (07 §17.4)。
 
+use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::fmt;
 use std::sync::{Arc, OnceLock};
+
+use crate::locales_gen;
 
 /// 言語ファイルを読めなかった。
 #[derive(Debug, PartialEq, Eq)]
@@ -21,16 +28,14 @@ impl fmt::Display for CatalogError {
 
 impl std::error::Error for CatalogError {}
 
-/// 同梱の日本語の言語ファイル (実行時のファイル読込はしない)。
-const BUILTIN_JA: &str = include_str!("../../../locales/ja.toml");
-
-/// 同梱の英語の言語ファイル (実行時のファイル読込はしない)。
-const BUILTIN_EN: &str = include_str!("../../../locales/en.toml");
+/// 文言の表の 1 行 (キー, 文言)。同梱の表 (生成物) は両方とも借用で、読んだ・重ねた文言は所有する。
+pub(crate) type Entry = (Cow<'static, str>, Cow<'static, str>);
 
 /// 文言の表。
 #[derive(Clone, Debug, Default)]
 pub struct Catalog {
-    entries: BTreeMap<String, String>,
+    /// キーの昇順に並べ、キーは重ならない (二分探索で引く)。同梱の表は生成物の配列を借りる。
+    entries: Cow<'static, [Entry]>,
 }
 
 impl Catalog {
@@ -49,14 +54,17 @@ impl Catalog {
                 flatten(k, v, &mut entries)?;
             }
         }
-        Ok(Catalog { entries })
+        // BTreeMap の順はキーの昇順 (二分探索の前提)
+        let entries: Vec<Entry> = entries
+            .into_iter()
+            .map(|(k, v)| (Cow::Owned(k), Cow::Owned(v)))
+            .collect();
+        Ok(Catalog {
+            entries: Cow::Owned(entries),
+        })
     }
 
-    /// 同梱の `ja`。同梱のファイルは CI で検査するので、読めないのは開発中の誤りだけ。
-    ///
-    /// # Panics
-    ///
-    /// 同梱の `locales/ja.toml` が読めないとき (開発中の誤り。CI の試験が防ぐ)。
+    /// 同梱の `ja` (生成した静的な表。起動時に解析しない、07 §17.1)。
     pub fn builtin_ja() -> &'static Catalog {
         shared_ja()
     }
@@ -79,11 +87,7 @@ impl Catalog {
         }
     }
 
-    /// 同梱の `en`。キー集合は `ja` と一致する (`cargo xtask i18n` と下の試験が検査する)。
-    ///
-    /// # Panics
-    ///
-    /// 同梱の `locales/en.toml` が読めないとき (開発中の誤り。CI の試験が防ぐ)。
+    /// 同梱の `en` (生成した静的な表)。キー集合は `ja` と一致する (`cargo xtask i18n` と下の試験が検査する)。
     pub fn builtin_en() -> &'static Catalog {
         shared_en()
     }
@@ -100,26 +104,36 @@ impl Catalog {
 
     /// 補う言語の同梱の表 `self` に、ユーザーの言語ファイルの検査に通った文言を重ねた表 (07 §17.4)。`file` は
     /// [`load_locale_file`](crate::load_locale_file) に同じ表を渡して読んだもの。`self` に無いキーは足さない
-    /// (書かれていないキーは `self` の文言のまま)。起動時に 1 回作り、実行中は変えない。
+    /// (書かれていないキーは `self` の文言のまま)。起動時に 1 回作り、実行中は変えない。上書きしない文言は
+    /// 同梱の表を借りたまま (複製しない)。
     #[must_use]
     pub fn overlay(&self, file: &crate::LocaleFile) -> Catalog {
-        let mut entries = self.entries.clone();
+        let mut entries = self.entries.to_vec();
         for (k, v) in file.texts() {
-            if let Some(slot) = entries.get_mut(k) {
-                slot.clone_from(v);
+            if let Ok(i) = entries.binary_search_by(|(e, _)| e.as_ref().cmp(k.as_str())) {
+                entries[i].1 = Cow::Owned(v.clone());
             }
         }
-        Catalog { entries }
+        Catalog {
+            entries: Cow::Owned(entries),
+        }
+    }
+
+    /// キーの行の位置。
+    fn find(&self, key: &str) -> Option<usize> {
+        self.entries
+            .binary_search_by(|(k, _)| k.as_ref().cmp(key))
+            .ok()
     }
 
     /// キーの文言。無ければ `None`。
     pub fn get(&self, key: &str) -> Option<&str> {
-        self.entries.get(key).map(String::as_str)
+        self.find(key).map(|i| self.entries[i].1.as_ref())
     }
 
     /// キーがあるか。
     pub fn contains(&self, key: &str) -> bool {
-        self.entries.contains_key(key)
+        self.find(key).is_some()
     }
 
     /// 文言の件数。
@@ -134,7 +148,7 @@ impl Catalog {
 
     /// すべてのキー (昇順)。
     pub fn keys(&self) -> impl Iterator<Item = &str> {
-        self.entries.keys().map(String::as_str)
+        self.entries.iter().map(|(k, _)| k.as_ref())
     }
 
     /// キーの文言を引数で埋める。`key_label` は `{key:<command_id>}` のコマンドのキー表記 (割当がなければ `None`)。
@@ -199,19 +213,23 @@ impl Catalog {
     }
 }
 
-/// 同梱の `ja` の表 (1 回だけ読む)。
+/// 同梱の `ja` の表 (生成物の配列を借りる。解析しない)。
 fn shared_ja() -> &'static Arc<Catalog> {
     static JA: OnceLock<Arc<Catalog>> = OnceLock::new();
     JA.get_or_init(|| {
-        Arc::new(Catalog::parse(BUILTIN_JA).expect("同梱の locales/ja.toml は読める"))
+        Arc::new(Catalog {
+            entries: Cow::Borrowed(locales_gen::JA),
+        })
     })
 }
 
-/// 同梱の `en` の表 (1 回だけ読む)。
+/// 同梱の `en` の表 (生成物の配列を借りる。解析しない)。
 fn shared_en() -> &'static Arc<Catalog> {
     static EN: OnceLock<Arc<Catalog>> = OnceLock::new();
     EN.get_or_init(|| {
-        Arc::new(Catalog::parse(BUILTIN_EN).expect("同梱の locales/en.toml は読める"))
+        Arc::new(Catalog {
+            entries: Cow::Borrowed(locales_gen::EN),
+        })
     })
 }
 
@@ -303,6 +321,53 @@ mod tests {
         let en_keys: Vec<&str> = en.keys().collect();
         assert_eq!(ja_keys, en_keys);
         assert!(en.len() > 400);
+    }
+
+    #[test]
+    fn 同梱の表は原文の解析と同じで_キーの昇順() {
+        // 生成物 (locales_gen.rs) が原文と食い違っていれば `cargo xtask gen-locales` で作り直す
+        // (CI は `cargo xtask gen-locales --check` でも確かめる)。
+        for (name, src, built) in [
+            (
+                "ja",
+                include_str!("../../../locales/ja.toml"),
+                Catalog::builtin_ja(),
+            ),
+            (
+                "en",
+                include_str!("../../../locales/en.toml"),
+                Catalog::builtin_en(),
+            ),
+        ] {
+            let parsed = Catalog::parse(src).unwrap();
+            assert!(
+                built.entries.iter().eq(parsed.entries.iter()),
+                "{name}: 同梱の表が locales/{name}.toml と違う (`cargo xtask gen-locales` で作り直す)"
+            );
+            assert!(
+                built.entries.windows(2).all(|w| w[0].0 < w[1].0),
+                "{name}: キーの昇順でない"
+            );
+        }
+    }
+
+    #[test]
+    fn 重ねた表は書いたキーだけを替え_ほかは同梱の表を借りる() {
+        let base = Catalog::builtin_ja();
+        let file = crate::load_locale_file(
+            "ja",
+            "[info.save]\ndone = \"保存: {path}\"\n".as_bytes(),
+            base,
+            usize::MAX,
+        );
+        let c = base.overlay(&file);
+        assert_eq!(c.len(), base.len());
+        assert_eq!(c.get("info.save.done"), Some("保存: {path}"));
+        assert_eq!(c.get("status.untitled"), base.get("status.untitled"));
+        let i = c.find("status.untitled").unwrap();
+        assert!(matches!(c.entries[i].1, Cow::Borrowed(_)));
+        let j = c.find("info.save.done").unwrap();
+        assert!(matches!(c.entries[j].1, Cow::Owned(_)));
     }
 
     #[test]

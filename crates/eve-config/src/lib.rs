@@ -14,6 +14,7 @@ mod keymap;
 mod layers;
 mod locale;
 mod locale_file;
+mod locales_gen;
 pub mod reserved;
 mod sanitize;
 pub mod theme;

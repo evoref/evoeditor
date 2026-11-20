@@ -2175,7 +2175,7 @@ sensitive = false                     # 任意 (無ければ false)。秘密フ�
 | 権限 | eve-core | 02 §10.4 (骨子) → 06 (AI)、07 (プラグイン) |
 | `EmergencySnapshot`、緊急退避の manifest | eve-host | 02 §11.2.1 (方式とスキーマの正本) → 05 (OS 別の書き手・配置・命名)、03 §10.1 (core 側の契約) |
 | 設定値の型 (`ResolvedConfig`、テーマの 4 段 Style 表) | eve-config | 07 |
-| UI 文言 (`MessageKey` と同梱の言語ファイル。v0.1 は `ja` のみ) | `MessageKey` の型: eve-core (Frame には解決済みの文字列だけが入る、§8.2)。同梱の言語ファイル (`include_str!`) の解析・検証: eve-config。MessageKey → 文字列の解決: eve-core (Frame 生成時)。v0.1 は言語を `ja` に固定し、言語の選択 (eve-config) と OS ロケールの検出 (eve-platform、05 §6.1) は英語 UI を同梱する v0.2 で入れる (確定 (ユーザー回答)、OQ-21)。言語を足すときは言語ファイルを足すだけで、MessageKey と解決の経路は変えない。v0.4 のユーザーの言語ファイル (`<config_dir>/locales/<lang>.toml`、07 §17.4): 読むのは bin (起動時に 1 回。`config.reload` では読み直さない)、検査と同梱の文言への重ね合わせは eve-config (I/O をしない。検査は `xtask i18n` と同じ関数)、core は重ねた表 (`Arc`) を持って解決する。言語ファイルの診断の文言と、端末を戻した後に bin が stderr へ出す行は、同梱の表だけで解決する (07 §17.4 の「重ねた表を使わないもの」)。起動前・パニック時の stderr の文言 (v0.1 は `ja` のみ。英語 (ASCII) の行の併記は v0.2、OQ-67、01 §4.6): eve-host の定数表。core が出す stderr の行は `StderrLine` (キーと引数) で渡し、文言の解決は eve-host が行う (§6.3) | 07 §17 (書式・選択順・翻訳対象)、01 NFR-603 |
+| UI 文言 (`MessageKey` と同梱の言語ファイル。v0.1 は `ja` のみ) | `MessageKey` の型: eve-core (Frame には解決済みの文字列だけが入る、§8.2)。同梱の言語ファイルの解析・検証: eve-config (v0.5 の M29 からは、`xtask gen-locales` が eve-config の解析 (`Catalog::parse`) で生成した静的な表 `locales_gen.rs` を埋め込み、起動時に解析しない。07 §17.1。v0.4 までは `include_str!` の原文を起動時に解析した)。MessageKey → 文字列の解決: eve-core (Frame 生成時)。v0.1 は言語を `ja` に固定し、言語の選択 (eve-config) と OS ロケールの検出 (eve-platform、05 §6.1) は英語 UI を同梱する v0.2 で入れる (確定 (ユーザー回答)、OQ-21)。言語を足すときは言語ファイルを足すだけで、MessageKey と解決の経路は変えない。v0.4 のユーザーの言語ファイル (`<config_dir>/locales/<lang>.toml`、07 §17.4): 読むのは bin (起動時に 1 回。`config.reload` では読み直さない)、検査と同梱の文言への重ね合わせは eve-config (I/O をしない。検査は `xtask i18n` と同じ関数)、core は重ねた表 (`Arc`) を持って解決する。言語ファイルの診断の文言と、端末を戻した後に bin が stderr へ出す行は、同梱の表だけで解決する (07 §17.4 の「重ねた表を使わないもの」)。起動前・パニック時の stderr の文言 (v0.1 は `ja` のみ。英語 (ASCII) の行の併記は v0.2、OQ-67、01 §4.6): eve-host の定数表。core が出す stderr の行は `StderrLine` (キーと引数) で渡し、文言の解決は eve-host が行う (§6.3) | 07 §17 (書式・選択順・翻訳対象)、01 NFR-603 |
 | 駆動 API のメソッド | eve-protocol | 02 §10.5 (正本) → 11 (使い方) |
 
 ### 12.3 正本マップ (本書が正本の概念)
@@ -2397,6 +2397,7 @@ evoeditor/                    # 公開リポジトリ (案、12 §3.3)
 ├─ xtask/                    # bin、publish = false (§4.1)。Windows / Linux の両方でビルドする (§4.7)。サブコマンドの正本は 11 §1。
 │                            # v0.1: check, check-deps, check-themes, i18n, gen-corpus, gen-reference (v0.3 に送った), nightly, bench。
 │                            # v0.2: spec-index (生成), trace, scenario run / scenario check, screenshot, check-docs, check-assets (同梱資産の台帳。最初の同梱資産と同時)。
+│                            # v0.5: gen-locales (同梱の言語の表の生成と --check、07 §17.1)。
 │                            # v1.L: ai-mock / ai-record
 ├─ fuzz/                     # cargo-fuzz の独立したワークスペース (本体の workspace に含めない。夜間 CI、09)
 ├─ tests/scenarios/          # シナリオ DSL (TOML、v0.2) の置き場所。v0.1 は使わない (v0.1 のテストは各 crate の tests/)
