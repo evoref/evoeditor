@@ -38,10 +38,10 @@ pub use editor::{
     DocSnapshot, Editor, EditorState, Handler, HostReport, InitialFile, InitialTarget,
     InvocationSource, KEYMAP_FILE, KeyParseError, Keymap, LOCALE_CLI_SOURCE, LOCALE_ENV_SOURCE,
     LOCALES_PREFIX, Layer, LocaleFiles, LocaleScan, ParseError, Permission, RejectReason,
-    Resolution, ScrollPos, SearchCount, SearchStep, StartupConfig, View, Window, WrapMode,
-    WrapSettings, config_diagnostic_kind, config_diagnostic_texts, config_diagnostic_texts_long,
-    config_problem_count, format_stroke, normalize_eol, parse_sequence, parse_stroke,
-    resolve_theme, scan_locales,
+    Resolution, ScrollPos, SearchCount, SearchStep, StartupConfig, StdinKind, View, Window,
+    WrapMode, WrapSettings, config_diagnostic_kind, config_diagnostic_texts,
+    config_diagnostic_texts_long, config_problem_count, format_stroke, normalize_eol,
+    parse_sequence, parse_stroke, resolve_theme, scan_locales,
 };
 pub use eve_encoding::Encoding;
 pub use eve_view::DocumentId;

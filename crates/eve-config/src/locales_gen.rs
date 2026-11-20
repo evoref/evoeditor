@@ -8,7 +8,7 @@ use std::borrow::Cow::Borrowed as B;
 
 use crate::catalog::Entry;
 
-/// `locales/en.toml` の文言 (826 件)。
+/// `locales/en.toml` の文言 (828 件)。
 #[rustfmt::skip]
 pub(crate) static EN: &[Entry] = &[
     (B("cmd.app.quit.description"), B("Quit the editor.")),
@@ -496,8 +496,10 @@ pub(crate) static EN: &[Entry] = &[
     (B("msg.stdin.truncated.text"), B("Standard input exceeded {size}; opened what was read as read-only")),
     (B("msg.stdin.unreadable.hint"), B("Check the command that writes to standard input and run it again")),
     (B("msg.stdin.unreadable.text"), B("Could not read standard input: {reason}")),
-    (B("msg.stdin.unsaveable.hint"), B("Restart with --encoding")),
+    (B("msg.stdin.unsaveable.hint"), B("Restart with --encoding, or select and copy the text shown")),
     (B("msg.stdin.unsaveable.text"), B("This content cannot be saved")),
+    (B("msg.stdin.unsaveable_copy.hint"), B("You can still select and copy the text shown")),
+    (B("msg.stdin.unsaveable_copy.text"), B("This content cannot be saved")),
     (B("msg.swap.changed_since_offer.hint"), B("The swap was kept. It will be offered again")),
     (B("msg.swap.changed_since_offer.text"), B("The document changed after the recovery offer, so it was not applied")),
     (B("msg.swap.found.hint"), B("Open the matching file and recovery will be offered. Delete the .swp folder if you do not need it")),
@@ -839,7 +841,7 @@ pub(crate) static EN: &[Entry] = &[
     (B("ui.too_small"), B("The terminal is too small (at least {cols}x{rows} is needed)")),
 ];
 
-/// `locales/ja.toml` の文言 (826 件)。
+/// `locales/ja.toml` の文言 (828 件)。
 #[rustfmt::skip]
 pub(crate) static JA: &[Entry] = &[
     (B("cmd.app.quit.description"), B("エディタを終了します。")),
@@ -1327,8 +1329,10 @@ pub(crate) static JA: &[Entry] = &[
     (B("msg.stdin.truncated.text"), B("標準入力が {size} を超えたため、そこまでを読み取り専用で開きました")),
     (B("msg.stdin.unreadable.hint"), B("標準入力に渡すコマンドを確かめて、実行し直してください")),
     (B("msg.stdin.unreadable.text"), B("標準入力を読めませんでした: {reason}")),
-    (B("msg.stdin.unsaveable.hint"), B("--encoding を付けて起動し直してください")),
+    (B("msg.stdin.unsaveable.hint"), B("--encoding を付けて起動し直すか、表示している内容を選択してコピーしてください")),
     (B("msg.stdin.unsaveable.text"), B("この内容は保存できません")),
+    (B("msg.stdin.unsaveable_copy.hint"), B("表示している内容は、選択してコピーできます")),
+    (B("msg.stdin.unsaveable_copy.text"), B("この内容は保存できません")),
     (B("msg.swap.changed_since_offer.hint"), B("スワップは残してあります。もう一度提案します")),
     (B("msg.swap.changed_since_offer.text"), B("復旧の提案の後で文書が変わったので、適用しませんでした")),
     (B("msg.swap.found.hint"), B("該当のファイルを開くと復旧を提案します。要らなければ .swp フォルダを削除してください")),

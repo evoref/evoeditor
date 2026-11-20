@@ -18,7 +18,7 @@ pub use crate::ui_model::config_report::{
 };
 pub use host_api::{HostReport, StartupConfig};
 pub(crate) mod query;
-pub use crate::io::startup::{InitialFile, InitialTarget};
+pub use crate::io::startup::{InitialFile, InitialTarget, StdinKind};
 pub(crate) mod state;
 
 use eve_view::{
@@ -450,9 +450,11 @@ impl Editor {
         self.state.drain_events()
     }
 
-    /// 退避用の公開物を作る。dirty でない文書・読込中の文書・閉じた文書は `None` (スロットを空にする)。
+    /// 退避用の公開物を作る。dirty でない文書 (まだ保存していない標準入力の文書を除く。03 §10.1 の「対象」)・
+    /// 読込中の文書・閉じた文書は `None` (スロットを空にする)。
     pub fn emergency_snapshot(&self, doc: DocumentId) -> Option<DocSnapshot> {
-        self.state.rescue_snapshot(doc, true)
+        self.state
+            .rescue_snapshot(doc, crate::io::snapshot::SnapshotScope::Rescue)
     }
 
     /// `Effect::SetClipboard` の `Handle` の中身を取り出す (Host が実行時に呼ぶ、02 §4.4)。

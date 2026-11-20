@@ -806,7 +806,11 @@ hint = "Check the command that writes to standard input and run it again"
 text = "Could not read standard input: {reason}"
 
 [msg.stdin.unsaveable]
-hint = "Restart with --encoding"
+hint = "Restart with --encoding, or select and copy the text shown"
+text = "This content cannot be saved"
+
+[msg.stdin.unsaveable_copy]
+hint = "You can still select and copy the text shown"
 text = "This content cannot be saved"
 
 [msg.swap.found]
