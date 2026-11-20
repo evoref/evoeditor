@@ -321,7 +321,7 @@ fn absent_conflicts_with_existing(s: &Subject) {
     assert_eq!(
         e.kind,
         FsErrorKind::Conflict {
-            current: Some(before)
+            current: Some(Box::new(before))
         }
     );
     assert_eq!(read_all(s, &p), b"orig");
@@ -354,7 +354,7 @@ fn stamp_mismatch_conflicts(s: &Subject) {
     assert_eq!(
         e.kind,
         FsErrorKind::Conflict {
-            current: Some(have)
+            current: Some(Box::new(have))
         }
     );
     assert_eq!(read_all(s, &p), b"orig");

@@ -90,9 +90,7 @@ pub(crate) fn reconcile(
         if have_hash == want_hash {
             Ok(want)
         } else {
-            Err(FsError::new(FsErrorKind::Conflict {
-                current: Some(have),
-            }))
+            Err(FsError::conflict(Some(have)))
         }
     } else if have_hash == want_hash {
         Ok(have)

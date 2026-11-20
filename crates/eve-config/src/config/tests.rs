@@ -244,6 +244,67 @@ fn 公開前のキーとセクションは情報診断で_警告にしない() {
     );
 }
 
+// verifies: AC-FR-701-3
+#[test]
+fn 条件付きセクションは解決せず_セクションごとに未対応の情報診断() {
+    // 07 §3.4: 解決は v0.5 の M33 (NFR-405)。それまでは未知のキーの警告ではなく未対応の情報診断にし、中身を使わない
+    let l = load_str(
+        r#"
+[editor]
+tab_width = 8
+
+[os.windows.editor]
+tab_width = 2
+
+[os.linux.editor]
+tab_width = 3
+
+[frontend.tui.view]
+ambiguous_width = 2
+
+[env.ssh.clipboard]
+provider = "osc52"
+
+[host.myhost.theme]
+color_mode = "16"
+"#,
+    );
+    assert_eq!(
+        l.config,
+        Config {
+            tab_width: 8,
+            ..Config::default()
+        },
+        "条件付きセクションの値は使わない"
+    );
+    // 中のキーごとではなく、条件の名前ごとに 1 件 (公開前のセクション `[ai]` などと同じ)
+    let keys: Vec<&str> = l.diagnostics.iter().map(|d| d.key.as_str()).collect();
+    assert_eq!(keys, ["env", "frontend", "host", "os"], "表の名前の順");
+    assert!(
+        l.diagnostics
+            .iter()
+            .all(|d| d.severity == Severity::Info && d.kind == DiagKind::Unsupported),
+        "未知のキーの警告にしない: {:?}",
+        l.diagnostics
+    );
+    // 位置はそのセクションを最初に書いた見出し
+    let os = l
+        .diagnostics
+        .iter()
+        .find(|d| d.key == "os")
+        .expect("os の診断");
+    assert_eq!((os.line, os.column), (5, 2));
+
+    // 点のキー (`--set` と同じ形) と、中が表でない値も同じ
+    for text in ["os.windows.editor.tab_width = 2\n", "env = 1\n"] {
+        let l = load_str(text);
+        assert_eq!(l.config, Config::default(), "{text}");
+        assert_eq!(l.diagnostics.len(), 1, "{text}: {:?}", l.diagnostics);
+        assert_eq!(l.diagnostics[0].severity, Severity::Info, "{text}");
+        assert_eq!(l.diagnostics[0].kind, DiagKind::Unsupported, "{text}");
+    }
+}
+
 #[test]
 fn 綴りの候補は公開前のキーからも探す() {
     let l = load_str("[editor]\nauto_indnt = true\n");

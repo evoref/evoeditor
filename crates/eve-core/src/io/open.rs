@@ -4,13 +4,13 @@
 use eve_view::{DocumentId, MessageLevel, ViewId};
 
 use crate::document::Document;
-use crate::io::fs::{Expect, FsError, FsErrorDetail, FsErrorKind};
+use crate::io::fs::Expect;
 use crate::io::fspath::FsPath;
 use crate::io::io_jobs::OpenOptions;
-use crate::jobs::{ConfirmAsk, JobError, JobKind, JobResult, SaveStrategy};
+use crate::jobs::{ConfirmAsk, JobKind, JobResult, SaveStrategy};
 use crate::ui_model::keys;
 
-use super::file::*;
+use super::error_keys::{open_failure, reason_label};
 use super::pending::*;
 use super::save::*;
 use crate::command::CommandResult;
@@ -354,14 +354,7 @@ impl EditorState {
             }
             JobResult::Failed { err, .. } => {
                 let reason = reason_label(&err);
-                let (level, key) = match err {
-                    JobError::Cancelled => (MessageLevel::Info, keys::INFO_OPEN_CANCELLED),
-                    JobError::Fs(e) => (MessageLevel::Error, open_error_key(&e)),
-                    JobError::OutOfMemory { .. } => {
-                        (MessageLevel::Error, keys::MSG_OPEN_OUT_OF_MEMORY)
-                    }
-                    _ => (MessageLevel::Error, keys::MSG_OPEN_FAILED),
-                };
+                let (level, key) = open_failure(&err);
                 self.open_failed(doc_id, replace, level, key, &path, &reason);
             }
             _ => {}
@@ -620,16 +613,5 @@ pub(crate) fn human_size(n: u64) -> String {
         format!("{n} B")
     } else {
         format!("{v:.1} {}", UNITS[u])
-    }
-}
-
-/// 開く失敗の `MessageKey` (04 §15.2)。
-pub(crate) fn open_error_key(e: &FsError) -> &'static str {
-    match (&e.kind, &e.detail) {
-        (FsErrorKind::PermissionDenied, _) => keys::MSG_OPEN_PERMISSION_DENIED,
-        (FsErrorKind::Busy, _) => keys::MSG_OPEN_BUSY,
-        (_, Some(FsErrorDetail::NotAFile)) => keys::MSG_OPEN_NOT_A_FILE,
-        (_, Some(FsErrorDetail::ReservedName)) => keys::MSG_OPEN_RESERVED_NAME,
-        _ => keys::MSG_OPEN_FAILED,
     }
 }

@@ -732,6 +732,13 @@ impl FsError {
             source: None,
         }
     }
+
+    /// 照合の不一致 (`FsErrorKind::Conflict`) を作る。`current` は照合の時点の保存先の Stamp (無ければ `None`)。
+    pub fn conflict(current: Option<FileStamp>) -> FsError {
+        FsError::new(FsErrorKind::Conflict {
+            current: current.map(Box::new),
+        })
+    }
 }
 
 /// `FsError` の種類。保存の変種は、元ファイルが無傷か (何も書いていないか) を区別する (05 §4)。
@@ -757,10 +764,11 @@ pub enum FsErrorKind {
     Unsupported,
     // ── 保存 ──
     /// `SaveOptions::expected` と不一致。何も書いていない。`current` は照合の時点の保存先の Stamp で、
-    /// `None` は保存先が存在しない (開いた後に削除された)。
+    /// `None` は保存先が存在しない (開いた後に削除された)。`FileStamp` は大きい (96 バイト) ので `Box` に入れ、`FsError` を
+    /// 小さく保つ (`Result` の `Err` を値で返すため。docs/review/v0.3-findings.md の STR-B7)。
     Conflict {
         /// 照合の時点の保存先の Stamp。保存先が存在しなければ `None`。
-        current: Option<FileStamp>,
+        current: Option<Box<FileStamp>>,
     },
     /// 原子的置換ができない・意味が変わる。何も書いていない。
     AtomicUnsupported,
@@ -872,6 +880,50 @@ mod tests {
         assert!(
             !e.to_string().contains("secretdir"),
             "エラーの表示にパス全体を出さない"
+        );
+    }
+
+    // STR-B7: `Result<_, FsError>` を値で返すので、clippy の `result_large_err` の既定の閾値 (128 バイト) 未満に保つ。
+    // 大きい詳細 (`FileStamp` など) は `Box` に入れる。今は 88 バイト (Windows x64)。
+    #[test]
+    fn エラーの型は小さい() {
+        const LARGE_ERR_THRESHOLD: usize = 128;
+        assert!(
+            std::mem::size_of::<FsError>() < LARGE_ERR_THRESHOLD,
+            "FsError が {} バイト",
+            std::mem::size_of::<FsError>()
+        );
+        assert!(
+            std::mem::size_of::<crate::jobs::JobError>() < LARGE_ERR_THRESHOLD,
+            "JobError が {} バイト",
+            std::mem::size_of::<crate::jobs::JobError>()
+        );
+    }
+
+    #[test]
+    fn 照合の不一致はスタンプを持つ() {
+        let meta = FileMeta {
+            kind: FileKind::File,
+            len: 3,
+            mtime: FileTime { secs: 1, nanos: 0 },
+            readonly: false,
+            file_id: None,
+            nlink: 1,
+            link: None,
+            fs_kind: FsKind::Local,
+            owner_is_me: Some(true),
+        };
+        let s = FileStamp::from_meta(&meta, None);
+        let e = FsError::conflict(Some(s));
+        assert_eq!(
+            e.kind,
+            FsErrorKind::Conflict {
+                current: Some(Box::new(s))
+            }
+        );
+        assert_eq!(
+            FsError::conflict(None).kind,
+            FsErrorKind::Conflict { current: None }
         );
     }
 }
