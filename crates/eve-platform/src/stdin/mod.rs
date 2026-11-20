@@ -73,6 +73,15 @@ pub fn stdin_is_terminal() -> bool {
     std::io::IsTerminal::is_terminal(&std::io::stdin())
 }
 
+/// 標準入力がふつうのファイル (`evoeditor - < file`) か (03 §9.2.2 の「書く手段の無い文書」、05 §9.1 / §9.2)。ファイルなら
+/// 起動し直せば同じ内容を読める (流し直せる)。パイプ・デバイス (`NUL` / `/dev/null` を含む)・端末と、判定できない
+/// ときは `false` (流し直せるか分からないので、起動し直す案内を出さない側)。Unix は `fstat` がふつうのファイル
+/// (`S_ISREG`)、Windows は `GetFileType` が `FILE_TYPE_DISK`。Host は標準入力を移す (`PlatformStdin::from_process_stdin`)
+/// 前に呼ぶ (移した後の標準入力の位置は `NUL` / `/dev/null`)。
+pub fn stdin_is_file() -> bool {
+    os::stdin_is_file()
+}
+
 /// `eve-stdin` が最初の知らせ (データ・EOF・失敗) をチャネルへ入れたか (端末を初期化する時期、OQ-219 の 9)。
 #[derive(Default)]
 struct Ready {

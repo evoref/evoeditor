@@ -147,6 +147,9 @@ pub struct StdinDoc {
     /// 標準入力から読み込んだだけ (`StdinDone` の適用で立て、本文を変える Transaction の適用で外す。`Origin` を問わない。
     /// Undo で取り消しても戻さない)。スワップの対象の判定に使う (03 §10.2)。
     pub pristine: bool,
+    /// 標準入力がふつうのファイルだった (`InitialTarget::Stdin(StdinKind::File)`。起動し直せば同じ内容を読める)。
+    /// 書く手段の無い内容のメッセージで、`--encoding` を付けて起動し直す案内を出すかに使う (03 §9.2.2)。
+    pub replayable: bool,
 }
 
 /// 書式の変更が、保持方式の記録の表を丸ごと入れ替えるか (再読込・復旧)。
@@ -392,6 +395,13 @@ impl Document {
     pub fn stdin_read_any(&self) -> bool {
         self.stdin.is_some_and(|s| s.bytes_read > 0)
             || (self.stdin.is_some() && self.read_only.contains(ReadOnlyReason::LoadIncomplete))
+    }
+
+    /// まだ保存していない (パスの無い) 標準入力の文書で、1 バイト以上読んだもの。内容はほかに残っておらず、パイプは
+    /// 読み直せないので、dirty でなくても (`--readonly` で開いた) 緊急退避の対象にする (03 §9.2.2 の「スワップと
+    /// 緊急退避」・§10.1 の「対象」)。名前を付けて保存した後は、保存したファイルに残るので外れる。
+    pub fn stdin_unsaved(&self) -> bool {
+        self.path.is_none() && self.stdin_read_any()
     }
 
     /// 編集できるか (`read_only` が空かつ `load_state == Ready`)。

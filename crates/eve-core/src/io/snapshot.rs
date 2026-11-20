@@ -44,15 +44,35 @@ impl DocSnapshot {
     }
 }
 
+/// 公開物を作る文書の範囲 (`EditorState::rescue_snapshot`)。読込中・閉じた文書はどの範囲でも作らない。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum SnapshotScope {
+    /// 緊急退避 (docs/03 §10.1 の「対象」): dirty な文書と、dirty でなくても内容がほかに残っていない文書
+    /// (`Document::stdin_unsaved`。`--readonly` で開いた標準入力の文書。03 §9.2.2 の「スワップと緊急退避」)。
+    Rescue,
+    /// スワップ (03 §10.2): dirty な文書だけ。
+    Dirty,
+    /// 「退避先に保存」: 保存に失敗した文書 (dirty でないこともある)。
+    Any,
+}
+
 impl crate::editor::state::EditorState {
-    /// 文書の公開物を作る。`dirty_only` なら dirty でない文書は `None` (緊急退避)。読込中・閉じた文書は常に `None`。
-    /// 「退避先に保存」は保存に失敗した文書 (dirty でないこともある) を `dirty_only = false` で作る。
-    pub(crate) fn rescue_snapshot(&self, doc: DocumentId, dirty_only: bool) -> Option<DocSnapshot> {
+    /// 文書の公開物を作る。`scope` に入らない文書は `None`。読込中・閉じた文書は常に `None`。
+    pub(crate) fn rescue_snapshot(
+        &self,
+        doc: DocumentId,
+        scope: SnapshotScope,
+    ) -> Option<DocSnapshot> {
         let Some(d) = self.document(doc) else {
             // 閉じたが保存ジョブが実行中の文書は、保存の結果が届くまで公開物を残す
             return self.io.closing_snapshots.get(&doc).cloned();
         };
-        if (dirty_only && !d.is_dirty()) || d.load_state != crate::document::LoadState::Ready {
+        let in_scope = match scope {
+            SnapshotScope::Rescue => d.is_dirty() || d.stdin_unsaved(),
+            SnapshotScope::Dirty => d.is_dirty(),
+            SnapshotScope::Any => true,
+        };
+        if !in_scope || d.load_state != crate::document::LoadState::Ready {
             return None;
         }
         Some(DocSnapshot {

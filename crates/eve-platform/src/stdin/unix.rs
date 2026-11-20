@@ -34,6 +34,16 @@ pub(super) type Waker = UnixStream;
 /// 停止の自己パイプの読み端 (`eve-stdin` が持つ)。
 pub(super) type Stopped = UnixStream;
 
+/// 標準入力 (fd 0) がふつうのファイルか (`fstat` の `S_ISREG`。複製した fd で std の `metadata` を引く)。
+pub(super) fn stdin_is_file() -> bool {
+    io::stdin()
+        .as_fd()
+        .try_clone_to_owned()
+        .map(std::fs::File::from)
+        .and_then(|f| f.metadata())
+        .is_ok_and(|m| m.file_type().is_file())
+}
+
 /// 標準入力 (fd 0) を私有の fd へ移し、fd 0 に `/dev/null` を置く。
 pub(super) fn take_process_stdin() -> io::Result<Private> {
     // SAFETY: fd 0 を複製するだけ (fd 0 が閉じていれば EBADF が返る)。

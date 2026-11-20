@@ -624,7 +624,10 @@ fn harness(fake: &FakeStdin) -> Harness {
         .defer_start()
         .stdin(Arc::new(fake.clone()))
         .build();
-    let doc = h.editor.state_mut().open_stdin(OpenOptions::default());
+    let doc = h
+        .editor
+        .state_mut()
+        .open_stdin(OpenOptions::default(), eve_core::StdinKind::Stream);
     h.started();
     assert_eq!(h.editor.state().active_document(), Some(doc));
     h
@@ -798,6 +801,7 @@ fn 読み込んだだけの印はどの_origin_の編集でも_redo_でも外れ
     let pristine = Some(StdinDoc {
         bytes_read: 3,
         pristine: true,
+        replayable: false,
     });
     // 駆動 API の Ai / External は、まだ `Origin` に無い (その版で足す)。どの `Origin` でも外れることを、今ある種類で確かめる
     let origins = [

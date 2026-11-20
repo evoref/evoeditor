@@ -20,13 +20,23 @@ use eve_text::{Selection, TextRead};
 pub enum InitialTarget {
     /// 入力されたままのパス。
     Path(String),
-    /// 標準入力。`terminal` は Host が判定した「標準入力が端末」(05 §9.1 / §9.2)。端末なら読まずに空の無題の文書を開き
-    /// `info.stdin.terminal` を出す。端末でなければ `JobKind::OpenStdin` を投入する (Host は `JobPorts.stdin` に
-    /// `StdinSource` を入れる。作れなかったときは入れず、読込は「最初から読めない」で終わる)。
-    Stdin {
-        /// 標準入力が端末。
-        terminal: bool,
-    },
+    /// 標準入力。種類は Host が判定する (05 §9.1 / §9.2)。端末なら読まずに空の無題の文書を開き `info.stdin.terminal`
+    /// を出す。端末でなければ `JobKind::OpenStdin` を投入する (Host は `JobPorts.stdin` に `StdinSource` を入れる。
+    /// 作れなかったときは入れず、読込は「最初から読めない」で終わる)。
+    Stdin(StdinKind),
+}
+
+/// 標準入力の種類 (Host が判定する。03 §9.2.2、05 §9.1 / §9.2)。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum StdinKind {
+    /// 端末 (読まない)。
+    Terminal,
+    /// ふつうのファイル (`evoeditor - < file`)。起動し直せば同じ内容を読める (流し直せる)。書く手段の無い内容
+    /// (`msg.stdin.unsaveable`) で `--encoding` を付けて起動し直すことを案内する。
+    File,
+    /// パイプ・デバイスなど、ファイルでないもの。流し直せるかは分からない (閉じないパイプ・一度きりの出力) ので、
+    /// 起動し直す案内を出さない (`msg.stdin.unsaveable_copy`)。
+    Stream,
 }
 
 /// 起動時に開くもの 1 つ。
@@ -62,8 +72,8 @@ impl EditorState {
                     self.active_document()
                 }
                 InitialTarget::Path(p) => self.open_additional(p, opts),
-                InitialTarget::Stdin { terminal: true } => Some(self.open_stdin_terminal()),
-                InitialTarget::Stdin { terminal: false } => Some(self.open_stdin(opts)),
+                InitialTarget::Stdin(StdinKind::Terminal) => Some(self.open_stdin_terminal()),
+                InitialTarget::Stdin(kind) => Some(self.open_stdin(opts, *kind)),
             };
             if let (Some(doc), Some(line)) = (doc, f.line) {
                 self.io.open_jumps.insert(doc, (line, f.col.unwrap_or(1)));

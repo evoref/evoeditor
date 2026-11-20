@@ -147,6 +147,7 @@ pub(crate) const MSG_STDIN_READ_FAILED: &str = "msg.stdin.read_failed";
 pub(crate) const MSG_STDIN_TRUNCATED: &str = "msg.stdin.truncated";
 pub(crate) const MSG_STDIN_UNREADABLE: &str = "msg.stdin.unreadable";
 pub(crate) const MSG_STDIN_UNSAVEABLE: &str = "msg.stdin.unsaveable";
+pub(crate) const MSG_STDIN_UNSAVEABLE_COPY: &str = "msg.stdin.unsaveable_copy";
 pub(crate) const MSG_SWAP_CHANGED_SINCE_OFFER: &str = "msg.swap.changed_since_offer";
 pub(crate) const MSG_SWAP_FOUND: &str = "msg.swap.found";
 pub(crate) const MSG_SWAP_OTHER_INSTANCE: &str = "msg.swap.other_instance";

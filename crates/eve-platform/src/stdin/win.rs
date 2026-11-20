@@ -24,7 +24,8 @@ use windows_sys::Win32::Foundation::{
 };
 use windows_sys::Win32::Security::SECURITY_ATTRIBUTES;
 use windows_sys::Win32::Storage::FileSystem::{
-    CreateFileW, FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING, ReadFile,
+    CreateFileW, FILE_SHARE_READ, FILE_SHARE_WRITE, FILE_TYPE_DISK, GetFileType, OPEN_EXISTING,
+    ReadFile,
 };
 use windows_sys::Win32::System::Console::{
     GetStdHandle, STD_ERROR_HANDLE, STD_INPUT_HANDLE, STD_OUTPUT_HANDLE, SetStdHandle,
@@ -59,6 +60,22 @@ impl Private {
 pub(super) struct Waker;
 /// 同上。
 pub(super) struct Stopped;
+
+/// 標準入力のハンドルがふつうのファイルか (`GetFileType` が `FILE_TYPE_DISK`。パイプは `FILE_TYPE_PIPE`、コンソールと
+/// `NUL` は `FILE_TYPE_CHAR`)。ハンドルが無い・無効なら `false`。
+pub(super) fn stdin_is_file() -> bool {
+    // SAFETY: 引数は定数 `STD_INPUT_HANDLE` で、ポインタを渡さない。プロセスの標準ハンドルの表を読むだけで、返った
+    // ハンドルの所有権は受け取らない (閉じない)。失敗・未設定は null / `INVALID_HANDLE_VALUE` で返り、下で弾く。
+    let h = unsafe { GetStdHandle(STD_INPUT_HANDLE) };
+    if h.is_null() || h == INVALID_HANDLE_VALUE {
+        return false;
+    }
+    // SAFETY: `h` はこの関数の間だけ借りるハンドルで、閉じない・複製しない。種類を問い合わせるだけで、ハンドルの状態を
+    // 変えない (無効な値なら `FILE_TYPE_UNKNOWN` が返る)。標準入力を差し替える `take_process_stdin` (`SetStdHandle`
+    // で `NUL` を置き、元を閉じる) は、Host (bin) の同じスレッドがこの判定の後に呼ぶので、問い合わせの間に `h` が
+    // 閉じられたり差し替わったりしない。
+    unsafe { GetFileType(h) == FILE_TYPE_DISK }
+}
 
 /// 標準入力を私有のハンドルへ移し、標準入力の位置に `NUL` を置いて元を閉じる。
 pub(super) fn take_process_stdin() -> io::Result<Private> {
