@@ -9,6 +9,7 @@
 //! - `verify-tag`: リリースのタグの検証 (署名・位置・版・判定コミットとの差分。`release.yml` の最初のステップ。docs/09 §6.1)
 //! - `review-wording`: 日本語 UI 文言の人手レビュー用の一覧 (docs/review/ja-wording-v0.1.md) を生成する
 //! - `dist`: 配布 zip / tar.gz と SHA256SUMS の作成・検査 (`--verify ARCHIVE` で検査だけ。docs/05 §18.2)
+//! - `gen-locales`: 同梱の言語の表 crates/eve-config/src/locales_gen.rs の生成 (`--check` で locales/*.toml との一致の検査。docs/07 §17.1)
 //! - `gen-notices`: THIRD-PARTY-NOTICES.md の生成 (`--check` で最新性の検査。docs/05 §17.1)
 //! - `gen-reference`: 生成リファレンス docs/reference/* の生成 (`--check` で最新性と 07 §11.6 のカタログとの突合。docs/09 §11.2)
 //! - `check-ac-checklist`: `tests/ac-checklist.toml` の検査 (docs/11 §3.3)
@@ -42,6 +43,7 @@ mod check_themes;
 mod crash_consistency;
 mod dist;
 mod gen_corpus;
+mod gen_locales;
 mod gen_notices;
 mod gen_reference;
 mod i18n;
@@ -70,6 +72,7 @@ const USAGE: &str = "\
   verify-tag          リリースのタグの検証 (--allowed-signers FILE。タグは作らない・消さない)
   review-wording      日本語 UI 文言のレビュー用の一覧の生成 (--reviewed 日付: 全件 OK の記録)
   dist                配布 zip / tar.gz と SHA256SUMS の作成と検査 (--verify ARCHIVE: 検査だけ。--target T (Linux の musl 版) / --exe / --version)
+  gen-locales         同梱の言語の表 crates/eve-config/src/locales_gen.rs の生成 (locales/*.toml から。--check: 一致の検査)
   gen-notices         THIRD-PARTY-NOTICES.md の生成 (cargo-about。--check: 最新性の検査)
   gen-reference       生成リファレンス docs/reference/* の生成 (bin の --list-commands 等の JSON から。--check: 最新性と 07 §11.6 との突合)
   check-ac-checklist  tests/ac-checklist.toml の検査 (check の一部)
@@ -96,6 +99,7 @@ fn main() -> ExitCode {
         Some("verify-tag") => verify_tag::run(&args.collect::<Vec<_>>()),
         Some("review-wording") => review_wording::run(&args.collect::<Vec<_>>()),
         Some("dist") => dist::run(&args.collect::<Vec<_>>()),
+        Some("gen-locales") => gen_locales::run(&args.collect::<Vec<_>>()),
         Some("gen-notices") => gen_notices::run(&args.collect::<Vec<_>>()),
         Some("gen-reference") => gen_reference::run(&args.collect::<Vec<_>>()),
         Some("check-ac-checklist") => ac_checklist::run(),
