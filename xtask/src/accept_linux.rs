@@ -1566,13 +1566,32 @@ fn g1_big_cancel(ctx: &Ctx) -> CheckResult {
     }
     let t1 = Instant::now();
     p.keys(&["Escape"])?;
-    // メッセージはパスの長さで省略される (「…の読込を取り…」) ので、読込中の表示が消えて無題に戻ったことを見る
-    p.wait("取り消し", 2_000, |s| {
-        s.contains("の読込を") && !s.contains("読込中") && s.contains("無題-1")
-    })?;
+    p.wait("取り消し", 2_000, g1_cancelled)?;
     let ms = t1.elapsed().as_millis();
     p.quit()?;
     pass(format!("[読込中 n%] が出て、Esc から {ms} ms で取り消す"))
+}
+
+/// G1 の `Esc` の後の画面で、読込を取り消して無題の文書に戻ったか。
+///
+/// 取り消しのメッセージ (`info.open.cancelled`「{path} の読込を取り消しました」) の文言には頼らない。メッセージ行は
+/// 80 桁で省略されるので、作業ディレクトリの絶対パスが長いと「の読込を」も画面に残らない (Issue #578)。
+/// 代わりに、読込の状態の表示と文書が替わったことで見る (03 §9.2.1・§9.8 の「読込中のバッファ」):
+///
+/// - 読込中は、ステータスバーに進捗 (`status.loading.long`「[読込中 n%]」。先行表示 (`Partial`) の間は
+///   `status.partial.long`「[先頭のみ n%]」、04 §8.7) が出て、文書の名前は `g-100mb.txt` (起動時の最初のパスは
+///   最初から読込中の文書を表示する)。先行表示の間は本文の先頭 (`00000000 The…`) も見える。
+/// - 取り消すと、読込中の文書を閉じ、ほかに文書が無いので無題の文書 (`status.untitled`「無題-1」) を表示する。
+///   進捗も本文も消える。
+/// - 取り消しが効かずに読み終わると、進捗は消えるが、文書は `g-100mb.txt` のままで本文の先頭が見え、`無題-1` は
+///   出ない。この場合を ○ にしないように、`無題-1` があることと本文の先頭が無いことの両方を見る。
+///
+/// 文言はほかの項目と同じく `EVE_LANG=ja` の `locales/ja.toml` の値をそのまま書く。
+fn g1_cancelled(s: &str) -> bool {
+    !s.contains("読込中")
+        && !s.contains("先頭のみ")
+        && s.contains("無題-1")
+        && !s.contains("00000000 The")
 }
 
 fn g2_huge_warning(ctx: &Ctx) -> CheckResult {
@@ -1782,6 +1801,41 @@ mod tests {
     fn 幅は全角を_2_と数える() {
         assert_eq!(width("a.txt 行 1, 桁 1"), 16);
         assert_eq!(width("😀a"), 3);
+    }
+
+    #[test]
+    fn g1_は文言が省略されても無題に戻れば取り消したとみなす() {
+        // 作業ディレクトリのパスが長く、メッセージが「の読込を」の前で切れた画面 (Issue #578)
+        let cancelled = "
+~
+~
+/home/u/evo-long-path-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx/src/target/accept-linux/work/g-1…
+ 無題-1  行 1, 桁 1  UTF-8  LF
+^Q 終了";
+        assert!(g1_cancelled(cancelled));
+    }
+
+    #[test]
+    fn g1_は読込中と読み終わった画面を取り消しとみなさない() {
+        // 先行表示の間 (本文の先頭と進捗)
+        let loading = "00000000 The quick brown fox jumps over the lazy dog 0123456789
+ g-100mb.txt [読込中 12%]  行 1, 桁 1
+^Q 終了";
+        assert!(!g1_cancelled(loading));
+        let partial = "00000000 The quick brown fox jumps over the lazy dog 0123456789
+ g-100mb.txt [先頭のみ 3%]  行 1, 桁 1
+^Q 終了";
+        assert!(!g1_cancelled(partial));
+        // 取り消しが効かずに読み終わった
+        let loaded = "00000000 The quick brown fox jumps over the lazy dog 0123456789
+ g-100mb.txt  行 1, 桁 1  UTF-8  LF
+^Q 終了";
+        assert!(!g1_cancelled(loaded));
+        // 読み終わった文書のほかに無題が残っていても (一覧の名前などが見えても)、本文が見えていれば取り消しではない
+        let loaded_with_untitled = "00000000 The quick brown fox
+ 無題-1  g-100mb.txt  行 1, 桁 1
+^Q 終了";
+        assert!(!g1_cancelled(loaded_with_untitled));
     }
 
     #[test]
