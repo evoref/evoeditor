@@ -152,7 +152,7 @@ v1.X-c  UC-07 ACP クライアント, (Could) MCP クライアント
 | F | ACP (Agent Client Protocol) で外部エージェントを接続 | ACP client | UC-07 | **外部エージェント連携の第一候補** | v1.X |
 | G | LSP 経由の AI (AI 補完を提供する言語サーバ / LSP のインライン補完) | LSP client | UC-05 | 要調査 (eve-lsp で副次的に対応可能か) | v1.X |
 | J | CLI エージェントをヘッドレス (非対話・構造化出力) サブプロセスで統合 | プロセス管理 + 出力解析 | UC-07 | 個別アダプタとしてのみ (F が使えない場合の退路) | v1.X |
-| (A') | 駆動 API `evoeditor --headless --rpc stdio --fake-ports` (02 §10.5) | JSON-RPC サーバ (エディタ自身) | 開発・テスト・AI コーディングエージェントによる検証 (11-dev-workflow) | **開発機能** (dev feature `headless`。配布同梱は OQ-120)。AI 機能ではないが E の土台 | v0.2 以降 (dev。v0.1 は形の予約のみ) |
+| (A') | 駆動 API `evoeditor --headless --rpc stdio --fake-ports` (02 §10.5) | JSON-RPC サーバ (エディタ自身) | 開発・テスト・AI コーディングエージェントによる検証 (11-dev-workflow) | **開発機能** (dev feature `headless`。v0.x の配布ビルドには同梱しない、OQ-120)。AI 機能ではないが E の土台 | v0.2 以降 (dev。v0.1 は形の予約のみ) |
 
 次は行わない: evoeditor 専用の独自 AI プロトコル (ACP / MCP を使う)、CLI エージェントの疑似端末 (PTY) 埋め込み (NG4、§3.7)、プロセス内推論 (推論エンジンをエディタのプロセスに組み込まない、ADR-0034、§4.3)。
 
@@ -1227,7 +1227,7 @@ v0.1 では AI を実装しないが、以下が無いと v1.L で core の構�
 | OQ-92 | AI 機能の i18n | AI 関連 UI 文言は MessageKey 化し、OQ-21 に従う (UI 文言は v0.1 から ja のみ。AI の文言は v1.L で ja を追加し、英語は英語 UI の追加時に同時に入れる) | 裁量 / v1.L |
 | OQ-93 | LSP 経由の AI 補完 (方式 G) | eve-lsp がインライン補完系メッセージに対応すれば UC-05 の別経路になる。v1.X で要調査 | 裁量 / v1.X |
 | OQ-36 | AI の安全方針: (a) ワークスペース層の AI 項目を常に無視 / (c) 範囲の端に接する挿入も失効 | 本書はいずれもこの案で記述 (§11.1 / §7.4)。(b) 平文 `api_key` を提供しない、は確定 (ユーザー回答、01 FR-907、§10.1) | PO / (a)・(c) は v1.L 着手前 |
-| OQ-120 | ヘッドレス RPC (駆動 API) を配布ビルドに同梱するか | (配布ビルドでの予約名の扱いと `eve-view` の feature は確定 (ユーザー回答)、10) 本書の立場: MCP サーバ (v1.L-b) は sidecar モードが配布ビルドに **含まれる** ことを前提にする。v0.x は dev feature のみでよい。同梱は S-21 の計測 (サイズ・起動時間) を受けて v0.5 着手前に決める (10) | PO / v0.5 着手前 |
+| OQ-120 | ヘッドレス RPC (駆動 API) を配布ビルドに同梱するか | (配布ビルドでの予約名の扱いと `eve-view` の feature は確定 (ユーザー回答)、10) 本書の立場: MCP サーバ (v1.L-b) は sidecar モードが配布ビルドに **含まれる** ことを前提にする。**v0.x は同梱しない (dev feature のみ) と確定 (ユーザー回答、2026-11-20)**。1.0 以降の同梱は、駆動 API の実装と S-21 の計測 (サイズ・起動時間) の後に判断する (10) | PO / 確定 (v0.x)。1.0 以降は v1.L-b 着手前 |
 | OQ-128 | ローカル LLM アダプタの対象範囲 | `llama_server` を第一級 (ネイティブ API を深く使う)、`openai_compatible` を汎用とし、Ollama は汎用 + ネイティブ補助 (`/api/show` の能力・`/api/generate` の `suffix`)。LM Studio / vLLM / llamafile は汎用で能力の範囲 (§3.3.1) | 裁量 / v1.L 着手前 (S-22) |
 | OQ-130 | チャットテンプレートと FIM の扱い | チャットはサーバ側でテンプレートを適用。FIM はサーバ側 (`/infill`・`suffix`) を優先し、無ければ同梱の FIM テンプレート (モデル系列ごと) で生プロンプト。チャット形式での補完代用はしない (§7.6) | 裁量 / v1.L-a |
 | OQ-131 | 構造化出力の方式 | JSON schema を第一 (llama-server・Ollama・vLLM で共通)、GBNF は JSON schema の無いサーバ向けに eve-ai が生成、制約の無いサーバは nonce 付き区切りに縮退。いずれも検証してから適用 (§7.2) | 裁量 / v1.L-a |
