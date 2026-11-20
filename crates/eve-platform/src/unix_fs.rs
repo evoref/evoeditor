@@ -324,7 +324,7 @@ impl FileSystem for UnixFs {
         data: &mut dyn ReadChunks,
         opts: &SaveOptions,
     ) -> Result<SaveReport, FsError> {
-        let conflict = |current| FsError::new(FsErrorKind::Conflict { current });
+        let conflict = FsError::conflict;
 
         // 0a. シンボリックリンクなら最終リンク先 T を対象にする
         let target = resolve_target(path, opts.create_link_target)?;
