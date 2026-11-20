@@ -48,6 +48,7 @@ mod i18n;
 mod nightly;
 mod no_network;
 mod perf_diff;
+mod proptest_budget;
 mod review_wording;
 mod scenario;
 mod spec_index;
