@@ -268,7 +268,7 @@ core を OS から切り離すための差し替え点 (Hexagonal / Ports & Adap
 | `JobSpawner` | 非ブロッキング | バックグラウンドジョブの投入 (JobId の採番、結果は `HostMsg::Job`)。ジョブ種別で `io` / `bg` のどちらに載せるかを決める (§9.1) | メイン | eve-host (固定 2 ワーカー) | `ManualJobSpawner` | v0.1 |
 | `Paths` | 非ブロッキング | `config_dir` / `state_dir` / `data_dir` / `runtime_dir` の解決結果と、入力パスの構文的な正規化 `normalize` (起動時に解決済み。ログ・スワップ・recovery・backup は `state_dir` の下、05 §7.5。作成はジョブ、ログは最初の書込時) | 任意 | eve-platform | 一時ディレクトリ | v0.1 |
 | `FileWatcher` | 非ブロッキング (登録のみ) | 監視登録/解除。通知は `HostMsg::Fs` | メイン | eve-platform (notify) | 手動イベント注入 | v0.5 |
-| `ProcessRunner` | I/O | 短命の外部コマンド (フィルタ・フォーマッタ)。**常にユーザー承認後のみ**。長寿命プロセス (LSP・ローカル LLM サーバの管理モード (06 §3.3.3)・プラグイン・外部エージェント) 向けの `spawn_long_lived` (`LongLivedSpec`・`terminate(grace)`) は v1.L で入れ、trait の正本は本節の下の「長寿命プロセスの API」(OS 別の実装は 05 §2.6 / §13.4 / §13.7)。承認は 07 §12 の信頼で代替 (管理モードの起動コマンドはユーザー設定のみ) | ジョブ / サービス | eve-platform | 記録のみ | v0.5 (長寿命 v1.L) |
+| `ProcessRunner` | I/O | 短命の外部コマンド (フィルタ・フォーマッタ)。**常にユーザー承認後のみ**。長寿命プロセス (LSP・ローカル LLM サーバの管理モード (06 §3.3.3)・プラグイン・外部エージェント) 向けの `spawn_long_lived` (`LongLivedSpec`・`terminate(grace)`) は v1.L で入れ、trait の正本は本節の下の「長寿命プロセスの API」(OS 別の実装は 05 §2.6 / §13.4 / §13.7)。承認は 07 §12 の信頼で代替 (管理モードの起動コマンドはユーザー設定のみ) | ジョブ / サービス | eve-platform | 記録のみ | v0.6 以降 (短命。FR-709 / 710 と一緒に v0.5 から送った、08 §7) / v1.L (長寿命) |
 | `SecretStore` | I/O | API キー等の取得/保存 | ジョブ / サービス | eve-platform (keyring) | メモリ | v1.L |
 | `StdinSource` | I/O | 標準入力 (`evoeditor -`) をチャンクで読む。1 回だけ取れる。データが無い間はチャネルで待ち、取消しは `wake` で起こす (時間で区切って起きない。下の擬似コード) | ジョブのみ (`OpenStdin`) | eve-platform | 偽物 (eve-testkit) | v0.4 (M25) |
 | `SystemInfo` | 非ブロッキング | 利用可能メモリ・論理コア数。巨大ファイル警告のメモリ連動用 (OQ-05: v0.1 は固定閾値で不要)、ローカル LLM サーバの管理モードでのモデルの必要メモリの確認とスレッド数の既定 (06 §3.3.3) | 任意 | eve-platform | 固定値 | v0.5 以降 (予約)。最初の利用者が v1.L になる場合はそこで定義 |
@@ -307,7 +307,7 @@ trait HostTasks {                                // メインスレッドから�
 #[derive(Clone)]
 struct CancelToken(Arc<AtomicBool>);             // 相当。cancel() で立て、is_cancelled() で読む (待たない・ブロックしない)。JobSpawner がジョブごとに作る。
                                                  // キャンセルを表す型はこれと JobError::Cancelled の 2 つだけにする (Port のエラーにキャンセルの変種を持たない)。
-                                                 // 03 (構文解析の ParseRequest、v0.6)・05 (ProcessRunner、v0.5)・06 (AI のプロバイダ、v1.L) もこの型を使い、別の型を作らない
+                                                 // 03 (構文解析の ParseRequest、v0.6)・05 (ProcessRunner、v0.6 以降)・06 (AI のプロバイダ、v1.L) もこの型を使い、別の型を作らない
                                                  // (非同期で待つ仕組みが要るなら、eve-ai の内部でこの型を包む)
 
 trait Paths: Send + Sync {                       // 起動時に解決済みの値を返すだけ (I/O しない)。ディレクトリの存在は保証しない
@@ -343,7 +343,7 @@ struct Ports {                                   // Host が組み立てて Edit
     jobs: Rc<dyn JobSpawner>,                    // 同じ実体を Host (HostTasks として) とテスト (run_jobs) がメインスレッドの中で共有する。Send でない
                                                  // (そのため Editor と Host も Send でない。外部のループからの駆動への影響は §9.2、提案、OQ-176)
     paths: Arc<dyn Paths>,
-    // 後の版の Port (FileWatcher v0.5、ProcessRunner v0.5、SecretStore v1.L …) は最初の利用者と同時にフィールドを足す (規則 6)
+    // 後の版の Port (FileWatcher v0.5、ProcessRunner v0.6 以降、SecretStore v1.L …) は最初の利用者と同時にフィールドを足す (規則 6)
 }
 #[derive(Clone)]
 struct JobPorts {                                // ジョブ本体 run_job (§9.3) が受け取る Port。Send + Sync。JobSpawner の実装が保持してワーカーに渡す
@@ -351,7 +351,7 @@ struct JobPorts {                                // ジョブ本体 run_job (§9
     clock: Arc<dyn Clock>,                       // 進捗の間隔 (10 Hz 以下) の判定に使う
     paths: Arc<dyn Paths>,
     stdin: Option<Arc<dyn StdinSource>>,         // v0.4 の M25: `evoeditor -` で標準入力が端末でないときだけ Host が作る (03 §9.2.2)。JobKind::OpenStdin だけが使う
-    // ProcessRunner (v0.5)・SecretStore (v1.L) も最初の利用者と同時に足す
+    // ProcessRunner (v0.6 以降)・SecretStore (v1.L) も最初の利用者と同時に足す
 }
 trait StdinSource: Send + Sync {                 // v0.4 の M25。eve-platform が実装する (05 §9.1 / §9.2)。テストは偽物 (チャンクの列・遅延・エラー・閉じないパイプ)
     fn take(&self) -> Option<Box<dyn ReadChunks + Send>>; // 1 回だけ Some (2 回目は None)。端末かどうかは作る前に Host が判定する (下の注記)
@@ -386,7 +386,7 @@ trait StdinSource: Send + Sync {                 // v0.4 の M25。eve-platform 
 | `ThreadGuard` / `assert_not_main_thread_fs()` (メインスレッドでの I/O の自動検査) | 無い | 未実装。v0.3 の M13 (安全網) で入れるかを決める |
 | `ManualJobSpawner::run_jobs_stale()` | 無い。`new`・`pending`・`run_jobs`・`cancel_all`・`take_results` を持つ。`spawn_host_task` の模擬も無い | Revision の不一致は、テストが `run_jobs()` の前に編集を入れて作る。`run_jobs_stale` は要るときに足す |
 
-**長寿命プロセスの API (`ProcessRunner::spawn_long_lived`、v1.L。trait の正本は本節)**: LSP サーバ (v1.L-a)、ローカル LLM サーバの管理モード (v1.L-b、06 §3.3.3)、外部エージェント (v1.X) が使う。短命の `spawn` (v0.5) の形は v0.5 着手時に本節で確定する (05 §2.6 の案)。各 OS での実装 (Job Object / プロセスグループ、優先度、プロセス木の終了、ログの上限) は 05 §2.6 / §13.4 / §13.7 が定め、本節の型を再定義しない。フィールドの細部は v1.L 着手時に本節で確定する (規則 6)。
+**長寿命プロセスの API (`ProcessRunner::spawn_long_lived`、v1.L。trait の正本は本節)**: LSP サーバ (v1.L-a)、ローカル LLM サーバの管理モード (v1.L-b、06 §3.3.3)、外部エージェント (v1.X) が使う。短命の `spawn` の形は、それを使う FR-709 / 710 を入れる版 (v0.6 以降。v0.5 から送った、08 §7) の着手時に本節で確定する (05 §2.6 の案)。各 OS での実装 (Job Object / プロセスグループ、優先度、プロセス木の終了、ログの上限) は 05 §2.6 / §13.4 / §13.7 が定め、本節の型を再定義しない。フィールドの細部は v1.L 着手時に本節で確定する (規則 6)。
 
 ```rust
 // 擬似コード。eve-core が定義し eve-platform が実装する。ジョブ / サービスのスレッドから呼ぶ (規則 2)
@@ -467,7 +467,7 @@ trait FileSystem: Send + Sync {
     fn read_state_file(&self, name: &str) -> Result<Vec<u8>, FsError>;
     fn write_state_file(&self, name: &str, data: &[u8]) -> Result<(), FsError>; // 原子的に書く (所有者のみ)
     fn set_aside_state_file(&self, name: &str) -> Result<(), FsError>;      // 読めない状態ファイルを別名に退ける (消さない)
-    fn read_dir(&self, path: &FsPath) -> Result<Vec<DirEntry>, FsError>;    // v0.5 (ファインダ・パス補完)
+    fn read_dir(&self, path: &FsPath) -> Result<Vec<DirEntry>, FsError>;    // v0.5 (ワークスペースの走査。ファインダ・横断検索、03 §12.7。パスの補完は送った)
 }
 // 既定の実装: v0.2.0 の実装では metadata / canonicalize / open_read / write_atomic 以外のメソッドが既定の実装 (空の一覧・Unsupported・Other) を持つ。
 // 一覧を返すメソッドの既定は Ok(空)、書くメソッドの既定は Err (Unsupported または Other)。テストの MemFs が上書きを忘れても黙るので、
@@ -1261,7 +1261,7 @@ TUI と、ヘッドレスの消費者 (シナリオ・駆動 API・ヘッドレ�
 | クリップボードのコマンドの入出力 (使い捨て、Unix) | eve-platform (`clipboard::cmd`) | クリップボードの書込・取得のスレッドの中で外部コマンド (`wl-copy` 等) を起こしたとき、その標準入力へ書き・標準出力を読む (05 §8.3)。呼び出し側は子プロセスの終了を 2 s まで待ち、過ぎたら子を止める | 外部コマンドの起動ごと | v0.2 (M7) |
 | 緊急の端末復元 (使い捨て) | eve-platform (`emergency_restore` の中) | 受信スレッドの代わりに描画先へ復元のバイト列を書き、コンソールのモードを戻す (§9.6)。書込が止まっても受信スレッドは最大 200 ms で先へ進む | 非対話終了でメインが終わらなかったとき (プロセスで 1 回) | v0.1 |
 | セッション終了通知 (Windows) | eve-platform | **非表示のトップレベルウィンドウ** (メッセージ専用ウィンドウではない) で `WM_QUERYENDSESSION` / `WM_ENDSESSION` を受け、緊急退避を起動する (ベストエフォート、§11.2.1)。`WM_QUERYENDSESSION` ごとに使い捨てのスレッド (`eve-session-query`) を作り、そこで退避を書く (メッセージループは待たずに戻る。05 §11.2) | 起動時 (専用スレッドで作り、起動経路をブロックしない) | v0.2 (M9d) |
-| ファイル監視 | eve-platform (notify) | 変更通知を `HostMsg::Fs` へ (デバウンス済み) | 必要時 | v0.5 |
+| ファイル監視 | eve-platform (notify) | 変更通知を `HostMsg::Fs` へ送るだけ (待ち合わせは Host が待機の期限で行う。debouncer の crate は使わない。05 §12.2) | 必要時 | v0.5 |
 | 非同期ランタイム | eve-host が起動、eve-lsp / eve-ai が使用 | tokio (専用スレッド、少数ワーカー)。LSP の stdio、HTTP ストリーミング | 必要時 | v1.L |
 
 - **ワーカーは固定 2 本** (ADR-0006、確定。再評価は OQ-103)。標準入力の読込 (v0.4 の M25) は、例外として (ADR-0006 の改訂、OQ-219 の 8。確定 (ユーザー回答、2026-11-13))、`evoeditor -` のときだけ専用のワーカー `eve-stdin-job` と読取のスレッド `eve-stdin` を足す (上の表。閉じないパイプで `io` を止めないため。汎用のワーカーは増やさない)。R11 (§4.3) の例外の一覧にも載せた。`deps-policy.toml` の `thread_spawn.allowed_files` と `clippy.toml` の理由の文は、スレッドを作るコードと同じ PR で直す (08 §2.5 の M25 の (8))。保存が検索に待たされないことは `io` と `bg` の分離で満たす。検索は 1 スレッドでも 1 GB/s 出るので v0.1 では並列化しない。優先度付きプールと rayon の検討は v0.5 (横断検索)・v0.6 (tree-sitter)。`JobSpawner` の形は変えないので後から差し替えられる。
@@ -1782,7 +1782,7 @@ enum JobError {                    // #[non_exhaustive]
 2. 設定読込 (**メインスレッドで同期**。ADR-0020 の例外。数 KB の TOML、予算 ≤ 2 ms (p50。テーマの段の解決と同梱の言語ファイルの読込を含む。07 §3.2、09 BM-101a の内訳と同じ。v0.4 のユーザーの言語ファイル (07 §17.4) も、選んだ言語のものだけをここで読み、同梱の文言に重ねる。全訳のファイルでの増分は 3 ms 以下が目安 (参考値。M26 の (2) で 1 ms から改めた。下の計測と 07 §17.4)。最悪の場合 (上限の 1 MiB のファイルで、診断が 1 ファイルの上限の 100 件と「ほか N 件」に達する) でも、読込・検査・重ね合わせは 20 ms 以内を目安とし (参考値。BM-101a の参考の行で測る)、起動は止めない。M26 の (1) の計測 (開発機の release ビルドで、ヒープの使用量の山を数えた参考値): 書ける構造の上限 (07 §17.4。インラインの表・配列を書けず、キーは 8 段まで、キーの段の総数は 2 万まで) の近くまで表とキーを並べた 1 MiB のファイルで約 20 ms・約 27 MiB、上限を超えて構文を読む前に拒むファイル (配列・インラインの表・深いキー・2 万を超えるキーの段) は 1 ms 未満・0.1 MiB、全訳のファイル (約 60 KB) は約 3 ms・約 1 MiB。M26 の (2) で、よくある文字 (ASCII・かな・CJK 統合漢字) の表を引かない近道を検査に足して約 2.2 ms (検査が約 0.8 ms、位置付きの構文の木が約 0.3 ms、重ね合わせが約 0.15 ms) になり、BM-101a の参考の行 (同じ回に交互に測った言語ファイルの無い起動との差の中央値、開発機で 100 回) は約 3.0 ms (言語ファイルの無い起動は約 3.1 ms) だった。目安を 3 ms に改めた。上限を置く前は、配列を並べた 1 MiB のファイルで約 113 MiB・110 ms、深い表を並べたファイルで約 310 MiB・240 ms だった。ファイルの一覧・開き方・上限は 07 §17.4)、正規表現は遅延コンパイル。エラーは保留して後で表示)。テーマ解決で 4 段の Style 表を作る (色の数はたかだか数十)。保留した診断は `Editor::new` の直後に `Editor::report(HostReport::ConfigDiagnostics(..))` で core に渡し、core が最初の Frame の後に示す (§5.4、07 §4.3)。
    - **大きすぎる設定と遅い設定ディレクトリへの備え** (提案、OQ-190): (a) `config.toml` が **1 MiB** を超えたら読まずに (内容を解析せず) 診断を 1 件出し、ユーザー層を欠いた状態 (既定値) で起動する (数 KB を想定した 2 ms の予算と NFR-101 を守る。TOML 構文エラーと同じ「そのファイルを無視」の扱い、07 §3.3)。(b) 設定の読込を `io` ワーカーのジョブで行い、メインは最大 **200 ms** だけ待つ。間に合わなければ既定値で起動を続け、届いた時点で反映する (ネットワーク上のホーム・`EVE_CONFIG_DIR` で読込が止まっても起動が止まらない)。後から反映するときは、`FrontendConfig` に載る項目 (`Frontend::init` に渡し済み) だけは次の起動から効くことを診断で示す。(b) を採るなら §4.4 規則 4 の例外 (メインスレッドでの同期の読込) は不要になる。
 3. ログの準備 (購読者の登録だけ。**ファイルを開く・state_dir を作るのは最初の warn 以上のイベントまで遅延**。既定レベル warn。`EVE_LOG` は単純なレベル名のみ受理)。
-4. `Frontend::init(&FrontendConfig)` で端末初期化 (raw モード、代替スクリーン、ブラケットペースト (Unix のみ。Windows は送らない)。拡張キーボードプロトコル (kitty keyboard protocol) の有効化は v0.2 で入れ、そのときも **問い合わせず無条件に push** する。v0.1 は push しない (ADR-0039、01 FR-606))。端末への能力問い合わせは起動経路で行わない (応答待ちが NFR-101 を圧迫し、応答の解析が入力ストリームと混ざるため)。能力は受信したイベントの形式から後で判明し `CapabilitiesChanged` で core に伝える。色深度は `theme.color_mode` と環境変数だけで判定する (04 §5)。`init` が返した Capabilities で `Editor::new` を呼ぶ。`init` の直後に `Frontend::emergency_restore_info()` を取得して保持する (受信スレッドが使う、§9.6)。Unix では、同じ値で異常終了のシグナル (SIGSEGV など) のハンドラ `term::install_crash_restore` も付ける (端末の復元だけを行う、05 §11.1)。
+4. `Frontend::init(&FrontendConfig)` で端末初期化 (raw モード、代替スクリーン、ブラケットペースト (Unix のみ。Windows は送らない)。拡張キーボードプロトコル (kitty keyboard protocol) の有効化は v0.2 で入れ、そのときも **問い合わせず無条件に push** する。v0.1 は push しない (ADR-0039、01 FR-606))。端末への能力問い合わせは起動経路で行わない (応答待ちが NFR-101 を圧迫し、応答の解析が入力ストリームと混ざるため。起動の後も問い合わせない、OQ-61 (確定 (推奨案、2026-11-20)))。能力は受信したイベントの形式から後で判明し `CapabilitiesChanged` で core に伝える。色深度は `theme.color_mode` と環境変数だけで判定する (04 §5)。`init` が返した Capabilities で `Editor::new` を呼ぶ。`init` の直後に `Frontend::emergency_restore_info()` を取得して保持する (受信スレッドが使う、§9.6)。Unix では、同じ値で異常終了のシグナル (SIGSEGV など) のハンドラ `term::install_crash_restore` も付ける (端末の復元だけを行う、05 §11.1)。
    - **任意の端末機能の有効化の失敗は起動エラーにしない**: ブラケットペーストの有効化 (`?2004h`) や拡張キーボードプロトコルの push が `Unsupported` 等のエラーを返したら、無視して起動を続け、`Capabilities` の該当項目 (`bracketed_paste` / `enhanced_keys`) を false にして知らせる。起動エラーにするのは raw モード・代替スクリーン等の必須の初期化の失敗だけ (04 §14.1)。kitty keyboard protocol の push は Unix だけで行い、Windows では行わない。Windows はブラケットペースト (`?2004h`) を送らない (入力は自前の `ReadConsoleInputW` ループで、貼り付けは個別のキーとして届くのでバースト検出で合成する、04 §6.6。`Capabilities.bracketed_paste` は false)。
 5. 入力スレッドと `io` ワーカーの起動 (`bg` とログスレッドは遅延)。Windows ではセッション終了通知のスレッドも起動する (v0.2。隠しウィンドウの作成はそのスレッドで行い、メインスレッドは待たない。§11.2.1。コストは 09 BM-101a で計測)。クリップボードはここでは初期化しない (§6.3)。
 6. 端末サイズ取得 → `Resize` を core に送る → `Editor::open_initial_files(files, read_only, forced)` (ファイル読込ジョブ投入) → **空/読込中の最初の Frame を即描画**。
@@ -2249,8 +2249,8 @@ sensitive = false                     # 任意 (無ければ false)。秘密フ�
 | **regex** | 線形時間保証 (ReDoS なし)、高速 | 後方参照・先読みなし | **採用**。v0.1 は大文字小文字を区別しないリテラル検索の内部経路だけで使い、利用者が書く正規表現の検索は v0.2 (01 FR-402、03 §12.3)。feature は `std`・`unicode`・`perf` (v0.4 の M21 から `perf` の全部。それまでは `perf-inline`・`perf-literal` だけで、遅延 DFA などの実行部分が無く、文字クラスで始まるパターンが 10 倍以上遅かった。クレートは増えず、実行ファイルが約 0.2 MB 増える)。**v0.4 の M24 から `regex-syntax` も eve-core の直接の依存にする** (検索語の AST の書き換えと、一致がまたぐ行の数の上限・最大の長さの計算。03 §12.3.1。`regex` の依存として既に入っている crate で、crate の数は増やさない)。指定は `regex-syntax = { version = "0.8.11", default-features = false, features = ["std", "unicode"] }` とし、`regex` の feature (`std`・`unicode`) とそろえる。`regex` と `regex-syntax` は一緒に上げる。`regex-syntax` は 1 つの版だけを許し、版が重複したら `cargo xtask check-deps` を失敗にする (M24 の (1) で足した。`Cargo.lock` の解決 (dev 依存を含む) の中の版の数を数える。08 §2.5)。**M24 の (5) から `regex-automata` も eve-core の直接の依存にする** (すべて置換と検索バーの印で、CP932 互換文字の同一視で当たった一致を見分ける。同一視を切った検索語を、文書の前後の文脈のまま、一致の始端に固定し範囲を一致に限って PikeVM で探す。`regex` の API にはこの口が無い。03 §12.4.1)。`regex` の依存として既に入っている crate で、crate の数は増やさない。feature は `regex` が既に有効にしているもの (`std`・`syntax`・`nfa-pikevm`・`unicode`) だけにする |
 | **memchr (memmem)** | リテラル検索で 1 GB/s 超 | — | **採用** (リテラル検索、チャンク境界は重なり分だけ連結して走査) |
 | regex-cursor | rope のチャンクを跨いで regex を実行 (全文の連結不要) | 小規模プロジェクト (0.1.x、regex-automata 内部 API に密結合、リリースが止まっている)。キャプチャ・CRLF モードの対応が未確認。rope 対応 (`ropey` feature) は **ropey ^1.6.1 にだけ** 対応する (0.1.5 時点) ので、S-02 で ropey 1.x 以外を選んだ場合は `Cursor` を自前で実装する必要がある | **不採用** (OQ-60、S-04 の実測で 2026-11-11 に確定)。0.1.5 は、前段のリテラルの絞り込みがチャンクの境目の近くで一致を取りこぼす・短く切る (差分 fuzz で不一致。絞り込みを切ると無くなるが、10 MB の 1 行で全文連結の 3.8〜3.9 倍かかる)。リリースは 2025-02 から止まっている。複数行の正規表現 (v0.4) は、crate の数を増やさずに **行の窓の方式** で実行する (03 §12.3)。検索語の書き換えと一致がまたぐ行の数の上限の計算には、`regex` の依存の `regex-syntax` を eve-core から直接使う (crate の数は増えない。03 §12.3.1)。v0.3 までの正規表現は **行単位の実行** (1 行ずつ切り出して実行) で、`\n` を含むパターンは「未対応」と表示する |
-| ignore + grep-searcher (ripgrep 部品) | ワークスペース横断検索・.gitignore | — | v0.5 採用候補 |
-| nucleo | ファジーマッチ (Helix) | — | v0.2 (パレット) / v0.5 (ファインダ) の採用候補 |
+| ignore + grep-searcher (ripgrep 部品) | ワークスペース横断検索・.gitignore | `std::fs` を直接呼ぶので FileSystem Port と `MemFs` の試験を通らない。`ignore::WalkParallel` は自前でスレッドを作る (ADR-0006 の固定 2 本・R11 に反する)。`grep-searcher` は UTF-8 と BOM 付き UTF-16 だけを扱い、Shift_JIS / EUC-JP のファイルで当たらない | **不採用** (v0.5 の計画、2026-11-20。v0.5-plan §1.2・WS-01 / WS-02)。走査は `FileSystem::read_dir` と `bg` のジョブ、gitignore の照合は eve-core の純粋関数 (06 X10)、照合はファイルごとに eve-encoding で復号して eve-core の照合器で探す (03 §12.7)。照合の正しさ・速さが git との差分試験と BM で足りなければ、§13.0 の手順で `ignore` (の照合の部分) を評価し直す |
+| nucleo | ファジーマッチ (Helix) | MPL-2.0 で許可リスト (05 §17.1) に無く、rayon と parking_lot を連れてくる (未確認) | **不採用** (v0.5 の計画、2026-11-20。v0.5-plan §1.2)。ファインダ (FR-125) の照合は自作する: パレットの採点の規則 (07 §11.4) をパス用に詰めた形で作り直し、`bg` のジョブで照らし、新しい入力で前のジョブを取り消し、上位 N 件だけを返す (メインスレッドで照らすと 10 万件で NFR-103 を割る恐れがある) |
 
 ### 13.6 並行処理
 
@@ -2265,7 +2265,7 @@ sensitive = false                     # 任意 (無ければ false)。秘密フ�
 
 | 用途 | 採用案 | 採用理由 / リスク |
 |---|---|---|
-| ファイル監視 (v0.5) | notify (+ debouncer)。ライセンス CC0-1.0 | OS ネイティブ監視。ネットワーク FS・inotify 上限・エディタ自身の保存イベント除外に注意 → 監視失敗時は **イベント駆動 (保存前・フォーカス復帰時の metadata 比較) で代替** し、ポーリングはユーザーが明示設定した場合のみ (最小間隔 2 s、OQ-78)。NFR-204 の例外として 01 に明記 |
+| ファイル監視 (v0.5) | notify。ライセンス CC0-1.0。**debouncer の crate (`notify-debouncer-mini` / `-full`) は使わない** (定期の起床がある (未確認)。待ち合わせは Host の待機の期限で自前に行う、05 §12.2。v0.5-plan §1.2) | OS ネイティブ監視。ネットワーク FS・inotify 上限・エディタ自身の保存イベント除外に注意 → 監視失敗時と、監視しない FS (`FsKind::Network`・WSL の DrvFs) は **イベント駆動 (保存前・フォーカス復帰時の metadata 比較) で代替** する。ポーリングはユーザーが明示設定した場合のみ (最小間隔 2 s、OQ-78。確定、実装は v0.6 以降)。NFR-204 の例外として 01 に明記。C を含む依存 (`links`) を持たないことを v0.5 の M29 のスパイクで確かめる (08 §3 末尾) |
 | シンタックス (v0.6) | tree-sitter ([ADR-0015](10-decisions.md#adr-0015-シンタックスハイライト方式)) | インクリメンタル・構文選択/インデントにも使える。リスク: C コンパイラが必要、文法ごとのサイズ、ABI 版、クエリの保守/ライセンス ([OQ-22](10-decisions.md#oq-22-tree-sitter-文法の同梱方式)) |
 | 設定 | serde + toml (書き戻し時は toml_edit) | Rust 界隈で標準、コメント可、人間が書きやすい |
 | エラー | thiserror (lib) / anyhow (bin) | 標準的・軽量 |
@@ -2328,7 +2328,7 @@ sensitive = false                     # 任意 (無ければ false)。秘密フ�
 | ユーザーのキー入力・コマンド | 信頼 | — |
 | ユーザー設定ファイル | 信頼 (ただし誤り得る) | 検証して不正値は既定値 (FR-703) |
 | ファイル内容 | **非信頼データ** | 描画前に制御文字を無害化 (NFR-503)、内容によってコマンド実行しない (モードライン無効、NFR-502)、パーサは fuzz |
-| ワークスペース設定 (`.eve/` (OQ-01), `.editorconfig`) (v0.5) | 半信頼 | 「ワークスペースを信頼」するまで安全な項目 (インデント等) のみ適用。外部コマンド・LSP 起動設定は信頼後のみ (07)。**所有者が自分でない、または world-writable なディレクトリ以下のワークスペース設定・`.editorconfig` は無視して診断で通知** (提案、OQ-35)。AI 関連項目は信頼後も適用しない (OQ-36)。v0.x の v0.1〜v0.5 はワークスペース設定を読まない |
+| ワークスペース設定 (`.eve/` (OQ-01), `.editorconfig`) (v0.5) | 半信頼 | 「ワークスペースを信頼」するまで安全な項目 (インデント等) のみ適用。外部コマンド・LSP 起動設定は信頼後のみ (07)。**所有者が自分でない、または world-writable なディレクトリ以下のワークスペース設定・`.editorconfig` は無視して診断で通知** (確定 (ユーザー回答、2026-11-20)、OQ-35)。AI 関連項目は信頼後も適用しない (OQ-36)。v0.4 まではワークスペース設定を読まない。v0.5 は安全な項目の適用・所有者の検査・`.editorconfig` だけを入れ、準安全・危険な項目は保留して診断を出す。信頼の仕組み (記録・確認ダイアログ・`--trust`) は最初の危険な項目と一緒に入れる (07 §12 の「版」。PO の決定 2026-11-20) |
 | 外部プロセス (LSP・フィルタ・プラグイン) | 非信頼 | プロセス境界、出力は検証、文書変更は Transaction 経由。**実行ファイルの探索は絶対パスの PATH 要素のみ** (cwd・相対要素・空要素を探索しない、05 §13)。ツール自体がリポジトリ内のコードを実行し得ることを信頼ダイアログで示す。クリップボード用の外部コマンドは `/usr/bin` 配下の絶対パスに限る (OQ-111) |
 | 駆動 API のクライアント (`--headless`) | 半信頼 (ユーザーが明示的に起動) | 主体は External。`exec` / `net` / `edit.apply` は常に拒否、保存は `--allow-write` 明示時のみ。ネットワーク経由のトランスポートなし (§10.5) |
 | AI 応答 | **非信頼** | 自動実行しない。Proposal として提示し承認後のみ適用。応答中のエスケープシーケンスも無害化 |
