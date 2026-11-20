@@ -408,7 +408,7 @@ impl EditorState {
     ) -> Option<SaveFailedAsk> {
         // 閉じた文書には確認を出さない (保存の結果の処理が退避先に書く)
         self.document(doc)?;
-        let snapshot = self.rescue_snapshot(doc, false)?;
+        let snapshot = self.rescue_snapshot(doc, crate::io::snapshot::SnapshotScope::Any)?;
         Some(SaveFailedAsk {
             doc,
             path: path.clone(),

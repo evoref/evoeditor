@@ -212,7 +212,7 @@ impl EditorState {
         }
         if !busy
             && self.swap_due(&e).is_some_and(|due| now >= due)
-            && let Some(snap) = self.rescue_snapshot(id, true)
+            && let Some(snap) = self.rescue_snapshot(id, crate::io::snapshot::SnapshotScope::Dirty)
         {
             let path = snap.path.clone();
             let job = self.jobs.spawn(

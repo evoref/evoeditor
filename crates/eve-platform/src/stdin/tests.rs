@@ -313,6 +313,8 @@ fn 子_標準入力の試験の子プロセス() {
             let _ = grand.wait();
         }
         "sleep" => std::thread::sleep(Duration::from_secs(3)),
+        // 標準入力がふつうのファイルか (移す前に判定する)
+        "kind" => say(&format!("file={}", stdin_is_file())),
         // 読取で止まったまま終わる (終了のときに eve-stdin を待たない、02 §9.6)
         "exit" => {
             let s = PlatformStdin::from_process_stdin().expect("移し替え");
@@ -363,6 +365,33 @@ fn 標準入力が空のもの_ファイルのときも読める() {
         text.contains("@@got=from file std_stdin=0"),
         "子の出力: {text}"
     );
+}
+
+#[test]
+fn 標準入力がふつうのファイルのときだけ流し直せると判定する() {
+    if std::env::var_os(CHILD_ENV).is_some() {
+        return;
+    }
+    let kind = |stdin: std::process::Stdio| {
+        let out = spawn_child(CHILD_TEST, "kind", stdin)
+            .wait_with_output()
+            .expect("子の終わり");
+        let text = String::from_utf8_lossy(&out.stdout).into_owned();
+        assert!(out.status.success(), "{text}");
+        text
+    };
+    // ふつうのファイル (`evoeditor - < file`)
+    let path = std::env::temp_dir().join(format!("eve-stdin-kind-{}.txt", std::process::id()));
+    std::fs::write(&path, b"x").expect("一時ファイル");
+    let f = std::fs::File::open(&path).expect("開く");
+    let text = kind(std::process::Stdio::from(f));
+    let _ = std::fs::remove_file(&path);
+    assert!(text.contains("@@file=true"), "ファイル: {text}");
+    // パイプ・`NUL` / `/dev/null` は流し直せるか分からない
+    let text = kind(std::process::Stdio::piped());
+    assert!(text.contains("@@file=false"), "パイプ: {text}");
+    let text = kind(std::process::Stdio::null());
+    assert!(text.contains("@@file=false"), "NUL / /dev/null: {text}");
 }
 
 #[test]

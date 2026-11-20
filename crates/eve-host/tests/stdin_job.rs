@@ -245,7 +245,7 @@ fn host_with_stdin(
     host.start(
         &mut fe,
         &[eve_core::InitialFile {
-            target: eve_core::InitialTarget::Stdin { terminal: false },
+            target: eve_core::InitialTarget::Stdin(eve_core::StdinKind::Stream),
             line: None,
             col: None,
         }],

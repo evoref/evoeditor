@@ -8,7 +8,8 @@
 //!   `info.stdin.terminal`、端末でなければ `Loading` の無題の文書と `JobKind::OpenStdin`。
 //! - **終端** (`StdinDone`): 読み終えた (`end` のどれでも、1 バイト以上読んだ) 文書は変更あり (保存点の無い履歴)。
 //!   `--readonly` (理由 `UserRequested`) は変更なしで、解除した時点で変更ありにする (`io/file_cmds.rs`)。`end` ごとに
-//!   メッセージを出し分け、書く手段の無い内容には `msg.stdin.unsaveable` を足す。
+//!   メッセージを出し分け、書く手段の無い内容には `msg.stdin.unsaveable` (標準入力がふつうのファイルなら、起動し直す
+//!   案内の付いた `msg.stdin.unsaveable_rerun`) を足す。
 //! - **止める・捨てる操作の確認** (OQ-219 の 10): 表示中の `Esc` は `ui.confirm.stdin_stop`、1 バイト以上読んだ読込中の
 //!   文書を閉じる・終了するときは `ui.confirm.stdin_loading` (閉じる・終了の連鎖に入る)。
 //! - **パニック** (`Failed`): 読んだ内容は失い、文書を閉じる (`msg.stdin.failed`)。
@@ -21,6 +22,7 @@ use crate::editor::state::EditorState;
 use crate::io::io_jobs::OpenOptions;
 use crate::io::open::human_size;
 use crate::io::pending::Pending;
+use crate::io::startup::StdinKind;
 use crate::jobs::{JobKind, JobResult, StdinEnd};
 use crate::ui_model::keys;
 use crate::ui_model::overlay::{ChoiceDef, ConfirmAction, ConfirmState, Continuation, Overlay};
@@ -59,11 +61,13 @@ impl EditorState {
     /// 標準入力を読む無題の文書を `Loading` で足し、`JobKind::OpenStdin` を投入する (03 §9.2.2 の「起動の経路」)。
     /// 確認を出さずに読む (`read_only_requested`)。先行表示はしない。`opts` の `forced` (`--encoding`) と
     /// `user_read_only` (`--readonly`) はそのまま使い、設定の値 (改行・上限・長大行の閾値) は指定が無ければ設定から入れる。
-    /// 最初の Window が無ければ、この文書を表示する。足した文書を返す。
+    /// 最初の Window が無ければ、この文書を表示する。足した文書を返す。`kind` は標準入力の種類 (`File` なら流し直せる。
+    /// `Terminal` は呼ぶ側が `open_stdin_terminal` に分けるので来ない)。
     ///
-    /// `open_initial_files` の `InitialTarget::Stdin { terminal: false }` から呼ぶ (試験も直接使う)。
+    /// `open_initial_files` の端末でない `InitialTarget::Stdin` から呼ぶ (試験も直接使う)。
     #[doc(hidden)]
-    pub fn open_stdin(&mut self, opts: OpenOptions) -> DocumentId {
+    pub fn open_stdin(&mut self, opts: OpenOptions, kind: StdinKind) -> DocumentId {
+        debug_assert_ne!(kind, StdinKind::Terminal, "端末の標準入力は読まない");
         let opts = OpenOptions {
             read_only_requested: true,
             partial: false,
@@ -78,7 +82,10 @@ impl EditorState {
         };
         let mut doc = self.blank_document();
         doc.load_state = LoadState::Loading;
-        doc.stdin = Some(StdinDoc::default());
+        doc.stdin = Some(StdinDoc {
+            replayable: kind == StdinKind::File,
+            ..StdinDoc::default()
+        });
         let (doc_id, view) = self.add_document(doc);
         if self.focused_window().is_none() {
             self.show_view(view, None);
@@ -94,7 +101,7 @@ impl EditorState {
         doc_id
     }
 
-    /// 標準入力が端末 (`InitialTarget::Stdin { terminal: true }`): 読まずに空の無題の文書を開き、`info.stdin.terminal`
+    /// 標準入力が端末 (`InitialTarget::Stdin(StdinKind::Terminal)`): 読まずに空の無題の文書を開き、`info.stdin.terminal`
     /// を出す (03 §9.2.2 の「標準入力が端末」、01 FR-120 AC-2)。最初の Window が無ければ、この文書を表示する。
     pub(crate) fn open_stdin_terminal(&mut self) -> DocumentId {
         let doc = self.blank_document();
@@ -310,12 +317,20 @@ impl EditorState {
                 bytes,
                 end,
             } => {
+                // 標準入力の種類 (流し直せるか) は、読込中の文書から引き継ぐ
+                let replayable = self
+                    .docs
+                    .documents
+                    .get(&doc_id)
+                    .and_then(|d| d.stdin)
+                    .is_some_and(|s| s.replayable);
                 let mut d = Document::from_loaded(text, format, preserved);
                 d.read_only = detected;
                 // 読んだバイト数は開いた量にする (「途中まで ({size})」の size)
                 d.stdin = Some(StdinDoc {
                     bytes_read: bytes,
                     pristine: true,
+                    replayable,
                 });
                 let read_any = d.stdin_read_any();
                 // 変更あり (03 §9.2.2 の「変更あり」。OQ-219 の 4): 1 バイト以上読んだら保存点の無い履歴にする。
@@ -330,7 +345,7 @@ impl EditorState {
                 self.close_stdin_stop_confirm(doc_id);
                 self.stdin_end_message(&end, bytes, read_any);
                 if unsaveable {
-                    self.show_message(MessageLevel::Warn, keys::MSG_STDIN_UNSAVEABLE, &[]);
+                    self.show_message(MessageLevel::Warn, unsaveable_key(replayable), &[]);
                 }
                 if let Some(c) = cont {
                     self.continue_after_stdin(doc_id, c);
@@ -433,6 +448,17 @@ impl EditorState {
             &[("reason", reason)],
         );
         self.drop_failed_open(doc_id, None);
+    }
+}
+
+/// 書く手段の無い内容のメッセージのキー (03 §9.2.2 の「書く手段の無い文書」)。`--encoding` を付けて起動し直す案内は、
+/// 標準入力がふつうのファイル (流し直せる) ときだけ出す。パイプは流し直せるか分からない (閉じないパイプ・一度きりの
+/// 出力) ので、選択してコピーできることだけを示す。
+fn unsaveable_key(replayable: bool) -> &'static str {
+    if replayable {
+        keys::MSG_STDIN_UNSAVEABLE_RERUN
+    } else {
+        keys::MSG_STDIN_UNSAVEABLE
     }
 }
 

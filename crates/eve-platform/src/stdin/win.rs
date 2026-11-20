@@ -24,7 +24,8 @@ use windows_sys::Win32::Foundation::{
 };
 use windows_sys::Win32::Security::SECURITY_ATTRIBUTES;
 use windows_sys::Win32::Storage::FileSystem::{
-    CreateFileW, FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING, ReadFile,
+    CreateFileW, FILE_SHARE_READ, FILE_SHARE_WRITE, FILE_TYPE_DISK, GetFileType, OPEN_EXISTING,
+    ReadFile,
 };
 use windows_sys::Win32::System::Console::{
     GetStdHandle, STD_ERROR_HANDLE, STD_INPUT_HANDLE, STD_OUTPUT_HANDLE, SetStdHandle,
@@ -59,6 +60,18 @@ impl Private {
 pub(super) struct Waker;
 /// 同上。
 pub(super) struct Stopped;
+
+/// 標準入力のハンドルがふつうのファイルか (`GetFileType` が `FILE_TYPE_DISK`。パイプは `FILE_TYPE_PIPE`、コンソールと
+/// `NUL` は `FILE_TYPE_CHAR`)。ハンドルが無い・無効なら `false`。
+pub(super) fn stdin_is_file() -> bool {
+    // SAFETY: 引数の無い問い合わせ。
+    let h = unsafe { GetStdHandle(STD_INPUT_HANDLE) };
+    if h.is_null() || h == INVALID_HANDLE_VALUE {
+        return false;
+    }
+    // SAFETY: 種類を問い合わせるだけで、ハンドルを変えない (無効な値なら `FILE_TYPE_UNKNOWN` が返る)。
+    unsafe { GetFileType(h) == FILE_TYPE_DISK }
+}
 
 /// 標準入力を私有のハンドルへ移し、標準入力の位置に `NUL` を置いて元を閉じる。
 pub(super) fn take_process_stdin() -> io::Result<Private> {

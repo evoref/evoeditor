@@ -11,6 +11,11 @@ The Japanese version ([CHANGELOG.md](CHANGELOG.md)) is authoritative. Both are u
 
 ## [Unreleased]
 
+### Fixed
+
+- **Content read from standard input with `--readonly` was not rescued on an abnormal exit or a lost terminal**: content read with `cmd | evoeditor --readonly -` counted as unchanged and was left out of the emergency rescue. Standard input cannot be read again, so it is now rescued even when unchanged (the rescue is marked as sensitive, and the next start suggests deleting it). After Save As it is not rescued, because the saved file holds it. A normal quit, which ends without asking, still does not rescue it
+- **The notice for unsaveable content read from standard input said to restart with `--encoding` even when the input cannot be sent again**: when content that cannot be saved (such as ISO-2022-JP with invalid bytes) is read from standard input, the notice now suggests restarting with `--encoding` only when standard input is a regular file (`evoeditor - < file`). For a pipe it does not, and says that you can select and copy the text shown
+
 ## [0.4.0] - 2026-11-19
 
 This is the first release of v0.4, the version that completes Japanese text and large files. **In Shift_JIS, EUC-JP, and ISO-2022-JP files, the parts you did not edit are saved with their original bytes, and files with invalid bytes can now be edited after a confirmation.** It also adds multi-line regular expressions and matching of CP932 compatibility characters, early display of large files, faster and grapheme-accurate long lines, standard input (`cmd | evoeditor -`), user language files, high-contrast themes, and more. The downloads are the Windows zip and the Linux tar.gz on GitHub Releases; installation, updates, and known limitations are in the bundled `README.en.md` (Japanese: `README.md`). When you update from v0.3.0, your settings files keep working. Changes in behavior are listed under "Behavior changes" below. The product code is unchanged from [0.4.0-rc.2].

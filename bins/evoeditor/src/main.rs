@@ -105,13 +105,19 @@ fn run(
     if read_stdin && let Err(code) = probe_terminal() {
         return code;
     }
+    // 端末でない標準入力は、ふつうのファイル (`< file`。流し直せる) かを移す前に判定する (03 §9.2.2 の「書く手段の無い文書」)
+    let stdin_kind = if stdin_terminal {
+        eve_core::StdinKind::Terminal
+    } else if read_stdin && eve_platform::stdin::stdin_is_file() {
+        eve_core::StdinKind::File
+    } else {
+        eve_core::StdinKind::Stream
+    };
     let files: Vec<eve_core::InitialFile> = files
         .into_iter()
         .map(|f| eve_core::InitialFile {
             target: if f.stdin {
-                eve_core::InitialTarget::Stdin {
-                    terminal: stdin_terminal,
-                }
+                eve_core::InitialTarget::Stdin(stdin_kind)
             } else {
                 eve_core::InitialTarget::Path(f.path)
             },

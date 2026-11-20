@@ -126,7 +126,9 @@ impl EditorState {
             .pending
             .values()
             .any(|p| matches!(p, Pending::Save { doc: d, .. } if *d == doc));
-        let retained = saving.then(|| self.rescue_snapshot(doc, true)).flatten();
+        let retained = saving
+            .then(|| self.rescue_snapshot(doc, crate::io::snapshot::SnapshotScope::Rescue))
+            .flatten();
         if self.docs.documents.remove(&doc).is_some() {
             if let Some(snap) = retained {
                 self.io.closing_snapshots.insert(doc, snap);

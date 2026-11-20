@@ -804,7 +804,11 @@ hint = "標準入力に渡すコマンドを確かめて、実行し直してく
 text = "標準入力を読めませんでした: {reason}"
 
 [msg.stdin.unsaveable]
-hint = "--encoding を付けて起動し直してください"
+hint = "表示している内容は、選択してコピーできます"
+text = "この内容は保存できません"
+
+[msg.stdin.unsaveable_rerun]
+hint = "--encoding を付けて起動し直すか、表示している内容を選択してコピーしてください"
 text = "この内容は保存できません"
 
 [msg.swap.found]
