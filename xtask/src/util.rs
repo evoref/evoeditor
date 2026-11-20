@@ -130,11 +130,117 @@ fn dump_processes(root: u32) {
         .status();
 }
 
-/// `root` とその子孫を強制終了する。
-fn kill_tree(root: u32) {
+/// `root` とその子孫を強制終了する。Unix では、先に木の全体を `SIGSTOP` で止めてから (止めている間は子を増やせない)
+/// `SIGKILL` を送る。子孫を親子の関係でたどれるのは Linux だけ (`/proc`)。他の Unix では `root` だけを止める。
+pub fn kill_tree(root: u32) {
     if cfg!(windows) {
         let _ = Command::new("taskkill")
             .args(["/F", "/T", "/PID", &root.to_string()])
             .status();
+        return;
+    }
+    let mut pids = process_tree(root);
+    send_signal("STOP", &pids);
+    // 止める前に増えた子を拾い直す (止めた親はもう子を増やせない)
+    for pid in process_tree(root) {
+        if !pids.contains(&pid) {
+            pids.push(pid);
+        }
+    }
+    send_signal("STOP", &pids);
+    send_signal("KILL", &pids);
+}
+
+/// `root` とその子孫に `SIGTERM` を送り、行儀よく終わらせる (cargo-nextest は実行中の試験を止め、要約を出してから終わる)。
+/// 子孫にも送るのは、`root` が先に終わって子 (ビルド中の cargo・rustc) が残らないようにするため。
+/// Windows には相当するものが無いので `kill_tree` と同じ。
+pub fn terminate_tree(root: u32) {
+    if cfg!(windows) {
+        kill_tree(root);
+    } else {
+        send_signal("TERM", &process_tree(root));
+    }
+}
+
+/// `kill -<signal> <pid>…` (Unix)。消えたプロセスへの送信の失敗は無視する。
+fn send_signal(signal: &str, pids: &[u32]) {
+    if pids.is_empty() {
+        return;
+    }
+    let _ = Command::new("kill")
+        .arg(format!("-{signal}"))
+        .args(pids.iter().map(u32::to_string))
+        .stderr(std::process::Stdio::null())
+        .status();
+}
+
+/// `root` と、その子孫のプロセス ID (根から順)。子孫を求められない OS では `root` だけ。
+fn process_tree(root: u32) -> Vec<u32> {
+    #[cfg(target_os = "linux")]
+    {
+        let mut pairs = Vec::new();
+        for entry in fs::read_dir("/proc").into_iter().flatten().flatten() {
+            let Some(pid) = entry.file_name().to_str().and_then(|s| s.parse().ok()) else {
+                continue;
+            };
+            if let Some(ppid) = fs::read_to_string(entry.path().join("stat"))
+                .ok()
+                .and_then(|stat| parent_pid(&stat))
+            {
+                pairs.push((pid, ppid));
+            }
+        }
+        descendants(root, &pairs)
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        vec![root]
+    }
+}
+
+/// `/proc/<pid>/stat` の親のプロセス ID (4 つ目の欄)。2 つ目の欄 (コマンド名) は括弧で囲まれ、空白や括弧を含みうるので、
+/// 最後の `)` の後から数える。
+#[cfg(any(target_os = "linux", test))]
+fn parent_pid(stat: &str) -> Option<u32> {
+    let rest = &stat[stat.rfind(')')? + 1..];
+    rest.split_whitespace().nth(1)?.parse().ok()
+}
+
+/// (プロセス, 親) の組から、`root` とその子孫を根から順に集める。
+#[cfg(any(target_os = "linux", test))]
+fn descendants(root: u32, pairs: &[(u32, u32)]) -> Vec<u32> {
+    let mut out = vec![root];
+    let mut i = 0;
+    while let Some(&parent) = out.get(i) {
+        for &(pid, ppid) in pairs {
+            if ppid == parent && !out.contains(&pid) {
+                out.push(pid);
+            }
+        }
+        i += 1;
+    }
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn stat_から親を読む() {
+        assert_eq!(parent_pid("42 (cargo) S 7 42 42 0 -1"), Some(7));
+        // コマンド名に空白と括弧があっても、最後の `)` の後から数える
+        assert_eq!(parent_pid("43 (a b) (c)) R 9 43 43 0 -1"), Some(9));
+        assert_eq!(parent_pid("壊れた行"), None);
+    }
+
+    #[test]
+    fn 子孫を根から順に集める() {
+        // 1 ─ 2 ─ 4
+        //   └ 3     5 (無関係) ─ 6
+        let pairs = [(2, 1), (3, 1), (4, 2), (5, 0), (6, 5)];
+        assert_eq!(descendants(1, &pairs), [1, 2, 3, 4]);
+        assert_eq!(descendants(4, &pairs), [4]);
+        assert_eq!(descendants(9, &pairs), [9]);
     }
 }

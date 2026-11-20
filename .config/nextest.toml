@@ -46,7 +46,9 @@ filter = 'package(evoeditor) & binary(e2e) & test(/退避|ctrl_break|sigterm|sig
 success-output = "final"
 
 # 夜間 (`cargo xtask nightly` の proptest 拡張。PROPTEST_CASES=10000)。1 テストが数分かかることがあるので、
-# `ci` の 5 分で打ち切らず、1 時間まで許す (ハングは step 全体の時間の上限 XTASK_STEP_TIMEOUT_SECS で止める)。retries は付けない。
+# `ci` の 5 分で打ち切らず、30 分まで許す (最も長い試験は 8 分ほど。docs/09 §6.3)。段の全体は xtask の時間の予算 (45 分) で
+# 打ち切る。1 テストの上限を予算より短くして、段の前半で止まった試験は予算の打ち切りではなく TIMEOUT (失敗) で分かるようにする。
+# retries は付けない。
 [profile.nightly]
 fail-fast = false
-slow-timeout = { period = "300s", terminate-after = 12 }
+slow-timeout = { period = "300s", terminate-after = 6 }

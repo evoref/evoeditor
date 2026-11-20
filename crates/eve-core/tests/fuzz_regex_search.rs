@@ -1,7 +1,8 @@
 //! `fuzz_regex_search` の本体を proptest で回す (docs/09 §3.3、09 §3.2 の検索の拡張の行。Windows の CI では libFuzzer が
 //! 使えないので、同じ関数をここで検査する)。行の窓 (核を 1〜40 バイトにして窓の境目を多く作る) と全文の連結の経路が、全文を
 //! 1 本に連結した参照と、一致・再開の位置からの続き・前 / 次の一致・置換の展開で同じになり、2 つ目の参照 (CRLF と CR を LF に
-//! そろえた文書) とも同じになる。件数は `PROPTEST_CASES` で増やせる (夜間は 10,000)。
+//! そろえた文書) とも同じになる。件数は `PROPTEST_CASES` で増やせる (夜間は 10,000。1 件が重い複合の検索語の性質だけは
+//! その 1/20)。
 
 use eve_core::search_fuzzing::{Checked, RegexCase, check, decode};
 use eve_core::{Case, SEARCH_CONCAT_MAX_BYTES};
@@ -23,16 +24,38 @@ proptest! {
     fn 任意の入力で参照と一致する(data in prop::collection::vec(any::<u8>(), 0..160)) {
         run(&decode(&data))?;
     }
+}
 
-    // 部品を多く含む入力 (構文木の節を多く作るバイトを重み付けする)
-    #[test]
-    fn 複合の検索語でも参照と一致する(
-        head in prop::collection::vec(any::<u8>(), 4..5),
-        body in prop::collection::vec(prop_oneof![3 => 0u8..112, 2 => 112u8..=255, 1 => 248u8..=255], 0..200),
-    ) {
+/// 部品を多く含む入力 (構文木の節を多く作るバイトを重み付けする)。1 件が重い (夜間の 10,000 件で 25 分かかった) ので、件数は
+/// 既定の 256 件と `PROPTEST_CASES` の 1/20 の大きい方 (夜間は 500 件)。同じ `check` は夜間の libFuzzer の
+/// `fuzz_regex_search` が別に回す。`proptest!` のマクロは `PROPTEST_CASES` で件数を上書きするので、`TestRunner` を直に使う
+/// (docs/09 §6.3、Issue #453 と同じ扱い)。
+#[test]
+fn 複合の検索語でも参照と一致する() {
+    let cases = std::env::var("PROPTEST_CASES")
+        .ok()
+        .and_then(|v| v.parse::<u32>().ok())
+        .map_or(256, |n| (n / 20).max(256));
+    let mut runner = proptest::test_runner::TestRunner::new(ProptestConfig {
+        cases,
+        failure_persistence: None,
+        ..ProptestConfig::default()
+    });
+    let strategy = (
+        prop::collection::vec(any::<u8>(), 4..5),
+        prop::collection::vec(
+            prop_oneof![3 => 0u8..112, 2 => 112u8..=255, 1 => 248u8..=255],
+            0..200,
+        ),
+    );
+    let result = runner.run(&strategy, |(head, body)| {
         let mut data = head;
         data.extend(body);
         run(&decode(&data))?;
+        Ok(())
+    });
+    if let Err(e) = result {
+        panic!("{e}\n{runner}");
     }
 }
 

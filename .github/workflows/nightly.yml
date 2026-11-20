@@ -1,7 +1,7 @@
 # 夜間ジョブ (docs/09-testing-quality.md §6.1 / §6.3、docs/11 §1)。毎日 UTC 18:00 (JST 03:00) と手動 (workflow_dispatch)。
 # `schedule` は既定ブランチのワークフロー定義で動くので、ここは薄いトリガだけ: 対象のブランチ (変数 NIGHTLY_REF、未設定なら develop。
 # 手動実行では引数 ref で上書き) をチェックアウトし、そのコードの `cargo xtask nightly` を入口にする (手順の中身は xtask にある)。
-# 中身: fuzz の 5 つのターゲット (v0.4。各 16 分、合計 80 分。ターゲットを絞らないときは xtask が合計 80 分に抑える)・proptest 拡張 (PROPTEST_CASES=10000)・cargo audit / deny advisories (本体と fuzz/)・coverage (報告のみ)・
+# 中身: fuzz の 5 つのターゲット (v0.4。各 16 分、合計 80 分。ターゲットを絞らないときは xtask が合計 80 分に抑える)・proptest 拡張 (PROPTEST_CASES=10000。xtask が 45 分の予算で打ち切る)・cargo audit / deny advisories (本体と fuzz/)・coverage (報告のみ)・
 # 保存のクラッシュ一貫性 (v0.2。LazyFS で電源断を模擬する、NFR-301)・長時間の soak (v0.2。BM-306 を 60 分。観察のみ、NFR-306)。
 # 別のジョブ beta (linux): beta のツールチェーンで fmt・clippy・nextest (09 §6.3。2026-11-20 に足した。記録のみで、失敗しても実行の成否に数えない)。
 # schedule は既定ブランチ (main) の定義で動くので、beta のジョブが定時に走るのは、この定義が main に入った後 (v0.5.0 の昇格)。
@@ -42,7 +42,8 @@ env:
   CARGO_PROFILE_DEV_DEBUG: "0"
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: "1"
-  # xtask の各手順の時間の上限 (秒)。proptest 拡張は共有ランナーで 30〜60 分かかる (既定の 20 分では足りない)
+  # xtask の各手順の時間の上限 (秒)。soak は 60 分回すので、既定の 20 分では足りない (proptest 拡張はこの上限ではなく、xtask の
+  # 時間の予算 45 分で打ち切る。docs/09 §6.3)
   XTASK_STEP_TIMEOUT_SECS: "5400"
 
 defaults:
