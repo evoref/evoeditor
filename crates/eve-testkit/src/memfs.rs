@@ -769,7 +769,7 @@ impl FileSystem for MemFs {
         let current = existing
             .as_ref()
             .map(|e| FileStamp::from_meta(&meta_of(e), None));
-        let conflict = |current| FsError::new(FsErrorKind::Conflict { current });
+        let conflict = FsError::conflict;
         match (opts.expected, &current) {
             (Expect::Absent, Some(_)) => return Err(conflict(current)),
             (Expect::Stamp(_), None) => return Err(conflict(None)),
@@ -863,9 +863,7 @@ impl FileSystem for MemFs {
         if let Expect::Stamp(want) = opts.expected
             && !stamp_matches(&want, &have)
         {
-            return Err(FsError::new(FsErrorKind::Conflict {
-                current: Some(have),
-            }));
+            return Err(FsError::conflict(Some(have)));
         }
         if existing.readonly {
             return Err(FsError::new(FsErrorKind::PermissionDenied));
@@ -1110,7 +1108,7 @@ mod tests {
         fs.set_file(&FsPath::from("/w/a.txt"), b"v2"); // 同じ長さでも mtime が変わる
         let e = save(&fs, "/w/a.txt", b"mine", Expect::Stamp(stamp)).unwrap_err();
         assert!(
-            matches!(e.kind, FsErrorKind::Conflict { current: Some(c) } if Some(c) == fs.stamp("/w/a.txt"))
+            matches!(e.kind, FsErrorKind::Conflict { current: Some(ref c) } if Some(**c) == fs.stamp("/w/a.txt"))
         );
         assert_eq!(fs.read("/w/a.txt").unwrap(), b"v2");
         assert!(

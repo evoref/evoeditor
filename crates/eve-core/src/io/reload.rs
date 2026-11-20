@@ -5,11 +5,11 @@ use eve_view::{DocumentId, MessageLevel, ViewId};
 use crate::document::Document;
 use crate::io::fspath::FsPath;
 use crate::io::io_jobs::OpenOptions;
-use crate::jobs::{JobError, JobKind, JobResult};
+use crate::jobs::{JobKind, JobResult};
 use crate::ui_model::keys;
 use eve_encoding::Encoding;
 
-use super::file::*;
+use super::error_keys::{open_failure, reason_label};
 use super::open::*;
 use super::pending::*;
 use crate::command::{CommandResult, RejectReason};
@@ -337,14 +337,7 @@ impl EditorState {
             JobResult::Failed { err, .. } => {
                 self.reopen_restore(doc_id);
                 let reason = reason_label(&err);
-                let (level, key) = match err {
-                    JobError::Cancelled => (MessageLevel::Info, keys::INFO_OPEN_CANCELLED),
-                    JobError::Fs(e) => (MessageLevel::Error, open_error_key(&e)),
-                    JobError::OutOfMemory { .. } => {
-                        (MessageLevel::Error, keys::MSG_OPEN_OUT_OF_MEMORY)
-                    }
-                    _ => (MessageLevel::Error, keys::MSG_OPEN_FAILED),
-                };
+                let (level, key) = open_failure(&err);
                 self.show_message(
                     level,
                     key,

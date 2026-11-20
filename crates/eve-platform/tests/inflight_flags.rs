@@ -2,7 +2,6 @@
 //! 保存の開始時にフラグを書き、成功・置換前の失敗で消し、クラッシュ (パニック) で残った痕跡を開くときに報告する。
 
 #![cfg(any(windows, target_os = "linux"))]
-#![allow(clippy::result_large_err)]
 
 use std::fs;
 use std::path::{Path, PathBuf};

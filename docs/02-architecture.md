@@ -587,7 +587,8 @@ enum FsErrorKind {
     NotFound, PermissionDenied, Busy /*共有違反・ロック。再試行は 05 §4.2*/, InvalidPath /*構文・予約名・循環 (ELOOP)*/,
     DiskFull, ReadOnlyFs, Other, Unsupported /*Port がその操作を実装していない (既定の実装、スワップの無い環境)*/, // キャンセルの変種は持たない (キャンセルは CancelToken と JobError::Cancelled、§4.4)
     // ── 保存 ──
-    Conflict { current: Option<FileStamp> } /*SaveOptions.expected と不一致。何も書いていない。current は照合の時点の保存先 T の Stamp で、
+    Conflict { current: Option<Box<FileStamp>> } /*SaveOptions.expected と不一致。何も書いていない。current は照合の時点の保存先 T の Stamp で
+                                       (FileStamp は大きいので Box に入れ、Result の Err で値として返す FsError を小さく保つ。docs/review/v0.3-findings.md の STR-B7)、
                                        None = T が存在しない (開いた後に削除された。Expect::Stamp を期待していて T が無い場合で、NotFound ではなくこれを返す)。
                                        Expect::Absent を期待していて T が存在すれば Some(その Stamp)。core は確認の後の再投入で Some なら Stamp(current)、None なら Absent を使う (03 §9.3)*/,
     AtomicUnsupported                /*原子的置換ができない・意味が変わる (ハードリンクの Ask、他ユーザー所有 (Unix: 作った一時ファイルの所有者が T と違い root でない)、

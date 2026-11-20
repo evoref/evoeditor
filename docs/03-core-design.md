@@ -1057,7 +1057,7 @@ core は `FileSystem` Port ([02 §4.4](02-architecture.md#44-ports-core-が定�
 | F10 | 外部変更の比較キー | `FileStamp { mtime, len, file_id, hash }` (02 §4.5。05 §5.5 が計算規則) | §9.3 / §9.5 の `disk_stamp` / `external_modified` |
 | F11 | 「退避先に保存」の書込 (退避ディレクトリの作成を含む) と退避ディレクトリの走査 (場所・名前・壁時計・pid は Port の実装が決める) | `write_recovery()` / `list_recovery_dirs()` (v0.1。02 §4.5) | §9.7 (e) の「退避先に保存」(`WriteRecovery`)、§10.1 の「復旧」(`RecoveryScan`) |
 
-要求する性質: (a) すべて同期 API、(b) `Send + Sync` (ジョブから呼ぶ)、(c) エラーは 02 §4.5 の構造体 `FsError { kind: FsErrorKind, detail: Option<FsErrorDetail>, source }` で、core は `kind` (と必要なら `detail`) で分岐する (`NotFound`、`PermissionDenied`、`Busy` = 共有違反・ロック (再試行は 05 §4.2)、`InvalidPath`、`DiskFull`、`ReadOnlyFs`、`Other`、保存の `Conflict { current: Option<FileStamp> }` = `SaveOptions.expected` 不一致 (`None` = ファイルが無い)、`AtomicUnsupported` = 原子的置換不可 (何も書いていない)、`SourceFailed`、`ReplacedMovedToBackup { backup }`、`BackupFailed`、`InPlaceFailed { backup: Option<FsPath> }` (事前バックアップを省いた (`SkipConfirmed`) ときは `None`))。キャンセルは `FsErrorKind` に含めず、ジョブの結果 `JobError::Cancelled` (02 §9.3) だけで表す。Windows の置換途中失敗 (`ERROR_UNABLE_TO_MOVE_REPLACEMENT_2`、元ファイルが退避名に移動済み) は 02 §4.5 の `ReplacedMovedToBackup { backup }` で退避パスを添えて返る (OS 側の検出は 05 §4.2)。
+要求する性質: (a) すべて同期 API、(b) `Send + Sync` (ジョブから呼ぶ)、(c) エラーは 02 §4.5 の構造体 `FsError { kind: FsErrorKind, detail: Option<FsErrorDetail>, source }` で、core は `kind` (と必要なら `detail`) で分岐する (`NotFound`、`PermissionDenied`、`Busy` = 共有違反・ロック (再試行は 05 §4.2)、`InvalidPath`、`DiskFull`、`ReadOnlyFs`、`Other`、保存の `Conflict { current: Option<Box<FileStamp>> }` = `SaveOptions.expected` 不一致 (`None` = ファイルが無い)、`AtomicUnsupported` = 原子的置換不可 (何も書いていない)、`SourceFailed`、`ReplacedMovedToBackup { backup }`、`BackupFailed`、`InPlaceFailed { backup: Option<FsPath> }` (事前バックアップを省いた (`SkipConfirmed`) ときは `None`))。キャンセルは `FsErrorKind` に含めず、ジョブの結果 `JobError::Cancelled` (02 §9.3) だけで表す。Windows の置換途中失敗 (`ERROR_UNABLE_TO_MOVE_REPLACEMENT_2`、元ファイルが退避名に移動済み) は 02 §4.5 の `ReplacedMovedToBackup { backup }` で退避パスを添えて返る (OS 側の検出は 05 §4.2)。
 
 **原則 (ADR-0020 確定、02 §4.4 規則 2)**: core は `metadata` / `canonicalize` を含む **いかなる I/O もメインスレッドで行わない**。ネットワーク FS では `stat` 1 回が秒単位でブロックし得る (P3 違反)。§9.2 / §9.3 / §9.5 の手順はこの原則に従う。
 
@@ -1290,7 +1290,7 @@ file.save(doc)  [main]
        v0.3 までの実装は、UTF-8 / UTF-16 の原子的保存では escape = Reject のときだけ乾式走査をし、Restore では書きながら符号化していた。
        記録を渡す保存と、UTF-8 / UTF-16 以外の文字コードの保存は、今の実装どおり書く前に乾式走査をする
   5. method = Atomic のとき write_atomic(path, エンコード済みチャンクのストリーム, opts):
-       a. Port が metadata を取り opts.expected (`Expect`) と照合 (05 §4.1 手順 0b)。不一致 → FsError { kind: Conflict { current: Option<FileStamp> } } を返して終了 (何も書かない。`current` は今の stamp で、None = ファイルが無い)
+       a. Port が metadata を取り opts.expected (`Expect`) と照合 (05 §4.1 手順 0b)。不一致 → FsError { kind: Conflict { current: Option<Box<FileStamp>> } } を返して終了 (何も書かない。`current` は今の stamp で、None = ファイルが無い)
        b. チャンクを順に encode + 照合 (§8.6 E1、v0.4 は E2 の差し替えと確認 (i)・(ii)、つながりの検査も)。表現不能を 1 件でも検出したら **その時点で書込を止める** (ストリームが `ChunkError::Unmappable` を返し、
           Port は一時ファイルを破棄して `SourceFailed` を返す)。ジョブは書込なしの走査 (encode + 照合) だけを終端まで続けて位置を集め、JobError::Unmappable { positions, total } を返す
           (無駄な I/O を避け、空き容量不足 (DiskFull) で表現不能が隠れないようにする)。状態付き符号化は最後に last = true で呼び、終端のエスケープ (ESC ( B) まで書く (E6)
@@ -1391,7 +1391,7 @@ file.save(doc)  [main]
 ### 9.5 外部変更の検知と再読込 (FR-117)
 
 - **検知手段**: (v0.1) 保存ジョブ内の比較 (§9.3 手順 0 / 5a)。外部の変更を取り込む手段は、利用者の明示の再読込 `file.reload` (下の「明示の再読込」) だけで、検知はしない。(v0.2) ユーザーの明示的なコマンド (`file.check_external_changes`) と、フォーカス復帰 (`InputEvent::Focus(true)`) 時に **ジョブで** `metadata` を取り `disk_stamp` と比較 (メインスレッドでは行わない。ADR-0020。`JobKind::Metadata` の目的 `MetaPurpose::ExternalCheck` (02 §9.3) を使う)。(v0.5) `FileWatcher` Port のイベント (デバウンス済み)。自分の保存によるイベントは `disk_stamp` と一致するので無視できる。比較キーは 02 §4.5 の `FileStamp` (mtime + len + FileId、16 MiB 以下は内容ハッシュ併用。計算規則は 05 §5.5)。
-- **保存時の競合 (v0.1)**: 保存ジョブが `Conflict` を返したら (§9.3 手順 5a / 5c)、書き込まずに次の確認を出す (01 FR-117 AC-1)。選択肢は v0.1 では「上書き / 別名で保存 (既定) / 中止 (Esc)」の 3 つで、**このダイアログの再読込の選択肢は v0.2** (フォーカス復帰時の確認と同時。v0.1 は中止してから `file.reload` で読み直せる)。上書きを選んだら `expected` を `Conflict { current: Option<FileStamp> }` の `current` から決めて再投入する (`Some(stamp)` → `Expect::Stamp(stamp)`、`None` (ファイルが無い。開いた後に削除された) → `Expect::Absent`)。
+- **保存時の競合 (v0.1)**: 保存ジョブが `Conflict` を返したら (§9.3 手順 5a / 5c)、書き込まずに次の確認を出す (01 FR-117 AC-1)。選択肢は v0.1 では「上書き / 別名で保存 (既定) / 中止 (Esc)」の 3 つで、**このダイアログの再読込の選択肢は v0.2** (フォーカス復帰時の確認と同時。v0.1 は中止してから `file.reload` で読み直せる)。上書きを選んだら `expected` を `Conflict { current: Option<Box<FileStamp>> }` の `current` から決めて再投入する (`Some(stamp)` → `Expect::Stamp(stamp)`、`None` (ファイルが無い。開いた後に削除された) → `Expect::Absent`)。
   - 既存のファイルが開いた後に変更・削除された: `ui.confirm.external_change` (削除されていた場合の「上書き」はファイルを作り直す)
   - 新規ファイル (`Expect::Absent`) の保存先に同名のファイルが作られていた: `ui.confirm.save.target_exists`
 - **明示の再読込 (`file.reload`、v0.1。FR-117 の Should の部分、確定 (ユーザー回答))**: 読込の経路は「文字コードを指定して開き直す」(§8.8) と同じで、適用だけが違う (開き直しは履歴を消すが、再読込は Undo できる下の「再読込の実現」)。

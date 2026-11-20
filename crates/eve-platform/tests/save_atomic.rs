@@ -2,7 +2,7 @@
 //! 一時ファイル + `ReplaceFileW` で、元のファイルを無傷に保ち、ACL・ADS・属性を保つこと。
 
 #![cfg(windows)]
-#![allow(clippy::result_large_err, clippy::print_stderr)]
+#![allow(clippy::print_stderr)]
 
 use std::fs;
 use std::io::Write;
