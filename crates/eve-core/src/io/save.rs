@@ -10,6 +10,7 @@ use crate::io::fspath::FsPath;
 use crate::jobs::{JobError, JobKind, JobResult, SaveStrategy};
 use crate::ui_model::keys;
 
+use super::error_keys::{fs_reason, reason_label, save_error_key, save_failure};
 use super::file::*;
 use super::open::*;
 use super::pending::*;
@@ -939,6 +940,7 @@ impl EditorState {
                     }),
                 ..
             } if self.docs.documents.contains_key(&doc_id) => {
+                let current = current.map(|c| *c);
                 let kind = match (expected, current) {
                     (Expect::Absent, _) => FallbackKind::ConflictCreated,
                     (_, None) => FallbackKind::ConflictDeleted,
@@ -960,20 +962,18 @@ impl EditorState {
             }
             JobResult::Failed {
                 err:
-                    JobError::Fs(FsError {
-                        kind: FsErrorKind::InPlaceFailed { backup },
-                        ..
-                    }),
+                    JobError::Fs(
+                        ref e @ FsError {
+                            kind: FsErrorKind::InPlaceFailed { ref backup },
+                            ..
+                        },
+                    ),
                 ..
             } => {
                 let ask = self.save_failed_ask(doc_id, path, expected, fmt, cont);
                 // 直接上書きの途中の失敗: 元のファイルは壊れている可能性がある。バックアップの場所を必ず示す (05 §4.4 手順 8)
                 let b = backup.as_ref().map(FsPath::display).unwrap_or_default();
-                let key = if backup.is_some() {
-                    keys::MSG_SAVE_IN_PLACE_FAILED
-                } else {
-                    keys::MSG_SAVE_IN_PLACE_FAILED_NO_BACKUP
-                };
+                let key = save_error_key(e);
                 self.report_save_failure(
                     ask,
                     key,
@@ -1028,13 +1028,7 @@ impl EditorState {
                     }) => target.display(),
                     _ => String::new(),
                 };
-                let (level, key) = match err {
-                    JobError::Cancelled => (MessageLevel::Info, keys::INFO_SAVE_ABORTED),
-                    JobError::Fs(e) => (MessageLevel::Error, save_error_key(&e)),
-                    // 確認 (ii) の不一致 (03 §8.6 E2): 何も書いていない。別名で保存・退避先に保存を選べる
-                    JobError::VerifyFailed => (MessageLevel::Error, keys::MSG_SAVE_VERIFY_FAILED),
-                    _ => (MessageLevel::Error, keys::MSG_SAVE_FAILED),
-                };
+                let (level, key) = save_failure(&err);
                 let backup = match &err_backup {
                     Some(b) => b.display(),
                     None => String::new(),
@@ -1149,43 +1143,4 @@ impl EditorState {
     }
 }
 
-/// 保存失敗の `MessageKey` (04 §15.2)。失敗の後の選択肢 (確認ダイアログ) は別に出す。
-pub(crate) fn save_error_key(e: &FsError) -> &'static str {
-    match (&e.kind, &e.detail) {
-        (FsErrorKind::PermissionDenied, _) => keys::MSG_SAVE_PERMISSION_DENIED,
-        (FsErrorKind::DiskFull, _) => keys::MSG_SAVE_DISK_FULL,
-        (FsErrorKind::ReadOnlyFs, _) => keys::MSG_SAVE_READ_ONLY_FS,
-        (FsErrorKind::InvalidPath, _) => keys::MSG_SAVE_INVALID_PATH,
-        (FsErrorKind::Busy, _) => keys::MSG_SAVE_BUSY,
-        // 置換の途中で失敗し、元のファイルは退避名に残っている (NFR-301 AC-2)。そのパスを必ず示す
-        (FsErrorKind::ReplacedMovedToBackup { .. }, _) => keys::MSG_SAVE_MOVED_TO_BACKUP,
-        (FsErrorKind::NotFound, Some(FsErrorDetail::ParentMissing { .. })) => {
-            keys::MSG_SAVE_PARENT_MISSING
-        }
-        // リンク先が無いシンボリックリンク: 書かずに、リンク先を示して知らせる (FR-106 AC-2)
-        (FsErrorKind::NotFound, Some(FsErrorDetail::DanglingLink { .. })) => {
-            keys::MSG_SAVE_DANGLING_LINK
-        }
-        _ => keys::MSG_SAVE_FAILED,
-    }
-}
-
 // ---------- コマンド ----------
-
-#[cfg(test)]
-mod save_error_tests {
-    use super::*;
-
-    // verifies: AC-FR-106-2
-    #[test]
-    fn ダングリングリンクは専用のメッセージになる() {
-        let e = FsError {
-            kind: FsErrorKind::NotFound,
-            detail: Some(FsErrorDetail::DanglingLink {
-                target: crate::FsPath::from(r"C:\gone\a.txt"),
-            }),
-            source: None,
-        };
-        assert_eq!(save_error_key(&e), "msg.save.dangling_link");
-    }
-}

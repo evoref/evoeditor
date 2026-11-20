@@ -107,6 +107,10 @@ pub(super) fn rewrite(
 /// 検索語 `pattern` を書き換える。`insensitive` は大小を区別しない (`(?i)` の初期値)、`sugar` は `\n` の糖衣
 /// (`search.newline_sugar`)、`compat` は CP932 互換文字の同一視 (`search.cp932_compat_fold`)。構文の誤り (後方参照・
 /// 先読み・不正なクラス名など) は `QueryError::Syntax`。
+#[expect(
+    clippy::result_large_err,
+    reason = "途中の閉包が regex_syntax::Error (外部の型で大きい) を運ぶ。関数が返すのは QueryError"
+)]
 pub(super) fn rewrite_with(
     pattern: &str,
     insensitive: bool,

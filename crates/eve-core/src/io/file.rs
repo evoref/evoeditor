@@ -7,10 +7,10 @@
 use eve_view::{DocumentId, EditorEvent, MessageLevel};
 
 use crate::document::Document;
-use crate::io::fs::{Expect, FsError};
+use crate::io::fs::Expect;
 use crate::io::fspath::FsPath;
 use crate::io::io_jobs::OpenOptions;
-use crate::jobs::{JobError, JobKind, MetaPurpose};
+use crate::jobs::{JobKind, MetaPurpose};
 use crate::ui_model::keys;
 use eve_encoding::Encoding;
 
@@ -416,17 +416,6 @@ impl EditorState {
     }
 }
 
-/// `{reason}` に入れる短い分類名 (技術的な識別子。OS のエラーの分類文言 `ui.reason.*` は目録ができてから)。
-pub(crate) fn reason_label(err: &JobError) -> String {
-    match err {
-        JobError::Fs(e) => fs_reason(e),
-        JobError::Panic => "panic".to_owned(),
-        JobError::OutOfMemory { .. } => "out of memory".to_owned(),
-        JobError::Cancelled => "cancelled".to_owned(),
-        JobError::VerifyFailed => "verify failed".to_owned(),
-    }
-}
-
 /// 読んだ (書いた) ときの Stamp `d` と今の Stamp `now` が同じファイルの同じ内容を指すか (03 §9.3 手順 0・§9.5)。
 pub(crate) fn same_on_disk(d: &crate::FileStamp, now: &crate::FileStamp) -> bool {
     // 内容ハッシュが双方にあれば、それで決める (mtime だけが違っても中身が同じなら変更なし、
@@ -438,12 +427,4 @@ pub(crate) fn same_on_disk(d: &crate::FileStamp, now: &crate::FileStamp) -> bool
             Some(same) => same,
             None => d.mtime == now.mtime,
         }
-}
-
-pub(crate) fn fs_reason(e: &FsError) -> String {
-    format!("{:?}", e.kind)
-        .split([' ', '{'])
-        .next()
-        .unwrap_or("unknown")
-        .to_lowercase()
 }

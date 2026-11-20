@@ -1,7 +1,7 @@
 //! `NativeFs::write_in_place` の実ファイルでの検査 (docs/05 §4.4 の手順 1〜9、09 §3.6 の in-place の項)。
 
 #![cfg(any(windows, target_os = "linux"))]
-#![allow(clippy::result_large_err, clippy::print_stderr)]
+#![allow(clippy::print_stderr)]
 
 use std::cell::Cell;
 use std::fs;

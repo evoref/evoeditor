@@ -7,7 +7,10 @@
 //!   nightly.yml が古い既定の 1200 秒を渡しても、夜間の段がジョブの上限 240 分に収まるように)。
 //!   `--only fuzz:fuzz_decode+fuzz_editor` のように回すターゲットを絞れる (リリース前の各 1 時間、09 §8.2。5 つ × 1 時間はジョブの上限 240 分に収まらない)。`-close_fd_mask=3` で入力とスタックをログに出さない。クラッシュ入力は
 //!   `.github/fuzz-recipients.txt` の公開鍵で `age` により暗号化し、平文は消す (artifact に上げるのは暗号化したものだけ)。
-//! - `proptest`: `PROPTEST_CASES=10000` で Linux CI の対象 crate のテスト。
+//! - `proptest`: `PROPTEST_CASES=10000` で Linux CI の対象 crate のテスト。時間の予算 (`proptest_budget::BUDGET_SECONDS`、
+//!   45 分。ビルドを含む) を使い切ったら nextest を止め、止める前に失敗した試験が無ければ失敗にせず「時間切れで打ち切った」と
+//!   要約に書く (GitHub Actions では警告の注記も出す)。残りの段に時間を回し、夜間の段がジョブの上限 240 分に収まるように
+//!   (09 §6.3、v0.5 の M29)。`--proptest-minutes N` で予算を変えられる (手元で打ち切りの経路を試すとき)。
 //! - `audit`: `cargo audit` と `cargo deny check advisories` (本体と `fuzz/`)。例外は `deny.toml` の `[advisories] ignore` の 1 か所。
 //! - `coverage`: `cargo llvm-cov nextest --lcov` (報告のみ、OQ-101)。
 //! - `crash` (v0.2): 保存のクラッシュ一貫性 (`cargo xtask crash-consistency`。`LazyFS` は環境変数 `LAZYFS_BIN`、下の FS は
@@ -28,7 +31,9 @@
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::time::Duration;
 
+use crate::proptest_budget::{self, Verdict};
 use crate::util::{read_text, run, run_capture, workspace_root};
 
 /// Linux CI の対象 crate (`Cargo.toml` の `[workspace.metadata.evoeditor] linux-ci-crates`、09 §6.4)。
@@ -86,6 +91,14 @@ pub fn run_all(args: &[String]) -> Result<(), String> {
         })
         .transpose()?
         .or(explicit.then_some(60));
+    let proptest_limit = flag(args, "--proptest-minutes")
+        .map(|v| {
+            v.parse::<u64>()
+                .map(|m| Duration::from_secs(m * 60))
+                .map_err(|_| format!("--proptest-minutes が数ではありません: {v}"))
+        })
+        .transpose()?
+        .unwrap_or(Duration::from_secs(proptest_budget::BUDGET_SECONDS));
 
     let out_dir = workspace_root().join("target").join("nightly");
     std::fs::create_dir_all(&out_dir).map_err(|e| format!("{}: {e}", out_dir.display()))?;
@@ -123,16 +136,26 @@ pub fn run_all(args: &[String]) -> Result<(), String> {
                 seed,
                 &out_dir,
                 &mut summary,
-            ),
-            "soak" => soak(soak_minutes.unwrap_or(60), &out_dir, &mut summary),
-            "proptest" => proptest(),
-            "audit" => audit(),
-            "coverage" => coverage(&out_dir),
-            "beta" => beta(&mut summary),
-            _ => crate::crash_consistency::run_cmd(&[]),
+            )
+            .map(|()| StepEnd::Done),
+            "soak" => {
+                soak(soak_minutes.unwrap_or(60), &out_dir, &mut summary).map(|()| StepEnd::Done)
+            }
+            "proptest" => proptest(proptest_limit),
+            "audit" => audit().map(|()| StepEnd::Done),
+            "coverage" => coverage(&out_dir).map(|()| StepEnd::Done),
+            "beta" => beta(&mut summary).map(|()| StepEnd::Done),
+            _ => crate::crash_consistency::run_cmd(&[]).map(|()| StepEnd::Done),
         };
         match r {
-            Ok(()) => summary.push(format!("{step}: 成功")),
+            Ok(StepEnd::Done) => summary.push(format!("{step}: 成功")),
+            Ok(StepEnd::CutOff(note)) => {
+                // 失敗ではないので起票はしないが、実行の画面と要約で気づけるようにする
+                if std::env::var_os("GITHUB_ACTIONS").is_some() {
+                    println!("::warning title=nightly の {step} を打ち切った::{note}");
+                }
+                summary.push(format!("{step}: {note}"));
+            }
             Err(e) => {
                 summary.push(format!("{step}: 失敗"));
                 failures.push(format!("{step}: {e}"));
@@ -396,20 +419,35 @@ fn list_crashes(dir: &Path) -> Result<Vec<PathBuf>, String> {
     Ok(v)
 }
 
-fn proptest() -> Result<(), String> {
+/// 手順の終わり方 (失敗は `Err`)。
+enum StepEnd {
+    /// 最後まで回って成功した。
+    Done,
+    /// 時間の予算で打ち切った。失敗ではない (要約に書く 1 行)。
+    CutOff(String),
+}
+
+/// 手順 `proptest`: 時間の予算 `budget` の中で回す (09 §6.3)。予算を使い切ったときは、それまでに失敗した試験が無ければ
+/// `StepEnd::CutOff` (失敗にしない)。
+fn proptest(budget: Duration) -> Result<StepEnd, String> {
     let mut cmd = Command::new("cargo");
     cmd.env("PROPTEST_CASES", "10000").args([
         "nextest",
         "run",
         "--profile",
-        // 夜間の proptest は重い (eve-text の storage は 1 ケースで大きな文書を作る) ので、専用の profile で長い時間を許す
+        // 夜間の proptest は重い (1 件が重い試験は件数を自分で決める、09 §6.3) ので、専用の profile で長い時間を許す
         "nightly",
         "--no-tests=pass",
     ]);
     for c in linux_crates()? {
         cmd.args(["-p", &c]);
     }
-    run("proptest 拡張 (PROPTEST_CASES=10000)", &mut cmd)
+    let label = "proptest 拡張 (PROPTEST_CASES=10000)";
+    match proptest_budget::run(label, &mut cmd, budget)? {
+        Verdict::Passed => Ok(StepEnd::Done),
+        Verdict::CutOff(c) => Ok(StepEnd::CutOff(c.note(budget))),
+        Verdict::Failed(e) => Err(format!("{label}: {e}")),
+    }
 }
 
 /// `deny.toml` の `[advisories] ignore` にある勧告 ID (`RUSTSEC-YYYY-NNNN`)。
@@ -679,6 +717,24 @@ mod tests {
         assert_eq!(steps, ["beta"]);
         assert_eq!(t, None);
         assert!(parse_only("beta:fuzz_decode").is_err());
+    }
+
+    #[test]
+    fn 段の上限の合計はジョブの上限に収まる() {
+        // 09 §6.3 の段の時間の配分: 上限を決めた段 (fuzz・proptest・soak) と、他の段の見込み (準備と後始末 5 分・coverage 15 分・
+        // audit と crash 2 分) の合計が、nightly.yml の nightly (linux) の timeout-minutes (240 分) に、20 分以上の余裕を
+        // 残して収まる
+        let yml = read_text(&workspace_root().join(".github/workflows/nightly.yml")).unwrap();
+        assert!(
+            yml.contains("timeout-minutes: 240"),
+            "nightly (linux) の上限"
+        );
+        let capped = FUZZ_TOTAL_SECONDS / 60 + proptest_budget::BUDGET_SECONDS / 60 + 60;
+        let others = 5 + 15 + 2;
+        assert!(
+            capped + others + 20 <= 240,
+            "段の合計 {capped} + {others} 分が 240 分に余裕を残して収まらない"
+        );
     }
 
     #[test]

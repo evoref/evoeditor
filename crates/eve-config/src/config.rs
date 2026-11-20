@@ -592,7 +592,10 @@ impl Cx<'_> {
 
     fn section(&mut self, name: &Spanned<DeString<'_>>, value: &Spanned<DeValue<'_>>) {
         let n: &str = name.get_ref();
-        if crate::reserved::RESERVED_SECTIONS.contains(&n) {
+        // 公開前のセクションと、まだ解決しない条件付きセクション (07 §3.4) は、セクションごとに未対応の情報診断にする
+        if crate::reserved::RESERVED_SECTIONS.contains(&n)
+            || crate::reserved::CONDITIONAL_SECTIONS.contains(&n)
+        {
             self.diag(
                 Severity::Info,
                 DiagKind::Unsupported,

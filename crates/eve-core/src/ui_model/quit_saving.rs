@@ -16,6 +16,7 @@ use crate::ui_model::keys;
 use crate::ui_model::overlay::{ChoiceDef, ConfirmAction, ConfirmState, Continuation};
 use crate::{CommandResult, FsErrorKind, FsPath, JobError, JobResult};
 
+use crate::io::error_keys::{quit_abort_stderr_key, reason_label};
 use crate::io::pending::Pending;
 
 /// 保存を待つ時間。これを超えたら確認を出す。
@@ -207,23 +208,16 @@ impl EditorState {
                 err: JobError::Fs(e),
                 ..
             } => {
+                let key = quit_abort_stderr_key(&e.kind);
                 abort.stderr.push(match &e.kind {
-                    FsErrorKind::ReplacedMovedToBackup { backup } => line(
-                        "stderr.quit_abort.moved_to_backup",
-                        vec![("path", p), ("backup", backup.display())],
-                    ),
-                    FsErrorKind::InPlaceFailed { backup: Some(b) } => line(
-                        "stderr.quit_abort.in_place_failed",
-                        vec![("path", p), ("backup", b.display())],
-                    ),
-                    FsErrorKind::InPlaceFailed { backup: None } => line(
-                        "stderr.quit_abort.in_place_failed_no_backup",
-                        vec![("path", p)],
-                    ),
-                    other => line(
-                        "stderr.quit_abort.save_failed",
-                        vec![("path", p), ("reason", format!("{other:?}"))],
-                    ),
+                    FsErrorKind::ReplacedMovedToBackup { backup } => {
+                        line(key, vec![("path", p), ("backup", backup.display())])
+                    }
+                    FsErrorKind::InPlaceFailed { backup: Some(b) } => {
+                        line(key, vec![("path", p), ("backup", b.display())])
+                    }
+                    FsErrorKind::InPlaceFailed { backup: None } => line(key, vec![("path", p)]),
+                    other => line(key, vec![("path", p), ("reason", format!("{other:?}"))]),
                 });
                 true
             }
@@ -234,7 +228,7 @@ impl EditorState {
             } => {
                 abort.stderr.push(line(
                     "stderr.quit_abort.save_failed",
-                    vec![("path", p), ("reason", crate::io::file::reason_label(err))],
+                    vec![("path", p), ("reason", reason_label(err))],
                 ));
                 true
             }

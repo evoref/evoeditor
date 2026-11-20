@@ -173,7 +173,7 @@ pub(crate) fn write_in_place(
     opts: &SaveOptions,
     cancel: &CancelToken,
 ) -> Result<SaveReport, FsError> {
-    let conflict = |current| FsError::new(FsErrorKind::Conflict { current });
+    let conflict = FsError::conflict;
     let source_failed = || FsError::new(FsErrorKind::SourceFailed);
     let target = resolve_target(path, false)?;
     let target_path = FsPath::new(target.clone());

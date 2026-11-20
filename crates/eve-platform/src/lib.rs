@@ -10,8 +10,6 @@
 // `console`・`dll`・`locale`・`session`・`signals`・`stdin::win`・`stdin::unix`・`term` だけに許す (R5)。アルゴリズムのモジュール (`save`・`unix_fs`・`fs`・
 // `fs_common`・`inplace`・`inflight`・`swap_scan`・`hooks` など) には許さない。
 #![deny(unsafe_code)]
-// eve-core の `FsError` は大きい型 (エラーは稀な経路)。値で返す。
-#![allow(clippy::result_large_err)]
 
 /// `FileSystem` のうち状態ディレクトリを使うメソッド (保存中フラグ・孤児のバックアップ・緊急退避・状態ファイル・スワップ・
 /// 直接上書き)。実装は OS に依らないので、`WinFs` と `UnixFs` の `impl FileSystem` の中で展開して共有する

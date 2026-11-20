@@ -12,6 +12,7 @@ use crate::command::{
     CommandCtx, CommandKind, CommandRegistry, CommandResult, Permission, RejectReason,
 };
 use crate::editor::state::EditorState;
+use crate::io::error_keys::{fs_reason, reason_label, save_error_key};
 use crate::io::fs::Expect;
 use crate::jobs::{JobError, JobResult};
 use crate::ui_model::keys;
@@ -100,21 +101,19 @@ impl EditorState {
                 err: JobError::Fs(e),
                 ..
             } => match &e.kind {
-                crate::FsErrorKind::ReplacedMovedToBackup { backup } => self.message_text(
-                    keys::MSG_SAVE_MOVED_TO_BACKUP,
-                    &[("backup", &backup.display())],
-                ),
+                crate::FsErrorKind::ReplacedMovedToBackup { backup } => {
+                    self.message_text(save_error_key(e), &[("backup", &backup.display())])
+                }
                 crate::FsErrorKind::InPlaceFailed { backup: Some(b) } => self.message_text(
-                    keys::MSG_SAVE_IN_PLACE_FAILED,
+                    save_error_key(e),
                     &[("path", &shown), ("backup", &b.display())],
                 ),
-                crate::FsErrorKind::InPlaceFailed { backup: None } => self.message_text(
-                    keys::MSG_SAVE_IN_PLACE_FAILED_NO_BACKUP,
-                    &[("path", &shown)],
-                ),
-                _ => crate::io::file::fs_reason(e),
+                crate::FsErrorKind::InPlaceFailed { backup: None } => {
+                    self.message_text(save_error_key(e), &[("path", &shown)])
+                }
+                _ => fs_reason(e),
             },
-            JobResult::Failed { err, .. } => crate::io::file::reason_label(err),
+            JobResult::Failed { err, .. } => reason_label(err),
             JobResult::Unmappable { .. } => "unmappable".to_owned(),
             // エスケープ文字のつながり (03 §8.3.1): 確認が要るので保存しない (何も書いていない)
             JobResult::EscapeMerge { .. } => {

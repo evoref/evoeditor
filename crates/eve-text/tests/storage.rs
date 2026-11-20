@@ -71,18 +71,45 @@ fn any_text() -> impl Strategy<Value = String> {
     .prop_map(|v| v.into_iter().collect())
 }
 
+/// 性質の件数。1 件が重い (5 件に 1 件は ropey のチャンクをまたぐ 1500〜6000 文字のテキストを作る。夜間の 10,000 件では
+/// 1 つの性質で 8〜11 分かかった) ので、既定は 128 件、`PROPTEST_CASES` があればその 1/20 と 128 の大きい方 (夜間の
+/// 10,000 なら 500)。`proptest!` のマクロは `PROPTEST_CASES` で件数を上書きするので、下の `heavy_proptest!` で
+/// `TestRunner` を直に使う (docs/09 §6.3、Issue #453 と同じ扱い)。
 fn config() -> ProptestConfig {
+    let cases = std::env::var("PROPTEST_CASES")
+        .ok()
+        .and_then(|v| v.parse::<u32>().ok())
+        .map_or(128, |n| (n / 20).max(128));
     ProptestConfig {
-        cases: 128,
+        cases,
+        source_file: Some(file!()),
         ..ProptestConfig::default()
     }
 }
 
+/// `proptest!` と同じ書き方 (`fn 名前(値 in 生成, …) { 本体 }`) で、件数を `config()` のとおりにする。
+macro_rules! heavy_proptest {
+    ($($(#[$meta:meta])* fn $name:ident($($arg:pat in $strategy:expr),+ $(,)?) $body:block)*) => {$(
+        $(#[$meta])*
+        fn $name() {
+            let mut runner = proptest::test_runner::TestRunner::new(ProptestConfig {
+                test_name: Some(concat!(module_path!(), "::", stringify!($name))),
+                ..config()
+            });
+            let result = runner.run(&($($strategy,)+), |($($arg,)+)| {
+                $body
+                Ok(())
+            });
+            if let Err(e) = result {
+                panic!("{e}\n{runner}");
+            }
+        }
+    )*};
+}
+
 // ---------- 性質 ----------
 
-proptest! {
-    #![proptest_config(config())]
-
+heavy_proptest! {
     // spec: 03 §2.4 / §2.5 (INV-T2)
     #[test]
     fn 行数は区切りの数プラス_1(s in any_text()) {

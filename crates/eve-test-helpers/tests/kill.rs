@@ -3,7 +3,6 @@
 //! 起動し、切断点で後始末なしに終了させる。
 
 #![cfg(any(windows, target_os = "linux"))]
-#![allow(clippy::result_large_err)]
 
 use std::fs;
 use std::path::{Path, PathBuf};

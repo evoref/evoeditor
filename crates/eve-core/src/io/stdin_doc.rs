@@ -27,7 +27,7 @@ use crate::jobs::{JobKind, JobResult, StdinEnd};
 use crate::ui_model::keys;
 use crate::ui_model::overlay::{ChoiceDef, ConfirmAction, ConfirmState, Continuation, Overlay};
 
-use super::file::{fs_reason, reason_label};
+use super::error_keys::{fs_reason, reason_label};
 
 /// `ui.confirm.stdin_stop` の選択肢 (読み続ける (既定。`Esc` と同じ) / ここまでで開く)。
 const STOP_CHOICES: [ChoiceDef; 2] = [
