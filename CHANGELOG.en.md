@@ -13,6 +13,8 @@ The Japanese version ([CHANGELOG.md](CHANGELOG.md)) is authoritative. Both are u
 
 ### Changed
 
+- **Building from source now needs Rust 1.99 or later** (it was 1.97). The prebuilt binaries are not affected
+
 - **The keymap (`keymap.toml`) check for bindings that make quit, the command palette or cancel unreachable now works per place on the screen**: it used to pass a keymap as long as the key worked in one place. Now a binding that makes one of them unreachable in any place where the default reaches it (the editor, the search bar, input fields, the command palette, lists, help and confirmation dialogs) is an error: the binding is ignored and the default comes back. Settings that passed in v0.4, such as `"esc" = "edit.duplicate_line"` under `[keys.editor]` (Esc no longer cancels in the editor), rebinding `"esc"` under `[keys.prompt]`, or `"esc" = "none"` under `[keys.dialog]`, are errors in v0.5. So are rebinding these keys with a `when` clause, and rebinding both `Ctrl+P` and `F1` so that only a key that needs an enhanced keyboard protocol (`Ctrl+Shift+P`) is left. Check with `evoeditor --check-config`
 
 ### Fixed
