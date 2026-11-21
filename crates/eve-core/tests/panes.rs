@@ -634,3 +634,22 @@ fn 表示していない_view_もペインの大きさが変わったら合わ�
     assert_eq!(f.panes[1].cursors.len(), 1, "戻した a のカーソルが見える");
     assert!(f.primary_cursor.is_some());
 }
+
+// verifies: AC-FR-103-2
+#[test]
+fn _1_ペインで別の文書に切り替えて戻してもスクロールの位置が保たれる() {
+    let mut h = opened(&[("/w/a.txt", &lines(200)), ("/w/b.txt", b"b\n")]);
+    h.open("/w/a.txt");
+    let a = focused(&h);
+    // ホイールでカーソルから離れた所までスクロールする
+    for _ in 0..10 {
+        h.mouse_in(a, MouseKind::WheelDown, Modifiers::NONE, 1, 1);
+    }
+    let top = |h: &Harness| h.editor.state().view(a).expect("View").scroll.top.0;
+    let before = top(&h);
+    assert!(before > 0);
+    run(&mut h, "buffer.next");
+    run(&mut h, "buffer.next");
+    assert_eq!(focused(&h), a, "a の View に戻る");
+    assert_eq!(top(&h), before, "切り替えて戻してもスクロールを変えない");
+}

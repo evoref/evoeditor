@@ -319,14 +319,17 @@ impl EditorState {
         if let Some(prev) = prev {
             self.note_recent(at, prev);
         }
-        let view = match self.pane(at).and_then(|p| p.views.get(&doc).copied()) {
-            Some(v) if self.docs.views.contains_key(&v) => v,
-            _ => self.view_for_new_pane(doc),
+        let (view, fresh) = match self.pane(at).and_then(|p| p.views.get(&doc).copied()) {
+            Some(v) if self.docs.views.contains_key(&v) => (v, false),
+            _ => (self.view_for_new_pane(doc), true),
         };
         self.put_view_in(at, doc, view);
-        // 写した View は写し元のペインと、表に残っていた View は前に表示したときと、ペインの本文の大きさが違うことがある。
-        // 表示するペインの矩形でカーソルが見えるようにする (PANE-1)
-        self.ensure_cursor_visible(view);
+        if fresh {
+            // 写して作った View は写し元のペインと、ペインに属さない View はそれまで大きさを求めたペインと、本文の大きさが
+            // 違うことがある。表示するペインの矩形でカーソルが見えるようにする (PANE-1)。ペインの表から出した View は
+            // そのまま使う (位置を保つ、FR-103 AC-2。大きさの変更は `after_relayout` と `apply_viewport` が合わせている)
+            self.ensure_cursor_visible(view);
+        }
         if focused {
             self.docs.last_view.insert(doc, view);
         }
