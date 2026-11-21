@@ -3,21 +3,25 @@
 //! `MemFs` と実 FS (`WinFs` / `UnixFs`) に同じ検査を掛け、仕様 (02 §4.5、05 §2.1 / §4.1 / §4.5 / §5.4) が定める観察できる振る舞いを
 //! 揃える。trait の既定の実装 (空の一覧・`Unsupported`・`Other`) を上書きし忘れた実装は、書く操作の検査で落ちる。
 //!
-//! 使い方: `suite(|| Subject::new(fs, root).caps(..).lister(..).keep(guard))`。検査ごとに `make` を呼んで新しい対象を作る。
-//! `root` は空の既存ディレクトリ。検査は trait の操作だけで準備と観察をする (保存先のファイルも `write_atomic` で作る)。
-//! 実装が意図して仕様と違う点は `Caps` の名前の付いたフラグで飛ばす (黙って飛ばさない)。
+//! 使い方: `suite(|| Subject::new(fs, root).caps(..).lister(..).fixture(..).keep(guard))`。検査ごとに `make` を呼んで新しい対象を
+//! 作る。`root` は空の既存ディレクトリ。検査は trait の操作だけで準備と観察をする (保存先のファイルも `write_atomic` で作る)。
+//! ただし `read_dir` の検査 (v0.5 の M31、03 §12.7.8) は、trait に無い準備 (ディレクトリ・リンク・属性・FIFO) を `Fixture` で行う。
+//! 実装が意図して仕様と違う点は `Caps` の名前の付いたフラグで飛ばす (黙って飛ばさない)。OS や環境に無いもの (Unix のオフラインの
+//! 属性、Windows の FIFO、権限の無い開発機のシンボリックリンク) は `Fixture` が `false` を返し、その項目だけを確かめない。
 
 use std::any::Any;
+use std::collections::BTreeMap;
+use std::ffi::OsString;
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::sync::Arc;
 
 use eve_core::{
-    CancelToken, ChunkError, DocSnapshot, Expect, FileKind, FileStamp, FileSystem, FsError,
-    FsErrorDetail, FsErrorKind, FsPath, ReadChunks, SaveMethod, SaveOptions, SaveReport,
-    TextFormat,
+    CancelToken, ChunkError, DirEntry, DocSnapshot, EntryKind, Expect, FileKind, FileStamp,
+    FileSystem, FsError, FsErrorDetail, FsErrorKind, FsPath, ReadChunks, SaveMethod, SaveOptions,
+    SaveReport, TextFormat,
 };
 
-use crate::memfs::BytesSource;
+use crate::memfs::{BytesSource, MemFs};
 
 /// 実装の能力と、既知の仕様との差。
 #[derive(Clone, Copy, Debug)]
@@ -28,6 +32,9 @@ pub struct Caps {
     /// `write_recovery` で書いた退避が `list_recovery_dirs` に `rescue = true` で現れる (02 §4.5)。MemFs はテストが積んだ
     /// ものだけを返すので `false` (既知の差)。
     pub recovery_listing_reflects_writes: bool,
+    /// `read_dir` がファイルの大きさ (`DirEntry::len`) を返す (05 §2.1。Windows の実 FS と `MemFs` は `true`、Unix は
+    /// `stat` をしないので `false`)。`true` なら正しい値を、`false` なら `None` を求める。
+    pub read_dir_len: bool,
 }
 
 impl Default for Caps {
@@ -35,12 +42,98 @@ impl Default for Caps {
         Caps {
             state_dir: true,
             recovery_listing_reflects_writes: true,
+            read_dir_len: false,
         }
     }
 }
 
 /// ディレクトリの直下の名前を返す関数。
 type Lister = Box<dyn Fn(&FsPath) -> Vec<String>>;
+
+/// `read_dir` の検査の準備に使う、trait に無い操作。実 FS は OS の API で、`MemFs` は準備の口で作る。
+/// 作れないもの (OS に無い・権限が無い) は `false` / `None` を返し、検査はその項目だけを確かめない。
+/// 後片付け (列挙を拒んだ権限を戻すなど) は実装が `Drop` で行う (対象の一時ディレクトリより先に落ちる)。
+pub trait Fixture {
+    /// ディレクトリを作る (祖先も作る)。
+    fn dir(&self, path: &FsPath);
+    /// ファイルを作る。名前は変えない (Windows の末尾のドット・空白、予約名 `con.txt` もそのまま作る)。
+    fn file(&self, path: &FsPath, data: &[u8]);
+    /// 隠しファイル (Windows は隠し属性を付ける。ほかは `file` と同じ)。
+    fn hidden_file(&self, path: &FsPath) {
+        self.file(path, b"");
+    }
+    /// 呼び戻しの属性 (オフライン) を持つファイルを作る。属性の無い FS は `false`。
+    fn offline_file(&self, _path: &FsPath) -> bool {
+        false
+    }
+    /// `link` に `target` を指すシンボリックリンクを作る (`kind` はリンク先の種類。Windows はファイルとディレクトリで作り方が違う)。
+    /// 作れない環境 (権限の無い Windows の開発機) は `false`。
+    fn symlink(&self, link: &FsPath, target: &FsPath, kind: FileKind) -> bool;
+    /// ジャンクション (Windows)。無い OS は `false`。
+    fn junction(&self, _link: &FsPath, _target: &FsPath) -> bool {
+        false
+    }
+    /// FIFO などの、通常のファイルでもディレクトリでもない項目を作る。作れない OS は `false`。
+    fn special(&self, _path: &FsPath) -> bool {
+        false
+    }
+    /// `dir` の中で、開くと止まり得る通常でないファイル (FIFO・デバイス) のパス。無ければ `None`。
+    fn device_in(&self, _dir: &FsPath) -> Option<FsPath> {
+        None
+    }
+    /// `dir` を列挙できなくする。できない (Unix の root など) なら `false`。
+    fn deny_list(&self, _dir: &FsPath) -> bool {
+        false
+    }
+    /// `dir` の列挙を、`after` 個の項目を返した後に失敗させる (SMB の切断などの再現)。実 FS では作れないので `false`。
+    fn fail_listing_after(&self, _dir: &FsPath, _after: usize) -> bool {
+        false
+    }
+}
+
+/// `MemFs` の準備の口で作る `Fixture`。どの項目も作れる (リンク・FIFO の代わり・オフライン・列挙の拒否)。
+pub struct MemFixture(pub Arc<MemFs>);
+
+fn mem_str(path: &FsPath) -> &str {
+    path.as_path()
+        .to_str()
+        .expect("MemFs の準備のパスは UTF-8 (UTF-8 でない名前はファイルだけ)")
+}
+
+impl Fixture for MemFixture {
+    fn dir(&self, path: &FsPath) {
+        self.0.add_dir(mem_str(path));
+    }
+    fn file(&self, path: &FsPath, data: &[u8]) {
+        self.0.set_file(path, data);
+    }
+    fn offline_file(&self, path: &FsPath) -> bool {
+        self.0.set_file(path, b"");
+        self.0.set_offline(mem_str(path), true);
+        true
+    }
+    fn symlink(&self, link: &FsPath, target: &FsPath, _kind: FileKind) -> bool {
+        self.0.add_link(mem_str(link), mem_str(target));
+        true
+    }
+    fn special(&self, path: &FsPath) -> bool {
+        self.0.add_special(mem_str(path));
+        true
+    }
+    fn device_in(&self, dir: &FsPath) -> Option<FsPath> {
+        let p = dir.join("device");
+        self.0.add_special(mem_str(&p));
+        Some(p)
+    }
+    fn deny_list(&self, dir: &FsPath) -> bool {
+        self.0.set_unreadable(mem_str(dir), true);
+        true
+    }
+    fn fail_listing_after(&self, dir: &FsPath, after: usize) -> bool {
+        self.0.set_read_dir_fail_after(mem_str(dir), Some(after));
+        true
+    }
+}
 
 /// 検査の対象 1 つ (検査ごとに新しく作る)。
 pub struct Subject {
@@ -52,6 +145,8 @@ pub struct Subject {
     pub caps: Caps,
     /// ディレクトリの直下の名前 (一時ファイルの残りの検査に使う)。無ければ残りを確かめない。
     lister: Option<Lister>,
+    /// `read_dir` の検査の準備。`_keep` より先に落とす (権限を戻してから一時ディレクトリを消す)。
+    fixture: Option<Box<dyn Fixture>>,
     /// 検査の後に落とすもの (一時ディレクトリの後片付けなど)。
     _keep: Option<Box<dyn Any>>,
 }
@@ -64,6 +159,7 @@ impl Subject {
             root,
             caps: Caps::default(),
             lister: None,
+            fixture: None,
             _keep: None,
         }
     }
@@ -82,6 +178,13 @@ impl Subject {
         self
     }
 
+    /// `read_dir` の検査の準備を渡す (無ければ `read_dir` の検査は落ちる)。
+    #[must_use]
+    pub fn fixture(mut self, f: impl Fixture + 'static) -> Subject {
+        self.fixture = Some(Box::new(f));
+        self
+    }
+
     /// 検査の後まで持っておくもの (一時ディレクトリの後片付けなど)。対象と一緒に落とす。
     #[must_use]
     pub fn keep(mut self, guard: impl Any) -> Subject {
@@ -91,6 +194,12 @@ impl Subject {
 
     fn p(&self, name: &str) -> FsPath {
         self.root.join(name)
+    }
+
+    fn fx(&self) -> &dyn Fixture {
+        self.fixture
+            .as_deref()
+            .expect("read_dir の検査には Subject::fixture が要る")
     }
 
     fn names(&self) -> Option<Vec<String>> {
@@ -148,6 +257,21 @@ pub const CHECKS: &[(&str, Check)] = &[
     ("状態ファイルを読み書きし退ける", state_files),
     ("スワップを書いて消す", swap),
     ("退避先に保存はディレクトリを返す", write_recovery),
+    ("read_dir_は空のディレクトリで空", read_dir_empty),
+    ("read_dir_は種類を返しリンクを辿らない", read_dir_kinds),
+    ("read_dir_は名前を変えない", read_dir_names),
+    ("read_dir_は長いパスを読む", read_dir_long_path),
+    ("read_dir_はオフラインの属性を返す", read_dir_offline),
+    ("read_dir_の失敗の種類", read_dir_errors),
+    ("read_dir_は_max_entries_で打ち切る", read_dir_max_entries),
+    (
+        "read_dir_は列挙の途中の失敗を_incomplete_で返す",
+        read_dir_incomplete,
+    ),
+    (
+        "open_read_は通常でないファイルで止まらずに_invalidpath",
+        open_read_not_regular,
+    ),
 ];
 
 /// すべての検査を掛ける。落ちた検査の名前をまとめて panic する。
@@ -636,4 +760,278 @@ fn write_recovery(s: &Subject) {
             "書いた退避が一覧に現れる"
         );
     }
+}
+
+// ---------- ディレクトリの列挙 (02 §4.5 read_dir、05 §2.1、03 §12.7.8。v0.5 の M31) ----------
+
+/// UTF-8 で表せない名前 (Unix) / 対にならないサロゲートを含む名前 (Windows)。
+fn odd_name() -> OsString {
+    #[cfg(unix)]
+    {
+        use std::os::unix::ffi::OsStringExt;
+        OsString::from_vec(b"odd-\xff-name.txt".to_vec())
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::ffi::OsStringExt;
+        let mut w: Vec<u16> = "odd-".encode_utf16().collect();
+        w.push(0xD800);
+        w.extend(".txt".encode_utf16());
+        OsString::from_wide(&w)
+    }
+}
+
+/// 打ち切らずに全部を列挙し、名前で引ける形にする。名前の重複・`.`・`..` が無いことも確かめる。
+fn listing(s: &Subject, dir: &FsPath) -> BTreeMap<OsString, DirEntry> {
+    let l = s.fs.read_dir(dir, usize::MAX).expect("read_dir");
+    assert!(!l.truncated, "上限に達していないのに打ち切った");
+    assert!(!l.incomplete, "列挙は途中で失敗していない");
+    let n = l.entries.len();
+    let map: BTreeMap<OsString, DirEntry> =
+        l.entries.into_iter().map(|e| (e.name.clone(), e)).collect();
+    assert_eq!(map.len(), n, "同じ名前を 2 度返した");
+    for dot in [".", ".."] {
+        assert!(!map.contains_key(&OsString::from(dot)), "{dot} を返した");
+    }
+    map
+}
+
+fn kind_of(map: &BTreeMap<OsString, DirEntry>, name: &str) -> EntryKind {
+    map.get(&OsString::from(name))
+        .unwrap_or_else(|| panic!("{name} が無い: {:?}", map.keys().collect::<Vec<_>>()))
+        .kind
+}
+
+// 02 §4.5: 空のディレクトリは空の一覧 (既定の Unsupported と区別する)
+fn read_dir_empty(s: &Subject) {
+    let l = s.fs.read_dir(&s.root, 10).expect("read_dir");
+    assert!(l.entries.is_empty() && !l.truncated, "{l:?}");
+}
+
+// 02 §4.5 EntryKind・DirEntry.len、05 §2.1 (リンクは辿らない。ジャンクションも Symlink。FIFO は Other)
+fn read_dir_kinds(s: &Subject) {
+    let fx = s.fx();
+    fx.file(&s.p("a.txt"), b"abc");
+    fx.dir(&s.p("sub"));
+    fx.file(&s.p("sub").join("inner.txt"), b"x");
+    let mut want = vec![("a.txt", EntryKind::File), ("sub", EntryKind::Dir)];
+    if fx.symlink(&s.p("link-file"), &s.p("a.txt"), FileKind::File) {
+        want.push(("link-file", EntryKind::Symlink));
+    }
+    if fx.symlink(&s.p("link-dir"), &s.p("sub"), FileKind::Dir) {
+        want.push(("link-dir", EntryKind::Symlink));
+    }
+    if fx.symlink(&s.p("dangling"), &s.p("none.txt"), FileKind::File) {
+        want.push(("dangling", EntryKind::Symlink));
+    }
+    if fx.junction(&s.p("junction"), &s.p("sub")) {
+        want.push(("junction", EntryKind::Symlink));
+    }
+    if fx.special(&s.p("fifo")) {
+        want.push(("fifo", EntryKind::Other));
+    }
+    let map = listing(s, &s.root);
+    assert_eq!(
+        map.len(),
+        want.len(),
+        "{:?}",
+        map.keys().collect::<Vec<_>>()
+    );
+    for (name, kind) in &want {
+        assert_eq!(kind_of(&map, name), *kind, "{name}");
+    }
+    for e in map.values() {
+        if e.kind == EntryKind::File {
+            let want = s.caps.read_dir_len.then_some(3);
+            assert_eq!(
+                e.len, want,
+                "大きさは列挙で分かるときだけ、正しい値で: {e:?}"
+            );
+        } else {
+            assert_eq!(e.len, None, "ファイル以外の大きさは返さない: {e:?}");
+        }
+        assert!(!e.offline, "{e:?}");
+    }
+    // 直下だけを返す (降りない)
+    assert!(!map.contains_key(&OsString::from("inner.txt")));
+}
+
+// 03 §12.7.8: 隠しファイル・日本語と空白・UTF-8 で表せない名前 (Unix) と対にならないサロゲート (Windows)・末尾のドットと空白・
+// 予約名 (`con.txt`)。列挙で名前が変わらない (02 §4.5 の DirEntry.name、05 §2.1)
+fn read_dir_names(s: &Subject) {
+    let fx = s.fx();
+    let plain = [
+        "日本語 の 名前.txt",
+        "末尾のドット.",
+        "末尾の空白 ",
+        "con.txt",
+        " 先頭の空白.txt",
+    ];
+    for n in plain {
+        fx.file(&s.p(n), b"x");
+    }
+    fx.file(&s.p(".hidden"), b"x");
+    fx.hidden_file(&s.p("隠し属性.txt"));
+    let odd = odd_name();
+    fx.file(&s.root.join(&odd), b"x");
+    let map = listing(s, &s.root);
+    let mut want: Vec<OsString> = plain.iter().map(OsString::from).collect();
+    want.extend([
+        OsString::from(".hidden"),
+        OsString::from("隠し属性.txt"),
+        odd,
+    ]);
+    want.sort();
+    assert_eq!(map.keys().cloned().collect::<Vec<_>>(), want);
+    assert!(map.values().all(|e| e.kind == EntryKind::File), "{map:?}");
+}
+
+// 03 §12.7.8 / 05 §3.1: 260 文字を超えるパス (Windows は std が verbatim の接頭辞を付けて読む)
+fn read_dir_long_path(s: &Subject) {
+    let mut dir = s.root.clone();
+    while dir.as_path().as_os_str().len() < 320 {
+        dir = dir.join("長いパスの途中のディレクトリ-0123456789");
+    }
+    s.fx().dir(&dir);
+    s.fx().file(&dir.join("深いファイル.txt"), b"deep");
+    let map = listing(s, &dir);
+    assert_eq!(kind_of(&map, "深いファイル.txt"), EntryKind::File);
+    assert_eq!(map.len(), 1);
+}
+
+// 02 §4.5 DirEntry.offline、05 §2.1 (RECALL_ON_DATA_ACCESS / RECALL_ON_OPEN / OFFLINE の属性。Unix は常に false)
+fn read_dir_offline(s: &Subject) {
+    let fx = s.fx();
+    fx.file(&s.p("local.txt"), b"x");
+    let has = fx.offline_file(&s.p("online-only.txt"));
+    let map = listing(s, &s.root);
+    assert!(!map[&OsString::from("local.txt")].offline);
+    if has {
+        let e = &map[&OsString::from("online-only.txt")];
+        assert!(e.offline && e.kind == EntryKind::File, "{e:?}");
+    }
+}
+
+// 02 §4.5 read_dir の注: 無い → NotFound (detail なし。ダングリングのリンクだけ DanglingLink)、ディレクトリでない
+// (ファイルを指すリンクを含む) → InvalidPath (detail なし)、読めない → PermissionDenied
+fn read_dir_errors(s: &Subject) {
+    let e = s.fs.read_dir(&s.p("none"), 10).unwrap_err();
+    assert_eq!(
+        kind_detail(&e),
+        (FsErrorKind::NotFound, None),
+        "無いディレクトリ"
+    );
+    let e = s.fs.read_dir(&s.p("none").join("deeper"), 10).unwrap_err();
+    assert_eq!(kind_detail(&e), (FsErrorKind::NotFound, None), "親も無い");
+    s.fx().file(&s.p("f.txt"), b"x");
+    let e = s.fs.read_dir(&s.p("f.txt"), 10).unwrap_err();
+    assert_eq!(
+        kind_detail(&e),
+        (FsErrorKind::InvalidPath, None),
+        "ファイル"
+    );
+    if s.fx()
+        .symlink(&s.p("link-f"), &s.p("f.txt"), FileKind::File)
+    {
+        let e = s.fs.read_dir(&s.p("link-f"), 10).unwrap_err();
+        assert_eq!(
+            kind_detail(&e),
+            (FsErrorKind::InvalidPath, None),
+            "ファイルを指すリンク"
+        );
+    }
+    if s.fx()
+        .symlink(&s.p("dangling"), &s.p("none-dir"), FileKind::Dir)
+    {
+        let e = s.fs.read_dir(&s.p("dangling"), 10).unwrap_err();
+        assert_eq!(e.kind, FsErrorKind::NotFound, "ダングリングのリンク");
+        assert!(
+            matches!(e.detail, Some(FsErrorDetail::DanglingLink { .. })),
+            "{:?}",
+            e.detail
+        );
+    }
+    let locked = s.p("locked");
+    s.fx().dir(&locked);
+    if s.fx().deny_list(&locked) {
+        let e = s.fs.read_dir(&locked, 10).unwrap_err();
+        assert_eq!(e.kind, FsErrorKind::PermissionDenied, "読めない");
+    }
+}
+
+// 02 §4.5 DirListing.truncated、05 §2.1 (max_entries 個を返した後にまだ項目があれば打ち切る)
+fn read_dir_max_entries(s: &Subject) {
+    let all: Vec<OsString> = (0..5)
+        .map(|i| OsString::from(format!("f{i}.txt")))
+        .collect();
+    for n in &all {
+        s.fx().file(&s.root.join(n), b"x");
+    }
+    for (max, truncated) in [(0, true), (1, true), (4, true), (5, false), (6, false)] {
+        let l = s.fs.read_dir(&s.root, max).expect("read_dir");
+        assert_eq!(l.truncated, truncated, "max_entries = {max}");
+        assert_eq!(l.entries.len(), max.min(all.len()), "max_entries = {max}");
+        for e in &l.entries {
+            assert!(all.contains(&e.name), "{e:?}");
+        }
+    }
+}
+
+// 02 §4.5 DirListing.incomplete、05 §2.1 (列挙そのものの途中の失敗は、そこまでの項目で incomplete。打ち切りとは別)
+fn read_dir_incomplete(s: &Subject) {
+    for i in 0..5 {
+        s.fx().file(&s.p(&format!("f{i}.txt")), b"x");
+    }
+    if !s.fx().fail_listing_after(&s.root, 2) {
+        // 実 FS では途中の失敗を作れない。失敗しない列挙は incomplete を立てない
+        let l = s.fs.read_dir(&s.root, usize::MAX).expect("read_dir");
+        assert!(
+            !l.incomplete && !l.truncated && l.entries.len() == 5,
+            "{l:?}"
+        );
+        return;
+    }
+    let l =
+        s.fs.read_dir(&s.root, usize::MAX)
+            .expect("途中の失敗は Err にしない");
+    assert!(l.incomplete && !l.truncated, "{l:?}");
+    assert_eq!(l.entries.len(), 2, "失敗までの項目を返す");
+    // 失敗の前に上限に達したら、打ち切りだけ
+    let l = s.fs.read_dir(&s.root, 1).expect("read_dir");
+    assert!(
+        l.truncated && !l.incomplete && l.entries.len() == 1,
+        "{l:?}"
+    );
+}
+
+/// 通常でないファイルを開く操作が戻るのを待つ時間。FIFO を開くのが退行して止まっても、試験を失敗で終わらせる。
+const OPEN_WATCHDOG: std::time::Duration = std::time::Duration::from_secs(10);
+
+// 05 §2.1 の open_read() の行 (v0.5 の M31): 開いた後のハンドルで通常のファイルと確かめ、FIFO・デバイスで止まらずに
+// InvalidPath (detail = NotAFile)
+fn open_read_not_regular(s: &Subject) {
+    let Some(p) = s.fx().device_in(&s.root) else {
+        return;
+    };
+    // 別のスレッドで開き、戻らなければ失敗にする (止まったスレッドはプロセスの終わりまで残る)
+    let (tx, rx) = std::sync::mpsc::channel();
+    let fs = Arc::clone(&s.fs);
+    let target = p.clone();
+    // 試験だけの見張りのスレッド (deps-policy.toml の allowed_files)
+    #[allow(clippy::disallowed_methods)]
+    std::thread::spawn(move || {
+        let r = fs
+            .open_read(&target)
+            .map(|_| ())
+            .map_err(|e| kind_detail(&e));
+        let _ = tx.send(r);
+    });
+    let r = rx.recv_timeout(OPEN_WATCHDOG).unwrap_or_else(|_| {
+        panic!("open_read が {OPEN_WATCHDOG:?} 戻らない (FIFO で止まった): {p:?}")
+    });
+    assert_eq!(
+        r,
+        Err((FsErrorKind::InvalidPath, Some(FsErrorDetail::NotAFile))),
+        "{p:?}"
+    );
 }

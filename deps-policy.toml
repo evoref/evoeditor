@@ -35,6 +35,8 @@ allowed_files = [
     { crate = "eve-platform", file = "src/stdin/mod.rs" },
     # NFR-501 AC-2 のシナリオで入力を送る試験用のスレッド (docs/09 §3.6)
     { crate = "eve-testkit", file = "benches/no_network.rs" },
+    # FileSystem の契約試験の見張り (FIFO を開く open_read が退行して止まっても、時間切れで試験を失敗にする。03 §12.7.8)
+    { crate = "eve-testkit", file = "src/fs_contract.rs" },
 ]
 
 [crate."eve-text"]

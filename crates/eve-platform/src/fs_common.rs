@@ -66,34 +66,66 @@ pub(crate) fn metadata_error(e: io::Error, path: &FsPath) -> FsError {
     map_io_error(e, path)
 }
 
-/// `open_read` の本体。ディレクトリ・デバイスは開かない (`InvalidPath` + `NotAFile`、05 §4.5。Windows の `File::open` は
-/// ディレクトリで成功しないので、ここに来るのは Unix)。
+/// `open_read` の本体。開いた後のハンドルで通常のファイルと確かめ、ディレクトリ・FIFO・デバイスは読まない (`InvalidPath` +
+/// `NotAFile`、05 §2.1 の `open_read()` の行・§4.5)。Unix は `O_NONBLOCK` で開き (FIFO を開くときに書き手を待って止まらない)、
+/// `fstat` で通常のファイルと確かめてから非ブロックを外す。非ブロックの `open` が `EAGAIN` (書込のリースが掛かった通常の
+/// ファイル) なら、非ブロックなしで開き直す (リースが破られるまで待つ)。Windows は `GetFileType` が `FILE_TYPE_CHAR`
+/// (`NUL`・コンソール) か `FILE_TYPE_PIPE` なら拒む。どちらも、属性 (`fstat` / `GetFileInformationByHandle`) を読めなければ
+/// 確かめずに進まず `Err` にする。
 pub(crate) fn open_read(path: &FsPath) -> Result<Box<dyn ReadChunks + Send>, FsError> {
-    let f = match File::open(path.as_path()) {
+    let not_a_file = || FsError::with_detail(FsErrorKind::InvalidPath, FsErrorDetail::NotAFile);
+    let f = match open_file(path) {
         Ok(f) => f,
-        // Windows はディレクトリを開くと `ERROR_ACCESS_DENIED` になる。ディレクトリなら権限の問題ではなく
-        // `InvalidPath` (05 §2.1 の写像の表、§4.5)
-        Err(_) if std::fs::metadata(path.as_path()).is_ok_and(|m| m.is_dir()) => {
-            return Err(FsError::with_detail(
-                FsErrorKind::InvalidPath,
-                FsErrorDetail::NotAFile,
-            ));
+        // Windows はディレクトリを開くと `ERROR_ACCESS_DENIED`、Unix はソケットを開くと `ENXIO` になる。在るが通常のファイルで
+        // ないなら、権限などの問題ではなく `InvalidPath` (05 §2.1 の写像の表、§4.5)
+        Err(_) if fs::metadata(path.as_path()).is_ok_and(|m| !m.is_file()) => {
+            return Err(not_a_file());
         }
         Err(e) => return Err(map_io_error(e, path)),
     };
-    if let Ok(m) = f.metadata()
-        && !m.is_file()
-    {
-        return Err(FsError::with_detail(
-            FsErrorKind::InvalidPath,
-            FsErrorDetail::NotAFile,
-        ));
+    // Windows の `NUL`・コンソール・パイプ。種類を問い合わせられない (`FILE_TYPE_UNKNOWN`) ときは下の属性で決める
+    #[cfg(windows)]
+    if crate::sys::is_char_or_pipe(&f) {
+        return Err(not_a_file());
     }
+    let meta = f.metadata().map_err(|e| map_io_error(e, path))?;
+    if !meta.is_file() {
+        return Err(not_a_file());
+    }
+    // ローカルの FS では通常のファイルの読込に `O_NONBLOCK` は効かないので、外せなくても読める (失敗は無視する)
+    #[cfg(unix)]
+    let _ = crate::sys::clear_nonblocking(&f);
     Ok(Box::new(FileChunks {
         file: f,
         buf: vec![0u8; READ_CHUNK_BYTES],
         path: path.clone(),
     }))
+}
+
+/// 読むために開く。Unix は `O_NONBLOCK | O_NOCTTY` (FIFO の書き手を待たない。端末を制御端末にしない)。`EAGAIN` /
+/// `EWOULDBLOCK` は書込のリースが掛かった通常のファイル (読み取りで開く FIFO は `EAGAIN` にならない) なので、`O_NONBLOCK`
+/// なしで開き直す (05 §2.1 の `open_read()` の行)。
+fn open_file(path: &FsPath) -> io::Result<File> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt as _;
+        let open = |flags| {
+            fs::OpenOptions::new()
+                .read(true)
+                .custom_flags(flags)
+                .open(path.as_path())
+        };
+        match open(libc::O_NONBLOCK | libc::O_NOCTTY) {
+            Err(e) if matches!(e.raw_os_error(), Some(c) if c == libc::EAGAIN || c == libc::EWOULDBLOCK) => {
+                open(libc::O_NOCTTY)
+            }
+            r => r,
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        File::open(path.as_path())
+    }
 }
 
 /// ファイルをチャンクで読む。

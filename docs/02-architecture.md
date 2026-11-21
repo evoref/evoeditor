@@ -469,12 +469,12 @@ trait FileSystem: Send + Sync {
     fn set_aside_state_file(&self, name: &str) -> Result<(), FsError>;      // 読めない状態ファイルを別名に退ける (消さない)
     fn read_dir(&self, dir: &FsPath, max_entries: usize) -> Result<DirListing, FsError>; // v0.5 の M31 (ワークスペースの走査。ファインダ・横断検索、03 §12.7.2。パスの補完は送った)。
                                                                              // dir の直下の項目を max_entries 個まで返す (`.` と `..` は返さない。並びは問わない。追加の stat をしない)。
-                                                                             // dir が無い → NotFound、ディレクトリでない → InvalidPath (detail なし)、読めない → PermissionDenied。既定は Unsupported
+                                                                             // dir が無い → NotFound (detail なし。dir がダングリングのリンクなら DanglingLink)、ディレクトリでない (ファイルを指すリンクを含む) → InvalidPath (detail なし)、読めない → PermissionDenied。既定は Unsupported
 }
-struct DirListing { entries: Vec<DirEntry>, truncated: bool /*max_entries で列挙をやめた*/ }   // v0.5 の M31
+struct DirListing { entries: Vec<DirEntry>, truncated: bool /*max_entries 個を返した後にまだ項目があったので列挙をやめた*/, incomplete: bool /*列挙そのものが途中で失敗した (SMB の切断・NFS の ESTALE など)。そこまでの項目を返す。項目 1 つの読み取りの失敗はその項目を飛ばすだけで立てない*/ }   // v0.5 の M31
 struct DirEntry  { name: OsString /*最後の要素だけ。UTF-8 で表せない名前もそのまま*/, kind: EntryKind,
-                   len: Option<u64> /*列挙で追加の I/O なしに分かるときだけ (Windows の FindNextFileW)。Unix は None*/,
-                   offline: bool /*読むと呼び戻しが起きるファイル (Windows の RECALL_ON_DATA_ACCESS / RECALL_ON_OPEN / OFFLINE の属性。OneDrive のオンライン専用など)。Unix は false*/ }
+                   len: Option<u64> /*列挙で追加の I/O なしに分かるときだけ (Windows の FindNextFileW の File)。Unix とファイル以外は None*/,
+                   offline: bool /*読むと呼び戻しが起きる項目 (Windows の RECALL_ON_DATA_ACCESS / RECALL_ON_OPEN / OFFLINE の属性。OneDrive のオンライン専用など)。種類を問わず (ディレクトリ・リンクでも) 属性があれば立つ (どう扱うかは呼ぶ側、03 §12.7.2)。Unix は false*/ }
 enum EntryKind   { File, Dir, Symlink /*シンボリックリンク・ジャンクション・名前の代理の再解析点。辿らない*/, Other /*FIFO・ソケット・デバイス*/ }
 // 種類は列挙が返すもの (Windows の属性、Unix の d_type) から決める。FS が種類を返さない (d_type が DT_UNKNOWN) ときだけ実装が lstat で補う (05 §2.1)
 // 既定の実装: v0.2.0 の実装では metadata / canonicalize / open_read / write_atomic 以外のメソッドが既定の実装 (空の一覧・Unsupported・Other) を持つ。

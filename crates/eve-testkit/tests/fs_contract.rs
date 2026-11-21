@@ -4,16 +4,19 @@
 use std::sync::Arc;
 
 use eve_core::{FileMeta, FileSystem, FsError, FsPath, ReadChunks, SaveOptions, SaveReport};
-use eve_testkit::fs_contract::{Caps, Subject, failures, suite};
+use eve_testkit::fs_contract::{Caps, MemFixture, Subject, failures, suite};
 use eve_testkit::{ManualClock, MemFs};
 
 fn memfs_subject(fs: Arc<MemFs>, as_port: Arc<dyn FileSystem>) -> Subject {
     let root = "/contract";
     fs.add_dir(root);
+    let fixture = MemFixture(fs.clone());
     Subject::new(as_port, FsPath::from(root))
+        .fixture(fixture)
         .caps(Caps {
             // MemFs の `list_recovery_dirs` はテストが積んだものだけを返す (既知の差)
             recovery_listing_reflects_writes: false,
+            read_dir_len: true,
             ..Caps::default()
         })
         .lister(move |dir| {
@@ -76,6 +79,10 @@ fn 契約試験は既定の実装のままの操作を見逃さない() {
         "状態ファイルを読み書きし退ける",
         "スワップを書いて消す",
         "退避先に保存はディレクトリを返す",
+        // read_dir の既定 (Unsupported) は空のディレクトリと区別できる
+        "read_dir_は空のディレクトリで空",
+        "read_dir_は種類を返しリンクを辿らない",
+        "read_dir_は_max_entries_で打ち切る",
     ] {
         assert!(failed.contains(&want), "{want} が落ちない: {failed:?}");
     }

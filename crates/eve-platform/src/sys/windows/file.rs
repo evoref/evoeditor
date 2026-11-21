@@ -9,10 +9,10 @@ use std::ptr;
 use windows_sys::Win32::Foundation::{GENERIC_WRITE, GetLastError, INVALID_HANDLE_VALUE};
 use windows_sys::Win32::Storage::FileSystem::{
     BY_HANDLE_FILE_INFORMATION, CREATE_NEW, CreateFileW, DeleteFileW, FILE_ALLOCATION_INFO,
-    FILE_ATTRIBUTE_NORMAL, FILE_SHARE_READ, FileAllocationInfo, FlushFileBuffers,
-    GetDiskFreeSpaceExW, GetDriveTypeW, GetFileAttributesW, GetFileInformationByHandle,
-    INVALID_FILE_ATTRIBUTES, MOVEFILE_WRITE_THROUGH, MoveFileExW, ReplaceFileW, SetFileAttributesW,
-    SetFileInformationByHandle,
+    FILE_ATTRIBUTE_NORMAL, FILE_SHARE_READ, FILE_TYPE_CHAR, FILE_TYPE_PIPE, FileAllocationInfo,
+    FlushFileBuffers, GetDiskFreeSpaceExW, GetDriveTypeW, GetFileAttributesW,
+    GetFileInformationByHandle, GetFileType, INVALID_FILE_ATTRIBUTES, MOVEFILE_WRITE_THROUGH,
+    MoveFileExW, ReplaceFileW, SetFileAttributesW, SetFileInformationByHandle,
 };
 
 use super::security::OwnerOnly;
@@ -161,6 +161,15 @@ pub(crate) fn file_info(f: &File) -> io::Result<HandleInfo> {
         index: (u128::from(info.nFileIndexHigh) << 32) | u128::from(info.nFileIndexLow),
         nlink: info.nNumberOfLinks,
     })
+}
+
+/// 開いたハンドルが文字デバイス (`NUL`・コンソール。`FILE_TYPE_CHAR`) かパイプ (`FILE_TYPE_PIPE`) か。問い合わせの失敗
+/// (`FILE_TYPE_UNKNOWN`) は `false` (呼び側が属性で決める)。05 §2.1 の `open_read()` の行。
+pub(crate) fn is_char_or_pipe(f: &File) -> bool {
+    // SAFETY: `f` が持つ開いたハンドルをこの呼出しの間だけ借りる (閉じない・複製しない)。種類を問い合わせるだけで、
+    // ハンドルの状態を変えない。
+    let t = unsafe { GetFileType(f.as_raw_handle()) };
+    t == FILE_TYPE_CHAR || t == FILE_TYPE_PIPE
 }
 
 /// ネットワーク上か (UNC、またはドライブがリモート)。判定できなければ `false`。

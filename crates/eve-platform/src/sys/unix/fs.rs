@@ -29,6 +29,22 @@ pub(crate) fn fsync(f: &File) -> io::Result<()> {
     f.sync_all()
 }
 
+/// `O_NONBLOCK` で開いたファイルの非ブロックを外す (`fcntl(F_SETFL)`)。05 §2.1 の `open_read()` の行: FIFO で止まらない
+/// ように非ブロックで開き、`fstat` で通常のファイルと確かめた後に呼ぶ。
+pub(crate) fn clear_nonblocking(f: &File) -> io::Result<()> {
+    let fd = std::os::fd::AsRawFd::as_raw_fd(f);
+    // SAFETY: `fd` は `f` が持つ開いた記述子で、この関数の間は閉じられない。状態の旗を読むだけ。
+    let fl = unsafe { libc::fcntl(fd, libc::F_GETFL) };
+    if fl < 0 {
+        return Err(io::Error::last_os_error());
+    }
+    // SAFETY: 同じ記述子の状態の旗から `O_NONBLOCK` だけを外す (ほかの旗は読んだ値のまま)。
+    if unsafe { libc::fcntl(fd, libc::F_SETFL, fl & !libc::O_NONBLOCK) } < 0 {
+        return Err(io::Error::last_os_error());
+    }
+    Ok(())
+}
+
 // ---------- 上書きしない名前の変更 ----------
 
 /// `renameat2(RENAME_NOREPLACE)` を 1 回だけ呼ぶ (代替の経路は呼び側)。在れば `EEXIST`。

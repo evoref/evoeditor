@@ -14,8 +14,8 @@ mod security;
 mod wide;
 
 pub(crate) use file::{
-    attributes, create_new, delete, file_info, flush, free_bytes, is_remote, move_no_replace,
-    rename_no_replace, replace_file_once, set_allocation_size, set_attributes,
+    attributes, create_new, delete, file_info, flush, free_bytes, is_char_or_pipe, is_remote,
+    move_no_replace, rename_no_replace, replace_file_once, set_allocation_size, set_attributes,
 };
 #[cfg(feature = "test-hooks")]
 pub(crate) use process::kill_self;
