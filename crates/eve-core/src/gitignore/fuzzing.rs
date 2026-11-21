@@ -12,6 +12,7 @@
 //! - ワイルドカード・エスケープ・否定を含まない行は、名前かパスの完全一致にだけ当たる (行を 1 つずつ別に確かめる)。
 //! - 文字の集合 (`[...]`) を含まない本文では、`core.ignorecase` が真のときの結果は、本文とパスの ASCII の英字を小文字にして
 //!   から偽で照らした結果と同じ。
+//! - 速い経路で照らす行 (`**/` + ワイルドカードの無い名前) の結果は、同じ行を字句の模擬で照らした結果と同じ。
 
 use super::{CaseFold, ExcludeChain, IgnoreRules, PathKind, RepoIgnore};
 
@@ -130,6 +131,11 @@ pub fn check(c: &GitignoreCase) -> Result<(), String> {
     if chain_steps > chain_bound {
         return Err(format!(
             "連鎖の照合の手数 {chain_steps} が上限 {chain_bound} を超えた: {c:?}"
+        ));
+    }
+    if let Some(line) = rules.fast_path_mismatch(&c.path, c.fold) {
+        return Err(format!(
+            "{line} 行目の速い経路の結果が字句の模擬と違う: {c:?}"
         ));
     }
     check_literal_lines(c, base)?;

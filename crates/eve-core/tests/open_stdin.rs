@@ -50,7 +50,7 @@ fn run_stdin_with(
         kind: JobKind::OpenStdin { opts },
     };
     let mut out = Vec::new();
-    run_job(&req, &p, cancel, &mut |r| out.push(r));
+    assert!(run_job(req, &p, cancel, &mut |r| out.push(r)).is_done());
     let last = out.pop().expect("終端の結果");
     let JobResult::StdinDone {
         text,
@@ -112,7 +112,7 @@ fn open_as_file(bytes: &[u8], opts: OpenOptions) -> Done {
         },
     };
     let mut out = Vec::new();
-    run_job(&req, &p, &CancelToken::new(), &mut |r| out.push(r));
+    assert!(run_job(req, &p, &CancelToken::new(), &mut |r| out.push(r)).is_done());
     let Some(JobResult::Complete {
         text,
         format,
@@ -739,7 +739,7 @@ fn 一バイト以上読んで取り消した読込の_stdin_done_を採用す�
             },
         };
         let mut out = Vec::new();
-        run_job(&req, &p, &cancel, &mut |r| out.push(r));
+        assert!(run_job(req, &p, &cancel, &mut |r| out.push(r)).is_done());
         ((), out)
     };
     let last = out.pop().expect("終端");

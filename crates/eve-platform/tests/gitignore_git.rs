@@ -1,8 +1,9 @@
 //! gitignore の照合 (eve-core の `ExcludeChain`) と git の差分試験 (docs/09 §3.4 の「ワークスペースの試験」の (1)、03 §12.7.8、
 //! 01 FR-125 AC-1)。
 //!
-//! §4 の「ワークスペースの木」を実 FS に作り、03 §12.7.3 の規則どおりに降りる参照の走査 (この試験の中の `Walker`。本番の走査
-//! `WorkspaceWalk` は M31 の段 4 で入る) の結果を、git の出力と比べて差 0 を確かめる:
+//! §4 の「ワークスペースの木」を実 FS に作り、本番の走査 (`WorkspaceWalk`、03 §12.7.2。M31 の段 4 で試験の中の参照の走査を
+//! 置き換えた) の結果を、git の出力と比べて差 0 を確かめる。除外したディレクトリには走査が降りないので、その中の項目
+//! (git の `--ignored` と `check-ignore` が 1 件ずつ出すもの) だけは試験が std で列挙する:
 //!
 //! - 残るファイル: `git ls-files -z --others --exclude-standard`
 //! - 除外されるファイル: 同じに `--ignored` を足したもの
@@ -10,8 +11,8 @@
 //!
 //! git はシステム・利用者の設定とグローバルの excludesFile を読まない形で走らせる (`GIT_CONFIG_NOSYSTEM=1`・
 //! `GIT_CONFIG_GLOBAL` に空のファイル・`-c core.excludesFile=<空のファイル>`・`-c core.quotePath=false`・
-//! `-c core.longpaths=true`)。`core.ignorecase` は各リポジトリの `config` に `true` と `false` を書いて両方で比べる (参照の走査は
-//! その `config` を `parse_core_ignorecase` で読む)。入れ子のリポジトリと worktree (`.git` がファイル) は、それぞれのルートで
+//! `-c core.longpaths=true`)。`core.ignorecase` は各リポジトリの `config` に `true` と `false` を書いて両方で比べる (走査は
+//! その `config` を読む)。入れ子のリポジトリと worktree (`.git` がファイル) は、それぞれのルートで
 //! 走らせた git の結果と比べる。git が無い・古い (2.32 より前。`GIT_CONFIG_GLOBAL` が効かない) 環境では失敗にする (飛ばさない)。
 //!
 //! 小さい木 (約 2,000 ファイル) と、ランダムに組んだ規則の木 (1 行の規則を置いたディレクトリ 200 個) は毎回。10 万ファイルの木は
@@ -28,13 +29,15 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 
+use std::sync::Arc;
+
 use eve_core::{
-    CaseFold, ExcludeChain, GitPath, IgnoreRules, PathKind, RepoIgnore, parse_commondir_file,
-    parse_core_ignorecase, parse_gitdir_file,
+    CaseFold, Clock, ExcludeConfig, FileSystem, FsPath, PathKind, Tick, WalkObserver, WalkStep,
+    WorkspaceWalk,
 };
 use workspace_tree::{Git, TreeSize};
 
-// ---------- 参照の走査 ----------
+// ---------- 本番の走査 (WorkspaceWalk) の結果を、リポジトリごとに分ける ----------
 
 /// 1 つのリポジトリの結果 (パスは木のルートからの相対パス)。
 #[derive(Default)]
@@ -49,9 +52,24 @@ struct RepoResult {
     all: Vec<(Vec<u8>, bool)>,
 }
 
-struct Walker {
-    top: PathBuf,
-    repos: Vec<RepoResult>,
+/// 走査が知らせる、候補にならなかった項目と降りたディレクトリ。
+#[derive(Default)]
+struct Events {
+    excluded: Vec<(Vec<u8>, PathKind)>,
+    dirs: Vec<Vec<u8>>,
+    nested: Vec<Vec<u8>>,
+}
+
+impl WalkObserver for Events {
+    fn excluded(&mut self, rel: &[u8], kind: PathKind) {
+        self.excluded.push((rel.to_vec(), kind));
+    }
+    fn entered_dir(&mut self, rel: &[u8]) {
+        self.dirs.push(rel.to_vec());
+    }
+    fn nested_repo(&mut self, rel: &[u8]) {
+        self.nested.push(rel.to_vec());
+    }
 }
 
 fn name_bytes(name: &std::ffi::OsStr) -> Vec<u8> {
@@ -74,169 +92,124 @@ fn join(dir: &[u8], name: &[u8]) -> Vec<u8> {
     }
 }
 
-fn is_dot_git(name: &[u8]) -> bool {
-    if cfg!(any(windows, target_os = "macos")) {
-        name.eq_ignore_ascii_case(b".git")
+fn abs(top: &Path, rel: &[u8]) -> PathBuf {
+    let s = std::str::from_utf8(rel).expect("木のパスは UTF-8");
+    if s.is_empty() {
+        top.to_path_buf()
     } else {
-        name == b".git"
+        top.join(s)
     }
 }
 
-/// 種類が通常のファイルのときだけ読む (シンボリックリンクは辿らない)。
-fn read_regular(p: &Path) -> Option<Vec<u8>> {
-    let meta = fs::symlink_metadata(p).ok()?;
-    if !meta.is_file() {
-        return None;
-    }
-    fs::read(p).ok()
-}
-
-fn os_default_fold() -> CaseFold {
-    if cfg!(any(windows, target_os = "macos")) {
-        CaseFold::Ascii
-    } else {
-        CaseFold::Sensitive
-    }
-}
-
-/// `.git` (ディレクトリかファイル) から、`info/exclude` と `config` を読むディレクトリを決める (03 §12.7.3 の「リポジトリ」)。
-fn common_git_dir(repo_root: &Path) -> Option<PathBuf> {
-    let dotgit = repo_root.join(".git");
-    let meta = fs::symlink_metadata(&dotgit).ok()?;
-    if meta.is_dir() {
-        return Some(dotgit);
-    }
-    if !meta.is_file() {
-        return None;
-    }
-    let resolve = |base: &Path, g: GitPath| match g {
-        GitPath::Relative(p) => Some(base.join(p)),
-        GitPath::Absolute(p) => Some(PathBuf::from(p)),
-        GitPath::Refused => None,
-    };
-    let gitdir = resolve(repo_root, parse_gitdir_file(&read_regular(&dotgit)?)?)?;
-    match read_regular(&gitdir.join("commondir")) {
-        Some(c) => resolve(&gitdir, parse_commondir_file(&c)?),
-        None => Some(gitdir),
-    }
-}
-
-fn load_repo(repo_root: &Path, rel: &[u8]) -> RepoIgnore {
-    let Some(common) = common_git_dir(repo_root) else {
-        return RepoIgnore::new(IgnoreRules::default(), os_default_fold());
-    };
-    let info = read_regular(&common.join("info").join("exclude"))
-        .map(|b| IgnoreRules::parse(rel, &b).0)
-        .unwrap_or_default();
-    let fold = match read_regular(&common.join("config")) {
-        Some(cfg) => {
-            if parse_core_ignorecase(&cfg).unwrap_or(false) {
-                CaseFold::Ascii
-            } else {
-                CaseFold::Sensitive
-            }
-        }
-        None => os_default_fold(),
-    };
-    RepoIgnore::new(info, fold)
-}
-
-impl Walker {
-    /// 木のルート (リポジトリのルート) から走査する。
-    fn run(top: &Path) -> Vec<RepoResult> {
-        let mut w = Walker {
-            top: top.to_path_buf(),
-            repos: vec![RepoResult::default()],
-        };
-        let (chain, _) = ExcludeChain::default().enter_repo(load_repo(top, b""));
-        w.walk(b"", &chain, 0);
-        w.repos
-    }
-
-    fn entries(&self, dir: &[u8]) -> Vec<(Vec<u8>, bool)> {
-        let abs = self.abs(dir);
-        let mut v: Vec<(Vec<u8>, bool)> = fs::read_dir(&abs)
-            .unwrap_or_else(|e| panic!("{}: {e}", abs.display()))
-            .map(|e| {
-                let e = e.expect("項目");
-                let is_dir = e.file_type().expect("種類").is_dir();
-                (name_bytes(&e.file_name()), is_dir)
-            })
-            .filter(|(n, _)| !is_dot_git(n))
-            .collect();
-        v.sort();
-        v
-    }
-
-    fn abs(&self, rel: &[u8]) -> PathBuf {
-        let s = std::str::from_utf8(rel).expect("木のパスは UTF-8");
-        if s.is_empty() {
-            self.top.clone()
+/// 除外したディレクトリの中のすべて (git の `--ignored` は中のファイルを 1 件ずつ出す)。本番の走査は除外したディレクトリに
+/// 降りないので、ここだけ std で列挙する (`.git` は git と同じく飛ばす)。
+fn all_excluded(top: &Path, dir: &[u8], out: &mut Vec<(Vec<u8>, PathKind)>) {
+    let d = abs(top, dir);
+    let mut v: Vec<(Vec<u8>, bool)> = fs::read_dir(&d)
+        .unwrap_or_else(|e| panic!("{}: {e}", d.display()))
+        .map(|e| {
+            let e = e.expect("項目");
+            let is_dir = e.file_type().expect("種類").is_dir();
+            (name_bytes(&e.file_name()), is_dir)
+        })
+        .filter(|(n, _)| n.as_slice() != b".git")
+        .collect();
+    v.sort();
+    for (name, is_dir) in v {
+        let rel = join(dir, &name);
+        if is_dir {
+            out.push((rel.clone(), PathKind::Dir));
+            all_excluded(top, &rel, out);
         } else {
-            self.top.join(s)
+            out.push((rel, PathKind::File));
         }
     }
+}
 
-    fn walk(&mut self, dir: &[u8], chain: &ExcludeChain, repo: usize) {
-        let chain = match read_regular(&self.abs(dir).join(".gitignore")) {
-            Some(text) if chain.in_repo() => {
-                let (rules, report) = IgnoreRules::parse(dir, &text);
-                assert!(report.is_clean(), "{report:?}");
-                chain.with_gitignore(rules).0
-            }
-            _ => chain.clone(),
-        };
-        for (name, is_dir) in self.entries(dir) {
-            let rel = join(dir, &name);
-            let kind = if is_dir {
-                PathKind::Dir
-            } else {
-                PathKind::File
-            };
-            let excluded = chain.is_excluded(&rel, kind);
-            let r = &mut self.repos[repo];
-            if !is_dir {
-                r.all.push((rel.clone(), excluded));
-                if excluded {
-                    r.ignored.insert(rel);
-                } else {
-                    r.remaining.insert(rel);
-                }
-                continue;
-            }
-            r.all.push((rel.clone(), excluded));
-            if excluded {
-                self.all_excluded(&rel, repo);
-                continue;
-            }
-            let abs = self.abs(&rel);
-            if fs::symlink_metadata(abs.join(".git")).is_ok() {
-                // 入れ子のリポジトリ: 外側には `<パス>/` で 1 件。中は別のリポジトリとして走査する
-                self.repos[repo].remaining.insert([&rel[..], b"/"].concat());
-                let (inner, _) = chain.enter_repo(load_repo(&abs, &rel));
-                self.repos.push(RepoResult {
-                    root: rel.clone(),
-                    ..RepoResult::default()
-                });
-                let idx = self.repos.len() - 1;
-                self.walk(&rel, &inner, idx);
-                continue;
-            }
-            self.walk(&rel, &chain, repo);
+/// 木のルート (リポジトリのルート) を本番の走査 (`WorkspaceWalk`。`workspace.exclude = []`) で最後まで走らせ、結果を
+/// リポジトリごとに分ける。
+fn walk_repos(top: &Path) -> Vec<RepoResult> {
+    let fs = real_fs();
+    let mut walk = WorkspaceWalk::new(FsPath::new(top), Arc::new(ExcludeConfig::new()));
+    let mut ev = Events::default();
+    let mut remaining: Vec<Vec<u8>> = Vec::new();
+    loop {
+        let step = walk.step_observed(&*fs, &StoppedClock, &mut ev);
+        remaining.extend(
+            walk.take_pending()
+                .iter()
+                .map(|c| c.rel().as_bytes().to_vec()),
+        );
+        match step {
+            WalkStep::Yield => {}
+            WalkStep::Done => break,
+            WalkStep::Failed(e) => panic!("走査に失敗: {:?}", e.kind),
         }
     }
-
-    /// 除外したディレクトリの中のすべて (git の `--ignored` は中のファイルを 1 件ずつ出す)。
-    fn all_excluded(&mut self, dir: &[u8], repo: usize) {
-        for (name, is_dir) in self.entries(dir) {
-            let rel = join(dir, &name);
-            self.repos[repo].all.push((rel.clone(), true));
-            if is_dir {
-                self.all_excluded(&rel, repo);
-            } else {
-                self.repos[repo].ignored.insert(rel);
-            }
+    assert!(!walk.truncated(), "木は上限に当たらない");
+    assert_eq!(walk.unreadable_dirs(), 0);
+    let roots: Vec<Vec<u8>> = std::iter::once(Vec::new())
+        .chain(ev.nested.iter().cloned())
+        .collect();
+    let mut repos: Vec<RepoResult> = roots
+        .iter()
+        .map(|r| RepoResult {
+            root: r.clone(),
+            ..RepoResult::default()
+        })
+        .collect();
+    // パスを含む最も内側のリポジトリ (入れ子のリポジトリのルートのディレクトリ自身は外側に属する)
+    let owner = |p: &[u8]| -> usize {
+        roots
+            .iter()
+            .enumerate()
+            .filter(|(_, r)| r.is_empty() || p.starts_with(&[&r[..], b"/"].concat()))
+            .max_by_key(|(_, r)| r.len())
+            .map_or(0, |(i, _)| i)
+    };
+    let mut excluded: Vec<(Vec<u8>, PathKind)> = Vec::new();
+    for (p, kind) in &ev.excluded {
+        excluded.push((p.clone(), *kind));
+        if *kind == PathKind::Dir {
+            all_excluded(top, p, &mut excluded);
         }
+    }
+    let owners: Vec<usize> = excluded.iter().map(|(p, _)| owner(p)).collect();
+    for ((p, kind), i) in excluded.into_iter().zip(owners) {
+        if kind == PathKind::File {
+            repos[i].ignored.insert(p.clone());
+        }
+        repos[i].all.push((p, true));
+    }
+    for p in remaining {
+        let i = owner(&p);
+        repos[i].remaining.insert(p.clone());
+        repos[i].all.push((p, false));
+    }
+    for d in ev.dirs {
+        let i = owner(&d);
+        repos[i].all.push((d, false));
+    }
+    for n in ev.nested.clone() {
+        let i = owner(&n);
+        repos[i].remaining.insert([&n[..], b"/"].concat());
+    }
+    repos
+}
+
+fn real_fs() -> Box<dyn FileSystem> {
+    #[cfg(windows)]
+    return Box::new(eve_platform::fs::WinFs::default());
+    #[cfg(unix)]
+    return Box::new(eve_platform::unix_fs::UnixFs::default());
+}
+
+/// 止まった時計 (区切りは数だけで決まる)。
+struct StoppedClock;
+
+impl Clock for StoppedClock {
+    fn now(&self) -> Tick {
+        Tick(0)
     }
 }
 
@@ -345,12 +318,12 @@ fn show(p: &[u8]) -> String {
 
 /// 木のルート `top` のすべてのリポジトリで、参照の走査と git を比べる。差の説明を返す (差 0 なら空)。
 fn compare(git: &Git, top: &Path, fold: CaseFold) -> String {
-    let repos = Walker::run(top);
+    let repos = walk_repos(top);
     for r in &repos {
         set_ignorecase(git, &top.join(show(&r.root)), fold);
     }
     // 設定を書いた後に読み直す
-    let repos = Walker::run(top);
+    let repos = walk_repos(top);
     let mut report = String::new();
     for r in &repos {
         let cwd = top.join(show(&r.root));
@@ -438,7 +411,7 @@ fn compare(git: &Git, top: &Path, fold: CaseFold) -> String {
 }
 
 fn counts(top: &Path) -> (usize, usize) {
-    let repos = Walker::run(top);
+    let repos = walk_repos(top);
     (
         repos.iter().map(|r| r.remaining.len()).sum(),
         repos.iter().map(|r| r.ignored.len()).sum(),

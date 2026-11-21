@@ -441,3 +441,273 @@ fn 計測_全件の走査の途中の単発の検索とすべて置換の待ち(
         }
     }
 }
+
+// ---------- 区切って譲るジョブ (JobStep::Continue、02 §9.3。ワークスペースの走査) ----------
+
+/// `gates` のどれかの `read_dir` が `release` されるまで止まるファイルシステム (走査の 1 区切りの途中で止める)。
+struct ReadDirGate {
+    inner: Arc<MemFs>,
+    gates: Vec<FsPath>,
+    entered: std::sync::mpsc::Sender<()>,
+    release: std::sync::Mutex<std::sync::mpsc::Receiver<()>>,
+}
+
+impl FileSystem for ReadDirGate {
+    fn metadata(&self, p: &FsPath) -> Result<FileMeta, FsError> {
+        self.inner.metadata(p)
+    }
+    fn canonicalize(&self, p: &FsPath) -> Result<FsPath, FsError> {
+        self.inner.canonicalize(p)
+    }
+    fn open_read(&self, p: &FsPath) -> Result<Box<dyn ReadChunks + Send>, FsError> {
+        self.inner.open_read(p)
+    }
+    fn write_atomic(
+        &self,
+        p: &FsPath,
+        d: &mut dyn ReadChunks,
+        o: &SaveOptions,
+    ) -> Result<SaveReport, FsError> {
+        self.inner.write_atomic(p, d, o)
+    }
+    fn read_dir(&self, dir: &FsPath, max: usize) -> Result<eve_core::DirListing, FsError> {
+        if self.gates.contains(dir) {
+            let _ = self.entered.send(());
+            let _ = self.release.lock().unwrap().recv();
+        }
+        self.inner.read_dir(dir, max)
+    }
+}
+
+/// 40 個のディレクトリの木 `/w` (走査は 16 個ずつ 3 区切り) と小さな木 `/v` を置き、`gates` の列挙で止まる spawner。
+fn gated_scan_at(
+    gates: &[&str],
+) -> (
+    ThreadJobSpawner,
+    std::sync::mpsc::Receiver<HostMsg>,
+    std::sync::mpsc::Receiver<()>,
+    std::sync::mpsc::Sender<()>,
+) {
+    let clock = Arc::new(SystemClock::new());
+    let mem = Arc::new(MemFs::new(clock.clone()));
+    for i in 0..40 {
+        mem.add_file(&format!("/w/d{i:02}/f.txt"), b"x");
+    }
+    mem.add_file("/v/a.txt", b"x");
+    let (etx, erx) = std::sync::mpsc::channel();
+    let (rtx, rrx) = std::sync::mpsc::channel();
+    let fs = Arc::new(ReadDirGate {
+        inner: mem,
+        gates: gates.iter().map(|g| FsPath::from(*g)).collect(),
+        entered: etx,
+        release: std::sync::Mutex::new(rrx),
+    });
+    let jp = JobPorts {
+        stdin: None,
+        fs,
+        clock,
+        paths: Arc::new(FixedPaths::default()),
+    };
+    let (tx, rx) = channel();
+    (ThreadJobSpawner::new(jp, tx).unwrap(), rx, erx, rtx)
+}
+
+/// `/w/d00` の列挙で止まる spawner。
+fn gated_scan() -> (
+    ThreadJobSpawner,
+    std::sync::mpsc::Receiver<HostMsg>,
+    std::sync::mpsc::Receiver<()>,
+    std::sync::mpsc::Sender<()>,
+) {
+    gated_scan_at(&["/w/d00"])
+}
+
+fn scan_kind() -> JobKind {
+    scan_of("/w")
+}
+
+fn scan_of(root: &str) -> JobKind {
+    JobKind::WorkspaceScan {
+        root: FsPath::from(root),
+        exclude: Arc::new(eve_core::ExcludeConfig::new()),
+        generation: 1,
+        walk: None,
+    }
+}
+
+/// 終端の結果 (`ScanBatch` 以外) が `n` 件届くまで集める。
+fn recv_until_terminals(rx: &std::sync::mpsc::Receiver<HostMsg>, n: usize) -> Vec<JobOutput> {
+    let mut out = Vec::new();
+    let mut terminals = 0;
+    while terminals < n {
+        let r = recv_job(rx);
+        if !matches!(r.body, JobResult::ScanBatch { .. }) {
+            terminals += 1;
+        }
+        out.push(r);
+    }
+    out
+}
+
+#[test]
+fn 走査の続きはレーンの末尾に積まれ_間に投入されたジョブが先に走る() {
+    let (sp, rx, entered, release) = gated_scan();
+    let scan = sp.spawn(None, Revision(0), scan_kind());
+    // 1 区切り目の途中 (`/w/d00` の列挙) で止まっている間に、同じ bg に別のジョブを積む
+    entered.recv_timeout(Duration::from_secs(10)).unwrap();
+    let other = sp.spawn(
+        None,
+        Revision(0),
+        JobKind::ReleaseCandidates { chunks: Vec::new() },
+    );
+    release.send(()).unwrap();
+    let r = recv_until_terminals(&rx, 2);
+    let pos = |id, pred: fn(&JobResult) -> bool| {
+        r.iter()
+            .position(|o| o.job == id && pred(&o.body))
+            .unwrap_or_else(|| panic!("{r:?}"))
+    };
+    let released = pos(other, |b| matches!(b, JobResult::Released));
+    let done = pos(scan, |b| {
+        matches!(
+            b,
+            JobResult::ScanDone {
+                generation: 1,
+                total: 40,
+                truncated: false
+            }
+        )
+    });
+    assert!(released < done, "続きは間に入ったジョブの後に走る: {r:?}");
+    let found: usize = r
+        .iter()
+        .filter_map(|o| match &o.body {
+            JobResult::ScanBatch { chunk, .. } => Some(chunk.len()),
+            _ => None,
+        })
+        .sum();
+    assert_eq!(found, 40);
+    assert!(
+        rx.recv_timeout(Duration::from_millis(100)).is_err(),
+        "終端の後に結果は来ない"
+    );
+}
+
+#[test]
+fn 区切りの途中で取り消した走査は続きを積まず_cancelled_を1件だけ返す() {
+    let (sp, rx, entered, release) = gated_scan();
+    let scan = sp.spawn(None, Revision(0), scan_kind());
+    entered.recv_timeout(Duration::from_secs(10)).unwrap();
+    sp.cancel(scan);
+    release.send(()).unwrap();
+    let r = recv_until_terminals(&rx, 1);
+    assert!(
+        matches!(
+            r.last(),
+            Some(JobOutput {
+                job,
+                body: JobResult::Failed {
+                    err: JobError::Cancelled
+                }
+            }) if *job == scan
+        ),
+        "{r:?}"
+    );
+    assert!(
+        rx.recv_timeout(Duration::from_millis(200)).is_err(),
+        "続きは積まれない"
+    );
+    // レーンは生きている
+    let next = sp.spawn(
+        None,
+        Revision(0),
+        JobKind::ReleaseCandidates { chunks: Vec::new() },
+    );
+    let r = recv_job(&rx);
+    assert_eq!(r.job, next);
+    assert!(matches!(r.body, JobResult::Released));
+}
+
+#[test]
+fn 手元の列で待っている続きを取り消すと_cancelled_を1件だけ返す() {
+    // /w の 1 区切り目と /v の列挙で止める。/w の続きは、間に入った /v の走査の後ろ (手元の列) で待つ
+    let (sp, rx, entered, release) = gated_scan_at(&["/w/d00", "/v"]);
+    let w = sp.spawn(None, Revision(0), scan_kind());
+    entered.recv_timeout(Duration::from_secs(10)).unwrap();
+    let v = sp.spawn(None, Revision(0), scan_of("/v"));
+    release.send(()).unwrap();
+    // /v の列挙で止まっている = /w の続きは手元の列にある
+    entered.recv_timeout(Duration::from_secs(10)).unwrap();
+    sp.cancel(w);
+    release.send(()).unwrap();
+    let r = recv_until_terminals(&rx, 2);
+    let terminals: Vec<&JobOutput> = r
+        .iter()
+        .filter(|o| !matches!(o.body, JobResult::ScanBatch { .. }))
+        .collect();
+    assert!(
+        terminals
+            .iter()
+            .any(|o| o.job == v && matches!(o.body, JobResult::ScanDone { total: 1, .. })),
+        "{r:?}"
+    );
+    let of_w: Vec<_> = r.iter().filter(|o| o.job == w).collect();
+    assert!(
+        matches!(
+            of_w.as_slice(),
+            [JobOutput {
+                body: JobResult::Failed {
+                    err: JobError::Cancelled
+                },
+                ..
+            }]
+        ),
+        "取り消した続きは Cancelled だけ (束も ScanDone も送らない): {r:?}"
+    );
+    assert!(
+        rx.recv_timeout(Duration::from_millis(200)).is_err(),
+        "続きは積まれない"
+    );
+}
+
+#[test]
+fn 走査の最中に_spawner_を手放すと終端は1つで_待ちの上限の内に終わる() {
+    // eve-host の `JOIN_WAIT` (1 秒) と同じ値
+    const JOIN_WAIT: Duration = Duration::from_secs(1);
+    let (sp, rx, entered, release) = gated_scan();
+    let id = sp.spawn(None, Revision(0), scan_kind());
+    entered.recv_timeout(Duration::from_secs(10)).unwrap();
+    // drop がワーカーを待っている間に、止めていた列挙を戻す
+    let releaser = thread::spawn(move || {
+        thread::sleep(Duration::from_millis(100));
+        release.send(()).unwrap();
+    });
+    let t = Instant::now();
+    drop(sp);
+    let waited = t.elapsed();
+    releaser.join().unwrap();
+    assert!(
+        waited < JOIN_WAIT,
+        "drop は区切りの終わりで終わる: {waited:?}"
+    );
+    let mut r = Vec::new();
+    while let Ok(HostMsg::Job(o)) = rx.recv_timeout(Duration::from_millis(200)) {
+        r.push(*o);
+    }
+    let terminals: Vec<_> = r
+        .iter()
+        .filter(|o| o.job == id && !matches!(o.body, JobResult::ScanBatch { .. }))
+        .collect();
+    assert!(
+        matches!(
+            terminals.as_slice(),
+            [JobOutput {
+                body: JobResult::Failed {
+                    err: JobError::Cancelled
+                },
+                ..
+            }]
+        ),
+        "drop が取り消した走査の終端は Cancelled の 1 つ: {r:?}"
+    );
+}

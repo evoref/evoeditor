@@ -1326,7 +1326,7 @@ TUI と、ヘッドレスの消費者 (シナリオ・駆動 API・ヘッドレ�
 | `bg` に載せるもの: 検索 (`Search` / 単発の検索)、Undo の実体化、`ReplaceUnmappable` / `ReplaceAll` / `ConvertEol` の構築、スワップの書出し、`WriteRecovery`、クリップボードの文字列化 | `bg` は検索 (`Search` と単発の検索 `FindNext`)・すべて置換 (`ReplaceAll`)・1 件置換の確かめ (`ReplaceOne`) だけ (`FindNext` と `ReplaceAll` は v0.4 の M24 の (3) で `io` から移した。先着順の `bg` で全件の走査の後ろに待たないよう、core が走っている `Search` を取り消して投げ直す、03 §12.3.1)。`ReplaceUnmappable`・`ConvertEol`・`Swap`・`WriteRecovery` と、仕様に無い種別 (`ReadTheme`・`ReadConfig`・`LastVersion`・`SwapRead`・`SwapRemove`・`SwapDiscard`・`LeftoverAct`) はすべて `io` (`eve-host` の `ThreadJobSpawner::is_bg`) | 振り分けを変えると振る舞い (順序と待ち) が変わるので、v0.3 の M16 で決める。特に `WriteRecovery` と `Swap` が `io` にあると、応答の無い保存の後ろで退避が待たされ得る (仕様が `bg` に置いた理由と逆) |
 | Undo の実体化 (`Materialize`、§14.1 MR1) | 無い | 未実装。Undo の大きな削除を Slice で持つ版で入れる |
 | クリップボードの文字列化は `bg` (`HostTasks`、§4.4) | 使い捨てのスレッド `eve-clip-write` | §4.4 の「v0.2.0 の実装との差」 |
-| `bg` のキューの順序 (提案、OQ-198)、`io` の監視 (提案、OQ-179) | 無い (単純な FIFO。`io` の監視なし) | 提案のまま。OQ の回答の後に入れる |
+| `bg` のキューの順序 (提案、OQ-198)、`io` の監視 (提案、OQ-179) | 無い (単純な FIFO。`io` の監視なし。v0.5 の M31 の段 4 から、区切って譲るジョブ (`JobStep::Continue`、§9.3) の続きをレーンの末尾に積む経路はある。段の順の並べ替えは無い) | 提案のまま。OQ の回答の後に入れる |
 
 
 ### 9.2 メインループ (擬似コード)
@@ -1579,13 +1579,18 @@ struct JobRequest {
     kind: JobKind,
 }
 
-fn run_job(req: &JobRequest, ports: &JobPorts, cancel: &CancelToken, emit: &mut dyn FnMut(JobOutput)) -> JobStep;
+fn run_job(req: JobRequest, ports: &JobPorts, cancel: &CancelToken, emit: &mut dyn FnMut(JobOutput)) -> JobStep;
+    // 依頼は値で受け取る (v0.5 の M31 の段 4 で `&JobRequest` から改めた): 積み直しの状態 (WorkspaceWalk) を複製せずに続きへ移し、
+    // 解放するジョブ (ReleaseCandidates) の一覧を run_job の中 (= ワーカーのスレッド) で手放すため
 enum JobStep { Done, Continue(JobKind) }  // v0.5 の M31 で足す (03 §12.7.2): 区切って譲るジョブ (WorkspaceScan / WorkspaceSearch) は、1 区切りを終えると
     // 終端の結果を送らずに続きの JobKind (積み直しの状態を持つ) を返す。ワーカーのレーンはそれを **同じ JobId・同じ CancelToken のまま** 自分のキューの
     // 末尾へ積む (間に投入されたジョブが先に走る。JobSpawner::cancel は続きにも効き、取り消されていれば続きを積まずに Failed { Cancelled } を送る)。
     // ManualJobSpawner も同じく続きを自分のキューの末尾に積み、run_jobs() はキューが空になるまで、run_one() は 1 区切りだけ回す (走査の途中の状態を
     // 決定的に作れる)。ほかのジョブは Done だけを返す。v0.2.0〜v0.4 の実装の Lane は単純な FIFO で、ジョブが続きを積む経路が無い
-    // (エディタ内の検索は core が取り消して投げ直す、§9.1 の「v0.2.0 の実装との差」)。この経路は M31 の段 4 (03 §12.7.9) で eve-host と一緒に入れる。
+    // (エディタ内の検索は core が取り消して投げ直す、§9.1 の「v0.2.0 の実装との差」)。この経路は M31 の段 4 (03 §12.7.9) で eve-host と一緒に入れた
+    // (レーンの不変条件は crates/eve-host/src/workers.rs のモジュールの説明の (I1)〜(I4): 続きを積む前に届いている投入をすべて手元の列に移し、
+    // 続きを返した時点で取り消されていれば積まずに Failed { Cancelled } を送る。この積み直しと取消しの規則は JobStep::requeue にまとめ、
+    // レーンと ManualJobSpawner が共通に使う。JobStep は #[must_use] で、続きを捨てると終端の結果が届かないことを型で知らせる)。
     // 1 つのジョブを実行する。結果はすべて emit で送る (進捗・検索結果のように 1 つのジョブが複数の結果を送る種別がある)。
     // 最後に送るのは終端の結果 1 つ (Progress と SearchBatch 以外の変種。Search の終端は SearchDone)。cancel は長い処理の区切りで見る
     // (検索: 一定バイト毎、デコード・エンコード: チャンク毎)。立っていたら一時ファイル等を片付けて Failed { err: JobError::Cancelled } を送る。
@@ -1645,7 +1650,10 @@ enum JobKind {                     // Port は持たない (run_job が JobPorts
     WorkspaceSearch { root: FsPath, query: SearchQuery, exclude: Arc<ExcludeConfig>, open_docs: Vec<OpenDocRef /*canonical・ファイル名・FileId・Snapshot*/>,
                       decode: DecodeSettings, max_file_size: u64, max_lines: usize, generation: u64, state: Option<Box<WorkspaceSearchState>> },
                                                                       // bg。横断検索 (03 §12.7.5)。区切りはディレクトリ 16 個・ファイル 64 個・中身 1 MiB・8 ms の早いほう
-    ReleaseCandidates { chunks: Vec<Arc<[Candidate]>>, hits: Vec<WsHit> },              // bg。古い候補の一覧・横断検索の結果を bg で解放する (主スレッドで大きな一覧を drop しない、03 §12.7.2)
+    ReleaseCandidates { chunks: Vec<Arc<[Candidate]>>, hits: Vec<WsHit> },              // bg。古い候補の一覧・横断検索の結果を bg で解放する (主スレッドで大きな一覧を drop しない、03 §12.7.2)。
+                                                                      // 終端の結果は Released だけ。取消し (CancelToken・spawner の drop) を見ず、常に Released を返す
+                                                                      // (run_job の入口の取消しの確かめからも外す。ManualJobSpawner の cancel もキューに残す)。
+                                                                      // hits は横断検索 (M31 の段 7) で足す (段 4 の実装は chunks だけ)
     Swap     { doc: Arc<DocSnapshot> /*1 文書分*/ },                                                  // bg (v0.2)。FileSystem::write_swap (§4.5) が置き場所を決めて書く
     SwapRead { entry: SwapEntry }, SwapRemove { entry: SwapEntry },   // io (v0.2)。他のプロセスが残したスワップの適用・破棄 (03 §10.3)
     SwapDiscard { doc: DocumentId, path: Option<FsPath> },            // io (v0.2)。自分のスワップを消す (03 §10.2)
@@ -1784,6 +1792,7 @@ enum JobResult {                   // #[non_exhaustive]
     WorkspaceRoot { root: FsPath, source: RootSource /*Explicit | Dir | Marker | Cwd*/, dir_args: Vec<FsPath>, explicit_error: Option<FsError> /*--workspace を使えなかった理由*/ },
     ScanBatch    { generation: u64, chunk: Arc<[Candidate]>, unreadable_dirs: u64 }, // 非終端。WorkspaceScan の束
     ScanDone     { generation: u64, total: u64, truncated: bool },                    // WorkspaceScan の終端 (ルートが読めなければ Failed)
+    Released,                                                                        // ReleaseCandidates の終端 (受け手は何もしない。v0.5 の M31 の段 4)
     FinderMatched { generation: u64, matched: usize, top: Vec<FinderHit> },
     WorkspaceHits { generation: u64, hits: Vec<WsHit>, progress: WsProgress },        // 非終端。WorkspaceSearch の区切りごと
     WorkspaceSearchDone { generation: u64, progress: WsProgress, truncated: bool },   // WorkspaceSearch の終端

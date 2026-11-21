@@ -12,7 +12,7 @@ mod ports;
 mod result;
 mod run;
 
-pub use kind::{JobKind, JobRequest, MetaPurpose, SaveStrategy};
+pub use kind::{JobKind, JobRequest, JobStep, MetaPurpose, SaveStrategy};
 pub use ports::{JobPorts, JobSpawner, Ports, StdinSource};
 pub use result::{
     ConfigFile, ConfirmAsk, EscapeMergeApproval, EscapeMergeAt, JobError, JobOutput, JobResult,

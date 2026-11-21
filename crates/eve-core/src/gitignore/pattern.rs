@@ -68,6 +68,10 @@ pub(crate) enum Program {
     Literal(Box<[u8]>),
     /// 名前に当てる `*` + ワイルドカードの無い文字列: 末尾の一致。
     Suffix(Box<[u8]>),
+    /// パスに当てる `**/` + ワイルドカードも `/` も無い文字列: 最後の要素の全体の一致 (`**/foo` は `foo` と同じく、どの深さの
+    /// `foo` にも当たる。gitignore(5))。`workspace.exclude` の既定 (`**/node_modules` など) が全項目に当たるので、字句の模擬を
+    /// 通さない。
+    PathTail(Box<[u8]>),
     /// 字句の列。
     Tokens(Box<[Tok]>),
 }
@@ -93,17 +97,34 @@ impl Program {
         {
             return Program::Suffix(pat[1..].into());
         }
+        if mode == Mode::Path
+            && let Some(tail) = pat.strip_prefix(b"**/")
+            && !tail.is_empty()
+            && !tail.iter().any(|b| special(b) || *b == b'/')
+        {
+            return Program::PathTail(tail.into());
+        }
         match tokenize(pat, mode) {
             Some(toks) => Program::Tokens(toks.into()),
             None => Program::Never,
         }
     }
 
+    /// 速い経路 (`PathTail`) と同じ意味の字句の模擬 (`**/` + 名前)。fuzz の性質 (速い経路と字句の模擬の結果が等しい) に使う。
+    /// ほかの形は `None`。
+    pub(crate) fn token_equivalent(&self) -> Option<Program> {
+        let Program::PathTail(lit) = self else {
+            return None;
+        };
+        let pat = [b"**/".as_slice(), lit].concat();
+        tokenize(&pat, Mode::Path).map(|t| Program::Tokens(t.into()))
+    }
+
     /// 字句の数 (手数の上限の式に使う)。
     pub(crate) fn len(&self) -> usize {
         match self {
             Program::Never => 0,
-            Program::Literal(s) | Program::Suffix(s) => s.len() + 1,
+            Program::Literal(s) | Program::Suffix(s) | Program::PathTail(s) => s.len() + 1,
             Program::Tokens(t) => t.len(),
         }
     }
@@ -120,6 +141,14 @@ impl Program {
                 *steps += u64::try_from(lit.len().min(subject.len())).unwrap_or(u64::MAX);
                 subject.len() >= lit.len()
                     && eq_bytes(lit, &subject[subject.len() - lit.len()..], fold)
+            }
+            Program::PathTail(lit) => {
+                *steps += u64::try_from((lit.len() + 1).min(subject.len())).unwrap_or(u64::MAX);
+                let name_start = subject
+                    .iter()
+                    .rposition(|b| *b == b'/')
+                    .map_or(0, |i| i + 1);
+                eq_bytes(lit, &subject[name_start..], fold)
             }
             Program::Tokens(toks) => run(toks, subject, fold, steps),
         }
@@ -353,32 +382,50 @@ fn class_matches(members: &[Member], b: u8, fold: CaseFold) -> bool {
     })
 }
 
-/// 字句の位置の集合 (0..=字句の数)。
-struct States {
-    words: Vec<u64>,
+/// 字句の位置の集合 (0..=字句の数)。128 個までは確保しない (照合は走査の全項目で呼ばれる)。
+enum States {
+    Inline([u64; 2]),
+    Heap(Vec<u64>),
 }
 
 impl States {
     fn new(n: usize) -> States {
-        States {
-            words: vec![0; n / 64 + 1],
+        let words = n / 64 + 1;
+        if words <= 2 {
+            States::Inline([0; 2])
+        } else {
+            States::Heap(vec![0; words])
+        }
+    }
+
+    fn words(&self) -> &[u64] {
+        match self {
+            States::Inline(w) => w,
+            States::Heap(w) => w,
+        }
+    }
+
+    fn words_mut(&mut self) -> &mut [u64] {
+        match self {
+            States::Inline(w) => w,
+            States::Heap(w) => w,
         }
     }
 
     fn has(&self, s: usize) -> bool {
-        self.words[s / 64] & (1 << (s % 64)) != 0
+        self.words()[s / 64] & (1 << (s % 64)) != 0
     }
 
     fn set(&mut self, s: usize) {
-        self.words[s / 64] |= 1 << (s % 64);
+        self.words_mut()[s / 64] |= 1 << (s % 64);
     }
 
     fn clear(&mut self) {
-        self.words.fill(0);
+        self.words_mut().fill(0);
     }
 
     fn is_empty(&self) -> bool {
-        self.words.iter().all(|w| *w == 0)
+        self.words().iter().all(|w| *w == 0)
     }
 }
 
@@ -408,7 +455,7 @@ fn run(toks: &[Tok], text: &[u8], fold: CaseFold, steps: &mut u64) -> bool {
     close(toks, &mut cur, 0);
     for &b in text {
         next.clear();
-        for (w, &word) in cur.words.iter().enumerate() {
+        for (w, &word) in cur.words().iter().enumerate() {
             let mut bits = word;
             while bits != 0 {
                 let s = w * 64 + bits.trailing_zeros() as usize;
@@ -557,6 +604,52 @@ mod tests {
         // `?` は 1 バイト (UTF-8 の 1 文字ではない)
         assert!(!name("?.txt", "あ.txt"));
         assert!(name("???.txt", "あ.txt"));
+    }
+
+    #[test]
+    fn 先頭の二重の星と名前だけのパターンは字句の模擬と同じ() {
+        for pat in ["**/node_modules", "**/.git", "**/a.b", "**/X"] {
+            let fast = Program::compile(pat.as_bytes(), Mode::Path);
+            assert!(matches!(fast, Program::PathTail(_)), "{pat}");
+            let slow = Program::Tokens(tokenize(pat.as_bytes(), Mode::Path).expect("字句").into());
+            for subject in [
+                "node_modules",
+                "a/node_modules",
+                "a/b/node_modules",
+                "xnode_modules",
+                "a/xnode_modules",
+                "node_modules/a",
+                "NODE_MODULES",
+                "a/NODE_MODULES",
+                ".git",
+                "a/.git",
+                "a.b",
+                "d/a.b",
+                "d/aXb",
+                "x",
+                "X",
+                "d/x",
+                "",
+            ] {
+                for fold in [CaseFold::Sensitive, CaseFold::Ascii] {
+                    let mut s1 = 0;
+                    let mut s2 = 0;
+                    assert_eq!(
+                        fast.matches(subject.as_bytes(), fold, &mut s1),
+                        slow.matches(subject.as_bytes(), fold, &mut s2),
+                        "{pat} / {subject} / {fold:?}"
+                    );
+                    assert!(s1 <= step_bound(fast.len(), subject.len()));
+                }
+            }
+        }
+        // 名前にワイルドカード・区切りがあれば字句の模擬に残す
+        for pat in ["**/a*", "**/a/b", "**/"] {
+            assert!(!matches!(
+                Program::compile(pat.as_bytes(), Mode::Path),
+                Program::PathTail(_)
+            ));
+        }
     }
 
     #[test]

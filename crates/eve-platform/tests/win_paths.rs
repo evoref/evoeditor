@@ -63,7 +63,7 @@ fn open_text(path: &Path) -> String {
         },
     };
     let mut out = Vec::new();
-    run_job(&req, &ports(), &CancelToken::new(), &mut |r| out.push(r));
+    assert!(run_job(req, &ports(), &CancelToken::new(), &mut |r| out.push(r)).is_done());
     match out.pop().expect("結果がある").body {
         JobResult::Complete { text, .. } => {
             use eve_text::TextRead;

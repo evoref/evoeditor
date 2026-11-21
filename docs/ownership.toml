@@ -100,6 +100,13 @@ owner = "shared"
 reviewer = "human:maintainer"
 
 [[unit]]
+path = "crates/eve-core/src/workspace"
+spec = ["03 §12.7"]
+owner = "shared"
+reviewer = "human:maintainer"
+notes = "ワークスペースの走査 (WorkspaceWalk)・候補 (Candidate)・走査のジョブ (v0.5 の M31 の段 4)"
+
+[[unit]]
 path = "crates/eve-core/src/editor"
 spec = ["02 §5", "02 §6", "02 §7", "03 §5"]
 owner = "shared"

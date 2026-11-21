@@ -1,8 +1,22 @@
 //! 本番の `JobSpawner`: 固定のワーカースレッド (docs/02 §9.1、ADR-0006)。
 //!
-//! `io` ワーカー (読込・保存・metadata など) と `bg` ワーカー (検索) の 2 本。`bg` ワーカーは、最初の `bg` のジョブを
-//! 投入するときに遅延生成する。結果は `HostMsg::Job` で受信口へ送る。
+//! `io` ワーカー (読込・保存・metadata など) と `bg` ワーカー (検索・ワークスペースの走査など) の 2 本。`bg` ワーカーは、
+//! 最初の `bg` のジョブを投入するときに遅延生成する。結果は `HostMsg::Job` で受信口へ送る。
 //! ワーカーは `run_job` を呼ぶだけで、`Editor` にも `Ports` にも触れない。
+//!
+//! **区切って譲るジョブ** (`JobStep::Continue`、02 §9.3。v0.5 の M31 の段 4): `run_job` が続きを返したら、レーンは同じ
+//! `JobId`・同じ `CancelToken` のまま、自分のキューの末尾へ積む。レーンのキューは「チャネル + レーンの手元の列」の 2 段で、
+//! 次の不変条件を保つ:
+//!
+//! - **(I1) 投入順**: 手元の列の項目は、チャネルに残っているどの項目よりも先に投入された。ワーカーは手元の列が空のときだけ
+//!   チャネルから取る。
+//! - **(I2) 続きは末尾**: 続きを積む前に、チャネルに届いている項目をすべて手元の列に移してから、続きを列の末尾に足す。
+//!   よって続きは、それを返した区切りの終わりまでに投入されたすべてのジョブの後に走る (間に入ったジョブが先に走る)。
+//! - **(I3) 取消し**: 取消しは `CancelToken` で行い、続きも同じトークンを持つ (spawner の表から外れない)。続きを返した時点で
+//!   取り消されていれば、続きを積まずに `Failed { Cancelled }` を終端として送る。積んだ後に取り消されれば、`run_job` が
+//!   始めに見て `Failed { Cancelled }` を送る。どちらでも、終端の結果はちょうど 1 つ。
+//! - **(I4) 終了**: spawner を drop するとチャネルが閉じる。ワーカーは手元の列を走らせ切ってから終わる (drop がすべての
+//!   トークンを取り消すので、残りの続きはすぐ `Cancelled` で終わる)。
 //!
 //! 例外として、標準入力の読込 (`JobKind::OpenStdin`、v0.4 の M25) は `io` / `bg` に載せず、専用のスレッド
 //! `eve-stdin-job` で走らせる (02 §9.1。ADR-0006 の改訂、OQ-219 の 8。閉じないパイプで `io` の読込・保存を止めない)。
@@ -13,7 +27,7 @@
 //! 起きる (メインのスレッドで手放さない)。
 
 use std::cell::{Cell, RefCell};
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::sync::mpsc::{self, RecvTimeoutError, Sender};
 use std::sync::{Arc, Weak};
@@ -45,7 +59,8 @@ struct Lane {
 }
 
 impl Lane {
-    /// 送信口が閉じる (spawner が drop される) までキューを直列に処理する。
+    /// 送信口が閉じる (spawner が drop される) までキューを直列に処理する。区切って譲るジョブの続きは、手元の列の末尾へ
+    /// 積む (モジュールの説明の (I1)〜(I4))。
     fn start(name: &str, ports: JobPorts, tx: Sender<HostMsg>) -> std::io::Result<Lane> {
         let (qtx, qrx) = mpsc::channel::<Work>();
         let (done_tx, done) = mpsc::channel::<()>();
@@ -53,20 +68,43 @@ impl Lane {
             .name(name.to_owned())
             .spawn(move || {
                 let _done = done_tx;
-                while let Ok(Work { req, cancel }) = qrx.recv() {
-                    let job = req.id;
+                let send = |r: JobOutput| {
+                    let _ = tx.send(HostMsg::Job(Box::new(r)));
+                };
+                let mut local: VecDeque<Work> = VecDeque::new();
+                loop {
+                    // (I1) 手元の列が空のときだけチャネルから取る
+                    let work = match local.pop_front() {
+                        Some(w) => w,
+                        None => match qrx.recv() {
+                            Ok(w) => w,
+                            Err(_) => break,
+                        },
+                    };
+                    let Work { req, cancel } = work;
+                    let (job, doc, base) = (req.id, req.doc, req.base);
                     let outcome = catch_unwind(AssertUnwindSafe(|| {
-                        run_job(&req, &ports, &cancel, &mut |r| {
-                            let _ = tx.send(HostMsg::Job(Box::new(r)));
-                        });
+                        run_job(req, &ports, &cancel, &mut |r| send(r))
                     }));
-                    if outcome.is_err() {
-                        let _ = tx.send(HostMsg::Job(Box::new(JobOutput {
+                    match outcome {
+                        Ok(step) => {
+                            // (I3) 取り消されていれば積まずに `Cancelled` を送る (続きの状態はこのスレッドで手放す)
+                            let Some(req) = step.requeue(job, doc, base, &cancel, &mut |r| send(r))
+                            else {
+                                continue;
+                            };
+                            // (I2) 届いているものを先に移してから、続きを末尾に足す
+                            while let Ok(w) = qrx.try_recv() {
+                                local.push_back(w);
+                            }
+                            local.push_back(Work { req, cancel });
+                        }
+                        Err(_) => send(JobOutput {
                             job,
                             body: JobResult::Failed {
                                 err: JobError::Panic,
                             },
-                        })));
+                        }),
                     }
                 }
             })?;
@@ -143,7 +181,8 @@ impl ThreadJobSpawner {
     }
 
     /// `bg` ワーカーに回すジョブか。検索 (全件・単発)・すべて置換・1 件置換の確かめ (02 §9.3。v0.4 の M24 で単発の検索とすべて置換を `io` から
-    /// 移した: 行をまたぐ検索語では単発の検索が文書の先頭から走ることがあり、`io` に置くと保存・読込を待たせる、03 §12.3.1)。
+    /// 移した: 行をまたぐ検索語では単発の検索が文書の先頭から走ることがあり、`io` に置くと保存・読込を待たせる、03 §12.3.1)、
+    /// ワークスペースの走査と候補の一覧の解放 (v0.5 の M31。保存・読込は `io` に残し、走査の影響を受けない、03 §12.7.7)。
     fn is_bg(kind: &JobKind) -> bool {
         matches!(
             kind,
@@ -151,6 +190,8 @@ impl ThreadJobSpawner {
                 | JobKind::FindNext { .. }
                 | JobKind::ReplaceAll { .. }
                 | JobKind::ReplaceOne { .. }
+                | JobKind::WorkspaceScan { .. }
+                | JobKind::ReleaseCandidates { .. }
         )
     }
 }
@@ -239,18 +280,22 @@ fn spawn_stdin_job(work: Work, ports: JobPorts, tx: Sender<HostMsg>) -> std::io:
         .spawn(move || {
             let Work { req, cancel } = work;
             let job = req.id;
+            // 標準入力の読込は区切らない (続きを返さない)
             let outcome = catch_unwind(AssertUnwindSafe(|| {
-                run_job(&req, &ports, &cancel, &mut |r| {
+                run_job(req, &ports, &cancel, &mut |r| {
                     let _ = tx.send(HostMsg::Job(Box::new(r)));
-                });
+                })
             }));
-            if outcome.is_err() {
-                let _ = tx.send(HostMsg::Job(Box::new(JobOutput {
-                    job,
-                    body: JobResult::Failed {
-                        err: JobError::Panic,
-                    },
-                })));
+            match outcome {
+                Ok(step) => debug_assert!(step.is_done(), "標準入力の読込は続きを返さない"),
+                Err(_) => {
+                    let _ = tx.send(HostMsg::Job(Box::new(JobOutput {
+                        job,
+                        body: JobResult::Failed {
+                            err: JobError::Panic,
+                        },
+                    })));
+                }
             }
         })
         .map(drop)

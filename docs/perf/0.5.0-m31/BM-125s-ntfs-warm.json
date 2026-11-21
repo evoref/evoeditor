@@ -1,0 +1,39 @@
+{
+  "commit": "af3e75f+M31 (4)",
+  "env": "開発機 (基準機ではない)",
+  "id": "BM-125s-ntfs-warm",
+  "note": "develop の af3e75f に M31 の段 4 (feat/eve-core-workspace-scan) の変更を足した作業ツリー。cargo bench -p eve-host --bench bm_125s -- --tree <木> --runs 5 --probe-secs 20 --json を 2 ラウンド続けて測った各回の値 (round)。木は xtask gen-corpus --workspace large --seed 42 (内蔵の NVMe SSD の NTFS)。scan は温め 1 回の後の 5 回 (ジョブの投入 → ScanDone)。step は同じ木を WorkspaceWalk::step で直に回した 1 区切りの時間。io_start / bg_start は走査を繰り返す間に 20〜80 ms ごとに投入した見張りのジョブの開始の遅れ (投入 → 最初の FS の呼出し)。during_probes は見張りを投入している間の走査 1 回の時間。CPU のコアは固定していない (性能の違う 2 種類のコアのどちらに載るかで揺れる)",
+  "quick": false,
+  "results": [
+    {
+      "round": 1,
+      "candidates": 91428,
+      "truncated": false,
+      "unreadable_dirs": 0,
+      "batches": 23,
+      "warmup_ms": 697.7,
+      "scan_samples_ms": [583.442, 580.143, 623.776, 797.448, 1079.897],
+      "scan_p50_ms": 623.776,
+      "scan_max_ms": 1079.897,
+      "step": { "n": 597, "p50_ms": 1.542, "p99_ms": 3.781, "max_ms": 7.911, "walk_ms": 981.620 },
+      "io_start": { "n": 182, "p50_ms": 0.048, "p99_ms": 0.101, "max_ms": 0.286 },
+      "bg_start": { "n": 182, "p50_ms": 1.394, "p99_ms": 6.803, "max_ms": 10.494 },
+      "during_probes": { "n": 19, "p50_ms": 1067.428, "max_ms": 1312.999 }
+    },
+    {
+      "round": 2,
+      "candidates": 91428,
+      "truncated": false,
+      "unreadable_dirs": 0,
+      "batches": 23,
+      "warmup_ms": 703.8,
+      "scan_samples_ms": [562.286, 560.582, 561.680, 568.102, 1003.340],
+      "scan_p50_ms": 562.286,
+      "scan_max_ms": 1003.340,
+      "step": { "n": 597, "p50_ms": 1.786, "p99_ms": 4.316, "max_ms": 11.012, "walk_ms": 1167.241 },
+      "io_start": { "n": 178, "p50_ms": 0.048, "p99_ms": 0.108, "max_ms": 0.422 },
+      "bg_start": { "n": 178, "p50_ms": 1.256, "p99_ms": 3.266, "max_ms": 8.562 },
+      "during_probes": { "n": 19, "p50_ms": 1039.151, "max_ms": 1258.692 }
+    }
+  ]
+}

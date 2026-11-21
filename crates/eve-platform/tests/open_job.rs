@@ -47,7 +47,7 @@ fn open(path: &FsPath, ports: &JobPorts) -> JobResult {
         },
     };
     let mut out = Vec::new();
-    run_job(&req, ports, &CancelToken::new(), &mut |r| out.push(r));
+    assert!(run_job(req, ports, &CancelToken::new(), &mut |r| out.push(r)).is_done());
     // 終わりの結果の前に届くのは進捗だけ
     let last = out.pop().expect("結果がある").body;
     assert!(
