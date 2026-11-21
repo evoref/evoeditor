@@ -741,7 +741,7 @@ EditorState
    │    └─ View { doc: DocumentId, selection: Selection, scroll: ScrollPos { top: ByteOff /*先頭可視行の行頭*/, wrap_idx: u32 /*折り返し ON での行内の表示行 (v0.2)*/, left_col: u32 /*水平スクロール*/ },
    │              goal_dcol: Option<u32> /*上下移動の目標の表示列*/, wrap: WrapSettings, cursor_affinity /*折り返し位置のカーソルの前後*/ }
    │              // 表示面の大きさは View ではなく EditorState.viewport / surface が持つ (v0.x は 1 Window)。v0.5 の複数ペインでは、
-   │              // View の可視の大きさはその View を表示するペインの本文の矩形 (03 §9.9 の PANE-3)。どの View も 1 つのペインにだけ属する
+   │              // View の可視の大きさはその View を表示するペインの本文の矩形 (03 §9.9 の PANE-3)。どの View も高々 1 つのペインに属する
    ├─ windows: Vec<Window>          // v0.x は 1 つ
    │    └─ Window { id: WindowId, root: ViewId /*v0.4 まで*/ }
    │         // v0.5 の M30 で Window { id, root: LayoutNode, focus: PaneId, pane_recent } に置き換える (レイアウトの木。葉 = ペイン
@@ -1111,7 +1111,8 @@ frontend はセル座標を **Frame のヒットマップ** (各 Pane の矩形�
 
 ```rust
 // eve-view (v0.5 の M30 で足す。追加だけ、C2)
-struct ChromeMouseEvent { kind: MouseKind, mods: Modifiers, target: ChromeTarget }
+struct ChromeMouseEvent { kind: MouseKind, mods: Modifiers, target: ChromeTarget,
+                         row: i32, col: i32 /*対象の矩形 (見出しの rect・タブ) の左上が原点のセル。MouseAt と同じく i32 (後の版のドラッグの捕捉で面の外も渡す)*/ }
 #[non_exhaustive]
 enum ChromeTarget {
     PaneBar { view: ViewId },        // ペインの見出し (PaneFrame.bar)。ペインは表示中の View で指す (03 §9.9 の PANE-7 (g))。FR-509 の PR で足す
@@ -1207,7 +1208,7 @@ struct PaneBarModel { rect: CellRect /*1 行。編集面の座標*/, items: Vec<
                                             // frontend はステータスバーと同じ規則で省略し、PaneFrame.focused の見出しを強調する (ロールは 07 §8.8)。
                                             // core が入れる StatusKind は Path・Dirty・ReadOnly だけ (TabItem も同じ)。ほかの種類を足すときは 03 §9.9 に書き足す。
                                             // frontend は種類で描き分けず、ステータスバーの左群と同じに並べる (知らない種類も同じに扱う)
-struct Divider { rect: CellRect /*1 列。編集面の座標。高さは親の分割の全体*/ }
+struct Divider { rect: CellRect /*1 列。編集面の座標。高さは親の分割の全体*/ }   // 区切りを指す識別子は、ドラッグを入れる版で Option のフィールドとして足す
 struct TabLineModel { tabs: Vec<TabItem> /*開いた順 (buffer.next と同じ順)*/, active: Option<usize> /*フォーカスのペインの文書の添字*/ }   // FR-510 の PR (M32) で足す
 struct TabItem { doc: DocumentId, items: Vec<StatusItem> /*見出しと同じ Path (同じ名前の区別を含む、03 §9.9 の PANE-11。cut は Middle)・Dirty・ReadOnly*/ }
 struct RenderRow { source: RowSource /*doc line + wrap index (折り返しは v0.2) | virtual*/,
@@ -1958,6 +1959,8 @@ enum ReadOnlyReasonView {                          // eve-core の ReadOnlyReaso
     Binary, LargeFileViewer, LoadIncomplete,
 }
 struct WindowInfo { window: WindowId, views: Vec<ViewId> /*v0.5: 全ペインの表示中の View (レイアウトの木の葉の順、03 §9.9)*/, focus: FocusTarget /*§8.2*/ }
+// DocumentInfo.views は、その文書の View 全部 (どのペインにも表示していない View、ペインに属さない View を含む。03 §9.9 の PANE-1)。今の実装と同じ意味で、
+// eve-view の doc コメントの「表示している View」は FR-509 の PR で直す
 struct ByteRange { start: u64, end: u64 }          // eve-view の位置の範囲 (バイトオフセット、ADR-0010)。eve-text の同名の型 (ByteOff (usize) の組、03 §19) とは別の型で、
                                                    // eve-view は他の eve-* に依存しないので別に持つ。所有と変換規則は §12.2
 ```
