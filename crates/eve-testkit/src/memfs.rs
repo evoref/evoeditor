@@ -9,9 +9,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use eve_core::{
-    ChunkError, Clock, Expect, FileId, FileKind, FileMeta, FileStamp, FileSystem, FileTime,
-    FsError, FsErrorDetail, FsErrorKind, FsKind, FsPath, FsyncLevel, HardlinkPolicy,
-    InflightRecord, Millis, ReadChunks, RecoveryDirEntry, SaveMethod, SaveOptions, SaveReport,
+    ChunkError, Clock, DirEntry, DirListing, EntryKind, Expect, FileId, FileKind, FileMeta,
+    FileStamp, FileSystem, FileTime, FsError, FsErrorDetail, FsErrorKind, FsKind, FsPath,
+    FsyncLevel, HardlinkPolicy, InflightRecord, Millis, ReadChunks, RecoveryDirEntry, SaveMethod,
+    SaveOptions, SaveReport,
 };
 
 use crate::ManualClock;
@@ -35,6 +36,8 @@ pub enum FsOp {
     WriteSwap,
     /// スワップの破棄 (`FileSystem::discard_swap`)。
     DiscardSwap,
+    /// ディレクトリの列挙 (`FileSystem::read_dir`)。
+    ReadDir,
 }
 
 /// このプロセスのスワップの鍵 (パス、無題なら文書)。
@@ -78,6 +81,14 @@ struct State {
     /// シンボリックリンク (リンク → リンク先)。リンク先が無ければダングリング。
     links: BTreeMap<FsPath, FsPath>,
     dirs: BTreeSet<FsPath>,
+    /// FIFO・ソケット・デバイスの代わり (`read_dir` が `EntryKind::Other` で返す。開けない)。
+    specials: BTreeSet<FsPath>,
+    /// 呼び戻しの属性を持つファイル (`read_dir` の `offline`)。
+    offline: BTreeSet<FsPath>,
+    /// 列挙できないディレクトリ (`read_dir` が `PermissionDenied`)。
+    unreadable: BTreeSet<FsPath>,
+    /// 列挙が途中で失敗するディレクトリと、失敗するまでに返す項目の数 (`read_dir` の `incomplete`)。
+    read_dir_fail_after: BTreeMap<FsPath, usize>,
     next_id: u128,
     seq: u32,
     chunk_size: usize,
@@ -131,6 +142,10 @@ impl MemFs {
             state: Mutex::new(State {
                 files: BTreeMap::new(),
                 dirs: BTreeSet::new(),
+                specials: BTreeSet::new(),
+                offline: BTreeSet::new(),
+                unreadable: BTreeSet::new(),
+                read_dir_fail_after: BTreeMap::new(),
                 links: BTreeMap::new(),
                 next_id: 1,
                 seq: 0,
@@ -363,6 +378,53 @@ impl MemFs {
         self.st()
             .links
             .insert(FsPath::from(link), FsPath::from(target));
+    }
+
+    /// FIFO・ソケット・デバイスの代わりを置く (祖先のフォルダも作る)。`read_dir` は `EntryKind::Other` で返す。
+    pub fn add_special(&self, path: &str) {
+        let mut s = self.st();
+        let p = FsPath::from(path);
+        if let Some(parent) = p.parent() {
+            Self::add_ancestors_and_self(&mut s, &parent);
+        }
+        s.specials.insert(p);
+    }
+
+    /// 呼び戻しの属性 (`OneDrive` のオンライン専用など) を付け外しする。`read_dir` の `offline` に出る。
+    pub fn set_offline(&self, path: &str, offline: bool) {
+        let mut s = self.st();
+        let p = FsPath::from(path);
+        if offline {
+            s.offline.insert(p);
+        } else {
+            s.offline.remove(&p);
+        }
+    }
+
+    /// ディレクトリを列挙できなくする (`read_dir` が `PermissionDenied`)。`false` で戻す。
+    pub fn set_unreadable(&self, dir: &str, unreadable: bool) {
+        let mut s = self.st();
+        let p = FsPath::from(dir);
+        if unreadable {
+            s.unreadable.insert(p);
+        } else {
+            s.unreadable.remove(&p);
+        }
+    }
+
+    /// `dir` の列挙を、`after` 個の項目を返した後に失敗させる (SMB の切断・NFS の `ESTALE` の再現。`read_dir` は
+    /// そこまでの項目で `incomplete` を返す)。項目が `after` 個以下なら失敗しない。`None` で戻す。
+    pub fn set_read_dir_fail_after(&self, dir: &str, after: Option<usize>) {
+        let mut s = self.st();
+        let p = FsPath::from(dir);
+        match after {
+            Some(n) => {
+                s.read_dir_fail_after.insert(p, n);
+            }
+            None => {
+                s.read_dir_fail_after.remove(&p);
+            }
+        }
     }
 
     /// ハードリンク数を決める (`HardlinkPolicy` の試験用。無いパスは何もしない)。
@@ -684,6 +746,12 @@ impl FileSystem for MemFs {
         if s.dirs.contains(path) {
             return Ok(dir_meta());
         }
+        if s.specials.contains(path) {
+            return Ok(FileMeta {
+                kind: FileKind::Other,
+                ..dir_meta()
+            });
+        }
         Err(not_found(&s, path))
     }
 
@@ -703,6 +771,89 @@ impl FileSystem for MemFs {
             .chain(s.dirs.iter())
             .filter_map(child)
             .collect())
+    }
+
+    fn read_dir(&self, dir: &FsPath, max_entries: usize) -> Result<DirListing, FsError> {
+        let mut s = self.st();
+        injected(&mut s, FsOp::ReadDir)?;
+        // リンクは辿る (OS の列挙と同じ)。ダングリングなら NotFound + DanglingLink (02 §4.5 の read_dir の注)
+        let dir = match s.links.get(dir) {
+            Some(t)
+                if !dir_exists(&s, t) && !s.files.contains_key(t) && !s.specials.contains(t) =>
+            {
+                return Err(FsError::with_detail(
+                    FsErrorKind::NotFound,
+                    FsErrorDetail::DanglingLink { target: t.clone() },
+                ));
+            }
+            Some(t) => t.clone(),
+            None => dir.clone(),
+        };
+        // ディレクトリでない (ファイルを指すリンクを含む)
+        if s.files.contains_key(&dir) || s.specials.contains(&dir) {
+            return Err(FsError::new(FsErrorKind::InvalidPath));
+        }
+        // 無いディレクトリの NotFound は detail を付けない (親の有無を言わない)
+        if !dir_exists(&s, &dir) {
+            return Err(FsError::new(FsErrorKind::NotFound));
+        }
+        if s.unreadable.contains(&dir) {
+            return Err(FsError::new(FsErrorKind::PermissionDenied));
+        }
+        let name = |p: &FsPath| {
+            (p.as_path().parent() == Some(dir.as_path()))
+                .then(|| p.as_path().file_name().map(std::ffi::OsStr::to_os_string))
+                .flatten()
+        };
+        // 同じパスが複数の集合にあれば、後に入れたもの (リンク > その他 > ファイル > ディレクトリ) を採る
+        let mut found: BTreeMap<std::ffi::OsString, (EntryKind, Option<u64>)> = BTreeMap::new();
+        for p in &s.dirs {
+            if let Some(n) = name(p) {
+                found.insert(n, (EntryKind::Dir, None));
+            }
+        }
+        for (p, e) in &s.files {
+            if let Some(n) = name(p) {
+                found.insert(n, (EntryKind::File, Some(meta_of(e).len)));
+            }
+        }
+        for p in &s.specials {
+            if let Some(n) = name(p) {
+                found.insert(n, (EntryKind::Other, None));
+            }
+        }
+        for p in s.links.keys() {
+            if let Some(n) = name(p) {
+                found.insert(n, (EntryKind::Symlink, None));
+            }
+        }
+        // 名前の逆順に返す (OS の並びは決まらない。並べるのは呼ぶ側で、その試験が並びに頼らないように)
+        let all: Vec<_> = found.into_iter().rev().collect();
+        let fail_at = s
+            .read_dir_fail_after
+            .get(&dir)
+            .copied()
+            .filter(|&n| n < all.len());
+        let mut listing = DirListing::default();
+        for (i, (name, (kind, len))) in all.into_iter().enumerate() {
+            // 列挙そのものの途中の失敗 (実 FS と同じく、打ち切りより先に見る)
+            if Some(i) == fail_at {
+                listing.incomplete = true;
+                break;
+            }
+            if listing.entries.len() == max_entries {
+                listing.truncated = true;
+                break;
+            }
+            let offline = s.offline.contains(&dir.join(&name));
+            listing.entries.push(DirEntry {
+                name,
+                kind,
+                len,
+                offline,
+            });
+        }
+        Ok(listing)
     }
 
     fn canonicalize(&self, path: &FsPath) -> Result<FsPath, FsError> {
@@ -727,10 +878,9 @@ impl FileSystem for MemFs {
                 fail_after: s.read_fail_after,
                 delay: s.read_delay.clone(),
             })),
-            None if s.dirs.contains(path) => Err(FsError::with_detail(
-                FsErrorKind::InvalidPath,
-                FsErrorDetail::NotAFile,
-            )),
+            None if s.dirs.contains(path) || s.specials.contains(path) => Err(
+                FsError::with_detail(FsErrorKind::InvalidPath, FsErrorDetail::NotAFile),
+            ),
             None => Err(not_found(&s, path)),
         }
     }

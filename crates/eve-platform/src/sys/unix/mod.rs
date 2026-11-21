@@ -14,7 +14,8 @@ use std::path::Path;
 use eve_core::FileTime;
 
 pub(crate) use fs::{
-    can_write, fallocate_keep_size, fsync, get_xattr, list_xattrs, rename_noreplace, set_xattr,
+    can_write, clear_nonblocking, fallocate_keep_size, fsync, get_xattr, list_xattrs,
+    rename_noreplace, set_xattr,
 };
 
 pub(crate) fn euid() -> u32 {

@@ -287,6 +287,10 @@ impl FileSystem for UnixFs {
         crate::fs_common::list_dir_names(dir)
     }
 
+    fn read_dir(&self, dir: &FsPath, max_entries: usize) -> Result<eve_core::DirListing, FsError> {
+        crate::read_dir::read_dir(dir, max_entries)
+    }
+
     fn metadata(&self, path: &FsPath) -> Result<FileMeta, FsError> {
         let p = path.as_path();
         fs::metadata(p)
