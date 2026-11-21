@@ -99,7 +99,7 @@ Port の trait シグネチャ・型名・エラー分類の正本は [02 §4.4]
 |---|---|
 | `metadata()` | §5.2 (読み取り専用判定)、§5.4 (`FileMeta.file_id`)、§5.5 (`FsKind`)、§3.3 (シンボリックリンクは辿り、`FileMeta.link` にリンク自体の情報と dangling を入れる)。ジョブ内のみ (02 §4.4 規則 2) |
 | `canonicalize()` | §3.3 (Windows の verbatim 接頭辞の扱い、macOS `/private`、ジョブ内のみ) |
-| `open_read()` | §4.5 (チャンクサイズ、`EINTR`、共有モード、読込中の外部変更検知) |
+| `open_read()` | §4.5 (チャンクサイズ、`EINTR`、共有モード、読込中の外部変更検知)。**v0.5 の M31 から**、開いた後のハンドルで通常のファイルであることを確かめ、違えば `InvalidPath` (detail = `NotAFile`) を返す: Unix は `O_NONBLOCK` を付けて開き (FIFO を開くときに止まらない)、`fstat` で通常のファイルと確かめてから非ブロックを外す。Windows は `GetFileType` が `FILE_TYPE_DISK` であることを確かめる。ワークスペースの走査・横断検索は `metadata` を呼ばずに開く (列挙の後に FIFO・デバイスに置き換わっていても止まらないため。03 §12.7.3 / §12.7.5) |
 | `write_atomic()` | §4.1 (共通手順)、§4.2 (Windows。v0.1)、§4.3 (Unix。v0.2)。T が存在し、§4.4 の一時ファイル規則に該当すれば **何も書かずに** `AtomicUnsupported` (detail = `InPlacePattern`) を返す (本層は in-place を自分で選ばない。core が乾式走査をしてから `write_in_place` を呼ぶ。02 §4.5 / 03 §9.3)。T が存在しなければ規則に該当しても §4.1 の「新規ファイル」の経路 (`SaveMethod::NewFile`) で書く。`SaveOptions.private = true` のときは一時ファイル・最終ファイルを所有者のみ権限で作る (§5.6) |
 | `write_in_place()` | §4.4 (フォールバック条件と手順)。呼ぶのは core だけで、経路は (1) `AtomicUnsupported` の確認の後、(2) `InPlacePattern` (確認なし)、(3) `file.save_strategy = "in_place"` のとき core が最初から直接上書きを選ぶ場合、の 3 つ。いずれも T が存在し、乾式走査の後に呼ばれる (T が無ければ (3) でも `write_atomic` の新規ファイルの経路) |
 | `inflight_for()` (v0.1) | §4.6 / §7.5 (開くパス 1 つ分の保存中フラグ `recovery/inflight/<hash(path)>/` だけを読み、残っているフラグを **すべて** `Vec<InflightRecord>` で返す (複数のインスタンス・複数回の中断で 1 つのキーに複数の `<pid>.toml` があり得る。無ければ空)。シンボリックリンクならリンクとリンク先の 2 キー。ディレクトリ全体は列挙しない。開くたびに呼ぶ (T の有無に依らない、§4.6)。解析できないフラグ (未知の版・必須キーの欠落・値の不正) も捨てずに `malformed = true` の記録として返す (§4.6 の「上書きの可能性あり」の行。フラグは消さない)) |
@@ -110,7 +110,7 @@ Port の trait シグネチャ・型名・エラー分類の正本は [02 §4.4]
 | `list_orphan_backups()` (v0.2) | §4.6 / §7.5 (`state_dir/backup/` 直下の `*.bak` / `*.bak.tmp` の列挙。名前の pid が動いているもの・`fr119/` は含めない。フラグとの照合は core) |
 | `write_recovery(doc)` (v0.1) | §7.5 (「退避先に保存」の `rescue/<UTC timestamp>-<pid>/` を §5.6 の「所有者のみ」で新しく作る。UTC の時刻・pid は本層が std で取り、名前は §7.5 の「退避ディレクトリの名前の形」(同名があれば `-<n>` を足す) に従う。`state_dir` を使えなければ §7.5 の代替の退避先の `rescue\` に作る (`alternate = true`)。manifest の `created_at` に使う RFC 3339 の文字列は本層が作る。本文と manifest も本層が緊急退避と同じ関数で書き (`reason = "user_save"`)、書いたディレクトリを返す) |
 | `list_recovery_dirs()` (v0.1) | §7.5 の「`recovery/` の走査と削除の規則」の対象 (`recovery/` 直下と `rescue/` 直下の、§7.5 の「退避ディレクトリの名前の形」(`<UTC timestamp>-<pid>[-<n>]`) に合うディレクトリ、代替の退避先の同じ位置) だけを返す。`inflight/` と形に合わない名前は見ない。中のファイルは読まない (起動時の `RecoveryScan` ジョブが呼ぶ。02 §9.3) |
-| `read_dir()` (v0.5) | ファインダ・パス補完。v0.1 では使わない |
+| `read_dir()` (v0.5 の M31) | ワークスペースの走査 (ファインダ・横断検索。03 §12.7.2。パスの補完は送った)。v0.1〜v0.4 では使わない。**Windows**: std の `read_dir` (`FindFirstFileExW` / `FindNextFileW`) で列挙し、種類と大きさ (`DirEntry.len`) は列挙が返す属性から取る (追加の `stat` をしない。S-26 で、ハンドルを開いて `GetFileInformationByHandleEx(FileFullDirectoryInfo)` で読む別案は同じ時間だった)。`FILE_ATTRIBUTE_REPARSE_POINT` の項目は、シンボリックリンクとジャンクション (名前の代理の再解析点) を `Symlink`、それ以外の再解析点 (OneDrive のプレースホルダ・重複除去のファイルなど) は属性のディレクトリ・ファイルの別で `Dir` / `File` にする (中身を読むのは開くときで、列挙では呼び戻しを起こさない)。隠し属性・システム属性も返す (選ぶのは core)。`FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS` / `FILE_ATTRIBUTE_RECALL_ON_OPEN` / `FILE_ATTRIBUTE_OFFLINE` の項目は `offline = true` (横断検索が読まない、03 §12.7.5)。`follow_symlinks = true` の循環の防止でディレクトリの `FileId` を取るときは、`CreateFileW` に `FILE_FLAG_BACKUP_SEMANTICS` を付けて開く (ディレクトリのハンドルはこの印が無いと開けない)。260 文字を超えるパスは std が verbatim の接頭辞を付けて読む (§3.1)。**Unix**: `readdir` の `d_type` から種類を取り、`DT_UNKNOWN` (一部の FS・ネットワーク FS) のときだけ `lstat` で補う。`len` は `None`。名前は変換しない (UTF-8 で表せない名前もそのまま)。**共通**: `max_entries` 個を返したら列挙をやめ `truncated = true`。列挙の途中のエラー (項目 1 つの読み取りの失敗) は、その項目を飛ばして続け、最初の `ReadDir` を開けないときだけ `Err` (`NotFound` / `PermissionDenied` / `InvalidPath` (ディレクトリでない) / `Other`)。`EINTR` は本層で再試行する。ジョブ内のみ (02 §4.4 規則 2) |
 | `FileStamp` | §5.5 (計算規則。`hash` は 16 MiB 以下を読込ジョブ内でストリーミング計算。`hash` を比べるのは書き始める前の照合 (§4.1 手順 0b) だけで、置換の直前 (手順 4b) は `(mtime, len, FileId)` だけを比べる) |
 | `SaveReport.method` | `SaveMethod::{Atomic, InPlace, NewFile}`。`Atomic` = §4.2 / §4.3 の置換、`InPlace` = §4.4 の直接上書き、`NewFile` = §4.1 の「新規ファイル」 |
 | `SaveOptions.fsync` | §4.1 手順 3 (`Full` / `FileOnly` / `None`、OS 別の fsync API) |
@@ -581,6 +581,8 @@ v0.1 (Windows) で本層が自ら複製するのは READONLY・HIDDEN・SYSTEM �
 | Windows | `GetFileInformationByHandleEx(FileIdInfo)` → `(VolumeSerialNumber, FileId 128bit)` (ReFS 対応)。Rust std の `MetadataExt::file_index` は Windows の unstable API のため自前で呼ぶ | NTFS では rename 後も同じ ID (ReplaceFileW でも tmp 側の ID になる) |
 
 用途: (1) 同じファイルを二重に開く検出 (`evoeditor A.txt a.txt` on Windows)、(2) 保存直前の「別ファイルに置き換わっていないか」確認、(3) 監視イベントの自己抑制。
+
+**(1) の「同じファイルか」の判定に使ってよい FS** (v0.5 の M31、SAF-28。`FileMeta.file_id_unique`、03 §12.7.6): Windows は NTFS / ReFS のローカルのボリューム (`GetVolumeInformationByHandleW` の FS の名前で見分ける) で、`FileIdInfo` の値が 0 でないとき。Unix は `FsKind::Local` のとき。FAT / exFAT (ディレクトリの項目の位置から作られ、使い回される)、`Network` (サーバによって 0 や重なる値を返す。sshfs は `use_ino` が無いと番号を使い回す)、`Unknown` は使わない (`false`)。イメージから複製したボリュームはシリアル番号が重なるので、`false` の FS では canonical のパスで比べる。(2)・(3) の用途はこの区別に依らない (変わったことを見るだけなので、重なっても安全な側に倒れる)。
 
 ### 5.5 外部変更検知 (FR-117) の比較キー
 

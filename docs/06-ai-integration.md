@@ -1191,7 +1191,7 @@ v0.1 では AI を実装しないが、以下が無いと v1.L で core の構�
 | X7 | オーバーレイ/パネルモデルの拡張性 | `OverlayModel` / `PanelModel` を `#[non_exhaustive]` にし、Confirm に「複数選択肢 + 詳細表示」を持たせる (SendPreview / PermissionPrompt の土台) | 02/04 |
 | X8 | `CommandSpec.permission` と `InvocationSource::{Ai, External}` | `CommandSpec.permission` は v0.1 で **実装** (必須項目。組込みコマンド全件に「AI/外部から呼べるか」の既定値を付ける。検証は 01 FR-601 AC-2)。`InvocationSource::{Ai, External}` は v0.1 では変種の予約のみ (External は駆動 API の実装 (v0.2 以降) と同時、Ai は v1.L) | 07 |
 | X9 | `HostMsg::Service` とキャンセル可能な要求 ID | v0.1 で enum 変種を予約。JobTable のキャンセルトークンを「ジョブ以外の要求」にも使える汎用 ID にする | 02/03 |
-| X10 | ファイル列挙と除外判定の共通部品 | **v0.1 では実装しない** (最初の利用者は v0.5 の横断検索・ファインダ (FR-125 / 405) で、そのときに作る)。v0.5 でパスパターン照合 (.gitignore 形式) を core の純粋関数として作り (I/O は FileSystem Port)、AI の除外 (§6.5) はそれを共用する。横断検索・ファインダもこの方式で作る (`ignore` / `grep-searcher` は使わない。照合の範囲と横断検索の方式は 03 §12.7、v0.5-plan §1.2) | 03/05/07 |
+| X10 | ファイル列挙と除外判定の共通部品 | **v0.1 では実装しない** (最初の利用者は v0.5 の横断検索・ファインダ (FR-125 / 405) で、そのときに作る)。v0.5 でパスパターン照合 (.gitignore 形式) を core の純粋関数として作り (I/O は FileSystem Port)、AI の除外 (§6.5) はそれを共用する。横断検索・ファインダもこの方式で作る (`ignore` / `grep-searcher` は使わない。照合の範囲と横断検索の方式は 03 §12.7、v0.5-plan §1.2。照合の細目 (読む源・優先・構文・`core.ignorecase`) は v0.5 の M31 の仕様の PR で 03 §12.7.3 に決めた) | 03/05/07 |
 | X11 | `Effect::OpenUrl` のユーザー起点制約 | 「ユーザー操作に起因する場合のみ発行」を規約化 (AI 応答から自動発行させない) | 02/04 |
 | X12 | テキスト無害化関数の再利用 | NFR-503 の無害化を、ファイル内容以外の文字列 (外部由来メッセージ) にも適用できる API に | 03/04 |
 | X13 | 設定スキーマの `ai` 名前空間予約 | v0.1 は `ai.enabled` を認識し「この版では未対応」と表示 (未知キー警告にしない) | 07 |

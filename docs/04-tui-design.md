@@ -983,7 +983,7 @@ Vim 層 (FR-607) は v0.5 以降だが、v0.1 から次を壊さないこと。
 
 ## 8. UI 部品
 
-core の意味的モデル ([02 §8.1](02-architecture.md#81-方針-adr-0008)) を TUI でどう見せるかを定める。共通部品 (FR-511): **リスト選択** (パレット。v0.2 からバッファ一覧、v0.5 からファインダ)、**入力プロンプト** (開く・行移動・名前を付けて保存)、**確認** (未保存・上書き・バイナリ・エンコード警告)。
+core の意味的モデル ([02 §8.1](02-architecture.md#81-方針-adr-0008)) を TUI でどう見せるかを定める。共通部品 (FR-511): **リスト選択** (パレット。v0.2 からバッファ一覧、v0.5 からファインダと横断検索の結果 (§8.11 / §8.12))、**入力プロンプト** (開く・行移動・名前を付けて保存)、**確認** (未保存・上書き・バイナリ・エンコード警告)。
 
 ### 8.1 コマンドパレット (FR-602)
 
@@ -1123,6 +1123,62 @@ v0.1 で TUI は AI のコードを持たないが、v1.L で **ローカル LLM
 
 - 補完中もキー入力の遅延を増やさない (NFR-115): TUI は AI 由来の Frame 更新を通常の描画経路で扱い、専用のスレッドや同期待ちを持たない。
 - AI 由来の文字列 (ゴースト・チャット・提案) はすべて描画前の無害化対象 (§4.9)。
+
+### 8.11 ファインダ (FR-125、v0.5 の M31)
+
+照合・並び・走査は core (03 §12.7.2 / §12.7.4)。TUI はパレット (§8.1) と同じリストオーバーレイ (`OverlayModel::List`) を描くだけで、境界の型は変えない。
+
+- **開く**: `Ctrl+O` (`workspace.open_file`。v0.5 から。07 §11.6)。起動の引数にフォルダ (`DIR`) を渡したときは、ルートの検出の後に開く (07 §18.2)。
+- **オーバーレイとペイン**: オーバーレイは画面全体に 1 つで、開いたときにフォーカスのあったペインに対して働く。選んだファイルはそのペインで開く (ペインの細目は M30 の仕様、§11)。横断検索 (§8.12) も同じ。
+- **位置・大きさ**: パレットと同じ (上部中央、幅 = min(80, 端末幅 − 4)、候補は最大 12 行)。長い相対パスは、中間を `…` で詰める (core が `ListItem.label` の `cut` を `CutPolicy::Middle` にし、TUI が幅に合わせて詰める。先頭のディレクトリと末尾のファイル名が残る。境界の型は変えない。v0.4 までの TUI の一覧は `cut` に依らず末尾で切り、強調を切った後の位置でそのまま照らしているので、M31 の段 6 で `cut` に従い、強調の書記素番号を切った後の位置に写すように直す)。
+- **見出し**: `List.title` = `ui.finder.title` (`{root}` は 03 の短縮したパス。長いと前を `…` で詰める)。
+- **行**: ワークスペースのルートからの相対パス (区切りは全 OS で `/`)。一致した文字は下線 + 太字 (パレットと同じ、色だけに頼らない)。`detail` と `keys` は使わない。
+- **件数** (`List.footer`): `ui.palette.footer` (`{matched}/{total}`)。走査中は `ui.finder.footer_scanning`、上限 (20 万件) で打ち切ったときは `ui.finder.footer_truncated`、読めないフォルダがあれば `ui.finder.unreadable_suffix` を後ろに足す。ルートの検出を待つ間は `ui.finder.footer_waiting`。
+- **0 件**: `List.no_match` = `ui.finder.no_match`。走査の前・途中で 0 件のときも同じ文言で、件数の欄の「走査中」で区別できる。
+- **操作** (07 §7.1 の `finder` → `list` → `prompt` → `global`): `↑` / `↓`・`Ctrl+P` / `Ctrl+N`・`PgUp` / `PgDn` で候補、`Enter` で開いて閉じる、`Esc` で何もせずに閉じる。入力欄の編集は他の入力欄と同じ (§8.2)。IME で日本語の名前を絞り込める。
+- **消えたファイル**: 選んだファイルが走査の後に消えていたら、新規の文書にせずメッセージ行に `msg.finder.not_found` を出す (03 §12.7.4)。
+
+### 8.12 横断検索の結果 (FR-405、v0.5 の M31)
+
+v0.5 は結果を一覧のオーバーレイで出す (PO の決定 2026-11-20、§11 の下部パネルは後の版)。検索と結果の持ち方は core (03 §12.7.5)。
+
+- **開く**: `Ctrl+Shift+F` [E][横] または `Ctrl+K F` (`search.workspace`)。Windows Terminal は `Ctrl+Shift+F` を検索に使う (§7.3a) ので、その端末では `Ctrl+K F` かパレットから開く。検索バーから開くと、検索バーの検索語とトグルを引き継ぐ。
+- **位置・大きさ**: ファインダ (§8.11) と同じ。
+- **見出し** (`List.title`): `ui.workspace_search.title`。トグルの状態を検索バー (§8.4) と同じ記号 (`[Aa~]` / `[Aa✓]` / `[Aa]`、`[.*]` / `[.*✓]`、`[ab]` / `[ab✓]`) で見出しの後ろに並べる (core が文字列を組む。ON の反転は見出しの中ではしない: 記号の `✓` で示す。ASCII 縮退では `✓` を `*` にする)。トグルのキーは検索バーと同じ `Alt+C` / `Alt+R` / `Alt+W` (代替 `Ctrl+K C` / `Ctrl+K X` / `Ctrl+K B`)。
+- **行**: `ui.workspace_search.item` (`{path}:{line}: {text}`)。`{text}` は一致した行の抜粋 (先頭の空白は詰める)。一致した箇所は下線 + 太字。幅が足りないときは行の末尾を `…` で切る (`CutPolicy::End`。`{path}` が長いと `{text}` が見えなくなるが、1 つの `CellText` の 2 か所を別々に切る形は今の境界の型に無いので、v0.5 はこれで足りるとする)。
+- **件数** (`List.footer`): 検索中は `ui.workspace_search.footer_running`、終わったら `ui.workspace_search.footer_done`、上限 (10,000 行) で打ち切ったら `ui.workspace_search.footer_truncated`。飛ばしたファイル (大きすぎる・バイナリ・オフライン・読めない) があれば `ui.workspace_search.skipped_suffix`、読めないフォルダがあれば `ui.finder.unreadable_suffix` (ファインダと同じ文言) を足す。正規表現の誤りは検索バーと同じ文言 (§8.4) を件数の位置に出す。
+- **0 件**: `ui.workspace_search.no_match` (検索語が空のときは何も出さない)。
+- **操作**: ファインダと同じ。`Enter` で選んだ結果のファイルを開き (開いていればその文書に切り替え)、一致の位置へ移って閉じる。`Esc` で閉じる。閉じても結果を持ち、次に開くと同じ検索語・結果・選択から始まる (03 §12.7.5)。
+
+### 8.13 ワークスペースの文言の案 (v0.5 の M31)
+
+次のキーは **案** で、言語ファイル (`locales/ja.toml` / `en.toml`) と §15 の目録には、使う実装の PR (03 §12.7.9 の各段) で足す (目録は言語ファイルと一致を検査するので、先に足さない。09 §6.2 の `i18n`)。`{root}` / `{path}` は短縮したパス、`{matched}` / `{total}` / `{lines}` / `{files}` / `{hit_files}` / `{skipped}` / `{dirs}` / `{limit}` / `{line}` (1 始まりの行番号) は整数 (千の区切りを付けない、07 §17.3)。`{text}` は一致した行の抜粋 (§8.12)、`{toggles}` はトグルの記号の並び (§8.12)、`{reason}` は OS のエラーを分類した短い文言 (`ui.reason.*`、§15.2)。
+
+| キー (案) | 出す場面 | ja (案) | en (案) |
+|---|---|---|---|
+| `cmd.workspace.open_file.title` / `.description` | コマンドの名前と説明 (07 §11.6) | ファイルを探して開く / ワークスペースのファイルを名前で絞り込んで開きます | Find and Open File / Filter the workspace files by name and open one |
+| `cmd.search.workspace.title` / `.description` | 同上 | ワークスペースを検索 / ワークスペースのファイルを横断して検索します | Search Workspace / Search across the files in the workspace |
+| `hint.workspace.open_file` | ヒントバー (`file.open` の `開く` を移す) | 開く | Open |
+| `ui.finder.title` | ファインダの見出し | ファイルを開く ({root}) | Open File ({root}) |
+| `ui.finder.placeholder` | 入力欄が空のときの案内 | ファイル名・パスで絞り込み | Filter by file name or path |
+| `ui.finder.footer_waiting` | ルートの検出を待つ間 | ワークスペースを調べています… | Finding the workspace… |
+| `ui.finder.footer_scanning` | 走査中の件数 | {matched}/{total} 走査中… | {matched}/{total} scanning… |
+| `ui.finder.footer_truncated` | 上限で打ち切った | {matched}/{total} (ファイルが多いため {limit} 件で打ち切りました) | {matched}/{total} (stopped at {limit} files) |
+| `ui.finder.unreadable_suffix` | 件数の後ろに足す | ・読めないフォルダ {dirs} | · {dirs} unreadable folders |
+| `ui.finder.no_match` | 0 件 | 一致するファイルはありません | No matching files |
+| `ui.workspace_search.title` | 横断検索の見出し (`{toggles}` は §8.12 の記号) | ワークスペースを検索 {toggles} | Search Workspace {toggles} |
+| `ui.workspace_search.placeholder` | 入力欄が空のときの案内 | 検索語を入力 | Type to search |
+| `ui.workspace_search.item` | 結果の 1 行 | {path}:{line}: {text} | {path}:{line}: {text} |
+| `ui.workspace_search.footer_running` | 検索中 | {lines} 件・{files} ファイルを検索中… | {lines} lines · searching {files} files… |
+| `ui.workspace_search.footer_done` | 終わった | {lines} 件 ({hit_files}/{files} ファイル) | {lines} lines ({hit_files}/{files} files) |
+| `ui.workspace_search.footer_truncated` | 上限で打ち切った | {lines} 件で打ち切りました ({hit_files} ファイル) | Stopped at {lines} lines ({hit_files} files) |
+| `ui.workspace_search.skipped_suffix` | 件数の後ろに足す | ・飛ばした {skipped} | · {skipped} skipped |
+| `ui.workspace_search.no_match` | 0 件 | 一致はありません | No matches |
+| `msg.finder.not_found` | ファインダ・横断検索で選んだファイルが無い | {path} はもうありません / 一覧を開き直すと、今のファイルで探し直します | {path} no longer exists / Reopen the list to scan the current files |
+| `msg.workspace.root_invalid` | `--workspace` がフォルダでない・読めない | {path} をワークスペースにできません: {reason} / フォルダのパスを指定してください。今は {root} をワークスペースにしています | Cannot use {path} as the workspace: {reason} / Specify a folder. {root} is used as the workspace for now |
+| `msg.workspace.scan_failed` | ルートを読めない | ワークスペース {root} を読めません: {reason} / フォルダの権限を確認してください | Cannot read the workspace {root}: {reason} / Check the folder permissions |
+| `msg.cli.directory_ignored` | 起動の引数の 2 つ目以降のフォルダ、`--workspace` があるときのフォルダ (07 §18.2) | {path} はフォルダなので開けません。ワークスペースは {root} です / ワークスペースにするフォルダは 1 つだけ指定してください | {path} is a folder and was not opened. The workspace is {root} / Specify only one folder as the workspace |
+| `msg.save_as.open_in_other` | 名前を付けて保存の保存先が、ほかの開いている文書と同じファイル (03 §9.7 (a) の 1b) | {path} は別の文書として開いています / その文書に切り替えて保存するか、別の名前を指定してください | {path} is open in another buffer / Switch to that buffer to save, or choose another name |
 
 ---
 
