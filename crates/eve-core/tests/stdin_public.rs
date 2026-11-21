@@ -326,6 +326,8 @@ fn 保存中に閉じた_readonly_の標準入力の文書は保存に失敗し�
         "file.save_as",
         eve_core::Args::new().with_str("path", "/w/journal.txt"),
     );
+    // 保存先の照合 (03 §9.7 の `CheckTarget`) を済ませる
+    h.run_jobs_once();
     assert_eq!(h.pending_jobs(), 1, "保存ジョブが実行待ち");
     h.editor.state_mut().close_document(doc);
     assert!(

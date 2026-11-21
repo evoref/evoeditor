@@ -142,8 +142,10 @@ impl FileSystem for WinFs {
         let meta = fs::metadata(p).map_err(|e| metadata_error(e, path))?;
         let kind = file_kind(&meta);
         let link = link_info(p);
-        // ファイルの識別とハードリンク数 (開けなければ分からないものとして続ける)
-        let (file_id, nlink) = if kind == FileKind::File {
+        // ファイルの識別とハードリンク数 (開けなければ分からないものとして続ける)。識別を同じファイルの判定に使ってよいのは、
+        // NTFS / ReFS のローカルのボリュームだけ (05 §5.4 の (1)。ネットワークのドライブの割当ても `fs_kind` で除く)
+        let fs_kind = fs_kind(p);
+        let (file_id, nlink, file_id_unique) = if kind == FileKind::File {
             match File::open(p).and_then(|f| crate::sys::file_info(&f)) {
                 Ok(i) => (
                     Some(eve_core::FileId {
@@ -151,11 +153,12 @@ impl FileSystem for WinFs {
                         index: i.index,
                     }),
                     i.nlink,
+                    i.unique && fs_kind == FsKind::Local,
                 ),
-                Err(_) => (None, 1),
+                Err(_) => (None, 1, false),
             }
         } else {
-            (None, 1)
+            (None, 1, false)
         };
         Ok(FileMeta {
             kind,
@@ -165,8 +168,9 @@ impl FileSystem for WinFs {
             file_id,
             nlink,
             link,
-            fs_kind: fs_kind(p),
+            fs_kind,
             owner_is_me: None,
+            file_id_unique,
         })
     }
 
@@ -255,6 +259,12 @@ mod tests {
             "同じファイルは同じ識別"
         );
         assert_eq!(m.fs_kind, FsKind::Local);
+        // 一時ディレクトリは NTFS のローカルのボリューム: 識別を同じファイルの判定に使ってよい (05 §5.4 の (1))
+        assert!(m.file_id_unique, "NTFS の識別は信頼する");
+        assert!(
+            !fsys.metadata(&t.path("")).unwrap().file_id_unique,
+            "ディレクトリは識別を持たない"
+        );
     }
 
     #[test]

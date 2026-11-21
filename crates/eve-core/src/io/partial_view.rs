@@ -534,6 +534,7 @@ fn pending_doc(state: &EditorState, p: &Pending) -> Option<DocumentId> {
         | Pending::Save { doc, .. } => Some(*doc),
         Pending::ConvertEol(c) => Some(c.doc),
         Pending::ReplaceUnmappable { ask, .. } => Some(ask.doc),
+        Pending::SaveAsTarget(ask) => Some(ask.doc),
         Pending::WriteRecovery { release, .. } => *release,
         Pending::Search => state.find.search.as_ref().map(|s| s.doc()),
         Pending::ConfigReload

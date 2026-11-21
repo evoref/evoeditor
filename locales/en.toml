@@ -1034,6 +1034,10 @@ text = "Stopped saving {path}: the content to be written did not read back as th
 hint = "Enter a different file name"
 text = "{path} is not a file (it may be a folder)"
 
+[msg.save_as.open_in_other]
+hint = "Switch to that buffer to save, or choose another name"
+text = "{path} is open in another buffer"
+
 [msg.save_as.same_file_read_only]
 hint = "Enter a different file name"
 text = "A read-only document cannot be saved to the same file {path}"
@@ -1138,8 +1142,12 @@ message = "{path} starts with a UTF-32 BOM. UTF-32 is not supported"
 readonly = "[R] Open read-only"
 encoding = "[E] Open with an encoding"
 
-[ui.confirm.save]
-overwrite = "{path} already exists. Overwrite it? — `[O] Overwrite` / `[R] Enter another name` ★ (default is to enter another name; decided by the product owner)"
+[ui.confirm.save.overwrite]
+title = "A file with the same name exists"
+message = "{path} already exists. Overwrite it?"
+overwrite = "[O] Overwrite"
+rename = "[R] Enter another name"
+link = "Link target: {target}"
 
 [ui.confirm.swap_recovery]
 title = "Unsaved content found"

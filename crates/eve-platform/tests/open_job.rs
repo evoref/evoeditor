@@ -48,12 +48,14 @@ fn open(path: &FsPath, ports: &JobPorts) -> JobResult {
     };
     let mut out = Vec::new();
     run_job(&req, ports, &CancelToken::new(), &mut |r| out.push(r));
-    // 終わりの結果の前に届くのは進捗だけ
+    // 終わりの結果の前に届くのは、識別 (03 §9.2 手順 2b) と進捗だけ
     let last = out.pop().expect("結果がある").body;
     assert!(
-        out.iter()
-            .all(|r| matches!(r.body, eve_core::JobResult::Progress { .. })),
-        "終わり以外は進捗"
+        out.iter().all(|r| matches!(
+            r.body,
+            eve_core::JobResult::Progress { .. } | eve_core::JobResult::Identity { .. }
+        )),
+        "終わり以外は識別と進捗"
     );
     last
 }

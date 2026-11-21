@@ -145,6 +145,11 @@ impl EditorState {
         if self.ui.overlay.is_none() && self.cancel_loading() {
             return CommandResult::Done;
         }
+        // 名前を付けて保存の保存先の照合を待つ間は、結果を捨てて名前の入力に戻る (03 §9.7 の `CheckTarget` の行)
+        if self.ui.overlay.is_none() && self.cancel_save_as_check() {
+            self.mark_dirty_render();
+            return CommandResult::Done;
+        }
         // 確認の `Esc` はキャンセルの選択 (保存の失敗の確認では中止を示す)
         if let Some(Overlay::Confirm(c)) = &self.ui.overlay {
             let cancel = c.cancel_index();

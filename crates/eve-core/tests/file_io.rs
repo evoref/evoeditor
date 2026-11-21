@@ -518,18 +518,20 @@ fn 名前を付けて保存の失敗はパスと_stamp_を変えない() {
         &mut s,
         "file.save_as",
         Args::new().with_str("path", "/w/other.txt"),
-    ); // 既存 → Conflict
+    ); // 既存 → 上書きの確認 (03 §9.7 (a) の 6。v0.4 までは照合せずに書いて Conflict)
     assert_eq!(s.fs.read("/w/other.txt").unwrap(), b"EXIST");
     let (_, d) = doc(&s);
     assert_eq!(
         d.path,
         Some(FsPath::from("/w/a.txt")),
-        "失敗したのでパスは元のまま"
+        "書いていないのでパスは元のまま"
     );
     assert_eq!(d.disk_stamp, stamp);
     assert!(d.is_dirty());
-    // 競合の確認は中止する (Esc)。元のファイルへはそのまま保存できる
+    // 上書きの確認の Esc は名前の入力に戻り、もう一度の Esc で閉じる。元のファイルへはそのまま保存できる
     assert!(dialog_open(&s));
+    keys(&mut s, "esc");
+    assert_eq!(s.overlay(), "prompt");
     keys(&mut s, "esc");
     run(&mut s, "file.save", Args::new());
     assert_eq!(s.fs.read("/w/a.txt").unwrap(), b"xabc");

@@ -346,6 +346,8 @@ fn 名前を付けて保存でパスが変わったら_新しい名前で書く�
         "file.save_as",
         eve_core::Args::new().with_str("path", "/w/b.txt"),
     );
+    // 保存先の照合 (03 §9.7 の `CheckTarget`) を済ませ、保存ジョブが実行待ちの間に編集する
+    h.run_jobs_once();
     typed(&mut h, "z");
     h.run_jobs();
     assert!(h.is_dirty());

@@ -796,6 +796,8 @@ fn 名前を付けて保存の入力の間は切り替えを保留し_入力は�
     h.keys("enter");
     // 入力を閉じた後に切り替わる。保存したのは入力を開いた時点の文書
     assert_eq!(h.doc_id(), doc, "閉じた後に切り替える");
+    // 保存先の照合 (03 §9.7 の `CheckTarget`) の後に保存のジョブ
+    h.run_jobs_until_partial();
     h.run_jobs_until_partial();
     assert_eq!(h.fs_read("/w/mine.txt").unwrap(), b"mine");
     h.finish_held_jobs();

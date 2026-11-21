@@ -168,6 +168,22 @@ fn open_inner(
     // 1. 残っている保存中フラグ (開くたびに 1 回。ディレクトリは列挙しない)。見つけた痕跡は T の有無と合わせて写像する
     let inflight = ports.fs.inflight_for(path).unwrap_or_default();
 
+    // 2b. 同じファイルの判定の識別 (03 §9.2 手順 2b、§12.7.6 の 1)。読込と確認 (`NeedsConfirm`) の前に 1 回だけ送る
+    // (確認を待つ文書も識別を持ち、別の書き方のパスで開いた同じファイルが 2 つの文書にならない)。判定のやり直し (`redo`)
+    // の読み直しでは送らない
+    let mut send_identity = |file_id, file_id_unique| {
+        if redo.is_none() {
+            emit(JobOutput {
+                job: id,
+                body: JobResult::Identity {
+                    file_id,
+                    file_id_unique,
+                    canonical: crate::io::same_file::canonical_of(ports.fs.as_ref(), path),
+                },
+            });
+        }
+    };
+
     // 2. metadata
     let meta = match ports.fs.metadata(path) {
         Ok(m) => m,
@@ -176,6 +192,8 @@ fn open_inner(
                 Some(FsErrorDetail::ParentMissing { dir }) => Some(dir),
                 _ => None,
             };
+            // 新規のファイル: canonical は親を canonicalize してファイル名を付けたもの (NewFile の前に送る)
+            send_identity(None, false);
             return JobResult::NewFile {
                 parent_missing,
                 interrupted_save: map_interrupted(ports.fs.as_ref(), &inflight, false),
@@ -189,6 +207,10 @@ fn open_inner(
             FsErrorDetail::NotAFile,
         )));
     }
+    if cancel.is_cancelled() {
+        return cancelled();
+    }
+    send_identity(meta.file_id, meta.file_id_unique);
     if cancel.is_cancelled() {
         return cancelled();
     }
