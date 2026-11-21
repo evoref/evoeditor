@@ -1200,12 +1200,13 @@ struct PaneFrame {
     gutter_width: u16,
     rows: Vec<RenderRow>,                    // 可視行
     cursors: Vec<CellPos> /*rect の左上が原点*/, focused: bool,
+    active: bool,                            // v0.5 (M30): Window のフォーカスのペイン (オーバーレイ・検索バーの間も真)。focused (入力の行き先) とは別
     bar: Option<PaneBarModel>,               // v0.5 (M30): ペインの見出し。ペインが 2 つ以上で縮退表示でないときだけ Some (03 §9.9 の PANE-10)
     // hit: Option<HitMap>                  // セル → 文書位置 の逆引き情報。未実装 (v0.2 のマウスは frontend の位置変換で足りた。v0.5 の複数ペインでも作らない)。要るようになったら C2 の追加で入れる
 }
 // ── v0.5 の複数ペインとタブライン (03 §9.9。追加だけで、CONTRACT_VERSION は 0 のまま) ──
 struct PaneBarModel { rect: CellRect /*1 行。編集面の座標*/, items: Vec<StatusItem> /*Path・Dirty・ReadOnly。ステータスバーの左群と同じ文言・優先度*/ }
-                                            // frontend はステータスバーと同じ規則で省略し、PaneFrame.focused の見出しを強調する (ロールは 07 §8.8)。
+                                            // frontend はステータスバーと同じ規則で省略し、PaneFrame.active の見出しを強調する (ロールは 07 §8.8)。
                                             // core が入れる StatusKind は Path・Dirty・ReadOnly だけ (TabItem も同じ)。ほかの種類を足すときは 03 §9.9 に書き足す。
                                             // frontend は種類で描き分けず、ステータスバーの左群と同じに並べる (知らない種類も同じに扱う)
 struct Divider { rect: CellRect /*1 列。編集面の座標。高さは親の分割の全体*/ }   // 区切りを指す識別子は、ドラッグを入れる版で Option のフィールドとして足す
