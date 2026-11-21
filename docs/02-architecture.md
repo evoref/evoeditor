@@ -740,10 +740,14 @@ EditorState
    ├─ views: BTreeMap<ViewId, View>
    │    └─ View { doc: DocumentId, selection: Selection, scroll: ScrollPos { top: ByteOff /*先頭可視行の行頭*/, wrap_idx: u32 /*折り返し ON での行内の表示行 (v0.2)*/, left_col: u32 /*水平スクロール*/ },
    │              goal_dcol: Option<u32> /*上下移動の目標の表示列*/, wrap: WrapSettings, cursor_affinity /*折り返し位置のカーソルの前後*/ }
-   │              // 表示面の大きさは View ではなく EditorState.viewport / surface が持つ (v0.x は 1 Window)
+   │              // 表示面の大きさは View ではなく EditorState.viewport / surface が持つ (v0.x は 1 Window)。v0.5 の複数ペインでは、
+   │              // View の可視の大きさはその View を表示するペインの本文の矩形 (03 §9.9 の PANE-3)。どの View も高々 1 つのペインに属する
    ├─ windows: Vec<Window>          // v0.x は 1 つ
-   │    └─ Window { id: WindowId, root: ViewId /*v0.5 で LayoutTree<ViewId> に置換*/ }
-   │         // フォーカスとオーバーレイは Window の外 (EditorState.overlay: Option<Overlay>、検索バーは search_bar)。複数 Window の版で Window に移す
+   │    └─ Window { id: WindowId, root: ViewId /*v0.4 まで*/ }
+   │         // v0.5 の M30 で Window { id, root: LayoutNode, focus: PaneId, pane_recent } に置き換える (レイアウトの木。葉 = ペイン
+   │         // Pane { id, view /*表示中*/, views: BTreeMap<DocumentId, ViewId>, recent }。型と規則の正本は 03 §9.9 の PANE-1〜PANE-3)
+   │         // フォーカスとオーバーレイは Window の外 (EditorState.overlay: Option<Overlay>、検索バーは search_bar)。複数 Window の版で Window に移す。
+   │         // オーバーレイと検索バーは Window に 1 つで、開いた時点のフォーカスのペインに対して働く (03 §9.9 の PANE-6)
    ├─ clipboard (内部レジスタ)、search / search_bar (検索の状態と検索バー)
    ├─ pending: BTreeMap<JobId, Pending>   // 未完了のジョブ (下記の「ジョブ表」)
    ├─ continuations: BTreeMap<JobId, Continuation>   // 保存の完了の後に続ける操作 (Quit / Reopen / Close、03 §9.7)
@@ -757,11 +761,11 @@ EditorState
 ```
 
 - **文書の集合**: `documents` は v0.1 から集合 (SlotMap) のまま持つ。v0.1 は単一文書で、UI と CLI は 1 つの文書だけを扱い、別のファイルを開くと今の文書を置き換える (集合に 2 つ入るのは置き換えの途中だけ、03 §9.2。その間、旧文書は表示し続けるが編集を受け付けない: 読み取り専用として扱い、`ReadOnlyReasons` には入れず「置き換えの読込中」であることから導出する)。複数文書 (FR-103) は v0.2 で UI (バッファ一覧・`buffer.*`) と CLI の複数パスを足すだけで入れる (公開面を壊さない、01 §4.4)。
-- **Document と View の分離**: 同じ Document を複数 View で開ける (分割、v0.5)。選択はビューごと。v0.1 は Window が View を 1 つ持つだけで、`LayoutTree` の型は分割と同時に入れる (内部構造、ADR-0028)。
+- **Document と View の分離**: 同じ Document を複数 View で開ける (分割、v0.5)。選択はビューごと。v0.1 は Window が View を 1 つ持つだけで、`LayoutTree` の型は分割と同時に入れる (内部構造、ADR-0028)。**v0.5 (M30)**: Window の編集面をペイン (レイアウトの木の葉) に分け、各ペインが「文書 → View」の表を持つ (同じ文書を 2 つのペインで出すと View は 2 つ)。本文・Undo の履歴・保存点は文書に 1 つで共有し、選択・スクロールは View (ペイン) ごと。規則の正本は 03 §9.9。作り替えは、見た目を変えない `refactor` の PR を先に入れてから分割を入れる (03 §9.9 の PANE-14)。
 - **ID による参照**: 相互参照は `DocumentId` / `ViewId` で行い、所有権の循環や `Rc<RefCell>` を避ける。集合は ID の順に並ぶ `BTreeMap` で持つ (v0.1 の案の `SlotMap` は使わなかった。ID は単調増加の通番で再利用しない)。
 - **ジョブ表** (`pending`): 未完了のジョブの `JobId` → `Pending`。`Pending` の変種がジョブの種別と、結果の採否に要るもの (対象の文書・投入時の Revision・保存先など) を持つ。Revision の照合が要る種別 (`FindNext`・`ReplaceAll`・`ReplaceUnmappable`・`Save`・`SwapRead` など) だけが Revision を持ち、全種別に一律の `base` は持たない (`JobRequest.base` は使わない)。キャンセル済みの印は持たない (`JobSpawner::cancel` がトークンを立て、結果の `Failed { Cancelled }` で行を消す)。表に無い `JobId` の結果は黙って捨てる。v0.2.0 では `Pending` と結果の振り分け (`on_job_result`) が `editor/file.rs` にあり、v0.3 の M14 で `jobs/` に移す (02 §4.6、STR-B1)。
 - **Selection は最初から複数 Range** (v0.1〜v0.4 は 1 個に制限。複数カーソル FR-211 は v0.5)。後から複数にすると全コマンドの書き直しになるため、型は v0.1 から配列にする。
-- **Window 単位**: Frame は Window ごとに生成する API とする (v0.x は 1 Window)。入力も `Editor::handle_input(window: WindowId, ev)` で宛先 Window を受ける。
+- **Window 単位**: Frame は Window ごとに生成する API とする (v0.x は 1 Window)。入力も `Editor::handle_input(window: WindowId, ev)` で宛先 Window を受ける。v0.5 の複数ペインでも Window は 1 つで、入力の宛先のペインはフォーカスのペイン (キー) か、マウスの入力が指す View のペイン (03 §9.9 の PANE-7)。
 - **保存点 = 履歴ノード ID** (FR-204): dirty 判定は `Some(history.current) != history.saved` で行う。Revision は単調増加するため、Undo で保存時点に戻ったときに「未変更」と判定するには履歴ノードの同一性が要る (03 §7.4)。保存ジョブ完了時に「Snapshot 取得時点のノード」を `saved` にする (保存中の編集は許可され、その分は dirty のまま残る)。ただし完了時にそのノードが `base`・`undo`・`redo` のどこにも無ければ (保存中に Undo してから新しい編集をして redo ごと捨てた、予算の破棄で底より古くなった) `saved = None` とする (03 §7.4、INV-H3)。
 - **`NodeId` は文書ごとの単調増加の通番 (`u64`)** で、破棄したノードの番号も再利用しない。スタック上の深さ (位置) では表さない: 予算超過で底のノードを捨てると深さがずれ、別の内容の位置が保存点と一致して「未変更」と誤判定する (FR-107 の確認が出ずに未保存の内容を失う)。結合で内容が変わったノードには新しい番号を振り直す。保存点に戻れなくなったら (redo の破棄・底の破棄で古くなった) `saved = None`。規則の詳細は 03 §7.1 / §7.4。
 - **Undo の構造** (確定 (ユーザー回答)、OQ-114): v0.1 は **線形の 2 本のスタック** で実装する。`NodeId` の意味は木構造でも同じ (位置の通番)。API (`undo` / `redo` / `seal` / `is_dirty` と `history.saved`) は木構造と同じにし、`document/` モジュールの中に閉じる。履歴は永続化しない (OQ-18) ので、木構造 (FR-213、v1.L) への入れ替えは crate の内部で完結する。
@@ -1013,8 +1017,9 @@ enum InputEvent {
     Key(KeyEvent),                  // 修飾付きキー (ショートカット判定用)
     Text(String),                   // 確定済みテキスト入力 (IME 確定、通常の文字入力)。入力スレッドが連続分を集約 (上限 64 KiB)
     Paste(String),                  // ブラケットペースト
-    Mouse(MouseEvent),              // 位置は「Frame 内のセル座標」 + ヒット対象 (TUI は v0.2 から)
-    Resize { cols: u16, rows: u16 },  // Window の編集面サイズ (セル単位)
+    Mouse(MouseEvent),              // 位置は「Frame 内のセル座標」 + ヒット対象 (TUI は v0.2 から)。編集面 (ペインの本文) の中だけ
+    ChromeMouse(ChromeMouseEvent),  // v0.5 (M30): core が意味を持つクローム (ペインの見出し・タブ) のマウス。下の §7.3
+    Resize { cols: u16, rows: u16 },  // Window の編集面サイズ (セル単位)。検索バーと (v0.5 の) タブラインの行を含む (core が引く)
     Focus(bool),
     ClipboardContent { token: ClipboardToken, text: Option<String> }, // RequestClipboard の応答 (§6.3)
     CapabilitiesChanged(Capabilities),                  // 実行中に判明・変化した能力 (拡張キーの検出 等)。色深度は起動時に 1 回だけ判定し、この経路では変えない (04 §5)
@@ -1100,7 +1105,20 @@ InputEvent::Text ─▶ チョード保留中、または captures_text を宣�
 
 ### 7.3 マウス
 
-frontend はセル座標を **Frame のヒットマップ** (各 Pane の矩形・行→文書位置の対応) を使って `(ViewId, 表示行, 表示列)` などのヒット対象に変換して渡す。座標→文書位置の確定 (折り返し・タブ・全角を考慮) は core が行う。TUI のマウス (FR-307) は v0.2 (v0.1 はマウスを取得せず、端末の選択とスクロールをそのまま使えるようにする、OQ-63)。**v0.2 で決めた型は 03 §5.8.1**: `MouseEvent { kind, mods, at: MouseAt { view, row, col } }` (編集面の左上を原点とするセル。ボタン押下中は面の外も渡す)。`HitMap` は v0.2 では型もフィールドも置かず (`PaneFrame.hit` は §8.2 で注記した将来の追加)、TUI は `PaneFrame.rect` と `gutter_width` で (セル → `MouseAt`) を作る。複数ペイン (v0.5) で要るなら C2 の追加として入れる。
+frontend はセル座標を **Frame のヒットマップ** (各 Pane の矩形・行→文書位置の対応) を使って `(ViewId, 表示行, 表示列)` などのヒット対象に変換して渡す。座標→文書位置の確定 (折り返し・タブ・全角を考慮) は core が行う。TUI のマウス (FR-307) は v0.2 (v0.1 はマウスを取得せず、端末の選択とスクロールをそのまま使えるようにする、OQ-63)。**v0.2 で決めた型は 03 §5.8.1**: `MouseEvent { kind, mods, at: MouseAt { view, row, col } }` (編集面の左上を原点とするセル。ボタン押下中は面の外も渡す)。`HitMap` は v0.2 では型もフィールドも置かず (`PaneFrame.hit` は §8.2 で注記した将来の追加)、TUI は `PaneFrame.rect` と `gutter_width` で (セル → `MouseAt`) を作る。複数ペイン (v0.5) でも `HitMap` は作らず、TUI が各ペインの `rect` で押した位置のペインを決める (03 §5.8.1)。
+
+**編集面の外のマウス (v0.5 の M30)**: TUI は、自分が置いたクローム・パネル・オーバーレイを先に判定し、そのうち core が意味を持つもの (ペインの見出し・タブライン (FR-510) のタブ) だけを `ChromeMouse` で渡す。ステータスバー・ヒントバーの項目、区切り、パネルは v0.5 では渡さない (渡すときは、その版で `ChromeTarget` に変種を足す)。どのクリックで何をするか (フォーカスを移す・文書を表示する) は core が決める (03 §9.9 の PANE-7)。
+
+```rust
+// eve-view (v0.5 の M30 で足す。追加だけ、C2)
+struct ChromeMouseEvent { kind: MouseKind, mods: Modifiers, target: ChromeTarget,
+                         row: i32, col: i32 /*対象の矩形 (見出しの rect・タブ) の左上が原点のセル。MouseAt と同じく i32 (後の版のドラッグの捕捉で面の外も渡す)*/ }
+#[non_exhaustive]
+enum ChromeTarget {
+    PaneBar { view: ViewId },        // ペインの見出し (PaneFrame.bar)。ペインは表示中の View で指す (03 §9.9 の PANE-7 (g))。FR-509 の PR で足す
+    Tab { doc: DocumentId },         // タブラインのタブ (TabItem.doc)。FR-510 の PR (M32) で足す
+}
+```
 
 ## 8. 状態と描画の分離 (ViewModel)
 
@@ -1123,15 +1141,22 @@ frontend はセル座標を **Frame のヒットマップ** (各 Pane の矩形�
 pub const CONTRACT_VERSION: u32 = /* §8.4 */;
 struct Frame {
     window: WindowId,
-    size: CellSize,                         // 編集面全体 (cols, rows)
-    panes: Vec<PaneFrame>,                  // レイアウト済み
+    size: CellSize,                         // 編集面全体 (cols, rows)。検索バーと (v0.5 の) タブラインの行を引いた後
+    panes: Vec<PaneFrame>,                  // レイアウト済み。v0.5: レイアウトの木の葉の順 (03 §9.9 の PANE-10)
+    dividers: Vec<Divider>,                 // v0.5 (M30、FR-509): ペインの間の区切り (core が確保する)。ペインが 1 つのときは空
+    tab_line: Option<TabLineModel>,         // v0.5 (M32、FR-510 の PR で足す): タブライン。出すときだけ Some。frontend が画面の最上行に置く
     status: StatusModel, hints: HintModel,
     messages: MessageModel,                 // { current: Option<Message{level, text: CellText, hint: Option<CellText>}>, unread: u16 } (FR-505)
     search: Option<SearchBarModel>,         // 検索バー (クロームとして描く。04 §8.4)。表示中だけ Some
     overlays: Vec<OverlayModel>,            // 前面順
-    panels: Vec<PanelModel>,                // v0.5 以降 (希望サイド・希望サイズを含む)
-    focus: FocusTarget,                     // 入力の行き先: Pane(ViewId) | Overlay(usize /*overlays の添字*/) | SearchBar
+    panels: Vec<PanelModel>,                // v0.5 以降 (希望サイド・希望サイズを含む)。最初の利用者 (FR-126 ファイルツリー、Could) の版で unstable から移して足す。
+                                            // v0.5 の M30 では足さない。置き場所は編集面の外で、レイアウトの木はパネルを除いた編集面に置く (04 §3.4 (h))
+    focus: FocusTarget,                     // 入力の行き先: Pane(ViewId) | Overlay(usize /*overlays の添字*/) | SearchBar。
+                                            // v0.5: Pane はフォーカスのペインの表示中の View。パネルのフォーカス (Panel) はパネルと同じ版で足す
     primary_cursor: Option<CursorPlacement>,// 編集面にフォーカスがあるときだけ Some: ハードウェアカーソル / IME 候補窓の位置 (編集面のセル矩形) と形状。
+                                            // 編集面の左上が原点 (フォーカスのペインの rect の位置を足す。03 §9.9 の PANE-10)。v0.4 までの「Frame 全体の座標」と同じ
+                                            // (編集面が画面の最上行から始まるため)。v0.5 でタブラインを編集面の上に出すときは、PaneFrame.rect・bar・Divider・
+                                            // primary_cursor のどれも編集面の座標のままで、frontend が編集面を置いた位置 (タブラインの下) を足して出力する。
                                             // 入力欄 (オーバーレイ・検索バー) にフォーカスがあるときは None で、frontend が欄の配置と InputFieldModel から求める
     title: String,                          // 端末タイトル。内容規約は 04 §3.1。タイトルの経路はこれだけ (Effect にしない、§6.3)
     texts: ChromeTexts,                     // frontend が自分の判断で出す場面の、core が解決済みの文言
@@ -1171,12 +1196,22 @@ struct HintItem { keys: Vec<KeyLabel>, text: CellText, short_text: Option<CellTe
 struct KeyLabel { strokes: Vec<KeyStroke> }  // `Ctrl+K H` は 2 ストローク。表記 (`Ctrl+S` / `^S`) は言語に依存しない ASCII 表記で frontend が作る
 struct KeyStroke { mods: Modifiers, key: KeyCode }
 struct PaneFrame {
-    view: ViewId, rect: CellRect, revision: (Revision, ViewRevision),
+    view: ViewId, rect: CellRect /*本文 (ガター + テキスト) の矩形。見出しを含まない。編集面の左上が原点*/, revision: (Revision, ViewRevision),
     gutter_width: u16,
     rows: Vec<RenderRow>,                    // 可視行
-    cursors: Vec<CellPos>, focused: bool,
-    // hit: Option<HitMap>                  // セル → 文書位置 の逆引き情報。未実装 (v0.2 のマウスは frontend の位置変換で足りた)。要るようになったら C2 の追加で入れる
+    cursors: Vec<CellPos> /*rect の左上が原点*/, focused: bool,
+    active: bool,                            // v0.5 (M30): Window のフォーカスのペイン (オーバーレイ・検索バーの間も真)。focused (入力の行き先) とは別
+    bar: Option<PaneBarModel>,               // v0.5 (M30): ペインの見出し。ペインが 2 つ以上で縮退表示でないときだけ Some (03 §9.9 の PANE-10)
+    // hit: Option<HitMap>                  // セル → 文書位置 の逆引き情報。未実装 (v0.2 のマウスは frontend の位置変換で足りた。v0.5 の複数ペインでも作らない)。要るようになったら C2 の追加で入れる
 }
+// ── v0.5 の複数ペインとタブライン (03 §9.9。追加だけで、CONTRACT_VERSION は 0 のまま) ──
+struct PaneBarModel { rect: CellRect /*1 行。編集面の座標*/, items: Vec<StatusItem> /*Path・Dirty・ReadOnly。ステータスバーの左群と同じ文言・優先度*/ }
+                                            // frontend はステータスバーと同じ規則で省略し、PaneFrame.active の見出しを強調する (ロールは 07 §8.8)。
+                                            // core が入れる StatusKind は Path・Dirty・ReadOnly だけ (TabItem も同じ)。ほかの種類を足すときは 03 §9.9 に書き足す。
+                                            // frontend は種類で描き分けず、ステータスバーの左群と同じに並べる (知らない種類も同じに扱う)
+struct Divider { rect: CellRect /*1 列。編集面の座標。高さは親の分割の全体*/ }   // 区切りを指す識別子は、ドラッグを入れる版で Option のフィールドとして足す
+struct TabLineModel { tabs: Vec<TabItem> /*開いた順 (buffer.next と同じ順)*/, active: Option<usize> /*フォーカスのペインの文書の添字*/ }   // FR-510 の PR (M32) で足す
+struct TabItem { doc: DocumentId, items: Vec<StatusItem> /*見出しと同じ Path (同じ名前の区別を含む、03 §9.9 の PANE-11。cut は Middle)・Dirty・ReadOnly*/ }
 struct RenderRow { source: RowSource /*doc line + wrap index (折り返しは v0.2) | virtual*/,
                    gutter: Vec<Span>, spans: Vec<Span>,
                    clipped_left: bool, clipped_right: bool,   // 水平スクロールで左右に続きがある (FR-506)
@@ -1214,8 +1249,8 @@ enum Color { Default, Rgb(u8,u8,u8), Indexed(u8) }
 
 ### 8.3 レイアウト責任
 
-- 論理レイアウト (分割ツリー・比率) と **ペインのセル矩形** の計算は core (編集面サイズは `Resize` で受け取る)。
-- クローム (ステータスバー・メッセージ行・ヒントバー) とパネルの配置は frontend が決め、**編集面** のセル数だけを core に伝える。
+- 論理レイアウト (分割ツリー・比率) と **ペインのセル矩形** の計算は core (編集面サイズは `Resize` で受け取る)。v0.5 の M30 で、ペインの見出しの行 (`PaneFrame.bar`) と区切り (`Frame.dividers`) のセルも core が確保して Frame で渡す (frontend は矩形の隙間から推さない)。規則は 03 §9.9 の PANE-3 / PANE-4 / PANE-10。
+- クローム (ステータスバー・メッセージ行・ヒントバー) とパネルの配置は frontend が決め、**編集面** のセル数だけを core に伝える。検索バーと (v0.5 の) タブラインの行は、frontend が送る編集面の行数に含め、core が出すときに引く (出し入れで `Resize` を送り直さずに済む。03 §9.9 の PANE-12)。
 
 ### 8.4 境界型の契約と凍結段階
 
@@ -1924,7 +1959,9 @@ enum ReadOnlyReasonView {                          // eve-core の ReadOnlyReaso
     FileAttribute, UserRequested, NoWritePermission, InvalidBytes, StatefulEncodingWithInvalidBytes,
     Binary, LargeFileViewer, LoadIncomplete,
 }
-struct WindowInfo { window: WindowId, views: Vec<ViewId>, focus: FocusTarget /*§8.2*/ }
+struct WindowInfo { window: WindowId, views: Vec<ViewId> /*v0.5: 全ペインの表示中の View (レイアウトの木の葉の順、03 §9.9)*/, focus: FocusTarget /*§8.2*/ }
+// DocumentInfo.views は、その文書の View 全部 (どのペインにも表示していない View、ペインに属さない View を含む。03 §9.9 の PANE-1)。今の実装と同じ意味で、
+// eve-view の doc コメントの「表示している View」は FR-509 の PR で直す
 struct ByteRange { start: u64, end: u64 }          // eve-view の位置の範囲 (バイトオフセット、ADR-0010)。eve-text の同名の型 (ByteOff (usize) の組、03 §19) とは別の型で、
                                                    // eve-view は他の eve-* に依存しないので別に持つ。所有と変換規則は §12.2
 ```
