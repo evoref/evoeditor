@@ -1429,6 +1429,7 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 | ステータスバー | `status.read_only.long` / `.short` | [RO] / RO | 4、2 |
 | ステータスバー | `status.saving.long` / `.short` | [保存中] / 保存中 | 8、6 |
 | ステータスバー | `status.degraded.long_line.long` / `.short` | [長い行: 折り返しなし] / 折返なし | 22、8 |
+| ステータスバー (v0.5。ペインの縮退表示の間、§8.7、03 §9.9 の PANE-4 (b)) | `status.degraded.panes.long` / `.short` | [ペイン {index}/{total} だけ表示] / {index}/{total} | 22、3 (1 桁) |
 | ステータスバー (v0.3) | `status.external_change.long` / `.short` | [外部で変更] / 外部変更 | 12、8 |
 | ステータスバー | `status.eol_mixed` | 混在 | 4 |
 | ステータスバー | `status.encoding.bom` | {encoding} BOM | — |
@@ -1457,6 +1458,7 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 | パレット (実行できない理由) | `ui.palette.reason.no_changes` | 未保存の変更がありません | — |
 | パレット (実行できない理由) | `ui.palette.reason.no_selection` | 選択範囲がありません | — |
 | パレット (実行できない理由) | `ui.palette.reason.unavailable` | 今の状態では使えません | — |
+| パレット (実行できない理由。v0.5。`when` が `pane.split` のペインのコマンド、03 §9.9 の PANE-5 (d)) | `ui.palette.reason.single_pane` | ペインが 1 つだけです | — |
 | パレット (0 件。`List.no_match`) | `ui.palette.no_match` | 一致するコマンドはありません | — |
 | パレットの行のカテゴリ (CommandId の名前空間) | `ui.palette.category.app` | アプリ | — |
 | パレットの行のカテゴリ (CommandId の名前空間) | `ui.palette.category.buffer` | バッファ | — |
@@ -1465,6 +1467,7 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 | パレットの行のカテゴリ (CommandId の名前空間) | `ui.palette.category.cursor` | 移動 | — |
 | パレットの行のカテゴリ (CommandId の名前空間) | `ui.palette.category.edit` | 編集 | — |
 | パレットの行のカテゴリ (CommandId の名前空間) | `ui.palette.category.file` | ファイル | — |
+| パレットの行のカテゴリ (CommandId の名前空間。v0.5) | `ui.palette.category.pane` | ペイン | — |
 | パレットの行のカテゴリ (CommandId の名前空間) | `ui.palette.category.search` | 検索 | — |
 | パレットの行のカテゴリ (CommandId の名前空間) | `ui.palette.category.select` | 選択 | — |
 | パレットの行のカテゴリ (CommandId の名前空間) | `ui.palette.category.ui` | 画面 | — |
@@ -1810,6 +1813,9 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 | `info.mouse.enabled` | `ui.toggle_mouse` でマウスの取得を有効にした (04 §6.8) | マウスの操作を有効にしました |
 | `info.mouse.disabled` | 同上。無効にした (端末のネイティブ選択・スクロールが使える) | マウスの操作を無効にしました (端末の選択とスクロールが使えます) |
 | `info.goto_line.clamped` | 行へ移動で範囲外の番号を入れた (01 FR-306 AC-1) | 行 {line} はありません。最後の行 ({last}) へ移動しました |
+| `info.pane.no_room` (v0.5) | `pane.split_right` / `pane.split_down` で、分割した後の木の最小が編集面に入らないので分割しなかった (03 §9.9 の PANE-4 (a)) | ペインを分ける広さがありません。端末を広げるか、ほかのペインを閉じてください |
+| `info.pane.collapsed` (v0.5) | 編集面が木の最小より小さくなり、フォーカスのペインだけを出す縮退表示に入った (入ったときに 1 回。03 §9.9 の PANE-4 (b)。縮退表示の間はステータスバーに `status.degraded.panes.*`) | 端末が狭いので、フォーカスのペインだけを表示しています |
+| `info.pane.single_pane` (v0.5) | ペインが 1 つだけなので、`when` が `pane.split` のペインのコマンド (`pane.close`・移動・大きさ・揃える) をキーで実行して断った (03 §9.9 の PANE-5 (d)。「割り当てられていません」とは出さない。パレットでは淡色にして `ui.palette.reason.single_pane`) | ペインが 1 つだけです |
 | `msg.clipboard.fallback` | システムのクリップボードを使えず、内部レジスタに切り替えた (01 FR-205 AC-2。同じ起動の中では最初の 1 回だけ出す) | システムのクリップボードを使えないため、エディタ内のクリップボードを使いました: {reason} / 他のアプリとの間でコピー・貼り付けするには、端末の範囲選択と貼り付けを使ってください |
 | `info.eol.converted` | 改行コードを変換した (01 FR-113 AC-4、03 §8.4。`{eol}` は `LF` / `CRLF` / `CR` で翻訳しない) | {count} 個の改行を {eol} に変換しました (元に戻すで戻せます) |
 | `info.eol.unchanged` | 変換する改行が無かった (すべて `{eol}` か、改行が無い。新しく挿入する改行だけを `{eol}` にした) | 改行はすでに {eol} です |

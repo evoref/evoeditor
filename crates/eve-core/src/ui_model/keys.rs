@@ -33,6 +33,9 @@ pub(crate) const INFO_OPEN_PARTIAL_END: &str = "info.open.partial_end";
 pub(crate) const INFO_OPEN_PRESERVE_OFF: &str = "info.open.preserve_off";
 pub(crate) const INFO_OPEN_PRESERVE_PARTIAL: &str = "info.open.preserve_partial";
 pub(crate) const INFO_OPEN_REDETECTED: &str = "info.open.redetected";
+pub(crate) const INFO_PANE_COLLAPSED: &str = "info.pane.collapsed";
+pub(crate) const INFO_PANE_NO_ROOM: &str = "info.pane.no_room";
+pub(crate) const INFO_PANE_SINGLE_PANE: &str = "info.pane.single_pane";
 pub(crate) const INFO_PASTE_AS_BYTES: &str = "info.paste.as_bytes";
 pub(crate) const INFO_PASTE_ESCAPE_AS_TEXT: &str = "info.paste.escape_as_text";
 pub(crate) const INFO_PASTE_NOTATION_AS_TEXT: &str = "info.paste.notation_as_text";
@@ -159,6 +162,8 @@ pub(crate) const MSG_SWAP_UNREADABLE: &str = "msg.swap.unreadable";
 pub(crate) const MSG_WORKSPACE_ROOT_INVALID: &str = "msg.workspace.root_invalid";
 pub(crate) const STATUS_DEGRADED_LONG_LINE_LONG: &str = "status.degraded.long_line.long";
 pub(crate) const STATUS_DEGRADED_LONG_LINE_SHORT: &str = "status.degraded.long_line.short";
+pub(crate) const STATUS_DEGRADED_PANES_LONG: &str = "status.degraded.panes.long";
+pub(crate) const STATUS_DEGRADED_PANES_SHORT: &str = "status.degraded.panes.short";
 pub(crate) const STATUS_ENCODING_BOM: &str = "status.encoding.bom";
 pub(crate) const STATUS_EOL_MIXED: &str = "status.eol_mixed";
 pub(crate) const STATUS_EXTERNAL_CHANGE_LONG: &str = "status.external_change.long";
@@ -290,7 +295,7 @@ pub(crate) const UI_TOO_SMALL: &str = "ui.too_small";
 
 /// すべての定数 (キーの順。試験に使う)。
 #[cfg(test)]
-const ALL: [&str; 267] = [
+const ALL: [&str; 272] = [
     HINT_UI_CANCEL,
     INFO_APP_RELEASE_SUMMARY,
     INFO_APP_UPDATED,
@@ -321,6 +326,9 @@ const ALL: [&str; 267] = [
     INFO_OPEN_PRESERVE_OFF,
     INFO_OPEN_PRESERVE_PARTIAL,
     INFO_OPEN_REDETECTED,
+    INFO_PANE_COLLAPSED,
+    INFO_PANE_NO_ROOM,
+    INFO_PANE_SINGLE_PANE,
     INFO_PASTE_AS_BYTES,
     INFO_PASTE_ESCAPE_AS_TEXT,
     INFO_PASTE_NOTATION_AS_TEXT,
@@ -441,6 +449,8 @@ const ALL: [&str; 267] = [
     MSG_WORKSPACE_ROOT_INVALID,
     STATUS_DEGRADED_LONG_LINE_LONG,
     STATUS_DEGRADED_LONG_LINE_SHORT,
+    STATUS_DEGRADED_PANES_LONG,
+    STATUS_DEGRADED_PANES_SHORT,
     STATUS_ENCODING_BOM,
     STATUS_EOL_MIXED,
     STATUS_EXTERNAL_CHANGE_LONG,

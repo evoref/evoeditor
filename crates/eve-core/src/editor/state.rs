@@ -139,9 +139,9 @@ pub(crate) struct IoState {
     pub(crate) open_switch: BTreeMap<DocumentId, crate::io::partial_view::OpenSwitch>,
     /// 先行表示の間に `info.open.partial_end` を出した文書 (同じ文書の先行表示の間は 1 回だけ、03 §9.2.1)。
     pub(crate) partial_end_noted: BTreeSet<DocumentId>,
-    /// 読込の失敗・取消しで閉じる文書のうち、オーバーレイ・検索バーの間は表示を移さずに待っているもの (文書 → 開く前の
-    /// 文書。03 §9.2.1 の「失敗・取消し・閉じる」)。
-    pub(crate) failed_holds: BTreeMap<DocumentId, Option<DocumentId>>,
+    /// 読込の失敗・取消しで閉じる文書のうち、オーバーレイ・検索バーの間は表示を移さずに待っているもの (文書 → 開いた
+    /// 時点のペインと開く前の文書。03 §9.2.1 の「失敗・取消し・閉じる」、§9.9 の PANE-8 (b))。
+    pub(crate) failed_holds: BTreeMap<DocumentId, Option<crate::io::open::OpenFrom>>,
     /// 標準入力の閉じる・終了の確認で「ここまでで開く」を選んだ後、読み終えたときの続き (文書, 続き) のうち、オーバーレイ・
     /// 検索バーの間は進めずに待っているもの (03 §9.2.2 の「閉じる・終了」。開いているほかの確認・入力を置き換えない)。
     pub(crate) stdin_conts: Vec<(DocumentId, crate::ui_model::overlay::Continuation)>,
@@ -268,6 +268,8 @@ pub(crate) struct TermState {
     pub(crate) bar_rows: u16,
     /// ホストが渡した編集面の大きさ (検索バーの分を引く前)。
     pub(crate) surface: (u16, u16),
+    /// 全 View の可視の大きさを 1 回求めたもの (全 View のスクロールを調整する間だけ。`with_view_sizes`)。
+    pub(crate) view_sizes: Option<BTreeMap<ViewId, (u16, u16)>>,
 }
 
 impl EditorState {
@@ -283,6 +285,7 @@ impl EditorState {
                 viewport: (80, 24),
                 bar_rows: 0,
                 surface: (80, 24),
+                view_sizes: None,
                 mouse_drag: None,
                 mouse_on: true,
                 hint_bar_on: true,
@@ -523,6 +526,28 @@ impl EditorState {
             doc.untitled_no = doc.untitled_no.or(old.untitled_no);
         }
         self.docs.documents.insert(id, doc);
+        self.clamp_views_of(id);
+    }
+
+    /// 本文を差し替えた文書 `doc` の全 View の選択とスクロールを、新しい本文の範囲と書記素の境界に収める (差し替えの経路が
+    /// 位置を決め直す前の安全網。どの View も範囲の外・char の境界でない位置を指したままにしない、03 §9.9 の PANE-8 (e))。
+    fn clamp_views_of(&mut self, doc: DocumentId) {
+        let Some(d) = self.docs.documents.get(&doc) else {
+            return;
+        };
+        let t = d.text();
+        let len = t.len_bytes();
+        let clamp = |o: ByteOff| ByteOff(o.0.min(len));
+        for v in self.docs.views.values_mut().filter(|v| v.doc == doc) {
+            v.selection = v
+                .selection
+                .transform(t, |r| eve_text::Range::new(clamp(r.anchor), clamp(r.head)));
+            let top = t.line_to_byte(t.byte_to_line(clamp(v.scroll.top)));
+            if top != v.scroll.top {
+                v.scroll.top = top;
+                v.scroll.wrap_idx = 0;
+            }
+        }
     }
 
     /// 退避用の公開物が変わった文書として記録する (03 §6.5 手順 12。保存の完了・読込の完了)。
@@ -555,15 +580,19 @@ impl EditorState {
         if self.term.viewport != (cols, rows) {
             self.term.viewport = (cols, rows);
             self.out.needs_render = true;
-            // 画面の大きさが変わっても、カーソルが見えるようにする
+            // 画面の大きさが変わっても、カーソルが見えるようにする (配置は 1 回だけ求める)
             let views: Vec<ViewId> = self.docs.views.keys().copied().collect();
-            for v in views {
-                // 折り返し幅が変わるので、先頭の論理行の最初の表示行に戻す (03 §14.3.1)
-                if let Some(view) = self.docs.views.get_mut(&v) {
-                    view.scroll.wrap_idx = 0;
+            self.with_view_sizes(|st| {
+                for v in views {
+                    // 折り返し幅が変わるので、先頭の論理行の最初の表示行に戻す (03 §14.3.1)
+                    if let Some(view) = st.docs.views.get_mut(&v) {
+                        view.scroll.wrap_idx = 0;
+                    }
+                    st.ensure_cursor_visible(v);
                 }
-                self.ensure_cursor_visible(v);
-            }
+            });
+            // 縮退表示に入った・出た (03 §9.9 の PANE-4 (b))
+            self.refresh_collapse();
         }
     }
 
@@ -766,7 +795,8 @@ impl EditorState {
         }
     }
 
-    /// Undo。取り消すものがなければ `Ok(false)`。発行 View の Selection は `selection_before` に戻す。
+    /// Undo。取り消すものがなければ `Ok(false)`。発行 View の Selection は `selection_before` に戻す (`view` は実行した
+    /// View。発行 View の選び方は `after_history_step`)。
     ///
     /// # Errors
     ///
@@ -778,7 +808,9 @@ impl EditorState {
             .get_mut(&doc)
             .ok_or(ApplyError::Rejected)?;
         let applied = document.undo()?;
-        Ok(applied.map(|a| self.after_change(doc, &a, view)).is_some())
+        Ok(applied
+            .map(|a| self.after_history_step(doc, &a, view))
+            .is_some())
     }
 
     /// Redo。やり直すものがなければ `Ok(false)`。
@@ -793,7 +825,44 @@ impl EditorState {
             .get_mut(&doc)
             .ok_or(ApplyError::Rejected)?;
         let applied = document.redo()?;
-        Ok(applied.map(|a| self.after_change(doc, &a, view)).is_some())
+        Ok(applied
+            .map(|a| self.after_history_step(doc, &a, view))
+            .is_some())
+    }
+
+    /// Undo / Redo の適用の後 (03 §7.6、§9.9 の PANE-2): ノードを記録した発行 View がどれかのペインに表示中なら、その
+    /// 選択を戻す。表示中でなければ (別の文書に切り替えたペインの表に残っているだけ・ペインに属さない) 写像だけ。ノードに
+    /// View が無い (View を指さずに適用した) ときは、実行した View `by` を発行 View とみなす。実行した View が発行 View で
+    /// なければ、その選択は写像だけで、戻した変更の先頭が見えるようにスクロールだけする。
+    fn after_history_step(&mut self, doc: DocumentId, a: &Applied, by: Option<ViewId>) {
+        let issuer = match a.view {
+            None => by,
+            Some(v) if self.pane_of_shown_view(v).is_some() => Some(v),
+            Some(_) => None,
+        };
+        self.after_change(doc, a, issuer);
+        if let Some(by) = by.filter(|b| Some(*b) != issuer)
+            && let Some((_, after)) = a.changes.changed_ranges().next()
+        {
+            self.scroll_to_show(by, after.start);
+        }
+    }
+
+    /// View `view` の選択を変えずに、位置 `pos` が見えるように最小限スクロールする。
+    fn scroll_to_show(&mut self, view: ViewId, pos: ByteOff) {
+        let Some(saved) = self
+            .docs
+            .views
+            .get(&view)
+            .map(|v| (v.selection.clone(), v.goal_dcol, v.cursor_affinity))
+        else {
+            return;
+        };
+        self.set_selection(view, Selection::point(pos));
+        self.ensure_cursor_visible(view);
+        if let Some(v) = self.docs.views.get_mut(&view) {
+            (v.selection, v.goal_dcol, v.cursor_affinity) = saved;
+        }
     }
 
     /// プロセス全体の Undo 履歴の上限 (`editor.undo.total_max_bytes`、NFR-203) を守る: 超えていたら、履歴が最も大きい文書から
@@ -1132,6 +1201,11 @@ impl EditorState {
             "doc.modified" => b(doc.is_some_and(Document::is_dirty)),
             "selection.empty" => b(view.is_none_or(|v| v.selection.iter().all(|r| r.is_empty()))),
             "overlay.active" => Some(CtxValue::Str(self.overlay_name().to_owned())),
+            // Window のペインが 2 つ以上 (03 §9.9、07 §7.3)
+            "pane.split" => b(self
+                .focused_window()
+                .and_then(|w| self.window(w))
+                .is_some_and(|w| w.panes.len() >= 2)),
             "search.active" => b(self.find.search_bar.is_some()),
             "search.replace_active" => b(self
                 .find

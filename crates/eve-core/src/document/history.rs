@@ -10,6 +10,7 @@ use std::collections::VecDeque;
 use std::sync::Arc;
 
 use eve_text::{ByteRange, ChangeSet, Op, Selection};
+use eve_view::ViewId;
 
 use crate::time::{Millis, Tick};
 
@@ -56,6 +57,9 @@ struct UndoNode {
     undo: Arc<ChangeSet>,
     selection_before: Option<Selection>,
     selection_after: Option<Selection>,
+    /// 発行 View (記録した Transaction の `view`。結合したら後の Transaction のもの)。Undo / Redo で選択を戻す相手
+    /// (03 §7.1 の `UndoNode.view`、§7.6)。
+    view: Option<ViewId>,
     last_edit_at: Tick,
     group_sealed: bool,
     bytes: usize,
@@ -130,6 +134,8 @@ pub struct HistoryStep {
     pub origin: Origin,
     /// 発行 View に復元する Selection。Undo は `selection_before`、Redo は `selection_after`。
     pub selection: Option<Selection>,
+    /// 発行 View (ノードを記録した Transaction の View。03 §7.6)。
+    pub view: Option<ViewId>,
     /// 本文と一緒に戻す書式 (再読込と改行コードの変換のノードだけ。範囲は `FormatChange` の種類で決まる)。
     pub format: Option<FormatRestore>,
     /// 本文と一緒に戻す・外す保持方式の記録 (03 §8.7.1)。Undo か Redo かは、どちらの `*_step` で得たかで決まる。
@@ -504,6 +510,9 @@ impl UndoHistory {
         prev.redo = Arc::new(redo);
         prev.undo = Arc::new(undo);
         prev.selection_after = tx.selection_after.clone();
+        if tx.view.is_some() {
+            prev.view = tx.view;
+        }
         prev.last_edit_at = tx.timestamp;
         prev.id = new_id;
         let old_bytes = prev.bytes;
@@ -542,6 +551,7 @@ impl UndoHistory {
             undo: Arc::new(inverse),
             selection_before: tx.selection_before.clone(),
             selection_after: tx.selection_after.clone(),
+            view: tx.view,
             last_edit_at: tx.timestamp,
             group_sealed: false,
             bytes,
@@ -591,6 +601,7 @@ impl UndoHistory {
             changes: node.undo.clone(),
             origin: node.origin.clone(),
             selection: node.selection_before.clone(),
+            view: node.view,
             format: node.format.as_ref().map(|f| f.side(false)),
             preserved: node.preserved.clone(),
         };
@@ -606,6 +617,7 @@ impl UndoHistory {
             changes: node.redo.clone(),
             origin: node.origin.clone(),
             selection: node.selection_after.clone(),
+            view: node.view,
             format: node.format.as_ref().map(|f| f.side(true)),
             preserved: node.preserved.clone(),
         };

@@ -131,6 +131,24 @@ pub(crate) fn status_model(
             CutPolicy::Never,
         ));
     }
+    // ペインの縮退表示: 端末が狭く、フォーカスのペインだけを出している間 (03 §9.9 の PANE-4 (b)、04 §8.7)。
+    // 長い行の項目の後ろに並べる
+    if let Some((index, total)) = state.collapsed_position() {
+        let (index, total) = (index.to_string(), total.to_string());
+        let a = [("index", index.as_str()), ("total", total.as_str())];
+        let (long, short) = (
+            render(state, keys::STATUS_DEGRADED_PANES_LONG, &a),
+            render(state, keys::STATUS_DEGRADED_PANES_SHORT, &a),
+        );
+        items.push(item(
+            StatusKind::Degraded,
+            &long,
+            Some(&short),
+            5,
+            Left,
+            CutPolicy::Never,
+        ));
+    }
     // 読込中: 表示中の文書が読込中 (`Loading` / `Partial`) ならその文書の進捗を、そうでなければ表示していない文書の
     // 新しく開く読込の進捗を出す (03 §9.2.1 の「ステータスバー」、§9.8 の「読込中のバッファ」)。先行表示の間は
     // `status.partial.*` (02 §5.1: 読込中は `Loading` / `Partial` から導出する)

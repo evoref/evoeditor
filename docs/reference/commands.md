@@ -1,6 +1,6 @@
 # コマンド一覧
 
-生成物 (`cargo xtask gen-reference` で作り直す。手で直さない。docs/09 §11.2)。`evoeditor --list-commands --json` の出力 (組込みのコマンド 91 個。CommandId の順) から作る。コマンドと既定キーの正本は [07 §11.6 のカタログ](../07-config-extensibility.md#116-v01-commandid-カタログ-付録) で、`cargo xtask gen-reference --check` が突合する。
+生成物 (`cargo xtask gen-reference` で作り直す。手で直さない。docs/09 §11.2)。`evoeditor --list-commands --json` の出力 (組込みのコマンド 103 個。CommandId の順) から作る。コマンドと既定キーの正本は [07 §11.6 のカタログ](../07-config-extensibility.md#116-v01-commandid-カタログ-付録) で、`cargo xtask gen-reference --check` が突合する。
 
 - **種類**・**権限** は 07 §11.6 の kind / perm 列の表記 (権限の `-` は外部の主体から呼べない)。**when** の `—` は常に実行できる。
 - **引数** は `名前` (`?` は省略可能): 型 (07 §11.2)。
@@ -63,6 +63,18 @@
 | `help.commands` | コマンド一覧を開く | Ui | — | — | `ui` | — | 出す |
 | `help.keys` | キー一覧を開く | Ui | — | — | `ui` | — | 出す |
 | `help.open` | ヘルプを開く | Ui | — | — | `ui` | `global`: `Ctrl+K H` | 出す |
+| `pane.close` | ペインを閉じる | Ui | — | `pane.split` | `ui` | — | 出す |
+| `pane.equalize` | ペインの大きさを揃える | Ui | — | `pane.split` | `ui` | — | 出す |
+| `pane.focus_down` | 下のペインへ | Ui | — | `pane.split` | `ui` | — | 出す |
+| `pane.focus_left` | 左のペインへ | Ui | — | `pane.split` | `ui` | — | 出す |
+| `pane.focus_next` | 次のペイン | Ui | — | `pane.split` | `ui` | — | 出す |
+| `pane.focus_prev` | 前のペイン | Ui | — | `pane.split` | `ui` | — | 出す |
+| `pane.focus_right` | 右のペインへ | Ui | — | `pane.split` | `ui` | — | 出す |
+| `pane.focus_up` | 上のペインへ | Ui | — | `pane.split` | `ui` | — | 出す |
+| `pane.grow` | ペインを広げる | Ui | `cells?`: `int` | `pane.split` | `ui` | — | 出す |
+| `pane.shrink` | ペインを狭める | Ui | `cells?`: `int` | `pane.split` | `ui` | — | 出す |
+| `pane.split_down` | 下に分割 (上下に並べる) | Ui | — | — | `ui` | — | 出す |
+| `pane.split_right` | 右に分割 (左右に並べる) | Ui | — | — | `ui` | — | 出す |
 | `search.next` | 次を検索 | Motion | — | `search.active` | `read` | `search`: `Enter`, `↓`, `F3` | 出す |
 | `search.open` | 検索 | Ui | `query?`: `string` | — | `ui` | `editor`: `Ctrl+F`<br>`search`: `Ctrl+F` | 出す |
 | `search.prev` | 前を検索 | Motion | — | `search.active` | `read` | `search`: `↑`, `Shift+F3` [E], `Shift+Enter` [E] | 出す |

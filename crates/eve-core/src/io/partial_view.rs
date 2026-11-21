@@ -13,7 +13,7 @@ use crate::document::{Document, LoadState, PreservedMap, TextFormat};
 use crate::editor::state::{EditorState, ScrollPos};
 use crate::ui_model::keys;
 
-use super::open::{OpenKind, human_size};
+use super::open::{OpenFrom, OpenKind, human_size};
 use super::pending::Pending;
 
 /// 新しく開く読込の間 (本文の無い `Loading` と先行表示の `Partial`) は、`msg.open.partial_unavailable` で拒否する
@@ -50,8 +50,8 @@ const FORWARD_MOTIONS: [&str; 11] = [
 /// ・読込が終わった (失敗・取消し・閉じる) ときに消す。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct OpenSwitch {
-    /// 切り替え元 (開いたときに表示していた文書)。
-    pub from: DocumentId,
+    /// 切り替え元 (開いたときのフォーカスのペインと、そこに出ていた文書)。
+    pub from: OpenFrom,
     /// 読み込んでいる文書の View。
     pub view: ViewId,
     /// 読込を終えた (`Complete` / `NewFile`)。
@@ -188,7 +188,7 @@ impl EditorState {
     }
 
     /// 文書 `doc` の全 View のカーソル・選択・スクロールを文書の先頭に戻す。
-    fn reset_views_of(&mut self, doc: DocumentId) {
+    pub(crate) fn reset_views_of(&mut self, doc: DocumentId) {
         for v in self.docs.views.values_mut().filter(|v| v.doc == doc) {
             v.selection = Selection::point(ByteOff(0));
             v.scroll = ScrollPos::default();
@@ -262,27 +262,32 @@ impl EditorState {
         self.ui.overlay.is_some() || self.find.search_bar.is_some()
     }
 
-    /// 自動の切り替えで表示を `from` から `to` へ移したとき、ほかの待っている読込の切り替え元を `to` に書き換える
-    /// (03 §9.8 の `file.open` の行の「切り替え元の書き換え」)。続けて開いた読込が、利用者の見ていない元の文書を基準に
-    /// 表示を奪わないため。`to` 自身の読込の切り替え元 (失敗で戻す先) は書き換えない。
-    fn retarget_open_sources(&mut self, from: DocumentId, to: DocumentId) {
+    /// 自動の切り替えでペインの表示を `from` から `to` へ移したとき、同じペインを待つほかの読込の切り替え元を `to` に
+    /// 書き換える (03 §9.8 の `file.open` の行の「切り替え元の書き換え」、§9.9 の PANE-8 (b))。続けて開いた読込が、利用者の
+    /// 見ていない元の文書を基準に表示を奪わないため。`to` 自身の読込の切り替え元 (失敗で戻す先) は書き換えない。
+    fn retarget_open_sources(&mut self, from: OpenFrom, to: DocumentId) {
         for p in self.io.pending.values_mut() {
-            if let Pending::Open { doc, replace, .. } = p
+            if let Pending::Open {
+                doc,
+                replace: Some(r),
+                ..
+            } = p
                 && *doc != to
-                && *replace == Some(from)
+                && *r == from
             {
-                *replace = Some(to);
+                r.doc = to;
             }
         }
         for (d, e) in &mut self.io.open_switch {
             if *d != to && e.from == from {
-                e.from = to;
+                e.from.doc = to;
             }
         }
     }
 
-    /// 文書 `doc` の読込の表示の切り替えを試みる (03 §9.2.1 の「表示の切り替え」)。切り替え元をまだ表示していれば
-    /// 切り替える。オーバーレイ・検索バーが開いている間は保留する。先行表示で切り替えた後の完了では、表示から外した
+    /// 文書 `doc` の読込の表示の切り替えを試みる (03 §9.2.1 の「表示の切り替え」)。開いた時点のペインが残っていて、
+    /// 切り替え元をまだ表示していれば、そのペインを切り替える (フォーカスの無いペインでも、フォーカスは移さない。03 §9.9
+    /// の PANE-8 (b))。オーバーレイ・検索バーが開いている間は保留する。先行表示で切り替えた後の完了では、表示から外した
     /// 何も入力していない無題のバッファを (まだそのままで、表示していなければ) 閉じる。
     pub(crate) fn try_open_switch(&mut self, doc: DocumentId) {
         let Some(sw) = self.io.open_switch.get(&doc).copied() else {
@@ -305,15 +310,15 @@ impl EditorState {
             }
             self.io.open_switch.remove(&doc);
             if pristine_from
-                && self.panes_showing(sw.from).is_empty()
-                && self.is_pristine_untitled(sw.from)
+                && self.panes_showing(sw.from.doc).is_empty()
+                && self.is_pristine_untitled(sw.from.doc)
             {
-                self.close_document(sw.from);
+                self.close_document(sw.from.doc);
             }
             return;
         }
-        if self.active_document() != Some(sw.from) {
-            // 利用者が別の文書へ切り替えた: 切り替えない (完了の前なら、完了の時点でもう一度見る)
+        if self.pane_document(sw.from.pane) != Some(sw.from.doc) {
+            // 利用者がそのペインを別の文書へ切り替えた・ペインを閉じた: 切り替えない (完了の前なら、完了の時点でもう一度見る)
             if sw.complete {
                 self.io.open_switch.remove(&doc);
             } else if let Some(e) = self.io.open_switch.get_mut(&doc) {
@@ -329,15 +334,15 @@ impl EditorState {
             return;
         }
         // 置き換えるのは、その無題の文書をフォーカスのペインだけが表示しているときに限る (03 §9.9 の PANE-8 (c))
-        let pristine = self.is_pristine_untitled(sw.from) && self.panes_showing(sw.from).len() <= 1;
+        let pristine =
+            self.is_pristine_untitled(sw.from.doc) && self.panes_showing(sw.from.doc).len() <= 1;
         self.retarget_open_sources(sw.from, doc);
         if sw.complete {
             self.io.open_switch.remove(&doc);
-            if pristine {
+            self.show_document_in(sw.from.pane, doc);
+            if pristine && self.panes_showing(sw.from.doc).is_empty() {
                 // 何も失わない置き換え: 無題のバッファを開いたファイルで置き換える (一覧の番号を増やさない)
-                self.show_view(sw.view, Some(sw.from));
-            } else {
-                self.activate_document(doc);
+                self.close_document(sw.from.doc);
             }
         } else {
             // 先行表示の時点: 無題のバッファは閉じずに表示から外すだけ (完了・失敗で決める)
@@ -345,7 +350,7 @@ impl EditorState {
                 e.deferred = false;
                 e.switched = Some(pristine);
             }
-            self.activate_document(doc);
+            self.show_document_in(sw.from.pane, doc);
         }
     }
 
@@ -355,7 +360,7 @@ impl EditorState {
         &mut self,
         doc: DocumentId,
         view: ViewId,
-        replace: Option<DocumentId>,
+        replace: Option<OpenFrom>,
     ) {
         if let Some(e) = self.io.open_switch.get_mut(&doc) {
             e.complete = true;
@@ -377,7 +382,7 @@ impl EditorState {
     /// 読込の失敗・取消し・確認での中止で、表示中の読込の文書を閉じて開く前の文書へ表示を戻すのを、オーバーレイ・
     /// 検索バーが閉じるまで保留する (03 §9.2.1 の「失敗・取消し・閉じる」)。先頭はここで捨て (本文の無い `Failed`
     /// にする)、閉じるのは表示を移すときに行う。
-    pub(crate) fn hold_failed_open(&mut self, doc: DocumentId, replace: Option<DocumentId>) {
+    pub(crate) fn hold_failed_open(&mut self, doc: DocumentId, replace: Option<OpenFrom>) {
         let Some(old) = self.docs.documents.get(&doc) else {
             return;
         };
@@ -398,10 +403,9 @@ impl EditorState {
             return;
         }
         self.flush_stdin_continuations();
-        let holds: Vec<(DocumentId, Option<DocumentId>)> =
-            std::mem::take(&mut self.io.failed_holds)
-                .into_iter()
-                .collect();
+        let holds: Vec<(DocumentId, Option<OpenFrom>)> = std::mem::take(&mut self.io.failed_holds)
+            .into_iter()
+            .collect();
         for (doc, replace) in holds {
             if self.docs.documents.contains_key(&doc) {
                 self.leave_failed_open(doc, replace);

@@ -41,17 +41,28 @@ impl EditorState {
             self.term.mouse_drag = None;
             return;
         }
+        // 押す・ホイールは、指す View を表示中のペインに対して行う。どのペインの表示中の View でもなければ (Frame を
+        // 作った後にペインが別の文書へ切り替わった・閉じた) 捨てる (03 §9.9 の PANE-7 (g))。ドラッグと Up は押した
+        // ペインの View のまま (PANE-7 (b))
+        let shown = self.pane_of_shown_view(m.at.view);
         match m.kind {
             // v0.2 は修飾なしと Shift だけ (Ctrl / Alt 付きは後の版)
             MouseKind::Down(MouseButton::Left)
                 if m.mods.is_empty() || m.mods == Modifiers::SHIFT =>
             {
+                let Some(at) = shown else {
+                    self.term.mouse_drag = None;
+                    return;
+                };
+                // フォーカスの無いペインを押した: そのペインにフォーカスを移してから、同じクリックの処理をする (PANE-7 (a))
+                self.focus_pane(at);
                 self.mouse_down(m);
             }
             MouseKind::Drag(MouseButton::Left) => self.mouse_move(m.at),
             MouseKind::Up(MouseButton::Left) => self.term.mouse_drag = None,
-            MouseKind::WheelUp => self.mouse_wheel(m, -1),
-            MouseKind::WheelDown => self.mouse_wheel(m, 1),
+            // ホイールはポインタの下のペインをスクロールし、フォーカスは移さない (PANE-7 (c))
+            MouseKind::WheelUp if shown.is_some() => self.mouse_wheel(m, -1),
+            MouseKind::WheelDown if shown.is_some() => self.mouse_wheel(m, 1),
             _ => {}
         }
     }

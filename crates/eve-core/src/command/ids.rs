@@ -56,6 +56,18 @@ pub const FILE_TOGGLE_READ_ONLY: &str = "file.toggle_read_only";
 pub const HELP_COMMANDS: &str = "help.commands";
 pub const HELP_KEYS: &str = "help.keys";
 pub const HELP_OPEN: &str = "help.open";
+pub const PANE_CLOSE: &str = "pane.close";
+pub const PANE_EQUALIZE: &str = "pane.equalize";
+pub const PANE_FOCUS_DOWN: &str = "pane.focus_down";
+pub const PANE_FOCUS_LEFT: &str = "pane.focus_left";
+pub const PANE_FOCUS_NEXT: &str = "pane.focus_next";
+pub const PANE_FOCUS_PREV: &str = "pane.focus_prev";
+pub const PANE_FOCUS_RIGHT: &str = "pane.focus_right";
+pub const PANE_FOCUS_UP: &str = "pane.focus_up";
+pub const PANE_GROW: &str = "pane.grow";
+pub const PANE_SHRINK: &str = "pane.shrink";
+pub const PANE_SPLIT_DOWN: &str = "pane.split_down";
+pub const PANE_SPLIT_RIGHT: &str = "pane.split_right";
 pub const SEARCH_NEXT: &str = "search.next";
 pub const SEARCH_OPEN: &str = "search.open";
 pub const SEARCH_PREV: &str = "search.prev";
@@ -96,7 +108,7 @@ pub const VIEW_TOGGLE_WRAP: &str = "view.toggle_wrap";
 
 /// 組込みのコマンドの ID のすべて (ID の順。登録と一致することを確かめる試験に使う)。
 #[cfg(test)]
-pub const ALL: [&str; 91] = [
+pub const ALL: [&str; 103] = [
     APP_QUIT,
     APP_QUIT_WITH_ERROR,
     APP_SAVE_AND_QUIT,
@@ -151,6 +163,18 @@ pub const ALL: [&str; 91] = [
     HELP_COMMANDS,
     HELP_KEYS,
     HELP_OPEN,
+    PANE_CLOSE,
+    PANE_EQUALIZE,
+    PANE_FOCUS_DOWN,
+    PANE_FOCUS_LEFT,
+    PANE_FOCUS_NEXT,
+    PANE_FOCUS_PREV,
+    PANE_FOCUS_RIGHT,
+    PANE_FOCUS_UP,
+    PANE_GROW,
+    PANE_SHRINK,
+    PANE_SPLIT_DOWN,
+    PANE_SPLIT_RIGHT,
     SEARCH_NEXT,
     SEARCH_OPEN,
     SEARCH_PREV,

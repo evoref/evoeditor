@@ -405,6 +405,7 @@ impl EditorState {
                 "doc.has_path" => Some("no_path"),
                 "doc.dirty" => Some("no_changes"),
                 "selection.empty" => Some("no_selection"),
+                "pane.split" => Some("single_pane"),
                 _ => None,
             })
             .unwrap_or("unavailable");
