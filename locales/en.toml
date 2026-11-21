@@ -565,6 +565,30 @@ text = "{item} is the first key of a default key sequence (such as Ctrl+K)"
 hint = "The default binding was kept. Choose another key"
 text = "The binding {item} would make quit, the command palette or cancel unreachable"
 
+[msg.config.keymap_user_chord_prefix]
+hint = "The key sequence wins. This binding is ignored"
+text = "{item} is the first key of the key sequence {value}"
+
+[msg.config.keymap_chord_shadows_default]
+hint = "The key sequence wins. To keep the default key, start the sequence with another key"
+text = "{item} makes the default binding {value} unusable"
+
+[msg.config.keymap_chord_prefix_partly]
+hint = "Where that context applies, the key sequence wins and this binding is ignored. Elsewhere this binding is used"
+text = "{item} is the first key of the key sequence {value}"
+
+[msg.config.keymap_chord_shadows_default_partly]
+hint = "Where the context of {item} applies, the key sequence wins. Elsewhere the default key still works"
+text = "{item} makes the default binding {value} unusable in some places"
+
+[msg.config.keymap_duplicate_key]
+hint = "The binding written later is used"
+text = "{item} is the same key as {value}"
+
+[msg.config.keymap_bad_args]
+hint = "See the config spec (07 §11.6) for argument names and types. This binding is ignored"
+text = "The argument {value} in the args of {item} does not match the command"
+
 [msg.config.locale_accelerator]
 hint = "Use the same letters in the same order"
 text = "The bracketed letters like [S] in {item} differ from the built-in text"
@@ -1340,6 +1364,7 @@ quit = "Quit with {key:app.quit}"
 palette = "Find and run any command from the command palette with {key:ui.palette_open}"
 
 [ui.help.keys]
+disabled = "Keys marked ! cannot be used because a key sequence in your keymap starts with them (see Show Settings Diagnostics)"
 note = "Keys written like Ctrl+K S are pressed one after another. Several keys for one command are separated by commas"
 unreachable = "Keys marked * do not reach the editor in this terminal (use the command palette or another key)"
 

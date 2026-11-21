@@ -53,8 +53,9 @@
 8:1	Warning	keys.editor.f5	"doc.modified &&"
   keys.editor.f5 の when 句が正しくありません
   書式は設定の仕様 (07 §7.3) を見てください。この割当は使いません
-12:1	Info	keys.editor.f6	""
-  keys.editor.f6 はこのバージョンでは未対応のため無視しました
+12:1	Warning	keys.editor.f6	"a"
+  keys.editor.f6 の args の a がコマンドの引数に合いません
+  引数の名前と型は設定の仕様 (07 §11.6) を見てください。この割当は使いません
 4:1	Warning	keys.nowhere.ctrl+s	"nowhere"
   keys.nowhere.ctrl+s のコンテキスト名は使えません
   使える名前: global, editor, search, prompt, palette, list, dialog, help。この割当は使いません

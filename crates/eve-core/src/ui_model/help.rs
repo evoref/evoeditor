@@ -21,6 +21,10 @@ use crate::ui_model::overlay::Overlay;
 /// ヘルプのキー一覧で、この端末で届かない割当の後ろに付ける印 (04 §8.6)。
 const UNREACHABLE_MARK: &str = "*";
 
+/// ヘルプのキー一覧で、ユーザーのチョードが先頭に使うため使えない割当 (プレフィックスの衝突、07 §7.6 / §7.7) の後ろに
+/// 付ける印 (04 §8.6)。ASCII だけの端末でも描ける字にする。
+const DISABLED_MARK: &str = "!";
+
 /// 「検索の書き方」の節の表 (書き方, 説明の文言キー)。書き方は正規表現の構文で、言語に依らないのでここに書く
 /// (04 §8.6、03 §12.3.1 の表)。行をまたぐ書き方・またがない書き方・改行の続き・文書の端の順。
 const SEARCH_SYNTAX: [(&str, &str); 6] = [
@@ -89,7 +93,7 @@ impl EditorState {
             render(keys::UI_HELP_KEYS_NOTE),
         ));
         let note_at = lines.len();
-        let mut any_unreachable = false;
+        let (mut any_unreachable, mut any_disabled) = (false, false);
         let mut last_ns = "";
         for id in self.palette_command_ids() {
             let Some(seqs) = self.keys.key_all.get(id).filter(|s| !s.is_empty()) else {
@@ -104,16 +108,21 @@ impl EditorState {
                     self.category_label(ns),
                 ));
             }
-            // この端末で届かない割当には印を付ける (04 §8.6 / §7.8)
+            // この端末で届かない割当と、ユーザーのチョードに負けて使えない割当には印を付ける (04 §8.6 / §7.8、07 §7.7)
             let keys = seqs
                 .iter()
-                .map(|(s, ok)| {
+                .map(|(s, state)| {
                     let k = eve_view::key_notation(s, self.term.caps.ascii_only);
-                    if *ok {
-                        k
-                    } else {
-                        any_unreachable = true;
-                        format!("{k}{UNREACHABLE_MARK}")
+                    match state {
+                        KeyState::Reachable => k,
+                        KeyState::Unreachable => {
+                            any_unreachable = true;
+                            format!("{k}{UNREACHABLE_MARK}")
+                        }
+                        KeyState::Disabled => {
+                            any_disabled = true;
+                            format!("{k}{DISABLED_MARK}")
+                        }
                     }
                 })
                 .collect::<Vec<_>>()
@@ -124,15 +133,12 @@ impl EditorState {
                 self.command_title_of(id),
             ));
         }
-        if any_unreachable {
-            lines.insert(
-                note_at,
-                line(
-                    HelpLineKind::Body,
-                    None,
-                    render(keys::UI_HELP_KEYS_UNREACHABLE),
-                ),
-            );
+        let notes = [
+            (any_unreachable, keys::UI_HELP_KEYS_UNREACHABLE),
+            (any_disabled, keys::UI_HELP_KEYS_DISABLED),
+        ];
+        for (i, (_, key)) in notes.iter().filter(|(on, _)| *on).enumerate() {
+            lines.insert(note_at + i, line(HelpLineKind::Body, None, render(key)));
         }
         lines.push(line(HelpLineKind::Body, None, String::new()));
 
@@ -436,17 +442,28 @@ pub(crate) fn register(r: &mut CommandRegistry) {
     }
 }
 
+/// ヘルプのキー一覧での割当の状態 (04 §8.6)。並びは「使える」側が先 (同じキー列をまとめるときに強い方を採る)。
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) enum KeyState {
+    /// この端末で届く。
+    Reachable,
+    /// この端末では届かない (拡張キーが要る・横取りされる、04 §7.8)。
+    Unreachable,
+    /// ユーザーのチョードが先頭に使うため、使えない (プレフィックスの衝突、07 §7.6 / §7.7)。
+    Disabled,
+}
+
 /// すべての割当をコマンドごとに集める (ヘルプのキー一覧用)。層の順で、同じ割当は 1 つにまとめる。
-/// 割当をコマンドごとに集める。値は (キー列, この端末で届くか)。同じキー列が複数あれば、どれかが届けば届く。
+/// 値は (キー列, 状態)。同じキー列が複数あれば、使える側の状態を採る (どれかが届けば届く)。
 pub(crate) fn collect_all_bindings(
-    bindings: impl Iterator<Item = (String, Vec<KeyStroke>, bool)>,
-) -> BTreeMap<String, Vec<(Vec<KeyStroke>, bool)>> {
-    let mut out: BTreeMap<String, Vec<(Vec<KeyStroke>, bool)>> = BTreeMap::new();
-    for (cmd, seq, ok) in bindings {
+    bindings: impl Iterator<Item = (String, Vec<KeyStroke>, KeyState)>,
+) -> BTreeMap<String, Vec<(Vec<KeyStroke>, KeyState)>> {
+    let mut out: BTreeMap<String, Vec<(Vec<KeyStroke>, KeyState)>> = BTreeMap::new();
+    for (cmd, seq, state) in bindings {
         let e = out.entry(cmd).or_default();
         match e.iter_mut().find(|(s, _)| *s == seq) {
-            Some(x) => x.1 |= ok,
-            None => e.push((seq, ok)),
+            Some(x) => x.1 = x.1.min(state),
+            None => e.push((seq, state)),
         }
     }
     out

@@ -35,7 +35,8 @@ pub use crate::command::{
 };
 pub use crate::io::snapshot::DocSnapshot;
 pub use crate::keymap::{
-    Binding, KeyParseError, Keymap, Layer, Resolution, format_stroke, parse_sequence, parse_stroke,
+    Binding, DisabledBinding, KeyParseError, Keymap, Layer, Resolution, format_stroke,
+    parse_sequence, parse_stroke,
 };
 pub use crate::layout::{Affinity, WrapMode, WrapSettings};
 pub use crate::search::search_state::{SearchCount, SearchStep};
@@ -45,6 +46,7 @@ use crate::command::ids;
 use crate::document::Document;
 use crate::jobs::Ports;
 use crate::time::Tick;
+use crate::ui_model::help::KeyState;
 
 /// eve-core の公開ファサード (02 §4.1)。Host は入力・ジョブの結果・時刻をこれに渡し、Frame・Effect・EditorEvent を受け取る。
 /// メインスレッドで使い、I/O はしない (ADR-0020。I/O はジョブとして `Ports.jobs` に投入する)。
@@ -106,20 +108,37 @@ impl Editor {
     pub(crate) fn refresh_key_labels(&mut self) {
         let caps = self.state.term.caps.clone();
         let ok = |b: &crate::keymap::Binding| crate::keymap::reachable(b, &caps);
-        let seqs = self
-            .keymap
-            .first_bindings_where(&Self::EDITOR_CONTEXTS, &ok);
+        let seqs = self.keymap.first_bindings_where(Self::EDITOR_CONTEXTS, &ok);
         let labels = seqs
             .iter()
             .map(|(k, v)| (k.clone(), eve_view::key_notation(v, caps.ascii_only)))
             .collect();
         self.state.set_key_bindings(labels, seqs);
+        // ヘルプのキー一覧は、プレフィックスの衝突で使えなくなった割当も印を付けて出す (07 §7.7)
+        let state_of = |b: &crate::keymap::Binding| {
+            if ok(b) {
+                KeyState::Reachable
+            } else {
+                KeyState::Unreachable
+            }
+        };
+        let listed = self.keymap.all_bindings().into_iter().map(|b| {
+            (
+                b.command.as_str().to_owned(),
+                b.sequence.clone(),
+                state_of(b),
+            )
+        });
+        let disabled = self.keymap.disabled_bindings().into_iter().map(|d| {
+            (
+                d.binding.command.as_str().to_owned(),
+                d.binding.sequence.clone(),
+                KeyState::Disabled,
+            )
+        });
         self.state
             .set_all_key_bindings(crate::ui_model::help::collect_all_bindings(
-                self.keymap
-                    .all_bindings()
-                    .into_iter()
-                    .map(|b| (b.command.as_str().to_owned(), b.sequence.clone(), ok(b))),
+                listed.chain(disabled),
             ));
     }
 
@@ -359,20 +378,23 @@ impl Editor {
     }
 
     /// 編集面にフォーカスがあるときのコンテキストの参照順 (07 §7.1)。
-    const EDITOR_CONTEXTS: [&'static str; 2] = ["editor", "global"];
+    const EDITOR_CONTEXTS: &'static [&'static str] = crate::keymap::FOCUS_EDITOR;
 
     /// フォーカスの場所ごとのコンテキストの参照順 (07 §7.1)。確認ダイアログはモーダルで `global` を参照しない。
     fn contexts_for(overlay: &str) -> &'static [&'static str] {
+        use crate::keymap::{
+            FOCUS_DIALOG, FOCUS_HELP, FOCUS_LIST, FOCUS_PALETTE, FOCUS_PROMPT, FOCUS_SEARCH,
+        };
         match overlay {
-            "dialog" => &["dialog"],
-            "prompt" => &["prompt", "global"],
-            "palette" => &["palette", "list", "prompt", "global"],
+            "dialog" => FOCUS_DIALOG,
+            "prompt" => FOCUS_PROMPT,
+            "palette" => FOCUS_PALETTE,
             // ヘルプ画面: 移動と閉じるだけ (入力欄は無い)
-            "help" => &["help", "global"],
+            "help" => FOCUS_HELP,
             // バッファ一覧・設定の診断の一覧: 一覧の移動と一覧内の `buffer.close` は `list`。パレットの割当 (`palette`) は見ない
-            "buffer_list" | "config_diagnostics" => &["list", "prompt", "global"],
-            "search" => &["search", "prompt", "global"],
-            _ => &Self::EDITOR_CONTEXTS,
+            "buffer_list" | "config_diagnostics" => FOCUS_LIST,
+            "search" => FOCUS_SEARCH,
+            _ => Self::EDITOR_CONTEXTS,
         }
     }
 
@@ -408,25 +430,24 @@ impl Editor {
     }
 
     fn on_text(&mut self, s: &str) {
+        // チョードの保留中は、確認ダイアログでもアクセラレータより先に保留の続きとして照合する (02 §7.2 K1 / K2。
+        // 2 打目の文字で選択肢が選ばれないように): 先頭の書記素を 2 打目として照合し、残りは捨てる。大文字は
+        // 設定のキーと同じく `shift+小文字` にする (`char_stroke`)
+        if !self.keymap.pending().is_empty() {
+            let t = eve_text::Text::from(s);
+            let end = eve_text::next_grapheme_boundary(&t, eve_text::ByteOff(0)).0;
+            let first = s.get(..end).filter(|g| g.chars().count() == 1);
+            match first.and_then(|g| g.chars().next()) {
+                Some(c) => self.on_key(crate::keymap::char_stroke(c)),
+                None => self.keymap.clear_pending(),
+            }
+            return;
+        }
         if self.state.is_dialog() {
             // 確認ダイアログ: 複数書記素の Text はすべて捨て、1 書記素ならアクセラレータとして照合する (K1)
             let mut it = s.chars();
             if let (Some(c), None) = (it.next(), it.next()) {
                 self.state.dialog_accelerator(c);
-            }
-            return;
-        }
-        if !self.keymap.pending().is_empty() {
-            // チョードの保留中: 先頭の書記素を 2 打目として照合し、残りは捨てる (K1)
-            let t = eve_text::Text::from(s);
-            let end = eve_text::next_grapheme_boundary(&t, eve_text::ByteOff(0)).0;
-            let first = s.get(..end).filter(|g| g.chars().count() == 1);
-            match first.and_then(|g| g.chars().next()) {
-                Some(c) => self.on_key(KeyStroke {
-                    mods: Modifiers::NONE,
-                    key: KeyCode::Char(c),
-                }),
-                None => self.keymap.clear_pending(),
             }
             return;
         }

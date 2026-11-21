@@ -296,3 +296,41 @@ fn 端末が無ければ標準入力を読まずに終了コード_5_で終わ�
     assert!(!err.contains("Waiting for standard input"), "{err}");
     drop(writer);
 }
+
+// verifies: AC-FR-608-1
+#[test]
+fn check_config_はキーマップの衝突と合わない割当を出す() {
+    let d = dir("keymap");
+    std::fs::write(
+        d.join("keymap.toml"),
+        concat!(
+            "[keys.editor]\n",
+            "\"ctrl+s x\" = \"edit.duplicate_line\"\n",
+            "\"f6\" = \"no.such_command\"\n",
+            "\"f7\" = { command = \"cursor.goto_line\", args = { row = 1 } }\n",
+        ),
+    )
+    .unwrap();
+    let (code, out) = run(&d, &["--check-config"]);
+    assert_eq!(code, 0, "警告だけなら 0 (起動は止まらない): {out}");
+    for want in [
+        "keymap.toml:2:",
+        "Ctrl+S = file.save",
+        "keymap.toml:3:",
+        "no.such_command",
+        "keymap.toml:4:",
+        "row",
+    ] {
+        assert!(out.contains(want), "{want}: {out}");
+    }
+    // 脱出キーに届かなくなる割当はエラー (終了コード 3)
+    std::fs::write(
+        d.join("keymap.toml"),
+        "[keys.global]\n\"ctrl+q x\" = \"edit.delete_line\"\n",
+    )
+    .unwrap();
+    let (code, out) = run(&d, &["--check-config"]);
+    assert_eq!(code, 3, "{out}");
+    assert!(out.contains("keymap.toml:2:"), "{out}");
+    let _ = std::fs::remove_dir_all(&d);
+}

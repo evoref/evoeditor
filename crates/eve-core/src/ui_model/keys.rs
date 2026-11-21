@@ -209,6 +209,7 @@ pub(crate) const UI_HELP_FOOTER: &str = "ui.help.footer";
 pub(crate) const UI_HELP_INTRO_PALETTE: &str = "ui.help.intro.palette";
 pub(crate) const UI_HELP_INTRO_QUIT: &str = "ui.help.intro.quit";
 pub(crate) const UI_HELP_INTRO_SAVE: &str = "ui.help.intro.save";
+pub(crate) const UI_HELP_KEYS_DISABLED: &str = "ui.help.keys.disabled";
 pub(crate) const UI_HELP_KEYS_NOTE: &str = "ui.help.keys.note";
 pub(crate) const UI_HELP_KEYS_UNREACHABLE: &str = "ui.help.keys.unreachable";
 pub(crate) const UI_HELP_SECTION_COMMANDS: &str = "ui.help.section.commands";
@@ -287,7 +288,7 @@ pub(crate) const UI_TOO_SMALL: &str = "ui.too_small";
 
 /// すべての定数 (キーの順。試験に使う)。
 #[cfg(test)]
-const ALL: [&str; 264] = [
+const ALL: [&str; 265] = [
     HINT_UI_CANCEL,
     INFO_APP_RELEASE_SUMMARY,
     INFO_APP_UPDATED,
@@ -481,6 +482,7 @@ const ALL: [&str; 264] = [
     UI_HELP_INTRO_PALETTE,
     UI_HELP_INTRO_QUIT,
     UI_HELP_INTRO_SAVE,
+    UI_HELP_KEYS_DISABLED,
     UI_HELP_KEYS_NOTE,
     UI_HELP_KEYS_UNREACHABLE,
     UI_HELP_SECTION_COMMANDS,

@@ -1,7 +1,7 @@
 //! ユーザーのキーマップファイル (`keymap.toml`) の読込 (docs/07 §7.1、01 FR-604)。
 //!
 //! 書式だけを解く: `[keys.<コンテキスト>]` の表の「キー = 値」を、書かれた順の `KeymapEntry` の列にする。
-//! キー名・コマンド・`when` の検証と層への組み込みは core が行う (コマンドの一覧は core が持つため)。
+//! キー名・コマンド・`when`・`args` の検証と層への組み込みは core が行う (コマンドの一覧は core が持つため)。
 //! ファイルが無い・壊れているときも `KeymapFile` は返り、問題は `Diagnostic` の列として返す。
 
 use toml::Spanned;
@@ -12,17 +12,30 @@ use crate::{DiagKind, Diagnostic, Severity};
 /// 1 件の割当の動作。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum KeyAction {
-    /// コマンドを実行する。`has_args` は `args` が書かれていた (v0.2 は未対応)。
+    /// コマンドを実行する。
     Command {
         /// コマンド ID (core が一覧と照合する)。
         command: String,
         /// `when` 句の本文。書かれていなければ `None` (読み方は core、07 §7.3)。
         when: Option<String>,
-        /// `args` が書かれていたか。
-        has_args: bool,
+        /// `args` の表 (書かれた順)。書かれていなければ `None`。引数の名前と型の照合は core が行う (07 §7.6)。
+        args: Option<Vec<(String, KeyArgValue)>>,
     },
     /// `"none"`: 下位の層の割当をこの層で遮蔽する。
     None,
+}
+
+/// 割当の `args` の 1 つの値 (07 §7.1)。コマンドの引数の型 (07 §11.2) に当たる値だけを区別し、それ以外は型の名前だけを残す。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum KeyArgValue {
+    /// 整数。
+    Int(i64),
+    /// 文字列。
+    Str(String),
+    /// 真偽値。
+    Bool(bool),
+    /// コマンドの引数にならない型の値 (浮動小数点数・配列・表など)。中身は TOML の型の名前 (`float` など)。
+    Other(&'static str),
 }
 
 /// `[keys.<context>]` の 1 行。配列値は書かれた順に複数の `KeymapEntry` になる。
@@ -58,6 +71,17 @@ fn pos(text: &str, offset: usize) -> (u32, u32) {
         u32::try_from(line).unwrap_or(u32::MAX),
         u32::try_from(col).unwrap_or(u32::MAX),
     )
+}
+
+/// `args` の 1 つの値。`i64` に収まらない整数は、引数にならない値として型の名前だけを残す。
+fn arg_value(v: &DeValue<'_>) -> KeyArgValue {
+    match v {
+        DeValue::String(s) => KeyArgValue::Str(s.to_string()),
+        DeValue::Boolean(b) => KeyArgValue::Bool(*b),
+        DeValue::Integer(i) => i64::from_str_radix(&i.as_str().replace('_', ""), i.radix())
+            .map_or(KeyArgValue::Other("integer"), KeyArgValue::Int),
+        other => KeyArgValue::Other(other.type_str()),
+    }
 }
 
 struct Cx<'a> {
@@ -112,7 +136,7 @@ impl Cx<'_> {
             DeValue::String(s) => KeyAction::Command {
                 command: s.to_string(),
                 when: None,
-                has_args: false,
+                args: None,
             },
             DeValue::Table(t) => {
                 let str_of = |name: &str| match t.get(name).map(|x| x.get_ref()) {
@@ -123,10 +147,26 @@ impl Cx<'_> {
                     self.mismatch(&format!("{full}.command"), v, "string");
                     return;
                 };
+                let args = match t.get("args") {
+                    None => None,
+                    Some(a) => match a.get_ref() {
+                        DeValue::Table(items) => Some(
+                            items
+                                .iter()
+                                .map(|(k, x)| (k.get_ref().to_string(), arg_value(x.get_ref())))
+                                .collect(),
+                        ),
+                        _ => {
+                            // `args` が表でない割当は使わない (07 §7.6 の「合わない args」)
+                            self.mismatch(&format!("{full}.args"), a, "table");
+                            return;
+                        }
+                    },
+                };
                 KeyAction::Command {
                     command,
                     when: str_of("when"),
-                    has_args: t.contains_key("args"),
+                    args,
                 }
             }
             _ => {
@@ -237,7 +277,7 @@ mod tests {
             KeyAction::Command {
                 command: "a.b".into(),
                 when: Some("doc.modified".into()),
-                has_args: false
+                args: None
             }
         );
         assert_eq!(f5[1].context, "editor");
@@ -277,12 +317,43 @@ mod tests {
     }
 
     #[test]
-    fn args_は読み取って有りとだけ覚える() {
-        let f =
-            load_keymap_str("[keys.editor]\n\"f5\" = { command = \"x.y\", args = { a = 1 } }\n");
+    fn args_は名前と値を書かれた順に読む() {
+        let f = load_keymap_str(
+            "[keys.editor]\n\"f5\" = { command = \"x.y\", args = { a = 1, b = \"s\", c = true, d = 1.5, e = 0x10 } }\n",
+        );
+        assert!(f.diagnostics.is_empty(), "{:?}", f.diagnostics);
+        let KeyAction::Command {
+            args: Some(args), ..
+        } = &f.entries[0].action
+        else {
+            panic!("{:?}", f.entries[0].action)
+        };
+        assert_eq!(
+            args,
+            &[
+                ("a".to_owned(), KeyArgValue::Int(1)),
+                ("b".to_owned(), KeyArgValue::Str("s".to_owned())),
+                ("c".to_owned(), KeyArgValue::Bool(true)),
+                ("d".to_owned(), KeyArgValue::Other("float")),
+                ("e".to_owned(), KeyArgValue::Int(16)),
+            ]
+        );
+    }
+
+    #[test]
+    fn 表でない_args_の割当は型違いの警告にして使わない() {
+        let f = load_keymap_str(
+            "[keys.editor]\n\"f5\" = { command = \"x.y\", args = 1 }\n\"f6\" = \"x.y\"\n",
+        );
+        assert_eq!(f.entries.len(), 1, "{:?}", f.entries);
+        assert_eq!(f.entries[0].keys, "f6");
+        assert_eq!(f.diagnostics[0].key, "keys.editor.f5.args");
         assert!(matches!(
-            f.entries[0].action,
-            KeyAction::Command { has_args: true, .. }
+            f.diagnostics[0].kind,
+            DiagKind::TypeMismatch {
+                expected: "table",
+                ..
+            }
         ));
     }
 }

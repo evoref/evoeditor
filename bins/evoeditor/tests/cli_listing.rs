@@ -204,3 +204,71 @@ fn json_は出力のオプションの修飾だけ() {
     assert_eq!(code, 2, "--defaults は --dump-config の修飾だけ");
     let _ = std::fs::remove_dir_all(&d);
 }
+
+// verifies: AC-FR-604-3
+#[test]
+fn dump_keymap_にユーザーのチョードと無効にした単体の割当と引数が出る() {
+    let d = dir("chords");
+    std::fs::write(
+        d.join("keymap.toml"),
+        concat!(
+            "[keys.editor]\n",
+            "\"ctrl+s x\" = \"edit.duplicate_line\"\n",
+            "\"ctrl+j i\" = { command = \"edit.insert_text\", args = { text = \"hi\" } }\n",
+        ),
+    )
+    .unwrap();
+    let v = json(&d, &["--dump-keymap", "--json"]);
+    let bindings = v["bindings"].as_array().unwrap();
+    let find = |key: &str| -> Vec<&Value> {
+        bindings
+            .iter()
+            .filter(|b| b["context"] == "editor" && b["key"] == key)
+            .collect()
+    };
+    let chord = find("ctrl+s x");
+    assert_eq!(chord.len(), 1, "{chord:?}");
+    assert_eq!(
+        (str_of(chord[0], "command"), str_of(chord[0], "layer")),
+        ("edit.duplicate_line", "user")
+    );
+    assert_eq!(str_of(chord[0], "disabled_by"), "");
+    let save = find("ctrl+s");
+    assert_eq!(save.len(), 1, "{save:?}");
+    assert_eq!(
+        (
+            str_of(save[0], "command"),
+            str_of(save[0], "layer"),
+            str_of(save[0], "disabled_by")
+        ),
+        ("file.save", "default", "ctrl+s x"),
+        "無効にした既定の単体の割当と、無効にしたチョード"
+    );
+    let insert = find("ctrl+j i");
+    assert_eq!(insert[0]["args"]["text"], "hi", "{insert:?}");
+    assert!(bindings.iter().all(|b| b["args"].is_object()));
+
+    // JSON でなければ keymap.toml の書式。無効にした割当は注釈の行で、読み直しても割当にならない
+    let (code, out) = run(&d, &["--dump-keymap"]);
+    assert_eq!(code, 0);
+    assert!(
+        out.contains("\"ctrl+j i\" = { command = \"edit.insert_text\", args = { text = \"hi\" } }"),
+        "{out}"
+    );
+    assert!(
+        out.lines()
+            .any(|l| l.starts_with("# \"ctrl+s\" = \"file.save\"")
+                && l.ends_with("disabled_by \"ctrl+s x\"")),
+        "{out}"
+    );
+    let file = eve_config::load_keymap_str(&out);
+    assert!(file.diagnostics.is_empty(), "{:?}", file.diagnostics);
+    assert!(
+        !file
+            .entries
+            .iter()
+            .any(|e| e.context == "editor" && e.keys == "ctrl+s"),
+        "注釈の行は割当にならない"
+    );
+    let _ = std::fs::remove_dir_all(&d);
+}
