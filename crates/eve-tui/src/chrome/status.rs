@@ -45,6 +45,80 @@ pub(super) fn status_order(entries: &[StatusEntry]) -> Vec<usize> {
     order
 }
 
+/// 項目の並び。`left_only` なら全部を左群として扱う (ペインの見出し。種類と配置で描き分けない、02 §8.2)。
+fn status_entries(items: &[StatusItem], left_only: bool) -> Vec<StatusEntry> {
+    items
+        .iter()
+        .enumerate()
+        .map(|(i, it): (usize, &StatusItem)| {
+            let align = if left_only {
+                StatusAlign::Left
+            } else {
+                it.align
+            };
+            StatusEntry {
+                kind: it.kind,
+                align,
+                priority: it.priority,
+                spans: it.long.spans.clone(),
+                short: it.short.as_ref().map(|s| s.spans.clone()),
+                middle: it.long.cut == CutPolicy::Middle,
+                dropped: false,
+                rank: usize::from(align == StatusAlign::Right) * items.len() + i,
+            }
+        })
+        .collect()
+}
+
+/// 項目を幅 `cols` に収める (04 §8.7 の省略の (1) 短い形 → (2) 名前の中間の省略 → (3) 優先度 5 未満を落とす)。
+/// それでも入らなければ、呼び側が末尾を省略記号で切る。
+fn shrink(entries: &mut [StatusEntry], cols: u16, glyphs: &Glyphs) {
+    let order = status_order(entries);
+    // (1) 短い形にする
+    for &i in &order {
+        if status_total(entries) <= cols {
+            break;
+        }
+        if let Some(s) = entries[i].short.take() {
+            entries[i].spans = s;
+        }
+    }
+    // (2) 中間を省略できる項目 (ファイル名) を縮める
+    let total = status_total(entries);
+    if total > cols {
+        let excess = total - cols;
+        if let Some(e) = entries.iter_mut().find(|e| e.middle && !e.dropped) {
+            let want = text_width(&e.spans).saturating_sub(excess).max(5);
+            e.spans = truncate_middle(&e.spans, want, &glyphs.ellipsis);
+        }
+    }
+    // (3) 項目を落とす (優先度 5 は落とさない)
+    for &i in &order {
+        if status_total(entries) <= cols {
+            break;
+        }
+        if entries[i].priority < 5 {
+            entries[i].dropped = true;
+        }
+    }
+}
+
+/// ペインの見出しの項目を、ステータスバーの左群と同じ規則で幅 `cols` に収めた 1 行 (04 §3.4 (f)、§8.7)。項目の間は
+/// 1 セル。優先度 5 の項目だけでも入らなければ、末尾を省略記号で切る。各 `Span` のスタイルは項目のまま (呼び側が地の
+/// スタイルに重ねる)。
+pub(crate) fn fit_bar_items(items: &[StatusItem], cols: u16, glyphs: &Glyphs) -> Vec<Span> {
+    let mut entries = status_entries(items, true);
+    shrink(&mut entries, cols, glyphs);
+    let mut line: Vec<Span> = Vec::new();
+    for e in entries.iter().filter(|e| !e.dropped) {
+        if !line.is_empty() {
+            line.push(ascii_span(" ", eve_view::Style::DEFAULT));
+        }
+        line.extend(e.spans.iter().cloned());
+    }
+    truncate_end(&line, cols, &glyphs.ellipsis)
+}
+
 pub(super) fn render_status(
     w: &mut Writer<'_>,
     y: u16,
@@ -55,49 +129,8 @@ pub(super) fn render_status(
 ) {
     let base = theme.status_bar;
     fill(w, 0, y, cols, base);
-    let mut entries: Vec<StatusEntry> = model
-        .items
-        .iter()
-        .enumerate()
-        .map(|(i, it): (usize, &StatusItem)| StatusEntry {
-            kind: it.kind,
-            align: it.align,
-            priority: it.priority,
-            spans: it.long.spans.clone(),
-            short: it.short.as_ref().map(|s| s.spans.clone()),
-            middle: it.long.cut == CutPolicy::Middle,
-            dropped: false,
-            rank: usize::from(it.align == StatusAlign::Right) * model.items.len() + i,
-        })
-        .collect();
-    let order = status_order(&entries);
-    // (1) 短い形にする
-    for &i in &order {
-        if status_total(&entries) <= cols {
-            break;
-        }
-        if let Some(s) = entries[i].short.take() {
-            entries[i].spans = s;
-        }
-    }
-    // (2) 中間を省略できる項目 (ファイル名) を縮める
-    let total = status_total(&entries);
-    if total > cols {
-        let excess = total - cols;
-        if let Some(e) = entries.iter_mut().find(|e| e.middle && !e.dropped) {
-            let want = text_width(&e.spans).saturating_sub(excess).max(5);
-            e.spans = truncate_middle(&e.spans, want, &glyphs.ellipsis);
-        }
-    }
-    // (3) 項目を落とす (優先度 5 は落とさない)
-    for &i in &order {
-        if status_total(&entries) <= cols {
-            break;
-        }
-        if entries[i].priority < 5 {
-            entries[i].dropped = true;
-        }
-    }
+    let mut entries = status_entries(&model.items, false);
+    shrink(&mut entries, cols, glyphs);
     let live = |a: StatusAlign| -> Vec<&StatusEntry> {
         entries
             .iter()

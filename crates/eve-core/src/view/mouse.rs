@@ -4,7 +4,8 @@
 
 use eve_text::{ByteOff, LineIdx, Range, Selection, TextRead};
 use eve_view::{
-    Effect, MessageLevel, Modifiers, MouseAt, MouseButton, MouseEvent, MouseKind, ViewId,
+    ChromeMouseEvent, ChromeTarget, Effect, MessageLevel, Modifiers, MouseAt, MouseButton,
+    MouseEvent, MouseKind, ViewId,
 };
 
 use crate::command::ids;
@@ -64,6 +65,25 @@ impl EditorState {
             MouseKind::WheelUp if shown.is_some() => self.mouse_wheel(m, -1),
             MouseKind::WheelDown if shown.is_some() => self.mouse_wheel(m, 1),
             _ => {}
+        }
+    }
+
+    /// クローム (ペインの見出し) のマウス (03 §9.9 の PANE-7 (d) / (f))。見出しの左 `Down` でそのペインにフォーカスを移す
+    /// (カーソルは動かさない)。見出しは、指す View がそのペインの表に残っていれば同じペインを指す (Frame を作った後に
+    /// ペインが別の文書へ切り替わっても、フォーカスを移すだけなので)。ほかの操作 (中・右のボタン・ホイール) とオーバーレイ・
+    /// 検索バーを開いている間は何もしない (PANE-6 (c))。
+    pub(crate) fn on_chrome_mouse(&mut self, m: ChromeMouseEvent) {
+        if self.ui.overlay.is_some() || self.find.search_bar.is_some() {
+            return;
+        }
+        if let (MouseKind::Down(MouseButton::Left), ChromeTarget::PaneBar { view }) =
+            (m.kind, m.target)
+        {
+            self.term.mouse_drag = None;
+            // 消えた View・どのペインにも属さない View を指す入力は捨てる (PANE-7 (g))
+            if let Some(at) = self.pane_owning(view) {
+                self.focus_pane(at);
+            }
         }
     }
 

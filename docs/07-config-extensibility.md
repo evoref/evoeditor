@@ -881,12 +881,15 @@ diff.plus / diff.minus = { ... }                            # diff ファイル�
 | `ui.search_bar.toggle_on` | 検索バーの ON のトグル (`[Aa✓]` / `[.*✓]`、smart で実際に区別しているときの `[Aa~]`) | (ii) | `reverse` | `reverse` | `reverse` | `reverse` |
 | `ui.control_char` | 制御文字・不正バイトの可視記号 (NFR-503) | (i) | `#ffffff` / `#8a3ab9` (6.2) | `ansi.231` / `ansi.91` (7.9) | `bright_white` / `magenta` (4.7) | `reverse` |
 | `ui.whitespace` | 全角スペース・タブの可視化の記号 (FR-508 の v0.1 の範囲、03 §13.2)。背景は付けず、選択・検索一致・現在行の背景をそのまま使う | (iii) | `#808080` / `default` (白 3.9・黒 5.3) | `ansi.244` / `default` (同左) | `bright_black` / `default` | `dim` |
+| `ui.pane.border` | ペインの区切り (`│`) と、フォーカスの無いペインの見出しの残りの `─` の埋め (v0.5 の M30、FR-509。§8.8) | (iii) | `#808080` / `default` (白 3.9・黒 5.3) | `ansi.244` / `default` (同左) | `bright_black` / `default` | `none` (通常属性。`│` と `─` の記号で区別する、04 §12.4) |
+| `ui.pane.bar` | フォーカスの無いペインの見出しの名前と印 (v0.5。読む文字なので淡色にしない) | (ii) | `default` / `default` | `default` / `default` | `default` / `default` | `none` (`─` の埋めで区別する) |
+| `ui.pane.bar.active` | フォーカスのあるペインの見出し (v0.5。先頭に `▶`) | (i) | `#e8e8e8` / `#2f3340` (10.3) | `ansi.254` / `ansi.237` (9.0) | `reverse` | `reverse` |
 
 - 括弧内の数値はコントラスト比 (組は前景と背景、(iii) は白背景・黒背景に対する比)。16 の段の比は xterm 既定パレット (`black #000000`、`red #cd0000`、`yellow #cdcd00`、`blue #0000ee`、`magenta #cd00cd`、`cyan #00cdcd`、`white #e5e5e5`、`bright_black #7f7f7f`、`bright_yellow #ffff00`、`bright_white #ffffff` 等) で計算した。
 - `ui.cursor_line` を組にしたので、明るい背景の端末では現在行が暗い帯に明るい文字で出る (読める)。帯が強すぎると感じる利用者は `view.cursor_line_highlight = false` (v0.2 で公開) で消せる。mono の段は現在行を強調しない。16 の段を明示値にする版では、16 の段も強調しない (背景色の組が端末の配色とぶつかるため)。現在行の行番号の太字 (`ui.line_number.active`) はどの段でも残る。
-- `ui.status_bar` の 16 の段を明示値にする版では `reverse` にする (その段だけ形 (ii)。`bright_white` / `black` のような組は黒背景の端末で編集面と区別できないため。FR-513 AC-4)。`ui.cursor_line` の 16 の段の `none` も同じく形の例外 (上の箇条)。v0.1 の近似では、近似した前景と背景が同じ番号になったときに反転に置き換える規則 (04 §12.3) で区別を保つ。
-- 意味のあるロール (エラー・警告・情報・選択・検索一致・現在の一致・チョード保留・ボタンのフォーカス) は mono の段でも属性か記号で区別できる (NFR-604 AC-1)。情報メッセージは `ℹ`、警告は `⚠`、エラーは `✖` の記号を常に付ける (04 §8.9)。mono の段では **dim だけで他と区別するロールを作らない** (conhost は dim を描かないため)。行番号・`~`・プレースホルダ・実行できないパレット項目は、通常属性に区切り記号・丸括弧・行頭の `-` を併用する規定に従う (04 §12.4。この規定は提案、04 §18 の OQ-181)。
-- v0.5 以降のロール (`ui.ruler`、`diagnostic.*`、`ui.pane.*` と `ui.tab_line*` (値の案は §8.8)、`[syntax]`) と v1.L の `virtual_text*`・`diff.*` は、その版で本表に加える。上の TOML の例はユーザーテーマの書式の説明で、値は `default` テーマと同じではない。
+- `ui.status_bar` (と同じ組の `ui.pane.bar.active`) の 16 の段を明示値にする版では `reverse` にする (その段だけ形 (ii)。`bright_white` / `black` のような組は黒背景の端末で編集面と区別できないため。FR-513 AC-4)。`ui.cursor_line` の 16 の段の `none` も同じく形の例外 (上の箇条)。v0.1 の近似では、近似した前景と背景が同じ番号になったときに反転に置き換える規則 (04 §12.3) で区別を保つ。
+- 意味のあるロール (エラー・警告・情報・選択・検索一致・現在の一致・チョード保留・ボタンのフォーカス・フォーカスのあるペインの見出し) は mono の段でも属性か記号で区別できる (NFR-604 AC-1)。情報メッセージは `ℹ`、警告は `⚠`、エラーは `✖` の記号を常に付ける (04 §8.9)。mono の段では **dim だけで他と区別するロールを作らない** (conhost は dim を描かないため)。行番号・`~`・プレースホルダ・実行できないパレット項目は、通常属性に区切り記号・丸括弧・行頭の `-` を併用する規定に従う (04 §12.4。この規定は提案、04 §18 の OQ-181)。
+- v0.5 以降のロール (`ui.ruler`、`diagnostic.*`、`ui.tab_line*` (値の案は §8.8)、`[syntax]`) と v1.L の `virtual_text*`・`diff.*` は、その版で本表に加える (`ui.pane.*` の 3 つは v0.5 の M30 で加えた)。上の TOML の例はユーザーテーマの書式の説明で、値は `default` テーマと同じではない。
 
 ### 8.3 解決手順
 
@@ -970,7 +973,7 @@ tree-sitter のハイライトクエリ (`@keyword.control` 等) のキャプチ
 
 - **テーマ** (OQ-221 の 1): 組込みテーマ `high-contrast-dark` (黒の背景に白の文字) と `high-contrast-light` (白の背景に黒の文字)。どちらも背景を塗るテーマで、`default-dark` / `default-light` と同じく扱う (§8.6 の 3 本目): 色の段では、各ロールの端末の既定色 (`default`) を `ui.text` の色に置き換え (重ねるロールは置き換えず、下のロールの色を通す。§8.6 の 3 本目)、eve-tui は画面全体を `ui.text` で塗ってから描く。無色の段は塗らない。
 - **選び方**: `theme.name` で選ぶ (§5.4)。`theme.background = "dark"` / `"light"` で対の他方へ替わり、`auto` (既定) は名前どおり (OQ-221 の 4。`with_background` に足す)。名前と逆の値 (`high-contrast-dark` に `light`) を書くと逆のテーマになる。OS のハイコントラストの設定からは選ばない (OQ-221 の 5)。別名 (`high-contrast` など) は足さない。テーマが組込みの名前でも `themes/<name>.toml` でもないときは、テーマが無い診断 (`msg.config.theme_not_found`。エラー。テーマは組込みの `default` で描く。04 §15.2) を出す。場所は `theme.name` を書いた設定ファイルとその行 (`--set` で書いたときは `--set`)、`inherits` で書いた名前なら、そのテーマファイルの `inherits` の行。組込みの名前に近い名前 (組込みの名前の接頭辞か、編集距離 2 以下。どちらも大文字小文字を区別しない) なら、候補を診断の対処に入れる (例 本文「テーマ high-contrast がありません」、対処「theme.name を "high-contrast-dark" / "high-contrast-light" にしてください。…」)。
-- **ロール**: `default` と同じ 26 個 (§8.2。ロール名は公開面。M22〜M25 で増えていない)。値は下の 2 つの表が正本で、`xtask check-themes` が読む (セルの文法は §8.2 の凡例と同じ。表の見出しと列は 11 §8.5 で固定する)。256 と 16 の段も明示値で書く (04 §12.3 の近似を使わない)。形の列は truecolor の段の形で、16 の段で属性や形が違うロール (下の (h9) のため) は表の値が正。
+- **ロール**: `default` と同じ 29 個 (§8.2。ロール名は公開面。M22〜M25 で増えていない。v0.5 の M30 で `ui.pane.*` の 3 つを足した)。値は下の 2 つの表が正本で、`xtask check-themes` が読む (セルの文法は §8.2 の凡例と同じ。表の見出しと列は 11 §8.5 で固定する)。256 と 16 の段も明示値で書く (04 §12.3 の近似を使わない)。形の列は truecolor の段の形で、16 の段で属性や形が違うロール (下の (h9) のため) は表の値が正。
 - **基準** (OQ-221 の 2・3・6。`check-themes` の高コントラスト用の検査、09 §3.5 の (g)。比は WCAG 2.x の相対輝度による比で、256 の段は xterm の 256 色の標準値で計算する):
   - (h1) truecolor と 256 の段で、本文 (`ui.text`) の組が **7.0:1 以上**。
   - (h2) 同じ段で、強調ロール (形 (i)) の組が **7.0:1 以上**。
@@ -1023,6 +1026,9 @@ tree-sitter のハイライトクエリ (`@keyword.control` 等) のキャプチ
 | `ui.search_bar.toggle_on` | 検索バーの ON のトグル | (ii) | `reverse` | `reverse` | `reverse` | `reverse` |
 | `ui.control_char` | 制御文字・不正バイトの可視記号 | (i) | `#000000` / `#e0a8ff` (11.2・11.2) | `ansi.16` / `ansi.183` (11.4・11.4) | `black` / `white` (16.6・16.6) | `reverse` |
 | `ui.whitespace` | 全角スペース・タブの可視化の記号 | (iii) | `#c0c0c0` / `default` (11.5) | `ansi.250` / `default` (11.0) | `cyan` / `default` (10.6) | `bold` |
+| `ui.pane.border` | ペインの区切りと、フォーカスの無いペインの見出しの埋め (v0.5) | (iii) | `#c0c0c0` / `default` (11.5) | `ansi.250` / `default` (11.0) | `cyan` / `default` (10.6) | `none` |
+| `ui.pane.bar` | フォーカスの無いペインの見出しの名前と印 (v0.5) | (ii) | `default` / `default` | `default` / `default` | `default` / `default` | `none` |
+| `ui.pane.bar.active` | フォーカスのあるペインの見出し (v0.5。先頭に `▶`) | (i) | `#000000` / `#ffffff` (21.0・21.0) | `ansi.16` / `ansi.231` (21.0・21.0) | `black` / `bright_white` (21.0・21.0) | `reverse` |
 
 #### 8.7.2 high-contrast-light のロール表
 
@@ -1054,10 +1060,13 @@ tree-sitter のハイライトクエリ (`@keyword.control` 等) のキャプチ
 | `ui.search_bar.toggle_on` | 検索バーの ON のトグル | (ii) | `reverse` | `reverse` | `reverse` | `reverse` |
 | `ui.control_char` | 制御文字・不正バイトの可視記号 | (i) | `#ffffff` / `#6a1b9a` (9.3・9.3) | `ansi.231` / `ansi.54` (11.4・11.4) | `bright_white` / `magenta` (4.6・4.6) | `reverse` |
 | `ui.whitespace` | 全角スペース・タブの可視化の記号 | (iii) | `#404040` / `default` (10.3) | `ansi.238` / `default` (9.7) | `blue` / `default` (9.3) | `bold` |
+| `ui.pane.border` | ペインの区切りと、フォーカスの無いペインの見出しの埋め (v0.5) | (iii) | `#404040` / `default` (10.3) | `ansi.238` / `default` (9.7) | `blue` / `default` (9.3) | `none` |
+| `ui.pane.bar` | フォーカスの無いペインの見出しの名前と印 (v0.5) | (ii) | `default` / `default` | `default` / `default` | `default` / `default` | `none` |
+| `ui.pane.bar.active` | フォーカスのあるペインの見出し (v0.5。先頭に `▶`) | (i) | `#ffffff` / `#000000` (21.0・21.0) | `ansi.231` / `ansi.16` (21.0・21.0) | `bright_white` / `black` (21.0・21.0) | `reverse` |
 
-### 8.8 v0.5 で足すロール (案。M30 の仕様の PR、2026-11-21)
+### 8.8 v0.5 で足すロール (M30 の仕様の PR、2026-11-21。`ui.pane.*` は M30 の段 2b で §8.2 / §8.7 へ移した)
 
-複数ペイン (FR-509、M30) とタブライン (FR-510、M32) で足すロール。**値は案で、実装の PR が §8.2 と §8.7.1 / §8.7.2 の表に行を移し**、`eve_config::theme` の組込みテーマと eve-tui の `theme_table` を同じ PR で直す (§8.2 の表は実装との突合 (`check-themes`、09 §3.5) に使うので、実装より先に行を足すと検査が落ちる。本節の表は `check-themes` が読まない)。`default-dark` / `default-light` / `ansi` は §8.6 の 3 本目の規則で `default` から作る。値は既存のロールの値を流用し、比は流用元と同じ (括弧内)。どれも重ねるロール (§8.6) ではない。
+複数ペイン (FR-509、M30) とタブライン (FR-510、M32) で足すロール。**値は案で、実装の PR が §8.2 と §8.7.1 / §8.7.2 の表に行を移し**、`eve_config::theme` の組込みテーマと eve-tui の `theme_table` を同じ PR で直す (§8.2 の表は実装との突合 (`check-themes`、09 §3.5) に使うので、実装より先に行を足すと検査が落ちる。本節の表は `check-themes` が読まない)。**複数ペインの 3 つ (`ui.pane.border`・`ui.pane.bar`・`ui.pane.bar.active`) は M30 の段 2b (FR-509 の PR) で §8.2 と §8.7.1 / §8.7.2 の表に移した** (値は下の表のまま。下の表の 3 行は移した記録として残す)。タブラインの 2 つは M32 で移す。`default-dark` / `default-light` / `ansi` は §8.6 の 3 本目の規則で `default` から作る。値は既存のロールの値を流用し、比は流用元と同じ (括弧内)。どれも重ねるロール (§8.6) ではない。
 
 - **使い方** (03 §9.9 の PANE-10 / PANE-12、04 §3.4 / §9): ペインの見出しは、フォーカスのペインを `ui.pane.bar.active` (ステータスバーと同じ組。無色の段は反転。先頭に `▶`、ASCII の縮退では `>`) で、ほかのペインを `ui.pane.bar` (名前と印は本文と同じ色。残りの `─` の埋め (ASCII の縮退では `-`) は `ui.pane.border`) で描く。無色の段と ASCII の縮退の組 (最も区別しにくい組) でも「反転の行」と「`-` で埋めた行」で区別できる (FR-509 AC-1)。区切り (`│`、ASCII は `|`) は `ui.pane.border`。タブラインは、アクティブなタブを `ui.tab_line.active`、ほかを `ui.tab_line` で描き、省いた側の `‹` `›` は `ui.scroll_marker`。
 - `check-themes` に掛かる点: (i) の 2 つは 4.5:1 (高コントラストは (h2) の 7.0:1 と (h4) の 3.0:1)、(iii) の `ui.pane.border` は白・黒の背景に 3.0:1 (高コントラストは (h3) と (h10))。16 の段で `bold` を使わない ((h9))。`ui.pane.bar.active` と `ui.tab_line.active` は意味のあるロール (フォーカス・アクティブを示す) なので、mono の段を `none` にしない (§8.2 の表の下の箇条、NFR-604 AC-1)。`ui.pane.bar` の mono が `none` なのは、`─` の埋めで区別するため (04 §12.4 と同じ考え)。
@@ -1423,7 +1432,7 @@ verb       := [a-z][a-z0-9_]*
 
 **予約 (v0.1 では割り当てない)**: `alt+z` (v0.2 折り返し)、`mod+d` (v0.5 `select.add_next_match`)、`mod+l` (v0.5 `select.line`)、`mod+/` (v0.5 `edit.toggle_comment`)、`mod+\` (v0.5 `pane.split_right`。上の「ペイン」の表)、`mod+t` (v0.5 のファインダの候補だった。ファインダは Ctrl+O にした (v0.5-plan §1.3 の (1))。予約のまま)、`ctrl+b` (tmux)、`ctrl+j` (レガシー Enter と紛らわしい)、`ctrl+i` / `ctrl+m` / `ctrl+[` (区別困難)、`ctrl+数字`、`ctrl+k ctrl+<矢印>` (方向のペインの移動 `pane.focus_left` 等の候補。v0.5 では既定に割り当てない。上の「ペイン」の表の「キーの選び方」)。
 
-**FR-606 の到達性検査** (09 §3.4、OQ-30) の対象「頻出操作」(v0.1 で確定。OQ-30 の分類「保存・終了・検索・パレット・Undo/Redo・コピー/カット/貼り付け・移動・選択」を ID で列挙したもの。計 37 個):
+**FR-606 の到達性検査** (09 §3.4、OQ-30) の対象「頻出操作」(v0.1 で確定。OQ-30 の分類「保存・終了・検索・パレット・Undo/Redo・コピー/カット/貼り付け・移動・選択」を ID で列挙したもの。v0.5 の M30 でペインの 3 個を足した。計 40 個):
 
 - 保存・終了・パレット: `file.save`, `app.quit`, `ui.palette_open`, `ui.cancel`
 - 検索: `search.open`, `search.next`, `search.prev`, `search.toggle_case`
@@ -1431,6 +1440,7 @@ verb       := [a-z][a-z0-9_]*
 - クリップボード: `clipboard.copy`, `clipboard.cut`, `edit.paste`
 - 移動: `cursor.move_left`, `cursor.move_right`, `cursor.move_up`, `cursor.move_down`, `cursor.move_word_left`, `cursor.move_word_right`, `cursor.home`, `cursor.end`, `cursor.doc_start`, `cursor.doc_end`, `cursor.page_up`, `cursor.page_down`, `cursor.goto_line`
 - 選択: `select.all`, `select.extend_left`, `select.extend_right`, `select.extend_up`, `select.extend_down`, `select.extend_word_left`, `select.extend_word_right`, `select.extend_home`, `select.extend_end`, `select.extend_page_up`, `select.extend_page_down`
+- ペイン (v0.5 の M30、FR-509。03 §9.9 の PANE-14): `pane.split_right`, `pane.focus_next`, `pane.close` (下への分割・前のペイン・大きさは代替のチョードで届くが、対象は分割・次・閉じるの 3 つに限る)
 
 対象に含めないもの: `select.extend_to_doc_start` / `select.extend_to_doc_end` (代替キーを持たず、届かない端末ではパレットから実行する。OQ-30 の (2))、`file.open` / `file.new` / `file.save_as` / `file.reopen_with_encoding` / `file.reload` / `file.set_line_ending` / `search.replace_open` / `search.replace_all` 等のその他の操作 (パレット経由で可。置換は OQ-30 の分類に入らない)、版注記付きの ID (`help.open`・行の移動等。各版で加える)。合格の条件: v0.1 の対象端末 (01 NFR-402。Windows Terminal と conhost) の **それぞれ** について、各操作に「`Capabilities.enhanced_keys = false` で区別でき (`[E]` でない)、かつ 04 §7.3a の横取り表でその端末が横取りするキーを含まない」割当が 1 つ以上ある。macOS / Linux の端末は、それらを出荷する版で同じ条件を加える (横取り表の想定 (動作未確認) を横取りとして扱う)。
 

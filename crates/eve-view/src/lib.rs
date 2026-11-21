@@ -27,17 +27,18 @@ pub use effect::{ClipboardTarget, ClipboardText, Effect, QuitRescue, StderrLine}
 pub use events::{EditorEvent, MessageLevel, OriginKind, OriginTag, OverlayKind};
 pub use frame::{
     BarFocus, CaseMode, CellPos, CellRect, CellText, Choice, ChoiceId, ChromeTexts, Color,
-    CursorPlacement, CursorShape, CutPolicy, Frame, HelpLine, HelpLineKind, HintContext, HintItem,
-    HintModel, InputFieldModel, KeyLabel, ListItem, Message, MessageModel, OverlayModel, PaneFrame,
-    RenderRow, ReplaceRowModel, RoleStyles, RowSource, SearchBarModel, Span, StatusAlign,
-    StatusItem, StatusKind, StatusModel, Style, StyleMods, WhichKeyItem, WhichKeyModel,
+    CursorPlacement, CursorShape, CutPolicy, Divider, Frame, HelpLine, HelpLineKind, HintContext,
+    HintItem, HintModel, InputFieldModel, KeyLabel, ListItem, Message, MessageModel, OverlayModel,
+    PaneBarModel, PaneFrame, RenderRow, ReplaceRowModel, RoleStyles, RowSource, SearchBarModel,
+    Span, StatusAlign, StatusItem, StatusKind, StatusModel, Style, StyleMods, WhichKeyItem,
+    WhichKeyModel,
 };
 pub use ids::{
     ClipboardHandleId, ClipboardToken, DocumentId, JobId, Revision, ViewId, ViewRevision, WindowId,
 };
 pub use input::{
-    InputEvent, KeyCode, KeyEvent, KeyKind, KeyStroke, Modifiers, MouseAt, MouseButton, MouseEvent,
-    MouseKind, key_notation,
+    ChromeMouseEvent, ChromeTarget, InputEvent, KeyCode, KeyEvent, KeyKind, KeyStroke, Modifiers,
+    MouseAt, MouseButton, MouseEvent, MouseKind, key_notation,
 };
 pub use query::{
     Answer, ByteRange, DocumentInfo, FocusTarget, LoadStateView, Query, QueryError,

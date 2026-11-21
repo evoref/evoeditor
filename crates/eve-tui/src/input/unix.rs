@@ -24,7 +24,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::{self, JoinHandle};
 
-use eve_view::{CellSize, InputEvent};
+use eve_view::CellSize;
 
 use super::vt::{VtOut, VtParser};
 use super::{InputOut, surface_resize};
@@ -358,7 +358,7 @@ impl Loop<'_> {
                 }
                 VtOut::Mouse(r) => {
                     for m in self.tracker.feed(r, &self.geom.get()) {
-                        if !self.out.event(InputEvent::Mouse(m)) {
+                        if !self.out.event(m) {
                             return false;
                         }
                     }
@@ -516,6 +516,7 @@ pub fn spawn_input_thread(
 #[cfg(all(test, target_os = "linux"))]
 mod tests {
     use super::*;
+    use eve_view::InputEvent;
     use std::sync::Mutex;
     use std::sync::mpsc;
     use std::time::Duration;
