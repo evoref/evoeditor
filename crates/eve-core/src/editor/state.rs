@@ -523,6 +523,28 @@ impl EditorState {
             doc.untitled_no = doc.untitled_no.or(old.untitled_no);
         }
         self.docs.documents.insert(id, doc);
+        self.clamp_views_of(id);
+    }
+
+    /// 本文を差し替えた文書 `doc` の全 View の選択とスクロールを、新しい本文の範囲と書記素の境界に収める (差し替えの経路が
+    /// 位置を決め直す前の安全網。どの View も範囲の外・char の境界でない位置を指したままにしない、03 §9.9 の PANE-8 (e))。
+    fn clamp_views_of(&mut self, doc: DocumentId) {
+        let Some(d) = self.docs.documents.get(&doc) else {
+            return;
+        };
+        let t = d.text();
+        let len = t.len_bytes();
+        let clamp = |o: ByteOff| ByteOff(o.0.min(len));
+        for v in self.docs.views.values_mut().filter(|v| v.doc == doc) {
+            v.selection = v
+                .selection
+                .transform(t, |r| eve_text::Range::new(clamp(r.anchor), clamp(r.head)));
+            let top = t.line_to_byte(t.byte_to_line(clamp(v.scroll.top)));
+            if top != v.scroll.top {
+                v.scroll.top = top;
+                v.scroll.wrap_idx = 0;
+            }
+        }
     }
 
     /// 退避用の公開物が変わった文書として記録する (03 §6.5 手順 12。保存の完了・読込の完了)。
@@ -770,7 +792,8 @@ impl EditorState {
         }
     }
 
-    /// Undo。取り消すものがなければ `Ok(false)`。発行 View の Selection は `selection_before` に戻す。
+    /// Undo。取り消すものがなければ `Ok(false)`。発行 View の Selection は `selection_before` に戻す (`view` は実行した
+    /// View。発行 View の選び方は `after_history_step`)。
     ///
     /// # Errors
     ///
@@ -782,7 +805,9 @@ impl EditorState {
             .get_mut(&doc)
             .ok_or(ApplyError::Rejected)?;
         let applied = document.undo()?;
-        Ok(applied.map(|a| self.after_change(doc, &a, view)).is_some())
+        Ok(applied
+            .map(|a| self.after_history_step(doc, &a, view))
+            .is_some())
     }
 
     /// Redo。やり直すものがなければ `Ok(false)`。
@@ -797,7 +822,44 @@ impl EditorState {
             .get_mut(&doc)
             .ok_or(ApplyError::Rejected)?;
         let applied = document.redo()?;
-        Ok(applied.map(|a| self.after_change(doc, &a, view)).is_some())
+        Ok(applied
+            .map(|a| self.after_history_step(doc, &a, view))
+            .is_some())
+    }
+
+    /// Undo / Redo の適用の後 (03 §7.6、§9.9 の PANE-2): ノードを記録した発行 View がどれかのペインに表示中なら、その
+    /// 選択を戻す。表示中でなければ (別の文書に切り替えたペインの表に残っているだけ・ペインに属さない) 写像だけ。ノードに
+    /// View が無い (View を指さずに適用した) ときは、実行した View `by` を発行 View とみなす。実行した View が発行 View で
+    /// なければ、その選択は写像だけで、戻した変更の先頭が見えるようにスクロールだけする。
+    fn after_history_step(&mut self, doc: DocumentId, a: &Applied, by: Option<ViewId>) {
+        let issuer = match a.view {
+            None => by,
+            Some(v) if self.pane_of_shown_view(v).is_some() => Some(v),
+            Some(_) => None,
+        };
+        self.after_change(doc, a, issuer);
+        if let Some(by) = by.filter(|b| Some(*b) != issuer)
+            && let Some((_, after)) = a.changes.changed_ranges().next()
+        {
+            self.scroll_to_show(by, after.start);
+        }
+    }
+
+    /// View `view` の選択を変えずに、位置 `pos` が見えるように最小限スクロールする。
+    fn scroll_to_show(&mut self, view: ViewId, pos: ByteOff) {
+        let Some(saved) = self
+            .docs
+            .views
+            .get(&view)
+            .map(|v| (v.selection.clone(), v.goal_dcol, v.cursor_affinity))
+        else {
+            return;
+        };
+        self.set_selection(view, Selection::point(pos));
+        self.ensure_cursor_visible(view);
+        if let Some(v) = self.docs.views.get_mut(&view) {
+            (v.selection, v.goal_dcol, v.cursor_affinity) = saved;
+        }
     }
 
     /// プロセス全体の Undo 履歴の上限 (`editor.undo.total_max_bytes`、NFR-203) を守る: 超えていたら、履歴が最も大きい文書から

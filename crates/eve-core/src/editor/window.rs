@@ -319,15 +319,14 @@ impl EditorState {
         if let Some(prev) = prev {
             self.note_recent(at, prev);
         }
-        let (view, copied) = match self.pane(at).and_then(|p| p.views.get(&doc).copied()) {
-            Some(v) if self.docs.views.contains_key(&v) => (v, false),
+        let view = match self.pane(at).and_then(|p| p.views.get(&doc).copied()) {
+            Some(v) if self.docs.views.contains_key(&v) => v,
             _ => self.view_for_new_pane(doc),
         };
         self.put_view_in(at, doc, view);
-        if copied {
-            // 写した位置を、表示するペインの本文の矩形で見えるようにする (写し元のペインと大きさが違う。PANE-1)
-            self.ensure_cursor_visible(view);
-        }
+        // 写した View は写し元のペインと、表に残っていた View は前に表示したときと、ペインの本文の大きさが違うことがある。
+        // 表示するペインの矩形でカーソルが見えるようにする (PANE-1)
+        self.ensure_cursor_visible(view);
         if focused {
             self.docs.last_view.insert(doc, view);
         }
@@ -376,8 +375,8 @@ impl EditorState {
     }
 
     /// 文書 `doc` を初めて表示するペインに渡す View (PANE-1): ペインに属さない View があればそれ (`ViewId` は変わらない)、
-    /// 無ければ最後にフォーカスのあった View を写した新しい View。写して作ったかを添えて返す。
-    fn view_for_new_pane(&mut self, doc: DocumentId) -> (ViewId, bool) {
+    /// 無ければ最後にフォーカスのあった View を写した新しい View。
+    fn view_for_new_pane(&mut self, doc: DocumentId) -> ViewId {
         let own: Vec<ViewId> = self
             .docs
             .views
@@ -386,7 +385,7 @@ impl EditorState {
             .map(|(id, _)| *id)
             .collect();
         if let Some(free) = own.iter().copied().find(|v| self.pane_owning(*v).is_none()) {
-            return (free, false);
+            return free;
         }
         let source = self
             .docs
@@ -396,8 +395,8 @@ impl EditorState {
             .filter(|v| own.contains(v))
             .or_else(|| own.first().copied());
         match source.and_then(|v| self.copy_view(v)) {
-            Some(id) => (id, true),
-            None => (self.add_view(doc), false),
+            Some(id) => id,
+            None => self.add_view(doc),
         }
     }
 

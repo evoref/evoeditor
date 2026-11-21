@@ -145,21 +145,43 @@ fn check_state(h: &Harness, revs: &mut BTreeMap<DocumentId, u64>, step: usize) {
     if let Err(e) = st.check_panes() {
         panic!("step {step}: ペインの不変条件に反する: {e}");
     }
-    // 全ペインの表示中の View の主カーソルが、文書の範囲内で char の境界にある (09 §3.2 の「eve-core 複数ペイン」の (e))
+    // 全 View (ペインの表示中の View・表に残っている View・ペインに属さない View) の全 Range の anchor / head が、文書の
+    // 範囲内で char の境界にあり、選択が正規化済み (09 §3.2 の「eve-core 複数ペイン」の (e))。ペインが表示中の View は
+    // 必ずある
     if let Ok(Answer::Windows(ws)) = h.query(&Query::Windows) {
         for v in ws.iter().flat_map(|w| w.views.iter()) {
-            let view = st
-                .view(*v)
-                .unwrap_or_else(|| panic!("step {step}: ペインの View {v:?} が無い"));
-            let d = st
-                .document(view.doc)
-                .unwrap_or_else(|| panic!("step {step}: {v:?} の文書 {:?} が無い", view.doc));
-            let head = view.selection.primary().head;
-            use eve_text::TextRead as _;
             assert!(
-                head.0 <= d.len_bytes() && d.text().is_char_boundary(head),
-                "step {step}: {v:?} のカーソル {head:?} が文書の範囲・char の境界の外"
+                st.view(*v).is_some_and(|x| st.document(x.doc).is_some()),
+                "step {step}: ペインの View {v:?} か、その文書が無い"
             );
+        }
+    }
+    if let Ok(Answer::Documents(docs)) = h.query(&Query::Documents) {
+        use eve_text::TextRead as _;
+        for info in docs {
+            let Some(d) = st.document(info.doc) else {
+                continue;
+            };
+            let t = d.text();
+            for v in &info.views {
+                let Some(view) = st.view(*v) else {
+                    panic!("step {step}: {:?} の View {v:?} が無い", info.doc);
+                };
+                for r in view.selection.iter() {
+                    for p in [r.anchor, r.head] {
+                        assert!(
+                            p.0 <= t.len_bytes() && t.is_char_boundary(p),
+                            "step {step}: {v:?} の選択の端 {p:?} が文書 ({} バイト) の範囲・char の境界の外",
+                            t.len_bytes()
+                        );
+                    }
+                }
+                assert_eq!(
+                    view.selection.clone().normalized(t),
+                    view.selection,
+                    "step {step}: {v:?} の選択が正規化されていない"
+                );
+            }
         }
     }
     if let Some(w) = st.first_window()
@@ -559,7 +581,16 @@ fn pane_op(h: &mut Harness, b: &mut Bytes<'_>) -> String {
                 h.cmd_with(id, Args::new().with_int("cells", n));
                 format!("{id} cells {n}")
             } else {
+                let docs = h.editor.state().documents_len();
                 h.cmd(id);
+                if id == "pane.close" {
+                    // ペインを閉じても文書の数は変わらない (09 §3.2 の「eve-core 複数ペイン」の (d))
+                    assert_eq!(
+                        h.editor.state().documents_len(),
+                        docs,
+                        "pane.close で文書の数が変わった"
+                    );
+                }
                 id.to_owned()
             }
         }

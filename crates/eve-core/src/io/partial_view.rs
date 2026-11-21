@@ -188,7 +188,7 @@ impl EditorState {
     }
 
     /// 文書 `doc` の全 View のカーソル・選択・スクロールを文書の先頭に戻す。
-    fn reset_views_of(&mut self, doc: DocumentId) {
+    pub(crate) fn reset_views_of(&mut self, doc: DocumentId) {
         for v in self.docs.views.values_mut().filter(|v| v.doc == doc) {
             v.selection = Selection::point(ByteOff(0));
             v.scroll = ScrollPos::default();

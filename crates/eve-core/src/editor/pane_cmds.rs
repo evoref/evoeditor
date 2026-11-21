@@ -81,8 +81,8 @@ impl EditorState {
         self.ensure_cursor_visible(view);
     }
 
-    /// Window `w` の木を変えた後: 本文の大きさが変わったペイン (と新しく出たペイン) の View を合わせ、縮退表示の出入りを
-    /// 見る。`before` は変える前の配置。
+    /// Window `w` の木を変えた後: 本文の大きさが変わったペイン (と新しく出たペイン) の表の View (表示していないものを
+    /// 含む) を合わせ、縮退表示の出入りを見る。`before` は変える前の配置。
     fn after_relayout(&mut self, w: WindowId, before: &PaneLayout) {
         let size = self.surface_size();
         let Some(win) = self.window(w) else {
@@ -99,7 +99,10 @@ impl EditorState {
                     .find(|b| b.pane == x.pane)
                     .is_none_or(|b| (b.body.cols, b.body.rows) != (x.body.cols, x.body.rows))
             })
-            .filter_map(|x| win.panes.get(&x.pane).map(|p| p.view))
+            // 表示中の View だけでなく、そのペインの表に残っている (表示していない) View も合わせる (次にそのペインで
+            // 表示するときの大きさが変わった)
+            .filter_map(|x| win.panes.get(&x.pane))
+            .flat_map(|p| p.views.values().copied())
             .collect();
         self.with_view_sizes(|st| {
             for v in changed {

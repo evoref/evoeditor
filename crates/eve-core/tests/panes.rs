@@ -108,6 +108,8 @@ fn palette_reason(h: &mut Harness, query: &str) -> Option<String> {
 
 // verifies: AC-FR-509-1
 #[test]
+// 段 2a の範囲だけ (分割・移動と、全ペインが Frame に出ること)。見出し・区切り・フォーカスの強調・ASCII の Frame・既定キーの
+// `verifies:` は段 2b で足す
 fn 右と下に分割し_次_前と方向でフォーカスを移せる() {
     // 見出し・区切り・フォーカスの強調の描画は段 2b (ここでは木とフォーカスと、全ペインが Frame に出ることを見る)
     let mut h = opened(&[("/w/a.txt", &lines(50))]);
@@ -157,6 +159,7 @@ fn 右と下に分割し_次_前と方向でフォーカスを移せる() {
 
 // verifies: AC-FR-509-1
 #[test]
+// 段 2a の範囲だけ (パレットからの実行)。既定キーからの実行は段 2b
 fn パレットから実行したペインのコマンドはフォーカスのペインに効く() {
     let mut h = opened(&[("/w/a.txt", &lines(10))]);
     let left = focused(&h);
@@ -194,11 +197,16 @@ fn 同じ文書を_2_つのペインで編集すると両方に反映し_もう�
     h.text("Y");
     assert_eq!(h.doc_text(), "Xone\nYtwo\nthree\n");
     assert_eq!(head(&h, right), 1, "右のカーソルは前の位置のまま");
-    // Undo は文書に 1 つ: 右から戻しても左から戻しても同じ本文
+    // Undo は文書に 1 つ: 右から戻しても左から戻しても同じ本文。右で左の編集を戻すと、選択を戻すのは発行した左の
+    // View (表示中) で、右の選択は写像だけ (03 §7.6、§9.9 の PANE-2)
     run(&mut h, "pane.focus_next");
     h.cmd("edit.undo");
     let from_right = h.doc_text();
+    assert_eq!(head(&h, right), 1, "実行した右のカーソルは飛ばない");
+    assert_eq!(head(&h, left), 5, "発行した左の View の選択を戻す");
     h.cmd("edit.redo");
+    assert_eq!(head(&h, right), 1);
+    assert_eq!(head(&h, left), 6);
     run(&mut h, "pane.focus_prev");
     h.cmd("edit.undo");
     assert_eq!(h.doc_text(), from_right);
@@ -357,6 +365,8 @@ fn 端末が縮むとフォーカスのペインだけを出し_入力が届き_
 
 // verifies: AC-FR-509-4
 #[test]
+// 段 2a の範囲だけ (core のマウス・大きさ・検索バーとオーバーレイ)。見出しのクリック (`ChromeMouse`)・TUI の変換・既定キーの
+// `verifies:` は段 2b で足す
 fn フォーカスの無いペインのクリックでフォーカスとカーソルが移り_ホイールはポインタの下のペインだけを動かす()
  {
     let mut h = opened(&[("/w/a.txt", &lines(100))]);
@@ -401,6 +411,8 @@ fn フォーカスの無いペインのクリックでフォーカスとカー�
 
 // verifies: AC-FR-509-4
 #[test]
+// 段 2a の範囲だけ (core のマウス・大きさ・検索バーとオーバーレイ)。見出しのクリック (`ChromeMouse`)・TUI の変換・既定キーの
+// `verifies:` は段 2b で足す
 fn キーでペインの大きさを変えて揃えられる() {
     let mut h = opened(&[("/w/a.txt", b"a\n")]);
     run(&mut h, "pane.split_right");
@@ -429,6 +441,8 @@ fn キーでペインの大きさを変えて揃えられる() {
 
 // verifies: AC-FR-509-4
 #[test]
+// 段 2a の範囲だけ (core のマウス・大きさ・検索バーとオーバーレイ)。見出しのクリック (`ChromeMouse`)・TUI の変換・既定キーの
+// `verifies:` は段 2b で足す
 fn フォーカスのペインが替わると検索バーは閉じ_オーバーレイの間はクリックでフォーカスが変わらない() {
     let mut h = opened(&[("/w/a.txt", &lines(10))]);
     let left = focused(&h);
@@ -542,4 +556,81 @@ fn 先行表示で切り替えた読込を取り消すと_開いたペインだ�
     );
     h.finish_held_jobs();
     check(&h);
+}
+
+// ---------- 段 2a のレビューで直した点 ----------
+
+// verifies: AC-FR-509-2
+#[test]
+fn ほかのペインで行った編集を戻しても_実行したペインのカーソルは飛ばない() {
+    let mut h = opened(&[("/w/a.txt", &lines(100))]);
+    let left = focused(&h);
+    run(&mut h, "pane.split_right");
+    let right = focused(&h);
+    h.keys("ctrl+end");
+    let end = head(&h, right);
+    run(&mut h, "pane.focus_prev");
+    h.text("X");
+    run(&mut h, "pane.focus_next");
+    h.cmd("edit.undo");
+    assert_eq!(head(&h, right), end, "右は写像だけ (末尾のまま)");
+    assert_eq!(head(&h, left), 0, "左は記録した選択に戻る");
+    let top = h.editor.state().view(right).expect("View").scroll.top.0;
+    assert_eq!(
+        top, 0,
+        "戻した変更の先頭 (文書の先頭) が見えるようにスクロールする"
+    );
+    check(&h);
+}
+
+#[test]
+fn 開き直すと同じ文書を出すほかのペインの_view_も先頭に戻る() {
+    let mut h = opened(&[("/w/a.txt", &lines(200))]);
+    let left = focused(&h);
+    h.keys("ctrl+end");
+    run(&mut h, "pane.split_right");
+    h.keys("ctrl+home");
+    h.fs.add_file("/w/a.txt", "短い\n".as_bytes());
+    h.cmd_with(
+        "file.reopen_with_encoding",
+        Args::new().with_str("encoding", "utf-8"),
+    );
+    h.run_jobs();
+    check(&h);
+    assert_eq!(h.doc_text(), "短い\n");
+    assert_eq!(head(&h, left), 0, "実行していないペインの View も戻す");
+    run(&mut h, "pane.focus_prev");
+    h.text("x");
+    assert_eq!(h.doc_text(), "x短い\n", "左の入力が捨てられない");
+}
+
+#[test]
+fn 表示していない_view_もペインの大きさが変わったら合わせ_戻したときにカーソルが見える() {
+    let long = "x".repeat(3000) + "\n";
+    let mut h = opened(&[("/w/a.txt", long.as_bytes()), ("/w/b.txt", b"b\n")]);
+    h.open("/w/a.txt");
+    run(&mut h, "pane.split_right");
+    h.cmd_with("pane.shrink", Args::new().with_int("cells", 100));
+    h.cmd("view.toggle_wrap");
+    // 1 行目の行末 (文書の末尾の改行の前)
+    h.keys("ctrl+end left");
+    assert!(
+        h.frame().panes[1].cursors.len() == 1,
+        "折り返した行末のカーソルが見える"
+    );
+    let right = focused(&h);
+    let wrap_idx = |h: &Harness| h.editor.state().view(right).expect("View").scroll.wrap_idx;
+    assert!(
+        wrap_idx(&h) > 100,
+        "20 列で折り返した行の終わりの表示行: {}",
+        wrap_idx(&h)
+    );
+    h.open("/w/b.txt");
+    run(&mut h, "pane.equalize");
+    h.cmd_with("pane.grow", Args::new().with_int("cells", 100));
+    h.open("/w/a.txt");
+    check(&h);
+    let f = h.frame();
+    assert_eq!(f.panes[1].cursors.len(), 1, "戻した a のカーソルが見える");
+    assert!(f.primary_cursor.is_some());
 }
