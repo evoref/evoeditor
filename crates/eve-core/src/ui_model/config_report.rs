@@ -463,6 +463,8 @@ pub fn diagnostic_texts(cat: &eve_config::Catalog, d: &Diagnostic) -> (String, S
                 P::ChordShadowsDefault => "keymap_chord_shadows_default",
                 P::DuplicateKey => "keymap_duplicate_key",
                 P::BadArgs => "keymap_bad_args",
+                P::ChordPrefixPartly => "keymap_chord_prefix_partly",
+                P::ChordShadowsDefaultPartly => "keymap_chord_shadows_default_partly",
             }
         }
         DiagKind::ThemeNotFound { candidates } => {

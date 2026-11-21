@@ -220,6 +220,9 @@ fn check_args(command: &str, args: &[(String, KeyArgValue)]) -> Result<Args, Str
 /// - ユーザーの割当が既定のチョードの先頭と同じ: その割当の行で `ChordPrefix`。
 /// - ユーザーの割当がユーザーの別のチョードの先頭と同じ: 短い側の行で `UserChordPrefix` (値はチョードのキー)。
 /// - ユーザーのチョードが既定の単体の割当を無効にした: チョードの行で `ChordShadowsDefault` (値は無効になった既定の割当)。
+///
+/// 割当のコンテキストを参照するフォーカスの一部でだけ奪われる衝突は、ユーザーの割当なら `ChordPrefixPartly` (値は奪う
+/// チョードの `コンテキスト: キー`)、既定の割当なら `ChordShadowsDefaultPartly` にする (ほかのフォーカスでは使える)。
 fn prefix_diagnostics(
     keymap: &Keymap,
     origins: &[Origin],
@@ -233,29 +236,42 @@ fn prefix_diagnostics(
         )
     };
     let mut out: Vec<(usize, Diagnostic)> = Vec::new();
-    for d in keymap.disabled() {
+    for d in keymap.conflicts() {
         let (at_layer, by_layer) = (keymap.layer(d.at.0), keymap.layer(d.by.0));
         let b = &at_layer.bindings()[d.at.1];
         let c = &by_layer.bindings()[d.by.1];
-        let item = match (at_layer.name == "user", by_layer.name == "user") {
-            (true, false) => origin(origins, b).map(|i| {
+        let chord = format!("{}: {}", c.context, format_sequence(&c.sequence));
+        let item = match (
+            at_layer.name == "user",
+            by_layer.name == "user",
+            d.everywhere,
+        ) {
+            (true, _, false) => {
+                origin(origins, b).map(|i| warn(i, KeymapProblem::ChordPrefixPartly, &chord))
+            }
+            (true, false, true) => origin(origins, b).map(|i| {
                 let keys = file.entries[i].keys.clone();
                 warn(i, KeymapProblem::ChordPrefix, &keys)
             }),
-            (true, true) => origin(origins, b)
+            (true, true, true) => origin(origins, b)
                 .zip(origin(origins, c))
                 .map(|(i, j)| warn(i, KeymapProblem::UserChordPrefix, &file.entries[j].keys)),
-            (false, true) => origin(origins, c).map(|j| {
+            (false, true, everywhere) => origin(origins, c).map(|j| {
                 let value = format!(
                     "{}: {} = {}",
                     b.context,
                     format_sequence(&b.sequence),
                     b.command.as_str()
                 );
-                warn(j, KeymapProblem::ChordShadowsDefault, &value)
+                let p = if everywhere {
+                    KeymapProblem::ChordShadowsDefault
+                } else {
+                    KeymapProblem::ChordShadowsDefaultPartly
+                };
+                warn(j, p, &value)
             }),
             // 既定の層どうしの衝突は作らない (`Keymap::new` が設計エラーにする)
-            (false, false) => None,
+            (false, false, _) => None,
         };
         if let Some(item) = item
             && !out.contains(&item)
@@ -266,9 +282,10 @@ fn prefix_diagnostics(
     entry_diags.extend(out);
 }
 
-/// 終了・コマンドパレット・取消に届かなくなったら、その原因の割当を外す (エラー、07 §7.6)。原因は、脱出キーと同じ
-/// キーを別の用途にした (または解除した) 割当と、脱出キーを先頭にするチョード (チョードが勝つので単体が届かない、K3)。
-/// 診断は、外した割当を書いた行の位置と、書かれたキーの表記で出す。
+/// 終了・コマンドパレット・取消が、既定で届くフォーカス (07 §7.1 の参照順の表の行) のどれかで届かなくなったら、
+/// その原因の割当を外す (エラー、07 §7.6)。原因は、そのフォーカスで参照するコンテキストにあり、脱出キーと同じキーを
+/// 別の用途にした (`when` 付きを含む) か解除した割当と、脱出キーを先頭にするチョード (チョードが勝つ、K3)。外すたびに
+/// 調べ直し、どのフォーカスでも届くまで続ける。診断は、外した割当を書いた行の位置と、書かれたキーの表記で出す。
 fn restore_escape_keys(
     keymap: &mut Keymap,
     layer: &mut Layer,
@@ -277,34 +294,45 @@ fn restore_escape_keys(
 ) -> Vec<Diagnostic> {
     let mut diags = Vec::new();
     for cmd in ESCAPE_COMMANDS {
-        if keymap.escape_reachable(cmd) {
-            continue;
-        }
         let defaults = keymap.default_sequences(cmd);
-        // コンテキストを問わず外す
-        let dropped =
-            layer.retain(|b| !defaults.iter().any(|(_, seq)| b.sequence.starts_with(seq)));
-        for b in dropped {
-            let d = match origin(origins, &b) {
-                Some(i) => entry_diagnostic(
-                    file,
-                    i,
-                    Severity::Error,
-                    DiagKind::Keymap(KeymapProblem::EscapeKey),
-                    cmd,
-                ),
-                None => Diagnostic {
-                    severity: Severity::Error,
-                    kind: DiagKind::Keymap(KeymapProblem::EscapeKey),
-                    key: format!("keys.{}.{}", b.context, format_sequence(&b.sequence)),
-                    value: cmd.to_owned(),
-                    line: 0,
-                    column: 0,
-                },
-            };
-            diags.push(d);
+        while let Some(&focus) = keymap.escape_lost_focuses(cmd).first() {
+            let keys: Vec<&Vec<KeyStroke>> = defaults
+                .iter()
+                .filter(|(ctx, _)| focus.contains(ctx))
+                .map(|(_, seq)| seq)
+                .collect();
+            let dropped = layer.retain(|b| {
+                !(focus.contains(&b.context)
+                    && keys
+                        .iter()
+                        .any(|k| b.sequence.starts_with(k) || k.starts_with(&b.sequence)))
+            });
+            if dropped.is_empty() {
+                // ユーザー層の外の原因 (起きないはず)。外せるものが無いので止める
+                break;
+            }
+            for b in dropped {
+                let d = match origin(origins, &b) {
+                    Some(i) => entry_diagnostic(
+                        file,
+                        i,
+                        Severity::Error,
+                        DiagKind::Keymap(KeymapProblem::EscapeKey),
+                        cmd,
+                    ),
+                    None => Diagnostic {
+                        severity: Severity::Error,
+                        kind: DiagKind::Keymap(KeymapProblem::EscapeKey),
+                        key: format!("keys.{}.{}", b.context, format_sequence(&b.sequence)),
+                        value: cmd.to_owned(),
+                        line: 0,
+                        column: 0,
+                    },
+                };
+                diags.push(d);
+            }
+            keymap.set_user_layer(layer.clone());
         }
-        keymap.set_user_layer(layer.clone());
     }
     diags
 }

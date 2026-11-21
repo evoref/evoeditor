@@ -430,25 +430,24 @@ impl Editor {
     }
 
     fn on_text(&mut self, s: &str) {
+        // チョードの保留中は、確認ダイアログでもアクセラレータより先に保留の続きとして照合する (02 §7.2 K1 / K2。
+        // 2 打目の文字で選択肢が選ばれないように): 先頭の書記素を 2 打目として照合し、残りは捨てる。大文字は
+        // 設定のキーと同じく `shift+小文字` にする (`char_stroke`)
+        if !self.keymap.pending().is_empty() {
+            let t = eve_text::Text::from(s);
+            let end = eve_text::next_grapheme_boundary(&t, eve_text::ByteOff(0)).0;
+            let first = s.get(..end).filter(|g| g.chars().count() == 1);
+            match first.and_then(|g| g.chars().next()) {
+                Some(c) => self.on_key(crate::keymap::char_stroke(c)),
+                None => self.keymap.clear_pending(),
+            }
+            return;
+        }
         if self.state.is_dialog() {
             // 確認ダイアログ: 複数書記素の Text はすべて捨て、1 書記素ならアクセラレータとして照合する (K1)
             let mut it = s.chars();
             if let (Some(c), None) = (it.next(), it.next()) {
                 self.state.dialog_accelerator(c);
-            }
-            return;
-        }
-        if !self.keymap.pending().is_empty() {
-            // チョードの保留中: 先頭の書記素を 2 打目として照合し、残りは捨てる (K1)
-            let t = eve_text::Text::from(s);
-            let end = eve_text::next_grapheme_boundary(&t, eve_text::ByteOff(0)).0;
-            let first = s.get(..end).filter(|g| g.chars().count() == 1);
-            match first.and_then(|g| g.chars().next()) {
-                Some(c) => self.on_key(KeyStroke {
-                    mods: Modifiers::NONE,
-                    key: KeyCode::Char(c),
-                }),
-                None => self.keymap.clear_pending(),
             }
             return;
         }

@@ -48,8 +48,10 @@ const FIRST: [&str; 8] = [
     "alt+x",
     "ctrl+shift+u",
 ];
-/// 2 打目以降に使うキー (保留中は文字キーも照合される、K1)。
-const NEXT: [&str; 7] = ["a", "b", "d", "ctrl+j", "f6", "ctrl+s", "up"];
+/// 2 打目以降に使うキー (保留中は文字キーも照合される、K1)。大文字と `shift+文字` は、端末からは大文字の `Text` で届く。
+const NEXT: [&str; 9] = [
+    "a", "b", "d", "A", "shift+b", "ctrl+j", "f6", "ctrl+s", "up",
+];
 /// 割り当てるコマンドと、`args` の TOML の表記 (無ければ空)。
 const COMMANDS: [(&str, &str); 6] = [
     ("edit.duplicate_line", ""),
@@ -75,12 +77,13 @@ fn no_ctx(_: &str) -> Option<CtxValue> {
     None
 }
 
-/// ユーザーの割当 1 つ (コンテキスト, キーの書き方, コマンドの番号)。
+/// ユーザーの割当 1 つ (コンテキスト, キーの書き方, コマンドの番号, `when` (空は常に真))。
 #[derive(Clone, Debug)]
 struct Entry {
     ctx: &'static str,
     keys: String,
     command: usize,
+    when: &'static str,
 }
 
 fn keys_of(first: usize, rest: &[usize]) -> String {
@@ -101,6 +104,7 @@ fn entry(contexts: &'static [&'static str]) -> impl Strategy<Value = Entry> {
             ctx,
             keys: keys_of(first, &rest),
             command,
+            when: "",
         })
 }
 
@@ -122,13 +126,17 @@ fn toml_of(entries: &[Entry]) -> (String, Vec<Entry>) {
         text.push_str(&format!("[keys.{ctx}]\n"));
         for e in in_ctx {
             let (cmd, args) = COMMANDS[e.command];
-            if args.is_empty() {
+            let mut parts = vec![format!("command = \"{cmd}\"")];
+            if !args.is_empty() {
+                parts.push(format!("args = {{ {args} }}"));
+            }
+            if !e.when.is_empty() {
+                parts.push(format!("when = \"{}\"", e.when));
+            }
+            if parts.len() == 1 {
                 text.push_str(&format!("\"{}\" = \"{cmd}\"\n", e.keys));
             } else {
-                text.push_str(&format!(
-                    "\"{}\" = {{ command = \"{cmd}\", args = {{ {args} }} }}\n",
-                    e.keys
-                ));
+                text.push_str(&format!("\"{}\" = {{ {} }}\n", e.keys, parts.join(", ")));
             }
         }
     }
@@ -169,6 +177,24 @@ fn default_chords() -> Vec<(&'static str, Vec<KeyStroke>)> {
         .collect()
 }
 
+/// どの割当も、ほかの割当 (ユーザーのものと既定のチョード) のプレフィックスでも延長でもない組だけを残す (曖昧でない割当)。
+fn unambiguous(entries: &[Entry], chords: &[(&'static str, Vec<KeyStroke>)]) -> Vec<Entry> {
+    let mut free: Vec<Entry> = Vec::new();
+    for e in entries {
+        let seq = parse_sequence(&e.keys).expect("書けるキー");
+        let clash = free.iter().any(|f| {
+            let other = parse_sequence(&f.keys).expect("書けるキー");
+            other.starts_with(&seq) || seq.starts_with(&other)
+        }) || chords
+            .iter()
+            .any(|(_, c)| c.len() > seq.len() && c.starts_with(&seq));
+        if !clash {
+            free.push(e.clone());
+        }
+    }
+    free
+}
+
 // verifies: AC-FR-604-2
 #[test]
 fn a_曖昧でない割当は列を押すと割り当てたコマンドになる() {
@@ -181,21 +207,7 @@ fn a_曖昧でない割当は列を押すと割り当てたコマンドになる
     let strategy = proptest::collection::vec(entry(&["editor", "global"]), 1..10);
     runner
         .run(&strategy, |entries| {
-            // どの割当も、ほかの割当 (ユーザーのものと既定のチョード) のプレフィックスでも延長でもない組だけを残す
-            let mut free: Vec<Entry> = Vec::new();
-            for e in &entries {
-                let seq = parse_sequence(&e.keys).expect("書けるキー");
-                let clash = free.iter().any(|f| {
-                    let other = parse_sequence(&f.keys).expect("書けるキー");
-                    other.starts_with(&seq) || seq.starts_with(&other)
-                }) || chords
-                    .iter()
-                    .any(|(_, c)| c.len() > seq.len() && c.starts_with(&seq));
-                if !clash {
-                    free.push(e.clone());
-                }
-            }
-            let (text, kept) = toml_of(&free);
+            let (text, kept) = toml_of(&unambiguous(&entries, &chords));
             let (mut km, diags) = resolve_keymap(&load_keymap_str(&text));
             prop_assert!(
                 !diags
@@ -278,6 +290,64 @@ fn b_保留は時間で切れない() {
         .unwrap();
 }
 
+// verifies: AC-FR-604-1, AC-FR-604-2
+#[test]
+fn a_端末の_text_で届く_2_打目以降の文字でも割り当てたコマンドになる() {
+    // (a) を `Editor` の入力の経路で: 2 打目以降の文字キーは、端末と同じく `Text` (大文字・`shift+文字` は大文字) で送る
+    let chords = default_chords();
+    let mut runner = TestRunner::new(Config {
+        // 1 件ごとに Harness を作るので、件数は 1/50 (既定 64 件)
+        cases: (cases(3200) / 50).max(64),
+        failure_persistence: None,
+        ..Config::default()
+    });
+    let strategy = proptest::collection::vec(entry(&["editor", "global"]), 1..6);
+    runner
+        .run(&strategy, |entries| {
+            let free = unambiguous(&entries, &chords);
+            let mut text = String::new();
+            for ctx in ["global", "editor"] {
+                let in_ctx: Vec<(usize, &Entry)> =
+                    free.iter().enumerate().filter(|(_, e)| e.ctx == ctx).collect();
+                if in_ctx.is_empty() {
+                    continue;
+                }
+                text.push_str(&format!("[keys.{ctx}]\n"));
+                for (i, e) in in_ctx {
+                    text.push_str(&format!(
+                        "\"{}\" = {{ command = \"edit.insert_text\", args = {{ text = \"[{i}]\" }} }}\n",
+                        e.keys
+                    ));
+                }
+            }
+            let mut h = Harness::new();
+            let d = h.editor.set_user_keymap(&load_keymap_str(&text));
+            prop_assert!(
+                !d.iter().any(|d| d.severity == eve_config::Severity::Error),
+                "{d:?}\n{text}"
+            );
+            let mut want = String::new();
+            for (i, e) in free.iter().enumerate() {
+                for (j, part) in e.keys.split(' ').enumerate() {
+                    let k = ks(part);
+                    match k.key {
+                        KeyCode::Char(c) if j > 0 && k.mods == Modifiers::NONE => {
+                            h.text(&c.to_string());
+                        }
+                        KeyCode::Char(c) if j > 0 && k.mods == Modifiers::SHIFT => {
+                            h.text(&c.to_uppercase().to_string());
+                        }
+                        _ => h.keys(part),
+                    }
+                }
+                want.push_str(&format!("[{i}]"));
+                prop_assert_eq!(h.doc_text(), want.clone(), "{}\n{}", e.keys, text);
+            }
+            Ok(())
+        })
+        .unwrap();
+}
+
 /// (c) の 1 件: `seq` の真のプレフィックスまで押して `Esc` を押すと保留だけが消え、続けて `seq` を押し直すと
 /// 最初から押したときと同じ結果になる。
 fn esc_cancels_only_pending(km: &mut Keymap, seq: &[KeyStroke], cut: usize) -> Result<(), String> {
@@ -345,40 +415,48 @@ fn c_保留中の_esc_は保留だけを取り消す() {
         .unwrap();
 }
 
-/// 脱出のコマンドと、その既定のキー (コンテキスト, キー)。07 §11.6 の既定キー (`global` は編集面から押す)。
-const ESCAPES: [(&str, &[(&str, &str)]); 3] = [
-    ("app.quit", &[("global", "ctrl+q")]),
-    (
-        "ui.palette_open",
-        &[
-            ("global", "ctrl+p"),
-            ("global", "f1"),
-            ("global", "ctrl+shift+p"),
-        ],
-    ),
-    (
-        "ui.cancel",
-        &[
-            ("editor", "esc"),
-            ("prompt", "esc"),
-            ("help", "esc"),
-            ("dialog", "esc"),
-        ],
-    ),
-];
+/// 脱出のコマンド (07 §7.6)。
+const ESCAPES: [&str; 3] = ["app.quit", "ui.palette_open", "ui.cancel"];
+
+/// `when` の値の組 (`doc.modified` の真偽)。どの組でも届くことを確かめる。
+fn valuation(modified: bool) -> impl Fn(&str) -> Option<CtxValue> {
+    move |name: &str| (name == "doc.modified").then_some(CtxValue::Bool(modified))
+}
+
+/// `km` で、フォーカス `focus` から `cmd` に届く既定のキー (`keys` のどれか) があるか。`when` の値は `modified`。
+fn reaches(
+    km: &mut Keymap,
+    focus: &[&str],
+    keys: &[Vec<KeyStroke>],
+    cmd: &str,
+    modified: bool,
+) -> bool {
+    let v = valuation(modified);
+    keys.iter().any(|seq| {
+        let mut last = Resolution::Unbound;
+        for k in seq {
+            last = km.resolve(focus, *k, &v);
+        }
+        km.clear_pending();
+        run_id(&last) == Some(cmd)
+    })
+}
 
 // verifies: AC-FR-604-2
 #[test]
-fn d_脱出の_3_つにはどの割当でも届く() {
-    // 脱出キーを奪いやすい割当を混ぜる: 脱出キーそのものの付け替え・解除と、脱出キーを先頭にするチョード
+fn d_脱出の_3_つにはどの割当でもフォーカスごとに届く() {
+    // 脱出キーを奪いやすい割当を混ぜる: 脱出キーそのものの付け替え・解除 (when 付きを含む) と、脱出キーを先頭にする
+    // チョード
     let escape_keys = ["ctrl+q", "ctrl+p", "f1", "ctrl+shift+p", "esc"];
-    let contexts = ["global", "editor", "prompt", "help", "dialog"];
+    let contexts = ["global", "editor", "prompt", "search", "help", "dialog"];
+    let whens = ["", "doc.modified", "!doc.modified"];
     let strategy = proptest::collection::vec(
         (
             proptest::sample::select(contexts.to_vec()),
             proptest::sample::select(escape_keys.to_vec()),
             proptest::collection::vec(0..NEXT.len(), 0..2),
             0..COMMANDS.len(),
+            proptest::sample::select(whens.to_vec()),
         ),
         0..10,
     );
@@ -391,29 +469,43 @@ fn d_脱出の_3_つにはどの割当でも届く() {
         .run(&strategy, |raw| {
             let entries: Vec<Entry> = raw
                 .into_iter()
-                .map(|(ctx, first, rest, command)| Entry {
+                .map(|(ctx, first, rest, command, when)| Entry {
                     ctx,
                     keys: std::iter::once(first)
                         .chain(rest.iter().map(|&i| NEXT[i]))
                         .collect::<Vec<_>>()
                         .join(" "),
                     command,
+                    when: if COMMANDS[command].0 == "none" {
+                        ""
+                    } else {
+                        when
+                    },
                 })
                 .collect();
             let (text, _) = toml_of(&entries);
             let (mut km, _) = resolve_keymap(&load_keymap_str(&text));
-            for (cmd, defaults) in ESCAPES {
-                let reached = defaults.iter().any(|(ctx, keys)| {
-                    let focus = FOCUSES
-                        .iter()
-                        .find(|f| f[0] == *ctx)
-                        .copied()
-                        .unwrap_or(EDITOR);
-                    let r = km.resolve(focus, ks(keys), &no_ctx);
-                    km.clear_pending();
-                    run_id(&r) == Some(cmd)
-                });
-                prop_assert!(reached, "{cmd} に届かない\n{text}");
+            let (mut base, _) = resolve_keymap(&KeymapFile::default());
+            for cmd in ESCAPES {
+                for focus in FOCUSES {
+                    // そのフォーカスで参照する、cmd の既定のキー
+                    let keys: Vec<Vec<KeyStroke>> = base
+                        .listed_bindings()
+                        .into_iter()
+                        .filter(|(_, b)| b.command.as_str() == cmd && focus.contains(&b.context))
+                        .map(|(_, b)| b.sequence.clone())
+                        .collect();
+                    for modified in [false, true] {
+                        // 既定のキーマップで届くフォーカスだけを見る
+                        if !reaches(&mut base, focus, &keys, cmd, modified) {
+                            continue;
+                        }
+                        prop_assert!(
+                            reaches(&mut km, focus, &keys, cmd, modified),
+                            "{cmd} に {focus:?} から届かない (doc.modified = {modified})\n{text}"
+                        );
+                    }
+                }
             }
             Ok(())
         })

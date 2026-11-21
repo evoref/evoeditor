@@ -8,7 +8,7 @@ use std::borrow::Cow::Borrowed as B;
 
 use crate::catalog::Entry;
 
-/// `locales/en.toml` の文言 (837 件)。
+/// `locales/en.toml` の文言 (841 件)。
 #[rustfmt::skip]
 pub(crate) static EN: &[Entry] = &[
     (B("cmd.app.quit.description"), B("Quit the editor.")),
@@ -300,8 +300,12 @@ pub(crate) static EN: &[Entry] = &[
     (B("msg.config.keymap_bad_when.text"), B("The when clause in {item} is not valid")),
     (B("msg.config.keymap_chord_prefix.hint"), B("The key sequence wins. This binding is ignored")),
     (B("msg.config.keymap_chord_prefix.text"), B("{item} is the first key of a default key sequence (such as Ctrl+K)")),
+    (B("msg.config.keymap_chord_prefix_partly.hint"), B("Where that context applies, the key sequence wins and this binding is ignored. Elsewhere this binding is used")),
+    (B("msg.config.keymap_chord_prefix_partly.text"), B("{item} is the first key of the key sequence {value}")),
     (B("msg.config.keymap_chord_shadows_default.hint"), B("The key sequence wins. To keep the default key, start the sequence with another key")),
     (B("msg.config.keymap_chord_shadows_default.text"), B("{item} makes the default binding {value} unusable")),
+    (B("msg.config.keymap_chord_shadows_default_partly.hint"), B("Where the context of {item} applies, the key sequence wins. Elsewhere the default key still works")),
+    (B("msg.config.keymap_chord_shadows_default_partly.text"), B("{item} makes the default binding {value} unusable in some places")),
     (B("msg.config.keymap_duplicate_key.hint"), B("The binding written later is used")),
     (B("msg.config.keymap_duplicate_key.text"), B("{item} is the same key as {value}")),
     (B("msg.config.keymap_escape_key.hint"), B("The default binding was kept. Choose another key")),
@@ -850,7 +854,7 @@ pub(crate) static EN: &[Entry] = &[
     (B("ui.too_small"), B("The terminal is too small (at least {cols}x{rows} is needed)")),
 ];
 
-/// `locales/ja.toml` の文言 (837 件)。
+/// `locales/ja.toml` の文言 (841 件)。
 #[rustfmt::skip]
 pub(crate) static JA: &[Entry] = &[
     (B("cmd.app.quit.description"), B("エディタを終了します。")),
@@ -1142,8 +1146,12 @@ pub(crate) static JA: &[Entry] = &[
     (B("msg.config.keymap_bad_when.text"), B("{item} の when 句が正しくありません")),
     (B("msg.config.keymap_chord_prefix.hint"), B("続けて押すキーを優先し、この割当は使いません")),
     (B("msg.config.keymap_chord_prefix.text"), B("{item} は、既定の続けて押すキー (Ctrl+K など) の先頭です")),
+    (B("msg.config.keymap_chord_prefix_partly.hint"), B("そのコンテキストが効く場所では続けて押すキーを優先し、この割当は使いません。ほかの場所では使います")),
+    (B("msg.config.keymap_chord_prefix_partly.text"), B("{item} は、続けて押すキー {value} の先頭です")),
     (B("msg.config.keymap_chord_shadows_default.hint"), B("続けて押すキーを優先します。既定のキーも使うには、別のキーで始めてください")),
     (B("msg.config.keymap_chord_shadows_default.text"), B("{item} を割り当てたため、既定の割当 {value} は使えなくなります")),
+    (B("msg.config.keymap_chord_shadows_default_partly.hint"), B("{item} のコンテキストが効く場所では続けて押すキーを優先します。ほかの場所では既定のキーを使えます")),
+    (B("msg.config.keymap_chord_shadows_default_partly.text"), B("{item} を割り当てたため、既定の割当 {value} は一部の場所で使えなくなります")),
     (B("msg.config.keymap_duplicate_key.hint"), B("後に書いた割当を使います")),
     (B("msg.config.keymap_duplicate_key.text"), B("{item} は {value} と同じキーです")),
     (B("msg.config.keymap_escape_key.hint"), B("既定の割当を残しました。別のキーにしてください")),

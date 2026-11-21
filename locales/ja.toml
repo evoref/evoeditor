@@ -571,6 +571,14 @@ text = "{item} は、続けて押すキー {value} の先頭です"
 hint = "続けて押すキーを優先します。既定のキーも使うには、別のキーで始めてください"
 text = "{item} を割り当てたため、既定の割当 {value} は使えなくなります"
 
+[msg.config.keymap_chord_prefix_partly]
+hint = "そのコンテキストが効く場所では続けて押すキーを優先し、この割当は使いません。ほかの場所では使います"
+text = "{item} は、続けて押すキー {value} の先頭です"
+
+[msg.config.keymap_chord_shadows_default_partly]
+hint = "{item} のコンテキストが効く場所では続けて押すキーを優先します。ほかの場所では既定のキーを使えます"
+text = "{item} を割り当てたため、既定の割当 {value} は一部の場所で使えなくなります"
+
 [msg.config.keymap_duplicate_key]
 hint = "後に書いた割当を使います"
 text = "{item} は {value} と同じキーです"

@@ -118,16 +118,32 @@ pub fn parse_stroke(s: &str) -> Result<KeyStroke, KeyParseError> {
             KeyCode::F(f[1..].parse().unwrap_or(1))
         }
         _ => match single {
-            Some(c) if c.is_uppercase() => {
-                // 大文字は shift + 小文字
-                mods = mods | Modifiers::SHIFT;
-                KeyCode::Char(c.to_lowercase().next().unwrap_or(c))
+            Some(c) => {
+                let k = char_stroke(c);
+                mods = mods | k.mods;
+                k.key
             }
-            Some(c) => KeyCode::Char(c),
             None => return Err(KeyParseError::UnknownKey(key_name.to_owned())),
         },
     };
     Ok(KeyStroke { mods, key })
+}
+
+/// 1 文字のキーのストローク。大文字で、小文字が 1 文字に決まるものは `shift+小文字` に正準化する。設定のキー
+/// (`parse_stroke`) と、チョードの保留中に届いた `Text` の照合 (02 §7.2 K1) の両方がこれを使う (書いた `A` /
+/// `shift+a` と、端末から届いた `Text("A")` が同じストロークになるように)。
+pub(crate) fn char_stroke(c: char) -> KeyStroke {
+    let mut lower = c.to_lowercase();
+    match (c.is_uppercase(), lower.next(), lower.next()) {
+        (true, Some(l), None) => KeyStroke {
+            mods: Modifiers::SHIFT,
+            key: KeyCode::Char(l),
+        },
+        _ => KeyStroke {
+            mods: Modifiers::NONE,
+            key: KeyCode::Char(c),
+        },
+    }
 }
 
 /// 空白で区切ったストロークの列 (`ctrl+k s`)。
@@ -212,7 +228,7 @@ pub(crate) const FOCUS_HELP: &[&str] = &["help", "global"];
 pub(crate) const FOCUS_DIALOG: &[&str] = &["dialog"];
 
 /// フォーカスの場所ごとの参照順の全部 (07 §7.1 の表)。
-const FOCUSES: [&[&str]; 7] = [
+pub(crate) const FOCUSES: [&[&str]; 7] = [
     FOCUS_EDITOR,
     FOCUS_SEARCH,
     FOCUS_PROMPT,
@@ -400,14 +416,17 @@ impl PartialEq for CommandInvocation {
     }
 }
 
-/// プレフィックスの衝突 (曖昧なチョード、02 §7.2 K3 / 07 §7.6) で使えなくなった割当の位置と、それを無効にしたチョードの
-/// 位置 (どちらも `(層の番号, 層の中の番号)`)。ユーザー設定でだけ生じる (既定キーマップには作らない)。
+/// プレフィックスの衝突 (曖昧なチョード、02 §7.2 K3 / 07 §7.6): 割当 `at` を、チョード `by` が奪う (どちらも
+/// `(層の番号, 層の中の番号)`)。ユーザー設定でだけ生じる (既定キーマップには作らない)。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct Disabled {
-    /// 使えなくなった割当。
+pub(crate) struct Conflict {
+    /// 奪われる割当。
     pub at: (usize, usize),
-    /// それを無効にしたチョード。
+    /// 奪うチョード (層の優先順で最初のもの)。
     pub by: (usize, usize),
+    /// `at` のコンテキストを参照するすべてのフォーカスで奪われる (使えない割当)。偽なら一部のフォーカスでだけ奪われ、
+    /// ほかのフォーカスでは使える。
+    pub everywhere: bool,
 }
 
 /// プレフィックスの衝突で使えなくなった割当と、それを無効にしたチョード (一覧の出力とヘルプのキー一覧、07 §7.7)。
@@ -423,7 +442,7 @@ pub struct DisabledBinding<'a> {
     pub by: &'a Binding,
 }
 
-/// キーの列の照合の結果 (`Keymap::lookup`)。
+/// キーの列の照合の結果 (`lookup_in`)。
 struct Lookup<'a> {
     /// 列にちょうど一致する割当 (上位の層の同じ列に遮蔽されていないもの。`"none"` を含む)。
     exact: Option<&'a Binding>,
@@ -437,27 +456,36 @@ pub struct Keymap {
     /// 優先順 (先頭が最優先)。
     layers: Vec<Layer>,
     pending: Vec<KeyStroke>,
-    /// プレフィックスの衝突で使えなくなった割当 (層を替えるたびに求め直す)。
-    disabled: Vec<Disabled>,
+    /// プレフィックスの衝突 (層を替えるたびに求め直す)。
+    conflicts: Vec<Conflict>,
+}
+
+/// コンテキスト `b` を参照するフォーカスは、どれも `o` も参照する (07 §7.1 の参照順の表。`FOCUSES` が正本)。上の層の
+/// `o` の割当は、`b` の割当が効くどの場所でも先に照合される。
+fn covers(o: &str, b: &str) -> bool {
+    FOCUSES
+        .iter()
+        .filter(|f| f.contains(&b))
+        .all(|f| f.contains(&o))
 }
 
 /// 上位の層に、同じキーを無条件で奪う割当がある (表示から外す。`"none"` や付け替えで届かなくなった既定の割当)。
+/// 奪うのは、`b` のコンテキストを参照するどのフォーカスでも先に照合される割当 (`covers`)。
 fn shadowed(layers: &[Layer], layer_index: usize, b: &Binding) -> bool {
     layers[..layer_index].iter().any(|l| {
         l.bindings.iter().any(|o| {
             o.sequence == b.sequence
                 && o.when == ContextExpr::always()
-                && (o.context == b.context
-                    || (o.context == "global" && b.context != "dialog")
-                    || (o.context == "editor" && b.context == "global"))
+                && covers(o.context, b.context)
         })
     })
 }
 
-/// 曖昧なチョードで使えなくなる割当を求める: 同時に参照され得るコンテキストに、その割当の列を真のプレフィックスに持つ
-/// チョード (`"none"` でなく、遮蔽されていないもの) がある割当 (02 §7.2 K3、07 §7.6)。チョードの `when` は見ない
-/// (真になり得るなら単体を奪うので、表示と診断は無効として扱う)。無効にしたチョードは、層の優先順で最初のもの。
-fn find_disabled(layers: &[Layer]) -> Vec<Disabled> {
+/// プレフィックスの衝突を求める: 同時に参照され得るコンテキストに、割当の列を真のプレフィックスに持つチョード
+/// (`"none"` でなく、遮蔽されていないもの) がある割当 (02 §7.2 K3、07 §7.6)。チョードの `when` は見ない (真になり得る
+/// なら単体を奪うので、表示と診断は奪われるものとして扱う)。割当のコンテキストを参照するフォーカスのすべてにチョードが
+/// あれば「使えない割当」(`everywhere`)。
+fn find_conflicts(layers: &[Layer]) -> Vec<Conflict> {
     let all: Vec<((usize, usize), &Binding)> = layers
         .iter()
         .enumerate()
@@ -473,18 +501,102 @@ fn find_disabled(layers: &[Layer]) -> Vec<Disabled> {
         if b.is_none() || shadowed(layers, at.0, b) {
             continue;
         }
-        let by = all.iter().find(|&&(cat, c)| {
-            !c.is_none()
-                && c.sequence.len() > b.sequence.len()
-                && c.sequence.starts_with(&b.sequence)
-                && contexts_meet(b.context, c.context)
-                && !shadowed(layers, cat.0, c)
-        });
-        if let Some(&(by, _)) = by {
-            out.push(Disabled { at, by });
-        }
+        let chords: Vec<((usize, usize), &Binding)> = all
+            .iter()
+            .copied()
+            .filter(|&(cat, c)| {
+                !c.is_none()
+                    && c.sequence.len() > b.sequence.len()
+                    && c.sequence.starts_with(&b.sequence)
+                    && contexts_meet(b.context, c.context)
+                    && !shadowed(layers, cat.0, c)
+            })
+            .collect();
+        let Some(&(by, _)) = chords.first() else {
+            continue;
+        };
+        let everywhere = FOCUSES
+            .iter()
+            .filter(|f| f.contains(&b.context))
+            .all(|f| chords.iter().any(|(_, c)| f.contains(&c.context)));
+        out.push(Conflict { at, by, everywhere });
     }
     out
+}
+
+/// `layers` (優先順) を `contexts` の参照順で引いて `seq` を照合する。層の優先が先 (ユーザー層の `global` は既定層の
+/// `editor` より優先、07 §7.4)、同じ層の中でコンテキストの参照順。同じキーの列は最初に見つかった割当だけが効く (下は
+/// 遮蔽される)。`active` が偽の割当 (`when` が偽など) は無いものとする。
+fn lookup_in<'a>(
+    layers: impl IntoIterator<Item = &'a Layer>,
+    contexts: &[&str],
+    seq: &[KeyStroke],
+    active: &dyn Fn(&Binding) -> bool,
+) -> Lookup<'a> {
+    let mut seen: Vec<&[KeyStroke]> = Vec::new();
+    let mut found = Lookup {
+        exact: None,
+        extends: false,
+    };
+    for layer in layers {
+        for ctx in contexts {
+            for b in layer.bindings.iter().filter(|b| b.context == *ctx) {
+                if !b.sequence.starts_with(seq) || !active(b) {
+                    continue;
+                }
+                if seen.contains(&b.sequence.as_slice()) {
+                    continue;
+                }
+                seen.push(&b.sequence);
+                if b.sequence.len() == seq.len() {
+                    found.exact = Some(b);
+                } else if !b.is_none() {
+                    found.extends = true;
+                }
+            }
+        }
+    }
+    found
+}
+
+/// `layers` で、フォーカス `focus` で `seq` を押すと、`when` の値に依らず必ず `command` になる (脱出キーの検査、07 §7.6)。
+/// `when` 付きの割当は真になり得るものとして扱う: 同じ列の割当は、`when` の無い割当に行き着くまでのどれもが
+/// `command` で、列を先頭にする `"none"` でないチョードが (無条件の割当に遮蔽されずに) 1 つも無いこと。
+fn always_runs<'a>(
+    layers: impl IntoIterator<Item = &'a Layer>,
+    focus: &[&str],
+    seq: &[KeyStroke],
+    command: &str,
+) -> bool {
+    let mut decided: Vec<&[KeyStroke]> = Vec::new();
+    let mut exact_done = false;
+    for layer in layers {
+        for ctx in focus {
+            for b in layer.bindings.iter().filter(|b| b.context == *ctx) {
+                if !b.sequence.starts_with(seq) || decided.contains(&b.sequence.as_slice()) {
+                    continue;
+                }
+                let always = b.when == ContextExpr::always();
+                if b.sequence.len() == seq.len() {
+                    if exact_done {
+                        continue;
+                    }
+                    if b.command.as_str() != command {
+                        return false;
+                    }
+                    if always {
+                        exact_done = true;
+                        decided.push(&b.sequence);
+                    }
+                } else if !b.is_none() {
+                    return false;
+                } else if always {
+                    decided.push(&b.sequence);
+                }
+            }
+        }
+    }
+    exact_done
 }
 
 impl Keymap {
@@ -496,7 +608,7 @@ impl Keymap {
     ///
     /// 曖昧なチョードがあれば、そのコンテキストと割当を示す説明の文字列。
     pub fn new(layers: Vec<Layer>) -> Result<Keymap, String> {
-        if let Some(d) = find_disabled(&layers).first() {
+        if let Some(d) = find_conflicts(&layers).first() {
             let a = &layers[d.at.0].bindings[d.at.1];
             let b = &layers[d.by.0].bindings[d.by.1];
             return Err(format!(
@@ -510,7 +622,7 @@ impl Keymap {
         Ok(Keymap {
             layers,
             pending: Vec::new(),
-            disabled: Vec::new(),
+            conflicts: Vec::new(),
         })
     }
 
@@ -524,7 +636,8 @@ impl Keymap {
     }
 
     /// `first_bindings` のうち、`ok` を満たす割当だけから選ぶ (この端末で届く割当、04 §7.8)。
-    /// プレフィックスの衝突で使えなくなった割当は選ばない。
+    /// `contexts` のフォーカスでその割当が実際に効くもの (無条件の割当に遮蔽されず、無条件のチョードに奪われない) だけを
+    /// 選び、どこでも使えない割当 (プレフィックスの衝突) も選ばない。
     pub fn first_bindings_where(
         &self,
         contexts: &[&str],
@@ -534,12 +647,13 @@ impl Keymap {
         for (li, layer) in self.layers.iter().enumerate() {
             for ctx in contexts {
                 for (bi, b) in layer.bindings.iter().enumerate() {
-                    if b.context != *ctx
-                        || b.is_none()
-                        || shadowed(&self.layers, li, b)
-                        || self.is_disabled((li, bi))
-                        || !ok(b)
-                    {
+                    if b.context != *ctx || b.is_none() || self.is_disabled((li, bi)) || !ok(b) {
+                        continue;
+                    }
+                    let found = lookup_in(&self.layers, contexts, &b.sequence, &|c| {
+                        c.when == ContextExpr::always() || std::ptr::eq(c, b)
+                    });
+                    if found.extends || !found.exact.is_some_and(|e| std::ptr::eq(e, b)) {
                         continue;
                     }
                     out.entry(b.command.as_str().to_owned())
@@ -573,11 +687,13 @@ impl Keymap {
             .collect()
     }
 
-    /// プレフィックスの衝突 (曖昧なチョード) で使えなくなった割当と、それを無効にしたチョード (層の順)。
-    /// ヘルプのキー一覧と `--dump-keymap` が、使えない割当として出す (07 §7.7)。
+    /// プレフィックスの衝突で、どのフォーカスでも使えなくなった割当と、それを無効にしたチョード (層の順)。
+    /// ヘルプのキー一覧と `--dump-keymap` が、使えない割当として出す (07 §7.7)。一部のフォーカスでだけ奪われる割当は
+    /// 含めない (使える割当として出す)。
     pub fn disabled_bindings(&self) -> Vec<DisabledBinding<'_>> {
-        self.disabled
+        self.conflicts
             .iter()
+            .filter(|d| d.everywhere)
             .map(|d| DisabledBinding {
                 layer: self.layers[d.at.0].name,
                 binding: &self.layers[d.at.0].bindings[d.at.1],
@@ -587,13 +703,13 @@ impl Keymap {
             .collect()
     }
 
-    /// プレフィックスの衝突で使えなくなった割当の位置 (ユーザー層の診断が使う)。
-    pub(crate) fn disabled(&self) -> &[Disabled] {
-        &self.disabled
+    /// プレフィックスの衝突の全部 (一部のフォーカスでだけ奪われるものを含む。ユーザー層の診断が使う)。
+    pub(crate) fn conflicts(&self) -> &[Conflict] {
+        &self.conflicts
     }
 
     fn is_disabled(&self, at: (usize, usize)) -> bool {
-        self.disabled.iter().any(|d| d.at == at)
+        self.conflicts.iter().any(|d| d.at == at && d.everywhere)
     }
 
     /// 層 `index` (優先順の番号)。
@@ -612,78 +728,34 @@ impl Keymap {
             .collect()
     }
 
-    /// `command` の既定の割当のどれかが、今のキーマップで `command` に届く (脱出キーの検査、07 §7.6)。
-    pub(crate) fn escape_reachable(&self, command: &str) -> bool {
+    /// 脱出のコマンド `command` に、既定のキーマップでは届くのに、今のキーマップでは届かなくなったフォーカス (07 §7.1 の
+    /// 参照順。07 §7.6 の「脱出キーの消失」)。「届く」は、そのフォーカスで参照する `command` の既定のキーのどれかを押すと、
+    /// `when` の値に依らず必ず `command` になること。
+    pub(crate) fn escape_lost_focuses(&self, command: &str) -> Vec<&'static [&'static str]> {
         let defaults = self.default_sequences(command);
-        defaults.is_empty()
-            || defaults.iter().any(|(ctx, seq)| {
-                // `global` の割当は、編集面 (`editor` → `global`) から届くかで見る
-                let contexts: &[&str] = match *ctx {
-                    "dialog" => FOCUS_DIALOG,
-                    "global" => FOCUS_EDITOR,
-                    c => &[c, "global"],
+        let base: Vec<&Layer> = self.layers.iter().filter(|l| l.name == "default").collect();
+        FOCUSES
+            .iter()
+            .copied()
+            .filter(|focus| {
+                let reaches = |layers: &[&Layer]| {
+                    defaults.iter().any(|(ctx, seq)| {
+                        focus.contains(ctx)
+                            && always_runs(layers.iter().copied(), focus, seq, command)
+                    })
                 };
-                self.effective(contexts, seq) == Some(command)
+                let now: Vec<&Layer> = self.layers.iter().collect();
+                reaches(&base) && !reaches(&now)
             })
+            .collect()
     }
 
-    /// 無条件の割当だけを見て、`seq` に当たるコマンド (`"none"` の遮蔽は `None`)。`seq` を先頭にするチョードがあれば、
-    /// チョードが勝つので `None` (K3)。チョードは `when` 付きでも数える (真になれば単体を奪うため)。
-    fn effective(&self, contexts: &[&str], seq: &[KeyStroke]) -> Option<&str> {
-        let found = self.lookup(contexts, seq, &|b| {
-            b.sequence.len() > seq.len() || b.when == ContextExpr::always()
-        });
-        if found.extends {
-            return None;
-        }
-        found
-            .exact
-            .filter(|b| !b.is_none())
-            .map(|b| b.command.as_str())
-    }
-
-    /// `contexts` の参照順で `seq` を照合する。層の優先が先 (ユーザー層の `global` は既定層の `editor` より優先、07 §7.4)、
-    /// 同じ層の中でコンテキストの参照順。同じキーの列は最初に見つかった割当だけが効く (下は遮蔽される)。`active` が偽の
-    /// 割当 (`when` が偽など) は無いものとする。
-    fn lookup(
-        &self,
-        contexts: &[&str],
-        seq: &[KeyStroke],
-        active: &dyn Fn(&Binding) -> bool,
-    ) -> Lookup<'_> {
-        let mut seen: Vec<&[KeyStroke]> = Vec::new();
-        let mut found = Lookup {
-            exact: None,
-            extends: false,
-        };
-        for layer in &self.layers {
-            for ctx in contexts {
-                for b in layer.bindings.iter().filter(|b| b.context == *ctx) {
-                    if !b.sequence.starts_with(seq) || !active(b) {
-                        continue;
-                    }
-                    if seen.contains(&b.sequence.as_slice()) {
-                        continue;
-                    }
-                    seen.push(&b.sequence);
-                    if b.sequence.len() == seq.len() {
-                        found.exact = Some(b);
-                    } else if !b.is_none() {
-                        found.extends = true;
-                    }
-                }
-            }
-        }
-        found
-    }
-
-    /// ユーザー層を置き換える (最優先に置く)。同じ名前 (`user`) の層があれば取り除く。プレフィックスの衝突で使えなく
-    /// なる割当を求め直す。
+    /// ユーザー層を置き換える (最優先に置く)。同じ名前 (`user`) の層があれば取り除く。プレフィックスの衝突を求め直す。
     pub fn set_user_layer(&mut self, layer: Layer) {
         self.layers.retain(|l| l.name != layer.name);
         self.layers.insert(0, layer);
         self.pending.clear();
-        self.disabled = find_disabled(&self.layers);
+        self.conflicts = find_conflicts(&self.layers);
     }
 
     /// `first_bindings` の機械向けの表記版 (試験用)。
@@ -771,7 +843,7 @@ impl Keymap {
         }
         let mut seq = std::mem::take(&mut self.pending);
         seq.push(key);
-        let found = self.lookup(contexts, &seq, &|b| b.when.eval(lookup));
+        let found = lookup_in(&self.layers, contexts, &seq, &|b| b.when.eval(lookup));
         if found.extends {
             self.pending = seq;
             return Resolution::Pending;

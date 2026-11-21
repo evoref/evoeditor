@@ -598,3 +598,149 @@ fn 衝突の診断は再読込でも出て_一覧にファイルと行で並ぶ(
     h.text("x");
     assert_eq!(h.doc_text(), "");
 }
+
+// ---------- PR #600 のレビューで直した点 ----------
+
+// verifies: AC-FR-604-2
+#[test]
+fn 確認ダイアログでもチョードの保留中の文字はアクセラレータにしない() {
+    let mut h = Harness::new();
+    let d = diagnostics(&mut h, "[keys.dialog]\n\"ctrl+k d\" = \"ui.cancel\"\n");
+    assert!(d.is_empty(), "{d:?}");
+    h.text("x");
+    h.keys("ctrl+q");
+    assert_eq!(h.overlay(), "dialog", "未保存の終了の確認");
+    h.keys("ctrl+k");
+    // 「保存しない」のアクセラレータと同じ文字。保留の 2 打目として照合する
+    h.text("d");
+    assert_eq!(h.quit_code(), None, "変更を捨てて終了しない");
+    assert_eq!(h.overlay(), "", "チョード (ui.cancel) で閉じる");
+    assert_eq!(h.doc_text(), "x");
+    // 複数書記素でも先頭だけを照合し、残りは捨てる
+    h.keys("ctrl+q ctrl+k");
+    h.text("dd");
+    assert_eq!((h.quit_code(), h.overlay()), (None, ""));
+    // 保留中の貼り付けは保留を捨て、ダイアログでは選択肢にしない
+    h.keys("ctrl+q ctrl+k");
+    h.paste("d");
+    assert_eq!((h.quit_code(), h.overlay()), (None, "dialog"));
+    // 保留が無ければ、文字は今までどおりアクセラレータ
+    h.text("d");
+    assert_eq!(h.quit_code(), Some(0), "保存しないで終了");
+}
+
+// verifies: AC-FR-604-1
+#[test]
+fn 二打目以降の大文字と_shift_付きの文字は端末の_text_で届く() {
+    let mut h = Harness::new();
+    let d = diagnostics(
+        &mut h,
+        "[keys.editor]\n\"ctrl+j A\" = \"edit.duplicate_line\"\n\"ctrl+j shift+b\" = \"edit.delete_line\"\n",
+    );
+    assert!(d.is_empty(), "{d:?}");
+    h.paste("a\nb\n");
+    h.keys("ctrl+home ctrl+j");
+    h.text("A");
+    assert_eq!(h.doc_text(), "a\na\nb\n");
+    h.keys("ctrl+j");
+    h.text("B");
+    assert_eq!(h.doc_text(), "a\nb\n");
+    // 小文字は別のキー (割当が無いので何もしない)
+    h.keys("ctrl+j");
+    h.text("a");
+    assert_eq!(h.doc_text(), "a\nb\n");
+}
+
+// verifies: AC-FR-608-1
+#[test]
+fn 脱出の検査はフォーカスごと_esc_を先頭にするチョードはエラーにして外す() {
+    let mut h = Harness::new();
+    let d = diagnostics(
+        &mut h,
+        "[keys.global]\n\"esc x\" = \"edit.duplicate_line\"\n",
+    );
+    assert_eq!(
+        d.iter()
+            .filter(|d| d.kind == DiagKind::Keymap(KeymapProblem::EscapeKey))
+            .map(|d| (d.key.as_str(), d.value.as_str()))
+            .collect::<Vec<_>>(),
+        [("keys.global.esc x", "ui.cancel")],
+        "{d:?}"
+    );
+    // どのフォーカスでも Esc で取り消せる
+    h.keys("ctrl+p");
+    assert_eq!(h.overlay(), "palette");
+    h.keys("esc");
+    assert_eq!(h.overlay(), "");
+    h.keys("ctrl+k h");
+    assert_eq!(h.overlay(), "help");
+    h.keys("esc");
+    assert_eq!(h.overlay(), "");
+}
+
+// verifies: AC-FR-608-1
+#[test]
+fn when_付きで脱出キーを奪い得る割当もエラーにして外す() {
+    let mut h = Harness::new();
+    let d = diagnostics(
+        &mut h,
+        "[keys.global]\n\"ctrl+q\" = { command = \"file.save\", when = \"doc.modified\" }\n",
+    );
+    assert!(
+        d.iter()
+            .any(|d| d.kind == DiagKind::Keymap(KeymapProblem::EscapeKey) && d.value == "app.quit"),
+        "{d:?}"
+    );
+    h.text("x");
+    h.keys("ctrl+q");
+    assert_eq!(
+        h.overlay(),
+        "dialog",
+        "未保存でも終了の確認が出る (保存にならない)"
+    );
+}
+
+// verifies: AC-FR-608-1
+#[test]
+fn 一部のフォーカスでだけ奪う衝突は使えない割当にせず_そうと分かる警告にする() {
+    let mut h = Harness::new();
+    let d = diagnostics(
+        &mut h,
+        concat!(
+            "[keys.search]\n\"ctrl+a x\" = \"edit.duplicate_line\"\n\"ctrl+j x\" = \"edit.duplicate_line\"\n",
+            "[keys.global]\n\"ctrl+j\" = \"edit.delete_line\"\n",
+        ),
+    );
+    assert_eq!(
+        of_kind(&d, KeymapProblem::ChordShadowsDefaultPartly),
+        [(
+            "keys.search.ctrl+a x".to_owned(),
+            "prompt: Ctrl+A = select.all".to_owned(),
+            2
+        )],
+        "{d:?}"
+    );
+    assert_eq!(
+        of_kind(&d, KeymapProblem::ChordPrefixPartly),
+        [(
+            "keys.global.ctrl+j".to_owned(),
+            "search: Ctrl+J X".to_owned(),
+            5
+        )],
+        "{d:?}"
+    );
+    assert!(
+        d.iter()
+            .all(|d| d.severity == eve_config::Severity::Warning)
+    );
+    assert!(
+        h.editor.keymap().disabled_bindings().is_empty(),
+        "使えない割当にはしない"
+    );
+    // 編集面では global の ctrl+j が効く
+    h.paste("a\nb\n");
+    h.keys("ctrl+home ctrl+j");
+    assert_eq!(h.doc_text(), "b\n");
+    let (entries, _) = help_keys(&mut h);
+    assert!(entries.iter().all(|(_, k)| !k.contains('!')), "{entries:?}");
+}

@@ -573,6 +573,14 @@ text = "{item} is the first key of the key sequence {value}"
 hint = "The key sequence wins. To keep the default key, start the sequence with another key"
 text = "{item} makes the default binding {value} unusable"
 
+[msg.config.keymap_chord_prefix_partly]
+hint = "Where that context applies, the key sequence wins and this binding is ignored. Elsewhere this binding is used"
+text = "{item} is the first key of the key sequence {value}"
+
+[msg.config.keymap_chord_shadows_default_partly]
+hint = "Where the context of {item} applies, the key sequence wins. Elsewhere the default key still works"
+text = "{item} makes the default binding {value} unusable in some places"
+
 [msg.config.keymap_duplicate_key]
 hint = "The binding written later is used"
 text = "{item} is the same key as {value}"
