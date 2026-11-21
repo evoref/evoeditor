@@ -1781,7 +1781,7 @@ enum JobResult {                   // #[non_exhaustive]
     ThemeRead    { name: String, theme: Option<Theme>, reports: Vec<(String, Vec<Diagnostic>)> },
     LastVersionChecked { outcome: LastVersionOutcome },
     // ── ワークスペース (v0.5 の M31。型の細目は 03 §12.7.1〜§12.7.5) ──
-    WorkspaceRoot { root: FsPath, source: RootSource /*Explicit | Dir | Marker | Cwd*/, dir_args: Vec<FsPath> },
+    WorkspaceRoot { root: FsPath, source: RootSource /*Explicit | Dir | Marker | Cwd*/, dir_args: Vec<FsPath>, explicit_error: Option<FsError> /*--workspace を使えなかった理由*/ },
     ScanBatch    { generation: u64, chunk: Arc<[Candidate]>, unreadable_dirs: u64 }, // 非終端。WorkspaceScan の束
     ScanDone     { generation: u64, total: u64, truncated: bool },                    // WorkspaceScan の終端 (ルートが読めなければ Failed)
     FinderMatched { generation: u64, matched: usize, top: Vec<FinderHit> },

@@ -37,6 +37,12 @@ pub fn run_job(
             swaps: ports.fs.list_swaps().unwrap_or_default(),
             leftovers: crate::io::leftover::scan(&*ports.fs),
         },
+        JobKind::WorkspaceRoot {
+            explicit,
+            args,
+            cwd,
+            markers,
+        } => crate::workspace::root::detect_root(&*ports.fs, explicit.as_ref(), args, cwd, markers),
         JobKind::Open { path, opts } => run_open(req.id, path, *opts, ports, cancel, emit),
         JobKind::OpenStdin { opts } => run_open_stdin(req.id, *opts, ports, cancel, emit),
         JobKind::Save {

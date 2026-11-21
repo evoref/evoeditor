@@ -174,6 +174,8 @@ pub struct HostInit {
     pub rescue_writer: Option<Arc<dyn RescueWriter>>,
     /// SSH 接続中か (`clipboard.osc52 = auto` の条件)。`None` は環境変数 `SSH_TTY` / `SSH_CONNECTION` から決める。
     pub ssh_session: Option<bool>,
+    /// `--workspace` / `-w` の値 (入力されたまま、07 §18.3)。起動の後に `io` のジョブでルートを決める (03 §12.7.1)。
+    pub workspace: Option<String>,
 }
 
 impl Host {
@@ -209,6 +211,7 @@ impl Host {
             clipboard,
             rescue_writer,
             ssh_session,
+            workspace,
         } = init;
         let clock = ports.clock.clone();
         let fs = ports.fs.clone();
@@ -257,6 +260,7 @@ impl Host {
         editor.configure(StartupConfig {
             log_path: Some(log_path),
             system_encoding: Some(system_encoding),
+            workspace,
             ..Default::default()
         });
         let emergency = EmergencyCtl::new();

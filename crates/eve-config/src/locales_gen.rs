@@ -8,7 +8,7 @@ use std::borrow::Cow::Borrowed as B;
 
 use crate::catalog::Entry;
 
-/// `locales/en.toml` の文言 (841 件)。
+/// `locales/en.toml` の文言 (845 件)。
 #[rustfmt::skip]
 pub(crate) static EN: &[Entry] = &[
     (B("cmd.app.quit.description"), B("Quit the editor.")),
@@ -286,6 +286,8 @@ pub(crate) static EN: &[Entry] = &[
     (B("info.undo.history_trimmed"), B("Dropped old undo history to stay within the memory limit")),
     (B("msg.cli.directory.hint"), B("Start with the path of a file")),
     (B("msg.cli.directory.text"), B("{path} is a folder and cannot be opened. An untitled document was opened")),
+    (B("msg.cli.directory_ignored.hint"), B("Specify only one folder as the workspace")),
+    (B("msg.cli.directory_ignored.text"), B("{path} is a folder and was not opened. The workspace is {root}")),
     (B("msg.clipboard.fallback.hint"), B("To copy and paste with other apps, use your terminal's selection and paste")),
     (B("msg.clipboard.fallback.text"), B("The system clipboard is not available, so the editor's own clipboard was used: {reason}")),
     (B("msg.config.invalid_value.hint"), B("Allowed values: {allowed}. This item uses the default {default}")),
@@ -526,6 +528,8 @@ pub(crate) static EN: &[Entry] = &[
     (B("msg.swap.too_large.text"), B("{path} is larger than {mib} MiB, so it is not covered by autosave of unsaved content (swap)")),
     (B("msg.swap.unreadable.hint"), B("Open it with a newer version of evoeditor. This folder was not moved or deleted")),
     (B("msg.swap.unreadable.text"), B("There are {count} swaps that cannot be read: {dir}")),
+    (B("msg.workspace.root_invalid.hint"), B("Specify a folder. {root} is used as the workspace for now")),
+    (B("msg.workspace.root_invalid.text"), B("Cannot use {path} as the workspace: {reason}")),
     (B("status.degraded.long_line.long"), B("[Long lines: no wrap]")),
     (B("status.degraded.long_line.short"), B("No wrap")),
     (B("status.encoding.bom"), B("{encoding} BOM")),
@@ -854,7 +858,7 @@ pub(crate) static EN: &[Entry] = &[
     (B("ui.too_small"), B("The terminal is too small (at least {cols}x{rows} is needed)")),
 ];
 
-/// `locales/ja.toml` の文言 (841 件)。
+/// `locales/ja.toml` の文言 (845 件)。
 #[rustfmt::skip]
 pub(crate) static JA: &[Entry] = &[
     (B("cmd.app.quit.description"), B("エディタを終了します。")),
@@ -1132,6 +1136,8 @@ pub(crate) static JA: &[Entry] = &[
     (B("info.undo.history_trimmed"), B("メモリの上限のため、古い元に戻す履歴を破棄しました")),
     (B("msg.cli.directory.hint"), B("ファイルのパスを指定して起動してください")),
     (B("msg.cli.directory.text"), B("{path} はフォルダなので開けません。無題の文書を開きました")),
+    (B("msg.cli.directory_ignored.hint"), B("ワークスペースにするフォルダは 1 つだけ指定してください")),
+    (B("msg.cli.directory_ignored.text"), B("{path} はフォルダなので開けません。ワークスペースは {root} です")),
     (B("msg.clipboard.fallback.hint"), B("他のアプリとの間でコピー・貼り付けするには、端末の範囲選択と貼り付けを使ってください")),
     (B("msg.clipboard.fallback.text"), B("システムのクリップボードを使えないため、エディタ内のクリップボードを使いました: {reason}")),
     (B("msg.config.invalid_value.hint"), B("使える値: {allowed}。この項目は既定値 {default} を使います")),
@@ -1372,6 +1378,8 @@ pub(crate) static JA: &[Entry] = &[
     (B("msg.swap.too_large.text"), B("{path} は {mib} MiB を超えるので、未保存の内容の自動保存 (スワップ) の対象外です")),
     (B("msg.swap.unreadable.hint"), B("新しい版の evoeditor で開いてください。このフォルダは移動も削除もしていません")),
     (B("msg.swap.unreadable.text"), B("読めないスワップが {count} 件あります: {dir}")),
+    (B("msg.workspace.root_invalid.hint"), B("フォルダのパスを指定してください。今は {root} をワークスペースにしています")),
+    (B("msg.workspace.root_invalid.text"), B("{path} をワークスペースにできません: {reason}")),
     (B("status.degraded.long_line.long"), B("[長い行: 折り返しなし]")),
     (B("status.degraded.long_line.short"), B("折返なし")),
     (B("status.encoding.bom"), B("{encoding} BOM")),

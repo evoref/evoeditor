@@ -83,6 +83,18 @@ pub enum JobKind {
         /// 今の版 (`CARGO_PKG_VERSION` の形の文字列)。
         current: String,
     },
+    /// ワークスペースのルートの検出 (03 §12.7.1、規則は 07 §12.1。v0.5 の M31)。起動時に 1 回、起動時のパスを開くジョブの
+    /// 後ろに積む (`io`)。結果は `JobResult::WorkspaceRoot`。
+    WorkspaceRoot {
+        /// `--workspace` / `-w` の値 (正規化したパス)。
+        explicit: Option<FsPath>,
+        /// 位置引数 (正規化したパス。`-` を除く)。
+        args: Vec<FsPath>,
+        /// カレントディレクトリ。
+        cwd: FsPath,
+        /// 目印の名前 (`workspace.root_markers`、07 §5.9)。
+        markers: Vec<String>,
+    },
     /// ファイルを開く (03 §9.2)。文字コードは判定する (03 §8.2) か、`opts.forced` で指定する。
     Open {
         /// 開くパス。

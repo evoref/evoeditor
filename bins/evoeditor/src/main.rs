@@ -77,10 +77,16 @@ fn wait_stdin(stdin: &PlatformStdin) {
     }
 }
 
+/// 起動時に開くもの (位置引数の FILE・DIR・`-`) と、ワークスペースのルートの指定 (`--workspace`。07 §18.2 / §18.3)。
+struct Targets {
+    files: Vec<cli::FileArg>,
+    workspace: Option<String>,
+}
+
 /// 端末を始めて編集する起動の形: Host を組み立て、OS のコールバックとパニックのフックを入れて `Host::run` を回し、
 /// どの経路でも端末を復元してから終わり方 (終了時の行・退避・クラッシュログ) を出す。
 fn run(
-    files: Vec<cli::FileArg>,
+    Targets { files, workspace }: Targets,
     read_only: bool,
     encoding: Option<Encoding>,
     cli_locale: Option<&str>,
@@ -138,6 +144,7 @@ fn run(
         cli_locale,
         config_args,
         cli_log_level,
+        workspace,
         // 標準入力は、Host の組み立ての失敗し得る段 (作業ディレクトリ・ワーカー) の後に移す
         || if read_stdin { take_stdin() } else { None },
     ) {
@@ -235,6 +242,7 @@ fn main() -> ProcessExit {
             ignored,
             config,
             log_level,
+            workspace,
             ..
         }) => match encoding.as_deref().map(Encoding::from_label) {
             // 07 §18.4: 文字コードの名前が分からないのは使い方の誤り
@@ -244,7 +252,7 @@ fn main() -> ProcessExit {
                 EXIT_USAGE
             }
             forced => run(
-                files,
+                Targets { files, workspace },
                 read_only,
                 forced.flatten(),
                 locale.as_deref(),

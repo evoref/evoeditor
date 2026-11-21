@@ -521,6 +521,10 @@ history_trimmed = "Dropped old undo history to stay within the memory limit"
 hint = "Start with the path of a file"
 text = "{path} is a folder and cannot be opened. An untitled document was opened"
 
+[msg.cli.directory_ignored]
+hint = "Specify only one folder as the workspace"
+text = "{path} is a folder and was not opened. The workspace is {root}"
+
 [msg.clipboard.fallback]
 hint = "To copy and paste with other apps, use your terminal's selection and paste"
 text = "The system clipboard is not available, so the editor's own clipboard was used: {reason}"
@@ -864,6 +868,10 @@ text = "The document changed after the recovery offer, so it was not applied"
 [msg.swap.remove_failed]
 hint = "Delete it by hand"
 text = "Could not delete the swap: {dir}"
+
+[msg.workspace.root_invalid]
+hint = "Specify a folder. {root} is used as the workspace for now"
+text = "Cannot use {path} as the workspace: {reason}"
 
 [msg.reload.missing]
 hint = "To keep the current content, recreate the file with Save ({key:file.save}), or use Save As ({key:file.save_as})"
