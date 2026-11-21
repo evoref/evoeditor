@@ -294,7 +294,7 @@ fn restore_escape_keys(
 ) -> Vec<Diagnostic> {
     let mut diags = Vec::new();
     for cmd in ESCAPE_COMMANDS {
-        let defaults = keymap.default_sequences(cmd);
+        let defaults = keymap.escape_sequences(cmd);
         while let Some(&focus) = keymap.escape_lost_focuses(cmd).first() {
             let keys: Vec<&Vec<KeyStroke>> = defaults
                 .iter()

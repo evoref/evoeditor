@@ -118,7 +118,9 @@ fn toml_of(entries: &[Entry]) -> (String, Vec<Entry>) {
         }
     }
     let mut text = String::new();
-    for ctx in ["global", "editor", "prompt", "help", "dialog", "search"] {
+    for ctx in [
+        "global", "editor", "search", "prompt", "palette", "list", "dialog", "help",
+    ] {
         let in_ctx: Vec<&Entry> = kept.iter().filter(|e| e.ctx == ctx).collect();
         if in_ctx.is_empty() {
             continue;
@@ -446,7 +448,8 @@ fn reaches(
 #[test]
 fn d_脱出の_3_つにはどの割当でもフォーカスごとに届く() {
     // 脱出キーを奪いやすい割当を混ぜる: 脱出キーそのものの付け替え・解除 (when 付きを含む) と、脱出キーを先頭にする
-    // チョード
+    // チョード。半分の件では、パレットのどの端末でも区別できる既定のキー (`ctrl+p` と `f1`) を両方付け替え、拡張キーの
+    // 既定 (`ctrl+shift+p`、`[E]`) だけが残る形にする
     let escape_keys = ["ctrl+q", "ctrl+p", "f1", "ctrl+shift+p", "esc"];
     let contexts = ["global", "editor", "prompt", "search", "help", "dialog"];
     let whens = ["", "doc.modified", "!doc.modified"];
@@ -460,13 +463,19 @@ fn d_脱出の_3_つにはどの割当でもフォーカスごとに届く() {
         ),
         0..10,
     );
+    let strategy = (strategy, any::<bool>(), 0..COMMANDS.len());
     let mut runner = TestRunner::new(Config {
         cases: cases(256),
         failure_persistence: None,
         ..Config::default()
     });
     runner
-        .run(&strategy, |raw| {
+        .run(&strategy, |(raw, only_enhanced, other)| {
+            let mut raw = raw;
+            if only_enhanced {
+                raw.insert(0, ("global", "ctrl+p", vec![], other, ""));
+                raw.insert(0, ("global", "f1", vec![], 0, ""));
+            }
             let entries: Vec<Entry> = raw
                 .into_iter()
                 .map(|(ctx, first, rest, command, when)| Entry {
@@ -488,11 +497,13 @@ fn d_脱出の_3_つにはどの割当でもフォーカスごとに届く() {
             let (mut base, _) = resolve_keymap(&KeymapFile::default());
             for cmd in ESCAPES {
                 for focus in FOCUSES {
-                    // そのフォーカスで参照する、cmd の既定のキー
+                    // そのフォーカスで参照する、cmd の既定のキーのうち、どの端末でも区別できるもの (`[E]` でないもの)
                     let keys: Vec<Vec<KeyStroke>> = base
                         .listed_bindings()
                         .into_iter()
-                        .filter(|(_, b)| b.command.as_str() == cmd && focus.contains(&b.context))
+                        .filter(|(_, b)| {
+                            b.command.as_str() == cmd && focus.contains(&b.context) && !b.enhanced
+                        })
                         .map(|(_, b)| b.sequence.clone())
                         .collect();
                     for modified in [false, true] {
@@ -507,6 +518,47 @@ fn d_脱出の_3_つにはどの割当でもフォーカスごとに届く() {
                     }
                 }
             }
+            Ok(())
+        })
+        .unwrap();
+}
+
+// verifies: AC-FR-604-2, AC-FR-608-1
+#[test]
+fn d_脱出のキーに触れない設定では脱出キーの消失のエラーが出ない() {
+    // 1 打目は脱出のキー (`ctrl+q`・`ctrl+p`・`f1`・`ctrl+shift+p`・`esc`) でない。どのコンテキストにも書き、when も付ける
+    let contexts: &'static [&'static str] = &[
+        "global", "editor", "search", "prompt", "palette", "list", "dialog", "help",
+    ];
+    let whens = ["", "doc.modified", "!doc.modified"];
+    let strategy = proptest::collection::vec(
+        (entry(contexts), proptest::sample::select(whens.to_vec())),
+        0..12,
+    );
+    let mut runner = TestRunner::new(Config {
+        cases: cases(256),
+        failure_persistence: None,
+        ..Config::default()
+    });
+    runner
+        .run(&strategy, |raw| {
+            let entries: Vec<Entry> = raw
+                .into_iter()
+                .map(|(mut e, when)| {
+                    if COMMANDS[e.command].0 != "none" {
+                        e.when = when;
+                    }
+                    e
+                })
+                .collect();
+            let (text, _) = toml_of(&entries);
+            let (_, diags) = resolve_keymap(&load_keymap_str(&text));
+            prop_assert!(
+                !diags
+                    .iter()
+                    .any(|d| d.kind == DiagKind::Keymap(KeymapProblem::EscapeKey)),
+                "{diags:?}\n{text}"
+            );
             Ok(())
         })
         .unwrap();

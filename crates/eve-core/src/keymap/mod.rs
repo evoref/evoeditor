@@ -717,22 +717,23 @@ impl Keymap {
         &self.layers[index]
     }
 
-    /// 既定の層にある `command` の割当 (コンテキスト, キー列)。
-    pub(crate) fn default_sequences(&self, command: &str) -> Vec<(&'static str, Vec<KeyStroke>)> {
+    /// 既定の層にある `command` の割当のうち、どの端末でも区別できるもの (コンテキスト, キー列)。拡張キーが要る割当
+    /// (`[E]`、07 §11.6) は、拡張キーの無い端末で届かないので含めない (脱出キーの検査、07 §7.6)。
+    pub(crate) fn escape_sequences(&self, command: &str) -> Vec<(&'static str, Vec<KeyStroke>)> {
         self.layers
             .iter()
             .filter(|l| l.name == "default")
             .flat_map(|l| l.bindings.iter())
-            .filter(|b| b.command.as_str() == command)
+            .filter(|b| b.command.as_str() == command && !b.enhanced)
             .map(|b| (b.context, b.sequence.clone()))
             .collect()
     }
 
     /// 脱出のコマンド `command` に、既定のキーマップでは届くのに、今のキーマップでは届かなくなったフォーカス (07 §7.1 の
-    /// 参照順。07 §7.6 の「脱出キーの消失」)。「届く」は、そのフォーカスで参照する `command` の既定のキーのどれかを押すと、
-    /// `when` の値に依らず必ず `command` になること。
+    /// 参照順。07 §7.6 の「脱出キーの消失」)。「届く」は、そのフォーカスで参照する `command` の既定のキーのうち、どの
+    /// 端末でも区別できるもの (`[E]` でないもの) のどれかを押すと、`when` の値に依らず必ず `command` になること。
     pub(crate) fn escape_lost_focuses(&self, command: &str) -> Vec<&'static [&'static str]> {
-        let defaults = self.default_sequences(command);
+        let defaults = self.escape_sequences(command);
         let base: Vec<&Layer> = self.layers.iter().filter(|l| l.name == "default").collect();
         FOCUSES
             .iter()

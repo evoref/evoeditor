@@ -744,3 +744,51 @@ fn 一部のフォーカスでだけ奪う衝突は使えない割当にせず_�
     let (entries, _) = help_keys(&mut h);
     assert!(entries.iter().all(|(_, k)| !k.contains('!')), "{entries:?}");
 }
+
+// verifies: AC-FR-608-1
+#[test]
+fn 脱出の検査は拡張キーの既定の割当を届くと数えない() {
+    let mut h = Harness::new();
+    // パレットのどの端末でも区別できる既定のキー (Ctrl+P と F1) を両方付け替える。残るのは Ctrl+Shift+P ([E]) だけ
+    let d = diagnostics(
+        &mut h,
+        "[keys.global]\n\"ctrl+p\" = \"file.open\"\n\"f1\" = \"help.open\"\n",
+    );
+    let mut lost: Vec<(&str, &str)> = d
+        .iter()
+        .filter(|d| d.kind == DiagKind::Keymap(KeymapProblem::EscapeKey))
+        .map(|d| (d.key.as_str(), d.value.as_str()))
+        .collect();
+    lost.sort_unstable();
+    assert_eq!(
+        lost,
+        [
+            ("keys.global.ctrl+p", "ui.palette_open"),
+            ("keys.global.f1", "ui.palette_open")
+        ],
+        "{d:?}"
+    );
+    // 既定が戻る
+    h.keys("ctrl+p");
+    assert_eq!(h.overlay(), "palette");
+    h.keys("esc f1");
+    assert_eq!(h.overlay(), "palette");
+}
+// verifies: AC-FR-608-1
+#[test]
+fn v0_4_で通った_esc_の付け替えは_v0_5_ではエラーにして既定を戻す() {
+    for text in [
+        "[keys.editor]\n\"esc\" = \"edit.duplicate_line\"\n",
+        "[keys.prompt]\n\"esc\" = \"select.all\"\n",
+        "[keys.dialog]\n\"esc\" = \"none\"\n",
+    ] {
+        let mut h = Harness::new();
+        let d = diagnostics(&mut h, text);
+        assert!(
+            d.iter()
+                .any(|d| d.kind == DiagKind::Keymap(KeymapProblem::EscapeKey)
+                    && d.value == "ui.cancel"),
+            "{text}: {d:?}"
+        );
+    }
+}
