@@ -42,11 +42,13 @@ pub trait FileSystem: Send + Sync {
     /// 並びは問わない (並べるのは呼ぶ側)。シンボリックリンクは辿らず `EntryKind::Symlink` で返す。名前は変換しない。
     /// 種類と大きさは列挙が返すものから取り、項目ごとの `stat` をしない (05 §2.1)。OS の列挙 1 回は区切れないので、区切りと
     /// 積み直しは呼ぶ側のジョブが行う。`max_entries` 個を返した後にまだ項目があれば列挙をやめ、`DirListing::truncated` を立てる。
-    /// 項目 1 つを読めないときは、その項目を飛ばして続ける。既定は `Unsupported` (空のディレクトリと区別するため)。
+    /// 項目 1 つを読めないときは、その項目を飛ばして続ける。列挙そのものが途中で失敗したら、そこまでの項目を返して
+    /// `DirListing::incomplete` を立てる。既定は `Unsupported` (空のディレクトリと区別するため)。
     ///
     /// # Errors
     ///
-    /// `dir` が無ければ `NotFound`、ディレクトリでなければ `InvalidPath` (detail なし)、読めなければ `PermissionDenied`。
+    /// `dir` が無ければ `NotFound` (detail なし。`dir` がダングリングのリンクなら `DanglingLink`)、ディレクトリでなければ
+    /// (ファイルを指すリンクを含む) `InvalidPath` (detail なし)、読めなければ `PermissionDenied`。
     /// ほかの失敗は `Other` など (05 §2.1 の写像)。実装していない Port は `Unsupported`。
     fn read_dir(&self, _dir: &FsPath, _max_entries: usize) -> Result<DirListing, FsError> {
         Err(FsError::new(FsErrorKind::Unsupported))
@@ -415,6 +417,9 @@ pub struct DirListing {
     pub entries: Vec<DirEntry>,
     /// `max_entries` 個を返した後にまだ項目があったので、列挙をやめた。
     pub truncated: bool,
+    /// 列挙そのものが途中で失敗した (SMB の切断・NFS の `ESTALE` など)。`entries` はそこまでの項目で、欠けている。
+    /// 項目 1 つの読み取りの失敗 (その項目を飛ばす) では立てない。
+    pub incomplete: bool,
 }
 
 /// ディレクトリの項目 1 つ。
@@ -426,8 +431,8 @@ pub struct DirEntry {
     pub kind: EntryKind,
     /// 大きさ (バイト)。列挙で追加の I/O なしに分かるときだけ (Windows の `File`)。Unix とファイル以外は `None`。
     pub len: Option<u64>,
-    /// 読むと呼び戻しが起きるファイル (Windows の `RECALL_ON_DATA_ACCESS` / `RECALL_ON_OPEN` / `OFFLINE` の属性。
-    /// `OneDrive` のオンライン専用など)。Unix は常に `false`。
+    /// 読むと呼び戻しが起きる項目 (Windows の `RECALL_ON_DATA_ACCESS` / `RECALL_ON_OPEN` / `OFFLINE` の属性。
+    /// `OneDrive` のオンライン専用など)。種類を問わず (ディレクトリ・リンクでも) 属性があれば立つ。Unix は常に `false`。
     pub offline: bool,
 }
 

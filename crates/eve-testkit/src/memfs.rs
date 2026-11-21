@@ -87,6 +87,8 @@ struct State {
     offline: BTreeSet<FsPath>,
     /// 列挙できないディレクトリ (`read_dir` が `PermissionDenied`)。
     unreadable: BTreeSet<FsPath>,
+    /// 列挙が途中で失敗するディレクトリと、失敗するまでに返す項目の数 (`read_dir` の `incomplete`)。
+    read_dir_fail_after: BTreeMap<FsPath, usize>,
     next_id: u128,
     seq: u32,
     chunk_size: usize,
@@ -143,6 +145,7 @@ impl MemFs {
                 specials: BTreeSet::new(),
                 offline: BTreeSet::new(),
                 unreadable: BTreeSet::new(),
+                read_dir_fail_after: BTreeMap::new(),
                 links: BTreeMap::new(),
                 next_id: 1,
                 seq: 0,
@@ -406,6 +409,21 @@ impl MemFs {
             s.unreadable.insert(p);
         } else {
             s.unreadable.remove(&p);
+        }
+    }
+
+    /// `dir` の列挙を、`after` 個の項目を返した後に失敗させる (SMB の切断・NFS の `ESTALE` の再現。`read_dir` は
+    /// そこまでの項目で `incomplete` を返す)。項目が `after` 個以下なら失敗しない。`None` で戻す。
+    pub fn set_read_dir_fail_after(&self, dir: &str, after: Option<usize>) {
+        let mut s = self.st();
+        let p = FsPath::from(dir);
+        match after {
+            Some(n) => {
+                s.read_dir_fail_after.insert(p, n);
+            }
+            None => {
+                s.read_dir_fail_after.remove(&p);
+            }
         }
     }
 
@@ -758,16 +776,26 @@ impl FileSystem for MemFs {
     fn read_dir(&self, dir: &FsPath, max_entries: usize) -> Result<DirListing, FsError> {
         let mut s = self.st();
         injected(&mut s, FsOp::ReadDir)?;
-        // ディレクトリを指すリンクは辿る (OS の列挙と同じ)
+        // リンクは辿る (OS の列挙と同じ)。ダングリングなら NotFound + DanglingLink (02 §4.5 の read_dir の注)
         let dir = match s.links.get(dir) {
-            Some(t) if s.dirs.contains(t) => t.clone(),
-            _ => dir.clone(),
+            Some(t)
+                if !dir_exists(&s, t) && !s.files.contains_key(t) && !s.specials.contains(t) =>
+            {
+                return Err(FsError::with_detail(
+                    FsErrorKind::NotFound,
+                    FsErrorDetail::DanglingLink { target: t.clone() },
+                ));
+            }
+            Some(t) => t.clone(),
+            None => dir.clone(),
         };
+        // ディレクトリでない (ファイルを指すリンクを含む)
         if s.files.contains_key(&dir) || s.specials.contains(&dir) {
             return Err(FsError::new(FsErrorKind::InvalidPath));
         }
+        // 無いディレクトリの NotFound は detail を付けない (親の有無を言わない)
         if !dir_exists(&s, &dir) {
-            return Err(not_found(&s, &dir));
+            return Err(FsError::new(FsErrorKind::NotFound));
         }
         if s.unreadable.contains(&dir) {
             return Err(FsError::new(FsErrorKind::PermissionDenied));
@@ -799,21 +827,33 @@ impl FileSystem for MemFs {
                 found.insert(n, (EntryKind::Symlink, None));
             }
         }
-        let truncated = found.len() > max_entries;
-        let entries = found
-            .into_iter()
-            .take(max_entries)
-            .map(|(name, (kind, len))| {
-                let offline = kind == EntryKind::File && s.offline.contains(&dir.join(&name));
-                DirEntry {
-                    name,
-                    kind,
-                    len,
-                    offline,
-                }
-            })
-            .collect();
-        Ok(DirListing { entries, truncated })
+        // 名前の逆順に返す (OS の並びは決まらない。並べるのは呼ぶ側で、その試験が並びに頼らないように)
+        let all: Vec<_> = found.into_iter().rev().collect();
+        let fail_at = s
+            .read_dir_fail_after
+            .get(&dir)
+            .copied()
+            .filter(|&n| n < all.len());
+        let mut listing = DirListing::default();
+        for (i, (name, (kind, len))) in all.into_iter().enumerate() {
+            // 列挙そのものの途中の失敗 (実 FS と同じく、打ち切りより先に見る)
+            if Some(i) == fail_at {
+                listing.incomplete = true;
+                break;
+            }
+            if listing.entries.len() == max_entries {
+                listing.truncated = true;
+                break;
+            }
+            let offline = s.offline.contains(&dir.join(&name));
+            listing.entries.push(DirEntry {
+                name,
+                kind,
+                len,
+                offline,
+            });
+        }
+        Ok(listing)
     }
 
     fn canonicalize(&self, path: &FsPath) -> Result<FsPath, FsError> {

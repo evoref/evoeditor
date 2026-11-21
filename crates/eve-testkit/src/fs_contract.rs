@@ -32,6 +32,9 @@ pub struct Caps {
     /// `write_recovery` で書いた退避が `list_recovery_dirs` に `rescue = true` で現れる (02 §4.5)。MemFs はテストが積んだ
     /// ものだけを返すので `false` (既知の差)。
     pub recovery_listing_reflects_writes: bool,
+    /// `read_dir` がファイルの大きさ (`DirEntry::len`) を返す (05 §2.1。Windows の実 FS と `MemFs` は `true`、Unix は
+    /// `stat` をしないので `false`)。`true` なら正しい値を、`false` なら `None` を求める。
+    pub read_dir_len: bool,
 }
 
 impl Default for Caps {
@@ -39,6 +42,7 @@ impl Default for Caps {
         Caps {
             state_dir: true,
             recovery_listing_reflects_writes: true,
+            read_dir_len: false,
         }
     }
 }
@@ -81,6 +85,10 @@ pub trait Fixture {
     fn deny_list(&self, _dir: &FsPath) -> bool {
         false
     }
+    /// `dir` の列挙を、`after` 個の項目を返した後に失敗させる (SMB の切断などの再現)。実 FS では作れないので `false`。
+    fn fail_listing_after(&self, _dir: &FsPath, _after: usize) -> bool {
+        false
+    }
 }
 
 /// `MemFs` の準備の口で作る `Fixture`。どの項目も作れる (リンク・FIFO の代わり・オフライン・列挙の拒否)。
@@ -119,6 +127,10 @@ impl Fixture for MemFixture {
     }
     fn deny_list(&self, dir: &FsPath) -> bool {
         self.0.set_unreadable(mem_str(dir), true);
+        true
+    }
+    fn fail_listing_after(&self, dir: &FsPath, after: usize) -> bool {
+        self.0.set_read_dir_fail_after(mem_str(dir), Some(after));
         true
     }
 }
@@ -252,6 +264,10 @@ pub const CHECKS: &[(&str, Check)] = &[
     ("read_dir_はオフラインの属性を返す", read_dir_offline),
     ("read_dir_の失敗の種類", read_dir_errors),
     ("read_dir_は_max_entries_で打ち切る", read_dir_max_entries),
+    (
+        "read_dir_は列挙の途中の失敗を_incomplete_で返す",
+        read_dir_incomplete,
+    ),
     (
         "open_read_は通常でないファイルで止まらずに_invalidpath",
         open_read_not_regular,
@@ -769,6 +785,7 @@ fn odd_name() -> OsString {
 fn listing(s: &Subject, dir: &FsPath) -> BTreeMap<OsString, DirEntry> {
     let l = s.fs.read_dir(dir, usize::MAX).expect("read_dir");
     assert!(!l.truncated, "上限に達していないのに打ち切った");
+    assert!(!l.incomplete, "列挙は途中で失敗していない");
     let n = l.entries.len();
     let map: BTreeMap<OsString, DirEntry> =
         l.entries.into_iter().map(|e| (e.name.clone(), e)).collect();
@@ -825,8 +842,9 @@ fn read_dir_kinds(s: &Subject) {
     }
     for e in map.values() {
         if e.kind == EntryKind::File {
-            assert!(
-                e.len.is_none() || e.len == Some(3),
+            let want = s.caps.read_dir_len.then_some(3);
+            assert_eq!(
+                e.len, want,
                 "大きさは列挙で分かるときだけ、正しい値で: {e:?}"
             );
         } else {
@@ -894,12 +912,17 @@ fn read_dir_offline(s: &Subject) {
     }
 }
 
-// 02 §4.5 read_dir の注: 無い → NotFound、ディレクトリでない → InvalidPath (detail なし)、読めない → PermissionDenied
+// 02 §4.5 read_dir の注: 無い → NotFound (detail なし。ダングリングのリンクだけ DanglingLink)、ディレクトリでない
+// (ファイルを指すリンクを含む) → InvalidPath (detail なし)、読めない → PermissionDenied
 fn read_dir_errors(s: &Subject) {
     let e = s.fs.read_dir(&s.p("none"), 10).unwrap_err();
-    assert_eq!(e.kind, FsErrorKind::NotFound, "無いディレクトリ");
+    assert_eq!(
+        kind_detail(&e),
+        (FsErrorKind::NotFound, None),
+        "無いディレクトリ"
+    );
     let e = s.fs.read_dir(&s.p("none").join("deeper"), 10).unwrap_err();
-    assert_eq!(e.kind, FsErrorKind::NotFound, "親も無い");
+    assert_eq!(kind_detail(&e), (FsErrorKind::NotFound, None), "親も無い");
     s.fx().file(&s.p("f.txt"), b"x");
     let e = s.fs.read_dir(&s.p("f.txt"), 10).unwrap_err();
     assert_eq!(
@@ -907,6 +930,27 @@ fn read_dir_errors(s: &Subject) {
         (FsErrorKind::InvalidPath, None),
         "ファイル"
     );
+    if s.fx()
+        .symlink(&s.p("link-f"), &s.p("f.txt"), FileKind::File)
+    {
+        let e = s.fs.read_dir(&s.p("link-f"), 10).unwrap_err();
+        assert_eq!(
+            kind_detail(&e),
+            (FsErrorKind::InvalidPath, None),
+            "ファイルを指すリンク"
+        );
+    }
+    if s.fx()
+        .symlink(&s.p("dangling"), &s.p("none-dir"), FileKind::Dir)
+    {
+        let e = s.fs.read_dir(&s.p("dangling"), 10).unwrap_err();
+        assert_eq!(e.kind, FsErrorKind::NotFound, "ダングリングのリンク");
+        assert!(
+            matches!(e.detail, Some(FsErrorDetail::DanglingLink { .. })),
+            "{:?}",
+            e.detail
+        );
+    }
     let locked = s.p("locked");
     s.fx().dir(&locked);
     if s.fx().deny_list(&locked) {
@@ -933,16 +977,61 @@ fn read_dir_max_entries(s: &Subject) {
     }
 }
 
+// 02 §4.5 DirListing.incomplete、05 §2.1 (列挙そのものの途中の失敗は、そこまでの項目で incomplete。打ち切りとは別)
+fn read_dir_incomplete(s: &Subject) {
+    for i in 0..5 {
+        s.fx().file(&s.p(&format!("f{i}.txt")), b"x");
+    }
+    if !s.fx().fail_listing_after(&s.root, 2) {
+        // 実 FS では途中の失敗を作れない。失敗しない列挙は incomplete を立てない
+        let l = s.fs.read_dir(&s.root, usize::MAX).expect("read_dir");
+        assert!(
+            !l.incomplete && !l.truncated && l.entries.len() == 5,
+            "{l:?}"
+        );
+        return;
+    }
+    let l =
+        s.fs.read_dir(&s.root, usize::MAX)
+            .expect("途中の失敗は Err にしない");
+    assert!(l.incomplete && !l.truncated, "{l:?}");
+    assert_eq!(l.entries.len(), 2, "失敗までの項目を返す");
+    // 失敗の前に上限に達したら、打ち切りだけ
+    let l = s.fs.read_dir(&s.root, 1).expect("read_dir");
+    assert!(
+        l.truncated && !l.incomplete && l.entries.len() == 1,
+        "{l:?}"
+    );
+}
+
+/// 通常でないファイルを開く操作が戻るのを待つ時間。FIFO を開くのが退行して止まっても、試験を失敗で終わらせる。
+const OPEN_WATCHDOG: std::time::Duration = std::time::Duration::from_secs(10);
+
 // 05 §2.1 の open_read() の行 (v0.5 の M31): 開いた後のハンドルで通常のファイルと確かめ、FIFO・デバイスで止まらずに
 // InvalidPath (detail = NotAFile)
 fn open_read_not_regular(s: &Subject) {
     let Some(p) = s.fx().device_in(&s.root) else {
         return;
     };
-    let e = s.fs.open_read(&p).map(|_| ()).unwrap_err();
+    // 別のスレッドで開き、戻らなければ失敗にする (止まったスレッドはプロセスの終わりまで残る)
+    let (tx, rx) = std::sync::mpsc::channel();
+    let fs = Arc::clone(&s.fs);
+    let target = p.clone();
+    // 試験だけの見張りのスレッド (deps-policy.toml の allowed_files)
+    #[allow(clippy::disallowed_methods)]
+    std::thread::spawn(move || {
+        let r = fs
+            .open_read(&target)
+            .map(|_| ())
+            .map_err(|e| kind_detail(&e));
+        let _ = tx.send(r);
+    });
+    let r = rx.recv_timeout(OPEN_WATCHDOG).unwrap_or_else(|_| {
+        panic!("open_read が {OPEN_WATCHDOG:?} 戻らない (FIFO で止まった): {p:?}")
+    });
     assert_eq!(
-        kind_detail(&e),
-        (FsErrorKind::InvalidPath, Some(FsErrorDetail::NotAFile)),
+        r,
+        Err((FsErrorKind::InvalidPath, Some(FsErrorDetail::NotAFile))),
         "{p:?}"
     );
 }

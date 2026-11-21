@@ -16,6 +16,7 @@ fn memfs_subject(fs: Arc<MemFs>, as_port: Arc<dyn FileSystem>) -> Subject {
         .caps(Caps {
             // MemFs の `list_recovery_dirs` はテストが積んだものだけを返す (既知の差)
             recovery_listing_reflects_writes: false,
+            read_dir_len: true,
             ..Caps::default()
         })
         .lister(move |dir| {

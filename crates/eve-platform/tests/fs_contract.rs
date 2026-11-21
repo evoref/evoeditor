@@ -146,13 +146,14 @@ impl Fixture for NativeFixture {
 
     #[cfg(windows)]
     fn junction(&self, link: &FsPath, target: &FsPath) -> bool {
-        // ジャンクションは権限なしで作れる
-        run(Command::new("cmd")
-            .args(["/C", "mklink", "/J"])
-            .arg(link.as_path())
-            .arg(target.as_path()))
-        .expect("mklink /J");
-        true
+        // ジャンクションはふつう権限なしで作れる。作れない開発機では飛ばし、CI では失敗にする (シンボリックリンクと同じ)
+        made(
+            run(Command::new("cmd")
+                .args(["/C", "mklink", "/J"])
+                .arg(link.as_path())
+                .arg(target.as_path())),
+            "ジャンクション",
+        )
     }
 
     #[cfg(unix)]
@@ -227,6 +228,8 @@ impl Drop for NativeFixture {
 fn caps(state_dir: bool) -> Caps {
     Caps {
         state_dir,
+        // Windows は列挙のデータに大きさがある。Unix は stat をしないので返さない (05 §2.1)
+        read_dir_len: cfg!(windows),
         ..Caps::default()
     }
 }

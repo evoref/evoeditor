@@ -10,29 +10,37 @@
 use std::fs;
 use std::io;
 
-use eve_core::{DirEntry, DirListing, EntryKind, FsError, FsErrorKind, FsPath};
+use eve_core::{DirEntry, DirListing, EntryKind, FsError, FsErrorDetail, FsErrorKind, FsPath};
 
 use crate::sys::map_io_error;
 
 /// `dir` の直下を `max_entries` 個まで列挙する。`max_entries` 個を返した後にまだ項目があれば `truncated`。
-/// 項目 1 つの読み取りの失敗はその項目を飛ばす。
+/// 項目 1 つの読み取りの失敗はその項目を飛ばし、列挙そのものの途中の失敗はそこまでの項目で `incomplete`。
 pub(crate) fn read_dir(dir: &FsPath, max_entries: usize) -> Result<DirListing, FsError> {
     let iter = open(dir)?;
-    let mut entries = Vec::new();
-    let mut truncated = false;
+    let mut listing = DirListing::default();
     for item in iter {
-        // 項目 1 つの失敗 (Unix の `DT_UNKNOWN` の `lstat` の失敗など) は飛ばす。std の反復子は列挙そのものの失敗の後は
-        // `None` を返すので、ここで回り続けない
-        let Some(entry) = item.ok().and_then(|e| entry_of(&e)) else {
+        // std の反復子が `Err` を返すのは列挙そのものの失敗 (Unix の `readdir` の errno、Windows の `FindNextFileW` の
+        // `ERROR_NO_MORE_FILES` 以外)。欠けた一覧を完全に見せないよう印を立ててやめる (Windows の反復子は失敗の後も
+        // 呼べば同じ失敗を返し得るので、続けない)
+        let e = match item {
+            Ok(e) => e,
+            Err(_) => {
+                listing.incomplete = true;
+                break;
+            }
+        };
+        // 項目 1 つの失敗 (Unix の `DT_UNKNOWN` の `lstat` の失敗。項目が消えたなど) は飛ばす
+        let Some(entry) = entry_of(&e) else {
             continue;
         };
-        if entries.len() == max_entries {
-            truncated = true;
+        if listing.entries.len() == max_entries {
+            listing.truncated = true;
             break;
         }
-        entries.push(entry);
+        listing.entries.push(entry);
     }
-    Ok(DirListing { entries, truncated })
+    Ok(listing)
 }
 
 /// 列挙を始める。`EINTR` は再試行する。失敗の写像は 05 §2.1 (ディレクトリでなければ `InvalidPath`、detail なし)。
@@ -47,8 +55,8 @@ fn open(dir: &FsPath) -> Result<fs::ReadDir, FsError> {
 }
 
 fn open_error(e: io::Error, dir: &FsPath) -> FsError {
-    // 在るがディレクトリでない (ファイル・デバイス)。Windows はファイルに列挙を掛けると `ERROR_DIRECTORY` や
-    // `ERROR_PATH_NOT_FOUND` を返し得るので、失敗のときだけ `metadata` で確かめて揃える
+    // 在るがディレクトリでない (ファイル・デバイス・ファイルを指すリンク)。Windows はファイルに列挙を掛けると
+    // `ERROR_DIRECTORY` や `ERROR_PATH_NOT_FOUND` を返し得るので、失敗のときだけ `metadata` で確かめて揃える
     if fs::metadata(dir.as_path()).is_ok_and(|m| !m.is_dir()) {
         return FsError {
             kind: FsErrorKind::InvalidPath,
@@ -56,7 +64,20 @@ fn open_error(e: io::Error, dir: &FsPath) -> FsError {
             source: Some(e),
         };
     }
-    map_io_error(e, dir)
+    let mut err = map_io_error(e, dir);
+    if err.kind == FsErrorKind::NotFound {
+        // `NotFound` の detail は、ダングリングのリンクだけに付ける。Windows の `ERROR_PATH_NOT_FOUND` は親が在っても
+        // `ParentMissing` に写るので落とす (02 §4.5 の read_dir の注)
+        err.detail = fs::symlink_metadata(dir.as_path())
+            .is_ok_and(|m| m.file_type().is_symlink())
+            .then(|| {
+                fs::read_link(dir.as_path()).map(|target| FsErrorDetail::DanglingLink {
+                    target: FsPath::new(target),
+                })
+            })
+            .and_then(Result::ok);
+    }
+    err
 }
 
 fn entry_of(e: &fs::DirEntry) -> Option<DirEntry> {
@@ -86,7 +107,7 @@ const RECALL_ATTRS: u32 = windows_sys::Win32::Storage::FileSystem::FILE_ATTRIBUT
     | windows_sys::Win32::Storage::FileSystem::FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS;
 
 /// 大きさとオフラインの属性 (Windows)。`DirEntry::metadata` は列挙のデータから作られ、追加の呼出しをしない。
-/// 大きさはファイルだけに返す (ディレクトリ・リンクの大きさは中身・リンク先の大きさではない)。
+/// 大きさはファイルだけに返す (ディレクトリ・リンクの大きさは中身・リンク先の大きさではない)。オフラインは種類を問わない。
 #[cfg(windows)]
 fn extra(e: &fs::DirEntry, kind: EntryKind) -> (Option<u64>, bool) {
     use std::os::windows::fs::MetadataExt;
