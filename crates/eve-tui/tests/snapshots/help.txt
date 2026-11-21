@@ -10,7 +10,7 @@
  アプリ
   Ctrl+Q                     終了
  バッファ
-  Ctrl+W, Ctrl+K W           閉じる
+  Ctrl+W, Ctrl+K W           文書を閉じる
 ↑↓ PgUp PgDn で移動、Esc で閉じる
 memo.txt                                                     行 1, 桁 1 UTF-8 LF
 

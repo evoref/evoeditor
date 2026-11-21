@@ -147,8 +147,8 @@ description = "直前の編集を取り消します。"
 title = "元に戻す"
 
 [cmd.buffer.close]
-description = "現在の文書を閉じます。未保存の変更があれば確認します。"
-title = "閉じる"
+description = "現在の文書を閉じます。未保存の変更があれば確認します。文書を表示していたペインは閉じず、ほかの文書を表示します (ペインを閉じるのは「ペインを閉じる」(pane.close) です)。"
+title = "文書を閉じる"
 
 [cmd.buffer.list]
 description = "開いている文書の一覧を出して、切り替えます。"
@@ -251,7 +251,7 @@ description = "下に隣り合うペインへフォーカスを移します。"
 title = "下のペインへ"
 
 [cmd.pane.close]
-description = "今のペインを閉じます。文書は閉じません (未保存の変更があっても確認しません)。文書を閉じるのは「閉じる」(buffer.close) です。"
+description = "今のペインを閉じます。文書は閉じません (未保存の変更があっても確認しません)。文書を閉じるのは「文書を閉じる」(buffer.close) です。"
 title = "ペインを閉じる"
 
 [cmd.pane.grow]

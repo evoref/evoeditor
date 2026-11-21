@@ -173,12 +173,13 @@ pub struct RenderRow {
     pub width_risky: bool,
 }
 
-/// 編集面 (View 1 つ分)。
+/// 編集面のペイン 1 つ (View 1 つ分)。
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PaneFrame {
     /// この面が表示している View。
     pub view: ViewId,
-    /// 面のセル矩形 (core がレイアウトした位置、02 §8.3)。
+    /// 本文 (ガター + テキスト) のセル矩形。見出しの行を含まない。編集面 (`Frame.size`) の左上が原点
+    /// (core がレイアウトした位置、02 §8.3、03 §9.9 の PANE-10)。
     pub rect: CellRect,
     /// 生成した時点の文書の `Revision` と View の `ViewRevision`。
     pub revision: (Revision, ViewRevision),
@@ -188,8 +189,32 @@ pub struct PaneFrame {
     pub rows: Vec<RenderRow>,
     /// 可視範囲にあるすべてのカーソルのセル位置 (`rect` の左上が原点)。
     pub cursors: Vec<CellPos>,
-    /// 入力の行き先がこの面である (`Frame.focus` が `Pane(view)`)。
+    /// 入力の行き先がこの面である (`Frame.focus` が `Pane(view)`)。オーバーレイ・検索バーを開いている間は偽。
     pub focused: bool,
+    /// Window のフォーカスのペインである (オーバーレイ・検索バーを開いている間も真。`focused` とは別、03 §9.9 の PANE-10 (b))。
+    /// frontend はこのペインの見出しを強調する。
+    pub active: bool,
+    /// ペインの見出し。ペインが 2 つ以上で、縮退表示 (03 §9.9 の PANE-4 (b)) でないときだけ `Some`。
+    pub bar: Option<PaneBarModel>,
+}
+
+/// ペインの見出し (ペインの最下行の 1 行、03 §9.9 の PANE-10 (b))。
+///
+/// `items` はステータスバーの左群と同じ文言・優先度の `StatusItem` で、core が入れる種類は `Path`・`Dirty`・`ReadOnly`
+/// だけ。frontend は種類で描き分けず、ステータスバーの左群と同じ規則で省略して並べる (知らない種類も同じに扱う)。
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PaneBarModel {
+    /// 見出しの矩形 (1 行。編集面の左上が原点)。
+    pub rect: CellRect,
+    /// 見出しの項目 (表示順)。
+    pub items: Vec<StatusItem>,
+}
+
+/// 左右に並ぶペインの間の区切り (1 列。03 §9.9 の PANE-10 (c))。core がセルを確保する。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Divider {
+    /// 区切りの矩形 (1 列。編集面の左上が原点。高さは親の分割の全体で、見出しの行を含む)。
+    pub rect: CellRect,
 }
 
 /// カーソルの形。
@@ -205,7 +230,7 @@ pub enum CursorShape {
     Underline,
 }
 
-/// ハードウェアカーソル・IME 候補窓の位置 (Frame 全体のセル座標)。
+/// ハードウェアカーソル・IME 候補窓の位置 (編集面の左上が原点のセル座標。フォーカスのペインの `rect` の位置を足してある)。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct CursorPlacement {
     /// 置くセル。
@@ -620,8 +645,10 @@ pub struct Frame {
     pub window: WindowId,
     /// 編集面全体の大きさ (セル。端末の全体からクロームと検索バーの行を除いたもの)。
     pub size: CellSize,
-    /// 編集面 (レイアウト済み。v0.1 は 1 つ)。
+    /// 編集面のペイン (レイアウト済み。レイアウトの木の葉の順。縮退表示ではフォーカスのペインだけ、03 §9.9 の PANE-10 (a))。
     pub panes: Vec<PaneFrame>,
+    /// ペインの間の区切り (core が確保する)。ペインが 1 つのときと縮退表示では空。
+    pub dividers: Vec<Divider>,
     /// 入力の行き先。
     pub focus: FocusTarget,
     /// 編集面にフォーカスがあるときだけ `Some`。

@@ -568,7 +568,7 @@ fn d_脱出のキーに触れない設定では脱出キーの消失のエラー
 #[test]
 fn e_曖昧ならチョードが勝ち_単体は無効になる() {
     // 単体 (ユーザーか既定) と、それを先頭にするユーザーのチョード。コンテキストは同時に参照されるもの
-    let singles = ["ctrl+j", "ctrl+s", "ctrl+z", "f6", "alt+z", "ctrl+o"];
+    let singles = ["ctrl+j", "ctrl+s", "ctrl+z", "f9", "alt+z", "ctrl+o"];
     let strategy = (
         proptest::sample::select(singles.to_vec()),
         proptest::collection::vec(0..NEXT.len(), 1..3),
@@ -621,8 +621,8 @@ fn e_曖昧ならチョードが勝ち_単体は無効になる() {
                 let (_, last) = press(&mut km, EDITOR, &seq);
                 prop_assert_eq!(run_id(&last), Some("edit.duplicate_line"), "{}", text);
                 // 無効になった単体は、使えない割当として出て、診断で名指しされる。ユーザーの単体が無く、既定にも単体が無い
-                // キー (ctrl+j・f6) なら、無効になる割当は無い
-                let has_single = user_single || !matches!(single, "ctrl+j" | "f6");
+                // キー (ctrl+j・f9。f6 は v0.5 の M30 で pane.focus_next の既定キーになった) なら、無効になる割当は無い
+                let has_single = user_single || !matches!(single, "ctrl+j" | "f9");
                 let disabled = km.disabled_bindings();
                 let named = |b: &Binding| b.sequence == seq[..1];
                 prop_assert_eq!(

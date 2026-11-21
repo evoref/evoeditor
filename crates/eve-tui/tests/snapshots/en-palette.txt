@@ -2,7 +2,7 @@
  2▶ App: Quit                                                 app.quit  Ctrl+Q
  3  App: Quit with Error                                   app.quit_with_error
  4  App: Save and Quit                                       app.save_and_quit
-~   Buffer: Close                                         buffer.close  Ctrl+W
+~   Buffer: Close Document                                buffer.close  Ctrl+W
 ~   Buffer: List                                           buffer.list  Ctrl+E
 ~   Buffer: Next document                               buffer.next  Ctrl+PgDn
 ~   Buffer: Previous document                           buffer.prev  Ctrl+PgUp

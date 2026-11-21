@@ -104,6 +104,45 @@ fn is_control(c: char) -> bool {
 }
 
 fn check_frame(f: &Frame, step: usize) {
+    // 複数ペインの Frame の不変条件 (03 §9.9 の PANE-10): Window のフォーカスのペイン (`active`) はちょうど 1 つ。
+    // 見出しはペインが 2 つ以上のときだけ全ペインにある (縮退表示ではフォーカスのペインだけで見出しが無い)。ペインが 1 つなら
+    // 区切りは無い。見出しと区切りの矩形は編集面 (`Frame.size`) の中
+    let active = f.panes.iter().filter(|p| p.active).count();
+    assert_eq!(active, 1, "step {step}: active のペインが {active} 個");
+    let split = f.panes.len() >= 2;
+    for p in &f.panes {
+        assert_eq!(
+            p.bar.is_some(),
+            split,
+            "step {step}: ペイン {} 個で {:?} の見出しが {:?}",
+            f.panes.len(),
+            p.view,
+            p.bar.as_ref().map(|b| b.rect)
+        );
+    }
+    if !split {
+        assert_eq!(
+            f.dividers,
+            Vec::new(),
+            "step {step}: ペインが 1 つなのに区切りがある"
+        );
+    }
+    let inside = |r: &eve_view::CellRect| {
+        u32::from(r.col) + u32::from(r.cols) <= u32::from(f.size.cols)
+            && u32::from(r.row) + u32::from(r.rows) <= u32::from(f.size.rows)
+    };
+    for r in f
+        .panes
+        .iter()
+        .filter_map(|p| p.bar.as_ref().map(|b| b.rect))
+        .chain(f.dividers.iter().map(|d| d.rect))
+    {
+        assert!(
+            inside(&r),
+            "step {step}: 見出し・区切りの {r:?} が編集面 {:?} の外に出る",
+            f.size
+        );
+    }
     for p in &f.panes {
         for (r, row) in p.rows.iter().enumerate() {
             let w: u32 = row

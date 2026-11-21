@@ -298,6 +298,28 @@ const DEFAULT_ROLES: &[Role] = &[
         ansi16: st(ansi(8), D, NONE),
         mono: DIM,
     },
+    // 複数ペイン (v0.5 の M30、FR-509。07 §8.2 の表の v0.5 の行)
+    Role {
+        name: "ui.pane.border",
+        truecolor: st(rgb(0x808080), D, NONE),
+        ansi256: st(ansi(244), D, NONE),
+        ansi16: st(ansi(8), D, NONE),
+        mono: NONE,
+    },
+    Role {
+        name: "ui.pane.bar",
+        truecolor: st(D, D, NONE),
+        ansi256: st(D, D, NONE),
+        ansi16: st(D, D, NONE),
+        mono: NONE,
+    },
+    Role {
+        name: "ui.pane.bar.active",
+        truecolor: st(rgb(0xe8e8e8), rgb(0x2f3340), NONE),
+        ansi256: st(ansi(254), ansi(237), NONE),
+        ansi16: st(D, D, REVERSE),
+        mono: REVERSE,
+    },
 ];
 
 const fn role(
@@ -506,6 +528,22 @@ const HIGH_CONTRAST_DARK_ROLES: &[Role] = &[
         st(CYAN, D, NONE),
         BOLD,
     ),
+    // 複数ペイン (v0.5 の M30、FR-509)
+    role(
+        "ui.pane.border",
+        st(rgb(0xc0c0c0), D, NONE),
+        st(ansi(250), D, NONE),
+        st(CYAN, D, NONE),
+        NONE,
+    ),
+    role("ui.pane.bar", attrs(NONE), attrs(NONE), attrs(NONE), NONE),
+    role(
+        "ui.pane.bar.active",
+        st(rgb(0x000000), rgb(0xffffff), NONE),
+        st(ansi(16), ansi(231), NONE),
+        st(BLACK, BRIGHT_WHITE, NONE),
+        REVERSE,
+    ),
 ];
 
 /// 組込みテーマ `high-contrast-light` (07 §8.7.2 の表。4 段とも明示値。背景を塗る)。
@@ -679,6 +717,22 @@ const HIGH_CONTRAST_LIGHT_ROLES: &[Role] = &[
         st(ansi(238), D, NONE),
         st(BLUE, D, NONE),
         BOLD,
+    ),
+    // 複数ペイン (v0.5 の M30、FR-509)
+    role(
+        "ui.pane.border",
+        st(rgb(0x404040), D, NONE),
+        st(ansi(238), D, NONE),
+        st(BLUE, D, NONE),
+        NONE,
+    ),
+    role("ui.pane.bar", attrs(NONE), attrs(NONE), attrs(NONE), NONE),
+    role(
+        "ui.pane.bar.active",
+        st(rgb(0xffffff), rgb(0x000000), NONE),
+        st(ansi(231), ansi(16), NONE),
+        st(BRIGHT_WHITE, BLACK, NONE),
+        REVERSE,
     ),
 ];
 
@@ -927,7 +981,7 @@ mod tests {
             assert!(t.paints, "{name}");
             let names: Vec<&str> = t.roles.iter().map(|r| r.name).collect();
             let default: Vec<&str> = DEFAULT_ROLES.iter().map(|r| r.name).collect();
-            assert_eq!(names, default, "{name}: ロールは default と同じ 26 個");
+            assert_eq!(names, default, "{name}: ロールは default と同じ 29 個");
             for r in &t.roles {
                 for m in [r.truecolor.mods, r.ansi256.mods, r.ansi16.mods, r.mono] {
                     assert_eq!(m & DIM, 0, "{name} {}", r.name);

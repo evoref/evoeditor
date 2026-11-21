@@ -207,6 +207,23 @@ pub(crate) fn default_keymap() -> Keymap {
     bind("editor", "alt+b", "cursor.move_word_left");
     bind("editor", "alt+f", "cursor.move_word_right");
     bind("editor", "mod+g", "cursor.goto_line");
+    // ペイン (v0.5 の M30、FR-509。07 §11.6 の「ペイン」。方向の移動 `pane.focus_left` 等には既定キーを付けない)
+    for (keys, cmd) in [
+        ("mod+\\", "pane.split_right"),
+        ("ctrl+k \\", "pane.split_right"),
+        ("ctrl+k |", "pane.split_right"),
+        ("ctrl+k -", "pane.split_down"),
+        ("f6", "pane.focus_next"),
+        ("shift+f6", "pane.focus_prev"),
+        ("ctrl+k tab", "pane.focus_next"),
+        ("ctrl+k shift+tab", "pane.focus_prev"),
+        ("ctrl+k q", "pane.close"),
+        ("ctrl+k ]", "pane.grow"),
+        ("ctrl+k [", "pane.shrink"),
+        ("ctrl+k =", "pane.equalize"),
+    ] {
+        bind("editor", keys, cmd);
+    }
     // チョードの代替キー ((alt))
     for (keys, cmd) in [
         ("ctrl+k left", "cursor.home"),
@@ -334,7 +351,7 @@ mod tests {
     #[test]
     fn 頻出操作はどの_must_端末でも_拡張キーなしで届く既定キーを持つ() {
         let ops = frequent_ops();
-        assert_eq!(ops.len(), 37, "計 37 個 (07 §11.6): {ops:?}");
+        assert_eq!(ops.len(), 40, "計 40 個 (07 §11.6): {ops:?}");
         let docs = doc_bindings();
         let km = default_keymap();
         let mut bound: BTreeMap<String, Vec<Vec<KeyStroke>>> = BTreeMap::new();

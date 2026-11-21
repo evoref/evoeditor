@@ -173,15 +173,32 @@ pub(crate) fn build_frame(
     let input_here = !overlay_open && !bar_open;
     let mut panes = Vec::new();
     let mut primary_cursor = None;
-    for leaf in w.layout(size).leaves {
+    let layout = w.layout(size);
+    // 見出しの名前 (同じ名前の区別、PANE-11) は見出しを出すときだけ求める
+    let names = layout
+        .leaves
+        .iter()
+        .any(|l| l.bar.is_some())
+        .then(|| crate::ui_model::pane_bar::display_names(state));
+    for leaf in layout.leaves {
         let Some(pane) = w.panes.get(&leaf.pane) else {
             continue;
         };
         let active = leaf.pane == w.focus;
-        let Some((pf, primary)) = pane_frame(state, pane.view, leaf.body, active && input_here)
+        let Some((mut pf, primary)) =
+            pane_frame(state, pane.view, leaf.body, active && input_here, active)
         else {
             continue;
         };
+        // 見出し (ペインが 2 つ以上で縮退表示でないとき、PANE-10 (b))
+        pf.bar = leaf
+            .bar
+            .filter(|r| r.rows > 0)
+            .zip(names.as_ref())
+            .map(|(rect, names)| eve_view::PaneBarModel {
+                rect,
+                items: crate::ui_model::pane_bar::bar_items(state, pane.view, names),
+            });
         if active {
             // `Frame.primary_cursor` は編集面の左上が原点 (ペインの `rect` の位置を足す。PANE-10 (a))
             primary_cursor = primary.filter(|_| input_here).map(|pos| CursorPlacement {
@@ -194,10 +211,17 @@ pub(crate) fn build_frame(
         }
         panes.push(pf);
     }
+    // 区切り (`Row` の子の間の 1 列、PANE-10 (c))。縮退表示では配置が空なので出ない
+    let dividers = layout
+        .dividers
+        .into_iter()
+        .map(|rect| eve_view::Divider { rect })
+        .collect();
     Some(Frame {
         window,
         size,
         panes,
+        dividers,
         focus: if overlay_open {
             FocusTarget::Overlay(0)
         } else if bar_open {
@@ -219,13 +243,16 @@ pub(crate) fn build_frame(
     })
 }
 
-/// 1 つのペインの `PaneFrame` と、主カーソルのセル位置 (`rect` の左上が原点) を作る。`focused` は入力の行き先がこの面
-/// (`PaneFrame.focused`)。生成の費用はペインの可視範囲の大きさに比例する。
+/// 1 つのペインの `PaneFrame` (見出しは呼び側が入れる) と、主カーソルのセル位置 (`rect` の左上が原点) を作る。`focused` は
+/// 入力の行き先がこの面 (`PaneFrame.focused`)、`active` は Window のフォーカスのペイン (`PaneFrame.active`)。フォーカスの
+/// 無いペインは、現在行の行番号の太字 (`ui.line_number.active`) を付けない (03 §9.9 の PANE-10 (d))。
+/// 生成の費用はペインの可視範囲の大きさに比例する。
 fn pane_frame(
     state: &EditorState,
     view_id: ViewId,
     rect: CellRect,
     focused: bool,
+    active: bool,
 ) -> Option<(PaneFrame, Option<CellPos>)> {
     let view = state.view(view_id)?;
     let doc = state.document(view.doc)?;
@@ -260,7 +287,11 @@ fn pane_frame(
     let found = state.visible_matches(view.doc, top_line, rows);
     let current = state.bar_current();
     let unmappable = state.unmappable_marks_for(view.doc);
-    let styles = RowStyles::new(&state.settings.roles);
+    let mut styles = RowStyles::new(&state.settings.roles);
+    if !active {
+        // 重ねる属性が無ければ `ui.line_number` のまま (現在行の行番号を強調しない)
+        styles.line_number_active = eve_view::Style::DEFAULT;
+    }
     let marks = Marks {
         found: found.as_deref().unwrap_or(&[]),
         current,
@@ -343,6 +374,8 @@ fn pane_frame(
         rows: out_rows,
         cursors,
         focused,
+        active,
+        bar: None,
     };
     Some((pane, primary))
 }
@@ -354,7 +387,7 @@ pub(crate) fn primary_cursor_in(
     view: ViewId,
     rect: CellRect,
 ) -> Option<CellPos> {
-    pane_frame(state, view, rect, false).and_then(|(_, p)| p)
+    pane_frame(state, view, rect, false, false).and_then(|(_, p)| p)
 }
 
 /// 水平スクロールの調整に使う、primary のカーソルの (表示列, セルの幅)。

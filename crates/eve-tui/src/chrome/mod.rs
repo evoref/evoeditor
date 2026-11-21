@@ -26,6 +26,7 @@ pub mod layout;
 mod list;
 mod message;
 mod overlay;
+pub(crate) mod pane_bar;
 mod parts;
 mod prompt;
 mod search_bar;

@@ -1,0 +1,27 @@
+ 1 line 000000                          | 1 line 000000
+ 2 line 000001                          | 2 line 000001
+ 3 line 000002                          | 3 line 000002
+ 4 line 000003                          | 4 line 000003
+ 5 line 000004                          | 5 line 000004
+ 6 line 000005                          | 6 line 000005
+ 7 line 000006                          | 7 line 000006
+ 8 line 000007                          | 8 line 000007
+ 9 line 000008                          | 9 line 000008
+10 line 000009                          |10 line 000009
+11 line 000010                          |11 line 000010
+12 line 000011                          | mod.rs (a) ---------------------------
+13                                      | 1 line 000000
+                                        | 2 line 000001
+                                        | 3 line 000002
+                                        | 4 line 000003
+                                        | 5 line 000004
+                                        | 6 line 000005
+                                        | 7 line 000006
+                                        | 8 line 000007
+                                        | 9 line 000008
+                                        |10 line 000009
+                                        |11 line 000010
+> a.txt ================================| mod.rs (b) ---------------------------
+status: a.txt (1/3) | 行 1, 桁 1 UTF-8 LF
+hints: Ctrl+Q 終了 | Ctrl+P コマンド | Ctrl+S 保存 | Ctrl+F 検索 | Ctrl+O 開く | Ctrl+Z 元に戻す | Ctrl+G 行へ移動
+cursor: (3,0)

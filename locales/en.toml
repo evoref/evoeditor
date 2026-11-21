@@ -149,8 +149,8 @@ description = "Undo the last edit."
 title = "Undo"
 
 [cmd.buffer.close]
-description = "Close the current document. Asks first if it has unsaved changes."
-title = "Close"
+description = "Close the current document. Asks first if it has unsaved changes. Panes showing it stay open and show another document (to close a pane, use Close Pane (pane.close))."
+title = "Close Document"
 
 [cmd.buffer.list]
 description = "Show the open documents and switch between them."
@@ -253,7 +253,7 @@ description = "Move the focus to the pane below."
 title = "Focus Pane Below"
 
 [cmd.pane.close]
-description = "Close the current pane. The document stays open (no prompt, even with unsaved changes). To close the document, use Close (buffer.close)."
+description = "Close the current pane. The document stays open (no prompt, even with unsaved changes). To close the document, use Close Document (buffer.close)."
 title = "Close Pane"
 
 [cmd.pane.grow]
