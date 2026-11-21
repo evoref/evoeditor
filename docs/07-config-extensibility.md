@@ -343,7 +343,7 @@ v0.1 で設定ファイル (`config.toml`、ユーザー層) から読む **公�
 | `view.control_char_style` | `"caret" \| "hex"` | `"hex"` | 制御文字の可視化表記 (`caret` = `^X`、`hex` = `<U+001B>`。C0 と DEL にだけ効き、C1 は常に `<U+0085>` の形。復号できないバイトの `<0xHH>` とは別物、03 §13.2)。空白の可視化 (`view.show_whitespace` の `"minimal"` = 全角スペースとタブ) とは独立で、この値では変わらない | FR-507 | v0.1 (定数、公開 v0.2) |
 | `ui.hint_bar` | bool | `true` | ヒントバー (v0.1 は常時表示)。**v0.2 の M10 で公開・実装した** (`ui.toggle_hint_bar` で実行中に切り替えられる。隠すとその行を本文に使う、04 §3.5 / §8.5。`config.reload` で即時に効く) | FR-504 | v0.1 (定数、公開 v0.2) |
 | `ui.status_bar` | bool | `true` | ステータスバー | FR-503 | v0.1 (定数、公開 v0.2) |
-| `ui.tab_line` | `"auto" \| "always" \| "never"` | `"auto"` (2 バッファ以上で表示) | バッファライン | FR-510 | v0.5 |
+| `ui.tab_line` | `"auto" \| "always" \| "never"` | `"auto"` (2 バッファ以上で表示) | バッファライン (画面の最上行。並び・アクティブ・同じ名前の区別は 03 §9.9 の PANE-11 / PANE-12) | FR-510 | v0.5 |
 | `ui.locale` | string (BCP 47) / `"auto"` | `"auto"` | UI の言語 (§17.1)。`auto` は環境変数 `EVE_LANG`、OS ロケールの順で決める。`--locale` が最優先。v0.2 の M8 で公開した。v0.4 (M26) から、同梱の言語 (`ja` / `en`) に加えて `locales/<lang>.toml` がある言語も選べる。当たらない値は `msg.config.invalid_value` で知らせて次の段へ進む (§17.4、OQ-220) | NFR-603 | v0.2 |
 | `ui.message_timeout_ms` | int | `5000` | 情報メッセージの表示時間 (04 §8.9) | FR-505 | v0.1 (定数、公開 v0.2) |
 | `ui.mouse` | bool | `true` | マウス入力 (v0.2。v0.1 はマウスを捕捉せず端末の選択・スクロールをそのまま使える、04 §6.8)。**v0.2 の M9b で公開・実装した** (`ui.toggle_mouse` で実行中に切り替えられる) | FR-307 | v0.2 |
@@ -692,6 +692,7 @@ literal:= '"' ... '"' | number | true | false
 | `editor.focus` | bool | 編集面にフォーカス |
 | `overlay.active` | string | 表示中オーバーレイ名 (`""` / `palette` / `prompt` / `dialog` / `buffer_list` (v0.2) / `config_diagnostics` (v0.3) / `help` (v0.2) / `finder` (v0.5) / `completion` (v0.5 以降)) |
 | `panel.focus` | string | フォーカス中パネル名 (v0.5+) |
+| `pane.split` | bool | Window のペインが 2 つ以上 (v0.5、FR-509。03 §9.9)。`pane.close`・ペインの移動・大きさのコマンドの `when` (§11.6)。偽のときのパレットの理由は `ui.palette.reason.single_pane` |
 | `doc.read_only` | bool | 読み取り専用 |
 | `doc.language` | string | 言語名 (`"rust"`, `"plain"`) |
 | `doc.modified` | bool | 未保存変更あり |
@@ -808,7 +809,8 @@ virtual_text       = { fg = "#6c7086", mods = ["italic"] } # インレイヒン�
 virtual_text.ghost = { fg = "#6c7086", mods = ["italic"],   # AI のゴーストテキスト (FR-910、v1.L-a。04 §8.10)。4 段必須:
                        fallback256 = { fg = "ansi.243" }, fallback16 = { mods = ["dim"] }, mono = { mods = ["dim"] } }
 diff.add / diff.delete / diff.change = { ... }              # 差分ビュー (v1.L)
-pane.border / pane.border.active = { ... }                  # 分割 (v0.5)
+pane.border / pane.bar / pane.bar.active = { ... }          # 分割の区切りとペインの見出し (v0.5。§8.8)
+tab_line / tab_line.active = { ... }                         # タブライン (v0.5。§8.8)
 
 [syntax]                         # tree-sitter ハイライトのキャプチャ名に対応 (v0.6)
 comment            = { fg = "#6c7086", mods = ["italic"] }
@@ -883,7 +885,7 @@ diff.plus / diff.minus = { ... }                            # diff ファイル�
 - `ui.cursor_line` を組にしたので、明るい背景の端末では現在行が暗い帯に明るい文字で出る (読める)。帯が強すぎると感じる利用者は `view.cursor_line_highlight = false` (v0.2 で公開) で消せる。mono の段は現在行を強調しない。16 の段を明示値にする版では、16 の段も強調しない (背景色の組が端末の配色とぶつかるため)。現在行の行番号の太字 (`ui.line_number.active`) はどの段でも残る。
 - `ui.status_bar` の 16 の段を明示値にする版では `reverse` にする (その段だけ形 (ii)。`bright_white` / `black` のような組は黒背景の端末で編集面と区別できないため。FR-513 AC-4)。`ui.cursor_line` の 16 の段の `none` も同じく形の例外 (上の箇条)。v0.1 の近似では、近似した前景と背景が同じ番号になったときに反転に置き換える規則 (04 §12.3) で区別を保つ。
 - 意味のあるロール (エラー・警告・情報・選択・検索一致・現在の一致・チョード保留・ボタンのフォーカス) は mono の段でも属性か記号で区別できる (NFR-604 AC-1)。情報メッセージは `ℹ`、警告は `⚠`、エラーは `✖` の記号を常に付ける (04 §8.9)。mono の段では **dim だけで他と区別するロールを作らない** (conhost は dim を描かないため)。行番号・`~`・プレースホルダ・実行できないパレット項目は、通常属性に区切り記号・丸括弧・行頭の `-` を併用する規定に従う (04 §12.4。この規定は提案、04 §18 の OQ-181)。
-- v0.5 以降のロール (`ui.ruler`、`diagnostic.*`、`pane.border*`、`[syntax]`) と v1.L の `virtual_text*`・`diff.*` は、その版で本表に加える。上の TOML の例はユーザーテーマの書式の説明で、値は `default` テーマと同じではない。
+- v0.5 以降のロール (`ui.ruler`、`diagnostic.*`、`ui.pane.*` と `ui.tab_line*` (値の案は §8.8)、`[syntax]`) と v1.L の `virtual_text*`・`diff.*` は、その版で本表に加える。上の TOML の例はユーザーテーマの書式の説明で、値は `default` テーマと同じではない。
 
 ### 8.3 解決手順
 
@@ -1052,6 +1054,27 @@ tree-sitter のハイライトクエリ (`@keyword.control` 等) のキャプチ
 | `ui.control_char` | 制御文字・不正バイトの可視記号 | (i) | `#ffffff` / `#6a1b9a` (9.3・9.3) | `ansi.231` / `ansi.54` (11.4・11.4) | `bright_white` / `magenta` (4.6・4.6) | `reverse` |
 | `ui.whitespace` | 全角スペース・タブの可視化の記号 | (iii) | `#404040` / `default` (10.3) | `ansi.238` / `default` (9.7) | `blue` / `default` (9.3) | `bold` |
 
+### 8.8 v0.5 で足すロール (案。M30 の仕様の PR、2026-11-21)
+
+複数ペイン (FR-509、M30) とタブライン (FR-510、M32) で足すロール。**値は案で、実装の PR が §8.2 と §8.7.1 / §8.7.2 の表に行を移し**、`eve_config::theme` の組込みテーマと eve-tui の `theme_table` を同じ PR で直す (§8.2 の表は実装との突合 (`check-themes`、09 §3.5) に使うので、実装より先に行を足すと検査が落ちる。本節の表は `check-themes` が読まない)。`default-dark` / `default-light` / `ansi` は §8.6 の 3 本目の規則で `default` から作る。値は既存のロールの値を流用し、比は流用元と同じ (括弧内)。どれも重ねるロール (§8.6) ではない。
+
+- **使い方** (03 §9.9 の PANE-10 / PANE-12、04 §3.4 / §9): ペインの見出しは、フォーカスのペインを `ui.pane.bar.active` (ステータスバーと同じ組。無色の段は反転。先頭に `▶`、ASCII の縮退では `>`) で、ほかのペインを `ui.pane.bar` (名前と印は本文と同じ色。残りの `─` の埋め (ASCII の縮退では `-`) は `ui.pane.border`) で描く。無色の段と ASCII の縮退の組 (最も区別しにくい組) でも「反転の行」と「`-` で埋めた行」で区別できる (FR-509 AC-1)。区切り (`│`、ASCII は `|`) は `ui.pane.border`。タブラインは、アクティブなタブを `ui.tab_line.active`、ほかを `ui.tab_line` で描き、省いた側の `‹` `›` は `ui.scroll_marker`。
+- `check-themes` に掛かる点: (i) の 2 つは 4.5:1 (高コントラストは (h2) の 7.0:1 と (h4) の 3.0:1)、(iii) の `ui.pane.border` は白・黒の背景に 3.0:1 (高コントラストは (h3) と (h10))。16 の段で `bold` を使わない ((h9))。`ui.pane.bar.active` と `ui.tab_line.active` は意味のあるロール (フォーカス・アクティブを示す) なので、mono の段を `none` にしない (§8.2 の表の下の箇条、NFR-604 AC-1)。`ui.pane.bar` の mono が `none` なのは、`─` の埋めで区別するため (04 §12.4 と同じ考え)。
+
+| 足すロール | 用途 | 形 | テーマ | truecolor (fg / bg) | 256 (fg / bg) | 16 (fg / bg) | mono | 流用元 |
+|---|---|---|---|---|---|---|---|---|
+| `ui.pane.border` | ペインの区切り (`│`) | (iii) | `default` | `#808080` / `default` (白 3.9・黒 5.3) | `ansi.244` / `default` | `bright_black` / `default` | `none` | `ui.line_number` |
+| | | | `high-contrast-dark` | `#c0c0c0` / `default` (11.5) | `ansi.250` / `default` (11.0) | `cyan` / `default` (10.6) | `none` | 同上 |
+| | | | `high-contrast-light` | `#404040` / `default` (10.3) | `ansi.238` / `default` (9.7) | `blue` / `default` (9.3) | `none` | 同上 |
+| `ui.pane.bar` | フォーカスの無いペインの見出しの名前と印 (読む文字なので淡色にしない。残りの `─` の埋めは `ui.pane.border`) | (ii) | 3 つとも | `default` / `default` | `default` / `default` | `default` / `default` | `none` (`─` の埋めで区別する) | `ui.hint_bar` |
+| `ui.pane.bar.active` | フォーカスのあるペインの見出し | (i) | `default` | `#e8e8e8` / `#2f3340` (10.3) | `ansi.254` / `ansi.237` (9.0) | `reverse` (形 (ii)。`ui.status_bar` と同じ例外) | `reverse` | `ui.status_bar` |
+| | | | `high-contrast-dark` | `#000000` / `#ffffff` (21.0・21.0) | `ansi.16` / `ansi.231` (21.0・21.0) | `black` / `bright_white` (21.0・21.0) | `reverse` | 同上 |
+| | | | `high-contrast-light` | `#ffffff` / `#000000` (21.0・21.0) | `ansi.231` / `ansi.16` (21.0・21.0) | `bright_white` / `black` (21.0・21.0) | `reverse` | 同上 |
+| `ui.tab_line` | タブラインの地と、アクティブでないタブ (FR-510、M32) | (ii) | 3 つとも | `default` / `default` | `default` / `default` | `default` / `default` | `none` | `ui.hint_bar` |
+| `ui.tab_line.active` | アクティブなタブ (フォーカスのペインの文書。FR-510、M32) | (i) | 3 つとも | `ui.pane.bar.active` と同じ | 同左 | 同左 | `reverse` | `ui.status_bar` |
+
+- フォーカスのあるペインの見出しが一番下のペインにあると、すぐ下のステータスバーと同じ組の 2 行が続く。中身 (見出しは文書名と印だけ、ステータスバーは位置・文字コードなどを右に持つ) で見分ける。目で確かめるとき (09 §8.2 の互換の行) に見にくければ、見出しの組を変える (基準は満たしたまま)。
+
 ---
 
 ## 9. 言語設定
@@ -1200,7 +1223,7 @@ verb       := [a-z][a-z0-9_]*
 | `select` | 選択の拡張・操作 | `select.extend_left` 等 (`cursor` の移動ごとの `extend_` 版。一覧は §11.6), `select.all`, `select.extend_to_doc_start`, `select.extend_to_doc_end`, `select.add_next_match` (v0.5), `select.line` (v0.5) |
 | `search` | 検索・置換 | `search.open`, `search.next`, `search.prev`, `search.toggle_case`, `search.toggle_regex`, `search.replace_open`, `search.replace`, `search.replace_all`, `search.workspace` (v0.5) |
 | `view` | View の表示属性 | `view.toggle_wrap`, `view.scroll_down`, `view.toggle_line_numbers` |
-| `pane` | 分割ペイン (1 つの端末画面の中を分割する。04 §11) の作成・フォーカス移動 (v0.5) | `pane.split_vertical`, `pane.focus_next`, `pane.close` |
+| `pane` | 分割ペイン (1 つの端末画面の中を分割する。04 §11、03 §9.9) の作成・フォーカス移動・大きさ・閉じる (v0.5)。分割の向きは「水平」「垂直」と書かず、新しいペインを置く側で書く | `pane.split_right`, `pane.split_down`, `pane.focus_next`, `pane.close` (一覧は §11.6 の「ペイン」) |
 | `ui` | オーバーレイ・パネル・汎用 UI | `ui.palette_open`, `ui.cancel` (Esc の意味は 04 §7.5), `ui.confirm`, `ui.list_next`, `ui.dialog_choose`, `ui.message_history`, `ui.toggle_hint_bar`, `ui.toggle_mouse`, `ui.redraw`, `ui.probe_char_width` (Could) |
 | `config` / `theme` / `keys` | 設定操作 | `config.reload`, `config.open_user`, `config.show`, `config.show_diagnostics`, `config.set`, `theme.select`, `keys.set_preset`, `keys.bind` |
 | `lang` | 言語・構文 | `lang.set`, `lang.redetect`, `lang.format`, `lang.select_node`, `lang.run_command` (外部コマンドの出力をパネルに表示、Could v0.5、§15。予約) |
@@ -1362,6 +1385,22 @@ verb       := [a-z][a-z0-9_]*
 
 `search.prev` の主な手段は `up` (`shift+enter` は従来の端末で `enter` と区別できず、`shift+f3` は従来の端末でカーソル位置報告と区別できない)。`search.toggle_case` は大小区別を **smart → sensitive → insensitive → smart** の順に巡回する。開くたびに `search.case` の値から始まり、切り替えた値はセッション中だけ保持する (設定ファイルには書かない。意味は 03 §12、表示は 04 §8.4)。`search.toggle_regex` (正規表現の ON / OFF、初期値は `search.regex_default`) は v0.2 で入れた。`search.replace_open` は検索バーを置換欄つきで開く (検索バーが開いていれば置換欄を足し、置換欄にフォーカスを移す)。`search.replace_all` は v0.1 ではリテラルの一括置換で、大小区別は検索バーの現在の値に従う (手順は 03 §12.5)。置換欄が開いていない (`search.replace_active` が偽) ときは実行できないので、置換文字列を入れないまま `alt+a` で一致を消すことはない。
 
+**ペイン** (v0.5 の M30、FR-509。規則の正本は 03 §9.9。M30 の仕様の PR で決めた。ID と既定キーは PO の確認を待つ (2026-11-21))
+
+| ID | title key | kind | args | when | perm | コンテキスト | 既定キー | ヒント |
+|---|---|---|---|---|---|---|---|---|
+| `pane.split_right` (v0.5) | `cmd.pane.split_right` | Ui | — | — | `ui` | `editor` | `mod+\` [E], `ctrl+k \` (alt), `ctrl+k \|` (alt) | - |
+| `pane.split_down` (v0.5) | `cmd.pane.split_down` | Ui | — | — | `ui` | `editor` | `ctrl+k -` (alt) | - |
+| `pane.focus_next` / `pane.focus_prev` (v0.5) | `cmd.pane.focus_next` / `cmd.pane.focus_prev` | Ui | — | `pane.split` | `ui` | `editor` | `f6` / `shift+f6`, `ctrl+k tab` / `ctrl+k shift+tab` (alt) | - |
+| `pane.focus_left` / `pane.focus_right` / `pane.focus_up` / `pane.focus_down` (v0.5) | `cmd.pane.focus_left` / `cmd.pane.focus_right` / `cmd.pane.focus_up` / `cmd.pane.focus_down` | Ui | — | `pane.split` | `ui` | パレット | — (ユーザーのキーマップでは割り当てられる。`ctrl+k ctrl+<矢印>` は予約のまま。下の「キーの選び方」) | - |
+| `pane.close` (v0.5) | `cmd.pane.close` | Ui | — | `pane.split` | `ui` | `editor` | `ctrl+k q` (alt) | - |
+| `pane.grow` / `pane.shrink` (v0.5) | `cmd.pane.grow` / `cmd.pane.shrink` | Ui | `cells?` (int。既定: 親の分割の向きの長さの 1/10、少なくとも 1) | `pane.split` | `ui` | `editor` | `ctrl+k ]` / `ctrl+k [` (alt) | - |
+| `pane.equalize` (v0.5) | `cmd.pane.equalize` | Ui | — | `pane.split` | `ui` | `editor` | `ctrl+k =` (alt) | - |
+
+- **向きの意味**: `pane.split_right` はフォーカスのペインの **右** に新しいペインを置く (左右に並ぶ。区切りは縦の線)。`pane.split_down` は **下** に置く (上下に並ぶ。上のペインの見出しが境目)。文言 (`cmd.pane.split_right` の title) は「右に分割 (左右に並べる)」「下に分割 (上下に並べる)」(en: Split Right / Split Down) とし、「水平」「垂直」を使わない (Vim と VS Code・tmux で逆に読めるため)。
+- **キーの選び方** (04 §7.2 / §7.3a): `mod+\` は v0.1 から予約していた分割のキー。従来の VT 端末では `Ctrl+\` が 0x1C (`Ctrl+4` と同じ符号) で届くので `[E]` とし、全端末で届く代替 `ctrl+k \` を持つ (eve-tui は 0x1C を `ctrl+\` に正規化する。FR-509 の PR)。下への分割は `ctrl+k -` (横の線の形。`\` との組は tmux の慣習の `|` / `-` に倣う)。`ctrl+k |` は `ctrl+k \` の別名 (macOS の JIS 配列の既定では `¥` キーが U+00A5 を送り `\` が打てないが、`Shift+¥` の `|` は届く)。JIS 配列では `=` が `Shift+-` なので、揃える (`ctrl+k =`) の Shift を押し忘れると下への分割になるが、分割は `ctrl+k q` で戻せる。ペインの移動の第一は `f6` / `shift+f6` (多くのアプリで「次の区画」。修飾が要らず、従来の端末でも届く)。方向の移動 (`pane.focus_left` 等) には **既定のキーを付けない**: v0.1 から予約していた `ctrl+k ctrl+矢印` は、`ctrl+k` の後で `ctrl` を離さずに矢印を押すと、行頭・行末の代替 (`ctrl+k left` / `ctrl+k right`。Terminal.app など `home` / `end` が届かない端末で日常に使う) のつもりが、黙ってペインの移動になる (逆に `ctrl` を早く離すと `ctrl+k up` / `ctrl+k down` = 行の上下移動で本文が変わる)。macOS の既定では Mission Control が `ctrl+矢印` を取ることもある。`ctrl+k ctrl+<矢印>` は予約のまま残し (ユーザーのキーマップでは割り当ててよい)、Must の移動は次 / 前で満たす。閉じるは `ctrl+k q` (`ctrl+k w` は文書を閉じる `buffer.close`)。大きさは `ctrl+k ]` / `ctrl+k [` / `ctrl+k =` (04 §11 の v0.4 までの案の `Ctrl+K -` は下への分割に使った)。どれも既定のキーマップの既存の割当・チョードの先頭と重ならない (`ctrl+k` の 2 打目で使っていたのは `,` `.` `<` `>` `a` `b` `c` `d` `h` `l` `m` `n` `o` `p` `r` `s` `w` `x` `z` と矢印・`shift+left` / `shift+right`)。ユーザーのキーマップが同じキーを先に使っていれば、ユーザーの割当が勝つ (02 §7.2 K5)。`ctrl+\` を先頭にするユーザーのチョードは、v0.5 から既定の `mod+\` を無効にする警告 (§7.6 の `msg.config.keymap_chord_shadows_default`) が出る (CHANGELOG の v0.5 の「変更」に書く)。
+- 最後のペインでは `when` (`pane.split`) が偽になり、`pane.close`・移動・大きさはパレットで淡色 (`ui.palette.reason.single_pane`)。分割は `when` を持たず、広さが足りなければ `info.pane.no_room` を出す (03 §9.9 の PANE-4)。文書を閉じる `buffer.close` との違いは 03 §9.9 の PANE-9。
+
 **オーバーレイ内** (v0.1 の ID 6 個。すべてパレット非表示)
 
 | ID | title key | kind | args | when | perm | コンテキスト | 既定キー | ヒント |
@@ -1377,7 +1416,7 @@ verb       := [a-z][a-z0-9_]*
 
 **内部 (パレット非表示、配布ビルドに無い)**: `internal.debug_panic` (パニックの注入。cargo feature `test-hooks` を有効にしたビルドで、かつ `EVE_TEST_HOOK` に `panic_command` を含むときだけ登録する (09 §3.6 の test-hooks の一覧。どちらかが欠ければ登録しない)。01 NFR-302 AC-1、02 §4.1)。キー割当なし。
 
-**予約 (v0.1 では割り当てない)**: `alt+z` (v0.2 折り返し)、`mod+d` (v0.5 `select.add_next_match`)、`mod+l` (v0.5 `select.line`)、`mod+/` (v0.5 `edit.toggle_comment`)、`mod+\` (v0.5 `pane.split_vertical`)、`mod+t` (v0.5 のファインダの候補だった。ファインダは Ctrl+O にした (v0.5-plan §1.3 の (1))。予約のまま)、`ctrl+b` (tmux)、`ctrl+j` (レガシー Enter と紛らわしい)、`ctrl+i` / `ctrl+m` / `ctrl+[` (区別困難)、`ctrl+数字`、`ctrl+k ctrl+<矢印>` (v0.5 ペイン移動)。
+**予約 (v0.1 では割り当てない)**: `alt+z` (v0.2 折り返し)、`mod+d` (v0.5 `select.add_next_match`)、`mod+l` (v0.5 `select.line`)、`mod+/` (v0.5 `edit.toggle_comment`)、`mod+\` (v0.5 `pane.split_right`。上の「ペイン」の表)、`mod+t` (v0.5 のファインダの候補だった。ファインダは Ctrl+O にした (v0.5-plan §1.3 の (1))。予約のまま)、`ctrl+b` (tmux)、`ctrl+j` (レガシー Enter と紛らわしい)、`ctrl+i` / `ctrl+m` / `ctrl+[` (区別困難)、`ctrl+数字`、`ctrl+k ctrl+<矢印>` (方向のペインの移動 `pane.focus_left` 等の候補。v0.5 では既定に割り当てない。上の「ペイン」の表の「キーの選び方」)。
 
 **FR-606 の到達性検査** (09 §3.4、OQ-30) の対象「頻出操作」(v0.1 で確定。OQ-30 の分類「保存・終了・検索・パレット・Undo/Redo・コピー/カット/貼り付け・移動・選択」を ID で列挙したもの。計 37 個):
 
