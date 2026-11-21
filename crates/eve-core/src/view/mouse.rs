@@ -81,7 +81,7 @@ impl EditorState {
             return;
         };
         drag.at = at;
-        let rows = i32::from(self.viewport().1);
+        let rows = i32::from(self.view_size(drag.view).1);
         if at.row < 0 || at.row >= rows {
             drag.next_scroll = drag.next_scroll.or(Some(self.now + AUTO_SCROLL_INTERVAL));
         } else {
@@ -139,7 +139,7 @@ impl EditorState {
 
     /// 水平スクロール (折り返し OFF)。いちばん長い可視行の幅を超えて右へは動かさない。
     fn scroll_columns(&mut self, view: ViewId, delta: i64) {
-        let rows = self.viewport().1 as usize;
+        let rows = self.view_size(view).1 as usize;
         let Some(v) = self.docs.views.get(&view) else {
             return;
         };
@@ -169,7 +169,7 @@ impl EditorState {
     fn mouse_position(&self, at: MouseAt) -> Option<(ByteOff, Affinity)> {
         let v = self.docs.views.get(&at.view)?;
         let d = self.docs.documents.get(&v.doc)?;
-        let (cols, rows) = self.viewport();
+        let (cols, rows) = self.view_size(at.view);
         let gw = i32::from(crate::layout::gutter_width(d, cols as usize));
         // どちらも 0 以上に丸めてから変換する
         let row = usize::try_from(at.row.clamp(0, (i32::from(rows) - 1).max(0))).unwrap_or(0);

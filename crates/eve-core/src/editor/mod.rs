@@ -20,6 +20,7 @@ pub use host_api::{HostReport, StartupConfig};
 pub(crate) mod query;
 pub use crate::io::startup::{InitialFile, InitialTarget, StdinKind};
 pub(crate) mod state;
+pub(crate) mod window;
 
 use eve_view::{
     Capabilities, DocumentId, EditorEvent, Effect, InputEvent, KeyCode, KeyKind, KeyStroke,

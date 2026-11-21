@@ -55,14 +55,23 @@ impl Editor {
                     .docs
                     .windows
                     .iter()
-                    .map(|w| WindowInfo {
-                        window: w.id,
-                        views: vec![w.root],
-                        focus: if state.ui.overlay.is_some() {
-                            FocusTarget::Overlay(0)
-                        } else {
-                            FocusTarget::Pane(w.root)
-                        },
+                    .filter_map(|w| {
+                        // ペインを木の葉の順に、表示中の View で並べる (03 §9.9 の PANE-13)
+                        let views = w
+                            .leaves()
+                            .iter()
+                            .filter_map(|p| w.panes.get(p).map(|p| p.view))
+                            .collect();
+                        let focused = w.focused_pane()?.view;
+                        Some(WindowInfo {
+                            window: w.id,
+                            views,
+                            focus: if state.ui.overlay.is_some() {
+                                FocusTarget::Overlay(0)
+                            } else {
+                                FocusTarget::Pane(focused)
+                            },
+                        })
                     })
                     .collect(),
             )),
@@ -131,6 +140,7 @@ impl Editor {
         }
     }
 
+    /// Window のフォーカスのペインが表示している View (`Query::Status` / `Query::Overlay`)。
     fn window_root(&self, window: WindowId) -> Result<ViewId, QueryError> {
         self.state
             .window_view(window)

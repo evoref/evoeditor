@@ -53,7 +53,7 @@ pub(crate) fn wrap_ctx(state: &EditorState, view: ViewId) -> Option<(WrapSetting
     if d.format.long_lines > 0 {
         return None;
     }
-    Some((v.wrap, wrap_width(d, state.viewport())))
+    Some((v.wrap, wrap_width(d, state.view_size(view))))
 }
 
 /// 1 論理行を表示行に分けた結果 (03 §14.3.1)。移動とスクロールが表示行を数えるのに使う。

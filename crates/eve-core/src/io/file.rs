@@ -99,7 +99,7 @@ impl EditorState {
         !ids.is_empty()
     }
 
-    /// 今の文書 (最初の Window の View の文書)。
+    /// 今の文書 (アクティブな文書 = フォーカスのペインの文書。03 §9.9 の PANE-8)。
     pub fn active_document(&self) -> Option<DocumentId> {
         let w = self.focused_window()?;
         self.view(self.window_view(w)?).map(|v| v.doc)
@@ -121,6 +121,8 @@ impl EditorState {
         // 先行表示の先頭は文書ごと捨てる (03 §9.2.1 の「失敗・取消し・閉じる」)
         self.forget_partial_state(doc);
         self.docs.views.retain(|_, v| v.doc != doc);
+        // 全ペインの表・最近使った順からも消す (表示中のペインは呼び側が先に別の文書へ替える。03 §9.9 の PANE-1 / PANE-9)
+        self.forget_document_in_panes(doc);
         let saving = self
             .io
             .pending

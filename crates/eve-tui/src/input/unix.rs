@@ -357,7 +357,7 @@ impl Loop<'_> {
                     }
                 }
                 VtOut::Mouse(r) => {
-                    for m in self.tracker.feed(r, self.geom) {
+                    for m in self.tracker.feed(r, &self.geom.get()) {
                         if !self.out.event(InputEvent::Mouse(m)) {
                             return false;
                         }
