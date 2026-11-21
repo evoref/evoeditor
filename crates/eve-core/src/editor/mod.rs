@@ -380,6 +380,10 @@ impl Editor {
                 self.keymap.clear_pending();
                 self.state.on_mouse(m);
             }
+            InputEvent::ChromeMouse(m) => {
+                self.keymap.clear_pending();
+                self.state.on_chrome_mouse(m);
+            }
             InputEvent::Resize { cols, rows } => self.state.set_viewport(cols, rows),
             InputEvent::CapabilitiesChanged(caps) => self.set_caps(caps),
             // フォーカス復帰: 表示中の文書の外部変更を確かめる (03 §9.5)

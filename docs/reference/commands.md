@@ -13,7 +13,7 @@
 | `app.quit_with_error` | 失敗として終了 | Ui | — | — | `-` | — | 出す |
 | `app.save_and_quit` | 保存して終了 | File | — | — | `-` | — | 出す |
 | `app.suspend` | 一時停止 (サスペンド) | Ui | — | `caps.can_suspend` | `-` | `editor`: `Ctrl+K Z` | 出す |
-| `buffer.close` | 閉じる | Ui | — | — | `-` | `editor`: `Ctrl+W`, `Ctrl+K W`<br>`list`: `Ctrl+W` | 出す |
+| `buffer.close` | 文書を閉じる | Ui | — | — | `-` | `editor`: `Ctrl+W`, `Ctrl+K W`<br>`list`: `Ctrl+W` | 出す |
 | `buffer.list` | 一覧 | Ui | — | — | `ui` | `editor`: `Ctrl+E` | 出す |
 | `buffer.next` | 次の文書 | Ui | — | — | `ui` | `editor`: `Ctrl+PgDn`, `Ctrl+K N` | 出す |
 | `buffer.prev` | 前の文書 | Ui | — | — | `ui` | `editor`: `Ctrl+PgUp`, `Ctrl+K P` | 出す |
@@ -63,18 +63,18 @@
 | `help.commands` | コマンド一覧を開く | Ui | — | — | `ui` | — | 出す |
 | `help.keys` | キー一覧を開く | Ui | — | — | `ui` | — | 出す |
 | `help.open` | ヘルプを開く | Ui | — | — | `ui` | `global`: `Ctrl+K H` | 出す |
-| `pane.close` | ペインを閉じる | Ui | — | `pane.split` | `ui` | — | 出す |
-| `pane.equalize` | ペインの大きさを揃える | Ui | — | `pane.split` | `ui` | — | 出す |
+| `pane.close` | ペインを閉じる | Ui | — | `pane.split` | `ui` | `editor`: `Ctrl+K Q` | 出す |
+| `pane.equalize` | ペインの大きさを揃える | Ui | — | `pane.split` | `ui` | `editor`: `Ctrl+K =` | 出す |
 | `pane.focus_down` | 下のペインへ | Ui | — | `pane.split` | `ui` | — | 出す |
 | `pane.focus_left` | 左のペインへ | Ui | — | `pane.split` | `ui` | — | 出す |
-| `pane.focus_next` | 次のペイン | Ui | — | `pane.split` | `ui` | — | 出す |
-| `pane.focus_prev` | 前のペイン | Ui | — | `pane.split` | `ui` | — | 出す |
+| `pane.focus_next` | 次のペイン | Ui | — | `pane.split` | `ui` | `editor`: `F6`, `Ctrl+K Tab` | 出す |
+| `pane.focus_prev` | 前のペイン | Ui | — | `pane.split` | `ui` | `editor`: `Shift+F6`, `Ctrl+K Shift+Tab` | 出す |
 | `pane.focus_right` | 右のペインへ | Ui | — | `pane.split` | `ui` | — | 出す |
 | `pane.focus_up` | 上のペインへ | Ui | — | `pane.split` | `ui` | — | 出す |
-| `pane.grow` | ペインを広げる | Ui | `cells?`: `int` | `pane.split` | `ui` | — | 出す |
-| `pane.shrink` | ペインを狭める | Ui | `cells?`: `int` | `pane.split` | `ui` | — | 出す |
-| `pane.split_down` | 下に分割 (上下に並べる) | Ui | — | — | `ui` | — | 出す |
-| `pane.split_right` | 右に分割 (左右に並べる) | Ui | — | — | `ui` | — | 出す |
+| `pane.grow` | ペインを広げる | Ui | `cells?`: `int` | `pane.split` | `ui` | `editor`: `Ctrl+K ]` | 出す |
+| `pane.shrink` | ペインを狭める | Ui | `cells?`: `int` | `pane.split` | `ui` | `editor`: `Ctrl+K [` | 出す |
+| `pane.split_down` | 下に分割 (上下に並べる) | Ui | — | — | `ui` | `editor`: `Ctrl+K -` | 出す |
+| `pane.split_right` | 右に分割 (左右に並べる) | Ui | — | — | `ui` | `editor`: `Ctrl+\`, `Ctrl+K \`, `Ctrl+K \|` | 出す |
 | `search.next` | 次を検索 | Motion | — | `search.active` | `read` | `search`: `Enter`, `↓`, `F3` | 出す |
 | `search.open` | 検索 | Ui | `query?`: `string` | — | `ui` | `editor`: `Ctrl+F`<br>`search`: `Ctrl+F` | 出す |
 | `search.prev` | 前を検索 | Motion | — | `search.active` | `read` | `search`: `↑`, `Shift+F3` [E], `Shift+Enter` [E] | 出す |

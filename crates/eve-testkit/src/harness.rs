@@ -342,6 +342,24 @@ impl Harness {
         }));
     }
 
+    /// View `view` を表示するペインの見出しへのマウス操作 (`InputEvent::ChromeMouse`、`ChromeTarget::PaneBar`)。`col` は
+    /// 見出しの左端からのセル (docs/03 §9.9 の PANE-7 (d))。
+    pub fn pane_bar_mouse(
+        &mut self,
+        view: eve_view::ViewId,
+        kind: eve_view::MouseKind,
+        mods: eve_view::Modifiers,
+        col: i32,
+    ) {
+        self.input(InputEvent::ChromeMouse(eve_view::ChromeMouseEvent {
+            kind,
+            mods,
+            target: eve_view::ChromeTarget::PaneBar { view },
+            row: 0,
+            col,
+        }));
+    }
+
     /// 左クリック (押して離す)。
     pub fn click(&mut self, row: i32, col: i32) {
         use eve_view::{Modifiers, MouseButton, MouseKind};

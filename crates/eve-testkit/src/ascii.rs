@@ -179,33 +179,122 @@ fn push_line(out: &mut String, mut line: String) {
     out.push('\n');
 }
 
-/// ペインが 2 つ以上の Frame: 編集面の行ごとに、その行に掛かるペインの行を矩形の列の位置に並べる (ペインの間の列は空白)。
-fn render_panes(out: &mut String, frame: &Frame, opts: AsciiOptions, sel_bg: eve_view::Color) {
-    for y in 0..frame.size.rows {
-        let mut here: Vec<&eve_view::PaneFrame> = frame
-            .panes
-            .iter()
-            .filter(|p| y >= p.rect.row && y < p.rect.row.saturating_add(p.rect.rows))
-            .collect();
-        here.sort_by_key(|p| p.rect.col);
-        let mut line = String::new();
-        let mut x = 0usize;
-        for p in here {
-            let col = usize::from(p.rect.col);
-            if col > x {
-                line.push_str(&" ".repeat(col - x));
-                x = col;
-            }
-            let Some(row) = p.rows.get(usize::from(y - p.rect.row)) else {
-                continue;
-            };
-            let (mut cells, body_start) = row_cells(row, opts, sel_bg);
-            cells.truncate(usize::from(p.rect.cols));
-            let n = cells.len();
-            line.push_str(&cells_text(&cells, body_start, opts));
-            x += n;
+/// 見出しの 1 行のセル (03 §9.9 の PANE-13): フォーカスのペイン (`active`) は `> ` と項目の後ろを `=` で、ほかのペインは
+/// 先頭の空白と項目の後ろを `-` で埋める (無色・ASCII でもフォーカスが分かる)。項目は長い形を空白 1 つで並べる。
+fn bar_cells(pane: &eve_view::PaneFrame, bar: &eve_view::PaneBarModel) -> Vec<Cell> {
+    let plain = |t: &str| Cell {
+        text: Some(t.to_owned()),
+        reverse: false,
+    };
+    let mut cells = vec![plain(if pane.active { ">" } else { " " })];
+    if pane.active {
+        cells.push(plain(" "));
+    }
+    for (i, item) in bar.items.iter().enumerate() {
+        if i > 0 {
+            cells.push(plain(" "));
         }
-        push_line(out, line);
+        put_spans(&mut cells, &item.long.spans, eve_view::Color::Default);
+    }
+    for c in &mut cells {
+        c.reverse = false;
+    }
+    let width = usize::from(bar.rect.cols);
+    if cells.len() < width {
+        cells.push(plain(" "));
+    }
+    let fill = if pane.active { "=" } else { "-" };
+    while cells.len() < width {
+        cells.push(plain(fill));
+    }
+    cells.truncate(width);
+    cells
+}
+
+/// 格子の `y` 行の `x0` 列から、`limit` セルまで `cells` を置く。`body_start` 番目より後ろのセルは選択の印の対象。
+fn place(
+    grid: &mut [Vec<(Cell, bool)>],
+    x0: u16,
+    y: u16,
+    cells: Vec<Cell>,
+    body_start: usize,
+    limit: u16,
+) {
+    let Some(line) = grid.get_mut(usize::from(y)) else {
+        return;
+    };
+    for (i, c) in cells.into_iter().enumerate().take(usize::from(limit)) {
+        if let Some(slot) = line.get_mut(usize::from(x0) + i) {
+            *slot = (c, i >= body_start);
+        }
+    }
+}
+
+/// ペインが 2 つ以上の Frame: 編集面の大きさの格子に、各ペインの行・見出し (`=` / `-` の埋め)・区切り (`|`) を矩形の位置に
+/// 置く (03 §9.9 の PANE-13)。選択の印 (`«` `»`) は本文のセルだけに付ける。
+fn render_panes(out: &mut String, frame: &Frame, opts: AsciiOptions, sel_bg: eve_view::Color) {
+    let (cols, rows) = (usize::from(frame.size.cols), usize::from(frame.size.rows));
+    // (セル, 選択の印を付けてよい本文のセルか)
+    let blank = || {
+        (
+            Cell {
+                text: Some(" ".to_owned()),
+                reverse: false,
+            },
+            false,
+        )
+    };
+    let mut grid: Vec<Vec<(Cell, bool)>> = (0..rows)
+        .map(|_| (0..cols).map(|_| blank()).collect())
+        .collect();
+    for p in &frame.panes {
+        for (i, row) in p.rows.iter().enumerate().take(usize::from(p.rect.rows)) {
+            let (cells, body_start) = row_cells(row, opts, sel_bg);
+            let y = p
+                .rect
+                .row
+                .saturating_add(u16::try_from(i).unwrap_or(u16::MAX));
+            place(&mut grid, p.rect.col, y, cells, body_start, p.rect.cols);
+        }
+        if let Some(bar) = &p.bar {
+            place(
+                &mut grid,
+                bar.rect.col,
+                bar.rect.row,
+                bar_cells(p, bar),
+                usize::MAX,
+                bar.rect.cols,
+            );
+        }
+    }
+    for d in &frame.dividers {
+        for y in d.rect.row..d.rect.row.saturating_add(d.rect.rows) {
+            let cells = (0..d.rect.cols)
+                .map(|_| Cell {
+                    text: Some("|".to_owned()),
+                    reverse: false,
+                })
+                .collect();
+            place(&mut grid, d.rect.col, y, cells, usize::MAX, d.rect.cols);
+        }
+    }
+    for line in grid {
+        let mut s = String::new();
+        let mut in_sel = false;
+        for (c, body) in &line {
+            let sel = opts.mark_selection && *body && c.reverse;
+            if sel != in_sel {
+                s.push(if sel { '«' } else { '»' });
+                in_sel = sel;
+            }
+            if let Some(t) = &c.text {
+                s.push_str(t);
+            }
+        }
+        if in_sel {
+            s.push('»');
+        }
+        push_line(out, s);
     }
 }
 
@@ -258,7 +347,10 @@ mod tests {
                 rows,
                 cursors: vec![],
                 focused: true,
+                active: true,
+                bar: None,
             }],
+            dividers: Vec::new(),
             search: None,
             focus: FocusTarget::Pane(ViewId(1)),
             primary_cursor: Some(CursorPlacement {
@@ -327,6 +419,8 @@ mod tests {
             rows,
             cursors: vec![],
             focused: view == 1,
+            active: view == 1,
+            bar: None,
         };
         let mut f = frame(vec![]);
         f.size = CellSize { cols: 9, rows: 2 };

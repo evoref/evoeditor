@@ -10,5 +10,6 @@ pub(crate) mod keys;
 pub(crate) mod message;
 pub(crate) mod overlay;
 pub(crate) mod palette;
+pub(crate) mod pane_bar;
 pub(crate) mod quit_saving;
 pub(crate) mod search_bar;

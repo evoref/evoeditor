@@ -1,6 +1,6 @@
-//! 複数ペイン (docs/03 §9.9、01 §5.5 の FR-509) のシナリオ (09 §3.4 の計画の (2))。v0.5 の M30 の段 2a: core の木の
-//! 操作と PANE-4〜PANE-9 を、`execute` とパレットから実行する。見出し・区切りの描画・既定キー・見出しのクリック・
-//! ASCII の Frame は段 2b で確かめる。
+//! 複数ペイン (docs/03 §9.9、01 §5.5 の FR-509) のシナリオ (09 §3.4 の計画の (2)・(3))。v0.5 の M30 の段 2a: core の木の
+//! 操作と PANE-4〜PANE-9 を、`execute` とパレットから実行する。段 2b: 見出し・区切り・フォーカスの強調 (Frame)・既定キー・
+//! 見出しのクリック (`ChromeMouse`)・ASCII の Frame のゴールデン (`tests/golden/panes_*.frame.txt`)。
 
 use eve_core::{Args, CommandResult, RejectReason};
 use eve_testkit::Harness;
@@ -108,10 +108,8 @@ fn palette_reason(h: &mut Harness, query: &str) -> Option<String> {
 
 // verifies: AC-FR-509-1
 #[test]
-// 段 2a の範囲だけ (分割・移動と、全ペインが Frame に出ること)。見出し・区切り・フォーカスの強調・ASCII の Frame・既定キーの
-// `verifies:` は段 2b で足す
+// 分割・移動と、全ペインが Frame に出ること。見出し・区切り・フォーカスの強調・ASCII の Frame・既定キーは下の段 2b の試験
 fn 右と下に分割し_次_前と方向でフォーカスを移せる() {
-    // 見出し・区切り・フォーカスの強調の描画は段 2b (ここでは木とフォーカスと、全ペインが Frame に出ることを見る)
     let mut h = opened(&[("/w/a.txt", &lines(50))]);
     let left = focused(&h);
     run(&mut h, "pane.split_right");
@@ -159,7 +157,7 @@ fn 右と下に分割し_次_前と方向でフォーカスを移せる() {
 
 // verifies: AC-FR-509-1
 #[test]
-// 段 2a の範囲だけ (パレットからの実行)。既定キーからの実行は段 2b
+// パレットからの実行。既定キーからの実行は下の段 2b の試験
 fn パレットから実行したペインのコマンドはフォーカスのペインに効く() {
     let mut h = opened(&[("/w/a.txt", &lines(10))]);
     let left = focused(&h);
@@ -365,8 +363,8 @@ fn 端末が縮むとフォーカスのペインだけを出し_入力が届き_
 
 // verifies: AC-FR-509-4
 #[test]
-// 段 2a の範囲だけ (core のマウス・大きさ・検索バーとオーバーレイ)。見出しのクリック (`ChromeMouse`)・TUI の変換・既定キーの
-// `verifies:` は段 2b で足す
+// core のマウス・大きさ・検索バーとオーバーレイ。見出しのクリック (`ChromeMouse`)・既定キーは下の段 2b の試験、TUI の変換は
+// eve-tui の `mouse` の単体試験
 fn フォーカスの無いペインのクリックでフォーカスとカーソルが移り_ホイールはポインタの下のペインだけを動かす()
  {
     let mut h = opened(&[("/w/a.txt", &lines(100))]);
@@ -411,8 +409,8 @@ fn フォーカスの無いペインのクリックでフォーカスとカー�
 
 // verifies: AC-FR-509-4
 #[test]
-// 段 2a の範囲だけ (core のマウス・大きさ・検索バーとオーバーレイ)。見出しのクリック (`ChromeMouse`)・TUI の変換・既定キーの
-// `verifies:` は段 2b で足す
+// core のマウス・大きさ・検索バーとオーバーレイ。見出しのクリック (`ChromeMouse`)・既定キーは下の段 2b の試験、TUI の変換は
+// eve-tui の `mouse` の単体試験
 fn キーでペインの大きさを変えて揃えられる() {
     let mut h = opened(&[("/w/a.txt", b"a\n")]);
     run(&mut h, "pane.split_right");
@@ -441,8 +439,8 @@ fn キーでペインの大きさを変えて揃えられる() {
 
 // verifies: AC-FR-509-4
 #[test]
-// 段 2a の範囲だけ (core のマウス・大きさ・検索バーとオーバーレイ)。見出しのクリック (`ChromeMouse`)・TUI の変換・既定キーの
-// `verifies:` は段 2b で足す
+// core のマウス・大きさ・検索バーとオーバーレイ。見出しのクリック (`ChromeMouse`)・既定キーは下の段 2b の試験、TUI の変換は
+// eve-tui の `mouse` の単体試験
 fn フォーカスのペインが替わると検索バーは閉じ_オーバーレイの間はクリックでフォーカスが変わらない() {
     let mut h = opened(&[("/w/a.txt", &lines(10))]);
     let left = focused(&h);
@@ -652,4 +650,290 @@ fn _1_ペインで別の文書に切り替えて戻してもスクロールの�
     run(&mut h, "buffer.next");
     assert_eq!(focused(&h), a, "a の View に戻る");
     assert_eq!(top(&h), before, "切り替えて戻してもスクロールを変えない");
+}
+
+// ---------- 段 2b: 見出し・区切り・既定キー・見出しのクリック・ASCII の Frame ----------
+
+/// `keys` を押して、ペインの不変条件を確かめる。
+fn press(h: &mut Harness, keys: &str) {
+    h.keys(keys);
+    check(h);
+}
+
+/// 見出しの項目の長い形を空白で繋いだもの (見出しが無ければ `None`)。
+fn bar_text(p: &eve_view::PaneFrame) -> Option<String> {
+    p.bar.as_ref().map(|b| {
+        b.items
+            .iter()
+            .map(|i| cell_text(&i.long))
+            .collect::<Vec<_>>()
+            .join(" ")
+    })
+}
+
+/// ペイン `p` の `line` 行目 (0 始まり) のガターの行番号が太字か。
+fn line_number_bold(p: &eve_view::PaneFrame, line: u32) -> bool {
+    p.rows
+        .iter()
+        .find(
+            |r| matches!(r.source, eve_view::RowSource::Line { line: l, wrap_idx: 0 } if l == line),
+        )
+        .and_then(|r| r.gutter.first())
+        .is_some_and(|s| s.style.mods.contains(eve_view::StyleMods::BOLD))
+}
+
+// verifies: AC-FR-509-1
+#[test]
+fn 見出しと区切りが出て_フォーカスのペインの見出しを強調し_ほかのペインは現在行の行番号を強調しない()
+ {
+    let mut h = opened(&[("/w/a.txt", &lines(30))]);
+    // 1 ペインでは見出しも区切りも出さない (画面は v0.4 と同じ)
+    let f = h.frame();
+    assert_eq!(f.dividers, Vec::new());
+    assert!(f.panes[0].bar.is_none() && f.panes[0].active);
+    let left = focused(&h);
+    run(&mut h, "pane.split_right");
+    let right = focused(&h);
+    let f = h.frame();
+    assert_eq!(f.panes.len(), 2);
+    let (l, r) = (&f.panes[0], &f.panes[1]);
+    assert_eq!((l.view, r.view), (left, right));
+    assert!(
+        !l.active && r.active,
+        "Window のフォーカスのペインだけが active"
+    );
+    assert!(!l.focused && r.focused);
+    // 見出しは各ペインの最下行 (本文の直下)、区切りは左右の間の 1 列で見出しの行も通す
+    let (lb, rb) = (
+        l.bar.as_ref().expect("左の見出し"),
+        r.bar.as_ref().expect("右の見出し"),
+    );
+    assert_eq!((lb.rect.row, lb.rect.rows), (l.rect.rows, 1));
+    assert_eq!((lb.rect.col, lb.rect.cols), (l.rect.col, l.rect.cols));
+    assert_eq!((rb.rect.col, rb.rect.cols), (r.rect.col, r.rect.cols));
+    assert_eq!(f.dividers.len(), 1);
+    let d = f.dividers[0].rect;
+    assert_eq!((d.col, d.cols, d.row, d.rows), (40, 1, 0, 24));
+    // 見出しの項目は名前 (番号を付けない)・変更・読み取り専用
+    assert_eq!(bar_text(l).as_deref(), Some("a.txt"));
+    h.text("x");
+    let f = h.frame();
+    assert_eq!(bar_text(&f.panes[0]).as_deref(), Some("a.txt [+]"));
+    assert_eq!(bar_text(&f.panes[1]).as_deref(), Some("a.txt [+]"));
+    let kinds: Vec<StatusKind> = f.panes[1]
+        .bar
+        .as_ref()
+        .map(|b| b.items.iter().map(|i| i.kind).collect())
+        .unwrap_or_default();
+    assert_eq!(kinds, vec![StatusKind::Path, StatusKind::Dirty]);
+    // フォーカスの無いペインは現在行の行番号を太字にしない (03 §9.9 の PANE-10 (d))
+    assert!(line_number_bold(&f.panes[1], 0));
+    assert!(!line_number_bold(&f.panes[0], 0));
+    // オーバーレイを開いても active は変わらない (focused は偽になる)
+    h.cmd("ui.palette_open");
+    let f = h.frame();
+    assert!(f.panes[1].active && !f.panes[1].focused);
+    assert!(!f.panes[0].active);
+    h.keys("escape");
+}
+
+// verifies: AC-FR-509-1
+#[test]
+fn 既定キーで分割し_次_前へ移り_大きさを変えて揃え_ペインを閉じる() {
+    let mut h = opened(&[("/w/a.txt", &lines(30))]);
+    let first = focused(&h);
+    press(&mut h, "ctrl+\\");
+    let (v, second) = panes(&h);
+    assert_eq!(v, vec![first, second], "Ctrl+\\ で右に分割");
+    press(&mut h, "ctrl+k -");
+    let (v, third) = panes(&h);
+    assert_eq!(v, vec![first, second, third], "Ctrl+K - で下に分割");
+    press(&mut h, "f6");
+    assert_eq!(focused(&h), first, "F6 で次 (末尾から先頭へ巡る)");
+    press(&mut h, "shift+f6");
+    assert_eq!(focused(&h), third, "Shift+F6 で前");
+    press(&mut h, "ctrl+k tab");
+    assert_eq!(focused(&h), first, "Ctrl+K Tab で次");
+    press(&mut h, "ctrl+k shift+tab");
+    assert_eq!(focused(&h), third, "Ctrl+K Shift+Tab で前");
+    let rows =
+        |h: &mut Harness| -> Vec<u16> { h.frame().panes.iter().map(|p| p.rect.rows).collect() };
+    let before = rows(&mut h);
+    press(&mut h, "ctrl+k ]");
+    let grown = rows(&mut h);
+    assert!(
+        grown[2] > before[2],
+        "Ctrl+K ] で広げる: {before:?} → {grown:?}"
+    );
+    press(&mut h, "ctrl+k [");
+    press(&mut h, "ctrl+k [");
+    let shrunk = rows(&mut h);
+    assert!(
+        shrunk[2] < grown[2],
+        "Ctrl+K [ で狭める: {grown:?} → {shrunk:?}"
+    );
+    press(&mut h, "ctrl+k =");
+    assert_eq!(rows(&mut h), before, "Ctrl+K = で揃える");
+    press(&mut h, "ctrl+k q");
+    assert_eq!(
+        panes(&h).0,
+        vec![first, second],
+        "Ctrl+K Q でペインを閉じる"
+    );
+    assert_eq!(h.editor.state().documents_len(), 1, "文書は閉じない");
+    // `\` の代替 (`Ctrl+K \` と `Ctrl+K |`)
+    press(&mut h, "ctrl+k q");
+    assert_eq!(panes(&h).0.len(), 1);
+    press(&mut h, "ctrl+k \\");
+    assert_eq!(panes(&h).0.len(), 2);
+    press(&mut h, "ctrl+k |");
+    assert_eq!(panes(&h).0.len(), 3);
+    // 最後のペインで閉じるキーを押すと、未割当ではなく理由を知らせる
+    press(&mut h, "ctrl+k q");
+    press(&mut h, "ctrl+k q");
+    h.clear_log();
+    press(&mut h, "ctrl+k q");
+    assert_eq!(panes(&h).0.len(), 1);
+    assert!(
+        h.messages().contains(&"info.pane.single_pane".to_owned()),
+        "{:?}",
+        h.messages()
+    );
+}
+
+// verifies: AC-FR-509-4
+#[test]
+fn 見出しのクリックでフォーカスだけが移り_オーバーレイの間は無視する() {
+    let mut h = opened(&[("/w/a.txt", &lines(30)), ("/w/b.txt", b"bee\n")]);
+    h.open("/w/a.txt");
+    let left = focused(&h);
+    run(&mut h, "pane.split_right");
+    let right = focused(&h);
+    h.keys("down down");
+    let (left_head, right_head) = (head(&h, left), head(&h, right));
+    let down = MouseKind::Down(MouseButton::Left);
+    // オーバーレイの間は無視する
+    h.cmd("ui.palette_open");
+    h.pane_bar_mouse(left, down, Modifiers::NONE, 3);
+    h.keys("escape");
+    assert_eq!(focused(&h), right);
+    // 右ボタン・ホイールは何もしない
+    h.pane_bar_mouse(
+        left,
+        MouseKind::Down(MouseButton::Right),
+        Modifiers::NONE,
+        3,
+    );
+    h.pane_bar_mouse(left, MouseKind::WheelDown, Modifiers::NONE, 3);
+    assert_eq!(focused(&h), right);
+    // 左の押下でフォーカスだけが移る (カーソルは動かない)
+    h.pane_bar_mouse(left, down, Modifiers::NONE, 3);
+    assert_eq!(focused(&h), left);
+    assert_eq!((head(&h, left), head(&h, right)), (left_head, right_head));
+    // Frame の後に右のペインが別の文書に切り替わっても、古い View がそのペインの表に残っていれば同じペインを指す
+    run(&mut h, "pane.focus_next");
+    h.open("/w/b.txt");
+    let b_view = focused(&h);
+    run(&mut h, "pane.focus_prev");
+    assert_eq!(focused(&h), left);
+    h.pane_bar_mouse(right, down, Modifiers::NONE, 0);
+    assert_eq!(focused(&h), b_view, "右のペイン (今は b を表示) へ");
+    // 閉じたペインの View を指す入力は捨てる
+    run(&mut h, "pane.close");
+    let only = focused(&h);
+    h.pane_bar_mouse(b_view, down, Modifiers::NONE, 0);
+    assert_eq!(focused(&h), only);
+    check(&h);
+}
+
+// verifies: AC-FR-509-3
+#[test]
+fn 縮退表示の_frame_には見出しも区切りも出さない() {
+    let mut h = opened(&[("/w/a.txt", &lines(30))]);
+    run(&mut h, "pane.split_right");
+    h.resize(30, 24);
+    let f = h.frame();
+    assert_eq!(f.panes.len(), 1);
+    assert!(f.panes[0].bar.is_none() && f.panes[0].active);
+    assert_eq!(f.dividers, Vec::new());
+}
+
+// ---------- ASCII の Frame のゴールデン (09 §3.4 の複数ペインの計画の (3)) ----------
+
+fn golden_path(name: &str) -> std::path::PathBuf {
+    std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/golden")
+        .join(format!("{name}.frame.txt"))
+}
+
+/// ガター・クローム・カーソルつきの ASCII の Frame を、ゴールデン `name` と比べる。
+fn check_frame(h: &mut Harness, name: &str) {
+    let text = h.frame_text_with(eve_testkit::AsciiOptions {
+        show_gutter: true,
+        show_chrome: true,
+        ..eve_testkit::AsciiOptions::default()
+    });
+    eve_testkit::golden::check(&golden_path(name), &text);
+}
+
+/// `/w/a.txt` (12 行) を開いて 3 行目へ移った、`cols` × `rows` の Harness。
+fn ascii_base(cols: u16, rows: u16) -> Harness {
+    let mut b = Harness::builder().size(cols, rows);
+    b = b.file("/w/a.txt", &lines(12));
+    let mut h = b.build();
+    h.open("/w/a.txt");
+    h.run_jobs();
+    h.keys("down down");
+    h
+}
+
+// verifies: AC-FR-509-1
+#[test]
+fn ascii_の_frame_左右に並べた_2_つのペイン() {
+    let mut h = ascii_base(80, 24);
+    press(&mut h, "ctrl+\\");
+    h.text("x");
+    check_frame(&mut h, "panes_left_right");
+}
+
+// verifies: AC-FR-509-1
+#[test]
+fn ascii_の_frame_上下に並べた_2_つのペイン() {
+    let mut h = ascii_base(80, 24);
+    press(&mut h, "ctrl+k -");
+    check_frame(&mut h, "panes_up_down");
+}
+
+// verifies: AC-FR-509-1
+#[test]
+fn ascii_の_frame_入れ子の_3_つのペインと同じ名前の区別() {
+    let mut b = Harness::builder().size(80, 24);
+    for p in ["/w/a.txt", "/p/a/mod.rs", "/p/b/mod.rs"] {
+        b = b.file(p, &lines(12));
+    }
+    let mut h = b.build();
+    h.open("/w/a.txt");
+    h.run_jobs();
+    press(&mut h, "ctrl+\\");
+    h.open("/p/a/mod.rs");
+    h.run_jobs();
+    press(&mut h, "ctrl+k -");
+    h.open("/p/b/mod.rs");
+    h.run_jobs();
+    press(&mut h, "f6");
+    check_frame(&mut h, "panes_nested");
+}
+
+// verifies: AC-FR-509-1
+#[test]
+fn ascii_の_frame_最小の前後と縮退表示() {
+    // 41 列: 左右に分けた最小 (20 + 区切り 1 + 20)
+    let mut h = ascii_base(41, 8);
+    press(&mut h, "ctrl+\\");
+    assert_eq!(panes(&h).0.len(), 2);
+    check_frame(&mut h, "panes_min");
+    // 40 列に縮めると縮退表示 (フォーカスのペインだけ。見出しと区切りなし)
+    h.resize(40, 8);
+    check(&h);
+    check_frame(&mut h, "panes_collapsed");
 }

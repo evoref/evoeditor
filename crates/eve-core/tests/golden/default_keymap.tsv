@@ -143,6 +143,18 @@ editor	Ctrl+K Down	edit.move_line_down	Args({})	ContextExpr(None)	false
 editor	Alt+B	cursor.move_word_left	Args({})	ContextExpr(None)	false
 editor	Alt+F	cursor.move_word_right	Args({})	ContextExpr(None)	false
 editor	Ctrl+G	cursor.goto_line	Args({})	ContextExpr(None)	false
+editor	Ctrl+\	pane.split_right	Args({})	ContextExpr(None)	false
+editor	Ctrl+K \	pane.split_right	Args({})	ContextExpr(None)	false
+editor	Ctrl+K |	pane.split_right	Args({})	ContextExpr(None)	false
+editor	Ctrl+K -	pane.split_down	Args({})	ContextExpr(None)	false
+editor	F6	pane.focus_next	Args({})	ContextExpr(None)	false
+editor	Shift+F6	pane.focus_prev	Args({})	ContextExpr(None)	false
+editor	Ctrl+K Tab	pane.focus_next	Args({})	ContextExpr(None)	false
+editor	Ctrl+K Shift+Tab	pane.focus_prev	Args({})	ContextExpr(None)	false
+editor	Ctrl+K Q	pane.close	Args({})	ContextExpr(None)	false
+editor	Ctrl+K ]	pane.grow	Args({})	ContextExpr(None)	false
+editor	Ctrl+K [	pane.shrink	Args({})	ContextExpr(None)	false
+editor	Ctrl+K =	pane.equalize	Args({})	ContextExpr(None)	false
 editor	Ctrl+K Left	cursor.home	Args({})	ContextExpr(None)	false
 editor	Ctrl+K Right	cursor.end	Args({})	ContextExpr(None)	false
 editor	Ctrl+K Shift+Left	select.extend_home	Args({})	ContextExpr(None)	false

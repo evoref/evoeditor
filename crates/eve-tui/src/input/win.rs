@@ -10,7 +10,7 @@
 use std::io;
 use std::thread::{self, JoinHandle};
 
-use eve_view::{CellSize, InputEvent};
+use eve_view::CellSize;
 use windows_sys::Win32::Foundation::{
     CloseHandle, GENERIC_READ, GENERIC_WRITE, HANDLE, INVALID_HANDLE_VALUE, WAIT_OBJECT_0,
     WAIT_TIMEOUT,
@@ -343,7 +343,7 @@ fn send_mouse(
         r.col -= left;
         r.row -= top;
         for m in tracker.feed(r, &geom) {
-            if !out.event(InputEvent::Mouse(m)) {
+            if !out.event(m) {
                 return false;
             }
         }

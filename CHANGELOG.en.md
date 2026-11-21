@@ -11,9 +11,18 @@ The Japanese version ([CHANGELOG.md](CHANGELOG.md)) is authoritative. Both are u
 
 ## [Unreleased]
 
+### Added
+
+- **Split panes**: you can split the editing area left/right and top/bottom to show different documents, or different places in the same document, side by side. `Ctrl+\` (or `Ctrl+K \`) splits to the right and `Ctrl+K -` splits down; `F6` / `Shift+F6` (or `Ctrl+K Tab` / `Ctrl+K Shift+Tab`) move to the next / previous pane. `Ctrl+K Q` closes the pane (not the document), `Ctrl+K ]` / `Ctrl+K [` change its size, and `Ctrl+K =` evens them out. Moving to the pane on the left, right, above, or below is available from the command palette (no default keys). With two or more panes, each pane shows a header line with the document name at its bottom; the focused pane's header is reversed and starts with `▶`. Files with the same name are told apart by their parent folder, like `mod.rs (a)`. Clicking a header moves the focus to that pane; clicking the text of another pane moves the focus there and moves the cursor. When the terminal becomes too small for the panes, only the focused pane is shown
+- eve-view: added the boundary types for multiple panes (addition only; docs/02 §8.2 / §7.3, C2; docs/03 §9.9 PANE-7 / PANE-10): `Frame.dividers` (`Divider`), `PaneFrame.active` and `PaneFrame.bar` (`PaneBarModel`), and `InputEvent::ChromeMouse` (`ChromeMouseEvent`, `ChromeTarget::PaneBar`; `#[non_exhaustive]`). `PaneFrame.rect` and `Frame.primary_cursor` are relative to the top-left of the editing area (the same values as before with one pane). `CONTRACT_VERSION` stays 0
+
 ### Changed
 
 - **Building from source now needs Rust 1.99 or later** (it was 1.97). The prebuilt binaries are not affected
+
+- **The command "Close" (`buffer.close`) is now named "Close Document"**, to sit next to "Close Pane" (`pane.close`). It works as before (it closes the document, and the panes that showed it show another document). Typing "Close" in the command palette still finds it
+
+- **If your keymap has a chord that starts with `Ctrl+\`, you get a warning that the default split to the right (`Ctrl+\`) no longer works**: v0.5 assigns `Ctrl+\` to splitting to the right. You can still split with `Ctrl+K \` / `Ctrl+K |`
 
 - **The keymap (`keymap.toml`) check for bindings that make quit, the command palette or cancel unreachable now works per place on the screen**: it used to pass a keymap as long as the key worked in one place. Now a binding that makes one of them unreachable in any place where the default reaches it (the editor, the search bar, input fields, the command palette, lists, help and confirmation dialogs) is an error: the binding is ignored and the default comes back. Settings that passed in v0.4, such as `"esc" = "edit.duplicate_line"` under `[keys.editor]` (Esc no longer cancels in the editor), rebinding `"esc"` under `[keys.prompt]`, or `"esc" = "none"` under `[keys.dialog]`, are errors in v0.5. So are rebinding these keys with a `when` clause, and rebinding both `Ctrl+P` and `F1` so that only a key that needs an enhanced keyboard protocol (`Ctrl+Shift+P`) is left. Check with `evoeditor --check-config`
 

@@ -25,10 +25,16 @@ pub struct Theme {
     pub toggle_on: Style,
     pub eof_marker: Style,
     pub scroll_marker: Style,
+    /// ペインの区切りと、フォーカスの無いペインの見出しの埋め (v0.5)。
+    pub pane_border: Style,
+    /// フォーカスの無いペインの見出しの名前と印 (v0.5)。
+    pub pane_bar: Style,
+    /// フォーカスのあるペインの見出し (v0.5)。
+    pub pane_bar_active: Style,
 }
 
 /// eve-tui が引くロール名 (07 §8.2 の表のロール名と同じ。表との突合は `tests/theme_table.rs`)。
-pub const ROLES: [&str; 18] = [
+pub const ROLES: [&str; 21] = [
     "ui.status_bar",
     "ui.status_bar.chord",
     "ui.message.info",
@@ -47,6 +53,9 @@ pub const ROLES: [&str; 18] = [
     "ui.search_bar.toggle_on",
     "ui.eof_marker",
     "ui.scroll_marker",
+    "ui.pane.border",
+    "ui.pane.bar",
+    "ui.pane.bar.active",
 ];
 
 impl Theme {
@@ -71,6 +80,9 @@ impl Theme {
             toggle_on: r.get("ui.search_bar.toggle_on"),
             eof_marker: r.get("ui.eof_marker"),
             scroll_marker: r.get("ui.scroll_marker"),
+            pane_border: r.get("ui.pane.border"),
+            pane_bar: r.get("ui.pane.bar"),
+            pane_bar_active: r.get("ui.pane.bar.active"),
         }
     }
 }

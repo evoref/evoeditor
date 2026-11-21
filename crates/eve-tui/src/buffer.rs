@@ -258,6 +258,19 @@ fn render_row(
     }
 }
 
+/// ペイン `pane` のカーソルのセル (`PaneFrame.cursors`、`rect` の左上が原点) の反転を切り替える (選択の反転の上でも見える)。
+fn mark_cursors(w: &mut Writer<'_>, pane: &PaneFrame) {
+    let r = pane.rect;
+    for c in &pane.cursors {
+        if c.col >= r.cols || c.row >= r.rows {
+            continue;
+        }
+        if let Some(cell) = w.buf.cell_mut((r.col + c.col, r.row + c.row)) {
+            cell.modifier.toggle(Modifier::REVERSED);
+        }
+    }
+}
+
 /// Frame の編集面を Buffer に書く (端末の大きさが分からないとき。行の割り当ては `ScreenLayout::for_frame` で推す)。
 pub fn render_panes(frame: &Frame, depth: ColorDepth, glyphs: &Glyphs) -> PaneRender {
     render_panes_in(frame, ScreenLayout::for_frame(frame), depth, glyphs)
@@ -300,6 +313,15 @@ pub fn render_panes_in(
                 }
                 render_row(&mut w, pane, i, row, glyphs, &theme);
             }
+            if !pane.active {
+                // フォーカスの無いペインのカーソルは反転のセルで示す (ハードウェアカーソルはフォーカスのペインだけ、04 §9)
+                mark_cursors(&mut w, pane);
+            }
+            // 見出し (ペインが 2 つ以上のとき、04 §3.4 (f))
+            crate::chrome::pane_bar::render_pane_bar(&mut w, pane, &theme, glyphs);
+        }
+        for d in &frame.dividers {
+            crate::chrome::pane_bar::render_divider(&mut w, d, &theme, glyphs);
         }
         clamped_cells = w.clamped;
         sanitized = w.sanitized;

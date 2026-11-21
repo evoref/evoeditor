@@ -14,8 +14,12 @@ pub enum InputEvent {
     Text(String),
     /// ブラケットペースト。本文の制御文字はコマンドとして解釈せず、文字として扱う。
     Paste(String),
-    /// マウス (docs/03 §5.8.1)。編集面の外 (クローム・オーバーレイ) は frontend が先に判定し、ここへは渡さない。
+    /// マウス (docs/03 §5.8.1)。編集面 (ペインの本文) の中だけ。編集面の外 (クローム・オーバーレイ) は frontend が先に判定し、
+    /// ここへは渡さない。
     Mouse(MouseEvent),
+    /// core が意味を持つクローム (ペインの見出し) のマウス (02 §7.3、03 §9.9 の PANE-7)。frontend は自分が置いたクローム・
+    /// オーバーレイを先に判定し、`ChromeTarget` の対象の上の操作だけをここで渡す。
+    ChromeMouse(ChromeMouseEvent),
     /// Window の編集面のサイズ (セル単位)。端末の全体からクローム (ステータスバー・ヒントバー) の行を除いた大きさで、
     /// 検索バーの行は含む (core が引く。`Frame.size` は引いた後の大きさ)。core の扱いは 1 つ (編集面の大きさを置き換える) だが、
     /// frontend が送る契機は 2 つある。
@@ -91,6 +95,32 @@ pub struct MouseAt {
     pub row: i32,
     /// 編集面の中の表示列 (セル、0 始まり。ガターを含む。面の左は負)。
     pub col: i32,
+}
+
+/// クロームのマウスの操作 1 つ (02 §7.3)。どの操作で何をするかは core が決める (03 §9.9 の PANE-7)。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ChromeMouseEvent {
+    /// 操作の種類 (押下・ドラッグ・解放・ホイール)。
+    pub kind: MouseKind,
+    /// 操作の時に押されていた修飾キー。
+    pub mods: Modifiers,
+    /// 操作の対象。
+    pub target: ChromeTarget,
+    /// 対象の矩形 (見出しの `rect`) の左上を原点とする行 (`MouseAt` と同じく i32)。
+    pub row: i32,
+    /// 対象の矩形の左上を原点とする列 (セル)。
+    pub col: i32,
+}
+
+/// クロームのマウスの対象 (02 §7.3)。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum ChromeTarget {
+    /// ペインの見出し (`PaneFrame.bar`)。ペインは表示中の View で指す (03 §9.9 の PANE-7 (g))。
+    PaneBar {
+        /// 見出しのペインが表示している View (`PaneFrame.view`)。
+        view: ViewId,
+    },
 }
 
 /// キー 1 つの押下・リピート・解放。
