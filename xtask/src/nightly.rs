@@ -2,10 +2,10 @@
 //! チェックアウトしたコードのこのコマンドを呼ぶ (手順の中身は対象のブランチの `xtask` にあるので、トリガを直さずに済む)。Linux 前提。
 //!
 //! v0.1 の手順 (`--only` で絞れる):
-//! - `fuzz`: `fuzz_decode`・`fuzz_editor` (v0.2)・`fuzz_encode`・`fuzz_vt_input` (v0.3)・`fuzz_regex_search` (v0.4) を、それぞれ `--fuzz-seconds` (既定 960 秒。5 つの合計 80 分。09 §6.3)。
-//!   ターゲットを絞らないときは、5 つの合計が `FUZZ_TOTAL_SECONDS` (80 分) を超えないように 1 つの時間を抑える (既定のブランチの
-//!   nightly.yml が古い既定の 1200 秒を渡しても、夜間の段がジョブの上限 240 分に収まるように)。
-//!   `--only fuzz:fuzz_decode+fuzz_editor` のように回すターゲットを絞れる (リリース前の各 1 時間、09 §8.2。5 つ × 1 時間はジョブの上限 240 分に収まらない)。`-close_fd_mask=3` で入力とスタックをログに出さない。クラッシュ入力は
+//! - `fuzz`: `fuzz_decode`・`fuzz_editor` (v0.2)・`fuzz_encode`・`fuzz_vt_input` (v0.3)・`fuzz_regex_search` (v0.4)・`fuzz_gitignore` (v0.5) を、それぞれ `--fuzz-seconds` (既定 800 秒。6 つの合計 80 分。09 §6.3)。
+//!   ターゲットを絞らないときは、6 つの合計が `FUZZ_TOTAL_SECONDS` (80 分) を超えないように 1 つの時間を抑える (既定のブランチの
+//!   nightly.yml が古い既定の 1200 秒・960 秒を渡しても、夜間の段がジョブの上限 240 分に収まるように)。
+//!   `--only fuzz:fuzz_decode+fuzz_editor` のように回すターゲットを絞れる (リリース前の各 1 時間、09 §8.2。6 つ × 1 時間はジョブの上限 240 分に収まらない)。`-close_fd_mask=3` で入力とスタックをログに出さない。クラッシュ入力は
 //!   `.github/fuzz-recipients.txt` の公開鍵で `age` により暗号化し、平文は消す (artifact に上げるのは暗号化したものだけ)。
 //! - `proptest`: `PROPTEST_CASES=10000` で Linux CI の対象 crate のテスト。時間の予算 (`proptest_budget::BUDGET_SECONDS`、
 //!   45 分。ビルドを含む) を使い切ったら nextest を止め、止める前に失敗した試験が無ければ失敗にせず「時間切れで打ち切った」と
@@ -13,6 +13,8 @@
 //!   (09 §6.3、v0.5 の M29)。`--proptest-minutes N` で予算を変えられる (手元で打ち切りの経路を試すとき)。
 //! - `audit`: `cargo audit` と `cargo deny check advisories` (本体と `fuzz/`)。例外は `deny.toml` の `[advisories] ignore` の 1 か所。
 //! - `coverage`: `cargo llvm-cov nextest --lcov` (報告のみ、OQ-101)。
+//! - `gitignore` (v0.5 の M31): 10 万ファイルのワークスペースの木で、gitignore の照合と git の差分試験 (09 §3.4。
+//!   `crates/eve-platform/tests/gitignore_git.rs` の `#[ignore]` の試験を `--ignored` で回す。毎 PR は小さい木だけ)。
 //! - `crash` (v0.2): 保存のクラッシュ一貫性 (`cargo xtask crash-consistency`。`LazyFS` は環境変数 `LAZYFS_BIN`、下の FS は
 //!   `EVE_CRASH_ROOTS`。nightly.yml が `LazyFS` をビルドし、ext4 / xfs / btrfs のループバックを用意する。NFR-301、09 §6.3)。
 //!   `--only` を付けない実行で `LAZYFS_BIN` が無いときは、失敗にせず飛ばして要約に書く (定時の実行は既定ブランチ (main) の
@@ -56,7 +58,15 @@ fn linux_crates() -> Result<Vec<String>, String> {
 }
 
 /// `--only` を付けない実行で回す手順。
-const STEPS: [&str; 6] = ["fuzz", "proptest", "audit", "coverage", "crash", "soak"];
+const STEPS: [&str; 7] = [
+    "fuzz",
+    "proptest",
+    "audit",
+    "coverage",
+    "gitignore",
+    "crash",
+    "soak",
+];
 
 /// `--only` で明示したときだけ回す手順 (09 §6.3。nightly.yml の別のジョブが呼ぶ)。
 const EXPLICIT_STEPS: [&str; 1] = ["beta"];
@@ -144,6 +154,7 @@ pub fn run_all(args: &[String]) -> Result<(), String> {
             "proptest" => proptest(proptest_limit),
             "audit" => audit().map(|()| StepEnd::Done),
             "coverage" => coverage(&out_dir).map(|()| StepEnd::Done),
+            "gitignore" => gitignore_large().map(|()| StepEnd::Done),
             "beta" => beta(&mut summary).map(|()| StepEnd::Done),
             _ => crate::crash_consistency::run_cmd(&[]).map(|()| StepEnd::Done),
         };
@@ -185,7 +196,7 @@ fn parse_only(v: &str) -> Result<(Vec<String>, Option<Vec<&'static str>>), Strin
             .map_or((item, None), |(a, b)| (a, Some(b)));
         if !STEPS.contains(&step) && !EXPLICIT_STEPS.contains(&step) {
             return Err(format!(
-                "知らない手順です: {step} (fuzz / proptest / audit / coverage / crash / soak / beta)"
+                "知らない手順です: {step} (fuzz / proptest / audit / coverage / gitignore / crash / soak / beta)"
             ));
         }
         if let Some(rest) = rest {
@@ -231,8 +242,8 @@ fn commit() -> String {
 /// libFuzzer が書く、失敗した入力のファイル名の接頭辞。
 const CRASH_PREFIXES: [&str; 3] = ["crash-", "oom-", "timeout-"];
 
-/// 1 つのターゲットを回す時間の既定 (秒)。5 つで合計 80 分。
-const FUZZ_SECONDS_DEFAULT: u64 = 960;
+/// 1 つのターゲットを回す時間の既定 (秒)。6 つで合計 80 分。
+const FUZZ_SECONDS_DEFAULT: u64 = 800;
 
 /// ターゲットを絞らない夜間の fuzz の合計の上限 (秒)。夜間の段 (fuzz・proptest・audit・coverage・crash・soak) がジョブの上限
 /// 240 分に収まるように (09 §8.2。v0.4 の M24 で 5 つ目を足したとき、20 分 × 5 では段の合計が 240 分に迫った)。
@@ -248,12 +259,13 @@ fn fuzz_seconds_for(seconds: u64, narrowed: bool) -> u64 {
 }
 
 /// fuzz のターゲット (docs/09 §3.3)。それぞれ `--fuzz-seconds` 秒ずつ回す。
-const FUZZ_TARGETS: [&str; 5] = [
+const FUZZ_TARGETS: [&str; 6] = [
     "fuzz_decode",
     "fuzz_editor",
     "fuzz_encode",
     "fuzz_vt_input",
     "fuzz_regex_search",
+    "fuzz_gitignore",
 ];
 
 fn fuzz(
@@ -507,6 +519,24 @@ fn audit() -> Result<(), String> {
     }
 }
 
+/// 手順 `gitignore`: 10 万ファイルの木で git との差分試験 (09 §3.4、03 §12.7.8)。木は試験が一時ディレクトリに作って消す。
+fn gitignore_large() -> Result<(), String> {
+    run(
+        "gitignore の git との差分試験 (10 万ファイルの木)",
+        Command::new("cargo").args([
+            "test",
+            "-p",
+            "eve-platform",
+            "--test",
+            "gitignore_git",
+            "--",
+            "--ignored",
+            "--exact",
+            "大きい木で_git_と一致する",
+        ]),
+    )
+}
+
 fn coverage(out_dir: &Path) -> Result<(), String> {
     let lcov = out_dir.join("lcov.info");
     let mut cmd = Command::new("cargo");
@@ -699,8 +729,9 @@ mod tests {
         let (steps, t) = parse_only("fuzz:fuzz_decode+fuzz_editor,audit").unwrap();
         assert_eq!(steps, ["fuzz", "audit"]);
         assert_eq!(t, Some(vec!["fuzz_decode", "fuzz_editor"]));
-        // 絞らない夜間は合計 80 分 (1 つ 960 秒) に抑え、絞ったリリース前の 1 時間は抑えない
-        assert_eq!(fuzz_seconds_for(1200, false), 960);
+        // 絞らない夜間は合計 80 分 (1 つ 800 秒) に抑え、絞ったリリース前の 1 時間は抑えない
+        assert_eq!(fuzz_seconds_for(1200, false), 800);
+        assert_eq!(fuzz_seconds_for(960, false), 800);
         assert_eq!(fuzz_seconds_for(600, false), 600);
         assert_eq!(fuzz_seconds_for(3600, true), 3600);
         assert_eq!(
@@ -722,15 +753,15 @@ mod tests {
     #[test]
     fn 段の上限の合計はジョブの上限に収まる() {
         // 09 §6.3 の段の時間の配分: 上限を決めた段 (fuzz・proptest・soak) と、他の段の見込み (準備と後始末 5 分・coverage 15 分・
-        // audit と crash 2 分) の合計が、nightly.yml の nightly (linux) の timeout-minutes (240 分) に、20 分以上の余裕を
-        // 残して収まる
+        // audit と crash 2 分・gitignore の 10 万ファイルの木 5 分) の合計が、nightly.yml の nightly (linux) の timeout-minutes
+        // (240 分) に、20 分以上の余裕を残して収まる
         let yml = read_text(&workspace_root().join(".github/workflows/nightly.yml")).unwrap();
         assert!(
             yml.contains("timeout-minutes: 240"),
             "nightly (linux) の上限"
         );
         let capped = FUZZ_TOTAL_SECONDS / 60 + proptest_budget::BUDGET_SECONDS / 60 + 60;
-        let others = 5 + 15 + 2;
+        let others = 5 + 15 + 2 + 5;
         assert!(
             capped + others + 20 <= 240,
             "段の合計 {capped} + {others} 分が 240 分に余裕を残して収まらない"
@@ -744,8 +775,8 @@ mod tests {
     }
 
     #[test]
-    fn 手順の名前は_6_つ() {
-        assert_eq!(STEPS.len(), 6);
+    fn 手順の名前は_7_つ() {
+        assert_eq!(STEPS.len(), 7);
     }
 
     #[test]

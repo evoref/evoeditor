@@ -18,7 +18,7 @@ on:
         required: false
         default: ""
       fuzz_seconds:
-        description: "fuzz の各ターゲットの時間 (秒。既定 960。ターゲットを絞らないときは合計 80 分に抑える)。リリース前の 1 時間の fuzz は 3600 で only の fuzz:<ターゲット> と一緒に (docs/09 §8.2)"
+        description: "fuzz の各ターゲットの時間 (秒。既定 800。ターゲットを絞らないときは合計 80 分に抑える)。リリース前の 1 時間の fuzz は 3600 で only の fuzz:<ターゲット> と一緒に (docs/09 §8.2)"
         required: false
         default: "600"
       only:
@@ -129,9 +129,9 @@ jobs:
         run: |
           only="${{ inputs.only }}"
           if [ -n "$only" ]; then
-            cargo xtask nightly --fuzz-seconds "${{ inputs.fuzz_seconds || '960' }}" --soak-minutes "${{ inputs.soak_minutes || '60' }}" --only "$only"
+            cargo xtask nightly --fuzz-seconds "${{ inputs.fuzz_seconds || '800' }}" --soak-minutes "${{ inputs.soak_minutes || '60' }}" --only "$only"
           else
-            cargo xtask nightly --fuzz-seconds "${{ inputs.fuzz_seconds || '960' }}" --soak-minutes "${{ inputs.soak_minutes || '60' }}"
+            cargo xtask nightly --fuzz-seconds "${{ inputs.fuzz_seconds || '800' }}" --soak-minutes "${{ inputs.soak_minutes || '60' }}"
           fi
       - name: 要約
         if: always()

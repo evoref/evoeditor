@@ -10,6 +10,7 @@
 mod command;
 mod document;
 mod editor;
+mod gitignore;
 mod io;
 mod jobs;
 mod keymap;
@@ -45,6 +46,15 @@ pub use editor::{
 };
 pub use eve_encoding::Encoding;
 pub use eve_view::DocumentId;
+/// `fuzz_gitignore` の本体 (docs/09 §3.3)。cargo-fuzz のターゲットと、CI の proptest が同じ関数を使う。
+#[doc(hidden)]
+pub use gitignore::fuzzing as gitignore_fuzzing;
+pub use gitignore::{
+    CaseFold, ExcludeChain, GitPath, IGNORE_CHAIN_MAX_PATTERNS, IGNORE_FILE_MAX_BYTES,
+    IGNORE_FILE_MAX_PATTERNS, IGNORE_LINE_MAX_BYTES, IgnoreHit, IgnoreRules, IgnoreSource,
+    ParseReport, PathKind, RepoIgnore, parse_commondir_file, parse_core_ignorecase,
+    parse_gitdir_file,
+};
 pub use io::fs::*;
 pub use io::fspath::FsPath;
 pub use io::io_jobs::OpenOptions;
