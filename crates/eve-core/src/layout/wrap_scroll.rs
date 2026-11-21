@@ -126,7 +126,7 @@ impl EditorState {
         let (Some(top), Some(doc)) = (self.top_pos(view), self.view_doc(view)) else {
             return;
         };
-        let rows = self.term.viewport.1 as usize;
+        let rows = self.view_size(view).1 as usize;
         let moved = walk(
             doc,
             g,
@@ -139,7 +139,7 @@ impl EditorState {
     }
 
     pub(crate) fn wrapped_ensure_vertical(&mut self, view: ViewId, g: Geometry, margin: usize) {
-        let rows = self.term.viewport.1 as usize;
+        let rows = self.view_size(view).1 as usize;
         let (Some(top), Some(cur), Some(doc)) = (
             self.top_pos(view),
             self.cursor_pos(view, g),
@@ -167,7 +167,7 @@ impl EditorState {
     }
 
     pub(crate) fn wrapped_center_cursor(&mut self, view: ViewId, g: Geometry) {
-        let rows = self.term.viewport.1 as usize;
+        let rows = self.view_size(view).1 as usize;
         let (Some(cur), Some(doc)) = (self.cursor_pos(view, g), self.view_doc(view)) else {
             return;
         };

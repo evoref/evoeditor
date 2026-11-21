@@ -7,6 +7,7 @@
 //! - Span の文字列に制御文字 (`\x00..\x1f`・`\x7f`・`\u{80}..\u{9f}`) が無い (NFR-503 の無害化)
 //! - 主カーソルの位置が文書の長さ以下で、char の境界にある
 //! - 文書の Revision が単調に増える (同じ文書で減らない)
+//! - 文書・ペイン・View の関係 (docs/03 §9.9 の PANE-1。`EditorState::check_panes`)
 //! - 不正バイトを含む文書の編集 (docs/03 §8.3.1、v0.4 の M23) の不変条件:
 //!   (a) `escape_encoding` は `None` か `Some(encoding)` (`Some` なら `pua_escape == Enabled` で状態付きでない)、
 //!   (b) 解除の記録があるバイトの文書に `InvalidBytes` の理由が付いていない、
@@ -139,6 +140,10 @@ fn check_state(h: &Harness, revs: &mut BTreeMap<DocumentId, u64>, step: usize) {
                 d.doc
             );
         }
+    }
+    // 文書・ペイン・View の関係 (docs/03 §9.9 の PANE-1)
+    if let Err(e) = st.check_panes() {
+        panic!("step {step}: ペインの不変条件に反する: {e}");
     }
     if let Some(w) = st.first_window()
         && let Some(v) = st.window_view(w).and_then(|v| st.view(v))

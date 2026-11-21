@@ -243,7 +243,7 @@ fn run(ctx: &mut CommandCtx<'_>, m: Motion, extend: bool) -> CommandResult {
         Some(ArgValue::Int(n)) if *n >= 1 => usize::try_from(*n).unwrap_or(usize::MAX),
         Some(_) => return CommandResult::Rejected(RejectReason::InvalidArgs),
     };
-    let rows = ctx.state.viewport().1 as usize;
+    let rows = ctx.state.view_size(view_id).1 as usize;
     let (Some(doc), Some(view)) = (ctx.state.document(doc_id), ctx.state.view(view_id)) else {
         return CommandResult::Rejected(RejectReason::NoTarget);
     };

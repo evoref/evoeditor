@@ -338,10 +338,11 @@ fn send_mouse(
     } else {
         (i32::from(info.srWindow.Left), i32::from(info.srWindow.Top))
     };
+    let geom = geom.get();
     for mut r in recs.drain(..) {
         r.col -= left;
         r.row -= top;
-        for m in tracker.feed(r, geom) {
+        for m in tracker.feed(r, &geom) {
             if !out.event(InputEvent::Mouse(m)) {
                 return false;
             }

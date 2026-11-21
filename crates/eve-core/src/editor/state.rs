@@ -18,6 +18,8 @@ use crate::ui_model::keys;
 
 use crate::command::context::CtxValue;
 
+pub use super::window::Window;
+
 /// 上下の余白の既定 (行)。
 const SCROLL_MARGIN: usize = 3;
 
@@ -47,15 +49,6 @@ pub struct View {
     pub wrap: crate::layout::WrapSettings,
     /// 折り返し位置のカーソルの帰属 (主カーソルだけ、03 §14.3.1)。
     pub cursor_affinity: crate::layout::Affinity,
-}
-
-/// frontend が持つ編集面。v0.x は 1 つで、View を 1 つ持つ。
-#[derive(Clone, Copy, Debug)]
-pub struct Window {
-    /// Window の識別子。
-    pub id: WindowId,
-    /// 表示している View。
-    pub root: ViewId,
 }
 
 /// 表現不能の文字の強調 (文書, 作った Revision, 文書内のバイト範囲)。
@@ -95,9 +88,14 @@ pub(crate) struct DocSet {
     pub(crate) views: BTreeMap<ViewId, View>,
     pub(crate) windows: Vec<Window>,
     pub(crate) next_id: u64,
+    /// 次に振るペインの ID (文書・View・Window の ID とは別に振る。03 §9.9)。
+    pub(crate) next_pane: u64,
+    /// 文書ごとの、最後にフォーカスのあった View (03 §9.9 の PANE-1。ペインで初めて表示するときに写す元)。
+    pub(crate) last_view: BTreeMap<DocumentId, ViewId>,
     /// 次に振る無題の通し番号 (起動ごとに 1 から。閉じても再利用しない、03 §9.8)。
     pub(crate) next_untitled: u32,
-    /// 前に表示していた文書 (最近使った順。末尾が直近)。閉じた後に表示する文書を選ぶのに使う。
+    /// 前に表示していた文書 (Window 全体の最近使った順。末尾が直近)。閉じた後に表示する文書を選ぶのに使う
+    /// (ペインごとの順の次に見る、03 §9.9 の PANE-9)。
     pub(crate) recent: Vec<DocumentId>,
 }
 
@@ -366,6 +364,8 @@ impl EditorState {
                 views: BTreeMap::new(),
                 windows: Vec::new(),
                 next_id: 1,
+                next_pane: 1,
+                last_view: BTreeMap::new(),
                 next_untitled: 1,
                 recent: Vec::new(),
             },
@@ -527,13 +527,15 @@ impl EditorState {
         self.out.snapshot_updates.insert(doc);
     }
 
-    fn fresh(&mut self) -> u64 {
+    /// 文書・View・Window の ID を振る (閉じた後も再利用しない)。
+    pub(crate) fn fresh_id(&mut self) -> u64 {
         let id = self.docs.next_id;
         self.docs.next_id += 1;
         id
     }
 
-    /// 編集面の大きさ (列, 行)。端末の大きさから検索バーなどの行を引いたもの (行は 1 以上)。
+    /// 編集面の大きさ (列, 行)。端末の大きさから検索バーなどの行を引いたもの (行は 1 以上)。ペインに分けた後の各 View の
+    /// 可視の大きさは `view_size`。
     pub fn viewport(&self) -> (u16, u16) {
         self.term.viewport
     }
@@ -586,7 +588,7 @@ impl EditorState {
             doc.untitled_no = Some(self.docs.next_untitled);
             self.docs.next_untitled = self.docs.next_untitled.saturating_add(1);
         }
-        let doc_id = DocumentId(self.fresh());
+        let doc_id = DocumentId(self.fresh_id());
         self.docs.documents.insert(doc_id, doc);
         let view_id = self.add_view(doc_id);
         self.out
@@ -607,7 +609,7 @@ impl EditorState {
 
     /// 文書 `doc` を表示する View を作る (カーソルは先頭)。
     pub fn add_view(&mut self, doc: DocumentId) -> ViewId {
-        let id = ViewId(self.fresh());
+        let id = ViewId(self.fresh_id());
         self.docs.views.insert(
             id,
             View {
@@ -619,13 +621,6 @@ impl EditorState {
                 cursor_affinity: Default::default(),
             },
         );
-        id
-    }
-
-    /// View `root` を表示する Window を作る。
-    pub fn add_window(&mut self, root: ViewId) -> WindowId {
-        let id = WindowId(self.fresh());
-        self.docs.windows.push(Window { id, root });
         id
     }
 
@@ -668,9 +663,9 @@ impl EditorState {
         self.docs.windows.iter().find(|w| w.id == id)
     }
 
-    /// Window が表示している View。
+    /// Window のフォーカスのペインが表示している View。
     pub fn window_view(&self, id: WindowId) -> Option<ViewId> {
-        self.window(id).map(|w| w.root)
+        self.window(id)?.focused_pane().map(|p| p.view)
     }
 
     /// 最初の Window (v0.x は 1 つ)。
@@ -678,13 +673,13 @@ impl EditorState {
         self.docs.windows.first().map(|w| w.id)
     }
 
-    /// 入力と表示の対象の Window。今は Window が 1 つだけなので最初の Window。分割ウィンドウを入れるときは
-    /// ここ (と `focused_view`) を変える (docs/review/v0.3-findings.md の STR-B2: 単一 Window の前提をここに集める)。
+    /// 入力と表示の対象の Window。v0.x は Window が 1 つだけなので最初の Window (docs/review/v0.3-findings.md の STR-B2:
+    /// 単一 Window の前提をここに集める)。その中の対象のペインは `focused_pane`。
     pub(crate) fn focused_window(&self) -> Option<WindowId> {
         self.first_window()
     }
 
-    /// `focused_window` が表示している View。
+    /// `focused_window` のフォーカスのペインが表示している View (03 §9.9 の PANE-13)。
     pub(crate) fn focused_view(&self) -> Option<ViewId> {
         self.focused_window().and_then(|w| self.window_view(w))
     }
@@ -839,7 +834,14 @@ impl EditorState {
             return;
         };
         let text = document.text();
-        let viewport = self.term.viewport;
+        // 折り返しの幅は、View を表示するペインの本文の幅から求める (03 §9.9 の PANE-13)
+        let sizes: BTreeMap<ViewId, (u16, u16)> = self
+            .docs
+            .views
+            .iter()
+            .filter(|(_, v)| v.doc == doc && v.scroll.wrap_idx > 0)
+            .map(|(id, _)| (*id, self.view_size(*id)))
+            .collect();
         for (id, view) in self.docs.views.iter_mut().filter(|(_, v)| v.doc == doc) {
             if Some(*id) == issuer {
                 // 発行 View: 指定された Selection (なければ自分の編集として写像)。goal_dcol はクリア
@@ -871,7 +873,8 @@ impl EditorState {
                     && document.format.long_lines == 0
                     && top == view.scroll.top
                 {
-                    let cols = crate::layout::wrap_width(document, viewport);
+                    let size = sizes.get(id).copied().unwrap_or(self.term.viewport);
+                    let cols = crate::layout::wrap_width(document, size);
                     let n = crate::layout::line_rows(document, top_line, view.wrap, cols).len();
                     view.scroll
                         .wrap_idx
@@ -897,14 +900,9 @@ impl EditorState {
         self.out.needs_render = true;
     }
 
-    /// Window の View が表示している文書の Undo の結合を封印する (カーソル移動の実行時)。
+    /// フォーカスのペインが表示している文書の Undo の結合を封印する (カーソル移動の実行時)。
     pub fn seal_active_history(&mut self) {
-        let doc = self
-            .docs
-            .windows
-            .first()
-            .and_then(|w| self.docs.views.get(&w.root))
-            .map(|v| v.doc);
+        let doc = self.active_document();
         if let Some(d) = doc.and_then(|d| self.docs.documents.get_mut(&d)) {
             d.seal_history();
         }
@@ -918,12 +916,13 @@ impl EditorState {
         }
     }
 
-    /// 先頭可視行の上限 (最後の行が画面の最下行に来る位置)。これより下へは動かさない。
-    fn max_top_line(&self, doc: DocumentId) -> usize {
-        let rows = self.term.viewport.1 as usize;
+    /// 先頭可視行の上限 (最後の行が View の最下行に来る位置)。これより下へは動かさない。
+    fn max_top_line(&self, view: ViewId) -> usize {
+        let rows = self.view_size(view).1 as usize;
         self.docs
-            .documents
-            .get(&doc)
+            .views
+            .get(&view)
+            .and_then(|v| self.docs.documents.get(&v.doc))
             .map_or(0, |d| d.text().len_lines().saturating_sub(rows.max(1)))
     }
 
@@ -963,7 +962,7 @@ impl EditorState {
         let Some(doc) = self.docs.views.get(&view).map(|v| v.doc) else {
             return;
         };
-        let max_top = self.max_top_line(doc);
+        let max_top = self.max_top_line(view);
         let Some(v) = self.docs.views.get_mut(&view) else {
             return;
         };
@@ -984,14 +983,14 @@ impl EditorState {
         self.out.needs_render = true;
     }
 
-    /// 上下の余白 (行)。`view.scroll_margin` の既定 3 (04 §10。v0.1 は定数)。小さな画面では半分以下にする。
-    fn scroll_margin(&self) -> usize {
-        SCROLL_MARGIN.min((self.term.viewport.1 as usize).saturating_sub(1) / 2)
+    /// 上下の余白 (行)。`view.scroll_margin` の既定 3 (04 §10。v0.1 は定数)。小さな画面では View の行数の半分以下にする。
+    fn scroll_margin(&self, view: ViewId) -> usize {
+        SCROLL_MARGIN.min((self.view_size(view).1 as usize).saturating_sub(1) / 2)
     }
 
     /// カーソル (primary の head) が余白を除いた可視範囲に入るよう、先頭可視行を最小限に動かす。
     pub fn ensure_cursor_visible(&mut self, view: ViewId) {
-        let margin = self.scroll_margin();
+        let margin = self.scroll_margin(view);
         self.ensure_cursor_visible_with_margin(view, margin);
     }
 
@@ -1024,11 +1023,8 @@ impl EditorState {
         else {
             return;
         };
-        let text_cols =
-            (self.term.viewport.0 as usize)
-                .saturating_sub(
-                    crate::layout::gutter_width(doc, self.term.viewport.0 as usize) as usize,
-                );
+        let cols = self.view_size(view).0 as usize;
+        let text_cols = cols.saturating_sub(crate::layout::gutter_width(doc, cols) as usize);
         let Some(v) = self.docs.views.get_mut(&view) else {
             return;
         };
@@ -1053,11 +1049,11 @@ impl EditorState {
         if let Some(g) = self.wrap_geometry(view) {
             return self.wrapped_ensure_vertical(view, g, margin);
         }
-        let rows = self.term.viewport.1 as usize;
+        let rows = self.view_size(view).1 as usize;
         let Some(doc) = self.docs.views.get(&view).map(|v| v.doc) else {
             return;
         };
-        let max_top = self.max_top_line(doc);
+        let max_top = self.max_top_line(view);
         let Some(v) = self.docs.views.get_mut(&view) else {
             return;
         };
@@ -1087,11 +1083,11 @@ impl EditorState {
         if let Some(g) = self.wrap_geometry(view) {
             return self.wrapped_center_cursor(view, g);
         }
-        let rows = self.term.viewport.1 as usize;
+        let rows = self.view_size(view).1 as usize;
         let Some(doc) = self.docs.views.get(&view).map(|v| v.doc) else {
             return;
         };
-        let max_top = self.max_top_line(doc);
+        let max_top = self.max_top_line(view);
         let Some(v) = self.docs.views.get_mut(&view) else {
             return;
         };
@@ -1123,11 +1119,7 @@ impl EditorState {
 
     /// `when` 句で参照できる識別子の値 (07 §7.1 / §11.6)。知らない識別子は `None` (偽)。
     pub fn context_value(&self, name: &str) -> Option<CtxValue> {
-        let view = self
-            .docs
-            .windows
-            .first()
-            .and_then(|w| self.docs.views.get(&w.root));
+        let view = self.focused_view().and_then(|v| self.docs.views.get(&v));
         let doc = view.and_then(|v| self.docs.documents.get(&v.doc));
         let b = |x: bool| Some(CtxValue::Bool(x));
         match name {
