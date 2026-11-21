@@ -145,6 +145,23 @@ fn check_state(h: &Harness, revs: &mut BTreeMap<DocumentId, u64>, step: usize) {
     if let Err(e) = st.check_panes() {
         panic!("step {step}: ペインの不変条件に反する: {e}");
     }
+    // 全ペインの表示中の View の主カーソルが、文書の範囲内で char の境界にある (09 §3.2 の「eve-core 複数ペイン」の (e))
+    if let Ok(Answer::Windows(ws)) = h.query(&Query::Windows) {
+        for v in ws.iter().flat_map(|w| w.views.iter()) {
+            let view = st
+                .view(*v)
+                .unwrap_or_else(|| panic!("step {step}: ペインの View {v:?} が無い"));
+            let d = st
+                .document(view.doc)
+                .unwrap_or_else(|| panic!("step {step}: {v:?} の文書 {:?} が無い", view.doc));
+            let head = view.selection.primary().head;
+            use eve_text::TextRead as _;
+            assert!(
+                head.0 <= d.len_bytes() && d.text().is_char_boundary(head),
+                "step {step}: {v:?} のカーソル {head:?} が文書の範囲・char の境界の外"
+            );
+        }
+    }
     if let Some(w) = st.first_window()
         && let Some(v) = st.window_view(w).and_then(|v| st.view(v))
         && let Some(d) = st.document(v.doc)
@@ -515,15 +532,91 @@ fn command_with_args(b: &mut Bytes<'_>) -> (&'static str, Args) {
     }
 }
 
+/// ペインの操作を 1 つ (docs/03 §9.9、09 §3.2 の「eve-core 複数ペイン」)。分割を多めに選び、2 つ以上のペインに届かせる。
+fn pane_op(h: &mut Harness, b: &mut Bytes<'_>) -> String {
+    use eve_view::{Modifiers, MouseButton, MouseKind};
+    const CMDS: [&str; 12] = [
+        "pane.split_right",
+        "pane.split_down",
+        "pane.close",
+        "pane.focus_next",
+        "pane.focus_prev",
+        "pane.focus_left",
+        "pane.focus_right",
+        "pane.focus_up",
+        "pane.focus_down",
+        "pane.grow",
+        "pane.shrink",
+        "pane.equalize",
+    ];
+    let x = b.u8();
+    match x % 18 {
+        i @ 0..=11 => {
+            let id = CMDS[usize::from(i)];
+            let cells = b.u8();
+            if matches!(i, 9 | 10) && cells & 1 == 1 {
+                let n = i64::from(cells >> 1);
+                h.cmd_with(id, Args::new().with_int("cells", n));
+                format!("{id} cells {n}")
+            } else {
+                h.cmd(id);
+                id.to_owned()
+            }
+        }
+        12 | 13 => {
+            let id = if x % 18 == 12 {
+                "pane.split_right"
+            } else {
+                "pane.split_down"
+            };
+            h.cmd(id);
+            id.to_owned()
+        }
+        14 | 15 => {
+            // 表示中の View の i 番目のペインを押す・ホイール (フォーカスの無いペインのクリック、ポインタの下のホイール)
+            let Ok(Answer::Windows(ws)) = h.query(&Query::Windows) else {
+                return "pane mouse (Window なし)".to_owned();
+            };
+            let views = ws.first().map(|w| w.views.clone()).unwrap_or_default();
+            if views.is_empty() {
+                return "pane mouse (ペインなし)".to_owned();
+            }
+            let v = views[usize::from(b.u8()) % views.len()];
+            let (r, c) = (i32::from(b.u8() % 30), i32::from(b.u8() % 60));
+            if x % 18 == 14 {
+                h.mouse_in(v, MouseKind::Down(MouseButton::Left), Modifiers::NONE, r, c);
+                h.mouse_in(v, MouseKind::Up(MouseButton::Left), Modifiers::NONE, r, c);
+                format!("pane click {v:?} {r},{c}")
+            } else {
+                h.mouse_in(v, MouseKind::WheelDown, Modifiers::NONE, r, c);
+                format!("pane wheel {v:?} {r},{c}")
+            }
+        }
+        16 => {
+            // 最小の前後 (左右 2 つは 41 列、上下 2 つは 8 行) の大きさ
+            let c = 38 + u16::from(b.u8() % 8);
+            let r = 5 + u16::from(b.u8() % 6);
+            h.resize(c, r);
+            format!("resize {c}x{r} (最小の前後)")
+        }
+        _ => {
+            let c = 60 + u16::from(b.u8() % 61);
+            let r = 16 + u16::from(b.u8() % 30);
+            h.resize(c, r);
+            format!("resize {c}x{r}")
+        }
+    }
+}
+
 /// 1 つの入力を流す。先頭: [0..2] 初期文書の長さ (下位 12 ビット。ビット 12〜14 は初期文書の形、ビット 15 はスワップを積むか。
 /// 下)、続いて文書の本文、[次の 2 バイト] ビューポートの大きさ
 /// (行の数のバイトの最上位ビットが立っていれば、長大行の閾値を 64 バイトに下げた設定で起動する。長大行とジョブの経路に届かせる)、
-/// 残りが操作の列 (操作の種類 1 バイト + 引数)。操作は 23 種類: 文字・キー・貼り付け・大きさ・引数なしのコマンド・ジョブ・時刻・
+/// 残りが操作の列 (操作の種類 1 バイト + 引数)。操作は 24 種類: 文字・キー・貼り付け・大きさ・引数なしのコマンド・ジョブ・時刻・
 /// 確認への答え・クリック・引数付きのコマンド・外部の変更・ジョブを 1 周だけ・ジョブの取消し・マウスのドラッグ・再読込と外部の変更の確認
 /// (docs/review/v0.3-findings.md の §2.7 の 10)、v0.4 の M23 で足した 6 種類 (`file.toggle_read_only`・その確認への答え
 /// (`[A]` / `[E]` / Esc)・再読込 (ジョブまで)・`U+10FF00..` を含む外からの文字列の入力と貼り付け・保存 (ジョブまで)・
 /// 隣とつなげる ASCII の入力)、v0.4 の M25 で足した遅い読込で開く操作 (`slow_open`。先行表示の先頭で止める・取り置いた
-/// 結果を渡す)。
+/// 結果を渡す)、v0.5 の M30 で足したペインの操作 (`pane_op`。分割・閉じる・移動・大きさ・ペインを指すマウス・最小の前後の大きさ)。
 ///
 /// 初期文書の形 (ビット 12〜14 の値): 0 / 5 = 本文を判定に任せて開く、1〜4 (6・7 は 1・2 と同じ) = 不正なバイトを含むファイルを
 /// UTF-8 / `Shift_JIS` / EUC-JP / UTF-16LE で指定して開く (`invalid_bytes_file`。03 §8.3.1)。ビット 15 が立っていれば、
@@ -580,8 +673,9 @@ pub fn editor_sequence(data: &[u8]) {
         .registry()
         .iter()
         .map(|s| s.id.as_str().to_owned())
-        // 終了とプロセスの外に出るものは除く (終了は下の Quit の検出で止める)
-        .filter(|id| !id.starts_with("app.quit"))
+        // 終了とプロセスの外に出るものは除く (終了は下の Quit の検出で止める)。ペインのコマンドは操作 23 で選ぶ
+        // (この一覧の番号の読み替えを変えず、既存の種の意味を保つ)
+        .filter(|id| !id.starts_with("app.quit") && !id.starts_with("pane."))
         .collect();
     let mut revs = BTreeMap::new();
     // 遅い読込で開いたパスと、開いた時点の中身 (先行表示の不変条件の検査に使う)
@@ -601,8 +695,8 @@ pub fn editor_sequence(data: &[u8]) {
         let mut external = false;
         // (c) 外から入れた文字列の検査の対象 (入れた文字列と、入れる前の今の文書の ID・エスケープ文字の数)
         let mut outside: Option<(String, Option<(DocumentId, usize)>)> = None;
-        // 操作の種類。足すときは剰余を増やし、既存の番号を変えない (コミットした corpus の操作の番号は 22 未満)
-        match b.u8() % 23 {
+        // 操作の種類。足すときは剰余を増やし、既存の番号を変えない (コミットした corpus の操作の番号は 24 未満)
+        match b.u8() % 24 {
             0 => {
                 let t = b.text(16);
                 log(step, &format!("text {t:?}"));
@@ -739,6 +833,11 @@ pub fn editor_sequence(data: &[u8]) {
             22 => {
                 // 遅い読込で開く (先行表示。v0.4 の M25)
                 let what = slow_open(&mut h, &mut b, &mut opened);
+                log(step, &what);
+            }
+            23 => {
+                // ペイン (v0.5 の M30。docs/03 §9.9): 分割・閉じる・移動・大きさ・揃える、ペインを指すマウス、最小の前後の大きさ
+                let what = pane_op(&mut h, &mut b);
                 log(step, &what);
             }
             _ => {

@@ -2456,70 +2456,70 @@ title = "リサイズ・サスペンド・その他のシグナル"
 id = "04 §15"
 file = "docs/04-tui-design.md"
 line = 1400
-end = 2055
+end = 2061
 title = "日本語環境での考慮事項 (まとめ)"
 
 [[section]]
 id = "04 §15.1"
 file = "docs/04-tui-design.md"
 line = 1417
-end = 1480
+end = 1483
 title = "v0.1 の画面文言 (ja)"
 
 [[section]]
 id = "04 §15.2"
 file = "docs/04-tui-design.md"
-line = 1481
-end = 2055
+line = 1484
+end = 2061
 title = "保存・読込・退避・パニックの文言目録"
 
 [[section]]
 id = "04 §16"
 file = "docs/04-tui-design.md"
-line = 2056
-end = 2094
+line = 2062
+end = 2100
 title = "共通化する部分 / しない部分"
 
 [[section]]
 id = "04 §17"
 file = "docs/04-tui-design.md"
-line = 2095
-end = 2138
+line = 2101
+end = 2144
 title = "版ごとの範囲"
 
 [[section]]
 id = "04 §17.1"
 file = "docs/04-tui-design.md"
-line = 2099
-end = 2124
+line = 2105
+end = 2130
 title = "v0.1 で実装する (最小核)"
 
 [[section]]
 id = "04 §17.2"
 file = "docs/04-tui-design.md"
-line = 2125
-end = 2128
+line = 2131
+end = 2134
 title = "v0.2 (日常の不足を埋める)"
 
 [[section]]
 id = "04 §17.3"
 file = "docs/04-tui-design.md"
-line = 2129
-end = 2132
+line = 2135
+end = 2138
 title = "v0.4"
 
 [[section]]
 id = "04 §17.4"
 file = "docs/04-tui-design.md"
-line = 2133
-end = 2138
+line = 2139
+end = 2144
 title = "v0.5 以降"
 
 [[section]]
 id = "04 §18"
 file = "docs/04-tui-design.md"
-line = 2139
-end = 2155
+line = 2145
+end = 2161
 title = "未決事項"
 
 [[section]]
@@ -8111,67 +8111,67 @@ section = "04 §12.1"
 [[id]]
 id = "OQ-33"
 file = "docs/04-tui-design.md"
-line = 2145
+line = 2151
 section = "04 §18"
 
 [[id]]
 id = "OQ-61"
 file = "docs/04-tui-design.md"
-line = 2146
+line = 2152
 section = "04 §18"
 
 [[id]]
 id = "OQ-64"
 file = "docs/04-tui-design.md"
-line = 2147
+line = 2153
 section = "04 §18"
 
 [[id]]
 id = "OQ-66"
 file = "docs/04-tui-design.md"
-line = 2148
+line = 2154
 section = "04 §18"
 
 [[id]]
 id = "OQ-68"
 file = "docs/04-tui-design.md"
-line = 2149
+line = 2155
 section = "04 §18"
 
 [[id]]
 id = "OQ-180"
 file = "docs/04-tui-design.md"
-line = 2150
+line = 2156
 section = "04 §18"
 
 [[id]]
 id = "OQ-181"
 file = "docs/04-tui-design.md"
-line = 2151
+line = 2157
 section = "04 §18"
 
 [[id]]
 id = "OQ-182"
 file = "docs/04-tui-design.md"
-line = 2152
+line = 2158
 section = "04 §18"
 
 [[id]]
 id = "OQ-183"
 file = "docs/04-tui-design.md"
-line = 2153
+line = 2159
 section = "04 §18"
 
 [[id]]
 id = "OQ-184"
 file = "docs/04-tui-design.md"
-line = 2154
+line = 2160
 section = "04 §18"
 
 [[id]]
 id = "OQ-124"
 file = "docs/04-tui-design.md"
-line = 2155
+line = 2161
 section = "04 §18"
 
 [[id]]

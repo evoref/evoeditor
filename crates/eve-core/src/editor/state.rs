@@ -137,9 +137,9 @@ pub(crate) struct IoState {
     pub(crate) open_switch: BTreeMap<DocumentId, crate::io::partial_view::OpenSwitch>,
     /// 先行表示の間に `info.open.partial_end` を出した文書 (同じ文書の先行表示の間は 1 回だけ、03 §9.2.1)。
     pub(crate) partial_end_noted: BTreeSet<DocumentId>,
-    /// 読込の失敗・取消しで閉じる文書のうち、オーバーレイ・検索バーの間は表示を移さずに待っているもの (文書 → 開く前の
-    /// 文書。03 §9.2.1 の「失敗・取消し・閉じる」)。
-    pub(crate) failed_holds: BTreeMap<DocumentId, Option<DocumentId>>,
+    /// 読込の失敗・取消しで閉じる文書のうち、オーバーレイ・検索バーの間は表示を移さずに待っているもの (文書 → 開いた
+    /// 時点のペインと開く前の文書。03 §9.2.1 の「失敗・取消し・閉じる」、§9.9 の PANE-8 (b))。
+    pub(crate) failed_holds: BTreeMap<DocumentId, Option<crate::io::open::OpenFrom>>,
     /// 標準入力の閉じる・終了の確認で「ここまでで開く」を選んだ後、読み終えたときの続き (文書, 続き) のうち、オーバーレイ・
     /// 検索バーの間は進めずに待っているもの (03 §9.2.2 の「閉じる・終了」。開いているほかの確認・入力を置き換えない)。
     pub(crate) stdin_conts: Vec<(DocumentId, crate::ui_model::overlay::Continuation)>,
@@ -266,6 +266,8 @@ pub(crate) struct TermState {
     pub(crate) bar_rows: u16,
     /// ホストが渡した編集面の大きさ (検索バーの分を引く前)。
     pub(crate) surface: (u16, u16),
+    /// 全 View の可視の大きさを 1 回求めたもの (全 View のスクロールを調整する間だけ。`with_view_sizes`)。
+    pub(crate) view_sizes: Option<BTreeMap<ViewId, (u16, u16)>>,
 }
 
 impl EditorState {
@@ -281,6 +283,7 @@ impl EditorState {
                 viewport: (80, 24),
                 bar_rows: 0,
                 surface: (80, 24),
+                view_sizes: None,
                 mouse_drag: None,
                 mouse_on: true,
                 hint_bar_on: true,
@@ -552,15 +555,19 @@ impl EditorState {
         if self.term.viewport != (cols, rows) {
             self.term.viewport = (cols, rows);
             self.out.needs_render = true;
-            // 画面の大きさが変わっても、カーソルが見えるようにする
+            // 画面の大きさが変わっても、カーソルが見えるようにする (配置は 1 回だけ求める)
             let views: Vec<ViewId> = self.docs.views.keys().copied().collect();
-            for v in views {
-                // 折り返し幅が変わるので、先頭の論理行の最初の表示行に戻す (03 §14.3.1)
-                if let Some(view) = self.docs.views.get_mut(&v) {
-                    view.scroll.wrap_idx = 0;
+            self.with_view_sizes(|st| {
+                for v in views {
+                    // 折り返し幅が変わるので、先頭の論理行の最初の表示行に戻す (03 §14.3.1)
+                    if let Some(view) = st.docs.views.get_mut(&v) {
+                        view.scroll.wrap_idx = 0;
+                    }
+                    st.ensure_cursor_visible(v);
                 }
-                self.ensure_cursor_visible(v);
-            }
+            });
+            // 縮退表示に入った・出た (03 §9.9 の PANE-4 (b))
+            self.refresh_collapse();
         }
     }
 
@@ -1129,6 +1136,11 @@ impl EditorState {
             "doc.modified" => b(doc.is_some_and(Document::is_dirty)),
             "selection.empty" => b(view.is_none_or(|v| v.selection.iter().all(|r| r.is_empty()))),
             "overlay.active" => Some(CtxValue::Str(self.overlay_name().to_owned())),
+            // Window のペインが 2 つ以上 (03 §9.9、07 §7.3)
+            "pane.split" => b(self
+                .focused_window()
+                .and_then(|w| self.window(w))
+                .is_some_and(|w| w.panes.len() >= 2)),
             "search.active" => b(self.find.search_bar.is_some()),
             "search.replace_active" => b(self
                 .find

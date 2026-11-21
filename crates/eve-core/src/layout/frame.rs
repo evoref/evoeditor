@@ -347,6 +347,16 @@ fn pane_frame(
     Some((pane, primary))
 }
 
+/// View `view` を矩形 `rect` のペインに出したときの主カーソルのセル (`rect` の左上が原点)。画面の外なら `None`
+/// (方向のペインの移動が使う、03 §9.9 の PANE-5 (c))。費用はペインの可視範囲の大きさに比例する。
+pub(crate) fn primary_cursor_in(
+    state: &EditorState,
+    view: ViewId,
+    rect: CellRect,
+) -> Option<CellPos> {
+    pane_frame(state, view, rect, false).and_then(|(_, p)| p)
+}
+
 /// 水平スクロールの調整に使う、primary のカーソルの (表示列, セルの幅)。
 pub(crate) fn primary_cursor_cell(state: &EditorState, view: ViewId) -> Option<(usize, usize)> {
     let v = state.view(view)?;

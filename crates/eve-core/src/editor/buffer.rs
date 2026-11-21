@@ -7,6 +7,7 @@ use std::ops::Range;
 use eve_view::{CutPolicy, DocumentId, InputFieldModel, ListItem, OverlayModel, ViewId};
 
 use super::state::EditorState;
+use super::window::PaneRef;
 use crate::command::ids;
 use crate::command::{
     CommandCtx, CommandKind, CommandRegistry, CommandResult, Permission, RejectReason,
@@ -271,27 +272,44 @@ impl EditorState {
     /// 表示する (03 §9.9 の PANE-9。ペインは閉じない)。最後の 1 件なら無題の文書を新しく作り、表示していたペインに出す
     /// (終了はしない、03 §9.8)。
     pub(crate) fn close_buffer(&mut self, doc: DocumentId) -> CommandResult {
-        let showing = self.panes_showing(doc);
-        let mut blank_view = None;
-        for at in showing {
-            match self.next_document_for(at, doc) {
+        self.close_document(doc);
+        CommandResult::Done
+    }
+
+    /// 文書 `doc` を表示している全ペインを次の文書へ替えてから閉じる (03 §9.9 の PANE-9)。`prefer` が (ペイン, 文書)
+    /// なら、そのペインには (開いていれば) その文書を優先して出す (読込の失敗で開く前の文書へ戻すのはそのペインだけ、
+    /// PANE-8 (b))。
+    pub(crate) fn close_shown_document(
+        &mut self,
+        doc: DocumentId,
+        prefer: Option<(PaneRef, DocumentId)>,
+    ) {
+        self.move_panes_off(doc, prefer);
+        self.close_document(doc);
+    }
+
+    /// 文書 `doc` を表示している全ペインに、それぞれ次の文書を出す (PANE-9): `prefer` のペインには指定の文書、ほかは
+    /// そのペインの `recent`・Window 全体の `recent`・開いた順。ほかに文書が無ければ無題の文書を 1 つ作る (2 つ目からの
+    /// ペインは、開いた順でその文書を選ぶ)。
+    pub(crate) fn move_panes_off(
+        &mut self,
+        doc: DocumentId,
+        prefer: Option<(PaneRef, DocumentId)>,
+    ) {
+        for at in self.panes_showing(doc) {
+            let preferred = prefer
+                .filter(|(p, d)| *p == at && *d != doc && self.docs.documents.contains_key(d))
+                .map(|(_, d)| d);
+            match preferred.or_else(|| self.next_document_for(at, doc)) {
                 Some(n) => self.show_document_in(at, n),
                 None => {
-                    // 最後の 1 件を閉じた: 無題の文書を新しく作る (終了はしない)。2 つ目からのペインには同じ文書を出す
-                    match blank_view {
-                        None => {
-                            let blank = self.blank_document();
-                            let (blank_doc, view) = self.add_document(blank);
-                            self.show_view_in(at, view);
-                            blank_view = Some(blank_doc);
-                        }
-                        Some(blank_doc) => self.show_document_in(at, blank_doc),
-                    }
+                    // 最後の 1 件を閉じる: 無題の文書を新しく作る (終了はしない、03 §9.8)
+                    let blank = self.blank_document();
+                    let (_, view) = self.add_document(blank);
+                    self.show_view_in(at, view);
                 }
             }
         }
-        self.close_document(doc);
-        CommandResult::Done
     }
 }
 

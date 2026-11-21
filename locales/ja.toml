@@ -218,6 +218,54 @@ title = "キー一覧を開く"
 description = "ヘルプ画面をコマンド一覧の節で開きます。"
 title = "コマンド一覧を開く"
 
+[cmd.pane.split_right]
+description = "今のペインの右に新しいペインを作り、同じ文書を同じ位置で表示します (左右に並べる)。"
+title = "右に分割 (左右に並べる)"
+
+[cmd.pane.split_down]
+description = "今のペインの下に新しいペインを作り、同じ文書を同じ位置で表示します (上下に並べる)。"
+title = "下に分割 (上下に並べる)"
+
+[cmd.pane.focus_next]
+description = "次のペインへフォーカスを移します。最後のペインからは最初のペインへ移ります。"
+title = "次のペイン"
+
+[cmd.pane.focus_prev]
+description = "前のペインへフォーカスを移します。最初のペインからは最後のペインへ移ります。"
+title = "前のペイン"
+
+[cmd.pane.focus_left]
+description = "左に隣り合うペインへフォーカスを移します。"
+title = "左のペインへ"
+
+[cmd.pane.focus_right]
+description = "右に隣り合うペインへフォーカスを移します。"
+title = "右のペインへ"
+
+[cmd.pane.focus_up]
+description = "上に隣り合うペインへフォーカスを移します。"
+title = "上のペインへ"
+
+[cmd.pane.focus_down]
+description = "下に隣り合うペインへフォーカスを移します。"
+title = "下のペインへ"
+
+[cmd.pane.close]
+description = "今のペインを閉じます。文書は閉じません (未保存の変更があっても確認しません)。文書を閉じるのは「閉じる」(buffer.close) です。"
+title = "ペインを閉じる"
+
+[cmd.pane.grow]
+description = "今のペインを、隣のペインから少し広げます。"
+title = "ペインを広げる"
+
+[cmd.pane.shrink]
+description = "今のペインを少し狭め、隣のペインに返します。"
+title = "ペインを狭める"
+
+[cmd.pane.equalize]
+description = "すべてのペインの大きさを揃えます。"
+title = "ペインの大きさを揃える"
+
 [cmd.search.next]
 description = "次の一致へ移動します。"
 title = "次を検索"
@@ -438,6 +486,11 @@ partial_end = "先頭の {size} だけを表示しています。残りは読込
 preserve_off = "この文書では元のバイト列を覚えていません。元の文字コードで保存すると、一部の文字が同じ文字の別のバイト表現になることがあります"
 preserve_partial = "{count} 行は元のバイト列を覚えられませんでした。編集して保存すると、これらの行はエスケープシーケンスの書き方が変わることがあります (文字は変わりません)"
 redetected = "文字コードを {encoding} と判定し直しました"
+
+[info.pane]
+collapsed = "端末が狭いので、フォーカスのペインだけを表示しています"
+no_room = "ペインを分ける広さがありません。端末を広げるか、ほかのペインを閉じてください"
+single_pane = "ペインが 1 つだけです"
 
 [info.paste]
 first_line_only = "入力欄には最初の行だけを貼り付けました"
@@ -1283,6 +1336,10 @@ short = "外部変更"
 long = "[長い行: 折り返しなし]"
 short = "折返なし"
 
+[status.degraded.panes]
+long = "[ペイン {index}/{total} だけ表示]"
+short = "{index}/{total}"
+
 [status.encoding]
 bom = "{encoding} BOM"
 
@@ -1314,6 +1371,7 @@ no_path = "文書に保存先のパスがありません"
 no_selection = "選択範囲がありません"
 unavailable = "今の状態では使えません"
 read_only = "文書が読み取り専用です"
+single_pane = "ペインが 1 つだけです"
 
 [ui.palette]
 title = "コマンド"
@@ -1405,6 +1463,7 @@ cursor = "移動"
 edit = "編集"
 help = "ヘルプ"
 file = "ファイル"
+pane = "ペイン"
 search = "検索"
 select = "選択"
 ui = "画面"

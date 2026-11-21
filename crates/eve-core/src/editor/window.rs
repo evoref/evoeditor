@@ -5,12 +5,12 @@
 //!
 //! spec: 03 §9.9 (PANE-1, PANE-8, PANE-9, PANE-13)
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use eve_view::{CellRect, CellSize, DocumentId, ViewId, WindowId};
 
 use crate::editor::state::{EditorState, View};
-use crate::layout::panes::{LeafRect, PaneLayout, layout};
+use crate::layout::panes::{LeafRect, PANE_MIN, PaneLayout, layout, min_size};
 
 /// ペインの識別子 (core の内部。Window の中で一意で、閉じた後も再利用しない)。
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -18,10 +18,6 @@ pub(crate) struct PaneId(pub(crate) u64);
 
 /// 分割の向き (PANE-3)。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "分割は FR-509 の PR で作る (今は葉 1 つの木だけ)")
-)]
 pub(crate) enum Axis {
     /// 左右に並べる。子の間に区切りを 1 列置く。
     Row,
@@ -35,10 +31,6 @@ pub(crate) enum LayoutNode {
     /// ペイン。
     Leaf(PaneId),
     /// 分割。子と、その比率。
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "分割は FR-509 の PR で作る (今は葉 1 つの木だけ)")
-    )]
     Split {
         axis: Axis,
         children: Vec<(LayoutNode, u16)>,
@@ -87,6 +79,8 @@ pub struct Window {
     pub(crate) focus: PaneId,
     /// フォーカスしたペイン (順。末尾が直近。PANE-5 (d) のペインを閉じた後のフォーカスに使う)。
     pub(crate) pane_recent: Vec<PaneId>,
+    /// 縮退表示の最中 (PANE-4 (b))。入ったときに 1 回だけ知らせるために、前の状態を覚える。
+    pub(crate) collapsed: bool,
 }
 
 impl Window {
@@ -106,6 +100,7 @@ impl Window {
             root: LayoutNode::Leaf(pane),
             focus: pane,
             pane_recent: vec![pane],
+            collapsed: false,
         }
     }
 
@@ -127,8 +122,42 @@ impl Window {
             .map(|(id, _)| *id)
     }
 
-    /// 編集面 `size` に置いた各ペインの配置 (PANE-3、PANE-10 (a))。
+    /// 編集面 `size` が木の最小より小さい (縮退表示、PANE-4 (b))。葉が 1 つの木は縮退しない (端末の最小は frontend)。
+    pub(crate) fn is_collapsed(&self, size: CellSize) -> bool {
+        if matches!(self.root, LayoutNode::Leaf(_)) {
+            return false;
+        }
+        let min = min_size(&self.root);
+        size.cols < min.cols || size.rows < min.rows
+    }
+
+    /// 編集面 `size` に出す各ペインの配置 (PANE-3、PANE-10 (a))。縮退表示では、フォーカスのペインだけを編集面の全体に、
+    /// 見出しと区切りなしで置く (PANE-4 (b))。
     pub(crate) fn layout(&self, size: CellSize) -> PaneLayout {
+        if self.is_collapsed(size) {
+            return PaneLayout {
+                leaves: vec![LeafRect {
+                    pane: self.focus,
+                    body: CellRect {
+                        col: 0,
+                        row: 0,
+                        cols: size.cols,
+                        rows: size.rows,
+                    },
+                    bar: None,
+                }],
+                dividers: Vec::new(),
+            };
+        }
+        layout(&self.root, size)
+    }
+
+    /// ペインの操作 (方向の移動・大きさ) が使う木の配置: 縮退表示では木の最小の大きさで計算した配置、そうでなければ
+    /// 編集面の配置 (PANE-4 (b))。
+    pub(crate) fn logical_layout(&self, size: CellSize) -> PaneLayout {
+        if self.is_collapsed(size) {
+            return layout(&self.root, min_size(&self.root));
+        }
         layout(&self.root, size)
     }
 }
@@ -158,7 +187,7 @@ impl EditorState {
         Some((w.id, w.focus))
     }
 
-    fn window_mut(&mut self, id: WindowId) -> Option<&mut Window> {
+    pub(crate) fn window_mut(&mut self, id: WindowId) -> Option<&mut Window> {
         self.docs.windows.iter_mut().find(|w| w.id == id)
     }
 
@@ -206,7 +235,16 @@ impl EditorState {
 
     /// View `view` の可視の大きさ (列, 行): その View を表示するペインの本文の大きさ (03 §9.9 の PANE-13)。表示していない
     /// View は、表に持つペイン (次に表示するペイン) の大きさ、どのペインにも属さない View はフォーカスのペインの大きさ。
+    /// 縮退表示で隠れているペインの View は、編集面の全体 (フォーカスを移すとその大きさで出る、PANE-4 (b))。
     pub(crate) fn view_size(&self, view: ViewId) -> (u16, u16) {
+        if let Some(size) = self
+            .term
+            .view_sizes
+            .as_ref()
+            .and_then(|m| m.get(&view).copied())
+        {
+            return size;
+        }
         let rect = self.view_rect(view).or_else(|| {
             let (w, p) = self.pane_owning(view).or_else(|| self.focused_pane())?;
             pane_body(&self.window(w)?.layout(self.surface_size()), p)
@@ -217,8 +255,47 @@ impl EditorState {
         }
     }
 
+    /// 全 View の可視の大きさ (`view_size` と同じ規則)。Window ごとに配置を 1 回だけ求める (全 View のスクロールを
+    /// 調整するときに、View ごとに配置を求め直さない)。
+    pub(crate) fn all_view_sizes(&self) -> BTreeMap<ViewId, (u16, u16)> {
+        let size = self.surface_size();
+        let whole = (size.cols, size.rows);
+        let mut out = BTreeMap::new();
+        let mut free = None;
+        for (i, w) in self.docs.windows.iter().enumerate() {
+            let l = w.layout(size);
+            for (pid, p) in &w.panes {
+                let body = pane_body(&l, *pid).map_or(whole, |r| (r.cols, r.rows));
+                for v in p.views.values() {
+                    out.insert(*v, body);
+                }
+                if i == 0 && *pid == w.focus {
+                    free = Some(body);
+                }
+            }
+        }
+        let free = free.unwrap_or(whole);
+        for v in self.docs.views.keys() {
+            out.entry(*v).or_insert(free);
+        }
+        out
+    }
+
+    /// `f` の間だけ、全 View の可視の大きさを 1 回求めたものを使う (配置は `f` の中で変えないこと)。
+    pub(crate) fn with_view_sizes<R>(&mut self, f: impl FnOnce(&mut EditorState) -> R) -> R {
+        let outer = self.term.view_sizes.is_some();
+        if !outer {
+            self.term.view_sizes = Some(self.all_view_sizes());
+        }
+        let r = f(self);
+        if !outer {
+            self.term.view_sizes = None;
+        }
+        r
+    }
+
     /// 編集面の大きさ (`Frame.size`)。
-    fn surface_size(&self) -> CellSize {
+    pub(crate) fn surface_size(&self) -> CellSize {
         let (cols, rows) = self.viewport();
         CellSize { cols, rows }
     }
@@ -242,11 +319,15 @@ impl EditorState {
         if let Some(prev) = prev {
             self.note_recent(at, prev);
         }
-        let view = match self.pane(at).and_then(|p| p.views.get(&doc).copied()) {
-            Some(v) if self.docs.views.contains_key(&v) => v,
+        let (view, copied) = match self.pane(at).and_then(|p| p.views.get(&doc).copied()) {
+            Some(v) if self.docs.views.contains_key(&v) => (v, false),
             _ => self.view_for_new_pane(doc),
         };
         self.put_view_in(at, doc, view);
+        if copied {
+            // 写した位置を、表示するペインの本文の矩形で見えるようにする (写し元のペインと大きさが違う。PANE-1)
+            self.ensure_cursor_visible(view);
+        }
         if focused {
             self.docs.last_view.insert(doc, view);
         }
@@ -254,11 +335,20 @@ impl EditorState {
     }
 
     /// View `view` をペイン `at` に表示する (読込の完了・起動・最後の文書を閉じた後の無題の文書など、表示する View の
-    /// 決まっている所)。`recent` には記録しない。
+    /// 決まっている所)。`recent` には記録しない。`view` をほかのペインが表示していれば、そのペインから取り上げずに
+    /// 文書を表示する (`show_document_in`。どのペインの表示中の View も、そのペインの表にある)。
     pub(crate) fn show_view_in(&mut self, at: PaneRef, view: ViewId) {
         let Some(doc) = self.view(view).map(|v| v.doc) else {
             return;
         };
+        let shown_elsewhere = self.docs.windows.iter().any(|w| {
+            w.panes
+                .iter()
+                .any(|(id, p)| (w.id, *id) != at && p.view == view)
+        });
+        if shown_elsewhere {
+            return self.show_document_in(at, doc);
+        }
         self.put_view_in(at, doc, view);
         if self.focused_pane() == Some(at) {
             self.docs.last_view.insert(doc, view);
@@ -286,8 +376,8 @@ impl EditorState {
     }
 
     /// 文書 `doc` を初めて表示するペインに渡す View (PANE-1): ペインに属さない View があればそれ (`ViewId` は変わらない)、
-    /// 無ければ最後にフォーカスのあった View を写した新しい View。
-    fn view_for_new_pane(&mut self, doc: DocumentId) -> ViewId {
+    /// 無ければ最後にフォーカスのあった View を写した新しい View。写して作ったかを添えて返す。
+    fn view_for_new_pane(&mut self, doc: DocumentId) -> (ViewId, bool) {
         let own: Vec<ViewId> = self
             .docs
             .views
@@ -296,7 +386,7 @@ impl EditorState {
             .map(|(id, _)| *id)
             .collect();
         if let Some(free) = own.iter().copied().find(|v| self.pane_owning(*v).is_none()) {
-            return free;
+            return (free, false);
         }
         let source = self
             .docs
@@ -304,15 +394,21 @@ impl EditorState {
             .get(&doc)
             .copied()
             .filter(|v| own.contains(v))
-            .or_else(|| own.first().copied())
-            .and_then(|v| self.docs.views.get(&v).cloned());
-        let id = self.add_view(doc);
-        if let Some(src) = source
-            && let Some(v) = self.docs.views.get_mut(&id)
-        {
-            *v = View { doc, ..src };
+            .or_else(|| own.first().copied());
+        match source.and_then(|v| self.copy_view(v)) {
+            Some(id) => (id, true),
+            None => (self.add_view(doc), false),
         }
-        id
+    }
+
+    /// View `src` の選択・スクロール・上下の移動の目標の列・折り返しの設定を写した新しい View (PANE-1、PANE-5 (a))。
+    pub(crate) fn copy_view(&mut self, src: ViewId) -> Option<ViewId> {
+        let copy: View = self.docs.views.get(&src).cloned()?;
+        let id = self.add_view(copy.doc);
+        if let Some(v) = self.docs.views.get_mut(&id) {
+            *v = copy;
+        }
+        Some(id)
     }
 
     /// ペイン `at` で表示を替える前の文書 `prev` を、そのペインと Window 全体の最近使った順に記録する。
@@ -355,17 +451,28 @@ impl EditorState {
     /// 破れている条件を文で返す。
     pub fn check_panes(&self) -> Result<(), String> {
         let mut owners: BTreeMap<ViewId, PaneRef> = BTreeMap::new();
+        let size = self.surface_size();
         for w in &self.docs.windows {
             let leaves = w.leaves();
-            if leaves.len() != w.panes.len() || leaves.iter().any(|p| !w.panes.contains_key(p)) {
-                return Err(format!("{:?}: 木の葉とペインの表が合わない", w.id));
+            let set: BTreeSet<PaneId> = leaves.iter().copied().collect();
+            if set.len() != leaves.len() || !set.iter().eq(w.panes.keys()) {
+                return Err(format!(
+                    "{:?}: 木の葉 {leaves:?} とペインの表 {:?} が合わない",
+                    w.id,
+                    w.panes.keys().collect::<Vec<_>>()
+                ));
             }
+            // 木の形 (PANE-3): 分割の子は 2 つ以上・比率は正で合計 10,000・同じ向きの分割を親子にしない
+            w.root
+                .check_shape()
+                .map_err(|e| format!("{:?}: 木の形: {e}", w.id))?;
             if !w.panes.contains_key(&w.focus) {
                 return Err(format!("{:?}: フォーカスのペインが無い", w.id));
             }
             if w.pane_recent.iter().any(|p| !w.panes.contains_key(p)) {
                 return Err(format!("{:?}: 閉じたペインが pane_recent に残る", w.id));
             }
+            check_tiling(w, size)?;
             for (pid, p) in &w.panes {
                 if !p.views.values().any(|v| *v == p.view) {
                     return Err(format!("{pid:?}: 表示中の View が表に無い"));
@@ -393,8 +500,79 @@ impl EditorState {
                 return Err(format!("{doc:?} に View が無い"));
             }
         }
+        if let Some(d) = self
+            .docs
+            .recent
+            .iter()
+            .find(|d| !self.docs.documents.contains_key(d))
+        {
+            return Err(format!("閉じた文書 {d:?} が Window 全体の recent に残る"));
+        }
+        for (doc, view) in &self.docs.last_view {
+            if self.docs.views.get(view).map(|v| v.doc) != Some(*doc) {
+                return Err(format!("{doc:?} の最後の View {view:?} が無い・別の文書"));
+            }
+        }
         Ok(())
     }
+}
+
+/// 配置の不変条件 (09 §3.2 の「eve-core 複数ペイン」の (a)): 縮退表示でなければ、全ペインの本文と見出しと区切りの矩形が
+/// 編集面を重なりも隙間もなく埋め、各ペインが最小 (20 × 3 と見出し) 以上。縮退表示ではフォーカスのペインだけが編集面の
+/// 全体に出る。
+fn check_tiling(w: &Window, size: CellSize) -> Result<(), String> {
+    let l = w.layout(size);
+    if w.is_collapsed(size) {
+        let ok = l.leaves.len() == 1
+            && l.leaves[0].pane == w.focus
+            && l.leaves[0].bar.is_none()
+            && (l.leaves[0].body.cols, l.leaves[0].body.rows) == (size.cols, size.rows)
+            && l.dividers.is_empty();
+        return if ok {
+            Ok(())
+        } else {
+            Err(format!("{:?}: 縮退表示の配置 {l:?}", w.id))
+        };
+    }
+    let split = w.panes.len() > 1;
+    let mut rects: Vec<CellRect> = l.dividers.clone();
+    for x in &l.leaves {
+        if split {
+            let Some(bar) = x.bar else {
+                return Err(format!("{:?}: {:?} に見出しが無い", w.id, x.pane));
+            };
+            if x.body.cols < PANE_MIN.cols || x.body.rows + bar.rows < PANE_MIN.rows {
+                return Err(format!("{:?}: {:?} が最小より小さい: {x:?}", w.id, x.pane));
+            }
+            rects.push(bar);
+        }
+        rects.push(x.body);
+    }
+    let area = |r: &CellRect| u32::from(r.cols) * u32::from(r.rows);
+    let total: u32 = rects.iter().map(area).sum();
+    if total != u32::from(size.cols) * u32::from(size.rows) {
+        return Err(format!(
+            "{:?}: 矩形の面積の和 {total} が編集面 {size:?} と違う: {l:?}",
+            w.id
+        ));
+    }
+    for (i, a) in rects.iter().enumerate() {
+        if u32::from(a.col) + u32::from(a.cols) > u32::from(size.cols)
+            || u32::from(a.row) + u32::from(a.rows) > u32::from(size.rows)
+        {
+            return Err(format!("{:?}: {a:?} が編集面の外に出る", w.id));
+        }
+        for b in &rects[i + 1..] {
+            let apart = a.col + a.cols <= b.col
+                || b.col + b.cols <= a.col
+                || a.row + a.rows <= b.row
+                || b.row + b.rows <= a.row;
+            if !apart && area(a) > 0 && area(b) > 0 {
+                return Err(format!("{:?}: {a:?} と {b:?} が重なる", w.id));
+            }
+        }
+    }
+    Ok(())
 }
 
 /// 配置 `l` の中のペイン `pane` の本文の矩形。
@@ -463,32 +641,17 @@ mod tests {
         (st, d, v)
     }
 
-    /// フォーカスのペインの右に、同じ文書を出すペインを足す (分割のコマンドは FR-509 の PR。ここでは木を直に組む)。
+    /// フォーカスのペインを右に分ける (`pane.split_right` の本体)。新しいペインにフォーカスが移る。
     fn split_right(st: &mut EditorState) -> PaneRef {
-        let (w, p) = st.focused_pane().expect("ペインがある");
-        let d = st.active_document().expect("文書がある");
-        let id = PaneId(st.docs.next_pane);
-        st.docs.next_pane += 1;
-        let view = st.view_for_new_pane(d);
-        let win = st.window_mut(w).expect("Window がある");
-        win.panes.insert(
-            id,
-            Pane {
-                view,
-                views: BTreeMap::from([(d, view)]),
-                recent: Vec::new(),
-            },
+        assert_eq!(
+            st.split_pane(Axis::Row),
+            crate::command::CommandResult::Done
         );
-        win.root = LayoutNode::Split {
-            axis: Axis::Row,
-            children: vec![(LayoutNode::Leaf(p), 5_000), (LayoutNode::Leaf(id), 5_000)],
-        };
-        win.pane_recent.push(id);
-        (w, id)
+        st.focused_pane().expect("ペインがある")
     }
 
     fn focus(st: &mut EditorState, at: PaneRef) {
-        st.window_mut(at.0).expect("Window がある").focus = at.1;
+        st.focus_pane(at);
     }
 
     #[test]
@@ -586,7 +749,9 @@ mod tests {
     fn frame_は葉の順にペインを並べ_主カーソルに矩形の位置を足す() {
         let (mut st, _, va) = state("abc\n");
         st.set_selection(va, Selection::point(ByteOff(2)));
+        let left = st.focused_pane().expect("ペインがある");
         let right = split_right(&mut st);
+        focus(&mut st, left);
         let w = right.0;
         let f = crate::layout::build_frame(&st, w, &[]).expect("Frame");
         assert_eq!(f.panes.len(), 2);
@@ -605,5 +770,100 @@ mod tests {
             }),
             "右のペインの主カーソルは、ペインの中の位置に矩形の左上を足す"
         );
+    }
+
+    #[test]
+    fn 表示していない_view_は表に持つペイン_ペインに属さない_view_はフォーカスのペインの大きさ() {
+        let (mut st, a, _) = state(
+            "a
+",
+        );
+        let (b, vb) = st.add_document(doc("b
+"));
+        let left = st.focused_pane().expect("ペインがある");
+        let right = split_right(&mut st);
+        // どのペインにも属さない View: フォーカスのペイン (右) の大きさ
+        assert_eq!(st.pane_owning(vb), None);
+        assert_eq!(st.view_size(vb), (40, 23));
+        // 右で b を出してから a に戻す: vb は右の表に残り (表示していない)、右のペインの大きさ
+        st.activate_document(b);
+        st.activate_document(a);
+        assert_eq!(st.pane_owning(vb), Some(right));
+        assert_eq!(st.view_rect(vb), None);
+        assert_eq!(st.view_size(vb), (40, 23));
+        // 1 回で求めた全 View の大きさは、View ごとの大きさと同じ
+        let all = st.all_view_sizes();
+        for (v, size) in &all {
+            assert_eq!(st.view_size(*v), *size, "{v:?}");
+        }
+        assert_eq!(all.len(), st.docs.views.len());
+        // 右を閉じる: a の右の View は消え (左にある)、b の View は唯一なのでペインに属さない View として残る
+        assert_eq!(st.close_pane(), crate::command::CommandResult::Done);
+        assert_eq!(st.focused_pane(), Some(left));
+        assert!(st.view(vb).is_some(), "唯一の View は残す");
+        assert_eq!(st.pane_owning(vb), None);
+        assert_eq!(st.view_size(vb), (81, 24));
+        assert_eq!(st.docs.views.len(), 2);
+        st.check_panes().expect("不変条件");
+    }
+
+    #[test]
+    fn 縮退表示ではフォーカスのペインが編集面の全体で_戻すと元の大きさ() {
+        let (mut st, _, va) = state(
+            "a
+",
+        );
+        let right = split_right(&mut st);
+        let vr = st.pane(right).map(|p| p.view).expect("右のペイン");
+        st.set_viewport(30, 24);
+        assert_eq!(st.view_size(vr), (30, 24));
+        assert_eq!(st.view_size(va), (30, 24), "隠れているペインの View も全体");
+        assert_eq!(st.collapsed_position(), Some((2, 2)));
+        assert_eq!(
+            st.shown_message_key(),
+            Some(crate::ui_model::keys::INFO_PANE_COLLAPSED)
+        );
+        st.check_panes().expect("不変条件");
+        st.set_viewport(81, 24);
+        assert_eq!(st.view_size(vr), (40, 23));
+        assert_eq!(st.collapsed_position(), None);
+        st.check_panes().expect("不変条件");
+    }
+
+    #[test]
+    fn 写して作った_view_は表示するペインの矩形でカーソルが見えるようにする() {
+        // 100 行の文書の 90 行目にカーソル。下に分けた 11 行のペインに写すと、写した直後に見える位置へスクロールする
+        let text: String = (0..100)
+            .map(|i| {
+                format!(
+                    "{i}
+"
+                )
+            })
+            .collect();
+        let (mut st, a, va) = state(&text);
+        let at = st.document(a).map(|d| {
+            use eve_text::TextRead as _;
+            d.text().line_to_byte(eve_text::LineIdx(90))
+        });
+        st.set_selection(va, Selection::point(at.expect("行")));
+        st.ensure_cursor_visible(va);
+        let (b, _) = st.add_document(doc("b
+"));
+        // 左を b にしておき、右に分けてから右で a を表示する (最後にフォーカスのあった va を写す)
+        st.activate_document(b);
+        let right = split_right(&mut st);
+        st.set_viewport(81, 12);
+        st.activate_document(a);
+        let vr = st.pane(right).map(|p| p.view).expect("右のペイン");
+        assert_ne!(vr, va);
+        let v = st.view(vr).expect("View");
+        let top = st.document(a).map(|d| {
+            use eve_text::TextRead as _;
+            d.text().byte_to_line(v.scroll.top).0
+        });
+        let rows = usize::from(st.view_size(vr).1);
+        let top = top.expect("文書");
+        assert!(top <= 90 && 90 < top + rows, "top {top}、行数 {rows}");
     }
 }

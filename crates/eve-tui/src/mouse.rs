@@ -183,9 +183,10 @@ impl MouseTracker {
         let now = r.buttons & (LEFT | RIGHT | MIDDLE);
         let before = self.buttons;
         self.buttons = now;
-        // 押す先: ボタンを押している間は、押したペイン (の中で押したときだけ)。何も押していなければポインタの下のペイン
+        // 押す先: ボタンを押している間は、押したペイン (の中で押したときだけ)。何も押していなければポインタの下のペイン。
+        // 同じペインかは矩形で比べる (押している間に Frame が替わり、そのペインが別の文書の View を出していても同じペイン)
         let target = match self.pressed {
-            Some(p) if self.pressed_in_pane != 0 => hit.filter(|h| *h == p),
+            Some(p) if self.pressed_in_pane != 0 => hit.filter(|h| h.rect == p.rect),
             _ => hit,
         };
         let mut out = Vec::new();
@@ -412,6 +413,19 @@ mod tests {
         let u = t.feed(rec(50, 1, 0, 0), &g);
         assert_eq!(kinds(&u), [MouseKind::Up(MouseButton::Left)]);
         assert_eq!(u[0].at.view, ViewId(1));
+    }
+
+    #[test]
+    fn 押している間に_frame_が替わっても同じペインで押した_2_つ目のボタンは届く() {
+        let (g, mut t) = (two(), MouseTracker::new());
+        t.feed(rec(5, 1, LEFT, 0), &g);
+        // 左のペインが別の文書 (View 3) に切り替わった Frame の幾何
+        let g2 = Geometry {
+            panes: vec![pane(3, 0, 0, 40, 9), pane(2, 41, 0, 40, 9)],
+        };
+        let d = t.feed(rec(6, 1, LEFT | RIGHT, 0), &g2);
+        assert_eq!(kinds(&d), [MouseKind::Down(MouseButton::Right)]);
+        assert_eq!(d[0].at.view, ViewId(3));
     }
 
     #[test]

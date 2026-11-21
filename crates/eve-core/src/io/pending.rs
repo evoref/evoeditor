@@ -25,7 +25,8 @@ pub(crate) enum Pending {
         doc: DocumentId,
         view: ViewId,
         path: FsPath,
-        replace: Option<DocumentId>,
+        /// 切り替え元 (開いた時点のフォーカスのペインと、そこに出ていた文書。03 §9.9 の PANE-8 (b))。
+        replace: Option<crate::io::open::OpenFrom>,
         /// 投入したときの指定 (確認の回答で足して再投入する、03 §9.2)。
         opts: OpenOptions,
         /// 用途。`Reopen` / `Reload` は同じ文書・View の中身を差し替える。

@@ -6,6 +6,8 @@
 
 pub(crate) mod buffer;
 mod host_api;
+pub(crate) mod pane_cmds;
+pub(crate) mod pane_tree;
 pub use crate::io::config_reload::{
     CONFIG_FILE, ConfigSources, KEYMAP_FILE, LocaleFiles, LocaleScan, scan_locales,
 };
@@ -70,6 +72,7 @@ pub fn builtin_registry() -> CommandRegistry {
     crate::io::file_cmds::register(&mut r);
     crate::io::external::register(&mut r);
     buffer::register(&mut r);
+    pane_cmds::register(&mut r);
     crate::io::save_all::register(&mut r);
     crate::ui_model::help::register(&mut r);
     crate::io::config_reload::register(&mut r);
