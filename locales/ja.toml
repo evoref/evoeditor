@@ -563,6 +563,22 @@ text = "{item} は、既定の続けて押すキー (Ctrl+K など) の先頭で
 hint = "既定の割当を残しました。別のキーにしてください"
 text = "{item} の割当だと、終了・コマンドパレット・取消のどれかに届かなくなります"
 
+[msg.config.keymap_user_chord_prefix]
+hint = "続けて押すキーを優先し、この割当は使いません"
+text = "{item} は、続けて押すキー {value} の先頭です"
+
+[msg.config.keymap_chord_shadows_default]
+hint = "続けて押すキーを優先します。既定のキーも使うには、別のキーで始めてください"
+text = "{item} を割り当てたため、既定の割当 {value} は使えなくなります"
+
+[msg.config.keymap_duplicate_key]
+hint = "後に書いた割当を使います"
+text = "{item} は {value} と同じキーです"
+
+[msg.config.keymap_bad_args]
+hint = "引数の名前と型は設定の仕様 (07 §11.6) を見てください。この割当は使いません"
+text = "{item} の args の {value} がコマンドの引数に合いません"
+
 [msg.config.locale_accelerator]
 hint = "同梱と同じ英字を同じ順に書いてください"
 text = "{item} の [S] のような角括弧の英字が同梱の文言と違います"
@@ -1338,6 +1354,7 @@ quit = "終了は {key:app.quit}"
 palette = "すべてのコマンドは {key:ui.palette_open} のコマンドパレットから探して実行できます"
 
 [ui.help.keys]
+disabled = "! の付いたキーは、キーマップの続けて押すキーの先頭に使われているため使えません (設定の診断を表示で確かめられます)"
 note = "続けて押すキー (例: Ctrl+K S) は、順に押します。同じコマンドに複数のキーがあるときは、コンマで並べます"
 unreachable = "* の付いたキーは、この端末では届きません (コマンドパレットか、ほかのキーで実行できます)"
 

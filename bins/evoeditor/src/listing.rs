@@ -7,7 +7,9 @@
 //!   [ { "name", "type", "required" } ], "when", "permission", "hidden", "keys": [ { "context", "key", "label",
 //!   "enhanced" } ] } ] }`。コマンドは `CommandId` の順、`keys` は組込みの既定キーマップの割当 (07 §7.1 のコンテキストの順、その中は層の順・登録の順)。
 //! - `--dump-keymap --json`: `{ "format", "locale", "bindings": [ { "context", "key", "label", "command", "title",
-//!   "when", "layer", "enhanced" } ] }`。コンテキストは 07 §7.1 の順、同じコンテキストの中は層の優先順・登録の順。
+//!   "when", "layer", "enhanced", "args", "disabled_by" } ] }`。コンテキストは 07 §7.1 の順、同じコンテキストの中は層の
+//!   優先順・登録の順。`args` は割当の引数の表 (無ければ `{}`)、`disabled_by` はプレフィックスの衝突で使えなくなった割当
+//!   を無効にしたチョードのキー (使える割当は空。v0.5、07 §7.7)。使えなくなった割当はそのコンテキストの後ろに並ぶ。
 //!
 //! `key` は設定の表記 (`ctrl+k s`。`keymap.toml` にそのまま書ける)、`label` は画面の表記 (`eve_view::key_notation`、04 §7.8)。
 //! `permission` は 07 §11.6 の perm 列の表記 (`-` / `read` / `propose` / `ui`)。`when` の空は常に真。
@@ -16,8 +18,8 @@ use std::fmt::Write as _;
 
 use eve_config::Catalog;
 use eve_core::{
-    Binding, CommandKind, KEYMAP_CONTEXTS, Keymap, Permission, builtin_registry, command_args,
-    command_hidden, resolve_keymap,
+    ArgValue, Args, Binding, CommandKind, KEYMAP_CONTEXTS, Keymap, Permission, builtin_registry,
+    command_args, command_hidden, resolve_keymap,
 };
 use eve_view::{KeyCode, KeyStroke, Modifiers};
 
@@ -123,6 +125,8 @@ fn perm_name(p: Permission) -> &'static str {
 struct Row<'a> {
     layer: &'static str,
     b: &'a Binding,
+    /// プレフィックスの衝突で使えなくなった割当なら、それを無効にしたチョード (07 §7.6 / §7.7)。
+    disabled_by: Option<&'a Binding>,
 }
 
 impl Row<'_> {
@@ -133,9 +137,17 @@ impl Row<'_> {
     fn label(&self) -> String {
         eve_view::key_notation(&self.b.sequence, false)
     }
+
+    /// 無効にしたチョードのキー (設定の表記)。使える割当は空。
+    fn disabled_by(&self) -> String {
+        self.disabled_by
+            .map(|c| config_keys(&c.sequence))
+            .unwrap_or_default()
+    }
 }
 
-/// 割当を 07 §7.1 のコンテキストの順に並べる (同じコンテキストの中は層の優先順・登録の順のまま)。
+/// 割当を 07 §7.1 のコンテキストの順に並べる (同じコンテキストの中は層の優先順・登録の順のまま。プレフィックスの衝突で
+/// 使えなくなった割当は、そのコンテキストの後ろ)。
 fn sorted_rows(km: &Keymap) -> Vec<Row<'_>> {
     let rank = |ctx: &str| {
         KEYMAP_CONTEXTS
@@ -143,13 +155,46 @@ fn sorted_rows(km: &Keymap) -> Vec<Row<'_>> {
             .position(|c| *c == ctx)
             .unwrap_or(KEYMAP_CONTEXTS.len())
     };
-    let mut rows: Vec<Row<'_>> = km
-        .listed_bindings()
-        .into_iter()
-        .map(|(layer, b)| Row { layer, b })
-        .collect();
+    let listed = km.listed_bindings().into_iter().map(|(layer, b)| Row {
+        layer,
+        b,
+        disabled_by: None,
+    });
+    let disabled = km.disabled_bindings().into_iter().map(|d| Row {
+        layer: d.layer,
+        b: d.binding,
+        disabled_by: Some(d.by),
+    });
+    let mut rows: Vec<Row<'_>> = listed.chain(disabled).collect();
     rows.sort_by_key(|r| rank(r.b.context));
     rows
+}
+
+/// 引数の値の表記 (TOML と JSON で同じ: 文字列は `"…"`、整数と真偽値はそのまま)。
+fn arg_value_text(v: &ArgValue) -> String {
+    match v {
+        ArgValue::Int(n) => n.to_string(),
+        ArgValue::Str(s) => json_str(s),
+        ArgValue::Bool(b) => b.to_string(),
+    }
+}
+
+/// 割当の引数の表。TOML (`{ name = 値 }`) か JSON (`{ "name": 値 }`)。引数が無ければ `{}`。
+fn args_text(args: &Args, json: bool) -> String {
+    if args.is_empty() {
+        return "{}".to_owned();
+    }
+    let items: Vec<String> = args
+        .iter()
+        .map(|(k, v)| {
+            if json {
+                format!("{}: {}", json_str(k), arg_value_text(v))
+            } else {
+                format!("{k} = {}", arg_value_text(v))
+            }
+        })
+        .collect();
+    format!("{{ {} }}", items.join(", "))
 }
 
 /// コマンドの一覧 (`--list-commands`)。キーは組込みの既定キーマップの割当。
@@ -158,6 +203,7 @@ pub(crate) fn list_commands_text(cat: &Catalog, locale: &str, json: bool) -> Str
     let (km, _) = resolve_keymap(&eve_config::KeymapFile::default());
     let rows: Vec<(&'static str, &Binding)> = sorted_rows(&km)
         .into_iter()
+        .filter(|r| r.disabled_by.is_none())
         .map(|r| (r.layer, r.b))
         .collect();
     let title = |id: &str| cat.get(&format!("cmd.{id}.title")).unwrap_or("").to_owned();
@@ -252,7 +298,7 @@ pub(crate) fn dump_keymap_text(cat: &Catalog, locale: &str, km: &Keymap, json: b
             let id = r.b.command.as_str();
             let _ = write!(
                 out,
-                "{}\n    {{ \"context\": {}, \"key\": {}, \"label\": {}, \"command\": {}, \"title\": {}, \"when\": {}, \"layer\": {}, \"enhanced\": {} }}",
+                "{}\n    {{ \"context\": {}, \"key\": {}, \"label\": {}, \"command\": {}, \"title\": {}, \"when\": {}, \"layer\": {}, \"enhanced\": {}, \"args\": {}, \"disabled_by\": {} }}",
                 if i == 0 { "" } else { "," },
                 json_str(r.b.context),
                 json_str(&r.key()),
@@ -262,6 +308,8 @@ pub(crate) fn dump_keymap_text(cat: &Catalog, locale: &str, km: &Keymap, json: b
                 json_str(&r.b.when_src),
                 json_str(r.layer),
                 r.b.enhanced,
+                args_text(&r.b.args, true),
+                json_str(&r.disabled_by()),
             );
         }
         out.push_str("\n  ]\n}\n");
@@ -285,23 +333,32 @@ pub(crate) fn dump_keymap_text(cat: &Catalog, locale: &str, km: &Keymap, json: b
             if done[a] {
                 continue;
             }
+            // プレフィックスの衝突で使えなくなった割当は、注釈の行にする (読み直しても割当にならない、07 §7.7)
+            if r.disabled_by.is_some() {
+                done[a] = true;
+                let _ = writeln!(
+                    out,
+                    "# {} = {}  # {} ({}) disabled_by {}",
+                    json_str(&r.key()),
+                    toml_value(r.b),
+                    title(r.b.command.as_str()),
+                    r.layer,
+                    json_str(&r.disabled_by())
+                );
+                continue;
+            }
             let same: Vec<usize> = (a..group.len())
-                .filter(|&k| !done[k] && group[k].b.sequence == r.b.sequence)
+                .filter(|&k| {
+                    !done[k]
+                        && group[k].disabled_by.is_none()
+                        && group[k].b.sequence == r.b.sequence
+                })
                 .collect();
             let values: Vec<String> = same
                 .iter()
                 .map(|&k| {
                     done[k] = true;
-                    let b = group[k].b;
-                    if b.when_src.is_empty() {
-                        json_str(b.command.as_str())
-                    } else {
-                        format!(
-                            "{{ command = {}, when = {} }}",
-                            json_str(b.command.as_str()),
-                            json_str(&b.when_src)
-                        )
-                    }
+                    toml_value(group[k].b)
                 })
                 .collect();
             let value = if values.len() == 1 {
@@ -326,6 +383,21 @@ pub(crate) fn dump_keymap_text(cat: &Catalog, locale: &str, km: &Keymap, json: b
         i = j;
     }
     out
+}
+
+/// 割当 1 つの値の TOML の表記 (07 §7.1): `when` も `args` も無ければコマンド ID の文字列、あれば表。
+fn toml_value(b: &Binding) -> String {
+    if b.when_src.is_empty() && b.args.is_empty() {
+        return json_str(b.command.as_str());
+    }
+    let mut parts = vec![format!("command = {}", json_str(b.command.as_str()))];
+    if !b.args.is_empty() {
+        parts.push(format!("args = {}", args_text(&b.args, false)));
+    }
+    if !b.when_src.is_empty() {
+        parts.push(format!("when = {}", json_str(&b.when_src)));
+    }
+    format!("{{ {} }}", parts.join(", "))
 }
 
 /// UI の言語の選択 (`--locale` > `ui.locale` > `EVE_LANG` > OS、07 §17.1) と、そのカタログ (画面と同じく、ユーザーの

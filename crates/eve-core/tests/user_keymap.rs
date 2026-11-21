@@ -1,4 +1,5 @@
-//! ユーザーのキーマップ (docs/07 §7、01 FR-604): `keymap.toml` の単一ストロークの上書き・追加・解除と、その診断。
+//! ユーザーのキーマップ (docs/07 §7、01 FR-604 / FR-608): `keymap.toml` の単一ストロークとチョードの上書き・追加・
+//! 解除と、その診断 (衝突の検出を含む)。
 
 use eve_config::{DiagKind, KeymapProblem, load_keymap_str};
 use eve_testkit::Harness;
@@ -124,17 +125,6 @@ fn 問題のある割当だけを無効にして診断を返す() {
 }
 
 #[test]
-fn 二ストロークと_args_は未対応の情報診断() {
-    let mut h = Harness::new();
-    let d = load(
-        &mut h,
-        "[keys.editor]\n\"ctrl+k ctrl+c\" = \"edit.delete_line\"\n\"f6\" = { command = \"edit.delete_line\", args = { a = 1 } }\n",
-    );
-    assert_eq!(d.len(), 2);
-    assert!(d.iter().all(|(_, k)| *k == DiagKind::Unsupported));
-}
-
-#[test]
 fn 脱出キーに届かなくなる割当は外して既定を残す() {
     let mut h = Harness::new();
     let d = load(
@@ -240,4 +230,371 @@ fn palette_の割当はバッファ一覧に漏れず_list_の割当は両方に
     );
     h.keys("f7");
     assert_eq!(selected(&mut h), before + 1, "list の割当は届く");
+}
+
+// ---------- v0.5 の M29: ユーザー定義のチョード (FR-604) と衝突の検出 (FR-608) ----------
+
+const KEYMAP: &str = "/evo/config/keymap.toml";
+
+/// `keymap.toml` の本文を読ませて、診断を返す。
+fn diagnostics(h: &mut Harness, text: &str) -> Vec<eve_config::Diagnostic> {
+    h.editor.set_user_keymap(&load_keymap_str(text))
+}
+
+/// `p` の診断の (キー, 値, 行)。
+fn of_kind(d: &[eve_config::Diagnostic], p: KeymapProblem) -> Vec<(String, String, u32)> {
+    d.iter()
+        .filter(|d| d.kind == DiagKind::Keymap(p))
+        .map(|d| (d.key.clone(), d.value.clone(), d.line))
+        .collect()
+}
+
+/// ヘルプのキー一覧 (`help.keys`) の (タイトル → キーの列) と本文の行。
+fn help_keys(h: &mut Harness) -> (Vec<(String, String)>, Vec<String>) {
+    h.cmd("help.keys");
+    let f = h.frame();
+    let eve_view::OverlayModel::Help { lines, .. } = &f.overlays[0] else {
+        panic!("ヘルプではない")
+    };
+    let entries = lines
+        .iter()
+        .filter(|l| l.kind == eve_view::HelpLineKind::Entry)
+        .filter_map(|l| Some((cell_text(&l.text), cell_text(l.key.as_ref()?))))
+        .collect();
+    let body = lines
+        .iter()
+        .filter(|l| l.kind == eve_view::HelpLineKind::Body)
+        .map(|l| cell_text(&l.text))
+        .collect();
+    (entries, body)
+}
+
+// verifies: AC-FR-604-1
+#[test]
+fn ユーザーのチョードを解決し_ストロークの数に上限は無い() {
+    let mut h = Harness::new();
+    let d = load(
+        &mut h,
+        "[keys.editor]\n\"ctrl+j d\" = \"edit.duplicate_line\"\n\"ctrl+j ctrl+j ctrl+j l\" = \"edit.delete_line\"\n",
+    );
+    assert!(d.is_empty(), "{d:?}");
+    h.paste("a\nb\n");
+    h.keys("ctrl+home ctrl+j");
+    // 2 打目の文字は端末から Text で届く (K1)
+    h.text("d");
+    assert_eq!(h.doc_text(), "a\na\nb\n");
+    h.keys("ctrl+j ctrl+j ctrl+j");
+    assert_eq!(h.doc_text(), "a\na\nb\n", "途中では何もしない");
+    h.text("l");
+    assert_eq!(h.doc_text(), "a\nb\n");
+}
+
+// verifies: AC-FR-604-1
+#[test]
+fn 割当の_args_はコマンドに渡る() {
+    let mut h = Harness::new();
+    let d = load(
+        &mut h,
+        concat!(
+            "[keys.editor]\n",
+            "\"ctrl+j i\" = { command = \"edit.insert_text\", args = { text = \"hello\" } }\n",
+            "\"f6\" = { command = \"cursor.goto_line\", args = { line = 2 } }\n",
+            "\"f7\" = { command = \"cursor.goto_line\", args = { line = \"$\" } }\n",
+        ),
+    );
+    assert!(d.is_empty(), "{d:?}");
+    h.keys("ctrl+j");
+    h.text("i");
+    assert_eq!(h.doc_text(), "hello");
+    h.paste("\nx\ny");
+    h.keys("f6");
+    assert_eq!(h.selection_range(), (6, 6), "2 行目の先頭");
+    h.keys("f7");
+    assert_eq!(h.selection_range().0, 8, "最終行");
+}
+
+// verifies: AC-FR-604-1
+#[test]
+fn none_はチョードの割当も解除し_ほかのチョードは残る() {
+    let mut h = Harness::new();
+    let d = load(&mut h, "[keys.editor]\n\"ctrl+k d\" = \"none\"\n");
+    assert!(d.is_empty(), "{d:?}");
+    h.paste("a\n");
+    h.keys("ctrl+home ctrl+k");
+    h.text("d");
+    assert_eq!(h.doc_text(), "a\n", "複製されず、d も入らない");
+    h.keys("ctrl+k");
+    h.text("l");
+    assert_eq!(h.doc_text(), "", "ほかの既定のチョード (行の削除) は効く");
+}
+
+// verifies: AC-FR-604-2, AC-FR-608-1
+#[test]
+fn ユーザーのチョードが既定の単体を無効にしたら_チョードが勝ち_警告で名指しする() {
+    let mut h = Harness::new();
+    let d = diagnostics(
+        &mut h,
+        "[keys.editor]\n\"f6\" = \"edit.delete_line\"\n\"ctrl+s x\" = \"edit.duplicate_line\"\n",
+    );
+    let shadow = of_kind(&d, KeymapProblem::ChordShadowsDefault);
+    assert_eq!(
+        shadow,
+        [(
+            "keys.editor.ctrl+s x".to_owned(),
+            "editor: Ctrl+S = file.save".to_owned(),
+            3
+        )],
+        "{d:?}"
+    );
+    assert!(
+        d.iter()
+            .all(|d| d.severity == eve_config::Severity::Warning)
+    );
+    h.text("a");
+    h.keys("ctrl+s");
+    assert_eq!(h.overlay(), "", "保存 (名前を尋ねる) にならず、続きを待つ");
+    h.text("x");
+    assert_eq!(h.doc_text(), "a\na");
+}
+
+// verifies: AC-FR-608-1
+#[test]
+fn ユーザーの割当どうしの衝突は短い側を名指しして警告し_チョードが勝つ() {
+    let mut h = Harness::new();
+    let d = diagnostics(
+        &mut h,
+        "[keys.editor]\n\"ctrl+j x\" = \"edit.duplicate_line\"\n\"ctrl+j\" = \"edit.delete_line\"\n",
+    );
+    assert_eq!(
+        of_kind(&d, KeymapProblem::UserChordPrefix),
+        [("keys.editor.ctrl+j".to_owned(), "ctrl+j x".to_owned(), 3)],
+        "{d:?}"
+    );
+    h.paste("a\n");
+    h.keys("ctrl+home ctrl+j");
+    assert_eq!(h.doc_text(), "a\n", "単体 (行の削除) は使わない");
+    h.text("x");
+    assert_eq!(h.doc_text(), "a\na\n");
+}
+
+// verifies: AC-FR-608-1
+#[test]
+fn 既定のチョードの先頭と同じ単体は_global_でも警告して使わない() {
+    let mut h = Harness::new();
+    let d = diagnostics(&mut h, "[keys.prompt]\n\"ctrl+k\" = \"select.all\"\n");
+    assert_eq!(
+        of_kind(&d, KeymapProblem::ChordPrefix),
+        [("keys.prompt.ctrl+k".to_owned(), "ctrl+k".to_owned(), 2)],
+        "prompt は global (Ctrl+K R など) と同時に参照される: {d:?}"
+    );
+}
+
+// verifies: AC-FR-608-1
+#[test]
+fn 別の書き方の同じキーは後の行を使い_情報の診断を出す() {
+    let mut h = Harness::new();
+    let d = diagnostics(
+        &mut h,
+        "[keys.editor]\n\"ctrl+j\" = \"edit.delete_line\"\n\"mod+j\" = \"edit.duplicate_line\"\n",
+    );
+    assert_eq!(
+        of_kind(&d, KeymapProblem::DuplicateKey),
+        [("keys.editor.mod+j".to_owned(), "ctrl+j".to_owned(), 3)],
+        "{d:?}"
+    );
+    assert_eq!(d[0].severity, eve_config::Severity::Info);
+    h.paste("a\n");
+    h.keys("ctrl+home ctrl+j");
+    assert_eq!(h.doc_text(), "a\na\n", "後の行 (複製) を使う");
+    // 表のキーの順 (ctrl+j が先) と行の順が逆でも、後の行を使う
+    let mut h = Harness::new();
+    let d = diagnostics(
+        &mut h,
+        "[keys.editor]\n\"mod+j\" = \"edit.duplicate_line\"\n\"ctrl+j\" = \"edit.delete_line\"\n",
+    );
+    assert_eq!(
+        of_kind(&d, KeymapProblem::DuplicateKey),
+        [("keys.editor.ctrl+j".to_owned(), "mod+j".to_owned(), 3)],
+        "{d:?}"
+    );
+    h.paste("a\nb\n");
+    h.keys("ctrl+home ctrl+j");
+    assert_eq!(h.doc_text(), "b\n", "後の行 (削除) を使う");
+}
+
+// verifies: AC-FR-604-2, AC-FR-608-1
+#[test]
+fn 脱出キーを先頭にするチョードはエラーにして外し_既定を残す() {
+    let mut h = Harness::new();
+    let d = diagnostics(
+        &mut h,
+        "[keys.global]\n\"ctrl+q x\" = \"edit.delete_line\"\n",
+    );
+    let e = d
+        .iter()
+        .find(|d| d.kind == DiagKind::Keymap(KeymapProblem::EscapeKey))
+        .unwrap_or_else(|| panic!("{d:?}"));
+    assert_eq!(
+        (e.key.as_str(), e.value.as_str(), e.severity),
+        (
+            "keys.global.ctrl+q x",
+            "app.quit",
+            eve_config::Severity::Error
+        )
+    );
+    h.text("x");
+    h.keys("ctrl+q");
+    assert_eq!(h.overlay(), "dialog", "終了の確認が出る");
+}
+
+// verifies: AC-FR-608-1
+#[test]
+fn 一打目が文字キーのチョードは使わず_二打目以降の文字は使える() {
+    let mut h = Harness::new();
+    let d = diagnostics(
+        &mut h,
+        "[keys.editor]\n\"a b\" = \"edit.delete_line\"\n\"f6 b\" = \"edit.duplicate_line\"\n",
+    );
+    assert_eq!(
+        of_kind(&d, KeymapProblem::PrintableKey),
+        [("keys.editor.a b".to_owned(), "a b".to_owned(), 2)]
+    );
+    h.text("a");
+    h.text("b");
+    assert_eq!(h.doc_text(), "ab", "文字入力は奪われない");
+    h.keys("f6");
+    h.text("b");
+    assert_eq!(h.doc_text(), "ab\nab");
+}
+
+// verifies: AC-FR-608-2
+#[test]
+fn 合わない割当はそれだけを使わずに警告し_同じファイルの他の割当は効く() {
+    let mut h = Harness::new();
+    let d = diagnostics(
+        &mut h,
+        concat!(
+            "[keys.editor]\n",
+            "\"f6\" = { command = \"cursor.goto_line\", args = { row = 1 } }\n",
+            "\"f7\" = { command = \"cursor.goto_line\", args = { line = \"x\" } }\n",
+            "\"f8\" = { command = \"file.set_line_ending\", args = { eol = \"lf2\" } }\n",
+            "\"f9\" = { command = \"file.set_line_ending\", args = {} }\n",
+            "\"f10\" = { command = \"edit.duplicate_line\", args = { a = 1 } }\n",
+            "\"f11\" = \"edit.duplicate_line\"\n",
+            "\"f12\" = \"no.such_command\"\n",
+            "\"ctrl+j\" = { command = \"edit.delete_line\", when = \"((\" }\n",
+            "\"ctrl+j x\" = { command = \"edit.delete_line\", when = \"doc.no_such\" }\n",
+        ),
+    );
+    // 診断は表のキーの順に並ぶので、行の順に並べ替えて比べる
+    let mut bad = of_kind(&d, KeymapProblem::BadArgs);
+    bad.sort_by_key(|(_, _, line)| *line);
+    let bad: Vec<(String, String)> = bad.into_iter().map(|(k, v, _)| (k, v)).collect();
+    let want: Vec<(String, String)> = [
+        ("f6", "row"),
+        ("f7", "line"),
+        ("f8", "eol"),
+        ("f9", "eol"),
+        ("f10", "a"),
+    ]
+    .iter()
+    .map(|(k, v)| (format!("keys.editor.{k}"), (*v).to_owned()))
+    .collect();
+    assert_eq!(bad, want, "{d:?}");
+    for p in [
+        KeymapProblem::UnknownCommand,
+        KeymapProblem::BadWhen,
+        KeymapProblem::UnknownWhenVar,
+    ] {
+        assert_eq!(of_kind(&d, p).len(), 1, "{p:?} {d:?}");
+    }
+    assert!(
+        d.iter()
+            .all(|d| d.severity == eve_config::Severity::Warning),
+        "どれも起動を止めない警告: {d:?}"
+    );
+    h.paste("a");
+    h.keys("f6 f10 f11");
+    assert_eq!(h.doc_text(), "a\na", "f11 だけが効く");
+}
+
+// verifies: AC-FR-604-3
+#[test]
+fn ヘルプのキー一覧にユーザーのチョードと無効にした単体の割当が出る() {
+    let mut h = Harness::new();
+    load(
+        &mut h,
+        "[keys.editor]\n\"ctrl+z x\" = \"edit.duplicate_line\"\n",
+    );
+    let (entries, body) = help_keys(&mut h);
+    let key_of = |title: &str| {
+        entries
+            .iter()
+            .find(|(t, _)| t == title)
+            .map(|(_, k)| k.clone())
+            .unwrap_or_else(|| panic!("{title}: {entries:?}"))
+    };
+    assert!(key_of("行を複製").contains("Ctrl+Z X"), "{entries:?}");
+    assert_eq!(key_of("元に戻す"), "Ctrl+Z!", "{entries:?}");
+    assert!(
+        body.iter().any(|l| l.starts_with("! の付いたキーは")),
+        "{body:?}"
+    );
+    // 衝突が無ければ印も注記も出ない
+    let mut h = Harness::new();
+    let (entries, body) = help_keys(&mut h);
+    assert!(entries.iter().all(|(_, k)| !k.contains('!')), "{entries:?}");
+    assert!(body.iter().all(|l| !l.starts_with("! の付いたキーは")));
+}
+
+/// 一覧 (`config.show_diagnostics`) の (各行の本文, 各行の右の列)。
+fn diagnostics_list(h: &mut Harness) -> (Vec<String>, Vec<String>) {
+    h.cmd("config.show_diagnostics");
+    let f = h.frame();
+    let eve_view::OverlayModel::List { items, .. } = &f.overlays[0] else {
+        panic!("一覧が出ていない")
+    };
+    (
+        items.iter().map(|i| cell_text(&i.label)).collect(),
+        items
+            .iter()
+            .map(|i| i.detail.as_ref().map(cell_text).unwrap_or_default())
+            .collect(),
+    )
+}
+
+// verifies: AC-FR-608-1
+#[test]
+fn 衝突の診断は再読込でも出て_一覧にファイルと行で並ぶ() {
+    let mut h = Harness::new();
+    h.fs.add_file(
+        KEYMAP,
+        b"[keys.editor]\n\"ctrl+j\" = \"edit.delete_line\"\n\"mod+j\" = \"edit.duplicate_line\"\n\"ctrl+s x\" = \"edit.delete_line\"\n",
+    );
+    h.cmd("config.reload");
+    h.run_jobs();
+    let (rows, places) = diagnostics_list(&mut h);
+    let mut found: Vec<(&str, &str)> = places
+        .iter()
+        .map(String::as_str)
+        .zip(rows.iter().map(String::as_str))
+        .collect();
+    found.sort_unstable();
+    assert_eq!(found.len(), 2, "{rows:?}");
+    assert_eq!(found[0].0, "keymap.toml:3");
+    assert!(
+        found[0].1.starts_with("情報: ") && found[0].1.contains("ctrl+j"),
+        "{rows:?}"
+    );
+    assert_eq!(found[1].0, "keymap.toml:4");
+    assert!(
+        found[1].1.starts_with("警告: ") && found[1].1.contains("Ctrl+S = file.save"),
+        "{rows:?}"
+    );
+    // 起動は止まらず、チョードは効く
+    h.keys("esc");
+    h.paste("a");
+    h.keys("ctrl+s");
+    h.text("x");
+    assert_eq!(h.doc_text(), "");
 }

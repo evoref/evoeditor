@@ -8,7 +8,7 @@ use std::borrow::Cow::Borrowed as B;
 
 use crate::catalog::Entry;
 
-/// `locales/en.toml` の文言 (828 件)。
+/// `locales/en.toml` の文言 (837 件)。
 #[rustfmt::skip]
 pub(crate) static EN: &[Entry] = &[
     (B("cmd.app.quit.description"), B("Quit the editor.")),
@@ -292,12 +292,18 @@ pub(crate) static EN: &[Entry] = &[
     (B("msg.config.invalid_value.text"), B("The value {value} of {item} cannot be used")),
     (B("msg.config.invalid_value_no_default.hint"), B("Allowed values: {allowed}. This item is ignored")),
     (B("msg.config.invalid_value_no_default.text"), B("The value {value} of {item} cannot be used")),
+    (B("msg.config.keymap_bad_args.hint"), B("See the config spec (07 §11.6) for argument names and types. This binding is ignored")),
+    (B("msg.config.keymap_bad_args.text"), B("The argument {value} in the args of {item} does not match the command")),
     (B("msg.config.keymap_bad_key.hint"), B("Examples: ctrl+shift+s, alt+up, f5. This binding is ignored")),
     (B("msg.config.keymap_bad_key.text"), B("The key in {item} is not valid")),
     (B("msg.config.keymap_bad_when.hint"), B("See the config spec (07 §7.3) for the syntax. This binding is ignored")),
     (B("msg.config.keymap_bad_when.text"), B("The when clause in {item} is not valid")),
     (B("msg.config.keymap_chord_prefix.hint"), B("The key sequence wins. This binding is ignored")),
     (B("msg.config.keymap_chord_prefix.text"), B("{item} is the first key of a default key sequence (such as Ctrl+K)")),
+    (B("msg.config.keymap_chord_shadows_default.hint"), B("The key sequence wins. To keep the default key, start the sequence with another key")),
+    (B("msg.config.keymap_chord_shadows_default.text"), B("{item} makes the default binding {value} unusable")),
+    (B("msg.config.keymap_duplicate_key.hint"), B("The binding written later is used")),
+    (B("msg.config.keymap_duplicate_key.text"), B("{item} is the same key as {value}")),
     (B("msg.config.keymap_escape_key.hint"), B("The default binding was kept. Choose another key")),
     (B("msg.config.keymap_escape_key.text"), B("The binding {item} would make quit, the command palette or cancel unreachable")),
     (B("msg.config.keymap_printable_key.hint"), B("Combine it with ctrl or alt. This binding is ignored")),
@@ -308,6 +314,8 @@ pub(crate) static EN: &[Entry] = &[
     (B("msg.config.keymap_unknown_context.text"), B("The context in {item} is not available")),
     (B("msg.config.keymap_unknown_when_var.hint"), B("See the config spec (07 §7.3) for the available variables. This binding is ignored")),
     (B("msg.config.keymap_unknown_when_var.text"), B("{value} in the when clause of {item} is not a known variable")),
+    (B("msg.config.keymap_user_chord_prefix.hint"), B("The key sequence wins. This binding is ignored")),
+    (B("msg.config.keymap_user_chord_prefix.text"), B("{item} is the first key of the key sequence {value}")),
     (B("msg.config.locale_accelerator.hint"), B("Use the same letters in the same order")),
     (B("msg.config.locale_accelerator.text"), B("The bracketed letters like [S] in {item} differ from the built-in text")),
     (B("msg.config.locale_bad_name.hint"), B("Use 2-3 lowercase letters (fr.toml)")),
@@ -741,6 +749,7 @@ pub(crate) static EN: &[Entry] = &[
     (B("ui.help.intro.palette"), B("Find and run any command from the command palette with {key:ui.palette_open}")),
     (B("ui.help.intro.quit"), B("Quit with {key:app.quit}")),
     (B("ui.help.intro.save"), B("Save with {key:file.save}, save as with {key:file.save_as}")),
+    (B("ui.help.keys.disabled"), B("Keys marked ! cannot be used because a key sequence in your keymap starts with them (see Show Settings Diagnostics)")),
     (B("ui.help.keys.note"), B("Keys written like Ctrl+K S are pressed one after another. Several keys for one command are separated by commas")),
     (B("ui.help.keys.unreachable"), B("Keys marked * do not reach the editor in this terminal (use the command palette or another key)")),
     (B("ui.help.search.anchors"), B("Start / end of the document (^ and $ are the start / end of a line)")),
@@ -841,7 +850,7 @@ pub(crate) static EN: &[Entry] = &[
     (B("ui.too_small"), B("The terminal is too small (at least {cols}x{rows} is needed)")),
 ];
 
-/// `locales/ja.toml` の文言 (828 件)。
+/// `locales/ja.toml` の文言 (837 件)。
 #[rustfmt::skip]
 pub(crate) static JA: &[Entry] = &[
     (B("cmd.app.quit.description"), B("エディタを終了します。")),
@@ -1125,12 +1134,18 @@ pub(crate) static JA: &[Entry] = &[
     (B("msg.config.invalid_value.text"), B("{item} の値 {value} は使えません")),
     (B("msg.config.invalid_value_no_default.hint"), B("使える値: {allowed}。この項目は使いません")),
     (B("msg.config.invalid_value_no_default.text"), B("{item} の値 {value} は使えません")),
+    (B("msg.config.keymap_bad_args.hint"), B("引数の名前と型は設定の仕様 (07 §11.6) を見てください。この割当は使いません")),
+    (B("msg.config.keymap_bad_args.text"), B("{item} の args の {value} がコマンドの引数に合いません")),
     (B("msg.config.keymap_bad_key.hint"), B("例: ctrl+shift+s、alt+up、f5。この割当は使いません")),
     (B("msg.config.keymap_bad_key.text"), B("{item} のキーの書き方が正しくありません")),
     (B("msg.config.keymap_bad_when.hint"), B("書式は設定の仕様 (07 §7.3) を見てください。この割当は使いません")),
     (B("msg.config.keymap_bad_when.text"), B("{item} の when 句が正しくありません")),
     (B("msg.config.keymap_chord_prefix.hint"), B("続けて押すキーを優先し、この割当は使いません")),
     (B("msg.config.keymap_chord_prefix.text"), B("{item} は、既定の続けて押すキー (Ctrl+K など) の先頭です")),
+    (B("msg.config.keymap_chord_shadows_default.hint"), B("続けて押すキーを優先します。既定のキーも使うには、別のキーで始めてください")),
+    (B("msg.config.keymap_chord_shadows_default.text"), B("{item} を割り当てたため、既定の割当 {value} は使えなくなります")),
+    (B("msg.config.keymap_duplicate_key.hint"), B("後に書いた割当を使います")),
+    (B("msg.config.keymap_duplicate_key.text"), B("{item} は {value} と同じキーです")),
     (B("msg.config.keymap_escape_key.hint"), B("既定の割当を残しました。別のキーにしてください")),
     (B("msg.config.keymap_escape_key.text"), B("{item} の割当だと、終了・コマンドパレット・取消のどれかに届かなくなります")),
     (B("msg.config.keymap_printable_key.hint"), B("ctrl や alt を組み合わせたキーにしてください。この割当は使いません")),
@@ -1141,6 +1156,8 @@ pub(crate) static JA: &[Entry] = &[
     (B("msg.config.keymap_unknown_context.text"), B("{item} のコンテキスト名は使えません")),
     (B("msg.config.keymap_unknown_when_var.hint"), B("使える変数は設定の仕様 (07 §7.3) を見てください。この割当は使いません")),
     (B("msg.config.keymap_unknown_when_var.text"), B("{item} の when 句の {value} は使えない変数です")),
+    (B("msg.config.keymap_user_chord_prefix.hint"), B("続けて押すキーを優先し、この割当は使いません")),
+    (B("msg.config.keymap_user_chord_prefix.text"), B("{item} は、続けて押すキー {value} の先頭です")),
     (B("msg.config.locale_accelerator.hint"), B("同梱と同じ英字を同じ順に書いてください")),
     (B("msg.config.locale_accelerator.text"), B("{item} の [S] のような角括弧の英字が同梱の文言と違います")),
     (B("msg.config.locale_bad_name.hint"), B("fr.toml のような英小文字 2〜3 字の名前に")),
@@ -1574,6 +1591,7 @@ pub(crate) static JA: &[Entry] = &[
     (B("ui.help.intro.palette"), B("すべてのコマンドは {key:ui.palette_open} のコマンドパレットから探して実行できます")),
     (B("ui.help.intro.quit"), B("終了は {key:app.quit}")),
     (B("ui.help.intro.save"), B("保存は {key:file.save}、名前を付けて保存は {key:file.save_as}")),
+    (B("ui.help.keys.disabled"), B("! の付いたキーは、キーマップの続けて押すキーの先頭に使われているため使えません (設定の診断を表示で確かめられます)")),
     (B("ui.help.keys.note"), B("続けて押すキー (例: Ctrl+K S) は、順に押します。同じコマンドに複数のキーがあるときは、コンマで並べます")),
     (B("ui.help.keys.unreachable"), B("* の付いたキーは、この端末では届きません (コマンドパレットか、ほかのキーで実行できます)")),
     (B("ui.help.search.anchors"), B("文書の先頭 / 末尾 (^ と $ は行頭 / 行末)")),

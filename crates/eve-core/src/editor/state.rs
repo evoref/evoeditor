@@ -241,7 +241,8 @@ pub(crate) struct KeyLabels {
     /// コマンド → 第一割当のストローク列 (ヒントバーの逆引き)。
     pub(crate) key_seqs: BTreeMap<String, Vec<eve_view::KeyStroke>>,
     /// すべての割当をコマンドごとに集めたもの (ヘルプのキー一覧、04 §8.6)。
-    pub(crate) key_all: BTreeMap<String, Vec<(Vec<eve_view::KeyStroke>, bool)>>,
+    pub(crate) key_all:
+        BTreeMap<String, Vec<(Vec<eve_view::KeyStroke>, crate::ui_model::help::KeyState)>>,
 }
 
 /// 出力: frontend への Effect・Host への EditorEvent・描き直しの要求・退避の更新の印 (`EditorState` の部分、docs/review/v0.3-findings.md の STR-B2)。

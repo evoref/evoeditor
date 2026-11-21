@@ -75,6 +75,21 @@ impl Args {
             _ => None,
         }
     }
+
+    /// 引数が 1 つも無い。
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    /// 引数の数。
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    /// 引数 (名前の順)。
+    pub fn iter(&self) -> impl Iterator<Item = (&str, &ArgValue)> {
+        self.0.iter().map(|(k, v)| (k.as_str(), v))
+    }
 }
 
 /// 呼び出しの主体。User (キーマップ・パレット・CLI・マクロ) は常に全権。それ以外は `Permission` で制限する。

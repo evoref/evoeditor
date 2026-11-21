@@ -54,7 +54,8 @@ fn locale_summary(cat: &Catalog, setup: &LocaleSetup) -> String {
 }
 
 /// `--check-config` (07 §18.3): 設定を読んで診断を標準出力へ出し、終える。エラーがあれば終了コード 3、警告だけなら 0。
-/// キーマップは書式だけを確かめる (コマンド名などの照合は起動したときの診断で行う)。選ばれる言語のユーザーの言語ファイルも
+/// キーマップは起動したときと同じく、書式に加えてコマンド名・`when`・`args`・プレフィックスの衝突・脱出キーまで確かめる
+/// (v0.5 の FR-608。組込みの既定キーマップに重ねて解決する)。選ばれる言語のユーザーの言語ファイルも
 /// 検査し、先頭に言語の選択の結果を 1 行出す (07 §17.4)。文言は画面と同じく選んだ言語の表 (ユーザーの言語ファイルを
 /// 重ねた表) で出し、先頭の行と言語ファイル・言語の選択の診断は、補う言語の **同梱の** 表で出す (壊れた訳で読めなくならない
 /// ように)。標準出力へ出す行の全体を無害化する (Frame を通らないため、07 §4.3)。
@@ -74,8 +75,9 @@ pub(crate) fn check_config(args: &cli::ConfigArgs, cli_locale: Option<&str>) -> 
     };
     line(&mut out, &locale_summary(builtin, &setup));
     let mut reports = resolved.reports.clone();
-    if !keymap.diagnostics.is_empty() {
-        reports.push((KEYMAP_FILE.to_owned(), keymap.diagnostics.clone()));
+    let (_, keymap_diagnostics) = eve_core::resolve_keymap(&keymap);
+    if !keymap_diagnostics.is_empty() {
+        reports.push((KEYMAP_FILE.to_owned(), keymap_diagnostics));
     }
     if let Some((_, _, theme_reports)) =
         load_user_theme(&src, &resolved.config, resolved.theme_name_at.as_ref())

@@ -29,7 +29,7 @@ pub use config::{
     ShowWhitespace, ThemeBackground, WrapIndent, WrapMode, changed_keys, default_display,
     is_theme_name, load_str, load_str_onto,
 };
-pub use keymap::{KeyAction, KeymapEntry, KeymapFile, load_keymap_str};
+pub use keymap::{KeyAction, KeyArgValue, KeymapEntry, KeymapFile, load_keymap_str};
 pub use layers::{
     KeyOrigin, Resolved, SET_SOURCE, Source, check_ui_locale, dump, load_set, merge_reports,
     resolve, values,

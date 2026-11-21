@@ -459,6 +459,10 @@ pub fn diagnostic_texts(cat: &eve_config::Catalog, d: &Diagnostic) -> (String, S
                 P::PrintableKey => "keymap_printable_key",
                 P::ChordPrefix => "keymap_chord_prefix",
                 P::EscapeKey => "keymap_escape_key",
+                P::UserChordPrefix => "keymap_user_chord_prefix",
+                P::ChordShadowsDefault => "keymap_chord_shadows_default",
+                P::DuplicateKey => "keymap_duplicate_key",
+                P::BadArgs => "keymap_bad_args",
             }
         }
         DiagKind::ThemeNotFound { candidates } => {
