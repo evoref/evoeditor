@@ -950,7 +950,7 @@ fn open_job(path: &Path) -> Duration {
     };
     let mut out = Vec::new();
     let t = Instant::now();
-    run_job(req, &ports, &CancelToken::new(), &mut |r| out.push(r));
+    assert!(run_job(req, &ports, &CancelToken::new(), &mut |r| out.push(r)).is_done());
     let d = t.elapsed();
     let body = out.pop().expect("結果がある").body;
     assert!(

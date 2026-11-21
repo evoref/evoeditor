@@ -11,8 +11,9 @@ use super::{
 };
 
 /// ジョブを同期的に実行する。eve-host のワーカーとテストが同じ関数を使う (スレッドは呼び出し側が用意する)。
-/// 開始前にキャンセルされていれば何もせず `Failed { Cancelled }` を返す (`OpenStdin` を除く。標準入力の取消しは「読むのを
-/// やめて開く」意味で、終端は常に `StdinDone`、03 §9.2.2)。結果は `emit` に渡す (終端は最後の 1 つ)。
+/// 開始前にキャンセルされていれば何もせず `Failed { Cancelled }` を返す (`OpenStdin` と `ReleaseCandidates` を除く。標準入力の
+/// 取消しは「読むのをやめて開く」意味で、終端は常に `StdinDone`、03 §9.2.2。一覧の解放は取消しを見ず、常に `Released`、
+/// 03 §12.7.7)。結果は `emit` に渡す (終端は最後の 1 つ)。
 ///
 /// 依頼は値で受け取り、ジョブの入力 (区切って譲るジョブの状態・解放する一覧) はこの呼出しの中 (= ワーカーのスレッド) で
 /// 手放す。区切って譲るジョブ (`WorkspaceScan`) は、1 区切りを終えると終端の結果を送らずに `JobStep::Continue` で続きを
@@ -23,7 +24,12 @@ pub fn run_job(
     cancel: &CancelToken,
     emit: &mut dyn FnMut(JobOutput),
 ) -> JobStep {
-    if cancel.is_cancelled() && !matches!(req.kind, JobKind::OpenStdin { .. }) {
+    if cancel.is_cancelled()
+        && !matches!(
+            req.kind,
+            JobKind::OpenStdin { .. } | JobKind::ReleaseCandidates { .. }
+        )
+    {
         emit(JobOutput {
             job: req.id,
             body: JobResult::Failed {
@@ -443,7 +449,7 @@ mod tests {
 
     fn run(p: &JobPorts, c: &CancelToken) -> Vec<JobOutput> {
         let mut out = Vec::new();
-        run_job(req(), p, c, &mut |r| out.push(r));
+        assert!(run_job(req(), p, c, &mut |r| out.push(r)).is_done());
         out
     }
 
@@ -540,7 +546,7 @@ mod tests {
             },
         };
         let mut out = Vec::new();
-        run_job(r, &p, &cancel, &mut |x| out.push(x));
+        assert!(run_job(r, &p, &cancel, &mut |x| out.push(x)).is_done());
         out.pop().expect("終端の結果").body
     }
 

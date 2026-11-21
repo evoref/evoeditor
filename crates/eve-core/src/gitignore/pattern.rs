@@ -110,6 +110,16 @@ impl Program {
         }
     }
 
+    /// 速い経路 (`PathTail`) と同じ意味の字句の模擬 (`**/` + 名前)。fuzz の性質 (速い経路と字句の模擬の結果が等しい) に使う。
+    /// ほかの形は `None`。
+    pub(crate) fn token_equivalent(&self) -> Option<Program> {
+        let Program::PathTail(lit) = self else {
+            return None;
+        };
+        let pat = [b"**/".as_slice(), lit].concat();
+        tokenize(&pat, Mode::Path).map(|t| Program::Tokens(t.into()))
+    }
+
     /// 字句の数 (手数の上限の式に使う)。
     pub(crate) fn len(&self) -> usize {
         match self {

@@ -258,6 +258,7 @@ pub enum JobKind {
 /// 続きを返し、ワーカーのレーンが **同じ `JobId`・同じ `CancelToken` のまま** 自分のキューの末尾へ積む (間に投入された
 /// ジョブが先に走る)。ほかのジョブは `Done` だけを返す。
 #[derive(Debug)]
+#[must_use = "Continue を積み直さないと終端の結果が届かない"]
 #[expect(
     clippy::large_enum_variant,
     reason = "run_job の戻り値として 1 回ずつ動かすだけで、並べて持たない (続きは JobRequest の kind に戻す)"
@@ -267,6 +268,46 @@ pub enum JobStep {
     Done,
     /// 続きがある。`JobRequest` の `kind` をこれに替えて積み直す (`id`・`doc`・`base` はそのまま)。
     Continue(JobKind),
+}
+
+impl JobStep {
+    /// 終わった (続きが無い)。区切らないジョブを直に走らせる試験・ベンチが確かめるのに使う。
+    #[must_use]
+    pub fn is_done(&self) -> bool {
+        matches!(self, JobStep::Done)
+    }
+
+    /// 続きの積み直しの規則 (本番のレーンと `ManualJobSpawner` が共通に使う、02 §9.3)。`Done` なら `None`。`Continue` なら、
+    /// `cancel` が立っていれば続きを手放して (呼び出し側のスレッド = ワーカー) `Failed { Cancelled }` を終端として `emit` し、
+    /// `None`。立っていなければ、同じ `id`・`doc`・`base` の依頼を返す (呼び出し側が同じ `cancel` と一緒に末尾へ積む)。
+    pub fn requeue(
+        self,
+        id: JobId,
+        doc: Option<DocumentId>,
+        base: Revision,
+        cancel: &crate::CancelToken,
+        emit: &mut dyn FnMut(super::JobOutput),
+    ) -> Option<JobRequest> {
+        let JobStep::Continue(kind) = self else {
+            return None;
+        };
+        if cancel.is_cancelled() {
+            drop(kind);
+            emit(super::JobOutput {
+                job: id,
+                body: super::JobResult::Failed {
+                    err: super::JobError::Cancelled,
+                },
+            });
+            return None;
+        }
+        Some(JobRequest {
+            id,
+            doc,
+            base,
+            kind,
+        })
+    }
 }
 
 /// `Metadata` ジョブの目的 (結果を受けた側の分岐に使う)。

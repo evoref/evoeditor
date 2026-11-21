@@ -92,7 +92,7 @@ fn other_run_as(job: JobId, steps: Vec<StdinStep>, cancel_on_hang: bool) -> Vec<
         },
     };
     let mut out = Vec::new();
-    run_job(req, &p, &cancel, &mut |r| out.push(r));
+    assert!(run_job(req, &p, &cancel, &mut |r| out.push(r)).is_done());
     out
 }
 

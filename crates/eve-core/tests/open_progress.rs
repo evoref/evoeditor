@@ -47,7 +47,7 @@ fn open_results(step_ms: u64, chunk: usize, size: usize) -> Vec<JobOutput> {
         },
     };
     let mut out = Vec::new();
-    run_job(req, &ports, &CancelToken::new(), &mut |r| out.push(r));
+    assert!(run_job(req, &ports, &CancelToken::new(), &mut |r| out.push(r)).is_done());
     out
 }
 

@@ -79,6 +79,31 @@ proptest! {
         run(&decode(&data))?;
     }
 
+    // `**/` + 名前の行 (速い経路) と、その名前を含むパス。速い経路と字句の模擬の結果が等しいことを含めて確かめる
+    #[test]
+    fn 二重の星と名前の行で性質を満たす(
+        names in prop::collection::vec(pieces(PATH_PIECES, 3), 1..4),
+        path in pieces(PATH_PIECES, 12),
+        dir in any::<bool>(),
+        fold in any::<bool>(),
+        depth in 0usize..4,
+    ) {
+        let text: String = names.iter().map(|n| format!("**/{n}\n")).collect();
+        let mut segments: Vec<&str> = path.split('/').filter(|s| !s.is_empty()).collect();
+        if let Some(n) = names.first().filter(|n| !n.is_empty() && !n.contains('/')) {
+            segments.push(n);
+        }
+        let path = if segments.is_empty() { "a".to_owned() } else { segments.join("/") };
+        let slashes = path.matches('/').count();
+        run(&GitignoreCase {
+            text: text.into_bytes(),
+            path: path.into_bytes(),
+            kind: if dir { PathKind::Dir } else { PathKind::File },
+            fold: if fold { CaseFold::Ascii } else { CaseFold::Sensitive },
+            base_depth: depth % (slashes + 1),
+        })?;
+    }
+
     // 部品を組んだ本文とパス
     #[test]
     fn 部品を組んだ入力で性質を満たす(

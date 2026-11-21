@@ -263,6 +263,17 @@ impl IgnoreRules {
         })
     }
 
+    /// 速い経路で照らす行について、`path` に対する結果が字句の模擬と同じか (fuzz の性質、docs/09 §3.3)。違えば行番号。
+    pub(crate) fn fast_path_mismatch(&self, path: &[u8], fold: CaseFold) -> Option<u32> {
+        let rel = relative_to(&self.base, path)?;
+        self.rules.iter().find_map(|r| {
+            let slow = r.program.token_equivalent()?;
+            let (mut a, mut b) = (0, 0);
+            (r.program.matches(rel, fold, &mut a) != slow.matches(rel, fold, &mut b))
+                .then_some(r.line)
+        })
+    }
+
     /// 1 回の `decide` の手数の上限 (各行の「(字句の数 + 1) × (パスの長さ + 1)」の和。fuzz の性質、docs/09 §3.3)。
     fn step_bound(&self, path_len: usize) -> u64 {
         self.rules

@@ -6,7 +6,8 @@
 //! `JobPorts.stdin` の `wake` を呼ぶ (本番の `JobSpawner` と同じ)。
 //!
 //! 区切って譲るジョブ (`JobStep::Continue`、02 §9.3。ワークスペースの走査) は、続きを同じ `JobId`・同じ `CancelToken` のまま
-//! キューの末尾へ積む (本番のレーンと同じ。続きは、それを返した区切りより前に積まれたジョブすべての後に走る)。`run_jobs` は
+//! キューの末尾へ積む (本番のレーンと同じ規則 `JobStep::requeue`。続きは、それを返した区切りより前に積まれたジョブすべての
+//! 後に走る)。キューは 1 本で、本番の `io` / `bg` のレーンの分かれは模さない (投入順に 1 本のキューで回す)。`run_jobs` は
 //! キューが空になるまで回し、`run_one` は 1 件 (続きなら 1 区切り) だけ回す (走査の途中の状態を決定的に作れる)。キューに
 //! 残った続きの取消しは、ほかの未実行のジョブと同じく、キューから外して `Cancelled` を積む。
 //!
@@ -19,8 +20,7 @@ use std::collections::VecDeque;
 use std::rc::Rc;
 
 use eve_core::{
-    CancelToken, JobError, JobKind, JobOutput, JobPorts, JobRequest, JobResult, JobSpawner,
-    JobStep, run_job,
+    CancelToken, JobError, JobKind, JobOutput, JobPorts, JobRequest, JobResult, JobSpawner, run_job,
 };
 use eve_view::{DocumentId, JobId, Revision};
 
@@ -74,31 +74,20 @@ impl ManualJobSpawner {
         let Some(Queued { req, cancel }) = self.queue.borrow_mut().pop_front() else {
             return false;
         };
-        let (id, doc, base) = (req.id, req.doc, req.base);
         let mut out = Vec::new();
-        let step = run_job(req, &self.ports, &cancel, &mut |r| out.push(r));
+        self.run_queued(Queued { req, cancel }, &mut out);
         self.inbox.borrow_mut().extend(out);
-        if let JobStep::Continue(kind) = step {
-            if cancel.is_cancelled() {
-                self.inbox.borrow_mut().push_back(JobOutput {
-                    job: id,
-                    body: JobResult::Failed {
-                        err: JobError::Cancelled,
-                    },
-                });
-            } else {
-                self.queue.borrow_mut().push_back(Queued {
-                    req: JobRequest {
-                        id,
-                        doc,
-                        base,
-                        kind,
-                    },
-                    cancel,
-                });
-            }
-        }
         true
+    }
+
+    /// 1 件 (1 区切り) を実行して結果を `out` に足し、続きがあればキューの末尾へ積む (`JobStep::requeue`)。
+    fn run_queued(&self, job: Queued, out: &mut Vec<JobOutput>) {
+        let Queued { req, cancel } = job;
+        let (id, doc, base) = (req.id, req.doc, req.base);
+        let step = run_job(req, &self.ports, &cancel, &mut |r| out.push(r));
+        if let Some(req) = step.requeue(id, doc, base, &cancel, &mut |r| out.push(r)) {
+            self.queue.borrow_mut().push_back(Queued { req, cancel });
+        }
     }
 
     /// 積まれたジョブを積まれた順に実行し、最初に `JobResult::Partial` を送ったジョブで止まる: そのジョブの `Partial`
@@ -110,8 +99,7 @@ impl ManualJobSpawner {
                 return false;
             };
             let mut out = Vec::new();
-            // 先行表示の試験の読込ジョブは区切らない (続きを返さない)
-            let _ = run_job(job.req, &self.ports, &job.cancel, &mut |r| out.push(r));
+            self.run_queued(job, &mut out);
             if let Some(at) = out
                 .iter()
                 .position(|o| matches!(o.body, JobResult::Partial { .. }))
@@ -175,7 +163,13 @@ impl JobSpawner for ManualJobSpawner {
             },
         };
         let mut q = self.queue.borrow_mut();
-        // 標準入力の読込: 取消しを立てて待ちを起こす (キューに残し、`run_jobs` で `StdinDone { Stopped }` を返させる)
+        // 候補の一覧の解放は取り消さない (03 §12.7.7。キューに残し、走らせると `Released`。一覧をこのスレッドで手放さない)
+        if q.iter()
+            .any(|j| j.req.id == job && matches!(j.req.kind, JobKind::ReleaseCandidates { .. }))
+        {
+            return;
+        }
+        // 標準入力の読込:取消しを立てて待ちを起こす (キューに残し、`run_jobs` で `StdinDone { Stopped }` を返させる)
         if let Some(j) = q
             .iter()
             .find(|j| j.req.id == job && matches!(j.req.kind, JobKind::OpenStdin { .. }))

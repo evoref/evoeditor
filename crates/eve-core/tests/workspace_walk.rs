@@ -643,3 +643,72 @@ fn 候補の一覧の解放は_released_で終わる() {
     let r = sp.take_results();
     assert!(matches!(&r[..], [JobOutput { job, body: JobResult::Released }] if *job == id));
 }
+
+#[test]
+fn 候補の一覧の解放は取り消しても_released_で終わる() {
+    let (fs, clock) = fs();
+    let sp = spawner(&fs, &clock);
+    let chunk: Arc<[Candidate]> = Arc::from(vec![Candidate::new("a.txt")]);
+    let weak = Arc::downgrade(&chunk);
+    let id = sp.spawn(
+        None,
+        Revision(0),
+        JobKind::ReleaseCandidates {
+            chunks: vec![chunk],
+        },
+    );
+    sp.cancel(id);
+    sp.cancel_all();
+    assert_eq!(sp.pending(), 1, "取り消さずにキューに残す");
+    assert!(weak.upgrade().is_some());
+    sp.run_jobs();
+    assert!(weak.upgrade().is_none());
+    let r = sp.take_results();
+    assert!(matches!(&r[..], [JobOutput { job, body: JobResult::Released }] if *job == id));
+
+    // run_job の入口の取消しの確かめも見ない (本番のレーンで spawner を手放したとき)
+    let cancel = eve_core::CancelToken::new();
+    cancel.cancel();
+    let mut out = Vec::new();
+    let step = eve_core::run_job(
+        eve_core::JobRequest {
+            id: eve_view::JobId(9),
+            doc: None,
+            base: Revision(0),
+            kind: JobKind::ReleaseCandidates { chunks: Vec::new() },
+        },
+        &JobPorts {
+            stdin: None,
+            fs: fs.clone(),
+            clock: Arc::new(clock.clone()),
+            paths: Arc::new(FixedPaths::default()),
+        },
+        &cancel,
+        &mut |o| out.push(o),
+    );
+    assert!(step.is_done());
+    assert!(matches!(
+        &out[..],
+        [JobOutput {
+            body: JobResult::Released,
+            ..
+        }]
+    ));
+}
+
+#[test]
+fn 先行表示まで回すときも走査の続きを積み直す() {
+    let (fs, clock) = fs();
+    for i in 0..40 {
+        fs.add_file(&format!("/w/d{i:02}/f.txt"), b"x");
+    }
+    let sp = spawner(&fs, &clock);
+    let id = sp.spawn(None, Revision(0), scan(2));
+    // 先行表示を送るジョブは無いので、走査を最後まで回して false
+    assert!(!sp.run_jobs_until_partial());
+    let r = sp.take_results();
+    assert!(
+        matches!(r.last(), Some(JobOutput { job, body: JobResult::ScanDone { total: 40, .. } }) if *job == id),
+        "{r:?}"
+    );
+}

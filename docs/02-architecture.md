@@ -1589,7 +1589,8 @@ enum JobStep { Done, Continue(JobKind) }  // v0.5 の M31 で足す (03 §12.7.2
     // 決定的に作れる)。ほかのジョブは Done だけを返す。v0.2.0〜v0.4 の実装の Lane は単純な FIFO で、ジョブが続きを積む経路が無い
     // (エディタ内の検索は core が取り消して投げ直す、§9.1 の「v0.2.0 の実装との差」)。この経路は M31 の段 4 (03 §12.7.9) で eve-host と一緒に入れた
     // (レーンの不変条件は crates/eve-host/src/workers.rs のモジュールの説明の (I1)〜(I4): 続きを積む前に届いている投入をすべて手元の列に移し、
-    // 続きを返した時点で取り消されていれば積まずに Failed { Cancelled } を送る)。
+    // 続きを返した時点で取り消されていれば積まずに Failed { Cancelled } を送る。この積み直しと取消しの規則は JobStep::requeue にまとめ、
+    // レーンと ManualJobSpawner が共通に使う。JobStep は #[must_use] で、続きを捨てると終端の結果が届かないことを型で知らせる)。
     // 1 つのジョブを実行する。結果はすべて emit で送る (進捗・検索結果のように 1 つのジョブが複数の結果を送る種別がある)。
     // 最後に送るのは終端の結果 1 つ (Progress と SearchBatch 以外の変種。Search の終端は SearchDone)。cancel は長い処理の区切りで見る
     // (検索: 一定バイト毎、デコード・エンコード: チャンク毎)。立っていたら一時ファイル等を片付けて Failed { err: JobError::Cancelled } を送る。
@@ -1650,7 +1651,9 @@ enum JobKind {                     // Port は持たない (run_job が JobPorts
                       decode: DecodeSettings, max_file_size: u64, max_lines: usize, generation: u64, state: Option<Box<WorkspaceSearchState>> },
                                                                       // bg。横断検索 (03 §12.7.5)。区切りはディレクトリ 16 個・ファイル 64 個・中身 1 MiB・8 ms の早いほう
     ReleaseCandidates { chunks: Vec<Arc<[Candidate]>>, hits: Vec<WsHit> },              // bg。古い候補の一覧・横断検索の結果を bg で解放する (主スレッドで大きな一覧を drop しない、03 §12.7.2)。
-                                                                      // 終端の結果は Released だけ。hits は横断検索 (M31 の段 7) で足す (段 4 の実装は chunks だけ)
+                                                                      // 終端の結果は Released だけ。取消し (CancelToken・spawner の drop) を見ず、常に Released を返す
+                                                                      // (run_job の入口の取消しの確かめからも外す。ManualJobSpawner の cancel もキューに残す)。
+                                                                      // hits は横断検索 (M31 の段 7) で足す (段 4 の実装は chunks だけ)
     Swap     { doc: Arc<DocSnapshot> /*1 文書分*/ },                                                  // bg (v0.2)。FileSystem::write_swap (§4.5) が置き場所を決めて書く
     SwapRead { entry: SwapEntry }, SwapRemove { entry: SwapEntry },   // io (v0.2)。他のプロセスが残したスワップの適用・破棄 (03 §10.3)
     SwapDiscard { doc: DocumentId, path: Option<FsPath> },            // io (v0.2)。自分のスワップを消す (03 §10.2)

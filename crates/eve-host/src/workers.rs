@@ -36,7 +36,7 @@ use std::time::Duration;
 
 use eve_core::{
     CancelToken, JobError, JobKind, JobOutput, JobPorts, JobRequest, JobResult, JobSpawner,
-    JobStep, StdinSource, run_job,
+    StdinSource, run_job,
 };
 use eve_view::{DocumentId, JobId, Revision};
 
@@ -87,27 +87,17 @@ impl Lane {
                         run_job(req, &ports, &cancel, &mut |r| send(r))
                     }));
                     match outcome {
-                        Ok(JobStep::Done) => {}
-                        Ok(JobStep::Continue(kind)) => {
-                            if cancel.is_cancelled() {
-                                // (I3) 取り消されていれば積まずに終える (続きの状態はこのスレッドで手放す)
-                                drop(kind);
-                                send(cancelled(job));
+                        Ok(step) => {
+                            // (I3) 取り消されていれば積まずに `Cancelled` を送る (続きの状態はこのスレッドで手放す)
+                            let Some(req) = step.requeue(job, doc, base, &cancel, &mut |r| send(r))
+                            else {
                                 continue;
-                            }
+                            };
                             // (I2) 届いているものを先に移してから、続きを末尾に足す
                             while let Ok(w) = qrx.try_recv() {
                                 local.push_back(w);
                             }
-                            local.push_back(Work {
-                                req: JobRequest {
-                                    id: job,
-                                    doc,
-                                    base,
-                                    kind,
-                                },
-                                cancel,
-                            });
+                            local.push_back(Work { req, cancel });
                         }
                         Err(_) => send(JobOutput {
                             job,
@@ -282,16 +272,6 @@ impl ThreadJobSpawner {
     }
 }
 
-/// 取消しの終端の結果。
-fn cancelled(job: JobId) -> JobOutput {
-    JobOutput {
-        job,
-        body: JobResult::Failed {
-            err: JobError::Cancelled,
-        },
-    }
-}
-
 /// 標準入力の読込のジョブを、専用のスレッド `eve-stdin-job` で走らせる (02 §9.1)。スレッドはジョブが終わると終わる。
 /// `JoinHandle` は持たない (終了のときに待たない、02 §9.6)。パニックは `io` / `bg` と同じく `Failed { Panic }` にする。
 fn spawn_stdin_job(work: Work, ports: JobPorts, tx: Sender<HostMsg>) -> std::io::Result<()> {
@@ -306,13 +286,16 @@ fn spawn_stdin_job(work: Work, ports: JobPorts, tx: Sender<HostMsg>) -> std::io:
                     let _ = tx.send(HostMsg::Job(Box::new(r)));
                 })
             }));
-            if outcome.is_err() {
-                let _ = tx.send(HostMsg::Job(Box::new(JobOutput {
-                    job,
-                    body: JobResult::Failed {
-                        err: JobError::Panic,
-                    },
-                })));
+            match outcome {
+                Ok(step) => debug_assert!(step.is_done(), "標準入力の読込は続きを返さない"),
+                Err(_) => {
+                    let _ = tx.send(HostMsg::Job(Box::new(JobOutput {
+                        job,
+                        body: JobResult::Failed {
+                            err: JobError::Panic,
+                        },
+                    })));
+                }
             }
         })
         .map(drop)
