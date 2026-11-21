@@ -8,12 +8,10 @@
 use std::collections::BTreeMap;
 use std::path::{Component, MAIN_SEPARATOR_STR};
 
-use eve_view::{CutPolicy, DocumentId, StatusAlign, StatusItem, StatusKind, ViewId};
+use eve_view::{DocumentId, StatusItem, ViewId};
 
 use crate::FsPath;
 use crate::editor::state::EditorState;
-use crate::layout::cell_text;
-use crate::ui_model::keys;
 
 /// 開いている全文書の、見出し (とタブライン) に出す名前 (PANE-11)。ファイル名が同じ文書が 2 つ以上あれば `名前 (親)` にし、
 /// 無題の文書は今の無題の名前 (`無題-1` など)。
@@ -112,7 +110,7 @@ impl Parent {
 }
 
 /// View `view` のペインの見出しの項目 (PANE-10 (b)): 名前 (`names`、PANE-11)・変更・読み取り専用を、ステータスバーの
-/// 左群と同じ文言・優先度で入れる (04 §8.7)。
+/// 左群と同じ文言・優先度で入れる (04 §8.7。組み立ては `chrome::document_items` と共有する)。
 pub(crate) fn bar_items(
     state: &EditorState,
     view: ViewId,
@@ -124,38 +122,11 @@ pub(crate) fn bar_items(
     let Some(doc) = state.document(doc_id) else {
         return Vec::new();
     };
-    let item = |kind, long: &str, short: Option<&str>, priority, cut| StatusItem {
-        kind,
-        long: cell_text(long, cut),
-        short: short.map(|s| cell_text(s, CutPolicy::Never)),
-        priority,
-        align: StatusAlign::Left,
-    };
     let name = names
         .get(&doc_id)
         .cloned()
         .unwrap_or_else(|| state.untitled_label(doc));
-    let mut items = vec![item(StatusKind::Path, &name, None, 4, CutPolicy::Middle)];
-    if doc.is_dirty() {
-        items.push(item(StatusKind::Dirty, "[+]", None, 5, CutPolicy::Never));
-    }
-    if !doc.read_only.is_empty() {
-        let label = |c: &str| state.key_label(c);
-        let long = state
-            .catalog()
-            .render(keys::STATUS_READ_ONLY_LONG, &[], &label);
-        let short = state
-            .catalog()
-            .render(keys::STATUS_READ_ONLY_SHORT, &[], &label);
-        items.push(item(
-            StatusKind::ReadOnly,
-            &long,
-            Some(&short),
-            5,
-            CutPolicy::Never,
-        ));
-    }
-    items
+    crate::ui_model::chrome::document_items(state, doc, &name)
 }
 
 #[cfg(test)]

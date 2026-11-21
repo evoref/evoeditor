@@ -207,6 +207,16 @@ fn bar_cells(pane: &eve_view::PaneFrame, bar: &eve_view::PaneBarModel) -> Vec<Ce
     while cells.len() < width {
         cells.push(plain(fill));
     }
+    // 幅で切る所が全角の文字の途中なら、その文字の先頭から空白にする (行の幅を崩さない)
+    if cells.get(width).is_some_and(|c| c.text.is_none()) {
+        for i in (0..width).rev() {
+            let head = cells[i].text.is_some();
+            cells[i] = plain(" ");
+            if head {
+                break;
+            }
+        }
+    }
     cells.truncate(width);
     cells
 }
@@ -444,5 +454,55 @@ mod tests {
             render_ascii(&f, AsciiOptions::default()),
             "ab   wxyz\n     q\n"
         );
+    }
+
+    #[test]
+    fn 見出しの全角の名前が幅を超えるときは途中で切らず空白にする() {
+        let item = |text: &str, width: u16| eve_view::StatusItem {
+            kind: eve_view::StatusKind::Path,
+            long: eve_view::CellText {
+                spans: vec![Span::new(text, width, Style::DEFAULT)],
+                width,
+                cut: eve_view::CutPolicy::Middle,
+            },
+            short: None,
+            priority: 4,
+            align: eve_view::StatusAlign::Left,
+        };
+        let bar = |cols| eve_view::PaneBarModel {
+            rect: CellRect {
+                col: 0,
+                row: 0,
+                cols,
+                rows: 1,
+            },
+            items: vec![item("あいう", 6)],
+        };
+        let pane = |active| PaneFrame {
+            view: ViewId(1),
+            rect: CellRect::default(),
+            revision: Default::default(),
+            gutter_width: 0,
+            rows: vec![],
+            cursors: vec![],
+            focused: active,
+            active,
+            bar: None,
+        };
+        let text =
+            |cells: &[Cell]| -> String { cells.iter().filter_map(|c| c.text.as_deref()).collect() };
+        // `> ` + `あい` + `う` の左半分で切れる: `う` を空白にして 5 セル
+        let cells = bar_cells(&pane(true), &bar(5));
+        assert_eq!(cells.len(), 5);
+        assert_eq!(text(&cells), "> あ ");
+        // 全角の境目で切れる: そのまま
+        let cells = bar_cells(&pane(true), &bar(6));
+        assert_eq!(text(&cells), "> あい");
+        // フォーカスの無いペイン (` ` + `あいう`): 4 セルで `い` の左半分
+        let cells = bar_cells(&pane(false), &bar(4));
+        assert_eq!((cells.len(), text(&cells)), (4, " あ ".to_owned()));
+        // 幅に余れば `-` / `=` で埋める
+        assert_eq!(text(&bar_cells(&pane(false), &bar(10))), " あいう --");
+        assert_eq!(text(&bar_cells(&pane(true), &bar(10))), "> あいう =");
     }
 }

@@ -838,12 +838,40 @@ fn 見出しのクリックでフォーカスだけが移り_オーバーレイ�
     assert_eq!(focused(&h), left);
     h.pane_bar_mouse(right, down, Modifiers::NONE, 0);
     assert_eq!(focused(&h), b_view, "右のペイン (今は b を表示) へ");
-    // 閉じたペインの View を指す入力は捨てる
+    // 右を下に分けて 3 つにし (下は b を写した View)、下で新しい文書を出してから下を閉じる。下の表の View のうち、
+    // b を写した View は消え (b にはほかの View がある)、新しい文書の View は唯一なのでどのペインにも属さない View として
+    // 残る (PANE-1)。フォーカスの無い左のペインが残る状態で、どちらを指す見出しの入力も捨てる (PANE-7 (g))
+    run(&mut h, "pane.split_down");
+    let copied = focused(&h);
+    h.cmd("file.new");
+    let fresh = focused(&h);
+    assert_ne!(fresh, copied);
     run(&mut h, "pane.close");
-    let only = focused(&h);
-    h.pane_bar_mouse(b_view, down, Modifiers::NONE, 0);
-    assert_eq!(focused(&h), only);
+    let (v, now) = panes(&h);
+    assert_eq!(v, vec![left, b_view], "左と右が残る");
+    assert_eq!(now, b_view, "フォーカスは直前の右のペインへ");
+    let state = h.editor.state();
+    assert!(state.view(copied).is_none(), "写した View は消えた");
+    assert!(state.view(fresh).is_some(), "唯一の View は残る");
+    for gone in [fresh, copied] {
+        h.pane_bar_mouse(gone, down, Modifiers::NONE, 0);
+        assert_eq!(focused(&h), b_view, "{gone:?} を指す見出しの入力は捨てる");
+    }
     check(&h);
+}
+
+// verifies: AC-FR-509-4
+#[test]
+fn 検索バーを開いている間は見出しのクリックを無視する() {
+    let mut h = opened(&[("/w/a.txt", &lines(30))]);
+    let left = focused(&h);
+    run(&mut h, "pane.split_right");
+    let right = focused(&h);
+    h.cmd("search.open");
+    assert!(h.frame().search.is_some());
+    h.pane_bar_mouse(left, MouseKind::Down(MouseButton::Left), Modifiers::NONE, 1);
+    assert_eq!(focused(&h), right, "フォーカスは変わらない (PANE-6 (c))");
+    assert!(h.frame().search.is_some(), "検索バーは開いたまま");
 }
 
 // verifies: AC-FR-509-3
