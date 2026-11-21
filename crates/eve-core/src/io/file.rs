@@ -72,12 +72,13 @@ impl EditorState {
             .find_map(|(_, doc)| self.docs.documents.get(&doc).map(|d| d.load_percent))
     }
 
-    /// `Esc` (`ui.cancel`) で読込を取り消す (03 §9.8 の「読込中のバッファ」)。表示中の文書が読込中 (`Loading` /
-    /// `Partial`。開く・再読込・開き直しのどれでも) ならその文書の読込だけを、表示中の文書が読込中でなければ、表示して
-    /// いない文書の新しく開く読込を取り消す。ほかの文書の再読込・開き直しは取り消さない。取り消すものがあれば `true`。
-    pub(crate) fn cancel_loading(&mut self) -> bool {
+    /// `Esc` (`ui.cancel`) で読込を取り消す (03 §9.8 の「読込中のバッファ」) 1 段目: 表示中の文書が読込中 (`Loading` /
+    /// `Partial`。開く・再読込・開き直しのどれでも) ならその文書の読込を取り消す。2 段目の `cancel_hidden_loading` は、
+    /// 間に名前を付けて保存の照合の取消しをはさんで呼ぶ (03 §12.7.6 の細目 (9))。ほかの文書の再読込・開き直しは取り消さない。
+    /// 読込中の標準入力の文書なら、取り消さずに読むのをやめるかを尋ねる。取り消すものがあれば `true`。
+    pub(crate) fn cancel_own_loading(&mut self) -> bool {
         // 表示中の文書が読込中の標準入力の文書なら、取り消さずに読むのをやめるかを尋ねる (03 §9.2.2 の「取消し (`Esc`)」)。
-        // 表示していない標準入力の読込には触れない (下の 2 つはファイルの読込 `Pending::Open` だけを見る)
+        // 表示していない標準入力の読込には触れない (下はファイルの読込 `Pending::Open` だけを見る)
         if self.confirm_stdin_stop() {
             return true;
         }
@@ -89,11 +90,15 @@ impl EditorState {
             .filter(|(_, p)| matches!(p, Pending::Open { doc, .. } if Some(*doc) == active))
             .map(|(id, _)| *id)
             .collect();
-        let ids: Vec<_> = if own.is_empty() {
-            self.hidden_open_loads().map(|(id, _)| id).collect()
-        } else {
-            own
-        };
+        for id in &own {
+            self.jobs.cancel(*id);
+        }
+        !own.is_empty()
+    }
+
+    /// 表示していない文書の新しく開く読込を取り消す (表示中の文書が読込中でないときに呼ぶ)。取り消すものがあれば `true`。
+    pub(crate) fn cancel_hidden_loading(&mut self) -> bool {
+        let ids: Vec<_> = self.hidden_open_loads().map(|(id, _)| id).collect();
         for id in &ids {
             self.jobs.cancel(*id);
         }

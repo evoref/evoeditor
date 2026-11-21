@@ -313,16 +313,23 @@ pub fn run_job(
             known_ids,
         } => match ports.fs.metadata(path) {
             Ok(mut meta) => {
-                // 名前を付けて保存の保存先: 文書の古い識別と重なっていれば、識別で同じと判定しない (03 §12.7.6 の 0)
-                if *purpose == MetaPurpose::SaveAsTarget
-                    && !crate::io::same_file::ids_still_valid(
+                // 名前を付けて保存の保存先は、同じファイルの判定 (03 §12.7.6 の 2) に canonical のパスと、識別が古いと
+                // 確かめた文書の一覧も返す。`path` 自身を canonicalize できなければ識別を使わない (03 §12.7.6 の 0)
+                let (canonical, stale) = if *purpose == MetaPurpose::SaveAsTarget {
+                    let (canonical, source) =
+                        crate::io::same_file::canonical_of(ports.fs.as_ref(), path);
+                    if source != crate::io::same_file::CanonicalSource::Direct {
+                        meta.file_id_unique = false;
+                    }
+                    let stale = crate::io::same_file::stale_known_ids(
                         ports.fs.as_ref(),
                         meta.file_id,
                         known_ids,
-                    )
-                {
-                    meta.file_id_unique = false;
-                }
+                    );
+                    (canonical, stale)
+                } else {
+                    (None, Vec::new())
+                };
                 if cancel.is_cancelled() {
                     JobResult::Failed {
                         err: JobError::Cancelled,
@@ -340,14 +347,11 @@ pub fn run_job(
                         None
                     };
                     let stamp = FileStamp::from_meta(&meta, hash);
-                    // 名前を付けて保存の保存先は、同じファイルの判定 (03 §12.7.6 の 2) に canonical のパスも返す
-                    let canonical = (*purpose == MetaPurpose::SaveAsTarget)
-                        .then(|| crate::io::same_file::canonical_of(ports.fs.as_ref(), path))
-                        .flatten();
                     JobResult::Meta {
                         meta,
                         stamp,
                         canonical,
+                        stale,
                     }
                 }
             }
@@ -363,7 +367,7 @@ pub fn run_job(
                     }
                 } else {
                     JobResult::TargetAbsent {
-                        canonical: crate::io::same_file::canonical_of(ports.fs.as_ref(), path),
+                        canonical: crate::io::same_file::canonical_of(ports.fs.as_ref(), path).0,
                         err,
                     }
                 }

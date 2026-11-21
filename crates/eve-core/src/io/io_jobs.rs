@@ -177,14 +177,15 @@ fn open_inner(
     // 2b. 同じファイルの判定の識別 (03 §9.2 手順 2b、§12.7.6 の 1)。読込と確認 (`NeedsConfirm`) の前に 1 回だけ送る
     // (確認を待つ文書も識別を持ち、別の書き方のパスで開いた同じファイルが 2 つの文書にならない)。判定のやり直し (`redo`)
     // の読み直しでは送らない
-    let mut send_identity = |file_id, file_id_unique| {
+    let mut send_identity = |file_id, file_id_unique, canonical, stale| {
         if redo.is_none() {
             emit(JobOutput {
                 job: id,
                 body: JobResult::Identity {
                     file_id,
                     file_id_unique,
-                    canonical: crate::io::same_file::canonical_of(ports.fs.as_ref(), path),
+                    canonical,
+                    stale,
                 },
             });
         }
@@ -199,7 +200,8 @@ fn open_inner(
                 _ => None,
             };
             // 新規のファイル: canonical は親を canonicalize してファイル名を付けたもの (NewFile の前に送る)
-            send_identity(None, false);
+            let (canonical, _) = crate::io::same_file::canonical_of(ports.fs.as_ref(), path);
+            send_identity(None, false, canonical, Vec::new());
             return JobResult::NewFile {
                 parent_missing,
                 interrupted_save: map_interrupted(ports.fs.as_ref(), &inflight, false),
@@ -216,11 +218,13 @@ fn open_inner(
     if cancel.is_cancelled() {
         return cancelled();
     }
-    // 文書の古い識別と重なっていれば (文書のファイルが外で作り直され、番号を使い回した)、識別で同じと判定しない
-    // (03 §12.7.6 の「古い識別の確かめ」)
-    let unique = meta.file_id_unique
-        && crate::io::same_file::ids_still_valid(ports.fs.as_ref(), meta.file_id, known_ids);
-    send_identity(meta.file_id, unique);
+    // `path` 自身を canonicalize できなかった (代わりのパス) ときは識別を使わない (ボリュームの条件が効かない)。文書の
+    // 古い識別 (文書のファイルが外で作り直され、番号を使い回した) は一覧で返し、主スレッドがその文書の識別を下ろす
+    // (03 §12.7.6 の 0 と「古い識別の確かめ」)
+    let (canonical, source) = crate::io::same_file::canonical_of(ports.fs.as_ref(), path);
+    let unique = meta.file_id_unique && source == crate::io::same_file::CanonicalSource::Direct;
+    let stale = crate::io::same_file::stale_known_ids(ports.fs.as_ref(), meta.file_id, known_ids);
+    send_identity(meta.file_id, unique, canonical, stale);
     if cancel.is_cancelled() {
         return cancelled();
     }

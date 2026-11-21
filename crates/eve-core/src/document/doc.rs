@@ -270,12 +270,12 @@ impl Document {
     }
 
     /// 同じファイルの判定に使う識別 (03 §12.7.6 の 0)。識別は `disk_stamp` から取り (保存・再読込・外部変更の受け入れで
-    /// 直る)、読込の完了の前は `Identity` で受け取ったもの。
-    pub(crate) fn file_identity(&self) -> crate::io::same_file::FileIdentity {
-        crate::io::same_file::FileIdentity {
+    /// 直る)、読込の完了の前は `Identity` で受け取ったもの。canonical のパスは借りる (文書の集合を比べて回るとき複製しない)。
+    pub(crate) fn identity_ref(&self) -> crate::io::same_file::IdentityRef<'_> {
+        crate::io::same_file::IdentityRef {
             file_id: self.disk_stamp.map_or(self.loading_file_id, |s| s.file_id),
             file_id_unique: self.file_id_unique,
-            canonical: self.canonical.clone(),
+            canonical: self.canonical.as_ref(),
         }
     }
 

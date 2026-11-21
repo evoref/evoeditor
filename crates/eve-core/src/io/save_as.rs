@@ -104,8 +104,9 @@ impl EditorState {
             Pending::SaveAsTarget(a) => Some(&**a),
             _ => None,
         });
+        // 在る文書の照合だけを数える (閉じた文書の照合は `take_pending_for` と `close_document` が捨てる。念のための受け止め)
         held.chain(pending)
-            .find(|a| doc.is_none_or(|d| d == a.doc))
+            .find(|a| doc.is_none_or(|d| d == a.doc) && self.docs.documents.contains_key(&a.doc))
             .map(|a| (a.doc, a.path.clone()))
     }
 
@@ -130,10 +131,14 @@ impl EditorState {
                 meta,
                 stamp,
                 canonical,
+                stale,
             } => {
+                // 識別が古いと確かめた文書は識別で比べない。canonical を取れずに入力したパスで代えるときは、保存先の識別を
+                // 使わない (代わりのパスではボリュームの条件が効かない。03 §12.7.6 の 0)
+                self.demote_stale_ids(&stale);
                 ask.target = FileIdentity {
                     file_id: meta.file_id,
-                    file_id_unique: meta.file_id_unique,
+                    file_id_unique: meta.file_id_unique && canonical.is_some(),
                     canonical: canonical.or_else(|| Some(ask.path.clone())),
                 };
                 if self.save_as_same_or_other(&ask) {
@@ -205,7 +210,7 @@ impl EditorState {
             return true;
         };
         // 1: 今の文書と同じファイル (別名・リンク・ハードリンク・大文字小文字の違い): 通常の上書き保存として扱う
-        if doc.file_identity().same_file(&ask.target) {
+        if doc.identity_ref().same_file(ask.target.as_ref()) {
             let raw = ask.raw.clone();
             self.save_as_same_file(ask.doc, &raw, ask.cont.clone(), ask.fmt);
             return true;
@@ -280,7 +285,7 @@ impl EditorState {
         self.docs
             .documents
             .iter()
-            .find(|(id, d)| Some(**id) != except && d.file_identity().same_file(target))
+            .find(|(id, d)| Some(**id) != except && d.identity_ref().same_file(target.as_ref()))
             .map(|(id, _)| *id)
     }
 
@@ -403,7 +408,10 @@ impl EditorState {
             .pending
             .iter()
             .filter_map(|(job, p)| match p {
-                Pending::SaveAsTarget(ask) => Some((*job, ask.doc)),
+                // 在る文書の照合だけ (閉じた文書の名前の入力は開かない)
+                Pending::SaveAsTarget(ask) if self.docs.documents.contains_key(&ask.doc) => {
+                    Some((*job, ask.doc))
+                }
                 _ => None,
             })
             .collect();
@@ -442,8 +450,21 @@ impl EditorState {
         doc.canonical = target.canonical;
         doc.file_id_unique = target.file_id_unique;
         doc.loading_file_id = None;
-        let ident = doc.file_identity();
-        if let Some(other) = self.document_same_as(&ident, Some(doc_id)) {
+        // canonical のパスだけで比べる (保存した直後の識別は、ほかの文書の古い識別を確かめていないので使わない。
+        // 03 §12.7.6 の 2)
+        let canonical = doc.canonical.clone();
+        let mine = crate::io::same_file::IdentityRef {
+            file_id: None,
+            file_id_unique: false,
+            canonical: canonical.as_ref(),
+        };
+        let other = self
+            .docs
+            .documents
+            .iter()
+            .find(|(id, d)| **id != doc_id && d.identity_ref().same_canonical(mine))
+            .map(|(id, _)| *id);
+        if let Some(other) = other {
             // 保存はできている。拒んだときの `msg.save_as.open_in_other` と読み違えないよう、別の文言で知らせる
             let other = self.doc_label(other);
             self.show_message(

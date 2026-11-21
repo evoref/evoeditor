@@ -6,6 +6,182 @@
 use eve_core::{Args, DocumentId};
 use eve_testkit::Harness;
 
+// ---------- レビューの指摘 (canonical の代わりのパス・閉じた文書の照合・Esc の順・古い識別の後始末) ----------
+
+// verifies: FR-103
+#[test]
+fn canonicalize_できないパスでは識別で同じとしない() {
+    // シャドウコピー・ドライブ文字の無いボリュームの先: canonicalize に失敗し、代わりのパスではボリュームの条件が効かない
+    // (03 §12.7.6 の 0)。識別が一致しても同じとしない
+    let mut h = opened(&[("/w/a.txt", b"alpha\n")]);
+    h.fs.add_hardlink("/w/hard.txt", "/w/a.txt");
+    h.open("/w/a.txt");
+    h.run_jobs();
+    h.fs.fail_next(
+        eve_testkit::FsOp::Canonicalize,
+        eve_core::FsErrorKind::Other,
+    );
+    h.open("/w/hard.txt");
+    h.run_jobs();
+    assert_eq!(docs(&h), 2, "{:?}", paths(&h));
+}
+
+// verifies: FR-104
+#[test]
+fn canonicalize_できない保存先は今の文書と同じとしない() {
+    let (mut h, a, _) = a_dirty_and_b();
+    h.fs.add_hardlink("/w/hard.txt", "/w/a.txt");
+    h.fs.fail_next(
+        eve_testkit::FsOp::Canonicalize,
+        eve_core::FsErrorKind::Other,
+    );
+    save_as(&mut h, "/w/hard.txt");
+    assert_eq!(
+        h.overlay(),
+        "dialog",
+        "既存のファイルの上書きの確認 (表の 6)"
+    );
+    h.keys("r");
+    assert_eq!(
+        disk(&h, "/w/a.txt").as_deref(),
+        Some("alpha\n"),
+        "a は書かない"
+    );
+    assert_eq!(h.doc_id(), a);
+    assert!(h.is_dirty());
+}
+
+// verifies: FR-103
+#[test]
+fn 古い識別の文書だけを下ろし_新しい文書の識別は使える() {
+    // a の識別は古く、同じ番号を b が使う。b を開いた後、b のハードリンクを開くと b に切り替える (a ではない)
+    let (mut h, a) = stale_id();
+    h.open("/w/b.txt");
+    h.run_jobs();
+    let b = h.doc_id();
+    assert_ne!(b, a);
+    h.fs.add_hardlink("/w/b2.txt", "/w/b.txt");
+    h.open("/w/b2.txt");
+    h.run_jobs();
+    assert_eq!(docs(&h), 2, "{:?}", paths(&h));
+    assert_eq!(h.doc_id(), b, "b の識別は使える。古い a とは識別で比べない");
+}
+
+// verifies: FR-103
+#[test]
+fn 文書のファイルを調べ直せなければ古い識別として扱う() {
+    // a.txt を外で消した (metadata に失敗する) 後、a の古い番号を b が使う
+    let mut h = opened(&[("/w/a.txt", b"alpha\n")]);
+    h.open("/w/a.txt");
+    h.run_jobs();
+    let a = h.doc_id();
+    let old = h.fs.file_id_of("/w/a.txt").expect("a の識別");
+    h.fs.remove(&eve_core::FsPath::from("/w/a.txt"));
+    h.fs.add_file("/w/b.txt", b"beta\n");
+    h.fs.set_file_id("/w/b.txt", old);
+    h.open("/w/b.txt");
+    h.run_jobs();
+    assert_eq!(docs(&h), 2, "{:?}", paths(&h));
+    assert_ne!(h.doc_id(), a);
+}
+
+// verifies: FR-104
+#[test]
+fn 照合中に文書を閉じても終了と開くは効く() {
+    let (mut h, a, _) = a_dirty_and_b();
+    h.cmd_with("file.save_as", Args::new().with_str("path", "/w/c.txt"));
+    h.editor.state_mut().close_document(a);
+    // 閉じた文書の名前の入力は開かない
+    h.keys("esc");
+    assert_eq!(h.overlay(), "");
+    h.cmd_with("file.open", Args::new().with_str("path", "/w/b.txt"));
+    assert!(!has_msg(&h, "info.save.in_progress"));
+    h.run_jobs();
+    assert!(disk(&h, "/w/c.txt").is_none(), "閉じた文書の照合は捨てる");
+    h.cmd("app.quit");
+    assert!(h.quit_code().is_some(), "dirty な文書は無いので終わる");
+}
+
+// verifies: FR-104
+#[test]
+fn 保留した照合の文書を閉じても終了は効く() {
+    let (mut h, a, _) = a_dirty_and_b();
+    h.cmd_with("file.save_as", Args::new().with_str("path", "/w/c.txt"));
+    h.cmd("ui.palette_open");
+    h.run_jobs();
+    h.editor.state_mut().close_document(a);
+    h.keys("esc");
+    assert_eq!(h.overlay(), "", "閉じた文書の照合の結果は出さない");
+    h.cmd("app.quit");
+    assert!(h.quit_code().is_some());
+    assert!(disk(&h, "/w/c.txt").is_none());
+}
+
+// verifies: FR-104
+#[test]
+fn esc_は今の文書の読込を照合より先に取り消す() {
+    // 照合を待つ a と、読込中の d。d を表示しているときの Esc は d の読込を取り消し、次の Esc で a の照合を取り消す
+    // (03 §12.7.6 の細目 (9) の順)
+    let (mut h, a, _) = a_dirty_and_b();
+    h.fs.add_file("/w/d.txt", b"delta\n");
+    h.cmd_with("file.save_as", Args::new().with_str("path", "/w/c.txt"));
+    h.editor
+        .state_mut()
+        .open_path("/w/d.txt", eve_core::OpenOptions::default());
+    for _ in 0..3 {
+        if h.doc_path().as_deref() == Some("/w/d.txt") {
+            break;
+        }
+        h.cmd("buffer.next");
+    }
+    assert_eq!(
+        h.doc_path().as_deref(),
+        Some("/w/d.txt"),
+        "読込中の d を表示"
+    );
+    h.keys("esc");
+    assert_eq!(
+        h.overlay(),
+        "",
+        "今の文書 (d) の読込を取り消す (照合は取り消さないので名前の入力は出ない)"
+    );
+    h.run_jobs();
+    assert!(
+        !paths(&h).iter().any(|p| p == "/w/d.txt"),
+        "d の読込は取り消した"
+    );
+    assert_eq!(
+        disk(&h, "/w/c.txt").as_deref(),
+        Some("xalpha\n"),
+        "a の照合は残り、保存まで進んだ"
+    );
+    assert!(h.editor.state().document(a).is_some());
+}
+
+// verifies: FR-104
+#[test]
+fn 失敗した名前を付けて保存の識別の覚えは捨てる() {
+    // 既存の c.txt への保存が Busy で失敗し、再試行で成功した: 照合の識別の覚えは失敗の時点で捨てたので、文書の識別は
+    // 信頼しない (03 §12.7.6 の細目 (10))。c のハードリンクを開くと別の文書になる (canonical のパスは違う)
+    let (mut h, a, _) = a_dirty_and_b();
+    h.fs.add_file("/w/c.txt", b"old\n");
+    save_as(&mut h, "/w/c.txt");
+    assert_eq!(h.overlay(), "dialog", "上書きの確認");
+    h.fs.busy_times(eve_testkit::FsOp::WriteAtomic, 1);
+    h.keys("o");
+    h.run_jobs();
+    assert_eq!(h.overlay(), "dialog", "保存の失敗の確認");
+    h.keys("t");
+    h.run_jobs();
+    assert_eq!(disk(&h, "/w/c.txt").as_deref(), Some("xalpha\n"));
+    assert_eq!(h.doc_path().as_deref(), Some("/w/c.txt"));
+    assert_eq!(h.doc_id(), a);
+    h.fs.add_hardlink("/w/c-hard.txt", "/w/c.txt");
+    h.open("/w/c-hard.txt");
+    h.run_jobs();
+    assert_ne!(h.doc_id(), a, "識別では同じとしない");
+}
+
 fn docs(h: &Harness) -> usize {
     h.editor.state().documents_len()
 }

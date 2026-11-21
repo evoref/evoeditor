@@ -33,7 +33,7 @@ pub(crate) enum Pending {
         kind: OpenKind,
     },
     /// 標準入力の読込 (`JobKind::OpenStdin`、03 §9.2.2。v0.4 の M25)。ファイルの読込 (`Open`) とは別の種類に持ち、
-    /// `open_in_progress`・`cancel_loading`・`loading_percent` の対象から外す。
+    /// `open_in_progress`・`cancel_own_loading`・`cancel_hidden_loading`・`loading_percent` の対象から外す。
     OpenStdin { doc: DocumentId, view: ViewId },
     /// 未編集の上書き保存の照合 (03 §9.3 手順 0)。
     CheckUnchanged { doc: DocumentId },
@@ -219,6 +219,7 @@ impl EditorState {
             file_id,
             file_id_unique,
             canonical,
+            stale,
         } = r
         {
             self.on_open_identity(
@@ -228,6 +229,7 @@ impl EditorState {
                     file_id_unique,
                     canonical,
                 },
+                &stale,
             );
             return;
         }

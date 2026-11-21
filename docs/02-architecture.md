@@ -1724,7 +1724,7 @@ enum JobResult {                   // #[non_exhaustive]
     Partial      { head: Text /*固定の先頭 (1 MiB まで、行の区切りで切る。全文の接頭辞)*/, format: TextFormat /*先頭の時点の形式。表示にだけ使う*/ },
                                                                 // v0.4 の M25 (03 §9.2.1)。非終端。読込が 200 ms を過ぎても終わらないとき 1 回 (判定のやり直しの後は送り直す)。OpenOptions.partial が立った Open だけが送る
     NeedsConfirm { ask: ConfirmAsk }, // ジョブはここで終了 (下の「確認を待ってブロックしない」)
-    Identity     { file_id: Option<FileId>, file_id_unique: bool /*known_ids の文書の識別が古ければ false (03 §12.7.6 の 0)*/, canonical: Option<FsPath> }, // 非終端。metadata と canonicalize の後、読込と確認 (NeedsConfirm) の前に 1 回 (03 §9.2 手順 2b、§12.7.6)。
+    Identity     { file_id: Option<FileId>, file_id_unique: bool /*path 自身を canonicalize できなければ false (03 §12.7.6 の 0)*/, canonical: Option<FsPath>, stale: Vec<KnownFileId> /*known_ids のうち、識別が今は違う文書 (主スレッドがその文書の file_id_unique を下ろす)*/ }, // 非終端。metadata と canonicalize の後、読込と確認 (NeedsConfirm) の前に 1 回 (03 §9.2 手順 2b、§12.7.6)。
                                                                 // v0.1 の案にあったが v0.2.0〜v0.4 の実装に無かった (二重オープンの判定は、開くジョブの前に正規化したパスの文字列を比べるだけ)。
                                                                 // **v0.5 の M31 で入れた** (SAF-28。名前を付けて保存の同一の判定と一緒に)。新規のファイル (NotFound) では NewFile の前に送る
     NewFile      { interrupted_save: Option<InterruptedSave> /*§4.5。残っていた保存中フラグ*/,
@@ -1758,7 +1758,7 @@ enum JobResult {                   // #[non_exhaustive]
     // EscapeMergeApproval { total: u64, recorded: Vec<EscapeMergeAt>, digest: u64 /*全件 (位置・強調の範囲・局所の復号) のダイジェスト。XXH3-64*/ }
     //                 /*承認した結果。JobKind::Save の escape_merge_ok に入れる。ジョブは結果 (件数・先頭 100 件・全件のダイジェスト) がこれと同じときだけ止めない*/
     // ── metadata の照合 (io) ──
-    Meta         { meta: FileMeta, stamp: FileStamp, canonical: Option<FsPath> /*v0.5 の M31: SaveAsTarget だけが入れる (03 §12.7.6 の 2)。ほかは None。SaveAsTarget では known_ids の文書の識別が古ければ meta.file_id_unique を false にする*/ }, // MetaPurpose のいずれか (未編集の上書き保存の照合、名前を付けて保存の保存先、フォーカス復帰時の確認 (v0.2))
+    Meta         { meta: FileMeta, stamp: FileStamp, canonical: Option<FsPath> /*v0.5 の M31: SaveAsTarget だけが入れる (03 §12.7.6 の 2)。ほかは None。SaveAsTarget では path 自身を canonicalize できなければ meta.file_id_unique を false にする*/, stale: Vec<KnownFileId> /*SaveAsTarget だけ。Identity と同じ*/ }, // MetaPurpose のいずれか (未編集の上書き保存の照合、名前を付けて保存の保存先、フォーカス復帰時の確認 (v0.2))
     TargetAbsent { err: FsError /*NotFound。detail に ParentMissing / DanglingLink*/, canonical: Option<FsPath> /*親を canonicalize してファイル名を付けたもの*/ },
                                    // v0.5 の M31: SaveAsTarget で保存先が無かった (Failed では無い保存先の canonical を運べないため。03 §9.7 (a) の 1b / 2 / 3、§12.7.6 の 2)
     // ── E3 の置換 (03 §8.6) ──

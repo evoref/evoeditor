@@ -83,6 +83,8 @@ pub enum JobResult {
         stamp: FileStamp,
         /// canonical のパス (v0.5 の M31。`MetaPurpose::SaveAsTarget` だけが入れる、03 §12.7.6 の 2。ほかは `None`)。
         canonical: Option<FsPath>,
+        /// 識別が古いと確かめた文書 (`known_ids` のうち、今は同じ識別でないもの。`SaveAsTarget` だけ。03 §12.7.6 の 0)。
+        stale: Vec<crate::jobs::KnownFileId>,
     },
     /// `Metadata { purpose: SaveAsTarget }` で保存先が無かった (`NotFound`。詳細に親フォルダが無い・ダングリングのリンクを
     /// 持つ)。`canonical` は親ディレクトリを canonicalize してファイル名を付けたもの (03 §12.7.6 の 2)。v0.5 の M31。
@@ -101,6 +103,8 @@ pub enum JobResult {
         file_id_unique: bool,
         /// canonical のパス (新規のファイルは親を canonicalize してファイル名を付けたもの)。取れなければ `None`。
         canonical: Option<FsPath>,
+        /// 識別が古いと確かめた文書 (`known_ids` のうち、今は同じ識別でないもの。主スレッドがその文書の識別を下ろす)。
+        stale: Vec<crate::jobs::KnownFileId>,
     },
     /// 読込の完了。
     Complete {

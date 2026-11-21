@@ -5,8 +5,8 @@
 //! 指すと、片方の保存がもう片方の外部変更になり、照合 (03 §9.5) と保存点がずれて、古い本文で上書きし得る。比べ方は
 //! 「別のファイルを同じと判定しない」側に倒す: 識別 (`FileId`) は FS が値を使い回さないと分かっていて、canonical のパスの
 //! ボリュームの部分も等しいとき (複製したボリュームは識別が重なる) だけ使い、そうでなければ canonical のパスが等しいとき
-//! だけ同じとする (大文字小文字を自前で畳まない、05 §3.1)。文書の古い識別は、ジョブがパスを調べ直して確かめる
-//! (`ids_still_valid`)。
+//! だけ同じとする (大文字小文字を自前で畳まない、05 §3.1)。canonical を取れずに代わりのパスを使うものは識別を使わない。
+//! 文書の古い識別は、ジョブがパスを調べ直して確かめる (`stale_known_ids`)。
 //!
 //! spec: 03 §12.7.6, 03 §9.2, 05 §5.4
 
@@ -26,29 +26,61 @@ pub(crate) struct FileIdentity {
 }
 
 impl FileIdentity {
+    /// 借りた形 (比べるときに canonical のパスを複製しない)。
+    pub(crate) fn as_ref(&self) -> IdentityRef<'_> {
+        IdentityRef {
+            file_id: self.file_id,
+            file_id_unique: self.file_id_unique,
+            canonical: self.canonical.as_ref(),
+        }
+    }
+
+    /// `self` と `other` が同じファイルか (`IdentityRef::same_file`)。
+    #[cfg(test)]
+    pub(crate) fn same_file(&self, other: &FileIdentity) -> bool {
+        self.as_ref().same_file(other.as_ref())
+    }
+}
+
+/// `FileIdentity` の借りた形 (文書の欄から複製せずに作る。03 §12.7.6 の 0 の比べ方)。
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct IdentityRef<'a> {
+    /// ファイルの識別。
+    pub file_id: Option<FileId>,
+    /// `file_id` を判定に使ってよい。
+    pub file_id_unique: bool,
+    /// canonical のパス。
+    pub canonical: Option<&'a FsPath>,
+}
+
+impl IdentityRef<'_> {
     /// `self` と `other` が同じファイルか (03 §12.7.6 の 0): どちらも信頼できる `FileId` を持ち、それが等しく、canonical の
     /// パスのボリュームの部分も等しい、**または** どちらも canonical のパスを持ち、Windows の verbatim の接頭辞を外した形が
     /// 等しい。
-    pub(crate) fn same_file(&self, other: &FileIdentity) -> bool {
+    pub(crate) fn same_file(self, other: IdentityRef<'_>) -> bool {
         let by_id = match (self.file_id, other.file_id) {
             (Some(a), Some(b)) => {
                 self.file_id_unique && other.file_id_unique && a == b && self.same_volume(other)
             }
             _ => false,
         };
-        by_id
-            || match (&self.canonical, &other.canonical) {
-                (Some(a), Some(b)) => canonical_key(a) == canonical_key(b),
-                _ => false,
-            }
+        by_id || self.same_canonical(other)
+    }
+
+    /// どちらも canonical のパスを持ち、それが等しいか (識別を使わない比べ方)。
+    pub(crate) fn same_canonical(self, other: IdentityRef<'_>) -> bool {
+        match (self.canonical, other.canonical) {
+            (Some(a), Some(b)) => canonical_key(a) == canonical_key(b),
+            _ => false,
+        }
     }
 
     /// canonical のパスのボリュームの部分が等しいか (分からなければ `false`)。ディスクの複製・バックアップの VHDX・
     /// シャドウコピーは、ボリュームのシリアル番号と `FileId` が元と重なるので、識別だけでは見分けられない (05 §5.4)。
-    fn same_volume(&self, other: &FileIdentity) -> bool {
+    fn same_volume(self, other: IdentityRef<'_>) -> bool {
         match (
-            self.canonical.as_ref().and_then(volume_of),
-            other.canonical.as_ref().and_then(volume_of),
+            self.canonical.and_then(volume_of),
+            other.canonical.and_then(volume_of),
         ) {
             (Some(a), Some(b)) => a == b,
             _ => false,
@@ -108,22 +140,24 @@ pub(crate) fn volume_of(p: &FsPath) -> Option<String> {
     (!vol.is_empty() && !vol.contains('\u{FFFD}')).then(|| vol.to_ascii_uppercase())
 }
 
-/// ジョブの側で、調べたファイルの識別 `file_id` と等しい識別を持つ文書 (`known`) が、今も同じ識別かを確かめる (03 §12.7.6 の
-/// 「古い識別の確かめ」)。文書のファイルが外で作り直されると、文書の識別は古いまま残り、その番号を別のファイルが使う
-/// ことがある (inode を使い回す Linux の FS)。1 つでも今は違う (作り直された・消えた・読めない) なら `false` を返し、
-/// 呼び側は結果の `file_id_unique` を下ろす (識別で同じと判定しない側)。
-pub(crate) fn ids_still_valid(
+/// ジョブの側で、調べたファイルの識別 `file_id` と等しい識別を持つ文書 (`known`) のうち、今は同じ識別でないもの (作り
+/// 直された・消えた・`metadata` に失敗した) を返す (03 §12.7.6 の「古い識別の確かめ」)。文書のファイルが外で作り直される
+/// と、文書の識別は古いまま残り、その番号を別のファイルが使うことがある (inode を使い回す Linux の FS)。主スレッドは
+/// 返した文書の `file_id_unique` を下ろす (`demote_stale_ids`)。
+pub(crate) fn stale_known_ids(
     fs: &dyn FileSystem,
     file_id: Option<FileId>,
     known: &[KnownFileId],
-) -> bool {
+) -> Vec<KnownFileId> {
     let Some(id) = file_id else {
-        return true;
+        return Vec::new();
     };
     known
         .iter()
         .filter(|k| k.file_id == id)
-        .all(|k| fs.metadata(&k.path).is_ok_and(|m| m.file_id == Some(id)))
+        .filter(|k| !fs.metadata(&k.path).is_ok_and(|m| m.file_id == Some(id)))
+        .cloned()
+        .collect()
 }
 
 /// 比べる形の canonical のパス: Windows の verbatim の接頭辞 (`\\?\`・`\\?\UNC\`) を外す (05 §3.3 の表示用の形は 260
@@ -143,16 +177,33 @@ pub(crate) fn canonical_key(p: &FsPath) -> std::path::PathBuf {
     }
 }
 
-/// ジョブの側で求める canonical のパス (03 §12.7.6 の 0 / 2): `path` を canonicalize したもの。`path` が無ければ (新規の
-/// ファイル・名前を付けて保存の新しい保存先・ダングリングのリンク)、親ディレクトリを canonicalize してファイル名を付けた
-/// もの。どちらも取れなければ `None` (主スレッドが正規化したパスで代える)。
-pub(crate) fn canonical_of(fs: &dyn FileSystem, path: &FsPath) -> Option<FsPath> {
+/// ジョブの側で求める canonical のパス (03 §12.7.6 の 0 / 2) と、それが `path` 自身を canonicalize したものか
+/// (`CanonicalSource::Direct`)。`path` を canonicalize できなければ (新規のファイル・名前を付けて保存の新しい保存先・
+/// ダングリングのリンク・DOS の名前の無いボリュームの先)、親ディレクトリを canonicalize してファイル名を付けたもの
+/// (`Fallback`)。どちらも取れなければ `None` (主スレッドが正規化したパスで代える)。在るファイルで `Direct` でないものは、
+/// 呼び側が識別を使わない (`file_id_unique = false`。代わりのパスではボリュームの条件が効かないため)。
+pub(crate) fn canonical_of(
+    fs: &dyn FileSystem,
+    path: &FsPath,
+) -> (Option<FsPath>, CanonicalSource) {
     if let Ok(c) = fs.canonicalize(path) {
-        return Some(c);
+        return (Some(c), CanonicalSource::Direct);
     }
-    let name = path.as_path().file_name()?;
-    let parent = path.parent()?;
-    fs.canonicalize(&parent).ok().map(|dir| dir.join(name))
+    let parent = path
+        .as_path()
+        .file_name()
+        .zip(path.parent())
+        .and_then(|(name, parent)| fs.canonicalize(&parent).ok().map(|dir| dir.join(name)));
+    (parent, CanonicalSource::Fallback)
+}
+
+/// canonical のパスの出どころ (`canonical_of`)。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum CanonicalSource {
+    /// `path` 自身を canonicalize した。
+    Direct,
+    /// 親で代えた、または取れなかった (在るファイルなら識別を使わない)。
+    Fallback,
 }
 
 impl crate::editor::state::EditorState {
@@ -164,19 +215,43 @@ impl crate::editor::state::EditorState {
             .iter()
             .filter(|(id, _)| Some(**id) != except)
             .filter_map(|(_, d)| {
-                let ident = d.file_identity();
+                // 識別を先に確かめ、識別のある文書だけパスを複製する
+                let ident = d.identity_ref();
+                let file_id = ident.file_id.filter(|_| ident.file_id_unique)?;
                 Some(KnownFileId {
-                    path: d.path.clone()?,
-                    file_id: ident.file_id.filter(|_| ident.file_id_unique)?,
+                    path: d.path.as_ref()?.clone(),
+                    file_id,
                 })
             })
             .collect()
     }
 
+    /// ジョブが古いと確かめた文書の識別 (`stale`) を、同じファイルの判定に使わないようにする (03 §12.7.6 の「古い識別の
+    /// 確かめ」)。パスと識別がジョブに渡したときのままの文書だけを下ろす (その後に保存・再読込で直った文書は触らない)。
+    pub(crate) fn demote_stale_ids(&mut self, stale: &[KnownFileId]) {
+        if stale.is_empty() {
+            return;
+        }
+        for d in self.docs.documents.values_mut() {
+            let file_id = d.identity_ref().file_id;
+            if stale
+                .iter()
+                .any(|k| Some(k.file_id) == file_id && d.path.as_ref() == Some(&k.path))
+            {
+                d.file_id_unique = false;
+            }
+        }
+    }
+
     /// 開くジョブの識別 (`JobResult::Identity`、03 §9.2 手順 2b・§12.7.6 の 1) を受けた。新しく開く読込 (`OpenKind::Open`)
     /// で、ほかの文書 (読込中・確認待ちを含む) と同じファイルなら、新しい文書を閉じて読込を取り消し、既存の文書を開いた
     /// 時点のペインに出す。違えば (再読込・開き直しでも) 文書に識別を覚える。
-    pub(crate) fn on_open_identity(&mut self, job: eve_view::JobId, mut ident: FileIdentity) {
+    pub(crate) fn on_open_identity(
+        &mut self,
+        job: eve_view::JobId,
+        mut ident: FileIdentity,
+        stale: &[KnownFileId],
+    ) {
         let Some(super::pending::Pending::Open {
             doc,
             path,
@@ -187,15 +262,18 @@ impl crate::editor::state::EditorState {
         else {
             return;
         };
-        let (doc, replace, kind) = (*doc, *replace, *kind);
-        // canonicalize できなかったときは正規化したパスで代える (03 §12.7.6 の 0)
+        let (doc, replace, kind, opened) = (*doc, *replace, *kind, path.clone());
+        // canonicalize できなかったときは正規化したパスで代え、識別は使わない (代わりのパスではボリュームの条件が効かない。
+        // 03 §12.7.6 の 0)
         if ident.canonical.is_none() {
-            ident.canonical = Some(path.clone());
+            ident.canonical = Some(opened.clone());
+            ident.file_id_unique = false;
         }
+        // 識別が古いと確かめた文書は、以後は識別で比べない
+        self.demote_stale_ids(stale);
         if kind == super::open::OpenKind::Open
             && let Some(existing) = self.document_same_as(&ident, Some(doc))
         {
-            let opened = path.clone();
             self.open_already_open(job, doc, existing, replace, &opened);
             return;
         }
