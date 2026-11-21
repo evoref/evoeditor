@@ -467,15 +467,25 @@ trait FileSystem: Send + Sync {
     fn read_state_file(&self, name: &str) -> Result<Vec<u8>, FsError>;
     fn write_state_file(&self, name: &str, data: &[u8]) -> Result<(), FsError>; // 原子的に書く (所有者のみ)
     fn set_aside_state_file(&self, name: &str) -> Result<(), FsError>;      // 読めない状態ファイルを別名に退ける (消さない)
-    fn read_dir(&self, path: &FsPath) -> Result<Vec<DirEntry>, FsError>;    // v0.5 (ワークスペースの走査。ファインダ・横断検索、03 §12.7。パスの補完は送った)
+    fn read_dir(&self, dir: &FsPath, max_entries: usize) -> Result<DirListing, FsError>; // v0.5 の M31 (ワークスペースの走査。ファインダ・横断検索、03 §12.7.2。パスの補完は送った)。
+                                                                             // dir の直下の項目を max_entries 個まで返す (`.` と `..` は返さない。並びは問わない。追加の stat をしない)。
+                                                                             // dir が無い → NotFound、ディレクトリでない → InvalidPath (detail なし)、読めない → PermissionDenied。既定は Unsupported
 }
+struct DirListing { entries: Vec<DirEntry>, truncated: bool /*max_entries で列挙をやめた*/ }   // v0.5 の M31
+struct DirEntry  { name: OsString /*最後の要素だけ。UTF-8 で表せない名前もそのまま*/, kind: EntryKind,
+                   len: Option<u64> /*列挙で追加の I/O なしに分かるときだけ (Windows の FindNextFileW)。Unix は None*/,
+                   offline: bool /*読むと呼び戻しが起きるファイル (Windows の RECALL_ON_DATA_ACCESS / RECALL_ON_OPEN / OFFLINE の属性。OneDrive のオンライン専用など)。Unix は false*/ }
+enum EntryKind   { File, Dir, Symlink /*シンボリックリンク・ジャンクション・名前の代理の再解析点。辿らない*/, Other /*FIFO・ソケット・デバイス*/ }
+// 種類は列挙が返すもの (Windows の属性、Unix の d_type) から決める。FS が種類を返さない (d_type が DT_UNKNOWN) ときだけ実装が lstat で補う (05 §2.1)
 // 既定の実装: v0.2.0 の実装では metadata / canonicalize / open_read / write_atomic 以外のメソッドが既定の実装 (空の一覧・Unsupported・Other) を持つ。
-// 一覧を返すメソッドの既定は Ok(空)、書くメソッドの既定は Err (Unsupported または Other)。テストの MemFs が上書きを忘れても黙るので、
+// 一覧を返すメソッドの既定は Ok(空) (例外: v0.5 の read_dir の既定は Err(Unsupported)。空のディレクトリと区別するため)、書くメソッドの既定は Err (Unsupported または Other)。テストの MemFs が上書きを忘れても黙るので、
 // MemFs と実 FS に同じ試験を掛ける契約試験を v0.3 の M16 で足す (docs/review/v0.3-findings.md の STR-D3)
 
 struct FileMeta  { kind: FileKind /*File|Dir|Other*/, len: u64, mtime: FileTime, readonly: bool,
                    file_id: Option<FileId>, nlink: u32, link: Option<LinkInfo /*dangling 含む*/>, fs_kind: FsKind /*Local|Network|Unknown*/,
-                   owner_is_me: Option<bool> /*他ユーザー所有の事前判定 (05 §4.4)。判定できない OS・FS は None*/ }
+                   owner_is_me: Option<bool> /*他ユーザー所有の事前判定 (05 §4.4)。判定できない OS・FS は None*/,
+                   file_id_unique: bool /*v0.5 の M31: file_id を「同じファイルか」の判定に使ってよい (Windows の NTFS / ReFS のローカルのボリュームで 0 でない値、Unix の Local)。
+                                          FAT・exFAT・Network・Unknown は false (値が使い回され・重なり得る)。03 §12.7.6、05 §5.4*/ }
 struct FileStamp { mtime: FileTime, len: u64, file_id: Option<FileId>, hash: Option<ContentHash> } // 外部変更の比較キー (計算規則は 05 §5.5)
 struct RecoveryDirEntry { path: FsPath, rescue: bool /*true = 「退避先に保存」の退避 (rescue/ の中)。false = 異常終了の退避 (recovery/ 直下)*/ } // 代替の退避先 (05 §7.5) かどうかは持たない (v0.2.0)
 // write_recovery / list_recovery_dirs の場所 (state_dir と代替の退避先) は、FileSystem の実装が構築時に Host から受け取る
@@ -622,7 +632,8 @@ enum FsErrorDetail {
 | 原子性の主張 | Unix の rename は原子的 (macOS / Linux を出荷する版)。Windows の `ReplaceFileW` は **原子性を保証しない** (内部で複数段の移動を行う)。保存ジョブの開始時 (一時ファイルを作る前) に保存中フラグ (`recovery/inflight/<hash(path)>/<pid>-<seq>.toml`、配置と命名は 05 §7.5) を書き、完了後に消す。書けないときは、原子的保存では警告 (`SaveWarning::InflightFlagNotWritten`) して保存を続け、直接上書きでは書かずに `BackupFailed` (detail = `InflightFlag`) を返して確認を経る (直接上書きの中断は元ファイルを壊すので、痕跡なしでは書かない。`SkipConfirmed` の再投入だけは警告して続ける)。v0.1 は置換途中の失敗をその場で退避パス付きで報告し、さらに **開くジョブが開くたびに 1 回** `inflight_for` (開くパスとリンク先の正規化パスの 2 キー分) で残ったフラグを調べ、見つかれば下の「中断の痕跡の写像」に従って `Complete` / `NewFile` の `interrupted_save` で返して警告する (存在するファイルでも、直接上書きの中断で中身が壊れている可能性があるため)。フラグの pid が生きているか (他のプロセスが保存中か) の扱いは 05 §7.5。起動時に `list_inflight` で残ったフラグを確認して復旧を提案するのは v0.2。**開くたびに同じディレクトリを列挙して痕跡を探すことはしない** (ファイルが多いディレクトリで開くたびに数百 ms かかるため。`inflight_for` はハッシュで決まるディレクトリだけを読む) |
 | Windows の置換の失敗 | `ReplaceFileW` が失敗したときに `MoveFileExW` などの別の置換手段へ自動で切り替えない。元ファイルが無傷の失敗は `AtomicUnsupported` として返し、core は利用者の確認を経て直接上書き (`write_in_place`) へ進む (経路は「原子的置換 → 確認 → 直接上書き」の 1 本)。元ファイルが退避名に移った途中失敗は `ReplacedMovedToBackup` |
 | 保存中フラグのキー | `InflightRecord.target` (と `<hash(key)>` のキー) は **親ディレクトリを `canonicalize` したパス + ファイル名** とする (ファイル自身が無くても作れる。保存する側と開く側で同じ規則)。シンボリックリンクはリンク自身のキー (リンクの親を正規化 + リンクの名前) と、リンク先のキー (`readlink` でリンク先の名前を得て、その親ディレクトリを `canonicalize` し直したパス + リンク先のファイル名) の 2 つ。リンク先が無い (ダングリング) ときもこの規則でリンク先のキーを作る (05 §7.5) |
-| 二重オープン | `FileId` で判定。取得できない FS のみ canonical path で代替 (05 §5.4)。v0.2.0 の実装は、開くジョブの前に正規化したパスの文字列を比べるだけ (FileId を使わない。§9.3 の `JobResult` の注記) |
+| 二重オープン | `FileId` で判定。取得できない FS のみ canonical path で代替 (05 §5.4)。v0.2.0 の実装は、開くジョブの前に正規化したパスの文字列を比べるだけ (FileId を使わない。§9.3 の `JobResult` の注記)。**v0.5 の M31 で仕様どおりにする** (SAF-28。開くジョブの `Identity`、名前を付けて保存の `SaveAsTarget` の照合。比べ方は 03 §12.7.6) |
+| ディレクトリの列挙 (`read_dir`、v0.5) | 1 回の呼出しで `dir` の直下を `max_entries` 個まで列挙する (OS の列挙 1 回は区切れない。区切りと積み直しは呼ぶ側の走査のジョブ、03 §12.7.2)。シンボリックリンクは辿らず `Symlink` で返す (辿るかは呼ぶ側が `metadata` で決める)。名前は変換しない (Windows の対にならないサロゲートを含む名前も `OsString` のまま)。`MemFs` と実 FS に同じ契約試験を掛ける (09 §3.4。03 §12.7.8) |
 | 直接上書き (`write_in_place`) | 手順は 1 つ (03 §9.3 が論理手順の正本、OS 別は 05 §4.4)。承認後の直接上書きも、`InPlacePattern` による自動の直接上書きも同じ: (0) **乾式走査 (必須、Port を呼ぶ前に core のジョブが行う)**: Snapshot 全体をエンコード + 照合し、書き込まずに表現不能の有無と出力のバイト長を確定する。表現不能があれば Port を呼ばずに位置一覧を返す (03 §9.3 の Unmappable と同じ)。(1) 書き始める前の照合 (`SaveOptions.expected`) → 保存中フラグを `backup_complete = false` で書く (書けなければ書かずに `BackupFailed`、detail = `InflightFlag`) → 元ファイルを切り詰めずに、他のプロセスの書込を禁じる共有モード (Windows は `FILE_SHARE_READ` のみ) で開き、開いたハンドルで再照合 (不一致なら `Conflict`) → 事前バックアップ (必須。開いたハンドルから読む。一時名で書いて fsync し、バックアップ名に変えてから、フラグを `backup_complete = true` で書き直す。失敗なら書かずに `BackupFailed`。`SkipConfirmed` の再投入では作らない) → (2) 出力長 `len` が元より長ければ書く前に領域を確保 (確保できなければ書かずに `DiskFull`) → (3) 先頭から上書きし、最後に長さを `len` に合わせて fsync → 途中の失敗は `InPlaceFailed { backup }` (バックアップなしの再投入では `backup = None`) → (4) 成功後の後片付けは **フラグを消してからバックアップを消す** 順 (逆にすると、間で中断したとき「完全なバックアップがある」と記録したフラグだけが残る)。OS 別の手順は 05 §4.4。乾式走査で表現不能と長さを先に確定するので、書いている途中で表現不能に気付いて元ファイルを半端に壊す経路も、容量不足で壊す経路も残らない (01 FR-105 AC-2)。2 回目のエンコードが乾式走査と異なる長さ・表現不能を返したら (同じ Snapshot なので起きない不変条件違反) 書込を止めて `InPlaceFailed { backup }` |
 | 取消し | main は保存を取り消すとき **常に** そのジョブの `CancelToken` を立てる (`JobSpawner::cancel`)。ジョブが置換・上書きの前か最中かを main は観測せず、取消しを無視するかどうかはジョブと Port が決める。**取消しを見る段**: 乾式走査 (05 §4.4 手順 0)、`metadata` / 開く (照合を含む)、置換の前の書込 (`write_atomic` の一時ファイルへの書込はエンコーダが `ChunkError::Aborted` で、`write_in_place` の事前バックアップの書込は Port が `cancel` を見て止める)。止めたら一時ファイル・一時名のバックアップ・保存中フラグを片付け、元ファイルは無傷のまま `JobError::Cancelled` で終わる。**取消しを見ない段**: `write_atomic` の `ReplaceFileW` (新規ファイルは `MoveFileExW`、Unix は rename) の呼出しの開始以降と、`write_in_place` の上書きの開始 (05 §4.4 手順 6) 以降。取り消されていても完了まで進み、成功なら `Saved` を返す (失敗ならその `FsError`)。03 §9.3 手順 5d で `Atomic` のジョブが `InPlacePattern` により直接上書きへ切り替わった場合も同じで、本書込のエンコーダは `Aborted` を返さない。キャンセル済みの `Saved` は採用する (§9.3 の採否表) |
 | ハッシュ | 外部変更検知のハッシュ (`ContentHash`、XXH3-64) は 16 MiB 以下のファイルについて **読込ジョブ内** でストリーミング計算 (純 Rust の実装、§13.7) |
@@ -1288,8 +1299,8 @@ TUI と、ヘッドレスの消費者 (シナリオ・駆動 API・ヘッドレ�
 |---|---|---|---|---|
 | メイン (Editor ループ) | eve-host | `Editor` の唯一の所有者。メッセージ処理・コマンド実行・Frame 生成・描画出力 | 起動時 | v0.1 |
 | 入力 | eve-tui | 端末からブロッキングで読み、正規化・Text の集約をして `HostMsg::Input` を送る | 起動時 | v0.1 |
-| `io` ワーカー | eve-host (JobSpawner) | ファイル読込・デコード、保存、metadata、外部変更チェック、起動時の退避の走査 (`RecoveryScan`、§9.3) を **直列** に実行 | 起動時 | v0.1 |
-| `bg` ワーカー | eve-host (JobSpawner) | 検索、Undo の実体化 (§14.1 MR1)、E3 の置換の ChangeSet の構築 (`ReplaceUnmappable`)、すべて置換と改行コードの変換の ChangeSet の構築 (`ReplaceAll` / `ConvertEol`)、クリップボードの文字列化 (`Effect::SetClipboard` の `Handle`。JobRequest ではなく Host の作業として `HostTasks::spawn_host_task` (§4.4) でこのキューに積み、結果は core に返さずに `ClipboardProvider` に渡す、§6.3)、スワップ書出し (v0.2。`FileSystem` Port を `SaveOptions { private: true, state_file: true, expected: Expect::Any, .. }` で使う、§11.2.1)、「退避先に保存」の書出し (`WriteRecovery`。I/O を伴うが `io` ではなくこのワーカーで `FileSystem` Port を使う。§9.3、03 §9.7 (e))。新しい要求が来たら同種の古い要求をキャンセルする。例外: Undo の実体化はキャンセルしない。`WriteRecovery` は古い要求を取り消さない (利用者の操作ごとに 1 回書く)。スワップは書込中のものをキャンセルせず、完了後に **最新の Snapshot で 1 回だけ** 再実行する (待っている要求は文書ごとに 1 つに畳む。書きかけのスワップを残さない) | 最初の bg の作業で遅延生成 | v0.1 |
+| `io` ワーカー | eve-host (JobSpawner) | ファイル読込・デコード、保存、metadata、外部変更チェック、起動時の退避の走査 (`RecoveryScan`、§9.3)、ワークスペースのルートの検出 (`WorkspaceRoot`。v0.5 の M31、03 §12.7.1) を **直列** に実行 | 起動時 | v0.1 |
+| `bg` ワーカー | eve-host (JobSpawner) | 検索、Undo の実体化 (§14.1 MR1)、E3 の置換の ChangeSet の構築 (`ReplaceUnmappable`)、すべて置換と改行コードの変換の ChangeSet の構築 (`ReplaceAll` / `ConvertEol`)、クリップボードの文字列化 (`Effect::SetClipboard` の `Handle`。JobRequest ではなく Host の作業として `HostTasks::spawn_host_task` (§4.4) でこのキューに積み、結果は core に返さずに `ClipboardProvider` に渡す、§6.3)、スワップ書出し (v0.2。`FileSystem` Port を `SaveOptions { private: true, state_file: true, expected: Expect::Any, .. }` で使う、§11.2.1)、「退避先に保存」の書出し (`WriteRecovery`。I/O を伴うが `io` ではなくこのワーカーで `FileSystem` Port を使う。§9.3、03 §9.7 (e))、ワークスペースの走査・ファインダの照合・横断検索・候補の一覧の解放 (`WorkspaceScan` / `FinderMatch` / `WorkspaceSearch` / `ReleaseCandidates`。v0.5 の M31。走査と横断検索は I/O を伴うが `bg` で `FileSystem` Port を使い、ディレクトリ 16 個ごとに積み直して譲る。OQ-103、03 §12.7.7)。新しい要求が来たら同種の古い要求をキャンセルする。例外: Undo の実体化はキャンセルしない。`WriteRecovery` は古い要求を取り消さない (利用者の操作ごとに 1 回書く)。スワップは書込中のものをキャンセルせず、完了後に **最新の Snapshot で 1 回だけ** 再実行する (待っている要求は文書ごとに 1 つに畳む。書きかけのスワップを残さない) | 最初の bg の作業で遅延生成 | v0.1 |
 | ログ | eve-host | warn 以上のログをファイルへ書く | 最初の warn 以上のイベントで遅延生成 | v0.1 |
 | 標準入力の読込 (`eve-stdin-job`) | eve-host (JobSpawner) | `JobKind::OpenStdin` (03 §9.2.2) だけを走らせる専用のワーカー。パイプが閉じない間も `io` (他の文書の読込・保存) と `bg` を止めないため、`io` / `bg` に載せない。ジョブが終わると終わる。**終了のときに待たない** (join しない。§9.6。今の `ThreadJobSpawner` の drop はレーンごとに最大 1 秒待つ (`crates/eve-host/src/workers.rs` の `JOIN_WAIT`) ので、このワーカーをレーンとして作るなら「このレーンは待たない」とする)。ADR-0006 の改訂 (OQ-219 の 8) で認めた例外 | `evoeditor -` で起動し、標準入力が端末でないときだけ (プロセスで 1 回) | v0.4 (M25) |
 | 標準入力の読取 (`eve-stdin`) | eve-platform (`StdinSource` の実装) | 私有のハンドル / fd (§4.4 の `StdinSource` の注記) から標準入力を読み (Unix は停止の自己パイプと一緒に `poll` で待ってから `read(2)`、Windows は `ReadFile`)、チャンクを深さ 4 のチャネルで受け手 (`eve-stdin-job`) に渡す。読取の中で止まっていても取消しが効くように、ジョブとは別のスレッドにする (入力スレッドと同じく、読むだけのスレッド)。止めるときは OS ごとの方法で起こし (Unix は自己パイプ、Windows は `CancelSynchronousIo`、05 §9.1 / §9.2)、自分でハンドル / fd を閉じて終わる。**終了のときに待たない**。ADR-0006 の改訂 (OQ-219 の 8) で認めた例外 | `StdinSource` を作るとき (Host。`evoeditor -` で標準入力が端末でないとき) | v0.4 (M25) |
@@ -1303,7 +1314,7 @@ TUI と、ヘッドレスの消費者 (シナリオ・駆動 API・ヘッドレ�
 | 非同期ランタイム | eve-host が起動、eve-lsp / eve-ai が使用 | tokio (専用スレッド、少数ワーカー)。LSP の stdio、HTTP ストリーミング | 必要時 | v1.L |
 
 - **ワーカーは固定 2 本** (ADR-0006、確定。v0.5 の再評価 (OQ-103、S-26) でも固定 2 本のままと確定 (ユーザー回答、2026-11-21))。標準入力の読込 (v0.4 の M25) は、例外として (ADR-0006 の改訂、OQ-219 の 8。確定 (ユーザー回答、2026-11-13))、`evoeditor -` のときだけ専用のワーカー `eve-stdin-job` と読取のスレッド `eve-stdin` を足す (上の表。閉じないパイプで `io` を止めないため。汎用のワーカーは増やさない)。R11 (§4.3) の例外の一覧にも載せた。`deps-policy.toml` の `thread_spawn.allowed_files` と `clippy.toml` の理由の文は、スレッドを作るコードと同じ PR で直す (08 §2.5 の M25 の (8))。保存が検索に待たされないことは `io` と `bg` の分離で満たす。検索は 1 スレッドでも 1 GB/s 出るので v0.1 では並列化しない。優先度付きプールと rayon の検討は v0.5 (横断検索)・v0.6 (tree-sitter)。`JobSpawner` の形は変えないので後から差し替えられる。
-- **`bg` のキューの順序**: 高い方から `WriteRecovery` (保存の失敗の後に利用者が選んだ退避。データ保全、P1) → `Materialize` (§14.1 MR1。会計外のメモリを持つ時間を短くする) → `ReplaceUnmappable` / `ReplaceAll` / `ConvertEol` (と v0.2 の `Swap`) → 検索 (`Search` / `SearchFrom` / `SearchLines`) の順に先頭へ積み、同じ段の間は投入順とする (提案、OQ-198)。検索は 1 MiB ブロックを処理するごとに、続きを自分でキューに積み直して譲る (長い全件検索が上の段のジョブを待たせない)。検索の中での優先 (可視範囲を先に、等) は 03 §12 が決める。`ManualJobSpawner` の `run_jobs()` も同じ順で実行する (§4.4)。
+- **`bg` のキューの順序**: 高い方から `WriteRecovery` (保存の失敗の後に利用者が選んだ退避。データ保全、P1) → `Materialize` (§14.1 MR1。会計外のメモリを持つ時間を短くする) → `ReplaceUnmappable` / `ReplaceAll` / `ConvertEol` (と v0.2 の `Swap`) → 検索 (`Search` / `SearchFrom` / `SearchLines`。v0.5 の M31 のワークスペースのジョブ `WorkspaceScan` / `FinderMatch` / `WorkspaceSearch` / `ReleaseCandidates` も同じ段) の順に先頭へ積み、同じ段の間は投入順とする (提案、OQ-198)。検索は 1 MiB ブロックを処理するごとに、続きを自分でキューに積み直して譲る (長い全件検索が上の段のジョブを待たせない)。検索の中での優先 (可視範囲を先に、等) は 03 §12 が決める。`ManualJobSpawner` の `run_jobs()` も同じ順で実行する (§4.4)。
 - **`io` ワーカーが OS の呼出しで止まったとき** (提案、OQ-179): `io` は 1 本なので、ネットワーク共有の応答が無い等で 1 つのジョブが OS の呼出しの中で止まると、開く・保存・走査がすべて止まる (取消しは呼出しから戻るまで効かない)。そこで Host は `io` ジョブに **監視時間** (5 s。定数) を設ける。ワーカーはジョブを始めるときに (JobId, 開始の Tick) を原子変数に書き (Mutex は使わない、MR9)、Host は待機の期限にその監視の期限を加えて (§9.2 の `wait_deadline`)、超えていたら (1) `HostReport::IoJobStalled { job }` で core に知らせ (§5.4)、(2) そのワーカーを **切り離し**、(3) 新しい `io` ワーカーを作って、キューに残るジョブをそちらで続ける。切り離したワーカーは、止まっていたジョブの結果 (終端を含む) を送り終えたら次のジョブを取らずに終わる。止まっていたジョブは失敗にしない (保存なら置換が後で完了し得る。ジョブ表の行は残り、終端の結果が届けば通常どおり採否を決める、§9.3)。切り離したワーカーが残っている間に新しい `io` ワーカーも止まったら、それ以上は作らない (同時に切り離しておくのは 1 本まで)。R11 の「作業スレッドは固定 2 本」は **「同時に有効なのは 2 本」** と読み替える (切り離した 1 本は数えない)。代替は、`FsKind::Network` (§4.5) と分かった文書のジョブだけを専用の 3 本目のレーンに載せる案 (最初の `metadata` までは分からない) (10 の OQ-179)。
 - **スレッドのパニック**: ワーカーはジョブ単位で `catch_unwind(AssertUnwindSafe(|| run_job(..)))` で包み、パニックを `JobResult::Failed { err: JobError::Panic }` に変換して **そのジョブの終端の結果** として送る (ジョブの失敗として通知し、ワーカーは次のジョブへ進む)。パニックの前に `emit` 済みの非終端の結果 (`Progress`・`Identity`・`SearchHits { done: false }` 等) は届いたまま有効で、core は `Failed { Panic }` を受けた時点でジョブを終える。終端の結果を `emit` した後にパニックした場合、`Failed { Panic }` は「終端の後に届いた結果」として破棄される (§9.3。ログには残る)。Host の作業 (`HostTasks::spawn_host_task`) も同じく包み、失敗として扱う (クリップボードは書込失敗のメッセージ)。**パニックフックはどのスレッドでも端末に触れない**: ワーカーが `run_job` (と Host の作業) を実行している間はスレッドローカルの印 `IN_JOB` を立て、印が立っているスレッドのフックは **ログ (クラッシュログではなく error のログ) だけを書き、`HostMsg::Fatal` を送らない** (上の `catch_unwind` で回復するため)。メイン以外で `IN_JOB` が立っていないスレッド (入力スレッド等) のフックはメインへ `HostMsg::Fatal` を送るだけで、緊急退避は書かず (退避の「1 回だけ」の CAS にも参加しない、§11.2.1)、**退避と端末の復元はメイン (Host) が `Fatal` を受けて行う**。メインのパニックは `catch_unwind` で捕まえた後に Host が退避と復元を行う (§11.2)。入力スレッドの終了 (パニック・読取不能) は Fatal として扱い、緊急退避 (§11.2) してから終了する。
 - **共有の禁止**: ワーカーとメインの間で Mutex を共有しない (メッセージのみ)。ワーカーのパニックでロックが poison されることを防ぐ。例外はログで、それも専用スレッドへのチャネルにする。
@@ -1568,7 +1579,13 @@ struct JobRequest {
     kind: JobKind,
 }
 
-fn run_job(req: &JobRequest, ports: &JobPorts, cancel: &CancelToken, emit: &mut dyn FnMut(JobOutput));
+fn run_job(req: &JobRequest, ports: &JobPorts, cancel: &CancelToken, emit: &mut dyn FnMut(JobOutput)) -> JobStep;
+enum JobStep { Done, Continue(JobKind) }  // v0.5 の M31 で足す (03 §12.7.2): 区切って譲るジョブ (WorkspaceScan / WorkspaceSearch) は、1 区切りを終えると
+    // 終端の結果を送らずに続きの JobKind (積み直しの状態を持つ) を返す。ワーカーのレーンはそれを **同じ JobId・同じ CancelToken のまま** 自分のキューの
+    // 末尾へ積む (間に投入されたジョブが先に走る。JobSpawner::cancel は続きにも効き、取り消されていれば続きを積まずに Failed { Cancelled } を送る)。
+    // ManualJobSpawner も同じく続きを自分のキューの末尾に積み、run_jobs() はキューが空になるまで、run_one() は 1 区切りだけ回す (走査の途中の状態を
+    // 決定的に作れる)。ほかのジョブは Done だけを返す。v0.2.0〜v0.4 の実装の Lane は単純な FIFO で、ジョブが続きを積む経路が無い
+    // (エディタ内の検索は core が取り消して投げ直す、§9.1 の「v0.2.0 の実装との差」)。この経路は M31 の段 4 (03 §12.7.9) で eve-host と一緒に入れる。
     // 1 つのジョブを実行する。結果はすべて emit で送る (進捗・検索結果のように 1 つのジョブが複数の結果を送る種別がある)。
     // 最後に送るのは終端の結果 1 つ (Progress と SearchBatch 以外の変種。Search の終端は SearchDone)。cancel は長い処理の区切りで見る
     // (検索: 一定バイト毎、デコード・エンコード: チャンク毎)。立っていたら一時ファイル等を片付けて Failed { err: JobError::Cancelled } を送る。
@@ -1619,6 +1636,16 @@ enum JobKind {                     // Port は持たない (run_job が JobPorts
                                                                       // その後ろに同じ条件の Search を投げ直す (全件の走査の後ろで待たない、03 §12.3.1)
                                                                       // 同じ (Revision, 起点, 向き) の単発が走っている間は取り消さない (連打の回数は main が数える。03 §12.3.1)
     // SearchLines (可視範囲の行検索) と Materialize (§14.1 MR1) は v0.2.0 の実装に無い (§9.1 の「v0.2.0 の実装との差」)
+    // ── ワークスペース (v0.5 の M31。03 §12.7。細目と結果の型は 03 §12.7.1〜§12.7.7) ──
+    WorkspaceRoot { explicit: Option<FsPath> /*--workspace*/, args: Vec<FsPath> /*位置引数 (`-` を除く)*/, cwd: FsPath, markers: Vec<String> },
+                                                                      // io。起動時に 1 回、起動時のパスを開くジョブの後ろに積む (03 §12.7.1、規則は 07 §12.1)。doc は None
+    WorkspaceScan { root: FsPath, exclude: Arc<ExcludeConfig>, generation: u64, walk: Option<Box<WorkspaceWalk>> /*積み直しの続き*/ },
+                                                                      // bg。ファインダの候補の走査。ディレクトリ 16 個ごとに自分を積み直す (03 §12.7.2)
+    FinderMatch { chunks: Vec<Arc<[Candidate]>>, query: Arc<str>, top: usize, generation: u64 }, // bg。ファインダの照合 (03 §12.7.4)
+    WorkspaceSearch { root: FsPath, query: SearchQuery, exclude: Arc<ExcludeConfig>, open_docs: Vec<OpenDocRef /*canonical・ファイル名・FileId・Snapshot*/>,
+                      decode: DecodeSettings, max_file_size: u64, max_lines: usize, generation: u64, state: Option<Box<WorkspaceSearchState>> },
+                                                                      // bg。横断検索 (03 §12.7.5)。区切りはディレクトリ 16 個・ファイル 64 個・中身 1 MiB・8 ms の早いほう
+    ReleaseCandidates { chunks: Vec<Arc<[Candidate]>>, hits: Vec<WsHit> },              // bg。古い候補の一覧・横断検索の結果を bg で解放する (主スレッドで大きな一覧を drop しない、03 §12.7.2)
     Swap     { doc: Arc<DocSnapshot> /*1 文書分*/ },                                                  // bg (v0.2)。FileSystem::write_swap (§4.5) が置き場所を決めて書く
     SwapRead { entry: SwapEntry }, SwapRemove { entry: SwapEntry },   // io (v0.2)。他のプロセスが残したスワップの適用・破棄 (03 §10.3)
     SwapDiscard { doc: DocumentId, path: Option<FsPath> },            // io (v0.2)。自分のスワップを消す (03 §10.2)
@@ -1647,6 +1674,8 @@ struct OpenOptions {               // 開くジョブの指定 (Copy)。確認 (
                                    // 理由の保持場所はここだけにする (再投入で JobId が変わっても OpenOptions ごと引き継ぐので失われない)。
                                    // main は Complete を受けたら pending ∪ Complete.detected ∪ (meta から決まる理由、03 §9.6) を文書に付ける
     default_eol: Option<LineEnding>, huge_file_warn_bytes: Option<u64>, long_line_threshold: Option<usize>, // 開くときの設定の値 (07 §5)。None は既定値
+    must_exist: bool,              // v0.5 の M31: パスが無ければ新規の文書にせず Failed { Fs(NotFound) } で終える。ファインダ・横断検索から開くときだけ立てる
+                                   // (走査の後に消えたファイルを空の新規の文書にしない。03 §9.2 手順 2、§12.7.4)
     partial: bool,                 // v0.4 の M25: 先行表示 (JobResult::Partial) を送ってよい。core が新しく開く読込 (file.open・起動時のパス) のときだけ立てる。
                                    // 再読込・開き直し・OpenStdin では立てない。確認からの再投入は引き継ぐ (03 §9.2.1)
     // v0.1 の案の confirmed_invalid_bytes は置かなかった (ManyInvalidBytes の確認の回答は read_only_requested で表す)
@@ -1659,7 +1688,8 @@ enum SaveStrategy {                // 既定は Atomic { hardlink: Ask }
 }
 enum MetaPurpose {
     UnchangedSave,                 // 未編集の上書き保存の照合 (03 §9.3 手順 0)
-    SaveAsTarget,                  // 名前を付けて保存の保存先の照合 (03 §9.7 (a) の CheckTarget)
+    SaveAsTarget,                  // 名前を付けて保存の保存先の照合 (03 §9.7 (a) の CheckTarget)。v0.5 の M31 から metadata に加えて canonical のパスも返す
+                                   // (保存先が無ければ親を canonicalize してファイル名を付けたもの。SAF-28、03 §12.7.6)
     ExternalCheck,                 // フォーカス復帰時・明示コマンドの外部変更確認 (v0.2、03 §9.5)
 }
 enum ConfirmAsk {                  // 開くジョブが確認のために終了するときの理由 (03 §9.2)
@@ -1684,8 +1714,9 @@ enum JobResult {                   // #[non_exhaustive]
     Partial      { head: Text /*固定の先頭 (1 MiB まで、行の区切りで切る。全文の接頭辞)*/, format: TextFormat /*先頭の時点の形式。表示にだけ使う*/ },
                                                                 // v0.4 の M25 (03 §9.2.1)。非終端。読込が 200 ms を過ぎても終わらないとき 1 回 (判定のやり直しの後は送り直す)。OpenOptions.partial が立った Open だけが送る
     NeedsConfirm { ask: ConfirmAsk }, // ジョブはここで終了 (下の「確認を待ってブロックしない」)
-    // v0.1 の案の Identity (二重オープン判定用の中間結果) は v0.2.0 の実装に無い。v0.2.0 の二重オープンの判定は、開くジョブの前に正規化したパスの
-    // 文字列を比べるだけ (FileId を使わない。§4.5 の規則の表の「二重オープン」と食い違う。名前を付けて保存の同一の判定 (SAF-28) と一緒に v0.4 以降で直す)
+    Identity     { file_id: Option<FileId>, file_id_unique: bool, canonical: Option<FsPath> }, // 非終端。metadata と canonicalize の後、読込と確認 (NeedsConfirm) の前に 1 回 (03 §9.2 手順 2b、§12.7.6)。
+                                                                // v0.1 の案にあったが v0.2.0〜v0.4 の実装に無い (二重オープンの判定は、開くジョブの前に正規化したパスの文字列を比べるだけ。
+                                                                // §4.5 の規則の表の「二重オープン」と食い違う)。**v0.5 の M31 で入れる** (SAF-28。名前を付けて保存の同一の判定と一緒に)
     NewFile      { interrupted_save: Option<InterruptedSave> /*§4.5。残っていた保存中フラグ*/,
                    parent_missing: Option<FsPath> /*親フォルダが無い (FsErrorDetail::ParentMissing の dir)。msg.open.parent_missing を出す (03 §9.2)*/ }, // パスが存在しない
     Complete     { text: Text, format: TextFormat, meta: FileMeta, stamp: FileStamp, changed_during_load: bool,
@@ -1717,7 +1748,7 @@ enum JobResult {                   // #[non_exhaustive]
     // EscapeMergeApproval { total: u64, recorded: Vec<EscapeMergeAt>, digest: u64 /*全件 (位置・強調の範囲・局所の復号) のダイジェスト。XXH3-64*/ }
     //                 /*承認した結果。JobKind::Save の escape_merge_ok に入れる。ジョブは結果 (件数・先頭 100 件・全件のダイジェスト) がこれと同じときだけ止めない*/
     // ── metadata の照合 (io) ──
-    Meta         { meta: FileMeta, stamp: FileStamp },          // MetaPurpose のいずれか (未編集の上書き保存の照合、名前を付けて保存の保存先、フォーカス復帰時の確認 (v0.2))
+    Meta         { meta: FileMeta, stamp: FileStamp, canonical: Option<FsPath> /*v0.5 の M31: SaveAsTarget だけが入れる (03 §12.7.6 の 2)。ほかは None*/ }, // MetaPurpose のいずれか (未編集の上書き保存の照合、名前を付けて保存の保存先、フォーカス復帰時の確認 (v0.2))
     // ── E3 の置換 (03 §8.6) ──
     UnmappableReplacement { changes: ChangeSet /*投入時の Revision の全文に対する置換*/,
                             targets: Vec<ReplaceTarget> /*位置・元の文字・置換後。先頭の一部。位置は投入時の Revision の座標*/,
@@ -1749,9 +1780,16 @@ enum JobResult {                   // #[non_exhaustive]
     ConfigRead   { config: Vec<ConfigFile>, keymap: Option<ConfigFile>, locales: Option<LocaleScan> },
     ThemeRead    { name: String, theme: Option<Theme>, reports: Vec<(String, Vec<Diagnostic>)> },
     LastVersionChecked { outcome: LastVersionOutcome },
+    // ── ワークスペース (v0.5 の M31。型の細目は 03 §12.7.1〜§12.7.5) ──
+    WorkspaceRoot { root: FsPath, source: RootSource /*Explicit | Dir | Marker | Cwd*/, dir_args: Vec<FsPath> },
+    ScanBatch    { generation: u64, chunk: Arc<[Candidate]>, unreadable_dirs: u64 }, // 非終端。WorkspaceScan の束
+    ScanDone     { generation: u64, total: u64, truncated: bool },                    // WorkspaceScan の終端 (ルートが読めなければ Failed)
+    FinderMatched { generation: u64, matched: usize, top: Vec<FinderHit> },
+    WorkspaceHits { generation: u64, hits: Vec<WsHit>, progress: WsProgress },        // 非終端。WorkspaceSearch の区切りごと
+    WorkspaceSearchDone { generation: u64, progress: WsProgress, truncated: bool },   // WorkspaceSearch の終端
     // ── 共通 ──
     Failed       { err: JobError },
-    // v0.1 の案の Identity・Materialized は v0.2.0 の実装に無い。ChangesBuilt は ReplaceAllDone / ConvertEolDone に、SearchHits は SearchBatch / SearchDone に分けた
+    // v0.1 の案の Identity は v0.5 の M31 で入れる (上の「開く」)。Materialized は v0.2.0 の実装に無い。ChangesBuilt は ReplaceAllDone / ConvertEolDone に、SearchHits は SearchBatch / SearchDone に分けた
 }
 enum JobError {                    // #[non_exhaustive]
     Fs(FsError),                   // §4.5。読込の途中の I/O 失敗も ChunkError::Io の FsError をそのまま入れる

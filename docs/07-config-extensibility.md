@@ -374,9 +374,9 @@ v0.1 で設定ファイル (`config.toml`、ユーザー層) から読む **公�
 | `count_limit` | int | `1000000` | 一致件数カウントの打ち切り (FR-404、03 §12、OQ-55)。範囲 1000..=1000000000 (範囲外は警告して既定値)。超えたら数えるのをやめて「N+」と表示する (`max_matches` より小さくすると、保持もこの件数までになる)。設定の変更は次に検索バーを開いたときから効く | v0.1 (定数)。**v0.4 で、M24 とは別の fix の PR で公開・実装した** (それまでの実装は予約だけで、値は定数の `1000000`) |
 | `cp932_compat_fold` | bool | `true` | CP932 互換文字 (〜/～、−/－、‖/∥、¢/￠ 等) を検索で同一視する (03 §8.7、OQ-41。確定 (ユーザー回答、2026-11-11))。保存データは変えない。対象は 8 組 (03 §8.6 の互換文字の表 (OQ-208) から `¥` / `‾` の 2 行を除いたもの。`\` も含めない) で、文書の文字コードに依らない。リテラル検索と正規表現 (リテラルの文字とクラス) の両方に効き、置換の文字列には掛けない。同一視が効いているときは、検索バーの件数の後ろに印が出る。切り替えるトグル・コマンドは無い。設定の変更は次に検索バーを開いたときから効く (細目は 03 §12.4.1。v0.4 の M24 の案で、利用者に見える点は OQ-218 の 5〜8 (確定 (ユーザー回答、2026-11-12))) | v0.4 (**M24 の (5) で予約から外して公開した**) |
 | `newline_sugar` | bool | `true` | 正規表現の `\n` を改行 1 つ (LF・CRLF・単独の CR のどれか) に一致させる (03 §12.3 / §12.3.1)。要素として `\n` を書いたクラスも改行 1 つに一致させる。続けて書いた `\r\n` には掛けない。どの場合も CRLF を CR と LF に分けて一致させない。`false` では、`\n` は LF だけの改行に一致する (CRLF の改行には一致しない)。行の数に上限の無いパターン (`(?s).*`・`\n+` など) は、文書が 16 MiB (UTF-8 のバイト数。定数で、設定は無い) 以下のときだけ探す (03 §12.3.1)。検索バーを開いたときの値で効く (設定の変更は次に開いたときから) | v0.1 (定数、公開 v0.2)。v0.3 までの実装はキーを予約しただけで、糖衣も入れていない (`\n` を含むパターンは未対応)。糖衣は v0.4 の M24 で入れ、キーは **M24 の (4) で予約から外して公開した** (v0.4) |
-| `workspace.respect_gitignore` | bool | `true` | 横断検索・ファインダ | v0.5 |
-| `workspace.follow_symlinks` | bool | `false` | 〃。ワークスペース層の `true` は危険の分類 (ワークスペース外を読む、§12.3) | v0.5 |
-| `workspace.max_file_size` | int (bytes) | `2097152` | 横断検索対象の上限。ワークスペース層で大きくする値は準安全の分類 (§12.3) | v0.5 |
+| `workspace.respect_gitignore` | bool | `true` | 横断検索・ファインダで、リポジトリ (`.git` のある木) の `.gitignore` と `info/exclude` を効かせる。`false` でも `workspace.exclude` (§5.9) は効く。グローバルの excludesFile はどちらでも読まない (03 §12.7.3) | v0.5 |
+| `workspace.follow_symlinks` | bool | `false` | 〃。`false` では走査がシンボリックリンク (Windows のジャンクションを含む) の先へ降りず、横断検索はリンクを読まない (ファインダには候補として出す)。`true` ではリンク先のディレクトリへ降り (循環は `FileId` で防ぐ)、リンク先のファイルも探す (03 §12.7.2)。ワークスペース層の `true` は危険の分類 (ワークスペース外を読む、§12.3) | v0.5 |
+| `workspace.max_file_size` | int (bytes) | `2097152` | 横断検索対象の上限 (ディスクのファイルはバイト数、開いている文書は今の本文の UTF-8 のバイト数で比べる。超えたものは飛ばして数える、03 §12.7.5)。範囲 1024..=1073741824 (範囲外は警告して既定値)。ワークスペース層で大きくする値は準安全の分類 (§12.3) | v0.5 |
 
 ### 5.6 `[clipboard]`
 
@@ -403,8 +403,8 @@ v0.1 で設定ファイル (`config.toml`、ユーザー層) から読む **公�
 
 | キー | 型 / 値 | 既定 | 説明 | P |
 |---|---|---|---|---|
-| `root_markers` | array of string | `[".eve", ".git", ".hg", ".svn"]` | ルート検出の目印 (§12.1) |v0.5 |
-| `exclude` | array of glob | `["**/.git", "**/node_modules", "**/target"]` | ファインダ・横断検索の除外 (gitignore に追加) |v0.5 |
+| `root_markers` | array of string | `[".eve", ".git", ".hg", ".svn"]` | ルート検出の目印 (§12.1)。要素はディレクトリの直下の項目の名前 (区切り `/` `\` を含む要素・空の要素・`.`・`..` は警告して捨てる)。空の配列なら目印で探さない (§12.1 の 1・2・4 だけ) |v0.5 |
+| `exclude` | array of string (gitignore の行) | `["**/.git", "**/node_modules", "**/target"]` | ファインダ・横断検索の除外 (gitignore に追加)。各要素はワークスペースのルートに置いた `.gitignore` の 1 行と同じ書式で読み (`/build/`・`*.log`・`!keep.log`)、`.gitignore` より優先する (`!` の要素で gitignore の除外を戻せる)。`search.workspace.respect_gitignore` に依らず効く。照合は 03 §12.7.3 |v0.5 |
 | `trust.default` | `"ask" \| "never" \| "always"` | `"ask"` | 信頼の既定挙動 (`always` は非推奨で警告) | 信頼の仕組みと一緒 (最初の危険な項目の版。§12 の「版」) |
 | `trust.remember` | bool | `true` | 信頼判断を状態ディレクトリに記憶 | 信頼の仕組みと一緒 (§12 の「版」) |
 
@@ -622,7 +622,7 @@ v0.1 で設定ファイル (`config.toml`、ユーザー層) から読む **公�
 
 | 要素 | 文法 |
 |---|---|
-| コンテキスト | `global` / `editor` / `search` (検索バー) / `prompt` (1 行入力欄の編集。全入力欄で共通) / `palette` / `list` (一覧 UI 共通) / `dialog` (確認ダイアログ) / `help` (ヘルプ画面) / `finder` (v0.5) / `panel.<name>` (v0.5+)。core が公開する固定集合。未知名は警告。参照順は下の表 |
+| コンテキスト | `global` / `editor` / `search` (検索バー) / `prompt` (1 行入力欄の編集。全入力欄で共通) / `palette` / `list` (一覧 UI 共通) / `dialog` (確認ダイアログ) / `help` (ヘルプ画面) / `finder` (v0.5。ワークスペースの一覧のオーバーレイ: ファインダと横断検索の結果。03 §12.7.4 / §12.7.5) / `panel.<name>` (v0.5+)。core が公開する固定集合。未知名は警告。参照順は下の表 |
 | キー | 1 つ以上の **ストローク** を空白で区切ったもの (コード)。書式は v0.1 から固定する (FR-604)。版ごとの解決範囲: **v0.1** はユーザーのキー割当を読まない (`[keys]`・`[keys.*]`・`keymap.toml` は「このバージョンでは未対応」の情報診断。チョードは組込みの既定キーマップのものだけが動く)、**v0.2** はユーザー割当の単一ストロークを解決し、2 ストローク以上は「このバージョンでは未対応」の情報診断、**v0.5** でユーザー定義のチョードを解決する (ADR-0039。**v0.5 の M29 で実装した**、下の「v0.5 の実装範囲」) |
 | ストローク | `[修飾+]*キー名`。修飾は `ctrl` / `alt` / `shift` / `super` (別名 `cmd`, `win`, `meta` を受理し `super` に正規化) / **`mod`** (主修飾の抽象。OQ-29 / 02 §7.2 K6)。順序は任意、正準化は `ctrl+alt+shift+super+キー` |
 | `mod` | **正準化時に frontend / OS で解決** する: TUI (全 OS) = `ctrl`。既定キーマップ (§11.6) は `mod+s` のように書く。表示 (04 §7.8) は解決後の名前 (TUI は全 OS で `Ctrl+S`。`⌘S` / `⌃S` の記法は使わない)。`mod` と `ctrl` / `super` を同じストロークに併記した場合は解決後に重複としてエラー。既定キーマップで `ctrl` を直書きする英字との組 (`ctrl+k` のチョード、`list` の `ctrl+n` / `ctrl+p` 等) は `mod` を使わない例外で、一覧は §11.6 の「既定キー」の規則に書く |
@@ -640,6 +640,7 @@ v0.1 で設定ファイル (`config.toml`、ユーザー層) から読む **公�
 | コマンドパレット | `palette` → `list` → `prompt` → `global` |
 | バッファ一覧 (v0.2) | `list` → `prompt` → `global` |
 | 設定の診断の一覧 (v0.3、`config.show_diagnostics`) | `list` → `prompt` → `global` |
+| ファインダ・横断検索の結果 (v0.5 の M31、`workspace.open_file` / `search.workspace`) | `finder` → `list` → `prompt` → `global` (2 つのオーバーレイで同じコンテキストを使い、片方だけの割当は `when` の `overlay.active` で分ける) |
 | ヘルプ画面 (v0.2) | `help` → `global` |
 | 確認ダイアログ | `dialog` のみ (**モーダル**。`global` を参照しない。抜ける手段は `esc` と選択肢) |
 
@@ -655,7 +656,7 @@ v0.1 で設定ファイル (`config.toml`、ユーザー層) から読む **公�
 - **`"none"`**: チョードの割当も、その列だけを解除する (同じ先頭のほかのチョードは残る)。解除した列を押し切ると「未割当」と同じで、文字を本文に入れない。`"none"` のチョードは単体の割当を無効にしない (§7.6)。
 - **`args`**: 割当の `args` (表) をコマンドに渡す。引数の名前・型・使える値・必須はコマンドの引数の形 (§11.2、§11.6 の `args` 列) で照らし、合わない割当はそれだけを使わずに警告する (§7.6)。`args` を書かない割当は v0.2 と同じ (引数なしで呼ぶ)。
 - **衝突の検出** (FR-608): §7.6 の表のとおり。診断は書かれた行・キーを示し、起動・`config.reload`・`--check-config` (§18.3) で同じに出る。
-- `finder` / `panel.*` のコンテキストは、引き続き「このバージョンでは未対応」の情報診断。
+- `finder` / `panel.*` のコンテキストは、引き続き「このバージョンでは未対応」の情報診断。**`finder` は v0.5 の M31 のファインダの実装の PR (03 §12.7.9 の段 6) から解決する** (その PR でこの行を直す)。
 
 ### 7.2 キー名
 
@@ -690,7 +691,7 @@ literal:= '"' ... '"' | number | true | false
 | 変数 | 型 | 意味 |
 |---|---|---|
 | `editor.focus` | bool | 編集面にフォーカス |
-| `overlay.active` | string | 表示中オーバーレイ名 (`""` / `palette` / `prompt` / `dialog` / `buffer_list` (v0.2) / `config_diagnostics` (v0.3) / `help` (v0.2) / `finder` (v0.5) / `completion` (v0.5 以降)) |
+| `overlay.active` | string | 表示中オーバーレイ名 (`""` / `palette` / `prompt` / `dialog` / `buffer_list` (v0.2) / `config_diagnostics` (v0.3) / `help` (v0.2) / `finder` (v0.5) / `workspace_search` (v0.5。横断検索の結果、03 §12.7.5) / `completion` (v0.5 以降)) |
 | `panel.focus` | string | フォーカス中パネル名 (v0.5+) |
 | `pane.split` | bool | Window のペインが 2 つ以上 (v0.5、FR-509。03 §9.9)。`pane.close`・ペインの移動・大きさのコマンドの `when` (§11.6)。偽のときのパレットの理由は `ui.palette.reason.single_pane` |
 | `doc.read_only` | bool | 読み取り専用 |
@@ -1307,7 +1308,8 @@ verb       := [a-z][a-z0-9_]*
 | `file.save` | `cmd.file.save` | File | — | `!doc.read_only` | `-` | `editor`, `search` | `mod+s` | normal:4 |
 | `file.save_as` | `cmd.file.save_as` | File | `path?` | — | `-` | `editor`, `search` | `editor`: `mod+shift+s` [E], `ctrl+k s` (alt)、`search`: `mod+shift+s` [E] | - |
 | `file.save_all` (v0.2) | `cmd.file.save_all` | File | — | — | `-` | `editor` | `ctrl+k a` (alt) | chord:3 |
-| `file.open` | `cmd.file.open` | File | `path?` | — | `-` | `editor`, `search` | `mod+o` (v0.5 でファインダ `workspace.open_file` に移す。パスを入力する `file.open` はパレットから使う。パスの補完は送る。PO の決定 2026-11-20、v0.5-plan §1.3 の (1)) | normal:2 |
+| `file.open` | `cmd.file.open` | File | `path?` | — | `-` | `editor`, `search` | `mod+o` (v0.5 でファインダ `workspace.open_file` に移す。パスを入力する `file.open` はパレットから使う。パスの補完は送る。PO の決定 2026-11-20、v0.5-plan §1.3 の (1)。移すのは M31 のファインダの実装の PR (03 §12.7.9 の段 6) で、その PR でこの行の既定キーを `—`・ヒントを `-` にし、下の `workspace.open_file` の行に移す。それまで実装と照らす検査 (09 §11.2) のためにこの行に残す) | normal:2 |
+| `workspace.open_file` (v0.5) | `cmd.workspace.open_file` | Ui | `query?` | — | `ui` | `editor`, `search` | `mod+o` (ファインダ、FR-125。03 §12.7.4。M31 の段 6 で上の `file.open` から移す) | normal:2 |
 | `file.new` | `cmd.file.new` | File | — | — | `-` | `editor`, `search` | `mod+n` | - |
 | `file.reload` | `cmd.file.reload` | File | — | `doc.has_path` | `-` | パレット | — | - |
 | `file.check_external_changes` (v0.2) | `cmd.file.check_external_changes` | File | — | `doc.has_path` | `-` | パレット | — | - |
@@ -1381,7 +1383,10 @@ verb       := [a-z][a-z0-9_]*
 | `search.replace_open` | `cmd.search.replace_open` | Ui | — | `!doc.read_only` | `ui` | `editor`, `search` | `mod+r`, `ctrl+h` [E] | - |
 | `search.replace` (v0.2) | `cmd.search.replace` | Edit | — | `search.replace_active && !doc.read_only` | `propose` | `search` (置換欄) | `enter` (置換欄で。v0.1 の置換欄の `enter` は `search.next`。キーマップの `when` は `search.replace_focused`) | search:3 |
 | `search.replace_all` | `cmd.search.replace_all` | Edit | — | `search.replace_active && !doc.read_only` | `propose` | `search` | `alt+a` (`tab` で置換欄から `[A] すべて置換` のボタンへ移り `enter` でも実行できる。04 §8.4) | overlay:1 |
+| `search.workspace` (v0.5) | `cmd.search.workspace` | Ui | `query?` | — | `ui` | `editor`, `search` | `mod+shift+f` [E][横], `ctrl+k f` (alt) (横断検索、FR-405。03 §12.7.5。`search` から開くと検索バーの検索語とトグルを引き継ぐ。Windows Terminal は `ctrl+shift+f` を横取りする、04 §7.3a) | - |
 | `view.toggle_wrap` (v0.2、OQ-110) | `cmd.view.toggle_wrap` | Ui | — | — | `ui` | `editor` | `alt+z`, `ctrl+k o` (alt) | - |
+
+**v0.5 の M31 で足す割当** (横断検索のトグル。03 §12.7.5): `search.toggle_case` / `search.toggle_regex` / `search.toggle_word` を、`finder` コンテキストにも置く (3 つのコマンドの `when` を `search.active || overlay.active == "workspace_search"` に広げ、`finder` の割当にも `when = overlay.active == "workspace_search"` を付ける (ファインダでは効かない)。横断検索のオーバーレイが開いていれば、そのオーバーレイの検索語に効く。キーは `search` コンテキストと同じ `alt+c` / `alt+r` / `alt+w` と `ctrl+k c` / `ctrl+k x` / `ctrl+k b` (alt))。上の表の 3 行は v0.1・v0.2 の行で、既定キー列は実装と照らして検査する (09 §11.2) ので、横断検索の実装の PR (03 §12.7.9 の段 7) が割当と一緒に行を直す。どのキーも既存の既定キー (`finder` → `list` → `prompt` → `global` の参照順で届くもの) と衝突せず、`ctrl+k f` は既定のどのコンテキストでも未使用 (ユーザーのチョード (§7.6) が同じ列を割り当てていれば、ユーザー層が勝つ)。
 
 `search.prev` の主な手段は `up` (`shift+enter` は従来の端末で `enter` と区別できず、`shift+f3` は従来の端末でカーソル位置報告と区別できない)。`search.toggle_case` は大小区別を **smart → sensitive → insensitive → smart** の順に巡回する。開くたびに `search.case` の値から始まり、切り替えた値はセッション中だけ保持する (設定ファイルには書かない。意味は 03 §12、表示は 04 §8.4)。`search.toggle_regex` (正規表現の ON / OFF、初期値は `search.regex_default`) は v0.2 で入れた。`search.replace_open` は検索バーを置換欄つきで開く (検索バーが開いていれば置換欄を足し、置換欄にフォーカスを移す)。`search.replace_all` は v0.1 ではリテラルの一括置換で、大小区別は検索バーの現在の値に従う (手順は 03 §12.5)。置換欄が開いていない (`search.replace_active` が偽) ときは実行できないので、置換文字列を入れないまま `alt+a` で一致を消すことはない。
 
@@ -1438,7 +1443,14 @@ verb       := [a-z][a-z0-9_]*
 ### 12.1 ワークスペースの概念
 
 - **定義** ([00 §6](00-overview.md#6-用語集-glossary)): 起動時のルートディレクトリ。1 プロセスに **1 つ** (複数ルート (multi-root) は Won't (now)。別ワークスペースは別プロセスで開く)。
-- **ルート検出**: (1) CLI でディレクトリが渡されたらそれ (`evoeditor .` / `evoeditor path/to/dir`) (2) 渡されたファイル群の共通祖先から上へ `workspace.root_markers` (既定 `.eve`, `.git`, `.hg`, `.svn`) を探し、最初に見つかったディレクトリ (3) 見つからなければ **カレントディレクトリ** (4) `--workspace <dir>` で明示上書き。`$GIT_EDITOR` 等の一時ファイル編集 (§18.6) では `.git` が見つかるためリポジトリがワークスペースになる (ファインダで他ファイルを開けて便利)。
+- **ルート検出** (v0.5 の M31 で細目を決めた。前から順に、最初に決まったものを採る。ジョブの流れは 03 §12.7.1):
+  1. `--workspace <dir>` / `-w <dir>` (§18.3) で明示したディレクトリ。ディレクトリでない・無い・読めないときは `msg.workspace.root_invalid` を出し、2 以降で決める (起動は続ける)。
+  2. 位置引数の **最初のディレクトリ** (`evoeditor .` / `evoeditor path/to/dir`、§18.2)。2 つ目以降のディレクトリはルートにせず、`msg.cli.directory_ignored` を出す。1 で `--workspace` をルートにしたときは、位置引数のディレクトリはどれもルートにせず、同じ知らせを出す (`--workspace` を使えなかったときは、この 2 から決める)。
+  3. 起点から上へ、各ディレクトリで `workspace.root_markers` (既定 `.eve`, `.git`, `.hg`, `.svn`) のどれかの名前の項目 (ファイルでもディレクトリでもよい。`git worktree` とサブモジュールの `.git` はファイル) を探し、最初に見つかったディレクトリ。1 つのディレクトリの中の目印の順は問わない (深いほうが勝つ。`~/proj/sub/.eve` と `~/proj/.git` なら `sub`)。起点は、位置引数の FILE (`-` を除く) の親ディレクトリの共通の祖先 (構文で比べる。ドライブ・UNC の共有が違って共通の祖先が無ければ、最初の FILE の親)。FILE が無ければカレントディレクトリ。上への探索はファイルシステムのルートで止める (ホームディレクトリでは止めない。git と同じ)。
+  4. 見つからなければ **カレントディレクトリ**。
+  - 決めたルートは canonicalize して保つ (05 §3.3 の表示用の形。canonicalize できなければ正規化しただけのパス)。ルートの検出は最初の Frame の後に `io` のジョブで行い、起動を遅らせない (01 FR-125 AC-3、03 §12.7.1)。ルートの検出は目印の有無を見るだけで、ワークスペース設定を読まない (読むのは FR-705 で、下の所有者の検査を通す)。
+  - `$GIT_EDITOR` 等の一時ファイル編集 (§18.6) では `.git` が見つかるためリポジトリがワークスペースになる (ファインダで他ファイルを開けて便利)。
+  - v0.5 の範囲: ルートを決めるのは起動時だけ。起動した後にルートを替えるコマンドは無い (別のワークスペースは別のプロセスで開く)。
 - ワークスペース外のファイルも開ける (ファインダ・横断検索・AI コンテキストの **範囲** を規定するだけ)。
 - ワークスペース設定: `<root>/.eve/config.toml` (+ `.eve/themes/`, `.eve/languages/`, `.eve/queries/`)。名前は OQ-01 で確定 (ユーザー回答)。
 - **所有者の検査 (OQ-35。確定 (ユーザー回答、2026-11-20))**: ルート検出の上方探索と `.editorconfig` の祖先探索は、`/tmp/x.txt` を開いたときに **他ユーザーが作成できる** `/tmp/.eve/config.toml` や `/tmp/.editorconfig` を拾い得る。安全分類の項目にも `[keys]`・テーマ (fg = bg でコードを不可視にする誤誘導)・`format_on_save` が含まれるため、git の `safe.directory` と同様に **ディレクトリの所有者が現在のユーザーでない、または world-writable (Unix: `o+w` で sticky でも、Windows: `Everyone` / `Users` に書込許可) なディレクトリ以下のワークスペース設定・`.editorconfig` は読み込まない** (層ごと無視し、`config.show_diagnostics` に「所有者が異なるため無視しました: <path>」を出す)。例外: ユーザーが `workspace.trust` で明示的に信頼したルートは所有者に関わらず読む (信頼ダイアログに所有者を表示)。この例外は信頼の仕組みと一緒に入れる (v0.5 には無い。§12 の「版」)。判定の `metadata` (owner) はジョブで取る (02 §4.4 規則 2)。
@@ -1846,7 +1858,7 @@ evoeditor --headless --rpc stdio [--fake-ports] [--allow-write]              # d
 | 形 | 意味 | 備考 |
 |---|---|---|
 | `FILE` | ファイルを開く (存在しなければ新規、FR-101) | **v0.1 は 0 個か 1 個** (単一文書。2 つ以上渡すと TUI を始めずに stderr へ `stderr.usage.multiple_files` (04 §15.2) を出し、終了コード 2 (使い方の誤り) で終わる、01 FR-101 AC-1)。**v0.2 は複数** (FR-103): すべてを開いた順にバッファとして開き、最初のものを表示する。`--readonly` と `--encoding` は全 FILE に掛かる。同じパスは 1 つのバッファだけ開く。2 つ目以降は読込中のバッファとして足し、読込を待たない (03 §9.8) |
-| `DIR` | ワークスペースルートとして開き、ファインダを開く (v0.5) / v0.1 では無題の文書を開き、最初の Frame の後に `msg.cli.directory` (「フォルダなので開けません。無題の文書を開きました」、04 §15.2) を出す | 使い方の誤りにはしない (終了コード 0 の通常の起動)。ファイルを開くプロンプト (`file.open`) でフォルダを指定した場合は `msg.open.not_a_file` |
+| `DIR` | ワークスペースルートとして開き、ファインダを開く (v0.5) / v0.1 では無題の文書を開き、最初の Frame の後に `msg.cli.directory` (「フォルダなので開けません。無題の文書を開きました」、04 §15.2) を出す | 使い方の誤りにはしない (終了コード 0 の通常の起動)。ファイルを開くプロンプト (`file.open`) でフォルダを指定した場合は `msg.open.not_a_file`。**v0.5 の M31 の細目** (03 §12.7.1、§12.1 のルート検出の 2): v0.4 までの実装は、フォルダの引数に `msg.cli.directory` ではなく `msg.open.not_a_file` を出していた (03 §12.7.1)。ディレクトリかどうかは起動時のパスを開くジョブで分かる (端末を始める前に `stat` しない) ので、使い方の誤り (終了コード 2) にはできない。ルートにするのは最初のディレクトリだけで、2 つ目以降と、`--workspace` があるときのディレクトリは `msg.cli.directory_ignored` を出して開かない。ルートにしたディレクトリがあれば、ルートの検出が終わった時点でファインダを開く。FILE と一緒に書ける (`evoeditor . src/main.rs` は `.` をルートにし、`src/main.rs` を開いて表示し、ファインダも開く)。`DIR` だけなら無題の文書 1 つとファインダ |
 | `-` | 標準入力を無題バッファとして読む (FR-120、v0.4 の M25) | §18.5。`-` は 1 つまで (2 つ以上は使い方の誤り、`stderr.usage.generic`、終了コード 2)。FILE と一緒に書ける (書いた順にバッファを足し、最初のものを表示する)。`--` の後ろの `-` も標準入力 (v0.3 までの CLI は `--` の後ろをすべて FILE として扱うので、v0.4 で変わる)。`-` という名前のファイルは `./-` (Windows は `.\-` も) と書く。`--readonly` / `--encoding` は標準入力の文書にも掛かり、`+LINE` は下の `+LINE` の行の FILE と同じく、直後の `-` に掛かる (後置 (`- +10`) なら直前の `-`。読み終えた時点で移る)。`--headless --rpc stdio` と `-` の併用は使い方の誤り (標準入力は RPC が使う。終了コード 2)。細目は 03 §9.2.2 |
 | `FILE:LINE[:COL]` | 開いてその位置へ (FR-102、**v0.2**。v0.1 は `FILE:LINE` の形の引数を常にファイル名として扱う) | **曖昧性の解消**: まず `FILE:LINE:COL` 全体が存在するファイルなら位置指定なしで開く → 末尾の `:数字(:数字)?` を剥がしたものが存在すれば位置指定とみなす → どちらも無ければ **全体を新規ファイル名** とする。Windows の `C:\path` はドライブレター (`^[A-Za-z]:[\\/]`) を先に除外 |
 | `+LINE` / `+LINE:COL` / `+` | **直後の** FILE に適用 (`+` 単独は末尾。Vim/nano 互換)。**v0.2** (FR-102) | `+LINE` が FILE より後に来た場合も直前の FILE に適用 (`evoeditor file +10` を許容)。v0.1 は `+` で始まる引数を「このバージョンでは未対応」(`info.cli.unsupported`) として無視し、ファイル名として開かない (v0.2 で意味が変わらないように) |
@@ -1871,7 +1883,7 @@ v0.1 の公開オプションは **5 個** (ADR-0028: 引数解析と `--help` �
 | `--theme <name>` | — | `--set theme.name=` の短縮 | v0.5 |
 | `--keymap <preset>` | — | `--set keys.preset=` の短縮 | v0.5 |
 | `--locale <lang>` | — | UI 言語 (§17.1 の選択順の最上位)。値は `ja` / `en` (地域付きも可)。v0.4 から `locales/<lang>.toml` がある言語も (§17.4)。同梱していない言語名はログに警告を書いて次の段へ進む (使い方の誤りにはしない)。v0.4 からは、ユーザーの言語ファイルも無い言語名を警告の診断 (`msg.config.locale_not_found`。探した場所は一覧と `--check-config` に示す) にして画面にも出す (§17.4)。値の `.codeset` / `@modifier` は落としてから見る。値が無いときは使い方の誤り (終了コード 2)。M8 で実装した | v0.2 |
-| `--workspace <dir>` | `-w` | ワークスペースルートを明示 | v0.5 |
+| `--workspace <dir>` | `-w` | ワークスペースルートを明示 (§12.1 のルート検出の 1。v0.5 の M31)。値は 1 つ (2 回書けば使い方の誤り `stderr.usage.generic`、終了コード 2)。値の無いときも使い方の誤り。ディレクトリかどうかは起動の後にジョブで確かめ、違えば `msg.workspace.root_invalid` を出して §12.1 の 2 以降で決める (使い方の誤りにはしない)。ルートを決めるだけで、ファインダは開かない (開くのは `DIR`) | v0.5 |
 | `--trust` | — | このワークスペースを信頼して起動 (スクリプト用。警告表示) | 信頼の仕組みと一緒 (最初の危険な項目の版。§12 の「版」。v0.5 では入れない) |
 | `--no-session` | — | セッション復元・保存をしない | v0.5 |
 | `--wait` | — | **受理して無視** (TUI は常にブロックする)。`$EDITOR="evoeditor --wait"` と書けるようにするための互換オプション | v0.1 (受理のみ) |
