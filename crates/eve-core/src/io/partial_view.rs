@@ -305,11 +305,10 @@ impl EditorState {
             }
             self.io.open_switch.remove(&doc);
             if pristine_from
-                && self.active_document() != Some(sw.from)
+                && self.panes_showing(sw.from).is_empty()
                 && self.is_pristine_untitled(sw.from)
             {
                 self.close_document(sw.from);
-                self.docs.recent.retain(|d| *d != sw.from);
             }
             return;
         }
@@ -329,7 +328,8 @@ impl EditorState {
             }
             return;
         }
-        let pristine = self.is_pristine_untitled(sw.from);
+        // 置き換えるのは、その無題の文書をフォーカスのペインだけが表示しているときに限る (03 §9.9 の PANE-8 (c))
+        let pristine = self.is_pristine_untitled(sw.from) && self.panes_showing(sw.from).len() <= 1;
         self.retarget_open_sources(sw.from, doc);
         if sw.complete {
             self.io.open_switch.remove(&doc);

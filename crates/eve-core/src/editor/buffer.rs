@@ -267,34 +267,30 @@ impl EditorState {
         self.close_buffer(doc)
     }
 
-    /// 確認を済ませた (破棄または保存した) 後に文書を閉じる。表示中の文書なら、最近使った順で次の文書を表示する。
-    /// 最後の 1 件なら無題の文書を新しく作る (終了はしない、03 §9.8)。
+    /// 確認を済ませた (破棄または保存した) 後に文書を閉じる。その文書を表示していた各ペインは、最近使った順で次の文書を
+    /// 表示する (03 §9.9 の PANE-9。ペインは閉じない)。最後の 1 件なら無題の文書を新しく作り、表示していたペインに出す
+    /// (終了はしない、03 §9.8)。
     pub(crate) fn close_buffer(&mut self, doc: DocumentId) -> CommandResult {
-        if self.active_document() == Some(doc) {
-            let next = self
-                .docs
-                .recent
-                .iter()
-                .rev()
-                .copied()
-                .find(|d| *d != doc && self.docs.documents.contains_key(d))
-                .or_else(|| self.docs.documents.keys().copied().find(|d| *d != doc));
-            match next {
-                Some(n) => {
-                    self.activate_document(n);
-                    self.close_document(doc);
-                }
+        let showing = self.panes_showing(doc);
+        let mut blank_view = None;
+        for at in showing {
+            match self.next_document_for(at, doc) {
+                Some(n) => self.show_document_in(at, n),
                 None => {
-                    // 最後の 1 件を閉じた: 無題の文書を新しく作る (終了はしない)
-                    let blank = self.blank_document();
-                    let (_, view) = self.add_document(blank);
-                    self.show_view(view, Some(doc));
+                    // 最後の 1 件を閉じた: 無題の文書を新しく作る (終了はしない)。2 つ目からのペインには同じ文書を出す
+                    match blank_view {
+                        None => {
+                            let blank = self.blank_document();
+                            let (blank_doc, view) = self.add_document(blank);
+                            self.show_view_in(at, view);
+                            blank_view = Some(blank_doc);
+                        }
+                        Some(blank_doc) => self.show_document_in(at, blank_doc),
+                    }
                 }
             }
-        } else {
-            self.close_document(doc);
         }
-        self.docs.recent.retain(|d| *d != doc);
+        self.close_document(doc);
         CommandResult::Done
     }
 }
@@ -356,31 +352,18 @@ pub(crate) fn register(r: &mut CommandRegistry) {
 
 // ---- (v0.3 の M14、STR-B1 で io/ から移した) ----
 impl EditorState {
-    /// `doc` を表示する (最初の Window の View をその文書のものにする)。文書の View が無ければ作る。
+    /// `doc` をフォーカスのペインに表示する (03 §9.9 の PANE-8 (a)。ほかのペインの表示は変えない)。
     /// 検索バーは文書ごとには持たないので、切り替える前に閉じる (03 §9.8)。
     pub(crate) fn activate_document(&mut self, doc: DocumentId) {
-        if self.active_document() == Some(doc) || !self.docs.documents.contains_key(&doc) {
-            return;
+        if let Some(at) = self.focused_pane() {
+            self.show_document_in(at, doc);
         }
-        self.search_close();
-        if let Some(prev) = self.active_document() {
-            self.docs.recent.retain(|d| *d != prev);
-            self.docs.recent.push(prev);
-        }
-        let view = match self.docs.views.iter().find(|(_, v)| v.doc == doc) {
-            Some((id, _)) => *id,
-            None => self.add_view(doc),
-        };
-        if let Some(w) = self.docs.windows.first_mut() {
-            w.root = view;
-        }
-        self.mark_dirty_render();
     }
 
-    /// Window の表示を `view` に切り替え、`old` の文書を閉じる。Window がなければ作る。
+    /// フォーカスのペインの表示を `view` に切り替え、`old` の文書を閉じる。Window がなければ作る。
     pub(crate) fn show_view(&mut self, view: ViewId, old: Option<DocumentId>) {
-        match self.docs.windows.first_mut() {
-            Some(w) => w.root = view,
+        match self.focused_pane() {
+            Some(at) => self.show_view_in(at, view),
             None => {
                 self.add_window(view);
             }

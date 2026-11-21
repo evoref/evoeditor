@@ -1,10 +1,13 @@
-//! マウスの入力の変換 (docs/04 §6.8)。OS を呼ばない。Windows のコンソールの `MOUSE_EVENT_RECORD` を、編集面の左上を原点とする
-//! `MouseEvent` にする。編集面の外 (クローム) で始まった操作は捨て、編集面で押したボタンの間だけは面の外の座標もそのまま渡す
-//! (ドラッグの自動スクロールのため、03 §5.8.1)。
+//! マウスの入力の変換 (docs/04 §6.8)。OS を呼ばない。Windows のコンソールの `MOUSE_EVENT_RECORD` を、押した位置のペインの
+//! 本文の左上を原点とする `MouseEvent` にする。ペインの外 (クローム) で始まった操作は捨て、ペインで押したボタンの間だけは、
+//! 面の外の座標も押したペインの原点のまま渡す (ドラッグの自動スクロールのため、03 §5.8.1 / §9.9 の PANE-7)。
+//!
+//! 変換は「(幾何, マウスの記録) → 入力」で、幾何 ([`Geometry`]) は描画側が Frame ごとに作って入力スレッドへ差し替える。
 
-use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex, PoisonError};
 
-use eve_view::{Modifiers, MouseAt, MouseButton, MouseEvent, MouseKind, ViewId};
+use eve_view::{CellRect, Frame, Modifiers, MouseAt, MouseButton, MouseEvent, MouseKind, ViewId};
 
 /// `MouseRec` のビット (Windows の `MOUSE_EVENT_RECORD` の値。VT の SGR マウスもこの形にして渡す、`vt_input`)。
 pub mod button_bits {
@@ -37,14 +40,67 @@ pub struct MouseRec {
     pub flags: u32,
 }
 
-/// 描画側 (`render`) が入力スレッドへ渡す、編集面の位置。`view == 0` は未設定 (最初の Frame の前)。
+/// 1 つのペインの位置 (Frame の `PaneFrame` の写し)。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct PaneGeom {
+    /// ペインが表示している View (`MouseAt.view`)。
+    pub view: ViewId,
+    /// ペインの本文 (ガター + テキスト) の矩形。端末の左上が原点 (編集面は端末の最上行から始まる)。
+    pub rect: CellRect,
+}
+
+impl PaneGeom {
+    fn contains(&self, col: i32, row: i32) -> bool {
+        let r = self.rect;
+        let (c0, r0) = (i32::from(r.col), i32::from(r.row));
+        col >= c0 && col < c0 + i32::from(r.cols) && row >= r0 && row < r0 + i32::from(r.rows)
+    }
+
+    /// 端末の座標を、このペインの本文の左上を原点とする位置にする (面の外も負や本文の大きさ以上の値のまま)。
+    fn at(&self, col: i32, row: i32) -> MouseAt {
+        MouseAt {
+            view: self.view,
+            row: row.saturating_sub(i32::from(self.rect.row)),
+            col: col.saturating_sub(i32::from(self.rect.col)),
+        }
+    }
+}
+
+/// マウスの変換に使う画面の幾何 (全ペインの位置)。空は未設定 (最初の Frame の前)。
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Geometry {
+    /// ペイン (Frame の `panes` の順)。
+    pub panes: Vec<PaneGeom>,
+}
+
+impl Geometry {
+    /// Frame から作る。
+    pub fn from_frame(frame: &Frame) -> Geometry {
+        Geometry {
+            panes: frame
+                .panes
+                .iter()
+                .map(|p| PaneGeom {
+                    view: p.view,
+                    rect: p.rect,
+                })
+                .collect(),
+        }
+    }
+
+    /// 端末の位置 (`col`, `row`) にあるペイン。
+    fn hit(&self, col: i32, row: i32) -> Option<PaneGeom> {
+        self.panes.iter().copied().find(|p| p.contains(col, row))
+    }
+}
+
+/// 描画側 (`render`) が入力スレッドへ渡す、画面の幾何。Frame ごとに丸ごと差し替える。
 #[derive(Debug, Default)]
 pub struct SharedGeom {
-    view: AtomicU64,
-    rows: AtomicU32,
+    geom: Mutex<Arc<Geometry>>,
     /// 最後の Frame でヒントバーを隠していたか (`Frame.hint_bar` の否定。既定は表示)。端末の大きさから編集面の行数を
     /// 求めるとき (Resize) に使う (FR-504、04 §3.5)。
-    hint_bar_hidden: std::sync::atomic::AtomicBool,
+    hint_bar_hidden: AtomicBool,
 }
 
 impl SharedGeom {
@@ -56,18 +112,18 @@ impl SharedGeom {
         !self.hint_bar_hidden.load(Ordering::Relaxed)
     }
 
-    pub fn set(&self, view: ViewId, rows: u16) {
-        self.view.store(view.0, Ordering::Relaxed);
-        self.rows.store(u32::from(rows), Ordering::Relaxed);
+    /// 幾何を差し替える (変わっていなければ何もしない)。
+    pub fn set(&self, geom: Geometry) {
+        // 片方のスレッドがパニックしても、幾何は差し替えるだけの値なので、毒になった錠のままでも読み書きしてよい
+        let mut g = self.geom.lock().unwrap_or_else(PoisonError::into_inner);
+        if **g != geom {
+            *g = Arc::new(geom);
+        }
     }
 
-    fn get(&self) -> Option<(ViewId, i32)> {
-        let v = self.view.load(Ordering::Relaxed);
-        // rows は u16 から入れるので i32 に収まる
-        (v != 0).then(|| {
-            let rows = i32::try_from(self.rows.load(Ordering::Relaxed)).unwrap_or(i32::MAX);
-            (ViewId(v), rows)
-        })
+    /// 今の幾何。
+    pub fn get(&self) -> Arc<Geometry> {
+        Arc::clone(&self.geom.lock().unwrap_or_else(PoisonError::into_inner))
     }
 }
 
@@ -75,8 +131,10 @@ impl SharedGeom {
 #[derive(Debug, Default)]
 pub struct MouseTracker {
     buttons: u32,
-    /// 編集面で押して `Down` を出したボタン (面の外でも Drag / Up を届ける。外で押したものには Up を出さない)。
+    /// ペインで押して `Down` を出したボタン (面の外でも Drag / Up を届ける。外で押したものには Up を出さない)。
     pressed_in_pane: u32,
+    /// `pressed_in_pane` のボタンを押したペイン (Drag / Up はこのペインの原点で渡す、PANE-7 (b))。
+    pressed: Option<PaneGeom>,
 }
 
 fn mods(state: u32) -> Modifiers {
@@ -98,36 +156,38 @@ impl MouseTracker {
         MouseTracker::default()
     }
 
-    pub fn feed(&mut self, r: MouseRec, geom: &SharedGeom) -> Vec<MouseEvent> {
-        let Some((view, rows)) = geom.get() else {
+    /// マウスの記録 `r` を、幾何 `geom` で入力にする (ボタンの状態は自分が覚える)。
+    pub fn feed(&mut self, r: MouseRec, geom: &Geometry) -> Vec<MouseEvent> {
+        if geom.panes.is_empty() {
             self.buttons = r.buttons & (LEFT | RIGHT | MIDDLE);
             return Vec::new();
-        };
-        let inside = r.row >= 0 && r.row < rows && r.col >= 0;
-        let ev = |kind| MouseEvent {
+        }
+        let hit = geom.hit(r.col, r.row);
+        let ev = |kind, pane: PaneGeom| MouseEvent {
             kind,
             mods: mods(r.state),
-            at: MouseAt {
-                view,
-                row: r.row,
-                col: r.col,
-            },
+            at: pane.at(r.col, r.row),
         };
         if r.flags & HWHEELED != 0 {
             return Vec::new();
         }
         if r.flags & WHEELED != 0 {
-            // ホイールの向きは `dwButtonState` の上位 16 ビット (符号付き) の符号
+            // ホイールはポインタの下のペインに渡す (PANE-7 (c))。向きは `dwButtonState` の上位 16 ビット (符号付き) の符号
             let delta = ((r.buttons >> 16) as u16).cast_signed();
-            return match delta {
-                d if d > 0 && inside => vec![ev(MouseKind::WheelUp)],
-                d if d < 0 && inside => vec![ev(MouseKind::WheelDown)],
+            return match (delta, hit) {
+                (d, Some(p)) if d > 0 => vec![ev(MouseKind::WheelUp, p)],
+                (d, Some(p)) if d < 0 => vec![ev(MouseKind::WheelDown, p)],
                 _ => Vec::new(),
             };
         }
         let now = r.buttons & (LEFT | RIGHT | MIDDLE);
         let before = self.buttons;
         self.buttons = now;
+        // 押す先: ボタンを押している間は、押したペイン (の中で押したときだけ)。何も押していなければポインタの下のペイン
+        let target = match self.pressed {
+            Some(p) if self.pressed_in_pane != 0 => hit.filter(|h| *h == p),
+            _ => hit,
+        };
         let mut out = Vec::new();
         for (bit, button) in [
             (LEFT, MouseButton::Left),
@@ -135,20 +195,31 @@ impl MouseTracker {
             (RIGHT, MouseButton::Right),
         ] {
             let (was, is) = (before & bit != 0, now & bit != 0);
-            if is && !was && inside {
-                self.pressed_in_pane |= bit;
-                out.push(ev(MouseKind::Down(button)));
-            } else if was && !is && self.pressed_in_pane & bit != 0 {
+            if is && !was {
+                if let Some(p) = target {
+                    self.pressed_in_pane |= bit;
+                    self.pressed = Some(p);
+                    out.push(ev(MouseKind::Down(button), p));
+                }
+            } else if was
+                && !is
+                && self.pressed_in_pane & bit != 0
+                && let Some(p) = self.pressed
+            {
                 self.pressed_in_pane &= !bit;
-                out.push(ev(MouseKind::Up(button)));
+                out.push(ev(MouseKind::Up(button), p));
             }
         }
         if r.flags & MOVED != 0
             && now & LEFT != 0
             && self.pressed_in_pane & LEFT != 0
             && out.is_empty()
+            && let Some(p) = self.pressed
         {
-            out.push(ev(MouseKind::Drag(MouseButton::Left)));
+            out.push(ev(MouseKind::Drag(MouseButton::Left), p));
+        }
+        if self.pressed_in_pane == 0 {
+            self.pressed = None;
         }
         out
     }
@@ -158,10 +229,23 @@ impl MouseTracker {
 mod tests {
     use super::*;
 
-    fn geom() -> SharedGeom {
-        let g = SharedGeom::default();
-        g.set(ViewId(7), 10);
-        g
+    fn pane(view: u64, col: u16, row: u16, cols: u16, rows: u16) -> PaneGeom {
+        PaneGeom {
+            view: ViewId(view),
+            rect: CellRect {
+                col,
+                row,
+                cols,
+                rows,
+            },
+        }
+    }
+
+    /// 1 ペイン (80 列 × 10 行) の幾何。
+    fn geom() -> Geometry {
+        Geometry {
+            panes: vec![pane(7, 0, 0, 80, 10)],
+        }
     }
 
     fn rec(col: i32, row: i32, buttons: u32, flags: u32) -> MouseRec {
@@ -247,8 +331,96 @@ mod tests {
 
     #[test]
     fn 最初の_frame_の前は何も出さない() {
-        let (g, mut t) = (SharedGeom::default(), MouseTracker::new());
+        let (g, mut t) = (Geometry::default(), MouseTracker::new());
         let actual = t.feed(rec(1, 1, LEFT, 0), &g);
         assert!(actual.is_empty(), "{actual:?}");
+    }
+
+    /// 左右に 2 つ (左 = View 1 の 0..40 列、区切り 40 列、右 = View 2 の 41..81 列。本文は 0..9 行で、9 行は見出し)。
+    fn two() -> Geometry {
+        Geometry {
+            panes: vec![pane(1, 0, 0, 40, 9), pane(2, 41, 0, 40, 9)],
+        }
+    }
+
+    #[test]
+    fn 押した位置のペインの本文の左上を原点にする() {
+        let (g, mut t) = (two(), MouseTracker::new());
+        let d = t.feed(rec(45, 3, LEFT, 0), &g);
+        assert_eq!(kinds(&d), [MouseKind::Down(MouseButton::Left)]);
+        assert_eq!((d[0].at.view, d[0].at.col, d[0].at.row), (ViewId(2), 4, 3));
+        t.feed(rec(45, 3, 0, 0), &g);
+        let d = t.feed(rec(5, 2, LEFT, 0), &g);
+        assert_eq!((d[0].at.view, d[0].at.col, d[0].at.row), (ViewId(1), 5, 2));
+    }
+
+    #[test]
+    fn ドラッグと_up_は押したペインのまま_ほかのペインの上でもその原点で渡す() {
+        let (g, mut t) = (two(), MouseTracker::new());
+        t.feed(rec(45, 3, LEFT, 0), &g);
+        // 区切りを越えて左のペインの上へ引く: 右のペインの原点で負の列になる
+        let m = t.feed(rec(10, 5, LEFT, MOVED), &g);
+        assert_eq!(kinds(&m), [MouseKind::Drag(MouseButton::Left)]);
+        assert_eq!(
+            (m[0].at.view, m[0].at.col, m[0].at.row),
+            (ViewId(2), -31, 5)
+        );
+        let u = t.feed(rec(10, 12, 0, 0), &g);
+        assert_eq!(kinds(&u), [MouseKind::Up(MouseButton::Left)]);
+        assert_eq!(
+            (u[0].at.view, u[0].at.col, u[0].at.row),
+            (ViewId(2), -31, 12)
+        );
+    }
+
+    #[test]
+    fn 区切りと見出しの行で押した操作は捨てる() {
+        let (g, mut t) = (two(), MouseTracker::new());
+        for (col, row) in [(40, 3), (5, 9), (45, 9)] {
+            let actual = t.feed(rec(col, row, LEFT, 0), &g);
+            assert!(actual.is_empty(), "({col}, {row}): {actual:?}");
+            let actual = t.feed(rec(col, row, 0, 0), &g);
+            assert!(actual.is_empty(), "({col}, {row}): {actual:?}");
+        }
+    }
+
+    #[test]
+    fn ホイールはポインタの下のペインに渡す() {
+        let (g, mut t) = (two(), MouseTracker::new());
+        let up = |col| rec(col, 1, 120u32 << 16, WHEELED);
+        let e = t.feed(up(50), &g);
+        assert_eq!(
+            (kinds(&e), e[0].at.view),
+            (vec![MouseKind::WheelUp], ViewId(2))
+        );
+        let e = t.feed(up(3), &g);
+        assert_eq!(
+            (kinds(&e), e[0].at.view),
+            (vec![MouseKind::WheelUp], ViewId(1))
+        );
+        let actual = t.feed(up(40), &g);
+        assert!(actual.is_empty(), "区切りの上: {actual:?}");
+    }
+
+    #[test]
+    fn 押している間はほかのペインで押したボタンを捨てる() {
+        let (g, mut t) = (two(), MouseTracker::new());
+        t.feed(rec(5, 1, LEFT, 0), &g);
+        let actual = t.feed(rec(50, 1, LEFT | RIGHT, 0), &g);
+        assert!(actual.is_empty(), "{actual:?}");
+        // 左を離す: 押したペインの原点で Up。右は Down を出していないので Up も出さない
+        let u = t.feed(rec(50, 1, 0, 0), &g);
+        assert_eq!(kinds(&u), [MouseKind::Up(MouseButton::Left)]);
+        assert_eq!(u[0].at.view, ViewId(1));
+    }
+
+    #[test]
+    fn 共有の幾何は丸ごと差し替える() {
+        let s = SharedGeom::default();
+        assert_eq!(*s.get(), Geometry::default());
+        s.set(two());
+        assert_eq!(*s.get(), two());
+        s.set(geom());
+        assert_eq!(*s.get(), geom());
     }
 }

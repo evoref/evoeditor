@@ -156,17 +156,80 @@ fn wrapped_rows(
     (out_rows, cursors, primary)
 }
 
-/// Window の Frame を作る。
+/// Window の Frame を作る。ペインを木の葉の順に並べ、各ペインの本文の矩形に描く (03 §9.9 の PANE-10 (a))。
 pub(crate) fn build_frame(
     state: &EditorState,
     window: WindowId,
     chord: &[eve_view::KeyStroke],
 ) -> Option<Frame> {
+    let w = state.window(window)?;
     let view_id = state.window_view(window)?;
     let view = state.view(view_id)?;
     let doc = state.document(view.doc)?;
     let (cols, rows) = state.viewport();
-    let (cols, rows) = (cols as usize, rows as usize);
+    let size = CellSize { cols, rows };
+    let overlay_open = state.ui.overlay.is_some();
+    let bar_open = state.find.search_bar.is_some();
+    let input_here = !overlay_open && !bar_open;
+    let mut panes = Vec::new();
+    let mut primary_cursor = None;
+    for leaf in w.layout(size).leaves {
+        let Some(pane) = w.panes.get(&leaf.pane) else {
+            continue;
+        };
+        let active = leaf.pane == w.focus;
+        let Some((pf, primary)) = pane_frame(state, pane.view, leaf.body, active && input_here)
+        else {
+            continue;
+        };
+        if active {
+            // `Frame.primary_cursor` は編集面の左上が原点 (ペインの `rect` の位置を足す。PANE-10 (a))
+            primary_cursor = primary.filter(|_| input_here).map(|pos| CursorPlacement {
+                pos: CellPos {
+                    col: pos.col.saturating_add(leaf.body.col),
+                    row: pos.row.saturating_add(leaf.body.row),
+                },
+                shape: CursorShape::Bar,
+            });
+        }
+        panes.push(pf);
+    }
+    Some(Frame {
+        window,
+        size,
+        panes,
+        focus: if overlay_open {
+            FocusTarget::Overlay(0)
+        } else if bar_open {
+            FocusTarget::SearchBar
+        } else {
+            FocusTarget::Pane(view_id)
+        },
+        primary_cursor,
+        search: state.search_bar_model(),
+        status: crate::ui_model::chrome::status_model(state, view_id, chord),
+        hints: crate::ui_model::chrome::hint_model(state, chord),
+        hint_bar: state.term.hint_bar_on,
+        overlays: crate::ui_model::chrome::overlay_models(state),
+        which_key: None,
+        messages: message_model(state),
+        texts: crate::ui_model::chrome::chrome_texts(state),
+        title: title(state, doc),
+        roles: state.settings.roles.clone(),
+    })
+}
+
+/// 1 つのペインの `PaneFrame` と、主カーソルのセル位置 (`rect` の左上が原点) を作る。`focused` は入力の行き先がこの面
+/// (`PaneFrame.focused`)。生成の費用はペインの可視範囲の大きさに比例する。
+fn pane_frame(
+    state: &EditorState,
+    view_id: ViewId,
+    rect: CellRect,
+    focused: bool,
+) -> Option<(PaneFrame, Option<CellPos>)> {
+    let view = state.view(view_id)?;
+    let doc = state.document(view.doc)?;
+    let (cols, rows) = (rect.cols as usize, rect.rows as usize);
     let gw = gutter_width(doc, cols);
     let text_cols = cols.saturating_sub(gw as usize);
     let t = doc.text();
@@ -194,8 +257,6 @@ pub(crate) fn build_frame(
     let heads: Vec<usize> = visible.iter().map(|r| r.head.0).collect();
     let primary_head = view.selection.primary().head.0;
 
-    let overlay_open = state.ui.overlay.is_some();
-    let bar_open = state.find.search_bar.is_some();
     let found = state.visible_matches(view.doc, top_line, rows);
     let current = state.bar_current();
     let unmappable = state.unmappable_marks_for(view.doc);
@@ -276,49 +337,14 @@ pub(crate) fn build_frame(
     };
     let pane = PaneFrame {
         view: view_id,
-        rect: CellRect {
-            col: 0,
-            row: 0,
-            cols: super::cells_u16(cols),
-            rows: super::cells_u16(rows),
-        },
+        rect,
         revision: (doc.revision(), ViewRevision(0)),
         gutter_width: gw,
         rows: out_rows,
         cursors,
-        focused: !overlay_open && !bar_open,
+        focused,
     };
-    Some(Frame {
-        window,
-        size: CellSize {
-            cols: super::cells_u16(cols),
-            rows: super::cells_u16(rows),
-        },
-        panes: vec![pane],
-        focus: if overlay_open {
-            FocusTarget::Overlay(0)
-        } else if bar_open {
-            FocusTarget::SearchBar
-        } else {
-            FocusTarget::Pane(view_id)
-        },
-        primary_cursor: primary
-            .filter(|_| !overlay_open && !bar_open)
-            .map(|pos| CursorPlacement {
-                pos,
-                shape: CursorShape::Bar,
-            }),
-        search: state.search_bar_model(),
-        status: crate::ui_model::chrome::status_model(state, view_id, chord),
-        hints: crate::ui_model::chrome::hint_model(state, chord),
-        hint_bar: state.term.hint_bar_on,
-        overlays: crate::ui_model::chrome::overlay_models(state),
-        which_key: None,
-        messages: message_model(state),
-        texts: crate::ui_model::chrome::chrome_texts(state),
-        title: title(state, doc),
-        roles: state.settings.roles.clone(),
-    })
+    Some((pane, primary))
 }
 
 /// 水平スクロールの調整に使う、primary のカーソルの (表示列, セルの幅)。

@@ -135,39 +135,92 @@ fn chrome_lines(frame: &Frame) -> String {
     out
 }
 
-/// Frame を ASCII の文字列にする (最初の Pane だけ。複数 Pane は分割を入れる版で足す)。
+/// 1 行のセル (ガターを出すときはガターから) と、本文の始まるセルの位置。
+fn row_cells(
+    row: &eve_view::RenderRow,
+    opts: AsciiOptions,
+    sel_bg: eve_view::Color,
+) -> (Vec<Cell>, usize) {
+    let mut cells: Vec<Cell> = Vec::new();
+    if opts.show_gutter {
+        put_spans(&mut cells, &row.gutter, sel_bg);
+    }
+    let body_start = cells.len();
+    put_spans(&mut cells, &row.spans, sel_bg);
+    (cells, body_start)
+}
+
+/// セルの並びを文字列にする (選択の連続を `«` `»` で囲む)。
+fn cells_text(cells: &[Cell], body_start: usize, opts: AsciiOptions) -> String {
+    let mut line = String::new();
+    let mut in_sel = false;
+    for (i, c) in cells.iter().enumerate() {
+        let sel = opts.mark_selection && i >= body_start && c.reverse;
+        if sel != in_sel {
+            line.push(if sel { '«' } else { '»' });
+            in_sel = sel;
+        }
+        if let Some(t) = &c.text {
+            line.push_str(t);
+        }
+    }
+    if in_sel {
+        line.push('»');
+    }
+    line
+}
+
+/// 選択の外の行末の空白を落として、1 行として足す。
+fn push_line(out: &mut String, mut line: String) {
+    while line.ends_with(' ') {
+        line.pop();
+    }
+    out.push_str(&line);
+    out.push('\n');
+}
+
+/// ペインが 2 つ以上の Frame: 編集面の行ごとに、その行に掛かるペインの行を矩形の列の位置に並べる (ペインの間の列は空白)。
+fn render_panes(out: &mut String, frame: &Frame, opts: AsciiOptions, sel_bg: eve_view::Color) {
+    for y in 0..frame.size.rows {
+        let mut here: Vec<&eve_view::PaneFrame> = frame
+            .panes
+            .iter()
+            .filter(|p| y >= p.rect.row && y < p.rect.row.saturating_add(p.rect.rows))
+            .collect();
+        here.sort_by_key(|p| p.rect.col);
+        let mut line = String::new();
+        let mut x = 0usize;
+        for p in here {
+            let col = usize::from(p.rect.col);
+            if col > x {
+                line.push_str(&" ".repeat(col - x));
+                x = col;
+            }
+            let Some(row) = p.rows.get(usize::from(y - p.rect.row)) else {
+                continue;
+            };
+            let (mut cells, body_start) = row_cells(row, opts, sel_bg);
+            cells.truncate(usize::from(p.rect.cols));
+            let n = cells.len();
+            line.push_str(&cells_text(&cells, body_start, opts));
+            x += n;
+        }
+        push_line(out, line);
+    }
+}
+
+/// Frame を ASCII の文字列にする。ペインが 1 つなら各行をそのまま、2 つ以上なら矩形の位置に並べる (03 §9.9 の PANE-13)。
 pub fn render_ascii(frame: &Frame, opts: AsciiOptions) -> String {
     let mut out = String::new();
     let sel_bg = frame.roles.get("ui.selection").bg;
-    for pane in &frame.panes {
-        for row in &pane.rows {
-            let mut cells: Vec<Cell> = Vec::new();
-            if opts.show_gutter {
-                put_spans(&mut cells, &row.gutter, sel_bg);
+    if frame.panes.len() > 1 {
+        render_panes(&mut out, frame, opts, sel_bg);
+    } else {
+        for pane in &frame.panes {
+            for row in &pane.rows {
+                let (cells, body_start) = row_cells(row, opts, sel_bg);
+                push_line(&mut out, cells_text(&cells, body_start, opts));
             }
-            let body_start = cells.len();
-            put_spans(&mut cells, &row.spans, sel_bg);
-            let mut line = String::new();
-            let mut in_sel = false;
-            for (i, c) in cells.iter().enumerate() {
-                let sel = opts.mark_selection && i >= body_start && c.reverse;
-                if sel != in_sel {
-                    line.push(if sel { '«' } else { '»' });
-                    in_sel = sel;
-                }
-                if let Some(t) = &c.text {
-                    line.push_str(t);
-                }
-            }
-            if in_sel {
-                line.push('»');
-            }
-            // 選択の外の行末の空白は落とす
-            while line.ends_with(' ') {
-                line.pop();
-            }
-            out.push_str(&line);
-            out.push('\n');
         }
     }
     if opts.show_chrome {
@@ -257,5 +310,45 @@ mod tests {
             ..AsciiOptions::default()
         };
         assert_eq!(render_ascii(&f, plain), "aあbc\n");
+    }
+
+    #[test]
+    fn 複数のペインは矩形の位置に並べる() {
+        let pane = |view, col, rows: Vec<RenderRow>| PaneFrame {
+            view: ViewId(view),
+            rect: CellRect {
+                col,
+                row: 0,
+                cols: 4,
+                rows: 2,
+            },
+            revision: Default::default(),
+            gutter_width: 0,
+            rows,
+            cursors: vec![],
+            focused: view == 1,
+        };
+        let mut f = frame(vec![]);
+        f.size = CellSize { cols: 9, rows: 2 };
+        f.panes = vec![
+            pane(
+                1,
+                0,
+                vec![row(vec![Span::new("ab", 2, Style::DEFAULT)]), row(vec![])],
+            ),
+            pane(
+                2,
+                5,
+                vec![
+                    row(vec![Span::new("wxyz!", 5, Style::DEFAULT)]),
+                    row(vec![Span::new("q", 1, Style::DEFAULT)]),
+                ],
+            ),
+        ];
+        f.primary_cursor = None;
+        assert_eq!(
+            render_ascii(&f, AsciiOptions::default()),
+            "ab   wxyz\n     q\n"
+        );
     }
 }

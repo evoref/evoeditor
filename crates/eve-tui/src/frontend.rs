@@ -264,9 +264,8 @@ impl Frontend for TuiFrontend {
             }
             return RenderOutcome::Done;
         }
-        if let Some(p) = frame.panes.first() {
-            self.geom.set(p.view, p.rect.rows);
-        }
+        // マウスの変換に使う全ペインの位置を、入力スレッドへ差し替えて渡す (03 §9.9 の PANE-13)
+        self.geom.set(crate::mouse::Geometry::from_frame(frame));
         crate::trace::render_enter();
         let depth = self
             .detected
@@ -279,7 +278,7 @@ impl Frontend for TuiFrontend {
         self.write(&out);
         // 計測用ビルド: 描画の `write` が戻った時刻を記録する。`--bench-exit-after-first-frame` なら、端末を復元して終わる
         let content = cfg!(feature = "bench-trace")
-            && frame.panes.first().is_some_and(|p| {
+            && frame.panes.iter().any(|p| {
                 p.rows
                     .iter()
                     .any(|r| r.spans.iter().any(|s| !s.text.trim().is_empty()))
@@ -292,7 +291,7 @@ impl Frontend for TuiFrontend {
                 .any(|i| i.kind == eve_view::StatusKind::Loading);
         // 検索で一致へ移った: 計測ハーネスが決めた語が編集面の行に出ている (BM-108)
         let matched = crate::trace::match_text().is_some_and(|m| {
-            frame.panes.first().is_some_and(|p| {
+            frame.panes.iter().any(|p| {
                 p.rows.iter().any(|r| {
                     r.spans
                         .iter()

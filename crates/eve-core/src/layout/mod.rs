@@ -8,6 +8,7 @@
 
 mod cache;
 mod frame;
+pub(crate) mod panes;
 mod rows;
 mod units;
 
