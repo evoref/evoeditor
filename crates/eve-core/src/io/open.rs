@@ -364,6 +364,11 @@ impl EditorState {
                 });
             }
             JobResult::Failed { err, .. } => {
+                // 起動時のパスがディレクトリだった: 知らせはルートの検出の結果まで保留する (03 §12.7.1)
+                if self.hold_startup_dir(doc_id, &path, &err) {
+                    self.drop_failed_open(doc_id, replace);
+                    return;
+                }
                 let reason = reason_label(&err);
                 let (level, key) = open_failure(&err);
                 self.open_failed(doc_id, replace, level, key, &path, &reason);

@@ -1245,8 +1245,8 @@ fn 終了の連鎖で破棄の印を付けた標準入力の文書は保存を�
         .editor
         .state_mut()
         .open_stdin(OpenOptions::default(), StdinKind::Stream);
-    // 起動時の読込・版の記録・退避の走査の 3 つの後
-    let job = JobId(4);
+    // 起動時の読込・ルートの検出・版の記録・退避の走査の 4 つの後
+    let job = JobId(5);
     deliver(
         &mut h,
         vec![JobOutput {
@@ -1394,7 +1394,8 @@ fn 終了の連鎖で破棄した読込中の文書が読み終わるともう�
         .editor
         .state_mut()
         .open_stdin(OpenOptions::default(), StdinKind::Stream);
-    let job = JobId(4);
+    // 起動時の読込・ルートの検出・版の記録・退避の走査の 4 つの後
+    let job = JobId(5);
     deliver(
         &mut h,
         vec![JobOutput {

@@ -18,6 +18,7 @@ mod layout;
 mod time;
 mod ui_model;
 mod view;
+mod workspace;
 
 pub use command::arg_schema::{ArgSpec, ArgType, command_args};
 pub use command::clipboard::ClipboardFallbackReason;
@@ -84,3 +85,4 @@ pub use search::{
     run_search, scan_bytes, scan_range, unescape_replacement,
 };
 pub use time::{Clock, Millis, Tick};
+pub use workspace::{RootSource, Workspace};

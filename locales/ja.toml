@@ -572,6 +572,10 @@ history_trimmed = "メモリの上限のため、古い元に戻す履歴を破�
 hint = "ファイルのパスを指定して起動してください"
 text = "{path} はフォルダなので開けません。無題の文書を開きました"
 
+[msg.cli.directory_ignored]
+hint = "ワークスペースにするフォルダは 1 つだけ指定してください"
+text = "{path} はフォルダなので開けません。ワークスペースは {root} です"
+
 [msg.clipboard.fallback]
 hint = "他のアプリとの間でコピー・貼り付けするには、端末の範囲選択と貼り付けを使ってください"
 text = "システムのクリップボードを使えないため、エディタ内のクリップボードを使いました: {reason}"
@@ -915,6 +919,10 @@ text = "復旧の提案の後で文書が変わったので、適用しません
 [msg.swap.remove_failed]
 hint = "手で削除してください"
 text = "スワップを削除できませんでした: {dir}"
+
+[msg.workspace.root_invalid]
+hint = "フォルダのパスを指定してください。今は {root} をワークスペースにしています"
+text = "{path} をワークスペースにできません: {reason}"
 
 [msg.reload.missing]
 hint = "今の内容を残すには、上書き保存 ({key:file.save}) でファイルを作り直すか、名前を付けて保存 ({key:file.save_as}) してください"

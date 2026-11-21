@@ -68,6 +68,8 @@ pub(crate) enum Pending {
     RecoveryScan,
     /// 前回起動した版の記録 (FR-518)。
     LastVersion,
+    /// ワークスペースのルートの検出 (03 §12.7.1)。
+    WorkspaceRoot,
     /// スワップを書くジョブ (03 §10.2)。
     Swap { doc: DocumentId },
     /// スワップを消すジョブ。
@@ -158,6 +160,7 @@ impl EditorState {
                 | Pending::ThemeRead
                 | Pending::RecoveryScan
                 | Pending::LastVersion
+                | Pending::WorkspaceRoot
                 | Pending::WriteRecovery { .. }
                 | Pending::Swap { .. }
                 | Pending::SwapDiscard { .. }
@@ -259,6 +262,7 @@ impl EditorState {
             } => self.finish_replace_unmappable(ask, revision, retried, r),
             Pending::RecoveryScan => self.finish_recovery_scan(r),
             Pending::LastVersion => self.finish_last_version(r),
+            Pending::WorkspaceRoot => self.finish_workspace_root(r),
             Pending::ConfigReload => self.finish_config_reload(r),
             Pending::ThemeRead => self.finish_theme_read(r),
             Pending::Swap { doc } => self.finish_swap(doc, r),

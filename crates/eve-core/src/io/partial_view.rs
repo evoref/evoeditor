@@ -540,6 +540,7 @@ fn pending_doc(state: &EditorState, p: &Pending) -> Option<DocumentId> {
         | Pending::ThemeRead
         | Pending::RecoveryScan
         | Pending::LastVersion
+        | Pending::WorkspaceRoot
         | Pending::Leftover(_)
         | Pending::SwapRemove { .. } => None,
     }

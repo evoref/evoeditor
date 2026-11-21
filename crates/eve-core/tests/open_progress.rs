@@ -101,9 +101,10 @@ fn 進捗は_100_ms_以上あけて送る() {
 fn 進捗はステータスバーに百分率で出る() {
     let mut h = Harness::new().with_file("/w/a.txt", b"hello");
     h.open("/w/a.txt");
-    // 読込中の文書に進捗が届く (起動時は JobId(1) が前回の版の記録 (FR-518)、2 が退避の走査、3 が読込)
+    // 読込中の文書に進捗が届く (起動時は JobId(1) がルートの検出 (03 §12.7.1)、2 が前回の版の記録 (FR-518)、3 が退避の
+    // 走査、4 が読込)
     h.editor.on_job_result(JobOutput {
-        job: JobId(3),
+        job: JobId(4),
         body: JobResult::Progress {
             bytes: 50,
             total: 200,

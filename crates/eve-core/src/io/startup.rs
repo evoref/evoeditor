@@ -75,6 +75,9 @@ impl EditorState {
                 InitialTarget::Stdin(StdinKind::Terminal) => Some(self.open_stdin_terminal()),
                 InitialTarget::Stdin(kind) => Some(self.open_stdin(opts, *kind)),
             };
+            if let (Some(doc), InitialTarget::Path(_)) = (doc, &f.target) {
+                self.workspace.note_startup_doc(doc);
+            }
             if let (Some(doc), Some(line)) = (doc, f.line) {
                 self.io.open_jumps.insert(doc, (line, f.col.unwrap_or(1)));
             }

@@ -23,6 +23,8 @@ pub struct StartupConfig {
     pub catalog: Option<std::sync::Arc<eve_config::Catalog>>,
     /// ユーザーの言語ファイルの事実 (候補の言語・選んだ言語のファイルの起動時の大きさと更新日時。07 §17.4)。
     pub locale_files: Option<crate::io::config_reload::LocaleFiles>,
+    /// `--workspace` / `-w` の値 (入力されたまま、07 §18.3)。起動 (`open_initial*`) が投入するルートの検出に渡す (03 §12.7.1)。
+    pub workspace: Option<String>,
 }
 
 /// 起動の後に Host が Editor に知らせる事実。
@@ -85,6 +87,9 @@ impl Editor {
         }
         if let Some(files) = c.locale_files {
             st.io.locale_files = files;
+        }
+        if let Some(w) = c.workspace {
+            st.workspace.set_explicit_arg(Some(w));
         }
     }
 

@@ -284,6 +284,15 @@ impl Editor {
                     ..Default::default()
                 };
                 self.state.open_initial_files(files, opts);
+                // ルートの検出は開くジョブの後ろに積む (`io` は直列。最初の文書の読込を遅らせない、03 §12.7.1)
+                let args: Vec<&str> = files
+                    .iter()
+                    .filter_map(|f| match &f.target {
+                        InitialTarget::Path(p) => Some(p.as_str()),
+                        InitialTarget::Stdin(_) => None,
+                    })
+                    .collect();
+                self.state.start_workspace_root(&args);
                 self.state.start_recovery_scan();
             }
         }
@@ -311,9 +320,13 @@ impl Editor {
                     ..Default::default()
                 };
                 self.state.open_path(p, opts);
+                if let Some(doc) = self.state.active_document() {
+                    self.state.workspace.note_startup_doc(doc);
+                }
             }
         }
-        // 起動時の退避の案内 (走査は io のジョブ。開く文書のメッセージの後に出る)
+        // ルートの検出 (開くジョブの後ろ、03 §12.7.1)。起動時の退避の案内 (走査は io のジョブ。開く文書のメッセージの後に出る)
+        self.state.start_workspace_root(path.as_slice());
         self.state.start_recovery_scan();
     }
 
