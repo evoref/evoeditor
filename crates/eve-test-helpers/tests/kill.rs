@@ -122,7 +122,7 @@ impl Env {
             },
         };
         let mut out = Vec::new();
-        run_job(&req, &ports, &CancelToken::new(), &mut |r| out.push(r));
+        run_job(req, &ports, &CancelToken::new(), &mut |r| out.push(r));
         match out.pop().expect("結果がある").body {
             JobResult::Complete {
                 interrupted_save, ..
@@ -470,7 +470,7 @@ impl Env {
             kind,
         };
         let mut out = Vec::new();
-        run_job(&req, &ports, &CancelToken::new(), &mut |r| out.push(r));
+        run_job(req, &ports, &CancelToken::new(), &mut |r| out.push(r));
         out.pop().expect("結果がある").body
     }
 

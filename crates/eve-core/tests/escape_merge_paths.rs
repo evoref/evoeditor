@@ -259,7 +259,7 @@ fn save(
         },
     };
     let mut out = Vec::new();
-    run_job(&req, &e.ports, &CancelToken::new(), &mut |r| out.push(r));
+    run_job(req, &e.ports, &CancelToken::new(), &mut |r| out.push(r));
     out.into_iter()
         .map(|o| o.body)
         .rfind(|b| !matches!(b, JobResult::Progress { .. }))

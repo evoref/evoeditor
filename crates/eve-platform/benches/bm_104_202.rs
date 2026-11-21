@@ -245,7 +245,7 @@ mod imp {
             },
         };
         let mut out = Vec::new();
-        run_job(&req, ports, &CancelToken::new(), &mut |r| out.push(r));
+        run_job(req, ports, &CancelToken::new(), &mut |r| out.push(r));
         out.pop().expect("結果がある").body
     }
 
@@ -548,7 +548,7 @@ mod imp {
                 };
                 let mut out = Vec::new();
                 let t = Instant::now();
-                run_job(&req, &save_ports, &CancelToken::new(), &mut |r| out.push(r));
+                run_job(req, &save_ports, &CancelToken::new(), &mut |r| out.push(r));
                 let d = t.elapsed();
                 let body = out.pop().expect("結果がある").body;
                 assert!(

@@ -218,6 +218,25 @@ pub enum JobKind {
         /// 置換の文字列 (`$1` などを展開する前)。
         replacement: String,
     },
+    /// ワークスペースの候補の走査 (`bg`。03 §12.7.2 / §12.7.7)。1 区切り (ディレクトリ 16 個・項目 4,096 個・8 ms の早いほう)
+    /// ごとに、溜まった塊を `JobResult::ScanBatch` で送り、続き (`walk` に状態を持つ) を `JobStep::Continue` で返す。
+    /// 終われば `JobResult::ScanDone`、ルートを読めなければ `JobResult::Failed { Fs }`。`doc` は `None`。
+    WorkspaceScan {
+        /// ワークスペースのルート (絶対パス)。
+        root: FsPath,
+        /// 除外の設定 (走査を始める時点の値)。
+        exclude: std::sync::Arc<crate::workspace::ExcludeConfig>,
+        /// 走査の世代 (結果を照らして古いものを捨てる、03 §12.7.2 の 8)。
+        generation: u64,
+        /// 積み直しの続き (最初の投入は `None`)。
+        walk: Option<Box<crate::workspace::WorkspaceWalk>>,
+    },
+    /// 古い候補の一覧を `bg` で解放する (主スレッドで大きな一覧を drop しない、03 §12.7.2)。終端の結果は
+    /// `JobResult::Released` だけ。取り消さない。
+    ReleaseCandidates {
+        /// 手放す塊 (照合のジョブが同じ塊を持っていれば、最後の参照はジョブの側で外れる)。
+        chunks: Vec<std::sync::Arc<[crate::workspace::Candidate]>>,
+    },
     /// 文書内の全件検索 (03 §12.2)。`from` の行から末尾まで、続けて先頭から走査し (行をまたぐ検索の規則では文書の先頭から
     /// 末尾まで、03 §12.3.1)、一致を `SearchBatch` で順に返して `SearchDone` で終わる。保持するのは `max_matches` 件まで、
     /// 数えるのは `count_limit` 件まで。
@@ -233,6 +252,21 @@ pub enum JobKind {
         /// 数える一致の上限 (件)。
         count_limit: u64,
     },
+}
+
+/// 1 回の `run_job` の終わり方 (02 §9.3)。区切って譲るジョブ (`WorkspaceScan`) は、1 区切りを終えると終端の結果を送らずに
+/// 続きを返し、ワーカーのレーンが **同じ `JobId`・同じ `CancelToken` のまま** 自分のキューの末尾へ積む (間に投入された
+/// ジョブが先に走る)。ほかのジョブは `Done` だけを返す。
+#[derive(Debug)]
+#[expect(
+    clippy::large_enum_variant,
+    reason = "run_job の戻り値として 1 回ずつ動かすだけで、並べて持たない (続きは JobRequest の kind に戻す)"
+)]
+pub enum JobStep {
+    /// 終端の結果を送った (または送らないジョブが終わった)。
+    Done,
+    /// 続きがある。`JobRequest` の `kind` をこれに替えて積み直す (`id`・`doc`・`base` はそのまま)。
+    Continue(JobKind),
 }
 
 /// `Metadata` ジョブの目的 (結果を受けた側の分岐に使う)。

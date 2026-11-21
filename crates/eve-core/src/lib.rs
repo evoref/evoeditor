@@ -18,6 +18,7 @@ mod layout;
 mod time;
 mod ui_model;
 mod view;
+mod workspace;
 
 pub use command::arg_schema::{ArgSpec, ArgType, command_args};
 pub use command::clipboard::ClipboardFallbackReason;
@@ -67,8 +68,8 @@ pub use io::secret::is_secret_path;
 pub use io::unmap::{ReplaceCounts, ReplaceTarget};
 pub use jobs::{
     ConfirmAsk, EscapeMergeApproval, EscapeMergeAt, JobError, JobKind, JobOutput, JobPorts,
-    JobRequest, JobResult, JobSpawner, MetaPurpose, OpenNotes, Ports, SaveStrategy, StdinEnd,
-    StdinSource, run_job,
+    JobRequest, JobResult, JobSpawner, JobStep, MetaPurpose, OpenNotes, Ports, SaveStrategy,
+    StdinEnd, StdinSource, run_job,
 };
 /// 行の窓の核の大きさと連結の上限を試験から小さくする口 (feature `test-hooks` のときだけ。配布ビルドには無い、03 §12.3.1)。
 #[cfg(feature = "test-hooks")]
@@ -84,3 +85,8 @@ pub use search::{
     run_search, scan_bytes, scan_range, unescape_replacement,
 };
 pub use time::{Clock, Millis, Tick};
+pub use workspace::{
+    CANDIDATE_CHUNK, Candidate, ExcludeConfig, NoObserver, SCAN_FLUSH_INTERVAL, WALK_DIRS_PER_STEP,
+    WALK_ENTRIES_PER_DIR_MAX, WALK_ENTRIES_PER_STEP, WALK_STEP_TIME, WORKSPACE_MAX_DEPTH,
+    WORKSPACE_MAX_ENTRIES, WORKSPACE_MAX_FILES, WalkObserver, WalkStep, WorkspaceWalk, char_bit,
+};

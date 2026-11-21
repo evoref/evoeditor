@@ -96,7 +96,7 @@ impl Env {
             },
         };
         let mut out = Vec::new();
-        run_job(&req, &self.ports(), &CancelToken::new(), &mut |r| {
+        run_job(req, &self.ports(), &CancelToken::new(), &mut |r| {
             out.push(r)
         });
         out.pop().expect("結果がある").body

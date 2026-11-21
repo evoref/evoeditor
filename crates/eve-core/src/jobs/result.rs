@@ -294,6 +294,27 @@ pub enum JobResult {
         /// 理由。
         limit: crate::search::ScanLimit,
     },
+    /// ワークスペースの走査の候補の束 (非終端。`WorkspaceScan`、03 §12.7.7)。
+    ScanBatch {
+        /// 走査の世代。
+        generation: u64,
+        /// 候補の不変の塊 (主スレッドは `Arc` を列に足すだけ)。走査の終わりに、読めなかったディレクトリの数だけを届けるための
+        /// 空の塊もある。
+        chunk: std::sync::Arc<[crate::workspace::Candidate]>,
+        /// その時点までに読めなかったディレクトリの数。
+        unreadable_dirs: u64,
+    },
+    /// ワークスペースの走査の終端 (ルートが読めなければ代わりに `Failed`)。
+    ScanDone {
+        /// 走査の世代。
+        generation: u64,
+        /// 見つけた候補の数。
+        total: u64,
+        /// 上限か列挙の途中の失敗で、一覧が欠けている (`ui.finder.footer_truncated`)。
+        truncated: bool,
+    },
+    /// `ReleaseCandidates` の終端 (受け手は何もしない)。
+    Released,
     /// ジョブの失敗 (キャンセルを含む)。
     Failed {
         /// 失敗の理由。

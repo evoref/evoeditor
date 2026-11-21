@@ -7,18 +7,22 @@ use crate::io::fspath::FsPath;
 use crate::io::io_jobs::{SaveParams, run_open, run_open_stdin, run_save};
 
 use super::{
-    ConfigFile, JobError, JobKind, JobOutput, JobPorts, JobRequest, JobResult, MetaPurpose,
+    ConfigFile, JobError, JobKind, JobOutput, JobPorts, JobRequest, JobResult, JobStep, MetaPurpose,
 };
 
 /// ジョブを同期的に実行する。eve-host のワーカーとテストが同じ関数を使う (スレッドは呼び出し側が用意する)。
 /// 開始前にキャンセルされていれば何もせず `Failed { Cancelled }` を返す (`OpenStdin` を除く。標準入力の取消しは「読むのを
-/// やめて開く」意味で、終端は常に `StdinDone`、03 §9.2.2)。結果は `emit` に 1 つ渡す。
+/// やめて開く」意味で、終端は常に `StdinDone`、03 §9.2.2)。結果は `emit` に渡す (終端は最後の 1 つ)。
+///
+/// 依頼は値で受け取り、ジョブの入力 (区切って譲るジョブの状態・解放する一覧) はこの呼出しの中 (= ワーカーのスレッド) で
+/// 手放す。区切って譲るジョブ (`WorkspaceScan`) は、1 区切りを終えると終端の結果を送らずに `JobStep::Continue` で続きを
+/// 返す (02 §9.3。積み直すのは呼び出し側)。ほかは `JobStep::Done`。
 pub fn run_job(
-    req: &JobRequest,
+    req: JobRequest,
     ports: &JobPorts,
     cancel: &CancelToken,
     emit: &mut dyn FnMut(JobOutput),
-) {
+) -> JobStep {
     if cancel.is_cancelled() && !matches!(req.kind, JobKind::OpenStdin { .. }) {
         emit(JobOutput {
             job: req.id,
@@ -26,8 +30,30 @@ pub fn run_job(
                 err: JobError::Cancelled,
             },
         });
-        return;
+        return JobStep::Done;
     }
+    let req = match req.kind {
+        JobKind::WorkspaceScan {
+            root,
+            exclude,
+            generation,
+            walk,
+        } => {
+            return crate::workspace::run_scan(
+                req.id, root, exclude, generation, walk, ports, emit,
+            );
+        }
+        JobKind::ReleaseCandidates { chunks } => {
+            // 最後の参照をここ (ワーカーのスレッド) で手放す
+            drop(chunks);
+            emit(JobOutput {
+                job: req.id,
+                body: JobResult::Released,
+            });
+            return JobStep::Done;
+        }
+        kind => JobRequest { kind, ..req },
+    };
     let body = match &req.kind {
         JobKind::LastVersion { current } => JobResult::LastVersionChecked {
             outcome: crate::io::last_version::check_and_record(&*ports.fs, current),
@@ -193,7 +219,7 @@ pub fn run_job(
                 cancel,
                 emit,
             );
-            return;
+            return JobStep::Done;
         }
         JobKind::WriteRecovery { doc } => match ports.fs.write_recovery(doc) {
             Ok(path) => JobResult::RecoveryWritten { path },
@@ -291,8 +317,12 @@ pub fn run_job(
                 err: JobError::Fs(err),
             },
         },
+        JobKind::WorkspaceScan { .. } | JobKind::ReleaseCandidates { .. } => {
+            unreachable!("ワークスペースのジョブは上で処理した")
+        }
     };
     emit(JobOutput { job: req.id, body });
+    JobStep::Done
 }
 
 /// 設定ファイルの大きさの上限 (これを超えるものは設定ではないとみなして読まない)。
@@ -413,7 +443,7 @@ mod tests {
 
     fn run(p: &JobPorts, c: &CancelToken) -> Vec<JobOutput> {
         let mut out = Vec::new();
-        run_job(&req(), p, c, &mut |r| out.push(r));
+        run_job(req(), p, c, &mut |r| out.push(r));
         out
     }
 
@@ -510,7 +540,7 @@ mod tests {
             },
         };
         let mut out = Vec::new();
-        run_job(&r, &p, &cancel, &mut |x| out.push(x));
+        run_job(r, &p, &cancel, &mut |x| out.push(x));
         out.pop().expect("終端の結果").body
     }
 

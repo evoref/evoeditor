@@ -1,0 +1,37 @@
+{
+  "commit": "af3e75f+M31 (4)",
+  "env": "開発機の WSL2 (Ubuntu、ext4。報告のみ)",
+  "id": "BM-125s-ext4",
+  "note": "BM-125s-ntfs-warm と同じプログラムと手順を、WSL2 の Linux 側のホームの下 (ext4) に作った同じ種の木で 2 ラウンド続けて測った。候補の数が NTFS と違うのは、Linux の git init が core.ignorecase を書かず (区別する)、Windows は true を書く (畳む) ため。ラウンド 1 の温めは木を作った直後の 1 回目で、ページキャッシュに載っていない分が入る",
+  "quick": false,
+  "results": [
+    {
+      "round": 1,
+      "candidates": 95597,
+      "truncated": false,
+      "unreadable_dirs": 0,
+      "batches": 27,
+      "warmup_ms": 2128.9,
+      "scan_p50_ms": 299.682,
+      "scan_max_ms": 313.026,
+      "step": { "n": 605, "p50_ms": 0.438, "p99_ms": 0.634, "max_ms": 9.122, "walk_ms": 283.028 },
+      "io_start": { "n": 201, "p50_ms": 0.066, "p99_ms": 0.142, "max_ms": 0.159 },
+      "bg_start": { "n": 201, "p50_ms": 0.271, "p99_ms": 3.564, "max_ms": 5.646 },
+      "during_probes": { "n": 67, "p50_ms": 302.126, "max_ms": 314.077 }
+    },
+    {
+      "round": 2,
+      "candidates": 95597,
+      "truncated": false,
+      "unreadable_dirs": 0,
+      "batches": 24,
+      "warmup_ms": 307.1,
+      "scan_p50_ms": 293.451,
+      "scan_max_ms": 298.973,
+      "step": { "n": 605, "p50_ms": 0.445, "p99_ms": 0.573, "max_ms": 9.009, "walk_ms": 286.565 },
+      "io_start": { "n": 200, "p50_ms": 0.071, "p99_ms": 0.209, "max_ms": 0.267 },
+      "bg_start": { "n": 200, "p50_ms": 0.251, "p99_ms": 6.858, "max_ms": 8.001 },
+      "during_probes": { "n": 67, "p50_ms": 299.134, "max_ms": 317.299 }
+    }
+  ]
+}

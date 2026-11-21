@@ -5,6 +5,11 @@
 //! だけは、取消しが「読むのをやめて開く」意味 (終端は `StdinDone`、02 §9.3) なので、キューに残して取消しを立て、
 //! `JobPorts.stdin` の `wake` を呼ぶ (本番の `JobSpawner` と同じ)。
 //!
+//! 区切って譲るジョブ (`JobStep::Continue`、02 §9.3。ワークスペースの走査) は、続きを同じ `JobId`・同じ `CancelToken` のまま
+//! キューの末尾へ積む (本番のレーンと同じ。続きは、それを返した区切りより前に積まれたジョブすべての後に走る)。`run_jobs` は
+//! キューが空になるまで回し、`run_one` は 1 件 (続きなら 1 区切り) だけ回す (走査の途中の状態を決定的に作れる)。キューに
+//! 残った続きの取消しは、ほかの未実行のジョブと同じく、キューから外して `Cancelled` を積む。
+//!
 //! 先行表示 (docs/03 §9.2.1) の試験のために、`run_jobs_until_partial` は最初に `Partial` を送ったジョブの、`Partial` より
 //! 後の結果を取り置く (読込の途中で止まっている状態を作る)。取り置いた結果は `release_held` で inbox に移し、その間の
 //! `cancel` は取り置いた結果を捨てて `Cancelled` を積む (実際のジョブが次のチャンクの区切りで取消しに気づくのと同じ)。
@@ -14,7 +19,8 @@ use std::collections::VecDeque;
 use std::rc::Rc;
 
 use eve_core::{
-    CancelToken, JobError, JobKind, JobOutput, JobPorts, JobRequest, JobResult, JobSpawner, run_job,
+    CancelToken, JobError, JobKind, JobOutput, JobPorts, JobRequest, JobResult, JobSpawner,
+    JobStep, run_job,
 };
 use eve_view::{DocumentId, JobId, Revision};
 
@@ -51,21 +57,48 @@ impl ManualJobSpawner {
         self.queue.borrow().len()
     }
 
-    /// 積まれたジョブを積まれた順にすべて実行する。実行したジョブの数を返す。
-    /// 実行中に `spawn` されたジョブも、同じ呼び出しの中で続けて実行する。
+    /// 積まれたジョブを積まれた順にすべて実行する。実行した数 (区切って譲るジョブは区切りの数) を返す。
+    /// 実行中に `spawn` されたジョブと、区切って譲るジョブの続きも、同じ呼び出しの中で続けて実行する。
     pub fn run_jobs(&self) -> usize {
         let mut n = 0;
-        loop {
-            // 実行中に spawn / cancel されても借用が衝突しないよう、1 件ずつ取り出してから実行する
-            let Some(job) = self.queue.borrow_mut().pop_front() else {
-                break;
-            };
-            let mut out = Vec::new();
-            run_job(&job.req, &self.ports, &job.cancel, &mut |r| out.push(r));
-            self.inbox.borrow_mut().extend(out);
+        while self.run_one() {
             n += 1;
         }
         n
+    }
+
+    /// 先頭のジョブを 1 件 (区切って譲るジョブなら 1 区切り) だけ実行する。続きを返したら、キューの末尾へ積む。
+    /// 実行したら `true` (キューが空なら `false`)。
+    pub fn run_one(&self) -> bool {
+        // 実行中に spawn / cancel されても借用が衝突しないよう、1 件取り出してから実行する
+        let Some(Queued { req, cancel }) = self.queue.borrow_mut().pop_front() else {
+            return false;
+        };
+        let (id, doc, base) = (req.id, req.doc, req.base);
+        let mut out = Vec::new();
+        let step = run_job(req, &self.ports, &cancel, &mut |r| out.push(r));
+        self.inbox.borrow_mut().extend(out);
+        if let JobStep::Continue(kind) = step {
+            if cancel.is_cancelled() {
+                self.inbox.borrow_mut().push_back(JobOutput {
+                    job: id,
+                    body: JobResult::Failed {
+                        err: JobError::Cancelled,
+                    },
+                });
+            } else {
+                self.queue.borrow_mut().push_back(Queued {
+                    req: JobRequest {
+                        id,
+                        doc,
+                        base,
+                        kind,
+                    },
+                    cancel,
+                });
+            }
+        }
+        true
     }
 
     /// 積まれたジョブを積まれた順に実行し、最初に `JobResult::Partial` を送ったジョブで止まる: そのジョブの `Partial`
@@ -77,7 +110,8 @@ impl ManualJobSpawner {
                 return false;
             };
             let mut out = Vec::new();
-            run_job(&job.req, &self.ports, &job.cancel, &mut |r| out.push(r));
+            // 先行表示の試験の読込ジョブは区切らない (続きを返さない)
+            let _ = run_job(job.req, &self.ports, &job.cancel, &mut |r| out.push(r));
             if let Some(at) = out
                 .iter()
                 .position(|o| matches!(o.body, JobResult::Partial { .. }))

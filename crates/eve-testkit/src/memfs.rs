@@ -11,8 +11,8 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use eve_core::{
     ChunkError, Clock, DirEntry, DirListing, EntryKind, Expect, FileId, FileKind, FileMeta,
     FileStamp, FileSystem, FileTime, FsError, FsErrorDetail, FsErrorKind, FsKind, FsPath,
-    FsyncLevel, HardlinkPolicy, InflightRecord, Millis, ReadChunks, RecoveryDirEntry, SaveMethod,
-    SaveOptions, SaveReport,
+    FsyncLevel, HardlinkPolicy, InflightRecord, LinkInfo, LinkKind, Millis, ReadChunks,
+    RecoveryDirEntry, SaveMethod, SaveOptions, SaveReport,
 };
 
 use crate::ManualClock;
@@ -373,7 +373,8 @@ impl MemFs {
         }
     }
 
-    /// シンボリックリンクを置く。開く・保存はリンク先を対象にする (リンク先が無ければダングリング)。
+    /// シンボリックリンクを置く。開く・保存はリンク先を対象にする (リンク先が無ければダングリング)。ディレクトリを指すリンクは、
+    /// `metadata` がディレクトリ (リンクの情報つき) を、`canonicalize` がリンク先を返す (`read_dir` は辿って列挙する)。
     pub fn add_link(&self, link: &str, target: &str) {
         self.st()
             .links
@@ -752,6 +753,19 @@ impl FileSystem for MemFs {
                 ..dir_meta()
             });
         }
+        // ディレクトリを指すリンク (ワークスペースの走査の `follow_symlinks`、03 §12.7.2 の 4): 辿った先の種類とリンクの情報
+        if let Some(t) = s.links.get(path)
+            && s.dirs.contains(t)
+        {
+            return Ok(FileMeta {
+                link: Some(LinkInfo {
+                    kind: LinkKind::Symlink,
+                    target: Some(t.clone()),
+                    dangling: false,
+                }),
+                ..dir_meta()
+            });
+        }
         Err(not_found(&s, path))
     }
 
@@ -861,6 +875,11 @@ impl FileSystem for MemFs {
         injected(&mut s, FsOp::Canonicalize)?;
         if s.files.contains_key(path) || s.dirs.contains(path) {
             Ok(path.clone())
+        } else if let Some(t) = s.links.get(path)
+            && s.dirs.contains(t)
+        {
+            // ディレクトリを指すリンクは辿った先 (ファイルを指すリンクは従来どおり、リンクのパスでは解決しない)
+            Ok(t.clone())
         } else {
             Err(not_found(&s, path))
         }
