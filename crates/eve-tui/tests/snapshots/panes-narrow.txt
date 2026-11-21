@@ -1,0 +1,18 @@
+ 1│xこんにちは、世界│ 1│xこんにちは、世界
+ 2│hello fox        │ 2│hello fox
+ 3│>   タブと[]全角›│ 3│>   タブと[]全角›
+ 4│                 │ 4│
+~                   │~
+~                   │~
+~                   │~
+~                   │~
+~                   │~
+~                   │~
+~                   │~
+~                   │~
+~                   │~
+ a-rath…me.txt [+] ─│▶ a-rath…ame.txt [+]
+a-rather-lo…le-name.txt [+]  1:2 UTF-8 LF
+
+^Q 終了 ^P コマンド ^S 保存 ^F 検索
+cursor: Some(CellPos { col: 25, row: 0 })

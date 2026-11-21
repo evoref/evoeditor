@@ -491,3 +491,90 @@ fn 英語_警告メッセージ() {
     h.run_jobs();
     check("en-warning", &mut h);
 }
+
+// ---- 複数ペイン (v0.5 の M30、FR-509。09 §3.4 の複数ペインの計画の (4)) ----
+
+/// `MEMO` を開き、右に分割して右のペインで 1 文字入れ、下に分割した画面 (左 1・右上 1・右下 1 の 3 つ。フォーカスは右下)。
+fn split_panes(h: Harness) -> Harness {
+    let mut h = opened(h);
+    h.keys("ctrl+\\");
+    h.keys("down");
+    h.text("x");
+    h.keys("ctrl+k -");
+    h
+}
+
+/// 見出しの行 (編集面の行 `y`) の文字列。
+fn line(h: &mut Harness, y: u16) -> String {
+    let (text, _) = screen(h, DEFAULT_LOOK);
+    text.lines()
+        .nth(usize::from(y))
+        .unwrap_or_default()
+        .to_owned()
+}
+
+// verifies: AC-FR-509-1
+#[test]
+fn 複数ペイン_見出しと区切りとフォーカスの強調() {
+    let mut h = split_panes(Harness::new().with_size(80, 14));
+    check("panes", &mut h);
+    // ハードウェアカーソルは、フォーカスのペインの rect の位置を足した所 (03 §9.9 の PANE-10 (a))
+    let f = h.frame();
+    let p = f
+        .panes
+        .iter()
+        .find(|p| p.active)
+        .expect("フォーカスのペイン");
+    let c = f.primary_cursor.expect("カーソル").pos;
+    assert!(
+        c.col >= p.rect.col && c.row >= p.rect.row,
+        "{c:?} {:?}",
+        p.rect
+    );
+    let r = render_screen(
+        &f,
+        CellSize {
+            cols: 80,
+            rows: f.size.rows + eve_tui::buffer::chrome_rows(f.size.rows, f.hint_bar),
+        },
+        ColorDepth::TrueColor,
+        &Glyphs::unicode(),
+    );
+    assert_eq!(r.cursor, Some(c));
+    // フォーカスのペインの見出しは `▶` で始まり、ほかの見出しは `─` で埋める
+    let bar_y = p.bar.as_ref().expect("見出し").rect.row;
+    assert!(
+        line(&mut h, bar_y).contains("│▶ memo.txt"),
+        "{}",
+        line(&mut h, bar_y)
+    );
+}
+
+// verifies: AC-FR-509-1
+#[test]
+fn 複数ペイン_無色の段と_ascii_の縮退を重ねてもフォーカスが分かる() {
+    let mut h = split_panes(Harness::new().with_size(80, 14).with_caps(Capabilities {
+        color_depth: ColorDepth::Mono,
+        ascii_only: true,
+        ..Capabilities::default()
+    }));
+    let look = Look {
+        depth: ColorDepth::Mono,
+        glyphs: Glyphs::ascii(),
+    };
+    check_look("panes-mono-ascii", &mut h, look);
+}
+
+// verifies: AC-FR-509-1
+#[test]
+fn 複数ペイン_狭い幅では見出しの項目を省略する() {
+    // 41 列 (左右に分けた最小) と長いファイル名: 名前の中間を省略し、変更の印は残す (04 §8.7)
+    let mut h = Harness::new()
+        .with_size(41, 14)
+        .with_file("/a-rather-long-file-name.txt", MEMO.as_bytes());
+    h.open("/a-rather-long-file-name.txt");
+    h.run_jobs();
+    h.keys("ctrl+\\");
+    h.text("x");
+    check("panes-narrow", &mut h);
+}

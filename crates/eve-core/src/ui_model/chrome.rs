@@ -60,38 +60,18 @@ fn grapheme_column(doc: &Document, head: ByteOff) -> usize {
     grapheme_indices(&prefix).len() + 1
 }
 
-pub(crate) fn status_model(
-    state: &EditorState,
-    view_id: ViewId,
-    chord: &[KeyStroke],
-) -> StatusModel {
-    let mut items = Vec::new();
-    let Some(view) = state.view(view_id) else {
-        return StatusModel::default();
-    };
-    let Some(doc) = state.document(view.doc) else {
-        return StatusModel::default();
-    };
-    use StatusAlign::{Left, Right};
-
-    // 左群: ファイル名・変更・読み取り専用・機能縮退・読込中・保存中・外部変更・チョード
-    let name = match doc.path.as_ref().and_then(|p| p.file_name()) {
-        Some(n) => n,
-        None => state.untitled_label(doc),
-    };
-    // 文書が 2 件以上のときは、ファイル名の後ろに何番目かを出す (03 §9.8)
-    let name = match state.buffer_position() {
-        Some((n, total)) => format!("{name} ({n}/{total})"),
-        None => name,
-    };
-    items.push(item(
+/// 文書の名前・変更・読み取り専用の項目 (ステータスバーの左群の先頭 3 つ、04 §8.7)。ペインの見出しも同じ文言・優先度で
+/// 使う (03 §9.9 の PANE-10 (b))。名前 `name` は呼び側が決める (ステータスバーは `(n/total)` 付き、見出しは PANE-11 の区別)。
+pub(crate) fn document_items(state: &EditorState, doc: &Document, name: &str) -> Vec<StatusItem> {
+    use StatusAlign::Left;
+    let mut items = vec![item(
         StatusKind::Path,
-        &name,
+        name,
         None,
         4,
         Left,
         CutPolicy::Middle,
-    ));
+    )];
     if doc.is_dirty() {
         items.push(item(
             StatusKind::Dirty,
@@ -116,6 +96,34 @@ pub(crate) fn status_model(
             CutPolicy::Never,
         ));
     }
+    items
+}
+
+pub(crate) fn status_model(
+    state: &EditorState,
+    view_id: ViewId,
+    chord: &[KeyStroke],
+) -> StatusModel {
+    let mut items = Vec::new();
+    let Some(view) = state.view(view_id) else {
+        return StatusModel::default();
+    };
+    let Some(doc) = state.document(view.doc) else {
+        return StatusModel::default();
+    };
+    use StatusAlign::{Left, Right};
+
+    // 左群: ファイル名・変更・読み取り専用・機能縮退・読込中・保存中・外部変更・チョード
+    let name = match doc.path.as_ref().and_then(|p| p.file_name()) {
+        Some(n) => n,
+        None => state.untitled_label(doc),
+    };
+    // 文書が 2 件以上のときは、ファイル名の後ろに何番目かを出す (03 §9.8)
+    let name = match state.buffer_position() {
+        Some((n, total)) => format!("{name} ({n}/{total})"),
+        None => name,
+    };
+    items.extend(document_items(state, doc, &name));
     // 長い行を含む文書: 折り返さずに表示する (NFR-106、03 §14.4 の「文言」、04 §8.7)
     if doc.format.long_lines > 0 {
         let (long, short) = (

@@ -2,7 +2,7 @@
  2▶ アプリ: 終了                                              app.quit  Ctrl+Q
  3  アプリ: 失敗として終了                                 app.quit_with_error
  4  アプリ: 保存して終了                                     app.save_and_quit
-~   バッファ: 閉じる                                      buffer.close  Ctrl+W
+~   バッファ: 文書を閉じる                                buffer.close  Ctrl+W
 ~   バッファ: 一覧                                         buffer.list  Ctrl+E
 ~   バッファ: 次の文書                                  buffer.next  Ctrl+PgDn
 ~   バッファ: 前の文書                                  buffer.prev  Ctrl+PgUp

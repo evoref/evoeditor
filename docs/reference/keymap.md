@@ -1,6 +1,6 @@
 # 既定キーマップ
 
-生成物 (`cargo xtask gen-reference` で作り直す。手で直さない。docs/09 §11.2)。`evoeditor --dump-keymap --json` (`--no-config`。組込みの既定キーマップ、割当 152 件) の出力から作る。既定キーの正本は [07 §11.6 のカタログ](../07-config-extensibility.md#116-v01-commandid-カタログ-付録) の「既定キー」列で、`cargo xtask gen-reference --check` が突合する。
+生成物 (`cargo xtask gen-reference` で作り直す。手で直さない。docs/09 §11.2)。`evoeditor --dump-keymap --json` (`--no-config`。組込みの既定キーマップ、割当 164 件) の出力から作る。既定キーの正本は [07 §11.6 のカタログ](../07-config-extensibility.md#116-v01-commandid-カタログ-付録) の「既定キー」列で、`cargo xtask gen-reference --check` が突合する。
 
 - コンテキストは 07 §7.1 の順。同じコンテキストの中は優先の順 (層の順・登録の順)。キーを探すときの参照の順 (`search` → `prompt` → `global` など) は 07 §7.1。
 - **キー** は画面の表記 (04 §7.8)、**設定の表記** は `keymap.toml` に書く形 (07 §7.2)。**拡張キー** の「要」は拡張キーが無い端末では届かない割当 (07 §11.6 の `[E]`)。
@@ -34,8 +34,8 @@
 | `Ctrl+K A` | `ctrl+k a` | `file.save_all` | すべて保存 | — | — |
 | `Ctrl+O` | `ctrl+o` | `file.open` | 開く | — | — |
 | `Ctrl+N` | `ctrl+n` | `file.new` | 新規作成 | — | — |
-| `Ctrl+W` | `ctrl+w` | `buffer.close` | 閉じる | — | — |
-| `Ctrl+K W` | `ctrl+k w` | `buffer.close` | 閉じる | — | — |
+| `Ctrl+W` | `ctrl+w` | `buffer.close` | 文書を閉じる | — | — |
+| `Ctrl+K W` | `ctrl+k w` | `buffer.close` | 文書を閉じる | — | — |
 | `Ctrl+PgDn` | `ctrl+pagedown` | `buffer.next` | 次の文書 | — | — |
 | `Ctrl+PgUp` | `ctrl+pageup` | `buffer.prev` | 前の文書 | — | — |
 | `Ctrl+K N` | `ctrl+k n` | `buffer.next` | 次の文書 | — | — |
@@ -97,6 +97,18 @@
 | `Alt+B` | `alt+b` | `cursor.move_word_left` | 単語の左へ移動 | — | — |
 | `Alt+F` | `alt+f` | `cursor.move_word_right` | 単語の右へ移動 | — | — |
 | `Ctrl+G` | `ctrl+g` | `cursor.goto_line` | 行へ移動 | — | — |
+| `Ctrl+\` | `ctrl+\` | `pane.split_right` | 右に分割 (左右に並べる) | — | — |
+| `Ctrl+K \` | `ctrl+k \` | `pane.split_right` | 右に分割 (左右に並べる) | — | — |
+| `Ctrl+K \|` | `ctrl+k \|` | `pane.split_right` | 右に分割 (左右に並べる) | — | — |
+| `Ctrl+K -` | `ctrl+k -` | `pane.split_down` | 下に分割 (上下に並べる) | — | — |
+| `F6` | `f6` | `pane.focus_next` | 次のペイン | — | — |
+| `Shift+F6` | `shift+f6` | `pane.focus_prev` | 前のペイン | — | — |
+| `Ctrl+K Tab` | `ctrl+k tab` | `pane.focus_next` | 次のペイン | — | — |
+| `Ctrl+K Shift+Tab` | `ctrl+k shift+tab` | `pane.focus_prev` | 前のペイン | — | — |
+| `Ctrl+K Q` | `ctrl+k q` | `pane.close` | ペインを閉じる | — | — |
+| `Ctrl+K ]` | `ctrl+k ]` | `pane.grow` | ペインを広げる | — | — |
+| `Ctrl+K [` | `ctrl+k [` | `pane.shrink` | ペインを狭める | — | — |
+| `Ctrl+K =` | `ctrl+k =` | `pane.equalize` | ペインの大きさを揃える | — | — |
 | `Ctrl+K ←` | `ctrl+k left` | `cursor.home` | 行頭へ移動 | — | — |
 | `Ctrl+K →` | `ctrl+k right` | `cursor.end` | 行末へ移動 | — | — |
 | `Ctrl+K Shift+←` | `ctrl+k shift+left` | `select.extend_home` | 行頭まで選択 | — | — |
@@ -166,7 +178,7 @@
 | `Ctrl+P` | `ctrl+p` | `ui.list_prev` | 前の項目 | — | — |
 | `PgDn` | `pagedown` | `ui.list_page_down` | 一覧の次のページ | — | — |
 | `PgUp` | `pageup` | `ui.list_page_up` | 一覧の前のページ | — | — |
-| `Ctrl+W` | `ctrl+w` | `buffer.close` | 閉じる | — | — |
+| `Ctrl+W` | `ctrl+w` | `buffer.close` | 文書を閉じる | — | — |
 
 ## `dialog`
 
