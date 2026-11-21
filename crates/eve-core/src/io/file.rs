@@ -90,19 +90,30 @@ impl EditorState {
             .filter(|(_, p)| matches!(p, Pending::Open { doc, .. } if Some(*doc) == active))
             .map(|(id, _)| *id)
             .collect();
-        for id in &own {
+        self.cancel_loads(own)
+    }
+
+    /// 読込のジョブ `ids` を取り消す。取り消し済み (結果を待っているだけ) のものは数えない (次の `Esc` を次の段へ通す。
+    /// 03 §12.7.6 の細目 (9))。取り消したものがあれば `true`。
+    fn cancel_loads(&mut self, ids: Vec<eve_view::JobId>) -> bool {
+        // 結果が届いて表から消えた読込の印は捨てる
+        let pending = &self.io.pending;
+        self.io.cancelled_loads.retain(|j| pending.contains_key(j));
+        let fresh: Vec<_> = ids
+            .into_iter()
+            .filter(|id| !self.io.cancelled_loads.contains(id))
+            .collect();
+        for id in &fresh {
             self.jobs.cancel(*id);
+            self.io.cancelled_loads.insert(*id);
         }
-        !own.is_empty()
+        !fresh.is_empty()
     }
 
     /// 表示していない文書の新しく開く読込を取り消す (表示中の文書が読込中でないときに呼ぶ)。取り消すものがあれば `true`。
     pub(crate) fn cancel_hidden_loading(&mut self) -> bool {
         let ids: Vec<_> = self.hidden_open_loads().map(|(id, _)| id).collect();
-        for id in &ids {
-            self.jobs.cancel(*id);
-        }
-        !ids.is_empty()
+        self.cancel_loads(ids)
     }
 
     /// 今の文書 (アクティブな文書 = フォーカスのペインの文書。03 §9.9 の PANE-8)。

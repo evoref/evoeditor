@@ -37,9 +37,9 @@ fn canonicalize_できない保存先は今の文書と同じとしない() {
     );
     save_as(&mut h, "/w/hard.txt");
     assert_eq!(
-        h.overlay(),
-        "dialog",
-        "既存のファイルの上書きの確認 (表の 6)"
+        h.editor.state().confirm_name(),
+        Some("save.overwrite"),
+        "既存のファイルの上書きの確認 (表の 6)。表の 1 ならハードリンクの確認 (save.hardlink) になる"
     );
     h.keys("r");
     assert_eq!(
@@ -145,16 +145,150 @@ fn esc_は今の文書の読込を照合より先に取り消す() {
         "",
         "今の文書 (d) の読込を取り消す (照合は取り消さないので名前の入力は出ない)"
     );
+    // d の読込は取り消し済みで結果を待つだけ: 次の Esc は d に受け止められず、a の照合を取り消す
+    h.keys("esc");
+    assert_eq!(
+        h.overlay(),
+        "prompt",
+        "次の Esc で a の照合を取り消し、名前の入力に戻る"
+    );
+    h.keys("esc");
     h.run_jobs();
     assert!(
         !paths(&h).iter().any(|p| p == "/w/d.txt"),
         "d の読込は取り消した"
     );
+    assert!(disk(&h, "/w/c.txt").is_none(), "照合は取り消した");
+    assert!(h.editor.state().document(a).is_some());
+}
+
+/// 保存先の照合・開くジョブの結果を、ジョブを走らせずに渡す (主スレッドの受け止めだけを確かめる)。
+fn job_of(r: eve_core::CommandResult) -> eve_view::JobId {
+    match r {
+        eve_core::CommandResult::Pending(job) => job,
+        other => panic!("ジョブを投入する: {other:?}"),
+    }
+}
+
+fn file_id(h: &Harness, path: &str) -> eve_core::FileId {
+    eve_core::FileId {
+        volume: 1,
+        index: h.fs.file_id_of(path).expect("識別"),
+    }
+}
+
+// verifies: FR-103
+#[test]
+fn canonicalize_が_2_回とも失敗する開くは識別で同じとしない() {
+    // `path` も親も canonicalize できない: canonical は無く、主スレッドが入力したパスで代える (03 §12.7.6 の 0)
+    let mut h = opened(&[("/w/a.txt", b"alpha\n")]);
+    h.fs.add_hardlink("/w/hard.txt", "/w/a.txt");
+    h.open("/w/a.txt");
+    h.run_jobs();
+    for _ in 0..2 {
+        h.fs.fail_next(
+            eve_testkit::FsOp::Canonicalize,
+            eve_core::FsErrorKind::Other,
+        );
+    }
+    h.open("/w/hard.txt");
+    h.run_jobs();
+    assert_eq!(docs(&h), 2, "{:?}", paths(&h));
+}
+
+// verifies: FR-103
+#[test]
+fn canonical_の無い識別は主スレッドでも使わない() {
+    // ジョブが canonical を返さず識別だけを信頼できると言っても、主スレッドは代わりのパスでは識別を使わない
+    // (same_file.rs の `on_open_identity` の受け止め)
+    let mut h = opened(&[("/w/a.txt", b"alpha\n")]);
+    h.fs.add_hardlink("/w/hard.txt", "/w/a.txt");
+    h.open("/w/a.txt");
+    h.run_jobs();
+    let id = file_id(&h, "/w/a.txt");
+    let job = job_of(h.open("/w/hard.txt"));
+    h.editor.on_job_result(eve_core::JobOutput {
+        job,
+        body: eve_core::JobResult::Identity {
+            file_id: Some(id),
+            file_id_unique: true,
+            canonical: None,
+            stale: Vec::new(),
+        },
+    });
+    assert_eq!(docs(&h), 2, "新しい文書を閉じない: {:?}", paths(&h));
+}
+
+// verifies: FR-104
+#[test]
+fn canonicalize_が_2_回とも失敗する保存先は今の文書と同じとしない() {
+    let (mut h, a, _) = a_dirty_and_b();
+    h.fs.add_hardlink("/w/hard.txt", "/w/a.txt");
+    for _ in 0..2 {
+        h.fs.fail_next(
+            eve_testkit::FsOp::Canonicalize,
+            eve_core::FsErrorKind::Other,
+        );
+    }
+    save_as(&mut h, "/w/hard.txt");
+    assert_eq!(h.editor.state().confirm_name(), Some("save.overwrite"));
+    h.keys("r");
+    assert_eq!(disk(&h, "/w/a.txt").as_deref(), Some("alpha\n"));
+    assert_eq!(h.doc_id(), a);
+}
+
+// verifies: FR-104
+#[test]
+fn canonical_の無い保存先の識別は主スレッドでも使わない() {
+    // 照合のジョブが canonical を返さず識別だけを信頼できると言っても、主スレッドは入力したパスで代えるときは識別を
+    // 使わない (save_as.rs の `apply_save_as_target` の受け止め)
+    let (mut h, a, _) = a_dirty_and_b();
+    h.fs.add_hardlink("/w/hard.txt", "/w/a.txt");
+    let id = file_id(&h, "/w/hard.txt");
+    let meta = eve_core::FileMeta {
+        kind: eve_core::FileKind::File,
+        len: 6,
+        mtime: eve_core::FileTime::default(),
+        readonly: false,
+        file_id: Some(id),
+        nlink: 2,
+        link: None,
+        fs_kind: eve_core::FsKind::Local,
+        owner_is_me: Some(true),
+        file_id_unique: true,
+    };
+    let stamp = eve_core::FileStamp::from_meta(&meta, None);
+    let job = job_of(h.cmd_with("file.save_as", Args::new().with_str("path", "/w/hard.txt")));
+    h.editor.on_job_result(eve_core::JobOutput {
+        job,
+        body: eve_core::JobResult::Meta {
+            meta,
+            stamp,
+            canonical: None,
+            stale: Vec::new(),
+        },
+    });
     assert_eq!(
-        disk(&h, "/w/c.txt").as_deref(),
-        Some("xalpha\n"),
-        "a の照合は残り、保存まで進んだ"
+        h.editor.state().confirm_name(),
+        Some("save.overwrite"),
+        "表の 1 (今の文書への上書き保存) にしない"
     );
+    assert_eq!(h.doc_id(), a);
+}
+
+// verifies: FR-103
+#[test]
+fn 投入の後に同じ識別を得た文書は古い識別として下ろさない() {
+    // a の識別 X は古い (a.txt は作り直された)。b.txt が X を使い、c.txt は b のハードリンク (X)。b と c を続けて開く:
+    // c の結果の `stale` は a だけを指し、c のジョブの投入の後に同じ X を得た b は下ろさない (パスの条件)。c は b に
+    // 切り替わる
+    let (mut h, a) = stale_id();
+    h.fs.add_hardlink("/w/c.txt", "/w/b.txt");
+    h.open("/w/b.txt");
+    h.open("/w/c.txt");
+    h.run_jobs();
+    assert_eq!(docs(&h), 2, "a と b だけ: {:?}", paths(&h));
+    assert_eq!(h.doc_path().as_deref(), Some("/w/b.txt"));
     assert!(h.editor.state().document(a).is_some());
 }
 

@@ -170,6 +170,9 @@ pub(crate) struct IoState {
     /// 保存が成功したら、文書の canonical をこれに替える (03 §12.7.6 の 2)。
     pub(crate) save_as_targets:
         BTreeMap<DocumentId, (crate::FsPath, crate::io::same_file::FileIdentity)>,
+    /// `Esc` で取り消した読込のジョブ (結果が届くまで)。取り消し済みの読込は次の `Esc` を受け止めない (03 §12.7.6 の
+    /// 細目 (9))。
+    pub(crate) cancelled_loads: BTreeSet<JobId>,
     /// ほかのオーバーレイか検索バーが出ている間に届いた、名前を付けて保存の照合の結果 (届いた順。03 §12.7.6 の細目 (7))。
     pub(crate) held_save_as:
         std::collections::VecDeque<(Box<crate::io::save_as::SaveAsAsk>, crate::jobs::JobResult)>,
@@ -356,6 +359,7 @@ impl EditorState {
                 link_create_ok: None,
                 save_as_targets: BTreeMap::new(),
                 held_save_as: std::collections::VecDeque::new(),
+                cancelled_loads: BTreeSet::new(),
                 system_encoding: None,
                 log_path: None,
                 config_sources: None,
