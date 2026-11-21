@@ -17,7 +17,7 @@ use std::path::{Path, PathBuf};
 
 use eve_core::{
     AttrKind, ChunkError, Expect, FileId, FileKind, FileMeta, FileStamp, FileSystem, FileTime,
-    FsError, FsErrorDetail, FsErrorKind, FsKind, FsPath, FsyncLevel, HardlinkPolicy, ReadChunks,
+    FsError, FsErrorDetail, FsErrorKind, FsPath, FsyncLevel, HardlinkPolicy, ReadChunks,
     SaveMethod, SaveOptions, SaveReport, SaveWarning,
 };
 
@@ -92,6 +92,7 @@ use crate::sys::{
 
 fn meta_of(p: &Path, meta: &fs::Metadata) -> FileMeta {
     let kind = file_kind(meta);
+    let (fs_kind, id_trusted) = crate::sys::fs_class(p);
     FileMeta {
         kind,
         len: meta.len(),
@@ -106,9 +107,11 @@ fn meta_of(p: &Path, meta: &fs::Metadata) -> FileMeta {
         }),
         nlink: u32::try_from(meta.nlink()).unwrap_or(u32::MAX),
         link: link_info(p),
-        fs_kind: FsKind::Unknown,
+        fs_kind,
         // root は他人のファイルの所有者も保てるので「自分の」として扱う (05 §4.4)
         owner_is_me: Some(meta.uid() == my_euid() || my_euid() == 0),
+        // 同じファイルの判定に (dev, ino) を使ってよいのは、ローカルの FS (FAT / exFAT を除く) だけ (05 §5.4 の (1))
+        file_id_unique: kind == FileKind::File && id_trusted,
     }
 }
 
@@ -666,7 +669,7 @@ impl FileSystem for UnixFs {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use eve_core::{Expect, SaveOptions};
+    use eve_core::{Expect, FsKind, SaveOptions};
 
     struct Tmp(PathBuf);
 
@@ -710,6 +713,22 @@ mod tests {
             .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
             .filter(|n| n.contains(".eve-"))
             .collect()
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn ローカルの_fs_の識別は同じファイルの判定に使う() {
+        // 一時ディレクトリはローカル (ext4・tmpfs 等): 識別を信頼する (05 §5.4 の (1))。ディレクトリは識別を判定に使わない
+        let t = Tmp::new("fsclass");
+        fs::write(t.p("a.txt"), b"a").unwrap();
+        let ufs = UnixFs::default();
+        let m = ufs.metadata(&FsPath::new(t.p("a.txt"))).unwrap();
+        if m.fs_kind == FsKind::Network {
+            return; // 一時ディレクトリがネットワーク上の環境では確かめない
+        }
+        assert_eq!(m.fs_kind, FsKind::Local);
+        assert!(m.file_id_unique);
+        assert!(!ufs.metadata(&FsPath::new(&t.0)).unwrap().file_id_unique);
     }
 
     // verifies: NFR-401

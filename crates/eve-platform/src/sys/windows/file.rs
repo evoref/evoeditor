@@ -9,10 +9,12 @@ use std::ptr;
 use windows_sys::Win32::Foundation::{GENERIC_WRITE, GetLastError, INVALID_HANDLE_VALUE};
 use windows_sys::Win32::Storage::FileSystem::{
     BY_HANDLE_FILE_INFORMATION, CREATE_NEW, CreateFileW, DeleteFileW, FILE_ALLOCATION_INFO,
-    FILE_ATTRIBUTE_NORMAL, FILE_SHARE_READ, FILE_TYPE_CHAR, FILE_TYPE_PIPE, FileAllocationInfo,
+    FILE_ATTRIBUTE_NORMAL, FILE_ID_INFO, FILE_REMOTE_PROTOCOL_INFO, FILE_SHARE_READ,
+    FILE_TYPE_CHAR, FILE_TYPE_PIPE, FileAllocationInfo, FileIdInfo, FileRemoteProtocolInfo,
     FlushFileBuffers, GetDiskFreeSpaceExW, GetDriveTypeW, GetFileAttributesW,
-    GetFileInformationByHandle, GetFileType, INVALID_FILE_ATTRIBUTES, MOVEFILE_WRITE_THROUGH,
-    MoveFileExW, ReplaceFileW, SetFileAttributesW, SetFileInformationByHandle,
+    GetFileInformationByHandle, GetFileInformationByHandleEx, GetFileType,
+    GetVolumeInformationByHandleW, INVALID_FILE_ATTRIBUTES, MOVEFILE_WRITE_THROUGH, MoveFileExW,
+    ReplaceFileW, SetFileAttributesW, SetFileInformationByHandle,
 };
 
 use super::security::OwnerOnly;
@@ -142,13 +144,19 @@ pub(crate) fn free_bytes(path: &Path) -> Option<u64> {
     (ok != 0).then_some(avail)
 }
 
-/// ボリューム番号・ファイルインデックス・ハードリンク数。
+/// ボリューム番号・ファイルインデックス・ハードリンク数と、識別を同じファイルの判定に使ってよいか。
 pub(crate) struct HandleInfo {
     pub volume: u64,
     pub index: u128,
     pub nlink: u32,
+    /// `volume` と `index` で同じファイルを判定してよい (05 §5.4 の (1)): NTFS / `ReFS` のローカルのボリュームで、
+    /// `index` が 0 でない。
+    pub unique: bool,
 }
 
+/// ハンドルの識別 (05 §5.4)。`FileIdInfo` (128 bit。`ReFS` の識別は 64 bit に収まらない) が取れればそれを、取れない FS
+/// (FAT など) では `GetFileInformationByHandle` の 64 bit の値を使う。どの経路 (`metadata`・直接上書きのハンドル) も
+/// この関数で取るので、比べる値の作り方は揃う。
 pub(crate) fn file_info(f: &File) -> io::Result<HandleInfo> {
     // SAFETY: 全ビット 0 の `BY_HANDLE_FILE_INFORMATION` は有効な値 (すべて整数)。
     let mut info: BY_HANDLE_FILE_INFORMATION = unsafe { std::mem::zeroed() };
@@ -156,11 +164,80 @@ pub(crate) fn file_info(f: &File) -> io::Result<HandleInfo> {
     if unsafe { GetFileInformationByHandle(f.as_raw_handle(), &raw mut info) } == 0 {
         return Err(io::Error::last_os_error());
     }
+    let (volume, index) = file_id_info(f).unwrap_or((
+        u64::from(info.dwVolumeSerialNumber),
+        (u128::from(info.nFileIndexHigh) << 32) | u128::from(info.nFileIndexLow),
+    ));
+    let unique = index != 0 && trusted_id_fs(f) && !is_remote_handle(f);
     Ok(HandleInfo {
-        volume: u64::from(info.dwVolumeSerialNumber),
-        index: (u128::from(info.nFileIndexHigh) << 32) | u128::from(info.nFileIndexLow),
+        volume,
+        index,
         nlink: info.nNumberOfLinks,
+        unique,
     })
+}
+
+/// `GetFileInformationByHandleEx(FileIdInfo)`: (ボリュームのシリアル番号 (64 bit), ファイルの識別 (128 bit))。
+fn file_id_info(f: &File) -> Option<(u64, u128)> {
+    let mut info = FILE_ID_INFO::default();
+    // SAFETY: `f` は開いているファイルのハンドル。書込先は `FILE_ID_INFO` で、渡す大きさはその大きさ。
+    let ok = unsafe {
+        GetFileInformationByHandleEx(
+            f.as_raw_handle(),
+            FileIdInfo,
+            (&raw mut info).cast(),
+            u32::try_from(std::mem::size_of::<FILE_ID_INFO>()).unwrap_or(u32::MAX),
+        )
+    };
+    (ok != 0).then(|| {
+        (
+            info.VolumeSerialNumber,
+            u128::from_le_bytes(info.FileId.Identifier),
+        )
+    })
+}
+
+/// ハンドルのボリュームの FS が NTFS か `ReFS` か (`GetVolumeInformationByHandleW` の FS の名前)。問い合わせの失敗は
+/// `false` (識別を信頼しない側)。
+fn trusted_id_fs(f: &File) -> bool {
+    /// FS の名前の欄の長さ (`MAX_PATH + 1` 文字。API の説明が求める上限)。
+    const NAME_LEN: usize = 261;
+    let mut name = [0u16; NAME_LEN];
+    // SAFETY: `f` は開いているファイルのハンドル。FS の名前の書込先は `name` (長さ `NAME_LEN`)。要らない出力は null と 0。
+    let ok = unsafe {
+        GetVolumeInformationByHandleW(
+            f.as_raw_handle(),
+            ptr::null_mut(),
+            0,
+            ptr::null_mut(),
+            ptr::null_mut(),
+            ptr::null_mut(),
+            name.as_mut_ptr(),
+            u32::try_from(NAME_LEN).unwrap_or(0),
+        )
+    };
+    if ok == 0 {
+        return false;
+    }
+    let len = name.iter().position(|&c| c == 0).unwrap_or(NAME_LEN);
+    let fs = String::from_utf16_lossy(&name[..len]);
+    fs.eq_ignore_ascii_case("NTFS") || fs.eq_ignore_ascii_case("ReFS")
+}
+
+/// ハンドルがネットワーク上のファイルか (`FileRemoteProtocolInfo` はリモートのファイルでだけ成功する)。ドライブの割当て
+/// を通らないパス (シンボリックリンクの先が共有フォルダ) も、パスの文字列の判定 (`is_remote`) と違って見分けられる。
+fn is_remote_handle(f: &File) -> bool {
+    let mut info = FILE_REMOTE_PROTOCOL_INFO::default();
+    // SAFETY: `f` は開いているファイルのハンドル。書込先は `FILE_REMOTE_PROTOCOL_INFO` で、渡す大きさはその大きさ。
+    let ok = unsafe {
+        GetFileInformationByHandleEx(
+            f.as_raw_handle(),
+            FileRemoteProtocolInfo,
+            (&raw mut info).cast(),
+            u32::try_from(std::mem::size_of::<FILE_REMOTE_PROTOCOL_INFO>()).unwrap_or(u32::MAX),
+        )
+    };
+    ok != 0
 }
 
 /// 開いたハンドルが文字デバイス (`NUL`・コンソール。`FILE_TYPE_CHAR`) かパイプ (`FILE_TYPE_PIPE`) か。問い合わせの失敗

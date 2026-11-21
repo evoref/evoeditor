@@ -1032,6 +1032,10 @@ text = "{path} の保存を中止しました。書き出す内容を読み直�
 hint = "別のファイル名を入力してください"
 text = "{path} はファイルではありません (フォルダ等)"
 
+[msg.save_as.open_in_other]
+hint = "その文書に切り替えて保存するか、別の名前を指定してください"
+text = "{path} は別の文書として開いています"
+
 [msg.save_as.same_file_read_only]
 hint = "別のファイル名を入力してください"
 text = "読み取り専用の文書は、同じファイル {path} には保存できません"
@@ -1136,8 +1140,12 @@ message = "{path} の先頭に UTF-32 の BOM があります。UTF-32 には対
 readonly = "[R] 読み取り専用で開く"
 encoding = "[E] 文字コードを指定して開く"
 
-[ui.confirm.save]
-overwrite = "{path} は既にあります。上書きしますか? — `[O] 上書き` / `[R] 別の名前を入力` ★ (既定は別の名前を入力。確定 (ユーザー回答))"
+[ui.confirm.save.overwrite]
+title = "同名のファイルがあります"
+message = "{path} は既にあります。上書きしますか?"
+overwrite = "[O] 上書き"
+rename = "[R] 別の名前を入力"
+link = "リンク先: {target}"
 
 [ui.confirm.swap_recovery]
 title = "未保存の内容が見つかりました"

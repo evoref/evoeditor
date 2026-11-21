@@ -238,7 +238,7 @@ fn 編集を許可の確認から開き直すのは確認を出した文書() {
 #[test]
 fn 保存の確認から開いた名前の入力も確認の文書を保存する() {
     let (mut h, a) = a_dirty_b_loading();
-    // a を既存の c.txt へ名前を付けて保存する: 保存先が後から作られていた確認 (上書き / 別名で保存 (既定))
+    // a を既存の c.txt へ名前を付けて保存する: 上書きの確認 (上書き / 別の名前を入力 (既定)、03 §9.7 (a) の 6)
     h.cmd_with(
         "file.save_as",
         eve_core::Args::new().with_str("path", "/w/c.txt"),
@@ -248,9 +248,10 @@ fn 保存の確認から開いた名前の入力も確認の文書を保存す�
     let b = h.doc_id();
     assert_ne!(a, b, "表示は b に切り替わる");
     assert_eq!(h.overlay(), "dialog");
-    // 「別名で保存」で名前の入力へ (対象は確認の文書 a)
+    // 「別の名前を入力」で名前の入力へ (対象は確認の文書 a。入力した名前が残るので、全部選んで打ち直す)
     h.answer(1);
     assert_eq!(h.overlay(), "prompt");
+    h.cmd("select.all");
     h.text("/w/d.txt");
     h.keys("enter");
     h.run_jobs();

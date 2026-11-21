@@ -322,7 +322,32 @@ pub fn run_job(
                         None
                     };
                     let stamp = FileStamp::from_meta(&meta, hash);
-                    JobResult::Meta { meta, stamp }
+                    // 名前を付けて保存の保存先は、同じファイルの判定 (03 §12.7.6 の 2) に canonical のパスも返す
+                    let canonical = (*purpose == MetaPurpose::SaveAsTarget)
+                        .then(|| crate::io::same_file::canonical_of(ports.fs.as_ref(), path))
+                        .flatten();
+                    JobResult::Meta {
+                        meta,
+                        stamp,
+                        canonical,
+                    }
+                }
+            }
+            // 名前を付けて保存の保存先が無い: 新しく作るファイルの canonical (親を canonicalize してファイル名を付けた
+            // もの) も返す。ほかのまだ無いファイルとして開いた文書と同じ保存先かを見る (03 §9.7 (a) の 1b)
+            Err(err)
+                if *purpose == MetaPurpose::SaveAsTarget
+                    && err.kind == crate::io::fs::FsErrorKind::NotFound =>
+            {
+                if cancel.is_cancelled() {
+                    JobResult::Failed {
+                        err: JobError::Cancelled,
+                    }
+                } else {
+                    JobResult::TargetAbsent {
+                        canonical: crate::io::same_file::canonical_of(ports.fs.as_ref(), path),
+                        err,
+                    }
                 }
             }
             Err(err) => JobResult::Failed {
@@ -429,6 +454,7 @@ mod tests {
             link: None,
             fs_kind: FsKind::Local,
             owner_is_me: None,
+            file_id_unique: false,
         }
     }
 

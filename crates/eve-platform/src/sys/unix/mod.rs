@@ -48,6 +48,55 @@ pub(crate) fn free_bytes(path: &Path) -> Option<u64> {
     Some(u64::from(st.f_bavail).saturating_mul(u64::from(st.f_frsize)))
 }
 
+/// `path` のある FS の種類 (05 §5.5 の `FsKind` の判定) と、そこの `(st_dev, st_ino)` を同じファイルの判定に使ってよいか
+/// (05 §5.4 の (1)、`FileMeta.file_id_unique`)。Linux は `statfs` の `f_type` で見分ける: NFS・SMB/CIFS・9p (WSL の
+/// `DrvFs` を含む)・FUSE・AFS・Coda・Ceph は `Network`、それ以外は `Local`。識別を信頼するのはローカルで、FAT / `exFAT` で
+/// ないとき (FAT の inode の番号はディレクトリの項目の位置から作られ、削除の後に使い回される)。`statfs` の失敗と Linux
+/// 以外の Unix は `(Unknown, false)`。
+#[cfg(target_os = "linux")]
+pub(crate) fn fs_class(path: &Path) -> (eve_core::FsKind, bool) {
+    use eve_core::FsKind;
+    use std::os::unix::ffi::OsStrExt;
+    /// ネットワークの FS (`linux/magic.h`): NFS, SMB, CIFS, SMB2, 9p, FUSE, AFS, Coda, Ceph。
+    const NETWORK: [u32; 9] = [
+        0x6969,
+        0x517B,
+        0xFF53_4D42,
+        0xFE53_4D42,
+        0x0102_1997,
+        0x6573_5546,
+        0x5346_414F,
+        0x7375_7245,
+        0x00C3_6400,
+    ];
+    /// 識別を使い回す FS: MSDOS (vfat を含む)・`exFAT`。
+    const REUSED_IDS: [u32; 2] = [0x4D44, 0x2011_BAB0];
+    let Ok(c) = std::ffi::CString::new(path.as_os_str().as_bytes()) else {
+        return (FsKind::Unknown, false);
+    };
+    // SAFETY: ゼロ初期化した `statfs` (全フィールドが整数) に書かせる。
+    let mut st: libc::statfs = unsafe { std::mem::zeroed() };
+    // SAFETY: NUL 終端のパスと有効な書込先。
+    if unsafe { libc::statfs(c.as_ptr(), &raw mut st) } != 0 {
+        return (FsKind::Unknown, false);
+    }
+    // `f_type` の型は libc ごとに違う (glibc は符号付き、musl は符号無し)。下位 32 bit で比べる
+    let Ok(t) = u32::try_from(st.f_type & 0xFFFF_FFFF) else {
+        return (FsKind::Unknown, false);
+    };
+    if NETWORK.contains(&t) {
+        (FsKind::Network, false)
+    } else {
+        (FsKind::Local, !REUSED_IDS.contains(&t))
+    }
+}
+
+/// Linux 以外の Unix: 判定しない (`Unknown`。識別は信頼しない)。macOS へ移すときは `statfs` の `f_fstypename` で見分ける。
+#[cfg(not(target_os = "linux"))]
+pub(crate) fn fs_class(_path: &Path) -> (eve_core::FsKind, bool) {
+    (eve_core::FsKind::Unknown, false)
+}
+
 /// 1 段だけ 0700 で作る (05 §5.6。在れば何もしない)。
 pub(crate) fn create_dir_private(dir: &Path) -> io::Result<()> {
     use std::os::unix::fs::DirBuilderExt;

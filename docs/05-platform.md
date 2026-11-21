@@ -582,7 +582,7 @@ v0.1 (Windows) で本層が自ら複製するのは READONLY・HIDDEN・SYSTEM �
 
 用途: (1) 同じファイルを二重に開く検出 (`evoeditor A.txt a.txt` on Windows)、(2) 保存直前の「別ファイルに置き換わっていないか」確認、(3) 監視イベントの自己抑制。
 
-**(1) の「同じファイルか」の判定に使ってよい FS** (v0.5 の M31、SAF-28。`FileMeta.file_id_unique`、03 §12.7.6): Windows は NTFS / ReFS のローカルのボリューム (`GetVolumeInformationByHandleW` の FS の名前で見分ける) で、`FileIdInfo` の値が 0 でないとき。Unix は `FsKind::Local` のとき。FAT / exFAT (ディレクトリの項目の位置から作られ、使い回される)、`Network` (サーバによって 0 や重なる値を返す。sshfs は `use_ino` が無いと番号を使い回す)、`Unknown` は使わない (`false`)。イメージから複製したボリュームはシリアル番号が重なるので、`false` の FS では canonical のパスで比べる。(2)・(3) の用途はこの区別に依らない (変わったことを見るだけなので、重なっても安全な側に倒れる)。
+**(1) の「同じファイルか」の判定に使ってよい FS** (v0.5 の M31、SAF-28。`FileMeta.file_id_unique`、03 §12.7.6): Windows は NTFS / ReFS のローカルのボリューム (`GetVolumeInformationByHandleW` の FS の名前で見分ける) で、`FileIdInfo` の値が 0 でないとき (ハンドルが `FileRemoteProtocolInfo` に答える (リモートの) ファイルと、`fs_kind` が `Local` でないパスは除く)。Unix は `FsKind::Local` で、`statfs` の `f_type` が FAT (msdos・vfat)・exFAT でないとき (Linux。ほかの Unix は判定しないので `false`)。ディレクトリは `false`。FAT / exFAT (ディレクトリの項目の位置から作られ、使い回される)、`Network` (サーバによって 0 や重なる値を返す。sshfs は `use_ino` が無いと番号を使い回す)、`Unknown` は使わない (`false`)。イメージから複製したボリュームはシリアル番号が重なるので、`false` の FS では canonical のパスで比べる。(2)・(3) の用途はこの区別に依らない (変わったことを見るだけなので、重なっても安全な側に倒れる)。
 
 ### 5.5 外部変更検知 (FR-117) の比較キー
 
@@ -594,7 +594,7 @@ v0.1 (Windows) で本層が自ら複製するのは READONLY・HIDDEN・SYSTEM �
 |---|---|
 | パスが UNC (`\\server\share\…`。`\\wsl$\…` / `\\wsl.localhost\…` を含む) または `\\?\UNC\…` | `Network` |
 | ドライブ文字のパスで、`GetDriveTypeW(<ルート>)` が `DRIVE_REMOTE` (ネットワークドライブの割当て) | `Network` |
-| (v0.2、Unix) `statfs` の `f_type` / `f_fstypename` が NFS・CIFS/SMB・9p・FUSE 系 | `Network` |
+| (Unix) `statfs` の `f_type` / `f_fstypename` が NFS・CIFS/SMB・9p・FUSE 系 (v0.2 の仕様。実装は v0.5 の M31 で Linux の `f_type` (NFS・SMB・CIFS・SMB2・9p (WSL の DrvFs を含む)・FUSE・AFS・Coda・Ceph) から入れた。それまでの Unix の実装は常に `Unknown`。macOS の `f_fstypename` は移すときに入れる) | `Network` |
 | 判定の API が失敗した | `Unknown` |
 | それ以外 (`DRIVE_FIXED` / `DRIVE_REMOVABLE` / `DRIVE_RAMDISK` 等) | `Local` |
 

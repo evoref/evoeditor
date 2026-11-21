@@ -632,7 +632,7 @@ enum FsErrorDetail {
 | 原子性の主張 | Unix の rename は原子的 (macOS / Linux を出荷する版)。Windows の `ReplaceFileW` は **原子性を保証しない** (内部で複数段の移動を行う)。保存ジョブの開始時 (一時ファイルを作る前) に保存中フラグ (`recovery/inflight/<hash(path)>/<pid>-<seq>.toml`、配置と命名は 05 §7.5) を書き、完了後に消す。書けないときは、原子的保存では警告 (`SaveWarning::InflightFlagNotWritten`) して保存を続け、直接上書きでは書かずに `BackupFailed` (detail = `InflightFlag`) を返して確認を経る (直接上書きの中断は元ファイルを壊すので、痕跡なしでは書かない。`SkipConfirmed` の再投入だけは警告して続ける)。v0.1 は置換途中の失敗をその場で退避パス付きで報告し、さらに **開くジョブが開くたびに 1 回** `inflight_for` (開くパスとリンク先の正規化パスの 2 キー分) で残ったフラグを調べ、見つかれば下の「中断の痕跡の写像」に従って `Complete` / `NewFile` の `interrupted_save` で返して警告する (存在するファイルでも、直接上書きの中断で中身が壊れている可能性があるため)。フラグの pid が生きているか (他のプロセスが保存中か) の扱いは 05 §7.5。起動時に `list_inflight` で残ったフラグを確認して復旧を提案するのは v0.2。**開くたびに同じディレクトリを列挙して痕跡を探すことはしない** (ファイルが多いディレクトリで開くたびに数百 ms かかるため。`inflight_for` はハッシュで決まるディレクトリだけを読む) |
 | Windows の置換の失敗 | `ReplaceFileW` が失敗したときに `MoveFileExW` などの別の置換手段へ自動で切り替えない。元ファイルが無傷の失敗は `AtomicUnsupported` として返し、core は利用者の確認を経て直接上書き (`write_in_place`) へ進む (経路は「原子的置換 → 確認 → 直接上書き」の 1 本)。元ファイルが退避名に移った途中失敗は `ReplacedMovedToBackup` |
 | 保存中フラグのキー | `InflightRecord.target` (と `<hash(key)>` のキー) は **親ディレクトリを `canonicalize` したパス + ファイル名** とする (ファイル自身が無くても作れる。保存する側と開く側で同じ規則)。シンボリックリンクはリンク自身のキー (リンクの親を正規化 + リンクの名前) と、リンク先のキー (`readlink` でリンク先の名前を得て、その親ディレクトリを `canonicalize` し直したパス + リンク先のファイル名) の 2 つ。リンク先が無い (ダングリング) ときもこの規則でリンク先のキーを作る (05 §7.5) |
-| 二重オープン | `FileId` で判定。取得できない FS のみ canonical path で代替 (05 §5.4)。v0.2.0 の実装は、開くジョブの前に正規化したパスの文字列を比べるだけ (FileId を使わない。§9.3 の `JobResult` の注記)。**v0.5 の M31 で仕様どおりにする** (SAF-28。開くジョブの `Identity`、名前を付けて保存の `SaveAsTarget` の照合。比べ方は 03 §12.7.6) |
+| 二重オープン | `FileId` で判定。取得できない FS のみ canonical path で代替 (05 §5.4)。v0.2.0〜v0.4 の実装は、開くジョブの前に正規化したパスの文字列を比べるだけだった (FileId を使わない)。**v0.5 の M31 で仕様どおりにした** (SAF-28。`FileId` は `FileMeta.file_id_unique` が立つ FS だけで使う。開くジョブの `Identity`、名前を付けて保存の `SaveAsTarget` の照合。比べ方は 03 §12.7.6) |
 | ディレクトリの列挙 (`read_dir`、v0.5) | 1 回の呼出しで `dir` の直下を `max_entries` 個まで列挙する (OS の列挙 1 回は区切れない。区切りと積み直しは呼ぶ側の走査のジョブ、03 §12.7.2)。シンボリックリンクは辿らず `Symlink` で返す (辿るかは呼ぶ側が `metadata` で決める)。名前は変換しない (Windows の対にならないサロゲートを含む名前も `OsString` のまま)。`MemFs` と実 FS に同じ契約試験を掛ける (09 §3.4。03 §12.7.8) |
 | 直接上書き (`write_in_place`) | 手順は 1 つ (03 §9.3 が論理手順の正本、OS 別は 05 §4.4)。承認後の直接上書きも、`InPlacePattern` による自動の直接上書きも同じ: (0) **乾式走査 (必須、Port を呼ぶ前に core のジョブが行う)**: Snapshot 全体をエンコード + 照合し、書き込まずに表現不能の有無と出力のバイト長を確定する。表現不能があれば Port を呼ばずに位置一覧を返す (03 §9.3 の Unmappable と同じ)。(1) 書き始める前の照合 (`SaveOptions.expected`) → 保存中フラグを `backup_complete = false` で書く (書けなければ書かずに `BackupFailed`、detail = `InflightFlag`) → 元ファイルを切り詰めずに、他のプロセスの書込を禁じる共有モード (Windows は `FILE_SHARE_READ` のみ) で開き、開いたハンドルで再照合 (不一致なら `Conflict`) → 事前バックアップ (必須。開いたハンドルから読む。一時名で書いて fsync し、バックアップ名に変えてから、フラグを `backup_complete = true` で書き直す。失敗なら書かずに `BackupFailed`。`SkipConfirmed` の再投入では作らない) → (2) 出力長 `len` が元より長ければ書く前に領域を確保 (確保できなければ書かずに `DiskFull`) → (3) 先頭から上書きし、最後に長さを `len` に合わせて fsync → 途中の失敗は `InPlaceFailed { backup }` (バックアップなしの再投入では `backup = None`) → (4) 成功後の後片付けは **フラグを消してからバックアップを消す** 順 (逆にすると、間で中断したとき「完全なバックアップがある」と記録したフラグだけが残る)。OS 別の手順は 05 §4.4。乾式走査で表現不能と長さを先に確定するので、書いている途中で表現不能に気付いて元ファイルを半端に壊す経路も、容量不足で壊す経路も残らない (01 FR-105 AC-2)。2 回目のエンコードが乾式走査と異なる長さ・表現不能を返したら (同じ Snapshot なので起きない不変条件違反) 書込を止めて `InPlaceFailed { backup }` |
 | 取消し | main は保存を取り消すとき **常に** そのジョブの `CancelToken` を立てる (`JobSpawner::cancel`)。ジョブが置換・上書きの前か最中かを main は観測せず、取消しを無視するかどうかはジョブと Port が決める。**取消しを見る段**: 乾式走査 (05 §4.4 手順 0)、`metadata` / 開く (照合を含む)、置換の前の書込 (`write_atomic` の一時ファイルへの書込はエンコーダが `ChunkError::Aborted` で、`write_in_place` の事前バックアップの書込は Port が `cancel` を見て止める)。止めたら一時ファイル・一時名のバックアップ・保存中フラグを片付け、元ファイルは無傷のまま `JobError::Cancelled` で終わる。**取消しを見ない段**: `write_atomic` の `ReplaceFileW` (新規ファイルは `MoveFileExW`、Unix は rename) の呼出しの開始以降と、`write_in_place` の上書きの開始 (05 §4.4 手順 6) 以降。取り消されていても完了まで進み、成功なら `Saved` を返す (失敗ならその `FsError`)。03 §9.3 手順 5d で `Atomic` のジョブが `InPlacePattern` により直接上書きへ切り替わった場合も同じで、本書込のエンコーダは `Aborted` を返さない。キャンセル済みの `Saved` は採用する (§9.3 の採否表) |
@@ -729,6 +729,7 @@ Editor (ファサード。frontend と Host が触る唯一の入口)
 EditorState
    ├─ documents: BTreeMap<DocumentId, Document>
    │    └─ Document { text: Text /*TextStorage の実装 (eve-text)*/, path: Option<FsPath>, disk_stamp: Option<FileStamp> /*FileId は disk_stamp.file_id*/,
+   │                  canonical: Option<FsPath>, file_id_unique: bool /*v0.5 の M31: 同じファイルの判定 (03 §12.7.6)。境界の型には出さない*/,
    │                  format: TextFormat { encoding, has_bom, default_eol, eol_stats, invalid_bytes, pua_escape, escape_encoding /*v0.4 の M23: 本文のエスケープ文字がどの文字コードのバイトか (03 §8.3.1)*/,
    │                                       roundtrip: RoundtripSummary /*v0.1〜v0.3: 区分 B の検出の結果 (行の数 + 先頭 100 行の位置)。v0.4 は保持方式の要約 (件数と状態)。記録は下の preserved (03 §8.7.1)*/,
    │                                       long_line_threshold /*開いたときの閾値*/, long_lines /*閾値を超える行の数*/ },
@@ -1723,8 +1724,8 @@ enum JobResult {                   // #[non_exhaustive]
                                                                 // v0.4 の M25 (03 §9.2.1)。非終端。読込が 200 ms を過ぎても終わらないとき 1 回 (判定のやり直しの後は送り直す)。OpenOptions.partial が立った Open だけが送る
     NeedsConfirm { ask: ConfirmAsk }, // ジョブはここで終了 (下の「確認を待ってブロックしない」)
     Identity     { file_id: Option<FileId>, file_id_unique: bool, canonical: Option<FsPath> }, // 非終端。metadata と canonicalize の後、読込と確認 (NeedsConfirm) の前に 1 回 (03 §9.2 手順 2b、§12.7.6)。
-                                                                // v0.1 の案にあったが v0.2.0〜v0.4 の実装に無い (二重オープンの判定は、開くジョブの前に正規化したパスの文字列を比べるだけ。
-                                                                // §4.5 の規則の表の「二重オープン」と食い違う)。**v0.5 の M31 で入れる** (SAF-28。名前を付けて保存の同一の判定と一緒に)
+                                                                // v0.1 の案にあったが v0.2.0〜v0.4 の実装に無かった (二重オープンの判定は、開くジョブの前に正規化したパスの文字列を比べるだけ)。
+                                                                // **v0.5 の M31 で入れた** (SAF-28。名前を付けて保存の同一の判定と一緒に)。新規のファイル (NotFound) では NewFile の前に送る
     NewFile      { interrupted_save: Option<InterruptedSave> /*§4.5。残っていた保存中フラグ*/,
                    parent_missing: Option<FsPath> /*親フォルダが無い (FsErrorDetail::ParentMissing の dir)。msg.open.parent_missing を出す (03 §9.2)*/ }, // パスが存在しない
     Complete     { text: Text, format: TextFormat, meta: FileMeta, stamp: FileStamp, changed_during_load: bool,
@@ -1757,6 +1758,8 @@ enum JobResult {                   // #[non_exhaustive]
     //                 /*承認した結果。JobKind::Save の escape_merge_ok に入れる。ジョブは結果 (件数・先頭 100 件・全件のダイジェスト) がこれと同じときだけ止めない*/
     // ── metadata の照合 (io) ──
     Meta         { meta: FileMeta, stamp: FileStamp, canonical: Option<FsPath> /*v0.5 の M31: SaveAsTarget だけが入れる (03 §12.7.6 の 2)。ほかは None*/ }, // MetaPurpose のいずれか (未編集の上書き保存の照合、名前を付けて保存の保存先、フォーカス復帰時の確認 (v0.2))
+    TargetAbsent { err: FsError /*NotFound。detail に ParentMissing / DanglingLink*/, canonical: Option<FsPath> /*親を canonicalize してファイル名を付けたもの*/ },
+                                   // v0.5 の M31: SaveAsTarget で保存先が無かった (Failed では無い保存先の canonical を運べないため。03 §9.7 (a) の 1b / 2 / 3、§12.7.6 の 2)
     // ── E3 の置換 (03 §8.6) ──
     UnmappableReplacement { changes: ChangeSet /*投入時の Revision の全文に対する置換*/,
                             targets: Vec<ReplaceTarget> /*位置・元の文字・置換後。先頭の一部。位置は投入時の Revision の座標*/,

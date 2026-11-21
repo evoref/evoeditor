@@ -381,6 +381,10 @@ pub struct FileMeta {
     pub fs_kind: FsKind,
     /// 他ユーザー所有の事前判定。判定できない OS・FS は `None`。
     pub owner_is_me: Option<bool>,
+    /// `file_id` を「同じファイルか」の判定に使ってよい (v0.5 の M31、SAF-28。03 §12.7.6、05 §5.4)。Windows は NTFS /
+    /// `ReFS` のローカルのボリュームで 0 でない値が取れたとき、Unix はローカルの FS (FAT / `exFAT` を除く) のときだけ立つ。
+    /// 立っていない `file_id` は値が使い回され・重なり得るので、同じファイルの判定には canonical のパスを使う。
+    pub file_id_unique: bool,
 }
 
 /// 外部変更の比較キー (計算規則は 05 §5.5)。
@@ -913,6 +917,7 @@ mod tests {
             link: None,
             fs_kind: FsKind::Local,
             owner_is_me: Some(true),
+            file_id_unique: false,
         };
         let s = FileStamp::from_meta(&meta, None);
         assert_eq!((s.len, s.mtime), (10, FileTime { secs: 1, nanos: 2 }));
@@ -969,6 +974,7 @@ mod tests {
             link: None,
             fs_kind: FsKind::Local,
             owner_is_me: Some(true),
+            file_id_unique: false,
         };
         let s = FileStamp::from_meta(&meta, None);
         let e = FsError::conflict(Some(s));

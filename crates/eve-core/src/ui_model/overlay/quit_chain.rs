@@ -110,6 +110,8 @@ pub(crate) enum ConfirmAction {
         changes: eve_text::ChangeSet,
         revision: eve_view::Revision,
     },
+    /// 名前を付けて保存の保存先が既にある (上書き / 別の名前を入力 (既定)、03 §9.7 (a) の 6)。キャンセルも名前の入力に戻る。
+    SaveAsOverwrite(Box<crate::io::save_as::SaveAsAsk>),
 }
 
 /// 確認ダイアログ。選択肢は `choices` (+ 最後にキャンセル)。
@@ -239,6 +241,10 @@ impl EditorState {
                     self.unmappable_cancelled(ask)
                 }
                 ConfirmAction::EscapeMerge(ask) => self.escape_merge_cancelled(ask),
+                // 上書きの確認の `Esc` は確認だけを閉じて名前の入力に戻る (04 §7.5)
+                ConfirmAction::SaveAsOverwrite(ask) => {
+                    return self.choose_save_as_overwrite((**ask).clone(), None);
+                }
                 _ => {}
             }
             return CommandResult::Done;
@@ -285,6 +291,7 @@ impl EditorState {
                 changes,
                 revision,
             } => self.apply_replacement_and_save(ask, changes, revision),
+            ConfirmAction::SaveAsOverwrite(ask) => self.choose_save_as_overwrite(*ask, Some(id)),
         }
     }
 

@@ -131,6 +131,7 @@ mod tests {
                     link: None,
                     fs_kind: FsKind::Local,
                     owner_is_me: None,
+                    file_id_unique: false,
                 })
             } else {
                 Err(FsError::new(FsErrorKind::NotFound))

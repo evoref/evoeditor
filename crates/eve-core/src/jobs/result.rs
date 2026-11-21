@@ -6,7 +6,9 @@ use eve_text::Text;
 use eve_view::JobId;
 
 use crate::document::{PreservedMap, ReadOnlyReasons, TextFormat};
-use crate::io::fs::{FileMeta, FileStamp, FsError, InterruptedSave, RecoveryDirEntry, SaveReport};
+use crate::io::fs::{
+    FileId, FileMeta, FileStamp, FsError, InterruptedSave, RecoveryDirEntry, SaveReport,
+};
 use crate::io::fspath::FsPath;
 
 /// 確認が要る理由 (03 §9.2)。ジョブは確認を求めて終了し、回答を得た main が再投入する。
@@ -79,6 +81,26 @@ pub enum JobResult {
         meta: FileMeta,
         /// 外部変更の検出に使う Stamp。
         stamp: FileStamp,
+        /// canonical のパス (v0.5 の M31。`MetaPurpose::SaveAsTarget` だけが入れる、03 §12.7.6 の 2。ほかは `None`)。
+        canonical: Option<FsPath>,
+    },
+    /// `Metadata { purpose: SaveAsTarget }` で保存先が無かった (`NotFound`。詳細に親フォルダが無い・ダングリングのリンクを
+    /// 持つ)。`canonical` は親ディレクトリを canonicalize してファイル名を付けたもの (03 §12.7.6 の 2)。v0.5 の M31。
+    TargetAbsent {
+        /// `metadata` の失敗 (`NotFound`)。
+        err: FsError,
+        /// 保存先の canonical のパス (親を canonicalize できなければ `None`)。
+        canonical: Option<FsPath>,
+    },
+    /// 開くファイルの識別 (03 §9.2 手順 2b、§12.7.6 の 1。v0.5 の M31)。終わりではない。開くジョブが `metadata` と
+    /// `canonicalize` の後、読込と確認 (`NeedsConfirm`) の前に 1 回送る (新規のファイルは `NewFile` の前に送る)。
+    Identity {
+        /// ファイルの識別 (新規のファイルは `None`)。
+        file_id: Option<FileId>,
+        /// `file_id` を同じファイルの判定に使ってよい (`FileMeta.file_id_unique`)。
+        file_id_unique: bool,
+        /// canonical のパス (新規のファイルは親を canonicalize してファイル名を付けたもの)。取れなければ `None`。
+        canonical: Option<FsPath>,
     },
     /// 読込の完了。
     Complete {

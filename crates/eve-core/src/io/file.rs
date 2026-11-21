@@ -44,9 +44,11 @@ impl EditorState {
     }
 
     pub(crate) fn save_in_progress(&self, doc_id: DocumentId) -> bool {
-        self.io.pending
-            .values()
-            .any(|p| matches!(p, Pending::Save { doc, .. } | Pending::CheckUnchanged { doc } if *doc == doc_id))
+        self.io.pending.values().any(|p| match p {
+            Pending::Save { doc, .. } | Pending::CheckUnchanged { doc } => *doc == doc_id,
+            Pending::SaveAsTarget(ask) => ask.doc == doc_id,
+            _ => false,
+        })
     }
 
     /// 表示していない文書の、新しく開く読込 (`file.open`・起動時の 2 つ目以降のパス) のジョブ。ステータスバーが
