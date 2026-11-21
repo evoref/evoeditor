@@ -177,7 +177,12 @@ impl FileSystem for WinFs {
     fn canonicalize(&self, path: &FsPath) -> Result<FsPath, FsError> {
         match fs::canonicalize(path.as_path()) {
             // `\\?\C:\…` をそのまま表示・保存に使わない (05 §3.3)
-            Ok(c) => Ok(FsPath::new(simplify_verbatim(&c.to_string_lossy()))),
+            // UTF-16 として正しくない名前 (対になっていないサロゲート) を含むパスは文字列に変えず、OS の文字列のまま返す
+            // (置換文字にすると別の名前が同じ文字列になり、同じファイルの判定 (03 §12.7.6 の 0) で同じとされる)
+            Ok(c) => Ok(match c.to_str() {
+                Some(s) => FsPath::new(simplify_verbatim(s)),
+                None => FsPath::new(c),
+            }),
             Err(e) => Err(map_io_error(e, path)),
         }
     }
@@ -336,6 +341,22 @@ mod tests {
         assert!(WinFs::default().metadata(&p).unwrap().readonly);
         perm.set_readonly(false);
         fs::set_permissions(p.as_path(), perm).unwrap();
+    }
+
+    #[test]
+    fn canonicalize_は対になっていないサロゲートを置換文字にしない() {
+        use std::os::windows::ffi::OsStringExt;
+        let t = Tmp::new("surrogate");
+        let name = |hi: u16| std::ffi::OsString::from_wide(&[hi, u16::from(b'x')]);
+        let (a, b) = (t.0.join(name(0xD800)), t.0.join(name(0xD801)));
+        if File::create(&a).is_err() || File::create(&b).is_err() {
+            return; // 作れない FS では確かめない
+        }
+        let fsys = WinFs::default();
+        let ca = fsys.canonicalize(&FsPath::new(&a)).unwrap();
+        let cb = fsys.canonicalize(&FsPath::new(&b)).unwrap();
+        assert_ne!(ca, cb, "別の名前は別の canonical");
+        assert!(ca.as_path().to_str().is_none(), "OS の文字列のまま");
     }
 
     #[test]

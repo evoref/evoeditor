@@ -128,6 +128,7 @@ impl EditorState {
             JobKind::Open {
                 path: path.clone(),
                 opts,
+                known_ids: Vec::new(),
             },
         );
         self.io.pending.insert(

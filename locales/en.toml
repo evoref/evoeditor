@@ -488,6 +488,7 @@ partial_end = "Showing only the first {size}. The rest appears when loading fini
 preserve_off = "The original bytes of this document were not kept. Saving in the original encoding may write some characters as different bytes"
 preserve_partial = "The original bytes of {count} lines could not be kept. Saving after an edit may change how escape sequences are written on these lines (the characters do not change)"
 redetected = "Re-detected the encoding as {encoding}"
+same_file = "{path} is open as {other}"
 
 [info.pane]
 collapsed = "The terminal is too small, so only the focused pane is shown"
@@ -1034,9 +1035,13 @@ text = "Stopped saving {path}: the content to be written did not read back as th
 hint = "Enter a different file name"
 text = "{path} is not a file (it may be a folder)"
 
+[msg.save_as.now_open_in_other]
+hint = "Close one of the buffers before you continue editing"
+text = "Saved to {path}, but the same file is also open in another buffer as {other}"
+
 [msg.save_as.open_in_other]
 hint = "Switch to that buffer to save, or choose another name"
-text = "{path} is open in another buffer"
+text = "{path} is open in another buffer as {other}"
 
 [msg.save_as.same_file_read_only]
 hint = "Enter a different file name"

@@ -492,6 +492,7 @@ fn 走査のジョブは区切りごとに末尾へ積み直し_間に入った�
         JobKind::Metadata {
             path: FsPath::from("/w/d00/f.txt"),
             purpose: eve_core::MetaPurpose::ExternalCheck,
+            known_ids: Vec::new(),
         },
     );
     // 1 区切り: 続きは Metadata の後ろへ積まれる

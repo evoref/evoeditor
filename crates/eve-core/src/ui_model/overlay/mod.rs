@@ -141,13 +141,14 @@ impl EditorState {
         if self.palette_back() {
             return CommandResult::Done;
         }
-        // 読込中なら取り消す (FR-122。結果は `Failed { Cancelled }` で届き、旧文書があれば残る)
-        if self.ui.overlay.is_none() && self.cancel_loading() {
-            return CommandResult::Done;
-        }
-        // 名前を付けて保存の保存先の照合を待つ間は、結果を捨てて名前の入力に戻る (03 §9.7 の `CheckTarget` の行)
+        // 名前を付けて保存の保存先の照合を待つ間は、結果を捨てて名前の入力に戻る (03 §9.7 の `CheckTarget` の行)。表示して
+        // いない文書の読込の取消しより先に判定する (03 §12.7.6 の細目 (9))
         if self.ui.overlay.is_none() && self.cancel_save_as_check() {
             self.mark_dirty_render();
+            return CommandResult::Done;
+        }
+        // 読込中なら取り消す (FR-122。結果は `Failed { Cancelled }` で届き、旧文書があれば残る)
+        if self.ui.overlay.is_none() && self.cancel_loading() {
             return CommandResult::Done;
         }
         // 確認の `Esc` はキャンセルの選択 (保存の失敗の確認では中止を示す)

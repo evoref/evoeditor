@@ -454,6 +454,18 @@ impl MemFs {
         s.files.insert(link, copy);
     }
 
+    /// ファイルの識別 (`FileId.index`。ボリュームは常に 1) を決める (識別の使い回しの試験用。無いパスは何もしない)。
+    pub fn set_file_id(&self, path: &str, index: u128) {
+        if let Some(e) = self.st().files.get_mut(&FsPath::from(path)) {
+            e.id = index;
+        }
+    }
+
+    /// ファイルの識別 (`FileId.index`)。無いパスは `None`。
+    pub fn file_id_of(&self, path: &str) -> Option<u128> {
+        self.st().files.get(&FsPath::from(path)).map(|e| e.id)
+    }
+
     /// `metadata` が返す `file_id_unique` を決める (`false` で、`file_id` を同じファイルの判定に使えない FS のふりをする)。
     pub fn set_file_id_unique(&self, unique: bool) {
         self.st().file_id_unique = unique;

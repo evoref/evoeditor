@@ -403,6 +403,11 @@ impl EditorState {
             return;
         }
         self.flush_stdin_continuations();
+        // 保留した名前を付けて保存の照合の結果 (03 §12.7.6 の細目 (7))
+        self.flush_held_save_as();
+        if self.auto_switch_blocked() {
+            return;
+        }
         let holds: Vec<(DocumentId, Option<OpenFrom>)> = std::mem::take(&mut self.io.failed_holds)
             .into_iter()
             .collect();

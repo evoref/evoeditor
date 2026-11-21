@@ -197,13 +197,18 @@ fn file_id_info(f: &File) -> Option<(u64, u128)> {
     })
 }
 
-/// ハンドルのボリュームの FS が NTFS か `ReFS` か (`GetVolumeInformationByHandleW` の FS の名前)。問い合わせの失敗は
+/// ハンドルのボリュームの FS が NTFS か `ReFS` で、識別で開ける FS か (`GetVolumeInformationByHandleW` の FS の名前と旗)。問い合わせの失敗は
 /// `false` (識別を信頼しない側)。
 fn trusted_id_fs(f: &File) -> bool {
     /// FS の名前の欄の長さ (`MAX_PATH + 1` 文字。API の説明が求める上限)。
     const NAME_LEN: usize = 261;
+    /// FS の旗 `FILE_SUPPORTS_OPEN_BY_FILE_ID` (winnt.h。windows-sys では `Win32_System_SystemServices` の feature にあり、
+    /// この 1 つのために feature を足さない)。
+    const FILE_SUPPORTS_OPEN_BY_FILE_ID: u32 = 0x0100_0000;
     let mut name = [0u16; NAME_LEN];
-    // SAFETY: `f` は開いているファイルのハンドル。FS の名前の書込先は `name` (長さ `NAME_LEN`)。要らない出力は null と 0。
+    let mut flags = 0u32;
+    // SAFETY: `f` は開いているファイルのハンドル。FS の旗の書込先は `flags`、FS の名前の書込先は `name` (長さ `NAME_LEN`)。
+    // 要らない出力は null と 0。
     let ok = unsafe {
         GetVolumeInformationByHandleW(
             f.as_raw_handle(),
@@ -211,7 +216,7 @@ fn trusted_id_fs(f: &File) -> bool {
             0,
             ptr::null_mut(),
             ptr::null_mut(),
-            ptr::null_mut(),
+            &raw mut flags,
             name.as_mut_ptr(),
             u32::try_from(NAME_LEN).unwrap_or(0),
         )
@@ -221,7 +226,9 @@ fn trusted_id_fs(f: &File) -> bool {
     }
     let len = name.iter().position(|&c| c == 0).unwrap_or(NAME_LEN);
     let fs = String::from_utf16_lossy(&name[..len]);
-    fs.eq_ignore_ascii_case("NTFS") || fs.eq_ignore_ascii_case("ReFS")
+    // WinFsp・Dokan などで作る FS が NTFS と名乗ることがあるので、識別で開ける FS であることも求める (05 §5.4)
+    (fs.eq_ignore_ascii_case("NTFS") || fs.eq_ignore_ascii_case("ReFS"))
+        && flags & FILE_SUPPORTS_OPEN_BY_FILE_ID != 0
 }
 
 /// ハンドルがネットワーク上のファイルか (`FileRemoteProtocolInfo` はリモートのファイルでだけ成功する)。ドライブの割当て

@@ -242,6 +242,7 @@ mod imp {
                     partial,
                     ..OpenOptions::default()
                 },
+                known_ids: Vec::new(),
             },
         };
         let mut out = Vec::new();

@@ -91,11 +91,12 @@ pub(crate) fn run_open(
     id: JobId,
     path: &FsPath,
     opts: OpenOptions,
+    known_ids: &[crate::jobs::KnownFileId],
     ports: &JobPorts,
     cancel: &CancelToken,
     emit: &mut dyn FnMut(JobOutput),
 ) -> JobResult {
-    open_inner(id, path, opts, ports, cancel, emit, None)
+    open_inner(id, path, opts, known_ids, ports, cancel, emit, None)
 }
 
 mod partial;
@@ -150,10 +151,15 @@ fn redetect(chunk: &[u8], chunk_is_file_end: bool, opts: &DetectOptions) -> Opti
     redetect_window(window, complete, opts).and_then(|d| d.encoding())
 }
 
+#[allow(
+    clippy::too_many_arguments,
+    reason = "読込のジョブの文脈 (`JobKind::Open` の中身と Port・取消し・送り口・やり直し) をそのまま受ける"
+)]
 fn open_inner(
     id: JobId,
     path: &FsPath,
     opts: OpenOptions,
+    known_ids: &[crate::jobs::KnownFileId],
     ports: &JobPorts,
     cancel: &CancelToken,
     emit: &mut dyn FnMut(JobOutput),
@@ -210,7 +216,11 @@ fn open_inner(
     if cancel.is_cancelled() {
         return cancelled();
     }
-    send_identity(meta.file_id, meta.file_id_unique);
+    // 文書の古い識別と重なっていれば (文書のファイルが外で作り直され、番号を使い回した)、識別で同じと判定しない
+    // (03 §12.7.6 の「古い識別の確かめ」)
+    let unique = meta.file_id_unique
+        && crate::io::same_file::ids_still_valid(ports.fs.as_ref(), meta.file_id, known_ids);
+    send_identity(meta.file_id, unique);
     if cancel.is_cancelled() {
         return cancelled();
     }
@@ -370,7 +380,7 @@ fn open_inner(
                     partial_sent: head.as_ref().is_some_and(HeadCopy::sent),
                 };
                 drop(head);
-                return open_inner(id, path, again, ports, cancel, emit, Some(redo));
+                return open_inner(id, path, again, known_ids, ports, cancel, emit, Some(redo));
             }
             // 不正な UTF-8 も ISO-2022-JP の列も無い間は、次のチャンクでも見る。最初に見つけた契機で一度だけ判定する
             if find_iso_switch(chunk).is_some() || std::str::from_utf8(chunk).is_err() {

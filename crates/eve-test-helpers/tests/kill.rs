@@ -119,6 +119,7 @@ impl Env {
             kind: JobKind::Open {
                 path: FsPath::new(self.file(name)),
                 opts: OpenOptions::default(),
+                known_ids: Vec::new(),
             },
         };
         let mut out = Vec::new();

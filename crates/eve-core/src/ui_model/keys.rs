@@ -32,6 +32,7 @@ pub(crate) const INFO_OPEN_NEW_FILE: &str = "info.open.new_file";
 pub(crate) const INFO_OPEN_PARTIAL_END: &str = "info.open.partial_end";
 pub(crate) const INFO_OPEN_PRESERVE_OFF: &str = "info.open.preserve_off";
 pub(crate) const INFO_OPEN_PRESERVE_PARTIAL: &str = "info.open.preserve_partial";
+pub(crate) const INFO_OPEN_SAME_FILE: &str = "info.open.same_file";
 pub(crate) const INFO_OPEN_REDETECTED: &str = "info.open.redetected";
 pub(crate) const INFO_PANE_COLLAPSED: &str = "info.pane.collapsed";
 pub(crate) const INFO_PANE_NO_ROOM: &str = "info.pane.no_room";
@@ -138,6 +139,7 @@ pub(crate) const MSG_SAVE_RECOVERY_FAILED: &str = "msg.save.recovery_failed";
 pub(crate) const MSG_SAVE_TMP_NOT_REMOVED: &str = "msg.save.tmp_not_removed";
 pub(crate) const MSG_SAVE_VERIFY_FAILED: &str = "msg.save.verify_failed";
 pub(crate) const MSG_SAVE_AS_NOT_A_FILE: &str = "msg.save_as.not_a_file";
+pub(crate) const MSG_SAVE_AS_NOW_OPEN_IN_OTHER: &str = "msg.save_as.now_open_in_other";
 pub(crate) const MSG_SAVE_AS_OPEN_IN_OTHER: &str = "msg.save_as.open_in_other";
 pub(crate) const MSG_SAVE_AS_SAME_FILE_READ_ONLY: &str = "msg.save_as.same_file_read_only";
 pub(crate) const MSG_SAVE_AS_TARGET_READ_ONLY: &str = "msg.save_as.target_read_only";
@@ -299,7 +301,7 @@ pub(crate) const UI_TOO_SMALL: &str = "ui.too_small";
 
 /// すべての定数 (キーの順。試験に使う)。
 #[cfg(test)]
-const ALL: [&str; 276] = [
+const ALL: [&str; 278] = [
     HINT_UI_CANCEL,
     INFO_APP_RELEASE_SUMMARY,
     INFO_APP_UPDATED,
@@ -330,6 +332,7 @@ const ALL: [&str; 276] = [
     INFO_OPEN_PRESERVE_OFF,
     INFO_OPEN_PRESERVE_PARTIAL,
     INFO_OPEN_REDETECTED,
+    INFO_OPEN_SAME_FILE,
     INFO_PANE_COLLAPSED,
     INFO_PANE_NO_ROOM,
     INFO_PANE_SINGLE_PANE,
@@ -430,6 +433,7 @@ const ALL: [&str; 276] = [
     MSG_SAVE_TMP_NOT_REMOVED,
     MSG_SAVE_VERIFY_FAILED,
     MSG_SAVE_AS_NOT_A_FILE,
+    MSG_SAVE_AS_NOW_OPEN_IN_OTHER,
     MSG_SAVE_AS_OPEN_IN_OTHER,
     MSG_SAVE_AS_SAME_FILE_READ_ONLY,
     MSG_SAVE_AS_TARGET_READ_ONLY,

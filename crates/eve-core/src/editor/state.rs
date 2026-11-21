@@ -170,6 +170,9 @@ pub(crate) struct IoState {
     /// 保存が成功したら、文書の canonical をこれに替える (03 §12.7.6 の 2)。
     pub(crate) save_as_targets:
         BTreeMap<DocumentId, (crate::FsPath, crate::io::same_file::FileIdentity)>,
+    /// ほかのオーバーレイか検索バーが出ている間に届いた、名前を付けて保存の照合の結果 (届いた順。03 §12.7.6 の細目 (7))。
+    pub(crate) held_save_as:
+        std::collections::VecDeque<(Box<crate::io::save_as::SaveAsAsk>, crate::jobs::JobResult)>,
     /// ログファイルの場所 (設定の問題の要約に出す)。
     pub(crate) log_path: Option<String>,
     /// OS のロケール由来の文字コードのヒント。
@@ -352,6 +355,7 @@ impl EditorState {
                 escape_merge_ok: None,
                 link_create_ok: None,
                 save_as_targets: BTreeMap::new(),
+                held_save_as: std::collections::VecDeque::new(),
                 system_encoding: None,
                 log_path: None,
                 config_sources: None,

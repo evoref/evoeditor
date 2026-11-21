@@ -54,10 +54,11 @@ fn シンボリックリンクで同じファイルを開くと既存の文書�
     h.run_jobs();
     assert_eq!(docs(&h), 1, "1 つの文書: {:?}", paths(&h));
     assert_eq!(h.doc_id(), a);
-    assert!(
-        has_msg(&h, "info.open.already_open"),
-        "今の文書なので「既に開いています」"
-    );
+    // 打ったパスと既存の文書のパスが違うので、どの文書として開いているかを示す
+    assert!(has_msg(&h, "info.open.same_file"), "{:?}", h.messages());
+    // 同じパスをもう一度開くと「既に開いています」
+    h.open("/w/a.txt");
+    assert!(has_msg(&h, "info.open.already_open"));
 }
 
 // verifies: FR-103
@@ -76,10 +77,124 @@ fn ハードリンクで同じファイルを開くと既存の文書を出す()
     h.run_jobs();
     assert_eq!(docs(&h), 2, "a と b だけ: {:?}", paths(&h));
     assert_eq!(h.doc_id(), a, "既存の a を出す");
+    assert!(!has_msg(&h, "info.open.already_open"));
     assert!(
-        !has_msg(&h, "info.open.already_open"),
-        "今の文書ではないので知らせない"
+        has_msg(&h, "info.open.same_file"),
+        "名前の違う a に切り替えたことを示す"
     );
+}
+
+/// a.txt を開いた後に、外で a.txt を作り直し (新しい識別)、古い識別を b.txt が使い回した状態 (inode を使い回す FS)。
+fn stale_id() -> (Harness, eve_core::DocumentId) {
+    let mut h = opened(&[(
+        "/w/a.txt", b"alpha
+",
+    )]);
+    h.open("/w/a.txt");
+    h.run_jobs();
+    let a = h.doc_id();
+    let old = h.fs.file_id_of("/w/a.txt").expect("a の識別");
+    h.fs.remove(&eve_core::FsPath::from("/w/a.txt"));
+    h.fs.add_file(
+        "/w/a.txt",
+        b"recreated
+",
+    );
+    h.fs.add_file(
+        "/w/b.txt", b"beta
+",
+    );
+    h.fs.set_file_id("/w/b.txt", old);
+    assert_ne!(h.fs.file_id_of("/w/a.txt"), Some(old), "a は新しい識別");
+    (h, a)
+}
+
+// verifies: FR-103
+#[test]
+fn 古い識別を使い回した別のファイルは別の文書として開く() {
+    let (mut h, a) = stale_id();
+    h.open("/w/b.txt");
+    h.run_jobs();
+    assert_eq!(docs(&h), 2, "{:?}", paths(&h));
+    assert_ne!(h.doc_id(), a, "b を開く (a に切り替えない)");
+    assert_eq!(
+        h.doc_text(),
+        "beta
+"
+    );
+}
+
+// verifies: FR-104
+#[test]
+fn 古い識別を使い回した別のファイルへの名前を付けて保存は上書き保存にしない() {
+    let (mut h, a) = stale_id();
+    assert!(
+        !h.is_dirty(),
+        "未編集 (表の 1 なら何も書かずに済ませてしまう)"
+    );
+    save_as(&mut h, "/w/b.txt");
+    assert_eq!(h.overlay(), "dialog", "既存の b の上書きの確認 (表の 6)");
+    h.keys("o");
+    h.run_jobs();
+    assert_eq!(
+        disk(&h, "/w/b.txt").as_deref(),
+        Some(
+            "alpha
+"
+        ),
+        "b に書く"
+    );
+    assert_eq!(h.doc_id(), a);
+    assert_eq!(h.doc_path().as_deref(), Some("/w/b.txt"));
+}
+
+// verifies: FR-103
+#[test]
+fn 起動時の行の指定は読込中の既存の文書に引き継ぐ() {
+    // `evoeditor a.txt link.txt:3` で、link.txt が a.txt と同じファイル: link の識別が届いた時点で a はまだ読込中なので、
+    // 3 行目への移動を a に引き継ぐ (03 §12.7.6 の細目 (3))
+    let data: Vec<u8> = (0..100)
+        .flat_map(|i| {
+            format!(
+                "line {i:06}
+"
+            )
+            .into_bytes()
+        })
+        .collect();
+    let mut h = Harness::builder()
+        .file("/w/a.txt", &data)
+        .defer_start()
+        .build();
+    h.fs.add_link("/w/link.txt", "/w/a.txt");
+    // 遅い読込 (64 バイトごとに 100 ms): a の読込は先行表示の先頭で止まる
+    h.fs.set_chunk_size(64);
+    h.fs.set_read_delay(Some((h.clock.clone(), eve_core::Millis(100))));
+    let files = [
+        eve_core::InitialFile::path("/w/a.txt"),
+        eve_core::InitialFile {
+            line: Some(3),
+            ..eve_core::InitialFile::path("/w/link.txt")
+        },
+    ];
+    h.editor.open_initial_files(&files, false, None);
+    h.started();
+    assert!(h.run_jobs_until_partial(), "a は読込の途中");
+    // link の読込 (識別) を、a の読込が終わる前に渡す
+    h.run_jobs_once();
+    assert_eq!(docs(&h), 1, "{:?}", paths(&h));
+    h.finish_held_jobs();
+    let view = match h.query(&eve_view::Query::Windows).unwrap() {
+        eve_view::Answer::Windows(ws) => ws[0].views[0],
+        a => panic!("{a:?}"),
+    };
+    let head = match h.query(&eve_view::Query::Selection { view }).unwrap() {
+        eve_view::Answer::Selection {
+            ranges, primary, ..
+        } => ranges[primary].head,
+        a => panic!("{a:?}"),
+    };
+    assert_eq!(head, 24, "3 行目の先頭 (1 行 12 バイト) へ移る");
 }
 
 // verifies: FR-103
@@ -415,6 +530,82 @@ fn 照合を待つ間の_esc_は名前の入力に戻る() {
 
 // verifies: FR-104
 #[test]
+fn 照合を待つ間の終了と開くは無視する() {
+    let (mut h, a, _) = a_dirty_and_b();
+    h.cmd_with("file.save_as", Args::new().with_str("path", "/w/c.txt"));
+    h.cmd("app.quit");
+    assert_eq!(h.overlay(), "", "終了の連鎖 (未保存の確認) を始めない");
+    assert!(h.quit_code().is_none());
+    h.cmd_with("file.open", Args::new().with_str("path", "/w/b.txt"));
+    h.cmd("file.new");
+    assert!(has_msg(&h, "info.save.in_progress"));
+    h.run_jobs();
+    assert_eq!(
+        disk(&h, "/w/c.txt").as_deref(),
+        Some(
+            "xalpha
+"
+        )
+    );
+    assert_eq!(h.doc_id(), a, "開く・新規は無視したので a のまま");
+    assert_eq!(docs(&h), 2);
+}
+
+// verifies: FR-104
+#[test]
+fn 照合の結果はほかのオーバーレイの間は保留する() {
+    let (mut h, _, _) = a_dirty_and_b();
+    h.fs.add_file(
+        "/w/c.txt", b"old
+",
+    );
+    h.cmd_with("file.save_as", Args::new().with_str("path", "/w/c.txt"));
+    // 照合を待つ間にパレットを開く
+    h.cmd("ui.palette_open");
+    assert_eq!(h.overlay(), "palette");
+    h.run_jobs();
+    assert_eq!(
+        h.overlay(),
+        "palette",
+        "上書きの確認でパレットを置き換えない"
+    );
+    h.keys("esc");
+    assert_eq!(h.overlay(), "dialog", "閉じた後に上書きの確認を出す");
+    h.keys("o");
+    h.run_jobs();
+    assert_eq!(
+        disk(&h, "/w/c.txt").as_deref(),
+        Some(
+            "xalpha
+"
+        )
+    );
+}
+
+// verifies: FR-104
+#[test]
+fn 照合を待つ間の_esc_は表示していない文書の読込より先に照合を取り消す() {
+    let (mut h, a, _) = a_dirty_and_b();
+    h.fs.add_file(
+        "/w/d.txt", b"delta
+",
+    );
+    // 表示していない文書の読込 (d) と照合を同時に待つ
+    h.editor
+        .state_mut()
+        .open_path("/w/d.txt", eve_core::OpenOptions::default());
+    h.cmd_with("file.save_as", Args::new().with_str("path", "/w/c.txt"));
+    h.keys("esc");
+    assert_eq!(h.overlay(), "prompt", "照合を取り消して名前の入力に戻る");
+    h.keys("esc");
+    h.run_jobs();
+    assert!(disk(&h, "/w/c.txt").is_none());
+    assert_eq!(docs(&h), 3, "d の読込は取り消していない: {:?}", paths(&h));
+    assert!(h.editor.state().document(a).is_some());
+}
+
+// verifies: FR-104
+#[test]
 fn 照合を待つ間の上書き保存は無視する() {
     let (mut h, _, _) = a_dirty_and_b();
     h.cmd_with("file.save_as", Args::new().with_str("path", "/w/c.txt"));
@@ -442,9 +633,13 @@ fn 照合から保存の完了までに同じファイルの文書が開かれ�
     h.run_jobs();
     assert_eq!(disk(&h, "/w/c.txt").as_deref(), Some("xalpha\n"));
     assert!(
-        has_msg(&h, "msg.save_as.open_in_other"),
+        has_msg(&h, "msg.save_as.now_open_in_other"),
         "{:?}",
         h.messages()
+    );
+    assert!(
+        !has_msg(&h, "msg.save_as.open_in_other"),
+        "拒んだときの文言とは分ける"
     );
     assert!(
         h.editor.state().document(a).is_some(),

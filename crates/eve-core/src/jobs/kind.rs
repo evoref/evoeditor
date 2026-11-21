@@ -75,6 +75,8 @@ pub enum JobKind {
         path: FsPath,
         /// 結果を受けた側の分岐に使う目的。
         purpose: MetaPurpose,
+        /// 古い識別の確かめに使う、投入した時点の文書の識別 (`MetaPurpose::SaveAsTarget` だけが入れる。03 §12.7.6 の 0)。
+        known_ids: Vec<KnownFileId>,
     },
     /// 起動時の退避ディレクトリの走査 (02 §9.3 の `RecoveryScan`。メインスレッドでは列挙しない)。
     RecoveryScan,
@@ -101,6 +103,8 @@ pub enum JobKind {
         path: FsPath,
         /// 開くときの指定 (文字コードの強制など)。
         opts: OpenOptions,
+        /// 古い識別の確かめに使う、投入した時点の文書の識別 (03 §12.7.6 の 0)。再読込・開き直しは空。
+        known_ids: Vec<KnownFileId>,
     },
     /// 標準入力を読んで開く (`evoeditor -`、03 §9.2.2。v0.4 の M25)。`JobPorts.stdin` から `ReadChunks` を取って読む。
     /// 走らせるのは `io` でも `bg` でもない専用のワーカー `eve-stdin-job` (02 §9.1。OQ-219 の 8)。確認を出さない
@@ -320,6 +324,16 @@ impl JobStep {
             kind,
         })
     }
+}
+
+/// 投入した時点の文書の、同じファイルの判定に使ってよい識別 (03 §12.7.6 の「古い識別の確かめ」)。ジョブは、調べたファイルの
+/// 識別がこれと等しければ `path` を `metadata` し直し、今も同じ識別かを確かめる。
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct KnownFileId {
+    /// 文書のパス。
+    pub path: FsPath,
+    /// 文書の識別 (`disk_stamp` の値。ファイルが外で作り直されると古い)。
+    pub file_id: crate::io::fs::FileId,
 }
 
 /// `Metadata` ジョブの目的 (結果を受けた側の分岐に使う)。

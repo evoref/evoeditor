@@ -44,6 +44,7 @@ fn open_results(step_ms: u64, chunk: usize, size: usize) -> Vec<JobOutput> {
         kind: JobKind::Open {
             path: FsPath::from("/w/a.txt"),
             opts: OpenOptions::default(),
+            known_ids: Vec::new(),
         },
     };
     let mut out = Vec::new();

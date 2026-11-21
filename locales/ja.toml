@@ -486,6 +486,7 @@ partial_end = "先頭の {size} だけを表示しています。残りは読込
 preserve_off = "この文書では元のバイト列を覚えていません。元の文字コードで保存すると、一部の文字が同じ文字の別のバイト表現になることがあります"
 preserve_partial = "{count} 行は元のバイト列を覚えられませんでした。編集して保存すると、これらの行はエスケープシーケンスの書き方が変わることがあります (文字は変わりません)"
 redetected = "文字コードを {encoding} と判定し直しました"
+same_file = "{path} は {other} として開いています"
 
 [info.pane]
 collapsed = "端末が狭いので、フォーカスのペインだけを表示しています"
@@ -1032,9 +1033,13 @@ text = "{path} の保存を中止しました。書き出す内容を読み直�
 hint = "別のファイル名を入力してください"
 text = "{path} はファイルではありません (フォルダ等)"
 
+[msg.save_as.now_open_in_other]
+hint = "どちらかの文書を閉じてから編集を続けてください"
+text = "{path} に保存しましたが、同じファイルを別の文書 {other} としても開いています"
+
 [msg.save_as.open_in_other]
 hint = "その文書に切り替えて保存するか、別の名前を指定してください"
-text = "{path} は別の文書として開いています"
+text = "{path} は別の文書 {other} として開いています"
 
 [msg.save_as.same_file_read_only]
 hint = "別のファイル名を入力してください"

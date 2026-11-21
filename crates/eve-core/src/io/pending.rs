@@ -333,6 +333,7 @@ impl EditorState {
                     if !self.quit_abort_save_result(&path, &r) {
                         self.finish_save(&job_ctx, &path, None, r);
                     }
+                    self.forget_save_as_target(doc, &path);
                     self.release_closing_snapshot(doc, &path, saved);
                     self.quit_abort_check();
                     self.mark_dirty_render();
@@ -343,6 +344,9 @@ impl EditorState {
                 if in_batch != Some(true) {
                     self.finish_save(&job_ctx, &path, cont, r);
                 }
+                // 名前を付けて保存の識別の覚えは、そのパスへの保存が終われば (成功は `after_save_as` が使い終えた後、
+                // 失敗も) 消す (03 §12.7.6 の細目 (10))
+                self.forget_save_as_target(doc, &path);
                 self.release_closing_snapshot(doc, &path, saved);
                 if in_batch.is_some() {
                     self.finish_save_all_if_done();

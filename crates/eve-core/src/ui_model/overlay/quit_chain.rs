@@ -327,6 +327,10 @@ impl EditorState {
         if self.ui.quit_abort.is_none() {
             self.ui.quit_code = code;
         }
+        // 名前を付けて保存の照合の間は無視する (03 §9.7 の全状態の遷移表の `CheckTarget` の行。終了の連鎖を始めない)
+        if self.ignore_while_save_as_check() {
+            return CommandResult::Done;
+        }
         // 保存ジョブの実行中は、その完了を待つ (03 §9.7 (f))
         if let Some(r) = self.quit_while_saving(true) {
             return r;

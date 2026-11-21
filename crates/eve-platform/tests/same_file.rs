@@ -195,7 +195,10 @@ fn 大文字小文字の違うパスで開くと_1_つの文書になる() {
         assert_eq!(e.file_docs(), 1, "{}: 大文字小文字の違い", base.display());
         e.open(&t.path("case.txt"));
         assert_eq!(e.file_docs(), 1, "{}", base.display());
-        assert!(e.has_msg("info.open.already_open"));
+        assert!(
+            e.has_msg("info.open.same_file"),
+            "名前の違う既存の文書に切り替えたことを示す"
+        );
     }
 }
 

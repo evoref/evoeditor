@@ -46,9 +46,8 @@ impl EditorState {
     pub(crate) fn save_in_progress(&self, doc_id: DocumentId) -> bool {
         self.io.pending.values().any(|p| match p {
             Pending::Save { doc, .. } | Pending::CheckUnchanged { doc } => *doc == doc_id,
-            Pending::SaveAsTarget(ask) => ask.doc == doc_id,
             _ => false,
-        })
+        }) || self.save_as_checking(Some(doc_id)).is_some()
     }
 
     /// 表示していない文書の、新しく開く読込 (`file.open`・起動時の 2 つ目以降のパス) のジョブ。ステータスバーが
@@ -128,6 +127,9 @@ impl EditorState {
             "表示中の文書 {doc:?} のペインを替えられなかった"
         );
         self.io.open_jumps.remove(&doc);
+        // 名前を付けて保存の識別の覚えと保留した照合の結果も捨てる (03 §12.7.6 の細目 (10))
+        self.io.save_as_targets.remove(&doc);
+        self.io.held_save_as.retain(|(a, _)| a.doc != doc);
         // 先行表示の先頭は文書ごと捨てる (03 §9.2.1 の「失敗・取消し・閉じる」)
         self.forget_partial_state(doc);
         self.docs.views.retain(|_, v| v.doc != doc);
@@ -207,12 +209,14 @@ impl EditorState {
         if replace.is_none() {
             self.show_view(view, None);
         }
+        let known_ids = self.known_file_ids(Some(doc_id));
         let job = self.jobs.spawn(
             Some(doc_id),
             eve_view::Revision::INITIAL,
             JobKind::Open {
                 path: path.clone(),
                 opts,
+                known_ids,
             },
         );
         self.io.pending.insert(
@@ -268,6 +272,7 @@ impl EditorState {
                 JobKind::Metadata {
                     path,
                     purpose: MetaPurpose::UnchangedSave,
+                    known_ids: Vec::new(),
                 },
             );
             self.io

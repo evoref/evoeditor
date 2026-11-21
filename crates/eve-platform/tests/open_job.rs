@@ -44,6 +44,7 @@ fn open(path: &FsPath, ports: &JobPorts) -> JobResult {
         kind: JobKind::Open {
             path: path.clone(),
             opts: OpenOptions::default(),
+            known_ids: Vec::new(),
         },
     };
     let mut out = Vec::new();

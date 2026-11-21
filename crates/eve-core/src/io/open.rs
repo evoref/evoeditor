@@ -493,12 +493,14 @@ impl EditorState {
 
     /// 確認の回答の後、同じ読込中の文書へ `opts` で先頭から読み直すジョブを投入する。
     pub(crate) fn respawn_open(&mut self, ask: OpenAsk, opts: OpenOptions) -> CommandResult {
+        let known_ids = self.known_file_ids(Some(ask.doc));
         let job = self.jobs.spawn(
             Some(ask.doc),
             eve_view::Revision::INITIAL,
             JobKind::Open {
                 path: ask.path.clone(),
                 opts,
+                known_ids,
             },
         );
         self.io.pending.insert(

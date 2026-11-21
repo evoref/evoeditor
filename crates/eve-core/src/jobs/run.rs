@@ -75,7 +75,11 @@ pub fn run_job(
             cwd,
             markers,
         } => crate::workspace::root::detect_root(&*ports.fs, explicit.as_ref(), args, cwd, markers),
-        JobKind::Open { path, opts } => run_open(req.id, path, *opts, ports, cancel, emit),
+        JobKind::Open {
+            path,
+            opts,
+            known_ids,
+        } => run_open(req.id, path, *opts, known_ids, ports, cancel, emit),
         JobKind::OpenStdin { opts } => run_open_stdin(req.id, *opts, ports, cancel, emit),
         JobKind::Save {
             path,
@@ -303,8 +307,22 @@ pub fn run_job(
                 crate::io::config_reload::scan_locales(&*ports.fs, dir, *chosen)
             }),
         },
-        JobKind::Metadata { path, purpose } => match ports.fs.metadata(path) {
-            Ok(meta) => {
+        JobKind::Metadata {
+            path,
+            purpose,
+            known_ids,
+        } => match ports.fs.metadata(path) {
+            Ok(mut meta) => {
+                // 名前を付けて保存の保存先: 文書の古い識別と重なっていれば、識別で同じと判定しない (03 §12.7.6 の 0)
+                if *purpose == MetaPurpose::SaveAsTarget
+                    && !crate::io::same_file::ids_still_valid(
+                        ports.fs.as_ref(),
+                        meta.file_id,
+                        known_ids,
+                    )
+                {
+                    meta.file_id_unique = false;
+                }
                 if cancel.is_cancelled() {
                     JobResult::Failed {
                         err: JobError::Cancelled,
@@ -475,6 +493,7 @@ mod tests {
             kind: JobKind::Metadata {
                 path: FsPath::from("/a"),
                 purpose: MetaPurpose::ExternalCheck,
+                known_ids: Vec::new(),
             },
         }
     }

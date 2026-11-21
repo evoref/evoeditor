@@ -54,12 +54,15 @@ impl EditorState {
             eve_view::Revision::INITIAL,
             crate::document::Document::revision,
         );
+        // 今の文書も含める (今の文書の識別が古いと、表の 1 に当たって別のファイルへ書かずに済ませてしまう)
+        let known_ids = self.known_file_ids(None);
         let job = self.jobs.spawn(
             Some(ask.doc),
             revision,
             JobKind::Metadata {
                 path: ask.path.clone(),
                 purpose: MetaPurpose::SaveAsTarget,
+                known_ids,
             },
         );
         self.io
@@ -68,11 +71,59 @@ impl EditorState {
         CommandResult::Pending(job)
     }
 
-    /// 保存先の照合の結果 (03 §9.7 (a) の表)。文書が閉じられていれば何もしない。
-    pub(crate) fn finish_save_as_target(&mut self, mut ask: SaveAsAsk, r: JobResult) {
+    /// 保存先の照合の結果 (03 §9.7 (a) の表)。文書が閉じられていれば何もしない。ほかのオーバーレイか検索バーが出ていれば、
+    /// 閉じるまで保留する (03 §12.7.6 の細目 (7)。名前の入力・上書きの確認で、利用者が開いた入力を黙って置き換えない)。
+    /// 保留した結果は `flush_held_save_as` が出した順に扱う。
+    pub(crate) fn finish_save_as_target(&mut self, ask: SaveAsAsk, r: JobResult) {
         if self.document(ask.doc).is_none() {
             return;
         }
+        if self.auto_switch_blocked() || !self.io.held_save_as.is_empty() {
+            self.io.held_save_as.push_back((Box::new(ask), r));
+            return;
+        }
+        self.apply_save_as_target(ask, r);
+    }
+
+    /// 保留した照合の結果を、オーバーレイ・検索バーが閉じている間、届いた順に扱う (`flush_open_switches` から呼ぶ)。
+    pub(crate) fn flush_held_save_as(&mut self) {
+        while !self.auto_switch_blocked() {
+            let Some((ask, r)) = self.io.held_save_as.pop_front() else {
+                return;
+            };
+            if self.document(ask.doc).is_some() {
+                self.apply_save_as_target(*ask, r);
+            }
+        }
+    }
+
+    /// 照合中 (結果を待つ、または保留した) の名前を付けて保存の、(文書, 保存先)。`doc` を指定すればその文書のものだけ。
+    pub(crate) fn save_as_checking(&self, doc: Option<DocumentId>) -> Option<(DocumentId, FsPath)> {
+        let held = self.io.held_save_as.iter().rev().map(|(a, _)| &**a);
+        let pending = self.io.pending.values().rev().filter_map(|p| match p {
+            Pending::SaveAsTarget(a) => Some(&**a),
+            _ => None,
+        });
+        held.chain(pending)
+            .find(|a| doc.is_none_or(|d| d == a.doc))
+            .map(|a| (a.doc, a.path.clone()))
+    }
+
+    /// 照合の間の `app.quit`・`file.open`・`file.new` (03 §9.7 の全状態の遷移表の `CheckTarget` の行): 照合中なら
+    /// `info.save.in_progress` を示して `true` (呼び側は何もしない)。
+    pub(crate) fn ignore_while_save_as_check(&mut self) -> bool {
+        let Some((_, path)) = self.save_as_checking(None) else {
+            return false;
+        };
+        self.message(
+            MessageLevel::Info,
+            keys::INFO_SAVE_IN_PROGRESS,
+            &path.display(),
+        );
+        true
+    }
+
+    fn apply_save_as_target(&mut self, mut ask: SaveAsAsk, r: JobResult) {
         let shown = ask.path.display();
         match r {
             JobResult::Meta {
@@ -159,10 +210,16 @@ impl EditorState {
             self.save_as_same_file(ask.doc, &raw, ask.cont.clone(), ask.fmt);
             return true;
         }
-        // 1b: ほかの開いている文書 (読込中・確認待ちを含む) と同じファイル: 書かずに名前の入力に戻る
-        if self.document_same_as(&ask.target, Some(ask.doc)).is_some() {
+        // 1b: ほかの開いている文書 (読込中・確認待ちを含む) と同じファイル: 書かずに名前の入力に戻る。リンクでは名前が
+        // 違うので、相手の文書のパスも示す
+        if let Some(other) = self.document_same_as(&ask.target, Some(ask.doc)) {
             let shown = ask.path.display();
-            self.save_as_back(ask, keys::MSG_SAVE_AS_OPEN_IN_OTHER, &[("path", &shown)]);
+            let other = self.doc_label(other);
+            self.save_as_back(
+                ask,
+                keys::MSG_SAVE_AS_OPEN_IN_OTHER,
+                &[("path", &shown), ("other", &other)],
+            );
             return true;
         }
         false
@@ -202,6 +259,7 @@ impl EditorState {
                 JobKind::Metadata {
                     path,
                     purpose: MetaPurpose::UnchangedSave,
+                    known_ids: Vec::new(),
                 },
             );
             self.io
@@ -338,11 +396,23 @@ impl EditorState {
     /// 照合のジョブを待つ間の `Esc` (03 §9.7 の全状態の遷移表の `CheckTarget` の行): 結果を捨てて名前の入力に戻る。
     /// 照合を待っていなければ `false`。
     pub(crate) fn cancel_save_as_check(&mut self) -> bool {
+        // 今の文書の照合を、無ければ最後に投入した照合を取り消す (03 §12.7.6 の細目 (9))
         let active = self.active_document();
-        let Some(job) = self.io.pending.iter().find_map(|(job, p)| match p {
-            Pending::SaveAsTarget(ask) if Some(ask.doc) == active => Some(*job),
-            _ => None,
-        }) else {
+        let checks: Vec<(eve_view::JobId, DocumentId)> = self
+            .io
+            .pending
+            .iter()
+            .filter_map(|(job, p)| match p {
+                Pending::SaveAsTarget(ask) => Some((*job, ask.doc)),
+                _ => None,
+            })
+            .collect();
+        let Some(job) = checks
+            .iter()
+            .find(|(_, d)| Some(*d) == active)
+            .or_else(|| checks.iter().max_by_key(|(j, _)| j.0))
+            .map(|(j, _)| *j)
+        else {
             return false;
         };
         let Some(Pending::SaveAsTarget(ask)) = self.io.pending.remove(&job) else {
@@ -373,12 +443,37 @@ impl EditorState {
         doc.file_id_unique = target.file_id_unique;
         doc.loading_file_id = None;
         let ident = doc.file_identity();
-        if self.document_same_as(&ident, Some(doc_id)).is_some() {
+        if let Some(other) = self.document_same_as(&ident, Some(doc_id)) {
+            // 保存はできている。拒んだときの `msg.save_as.open_in_other` と読み違えないよう、別の文言で知らせる
+            let other = self.doc_label(other);
             self.show_message(
                 MessageLevel::Warn,
-                keys::MSG_SAVE_AS_OPEN_IN_OTHER,
-                &[("path", &path.display())],
+                keys::MSG_SAVE_AS_NOW_OPEN_IN_OTHER,
+                &[("path", &path.display()), ("other", &other)],
             );
         }
+    }
+
+    /// 名前を付けて保存の識別の覚えを、そのパスのものなら消す。
+    pub(crate) fn forget_save_as_target(&mut self, doc: DocumentId, path: &FsPath) {
+        if self
+            .io
+            .save_as_targets
+            .get(&doc)
+            .is_some_and(|(p, _)| p == path)
+        {
+            self.io.save_as_targets.remove(&doc);
+        }
+    }
+
+    /// 文書の表示用の名前 (パス、無題なら `無題-{n}`)。
+    fn doc_label(&self, doc: DocumentId) -> String {
+        self.document(doc)
+            .map(|d| {
+                d.path
+                    .as_ref()
+                    .map_or_else(|| self.untitled_label(d), FsPath::display)
+            })
+            .unwrap_or_default()
     }
 }

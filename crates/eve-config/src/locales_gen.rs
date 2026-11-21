@@ -8,7 +8,7 @@ use std::borrow::Cow::Borrowed as B;
 
 use crate::catalog::Entry;
 
-/// `locales/en.toml` の文言 (882 件)。
+/// `locales/en.toml` の文言 (885 件)。
 #[rustfmt::skip]
 pub(crate) static EN: &[Entry] = &[
     (B("cmd.app.quit.description"), B("Quit the editor.")),
@@ -263,6 +263,7 @@ pub(crate) static EN: &[Entry] = &[
     (B("info.open.preserve_off"), B("The original bytes of this document were not kept. Saving in the original encoding may write some characters as different bytes")),
     (B("info.open.preserve_partial"), B("The original bytes of {count} lines could not be kept. Saving after an edit may change how escape sequences are written on these lines (the characters do not change)")),
     (B("info.open.redetected"), B("Re-detected the encoding as {encoding}")),
+    (B("info.open.same_file"), B("{path} is open as {other}")),
     (B("info.pane.collapsed"), B("The terminal is too small, so only the focused pane is shown")),
     (B("info.pane.no_room"), B("There is no room to split the pane. Enlarge the terminal or close another pane")),
     (B("info.pane.single_pane"), B("There is only one pane")),
@@ -513,8 +514,10 @@ pub(crate) static EN: &[Entry] = &[
     (B("msg.save.verify_failed.text"), B("Stopped saving {path}: the content to be written did not read back as the document text (this may be a bug). The file was not changed")),
     (B("msg.save_as.not_a_file.hint"), B("Enter a different file name")),
     (B("msg.save_as.not_a_file.text"), B("{path} is not a file (it may be a folder)")),
+    (B("msg.save_as.now_open_in_other.hint"), B("Close one of the buffers before you continue editing")),
+    (B("msg.save_as.now_open_in_other.text"), B("Saved to {path}, but the same file is also open in another buffer as {other}")),
     (B("msg.save_as.open_in_other.hint"), B("Switch to that buffer to save, or choose another name")),
-    (B("msg.save_as.open_in_other.text"), B("{path} is open in another buffer")),
+    (B("msg.save_as.open_in_other.text"), B("{path} is open in another buffer as {other}")),
     (B("msg.save_as.same_file_read_only.hint"), B("Enter a different file name")),
     (B("msg.save_as.same_file_read_only.text"), B("A read-only document cannot be saved to the same file {path}")),
     (B("msg.save_as.target_read_only.hint"), B("Enter a different file name")),
@@ -895,7 +898,7 @@ pub(crate) static EN: &[Entry] = &[
     (B("ui.too_small"), B("The terminal is too small (at least {cols}x{rows} is needed)")),
 ];
 
-/// `locales/ja.toml` の文言 (882 件)。
+/// `locales/ja.toml` の文言 (885 件)。
 #[rustfmt::skip]
 pub(crate) static JA: &[Entry] = &[
     (B("cmd.app.quit.description"), B("エディタを終了します。")),
@@ -1150,6 +1153,7 @@ pub(crate) static JA: &[Entry] = &[
     (B("info.open.preserve_off"), B("この文書では元のバイト列を覚えていません。元の文字コードで保存すると、一部の文字が同じ文字の別のバイト表現になることがあります")),
     (B("info.open.preserve_partial"), B("{count} 行は元のバイト列を覚えられませんでした。編集して保存すると、これらの行はエスケープシーケンスの書き方が変わることがあります (文字は変わりません)")),
     (B("info.open.redetected"), B("文字コードを {encoding} と判定し直しました")),
+    (B("info.open.same_file"), B("{path} は {other} として開いています")),
     (B("info.pane.collapsed"), B("端末が狭いので、フォーカスのペインだけを表示しています")),
     (B("info.pane.no_room"), B("ペインを分ける広さがありません。端末を広げるか、ほかのペインを閉じてください")),
     (B("info.pane.single_pane"), B("ペインが 1 つだけです")),
@@ -1400,8 +1404,10 @@ pub(crate) static JA: &[Entry] = &[
     (B("msg.save.verify_failed.text"), B("{path} の保存を中止しました。書き出す内容を読み直すと本文と一致しなかったためです (不具合の可能性があります)。ファイルは変更していません")),
     (B("msg.save_as.not_a_file.hint"), B("別のファイル名を入力してください")),
     (B("msg.save_as.not_a_file.text"), B("{path} はファイルではありません (フォルダ等)")),
+    (B("msg.save_as.now_open_in_other.hint"), B("どちらかの文書を閉じてから編集を続けてください")),
+    (B("msg.save_as.now_open_in_other.text"), B("{path} に保存しましたが、同じファイルを別の文書 {other} としても開いています")),
     (B("msg.save_as.open_in_other.hint"), B("その文書に切り替えて保存するか、別の名前を指定してください")),
-    (B("msg.save_as.open_in_other.text"), B("{path} は別の文書として開いています")),
+    (B("msg.save_as.open_in_other.text"), B("{path} は別の文書 {other} として開いています")),
     (B("msg.save_as.same_file_read_only.hint"), B("別のファイル名を入力してください")),
     (B("msg.save_as.same_file_read_only.text"), B("読み取り専用の文書は、同じファイル {path} には保存できません")),
     (B("msg.save_as.target_read_only.hint"), B("別のファイル名を入力してください")),

@@ -93,6 +93,7 @@ impl Env {
             kind: JobKind::Open {
                 path: self.path(name),
                 opts: OpenOptions::default(),
+                known_ids: Vec::new(),
             },
         };
         let mut out = Vec::new();
