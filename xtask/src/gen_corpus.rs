@@ -9,12 +9,19 @@
 //! - `many-lines-1m`: 100 万行の短い行
 //!
 //! 既定では `large-1gb` を除く (時間と容量が大きい)。`--with-1gb` で加える。
+//!
+//! `--workspace small|large` は、文書の代わりに **ワークスペースの木** (09 §4、03 §12.7.8。gitignore の差分試験と M31 の計測の
+//! 木) を `<出力>/workspace-<大きさ>/` に作る (リポジトリは git で作るので git が要る)。木の作り方は gitignore の差分試験
+//! (`crates/eve-platform/tests/gitignore_git.rs`) と同じ関数 (`#[path]` で取り込む)。
 
 use std::fs::{self, File};
 use std::io::{self, BufWriter, Write};
 use std::path::{Path, PathBuf};
 
 use crate::util::workspace_root;
+
+#[path = "../../crates/eve-platform/tests/common/workspace_tree.rs"]
+mod workspace_tree;
 
 const MIB: u64 = 1024 * 1024;
 
@@ -227,6 +234,7 @@ struct Options {
     only: Option<Vec<String>>,
     with_1gb: bool,
     list: bool,
+    workspace: Option<workspace_tree::TreeSize>,
 }
 
 fn parse_args(args: &[String]) -> Result<Options, String> {
@@ -236,6 +244,7 @@ fn parse_args(args: &[String]) -> Result<Options, String> {
         only: None,
         with_1gb: false,
         list: false,
+        workspace: None,
     };
     let mut it = args.iter();
     while let Some(a) = it.next() {
@@ -254,6 +263,17 @@ fn parse_args(args: &[String]) -> Result<Options, String> {
             "--only" => o.only = Some(value("--only")?.split(',').map(str::to_owned).collect()),
             "--with-1gb" => o.with_1gb = true,
             "--list" => o.list = true,
+            "--workspace" => {
+                o.workspace = Some(match value("--workspace")?.as_str() {
+                    "small" => workspace_tree::TreeSize::Small,
+                    "large" => workspace_tree::TreeSize::Large,
+                    other => {
+                        return Err(format!(
+                            "--workspace は small か large にしてください: {other}"
+                        ));
+                    }
+                });
+            }
             other => return Err(format!("知らないオプションです: {other}")),
         }
     }
@@ -262,6 +282,28 @@ fn parse_args(args: &[String]) -> Result<Options, String> {
 
 pub fn run(args: &[String]) -> Result<(), String> {
     let o = parse_args(args)?;
+    if let Some(size) = o.workspace {
+        let name = match size {
+            workspace_tree::TreeSize::Small => "workspace-small",
+            workspace_tree::TreeSize::Large => "workspace-large",
+        };
+        let root = o.out.join(name);
+        println!(
+            "▶ gen-corpus --workspace (seed {}、出力 {})",
+            o.seed,
+            root.display()
+        );
+        let tree = workspace_tree::generate(&root, size, o.seed)
+            .map_err(|e| format!("{}: {e}", root.display()))?;
+        println!(
+            "  ファイル {}・ディレクトリ {}・リポジトリ {} (worktree の本体は {})",
+            tree.files,
+            tree.dirs,
+            tree.repos.len(),
+            tree.gitdirs.display()
+        );
+        return Ok(());
+    }
     if o.list {
         for (name, _) in CATALOG {
             println!("{name}");

@@ -80,7 +80,7 @@ const USAGE: &str = "\
                       --env ENV-W1 --out DIR: 基準機の記録 (BM-106・端末込みの BM-101b/102b/103b/107 も測り、DIR に JSON と summary.md)
   check-themes        組込みテーマのロール表の検査 (07 §8.2・§8.7。4 段の値・コントラスト・高コントラストの基準・実装との突合)
   i18n                UI 文言の検査 (04 §15.2 の目録・07 §11.6 のカタログ・locales/ja.toml)
-  gen-corpus          巨大・長大のコーパスの生成 (--seed N --out DIR --only a,b --with-1gb --list)
+  gen-corpus          巨大・長大のコーパスの生成 (--seed N --out DIR --only a,b --with-1gb --list --workspace small|large)
   scenario            シナリオ DSL (tests/scenarios) の実行 (run [<部分一致>] [--print-frame]) と検証 (check)
   spec-index          仕様書の索引 docs/spec-index.toml の生成 (--check: 最新性・重複・spec: の参照の検査。--show <ID>: 本文)
   trace               仕様と試験の対応の検査と docs/traceability.md の生成 (--check: 存在しない ID と行列の最新性。--version vX.Y: 警告をその版の行に絞る)
