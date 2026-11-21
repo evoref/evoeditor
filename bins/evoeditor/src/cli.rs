@@ -1,5 +1,6 @@
 //! コマンドラインの解析 (docs/07 §18.1〜§18.3。v0.1 の公開オプションは `--version` `--help` `--readonly` `--encoding` `--`
-//! と、受理して無視する `--wait`。v0.2 で `--locale` を足した。v0.4 の M25 で標準入力の `-` を足した)。パーサは外部 crate を使わず、この小さな関数で済ませる (サブコマンドが要る v1.X で見直す、OQ-24)。
+//! と、受理して無視する `--wait`。v0.2 で `--locale` を足した。v0.4 の M25 で標準入力の `-` を足した。v0.5 の M31 で
+//! `--workspace` / `-w` と、位置引数のディレクトリ (`DIR`) を足した)。パーサは外部 crate を使わず、この小さな関数で済ませる (サブコマンドが要る v1.X で見直す、OQ-24)。
 
 use std::ffi::OsString;
 
@@ -66,6 +67,10 @@ pub enum Mode {
 
 /// 解析の結果。
 #[derive(Debug, PartialEq, Eq)]
+#[expect(
+    clippy::large_enum_variant,
+    reason = "起動のときに 1 回だけ作ってすぐ分解する値。v0.5 の M31 で `workspace` を足して閾値を超えたが、箱に入れても得が無い"
+)]
 pub enum Cli {
     Help,
     Version,
@@ -83,6 +88,10 @@ pub enum Cli {
         mode: Mode,
         /// `--log-level <level>`: `EVE_LOG` より優先する。値の妥当性は main が確かめる。
         log_level: Option<String>,
+        /// `--workspace <dir>` / `-w <dir>`: ワークスペースのルート (07 §12.1 の規則 1)。ディレクトリかどうかは起動の後に
+        /// ジョブで確かめる (端末を始める前に `stat` しない)。位置引数のディレクトリ (`DIR`) は `files` に入る (ファイルと
+        /// 区別しない。開くジョブとルートの検出のジョブが見分ける、03 §12.7.1)。
+        workspace: Option<String>,
     },
 }
 
@@ -99,6 +108,8 @@ pub enum UsageError {
     BadLogLevel(String),
     /// 標準入力 (`-`) を 2 つ以上書いた (07 §18.2。`stderr.usage.generic`)。
     StdinTwice,
+    /// `--workspace` / `-w` を 2 回以上書いた (07 §18.3。`stderr.usage.generic`)。
+    WorkspaceTwice,
 }
 
 fn to_string(a: OsString) -> Result<String, UsageError> {
@@ -182,6 +193,7 @@ pub fn parse(
     let (mut crash_report, mut licenses) = (false, false);
     let (mut list_commands, mut dump_keymap) = (false, false);
     let mut log_level = None;
+    let mut workspace: Option<String> = None;
     let mut only_positional = false;
     // `-` は標準入力 (`--` の後ろでも)。`+LINE` はファイルと同じく直後 (後置なら直前) の `-` に掛かる (07 §18.2)
     let add_file =
@@ -269,6 +281,21 @@ pub fn parse(
                 log_level = Some(s["--log-level=".len()..].to_owned());
             }
             "--json" => json = true,
+            // 値は 1 つ (2 回書けば使い方の誤り)。空の値も値の無いのと同じ (07 §18.3)
+            "--workspace" | "-w" => {
+                let v = it
+                    .next()
+                    .ok_or_else(|| UsageError::MissingValue(a.clone()))
+                    .and_then(to_string)?;
+                set_workspace(&mut workspace, &a, v)?;
+            }
+            s if s.starts_with("--workspace=") => {
+                set_workspace(
+                    &mut workspace,
+                    "--workspace",
+                    s["--workspace=".len()..].to_owned(),
+                )?;
+            }
             s if s.starts_with("--encoding=") => {
                 let v = s["--encoding=".len()..].to_owned();
                 if v.is_empty() {
@@ -329,7 +356,20 @@ pub fn parse(
         config,
         mode,
         log_level,
+        workspace,
     })
+}
+
+/// `--workspace` の値を入れる。2 回目と空の値は使い方の誤り。
+fn set_workspace(slot: &mut Option<String>, opt: &str, v: String) -> Result<(), UsageError> {
+    if v.is_empty() {
+        return Err(UsageError::MissingValue(opt.to_owned()));
+    }
+    if slot.is_some() {
+        return Err(UsageError::WorkspaceTwice);
+    }
+    *slot = Some(v);
+    Ok(())
 }
 
 /// `--set` の値が `key=value` の形か (キーが空でないこと)。値の妥当性は設定の読込が診断する。
@@ -386,6 +426,7 @@ mod tests {
             config: ConfigArgs::default(),
             mode: Mode::Edit,
             log_level: None,
+            workspace: None,
         }
     }
 
@@ -619,6 +660,7 @@ mod tests {
                 config: ConfigArgs::default(),
                 mode: Mode::Edit,
                 log_level: None,
+                workspace: None,
             }
         );
     }
@@ -755,6 +797,65 @@ mod tests {
             Cli::Run { files, read_only: true, encoding: Some(e), .. }
                 if e == "shift_jis" && files == &vec![stdin(None, None)]
         ));
+    }
+
+    // ---- ワークスペース (07 §18.2 の `DIR`、§18.3 の `--workspace` / `-w`。v0.5 の M31) ----
+
+    fn workspace_of(args: &[&str]) -> Option<String> {
+        match p(args).unwrap() {
+            Cli::Run { workspace, .. } => workspace,
+            other => panic!("{other:?}"),
+        }
+    }
+
+    #[test]
+    fn workspace_は値を_1_つ取る() {
+        assert_eq!(
+            workspace_of(&["--workspace", "proj"]).as_deref(),
+            Some("proj")
+        );
+        assert_eq!(
+            workspace_of(&["-w", "proj", "a.txt"]).as_deref(),
+            Some("proj")
+        );
+        assert_eq!(
+            workspace_of(&["--workspace=日本語"]).as_deref(),
+            Some("日本語")
+        );
+        assert_eq!(workspace_of(&["a.txt"]), None);
+        assert_eq!(
+            p(&["-w"]).unwrap_err(),
+            UsageError::MissingValue("-w".into()),
+            "値の無いときは使い方の誤り"
+        );
+        assert_eq!(
+            p(&["--workspace="]).unwrap_err(),
+            UsageError::MissingValue("--workspace".into()),
+            "空の値も値の無いのと同じ"
+        );
+        assert_eq!(
+            p(&["-w", "a", "--workspace", "b"]).unwrap_err(),
+            UsageError::WorkspaceTwice,
+            "2 回書けば使い方の誤り"
+        );
+        assert_eq!(
+            p(&["--workspace=a", "-w", "a"]).unwrap_err(),
+            UsageError::WorkspaceTwice
+        );
+    }
+
+    #[test]
+    fn ディレクトリの位置引数はファイルと区別せずに並ぶ() {
+        // ディレクトリかどうかは端末を始めた後にジョブで分かる (07 §18.2)。解析はファイルシステムに触れない
+        assert_eq!(
+            p(&[".", "src/main.rs", "other"]).unwrap(),
+            run(
+                vec![plain("."), plain("src/main.rs"), plain("other")],
+                false
+            )
+        );
+        // 区切りの後の `-w` はファイル名
+        assert_eq!(p(&["--", "-w"]).unwrap(), run(vec![plain("-w")], false));
     }
 
     #[test]

@@ -315,6 +315,11 @@ pub fn usage_error(e: &UsageError) -> Bi {
             format!("Standard input (-) can be given only once. {tail_en}"),
             format!("標準入力 (-) は 1 つだけ指定できます。{tail_ja}"),
         ),
+        // `stderr.usage.generic` (07 §18.3: `--workspace` は 1 つまで)
+        UsageError::WorkspaceTwice => Bi::new(
+            format!("--workspace (-w) can be given only once. {tail_en}"),
+            format!("--workspace (-w) は 1 つだけ指定できます。{tail_ja}"),
+        ),
     }
 }
 

@@ -35,12 +35,13 @@ pub(crate) struct Started {
 
 /// Host を組み立てる。作業ディレクトリ・ワーカーを用意できなければ、標準エラーに理由を出して終了コードを返す。
 /// `take_stdin` は標準入力 (`evoeditor -`、端末でないとき) を移して返す。失敗し得る段の後に 1 回だけ呼び、ジョブの
-/// ワーカーに渡す。
+/// ワーカーに渡す。`workspace` は `--workspace` の値 (起動の後にジョブで確かめる、03 §12.7.1)。
 pub(crate) fn start(
     encoding: Option<Encoding>,
     cli_locale: Option<&str>,
     config_args: &cli::ConfigArgs,
     cli_log_level: Option<eve_platform::log::Level>,
+    workspace: Option<String>,
     take_stdin: impl FnOnce() -> Option<Arc<PlatformStdin>>,
 ) -> Result<Started, u8> {
     // 作業ディレクトリ・ディレクトリ・Ports
@@ -170,6 +171,7 @@ pub(crate) fn start(
             state_dir.as_path().to_path_buf(),
         )))),
         ssh_session: None,
+        workspace,
     };
     let host = Host::with_channel(ports, (tx.clone(), rx), host_init);
     // 非対話の終了の手順 (退避 → メインへの通知と終了待ち → 置換中の計数の待ち → 端末の緊急復元 → 退避の結果の行、

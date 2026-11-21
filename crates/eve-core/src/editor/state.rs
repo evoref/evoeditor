@@ -80,6 +80,8 @@ pub struct EditorState {
     pub(crate) settings: Settings,
     /// 文書の集合: 文書・View・Window・ID の採番・最近使った順
     pub(crate) docs: DocSet,
+    /// ワークスペース: 決まったルートと、起動の引数のディレクトリの知らせの保留 (03 §12.7.1)
+    pub(crate) workspace: crate::workspace::root::WorkspaceState,
 }
 
 /// 文書の集合: 文書・View・Window・ID の採番・最近使った順 (`EditorState` の部分、docs/review/v0.3-findings.md の STR-B2)。
@@ -369,6 +371,7 @@ impl EditorState {
                 next_untitled: 1,
                 recent: Vec::new(),
             },
+            workspace: crate::workspace::root::WorkspaceState::default(),
         }
     }
 
