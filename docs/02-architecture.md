@@ -471,9 +471,9 @@ trait FileSystem: Send + Sync {
                                                                              // dir の直下の項目を max_entries 個まで返す (`.` と `..` は返さない。並びは問わない。追加の stat をしない)。
                                                                              // dir が無い → NotFound、ディレクトリでない → InvalidPath (detail なし)、読めない → PermissionDenied。既定は Unsupported
 }
-struct DirListing { entries: Vec<DirEntry>, truncated: bool /*max_entries で列挙をやめた*/ }   // v0.5 の M31
+struct DirListing { entries: Vec<DirEntry>, truncated: bool /*max_entries 個を返した後にまだ項目があったので列挙をやめた*/ }   // v0.5 の M31
 struct DirEntry  { name: OsString /*最後の要素だけ。UTF-8 で表せない名前もそのまま*/, kind: EntryKind,
-                   len: Option<u64> /*列挙で追加の I/O なしに分かるときだけ (Windows の FindNextFileW)。Unix は None*/,
+                   len: Option<u64> /*列挙で追加の I/O なしに分かるときだけ (Windows の FindNextFileW の File)。Unix とファイル以外は None*/,
                    offline: bool /*読むと呼び戻しが起きるファイル (Windows の RECALL_ON_DATA_ACCESS / RECALL_ON_OPEN / OFFLINE の属性。OneDrive のオンライン専用など)。Unix は false*/ }
 enum EntryKind   { File, Dir, Symlink /*シンボリックリンク・ジャンクション・名前の代理の再解析点。辿らない*/, Other /*FIFO・ソケット・デバイス*/ }
 // 種類は列挙が返すもの (Windows の属性、Unix の d_type) から決める。FS が種類を返さない (d_type が DT_UNKNOWN) ときだけ実装が lstat で補う (05 §2.1)

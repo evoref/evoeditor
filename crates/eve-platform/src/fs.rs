@@ -123,6 +123,10 @@ impl FileSystem for WinFs {
         crate::fs_common::list_dir_names(dir)
     }
 
+    fn read_dir(&self, dir: &FsPath, max_entries: usize) -> Result<eve_core::DirListing, FsError> {
+        crate::read_dir::read_dir(dir, max_entries)
+    }
+
     fn rename_no_replace(&self, from: &FsPath, to: &FsPath) -> Result<(), FsError> {
         crate::sys::rename_no_replace(from.as_path(), to.as_path()).map_err(|e| map_io_error(e, to))
     }

@@ -66,29 +66,40 @@ pub(crate) fn metadata_error(e: io::Error, path: &FsPath) -> FsError {
     map_io_error(e, path)
 }
 
-/// `open_read` の本体。ディレクトリ・デバイスは開かない (`InvalidPath` + `NotAFile`、05 §4.5。Windows の `File::open` は
-/// ディレクトリで成功しないので、ここに来るのは Unix)。
+/// `open_read` の本体。開いた後のハンドルで通常のファイルと確かめ、ディレクトリ・FIFO・デバイスは読まない (`InvalidPath` +
+/// `NotAFile`、05 §2.1 の `open_read()` の行・§4.5)。Unix は `O_NONBLOCK` で開き (FIFO を開くときに書き手を待って止まらない)、
+/// `fstat` で通常のファイルと確かめてから非ブロックを外す。Windows は `GetFileType` が `FILE_TYPE_DISK` であることも確かめる
+/// (`NUL`・コンソールを読まない)。
 pub(crate) fn open_read(path: &FsPath) -> Result<Box<dyn ReadChunks + Send>, FsError> {
-    let f = match File::open(path.as_path()) {
+    let not_a_file = || FsError::with_detail(FsErrorKind::InvalidPath, FsErrorDetail::NotAFile);
+    let mut opts = fs::OpenOptions::new();
+    opts.read(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt as _;
+        opts.custom_flags(libc::O_NONBLOCK | libc::O_NOCTTY);
+    }
+    let f = match opts.open(path.as_path()) {
         Ok(f) => f,
-        // Windows はディレクトリを開くと `ERROR_ACCESS_DENIED` になる。ディレクトリなら権限の問題ではなく
-        // `InvalidPath` (05 §2.1 の写像の表、§4.5)
-        Err(_) if std::fs::metadata(path.as_path()).is_ok_and(|m| m.is_dir()) => {
-            return Err(FsError::with_detail(
-                FsErrorKind::InvalidPath,
-                FsErrorDetail::NotAFile,
-            ));
+        // Windows はディレクトリを開くと `ERROR_ACCESS_DENIED`、Unix はソケットを開くと `ENXIO` になる。在るが通常のファイルで
+        // ないなら、権限などの問題ではなく `InvalidPath` (05 §2.1 の写像の表、§4.5)
+        Err(_) if fs::metadata(path.as_path()).is_ok_and(|m| !m.is_file()) => {
+            return Err(not_a_file());
         }
         Err(e) => return Err(map_io_error(e, path)),
     };
     if let Ok(m) = f.metadata()
         && !m.is_file()
     {
-        return Err(FsError::with_detail(
-            FsErrorKind::InvalidPath,
-            FsErrorDetail::NotAFile,
-        ));
+        return Err(not_a_file());
     }
+    #[cfg(windows)]
+    if !crate::sys::is_disk_file(&f) {
+        return Err(not_a_file());
+    }
+    // 通常のファイルの読込に `O_NONBLOCK` は効かないので、外せなくても読める (失敗は無視する)
+    #[cfg(unix)]
+    let _ = crate::sys::clear_nonblocking(&f);
     Ok(Box::new(FileChunks {
         file: f,
         buf: vec![0u8; READ_CHUNK_BYTES],
