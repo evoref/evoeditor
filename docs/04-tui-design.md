@@ -1940,7 +1940,7 @@ v0.2 以降の診断 (名前だけを予約し、文言はその版で言語フ�
 
 | MessageKey | 内容 | en | ja |
 |---|---|---|---|
-| `cli.help.usage` | 先頭の使い方 (v0.4 の M25 で標準入力の `-` (07 §18.2) を足した) | Usage: evoeditor [OPTIONS] [--] [FILE \| -]... | 使い方: evoeditor [オプション] [--] [ファイル \| -]... |
+| `cli.help.usage` | 先頭の使い方 (v0.4 の M25 で標準入力の `-` (07 §18.2) を足した。v0.5 の M31 の段 1 でフォルダ `DIR` (07 §18.2) を足した) | Usage: evoeditor [OPTIONS] [--] [FILE \| DIR \| -]... | 使い方: evoeditor [オプション] [--] [ファイル \| フォルダ \| -]... |
 | `cli.help.description` | 概要の 1 行 | A modeless text editor for the terminal. | 端末で動く、モードのないテキストエディタです。 |
 | `cli.help.options_title` | オプションの見出し | Options: | オプション: |
 | `cli.help.option.version` | `-V, --version` | Show the version and build information | 版とビルド情報を表示して終了します |
@@ -1951,6 +1951,7 @@ v0.2 以降の診断 (名前だけを予約し、文言はその版で言語フ�
 | `cli.help.option.config` (v0.2) | `-c, --config <file>` | Read this settings file instead of config.toml (repeatable; later files win) | config.toml の代わりにこの設定ファイルを読みます (複数指定可。後のものが優先) |
 | `cli.help.option.no_config` (v0.2) | `-N, --no-config` | Do not read config.toml, keymap.toml, theme files, or language files (use the defaults) | config.toml・keymap.toml・テーマファイル・言語ファイルを読みません (既定値で動きます) |
 | `cli.help.option.set` (v0.2) | `-s, --set <key>=<value>` | Override one setting (e.g. --set view.wrap=soft) | 設定を 1 項目上書きします (例: --set view.wrap=soft) |
+| `cli.help.option.workspace` (v0.5) | `-w, --workspace <dir>` (07 §18.3。v0.5 の M31 の段 1) | Use this folder as the workspace root (a DIR argument also sets it) | このフォルダをワークスペースのルートにします (位置引数のフォルダでも決まります) |
 | `cli.help.option.log_level` (v0.2) | `--log-level <level>` | Set the log level: error, warn, info, debug, or trace (overrides EVE_LOG) | ログの水準を指定します: error / warn / info / debug / trace (EVE_LOG より優先) |
 | `cli.help.option.crash_report` (v0.2) | `--crash-report` | Show the latest crash log and exit | 最新のクラッシュログを表示して終了します |
 | `cli.help.option.check_config` (v0.2) | `--check-config` | Check the settings, print the problems, and exit | 設定を確かめて問題を表示し、終了します |

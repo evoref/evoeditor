@@ -381,7 +381,7 @@ pub fn ignored_args(args: &[String]) -> Bi {
 
 /// `--help` の本文 (`cli.help.*`)。オプション名の後ろに英語の説明、次の行に日本語の説明を揃えて出す。
 pub fn help() -> String {
-    const OPTIONS: [(&str, &str, &str); 15] = [
+    const OPTIONS: [(&str, &str, &str); 16] = [
         (
             "-R, --readonly",
             "Open the file read-only",
@@ -411,6 +411,12 @@ pub fn help() -> String {
             "-s, --set <key>=<value>",
             "Override one setting (e.g. --set view.wrap=soft)",
             "設定を 1 項目上書きします (例: --set view.wrap=soft)",
+        ),
+        // 07 §18.3。ルートを決めるだけで、ファインダは開かない (開くのは位置引数の DIR)
+        (
+            "-w, --workspace <dir>",
+            "Use this folder as the workspace root (a DIR argument also sets it)",
+            "このフォルダをワークスペースのルートにします (位置引数のフォルダでも決まります)",
         ),
         (
             "--log-level <level>",
@@ -462,8 +468,8 @@ pub fn help() -> String {
     let mut out = String::new();
     let mut pair = |en: &str, ja: &str| out.push_str(&format!("{en}\n  {ja}\n\n"));
     pair(
-        "Usage: evoeditor [OPTIONS] [--] [FILE | -]...",
-        "使い方: evoeditor [オプション] [--] [ファイル | -]...",
+        "Usage: evoeditor [OPTIONS] [--] [FILE | DIR | -]...",
+        "使い方: evoeditor [オプション] [--] [ファイル | フォルダ | -]...",
     );
     pair(
         "A modeless text editor for the terminal.",
@@ -600,6 +606,7 @@ mod tests {
             "--dump-config",
             "--log-level",
             "--crash-report",
+            "--workspace",
         ] {
             assert!(h.contains(opt), "{opt}");
         }
