@@ -1703,7 +1703,7 @@ struct Pane {
 // フォーカスを移す関数とペインに文書を出す関数の 2 か所に集める。閉じた文書・ペインの ID はどの記録にも残さない
 ```
 
-**決めた点と退けた案** (M30 の仕様の PR。コマンドの ID・既定キー・境界の型の形は、PO の確認を待つ (2026-11-21))
+**決めた点と退けた案** (M30 の仕様の PR。コマンドの ID・既定キー・フォーカスの示し方 (ペインごとの見出し) は **確定 (ユーザー回答、2026-11-21)。推奨案のまま**)
 
 | 論点 | 採った案 | 退けた案と理由 |
 |---|---|---|
@@ -1738,7 +1738,7 @@ struct Pane {
 | 段 | PR | 範囲 | 完了の条件 |
 |---|---|---|---|
 | 1. 作り替え (v0.5-plan の FND) | `refactor` (振る舞いを変えない。境界の型・コマンド・設定・文言を足さない) | 上の型 (葉 1 つ)、PANE-1 のペインの表と `recent`、PANE-8 / PANE-9 (1 ペインでは今と同じ結果)、PANE-10 (a) の座標、PANE-13 の各所 (TUI のマウスと ASCII の Frame を全ペインに回す) | 既存の試験とゴールデンが **差分なしで** 通る (1 ペインの画面が変わらない、FR-509 AC-1 の後半)。`Query` の応答 (`Windows` の `views` と `focus`、`Status`・`Selection`) も 1 ペインでは今と同じ。`cargo xtask check` の全体。木と矩形の計算 (PANE-3) の単体試験 (葉 1 つ・2 つ・入れ子。試験の中で木を組む) |
-| 2. FR-509 (M30)。2a (core の木の操作と PANE-4〜PANE-9。パレットと `execute` からだけ実行) と 2b (境界の型・TUI・ヘッドレス・既定キー・ロール・ゴールデンの更新。境界の型は TUI とヘッドレスと同じ PR、02 §8.4) に分けてよい | `feat` (`contract-change` のラベル) | 07 §11.6 の `pane.*` と既定キー、`when` の変数 `pane.split` (07 §7.3)、PANE-4〜PANE-11、02 §8.2 の `Frame.dividers`・`Divider`・`PaneFrame.bar`・`PaneBarModel`・`InputEvent::ChromeMouse` (`ChromeTarget::PaneBar` だけ)、07 §8.8 のペインのロール (07 §8.2・§8.7 の表へ移す)、言語ファイル (`cmd.pane.*`・`cmd.buffer.close` の title の変更・`info.pane.no_room`・`info.pane.collapsed`・`info.pane.single_pane`・`status.degraded.panes.*`・`ui.palette.reason.single_pane`)、TUI の描画とマウス (04)、ASCII の Frame、`CHANGELOG.md` の `eve-view:` の行。07 §11.6 の頻出操作 (FR-606) に分割・次のペイン・ペインを閉じるを足す | 01 §5.5 の FR-509 AC-1〜AC-4 に `verifies:` の試験がある (09 §3.4 の計画)。既存のゴールデンは、既定キーとコマンドの一覧 (`crates/eve-core/tests/golden/default_keymap.tsv`・`commands.tsv`) が増える以外は変わらない (この 2 つの更新は人間の判断を得る)。`check-themes`・`gen-reference --check`・到達性の検査 (`key_reachability`) が通る。Windows Terminal と conhost で目で確かめる (09 §8.2 の互換の行) |
+| 2. FR-509 (M30)。2a (core の木の操作と PANE-4〜PANE-9。パレットと `execute` からだけ実行) と 2b (境界の型・TUI・ヘッドレス・既定キー・ロール・ゴールデンの更新。境界の型は TUI とヘッドレスと同じ PR、02 §8.4) に分けてよい | `feat` (`contract-change` のラベル) | 07 §11.6 の `pane.*` と既定キー、`when` の変数 `pane.split` (07 §7.3)、PANE-4〜PANE-11、02 §8.2 の `Frame.dividers`・`Divider`・`PaneFrame.bar`・`PaneBarModel`・`InputEvent::ChromeMouse` (`ChromeTarget::PaneBar` だけ)、07 §8.8 のペインのロール (07 §8.2・§8.7 の表へ移す)、言語ファイル (`cmd.pane.*`・`cmd.buffer.close` の title の変更・`info.pane.no_room`・`info.pane.collapsed`・`info.pane.single_pane`・`status.degraded.panes.*`・`ui.palette.reason.single_pane`)、TUI の描画とマウス (04)、ASCII の Frame、`CHANGELOG.md` の `eve-view:` の行。07 §11.6 の頻出操作 (FR-606) に分割・次のペイン・ペインを閉じるを足す | 01 §5.5 の FR-509 AC-1〜AC-4 に `verifies:` の試験がある (09 §3.4 の計画)。既存のゴールデンは、既定キーとコマンドの一覧 (`crates/eve-core/tests/golden/default_keymap.tsv`・`commands.tsv`) が増える以外は変わらない (この 2 つは、仕様の表どおりの行の追加だけなら更新してよい。PO の決定 2026-11-21。既存の行が変わる・消えるときは人間の判断を得る)。`check-themes`・`gen-reference --check`・到達性の検査 (`key_reachability`) が通る。Windows Terminal と conhost で目で確かめる (09 §8.2 の互換の行) |
 | 3. FR-510 (M32) | `feat` (`contract-change`) | PANE-12、`Frame.tab_line`・`TabLineModel`・`TabItem`・`ChromeTarget::Tab`、`ui.tab_line`、タブラインのロール (07 §8.8) | 01 §5.5 の FR-510 AC-1 / AC-2 |
 
 ## 10. クラッシュ復旧・スワップ・バックアップ
