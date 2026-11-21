@@ -53,8 +53,9 @@
 8:1	Warning	keys.editor.f5	"doc.modified &&"
   The when clause in keys.editor.f5 is not valid
   See the config spec (07 §7.3) for the syntax. This binding is ignored
-12:1	Info	keys.editor.f6	""
-  keys.editor.f6 is not supported in this version and was ignored
+12:1	Warning	keys.editor.f6	"a"
+  The argument a in the args of keys.editor.f6 does not match the command
+  See the config spec (07 §11.6) for argument names and types. This binding is ignored
 4:1	Warning	keys.nowhere.ctrl+s	"nowhere"
   The context in keys.nowhere.ctrl+s is not available
   Available: global, editor, search, prompt, palette, list, dialog, help. This binding is ignored
