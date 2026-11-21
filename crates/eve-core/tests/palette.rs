@@ -221,12 +221,16 @@ fn ページ送りは窓の行数ぶん動き_端で止まる() {
     h.keys("ctrl+p");
     h.keys("pagedown");
     assert_eq!(list(&h.frame()).2, 12);
-    h.keys("pagedown pagedown pagedown pagedown pagedown pagedown");
     let f = h.frame();
     let OverlayModel::List { footer, .. } = &f.overlays[0] else {
         panic!()
     };
     let total: usize = cells(footer).split('/').nth(1).unwrap().parse().unwrap();
+    // 候補の数に依らず、末尾を越える回数だけ送る
+    for _ in 0..=total / 12 {
+        h.keys("pagedown");
+    }
+    let f = h.frame();
     assert_eq!(list(&f).2, total - 1, "末尾で止まる");
     h.keys("pageup");
     assert_eq!(list(&h.frame()).2, total - 13);

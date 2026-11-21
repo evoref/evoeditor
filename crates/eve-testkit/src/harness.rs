@@ -322,6 +322,19 @@ impl Harness {
             .first_window()
             .and_then(|w| self.editor.state().window_view(w))
             .expect("View がある");
+        self.mouse_in(view, kind, mods, row, col);
+    }
+
+    /// View `view` を表示するペインへのマウス操作 (`InputEvent::Mouse`)。`row` / `col` はそのペインの本文の左上を原点と
+    /// するセル (ペインが 2 つ以上のとき。docs/03 §9.9 の PANE-7)。
+    pub fn mouse_in(
+        &mut self,
+        view: eve_view::ViewId,
+        kind: eve_view::MouseKind,
+        mods: eve_view::Modifiers,
+        row: i32,
+        col: i32,
+    ) {
         self.input(InputEvent::Mouse(eve_view::MouseEvent {
             kind,
             mods,

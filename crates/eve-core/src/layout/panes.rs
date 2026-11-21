@@ -394,4 +394,24 @@ mod tests {
         let l = layout(&t, size(0, 0));
         assert_eq!(l.leaves.len(), 2);
     }
+
+    #[test]
+    fn 比率の和が_0_なら等分する() {
+        assert_eq!(distribute(9, &[0, 0, 0], &[0, 0, 0]), vec![3, 3, 3]);
+        assert_eq!(distribute(10, &[0, 0, 0], &[0, 0, 0]), vec![4, 3, 3]);
+    }
+
+    #[test]
+    fn 上下の分割が最小より低い面でも矩形は面の中に収める() {
+        let t = split(Axis::Column, vec![(leaf(1), 5_000), (leaf(2), 5_000)]);
+        for rows in [0, 1, 3, 7] {
+            let l = layout(&t, size(80, rows));
+            assert_eq!(l.leaves.len(), 2);
+            for x in &l.leaves {
+                let bar = x.bar.expect("見出しの矩形");
+                assert!(x.body.row + x.body.rows <= rows, "{rows}: {x:?}");
+                assert!(bar.row + bar.rows <= rows.max(bar.row), "{rows}: {x:?}");
+            }
+        }
+    }
 }

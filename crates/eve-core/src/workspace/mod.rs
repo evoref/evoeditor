@@ -1,21 +1,25 @@
-//! ワークスペースの走査と候補 (docs/03 §12.7.2 / §12.7.7。v0.5 の M31 の段 4)。
+//! ワークスペース (docs/03 §12.7、07 §12.1。v0.5 の M31)。
 //!
-//! - [`WorkspaceWalk`][]: 走査の状態。深さ優先で、項目を名前のバイト列の順に並べ、除外の連鎖
+//! - [`root`]: ルートの検出 (`JobKind::WorkspaceRoot`、03 §12.7.1) と、core が持つワークスペースの状態、起動の引数の
+//!   ディレクトリの知らせの保留 (段 1)。
+//! - [`WorkspaceWalk`][]: 走査の状態 (段 4)。深さ優先で、項目を名前のバイト列の順に並べ、除外の連鎖
 //!   ([`ExcludeChain`](crate::ExcludeChain)) で照らす。区切りはディレクトリ 16 個・項目 4,096 個・8 ms の早いほう。
 //! - [`Candidate`][]: ファインダの候補。走査の側 (`bg`) で作り、4,096 件ごとの不変の塊 (`Arc<[Candidate]>`) で送る。
 //! - ジョブ `JobKind::WorkspaceScan` (区切りごとに `JobStep::Continue` で積み直す) と `JobKind::ReleaseCandidates`
 //!   (古い一覧を `bg` で解放する。主スレッドで大きな一覧を drop しない)。
 //!
-//! ルートは引数で受け取る (ルートの検出 `WorkspaceRoot` は段 1、ファインダへのつなぎ込みは段 6)。
+//! 走査はルートを引数で受け取る (ファインダへのつなぎ込みは段 6)。
 //!
-//! spec: 03 §12.7.2, 03 §12.7.7, 03 §12.7.8, 02 §9.3
+//! spec: 03 §12.7.1, 03 §12.7.2, 03 §12.7.7, 03 §12.7.8, 02 §9.3, 07 §12.1, 07 §18.2, 07 §18.3
 
 mod candidate;
 mod git;
+pub(crate) mod root;
 mod scan_job;
 mod walk;
 
 pub use candidate::{Candidate, char_bit};
+pub use root::{RootSource, Workspace};
 pub(crate) use scan_job::run_scan;
 pub use walk::{NoObserver, WalkObserver, WalkStep, WorkspaceWalk};
 

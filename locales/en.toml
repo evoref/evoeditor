@@ -220,6 +220,54 @@ title = "Show Keys"
 description = "Open the help screen at the list of commands."
 title = "Show Commands"
 
+[cmd.pane.split_right]
+description = "Open a new pane to the right that shows the same document at the same position (side by side)."
+title = "Split Right"
+
+[cmd.pane.split_down]
+description = "Open a new pane below that shows the same document at the same position (stacked)."
+title = "Split Down"
+
+[cmd.pane.focus_next]
+description = "Move the focus to the next pane. From the last pane, it moves to the first."
+title = "Next Pane"
+
+[cmd.pane.focus_prev]
+description = "Move the focus to the previous pane. From the first pane, it moves to the last."
+title = "Previous Pane"
+
+[cmd.pane.focus_left]
+description = "Move the focus to the pane on the left."
+title = "Focus Pane Left"
+
+[cmd.pane.focus_right]
+description = "Move the focus to the pane on the right."
+title = "Focus Pane Right"
+
+[cmd.pane.focus_up]
+description = "Move the focus to the pane above."
+title = "Focus Pane Above"
+
+[cmd.pane.focus_down]
+description = "Move the focus to the pane below."
+title = "Focus Pane Below"
+
+[cmd.pane.close]
+description = "Close the current pane. The document stays open (no prompt, even with unsaved changes). To close the document, use Close (buffer.close)."
+title = "Close Pane"
+
+[cmd.pane.grow]
+description = "Make the current pane a little larger, taking space from the next pane."
+title = "Enlarge Pane"
+
+[cmd.pane.shrink]
+description = "Make the current pane a little smaller, giving space to the next pane."
+title = "Shrink Pane"
+
+[cmd.pane.equalize]
+description = "Make all panes the same size."
+title = "Equalize Panes"
+
 [cmd.search.next]
 description = "Go to the next match."
 title = "Find Next"
@@ -441,6 +489,11 @@ preserve_off = "The original bytes of this document were not kept. Saving in the
 preserve_partial = "The original bytes of {count} lines could not be kept. Saving after an edit may change how escape sequences are written on these lines (the characters do not change)"
 redetected = "Re-detected the encoding as {encoding}"
 
+[info.pane]
+collapsed = "The terminal is too small, so only the focused pane is shown"
+no_room = "There is no room to split the pane. Enlarge the terminal or close another pane"
+single_pane = "There is only one pane"
+
 [info.paste]
 first_line_only = "Only the first line was pasted into the input field"
 as_bytes = "Pasted {count} invalid bytes as bytes"
@@ -520,6 +573,10 @@ history_trimmed = "Dropped old undo history to stay within the memory limit"
 [msg.cli.directory]
 hint = "Start with the path of a file"
 text = "{path} is a folder and cannot be opened. An untitled document was opened"
+
+[msg.cli.directory_ignored]
+hint = "Specify only one folder as the workspace"
+text = "{path} is a folder and was not opened. The workspace is {root}"
 
 [msg.clipboard.fallback]
 hint = "To copy and paste with other apps, use your terminal's selection and paste"
@@ -864,6 +921,10 @@ text = "The document changed after the recovery offer, so it was not applied"
 [msg.swap.remove_failed]
 hint = "Delete it by hand"
 text = "Could not delete the swap: {dir}"
+
+[msg.workspace.root_invalid]
+hint = "Specify a folder. {root} is used as the workspace for now"
+text = "Cannot use {path} as the workspace: {reason}"
 
 [msg.reload.missing]
 hint = "To keep the current content, recreate the file with Save ({key:file.save}), or use Save As ({key:file.save_as})"
@@ -1285,6 +1346,10 @@ short = "Changed"
 long = "[Long lines: no wrap]"
 short = "No wrap"
 
+[status.degraded.panes]
+long = "[Only pane {index}/{total} shown]"
+short = "{index}/{total}"
+
 [status.encoding]
 bom = "{encoding} BOM"
 
@@ -1316,6 +1381,7 @@ no_path = "The document has no path to save to"
 no_selection = "There is no selection"
 unavailable = "Not available in the current state"
 read_only = "The document is read-only"
+single_pane = "There is only one pane"
 
 [ui.palette]
 title = "Commands"
@@ -1407,6 +1473,7 @@ cursor = "Move"
 edit = "Edit"
 help = "Help"
 file = "File"
+pane = "Pane"
 search = "Search"
 select = "Select"
 ui = "View"

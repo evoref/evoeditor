@@ -5,9 +5,9 @@
 ~   編集: インデント                                          edit.indent  Tab
 ~   編集: 改行                                             edit.newline  Enter
 ~   編集: インデント解除                               edit.outdent  Shift+Tab
+~   ペイン: ペインを広げる         現在は実行できません: ペインが 1 つだけです
+~   ペイン: ペインの大きさを揃える
 ~   編集: 行を削除                                  edit.delete_line  Ctrl+K L
-~   編集: 文字を挿入                                          edit.insert_text
-~   編集: 行を上へ移動                              edit.move_line_up  Alt+↑
 memo.txt                                                     行 1, 桁 1 UTF-8 LF
 
 Esc 取消  Enter 決定

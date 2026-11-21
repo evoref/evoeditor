@@ -4,6 +4,7 @@
 use eve_view::{DocumentId, MessageLevel, ViewId};
 
 use crate::document::Document;
+use crate::editor::window::PaneRef;
 use crate::io::fs::Expect;
 use crate::io::fspath::FsPath;
 use crate::io::io_jobs::OpenOptions;
@@ -27,13 +28,23 @@ pub(crate) enum OpenKind {
     Reload,
 }
 
+/// `file.open` の読込を始めた時点のフォーカスのペインと、そこに出ていた文書 (切り替え元。03 §9.8、§9.9 の PANE-8 (b))。
+/// 読込の完了・先行表示での切り替えと、失敗・取消しで開く前の文書へ戻すのは、このペインだけで行う。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct OpenFrom {
+    /// 開いた時点のフォーカスのペイン。
+    pub pane: PaneRef,
+    /// そのペインに出ていた文書。
+    pub doc: DocumentId,
+}
+
 /// 開くときの確認 (`ui.confirm.open.*`、03 §9.2) に答えるための材料。読込中の文書 (Loading) は確認の間も残す。
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct OpenAsk {
     pub doc: DocumentId,
     pub view: ViewId,
     pub path: FsPath,
-    pub replace: Option<DocumentId>,
+    pub replace: Option<OpenFrom>,
     pub opts: OpenOptions,
     pub ask: ConfirmAsk,
     /// 用途 (開き直し・再読込は同じ文書の中身を差し替える)。
@@ -225,7 +236,7 @@ impl EditorState {
         doc_id: DocumentId,
         view: ViewId,
         path: FsPath,
-        replace: Option<DocumentId>,
+        replace: Option<OpenFrom>,
         opts: OpenOptions,
         kind: OpenKind,
         r: JobResult,
@@ -353,6 +364,11 @@ impl EditorState {
                 });
             }
             JobResult::Failed { err, .. } => {
+                // 起動時のパスがディレクトリだった: 知らせはルートの検出の結果まで保留する (03 §12.7.1)
+                if self.hold_startup_dir(doc_id, &path, &err) {
+                    self.drop_failed_open(doc_id, replace);
+                    return;
+                }
                 let reason = reason_label(&err);
                 let (level, key) = open_failure(&err);
                 self.open_failed(doc_id, replace, level, key, &path, &reason);
@@ -527,7 +543,7 @@ impl EditorState {
         &mut self,
         doc: DocumentId,
         view: ViewId,
-        replace: Option<DocumentId>,
+        replace: Option<OpenFrom>,
     ) {
         // 読込の間に別の文書へ切り替えていなければ、新しいバッファへ切り替える (03 §9.8)。何も入力していない無題の
         // バッファは、開いたファイルで置き換える (何も失わない。起動直後の Ctrl+O で空のバッファが残らない)。先行表示で
@@ -543,7 +559,7 @@ impl EditorState {
     pub(crate) fn open_failed(
         &mut self,
         doc: DocumentId,
-        replace: Option<DocumentId>,
+        replace: Option<OpenFrom>,
         level: MessageLevel,
         key: &str,
         path: &FsPath,
@@ -555,10 +571,11 @@ impl EditorState {
 
     /// 読込に失敗した文書を閉じる (メッセージは呼び側が出す)。表示中なら §9.8 の順で別の文書を表示する。標準入力の読込の
     /// 失敗 (パニック、03 §9.2.2) も同じ経路。
-    pub(crate) fn drop_failed_open(&mut self, doc: DocumentId, replace: Option<DocumentId>) {
+    pub(crate) fn drop_failed_open(&mut self, doc: DocumentId, replace: Option<OpenFrom>) {
         // 先頭も捨てる (03 §9.2.1 の「失敗・取消し・閉じる」。文書ごと閉じる)
         self.forget_partial_state(doc);
-        if self.active_document() == Some(doc) || self.focused_window().is_none() {
+        // どれかのペインが表示している (フォーカスの無いペインでも。03 §9.9 の PANE-8)
+        if !self.panes_showing(doc).is_empty() || self.focused_window().is_none() {
             self.io.open_jumps.remove(&doc);
             // オーバーレイ・検索バーの間は、表示を移さずに先頭だけを捨てて待つ (閉じた後に移す。03 §9.2.1 の「失敗・
             // 取消し・閉じる」。パレットで選んだコマンドが、開いたときと別の文書に効かないため)
@@ -574,19 +591,24 @@ impl EditorState {
     }
 
     /// 表示中の文書の読込に失敗 (起動時の文書、または読込中に切り替えて表示していた足したバッファ): 失敗した文書は閉じ、
-    /// 開く前の文書 (残っていれば)・ほかの文書・無題の文書の順で表示する (再試行できる、03 §9.2 の「失敗」・§9.8)。
-    /// 表示を移さずに閉じると、Window が消えた View を指したままになる (`fuzz_editor` で見つけた)。ほかの読込の切り替え元は
-    /// 書き換えない (戻した先を基準に表示を奪わない側に倒す、03 §9.8 の「切り替え元の書き換え」)。表示していなければ
-    /// 閉じるだけ (保留の間に利用者が表示を移したとき)。
-    pub(crate) fn leave_failed_open(&mut self, doc: DocumentId, replace: Option<DocumentId>) {
-        if self.focused_window().is_some() && self.active_document() != Some(doc) {
-            self.close_document(doc);
-            return;
-        }
-        let others = replace
+    /// 開いた時点のペイン (切り替え元の無い読込はフォーカスのペイン) には、開く前の文書 (残っていれば)・開いた順で最初の
+    /// 文書・無題の文書の順で表示する (再試行できる、03 §9.2 の「失敗」・§9.8)。戻すのはそのペインだけで、ほかに表示して
+    /// いるペインは閉じる文書と同じ規則 (PANE-9) で次の文書を出す (03 §9.9 の PANE-8 (b))。表示を移さずに閉じると、
+    /// ペインが消えた View を指したままになる (`fuzz_editor` で見つけた)。ほかの読込の切り替え元は書き換えない (戻した先を
+    /// 基準に表示を奪わない側に倒す、03 §9.8 の「切り替え元の書き換え」)。表示していなければ閉じるだけ (保留の間に利用者が
+    /// 表示を移したとき)。
+    pub(crate) fn leave_failed_open(&mut self, doc: DocumentId, replace: Option<OpenFrom>) {
+        let back = replace
+            .map(|r| r.doc)
             .filter(|r| *r != doc && self.docs.documents.contains_key(r))
             .or_else(|| self.docs.documents.keys().copied().find(|d| *d != doc));
-        match others {
+        if self.focused_window().is_some() {
+            let pane = replace.map(|r| r.pane).or_else(|| self.focused_pane());
+            self.close_shown_document(doc, pane.zip(back));
+            return;
+        }
+        // Window がまだ無い (起動時の文書の読込に失敗した)
+        match back {
             Some(next) => {
                 self.activate_document(next);
                 self.close_document(doc);

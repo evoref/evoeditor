@@ -301,11 +301,9 @@ impl EditorState {
                 d.read_only = detected;
                 // 本文・書式・理由を一括で差し替え、履歴は新しい根 (保存点 = 根)。開き直しは Undo できない (03 §8.8)
                 self.put_document(doc_id, d);
-                if let Some(v) = self.docs.views.get_mut(&view) {
-                    v.selection = eve_text::Selection::point(eve_text::ByteOff(0));
-                    v.scroll = Default::default();
-                    v.goal_dcol = None;
-                }
+                // 文書の全 View (全ペイン・ペインに属さない View) を先頭に戻す。開き直しを実行したペインの View だけを戻すと、
+                // ほかのペインの View が古い本文の位置を指したままになる (03 §9.9 の PANE-8 (e))
+                self.reset_views_of(doc_id);
                 self.mark_snapshot_update(doc_id);
                 self.mark_dirty_render();
                 if changed_during_load {

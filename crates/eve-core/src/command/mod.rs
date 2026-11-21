@@ -334,6 +334,20 @@ impl CommandRegistry {
             if spec.kind == CommandKind::File {
                 state.notify_loading_busy();
             }
+            // ペインが 1 つだけなので断ったペインのコマンド (`pane.split` が偽) は、キーで実行したときも理由を示す
+            // (03 §9.9 の PANE-5 (d)。パレットでは淡色にして `ui.palette.reason.single_pane` を出す)
+            if inv.source == InvocationSource::Keymap
+                && spec.when.vars().iter().any(|v| v == "pane.split")
+                && !state
+                    .context_value("pane.split")
+                    .is_some_and(|v| v.truthy())
+            {
+                state.show_message(
+                    eve_view::MessageLevel::Info,
+                    crate::ui_model::keys::INFO_PANE_SINGLE_PANE,
+                    &[],
+                );
+            }
             return CommandResult::Rejected(RejectReason::NotAvailable);
         }
         // Error のメッセージは、次の編集・ファイルのコマンド実行で消える (カーソル移動・オーバーレイ内の操作では消えない、04 §8.9)

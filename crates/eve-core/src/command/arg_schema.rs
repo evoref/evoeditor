@@ -58,6 +58,7 @@ const fn arg(name: &'static str, ty: ArgType, required: bool) -> ArgSpec {
 
 const COUNT: &[ArgSpec] = &[arg("count", ArgType::Int, false)];
 const PATH: &[ArgSpec] = &[arg("path", ArgType::Path, false)];
+const CELLS: &[ArgSpec] = &[arg("cells", ArgType::Int, false)];
 
 /// コマンド → 引数の形。ID の順。
 const TABLE: &[(&str, &[ArgSpec])] = &[
@@ -92,6 +93,8 @@ const TABLE: &[(&str, &[ArgSpec])] = &[
         ids::FILE_SET_LINE_ENDING,
         &[arg("eol", ArgType::Enum(LINE_ENDINGS), true)],
     ),
+    (ids::PANE_GROW, CELLS),
+    (ids::PANE_SHRINK, CELLS),
     (ids::SEARCH_OPEN, &[arg("query", ArgType::String, false)]),
     (ids::SELECT_EXTEND_DOWN, COUNT),
     (ids::SELECT_EXTEND_LEFT, COUNT),

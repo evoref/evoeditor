@@ -116,7 +116,15 @@ impl EditorState {
 
     /// 文書を閉じる。保存ジョブが実行中なら、その保存の結果が届くまで内容を緊急退避の対象に残す
     /// (結果が失敗なら退避先に書く。03 §9.2 の閉じる手順 (a))。
+    ///
+    /// 表示しているペインは、先に次の文書へ替える (03 §9.9 の PANE-9。ペインに優先して出す文書があるときは、呼び側が
+    /// `close_shown_document` で替える)。ペインが消えた View を指したままにならない。
     pub fn close_document(&mut self, doc: DocumentId) {
+        self.move_panes_off(doc, None);
+        debug_assert!(
+            self.panes_showing(doc).is_empty(),
+            "表示中の文書 {doc:?} のペインを替えられなかった"
+        );
         self.io.open_jumps.remove(&doc);
         // 先行表示の先頭は文書ごと捨てる (03 §9.2.1 の「失敗・取消し・閉じる」)
         self.forget_partial_state(doc);
@@ -184,8 +192,12 @@ impl EditorState {
             }
             return CommandResult::Done;
         }
-        // 読込が終わったとき、その間に別の文書へ切り替えていなければ新しいバッファへ切り替える
-        let replace = self.active_document();
+        // 読込が終わったとき、その間に開いた時点のペインを別の文書へ切り替えていなければ、そのペインを新しいバッファへ
+        // 切り替える (03 §9.9 の PANE-8 (b))
+        let replace = self
+            .focused_pane()
+            .zip(self.active_document())
+            .map(|(pane, doc)| crate::io::open::OpenFrom { pane, doc });
         let mut doc = Document::new_untitled();
         doc.path = Some(path.clone());
         doc.load_state = crate::document::LoadState::Loading;

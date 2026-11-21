@@ -227,6 +227,17 @@ pub enum JobResult {
         /// 比較の結果。
         outcome: crate::LastVersionOutcome,
     },
+    /// ワークスペースのルートの検出の結果 (`WorkspaceRoot`、03 §12.7.1)。
+    WorkspaceRoot {
+        /// 決めたルート (canonicalize して 05 §3.3 の表示用の形にしたもの。できなければ正規化しただけのパス)。
+        root: FsPath,
+        /// どの規則で決まったか (07 §12.1 の 1〜4)。
+        source: crate::RootSource,
+        /// ディレクトリだった位置引数 (ルートにしたものを含む。投入したときのパスのまま)。
+        dir_args: Vec<FsPath>,
+        /// `--workspace` を使えなかった理由 (ディレクトリでない・無い・読めない)。使えたか、渡されなければ `None`。
+        explicit_error: Option<FsError>,
+    },
     /// 単発の検索の結果。`found` は (一致, 文書の端を越えたか)。
     FindNextDone {
         /// 見つけた一致 (バイト範囲) と、文書の端を越えて折り返したか。見つからなければ `None`。

@@ -50,6 +50,8 @@ pub struct Applied {
     /// 発行 View に設定する Selection。通常の編集は `selection_after` (なければ `None` = 写像)、
     /// Undo は `selection_before`、Redo は `selection_after`。
     pub selection: Option<Selection>,
+    /// 発行 View。通常の編集は `tx.view`、Undo / Redo はノードを記録した Transaction の View (03 §7.6)。
+    pub view: Option<eve_view::ViewId>,
     /// 履歴への記録の結果 (Undo / Redo では `None`)。`pruned` が真なら通知を 1 回出す。
     pub record: Option<RecordOutcome>,
 }
@@ -541,6 +543,7 @@ impl Document {
             origin: tx.origin.clone(),
             is_undo: tx.is_undo,
             selection: tx.selection_after.clone(),
+            view: tx.view,
             record,
         }))
     }
@@ -558,14 +561,16 @@ impl Document {
         let Some(step) = self.history.undo_step() else {
             return Ok(None);
         };
-        Ok(Some(self.apply_step(
+        let mut a = self.apply_step(
             step.changes,
             step.origin,
             step.selection,
             step.format,
             &step.preserved,
             false,
-        )?))
+        )?;
+        a.view = step.view;
+        Ok(Some(a))
     }
 
     /// Redo。やり直すものがなければ `None`。
@@ -580,14 +585,16 @@ impl Document {
         let Some(step) = self.history.redo_step() else {
             return Ok(None);
         };
-        Ok(Some(self.apply_step(
+        let mut a = self.apply_step(
             step.changes,
             step.origin,
             step.selection,
             step.format,
             &step.preserved,
             true,
-        )?))
+        )?;
+        a.view = step.view;
+        Ok(Some(a))
     }
 
     /// Undo (`redo == false`) / Redo の適用。本文・書式と一緒に、保持方式の記録を戻す・外す (03 §8.7.1 の「Undo / Redo」)。
@@ -648,6 +655,7 @@ impl Document {
             origin,
             is_undo: true,
             selection,
+            view: None,
             record: None,
         })
     }

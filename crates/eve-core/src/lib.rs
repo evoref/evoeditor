@@ -90,3 +90,4 @@ pub use workspace::{
     WALK_ENTRIES_PER_DIR_MAX, WALK_ENTRIES_PER_STEP, WALK_STEP_TIME, WORKSPACE_MAX_DEPTH,
     WORKSPACE_MAX_ENTRIES, WORKSPACE_MAX_FILES, WalkObserver, WalkStep, WorkspaceWalk, char_bit,
 };
+pub use workspace::{RootSource, Workspace};

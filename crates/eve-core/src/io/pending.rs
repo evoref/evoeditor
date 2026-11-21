@@ -25,7 +25,8 @@ pub(crate) enum Pending {
         doc: DocumentId,
         view: ViewId,
         path: FsPath,
-        replace: Option<DocumentId>,
+        /// 切り替え元 (開いた時点のフォーカスのペインと、そこに出ていた文書。03 §9.9 の PANE-8 (b))。
+        replace: Option<crate::io::open::OpenFrom>,
         /// 投入したときの指定 (確認の回答で足して再投入する、03 §9.2)。
         opts: OpenOptions,
         /// 用途。`Reopen` / `Reload` は同じ文書・View の中身を差し替える。
@@ -67,6 +68,8 @@ pub(crate) enum Pending {
     RecoveryScan,
     /// 前回起動した版の記録 (FR-518)。
     LastVersion,
+    /// ワークスペースのルートの検出 (03 §12.7.1)。
+    WorkspaceRoot,
     /// スワップを書くジョブ (03 §10.2)。
     Swap { doc: DocumentId },
     /// スワップを消すジョブ。
@@ -157,6 +160,7 @@ impl EditorState {
                 | Pending::ThemeRead
                 | Pending::RecoveryScan
                 | Pending::LastVersion
+                | Pending::WorkspaceRoot
                 | Pending::WriteRecovery { .. }
                 | Pending::Swap { .. }
                 | Pending::SwapDiscard { .. }
@@ -258,6 +262,7 @@ impl EditorState {
             } => self.finish_replace_unmappable(ask, revision, retried, r),
             Pending::RecoveryScan => self.finish_recovery_scan(r),
             Pending::LastVersion => self.finish_last_version(r),
+            Pending::WorkspaceRoot => self.finish_workspace_root(r),
             Pending::ConfigReload => self.finish_config_reload(r),
             Pending::ThemeRead => self.finish_theme_read(r),
             Pending::Swap { doc } => self.finish_swap(doc, r),

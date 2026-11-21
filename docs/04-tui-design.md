@@ -1160,7 +1160,7 @@ v0.5 は結果を一覧のオーバーレイで出す (PO の決定 2026-11-20�
 
 ### 8.13 ワークスペースの文言の案 (v0.5 の M31)
 
-次のキーは **案** で、言語ファイル (`locales/ja.toml` / `en.toml`) と §15 の目録には、使う実装の PR (03 §12.7.9 の各段) で足す (目録は言語ファイルと一致を検査するので、先に足さない。09 §6.2 の `i18n`)。`{root}` / `{path}` は短縮したパス、`{matched}` / `{total}` / `{lines}` / `{files}` / `{hit_files}` / `{skipped}` / `{dirs}` / `{limit}` / `{line}` (1 始まりの行番号) は整数 (千の区切りを付けない、07 §17.3)。`{text}` は一致した行の抜粋 (§8.12)、`{toggles}` はトグルの記号の並び (§8.12)、`{reason}` は OS のエラーを分類した短い文言 (`ui.reason.*`、§15.2)。
+次のキーは **案** で、言語ファイル (`locales/ja.toml` / `en.toml`) と §15 の目録には、使う実装の PR (03 §12.7.9 の各段) で足す (目録は言語ファイルと一致を検査するので、先に足さない。09 §6.2 の `i18n`)。`{root}` / `{path}` は短縮したパス、`{matched}` / `{total}` / `{lines}` / `{files}` / `{hit_files}` / `{skipped}` / `{dirs}` / `{limit}` / `{line}` (1 始まりの行番号) は整数 (千の区切りを付けない、07 §17.3)。`{text}` は一致した行の抜粋 (§8.12)、`{toggles}` はトグルの記号の並び (§8.12)、`{reason}` は OS のエラーを分類した短い文言 (`ui.reason.*`、§15.2)。`msg.cli.directory_ignored` と `msg.workspace.root_invalid` は M31 の段 1 の PR で §15.2 の目録へ移した。
 
 | キー (案) | 出す場面 | ja (案) | en (案) |
 |---|---|---|---|
@@ -1183,9 +1183,7 @@ v0.5 は結果を一覧のオーバーレイで出す (PO の決定 2026-11-20�
 | `ui.workspace_search.skipped_suffix` | 件数の後ろに足す | ・飛ばした {skipped} | · {skipped} skipped |
 | `ui.workspace_search.no_match` | 0 件 | 一致はありません | No matches |
 | `msg.finder.not_found` | ファインダ・横断検索で選んだファイルが無い | {path} はもうありません / 一覧を開き直すと、今のファイルで探し直します | {path} no longer exists / Reopen the list to scan the current files |
-| `msg.workspace.root_invalid` | `--workspace` がフォルダでない・読めない | {path} をワークスペースにできません: {reason} / フォルダのパスを指定してください。今は {root} をワークスペースにしています | Cannot use {path} as the workspace: {reason} / Specify a folder. {root} is used as the workspace for now |
 | `msg.workspace.scan_failed` | ルートを読めない | ワークスペース {root} を読めません: {reason} / フォルダの権限を確認してください | Cannot read the workspace {root}: {reason} / Check the folder permissions |
-| `msg.cli.directory_ignored` | 起動の引数の 2 つ目以降のフォルダ、`--workspace` があるときのフォルダ (07 §18.2) | {path} はフォルダなので開けません。ワークスペースは {root} です / ワークスペースにするフォルダは 1 つだけ指定してください | {path} is a folder and was not opened. The workspace is {root} / Specify only one folder as the workspace |
 | `msg.save_as.open_in_other` | 名前を付けて保存の保存先が、ほかの開いている文書と同じファイル (03 §9.7 (a) の 1b) | {path} は別の文書として開いています / その文書に切り替えて保存するか、別の名前を指定してください | {path} is open in another buffer / Switch to that buffer to save, or choose another name |
 
 ---
@@ -1431,6 +1429,7 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 | ステータスバー | `status.read_only.long` / `.short` | [RO] / RO | 4、2 |
 | ステータスバー | `status.saving.long` / `.short` | [保存中] / 保存中 | 8、6 |
 | ステータスバー | `status.degraded.long_line.long` / `.short` | [長い行: 折り返しなし] / 折返なし | 22、8 |
+| ステータスバー (v0.5。ペインの縮退表示の間、§8.7、03 §9.9 の PANE-4 (b)) | `status.degraded.panes.long` / `.short` | [ペイン {index}/{total} だけ表示] / {index}/{total} | 22、3 (1 桁) |
 | ステータスバー (v0.3) | `status.external_change.long` / `.short` | [外部で変更] / 外部変更 | 12、8 |
 | ステータスバー | `status.eol_mixed` | 混在 | 4 |
 | ステータスバー | `status.encoding.bom` | {encoding} BOM | — |
@@ -1459,6 +1458,7 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 | パレット (実行できない理由) | `ui.palette.reason.no_changes` | 未保存の変更がありません | — |
 | パレット (実行できない理由) | `ui.palette.reason.no_selection` | 選択範囲がありません | — |
 | パレット (実行できない理由) | `ui.palette.reason.unavailable` | 今の状態では使えません | — |
+| パレット (実行できない理由。v0.5。`when` が `pane.split` のペインのコマンド、03 §9.9 の PANE-5 (d)) | `ui.palette.reason.single_pane` | ペインが 1 つだけです | — |
 | パレット (0 件。`List.no_match`) | `ui.palette.no_match` | 一致するコマンドはありません | — |
 | パレットの行のカテゴリ (CommandId の名前空間) | `ui.palette.category.app` | アプリ | — |
 | パレットの行のカテゴリ (CommandId の名前空間) | `ui.palette.category.buffer` | バッファ | — |
@@ -1467,6 +1467,7 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 | パレットの行のカテゴリ (CommandId の名前空間) | `ui.palette.category.cursor` | 移動 | — |
 | パレットの行のカテゴリ (CommandId の名前空間) | `ui.palette.category.edit` | 編集 | — |
 | パレットの行のカテゴリ (CommandId の名前空間) | `ui.palette.category.file` | ファイル | — |
+| パレットの行のカテゴリ (CommandId の名前空間。v0.5) | `ui.palette.category.pane` | ペイン | — |
 | パレットの行のカテゴリ (CommandId の名前空間) | `ui.palette.category.search` | 検索 | — |
 | パレットの行のカテゴリ (CommandId の名前空間) | `ui.palette.category.select` | 選択 | — |
 | パレットの行のカテゴリ (CommandId の名前空間) | `ui.palette.category.ui` | 画面 | — |
@@ -1812,6 +1813,9 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 | `info.mouse.enabled` | `ui.toggle_mouse` でマウスの取得を有効にした (04 §6.8) | マウスの操作を有効にしました |
 | `info.mouse.disabled` | 同上。無効にした (端末のネイティブ選択・スクロールが使える) | マウスの操作を無効にしました (端末の選択とスクロールが使えます) |
 | `info.goto_line.clamped` | 行へ移動で範囲外の番号を入れた (01 FR-306 AC-1) | 行 {line} はありません。最後の行 ({last}) へ移動しました |
+| `info.pane.no_room` (v0.5) | `pane.split_right` / `pane.split_down` で、分割した後の木の最小が編集面に入らないので分割しなかった (03 §9.9 の PANE-4 (a)) | ペインを分ける広さがありません。端末を広げるか、ほかのペインを閉じてください |
+| `info.pane.collapsed` (v0.5) | 編集面が木の最小より小さくなり、フォーカスのペインだけを出す縮退表示に入った (入ったときに 1 回。03 §9.9 の PANE-4 (b)。縮退表示の間はステータスバーに `status.degraded.panes.*`) | 端末が狭いので、フォーカスのペインだけを表示しています |
+| `info.pane.single_pane` (v0.5) | ペインが 1 つだけなので、`when` が `pane.split` のペインのコマンド (`pane.close`・移動・大きさ・揃える) をキーで実行して断った (03 §9.9 の PANE-5 (d)。「割り当てられていません」とは出さない。パレットでは淡色にして `ui.palette.reason.single_pane`) | ペインが 1 つだけです |
 | `msg.clipboard.fallback` | システムのクリップボードを使えず、内部レジスタに切り替えた (01 FR-205 AC-2。同じ起動の中では最初の 1 回だけ出す) | システムのクリップボードを使えないため、エディタ内のクリップボードを使いました: {reason} / 他のアプリとの間でコピー・貼り付けするには、端末の範囲選択と貼り付けを使ってください |
 | `info.eol.converted` | 改行コードを変換した (01 FR-113 AC-4、03 §8.4。`{eol}` は `LF` / `CRLF` / `CR` で翻訳しない) | {count} 個の改行を {eol} に変換しました (元に戻すで戻せます) |
 | `info.eol.unchanged` | 変換する改行が無かった (すべて `{eol}` か、改行が無い。新しく挿入する改行だけを `{eol}` にした) | 改行はすでに {eol} です |
@@ -1839,6 +1843,8 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 |---|---|---|
 | `info.cli.unsupported` | 後の版で使う予約のオプション・`+LINE` を渡した (07 §18.3) | {option} はこのバージョンでは使えないため無視しました |
 | `msg.cli.directory` | 位置引数にフォルダを渡した (07 §18.2。v0.1 は無題の文書を開く) | {path} はフォルダなので開けません。無題の文書を開きました / ファイルのパスを指定して起動してください |
+| `msg.cli.directory_ignored` | 起動の引数の 2 つ目以降のフォルダ、`--workspace` があるときのフォルダ (07 §18.2。v0.5 の M31 の段 1。ルートにしたフォルダには出さない、03 §12.7.1) | {path} はフォルダなので開けません。ワークスペースは {root} です / ワークスペースにするフォルダは 1 つだけ指定してください |
+| `msg.workspace.root_invalid` | `--workspace` がフォルダでない・無い・読めない (07 §18.3。v0.5 の M31 の段 1。ルートは 07 §12.1 の 2 以降で決める。`{reason}` はフォルダでなければ `not a directory`、03 §12.7.1) | {path} をワークスペースにできません: {reason} / フォルダのパスを指定してください。今は {root} をワークスペースにしています |
 | `msg.config.problem` | 設定の診断が 1 件 (07 §4.3)。行の分からない診断 (`--set`・言語ファイルの名前と言語の選択・ファイル全体の問題など。v0.4 の M26 から) は `{line}` を空にして 〔 〕 の部分を省く | 設定の問題 ({file}〔:{line}〕): {detail} / {hint} |
 | `msg.config.problems` | 設定の診断が 2 件以上 (v0.4 の M26 から、言語ファイルの診断を含む。「ほか N 件」は N 件と数える。hint は、80 桁のメッセージ行で本文 (要約) が切り詰められて消えないよう、ログのパスを外して短くした (対処は省略しない、§8.9。ログの場所は一覧と `--check-config` で分かる)) | 設定に {count} 件の問題があります。最初の 1 件: {detail} / 一覧は「設定の診断を表示」で見られます |
 
@@ -1940,7 +1946,7 @@ v0.2 以降の診断 (名前だけを予約し、文言はその版で言語フ�
 
 | MessageKey | 内容 | en | ja |
 |---|---|---|---|
-| `cli.help.usage` | 先頭の使い方 (v0.4 の M25 で標準入力の `-` (07 §18.2) を足した) | Usage: evoeditor [OPTIONS] [--] [FILE \| -]... | 使い方: evoeditor [オプション] [--] [ファイル \| -]... |
+| `cli.help.usage` | 先頭の使い方 (v0.4 の M25 で標準入力の `-` (07 §18.2) を足した。v0.5 の M31 の段 1 でフォルダ `DIR` (07 §18.2) を足した) | Usage: evoeditor [OPTIONS] [--] [FILE \| DIR \| -]... | 使い方: evoeditor [オプション] [--] [ファイル \| フォルダ \| -]... |
 | `cli.help.description` | 概要の 1 行 | A modeless text editor for the terminal. | 端末で動く、モードのないテキストエディタです。 |
 | `cli.help.options_title` | オプションの見出し | Options: | オプション: |
 | `cli.help.option.version` | `-V, --version` | Show the version and build information | 版とビルド情報を表示して終了します |
@@ -1951,6 +1957,7 @@ v0.2 以降の診断 (名前だけを予約し、文言はその版で言語フ�
 | `cli.help.option.config` (v0.2) | `-c, --config <file>` | Read this settings file instead of config.toml (repeatable; later files win) | config.toml の代わりにこの設定ファイルを読みます (複数指定可。後のものが優先) |
 | `cli.help.option.no_config` (v0.2) | `-N, --no-config` | Do not read config.toml, keymap.toml, theme files, or language files (use the defaults) | config.toml・keymap.toml・テーマファイル・言語ファイルを読みません (既定値で動きます) |
 | `cli.help.option.set` (v0.2) | `-s, --set <key>=<value>` | Override one setting (e.g. --set view.wrap=soft) | 設定を 1 項目上書きします (例: --set view.wrap=soft) |
+| `cli.help.option.workspace` (v0.5) | `-w, --workspace <dir>` (07 §18.3。v0.5 の M31 の段 1) | Use this folder as the workspace root (a DIR argument also sets it) | このフォルダをワークスペースのルートにします (位置引数のフォルダでも決まります) |
 | `cli.help.option.log_level` (v0.2) | `--log-level <level>` | Set the log level: error, warn, info, debug, or trace (overrides EVE_LOG) | ログの水準を指定します: error / warn / info / debug / trace (EVE_LOG より優先) |
 | `cli.help.option.crash_report` (v0.2) | `--crash-report` | Show the latest crash log and exit | 最新のクラッシュログを表示して終了します |
 | `cli.help.option.check_config` (v0.2) | `--check-config` | Check the settings, print the problems, and exit | 設定を確かめて問題を表示し、終了します |
