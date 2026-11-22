@@ -437,7 +437,13 @@ impl UndoHistory {
         if new_kind == EditKind::Mixed || new_kind != kind_of(&prev_hunks) {
             return false;
         }
-        // 各 Range が対応する (同じ数の変更のまとまり)
+        // 各 Range が対応する: 直前のノードと Range の数が同じで (03 §4.5.1 の MCUR-7)、変更のまとまりも同じ数
+        // (文書の順に対応させて調べる)
+        if let (Some(now), Some(prev_sel)) = (&tx.selection_before, &prev.selection_after)
+            && now.len() != prev_sel.len()
+        {
+            return false;
+        }
         if new_hunks.len() != prev_hunks.len() {
             return false;
         }
@@ -456,9 +462,14 @@ impl UndoHistory {
                 if !adjacent {
                     return false;
                 }
-                // R7 の長さの条件 (R6 (a) の改行 1 つには課さない)
+                // R7 の長さの条件 (R6 (a) の改行 1 つには課さない)。長さは Range ごと (対応する変更のまとまりごと) に見る
+                // (合計で見ると、カーソルが多いと数文字ごとに区切れる。03 §4.5.1 の MCUR-7)。挿入だけなので、
+                // まとまりの適用後の長さが挿入の長さ
                 newline
-                    || inserted_len(&prev.redo) + inserted_len(&tx.changes) <= MAX_COALESCED_INSERT
+                    || new_hunks
+                        .iter()
+                        .zip(&prev_hunks)
+                        .all(|((_, na), (_, pa))| na.len() + pa.len() <= MAX_COALESCED_INSERT)
             }
             // R8: Backspace の連打 (新しい削除の末尾 == 直前の削除の先頭) か Delete の連打 (先頭 == 直前の削除の先頭)
             EditKind::Delete => new_hunks

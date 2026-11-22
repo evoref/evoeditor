@@ -1085,7 +1085,7 @@ v0.1 は単一文書で、バッファ一覧を持たない (別のファイル�
 | 左 7 | 5 | 外部変更 (外部での変更の確認で「無視」を選んでから、保存・再読込・開き直しまで。03 §9.5 の「状態」。v0.3 の M18) | `[外部で変更]` | `外部変更` | `status.external_change.long` / `.short` |
 | 左 8 | 5 | チョード保留 (保留中だけ出る) | `Ctrl+K …` (`Capabilities.ascii_only` が真のときは `Ctrl+K ...` にする案、§3.7、提案、OQ-214) | — | — (キー表記) |
 | 右 1 | 2 | 選択情報 | `(12 文字選択)` | — (省略) | `status.selection` |
-| 右 1 (複数カーソルのとき、v0.5 の M32) | 4 | カーソルの数 (`StatusKind::Selection`。カーソルが 2 つ以上のとき、選択情報の代わりに出す。03 §4.5.5) | `カーソル 3 個` | `3 個` | `status.cursors.long` / `.short` (`{count}`) |
+| 右 1 (複数カーソルのとき、v0.5 の M32) | 4 | カーソルの数 (`StatusKind::Selection`。カーソルが 2 つ以上のとき、選択情報の代わりに出す。03 §4.5.5) | `カーソル 3 個` | `3カーソル` | `status.cursors.long` / `.short` (`{count}`) |
 | 右 2 | 4 | カーソル位置 | `行 6, 桁 22` | `6:22` | `status.position.long` / `.short` |
 | 右 3 | 3 | 文字コード / BOM | `UTF-8`, `UTF-8 BOM`, `Shift_JIS` | `SJIS` 等 | — (値は翻訳しない。BOM 付きは `status.encoding.bom`) |
 | 右 4 | 3 | 改行コード | `LF` / `CRLF` / `CR` / `混在` | — | `status.eol_mixed` (混在のときだけ) |
@@ -1461,6 +1461,7 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 | ステータスバー | `status.encoding.bom` | {encoding} BOM | — |
 | ステータスバー | `status.selection` | ({count} 文字選択) | 13 (2 桁) |
 | ステータスバー | `status.position.long` / `.short` | 行 {line}, 桁 {col} / {line}:{col} | — |
+| ステータスバー (v0.5。カーソルが 2 つ以上のとき、選択情報の代わり。§8.7、03 §4.5.5) | `status.cursors.long` / `.short` | カーソル {count} 個 / {count}カーソル | 13、9 (1 桁) |
 | 検索バー | `ui.search.label` | 検索: | 5 |
 | 検索バー (置換欄。`SearchBarModel.replace`) | `ui.search.replace_label` / `ui.search.replace_all_button` | 置換: / [A] すべて置換 | 5、14 |
 | 検索バー (件数の後ろの印。CP932 互換文字の同一視が効いているとき、v0.4 の M24 の (5)。03 §12.4.1) | `ui.search.count.compat_suffix` | 互換 | 4 |
@@ -1819,6 +1820,7 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 | `info.paste.escape_as_text` (v0.4) | 表記にする文書 (`pua_escape != DisabledCollision`) からコピーしたエスケープ文字を含む範囲を、バイトとして扱えない文書 (別の文字コードのバイトの文書・バイトでない文書・状態付きの文書・衝突の文書 (a)) に貼り、`<0xNN>` の文字列で入れた (03 §8.3.1。コピー元がバイトでない文書・状態付きで不正バイトのある文書でも出す。`{count}` は内部レジスタのエスケープ文字の数)。en: "{count} invalid bytes were pasted as <0xNN> text, because this document cannot hold them as bytes" | 不正なバイト {count} 個は、この文書ではバイトとして扱えないため <0xNN> の文字列として貼り付けました |
 | `info.paste.notation_as_text` (v0.4) | 貼り付けで届いた文字列が内部レジスタ (表記にする文書からの、エスケープ文字を含むコピー) と一致せず、届いた文字列に `<0x[0-9A-F]{2}>` の形があった (文字列のまま入れた。03 §8.3.1 の「不一致」)。en: "The clipboard differs from the copy made in the editor, so text like <0xNN> was pasted as plain text" | クリップボードの内容がエディタ内のコピーと違うため、<0xNN> の形の文字列は文字列のまま貼り付けました |
 | `info.paste.pua_as_text` (v0.4) | 外から入る `U+10FF00..U+10FFFF` (貼り付け・`edit.insert_text` (文字の入力を含む)・置換の文字列の文字どおりの部分) を `<U+10FFNN>` の文字列にした (挿入先が衝突の文書でないとき。衝突の文書 (b) からのコピーは、衝突の文書 (a) へも。03 §8.3.1 の経路 (2)。`{count}` は置き換えた数で、すべて置換では置換した件数の分を合わせた数。すべて置換では `info.search.replaced` の後に出す)。en: "{count} private-use characters (U+10FF00 to U+10FFFF) cannot be inserted as is, so they were inserted as <U+XXXX> text" | 私用文字 (U+10FF00〜U+10FFFF) {count} 個は、そのままでは入れられないため <U+XXXX> の文字列にしました |
+| `info.paste.multi_too_large` (v0.5) | 複数カーソルへの貼り付けで、入れる合計のバイト数 (各カーソルに入れる片の長さの和。全文を各カーソルへ入れるときは全文の長さ × カーソルの数) が 64 MiB を超えた (何も入れない。03 §4.5.3 の MCUR-10)。en: "Too much text to paste at every cursor; nothing was pasted" | カーソルの数が多く、貼り付ける量が大きすぎるため貼り付けませんでした |
 | `info.paste.search_notation` (v0.4) | 検索欄に、内部レジスタ由来の `<0xNN>` を貼った (届いた文字列が内部レジスタと一致し、内部レジスタが表記にするコピーでエスケープ文字を含む。欄には文字列のまま入る。03 §8.3.1 の「入力欄」。文言が検索の説明なので、置換欄・プロンプト・パレットの欄では出さない)。言語ファイルでは `{` を `{{` と、`\` を `\\` と書く (07 §17.2)。en: "Text like <0xNN> does not match invalid bytes. Search with the regular expression \x{10FFNN}" | <0xNN> の文字列は不正なバイトに一致しません。正規表現の \x{10FFNN} で探せます |
 
 **編集・操作** (01 FR-116 / FR-306 / FR-205)

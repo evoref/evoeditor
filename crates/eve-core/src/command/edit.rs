@@ -2,6 +2,8 @@
 //!
 //! どのコマンドも Selection の各 Range に同じ規則を適用して 1 つの `ChangeSet` に合成し、1 つの Transaction として
 //! 適用する (03 §4.5)。変更が無いと分かれば Transaction を作らない (Revision も履歴も変わらない)。
+//!
+//! spec: 03 §4.5, 03 §4.5.2, 03 §4.5.3, 03 §15.3
 
 use eve_text::{
     Bias, ByteOff, ByteRange, ChangeSet, Edit, Range, Selection, TextRead, next_grapheme_boundary,
@@ -41,26 +43,22 @@ fn active(ctx: &CommandCtx<'_>) -> Option<(ViewId, DocumentId)> {
     Some((v, ctx.state.view(v)?.doc))
 }
 
-/// 重なる編集を切り詰める (03 §4.5 の 2): 先行する Range を優先し、後続は重なる部分を切り詰める。
-/// 切り詰めて何も残らない編集は捨てる。先行より前にさかのぼる編集 (順序が逆) は捨てる。
+/// 重なる編集を切り詰める (03 §4.5 の 2): 先行する Range を優先し、後続は先行の削除の範囲に入る部分を切り詰める
+/// (削除の始まりを、それまでの削除の末尾 `covered_end` まで後ろへずらす。挿入はずらした始まりに入る)。切り詰めて
+/// 何も残らない編集 (削除も挿入も空) は捨てる。結果の削除の範囲は昇順で重ならない (`from_sorted_edits` の前提)。
 fn trim_overlaps(plans: Vec<Option<Plan>>) -> Vec<Option<Plan>> {
     let mut covered_end = 0usize;
-    let mut prev_start = 0usize;
     plans
         .into_iter()
         .map(|p| {
             let mut p = p?;
-            if p.del.start.0 < prev_start {
-                return None;
-            }
             if p.del.start.0 < covered_end {
                 p.del = ByteRange::new(ByteOff(covered_end), ByteOff(p.del.end.0.max(covered_end)));
             }
             if p.del.is_empty() && p.ins.is_empty() {
                 return None;
             }
-            prev_start = p.del.start.0;
-            covered_end = covered_end.max(p.del.end.0);
+            covered_end = p.del.end.0;
             Some(p)
         })
         .collect()
@@ -71,13 +69,14 @@ fn edit_each(
     ctx: &mut CommandCtx<'_>,
     f: impl Fn(&Document, &Range) -> Option<Plan>,
 ) -> CommandResult {
-    edit_each_as(ctx, Origin::User, f)
+    edit_each_as(ctx, Origin::User, |d, _, r| f(d, r))
 }
 
+/// `edit_each` と同じだが、`f` は Range の番号 (文書の順、0 始まり) も受け取り、Transaction の `Origin` を指定する。
 fn edit_each_as(
     ctx: &mut CommandCtx<'_>,
     origin: Origin,
-    f: impl Fn(&Document, &Range) -> Option<Plan>,
+    f: impl Fn(&Document, usize, &Range) -> Option<Plan>,
 ) -> CommandResult {
     let Some((view_id, doc_id)) = active(ctx) else {
         return CommandResult::Rejected(RejectReason::NoTarget);
@@ -86,7 +85,13 @@ fn edit_each_as(
         return CommandResult::Rejected(RejectReason::NoTarget);
     };
     let before = view.selection.clone();
-    let plans = trim_overlaps(before.iter().map(|r| f(doc, r)).collect());
+    let plans = trim_overlaps(
+        before
+            .iter()
+            .enumerate()
+            .map(|(i, r)| f(doc, i, r))
+            .collect(),
+    );
     if plans.iter().all(Option::is_none) {
         return CommandResult::Done;
     }
@@ -99,6 +104,8 @@ fn edit_each_as(
         })
         .collect();
     let Ok(cs) = ChangeSet::from_sorted_edits(&doc.snapshot(), edits) else {
+        // 切り詰めた後の重なりはハンドラの誤り (03 §4.5 の 2)。リリースでは何もせずに終える
+        debug_assert!(false, "切り詰めた後の編集が重なる");
         return CommandResult::Rejected(RejectReason::InvalidArgs);
     };
     // 適用後の Selection: 挿入の直後に置くものは数値で、それ以外は写像で求める
@@ -122,7 +129,10 @@ fn edit_each_as(
             None => ranges.push(r.map(&cs, Bias::Before)),
         }
     }
-    let Some(after) = Selection::new(ranges, before.primary_index()) else {
+    // 重なった・同じ位置になった Range を併合してから記録する (Undo / Redo で戻す選択も INV-S1〜S3 を満たす)
+    let Some(after) =
+        Selection::new(ranges, before.primary_index()).map(|s| s.merged(cs.len_after()))
+    else {
         return CommandResult::Rejected(RejectReason::InvalidArgs);
     };
     let tx = Transaction::new(cs, origin, ctx.state.now())
@@ -136,7 +146,8 @@ fn edit_each_as(
 
 // ---------- クリップボード (03 §15.3) ----------
 
-/// `clipboard.cut`: 選択をクリップボードへ入れてから削除する。選択が空なら何もしない。
+/// `clipboard.cut`: 選択をクリップボードへ入れてから削除する。空でない Range が無ければ何もしない。空でない Range を
+/// 全部消し (1 つの Transaction)、空のカーソルはそのまま写す (03 §4.5.3 の MCUR-9)。
 fn clipboard_cut(ctx: &mut CommandCtx<'_>) -> CommandResult {
     if !ctx.state.copy_selection() {
         return CommandResult::Done;
@@ -144,7 +155,7 @@ fn clipboard_cut(ctx: &mut CommandCtx<'_>) -> CommandResult {
     edit_each_as(
         ctx,
         Origin::Command(eve_view::CommandId::new(ids::CLIPBOARD_CUT)),
-        |_, r| {
+        |_, _, r| {
             (!r.is_empty()).then(|| Plan {
                 del: ByteRange::new(r.start(), r.end()),
                 ins: String::new(),
@@ -307,31 +318,69 @@ pub fn normalize_eol(text: &str, eol: eve_text::LineEnding) -> String {
 /// `editor.paste_normalize_eol` (07 §5.13。公開は後の版で、今は常に正規化する)。
 const PASTE_NORMALIZE_EOL: bool = true;
 
+/// 複数カーソルへの貼り付けで入れる合計のバイト数の上限 (03 §4.5.3 の MCUR-10。定数)。超えたら何もせずに知らせる。
+pub const MULTI_PASTE_MAX_BYTES: usize = 64 * 1024 * 1024;
+
 /// 貼り付けの本文を挿入する (挿入の入口 (1)、03 §8.3.1: `edit.paste` の応答 `InputEvent::ClipboardContent` と、端末からの
 /// 貼り付け `InputEvent::Paste`)。`text` は届いた文字列 (読めなかったときは `None` で、内部レジスタを使う)。
 /// 届いた文字列を内部レジスタと照合し、改行を文書の `default_eol` に正規化し (§8.4)、エスケープ文字・私用文字の
 /// 規則をかけてから入れる (`insert_rule::resolve_paste`)。自動インデントは適用しない。本文の制御文字はコマンドとして
 /// 解釈せず文字として入れる。Origin は `Paste` (1 操作 = 1 Undo)。
+///
+/// Range が 2 つ以上なら、内部レジスタの片 → 行 → 全文の 3 段で分ける (03 §4.5.3 の MCUR-10、
+/// `insert_rule::resolve_multi_paste`)。入れる合計が `MULTI_PASTE_MAX_BYTES` を超えるなら何もせずに知らせる。
 pub(crate) fn paste_text(
     state: &mut crate::editor::state::EditorState,
     text: Option<&str>,
 ) -> CommandResult {
     let args = crate::command::Args::new();
     let mut ctx = CommandCtx { state, args: &args };
-    let Some((_, doc_id)) = active(&ctx) else {
+    let Some((view_id, doc_id)) = active(&ctx) else {
         return CommandResult::Rejected(RejectReason::NoTarget);
     };
-    let Some(doc) = ctx.state.document(doc_id) else {
+    let (Some(doc), Some(view)) = (ctx.state.document(doc_id), ctx.state.view(view_id)) else {
         return CommandResult::Rejected(RejectReason::NoTarget);
     };
     let target = EscapeContext::of(&doc.format);
     let eol = doc.format.default_eol;
+    let ranges = view.selection.len();
     let register = ctx.state.clipboard_register();
+    if ranges >= 2 {
+        let Some(plan) = insert_rule::resolve_multi_paste(
+            text,
+            register,
+            target,
+            eol,
+            PASTE_NORMALIZE_EOL,
+            ranges,
+        ) else {
+            return CommandResult::Done;
+        };
+        if plan.total_bytes(ranges) > MULTI_PASTE_MAX_BYTES {
+            ctx.state.show_message(
+                eve_view::MessageLevel::Info,
+                keys::INFO_PASTE_MULTI_TOO_LARGE,
+                &[],
+            );
+            return CommandResult::Done;
+        }
+        let r = edit_each_as(&mut ctx, Origin::Paste, |_, i, r| {
+            Some(Plan {
+                del: ByteRange::new(r.start(), r.end()),
+                ins: plan.text_for(i).to_owned(),
+                cursor: CursorRule::AfterInsert,
+            })
+        });
+        if matches!(r, CommandResult::Done) {
+            show_notices(ctx.state, &plan.notices);
+        }
+        return r;
+    }
     let Some(plan) = insert_rule::resolve_paste(text, register, target, eol, PASTE_NORMALIZE_EOL)
     else {
         return CommandResult::Done;
     };
-    let r = edit_each_as(&mut ctx, Origin::Paste, |_, r| {
+    let r = edit_each_as(&mut ctx, Origin::Paste, |_, _, r| {
         Some(Plan {
             del: ByteRange::new(r.start(), r.end()),
             ins: plan.text.clone(),

@@ -8,7 +8,7 @@ use std::borrow::Cow::Borrowed as B;
 
 use crate::catalog::Entry;
 
-/// `locales/en.toml` の文言 (902 件)。
+/// `locales/en.toml` の文言 (905 件)。
 #[rustfmt::skip]
 pub(crate) static EN: &[Entry] = &[
     (B("cmd.app.quit.description"), B("Quit the editor.")),
@@ -272,6 +272,7 @@ pub(crate) static EN: &[Entry] = &[
     (B("info.paste.as_bytes"), B("Pasted {count} invalid bytes as bytes")),
     (B("info.paste.escape_as_text"), B("{count} invalid bytes were pasted as <0xNN> text, because this document cannot hold them as bytes")),
     (B("info.paste.first_line_only"), B("Only the first line was pasted into the input field")),
+    (B("info.paste.multi_too_large"), B("Too much text to paste at every cursor; nothing was pasted")),
     (B("info.paste.notation_as_text"), B("The clipboard differs from the copy made in the editor, so text like <0xNN> was pasted as plain text")),
     (B("info.paste.pua_as_text"), B("{count} private-use characters (U+10FF00 to U+10FFFF) cannot be inserted as is, so they were inserted as <U+XXXX> text")),
     (B("info.paste.search_notation"), B("Text like <0xNN> does not match invalid bytes. Search with the regular expression \\x{{10FFNN}}")),
@@ -570,6 +571,8 @@ pub(crate) static EN: &[Entry] = &[
     (B("msg.workspace.root_invalid.text"), B("Cannot use {path} as the workspace: {reason}")),
     (B("msg.workspace.scan_failed.hint"), B("Check the folder permissions")),
     (B("msg.workspace.scan_failed.text"), B("Cannot read the workspace {root}: {reason}")),
+    (B("status.cursors.long"), B("{count} cursors")),
+    (B("status.cursors.short"), B("{count} cur")),
     (B("status.degraded.long_line.long"), B("[Long lines: no wrap]")),
     (B("status.degraded.long_line.short"), B("No wrap")),
     (B("status.degraded.panes.long"), B("[Only pane {index}/{total} shown]")),
@@ -915,7 +918,7 @@ pub(crate) static EN: &[Entry] = &[
     (B("ui.too_small"), B("The terminal is too small (at least {cols}x{rows} is needed)")),
 ];
 
-/// `locales/ja.toml` の文言 (902 件)。
+/// `locales/ja.toml` の文言 (905 件)。
 #[rustfmt::skip]
 pub(crate) static JA: &[Entry] = &[
     (B("cmd.app.quit.description"), B("エディタを終了します。")),
@@ -1179,6 +1182,7 @@ pub(crate) static JA: &[Entry] = &[
     (B("info.paste.as_bytes"), B("不正なバイト {count} 個を、バイトのまま貼り付けました")),
     (B("info.paste.escape_as_text"), B("不正なバイト {count} 個は、この文書ではバイトとして扱えないため <0xNN> の文字列として貼り付けました")),
     (B("info.paste.first_line_only"), B("入力欄には最初の行だけを貼り付けました")),
+    (B("info.paste.multi_too_large"), B("カーソルの数が多く、貼り付ける量が大きすぎるため貼り付けませんでした")),
     (B("info.paste.notation_as_text"), B("クリップボードの内容がエディタ内のコピーと違うため、<0xNN> の形の文字列は文字列のまま貼り付けました")),
     (B("info.paste.pua_as_text"), B("私用文字 (U+10FF00〜U+10FFFF) {count} 個は、そのままでは入れられないため <U+XXXX> の文字列にしました")),
     (B("info.paste.search_notation"), B("<0xNN> の文字列は不正なバイトに一致しません。正規表現の \\x{{10FFNN}} で探せます")),
@@ -1477,6 +1481,8 @@ pub(crate) static JA: &[Entry] = &[
     (B("msg.workspace.root_invalid.text"), B("{path} をワークスペースにできません: {reason}")),
     (B("msg.workspace.scan_failed.hint"), B("フォルダの権限を確認してください")),
     (B("msg.workspace.scan_failed.text"), B("ワークスペース {root} を読めません: {reason}")),
+    (B("status.cursors.long"), B("カーソル {count} 個")),
+    (B("status.cursors.short"), B("{count}カーソル")),
     (B("status.degraded.long_line.long"), B("[長い行: 折り返しなし]")),
     (B("status.degraded.long_line.short"), B("折返なし")),
     (B("status.degraded.panes.long"), B("[ペイン {index}/{total} だけ表示]")),

@@ -503,6 +503,7 @@ single_pane = "ペインが 1 つだけです"
 first_line_only = "入力欄には最初の行だけを貼り付けました"
 as_bytes = "不正なバイト {count} 個を、バイトのまま貼り付けました"
 escape_as_text = "不正なバイト {count} 個は、この文書ではバイトとして扱えないため <0xNN> の文字列として貼り付けました"
+multi_too_large = "カーソルの数が多く、貼り付ける量が大きすぎるため貼り付けませんでした"
 notation_as_text = "クリップボードの内容がエディタ内のコピーと違うため、<0xNN> の形の文字列は文字列のまま貼り付けました"
 pua_as_text = "私用文字 (U+10FF00〜U+10FFFF) {count} 個は、そのままでは入れられないため <U+XXXX> の文字列にしました"
 search_notation = "<0xNN> の文字列は不正なバイトに一致しません。正規表現の \\x{{10FFNN}} で探せます"
@@ -1346,6 +1347,10 @@ user_requested = "読み取り専用で開く指定 (`--readonly`)"
 untitled = "無題-{n}"
 eol_mixed = "混在"
 selection = "({count} 文字選択)"
+
+[status.cursors]
+long = "カーソル {count} 個"
+short = "{count}カーソル"
 
 [status.loading]
 long = "[読込中 {percent}%]"

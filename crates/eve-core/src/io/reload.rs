@@ -202,10 +202,21 @@ impl EditorState {
             Op::Insert(InsertText::Rope(text.snapshot())),
         ]);
         // カーソルは同じ行:桁 (書記素) を目安にし (行・桁が足りなければ最後の行・行末に丸める)、Undo では元の Selection に戻す
+        // 複数カーソルは各 Range の head に同じ写像を当てた空のカーソルにし (選択は解く。Range が 1 つのときと同じ)、
+        // 正規化で併合する (03 §4.5.2 の「写像して保つ」)
         let before_sel = self.docs.views.get(&view).map(|v| v.selection.clone());
-        let head = before_sel.as_ref().map_or(0, |s| s.primary().head.0);
-        let after_sel =
-            Selection::point(same_line_col(old.text(), &text, ByteOff(head))).normalized(&text);
+        let map = |p: ByteOff| same_line_col(old.text(), &text, p);
+        let after_sel = before_sel
+            .as_ref()
+            .and_then(|s| {
+                let ranges = s
+                    .iter()
+                    .map(|r| eve_text::Range::point(map(r.head)))
+                    .collect();
+                Selection::new(ranges, s.primary_index())
+            })
+            .unwrap_or_else(|| Selection::point(map(ByteOff(0))))
+            .normalized(&text);
         let tx = Transaction::new(cs, Origin::Reload, self.now)
             .with_selections(before_sel, Some(after_sel))
             .with_view(view)
