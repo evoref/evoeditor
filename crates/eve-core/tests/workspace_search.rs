@@ -865,6 +865,26 @@ fn 別の書き方のパスで開いている文書へは識別で突き合わ�
 
 // verifies: AC-FR-405-1
 #[test]
+fn 再読込の間の文書へは再読込の完了で移る() {
+    let mut h = repo(&[("/w/proj/a.txt", b"one\ntwo hit\n")]);
+    h.cmd_with("file.open", Args::new().with_str("path", "/w/proj/a.txt"));
+    h.run_jobs();
+    search(&mut h, "hit");
+    h.keys("esc");
+    // 再読込を始めて (ジョブは走らせない)、その間に結果を選ぶ
+    h.fs.set_file(&FsPath::from("/w/proj/a.txt"), b"zero\none\ntwo hit\n");
+    h.cmd("file.reload");
+    assert_eq!(h.pending_jobs(), 1, "再読込のジョブ");
+    h.keys("ctrl+shift+f enter");
+    assert_eq!(h.pending_jobs(), 1, "再読込の間の文書を開き直さない");
+    h.run_jobs();
+    assert_eq!(h.doc_text(), "zero\none\ntwo hit\n", "再読込した");
+    // 結果は再読込の前の位置 (2 行目の 4..7)。今の本文の 2 行目 (one) は短いので、丸めてカーソルだけを置く
+    assert_eq!(sel(&h), (8, 8), "再読込の完了で移る");
+}
+
+// verifies: AC-FR-405-1
+#[test]
 fn 別の書き方のパスで読込中の今の文書へは読込の完了で移る() {
     // 起動時の文書をリンクのパスで開く (canonical は /w/proj/a.txt)。ルートは目印の無い /w (カレントディレクトリ)
     let mut h = Harness::builder()
@@ -1331,12 +1351,13 @@ fn 一区切りは_8_ms_で譲り_走査も残りの時間で区切る() {
 
 // verifies: AC-FR-405-3
 #[test]
-fn 復号や照合の途中で取り消すとその区切りの結果を送らずに終える() {
+fn 区切りの途中の取消しでは_その区切りの結果を送らない() {
     let (fs, clock) = fs();
     fs.add_file("/r/a.txt", b"hit\n");
     fs.add_file("/r/b.txt", b"hit\n");
     let cancel = CancelToken::new();
-    // b.txt を読み終えた時点で取り消す: 復号 (チャンクごとに見る) か照合の前で止まり、b.txt の結果を作らない
+    // b.txt を読み終えた時点で取り消す: 同じ区切りで先に探した a.txt の結果も送らずに、取消しで終える (復号の中の取消しは
+    // io_jobs.rs の単体試験で確かめる)
     let hook = Arc::new(HookFs {
         inner: fs,
         clock: clock.clone(),

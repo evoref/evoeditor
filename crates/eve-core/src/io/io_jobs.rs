@@ -1655,6 +1655,24 @@ mod tests {
     use super::*;
     use crate::jobs::SaveStrategy;
 
+    #[test]
+    fn 横断検索の復号は取り消されたら_cancelled_を返す() {
+        let chunks = vec![b"hit\n".to_vec()];
+        let cancel = CancelToken::new();
+        assert!(matches!(
+            decode_for_search(&chunks, &cancel),
+            SearchDecoded::Text(_)
+        ));
+        cancel.cancel();
+        assert!(
+            matches!(
+                decode_for_search(&chunks, &cancel),
+                SearchDecoded::Cancelled
+            ),
+            "チャンクごとに取消しを見る"
+        );
+    }
+
     /// 本番の書き込みの供給 (`SnapshotSource`) が返す内容の全部。
     fn written(text: &str, encoding: Encoding, bom: bool) -> Vec<u8> {
         let t = eve_text::Text::from(text);
