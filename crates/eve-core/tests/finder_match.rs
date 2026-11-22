@@ -42,6 +42,23 @@ fn 性質_a_ファイル名の中だけで一致する候補はディレクト�
     assert_eq!(top, ["src/main.rs", "ma/in/x.rs"]);
 }
 
+// verifies: AC-FR-125-1
+#[test]
+fn ディレクトリ名にも語がある候補はファイル名の中で当てて数える() {
+    let (top, _) = ranked(
+        &["lib/domain.rs", "m/a/i/n.rs", "src/main/java/Main.java"],
+        "main",
+    );
+    assert_eq!(top[0], "src/main/java/Main.java", "{top:?}");
+    let (top, _) = ranked(&["pkg/observer.go", "cmd/server/server.go"], "server");
+    assert_eq!(top, ["cmd/server/server.go", "pkg/observer.go"]);
+    // 強調はファイル名の中の窓 (書記素 14〜17 の `Main`)
+    let chunks = chunks_of(&["src/main/java/Main.java"], 1);
+    let m = finder_match(&chunks, "main", 10, &CancelToken::new()).expect("一致");
+    assert_eq!(m.top[0].ranges.len(), 1);
+    assert_eq!(m.top[0].ranges.first(), Some(&(14..18)));
+}
+
 #[test]
 fn 性質_b_連続した一致は飛び飛びの一致より上() {
     let (top, _) = ranked(&["xaxbxc.rs", "xabc.rs"], "abc");

@@ -23,7 +23,7 @@ use super::{
 };
 use crate::command::{CommandCtx, CommandKind, CommandRegistry, CommandResult, Permission, ids};
 use crate::editor::state::EditorState;
-use crate::io::error_keys::fs_reason;
+use crate::io::error_keys::{fs_reason, reason_label};
 use crate::io::io_jobs::OpenOptions;
 use crate::io::pending::Pending;
 use crate::jobs::{JobError, JobKind, JobResult};
@@ -69,6 +69,9 @@ pub(crate) struct FinderList {
     unreadable: u64,
     /// 一覧を作る走査が終わった (一覧がある)。
     complete: bool,
+    /// 一覧を作った (最初の) 走査が失敗した (ルートを読めない・パニック)。一覧が欠けているので、件数の欄を完了に見せない
+    /// (`ui.finder.footer_incomplete`、03 §12.7.4 の段 6 の細目 (12))。
+    failed: bool,
     /// 走っている走査。
     scan: Option<ScanRun>,
     /// 次の走査の世代。
@@ -142,6 +145,8 @@ pub(crate) struct FinderOverlay {
     rematch_due: bool,
     /// 照合を待つ間に `Enter` を押した: 結果が届いたら、その先頭 (選択) を開く。
     confirm_waiting: bool,
+    /// 入力欄が変わった: 次に届いた結果で先頭を選ぶ (選択を保つのは同じ検索語の照合し直しだけ、03 §12.7.4)。
+    reset_selection: bool,
 }
 
 /// 選択中の行 selected が入る表示の窓の先頭の行。
@@ -232,7 +237,9 @@ impl EditorState {
         }
         let generation = list.next_scan_generation;
         list.next_scan_generation += 1;
-        let fresh = !list.complete && list.chunks.is_empty();
+        // 一覧が空 (最初・手放した後・前の走査が候補を出さずに失敗した) なら、届いた束をそのまま足す (03 §12.7.4 の段 6 の
+        // 細目 (6))
+        let fresh = list.chunks.is_empty();
         let exclude = Arc::new(ExcludeConfig {
             exclude: DEFAULT_WORKSPACE_EXCLUDE.map(str::to_owned).to_vec(),
             ..ExcludeConfig::new()
@@ -291,13 +298,22 @@ impl EditorState {
             }
             JobResult::Failed { err } if current => {
                 let scan = self.workspace.finder.scan.take();
+                let cancelled = matches!(err, JobError::Cancelled);
                 if let Some(s) = scan {
                     self.release_chunks(s.chunks);
-                    if s.fresh {
+                    // 最初の走査の失敗: 一覧は欠けている (件数の欄を完了に見せない)。走査し直しの失敗は前の一覧のまま
+                    if s.fresh && !cancelled {
                         self.workspace.finder.complete = true;
+                        self.workspace.finder.failed = true;
                     }
                 }
-                if let JobError::Fs(e) = &err {
+                // ルートを読めない・走査のジョブのパニック (03 §12.7.4 の段 6 の細目 (12))
+                let reason = match &err {
+                    JobError::Fs(e) => Some(fs_reason(e)),
+                    JobError::Cancelled => None,
+                    other => Some(reason_label(other)),
+                };
+                if let Some(reason) = reason {
                     let root = self
                         .workspace()
                         .map(|w| w.root().display())
@@ -305,7 +321,7 @@ impl EditorState {
                     self.show_message(
                         MessageLevel::Error,
                         keys::MSG_WORKSPACE_SCAN_FAILED,
-                        &[("root", &root), ("reason", &fs_reason(e))],
+                        &[("root", &root), ("reason", &reason)],
                     );
                 }
                 self.mark_dirty_render();
@@ -351,6 +367,7 @@ impl EditorState {
         list.truncated = truncated;
         list.unreadable = scan.unreadable;
         list.complete = true;
+        list.failed = false;
         if scan.fresh {
             debug_assert_eq!(
                 list.total, total,
@@ -443,9 +460,10 @@ impl EditorState {
         let current =
             matches!(&self.ui.overlay, Some(Overlay::Finder(f)) if f.generation == generation);
         let JobResult::FinderMatched { matched, top, .. } = r else {
-            // 取り消した・失敗した照合: 写しの塊を手放すだけ
+            // 取り消した・失敗した照合: 写しの塊を手放す。今の世代の失敗なら `Enter` の待ちも解く (03 §12.7.4 の段 6 の細目 (4))
             if current && let Some(Overlay::Finder(f)) = &mut self.ui.overlay {
                 f.match_job = None;
+                f.confirm_waiting = false;
             }
             self.release_chunks(chunks);
             return;
@@ -475,10 +493,14 @@ impl EditorState {
         let Some(Overlay::Finder(f)) = &mut self.ui.overlay else {
             return;
         };
-        let keep = f
-            .rows
-            .get(f.selected)
-            .map(|r| r.candidate().rel().to_owned());
+        // 選択を保つのは同じ検索語の照合し直しだけ。入力欄が変わった後の最初の結果では先頭を選ぶ
+        let keep = (!std::mem::take(&mut f.reset_selection))
+            .then(|| {
+                f.rows
+                    .get(f.selected)
+                    .map(|r| r.candidate().rel().to_owned())
+            })
+            .flatten();
         f.selected = keep
             .and_then(|rel| rows.iter().position(|r| r.candidate().rel() == rel))
             .unwrap_or(0);
@@ -499,6 +521,7 @@ impl EditorState {
     pub(crate) fn finder_edited(&mut self) {
         if let Some(Overlay::Finder(f)) = &mut self.ui.overlay {
             f.confirm_waiting = false;
+            f.reset_selection = true;
         }
         if self.workspace().is_some() {
             self.finder_rematch();
@@ -546,8 +569,11 @@ impl EditorState {
         let Some(Overlay::Finder(f)) = &mut self.ui.overlay else {
             return CommandResult::Rejected(crate::command::RejectReason::NotAvailable);
         };
-        if f.match_job.is_some() && f.shown_generation != Some(f.generation) {
-            f.confirm_waiting = true;
+        if f.shown_generation != Some(f.generation) {
+            // 行は前の検索語のもの: 照合が走っていれば結果を待って開き、走っていなければ (照合の失敗の後) 何もしない
+            if f.match_job.is_some() {
+                f.confirm_waiting = true;
+            }
             return CommandResult::Done;
         }
         let Some(row) = f.rows.get(f.selected) else {
@@ -621,6 +647,7 @@ impl EditorState {
         list.truncated = false;
         list.unreadable = 0;
         list.complete = false;
+        list.failed = false;
         list.closed_at = None;
         let mut all = chunks;
         if let Some(s) = scan {
@@ -703,6 +730,8 @@ impl EditorState {
             let counts = [("matched", matched.as_str()), ("total", total.as_str())];
             let mut s = if list.scanning() {
                 render(keys::UI_FINDER_FOOTER_SCANNING, &counts)
+            } else if list.failed {
+                render(keys::UI_FINDER_FOOTER_INCOMPLETE, &counts)
             } else if list.truncated {
                 let limit = WORKSPACE_MAX_FILES.to_string();
                 render(

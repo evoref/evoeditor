@@ -198,19 +198,19 @@ fn find_unit(hay: &[u8], from: usize, unit: &[u8]) -> Option<usize> {
     None
 }
 
-/// `hay[..end]` の中で `unit` が最後に始まる位置 (`unit` は `end` までに収まる)。
-fn rfind_unit(hay: &[u8], end: usize, unit: &[u8]) -> Option<usize> {
+/// `hay[from..end]` の中で `unit` が最後に始まる位置 (`unit` は `end` までに収まる)。
+fn rfind_unit(hay: &[u8], from: usize, end: usize, unit: &[u8]) -> Option<usize> {
     let last_start = end.checked_sub(unit.len())?;
-    (0..=last_start).rev().find(|&i| unit_at(hay, i, unit))
+    (from..=last_start).rev().find(|&i| unit_at(hay, i, unit))
 }
 
-/// 語 1 つを候補に当てる: 前から当てて終端を決め、後ろから当て直して最短の窓にし、窓の中を前から当てた各文字の位置を
-/// `pos` に入れる (先に `pos` を空にする)。当たらなければ `None`、当たれば窓の開始位置。
-fn match_word(lower: &[u8], w: &Word, pos: &mut Vec<usize>) -> Option<usize> {
+/// 語 1 つを候補の `from` から後ろに当てる: 前から当てて終端を決め、後ろから当て直して最短の窓にし、窓の中を前から当てた
+/// 各文字の位置を `pos` に入れる (先に `pos` を空にする)。当たらなければ `None`、当たれば窓の開始位置。
+fn match_word(lower: &[u8], w: &Word, from: usize, pos: &mut Vec<usize>) -> Option<usize> {
     pos.clear();
     let n = w.chars();
     // 1. 前から: 終端を決める
-    let mut at = 0;
+    let mut at = from;
     let mut end = 0;
     for k in 0..n {
         let u = w.unit(k);
@@ -221,7 +221,7 @@ fn match_word(lower: &[u8], w: &Word, pos: &mut Vec<usize>) -> Option<usize> {
     // 2. 後ろから: 最短の窓の開始を決める
     let mut limit = end;
     for k in (0..n).rev() {
-        limit = rfind_unit(lower, limit, w.unit(k))?;
+        limit = rfind_unit(lower, from, limit, w.unit(k))?;
     }
     let start = limit;
     // 3. 窓の中を前から当てる (採点と強調の位置)
@@ -282,9 +282,14 @@ fn score_candidate(
         score: 0,
     };
     for w in &q.words {
-        let start = match_word(lower, w, scratch)?;
+        // まずファイル名の中だけで当て、当たらなければ相対パス全体で当てる (ディレクトリ名にも同じ語がある候補を、ファイル名の
+        // 中の一致として数える。03 §12.7.4 の段 6 の細目 (1))
+        let in_name = match_word(lower, w, name_start, scratch).is_some();
+        if !in_name {
+            match_word(lower, w, 0, scratch)?;
+        }
         total.score = total.score.saturating_add(word_score(rel, w, scratch));
-        if start >= name_start {
+        if in_name {
             total.in_name += 1;
             let chars = i32::try_from(w.chars()).unwrap_or(i32::MAX);
             total.score = total
@@ -500,7 +505,7 @@ mod tests {
         let c = Candidate::new("axxxab");
         let q = FinderQuery::parse("ab");
         let mut pos = Vec::new();
-        assert_eq!(match_word(c.lower(), &q.words[0], &mut pos), Some(4));
+        assert_eq!(match_word(c.lower(), &q.words[0], 0, &mut pos), Some(4));
         assert_eq!(pos, [4, 5]);
     }
 

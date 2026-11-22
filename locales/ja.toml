@@ -1019,6 +1019,10 @@ text = "{path} に書き込む権限がありません"
 hint = "保存するときにも、ファイルが変わっていないかを照合します"
 text = "{path} の変更を確かめられませんでした: {reason}"
 
+[msg.finder.dangling_link]
+hint = "リンク先を確かめてください"
+text = "{path} はリンクで、リンク先 {target} がありません"
+
 [msg.finder.not_found]
 hint = "一覧を開き直すと、今のファイルで探し直します"
 text = "{path} はもうありません"
@@ -1427,6 +1431,7 @@ item_no_hint = "{level}: {text}"
 title = "ファイルを開く ({root})"
 placeholder = "ファイル名・パスで絞り込み"
 footer_waiting = "ワークスペースを調べています…"
+footer_incomplete = "{matched}/{total} (一覧が途中までです)"
 footer_scanning = "{matched}/{total} 走査中…"
 footer_truncated = "{matched}/{total} (ファイルが多いため {limit} 件で打ち切りました)"
 unreadable_suffix = "・読めないフォルダ {dirs}"

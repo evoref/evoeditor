@@ -8,7 +8,7 @@ use std::borrow::Cow::Borrowed as B;
 
 use crate::catalog::Entry;
 
-/// `locales/en.toml` の文言 (899 件)。
+/// `locales/en.toml` の文言 (902 件)。
 #[rustfmt::skip]
 pub(crate) static EN: &[Entry] = &[
     (B("cmd.app.quit.description"), B("Quit the editor.")),
@@ -424,6 +424,8 @@ pub(crate) static EN: &[Entry] = &[
     (B("msg.eol.convert_stale.text"), B("Line-ending conversion was cancelled because editing continued")),
     (B("msg.external.check_failed.hint"), B("The file is also checked for changes when you save")),
     (B("msg.external.check_failed.text"), B("Could not check {path} for changes: {reason}")),
+    (B("msg.finder.dangling_link.hint"), B("Check where the link points")),
+    (B("msg.finder.dangling_link.text"), B("{path} is a link, and its target {target} does not exist")),
     (B("msg.finder.not_found.hint"), B("Reopen the list to scan the current files")),
     (B("msg.finder.not_found.text"), B("{path} no longer exists")),
     (B("msg.io.stalled.hint"), B("Wait a while, or cancel with {key:ui.cancel}. Other file operations can continue meanwhile")),
@@ -797,6 +799,7 @@ pub(crate) static EN: &[Entry] = &[
     (B("ui.confirm.unsaved_reopen.message"), B("{path} has unsaved changes")),
     (B("ui.confirm.unsaved_reopen.save"), B("[S] Save, then reopen")),
     (B("ui.confirm.unsaved_reopen.title"), B("Unsaved changes")),
+    (B("ui.finder.footer_incomplete"), B("{matched}/{total} (list incomplete)")),
     (B("ui.finder.footer_scanning"), B("{matched}/{total} scanning…")),
     (B("ui.finder.footer_truncated"), B("{matched}/{total} (stopped at {limit} files)")),
     (B("ui.finder.footer_waiting"), B("Finding the workspace…")),
@@ -912,7 +915,7 @@ pub(crate) static EN: &[Entry] = &[
     (B("ui.too_small"), B("The terminal is too small (at least {cols}x{rows} is needed)")),
 ];
 
-/// `locales/ja.toml` の文言 (899 件)。
+/// `locales/ja.toml` の文言 (902 件)。
 #[rustfmt::skip]
 pub(crate) static JA: &[Entry] = &[
     (B("cmd.app.quit.description"), B("エディタを終了します。")),
@@ -1328,6 +1331,8 @@ pub(crate) static JA: &[Entry] = &[
     (B("msg.eol.convert_stale.text"), B("編集が続いたため、改行コードの変換を中止しました")),
     (B("msg.external.check_failed.hint"), B("保存するときにも、ファイルが変わっていないかを照合します")),
     (B("msg.external.check_failed.text"), B("{path} の変更を確かめられませんでした: {reason}")),
+    (B("msg.finder.dangling_link.hint"), B("リンク先を確かめてください")),
+    (B("msg.finder.dangling_link.text"), B("{path} はリンクで、リンク先 {target} がありません")),
     (B("msg.finder.not_found.hint"), B("一覧を開き直すと、今のファイルで探し直します")),
     (B("msg.finder.not_found.text"), B("{path} はもうありません")),
     (B("msg.io.stalled.hint"), B("しばらく待つか、{key:ui.cancel} で取り消してください。他のファイル操作はその間も続けられます")),
@@ -1701,6 +1706,7 @@ pub(crate) static JA: &[Entry] = &[
     (B("ui.confirm.unsaved_reopen.message"), B("{path} には保存されていない変更があります")),
     (B("ui.confirm.unsaved_reopen.save"), B("[S] 保存してから開き直す")),
     (B("ui.confirm.unsaved_reopen.title"), B("未保存の変更")),
+    (B("ui.finder.footer_incomplete"), B("{matched}/{total} (一覧が途中までです)")),
     (B("ui.finder.footer_scanning"), B("{matched}/{total} 走査中…")),
     (B("ui.finder.footer_truncated"), B("{matched}/{total} (ファイルが多いため {limit} 件で打ち切りました)")),
     (B("ui.finder.footer_waiting"), B("ワークスペースを調べています…")),

@@ -578,3 +578,30 @@ fn 複数ペイン_狭い幅では見出しの項目を省略する() {
     h.text("x");
     check("panes-narrow", &mut h);
 }
+
+/// ファインダ (04 §8.11): 長いルートの見出しと長い相対パスの行は、中間を `…` で詰める (`CutPolicy::Middle`)。一致した文字の
+/// 強調は、詰めた後も元の文字に付く (スタイルの層で確かめる)。
+#[test]
+fn ファインダの長いルートと長いパスは中間を詰める() {
+    let root = "/w/a-very-long-workspace-directory-name-for-the-finder-title/and-it-goes-on-and-on";
+    let file = format!(
+        "{root}/src/components/deeply/nested/directory/structure/for/testing/the/cut/main_component.rs"
+    );
+    let mut h = Harness::builder()
+        .size(80, 14)
+        .defer_start()
+        .dir(&format!("{root}/.git"))
+        .file(&file, b"\n")
+        .build();
+    h.editor
+        .open_initial_files(&[eve_core::InitialFile::path(&file)], false, None);
+    h.started();
+    h.run_jobs();
+    h.keys("ctrl+o");
+    h.text("main");
+    h.run_jobs();
+    // ルートの表示の区切りは OS で違う (Windows は `\`)。文字の層は `/` に揃えて比べる (幅は同じ)
+    let (text, styles) = screen(&mut h, DEFAULT_LOOK);
+    golden::check(&dir().join("finder-long.txt"), &text.replace('\\', "/"));
+    golden::check(&dir().join("finder-long.styles.txt"), &styles);
+}

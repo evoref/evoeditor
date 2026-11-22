@@ -261,28 +261,51 @@ fn 照合を待つ間の_enter_は結果が届いてから開く() {
 }
 
 #[test]
-fn 選択は照合し直しても同じパスに残る() {
+fn 同じ検索語の照合し直しでは選択を同じパスに保つ() {
+    let mut h = repo(&[("/w/proj/ab.txt", b"\n"), ("/w/proj/abc.txt", b"\n")]);
+    h.keys("ctrl+o");
+    h.run_jobs();
+    h.keys("esc");
+    // 開き直すと前の一覧を見せたまま走査する。走査の結果を渡す前に `ab` の照合を走らせて選ぶ
+    h.fs.add_file("/w/proj/aab.txt", b"\n");
+    h.keys("ctrl+o");
+    h.text("ab");
+    let scan = h.run_one_job_held();
+    assert!(h.run_one_job());
+    assert_eq!(rows(&h).0, ["ab.txt", "abc.txt"]);
+    h.keys("down");
+    assert_eq!(rows(&h).1, 1);
+    // 走査し直した一覧への差し替えの後の照合は同じ検索語: 選択していたパスが残っていれば保つ
+    h.deliver(scan);
+    h.run_jobs();
+    let (r, sel) = rows(&h);
+    assert_eq!(r.len(), 3, "{r:?}");
+    assert_eq!(r[sel], "abc.txt", "選択していたパスを保つ: {r:?}");
+}
+
+#[test]
+fn 入力を変えたら次の結果では先頭を選ぶ() {
     let mut h = repo(&[("/w/proj/ab.txt", b"\n"), ("/w/proj/abc.txt", b"\n")]);
     h.keys("ctrl+o");
     h.text("ab");
     h.run_jobs();
-    assert_eq!(rows(&h).0, ["ab.txt", "abc.txt"]);
     h.keys("down");
     assert_eq!(rows(&h).1, 1);
     h.text(".");
     h.run_jobs();
     let (r, sel) = rows(&h);
-    assert_eq!(
-        r[sel], "abc.txt",
-        "選択していたパスが残っていれば保つ: {r:?}"
+    assert!(
+        r.contains(&"abc.txt".to_owned()),
+        "前の選択も結果に残る: {r:?}"
     );
-    h.text("zzz");
+    assert_eq!(sel, 0, "入力を変えたら先頭: {r:?}");
+    // `Enter` で開くのは今の検索語の最上位
+    h.keys("enter");
     h.run_jobs();
-    h.keys("backspace");
-    h.keys("backspace");
-    h.keys("backspace");
-    h.run_jobs();
-    assert_eq!(rows(&h).1, 0, "消えたら先頭");
+    assert_eq!(
+        shown_path(&h).as_deref(),
+        Some(&*format!("/w/proj/{}", r[0]))
+    );
 }
 
 // ---- 走査の間 (AC-3) ----
@@ -477,4 +500,205 @@ fn 一致が無ければ_0_件の文言() {
     };
     let text: String = no_match.spans.iter().map(|s| s.text.as_str()).collect();
     assert_eq!(text, "一致するファイルはありません");
+}
+
+// ---- 照合の結果の並び (ファイル名の中で当てる) ----
+
+// verifies: AC-FR-125-1
+#[test]
+fn ディレクトリ名にも同じ語がある候補もファイル名の一致として上に並べる() {
+    let mut h = repo(&[
+        ("/w/proj/lib/domain.rs", b"\n"),
+        ("/w/proj/m/a/i/n.rs", b"\n"),
+        ("/w/proj/src/main/java/Main.java", b"\n"),
+    ]);
+    h.keys("ctrl+o");
+    h.text("main");
+    h.run_jobs();
+    let (r, _) = rows(&h);
+    assert_eq!(r[0], "src/main/java/Main.java", "{r:?}");
+    let (labels, marked, _) = list_model(&mut h);
+    assert_eq!(labels[0], "src/main/java/Main.java");
+    assert_eq!(marked[0], "Main", "強調はファイル名の中の窓");
+}
+
+// ---- 失敗 ----
+
+// verifies: AC-FR-125-3
+#[test]
+fn 最初の走査がルートを読めずに失敗したら知らせ_次の走査は途中の候補を出す() {
+    let mut h = repo(&[]);
+    h.fs.set_unreadable("/w/proj", true);
+    h.keys("ctrl+o");
+    h.run_jobs();
+    assert_eq!(
+        count(&h, "msg.workspace.scan_failed"),
+        1,
+        "{:?}",
+        h.messages()
+    );
+    let (_, _, footer) = list_model(&mut h);
+    assert_eq!(footer, "0/0 (一覧が途中までです)", "完了に見せない");
+    h.keys("esc");
+    h.fs.set_unreadable("/w/proj", false);
+    for i in 0..9000 {
+        h.fs.add_file(&format!("/w/proj/f{i:04}.txt"), b"");
+    }
+    h.keys("ctrl+o");
+    // 束 (4,096 件) が、走査の途中から一覧に入る (前の空の一覧を見せたまま、終わるまで待たない)
+    let state = |h: &Harness| {
+        let (total, scanning, _, _) = h.editor.state().finder_rows().expect("開いている");
+        (total, scanning)
+    };
+    while state(&h) == (0, true) {
+        assert!(h.run_one_job(), "走査が進まない");
+    }
+    let (total, scanning) = state(&h);
+    assert!(scanning, "走査の途中で候補が入る");
+    assert!((1..9001).contains(&total), "{total}");
+    h.run_jobs();
+    let (_, _, footer) = list_model(&mut h);
+    assert_eq!(footer, "9001/9001");
+}
+
+#[test]
+fn 走査のジョブがパニックしたら知らせ_件数の欄を完了に見せない() {
+    let mut h = repo(&[("/w/proj/a.txt", b"\n")]);
+    h.keys("ctrl+o");
+    let held = h.run_one_job_held();
+    let job = held.first().expect("走査の結果").job;
+    h.deliver(vec![eve_core::JobOutput {
+        job,
+        body: JobResult::Failed {
+            err: eve_core::JobError::Panic,
+        },
+    }]);
+    h.run_jobs();
+    assert_eq!(
+        count(&h, "msg.workspace.scan_failed"),
+        1,
+        "{:?}",
+        h.messages()
+    );
+    let (_, _, footer) = list_model(&mut h);
+    assert_eq!(footer, "0/0 (一覧が途中までです)");
+}
+
+#[test]
+fn 照合のジョブが失敗したら_enter_の待ちを解き_古い行を開かない() {
+    let mut h = repo(&[("/w/proj/abc.txt", b"\n"), ("/w/proj/xyz.txt", b"\n")]);
+    let doc = h.doc_id();
+    h.keys("ctrl+o");
+    h.run_jobs();
+    h.text("xyz");
+    h.keys("enter");
+    let held = h.run_one_job_held();
+    let job = held
+        .iter()
+        .find(|o| matches!(o.body, JobResult::FinderMatched { .. }))
+        .expect("照合の結果")
+        .job;
+    h.deliver(vec![eve_core::JobOutput {
+        job,
+        body: JobResult::Failed {
+            err: eve_core::JobError::Panic,
+        },
+    }]);
+    assert_eq!(h.overlay(), "finder", "失敗の結果では開かない");
+    // 行は空の検索語のもの (先頭は README.md)。`Enter` でも開かない
+    h.keys("enter");
+    h.run_jobs();
+    assert_eq!(h.overlay(), "finder");
+    assert_eq!(h.doc_id(), doc);
+    assert_eq!(h.editor.state().documents_len(), 1);
+}
+
+#[test]
+fn リンク先の無いリンクを選ぶとリンク先が無いと知らせる() {
+    let mut h = repo(&[]);
+    h.fs.add_link("/w/proj/dead.txt", "/w/proj/nowhere.txt");
+    h.keys("ctrl+o");
+    h.text("dead");
+    h.run_jobs();
+    assert_eq!(rows(&h).0, ["dead.txt"]);
+    h.keys("enter");
+    h.run_jobs();
+    assert_eq!(
+        count(&h, "msg.finder.dangling_link"),
+        1,
+        "{:?}",
+        h.messages()
+    );
+    assert_eq!(count(&h, NOT_FOUND), 0);
+    assert_eq!(h.editor.state().documents_len(), 1, "新規の文書にしない");
+}
+
+#[test]
+fn 上限で打ち切った一覧は件数の欄で示す() {
+    let mut h = repo(&[("/w/proj/a.txt", b"\n")]);
+    h.keys("ctrl+o");
+    let held = h.run_one_job_held();
+    let held = held
+        .into_iter()
+        .map(|mut o| {
+            if let JobResult::ScanDone { truncated, .. } = &mut o.body {
+                *truncated = true;
+            }
+            o
+        })
+        .collect();
+    h.deliver(held);
+    h.run_jobs();
+    let (_, _, footer) = list_model(&mut h);
+    assert_eq!(footer, "2/2 (ファイルが多いため 200000 件で打ち切りました)");
+}
+
+#[test]
+fn 走査し直した一覧に差し替えたら古い一覧を_bg_で手放す() {
+    let mut h = repo(&[("/w/proj/a.txt", b"\n")]);
+    h.keys("ctrl+o");
+    h.run_jobs();
+    h.keys("esc");
+    h.keys("ctrl+o");
+    let scan = h.run_one_job_held();
+    h.deliver(scan);
+    // 差し替えの直後に積まれるのは古い一覧の解放 (照合し直しより先)
+    let next = h.run_one_job_held();
+    assert!(
+        next.iter().any(|o| matches!(o.body, JobResult::Released)),
+        "{next:?}"
+    );
+    h.deliver(next);
+    h.run_jobs();
+    assert_eq!(rows(&h).0, ["a.txt", "README.md"]);
+}
+
+#[test]
+fn 照合の失敗で_enter_の待ちを解き_後の同じ検索語の結果で開かない() {
+    let mut h = repo(&[("/w/proj/xyz.txt", b"\n")]);
+    h.keys("ctrl+o");
+    h.run_jobs();
+    h.keys("esc");
+    // 開き直す: 走査し直しと、前の一覧の照合が積まれる
+    h.keys("ctrl+o");
+    h.text("xyz");
+    h.keys("enter");
+    let scan = h.run_one_job_held();
+    let held = h.run_one_job_held();
+    let job = held
+        .iter()
+        .find(|o| matches!(o.body, JobResult::FinderMatched { .. }))
+        .expect("照合の結果")
+        .job;
+    h.deliver(vec![eve_core::JobOutput {
+        job,
+        body: JobResult::Failed {
+            err: eve_core::JobError::Panic,
+        },
+    }]);
+    // 差し替えの後の同じ検索語の照合し直しの結果が届いても、待ちは解けているので開かない
+    h.deliver(scan);
+    h.run_jobs();
+    assert_eq!(rows(&h).0, ["xyz.txt"]);
+    assert_eq!(h.overlay(), "finder", "失敗の前に押した Enter で開かない");
 }

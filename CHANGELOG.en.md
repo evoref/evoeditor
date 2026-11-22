@@ -19,7 +19,7 @@ The Japanese version ([CHANGELOG.md](CHANGELOG.md)) is authoritative. Both are u
 
 ### Changed
 
-- **`Ctrl+O` now opens the finder (find and open a file) instead of asking for a path**: opening by typing a path (`file.open`) is available from the command palette (`Ctrl+P`, "File: Open"). To get the old `Ctrl+O` back, add `"ctrl+o" = "file.open"` under `[keys.editor]` in `keymap.toml`
+- **`Ctrl+O` now opens the finder (find and open a file) instead of asking for a path**: opening by typing a path (`file.open`) is available from the command palette (`Ctrl+P`, "File: Open"). To get the old `Ctrl+O` back, add `"ctrl+o" = "file.open"` under both `[keys.editor]` and `[keys.search]` (for when the search bar is focused) in `keymap.toml`. The hint bar then no longer shows "Open" (the hint belongs to the finder, which no longer has a key). The finder stays available from the command palette as "Workspace: Find and Open File"
 
 - **Building from source now needs Rust 1.99 or later** (it was 1.97). The prebuilt binaries are not affected
 

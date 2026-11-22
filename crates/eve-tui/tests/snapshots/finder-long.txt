@@ -1,0 +1,18 @@
+ 1│
+ 2┌─ ファイルを開く (/w/a-very-long-wor…finder-title/and-it-goes-on-and-on) ─┐
+~ │ main                                                                     │
+~ │ ▶ src/components/deeply/nested/direc…r/testing/the/cut/main_component.rs │
+~ └──────────────────────────────────────────────────────────────────── 1/1 ─┘
+~
+~
+~
+~
+~
+~
+~
+~
+~
+main_component.rs                                            行 1, 桁 1 UTF-8 LF
+
+Esc 取消  Enter 決定
+cursor: Some(CellPos { col: 8, row: 2 })

@@ -1021,6 +1021,10 @@ text = "You do not have permission to write to {path}"
 hint = "The file is also checked for changes when you save"
 text = "Could not check {path} for changes: {reason}"
 
+[msg.finder.dangling_link]
+hint = "Check where the link points"
+text = "{path} is a link, and its target {target} does not exist"
+
 [msg.finder.not_found]
 hint = "Reopen the list to scan the current files"
 text = "{path} no longer exists"
@@ -1429,6 +1433,7 @@ item_no_hint = "{level}: {text}"
 title = "Open File ({root})"
 placeholder = "Filter by file name or path"
 footer_waiting = "Finding the workspace…"
+footer_incomplete = "{matched}/{total} (list incomplete)"
 footer_scanning = "{matched}/{total} scanning…"
 footer_truncated = "{matched}/{total} (stopped at {limit} files)"
 unreadable_suffix = " · {dirs} unreadable folders"
