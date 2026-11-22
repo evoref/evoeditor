@@ -1,6 +1,6 @@
 # コマンド一覧
 
-生成物 (`cargo xtask gen-reference` で作り直す。手で直さない。docs/09 §11.2)。`evoeditor --list-commands --json` の出力 (組込みのコマンド 109 個。CommandId の順) から作る。コマンドと既定キーの正本は [07 §11.6 のカタログ](../07-config-extensibility.md#116-v01-commandid-カタログ-付録) で、`cargo xtask gen-reference --check` が突合する。
+生成物 (`cargo xtask gen-reference` で作り直す。手で直さない。docs/09 §11.2)。`evoeditor --list-commands --json` の出力 (組込みのコマンド 110 個。CommandId の順) から作る。コマンドと既定キーの正本は [07 §11.6 のカタログ](../07-config-extensibility.md#116-v01-commandid-カタログ-付録) で、`cargo xtask gen-reference --check` が突合する。
 
 - **種類**・**権限** は 07 §11.6 の kind / perm 列の表記 (権限の `-` は外部の主体から呼べない)。**when** の `—` は常に実行できる。
 - **引数** は `名前` (`?` は省略可能): 型 (07 §11.2)。
@@ -24,6 +24,7 @@
 | `cursor.doc_end` | 文書の末尾へ移動 | Motion | — | — | `read` | `editor`: `Ctrl+End` | 出す |
 | `cursor.doc_start` | 文書の先頭へ移動 | Motion | — | — | `read` | `editor`: `Ctrl+Home` | 出す |
 | `cursor.end` | 行末へ移動 | Motion | — | — | `read` | `editor`: `End`, `Ctrl+K →`<br>`prompt`: `End` | 出す |
+| `cursor.goto_bracket` | 対応する括弧へ移動 | Motion | — | — | `read` | `editor`: `Ctrl+]`, `Ctrl+K %` | 出す |
 | `cursor.goto_line` | 行へ移動 | Motion | `line?`: `int\|"$"`<br>`col?`: `int` | — | `read` | `editor`: `Ctrl+G` | 出す |
 | `cursor.home` | 行頭へ移動 | Motion | — | — | `read` | `editor`: `Home`, `Ctrl+K ←`<br>`prompt`: `Home` | 出す |
 | `cursor.move_down` | 下へ移動 | Motion | `count?`: `int` | — | `read` | `editor`: `↓` | 出す |

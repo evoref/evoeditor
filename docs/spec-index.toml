@@ -986,7 +986,7 @@ title = "変換関数と計算量"
 id = "03 §4"
 file = "docs/03-core-design.md"
 line = 251
-end = 478
+end = 494
 title = "位置・範囲・選択 (Pos / Range / Selection)"
 
 [[section]]
@@ -1070,7 +1070,7 @@ title = "Selection の View 間写像"
 id = "03 §4.7"
 file = "docs/03-core-design.md"
 line = 376
-end = 478
+end = 494
 title = "M32 (複数カーソル・対応括弧・タブライン) の試験・実装の順・決めた点 (v0.5)"
 
 [[section]]
@@ -1105,903 +1105,910 @@ title = "段 2 (`feat/eve-core-multi-cursor-edit`) で決めた細目 (実装の
 id = "03 §4.7.5"
 file = "docs/03-core-design.md"
 line = 452
-end = 478
+end = 476
 title = "段 3 (`feat/eve-core-multi-cursor-commands`) で決めた細目 (実装の PR、2026-11-23)"
+
+[[section]]
+id = "03 §4.7.6"
+file = "docs/03-core-design.md"
+line = 477
+end = 494
+title = "段 4 (`feat/eve-core-bracket-match`) で決めた細目 (実装の PR、2026-11-23)"
 
 [[section]]
 id = "03 §5"
 file = "docs/03-core-design.md"
-line = 479
-end = 592
+line = 495
+end = 608
 title = "カーソル移動のセマンティクス"
 
 [[section]]
 id = "03 §5.1"
 file = "docs/03-core-design.md"
-line = 483
-end = 492
+line = 499
+end = 508
 title = "水平移動 (FR-301)"
 
 [[section]]
 id = "03 §5.2"
 file = "docs/03-core-design.md"
-line = 493
-end = 499
+line = 509
+end = 515
 title = "垂直移動と目標列 (FR-301)"
 
 [[section]]
 id = "03 §5.3"
 file = "docs/03-core-design.md"
-line = 500
-end = 517
+line = 516
+end = 533
 title = "単語移動 (FR-302)"
 
 [[section]]
 id = "03 §5.4"
 file = "docs/03-core-design.md"
-line = 518
-end = 524
+line = 534
+end = 540
 title = "行頭・行末・文書端 (FR-303)"
 
 [[section]]
 id = "03 §5.5"
 file = "docs/03-core-design.md"
-line = 525
-end = 528
+line = 541
+end = 544
 title = "ページ移動 (FR-304)"
 
 [[section]]
 id = "03 §5.6"
 file = "docs/03-core-design.md"
-line = 529
-end = 533
+line = 545
+end = 549
 title = "指定行へ移動 (FR-306)"
 
 [[section]]
 id = "03 §5.7"
 file = "docs/03-core-design.md"
-line = 534
-end = 549
+line = 550
+end = 565
 title = "対応括弧・テキストオブジェクト (FR-308 / 309, v0.5)"
 
 [[section]]
 id = "03 §5.8"
 file = "docs/03-core-design.md"
-line = 550
-end = 592
+line = 566
+end = 608
 title = "マウス位置 → 文書位置"
 
 [[section]]
 id = "03 §5.8.1"
 file = "docs/03-core-design.md"
-line = 554
-end = 592
+line = 570
+end = 608
 title = "マウスの扱い (M9b、2026-10-30。案)"
 
 [[section]]
 id = "03 §6"
 file = "docs/03-core-design.md"
-line = 593
-end = 754
+line = 609
+end = 770
 title = "ChangeSet と Transaction"
 
 [[section]]
 id = "03 §6.1"
 file = "docs/03-core-design.md"
-line = 595
-end = 611
+line = 611
+end = 627
 title = "ChangeSet の形式"
 
 [[section]]
 id = "03 §6.2"
 file = "docs/03-core-design.md"
-line = 612
-end = 652
+line = 628
+end = 668
 title = "演算"
 
 [[section]]
 id = "03 §6.3"
 file = "docs/03-core-design.md"
-line = 653
-end = 685
+line = 669
+end = 701
 title = "Transaction"
 
 [[section]]
 id = "03 §6.4"
 file = "docs/03-core-design.md"
-line = 686
-end = 702
+line = 702
+end = 718
 title = "位置写像 (map) の規則"
 
 [[section]]
 id = "03 §6.5"
 file = "docs/03-core-design.md"
-line = 703
-end = 754
+line = 719
+end = 770
 title = "Document::apply の手順"
 
 [[section]]
 id = "03 §7"
 file = "docs/03-core-design.md"
-line = 755
-end = 859
+line = 771
+end = 875
 title = "Undo / Redo"
 
 [[section]]
 id = "03 §7.1"
 file = "docs/03-core-design.md"
-line = 757
-end = 793
+line = 773
+end = 809
 title = "線形か木か"
 
 [[section]]
 id = "03 §7.2"
 file = "docs/03-core-design.md"
-line = 794
-end = 807
+line = 810
+end = 823
 title = "Undo で元に戻るもの・戻らないもの"
 
 [[section]]
 id = "03 §7.3"
 file = "docs/03-core-design.md"
-line = 808
-end = 832
+line = 824
+end = 848
 title = "結合 (グループ化) 規則 (FR-203)"
 
 [[section]]
 id = "03 §7.4"
 file = "docs/03-core-design.md"
-line = 833
-end = 841
+line = 849
+end = 857
 title = "保存時点と「未変更」判定 (FR-204)"
 
 [[section]]
 id = "03 §7.5"
 file = "docs/03-core-design.md"
-line = 842
-end = 852
+line = 858
+end = 868
 title = "メモリ上限 (NFR-203)"
 
 [[section]]
 id = "03 §7.6"
 file = "docs/03-core-design.md"
-line = 853
-end = 859
+line = 869
+end = 875
 title = "Undo と複数 View・複数カーソル"
 
 [[section]]
 id = "03 §8"
 file = "docs/03-core-design.md"
-line = 860
-end = 1209
+line = 876
+end = 1225
 title = "文字コード・BOM・改行コード"
 
 [[section]]
 id = "03 §8.1"
 file = "docs/03-core-design.md"
-line = 862
-end = 899
+line = 878
+end = 915
 title = "Document のメタデータ"
 
 [[section]]
 id = "03 §8.2"
 file = "docs/03-core-design.md"
-line = 900
-end = 929
+line = 916
+end = 945
 title = "判定アルゴリズム (FR-108 / 109 / 115)"
 
 [[section]]
 id = "03 §8.2.1"
 file = "docs/03-core-design.md"
-line = 923
-end = 929
+line = 939
+end = 945
 title = "先頭だけで判定することの危険と再判定規則"
 
 [[section]]
 id = "03 §8.3"
 file = "docs/03-core-design.md"
-line = 930
-end = 1058
+line = 946
+end = 1074
 title = "不正バイト列の保持 (OQ-16 / NFR-304)"
 
 [[section]]
 id = "03 §8.3.1"
 file = "docs/03-core-design.md"
-line = 952
-end = 1058
+line = 968
+end = 1074
 title = "不正バイトを含む文書の編集 (v0.4、M23)"
 
 [[section]]
 id = "03 §8.4"
 file = "docs/03-core-design.md"
-line = 1059
-end = 1076
+line = 1075
+end = 1092
 title = "改行コード (OQ-04)"
 
 [[section]]
 id = "03 §8.5"
 file = "docs/03-core-design.md"
-line = 1077
-end = 1081
+line = 1093
+end = 1097
 title = "末尾改行 (FR-114)"
 
 [[section]]
 id = "03 §8.6"
 file = "docs/03-core-design.md"
-line = 1082
-end = 1127
+line = 1098
+end = 1143
 title = "エンコード (保存) と表現不能文字 (FR-112)"
 
 [[section]]
 id = "03 §8.7"
 file = "docs/03-core-design.md"
-line = 1128
-end = 1179
+line = 1144
+end = 1195
 title = "往復保証の範囲 (NFR-303)"
 
 [[section]]
 id = "03 §8.7.1"
 file = "docs/03-core-design.md"
-line = 1157
-end = 1179
+line = 1173
+end = 1195
 title = "保持方式 (v0.4、M22)"
 
 [[section]]
 id = "03 §8.8"
 file = "docs/03-core-design.md"
-line = 1180
-end = 1191
+line = 1196
+end = 1207
 title = "文字コードの変更 (FR-111)"
 
 [[section]]
 id = "03 §8.9"
 file = "docs/03-core-design.md"
-line = 1192
-end = 1209
+line = 1208
+end = 1225
 title = "対応しない文字コード"
 
 [[section]]
 id = "03 §9"
 file = "docs/03-core-design.md"
-line = 1210
-end = 1941
+line = 1226
+end = 1957
 title = "ファイル I/O の論理手順"
 
 [[section]]
 id = "03 §9.1"
 file = "docs/03-core-design.md"
-line = 1214
-end = 1235
+line = 1230
+end = 1251
 title = "Port に要求する操作 (05 への入力)"
 
 [[section]]
 id = "03 §9.2"
 file = "docs/03-core-design.md"
-line = 1236
-end = 1415
+line = 1252
+end = 1431
 title = "読込 (FR-101 / 122 / NFR-104)"
 
 [[section]]
 id = "03 §9.2.1"
 file = "docs/03-core-design.md"
-line = 1358
-end = 1382
+line = 1374
+end = 1398
 title = "先行表示 (Partial。v0.4 の M25、FR-122 AC-2〜AC-4)"
 
 [[section]]
 id = "03 §9.2.2"
 file = "docs/03-core-design.md"
-line = 1383
-end = 1415
+line = 1399
+end = 1431
 title = "標準入力 (FR-120。v0.4 の M25)"
 
 [[section]]
 id = "03 §9.3"
 file = "docs/03-core-design.md"
-line = 1416
-end = 1554
+line = 1432
+end = 1570
 title = "保存 (FR-104 / 105 / 106 / NFR-301 / NFR-107)"
 
 [[section]]
 id = "03 §9.4"
 file = "docs/03-core-design.md"
-line = 1555
-end = 1567
+line = 1571
+end = 1583
 title = "Windows 固有の論理上の扱い (実装は 05)"
 
 [[section]]
 id = "03 §9.5"
 file = "docs/03-core-design.md"
-line = 1568
-end = 1618
+line = 1584
+end = 1634
 title = "外部変更の検知と再読込 (FR-117)"
 
 [[section]]
 id = "03 §9.5.1"
 file = "docs/03-core-design.md"
-line = 1600
-end = 1618
+line = 1616
+end = 1634
 title = "ファイル監視 (v0.5 の M33。FR-117 の監視の部分)"
 
 [[section]]
 id = "03 §9.6"
 file = "docs/03-core-design.md"
-line = 1619
-end = 1641
+line = 1635
+end = 1657
 title = "読み取り専用・バイナリ (FR-115 / 116)"
 
 [[section]]
 id = "03 §9.7"
 file = "docs/03-core-design.md"
-line = 1642
-end = 1787
+line = 1658
+end = 1803
 title = "保存の連鎖と後続処理 (Continuation)"
 
 [[section]]
 id = "03 §9.8"
 file = "docs/03-core-design.md"
-line = 1788
-end = 1854
+line = 1804
+end = 1870
 title = "複数文書の操作 (v0.2 の M9a、FR-103 / FR-104 / FR-107)"
 
 [[section]]
 id = "03 §9.9"
 file = "docs/03-core-design.md"
-line = 1855
-end = 1941
+line = 1871
+end = 1957
 title = "複数ペインと分割 (v0.5 の M30、FR-509 / FR-510)"
 
 [[section]]
 id = "03 §10"
 file = "docs/03-core-design.md"
-line = 1942
-end = 2009
+line = 1958
+end = 2025
 title = "クラッシュ復旧・スワップ・バックアップ"
 
 [[section]]
 id = "03 §10.1"
 file = "docs/03-core-design.md"
-line = 1954
-end = 1976
+line = 1970
+end = 1992
 title = "緊急退避 (v0.1, NFR-302)"
 
 [[section]]
 id = "03 §10.2"
 file = "docs/03-core-design.md"
-line = 1977
-end = 1990
+line = 1993
+end = 2006
 title = "スワップ (v0.2, FR-118 / NFR-307)"
 
 [[section]]
 id = "03 §10.3"
 file = "docs/03-core-design.md"
-line = 1991
-end = 2000
+line = 2007
+end = 2016
 title = "復旧の提案と適用 (v0.2。v0.1 は退避先の表示のみ)"
 
 [[section]]
 id = "03 §10.4"
 file = "docs/03-core-design.md"
-line = 2001
-end = 2009
+line = 2017
+end = 2025
 title = "バックアップ (v0.6 以降, FR-119 Could)"
 
 [[section]]
 id = "03 §11"
 file = "docs/03-core-design.md"
-line = 2010
-end = 2118
+line = 2026
+end = 2134
 title = "巨大ファイル戦略"
 
 [[section]]
 id = "03 §11.1"
 file = "docs/03-core-design.md"
-line = 2012
-end = 2017
+line = 2028
+end = 2033
 title = "基本方針"
 
 [[section]]
 id = "03 §11.2"
 file = "docs/03-core-design.md"
-line = 2018
-end = 2032
+line = 2034
+end = 2048
 title = "サイズ閾値と挙動"
 
 [[section]]
 id = "03 §11.3"
 file = "docs/03-core-design.md"
-line = 2033
-end = 2038
+line = 2049
+end = 2054
 title = "段階的ロードと早期表示 (NFR-104)"
 
 [[section]]
 id = "03 §11.4"
 file = "docs/03-core-design.md"
-line = 2039
-end = 2044
+line = 2055
+end = 2060
 title = "行インデックス"
 
 [[section]]
 id = "03 §11.5"
 file = "docs/03-core-design.md"
-line = 2045
-end = 2097
+line = 2061
+end = 2113
 title = "長大行 (NFR-106)"
 
 [[section]]
 id = "03 §11.5.1"
 file = "docs/03-core-design.md"
-line = 2057
-end = 2097
+line = 2073
+end = 2113
 title = "char 近似モードを使う側の突合と実装の分け方 (M9d、2026-10-31。案)"
 
 [[section]]
 id = "03 §11.6"
 file = "docs/03-core-design.md"
-line = 2098
-end = 2101
+line = 2114
+end = 2117
 title = "mmap の可否"
 
 [[section]]
 id = "03 §11.7"
 file = "docs/03-core-design.md"
-line = 2102
-end = 2118
+line = 2118
+end = 2134
 title = "メモリ見積り (NFR-202)"
 
 [[section]]
 id = "03 §12"
 file = "docs/03-core-design.md"
-line = 2119
-end = 2501
+line = 2135
+end = 2517
 title = "検索・置換の基盤"
 
 [[section]]
 id = "03 §12.1"
 file = "docs/03-core-design.md"
-line = 2121
-end = 2142
+line = 2137
+end = 2158
 title = "検索の種類とモード"
 
 [[section]]
 id = "03 §12.2"
 file = "docs/03-core-design.md"
-line = 2143
-end = 2164
+line = 2159
+end = 2180
 title = "実行モデル (FR-404 / NFR-108 / 109)"
 
 [[section]]
 id = "03 §12.3"
 file = "docs/03-core-design.md"
-line = 2165
-end = 2262
+line = 2181
+end = 2278
 title = "正規表現"
 
 [[section]]
 id = "03 §12.3.1"
 file = "docs/03-core-design.md"
-line = 2178
-end = 2262
+line = 2194
+end = 2278
 title = "複数行の正規表現 (v0.4、M24)"
 
 [[section]]
 id = "03 §12.4"
 file = "docs/03-core-design.md"
-line = 2263
-end = 2289
+line = 2279
+end = 2305
 title = "単語単位・大文字小文字"
 
 [[section]]
 id = "03 §12.4.1"
 file = "docs/03-core-design.md"
-line = 2273
-end = 2289
+line = 2289
+end = 2305
 title = "CP932 互換文字の同一視 (v0.4、M24、OQ-41)"
 
 [[section]]
 id = "03 §12.5"
 file = "docs/03-core-design.md"
-line = 2290
-end = 2321
+line = 2306
+end = 2337
 title = "置換 (FR-403、v0.2)"
 
 [[section]]
 id = "03 §12.6"
 file = "docs/03-core-design.md"
-line = 2322
-end = 2329
+line = 2338
+end = 2345
 title = "クリップボードへのコピーと大きな文字列化"
 
 [[section]]
 id = "03 §12.7"
 file = "docs/03-core-design.md"
-line = 2330
-end = 2501
+line = 2346
+end = 2517
 title = "ワークスペース: 走査・除外・ファインダ・横断検索 (v0.5 の M31。FR-125 / FR-405)"
 
 [[section]]
 id = "03 §12.7.1"
 file = "docs/03-core-design.md"
-line = 2336
-end = 2344
+line = 2352
+end = 2360
 title = "ルートの検出 (規則の正本は 07 §12.1)"
 
 [[section]]
 id = "03 §12.7.2"
 file = "docs/03-core-design.md"
-line = 2345
-end = 2364
+line = 2361
+end = 2380
 title = "走査 (`WorkspaceWalk`)"
 
 [[section]]
 id = "03 §12.7.3"
 file = "docs/03-core-design.md"
-line = 2365
-end = 2389
+line = 2381
+end = 2405
 title = "除外の照合 (gitignore。eve-core の純粋関数、06 X10)"
 
 [[section]]
 id = "03 §12.7.4"
 file = "docs/03-core-design.md"
-line = 2390
-end = 2402
+line = 2406
+end = 2418
 title = "ファインダ (FR-125)"
 
 [[section]]
 id = "03 §12.7.5"
 file = "docs/03-core-design.md"
-line = 2403
-end = 2422
+line = 2419
+end = 2438
 title = "横断検索 (FR-405)"
 
 [[section]]
 id = "03 §12.7.6"
 file = "docs/03-core-design.md"
-line = 2423
-end = 2433
+line = 2439
+end = 2449
 title = "同じファイルの判定 (SAF-28)"
 
 [[section]]
 id = "03 §12.7.7"
 file = "docs/03-core-design.md"
-line = 2434
-end = 2447
+line = 2450
+end = 2463
 title = "ジョブとワーカーのまとめ"
 
 [[section]]
 id = "03 §12.7.8"
 file = "docs/03-core-design.md"
-line = 2448
-end = 2456
+line = 2464
+end = 2472
 title = "試験と計測 (09)"
 
 [[section]]
 id = "03 §12.7.9"
 file = "docs/03-core-design.md"
-line = 2457
-end = 2471
+line = 2473
+end = 2487
 title = "実装の順と各段の完了の条件 (08 §2.6 の M31)"
 
 [[section]]
 id = "03 §12.7.10"
 file = "docs/03-core-design.md"
-line = 2472
-end = 2501
+line = 2488
+end = 2517
 title = "決めた点 (M31 の仕様の PR、2026-11-21。退けた案と理由)"
 
 [[section]]
 id = "03 §13"
 file = "docs/03-core-design.md"
-line = 2502
-end = 2662
+line = 2518
+end = 2678
 title = "Unicode 処理"
 
 [[section]]
 id = "03 §13.1"
 file = "docs/03-core-design.md"
-line = 2504
-end = 2513
+line = 2520
+end = 2529
 title = "書記素クラスタ (FR-201 / 301)"
 
 [[section]]
 id = "03 §13.2"
 file = "docs/03-core-design.md"
-line = 2514
-end = 2571
+line = 2530
+end = 2587
 title = "表示幅 (FR-501 / NFR-605)"
 
 [[section]]
 id = "03 §13.3"
 file = "docs/03-core-design.md"
-line = 2572
-end = 2646
+line = 2588
+end = 2662
 title = "単語境界 (日本語補助規則)"
 
 [[section]]
 id = "03 §13.4"
 file = "docs/03-core-design.md"
-line = 2647
-end = 2650
+line = 2663
+end = 2666
 title = "大文字・小文字変換 (FR-214)"
 
 [[section]]
 id = "03 §13.5"
 file = "docs/03-core-design.md"
-line = 2651
-end = 2662
+line = 2667
+end = 2678
 title = "正規化と BiDi"
 
 [[section]]
 id = "03 §14"
 file = "docs/03-core-design.md"
-line = 2663
-end = 2854
+line = 2679
+end = 2870
 title = "表示幅・折り返し・レイアウト"
 
 [[section]]
 id = "03 §14.1"
 file = "docs/03-core-design.md"
-line = 2667
-end = 2677
+line = 2683
+end = 2693
 title = "入力と出力"
 
 [[section]]
 id = "03 §14.2"
 file = "docs/03-core-design.md"
-line = 2678
-end = 2696
+line = 2694
+end = 2712
 title = "1 行のレイアウト"
 
 [[section]]
 id = "03 §14.3"
 file = "docs/03-core-design.md"
-line = 2697
-end = 2764
+line = 2713
+end = 2780
 title = "折り返し (FR-506、ソフトラップは v0.2)"
 
 [[section]]
 id = "03 §14.3.1"
 file = "docs/03-core-design.md"
-line = 2713
-end = 2764
+line = 2729
+end = 2780
 title = "折り返しを使う側の突合と実装の分け方 (M9b、2026-10-30。案)"
 
 [[section]]
 id = "03 §14.4"
 file = "docs/03-core-design.md"
-line = 2765
-end = 2805
+line = 2781
+end = 2821
 title = "長大行の列の索引"
 
 [[section]]
 id = "03 §14.5"
 file = "docs/03-core-design.md"
-line = 2806
-end = 2817
+line = 2822
+end = 2833
 title = "Decoration の合成"
 
 [[section]]
 id = "03 §14.6"
 file = "docs/03-core-design.md"
-line = 2818
-end = 2854
+line = 2834
+end = 2870
 title = "意味的 UI モデルの生成 (core 側の要件。型の正本は 02 §8.2)"
 
 [[section]]
 id = "03 §15"
 file = "docs/03-core-design.md"
-line = 2855
-end = 2940
+line = 2871
+end = 2956
 title = "タブとインデント"
 
 [[section]]
 id = "03 §15.1"
 file = "docs/03-core-design.md"
-line = 2857
-end = 2866
+line = 2873
+end = 2882
 title = "設定と検出"
 
 [[section]]
 id = "03 §15.2"
 file = "docs/03-core-design.md"
-line = 2867
-end = 2872
+line = 2883
+end = 2888
 title = "タブ文字の扱い"
 
 [[section]]
 id = "03 §15.3"
 file = "docs/03-core-design.md"
-line = 2873
-end = 2884
+line = 2889
+end = 2900
 title = "インデント操作 (FR-202 / 208)"
 
 [[section]]
 id = "03 §15.4"
 file = "docs/03-core-design.md"
-line = 2885
-end = 2920
+line = 2901
+end = 2936
 title = "行の複製・削除・上下移動 (FR-207、v0.2 の M9b)"
 
 [[section]]
 id = "03 §15.5"
 file = "docs/03-core-design.md"
-line = 2921
-end = 2924
+line = 2937
+end = 2940
 title = "混在ファイル"
 
 [[section]]
 id = "03 §15.6"
 file = "docs/03-core-design.md"
-line = 2925
-end = 2940
+line = 2941
+end = 2956
 title = "行コメントの切替 (FR-209、v0.5 の M33)"
 
 [[section]]
 id = "03 §16"
 file = "docs/03-core-design.md"
-line = 2941
-end = 2993
+line = 2957
+end = 3009
 title = "シンタックスハイライト基盤"
 
 [[section]]
 id = "03 §16.1"
 file = "docs/03-core-design.md"
-line = 2943
-end = 2947
+line = 2959
+end = 2963
 title = "版と本書の範囲"
 
 [[section]]
 id = "03 §16.2"
 file = "docs/03-core-design.md"
-line = 2948
-end = 2957
+line = 2964
+end = 2973
 title = "言語判定"
 
 [[section]]
 id = "03 §16.3"
 file = "docs/03-core-design.md"
-line = 2958
-end = 2981
+line = 2974
+end = 2997
 title = "SyntaxProvider trait"
 
 [[section]]
 id = "03 §16.4"
 file = "docs/03-core-design.md"
-line = 2982
-end = 2986
+line = 2998
+end = 3002
 title = "ハイライトの Decoration 化"
 
 [[section]]
 id = "03 §16.5"
 file = "docs/03-core-design.md"
-line = 2987
-end = 2993
+line = 3003
+end = 3009
 title = "括弧対応 (FR-308) の二段構え"
 
 [[section]]
 id = "03 §17"
 file = "docs/03-core-design.md"
-line = 2994
-end = 3038
+line = 3010
+end = 3054
 title = "Revision とジョブ結果の採否規則"
 
 [[section]]
 id = "03 §17.1"
 file = "docs/03-core-design.md"
-line = 2998
-end = 3006
+line = 3014
+end = 3022
 title = "Revision"
 
 [[section]]
 id = "03 §17.2"
 file = "docs/03-core-design.md"
-line = 3007
-end = 3027
+line = 3023
+end = 3043
 title = "ジョブ種別ごとの採否"
 
 [[section]]
 id = "03 §17.3"
 file = "docs/03-core-design.md"
-line = 3028
-end = 3038
+line = 3044
+end = 3054
 title = "ジョブの投入規律"
 
 [[section]]
 id = "03 §18"
 file = "docs/03-core-design.md"
-line = 3039
-end = 3078
+line = 3055
+end = 3094
 title = "AI 差分適用 (Proposal) との接合"
 
 [[section]]
 id = "03 §18.1"
 file = "docs/03-core-design.md"
-line = 3043
-end = 3060
+line = 3059
+end = 3076
 title = "core が提供する演算 (06 X3 / X5 / X9 への回答)"
 
 [[section]]
 id = "03 §18.2"
 file = "docs/03-core-design.md"
-line = 3061
-end = 3066
+line = 3077
+end = 3082
 title = "差分表示の素材"
 
 [[section]]
 id = "03 §18.3"
 file = "docs/03-core-design.md"
-line = 3067
-end = 3078
+line = 3083
+end = 3094
 title = "相性の確認 (設計視点)"
 
 [[section]]
 id = "03 §19"
 file = "docs/03-core-design.md"
-line = 3079
-end = 3157
+line = 3095
+end = 3173
 title = "型スケッチのまとめ"
 
 [[section]]
 id = "03 §20"
 file = "docs/03-core-design.md"
-line = 3158
-end = 3192
+line = 3174
+end = 3208
 title = "不変条件一覧"
 
 [[section]]
 id = "03 §21"
 file = "docs/03-core-design.md"
-line = 3193
-end = 3216
+line = 3209
+end = 3232
 title = "性能目標との対応"
 
 [[section]]
 id = "03 §22"
 file = "docs/03-core-design.md"
-line = 3217
-end = 3294
+line = 3233
+end = 3310
 title = "テスト観点"
 
 [[section]]
 id = "03 §22.1"
 file = "docs/03-core-design.md"
-line = 3221
-end = 3249
+line = 3237
+end = 3265
 title = "プロパティテスト (proptest)"
 
 [[section]]
 id = "03 §22.2"
 file = "docs/03-core-design.md"
-line = 3250
-end = 3254
+line = 3266
+end = 3270
 title = "fuzz (cargo-fuzz, NFR-305)"
 
 [[section]]
 id = "03 §22.3"
 file = "docs/03-core-design.md"
-line = 3255
-end = 3283
+line = 3271
+end = 3299
 title = "ヘッドレス統合テスト (eve-testkit)"
 
 [[section]]
 id = "03 §22.4"
 file = "docs/03-core-design.md"
-line = 3284
-end = 3288
+line = 3300
+end = 3304
 title = "ベンチマーク (criterion、09 で CI 化)"
 
 [[section]]
 id = "03 §22.5"
 file = "docs/03-core-design.md"
-line = 3289
-end = 3294
+line = 3305
+end = 3310
 title = "スナップショットテスト"
 
 [[section]]
 id = "03 §23"
 file = "docs/03-core-design.md"
-line = 3295
-end = 3336
+line = 3311
+end = 3352
 title = "未決事項"
 
 [[section]]
@@ -2561,7 +2568,7 @@ title = "リサイズ・サスペンド・その他のシグナル"
 id = "04 §15"
 file = "docs/04-tui-design.md"
 line = 1473
-end = 2177
+end = 2180
 title = "日本語環境での考慮事項 (まとめ)"
 
 [[section]]
@@ -2575,56 +2582,56 @@ title = "v0.1 の画面文言 (ja)"
 id = "04 §15.2"
 file = "docs/04-tui-design.md"
 line = 1559
-end = 2177
+end = 2180
 title = "保存・読込・退避・パニックの文言目録"
 
 [[section]]
 id = "04 §16"
 file = "docs/04-tui-design.md"
-line = 2178
-end = 2216
+line = 2181
+end = 2219
 title = "共通化する部分 / しない部分"
 
 [[section]]
 id = "04 §17"
 file = "docs/04-tui-design.md"
-line = 2217
-end = 2260
+line = 2220
+end = 2263
 title = "版ごとの範囲"
 
 [[section]]
 id = "04 §17.1"
 file = "docs/04-tui-design.md"
-line = 2221
-end = 2246
+line = 2224
+end = 2249
 title = "v0.1 で実装する (最小核)"
 
 [[section]]
 id = "04 §17.2"
 file = "docs/04-tui-design.md"
-line = 2247
-end = 2250
+line = 2250
+end = 2253
 title = "v0.2 (日常の不足を埋める)"
 
 [[section]]
 id = "04 §17.3"
 file = "docs/04-tui-design.md"
-line = 2251
-end = 2254
+line = 2254
+end = 2257
 title = "v0.4"
 
 [[section]]
 id = "04 §17.4"
 file = "docs/04-tui-design.md"
-line = 2255
-end = 2260
+line = 2258
+end = 2263
 title = "v0.5 以降"
 
 [[section]]
 id = "04 §18"
 file = "docs/04-tui-design.md"
-line = 2261
-end = 2277
+line = 2264
+end = 2280
 title = "未決事項"
 
 [[section]]
@@ -4248,7 +4255,7 @@ title = "ヘルプとの連携"
 id = "07 §8"
 file = "docs/07-config-extensibility.md"
 line = 806
-end = 1151
+end = 1154
 title = "テーマ"
 
 [[section]]
@@ -4262,497 +4269,497 @@ title = "方針"
 id = "07 §8.2"
 file = "docs/07-config-extensibility.md"
 line = 816
-end = 949
+end = 950
 title = "書式"
 
 [[section]]
 id = "07 §8.3"
 file = "docs/07-config-extensibility.md"
-line = 950
-end = 957
+line = 951
+end = 958
 title = "解決手順"
 
 [[section]]
 id = "07 §8.4"
 file = "docs/07-config-extensibility.md"
-line = 958
-end = 969
+line = 959
+end = 970
 title = "ユーザーによる部分上書き"
 
 [[section]]
 id = "07 §8.5"
 file = "docs/07-config-extensibility.md"
-line = 970
-end = 973
+line = 971
+end = 974
 title = "シンタックススコープの命名"
 
 [[section]]
 id = "07 §8.6"
 file = "docs/07-config-extensibility.md"
-line = 974
-end = 1025
+line = 975
+end = 1026
 title = "テーマを使う側の突合と実装の分け方 (M9c、2026-10-30。案)"
 
 [[section]]
 id = "07 §8.7"
 file = "docs/07-config-extensibility.md"
-line = 1026
-end = 1126
+line = 1027
+end = 1129
 title = "高コントラストテーマ (v0.4 の M26。NFR-604)"
 
 [[section]]
 id = "07 §8.7.1"
 file = "docs/07-config-extensibility.md"
-line = 1055
-end = 1090
+line = 1056
+end = 1092
 title = "high-contrast-dark のロール表"
 
 [[section]]
 id = "07 §8.7.2"
 file = "docs/07-config-extensibility.md"
-line = 1091
-end = 1126
+line = 1093
+end = 1129
 title = "high-contrast-light のロール表"
 
 [[section]]
 id = "07 §8.8"
 file = "docs/07-config-extensibility.md"
-line = 1127
-end = 1151
-title = "v0.5 で足すロール (M30 の仕様の PR、2026-11-21。`ui.pane.*` は M30 の段 2b で、`ui.tab_line*` は M32 の段 1 で §8.2 / §8.7 へ移した。`ui.bracket_match` は M32 の仕様の PR、2026-11-22)"
+line = 1130
+end = 1154
+title = "v0.5 で足すロール (M30 の仕様の PR、2026-11-21。`ui.pane.*` は M30 の段 2b で、`ui.tab_line*` は M32 の段 1 で §8.2 / §8.7 へ移した。`ui.bracket_match` は M32 の仕様の PR、2026-11-22 で足し、M32 の段 4 で §8.2 / §8.7 へ移した)"
 
 [[section]]
 id = "07 §9"
 file = "docs/07-config-extensibility.md"
-line = 1152
-end = 1297
+line = 1155
+end = 1300
 title = "言語設定"
 
 [[section]]
 id = "07 §9.1"
 file = "docs/07-config-extensibility.md"
-line = 1154
-end = 1185
+line = 1157
+end = 1188
 title = "言語定義の書式"
 
 [[section]]
 id = "07 §9.2"
 file = "docs/07-config-extensibility.md"
-line = 1186
-end = 1196
+line = 1189
+end = 1199
 title = "言語判定の順序"
 
 [[section]]
 id = "07 §9.3"
 file = "docs/07-config-extensibility.md"
-line = 1197
-end = 1217
+line = 1200
+end = 1220
 title = "初期対応言語 (FR-802 の確定)"
 
 [[section]]
 id = "07 §9.4"
 file = "docs/07-config-extensibility.md"
-line = 1218
-end = 1232
+line = 1221
+end = 1235
 title = "言語サーバ定義 (書式。意味・プロトコルは eve-lsp)"
 
 [[section]]
 id = "07 §9.5"
 file = "docs/07-config-extensibility.md"
-line = 1233
-end = 1245
+line = 1236
+end = 1248
 title = "フォーマッタ定義"
 
 [[section]]
 id = "07 §9.6"
 file = "docs/07-config-extensibility.md"
-line = 1246
-end = 1297
+line = 1249
+end = 1300
 title = "言語定義の仕組み (v0.5 の M33。FR-704)"
 
 [[section]]
 id = "07 §9.6.1"
 file = "docs/07-config-extensibility.md"
-line = 1262
-end = 1297
+line = 1265
+end = 1300
 title = "組込みの言語定義の表 (v0.5 の M33。LANG-1 の正本)"
 
 [[section]]
 id = "07 §10"
 file = "docs/07-config-extensibility.md"
-line = 1298
-end = 1346
+line = 1301
+end = 1349
 title = "EditorConfig 対応"
 
 [[section]]
 id = "07 §10.1"
 file = "docs/07-config-extensibility.md"
-line = 1300
-end = 1318
+line = 1303
+end = 1321
 title = "対応範囲 (FR-705、v0.5)"
 
 [[section]]
 id = "07 §10.2"
 file = "docs/07-config-extensibility.md"
-line = 1319
-end = 1322
+line = 1322
+end = 1325
 title = "優先順位"
 
 [[section]]
 id = "07 §10.3"
 file = "docs/07-config-extensibility.md"
-line = 1323
-end = 1346
+line = 1326
+end = 1349
 title = "実装方針"
 
 [[section]]
 id = "07 §11"
 file = "docs/07-config-extensibility.md"
-line = 1347
-end = 1605
+line = 1350
+end = 1608
 title = "コマンド体系"
 
 [[section]]
 id = "07 §11.1"
 file = "docs/07-config-extensibility.md"
-line = 1349
-end = 1384
+line = 1352
+end = 1387
 title = "ID の命名規約 ([02 §6.2](02-architecture.md#62-命名規約-案) の具体化)"
 
 [[section]]
 id = "07 §11.2"
 file = "docs/07-config-extensibility.md"
-line = 1385
-end = 1400
+line = 1388
+end = 1403
 title = "引数 (`ArgSchema`)"
 
 [[section]]
 id = "07 §11.3"
 file = "docs/07-config-extensibility.md"
-line = 1401
-end = 1404
+line = 1404
+end = 1407
 title = "CommandSpec の公開面 (`eve-core`、[02 §6.1](02-architecture.md#61-基本方針-adr-0007))"
 
 [[section]]
 id = "07 §11.4"
 file = "docs/07-config-extensibility.md"
-line = 1405
-end = 1413
+line = 1408
+end = 1416
 title = "コマンドパレット (FR-602) の登録と表示"
 
 [[section]]
 id = "07 §11.5"
 file = "docs/07-config-extensibility.md"
-line = 1414
-end = 1424
+line = 1417
+end = 1427
 title = "ヘルプの自動生成 (FR-514)"
 
 [[section]]
 id = "07 §11.6"
 file = "docs/07-config-extensibility.md"
-line = 1425
-end = 1605
+line = 1428
+end = 1608
 title = "v0.1 CommandId カタログ (付録)"
 
 [[section]]
 id = "07 §12"
 file = "docs/07-config-extensibility.md"
-line = 1606
-end = 1819
+line = 1609
+end = 1822
 title = "ワークスペースと信頼モデル"
 
 [[section]]
 id = "07 §12.1"
 file = "docs/07-config-extensibility.md"
-line = 1610
-end = 1636
+line = 1613
+end = 1639
 title = "ワークスペースの概念"
 
 [[section]]
 id = "07 §12.2"
 file = "docs/07-config-extensibility.md"
-line = 1637
-end = 1644
+line = 1640
+end = 1647
 title = "信頼モデルの原則"
 
 [[section]]
 id = "07 §12.3"
 file = "docs/07-config-extensibility.md"
-line = 1645
-end = 1707
+line = 1648
+end = 1710
 title = "項目の分類"
 
 [[section]]
 id = "07 §12.4"
 file = "docs/07-config-extensibility.md"
-line = 1708
-end = 1711
+line = 1711
+end = 1714
 title = "コマンド"
 
 [[section]]
 id = "07 §12.5"
 file = "docs/07-config-extensibility.md"
-line = 1712
-end = 1725
+line = 1715
+end = 1728
 title = "v0.5 のワークスペース層の読み方 (M33。FR-705)"
 
 [[section]]
 id = "07 §12.6"
 file = "docs/07-config-extensibility.md"
-line = 1726
-end = 1819
+line = 1729
+end = 1822
 title = "M33 (設定と監視) の試験・実装の順・決めた点 (v0.5)"
 
 [[section]]
 id = "07 §12.6.1"
 file = "docs/07-config-extensibility.md"
-line = 1730
-end = 1741
+line = 1733
+end = 1744
 title = "試験と計測 (09)"
 
 [[section]]
 id = "07 §12.6.2"
 file = "docs/07-config-extensibility.md"
-line = 1742
-end = 1759
+line = 1745
+end = 1762
 title = "実装の順と各段の完了の条件 (08 §2.6 の M33)"
 
 [[section]]
 id = "07 §12.6.3"
 file = "docs/07-config-extensibility.md"
-line = 1760
-end = 1819
+line = 1763
+end = 1822
 title = "決めた点 (M33 の仕様の PR、2026-11-22。退けた案と理由)"
 
 [[section]]
 id = "07 §13"
 file = "docs/07-config-extensibility.md"
-line = 1820
-end = 1906
+line = 1823
+end = 1909
 title = "拡張機構の段階的方針"
 
 [[section]]
 id = "07 §13.1"
 file = "docs/07-config-extensibility.md"
-line = 1822
-end = 1836
+line = 1825
+end = 1839
 title = "段階的方針"
 
 [[section]]
 id = "07 §13.2"
 file = "docs/07-config-extensibility.md"
-line = 1837
-end = 1898
+line = 1840
+end = 1901
 title = "プラグインプロトコルの骨子 (v1.X で詳細化)"
 
 [[section]]
 id = "07 §13.3"
 file = "docs/07-config-extensibility.md"
-line = 1899
-end = 1906
+line = 1902
+end = 1909
 title = "プラグインの発見と配置"
 
 [[section]]
 id = "07 §14"
 file = "docs/07-config-extensibility.md"
-line = 1907
-end = 1954
+line = 1910
+end = 1957
 title = "拡張 API 設計原則"
 
 [[section]]
 id = "07 §14.1"
 file = "docs/07-config-extensibility.md"
-line = 1909
-end = 1917
+line = 1912
+end = 1920
 title = "安定性とバージョニング"
 
 [[section]]
 id = "07 §14.2"
 file = "docs/07-config-extensibility.md"
-line = 1918
-end = 1925
+line = 1921
+end = 1928
 title = "設計規律"
 
 [[section]]
 id = "07 §14.3"
 file = "docs/07-config-extensibility.md"
-line = 1926
-end = 1945
+line = 1929
+end = 1948
 title = "権限 ([02 §10.4](02-architecture.md#104-権限モデル-aiプラグイン共通骨子) の具体化)"
 
 [[section]]
 id = "07 §14.4"
 file = "docs/07-config-extensibility.md"
-line = 1946
-end = 1954
+line = 1949
+end = 1957
 title = "サンドボックス"
 
 [[section]]
 id = "07 §15"
 file = "docs/07-config-extensibility.md"
-line = 1955
-end = 1967
+line = 1958
+end = 1970
 title = "LSP / DAP / フォーマッタ / リンタ統合方針"
 
 [[section]]
 id = "07 §16"
 file = "docs/07-config-extensibility.md"
-line = 1968
-end = 1996
+line = 1971
+end = 1999
 title = "セッション復元 (FR-121, v0.5 Could)"
 
 [[section]]
 id = "07 §16.1"
 file = "docs/07-config-extensibility.md"
-line = 1970
-end = 1980
+line = 1973
+end = 1983
 title = "保存する内容"
 
 [[section]]
 id = "07 §16.2"
 file = "docs/07-config-extensibility.md"
-line = 1981
-end = 1984
+line = 1984
+end = 1987
 title = "保存場所と形式"
 
 [[section]]
 id = "07 §16.3"
 file = "docs/07-config-extensibility.md"
-line = 1985
-end = 1996
+line = 1988
+end = 1999
 title = "復元の挙動"
 
 [[section]]
 id = "07 §17"
 file = "docs/07-config-extensibility.md"
-line = 1997
-end = 2172
+line = 2000
+end = 2175
 title = "国際化 (UI 文言)"
 
 [[section]]
 id = "07 §17.1"
 file = "docs/07-config-extensibility.md"
-line = 1999
-end = 2007
+line = 2002
+end = 2010
 title = "方針 ([OQ-21](10-decisions.md#oq-21-ui-文言の国際化) の具体化)"
 
 [[section]]
 id = "07 §17.2"
 file = "docs/07-config-extensibility.md"
-line = 2008
-end = 2075
+line = 2011
+end = 2078
 title = "書式"
 
 [[section]]
 id = "07 §17.3"
 file = "docs/07-config-extensibility.md"
-line = 2076
-end = 2081
+line = 2079
+end = 2084
 title = "表示上の注意"
 
 [[section]]
 id = "07 §17.4"
 file = "docs/07-config-extensibility.md"
-line = 2082
-end = 2172
+line = 2085
+end = 2175
 title = "ユーザーの言語ファイル (v0.4 の M26)"
 
 [[section]]
 id = "07 §18"
 file = "docs/07-config-extensibility.md"
-line = 2173
-end = 2325
+line = 2176
+end = 2328
 title = "CLI 仕様"
 
 [[section]]
 id = "07 §18.1"
 file = "docs/07-config-extensibility.md"
-line = 2175
-end = 2188
+line = 2178
+end = 2191
 title = "書式"
 
 [[section]]
 id = "07 §18.2"
 file = "docs/07-config-extensibility.md"
-line = 2189
-end = 2201
+line = 2192
+end = 2204
 title = "位置引数"
 
 [[section]]
 id = "07 §18.3"
 file = "docs/07-config-extensibility.md"
-line = 2202
-end = 2249
+line = 2205
+end = 2252
 title = "オプション"
 
 [[section]]
 id = "07 §18.4"
 file = "docs/07-config-extensibility.md"
-line = 2250
-end = 2264
+line = 2253
+end = 2267
 title = "終了コード"
 
 [[section]]
 id = "07 §18.5"
 file = "docs/07-config-extensibility.md"
-line = 2265
-end = 2273
+line = 2268
+end = 2276
 title = "標準入力・標準出力"
 
 [[section]]
 id = "07 §18.6"
 file = "docs/07-config-extensibility.md"
-line = 2274
-end = 2289
+line = 2277
+end = 2292
 title = "`$EDITOR` / `$GIT_EDITOR` / `$VISUAL` として使われたとき"
 
 [[section]]
 id = "07 §18.7"
 file = "docs/07-config-extensibility.md"
-line = 2290
-end = 2293
+line = 2293
+end = 2296
 title = "シェル補完"
 
 [[section]]
 id = "07 §18.8"
 file = "docs/07-config-extensibility.md"
-line = 2294
-end = 2325
+line = 2297
+end = 2328
 title = "更新に関わる予約 (`--check-update` と前回起動した版の記録)"
 
 [[section]]
 id = "07 §19"
 file = "docs/07-config-extensibility.md"
-line = 2326
-end = 2354
+line = 2329
+end = 2357
 title = "サードパーティ拡張のライセンスと信頼"
 
 [[section]]
 id = "07 §19.1"
 file = "docs/07-config-extensibility.md"
-line = 2328
-end = 2336
+line = 2331
+end = 2339
 title = "配布物の種類と危険度"
 
 [[section]]
 id = "07 §19.2"
 file = "docs/07-config-extensibility.md"
-line = 2337
-end = 2343
+line = 2340
+end = 2346
 title = "ライセンス"
 
 [[section]]
 id = "07 §19.3"
 file = "docs/07-config-extensibility.md"
-line = 2344
-end = 2354
+line = 2347
+end = 2357
 title = "信頼の段階"
 
 [[section]]
 id = "07 §20"
 file = "docs/07-config-extensibility.md"
-line = 2355
-end = 2371
+line = 2358
+end = 2374
 title = "未決事項"
 
 [[section]]
@@ -7595,733 +7602,733 @@ section = "03 §4.5.3"
 [[id]]
 id = "BRK-1"
 file = "docs/03-core-design.md"
-line = 540
+line = 556
 section = "03 §5.7"
 
 [[id]]
 id = "BRK-2"
 file = "docs/03-core-design.md"
-line = 541
+line = 557
 section = "03 §5.7"
 
 [[id]]
 id = "BRK-3"
 file = "docs/03-core-design.md"
-line = 542
+line = 558
 section = "03 §5.7"
 
 [[id]]
 id = "BRK-4"
 file = "docs/03-core-design.md"
-line = 543
+line = 559
 section = "03 §5.7"
 
 [[id]]
 id = "BRK-5"
 file = "docs/03-core-design.md"
-line = 544
+line = 560
 section = "03 §5.7"
 
 [[id]]
 id = "BRK-6"
 file = "docs/03-core-design.md"
-line = 545
+line = 561
 section = "03 §5.7"
 
 [[id]]
 id = "BRK-7"
 file = "docs/03-core-design.md"
-line = 546
+line = 562
 section = "03 §5.7"
 
 [[id]]
 id = "CS1"
 file = "docs/03-core-design.md"
-line = 633
+line = 649
 section = "03 §6.2"
 
 [[id]]
 id = "CS2"
 file = "docs/03-core-design.md"
-line = 634
+line = 650
 section = "03 §6.2"
 
 [[id]]
 id = "CS3"
 file = "docs/03-core-design.md"
-line = 635
+line = 651
 section = "03 §6.2"
 
 [[id]]
 id = "CS4"
 file = "docs/03-core-design.md"
-line = 636
+line = 652
 section = "03 §6.2"
 
 [[id]]
 id = "CS5"
 file = "docs/03-core-design.md"
-line = 637
+line = 653
 section = "03 §6.2"
 
 [[id]]
 id = "CS6"
 file = "docs/03-core-design.md"
-line = 638
+line = 654
 section = "03 §6.2"
 
 [[id]]
 id = "R1"
 file = "docs/03-core-design.md"
-line = 817
+line = 833
 section = "03 §7.3"
 
 [[id]]
 id = "R2"
 file = "docs/03-core-design.md"
-line = 818
+line = 834
 section = "03 §7.3"
 
 [[id]]
 id = "R3"
 file = "docs/03-core-design.md"
-line = 819
+line = 835
 section = "03 §7.3"
 
 [[id]]
 id = "R4"
 file = "docs/03-core-design.md"
-line = 820
+line = 836
 section = "03 §7.3"
 
 [[id]]
 id = "R5"
 file = "docs/03-core-design.md"
-line = 821
+line = 837
 section = "03 §7.3"
 
 [[id]]
 id = "R6"
 file = "docs/03-core-design.md"
-line = 822
+line = 838
 section = "03 §7.3"
 
 [[id]]
 id = "R7"
 file = "docs/03-core-design.md"
-line = 823
+line = 839
 section = "03 §7.3"
 
 [[id]]
 id = "R8"
 file = "docs/03-core-design.md"
-line = 824
+line = 840
 section = "03 §7.3"
 
 [[id]]
 id = "R9"
 file = "docs/03-core-design.md"
-line = 825
+line = 841
 section = "03 §7.3"
 
 [[id]]
 id = "ISO-2022-JP"
 file = "docs/03-core-design.md"
-line = 1055
+line = 1071
 section = "03 §8.3.1"
 
 [[id]]
 id = "UTF-7"
 file = "docs/03-core-design.md"
-line = 1200
+line = 1216
 section = "03 §8.9"
 
 [[id]]
 id = "F1"
 file = "docs/03-core-design.md"
-line = 1220
+line = 1236
 section = "03 §9.1"
 
 [[id]]
 id = "F2"
 file = "docs/03-core-design.md"
-line = 1221
+line = 1237
 section = "03 §9.1"
 
 [[id]]
 id = "F3"
 file = "docs/03-core-design.md"
-line = 1222
+line = 1238
 section = "03 §9.1"
 
 [[id]]
 id = "F4"
 file = "docs/03-core-design.md"
-line = 1223
+line = 1239
 section = "03 §9.1"
 
 [[id]]
 id = "F5"
 file = "docs/03-core-design.md"
-line = 1224
+line = 1240
 section = "03 §9.1"
 
 [[id]]
 id = "F6"
 file = "docs/03-core-design.md"
-line = 1225
+line = 1241
 section = "03 §9.1"
 
 [[id]]
 id = "F7"
 file = "docs/03-core-design.md"
-line = 1226
+line = 1242
 section = "03 §9.1"
 
 [[id]]
 id = "F8"
 file = "docs/03-core-design.md"
-line = 1227
+line = 1243
 section = "03 §9.1"
 
 [[id]]
 id = "F9"
 file = "docs/03-core-design.md"
-line = 1228
+line = 1244
 section = "03 §9.1"
 
 [[id]]
 id = "F10"
 file = "docs/03-core-design.md"
-line = 1229
+line = 1245
 section = "03 §9.1"
 
 [[id]]
 id = "F11"
 file = "docs/03-core-design.md"
-line = 1230
+line = 1246
 section = "03 §9.1"
 
 [[id]]
 id = "WATCH-1"
 file = "docs/03-core-design.md"
-line = 1606
+line = 1622
 section = "03 §9.5.1"
 
 [[id]]
 id = "WATCH-2"
 file = "docs/03-core-design.md"
-line = 1607
+line = 1623
 section = "03 §9.5.1"
 
 [[id]]
 id = "WATCH-3"
 file = "docs/03-core-design.md"
-line = 1608
+line = 1624
 section = "03 §9.5.1"
 
 [[id]]
 id = "WATCH-4"
 file = "docs/03-core-design.md"
-line = 1609
+line = 1625
 section = "03 §9.5.1"
 
 [[id]]
 id = "WATCH-5"
 file = "docs/03-core-design.md"
-line = 1610
+line = 1626
 section = "03 §9.5.1"
 
 [[id]]
 id = "WATCH-6"
 file = "docs/03-core-design.md"
-line = 1611
+line = 1627
 section = "03 §9.5.1"
 
 [[id]]
 id = "WATCH-7"
 file = "docs/03-core-design.md"
-line = 1612
+line = 1628
 section = "03 §9.5.1"
 
 [[id]]
 id = "WATCH-8"
 file = "docs/03-core-design.md"
-line = 1613
+line = 1629
 section = "03 §9.5.1"
 
 [[id]]
 id = "WATCH-9"
 file = "docs/03-core-design.md"
-line = 1614
+line = 1630
 section = "03 §9.5.1"
 
 [[id]]
 id = "WATCH-10"
 file = "docs/03-core-design.md"
-line = 1615
+line = 1631
 section = "03 §9.5.1"
 
 [[id]]
 id = "WATCH-11"
 file = "docs/03-core-design.md"
-line = 1616
+line = 1632
 section = "03 §9.5.1"
 
 [[id]]
 id = "WATCH-12"
 file = "docs/03-core-design.md"
-line = 1617
+line = 1633
 section = "03 §9.5.1"
 
 [[id]]
 id = "PANE-1"
 file = "docs/03-core-design.md"
-line = 1871
+line = 1887
 section = "03 §9.9"
 
 [[id]]
 id = "PANE-2"
 file = "docs/03-core-design.md"
-line = 1872
+line = 1888
 section = "03 §9.9"
 
 [[id]]
 id = "PANE-3"
 file = "docs/03-core-design.md"
-line = 1873
+line = 1889
 section = "03 §9.9"
 
 [[id]]
 id = "PANE-4"
 file = "docs/03-core-design.md"
-line = 1874
+line = 1890
 section = "03 §9.9"
 
 [[id]]
 id = "PANE-5"
 file = "docs/03-core-design.md"
-line = 1875
+line = 1891
 section = "03 §9.9"
 
 [[id]]
 id = "PANE-6"
 file = "docs/03-core-design.md"
-line = 1876
+line = 1892
 section = "03 §9.9"
 
 [[id]]
 id = "PANE-7"
 file = "docs/03-core-design.md"
-line = 1877
+line = 1893
 section = "03 §9.9"
 
 [[id]]
 id = "PANE-8"
 file = "docs/03-core-design.md"
-line = 1878
+line = 1894
 section = "03 §9.9"
 
 [[id]]
 id = "PANE-9"
 file = "docs/03-core-design.md"
-line = 1879
+line = 1895
 section = "03 §9.9"
 
 [[id]]
 id = "PANE-10"
 file = "docs/03-core-design.md"
-line = 1880
+line = 1896
 section = "03 §9.9"
 
 [[id]]
 id = "PANE-11"
 file = "docs/03-core-design.md"
-line = 1881
+line = 1897
 section = "03 §9.9"
 
 [[id]]
 id = "PANE-12"
 file = "docs/03-core-design.md"
-line = 1882
+line = 1898
 section = "03 §9.9"
 
 [[id]]
 id = "CMT-1"
 file = "docs/03-core-design.md"
-line = 2931
+line = 2947
 section = "03 §15.6"
 
 [[id]]
 id = "CMT-2"
 file = "docs/03-core-design.md"
-line = 2932
+line = 2948
 section = "03 §15.6"
 
 [[id]]
 id = "CMT-3"
 file = "docs/03-core-design.md"
-line = 2933
+line = 2949
 section = "03 §15.6"
 
 [[id]]
 id = "CMT-4"
 file = "docs/03-core-design.md"
-line = 2934
+line = 2950
 section = "03 §15.6"
 
 [[id]]
 id = "CMT-5"
 file = "docs/03-core-design.md"
-line = 2935
+line = 2951
 section = "03 §15.6"
 
 [[id]]
 id = "CMT-6"
 file = "docs/03-core-design.md"
-line = 2936
+line = 2952
 section = "03 §15.6"
 
 [[id]]
 id = "CMT-7"
 file = "docs/03-core-design.md"
-line = 2937
+line = 2953
 section = "03 §15.6"
 
 [[id]]
 id = "INV-S1"
 file = "docs/03-core-design.md"
-line = 3165
+line = 3181
 section = "03 §20"
 
 [[id]]
 id = "INV-S2"
 file = "docs/03-core-design.md"
-line = 3166
+line = 3182
 section = "03 §20"
 
 [[id]]
 id = "INV-S3"
 file = "docs/03-core-design.md"
-line = 3167
+line = 3183
 section = "03 §20"
 
 [[id]]
 id = "INV-C1"
 file = "docs/03-core-design.md"
-line = 3168
+line = 3184
 section = "03 §20"
 
 [[id]]
 id = "INV-C2"
 file = "docs/03-core-design.md"
-line = 3169
+line = 3185
 section = "03 §20"
 
 [[id]]
 id = "INV-D1"
 file = "docs/03-core-design.md"
-line = 3170
+line = 3186
 section = "03 §20"
 
 [[id]]
 id = "INV-D2"
 file = "docs/03-core-design.md"
-line = 3171
+line = 3187
 section = "03 §20"
 
 [[id]]
 id = "INV-D3"
 file = "docs/03-core-design.md"
-line = 3172
+line = 3188
 section = "03 §20"
 
 [[id]]
 id = "INV-D4"
 file = "docs/03-core-design.md"
-line = 3173
+line = 3189
 section = "03 §20"
 
 [[id]]
 id = "INV-D5"
 file = "docs/03-core-design.md"
-line = 3174
+line = 3190
 section = "03 §20"
 
 [[id]]
 id = "INV-D6"
 file = "docs/03-core-design.md"
-line = 3175
+line = 3191
 section = "03 §20"
 
 [[id]]
 id = "INV-D7"
 file = "docs/03-core-design.md"
-line = 3176
+line = 3192
 section = "03 §20"
 
 [[id]]
 id = "INV-H1"
 file = "docs/03-core-design.md"
-line = 3177
+line = 3193
 section = "03 §20"
 
 [[id]]
 id = "INV-H2"
 file = "docs/03-core-design.md"
-line = 3178
+line = 3194
 section = "03 §20"
 
 [[id]]
 id = "INV-H3"
 file = "docs/03-core-design.md"
-line = 3179
+line = 3195
 section = "03 §20"
 
 [[id]]
 id = "INV-H4"
 file = "docs/03-core-design.md"
-line = 3180
+line = 3196
 section = "03 §20"
 
 [[id]]
 id = "INV-L1"
 file = "docs/03-core-design.md"
-line = 3181
+line = 3197
 section = "03 §20"
 
 [[id]]
 id = "INV-J1"
 file = "docs/03-core-design.md"
-line = 3182
+line = 3198
 section = "03 §20"
 
 [[id]]
 id = "INV-F1"
 file = "docs/03-core-design.md"
-line = 3183
+line = 3199
 section = "03 §20"
 
 [[id]]
 id = "INV-F2"
 file = "docs/03-core-design.md"
-line = 3184
+line = 3200
 section = "03 §20"
 
 [[id]]
 id = "INV-F3"
 file = "docs/03-core-design.md"
-line = 3185
+line = 3201
 section = "03 §20"
 
 [[id]]
 id = "INV-IO1"
 file = "docs/03-core-design.md"
-line = 3186
+line = 3202
 section = "03 §20"
 
 [[id]]
 id = "INV-IO2"
 file = "docs/03-core-design.md"
-line = 3187
+line = 3203
 section = "03 §20"
 
 [[id]]
 id = "INV-IO3"
 file = "docs/03-core-design.md"
-line = 3188
+line = 3204
 section = "03 §20"
 
 [[id]]
 id = "INV-IO4"
 file = "docs/03-core-design.md"
-line = 3189
+line = 3205
 section = "03 §20"
 
 [[id]]
 id = "OQ-32"
 file = "docs/03-core-design.md"
-line = 3301
+line = 3317
 section = "03 §23"
 
 [[id]]
 id = "OQ-45"
 file = "docs/03-core-design.md"
-line = 3302
+line = 3318
 section = "03 §23"
 
 [[id]]
 id = "OQ-46"
 file = "docs/03-core-design.md"
-line = 3303
+line = 3319
 section = "03 §23"
 
 [[id]]
 id = "OQ-47"
 file = "docs/03-core-design.md"
-line = 3304
+line = 3320
 section = "03 §23"
 
 [[id]]
 id = "OQ-48"
 file = "docs/03-core-design.md"
-line = 3305
+line = 3321
 section = "03 §23"
 
 [[id]]
 id = "OQ-49"
 file = "docs/03-core-design.md"
-line = 3306
+line = 3322
 section = "03 §23"
 
 [[id]]
 id = "OQ-50"
 file = "docs/03-core-design.md"
-line = 3307
+line = 3323
 section = "03 §23"
 
 [[id]]
 id = "OQ-51"
 file = "docs/03-core-design.md"
-line = 3308
+line = 3324
 section = "03 §23"
 
 [[id]]
 id = "OQ-52"
 file = "docs/03-core-design.md"
-line = 3309
+line = 3325
 section = "03 §23"
 
 [[id]]
 id = "OQ-05"
 file = "docs/03-core-design.md"
-line = 3310
+line = 3326
 section = "03 §23"
 
 [[id]]
 id = "OQ-53"
 file = "docs/03-core-design.md"
-line = 3311
+line = 3327
 section = "03 §23"
 
 [[id]]
 id = "OQ-54"
 file = "docs/03-core-design.md"
-line = 3312
+line = 3328
 section = "03 §23"
 
 [[id]]
 id = "OQ-39"
 file = "docs/03-core-design.md"
-line = 3313
+line = 3329
 section = "03 §23"
 
 [[id]]
 id = "OQ-55"
 file = "docs/03-core-design.md"
-line = 3314
+line = 3330
 section = "03 §23"
 
 [[id]]
 id = "OQ-56"
 file = "docs/03-core-design.md"
-line = 3315
+line = 3331
 section = "03 §23"
 
 [[id]]
 id = "OQ-57"
 file = "docs/03-core-design.md"
-line = 3316
+line = 3332
 section = "03 §23"
 
 [[id]]
 id = "OQ-58"
 file = "docs/03-core-design.md"
-line = 3317
+line = 3333
 section = "03 §23"
 
 [[id]]
 id = "OQ-59"
 file = "docs/03-core-design.md"
-line = 3318
+line = 3334
 section = "03 §23"
 
 [[id]]
 id = "OQ-60"
 file = "docs/03-core-design.md"
-line = 3319
+line = 3335
 section = "03 §23"
 
 [[id]]
 id = "OQ-41"
 file = "docs/03-core-design.md"
-line = 3320
+line = 3336
 section = "03 §23"
 
 [[id]]
 id = "OQ-218"
 file = "docs/03-core-design.md"
-line = 3321
+line = 3337
 section = "03 §23"
 
 [[id]]
 id = "OQ-42"
 file = "docs/03-core-design.md"
-line = 3322
+line = 3338
 section = "03 §23"
 
 [[id]]
 id = "OQ-139"
 file = "docs/03-core-design.md"
-line = 3323
+line = 3339
 section = "03 §23"
 
 [[id]]
 id = "OQ-217"
 file = "docs/03-core-design.md"
-line = 3324
+line = 3340
 section = "03 §23"
 
 [[id]]
 id = "OQ-31"
 file = "docs/03-core-design.md"
-line = 3327
+line = 3343
 section = "03 §23"
 
 [[id]]
 id = "OQ-116"
 file = "docs/03-core-design.md"
-line = 3328
+line = 3344
 section = "03 §23"
 
 [[id]]
 id = "OQ-114"
 file = "docs/03-core-design.md"
-line = 3329
+line = 3345
 section = "03 §23"
 
 [[id]]
 id = "OQ-03"
 file = "docs/03-core-design.md"
-line = 3330
+line = 3346
 section = "03 §23"
 
 [[id]]
 id = "OQ-138"
 file = "docs/03-core-design.md"
-line = 3331
+line = 3347
 section = "03 §23"
 
 [[id]]
 id = "OQ-162"
 file = "docs/03-core-design.md"
-line = 3332
+line = 3348
 section = "03 §23"
 
 [[id]]
 id = "OQ-110"
 file = "docs/03-core-design.md"
-line = 3336
+line = 3352
 section = "03 §23"
 
 [[id]]
@@ -8501,67 +8508,67 @@ section = "04 §12.1"
 [[id]]
 id = "OQ-33"
 file = "docs/04-tui-design.md"
-line = 2267
+line = 2270
 section = "04 §18"
 
 [[id]]
 id = "OQ-61"
 file = "docs/04-tui-design.md"
-line = 2268
+line = 2271
 section = "04 §18"
 
 [[id]]
 id = "OQ-64"
 file = "docs/04-tui-design.md"
-line = 2269
+line = 2272
 section = "04 §18"
 
 [[id]]
 id = "OQ-66"
 file = "docs/04-tui-design.md"
-line = 2270
+line = 2273
 section = "04 §18"
 
 [[id]]
 id = "OQ-68"
 file = "docs/04-tui-design.md"
-line = 2271
+line = 2274
 section = "04 §18"
 
 [[id]]
 id = "OQ-180"
 file = "docs/04-tui-design.md"
-line = 2272
+line = 2275
 section = "04 §18"
 
 [[id]]
 id = "OQ-181"
 file = "docs/04-tui-design.md"
-line = 2273
+line = 2276
 section = "04 §18"
 
 [[id]]
 id = "OQ-182"
 file = "docs/04-tui-design.md"
-line = 2274
+line = 2277
 section = "04 §18"
 
 [[id]]
 id = "OQ-183"
 file = "docs/04-tui-design.md"
-line = 2275
+line = 2278
 section = "04 §18"
 
 [[id]]
 id = "OQ-184"
 file = "docs/04-tui-design.md"
-line = 2276
+line = 2279
 section = "04 §18"
 
 [[id]]
 id = "OQ-124"
 file = "docs/04-tui-design.md"
-line = 2277
+line = 2280
 section = "04 §18"
 
 [[id]]
@@ -9311,259 +9318,259 @@ section = "07 §7.4"
 [[id]]
 id = "LANG-1"
 file = "docs/07-config-extensibility.md"
-line = 1252
+line = 1255
 section = "07 §9.6"
 
 [[id]]
 id = "LANG-2"
 file = "docs/07-config-extensibility.md"
-line = 1253
+line = 1256
 section = "07 §9.6"
 
 [[id]]
 id = "LANG-3"
 file = "docs/07-config-extensibility.md"
-line = 1254
+line = 1257
 section = "07 §9.6"
 
 [[id]]
 id = "LANG-4"
 file = "docs/07-config-extensibility.md"
-line = 1255
+line = 1258
 section = "07 §9.6"
 
 [[id]]
 id = "LANG-5"
 file = "docs/07-config-extensibility.md"
-line = 1256
+line = 1259
 section = "07 §9.6"
 
 [[id]]
 id = "LANG-6"
 file = "docs/07-config-extensibility.md"
-line = 1257
+line = 1260
 section = "07 §9.6"
 
 [[id]]
 id = "LANG-7"
 file = "docs/07-config-extensibility.md"
-line = 1258
+line = 1261
 section = "07 §9.6"
 
 [[id]]
 id = "LANG-8"
 file = "docs/07-config-extensibility.md"
-line = 1259
+line = 1262
 section = "07 §9.6"
 
 [[id]]
 id = "LANG-9"
 file = "docs/07-config-extensibility.md"
-line = 1260
+line = 1263
 section = "07 §9.6"
 
 [[id]]
 id = "EC-1"
 file = "docs/07-config-extensibility.md"
-line = 1336
+line = 1339
 section = "07 §10.3"
 
 [[id]]
 id = "EC-2"
 file = "docs/07-config-extensibility.md"
-line = 1337
+line = 1340
 section = "07 §10.3"
 
 [[id]]
 id = "EC-3"
 file = "docs/07-config-extensibility.md"
-line = 1338
+line = 1341
 section = "07 §10.3"
 
 [[id]]
 id = "EC-4"
 file = "docs/07-config-extensibility.md"
-line = 1339
+line = 1342
 section = "07 §10.3"
 
 [[id]]
 id = "EC-5"
 file = "docs/07-config-extensibility.md"
-line = 1340
+line = 1343
 section = "07 §10.3"
 
 [[id]]
 id = "EC-6"
 file = "docs/07-config-extensibility.md"
-line = 1341
+line = 1344
 section = "07 §10.3"
 
 [[id]]
 id = "EC-7"
 file = "docs/07-config-extensibility.md"
-line = 1342
+line = 1345
 section = "07 §10.3"
 
 [[id]]
 id = "EC-8"
 file = "docs/07-config-extensibility.md"
-line = 1343
+line = 1346
 section = "07 §10.3"
 
 [[id]]
 id = "OWN-1"
 file = "docs/07-config-extensibility.md"
-line = 1628
+line = 1631
 section = "07 §12.1"
 
 [[id]]
 id = "OWN-2"
 file = "docs/07-config-extensibility.md"
-line = 1629
+line = 1632
 section = "07 §12.1"
 
 [[id]]
 id = "OWN-3"
 file = "docs/07-config-extensibility.md"
-line = 1630
+line = 1633
 section = "07 §12.1"
 
 [[id]]
 id = "OWN-4"
 file = "docs/07-config-extensibility.md"
-line = 1631
+line = 1634
 section = "07 §12.1"
 
 [[id]]
 id = "OWN-5"
 file = "docs/07-config-extensibility.md"
-line = 1632
+line = 1635
 section = "07 §12.1"
 
 [[id]]
 id = "OWN-6"
 file = "docs/07-config-extensibility.md"
-line = 1633
+line = 1636
 section = "07 §12.1"
 
 [[id]]
 id = "OWN-7"
 file = "docs/07-config-extensibility.md"
-line = 1634
+line = 1637
 section = "07 §12.1"
 
 [[id]]
 id = "OWN-8"
 file = "docs/07-config-extensibility.md"
-line = 1635
+line = 1638
 section = "07 §12.1"
 
 [[id]]
 id = "WSC-1"
 file = "docs/07-config-extensibility.md"
-line = 1718
+line = 1721
 section = "07 §12.5"
 
 [[id]]
 id = "WSC-2"
 file = "docs/07-config-extensibility.md"
-line = 1719
+line = 1722
 section = "07 §12.5"
 
 [[id]]
 id = "WSC-3"
 file = "docs/07-config-extensibility.md"
-line = 1720
+line = 1723
 section = "07 §12.5"
 
 [[id]]
 id = "WSC-4"
 file = "docs/07-config-extensibility.md"
-line = 1721
+line = 1724
 section = "07 §12.5"
 
 [[id]]
 id = "WSC-5"
 file = "docs/07-config-extensibility.md"
-line = 1722
+line = 1725
 section = "07 §12.5"
 
 [[id]]
 id = "WSC-6"
 file = "docs/07-config-extensibility.md"
-line = 1723
+line = 1726
 section = "07 §12.5"
 
 [[id]]
 id = "WSC-7"
 file = "docs/07-config-extensibility.md"
-line = 1724
+line = 1727
 section = "07 §12.5"
 
 [[id]]
 id = "OQ-94"
 file = "docs/07-config-extensibility.md"
-line = 2361
+line = 2364
 section = "07 §20"
 
 [[id]]
 id = "OQ-95"
 file = "docs/07-config-extensibility.md"
-line = 2362
+line = 2365
 section = "07 §20"
 
 [[id]]
 id = "OQ-35"
 file = "docs/07-config-extensibility.md"
-line = 2363
+line = 2366
 section = "07 §20"
 
 [[id]]
 id = "OQ-96"
 file = "docs/07-config-extensibility.md"
-line = 2364
+line = 2367
 section = "07 §20"
 
 [[id]]
 id = "OQ-43"
 file = "docs/07-config-extensibility.md"
-line = 2365
+line = 2368
 section = "07 §20"
 
 [[id]]
 id = "OQ-98"
 file = "docs/07-config-extensibility.md"
-line = 2366
+line = 2369
 section = "07 §20"
 
 [[id]]
 id = "OQ-99"
 file = "docs/07-config-extensibility.md"
-line = 2367
+line = 2370
 section = "07 §20"
 
 [[id]]
 id = "OQ-141"
 file = "docs/07-config-extensibility.md"
-line = 2368
+line = 2371
 section = "07 §20"
 
 [[id]]
 id = "OQ-142"
 file = "docs/07-config-extensibility.md"
-line = 2369
+line = 2372
 section = "07 §20"
 
 [[id]]
 id = "OQ-120"
 file = "docs/07-config-extensibility.md"
-line = 2370
+line = 2373
 section = "07 §20"
 
 [[id]]
 id = "OQ-124"
 file = "docs/07-config-extensibility.md"
-line = 2371
+line = 2374
 section = "07 §20"
 
 [[id]]

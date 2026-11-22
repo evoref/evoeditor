@@ -48,6 +48,10 @@ title = "Go to Document Start"
 description = "Move the cursor to the end of the line."
 title = "Go to Line End"
 
+[cmd.cursor.goto_bracket]
+description = "Move to the bracket that matches the one at the cursor."
+title = "Go to Matching Bracket"
+
 [cmd.cursor.goto_line]
 description = "Move the cursor to the specified line."
 title = "Go to Line"
@@ -474,6 +478,11 @@ updated = "Updated to evoeditor {version}: {summary}"
 
 [info.cli]
 unsupported = "{option} is not available in this version and was ignored"
+
+[info.bracket]
+no_match = "No matching bracket"
+none = "No bracket next to the cursor"
+too_far = "No matching bracket within {limit}"
 
 [info.config]
 diagnostic_no_file = "The diagnostic for {file} was not written in a file, so there is nothing to open"

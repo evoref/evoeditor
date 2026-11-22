@@ -8,7 +8,7 @@ use std::borrow::Cow::Borrowed as B;
 
 use crate::catalog::Entry;
 
-/// `locales/en.toml` の文言 (937 件)。
+/// `locales/en.toml` の文言 (942 件)。
 #[rustfmt::skip]
 pub(crate) static EN: &[Entry] = &[
     (B("cmd.app.quit.description"), B("Quit the editor.")),
@@ -41,6 +41,8 @@ pub(crate) static EN: &[Entry] = &[
     (B("cmd.cursor.doc_start.title"), B("Go to Document Start")),
     (B("cmd.cursor.end.description"), B("Move the cursor to the end of the line.")),
     (B("cmd.cursor.end.title"), B("Go to Line End")),
+    (B("cmd.cursor.goto_bracket.description"), B("Move to the bracket that matches the one at the cursor.")),
+    (B("cmd.cursor.goto_bracket.title"), B("Go to Matching Bracket")),
     (B("cmd.cursor.goto_line.description"), B("Move the cursor to the specified line.")),
     (B("cmd.cursor.goto_line.title"), B("Go to Line")),
     (B("cmd.cursor.home.description"), B("Move the cursor to the start of the line.")),
@@ -245,6 +247,9 @@ pub(crate) static EN: &[Entry] = &[
     (B("hint.workspace.open_file"), B("Open")),
     (B("info.app.release_summary"), B("Saves the parts you did not edit with their original bytes, and lets you edit documents with invalid bytes. Also adds multi-line regular expressions, standard input, high-contrast themes, and more. See the release notes for details")),
     (B("info.app.updated"), B("Updated to evoeditor {version}: {summary}")),
+    (B("info.bracket.no_match"), B("No matching bracket")),
+    (B("info.bracket.none"), B("No bracket next to the cursor")),
+    (B("info.bracket.too_far"), B("No matching bracket within {limit}")),
     (B("info.cli.unsupported"), B("{option} is not available in this version and was ignored")),
     (B("info.config.diagnostic_no_file"), B("The diagnostic for {file} was not written in a file, so there is nothing to open")),
     (B("info.config.locale_restart"), B("Changes to language files take effect after a restart")),
@@ -950,7 +955,7 @@ pub(crate) static EN: &[Entry] = &[
     (B("ui.workspace_search.title"), B("Search Workspace {toggles}")),
 ];
 
-/// `locales/ja.toml` の文言 (937 件)。
+/// `locales/ja.toml` の文言 (942 件)。
 #[rustfmt::skip]
 pub(crate) static JA: &[Entry] = &[
     (B("cmd.app.quit.description"), B("エディタを終了します。")),
@@ -983,6 +988,8 @@ pub(crate) static JA: &[Entry] = &[
     (B("cmd.cursor.doc_start.title"), B("文書の先頭へ移動")),
     (B("cmd.cursor.end.description"), B("カーソルを行の末尾へ動かします。")),
     (B("cmd.cursor.end.title"), B("行末へ移動")),
+    (B("cmd.cursor.goto_bracket.description"), B("カーソルの位置の括弧と対応する括弧へ移ります。")),
+    (B("cmd.cursor.goto_bracket.title"), B("対応する括弧へ移動")),
     (B("cmd.cursor.goto_line.description"), B("指定した行へカーソルを動かします。")),
     (B("cmd.cursor.goto_line.title"), B("行へ移動")),
     (B("cmd.cursor.home.description"), B("カーソルを行の先頭へ動かします。")),
@@ -1187,6 +1194,9 @@ pub(crate) static JA: &[Entry] = &[
     (B("hint.workspace.open_file"), B("開く")),
     (B("info.app.release_summary"), B("編集していない所を元のバイト列のまま保存し、不正なバイトを含む文書も編集できるようにしました。行をまたぐ正規表現、標準入力、高コントラストのテーマなども加わりました。詳しくはリリースノートを見てください")),
     (B("info.app.updated"), B("evoeditor {version} に更新しました: {summary}")),
+    (B("info.bracket.no_match"), B("対応する括弧がありません")),
+    (B("info.bracket.none"), B("カーソルの前後に括弧がありません")),
+    (B("info.bracket.too_far"), B("対応する括弧は {limit} の範囲に見つかりませんでした")),
     (B("info.cli.unsupported"), B("{option} はこのバージョンでは使えないため無視しました")),
     (B("info.config.diagnostic_no_file"), B("{file} の診断は、ファイルに書かれたものではないため開けません")),
     (B("info.config.locale_restart"), B("言語ファイルの変更は、再起動すると有効になります")),

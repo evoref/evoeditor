@@ -201,6 +201,8 @@ pub(super) struct Marks<'a> {
     pub(super) current: Option<(usize, usize)>,
     /// 保存先の文字コードで表せない文字 (E3、03 §8.6)。
     pub(super) unmappable: &'a [(usize, usize)],
+    /// 対応括弧の強調のセル (文書のバイト位置。書記素の始まり。主のカーソルの括弧と対応の 2 つか空、03 §5.7 の BRK-5)。
+    pub(super) bracket: &'a [usize],
     /// 行の組み立てで使うロールのスタイル (フレームごとに 1 回引く)。
     pub(super) styles: &'a RowStyles,
 }
@@ -216,6 +218,7 @@ pub(super) struct RowStyles {
     pub(super) search_current: Style,
     pub(super) line_number: Style,
     pub(super) line_number_active: Style,
+    pub(super) bracket_match: Style,
 }
 
 impl RowStyles {
@@ -229,6 +232,7 @@ impl RowStyles {
             search_current: roles.get("ui.search.current"),
             line_number: roles.get("ui.line_number"),
             line_number_active: roles.get("ui.line_number.active"),
+            bracket_match: roles.get("ui.bracket_match"),
         }
     }
 }
@@ -308,7 +312,8 @@ pub(super) fn build_row(
     let mut wide_tail = false;
     'units: for u in us.clone() {
         let at = ls + u.byte;
-        // 重ねる順 (低 → 高、03 §14.5): 記号 → 表現不能の文字 → 検索の一致 / 現在の一致 → 選択
+        // 重ねる順 (低 → 高、03 §14.5): 記号 → 表現不能の文字 → 検索の一致 / 現在の一致 → 選択 → 対応括弧 (属性だけを
+        // 足す重ねるロール、07 §8.6)
         let mut decor = Style::DEFAULT;
         if marks.unmappable.iter().any(|&(s, e)| s <= at && at < e) {
             decor = over(
@@ -326,6 +331,9 @@ pub(super) fn build_row(
         }
         if selected(at) {
             decor = over(decor, marks.styles.selection);
+        }
+        if marks.bracket.contains(&at) {
+            decor = over(decor, marks.styles.bracket_match);
         }
         let mut c = u.col - base + shift;
         let mut buf = [0u8; 4];

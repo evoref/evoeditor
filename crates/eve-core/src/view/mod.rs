@@ -3,6 +3,7 @@
 //!
 //! spec: 03 §4, 03 §5, 01 FR-307, 07 §11.6 (移動・選択・`view.*`)
 
+pub(crate) mod bracket;
 pub(crate) mod motion;
 pub(crate) mod mouse;
 pub(crate) mod multi_cursor;

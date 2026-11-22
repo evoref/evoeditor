@@ -296,10 +296,13 @@ fn pane_frame(
         // 重ねる属性が無ければ `ui.line_number` のまま (現在行の行番号を強調しない)
         styles.line_number_active = eve_view::Style::DEFAULT;
     }
+    // 対応括弧の強調 (主のカーソルだけ。Frame の前に `sync_bracket_marks` が求めて View に覚えたもの、03 §5.7 の BRK-5)
+    let bracket = state.bracket_cells(view_id);
     let marks = Marks {
         found: found.as_deref().unwrap_or(&[]),
         current,
         unmappable: &unmappable,
+        bracket: &bracket,
         styles: &styles,
     };
     let cursor_line = t.byte_to_line(view.selection.primary().head).0;

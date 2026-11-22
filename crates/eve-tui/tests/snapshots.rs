@@ -268,6 +268,63 @@ fn 複数カーソル_無色の段でも主でないカーソルを見分けら�
     }
 }
 
+// ---- 対応括弧 (v0.5 の M32、FR-308。04 §9・03 §5.7 の BRK-5) ----
+
+/// 括弧を含む文書を開き、カーソルを `(` の直前に置く (`(` と対応の `)` を強調する。内側の `[]` と全角の `「」` は強調しない)。
+fn bracket_scene(depth: ColorDepth) -> Harness {
+    let h = Harness::new().with_size(80, 14).with_caps(Capabilities {
+        color_depth: depth,
+        ..Capabilities::default()
+    });
+    let mut h = h.with_file("/br.txt", "f(a, [b]) 「x」\n".as_bytes());
+    h.open("/br.txt");
+    h.run_jobs();
+    h.keys("right");
+    h
+}
+
+/// スタイルの層の 0 行目。
+fn row0(styles: &str) -> String {
+    styles
+        .lines()
+        .find(|l| l.starts_with("0:"))
+        .unwrap_or_else(|| panic!("0 行目のスタイル: {styles}"))
+        .to_owned()
+}
+
+// verifies: AC-FR-308-1
+#[test]
+fn 対応括弧は太字と下線() {
+    let mut h = bracket_scene(ColorDepth::TrueColor);
+    check("bracket-match", &mut h);
+    let (_, styles) = screen(&mut h, DEFAULT_LOOK);
+    // ガター (行番号) の後ろの `(` (列 4) と `)` (列 11) だけが太字と下線
+    let line = row0(&styles);
+    assert!(line.contains("4-4 Reset Reset BOLD | UNDERLINED"), "{line}");
+    assert!(
+        line.contains("11-11 Reset Reset BOLD | UNDERLINED"),
+        "{line}"
+    );
+}
+
+// verifies: AC-FR-308-1
+#[test]
+fn 対応括弧は無色の段でも太字と下線() {
+    let mut h = bracket_scene(ColorDepth::Mono);
+    let look = Look {
+        depth: ColorDepth::Mono,
+        ..DEFAULT_LOOK
+    };
+    check_look("bracket-match-mono", &mut h, look);
+    let (_, styles) = screen(&mut h, look);
+    let line = row0(&styles);
+    assert!(line.contains("4-4 Reset Reset BOLD | UNDERLINED"), "{line}");
+    assert!(
+        line.contains("11-11 Reset Reset BOLD | UNDERLINED"),
+        "{line}"
+    );
+}
+
 // ---- 高コントラストのテーマ (07 §8.7、09 §3.5 の (g)) ----
 
 /// 制御文字と、大文字を含む検索語 (`Fo`) に何度も一致する語を含む文書。

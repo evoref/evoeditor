@@ -940,12 +940,13 @@ diff.plus / diff.minus = { ... }                            # diff ファイル�
 | `ui.pane.bar.active` | フォーカスのあるペインの見出し (v0.5。先頭に `▶`) | (i) | `#e8e8e8` / `#2f3340` (10.3) | `ansi.254` / `ansi.237` (9.0) | `reverse` | `reverse` |
 | `ui.tab_line` | タブラインの地と、アクティブでないタブ (v0.5 の M32、FR-510。§8.8) | (ii) | `default` / `default` | `default` / `default` | `default` / `default` | `none` (印の欄の `▶` と反転で区別する) |
 | `ui.tab_line.active` | アクティブなタブ (フォーカスのペインの文書。v0.5。`[` の後ろに `▶`) | (i) | `#e8e8e8` / `#2f3340` (10.3) | `ansi.254` / `ansi.237` (9.0) | `reverse` | `reverse` |
+| `ui.bracket_match` | 対応括弧の強調 (主のカーソルの括弧と対応の括弧の 2 つのセル。v0.5 の M32、FR-308。本文・現在行・選択・検索の一致に重ねる。§8.8) | (ii) | `underline` + `bold` | `underline` + `bold` | `underline` + `bold` | `underline` + `bold` |
 
 - 括弧内の数値はコントラスト比 (組は前景と背景、(iii) は白背景・黒背景に対する比)。16 の段の比は xterm 既定パレット (`black #000000`、`red #cd0000`、`yellow #cdcd00`、`blue #0000ee`、`magenta #cd00cd`、`cyan #00cdcd`、`white #e5e5e5`、`bright_black #7f7f7f`、`bright_yellow #ffff00`、`bright_white #ffffff` 等) で計算した。
 - `ui.cursor_line` を組にしたので、明るい背景の端末では現在行が暗い帯に明るい文字で出る (読める)。帯が強すぎると感じる利用者は `view.cursor_line_highlight = false` (v0.2 で公開) で消せる。mono の段は現在行を強調しない。16 の段を明示値にする版では、16 の段も強調しない (背景色の組が端末の配色とぶつかるため)。現在行の行番号の太字 (`ui.line_number.active`) はどの段でも残る。
 - `ui.status_bar` (と同じ組の `ui.pane.bar.active`・`ui.tab_line.active`) の 16 の段を明示値にする版では `reverse` にする (その段だけ形 (ii)。`bright_white` / `black` のような組は黒背景の端末で編集面と区別できないため。FR-513 AC-4)。`ui.cursor_line` の 16 の段の `none` も同じく形の例外 (上の箇条)。v0.1 の近似では、近似した前景と背景が同じ番号になったときに反転に置き換える規則 (04 §12.3) で区別を保つ。
 - 意味のあるロール (エラー・警告・情報・選択・検索一致・現在の一致・チョード保留・ボタンのフォーカス・フォーカスのあるペインの見出し・アクティブなタブ) は mono の段でも属性か記号で区別できる (NFR-604 AC-1)。情報メッセージは `ℹ`、警告は `⚠`、エラーは `✖` の記号を常に付ける (04 §8.9)。mono の段では **dim だけで他と区別するロールを作らない** (conhost は dim を描かないため)。行番号・`~`・プレースホルダ・実行できないパレット項目は、通常属性に区切り記号・丸括弧・行頭の `-` を併用する規定に従う (04 §12.4。この規定は提案、04 §18 の OQ-181)。
-- v0.5 以降のロール (`ui.ruler`、`diagnostic.*`、`ui.bracket_match` (値の案は §8.8)、`[syntax]`) と v1.L の `virtual_text*`・`diff.*` は、その版で本表に加える (`ui.pane.*` の 3 つは v0.5 の M30 で、`ui.tab_line*` の 2 つは v0.5 の M32 の段 1 で加えた)。上の TOML の例はユーザーテーマの書式の説明で、値は `default` テーマと同じではない。
+- v0.5 以降のロール (`ui.ruler`、`diagnostic.*`、`[syntax]`) と v1.L の `virtual_text*`・`diff.*` は、その版で本表に加える (`ui.pane.*` の 3 つは v0.5 の M30 で、`ui.tab_line*` の 2 つは v0.5 の M32 の段 1 で、`ui.bracket_match` は M32 の段 4 で加えた)。上の TOML の例はユーザーテーマの書式の説明で、値は `default` テーマと同じではない。
 
 ### 8.3 解決手順
 
@@ -1004,7 +1005,7 @@ tree-sitter のハイライトクエリ (`@keyword.control` 等) のキャプチ
 | `ansi` | `default` の全ロールで、16 の段の値を全段に使う (端末の配色に馴染む。16 色端末・SSH 先向け、04 §12.1 C3) | 端末の既定色 |
 
 - 淡色の (iii) のロール (`#808080`) は、塗った背景に対しても 3.0:1 以上 (暗 4.2、明 3.8)。比は core の `tests/theme_table.rs` で確かめる。
-- **重ねるロールは塗らない** (v0.4 の M26 の (3) で直した): ほかのロールの上に重ねて属性だけを足すロール (**重ねるロール**: `ui.status_bar.chord` (`ui.status_bar` の上)・`ui.line_number.active` (`ui.line_number` の上)・`ui.overlay.match` (`ui.overlay` と `ui.overlay.selected` の上)・`ui.search_bar.toggle_on` (検索バーの地の `ui.overlay` の上)) は、端末の既定色を本文の色に置き換えず、既定色のまま下のロールの色を通す。置き換えると、ステータスバーのチョードや一覧の選択中の行の一致が本文の色になり、下の色を隠す。ほかのロールは単独でも描くので置き換える (`ui.dialog.button.focused` は確認ダイアログで単独に描く)。重ねるロールを足すときは、この一覧と `eve_config::theme` の表に足す。
+- **重ねるロールは塗らない** (v0.4 の M26 の (3) で直した): ほかのロールの上に重ねて属性だけを足すロール (**重ねるロール**: `ui.status_bar.chord` (`ui.status_bar` の上)・`ui.line_number.active` (`ui.line_number` の上)・`ui.overlay.match` (`ui.overlay` と `ui.overlay.selected` の上)・`ui.search_bar.toggle_on` (検索バーの地の `ui.overlay` の上)・`ui.bracket_match` (編集面の本文・現在行・選択・検索の一致の上。v0.5 の M32 の段 4)) は、端末の既定色を本文の色に置き換えず、既定色のまま下のロールの色を通す。置き換えると、ステータスバーのチョードや一覧の選択中の行の一致が本文の色になり、下の色を隠す。ほかのロールは単独でも描くので置き換える (`ui.dialog.button.focused` は確認ダイアログで単独に描く)。重ねるロールを足すときは、この一覧と `eve_config::theme` の表に足す。
 - `theme.background` (確定 (ユーザー回答)、2026-10-30): `default-dark` / `default-light` を選んだときだけ効き、`dark` / `light` でその明暗に替える。`auto` (既定) は名前どおりで、`COLORFGBG` による推定はしない (名前で明暗を明示しているため。OQ-124 の推定は、明暗を名前に含まないテーマを足すときに使う)。`default` と `ansi` は見ない。
 - `theme.name` の値は組込みの 4 つ (v0.4 の M26 で `high-contrast-dark` / `high-contrast-light` を足して 6 つ。§8.7)。テーマファイル (`themes/<name>.toml`) は 4 本目。設定を差し替えると (`config.reload` を含む) その場で替わる。
 
@@ -1029,7 +1030,7 @@ tree-sitter のハイライトクエリ (`@keyword.control` 等) のキャプチ
 
 - **テーマ** (OQ-221 の 1): 組込みテーマ `high-contrast-dark` (黒の背景に白の文字) と `high-contrast-light` (白の背景に黒の文字)。どちらも背景を塗るテーマで、`default-dark` / `default-light` と同じく扱う (§8.6 の 3 本目): 色の段では、各ロールの端末の既定色 (`default`) を `ui.text` の色に置き換え (重ねるロールは置き換えず、下のロールの色を通す。§8.6 の 3 本目)、eve-tui は画面全体を `ui.text` で塗ってから描く。無色の段は塗らない。
 - **選び方**: `theme.name` で選ぶ (§5.4)。`theme.background = "dark"` / `"light"` で対の他方へ替わり、`auto` (既定) は名前どおり (OQ-221 の 4。`with_background` に足す)。名前と逆の値 (`high-contrast-dark` に `light`) を書くと逆のテーマになる。OS のハイコントラストの設定からは選ばない (OQ-221 の 5)。別名 (`high-contrast` など) は足さない。テーマが組込みの名前でも `themes/<name>.toml` でもないときは、テーマが無い診断 (`msg.config.theme_not_found`。エラー。テーマは組込みの `default` で描く。04 §15.2) を出す。場所は `theme.name` を書いた設定ファイルとその行 (`--set` で書いたときは `--set`)、`inherits` で書いた名前なら、そのテーマファイルの `inherits` の行。組込みの名前に近い名前 (組込みの名前の接頭辞か、編集距離 2 以下。どちらも大文字小文字を区別しない) なら、候補を診断の対処に入れる (例 本文「テーマ high-contrast がありません」、対処「theme.name を "high-contrast-dark" / "high-contrast-light" にしてください。…」)。
-- **ロール**: `default` と同じ 31 個 (§8.2。ロール名は公開面。M22〜M25 で増えていない。v0.5 の M30 で `ui.pane.*` の 3 つを、M32 の段 1 で `ui.tab_line*` の 2 つを足した)。値は下の 2 つの表が正本で、`xtask check-themes` が読む (セルの文法は §8.2 の凡例と同じ。表の見出しと列は 11 §8.5 で固定する)。256 と 16 の段も明示値で書く (04 §12.3 の近似を使わない)。形の列は truecolor の段の形で、16 の段で属性や形が違うロール (下の (h9) のため) は表の値が正。
+- **ロール**: `default` と同じ 32 個 (§8.2。ロール名は公開面。M22〜M25 で増えていない。v0.5 の M30 で `ui.pane.*` の 3 つを、M32 の段 1 で `ui.tab_line*` の 2 つを、段 4 で `ui.bracket_match` を足した)。値は下の 2 つの表が正本で、`xtask check-themes` が読む (セルの文法は §8.2 の凡例と同じ。表の見出しと列は 11 §8.5 で固定する)。256 と 16 の段も明示値で書く (04 §12.3 の近似を使わない)。形の列は truecolor の段の形で、16 の段で属性や形が違うロール (下の (h9) のため) は表の値が正。
 - **基準** (OQ-221 の 2・3・6。`check-themes` の高コントラスト用の検査、09 §3.5 の (g)。比は WCAG 2.x の相対輝度による比で、256 の段は xterm の 256 色の標準値で計算する):
   - (h1) truecolor と 256 の段で、本文 (`ui.text`) の組が **7.0:1 以上**。
   - (h2) 同じ段で、強調ロール (形 (i)) の組が **7.0:1 以上**。
@@ -1087,6 +1088,7 @@ tree-sitter のハイライトクエリ (`@keyword.control` 等) のキャプチ
 | `ui.pane.bar.active` | フォーカスのあるペインの見出し (v0.5。先頭に `▶`) | (i) | `#000000` / `#ffffff` (21.0・21.0) | `ansi.16` / `ansi.231` (21.0・21.0) | `black` / `bright_white` (21.0・21.0) | `reverse` |
 | `ui.tab_line` | タブラインの地と、アクティブでないタブ (v0.5) | (ii) | `default` / `default` | `default` / `default` | `default` / `default` | `none` |
 | `ui.tab_line.active` | アクティブなタブ (v0.5。`[` の後ろに `▶`) | (i) | `#000000` / `#ffffff` (21.0・21.0) | `ansi.16` / `ansi.231` (21.0・21.0) | `black` / `bright_white` (21.0・21.0) | `reverse` |
+| `ui.bracket_match` | 対応括弧の強調 (v0.5。重ねるロール) | (ii) | `underline` + `bold` | `underline` + `bold` | `underline` | `underline` + `bold` |
 
 #### 8.7.2 high-contrast-light のロール表
 
@@ -1123,10 +1125,11 @@ tree-sitter のハイライトクエリ (`@keyword.control` 等) のキャプチ
 | `ui.pane.bar.active` | フォーカスのあるペインの見出し (v0.5。先頭に `▶`) | (i) | `#ffffff` / `#000000` (21.0・21.0) | `ansi.231` / `ansi.16` (21.0・21.0) | `bright_white` / `black` (21.0・21.0) | `reverse` |
 | `ui.tab_line` | タブラインの地と、アクティブでないタブ (v0.5) | (ii) | `default` / `default` | `default` / `default` | `default` / `default` | `none` |
 | `ui.tab_line.active` | アクティブなタブ (v0.5。`[` の後ろに `▶`) | (i) | `#ffffff` / `#000000` (21.0・21.0) | `ansi.231` / `ansi.16` (21.0・21.0) | `bright_white` / `black` (21.0・21.0) | `reverse` |
+| `ui.bracket_match` | 対応括弧の強調 (v0.5。重ねるロール) | (ii) | `underline` + `bold` | `underline` + `bold` | `underline` | `underline` + `bold` |
 
-### 8.8 v0.5 で足すロール (M30 の仕様の PR、2026-11-21。`ui.pane.*` は M30 の段 2b で、`ui.tab_line*` は M32 の段 1 で §8.2 / §8.7 へ移した。`ui.bracket_match` は M32 の仕様の PR、2026-11-22)
+### 8.8 v0.5 で足すロール (M30 の仕様の PR、2026-11-21。`ui.pane.*` は M30 の段 2b で、`ui.tab_line*` は M32 の段 1 で §8.2 / §8.7 へ移した。`ui.bracket_match` は M32 の仕様の PR、2026-11-22 で足し、M32 の段 4 で §8.2 / §8.7 へ移した)
 
-複数ペイン (FR-509、M30)・タブライン (FR-510、M32)・対応括弧 (FR-308、M32) で足すロール。**値は案で、実装の PR が §8.2 と §8.7.1 / §8.7.2 の表に行を移し**、`eve_config::theme` の組込みテーマと eve-tui の `theme_table` を同じ PR で直す (§8.2 の表は実装との突合 (`check-themes`、09 §3.5) に使うので、実装より先に行を足すと検査が落ちる。本節の表は `check-themes` が読まない)。**複数ペインの 3 つ (`ui.pane.border`・`ui.pane.bar`・`ui.pane.bar.active`) は M30 の段 2b (FR-509 の PR) で §8.2 と §8.7.1 / §8.7.2 の表に移した** (値は下の表のまま。下の表の 3 行は移した記録として残す)。**タブラインの 2 つ (`ui.tab_line`・`ui.tab_line.active`) は M32 の段 1 (03 §4.7.2、FR-510 の PR) で §8.2 と §8.7.1 / §8.7.2 の表に移した** (値は下の表のまま。`check-themes` の意味のあるロールに `ui.tab_line.active` を足した)。`ui.bracket_match` は M32 の段 4 で移す。`default-dark` / `default-light` / `ansi` は §8.6 の 3 本目の規則で `default` から作る。値は既存のロールの値を流用し、比は流用元と同じ (括弧内)。`ui.bracket_match` のほかは重ねるロール (§8.6) ではない。**`ui.bracket_match` は重ねるロール** (本文・選択・現在行・検索の一致の上に属性だけを足す。移すときに §8.6 の重ねるロールの一覧と `eve_config::theme` の表に足す)。
+複数ペイン (FR-509、M30)・タブライン (FR-510、M32)・対応括弧 (FR-308、M32) で足すロール。**値は案で、実装の PR が §8.2 と §8.7.1 / §8.7.2 の表に行を移し**、`eve_config::theme` の組込みテーマと eve-tui の `theme_table` を同じ PR で直す (§8.2 の表は実装との突合 (`check-themes`、09 §3.5) に使うので、実装より先に行を足すと検査が落ちる。本節の表は `check-themes` が読まない)。**複数ペインの 3 つ (`ui.pane.border`・`ui.pane.bar`・`ui.pane.bar.active`) は M30 の段 2b (FR-509 の PR) で §8.2 と §8.7.1 / §8.7.2 の表に移した** (値は下の表のまま。下の表の 3 行は移した記録として残す)。**タブラインの 2 つ (`ui.tab_line`・`ui.tab_line.active`) は M32 の段 1 (03 §4.7.2、FR-510 の PR) で §8.2 と §8.7.1 / §8.7.2 の表に移した** (値は下の表のまま。`check-themes` の意味のあるロールに `ui.tab_line.active` を足した)。**対応括弧の `ui.bracket_match` は M32 の段 4 (03 §4.7.2、FR-308 の PR) で §8.2 と §8.7.1 / §8.7.2 の表に移し、§8.6 の重ねるロールの一覧と `eve_config::theme::LAYERED_ROLES`・`check-themes` の (h9) の下のロールの一覧 (本文・現在行・選択・検索の一致・現在の一致) に足した** (値は下の表のまま)。`default-dark` / `default-light` / `ansi` は §8.6 の 3 本目の規則で `default` から作る。値は既存のロールの値を流用し、比は流用元と同じ (括弧内)。`ui.bracket_match` のほかは重ねるロール (§8.6) ではない。**`ui.bracket_match` は重ねるロール** (本文・選択・現在行・検索の一致の上に属性だけを足す。移すときに §8.6 の重ねるロールの一覧と `eve_config::theme` の表に足す)。
 
 - **使い方** (03 §9.9 の PANE-10 / PANE-12、04 §3.4 / §9): ペインの見出しは、フォーカスのペインを `ui.pane.bar.active` (ステータスバーと同じ組。無色の段は反転。先頭に `▶`、ASCII の縮退では `>`) で、ほかのペインを `ui.pane.bar` (名前と印は本文と同じ色。残りの `─` の埋め (ASCII の縮退では `-`) は `ui.pane.border`) で描く。無色の段と ASCII の縮退の組 (最も区別しにくい組) でも「反転の行」と「`-` で埋めた行」で区別できる (FR-509 AC-1)。区切り (`│`、ASCII は `|`) は `ui.pane.border`。タブラインは、アクティブなタブを `ui.tab_line.active`、ほかを `ui.tab_line` で描き、省いた側の `‹` `›` は `ui.scroll_marker` (03 §9.9 の PANE-12 (e))。対応括弧は、主のカーソルの括弧と対応の括弧の 2 つのセルに `ui.bracket_match` (太字 + 下線。無色の段も同じ) を重ねる (03 §5.7 の BRK-5、04 §9)。
 - `check-themes` に掛かる点: (i) の 2 つは 4.5:1 (高コントラストは (h2) の 7.0:1 と (h4) の 3.0:1)、(iii) の `ui.pane.border` は白・黒の背景に 3.0:1 (高コントラストは (h3) と (h10))。16 の段で `bold` を使わない ((h9))。`ui.pane.bar.active` と `ui.tab_line.active` は意味のあるロール (フォーカス・アクティブを示す) なので、mono の段を `none` にしない (§8.2 の表の下の箇条、NFR-604 AC-1)。`ui.pane.bar` の mono が `none` なのは、`─` の埋めで区別するため (04 §12.4 と同じ考え)。
