@@ -8,7 +8,7 @@ use std::borrow::Cow::Borrowed as B;
 
 use crate::catalog::Entry;
 
-/// `locales/en.toml` の文言 (936 件)。
+/// `locales/en.toml` の文言 (937 件)。
 #[rustfmt::skip]
 pub(crate) static EN: &[Entry] = &[
     (B("cmd.app.quit.description"), B("Quit the editor.")),
@@ -321,6 +321,7 @@ pub(crate) static EN: &[Entry] = &[
     (B("info.search.wrapped_forward"), B("Reached the end of the document, searching from the start")),
     (B("info.select.no_more_matches"), B("No more matches")),
     (B("info.select.no_word"), B("No word at the cursor")),
+    (B("info.select.query_too_long"), B("The selection is too long to search for (up to 64 KiB); no matches were searched")),
     (B("info.select.too_many_matches"), B("More than {limit} matches; selection unchanged")),
     (B("info.stdin.stopped"), B("Stopped reading standard input and opened what was read ({size}) as read-only")),
     (B("info.stdin.terminal"), B("Standard input is a terminal; opened an empty document without reading it")),
@@ -949,7 +950,7 @@ pub(crate) static EN: &[Entry] = &[
     (B("ui.workspace_search.title"), B("Search Workspace {toggles}")),
 ];
 
-/// `locales/ja.toml` の文言 (936 件)。
+/// `locales/ja.toml` の文言 (937 件)。
 #[rustfmt::skip]
 pub(crate) static JA: &[Entry] = &[
     (B("cmd.app.quit.description"), B("エディタを終了します。")),
@@ -1262,6 +1263,7 @@ pub(crate) static JA: &[Entry] = &[
     (B("info.search.wrapped_forward"), B("文書の末尾に達したので、先頭から検索しました")),
     (B("info.select.no_more_matches"), B("ほかに一致はありません")),
     (B("info.select.no_word"), B("カーソルの位置に単語がありません")),
+    (B("info.select.query_too_long"), B("選択が長すぎるため (64 KiB まで)、一致を探しませんでした")),
     (B("info.select.too_many_matches"), B("一致が {limit} 件を超えるため、選択を変えませんでした")),
     (B("info.stdin.stopped"), B("標準入力を読むのをやめ、ここまで ({size}) を読み取り専用で開きました")),
     (B("info.stdin.terminal"), B("標準入力が端末のため、読まずに空の文書を開きました")),
