@@ -75,6 +75,7 @@ search.toggle_case	Ui	Ui	search.active
 search.toggle_regex	Ui	Ui	search.active
 search.toggle_selection	Ui	Ui	search.active
 search.toggle_word	Ui	Ui	search.active
+search.workspace	Ui	Ui	—
 select.all	Motion	Read	—
 select.extend_down	Motion	Read	—
 select.extend_end	Motion	Read	—

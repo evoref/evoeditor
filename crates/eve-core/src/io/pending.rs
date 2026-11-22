@@ -79,6 +79,8 @@ pub(crate) enum Pending {
         generation: u64,
         chunks: crate::workspace::finder::Chunks,
     },
+    /// 横断検索 (03 §12.7.5)。結果の束 (`WorkspaceHits`) は途中経過なので、終端まで待ちの記録を残す。
+    WorkspaceSearch { generation: u64 },
     /// スワップを書くジョブ (03 §10.2)。
     Swap { doc: DocumentId },
     /// スワップを消すジョブ。
@@ -173,6 +175,7 @@ impl EditorState {
                 | Pending::WorkspaceRoot
                 | Pending::WorkspaceScan { .. }
                 | Pending::FinderMatch { .. }
+                | Pending::WorkspaceSearch { .. }
                 | Pending::WriteRecovery { .. }
                 | Pending::Swap { .. }
                 | Pending::SwapDiscard { .. }
@@ -250,6 +253,14 @@ impl EditorState {
             }
             return;
         }
+        // 横断検索も結果の束が複数届く。待ちの記録は終端まで残す (03 §12.7.5)
+        if let Some(Pending::WorkspaceSearch { generation }) = self.io.pending.get(&job) {
+            let generation = *generation;
+            if !self.on_ws_search_result(generation, r) {
+                self.io.pending.remove(&job);
+            }
+            return;
+        }
         // 検索は途中経過が複数届く。待ちの記録は終わりまで残す
         if matches!(self.io.pending.get(&job), Some(Pending::Search)) {
             self.on_search_result(JobOutput { job, body: r });
@@ -304,7 +315,7 @@ impl EditorState {
             Pending::RecoveryScan => self.finish_recovery_scan(r),
             Pending::LastVersion => self.finish_last_version(r),
             Pending::WorkspaceRoot => self.finish_workspace_root(r),
-            Pending::WorkspaceScan { .. } => {}
+            Pending::WorkspaceScan { .. } | Pending::WorkspaceSearch { .. } => {}
             Pending::FinderMatch { generation, chunks } => {
                 self.finish_finder_match(generation, chunks, r);
             }

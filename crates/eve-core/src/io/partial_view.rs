@@ -321,6 +321,8 @@ impl EditorState {
             // 利用者がそのペインを別の文書へ切り替えた・ペインを閉じた: 切り替えない (完了の前なら、完了の時点でもう一度見る)
             if sw.complete {
                 self.io.open_switch.remove(&doc);
+                // 横断検索のジャンプも捨てる (開いた時点のペインに出ないので移らない)
+                self.io.ws_jumps.remove(&doc);
             } else if let Some(e) = self.io.open_switch.get_mut(&doc) {
                 e.deferred = false;
             }
@@ -340,6 +342,8 @@ impl EditorState {
         if sw.complete {
             self.io.open_switch.remove(&doc);
             self.show_document_in(sw.from.pane, doc);
+            // 保留していた横断検索のジャンプ (03 §12.7.5 の「ジャンプ」)
+            self.finish_ws_jump(doc);
             if pristine && self.panes_showing(sw.from.doc).is_empty() {
                 // 何も失わない置き換え: 無題のバッファを開いたファイルで置き換える (一覧の番号を増やさない)
                 self.close_document(sw.from.doc);
@@ -549,6 +553,7 @@ fn pending_doc(state: &EditorState, p: &Pending) -> Option<DocumentId> {
         | Pending::WorkspaceRoot
         | Pending::WorkspaceScan { .. }
         | Pending::FinderMatch { .. }
+        | Pending::WorkspaceSearch { .. }
         | Pending::Leftover(_)
         | Pending::SwapRemove { .. } => None,
     }

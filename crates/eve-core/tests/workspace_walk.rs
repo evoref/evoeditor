@@ -637,6 +637,7 @@ fn 候補の一覧の解放は_released_で終わる() {
         Revision(0),
         JobKind::ReleaseCandidates {
             chunks: vec![chunk],
+            hits: Vec::new(),
         },
     );
     sp.run_jobs();
@@ -656,6 +657,7 @@ fn 候補の一覧の解放は取り消しても_released_で終わる() {
         Revision(0),
         JobKind::ReleaseCandidates {
             chunks: vec![chunk],
+            hits: Vec::new(),
         },
     );
     sp.cancel(id);
@@ -676,7 +678,10 @@ fn 候補の一覧の解放は取り消しても_released_で終わる() {
             id: eve_view::JobId(9),
             doc: None,
             base: Revision(0),
-            kind: JobKind::ReleaseCandidates { chunks: Vec::new() },
+            kind: JobKind::ReleaseCandidates {
+                chunks: Vec::new(),
+                hits: Vec::new(),
+            },
         },
         &JobPorts {
             stdin: None,

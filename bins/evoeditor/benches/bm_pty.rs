@@ -26,6 +26,10 @@
 //! - **BM-125-{many,few} / BM-103b-finder-{many,few}** (v0.5 の M31): ワークスペースの木 (`--workspace-tree`) を `DIR` で開いた
 //!   ファインダの入力欄に 30 ms ごとに打鍵し、打鍵の読取完了 → その入力で絞り込んだ件数を描いた Frame の `write` (`--only 125`。
 //!   区間の記録 `search.first_match` の一覧の版) と、同じ打鍵の `input.to_flush` (01 FR-125 AC-2、09 §5.2)。
+//! - **BM-103b-search-ws / BM-405-<名前>-{first,done}** (v0.5 の M31 の段 7): 同じ木の横断検索 (`Ctrl+K F`)。BM-103b-search-ws は
+//!   一致しない語に `k` と `BackSpace` を 30 ms ごとに打つ `input.to_flush` (`--only 103ws`)。BM-405 は場面 (`literal`・`regex`・
+//!   `many`・`sjis`) ごとに、最後の 1 文字の打鍵の読取完了 → 最初の一致の行 / 完了の件数の欄を描いた Frame の `write` を 5 回
+//!   (`--only 405`。区間の記録 `search.first_match` の一覧の版。印は計測しないプロセスで先に読む)。参考値 (01 FR-405 AC-3)。
 //!
 //! どのビルドでも測る、端末込みの参考値 (`ConPTY` を挟むので実際の Windows Terminal より遅めに出る。判定には使わない):
 //! - **BM-101c / 102c**: spawn → 最初の画面 (ステータスバーの `無題-1` / ファイルの先頭) が端末に届くまで。
@@ -40,6 +44,7 @@
 //! cargo bench -p evoeditor --bench bm_pty -- --json                # 1 行ずつの JSON
 //! cargo bench -p evoeditor --bench bm_pty -- --only 103,107        # 一部だけ (101 102 103 107)
 //! cargo bench -p evoeditor --features bench-trace --bench bm_pty -- --only 125 --workspace-tree <木>  # BM-125 / BM-103b-finder
+//! cargo bench -p evoeditor --features bench-trace --bench bm_pty -- --only 103ws,405 --workspace-tree <木>  # BM-103b-search-ws / BM-405 (数十分)
 //! ```
 
 #![cfg_attr(not(windows), allow(dead_code, unused_imports))]
@@ -1478,6 +1483,241 @@ fn finder_typing(
     }
 }
 
+/// 横断検索の件数の欄 (`N 件 (h/f ファイル)…` / `N 件で打ち切りました (h ファイル)…`) を画面から読む。検索中・ルート待ち・
+/// オーバーレイが無ければ `None`。
+fn ws_footer(t: &Term) -> Option<String> {
+    let screen = t.parser.lock().unwrap().screen().contents();
+    if !screen.contains("ワークスペースを検索")
+        || screen.contains("検索中")
+        || screen.contains("調べています")
+    {
+        return None;
+    }
+    let border = |l: &&str| l.contains('─') || l.trim_end().ends_with("-+");
+    screen.lines().filter(border).find_map(|l| {
+        let i = l.find(" 件")?;
+        let start = l[..i]
+            .rfind(|c: char| !c.is_ascii_digit())
+            .map_or(0, |j| j + 1);
+        let tail = &l[i..];
+        let end = tail.find(')').map(|j| i + j + 1)?;
+        Some(l[start..end].to_owned())
+    })
+}
+
+/// 横断検索の件数の欄が出て、変わらなくなるまで待つ (検索の完了)。
+fn ws_settle(t: &Term, what: &str) -> String {
+    ws_wait(t, what, || ws_footer(t).is_some());
+    let mut last = ws_footer(t);
+    loop {
+        thread::sleep(Duration::from_millis(400));
+        let now = ws_footer(t);
+        if let Some(c) = &now
+            && now == last
+        {
+            return c.clone();
+        }
+        last = now;
+    }
+}
+
+/// 横断検索の待ち (`Term::wait` の 30 s では 10 万ファイルの木の検索が終わらないので、10 分まで待つ)。
+fn ws_wait(t: &Term, what: &str, f: impl Fn() -> bool) {
+    let start = Instant::now();
+    while !f() {
+        assert!(
+            start.elapsed() < Duration::from_secs(600),
+            "待っても {what} にならない。画面:\n{}",
+            t.parser.lock().unwrap().screen().contents()
+        );
+        thread::sleep(Duration::from_millis(5));
+    }
+}
+
+/// 横断検索の一覧の最初の行の `相対パス:行:` (末尾を切った行は切る前の部分)。
+fn ws_first_row(t: &Term) -> Option<String> {
+    let screen = t.parser.lock().unwrap().screen().contents();
+    // 選択中の行 (先頭の行) の印 `▶` / `>` の後ろ。幅が足りずに末尾を `…` / `...` で切った行は、切る前の部分を印にする
+    // (一覧の行の文字列はその部分で始まる)。切っていなければ `相対パス:行:` までにする
+    screen.lines().find_map(|l| {
+        let body = l
+            .trim_start_matches(['~', ' ', '│', '|'])
+            .strip_prefix(['▶', '>'])?
+            .trim_start();
+        let body = body.trim_end().trim_end_matches(['│', '|']).trim_end();
+        if let Some(cut) = body.strip_suffix("...").or_else(|| body.strip_suffix('…')) {
+            return (!cut.is_empty()).then(|| cut.to_owned());
+        }
+        let mut colons = body.match_indices(':').map(|(i, _)| i);
+        let _ = colons.next()?;
+        let second = colons.next()?;
+        Some(body[..=second].to_owned())
+    })
+}
+
+/// 件数の欄から、検索が終わった Frame を見分ける印 (`N 件 (` か `N 件で打ち切りました`)。
+fn ws_done_marker(footer: &str) -> String {
+    match footer.find(" 件 (") {
+        Some(i) => footer[..i + " 件 (".len()].to_owned(),
+        None => footer.find("件で打ち切りました").map_or_else(
+            || footer.to_owned(),
+            |i| footer[..i + "件で打ち切りました".len()].to_owned(),
+        ),
+    }
+}
+
+/// 木を `DIR` で開き、ファインダの走査を終えて閉じ、横断検索を開く (`Ctrl+K F`。`regex` なら `Alt+R`)。
+fn ws_open(t: &mut Term, regex: bool) {
+    finder_settle(t, "走査の完了");
+    t.send(b"\x1b");
+    thread::sleep(Duration::from_millis(300));
+    // 続けて送ると貼り付けのバースト (04 §6.6) と見分けにくいので、チョードの 2 打目は間を置く。待つのは見出しの
+    // トグルの記号まで (続けて押すキーの候補の「ワークスペースを検索」と取り違えない)
+    t.send(b"\x0b");
+    thread::sleep(Duration::from_millis(150));
+    t.send(b"f");
+    t.wait("横断検索のオーバーレイ", || {
+        t.parser
+            .lock()
+            .unwrap()
+            .screen()
+            .contents()
+            .contains("ワークスペースを検索 [Aa")
+    });
+    if regex {
+        t.send(b"\x1br");
+        thread::sleep(Duration::from_millis(300));
+    }
+}
+
+/// BM-103b-search-ws (01 FR-405 AC-3、09 §5.2): 横断検索の入力欄に一致しない語 `zqxj` を入れた後、`k` と `BackSpace` を
+/// 30 ms ごとに交互に打つ (打鍵ごとに前の検索を取り消して探し直すので、横断の走査が走り続ける)。`k` の `input.to_flush`。
+fn ws_typing(dir: &Path, tree: &Path, runs: usize, warmup: usize) -> Vec<Duration> {
+    let tree_s = tree.to_str().expect("木のパス");
+    let trace = dir.join("ws-typing.jsonl");
+    let (mut t, _) = Term::start(&[tree_s], "", Some(&trace));
+    ws_open(&mut t, false);
+    t.send(b"zqxj");
+    // 検索は終わるのを待たない (打鍵ごとに探し直すので、横断の走査が走り続ける)
+    thread::sleep(Duration::from_millis(500));
+    for _ in 0..runs + warmup {
+        t.send(b"k");
+        thread::sleep(Duration::from_millis(30));
+        t.send(b"\x7f");
+        thread::sleep(Duration::from_millis(30));
+    }
+    thread::sleep(Duration::from_millis(300));
+    t.send(b"\x1b");
+    thread::sleep(Duration::from_millis(300));
+    t.send(b"\x11");
+    assert_eq!(t.wait_exit(WAIT), Some(0), "正常に終了しません");
+    let spans = read_spans(&trace);
+    let _ = std::fs::remove_file(&trace);
+    let mut v: Vec<&Span> = spans
+        .iter()
+        .filter(|s| s.name == "input.to_flush" && s.vk == Some(u64::from(b'K')))
+        .collect();
+    v.sort_by_key(|s| s.start_ns);
+    v.iter()
+        .skip(warmup)
+        .map(|s| ns_dur(s.end_ns - s.start_ns))
+        .collect()
+}
+
+/// BM-405 の 1 つの場面: 検索語 `query` (正規表現なら `regex`)。最後の 1 文字の打鍵を検索の開始とする。
+struct WsCase {
+    name: &'static str,
+    query: &'static str,
+    regex: bool,
+}
+
+/// BM-405 の 1 回: 検索語の最後の 1 文字の前までを打って検索を終えさせ、最後の 1 文字の読取完了 → 印 `marker` の出た Frame
+/// の `write` (`search.first_match`)。
+fn ws_once(dir: &Path, tree: &Path, case: &WsCase, marker: &str, tag: &str) -> Option<Duration> {
+    let tree_s = tree.to_str().expect("木のパス");
+    let trace = dir.join(format!("ws-{}-{tag}.jsonl", case.name));
+    let (mut t, _) = Term::start_env(&[tree_s], "", Some(&trace), &[("EVE_TRACE_MATCH", marker)]);
+    ws_open(&mut t, case.regex);
+    let (head, last) = case.query.split_at(case.query.len() - 1);
+    t.send(head.as_bytes());
+    // 前の検索語の検索は待たない (最後の 1 文字で取り消して探し直す。前の検索語は正規表現の誤りのこともある)
+    thread::sleep(Duration::from_millis(300));
+    t.send(last.as_bytes());
+    if tag.starts_with("first") {
+        // 最初の一致の行が出たら終える (完了を待たない)
+        ws_wait(&t, "最初の一致", || {
+            t.parser
+                .lock()
+                .unwrap()
+                .screen()
+                .contents()
+                .contains(marker)
+        });
+        thread::sleep(Duration::from_millis(200));
+    } else {
+        ws_settle(&t, "検索の完了");
+    }
+    t.send(b"\x1b");
+    thread::sleep(Duration::from_millis(300));
+    t.send(b"\x11");
+    assert_eq!(t.wait_exit(WAIT), Some(0), "正常に終了しません");
+    let vk = u64::from(last.as_bytes()[0].to_ascii_uppercase());
+    let spans = read_spans(&trace);
+    let _ = std::fs::remove_file(&trace);
+    spans
+        .iter()
+        .filter(|s| s.name == "search.first_match" && s.vk == Some(vk))
+        .max_by_key(|s| s.start_ns)
+        .map(|s| ns_dur(s.end_ns - s.start_ns))
+}
+
+/// BM-405 の場面の結果: 開始 → 最初の一致の Frame、開始 → 完了の Frame (それぞれ `runs` 回)、完了の件数の欄、最初の行。
+struct WsRun {
+    first: Vec<Duration>,
+    done: Vec<Duration>,
+    footer: String,
+    first_row: String,
+}
+
+/// BM-405-<名前> (01 FR-405 AC-3、09 §5.2。参考値): 計測しないプロセスで、完了の件数の欄と最初の行を読んでおき、それを印にして
+/// 「開始 → 最初の一致を描いた Frame」と「開始 → 完了 (または上限での打切り) を描いた Frame」を別のプロセスで `runs` 回ずつ測る。
+fn ws_case(dir: &Path, tree: &Path, case: &WsCase, runs: usize) -> WsRun {
+    let tree_s = tree.to_str().expect("木のパス");
+    let (mut t, _) = Term::start(&[tree_s], "", None);
+    ws_open(&mut t, case.regex);
+    t.send(case.query.as_bytes());
+    let footer = ws_settle(&t, "検索の完了");
+    let first_row = ws_first_row(&t).unwrap_or_else(|| {
+        panic!(
+            "{}: 最初の行を読めない。画面:\n{}",
+            case.name,
+            t.parser.lock().unwrap().screen().contents()
+        )
+    });
+    t.send(b"\x1b");
+    thread::sleep(Duration::from_millis(300));
+    t.send(b"\x11");
+    let _ = t.wait_exit(WAIT);
+    drop(t);
+    let done_marker = ws_done_marker(&footer);
+    let mut first = Vec::new();
+    let mut done = Vec::new();
+    for i in 0..runs {
+        if let Some(d) = ws_once(dir, tree, case, &first_row, &format!("first{i}")) {
+            first.push(d);
+        }
+        if let Some(d) = ws_once(dir, tree, case, &done_marker, &format!("done{i}")) {
+            done.push(d);
+        }
+    }
+    WsRun {
+        first,
+        done,
+        footer,
+        first_row,
+    }
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     // BM-120 のパイプの書き手として起こされた (計測ではない)
@@ -1836,6 +2076,70 @@ fn main() {
                         json,
                         quick,
                     );
+                }
+            }
+        }
+    }
+    if traced && (want("405") || want("103ws")) {
+        match workspace_tree.as_deref() {
+            None => println!(
+                "(BM-103b-search-ws / BM-405 は `--workspace-tree <cargo xtask gen-corpus --workspace large の木>` を付けたときだけ測ります)"
+            ),
+            Some(tree) => {
+                if want("103ws") {
+                    let v = ws_typing(&dir, tree, runs, warmup);
+                    report(
+                        "BM-103b-search-ws",
+                        "横断検索の入力欄への打鍵 (打鍵ごとに探し直す。入力の読取完了 → 描画の write)",
+                        v,
+                        json,
+                        quick,
+                    );
+                }
+                if want("405") {
+                    let cases = [
+                        WsCase {
+                            name: "literal",
+                            query: "leaf",
+                            regex: false,
+                        },
+                        WsCase {
+                            name: "regex",
+                            query: "pro[b]e|leaf",
+                            regex: true,
+                        },
+                        WsCase {
+                            name: "many",
+                            query: "editor",
+                            regex: false,
+                        },
+                        WsCase {
+                            name: "sjis",
+                            query: r"\x{65E5}\x{672C}\w",
+                            regex: true,
+                        },
+                    ];
+                    for case in &cases {
+                        let r = ws_case(&dir, tree, case, 5);
+                        println!(
+                            "  横断検索の場面 {}: 検索語 {:?} の件数の欄 {:?}、最初の行 {:?}",
+                            case.name, case.query, r.footer, r.first_row
+                        );
+                        report(
+                            &format!("BM-405-{}-first", case.name),
+                            "横断検索の開始 → 最初の一致を描いた Frame の write (参考)",
+                            r.first,
+                            json,
+                            true,
+                        );
+                        report(
+                            &format!("BM-405-{}-done", case.name),
+                            "横断検索の開始 → 完了 (または上限での打切り) を描いた Frame の write (参考)",
+                            r.done,
+                            json,
+                            true,
+                        );
+                    }
                 }
             }
         }

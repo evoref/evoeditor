@@ -82,6 +82,7 @@ pub fn builtin_registry() -> CommandRegistry {
     crate::command::line_ops::register(&mut r);
     crate::ui_model::overlay::register(&mut r);
     crate::workspace::finder::register(&mut r);
+    crate::workspace::ws_search_ui::register(&mut r);
     r
 }
 
@@ -420,7 +421,7 @@ impl Editor {
             "buffer_list" | "config_diagnostics" => FOCUS_LIST,
             "search" => FOCUS_SEARCH,
             // ファインダ (v0.5 の M31。横断検索の結果も同じ、07 §7.1)
-            "finder" => FOCUS_FINDER,
+            "finder" | "workspace_search" => FOCUS_FINDER,
             _ => Self::EDITOR_CONTEXTS,
         }
     }

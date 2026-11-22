@@ -78,6 +78,7 @@ pub const SEARCH_TOGGLE_CASE: &str = "search.toggle_case";
 pub const SEARCH_TOGGLE_REGEX: &str = "search.toggle_regex";
 pub const SEARCH_TOGGLE_SELECTION: &str = "search.toggle_selection";
 pub const SEARCH_TOGGLE_WORD: &str = "search.toggle_word";
+pub const SEARCH_WORKSPACE: &str = "search.workspace";
 pub const SELECT_ALL: &str = "select.all";
 pub const SELECT_EXTEND_DOWN: &str = "select.extend_down";
 pub const SELECT_EXTEND_END: &str = "select.extend_end";
@@ -109,7 +110,7 @@ pub const WORKSPACE_OPEN_FILE: &str = "workspace.open_file";
 
 /// 組込みのコマンドの ID のすべて (ID の順。登録と一致することを確かめる試験に使う)。
 #[cfg(test)]
-pub const ALL: [&str; 104] = [
+pub const ALL: [&str; 105] = [
     APP_QUIT,
     APP_QUIT_WITH_ERROR,
     APP_SAVE_AND_QUIT,
@@ -186,6 +187,7 @@ pub const ALL: [&str; 104] = [
     SEARCH_TOGGLE_REGEX,
     SEARCH_TOGGLE_SELECTION,
     SEARCH_TOGGLE_WORD,
+    SEARCH_WORKSPACE,
     SELECT_ALL,
     SELECT_EXTEND_DOWN,
     SELECT_EXTEND_END,

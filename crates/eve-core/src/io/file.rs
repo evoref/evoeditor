@@ -143,6 +143,7 @@ impl EditorState {
             "表示中の文書 {doc:?} のペインを替えられなかった"
         );
         self.io.open_jumps.remove(&doc);
+        self.io.ws_jumps.remove(&doc);
         // 名前を付けて保存の識別の覚えと保留した照合の結果も捨てる (03 §12.7.6 の細目 (10))
         self.io.save_as_targets.remove(&doc);
         self.io.held_save_as.retain(|(a, _)| a.doc != doc);

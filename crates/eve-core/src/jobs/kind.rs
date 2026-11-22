@@ -259,11 +259,35 @@ pub enum JobKind {
         /// 照合の世代 (結果を照らして古いものを捨てる)。
         generation: u64,
     },
-    /// 古い候補の一覧を `bg` で解放する (主スレッドで大きな一覧を drop しない、03 §12.7.2)。終端の結果は
-    /// `JobResult::Released` だけ。取り消さない。
+    /// 古い候補の一覧と横断検索の結果を `bg` で解放する (主スレッドで大きな一覧を drop しない、03 §12.7.2 / §12.7.5)。
+    /// 終端の結果は `JobResult::Released` だけ。取り消さない。
     ReleaseCandidates {
         /// 手放す塊 (照合のジョブが同じ塊を持っていれば、最後の参照はジョブの側で外れる)。
         chunks: Vec<std::sync::Arc<[crate::workspace::Candidate]>>,
+        /// 手放す横断検索の結果。
+        hits: Vec<crate::workspace::WsHit>,
+    },
+    /// 横断検索 (`bg`。03 §12.7.5 / §12.7.7)。`WorkspaceWalk` でファイルを見つけ、見つけた順に読込と同じ規則で復号して
+    /// 探す。1 区切り (ディレクトリ 16 個・ファイル 64 個・中身 1 MiB・8 ms の早いほう) ごとに `JobResult::WorkspaceHits` を
+    /// 送り、続き (`state`) を `JobStep::Continue` で返す。終われば `JobResult::WorkspaceSearchDone`、ルートを読めなければ
+    /// `JobResult::Failed { Fs }`。`doc` は `None`。
+    WorkspaceSearch {
+        /// ワークスペースのルート (絶対パス)。
+        root: FsPath,
+        /// 検索の世代 (結果を照らして古いものを捨てる)。
+        generation: u64,
+        /// 検索の条件 (エディタ内の検索と同じ)。
+        query: crate::search::SearchQuery,
+        /// 除外の設定 (走査を始める時点の値)。
+        exclude: std::sync::Arc<crate::workspace::ExcludeConfig>,
+        /// ルートの下にある開いている文書 (03 §12.7.6 の 3)。
+        open_docs: Vec<crate::workspace::OpenDocRef>,
+        /// 探すファイルの大きさの上限 (バイト)。
+        max_file_size: u64,
+        /// 結果の行の上限。
+        max_lines: usize,
+        /// 積み直しの続き (最初の投入は `None`)。
+        state: Option<Box<crate::workspace::WorkspaceSearchState>>,
     },
     /// 文書内の全件検索 (03 §12.2)。`from` の行から末尾まで、続けて先頭から走査し (行をまたぐ検索の規則では文書の先頭から
     /// 末尾まで、03 §12.3.1)、一致を `SearchBatch` で順に返して `SearchDone` で終わる。保持するのは `max_matches` 件まで、

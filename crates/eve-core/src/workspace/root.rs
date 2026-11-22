@@ -80,6 +80,8 @@ pub(crate) struct WorkspaceState {
     settled: Option<Settled>,
     /// ファインダの候補の一覧と走査 (03 §12.7.2 の「一覧の寿命」)。
     pub(crate) finder: crate::workspace::finder::FinderList,
+    /// 横断検索の閉じている間の状態と世代 (03 §12.7.5 の「結果を保つ」)。
+    pub(crate) search: crate::workspace::ws_search_ui::WsSearchStore,
 }
 
 /// 届いた結果のうち、起動の引数のディレクトリの知らせに使うもの。
@@ -196,6 +198,12 @@ impl WorkspaceState {
     /// 決まったワークスペース (結果が届くまでは `None`)。
     pub(crate) fn current(&self) -> Option<&Workspace> {
         self.current.as_ref()
+    }
+
+    /// ルートの検出の結果が届いたが、ルートが決まらなかった (ジョブのパニックなど)。ファインダ・横断検索は「調べています」で
+    /// 待たずに `ui.finder.footer_no_root` を出す (03 §12.7.1)。
+    pub(crate) fn root_failed(&self) -> bool {
+        self.current.is_none() && self.settled.is_some()
     }
 
     /// `--workspace` の値を覚える (起動の前に Host が渡す)。
@@ -322,6 +330,10 @@ impl EditorState {
         if let Some(source) = self.workspace.current.as_ref().map(Workspace::source) {
             self.finder_on_root(source);
         }
+        // 横断検索: ルートを待っていれば始める (決まらなかったら「決められませんでした」にする)。ファインダの「調べています」も
+        // 描き直す (03 §12.7.1)
+        self.ws_search_on_root();
+        self.mark_dirty_render();
         // `--workspace` を使えなかった知らせは、利用者が明示した指定なので最後に出す (現在のメッセージにする)
         if let (Some(e), Some(root)) = (explicit_error, self.workspace.current.as_ref()) {
             let root = root.root.display();
