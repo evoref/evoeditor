@@ -73,8 +73,7 @@ pub(crate) fn line_rows(doc: &Document, line: usize, s: WrapSettings, cols: usiz
     let l = eve_text::LineIdx(line);
     let long = t.line_end_byte(l).0 - t.line_to_byte(l).0 >= super::units::UNITS_CACHE_MIN;
     let key = (super::units::units_key(doc, line), s, cols);
-    if long && let Some(lr) = super::units::cache_get(&mut doc.layout_cache.borrow_mut().rows, &key)
-    {
+    if long && let Some(lr) = doc.layout_cache.borrow_mut().get_rows(&key) {
         return lr;
     }
     let (ls, content) = line_content(doc, line);
@@ -87,12 +86,18 @@ pub(crate) fn line_rows(doc: &Document, line: usize, s: WrapSettings, cols: usiz
         rows,
     };
     if long {
-        super::units::cache_put(&mut doc.layout_cache.borrow_mut().rows, key, lr.clone());
+        doc.layout_cache.borrow_mut().put_rows(key, lr.clone());
     }
     lr
 }
 
 impl LineRows {
+    /// 表示単位 (覚えとの共有を試験で確かめる)。
+    #[cfg(test)]
+    pub(super) fn units_rc(&self) -> &std::rc::Rc<Vec<Unit>> {
+        &self.units
+    }
+
     /// 表示行の数 (1 以上)。
     pub fn len(&self) -> usize {
         self.rows.len()

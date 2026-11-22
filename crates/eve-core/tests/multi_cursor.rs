@@ -688,6 +688,31 @@ fn 長い行の多数のカーソルでも移動とインデントと再読込�
 }
 
 #[test]
+fn 長い行を編集した後の移動は覚えの無い所から数えた位置と同じ() {
+    // 長い行 (表示単位を覚える 4 KiB 以上) で上下に動いて覚えを作り、同じ行を編集してから戻る。結果を、同じ本文と選択を
+    // 覚えの無い新しい Harness で動かした結果と比べる
+    let line = "a\tbあ".repeat(1_000);
+    let body = format!("{line}\n{line}\n");
+    let mut h = eve_testkit::helpers::opened("/w/long.txt", body.as_bytes());
+    let ranges: Vec<Range> = (0..100).map(|i| Range::point(ByteOff(i * 24))).collect();
+    set_selection(&mut h, ranges, 0);
+    h.keys("down");
+    h.text("\tあ");
+    let edited = h.doc_text();
+    let at: Vec<Range> = selection(&h).ranges().to_vec();
+    h.keys("up");
+    let mut cold = eve_testkit::helpers::opened("/w/cold.txt", edited.as_bytes());
+    assert_eq!(cold.doc_text(), edited);
+    set_selection(&mut cold, at, 0);
+    cold.keys("up");
+    assert_eq!(
+        selection(&h).ranges(),
+        selection(&cold).ranges(),
+        "編集の後の覚えが古くない"
+    );
+}
+
+#[test]
 fn ほかのペインからの編集は全_range_を写して保つ() {
     let mut h = scene("ab|cd|ef");
     let first = view(&h);

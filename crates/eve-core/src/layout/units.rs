@@ -187,7 +187,7 @@ pub(super) fn units_for(doc: &Document, line: usize, content: &str) -> std::rc::
         return u;
     }
     let u = Rc::new(units_with(content, esc, ws, &cfg));
-    cache_put(&mut doc.layout_cache.borrow_mut().units, key, u.clone());
+    doc.layout_cache.borrow_mut().put_units(key, u.clone());
     u
 }
 
@@ -499,6 +499,94 @@ mod tests {
             "2 行とも覚えに当たる"
         );
         assert_eq!(d.layout_cache.borrow().units.len(), UNITS_CACHE_LINES);
+        assert!(
+            std::mem::size_of::<Unit>() <= 64,
+            "03 §11.2 の覚えの最悪の量の見積り (1 つ 64 バイト以下)"
+        );
+    }
+
+    /// 折り返しの覚えは表示単位の覚えと `Rc` を共有し、表示単位を捨てた行の折り返しと、本文を変えた後の覚えは放す
+    /// (03 §11.2 の覚えの量)。
+    #[test]
+    fn 折り返しの覚えは表示単位を共有し_捨てた行と本文を変えた後は放す() {
+        use crate::document::{Document, TextFormat};
+        let line = "ab ".repeat(2_000);
+        let mut d = Document::from_text(
+            eve_text::Text::from(format!("{line}\n{line}\n{line}\n").as_str()),
+            TextFormat::new_document(),
+        );
+        let s = crate::layout::WrapSettings::default();
+        let lr = crate::layout::line_rows(&d, 0, s, 40);
+        assert!(
+            std::rc::Rc::ptr_eq(lr.units_rc(), &line_units(&d, 0).1),
+            "同じ行の表示単位を 2 重に持たない"
+        );
+        assert_eq!(d.layout_cache.borrow().rows.len(), 1);
+        // 別の 2 行を引いて行 0 の表示単位を捨てると、行 0 の折り返しも捨てる
+        let _ = line_units(&d, 1);
+        let _ = line_units(&d, 2);
+        assert_eq!(d.layout_cache.borrow().rows.len(), 0);
+        let _ = crate::layout::line_rows(&d, 2, s, 40);
+        assert_eq!(d.layout_cache.borrow().rows.len(), 1);
+        // 本文を変えたら (Revision が変わったら) 両方を放す
+        let text = d.snapshot();
+        let cs = eve_text::ChangeSet::from_sorted_edits(&text, []).unwrap();
+        let rev = d.revision();
+        d.layout_cache
+            .get_mut()
+            .on_change(&text, &text, &cs, (rev, rev.next()), usize::MAX);
+        let cache = d.layout_cache.borrow();
+        assert_eq!((cache.units.len(), cache.rows.len()), (0, 0));
+    }
+
+    /// 行頭から数え直した値 (覚えを使わない参照)。
+    fn fresh(doc: &crate::document::Document, line: usize) -> (usize, Vec<Unit>) {
+        let (_, content) = line_content(doc, line);
+        let us = units_with(
+            &content,
+            esc_enabled(doc),
+            doc.display.show_whitespace,
+            &doc_width_config(doc),
+        );
+        (content.len(), us)
+    }
+
+    fn naive_byte_at_col(doc: &crate::document::Document, line: usize, dcol: usize) -> usize {
+        let (len, us) = fresh(doc, line);
+        us.iter()
+            .find(|u| dcol < u.col + u.width)
+            .map_or(len, |u| u.byte)
+    }
+
+    #[test]
+    fn セルの途中の列は前の単位に寄せ_タブ幅を変えた後も行頭から数えた値と同じ() {
+        use crate::document::{Document, TextFormat};
+        let line = "a\tbあ".repeat(1_000);
+        let mut d = Document::from_text(
+            eve_text::Text::from(line.as_str()),
+            TextFormat::new_document(),
+        );
+        // タブ (列 1..4) の中の列 2・3 はタブの位置 1、全角 (列 5..7) の右半分の列 6 はその位置 3
+        assert_eq!(byte_at_col(&d, 0, 2), 1);
+        assert_eq!(byte_at_col(&d, 0, 3), 1);
+        assert_eq!(byte_at_col(&d, 0, 6), 3);
+        for col in [0, 1, 2, 5, 6, 7, 100, 5_000] {
+            assert_eq!(
+                byte_at_col(&d, 0, col),
+                naive_byte_at_col(&d, 0, col),
+                "col {col}"
+            );
+        }
+        // タブ幅を変えたら、覚えた展開を使わずに数え直す
+        d.display.tab_width = 8;
+        for col in [2, 6, 9, 10, 100, 5_000] {
+            assert_eq!(
+                byte_at_col(&d, 0, col),
+                naive_byte_at_col(&d, 0, col),
+                "tab 8 col {col}"
+            );
+        }
+        assert_eq!(byte_at_col(&d, 0, 6), 1, "タブ (列 1..8) の中");
     }
 
     /// `units` の ASCII の近道は、一般の経路 (書記素の表示の組み立て) と同じ結果になる前提に立つ:

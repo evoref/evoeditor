@@ -37,13 +37,41 @@ pub(crate) struct LayoutCache {
     /// 長い行の表示単位の計算結果 (直近の 2 行分。新しいものが後ろ)。1 回の操作で同じ行を何度も展開しないための覚え
     /// (複数カーソルの上下の移動は、カーソルごとに元の行と行き先の行を交互に引く。03 §4.5.4 の「費用」)。
     pub(super) units: Vec<(UnitsKey, Rc<Vec<Unit>>)>,
-    /// 長い行の折り返しの結果 (直近の 2 行分)。複数カーソルの表示行の移動で、カーソルごとに同じ行を折り返さない。
+    /// 長い行の折り返しの結果 (直近の 2 つ)。複数カーソルの表示行の移動で、カーソルごとに同じ行を折り返さない。
+    /// `units` に覚えている行の分だけを持ち、表示単位はその `Rc` を共有する (同じ行の表示単位を 2 重に持たない。
+    /// 覚えの量の上限は、長い行の表示単位 2 行分と、その折り返しの結果。03 §11.2)。
     pub(super) rows: Vec<(RowsKey, LineRows)>,
     /// 長大行の列の索引 (直近の数行分、03 §14.4 の「覚え」)。
     pub(super) long: Vec<LongEntry>,
 }
 
 impl LayoutCache {
+    /// 表示単位の覚えに足す (古いものを捨てる)。捨てた行の折り返しの覚えも捨てる (表示単位を共有しない覚えを残さない)。
+    pub(super) fn put_units(&mut self, key: UnitsKey, units: Rc<Vec<Unit>>) {
+        super::units::cache_put(&mut self.units, key, units);
+        let units = &self.units;
+        self.rows
+            .retain(|(k, _)| units.iter().any(|(uk, _)| *uk == k.0));
+    }
+
+    /// 折り返しの覚えを引く。当たったら、その行の表示単位の覚えも新しい側へ移す (2 つの覚えの並びを揃える)。
+    pub(super) fn get_rows(&mut self, key: &RowsKey) -> Option<LineRows> {
+        let lr = super::units::cache_get(&mut self.rows, key)?;
+        if super::units::cache_get(&mut self.units, &key.0).is_none() {
+            // 表示単位を捨てた行の折り返しは持たない (put_units が捨てるので、ここには来ない)
+            self.rows.retain(|(k, _)| k != key);
+            return None;
+        }
+        Some(lr)
+    }
+
+    /// 折り返しの覚えに足す。表示単位を覚えている行だけを覚える。
+    pub(super) fn put_rows(&mut self, key: RowsKey, lr: LineRows) {
+        if self.units.iter().any(|(uk, _)| *uk == key.0) {
+            super::units::cache_put(&mut self.rows, key, lr);
+        }
+    }
+
     /// 本文に `ChangeSet` の `cs` を当てた (Revision `old` → `new`): 覚えている長大行の索引を、03 §14.4 の「編集」の
     /// (1)〜(4) のとおりに引き継ぐか捨てる。`before` は適用前、`after` は適用後の本文、`threshold` は長大行の閾値。
     pub(crate) fn on_change(
@@ -54,6 +82,9 @@ impl LayoutCache {
         (old, new): (eve_view::Revision, eve_view::Revision),
         threshold: usize,
     ) {
+        // 表示単位と折り返しの覚えは Revision を鍵に含むので、古い鍵のものは二度と当たらない。持ち続けないように放す
+        self.units.clear();
+        self.rows.clear();
         self.long.retain_mut(|e| {
             if e.rev != old {
                 return false;

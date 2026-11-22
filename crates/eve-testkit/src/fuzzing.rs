@@ -825,8 +825,9 @@ fn multi_cursor_op(h: &mut Harness, b: &mut Bytes<'_>) -> String {
         }
         "edit.paste" => {
             // システムのクリップボードの応答 (半分は読み取れなかった扱いで内部レジスタを使う)
+            let seen = h.effects().len();
             h.cmd("edit.paste");
-            let token = h.effects().iter().rev().find_map(|e| match e {
+            let token = h.effects()[seen..].iter().rev().find_map(|e| match e {
                 eve_view::Effect::RequestClipboard { token, .. } => Some(*token),
                 _ => None,
             });

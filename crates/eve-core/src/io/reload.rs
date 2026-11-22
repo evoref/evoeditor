@@ -437,16 +437,26 @@ mod tests {
 
     #[test]
     fn 各カーソルを同じ行と桁に写し_行と桁が足りなければ丸める() {
-        let old = Text::from("abc\nde\u{301}f\r\nghij\nklmno");
-        let new = Text::from("ABCDE\nx\nYZ");
-        let heads: Vec<ByteOff> = [0, 2, 3, 4, 7, 8, 11, 13, 15, 20]
-            .into_iter()
-            .map(ByteOff)
-            .filter(|&p| old.is_char_boundary(p))
-            .collect();
-        let got = same_line_cols(&old, &new, &heads, |t, p| next_grapheme_boundary(t, p));
-        let want: Vec<ByteOff> = heads.iter().map(|&h| naive(&old, &new, h)).collect();
-        assert_eq!(got, want);
+        // (旧本文, 新本文): 行が減る・増える、新本文の CRLF と空の行、結合文字 (書記素の途中の head を含む)
+        let cases = [
+            ("abc\nde\u{301}f\r\nghij\nklmno", "ABCDE\nx\nYZ"),
+            ("ab\ncd", "AB\nCD\nEF\nGH"),
+            ("abc\n\nde\nf", "\r\n\r\nX"),
+            ("e\u{301}e\u{301}x\r\ny", "e\u{301}Z\r\n\r\n"),
+            ("", "abc"),
+        ];
+        for (old, new) in cases {
+            let (old, new) = (Text::from(old), Text::from(new));
+            // char の境界のすべての位置 (結合文字の前の位置 = 書記素の途中を含む)。文書の外の位置も 1 つ
+            let mut heads: Vec<ByteOff> = (0..=old.len_bytes())
+                .map(ByteOff)
+                .filter(|&p| old.is_char_boundary(p))
+                .collect();
+            heads.push(ByteOff(old.len_bytes() + 3));
+            let got = same_line_cols(&old, &new, &heads, |t, p| next_grapheme_boundary(t, p));
+            let want: Vec<ByteOff> = heads.iter().map(|&h| naive(&old, &new, h)).collect();
+            assert_eq!(got, want, "{old:?} → {new:?}");
+        }
     }
 
     #[test]
