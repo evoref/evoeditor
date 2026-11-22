@@ -4,101 +4,12 @@
 //! 文書は `|` (空のカーソル) と `«` `»` (前向きの選択。`»` が head) と `‹` `›` (後ろ向きの選択。`‹` が head) を含む文字列で
 //! 書く。主の Range は `*` を直前に置いたもの (無ければ最後の Range)。
 
+mod marked;
+
 use eve_testkit::Harness;
 use eve_text::{ByteOff, MAX_CURSORS, Range, Selection};
-use eve_view::{ClipboardText, Effect, StatusKind, ViewId};
-
-/// 印を読んで (本文, Range の並び, 主の番号) にする。
-fn parse(marked: &str) -> (String, Vec<Range>, usize) {
-    let mut text = String::new();
-    let mut ranges = Vec::new();
-    let mut primary = None;
-    let mut open: Option<(usize, char)> = None;
-    for c in marked.chars() {
-        let p = text.len();
-        match c {
-            '*' => primary = Some(ranges.len()),
-            '|' => ranges.push(Range::point(ByteOff(p))),
-            '«' | '‹' => open = Some((p, c)),
-            '»' => {
-                let (a, _) = open.take().expect("« の後の »");
-                ranges.push(Range::new(ByteOff(a), ByteOff(p)));
-            }
-            '›' => {
-                let (a, _) = open.take().expect("‹ の後の ›");
-                ranges.push(Range::new(ByteOff(p), ByteOff(a)));
-            }
-            c => text.push(c),
-        }
-    }
-    assert!(!ranges.is_empty(), "カーソルが要る: {marked}");
-    let primary = primary.unwrap_or(ranges.len() - 1);
-    (text, ranges, primary)
-}
-
-/// 本文と全 Range を印の文字列にする (`parse` の逆。主には `*` を付けない)。
-fn render(text: &str, sel: &Selection) -> String {
-    let mut marks: Vec<(usize, u8, &str)> = Vec::new();
-    for r in sel.iter() {
-        if r.is_empty() {
-            marks.push((r.head.0, 1, "|"));
-        } else if r.is_forward() {
-            marks.push((r.start().0, 2, "«"));
-            marks.push((r.end().0, 0, "»"));
-        } else {
-            marks.push((r.start().0, 2, "‹"));
-            marks.push((r.end().0, 0, "›"));
-        }
-    }
-    marks.sort_by_key(|&(p, order, _)| (p, order));
-    let mut out = String::new();
-    let mut at = 0;
-    for (p, _, m) in marks {
-        out.push_str(&text[at..p]);
-        out.push_str(m);
-        at = p;
-    }
-    out.push_str(&text[at..]);
-    out
-}
-
-fn view(h: &Harness) -> ViewId {
-    let st = h.editor.state();
-    st.window_view(h.window()).expect("View がある")
-}
-
-fn selection(h: &Harness) -> Selection {
-    h.editor
-        .state()
-        .view(view(h))
-        .expect("View がある")
-        .selection
-        .clone()
-}
-
-fn set_selection(h: &mut Harness, ranges: Vec<Range>, primary: usize) {
-    let v = view(h);
-    let sel = Selection::new(ranges, primary).expect("Selection を作れる");
-    h.editor.state_mut().set_selection(v, sel);
-}
-
-/// 無題の文書に本文を入れ、印の Range を置いた Harness。
-fn scene(marked: &str) -> Harness {
-    let (text, ranges, primary) = parse(marked);
-    let mut h = Harness::new();
-    if !text.is_empty() {
-        h.paste(&text);
-    }
-    assert_eq!(h.doc_text(), text, "本文が入る");
-    set_selection(&mut h, ranges, primary);
-    h.clear_log();
-    h
-}
-
-/// 本文と全 Range の今の様子。
-fn shown(h: &Harness) -> String {
-    render(&h.doc_text(), &selection(h))
-}
+use eve_view::{ClipboardText, Effect, StatusKind};
+use marked::{parse, render, scene, selection, set_selection, shown, view};
 
 fn set_clipboard(h: &Harness) -> Vec<ClipboardText> {
     h.effects()
@@ -474,12 +385,25 @@ fn 行の数がカーソルの数と違えば全文を各カーソルへ() {
 }
 
 #[test]
-fn 空の片を入れたカーソルも文書の順のまま先行の片の後ろに置く() {
-    // 主の空のカーソルが選択の端に残る (N4)。2 行 (`X` と空の行) を 1 行ずつ: 選択は `X` に、カーソルは空の行 (何も
-    // 入れない) で、カーソルは選択に入れた `X` の後ろ (前に回り込まない)
-    let mut h = scene("«ab»*|c");
+fn 主の空のカーソルが選択の端にあれば_1_つの選択になり_改行と貼り付けは選択を置き換える() {
+    // 03 §4.4 の N4 (M32 の段 3 で改めた): 主の空のカーソルは選択に併合され、カーソルの側が head になる
+    let mut h = scene("ab«cde»*|f");
+    assert_eq!(shown(&h), "ab«cde»f", "end のカーソルは前向きの 1 つの選択");
+    h.cmd("edit.newline");
+    assert_eq!(
+        shown(&h),
+        "ab\n|f",
+        "選択を改行で置き換える (`ab⏎⏎f` にしない)"
+    );
+    let mut h = scene("*|«ab»c");
+    assert_eq!(
+        shown(&h),
+        "‹ab›c",
+        "start のカーソルは後ろ向きの 1 つの選択"
+    );
+    // Range が 1 つなので、2 行の文字列は全文で入る
     h.paste("X\n\n");
-    assert_eq!(shown(&h), "X|c");
+    assert_eq!(shown(&h), "X\n\n|c");
 }
 
 #[test]

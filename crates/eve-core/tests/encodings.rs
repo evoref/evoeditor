@@ -1032,6 +1032,27 @@ fn 表現不能の先頭にエスケープ文字があれば_選択肢はキャ�
     assert_eq!(s.fs.read("/w/a.txt").unwrap(), b"\n");
 }
 
+// 04 §7.5 の `Esc` の段: 表現不能の置換の一覧を作っている間 (`BuildingReplacement`) の `Esc` は、E3 のキャンセルと同じく
+// 保存を中止する (保存しない。一覧の確認を出さない。03 §9.7)
+#[test]
+fn 置換の一覧を作っている間の_esc_は保存を中止する() {
+    let mut s = inject_and_save_as_sjis("😀");
+    assert_eq!(s.overlay(), "dialog");
+    // 置換して保存 (一覧を作るジョブを投げる)。ジョブの結果が届く前に Esc
+    s.answer(1);
+    assert_eq!(s.overlay(), "", "E3 の確認は閉じた");
+    s.clear_log();
+    s.keys("esc");
+    assert!(
+        s.messages().iter().any(|k| k == "info.save.aborted"),
+        "保存を中止した: {:?}",
+        s.messages()
+    );
+    s.run_jobs();
+    assert_eq!(s.overlay(), "", "置換の一覧の確認を出さない");
+    assert_eq!(s.fs.read("/w/a.txt").unwrap(), b"\n", "保存していない");
+}
+
 #[test]
 fn エスケープ文字が無ければ_表現不能が_101_件以上でも_置換して保存を出し_全件を置換する() {
     let mut s = inject_and_save_as_sjis(&"😀".repeat(101));

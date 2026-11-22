@@ -148,7 +148,8 @@ impl Selection {
     /// - 併合するのは、重なる Range、両方が非空で接する Range、同じ位置の空のカーソル同士 (N3)。
     /// - 空のカーソルが非空の Range の `[start, end]` (両端を含む) にあれば捨てる (N4)。
     ///   `end` の位置も含めるのは、選択の端に重なるカーソルは見た目に冗長だから (03 §4.4 N4 の「同じ位置」の解釈)。
-    ///   primary の空のカーソルは、Range の内側にあれば Range に併合し (その Range が primary になる)、端なら残す。
+    ///   primary の空のカーソルは Range に併合し (その Range が primary になる)、端ならカーソルの側を head にする
+    ///   (`end` なら前向き、`start` なら後ろ向き)。
     /// - 併合後の向きは primary を含むときは primary の向き、含まないときは先頭の向き。
     ///   空の Range だけの併合は空のカーソル。
     pub fn merged(self, len_bytes: usize) -> Selection {
@@ -184,7 +185,7 @@ impl Selection {
         }
 
         // 2. 空のカーソル: 同じ位置は 1 つに、非空の Range の `[start, end]` にあれば捨てる (N4)。
-        //    primary のカーソルは、内側 (`start < p < end`) なら Range に併合し、端なら残す。
+        //    primary のカーソルは Range に併合する (その Range が primary)。端ならカーソルの側を head にする。
         points.sort_by_key(|(r, _)| r.start());
         let mut cursors: Vec<(Range, bool)> = Vec::new();
         for (r, is_primary) in points {
@@ -192,10 +193,13 @@ impl Selection {
             let k = merged.partition_point(|(m, _)| m.end() < p);
             match merged.get_mut(k) {
                 Some((m, m_primary)) if m.start() <= p => {
-                    if is_primary && m.start() < p && p < m.end() {
+                    if is_primary {
                         *m_primary = true;
-                    } else if is_primary {
-                        cursors.push((r, true));
+                        if p == m.end() {
+                            *m = Range::new(m.start(), m.end());
+                        } else if p == m.start() {
+                            *m = Range::new(m.end(), m.start());
+                        }
                     }
                 }
                 _ => match cursors.last_mut() {
@@ -246,6 +250,18 @@ impl Selection {
             primary: self.primary,
         }
         .merged(text.len_bytes())
+    }
+
+    /// `range` を足して主にし、`normalized` したもの (03 §4.5.1 の MCUR-1 / MCUR-6。カーソルを足す操作)。
+    /// 足した Range は併合 (N3 / N4) で既存の Range と 1 つになることがあり、そのときは数が増えない。
+    /// 併合の後の数が `MAX_CURSORS` を超えるなら `None` (選択を変えずに知らせるのは呼び出し側)。
+    pub fn with_new_primary(&self, range: Range, text: &dyn TextRead) -> Option<Selection> {
+        let mut ranges = Vec::with_capacity(self.ranges.len() + 1);
+        ranges.extend_from_slice(&self.ranges);
+        ranges.push(range);
+        let primary = ranges.len() - 1;
+        let s = Selection { ranges, primary }.normalized(text);
+        (s.len() <= MAX_CURSORS).then_some(s)
     }
 
     /// 各 Range に移動 `f` を適用して `normalized` する。
@@ -332,6 +348,34 @@ mod tests {
     }
 
     #[test]
+    fn 足した_range_は主になり_併合の後の数で上限を調べる() {
+        let t = Text::from("x".repeat(MAX_CURSORS + 10).as_str());
+        let s = sel(&[(5, 5), (1, 3)], 0).normalized(&t);
+        let added = s.with_new_primary(r(8, 8), &t).expect("足せる");
+        assert_eq!(pairs(&added), [(1, 3), (5, 5), (8, 8)]);
+        assert_eq!(*added.primary(), r(8, 8), "足した Range が主");
+        let same = s.with_new_primary(r(3, 3), &t).expect("端のカーソルは併合");
+        assert_eq!(
+            (pairs(&same), same.primary_index()),
+            (vec![(1, 3), (5, 5)], 0),
+            "数は増えず、併合した Range が主"
+        );
+        let full = Selection::new((0..MAX_CURSORS).map(|i| r(i, i)).collect(), 0).unwrap();
+        assert!(
+            full.with_new_primary(r(MAX_CURSORS, MAX_CURSORS), &t)
+                .is_none(),
+            "上限 + 1"
+        );
+        let at_limit = full
+            .with_new_primary(r(7, 7), &t)
+            .expect("同じ位置なら数は増えない");
+        assert_eq!(
+            (at_limit.len(), at_limit.primary().head),
+            (MAX_CURSORS, ByteOff(7))
+        );
+    }
+
+    #[test]
     fn 並べ替えても_primary_は同じ_range_を指す() {
         let s = sel(&[(10, 12), (0, 3)], 0).merged(100);
         assert_eq!(pairs(&s), [(0, 3), (10, 12)]);
@@ -400,9 +444,26 @@ mod tests {
             [(2, 8), (9, 9)],
             "離れている"
         );
-        // primary が空のカーソルなら残す
-        let s = sel(&[(2, 8), (8, 8)], 1).merged(100);
-        assert_eq!(*s.primary(), r(8, 8));
+    }
+
+    #[test]
+    fn 主の空のカーソルは非空の_range_に併合し_端ならカーソルの側を_head_にする() {
+        // end: 前向き (後ろ向きの選択も向きを変える)
+        let s = sel(&[(8, 2), (8, 8)], 1).merged(100);
+        assert_eq!((pairs(&s), s.primary_index()), (vec![(2, 8)], 0), "end");
+        // start: 後ろ向き
+        let s = sel(&[(2, 8), (2, 2)], 1).merged(100);
+        assert_eq!((pairs(&s), s.primary_index()), (vec![(8, 2)], 0), "start");
+        // 内側: 向きを変えない
+        let s = sel(&[(8, 2), (5, 5)], 1).merged(100);
+        assert_eq!((pairs(&s), s.primary_index()), (vec![(8, 2)], 0), "内側");
+        // ほかの Range は残り、主は併合した Range
+        let s = sel(&[(0, 1), (5, 2), (5, 5), (9, 9)], 2).merged(100);
+        assert_eq!(pairs(&s), [(0, 1), (2, 5), (9, 9)]);
+        assert_eq!(*s.primary(), r(2, 5));
+        // 03 §4.4 N4 の例: `abcdef` の 2..5 の選択と 5 の主のカーソルは 1 つの選択
+        let s = sel(&[(2, 5), (5, 5)], 1).merged(6);
+        assert_eq!((pairs(&s), s.primary_index()), (vec![(2, 5)], 0));
     }
 
     #[test]

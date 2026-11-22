@@ -39,6 +39,8 @@ pub enum DiagKind {
     },
     /// 後の版で公開する設定 (このバージョンでは未対応)。情報。画面には出さず、件数にも数えない (07 §4.3)。
     Unsupported,
+    /// 公開しない、常に有効の機能のキー (`editor.multi_cursor`。複数カーソルは常に使える、07 §5.1)。情報。値は使わない。
+    MultiCursorAlways,
     /// 型が違う。
     TypeMismatch {
         /// 期待した型の名前 (`integer` など)。
@@ -671,6 +673,13 @@ impl Cx<'_> {
                 (v.get_ref(), KEYS.iter().any(|key| key.starts_with(&nested)))
             {
                 self.keys(&full, inner);
+            } else if crate::reserved::ALWAYS_ON_KEYS.contains(&full.as_str()) {
+                self.diag(
+                    Severity::Info,
+                    DiagKind::MultiCursorAlways,
+                    full,
+                    k.span().start,
+                );
             } else if is_reserved_key(&full) {
                 self.diag(Severity::Info, DiagKind::Unsupported, full, k.span().start);
             } else {

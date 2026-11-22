@@ -159,6 +159,14 @@ editor	Ctrl+K Q	pane.close	Args({})	ContextExpr(None)	false
 editor	Ctrl+K ]	pane.grow	Args({})	ContextExpr(None)	false
 editor	Ctrl+K [	pane.shrink	Args({})	ContextExpr(None)	false
 editor	Ctrl+K =	pane.equalize	Args({})	ContextExpr(None)	false
+editor	Ctrl+D	select.add_next_match	Args({})	ContextExpr(None)	false
+editor	Ctrl+Shift+L	select.all_matches	Args({})	ContextExpr(None)	true
+editor	Ctrl+K E	select.all_matches	Args({})	ContextExpr(None)	false
+editor	Ctrl+Alt+Up	select.add_cursor_above	Args({})	ContextExpr(None)	false
+editor	Ctrl+Alt+Down	select.add_cursor_below	Args({})	ContextExpr(None)	false
+editor	Ctrl+K Shift+Up	select.add_cursor_above	Args({})	ContextExpr(None)	false
+editor	Ctrl+K Shift+Down	select.add_cursor_below	Args({})	ContextExpr(None)	false
+editor	Ctrl+K V	edit.paste	Args({})	ContextExpr(None)	false
 editor	Ctrl+K Left	cursor.home	Args({})	ContextExpr(None)	false
 editor	Ctrl+K Right	cursor.end	Args({})	ContextExpr(None)	false
 editor	Ctrl+K Shift+Left	select.extend_home	Args({})	ContextExpr(None)	false

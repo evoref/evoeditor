@@ -1,0 +1,12 @@
+ 1 let «a» = 1;
+ 2 let «b» = 2;
+ 3 let «c» = 3;
+
+
+
+
+
+status: 無題-1 [+] | カーソル 3 個 行 1, 桁 6 UTF-8 LF
+hints: Ctrl+Q 終了 | Ctrl+P コマンド | Ctrl+S 保存 | Ctrl+F 検索 | Ctrl+O 開く | Ctrl+Z 元に戻す | Ctrl+G 行へ移動
+cursor: (8,0)
+secondary: (8,1) (8,2)

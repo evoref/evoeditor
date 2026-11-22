@@ -5,4 +5,5 @@
 
 pub(crate) mod motion;
 pub(crate) mod mouse;
+pub(crate) mod multi_cursor;
 pub(crate) mod view_cmds;

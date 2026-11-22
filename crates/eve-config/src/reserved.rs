@@ -22,6 +22,12 @@ pub const RESERVED_SECTIONS: &[&str] = &[
 /// 「このバージョンでは未対応」の情報診断にして中身を使わない。表との一致は eve-core の試験 `config_reserved` が確かめる。
 pub const CONDITIONAL_SECTIONS: &[&str] = &["env", "frontend", "host", "os"];
 
+/// 公開しない、常に有効の機能のキー (フルキー)。書くと、公開前のキーの「このバージョンでは未対応」ではなく、専用の情報診断
+/// (`DiagKind::MultiCursorAlways`、文言は `msg.config.multi_cursor_always`) にして値を使わない (docs/07 §5.1。v0.5 の M32 の段 3)。
+/// 表 (07 §5.1) の P 列が「公開しない」のキー。eve-core の試験 `config_reserved` が、公開前のキーとこの一覧の和が表の公開キー以外の
+/// キーと一致することを確かめる。
+pub const ALWAYS_ON_KEYS: &[&str] = &["editor.multi_cursor"];
+
 /// 公開前のキー (フルキー)。
 pub const RESERVED_KEYS: &[&str] = &[
     "clipboard.command.copy",
@@ -33,7 +39,6 @@ pub const RESERVED_KEYS: &[&str] = &[
     "editor.auto_pairs",
     "editor.backspace_unindent",
     "editor.insert_final_newline_on_save",
-    "editor.multi_cursor",
     "editor.newline_keep_whitespace_only_line",
     "editor.paste_normalize_eol",
     "editor.pending_changes_max_bytes",

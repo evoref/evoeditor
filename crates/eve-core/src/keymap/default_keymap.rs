@@ -232,6 +232,20 @@ pub(crate) fn default_keymap() -> Keymap {
     ] {
         bind("editor", keys, cmd);
     }
+    // 複数カーソル (v0.5 の M32、FR-211。07 §11.6 の「複数カーソルと対応括弧」)。端末に横取りされない貼り付けの代替
+    // `ctrl+k v` も置く (複数カーソルへの分配、03 §4.5.3 の MCUR-10)
+    for (keys, cmd) in [
+        ("mod+d", "select.add_next_match"),
+        ("mod+shift+l", "select.all_matches"), // [E]
+        ("ctrl+k e", "select.all_matches"),
+        ("ctrl+alt+up", "select.add_cursor_above"),
+        ("ctrl+alt+down", "select.add_cursor_below"),
+        ("ctrl+k shift+up", "select.add_cursor_above"),
+        ("ctrl+k shift+down", "select.add_cursor_below"),
+        ("ctrl+k v", "edit.paste"),
+    ] {
+        bind("editor", keys, cmd);
+    }
     // チョードの代替キー ((alt))
     for (keys, cmd) in [
         ("ctrl+k left", "cursor.home"),
@@ -260,6 +274,7 @@ pub(crate) fn default_keymap() -> Keymap {
         ("editor", "mod+shift+k"),
         ("editor", "mod+shift+f"),
         ("search", "mod+shift+f"),
+        ("editor", "mod+shift+l"),
     ] {
         l.mark_enhanced(ctx, keys);
     }

@@ -416,6 +416,8 @@ pub fn diagnostic_texts(cat: &eve_config::Catalog, d: &Diagnostic) -> (String, S
                 String::new(),
             );
         }
+        // 公開しない、常に有効の機能のキー (`editor.multi_cursor`、07 §5.1)。本文と対処の 2 文
+        DiagKind::MultiCursorAlways => "multi_cursor_always",
         DiagKind::Syntax { message } => {
             args.push(("reason", clean(message)));
             "syntax"
@@ -606,6 +608,7 @@ pub fn diagnostic_texts_long(cat: &eve_config::Catalog, d: &Diagnostic) -> (Stri
 pub fn diagnostic_kind(d: &Diagnostic) -> &'static str {
     match &d.kind {
         DiagKind::Unsupported => "unsupported",
+        DiagKind::MultiCursorAlways => "multi_cursor_always",
         DiagKind::Syntax { .. } | DiagKind::Structure(_) => "syntax",
         DiagKind::UnknownKey { .. } => "unknown_key",
         DiagKind::TypeMismatch { .. } => "type_mismatch",

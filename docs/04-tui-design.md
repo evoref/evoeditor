@@ -1193,7 +1193,7 @@ v0.5 は結果を一覧のオーバーレイで出す (PO の決定 2026-11-20�
 
 ### 8.14 複数カーソル・対応括弧の文言の案 (v0.5 の M32)
 
-次のキーは **案** で、言語ファイル (`locales/ja.toml` / `en.toml`) と §15 の目録には、使う実装の PR (03 §4.7.2 の各段) で足す (§8.13 と同じく、先に足さない。09 §6.2 の `i18n`)。`{count}` と `info.cursor.limit` の `{limit}` は整数 (千の区切りを付けない、07 §17.3)。`info.bracket.too_far` の `{limit}` は大きさの文言 (`1 MiB`。ほかの文言の大きさと同じ書き方)。`info.*` は情報メッセージ (§8.9) で、`hint` (2 行目の対処) を持たない。`msg.config.multi_cursor_always` は設定の診断 (`config.show_diagnostics`) の文言で、`/` の後ろが対処。タブライン (FR-510) は新しい文言を持たない (タブの項目はステータスバーの文言を使う、03 §9.9 の PANE-12 (c))。
+次のキーは **案** で、言語ファイル (`locales/ja.toml` / `en.toml`) と §15 の目録には、使う実装の PR (03 §4.7.2 の各段) で足す (§8.13 と同じく、先に足さない。09 §6.2 の `i18n`)。`status.cursors.*`・`info.paste.multi_too_large` は段 2 の PR で、複数カーソルの文言 (`cmd.select.*`・`info.cursor.limit`・`info.select.*` (`info.select.query_too_long` は段 3 の PR で足した、目録だけにある)・`ui.help.terminal.multi_cursor_paste`・`msg.config.multi_cursor_always`) は段 3 の PR で §15.1 / §15.2 の目録 (`cmd.*` は 07 §11.6 のカタログ) へ移した (下の表は案の一覧として残す)。`{count}` と `info.cursor.limit` の `{limit}` は整数 (千の区切りを付けない、07 §17.3)。`info.bracket.too_far` の `{limit}` は大きさの文言 (`1 MiB`。ほかの文言の大きさと同じ書き方)。`info.*` は情報メッセージ (§8.9) で、`hint` (2 行目の対処) を持たない。`msg.config.multi_cursor_always` は設定の診断 (`config.show_diagnostics`) の文言で、`/` の後ろが対処。タブライン (FR-510) は新しい文言を持たない (タブの項目はステータスバーの文言を使う、03 §9.9 の PANE-12 (c))。
 
 | キー (案) | 出す場面 | ja (案) | en (案) |
 |---|---|---|---|
@@ -1753,6 +1753,7 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 | `ui.help.terminal.ime` | 端末の設定: IME | IME が ON のとき、文字キーは確認ダイアログのアクセラレータとして届きません。Tab や矢印と Enter で選んでください |
 | `ui.help.terminal.chord` | 端末の設定: チョード | Ctrl+K で始まるキーは、Ctrl+K を押してから次のキーを押します。Esc で取り消せます |
 | `ui.help.terminal.alt` | 端末の設定: Alt が届かない端末 | Alt が届かない端末 (Terminal.app の既定など) では、Ctrl+K を使う代替のキーがあります |
+| `ui.help.terminal.multi_cursor_paste` (v0.5) | 端末の設定: 複数カーソルへの貼り付けの既知の制約 (03 §4.5.3 の MCUR-10。端末の短い貼り付けは個別のキーとして届き分配されないので、端末に横取りされない `Ctrl+K V` を案内する。M32 の段 3) | 複数のカーソルに 1 行ずつ貼り付けるときは Ctrl+K V を使ってください (端末の短い貼り付けは、カーソルごとに分けられません) |
 | `ui.help.terminal.stdin_keys` | 端末の設定: 標準入力の書き手とキー入力の取り合い (v0.4 の M25、§8.6) | 標準入力 (cmd \| evoeditor -) の書き手が端末から読むとき (cat 単独など) は、キー入力を取り合います |
 | `ui.help.terminal.stdin_redraw` | 端末の設定: 書き手の stderr で崩れた画面 (同上) | 書き手のエラー出力で画面が崩れたら、{key:ui.redraw} で描き直してください |
 | `ui.help.terminal.stdin_powershell` | 端末の設定: Windows PowerShell 5.1 のパイプ (同上) | Windows PowerShell 5.1 のパイプは非 ASCII を ? に置き換えます。PowerShell 7.4 以降か cmd /c "evoeditor - < file" を使ってください |
@@ -1919,6 +1920,11 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 | `info.pane.no_room` (v0.5) | `pane.split_right` / `pane.split_down` で、分割した後の木の最小が編集面に入らないので分割しなかった (03 §9.9 の PANE-4 (a)) | ペインを分ける広さがありません。端末を広げるか、ほかのペインを閉じてください |
 | `info.pane.collapsed` (v0.5) | 編集面が木の最小より小さくなり、フォーカスのペインだけを出す縮退表示に入った (入ったときに 1 回。03 §9.9 の PANE-4 (b)。縮退表示の間はステータスバーに `status.degraded.panes.*`) | 端末が狭いので、フォーカスのペインだけを表示しています |
 | `info.pane.single_pane` (v0.5) | ペインが 1 つだけなので、`when` が `pane.split` のペインのコマンド (`pane.close`・移動・大きさ・揃える) をキーで実行して断った (03 §9.9 の PANE-5 (d)。「割り当てられていません」とは出さない。パレットでは淡色にして `ui.palette.reason.single_pane`) | ペインが 1 つだけです |
+| `info.cursor.limit` (v0.5) | カーソルを足す操作 (`select.add_next_match`・`select.add_cursor_above` / `_below`。後の版の矩形選択) で、足した後の数が上限 (`{limit}` = 10,000、千の区切りを付けない) を超えるので、選択を変えなかった (03 §4.5.1 の MCUR-6) | カーソルは {limit} 個までです。選択を変えませんでした |
+| `info.select.too_many_matches` (v0.5) | `select.all_matches` で、一致の数が上限 (`{limit}`) を超えるので、何も選ばなかった (一部だけを選ばない。03 §4.5.1 の MCUR-3) | 一致が {limit} 件を超えるため、選択を変えませんでした |
+| `info.select.no_word` (v0.5) | `select.add_next_match` / `select.all_matches` で、主のカーソルの位置に単語が無い (空白・改行の上。03 §4.5.1 の MCUR-2 / MCUR-3) | カーソルの位置に単語がありません |
+| `info.select.query_too_long` (v0.5) | `select.add_next_match` / `select.all_matches` で、主の選択 (検索語) が 64 KiB を超えるので探さなかった (03 §4.5.1 の MCUR-2 (k)) | 選択が長すぎるため (64 KiB まで)、一致を探しませんでした |
+| `info.select.no_more_matches` (v0.5) | `select.add_next_match` で、足せる一致が無い (一致が無い・全部選んである・既にある選択と重なるか接する一致だけ。03 §4.5.1 の MCUR-2) | ほかに一致はありません |
 | `msg.clipboard.fallback` | システムのクリップボードを使えず、内部レジスタに切り替えた (01 FR-205 AC-2。同じ起動の中では最初の 1 回だけ出す) | システムのクリップボードを使えないため、エディタ内のクリップボードを使いました: {reason} / 他のアプリとの間でコピー・貼り付けするには、端末の範囲選択と貼り付けを使ってください |
 | `info.eol.converted` | 改行コードを変換した (01 FR-113 AC-4、03 §8.4。`{eol}` は `LF` / `CRLF` / `CR` で翻訳しない) | {count} 個の改行を {eol} に変換しました (元に戻すで戻せます) |
 | `info.eol.unchanged` | 変換する改行が無かった (すべて `{eol}` か、改行が無い。新しく挿入する改行だけを `{eol}` にした) | 改行はすでに {eol} です |
@@ -1980,6 +1986,7 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 | `msg.config.type_mismatch` | 型不一致。`{actual}` は書かれた値の型、`{expected}` は期待する型 (どちらも下の `ui.config.type.*`)。該当項目は下位層の値 (v0.1 は既定値) に戻す | {item} の値の型が違います (書かれた型: {actual}) / {expected} で書いてください。この項目は既定値 {default} を使います |
 | `msg.config.type_mismatch_no_default` | 型不一致のうち、既定値を持たない項目 (節が表でない `editor = 1`、テーマファイルのロール `ui.selection = 1` など)。`msg.config.type_mismatch` の `{default}` が空になる場面の代わりに出す。該当の項目は使わない (テーマのロールは継いだ値のまま) | {item} の値の型が違います (書かれた型: {actual}) / {expected} で書いてください。この項目は使いません |
 | `msg.config.out_of_range` | 範囲外。`{range}` は許容範囲 (例 `1〜16`)。`{default}` は戻した値 (丸める項目 (07 §4.2) は丸めた値) | {item} の値 {value} は範囲外です / {range} で指定してください。この項目は {default} を使います |
+| `msg.config.multi_cursor_always` (v0.5) | 設定の診断 (情報)。設定に `editor.multi_cursor` を書いた (公開しない。複数カーソルは常に有効、07 §5.1。値は使わない。M32 の段 3) | editor.multi_cursor は使えません。複数カーソルは常に有効です / 使わないときは keymap.toml で足す操作のキーを "none" にしてください |
 | `msg.config.invalid_value` | 列挙値不正 (`file.default_encoding` の許容値外を含む)。`{allowed}` は許容値を `, ` で並べたもの | {item} の値 {value} は使えません / 使える値: {allowed}。この項目は既定値 {default} を使います |
 | `msg.config.invalid_value_no_default` | 列挙値不正のうち、既定値を持たない項目 (テーマファイルの色 `ui.selection.fg = "nope"` など)。`msg.config.invalid_value` の `{default}` が空になる場面の代わりに出す。該当の値は使わない | {item} の値 {value} は使えません / 使える値: {allowed}。この項目は使いません |
 | `msg.config.locale_syntax` (v0.4) | 言語ファイル (`locales/<lang>.toml`、07 §17.4) のファイル全体の問題 (エラー。ファイル全体を使わない): TOML の構文エラー・書ける構造の上限を超える (インラインの表・配列、8 段を超えるキー、2 万を超えるキーの段)。`{reason}` は構文エラーならパーサの説明 (無害化したもの)、ほかは理由の語 (`ui.config.locale_reason.*`)。行が分からないこともあるので、hint は行の有無に依らず成り立つ形 | この言語ファイルは書式が正しくないため使っていません: {reason} / 表示された行かファイルを直してください |

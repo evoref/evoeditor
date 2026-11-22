@@ -49,6 +49,9 @@ pub struct View {
     pub wrap: crate::layout::WrapSettings,
     /// 折り返し位置のカーソルの帰属 (主カーソルだけ、03 §14.3.1)。
     pub cursor_affinity: crate::layout::Affinity,
+    /// 「単語の一致」の印 (03 §4.5.1 の MCUR-2。`select.add_next_match` が単語から始めたとき立て、選択を変えるほかの操作で
+    /// 無効になる)。
+    pub(crate) word_match: Option<crate::view::multi_cursor::WordMark>,
 }
 
 /// 表現不能の文字の強調 (文書, 作った Revision, 文書内のバイト範囲)。
@@ -192,8 +195,10 @@ pub(crate) struct SearchSet {
     pub(crate) search_bar: Option<crate::ui_model::search_bar::SearchBarState>,
     /// 編集で検索の結果が無効になった (Revision, 気づいた時刻)。入力が止まって 300 ms 後に再検索する (03 §12.2)。
     pub(crate) research: Option<(eve_view::Revision, Tick)>,
-    /// 単発の検索ジョブ (進行中の 1 つだけ)。
+    /// 単発の検索ジョブ (進行中の 1 つだけ。`search.next` / `search.prev` と `select.add_next_match` で共有する)。
     pub(crate) find_job: Option<eve_view::JobId>,
+    /// `select.all_matches` の全件の検索のジョブ (進行中の 1 つだけ。03 §4.5.1 の MCUR-3)。
+    pub(crate) select_all_job: Option<eve_view::JobId>,
     /// 単発の検索ジョブを待つ間に同じ向きの次 / 前を押した回数 (行をまたぐ検索の規則。届いて移った後に続ける、03 §12.3.1)。
     pub(crate) find_presses: u32,
     /// 全件ジョブの結果を待っている次 / 前 (行をまたぐ検索の規則、03 §12.3.1 の「次 / 前」の (4))。
@@ -339,6 +344,7 @@ impl EditorState {
                 search_bar: None,
                 research: None,
                 find_job: None,
+                select_all_job: None,
                 find_presses: 0,
                 find_wait: None,
                 find_since: None,
@@ -696,6 +702,7 @@ impl EditorState {
                 goal_dcol: None,
                 wrap: self.config_wrap(),
                 cursor_affinity: Default::default(),
+                word_match: None,
             },
         );
         id
@@ -1229,6 +1236,8 @@ impl EditorState {
         v.selection = sel.normalized(d.text());
         v.goal_dcol = None;
         v.cursor_affinity = Default::default();
+        // 選択を変えると「単語の一致」の印は消える (足す操作と `ui.cancel` は、この後に立て直す。03 §4.5.1 の MCUR-2 (e))
+        v.word_match = None;
         self.out.needs_render = true;
     }
 
@@ -1245,6 +1254,8 @@ impl EditorState {
             "doc.read_only_releasable" => b(doc.is_some_and(Document::read_only_releasable)),
             "doc.modified" => b(doc.is_some_and(Document::is_dirty)),
             "selection.empty" => b(view.is_none_or(|v| v.selection.iter().all(|r| r.is_empty()))),
+            // Range が 2 つ以上 (03 §4.5.5)
+            "selection.multi" => b(view.is_some_and(|v| v.selection.len() >= 2)),
             "overlay.active" => Some(CtxValue::Str(self.overlay_name().to_owned())),
             // Window のペインが 2 つ以上 (03 §9.9、07 §7.3)
             "pane.split" => b(self

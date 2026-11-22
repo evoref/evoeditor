@@ -212,6 +212,62 @@ fn 色の段_256_色() {
     check_look("depth-ansi256", &mut h, look);
 }
 
+// ---- 複数カーソル (v0.5 の M32、FR-211。04 §9・03 §4.5.5) ----
+
+/// 3 行の行頭にカーソルを置き (下へ 2 回足す。主は最後に足した 3 行目)、それぞれ 2 文字ずつ選ぶ。
+fn multi_cursor_scene(depth: ColorDepth) -> Harness {
+    let mut h = with_depth(depth);
+    h.keys("ctrl+alt+down ctrl+alt+down shift+right shift+right");
+    h
+}
+
+// verifies: AC-FR-211-3
+#[test]
+fn 複数カーソル_主でないカーソルは反転と下線_主は端末のカーソル() {
+    let mut h = multi_cursor_scene(ColorDepth::TrueColor);
+    check("multi-cursor", &mut h);
+    let (text, styles) = screen(&mut h, DEFAULT_LOOK);
+    // 主のカーソル (3 行目) だけが端末のカーソル。1・2 行目の選択の直後のセルが反転と下線
+    assert!(
+        text.ends_with("cursor: Some(CellPos { col: 9, row: 2 })\n"),
+        "{text}"
+    );
+    for row in ["0:", "1:"] {
+        let line = styles
+            .lines()
+            .find(|l| l.starts_with(row))
+            .unwrap_or_else(|| panic!("{row} のスタイル: {styles}"));
+        assert!(
+            line.contains("UNDERLINED | REVERSED"),
+            "{row} の主でないカーソル: {line}"
+        );
+    }
+}
+
+// verifies: AC-FR-211-3
+#[test]
+fn 複数カーソル_無色の段でも主でないカーソルを見分けられる() {
+    let mut h = multi_cursor_scene(ColorDepth::Mono);
+    let look = Look {
+        depth: ColorDepth::Mono,
+        ..DEFAULT_LOOK
+    };
+    check_look("multi-cursor-mono", &mut h, look);
+    let (_, styles) = screen(&mut h, look);
+    // 選択 (反転) と、その直後の主でないカーソル (反転 + 下線) は別のスタイルの連続になる
+    for row in ["0:", "1:"] {
+        let line = styles
+            .lines()
+            .find(|l| l.starts_with(row))
+            .unwrap_or_else(|| panic!("{row} のスタイル: {styles}"));
+        assert!(line.contains("UNDERLINED | REVERSED"), "{row}: {line}");
+        assert!(
+            line.contains("Reset Reset REVERSED"),
+            "{row} の選択: {line}"
+        );
+    }
+}
+
 // ---- 高コントラストのテーマ (07 §8.7、09 §3.5 の (g)) ----
 
 /// 制御文字と、大文字を含む検索語 (`Fo`) に何度も一致する語を含む文書。
