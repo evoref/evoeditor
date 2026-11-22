@@ -474,6 +474,15 @@ fn 行の数がカーソルの数と違えば全文を各カーソルへ() {
 }
 
 #[test]
+fn 空の片を入れたカーソルも文書の順のまま先行の片の後ろに置く() {
+    // 主の空のカーソルが選択の端に残る (N4)。2 行 (`X` と空の行) を 1 行ずつ: 選択は `X` に、カーソルは空の行 (何も
+    // 入れない) で、カーソルは選択に入れた `X` の後ろ (前に回り込まない)
+    let mut h = scene("«ab»*|c");
+    h.paste("X\n\n");
+    assert_eq!(shown(&h), "X|c");
+}
+
+#[test]
 fn カーソルが_1_つなら貼り付けは今と同じ() {
     let mut h = scene("a|b");
     h.paste("X\nY\n");
@@ -602,6 +611,80 @@ fn すべて置換は全_range_を写して保つ() {
     h.keys("alt+a");
     h.run_jobs();
     assert_eq!(shown(&h), "a|b XY c|d XY");
+}
+
+#[test]
+fn すべて置換は一致の始まりの空のカーソルを置換の後ろへ写す() {
+    // 発行 View の写像 (MapPolicy::Own): 置き換えた範囲の始まりの点は、入れた文字列の後ろへ。Other なら前に留まる
+    let mut h = scene("a |foo b |foo");
+    h.keys("ctrl+r");
+    h.text("foo");
+    h.keys("tab");
+    h.text("XY");
+    h.keys("alt+a");
+    h.run_jobs();
+    assert_eq!(shown(&h), "a XY| b XY|");
+}
+
+// verifies: AC-FR-211-2
+#[test]
+fn 切り取った片は同じ数のカーソルへ_1_つずつ戻る() {
+    let mut h = scene("«a\nb» x «c»");
+    h.keys("ctrl+x");
+    assert_eq!(shown(&h), "| x |");
+    paste_via_command(&mut h, Some("a\nb\nc"));
+    assert_eq!(shown(&h), "a\nb| x c|", "改行を含む片も 1 段目で戻る");
+}
+
+#[test]
+fn 読み取り専用の文書への端末の貼り付けは上限を調べずに断る() {
+    let mut h = Harness::new().with_file("/w/ro.txt", b"ab\n");
+    h.fs.set_readonly("/w/ro.txt", true);
+    h.open("/w/ro.txt");
+    h.run_jobs();
+    set_selection(
+        &mut h,
+        vec![Range::point(ByteOff(0)), Range::point(ByteOff(2))],
+        0,
+    );
+    h.clear_log();
+    h.paste(&"x".repeat(eve_core::MULTI_PASTE_MAX_BYTES / 2 + 1));
+    assert_eq!(h.doc_text(), "ab\n");
+    assert!(
+        !h.messages()
+            .iter()
+            .any(|k| k == "info.paste.multi_too_large"),
+        "読み取り専用なので量の知らせは出さない: {:?}",
+        h.messages()
+    );
+}
+
+#[test]
+fn 長い行の多数のカーソルでも移動とインデントと再読込が各カーソルの位置になる() {
+    // 1 行 (長い行の表示単位を覚える 4 KiB 以上) に 1,000 個のカーソル
+    let line = "ab".repeat(4_000);
+    let mut h = eve_testkit::helpers::opened("/w/long.txt", format!("{line}\n{line}\n").as_bytes());
+    let ranges: Vec<Range> = (0..1_000).map(|i| Range::point(ByteOff(i * 8))).collect();
+    set_selection(&mut h, ranges.clone(), 0);
+    h.keys("down");
+    let heads: Vec<usize> = selection(&h).iter().map(|r| r.head.0).collect();
+    let want: Vec<usize> = (0..1_000).map(|i| 8_001 + i * 8).collect();
+    assert_eq!(heads, want, "同じ表示列の次の行へ");
+    h.keys("up");
+    h.keys("tab");
+    let heads: Vec<usize> = selection(&h).iter().map(|r| r.head.0).collect();
+    let want: Vec<usize> = (0..1_000).map(|i| i * 8 + (i + 1) * 4).collect();
+    assert_eq!(
+        heads, want,
+        "各カーソルの表示列から次の停止位置 (4 の倍数) まで"
+    );
+    // 再読込: 各 head の行:桁
+    set_selection(&mut h, ranges, 0);
+    h.fs.add_file("/w/long.txt", format!("{line}\n").as_bytes());
+    h.cmd("file.reload");
+    h.run_jobs();
+    let heads: Vec<usize> = selection(&h).iter().map(|r| r.head.0).collect();
+    assert_eq!(heads, (0..1_000).map(|i| i * 8).collect::<Vec<_>>());
 }
 
 #[test]

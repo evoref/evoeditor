@@ -15,27 +15,68 @@ use super::pending::*;
 use crate::command::{CommandResult, RejectReason};
 use crate::editor::state::EditorState;
 
-/// 旧本文の位置 `head` の行:桁 (書記素) を、新本文の同じ行:桁へ写す (03 §9.5)。
-/// 新本文の行が足りなければ最後の行、桁が足りなければ行末にする。
-fn same_line_col(
+/// 旧本文の位置の並び `heads` (昇順) の行:桁 (書記素) を、新本文の同じ行:桁へ写す (03 §9.5、§4.5.2)。
+/// 新本文の行が足りなければ最後の行、桁が足りなければ行末にする。結果は `heads` と同じ順。
+///
+/// 書記素は、旧本文では行ごとに行頭から 1 回だけ、新本文では行ごとに桁の昇順に 1 回だけ数える (同じ行の複数のカーソルを
+/// 行頭から数え直さない。数える回数は「行の長さ + カーソルの数」で、カーソルの数 × 行の長さにならない)。`next` は
+/// 次の書記素の境界 (試験が数える回数を確かめるために渡す)。
+fn same_line_cols(
     old: &eve_text::Text,
     new: &eve_text::Text,
-    head: eve_text::ByteOff,
-) -> eve_text::ByteOff {
-    use eve_text::{ByteOff, TextRead, next_grapheme_boundary};
-    let head = ByteOff(head.0.min(old.len_bytes()));
-    let line = old.byte_to_line(head);
-    let (mut p, mut col) = (old.line_to_byte(line), 1);
-    while p < head {
-        let n = next_grapheme_boundary(old, p);
-        if n == p {
-            break;
-        }
-        p = n;
-        col += 1;
-    }
+    heads: &[eve_text::ByteOff],
+    mut next: impl FnMut(&eve_text::Text, eve_text::ByteOff) -> eve_text::ByteOff,
+) -> Vec<eve_text::ByteOff> {
+    use eve_text::{ByteOff, LineIdx, TextRead};
+    // 旧本文: (行, 桁)。同じ行の続きは、直前のカーソルの位置から数え続ける
+    let mut at: Option<(usize, ByteOff, usize)> = None;
+    let targets: Vec<(usize, usize)> = heads
+        .iter()
+        .map(|&h| {
+            let h = ByteOff(h.0.min(old.len_bytes()));
+            let line = old.byte_to_line(h).0;
+            let (mut p, mut col) = match at {
+                Some((l, p, c)) if l == line && p <= h => (p, c),
+                _ => (old.line_to_byte(LineIdx(line)), 1),
+            };
+            while p < h {
+                let n = next(old, p);
+                if n == p {
+                    break;
+                }
+                p = n;
+                col += 1;
+            }
+            at = Some((line, p, col));
+            (line, col)
+        })
+        .collect();
+    // 新本文: 行と桁の昇順に並べ、同じ行は直前の位置から数え続ける (最後の行に丸めた行は桁が昇順とは限らないので並べ直す)
     let last = new.len_lines().saturating_sub(1);
-    crate::view::motion::line_col_byte(new, line.0.min(last), col)
+    let mut order: Vec<usize> = (0..targets.len()).collect();
+    order.sort_by_key(|&i| (targets[i].0.min(last), targets[i].1));
+    let mut out = vec![ByteOff(0); targets.len()];
+    let mut at: Option<(usize, ByteOff, usize)> = None;
+    for i in order {
+        let (line, col) = (targets[i].0.min(last), targets[i].1);
+        let le = new.line_end_byte(LineIdx(line));
+        let (mut p, mut c) = match at {
+            Some((l, p, c)) if l == line => (p, c),
+            _ => (new.line_to_byte(LineIdx(line)), 1),
+        };
+        while c < col {
+            let n = next(new, p);
+            if n > le || n == p {
+                p = le;
+                break;
+            }
+            p = n;
+            c += 1;
+        }
+        at = Some((line, p, c));
+        out[i] = p.min(le);
+    }
+    out
 }
 
 impl EditorState {
@@ -205,18 +246,19 @@ impl EditorState {
         // 複数カーソルは各 Range の head に同じ写像を当てた空のカーソルにし (選択は解く。Range が 1 つのときと同じ)、
         // 正規化で併合する (03 §4.5.2 の「写像して保つ」)
         let before_sel = self.docs.views.get(&view).map(|v| v.selection.clone());
-        let map = |p: ByteOff| same_line_col(old.text(), &text, p);
-        let after_sel = before_sel
+        let heads: Vec<ByteOff> = before_sel
             .as_ref()
-            .and_then(|s| {
-                let ranges = s
-                    .iter()
-                    .map(|r| eve_text::Range::point(map(r.head)))
-                    .collect();
-                Selection::new(ranges, s.primary_index())
-            })
-            .unwrap_or_else(|| Selection::point(map(ByteOff(0))))
-            .normalized(&text);
+            .map_or_else(|| vec![ByteOff(0)], |s| s.iter().map(|r| r.head).collect());
+        let mapped = same_line_cols(old.text(), &text, &heads, |t, p| {
+            eve_text::next_grapheme_boundary(t, p)
+        });
+        let primary = before_sel.as_ref().map_or(0, Selection::primary_index);
+        let after_sel = Selection::new(
+            mapped.into_iter().map(eve_text::Range::point).collect(),
+            primary,
+        )
+        .unwrap_or_else(|| Selection::point(ByteOff(0)))
+        .normalized(&text);
         let tx = Transaction::new(cs, Origin::Reload, self.now)
             .with_selections(before_sel, Some(after_sel))
             .with_view(view)
@@ -372,5 +414,58 @@ impl EditorState {
         // 横断検索の結果から、再読込・開き直しの間の文書へ移ろうとしていた: 読み終えて (失敗で旧本文に戻った場合も) `Ready`
         // になったら移る (03 §12.7.5 の段 7 の細目 (11))。確認を待つ間 (`NeedsConfirm`) は持ち越す
         self.finish_ws_jump(doc_id);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::same_line_cols;
+    use eve_text::{ByteOff, Text, TextRead, next_grapheme_boundary};
+
+    /// 1 つずつ行頭から数える素朴な写し (参照)。
+    fn naive(old: &Text, new: &Text, head: ByteOff) -> ByteOff {
+        let head = ByteOff(head.0.min(old.len_bytes()));
+        let line = old.byte_to_line(head);
+        let (mut p, mut col) = (old.line_to_byte(line), 1);
+        while p < head {
+            p = next_grapheme_boundary(old, p);
+            col += 1;
+        }
+        let last = new.len_lines().saturating_sub(1);
+        crate::view::motion::line_col_byte(new, line.0.min(last), col)
+    }
+
+    #[test]
+    fn 各カーソルを同じ行と桁に写し_行と桁が足りなければ丸める() {
+        let old = Text::from("abc\nde\u{301}f\r\nghij\nklmno");
+        let new = Text::from("ABCDE\nx\nYZ");
+        let heads: Vec<ByteOff> = [0, 2, 3, 4, 7, 8, 11, 13, 15, 20]
+            .into_iter()
+            .map(ByteOff)
+            .filter(|&p| old.is_char_boundary(p))
+            .collect();
+        let got = same_line_cols(&old, &new, &heads, |t, p| next_grapheme_boundary(t, p));
+        let want: Vec<ByteOff> = heads.iter().map(|&h| naive(&old, &new, h)).collect();
+        assert_eq!(got, want);
+    }
+
+    #[test]
+    fn 長い行の多数のカーソルは行の長さとカーソルの数に比例する回数だけ数える() {
+        let len = 20_000;
+        let k = 2_000;
+        let old = Text::from("a".repeat(len).as_str());
+        let new = Text::from(format!("{}\n{}", "b".repeat(len), "c".repeat(len)).as_str());
+        let heads: Vec<ByteOff> = (0..k).map(|i| ByteOff(i * (len / k))).collect();
+        let mut steps = 0usize;
+        let got = same_line_cols(&old, &new, &heads, |t, p| {
+            steps += 1;
+            next_grapheme_boundary(t, p)
+        });
+        assert_eq!(got, heads, "同じ行の同じ桁");
+        assert!(
+            steps <= 2 * (len + k),
+            "書記素を数えた回数 {steps} (カーソルごとに行頭から数えると約 {})",
+            k * len
+        );
     }
 }

@@ -10,10 +10,14 @@ use std::rc::Rc;
 use eve_text::{ChangeSet, TextRead};
 
 use super::long::{ColIndex, carry};
+use super::rows::LineRows;
 use super::units::Unit;
+use super::wrap::WrapSettings;
 
 /// `units_for` の覚えの鍵 (Revision・行・エスケープ・タブ幅・曖昧幅・空白の可視化)。
 pub(super) type UnitsKey = (eve_view::Revision, usize, bool, u8, bool, bool);
+/// `line_rows` の覚えの鍵 (表示単位の鍵・折り返しの設定・折り返し幅)。
+pub(super) type RowsKey = (UnitsKey, WrapSettings, usize);
 /// 長大行の列の索引の表示の設定の鍵 (エスケープ・タブ幅・曖昧幅)。
 pub(super) type LongRule = (bool, u8, bool);
 
@@ -30,8 +34,11 @@ pub(super) struct LongEntry {
 /// 文書ごとのレイアウトの覚え。
 #[derive(Default)]
 pub(crate) struct LayoutCache {
-    /// 長い行の表示単位の計算結果 (最後の 1 行分)。1 回の操作で同じ行を何度も展開しないための覚え。
-    pub(super) units: Option<(UnitsKey, Rc<Vec<Unit>>)>,
+    /// 長い行の表示単位の計算結果 (直近の 2 行分。新しいものが後ろ)。1 回の操作で同じ行を何度も展開しないための覚え
+    /// (複数カーソルの上下の移動は、カーソルごとに元の行と行き先の行を交互に引く。03 §4.5.4 の「費用」)。
+    pub(super) units: Vec<(UnitsKey, Rc<Vec<Unit>>)>,
+    /// 長い行の折り返しの結果 (直近の 2 行分)。複数カーソルの表示行の移動で、カーソルごとに同じ行を折り返さない。
+    pub(super) rows: Vec<(RowsKey, LineRows)>,
     /// 長大行の列の索引 (直近の数行分、03 §14.4 の「覚え」)。
     pub(super) long: Vec<LongEntry>,
 }

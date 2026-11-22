@@ -10,6 +10,7 @@
 //! - 表記の文字列 `<0xNN>` をバイトに戻すことはしない。
 
 use std::borrow::Cow;
+use std::sync::Arc;
 
 use eve_encoding::{Encoding, PuaEscapeMode};
 use eve_text::LineEnding;
@@ -327,13 +328,23 @@ pub(crate) fn resolve_paste(
     Some(PastePlan { text, notices })
 }
 
-/// 複数カーソルへの貼り付けで各 Range に入れるもの (03 §4.5.3 の MCUR-10)。
+/// 複数カーソルへの貼り付けで各 Range に入れるもの (03 §4.5.3 の MCUR-10)。文字列は共有で持つ (全文を各 Range へ
+/// 入れるときも、Range ごとに写しを作らない)。
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum Distribution {
     /// 1 つずつ文書の順に各 Range へ入れる (1 段目の内部レジスタの片・2 段目の行)。数は Range の数と同じ。
-    Each(Vec<String>),
+    Each(Vec<Arc<str>>),
     /// 全文を各 Range へ入れる (3 段目)。
-    All(String),
+    All(Arc<str>),
+}
+
+/// `resolve_multi_paste` の結果。
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum MultiPaste {
+    /// 入れるもの。
+    Plan(MultiPastePlan),
+    /// 入れる合計が上限を超える (何も入れない。片や全文の写しを作る前に分かれば作らない)。
+    TooLarge,
 }
 
 /// 複数カーソルへの貼り付けの計画。
@@ -349,16 +360,16 @@ impl MultiPastePlan {
     /// `ranges` 個の Range に入れる合計のバイト数 (`All` は全文の長さ × Range の数。溢れたら `usize::MAX`)。
     pub(crate) fn total_bytes(&self, ranges: usize) -> usize {
         match &self.dist {
-            Distribution::Each(v) => v.iter().map(String::len).sum(),
+            Distribution::Each(v) => v.iter().map(|s| s.len()).sum(),
             Distribution::All(t) => t.len().saturating_mul(ranges),
         }
     }
 
-    /// `i` 番目 (文書の順) の Range に入れる文字列。
-    pub(crate) fn text_for(&self, i: usize) -> &str {
+    /// `i` 番目 (文書の順) の Range に入れる文字列 (共有の写し)。
+    pub(crate) fn text_for(&self, i: usize) -> Arc<str> {
         match &self.dist {
-            Distribution::Each(v) => v.get(i).map_or("", String::as_str),
-            Distribution::All(t) => t,
+            Distribution::Each(v) => v.get(i).cloned().unwrap_or_else(|| Arc::from("")),
+            Distribution::All(t) => Arc::clone(t),
         }
     }
 }
@@ -403,7 +414,8 @@ pub(crate) fn split_lines(s: &str) -> Vec<&str> {
 /// 2. **行**: 1 の当たらないとき、`resolve_paste` で決めた文字列の行の数が `ranges` と同じなら 1 行ずつ。
 /// 3. **全文**: それ以外は `resolve_paste` で決めた文字列を各 Range へ。
 ///
-/// 入れるものが無い (届かず、内部レジスタも空) ときは `None`。
+/// 入れる合計のバイト数 (各 Range に入れる文字列の長さの和。3 段目は全文の長さ × `ranges`) が `max_bytes` を超えれば
+/// `TooLarge` (03 §4.5.3 の MCUR-10 の「入れる量の上限」)。入れるものが無い (届かず、内部レジスタも空) ときは `None`。
 pub(crate) fn resolve_multi_paste(
     arrived: Option<&str>,
     register: Option<&ClipboardSource>,
@@ -411,24 +423,45 @@ pub(crate) fn resolve_multi_paste(
     eol: LineEnding,
     normalize_eol: bool,
     ranges: usize,
-) -> Option<MultiPastePlan> {
+    max_bytes: usize,
+) -> Option<MultiPaste> {
     if let Some(r) = register
         && r.pieces().len() == ranges
         && arrived.is_none_or(|a| r.matches_text(a))
     {
-        return Some(register_pieces(r, target, eol, normalize_eol));
+        // 片を作る前に粗く比べる: 改行の正規化で縮むのは CRLF → 1 バイトの改行の半分までなので、片の合計の半分が上限を
+        // 超えれば、片を作っても必ず超える
+        let joiners = r.joiner().byte_len() * (ranges - 1);
+        if (r.len_bytes() - joiners) / 2 > max_bytes {
+            return Some(MultiPaste::TooLarge);
+        }
+        let plan = register_pieces(r, target, eol, normalize_eol);
+        return Some(if plan.total_bytes(ranges) > max_bytes {
+            MultiPaste::TooLarge
+        } else {
+            MultiPaste::Plan(plan)
+        });
     }
     let plan = resolve_paste(arrived, register, target, eol, normalize_eol)?;
     let lines = split_lines(&plan.text);
-    let dist = if lines.len() == ranges {
-        Distribution::Each(lines.into_iter().map(str::to_owned).collect())
+    let each = lines.len() == ranges;
+    let total = if each {
+        lines.iter().map(|l| l.len()).sum()
     } else {
-        Distribution::All(plan.text)
+        plan.text.len().saturating_mul(ranges)
     };
-    Some(MultiPastePlan {
+    if total > max_bytes {
+        return Some(MultiPaste::TooLarge);
+    }
+    let dist = if each {
+        Distribution::Each(lines.into_iter().map(Arc::from).collect())
+    } else {
+        Distribution::All(Arc::from(plan.text))
+    };
+    Some(MultiPaste::Plan(MultiPastePlan {
         dist,
         notices: plan.notices,
-    })
+    }))
 }
 
 /// 1 段目: 内部レジスタの片を、`resolve_paste` の「一致した」場合と同じ規則で 1 つずつ文字列にする。
@@ -447,13 +480,15 @@ fn register_pieces(
     };
     let n = r.pieces().len();
     let mut notices = Vec::new();
-    let texts: Vec<String> =
+    let texts: Vec<Arc<str>> =
         if r.escape_origin.is_some() && r.escape_origin == target.escape_encoding {
             let count = r.escape_count();
             if count > 0 {
                 notices.push(InsertNotice::AsBytes(count));
             }
-            (0..n).map(|i| eol_rule(&r.piece_raw(i))).collect()
+            (0..n)
+                .map(|i| Arc::from(eol_rule(&r.piece_raw(i))))
+                .collect()
         } else {
             let count = r.notation_count();
             if count > 0 {
@@ -473,7 +508,7 @@ fn register_pieces(
                     let normalized = eol_rule(&r.piece_text(i));
                     let (s, k) = external_text(&normalized, target);
                     pua += k;
-                    s.into_owned()
+                    Arc::from(s.into_owned())
                 })
                 .collect();
             if pua > 0 {
@@ -715,7 +750,22 @@ mod tests {
         target: EscapeContext,
         n: usize,
     ) -> MultiPastePlan {
-        resolve_multi_paste(arrived, Some(r), target, LineEnding::Lf, true, n).unwrap()
+        match resolve_multi_paste(
+            arrived,
+            Some(r),
+            target,
+            LineEnding::Lf,
+            true,
+            n,
+            usize::MAX,
+        ) {
+            Some(MultiPaste::Plan(p)) => p,
+            other => panic!("計画が無い: {other:?}"),
+        }
+    }
+
+    fn each(v: &[&str]) -> Distribution {
+        Distribution::Each(v.iter().map(|&s| Arc::from(s)).collect())
     }
 
     #[test]
@@ -746,7 +796,7 @@ mod tests {
     #[test]
     fn 片の数が同じで中身が一致すれば片を_1_つずつ() {
         let r = pieces("a\nb c", &[(0, 3), (4, 5)], LineEnding::Lf, FROM_PLAIN);
-        let want = Distribution::Each(vec!["a\nb".to_owned(), "c".to_owned()]);
+        let want = each(&["a\nb", "c"]);
         assert_eq!(multi(Some("a\nb\nc"), &r, PLAIN, 2).dist, want);
         assert_eq!(
             multi(Some("a\rb\rc"), &r, PLAIN, 2).dist,
@@ -761,12 +811,12 @@ mod tests {
         // 中身が違えば片を使わない (3 行は 2 つのカーソルと合わないので全文)
         assert_eq!(
             multi(Some("a\nb\nd"), &r, PLAIN, 2).dist,
-            Distribution::All("a\nb\nd".to_owned())
+            Distribution::All(Arc::from("a\nb\nd"))
         );
         // 片の数とカーソルの数が違えば、行 (3 つ) で分ける
         assert_eq!(
             multi(Some("a\nb\nc"), &r, PLAIN, 3).dist,
-            Distribution::Each(vec!["a".to_owned(), "b".to_owned(), "c".to_owned()])
+            each(&["a", "b", "c"])
         );
     }
 
@@ -782,10 +832,7 @@ mod tests {
         assert_eq!(arrived, "x<0x9A>\n<0x81>y");
         // 同じ文字コードのバイトの文書: エスケープ文字のまま
         let p = multi(Some(&arrived), &r, BYTES_SJIS, 2);
-        assert_eq!(
-            p.dist,
-            Distribution::Each(vec!["x\u{10FF9A}".to_owned(), "\u{10FF81}y".to_owned()])
-        );
+        assert_eq!(p.dist, each(&["x\u{10FF9A}", "\u{10FF81}y"]));
         assert_eq!(
             p.notices,
             [InsertNotice::AsBytes(2)],
@@ -793,10 +840,7 @@ mod tests {
         );
         // バイトとして扱えない文書: 表記の文字列
         let p = multi(Some(&arrived), &r, PLAIN, 2);
-        assert_eq!(
-            p.dist,
-            Distribution::Each(vec!["x<0x9A>".to_owned(), "<0x81>y".to_owned()])
-        );
+        assert_eq!(p.dist, each(&["x<0x9A>", "<0x81>y"]));
         assert_eq!(p.notices, [InsertNotice::EscapeAsText(2)]);
         // 衝突の文書 (b) からのコピーは、衝突の文書 (a) へもコードポイントの表記で
         let r = pieces(
@@ -806,28 +850,53 @@ mod tests {
             FROM_COLLISION_B,
         );
         let p = multi(None, &r, COLLISION, 2);
-        assert_eq!(
-            p.dist,
-            Distribution::Each(vec!["<U+10FF80>".to_owned(), "<U+10FF81>".to_owned()])
-        );
+        assert_eq!(p.dist, each(&["<U+10FF80>", "<U+10FF81>"]));
         assert_eq!(p.notices, [InsertNotice::PuaAsText(2)]);
+    }
+
+    #[test]
+    fn 入れる合計が上限を超えれば片や全文を作らずに断る() {
+        let at = |arrived: Option<&str>, r: &ClipboardSource, n: usize, max: usize| {
+            resolve_multi_paste(arrived, Some(r), PLAIN, LineEnding::Lf, true, n, max)
+        };
+        let r = pieces("abcd efgh", &[(0, 4), (5, 9)], LineEnding::Lf, FROM_PLAIN);
+        // 1 段目: 片の合計 8 バイト。ちょうどは入れる、1 バイト足りなければ断る
+        assert!(matches!(at(None, &r, 2, 8), Some(MultiPaste::Plan(_))));
+        assert_eq!(at(None, &r, 2, 7), Some(MultiPaste::TooLarge));
+        assert_eq!(
+            at(None, &r, 2, 3),
+            Some(MultiPaste::TooLarge),
+            "粗い比較で断る"
+        );
+        // 3 段目: 全文 3 バイト × 3 = 9
+        assert!(matches!(
+            at(Some("xyz"), &r, 3, 9),
+            Some(MultiPaste::Plan(_))
+        ));
+        assert_eq!(at(Some("xyz"), &r, 3, 8), Some(MultiPaste::TooLarge));
+        // 2 段目: 行の長さの和 (区切りを含めない) 2
+        assert!(matches!(
+            at(Some("x\ny"), &r, 2, 2),
+            Some(MultiPaste::Plan(_))
+        ));
+        assert_eq!(at(Some("x\ny\n"), &r, 2, 1), Some(MultiPaste::TooLarge));
     }
 
     #[test]
     fn 入れる合計は全文なら長さ_x_カーソルの数() {
         let all = MultiPastePlan {
-            dist: Distribution::All("abc".to_owned()),
+            dist: Distribution::All(Arc::from("abc")),
             notices: vec![],
         };
         assert_eq!(all.total_bytes(4), 12);
         assert_eq!(all.total_bytes(usize::MAX), usize::MAX, "溢れたら最大");
-        assert_eq!(all.text_for(3), "abc");
+        assert_eq!(&*all.text_for(3), "abc");
         let each = MultiPastePlan {
-            dist: Distribution::Each(vec!["a".to_owned(), "bcd".to_owned()]),
+            dist: each(&["a", "bcd"]),
             notices: vec![],
         };
         assert_eq!(each.total_bytes(2), 4);
-        assert_eq!((each.text_for(1), each.text_for(5)), ("bcd", ""));
+        assert_eq!((&*each.text_for(1), &*each.text_for(5)), ("bcd", ""));
     }
 
     // ---------- 性質テスト (03 §22.1 の「貼り付けのエスケープ文字」) ----------

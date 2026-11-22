@@ -11,13 +11,14 @@
 //! - (d) 貼り付けの分配 (内部レジスタの片 → 行 → 全文) が 3 段の参照モデルと一致し、同じ選択でのコピー → 貼り付け
 //!   (改行を CR にした端末の貼り付けを含む) は各 Range の文字列を (改行の正規化だけをかけて) 戻す。
 //!
-//! (e) のほかの View からの写像は `fuzz_editor` (全 View の選択の正規化の検査) と L3 の `multi_cursor.rs` で見る。
+//! - (e) 同じ文書を表示するほかの View (ペインの分割で全 Range を写した View) での編集の後も、この View の Selection が
+//!   (b) を満たす (`MapPolicy::Other` の写像と併合)。
 
 use eve_testkit::Harness;
 use eve_testkit::helpers::opened;
 use eve_text::{
     ByteOff, MAX_CURSORS, Range, Selection, Text, next_grapheme_boundary, next_word_stop,
-    prev_grapheme_boundary, prev_word_stop,
+    prev_grapheme_boundary, prev_word_stop, snap_to_nearest_grapheme,
 };
 use eve_view::{ClipboardText, Effect};
 use proptest::prelude::*;
@@ -399,7 +400,18 @@ fn default_eol(h: &Harness) -> &'static str {
 
 /// INV-S1〜INV-S3 (03 §4.4、§21 の表): 正規化済み、`start` の順で重ならない、数が上限以下、主が範囲内。
 fn check_invariants(h: &Harness, what: &str) {
-    let sel = selection(h);
+    check_invariants_of(h, view(h), what);
+}
+
+/// View `v` の選択の INV-S1〜INV-S3。
+fn check_invariants_of(h: &Harness, v: eve_view::ViewId, what: &str) {
+    let sel = h
+        .editor
+        .state()
+        .view(v)
+        .expect("View がある")
+        .selection
+        .clone();
     let doc = h.editor.state().document(h.doc_id()).expect("文書がある");
     let normalized = sel.clone().normalized(doc.text());
     assert_eq!(normalized, sel, "{what}: 正規化されていない");
@@ -543,12 +555,41 @@ proptest! {
             want.push(at);
             delta += isize::try_from(ins.len()).unwrap() - isize::try_from(r.end().0 - r.start().0).unwrap();
         }
+        // 入れた文字列が隣とつながって 1 つの書記素になる (CR の文書に LF を貼ると CRLF になるなど) と、カーソルは
+        // 正規化 (N1) で近い書記素の境界に寄る
+        let after = Text::from(h.doc_text().as_str());
+        let mut want: Vec<usize> = want
+            .into_iter()
+            .map(|p| snap_to_nearest_grapheme(&after, ByteOff(p)).0)
+            .collect();
         want.dedup();
         let got: Vec<usize> = selection(&h).iter().map(|r| {
             assert!(r.is_empty(), "空のカーソル");
             r.head.0
         }).collect();
         prop_assert_eq!(got, want);
+    }
+
+    /// (e): ほかの View (分割で全 Range を写したペイン) での編集の後も、元の View の選択は不変条件を満たし、本文は
+    /// 参照モデルと一致する。
+    #[test]
+    fn ほかの_view_での編集の後も選択は不変条件を満たす(
+        text in doc_text(),
+        (raw, primary) in ranges(),
+        c in cmd(),
+    ) {
+        let (mut h, before) = setup(&text, &raw, primary);
+        let first = view(&h);
+        h.cmd("pane.split_right");
+        let second = view(&h);
+        prop_assert_ne!(first, second, "分割で新しい View にフォーカスが移る");
+        prop_assert_eq!(selection(&h), before.clone(), "分割は全 Range を写す");
+        let eol = default_eol(&h);
+        let arrived = run(&mut h, &c);
+        let want = model(&text, before.ranges(), &c, eol, arrived.as_deref());
+        prop_assert_eq!(h.doc_text(), want, "{:?} {:?}", c, before);
+        check_invariants_of(&h, first, "ほかの View の編集の後");
+        check_invariants_of(&h, second, "編集した View");
     }
 
     /// (c): 続けて打った文字は、全 Range で R7 の条件を満たすとき (Range が離れていて、編集が 1 つのまとまりに

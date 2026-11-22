@@ -778,6 +778,10 @@ fn multi_cursor_op(h: &mut Harness, b: &mut Bytes<'_>) -> String {
         "edit.undo",
         "edit.redo",
         "paste",
+        "edit.paste",
+        "edit.delete_word_forward",
+        "file.reload",
+        "search.replace_all",
     ];
     let st = h.editor.state();
     let Some(view) = st.first_window().and_then(|w| st.window_view(w)) else {
@@ -818,6 +822,35 @@ fn multi_cursor_op(h: &mut Harness, b: &mut Bytes<'_>) -> String {
             let t = b.text(24);
             h.paste(&t);
             format!("{what} + paste {t:?}")
+        }
+        "edit.paste" => {
+            // システムのクリップボードの応答 (半分は読み取れなかった扱いで内部レジスタを使う)
+            h.cmd("edit.paste");
+            let token = h.effects().iter().rev().find_map(|e| match e {
+                eve_view::Effect::RequestClipboard { token, .. } => Some(*token),
+                _ => None,
+            });
+            let t = (b.u8() & 1 == 0).then(|| b.text(24));
+            if let Some(token) = token {
+                h.clipboard_content(token, t.as_deref());
+            }
+            format!("{what} + edit.paste {t:?}")
+        }
+        "file.reload" => {
+            h.cmd("file.reload");
+            h.run_jobs();
+            format!("{what} + file.reload")
+        }
+        "search.replace_all" => {
+            let (find, with) = (b.text(4), b.text(4));
+            h.keys("ctrl+r");
+            h.text(&find);
+            h.keys("tab");
+            h.text(&with);
+            h.keys("alt+a");
+            h.run_jobs();
+            h.keys("escape");
+            format!("{what} + search.replace_all {find:?} → {with:?}")
         }
         id => {
             h.cmd(id);
