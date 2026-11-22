@@ -71,10 +71,10 @@ search.prev	Motion	Read	search.active
 search.replace	Edit	Propose	search.replace_active && !doc.read_only
 search.replace_all	Edit	Propose	search.replace_active && !doc.read_only
 search.replace_open	Ui	Ui	!doc.read_only
-search.toggle_case	Ui	Ui	search.active
-search.toggle_regex	Ui	Ui	search.active
+search.toggle_case	Ui	Ui	search.active || overlay.active == "workspace_search"
+search.toggle_regex	Ui	Ui	search.active || overlay.active == "workspace_search"
 search.toggle_selection	Ui	Ui	search.active
-search.toggle_word	Ui	Ui	search.active
+search.toggle_word	Ui	Ui	search.active || overlay.active == "workspace_search"
 search.workspace	Ui	Ui	—
 select.all	Motion	Read	—
 select.extend_down	Motion	Read	—
