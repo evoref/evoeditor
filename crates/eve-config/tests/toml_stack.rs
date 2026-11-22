@@ -154,8 +154,14 @@ fn インラインの表と点のキーを組み合わせた入れ子は読む�
 #[test]
 fn set_の値の深い入れ子も読む前に拒む() {
     let value = format!("{}1{}", "{ a.a = ".repeat(3000), " }".repeat(3000));
-    let l = on_small_stack(move || load_set(Config::default(), &format!("editor.x={value}")))
-        .expect("= がある");
+    let l = on_small_stack(move || {
+        load_set(
+            Config::default(),
+            &format!("editor.x={value}"),
+            &eve_config::Conditions::default(),
+        )
+    })
+    .expect("= がある");
     assert_eq!(l.config, Config::default());
     // TOML の値として読めない (書ける構造の上限を超える) ので文字列として読み直す (`editor.x` は無いキーなので警告)
     assert_eq!(l.diagnostics.len(), 1, "{:?}", l.diagnostics);

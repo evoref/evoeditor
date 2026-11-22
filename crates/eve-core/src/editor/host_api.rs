@@ -13,6 +13,8 @@ pub struct StartupConfig {
     pub system_encoding: Option<Option<crate::Encoding>>,
     /// 設定の値。
     pub config: Option<eve_config::Config>,
+    /// 設定の値の由来 (`config.show`、07 §3.5)。
+    pub config_origins: Option<eve_config::Origins>,
     /// テーマファイルから読んだテーマ (名前、読めなければ `None`。07 §8.6)。
     pub user_theme: Option<(String, Option<eve_config::theme::Theme>)>,
     /// 設定の読込元 (`config.reload` が同じ元を読み直す、07 §6)。
@@ -72,6 +74,9 @@ impl Editor {
         }
         if let Some(config) = c.config {
             st.set_config(config);
+        }
+        if let Some(origins) = c.config_origins {
+            st.settings.config_origins = origins;
         }
         if let Some((name, theme)) = c.user_theme {
             st.set_user_theme(&name, theme);

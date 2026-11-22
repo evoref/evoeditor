@@ -182,6 +182,7 @@ pub mod rescue;
 mod save;
 #[cfg(windows)]
 pub mod session;
+pub mod session_env;
 #[cfg(unix)]
 pub mod signals;
 mod state_file;

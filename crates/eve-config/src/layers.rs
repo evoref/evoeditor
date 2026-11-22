@@ -3,8 +3,8 @@
 //!
 //! 起動時 (bin) と `config.reload` (core) が同じ規則で合成するよう、読み込んだ本文を受け取る純関数にしている。
 
-use crate::config::{Config, declared_values, dump_rank, load_str_onto};
-use crate::{DiagKind, Diagnostic, Loaded, Severity};
+use crate::config::{Config, declared_values, dump_rank, load_str_for};
+use crate::{DiagKind, Diagnostic, Loaded, Severity, Written};
 
 /// ユーザー層のファイル 1 つ。`text` は、無ければ `Ok(None)`、読めなければ理由。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -41,30 +41,60 @@ pub struct Resolved {
     /// `ui.locale` を最後に書いた所と、書かれた値 (文字列でなければ空)。使える言語に当たらないときの診断
     /// ([`check_ui_locale`]) の場所と値に使う (07 §17.4)。
     pub ui_locale_at: Option<(KeyOrigin, String)>,
+    /// 公開キーの値の由来 (層・ファイル・行・条件。`config.show`、07 §3.5)。
+    pub origins: Origins,
 }
 
-/// TOML の本文で `<section>.<name>` を書いた所 (`[section]` の `name`、または `section.name = …`) と、書かれた値
-/// (文字列でなければ空)。
-fn key_position(text: &str, section: &str, name: &str) -> Option<(u32, u32, String)> {
-    use toml::de::{DeTable, DeValue};
-    let root = DeTable::parse(text).ok()?;
-    let (_, sec) = root.get_ref().get_key_value(section)?;
-    let DeValue::Table(t) = sec.get_ref() else {
-        return None;
-    };
-    let (k, v) = t.get_key_value(name)?;
-    let head = text.get(..k.span().start)?;
-    let line = head.matches('\n').count() + 1;
-    let col = head.rsplit('\n').next().map_or(0, |l| l.chars().count()) + 1;
-    let value = match v.get_ref() {
-        DeValue::String(s) => s.to_string(),
-        _ => String::new(),
-    };
-    Some((
-        u32::try_from(line).unwrap_or(u32::MAX),
-        u32::try_from(col).unwrap_or(u32::MAX),
-        value,
-    ))
+/// 公開キーの値の由来 (07 §3.5。`config.show` の右の列)。
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub enum Origin {
+    /// 既定値 (どの層も値を書いていない)。
+    #[default]
+    Default,
+    /// ユーザー層のファイル (`config.toml`・`--config` のファイル)。
+    User {
+        /// 診断に出す名前と同じ表示名 (`config.toml`、`--config` のパス)。
+        source: String,
+        /// キーを書いた行 (1 始まり)。
+        line: u32,
+        /// キーを書いた桁 (1 始まり)。
+        column: u32,
+        /// 条件付きセクションの値なら、その条件 (07 §3.4 の COND-7)。
+        condition: Option<crate::Condition>,
+    },
+    /// コマンドライン層 (`--set`)。
+    Cli {
+        /// 条件付きのキー (`--set os.windows.editor.tab_width=2`) なら、その条件。
+        condition: Option<crate::Condition>,
+    },
+}
+
+impl Origin {
+    /// 条件付きセクションの値なら、その条件。
+    #[must_use]
+    pub fn condition(&self) -> Option<crate::Condition> {
+        match self {
+            Origin::Default => None,
+            Origin::User { condition, .. } | Origin::Cli { condition } => *condition,
+        }
+    }
+}
+
+/// 公開キーごとの値の由来。値を書いた層の無いキーは [`Origin::Default`]。
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Origins(std::collections::BTreeMap<&'static str, Origin>);
+
+impl Origins {
+    /// `key` の値の由来。
+    #[must_use]
+    pub fn of(&self, key: &str) -> &Origin {
+        static DEFAULT: Origin = Origin::Default;
+        self.0.get(key).unwrap_or(&DEFAULT)
+    }
+
+    fn set(&mut self, key: &'static str, origin: Origin) {
+        self.0.insert(key, origin);
+    }
 }
 
 /// `ui.locale` を、使える言語 (同梱の言語と `available`。`available` は `locales/` を一覧して作る候補、07 §17.4) と
@@ -112,6 +142,7 @@ pub fn check_ui_locale(
         value,
         line: origin.line,
         column: origin.column,
+        condition: None,
     };
     merge_reports(&mut resolved.reports, [(origin.source, vec![d])]);
 }
@@ -152,19 +183,21 @@ fn unreadable(message: String) -> Diagnostic {
         value: String::new(),
         line: 0,
         column: 0,
+        condition: None,
     }
 }
 
 /// `--set key=value` を `base` に重ねる。値は TOML の値として読み、読めなければ文字列とする
-/// (`--set view.wrap=soft` と書ける)。`=` が無ければ `None` (使い方の誤り)。
-pub fn load_set(base: Config, arg: &str) -> Option<Loaded> {
+/// (`--set view.wrap=soft` と書ける)。`=` が無ければ `None` (使い方の誤り)。条件付きのキー
+/// (`--set os.windows.editor.tab_width=2`) は、`conditions` で条件が真のときだけ効く (07 §3.4 の COND-1)。
+pub fn load_set(base: Config, arg: &str, conditions: &crate::Conditions) -> Option<Loaded> {
     let (key, value) = arg.split_once('=')?;
     let key = key.trim();
     if key.is_empty() {
         return None;
     }
     let value = value.trim();
-    let as_toml = load_str_onto(base.clone(), &format!("{key} = {value}\n"));
+    let as_toml = load_str_for(base.clone(), &format!("{key} = {value}\n"), conditions);
     let syntax = as_toml
         .diagnostics
         .iter()
@@ -173,24 +206,71 @@ pub fn load_set(base: Config, arg: &str) -> Option<Loaded> {
         return Some(as_toml);
     }
     let quoted = value.replace('\\', "\\\\").replace('"', "\\\"");
-    Some(load_str_onto(base, &format!("{key} = \"{quoted}\"\n")))
+    Some(load_str_for(
+        base,
+        &format!("{key} = \"{quoted}\"\n"),
+        conditions,
+    ))
 }
 
 /// ユーザー層のファイルを順に重ね、最後に `sets` を重ねる。読めないファイル・構文エラーのファイルは重ねない
 /// (既定値または前のファイルまでの値のまま。起動時はそれで動き、`config.reload` は `has_error` を見て前の設定を保つ)。
-pub fn resolve(sources: &[Source], sets: &[String]) -> Resolved {
+/// 条件付きセクションは、ファイルごと (`--set` は値ごと) に `conditions` で解いてから重ねる (07 §3.4 の COND-3。層の間の
+/// 順は変えない)。
+pub fn resolve(sources: &[Source], sets: &[String], conditions: &crate::Conditions) -> Resolved {
     let mut config = Config::default();
     let mut reports = Vec::new();
     let mut has_error = false;
     let mut theme_name_at = None;
     let mut ui_locale_at = None;
+    let mut origins = Origins::default();
+    // 値を使った所を、由来と、テーマ・言語の診断の場所に記録する
+    let mut record = |source: Option<&str>, written: &[Written]| {
+        for w in written {
+            let at = KeyOrigin {
+                source: source.unwrap_or(SET_SOURCE).to_owned(),
+                line: w.line,
+                column: w.column,
+            };
+            let at = match source {
+                Some(_) => at,
+                None => KeyOrigin {
+                    line: 0,
+                    column: 0,
+                    ..at
+                },
+            };
+            match w.key {
+                "theme.name" => theme_name_at = Some(at.clone()),
+                "ui.locale" => ui_locale_at = Some((at.clone(), w.text.clone())),
+                _ => {}
+            }
+            let origin = match source {
+                Some(s) => Origin::User {
+                    source: s.to_owned(),
+                    line: w.line,
+                    column: w.column,
+                    condition: w.condition,
+                },
+                None => Origin::Cli {
+                    condition: w.condition,
+                },
+            };
+            origins.set(w.key, origin);
+        }
+    };
     for s in sources {
         let loaded = match &s.text {
             Ok(None) => continue,
-            Ok(Some(t)) => load_str_onto(config.clone(), t.strip_prefix('\u{feff}').unwrap_or(t)),
+            Ok(Some(t)) => load_str_for(
+                config.clone(),
+                t.strip_prefix('\u{feff}').unwrap_or(t),
+                conditions,
+            ),
             Err(e) => Loaded {
                 config: config.clone(),
                 diagnostics: vec![unreadable(e.clone())],
+                written: Vec::new(),
             },
         };
         let error = loaded
@@ -200,20 +280,7 @@ pub fn resolve(sources: &[Source], sets: &[String]) -> Resolved {
         has_error |= error;
         if !error {
             config = loaded.config;
-            if let Ok(Some(t)) = &s.text {
-                let t = t.strip_prefix('\u{feff}').unwrap_or(t);
-                let origin = |line, column| KeyOrigin {
-                    source: s.name.clone(),
-                    line,
-                    column,
-                };
-                if let Some((line, column, _)) = key_position(t, "theme", "name") {
-                    theme_name_at = Some(origin(line, column));
-                }
-                if let Some((line, column, value)) = key_position(t, "ui", "locale") {
-                    ui_locale_at = Some((origin(line, column), value));
-                }
-            }
+            record(Some(&s.name), &loaded.written);
         }
         if !loaded.diagnostics.is_empty() {
             reports.push((s.name.clone(), loaded.diagnostics));
@@ -221,20 +288,9 @@ pub fn resolve(sources: &[Source], sets: &[String]) -> Resolved {
     }
     let mut set_diags = Vec::new();
     for arg in sets {
-        if let Some(l) = load_set(config.clone(), arg) {
+        if let Some(l) = load_set(config.clone(), arg, conditions) {
             config = l.config;
-            let set_origin = || KeyOrigin {
-                source: SET_SOURCE.to_owned(),
-                line: 0,
-                column: 0,
-            };
-            match arg.split_once('=').map(|(k, v)| (k.trim(), v.trim())) {
-                Some(("theme.name", _)) => theme_name_at = Some(set_origin()),
-                Some(("ui.locale", v)) => {
-                    ui_locale_at = Some((set_origin(), v.trim_matches('"').to_owned()));
-                }
-                _ => {}
-            }
+            record(None, &l.written);
             set_diags.extend(l.diagnostics);
         }
     }
@@ -248,7 +304,13 @@ pub fn resolve(sources: &[Source], sets: &[String]) -> Resolved {
         has_error,
         theme_name_at,
         ui_locale_at,
+        origins,
     }
+}
+
+/// 公開キーの (キー, TOML の値の表記)。宣言の表 (07 §4.1) の順 (`config.show` の並び、§3.5)。
+pub fn declared(c: &Config) -> Vec<(&'static str, String)> {
+    declared_values(c)
 }
 
 /// 公開キーの (キー, TOML の値の表記)。並びはセクションごと (07 §5 の表の順) で、セクションの中は宣言の表の順。
@@ -291,6 +353,10 @@ mod tests {
     use super::*;
     use crate::{Osc52Policy, WrapMode, load_str};
 
+    fn res(sources: &[Source], sets: &[String]) -> Resolved {
+        resolve(sources, sets, &crate::Conditions::default())
+    }
+
     fn src(name: &str, text: &str) -> Source {
         Source {
             name: name.to_owned(),
@@ -311,21 +377,21 @@ mod tests {
         let b = src("b.toml", "# c\n\ntheme.name = \"y\"\n");
         let none = src("c.toml", "[editor]\ntab_width = 3\n");
         assert_eq!(
-            resolve(std::slice::from_ref(&a), &[]).theme_name_at,
+            res(std::slice::from_ref(&a), &[]).theme_name_at,
             at("a.toml", 2, 1)
         );
         assert_eq!(
-            resolve(&[a.clone(), b.clone(), none.clone()], &[]).theme_name_at,
+            res(&[a.clone(), b.clone(), none.clone()], &[]).theme_name_at,
             at("b.toml", 3, 7)
         );
         assert_eq!(
-            resolve(&[b, a.clone()], &["theme.name=z".into()]).theme_name_at,
+            res(&[b, a.clone()], &["theme.name=z".into()]).theme_name_at,
             at(SET_SOURCE, 0, 0)
         );
-        assert_eq!(resolve(&[none], &[]).theme_name_at, None);
+        assert_eq!(res(&[none], &[]).theme_name_at, None);
         // 構文エラーのファイルは重ねないので、書いた所にもしない
         let broken = src("d.toml", "[theme]\nname = \"w\"\n[editor\n");
-        assert_eq!(resolve(&[a, broken], &[]).theme_name_at, at("a.toml", 2, 1));
+        assert_eq!(res(&[a, broken], &[]).theme_name_at, at("a.toml", 2, 1));
     }
 
     // verifies: AC-NFR-603-9
@@ -335,7 +401,7 @@ mod tests {
         let de = crate::Locale::from_tag("de").unwrap();
         let a = src("config.toml", "# c\n[ui]\nlocale = \"de-DE\"\n");
         // 使える言語 (同梱と候補) に当たらない: 書いた所と書いた値で、探した場所と代わりの言語を示す
-        let mut r = resolve(std::slice::from_ref(&a), &[]);
+        let mut r = res(std::slice::from_ref(&a), &[]);
         check_ui_locale(&mut r, &[fr], "/c/locales", crate::Locale::Ja);
         assert_eq!(r.config.ui_locale, Some(de), "設定の値は変えない");
         let (name, diags) = &r.reports[0];
@@ -352,24 +418,25 @@ mod tests {
                 value: "de-DE".to_owned(),
                 line: 3,
                 column: 1,
+                condition: None,
             }
         );
         // 候補にあれば知らせない。同梱の言語と auto も
-        let mut ok = resolve(std::slice::from_ref(&a), &[]);
+        let mut ok = res(std::slice::from_ref(&a), &[]);
         check_ui_locale(&mut ok, &[de], "/c/locales", crate::Locale::Ja);
         assert!(ok.reports.is_empty(), "{:?}", ok.reports);
         for v in ["ja", "auto", "EN-us"] {
-            let mut r = resolve(&[src("c.toml", &format!("ui.locale = \"{v}\"\n"))], &[]);
+            let mut r = res(&[src("c.toml", &format!("ui.locale = \"{v}\"\n"))], &[]);
             check_ui_locale(&mut r, &[], "", crate::Locale::Ja);
             assert!(r.reports.is_empty(), "{v}: {:?}", r.reports);
         }
         // `--set` で書いたものは `--set` の診断
-        let mut s = resolve(&[], &["ui.locale=xx".into()]);
+        let mut s = res(&[], &["ui.locale=xx".into()]);
         check_ui_locale(&mut s, &[], "", crate::Locale::Ja);
         assert_eq!(s.reports[0].0, SET_SOURCE);
         assert_eq!(s.reports[0].1[0].value, "xx");
         // 形の誤りの診断も、許容値を使える言語の一覧に直す
-        let mut bad = resolve(&[src("c.toml", "ui.locale = \"../x\"\n")], &[]);
+        let mut bad = res(&[src("c.toml", "ui.locale = \"../x\"\n")], &[]);
         check_ui_locale(&mut bad, &[fr, fr], "", crate::Locale::Ja);
         assert_eq!(bad.reports[0].1.len(), 1);
         assert!(matches!(
@@ -388,6 +455,7 @@ mod tests {
             value: String::new(),
             line: 1,
             column: 1,
+            condition: None,
         };
         let mut r = vec![("config.toml".to_owned(), vec![d("a")])];
         merge_reports(
@@ -408,7 +476,7 @@ mod tests {
 
     #[test]
     fn ファイルを順に重ね_後のファイルが勝つ() {
-        let r = resolve(
+        let r = res(
             &[
                 src("a.toml", "[editor]\ntab_width = 8\nindent_width = 2\n"),
                 src("b.toml", "[editor]\ntab_width = 3\n"),
@@ -421,7 +489,7 @@ mod tests {
 
     #[test]
     fn 構文エラーのファイルは重ねず_エラーとして報告する() {
-        let r = resolve(
+        let r = res(
             &[
                 src("a.toml", "[editor]\ntab_width = 8\n"),
                 src("b.toml", "[editor\n"),
@@ -435,16 +503,16 @@ mod tests {
 
     #[test]
     fn set_は最後に重ね_引用符なしの文字列も受け付ける() {
-        let r = resolve(
+        let r = res(
             &[src("a.toml", "[view]\nwrap = \"word\"\n")],
             &["view.wrap=soft".into(), "editor.tab_width=2".into()],
         );
         assert_eq!(r.config.wrap, WrapMode::Soft);
         assert_eq!(r.config.tab_width, 2);
-        let r = resolve(&[], &["editor.tab_width=99".into()]);
+        let r = res(&[], &["editor.tab_width=99".into()]);
         assert_eq!(r.config.tab_width, 4, "範囲外は既定値");
         assert_eq!(r.reports[0].0, SET_SOURCE);
-        assert!(load_set(Config::default(), "novalue").is_none());
+        assert!(load_set(Config::default(), "novalue", &crate::Conditions::default()).is_none());
     }
 
     #[test]

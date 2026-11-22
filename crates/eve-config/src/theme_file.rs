@@ -161,6 +161,7 @@ impl Cx<'_> {
             value: value.to_owned(),
             line,
             column,
+            condition: None,
         });
     }
 
@@ -173,6 +174,7 @@ impl Cx<'_> {
             value: String::new(),
             line,
             column,
+            condition: None,
         });
     }
 
@@ -367,6 +369,7 @@ fn parse(text: &str) -> (Option<Parsed>, Vec<Diagnostic>) {
                 value: String::new(),
                 line,
                 column,
+                condition: None,
             });
             return (None, cx.diags);
         }
@@ -477,6 +480,7 @@ fn not_found(key: &str, name: &str, (line, column): (u32, u32)) -> Diagnostic {
         value: name.to_owned(),
         line,
         column,
+        condition: None,
     }
 }
 
@@ -508,6 +512,7 @@ pub fn load_theme_at(
                 value: String::new(),
                 line: 0,
                 column: 0,
+                condition: None,
             }],
         ));
     };
@@ -596,6 +601,7 @@ pub fn load_theme_at(
                         value: String::new(),
                         line: *line,
                         column: *column,
+                        condition: None,
                     };
                     match reports.iter_mut().find(|(f, _)| f == file) {
                         Some((_, ds)) => ds.push(d),

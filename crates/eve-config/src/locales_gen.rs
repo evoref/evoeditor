@@ -8,7 +8,7 @@ use std::borrow::Cow::Borrowed as B;
 
 use crate::catalog::Entry;
 
-/// `locales/en.toml` の文言 (921 件)。
+/// `locales/en.toml` の文言 (941 件)。
 #[rustfmt::skip]
 pub(crate) static EN: &[Entry] = &[
     (B("cmd.app.quit.description"), B("Quit the editor.")),
@@ -33,6 +33,8 @@ pub(crate) static EN: &[Entry] = &[
     (B("cmd.clipboard.cut.title"), B("Cut")),
     (B("cmd.config.reload.description"), B("Reload the settings files (config.toml and keymap.toml) without restarting.")),
     (B("cmd.config.reload.title"), B("Reload Settings")),
+    (B("cmd.config.show.description"), B("List the effective settings and where each value comes from. Press Enter to open the file at the line that sets the value.")),
+    (B("cmd.config.show.title"), B("Show Settings")),
     (B("cmd.config.show_diagnostics.description"), B("List the problems in the settings file, the keymap, the theme and the language file. Press Enter to open the file at that line.")),
     (B("cmd.config.show_diagnostics.title"), B("Show Settings Diagnostics")),
     (B("cmd.cursor.doc_end.description"), B("Move the cursor to the end of the document.")),
@@ -323,6 +325,16 @@ pub(crate) static EN: &[Entry] = &[
     (B("msg.cli.directory_ignored.text"), B("{path} is a folder and was not opened. The workspace is {root}")),
     (B("msg.clipboard.fallback.hint"), B("To copy and paste with other apps, use your terminal's selection and paste")),
     (B("msg.clipboard.fallback.text"), B("The system clipboard is not available, so the editor's own clipboard was used: {reason}")),
+    (B("msg.config.condition_bare_key.hint"), B("Add a section, as in [os.windows.editor]. This key is not used")),
+    (B("msg.config.condition_bare_key.text"), B("Keys cannot be written directly under a condition ({item})")),
+    (B("msg.config.condition_in_keymap.hint"), B("Use when = \"os == \\\"windows\\\"\" for OS-specific bindings. This section is not used")),
+    (B("msg.config.condition_in_keymap.text"), B("Conditional sections ({item}) are not supported in keymap.toml")),
+    (B("msg.config.condition_nested.hint"), B("Write a separate section for each condition. This section is not used")),
+    (B("msg.config.condition_nested.text"), B("Conditional sections cannot be nested ({item})")),
+    (B("msg.config.condition_unknown.hint"), B("〔Did you mean {suggestion}? 〕Valid names: os.windows, os.macos, os.linux, os.unix, frontend.tui, env.ssh, env.tmux, env.wsl. This section is not used")),
+    (B("msg.config.condition_unknown.text"), B("{item} is not a conditional section name")),
+    (B("msg.config.condition_unsupported_table.hint"), B("Write language definitions outside conditions, and key bindings with when in keymap.toml. This section is not used")),
+    (B("msg.config.condition_unsupported_table.text"), B("{item} cannot be written in a conditional section")),
     (B("msg.config.invalid_value.hint"), B("Allowed values: {allowed}. This item uses the default {default}")),
     (B("msg.config.invalid_value.text"), B("The value {value} of {item} cannot be used")),
     (B("msg.config.invalid_value_no_default.hint"), B("Allowed values: {allowed}. This item is ignored")),
@@ -648,6 +660,14 @@ pub(crate) static EN: &[Entry] = &[
     (B("ui.config_diagnostics.no_match"), B("No matching diagnostics")),
     (B("ui.config_diagnostics.placeholder"), B("Filter by text")),
     (B("ui.config_diagnostics.title"), B("Settings Diagnostics")),
+    (B("ui.config_origin.cli"), B("--set")),
+    (B("ui.config_origin.condition"), B("{origin} [{condition}]")),
+    (B("ui.config_origin.default"), B("default")),
+    (B("ui.config_origin.user"), B("user: {file}:{line}")),
+    (B("ui.config_show.item"), B("{key} = {value}")),
+    (B("ui.config_show.no_match"), B("No matching settings")),
+    (B("ui.config_show.placeholder"), B("Filter by key, value or origin")),
+    (B("ui.config_show.title"), B("Settings ({name} · {language})")),
     (B("ui.confirm.cancel"), B("[Esc] Cancel")),
     (B("ui.confirm.external_deleted.close"), B("[C] Close")),
     (B("ui.confirm.external_deleted.keep"), B("[K] Keep as new (saving recreates it)")),
@@ -934,7 +954,7 @@ pub(crate) static EN: &[Entry] = &[
     (B("ui.workspace_search.title"), B("Search Workspace {toggles}")),
 ];
 
-/// `locales/ja.toml` の文言 (921 件)。
+/// `locales/ja.toml` の文言 (941 件)。
 #[rustfmt::skip]
 pub(crate) static JA: &[Entry] = &[
     (B("cmd.app.quit.description"), B("エディタを終了します。")),
@@ -959,6 +979,8 @@ pub(crate) static JA: &[Entry] = &[
     (B("cmd.clipboard.cut.title"), B("切り取り")),
     (B("cmd.config.reload.description"), B("設定ファイル (config.toml と keymap.toml) を読み直して、再起動せずに反映します。")),
     (B("cmd.config.reload.title"), B("設定を読み直す")),
+    (B("cmd.config.show.description"), B("今効いている設定の値と、どこで決まったかを一覧で示します。Enter で値を書いたファイルのその行を開きます。")),
+    (B("cmd.config.show.title"), B("設定の値と由来を表示")),
     (B("cmd.config.show_diagnostics.description"), B("設定ファイル・キーマップ・テーマ・言語ファイルの問題を一覧で表示します。Enter で該当のファイルの該当の行を開きます。")),
     (B("cmd.config.show_diagnostics.title"), B("設定の診断を表示")),
     (B("cmd.cursor.doc_end.description"), B("カーソルを文書の末尾へ動かします。")),
@@ -1249,6 +1271,16 @@ pub(crate) static JA: &[Entry] = &[
     (B("msg.cli.directory_ignored.text"), B("{path} はフォルダなので開けません。ワークスペースは {root} です")),
     (B("msg.clipboard.fallback.hint"), B("他のアプリとの間でコピー・貼り付けするには、端末の範囲選択と貼り付けを使ってください")),
     (B("msg.clipboard.fallback.text"), B("システムのクリップボードを使えないため、エディタ内のクリップボードを使いました: {reason}")),
+    (B("msg.config.condition_bare_key.hint"), B("[os.windows.editor] のようにセクションをはさんでください。このキーは使いません")),
+    (B("msg.config.condition_bare_key.text"), B("条件付きセクションの直下にはキーを書けません ({item})")),
+    (B("msg.config.condition_in_keymap.hint"), B("OS ごとの割当は when = \"os == \\\"windows\\\"\" のように書いてください。このセクションは使いません")),
+    (B("msg.config.condition_in_keymap.text"), B("keymap.toml では条件付きセクション ({item}) を使えません")),
+    (B("msg.config.condition_nested.hint"), B("条件ごとに別のセクションに書いてください。このセクションは使いません")),
+    (B("msg.config.condition_nested.text"), B("条件付きセクションは入れ子にできません ({item})")),
+    (B("msg.config.condition_unknown.hint"), B("〔{suggestion} ではありませんか? 〕使える名前は os.windows・os.macos・os.linux・os.unix・frontend.tui・env.ssh・env.tmux・env.wsl です。このセクションは使いません")),
+    (B("msg.config.condition_unknown.text"), B("{item} は条件付きセクションの名前ではありません")),
+    (B("msg.config.condition_unsupported_table.hint"), B("言語定義は条件の外に、キーの割当は keymap.toml の when に書いてください。このセクションは使いません")),
+    (B("msg.config.condition_unsupported_table.text"), B("条件付きセクションの中に {item} は書けません")),
     (B("msg.config.invalid_value.hint"), B("使える値: {allowed}。この項目は既定値 {default} を使います")),
     (B("msg.config.invalid_value.text"), B("{item} の値 {value} は使えません")),
     (B("msg.config.invalid_value_no_default.hint"), B("使える値: {allowed}。この項目は使いません")),
@@ -1574,6 +1606,14 @@ pub(crate) static JA: &[Entry] = &[
     (B("ui.config_diagnostics.no_match"), B("一致する診断はありません")),
     (B("ui.config_diagnostics.placeholder"), B("診断の文で絞り込み")),
     (B("ui.config_diagnostics.title"), B("設定の診断")),
+    (B("ui.config_origin.cli"), B("--set")),
+    (B("ui.config_origin.condition"), B("{origin} [{condition}]")),
+    (B("ui.config_origin.default"), B("既定")),
+    (B("ui.config_origin.user"), B("ユーザー: {file}:{line}")),
+    (B("ui.config_show.item"), B("{key} = {value}")),
+    (B("ui.config_show.no_match"), B("一致する設定はありません")),
+    (B("ui.config_show.placeholder"), B("キー・値・由来で絞り込み")),
+    (B("ui.config_show.title"), B("設定 ({name}・{language})")),
     (B("ui.confirm.cancel"), B("[Esc] キャンセル")),
     (B("ui.confirm.external_deleted.close"), B("[C] 閉じる")),
     (B("ui.confirm.external_deleted.keep"), B("[K] 新規として保持 (保存で作り直す)")),

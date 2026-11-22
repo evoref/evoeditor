@@ -1225,18 +1225,19 @@ v0.5 は結果を一覧のオーバーレイで出す (PO の決定 2026-11-20�
 | `cmd.edit.toggle_comment.title` / `.description` | 同上 | 行コメントの切替 / 対象の行に行コメントを付ける・外す | Toggle Line Comment / Add or remove line comments on the target lines |
 | `ui.config_show.title` | `config.show` の見出し (07 §3.5) | 設定 ({name}・{language}) | Settings ({name} · {language}) |
 | `ui.config_show.item` | 一覧の 1 行 | {key} = {value} | {key} = {value} |
+| `ui.config_show.placeholder` / `.no_match` | 入力欄が空のときの案内 / 絞り込みに一致しないとき (M33 の段 1 で足した) | キー・値・由来で絞り込み / 一致する設定はありません | Filter by key, value or origin / No matching settings |
 | `ui.config_origin.default` / `.user` / `.workspace` / `.cli` | 一覧の右の列 (由来) | 既定 / ユーザー: {file}:{line} / ワークスペース: {file}:{line} / --set | default / user: {file}:{line} / workspace: {file}:{line} / --set |
 | `ui.config_origin.language_builtin` / `.language_file` / `.editorconfig` | 同上 (文書ごとのキー、07 §3.6) | 言語 {language} (組込み) / 言語 {language}: {file}:{line} / .editorconfig:{line} [{section}] | language {language} (built-in) / language {language}: {file}:{line} / .editorconfig:{line} [{section}] |
-| `ui.config_origin.condition` | 条件付きセクションの値 (07 §3.4 の COND-7) | {origin} [{condition}] | {origin} [{condition}] |
+| `ui.config_origin.condition` | 条件付きセクションの値 (07 §3.4 の COND-7)。条件付きセクションの中の診断の本文にも、同じ形で条件を添える (`{origin}` に診断の本文、COND-4) | {origin} [{condition}] | {origin} [{condition}] |
 | `ui.lang_set.title` / `ui.lang_set.auto` | `lang.set` の一覧 (07 §9.6 の LANG-8) | 言語を選ぶ (今: {language}) / 自動で判定 | Set Language (current: {language}) / Detect automatically |
 | `info.lang.changed` | 言語を替えた | 言語を {language} にしました | Language set to {language} |
 | `info.comment.unsupported` | 行コメントの記号の無い言語 (03 §15.6 の CMT-6) | {language} には行コメントの記号がありません | {language} has no line comment marker |
 | `info.comment.no_lines` | 対象が空行だけ (CMT-1) | コメントにする行がありません | No lines to comment |
-| `msg.config.condition_unknown` | 未知の条件の名前 (07 §3.4 の COND-5 (a)。警告) | {item} は条件付きセクションの名前ではありません / 使える名前は os.windows・os.macos・os.linux・os.unix・frontend.tui・env.ssh・env.tmux・env.wsl です | {item} is not a conditional section name / Valid names: os.windows, os.macos, os.linux, os.unix, frontend.tui, env.ssh, env.tmux, env.wsl |
-| `msg.config.condition_nested` | 入れ子 (COND-5 (b)。警告) | 条件付きセクションは入れ子にできません ({item}) / 条件ごとに別のセクションに書いてください | Conditional sections cannot be nested ({item}) / Write a separate section for each condition |
-| `msg.config.condition_bare_key` | 条件の直下のキー (COND-5 (c)。警告) | 条件付きセクションの直下にはキーを書けません ({item}) / [os.windows.editor] のようにセクションをはさんでください | Keys cannot be written directly under a condition ({item}) / Add a section, as in [os.windows.editor] |
-| `msg.config.condition_unsupported_table` | 条件の中の言語定義・キー (COND-5 (d)。警告) | 条件付きセクションの中に {item} は書けません / 言語定義は条件の外に、キーの割当は keymap.toml の when に書いてください | {item} cannot be written in a conditional section / Write language definitions outside conditions, and key bindings with when in keymap.toml |
-| `msg.config.condition_in_keymap` | `keymap.toml` の条件付きセクション (COND-6。警告) | keymap.toml では条件付きセクション ({item}) を使えません / OS ごとの割当は when = "os == \"windows\"" のように書いてください | Conditional sections ({item}) are not supported in keymap.toml / Use when = "os == \"windows\"" for OS-specific bindings |
+| `msg.config.condition_unknown` | 未知の条件の名前 (07 §3.4 の COND-5 (a)。警告) | {item} は条件付きセクションの名前ではありません / 〔{suggestion} ではありませんか? 〕使える名前は os.windows・os.macos・os.linux・os.unix・frontend.tui・env.ssh・env.tmux・env.wsl です。このセクションは使いません | {item} is not a conditional section name / 〔Did you mean {suggestion}? 〕Valid names: os.windows, os.macos, os.linux, os.unix, frontend.tui, env.ssh, env.tmux, env.wsl. This section is not used |
+| `msg.config.condition_nested` | 入れ子 (COND-5 (b)。警告) | 条件付きセクションは入れ子にできません ({item}) / 条件ごとに別のセクションに書いてください。このセクションは使いません | Conditional sections cannot be nested ({item}) / Write a separate section for each condition. This section is not used |
+| `msg.config.condition_bare_key` | 条件の直下のキー (COND-5 (c)。警告) | 条件付きセクションの直下にはキーを書けません ({item}) / [os.windows.editor] のようにセクションをはさんでください。このキーは使いません | Keys cannot be written directly under a condition ({item}) / Add a section, as in [os.windows.editor]. This key is not used |
+| `msg.config.condition_unsupported_table` | 条件の中の言語定義・キー (COND-5 (d)。警告) | 条件付きセクションの中に {item} は書けません / 言語定義は条件の外に、キーの割当は keymap.toml の when に書いてください。このセクションは使いません | {item} cannot be written in a conditional section / Write language definitions outside conditions, and key bindings with when in keymap.toml. This section is not used |
+| `msg.config.condition_in_keymap` | `keymap.toml` の条件付きセクション (COND-6。警告) | keymap.toml では条件付きセクション ({item}) を使えません / OS ごとの割当は when = "os == \"windows\"" のように書いてください。このセクションは使いません | Conditional sections ({item}) are not supported in keymap.toml / Use when = "os == \"windows\"" for OS-specific bindings. This section is not used |
 | `msg.language.ambiguous` | 同じ層の 2 つの言語が当たる (07 §9.6 の LANG-6 (d)。警告) | {file} は言語 {first} と {second} の両方に当たるため、{second} を使います / どちらかの定義の file_types などを直してください | {file} matches both {first} and {second}; using {second} / Fix file_types or other patterns in one of the definitions |
 | `msg.language.invalid_name` | 使えない言語の名前 (LANG-3。警告) | 言語の名前 {value} は使えません / 英小文字・数字・_・+・- で 32 文字までにしてください (plain は使えません) | Language name {value} is invalid / Use lowercase letters, digits, _, + and - (up to 32; plain is reserved) |
 | `msg.workspace.not_owned` | 所有者が違う (07 §12.1 の OWN-7。警告) | {path} を読みませんでした: 所有者が {owner} です / 自分の所有にする (takeown / chown) か、ユーザーの設定の workspace.safe_directories に足してください | Did not read {path}: it is owned by {owner} / Take ownership (takeown / chown), or add it to workspace.safe_directories in your user settings |
@@ -1731,6 +1732,14 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 | `ui.config_diagnostics.no_match` | 同上。絞り込みに一致する診断が無いとき | 一致する診断はありません |
 | `ui.config_diagnostics.item` | 同上。1 行の本文。`{level}` は `ui.history.level.*`、`{text}` / `{hint}` は診断の本文と対処 (`msg.config.*` の `.text` / `.hint`) | {level}: {text} / {hint} |
 | `ui.config_diagnostics.item_no_hint` | 同上。対処の無い診断 (「このバージョンでは未対応」の情報診断) の 1 行 | {level}: {text} |
+| `ui.config_show.title` | 設定の値と由来の一覧 (`config.show`、07 §3.5。v0.5 の M33) の見出し。`{name}` はフォーカスの文書の名前、`{language}` は文書の言語 (M33 の段 1 では `plain`) | 設定 ({name}・{language}) |
+| `ui.config_show.placeholder` | 同上。入力欄が空のときの案内 (キー・値・由来で絞り込む) | キー・値・由来で絞り込み |
+| `ui.config_show.no_match` | 同上。絞り込みに一致する行が無いとき | 一致する設定はありません |
+| `ui.config_show.item` | 同上。1 行の本文 (`{key}` は公開キー、`{value}` は TOML の値の表記) | {key} = {value} |
+| `ui.config_origin.default` | 同上。右の列の由来: 既定値 | 既定 |
+| `ui.config_origin.user` | 同上。ユーザー層のファイル (`{file}` は `config.toml` か `--config` のパス、`{line}` は行) | ユーザー: {file}:{line} |
+| `ui.config_origin.cli` | 同上。コマンドライン層 (`--set`) | --set |
+| `ui.config_origin.condition` | 同上。条件付きセクションの値 (`{origin}` は上の由来、`{condition}` は `os.windows` など。07 §3.4 の COND-7)。条件付きセクションの中の設定の診断の本文にも使う (`{origin}` に本文、COND-4) | {origin} [{condition}] |
 | `ui.help.title` | ヘルプ画面の見出し (04 §8.6。v0.2) | ヘルプ |
 | `ui.help.footer` | ヘルプ画面の下端の操作の案内 | ↑↓ PgUp PgDn で移動、Esc で閉じる |
 | `ui.history.title` | メッセージ履歴 (`ui.message_history`、§8.9。v0.2) の見出し | メッセージ履歴 |
@@ -1963,6 +1972,11 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 | `msg.config.syntax` | TOML 構文エラー。そのファイル全体を使わない。`{reason}` は構文エラーの短い説明 (パーサの出力を分類し無害化したもの)。書ける構造の上限 (07 §4.2。設定ファイル・キーマップ・テーマファイル) を超えるときも同じ文言で、`{reason}` は理由の語 (`ui.config.syntax_reason.*`) | この設定ファイルは書式が正しくないため使っていません: {reason} / 該当の行を直してください。直すまでは既定値で動きます |
 | `msg.config.theme_not_found` (v0.4) | テーマが無い (組込みの名前でも `themes/<name>.toml` でもない。07 §8.6 / §8.7)。エラーで、テーマは組込みの `default` で描く。`{item}` は `theme.name` (`inherits` で書いた名前なら `inherits`)、`{value}` は書かれた名前、`{candidates}` は組込みの名前に近い名前 (接頭辞か編集距離 2 以下。大文字小文字を区別しない) を `"…"` で囲んで ` / ` でつないだもの。候補が無ければ 〔 〕 の文を省く。`{file}:{line}` は `theme.name` を書いた設定ファイルの行 (`--set` なら `--set`)、`inherits` ならそれを書いたテーマファイルの行 | テーマ {value} がありません / 〔{item} を {candidates} にしてください。〕組込みのテーマか、themes/ に置いたテーマファイルの名前を書きます。今は default で描いています |
 | `msg.config.unknown_key` | 未知のキー。`{suggestion}` は編集距離 ≤ 2 の候補 (公開キーと公開前のキー (07 §5.13) の両方から探す)。候補が無ければ 〔 〕 の文を省く | {item} という設定項目はありません / 〔{suggestion} ではありませんか?〕設定できる項目は同梱の config.example.toml を見てください |
+| `msg.config.condition_unknown` (v0.5) | 条件付きセクション (07 §3.4) の知らない条件の名前 (COND-5 (a)。警告)。`{item}` は `os.win` など、`{suggestion}` は編集距離 ≤ 2 の条件の名前。候補が無ければ 〔 〕 の文を省く | {item} は条件付きセクションの名前ではありません / 〔{suggestion} ではありませんか? 〕使える名前は os.windows・os.macos・os.linux・os.unix・frontend.tui・env.ssh・env.tmux・env.wsl です。このセクションは使いません |
+| `msg.config.condition_nested` (v0.5) | 条件の入れ子 (COND-5 (b)。警告)。`{item}` は入れ子の条件の名前まで (`os.windows.env.ssh`) | 条件付きセクションは入れ子にできません ({item}) / 条件ごとに別のセクションに書いてください。このセクションは使いません |
+| `msg.config.condition_bare_key` (v0.5) | 条件の直下のキー (COND-5 (c)。警告) | 条件付きセクションの直下にはキーを書けません ({item}) / [os.windows.editor] のようにセクションをはさんでください。このキーは使いません |
+| `msg.config.condition_unsupported_table` (v0.5) | 条件の中の言語定義 (`[[os.windows.language]]`) と `[keys]` (COND-5 (d)。警告) | 条件付きセクションの中に {item} は書けません / 言語定義は条件の外に、キーの割当は keymap.toml の when に書いてください。このセクションは使いません |
+| `msg.config.condition_in_keymap` (v0.5) | `keymap.toml` の条件付きセクション (COND-6。警告。条件の名前ごとに 1 件) | keymap.toml では条件付きセクション ({item}) を使えません / OS ごとの割当は when = "os == \"windows\"" のように書いてください。このセクションは使いません |
 | `msg.config.keymap_unknown_context` | キーマップ (`keymap.toml`) の診断。知らないコンテキスト名 | {item} のコンテキスト名は使えません / 使える名前: global, editor, search, prompt, palette, list, dialog, help。この割当は使いません |
 | `msg.config.keymap_unknown_command` | キーマップ (`keymap.toml`) の診断。知らないコマンド | {item} のコマンド {value} はありません / コマンド名はコマンドパレットで確かめられます。この割当は使いません |
 | `msg.config.keymap_bad_key` | キーマップ (`keymap.toml`) の診断。キー名が読めない | {item} のキーの書き方が正しくありません / 例: ctrl+shift+s、alt+up、f5。この割当は使いません |

@@ -10,6 +10,7 @@ buffer.prev	Ui	Ui	—
 clipboard.copy	Ui	None	!selection.empty
 clipboard.cut	Edit	None	!selection.empty && !doc.read_only
 config.reload	Ui	None	—
+config.show	Ui	Ui	—
 config.show_diagnostics	Ui	Ui	—
 cursor.doc_end	Motion	Read	—
 cursor.doc_start	Motion	Read	—

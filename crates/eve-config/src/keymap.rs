@@ -99,6 +99,7 @@ impl Cx<'_> {
             value: String::new(),
             line,
             column,
+            condition: None,
         });
     }
 
@@ -186,6 +187,16 @@ impl Cx<'_> {
 
     fn top(&mut self, name: &Spanned<DeString<'_>>, value: &Spanned<DeValue<'_>>) {
         let n: &str = name.get_ref();
+        // キーマップは条件付きセクションを読まない。OS ごとの割当は `when` の `os` で書く (07 §3.4 の COND-6)
+        if crate::reserved::CONDITIONAL_SECTIONS.contains(&n) {
+            self.diag(
+                Severity::Warning,
+                DiagKind::Condition(crate::ConditionProblem::InKeymap),
+                n,
+                name.span().start,
+            );
+            return;
+        }
         if n != "keys" {
             self.diag(
                 Severity::Warning,
@@ -240,6 +251,7 @@ pub fn load_keymap_str(text: &str) -> KeymapFile {
                 value: String::new(),
                 line,
                 column,
+                condition: None,
             });
             return cx.out;
         }

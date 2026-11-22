@@ -2,13 +2,15 @@
 //!
 //! 言語ファイル (文言カタログ、`Catalog`。ユーザーの言語ファイルの検査と重ね合わせは `load_locale_file` と
 //! `Catalog::overlay`)、ファイル由来の文字列の無害化 (`sanitize_untrusted`)、ユーザー層の設定ファイルの読込 (`load_str`。公開キーは `config.rs` の
-//! 宣言の表、07 §4.1)、キーマップ (`keymap.toml`) とテーマファイルの読込。
+//! 宣言の表、07 §4.1。条件付きセクションの解決は `load_str_for` と `Conditions`、07 §3.4)、層の合成と値の由来 (`resolve`・
+//! `Origins`、§3.5)、キーマップ (`keymap.toml`) とテーマファイルの読込。
 
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
 mod catalog;
 mod chars;
+mod condition;
 mod config;
 mod keymap;
 mod layers;
@@ -23,16 +25,17 @@ mod toml_scan;
 
 pub use catalog::{Catalog, CatalogError, base_key, placeholders};
 pub use chars::{CharClass, forbidden_char};
+pub use condition::{Condition, Conditions, EnvConditions, Frontend, Os};
 pub use config::{
-    BackspaceUnit, ColorMode, Config, DefaultEncoding, DefaultLineEnding, DiagKind, Diagnostic,
-    ExternalChangePolicy, IndentUnit, KeymapProblem, Loaded, Osc52Policy, SearchCase, Severity,
-    ShowWhitespace, TabLineMode, ThemeBackground, WrapIndent, WrapMode, changed_keys,
-    default_display, is_theme_name, load_str, load_str_onto,
+    BackspaceUnit, ColorMode, ConditionProblem, Config, DefaultEncoding, DefaultLineEnding,
+    DiagKind, Diagnostic, ExternalChangePolicy, IndentUnit, KeymapProblem, Loaded, Osc52Policy,
+    SearchCase, Severity, ShowWhitespace, TabLineMode, ThemeBackground, WrapIndent, WrapMode,
+    Written, changed_keys, default_display, is_theme_name, load_str, load_str_for, load_str_onto,
 };
 pub use keymap::{KeyAction, KeyArgValue, KeymapEntry, KeymapFile, load_keymap_str};
 pub use layers::{
-    KeyOrigin, Resolved, SET_SOURCE, Source, check_ui_locale, dump, load_set, merge_reports,
-    resolve, values,
+    KeyOrigin, Origin, Origins, Resolved, SET_SOURCE, Source, check_ui_locale, declared, dump,
+    load_set, merge_reports, resolve, values,
 };
 pub use locale::{Locale, LocaleChoice, LocaleSource, LocaleWarning, select_locale};
 pub use locale_file::{
