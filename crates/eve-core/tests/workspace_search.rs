@@ -6,6 +6,7 @@
 
 use std::sync::Arc;
 
+use eve_core::Clock as _;
 use eve_core::{
     Args, CancelToken, Case, ExcludeConfig, FileId, FsPath, InitialFile, JobError, JobKind,
     JobOutput, JobPorts, JobRequest, JobResult, OpenDocBody, OpenDocRef, SearchQuery,
@@ -333,10 +334,10 @@ fn same_as_editor(files: &[(&str, Vec<u8>)], query: SearchQuery) {
     h.keys("esc");
     for (path, _) in files {
         let rel = path.trim_start_matches("/w/proj/");
-        let got: Vec<(u32, u32)> = hits
+        let got: Vec<(u32, Vec<std::ops::Range<u32>>)> = hits
             .iter()
             .filter(|x| &*x.rel == rel)
-            .map(|x| (x.line, x.ranges[0].start))
+            .map(|x| (x.line, x.ranges.clone()))
             .collect();
         h.cmd_with("file.open", Args::new().with_str("path", path));
         h.run_jobs();
@@ -347,7 +348,9 @@ fn same_as_editor(files: &[(&str, Vec<u8>)], query: SearchQuery) {
         let d = h.editor.state().document(h.doc_id()).unwrap();
         let snap = d.snapshot();
         let m = query.matcher().expect("照合器");
-        let mut want: Vec<(u32, u32)> = Vec::new();
+        // 行ごとの一致の範囲 (行の中の位置。行をまたぐ一致は行末まで)。試験のファイルの行は短く、1 行の一致は 16 個以下
+        // なので、横断検索の結果は抜粋の窓と個数で削られず、すべての一致を持つ
+        let mut want: Vec<(u32, Vec<std::ops::Range<u32>>)> = Vec::new();
         eve_core::scan_bytes(
             &snap,
             &m,
@@ -356,9 +359,13 @@ fn same_as_editor(files: &[(&str, Vec<u8>)], query: SearchQuery) {
             &mut |r| {
                 let line = snap.byte_to_line(r.start);
                 let ls = snap.line_to_byte(line).0;
+                let le = snap.line_end_byte(line).0;
                 let l = u32::try_from(line.0).unwrap();
-                if want.last().is_none_or(|w| w.0 != l) {
-                    want.push((l, u32::try_from(r.start.0 - ls).unwrap()));
+                let s = u32::try_from(r.start.0 - ls).unwrap();
+                let e = u32::try_from(r.end.0.min(le).max(r.start.0) - ls).unwrap();
+                match want.last_mut() {
+                    Some(w) if w.0 == l => w.1.push(s..e),
+                    _ => want.push((l, std::iter::once(s..e).collect())),
                 }
                 true
             },
@@ -834,8 +841,13 @@ fn 別の書き方のパスで開いている文書へは識別で突き合わ�
     h.run_jobs();
     search(&mut h, "hit");
     assert!(h.editor.state().ws_search_hits().unwrap()[0].from_open_doc);
+    h.clear_log();
     h.keys("enter");
-    h.run_jobs();
+    assert_eq!(
+        h.pending_jobs(),
+        0,
+        "canonical のパスで開いている文書と分かるので、開くジョブを走らせない"
+    );
     assert_eq!(
         shown_path(&h).as_deref(),
         Some("/w/link.txt"),
@@ -847,6 +859,75 @@ fn 別の書き方のパスで開いている文書へは識別で突き合わ�
         "同じファイルを 2 つの文書にしない"
     );
     assert_eq!(sel(&h), (8, 11), "既存の文書の一致の位置へ移る");
+    assert_eq!(count(&h, "info.open.same_file"), 0);
+    assert_eq!(count(&h, "info.open.already_open"), 0);
+}
+
+// verifies: AC-FR-405-1
+#[test]
+fn 別の書き方のパスで読込中の今の文書へは読込の完了で移る() {
+    // 起動時の文書をリンクのパスで開く (canonical は /w/proj/a.txt)。ルートは目印の無い /w (カレントディレクトリ)
+    let mut h = Harness::builder()
+        .defer_start()
+        .dir("/w/proj")
+        .file("/w/proj/a.txt", b"one\ntwo hit\n")
+        .build();
+    h.fs.add_link("/w/link.txt", "/w/proj/a.txt");
+    h.editor
+        .open_initial_files(&[InitialFile::path("/w/link.txt")], false, None);
+    h.started();
+    // 開くジョブの識別 (canonical) だけを渡し、読込の完了は持っておく (今の文書は読込中のまま)
+    let held = h.run_one_job_held();
+    let (ident, rest): (Vec<_>, Vec<_>) = held
+        .into_iter()
+        .partition(|o| matches!(o.body, JobResult::Identity { .. }));
+    assert_eq!(ident.len(), 1);
+    h.deliver(ident);
+    h.run_jobs();
+    assert_eq!(
+        shown_path(&h).as_deref(),
+        Some("/w/link.txt"),
+        "読込中の今の文書"
+    );
+    search(&mut h, "hit");
+    assert_eq!(rows(&h), ["proj/a.txt:2"], "読込中の文書はディスクを探す");
+    h.keys("enter");
+    assert_eq!(
+        h.pending_jobs(),
+        0,
+        "canonical で読込中の今の文書と分かるので、開き直さない"
+    );
+    h.deliver(rest);
+    h.run_jobs();
+    assert_eq!(shown_path(&h).as_deref(), Some("/w/link.txt"));
+    assert_eq!(h.editor.state().documents_len(), 1);
+    assert_eq!(sel(&h), (8, 11), "読込の完了で一致の位置へ移る");
+}
+
+// 偽 FS のパス (`/w/...`) は、Windows ではルートの正規化で `\w\...` の形になり、識別で比べるときのボリュームの部分
+// (03 §12.7.6 の 0) が分からなくなる (実 FS のパスはドライブ文字を持つ)。識別で比べる経路は Unix (WSL) で確かめる
+// verifies: AC-FR-405-1
+#[test]
+#[cfg(unix)]
+fn 識別だけが同じハードリンクの結果は_開くジョブの識別で既存の文書に移る() {
+    let mut h = repo(&[("/w/proj/x/a.txt", b"one\ntwo hit\n")]);
+    h.fs.set_file_id_unique(true);
+    h.fs.add_hardlink("/w/proj/y/a.txt", "/w/proj/x/a.txt");
+    h.cmd_with("file.open", Args::new().with_str("path", "/w/proj/x/a.txt"));
+    h.run_jobs();
+    h.cmd_with(
+        "file.open",
+        Args::new().with_str("path", "/w/proj/README.md"),
+    );
+    h.run_jobs();
+    search(&mut h, "hit");
+    assert_eq!(rows(&h), ["x/a.txt:2", "y/a.txt:2"]);
+    // y/a.txt の結果: canonical は違うので開くジョブを走らせ、識別で x/a.txt の文書と分かったら、その文書の一致へ移る
+    h.keys("down enter");
+    h.run_jobs();
+    assert_eq!(shown_path(&h).as_deref(), Some("/w/proj/x/a.txt"));
+    assert_eq!(h.editor.state().documents_len(), 2);
+    assert_eq!(sel(&h), (8, 11));
 }
 
 // verifies: AC-FR-405-1
@@ -1080,6 +1161,218 @@ fn 取り消されたら_cancelled_で終わる() {
     ));
 }
 
+// ---- 時計と取消しを差し込む FS ----
+
+/// 偽 FS に、`open_read` と `read_dir` のたびに時計を進める・読み終えたら取り消すを足したもの (区切りの時間と、復号・照合の
+/// 途中の取消しの試験)。
+struct HookFs {
+    inner: Arc<MemFs>,
+    clock: ManualClock,
+    open_ms: u64,
+    dir_ms: u64,
+    /// 立っていれば、このパスのファイルを読み終えた (最後のチャンクの後) 時点で取り消す。
+    cancel_after_read: Option<(String, CancelToken)>,
+}
+
+/// 最後のチャンクの後で取消しを立てる読み手。
+struct CancelAtEnd {
+    inner: Box<dyn eve_core::ReadChunks + Send>,
+    cancel: CancelToken,
+}
+
+impl eve_core::ReadChunks for CancelAtEnd {
+    fn next_chunk(&mut self) -> Result<Option<&[u8]>, eve_core::ChunkError> {
+        let r = self.inner.next_chunk()?;
+        if r.is_none() {
+            self.cancel.cancel();
+        }
+        Ok(r)
+    }
+}
+
+impl eve_core::FileSystem for HookFs {
+    fn metadata(&self, path: &FsPath) -> Result<eve_core::FileMeta, eve_core::FsError> {
+        self.inner.metadata(path)
+    }
+    fn canonicalize(&self, path: &FsPath) -> Result<FsPath, eve_core::FsError> {
+        self.inner.canonicalize(path)
+    }
+    fn read_dir(
+        &self,
+        dir: &FsPath,
+        max_entries: usize,
+    ) -> Result<eve_core::DirListing, eve_core::FsError> {
+        self.clock.advance(eve_core::Millis(self.dir_ms));
+        self.inner.read_dir(dir, max_entries)
+    }
+    fn open_read(
+        &self,
+        path: &FsPath,
+    ) -> Result<Box<dyn eve_core::ReadChunks + Send>, eve_core::FsError> {
+        self.clock.advance(eve_core::Millis(self.open_ms));
+        let r = self.inner.open_read(path)?;
+        match &self.cancel_after_read {
+            Some((p, c)) if path.as_path().to_string_lossy().replace('\\', "/") == *p => {
+                Ok(Box::new(CancelAtEnd {
+                    inner: r,
+                    cancel: c.clone(),
+                }))
+            }
+            _ => Ok(r),
+        }
+    }
+    fn write_atomic(
+        &self,
+        path: &FsPath,
+        data: &mut dyn eve_core::ReadChunks,
+        opts: &eve_core::SaveOptions,
+    ) -> Result<eve_core::SaveReport, eve_core::FsError> {
+        self.inner.write_atomic(path, data, opts)
+    }
+}
+
+/// `fs` でジョブを終わりまで走らせ、送った結果と、区切りごとに進んだ時計の時間 (ms) を返す。
+fn run_hooked(
+    fs: Arc<HookFs>,
+    clock: &ManualClock,
+    kind: JobKind,
+    cancel: &CancelToken,
+) -> (Vec<JobOutput>, Vec<u64>) {
+    let ports = JobPorts {
+        stdin: None,
+        fs,
+        clock: Arc::new(clock.clone()),
+        paths: Arc::new(FixedPaths::default()),
+    };
+    let mut out = Vec::new();
+    let mut kind = kind;
+    let mut spans = Vec::new();
+    loop {
+        let before = clock.now();
+        let step = run_job(
+            JobRequest {
+                id: eve_view::JobId(1),
+                doc: None,
+                base: eve_view::Revision(0),
+                kind,
+            },
+            &ports,
+            cancel,
+            &mut |o| out.push(o),
+        );
+        spans.push(clock.now().saturating_sub(before).0);
+        match step {
+            eve_core::JobStep::Done => return (out, spans),
+            eve_core::JobStep::Continue(k) => kind = k,
+        }
+        assert!(spans.len() < 10_000, "終わらない");
+    }
+}
+
+#[test]
+fn 一区切りは_8_ms_で譲り_走査も残りの時間で区切る() {
+    let (fs, clock) = fs();
+    // ディレクトリ 40 個 (各 1 ファイル)。ファイルを開くのに 3 ms、ディレクトリを読むのに 2 ms かかる FS
+    for i in 0..40 {
+        fs.add_file(&format!("/r/d{i:02}/f.txt"), b"hit\n");
+    }
+    let hook = Arc::new(HookFs {
+        inner: fs.clone(),
+        clock: clock.clone(),
+        open_ms: 3,
+        dir_ms: 2,
+        cancel_after_read: None,
+    });
+    let (out, spans) = run_hooked(
+        hook,
+        &clock,
+        job("/r", "hit", Vec::new(), 1000),
+        &CancelToken::new(),
+    );
+    let (hits, _) = collect(&out);
+    assert_eq!(hits.len(), 40);
+    // 区切りの始めから 8 ms を過ぎたら、次のファイルも次の走査も始めない。超えるのは、最後に始めた 1 つ (ファイル 3 ms・
+    // ディレクトリ 2 ms) の分まで
+    let max = spans.iter().copied().max().unwrap_or(0);
+    assert!(
+        max <= eve_core::WALK_STEP_TIME.0 + 3,
+        "区切りの長さ (ms): {spans:?}"
+    );
+    assert!(spans.len() > 10, "区切った: {spans:?}");
+
+    // 列が空になった時点で 8 ms に達していたら、走査も呼ばずに譲る (ファイル 4 ms・ディレクトリ 8 ms。a.txt と b.txt を探し
+    // 終えた区切りで、続けて s/t を読むと 16 ms になる)
+    let (fs, clock) = self::fs();
+    for p in ["/r/a.txt", "/r/b.txt", "/r/s/c.txt", "/r/s/t/d.txt"] {
+        fs.add_file(
+            p, b"hit
+",
+        );
+    }
+    let hook = Arc::new(HookFs {
+        inner: fs,
+        clock: clock.clone(),
+        open_ms: 4,
+        dir_ms: 8,
+        cancel_after_read: None,
+    });
+    let (out, spans) = run_hooked(
+        hook,
+        &clock,
+        job("/r", "hit", Vec::new(), 1000),
+        &CancelToken::new(),
+    );
+    assert_eq!(collect(&out).0.len(), 4);
+    assert!(
+        spans.iter().all(|ms| *ms <= eve_core::WALK_STEP_TIME.0 + 4),
+        "区切りの長さ (ms): {spans:?}"
+    );
+}
+
+// verifies: AC-FR-405-3
+#[test]
+fn 復号や照合の途中で取り消すとその区切りの結果を送らずに終える() {
+    let (fs, clock) = fs();
+    fs.add_file("/r/a.txt", b"hit\n");
+    fs.add_file("/r/b.txt", b"hit\n");
+    let cancel = CancelToken::new();
+    // b.txt を読み終えた時点で取り消す: 復号 (チャンクごとに見る) か照合の前で止まり、b.txt の結果を作らない
+    let hook = Arc::new(HookFs {
+        inner: fs,
+        clock: clock.clone(),
+        open_ms: 0,
+        dir_ms: 0,
+        cancel_after_read: Some(("/r/b.txt".to_owned(), cancel.clone())),
+    });
+    let (out, _) = run_hooked(hook, &clock, job("/r", "hit", Vec::new(), 10), &cancel);
+    assert!(
+        matches!(
+            &out[..],
+            [JobOutput {
+                body: JobResult::Failed {
+                    err: JobError::Cancelled
+                },
+                ..
+            }]
+        ),
+        "取消しで終え、途中の結果 (a.txt) も送らない: {out:?}"
+    );
+}
+
+// verifies: AC-FR-405-2
+#[test]
+fn 先頭_64_kib_の後に_shift_jis_が現れるファイルは判定し直してエディタと同じに一致する() {
+    let mut data = "ascii line for the sniff window\n"
+        .repeat(3000)
+        .into_bytes();
+    assert!(data.len() > 64 * 1024);
+    data.extend(sjis(JP));
+    same_as_editor(
+        &[("/w/proj/late.txt", data)],
+        SearchQuery::literal("文字コード"),
+    );
+}
+
 fn doc_ref(path: &str, canonical: &str, id: Option<u128>, body: &str) -> OpenDocRef {
     OpenDocRef {
         path: FsPath::from(path),
@@ -1091,28 +1384,38 @@ fn doc_ref(path: &str, canonical: &str, id: Option<u128>, body: &str) -> OpenDoc
 }
 
 #[test]
-fn 別の書き方のパスで開いた文書は識別で突き合わせ_古い識別では突き合わせない() {
+fn ルートの下の同じ名前のハードリンクは識別で突き合わせ_古い識別では突き合わせない() {
     let (fs, clock) = fs();
     fs.set_file_id_unique(true);
-    fs.add_file("/r/sub/a.txt", b"disk\n");
-    fs.add_file("/r/other.txt", b"x\n");
-    let id = fs.file_id_of("/r/sub/a.txt").expect("識別");
-    // canonical の文字列は候補と違う (短い名前などで開いた) が、ファイル名と識別が同じ: 文書の本文を探す
-    let doc = doc_ref("/x/A1.txt", "/x/sub/a.txt", Some(id), "buffer\n");
-    fs.add_file("/x/A1.txt", b"");
-    fs.set_file_id("/x/A1.txt", id);
-    let (hits, _) = collect(&run_to_end(&fs, &clock, job("/r", "buffer", vec![doc], 10)));
-    assert_eq!(hits.len(), 1);
-    assert!(hits[0].from_open_doc);
-    // 文書のパスの識別が今は違う (作り直されて番号を使い回した): 識別では比べず、ディスクを探す
-    fs.set_file_id("/x/A1.txt", id + 1000);
-    let doc = doc_ref("/x/A1.txt", "/x/sub/a.txt", Some(id), "buffer\n");
-    let (hits, _) = collect(&run_to_end(&fs, &clock, job("/r", "buffer", vec![doc], 10)));
-    assert!(hits.is_empty(), "古い識別の文書の本文は探さない");
-    let doc = doc_ref("/x/A1.txt", "/x/sub/a.txt", Some(id), "buffer\n");
-    let (hits, _) = collect(&run_to_end(&fs, &clock, job("/r", "disk", vec![doc], 10)));
-    assert_eq!(hits.len(), 1);
-    assert!(!hits[0].from_open_doc);
+    // /r/x/a.txt と /r/y/a.txt は同じファイル (ハードリンク)。文書は /r/x/a.txt で開いている
+    fs.add_file("/r/x/a.txt", b"disk\n");
+    fs.add_hardlink("/r/y/a.txt", "/r/x/a.txt");
+    let id = fs.file_id_of("/r/x/a.txt").expect("識別");
+    let doc = || doc_ref("/r/x/a.txt", "/r/x/a.txt", Some(id), "buffer\n");
+    let (hits, _) = collect(&run_to_end(
+        &fs,
+        &clock,
+        job("/r", "buffer", vec![doc()], 10),
+    ));
+    let rels: Vec<&str> = hits.iter().map(|h| &*h.rel).collect();
+    assert_eq!(
+        rels,
+        ["x/a.txt", "y/a.txt"],
+        "(i) と (ii) の両方で文書の本文を探す"
+    );
+    assert!(hits.iter().all(|h| h.from_open_doc));
+    // 文書のパスのファイルが作り直されて識別が変わった: y/a.txt とは識別で比べず、ディスク (y/a.txt の中身) を探す
+    fs.set_file_id("/r/x/a.txt", id + 1000);
+    let (hits, _) = collect(&run_to_end(
+        &fs,
+        &clock,
+        job("/r", "buffer", vec![doc()], 10),
+    ));
+    let rels: Vec<&str> = hits.iter().map(|h| &*h.rel).collect();
+    assert_eq!(rels, ["x/a.txt"], "古い識別では突き合わせない");
+    let (hits, _) = collect(&run_to_end(&fs, &clock, job("/r", "disk", vec![doc()], 10)));
+    let rels: Vec<(&str, bool)> = hits.iter().map(|h| (&*h.rel, h.from_open_doc)).collect();
+    assert_eq!(rels, [("y/a.txt", false)]);
 }
 
 #[test]

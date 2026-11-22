@@ -131,6 +131,8 @@ pub struct WorkspaceSearchState {
     last_sent: Option<Tick>,
     /// 前に送った進捗。
     sent: WsProgress,
+    /// 読むためのルート (Windows は verbatim の形。区切りのたびに作り直さない)。
+    read_root: FsPath,
 }
 
 impl fmt::Debug for WorkspaceSearchState {
@@ -181,6 +183,7 @@ pub(crate) fn run_workspace_search(
                 .collect(),
             last_sent: None,
             sent: WsProgress::default(),
+            read_root: verbatim_root(&p.root),
         })
     });
     let fail = |emit: &mut dyn FnMut(JobOutput), err| {
@@ -208,6 +211,7 @@ pub(crate) fn run_workspace_search(
         clock,
         cancel,
         root: &p.root,
+        read_root: &st.read_root,
         matcher: &matcher,
         open_docs: &p.open_docs,
         doc_keys: &st.doc_keys,
@@ -217,29 +221,33 @@ pub(crate) fn run_workspace_search(
     let (mut files, mut bytes) = (0usize, 0u64);
     let mut walked = false;
     let mut capped = false;
+    // 区切りの最初の 1 回 (走査かファイル 1 つ) は上限を見ずに進める (どの区切りも少しは進む)
+    let mut first = true;
     loop {
         if cancel.is_cancelled() {
             return fail(emit, JobError::Cancelled);
         }
+        let elapsed = clock.now().saturating_sub(start);
+        let over =
+            files >= WS_FILES_PER_STEP || bytes >= WS_BYTES_PER_STEP || elapsed >= WALK_STEP_TIME;
+        if !first && over {
+            break;
+        }
+        first = false;
         if st.queue.is_empty() {
-            // 走査は 1 区切りに 1 回まで (ディレクトリ 16 個・8 ms は走査の側で区切る)
+            // 走査は 1 区切りに 1 回まで。ファイルを探した残りの時間で走査する (区切り全体で 8 ms)
             if walked || st.walk.is_finished() {
                 break;
             }
             walked = true;
-            if let WalkStep::Failed(e) = st.walk.step(fs, clock) {
+            let budget = Millis(WALK_STEP_TIME.0.saturating_sub(elapsed.0));
+            if let WalkStep::Failed(e) = st.walk.step_within(fs, clock, budget) {
                 return fail(emit, JobError::Fs(e));
             }
             let found = st.walk.take_found();
             st.queue.extend(found);
             st.progress.unreadable_dirs = st.walk.unreadable_dirs();
             continue;
-        }
-        if files >= WS_FILES_PER_STEP
-            || bytes >= WS_BYTES_PER_STEP
-            || clock.now().saturating_sub(start) >= WALK_STEP_TIME
-        {
-            break;
         }
         let Some((cand, facts)) = st.queue.pop_front() else {
             break;
@@ -321,6 +329,8 @@ struct FileCtx<'a> {
     clock: &'a dyn Clock,
     cancel: &'a CancelToken,
     root: &'a FsPath,
+    /// 読むためのルート (Windows は verbatim の形)。
+    read_root: &'a FsPath,
     matcher: &'a Matcher,
     open_docs: &'a [OpenDocRef],
     doc_keys: &'a [PathBuf],
@@ -360,11 +370,10 @@ fn search_candidate(
         return Outcome::NotCounted;
     }
     let path = cand.path(ctx.root);
-    let rel: Arc<str> = Arc::from(cand.rel());
     // 1. 開いている文書: ディスクではなく Snapshot を探す
     if let Some(doc) = open_doc_for(ctx, &path) {
         return match &doc.body {
-            OpenDocBody::Text(s) => search_text(ctx, s, &path, &rel, true, remaining, out),
+            OpenDocBody::Text(s) => search_text(ctx, s, &path, cand, true, remaining, out),
             OpenDocBody::TooLarge => Outcome::Skipped(Skip::Large, 0),
             OpenDocBody::Binary => Outcome::Skipped(Skip::Binary, 0),
         };
@@ -377,7 +386,7 @@ fn search_candidate(
         return Outcome::Skipped(Skip::Large, 0);
     }
     // 3. 判定と復号
-    let chunks = match read_limited(ctx, &read_path(ctx.root, cand)) {
+    let chunks = match read_limited(ctx, &cand.path(ctx.read_root)) {
         Read::Data(c) => c,
         Read::TooLarge(n) => return Outcome::Skipped(Skip::Large, n),
         Read::Failed(n) => return Outcome::Skipped(Skip::Other, n),
@@ -391,16 +400,11 @@ fn search_candidate(
     };
     drop(chunks);
     // 4. 照合
-    search_text(ctx, &text, &path, &rel, false, remaining, out)
+    search_text(ctx, &text, &path, cand, false, remaining, out)
 }
 
-/// 読むためのパス。Windows はルートに verbatim の接頭辞を付けてから名前を足す (末尾のドット・空白・予約名の名前を、別の
-/// ファイルやデバイスに読み替えない、03 §12.7.5 の 3)。
-fn read_path(root: &FsPath, cand: &Candidate) -> FsPath {
-    cand.path(&verbatim_root(root))
-}
-
-/// ルートの verbatim の形 (Windows のドライブ文字・UNC の絶対パスだけ。ほかはそのまま)。
+/// 読むためのルート: Windows のドライブ文字・UNC の絶対パスは verbatim の形にする (そこに名前を足すので、末尾のドット・空白・
+/// 予約名の名前を、別のファイルやデバイスに読み替えない、03 §12.7.5 の 3)。ほかはそのまま。ジョブの状態に 1 回だけ作る。
 fn verbatim_root(root: &FsPath) -> FsPath {
     if !cfg!(windows) {
         return root.clone();
@@ -463,8 +467,9 @@ fn open_doc_for<'d>(ctx: &FileCtx<'d>, path: &FsPath) -> Option<&'d OpenDocRef> 
         return ctx.open_docs.get(i);
     }
     let name = path.as_path().file_name()?;
-    // (ii) は識別で比べるためのもの: 信頼できる識別の無い文書は (i) の canonical の比べ方だけにする (`mod.rs` のような
-    // よくある名前で、候補ごとに `metadata` を呼ばない)
+    // (ii) は識別で比べるためのもの: 信頼できる識別の無い文書は (i) の canonical の比べ方だけにする。識別を信頼できる FS
+    // (NTFS など) では、開いている文書と同じ名前の候補ごとに `metadata` と canonicalize を呼ぶ (今これが当たるのは、ルートの
+    // 下の別の場所にある同じ名前のハードリンクだけ。03 §12.7.6 の 3)
     let same_name: Vec<&OpenDocRef> = ctx
         .open_docs
         .iter()
@@ -521,11 +526,14 @@ fn search_text(
     ctx: &FileCtx<'_>,
     text: &Snapshot,
     path: &FsPath,
-    rel: &Arc<str>,
+    cand: &Candidate,
     from_open_doc: bool,
     remaining: usize,
     out: &mut Vec<WsHit>,
 ) -> Outcome {
+    // 相対パスの共有の文字列は、最初の一致の行を作るときに 1 回だけ作る (一致の無いファイルでは作らない)
+    let mut rel: Option<Arc<str>> = None;
+    let mut rel_of = || rel.get_or_insert_with(|| Arc::from(cand.rel())).clone();
     let len = text.len_bytes();
     if ctx.matcher.too_large_for(len) {
         return Outcome::Skipped(Skip::Other, len as u64);
@@ -548,7 +556,7 @@ fn search_text(
             let line = text.byte_to_line(r.start).0;
             if group.as_ref().is_none_or(|g| g.line != line) {
                 if let Some(g) = group.take() {
-                    out.push(g.finish(text, path, rel, from_open_doc));
+                    out.push(g.finish(text, path, rel_of(), from_open_doc));
                 }
                 if groups >= remaining {
                     capped = true;
@@ -575,7 +583,7 @@ fn search_text(
         }
     }
     if let Some(g) = group.take() {
-        out.push(g.finish(text, path, rel, from_open_doc));
+        out.push(g.finish(text, path, rel_of(), from_open_doc));
     }
     Outcome::Searched {
         size: len as u64,
@@ -653,7 +661,7 @@ impl LineGroup {
     }
 
     /// 結果の行にする。抜粋の先頭の空白は、最初の一致の手前まで詰める。
-    fn finish(self, text: &Snapshot, path: &FsPath, rel: &Arc<str>, from_open_doc: bool) -> WsHit {
+    fn finish(self, text: &Snapshot, path: &FsPath, rel: Arc<str>, from_open_doc: bool) -> WsHit {
         let ws = self.window.start;
         let raw = text.slice_to_string(ByteRange::new(
             ByteOff(self.line_start + ws),
@@ -665,7 +673,7 @@ impl LineGroup {
         let to32 = |n: usize| u32::try_from(n).unwrap_or(u32::MAX);
         WsHit {
             path: path.clone(),
-            rel: rel.clone(),
+            rel,
             line: to32(self.line),
             ranges: self.ranges,
             excerpt,
@@ -689,7 +697,7 @@ mod tests {
         let r = ByteRange::new(ByteOff(at.start), ByteOff(at.end));
         let line = t.byte_to_line(r.start).0;
         let rel: Arc<str> = Arc::from("a.txt");
-        LineGroup::new(&t, line, r).finish(&t, &FsPath::from("/w/a.txt"), &rel, false)
+        LineGroup::new(&t, line, r).finish(&t, &FsPath::from("/w/a.txt"), rel, false)
     }
 
     #[test]

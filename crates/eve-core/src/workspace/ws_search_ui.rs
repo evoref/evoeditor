@@ -616,14 +616,23 @@ impl EditorState {
         // 検索バーが開いたままだと、読込の完了の表示の切り替えが保留されて一致へ移れない (03 §9.2.1 の「表示の切り替え」)。
         // 結果を選んだら閉じる (フォーカスのペインに別の文書を出すと閉じるのと同じ)
         self.search_close();
-        // 今の文書の中の一致: 開き直さずに移る (「既に開いています」を出さない)
-        if let Some(id) = self.active_document()
-            && self
-                .document(id)
-                .is_some_and(|d| d.path.as_ref() == Some(&path) && d.load_state == LoadState::Ready)
-            && let Some(view) = self.focused_view()
-        {
-            self.apply_ws_jump(view, id, &jump);
+        // 開いている文書 (パスの文字列か canonical のパスが同じ。別の書き方のパスで開いた文書を含む) の一致: 開くジョブを
+        // 走らせずに、その文書へ切り替えて移る (「既に開いています」「…として開いています」を出さない)。読込中なら、読込の
+        // 完了で移る
+        if let Some((id, ready)) = self.ws_open_doc_of(&path) {
+            if self.active_document() != Some(id) {
+                self.activate_document(id);
+            }
+            if ready {
+                if self.active_document() == Some(id)
+                    && let Some(view) = self.focused_view()
+                {
+                    self.apply_ws_jump(view, id, &jump);
+                }
+            } else {
+                self.io.ws_jumps.insert(id, jump);
+            }
+            self.mark_dirty_render();
             return CommandResult::Done;
         }
         let res = self.open_fs_path(
@@ -633,28 +642,33 @@ impl EditorState {
                 ..OpenOptions::default()
             },
         );
-        let doc = self
+        // 新しく開いた文書: 読込が終わった時点で移る (`complete_open`)
+        if let Some(id) = self
             .docs
             .documents
             .iter()
             .find(|(_, d)| d.path.as_ref() == Some(&path))
-            .map(|(id, d)| (*id, d.load_state == LoadState::Ready));
-        match doc {
-            // 開いていた文書へ切り替えた: すぐに移る
-            Some((id, true)) => {
-                if self.active_document() == Some(id)
-                    && let Some(view) = self.focused_view()
-                {
-                    self.apply_ws_jump(view, id, &jump);
-                }
-            }
-            // 読込中: 読込が終わった時点で移る (`complete_open`)
-            Some((id, false)) => {
-                self.io.ws_jumps.insert(id, jump);
-            }
-            None => {}
+            .map(|(id, _)| *id)
+        {
+            self.io.ws_jumps.insert(id, jump);
         }
         res
+    }
+
+    /// 結果のパス `path` の、開いている文書 (パスの文字列が同じか、canonical のパスの比べる形が同じ) と、読込を終えているか。
+    fn ws_open_doc_of(&self, path: &FsPath) -> Option<(DocumentId, bool)> {
+        let key = canonical_key(path);
+        self.docs
+            .documents
+            .iter()
+            .filter(|(_, d)| d.load_state != LoadState::Failed)
+            .find(|(_, d)| {
+                d.path.as_ref() == Some(path)
+                    || d.canonical
+                        .as_ref()
+                        .is_some_and(|c| canonical_key(c) == key)
+            })
+            .map(|(id, d)| (*id, d.load_state == LoadState::Ready))
     }
 
     /// 読込が終わった文書 `doc` の横断検索のジャンプ: 開いた時点のペインがまだその文書を出していれば移る。読込の完了の表示の

@@ -13,7 +13,7 @@ use std::sync::Arc;
 use crate::gitignore::{ExcludeChain, IgnoreRules, PathKind};
 use crate::io::fs::{DirEntry, EntryKind, FileId, FileKind, FileSystem, FsError};
 use crate::io::fspath::FsPath;
-use crate::time::{Clock, Tick};
+use crate::time::{Clock, Millis, Tick};
 
 use super::candidate::Candidate;
 use super::git::{
@@ -273,6 +273,27 @@ impl WorkspaceWalk {
         clock: &dyn Clock,
         obs: &mut dyn WalkObserver,
     ) -> WalkStep {
+        self.step_inner(fs, clock, obs, WALK_STEP_TIME)
+    }
+
+    /// [`WorkspaceWalk::step`] の、時間の区切りを `budget` にしたもの (横断検索が、同じ区切りでファイルを探した残りの時間で
+    /// 走査する。03 §12.7.5 の段 7 の細目 (2))。ディレクトリは 1 つは読む (`budget` が 0 でも進む)。
+    pub fn step_within(
+        &mut self,
+        fs: &dyn FileSystem,
+        clock: &dyn Clock,
+        budget: Millis,
+    ) -> WalkStep {
+        self.step_inner(fs, clock, &mut NoObserver, budget.min(WALK_STEP_TIME))
+    }
+
+    fn step_inner(
+        &mut self,
+        fs: &dyn FileSystem,
+        clock: &dyn Clock,
+        obs: &mut dyn WalkObserver,
+        budget: Millis,
+    ) -> WalkStep {
         if self.finished {
             return WalkStep::Done;
         }
@@ -295,9 +316,7 @@ impl WorkspaceWalk {
                     return WalkStep::Failed(e);
                 }
                 dirs_read += 1;
-                if dirs_read >= WALK_DIRS_PER_STEP
-                    || clock.now().saturating_sub(start) >= WALK_STEP_TIME
-                {
+                if dirs_read >= WALK_DIRS_PER_STEP || clock.now().saturating_sub(start) >= budget {
                     return WalkStep::Yield;
                 }
                 continue;
