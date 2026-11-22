@@ -81,6 +81,7 @@ pub fn builtin_registry() -> CommandRegistry {
     crate::view::mouse::register(&mut r);
     crate::command::line_ops::register(&mut r);
     crate::ui_model::overlay::register(&mut r);
+    crate::workspace::finder::register(&mut r);
     r
 }
 
@@ -189,6 +190,7 @@ impl Editor {
         self.state.swap_tick();
         self.state.quit_wait_tick();
         self.state.mouse_tick();
+        self.state.finder_tick();
         if self.keymap.pending().is_empty() {
             self.chord_since = None;
             self.which_key_shown = false;
@@ -218,6 +220,7 @@ impl Editor {
             self.state.swap_deadline(),
             self.state.quit_wait_deadline(),
             self.state.mouse_deadline(),
+            self.state.finder_deadline(),
             self.chord_since
                 .filter(|_| !self.which_key_shown && !self.keymap.pending().is_empty())
                 .map(|t| t + self.which_key_delay()),
@@ -404,7 +407,8 @@ impl Editor {
     /// フォーカスの場所ごとのコンテキストの参照順 (07 §7.1)。確認ダイアログはモーダルで `global` を参照しない。
     fn contexts_for(overlay: &str) -> &'static [&'static str] {
         use crate::keymap::{
-            FOCUS_DIALOG, FOCUS_HELP, FOCUS_LIST, FOCUS_PALETTE, FOCUS_PROMPT, FOCUS_SEARCH,
+            FOCUS_DIALOG, FOCUS_FINDER, FOCUS_HELP, FOCUS_LIST, FOCUS_PALETTE, FOCUS_PROMPT,
+            FOCUS_SEARCH,
         };
         match overlay {
             "dialog" => FOCUS_DIALOG,
@@ -415,6 +419,8 @@ impl Editor {
             // バッファ一覧・設定の診断の一覧: 一覧の移動と一覧内の `buffer.close` は `list`。パレットの割当 (`palette`) は見ない
             "buffer_list" | "config_diagnostics" => FOCUS_LIST,
             "search" => FOCUS_SEARCH,
+            // ファインダ (v0.5 の M31。横断検索の結果も同じ、07 §7.1)
+            "finder" => FOCUS_FINDER,
             _ => Self::EDITOR_CONTEXTS,
         }
     }

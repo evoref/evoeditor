@@ -1,8 +1,8 @@
 //! オーバーレイの共通の部品: 枠・行・ボタン。
 
-use eve_view::{CellText, Choice, Span, Style};
+use eve_view::{CellText, Choice, CutPolicy, Span, Style};
 
-use super::parts::{ascii_span, fill, glyph_span, put, truncate_end};
+use super::parts::{ascii_span, fill, glyph_span, put, truncate_end, truncate_middle};
 use crate::buffer::Writer;
 use crate::glyphs::Glyphs;
 use crate::theme::{Theme, overlay_style};
@@ -63,7 +63,12 @@ pub(super) fn draw_box(
     if let Some(t) = title {
         // `┌─ 見出し ─…┐`
         let room = b.cols.saturating_sub(6);
-        let spans = truncate_end(&t.spans, room, &glyphs.ellipsis);
+        // `cut` が中間なら中間を詰める (ファインダの見出しの長いルート、04 §8.11)。ほかは末尾を切る
+        let spans = if t.cut == CutPolicy::Middle {
+            truncate_middle(&t.spans, room, &glyphs.ellipsis)
+        } else {
+            truncate_end(&t.spans, room, &glyphs.ellipsis)
+        };
         if !spans.is_empty() {
             let x = b.x + 2;
             let x = w.span(x, b.y, x1, &ascii_span(" ", style));

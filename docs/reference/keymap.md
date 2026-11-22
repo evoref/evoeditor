@@ -32,7 +32,7 @@
 | `Ctrl+Shift+S` | `ctrl+shift+s` | `file.save_as` | 名前を付けて保存 | — | 要 |
 | `Ctrl+K S` | `ctrl+k s` | `file.save_as` | 名前を付けて保存 | — | — |
 | `Ctrl+K A` | `ctrl+k a` | `file.save_all` | すべて保存 | — | — |
-| `Ctrl+O` | `ctrl+o` | `file.open` | 開く | — | — |
+| `Ctrl+O` | `ctrl+o` | `workspace.open_file` | ファイルを探して開く | — | — |
 | `Ctrl+N` | `ctrl+n` | `file.new` | 新規作成 | — | — |
 | `Ctrl+W` | `ctrl+w` | `buffer.close` | 文書を閉じる | — | — |
 | `Ctrl+K W` | `ctrl+k w` | `buffer.close` | 文書を閉じる | — | — |
@@ -145,7 +145,7 @@
 | `Ctrl+F` | `ctrl+f` | `search.open` | 検索 | — | — |
 | `Ctrl+S` | `ctrl+s` | `file.save` | 保存 | — | — |
 | `Ctrl+Shift+S` | `ctrl+shift+s` | `file.save_as` | 名前を付けて保存 | — | 要 |
-| `Ctrl+O` | `ctrl+o` | `file.open` | 開く | — | — |
+| `Ctrl+O` | `ctrl+o` | `workspace.open_file` | ファイルを探して開く | — | — |
 | `Ctrl+N` | `ctrl+n` | `file.new` | 新規作成 | — | — |
 
 ## `prompt`

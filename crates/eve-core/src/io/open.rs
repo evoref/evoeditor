@@ -369,6 +369,31 @@ impl EditorState {
                     self.drop_failed_open(doc_id, replace);
                     return;
                 }
+                // ファインダで選んだファイルが走査の後に消えた: 新規の文書にせず知らせる。リンク先の無いシンボリックリンクなら
+                // リンク先を示す (03 §12.7.4 の「開く」)
+                if opts.must_exist
+                    && let crate::jobs::JobError::Fs(e) = &err
+                    && e.kind == crate::io::fs::FsErrorKind::NotFound
+                {
+                    let shown = path.display();
+                    match &e.detail {
+                        Some(crate::io::fs::FsErrorDetail::DanglingLink { target }) => {
+                            let target = target.display();
+                            self.show_message(
+                                MessageLevel::Warn,
+                                keys::MSG_FINDER_DANGLING_LINK,
+                                &[("path", &shown), ("target", &target)],
+                            );
+                        }
+                        _ => self.show_message(
+                            MessageLevel::Warn,
+                            keys::MSG_FINDER_NOT_FOUND,
+                            &[("path", &shown)],
+                        ),
+                    }
+                    self.drop_failed_open(doc_id, replace);
+                    return;
+                }
                 let reason = reason_label(&err);
                 let (level, key) = open_failure(&err);
                 self.open_failed(doc_id, replace, level, key, &path, &reason);

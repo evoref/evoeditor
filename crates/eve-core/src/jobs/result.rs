@@ -352,6 +352,15 @@ pub enum JobResult {
     },
     /// `ReleaseCandidates` の終端 (受け手は何もしない)。
     Released,
+    /// ファインダの照合の結果 (`FinderMatch` の終端、03 §12.7.4)。
+    FinderMatched {
+        /// 照合の世代。
+        generation: u64,
+        /// 一致した件数 (上位に入らなかったものを含む)。
+        matched: usize,
+        /// 上位 (並びの順。`top` 件まで)。
+        top: Vec<crate::workspace::FinderHit>,
+    },
     /// ジョブの失敗 (キャンセルを含む)。
     Failed {
         /// 失敗の理由。

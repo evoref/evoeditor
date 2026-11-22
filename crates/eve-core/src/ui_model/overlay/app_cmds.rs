@@ -95,12 +95,18 @@ fn cmd_list_page_down(ctx: &mut CommandCtx<'_>) -> CommandResult {
     if matches!(ctx.state.ui.overlay, Some(Overlay::Help(_))) {
         return ctx.state.help_page(true);
     }
+    if matches!(ctx.state.ui.overlay, Some(Overlay::Finder(_))) {
+        return ctx.state.finder_page(true);
+    }
     ctx.state.palette_page(true)
 }
 
 fn cmd_list_page_up(ctx: &mut CommandCtx<'_>) -> CommandResult {
     if matches!(ctx.state.ui.overlay, Some(Overlay::Help(_))) {
         return ctx.state.help_page(false);
+    }
+    if matches!(ctx.state.ui.overlay, Some(Overlay::Finder(_))) {
+        return ctx.state.finder_page(false);
     }
     ctx.state.palette_page(false)
 }

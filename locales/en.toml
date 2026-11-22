@@ -416,6 +416,10 @@ title = "Toggle Mouse"
 description = "Turn word wrap on or off."
 title = "Toggle Word Wrap"
 
+[cmd.workspace.open_file]
+description = "Filter the workspace files by name and open one."
+title = "Find and Open File"
+
 [hint.app]
 quit = "Quit"
 
@@ -426,7 +430,6 @@ goto_line = "Goto"
 undo = "Undo"
 
 [hint.file]
-open = "Open"
 save = "Save"
 
 [hint.search]
@@ -441,6 +444,9 @@ cancel = "Cancel"
 confirm = "OK"
 list_next = "Next"
 palette_open = "Commands"
+
+[hint.workspace]
+open_file = "Open"
 
 [info.app]
 release_summary = "Saves the parts you did not edit with their original bytes, and lets you edit documents with invalid bytes. Also adds multi-line regular expressions, standard input, high-contrast themes, and more. See the release notes for details"
@@ -927,6 +933,10 @@ text = "Could not delete the swap: {dir}"
 hint = "Specify a folder. {root} is used as the workspace for now"
 text = "Cannot use {path} as the workspace: {reason}"
 
+[msg.workspace.scan_failed]
+hint = "Check the folder permissions"
+text = "Cannot read the workspace {root}: {reason}"
+
 [msg.reload.missing]
 hint = "To keep the current content, recreate the file with Save ({key:file.save}), or use Save As ({key:file.save_as})"
 text = "Cannot reload because {path} was not found"
@@ -1010,6 +1020,14 @@ text = "You do not have permission to write to {path}"
 [msg.external.check_failed]
 hint = "The file is also checked for changes when you save"
 text = "Could not check {path} for changes: {reason}"
+
+[msg.finder.dangling_link]
+hint = "Check where the link points"
+text = "{path} is a link, and its target {target} does not exist"
+
+[msg.finder.not_found]
+hint = "Reopen the list to scan the current files"
+text = "{path} no longer exists"
 
 [msg.save.permission_narrowed]
 hint = "Set the permissions again in the OS if needed"
@@ -1411,6 +1429,16 @@ no_match = "No matching diagnostics"
 item = "{level}: {text} / {hint}"
 item_no_hint = "{level}: {text}"
 
+[ui.finder]
+title = "Open File ({root})"
+placeholder = "Filter by file name or path"
+footer_waiting = "Finding the workspace…"
+footer_incomplete = "{matched}/{total} (list incomplete)"
+footer_scanning = "{matched}/{total} scanning…"
+footer_truncated = "{matched}/{total} (stopped at {limit} files)"
+unreadable_suffix = " · {dirs} unreadable folders"
+no_match = "No matching files"
+
 [ui.buffer_list]
 title = "Buffers"
 placeholder = "Filter by name"
@@ -1490,6 +1518,7 @@ pane = "Pane"
 search = "Search"
 select = "Select"
 ui = "View"
+workspace = "Workspace"
 
 [ui.prompt.open]
 title = "Open"

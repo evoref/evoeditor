@@ -103,6 +103,10 @@ const TABLE: &[(&str, &[ArgSpec])] = &[
     (ids::SELECT_EXTEND_WORD_LEFT, COUNT),
     (ids::SELECT_EXTEND_WORD_RIGHT, COUNT),
     (ids::UI_DIALOG_CHOOSE, &[arg("choice", ArgType::Int, true)]),
+    (
+        ids::WORKSPACE_OPEN_FILE,
+        &[arg("query", ArgType::String, false)],
+    ),
 ];
 
 /// `id` のコマンドの引数の形 (引数が無ければ空)。

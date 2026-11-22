@@ -414,6 +414,10 @@ title = "マウスの切り替え"
 description = "折り返し表示のオンとオフを切り替えます。"
 title = "折り返しの切り替え"
 
+[cmd.workspace.open_file]
+description = "ワークスペースのファイルを名前で絞り込んで開きます。"
+title = "ファイルを探して開く"
+
 [hint.app]
 quit = "終了"
 
@@ -424,7 +428,6 @@ goto_line = "行へ移動"
 undo = "元に戻す"
 
 [hint.file]
-open = "開く"
 save = "保存"
 
 [hint.search]
@@ -439,6 +442,9 @@ cancel = "取消"
 confirm = "決定"
 list_next = "次へ"
 palette_open = "コマンド"
+
+[hint.workspace]
+open_file = "開く"
 
 [info.app]
 release_summary = "編集していない所を元のバイト列のまま保存し、不正なバイトを含む文書も編集できるようにしました。行をまたぐ正規表現、標準入力、高コントラストのテーマなども加わりました。詳しくはリリースノートを見てください"
@@ -925,6 +931,10 @@ text = "スワップを削除できませんでした: {dir}"
 hint = "フォルダのパスを指定してください。今は {root} をワークスペースにしています"
 text = "{path} をワークスペースにできません: {reason}"
 
+[msg.workspace.scan_failed]
+hint = "フォルダの権限を確認してください"
+text = "ワークスペース {root} を読めません: {reason}"
+
 [msg.reload.missing]
 hint = "今の内容を残すには、上書き保存 ({key:file.save}) でファイルを作り直すか、名前を付けて保存 ({key:file.save_as}) してください"
 text = "{path} が見つからないため読み込み直せません"
@@ -1008,6 +1018,14 @@ text = "{path} に書き込む権限がありません"
 [msg.external.check_failed]
 hint = "保存するときにも、ファイルが変わっていないかを照合します"
 text = "{path} の変更を確かめられませんでした: {reason}"
+
+[msg.finder.dangling_link]
+hint = "リンク先を確かめてください"
+text = "{path} はリンクで、リンク先 {target} がありません"
+
+[msg.finder.not_found]
+hint = "一覧を開き直すと、今のファイルで探し直します"
+text = "{path} はもうありません"
 
 [msg.save.permission_narrowed]
 hint = "必要なら OS で権限を設定し直してください"
@@ -1409,6 +1427,16 @@ no_match = "一致する診断はありません"
 item = "{level}: {text} / {hint}"
 item_no_hint = "{level}: {text}"
 
+[ui.finder]
+title = "ファイルを開く ({root})"
+placeholder = "ファイル名・パスで絞り込み"
+footer_waiting = "ワークスペースを調べています…"
+footer_incomplete = "{matched}/{total} (一覧が途中までです)"
+footer_scanning = "{matched}/{total} 走査中…"
+footer_truncated = "{matched}/{total} (ファイルが多いため {limit} 件で打ち切りました)"
+unreadable_suffix = "・読めないフォルダ {dirs}"
+no_match = "一致するファイルはありません"
+
 [ui.buffer_list]
 title = "バッファ"
 placeholder = "文書名で絞り込み"
@@ -1488,6 +1516,7 @@ pane = "ペイン"
 search = "検索"
 select = "選択"
 ui = "画面"
+workspace = "ワークスペース"
 
 [ui.prompt.open]
 title = "開く"

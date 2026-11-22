@@ -69,6 +69,11 @@ impl EditorState {
                 cursor: &mut p.cursor,
                 all_selected: &mut p.all_selected,
             }),
+            Some(Overlay::Finder(f)) => Some(FieldMut {
+                text: &mut f.text,
+                cursor: &mut f.cursor,
+                all_selected: &mut f.all_selected,
+            }),
             None => {
                 let b = self.find.search_bar.as_mut()?;
                 match b.focus {
@@ -119,6 +124,7 @@ impl EditorState {
             return None;
         }
         let is_prompt = matches!(self.ui.overlay, Some(Overlay::Prompt(_)));
+        let is_finder = matches!(self.ui.overlay, Some(Overlay::Finder(_)));
         let Some(f) = self.input_mut() else {
             return Some(CommandResult::Rejected(RejectReason::NotAvailable));
         };
@@ -204,6 +210,8 @@ impl EditorState {
                 }
             } else if self.ui.overlay.is_none() {
                 self.bar_edited();
+            } else if is_finder {
+                self.finder_edited();
             } else {
                 self.palette_reset_selection();
             }

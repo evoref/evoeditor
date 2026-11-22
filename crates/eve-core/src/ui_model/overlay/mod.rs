@@ -30,6 +30,8 @@ pub(crate) enum Overlay {
     Palette(crate::ui_model::palette::PaletteState),
     /// ヘルプ画面 (全画面、04 §8.6)。
     Help(crate::ui_model::help::HelpState),
+    /// ファインダ (一覧のオーバーレイ、03 §12.7.4・04 §8.11)。
+    Finder(Box<crate::workspace::finder::FinderOverlay>),
 }
 
 impl EditorState {
@@ -41,10 +43,14 @@ impl EditorState {
                 Overlay::Prompt(_) => OverlayKind::Prompt,
                 Overlay::Palette(_) => OverlayKind::List,
                 Overlay::Help(_) => OverlayKind::Help,
+                Overlay::Finder(_) => OverlayKind::List,
             })
         };
         let (before, after) = (kind(&self.ui.overlay), kind(&new));
-        self.ui.overlay = new;
+        let mut old = std::mem::replace(&mut self.ui.overlay, new);
+        if let Some(Overlay::Finder(f)) = &mut old {
+            self.finder_closed(f);
+        }
         if before != after
             && let Some(window) = self.focused_window()
         {
@@ -56,7 +62,10 @@ impl EditorState {
     }
 
     pub(crate) fn take_overlay(&mut self) -> Option<Overlay> {
-        let old = self.ui.overlay.take();
+        let mut old = self.ui.overlay.take();
+        if let Some(Overlay::Finder(f)) = &mut old {
+            self.finder_closed(f);
+        }
         if old.is_some()
             && let Some(window) = self.focused_window()
         {
@@ -79,7 +88,7 @@ impl EditorState {
 
     /// 出ているオーバーレイの種類。条件式 `overlay.active` の値と同じ (07 §7.3、11 §6.3 の `overlay`):
     /// `""` (なし) / `"dialog"` (確認) / `"prompt"` (入力プロンプト) / `"palette"` (コマンドパレット) /
-    /// `"buffer_list"` (バッファ一覧) / `"help"` (ヘルプ)。
+    /// `"buffer_list"` (バッファ一覧) / `"help"` (ヘルプ) / `"finder"` (ファインダ)。
     pub fn overlay_kind(&self) -> &'static str {
         self.overlay_name()
     }
@@ -95,6 +104,7 @@ impl EditorState {
             Some(Overlay::Palette(p)) if p.diagnostics => "config_diagnostics",
             Some(Overlay::Palette(_)) => "palette",
             Some(Overlay::Help(_)) => "help",
+            Some(Overlay::Finder(_)) => "finder",
         }
     }
 
@@ -127,6 +137,7 @@ impl EditorState {
             Some(Overlay::Palette(_)) => self.palette_confirm(),
             // ヘルプは確定するものが無い (閉じるのは `Esc`)
             Some(Overlay::Help(_)) => CommandResult::Done,
+            Some(Overlay::Finder(_)) => self.finder_confirm(),
             None => CommandResult::Rejected(RejectReason::NotAvailable),
         }
     }
@@ -184,6 +195,9 @@ impl EditorState {
         }
         if matches!(self.ui.overlay, Some(Overlay::Help(_))) {
             return self.help_scroll(if forward { 1 } else { -1 });
+        }
+        if matches!(self.ui.overlay, Some(Overlay::Finder(_))) {
+            return self.finder_move(forward);
         }
         if self.ui.overlay.is_none() && self.find.search_bar.is_some() {
             self.bar_focus_cycle(forward);

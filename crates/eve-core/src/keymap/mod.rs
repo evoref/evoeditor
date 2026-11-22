@@ -222,18 +222,21 @@ pub(crate) const FOCUS_PROMPT: &[&str] = &["prompt", "global"];
 pub(crate) const FOCUS_PALETTE: &[&str] = &["palette", "list", "prompt", "global"];
 /// バッファ一覧・設定の診断の一覧 (パレットの割当 `palette` は見ない)。
 pub(crate) const FOCUS_LIST: &[&str] = &["list", "prompt", "global"];
+/// ファインダ・横断検索の結果 (v0.5 の M31、07 §7.1)。
+pub(crate) const FOCUS_FINDER: &[&str] = &["finder", "list", "prompt", "global"];
 /// ヘルプ画面。
 pub(crate) const FOCUS_HELP: &[&str] = &["help", "global"];
 /// 確認ダイアログ (モーダル。`global` を参照しない)。
 pub(crate) const FOCUS_DIALOG: &[&str] = &["dialog"];
 
 /// フォーカスの場所ごとの参照順の全部 (07 §7.1 の表)。
-pub(crate) const FOCUSES: [&[&str]; 7] = [
+pub(crate) const FOCUSES: [&[&str]; 8] = [
     FOCUS_EDITOR,
     FOCUS_SEARCH,
     FOCUS_PROMPT,
     FOCUS_PALETTE,
     FOCUS_LIST,
+    FOCUS_FINDER,
     FOCUS_HELP,
     FOCUS_DIALOG,
 ];

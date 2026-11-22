@@ -21,7 +21,7 @@ const NORMAL_HINTS: [(&str, u8); 7] = [
     (ids::UI_PALETTE_OPEN, 5),
     (ids::FILE_SAVE, 4),
     (ids::SEARCH_OPEN, 3),
-    (ids::FILE_OPEN, 2),
+    (ids::WORKSPACE_OPEN_FILE, 2),
     (ids::EDIT_UNDO, 2),
     (ids::CURSOR_GOTO_LINE, 1),
 ];
@@ -386,6 +386,7 @@ pub(crate) fn overlay_models(state: &EditorState) -> Vec<OverlayModel> {
         }
         Some(Overlay::Palette(p)) => vec![state.palette_model(p)],
         Some(Overlay::Help(h)) => vec![state.help_model(h)],
+        Some(Overlay::Finder(f)) => vec![state.finder_model(f)],
         Some(Overlay::Prompt(p)) => {
             let name = p.kind.name();
             let cells = cell_text(&p.text, CutPolicy::End).spans;

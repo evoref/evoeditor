@@ -25,6 +25,8 @@
 //! - `resize.to_flush`: 最後のリサイズイベントの読取完了 → 次の Frame の `write` が戻った時刻 (「リサイズ → 再描画」。FR-512)。
 //! - `search.first_match`: 直前のキー入力 (`fields.vk`) の読取完了 → 環境変数 `EVE_TRACE_MATCH` の文字列が編集面の行に初めて
 //!   現れた Frame の `write` が戻った時刻 (検索で一致へ移って画面に出るまで。BM-108、01 NFR-108)。キー入力のたびに測り直す。
+//!   一覧のオーバーレイ (ファインダ) では、件数の欄 (`List.footer`) が `EVE_TRACE_MATCH` で始まる Frame (その入力で絞り込んだ候補を
+//!   描いた Frame。BM-125、01 FR-125 AC-2)。
 //! - `open.content`: 直前のキー入力 (`fields.vk`) の読取完了 → 編集面に本文の無い Frame の後で、本文 (空白でない文字) が
 //!   初めて出た Frame の `write` が戻った時刻 (「開く」→ 文書の先頭部分を含む最初の Frame。BM-104v、01 FR-122 AC-2)。
 //!   `fields.partial` は、その Frame に読込の進捗も出ていた (先行表示の先頭。03 §9.2.1) なら 1、全文なら 0。

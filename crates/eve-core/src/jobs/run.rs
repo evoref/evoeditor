@@ -49,6 +49,27 @@ pub fn run_job(
                 req.id, root, exclude, generation, walk, ports, emit,
             );
         }
+        JobKind::FinderMatch {
+            chunks,
+            query,
+            top,
+            generation,
+        } => {
+            let body = match crate::workspace::finder_match(&chunks, &query, top, cancel) {
+                Some(m) => JobResult::FinderMatched {
+                    generation,
+                    matched: m.matched,
+                    top: m.top,
+                },
+                None => JobResult::Failed {
+                    err: JobError::Cancelled,
+                },
+            };
+            // 塊の参照はこのスレッドで手放す (主スレッドの一覧が持っているので、最後の参照になることは少ない)
+            drop(chunks);
+            emit(JobOutput { job: req.id, body });
+            return JobStep::Done;
+        }
         JobKind::ReleaseCandidates { chunks } => {
             // 最後の参照をここ (ワーカーのスレッド) で手放す
             drop(chunks);
@@ -376,7 +397,9 @@ pub fn run_job(
                 err: JobError::Fs(err),
             },
         },
-        JobKind::WorkspaceScan { .. } | JobKind::ReleaseCandidates { .. } => {
+        JobKind::WorkspaceScan { .. }
+        | JobKind::FinderMatch { .. }
+        | JobKind::ReleaseCandidates { .. } => {
             unreachable!("ワークスペースのジョブは上で処理した")
         }
     };

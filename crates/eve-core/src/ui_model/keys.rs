@@ -96,6 +96,8 @@ pub(crate) const MSG_EDIT_READ_ONLY_PUA_COLLISION: &str = "msg.edit.read_only_pu
 pub(crate) const MSG_EDIT_READ_ONLY_STATEFUL: &str = "msg.edit.read_only_stateful";
 pub(crate) const MSG_EOL_CONVERT_STALE: &str = "msg.eol.convert_stale";
 pub(crate) const MSG_EXTERNAL_CHECK_FAILED: &str = "msg.external.check_failed";
+pub(crate) const MSG_FINDER_DANGLING_LINK: &str = "msg.finder.dangling_link";
+pub(crate) const MSG_FINDER_NOT_FOUND: &str = "msg.finder.not_found";
 pub(crate) const MSG_LEFTOVER_FAILED: &str = "msg.leftover.failed";
 pub(crate) const MSG_LEFTOVER_TMP_OPENED: &str = "msg.leftover.tmp_opened";
 pub(crate) const MSG_OPEN_BUSY: &str = "msg.open.busy";
@@ -165,6 +167,7 @@ pub(crate) const MSG_SWAP_REMOVE_FAILED: &str = "msg.swap.remove_failed";
 pub(crate) const MSG_SWAP_TOO_LARGE: &str = "msg.swap.too_large";
 pub(crate) const MSG_SWAP_UNREADABLE: &str = "msg.swap.unreadable";
 pub(crate) const MSG_WORKSPACE_ROOT_INVALID: &str = "msg.workspace.root_invalid";
+pub(crate) const MSG_WORKSPACE_SCAN_FAILED: &str = "msg.workspace.scan_failed";
 pub(crate) const STATUS_DEGRADED_LONG_LINE_LONG: &str = "status.degraded.long_line.long";
 pub(crate) const STATUS_DEGRADED_LONG_LINE_SHORT: &str = "status.degraded.long_line.short";
 pub(crate) const STATUS_DEGRADED_PANES_LONG: &str = "status.degraded.panes.long";
@@ -257,6 +260,14 @@ pub(crate) const UI_HELP_TERMINAL_STDIN_KEYS: &str = "ui.help.terminal.stdin_key
 pub(crate) const UI_HELP_TERMINAL_STDIN_POWERSHELL: &str = "ui.help.terminal.stdin_powershell";
 pub(crate) const UI_HELP_TERMINAL_STDIN_REDRAW: &str = "ui.help.terminal.stdin_redraw";
 pub(crate) const UI_HELP_TERMINAL_STDIN_WRITER: &str = "ui.help.terminal.stdin_writer";
+pub(crate) const UI_FINDER_FOOTER_INCOMPLETE: &str = "ui.finder.footer_incomplete";
+pub(crate) const UI_FINDER_FOOTER_SCANNING: &str = "ui.finder.footer_scanning";
+pub(crate) const UI_FINDER_FOOTER_TRUNCATED: &str = "ui.finder.footer_truncated";
+pub(crate) const UI_FINDER_FOOTER_WAITING: &str = "ui.finder.footer_waiting";
+pub(crate) const UI_FINDER_NO_MATCH: &str = "ui.finder.no_match";
+pub(crate) const UI_FINDER_PLACEHOLDER: &str = "ui.finder.placeholder";
+pub(crate) const UI_FINDER_TITLE: &str = "ui.finder.title";
+pub(crate) const UI_FINDER_UNREADABLE_SUFFIX: &str = "ui.finder.unreadable_suffix";
 pub(crate) const UI_HELP_TITLE: &str = "ui.help.title";
 pub(crate) const UI_HISTORY_EMPTY: &str = "ui.history.empty";
 pub(crate) const UI_HISTORY_FOOTER: &str = "ui.history.footer";
@@ -301,7 +312,7 @@ pub(crate) const UI_TOO_SMALL: &str = "ui.too_small";
 
 /// すべての定数 (キーの順。試験に使う)。
 #[cfg(test)]
-const ALL: [&str; 278] = [
+const ALL: [&str; 289] = [
     HINT_UI_CANCEL,
     INFO_APP_RELEASE_SUMMARY,
     INFO_APP_UPDATED,
@@ -392,6 +403,8 @@ const ALL: [&str; 278] = [
     MSG_EDIT_READ_ONLY_STATEFUL,
     MSG_EOL_CONVERT_STALE,
     MSG_EXTERNAL_CHECK_FAILED,
+    MSG_FINDER_DANGLING_LINK,
+    MSG_FINDER_NOT_FOUND,
     MSG_LEFTOVER_FAILED,
     MSG_LEFTOVER_TMP_OPENED,
     MSG_OPEN_BUSY,
@@ -458,6 +471,7 @@ const ALL: [&str; 278] = [
     MSG_SWAP_TOO_LARGE,
     MSG_SWAP_UNREADABLE,
     MSG_WORKSPACE_ROOT_INVALID,
+    MSG_WORKSPACE_SCAN_FAILED,
     STATUS_DEGRADED_LONG_LINE_LONG,
     STATUS_DEGRADED_LONG_LINE_SHORT,
     STATUS_DEGRADED_PANES_LONG,
@@ -543,6 +557,14 @@ const ALL: [&str; 278] = [
     UI_HELP_TERMINAL_STDIN_POWERSHELL,
     UI_HELP_TERMINAL_STDIN_REDRAW,
     UI_HELP_TERMINAL_STDIN_WRITER,
+    UI_FINDER_FOOTER_INCOMPLETE,
+    UI_FINDER_FOOTER_SCANNING,
+    UI_FINDER_FOOTER_TRUNCATED,
+    UI_FINDER_FOOTER_WAITING,
+    UI_FINDER_NO_MATCH,
+    UI_FINDER_PLACEHOLDER,
+    UI_FINDER_TITLE,
+    UI_FINDER_UNREADABLE_SUFFIX,
     UI_HELP_TITLE,
     UI_HISTORY_EMPTY,
     UI_HISTORY_FOOTER,

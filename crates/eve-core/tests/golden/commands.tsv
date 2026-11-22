@@ -102,3 +102,4 @@ ui.redraw	Ui	None	—
 ui.toggle_hint_bar	Ui	Ui	—
 ui.toggle_mouse	Ui	None	caps.mouse
 view.toggle_wrap	Ui	Ui	—
+workspace.open_file	Ui	Ui	—

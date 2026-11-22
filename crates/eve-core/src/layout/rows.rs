@@ -421,8 +421,15 @@ pub(super) fn line_number_style(styles: &RowStyles, line: usize, cursor_line: us
 /// 文字列を `CellText` にする (INV-F1: 制御文字などは記号に展開済み。幅は core が計算する)。
 /// `cut` が `Never` 以外のときは 1 書記素 = 1 `Span` で渡す。
 pub(crate) fn cell_text(s: &str, cut: CutPolicy) -> CellText {
+    cell_text_indexed(s, cut).0
+}
+
+/// [`cell_text`] と、`s` の書記素の番号 → `Span` の番号の写し (幅 0 で落とした書記素は `None`)。一致の位置 (書記素の番号) を
+/// 記法に直した後の `Span` の番号に直すのに使う (03 §12.7.4 の「表示」。`ListItem.match_ranges`)。
+pub(crate) fn cell_text_indexed(s: &str, cut: CutPolicy) -> (CellText, Vec<Option<usize>>) {
     let cfg = width_config();
     let mut spans = Vec::new();
+    let mut map = Vec::new();
     let mut width = 0u16;
     for (_, g) in grapheme_indices(s) {
         let (text, w, style) = match g {
@@ -439,8 +446,10 @@ pub(crate) fn cell_text(s: &str, cut: CutPolicy) -> CellText {
             }
         };
         if w == 0 {
+            map.push(None);
             continue;
         }
+        map.push(Some(spans.len()));
         width = width.saturating_add(w);
         spans.push(Span {
             text,
@@ -448,5 +457,5 @@ pub(crate) fn cell_text(s: &str, cut: CutPolicy) -> CellText {
             style,
         });
     }
-    CellText { spans, width, cut }
+    (CellText { spans, width, cut }, map)
 }

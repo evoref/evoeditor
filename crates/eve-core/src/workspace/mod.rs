@@ -13,12 +13,19 @@
 //! spec: 03 §12.7.1, 03 §12.7.2, 03 §12.7.7, 03 §12.7.8, 02 §9.3, 07 §12.1, 07 §18.2, 07 §18.3
 
 mod candidate;
+pub(crate) mod finder;
+mod finder_match;
 mod git;
 pub(crate) mod root;
 mod scan_job;
 mod walk;
 
 pub use candidate::{Candidate, char_bit};
+pub use finder_match::{
+    BONUS_BOUNDARY, BONUS_CAMEL, BONUS_CONSECUTIVE, BONUS_FILENAME_PER_CHAR, FINDER_CANCEL_EVERY,
+    FINDER_TOP, FIRST_CHAR_MULTIPLIER, FinderHit, FinderMatches, FinderQuery, MATCH_SCORE,
+    PENALTY_GAP_EXTENSION, PENALTY_GAP_START, finder_match,
+};
 pub use root::{RootSource, Workspace};
 pub(crate) use scan_job::run_scan;
 pub use walk::{NoObserver, WalkObserver, WalkStep, WorkspaceWalk};
@@ -44,6 +51,13 @@ pub const CANDIDATE_CHUNK: usize = 4096;
 /// 塊が [`CANDIDATE_CHUNK`] 件に満たなくても、前に送ってからこれだけ過ぎたら区切りの終わりで送る (ファインダの照合の
 /// やり直しの間隔と同じ 100 ms、03 §12.7.4)。
 pub const SCAN_FLUSH_INTERVAL: Millis = Millis(100);
+
+/// ファインダを閉じてから一覧を手放すまでの時間 (03 §12.7.2 の「一覧の寿命」の `FINDER_LIST_KEEP`)。10 万件で数十 MB を
+/// 持ち続けない。
+pub const FINDER_LIST_KEEP: Millis = Millis(5 * 60 * 1000);
+/// 最初の走査の間に、届いた新しい候補で照合し直す間隔 (03 §12.7.4 の「取消しと投げ直し」)。前の照合を始めてからこれだけ
+/// 経っていなければ、経つまで待つ (束が届くたびに投げ直すと `bg` に照合が積み上がる)。
+pub const FINDER_RESCORE_INTERVAL: Millis = Millis(100);
 
 /// 除外の設定 (走査を始める時点の値。走査の途中で設定が変わっても、次の走査から効く、03 §12.7.2)。
 #[derive(Clone, Debug, PartialEq, Eq)]
