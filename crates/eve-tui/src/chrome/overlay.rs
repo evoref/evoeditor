@@ -149,3 +149,84 @@ pub(super) fn button_spans(
     }
     (spans, focus_x)
 }
+
+#[cfg(test)]
+mod tests {
+    use eve_view::{ColorDepth, StyleMods};
+    use ratatui::buffer::Buffer;
+    use ratatui::layout::Rect;
+    use ratatui::style::Modifier;
+
+    use super::*;
+
+    const AREA: Rect = Rect::new(0, 0, 12, 5);
+
+    const BOX: BoxRect = BoxRect {
+        x: 1,
+        y: 1,
+        cols: 10,
+        rows: 3,
+        bordered: true,
+    };
+
+    /// 全面を属性 `mods` の本文で埋めた画面 (現在行の行番号の太字・選択の反転・カーソルの反転などの代わり)。
+    fn screen_under(mods: StyleMods) -> Buffer {
+        let mut buf = Buffer::empty(AREA);
+        let mut w = Writer {
+            buf: &mut buf,
+            depth: ColorDepth::Mono,
+            clamped: 0,
+            sanitized: 0,
+        };
+        let st = w.style(Style::with_mods(mods));
+        for y in 0..AREA.height {
+            for x in 0..AREA.width {
+                w.set(x, y, "a", st, false);
+            }
+        }
+        buf
+    }
+
+    /// `buf` に枠つきのオーバーレイ `BOX` をスタイル `style` で描き、枠の中のセルの属性を返す。
+    fn box_over(buf: &mut Buffer, style: Style) -> Vec<((u16, u16), Modifier)> {
+        let mut w = Writer {
+            buf,
+            depth: ColorDepth::Mono,
+            clamped: 0,
+            sanitized: 0,
+        };
+        draw_box(&mut w, &BOX, None, style, &Glyphs::unicode());
+        (BOX.y..BOX.y + BOX.rows)
+            .flat_map(|y| (BOX.x..BOX.x + BOX.cols).map(move |x| (x, y)))
+            .map(|pos| (pos, buf[pos].modifier))
+            .collect()
+    }
+
+    #[test]
+    fn オーバーレイの枠と塗りは下のセルの属性を引き継がない() {
+        let under = StyleMods::BOLD
+            | StyleMods::ITALIC
+            | StyleMods::UNDERLINE
+            | StyleMods::REVERSE
+            | StyleMods::DIM;
+        let mut buf = screen_under(under);
+        for (pos, m) in box_over(&mut buf, Style::DEFAULT) {
+            assert_eq!(m, Modifier::empty(), "{pos:?} に下の属性が残る");
+        }
+        // 枠の外の本文の属性はそのまま
+        let all = Modifier::BOLD
+            | Modifier::ITALIC
+            | Modifier::UNDERLINED
+            | Modifier::REVERSED
+            | Modifier::DIM;
+        assert_eq!(buf[(0, 0)].modifier, all);
+    }
+
+    #[test]
+    fn オーバーレイのセルの属性はオーバーレイのスタイルのものだけになる() {
+        let mut buf = screen_under(StyleMods::BOLD | StyleMods::UNDERLINE);
+        for (pos, m) in box_over(&mut buf, Style::with_mods(StyleMods::REVERSE)) {
+            assert_eq!(m, Modifier::REVERSED, "{pos:?}");
+        }
+    }
+}
