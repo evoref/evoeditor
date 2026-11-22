@@ -776,7 +776,7 @@ EditorState
 - **Document と View の分離**: 同じ Document を複数 View で開ける (分割、v0.5)。選択はビューごと。v0.1 は Window が View を 1 つ持つだけで、`LayoutTree` の型は分割と同時に入れる (内部構造、ADR-0028)。**v0.5 (M30)**: Window の編集面をペイン (レイアウトの木の葉) に分け、各ペインが「文書 → View」の表を持つ (同じ文書を 2 つのペインで出すと View は 2 つ)。本文・Undo の履歴・保存点は文書に 1 つで共有し、選択・スクロールは View (ペイン) ごと。規則の正本は 03 §9.9。作り替えは、見た目を変えない `refactor` の PR を先に入れてから分割を入れる (03 §9.9 の PANE-14)。
 - **ID による参照**: 相互参照は `DocumentId` / `ViewId` で行い、所有権の循環や `Rc<RefCell>` を避ける。集合は ID の順に並ぶ `BTreeMap` で持つ (v0.1 の案の `SlotMap` は使わなかった。ID は単調増加の通番で再利用しない)。
 - **ジョブ表** (`pending`): 未完了のジョブの `JobId` → `Pending`。`Pending` の変種がジョブの種別と、結果の採否に要るもの (対象の文書・投入時の Revision・保存先など) を持つ。Revision の照合が要る種別 (`FindNext`・`ReplaceAll`・`ReplaceUnmappable`・`Save`・`SwapRead` など) だけが Revision を持ち、全種別に一律の `base` は持たない (`JobRequest.base` は使わない)。キャンセル済みの印は持たない (`JobSpawner::cancel` がトークンを立て、結果の `Failed { Cancelled }` で行を消す)。表に無い `JobId` の結果は黙って捨てる。v0.2.0 では `Pending` と結果の振り分け (`on_job_result`) が `editor/file.rs` にあり、v0.3 の M14 で `jobs/` に移す (02 §4.6、STR-B1)。
-- **Selection は最初から複数 Range** (v0.1〜v0.4 は 1 個に制限。複数カーソル FR-211 は v0.5)。後から複数にすると全コマンドの書き直しになるため、型は v0.1 から配列にする。
+- **Selection は最初から複数 Range** (v0.1〜v0.4 は 1 個に制限。複数カーソル FR-211 は v0.5 の M32 で入れ、上限は 10,000 個。03 §4.5)。後から複数にすると全コマンドの書き直しになるため、型は v0.1 から配列にする。
 - **Window 単位**: Frame は Window ごとに生成する API とする (v0.x は 1 Window)。入力も `Editor::handle_input(window: WindowId, ev)` で宛先 Window を受ける。v0.5 の複数ペインでも Window は 1 つで、入力の宛先のペインはフォーカスのペイン (キー) か、マウスの入力が指す View のペイン (03 §9.9 の PANE-7)。
 - **保存点 = 履歴ノード ID** (FR-204): dirty 判定は `Some(history.current) != history.saved` で行う。Revision は単調増加するため、Undo で保存時点に戻ったときに「未変更」と判定するには履歴ノードの同一性が要る (03 §7.4)。保存ジョブ完了時に「Snapshot 取得時点のノード」を `saved` にする (保存中の編集は許可され、その分は dirty のまま残る)。ただし完了時にそのノードが `base`・`undo`・`redo` のどこにも無ければ (保存中に Undo してから新しい編集をして redo ごと捨てた、予算の破棄で底より古くなった) `saved = None` とする (03 §7.4、INV-H3)。
 - **`NodeId` は文書ごとの単調増加の通番 (`u64`)** で、破棄したノードの番号も再利用しない。スタック上の深さ (位置) では表さない: 予算超過で底のノードを捨てると深さがずれ、別の内容の位置が保存点と一致して「未変更」と誤判定する (FR-107 の確認が出ずに未保存の内容を失う)。結合で内容が変わったノードには新しい番号を振り直す。保存点に戻れなくなったら (redo の破棄・底の破棄で古くなった) `saved = None`。規則の詳細は 03 §7.1 / §7.4。
@@ -1211,7 +1211,8 @@ struct PaneFrame {
     view: ViewId, rect: CellRect /*本文 (ガター + テキスト) の矩形。見出しを含まない。編集面の左上が原点*/, revision: (Revision, ViewRevision),
     gutter_width: u16,
     rows: Vec<RenderRow>,                    // 可視行
-    cursors: Vec<CellPos> /*rect の左上が原点*/, focused: bool,
+    cursors: Vec<CellPos> /*rect の左上が原点。可視範囲のすべてのカーソル (主と主でないもの)。v0.5 の M32 の複数カーソルでも意味と形は変えない:
+                               フォーカスのペインでは Frame.primary_cursor に当たるセルが主で、frontend はほかを反転で描く (03 §4.5.5、04 §9)*/, focused: bool,
     active: bool,                            // v0.5 (M30): Window のフォーカスのペイン (オーバーレイ・検索バーの間も真)。focused (入力の行き先) とは別
     bar: Option<PaneBarModel>,               // v0.5 (M30): ペインの見出し。ペインが 2 つ以上で縮退表示でないときだけ Some (03 §9.9 の PANE-10)
     // hit: Option<HitMap>                  // セル → 文書位置 の逆引き情報。未実装 (v0.2 のマウスは frontend の位置変換で足りた。v0.5 の複数ペインでも作らない)。要るようになったら C2 の追加で入れる
