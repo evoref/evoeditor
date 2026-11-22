@@ -152,6 +152,7 @@ pub(crate) fn start(
     let clipboard: Arc<dyn eve_host::ClipboardProvider> =
         Arc::new(eve_platform::clipboard::UnixClipboard::new());
     let color_mode = config.color_mode;
+    let ssh_session = sources.conditions.env.ssh;
     let host_init = HostInit {
         initial_encoding: encoding,
         config: Some(config),
@@ -172,7 +173,8 @@ pub(crate) fn start(
         rescue_writer: Some(Arc::new(StateRescue::new(Some(
             state_dir.as_path().to_path_buf(),
         )))),
-        ssh_session: None,
+        // SSH の中か: 条件の値 (起動時に 1 回だけ決めた `env.ssh`、07 §3.4 の COND-2) と同じ判定を使う
+        ssh_session: Some(ssh_session),
         workspace,
     };
     let host = Host::with_channel(ports, (tx.clone(), rx), host_init);

@@ -24,6 +24,8 @@ pub struct KeyOrigin {
     pub line: u32,
     /// 桁 (1 始まりの文字数。`--set` では 0)。
     pub column: u32,
+    /// 条件付きセクション (07 §3.4) で書いた値なら、その条件。その値の後の診断 (テーマが無い・言語が無い) に添える。
+    pub condition: Option<crate::Condition>,
 }
 
 /// 合成の結果。
@@ -128,6 +130,7 @@ pub fn check_ui_locale(
                 source: SET_SOURCE.to_owned(),
                 line: 0,
                 column: 0,
+                condition: None,
             },
             l.code().to_owned(),
         )
@@ -142,7 +145,7 @@ pub fn check_ui_locale(
         value,
         line: origin.line,
         column: origin.column,
-        condition: None,
+        condition: origin.condition,
     };
     merge_reports(&mut resolved.reports, [(origin.source, vec![d])]);
 }
@@ -190,7 +193,7 @@ fn unreadable(message: String) -> Diagnostic {
 /// `--set key=value` を `base` に重ねる。値は TOML の値として読み、読めなければ文字列とする
 /// (`--set view.wrap=soft` と書ける)。`=` が無ければ `None` (使い方の誤り)。条件付きのキー
 /// (`--set os.windows.editor.tab_width=2`) は、`conditions` で条件が真のときだけ効く (07 §3.4 の COND-1)。
-pub fn load_set(base: Config, arg: &str, conditions: &crate::Conditions) -> Option<Loaded> {
+pub fn load_set(base: Config, arg: &str, conditions: crate::Conditions) -> Option<Loaded> {
     let (key, value) = arg.split_once('=')?;
     let key = key.trim();
     if key.is_empty() {
@@ -217,7 +220,7 @@ pub fn load_set(base: Config, arg: &str, conditions: &crate::Conditions) -> Opti
 /// (既定値または前のファイルまでの値のまま。起動時はそれで動き、`config.reload` は `has_error` を見て前の設定を保つ)。
 /// 条件付きセクションは、ファイルごと (`--set` は値ごと) に `conditions` で解いてから重ねる (07 §3.4 の COND-3。層の間の
 /// 順は変えない)。
-pub fn resolve(sources: &[Source], sets: &[String], conditions: &crate::Conditions) -> Resolved {
+pub fn resolve(sources: &[Source], sets: &[String], conditions: crate::Conditions) -> Resolved {
     let mut config = Config::default();
     let mut reports = Vec::new();
     let mut has_error = false;
@@ -231,6 +234,7 @@ pub fn resolve(sources: &[Source], sets: &[String], conditions: &crate::Conditio
                 source: source.unwrap_or(SET_SOURCE).to_owned(),
                 line: w.line,
                 column: w.column,
+                condition: w.condition,
             };
             let at = match source {
                 Some(_) => at,
@@ -354,7 +358,7 @@ mod tests {
     use crate::{Osc52Policy, WrapMode, load_str};
 
     fn res(sources: &[Source], sets: &[String]) -> Resolved {
-        resolve(sources, sets, &crate::Conditions::default())
+        resolve(sources, sets, crate::Conditions::default())
     }
 
     fn src(name: &str, text: &str) -> Source {
@@ -371,6 +375,7 @@ mod tests {
                 source: source.to_owned(),
                 line,
                 column,
+                condition: None,
             })
         };
         let a = src("a.toml", "[theme]\nname = \"x\"\n");
@@ -512,7 +517,7 @@ mod tests {
         let r = res(&[], &["editor.tab_width=99".into()]);
         assert_eq!(r.config.tab_width, 4, "範囲外は既定値");
         assert_eq!(r.reports[0].0, SET_SOURCE);
-        assert!(load_set(Config::default(), "novalue", &crate::Conditions::default()).is_none());
+        assert!(load_set(Config::default(), "novalue", crate::Conditions::default()).is_none());
     }
 
     #[test]

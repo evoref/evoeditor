@@ -112,7 +112,7 @@ pub(crate) fn load_config(src: &eve_core::ConfigSources) -> eve_config::Resolved
             text: read_source(path.as_path()),
         })
         .collect();
-    eve_config::resolve(&sources, &src.sets, &src.conditions)
+    eve_config::resolve(&sources, &src.sets, src.conditions)
 }
 
 /// `keymap.toml` を読む。無ければ空。読めないときは診断を 1 件出して空。
@@ -498,6 +498,45 @@ mod tests {
         assert_eq!(
             describe("config.toml", &long),
             format!("config config.toml unsupported key={}…", "k".repeat(63))
+        );
+    }
+
+    // verifies: AC-NFR-405-2
+    #[test]
+    fn ログの行は条件付きセクションの中の診断に条件を添える() {
+        let d = Diagnostic {
+            severity: Severity::Warning,
+            kind: DiagKind::UnknownKey {
+                suggestion: Some("editor.tab_width".to_owned()),
+            },
+            key: "editor.tab_witdh".to_owned(),
+            value: String::new(),
+            line: 2,
+            column: 1,
+            condition: Some(eve_config::Condition::OsLinux),
+        };
+        assert_eq!(
+            describe("config.toml", &d),
+            "config config.toml:2:1 unknown_key key=editor.tab_witdh condition=os.linux"
+        );
+        // 条件の無い診断には付けない
+        let plain = Diagnostic {
+            condition: None,
+            ..d
+        };
+        assert_eq!(
+            describe("config.toml", &plain),
+            "config config.toml:2:1 unknown_key key=editor.tab_witdh"
+        );
+        // 条件の書き方の誤りは種類の名前で出す
+        let nested = Diagnostic {
+            kind: DiagKind::Condition(eve_config::ConditionProblem::Nested),
+            key: "os.windows.env.ssh".to_owned(),
+            ..plain
+        };
+        assert_eq!(
+            describe("config.toml", &nested),
+            "config config.toml:2:1 condition_nested key=os.windows.env.ssh"
         );
     }
 

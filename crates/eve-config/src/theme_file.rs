@@ -470,7 +470,12 @@ fn apply(base: Role, spec: &RoleSpec) -> Role {
 }
 
 /// テーマが無いときの診断 (07 §8.7、04 §15.2 の `msg.config.theme_not_found`)。組込みの名前に近い名前なら候補を持つ。
-fn not_found(key: &str, name: &str, (line, column): (u32, u32)) -> Diagnostic {
+fn not_found(
+    key: &str,
+    name: &str,
+    (line, column): (u32, u32),
+    condition: Option<crate::Condition>,
+) -> Diagnostic {
     Diagnostic {
         severity: Severity::Error,
         kind: DiagKind::ThemeNotFound {
@@ -480,7 +485,7 @@ fn not_found(key: &str, name: &str, (line, column): (u32, u32)) -> Diagnostic {
         value: name.to_owned(),
         line,
         column,
-        condition: None,
+        condition,
     }
 }
 
@@ -521,10 +526,15 @@ pub fn load_theme_at(
     let mut chain: Vec<(String, Parsed)> = Vec::new();
     let mut seen: Vec<String> = Vec::new();
     let mut cur = name.to_owned();
-    // 今の名前を書いた所 (層の名前, キー, (行, 桁))
-    let mut written_at: (String, &str, (u32, u32)) = match origin {
-        Some(o) => (o.source.clone(), "theme.name", (o.line, o.column)),
-        None => (format!("themes/{name}.toml"), "theme.name", (0, 0)),
+    // (層の名前, キー, (行, 桁), 書いた条件付きセクションの条件)
+    let mut written_at: (String, &str, (u32, u32), Option<crate::Condition>) = match origin {
+        Some(o) => (
+            o.source.clone(),
+            "theme.name",
+            (o.line, o.column),
+            o.condition,
+        ),
+        None => (format!("themes/{name}.toml"), "theme.name", (0, 0), None),
     };
     let base = loop {
         if let Some(t) = builtin(&cur) {
@@ -559,8 +569,11 @@ pub fn load_theme_at(
         let text = match read(&cur) {
             Ok(Some(t)) => t,
             Ok(None) => {
-                let (at_file, key, pos) = written_at;
-                crate::merge_reports(&mut reports, [(at_file, vec![not_found(key, &cur, pos)])]);
+                let (at_file, key, pos, condition) = written_at;
+                crate::merge_reports(
+                    &mut reports,
+                    [(at_file, vec![not_found(key, &cur, pos, condition)])],
+                );
                 return (None, reports);
             }
             Err(e) => {
@@ -579,7 +592,7 @@ pub fn load_theme_at(
         };
         match &p.inherits {
             Some((parent, pos)) => {
-                written_at = (file.clone(), "inherits", *pos);
+                written_at = (file.clone(), "inherits", *pos, None);
                 cur = parent.clone();
             }
             None => cur = "default".to_owned(),
@@ -799,6 +812,7 @@ mod tests {
             source: "config.toml".to_owned(),
             line: 3,
             column: 1,
+            condition: None,
         };
         let (file, d) = missing("high-contrast", Some(&origin), &[]);
         assert_eq!(file, "config.toml");

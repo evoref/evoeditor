@@ -158,7 +158,7 @@ fn set_の値の深い入れ子も読む前に拒む() {
         load_set(
             Config::default(),
             &format!("editor.x={value}"),
-            &eve_config::Conditions::default(),
+            eve_config::Conditions::default(),
         )
     })
     .expect("= がある");

@@ -614,12 +614,12 @@ pub fn load_str(text: &str) -> Loaded {
 /// `load_str` と同じだが、書かれていないキーは `base` の値のまま (層を重ねる、07 §3.3)。
 /// 構文エラーなら `base` のまま返す。条件付きセクションは既定の条件 ([`Conditions::default`](crate::Conditions)) で解く。
 pub fn load_str_onto(base: Config, text: &str) -> Loaded {
-    load_str_for(base, text, &crate::Conditions::default())
+    load_str_for(base, text, crate::Conditions::default())
 }
 
 /// `load_str_onto` と同じだが、条件付きセクション (07 §3.4) を `conditions` で解く。1 つのファイルの中で、条件の無い表、
 /// 真の条件のセクション (COND-3 の順) の順にキーごとに重ねる。偽の条件のセクションも検証して診断を出す (COND-4)。
-pub fn load_str_for(base: Config, text: &str, conditions: &crate::Conditions) -> Loaded {
+pub fn load_str_for(base: Config, text: &str, conditions: crate::Conditions) -> Loaded {
     let mut cx = Cx {
         text,
         out: Loaded {
@@ -627,7 +627,7 @@ pub fn load_str_for(base: Config, text: &str, conditions: &crate::Conditions) ->
             diagnostics: Vec::new(),
             written: Vec::new(),
         },
-        conditions: *conditions,
+        conditions,
         apply: true,
         condition: None,
     };
@@ -667,8 +667,7 @@ pub fn load_str_for(base: Config, text: &str, conditions: &crate::Conditions) ->
     for (c, table) in active {
         // 診断は検証のときに積んだので、重ねるときの分は捨てる
         let seen = cx.out.diagnostics.len();
-        cx.condition = Some(c);
-        cx.under_condition(c.name(), table);
+        cx.scoped(true, Some(c), |cx| cx.under_condition(c.name(), table));
         cx.out.diagnostics.truncate(seen);
     }
     cx.out
@@ -768,8 +767,7 @@ impl Cx<'_> {
                 continue;
             }
             let Some(c) = crate::Condition::from_parts(kind, sub.get_ref()) else {
-                let names = crate::Condition::ALL.map(crate::Condition::name);
-                let suggestion = nearest(&full, &names);
+                let suggestion = near_condition(&full);
                 self.diag(
                     Severity::Warning,
                     DiagKind::Condition(ConditionProblem::Unknown { suggestion }),
@@ -787,11 +785,8 @@ impl Cx<'_> {
                 );
                 continue;
             };
-            self.apply = false;
-            self.condition = Some(c);
-            self.under_condition(&full, t);
-            self.apply = true;
-            self.condition = None;
+            // 検証だけ (値は使わない)。真の条件のセクションは、後で COND-3 の順に重ねる
+            self.scoped(false, Some(c), |cx| cx.under_condition(&full, t));
             if self.conditions.holds(c) {
                 active.push((c, t));
             }
@@ -814,24 +809,38 @@ impl Cx<'_> {
             } else {
                 None
             };
-            match problem {
-                Some(p) => {
-                    let key = match (&p, value.get_ref()) {
-                        // 入れ子は、入れ子の条件の名前まで (`os.windows.env.ssh`) を示す
-                        (ConditionProblem::Nested, DeValue::Table(t)) => match t.iter().next() {
-                            Some((k, _)) => format!("{full}.{}", k.get_ref()),
-                            None => full,
-                        },
-                        _ => full,
-                    };
-                    // 名前に条件を含むので、条件は添えない
-                    let cond = self.condition.take();
-                    self.diag(Severity::Warning, DiagKind::Condition(p), key, at);
-                    self.condition = cond;
+            let Some(p) = problem else {
+                self.section(name, value);
+                continue;
+            };
+            // 入れ子は、入れ子の条件の名前ごとに 1 件 (`os.windows.env.ssh` と `os.windows.env.tmux` で 2 件)。位置はその名前
+            let places: Vec<(String, usize)> = match (&p, value.get_ref()) {
+                (ConditionProblem::Nested, DeValue::Table(t)) if !t.is_empty() => t
+                    .iter()
+                    .map(|(k, _)| (format!("{full}.{}", k.get_ref()), k.span().start))
+                    .collect(),
+                _ => vec![(full, at)],
+            };
+            // 名前に条件を含むので、条件は添えない
+            self.scoped(self.apply, None, |cx| {
+                for (key, at) in places {
+                    cx.diag(Severity::Warning, DiagKind::Condition(p.clone()), key, at);
                 }
-                None => self.section(name, value),
-            }
+            });
         }
+    }
+
+    /// 値を使うか (`apply`) と読んでいるセクションの条件 (`condition`) を `f` の間だけ替え、後で元に戻す。
+    fn scoped(
+        &mut self,
+        apply: bool,
+        condition: Option<crate::Condition>,
+        f: impl FnOnce(&mut Self),
+    ) {
+        let saved = (self.apply, self.condition);
+        (self.apply, self.condition) = (apply, condition);
+        f(self);
+        (self.apply, self.condition) = saved;
     }
 
     fn section(&mut self, name: &Spanned<DeString<'_>>, value: &Spanned<DeValue<'_>>) {
@@ -1091,6 +1100,20 @@ fn encoding(s: &str) -> Option<DefaultEncoding> {
         "csiso2022jp" => Some(DefaultEncoding::Iso2022Jp),
         _ => None,
     })
+}
+
+/// 知らない条件の名前 (`os.win`) に近い条件の名前 (07 §3.4 の COND-5 (a)): 書いた名前がその名前の接頭辞か、編集距離 2 以下
+/// (どちらも大文字小文字を区別しない。テーマの候補 (`theme::near_builtin_names`) と同じ規則)。当たる名前が 2 つ以上なら、
+/// 編集距離の小さいもの、同じなら重ねる順の先のもの。
+fn near_condition(name: &str) -> Option<&'static str> {
+    let lower = name.to_ascii_lowercase();
+    crate::Condition::ALL
+        .into_iter()
+        .map(crate::Condition::name)
+        .map(|c| (distance(&lower, c), c))
+        .filter(|(d, c)| c.starts_with(&lower) || *d <= 2)
+        .min_by_key(|(d, _)| *d)
+        .map(|(_, c)| c)
 }
 
 /// 表の配列 (`[[language]]`) か。

@@ -269,7 +269,7 @@ impl EditorState {
                 text: text_of(f),
             })
             .collect();
-        let mut resolved = eve_config::resolve(&sources, &src.sets, &src.conditions);
+        let mut resolved = eve_config::resolve(&sources, &src.sets, src.conditions);
         eve_config::check_ui_locale(&mut resolved, &available, &dir, self.locale());
         let keymap: KeymapFile = match keymap.as_ref().map(text_of) {
             None | Some(Ok(None)) => KeymapFile::default(),
