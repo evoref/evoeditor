@@ -291,7 +291,7 @@ v0.1 で設定ファイル (`config.toml`、ユーザー層) から読む **公�
 | `pending_changes_max_bytes` | int (bytes) | `16777216` (16 MiB) | 未決ジョブ・AI 提案の写像用に保持する ChangeSet の合計上限 (02 §5.3 / 03 §17.1)。**v1.L より前には `pending_changes` 自体が無い** (ジョブは Revision 照合で破棄)。写像は v1.L (Proposal の生成と同時、01 §4.3) | NFR-306 | v1.L |
 | `trim_trailing_whitespace_on_save` | bool | `false` | 保存時に末尾空白除去 | FR-216 | v0.5 |
 | `insert_final_newline_on_save` | bool | `false` | 保存時に末尾改行付与 | FR-216 | v0.5 |
-| `multi_cursor` | bool | `true` | 複数カーソルを有効化。**公開しない** (v0.5 の M32 の仕様の PR で決めた。複数カーソルは常に使え、使わない利用者はキーマップの `"none"` で足す操作の割当を外す。03 §4.7.3)。書いたときは、公開前のキーの「このバージョンでは未対応」ではなく、専用の情報診断 `msg.config.multi_cursor_always` (04 §8.14) を出して値を使わない (M32 の段 3 で `crates/eve-config/src/reserved.rs` の扱いを替える) | FR-211 | — (公開しない) |
+| `multi_cursor` | bool | `true` | 複数カーソルを有効化。**公開しない** (v0.5 の M32 の仕様の PR で決めた。PO の決定 2026-11-22。複数カーソルは常に使え、使わない利用者はキーマップの `"none"` で足す操作の割当を外す。03 §4.7.3)。書いたときは、公開前のキーの「このバージョンでは未対応」ではなく、専用の情報診断 `msg.config.multi_cursor_always` (04 §8.14) を出して値を使わない (M32 の段 3 で `crates/eve-config/src/reserved.rs` の扱いを替える) | FR-211 | — (公開しない) |
 
 ### 5.2 `[file]` — ファイル I/O
 
@@ -343,7 +343,7 @@ v0.1 で設定ファイル (`config.toml`、ユーザー層) から読む **公�
 | `view.control_char_style` | `"caret" \| "hex"` | `"hex"` | 制御文字の可視化表記 (`caret` = `^X`、`hex` = `<U+001B>`。C0 と DEL にだけ効き、C1 は常に `<U+0085>` の形。復号できないバイトの `<0xHH>` とは別物、03 §13.2)。空白の可視化 (`view.show_whitespace` の `"minimal"` = 全角スペースとタブ) とは独立で、この値では変わらない | FR-507 | v0.1 (定数、公開 v0.2) |
 | `ui.hint_bar` | bool | `true` | ヒントバー (v0.1 は常時表示)。**v0.2 の M10 で公開・実装した** (`ui.toggle_hint_bar` で実行中に切り替えられる。隠すとその行を本文に使う、04 §3.5 / §8.5。`config.reload` で即時に効く) | FR-504 | v0.1 (定数、公開 v0.2) |
 | `ui.status_bar` | bool | `true` | ステータスバー | FR-503 | v0.1 (定数、公開 v0.2) |
-| `ui.tab_line` | `"auto" \| "always" \| "never"` | `"auto"` (2 バッファ以上で表示) | バッファライン (画面の最上行。並び・アクティブ・同じ名前の区別は 03 §9.9 の PANE-11 / PANE-12)。M32 の FR-510 の PR (03 §4.7.2 の段 1) で公開する。不正な値は警告して `"auto"`。`config.reload` で即時に効く (03 §9.9 の PANE-12 (f)) | FR-510 | v0.5 |
+| `ui.tab_line` | `"auto" \| "always" \| "never"` | `"auto"` (2 バッファ以上で表示) | バッファライン (画面の最上行。並び・アクティブ・同じ名前の区別は 03 §9.9 の PANE-11 / PANE-12)。M32 の FR-510 の PR (03 §4.7.2 の段 1) で公開する (PO の決定 2026-11-22)。不正な値は警告して `"auto"`。`config.reload` で即時に効く (03 §9.9 の PANE-12 (f)) | FR-510 | v0.5 |
 | `ui.locale` | string (BCP 47) / `"auto"` | `"auto"` | UI の言語 (§17.1)。`auto` は環境変数 `EVE_LANG`、OS ロケールの順で決める。`--locale` が最優先。v0.2 の M8 で公開した。v0.4 (M26) から、同梱の言語 (`ja` / `en`) に加えて `locales/<lang>.toml` がある言語も選べる。当たらない値は `msg.config.invalid_value` で知らせて次の段へ進む (§17.4、OQ-220) | NFR-603 | v0.2 |
 | `ui.message_timeout_ms` | int | `5000` | 情報メッセージの表示時間 (04 §8.9) | FR-505 | v0.1 (定数、公開 v0.2) |
 | `ui.mouse` | bool | `true` | マウス入力 (v0.2。v0.1 はマウスを捕捉せず端末の選択・スクロールをそのまま使える、04 §6.8)。**v0.2 の M9b で公開・実装した** (`ui.toggle_mouse` で実行中に切り替えられる) | FR-307 | v0.2 |
@@ -1417,7 +1417,7 @@ verb       := [a-z][a-z0-9_]*
 - **キーの選び方** (04 §7.2 / §7.3a): `mod+\` は v0.1 から予約していた分割のキー。従来の VT 端末では `Ctrl+\` が 0x1C で届き、eve-tui は既に `ctrl+\` に正規化している (04 §6.2) ので `[E]` を付けない。`\` を打ちにくい配列のために代替 `ctrl+k \` / `ctrl+k |` を持つ。下への分割は `ctrl+k -` (横の線の形。`\` との組は tmux の慣習の `|` / `-` に倣う)。`ctrl+k |` は `ctrl+k \` の別名 (macOS の JIS 配列の既定では `¥` キーが U+00A5 を送り `\` が打てないが、`Shift+¥` の `|` は届く)。JIS 配列では `=` が `Shift+-` なので、揃える (`ctrl+k =`) の Shift を押し忘れると下への分割になるが、分割は `ctrl+k q` で戻せる。ペインの移動の第一は `f6` / `shift+f6` (多くのアプリで「次の区画」。修飾が要らず、従来の端末でも届く)。方向の移動 (`pane.focus_left` 等) には **既定のキーを付けない**: v0.1 から予約していた `ctrl+k ctrl+矢印` は、`ctrl+k` の後で `ctrl` を離さずに矢印を押すと、行頭・行末の代替 (`ctrl+k left` / `ctrl+k right`。Terminal.app など `home` / `end` が届かない端末で日常に使う) のつもりが、黙ってペインの移動になる (逆に `ctrl` を早く離すと `ctrl+k up` / `ctrl+k down` = 行の上下移動で本文が変わる)。macOS の既定では Mission Control が `ctrl+矢印` を取ることもある。`ctrl+k ctrl+<矢印>` は予約のまま残し (ユーザーのキーマップでは割り当ててよい)、Must の移動は次 / 前で満たす。閉じるは `ctrl+k q` (`ctrl+k w` は文書を閉じる `buffer.close`)。大きさは `ctrl+k ]` / `ctrl+k [` / `ctrl+k =` (04 §11 の v0.4 までの案の `Ctrl+K -` は下への分割に使った)。どれも既定のキーマップの既存の割当・チョードの先頭と重ならない (`ctrl+k` の 2 打目で使っていたのは `,` `.` `<` `>` `a` `b` `c` `d` `h` `l` `m` `n` `o` `p` `r` `s` `w` `x` `z` と矢印・`shift+left` / `shift+right`)。ユーザーのキーマップが同じキーを先に使っていれば、ユーザーの割当が勝つ (02 §7.2 K5)。`ctrl+\` を先頭にするユーザーのチョードは、v0.5 から既定の `mod+\` を無効にする警告 (§7.6 の `msg.config.keymap_chord_shadows_default`) が出る (CHANGELOG の v0.5 の「変更」に書く)。
 - 最後のペインでは `when` (`pane.split`) が偽になり、`pane.close`・移動・大きさはパレットで淡色 (`ui.palette.reason.single_pane`)。分割は `when` を持たず、広さが足りなければ `info.pane.no_room` を出す (03 §9.9 の PANE-4)。文書を閉じる `buffer.close` との違いは 03 §9.9 の PANE-9。
 
-**複数カーソルと対応括弧** (v0.5 の M32、FR-211 / FR-308。規則の正本は 03 §4.5.1 / §5.7。M32 の仕様の PR (2026-11-22) で決めた。ID と既定キーは PO の確認待ち (推奨案で書いた、03 §4.7.3))
+**複数カーソルと対応括弧** (v0.5 の M32、FR-211 / FR-308。規則の正本は 03 §4.5.1 / §5.7。M32 の仕様の PR (2026-11-22) で決めた。ID と既定キー (`edit.paste` の代替 `ctrl+k v` を含む) は **PO の決定 2026-11-22** (推奨案のまま確定、03 §4.7.3))
 
 | ID | title key | kind | args | when | perm | コンテキスト | 既定キー | ヒント |
 |---|---|---|---|---|---|---|---|---|
