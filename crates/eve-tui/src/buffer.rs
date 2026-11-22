@@ -79,9 +79,12 @@ impl Writer<'_> {
         to_ratatui(s)
     }
 
+    /// (x, y) のセルを書く。前景・背景と同じく属性も `style` で置き換え、下に描いたセルの属性を引き継がない (04 §4.2)。
+    /// ratatui の `Cell::set_style` は属性を足し引きするだけなので、先に空にする。
     pub(crate) fn set(&mut self, x: u16, y: u16, symbol: &str, style: RStyle, skip: bool) {
         self.break_wide(x, y);
         if let Some(cell) = self.buf.cell_mut((x, y)) {
+            cell.modifier = Modifier::empty();
             cell.set_symbol(symbol).set_style(style);
             cell.set_diff_option(if skip {
                 CellDiffOption::Skip
