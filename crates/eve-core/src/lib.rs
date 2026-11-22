@@ -97,4 +97,9 @@ pub use workspace::{
     WALK_ENTRIES_PER_DIR_MAX, WALK_ENTRIES_PER_STEP, WALK_STEP_TIME, WORKSPACE_MAX_DEPTH,
     WORKSPACE_MAX_ENTRIES, WORKSPACE_MAX_FILES, WalkObserver, WalkStep, WorkspaceWalk, char_bit,
 };
+pub use workspace::{
+    EntryFacts, OpenDocBody, OpenDocRef, WS_BYTES_PER_STEP, WS_EXCERPT_BEFORE, WS_EXCERPT_BYTES,
+    WS_FILES_PER_STEP, WS_MAX_DECODE_BYTES, WS_MAX_FILE_SIZE, WS_MAX_RANGES_PER_LINE,
+    WS_MAX_RESULT_LINES, WS_PROGRESS_INTERVAL, WorkspaceSearchState, WsHit, WsProgress,
+};
 pub use workspace::{RootSource, Workspace};

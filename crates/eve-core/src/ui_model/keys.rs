@@ -98,6 +98,7 @@ pub(crate) const MSG_EDIT_READ_ONLY_STATEFUL: &str = "msg.edit.read_only_statefu
 pub(crate) const MSG_EOL_CONVERT_STALE: &str = "msg.eol.convert_stale";
 pub(crate) const MSG_EXTERNAL_CHECK_FAILED: &str = "msg.external.check_failed";
 pub(crate) const MSG_FINDER_DANGLING_LINK: &str = "msg.finder.dangling_link";
+pub(crate) const MSG_FINDER_MATCH_FAILED: &str = "msg.finder.match_failed";
 pub(crate) const MSG_FINDER_NOT_FOUND: &str = "msg.finder.not_found";
 pub(crate) const MSG_LEFTOVER_FAILED: &str = "msg.leftover.failed";
 pub(crate) const MSG_LEFTOVER_TMP_OPENED: &str = "msg.leftover.tmp_opened";
@@ -169,6 +170,7 @@ pub(crate) const MSG_SWAP_TOO_LARGE: &str = "msg.swap.too_large";
 pub(crate) const MSG_SWAP_UNREADABLE: &str = "msg.swap.unreadable";
 pub(crate) const MSG_WORKSPACE_ROOT_INVALID: &str = "msg.workspace.root_invalid";
 pub(crate) const MSG_WORKSPACE_SCAN_FAILED: &str = "msg.workspace.scan_failed";
+pub(crate) const MSG_WORKSPACE_SEARCH_FAILED: &str = "msg.workspace.search_failed";
 pub(crate) const STATUS_CURSORS_LONG: &str = "status.cursors.long";
 pub(crate) const STATUS_CURSORS_SHORT: &str = "status.cursors.short";
 pub(crate) const STATUS_DEGRADED_LONG_LINE_LONG: &str = "status.degraded.long_line.long";
@@ -264,6 +266,7 @@ pub(crate) const UI_HELP_TERMINAL_STDIN_POWERSHELL: &str = "ui.help.terminal.std
 pub(crate) const UI_HELP_TERMINAL_STDIN_REDRAW: &str = "ui.help.terminal.stdin_redraw";
 pub(crate) const UI_HELP_TERMINAL_STDIN_WRITER: &str = "ui.help.terminal.stdin_writer";
 pub(crate) const UI_FINDER_FOOTER_INCOMPLETE: &str = "ui.finder.footer_incomplete";
+pub(crate) const UI_FINDER_FOOTER_NO_ROOT: &str = "ui.finder.footer_no_root";
 pub(crate) const UI_FINDER_FOOTER_SCANNING: &str = "ui.finder.footer_scanning";
 pub(crate) const UI_FINDER_FOOTER_TRUNCATED: &str = "ui.finder.footer_truncated";
 pub(crate) const UI_FINDER_FOOTER_WAITING: &str = "ui.finder.footer_waiting";
@@ -312,10 +315,20 @@ pub(crate) const UI_SEARCH_LABEL: &str = "ui.search.label";
 pub(crate) const UI_SEARCH_REPLACE_ALL_BUTTON: &str = "ui.search.replace_all_button";
 pub(crate) const UI_SEARCH_REPLACE_LABEL: &str = "ui.search.replace_label";
 pub(crate) const UI_TOO_SMALL: &str = "ui.too_small";
+pub(crate) const UI_WORKSPACE_SEARCH_FOOTER_DONE: &str = "ui.workspace_search.footer_done";
+pub(crate) const UI_WORKSPACE_SEARCH_FOOTER_FAILED: &str = "ui.workspace_search.footer_failed";
+pub(crate) const UI_WORKSPACE_SEARCH_FOOTER_RUNNING: &str = "ui.workspace_search.footer_running";
+pub(crate) const UI_WORKSPACE_SEARCH_FOOTER_TRUNCATED: &str =
+    "ui.workspace_search.footer_truncated";
+pub(crate) const UI_WORKSPACE_SEARCH_ITEM: &str = "ui.workspace_search.item";
+pub(crate) const UI_WORKSPACE_SEARCH_NO_MATCH: &str = "ui.workspace_search.no_match";
+pub(crate) const UI_WORKSPACE_SEARCH_PLACEHOLDER: &str = "ui.workspace_search.placeholder";
+pub(crate) const UI_WORKSPACE_SEARCH_SKIPPED_SUFFIX: &str = "ui.workspace_search.skipped_suffix";
+pub(crate) const UI_WORKSPACE_SEARCH_TITLE: &str = "ui.workspace_search.title";
 
 /// すべての定数 (キーの順。試験に使う)。
 #[cfg(test)]
-const ALL: [&str; 292] = [
+const ALL: [&str; 304] = [
     HINT_UI_CANCEL,
     INFO_APP_RELEASE_SUMMARY,
     INFO_APP_UPDATED,
@@ -408,6 +421,7 @@ const ALL: [&str; 292] = [
     MSG_EOL_CONVERT_STALE,
     MSG_EXTERNAL_CHECK_FAILED,
     MSG_FINDER_DANGLING_LINK,
+    MSG_FINDER_MATCH_FAILED,
     MSG_FINDER_NOT_FOUND,
     MSG_LEFTOVER_FAILED,
     MSG_LEFTOVER_TMP_OPENED,
@@ -476,6 +490,7 @@ const ALL: [&str; 292] = [
     MSG_SWAP_UNREADABLE,
     MSG_WORKSPACE_ROOT_INVALID,
     MSG_WORKSPACE_SCAN_FAILED,
+    MSG_WORKSPACE_SEARCH_FAILED,
     STATUS_CURSORS_LONG,
     STATUS_CURSORS_SHORT,
     STATUS_DEGRADED_LONG_LINE_LONG,
@@ -564,6 +579,7 @@ const ALL: [&str; 292] = [
     UI_HELP_TERMINAL_STDIN_REDRAW,
     UI_HELP_TERMINAL_STDIN_WRITER,
     UI_FINDER_FOOTER_INCOMPLETE,
+    UI_FINDER_FOOTER_NO_ROOT,
     UI_FINDER_FOOTER_SCANNING,
     UI_FINDER_FOOTER_TRUNCATED,
     UI_FINDER_FOOTER_WAITING,
@@ -608,6 +624,15 @@ const ALL: [&str; 292] = [
     UI_SEARCH_REPLACE_ALL_BUTTON,
     UI_SEARCH_REPLACE_LABEL,
     UI_TOO_SMALL,
+    UI_WORKSPACE_SEARCH_FOOTER_DONE,
+    UI_WORKSPACE_SEARCH_FOOTER_FAILED,
+    UI_WORKSPACE_SEARCH_FOOTER_RUNNING,
+    UI_WORKSPACE_SEARCH_FOOTER_TRUNCATED,
+    UI_WORKSPACE_SEARCH_ITEM,
+    UI_WORKSPACE_SEARCH_NO_MATCH,
+    UI_WORKSPACE_SEARCH_PLACEHOLDER,
+    UI_WORKSPACE_SEARCH_SKIPPED_SUFFIX,
+    UI_WORKSPACE_SEARCH_TITLE,
 ];
 
 #[cfg(test)]

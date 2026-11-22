@@ -374,9 +374,9 @@ v0.1 で設定ファイル (`config.toml`、ユーザー層) から読む **公�
 | `count_limit` | int | `1000000` | 一致件数カウントの打ち切り (FR-404、03 §12、OQ-55)。範囲 1000..=1000000000 (範囲外は警告して既定値)。超えたら数えるのをやめて「N+」と表示する (`max_matches` より小さくすると、保持もこの件数までになる)。設定の変更は次に検索バーを開いたときから効く | v0.1 (定数)。**v0.4 で、M24 とは別の fix の PR で公開・実装した** (それまでの実装は予約だけで、値は定数の `1000000`) |
 | `cp932_compat_fold` | bool | `true` | CP932 互換文字 (〜/～、−/－、‖/∥、¢/￠ 等) を検索で同一視する (03 §8.7、OQ-41。確定 (ユーザー回答、2026-11-11))。保存データは変えない。対象は 8 組 (03 §8.6 の互換文字の表 (OQ-208) から `¥` / `‾` の 2 行を除いたもの。`\` も含めない) で、文書の文字コードに依らない。リテラル検索と正規表現 (リテラルの文字とクラス) の両方に効き、置換の文字列には掛けない。同一視が効いているときは、検索バーの件数の後ろに印が出る。切り替えるトグル・コマンドは無い。設定の変更は次に検索バーを開いたときから効く (細目は 03 §12.4.1。v0.4 の M24 の案で、利用者に見える点は OQ-218 の 5〜8 (確定 (ユーザー回答、2026-11-12))) | v0.4 (**M24 の (5) で予約から外して公開した**) |
 | `newline_sugar` | bool | `true` | 正規表現の `\n` を改行 1 つ (LF・CRLF・単独の CR のどれか) に一致させる (03 §12.3 / §12.3.1)。要素として `\n` を書いたクラスも改行 1 つに一致させる。続けて書いた `\r\n` には掛けない。どの場合も CRLF を CR と LF に分けて一致させない。`false` では、`\n` は LF だけの改行に一致する (CRLF の改行には一致しない)。行の数に上限の無いパターン (`(?s).*`・`\n+` など) は、文書が 16 MiB (UTF-8 のバイト数。定数で、設定は無い) 以下のときだけ探す (03 §12.3.1)。検索バーを開いたときの値で効く (設定の変更は次に開いたときから) | v0.1 (定数、公開 v0.2)。v0.3 までの実装はキーを予約しただけで、糖衣も入れていない (`\n` を含むパターンは未対応)。糖衣は v0.4 の M24 で入れ、キーは **M24 の (4) で予約から外して公開した** (v0.4) |
-| `workspace.respect_gitignore` | bool | `true` | 横断検索・ファインダで、リポジトリ (`.git` のある木) の `.gitignore` と `info/exclude` を効かせる。`false` でも `workspace.exclude` (§5.9) は効く。グローバルの excludesFile はどちらでも読まない (03 §12.7.3) | v0.5 |
-| `workspace.follow_symlinks` | bool | `false` | 〃。`false` では走査がシンボリックリンク (Windows のジャンクションを含む) の先へ降りず、横断検索はリンクを読まない (ファインダには候補として出す)。`true` ではリンク先のディレクトリへ降り (循環は `FileId` で防ぐ)、リンク先のファイルも探す (03 §12.7.2)。ワークスペース層の `true` は危険の分類 (ワークスペース外を読む、§12.3) | v0.5 |
-| `workspace.max_file_size` | int (bytes) | `2097152` | 横断検索対象の上限 (ディスクのファイルはバイト数、開いている文書は今の本文の UTF-8 のバイト数で比べる。超えたものは飛ばして数える、03 §12.7.5)。範囲 1024..=1073741824 (範囲外は警告して既定値)。ワークスペース層で大きくする値は準安全の分類 (§12.3) | v0.5 |
+| `workspace.respect_gitignore` | bool | `true` | 横断検索・ファインダで、リポジトリ (`.git` のある木) の `.gitignore` と `info/exclude` を効かせる。`false` でも `workspace.exclude` (§5.9) は効く。グローバルの excludesFile はどちらでも読まない (03 §12.7.3) | v0.5 (M31 では予約のまま。既定値を定数で使う、03 §12.7.4 の段 6 の細目 (8)) |
+| `workspace.follow_symlinks` | bool | `false` | 〃。`false` では走査がシンボリックリンク (Windows のジャンクションを含む) の先へ降りず、横断検索はリンクを読まない (ファインダには候補として出す)。`true` ではリンク先のディレクトリへ降り (循環は `FileId` で防ぐ)、リンク先のファイルも探す (03 §12.7.2)。ワークスペース層の `true` は危険の分類 (ワークスペース外を読む、§12.3) | v0.5 (M31 では予約のまま。既定値を定数で使う、同上) |
+| `workspace.max_file_size` | int (bytes) | `2097152` | 横断検索対象の上限 (ディスクのファイルはバイト数、開いている文書は今の本文の UTF-8 のバイト数で比べる。超えたものは飛ばして数える、03 §12.7.5)。範囲 1024..=1073741824 (範囲外は警告して既定値)。ワークスペース層で大きくする値は準安全の分類 (§12.3) | v0.5 (M31 では予約のまま。既定値を定数で使う、03 §12.7.5 の段 7 の細目 (1)) |
 
 ### 5.6 `[clipboard]`
 
@@ -404,7 +404,7 @@ v0.1 で設定ファイル (`config.toml`、ユーザー層) から読む **公�
 | キー | 型 / 値 | 既定 | 説明 | P |
 |---|---|---|---|---|
 | `root_markers` | array of string | `[".eve", ".git", ".hg", ".svn"]` | ルート検出の目印 (§12.1)。要素はディレクトリの直下の項目の名前 (区切り `/` `\` を含む要素・空の要素・`.`・`..` は警告して捨てる)。空の配列なら目印で探さない (§12.1 の 1・2・4 だけ) |v0.5 |
-| `exclude` | array of string (gitignore の行) | `["**/.git", "**/node_modules", "**/target"]` | ファインダ・横断検索の除外 (gitignore に追加)。各要素はワークスペースのルートに置いた `.gitignore` の 1 行と同じ書式で読み (`/build/`・`*.log`・`!keep.log`)、`.gitignore` より優先する (`!` の要素で gitignore の除外を戻せる)。`search.workspace.respect_gitignore` に依らず効く。照合は 03 §12.7.3 |v0.5 |
+| `exclude` | array of string (gitignore の行) | `["**/.git", "**/node_modules", "**/target"]` | ファインダ・横断検索の除外 (gitignore に追加)。各要素はワークスペースのルートに置いた `.gitignore` の 1 行と同じ書式で読み (`/build/`・`*.log`・`!keep.log`)、`.gitignore` より優先する (`!` の要素で gitignore の除外を戻せる)。`search.workspace.respect_gitignore` に依らず効く。照合は 03 §12.7.3 |v0.5 (M31 では予約のまま。既定値を定数で使う、03 §12.7.4 の段 6 の細目 (8)) |
 | `trust.default` | `"ask" \| "never" \| "always"` | `"ask"` | 信頼の既定挙動 (`always` は非推奨で警告) | 信頼の仕組みと一緒 (最初の危険な項目の版。§12 の「版」) |
 | `trust.remember` | bool | `true` | 信頼判断を状態ディレクトリに記憶 | 信頼の仕組みと一緒 (§12 の「版」) |
 
@@ -1393,9 +1393,9 @@ verb       := [a-z][a-z0-9_]*
 | `search.open` | `cmd.search.open` | Ui | `query?` | — | `ui` | `editor`, `search` (欄を全選択) | `mod+f` | normal:3 |
 | `search.next` | `cmd.search.next` | Motion | — | `search.active` | `read` | `search` | `enter`, `down`, `f3` | overlay:4 |
 | `search.prev` | `cmd.search.prev` | Motion | — | `search.active` | `read` | `search` | `up`, `shift+enter` [E], `shift+f3` [E] | overlay:3 |
-| `search.toggle_case` | `cmd.search.toggle_case` | Ui | — | `search.active` | `ui` | `search` | `alt+c`, `ctrl+k c` (alt) | overlay:2 |
-| `search.toggle_regex` (v0.2) | `cmd.search.toggle_regex` | Ui | — | `search.active` | `ui` | `search` | `alt+r`, `ctrl+k x` (alt) | search:2 |
-| `search.toggle_word` (v0.2) | `cmd.search.toggle_word` | Ui | — | `search.active` | `ui` | `search` | `alt+w`, `ctrl+k b` (alt) | - |
+| `search.toggle_case` | `cmd.search.toggle_case` | Ui | — | `search.active \|\| overlay.active == "workspace_search"` (v0.5 の M31 で広げた) | `ui` | `search`, `finder` (v0.5) | `alt+c`, `ctrl+k c` (alt) | overlay:2 |
+| `search.toggle_regex` (v0.2) | `cmd.search.toggle_regex` | Ui | — | `search.active \|\| overlay.active == "workspace_search"` (同) | `ui` | `search`, `finder` (v0.5) | `alt+r`, `ctrl+k x` (alt) | search:2 |
+| `search.toggle_word` (v0.2) | `cmd.search.toggle_word` | Ui | — | `search.active \|\| overlay.active == "workspace_search"` (同) | `ui` | `search`, `finder` (v0.5) | `alt+w`, `ctrl+k b` (alt) | - |
 | `search.toggle_selection` (v0.2) | `cmd.search.toggle_selection` | Ui | — | `search.active` | `ui` | `search` | `alt+l`, `ctrl+k l` (alt) | - |
 | `search.replace_open` | `cmd.search.replace_open` | Ui | — | `!doc.read_only` | `ui` | `editor`, `search` | `mod+r`, `ctrl+h` [E] | - |
 | `search.replace` (v0.2) | `cmd.search.replace` | Edit | — | `search.replace_active && !doc.read_only` | `propose` | `search` (置換欄) | `enter` (置換欄で。v0.1 の置換欄の `enter` は `search.next`。キーマップの `when` は `search.replace_focused`) | search:3 |
@@ -1403,7 +1403,7 @@ verb       := [a-z][a-z0-9_]*
 | `search.workspace` (v0.5) | `cmd.search.workspace` | Ui | `query?` | — | `ui` | `editor`, `search` | `mod+shift+f` [E][横], `ctrl+k f` (alt) (横断検索、FR-405。03 §12.7.5。`search` から開くと検索バーの検索語とトグルを引き継ぐ。Windows Terminal は `ctrl+shift+f` を横取りする、04 §7.3a) | - |
 | `view.toggle_wrap` (v0.2、OQ-110) | `cmd.view.toggle_wrap` | Ui | — | — | `ui` | `editor` | `alt+z`, `ctrl+k o` (alt) | - |
 
-**v0.5 の M31 で足す割当** (横断検索のトグル。03 §12.7.5): `search.toggle_case` / `search.toggle_regex` / `search.toggle_word` を、`finder` コンテキストにも置く (3 つのコマンドの `when` を `search.active || overlay.active == "workspace_search"` に広げ、`finder` の割当にも `when = overlay.active == "workspace_search"` を付ける (ファインダでは効かない)。横断検索のオーバーレイが開いていれば、そのオーバーレイの検索語に効く。キーは `search` コンテキストと同じ `alt+c` / `alt+r` / `alt+w` と `ctrl+k c` / `ctrl+k x` / `ctrl+k b` (alt))。上の表の 3 行は v0.1・v0.2 の行で、既定キー列は実装と照らして検査する (09 §11.2) ので、横断検索の実装の PR (03 §12.7.9 の段 7) が割当と一緒に行を直す。どのキーも既存の既定キー (`finder` → `list` → `prompt` → `global` の参照順で届くもの) と衝突せず、`ctrl+k f` は既定のどのコンテキストでも未使用 (ユーザーのチョード (§7.6) が同じ列を割り当てていれば、ユーザー層が勝つ)。
+**v0.5 の M31 で足した割当** (横断検索のトグル。03 §12.7.5。M31 の段 7 の PR で入れ、上の 3 行の `when` と ctx を直した。下の「足す」「直す」は計画の時点の書き方のまま残す): `search.toggle_case` / `search.toggle_regex` / `search.toggle_word` を、`finder` コンテキストにも置く (3 つのコマンドの `when` を `search.active || overlay.active == "workspace_search"` に広げ、`finder` の割当にも `when = overlay.active == "workspace_search"` を付ける (ファインダでは効かない)。横断検索のオーバーレイが開いていれば、そのオーバーレイの検索語に効く。キーは `search` コンテキストと同じ `alt+c` / `alt+r` / `alt+w` と `ctrl+k c` / `ctrl+k x` / `ctrl+k b` (alt))。上の表の 3 行は v0.1・v0.2 の行で、既定キー列は実装と照らして検査する (09 §11.2) ので、横断検索の実装の PR (03 §12.7.9 の段 7) が割当と一緒に行を直す。どのキーも既存の既定キー (`finder` → `list` → `prompt` → `global` の参照順で届くもの) と衝突せず、`ctrl+k f` は既定のどのコンテキストでも未使用 (ユーザーのチョード (§7.6) が同じ列を割り当てていれば、ユーザー層が勝つ)。
 
 `search.prev` の主な手段は `up` (`shift+enter` は従来の端末で `enter` と区別できず、`shift+f3` は従来の端末でカーソル位置報告と区別できない)。`search.toggle_case` は大小区別を **smart → sensitive → insensitive → smart** の順に巡回する。開くたびに `search.case` の値から始まり、切り替えた値はセッション中だけ保持する (設定ファイルには書かない。意味は 03 §12、表示は 04 §8.4)。`search.toggle_regex` (正規表現の ON / OFF、初期値は `search.regex_default`) は v0.2 で入れた。`search.replace_open` は検索バーを置換欄つきで開く (検索バーが開いていれば置換欄を足し、置換欄にフォーカスを移す)。`search.replace_all` は v0.1 ではリテラルの一括置換で、大小区別は検索バーの現在の値に従う (手順は 03 §12.5)。置換欄が開いていない (`search.replace_active` が偽) ときは実行できないので、置換文字列を入れないまま `alt+a` で一致を消すことはない。
 

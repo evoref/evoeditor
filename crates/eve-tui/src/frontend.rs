@@ -292,8 +292,8 @@ impl Frontend for TuiFrontend {
                 .items
                 .iter()
                 .any(|i| i.kind == eve_view::StatusKind::Loading);
-        // 検索で一致へ移った: 計測ハーネスが決めた語が編集面の行に出ている (BM-108)。一覧のオーバーレイ (ファインダ) では、
-        // 件数の欄がその語で始まる (その入力で絞り込んだ候補を描いた Frame。BM-125)
+        // 検索で一致へ移った: 計測ハーネスが決めた語が編集面の行に出ている (BM-108)。一覧のオーバーレイ (ファインダ・横断検索)
+        // では、件数の欄か行の文字列がその語で始まる (その入力で絞り込んだ候補・最初の一致・完了を描いた Frame。BM-125 / BM-405)
         let joined =
             |spans: &[eve_view::Span]| spans.iter().map(|s| s.text.as_str()).collect::<String>();
         let matched = crate::trace::match_text().is_some_and(|m| {
@@ -302,7 +302,9 @@ impl Frontend for TuiFrontend {
                 .iter()
                 .any(|p| p.rows.iter().any(|r| joined(&r.spans).contains(m)))
                 || frame.overlays.iter().any(|o| {
-                    matches!(o, eve_view::OverlayModel::List { footer, .. } if joined(&footer.spans).starts_with(m))
+                    matches!(o, eve_view::OverlayModel::List { footer, items, .. }
+                        if joined(&footer.spans).starts_with(m)
+                            || items.iter().any(|i| joined(&i.label.spans).starts_with(m)))
                 })
         });
         if crate::trace::render_done(content, progress, matched) {

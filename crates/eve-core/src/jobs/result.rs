@@ -352,6 +352,25 @@ pub enum JobResult {
     },
     /// `ReleaseCandidates` の終端 (受け手は何もしない)。
     Released,
+    /// 横断検索の結果の束 (非終端。`WorkspaceSearch` の区切りごと、03 §12.7.5)。一致の無い区切りでも、進捗を 100 ms
+    /// ごとに送る。
+    WorkspaceHits {
+        /// 検索の世代。
+        generation: u64,
+        /// この区切りで見つけた結果の行 (ファイルを見つけた順、ファイルの中は行の順)。
+        hits: Vec<crate::workspace::WsHit>,
+        /// その時点の進捗。
+        progress: crate::workspace::WsProgress,
+    },
+    /// 横断検索の終端 (ルートを読めなければ代わりに `Failed`)。
+    WorkspaceSearchDone {
+        /// 検索の世代。
+        generation: u64,
+        /// 最後の進捗。
+        progress: crate::workspace::WsProgress,
+        /// 結果の行の上限、または走査の上限・列挙の途中の失敗で打ち切った。
+        truncated: bool,
+    },
     /// ファインダの照合の結果 (`FinderMatch` の終端、03 §12.7.4)。
     FinderMatched {
         /// 照合の世代。

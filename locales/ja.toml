@@ -302,6 +302,10 @@ title = "正規表現を切替"
 description = "一致の両端が単語の境界にあるものだけを探すかを切り替えます。"
 title = "単語単位を切替"
 
+[cmd.search.workspace]
+description = "ワークスペースのファイルを横断して検索します。"
+title = "ワークスペースを検索"
+
 [cmd.search.toggle_selection]
 description = "検索バーを開いたときの選択範囲の中だけを探すかを切り替えます。"
 title = "選択範囲内を切替"
@@ -936,6 +940,10 @@ text = "{path} をワークスペースにできません: {reason}"
 hint = "フォルダの権限を確認してください"
 text = "ワークスペース {root} を読めません: {reason}"
 
+[msg.workspace.search_failed]
+hint = "検索語を変えると探し直します"
+text = "ワークスペースの検索に失敗しました: {reason}"
+
 [msg.reload.missing]
 hint = "今の内容を残すには、上書き保存 ({key:file.save}) でファイルを作り直すか、名前を付けて保存 ({key:file.save_as}) してください"
 text = "{path} が見つからないため読み込み直せません"
@@ -1025,8 +1033,12 @@ hint = "リンク先を確かめてください"
 text = "{path} はリンクで、リンク先 {target} がありません"
 
 [msg.finder.not_found]
-hint = "一覧を開き直すと、今のファイルで探し直します"
+hint = "ファイルが移動・削除されていないかを確かめてください"
 text = "{path} はもうありません"
+
+[msg.finder.match_failed]
+hint = "入力を変えると絞り込み直します"
+text = "ファイルの絞り込みに失敗しました: {reason}"
 
 [msg.save.permission_narrowed]
 hint = "必要なら OS で権限を設定し直してください"
@@ -1436,11 +1448,23 @@ item_no_hint = "{level}: {text}"
 title = "ファイルを開く ({root})"
 placeholder = "ファイル名・パスで絞り込み"
 footer_waiting = "ワークスペースを調べています…"
+footer_no_root = "ワークスペースを決められませんでした"
 footer_incomplete = "{matched}/{total} (一覧が途中までです)"
 footer_scanning = "{matched}/{total} 走査中…"
 footer_truncated = "{matched}/{total} (ファイルが多いため {limit} 件で打ち切りました)"
 unreadable_suffix = "・読めないフォルダ {dirs}"
 no_match = "一致するファイルはありません"
+
+[ui.workspace_search]
+title = "ワークスペースを検索 {toggles}"
+placeholder = "検索語を入力"
+item = "{path}:{line}: {text}"
+footer_running = "{lines} 件・{files} ファイルを検索中…"
+footer_done = "{lines} 件 ({hit_files}/{files} ファイル)"
+footer_truncated = "{lines} 件で打ち切りました ({hit_files} ファイル)"
+footer_failed = "{lines} 件 (検索に失敗しました)"
+skipped_suffix = "・飛ばした {skipped}"
+no_match = "一致はありません"
 
 [ui.buffer_list]
 title = "バッファ"

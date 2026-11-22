@@ -135,6 +135,8 @@ pub(crate) struct IoState {
     pub(crate) save_all: Option<crate::io::save_all::SaveAll>,
     /// 読込が終わったらカーソルを移す位置 (行, 桁。ともに 1 始まり。起動時の `+行:桁`、07 §18.2)。
     pub(crate) open_jumps: BTreeMap<DocumentId, (usize, usize)>,
+    /// 読込が終わったら一致の位置へ移る横断検索のジャンプ (03 §12.7.5 の「ジャンプ」)。
+    pub(crate) ws_jumps: BTreeMap<DocumentId, crate::workspace::ws_search_ui::WsJump>,
     /// `file.open` の読込の表示の切り替え (先行表示の時点・完了の時点と、オーバーレイの間の保留。03 §9.2.1)。
     pub(crate) open_switch: BTreeMap<DocumentId, crate::io::partial_view::OpenSwitch>,
     /// 先行表示の間に `info.open.partial_end` を出した文書 (同じ文書の先行表示の間は 1 回だけ、03 §9.2.1)。
@@ -348,6 +350,7 @@ impl EditorState {
                 pending: BTreeMap::new(),
                 save_all: None,
                 open_jumps: BTreeMap::new(),
+                ws_jumps: BTreeMap::new(),
                 open_switch: BTreeMap::new(),
                 partial_end_noted: BTreeSet::new(),
                 failed_holds: BTreeMap::new(),

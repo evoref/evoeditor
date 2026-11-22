@@ -154,6 +154,80 @@ fn redetect(chunk: &[u8], chunk_is_file_end: bool, opts: &DetectOptions) -> Opti
     redetect_window(window, complete, opts).and_then(|d| d.encoding())
 }
 
+/// 横断検索の 1 ファイルの復号の結果 (03 §12.7.5 の 3)。
+#[derive(Debug)]
+pub(crate) enum SearchDecoded {
+    /// 読込と同じ本文 (不正バイトはエスケープ済み)。
+    Text(Snapshot),
+    /// バイナリの疑い (§8.2 手順 4) か、対応していない BOM (UTF-32、手順 1)。探さない。
+    Binary,
+    /// 取り消された。
+    Cancelled,
+}
+
+/// 横断検索の 1 ファイルを、読込 (`open_inner`) と同じ規則で判定して復号する (03 §12.7.5 の 3、01 FR-405 AC-2)。`chunks` は
+/// `open_read` が返したチャンクの並び (判定に使う先頭と、判定し直しの窓は読込と同じくチャンクの単位で決まる)。
+/// 読込との違いは確認を出さないことだけ: バイナリと未対応の BOM は探さず、不正バイトの多いファイルは復号したまま返す。
+/// 取消しはチャンク (既定 1 MiB) ごとに見る。
+pub(crate) fn decode_for_search(chunks: &[Vec<u8>], cancel: &CancelToken) -> SearchDecoded {
+    decode_search_pass(chunks, None, cancel)
+}
+
+/// `decode_for_search` の 1 回の復号。`forced` は判定し直しで決まった文字コード (読込の `Redo` と同じく 1 回だけ)。
+fn decode_search_pass(
+    chunks: &[Vec<u8>],
+    forced: Option<Encoding>,
+    cancel: &CancelToken,
+) -> SearchDecoded {
+    let total: usize = chunks.iter().map(Vec::len).sum();
+    let det_opts = DetectOptions::default().with_forced(forced);
+    let Some(first) = chunks.iter().find(|c| !c.is_empty()) else {
+        // 空のファイル (読込と同じく判定なしで空の本文)
+        return SearchDecoded::Text(Snapshot::default());
+    };
+    let head = &first[..first.len().min(SNIFF_LEN)];
+    let Detection {
+        kind, confidence, ..
+    } = detect(head, total <= head.len(), &det_opts);
+    let (enc, bom_len) = match kind {
+        DetectedKind::Utf8 { bom_len } => (Encoding::Utf8, bom_len),
+        DetectedKind::Encoded { encoding, bom_len } => (encoding, bom_len),
+        // バイナリの疑いと対応していない BOM (読込なら確認を出すもの) は探さない
+        _ => return SearchDecoded::Binary,
+    };
+    let mut dec = Decoder::new(enc, bom_len > 0);
+    let mut builder = TextBuilder::new();
+    let mut out = String::new();
+    let mut redetect_checked = false;
+    let mut read_total = 0usize;
+    for chunk in chunks.iter().filter(|c| !c.is_empty()) {
+        if cancel.is_cancelled() {
+            return SearchDecoded::Cancelled;
+        }
+        read_total += chunk.len();
+        // 再判定 (03 §8.2.1): 読込と同じく、信頼度「低」の UTF-8 で、後半に別の文字コードが現れたら 1 回だけやり直す
+        if !redetect_checked
+            && forced.is_none()
+            && enc == Encoding::Utf8
+            && confidence == Confidence::Low
+        {
+            if let Some(other) = redetect(chunk, read_total >= total, &det_opts) {
+                return decode_search_pass(chunks, Some(other), cancel);
+            }
+            if find_iso_switch(chunk).is_some() || std::str::from_utf8(chunk).is_err() {
+                redetect_checked = true;
+            }
+        }
+        out.clear();
+        dec.decode(chunk, false, &mut out);
+        builder.append(&out);
+    }
+    out.clear();
+    dec.decode(&[], true, &mut out);
+    builder.append(&out);
+    SearchDecoded::Text(builder.finish().snapshot())
+}
+
 #[allow(
     clippy::too_many_arguments,
     reason = "読込のジョブの文脈 (`JobKind::Open` の中身と Port・取消し・送り口・やり直し) をそのまま受ける"
@@ -1580,6 +1654,24 @@ mod escape_merge;
 mod tests {
     use super::*;
     use crate::jobs::SaveStrategy;
+
+    #[test]
+    fn 横断検索の復号は取り消されたら_cancelled_を返す() {
+        let chunks = vec![b"hit\n".to_vec()];
+        let cancel = CancelToken::new();
+        assert!(matches!(
+            decode_for_search(&chunks, &cancel),
+            SearchDecoded::Text(_)
+        ));
+        cancel.cancel();
+        assert!(
+            matches!(
+                decode_for_search(&chunks, &cancel),
+                SearchDecoded::Cancelled
+            ),
+            "チャンクごとに取消しを見る"
+        );
+    }
 
     /// 本番の書き込みの供給 (`SnapshotSource`) が返す内容の全部。
     fn written(text: &str, encoding: Encoding, bom: bool) -> Vec<u8> {

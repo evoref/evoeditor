@@ -159,7 +159,7 @@ fn window_first(selected: usize) -> usize {
 }
 
 /// 照合の結果の行を、記法に直した後の `label` の Span の番号に写す (`cell_text_indexed` の写し)。
-fn map_ranges(ranges: &[Range<u32>], map: &[Option<usize>]) -> Vec<Range<usize>> {
+pub(crate) fn map_ranges(ranges: &[Range<u32>], map: &[Option<usize>]) -> Vec<Range<usize>> {
     let mut out: Vec<Range<usize>> = Vec::new();
     for r in ranges {
         for g in r.start..r.end {
@@ -466,6 +466,17 @@ impl EditorState {
                 f.confirm_waiting = false;
             }
             self.release_chunks(chunks);
+            // 今の世代の照合の失敗 (パニックなど) は知らせる (`Enter` が黙って何もしない状態にしない。03 §12.7.4 の段 7 の細目)
+            if current
+                && let JobResult::Failed { err } = &r
+                && !matches!(err, JobError::Cancelled)
+            {
+                self.show_message(
+                    MessageLevel::Error,
+                    keys::MSG_FINDER_MATCH_FAILED,
+                    &[("reason", &reason_label(err))],
+                );
+            }
             return;
         };
         if !current {
@@ -684,7 +695,10 @@ impl EditorState {
         let _ = self.jobs.spawn(
             None,
             eve_view::Revision::INITIAL,
-            JobKind::ReleaseCandidates { chunks: out },
+            JobKind::ReleaseCandidates {
+                chunks: out,
+                hits: Vec::new(),
+            },
         );
     }
 
@@ -722,7 +736,9 @@ impl EditorState {
             }
         });
         let title = render(keys::UI_FINDER_TITLE, &[("root", &shown_root)]);
-        let footer = if root.is_none() {
+        let footer = if root.is_none() && self.workspace.root_failed() {
+            render(keys::UI_FINDER_FOOTER_NO_ROOT, &[])
+        } else if root.is_none() {
             render(keys::UI_FINDER_FOOTER_WAITING, &[])
         } else {
             let matched = f.matched.to_string();

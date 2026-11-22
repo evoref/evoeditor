@@ -96,6 +96,10 @@ const TABLE: &[(&str, &[ArgSpec])] = &[
     (ids::PANE_GROW, CELLS),
     (ids::PANE_SHRINK, CELLS),
     (ids::SEARCH_OPEN, &[arg("query", ArgType::String, false)]),
+    (
+        ids::SEARCH_WORKSPACE,
+        &[arg("query", ArgType::String, false)],
+    ),
     (ids::SELECT_EXTEND_DOWN, COUNT),
     (ids::SELECT_EXTEND_LEFT, COUNT),
     (ids::SELECT_EXTEND_RIGHT, COUNT),

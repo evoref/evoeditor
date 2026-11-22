@@ -97,9 +97,21 @@ pub(crate) fn open_read(path: &FsPath) -> Result<Box<dyn ReadChunks + Send>, FsE
     let _ = crate::sys::clear_nonblocking(&f);
     Ok(Box::new(FileChunks {
         file: f,
-        buf: vec![0u8; READ_CHUNK_BYTES],
+        buf: vec![0u8; first_buf_len(meta.len())],
         path: path.clone(),
     }))
+}
+
+/// 最初の読込のバッファの大きさ: `min(READ_CHUNK_BYTES, len + 1)`。小さなファイルを開くたびに 1 MiB を確保して 0 で埋めない
+/// (横断検索は 1 ファイルずつ開いて読む、03 §12.7.5)。`len + 1` にするのは、変わっていないファイルを 1 回の読込で読み終え、
+/// 次の読込で終わりと分かるようにするため (チャンクの区切りは 1 MiB のバッファのときと同じ: 1 MiB 以下は 1 チャンク、超えれば
+/// 1 MiB ずつ)。開いた後にファイルが伸びて 1 回の読込でバッファが埋まったら、その場で `READ_CHUNK_BYTES` に広げて読み足して
+/// から返す (`FileChunks::next_chunk`)。伸びたファイルの最初のチャンクも 1 MiB のバッファのときと同じになり、読込の文字コードの
+/// 判定 (03 §8.2) が小さな最初のチャンクだけで決まらない。
+fn first_buf_len(len: u64) -> usize {
+    usize::try_from(len)
+        .map_or(READ_CHUNK_BYTES, |n| n.saturating_add(1))
+        .min(READ_CHUNK_BYTES)
 }
 
 /// 読むために開く。Unix は `O_NONBLOCK | O_NOCTTY` (FIFO の書き手を待たない。端末を制御端末にしない)。`EAGAIN` /
@@ -131,20 +143,137 @@ fn open_file(path: &FsPath) -> io::Result<File> {
 /// ファイルをチャンクで読む。
 struct FileChunks {
     file: File,
+    /// 読込のバッファ (最初は `first_buf_len`、伸びたファイルでは `READ_CHUNK_BYTES`)。
     buf: Vec<u8>,
     path: FsPath,
 }
 
-impl ReadChunks for FileChunks {
-    fn next_chunk(&mut self) -> Result<Option<&[u8]>, ChunkError> {
+impl FileChunks {
+    /// `buf[from..]` に読む (`EINTR` は再試行する)。読んだバイト数。
+    fn read_into(&mut self, from: usize) -> Result<usize, ChunkError> {
         loop {
-            match self.file.read(&mut self.buf) {
-                Ok(0) => return Ok(None),
-                Ok(n) => return Ok(Some(&self.buf[..n])),
+            match self.file.read(&mut self.buf[from..]) {
+                Ok(n) => return Ok(n),
                 // EINTR は本層の中で再試行して外に出さない
                 Err(e) if e.kind() == io::ErrorKind::Interrupted => {}
                 Err(e) => return Err(ChunkError::Io(map_io_error(e, &self.path))),
             }
         }
+    }
+}
+
+impl ReadChunks for FileChunks {
+    fn next_chunk(&mut self) -> Result<Option<&[u8]>, ChunkError> {
+        let mut n = self.read_into(0)?;
+        if n == 0 {
+            return Ok(None);
+        }
+        // 1 MiB より小さいバッファが埋まった (開いた後にファイルが伸びた): その場で 1 MiB に広げ、読み足してから返す (1 回だけ)
+        if n == self.buf.len() && n < READ_CHUNK_BYTES {
+            self.buf.resize(READ_CHUNK_BYTES, 0);
+            n += self.read_into(n)?;
+        }
+        Ok(Some(&self.buf[..n]))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::io::Write as _;
+
+    use super::*;
+
+    /// 一時ディレクトリ (終わりに消す)。
+    struct Tmp(std::path::PathBuf);
+
+    impl Tmp {
+        fn new(tag: &str) -> Tmp {
+            static SEQ: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+            let n = SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            let p = std::env::temp_dir().join(format!(
+                "eve-platform-chunks-{tag}-{}-{n}",
+                std::process::id()
+            ));
+            fs::create_dir_all(&p).expect("一時ディレクトリ");
+            Tmp(p)
+        }
+    }
+
+    impl Drop for Tmp {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
+
+    /// 長さ `len` のファイルを読んだチャンクの長さの列。
+    fn chunk_lens(len: usize) -> Vec<usize> {
+        let t = Tmp::new(&len.to_string());
+        let p = t.0.join("f.bin");
+        fs::write(&p, vec![b'x'; len]).expect("書く");
+        let mut r = open_read(&FsPath::new(p)).expect("開く");
+        let mut out = Vec::new();
+        while let Some(c) = r.next_chunk().expect("読む") {
+            out.push(c.len());
+        }
+        out
+    }
+
+    #[test]
+    fn 最初のバッファは長さに_1_を足して_1_mib_まで() {
+        let max = u64::try_from(READ_CHUNK_BYTES).expect("1 MiB");
+        assert_eq!(first_buf_len(0), 1);
+        assert_eq!(first_buf_len(10), 11);
+        assert_eq!(first_buf_len(max - 1), READ_CHUNK_BYTES);
+        assert_eq!(first_buf_len(max), READ_CHUNK_BYTES);
+        assert_eq!(first_buf_len(u64::MAX), READ_CHUNK_BYTES);
+    }
+
+    #[test]
+    fn 変わっていないファイルのチャンクの区切りは_1_mib_のバッファと同じ() {
+        assert_eq!(chunk_lens(0), Vec::<usize>::new(), "空のファイル");
+        assert_eq!(chunk_lens(5), [5], "1 MiB 以下は 1 チャンク");
+        assert_eq!(
+            chunk_lens(READ_CHUNK_BYTES),
+            [READ_CHUNK_BYTES],
+            "1 MiB ちょうど"
+        );
+        assert_eq!(
+            chunk_lens(READ_CHUNK_BYTES + 1),
+            [READ_CHUNK_BYTES, 1],
+            "1 MiB + 1 は 1 MiB と 1"
+        );
+    }
+
+    #[test]
+    fn 開いた後に伸びたファイルは広げたバッファで最後まで読む() {
+        let t = Tmp::new("grow");
+        let p = t.0.join("f.bin");
+        fs::write(&p, b"0123456789").expect("書く");
+        let mut r = open_read(&FsPath::new(p.clone())).expect("開く");
+        // 開いた後に 2 MiB 足す (最初のバッファは 11 バイト)
+        let tail = vec![b'y'; 2 * READ_CHUNK_BYTES];
+        fs::OpenOptions::new()
+            .append(true)
+            .open(&p)
+            .expect("足す")
+            .write_all(&tail)
+            .expect("足す");
+        let mut lens = Vec::new();
+        let mut all = Vec::new();
+        while let Some(c) = r.next_chunk().expect("読む") {
+            lens.push(c.len());
+            all.extend_from_slice(c);
+        }
+        assert_eq!(all.len(), 10 + tail.len(), "伸びた分も読む");
+        assert_eq!(all.get(..10), Some(b"0123456789".as_slice()));
+        // 最初のバッファ (11 バイト) が埋まったら、その場で 1 MiB に広げて読み足す: 最初のチャンクに伸びた分が入る (1 MiB の
+        // バッファのときと同じ区切り。読込の文字コードの判定が 11 バイトだけで決まらない)
+        assert_eq!(
+            lens.first(),
+            Some(&READ_CHUNK_BYTES),
+            "最初のチャンクに伸びた分も入る: {lens:?}"
+        );
+        assert_eq!(all.get(10..11), Some(b"y".as_slice()));
+        assert!(lens.iter().all(|n| *n <= READ_CHUNK_BYTES));
     }
 }

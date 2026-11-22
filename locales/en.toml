@@ -304,6 +304,10 @@ title = "Toggle Regex"
 description = "Toggle matching whole words only."
 title = "Toggle Whole Word"
 
+[cmd.search.workspace]
+description = "Search across the files in the workspace."
+title = "Search Workspace"
+
 [cmd.search.toggle_selection]
 description = "Toggle searching only within the selection made before opening the search bar."
 title = "Toggle In Selection"
@@ -938,6 +942,10 @@ text = "Cannot use {path} as the workspace: {reason}"
 hint = "Check the folder permissions"
 text = "Cannot read the workspace {root}: {reason}"
 
+[msg.workspace.search_failed]
+hint = "Change the search text to search again"
+text = "Workspace search failed: {reason}"
+
 [msg.reload.missing]
 hint = "To keep the current content, recreate the file with Save ({key:file.save}), or use Save As ({key:file.save_as})"
 text = "Cannot reload because {path} was not found"
@@ -1027,8 +1035,12 @@ hint = "Check where the link points"
 text = "{path} is a link, and its target {target} does not exist"
 
 [msg.finder.not_found]
-hint = "Reopen the list to scan the current files"
+hint = "Check whether the file was moved or deleted"
 text = "{path} no longer exists"
+
+[msg.finder.match_failed]
+hint = "Change the text to filter again"
+text = "Failed to filter the files: {reason}"
 
 [msg.save.permission_narrowed]
 hint = "Set the permissions again in the OS if needed"
@@ -1438,11 +1450,23 @@ item_no_hint = "{level}: {text}"
 title = "Open File ({root})"
 placeholder = "Filter by file name or path"
 footer_waiting = "Finding the workspace…"
+footer_no_root = "Could not determine the workspace"
 footer_incomplete = "{matched}/{total} (list incomplete)"
 footer_scanning = "{matched}/{total} scanning…"
 footer_truncated = "{matched}/{total} (stopped at {limit} files)"
 unreadable_suffix = " · {dirs} unreadable folders"
 no_match = "No matching files"
+
+[ui.workspace_search]
+title = "Search Workspace {toggles}"
+placeholder = "Type to search"
+item = "{path}:{line}: {text}"
+footer_running = "{lines} lines · searching {files} files…"
+footer_done = "{lines} lines ({hit_files}/{files} files)"
+footer_truncated = "Stopped at {lines} lines ({hit_files} files)"
+footer_failed = "{lines} lines (search failed)"
+skipped_suffix = " · {skipped} skipped"
+no_match = "No matches"
 
 [ui.buffer_list]
 title = "Buffers"

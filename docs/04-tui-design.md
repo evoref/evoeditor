@@ -1159,13 +1159,13 @@ v0.5 は結果を一覧のオーバーレイで出す (PO の決定 2026-11-20�
 - **位置・大きさ**: ファインダ (§8.11) と同じ。
 - **見出し** (`List.title`): `ui.workspace_search.title`。トグルの状態を検索バー (§8.4) と同じ記号 (`[Aa~]` / `[Aa✓]` / `[Aa]`、`[.*]` / `[.*✓]`、`[ab]` / `[ab✓]`) で見出しの後ろに並べる (core が文字列を組む。ON の反転は見出しの中ではしない: 記号の `✓` で示す。ASCII 縮退では `✓` を `*` にする)。トグルのキーは検索バーと同じ `Alt+C` / `Alt+R` / `Alt+W` (代替 `Ctrl+K C` / `Ctrl+K X` / `Ctrl+K B`)。
 - **行**: `ui.workspace_search.item` (`{path}:{line}: {text}`)。`{text}` は一致した行の抜粋 (先頭の空白は詰める)。一致した箇所は下線 + 太字。幅が足りないときは行の末尾を `…` で切る (`CutPolicy::End`。`{path}` が長いと `{text}` が見えなくなるが、1 つの `CellText` の 2 か所を別々に切る形は今の境界の型に無いので、v0.5 はこれで足りるとする)。
-- **件数** (`List.footer`): 検索中は `ui.workspace_search.footer_running`、終わったら `ui.workspace_search.footer_done`、上限 (10,000 行) で打ち切ったら `ui.workspace_search.footer_truncated`。飛ばしたファイル (大きすぎる・バイナリ・オフライン・読めない) があれば `ui.workspace_search.skipped_suffix`、読めないフォルダがあれば `ui.finder.unreadable_suffix` (ファインダと同じ文言) を足す。正規表現の誤りは検索バーと同じ文言 (§8.4) を件数の位置に出す。
-- **0 件**: `ui.workspace_search.no_match` (検索語が空のときは何も出さない)。
-- **操作**: ファインダと同じ。`Enter` で選んだ結果のファイルを開き (開いていればその文書に切り替え)、一致の位置へ移って閉じる。`Esc` で閉じる。閉じても結果を持ち、次に開くと同じ検索語・結果・選択から始まる (03 §12.7.5)。
+- **件数** (`List.footer`): 検索中は `ui.workspace_search.footer_running`、終わったら `ui.workspace_search.footer_done`、上限 (10,000 行) で打ち切ったら `ui.workspace_search.footer_truncated` (走査の上限で打ち切ったときも同じ)、検索が失敗したら `ui.workspace_search.footer_failed` (メッセージ行にも `msg.workspace.search_failed` か `msg.workspace.scan_failed` を出す。届いていた結果は残す)。ルートの検出を待つ間は `ui.finder.footer_waiting`、ルートが決まらなかったら `ui.finder.footer_no_root` (ファインダと同じ)。飛ばしたファイル (大きすぎる・バイナリ・オフライン・読めない) があれば `ui.workspace_search.skipped_suffix`、読めないフォルダがあれば `ui.finder.unreadable_suffix` (ファインダと同じ文言) を足す。正規表現の誤りは検索バーと同じ文言 (§8.4) を件数の位置に出す。
+- **0 件**: `ui.workspace_search.no_match` (検索が終わった・失敗したときだけ。検索語が空のとき・検索中は何も出さない)。
+- **操作**: ファインダと同じ。`Enter` で選んだ結果のファイルを開き (開いていればその文書に切り替え)、一致の位置へ移って閉じる (検索バーも閉じる)。`Esc` で閉じる。閉じても結果を持ち、次に開くと同じ検索語・結果・選択から始まる。ただし、検索バー・選択から別の検索語で開いたときと、閉じたときに検索が途中だったときは探し直す (03 §12.7.5 の段 7 の細目 (8))。選んだファイルが検索の後に消えていたら、ファインダと同じ `msg.finder.not_found` を出す。
 
 ### 8.13 ワークスペースの文言の案 (v0.5 の M31)
 
-次のキーは **案** で、言語ファイル (`locales/ja.toml` / `en.toml`) と §15 の目録には、使う実装の PR (03 §12.7.9 の各段) で足す (目録は言語ファイルと一致を検査するので、先に足さない。09 §6.2 の `i18n`)。`{root}` / `{path}` は短縮したパス、`{matched}` / `{total}` / `{lines}` / `{files}` / `{hit_files}` / `{skipped}` / `{dirs}` / `{limit}` / `{line}` (1 始まりの行番号) は整数 (千の区切りを付けない、07 §17.3)。`{text}` は一致した行の抜粋 (§8.12)、`{toggles}` はトグルの記号の並び (§8.12)、`{reason}` は OS のエラーを分類した短い文言 (`ui.reason.*`、§15.2)。`msg.cli.directory_ignored` と `msg.workspace.root_invalid` は M31 の段 1 の PR で、`msg.save_as.open_in_other` は段 5 (SAF-28) の PR で、ファインダの文言 (`cmd.workspace.open_file.*`・`hint.workspace.open_file`・`ui.finder.*`・`msg.finder.not_found`・`msg.workspace.scan_failed`) は段 6 の PR で §15.2 の目録 (`cmd.*` と `hint.*` は 07 §11.6 のカタログ) へ移した (下の表は横断検索 (段 7) の分を含む案の一覧として残す)。
+次のキーは **案** で、言語ファイル (`locales/ja.toml` / `en.toml`) と §15 の目録には、使う実装の PR (03 §12.7.9 の各段) で足す (目録は言語ファイルと一致を検査するので、先に足さない。09 §6.2 の `i18n`)。`{root}` / `{path}` は短縮したパス、`{matched}` / `{total}` / `{lines}` / `{files}` / `{hit_files}` / `{skipped}` / `{dirs}` / `{limit}` / `{line}` (1 始まりの行番号) は整数 (千の区切りを付けない、07 §17.3)。`{text}` は一致した行の抜粋 (§8.12)、`{toggles}` はトグルの記号の並び (§8.12)、`{reason}` は OS のエラーを分類した短い文言 (`ui.reason.*`、§15.2)。`msg.cli.directory_ignored` と `msg.workspace.root_invalid` は M31 の段 1 の PR で、`msg.save_as.open_in_other` は段 5 (SAF-28) の PR で、ファインダの文言 (`cmd.workspace.open_file.*`・`hint.workspace.open_file`・`ui.finder.*`・`msg.finder.not_found`・`msg.workspace.scan_failed`) は段 6 の PR で、横断検索の文言 (`cmd.search.workspace.*`・`ui.workspace_search.*`) は段 7 の PR で §15.1 / §15.2 の目録 (`cmd.*` と `hint.*` は 07 §11.6 のカタログ) へ移した (下の表は案の一覧として残す。段 7 の PR で足した `ui.finder.footer_no_root`・`ui.workspace_search.footer_failed`・`msg.workspace.search_failed`・`msg.finder.match_failed` は目録だけにある)。
 
 | キー (案) | 出す場面 | ja (案) | en (案) |
 |---|---|---|---|
@@ -1661,12 +1661,22 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 | `ui.buffer_list.no_match` | 同上。絞り込みに一致する文書が無いとき | 一致する文書はありません |
 | `ui.finder.title` | ファインダ (`workspace.open_file`、§8.11。v0.5 の M31 の段 6) の見出し (`{root}` はワークスペースのルート) | ファイルを開く ({root}) |
 | `ui.finder.placeholder` | 同上。入力欄が空のときの案内 | ファイル名・パスで絞り込み |
-| `ui.finder.footer_waiting` | 同上。ルートの検出を待つ間の件数の欄 | ワークスペースを調べています… |
+| `ui.finder.footer_waiting` | 同上。ルートの検出を待つ間の件数の欄 (横断検索の件数の欄も使う、§8.12) | ワークスペースを調べています… |
 | `ui.finder.footer_scanning` | 同上。走査中の件数の欄 | {matched}/{total} 走査中… |
 | `ui.finder.footer_truncated` | 同上。候補の数の上限 (`{limit}`) で走査を打ち切ったときの件数の欄 | {matched}/{total} (ファイルが多いため {limit} 件で打ち切りました) |
 | `ui.finder.footer_incomplete` | 同上。走査が失敗して一覧が欠けているときの件数の欄 (03 §12.7.4 の段 6 の細目 (12)) | {matched}/{total} (一覧が途中までです) |
 | `ui.finder.unreadable_suffix` | 同上。読めないフォルダがあるとき件数の欄の後ろに足す (横断検索の件数の欄も使う、§8.12) | ・読めないフォルダ {dirs} |
 | `ui.finder.no_match` | 同上。絞り込みに一致するファイルが無いとき | 一致するファイルはありません |
+| `ui.finder.footer_no_root` | 同上。ルートの検出のジョブが失敗してルートが決まらなかったときの件数の欄 (横断検索の件数の欄も使う。03 §12.7.1。v0.5 の M31 の段 7) | ワークスペースを決められませんでした |
+| `ui.workspace_search.title` | 横断検索 (`search.workspace`、§8.12。v0.5 の M31 の段 7) の見出し (`{toggles}` はトグルの記号の並び `[Aa~] [.*] [ab]`) | ワークスペースを検索 {toggles} |
+| `ui.workspace_search.placeholder` | 同上。入力欄が空のときの案内 | 検索語を入力 |
+| `ui.workspace_search.item` | 同上。結果の 1 行 (`{path}` はルートからの相対パス、`{line}` は 1 始まりの行番号、`{text}` は一致した行の抜粋) | {path}:{line}: {text} |
+| `ui.workspace_search.footer_running` | 同上。検索中の件数の欄 (`{lines}` は結果の行の数、`{files}` は探したファイルの数) | {lines} 件・{files} ファイルを検索中… |
+| `ui.workspace_search.footer_done` | 同上。検索が終わったときの件数の欄 (`{hit_files}` は一致のあったファイルの数) | {lines} 件 ({hit_files}/{files} ファイル) |
+| `ui.workspace_search.footer_truncated` | 同上。結果の行の上限 (10,000 行) か走査の上限で打ち切ったときの件数の欄 | {lines} 件で打ち切りました ({hit_files} ファイル) |
+| `ui.workspace_search.footer_failed` | 同上。検索が失敗したときの件数の欄 (03 §12.7.5 の段 7 の細目 (12)) | {lines} 件 (検索に失敗しました) |
+| `ui.workspace_search.skipped_suffix` | 同上。飛ばしたファイル (大きすぎる・バイナリ・オフライン・読めない) があるとき件数の欄の後ろに足す | ・飛ばした {skipped} |
+| `ui.workspace_search.no_match` | 同上。検索が終わって一致が無いとき | 一致はありません |
 | `ui.config_diagnostics.title` | 設定の診断の一覧 (`config.show_diagnostics`、§8.5a。v0.3) の見出し | 設定の診断 |
 | `ui.config_diagnostics.placeholder` | 同上。入力欄が空のときの案内 (本文と `ファイル:行` で絞り込む) | 診断の文で絞り込み |
 | `ui.config_diagnostics.no_match` | 同上。絞り込みに一致する診断が無いとき | 一致する診断はありません |
@@ -1889,9 +1899,11 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 | `msg.cli.directory` | 位置引数にフォルダを渡した (07 §18.2。v0.1 は無題の文書を開く) | {path} はフォルダなので開けません。無題の文書を開きました / ファイルのパスを指定して起動してください |
 | `msg.cli.directory_ignored` | 起動の引数の 2 つ目以降のフォルダ、`--workspace` があるときのフォルダ (07 §18.2。v0.5 の M31 の段 1。ルートにしたフォルダには出さない、03 §12.7.1) | {path} はフォルダなので開けません。ワークスペースは {root} です / ワークスペースにするフォルダは 1 つだけ指定してください |
 | `msg.workspace.root_invalid` | `--workspace` がフォルダでない・無い・読めない (07 §18.3。v0.5 の M31 の段 1。ルートは 07 §12.1 の 2 以降で決める。`{reason}` はフォルダでなければ `not a directory`、03 §12.7.1) | {path} をワークスペースにできません: {reason} / フォルダのパスを指定してください。今は {root} をワークスペースにしています |
-| `msg.workspace.scan_failed` | ファインダの走査でワークスペースのルートを読めない (03 §12.7.2 の 7。v0.5 の M31 の段 6。`{reason}` は `ui.reason.*` と同じ分類の名前) | ワークスペース {root} を読めません: {reason} / フォルダの権限を確認してください |
+| `msg.workspace.scan_failed` | ファインダの走査・横断検索でワークスペースのルートを読めない (03 §12.7.2 の 7。v0.5 の M31 の段 6。`{reason}` は `ui.reason.*` と同じ分類の名前) | ワークスペース {root} を読めません: {reason} / フォルダの権限を確認してください |
 | `msg.finder.dangling_link` | ファインダで選んだシンボリックリンクのリンク先が無い (新規の文書にしない、03 §12.7.4。v0.5 の M31 の段 6) | {path} はリンクで、リンク先 {target} がありません / リンク先を確かめてください |
-| `msg.finder.not_found` | ファインダ (横断検索も、§8.12) で選んだファイルが走査の後に消えていた (新規の文書にしない、03 §12.7.4。v0.5 の M31 の段 6) | {path} はもうありません / 一覧を開き直すと、今のファイルで探し直します |
+| `msg.finder.not_found` | ファインダ (横断検索も、§8.12) で選んだファイルが走査の後に消えていた (新規の文書にしない、03 §12.7.4。v0.5 の M31 の段 6。hint は M31 の段 7 で、横断検索 (開き直しても探し直さない) にも通じる文にした) | {path} はもうありません / ファイルが移動・削除されていないかを確かめてください |
+| `msg.finder.match_failed` | ファインダの照合のジョブが失敗した (パニックなど。取消しでない。03 §12.7.4 の段 6 の細目 (4)。v0.5 の M31 の段 7。`{reason}` は `panic` など) | ファイルの絞り込みに失敗しました: {reason} / 入力を変えると絞り込み直します |
+| `msg.workspace.search_failed` | 横断検索のジョブが失敗した (パニックなど。ルートを読めないときは `msg.workspace.scan_failed`。03 §12.7.5 の段 7 の細目 (12)) | ワークスペースの検索に失敗しました: {reason} / 検索語を変えると探し直します |
 | `msg.config.problem` | 設定の診断が 1 件 (07 §4.3)。行の分からない診断 (`--set`・言語ファイルの名前と言語の選択・ファイル全体の問題など。v0.4 の M26 から) は `{line}` を空にして 〔 〕 の部分を省く | 設定の問題 ({file}〔:{line}〕): {detail} / {hint} |
 | `msg.config.problems` | 設定の診断が 2 件以上 (v0.4 の M26 から、言語ファイルの診断を含む。「ほか N 件」は N 件と数える。hint は、80 桁のメッセージ行で本文 (要約) が切り詰められて消えないよう、ログのパスを外して短くした (対処は省略しない、§8.9。ログの場所は一覧と `--check-config` で分かる)) | 設定に {count} 件の問題があります。最初の 1 件: {detail} / 一覧は「設定の診断を表示」で見られます |
 

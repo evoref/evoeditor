@@ -16,7 +16,7 @@ use super::{
 /// 03 §12.7.7)。結果は `emit` に渡す (終端は最後の 1 つ)。
 ///
 /// 依頼は値で受け取り、ジョブの入力 (区切って譲るジョブの状態・解放する一覧) はこの呼出しの中 (= ワーカーのスレッド) で
-/// 手放す。区切って譲るジョブ (`WorkspaceScan`) は、1 区切りを終えると終端の結果を送らずに `JobStep::Continue` で続きを
+/// 手放す。区切って譲るジョブ (`WorkspaceScan` / `WorkspaceSearch`) は、1 区切りを終えると終端の結果を送らずに `JobStep::Continue` で続きを
 /// 返す (02 §9.3。積み直すのは呼び出し側)。ほかは `JobStep::Done`。
 pub fn run_job(
     req: JobRequest,
@@ -70,14 +70,42 @@ pub fn run_job(
             emit(JobOutput { job: req.id, body });
             return JobStep::Done;
         }
-        JobKind::ReleaseCandidates { chunks } => {
+        JobKind::ReleaseCandidates { chunks, hits } => {
             // 最後の参照をここ (ワーカーのスレッド) で手放す
             drop(chunks);
+            drop(hits);
             emit(JobOutput {
                 job: req.id,
                 body: JobResult::Released,
             });
             return JobStep::Done;
+        }
+        JobKind::WorkspaceSearch {
+            root,
+            generation,
+            query,
+            exclude,
+            open_docs,
+            max_file_size,
+            max_lines,
+            state,
+        } => {
+            return crate::workspace::run_workspace_search(
+                req.id,
+                crate::workspace::WsSearchJob {
+                    root,
+                    generation,
+                    query,
+                    exclude,
+                    open_docs,
+                    max_file_size,
+                    max_lines,
+                    state,
+                },
+                ports,
+                cancel,
+                emit,
+            );
         }
         kind => JobRequest { kind, ..req },
     };
@@ -399,6 +427,7 @@ pub fn run_job(
         },
         JobKind::WorkspaceScan { .. }
         | JobKind::FinderMatch { .. }
+        | JobKind::WorkspaceSearch { .. }
         | JobKind::ReleaseCandidates { .. } => {
             unreachable!("ワークスペースのジョブは上で処理した")
         }

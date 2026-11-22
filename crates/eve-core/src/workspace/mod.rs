@@ -19,6 +19,8 @@ mod git;
 pub(crate) mod root;
 mod scan_job;
 mod walk;
+mod ws_search;
+pub(crate) mod ws_search_ui;
 
 pub use candidate::{Candidate, char_bit};
 pub use finder_match::{
@@ -28,7 +30,13 @@ pub use finder_match::{
 };
 pub use root::{RootSource, Workspace};
 pub(crate) use scan_job::run_scan;
-pub use walk::{NoObserver, WalkObserver, WalkStep, WorkspaceWalk};
+pub use walk::{EntryFacts, NoObserver, WalkObserver, WalkStep, WorkspaceWalk};
+pub use ws_search::{
+    OpenDocBody, OpenDocRef, WS_BYTES_PER_STEP, WS_EXCERPT_BEFORE, WS_EXCERPT_BYTES,
+    WS_FILES_PER_STEP, WS_MAX_DECODE_BYTES, WS_MAX_FILE_SIZE, WS_MAX_RANGES_PER_LINE,
+    WS_MAX_RESULT_LINES, WS_PROGRESS_INTERVAL, WorkspaceSearchState, WsHit, WsProgress,
+};
+pub(crate) use ws_search::{WsSearchJob, run_workspace_search};
 
 use crate::time::Millis;
 

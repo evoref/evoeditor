@@ -1650,13 +1650,14 @@ enum JobKind {                     // Port は持たない (run_job が JobPorts
     WorkspaceScan { root: FsPath, exclude: Arc<ExcludeConfig>, generation: u64, walk: Option<Box<WorkspaceWalk>> /*積み直しの続き*/ },
                                                                       // bg。ファインダの候補の走査。ディレクトリ 16 個ごとに自分を積み直す (03 §12.7.2)
     FinderMatch { chunks: Vec<Arc<[Candidate]>>, query: Arc<str>, top: usize, generation: u64 }, // bg。ファインダの照合 (03 §12.7.4)
-    WorkspaceSearch { root: FsPath, query: SearchQuery, exclude: Arc<ExcludeConfig>, open_docs: Vec<OpenDocRef /*canonical・ファイル名・FileId・Snapshot*/>,
-                      decode: DecodeSettings, max_file_size: u64, max_lines: usize, generation: u64, state: Option<Box<WorkspaceSearchState>> },
-                                                                      // bg。横断検索 (03 §12.7.5)。区切りはディレクトリ 16 個・ファイル 64 個・中身 1 MiB・8 ms の早いほう
+    WorkspaceSearch { root: FsPath, query: SearchQuery, exclude: Arc<ExcludeConfig>, open_docs: Vec<OpenDocRef /*パス・canonical・FileId・file_id_unique・中身 (Snapshot か飛ばす印)*/>,
+                      max_file_size: u64, max_lines: usize, generation: u64, state: Option<Box<WorkspaceSearchState>> },
+                                                                      // bg。横断検索 (03 §12.7.5)。区切りはディレクトリ 16 個・ファイル 64 個・中身 1 MiB・8 ms の早いほう。
+                                                                      // 復号は読込と同じ判定の関数 (DetectOptions の既定) を使う (03 §12.7.5 の 3。M31 の段 7)
     ReleaseCandidates { chunks: Vec<Arc<[Candidate]>>, hits: Vec<WsHit> },              // bg。古い候補の一覧・横断検索の結果を bg で解放する (主スレッドで大きな一覧を drop しない、03 §12.7.2)。
                                                                       // 終端の結果は Released だけ。取消し (CancelToken・spawner の drop) を見ず、常に Released を返す
                                                                       // (run_job の入口の取消しの確かめからも外す。ManualJobSpawner の cancel もキューに残す)。
-                                                                      // hits は横断検索 (M31 の段 7) で足す (段 4 の実装は chunks だけ)
+                                                                      // hits は横断検索の古い結果 (M31 の段 7 で足した。ファインダは空の Vec を渡す)
     Swap     { doc: Arc<DocSnapshot> /*1 文書分*/ },                                                  // bg (v0.2)。FileSystem::write_swap (§4.5) が置き場所を決めて書く
     SwapRead { entry: SwapEntry }, SwapRemove { entry: SwapEntry },   // io (v0.2)。他のプロセスが残したスワップの適用・破棄 (03 §10.3)
     SwapDiscard { doc: DocumentId, path: Option<FsPath> },            // io (v0.2)。自分のスワップを消す (03 §10.2)
@@ -1799,7 +1800,8 @@ enum JobResult {                   // #[non_exhaustive]
     ScanDone     { generation: u64, total: u64, truncated: bool },                    // WorkspaceScan の終端 (ルートが読めなければ Failed)
     Released,                                                                        // ReleaseCandidates の終端 (受け手は何もしない。v0.5 の M31 の段 4)
     FinderMatched { generation: u64, matched: usize, top: Vec<FinderHit> },
-    WorkspaceHits { generation: u64, hits: Vec<WsHit>, progress: WsProgress },        // 非終端。WorkspaceSearch の区切りごと
+    WorkspaceHits { generation: u64, hits: Vec<WsHit>, progress: WsProgress },        // 非終端。WorkspaceSearch の区切りごと (結果の無い区切りは 100 ms ごとの進捗だけ)。
+                                                                                     // WsProgress は files・hit_files・skipped_{large,binary,other}・unreadable_dirs (03 §12.7.5)
     WorkspaceSearchDone { generation: u64, progress: WsProgress, truncated: bool },   // WorkspaceSearch の終端
     // ── 共通 ──
     Failed       { err: JobError },

@@ -607,6 +607,31 @@ fn ファインダの長いルートと長いパスは中間を詰める() {
     golden::check(&dir().join("finder-long.styles.txt"), &styles);
 }
 
+/// 横断検索の結果 (03 §12.7.5、04 §8.12): 見出しのトグル、`パス:行: 抜粋` の行と一致の強調、件数の欄。
+#[test]
+fn 横断検索の結果() {
+    let mut h = Harness::builder()
+        .size(80, 14)
+        .defer_start()
+        .dir("/w/proj/.git")
+        .file(
+            "/w/proj/src/a.rs",
+            b"fn main() {\n    let needle = 1; // needle\n}\n",
+        )
+        .file("/w/proj/b.txt", b"needle\n")
+        .build();
+    h.editor
+        .open_initial_files(&[eve_core::InitialFile::path("/w/proj/b.txt")], false, None);
+    h.started();
+    h.run_jobs();
+    h.keys("ctrl+shift+f");
+    h.text("needle");
+    h.run_jobs();
+    let (text, styles) = screen(&mut h, DEFAULT_LOOK);
+    golden::check(&dir().join("workspace-search.txt"), &text);
+    golden::check(&dir().join("workspace-search.styles.txt"), &styles);
+}
+
 // ---- タブライン (v0.5 の M32、FR-510。03 §4.7.1 の L4) ----
 
 /// `files` を順に開いた Harness (最後に開いた文書を表示する)。

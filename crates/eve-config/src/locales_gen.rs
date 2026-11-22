@@ -8,7 +8,7 @@ use std::borrow::Cow::Borrowed as B;
 
 use crate::catalog::Entry;
 
-/// `locales/en.toml` の文言 (905 件)。
+/// `locales/en.toml` の文言 (921 件)。
 #[rustfmt::skip]
 pub(crate) static EN: &[Entry] = &[
     (B("cmd.app.quit.description"), B("Quit the editor.")),
@@ -163,6 +163,8 @@ pub(crate) static EN: &[Entry] = &[
     (B("cmd.search.toggle_selection.title"), B("Toggle In Selection")),
     (B("cmd.search.toggle_word.description"), B("Toggle matching whole words only.")),
     (B("cmd.search.toggle_word.title"), B("Toggle Whole Word")),
+    (B("cmd.search.workspace.description"), B("Search across the files in the workspace.")),
+    (B("cmd.search.workspace.title"), B("Search Workspace")),
     (B("cmd.select.all.description"), B("Select the whole document.")),
     (B("cmd.select.all.title"), B("Select All")),
     (B("cmd.select.extend_down.description"), B("Extend the selection down one line.")),
@@ -427,7 +429,9 @@ pub(crate) static EN: &[Entry] = &[
     (B("msg.external.check_failed.text"), B("Could not check {path} for changes: {reason}")),
     (B("msg.finder.dangling_link.hint"), B("Check where the link points")),
     (B("msg.finder.dangling_link.text"), B("{path} is a link, and its target {target} does not exist")),
-    (B("msg.finder.not_found.hint"), B("Reopen the list to scan the current files")),
+    (B("msg.finder.match_failed.hint"), B("Change the text to filter again")),
+    (B("msg.finder.match_failed.text"), B("Failed to filter the files: {reason}")),
+    (B("msg.finder.not_found.hint"), B("Check whether the file was moved or deleted")),
     (B("msg.finder.not_found.text"), B("{path} no longer exists")),
     (B("msg.io.stalled.hint"), B("Wait a while, or cancel with {key:ui.cancel}. Other file operations can continue meanwhile")),
     (B("msg.io.stalled.text"), B("A file operation is not responding (for example a file on the network)")),
@@ -571,6 +575,8 @@ pub(crate) static EN: &[Entry] = &[
     (B("msg.workspace.root_invalid.text"), B("Cannot use {path} as the workspace: {reason}")),
     (B("msg.workspace.scan_failed.hint"), B("Check the folder permissions")),
     (B("msg.workspace.scan_failed.text"), B("Cannot read the workspace {root}: {reason}")),
+    (B("msg.workspace.search_failed.hint"), B("Change the search text to search again")),
+    (B("msg.workspace.search_failed.text"), B("Workspace search failed: {reason}")),
     (B("status.cursors.long"), B("{count} cursors")),
     (B("status.cursors.short"), B("{count} cur")),
     (B("status.degraded.long_line.long"), B("[Long lines: no wrap]")),
@@ -803,6 +809,7 @@ pub(crate) static EN: &[Entry] = &[
     (B("ui.confirm.unsaved_reopen.save"), B("[S] Save, then reopen")),
     (B("ui.confirm.unsaved_reopen.title"), B("Unsaved changes")),
     (B("ui.finder.footer_incomplete"), B("{matched}/{total} (list incomplete)")),
+    (B("ui.finder.footer_no_root"), B("Could not determine the workspace")),
     (B("ui.finder.footer_scanning"), B("{matched}/{total} scanning…")),
     (B("ui.finder.footer_truncated"), B("{matched}/{total} (stopped at {limit} files)")),
     (B("ui.finder.footer_waiting"), B("Finding the workspace…")),
@@ -916,9 +923,18 @@ pub(crate) static EN: &[Entry] = &[
     (B("ui.search.replace_all_button"), B("[A] Replace All")),
     (B("ui.search.replace_label"), B("Replace:")),
     (B("ui.too_small"), B("The terminal is too small (at least {cols}x{rows} is needed)")),
+    (B("ui.workspace_search.footer_done"), B("{lines} lines ({hit_files}/{files} files)")),
+    (B("ui.workspace_search.footer_failed"), B("{lines} lines (search failed)")),
+    (B("ui.workspace_search.footer_running"), B("{lines} lines · searching {files} files…")),
+    (B("ui.workspace_search.footer_truncated"), B("Stopped at {lines} lines ({hit_files} files)")),
+    (B("ui.workspace_search.item"), B("{path}:{line}: {text}")),
+    (B("ui.workspace_search.no_match"), B("No matches")),
+    (B("ui.workspace_search.placeholder"), B("Type to search")),
+    (B("ui.workspace_search.skipped_suffix"), B(" · {skipped} skipped")),
+    (B("ui.workspace_search.title"), B("Search Workspace {toggles}")),
 ];
 
-/// `locales/ja.toml` の文言 (905 件)。
+/// `locales/ja.toml` の文言 (921 件)。
 #[rustfmt::skip]
 pub(crate) static JA: &[Entry] = &[
     (B("cmd.app.quit.description"), B("エディタを終了します。")),
@@ -1073,6 +1089,8 @@ pub(crate) static JA: &[Entry] = &[
     (B("cmd.search.toggle_selection.title"), B("選択範囲内を切替")),
     (B("cmd.search.toggle_word.description"), B("一致の両端が単語の境界にあるものだけを探すかを切り替えます。")),
     (B("cmd.search.toggle_word.title"), B("単語単位を切替")),
+    (B("cmd.search.workspace.description"), B("ワークスペースのファイルを横断して検索します。")),
+    (B("cmd.search.workspace.title"), B("ワークスペースを検索")),
     (B("cmd.select.all.description"), B("文書全体を選択します。")),
     (B("cmd.select.all.title"), B("すべて選択")),
     (B("cmd.select.extend_down.description"), B("選択範囲を下の行へ広げます。")),
@@ -1337,7 +1355,9 @@ pub(crate) static JA: &[Entry] = &[
     (B("msg.external.check_failed.text"), B("{path} の変更を確かめられませんでした: {reason}")),
     (B("msg.finder.dangling_link.hint"), B("リンク先を確かめてください")),
     (B("msg.finder.dangling_link.text"), B("{path} はリンクで、リンク先 {target} がありません")),
-    (B("msg.finder.not_found.hint"), B("一覧を開き直すと、今のファイルで探し直します")),
+    (B("msg.finder.match_failed.hint"), B("入力を変えると絞り込み直します")),
+    (B("msg.finder.match_failed.text"), B("ファイルの絞り込みに失敗しました: {reason}")),
+    (B("msg.finder.not_found.hint"), B("ファイルが移動・削除されていないかを確かめてください")),
     (B("msg.finder.not_found.text"), B("{path} はもうありません")),
     (B("msg.io.stalled.hint"), B("しばらく待つか、{key:ui.cancel} で取り消してください。他のファイル操作はその間も続けられます")),
     (B("msg.io.stalled.text"), B("ファイルの操作が応答していません (ネットワーク上のファイルなど)")),
@@ -1481,6 +1501,8 @@ pub(crate) static JA: &[Entry] = &[
     (B("msg.workspace.root_invalid.text"), B("{path} をワークスペースにできません: {reason}")),
     (B("msg.workspace.scan_failed.hint"), B("フォルダの権限を確認してください")),
     (B("msg.workspace.scan_failed.text"), B("ワークスペース {root} を読めません: {reason}")),
+    (B("msg.workspace.search_failed.hint"), B("検索語を変えると探し直します")),
+    (B("msg.workspace.search_failed.text"), B("ワークスペースの検索に失敗しました: {reason}")),
     (B("status.cursors.long"), B("カーソル {count} 個")),
     (B("status.cursors.short"), B("{count}カーソル")),
     (B("status.degraded.long_line.long"), B("[長い行: 折り返しなし]")),
@@ -1713,6 +1735,7 @@ pub(crate) static JA: &[Entry] = &[
     (B("ui.confirm.unsaved_reopen.save"), B("[S] 保存してから開き直す")),
     (B("ui.confirm.unsaved_reopen.title"), B("未保存の変更")),
     (B("ui.finder.footer_incomplete"), B("{matched}/{total} (一覧が途中までです)")),
+    (B("ui.finder.footer_no_root"), B("ワークスペースを決められませんでした")),
     (B("ui.finder.footer_scanning"), B("{matched}/{total} 走査中…")),
     (B("ui.finder.footer_truncated"), B("{matched}/{total} (ファイルが多いため {limit} 件で打ち切りました)")),
     (B("ui.finder.footer_waiting"), B("ワークスペースを調べています…")),
@@ -1826,4 +1849,13 @@ pub(crate) static JA: &[Entry] = &[
     (B("ui.search.replace_all_button"), B("[A] すべて置換")),
     (B("ui.search.replace_label"), B("置換:")),
     (B("ui.too_small"), B("端末が小さすぎます ({cols}x{rows} 以上が必要)")),
+    (B("ui.workspace_search.footer_done"), B("{lines} 件 ({hit_files}/{files} ファイル)")),
+    (B("ui.workspace_search.footer_failed"), B("{lines} 件 (検索に失敗しました)")),
+    (B("ui.workspace_search.footer_running"), B("{lines} 件・{files} ファイルを検索中…")),
+    (B("ui.workspace_search.footer_truncated"), B("{lines} 件で打ち切りました ({hit_files} ファイル)")),
+    (B("ui.workspace_search.item"), B("{path}:{line}: {text}")),
+    (B("ui.workspace_search.no_match"), B("一致はありません")),
+    (B("ui.workspace_search.placeholder"), B("検索語を入力")),
+    (B("ui.workspace_search.skipped_suffix"), B("・飛ばした {skipped}")),
+    (B("ui.workspace_search.title"), B("ワークスペースを検索 {toggles}")),
 ];
