@@ -234,7 +234,14 @@ pub fn word_at(text: &dyn TextRead, pos: Pos, max_window: usize) -> Option<ByteR
         let to = ceil_char(text, pos.saturating_add(window).min(le));
         let s = line_text(text, from, to);
         let (a, b) = word_in(&s, pos - from)?;
-        let cut_left = a == 0 && from > ls;
+        // 窓が行の途中で始まるとき、最初の書記素は信用しない: 書記素の途中で切れていることがあり、直前の文字種に従う文字
+        // (`ー`・`々` など、§13.3) を直前なしで分類している。単語がその書記素の後ろまで届いていれば、窓を広げて読み直す
+        let lead = if from > ls {
+            str_graphemes(&s).next().map_or(0, |(i, g)| i + g.len())
+        } else {
+            0
+        };
+        let cut_left = from > ls && a <= lead;
         let cut_right = b == s.len() && to < le;
         if (cut_left || cut_right) && window < max_window {
             window = window.saturating_mul(2).min(max_window);
@@ -610,6 +617,27 @@ mod word_at_tests {
             at("コーヒ|ー").as_deref(),
             Some("コーヒー"),
             "長音は直前の文字種に従う"
+        );
+    }
+
+    #[test]
+    fn 窓の左端が直前の文字種に従う文字や書記素の途中でも途中から始めない() {
+        // 窓 (256 バイト) の左端が `ー` (直前のかなに従う) に当たる: `ー` を直前なしでカタカナと分類しない
+        let s = format!("{}ー{} x", "ひ".repeat(10), "ひ".repeat(90));
+        let t = Text::from(s.as_str());
+        let pos = ByteOff(30 + 3 + 255);
+        assert!(s.is_char_boundary(pos.0));
+        let r = word_at(&t, pos, 1 << 16).expect("単語");
+        assert_eq!((r.start.0, r.end.0), (0, 303), "`ー` を含むひらがなの並び");
+        // 窓の左端が書記素 (か + 濁点 2 つ) の途中 (濁点) に当たる
+        let g = "か\u{3099}\u{3099}";
+        let s = format!("{} tail", g.repeat(60));
+        let t = Text::from(s.as_str());
+        let r = word_at(&t, ByteOff(9 * 50), 1 << 16).expect("単語");
+        assert_eq!(
+            (r.start.0, r.end.0),
+            (0, 9 * 60),
+            "書記素の途中から始めない"
         );
     }
 

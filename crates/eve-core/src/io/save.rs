@@ -655,6 +655,71 @@ impl EditorState {
         }
     }
 
+    /// `Esc` の段 (04 §7.5): 未編集の上書き保存の照合 (`CheckingUnchanged`) を待っていれば、照合の結果を捨てて後続も捨てる
+    /// (03 §9.7 の全状態の遷移表。何も書いていない)。今の文書の照合を、無ければ最後に投入した照合を中止する。中止したら `true`。
+    pub(crate) fn cancel_unchanged_check(&mut self) -> bool {
+        let active = self.active_document();
+        let checks: Vec<(eve_view::JobId, DocumentId)> = self
+            .io
+            .pending
+            .iter()
+            .filter_map(|(job, p)| match p {
+                Pending::CheckUnchanged { doc } => Some((*job, *doc)),
+                _ => None,
+            })
+            .collect();
+        let Some(&(job, doc)) = checks
+            .iter()
+            .find(|(_, d)| Some(*d) == active)
+            .or_else(|| checks.iter().max_by_key(|(j, _)| j.0))
+        else {
+            return false;
+        };
+        self.jobs.cancel(job);
+        self.io.pending.remove(&job);
+        self.ui.continuations.remove(&job);
+        let shown = self
+            .docs
+            .documents
+            .get(&doc)
+            .and_then(|d| d.path.as_ref())
+            .map(FsPath::display)
+            .unwrap_or_default();
+        self.message(MessageLevel::Info, keys::INFO_SAVE_ABORTED, &shown);
+        self.mark_dirty_render();
+        true
+    }
+
+    /// `Esc` の段 (04 §7.5): 表現不能の置換の一覧を作っている (`BuildingReplacement`) なら、ジョブに取消しを送り、E3 の
+    /// 選択肢 3 (キャンセル) と同じ扱いで保存を中止する (保存しない。後続も捨てる。最初の該当位置へ移る、03 §8.6)。
+    /// 今の文書の置換を、無ければ最後に投入した置換を中止する。中止したら `true`。
+    pub(crate) fn cancel_building_replacement(&mut self) -> bool {
+        let active = self.active_document();
+        let jobs: Vec<(eve_view::JobId, DocumentId)> = self
+            .io
+            .pending
+            .iter()
+            .filter_map(|(job, p)| match p {
+                Pending::ReplaceUnmappable { ask, .. } => Some((*job, ask.doc)),
+                _ => None,
+            })
+            .collect();
+        let Some(&(job, _)) = jobs
+            .iter()
+            .find(|(_, d)| Some(*d) == active)
+            .or_else(|| jobs.iter().max_by_key(|(j, _)| j.0))
+        else {
+            return false;
+        };
+        self.jobs.cancel(job);
+        self.ui.continuations.remove(&job);
+        if let Some(Pending::ReplaceUnmappable { ask, .. }) = self.io.pending.remove(&job) {
+            self.unmappable_cancelled(&ask);
+        }
+        self.mark_dirty_render();
+        true
+    }
+
     pub(crate) fn finish_check(&mut self, doc_id: DocumentId, r: JobResult) {
         let Some(doc) = self.docs.documents.get(&doc_id) else {
             return;

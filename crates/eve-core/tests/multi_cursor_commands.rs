@@ -190,6 +190,170 @@ fn 同期検索で見つからない一致は単発のジョブで探して足�
     assert_eq!(selection(&h).len(), 1, "投入時と選択が違うので足さない");
 }
 
+/// 1 KiB の行を `n` 行 (同期検索の予算を使い切る長さ)。
+fn filler(n: usize) -> String {
+    format!("{}\n", "x".repeat(1023)).repeat(n)
+}
+
+/// View `v` の選択。
+fn selection_of(h: &Harness, v: eve_view::ViewId) -> Selection {
+    h.editor
+        .state()
+        .view(v)
+        .expect("View がある")
+        .selection
+        .clone()
+}
+
+// verifies: AC-FR-211-1
+#[test]
+fn 単発のジョブの結果は_revision_が変わっていたら捨てる() {
+    // 右のペインで投げ、左のペインで後ろに書き足す (右のペインの選択は写像で変わらない。Revision だけが違う)
+    let body = format!("foo\n{}foo", filler(600));
+    let mut h = opened("/w/big.txt", body.as_bytes());
+    let v = view(&h);
+    h.editor
+        .state_mut()
+        .set_selection(v, Selection::single(Range::new(ByteOff(0), ByteOff(3))));
+    h.cmd("pane.split_right");
+    let right = view(&h);
+    h.keys("ctrl+d");
+    h.cmd("pane.focus_next");
+    h.keys("ctrl+end");
+    h.text("z");
+    let before = selection_of(&h, right);
+    h.run_jobs();
+    assert_eq!(before.len(), 1);
+    assert_eq!(
+        selection_of(&h, right),
+        before,
+        "Revision が違うので足さない"
+    );
+}
+
+// verifies: AC-FR-211-1
+#[test]
+fn 単発のジョブの結果が飛ばす一致なら_その後ろから続けて足す() {
+    // 主 (先頭) と、間の `foo` を選んである。間の `foo` は飛ばし (同期検索とジョブを 2 回)、最後の `foo` を足す
+    let body = format!("foo\n{}foo\n{}foo", filler(600), filler(600));
+    let len = body.len();
+    let mid = 4 + 600 * 1024;
+    let mut h = opened("/w/big.txt", body.as_bytes());
+    let v = view(&h);
+    let sel = Selection::new(
+        vec![
+            Range::new(ByteOff(0), ByteOff(3)),
+            Range::new(ByteOff(mid), ByteOff(mid + 3)),
+        ],
+        0,
+    )
+    .expect("Selection");
+    h.editor.state_mut().set_selection(v, sel);
+    h.keys("ctrl+d");
+    assert_eq!(selection(&h).len(), 2, "ジョブの結果を待つ");
+    h.clear_log();
+    h.run_jobs();
+    let s = selection(&h);
+    assert_eq!(s.len(), 3, "{:?}", s.ranges());
+    assert_eq!(*s.primary(), Range::new(ByteOff(len - 3), ByteOff(len)));
+    assert!(h.messages().is_empty(), "{:?}", h.messages());
+}
+
+// verifies: AC-FR-211-1
+#[test]
+fn 飛ばす一致の後ろから続ける同期検索は_1_回分の予算を分け合う() {
+    // 間の `foo` (選んである) まで 150 KiB、最後の `foo` まで更に 100 KiB: 続けた同期検索の合計は予算 (256 KiB) を超えるので、
+    // その場では足さずにジョブに回す (呼び出しごとに予算を新しくすると、メインスレッドで 250 KiB を読んで足してしまう)
+    let body = format!("foo\n{}foo\n{}foo", filler(150), filler(100));
+    let mid = 4 + 150 * 1024;
+    let mut h = opened("/w/big.txt", body.as_bytes());
+    let v = view(&h);
+    let sel = Selection::new(
+        vec![
+            Range::new(ByteOff(0), ByteOff(3)),
+            Range::new(ByteOff(mid), ByteOff(mid + 3)),
+        ],
+        0,
+    )
+    .expect("Selection");
+    h.editor.state_mut().set_selection(v, sel);
+    h.keys("ctrl+d");
+    assert_eq!(selection(&h).len(), 2, "予算を使い切ってジョブに回る");
+    h.run_jobs();
+    assert_eq!(selection(&h).len(), 3, "ジョブの結果で足す");
+}
+
+// verifies: AC-FR-211-1
+#[test]
+fn ジョブを経た末尾から先頭への回り込みは主の始まりで止まる() {
+    // 主は最後の `foo`、先頭の `foo` も選んである。先頭へ回って先頭の `foo` を飛ばした後、同期検索の予算が尽きてジョブに
+    // 回り、ジョブは主 (回った後の主の始まり) を見つけて止める
+    let body = format!("foo\n{}foo", filler(600));
+    let len = body.len();
+    let mut h = opened("/w/big.txt", body.as_bytes());
+    let v = view(&h);
+    let sel = Selection::new(
+        vec![
+            Range::new(ByteOff(0), ByteOff(3)),
+            Range::new(ByteOff(len - 3), ByteOff(len)),
+        ],
+        1,
+    )
+    .expect("Selection");
+    h.editor.state_mut().set_selection(v, sel.clone());
+    h.clear_log();
+    h.keys("ctrl+d");
+    assert!(h.messages().is_empty(), "同期検索では決まらない");
+    h.run_jobs();
+    assert_eq!(h.messages(), ["info.select.no_more_matches"]);
+    assert_eq!(selection(&h), sel);
+}
+
+// verifies: AC-FR-211-1
+#[test]
+fn 検索バーの逐次検索の後も単語の一致の印は残る() {
+    let mut h = scene("*|foo foobar foo");
+    h.keys("ctrl+d");
+    // 検索バーを開いて打つ (一致へスクロールするために選択を置き直して戻す) → 閉じる
+    h.keys("ctrl+f");
+    h.text("bar");
+    h.keys("esc");
+    assert_eq!(shown(&h), "«foo» foobar foo", "選択は変わらない");
+    h.keys("ctrl+d");
+    assert_eq!(
+        shown(&h),
+        "«foo» foobar «foo»",
+        "単語単位のまま (foobar を飛ばす)"
+    );
+}
+
+// verifies: AC-FR-211-1
+#[test]
+fn 長すぎる選択と文書の全体からは探さない() {
+    let long = "x".repeat(eve_core_query_max() + 1);
+    let mut h = scene(&format!("*«{long}» {long}"));
+    assert_eq!(press(&mut h, "ctrl+d"), ["info.select.query_too_long"]);
+    assert_eq!(press(&mut h, "ctrl+k e"), ["info.select.query_too_long"]);
+    assert_eq!(selection(&h).len(), 1);
+    // 上限ちょうどは探す
+    let ok = "x".repeat(eve_core_query_max());
+    let mut h = scene(&format!("*«{ok}» {ok}"));
+    assert_eq!(press(&mut h, "ctrl+d"), NO_MESSAGE);
+    assert_eq!(selection(&h).len(), 2);
+    // 文書の全体 (`select.all` の後) は何もしない (知らせない)
+    let mut h = scene("*|foo foo");
+    h.keys("ctrl+a");
+    let before = selection(&h);
+    assert_eq!(press(&mut h, "ctrl+d"), NO_MESSAGE);
+    assert_eq!(press(&mut h, "ctrl+k e"), NO_MESSAGE);
+    assert_eq!(selection(&h), before);
+}
+
+/// 検索語の長さの上限 (03 §4.5.1 の MCUR-2 (k) の 64 KiB)。
+fn eve_core_query_max() -> usize {
+    64 * 1024
+}
+
 // ---------- select.all_matches (MCUR-3) ----------
 
 // verifies: AC-FR-211-1
@@ -371,6 +535,63 @@ fn esc_は主の_range_だけを残し_もう一度で選択を解く() {
     assert_eq!(shown(&h), "one two| three", "選択を解いて head のカーソル");
     h.keys("esc");
     assert_eq!(shown(&h), "one two| three", "それ以外は何もしない");
+}
+
+// verifies: AC-FR-211-1
+#[test]
+fn 検索バーやオーバーレイを開いている間の_esc_はそれだけを閉じて_range_を残す() {
+    let mut h = scene("a|b *|c");
+    h.keys("ctrl+f");
+    h.keys("esc");
+    assert_eq!(h.editor.state().overlay_kind(), "");
+    assert_eq!(selection(&h).len(), 2, "検索バーを閉じるだけ");
+    h.keys("ctrl+p");
+    assert_ne!(h.editor.state().overlay_kind(), "");
+    h.keys("esc");
+    assert_eq!(h.editor.state().overlay_kind(), "");
+    assert_eq!(selection(&h).len(), 2, "パレットを閉じるだけ");
+    h.keys("esc");
+    assert_eq!(selection(&h).len(), 1, "前の段が無ければ主だけに");
+}
+
+// verifies: AC-FR-211-1
+#[test]
+fn 未編集の上書き保存の照合を待つ間の_esc_は照合を中止し_range_を残す() {
+    let mut h = opened("/w/a.txt", b"ab\ncd\n");
+    h.keys("ctrl+alt+down");
+    assert_eq!(selection(&h).len(), 2);
+    h.keys("ctrl+s");
+    assert_eq!(press(&mut h, "esc"), ["info.save.aborted"], "照合の中止");
+    assert_eq!(selection(&h).len(), 2, "選択は減らさない");
+    h.clear_log();
+    h.run_jobs();
+    assert!(
+        !h.messages().iter().any(|k| k == "info.save.unchanged"),
+        "照合の結果は捨てた: {:?}",
+        h.messages()
+    );
+    h.keys("esc");
+    assert_eq!(selection(&h).len(), 1);
+}
+
+// verifies: AC-FR-211-1
+#[test]
+fn すべて選ぶのジョブは検索バーの全件の走査を取り消さない() {
+    let body = format!("foo\n{}foo", "y\n".repeat(600 * 1024));
+    let mut h = opened("/w/big.txt", body.as_bytes());
+    h.keys("ctrl+f");
+    h.text("foo");
+    h.cmd("select.all_matches");
+    h.run_jobs();
+    assert_eq!(selection(&h).len(), 2, "すべて選んだ");
+    assert!(
+        matches!(
+            h.editor.state().search_count(),
+            eve_core::SearchCount::Exact { total: 2, .. }
+        ),
+        "検索バーの全件の走査は最後まで数えた: {:?}",
+        h.editor.state().search_count()
+    );
 }
 
 // verifies: AC-FR-211-3

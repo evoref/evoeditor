@@ -21,7 +21,7 @@ use crate::io::pending::Pending;
 use crate::jobs::cancel::CancelToken;
 use crate::jobs::{JobKind, JobResult};
 use crate::layout::Affinity;
-use crate::search::search_state::{Found, SYNC_STEP_BYTES};
+use crate::search::search_state::Found;
 use crate::search::{Case, Prepared, ScanCtx, ScanEnd, SearchQuery, scan_range};
 use crate::ui_model::keys;
 use crate::view::motion;
@@ -32,6 +32,10 @@ const WORD_WINDOW: usize = 64 * 1024;
 /// `select.all_matches` をメインスレッドで探す文書の大きさの上限 (バイト、03 §4.5.1 の MCUR-3)。超えれば `bg` の全件の
 /// 検索のジョブで探す。
 pub(crate) const ALL_MATCHES_SYNC_MAX_BYTES: usize = 1 << 20;
+
+/// 主の Range の文字列を検索語にする長さの上限 (バイト、03 §4.5.1 の MCUR-2 (k))。超えたら何もせずに知らせる (大きな選択を
+/// メインスレッドで文字列に写さない)。単語の窓 (`WORD_WINDOW`) と同じ大きさ。
+pub(crate) const MATCH_QUERY_MAX_BYTES: usize = 64 * 1024;
 
 /// 「単語の一致」の印 (03 §4.5.1 の MCUR-2 (a) / (e))。印を立てた (足す操作・`ui.cancel` で更新した) ときの文書の Revision と
 /// 選択を持ち、どちらかが変わっていたら (移動・クリック・編集・Undo など、選択を変えるほかの操作の後) 印は無いものとする。
@@ -136,6 +140,25 @@ impl NextMatchAsk {
     }
 }
 
+/// 主の Range (空でない) を検索語にできるか (03 §4.5.1 の MCUR-2 (k))。
+enum QueryFit {
+    Fits,
+    /// 文書の全体 (ほかに一致は無い。何もしない)。
+    WholeDocument,
+    /// `MATCH_QUERY_MAX_BYTES` を超える (知らせる)。
+    TooLong,
+}
+
+fn query_fit(primary: Range, len: usize) -> QueryFit {
+    if primary.start().0 == 0 && primary.end().0 >= len {
+        QueryFit::WholeDocument
+    } else if primary.end().0 - primary.start().0 > MATCH_QUERY_MAX_BYTES {
+        QueryFit::TooLong
+    } else {
+        QueryFit::Fits
+    }
+}
+
 /// 検索語のリテラル (03 §4.5.4: リテラル・大小を区別。検索バーのトグルと CP932 互換文字の同一視の設定に依らない)。
 fn literal_query(text: &str, word: bool) -> SearchQuery {
     SearchQuery::literal(text)
@@ -215,6 +238,14 @@ impl EditorState {
             return CommandResult::Done;
         }
         // (b): 主の Range の文字列の次の一致を足す (上限は、足した後の併合の後の数で調べる。`add_match`)
+        match query_fit(primary, t.len_bytes()) {
+            QueryFit::Fits => {}
+            QueryFit::WholeDocument => return CommandResult::Done,
+            QueryFit::TooLong => {
+                self.show_message(MessageLevel::Info, keys::INFO_SELECT_QUERY_TOO_LONG, &[]);
+                return CommandResult::Done;
+            }
+        }
         let word = self.word_mark_valid(view);
         let text = t.slice_to_string(ByteRange::new(primary.start(), primary.end()));
         let ask = NextMatchAsk {
@@ -243,19 +274,17 @@ impl EditorState {
         }
     }
 
-    /// 同期検索で次の一致を探す (`search.next` と同じ 256 KiB の予算。既存の Range と重なる一致を飛ばして進んだ量も数える)。
+    /// 同期検索で次の一致を探す (`search.next` と同じ予算: 256 KiB、行ごとに切り出す経路は 1/16。既存の Range と重なる
+    /// 一致を飛ばして探し続ける間の全部の呼び出しで、1 回分の予算を分け合う。03 §4.5.1 の MCUR-2 (d) / (i))。
     fn next_match_sync(&self, ask: &mut NextMatchAsk) -> Next {
         // 行をまたぐ検索語・重い検索語は同期検索をしない (03 §12.3.1)
         if ask.query.shape().is_some_and(|s| s.job_driven()) {
             return Next::Job;
         }
-        let Some(len) = self.document(ask.doc).map(|d| d.text().len_bytes()) else {
-            return Next::None;
-        };
-        let mut advanced = 0usize;
+        let mut budget: Option<usize> = None;
         loop {
-            let before = ask.cursor.0;
-            let (r, w) = match self.sync_find(ask.doc, &ask.query, ask.cursor, true) {
+            let found = self.sync_find_within(ask.doc, &ask.query, ask.cursor, true, &mut budget);
+            let (r, w) = match found {
                 Found::Hit(r, w) => (r, w),
                 Found::None => return Next::None,
                 Found::Incomplete => return Next::Job,
@@ -264,14 +293,6 @@ impl EditorState {
                 Judge::Take => return Next::Hit(r),
                 Judge::Stop => return Next::None,
                 Judge::Skip => {}
-            }
-            advanced = advanced.saturating_add(if w {
-                len.saturating_sub(before).saturating_add(r.end.0)
-            } else {
-                r.end.0.saturating_sub(before)
-            });
-            if advanced > SYNC_STEP_BYTES {
-                return Next::Job;
             }
         }
     }
@@ -371,6 +392,14 @@ impl EditorState {
                 }
             }
         } else {
+            match query_fit(primary, t.len_bytes()) {
+                QueryFit::Fits => {}
+                QueryFit::WholeDocument => return CommandResult::Done,
+                QueryFit::TooLong => {
+                    self.show_message(MessageLevel::Info, keys::INFO_SELECT_QUERY_TOO_LONG, &[]);
+                    return CommandResult::Done;
+                }
+            }
             (
                 ByteRange::new(primary.start(), primary.end()),
                 self.word_mark_valid(view),

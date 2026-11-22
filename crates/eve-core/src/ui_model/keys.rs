@@ -67,6 +67,7 @@ pub(crate) const INFO_SAVE_ALL_DONE_SKIPPED: &str = "info.save_all.done_skipped"
 pub(crate) const INFO_SAVE_ALL_NONE: &str = "info.save_all.none";
 pub(crate) const INFO_SELECT_NO_MORE_MATCHES: &str = "info.select.no_more_matches";
 pub(crate) const INFO_SELECT_NO_WORD: &str = "info.select.no_word";
+pub(crate) const INFO_SELECT_QUERY_TOO_LONG: &str = "info.select.query_too_long";
 pub(crate) const INFO_SELECT_TOO_MANY_MATCHES: &str = "info.select.too_many_matches";
 pub(crate) const INFO_SEARCH_NO_SELECTION: &str = "info.search.no_selection";
 pub(crate) const INFO_SEARCH_REPLACE_EMPTY_QUERY: &str = "info.search.replace_empty_query";
@@ -333,7 +334,7 @@ pub(crate) const UI_WORKSPACE_SEARCH_TITLE: &str = "ui.workspace_search.title";
 
 /// すべての定数 (キーの順。試験に使う)。
 #[cfg(test)]
-const ALL: [&str; 309] = [
+const ALL: [&str; 310] = [
     HINT_UI_CANCEL,
     INFO_APP_RELEASE_SUMMARY,
     INFO_APP_UPDATED,
@@ -397,6 +398,7 @@ const ALL: [&str; 309] = [
     INFO_SAVE_ALL_NONE,
     INFO_SELECT_NO_MORE_MATCHES,
     INFO_SELECT_NO_WORD,
+    INFO_SELECT_QUERY_TOO_LONG,
     INFO_SELECT_TOO_MANY_MATCHES,
     INFO_SEARCH_NO_SELECTION,
     INFO_SEARCH_REPLACE_EMPTY_QUERY,

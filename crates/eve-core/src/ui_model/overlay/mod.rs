@@ -162,9 +162,14 @@ impl EditorState {
         if self.palette_back() {
             return CommandResult::Done;
         }
-        // 取り消す順 (03 §12.7.6 の細目 (9)): 表示中の文書の読込 (標準入力の確認を含む) → 名前を付けて保存の照合 → 表示して
-        // いない文書の読込。読込の結果は `Failed { Cancelled }` で届き、旧文書があれば残る (FR-122)
+        // 取り消す順 (03 §12.7.6 の細目 (9)、04 §7.5): 表示中の文書の読込 (標準入力の確認を含む) → 未編集の上書き保存の
+        // 照合 → 名前を付けて保存の照合 → 表示していない文書の読込 → 表現不能の置換の一覧の作成。読込の結果は
+        // `Failed { Cancelled }` で届き、旧文書があれば残る (FR-122)
         if self.ui.overlay.is_none() && self.cancel_own_loading() {
+            return CommandResult::Done;
+        }
+        // 未編集の上書き保存の照合 (`CheckingUnchanged`) は中止する (何も書いていない。後続も捨てる、03 §9.7)
+        if self.ui.overlay.is_none() && self.cancel_unchanged_check() {
             return CommandResult::Done;
         }
         // 照合を待つ間は、結果を捨てて名前の入力に戻る (03 §9.7 の `CheckTarget` の行)
@@ -173,6 +178,10 @@ impl EditorState {
             return CommandResult::Done;
         }
         if self.ui.overlay.is_none() && self.cancel_hidden_loading() {
+            return CommandResult::Done;
+        }
+        // 表現不能の置換の一覧を作っている (`BuildingReplacement`) なら、E3 のキャンセルと同じく保存を中止する (03 §9.7)
+        if self.ui.overlay.is_none() && self.cancel_building_replacement() {
             return CommandResult::Done;
         }
         // 確認の `Esc` はキャンセルの選択 (保存の失敗の確認では中止を示す)

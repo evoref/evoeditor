@@ -24,7 +24,7 @@ use crate::editor::state::EditorState;
 use crate::io::pending::Pending;
 
 /// 同期検索で走査する量 (`SEARCH_SYNC_STEP_BYTES`、03 §12.2)。
-pub(crate) const SYNC_STEP_BYTES: usize = 1 << 18;
+const SYNC_STEP_BYTES: usize = 1 << 18;
 /// 同期検索で一度に `scan_bytes` へ渡す量 (打ち切りの粒度)。
 const SYNC_BATCH_BYTES: usize = 64 << 10;
 
@@ -808,6 +808,20 @@ impl EditorState {
         cursor: ByteOff,
         forward: bool,
     ) -> Found {
+        self.sync_find_within(doc_id, query, cursor, forward, &mut None)
+    }
+
+    /// `sync_find` の、予算を呼び出し側と分け合う形 (`select.add_next_match` が飛ばす一致の後ろから続けて探すとき、
+    /// 続けた全部の呼び出しで 1 回分の予算に収める、03 §4.5.1 の MCUR-2 (i))。`budget` が `None` なら照合器の予算
+    /// (`SYNC_STEP_BYTES`、行ごとに切り出す経路は 1/16) で始め、読んだ量を引いて返す。
+    pub(crate) fn sync_find_within(
+        &self,
+        doc_id: DocumentId,
+        query: &SearchQuery,
+        cursor: ByteOff,
+        forward: bool,
+        budget: &mut Option<usize>,
+    ) -> Found {
         let m = match query.prepared() {
             Prepared::Ready(m) => m,
             Prepared::Nothing => return Found::None,
@@ -825,11 +839,11 @@ impl EditorState {
         // 行ごとに切り出す経路 (正規表現と、大小を区別しないリテラルのうち §12.4 の 3 のエスケープした `(?i)` の正規表現) は
         // memmem より 1〜2 桁遅い (行ごとに畳み込んでいた v0.1 の実装で約 50 MB/s、1 MiB で約 20 ms。BM-404)。量を 1/16 に絞り、
         // 見つからなければ呼び出し側が単発のジョブに回す (`Found::Incomplete`)
-        let mut budget = if m.is_chunked() {
+        let budget = budget.get_or_insert(if m.is_chunked() {
             SYNC_STEP_BYTES
         } else {
             SYNC_STEP_BYTES / 16
-        };
+        });
         // 走査する区間 (行の半開区間, 折り返し済みか)。後ろ向きは区間の終わりから、バッチごとに戻る
         let segs: [(std::ops::Range<usize>, bool); 2] = if forward {
             [(line..n, false), (0..line + 1, true)]
@@ -842,7 +856,7 @@ impl EditorState {
                 // 次のバッチ: 目標のバイト数 (`SYNC_BATCH_BYTES` か残りの予算) を行の境界に丸める。
                 // 1 行ずつ走査すると 1 MiB で約 20 ms かかる (BM-404) ので、まとめて `scan_bytes` (memmem) に渡す。
                 // 行ごとの位置の引き直しも避け、バッチごとに 1 回だけ引く
-                let want = SYNC_BATCH_BYTES.min(budget);
+                let want = SYNC_BATCH_BYTES.min(*budget);
                 let (a, b) = if forward {
                     let target = t.line_to_byte(LineIdx(lo)).0.saturating_add(want);
                     let b = if target >= len {
@@ -870,10 +884,10 @@ impl EditorState {
                     t.line_to_byte(LineIdx(b))
                 };
                 let bytes = end.0 - start.0;
-                if bytes > budget {
+                if bytes > *budget {
                     return Found::Incomplete;
                 }
-                budget = budget.saturating_sub(bytes.max(1));
+                *budget = budget.saturating_sub(bytes.max(1));
                 let mut hit: Option<ByteRange> = None;
                 scan_bytes(t, &m, ByteRange::new(start, end), &cancel, &mut |r| {
                     let ok = if forward {
