@@ -491,6 +491,7 @@ impl FileSystem for OneFile {
             link: None,
             fs_kind: FsKind::Local,
             owner_is_me: None,
+            file_id_unique: false,
         })
     }
     fn canonicalize(&self, p: &FsPath) -> Result<FsPath, FsError> {

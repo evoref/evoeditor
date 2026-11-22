@@ -33,10 +33,12 @@ pub(crate) enum Pending {
         kind: OpenKind,
     },
     /// 標準入力の読込 (`JobKind::OpenStdin`、03 §9.2.2。v0.4 の M25)。ファイルの読込 (`Open`) とは別の種類に持ち、
-    /// `open_in_progress`・`cancel_loading`・`loading_percent` の対象から外す。
+    /// `open_in_progress`・`cancel_own_loading`・`cancel_hidden_loading`・`loading_percent` の対象から外す。
     OpenStdin { doc: DocumentId, view: ViewId },
     /// 未編集の上書き保存の照合 (03 §9.3 手順 0)。
     CheckUnchanged { doc: DocumentId },
+    /// 名前を付けて保存の保存先の照合 (`CheckTarget`、03 §9.7 (a)。`MetaPurpose::SaveAsTarget`)。
+    SaveAsTarget(Box<crate::io::save_as::SaveAsAsk>),
     /// 外部変更の確認 (03 §9.5)。`explicit` は `file.check_external_changes` (フォーカス復帰でない)。
     ExternalCheck { doc: DocumentId, explicit: bool },
     /// 文書内の全件検索。状態は `EditorState::search` にある。
@@ -148,6 +150,7 @@ impl EditorState {
                 | Pending::CheckUnchanged { doc: d }
                 | Pending::ExternalCheck { doc: d, .. } => *d == doc,
                 Pending::ReplaceUnmappable { ask, .. } => ask.doc == doc,
+                Pending::SaveAsTarget(ask) => ask.doc == doc,
                 Pending::Search => self.find.search.as_ref().is_some_and(|s| s.doc() == doc),
                 Pending::FindNext { doc: d, .. } => *d == doc,
                 Pending::ReplaceAll { doc: d, .. } | Pending::ReplaceOne { doc: d, .. } => {
@@ -210,6 +213,26 @@ impl EditorState {
             self.on_open_partial(job, head, format);
             return;
         }
+        // 開くファイルの識別 (03 §9.2 手順 2b) も終わりではない。同じファイルの文書が既にあれば、そちらを出してこの読込を
+        // 取り消す (io/same_file.rs)
+        if let JobResult::Identity {
+            file_id,
+            file_id_unique,
+            canonical,
+            stale,
+        } = r
+        {
+            self.on_open_identity(
+                job,
+                crate::io::same_file::FileIdentity {
+                    file_id,
+                    file_id_unique,
+                    canonical,
+                },
+                &stale,
+            );
+            return;
+        }
         // 検索は途中経過が複数届く。待ちの記録は終わりまで残す
         if matches!(self.io.pending.get(&job), Some(Pending::Search)) {
             self.on_search_result(JobOutput { job, body: r });
@@ -230,6 +253,7 @@ impl EditorState {
             } => self.finish_open(doc, view, path, replace, opts, kind, r),
             Pending::OpenStdin { doc, view } => self.finish_open_stdin(doc, view, cont, r),
             Pending::CheckUnchanged { doc } => self.finish_check(doc, r),
+            Pending::SaveAsTarget(ask) => self.finish_save_as_target(*ask, r),
             Pending::ExternalCheck { doc, explicit } => {
                 self.finish_external_check(doc, explicit, r);
             }
@@ -311,6 +335,7 @@ impl EditorState {
                     if !self.quit_abort_save_result(&path, &r) {
                         self.finish_save(&job_ctx, &path, None, r);
                     }
+                    self.forget_save_as_target(doc, &path);
                     self.release_closing_snapshot(doc, &path, saved);
                     self.quit_abort_check();
                     self.mark_dirty_render();
@@ -321,6 +346,9 @@ impl EditorState {
                 if in_batch != Some(true) {
                     self.finish_save(&job_ctx, &path, cont, r);
                 }
+                // 名前を付けて保存の識別の覚えは、そのパスへの保存が終われば (成功は `after_save_as` が使い終えた後、
+                // 失敗も) 消す (03 §12.7.6 の細目 (10))
+                self.forget_save_as_target(doc, &path);
                 self.release_closing_snapshot(doc, &path, saved);
                 if in_batch.is_some() {
                     self.finish_save_all_if_done();

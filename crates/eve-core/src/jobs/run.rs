@@ -75,7 +75,11 @@ pub fn run_job(
             cwd,
             markers,
         } => crate::workspace::root::detect_root(&*ports.fs, explicit.as_ref(), args, cwd, markers),
-        JobKind::Open { path, opts } => run_open(req.id, path, *opts, ports, cancel, emit),
+        JobKind::Open {
+            path,
+            opts,
+            known_ids,
+        } => run_open(req.id, path, *opts, known_ids, ports, cancel, emit),
         JobKind::OpenStdin { opts } => run_open_stdin(req.id, *opts, ports, cancel, emit),
         JobKind::Save {
             path,
@@ -303,8 +307,29 @@ pub fn run_job(
                 crate::io::config_reload::scan_locales(&*ports.fs, dir, *chosen)
             }),
         },
-        JobKind::Metadata { path, purpose } => match ports.fs.metadata(path) {
-            Ok(meta) => {
+        JobKind::Metadata {
+            path,
+            purpose,
+            known_ids,
+        } => match ports.fs.metadata(path) {
+            Ok(mut meta) => {
+                // 名前を付けて保存の保存先は、同じファイルの判定 (03 §12.7.6 の 2) に canonical のパスと、識別が古いと
+                // 確かめた文書の一覧も返す。`path` 自身を canonicalize できなければ識別を使わない (03 §12.7.6 の 0)
+                let (canonical, stale) = if *purpose == MetaPurpose::SaveAsTarget {
+                    let (canonical, source) =
+                        crate::io::same_file::canonical_of(ports.fs.as_ref(), path);
+                    if source != crate::io::same_file::CanonicalSource::Direct {
+                        meta.file_id_unique = false;
+                    }
+                    let stale = crate::io::same_file::stale_known_ids(
+                        ports.fs.as_ref(),
+                        meta.file_id,
+                        known_ids,
+                    );
+                    (canonical, stale)
+                } else {
+                    (None, Vec::new())
+                };
                 if cancel.is_cancelled() {
                     JobResult::Failed {
                         err: JobError::Cancelled,
@@ -322,7 +347,29 @@ pub fn run_job(
                         None
                     };
                     let stamp = FileStamp::from_meta(&meta, hash);
-                    JobResult::Meta { meta, stamp }
+                    JobResult::Meta {
+                        meta,
+                        stamp,
+                        canonical,
+                        stale,
+                    }
+                }
+            }
+            // 名前を付けて保存の保存先が無い: 新しく作るファイルの canonical (親を canonicalize してファイル名を付けた
+            // もの) も返す。ほかのまだ無いファイルとして開いた文書と同じ保存先かを見る (03 §9.7 (a) の 1b)
+            Err(err)
+                if *purpose == MetaPurpose::SaveAsTarget
+                    && err.kind == crate::io::fs::FsErrorKind::NotFound =>
+            {
+                if cancel.is_cancelled() {
+                    JobResult::Failed {
+                        err: JobError::Cancelled,
+                    }
+                } else {
+                    JobResult::TargetAbsent {
+                        canonical: crate::io::same_file::canonical_of(ports.fs.as_ref(), path).0,
+                        err,
+                    }
                 }
             }
             Err(err) => JobResult::Failed {
@@ -429,6 +476,7 @@ mod tests {
             link: None,
             fs_kind: FsKind::Local,
             owner_is_me: None,
+            file_id_unique: false,
         }
     }
 
@@ -449,6 +497,7 @@ mod tests {
             kind: JobKind::Metadata {
                 path: FsPath::from("/a"),
                 purpose: MetaPurpose::ExternalCheck,
+                known_ids: Vec::new(),
             },
         }
     }

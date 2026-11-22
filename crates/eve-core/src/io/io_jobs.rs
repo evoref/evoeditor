@@ -91,11 +91,12 @@ pub(crate) fn run_open(
     id: JobId,
     path: &FsPath,
     opts: OpenOptions,
+    known_ids: &[crate::jobs::KnownFileId],
     ports: &JobPorts,
     cancel: &CancelToken,
     emit: &mut dyn FnMut(JobOutput),
 ) -> JobResult {
-    open_inner(id, path, opts, ports, cancel, emit, None)
+    open_inner(id, path, opts, known_ids, ports, cancel, emit, None)
 }
 
 mod partial;
@@ -150,10 +151,15 @@ fn redetect(chunk: &[u8], chunk_is_file_end: bool, opts: &DetectOptions) -> Opti
     redetect_window(window, complete, opts).and_then(|d| d.encoding())
 }
 
+#[allow(
+    clippy::too_many_arguments,
+    reason = "読込のジョブの文脈 (`JobKind::Open` の中身と Port・取消し・送り口・やり直し) をそのまま受ける"
+)]
 fn open_inner(
     id: JobId,
     path: &FsPath,
     opts: OpenOptions,
+    known_ids: &[crate::jobs::KnownFileId],
     ports: &JobPorts,
     cancel: &CancelToken,
     emit: &mut dyn FnMut(JobOutput),
@@ -168,6 +174,23 @@ fn open_inner(
     // 1. 残っている保存中フラグ (開くたびに 1 回。ディレクトリは列挙しない)。見つけた痕跡は T の有無と合わせて写像する
     let inflight = ports.fs.inflight_for(path).unwrap_or_default();
 
+    // 2b. 同じファイルの判定の識別 (03 §9.2 手順 2b、§12.7.6 の 1)。読込と確認 (`NeedsConfirm`) の前に 1 回だけ送る
+    // (確認を待つ文書も識別を持ち、別の書き方のパスで開いた同じファイルが 2 つの文書にならない)。判定のやり直し (`redo`)
+    // の読み直しでは送らない
+    let mut send_identity = |file_id, file_id_unique, canonical, stale| {
+        if redo.is_none() {
+            emit(JobOutput {
+                job: id,
+                body: JobResult::Identity {
+                    file_id,
+                    file_id_unique,
+                    canonical,
+                    stale,
+                },
+            });
+        }
+    };
+
     // 2. metadata
     let meta = match ports.fs.metadata(path) {
         Ok(m) => m,
@@ -176,6 +199,9 @@ fn open_inner(
                 Some(FsErrorDetail::ParentMissing { dir }) => Some(dir),
                 _ => None,
             };
+            // 新規のファイル: canonical は親を canonicalize してファイル名を付けたもの (NewFile の前に送る)
+            let (canonical, _) = crate::io::same_file::canonical_of(ports.fs.as_ref(), path);
+            send_identity(None, false, canonical, Vec::new());
             return JobResult::NewFile {
                 parent_missing,
                 interrupted_save: map_interrupted(ports.fs.as_ref(), &inflight, false),
@@ -189,6 +215,16 @@ fn open_inner(
             FsErrorDetail::NotAFile,
         )));
     }
+    if cancel.is_cancelled() {
+        return cancelled();
+    }
+    // `path` 自身を canonicalize できなかった (代わりのパス) ときは識別を使わない (ボリュームの条件が効かない)。文書の
+    // 古い識別 (文書のファイルが外で作り直され、番号を使い回した) は一覧で返し、主スレッドがその文書の識別を下ろす
+    // (03 §12.7.6 の 0 と「古い識別の確かめ」)
+    let (canonical, source) = crate::io::same_file::canonical_of(ports.fs.as_ref(), path);
+    let unique = meta.file_id_unique && source == crate::io::same_file::CanonicalSource::Direct;
+    let stale = crate::io::same_file::stale_known_ids(ports.fs.as_ref(), meta.file_id, known_ids);
+    send_identity(meta.file_id, unique, canonical, stale);
     if cancel.is_cancelled() {
         return cancelled();
     }
@@ -348,7 +384,7 @@ fn open_inner(
                     partial_sent: head.as_ref().is_some_and(HeadCopy::sent),
                 };
                 drop(head);
-                return open_inner(id, path, again, ports, cancel, emit, Some(redo));
+                return open_inner(id, path, again, known_ids, ports, cancel, emit, Some(redo));
             }
             // 不正な UTF-8 も ISO-2022-JP の列も無い間は、次のチャンクでも見る。最初に見つけた契機で一度だけ判定する
             if find_iso_switch(chunk).is_some() || std::str::from_utf8(chunk).is_err() {

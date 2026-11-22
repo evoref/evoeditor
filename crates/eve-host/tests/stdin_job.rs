@@ -68,6 +68,7 @@ fn 閉じないパイプの間も_io_のジョブは進み_取消しで読んだ
         JobKind::Metadata {
             path: FsPath::from("/w/a.txt"),
             purpose: MetaPurpose::ExternalCheck,
+            known_ids: Vec::new(),
         },
     );
     let r = loop {

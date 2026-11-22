@@ -44,9 +44,10 @@ impl EditorState {
     }
 
     pub(crate) fn save_in_progress(&self, doc_id: DocumentId) -> bool {
-        self.io.pending
-            .values()
-            .any(|p| matches!(p, Pending::Save { doc, .. } | Pending::CheckUnchanged { doc } if *doc == doc_id))
+        self.io.pending.values().any(|p| match p {
+            Pending::Save { doc, .. } | Pending::CheckUnchanged { doc } => *doc == doc_id,
+            _ => false,
+        }) || self.save_as_checking(Some(doc_id)).is_some()
     }
 
     /// 表示していない文書の、新しく開く読込 (`file.open`・起動時の 2 つ目以降のパス) のジョブ。ステータスバーが
@@ -71,12 +72,13 @@ impl EditorState {
             .find_map(|(_, doc)| self.docs.documents.get(&doc).map(|d| d.load_percent))
     }
 
-    /// `Esc` (`ui.cancel`) で読込を取り消す (03 §9.8 の「読込中のバッファ」)。表示中の文書が読込中 (`Loading` /
-    /// `Partial`。開く・再読込・開き直しのどれでも) ならその文書の読込だけを、表示中の文書が読込中でなければ、表示して
-    /// いない文書の新しく開く読込を取り消す。ほかの文書の再読込・開き直しは取り消さない。取り消すものがあれば `true`。
-    pub(crate) fn cancel_loading(&mut self) -> bool {
+    /// `Esc` (`ui.cancel`) で読込を取り消す (03 §9.8 の「読込中のバッファ」) 1 段目: 表示中の文書が読込中 (`Loading` /
+    /// `Partial`。開く・再読込・開き直しのどれでも) ならその文書の読込を取り消す。2 段目の `cancel_hidden_loading` は、
+    /// 間に名前を付けて保存の照合の取消しをはさんで呼ぶ (03 §12.7.6 の細目 (9))。ほかの文書の再読込・開き直しは取り消さない。
+    /// 読込中の標準入力の文書なら、取り消さずに読むのをやめるかを尋ねる。取り消すものがあれば `true`。
+    pub(crate) fn cancel_own_loading(&mut self) -> bool {
         // 表示中の文書が読込中の標準入力の文書なら、取り消さずに読むのをやめるかを尋ねる (03 §9.2.2 の「取消し (`Esc`)」)。
-        // 表示していない標準入力の読込には触れない (下の 2 つはファイルの読込 `Pending::Open` だけを見る)
+        // 表示していない標準入力の読込には触れない (下はファイルの読込 `Pending::Open` だけを見る)
         if self.confirm_stdin_stop() {
             return true;
         }
@@ -88,15 +90,30 @@ impl EditorState {
             .filter(|(_, p)| matches!(p, Pending::Open { doc, .. } if Some(*doc) == active))
             .map(|(id, _)| *id)
             .collect();
-        let ids: Vec<_> = if own.is_empty() {
-            self.hidden_open_loads().map(|(id, _)| id).collect()
-        } else {
-            own
-        };
-        for id in &ids {
+        self.cancel_loads(own)
+    }
+
+    /// 読込のジョブ `ids` を取り消す。取り消し済み (結果を待っているだけ) のものは数えない (次の `Esc` を次の段へ通す。
+    /// 03 §12.7.6 の細目 (9))。取り消したものがあれば `true`。
+    fn cancel_loads(&mut self, ids: Vec<eve_view::JobId>) -> bool {
+        // 結果が届いて表から消えた読込の印は捨てる
+        let pending = &self.io.pending;
+        self.io.cancelled_loads.retain(|j| pending.contains_key(j));
+        let fresh: Vec<_> = ids
+            .into_iter()
+            .filter(|id| !self.io.cancelled_loads.contains(id))
+            .collect();
+        for id in &fresh {
             self.jobs.cancel(*id);
+            self.io.cancelled_loads.insert(*id);
         }
-        !ids.is_empty()
+        !fresh.is_empty()
+    }
+
+    /// 表示していない文書の新しく開く読込を取り消す (表示中の文書が読込中でないときに呼ぶ)。取り消すものがあれば `true`。
+    pub(crate) fn cancel_hidden_loading(&mut self) -> bool {
+        let ids: Vec<_> = self.hidden_open_loads().map(|(id, _)| id).collect();
+        self.cancel_loads(ids)
     }
 
     /// 今の文書 (アクティブな文書 = フォーカスのペインの文書。03 §9.9 の PANE-8)。
@@ -126,6 +143,9 @@ impl EditorState {
             "表示中の文書 {doc:?} のペインを替えられなかった"
         );
         self.io.open_jumps.remove(&doc);
+        // 名前を付けて保存の識別の覚えと保留した照合の結果も捨てる (03 §12.7.6 の細目 (10))
+        self.io.save_as_targets.remove(&doc);
+        self.io.held_save_as.retain(|(a, _)| a.doc != doc);
         // 先行表示の先頭は文書ごと捨てる (03 §9.2.1 の「失敗・取消し・閉じる」)
         self.forget_partial_state(doc);
         self.docs.views.retain(|_, v| v.doc != doc);
@@ -205,12 +225,14 @@ impl EditorState {
         if replace.is_none() {
             self.show_view(view, None);
         }
+        let known_ids = self.known_file_ids(Some(doc_id));
         let job = self.jobs.spawn(
             Some(doc_id),
             eve_view::Revision::INITIAL,
             JobKind::Open {
                 path: path.clone(),
                 opts,
+                known_ids,
             },
         );
         self.io.pending.insert(
@@ -266,6 +288,7 @@ impl EditorState {
                 JobKind::Metadata {
                     path,
                     purpose: MetaPurpose::UnchangedSave,
+                    known_ids: Vec::new(),
                 },
             );
             self.io

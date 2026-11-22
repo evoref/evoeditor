@@ -399,6 +399,7 @@ fn probe_delays(
                         JobKind::Metadata {
                             path: io_probe.clone(),
                             purpose: MetaPurpose::ExternalCheck,
+                            known_ids: Vec::new(),
                         },
                     );
                     next_lane = Lane::Bg;

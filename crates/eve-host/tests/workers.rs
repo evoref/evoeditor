@@ -139,6 +139,7 @@ fn ワーカーのパニックは_failed_で返り_ワーカーは生き続け�
     let kind = || JobKind::Metadata {
         path: FsPath::from("/w/a.txt"),
         purpose: MetaPurpose::ExternalCheck,
+        known_ids: Vec::new(),
     };
     let a = sp.spawn(None, Revision(0), kind());
     let b = sp.spawn(None, Revision(0), kind());
@@ -211,6 +212,7 @@ fn 待機中のジョブの取消しは_cancelled_で返り_結果は1件だけ(
     let kind = || JobKind::Metadata {
         path: FsPath::from("/w/a.txt"),
         purpose: MetaPurpose::ExternalCheck,
+        known_ids: Vec::new(),
     };
     let a = sp.spawn(None, Revision(0), kind());
     // a が実行中 (ワーカーが止まっている) の間に b を投入して取り消す
@@ -306,6 +308,7 @@ fn 単発の検索とすべて置換は_bg_で走り_io_の保存や読込を待
         JobKind::Metadata {
             path: FsPath::from("/w/a.txt"),
             purpose: MetaPurpose::ExternalCheck,
+            known_ids: Vec::new(),
         },
     );
     erx.recv_timeout(Duration::from_secs(10)).unwrap();

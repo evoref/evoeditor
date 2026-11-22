@@ -142,8 +142,10 @@ impl FileSystem for WinFs {
         let meta = fs::metadata(p).map_err(|e| metadata_error(e, path))?;
         let kind = file_kind(&meta);
         let link = link_info(p);
-        // ファイルの識別とハードリンク数 (開けなければ分からないものとして続ける)
-        let (file_id, nlink) = if kind == FileKind::File {
+        // ファイルの識別とハードリンク数 (開けなければ分からないものとして続ける)。識別を同じファイルの判定に使ってよいのは、
+        // NTFS / ReFS のローカルのボリュームだけ (05 §5.4 の (1)。ネットワークのドライブの割当ても `fs_kind` で除く)
+        let fs_kind = fs_kind(p);
+        let (file_id, nlink, file_id_unique) = if kind == FileKind::File {
             match File::open(p).and_then(|f| crate::sys::file_info(&f)) {
                 Ok(i) => (
                     Some(eve_core::FileId {
@@ -151,11 +153,12 @@ impl FileSystem for WinFs {
                         index: i.index,
                     }),
                     i.nlink,
+                    i.unique && fs_kind == FsKind::Local,
                 ),
-                Err(_) => (None, 1),
+                Err(_) => (None, 1, false),
             }
         } else {
-            (None, 1)
+            (None, 1, false)
         };
         Ok(FileMeta {
             kind,
@@ -165,15 +168,21 @@ impl FileSystem for WinFs {
             file_id,
             nlink,
             link,
-            fs_kind: fs_kind(p),
+            fs_kind,
             owner_is_me: None,
+            file_id_unique,
         })
     }
 
     fn canonicalize(&self, path: &FsPath) -> Result<FsPath, FsError> {
         match fs::canonicalize(path.as_path()) {
             // `\\?\C:\…` をそのまま表示・保存に使わない (05 §3.3)
-            Ok(c) => Ok(FsPath::new(simplify_verbatim(&c.to_string_lossy()))),
+            // UTF-16 として正しくない名前 (対になっていないサロゲート) を含むパスは文字列に変えず、OS の文字列のまま返す
+            // (置換文字にすると別の名前が同じ文字列になり、同じファイルの判定 (03 §12.7.6 の 0) で同じとされる)
+            Ok(c) => Ok(match c.to_str() {
+                Some(s) => FsPath::new(simplify_verbatim(s)),
+                None => FsPath::new(c),
+            }),
             Err(e) => Err(map_io_error(e, path)),
         }
     }
@@ -255,6 +264,12 @@ mod tests {
             "同じファイルは同じ識別"
         );
         assert_eq!(m.fs_kind, FsKind::Local);
+        // 一時ディレクトリは NTFS のローカルのボリューム: 識別を同じファイルの判定に使ってよい (05 §5.4 の (1))
+        assert!(m.file_id_unique, "NTFS の識別は信頼する");
+        assert!(
+            !fsys.metadata(&t.path("")).unwrap().file_id_unique,
+            "ディレクトリは識別を持たない"
+        );
     }
 
     #[test]
@@ -326,6 +341,22 @@ mod tests {
         assert!(WinFs::default().metadata(&p).unwrap().readonly);
         perm.set_readonly(false);
         fs::set_permissions(p.as_path(), perm).unwrap();
+    }
+
+    #[test]
+    fn canonicalize_は対になっていないサロゲートを置換文字にしない() {
+        use std::os::windows::ffi::OsStringExt;
+        let t = Tmp::new("surrogate");
+        let name = |hi: u16| std::ffi::OsString::from_wide(&[hi, u16::from(b'x')]);
+        let (a, b) = (t.0.join(name(0xD800)), t.0.join(name(0xD801)));
+        if File::create(&a).is_err() || File::create(&b).is_err() {
+            return; // 作れない FS では確かめない
+        }
+        let fsys = WinFs::default();
+        let ca = fsys.canonicalize(&FsPath::new(&a)).unwrap();
+        let cb = fsys.canonicalize(&FsPath::new(&b)).unwrap();
+        assert_ne!(ca, cb, "別の名前は別の canonical");
+        assert!(ca.as_path().to_str().is_none(), "OS の文字列のまま");
     }
 
     #[test]

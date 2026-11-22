@@ -201,24 +201,21 @@ impl EditorState {
             );
             return CommandResult::Done;
         }
-        let same = doc.path.as_ref() == Some(&path);
-        // 読み取り専用の文書を同じファイルへ書くと、元のバイト列を損なうことがある (03 §9.7 (a) の 1)
-        if same && !doc.is_editable() {
-            self.message(
-                MessageLevel::Warn,
-                keys::MSG_SAVE_AS_SAME_FILE_READ_ONLY,
-                &path.display(),
-            );
-            return CommandResult::Rejected(RejectReason::ReadOnly);
+        // 03 §9.7 (a) の 1 (構文的に同じパス、I/O なし): 通常の上書き保存。読み取り専用の文書は同じファイルへ書かない
+        if doc.path.as_ref() == Some(&path) {
+            return self.save_as_same_file(doc_id, raw_path, cont, fmt);
         }
-        // 同じファイルなら読んだときの Stamp で照合する。別のファイルへは存在しないことを期待する
-        // (既存なら Conflict。上書きの確認は確認ダイアログの仕事)。パスと Stamp は成功してから更新する
-        let expected = if same {
-            doc.disk_stamp.map_or(Expect::Absent, Expect::Stamp)
-        } else {
-            Expect::Absent
-        };
-        self.start_save_fmt(doc_id, path, expected, cont, fmt)
+        // 別のパス: 保存先の照合のジョブ (`CheckTarget`) を投入する。別名・リンクで今の文書・ほかの文書と同じファイルか、
+        // 既存か、読み取り専用かは結果で決める (io/save_as.rs)。v0.4 までは照合せず `Expect::Absent` で書いていた
+        self.start_save_as_check(super::save_as::SaveAsAsk {
+            doc: doc_id,
+            path,
+            raw: raw_path.to_owned(),
+            cont,
+            fmt,
+            stamp: None,
+            target: Default::default(),
+        })
     }
 
     pub(crate) fn start_save(
@@ -723,6 +720,12 @@ impl EditorState {
                 // ファイルの全体と一致し、読まなかった後半を失う誤解が無い。03 §9.2.2 の「`LoadIncomplete` の外し方」)。
                 // 完了の文言は `info.save.partial_saved` (`{size}` は開いた量)
                 let partial = self.partial_size(doc_id);
+                // 名前を付けて保存で別のパスへ書いた (同じファイルの判定の識別を直す、03 §12.7.6 の 2)
+                let path_changed = self
+                    .docs
+                    .documents
+                    .get(&doc_id)
+                    .is_some_and(|d| d.path.as_ref() != Some(path));
                 if let Some(doc) = self.docs.documents.get_mut(&doc_id) {
                     if partial.is_some() {
                         doc.read_only
@@ -792,6 +795,9 @@ impl EditorState {
                     );
                 }
                 self.show_save_warning(path, &report.warnings);
+                if path_changed {
+                    self.after_save_as(doc_id, path);
+                }
                 self.mark_snapshot_update(doc_id);
                 // 保存の後に続ける操作 (開く・新規作成・終了)。保存が失敗したときは続けない
                 // 保存の間に編集されていたら、続きの操作の前にもう一度尋ねる (03 §9.7。編集を捨てない)

@@ -68,8 +68,8 @@ pub use io::secret::is_secret_path;
 pub use io::unmap::{ReplaceCounts, ReplaceTarget};
 pub use jobs::{
     ConfirmAsk, EscapeMergeApproval, EscapeMergeAt, JobError, JobKind, JobOutput, JobPorts,
-    JobRequest, JobResult, JobSpawner, JobStep, MetaPurpose, OpenNotes, Ports, SaveStrategy,
-    StdinEnd, StdinSource, run_job,
+    JobRequest, JobResult, JobSpawner, JobStep, KnownFileId, MetaPurpose, OpenNotes, Ports,
+    SaveStrategy, StdinEnd, StdinSource, run_job,
 };
 /// 行の窓の核の大きさと連結の上限を試験から小さくする口 (feature `test-hooks` のときだけ。配布ビルドには無い、03 §12.3.1)。
 #[cfg(feature = "test-hooks")]

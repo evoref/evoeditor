@@ -138,12 +138,14 @@ impl EditorState {
         path: crate::FsPath,
         opts: OpenOptions,
     ) {
+        let known_ids = self.known_file_ids(Some(doc_id));
         let job = self.jobs.spawn(
             Some(doc_id),
             eve_view::Revision::INITIAL,
             JobKind::Open {
                 path: path.clone(),
                 opts,
+                known_ids,
             },
         );
         self.io.pending.insert(

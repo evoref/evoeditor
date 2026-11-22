@@ -1160,7 +1160,7 @@ v0.5 は結果を一覧のオーバーレイで出す (PO の決定 2026-11-20�
 
 ### 8.13 ワークスペースの文言の案 (v0.5 の M31)
 
-次のキーは **案** で、言語ファイル (`locales/ja.toml` / `en.toml`) と §15 の目録には、使う実装の PR (03 §12.7.9 の各段) で足す (目録は言語ファイルと一致を検査するので、先に足さない。09 §6.2 の `i18n`)。`{root}` / `{path}` は短縮したパス、`{matched}` / `{total}` / `{lines}` / `{files}` / `{hit_files}` / `{skipped}` / `{dirs}` / `{limit}` / `{line}` (1 始まりの行番号) は整数 (千の区切りを付けない、07 §17.3)。`{text}` は一致した行の抜粋 (§8.12)、`{toggles}` はトグルの記号の並び (§8.12)、`{reason}` は OS のエラーを分類した短い文言 (`ui.reason.*`、§15.2)。`msg.cli.directory_ignored` と `msg.workspace.root_invalid` は M31 の段 1 の PR で §15.2 の目録へ移した。
+次のキーは **案** で、言語ファイル (`locales/ja.toml` / `en.toml`) と §15 の目録には、使う実装の PR (03 §12.7.9 の各段) で足す (目録は言語ファイルと一致を検査するので、先に足さない。09 §6.2 の `i18n`)。`{root}` / `{path}` は短縮したパス、`{matched}` / `{total}` / `{lines}` / `{files}` / `{hit_files}` / `{skipped}` / `{dirs}` / `{limit}` / `{line}` (1 始まりの行番号) は整数 (千の区切りを付けない、07 §17.3)。`{text}` は一致した行の抜粋 (§8.12)、`{toggles}` はトグルの記号の並び (§8.12)、`{reason}` は OS のエラーを分類した短い文言 (`ui.reason.*`、§15.2)。`msg.cli.directory_ignored` と `msg.workspace.root_invalid` は M31 の段 1 の PR で、`msg.save_as.open_in_other` は段 5 (SAF-28) の PR で §15.2 の目録へ移した。
 
 | キー (案) | 出す場面 | ja (案) | en (案) |
 |---|---|---|---|
@@ -1184,7 +1184,6 @@ v0.5 は結果を一覧のオーバーレイで出す (PO の決定 2026-11-20�
 | `ui.workspace_search.no_match` | 0 件 | 一致はありません | No matches |
 | `msg.finder.not_found` | ファインダ・横断検索で選んだファイルが無い | {path} はもうありません / 一覧を開き直すと、今のファイルで探し直します | {path} no longer exists / Reopen the list to scan the current files |
 | `msg.workspace.scan_failed` | ルートを読めない | ワークスペース {root} を読めません: {reason} / フォルダの権限を確認してください | Cannot read the workspace {root}: {reason} / Check the folder permissions |
-| `msg.save_as.open_in_other` | 名前を付けて保存の保存先が、ほかの開いている文書と同じファイル (03 §9.7 (a) の 1b) | {path} は別の文書として開いています / その文書に切り替えて保存するか、別の名前を指定してください | {path} is open in another buffer / Switch to that buffer to save, or choose another name |
 
 ---
 
@@ -1604,8 +1603,14 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 | `ui.confirm.read_only.invalid_bytes.reopen` | 同上 (アクセラレータ `E`。`ui.confirm.open.invalid_bytes` の `[E]` と同じ意味で、`file.reopen_with_encoding` を実行する (文字コードを `ui.prompt.encoding` で尋ねる))。パスの無い文書 (無題の文書への復旧) では出さない | [E] 文字コードを指定して開き直す |
 | `info.read_only.released_invalid_bytes` | 同上の確認で「編集を許可」を選んだ (03 §8.3.1)。`info.read_only.released` に代えて出す | 編集を許可しました (不正なバイトは <0xNN> の 1 文字として編集できます) |
 | `info.read_only.set` (v0.2) | `file.toggle_read_only` で編集できる文書を読み取り専用にした (理由 `UserRequested`) | 読み取り専用にしました |
-| `ui.confirm.save.overwrite` | 名前を付けて保存で、入力した保存先に既にファイルがある (確認を閉じる `Esc` は名前の入力プロンプトに戻る、§7.5) | {path} は既にあります。上書きしますか? — `[O] 上書き` / `[R] 別の名前を入力` ★ (既定は別の名前を入力。確定 (ユーザー回答)) |
+| `ui.confirm.save.overwrite.title` | 名前を付けて保存で、入力した保存先に既にファイルがある (03 §9.7 (a) の 6。v0.5 の M31 で照合 (`CheckTarget`) と一緒に入れた。v0.4 までは照合せず、新規の保存の `Conflict` (`ui.confirm.save.conflict_created`) になっていた)。既定は「別の名前を入力」(確定 (ユーザー回答))。確認を閉じる `Esc` も名前の入力プロンプトに戻る (入力した名前は残る、§7.5) | 同名のファイルがあります |
+| `ui.confirm.save.overwrite.message` | 同上 (本文) | {path} は既にあります。上書きしますか? |
+| `ui.confirm.save.overwrite.overwrite` | 同上 (アクセラレータ `O`。照合で得た状態を期待値にして書くので、確認の間に変わっていれば書かずに `ui.confirm.save.conflict_changed` 等になる) | [O] 上書き |
+| `ui.confirm.save.overwrite.rename` | 同上 (既定。アクセラレータ `R`。名前の入力プロンプトに戻る) | [R] 別の名前を入力 |
+| `ui.confirm.save.overwrite.link` | 同上の `details` の 1 行 (保存先がシンボリックリンクのとき。書くのはリンク先) | リンク先: {target} |
 | `msg.save_as.same_file_read_only` | 名前を付けて保存で、読み取り専用の文書と同じファイルを選んだ (03 §9.7 (a) の 1。名前の入力プロンプトに戻る) | 読み取り専用の文書は、同じファイル {path} には保存できません / 別のファイル名を入力してください |
+| `msg.save_as.open_in_other` | 名前を付けて保存の保存先が、ほかの開いている文書 (読込中・確認待ちを含む) と同じファイル (03 §9.7 (a) の 1b。別名・リンク・ハードリンクでも同じ判定、§12.7.6。名前の入力プロンプトに戻る)。`{path}` は入力した保存先、`{other}` は相手の文書の表示用のパス (リンクでは名前が違う) | {path} は別の文書 {other} として開いています / その文書に切り替えて保存するか、別の名前を指定してください |
+| `msg.save_as.now_open_in_other` | 名前を付けて保存は成功したが、保存の完了の時点で、照合の後に開いた別の文書と同じファイルになっていた (03 §12.7.6 の 2。どちらの文書も閉じない。拒んだときの `msg.save_as.open_in_other` と読み違えないよう別のキーにする)。`{path}` は保存したパス、`{other}` は相手の文書の表示用のパス | {path} に保存しましたが、同じファイルを別の文書 {other} としても開いています / どちらかの文書を閉じてから編集を続けてください |
 | `msg.save_as.target_read_only` | 名前を付けて保存の保存先が読み取り専用属性のファイル (03 §9.7 (a) の 5。上書きの確認の前に拒否し、名前の入力プロンプトに戻る) | {path} は読み取り専用属性のファイルなので上書きできません / 別のファイル名を入力してください |
 | `msg.save_as.not_a_file` | 名前を付けて保存の保存先がフォルダ・デバイス等 (03 §9.7 (a) の 4。パスの不正は `msg.save.invalid_path`、metadata の失敗 ((a) の 7) は `msg.save.failed` / `msg.save.permission_denied` / `msg.save.busy`) | {path} はファイルではありません (フォルダ等) / 別のファイル名を入力してください |
 | `info.save.aborted` | 保存の連鎖の中止 (03 §9.7 の「中止」: 名前の入力・確認のキャンセル、保存の待ちの取消し (`JobError::Cancelled`)。後続の終了・置き換え・開き直しも行わない) | 保存を中止しました ({path} は書き換えていません) |
@@ -1723,6 +1728,7 @@ v0.1 の画面に出る主な文言 (`ja`)。**文言の正本は同梱の言語
 | `info.open.new_file` | 存在しないパスを開いた (新規ファイル。01 FR-101 AC-2) | {path} は無いため、新しいファイルとして開きました (保存すると作成します) |
 | `msg.open.parent_missing` | 存在しないパスを開き、そのフォルダも無い (`JobResult::NewFile` の `parent_missing`、03 §9.2 手順 2)。引数は `{path}` (開いたパス) と `{dir}` (`parent_missing` に入った、無いフォルダ) | {path} のフォルダ {dir} がありません。新しいファイルとして開きましたが、このままでは保存できません / フォルダを作ってから保存するか、別名で保存 ({key:file.save_as}) してください |
 | `info.open.already_open` | 開こうとしたファイルが今の文書と同じ (03 §9.2 手順 0 / 2b) | {path} は既に開いています |
+| `info.open.same_file` | 開こうとしたファイルが、開いているほかの書き方のパスの文書と同じファイルだった (大文字小文字・シンボリックリンク・ハードリンクの違い。03 §9.2 手順 2b・§12.7.6 の 1)。その文書に切り替えた。`{path}` は開こうとしたパス、`{other}` は既存の文書の表示用のパス | {path} は {other} として開いています |
 | `info.open.cancelled` | 読込を取り消した (`Esc`。01 FR-122 AC-1。今の文書はそのまま。v0.4 の M25 では先行表示 (`Partial`、03 §9.2.1) の間の取消しでも出し、先頭も閉じる)。**標準入力 (v0.4 の M25、03 §9.2.2) の `Esc` は取消しではなく、確認 (`ui.confirm.stdin_stop`) の「ここまでで開く」で「読むのをやめて、読んだところまでを開く」** なので、このキーではなく下の `info.stdin.stopped` を出す | {path} の読込を取り消しました |
 | `info.stdin.stopped` | 標準入力の文書の `ui.confirm.stdin_stop` / `ui.confirm.stdin_loading` で「ここまでで開く」を選び、1 バイト以上読んでいた (v0.4 の M25、03 §9.2.2。何も読んでいなければ出さない)。`{size}` は開いた量 (受け渡し待ちの分を取り込んだ後の量) | 標準入力を読むのをやめ、ここまで ({size}) を読み取り専用で開きました |
 | `info.stdin.terminal` | `evoeditor -` で標準入力が端末 (読まずに空の無題の文書を開いた。03 §9.2.2、07 §18.5、01 FR-120 AC-2) | 標準入力が端末のため、読まずに空の文書を開きました |

@@ -110,6 +110,8 @@ pub(crate) enum ConfirmAction {
         changes: eve_text::ChangeSet,
         revision: eve_view::Revision,
     },
+    /// 名前を付けて保存の保存先が既にある (上書き / 別の名前を入力 (既定)、03 §9.7 (a) の 6)。キャンセルも名前の入力に戻る。
+    SaveAsOverwrite(Box<crate::io::save_as::SaveAsAsk>),
 }
 
 /// 確認ダイアログ。選択肢は `choices` (+ 最後にキャンセル)。
@@ -239,6 +241,10 @@ impl EditorState {
                     self.unmappable_cancelled(ask)
                 }
                 ConfirmAction::EscapeMerge(ask) => self.escape_merge_cancelled(ask),
+                // 上書きの確認の `Esc` は確認だけを閉じて名前の入力に戻る (04 §7.5)
+                ConfirmAction::SaveAsOverwrite(ask) => {
+                    return self.choose_save_as_overwrite((**ask).clone(), None);
+                }
                 _ => {}
             }
             return CommandResult::Done;
@@ -285,6 +291,7 @@ impl EditorState {
                 changes,
                 revision,
             } => self.apply_replacement_and_save(ask, changes, revision),
+            ConfirmAction::SaveAsOverwrite(ask) => self.choose_save_as_overwrite(*ask, Some(id)),
         }
     }
 
@@ -319,6 +326,10 @@ impl EditorState {
     fn request_quit_with(&mut self, code: u8) -> CommandResult {
         if self.ui.quit_abort.is_none() {
             self.ui.quit_code = code;
+        }
+        // 名前を付けて保存の照合の間は無視する (03 §9.7 の全状態の遷移表の `CheckTarget` の行。終了の連鎖を始めない)
+        if self.ignore_while_save_as_check() {
+            return CommandResult::Done;
         }
         // 保存ジョブの実行中は、その完了を待つ (03 §9.7 (f))
         if let Some(r) = self.quit_while_saving(true) {

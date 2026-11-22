@@ -44,6 +44,7 @@ fn open_results(step_ms: u64, chunk: usize, size: usize) -> Vec<JobOutput> {
         kind: JobKind::Open {
             path: FsPath::from("/w/a.txt"),
             opts: OpenOptions::default(),
+            known_ids: Vec::new(),
         },
     };
     let mut out = Vec::new();
@@ -55,8 +56,10 @@ fn open_results(step_ms: u64, chunk: usize, size: usize) -> Vec<JobOutput> {
 #[test]
 fn 最初の進捗は読み始めてすぐ送り_終わりは最後に届く() {
     let out = open_results(0, 1024, 10_000);
+    // 先頭は同じファイルの判定の識別 (03 §9.2 手順 2b)。その次に最初の進捗
+    assert!(matches!(out[0].body, JobResult::Identity { .. }));
     assert!(matches!(
-        out[0].body,
+        out[1].body,
         JobResult::Progress {
             bytes: 0,
             total: 10_000,

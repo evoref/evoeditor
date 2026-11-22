@@ -60,6 +60,7 @@ fn open_text(path: &Path) -> String {
         kind: JobKind::Open {
             path: FsPath::new(path),
             opts: OpenOptions::default(),
+            known_ids: Vec::new(),
         },
     };
     let mut out = Vec::new();

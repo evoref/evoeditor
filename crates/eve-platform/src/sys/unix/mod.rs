@@ -48,6 +48,91 @@ pub(crate) fn free_bytes(path: &Path) -> Option<u64> {
     Some(u64::from(st.f_bavail).saturating_mul(u64::from(st.f_frsize)))
 }
 
+/// FS の種類 (05 §5.5 の `FsKind` の判定) と、そこの `(st_dev, st_ino)` を同じファイルの判定に使ってよいか (05 §5.4 の (1)、
+/// `FileMeta.file_id_unique`)。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct FsClass {
+    /// FS の種類。
+    pub kind: eve_core::FsKind,
+    /// 識別を同じファイルの判定に使ってよい。
+    pub id_trusted: bool,
+}
+
+impl FsClass {
+    /// 判定できなかった (`Unknown`。識別は信頼しない)。
+    const UNKNOWN: FsClass = FsClass {
+        kind: eve_core::FsKind::Unknown,
+        id_trusted: false,
+    };
+}
+
+/// ネットワーク・共有の FS の `f_type` (05 §5.5)。値はカーネルの公開されたヘッダで確かめたものだけ (`linux/magic.h` の
+/// NFS・SMB・CIFS・SMB2・9p (WSL の `DrvFs` を含む)・FUSE・AFS・kAFS・Coda・Ceph・NCP・OCFS2 と、`linux/gfs2_ondisk.h` の
+/// GFS2)。vboxsf・Lustre・GPFS は公開されたヘッダに値が無いので入れない (`Local` になる)。
+#[cfg(any(target_os = "linux", test))]
+const NETWORK_FS: [(u32, &str); 13] = [
+    (0x6969, "nfs"),
+    (0x517B, "smb"),
+    (0xFF53_4D42, "cifs"),
+    (0xFE53_4D42, "smb2"),
+    (0x0102_1997, "9p"),
+    (0x6573_5546, "fuse"),
+    (0x5346_414F, "afs"),
+    (0x6B41_4653, "kafs"),
+    (0x7375_7245, "coda"),
+    (0x00C3_6400, "ceph"),
+    (0x564C, "ncp"),
+    (0x7461_636F, "ocfs2"),
+    (0x0116_1970, "gfs2"),
+];
+
+/// 識別を使い回す FS の `f_type` (`linux/magic.h` の MSDOS (vfat を含む)・`exFAT`)。項目の位置から作られ、削除の後に使い回される。
+#[cfg(any(target_os = "linux", test))]
+const REUSED_ID_FS: [u32; 2] = [0x4D44, 0x2011_BAB0];
+
+/// `statfs` の `f_type` (下位 32 bit) から FS の種類を決める (純粋な関数。05 §5.5 の表)。
+#[cfg(any(target_os = "linux", test))]
+pub(crate) fn classify(f_type: u32) -> FsClass {
+    if NETWORK_FS.iter().any(|(t, _)| *t == f_type) {
+        FsClass {
+            kind: eve_core::FsKind::Network,
+            id_trusted: false,
+        }
+    } else {
+        FsClass {
+            kind: eve_core::FsKind::Local,
+            id_trusted: !REUSED_ID_FS.contains(&f_type),
+        }
+    }
+}
+
+/// `path` のある FS の種類 (`classify`)。Linux は `statfs` の `f_type` で見分ける (シンボリックリンクは辿った先の FS)。
+/// `statfs` の失敗と Linux 以外の Unix は `FsClass::UNKNOWN`。
+#[cfg(target_os = "linux")]
+pub(crate) fn fs_class(path: &Path) -> FsClass {
+    use std::os::unix::ffi::OsStrExt;
+    let Ok(c) = std::ffi::CString::new(path.as_os_str().as_bytes()) else {
+        return FsClass::UNKNOWN;
+    };
+    // SAFETY: ゼロ初期化した `statfs` (全フィールドが整数) に書かせる。
+    let mut st: libc::statfs = unsafe { std::mem::zeroed() };
+    // SAFETY: NUL 終端のパスと有効な書込先。
+    if unsafe { libc::statfs(c.as_ptr(), &raw mut st) } != 0 {
+        return FsClass::UNKNOWN;
+    }
+    // `f_type` の型は libc ごとに違う (glibc は符号付き、musl は符号無し)。下位 32 bit で比べる
+    match u32::try_from(st.f_type & 0xFFFF_FFFF) {
+        Ok(t) => classify(t),
+        Err(_) => FsClass::UNKNOWN,
+    }
+}
+
+/// Linux 以外の Unix: 判定しない (`Unknown`。識別は信頼しない)。macOS へ移すときは `statfs` の `f_fstypename` で見分ける。
+#[cfg(not(target_os = "linux"))]
+pub(crate) fn fs_class(_path: &Path) -> FsClass {
+    FsClass::UNKNOWN
+}
+
 /// 1 段だけ 0700 で作る (05 §5.6。在れば何もしない)。
 pub(crate) fn create_dir_private(dir: &Path) -> io::Result<()> {
     use std::os::unix::fs::DirBuilderExt;
@@ -134,6 +219,30 @@ pub(crate) fn kill_self() -> ! {
 mod tests {
     use super::*;
     use crate::sys::create_private;
+
+    #[test]
+    fn fs_の種類の表() {
+        use eve_core::FsKind;
+        let net = FsClass {
+            kind: FsKind::Network,
+            id_trusted: false,
+        };
+        let local = |id_trusted| FsClass {
+            kind: FsKind::Local,
+            id_trusted,
+        };
+        // ネットワーク・共有の FS は識別を信頼しない (値は linux/magic.h・linux/gfs2_ondisk.h)
+        for (t, name) in NETWORK_FS {
+            assert_eq!(classify(t), net, "{name} ({t:#x})");
+        }
+        // ローカルでも FAT (msdos・vfat)・exFAT は識別を使い回す
+        assert_eq!(classify(0x4D44), local(false), "msdos");
+        assert_eq!(classify(0x2011_BAB0), local(false), "exfat");
+        // ext4・tmpfs・btrfs・xfs は信頼する
+        for t in [0xEF53, 0x0102_1994, 0x9123_683E, 0x5846_5342] {
+            assert_eq!(classify(t), local(true), "{t:#x}");
+        }
+    }
 
     #[test]
     fn 自分の起動時刻と生存を取れる() {

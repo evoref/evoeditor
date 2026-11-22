@@ -946,6 +946,7 @@ fn open_job(path: &Path) -> Duration {
         kind: JobKind::Open {
             path: FsPath::new(path.to_path_buf()),
             opts: OpenOptions::default(),
+            known_ids: Vec::new(),
         },
     };
     let mut out = Vec::new();

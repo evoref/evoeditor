@@ -205,10 +205,17 @@ pub(crate) fn arg_path(ctx: &CommandCtx<'_>) -> Option<String> {
 }
 
 pub(crate) fn file_new(ctx: &mut CommandCtx<'_>) -> CommandResult {
+    // 名前を付けて保存の照合の間は無視する (03 §9.7 の全状態の遷移表の `CheckTarget` の行)
+    if ctx.state.ignore_while_save_as_check() {
+        return CommandResult::Done;
+    }
     ctx.state.new_untitled()
 }
 
 pub(crate) fn file_open(ctx: &mut CommandCtx<'_>) -> CommandResult {
+    if ctx.state.ignore_while_save_as_check() {
+        return CommandResult::Done;
+    }
     match arg_path(ctx) {
         Some(p) => ctx.state.open_path(&p, OpenOptions::default()),
         // パスがなければ入力プロンプトで尋ねる

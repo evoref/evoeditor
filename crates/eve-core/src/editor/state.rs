@@ -166,6 +166,16 @@ pub(crate) struct IoState {
     )>,
     /// ダングリングのリンクのリンク先への作成を承認した (文書, パス)。次の 1 回の保存で使って消す。
     pub(crate) link_create_ok: Option<(DocumentId, crate::FsPath)>,
+    /// 名前を付けて保存の照合 (`CheckTarget`、03 §9.7 (a)) で得た保存先の識別 (文書 → (保存先のパス, 識別))。そのパスへの
+    /// 保存が成功したら、文書の canonical をこれに替える (03 §12.7.6 の 2)。
+    pub(crate) save_as_targets:
+        BTreeMap<DocumentId, (crate::FsPath, crate::io::same_file::FileIdentity)>,
+    /// `Esc` で取り消した読込のジョブ (結果が届くまで)。取り消し済みの読込は次の `Esc` を受け止めない (03 §12.7.6 の
+    /// 細目 (9))。
+    pub(crate) cancelled_loads: BTreeSet<JobId>,
+    /// ほかのオーバーレイか検索バーが出ている間に届いた、名前を付けて保存の照合の結果 (届いた順。03 §12.7.6 の細目 (7))。
+    pub(crate) held_save_as:
+        std::collections::VecDeque<(Box<crate::io::save_as::SaveAsAsk>, crate::jobs::JobResult)>,
     /// ログファイルの場所 (設定の問題の要約に出す)。
     pub(crate) log_path: Option<String>,
     /// OS のロケール由来の文字コードのヒント。
@@ -347,6 +357,9 @@ impl EditorState {
                 readonly_ok: None,
                 escape_merge_ok: None,
                 link_create_ok: None,
+                save_as_targets: BTreeMap::new(),
+                held_save_as: std::collections::VecDeque::new(),
+                cancelled_loads: BTreeSet::new(),
                 system_encoding: None,
                 log_path: None,
                 config_sources: None,
@@ -524,6 +537,8 @@ impl EditorState {
         if let Some(old) = self.docs.documents.get(&id) {
             doc.continue_revision(old.revision());
             doc.untitled_no = doc.untitled_no.or(old.untitled_no);
+            // 同じファイルの判定の識別 (03 §12.7.6) は、読込の途中に `Identity` で受けたものを引き継ぐ
+            doc.inherit_identity(old);
         }
         self.docs.documents.insert(id, doc);
         self.clamp_views_of(id);

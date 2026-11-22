@@ -40,6 +40,7 @@ fn open_job(data: &[u8], chunk: usize, per_chunk_ms: u64, opts: OpenOptions) -> 
         kind: JobKind::Open {
             path: FsPath::from("/w/a.txt"),
             opts,
+            known_ids: Vec::new(),
         },
     };
     let mut out = Vec::new();

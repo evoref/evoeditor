@@ -122,6 +122,8 @@ struct State {
     swap_unsupported: bool,
     /// 他のプロセスが残したスワップ (テストが `add_swap_entry` で積む)。復旧の探索が返す。
     swap_entries: Vec<(eve_core::SwapEntry, Option<eve_core::SwapBody>)>,
+    /// `metadata` の `file_id_unique` (既定 `true`。`false` で FAT・`exFAT`・ネットワークの FS のふりをする、05 §5.4)。
+    file_id_unique: bool,
 }
 
 /// メモリ上の `FileSystem` (偽 Port)。ファイル・ディレクトリ・シンボリックリンクを持ち、`fail_next` などで障害を注入できる。
@@ -167,6 +169,7 @@ impl MemFs {
                 swap_writes: 0,
                 swap_unsupported: false,
                 swap_entries: Vec::new(),
+                file_id_unique: true,
             }),
         }
     }
@@ -428,6 +431,46 @@ impl MemFs {
         }
     }
 
+    /// ハードリンクを作る: `link` に `existing` と同じ `file_id` の項目を置き、両方の `nlink` を 1 つ増やす (同じファイルの
+    /// 判定の試験用。内容は作った時点の写しで、その後の書込は共有しない)。`existing` が無ければ何もしない。
+    pub fn add_hardlink(&self, link: &str, existing: &str) {
+        let mut s = self.st();
+        let Some(e) = s.files.get_mut(&FsPath::from(existing)) else {
+            return;
+        };
+        e.nlink += 1;
+        let copy = Entry {
+            data: e.data.clone(),
+            mtime: e.mtime,
+            readonly: e.readonly,
+            id: e.id,
+            nlink: e.nlink,
+            fake_len: e.fake_len,
+        };
+        let link = FsPath::from(link);
+        if let Some(parent) = link.parent() {
+            Self::add_ancestors_and_self(&mut s, &parent);
+        }
+        s.files.insert(link, copy);
+    }
+
+    /// ファイルの識別 (`FileId.index`。ボリュームは常に 1) を決める (識別の使い回しの試験用。無いパスは何もしない)。
+    pub fn set_file_id(&self, path: &str, index: u128) {
+        if let Some(e) = self.st().files.get_mut(&FsPath::from(path)) {
+            e.id = index;
+        }
+    }
+
+    /// ファイルの識別 (`FileId.index`)。無いパスは `None`。
+    pub fn file_id_of(&self, path: &str) -> Option<u128> {
+        self.st().files.get(&FsPath::from(path)).map(|e| e.id)
+    }
+
+    /// `metadata` が返す `file_id_unique` を決める (`false` で、`file_id` を同じファイルの判定に使えない FS のふりをする)。
+    pub fn set_file_id_unique(&self, unique: bool) {
+        self.st().file_id_unique = unique;
+    }
+
     /// ハードリンク数を決める (`HardlinkPolicy` の試験用。無いパスは何もしない)。
     pub fn set_nlink(&self, path: &str, nlink: u32) {
         if let Some(e) = self.st().files.get_mut(&FsPath::from(path)) {
@@ -521,6 +564,7 @@ fn meta_of(e: &Entry) -> FileMeta {
         link: None,
         fs_kind: FsKind::Local,
         owner_is_me: Some(true),
+        file_id_unique: true,
     }
 }
 
@@ -535,6 +579,7 @@ fn dir_meta() -> FileMeta {
         link: None,
         fs_kind: FsKind::Local,
         owner_is_me: Some(true),
+        file_id_unique: false,
     }
 }
 
@@ -742,7 +787,10 @@ impl FileSystem for MemFs {
         injected(&mut s, FsOp::Metadata)?;
         let path = &link_target(&s, path);
         if let Some(e) = s.files.get(path) {
-            return Ok(meta_of(e));
+            return Ok(FileMeta {
+                file_id_unique: s.file_id_unique,
+                ..meta_of(e)
+            });
         }
         if s.dirs.contains(path) {
             return Ok(dir_meta());
@@ -873,13 +921,14 @@ impl FileSystem for MemFs {
     fn canonicalize(&self, path: &FsPath) -> Result<FsPath, FsError> {
         let mut s = self.st();
         injected(&mut s, FsOp::Canonicalize)?;
-        if s.files.contains_key(path) || s.dirs.contains(path) {
-            Ok(path.clone())
-        } else if let Some(t) = s.links.get(path)
-            && s.dirs.contains(t)
-        {
-            // ディレクトリを指すリンクは辿った先 (ファイルを指すリンクは従来どおり、リンクのパスでは解決しない)
-            Ok(t.clone())
+        // シンボリックリンクは、リンク先が在ればリンク先にする (05 §3.3。ファイルを指すリンクも、ディレクトリを指すリンクも
+        // 辿る。ダングリングは `not_found` が詳細を付ける)。同じファイルの判定 (03 §12.7.6) とワークスペースの走査が使う
+        let target = match s.links.get(path) {
+            Some(t) if s.dirs.contains(t) => t.clone(),
+            _ => link_target(&s, path),
+        };
+        if s.files.contains_key(&target) || s.dirs.contains(&target) {
+            Ok(target)
         } else {
             Err(not_found(&s, path))
         }

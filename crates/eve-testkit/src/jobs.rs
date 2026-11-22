@@ -221,6 +221,7 @@ mod tests {
         JobKind::Metadata {
             path: FsPath::from(path),
             purpose: MetaPurpose::ExternalCheck,
+            known_ids: Vec::new(),
         }
     }
 

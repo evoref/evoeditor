@@ -582,19 +582,19 @@ v0.1 (Windows) で本層が自ら複製するのは READONLY・HIDDEN・SYSTEM �
 
 用途: (1) 同じファイルを二重に開く検出 (`evoeditor A.txt a.txt` on Windows)、(2) 保存直前の「別ファイルに置き換わっていないか」確認、(3) 監視イベントの自己抑制。
 
-**(1) の「同じファイルか」の判定に使ってよい FS** (v0.5 の M31、SAF-28。`FileMeta.file_id_unique`、03 §12.7.6): Windows は NTFS / ReFS のローカルのボリューム (`GetVolumeInformationByHandleW` の FS の名前で見分ける) で、`FileIdInfo` の値が 0 でないとき。Unix は `FsKind::Local` のとき。FAT / exFAT (ディレクトリの項目の位置から作られ、使い回される)、`Network` (サーバによって 0 や重なる値を返す。sshfs は `use_ino` が無いと番号を使い回す)、`Unknown` は使わない (`false`)。イメージから複製したボリュームはシリアル番号が重なるので、`false` の FS では canonical のパスで比べる。(2)・(3) の用途はこの区別に依らない (変わったことを見るだけなので、重なっても安全な側に倒れる)。
+**(1) の「同じファイルか」の判定に使ってよい FS** (v0.5 の M31、SAF-28。`FileMeta.file_id_unique`、03 §12.7.6): Windows は NTFS / ReFS のローカルのボリューム (`GetVolumeInformationByHandleW` の FS の名前で見分け、FS の旗に `FILE_SUPPORTS_OPEN_BY_FILE_ID` があることも求める。WinFsp・Dokan などで作る FS が NTFS と名乗るため) で、`FileIdInfo` の値が 0 でないとき (ハンドルが `FileRemoteProtocolInfo` に答える (リモートの) ファイルと、`fs_kind` が `Local` でないパスは除く)。Unix は `FsKind::Local` で、`statfs` の `f_type` が FAT (msdos・vfat)・exFAT でないとき (Linux。ほかの Unix は判定しないので `false`)。ディレクトリは `false`。FAT / exFAT (ディレクトリの項目の位置から作られ、使い回される)、`Network` (サーバによって 0 や重なる値を返す。sshfs は `use_ino` が無いと番号を使い回す)、`Unknown` は使わない (`false`)。`false` の FS では canonical のパスで比べる。**複製したボリューム** (ディスクの複製・マウントしたバックアップの VHDX・シャドウコピー `\\?\GLOBALROOT\Device\HarddiskVolumeShadowCopyN`) は、NTFS でもボリュームのシリアル番号と `FileId` が元と重なるので、識別が等しくても canonical のパスのボリュームの部分 (ドライブ文字・UNC のサーバとシェア・装置名) が違えば同じとしない (03 §12.7.6 の 0。ハードリンクは同じボリュームの中にしかない)。同じドライブの下のフォルダに複製をマウントしたものは見分けられない (既知の制約)。Linux の `(st_dev, st_ino)` は、削除した inode の番号を別のファイルがすぐ使うことがあるので、文書の古い識別との一致はジョブの中で文書のパスを `metadata` し直して確かめる (03 §12.7.6 の「古い識別の確かめ」)。(2)・(3) の用途はこの区別に依らない (変わったことを見るだけなので、重なっても安全な側に倒れる)。
 
 ### 5.5 外部変更検知 (FR-117) の比較キー
 
 02 §4.5 の `FileStamp { mtime, len, file_id, hash }` を比較キーとする (03 §9 の `known_stamp` の型)。本節はその計算規則を定める。`(mtime, len, FileId)` を基本とし、**mtime が等しく len も等しい** 場合に限って内容ハッシュ (16 MiB 以下) を比較する。加えて、**len と FileId が等しく mtime だけが違う** 場合も、16 MiB 以下なら内容ハッシュで照合し、一致すれば変更なしとする (OneDrive などの同期ソフト・ウイルス対策が内容を変えずに mtime だけを更新することがあり、そのたびに外部変更の確認を出さないため。16 MiB を超えるファイルは mtime の違いを変更として扱う)。一致したときは照合した側の stamp (新しい mtime) を以後の比較に使う。保存ジョブの中でハッシュを比べるのは **書き始める前の照合** (§4.1 手順 0b、§4.4 手順 1) だけで、置換の直前 (§4.1 手順 4b) と in-place の開いた直後 (§4.4 手順 3) は `(mtime, len, FileId)` だけで照合する (T を読み直す時間で競合の窓を広げないため)。理由: mtime 分解能は FAT32 2 秒、HFS+ 1 秒、ext4 は `CLOCK_REALTIME_COARSE` (数 ms) で同一 tick の連続更新が同じ mtime になる。**ハッシュは読込ジョブ内でストリーミング計算** する (保存ジョブで計算すると「開いてから最初の保存まで」ハッシュが無く、その間の外部変更を見逃すため)。保存ジョブでも書いた内容から計算して `SaveReport.new_stamp` に入れる。ハッシュ関数は **XXH3-64 (twox-hash クレート、MIT。純 Rust で §17.2 の「C 依存 0」に合う)** とし、値は 02 §4.5 の `ContentHash([u8; 8])` に入れる (v0.1 の既定)。S-09 のベンチでは速度だけを確かめる (16 MiB のハッシュが読込時間に対して無視できること)。`FsKind::Network` では mtime がクライアントキャッシュで遅延する (NFS `actimeo`) ことを UI の文言で伝える。
 
-**`FsKind` の判定** (`FileMeta.fs_kind`。`metadata()` の中で T の親ディレクトリについて判定する):
+**`FsKind` の判定** (`FileMeta.fs_kind`。`metadata()` の中で T 自身について判定する (シンボリックリンクは辿った先の FS)。v0.5 の M31 までの仕様は「T の親ディレクトリ」としていたが、実装 (Windows のパスの判定・Linux の `statfs`) は T 自身で判定しており、識別の信頼 (§5.4) も T のある FS で決まるので、T 自身に改めた):
 
 | 条件 (上から順に評価) | `FsKind` |
 |---|---|
 | パスが UNC (`\\server\share\…`。`\\wsl$\…` / `\\wsl.localhost\…` を含む) または `\\?\UNC\…` | `Network` |
 | ドライブ文字のパスで、`GetDriveTypeW(<ルート>)` が `DRIVE_REMOTE` (ネットワークドライブの割当て) | `Network` |
-| (v0.2、Unix) `statfs` の `f_type` / `f_fstypename` が NFS・CIFS/SMB・9p・FUSE 系 | `Network` |
+| (Unix) `statfs` の `f_type` / `f_fstypename` が NFS・CIFS/SMB・9p・FUSE 系 (v0.2 の仕様。実装は v0.5 の M31 で Linux の `f_type` (NFS・SMB・CIFS・SMB2・9p (WSL の DrvFs を含む)・FUSE・AFS・kAFS・Coda・Ceph・NCP・OCFS2・GFS2。値はカーネルの公開されたヘッダ `linux/magic.h`・`linux/gfs2_ondisk.h` で確かめたものだけ) から入れた。vboxsf・Lustre・GPFS は公開されたヘッダに値が無いので入れていない (`Local` になる)。それまでの Unix の実装は常に `Unknown`。macOS の `f_fstypename` は移すときに入れる) | `Network` |
 | 判定の API が失敗した | `Unknown` |
 | それ以外 (`DRIVE_FIXED` / `DRIVE_REMOVABLE` / `DRIVE_RAMDISK` 等) | `Local` |
 

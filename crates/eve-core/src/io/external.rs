@@ -57,6 +57,7 @@ impl EditorState {
             JobKind::Metadata {
                 path,
                 purpose: MetaPurpose::ExternalCheck,
+                known_ids: Vec::new(),
             },
         );
         self.io.pending.insert(

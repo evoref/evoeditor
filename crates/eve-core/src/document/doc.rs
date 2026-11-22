@@ -138,6 +138,14 @@ pub struct Document {
     preserved_anomalies: u32,
     /// 標準入力の文書だけ `Some` (`evoeditor -`、03 §9.2.2。v0.4 の M25)。書くのは core だけ。
     pub stdin: Option<StdinDoc>,
+    /// canonical のパス (同じファイルの判定に使う。03 §12.7.6 の 0、境界の型ではない)。開くジョブの `Identity` と、名前を
+    /// 付けて保存の成功で直す。canonicalize できなかったときは正規化したパス。無題・`Identity` が届く前は `None`。
+    pub(crate) canonical: Option<FsPath>,
+    /// ファイルの識別を同じファイルの判定に使ってよい (`FileMeta.file_id_unique`)。`canonical` と同じ時機に直す。
+    pub(crate) file_id_unique: bool,
+    /// 読込の完了の前 (`disk_stamp` が無い間) の識別。`Identity` で受け取る。`disk_stamp` があればそちらを使う
+    /// (保存・再読込で識別が変わる、05 §5.4)。
+    pub(crate) loading_file_id: Option<crate::io::fs::FileId>,
 }
 
 /// 標準入力の文書の欄 (02 §5.1 の `Document.stdin`、03 §9.2.2。v0.4 の M25)。
@@ -255,6 +263,28 @@ impl Document {
             preserved,
             preserved_anomalies: 0,
             stdin: None,
+            canonical: None,
+            file_id_unique: false,
+            loading_file_id: None,
+        }
+    }
+
+    /// 同じファイルの判定に使う識別 (03 §12.7.6 の 0)。識別は `disk_stamp` から取り (保存・再読込・外部変更の受け入れで
+    /// 直る)、読込の完了の前は `Identity` で受け取ったもの。canonical のパスは借りる (文書の集合を比べて回るとき複製しない)。
+    pub(crate) fn identity_ref(&self) -> crate::io::same_file::IdentityRef<'_> {
+        crate::io::same_file::IdentityRef {
+            file_id: self.disk_stamp.map_or(self.loading_file_id, |s| s.file_id),
+            file_id_unique: self.file_id_unique,
+            canonical: self.canonical.as_ref(),
+        }
+    }
+
+    /// 同じファイルの判定に使う識別を、前の文書 `old` から引き継ぐ (読込の完了・開き直しで文書を作り直すとき)。
+    pub(crate) fn inherit_identity(&mut self, old: &Document) {
+        if self.canonical.is_none() {
+            self.canonical.clone_from(&old.canonical);
+            self.file_id_unique = old.file_id_unique;
+            self.loading_file_id = old.loading_file_id;
         }
     }
 

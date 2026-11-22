@@ -109,6 +109,7 @@ fn open_as_file(bytes: &[u8], opts: OpenOptions) -> Done {
                 read_only_requested: true,
                 ..opts
             },
+            known_ids: Vec::new(),
         },
     };
     let mut out = Vec::new();
