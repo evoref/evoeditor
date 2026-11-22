@@ -278,6 +278,8 @@ pub(crate) struct TermState {
     pub(crate) hint_bar_on: bool,
     /// 検索バーが取る行数 (0 か 1)。編集面はその分だけ縮む。
     pub(crate) bar_rows: u16,
+    /// タブラインが取る行数 (0 か 1。FR-510、03 §9.9 の PANE-12 (b))。編集面はその分だけ縮む。
+    pub(crate) tab_rows: u16,
     /// ホストが渡した編集面の大きさ (検索バーの分を引く前)。
     pub(crate) surface: (u16, u16),
     /// 全 View の可視の大きさを 1 回求めたもの (全 View のスクロールを調整する間だけ。`with_view_sizes`)。
@@ -296,6 +298,7 @@ impl EditorState {
                 caps,
                 viewport: (80, 24),
                 bar_rows: 0,
+                tab_rows: 0,
                 surface: (80, 24),
                 view_sizes: None,
                 mouse_drag: None,
@@ -423,6 +426,8 @@ impl EditorState {
         if theme_changed {
             self.refresh_roles();
         }
+        // `ui.tab_line` は即時に効く (03 §9.9 の PANE-12 (f))
+        self.sync_tab_line();
         self.out.needs_render = true;
     }
 
@@ -586,24 +591,46 @@ impl EditorState {
         self.term.viewport
     }
 
+    /// タブラインの出し入れを今の文書の数と設定に合わせる (03 §9.9 の PANE-12 (b))。変われば編集面の行数が変わり、各 View の
+    /// 選択は変えずに、カーソルが隠れるときだけ最小限スクロールする (`apply_viewport`)。文書の数・設定・置き換えの読込の
+    /// 状態が変わり得る所 (入力・ジョブの結果・時刻の後、Frame を作る前) で呼ぶ。
+    pub(crate) fn sync_tab_line(&mut self) {
+        let (cols, rows) = self.term.surface;
+        self.apply_viewport(cols, rows);
+    }
+
     /// 端末の大きさ (列, 行) を設定し、バーの分を引いた編集面に反映する。大きさが変わればカーソルが見えるようにスクロールする。
     pub fn set_viewport(&mut self, cols: u16, rows: u16) {
         self.term.surface = (cols, rows);
         self.apply_viewport(cols, rows);
     }
 
-    /// 編集面の大きさを、検索バーの分を引いて反映する。
+    /// 編集面の大きさを、検索バーとタブラインの分を引いて反映する。タブラインを出すかもここで決める (出すと編集面が
+    /// `TAB_LINE_MIN_SURFACE` 行を割るときは出さない、03 §9.9 の PANE-12 (b))。
     pub(crate) fn apply_viewport(&mut self, cols: u16, rows: u16) {
-        let rows = rows.saturating_sub(self.term.bar_rows).max(1);
+        let rows = rows.saturating_sub(self.term.bar_rows);
+        let tab_rows = u16::from(
+            self.tab_line_wanted() && rows > crate::ui_model::tab_line::TAB_LINE_MIN_SURFACE,
+        );
+        if self.term.tab_rows != tab_rows {
+            self.term.tab_rows = tab_rows;
+            self.out.needs_render = true;
+        }
+        let rows = rows.saturating_sub(tab_rows).max(1);
         if self.term.viewport != (cols, rows) {
+            // 折り返し幅は View を表示するペインの本文の桁数で決まる。端末の桁数が同じでも、縮退表示 (03 §9.9 の PANE-4 (b))
+            // に出入りするとペインの幅が変わるので、変える前と後の本文の桁数を View ごとに比べる (03 §14.3.1 の
+            // 「リサイズ・設定変更」、§9.9 の PANE-12 (b))。行数だけの変化では先頭の表示行を保つ
+            let before = self.all_view_sizes();
             self.term.viewport = (cols, rows);
             self.out.needs_render = true;
             // 画面の大きさが変わっても、カーソルが見えるようにする (配置は 1 回だけ求める)
             let views: Vec<ViewId> = self.docs.views.keys().copied().collect();
             self.with_view_sizes(|st| {
                 for v in views {
-                    // 折り返し幅が変わるので、先頭の論理行の最初の表示行に戻す (03 §14.3.1)
-                    if let Some(view) = st.docs.views.get_mut(&v) {
+                    // 折り返し幅が変わったので、先頭の論理行の最初の表示行に戻す (03 §14.3.1)
+                    let cols_changed = before.get(&v).map(|s| s.0) != Some(st.view_size(v).0);
+                    if cols_changed && let Some(view) = st.docs.views.get_mut(&v) {
                         view.scroll.wrap_idx = 0;
                     }
                     st.ensure_cursor_visible(v);

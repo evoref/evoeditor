@@ -74,13 +74,18 @@ impl EditorState {
         wrap_ctx(self, view)
     }
 
+    /// 先頭の (論理行, 表示行)。`wrap_idx` は先頭の論理行の表示行の数 − 1 に丸めて読む (折り返し幅が変わった後に戻し
+    /// 忘れた値でも、表示行の数を超えて計算しない。03 §14.3.1 の「リサイズ・設定変更」の守り)。
     fn top_pos(&self, view: ViewId) -> Option<RowPos> {
         let v = self.docs.views.get(&view)?;
         let d = self.docs.documents.get(&v.doc)?;
-        Some((
-            d.text().byte_to_line(v.scroll.top).0,
-            v.scroll.wrap_idx as usize,
-        ))
+        let line = d.text().byte_to_line(v.scroll.top).0;
+        let widx = v.scroll.wrap_idx as usize;
+        let widx = match self.wrap_geometry(view) {
+            Some(g) => widx.min(rows_in(d, line, g).saturating_sub(1)),
+            None => widx,
+        };
+        Some((line, widx))
     }
 
     /// 主カーソルの (論理行, 表示行)。

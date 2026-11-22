@@ -181,6 +181,7 @@ impl Editor {
             Some(w) => w,
             None => self.state.add_window(view_id),
         };
+        self.state.sync_tab_line();
         (doc_id, view_id, window)
     }
 
@@ -200,6 +201,7 @@ impl Editor {
             self.state.mark_dirty_render();
         }
         self.state.flush_open_switches();
+        self.state.sync_tab_line();
     }
 
     /// which-key を出すまでの時間 (`ui.which_key_delay_ms`、既定 500 ms)。
@@ -243,6 +245,8 @@ impl Editor {
         }
         // オーバーレイを閉じたら、保留した表示の切り替えを行う (03 §9.2.1 の「表示の切り替え」)
         self.state.flush_open_switches();
+        // 文書を開く・閉じるとタブラインの出し入れが変わる (03 §9.9 の PANE-12 (b))
+        self.state.sync_tab_line();
         res
     }
 
@@ -264,6 +268,7 @@ impl Editor {
         // `config.reload` の結果: キーマップは Editor が持つので、ここで差し替える
         self.finish_reload_keymap();
         self.state.flush_open_switches();
+        self.state.sync_tab_line();
     }
 
     /// 起動時の開き方 (`Host::start` が最初の `Resize` の後に呼ぶ)。パスがなければ無題の文書 (FR-124)。
@@ -298,6 +303,7 @@ impl Editor {
                     .collect();
                 self.state.start_workspace_root(&args);
                 self.state.start_recovery_scan();
+                self.state.sync_tab_line();
             }
         }
     }
@@ -332,6 +338,7 @@ impl Editor {
         // ルートの検出 (開くジョブの後ろ、03 §12.7.1)。起動時の退避の案内 (走査は io のジョブ。開く文書のメッセージの後に出る)
         self.state.start_workspace_root(path.as_slice());
         self.state.start_recovery_scan();
+        self.state.sync_tab_line();
     }
 
     /// 入力を処理する (02 §5.4)。キーはキーマップを通してコマンドを実行し、`Text` は文字として挿入する。
@@ -400,6 +407,7 @@ impl Editor {
         }
         // オーバーレイを閉じたら、保留した表示の切り替えを行う (03 §9.2.1 の「表示の切り替え」)
         self.state.flush_open_switches();
+        self.state.sync_tab_line();
     }
 
     /// 編集面にフォーカスがあるときのコンテキストの参照順 (07 §7.1)。
@@ -534,6 +542,8 @@ impl Editor {
 
     /// Window の Frame を作る (可視範囲だけ。コストは文書の大きさに依存しない)。
     pub fn frame(&mut self, window: WindowId) -> Option<eve_view::Frame> {
+        // タブラインの出し入れを今の文書の数に合わせてから作る (03 §9.9 の PANE-12 (b))
+        self.state.sync_tab_line();
         let mut f = crate::layout::build_frame(&self.state, window, self.keymap.pending());
         if let Some(f) = f.as_mut() {
             f.which_key = self.which_key_model();

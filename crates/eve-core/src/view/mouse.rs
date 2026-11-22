@@ -68,22 +68,32 @@ impl EditorState {
         }
     }
 
-    /// クローム (ペインの見出し) のマウス (03 §9.9 の PANE-7 (d) / (f))。見出しの左 `Down` でそのペインにフォーカスを移す
-    /// (カーソルは動かさない)。見出しは、指す View がそのペインの表に残っていれば同じペインを指す (Frame を作った後に
+    /// クローム (ペインの見出し・タブラインのタブ) のマウス (03 §9.9 の PANE-7 (d) / (e) / (f))。見出しの左 `Down` でその
+    /// ペインにフォーカスを移す (カーソルは動かさない)。タブの左 `Down` でその文書をフォーカスのペインに表示する。見出しは、指す View がそのペインの表に残っていれば同じペインを指す (Frame を作った後に
     /// ペインが別の文書へ切り替わっても、フォーカスを移すだけなので)。ほかの操作 (中・右のボタン・ホイール) とオーバーレイ・
     /// 検索バーを開いている間は何もしない (PANE-6 (c))。
     pub(crate) fn on_chrome_mouse(&mut self, m: ChromeMouseEvent) {
         if self.ui.overlay.is_some() || self.find.search_bar.is_some() {
             return;
         }
-        if let (MouseKind::Down(MouseButton::Left), ChromeTarget::PaneBar { view }) =
-            (m.kind, m.target)
-        {
-            self.term.mouse_drag = None;
-            // 消えた View・どのペインにも属さない View を指す入力は捨てる (PANE-7 (g))
-            if let Some(at) = self.pane_owning(view) {
-                self.focus_pane(at);
+        // 左の押下だけに反応する (修飾キーは問わない)。見出しとタブの Drag / Up・ホイール・中と右のボタンは捨てる (PANE-7 (f))
+        if m.kind != MouseKind::Down(MouseButton::Left) {
+            return;
+        }
+        match m.target {
+            ChromeTarget::PaneBar { view } => {
+                self.term.mouse_drag = None;
+                // 消えた View・どのペインにも属さない View を指す入力は捨てる (PANE-7 (g))
+                if let Some(at) = self.pane_owning(view) {
+                    self.focus_pane(at);
+                }
             }
+            // タブ (FR-510): その文書をフォーカスのペインに表示する (PANE-7 (e)、PANE-12 (g) / (i))
+            ChromeTarget::Tab { doc } => {
+                self.term.mouse_drag = None;
+                self.click_tab(doc);
+            }
+            _ => {}
         }
     }
 

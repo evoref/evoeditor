@@ -22,7 +22,7 @@ use crate::theme::Theme;
 
 // 行の割り当ての計算は `chrome::layout` に集めた (04 §3.1 / §3.5)。以前の場所の名前を残す (試験・診断が使う)。
 pub use crate::chrome::layout::{
-    CHROME_ROWS, bar_rows, chrome_rows, chrome_rows_for_surface, surface_rows_for_window,
+    CHROME_ROWS, bar_rows, chrome_rows, chrome_rows_for_surface, surface_rows_for_window, tab_rows,
 };
 
 /// 変換の結果。
@@ -204,16 +204,17 @@ impl Writer<'_> {
     }
 }
 
+/// ペインの `i` 行目を書く。`top` は編集面を置いた画面の行 (タブラインを出すときは 1、03 §9.9 の PANE-12)。
 fn render_row(
     w: &mut Writer<'_>,
     pane: &PaneFrame,
-    i: u16,
+    (top, i): (u16, u16),
     row: &RenderRow,
     glyphs: &Glyphs,
     theme: &Theme,
 ) {
     let r = pane.rect;
-    let y = r.row + i;
+    let y = top + r.row + i;
     let limit = r.col + r.cols;
     let mut x = r.col;
     if matches!(row.source, RowSource::Virtual) {
@@ -262,13 +263,14 @@ fn render_row(
 }
 
 /// ペイン `pane` のカーソルのセル (`PaneFrame.cursors`、`rect` の左上が原点) の反転を切り替える (選択の反転の上でも見える)。
-fn mark_cursors(w: &mut Writer<'_>, pane: &PaneFrame) {
+/// `top` は編集面を置いた画面の行。
+fn mark_cursors(w: &mut Writer<'_>, pane: &PaneFrame, top: u16) {
     let r = pane.rect;
     for c in &pane.cursors {
         if c.col >= r.cols || c.row >= r.rows {
             continue;
         }
-        if let Some(cell) = w.buf.cell_mut((r.col + c.col, r.row + c.row)) {
+        if let Some(cell) = w.buf.cell_mut((r.col + c.col, top + r.row + c.row)) {
             cell.modifier.toggle(Modifier::REVERSED);
         }
     }
@@ -287,8 +289,10 @@ pub fn render_panes_in(
     glyphs: &Glyphs,
 ) -> PaneRender {
     let theme = Theme::from_roles(&frame.roles);
-    // 検索バーは編集面の下に 1 行取る (編集面の行数 `size.rows` はその分を引いてある)
+    // 検索バーは編集面の下に 1 行取る (編集面の行数 `size.rows` はその分を引いてある)。タブラインを出すときは、編集面を
+    // 1 行下げて置く (Frame の座標は編集面の左上が原点のまま、02 §8.2 の `primary_cursor`)
     let (cols, rows) = (layout.cols, layout.rows());
+    let top = layout.surface_top();
     let mut buffer = Buffer::empty(Rect::new(0, 0, cols, rows));
     // 背景を塗るテーマ (07 §8.6) は、画面全体を本文の色で塗ってから描く (行末より右・文書末尾より下も同じ色にする)
     let text = frame.roles.get("ui.text");
@@ -312,26 +316,29 @@ pub fn render_panes_in(
                     break;
                 }
                 if row.width_risky {
-                    risky_rows.push(pane.rect.row + i);
+                    risky_rows.push(top + pane.rect.row + i);
                 }
-                render_row(&mut w, pane, i, row, glyphs, &theme);
+                render_row(&mut w, pane, (top, i), row, glyphs, &theme);
             }
             if !pane.active {
                 // フォーカスの無いペインのカーソルは反転のセルで示す (ハードウェアカーソルはフォーカスのペインだけ、04 §9)
-                mark_cursors(&mut w, pane);
+                mark_cursors(&mut w, pane, top);
             }
             // 見出し (ペインが 2 つ以上のとき、04 §3.4 (f))
-            crate::chrome::pane_bar::render_pane_bar(&mut w, pane, &theme, glyphs);
+            crate::chrome::pane_bar::render_pane_bar(&mut w, pane, top, &theme, glyphs);
         }
         for d in &frame.dividers {
-            crate::chrome::pane_bar::render_divider(&mut w, d, &theme, glyphs);
+            crate::chrome::pane_bar::render_divider(&mut w, d, top, &theme, glyphs);
         }
         clamped_cells = w.clamped;
         sanitized = w.sanitized;
     }
     PaneRender {
         buffer,
-        cursor: frame.primary_cursor.map(|c| c.pos),
+        cursor: frame.primary_cursor.map(|c| CellPos {
+            col: c.pos.col,
+            row: c.pos.row.saturating_add(top),
+        }),
         risky_rows,
         clamped_cells,
         sanitized,

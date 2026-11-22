@@ -168,6 +168,8 @@ impl EditorState {
             self.mark_snapshot_update(doc);
             self.push_event(EditorEvent::DocumentClosed { doc });
             self.take_pending_for(doc);
+            // 文書の数が変わるとタブラインの出し入れが変わる (03 §9.9 の PANE-12 (b))
+            self.sync_tab_line();
         }
     }
 

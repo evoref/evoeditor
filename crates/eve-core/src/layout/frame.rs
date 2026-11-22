@@ -174,11 +174,9 @@ pub(crate) fn build_frame(
     let mut panes = Vec::new();
     let mut primary_cursor = None;
     let layout = w.layout(size);
-    // 見出しの名前 (同じ名前の区別、PANE-11) は見出しを出すときだけ求める
-    let names = layout
-        .leaves
-        .iter()
-        .any(|l| l.bar.is_some())
+    // 見出しとタブラインの名前 (同じ名前の区別、PANE-11) は、どちらかを出すときだけ求める
+    let tab_line_on = state.term.tab_rows > 0;
+    let names = (tab_line_on || layout.leaves.iter().any(|l| l.bar.is_some()))
         .then(|| crate::ui_model::pane_bar::display_names(state));
     for leaf in layout.leaves {
         let Some(pane) = w.panes.get(&leaf.pane) else {
@@ -217,11 +215,17 @@ pub(crate) fn build_frame(
         .into_iter()
         .map(|rect| eve_view::Divider { rect })
         .collect();
+    // タブライン (FR-510、PANE-12 (c))。行は `apply_viewport` が編集面から引いてある
+    let tab_line = names
+        .as_ref()
+        .filter(|_| tab_line_on)
+        .map(|names| crate::ui_model::tab_line::tab_line_model(state, names));
     Some(Frame {
         window,
         size,
         panes,
         dividers,
+        tab_line,
         focus: if overlay_open {
             FocusTarget::Overlay(0)
         } else if bar_open {

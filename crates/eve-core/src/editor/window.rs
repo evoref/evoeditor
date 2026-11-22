@@ -325,11 +325,23 @@ impl EditorState {
             self.note_recent(at, prev);
         }
         let (view, fresh) = match self.pane(at).and_then(|p| p.views.get(&doc).copied()) {
-            Some(v) if self.docs.views.contains_key(&v) => (v, false),
+            Some(v) if self.docs.views.contains_key(&v) => (NewPaneView::Existing(v), false),
             _ => (self.view_for_new_pane(doc), true),
         };
+        let (view, before_cols) = match view {
+            NewPaneView::Existing(v) => (v, None),
+            // 写した View のスクロールは、写し元の View の本文の桁数で求めたもの
+            NewPaneView::Copied { view, src_cols } => (view, Some(src_cols)),
+        };
+        let before_cols = before_cols.or_else(|| fresh.then(|| self.view_size(view).0));
         self.put_view_in(at, doc, view);
         if fresh {
+            // 表示するペインと本文の桁数 (折り返し幅) が違えば、折り返しの表示行の番号を 0 に戻す (PANE-1、03 §14.3.1)
+            if before_cols != Some(self.view_size(view).0)
+                && let Some(v) = self.docs.views.get_mut(&view)
+            {
+                v.scroll.wrap_idx = 0;
+            }
             // 写して作った View は写し元のペインと、ペインに属さない View はそれまで大きさを求めたペインと、本文の大きさが
             // 違うことがある。表示するペインの矩形でカーソルが見えるようにする (PANE-1)。ペインの表から出した View は
             // そのまま使う (位置を保つ、FR-103 AC-2。大きさの変更は `after_relayout` と `apply_viewport` が合わせている)
@@ -384,7 +396,7 @@ impl EditorState {
 
     /// 文書 `doc` を初めて表示するペインに渡す View (PANE-1): ペインに属さない View があればそれ (`ViewId` は変わらない)、
     /// 無ければ最後にフォーカスのあった View を写した新しい View。
-    fn view_for_new_pane(&mut self, doc: DocumentId) -> ViewId {
+    fn view_for_new_pane(&mut self, doc: DocumentId) -> NewPaneView {
         let own: Vec<ViewId> = self
             .docs
             .views
@@ -393,7 +405,7 @@ impl EditorState {
             .map(|(id, _)| *id)
             .collect();
         if let Some(free) = own.iter().copied().find(|v| self.pane_owning(*v).is_none()) {
-            return free;
+            return NewPaneView::Existing(free);
         }
         let source = self
             .docs
@@ -402,9 +414,11 @@ impl EditorState {
             .copied()
             .filter(|v| own.contains(v))
             .or_else(|| own.first().copied());
-        match source.and_then(|v| self.copy_view(v)) {
-            Some(id) => id,
-            None => self.add_view(doc),
+        let src_cols = source.map(|v| self.view_size(v).0);
+        match (source.and_then(|v| self.copy_view(v)), src_cols) {
+            (Some(view), Some(src_cols)) => NewPaneView::Copied { view, src_cols },
+            (Some(view), None) => NewPaneView::Existing(view),
+            (None, _) => NewPaneView::Existing(self.add_view(doc)),
         }
     }
 
@@ -588,6 +602,14 @@ fn pane_body(l: &PaneLayout, pane: PaneId) -> Option<CellRect> {
         .iter()
         .find(|x: &&LeafRect| x.pane == pane)
         .map(|x| x.body)
+}
+
+/// ペインに文書を初めて出すときに渡す View (`view_for_new_pane`)。
+enum NewPaneView {
+    /// そのまま使う View (ペインの表の View・ペインに属さない View・新しく作った View)。
+    Existing(ViewId),
+    /// ほかの View を写した View と、写し元の本文の桁数 (折り返し幅が違えば `wrap_idx` を戻す、PANE-1)。
+    Copied { view: ViewId, src_cols: u16 },
 }
 
 #[cfg(test)]

@@ -1,5 +1,5 @@
-//! 画面の行の割り当て (04 §3.1 / §3.5 / §3.6)。端末の大きさ・ヒントバーの表示 (FR-504)・検索バーの行数から、編集面・検索バー・
-//! クローム (ステータスバー・メッセージ行・ヒントバー) の行を決める。行の計算はここに集め、描画 (`render_panes` /
+//! 画面の行の割り当て (04 §3.1 / §3.5 / §3.6)。端末の大きさ・ヒントバーの表示 (FR-504)・検索バーとタブライン (FR-510) の
+//! 行数から、タブライン・編集面・検索バー・クローム (ステータスバー・メッセージ行・ヒントバー) の行を決める。行の計算はここに集め、描画 (`render_panes` /
 //! `render_screen`)・編集面の `Resize` (`input::surface_resize`)・Frame との大きさの比べ (`frontend`) はこれを使う。
 
 use eve_view::{CellSize, Frame};
@@ -43,9 +43,14 @@ pub fn bar_rows(frame: &Frame) -> u16 {
         .map_or(0, |b| 1 + u16::from(b.replace.is_some()))
 }
 
-/// 画面の行の割り当て。上から、Frame の編集面 (`frame_size().rows` 行)・検索バー (`bar_rows` 行)・ステータスバー・
-/// メッセージ行・ヒントバー (04 §3.1)。「端末の編集面」(`surface`) は Frame の編集面と検索バーを合わせたもので、core に
-/// `Resize` で知らせる大きさ。
+/// タブラインが取る行数 (`Frame.tab_line` があれば 1、FR-510、03 §9.9 の PANE-12)。
+pub fn tab_rows(frame: &Frame) -> u16 {
+    u16::from(frame.tab_line.is_some())
+}
+
+/// 画面の行の割り当て。上から、タブライン (`tab_rows` 行)・Frame の編集面 (`frame_size().rows` 行)・検索バー (`bar_rows`
+/// 行)・ステータスバー・メッセージ行・ヒントバー (04 §3.1)。「端末の編集面」(`surface`) はタブライン・Frame の編集面・検索
+/// バーを合わせたもので、core に `Resize` で知らせる大きさ (タブラインと検索バーの行は core が引く)。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ScreenLayout {
     /// 列数。
@@ -54,6 +59,8 @@ pub struct ScreenLayout {
     pub surface_rows: u16,
     /// 検索バーの行数 (閉じていれば 0)。
     pub bar_rows: u16,
+    /// タブラインの行数 (出さなければ 0)。端末の編集面の最上行に置く。
+    pub tab_rows: u16,
     /// 編集面の下のクロームの行数 (`chrome_rows`)。
     pub chrome_rows: u16,
     /// ヒントバーを出すか (`Frame.hint_bar`、FR-504)。
@@ -71,21 +78,35 @@ impl ScreenLayout {
             cols: window.cols,
             surface_rows,
             bar_rows,
+            tab_rows: 0,
             chrome_rows: window.rows.saturating_sub(surface_rows),
             hint_bar,
         }
     }
 
+    /// タブラインの行数を `tab_rows` にしたもの (端末の編集面の最上行に置き、Frame の編集面をその分だけ下げる)。
+    #[must_use]
+    pub const fn with_tab_rows(self, tab_rows: u16) -> ScreenLayout {
+        ScreenLayout { tab_rows, ..self }
+    }
+
     /// 端末の大きさ `window` と Frame から求める (描画用。端末の大きさが分かるときはこちらを使う)。
     pub fn for_frame_in(frame: &Frame, window: CellSize) -> ScreenLayout {
         ScreenLayout::compute(window, frame.hint_bar, bar_rows(frame))
+            .with_tab_rows(tab_rows(frame))
     }
 
     /// Frame だけから求める (端末の大きさが分からないとき。Frame の編集面に検索バーの行を足したものを端末の編集面とし、
     /// クロームの行数は `chrome_rows` で推す。端末 10 行の境目では `for_frame_in` と違い得る)。
     pub fn for_frame(frame: &Frame) -> ScreenLayout {
-        let bar = bar_rows(frame);
-        ScreenLayout::from_surface(frame.size.cols, frame.size.rows + bar, frame.hint_bar, bar)
+        let (bar, tab) = (bar_rows(frame), tab_rows(frame));
+        ScreenLayout::from_surface(
+            frame.size.cols,
+            frame.size.rows + bar + tab,
+            frame.hint_bar,
+            bar,
+        )
+        .with_tab_rows(tab)
     }
 
     const fn from_surface(cols: u16, surface_rows: u16, hint_bar: bool, bar_rows: u16) -> Self {
@@ -93,6 +114,7 @@ impl ScreenLayout {
             cols,
             surface_rows,
             bar_rows,
+            tab_rows: 0,
             chrome_rows: chrome_rows(surface_rows, hint_bar),
             hint_bar,
         }
@@ -111,17 +133,26 @@ impl ScreenLayout {
         }
     }
 
-    /// Frame の編集面の大きさ (検索バーの行を除く。core が `Frame.size` に入れるはずの値)。
+    /// Frame の編集面の大きさ (検索バーとタブラインの行を除く。core が `Frame.size` に入れるはずの値)。
     pub const fn frame_size(&self) -> CellSize {
         CellSize {
             cols: self.cols,
-            rows: self.surface_rows.saturating_sub(self.bar_rows),
+            rows: self
+                .surface_rows
+                .saturating_sub(self.bar_rows)
+                .saturating_sub(self.tab_rows),
         }
+    }
+
+    /// Frame の編集面を置く画面の行 (タブラインを出すときは、その下の 1 行目)。Frame の座標 (`PaneFrame.rect` など) は
+    /// 編集面の左上が原点なので、描くときにこの行を足す (02 §8.2 の `primary_cursor`)。
+    pub const fn surface_top(&self) -> u16 {
+        self.tab_rows
     }
 
     /// 検索バーの最初の行 (Frame の編集面のすぐ下)。
     pub const fn bar_row(&self) -> u16 {
-        self.frame_size().rows
+        self.surface_top() + self.frame_size().rows
     }
 
     /// ステータスバーの行。
@@ -239,6 +270,32 @@ mod tests {
         let a = ScreenLayout::for_frame(&f);
         assert_eq!(a, ScreenLayout::compute(size(80, 15), false, 0));
         assert_eq!(a.hint_row(), None);
+    }
+
+    #[test]
+    fn タブラインの行は_frame_の編集面から引き_編集面を_1_行下げる() {
+        let l = ScreenLayout::compute(size(80, 24), true, 1).with_tab_rows(1);
+        assert_eq!(l.surface(), size(80, 21));
+        assert_eq!(l.frame_size(), size(80, 19));
+        assert_eq!((l.surface_top(), l.bar_row(), l.status_row()), (1, 20, 21));
+        assert_eq!(l.rows(), 24);
+        // Frame から求めた割り当て (端末の大きさが分からないとき) も同じ
+        let mut h = eve_testkit::Harness::new().with_size(80, 12).with_file(
+            "/b.txt", b"b
+",
+        );
+        h.open("/b.txt");
+        h.run_jobs();
+        h.cmd("file.new");
+        let f = h.frame();
+        assert!(f.tab_line.is_some());
+        assert_eq!(f.size, size(80, 11));
+        let a = ScreenLayout::for_frame(&f);
+        assert_eq!(
+            a,
+            ScreenLayout::compute(size(80, 15), true, 0).with_tab_rows(1)
+        );
+        assert_eq!(a.frame_size(), f.size);
     }
 
     #[test]

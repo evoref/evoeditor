@@ -26,8 +26,8 @@ pub use chars::{CharClass, forbidden_char};
 pub use config::{
     BackspaceUnit, ColorMode, Config, DefaultEncoding, DefaultLineEnding, DiagKind, Diagnostic,
     ExternalChangePolicy, IndentUnit, KeymapProblem, Loaded, Osc52Policy, SearchCase, Severity,
-    ShowWhitespace, ThemeBackground, WrapIndent, WrapMode, changed_keys, default_display,
-    is_theme_name, load_str, load_str_onto,
+    ShowWhitespace, TabLineMode, ThemeBackground, WrapIndent, WrapMode, changed_keys,
+    default_display, is_theme_name, load_str, load_str_onto,
 };
 pub use keymap::{KeyAction, KeyArgValue, KeymapEntry, KeymapFile, load_keymap_str};
 pub use layers::{

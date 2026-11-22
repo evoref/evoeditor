@@ -13,7 +13,7 @@ use eve_host::{
 use eve_view::{Capabilities, CellSize, Effect, Frame, InputEvent};
 
 use crate::ansi::{ENTER, Emitter, LEAVE};
-use crate::buffer::{CHROME_ROWS, bar_rows};
+use crate::buffer::{CHROME_ROWS, bar_rows, tab_rows};
 use crate::caps::{CapsConfig, ColorMode, Detected, ProcessEnv, check_usable, detect};
 use crate::chrome::{ScreenLayout, render_screen};
 use crate::glyphs::Glyphs;
@@ -252,7 +252,9 @@ impl Frontend for TuiFrontend {
         self.geom.set_hint_bar(frame.hint_bar);
         // 大きさを取れなければ 0×0 (`surface_size` と同じ)
         let window = self.window().unwrap_or_default();
-        let layout = ScreenLayout::compute(window, self.geom.hint_bar(), bar_rows(frame));
+        // タブラインの行も検索バーと同じく core が引く (出し入れで Resize を送り直さない、04 §3.6)
+        let layout = ScreenLayout::compute(window, self.geom.hint_bar(), bar_rows(frame))
+            .with_tab_rows(tab_rows(frame));
         let now = layout.surface();
         if layout.frame_size() != frame.size {
             self.emitter.invalidate();
@@ -265,7 +267,8 @@ impl Frontend for TuiFrontend {
             return RenderOutcome::Done;
         }
         // マウスの変換に使う全ペインの位置を、入力スレッドへ差し替えて渡す (03 §9.9 の PANE-13)
-        self.geom.set(crate::mouse::Geometry::from_frame(frame));
+        self.geom
+            .set(crate::mouse::Geometry::from_frame(frame, &self.glyphs));
         crate::trace::render_enter();
         let depth = self
             .detected

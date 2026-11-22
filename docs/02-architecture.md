@@ -1128,7 +1128,7 @@ struct ChromeMouseEvent { kind: MouseKind, mods: Modifiers, target: ChromeTarget
 #[non_exhaustive]
 enum ChromeTarget {
     PaneBar { view: ViewId },        // ペインの見出し (PaneFrame.bar)。ペインは表示中の View で指す (03 §9.9 の PANE-7 (g))。FR-509 の PR で足す
-    Tab { doc: DocumentId },         // タブラインのタブ (TabItem.doc)。FR-510 の PR (M32) で足す
+    Tab { doc: DocumentId },         // タブラインのタブ (TabItem.doc)。FR-510 の PR (M32 の段 1) で足した
 }
 ```
 
@@ -1156,7 +1156,7 @@ struct Frame {
     size: CellSize,                         // 編集面全体 (cols, rows)。検索バーと (v0.5 の) タブラインの行を引いた後
     panes: Vec<PaneFrame>,                  // レイアウト済み。v0.5: レイアウトの木の葉の順 (03 §9.9 の PANE-10)
     dividers: Vec<Divider>,                 // v0.5 (M30、FR-509): ペインの間の区切り (core が確保する)。ペインが 1 つのときは空
-    tab_line: Option<TabLineModel>,         // v0.5 (M32、FR-510 の PR で足す): タブライン。出すときだけ Some。frontend が画面の最上行に置く
+    tab_line: Option<TabLineModel>,         // v0.5 (M32 の段 1、FR-510 の PR で足した): タブライン。出すときだけ Some。frontend が画面の最上行に置く
     status: StatusModel, hints: HintModel,
     messages: MessageModel,                 // { current: Option<Message{level, text: CellText, hint: Option<CellText>}>, unread: u16 } (FR-505)
     search: Option<SearchBarModel>,         // 検索バー (クロームとして描く。04 §8.4)。表示中だけ Some
@@ -1223,7 +1223,7 @@ struct PaneBarModel { rect: CellRect /*1 行。編集面の座標*/, items: Vec<
                                             // core が入れる StatusKind は Path・Dirty・ReadOnly だけ (TabItem も同じ)。ほかの種類を足すときは 03 §9.9 に書き足す。
                                             // frontend は種類で描き分けず、ステータスバーの左群と同じに並べる (知らない種類も同じに扱う)
 struct Divider { rect: CellRect /*1 列。編集面の座標。高さは親の分割の全体*/ }   // 区切りを指す識別子は、ドラッグを入れる版で Option のフィールドとして足す
-struct TabLineModel { tabs: Vec<TabItem> /*開いた順 (buffer.next と同じ順)*/, active: Option<usize> /*フォーカスのペインの文書の添字*/ }   // FR-510 の PR (M32) で足す
+struct TabLineModel { tabs: Vec<TabItem> /*開いた順 (buffer.next と同じ順)*/, active: Option<usize> /*フォーカスのペインの文書の添字*/ }   // FR-510 の PR (M32 の段 1) で足した
 struct TabItem { doc: DocumentId, items: Vec<StatusItem> /*見出しと同じ Path (同じ名前の区別を含む、03 §9.9 の PANE-11。cut は Middle)・Dirty・ReadOnly*/ }
 struct RenderRow { source: RowSource /*doc line + wrap index (折り返しは v0.2) | virtual*/,
                    gutter: Vec<Span>, spans: Vec<Span>,

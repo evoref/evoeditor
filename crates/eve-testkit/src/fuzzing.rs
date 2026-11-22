@@ -127,6 +127,20 @@ fn check_frame(f: &Frame, step: usize) {
             "step {step}: ペインが 1 つなのに区切りがある"
         );
     }
+    // タブライン (FR-510、03 §9.9 の PANE-12): タブは 1 つ以上で、アクティブはその中。タブの文書は重ならない
+    if let Some(t) = &f.tab_line {
+        assert!(!t.tabs.is_empty(), "step {step}: タブの無いタブライン");
+        if let Some(a) = t.active {
+            assert!(a < t.tabs.len(), "step {step}: アクティブ {a} がタブの外");
+        }
+        let mut docs: Vec<DocumentId> = t.tabs.iter().map(|x| x.doc).collect();
+        docs.dedup();
+        assert_eq!(docs.len(), t.tabs.len(), "step {step}: タブの文書が重なる");
+        assert!(
+            t.tabs.windows(2).all(|w| w[0].doc < w[1].doc),
+            "step {step}: タブが開いた順でない"
+        );
+    }
     let inside = |r: &eve_view::CellRect| {
         u32::from(r.col) + u32::from(r.cols) <= u32::from(f.size.cols)
             && u32::from(r.row) + u32::from(r.rows) <= u32::from(f.size.rows)
@@ -165,6 +179,63 @@ fn check_frame(f: &Frame, step: usize) {
             }
         }
     }
+}
+
+/// 各ペインの先頭の行は View の先頭の論理行で、折り返しの表示行の番号 (`wrap_idx`) はその行の表示行の数より小さい
+/// (03 §14.3.1。折り返し幅が変わった後に戻し忘れると、先頭の論理行を飛ばして描く)。
+fn check_wrap_top(h: &Harness, f: &Frame, step: usize) {
+    use eve_text::TextRead;
+    let st = h.editor.state();
+    for p in &f.panes {
+        let Some(eve_view::RowSource::Line { line, wrap_idx }) = p.rows.first().map(|r| r.source)
+        else {
+            continue;
+        };
+        let Some(v) = st.view(p.view) else {
+            continue;
+        };
+        let Some(d) = st.document(v.doc) else {
+            continue;
+        };
+        let top = d.text().byte_to_line(v.scroll.top).0;
+        assert_eq!(
+            usize::try_from(line).unwrap_or(usize::MAX),
+            top,
+            "step {step}: {:?} の先頭の行が先頭の論理行でない (wrap_idx {} が表示行の数を超えた)",
+            p.view,
+            v.scroll.wrap_idx
+        );
+        if wrap_idx > 0 {
+            assert_eq!(
+                wrap_idx, v.scroll.wrap_idx,
+                "step {step}: {:?} の先頭の表示行の番号",
+                p.view
+            );
+        }
+    }
+}
+
+/// タブラインの不変条件 (03 §9.9 の PANE-12): タブラインがあれば、アクティブは `Some` でフォーカスのペインの文書と一致し、
+/// 編集面は 3 行以上残る (PANE-12 (b))。
+fn check_tab_line(h: &Harness, f: &Frame, step: usize) {
+    let Some(t) = &f.tab_line else {
+        return;
+    };
+    let Some(a) = t.active else {
+        panic!("step {step}: タブラインのアクティブが無い");
+    };
+    let focus = f.panes.iter().find(|p| p.active).map(|p| p.view);
+    let doc = focus.and_then(|v| h.editor.state().view(v)).map(|v| v.doc);
+    assert_eq!(
+        t.tabs.get(a).map(|x| x.doc),
+        doc,
+        "step {step}: アクティブなタブがフォーカスのペインの文書でない"
+    );
+    assert!(
+        f.size.rows >= 3,
+        "step {step}: タブラインを出して編集面が {} 行",
+        f.size.rows
+    );
 }
 
 fn check_state(h: &Harness, revs: &mut BTreeMap<DocumentId, u64>, step: usize) {
@@ -678,6 +749,54 @@ fn pane_op(h: &mut Harness, b: &mut Bytes<'_>) -> String {
     }
 }
 
+/// タブラインの操作を 1 つ (docs/03 §9.9 の PANE-12、03 §4.7.1 の fuzz)。`ui.tab_line` の 3 値の切り替え、開いている・
+/// 閉じた文書のタブへのマウス (左の押下・離す・ホイール・右)、文書を足して 2 つ以上にする。
+fn tab_op(h: &mut Harness, b: &mut Bytes<'_>) -> String {
+    use eve_config::TabLineMode;
+    use eve_view::{Modifiers, MouseButton, MouseKind};
+    let x = b.u8();
+    match x % 6 {
+        0 => {
+            let mode = [TabLineMode::Auto, TabLineMode::Always, TabLineMode::Never]
+                [usize::from(b.u8() % 3)];
+            h.set_tab_line(mode);
+            format!("ui.tab_line {mode:?}")
+        }
+        1 => {
+            h.cmd("file.new");
+            "file.new".to_owned()
+        }
+        n => {
+            // 開いている文書 (閉じた文書の ID も混ぜる) のタブ
+            let docs: Vec<DocumentId> = h
+                .frame()
+                .tab_line
+                .map(|t| t.tabs.iter().map(|x| x.doc).collect())
+                .unwrap_or_default();
+            let pick = usize::from(b.u8());
+            let doc = docs
+                .get(pick % (docs.len() + 1))
+                .copied()
+                .unwrap_or(DocumentId(u64::from(b.u8())));
+            let kind = match n {
+                2 | 3 => MouseKind::Down(MouseButton::Left),
+                4 => MouseKind::Up(MouseButton::Left),
+                _ => [MouseKind::WheelDown, MouseKind::Down(MouseButton::Right)]
+                    [usize::from(b.u8() % 2)],
+            };
+            let before = h.editor.state().documents_len();
+            h.tab_mouse(doc, kind, Modifiers::NONE);
+            // タブのクリックで文書の数は変わらない
+            assert_eq!(
+                h.editor.state().documents_len(),
+                before,
+                "タブのマウスで文書の数が変わった"
+            );
+            format!("tab {kind:?} {doc:?}")
+        }
+    }
+}
+
 /// 1 つの入力を流す。先頭: [0..2] 初期文書の長さ (下位 12 ビット。ビット 12〜14 は初期文書の形、ビット 15 はスワップを積むか。
 /// 下)、続いて文書の本文、[次の 2 バイト] ビューポートの大きさ
 /// (行の数のバイトの最上位ビットが立っていれば、長大行の閾値を 64 バイトに下げた設定で起動する。長大行とジョブの経路に届かせる)、
@@ -686,7 +805,8 @@ fn pane_op(h: &mut Harness, b: &mut Bytes<'_>) -> String {
 /// (docs/review/v0.3-findings.md の §2.7 の 10)、v0.4 の M23 で足した 6 種類 (`file.toggle_read_only`・その確認への答え
 /// (`[A]` / `[E]` / Esc)・再読込 (ジョブまで)・`U+10FF00..` を含む外からの文字列の入力と貼り付け・保存 (ジョブまで)・
 /// 隣とつなげる ASCII の入力)、v0.4 の M25 で足した遅い読込で開く操作 (`slow_open`。先行表示の先頭で止める・取り置いた
-/// 結果を渡す)、v0.5 の M30 で足したペインの操作 (`pane_op`。分割・閉じる・移動・大きさ・ペインを指すマウス・最小の前後の大きさ)。
+/// 結果を渡す)、v0.5 の M30 で足したペインの操作 (`pane_op`。分割・閉じる・移動・大きさ・ペインを指すマウス・最小の前後の大きさ)、
+/// v0.5 の M32 で足したタブラインの操作 (`tab_op`。`ui.tab_line` の切り替え・タブのマウス・文書を足す)。
 ///
 /// 初期文書の形 (ビット 12〜14 の値): 0 / 5 = 本文を判定に任せて開く、1〜4 (6・7 は 1・2 と同じ) = 不正なバイトを含むファイルを
 /// UTF-8 / `Shift_JIS` / EUC-JP / UTF-16LE で指定して開く (`invalid_bytes_file`。03 §8.3.1)。ビット 15 が立っていれば、
@@ -766,7 +886,7 @@ pub fn editor_sequence(data: &[u8]) {
         // (c) 外から入れた文字列の検査の対象 (入れた文字列と、入れる前の今の文書の ID・エスケープ文字の数)
         let mut outside: Option<(String, Option<(DocumentId, usize)>)> = None;
         // 操作の種類。足すときは剰余を増やし、既存の番号を変えない (コミットした corpus の操作の番号は 24 未満)
-        match b.u8() % 24 {
+        match b.u8() % 25 {
             0 => {
                 let t = b.text(16);
                 log(step, &format!("text {t:?}"));
@@ -910,6 +1030,11 @@ pub fn editor_sequence(data: &[u8]) {
                 let what = pane_op(&mut h, &mut b);
                 log(step, &what);
             }
+            24 => {
+                // タブライン (v0.5 の M32。docs/03 §9.9 の PANE-12): `ui.tab_line` の切り替え・タブのマウス・新しい文書
+                let what = tab_op(&mut h, &mut b);
+                log(step, &what);
+            }
             _ => {
                 let id = if b.u8() & 1 == 0 {
                     "file.reload"
@@ -939,6 +1064,8 @@ pub fn editor_sequence(data: &[u8]) {
         }
         let f = h.frame();
         check_frame(&f, step);
+        check_tab_line(&h, &f, step);
+        check_wrap_top(&h, &f, step);
         check_state(&h, &mut revs, step);
         check_partial(&h, &opened, step);
         if let Some((t, Some((doc, before)))) = outside

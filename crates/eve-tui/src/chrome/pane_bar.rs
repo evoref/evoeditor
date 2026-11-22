@@ -17,10 +17,11 @@ use crate::buffer::Writer;
 use crate::glyphs::Glyphs;
 use crate::theme::Theme;
 
-/// ペイン `pane` の見出しを描く (見出しが無ければ何もしない)。
+/// ペイン `pane` の見出しを描く (見出しが無ければ何もしない)。`top` は編集面を置いた画面の行 (タブラインの下)。
 pub(crate) fn render_pane_bar(
     w: &mut Writer<'_>,
     pane: &PaneFrame,
+    top: u16,
     theme: &Theme,
     glyphs: &Glyphs,
 ) {
@@ -31,7 +32,7 @@ pub(crate) fn render_pane_bar(
     if r.rows == 0 || r.cols == 0 {
         return;
     }
-    let (x0, y, limit) = (r.col, r.row, r.col.saturating_add(r.cols));
+    let (x0, y, limit) = (r.col, top + r.row, r.col.saturating_add(r.cols));
     if pane.active {
         let base = theme.pane_bar_active;
         fill(w, x0, y, r.cols, base);
@@ -58,11 +59,18 @@ pub(crate) fn render_pane_bar(
     }
 }
 
-/// 区切りを描く。
-pub(crate) fn render_divider(w: &mut Writer<'_>, d: &Divider, theme: &Theme, glyphs: &Glyphs) {
+/// 区切りを描く。`top` は編集面を置いた画面の行。
+pub(crate) fn render_divider(
+    w: &mut Writer<'_>,
+    d: &Divider,
+    top: u16,
+    theme: &Theme,
+    glyphs: &Glyphs,
+) {
     let style = w.style(theme.pane_border);
     let r = d.rect;
-    for y in r.row..r.row.saturating_add(r.rows) {
+    let y0 = top + r.row;
+    for y in y0..y0.saturating_add(r.rows) {
         for x in r.col..r.col.saturating_add(r.cols) {
             w.set(x, y, glyphs.boxed.vertical.text, style, false);
         }

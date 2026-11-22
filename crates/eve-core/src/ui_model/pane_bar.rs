@@ -14,17 +14,23 @@ use crate::FsPath;
 use crate::editor::state::EditorState;
 
 /// 開いている全文書の、見出し (とタブライン) に出す名前 (PANE-11)。ファイル名が同じ文書が 2 つ以上あれば `名前 (親)` にし、
-/// 無題の文書は今の無題の名前 (`無題-1` など)。
+/// 無題の文書は今の無題の名前 (`無題-1` など)。区別に数えるのはタブに出す文書 (`tab_documents`。ステータスバーの
+/// `(n/total)` と同じ集合、03 §9.9 の PANE-12 (j) の (1)) だけで、見出しとタブで同じ名前になる。置き換えで読込中の
+/// 文書 (まだどこにも表示していない) の名前はファイル名のまま。
 pub(crate) fn display_names(state: &EditorState) -> BTreeMap<DocumentId, String> {
-    let paths: Vec<(DocumentId, Option<&FsPath>)> = state
-        .docs
-        .documents
+    let listed = state.tab_documents();
+    let paths: Vec<(DocumentId, Option<&FsPath>)> = listed
         .iter()
-        .map(|(id, d)| (*id, d.path.as_ref()))
+        .filter_map(|id| state.document(*id).map(|d| (*id, d.path.as_ref())))
         .collect();
     let mut out = disambiguate(&paths);
     for (id, d) in &state.docs.documents {
-        out.entry(*id).or_insert_with(|| state.untitled_label(d));
+        out.entry(*id).or_insert_with(|| {
+            d.path
+                .as_ref()
+                .and_then(FsPath::file_name)
+                .unwrap_or_else(|| state.untitled_label(d))
+        });
     }
     out
 }
