@@ -267,7 +267,7 @@ core を OS から切り離すための差し替え点 (Hexagonal / Ports & Adap
 | `Clock` | 非ブロッキング | 単調時計 (`Tick`)。タイマ・Undo 結合・スワップ間隔・ジョブ進捗 | 任意 (`Send + Sync`) | eve-host (std の `Instant` から換算) | `ManualClock` | v0.1 |
 | `JobSpawner` | 非ブロッキング | バックグラウンドジョブの投入 (JobId の採番、結果は `HostMsg::Job`)。ジョブ種別で `io` / `bg` のどちらに載せるかを決める (§9.1) | メイン | eve-host (固定 2 ワーカー) | `ManualJobSpawner` | v0.1 |
 | `Paths` | 非ブロッキング | `config_dir` / `state_dir` / `data_dir` / `runtime_dir` の解決結果と、入力パスの構文的な正規化 `normalize` (起動時に解決済み。ログ・スワップ・recovery・backup は `state_dir` の下、05 §7.5。作成はジョブ、ログは最初の書込時) | 任意 | eve-platform | 一時ディレクトリ | v0.1 |
-| `FileWatcher` | 非ブロッキング (登録のみ) | 監視登録/解除。通知は `HostMsg::Fs` | メイン | eve-platform (notify) | 手動イベント注入 | v0.5 |
+| `FileWatcher` | 非ブロッキング (登録のみ) | 監視登録/解除。通知は `HostMsg::Fs`。v0.5 の M33 で形を決めた (下の「`FileWatcher` (v0.5 の M33)」。登録は要求を積むだけで、OS の呼出しは `io` のレーンの Host の作業) | メイン | eve-platform (notify) | 手動イベント注入 (`FakeWatcher`、09 §3.4) | v0.5 |
 | `ProcessRunner` | I/O | 短命の外部コマンド (フィルタ・フォーマッタ)。**常にユーザー承認後のみ**。長寿命プロセス (LSP・ローカル LLM サーバの管理モード (06 §3.3.3)・プラグイン・外部エージェント) 向けの `spawn_long_lived` (`LongLivedSpec`・`terminate(grace)`) は v1.L で入れ、trait の正本は本節の下の「長寿命プロセスの API」(OS 別の実装は 05 §2.6 / §13.4 / §13.7)。承認は 07 §12 の信頼で代替 (管理モードの起動コマンドはユーザー設定のみ) | ジョブ / サービス | eve-platform | 記録のみ | v0.6 以降 (短命。FR-709 / 710 と一緒に v0.5 から送った、08 §7) / v1.L (長寿命) |
 | `SecretStore` | I/O | API キー等の取得/保存 | ジョブ / サービス | eve-platform (keyring) | メモリ | v1.L |
 | `StdinSource` | I/O | 標準入力 (`evoeditor -`) をチャンクで読む。1 回だけ取れる。データが無い間はチャネルで待ち、取消しは `wake` で起こす (時間で区切って起きない。下の擬似コード) | ジョブのみ (`OpenStdin`) | eve-platform | 偽物 (eve-testkit) | v0.4 (M25) |
@@ -302,6 +302,7 @@ trait JobSpawner {                               // メインスレッドから�
 // eve-host が定義する (core は知らない)。Host 自身の bg 作業 (クリップボードの文字列化、§6.3) の投入口。JobRequest ではなく、結果は core に返さない
 trait HostTasks {                                // メインスレッドからだけ呼ぶ
     fn spawn_host_task(&self, task: Box<dyn FnOnce() + Send>); // bg のキューに積む (§9.1)。本番は JobSpawner と同じワーカー、テストは ManualJobSpawner が模擬する
+    fn spawn_io_task(&self, task: Box<dyn FnOnce() + Send>);   // v0.5 の M33: io のキューに積む (ファイル監視の登録・解除。05 §12.2 の 9)。eve-host が eve-platform の FileWatcher の実装を作るときに、この口を渡す
 }                                                // v0.2.0 の実装には無い。クリップボードの文字列化と書込は Host が使い捨てのスレッド (`eve-clip-write`) で行う (下の「v0.2.0 の実装との差」)
 
 #[derive(Clone)]
@@ -384,6 +385,7 @@ trait StdinSource: Send + Sync {                 // v0.4 の M25。eve-platform 
 | `HostTasks::spawn_host_task` (クリップボードの文字列化を bg のキューで行う。§4.3 R11 の「作業スレッドは固定 2 本」) | 無い。Host がクリップボードの文字列化と書込を使い捨てのスレッド `eve-clip-write` で行う (取得の `eve-clip-read` は §9.1 の表のとおり) | R11 との食い違い。v0.3 の M16 (Host の整理、STR-C3) で、bg に寄せるか R11 の例外として書くかを決める |
 | `JobSpawner` が種別で `io` / `bg` を選ぶ (`kind.lane()`) | `JobKind` に lane を持たない。eve-host の `ThreadJobSpawner::is_bg` が `Search` だけを bg に載せ、ほかはすべて io (v0.4 の M24 で `FindNext` と `ReplaceAll` も bg に載せる。03 §12.3.1 の「最悪の入力の上限」) | 割当の差は §9.1 の「v0.2.0 の実装との差」 |
 | `ThreadGuard` / `assert_not_main_thread_fs()` (メインスレッドでの I/O の自動検査) | 無い | 未実装。v0.3 の M13 (安全網) で入れるかを決める |
+| `HostTasks::spawn_io_task` (v0.5 の M33) | 無い (`HostTasks` そのものが無い。上の行) | M33 の段 7 (07 §12.6.2) で、監視の登録のために `HostTasks` を io の口と一緒に入れる (bg の口のクリップボードの文字列化は、上の行の扱いのまま) |
 | `ManualJobSpawner::run_jobs_stale()` | 無い。`new`・`pending`・`run_jobs`・`cancel_all`・`take_results` を持つ。`spawn_host_task` の模擬も無い | Revision の不一致は、テストが `run_jobs()` の前に編集を入れて作る。`run_jobs_stale` は要るときに足す |
 
 **長寿命プロセスの API (`ProcessRunner::spawn_long_lived`、v1.L。trait の正本は本節)**: LSP サーバ (v1.L-a)、ローカル LLM サーバの管理モード (v1.L-b、06 §3.3.3)、外部エージェント (v1.X) が使う。短命の `spawn` の形は、それを使う FR-709 / 710 を入れる版 (v0.6 以降。v0.5 から送った、08 §7) の着手時に本節で確定する (05 §2.6 の案)。各 OS での実装 (Job Object / プロセスグループ、優先度、プロセス木の終了、ログの上限) は 05 §2.6 / §13.4 / §13.7 が定め、本節の型を再定義しない。フィールドの細部は v1.L 着手時に本節で確定する (規則 6)。
@@ -403,6 +405,36 @@ trait ProcessRunner: Send + Sync {
     fn spawn_long_lived(&self, spec: LongLivedSpec) -> Result<ProcessHandle, ProcessError>;
 }
 // ProcessHandle: id / pid、stdin / stdout のパイプ (Piped のとき)、ログのリング、terminate(grace: Duration) (終了要求 → 猶予 → 強制終了)
+```
+
+**`FileWatcher` (v0.5 の M33。trait の正本は本節)**: ファイル監視 (FR-117、03 §9.5.1) と設定の自動の再読込 (FR-706、07 §6) が使う。OS ごとの実装 (notify・監視できる FS・イベントの選り分け) は 05 §12.2。v0.4 までの 05 §2.5 の案 (`watch` が結果を同期に返す・`WatchKind` / `WatchCaps`・イベントの種類の区別) は採らない (M33 の仕様の PR で改めた。理由は 07 §12.6.3 の「登録の呼び出し」)。
+
+```rust
+// 擬似コード。eve-core が定義し eve-platform が実装する。メインスレッドから呼ぶ (規則 3。どのメソッドも要求を積むだけで OS を呼ばない)
+trait FileWatcher {
+    fn watch_dir(&mut self, dir: &FsPath) -> WatchId;  // ディレクトリを非再帰で監視する要求。WatchId は呼び出し側が数え上げに使う (同じ dir を 2 回頼まない。数え上げは core)。
+                                                      // 実際の登録 (監視できる FS の判定と notify の watch) は io のレーンの Host の作業で行い、結果を
+                                                      // HostMsg::Fs(FsEvent { watch, kind: Started | Failed { err } }) で返す
+    fn unwatch(&mut self, id: WatchId);               // 監視を外す要求 (結果は送らない。外した後に届いたイベントは core が捨てる)
+}
+struct FsEvent { watch: WatchId, kind: FsEventKind }
+#[non_exhaustive] enum FsEventKind {
+    Started,                        // 登録できた
+    Failed { err: WatchError },     // 登録できなかった (この WatchId は監視していない)
+    Changed { name: OsString },     // dir の直下の name のファイルに何か起きた (作成・変更・削除・改名の元と先。種類は区別しない。読むだけの開閉は含めない)
+    Rescan,                         // 取りこぼしの恐れ (イベントのあふれ・監視の誤り)。dir の全文書を照合する
+    Lost,                           // 監視が失効した (監視中のディレクトリそのものの削除・改名。05 §12.2 の 10)。dir の全文書を照合し、次の確かめで張り直す
+}
+#[non_exhaustive] enum WatchError {
+    Unsupported { fs: String },     // 監視しない FS (05 §12.2 の 4。fs は FS の名前: "network"・"9p" など。診断と知らせに使う)
+    Limit,                          // OS の上限 (inotify の max_user_watches など)
+    Denied, NotFound, Other,
+}
+// 本番は eve-platform (watcher はプロセスに 1 つ。05 §12.2 の 5)、テストは FakeWatcher (要求を記録し、試験が FsEvent を入れる。09 §3.4)。
+// crate の向き: eve-platform は eve-host に依存しない。eve-host は eve-platform の実装を作るときに 2 つのクロージャを渡す:
+//   io の口 `Box<dyn Fn(Box<dyn FnOnce() + Send>)>` (HostTasks::spawn_io_task を包んだもの。登録・解除を io のレーンで行う) と、
+//   知らせの口 `Arc<dyn Fn(FsEvent) + Send + Sync>` (受信口へ HostMsg::Fs を送る。notify のコールバックと io の作業から呼ぶ)
+// Ports に `watcher: Option<Box<dyn FileWatcher>>` を足す (規則 6。None なら監視しない: 監視を使わない試験とヘッドレス)
 ```
 
 **サービス Port** (長寿命の非同期サービス。v0.6 以降)
@@ -470,6 +502,24 @@ trait FileSystem: Send + Sync {
     fn read_dir(&self, dir: &FsPath, max_entries: usize) -> Result<DirListing, FsError>; // v0.5 の M31 (ワークスペースの走査。ファインダ・横断検索、03 §12.7.2。パスの補完は送った)。
                                                                              // dir の直下の項目を max_entries 個まで返す (`.` と `..` は返さない。並びは問わない。追加の stat をしない)。
                                                                              // dir が無い → NotFound (detail なし。dir がダングリングのリンクなら DanglingLink)、ディレクトリでない (ファイルを指すリンクを含む) → InvalidPath (detail なし)、読めない → PermissionDenied。既定は Unsupported
+    fn read_checked(&self, dir: &FsPath, name: &OsStr, max_len: u64, check: OwnerCheck) -> Result<CheckedRead, FsError>; // v0.5 の M33 (ワークスペース設定と .editorconfig、07 §12.1 の OWN-1〜OWN-6)。
+                                                                             // 順: dir を開く → name の有無を開かずに確かめる (無ければ dir の判定に依らず Ok(Missing)) → dir を判定する →
+                                                                             // 通れば dir の中の name を開いて判定し、同じハンドルから max_len + 1 バイトまで読む (判定と読込の間に差し替えられない)。
+                                                                             // check = Skip (workspace.safe_directories の下) なら所有者の判定を省き、ふつうのファイルかだけを確かめる。
+                                                                             // dir が無い・name が無い → Ok(Missing)。dir が読めない → PermissionDenied。既定は Unsupported (core は「読まない」として診断する)
+}
+enum OwnerCheck { Check, Skip }                                              // v0.5 の M33
+enum CheckedRead {                                                           // v0.5 の M33
+    Missing,                                                                 // ファイルが無い (判定していない)
+    Read { bytes: Vec<u8> },                                                 // 判定を通って読んだ (max_len 以下)
+    TooLarge,                                                                // max_len を超えた (読んだ分は捨てる)
+    Rejected { what: CheckedObject /*Dir | File*/, verdict: OwnerVerdict },  // 判定で読まなかった
+}
+enum OwnerVerdict {                                                          // 07 §12.1 の OWN-2 / OWN-3 / OWN-7 の診断の材料
+    NotOwner { owner: String /*アカウントの名前。名前に直せなければ SID・uid の文字列*/ },
+    OthersCanWrite { who: Vec<String> /*書込を許されたアカウントの名前。Unix は "others"*/ },
+    Unknown { fs: String /*"exFAT"・"9p" など。問い合わせの失敗は "query_failed"*/ },
+    NotRegular,                                                              // ふつうのファイルでない (ディレクトリ・FIFO・デバイス)
 }
 struct DirListing { entries: Vec<DirEntry>, truncated: bool /*max_entries 個を返した後にまだ項目があったので列挙をやめた*/, incomplete: bool /*列挙そのものが途中で失敗した (SMB の切断・NFS の ESTALE など)。そこまでの項目を返す。項目 1 つの読み取りの失敗はその項目を飛ばすだけで立てない*/ }   // v0.5 の M31
 struct DirEntry  { name: OsString /*最後の要素だけ。UTF-8 で表せない名前もそのまま*/, kind: EntryKind,
@@ -1312,7 +1362,7 @@ TUI と、ヘッドレスの消費者 (シナリオ・駆動 API・ヘッドレ�
 | クリップボードのコマンドの入出力 (使い捨て、Unix) | eve-platform (`clipboard::cmd`) | クリップボードの書込・取得のスレッドの中で外部コマンド (`wl-copy` 等) を起こしたとき、その標準入力へ書き・標準出力を読む (05 §8.3)。呼び出し側は子プロセスの終了を 2 s まで待ち、過ぎたら子を止める | 外部コマンドの起動ごと | v0.2 (M7) |
 | 緊急の端末復元 (使い捨て) | eve-platform (`emergency_restore` の中) | 受信スレッドの代わりに描画先へ復元のバイト列を書き、コンソールのモードを戻す (§9.6)。書込が止まっても受信スレッドは最大 200 ms で先へ進む | 非対話終了でメインが終わらなかったとき (プロセスで 1 回) | v0.1 |
 | セッション終了通知 (Windows) | eve-platform | **非表示のトップレベルウィンドウ** (メッセージ専用ウィンドウではない) で `WM_QUERYENDSESSION` / `WM_ENDSESSION` を受け、緊急退避を起動する (ベストエフォート、§11.2.1)。`WM_QUERYENDSESSION` ごとに使い捨てのスレッド (`eve-session-query`) を作り、そこで退避を書く (メッセージループは待たずに戻る。05 §11.2) | 起動時 (専用スレッドで作り、起動経路をブロックしない) | v0.2 (M9d) |
-| ファイル監視 | eve-platform (notify) | 変更通知を `HostMsg::Fs` へ送るだけ (待ち合わせは Host が待機の期限で行う。debouncer の crate は使わない。05 §12.2) | 必要時 | v0.5 |
+| ファイル監視 | eve-platform (notify) | 変更通知を `HostMsg::Fs` へ送るだけ (待ち合わせは core の期限で行い、Host の待機がそれを待つ。debouncer の crate は使わない。05 §12.2)。notify が watcher ごとに 1 本作り、evoeditor は watcher をプロセスに 1 つだけ作る。登録・解除の OS の呼出しは `io` のワーカーで行う (Host の作業、§4.4 の `HostTasks::spawn_io_task`。v0.5 の M33) | 最初の監視の登録で | v0.5 |
 | 非同期ランタイム | eve-host が起動、eve-lsp / eve-ai が使用 | tokio (専用スレッド、少数ワーカー)。LSP の stdio、HTTP ストリーミング | 必要時 | v1.L |
 
 - **ワーカーは固定 2 本** (ADR-0006、確定。v0.5 の再評価 (OQ-103、S-26) でも固定 2 本のままと確定 (ユーザー回答、2026-11-21))。標準入力の読込 (v0.4 の M25) は、例外として (ADR-0006 の改訂、OQ-219 の 8。確定 (ユーザー回答、2026-11-13))、`evoeditor -` のときだけ専用のワーカー `eve-stdin-job` と読取のスレッド `eve-stdin` を足す (上の表。閉じないパイプで `io` を止めないため。汎用のワーカーは増やさない)。R11 (§4.3) の例外の一覧にも載せた。`deps-policy.toml` の `thread_spawn.allowed_files` と `clippy.toml` の理由の文は、スレッドを作るコードと同じ PR で直す (08 §2.5 の M25 の (8))。保存が検索に待たされないことは `io` と `bg` の分離で満たす。検索は 1 スレッドでも 1 GB/s 出るので v0.1 では並列化しない。優先度付きプールと rayon の検討は v0.5 (横断検索)・v0.6 (tree-sitter)。`JobSpawner` の形は変えないので後から差し替えられる。
@@ -1674,6 +1724,16 @@ enum JobKind {                     // Port は持たない (run_job が JobPorts
     LastVersion { current: String },                                  // io (v0.2)。前回起動した版の記録 (last_version.toml) を読んで今の版と比べ、書き直す (FR-518、07 §18.8)
     ReadConfig { files: Vec<FsPath>, keymap: Option<FsPath>, locales: Option<(FsPath, Locale)> },        // io (v0.2)。config.reload の設定ファイルとキーマップの読込 (07 §6)
     ReadTheme { dir: FsPath, name: String },                          // io (v0.2)。テーマファイルを inherits の親までたどって読む (07 §8.6)
+    // ── 設定と言語 (v0.5 の M33。07 §9.6 / §12.5 / §10.3) ──
+    ReadLanguages { dir: FsPath /*<config_dir>/languages*/ },         // io。起動時に、起動時のパスを開くジョブより前に積む (07 §9.6 の LANG-2)。config.reload でも積む。
+                                                                      // 名前の順に *.toml を読み (256 ファイル・1 ファイル 256 KiB まで)、本文と読めなかった理由を返す (解析は主スレッド。ユーザー層なので config.reload と同じ)
+    ReadWorkspaceConfig { root: FsPath, conditions: Conditions /*07 §3.4 の COND-2*/, user: Arc<ResolvedConfig> /*「方向のみ」の比較に使う*/,
+                          safe_dirs: Arc<[FsPath]> /*workspace.safe_directories*/ },
+                                                                      // io。WorkspaceRoot の結果の後と config.reload で積む (07 §12.5 の WSC-1)。read_checked で .eve/config.toml と .eve/keymap.toml を読み、
+                                                                      // 解析・条件の解決・検証・分類までジョブの中で行い (WSC-2)、安全な項目の値・キーの割当・診断を返す。doc は None
+    ReadEditorConfig { path: FsPath /*文書の開いたときの絶対パス*/, safe_dirs: Arc<[FsPath]> },
+                                                                      // io。文書の読込の完了・名前を付けて保存・config.reload で積む (07 §10.3 の EC-1)。上へ read_checked で .editorconfig を集めて読み、
+                                                                      // 解析と glob の照合までジョブの中で行い、当たったプロパティ (由来つき) と診断を返す
 }
 struct OpenOptions {               // 開くジョブの指定 (Copy)。確認 (ConfirmAsk) の回答で立てて先頭から再投入する。前の回答で立てたものは引き継ぐ (選択肢の正本は 03 §9.2 の表)
     forced: Option<Encoding>,      // --encoding か「文字コードを指定して開く」(FR-111)。判定とバイナリ・UTF-32 の BOM の確認を行わない
@@ -1703,6 +1763,7 @@ enum MetaPurpose {
     SaveAsTarget,                  // 名前を付けて保存の保存先の照合 (03 §9.7 (a) の CheckTarget)。v0.5 の M31 から metadata に加えて canonical のパスも返す
                                    // (保存先が無ければ親を canonicalize してファイル名を付けたもの。SAF-28、03 §12.7.6)
     ExternalCheck,                 // フォーカス復帰時・明示コマンドの外部変更確認 (v0.2、03 §9.5)
+    WatchCheck,                    // v0.5 の M33: 監視のイベントを待ち合わせた後の照合 (03 §9.5.1 の WATCH-5)。結果の扱いだけが ExternalCheck と違う (確認を出さず、印を付ける)
 }
 enum ConfirmAsk {                  // 開くジョブが確認のために終了するときの理由 (03 §9.2)
     HugeFile { len: u64 },         // file.huge_file_warn_bytes 超 (FR-127)
@@ -1877,7 +1938,7 @@ enum JobError {                    // #[non_exhaustive]
 4. `Frontend::init(&FrontendConfig)` で端末初期化 (raw モード、代替スクリーン、ブラケットペースト (Unix のみ。Windows は送らない)。拡張キーボードプロトコル (kitty keyboard protocol) の有効化は v0.2 で入れ、そのときも **問い合わせず無条件に push** する。v0.1 は push しない (ADR-0039、01 FR-606))。端末への能力問い合わせは起動経路で行わない (応答待ちが NFR-101 を圧迫し、応答の解析が入力ストリームと混ざるため。起動の後も問い合わせない、OQ-61 (確定 (推奨案、2026-11-20)))。能力は受信したイベントの形式から後で判明し `CapabilitiesChanged` で core に伝える。色深度は `theme.color_mode` と環境変数だけで判定する (04 §5)。`init` が返した Capabilities で `Editor::new` を呼ぶ。`init` の直後に `Frontend::emergency_restore_info()` を取得して保持する (受信スレッドが使う、§9.6)。Unix では、同じ値で異常終了のシグナル (SIGSEGV など) のハンドラ `term::install_crash_restore` も付ける (端末の復元だけを行う、05 §11.1)。
    - **任意の端末機能の有効化の失敗は起動エラーにしない**: ブラケットペーストの有効化 (`?2004h`) や拡張キーボードプロトコルの push が `Unsupported` 等のエラーを返したら、無視して起動を続け、`Capabilities` の該当項目 (`bracketed_paste` / `enhanced_keys`) を false にして知らせる。起動エラーにするのは raw モード・代替スクリーン等の必須の初期化の失敗だけ (04 §14.1)。kitty keyboard protocol の push は Unix だけで行い、Windows では行わない。Windows はブラケットペースト (`?2004h`) を送らない (入力は自前の `ReadConsoleInputW` ループで、貼り付けは個別のキーとして届くのでバースト検出で合成する、04 §6.6。`Capabilities.bracketed_paste` は false)。
 5. 入力スレッドと `io` ワーカーの起動 (`bg` とログスレッドは遅延)。Windows ではセッション終了通知のスレッドも起動する (v0.2。隠しウィンドウの作成はそのスレッドで行い、メインスレッドは待たない。§11.2.1。コストは 09 BM-101a で計測)。クリップボードはここでは初期化しない (§6.3)。
-6. 端末サイズ取得 → `Resize` を core に送る → `Editor::open_initial_files(files, read_only, forced)` (ファイル読込ジョブ投入) → **空/読込中の最初の Frame を即描画**。
+6. 端末サイズ取得 → `Resize` を core に送る → `Editor::open_initial_files(files, read_only, forced)` (ファイル読込ジョブ投入。v0.5 の M33 から、その前に言語定義の読込 `ReadLanguages` (07 §9.6 の LANG-2) を `io` に積む。`io` は直列なので、起動時の文書は定義が届いた後に開き終わる) → **空/読込中の最初の Frame を即描画**。
    - **標準入力 (`evoeditor -`、v0.4 の M25)**: 標準入力が端末でないとき、Host は手順 4 の前に `StdinSource` を作って `eve-stdin` を始め、**OQ-219 の 9** により最初のデータか EOF (または上限・読取の失敗) が届くまで手順 4 (端末の初期化) を遅らせる (待つ間は stderr に `stderr.stdin.waiting` の 1 組。03 §9.2.2 の「端末の初期化の時期」)。この待ちは NFR-101 の起動の区間に含めない。読み終えたら端末のモードを入れ直して全面を描き直す (SIGCONT の再初期化と同じ経路、05 §11.1)。**実装 (M25 の (9))**: bin が `PlatformStdin` を作って `JobPorts.stdin` に入れ (Host の組み立て)、`PlatformStdin::wait_ready` で最初の知らせを待ってから (100 ms の間に届かなければ `stderr.stdin.waiting`)、終了の要求の受信を入れて `Host::run` (手順 4) に進む。待った後にメインの `Arc` を手放し、`ThreadJobSpawner` は標準入力を `io` / `bg` に渡さず `OpenStdin` の投入で `eve-stdin-job` へ移す (`Arc` を最後に手放すのを `eve-stdin-job` にする)。読み終えた (`StdinDone`) ら Host が `Frontend::reinit_terminal` を呼ぶ
 7. 以降、遅延初期化: 検索ワーカー・ログファイル・クリップボード・(v0.6) シンタックス文法・ファイル監視・(v1.L) LSP/AI は必要時に起動。
 
@@ -2359,7 +2420,7 @@ sensitive = false                     # 任意 (無ければ false)。秘密フ�
 
 | 用途 | 採用案 | 採用理由 / リスク |
 |---|---|---|
-| ファイル監視 (v0.5) | notify。ライセンス CC0-1.0。**debouncer の crate (`notify-debouncer-mini` / `-full`) は使わない** (定期の起床がある (未確認)。待ち合わせは Host の待機の期限で自前に行う、05 §12.2。v0.5-plan §1.2) | OS ネイティブ監視。ネットワーク FS・inotify 上限・エディタ自身の保存イベント除外に注意 → 監視失敗時と、監視しない FS (`FsKind::Network`・WSL の DrvFs) は **イベント駆動 (保存前・フォーカス復帰時の metadata 比較) で代替** する。ポーリングはユーザーが明示設定した場合のみ (最小間隔 2 s、OQ-78。確定、実装は v0.6 以降)。NFR-204 の例外として 01 に明記。C を含む依存 (`links`) を持たないことを v0.5 の M29 のスパイクで確かめる (08 §3 末尾) |
+| ファイル監視 (v0.5) | notify。ライセンス CC0-1.0。**debouncer の crate (`notify-debouncer-mini` / `-full`) は使わない** (定期の起床がある (未確認)。待ち合わせは core の期限で自前に行い、Host の待機がそれを待つ、05 §12.2。v0.5-plan §1.2)。**版の決め方** (M33 の仕様の PR、2026-11-22。S-24): 段 7 の PR (07 §12.6.2) の時点で 9.0.0 の安定版があればそれを使う。無ければ 9.0.0-rc を `=` で固定して入れ (8.2.2 は Windows の監視のスレッドが 100 ms ごとに起き、01 FR-117 AC-10 に反する。9.0.0-rc.9 は起きない)、安定版が出たら上げる。v0.5.0 の凍結までに rc の不具合が見つかったら 8.2.x に戻し、Windows の起床を既知の制約にする (FR-117 AC-10 を Windows では CPU 使用率だけで判定するよう、AC を先に直す)。ただし 8.2.x の Windows の backend は、イベントのあふれ (0 バイトの完了) を読み違え、`ERROR_NOTIFY_ENUM_DIR` で監視を黙って外す (Rescan を送らない。docs.rs の 8.2.0 のソースで確かめた) ので、戻すときは「1 つのディレクトリで多数の変更があると取りこぼし、監視が止まり得る」も既知の制約にし、FR-117 AC-9 の縮退の知らせが出ないことを AC に書く。段 7 の試験に、1 つのディレクトリで数千のファイルを書き換えて `Rescan` が届くことを足す (Windows と、Linux の `IN_Q_OVERFLOW`)。`default-features = false`。依存の数は S-24 で +12 (73 → 85。NFR-207 の目安 90 の内)、`links` を持つ crate は 0 | OS ネイティブ監視。ネットワーク FS・inotify 上限・エディタ自身の保存イベント除外に注意 → 監視失敗時と、監視しない FS (`FsKind::Network`・WSL の DrvFs) は **イベント駆動 (保存前・フォーカス復帰時の metadata 比較) で代替** する。ポーリングはユーザーが明示設定した場合のみ (最小間隔 2 s、OQ-78。確定、実装は v0.6 以降)。NFR-204 の例外として 01 に明記。C を含む依存 (`links`) を持たないことを v0.5 の M29 のスパイクで確かめる (08 §3 末尾) |
 | シンタックス (v0.6) | tree-sitter ([ADR-0015](10-decisions.md#adr-0015-シンタックスハイライト方式)) | インクリメンタル・構文選択/インデントにも使える。リスク: C コンパイラが必要、文法ごとのサイズ、ABI 版、クエリの保守/ライセンス ([OQ-22](10-decisions.md#oq-22-tree-sitter-文法の同梱方式)) |
 | 設定 | serde + toml (書き戻し時は toml_edit) | Rust 界隈で標準、コメント可、人間が書きやすい |
 | エラー | thiserror (lib) / anyhow (bin) | 標準的・軽量 |
@@ -2422,7 +2483,7 @@ sensitive = false                     # 任意 (無ければ false)。秘密フ�
 | ユーザーのキー入力・コマンド | 信頼 | — |
 | ユーザー設定ファイル | 信頼 (ただし誤り得る) | 検証して不正値は既定値 (FR-703) |
 | ファイル内容 | **非信頼データ** | 描画前に制御文字を無害化 (NFR-503)、内容によってコマンド実行しない (モードライン無効、NFR-502)、パーサは fuzz |
-| ワークスペース設定 (`.eve/` (OQ-01), `.editorconfig`) (v0.5) | 半信頼 | 「ワークスペースを信頼」するまで安全な項目 (インデント等) のみ適用。外部コマンド・LSP 起動設定は信頼後のみ (07)。**所有者が自分でない、または world-writable なディレクトリ以下のワークスペース設定・`.editorconfig` は無視して診断で通知** (確定 (ユーザー回答、2026-11-20)、OQ-35)。AI 関連項目は信頼後も適用しない (OQ-36)。v0.4 まではワークスペース設定を読まない。v0.5 は安全な項目の適用・所有者の検査・`.editorconfig` だけを入れ、準安全・危険な項目は保留して診断を出す。信頼の仕組み (記録・確認ダイアログ・`--trust`) は最初の危険な項目と一緒に入れる (07 §12 の「版」。PO の決定 2026-11-20) |
+| ワークスペース設定 (`.eve/` (OQ-01), `.editorconfig`) (v0.5) | 半信頼 | 「ワークスペースを信頼」するまで安全な項目 (インデント等) のみ適用。外部コマンド・LSP 起動設定は信頼後のみ (07)。**所有者が自分でない、または world-writable なディレクトリ以下のワークスペース設定・`.editorconfig` は無視して診断で通知** (確定 (ユーザー回答、2026-11-20)、OQ-35)。AI 関連項目は信頼後も適用しない (OQ-36)。v0.4 まではワークスペース設定を読まない。v0.5 は安全な項目の適用・所有者の検査・`.editorconfig` だけを入れ、準安全・危険な項目は保留して診断を出す。信頼の仕組み (記録・確認ダイアログ・`--trust`) は最初の危険な項目と一緒に入れる (07 §12 の「版」。PO の決定 2026-11-20)。v0.5 の細目 (M33 の仕様の PR、2026-11-22): 所有者の検査は置き場所のディレクトリとファイルの両方を同じハンドルで判定して読む (07 §12.1 の OWN-1〜OWN-8。所有者を判定できない FS は読まない。逃げ道はユーザー層の `workspace.safe_directories` だけ)、分類の基準と公開キーごとの分類は 07 §12.3、解析と分類は `io` のジョブの中で行う (07 §12.5)、キーの割当は `.eve/keymap.toml` で、下の層のキーの上書き・印字キー・`args` を持つ割当を使わない (07 §7.4 の WKEY-2) |
 | 外部プロセス (LSP・フィルタ・プラグイン) | 非信頼 | プロセス境界、出力は検証、文書変更は Transaction 経由。**実行ファイルの探索は絶対パスの PATH 要素のみ** (cwd・相対要素・空要素を探索しない、05 §13)。ツール自体がリポジトリ内のコードを実行し得ることを信頼ダイアログで示す。クリップボード用の外部コマンドは `/usr/bin` 配下の絶対パスに限る (OQ-111) |
 | 駆動 API のクライアント (`--headless`) | 半信頼 (ユーザーが明示的に起動) | 主体は External。`exec` / `net` / `edit.apply` は常に拒否、保存は `--allow-write` 明示時のみ。ネットワーク経由のトランスポートなし (§10.5) |
 | AI 応答 | **非信頼** | 自動実行しない。Proposal として提示し承認後のみ適用。応答中のエスケープシーケンスも無害化 |

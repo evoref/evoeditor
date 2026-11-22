@@ -144,7 +144,7 @@ evoeditor (bin) ───────┤
 | `config.toml` | 本体。`[theme]` / `[[language]]` を含んでもよい。`[keys]` / `[keys.*]` は書式としては書けるが、v0.5 まで読まず「このバージョンでは未対応」の情報診断にする (キー割当の入口は `keymap.toml`。PO の決定 2026-11-21、docs/review/v0.5-plan.md §1.3 の後の追加の決定) | 起動時 (同期、NFR-101 の予算 2 ms 以内)。1 MiB を超えるファイルは読まずに診断を 1 件出して無視する案と、`io` ワーカーで読んでメインは 200 ms だけ待つ案がある (提案、02 §9.5 手順 2、OQ-190) |
 | `keymap.toml` | `[keys.*]` のみ。ユーザーのキー割当を読む唯一の入口 (v0.2。`config.toml` の `[keys]` とは併合しない。同上の決定) | 起動時 |
 | `themes/<name>.toml` | テーマ 1 つ/ファイル。`theme.name` で選ばれたものだけ読む | 起動時 (選択中のみ)、切替時 |
-| `languages/<name>.toml` | 言語定義 1 つ/ファイル (組込み定義への上書き・追加) | 起動時は索引 (拡張子表) のみ、本体は該当言語の文書を開いたとき (遅延) |
+| `languages/<name>.toml` | 言語定義 (組込み定義への上書き・追加。v0.5 の M33 から、1 つのファイルに `[[language]]` を幾つ書いてもよい。§9.6 の LANG-2) | 起動時に `io` のジョブで全部を読む (起動時のパスを開くジョブより前。v0.4 までの「起動時は索引のみ、本体は遅延」は M33 で改めた、§9.6 の LANG-2) |
 | `locales/<lang>.toml` | UI 文言の上書き・追加言語 (v0.4。確定 (ユーザー回答、2026-11-11)、OQ-21。同梱の `ja` / `en` はバイナリ内にあり、このディレクトリは要らない) | 起動時 (選択した言語のみ。`config.reload` では読み直さない。`--no-config` では読まない。§17.4) |
 
 ### 3.3 マージ規則
@@ -166,38 +166,67 @@ evoeditor (bin) ───────┤
 
 ### 3.4 条件付きセクション (NFR-405)
 
-OS 間で 1 つの設定ファイルを共有するため、固定の条件キーを持つセクションを定義する。条件付きセクションは、同じ層内で無条件セクションの **後** にマージされる。**解決は v0.5 から** (NFR-405。08 §2.6 の M33)。それまで (M33 の前) は書式と名前の予約だけで、`[os.*]` / `[env.*]` / `[frontend.*]` / `[host.*]` を書くと「このバージョンでは未対応」の情報診断を出してそのセクションを無視する。診断は条件の名前 (`os` / `env` / `frontend` / `host`) ごとに 1 件で、位置はそれを最初に書いた見出しかキー。`[os.windows.editor]` と `[os.linux.editor]` を書いても `os` の 1 件で、中のキーごとには出さない (公開前のセクション (§5.12 の `[ai]` 等) と同じ扱い)。点のキー (`os.windows.editor.tab_width = 2`) と `--set` も同じ。
+OS 間で 1 つの設定ファイルを共有するため、固定の条件キーを持つセクションを定義する。条件付きセクションは、同じ層内で無条件セクションの **後** にマージされる。**解決は v0.5 から** (NFR-405。08 §2.6 の M33。細目は下の COND-1〜COND-8 で、M33 の仕様の PR (2026-11-22) で決めた。実装は §12.6.2 の段 1)。それまで (M33 の段 1 の前) は書式と名前の予約だけで、`[os.*]` / `[env.*]` / `[frontend.*]` / `[host.*]` を書くと「このバージョンでは未対応」の情報診断を出してそのセクションを無視する。診断は条件の名前 (`os` / `env` / `frontend` / `host`) ごとに 1 件で、位置はそれを最初に書いた見出しかキー。`[os.windows.editor]` と `[os.linux.editor]` を書いても `os` の 1 件で、中のキーごとには出さない (公開前のセクション (§5.12 の `[ai]` 等) と同じ扱い)。点のキー (`os.windows.editor.tab_width = 2`) と `--set` も同じ。
 
-**版の記述の訂正** (v0.5-plan WS-20): v0.4 までの本節は「解決は v0.2 から」と書いていたが、実装していない。さらに、`os` / `env` / `frontend` / `host` が予約のセクションに無いので、書くと「未知のキー」の警告になり、上の「未対応」の情報診断とも違う。予約のセクションに足して情報診断に揃える修正は v0.5 の M29 で入れた (eve-config の `reserved.rs` の `CONDITIONAL_SECTIONS`。本節の表の `条件キー` 列との一致は eve-core の試験 `config_reserved` が確かめる)。解決は M33 で入れる。`host.*` (Could) は v0.5 では解決しない (予約のまま)。条件付きセクションを `keymap.toml` にも効かせるかは M33 の仕様の PR で決める (それまでの `keymap.toml` は `[keys.*]` だけを読み、他の見出しは今までどおり未知のキーの警告。§3.2)。
+**版の記述の訂正** (v0.5-plan WS-20): v0.4 までの本節は「解決は v0.2 から」と書いていたが、実装していない。さらに、`os` / `env` / `frontend` / `host` が予約のセクションに無いので、書くと「未知のキー」の警告になり、上の「未対応」の情報診断とも違う。予約のセクションに足して情報診断に揃える修正は v0.5 の M29 で入れた (eve-config の `reserved.rs` の `CONDITIONAL_SECTIONS`。本節の表の `条件キー` 列との一致は eve-core の試験 `config_reserved` が確かめる)。解決は M33 で入れる。`host.*` (Could) は v0.5 では解決しない (予約のまま)。条件付きセクションは `keymap.toml` には効かせない (M33 の仕様の PR で決めた。下の COND-6。OS ごとの割当は `when` の `os` で書く)。
 
 ```toml
 [editor]
 tab_width = 4
 
-[os.windows.editor]           # Windows のみ
-line_ending = "crlf"
+[os.windows.file]             # Windows のみ
+default_line_ending = "crlf"
 
-[os.macos.keys.editor]        # macOS では super (cmd) 系も追加
-"super+s" = "file.save"
+[os.linux.view]               # Linux のみ (端末のフォントに合わせる)
+ambiguous_width = 2
 
-[env.ssh.clipboard]           # SSH セッション (SSH_TTY あり) では OSC 52 を優先 ([clipboard] の公開は v0.2)
-provider = "osc52"
+[env.ssh.clipboard]           # SSH セッション (SSH_TTY あり) では OSC 52 を常に使う
+osc52 = "always"
 ```
+
+v0.4 までの本節の例は `[os.windows.editor]` の `line_ending` (キーの名前の誤り。正しくは `file.default_line_ending`) と、`config.toml` の `[os.macos.keys.editor]` (v0.5 も `config.toml` の `[keys]` を読まない、§3.2) と、`[env.ssh.clipboard]` の `provider` (公開していないキー) を書いていた。M33 の仕様の PR で、読めるキーの例に直した。
 
 | 条件キー | 値 | 判定主体 |
 |---|---|---|
-| `os.<name>` | `windows` / `macos` / `linux` / `unix` (macos + linux + その他 Unix) | bin (コンパイル時定数) |
+| `os.<name>` | `windows` / `macos` / `linux` / `unix` (macos + linux。v0.5 の対象の Unix はこの 2 つ。ほかの Unix を対象にする版で足す) | bin (コンパイル時定数) |
 | `frontend.<name>` | `tui` | 起動した frontend。値は `tui` のみ |
 | `env.<name>` | `ssh` (SSH_TTY / SSH_CONNECTION あり) / `tmux` / `wsl` / `ci` | bin が環境変数等から判定 (詳細は 05)。v0.5 で解決するのは `ssh` / `tmux` / `wsl`。`ci` は名前の予約のみで、解決は最初の利用者の版 |
 | `host.<hostname>` | ホスト名完全一致 (小文字) | bin。マシン別の調整用 (Could。v0.5 では解決せず送る、v0.5-plan WS-20)。それまでは書式・名前の予約のみ |
 
 条件は **入れ子にしない** (`[os.windows.env.ssh]` は不可)。複数条件が必要なら `[env.ssh]` の内側に `[env.ssh.os.windows]` ではなく、それぞれ別に書いて重ねる。評価順は `os` → `frontend` → `env` → `host` (後勝ち)。設定全体に汎用の `when` 式は導入しない (条件は固定キーに限り、`--dump-config` で値を一意に出せるようにする)。
 
+**v0.5 の M33 で決めた細目** (NFR-405 の AC は 01 §5.5):
+
+| ID | 規則 |
+|---|---|
+| COND-1 | **書ける所**: ユーザー層の `config.toml` (と `--config` のファイル)、ワークスペース層の `.eve/config.toml` (§12.5)、`--set` のキー (`--set os.windows.editor.tab_width=2` は、条件が真のときだけ効く)。`keymap.toml`・`.eve/keymap.toml` (COND-6)・言語定義のファイル (`languages/*.toml`、§9.6)・テーマファイル・言語ファイル (`locales/`) には効かせない (それらのファイルに書いた `[os.*]` などは、今までどおりそのファイルの未知のキーの警告。`keymap.toml` だけは COND-6 の専用の警告) |
+| COND-2 | **条件の値**: 起動時に bin が 1 回だけ決めて eve-config に渡す (`Conditions { os, frontend, env }`)。`config.reload` と自動の再読込 (§6) も同じ値を使う (起動の後に SSH の接続や tmux の中かどうかが変わっても変えない)。`os` は実行ファイルの対象 OS (コンパイル時の定数) で、`os.unix` は `macos` と `linux` で真。`env.ssh` は環境変数 `SSH_TTY` か `SSH_CONNECTION` が空でないとき、`env.tmux` は `TMUX` が空でないとき、`env.wsl` は Linux で `WSL_DISTRO_NAME` か `WSL_INTEROP` が空でないとき (どれもクリップボードの判定 (05 §8.2 / §15) と同じ環境変数。M33 の段 1 で、eve-platform の 1 つの関数 (空の値は無いものとする) にまとめ、`eve-host` の SSH の判定 (今は変数があるかだけを見る) もそれを使う)。`frontend.tui` は v0.5 では常に真。**既知の限界**: 環境変数だけで判定するので、`sudo` (環境を消す)・WSL の中の sshd から入ったとき・systemd のサービスから起動したときは `env.wsl` が偽になり、SSH の中で作った tmux のセッションに手元から入り直すと `env.ssh` が真のまま。`/proc/sys/kernel/osrelease` などを読む判定は、起動時の I/O が増えるので v0.5 では採らない (01 §4.6) |
+| COND-3 | **重ね方**: 1 つのファイル (`--set` は 1 つの値) の中で、(1) 条件の無い表、(2) `os` の真のもの (`unix` → `windows` / `macos` / `linux`。同じ OS では具体的な名前が `unix` に勝つ)、(3) `frontend`、(4) `env` の真のもの (`ssh` → `tmux` → `wsl` の順) を、この順にキーごとに重ねる (後が勝つ。値の種類ごとの規則は §3.3 の表のまま: スカラーは置換、表はキーごと、配列は置換、`+` 接尾辞は追加)。重ねた結果がそのファイルの層の値になり、層の間の順 (§3.1 の L0 → L5) は変えない (ユーザー層の `[os.windows.editor]` は、ワークスペース層や `--set` に負ける) |
+| COND-4 | **検証**: 偽の条件のセクションにも、条件の無い表と同じ検証 (未知のキー・型・範囲) を掛けて診断を出し、値は使わない (Windows で `--check-config` を走らせても、`[os.linux.*]` の綴りの誤りが分かる)。パスの形の検証 (絶対パスか、など。`workspace.safe_directories`) は、セクションの条件の OS の規則で行い (`os.unix` は Unix の規則)、OS の決まらないセクション (`env.*`) ではパスの形を検証しない (Windows で `[os.linux.workspace]` の `/mnt/c/src` を誤りにしない)。診断の場所は書いた行で、`config.show_diagnostics` の一覧の本文にセクションの条件 (`[os.linux]`) を添える |
+| COND-5 | **誤りの扱い** (警告。そのセクション (と、その下のキー) を使わない): (a) 未知の条件の名前 (`[os.win]`。編集距離 2 以内の候補を対処に出す。`msg.config.condition_unknown`) (b) 入れ子 (`[os.windows.env.ssh]`。`msg.config.condition_nested`) (c) 条件の直下のキー (`[os.windows]` の中の `tab_width = 2`、点のキー `os.windows.tab_width`。セクションをはさんで `[os.windows.editor]` と書く。`msg.config.condition_bare_key`) (d) 条件付きセクションの中の言語定義 (`[[os.windows.language]]`) と `[keys]` (`msg.config.condition_unsupported_table`。言語定義は OS で分けない。キーは `keymap.toml` の `when` で分ける)。(e) `[host.*]` と `[env.ci]` は警告ではなく、v0.4 までと同じ「このバージョンでは未対応」の情報診断 (条件の名前ごとに 1 件) |
+| COND-6 | **キーマップ**: `keymap.toml` (と `.eve/keymap.toml`) は条件付きセクションを読まない。OS ごとに割当を変えるときは、割当の `when` で §7.3 の `os` 変数を使う (`"super+s" = { command = "file.save", when = "os == \"macos\"" }`)。`os` と `frontend` の変数は M33 の段 1 で実装する (v0.4 までは表にあるだけで、`when` に書くと知らない変数の警告だった)。`keymap.toml` に `[os.*]`・`[frontend.*]`・`[env.*]`・`[host.*]` を書いたときは、未知のキーの警告ではなく `msg.config.condition_in_keymap` (警告。`when` の書き方を対処に示す) を条件の名前ごとに 1 件出す |
+| COND-7 | **表示**: `--dump-config` は今の環境で解決した値を出す (出力の形は v0.4 と同じで、由来は出さない)。値の由来 (層・ファイル・行・条件) は `config.show` (§3.5) で示す (`editor.tab_width = 2  ユーザー: config.toml:12 [os.windows]`) |
+| COND-8 | **費用**: 解決は TOML を読んだ後の表の操作だけで、新しい I/O は無い (環境変数は bin が起動時に 1 回読む)。起動の予算 (§3.2 の 2 ms、NFR-101) に入る |
+
 **`[os.*]` 等の条件付きセクションと `when` 句 (§7.3) の使い分け**: 条件付きセクションは **設定値の切替** (起動時に 1 回評価され、`--dump-config` で一意に出せる)。`when` はキーマップ・コマンドの **実行時条件** (フォーカス・選択状態・モード等、刻々と変わるもの)。`when` にも `os` / `frontend` 変数があるが、これは「同じキーを OS で別コマンドにしたい」場合のためで、設定値の切替には条件付きセクションを使う。
 
 ### 3.5 層の起源の追跡
 
 `ResolvedConfig` は各項目について **どの層・どのファイル・何行目から来たか** を保持する (`config.show` コマンドで `editor.tab_width = 2  (workspace: .eve/config.toml:3)` のように表示)。初心者が「なぜこの挙動か」を辿るため (P7) と、ワークスペース設定の信頼判定 (§12.3) のため。
+
+**`config.show` (v0.5 の M33 の段 1 で入れる。ID は §11.6 の M33 の表)**: 一覧のオーバーレイ (意味的モデル `List`。`config.show_diagnostics` と同じ部品、04 §8.5a) に、公開キーを宣言の表 (§4.1) の順に 1 行ずつ `キー = 値` で出し、右の列に由来を出す。由来の書き方は `既定`・`ユーザー: <ファイル>:<行>`・`ワークスペース: .eve/config.toml:<行>`・`--set` で、条件付きセクション (§3.4) の値は後ろに `[os.windows]` のように条件を足す。文書ごとに決まるキー (§3.6) は、フォーカスのペインの文書の値と、勝った所 (`言語 rust (組込み)`・`言語 rust: languages/rust.toml:3`・`.editorconfig:5 [*.py]`) を出し、見出しの行に文書の名前と言語を出す。入力欄でキー・値・由来を部分一致で絞り込め、`Enter` は由来にファイルと行があればそのファイルのその行を開く (`config.show_diagnostics` の `Enter` と同じ)。ワークスペース層で使わなかった項目 (保留・効かない・無視、§12.3) は、この一覧には出さず `config.show_diagnostics` に出す。値と由来はファイル由来の文字列なので、診断と同じ無害化 (§4.3 の `sanitize_untrusted`) を通す。`--dump-config` は由来を出さない (COND-7)。
+
+### 3.6 文書ごとに決まる値 (v0.5 の M33。FR-704 / FR-705)
+
+言語定義 (§9) と `.editorconfig` (§10) は、値を文書ごとに変える。v0.5 で文書ごとに決まるキーは `editor.tab_width`・`editor.indent_unit`・`editor.indent_width` と、新しいファイルだけに効く `file.default_line_ending`・`file.default_encoding` の 5 つ (文書ごとのキー)。ほかのキーは、文書に依らず層 (§3.1) だけで決まる。
+
+| ID | 規則 |
+|---|---|
+| LAYER-1 | **順** (下ほど強い。システム層 (L1、Could) は v0.5 では入れないので含めない。入れる版で (1) と (2) の間に置く): (1) 既定値 (L0) (2) ユーザー層の一般の値 (`config.toml` と `--config` の `[editor]` / `[file]`。条件付きセクションを含む) (3) 組込みの言語定義 (§9.3) (4) ユーザー層の言語定義 (`config.toml` の `[[language]]` と `languages/*.toml`、§9.6) (5) `.editorconfig` の当たるセクションの値 (§10) (6) ワークスペース層の一般の値 (`.eve/config.toml` の `[editor]` / `[file]` の安全な項目、§12.3) (7) ワークスペース層の言語定義 (`.eve/config.toml` の `[[language]]`)。(6)(7) は **ワークスペースのルートの下の文書だけ** に効かせる (同じプロセスで開いた `~/notes.md` に、プロジェクトの字下げを効かせない。`.editorconfig` が置き場所の下だけに効くのと揃える) (8) コマンドライン層 (`--set editor.tab_width=2`) (9) セッション層 (v0.5 では無い)。各段は、その段がキーを持つときだけ下の段の値を置き換える (言語定義の `indent` の `unit` だけを書けば、`width` は下の段の値のまま) |
+| LAYER-2 | **順の理由**: 利用者の範囲 ((1)〜(4)) の中では、言語の値が一般の値に勝つ (Makefile のタブや Go の gofmt の形を、利用者の `editor.indent_unit = "space"` で壊さない。組込みの定義は、形式が字下げを決めている言語にだけ `indent` を持つ、§9.6 の LANG-3)。プロジェクトの範囲 ((5)〜(7)) は利用者の範囲より強い (プロジェクトの規約が個人の既定に勝つ。v0.4 までの §10.2 の順を保つ)。プロジェクトの中では evoeditor 専用の設定が `.editorconfig` に勝ち、その中で言語の値が一般の値に勝つ。`--set` は明示の指定なので最も強い |
+| LAYER-3 | **決める時期**: 文書を開いたとき (読込の完了)・言語を替えたとき (`lang.set`)・名前を付けて保存でパスが変わったとき・設定を読み直したとき (`config.reload` と自動の再読込、§6)・ワークスペース層が届いたとき (起動の後のジョブ、§12.5) に、その文書の値を決め直す。`.editorconfig` はジョブで読む (§10.3 の EC-1) ので、届くまでは (5) を除いた値で表示・編集し、届いたら決め直す。決め直しは文書の本文を変えない (Tab で入れる字下げと、タブの表示の幅が替わる。タブの表示の幅が替わったら、その文書の表示の単位と折り返しを作り直す) |
+| LAYER-4 | **新しいファイルだけのキー**: `file.default_line_ending`・`file.default_encoding` は、ディスクに無いファイルの文書 (存在しないパスで開いた文書) を作るときに、その文書の改行コードと文字コードを決めるのに使う (§10.1 の `end_of_line` / `charset` の「新規ファイルのみ」)。作った後で `.editorconfig` やワークスペース層が届いたときは、その文書がまだ編集も保存もされていなければ (Revision が作ったときのまま)、改行コードと文字コードを決め直す (起動時に `evoeditor new.py` で開いた文書が、プロジェクトの規約の形で作られる)。編集した後は決め直さない (利用者が見て打った改行の形を黙って変えない)。無題の文書はパスが無いので (1)(2)(6)(8) だけで決まる。**既存のファイルの文字コードの判定** (03 §8.2 の手順 7 の、判定できないときの `file.default_encoding`) には、文書ごとの値ではなく、利用者の範囲とコマンドライン層の値 ((1)(2)(8)) だけを使う (`.editorconfig` の `charset` とワークスペース層の `file.default_encoding` は、既存のファイルの読み方を変えない。起動時に開いた文書と後で開いた文書で判定が変わらない) |
+| LAYER-5 | **見せ方**: `config.show` (§3.5) は、フォーカスの文書の値と勝った段を示す。`--dump-config` は文書に依らない値 ((1)(2)(8)) だけを出す (v0.4 と同じ出力)。言語定義は `--dump-languages` (§18.3) で出す |
 
 ---
 
@@ -244,7 +273,7 @@ provider = "osc52"
 ### 4.3 エラー表示
 
 - 起動時 (v0.1): 診断は Message キュー (FR-505) に `warn` レベルで積み、**最初の Frame 描画後** に表示する (起動を妨げない、FR-703)。1 件ならその内容 (`msg.config.problem`)、2 件以上なら「設定に N 件の問題があります。最初の 1 件: …」と要約する (`msg.config.problems`。文言は 04 §15.2)。全件は `warn` でログ (05 §7.3) にも書く。診断は host が `Editor::report(HostReport)` で core に渡し、Message キューへの積みは core が行う (02 §5.4)。「このバージョンでは未対応」の情報診断 (公開前のキー・予約のセクション・条件付きセクション (§3.4)) は件数に数えず、ログにだけ書く (将来の設定を先に書いた利用者を毎回の起動で煩わせない)。
-- `config.show_diagnostics` コマンド (**v0.3 で実装**。v0.2 の予定から送った、PO の決定 2026-11-07): 一覧パネル (意味的モデル `List`) で表示し、Enter で該当ファイルの該当行を開く。一覧に出すのは、ファイル (`config.toml` 等のユーザー層のファイル・`keymap.toml`・テーマファイル `themes/<name>.toml`・v0.4 の M26 から言語ファイル `locales/<lang>.toml`) と `--set` ごと (v0.4 の M26 から、言語の選択の `--locale` / `EVE_LANG` と、名前の規則に合わない言語ファイルの一覧 `locales/` も。言語ファイル・言語の選択の診断は `config.reload` でも残す、§17.4) に **最後に読んだときの診断** (起動時、または `config.reload` で読み直したとき) で、「このバージョンでは未対応」の情報診断も含める (件数の要約とは違い、画面で確かめる手段にする)。各行は `重さ: 本文 / 対処` (`ui.config_diagnostics.item`。対処の無い情報診断は `ui.config_diagnostics.item_no_hint`) と、右の列に `ファイル:行` (行の分からない診断はファイル名だけ)。並びは読んだ順 (ファイルごと、その中は診断の順) で、入力欄で本文と `ファイル:行` を部分一致で絞り込める。Enter はそのファイルを開き (開いていればそのバッファへ切り替え)、該当の行・桁へ移る (行の分からない診断は 1 行目)。ファイルの無い診断 (`--set`・`--locale`・`EVE_LANG`・`locales/`) は開かずに `info.config.diagnostic_no_file` を示す。診断が 1 件も無ければ一覧を開かず、メッセージ行に `info.config.no_diagnostics` (「設定の診断はありません」) を出す。一覧の UI は 04 §8.5a。
+- `config.show_diagnostics` コマンド (**v0.3 で実装**。v0.2 の予定から送った、PO の決定 2026-11-07): 一覧パネル (意味的モデル `List`) で表示し、Enter で該当ファイルの該当行を開く。一覧に出すのは、ファイル (`config.toml` 等のユーザー層のファイル・`keymap.toml`・テーマファイル `themes/<name>.toml`・v0.4 の M26 から言語ファイル `locales/<lang>.toml`・v0.5 の M33 から言語定義のファイル `languages/*.toml` とワークスペース層の `.eve/config.toml` / `.eve/keymap.toml` と `.editorconfig` (§9.6・§12.5・§10.3。所有者の検査で読まなかったファイルを含む)) と `--set` ごと (v0.4 の M26 から、言語の選択の `--locale` / `EVE_LANG` と、名前の規則に合わない言語ファイルの一覧 `locales/` も。言語ファイル・言語の選択の診断は `config.reload` でも残す、§17.4) に **最後に読んだときの診断** (起動時、または `config.reload` で読み直したとき) で、「このバージョンでは未対応」の情報診断も含める (件数の要約とは違い、画面で確かめる手段にする)。各行は `重さ: 本文 / 対処` (`ui.config_diagnostics.item`。対処の無い情報診断は `ui.config_diagnostics.item_no_hint`) と、右の列に `ファイル:行` (行の分からない診断はファイル名だけ)。並びは読んだ順 (ファイルごと、その中は診断の順) で、入力欄で本文と `ファイル:行` を部分一致で絞り込める。Enter はそのファイルを開き (開いていればそのバッファへ切り替え)、該当の行・桁へ移る (行の分からない診断は 1 行目)。ファイルの無い診断 (`--set`・`--locale`・`EVE_LANG`・`locales/`) は開かずに `info.config.diagnostic_no_file` を示す。診断が 1 件も無ければ一覧を開かず、メッセージ行に `info.config.no_diagnostics` (「設定の診断はありません」) を出す。一覧の UI は 04 §8.5a。
 - 各診断は NFR-602 に従い「何が起きたか」+「どうすればよいか」を含む: `tab_width は 1〜16 の整数です。"4" は文字列なので既定値 4 を使います。引用符を外してください (config.toml:7)`。v0.1 の公開キーは 7 個なので、未知のキーの綴りの候補 (編集距離 ≤ 2) は公開キーと公開前のキー (§5.13) の両方から探す。
 - CLI (v0.2): `evoeditor --check-config` は診断を標準出力に出して終了する (終了コード §18.4)。CI やドットファイル管理に使う。
 - **ファイル由来の文字列の無害化** (v0.4 の M26 から。NFR-503): 診断に埋める `{item}` (キーの名前)・`{value}` (書かれた値)・`{reason}` (パーサの説明) は、利用者の設定ファイル・キーマップ・テーマファイル・言語ファイルから来た文字列なので、制御文字・双方向の書式文字・方向の印 (§17.4 の検査 4 の範囲) を `<U+XXXX>` の表記に直し、64 文字で切る (直した後の長さで数え、超えたら末尾の `…` を含めて 64 文字に収める。書記素 (eve-text の境界、03 §13.1) の途中と `<U+XXXX>` の途中では切らない)。画面 (Frame) に載せる前・ログに書く前・`--check-config` で標準出力へ出す前のどれも同じ関数 (eve-config の `sanitize_untrusted`) で行い、`--check-config` は行の全体を `<U+XXXX>` への置き換えだけの関数 (`escape_untrusted`。行は 64 文字で切らない) に通す (Frame の無害化 (04 §4.9) を通らないため)。
@@ -279,9 +308,9 @@ v0.1 で設定ファイル (`config.toml`、ユーザー層) から読む **公�
 
 | キー | 型 / 値 | 既定 | 説明 | 関連 | P |
 |---|---|---|---|---|---|
-| `tab_width` | int 1..16 | `4` | タブ文字の表示幅 | FR-208 | v0.1 |
-| `indent_unit` | `"tab" \| "space"` | `"space"` | インデント操作で挿入する単位 | FR-208 | v0.1 |
-| `indent_width` | int 1..16 | `4` | スペースインデントの幅 | FR-208 | v0.1 |
+| `tab_width` | int 1..16 | `4` | タブ文字の表示幅。v0.5 の M33 から文書ごとに決まる (言語定義・`.editorconfig`・ワークスペース層を重ねる、§3.6) | FR-208 | v0.1 |
+| `indent_unit` | `"tab" \| "space"` | `"space"` | インデント操作で挿入する単位。v0.5 の M33 から文書ごとに決まる (§3.6)。**v0.5 で変わる点**: 組込みの言語定義の `go` と `make` の文書では、この値に依らずタブになる (§9.6 の LANG-3。ユーザー層の `[[language]]` で替えられる) | FR-208 | v0.1 |
+| `indent_width` | int 1..16 | `4` | スペースインデントの幅。v0.5 の M33 から文書ごとに決まる (§3.6) | FR-208 | v0.1 |
 | `auto_indent` | bool | `true` | 改行時に直前行のインデントを継承 | FR-202 | v0.1 (定数、公開 v0.2) |
 | `auto_pairs` | bool | `false` | 括弧・引用符の自動閉じ | FR-210 | v0.5 |
 | `word_separators` | string | ASCII の空白・タブ・括弧・句読点・演算子記号 (`( ) [ ] { } < > , ; : . ! ? / = + - * & ^ % $ # @ ~`) と、引用符・バッククォート・バックスラッシュ・縦棒 | 単語境界の追加区切り。v0.1 の単語移動は **文字種の遷移規則** (03 §13.3、OQ-117) だけで、本キーは v0.2 で公開 | FR-302 | v0.1 (定数、公開 v0.2) |
@@ -303,7 +332,7 @@ v0.1 で設定ファイル (`config.toml`、ユーザー層) から読む **公�
 | `default_encoding` | `"utf-8" \| "utf-8-bom" \| "utf-16le" \| "utf-16be" \| "shift_jis" \| "euc-jp" \| "iso-2022-jp" \| "system"` (WHATWG の別名ラベル (`sjis`、`windows-31j` 等) は上の名前に正規化して受理) | `"utf-8"` | 新規ファイル・判定不能時の文字コード。`"system"` は 05 §6 の OS ロケール由来ヒント。**許容値は v0.1 の対応範囲 (01 の「文字コードの対応範囲」、OQ-03) の 7 種と `"system"` に限る**。これ以外 (例 `"windows-1252"`) は列挙値不正として警告 (§4.2) し、既定値 `"utf-8"` を使う (「ラベルとしては有効だが対応外」でも同じ)。許容値を FR-110 (encoding_rs が扱うもの) へ広げるのは v0.6 以降 (v0.4 から送り、v0.5 の計画で再び送った、08 §7) | FR-108 | v0.1 |
 | `encoding_detection` | `"auto" \| "utf8-only" \| "off"` | `"auto"` | chardetng 推定の使用 | FR-109 | v0.1 (定数、公開 v0.2) |
 | `detection_candidates` | array of string | ロケール由来 (05 §6 `system` ヒントが `ja` なら `["utf-8", "shift_jis", "euc-jp", "iso-2022-jp"]`、それ以外は `["utf-8"]`) | **推定結果の事後フィルタ**: chardetng 1.0 には候補リストを与える API が無いため、推定結果が候補外なら信頼度を下げ `default_encoding` と比較して採否を決める (03 §8.2 手順 7)。既定値は 05 §6 の `system` ヒントから決める | FR-109 | v0.1 (定数、公開 v0.2) |
-| `default_line_ending` | `"lf" \| "crlf" \| "cr" \| "native"` | **`"lf"`** (全 OS。P6 / NFR-405、05 §6、OQ-04) | 新規ファイルの改行コード。`native` は選択肢として残す | FR-113 | v0.1 |
+| `default_line_ending` | `"lf" \| "crlf" \| "cr" \| "native"` | **`"lf"`** (全 OS。P6 / NFR-405、05 §6、OQ-04) | 新規ファイルの改行コード。`native` は選択肢として残す。v0.5 の M33 から、新しいファイルの文書の値は文書ごとに決まる (`.editorconfig` の `end_of_line`・ワークスペース層、§3.6 の LAYER-4) | FR-113 | v0.1 |
 | `write_bom` | `"preserve" \| "never"` | `"preserve"` | UTF-8 BOM の扱い | FR-108 | v0.1 (定数、公開 v0.2) |
 | `large_file_threshold` | int (bytes) | `20971520` (20 MiB) | 重い機能を無効化する閾値 (03 §11.2) | FR-123 | v0.6 |
 | `huge_file_warn_bytes` | int (bytes) | `536870912` (512 MiB) | 開く前に警告する固定閾値 (03 §11.2、OQ-05 確定 (ユーザー回答))。閾値を設定で変えられるのは v0.2 (FR-127)。範囲 1048576..=1099511627776 (範囲外は警告して既定値)。**v0.2 の M9d で公開・実装した**。開くときの判定なので、変えても開いている文書には遡らず、次に開くファイル (再読込を含む) から効く (§6 の「新規文書から」) | OQ-05 | v0.2 |
@@ -311,7 +340,7 @@ v0.1 で設定ファイル (`config.toml`、ユーザー層) から読む **公�
 | `huge_file_warn_ratio` | float 0..1 | `0.5` | 利用可能メモリに対する警告比率 (`SystemInfo` Port 導入後。v0.1 は `huge_file_warn_bytes` のみ) | OQ-05 | v0.5 以降 |
 | `long_line_threshold` | int (bytes) | `1048576` (1 MiB) | 長大行の閾値。これを超える行は列の索引 (書記素の単位。v0.4、03 §14.4) で表示・編集し、その行を含む文書は折り返さない (NFR-106。v0.2〜v0.3 は char 近似モード、03 §11.5.1)。v0.1 はこれを超える行を含む文書を読み取り専用で開き、その行は先頭 64 KiB だけを表示した。範囲 65536..=1073741824 (下限は表示する先頭 64 KiB。範囲外は警告して既定値)。**v0.2 の M9d で公開・実装した**。開くときの判定で、文書は開いたときの閾値を持ち続ける (変えても次に開くファイル (再読込を含む) から効く。§6 の「新規文書から」) | NFR-106 | v0.2 |
 | `reload_on_external_change` | `"ask" \| "auto_if_unmodified" \| "never"` | `"auto_if_unmodified"` | 外部変更の扱い (保存時 (v0.1)・フォーカス復帰時 (v0.2)・監視 (v0.5))。**v0.2 の M9d で公開・実装した** (03 §9.5 の「M9d の実装」): `auto_if_unmodified` は dirty でなければ確認なしで再読込、`ask` は常に確認、`never` はフォーカス復帰で確かめない (`file.check_external_changes` は設定に関わらず確かめて尋ねる)。保存時の照合の確認はどの値でも出る | FR-117 | v0.2 |
-| `watch.enabled` | bool | `true` | ファイル監視 | FR-117 | v0.5 |
+| `watch.enabled` | bool | `true` | ファイル監視 (開いている文書の外部の変更を、監視のイベントで知らせる。03 §9.5.1)。`false` でも、フォーカス復帰・保存時の確認 (v0.1 / v0.2) は残る。`file.reload_on_external_change = "never"` のときは、この値に依らず監視しない。設定ファイルの自動の再読込 (§6、FR-706) もこの値に従う。`config.reload` で即時に効く (監視を張る・外す)。ワークスペース層では準安全 (§12.3) | FR-117 | v0.5 (**M33 の段 8 で公開・実装する**。それまでは予約) |
 | `watch.poll_interval_ms` | int / `0` | `0` (ポーリングしない) | 監視不可 FS での低頻度ポーリング。明示設定時のみ、最小 2000 (05 §12.2、OQ-78。確定 (推奨案、2026-11-20)) | NFR-204 | v0.6 以降 (決定は確定、実装を送った、08 §7) |
 | `save_strategy` | `"atomic" \| "in_place"` | `"atomic"` | 常に直接上書きにする設定 (05 §4.4)。`in_place` では core が最初から直接上書き (method = InPlace) を選び、乾式走査の後に `write_in_place` を呼ぶ (`write_atomic` を経由しない)。起動時に警告 1 回。ワークスペース層では `in_place` は危険の分類 (§12.3) | ADR-0016 | v0.1 (定数、公開 v0.2) |
 | `atomic_save_fallback` | `"ask" \| "fail"` | `"ask"` | 原子的置換不可時 (ハードリンク・`in_place_patterns` 以外。03 §9.3 手順 7)。`ask` = 「直接上書き (バックアップ付き) / 別名で保存 / キャンセル」の確認 (04 の `ui.confirm.save.atomic_unsupported`。既定の選択は「別名で保存」。確定 (ユーザー回答)) を出す、`fail` = 確認を出さずに保存の失敗として報告する。確認なしで直接上書きする値は持たない (直接上書きへのフォールバックには利用者の承認が要る、ADR-0016) | ADR-0016 | v0.1 (定数、公開 v0.2) |
@@ -375,9 +404,9 @@ v0.1 で設定ファイル (`config.toml`、ユーザー層) から読む **公�
 | `count_limit` | int | `1000000` | 一致件数カウントの打ち切り (FR-404、03 §12、OQ-55)。範囲 1000..=1000000000 (範囲外は警告して既定値)。超えたら数えるのをやめて「N+」と表示する (`max_matches` より小さくすると、保持もこの件数までになる)。設定の変更は次に検索バーを開いたときから効く | v0.1 (定数)。**v0.4 で、M24 とは別の fix の PR で公開・実装した** (それまでの実装は予約だけで、値は定数の `1000000`) |
 | `cp932_compat_fold` | bool | `true` | CP932 互換文字 (〜/～、−/－、‖/∥、¢/￠ 等) を検索で同一視する (03 §8.7、OQ-41。確定 (ユーザー回答、2026-11-11))。保存データは変えない。対象は 8 組 (03 §8.6 の互換文字の表 (OQ-208) から `¥` / `‾` の 2 行を除いたもの。`\` も含めない) で、文書の文字コードに依らない。リテラル検索と正規表現 (リテラルの文字とクラス) の両方に効き、置換の文字列には掛けない。同一視が効いているときは、検索バーの件数の後ろに印が出る。切り替えるトグル・コマンドは無い。設定の変更は次に検索バーを開いたときから効く (細目は 03 §12.4.1。v0.4 の M24 の案で、利用者に見える点は OQ-218 の 5〜8 (確定 (ユーザー回答、2026-11-12))) | v0.4 (**M24 の (5) で予約から外して公開した**) |
 | `newline_sugar` | bool | `true` | 正規表現の `\n` を改行 1 つ (LF・CRLF・単独の CR のどれか) に一致させる (03 §12.3 / §12.3.1)。要素として `\n` を書いたクラスも改行 1 つに一致させる。続けて書いた `\r\n` には掛けない。どの場合も CRLF を CR と LF に分けて一致させない。`false` では、`\n` は LF だけの改行に一致する (CRLF の改行には一致しない)。行の数に上限の無いパターン (`(?s).*`・`\n+` など) は、文書が 16 MiB (UTF-8 のバイト数。定数で、設定は無い) 以下のときだけ探す (03 §12.3.1)。検索バーを開いたときの値で効く (設定の変更は次に開いたときから) | v0.1 (定数、公開 v0.2)。v0.3 までの実装はキーを予約しただけで、糖衣も入れていない (`\n` を含むパターンは未対応)。糖衣は v0.4 の M24 で入れ、キーは **M24 の (4) で予約から外して公開した** (v0.4) |
-| `workspace.respect_gitignore` | bool | `true` | 横断検索・ファインダで、リポジトリ (`.git` のある木) の `.gitignore` と `info/exclude` を効かせる。`false` でも `workspace.exclude` (§5.9) は効く。グローバルの excludesFile はどちらでも読まない (03 §12.7.3) | v0.5 (M31 では予約のまま。既定値を定数で使う、03 §12.7.4 の段 6 の細目 (8)) |
-| `workspace.follow_symlinks` | bool | `false` | 〃。`false` では走査がシンボリックリンク (Windows のジャンクションを含む) の先へ降りず、横断検索はリンクを読まない (ファインダには候補として出す)。`true` ではリンク先のディレクトリへ降り (循環は `FileId` で防ぐ)、リンク先のファイルも探す (03 §12.7.2)。ワークスペース層の `true` は危険の分類 (ワークスペース外を読む、§12.3) | v0.5 (M31 では予約のまま。既定値を定数で使う、同上) |
-| `workspace.max_file_size` | int (bytes) | `2097152` | 横断検索対象の上限 (ディスクのファイルはバイト数、開いている文書は今の本文の UTF-8 のバイト数で比べる。超えたものは飛ばして数える、03 §12.7.5)。範囲 1024..=1073741824 (範囲外は警告して既定値)。ワークスペース層で大きくする値は準安全の分類 (§12.3) | v0.5 (M31 では予約のまま。既定値を定数で使う、03 §12.7.5 の段 7 の細目 (1)) |
+| `workspace.respect_gitignore` | bool | `true` | 横断検索・ファインダで、リポジトリ (`.git` のある木) の `.gitignore` と `info/exclude` を効かせる。`false` でも `workspace.exclude` (§5.9) は効く。グローバルの excludesFile はどちらでも読まない (03 §12.7.3) | v0.5 (M31 では予約のまま。既定値を定数で使う、03 §12.7.4 の段 6 の細目 (8))。**M33 の段 5 で公開する** (§12.6.2) |
+| `workspace.follow_symlinks` | bool | `false` | 〃。`false` では走査がシンボリックリンク (Windows のジャンクションを含む) の先へ降りず、横断検索はリンクを読まない (ファインダには候補として出す)。`true` ではリンク先のディレクトリへ降り (循環は `FileId` で防ぐ)、リンク先のファイルも探す (03 §12.7.2)。ワークスペース層の `true` は危険の分類 (ワークスペース外を読む、§12.3) | v0.5 (M31 では予約のまま。既定値を定数で使う、同上)。**M33 の段 5 で公開する** |
+| `workspace.max_file_size` | int (bytes) | `2097152` | 横断検索対象の上限 (ディスクのファイルはバイト数、開いている文書は今の本文の UTF-8 のバイト数で比べる。超えたものは飛ばして数える、03 §12.7.5)。範囲 1024..=1073741824 (範囲外は警告して既定値)。ワークスペース層で大きくする値は準安全の分類 (§12.3) | v0.5 (M31 では予約のまま。既定値を定数で使う、03 §12.7.5 の段 7 の細目 (1))。**M33 の段 5 で公開する** |
 
 ### 5.6 `[clipboard]`
 
@@ -400,14 +429,18 @@ v0.1 で設定ファイル (`config.toml`、ユーザー層) から読む **公�
 
 ### 5.8 `[[language]]` と `[language-server.<name>]`, `[formatter.<name>]` — §9 で定義。
 
+`[[language]]` は v0.5 の M33 の段 2 で読む (読む項目・誤りの扱い・ファイルは §9.6)。それまでは予約のセクション (「このバージョンでは未対応」の情報診断)。`[language-server.*]` と `[formatter.*]` は v0.5 も予約のまま (使う機能が v0.6 以降・v1.L)。
+
 ### 5.9 `[workspace]`
 
 | キー | 型 / 値 | 既定 | 説明 | P |
 |---|---|---|---|---|
-| `root_markers` | array of string | `[".eve", ".git", ".hg", ".svn"]` | ルート検出の目印 (§12.1)。要素はディレクトリの直下の項目の名前 (区切り `/` `\` を含む要素・空の要素・`.`・`..` は警告して捨てる)。空の配列なら目印で探さない (§12.1 の 1・2・4 だけ) |v0.5 |
-| `exclude` | array of string (gitignore の行) | `["**/.git", "**/node_modules", "**/target"]` | ファインダ・横断検索の除外 (gitignore に追加)。各要素はワークスペースのルートに置いた `.gitignore` の 1 行と同じ書式で読み (`/build/`・`*.log`・`!keep.log`)、`.gitignore` より優先する (`!` の要素で gitignore の除外を戻せる)。`search.workspace.respect_gitignore` に依らず効く。照合は 03 §12.7.3 |v0.5 (M31 では予約のまま。既定値を定数で使う、03 §12.7.4 の段 6 の細目 (8)) |
+| `root_markers` | array of string | `[".eve", ".git", ".hg", ".svn"]` | ルート検出の目印 (§12.1)。要素はディレクトリの直下の項目の名前 (区切り `/` `\` を含む要素・空の要素・`.`・`..` は警告して捨てる)。空の配列なら目印で探さない (§12.1 の 1・2・4 だけ)。ルートは起動時に決まるので、ワークスペース層に書いても効かない (§12.3 の「効かない」の行) |v0.5 (M31 では予約のまま。既定値を定数で使う)。**M33 の段 5 で公開する** (§12.6.2) |
+| `exclude` | array of string (gitignore の行) | `["**/.git", "**/node_modules", "**/target"]` | ファインダ・横断検索の除外 (gitignore に追加)。各要素はワークスペースのルートに置いた `.gitignore` の 1 行と同じ書式で読み (`/build/`・`*.log`・`!keep.log`)、`.gitignore` より優先する (`!` の要素で gitignore の除外を戻せる)。`search.workspace.respect_gitignore` に依らず効く。照合は 03 §12.7.3。ワークスペース層では安全 (§12.3。ワークスペース層の値も所有者の検査 (§12.1) を通ったファイルからだけ読む)。`config.reload` で即時に効く (次に開くファインダ・次の横断検索から) |v0.5 (M31 では予約のまま。既定値を定数で使う、03 §12.7.4 の段 6 の細目 (8))。**M33 の段 5 で公開する** |
 | `trust.default` | `"ask" \| "never" \| "always"` | `"ask"` | 信頼の既定挙動 (`always` は非推奨で警告) | 信頼の仕組みと一緒 (最初の危険な項目の版。§12 の「版」) |
 | `trust.remember` | bool | `true` | 信頼判断を状態ディレクトリに記憶 | 信頼の仕組みと一緒 (§12 の「版」) |
+
+**M33 の段 5 で足すキー** (M33 の仕様の PR で決めた。PO の決定 2026-11-22 (PR #619)。段 5 の PR で上の表と `crates/eve-config/src/reserved.rs` に同時に足す。表は実装の予約の一覧と照らして検査するので (eve-core の試験 `config_reserved`)、仕様の PR では表に入れない): **`workspace.safe_directories`** (型は array of string (絶対パス)、既定は `[]`)。所有者の検査 (§12.1 の OWN-1〜OWN-5) を **掛けない** ディレクトリ。ワークスペース設定 (`.eve/config.toml`・`.eve/keymap.toml`) と `.editorconfig` が、ここに書いたディレクトリか、その下にあれば、所有者・他人の書込・判定できない FS に依らず読む (exFAT のドライブ・WSL の `/mnt/c` の上のリポジトリなど、所有者を判定できない置き場所の逃げ道。git の `safe.directory` に当たる)。要素は絶対パス (`~` は展開しない。相対パス・空の要素・`*` は警告して捨てる)。比べ方は 03 §12.7.6 と同じ正規化の後の要素ごとの前方一致 (Windows は大文字小文字を区別しない)。**ユーザー層 (`config.toml`・`--config`) と `--set` だけが読む**: ワークスペース層に書いても使わず警告する (§12.3 の「常に無視」。ワークスペースが自分を検査の外に出せない)。所有者の検査を外すだけで、項目の分類 (§12.3。準安全・危険な項目の保留) は外さない。`config.reload` で即時に効く (次に読むワークスペース設定・`.editorconfig` から)。名前は M33 の仕様の PR で決め、PO の決定 2026-11-22 (PR #619)で確定した (§12.6.3)。
 
 ### 5.10 `[session]` — §16
 
@@ -578,9 +611,9 @@ v0.1 で設定ファイル (`config.toml`、ユーザー層) から読む **公�
 | 段階 | 内容 | 版 |
 |---|---|---|
 | 手動再読込 | `config.reload` コマンド。全層を再読込し、新しい `Arc<ResolvedConfig>` に差し替える | v0.2 (v0.1 は再起動で反映) |
-| 自動再読込 | `FileWatcher` Port でユーザー層・ワークスペース層のファイルを監視し、変更の通知 (Host が 100 ms 待ち合わせた後の通知。05 §12.2 の 2) を受けて再読込 | v0.5 (FR-706, Could) |
+| 自動再読込 | `FileWatcher` Port でユーザー層・ワークスペース層のファイルを監視し、変更の通知 (core が 100 ms 待ち合わせた後の通知。05 §12.2 の 2) を受けて再読込 (下の RLD-1〜RLD-5) | v0.5 (FR-706, Could。M33 の段 9) |
 
-**待ち合わせの時間** (v0.5-plan §2.4): v0.4 までの本節は 300 ms、05 §12.2 は 100 ms と書いていた。待ち合わせは、1 回の保存で届く複数のイベント (Windows の `ReadDirectoryChangesW` の複数の Modified など) を 1 つにまとめるためのもので、OS のイベントの性質で決まり、使う側 (文書の外部変更・設定の再読込) で変える理由が無い。Host の待機の期限で 1 つの値として待ち合わせる (debouncer の crate を使わない、v0.5-plan §1.2) ので、**05 §12.2 の 100 ms に揃える**。書きかけのファイルを読んで構文エラーになっても、規則 1 で前の設定を保ち、続くイベントで読み直す。
+**待ち合わせの時間** (v0.5-plan §2.4): v0.4 までの本節は 300 ms、05 §12.2 は 100 ms と書いていた。待ち合わせは、1 回の保存で届く複数のイベント (Windows の `ReadDirectoryChangesW` の複数の Modified など) を 1 つにまとめるためのもので、OS のイベントの性質で決まり、使う側 (文書の外部変更・設定の再読込) で変える理由が無い。core の期限 (`Editor::next_deadline`。Host の待機がそれを待つ) で 1 つの値として待ち合わせる (debouncer の crate を使わない、v0.5-plan §1.2。M33 の仕様の PR で、待ち合わせを Host ではなく core に置くと決めた、03 §9.5.1 の WATCH-4) ので、**05 §12.2 の 100 ms に揃える**。書きかけのファイルを読んで構文エラーになっても、規則 1 で前の設定を保ち、続くイベントで読み直す。
 
 **規則**:
 
@@ -594,6 +627,18 @@ v0.1 で設定ファイル (`config.toml`、ユーザー層) から読む **公�
 **v0.2 の M9c の実装 (案)**: `config.reload` (パレット) は、起動時と同じ読込元 (設定ディレクトリの `config.toml`、または `--config` のファイルを順に。`--no-config` なら読まない) と `keymap.toml` を io ジョブで読み、`--set` を最後に重ねる。読み (メインスレッドで I/O しない)、届いたらメインスレッドで解析する。ファイルごとに、エラー (重さ `Error` の診断 = 構文エラー・読めない) があれば前の設定のまま維持して診断と `msg.config.reload_kept` を出し、無ければ差し替える (警告の項目は起動時と同じく既定値)。項目の 3 分類は次のとおり: **再起動が必要** = `theme.color_mode` / `view.ambiguous_width` (端末の初期化で 1 回だけ使う) と `ui.locale` (起動時の選択順で決める)。**新規文書から** = `file.default_encoding` / `file.default_line_ending` (開いている文書の文字コード・改行は変えない)。**ほかはすべて即時** (表示の設定は開いている文書と View にも写す。折り返しは値が変わったときだけ写し、`view.toggle_wrap` で切り替えた状態を戻さない。`ui.mouse` が変わったら `Effect::SetMouseCapture` で端末にも伝える)。要約は `info.config.reloaded` (変わったキー) と `info.config.reload_restart` (そのうち再起動が必要なもの)。ワークスペース層・自動再読込 (下の 5) は v0.5。
 
 5. 自動再読込は **ワークスペース層の信頼状態を再評価** する。信頼済みワークスペースで危険項目 (§12.3) が **増えた** 場合は自動適用せず、再確認を求める (git pull で設定が書き換わる攻撃経路への対策)。v0.5 は信頼の仕組みを入れない (§12 の「版」) ので、再読込でも準安全・危険な項目は保留したままにする。
+
+**v0.5 の M33 で読み直すもの** (`config.reload` と自動の再読込で同じ): v0.4 までの読込元 (設定ファイル・`keymap.toml`・`--set`・テーマファイル) に加えて、ユーザー層の言語定義 (`languages/*.toml`、§9.6)、ワークスペース層 (`.eve/config.toml`・`.eve/keymap.toml`。所有者の検査を掛け直す、§12.5)、開いている文書の `.editorconfig` (§10.3。文書のディレクトリごとに読み直す) を、どれも `io` のジョブで読む。条件付きセクションの条件の値は起動時のまま (§3.4 の COND-2)。ワークスペースのルートは替えない (起動時に決まる、§12.1)。読み直した後、開いている全文書の文書ごとのキー (§3.6) を決め直す。言語の判定はやり直さない (「新規文書から」。開いている文書の言語を今の定義で判定し直すには `lang.set` で `auto` を選ぶ、§9.6 の LANG-8)。
+
+**自動の再読込 (FR-706。v0.5 の M33 の段 9。Could)**:
+
+| ID | 規則 |
+|---|---|
+| RLD-1 | **見るファイル**: ユーザー層の `config.toml`・`keymap.toml`・使っているテーマファイル (`themes/<theme.name>.toml`)・`languages/*.toml`、`--config` で渡したファイル、ワークスペース層の `.eve/config.toml`・`.eve/keymap.toml`。それらを置いたディレクトリ (`<config_dir>`・`<config_dir>/themes`・`<config_dir>/languages`・`--config` のファイルの親・`<root>/.eve`) を、文書の監視 (03 §9.5.1) と同じ仕組みで非再帰に監視する。起動時に無かったディレクトリは監視しない (後で作ったときは `config.reload` で反映する)。`.editorconfig` と言語ファイル (`locales/`) は見ない (`.editorconfig` は祖先のディレクトリにもあり、全部を監視しない。言語ファイルは起動時にだけ読む、§17.4) |
+| RLD-2 | **契機**: 見るファイルの名前の変更の知らせ (作成・変更・削除・改名) を、文書の監視と同じ待ち合わせ (100 ms。最初の知らせから最長 1 s、03 §9.5.1 の WATCH-4) でまとめ、`config.reload` と同じ手順で読み直す。**自分の保存を抑えない** (evoeditor で `config.toml` を編集して保存したら、それで読み直す。文書の監視とは逆。v0.5-plan §2.4)。内容が前と同じ (変わったキーが無い) ときは何も知らせない。変わったら手動のときと同じ要約 (`info.config.reloaded` / `info.config.reload_restart`) を出す |
+| RLD-3 | **誤り**: 待ち合わせの後、読む前と読んだ後にファイルの大きさと mtime を確かめ、変わっていたら読んだ内容を捨てて次の知らせを待つ (同期ソフト・遅い書き手が行の境目まで書いた、構文として正しい途中の内容を読まない)。自動の再読込では、Undo の履歴を減らす向きの値の変化 (`editor.undo.total_max_bytes` を小さくする) を効かせない (手動の `config.reload` でだけ効く。書きかけの内容で履歴を取り戻せない形に破棄しない)。書きかけのファイルを読んで構文エラーになったら、上の規則 1 のとおり前の設定を保って診断を出し、続く知らせで読み直す。診断の要約 (`msg.config.reload_kept`) は、同じファイルの同じ内容について 1 回だけ出す (保存のたびに同じ誤りを繰り返し知らせない) |
+| RLD-4 | **止める・縮退**: `file.watch.enabled = false` (読み直した値で判断する) では自動の再読込もしない (`file.reload_on_external_change` は文書の外部変更の扱いで、設定ファイルの自動の再読込には効かない)。監視できない FS (03 §9.5.1 の WATCH-2) の上の設定のディレクトリは見ず、知らせは文書の監視と同じく 1 回だけ。`--no-config` では見ない。`--no-workspace-config` ではワークスペース層を見ない |
+| RLD-5 | **ワークスペース層の項目**: 読み直しでも §12.3 の分類と §12.5 の手順をそのまま掛ける (保留した項目は保留のまま。信頼の仕組みは v0.5 に無いので、上の規則 5 の「再確認」は起きない) |
 
 ---
 
@@ -696,7 +741,7 @@ literal:= '"' ... '"' | number | true | false
 | `panel.focus` | string | フォーカス中パネル名 (v0.5+) |
 | `pane.split` | bool | Window のペインが 2 つ以上 (v0.5、FR-509。03 §9.9)。`pane.close`・ペインの移動・大きさのコマンドの `when` (§11.6)。偽のときのパレットの理由は `ui.palette.reason.single_pane` |
 | `doc.read_only` | bool | 読み取り専用 |
-| `doc.language` | string | 言語名 (`"rust"`, `"plain"`) |
+| `doc.language` | string | 言語名 (`"rust"`, `"plain"`)。v0.5 の M33 の段 2 で実装する (言語の ID、§9.6。言語を決めていない文書 (読込中) は `""`) |
 | `doc.modified` | bool | 未保存変更あり |
 | `doc.large` | bool | 巨大ファイル縮退中 (FR-123) |
 | `selection.empty` | bool | 選択が空 (v0.5 の M32 から: **全 Range が空** のとき真。Range が 1 つなら v0.4 までの「主選択が空」と同じ。03 §4.5.5) |
@@ -705,8 +750,8 @@ literal:= '"' ... '"' | number | true | false
 | `cursor.at_line_start` / `cursor.at_line_end` | bool | — |
 | `keymap.mode` | string | モード名 (`"normal"`, `"insert"` 等。Vim 層用。既定 `""`) |
 | `view.wrapped` | bool | 折り返し中 (設定キー `view.wrap` (§5.3、`off` / `soft` / `word`) が `off` 以外のとき真。設定キーとは別の名前空間だが、混同を避けて別名にする) |
-| `frontend` | string | `"tui"` |
-| `os` | string | `"windows"` / `"macos"` / `"linux"` |
+| `frontend` | string | `"tui"`。v0.5 の M33 の段 1 で実装する (§3.4 の COND-6) |
+| `os` | string | `"windows"` / `"macos"` / `"linux"` (実行ファイルの対象 OS。`unix` の値は無い。macOS と Linux の両方に効かせるときは `os != "windows"`)。v0.5 の M33 の段 1 で実装する (§3.4 の COND-6。キーマップで OS ごとに割当を変える手段) |
 | `caps.<field>` | bool / string | 02 §7.1 `Capabilities` の各フィールド (`caps.can_suspend`、`caps.enhanced_keys`、`caps.mouse` 等)。`app.suspend` の when 等に使う |
 | `doc.has_path` / `doc.read_only_releasable` | bool | パス付き文書か / 読み取り専用の理由が解除可能か (03 §9.6。解除のコマンドは v0.2 なので、v0.1 では常に false。v0.2 は理由がすべて `FileAttribute` / `UserRequested` のとき。v0.4 の M23 は加えて `InvalidBytes` (`pua_escape == Enabled` の文書だけ。私用文字と衝突した文書は除く) も解除できる、03 §8.3.1) |
 | `search.active` | bool | 検索バーが開いている |
@@ -725,6 +770,14 @@ literal:= '"' ... '"' | number | true | false
 解決順 (上が優先、02 §7.2 K5): **オーバーレイ固有の組込み** > `keymap.mode` のモード層 (v0.5+) > **ワークスペース層** `[keys.<コンテキスト>]` > ユーザー層 `[keys.<現在のコンテキスト>]` > ユーザー層 `[keys.global]` > 既定層 (`keys.preset`) の同順。
 
 **ワークスペース層のキーマップは「追加のみ」** (02 §7.2 K5、OQ-35。確定 (ユーザー回答、2026-11-20)): ユーザー層・既定層のいずれかで既に割当のあるキーをワークスペース層が定義した場合は、**信頼の前後を問わず無視して情報診断** を出す (`Ctrl+S` を別コマンドに付け替える、印字キーを奪う等の誤誘導を防ぐ。ワークスペースを信頼しても既存割当の上書き・`"none"` による解除はできない)。未割当キーへの追加は信頼前でも適用する (安全な項目、§12.3)。ただし `exec` 権限のコマンド (外部コマンド実行) への追加の割当は信頼後のみ。脱出キー (`app.quit` / `ui.palette_open` / `ui.cancel`) へ割り当てたキーは既存割当なので、ワークスペース層からは変えられない。
+
+**v0.5 の M33 で決めた細目** (段 5。FR-705 AC-1):
+
+| ID | 規則 |
+|---|---|
+| WKEY-1 | **置き場所**: ワークスペース層の割当は `<root>/.eve/keymap.toml` の `[keys.<コンテキスト>]` だけを読む (ユーザー層の入口を `keymap.toml` にした決定 (§3.2、PO の決定 2026-11-21) に揃える)。`.eve/config.toml` の `[keys]` / `[keys.*]` は、ユーザー層の `config.toml` と同じく「このバージョンでは未対応」の情報診断。所有者の検査 (§12.1) と、ほかの規則 (コマンド名・`when`・`args` の検証、§7.6) はユーザー層と同じ |
+| WKEY-2 | **使わない割当** (どれも割当ごとに `msg.workspace.key_rejected` (情報。理由の語 `{reason}` を添える) を出し、同じファイルのほかの割当は使う): (a) 下の層 (ユーザー層・既定層) で、そのキーを参照するどれかのフォーカス (§7.1 の参照順) に割当があるキー (上書き・`"none"` での解除はできない) (b) チョードで、先頭からの途中までの列 (`ctrl+s x` の `ctrl+s`) が下の層の割当のキーになっているもの (02 §7.2 K3 によって、下の層の単体の割当を無効にしてしまうため) と、下の層のチョードの先頭の列になっているキー (`ctrl+k` 単体。K3 で負けて効かない) (c) 修飾なしの印字可能キー・`shift` だけの印字可能キー・`space`・`enter`・`tab`・`backspace`・`delete`・`esc` を先頭のストロークにする割当 (文字入力と、取消し・確定の操作を奪わない) (d) `args` を持つ割当 (引数にパスや文字列を持たせて、知らないキーで別のファイルへ書く・開く操作を作らせない。引数を持たないコマンドだけに付けられる) (e) `"none"` の割当 (f) `perm` が `exec` のコマンド (v0.5 には無い。信頼の仕組みと一緒に扱う) (g) 許可リストの外のコマンド: ワークスペース層から付けられるのは、kind が Motion か Ui のコマンドと、kind が Edit のコマンド (本文を変えるだけで、Undo で戻せる) だけ。kind が File のコマンド (`file.save_all`・`file.toggle_read_only`・`file.reload` など、書く・読み直す・守りを外すもの) と `app.*` (`app.save_and_quit`・`app.quit_with_error` など) は付けられない (Unix の ESC 前置の Alt などで知らないキーを押して、全文書を保存して終わる・コミットを確定させる経路を作らせない) |
+| WKEY-3 | **費用と表示**: キーの一覧 (`help.keys`) では、ワークスペース層の割当の由来を `workspace` と示す。`--dump-keymap` は起動時にワークスペースのルートを決めないので、ワークスペース層を含めず、出力の形 (JSON の `layer` の値を含む) は v0.4 のまま。割当は 1 ファイル 1,000 件まで (超えた分は読まずに 1 件の警告) |
 
 同じ層・同じコンテキストに同じキーが **別の定義行として** 複数回現れた場合は後勝ちで情報診断 (配列値は先頭から `when` が真の最初。K4)。`"none"` は下位層の割当を **その層で遮蔽** する (さらに上位層で再割当可)。
 
@@ -1100,7 +1153,7 @@ tree-sitter のハイライトクエリ (`@keyword.control` 等) のキャプチ
 
 ### 9.1 言語定義の書式
 
-組込み定義 (バイナリ内 TOML、`evoeditor --dump-languages` で出力可) をユーザー層・ワークスペース層が `name` キーで併合する (§3.3)。
+組込み定義 (バイナリ内 TOML、`evoeditor --dump-languages` で出力可) をユーザー層・ワークスペース層が `name` キーで併合する (§3.3)。**v0.5 の M33 で読む項目・組込みの持ち方・ファイル・誤りの扱いは §9.6** (下の例の項目のうち v0.5 で効くのは判定の項目と `indent`・`comment.line` だけで、ほかは「このバージョンでは未対応」の情報診断。組込みの定義は TOML ではなく静的な表で持つ)。
 
 ```toml
 [[language]]
@@ -1110,7 +1163,7 @@ file_types      = ["rs"]                         # 拡張子 (ドットなし)
 file_names      = []                             # 完全一致ファイル名 (例 "Makefile", "Dockerfile")
 file_globs      = []                             # glob (例 "*.d.ts", ".github/**/*.yml")
 first_line      = ""                             # 先頭行の正規表現 (shebang 等。例 "^#!.*\\b(ba|z)?sh\\b")
-indent          = { unit = "space", width = 4 }  # editor.* を上書き
+indent          = { unit = "space", width = 4 }  # editor.* を上書き (v0.5 の M33 で tab_width も書ける、§9.6)
 comment         = { line = "//", block = ["/*", "*/"] }
 auto_pairs      = { "(" = ")", "[" = "]", "{" = "}", '"' = '"' }
 word_separators = ""                             # 空なら editor.word_separators
@@ -1137,28 +1190,30 @@ max_line_length  = 100                           # ruler に反映 (EditorConfig
 3. `first_line` (shebang 等)。ファイル先頭 1 KB にのみ適用
 4. 一致なし → `plain` (プレーンテキスト。ハイライトなし)
 
+照らし方の細目 (大文字小文字・glob の基準・判定の時期) は §9.6 の LANG-5〜LANG-7 (v0.5 の M33)。
+
 **モードライン (`# vim: ft=python`, `-*- mode: python -*-`) は読まない** (v0.1/v0.4)。言語名だけなら無害に見えるが「ファイル内容が設定を変える」経路を 1 つも作らない原則 (NFR-502) を優先する。「ファイルタイプ名のみ、許可リスト内」に限った対応は未決 (§20 OQ-96)。巨大ファイル (FR-123) では言語判定は行うが文法・LSP は起動しない (`doc.large`)。
 
 ### 9.3 初期対応言語 (FR-802 の確定)
 
-| 言語 ID | 拡張子 / 名前 (抜粋) | 文法同梱 (v0.6) | LSP 既定 (v1.L、定義のみ同梱。実行は信頼後) |
-|---|---|---|---|
-| `plain` | 既定 | — | — |
-| `rust` | rs | 静的 | rust-analyzer |
-| `markdown` | md, markdown | 静的 (+ inline) | — |
-| `toml` | toml, Cargo.lock | 静的 | taplo (任意) |
-| `json` | json, jsonc, json5 (別 ID `jsonc`) | 静的 | — |
-| `yaml` | yml, yaml | 静的 | yaml-language-server (任意) |
-| `python` | py, pyi; shebang python | 静的 | pyright / pylsp (任意) |
-| `javascript` / `typescript` / `tsx` / `jsx` | js, mjs, cjs / ts, mts / tsx / jsx | 静的 (typescript は大きい → OQ-22) | typescript-language-server |
-| `c` / `cpp` | c, h / cc, cpp, cxx, hpp, hh | 静的 | clangd |
-| `go` | go | 静的 | gopls |
-| `bash` | sh, bash, zsh (別 ID `zsh` は bash 文法で代替); shebang | 静的 | bash-language-server (任意) |
-| `html` / `css` | html, htm / css | 静的 (v0.6 Should) | — |
-| `diff` / `gitcommit` / `gitrebase` | patch, diff / COMMIT_EDITMSG / git-rebase-todo | 静的 (小) | — |
-| `ini` / `dockerfile` / `make` | ini, cfg, .editorconfig / Dockerfile / Makefile | 静的 (小) | — |
+| 言語 ID | 拡張子 / 名前 (抜粋) | 文法同梱 (v0.6) | LSP 既定 (v1.L、定義のみ同梱。実行は信頼後) | 行コメント (v0.5 の M33、`comment.line`) | 字下げ (v0.5 の M33、`indent.unit`。— は持たない) |
+|---|---|---|---|---|---|
+| `plain` | 既定 | — | — | — | — |
+| `rust` | rs | 静的 | rust-analyzer | `//` | — |
+| `markdown` | md, markdown | 静的 (+ inline) | — | — | — |
+| `toml` | toml, Cargo.lock | 静的 | taplo (任意) | `#` | — |
+| `json` | json, jsonc, json5 (別 ID `jsonc`) | 静的 | — | — / `//` (`jsonc`) | — |
+| `yaml` | yml, yaml | 静的 | yaml-language-server (任意) | `#` | — |
+| `python` | py, pyi; shebang python | 静的 | pyright / pylsp (任意) | `#` | — |
+| `javascript` / `typescript` / `tsx` / `jsx` | js, mjs, cjs / ts, mts / tsx / jsx | 静的 (typescript は大きい → OQ-22) | typescript-language-server | `//` | — |
+| `c` / `cpp` | c, h / cc, cpp, cxx, hpp, hh | 静的 | clangd | `//` | — |
+| `go` | go | 静的 | gopls | `//` | `tab` (gofmt) |
+| `bash` | sh, bash, zsh (別 ID `zsh` は bash 文法で代替); shebang | 静的 | bash-language-server (任意) | `#` | — |
+| `html` / `css` | html, htm / css | 静的 (v0.6 Should) | — | — | — |
+| `diff` / `gitcommit` / `gitrebase` | patch, diff / COMMIT_EDITMSG / git-rebase-todo | 静的 (小) | — | — / `#` / `#` | — |
+| `ini` / `dockerfile` / `make` | ini, cfg, .editorconfig / Dockerfile / Makefile | 静的 (小) | — | `;` / `#` / `#` | — / — / `tab` (make のレシピ) |
 
-`gitcommit` / `gitrebase` / `diff` は `$GIT_EDITOR` 利用 (U1、§18.6) のための追加。合計 20 文法前後で NFR-205 (v0.6 30 MB) に収まるかは [OQ-22](10-decisions.md#oq-22-tree-sitter-文法の同梱方式) と v0.6 の計測で判断し、超える場合は `typescript` / `cpp` を外部ロード候補にする。
+v0.5 の M33 の組込みの言語定義の正本 (1 行 1 言語・判定の項目の全部) は §9.6.1 で、この表はその要約。`gitcommit` / `gitrebase` / `diff` は `$GIT_EDITOR` 利用 (U1、§18.6) のための追加。合計 20 文法前後で NFR-205 (v0.6 30 MB) に収まるかは [OQ-22](10-decisions.md#oq-22-tree-sitter-文法の同梱方式) と v0.6 の計測で判断し、超える場合は `typescript` / `cpp` を外部ロード候補にする。
 
 ### 9.4 言語サーバ定義 (書式。意味・プロトコルは eve-lsp)
 
@@ -1188,36 +1243,104 @@ timeout_ms = 5000
 
 実行は `ProcessRunner` Port ([02 §4.4](02-architecture.md#44-ports-core-が定義し外側が実装する-trait)) 経由で、FR-709 どおり **実行前にユーザー確認** (ワークスペースごと・コマンドごとに「今後確認しない」を選べる。信頼済みワークスペースではこの選択を記憶)。確認文言には §9.4 と同じ「プロジェクト内のコードを実行する可能性」の注意と、解決済みの絶対パスを含める。**`format_on_save = true` は未信頼ワークスペースでは無効** (: ワークスペース層の `[[language]]` は安全項目だが、保存のたびにユーザー定義フォーマッタを起動する組合せは信頼後のみ。未信頼時は情報診断)。結果は差分 (ChangeSet) に変換し `Transaction(Origin::Command("lang.format"))` として 1 Undo 単位で適用。終了コード非 0 または標準出力が空の場合は適用しない (フォーマッタ失敗で文書を空にしない、v0.1)。
 
+### 9.6 言語定義の仕組み (v0.5 の M33。FR-704)
+
+v0.5 の M33 の段 2 (§12.6.2) で入れる。受入基準は 01 §5.5 の FR-704。言語の判定と、言語ごとの字下げ (§3.6 の文書ごとのキー) と、行コメントの記号 (FR-209、03 §15.6) に使う。構文の色付け (v0.6)・LSP (v1.L)・フォーマッタ (v0.6 以降) の項目は書式だけで、v0.5 では使わない。
+
+| ID | 規則 |
+|---|---|
+| LANG-1 | **組込みの定義**: eve-config の静的な表 (Rust の定数の配列) で持ち、起動時に TOML を解析しない (BM-102a と同じ理由)。中身は下の §9.6.1 の表 (1 行 1 言語) が正本で (§9.3 はその要約)、表との一致は eve-core の試験が `eve-docs-tables` で §9.6.1 を読んで確かめる (`config_reserved` と同じ形。eve-config は `eve-docs-tables` に依存しないので eve-core に置く)。どの 2 つの組込みの言語も、同じ `file_names`・`file_types` を持たない (試験で確かめる)。`--dump-languages` (§18.3) は、組込みの表にユーザー層の定義を重ねた結果を `[[language]]` の TOML で出す (`--no-config` なら組込みだけ。ワークスペース層は含めない) |
+| LANG-2 | **読むファイル** (シンボリックリンクの `languages/*.toml` も読む。ユーザー層は所有者の検査を掛けない信頼した層なので、OWN-6 の「辿らない」は掛けない): ユーザー層は `config.toml` (と `--config` のファイル) の `[[language]]` と `<config_dir>/languages/*.toml` (名前の順。1 つのファイルに `[[language]]` を幾つ書いてもよく、ファイル名と言語の名前は結び付けない。拡張子が `.toml` でないもの・ディレクトリは読まない。256 ファイル・1 ファイル 256 KiB まで。超えた分は読まずに 1 件の警告)。ワークスペース層は `.eve/config.toml` の `[[language]]` だけ (§12.5)。`.eve/languages/` は v0.5 では読まない (ディレクトリがあれば「このバージョンでは未対応」の情報診断を 1 件)。`languages/` は起動時に `io` のジョブ (`ReadLanguages`、02 §9.3) で読み、起動時のパスを開くジョブより前に積む (`io` は直列なので、起動時の文書は定義が届いた後に開き終わる)。`config.reload` でも読み直す (§6)。v0.4 までの §3.2 の「起動時は索引 (拡張子表) のみ、本体は該当言語の文書を開いたとき (遅延)」は採らない (索引を作るにも各ファイルを読んで解析する必要があり、遅延で減る費用が無い)。`--check-config` は `languages/*.toml` と `config.toml` の `[[language]]` も検査し、診断をファイル名・行で出す (FR-704 AC-2) |
+| LANG-3 | **v0.5 で効く項目**: `name` (必須。`[a-z][a-z0-9_+-]*` で 32 バイトまで。`plain` は定義できない (判定の行き先なので)。違反はその定義を使わずに警告)、`display_name` (64 文字まで。無ければ `name`)、`file_types` (拡張子。先頭の `.` は書かない。`d.ts` のように `.` を含んでよい)・`file_names` (ファイル名そのもの)・`file_globs` (§10.3 の EC-4 の glob)・`first_line` (正規表現。256 バイトまで。`regex` crate で、大きさの上限を付けて組む。組めなければその項目を使わずに警告)。配列はそれぞれ 64 要素・1 要素 256 バイトまで。`indent = { unit = "tab" | "space", width = 1..16, tab_width = 1..16 }` (どれも省ける。省いたものは §3.6 の下の段の値。`tab_width` は v0.4 までの §9.1 の書式に無く、M33 で足した (Makefile のタブの表示の幅を言語ごとに変えられるように))。`comment = { line = "<記号>" }` (`line` は 1〜16 バイトで、空白・制御文字を含まない。違反は項目を使わずに警告)。組込みの定義の `indent` は、形式が字下げを決めている言語 (`go`・`make` の `tab`) だけが持つ (§3.6 の LAYER-2) |
+| LANG-4 | **v0.5 で効かない項目**: `comment.block`・`auto_pairs` (FR-210、M34)・`word_separators`・`grammar`・`highlight_query` (v0.6)・`language_servers`・`roots` (v1.L)・`formatter`・`format_on_save` (v0.6 以降)・`max_line_length` (`view.rulers` と一緒) は、書いても起動を妨げず、項目ごとに「このバージョンでは未対応」の情報診断 (§4.3。件数に数えない) にして使わない (FR-704 AC-2)。表に無いキーは未知のキーの警告 (綴りの候補を出す)。値の型・範囲の誤りはその項目だけを使わずに警告し、下の層の値を使う (FR-703) |
+| LANG-5 | **併合**: 同じ `name` の定義は、層の順 (組込み → ユーザー層 (`config.toml` → `--config` → `languages/*.toml` の名前の順) → ワークスペース層) に項目ごとに重ねる (§3.3。配列は置換で、`file_types+ = ["foo"]` は追加)。ユーザー層の `name = "rust"` は組込みの `rust` の `indent` だけを替えられる |
+| LANG-6 | **照らし方**: (a) `file_names` はファイル名全体、`file_types` はファイル名の末尾の `.<型>` (`.` で始まる名前の先頭の `.` は拡張子の区切りに数えない。`.bashrc` は `file_names` で当てる) と比べ、どちらも **ASCII の大文字小文字を区別しない** (Windows の `MAIN.RS` と Linux の `Makefile` / `makefile` を同じに扱う。誤っても字下げとコメントの記号が違うだけ)。複数の `file_types` が当たれば長いほう (`d.ts` が `ts` に勝つ)。(b) `file_globs` は、`/` を含む glob はワークスペースのルートからの相対パス (区切りは `/`。ルートの外のファイルには当てない) に、含まない glob はファイル名に当て、ASCII の大文字小文字を区別しない。(c) `first_line` は、文書の本文の最初の行 (先頭から 1 KiB までの、最初の改行の前) に当てる。(d) §9.2 の各段で、より強い層の定義が勝ち、同じ層で 2 つ以上が当たれば後の定義が勝って警告 (`msg.language.ambiguous`。同じ組について 1 回) を出す |
+| LANG-7 | **判定の時期**: 開く (読込の完了。標準入力の文書は名前が無いので `first_line` だけ)・名前を付けて保存でパスが変わったとき (明示の指定が無ければ判定し直す)・`lang.set` で `auto` を選んだとき。再読込 (`file.reload`・外部変更の再読込) と `config.reload` では判定し直さない (§6 の「新規文書から」)。ただし **ワークスペース層が起動の後に届いたとき** (§12.5 の WSC-3) は、明示の指定の無い文書の言語を判定し直す (ワークスペース層の `[[language]]` と、ルートからの相対パスの `file_globs` が、起動時に開いた文書にも効くように。起動時に開いた文書と後で開いた文書で言語が変わらない)。無題の文書は `plain`。判定は主スレッドで行う (定義の数 × 名前の比較と、最初の 1 KiB への正規表現。組んだ正規表現と glob は定義を読んだときに 1 回だけ作る)。開くジョブの結果が定義 (`ReadLanguages`) より先に届いたとき (LANG-2 の順なので起きない想定) は、定義が届いたときに判定し直す |
+| LANG-8 | **`lang.set`** (ID は §11.6 の M33 の表): 引数 `language` (列挙。定義のある言語 ID と `auto`。パレットでは一覧で尋ね、`display_name` と ID を並べ、今の言語に印を付ける。先頭は `auto` (「自動で判定」)) で、フォーカスの文書の言語を明示して替える。明示の指定は文書を閉じるまで保つ (名前を付けて保存でも保つ。ディスクには書かない)。`auto` は明示の指定を外し、今の定義で判定し直す (07 §6 の v0.4 までの `lang.redetect` の役目。`lang.redetect` は予約のまま)。替えたら文書ごとのキーを決め直し (§3.6 の LAYER-3)、`info.lang.changed` (`{language}`) を出す。読み取り専用の文書でも使える (本文を変えない)。Undo の履歴に残らない |
+| LANG-9 | **見せ方**: `when` の `doc.language` (§7.3) に言語 ID を入れる。ステータスバーに言語を出さない (v0.5。04 §8.7 の項目と幅の割り振り、全画面のゴールデンを変えない。今の言語は `lang.set` の一覧の印と `config.show` の見出しで分かる) |
+
+#### 9.6.1 組込みの言語定義の表 (v0.5 の M33。LANG-1 の正本)
+
+1 行 1 言語。各列の値はバッククォートで囲み、`, ` で区切る (段 2 の試験が `eve-docs-tables` で読む)。`—` は無い。`display_name` は ID の表示の名前 (§9.3 の表の名前)。`first_line` は §9.6 の LANG-3 の正規表現。§9.3 の表はこの表の要約で、食い違ったらこの表を正とする。
+
+| ID | display_name | file_types | file_names | first_line | comment.line | indent.unit |
+|---|---|---|---|---|---|---|
+| `rust` | `Rust` | `rs` | — | — | `//` | — |
+| `markdown` | `Markdown` | `md`, `markdown` | — | — | — | — |
+| `toml` | `TOML` | `toml` | `Cargo.lock` | — | `#` | — |
+| `json` | `JSON` | `json` | — | — | — | — |
+| `jsonc` | `JSON with Comments` | `jsonc`, `json5` | — | — | `//` | — |
+| `yaml` | `YAML` | `yml`, `yaml` | — | — | `#` | — |
+| `python` | `Python` | `py`, `pyi` | — | `^#!.*\bpython[0-9.]*\b` | `#` | — |
+| `javascript` | `JavaScript` | `js`, `mjs`, `cjs` | — | `^#!.*\bnode\b` | `//` | — |
+| `typescript` | `TypeScript` | `ts`, `mts`, `cts` | — | — | `//` | — |
+| `tsx` | `TSX` | `tsx` | — | — | `//` | — |
+| `jsx` | `JSX` | `jsx` | — | — | `//` | — |
+| `c` | `C` | `c`, `h` | — | — | `//` | — |
+| `cpp` | `C++` | `cc`, `cpp`, `cxx`, `hpp`, `hh`, `hxx` | — | — | `//` | — |
+| `go` | `Go` | `go` | — | — | `//` | `tab` |
+| `bash` | `Bash` | `sh`, `bash` | `.bashrc`, `.bash_profile`, `.profile` | `^#!.*\b(ba)?sh\b` | `#` | — |
+| `zsh` | `Zsh` | `zsh` | `.zshrc`, `.zprofile` | `^#!.*\bzsh\b` | `#` | — |
+| `html` | `HTML` | `html`, `htm` | — | — | — | — |
+| `css` | `CSS` | `css` | — | — | — | — |
+| `diff` | `Diff` | `diff`, `patch` | — | — | — | — |
+| `gitcommit` | `Git Commit` | — | `COMMIT_EDITMSG`, `MERGE_MSG`, `TAG_EDITMSG` | — | `#` | — |
+| `gitrebase` | `Git Rebase` | — | `git-rebase-todo` | — | `#` | — |
+| `ini` | `INI` | `ini`, `cfg` | `.editorconfig`, `.gitconfig` | — | `;` | — |
+| `dockerfile` | `Dockerfile` | `dockerfile` | `Dockerfile`, `Containerfile` | — | `#` | — |
+| `make` | `Makefile` | `mk`, `mak` | `Makefile`, `GNUmakefile` | — | `#` | `tab` |
+
+- `plain` は表に置かない (判定の行き先。定義できない、LANG-3)。`file_names` は ASCII の大文字小文字を区別しない (LANG-6) ので、`makefile` も `make` に当たる。`.editorconfig` は §10 の読み方とは別に、編集するときの言語として `ini` になる。
+- どの 2 つの行も同じ `file_types`・`file_names` を持たない (試験で確かめる)。`h` は `c` にだけ置く (C++ のヘッダを `.h` で書くプロジェクトは、ユーザー層・ワークスペース層の `[[language]]` で替える)。
+
 ---
 
 ## 10. EditorConfig 対応
 
 ### 10.1 対応範囲 (FR-705、v0.5)
 
+v0.5 の M33 の段 6 (§12.6.2) で入れる。値の読み方は EditorConfig の仕様 (editorconfig.org の Specification) に揃え、下の表と §10.3 の EC-1〜EC-8 に書いた細目を正とする。
+
 | プロパティ | 対応 | 写像先 |
 |---|---|---|
 | `indent_style` | ○ | `editor.indent_unit` (`tab` → `"tab"`, `space` → `"space"`) |
-| `indent_size` | ○ (`tab` は tab_width に従う) | `editor.indent_width` |
-| `tab_width` | ○ | `editor.tab_width` |
-| `end_of_line` | ○ (**新規ファイルのみ**) | `file.default_line_ending`。既存ファイルの改行コードは判定値を維持 (FR-113、P1 原則) |
-| `charset` | ○ (**新規ファイルのみ**) | `file.default_encoding`。`utf-8-bom` は BOM 付き。写像できる値は `file.default_encoding` の許容値 (§5.2) だけで、それ以外 (`latin1` 等) は写像せず情報診断 (v0.4 で許容値が広がればその分だけ増える)。既存ファイルは判定値を維持し、不一致なら情報メッセージ |
+| `indent_size` | ○ (整数 1〜16、または `tab`。`tab` は `tab_width` (無ければ下の段の `editor.tab_width`) の値を幅にする) | `editor.indent_width` |
+| `tab_width` | ○ (整数 1〜16。書いていなくて `indent_size` が整数なら、仕様どおり `indent_size` の値を `tab_width` にも使う) | `editor.tab_width` |
+| `end_of_line` | ○ (**新規ファイルのみ**。`lf` / `crlf` / `cr`) | `file.default_line_ending`。既存ファイルの改行コードは判定値を維持 (FR-113、P1 原則)。新しいファイルの文書にだけ効く時期は §3.6 の LAYER-4 |
+| `charset` | ○ (**新規ファイルのみ**) | `file.default_encoding`。`utf-8` / `utf-8-bom` (BOM 付き) / `utf-16le` / `utf-16be` を写す。`latin1` (と仕様に無い値) は写像せず「この値には対応していません」の情報診断 (`msg.editorconfig.charset_unmapped`。`file.default_encoding` の許容値が広がればその分だけ増える)。既存ファイルは判定値を維持する (違っても知らせない。v0.4 までの本表の「不一致なら情報メッセージ」は、開くたびに出て煩わしいので採らない) |
 | `trim_trailing_whitespace` | ○ (FR-216 と一緒に入れる。それまでは写像せず「このバージョンでは未対応」の情報診断。v0.5-plan WS-23) | `editor.trim_trailing_whitespace_on_save` |
 | `insert_final_newline` | ○ (同上) | `editor.insert_final_newline_on_save` |
-| `max_line_length` | ○ | `view.rulers` に追加 (`off` で無し) |
-| `root` | ○ | 探索停止 |
+| `max_line_length` | v0.5 では写像せず「このバージョンでは未対応」の情報診断 (写像先の `view.rulers` (§5.3) が v0.5 で公開・実装されないため。M33 の仕様の PR で決めた) | `view.rulers` に追加 (`off` で無し)。`view.rulers` を入れる版で写す |
+| `root` | ○ (ファイルの先頭 (最初のセクションの前) に書いたときだけ。値は `true` / `false`、大文字小文字を区別しない) | 探索停止 |
 | その他 (`spelling_language` 等) / ドメイン固有 (`ij_*`, `csharp_*`) | 無視 (診断なし) | — |
+
+- どのプロパティも値 `unset` は、そのプロパティをそれまでに重ねた `.editorconfig` の値から取り消す (§3.6 の下の段の値に戻す。仕様どおり)。値は大文字小文字を区別しない (`TAB` も `tab`)。範囲の外・知らない値 (`indent_size = 0`・`end_of_line = lfcr`) はその値だけを使わずに警告する (`msg.editorconfig.invalid_value`)。
 
 ### 10.2 優先順位
 
-同じ意味の値について: **組込み/ユーザー層の `[[language]]` と `[editor]`** < **`.editorconfig`** < **ワークスペース層 `.eve/config.toml` の `[[language]]`** < コマンドライン < セッション。理由: `.editorconfig` は「プロジェクトの意図」でありユーザー既定より強いが、同じプロジェクトの evoeditor 専用設定はさらに具体的。
+同じ意味の値について: **組込み/ユーザー層の `[[language]]` と `[editor]`** < **`.editorconfig`** < **ワークスペース層 `.eve/config.toml` の `[[language]]`** < コマンドライン < セッション。理由: `.editorconfig` は「プロジェクトの意図」でありユーザー既定より強いが、同じプロジェクトの evoeditor 専用設定はさらに具体的。v0.5 の M33 で、ワークスペース層の `[editor]` (一般の値) の位置と、利用者の範囲の中の `[[language]]` と `[editor]` の順を決めた (全体の順は §3.6 の LAYER-1。`.editorconfig` はワークスペース層の一般の値にも負ける)。
 
 ### 10.3 実装方針
 
 - 探索: 文書のディレクトリから上位へ `.editorconfig` を集め (`root = true` または FS ルートで停止)、ファイルパスに対するセクション glob を評価。ファイル収集は bin/platform、解釈は `eve-config` (INI 風パーサ + EditorConfig glob)。
-- **安全な設定項目のみ** を含むため、ワークスペースの信頼を要しない (NFR-502 の「安全な項目」の代表例)。
+- **安全な設定項目のみ** を含むため、ワークスペースの信頼を要しない (NFR-502 の「安全な項目」の代表例)。ただし所有者の検査 (§12.1) は掛ける。
 - 依存: **自前で実装する (依存 0)** (OQ-95。確定 (推奨案、2026-11-20)、v0.5-plan §1.1)。`.editorconfig` の glob (`{a,b}`, `[!x]`, `**`, 数値範囲 `{1..5}`) は gitignore 構文と異なるが、glob の照合の部品はワークスペースの gitignore の照合 (03 §12.7、06 X10) と共通にする。v0.4 までの本節が候補に挙げた crate (`editorconfig-rs`) は採らない (C の実装への束縛の可能性がある。未確認)。
-- 文書を開くたびに評価する (キャッシュはディレクトリ単位、`FileWatcher` で無効化)。祖先探索はジョブで非同期に行う。ホットリロードの分類は「新規文書から」。
-- `.editorconfig` の glob 評価は非信頼データのパースなので fuzz の対象にする (09)。
+- 祖先探索はジョブで非同期に行う。ホットリロードの分類は「新規文書から」。v0.4 までの本節の「キャッシュはディレクトリ単位、`FileWatcher` で無効化」は採らない (下の EC-1。キャッシュを持たず、開くたびに読む)。
+- `.editorconfig` の glob 評価は非信頼データのパースなので fuzz の対象にする (09 §3.3 の `fuzz_editorconfig`。M33 の仕様の PR で足すと決めた)。
+- **ライセンス**: 実装と試験は EditorConfig の仕様の文書と、許可リスト (05 §17.1) のライセンスの資料だけから書く。EditorConfig の公式の試験の集まり (editorconfig-core-test) の例を写すときは、そのライセンスが許可リストに入ることを段 6 の PR で確かめてから写す (入らなければ、仕様の文書の例と自分で書いた表の試験だけにする)。
+
+**v0.5 の M33 で決めた細目**:
+
+| ID | 規則 |
+|---|---|
+| EC-1 | **読む時期と場所**: パスのある文書を開いたとき (読込の完了の後)・名前を付けて保存でディレクトリが変わったとき・`config.reload` (と自動の再読込、§6) のときに、`io` のジョブ (`ReadEditorConfig`、02 §9.3) で読む。キャッシュは持たない (開くたびに読む。外で `.editorconfig` を直したら、次に開く文書から効く。開いている文書には `config.reload` で効く)。無題の文書と標準入力の文書には使わない。文書のパスは開いたときの絶対パス (正規化しただけのもの。シンボリックリンクを辿った canonical のパスではない) で、探すのもそのディレクトリから上。**Windows では**、glob に当てる相対パス (EC-4) の各要素を、ディスクの上の名前 (長い名前とディスクの大文字小文字。開くジョブが返す canonical のパスの、該当する部分) に直してから当てる (`Src\main.rs` や 8.3 の `SOURCE~1\a.rs` と打って開いても、`[src/**.rs]` の当たり方が開き方で変わらない)。Unix は開いたときのパスのまま |
+| EC-2 | **集め方** (1 つの文書で読む `.editorconfig` の合計は 1 MiB・セクションの合計は 2,000 まで。超えたら、それより上 (遠く) のファイルを読まずに警告する。攻撃者のリポジトリが各段に大きなファイルを置いて `io` を使い続けさせない): 文書のディレクトリから上へ、各ディレクトリの `.editorconfig` を所有者の検査を通して読む (§12.1 の OWN-1。読まなかったファイルはそのファイルだけを飛ばして上へ続け、診断を出す)。`root = true` のファイルを読んだらそこで止める (所有者の検査で読まなかったファイルの `root` は見ない)。ファイルシステムのルートか、64 段 (上限。超えたら止めてログ) で止める。ファイルの大きさは 256 KiB まで (超えたら読まずに警告)。UTF-8 で読み (先頭の BOM は飛ばす)、UTF-8 でなければそのファイルを使わずに警告 |
+| EC-3 | **読み方** (INI): 行ごとに、前後の空白を落とし、空行と `#` / `;` で始まる行は注釈として飛ばす (行の途中の `#` / `;` は値の一部)。`[` で始まり `]` で終わる行はセクション (中身が glob)。`=` を含む行は `キー = 値` (最初の `=` で分け、前後の空白を落とす。キーは小文字にする)。どれでもない行は飛ばす (診断なし)。最初のセクションの前のキーは前置き (`root` だけを読む)。長さの上限: セクションの glob 4,096 バイト・キー 1,024 バイト・値 4,096 バイト (超えた行は飛ばす)。1 ファイル 10,000 行・1,000 セクションまで (超えた分は読まずにログ) |
+| EC-4 | **glob** (仕様の表のとおり): `*` (`/` 以外の 0 文字以上)、`**` (`/` を含む 0 文字以上)、`?` (`/` 以外の 1 文字)、`[name]` / `[!name]` (文字の集合と否定。範囲 `a-z`)、`{s1,s2,s3}` (どれか。入れ子にできる)、`{num1..num2}` (整数の範囲。負を含む。展開せずに、当てる所の数字の並びを整数として読んで比べる)、`\` (次の 1 文字をそのまま)。glob に `/` を含まなければ、どの深さのファイル名にも当てる (`**/` を前に付けたのと同じ)。`/` を含めば、その `.editorconfig` のあるディレクトリからの相対パスに当てる (先頭の `/` は取る)。照らすのは文字 (コードポイント) の単位で、区切りは `/` (Windows も)。**大文字小文字を区別する** (仕様どおり。言語の判定 (§9.6 の LANG-6) とは違う)。資源の上限: `{` の入れ子は 8 段まで、1 つの glob の選択肢の合計は 1,024 個まで (超えたらそのセクションを使わずに警告)。照合の時間は glob の長さ × パスの長さに比例する上限に収める (選択肢を前もって全部に展開しない。`*` の後戻りを無制限にしない。fuzz の性質、09 §3.3) |
+| EC-5 | **重ね方**: 遠いファイル (上のディレクトリ) から近いファイルの順に、各ファイルの中は書いた順に、当たるセクションのプロパティを重ね、後が勝つ (仕様どおり)。重ねた結果が §3.6 の LAYER-1 の (5) の値になる (由来はファイル・行・セクション) |
+| EC-6 | **診断**: 誤り (EC-2〜EC-4 の警告、§10.1 の誤った値) と、v0.5 で写さないプロパティ (`trim_trailing_whitespace`・`insert_final_newline`・`max_line_length` の情報診断、`charset` の写せない値) は、`config.show_diagnostics` に `.editorconfig` の絶対パスと行で出す。同じファイルの同じ内容について、セッションで 1 回だけ集める (文書を開くたびに同じ診断を積まない)。警告はメッセージ行の要約 (§4.3) にも出す |
+| EC-7 | **ワークスペースとの関係**: `.editorconfig` はワークスペースのルートの外 (上) にあっても読む (`~/.editorconfig` を個人の既定に置く使い方。EditorConfig の仕様どおり、探索はルートで止めない)。`--no-workspace-config` と `--no-config` では読まない (プロジェクトの規約を外して確かめる手段) |
+| EC-8 | **費用**: 1 つの文書で、最大 64 段の `.editorconfig` の有無の確かめと、見つかったファイルの読込と所有者の検査 (§12.1 の OWN-6) を `io` で行う。ローカルの FS では 1 文書 1 ms 未満の見込み (S-25 のハンドルの判定 0.05〜0.4 ms)。ネットワークの共有では段数 × 往復になり、その間も入力は止まらない (届くまでは `.editorconfig` の無い値で表示・編集する、§3.6 の LAYER-3) |
 
 ---
 
@@ -1438,6 +1561,17 @@ verb       := [a-z][a-z0-9_]*
 - **`edit.paste` の代替 `ctrl+k v` (alt)**: M32 の段 3 で、上の「編集」の表の `edit.paste` の行に足した (その表は実装と照らして検査する (09 §11.2) ので、行は実装の PR で直した)。`editor` のコンテキストだけに置く (入力欄の貼り付けは最初の行だけで分配しない、MCUR-11)。Windows Terminal は `mod+v` と `shift+insert` を端末の貼り付けにし、短い貼り付け (16 打鍵未満) は個別のキーとして届くので、複数カーソルへの分配 (03 §4.5.3 の MCUR-10) が効かない。`ctrl+k v` は端末に横取りされず、`edit.paste` (システムのクリップボードの読み取り) を確実に呼ぶ。
 - 足したカーソルを 1 つ戻す・一致を飛ばす (VS Code の `Ctrl+U`・`Ctrl+K Ctrl+D`) と、マウスで足す操作は v0.5 では入れない (03 §4.7.3)。
 
+**設定と言語** (v0.5 の M33、NFR-405 / FR-704 / FR-209。規則の正本は §3.5・§9.6 と 03 §15.6。M33 の仕様の PR (2026-11-22) で決めた。ID と既定キーは PO の決定 2026-11-22 (PR #619)で確定 (§12.6.3))
+
+| ID | title key | kind | args | when | perm | コンテキスト | 既定キー | ヒント |
+|---|---|---|---|---|---|---|---|---|
+| `config.show` (v0.5) | `cmd.config.show` | Ui | — | — | `ui` | パレット | — | - |
+| `lang.set` (v0.5) | `cmd.lang.set` | Ui | `language?` (列挙。言語 ID と `auto`。パレットでは一覧で尋ねる、§9.6 の LANG-8) | — | `ui` | パレット | — | - |
+| `edit.toggle_comment` (v0.5) | `cmd.edit.toggle_comment` | Edit | — | `!doc.read_only` | `propose` | `editor` | `mod+/`, `ctrl+k /` (alt) | - |
+
+- **意味**: `config.show` は設定の値と由来の一覧を開く (§3.5)。`lang.set` はフォーカスの文書の言語を替える (`auto` で判定し直す)。`edit.toggle_comment` は対象の行の行コメントを付ける・外す (03 §15.6。言語に行コメントの記号が無ければ文書を変えずに知らせる)。
+- **キーの選び方** (04 §7.2 / §7.3a): `mod+/` は v0.1 から予約していた VS Code・Sublime Text の慣習のキー。Windows のコンソール API では仮想キーで届き、従来の VT 端末では 0x1F で届いて eve-tui が `ctrl+/` に正規化する (04 §6.2。`Ctrl+7` / `Ctrl+_` も同じバイトを送る端末があるが、誤って押しても本文の変化は目に見え、`mod+z` で戻せる)。日本語の配列でも `/` は Shift なしで打てる。`/` を送らない配列・端末のために代替 `ctrl+k /` を持つ (2 打目の文字は IME を OFF にして打つ。`ctrl+k` の 2 打目で `/` は既定のどのコンテキストでも未使用)。`config.show` と `lang.set` は頻繁に使わないので既定キーを付けない (パレットから使う)。どれも既定のキーマップの既存の割当・チョードの先頭と重ならない。
+
 **オーバーレイ内** (v0.1 の ID 6 個。すべてパレット非表示)
 
 | ID | title key | kind | args | when | perm | コンテキスト | 既定キー | ヒント |
@@ -1453,7 +1587,7 @@ verb       := [a-z][a-z0-9_]*
 
 **内部 (パレット非表示、配布ビルドに無い)**: `internal.debug_panic` (パニックの注入。cargo feature `test-hooks` を有効にしたビルドで、かつ `EVE_TEST_HOOK` に `panic_command` を含むときだけ登録する (09 §3.6 の test-hooks の一覧。どちらかが欠ければ登録しない)。01 NFR-302 AC-1、02 §4.1)。キー割当なし。
 
-**予約 (v0.1 では割り当てない)**: `alt+z` (v0.2 折り返し)、`mod+d` (v0.5 `select.add_next_match`。M32 で上の「複数カーソルと対応括弧」の表に割り当てる)、`mod+l` (v0.5 `select.line`)、`mod+/` (v0.5 `edit.toggle_comment`)、`mod+\` (v0.5 `pane.split_right`。上の「ペイン」の表)、`mod+t` (v0.5 のファインダの候補だった。ファインダは Ctrl+O にした (v0.5-plan §1.3 の (1))。予約のまま)、`ctrl+b` (tmux)、`ctrl+j` (レガシー Enter と紛らわしい)、`ctrl+i` / `ctrl+m` / `ctrl+[` (区別困難)、`ctrl+数字`、`ctrl+k ctrl+<矢印>` (方向のペインの移動 `pane.focus_left` 等の候補。v0.5 では既定に割り当てない。上の「ペイン」の表の「キーの選び方」)。
+**予約 (v0.1 では割り当てない)**: `alt+z` (v0.2 折り返し)、`mod+d` (v0.5 `select.add_next_match`。M32 で上の「複数カーソルと対応括弧」の表に割り当てる)、`mod+l` (v0.5 `select.line`)、`mod+/` (v0.5 `edit.toggle_comment`。M33 で上の「設定と言語」の表に割り当てる)、`mod+\` (v0.5 `pane.split_right`。上の「ペイン」の表)、`mod+t` (v0.5 のファインダの候補だった。ファインダは Ctrl+O にした (v0.5-plan §1.3 の (1))。予約のまま)、`ctrl+b` (tmux)、`ctrl+j` (レガシー Enter と紛らわしい)、`ctrl+i` / `ctrl+m` / `ctrl+[` (区別困難)、`ctrl+数字`、`ctrl+k ctrl+<矢印>` (方向のペインの移動 `pane.focus_left` 等の候補。v0.5 では既定に割り当てない。上の「ペイン」の表の「キーの選び方」)。
 
 **FR-606 の到達性検査** (09 §3.4、OQ-30) の対象「頻出操作」(v0.1 で確定。OQ-30 の分類「保存・終了・検索・パレット・Undo/Redo・コピー/カット/貼り付け・移動・選択」を ID で列挙したもの。v0.5 の M30 でペインの 3 個を足した。計 40 個):
 
@@ -1471,7 +1605,7 @@ verb       := [a-z][a-z0-9_]*
 
 ## 12. ワークスペースと信頼モデル
 
-**版** (FR-705。PO の決定 2026-11-20、v0.5-plan §1.3 の (2)): **v0.5 は、安全な項目 (§12.3) の適用・所有者の検査 (§12.1)・`.editorconfig` (§10) だけを入れる**。準安全・危険・表に無いキーは保留して、`config.show_diagnostics` に保留した項目を出す (未信頼のときと同じ扱い。v0.5 には信頼して有効にする危険な項目が無い)。信頼の記録 (`trust.toml`、§12.2 の 2)・確認ダイアログ (§12.2 の 3・4)・CLI `--trust` (§12.2 の 5、§18.3)・`workspace.trust` / `untrust` / `show_trust` と未信頼の印 `[!]` (§12.4)・設定 `workspace.trust.*` (§5.9) は、最初の危険な項目 (FR-709 / 710 の外部コマンドか、v1.L の LSP) と一緒に入れる。§12.2〜§12.4 はその版の仕様として残す。
+**版** (FR-705。PO の決定 2026-11-20、v0.5-plan §1.3 の (2)): **v0.5 は、安全な項目 (§12.3) の適用・所有者の検査 (§12.1)・`.editorconfig` (§10) だけを入れる**。準安全・危険・表に無いキーは保留して、`config.show_diagnostics` に保留した項目を出す (未信頼のときと同じ扱い。v0.5 には信頼して有効にする危険な項目が無い)。信頼の記録 (`trust.toml`、§12.2 の 2)・確認ダイアログ (§12.2 の 3・4)・CLI `--trust` (§12.2 の 5、§18.3)・`workspace.trust` / `untrust` / `show_trust` と未信頼の印 `[!]` (§12.4)・設定 `workspace.trust.*` (§5.9) は、最初の危険な項目 (FR-709 / 710 の外部コマンドか、v1.L の LSP) と一緒に入れる。§12.2〜§12.4 はその版の仕様として残す。v0.5 の読み方は §12.5、M33 の試験・実装の順・決めた点は §12.6 (M33 の仕様の PR、2026-11-22)。
 
 ### 12.1 ワークスペースの概念
 
@@ -1486,7 +1620,19 @@ verb       := [a-z][a-z0-9_]*
   - v0.5 の範囲: ルートを決めるのは起動時だけ。起動した後にルートを替えるコマンドは無い (別のワークスペースは別のプロセスで開く)。
 - ワークスペース外のファイルも開ける (ファインダ・横断検索・AI コンテキストの **範囲** を規定するだけ)。
 - ワークスペース設定: `<root>/.eve/config.toml` (+ `.eve/themes/`, `.eve/languages/`, `.eve/queries/`)。名前は OQ-01 で確定 (ユーザー回答)。
-- **所有者の検査 (OQ-35。確定 (ユーザー回答、2026-11-20))**: ルート検出の上方探索と `.editorconfig` の祖先探索は、`/tmp/x.txt` を開いたときに **他ユーザーが作成できる** `/tmp/.eve/config.toml` や `/tmp/.editorconfig` を拾い得る。安全分類の項目にも `[keys]`・テーマ (fg = bg でコードを不可視にする誤誘導)・`format_on_save` が含まれるため、git の `safe.directory` と同様に **ディレクトリの所有者が現在のユーザーでない、または world-writable (Unix: `o+w` で sticky でも、Windows: `Everyone` / `Users` に書込許可) なディレクトリ以下のワークスペース設定・`.editorconfig` は読み込まない** (層ごと無視し、`config.show_diagnostics` に「所有者が異なるため無視しました: <path>」を出す)。例外: ユーザーが `workspace.trust` で明示的に信頼したルートは所有者に関わらず読む (信頼ダイアログに所有者を表示)。この例外は信頼の仕組みと一緒に入れる (v0.5 には無い。§12 の「版」)。判定の `metadata` (owner) はジョブで取る (02 §4.4 規則 2)。
+- **所有者の検査 (OQ-35。確定 (ユーザー回答、2026-11-20))**: ルート検出の上方探索と `.editorconfig` の祖先探索は、`/tmp/x.txt` を開いたときに **他ユーザーが作成できる** `/tmp/.eve/config.toml` や `/tmp/.editorconfig` を拾い得る。安全分類の項目にも `[keys]`・テーマ (fg = bg でコードを不可視にする誤誘導)・`format_on_save` が含まれるため、git の `safe.directory` と同様に **ディレクトリの所有者が現在のユーザーでない、または world-writable (Unix: `o+w` で sticky でも、Windows: 自分たち以外のアカウントに書込許可。範囲は下の OWN-2) なディレクトリ以下のワークスペース設定・`.editorconfig` は読み込まない** (層ごと無視し、`config.show_diagnostics` に「所有者が異なるため無視しました: <path>」を出す)。例外: ユーザーが `workspace.trust` で明示的に信頼したルートは所有者に関わらず読む (信頼ダイアログに所有者を表示)。この例外は信頼の仕組みと一緒に入れる (v0.5 には無い。§12 の「版」)。判定の `metadata` (owner) はジョブで取る (02 §4.4 規則 2)。v0.5 で読む例外は、ユーザー層の `workspace.safe_directories` (§5.9。下の OWN-5) だけ。
+- **所有者の検査の細目 (v0.5 の M33。S-25 の結果から M33 の仕様の PR で決めた。実装は §12.6.2 の段 4)**。所有者の検査は **同じ機械のほかの利用者への備え** で、ファイルの出所の確かめではない (自分で clone したリポジトリ・持ち込まれた USB メモリの中身は、作った人に依らず「自分たち」の所有に見えることがある)。出所に依らない守りは、項目の分類 (§12.3) が受け持つ:
+
+| ID | 規則 |
+|---|---|
+| OWN-1 | **判定する物** (判定の順は OWN-6): 読むファイル (`.eve/config.toml`・`.eve/keymap.toml`・各 `.editorconfig`) ごとに、(a) そのファイルを置いたディレクトリ (`.eve/*` は `.eve`、`.editorconfig` はそれのあるディレクトリ) と、(b) ファイルそのもの の 2 つを判定する (ディレクトリだけを見ると、ファイルにだけ他人の書込を許したものを見逃す。S-25 の W3d)。祖先のディレクトリは見ない (Windows の `C:\Users\<名前>` は SYSTEM、Unix の `/home` は root の所有なので、祖先まで見ると何も読めない。置き場所のディレクトリを差し替えられても、差し替えたディレクトリの所有者で見つかる)。ファイルが無ければ判定しない (無いのは正常)。ファイルがふつうのファイルでない (ディレクトリ・FIFO・デバイス) ときは読まない |
+| OWN-2 | **読む条件** (2 つの物の両方が満たすとき読む): (1) **所有者** が「自分たち」: Windows は今のユーザーの SID・トークンの既定の所有者 (`TokenOwner`。昇格した端末では Administrators)・SYSTEM (S-1-5-18)・Administrators (S-1-5-32-544)・TrustedInstaller、Unix は実効 uid か uid 0 (root)。特権のアカウントを入れるのは、今のユーザーのファイルも書き換えられるので、守れる範囲が変わらないため (プロファイルのフォルダ `C:\Users\<名前>` (SYSTEM の所有) の `.editorconfig`、管理者として作ったフォルダを読める。S-25 の決める点 3) (2) **他人が書けない**: Windows は、継承専用でない許可の ACE のうち、書込の権利 (`FILE_ADD_FILE` / `FILE_WRITE_DATA` (0x2)・`FILE_ADD_SUBDIRECTORY` / `FILE_APPEND_DATA` (0x4)・`FILE_DELETE_CHILD` (0x40)・`DELETE`・`WRITE_DAC`・`WRITE_OWNER`・`GENERIC_ALL`・`GENERIC_WRITE`。合わせて 0x500D0046) を、「自分たち」と CREATOR OWNER (S-1-3-0)・OWNER RIGHTS (S-1-3-4) 以外の SID に与えるものが無い (`Everyone`・`Users` に限らず、`Authenticated Users`・`INTERACTIVE` なども他人に数える。S-25 の決める点 1)。DACL が NULL のとき・読めない型の ACE があるときは「書ける」とみなす。拒否の ACE は数えない (書込を打ち消すかを見ないので、読まない側に倒れる)。Unix は `o+w` でない (sticky でも読まない) こと、かつ拡張 ACL (`system.posix_acl_access` の拡張属性) を持たないこと (`setfacl -m u:<他人>:w` の共有のディレクトリでは、`st_mode` に `o+w` が出ないまま他人が書ける。中身を解析せず、拡張 ACL があれば書けるとみなす)。`g+w` は見ない (Ubuntu などの既定のユーザーごとのグループでは自分だけ。共有のグループのディレクトリは既知の制約。S-25 の決める点 7)。macOS へ移すときは、外付けの「所有権を無視」(`MNT_IGNORE_OWNERSHIP`) のボリュームを OWN-3 の判定できない側に足す (3) **判定できる FS** (OWN-3) |
+| OWN-3 | **判定できない FS** (読まない): Windows は、ボリュームに `FILE_PERSISTENT_ACLS` が無い (FAT32・exFAT。SMB の向こうがそうでも分かる) とき、所有者・DACL の問い合わせが失敗する (9P の `\\wsl.localhost\…`・アクセス拒否) とき。Unix は、`statfs` の `f_type` が、所有者と mode をマウントの指定で写す FS か遠くの FS のとき: (i) 05 §5.5 の表で `FsKind::Network` と判定する `f_type` のすべて (NFS・SMB・CIFS・SMB2・9p (WSL2 の DrvFs を含む)・FUSE (sshfs・ntfs-3g・virtiofs を含む。virtiofs は FUSE の値を返す)・AFS・kAFS・Coda・Ceph・NCP・OCFS2・GFS2。リストを 2 つ持たず、05 §5.5 の判定を引く。NFS は `root_squash` などで写し、AFS・Coda はディレクトリの ACL で権限を決めて mode が書込の可否を表さない。S-25 の決める点 9) と、(ii) ローカルで所有者を写す FS: vfat / msdos・exFAT・ntfs3・iso9660・udf・vboxsf (値は `linux/magic.h` かカーネルのソースの定数で、段 4 の PR で確かめる。値を確かめられない FS は既知の制約に書く)。`stat` / `open` が失敗したときも判定できない。ほかの FS (ext4・xfs・btrfs・tmpfs・zfs・overlayfs など) は (1)(2) で判定する。監視の FS の判定 (05 §12.2 の 4。許可リスト) とは向きが違う (監視は「イベントが来ると分かっている FS だけ」、所有者の検査は「所有者が写されると分かっている FS を除く」)。理由は §12.6.3 |
+| OWN-4 | **root で動かしたとき** (Unix の実効 uid が 0): 「自分」は uid 0 だけ (`FileMeta.owner_is_me` の「root はすべて自分」の規則 (05 §4.4) は使わない)。`SUDO_UID` は見ない。`sudo evoeditor` で利用者のリポジトリを開くと、ワークスペース設定と `.editorconfig` は読まれない (診断で理由を示す) |
+| OWN-5 | **逃げ道**: ユーザー層の `workspace.safe_directories` (§5.9) に書いたディレクトリか、その下のファイルは、OWN-2 と OWN-3 を掛けずに読む (OWN-1 のふつうのファイルの確かめと、OWN-6 のリンクを辿らないことは掛ける)。下にあるかは、開いたディレクトリのハンドルの最終のパス (Windows の `GetFinalPathNameByHandleW`、Unix の `/proc/self/fd` または `realpath` で求めたもの) で比べる (安全な場所の下のリンクを経て、他人が書ける場所を検査の外に出さない)。ファイルシステムのルート・ドライブの直下・ホームディレクトリそのものを書いたときは警告する (広すぎる)。v0.5 の判定できない FS (exFAT・WSL の `/mnt/c`) の上のリポジトリの逃げ道 (S-25 の決める点 4 の (b))。信頼の記録 (`workspace.trust`) は後の版 (§12 の「版」) |
+| OWN-6 | **判定と読込を同じハンドルで行う** (判定の後に差し替えられない。S-25 の決める点 5): eve-platform の `FileSystem::read_checked` (02 §4.5) が、ディレクトリを開き、**まずファイルがあるかを開かずに確かめ** (無ければディレクトリの判定に依らず `Missing`。祖先を上る `.editorconfig` の探索 (§10.3 の EC-2) で、`C:\`・`C:\src`・`/tmp` のような他人が書けるディレクトリに `.editorconfig` が無いだけで診断を出さない)、あればディレクトリを判定し、通ったときだけそのディレクトリの中のファイルを開いて判定し、同じファイルのハンドルから読む。Unix は `open(dir, O_DIRECTORY)` (`.eve` は `O_NOFOLLOW` も付ける) → `fstatat(dirfd, name, AT_SYMLINK_NOFOLLOW)` (有無) → `fstat` / `fstatfs` / `fgetxattr` (拡張 ACL の有無) → `openat(dirfd, name, O_NONBLOCK \| O_NOFOLLOW)` → `fstat` (ふつうのファイルか・所有者・mode) → `read`。Windows はディレクトリを `FILE_SHARE_DELETE` なしで開き (`.eve` は `FILE_FLAG_OPEN_REPARSE_POINT` で開き、再解析点なら読まない) (開いている間、そのディレクトリと祖先を改名・削除できない。S-24 の (d))、ファイルの有無を属性の問い合わせだけで確かめ、`GetVolumeInformationByHandleW` と `GetSecurityInfo` で判定してから、ファイルをそのディレクトリのパスで開き (`FILE_FLAG_OPEN_REPARSE_POINT` と `SECURITY_SQOS_PRESENT \| SECURITY_IDENTIFICATION` を付ける (名前付きパイプへ誘われたときの成りすましを防ぐ)。共有は `FILE_SHARE_READ \| FILE_SHARE_WRITE \| FILE_SHARE_DELETE` で、ほかのエディタが開いていても共有違反にしない)、`GetFinalPathNameByHandleW` で開いたファイルの親が固定したディレクトリの最終のパスと同じであることを確かめ (途中のジャンクション・シンボリックリンクの行き先を差し替えられても、判定した物と違う所を読まない。違えば判定できないとする)、`GetSecurityInfo` で判定して同じハンドルから読む。共有違反 (`ERROR_SHARING_VIOLATION`) は一時の失敗として扱い、診断を出さずにログに残す (次の読込で読み直す)。パスは std と同じ規則で `\\?\` の形にしてから渡す (260 文字を超えるパス。05 §5.7)。ディレクトリの固定と最終のパスの確かめが効くことを段 4 の PR の試験で確かめる。**シンボリックリンクを辿らない**: 読むファイル (`config.toml`・`keymap.toml`・`.editorconfig`) と `.eve` がシンボリックリンク・ジャンクション・再解析点なら、ふつうのファイルでないものとして読まない (`NotRegular`。診断を出す)。S-25 の推奨と、M31 の `.gitignore` の読み方 (03 §12.7.3。git 2.32 以降と同じ) に揃える。理由: 辿ると、判定の前に開く時点で、リンクの先の UNC (SMB・WebDAV) へ認証が走り (Windows は既定でローカルからリモートへのリンクを辿る。NTLM のハッシュが外へ出る)、応答しない共有・hard マウントの NFS で `io` のワーカーが止まる。dotfiles の管理でリンクにした `~/.editorconfig` は読まれなくなる (既知の制約。01 §4.6)。読むのは上限 + 1 バイトまで (§12.5 の WSC-1・§10.3 の EC-2 の大きさ)。すべてジョブの中で行う (02 §4.4 規則 2。外付けのドライブの止まり (S-25 の 0.3〜2.5 秒) で入力を止めない)。1 回の判定の目安はローカルの FS で 1 ms 未満 (S-25 のハンドルの判定は NTFS で 0.05〜0.12 ms、ext4 で 10 µs) |
+| OWN-7 | **診断** (警告。読まなかったファイルごとに 1 件。`config.show_diagnostics` とメッセージ行の要約、§4.3): 所有者が違う (`msg.workspace.not_owned`。所有者の名前 (SID は名前に直せなければ `S-1-…` のまま) を示し、対処に「自分の所有にする (`takeown` / `chown`) か、`workspace.safe_directories` に足す」)、他人が書ける (`msg.workspace.others_can_write`。書けるアカウントの名前を示し、対処に Windows は「継承を切って (`icacls <dir> /inheritance:d`) そのアカウントを外す」、Unix は「`chmod o-w`」、どちらも「または `workspace.safe_directories` に足す」)、判定できない (`msg.workspace.owner_unknown`。FS の名前 (`exFAT`・`9p` など) を示し、対処に「`workspace.safe_directories` に足す」)。ドライブの直下に作ったフォルダ (`C:\src`。`Authenticated Users` の書込を継承する) は、本当に同じ機械の他のユーザーが書けるので読まない (文言で理由と対処を示す。S-25 の決める点 2)。パスと名前は §4.3 の無害化を通す |
+| OWN-8 | **検査しないもの**: ルートの検出 (目印の有無を見るだけ。§12.1 の上の箇条) と、ファインダ・横断検索の除外の源 (`.gitignore`・`.git/info/exclude`・git の `config`、03 §12.7.3) には所有者の検査を掛けない (M31 で先送りした点を、M33 の仕様の PR で「掛けない」と決めた。§12.6.3)。読んで変わるのは一覧と検索の範囲と `core.ignorecase` だけで、何も実行せず、文書の内容・保存・キーの意味を変えない。`workspace.exclude` は設定のキーなので、ワークスペース層に書いたものはこの検査を通った `.eve/config.toml` からだけ読む |
 
 ### 12.2 信頼モデルの原則
 
@@ -1498,22 +1644,176 @@ verb       := [a-z][a-z0-9_]*
 
 ### 12.3 項目の分類
 
+**分ける基準** (v0.5 の M33 の仕様の PR で、分類の根拠を書き出した。新しいキーをどの行に入れるかは、この基準で決める):
+
+| 基準 | 満たす条件 (ワークスペース層に書かれた値について) |
+|---|---|
+| B1 実行しない | 値によってプロセス (外部コマンド・LSP・フォーマッタ・クリップボードのコマンド・プラグイン) が起動されず、子プロセスの環境変数も変わらない |
+| B2 外に触れない | ワークスペースの外のパスを読む・書く・ファインダや横断検索・AI の範囲に入れることが無い (パスを値に取らない。リンクの先へ辿らない) |
+| B3 黙って書き換えない | 利用者の操作なしにファイルや文書の本文を書き換えず、保存・再読込の手順の安全性 (原子的保存・fsync・保存前の照合・確認) を下げない |
+| B4 送らない | 文書の内容・秘密を、利用者の環境の外 (ネットワーク・ほかのプロセス・状態ディレクトリの平文の写し) へ出す範囲を広げない |
+| B5 守りを弱めない | 未保存の内容を守る仕組み (スワップ・Undo の履歴)・警告 (巨大ファイル・長大行) を弱めない |
+| B6 惑わさない・重くしない | 表示を見えなくする・既存のキーの意味を変えるなど利用者を誤らせる余地が無く、重い処理やメモリの大量の消費を起こさない |
+
+- **安全**: B1〜B6 をすべて満たす。**準安全**: B1〜B4 を満たすが、B5 か B6 を満たさない。**危険**: B1〜B4 のどれかを満たさない。**常に無視**: 送信先の変更・承認の緩和 (B4 のうち、信頼でも解除しないもの。AI)。**効かない** (v0.5 の M33 で足した行): 安全性に依らず、ワークスペース層では意味を持たないキー (起動時・端末の初期化の前に決まる値、ワークスペースのルートを決める値、所有者の検査を外す値)。
+- 同じキーでも、向き (大きく・小さく) や値で基準の当たり方が変わるものは、値ごとに分ける (下の表の注と、表の下の箇条)。
+
 | 分類 | 内容 | 未信頼時 |
 |---|---|---|
-| **安全** | `editor.*`、`view.*`、`search.*` (`search.workspace.follow_symlinks = true` と `search.workspace.max_file_size` を大きくする方向を除く。下の行)、`file.default_encoding` / `file.encoding_detection` / `file.detection_candidates` / `file.default_line_ending` / `file.write_bom` / `file.reload_on_external_change`、`file.atomic_save_fallback = "fail"`、閾値のキー (下の準安全の行) を **小さくする方向のみ**、`[[language]]` のデータ項目 (§9.1。ただし `format_on_save = true` は未信頼では無効、§9.5)、`[keys]` (**追加のみ**: 未割当キーへの追加だけを適用し、既存割当の上書き・解除は信頼後も適用しない。`exec` 権限コマンドへの割当は信頼後、§7.4 / 02 §7.2 K5)、`workspace.exclude`、`.editorconfig`、`ai.exclude` (**除外を増やす方向のみ**)、`ai.secrets.mode` (**厳しくする方向のみ**: `off` < `warn` < `mask` < `block`)、`ai.limits.*` (**上限を小さくする方向のみ**) | 適用 (所有者検査 §12.1 を通ったディレクトリのみ) |
-| **準安全** | `theme.name` / `.eve/themes/` (fg = bg 等でコードを不可視にする誤誘導の余地があるため)、`.eve/queries/*.scm` (tree-sitter クエリ)、`.eve/languages/*.toml` の `grammar` 変更、`session.*`、閾値を **大きくする方向** (`file.huge_file_warn_bytes` / `file.huge_file_refuse_bytes` / `file.large_file_threshold` / `file.long_line_threshold` / `file.swap.max_bytes` / `search.workspace.max_file_size`。巨大ファイルの警告を外して OOM を誘う・重い処理を走らせる)、`file.swap.enabled = false` と `file.swap.*` の間隔 (未保存の内容を守る仕組みを弱める)、`file.watch.*` | 保留 (情報診断)。性能攻撃・誤誘導・保護の弱体化の余地があるため |
+| **安全** | `editor.*` (`editor.undo.*` を除く。準安全の行)、`view.*` (効かない行の `view.ambiguous_width` を除く)、`search.*` (`search.workspace.follow_symlinks = true` と `search.workspace.max_file_size` を大きくする方向を除く。下の行)、`ui.mouse` / `ui.hint_bar` / `ui.tab_line` / `ui.mouse_wheel_lines` / `ui.which_key_delay_ms` (表示と操作の好みだけ。どの値でも同じ操作をほかの手段でできる。v0.5 の M33 で足した)、`file.default_encoding` / `file.encoding_detection` / `file.detection_candidates` / `file.default_line_ending` / `file.write_bom` / `file.reload_on_external_change`、`file.atomic_save_fallback = "fail"`、閾値のキー (下の準安全の行) を **小さくする方向のみ** (`file.swap.max_bytes` を除く)、`[[language]]` のデータ項目 (§9.1。ただし `format_on_save = true` は未信頼では無効、§9.5)、`[keys]` (**追加のみ**: 未割当キーへの追加だけを適用し、既存割当の上書き・解除は信頼後も適用しない。`exec` 権限コマンドへの割当は信頼後、§7.4 / 02 §7.2 K5。v0.5 の置き場所と細目は §7.4 の WKEY-1〜WKEY-3)、`workspace.exclude`、`.editorconfig`、`ai.exclude` (**除外を増やす方向のみ**)、`ai.secrets.mode` (**厳しくする方向のみ**: `off` < `warn` < `mask` < `block`)、`ai.limits.*` (**上限を小さくする方向のみ**) | 適用 (所有者検査 §12.1 を通ったディレクトリのみ) |
+| **準安全** | `theme.name` / `theme.background` / `.eve/themes/` (fg = bg 等でコードを不可視にする誤誘導の余地があるため)、`.eve/queries/*.scm` (tree-sitter クエリ)、`.eve/languages/*.toml` の `grammar` 変更、`session.*`、閾値を **大きくする方向** (`file.huge_file_warn_bytes` / `file.huge_file_refuse_bytes` / `file.large_file_threshold` / `file.long_line_threshold` / `search.workspace.max_file_size`。巨大ファイルの警告を外して OOM を誘う・重い処理を走らせる)、`file.swap.enabled = false` と `file.swap.*` の間隔 (未保存の内容を守る仕組みを弱める)、`file.swap.max_bytes` (**どちらの向きも**: 小さくするとスワップを書く文書が減り、大きくするとメモリと書く量が増える。v0.5 の M33 で、小さくする向きを安全から移した)、`editor.undo.*` (**どちらの向きも**: 小さくすると Undo の履歴を失い、大きくするとメモリを使う。v0.5 の M33 で安全から移した)、`file.watch.*` (監視を止めると外部の変更に気付くのが遅れる)、`clipboard.osc52` / `clipboard.osc52_max_bytes` (コピーした内容を端末へ送るか・量を変える。端末への大量の送出で端末が止まる。v0.5 の M33 で足した) | 保留 (情報診断)。性能攻撃・誤誘導・保護の弱体化の余地があるため |
 | **危険** | `[language-server.*]`、`[formatter.*]`、`env`、`[plugins]`、**パスを値に取るすべてのキー** (`file.backup.dir` (ワークスペース外へ書く) と、後の版で足すパスのキー。値がワークスペースの中を指していても同じ扱い)、`log.*`、**外部コマンド**: `clipboard.provider = "command"` と `clipboard.command.*` (コマンドの起動、05 §8.3)、**保存の安全性を下げる値**: `file.fsync = "none"` (電源断で内容を失う)、`file.save_strategy = "in_place"` (原子的保存を止める)、`file.in_place_patterns` (確認なしの直接上書きの対象を広げる)、`file.hardlink_policy = "write_in_place"` (ハードリンクで繋がったワークスペース外のファイルも書き換える)、`file.swap.exclude_secret_files = false` (秘密ファイルの本文を状態ディレクトリに平文で写す)、`file.hot_exit = true`、**ワークスペース外を読む**: `search.workspace.follow_symlinks = true` (リンク先の `~/.ssh` 等を横断検索・ファインダ・AI のコンテキストの範囲に入れる) | 保留。信頼ダイアログで列挙 (コマンド行・解決済み絶対パス・「プロジェクト内のコードを実行し得る」注意、§9.4) |
-| **常に無視** (信頼しても適用しない。06 §11.1 / §14、OQ-36) | `ai.enabled`、`[ai.providers.*]` (`caps` を含む)、**`[ai.providers.*.runtime.*]` (管理モードの起動コマンド・引数・モデルパス: 送信先の改変と任意コード実行の両方に当たる)**、`[ai.profiles.*]`、`[ai.features.*]`、`ai.inline.extra_context`、`[ai.approval]`、`ai.allow_excluded_paths`、`[ai.network]`、`[ai.prompts]`、`[ai.agents]`、`ai.context.load_instruction_files`、`ai.audit.enabled`、`ai.exec.allowlist` (送信先の変更・承認緩和はリポジトリ経由の流出に直結するため、信頼で解除できない。`ai.exclude` の追加と `ai.inline.*` の他のキー・`ai.context.surrounding_lines`・`ai.timeouts.*` は安全項目) | 無視 + 警告 (信頼後も) |
+| **常に無視** (信頼しても適用しない。06 §11.1 / §14、OQ-36) | `ai.enabled`、`[ai.providers.*]` (`caps` を含む)、**`[ai.providers.*.runtime.*]` (管理モードの起動コマンド・引数・モデルパス: 送信先の改変と任意コード実行の両方に当たる)**、`[ai.profiles.*]`、`[ai.features.*]`、`ai.inline.extra_context`、`[ai.approval]`、`ai.allow_excluded_paths`、`[ai.network]`、`[ai.prompts]`、`[ai.agents]`、`ai.context.load_instruction_files`、`ai.audit.enabled`、`ai.exec.allowlist` (送信先の変更・承認緩和はリポジトリ経由の流出に直結するため、信頼で解除できない。`ai.exclude` の追加と `ai.inline.*` の他のキー・`ai.context.surrounding_lines`・`ai.timeouts.*` は安全項目)。**`workspace.safe_directories`** (ワークスペースが自分を所有者の検査の外に出せない。v0.5 の M33 で足した) | 無視 + 警告 (信頼後も) |
+| **効かない** (ワークスペース層では意味を持たない。v0.5 の M33 で足した) | `view.ambiguous_width`・`theme.color_mode`・`ui.locale` (端末の初期化と言語の選択は起動時に 1 回で、ワークスペース層はその後にジョブで届く、§12.5 の WSC-1)、`workspace.root_markers` (ワークスペース層はルートを決めた後に読む) | 使わずに情報診断 (信頼後も) |
 | **ユーザー層でも承認を要する** | `ai.providers.*.runtime.command` / `args` / `model_path` (管理モード、§5.12.1): ユーザー層に書かれていても、初回起動時とコマンド行が変わるごとに完全なコマンド行 (解決済み絶対パス・引数・環境変数名) を示して `exec` 承認を得る (06 §3.3.3)。承認の記録は状態ディレクトリ (`trust.toml` と同じ扱い)。禁止引数 (§5.12.1) を含む定義は承認以前に検証エラー | 承認まで起動しない |
 | **禁止** (どの層でも) | `api_key` 平文 (06 §10.1)、シェル文字列としてのコマンド指定、`runtime.command` の相対パス・`PATH` 探索・`.bat` / `.cmd`、`runtime.args` の禁止引数、`runtime.transport` にループバック以外の待受 | エラー |
 
-- **表に無いキーの既定は「保留 (危険扱い)」** とする: 上の表のどの行にも当たらないキー (後の版で足すキーを含む) は、ワークスペース層に書かれていれば危険の行と同じく信頼まで保留し、信頼ダイアログで列挙する。キーを足すときは、本表のどの行に入れるかを §5 の表と同時に決める (決めるまでは保留のまま)。
-- 「方向のみ」の行 (安全の「小さくする方向のみ」、準安全の「大きくする方向」等) は、ワークスペース層の値をユーザー層 (無ければ既定値) と比べて判定する。比べられない値 (型の違い等) は保留とする。`file.*` の各キーと閾値のキーの安全・準安全への割り振りは上の表のとおり (OQ-202。確定 (推奨案、2026-11-20)、v0.5-plan §1.1)。
+- **v0.5 の正本は下の「公開キーごとの分類」の表**: 上の表の `editor.*`・`view.*`・`search.*` のようなワイルドカードは、後の版の信頼の仕組みの説明として残すもので、v0.5 では新しいキーを安全にしない (公開キーごとの表に無いキーは、次の箇条のとおり保留)。後の版で公開するキーは、公開する PR で公開キーごとの表に行を足す (例: FR-216 の `editor.trim_trailing_whitespace_on_save` / `insert_final_newline_on_save` は、保存の内容を利用者の操作 (保存) に伴って変えるので、ワークスペース層では準安全とする案。FR-216 の仕様の PR で決める)。
+- **表に無いキーの既定は「保留 (危険扱い)」** とする: 上の表のどの行にも当たらないキー (後の版で足すキーを含む) は、ワークスペース層に書かれていれば危険の行と同じく信頼まで保留し、信頼ダイアログで列挙する。キーを足すときは、本表のどの行に入れるかを §5 の表と同時に決める (決めるまでは保留のまま)。公開前のキー (§5.13 と各表の P 列。`reserved.rs`) は、どの層でも「このバージョンでは未対応」の情報診断で使わない (ワークスペース層でも同じ。保留ではなく未対応と示す)。
+- 「方向のみ」の行 (安全の「小さくする方向のみ」、準安全の「大きくする方向」等) は、ワークスペース層の値をユーザー層 (無ければ既定値) と比べて判定する。比べられない値 (型の違い等) は保留とする。等しい値は安全とする (下の層と同じ値は何も変えない)。`file.*` の各キーと閾値のキーの安全・準安全への割り振りは上の表のとおり (OQ-202。確定 (推奨案、2026-11-20)、v0.5-plan §1.1。M33 の仕様の PR で `file.swap.max_bytes` の小さくする向きを準安全に移した。確定: PO の決定 2026-11-22 (PR #619)、§12.6.3)。
 - 同じキーでも値で行が分かれるもの (`clipboard.provider`、`file.fsync`、`file.save_strategy`、`file.hardlink_policy`、`file.atomic_save_fallback`、`file.swap.exclude_secret_files`、`search.workspace.follow_symlinks` 等) は、表に書いた値のときだけその行に当たり、他の値は既定値と同じ安全側の値なら安全、そうでなければ保留とする。
+
+**v0.5 の公開キーごとの分類** (v0.5 の M33 の段 5 の実装の正本。上の表を v0.5 の公開キー (§5.0 の 37 個と、M33 で公開するキー) に展開したもの。eve-config の宣言の表 (§4.1) に分類の列を足し、本表との一致を eve-core の試験 (`config_reserved` と同じ形) が確かめる):
+
+| キー | 分類 | 当たる基準・理由 |
+|---|---|---|
+| `editor.tab_width`・`editor.indent_unit`・`editor.indent_width`・`editor.backspace_unit` | 安全 | B1〜B6。字下げと削除の単位だけ |
+| `editor.undo.total_max_bytes` | 準安全 (どちらの向きも) | B5 (小さく: 履歴を失う)・B6 (大きく: メモリ) |
+| `file.default_encoding`・`file.default_line_ending` | 安全 | 新しいファイルの形だけ。書くのは利用者の保存 |
+| `file.reload_on_external_change` | `ask` と、ユーザー層 (無ければ既定) と同じ値: 安全 / `never` と、下の層より緩い `auto_if_unmodified` (下の層が `ask`): 準安全 | B5 (`never` は監視とフォーカス復帰の確認を止める)・B3 (`auto_if_unmodified` は確認なしで本文を置き換える)。保存前の照合は値に依らず残る |
+| `file.huge_file_warn_bytes`・`file.long_line_threshold` | 小さく・等しい: 安全 / 大きく: 準安全 | B5・B6 (警告を外して重い処理を誘う) |
+| `file.swap.enabled` | `true`: 安全 / `false`: 準安全 | B5 |
+| `file.swap.interval_ms`・`file.swap.min_interval_ms`・`file.swap.max_bytes` | 準安全 (等しい値を除く) | B5 (守る間隔・範囲)・B6 |
+| `file.swap.exclude_secret_files` | `true`: 安全 / `false`: 危険 | B4 (秘密ファイルの本文を状態ディレクトリへ写す) |
+| `file.watch.enabled` (M33 で公開) | 準安全 (等しい値を除く) | B5 (外部の変更に気付くのが遅れる) |
+| `view.wrap`・`view.wrap_indent`・`view.wrap_kinsoku`・`view.show_whitespace` | 安全 | 表示だけ |
+| `view.ambiguous_width` | 効かない | 端末の初期化で 1 回だけ使う |
+| `theme.color_mode` | 効かない | 同上 |
+| `theme.name`・`theme.background` | 準安全 | B6 (見えなくする誤誘導。v0.5 は `.eve/themes/` を読まないが、行を変えない) |
+| `ui.locale` | 効かない | 言語は起動時に 1 回だけ選ぶ (§17.1) |
+| `ui.mouse`・`ui.hint_bar`・`ui.tab_line`・`ui.mouse_wheel_lines`・`ui.which_key_delay_ms` | 安全 | 表示と操作の好みだけ |
+| `clipboard.osc52`・`clipboard.osc52_max_bytes` | 準安全 | B6 (端末への大量の送出で端末が止まる)。コピーの行き先は利用者の環境の好みで、プロジェクトが決めるものではない |
+| `search.case`・`search.regex_default`・`search.newline_sugar`・`search.cp932_compat_fold`・`search.max_matches`・`search.count_limit` | 安全 | エディタ内の検索の既定だけ (上限は範囲の検査がある) |
+| `search.workspace.respect_gitignore` (M33 で公開) | `true`: 安全 / `false`: 準安全 | B6 (`dist/`・`.venv/` などを走査させて重くする。外には出ない、B2) |
+| `search.workspace.follow_symlinks` (M33 で公開) | `false`: 安全 / `true`: 危険 | B2 |
+| `search.workspace.max_file_size` (M33 で公開) | 小さく・等しい: 安全 / 大きく: 準安全 | B6 |
+| `workspace.exclude` (M33 で公開) | 安全 (ワークスペース層の値は、下の層の配列に **足す** ものとして読む。`workspace.exclude = [...]` と書いても置換せず、`workspace.exclude+` と同じに扱う。`!` の行はワークスペースの中で gitignore の除外を戻すだけで、ユーザー層・既定の除外の行より前に並べるので、それらを戻さない) | 範囲を狭める・ワークスペースの中で戻すだけ (配列の置換 (§3.3) で `node_modules` などの既定の除外を消させない、B6) |
+| `workspace.root_markers` (M33 で公開) | 効かない | ルートは読む前に決まっている |
+| `workspace.safe_directories` (M33 で足す) | 常に無視 + 警告 | 所有者の検査を外す |
+| `[[language]]` の v0.5 の項目 (§9.6 の LANG-3) | 安全 | データだけ (`first_line` の正規表現は大きさの上限と線形時間の照合、B6) |
+| `.eve/keymap.toml` の `[keys.*]` | 安全 (追加だけ。§7.4 の WKEY-2 の割当は使わない) | B6 (既存のキーの意味を変えない) |
+| `.editorconfig` の §10.1 のプロパティ | 安全 | 字下げと新しいファイルの形だけ |
+| 条件付きセクション (§3.4) の中のキー | 中のキーの分類 | 条件は値を選ぶだけ |
 
 ### 12.4 コマンド
 
 `workspace.trust` / `workspace.untrust` / `workspace.show_trust` (状態と保留項目の表示)。ステータスバーに未信頼かつ保留項目ありの場合に記号 (例 `[!]`) を表示する (04)。
+
+### 12.5 v0.5 のワークスペース層の読み方 (M33。FR-705)
+
+v0.5 の M33 の段 5 (§12.6.2) で入れる。受入基準は 01 §5.5 の FR-705。v0.5 の範囲は §12 の「版」のとおりで、信頼の記録・確認ダイアログ・`--trust`・`[!]` は入れない。
+
+| ID | 規則 |
+|---|---|
+| WSC-1 | **読む時期**: ルートの検出 (`WorkspaceRoot`、03 §12.7.1) の結果が届いたら、`--no-workspace-config` と `--no-config` でなければ、`io` のジョブ (`ReadWorkspaceConfig`、02 §9.3) を積む。ジョブは `<root>/.eve/config.toml` と `<root>/.eve/keymap.toml` を所有者の検査を通して読み (§12.1 の OWN-6。それぞれ 256 KiB まで。超えたら読まずに警告)、`.eve/languages/`・`.eve/themes/`・`.eve/queries/` があるかを確かめる (あれば「このバージョンでは未対応」の情報診断を 1 件ずつ。中は読まない)。`config.reload` と自動の再読込 (§6) でも同じジョブで読み直す (所有者の検査も掛け直す)。ルートに `.eve` が無ければ何もしない |
+| WSC-2 | **解析と分類をジョブの中で行う**: ジョブが TOML の解析 (§4.2 の構造の上限の検査を含む)・条件付きセクションの解決 (§3.4)・検証・§12.3 の分類までを行い、安全な項目の値と診断を主スレッドへ返す (他人のリポジトリの大きな・入れ子の深いファイルの解析で入力を止めない。ユーザー層の `config.reload` は主スレッドで解析するが、ワークスペース層は他人が書いたものなので分ける)。「方向のみ」の比較 (§12.3 の表の下) に使うユーザー層の値は、ジョブを積むときに `Arc<ResolvedConfig>` で渡す |
+| WSC-3 | **重ね方**: 安全な項目は層 L3 (§3.1) としてユーザー層の上・コマンドライン層の下に重ね、`ResolvedConfig` を差し替える (`config.reload` と同じ経路。項目の 3 分類 (§6 の規則 2) も同じで、「新規文書から」の項目はこの後に開く文書から効く)。言語定義は §9.6 の LANG-5、キーの割当は §7.4 の WKEY-1〜WKEY-3。開いている全文書の文書ごとのキーを決め直す (§3.6 の LAYER-3 / LAYER-4)。起動時に届いたときは「設定を読み直しました」の要約を出さない (診断だけ) |
+| WSC-4 | **使わない項目**: 準安全・危険の項目は使わず、項目ごとに `msg.workspace.item_pending` (情報。`{item}` と分類の名前。対処に「v0.5 ではワークスペース設定から使えません。使うときはユーザーの設定に書いてください」) を出す。危険の項目は `msg.workspace.item_pending_unsafe` (情報。値を示し、ユーザーの設定へ写すことを勧めない。他人の設定を自分の設定へ写させる誘導にしない)、「常に無視」は `msg.workspace.item_ignored` (警告)、「効かない」は `msg.workspace.item_no_effect` (情報)、公開前のキーは「このバージョンでは未対応」の情報診断 (§12.3 の表の下)、未知のキー・型・範囲の誤りはユーザー層と同じ警告。情報診断は件数に数えず (§4.3)、`config.show_diagnostics` にファイル (`.eve/config.toml` の絶対パス)・行と一緒に出す (FR-705 AC-2) |
+| WSC-5 | **届く前**: ワークスペース層が届くまでは、ユーザー層とコマンドライン層だけで動く。起動時に開いた文書は、届いた後に言語 (明示の指定の無いもの。§9.6 の LANG-7) と文書ごとのキーを決め直す (開いたときの判定 (巨大ファイルの警告・長大行・文字コード) はやり直さない) |
+| WSC-6 | **実行しないこと** (NFR-502): 読込・解析・分類のどこでも、プロセスの起動・ネットワーク・ワークスペースの外のパスへの書込をしない。`clipboard.provider = "command"`・`clipboard.command.*` は公開前のキーで (§5.6)、ワークスペース層では未対応の情報診断になり、使われない (公開した後も危険の行で保留)。`[formatter.*]`・`[language-server.*]`・`[plugins]` は予約のセクションで、使われない (01 NFR-502 AC-1 をワークスペース設定で確かめ直す試験、§12.6.1) |
+| WSC-7 | **CLI**: `--no-workspace-config` (§18.3) はワークスペース層と `.editorconfig` を読まない (v0.5 の M33 の段 5 で入れる)。`--check-config` と `--dump-config` はワークスペース層を読まない (起動時にルートを決めないため。ワークスペース層の診断は `config.show_diagnostics` で見る。CI でワークスペース設定を確かめる手段は後の版で要望があれば足す) |
+
+### 12.6 M33 (設定と監視) の試験・実装の順・決めた点 (v0.5)
+
+v0.5 の M33 (08 §2.6) は、NFR-405 (条件付きセクション、§3.4) → FR-704 (言語定義、§9.6・§3.6) → FR-209 (行コメント、03 §15.6) → FR-705 (ワークスペース設定と `.editorconfig`、§12.1・§12.3・§12.5・§10) → FR-117 のファイル監視 (03 §9.5.1・05 §12) → FR-706 (設定の自動の再読込、§6。Could) を入れる。本節は 6 つに共通の試験と計測・PR の分け方と各段の完了の条件・決めた点を置く (M33 の仕様の PR、2026-11-22。点検の材料は docs/review/v0.5-plan.md §2.4 / §2.5 / §4.1 の WS-20〜WS-23 と、M29 のスパイク S-24 (`spikes/S-24/REPORT.md`)・S-25 (`spikes/S-25/REPORT.md`) の「M33 で決めること」)。M31 から送った 2 件 (除外の源の所有者の検査と、`bg` のワーカーの詰まり。03 §12.7.10) も本節で決めた。
+
+#### 12.6.1 試験と計測 (09)
+
+- **L0 / L1 (条件付きセクション)**: 表駆動の試験で、条件の値 (`windows` / `linux` / `macos` × `ssh` / `tmux` / `wsl` の有無) と同じ設定ファイルの組から、解決した値と由来が §3.4 の COND-3 のとおりになる (01 NFR-405 AC-1。同じファイルを Windows と Linux の条件で読んで、それぞれの OS のセクションだけが効く)。proptest で、任意の表と条件付きセクションの組について、解決の結果が参照モデル「条件の無い表に、真の条件のセクションを COND-3 の順にキーごとに上書きする」と一致する。COND-5 の誤り (未知の名前・入れ子・直下のキー・言語定義と `[keys]`・`host` / `env.ci`) と COND-6 (`keymap.toml` の `[os.*]`) の診断、偽の条件のセクションの検証 (COND-4)。`when` の `os` / `frontend`。
+- **L0 / L1 (言語定義と文書ごとの値)**: §9.6 の LANG-6 の照らし方 (大文字小文字・`d.ts` の長さ・`.` で始まる名前・`file_globs` の `/` の有無とルートの外・`first_line`・同じ層の後勝ちと警告) と LANG-3 / LANG-4 の誤りの扱いを表の試験で。組込みの表と §9.3 の表の一致 (`eve-docs-tables`)・組込みどうしの重なりが無いこと。proptest で、§3.6 の 5 つのキーについて、任意の段 ((1)〜(8)) の有無の組で、決まる値が参照モデル「LAYER-1 の順で最後に値を持つ段の値」と一致する。
+- **L0 / L1 (行コメント)**: proptest で、任意の文書 (CRLF・最後の行の改行の有無・タブと空白の混ざった字下げ・空白だけの行を含む)・任意の複数の Range・任意の記号 (`#`・`//`・`--`・`;`) について、(a) 記号の無い行を含む対象を切り替えて (付けて) からもう一度切り替えると本文が元に戻る (外す向きから始めると、記号の後の空白と字下げの位置が揃うので元に戻るとは限らない。外す向きの性質は、外した後に付けると各行が「最も浅い字下げの位置 + 記号 + 空白」の形になること) (b) 1 回目で記号の無い行があったときは、2 回目の前に空白でない対象の行がすべて記号で始まる (c) 空行と空白だけの行は変わらない (d) 1 回の Undo で本文と選択が戻る。表の試験で 03 §15.6 の CMT-1〜CMT-7 (字下げの最も浅い列の決め方・タブを途中で割らない・記号の後の空白・複数カーソルで同じ行を 1 回・記号の無い言語・読み取り専用)。
+- **L0 (所有者の検査)**: eve-platform の契約試験を実際の FS で (Unix: 一時ディレクトリに `chmod o+w` のディレクトリ・ファイルだけ `o+w`・シンボリックリンク (読まないこと)・拡張 ACL (`setfacl`)・FIFO・別の所有者 (root で走らせられる CI の Linux だけ)。Windows: ジャンクションとシンボリックリンク (UNC を指すものを含む。読まないことと、開く前に UNC へ出ないこと)。Windows: 一時ディレクトリに `icacls` で `Everyone:(OI)(CI)M`・`Authenticated Users:M`・ファイルだけの `Everyone:M`・拒否の ACE を付けたもの)。判定できない FS は、手元で用意できるもの (WSL の `/mnt/c`) を WSL の試験で。core の経路は `MemFs` の偽の所有者 (09 §3.4 の `FakePathsOwner`) で。§12.1 の OWN-6 のディレクトリの固定 (Windows で開いている間に親を改名できない) を契約試験で確かめる。
+- **L3 シナリオ** (`crates/eve-core/tests/conditional_sections.rs`・`language.rs`・`toggle_comment.rs`・`workspace_config.rs`・`editorconfig.rs`・`file_watch.rs`・`config_auto_reload.rs` の案。AC の ID は 01 §5.5、`verifies:` を関数の直前に書く): NFR-405 AC-1 / AC-2、FR-704 AC-1 / AC-2、FR-209 AC-1 / AC-2、FR-705 AC-1〜AC-4 (安全な項目の適用と由来・保留と無視と効かないの診断・キーの割当の WKEY-2 の (a)〜(f)・所有者の検査で読まない 3 つの理由と `workspace.safe_directories`・`.editorconfig` の探し方と `root`・`unset`・優先順位)、**NFR-502 AC-1 の確かめ直し** (ワークスペース設定に `clipboard.provider = "command"`・`clipboard.command.copy`・`[formatter.x]`・`[language-server.x]` を書いたリポジトリを開いてコピー・保存をしても、記録する偽のクリップボードのコマンドの実行が 0 回で、プロセスが起動されない)、FR-117 AC-7〜AC-9 (偽の監視 `FakeWatcher` でイベントを入れる。03 §9.5.1 の WATCH-1〜WATCH-12。手動の時計で待ち合わせの 100 ms と最長 1 s)、FR-706 AC-1 / AC-2。
+- **fuzz**: `fuzz_editorconfig` を足す (09 §3.3。08 §2.6 の (d) の「足すか」は足すと決めた)。本体は eve-config の `.editorconfig` の読込と glob の照合で、CI は同じ関数を proptest で回す (`fuzz_gitignore` と同じ形)。性質: パニックしない、照合の手数が glob の長さ × パスの長さの上限に収まる (EC-4)、`{a,b}` の照合が展開した glob のどれかへの照合と一致する (選択肢の数が上限以下のとき)。条件付きセクションと言語定義は既存の `fuzz_config` (候補) の扱いのまま (L1 の proptest で代える)。
+- **ゴールデン** (新しく作る): ASCII の Frame で、外部変更の印 (表示していない文書の印をバッファ一覧で・削除の印をステータスバーで)、`config.show` の一覧、`lang.set` の一覧。
+- **計測** (09 §5.2): **BM-204w** (判定) — 監視ありのアイドルの CPU を判定し (01 NFR-204 AC-1・FR-117 AC-10)、参考に Windows の監視のスレッドの起床の回数 (性能カウンタの文脈切替の差。S-24 の測り方) と Linux の `strace -c` の起床を記録する。**BM-117w** (参考) — 外部のプロセスが開いている文書のファイルを書いてから、印の出た Frame までの時間 (p50 / p99。待ち合わせの 100 ms を含む) を、ワークスペースの横断検索を走らせている間とそうでない間で記録する (`bg` が詰まっても監視の知らせが遅れないこと、下の決めた点の「`bg` の詰まり」)。BM-101a / BM-102a (判定) を、`languages/` に 20 ファイルと条件付きセクションのある設定のディレクトリでも測り、v0.4.0 の記録から劣化しない (FR-704 AC-2)。
+- **手での確認 (M)**: 09 §8.2 の互換の行と `docs/compat/checklist-*.md` (各段の PR で手順を足す): Windows の所有者の検査 (昇格した端末で作ったフォルダ・OneDrive・`C:\src`・exFAT のドライブと `workspace.safe_directories`)、WSL の `/mnt/c` (判定できない FS の診断と、監視しない縮退の知らせ)、監視 (ほかのエディタでの保存・`git checkout`・削除と作り直し・ネットワークの共有の縮退・Windows で文書を開いている間に親のフォルダをエクスプローラで改名できないこと (05 §12.1))、行コメントのキー (`Ctrl+/` が Windows Terminal・conhost・WSL の端末で届くか)。
+
+#### 12.6.2 実装の順と各段の完了の条件 (08 §2.6 の M33)
+
+| 段 | PR (ブランチ) | 中身 | 完了の条件 |
+|---|---|---|---|
+| 1 | `feat/eve-config-conditional-sections` (`feat`) | NFR-405: §3.4 の COND-1〜COND-8 (eve-config の解決と診断、bin の条件の値、`reserved.rs` の `CONDITIONAL_SECTIONS` の扱いを替える)、`when` の `os` / `frontend` (03 の `CONTEXT_VARS`)、値の由来の記録と `config.show` (§3.5。`ui_model` の一覧)、言語ファイル (04 §8.15 の文言)、07 §11.6 の `config.show` の行 | 01 NFR-405 AC-1 / AC-2 に `verifies:` の試験がある (§12.6.1)。条件付きセクションを書かない設定では、v0.4 と同じ値・同じ診断 (既存の試験とゴールデンが差分なしで通る。`--dump-config` の出力も同じ)。`config.show` の追加による既定キーとコマンドの一覧 (`commands.tsv`)・パレットのスナップショットの差分は、人間の判断を得て更新する |
+| 2 | `feat/eve-config-language-definitions` (`feat`) | FR-704: §9.6 の LANG-1〜LANG-9 (組込みの表、`[[language]]` と `languages/*.toml` の読込 (`ReadLanguages`)、判定、併合、`lang.set`、`doc.language`、`--dump-languages`)、§3.6 の文書ごとの値 (LAYER-1〜LAYER-5。ここでは (1)〜(4)・(8) の段)、`command/edit.rs` の字下げを文書ごとの値で読む、`reserved.rs` の `language` を予約から外す | 01 FR-704 AC-1 / AC-2 の試験。`config.show` に言語の由来を出す (§3.5)。BM-101a / BM-102a が劣化しない。言語定義を書かない設定では v0.4 と同じ字下げ (組込みの `indent` は `go` と `make` だけ。それらの文書の Tab がタブになるのは計画した変更で、`CHANGELOG.md` の「変更」に書く)。コマンドの一覧とパレットのスナップショットの差分は人間の判断を得て更新する。段 1 の後 (eve-config の層を直列に触る、08 §2.6)。M32 の段 2 (`command/edit.rs`) の後 |
+| 3 | `feat/eve-core-toggle-comment` (`feat`) | FR-209: 03 §15.6 の CMT-1〜CMT-7、03 §4.5.2 の「全カーソル」の行、07 §11.6 の `edit.toggle_comment` の行と既定キー (`mod+/`・`ctrl+k /`)、言語ファイル | 01 FR-209 AC-1 / AC-2 の試験 (§12.6.1 の proptest を含む)。既定キーとコマンドの一覧のゴールデンは 07 §11.6 の表どおりの行の追加だけ。パレット・ヘルプのキー一覧・which-key のスナップショットの差分は人間の判断を得て更新する。段 2 の後 |
+| 4 | `feat/eve-platform-owner-check` (`feat`) | FR-705 の土台: §12.1 の OWN-1〜OWN-7 の判定 (eve-platform の `FileSystem::read_checked`、02 §4.5。Windows の ACL と Unix の uid / mode / `statfs`)、`MemFs` の偽の所有者、契約試験 | §12.6.1 の契約試験 (Windows と、WSL の Linux)。新しい依存なし (`windows-sys` の feature は今のものの範囲、S-25)。unsafe と OS の分岐を足すので、安全性・OS の違いの 2 つの視点のレビューに掛ける (08 §2.6 の「FR-705 の PR」)。段 1〜3 と触る場所が違う (eve-platform) ので、並べて進められる |
+| 5 | `feat/eve-core-workspace-config` (`feat`。`.editorconfig` の所有者の検査の部分の AC-3 は段 6) | FR-705 の本体: §12.5 の WSC-1〜WSC-7 (`ReadWorkspaceConfig`、分類 (§12.3 の v0.5 の公開キーごとの表を宣言の表に)、保留・無視・効かないの診断)、ワークスペース層のキーの割当 (§7.4 の WKEY-1〜WKEY-3)、`workspace.safe_directories` (§5.9)、`workspace.root_markers` / `workspace.exclude` / `search.workspace.*` の公開 (M31 で定数にしたものを設定から読む)、`--no-workspace-config` (§18.3)、§3.6 の (6)(7) の段 | 01 FR-705 AC-1〜AC-3 の試験と NFR-502 AC-1 の確かめ直し。公開による既定の設定の JSON (`dump_config_defaults.json`) の行の追加・`config.example.toml`・07 §5.0 の件数・`reserved.rs` を直す。ゴールデンの差分は計画した行の追加だけで、人間の判断を得て更新する。仕様との整合と安全性の 2 つの視点のレビューに掛ける (08 §2.6)。段 2・段 4 の後 |
+| 6 | `feat/eve-config-editorconfig` (`feat`) | FR-705 の `.editorconfig`: §10.1 / §10.3 の EC-1〜EC-8 (eve-config の読込と glob、`ReadEditorConfig`、§3.6 の (5) の段)、`fuzz_editorconfig` (09 §3.3) | 01 FR-705 AC-3 (`.editorconfig` の部分) と AC-4 の試験と fuzz の proptest。`config.show` に `.editorconfig` の由来を出す (§3.5)。glob の照合が EditorConfig の仕様の例と一致する。段 5 の後 (所有者の検査と文書ごとの値の段を使う) |
+| 7 | `feat/eve-platform-file-watch` (`feat`) | FR-117 の監視の土台: notify の依存 (02 §13.7 の版の決め方。依存追加のチェックリスト、NFR-706)、eve-platform の `FileWatcher` (02 §4.4。登録は `io` のレーンの Host の作業)、Linux の監視できる FS の判定 (05 §12.2 の 4)、`HostMsg::Fs` と `FsEvent`、eve-testkit の `FakeWatcher` | `cargo xtask check-deps` (C を含む依存 0・推移的依存の数を記録。S-24 の見込みは +12 で 85、NFR-207 の目安 90 の内)・`cargo deny`。実 FS の監視の試験 (Windows と WSL の Linux)。段 1〜6 と触る場所が違う (eve-platform・eve-host) ので、並べて進められる |
+| 8 | `feat/eve-core-file-watch` (`feat`) | FR-117 の監視の本体: 03 §9.5.1 の WATCH-1〜WATCH-12 (監視の張り外し、core の待ち合わせ、`WatchCheck` の照合、印とメッセージ、表示中の未編集の文書の再読込、切替の確認の流れ、縮退の知らせ)、`file.watch.enabled` の公開 (§5.2)、ステータスバーとバッファ一覧の印 (04 §8.5 / §8.7)、言語ファイル、01 §4.6 の既知の制約 (外部の変更の行の書き換え・監視しない FS・Windows の祖先の改名) | 01 FR-117 AC-7〜AC-10 の試験と BM-204w (判定)・BM-117w (参考)。`file.watch.enabled` の公開で 07 §5.0 の件数・`config.example.toml`・`reserved.rs` を直す。外部の変更が無い間は v0.4 と同じ画面 (既存のゴールデンが差分なしで通る)。`file.watch.enabled` の公開による `dump_config_defaults.json` の 1 行の追加は人間の判断を得て更新する。段 7 の後 |
+| 9 | `feat/eve-core-config-auto-reload` (`feat`。Could) | FR-706: §6 の RLD-1〜RLD-5 | 01 FR-706 AC-1 / AC-2 の試験。判定の条件にしない (Could。入らなければ 08 §7 に繰り越しを記録する)。段 5 と段 8 の後 |
+
+- 段 1〜3 と段 5・段 6 は eve-config の層を直列に触る (08 §2.6 の順)。段 4 と段 7 は eve-platform で、並べて進められる。段 8 は段 7 の後、段 9 は段 5・段 8 の後。
+- どの段も境界の型 (eve-view) を変えない (§12.6.3 の「境界の型」)。変えることになったら、その PR の前に仕様を直す。
+- 文言 (04 §8.15) は、使う段の PR で言語ファイルと §15 の目録に足す (先に足さない。09 §6.2 の `i18n`)。
+
+#### 12.6.3 決めた点 (M33 の仕様の PR、2026-11-22。退けた案と理由)
+
+**PO の決定 2026-11-22 (PR #619。8 点とも推奨案のまま確定)**: (1) コマンドの ID と既定キー (`edit.toggle_comment` の `mod+/` と `ctrl+k /`、`lang.set` (`auto` を含む)、`config.show`。後の 2 つは既定キーなし) (2) 公開する設定のキー (`file.watch.enabled`・`workspace.root_markers`・`workspace.exclude`・`search.workspace.*` の公開、新しい `workspace.safe_directories`、言語定義の `indent.tab_width`、自動の再読込に専用のキーを持たないこと) (3) ファイルの形式 (`.eve/keymap.toml`、`languages/*.toml` に複数の定義、条件付きセクションを `keymap.toml` に効かせないこと、`.editorconfig` の `max_line_length` を v0.5 で写さないこと・glob の大文字小文字を区別すること) (4) 項目の安全の分類 (特権の所有者を受け入れる・他人の書込の範囲・判定できない FS を読まず `workspace.safe_directories` を逃げ道にする・除外の源に所有者の検査を掛けない・設定ファイルのシンボリックリンクを辿らない・§12.3 の見直し (`editor.undo.*` と `file.swap.max_bytes` を準安全、`ui.*` の 5 つを安全、`clipboard.osc52*` を準安全、`file.reload_on_external_change` を値と向きで分ける、`search.workspace.respect_gitignore = false` を準安全、ワークスペース層の `workspace.exclude` を足すだけにする、「効かない」の行、ワークスペース層の文書ごとの値をルートの下だけにする) とワークスペース層のキーの割当の WKEY-2 (コマンドを Motion・Ui・Edit に限ることを含む)) (5) 監視の既定値 (`file.watch.enabled = true`、待ち合わせ 100 ms と最長 1 s、表示中の未編集の文書だけを既定の `auto_if_unmodified` で確認なしに読み直すこと (v0.4 はフォーカス復帰のときだけ読み直していた。分割したペインのフォーカスの無い文書も目の前で替わる) とその上限 (16 MiB・5 s)、切り替えたときに確認を出さないこと、縮退の知らせはプロセスで 1 回、notify の版の決め方、Windows (NTFS・ReFS だけ) と Linux の監視できる FS の許可リスト) (6) 境界の型 (eve-view を変えない。Port の `FileWatcher`・`FsEvent`・`FileSystem::read_checked` を足す) (7) 各段の完了の条件に書いたゴールデンの差分を、各段の PR で更新してよいか (8) 既定の振る舞いの変更: 組込みの言語定義で `go` と `make` の文書の Tab がタブになること (v0.4 は全文書で空白。Makefile のレシピは空白では動かない)。
+
+| 点 | 採った案 | 退けた案と理由 |
+|---|---|---|
+| 条件付きセクションとキーマップ | `keymap.toml` には効かせず、`when` の `os` で書く (COND-6) | `keymap.toml` にも `[os.macos.keys.editor]` を効かせる: 同じことを 2 通りに書け、ユーザー層とワークスペース層のキーの併合 (WKEY) に条件の段が増える。§3.4 の「設定値の切替は条件付きセクション、同じキーを OS で別コマンドにするのは `when`」の使い分けとも合う |
+| 偽の条件のセクションの検証 | 検証して診断を出す (COND-4) | 読み飛ばす: ほかの OS のセクションの綴りの誤りが、その OS で起動するまで分からない (共有する設定の目的に反する) |
+| 条件の値の時期 | 起動時に 1 回 (COND-2) | 読み直しのたびに環境変数を見る: Host の環境変数は起動の後に変わらないので結果は同じで、`env` だけ時期が違う説明が要る |
+| 値の由来の見せ方 | `config.show` の一覧を足す (§3.5)。`--dump-config` の形は変えない | `--dump-config` に由来を注釈で出す: 出力の形 (ゴールデンと、設定ファイルとしてそのまま読めること) が変わる。由来は文書ごとに違う (§3.6) ので、文書を知らない CLI では出せない |
+| 文書ごとの値の順 | 利用者の範囲 (言語が一般に勝つ) < `.editorconfig` < ワークスペース層 (言語が一般に勝つ) < `--set` (LAYER-1) | 言語の値を層に依らず一般の値より強くする (VS Code の言語ごとの設定): ワークスペースの `[editor]` が利用者の `[[language]]` に負け、プロジェクトの規約が効かない。層の順だけで決める: 組込みの Makefile のタブが利用者の `editor.indent_unit = "space"` に負けて、Makefile が壊れる |
+| 組込みの言語定義の持ち方 | 静的な表 (LANG-1) | バイナリ内の TOML を起動時に解析する (v0.4 までの §9.1): BM-102a と同じく起動の時間を使う |
+| `languages/` の読み方 | 起動時に `io` のジョブで全部を読む (LANG-2) | 索引だけ先に読み、本体を遅延で読む (v0.4 までの §3.2): 索引を作るにも全ファイルを解析する |
+| ワークスペース層の言語定義 | `.eve/config.toml` の `[[language]]` だけ。`.eve/languages/` は読まない | `.eve/languages/` も読む: 所有者の検査の対象と診断の場所が増え、`[[language]]` で同じことが書ける |
+| 言語の判定の大文字小文字 | ASCII の大文字小文字を区別しない (LANG-6) | OS に合わせる: 同じリポジトリを Windows と Linux で開いて言語が変わる |
+| 判定し直す手段 | `lang.set` に `auto` を含める (LANG-8) | `lang.redetect` を別に足す: コマンドが増える。`auto` は一覧の先頭で見つけやすい |
+| ステータスバーの言語 | v0.5 では出さない (LANG-9) | 出す: 04 §8.7 の項目の幅の割り振りと、ステータスバーを含む全画面のゴールデンが変わる。字下げの違いの原因は `config.show` で分かる |
+| 行コメントの付け方 | 対象の空白でない行の最も浅い字下げの位置 (表示の列で比べ、タブを割らない) に `記号 + 空白` を付ける。全部がコメントなら外す (03 §15.6) | 行ごとに切り替える: 一部がコメントの範囲で、コメントとコードが入れ替わるだけになる。行頭 (列 0) に付ける: 字下げが崩れて見え、Python のブロックの見た目が変わる |
+| 行コメントのキー | `mod+/` と `ctrl+k /` | `ctrl+k ctrl+c` / `ctrl+k ctrl+u` (VS Code の付ける・外すの別のキー): 切替の 1 つのコマンドの AC に対して 2 つのキーが要り、`ctrl` を離さずに打つチョードは誤操作しやすい (§11.6 のペインの「キーの選び方」と同じ理由) |
+| 特権の所有者 | 受け入れる (OWN-2 の (1)) | git の `safe.directory` と同じく自分だけ: プロファイルのフォルダ (`C:\Users\<名前>`、SYSTEM の所有) の `.editorconfig`・管理者として作ったフォルダが読めない。特権のアカウントは今のユーザーのファイルも書き換えられるので、守れる範囲は変わらない (反対の論点: git と挙動が違う。共有の PC のほかの管理者の置いた設定も読む) |
+| 他人の書込の範囲 (Windows) | 「自分たち」以外のどの SID への書込の許可も数える (OWN-2 の (2)) | `Everyone` / `Users` だけ (v0.4 までの §12.1): ドライブの直下から継承する `Authenticated Users` の書込を見逃す (S-25 の W7) |
+| 判定できない FS | 読まずに診断し、ユーザー層の `workspace.safe_directories` を逃げ道にする (OWN-3 / OWN-5) | 逃げ道なし (既知の制約): exFAT のドライブ・WSL の `/mnt/c` の上のリポジトリで、ワークスペース設定も `.editorconfig` も使えない (開発機の作業ツリーそのものが当たる、S-25)。`workspace.trust` を v0.5 に入れる: 信頼の記録と UI を先に固めることになり、PO の決定 (§12 の「版」) に反する |
+| Unix の判定できない FS の決め方 | 所有者を写す FS の否定のリスト (OWN-3) | 許可リスト (ext4 などだけを判定する): zfs・ecryptfs (暗号化したホーム)・overlayfs (コンテナ) の利用者のワークスペース設定が読まれない。否定のリストの外で所有者を写す FS は、写す先が利用者自身なので、他人の設定を読むことにはならない見込み (反対の論点に残す) |
+| 判定と読込 | 同じハンドルで行う (OWN-6) | パスで判定してから開き直す: 判定と読込の間に差し替えられる (S-25 の決める点 5) |
+| 設定ファイルのシンボリックリンク | 辿らない (OWN-6。`.gitignore` の読み方と揃える) | 辿って辿った先を判定する: 判定の前に開く時点で、リンクの先の UNC へ認証が走り (資格情報の漏れ)、応答しない共有で `io` が止まる。失うのは dotfiles の管理でリンクにした `~/.editorconfig` を読む使い方 (既知の制約) |
+| ワークスペース層のキーの割当のコマンド | Motion・Ui・Edit だけ (WKEY-2 の (g)) | 制限しない (`args` だけを禁じる): 知らないキーで `app.save_and_quit` や `file.save_all` を起こせる |
+| `file.reload_on_external_change` の分類 | 値と向きで分ける (`never` と緩める向きは準安全、§12.3) | 一律に安全 (v0.4 までの表): `never` で監視とフォーカス復帰の確認を止められ、準安全の `file.watch.enabled = false` より強いことが安全でできる |
+| ワークスペース層の `workspace.exclude` | 下の層に足す (§12.3 の公開キーごとの表) | 配列の置換のまま: `workspace.exclude = []` で既定の除外が消え、`node_modules` を走査させられる |
+| ワークスペース層の文書ごとの値の範囲 | ルートの下の文書だけ (LAYER-1) | すべての文書: ワークスペースの外のファイル (`~/notes.md`) にプロジェクトの字下げが効く |
+| 切り替えたときの外部変更の確認 | 確認のダイアログを出さず、印とメッセージで知らせる (未編集なら読み直す。WATCH-8) | 今のフォーカス復帰と同じく確認を出す: 切り替えた直後に打った文字が、非同期に出たダイアログの 1 文字のアクセラレータ (`[L]` 再読込 (自分の変更を破棄)) に当たり、編集を失う (読み直した内容が読み取り専用になると Undo もできない)。フォーカス復帰のダイアログの同じ危険は v0.2 からで、後の版で扱う (下の行) |
+| 利用者の操作に直接応えないダイアログのアクセラレータ | v0.5 では変えない (フォーカス復帰の `ui.confirm.external_modified` は今のまま) | M33 で直す: 04 §8.3 のダイアログの部品と既存のゴールデンを変え、M33 の範囲を超える。起票して後の版で扱う (PR の本文に書く) |
+| 除外の源の所有者の検査 (M31 から送った件) | 掛けない (OWN-8) | 掛ける: 読んで変わるのは一覧と検索の範囲だけで何も実行しないのに、所有者を判定できない FS (WSL の `/mnt/c`・exFAT) の上のリポジトリで `.gitignore` が効かなくなり、ファインダに `node_modules` などが並ぶ。所有者の検査は「文書の内容・保存・キーの意味を変える源」に掛ける、と線を引いた |
+| ワークスペース層のキーの割当の置き場所 | `.eve/keymap.toml` (WKEY-1) | `.eve/config.toml` の `[keys]`: ユーザー層の入口を `keymap.toml` にした決定 (PO の決定 2026-11-21) と食い違い、2 つのファイルの併合が要る |
+| ワークスペース層のキーの割当の `args` | 持たせない (WKEY-2 の (d)) | 持たせる: `file.save_as` にパスを付けたキーで、知らないキーを押すとワークスペースの外へ書く操作を作れる (B2) |
+| ワークスペース設定の解析の場所 | ジョブの中 (WSC-2) | 主スレッド (ユーザー層の `config.reload` と同じ): 他人のリポジトリの大きな・入れ子の深いファイルで入力が止まる |
+| 分類の見直し | `editor.undo.*` と `file.swap.max_bytes` の両方の向きを準安全、`ui.*` の表示の 5 つを安全、`clipboard.osc52*` を準安全、「効かない」の行を足す (§12.3) | v0.4 までの表のまま: `editor.*` を一律に安全とすると Undo の履歴を小さくして守りを弱められ、`file.swap.max_bytes` を小さくする向きが安全に入っていて (閾値のキーの「小さくする方向のみ」の一律の扱い) スワップを止められる。`ui.*` は表に無く、保留 (危険扱い) になっていた |
+| `--check-config` とワークスペース層 | 読まない (WSC-7) | 読む: CLI で起動時にルートを決める手順と所有者の検査が要り、出力が置き場所で変わる (ゴールデンに向かない)。要望があれば後の版で `--workspace` と組む |
+| `.editorconfig` のキャッシュ | 持たない。開くたびに読む (EC-1) | ディレクトリごとにキャッシュし、監視で無効にする (v0.4 までの §10.3): 祖先のディレクトリを全部監視することになり、監視しない FS では古いまま残る。ローカルの FS では読む費用が小さい (EC-8) |
+| `.editorconfig` の glob の大文字小文字 | 区別する (仕様どおり。EC-4) | Windows で区別しない: 同じリポジトリで OS によって当たるセクションが変わる。EditorConfig のほかの実装とも違う |
+| `max_line_length` | v0.5 では写さず未対応の情報診断 (§10.1) | `view.rulers` を M33 で入れる: AC に無く、表示の機能を足すことになる |
+| 既存のファイルの `charset` の不一致 | 知らせない (§10.1) | 知らせる (v0.4 までの §10.1): 開くたびに情報メッセージが出て煩わしく、文書の文字コードは判定値を保つので害も無い |
+| `.editorconfig` の fuzz | `fuzz_editorconfig` を足す (§12.6.1) | proptest だけ: 他人のリポジトリから来る非信頼のデータの読込と、展開の爆発を起こし得る glob の照合 |
+| notify の版 | 段 7 の PR の時点で 9.0 の安定版が出ていればそれを使う。出ていなければ **9.0.0-rc を `=` で固定** して入れ、安定版が出たら上げる。v0.5.0 の凍結の時点で rc の不具合が見つかったら 8.2.x に戻し、Windows の 100 ms の起床を既知の制約にして FR-117 AC-10 を Windows では CPU 使用率だけにする (02 §13.7) | 8.2.2 で入れる: Windows で監視のスレッドが 100 ms ごとに起き、FR-117 AC-10 と NFR-204 の「不要なタイマ起床をしない」に反する (S-24)。`ReadDirectoryChangesW` と inotify を自前で呼ぶ: unsafe と OS の分岐を持ち、macOS の FSEvents も後で要る (S-24 の反対の論点)。rc の API は試作の範囲で 8.2 と同じ |
+| Linux の監視できる FS | `statfs` の `f_type` の許可リスト (ext2/3/4・xfs・btrfs・tmpfs・f2fs。05 §12.2 の 4) | `FsKind::Network` の否定のリスト: 知らない FS (virtiofs・overlayfs・FUSE の新しいもの) を監視したつもりになり、イベントが来ないのに縮退を知らせない (S-24 の (3) の「判定できない FS は監視しない側に倒す」) |
+| 待ち合わせの置き場所 | core の期限 (`next_deadline`)。Host は待つだけ (WATCH-4) | Host で待ち合わせる (v0.4 までの 05 §12.2 の 2): Host は文書とパスの対応を知らず、手動の時計での試験 (`ManualClock`) が Host の試験になる |
+| 待ち合わせの上限 | 最初のイベントから最長 1 s (WATCH-4) | 上限なし: 書き続けるログのファイルでは期限が延び続け、知らせが出ない (S-24 の決めること 3) |
+| 自分の保存の抑え方 | 保存などのジョブの間は照合を延ばし、終わった後に文書の `disk_stamp` と比べる (WATCH-5) | 一時ファイルの名前で抑える: 自分の保存の直後のほかのプログラムの書込を隠す (S-24 の own-then-ext)。最後の保存の stamp と比べる: 再読込や同期ソフトの属性の変更を外部の変更と見る |
+| 監視のイベントで読み直す文書 | 表示している未編集の文書だけ (`auto_if_unmodified` のとき)。ほかは印だけで、切り替えたときに今の確認の流れ (WATCH-6 / WATCH-8) | 未編集なら全部を読み直す: `git checkout` で開いている多数の文書を一度に読み、再読込ごとに旧全文を Undo に持つのでメモリが増える (03 §7.5)。どれも読み直さない: 表示中の文書が古いまま、フォーカス復帰を知らせない端末では保存まで気付かない |
+| 監視するディレクトリ | 文書の canonical のパスの親 (WATCH-1) | 開いたパスの親: シンボリックリンクで開いた文書 (dotfiles の管理など) の変更はリンク先のディレクトリで起き、イベントが来ない |
+| 登録の呼び出し | `io` のレーンの Host の作業 (05 §12.2 の 9) | 主スレッドで `watch()` を呼ぶ: notify は監視のスレッドの応答を待つので、主スレッドが OS の呼出しを待つ (02 §4.4 規則 2)。登録の専用のスレッド: スレッドが増える (ADR-0006) |
+| 縮退の知らせ | 理由ごとにプロセスで 1 回 (WATCH-2) | 文書ごと: ネットワークの共有の文書を開くたびに同じ知らせが出る |
+| タブラインの外部変更の印 | 付けない (ステータスバーとバッファ一覧だけ。01 FR-117 AC-7) | `TabItem` に印を足す: 境界の型 (eve-view) を変える。AC に無い |
+| 自動の再読込の契機 | 自分の保存も契機にする。`.editorconfig` は見ない (RLD-1 / RLD-2) | 自分の保存を抑える: evoeditor で設定ファイルを直して保存しても効かない。`.editorconfig` も見る: 祖先のディレクトリをすべて監視することになる |
+| 自動の再読込の設定 | 専用のキーを持たず `file.watch.enabled` に従う | `config.auto_reload` を足す: 公開するキーが増え、監視を止める理由 (監視できない FS・資源) は文書と設定で同じ |
+| `bg` の詰まり (OQ-103 の後に残った件) | M33 のジョブはすべて `io` に置き (設定・言語・`.editorconfig` の読込、所有者の検査、監視の照合、監視の登録)、`bg` を使わない。走査と横断検索が `bg` を長く使っても、監視の知らせと設定の読込は遅れない (BM-117w で記録する)。`bg` の OS の呼出しの止まり (ネットワークの共有の `read_dir`) で文書の中の検索が遅れることは、M31 の既知の制約のまま (03 §12.7.10) | 監視の照合を `bg` に置く: 走査の区切り (8 ms) と OS の呼出しの止まりの後ろで待つ。監視の専用のレーンを足す: ADR-0006 の固定 2 本を変える理由が無い (`io` のジョブは短い) |
+| インデントの自動検出 (03 §15.1 の v0.5 の記述) | v0.5 では入れない (03 §15.1 を直した) | 入れる: 01 に要件と AC が無く、`.editorconfig` と言語定義との優先の順を決め直すことになる |
+| 境界の型 | eve-view を変えない (`CONTRACT_VERSION` は 0 のまま)。`config.show`・`lang.set` は今の `List` の一覧、外部変更の印は今の `StatusItem` とバッファ一覧の行の文字列。Port (eve-core の `FileWatcher`・`FsEvent`・`FileSystem::read_checked`) を足す (02 §4.4 / §4.5) | `Frame` に言語や外部変更の印の欄を足す: AC に無く、M30 / M32 で計画した追加の外 |
 
 ---
 
@@ -1911,7 +2211,7 @@ v0.1 の公開オプションは **5 個** (ADR-0028: 引数解析と `--help` �
 | `--config <file>` | `-c` | ユーザー層の `config.toml` を差し替える (複数可、順にマージ)。**v0.2 の M9c で実装した** (`keymap.toml` は設定ディレクトリのものを読む。読めない・構文エラーのファイルは重ねない) | v0.2 |
 | `--config-dir <dir>` | — | `EVE_CONFIG_DIR` と同じ (環境変数で代替可) | v0.5 |
 | `--no-config` | `-N` | ユーザー層・システム層・ワークスペース層を読まない (既定値のみ。トラブルシュート用。v0.1 は `EVE_CONFIG_DIR` を空のディレクトリに向けて代える)。**v0.2 の M9c で実装した** (v0.2 はユーザー層の `config.toml` と `keymap.toml` を読まない。テーマファイルと、v0.4 のユーザーの言語ファイル (§17.4) も読まない) | v0.2 |
-| `--no-workspace-config` | — | ワークスペース層のみ読まない | v0.5 |
+| `--no-workspace-config` | — | ワークスペース層のみ読まない (`.editorconfig` も読まない。§12.5 の WSC-7・§10.3 の EC-7) | v0.5 (**M33 の段 5 で入れる**) |
 | `--set <key>=<value>` | `-s` | コマンドライン層で 1 項目上書き (TOML 値として解釈。`--set view.wrap=soft`)。**v0.2 の M9c で実装した**: 値を TOML の値として読めなければ文字列として読む (`soft` と書ける)。`=` が無い・キーが空は使い方の誤り (終了コード 2)。値の誤りは設定ファイルと同じ診断 (名前は `--set`)。複数可、後のものが優先 | v0.2 |
 | `--theme <name>` | — | `--set theme.name=` の短縮 | v0.5 |
 | `--keymap <preset>` | — | `--set keys.preset=` の短縮 | v0.5 |
@@ -1925,7 +2225,7 @@ v0.1 の公開オプションは **5 個** (ADR-0028: 引数解析と `--help` �
 | `--dump-config [--defaults] [--json]` | — | 解決済み設定 (または既定値) を出力。**v0.2 の M9c で実装した**: TOML はセクションごとの公開キーの全項目で、そのまま設定ファイルとして読める。`--json` は平らなキーの表。`--defaults` / `--json` は `--dump-config` の修飾で、単独では使い方の誤り。`--annotated` (注釈付き雛形) は v0.1 は同梱の `config.example.toml`、生成は v0.5 (§4.1) | v0.2 |
 | `--dump-schema` | — | JSON Schema (Could) | v0.5 |
 | `--list-commands [--json]` / `--dump-keymap [--json]` | — | §11.5 / §11.6 (CI 突合用)。**v0.3 の M18 で実装した** (案): 端末を始めずに標準出力へ出し、終了コード 0。`--list-commands` は組込みのコマンドを CommandId の順に、`--dump-keymap` は解決後のキーマップ (組込みの既定に `keymap.toml` のユーザー層を重ねたもの。`--no-config` なら既定だけ。診断は出さず、`--check-config` で見る) を §7.1 のコンテキストの順 (同じコンテキストの中は層の優先順・登録の順) に出す。タイトルは §17.1 の順で選んだ UI の言語 (`--locale` が最上位)。`--json` が無いときは、`--list-commands` は 1 行 1 コマンド (`ID` タブ タイトル タブ 既定キー)、`--dump-keymap` は `keymap.toml` の書式 (§7.5。割当ごとの行末の注釈にタイトルと層)。`--json` の形 (`format` = 1。項目を足すときは版を変えずに足し、意味を変えるときに版を上げる): `--list-commands` は `{ format, locale, commands: [ { id, title, description, kind, args: [ { name, type, required } ], when, permission, hidden, keys: [ { context, key, label, enhanced } ] } ] }`、`--dump-keymap` は `{ format, locale, bindings: [ { context, key, label, command, title, when, layer, enhanced, args, disabled_by } ] }` (`args` は割当の引数の表 (無ければ `{}`)、`disabled_by` はプレフィックスの衝突で使えなくなった割当を無効にしたチョードのキー (使える割当は空文字列)。どちらも v0.5 の M29 で足した。使えなくなった割当は、そのコンテキストの後ろに並ぶ)。`key` は設定の表記 (§7.2。小文字、`mod` は `ctrl` に解決)、`label` は画面の表記 (04 §7.8 の `key_notation`)、`type` は §11.2 の表記、`permission` は §11.6 の perm 列の表記 (`-` / `read` / `propose` / `ui`)、`when` の空文字列は常に真、`keys` は組込みの既定キーマップの割当。`--json` は `--dump-config` / `--list-commands` / `--dump-keymap` の修飾 (単独では使い方の誤り)。`--help` には出さない | v0.3 (隠し。v0.1 の予定から送った) |
-| `--dump-languages` | — | §9.1 | v0.5 |
+| `--dump-languages` | — | §9.1。組込みの言語定義にユーザー層の定義を重ねた結果を `[[language]]` の TOML で標準出力へ出して終了する (終了コード 0。`--no-config` なら組込みだけ。ワークスペース層は含めない。§9.6 の LANG-1) | v0.5 (**M33 の段 2 で入れる**) |
 | `--log-level <level>` | — | `EVE_LOG` より優先。**v0.2 の M9c で実装した** (値は `error` / `warn` / `info` / `debug` / `trace`。それ以外・値なしは使い方の誤り、終了コード 2) | v0.2 |
 | `--log-file <path>` | — | ログ出力先の変更 | v0.5 |
 | `--debug-commands` | — | `debug.*` をパレットに出す | v0.5 |
