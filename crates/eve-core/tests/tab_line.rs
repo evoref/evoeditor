@@ -502,6 +502,172 @@ fn 同じ名前の区別はタブに出す文書の集合で行い_見出しと�
     assert_eq!(bars, vec!["mod.rs (b)", "mod.rs (a)"]);
 }
 
+/// 各ペインの先頭の行が View の先頭の論理行で、折り返しの表示行の番号がその行の中にある (03 §14.3.1)。
+fn check_wrap_top(h: &mut Harness) {
+    let f = h.frame();
+    let st = h.editor.state();
+    for p in &f.panes {
+        let v = st.view(p.view).expect("View");
+        let d = st.document(v.doc).expect("文書");
+        let top = eve_text::TextRead::byte_to_line(d.text(), v.scroll.top).0;
+        let eve_view::RowSource::Line { line, wrap_idx } = p.rows[0].source else {
+            panic!("先頭の行が文書の外: {:?}", p.rows[0].source);
+        };
+        assert_eq!(
+            (line as usize, wrap_idx),
+            (top, v.scroll.wrap_idx),
+            "{:?} の先頭",
+            p.view
+        );
+    }
+}
+
+/// 150 文字の行を折り返して、左右に分けた右のペインで先頭をその行の途中 (`wrap_idx` = 3) にした 80 × 4 の Harness。
+fn wrapped_right_pane() -> (Harness, ViewId) {
+    let mut text = "x".repeat(150).into_bytes();
+    text.extend_from_slice(b"\n");
+    text.extend(lines(5));
+    let mut h = opened_sized(80, 4, &[("/w/a.txt", &text)]);
+    h.cmd("view.toggle_wrap");
+    h.cmd("pane.split_right");
+    let right = focused(&h);
+    h.mouse_in(right, MouseKind::WheelDown, Modifiers::NONE, 0, 5);
+    // 本文の 3 行目 (次の論理行) をクリックする: カーソルが先頭の論理行より後ろにあると、スクロールの計算が先頭の行の
+    // 表示行の数を数える
+    h.mouse_in(right, left_down(), Modifiers::NONE, 2, 5);
+    h.mouse_in(
+        right,
+        MouseKind::Up(MouseButton::Left),
+        Modifiers::NONE,
+        2,
+        5,
+    );
+    let w = h.editor.state().view(right).expect("View").scroll.wrap_idx;
+    assert_eq!(w, 3, "右のペイン (約 35 桁) では 150 文字が 5 表示行");
+    check_wrap_top(&mut h);
+    (h, right)
+}
+
+// verifies: AC-FR-510-2
+#[test]
+fn タブラインを出して縮退表示に入ると_桁数が変わった_view_の先頭の表示行を戻す() {
+    let (mut h, right) = wrapped_right_pane();
+    // タブラインを出すと編集面が 3 行になり、木の最小 (4 行) を割るので縮退表示。右のペインが 80 桁で出る
+    h.set_tab_line(TabLineMode::Always);
+    let f = h.frame();
+    assert_eq!((f.panes.len(), f.panes[0].view), (1, right));
+    assert_eq!(f.panes[0].rect.cols, 80);
+    // 80 桁では 150 文字は 2 表示行なので、3 のままにしない (論理行の最初の表示行に戻してから、次の論理行のカーソルが
+    // 余白の内に入るように 1 表示行だけ下げる)
+    assert_eq!(
+        h.editor.state().view(right).expect("View").scroll.wrap_idx,
+        1
+    );
+    check_wrap_top(&mut h);
+}
+
+// verifies: AC-FR-510-2
+#[test]
+fn 端末を低くして縮退表示に入っても_先頭の表示行を戻す() {
+    let (mut h, right) = wrapped_right_pane();
+    h.resize(80, 3);
+    assert_eq!(h.frame().panes.len(), 1);
+    assert_eq!(
+        h.editor.state().view(right).expect("View").scroll.wrap_idx,
+        1
+    );
+    check_wrap_top(&mut h);
+    // 戻すと元の配置に戻り、狭いペインでも先頭は行の中
+    h.resize(80, 4);
+    assert_eq!(h.frame().panes.len(), 2);
+    check_wrap_top(&mut h);
+}
+
+// verifies: AC-FR-510-2
+#[test]
+fn 狭いペインの_view_を写して広いペインに出すと_先頭の表示行を戻す() {
+    let mut text = "y".repeat(600).into_bytes();
+    text.extend_from_slice(b"\n");
+    text.extend(lines(30));
+    // 上のペインでは a を一度も出さない (上のペインの表に a の View が無く、a を出すときに写す)
+    let mut h = opened(&[("/w/b.txt", b"b\n")]);
+    // 上に広いペイン (b)、下に左右 2 つの狭いペイン
+    h.cmd("pane.split_down");
+    h.cmd("pane.split_right");
+    // 下の右の狭いペインで a を開いて折り返し、先頭を 600 文字の行 (狭いペインで約 17 表示行) の 13 番目の表示行にする
+    h.fs.add_file("/w/a.txt", &text);
+    h.open("/w/a.txt");
+    h.run_jobs();
+    let a = doc_of(&h, "/w/a.txt");
+    h.cmd("view.toggle_wrap");
+    let narrow = focused(&h);
+    for _ in 0..4 {
+        h.mouse_in(narrow, MouseKind::WheelDown, Modifiers::NONE, 0, 5);
+    }
+    // 先頭の論理行より後ろ (次の論理行) をクリックする: 先頭の行の残りは 5 表示行
+    h.mouse_in(narrow, left_down(), Modifiers::NONE, 6, 5);
+    h.mouse_in(
+        narrow,
+        MouseKind::Up(MouseButton::Left),
+        Modifiers::NONE,
+        6,
+        5,
+    );
+    assert_eq!(
+        h.editor.state().view(narrow).expect("View").scroll.wrap_idx,
+        12
+    );
+    check_wrap_top(&mut h);
+    // 上の広いペインへ移り、a のタブをクリックする: a は狭いペインの View を写して出す (80 桁では 8 表示行)
+    h.cmd("pane.focus_up");
+    h.click_tab(a);
+    let wide = focused(&h);
+    assert_ne!(wide, narrow);
+    assert_eq!(doc_of_view(&h, wide), a);
+    // 折り返し幅が違うので論理行の最初の表示行に戻し、次の論理行のカーソルが下の余白に入らないように最小限下げる
+    // (戻さずに丸めるだけなら、先頭は 8 表示行の最後の 7 になる)
+    assert_eq!(
+        h.editor.state().view(wide).expect("View").scroll.wrap_idx,
+        1
+    );
+    check_wrap_top(&mut h);
+}
+
+// verifies: AC-FR-510-2
+#[test]
+fn 範囲を超えた_wrap_idx_でもスクロールの計算はパニックしない() {
+    let mut text = "z".repeat(150).into_bytes();
+    text.extend_from_slice(b"\n");
+    text.extend(lines(40));
+    let mut h = opened_sized(80, 10, &[("/w/a.txt", &text)]);
+    h.cmd("view.toggle_wrap");
+    let v = focused(&h);
+    // カーソルを先頭の行より後ろ (2 つ目の論理行) に置く
+    h.keys("down down");
+    // 先頭の行 (80 桁で 2 表示行) に、表示行の数を超えた番号を直接置く (戻し忘れの守り、03 §14.3.1)
+    let set = |h: &mut Harness| {
+        let top = h.editor.state().view(v).expect("View").scroll.top;
+        h.editor.state_mut().set_scroll(
+            v,
+            eve_core::ScrollPos {
+                top,
+                left_col: 0,
+                wrap_idx: 50,
+            },
+        );
+    };
+    // カーソルの移動 (先頭からカーソルまでの表示行を数える)・ホイール・ページ移動のどれでもパニックしない
+    for k in ["down", "up", "pagedown", "pageup"] {
+        set(&mut h);
+        h.keys(k);
+        let w = h.editor.state().view(v).expect("View").scroll.wrap_idx;
+        assert!(w < 2, "{k}: {w}");
+    }
+    set(&mut h);
+    h.mouse_in(v, MouseKind::WheelDown, Modifiers::NONE, 2, 5);
+    let _ = h.frame();
+}
+
 // ---------- ASCII の Frame のゴールデン (03 §4.7.1 のゴールデン、PANE-12 (h)) ----------
 
 fn golden_path(name: &str) -> std::path::PathBuf {

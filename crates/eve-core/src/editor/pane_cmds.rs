@@ -53,6 +53,11 @@ impl EditorState {
         self.seal_active_history();
         self.search_close();
         let size = self.surface_size();
+        // 移す先のペインの View の、移す前の本文の桁数 (縮退表示で表示が替わったときに合わせる)
+        let before_cols = self
+            .window(at.0)
+            .and_then(|w| w.panes.get(&at.1))
+            .map(|p| self.view_size(p.view).0);
         let Some(w) = self.window_mut(at.0) else {
             return;
         };
@@ -67,15 +72,18 @@ impl EditorState {
             self.docs.last_view.insert(doc, view);
         }
         if collapsed {
-            self.fit_view(view);
+            self.fit_view(view, before_cols);
         }
         self.mark_dirty_render();
     }
 
-    /// 可視の大きさが変わった View を合わせる: 折り返しの表示行の番号を 0 に戻し (`apply_viewport` と同じ規則)、
-    /// カーソルが見えるようにスクロールする。
-    fn fit_view(&mut self, view: ViewId) {
-        if let Some(v) = self.docs.views.get_mut(&view) {
+    /// 可視の大きさが変わった View を合わせる: 本文の桁数 (折り返し幅) が `before_cols` から変わったときだけ折り返しの
+    /// 表示行の番号を 0 に戻し (`apply_viewport` と同じ規則、03 §14.3.1)、カーソルが見えるようにスクロールする。
+    /// `before_cols` が `None` (前の大きさが分からない) なら戻す。
+    fn fit_view(&mut self, view: ViewId, before_cols: Option<u16>) {
+        if before_cols != Some(self.view_size(view).0)
+            && let Some(v) = self.docs.views.get_mut(&view)
+        {
             v.scroll.wrap_idx = 0;
         }
         self.ensure_cursor_visible(view);
@@ -88,25 +96,24 @@ impl EditorState {
         let Some(win) = self.window(w) else {
             return;
         };
-        let changed: Vec<ViewId> = win
+        // (View, 変える前のペインの本文の桁数。新しく出たペインは `None`)
+        let changed: Vec<(ViewId, Option<u16>)> = win
             .layout(size)
             .leaves
             .iter()
-            .filter(|x| {
-                before
-                    .leaves
-                    .iter()
-                    .find(|b| b.pane == x.pane)
-                    .is_none_or(|b| (b.body.cols, b.body.rows) != (x.body.cols, x.body.rows))
+            .filter_map(|x| {
+                let prev = before.leaves.iter().find(|b| b.pane == x.pane);
+                prev.is_none_or(|b| (b.body.cols, b.body.rows) != (x.body.cols, x.body.rows))
+                    .then(|| (x.pane, prev.map(|b| b.body.cols)))
             })
             // 表示中の View だけでなく、そのペインの表に残っている (表示していない) View も合わせる (次にそのペインで
             // 表示するときの大きさが変わった)
-            .filter_map(|x| win.panes.get(&x.pane))
-            .flat_map(|p| p.views.values().copied())
+            .filter_map(|(pane, cols)| win.panes.get(&pane).map(|p| (p, cols)))
+            .flat_map(|(p, cols)| p.views.values().map(move |v| (*v, cols)))
             .collect();
         self.with_view_sizes(|st| {
-            for v in changed {
-                st.fit_view(v);
+            for (v, cols) in changed {
+                st.fit_view(v, cols);
             }
         });
         self.refresh_collapse();

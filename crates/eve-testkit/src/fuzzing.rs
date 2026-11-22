@@ -181,6 +181,40 @@ fn check_frame(f: &Frame, step: usize) {
     }
 }
 
+/// 各ペインの先頭の行は View の先頭の論理行で、折り返しの表示行の番号 (`wrap_idx`) はその行の表示行の数より小さい
+/// (03 §14.3.1。折り返し幅が変わった後に戻し忘れると、先頭の論理行を飛ばして描く)。
+fn check_wrap_top(h: &Harness, f: &Frame, step: usize) {
+    use eve_text::TextRead;
+    let st = h.editor.state();
+    for p in &f.panes {
+        let Some(eve_view::RowSource::Line { line, wrap_idx }) = p.rows.first().map(|r| r.source)
+        else {
+            continue;
+        };
+        let Some(v) = st.view(p.view) else {
+            continue;
+        };
+        let Some(d) = st.document(v.doc) else {
+            continue;
+        };
+        let top = d.text().byte_to_line(v.scroll.top).0;
+        assert_eq!(
+            usize::try_from(line).unwrap_or(usize::MAX),
+            top,
+            "step {step}: {:?} の先頭の行が先頭の論理行でない (wrap_idx {} が表示行の数を超えた)",
+            p.view,
+            v.scroll.wrap_idx
+        );
+        if wrap_idx > 0 {
+            assert_eq!(
+                wrap_idx, v.scroll.wrap_idx,
+                "step {step}: {:?} の先頭の表示行の番号",
+                p.view
+            );
+        }
+    }
+}
+
 /// タブラインの不変条件 (03 §9.9 の PANE-12): タブラインがあれば、アクティブは `Some` でフォーカスのペインの文書と一致し、
 /// 編集面は 3 行以上残る (PANE-12 (b))。
 fn check_tab_line(h: &Harness, f: &Frame, step: usize) {
@@ -1031,6 +1065,7 @@ pub fn editor_sequence(data: &[u8]) {
         let f = h.frame();
         check_frame(&f, step);
         check_tab_line(&h, &f, step);
+        check_wrap_top(&h, &f, step);
         check_state(&h, &mut revs, step);
         check_partial(&h, &opened, step);
         if let Some((t, Some((doc, before)))) = outside

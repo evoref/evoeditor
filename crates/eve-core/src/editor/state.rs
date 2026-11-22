@@ -615,16 +615,18 @@ impl EditorState {
         }
         let rows = rows.saturating_sub(tab_rows).max(1);
         if self.term.viewport != (cols, rows) {
-            // 桁数が変わったときだけ折り返し幅が変わる。行数だけの変化 (端末の高さ・検索バーとタブラインの出し入れ) では
-            // 先頭の表示行を保つ (03 §14.3.1 の「リサイズ・設定変更」、§9.9 の PANE-12 (b))
-            let cols_changed = self.term.viewport.0 != cols;
+            // 折り返し幅は View を表示するペインの本文の桁数で決まる。端末の桁数が同じでも、縮退表示 (03 §9.9 の PANE-4 (b))
+            // に出入りするとペインの幅が変わるので、変える前と後の本文の桁数を View ごとに比べる (03 §14.3.1 の
+            // 「リサイズ・設定変更」、§9.9 の PANE-12 (b))。行数だけの変化では先頭の表示行を保つ
+            let before = self.all_view_sizes();
             self.term.viewport = (cols, rows);
             self.out.needs_render = true;
             // 画面の大きさが変わっても、カーソルが見えるようにする (配置は 1 回だけ求める)
             let views: Vec<ViewId> = self.docs.views.keys().copied().collect();
             self.with_view_sizes(|st| {
                 for v in views {
-                    // 折り返し幅が変わるので、先頭の論理行の最初の表示行に戻す (03 §14.3.1)
+                    // 折り返し幅が変わったので、先頭の論理行の最初の表示行に戻す (03 §14.3.1)
+                    let cols_changed = before.get(&v).map(|s| s.0) != Some(st.view_size(v).0);
                     if cols_changed && let Some(view) = st.docs.views.get_mut(&v) {
                         view.scroll.wrap_idx = 0;
                     }
