@@ -137,7 +137,40 @@ fn flush_run(run: &mut String, parts: &mut Vec<(String, u16, bool)>, cfg: &Width
 }
 
 /// 展開の覚えを使う行の大きさ (これ未満は毎回展開する)。
-const UNITS_CACHE_MIN: usize = 4096;
+pub(super) const UNITS_CACHE_MIN: usize = 4096;
+
+/// 展開の覚えに持つ行の数 (複数カーソルの上下の移動で、元の行と行き先の行を交互に引いても展開し直さない)。
+pub(super) const UNITS_CACHE_LINES: usize = 2;
+
+/// 行 `line` の展開の覚えの鍵。
+pub(super) fn units_key(doc: &Document, line: usize) -> UnitsKey {
+    let cfg = doc_width_config(doc);
+    (
+        doc.revision(),
+        line,
+        esc_enabled(doc),
+        cfg.tab_width,
+        cfg.ambiguous_wide,
+        doc.display.show_whitespace,
+    )
+}
+
+/// 直近の覚え (`entries` の後ろほど新しい) から `key` を引く。当たったものは一番後ろへ移す。
+pub(super) fn cache_get<K: PartialEq, V: Clone>(entries: &mut Vec<(K, V)>, key: &K) -> Option<V> {
+    let i = entries.iter().position(|(k, _)| k == key)?;
+    let e = entries.remove(i);
+    let v = e.1.clone();
+    entries.push(e);
+    Some(v)
+}
+
+/// 覚えに足す (`UNITS_CACHE_LINES` を超えたら一番古いものを捨てる)。
+pub(super) fn cache_put<K, V>(entries: &mut Vec<(K, V)>, key: K, value: V) {
+    if entries.len() >= UNITS_CACHE_LINES {
+        entries.remove(0);
+    }
+    entries.push((key, value));
+}
 
 /// `units` の結果。長い行 (閾値以下で 4 KiB 以上) は、Revision・行・幅の設定が同じ間は覚えを使う
 /// (1 回の操作で `cursor_cell` と Frame の生成が同じ行を何度も展開するのを避ける、NFR-106)。
@@ -149,22 +182,31 @@ pub(super) fn units_for(doc: &Document, line: usize, content: &str) -> std::rc::
     if content.len() < UNITS_CACHE_MIN {
         return Rc::new(units_with(content, esc, ws, &cfg));
     }
-    let key: UnitsKey = (
-        doc.revision(),
-        line,
-        esc,
-        cfg.tab_width,
-        cfg.ambiguous_wide,
-        ws,
-    );
-    if let Some((k, u)) = doc.layout_cache.borrow().units.as_ref()
-        && *k == key
-    {
-        return u.clone();
+    let key = units_key(doc, line);
+    if let Some(u) = cache_get(&mut doc.layout_cache.borrow_mut().units, &key) {
+        return u;
     }
     let u = Rc::new(units_with(content, esc, ws, &cfg));
-    doc.layout_cache.borrow_mut().units = Some((key, u.clone()));
+    doc.layout_cache.borrow_mut().put_units(key, u.clone());
     u
+}
+
+/// 行 `line` の (本文の長さ, 表示単位)。覚えに当たれば行を文字列にしない (カーソルごとに行全体を写さない)。
+fn line_units(doc: &Document, line: usize) -> (usize, std::rc::Rc<Vec<Unit>>) {
+    let t = doc.text();
+    let l = LineIdx(line);
+    let len = t.line_end_byte(l).0 - t.line_to_byte(l).0;
+    if len >= UNITS_CACHE_MIN
+        && let Some(u) = cache_get(
+            &mut doc.layout_cache.borrow_mut().units,
+            &units_key(doc, line),
+        )
+    {
+        return (len, u);
+    }
+    let (_, content) = line_content(doc, line);
+    let us = units_for(doc, line, &content);
+    (content.len(), us)
 }
 
 /// 1 書記素 `g` (行内のバイト位置 `off`、表示列 `col`) を表示の単位に展開する (一般の経路)。
@@ -393,9 +435,9 @@ pub(crate) fn cursor_cell(doc: &Document, line: usize, byte: usize) -> (usize, u
         let (p, w) = ix.at_byte(doc.text(), ls, byte);
         return (p.col, w);
     }
-    let (_, content) = line_content(doc, line);
-    let us = units_for(doc, line, &content);
-    match us.iter().find(|u| u.byte >= byte) {
+    // 表示単位は位置の順なので二分探索する (複数カーソルで同じ行を何度も引いても、行の長さに比例しない)
+    let (_, us) = line_units(doc, line);
+    match us.get(us.partition_point(|u| u.byte < byte)) {
         Some(u) => (u.col, u.width.max(1)),
         None => (us.last().map_or(0, |u| u.col + u.width), 1),
     }
@@ -417,11 +459,10 @@ pub(crate) fn byte_at_col(doc: &Document, line: usize, dcol: usize) -> usize {
     if let Some((ls, ix)) = long_index(doc, line) {
         return ix.at_col(doc.text(), ls, dcol).byte;
     }
-    let (_, content) = line_content(doc, line);
-    let us = units_for(doc, line, &content);
-    us.iter()
-        .find(|u| dcol < u.col + u.width)
-        .map_or(content.len(), |u| u.byte)
+    // `col + width` は表示単位の順に増える (減らない) ので二分探索する
+    let (len, us) = line_units(doc, line);
+    us.get(us.partition_point(|u| u.col + u.width <= dcol))
+        .map_or(len, |u| u.byte)
 }
 
 #[cfg(test)]
@@ -429,6 +470,124 @@ mod tests {
     use eve_text::grapheme_indices;
 
     use super::*;
+
+    /// 長い行 (4 KiB 以上) の 2 行を交互に引いても展開し直さない (複数カーソルの上下の移動。03 §4.5.4 の「費用」)。
+    /// 位置と列は二分探索で引き、結果は行頭から数えた値と同じ。
+    #[test]
+    fn 長い行の表示単位は_2_行分覚え_交互に引いても展開し直さない() {
+        use crate::document::{Document, TextFormat};
+        let line = "a\tbあ".repeat(1_000);
+        let d = Document::from_text(
+            eve_text::Text::from(format!("{line}\n{line}\n").as_str()),
+            TextFormat::new_document(),
+        );
+        let first = line_units(&d, 0).1;
+        let second = line_units(&d, 1).1;
+        for (byte, col) in [(0, 0), (1, 1), (2, 4), (3, 5), (6, 7), (7, 8)] {
+            assert_eq!(cursor_col(&d, 0, byte), col, "byte {byte}");
+            assert_eq!(cursor_col(&d, 1, byte), col, "byte {byte}");
+            assert_eq!(byte_at_col(&d, 1, col), byte, "col {col}");
+        }
+        assert_eq!(
+            byte_at_col(&d, 0, usize::MAX),
+            line.len(),
+            "行の幅を超えれば行末"
+        );
+        assert!(
+            std::rc::Rc::ptr_eq(&first, &line_units(&d, 0).1)
+                && std::rc::Rc::ptr_eq(&second, &line_units(&d, 1).1),
+            "2 行とも覚えに当たる"
+        );
+        assert_eq!(d.layout_cache.borrow().units.len(), UNITS_CACHE_LINES);
+        assert!(
+            std::mem::size_of::<Unit>() <= 64,
+            "03 §11.2 の覚えの最悪の量の見積り (1 つ 64 バイト以下)"
+        );
+    }
+
+    /// 折り返しの覚えは表示単位の覚えと `Rc` を共有し、表示単位を捨てた行の折り返しと、本文を変えた後の覚えは放す
+    /// (03 §11.2 の覚えの量)。
+    #[test]
+    fn 折り返しの覚えは表示単位を共有し_捨てた行と本文を変えた後は放す() {
+        use crate::document::{Document, TextFormat};
+        let line = "ab ".repeat(2_000);
+        let mut d = Document::from_text(
+            eve_text::Text::from(format!("{line}\n{line}\n{line}\n").as_str()),
+            TextFormat::new_document(),
+        );
+        let s = crate::layout::WrapSettings::default();
+        let lr = crate::layout::line_rows(&d, 0, s, 40);
+        assert!(
+            std::rc::Rc::ptr_eq(lr.units_rc(), &line_units(&d, 0).1),
+            "同じ行の表示単位を 2 重に持たない"
+        );
+        assert_eq!(d.layout_cache.borrow().rows.len(), 1);
+        // 別の 2 行を引いて行 0 の表示単位を捨てると、行 0 の折り返しも捨てる
+        let _ = line_units(&d, 1);
+        let _ = line_units(&d, 2);
+        assert_eq!(d.layout_cache.borrow().rows.len(), 0);
+        let _ = crate::layout::line_rows(&d, 2, s, 40);
+        assert_eq!(d.layout_cache.borrow().rows.len(), 1);
+        // 本文を変えたら (Revision が変わったら) 両方を放す
+        let text = d.snapshot();
+        let cs = eve_text::ChangeSet::from_sorted_edits(&text, []).unwrap();
+        let rev = d.revision();
+        d.layout_cache
+            .get_mut()
+            .on_change(&text, &text, &cs, (rev, rev.next()), usize::MAX);
+        let cache = d.layout_cache.borrow();
+        assert_eq!((cache.units.len(), cache.rows.len()), (0, 0));
+    }
+
+    /// 行頭から数え直した値 (覚えを使わない参照)。
+    fn fresh(doc: &crate::document::Document, line: usize) -> (usize, Vec<Unit>) {
+        let (_, content) = line_content(doc, line);
+        let us = units_with(
+            &content,
+            esc_enabled(doc),
+            doc.display.show_whitespace,
+            &doc_width_config(doc),
+        );
+        (content.len(), us)
+    }
+
+    fn naive_byte_at_col(doc: &crate::document::Document, line: usize, dcol: usize) -> usize {
+        let (len, us) = fresh(doc, line);
+        us.iter()
+            .find(|u| dcol < u.col + u.width)
+            .map_or(len, |u| u.byte)
+    }
+
+    #[test]
+    fn セルの途中の列は前の単位に寄せ_タブ幅を変えた後も行頭から数えた値と同じ() {
+        use crate::document::{Document, TextFormat};
+        let line = "a\tbあ".repeat(1_000);
+        let mut d = Document::from_text(
+            eve_text::Text::from(line.as_str()),
+            TextFormat::new_document(),
+        );
+        // タブ (列 1..4) の中の列 2・3 はタブの位置 1、全角 (列 5..7) の右半分の列 6 はその位置 3
+        assert_eq!(byte_at_col(&d, 0, 2), 1);
+        assert_eq!(byte_at_col(&d, 0, 3), 1);
+        assert_eq!(byte_at_col(&d, 0, 6), 3);
+        for col in [0, 1, 2, 5, 6, 7, 100, 5_000] {
+            assert_eq!(
+                byte_at_col(&d, 0, col),
+                naive_byte_at_col(&d, 0, col),
+                "col {col}"
+            );
+        }
+        // タブ幅を変えたら、覚えた展開を使わずに数え直す
+        d.display.tab_width = 8;
+        for col in [2, 6, 9, 10, 100, 5_000] {
+            assert_eq!(
+                byte_at_col(&d, 0, col),
+                naive_byte_at_col(&d, 0, col),
+                "tab 8 col {col}"
+            );
+        }
+        assert_eq!(byte_at_col(&d, 0, 6), 1, "タブ (列 1..8) の中");
+    }
 
     /// `units` の ASCII の近道は、一般の経路 (書記素の表示の組み立て) と同じ結果になる前提に立つ:
     /// 印字できる ASCII 1 文字は、幅 1・マークなし・記号でない・幅の危険なし。

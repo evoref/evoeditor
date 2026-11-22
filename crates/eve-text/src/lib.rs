@@ -28,7 +28,7 @@ pub use grapheme::{
     prev_grapheme_boundary, snap_to_grapheme, snap_to_nearest_grapheme,
 };
 pub use join::{GRAPHEME_JOIN_UNICODE_VERSION, may_join_grapheme};
-pub use selection::{MapPolicy, Range, Selection};
+pub use selection::{MAX_CURSORS, MapPolicy, Range, Selection};
 pub use text::{Chunks, Snapshot, Text, TextBuilder, TextRead};
 pub use types::{ByteOff, ByteRange, CharIdx, LineEnding, LineIdx, Pos, Utf16Off};
 pub use width::{

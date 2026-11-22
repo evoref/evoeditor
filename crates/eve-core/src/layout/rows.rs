@@ -57,28 +57,47 @@ pub(crate) fn wrap_ctx(state: &EditorState, view: ViewId) -> Option<(WrapSetting
 }
 
 /// 1 論理行を表示行に分けた結果 (03 §14.3.1)。移動とスクロールが表示行を数えるのに使う。
-/// 位置はすべて行頭からのバイト位置 (`rel`)。
+/// 位置はすべて行頭からのバイト位置 (`rel`)。写しは安い (中身を共有する)。
+#[derive(Clone)]
 pub(crate) struct LineRows {
     /// 行頭の絶対バイト位置。
     pub ls: usize,
     content_len: usize,
     units: std::rc::Rc<Vec<Unit>>,
-    rows: Vec<wrap::WrapRow>,
+    rows: std::rc::Rc<Vec<wrap::WrapRow>>,
 }
 
 pub(crate) fn line_rows(doc: &Document, line: usize, s: WrapSettings, cols: usize) -> LineRows {
+    // 長い行は、同じ行・同じ幅の折り返しを覚える (複数カーソルの表示行の移動で、カーソルごとに折り返さない)
+    let t = doc.text();
+    let l = eve_text::LineIdx(line);
+    let long = t.line_end_byte(l).0 - t.line_to_byte(l).0 >= super::units::UNITS_CACHE_MIN;
+    let key = (super::units::units_key(doc, line), s, cols);
+    if long && let Some(lr) = doc.layout_cache.borrow_mut().get_rows(&key) {
+        return lr;
+    }
     let (ls, content) = line_content(doc, line);
     let units = units_for(doc, line, &content);
-    let rows = wrap_line(&content, &units, cols, s);
-    LineRows {
+    let rows = std::rc::Rc::new(wrap_line(&content, &units, cols, s));
+    let lr = LineRows {
         ls,
         content_len: content.len(),
         units,
         rows,
+    };
+    if long {
+        doc.layout_cache.borrow_mut().put_rows(key, lr.clone());
     }
+    lr
 }
 
 impl LineRows {
+    /// 表示単位 (覚えとの共有を試験で確かめる)。
+    #[cfg(test)]
+    pub(super) fn units_rc(&self) -> &std::rc::Rc<Vec<Unit>> {
+        &self.units
+    }
+
     /// 表示行の数 (1 以上)。
     pub fn len(&self) -> usize {
         self.rows.len()

@@ -248,7 +248,23 @@ pub(crate) fn status_model(
 
     // 右群: 選択・位置・文字コード・改行コード
     let r = view.selection.primary();
-    if !r.is_empty() {
+    if view.selection.len() >= 2 {
+        // 複数カーソル: 選択情報の代わりにカーソルの数を出す (03 §4.5.5、04 §8.7。優先度 4)
+        let count = [("count", view.selection.len().to_string())];
+        let count: Vec<(&str, &str)> = count.iter().map(|(k, v)| (*k, v.as_str())).collect();
+        let (long, short) = (
+            render(state, keys::STATUS_CURSORS_LONG, &count),
+            render(state, keys::STATUS_CURSORS_SHORT, &count),
+        );
+        items.push(item(
+            StatusKind::Selection,
+            &long,
+            Some(&short),
+            4,
+            Right,
+            CutPolicy::Never,
+        ));
+    } else if !r.is_empty() {
         let t = doc.text();
         let n = t.byte_to_char(r.end()).0 - t.byte_to_char(r.start()).0;
         let text = render(state, keys::STATUS_SELECTION, &[("count", &n.to_string())]);

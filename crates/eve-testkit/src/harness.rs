@@ -397,6 +397,25 @@ impl Harness {
         self.editor.state_mut().set_config(config);
     }
 
+    /// 最初の Window の今の View に Selection を置く (正規化される)。複数カーソルを足すコマンドの無い段 (M32 の段 2) と
+    /// fuzz で、複数の Range を直接与える (docs/03 §4.7.2)。
+    ///
+    /// # Panics
+    ///
+    /// 最初の Window に View が無いとき。
+    #[allow(
+        clippy::disallowed_methods,
+        reason = "複数の Range を置くコマンドが段 3 まで無いので、testkit は EditorState に直接触れる (STR-B3)"
+    )]
+    pub fn set_selection(&mut self, sel: eve_text::Selection) {
+        let st = self.editor.state();
+        let view = st
+            .first_window()
+            .and_then(|w| st.window_view(w))
+            .expect("View がある");
+        self.editor.state_mut().set_selection(view, sel);
+    }
+
     /// 左クリック (押して離す)。
     pub fn click(&mut self, row: i32, col: i32) {
         use eve_view::{Modifiers, MouseButton, MouseKind};

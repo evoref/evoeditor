@@ -22,6 +22,7 @@ mod workspace;
 
 pub use command::arg_schema::{ArgSpec, ArgType, command_args};
 pub use command::clipboard::ClipboardFallbackReason;
+pub use command::edit::MULTI_PASTE_MAX_BYTES;
 pub use editor::builtin_registry;
 pub use jobs::cancel::CancelToken;
 pub use keymap::{KEYMAP_CONTEXTS, resolve_keymap};

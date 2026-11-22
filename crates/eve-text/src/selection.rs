@@ -84,8 +84,11 @@ impl MapPolicy {
     }
 }
 
-/// 複数の `Range`。非空で、`primary` はそのうちの 1 つを指す。
-/// v0.1〜v0.4 は 1 つに制限されるが、編集コマンドは複数を前提に書く (03 §4.5)。
+/// Selection が持てる Range の数の上限 (03 §4.5.1 の MCUR-6、INV-S3)。定数で、設定では変えない。
+/// Range の数を増やす操作は、超えるなら選択を変えずに知らせる。編集・移動・写像は数を増やさない (併合で減るだけ)。
+pub const MAX_CURSORS: usize = 10_000;
+
+/// 複数の `Range`。非空で、`primary` はそのうちの 1 つを指す。数は `1..=MAX_CURSORS` (INV-S3。v0.5 の M32 から)。
 /// 内部は `Vec` (仕様の `SmallVec` は依存を増やすので使わない。1 要素の確保は View ごとの低頻度)。
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Selection {
@@ -105,10 +108,11 @@ impl Selection {
         Selection::single(Range::point(pos))
     }
 
-    /// `ranges` が空、または `primary` が範囲外なら `None` (N5: 空の Selection は作れない)。
-    /// 並べ替えや併合はしない (`merged` を通す)。
+    /// `ranges` が空、`primary` が範囲外、または `MAX_CURSORS` を超えるなら `None` (N5: 空の Selection は作れない。
+    /// INV-S3: 上限を超える Selection は作れない)。並べ替えや併合はしない (`merged` を通す)。
     pub fn new(ranges: Vec<Range>, primary: usize) -> Option<Selection> {
-        (primary < ranges.len()).then_some(Selection { ranges, primary })
+        (primary < ranges.len() && ranges.len() <= MAX_CURSORS)
+            .then_some(Selection { ranges, primary })
     }
 
     pub fn primary(&self) -> &Range {
@@ -315,6 +319,16 @@ mod tests {
     fn 空の_selection_は作れない() {
         assert!(Selection::new(vec![], 0).is_none());
         assert!(Selection::new(vec![r(0, 0)], 1).is_none());
+    }
+
+    #[test]
+    fn 上限ちょうどは作れて_1_つ多いと作れない() {
+        let at = |n: usize| (0..n).map(|i| r(i, i)).collect::<Vec<_>>();
+        assert_eq!(
+            Selection::new(at(MAX_CURSORS), MAX_CURSORS - 1).map(|s| s.len()),
+            Some(MAX_CURSORS)
+        );
+        assert!(Selection::new(at(MAX_CURSORS + 1), 0).is_none());
     }
 
     #[test]

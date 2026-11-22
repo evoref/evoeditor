@@ -3,6 +3,7 @@
 //! コピーは常に内部レジスタへ書き (Snapshot と範囲を持つだけ。O(1))、システムクリップボードへは Effect で依頼する。
 //! 64 KiB 未満は文字列にして `Inline`、それ以上はハンドルで渡し、Host が `take_clipboard` で取り出してワーカーで文字列化する。
 //! 貼り付けは `RequestClipboard` で読み取りを要求し、応答 (`ClipboardContent`) が届いた時点の Selection に入れる。
+//! 複数カーソルのコピーは、空でない Range ごとの片を内部レジスタに持つ (03 §4.5.3 の MCUR-8)。
 //!
 //! 不正バイトのエスケープ文字 (v0.4 の M23、03 §8.3.1 の「本文に入れる規則」): 内部レジスタはエスケープ文字のまま持ち、
 //! コピー元の `notation` と `escape_origin` を覚える。システムのクリップボードへ渡す文字列は `ClipboardSource::to_text`
@@ -46,7 +47,7 @@ impl ClipboardFallbackReason {
     }
 }
 
-use eve_text::{ByteRange, Snapshot, TextRead};
+use eve_text::{ByteRange, LineEnding, Snapshot, TextRead};
 use eve_view::{
     ClipboardHandleId, ClipboardTarget, ClipboardText, ClipboardToken, Effect, MessageLevel,
 };
@@ -58,12 +59,18 @@ use crate::ui_model::keys;
 /// `Inline` にする上限 (これ未満は core が文字列化する)。
 pub const INLINE_MAX_BYTES: usize = 64 * 1024;
 
-/// クリップボードの中身 (Snapshot と範囲) と、コピーした時点の文書の状態 (03 §8.3.1 の「コピー」)。`Send`。
+/// クリップボードの中身 (Snapshot と片の範囲の並び) と、コピーした時点の文書の状態 (03 §8.3.1 の「コピー」)。`Send`。
 /// 文字列化は Host がワーカーで行う (`to_text`)。
+///
+/// 複数カーソルのコピー (03 §4.5.3 の MCUR-8) は、空でない Range ごとの片を文書の順に持ち、文字列にするときは片の間に
+/// `joiner` (コピー元の文書の既定の改行) を入れる (末尾には足さない)。片が 1 つなら v0.4 までと同じ。
 #[derive(Clone, Debug)]
 pub struct ClipboardSource {
     pub snapshot: Snapshot,
-    pub range: ByteRange,
+    /// 片の範囲 (文書の順で重ならない。1 つ以上)。
+    pieces: Vec<ByteRange>,
+    /// 片の間に入れる改行。
+    joiner: LineEnding,
     /// コピー元が `pua_escape != DisabledCollision` だった (エスケープ文字を表記 `<0xNN>` にして文字列化する)。
     /// 偽は衝突の文書で、私用文字をそのまま渡す。文書の外の文字列 (メッセージ履歴など) も偽。
     pub notation: bool,
@@ -76,22 +83,102 @@ pub struct ClipboardSource {
 }
 
 impl ClipboardSource {
-    /// 範囲の総バイト数 (文字列化の前に上限と比べる。表記にすると長くなる分は数えない、05 §8.1)。
+    /// 片 1 つの中身 (文書の外の文字列や、1 つの Range のコピー)。
+    pub(crate) fn single(snapshot: Snapshot, range: ByteRange) -> ClipboardSource {
+        ClipboardSource {
+            snapshot,
+            pieces: vec![range],
+            joiner: LineEnding::Lf,
+            notation: false,
+            escape_origin: None,
+            indistinct: false,
+        }
+    }
+
+    /// 片の並び (文書の順) と、連結に使う改行を入れた中身。`pieces` が空なら `None`。
+    pub(crate) fn with_pieces(
+        snapshot: Snapshot,
+        pieces: Vec<ByteRange>,
+        joiner: LineEnding,
+    ) -> Option<ClipboardSource> {
+        (!pieces.is_empty()).then_some(ClipboardSource {
+            snapshot,
+            pieces,
+            joiner,
+            notation: false,
+            escape_origin: None,
+            indistinct: false,
+        })
+    }
+
+    /// 片の範囲 (文書の順)。
+    pub fn pieces(&self) -> &[ByteRange] {
+        &self.pieces
+    }
+
+    /// 片の間に入れる改行。
+    pub fn joiner(&self) -> LineEnding {
+        self.joiner
+    }
+
+    /// 片の合計のバイト数に、連結の改行を足したもの (文字列化の前に上限と比べる。表記にすると長くなる分は数えない、
+    /// 05 §8.1。03 §4.5.3 の MCUR-8)。
     pub fn len_bytes(&self) -> usize {
-        self.range.end.0 - self.range.start.0
+        let body: usize = self.pieces.iter().map(|r| r.end.0 - r.start.0).sum();
+        body + self.joiner.byte_len() * (self.pieces.len() - 1)
     }
 
     /// システムのクリップボードへ渡す文字列 (`Inline`・Host が `Handle` を文字列化するとき・OSC 52 で共通、02 §5.4)。
-    /// `notation` が真ならエスケープ文字を表記 `<0xNN>` にする (表示と同じ。03 §8.3.1)。改行は変えない。
+    /// `notation` が真ならエスケープ文字を表記 `<0xNN>` にする (表示と同じ。03 §8.3.1)。片の中の改行は変えず、片の間に
+    /// `joiner` を入れる。
     pub fn to_text(&self) -> String {
-        if !self.notation {
-            return self.snapshot.slice_to_string(self.range);
-        }
         let mut out = String::with_capacity(self.len_bytes());
-        for chunk in self.snapshot.chunks(self.range) {
-            crate::command::insert_rule::push_notation(&mut out, chunk);
+        for (i, &range) in self.pieces.iter().enumerate() {
+            if i > 0 {
+                out.push_str(self.joiner.as_str());
+            }
+            self.push_piece_text(&mut out, range);
         }
         out
+    }
+
+    /// 片 `i` を `to_text` と同じ規則で文字列にしたもの。
+    pub(crate) fn piece_text(&self, i: usize) -> String {
+        let mut out = String::new();
+        if let Some(&range) = self.pieces.get(i) {
+            self.push_piece_text(&mut out, range);
+        }
+        out
+    }
+
+    /// 片 `i` の中身 (エスケープ文字のまま)。
+    pub(crate) fn piece_raw(&self, i: usize) -> String {
+        self.pieces
+            .get(i)
+            .map(|&r| self.snapshot.slice_to_string(r))
+            .unwrap_or_default()
+    }
+
+    /// 内部レジスタの中身 (エスケープ文字のまま。片の間に `joiner` を入れる)。
+    pub(crate) fn raw_text(&self) -> String {
+        let mut out = String::with_capacity(self.len_bytes());
+        for i in 0..self.pieces.len() {
+            if i > 0 {
+                out.push_str(self.joiner.as_str());
+            }
+            out.push_str(&self.piece_raw(i));
+        }
+        out
+    }
+
+    fn push_piece_text(&self, out: &mut String, range: ByteRange) {
+        if !self.notation {
+            out.push_str(&self.snapshot.slice_to_string(range));
+            return;
+        }
+        for chunk in self.snapshot.chunks(range) {
+            crate::command::insert_rule::push_notation(out, chunk);
+        }
     }
 }
 
@@ -134,7 +221,8 @@ impl EditorState {
         );
     }
 
-    /// 選択をコピーする。選択が空なら何もしない (`false`)。内部レジスタへ書き、`SetClipboard` を積む。
+    /// 選択をコピーする。空でない Range が無ければ何もしない (`false`)。内部レジスタへ書き、`SetClipboard` を積む。
+    /// 空でない Range を文書の順に片にし、文書の既定の改行で連結する (03 §4.5.3 の MCUR-8。空のカーソルは数えない)。
     pub(crate) fn copy_selection(&mut self) -> bool {
         let Some(doc_id) = self.active_document() else {
             return false;
@@ -146,25 +234,27 @@ impl EditorState {
         else {
             return false;
         };
-        let r = view.selection.primary();
-        if r.is_empty() {
-            return false;
-        }
-        let range = ByteRange::new(r.start(), r.end());
+        let pieces: Vec<ByteRange> = view
+            .selection
+            .iter()
+            .filter(|r| !r.is_empty())
+            .map(|r| ByteRange::new(r.start(), r.end()))
+            .collect();
         let Some(doc) = self.docs.documents.get(&doc_id) else {
+            return false;
+        };
+        let Some(mut source) =
+            ClipboardSource::with_pieces(doc.snapshot(), pieces, doc.format.default_eol)
+        else {
             return false;
         };
         // コピーした時点の文書の状態を覚える (03 §8.3.1 の「コピー」)
         let ctx = crate::command::insert_rule::EscapeContext::of(&doc.format);
-        let source = ClipboardSource {
-            snapshot: doc.snapshot(),
-            range,
-            notation: ctx.notation,
-            escape_origin: ctx.escape_encoding,
-            // 衝突の文書 (b): 不正バイトと真の私用文字の両方があり、区別できない
-            indistinct: doc.format.pua_escape == eve_encoding::PuaEscapeMode::DisabledCollision
-                && doc.format.invalid_bytes > 0,
-        };
+        source.notation = ctx.notation;
+        source.escape_origin = ctx.escape_encoding;
+        // 衝突の文書 (b): 不正バイトと真の私用文字の両方があり、区別できない
+        source.indistinct = doc.format.pua_escape == eve_encoding::PuaEscapeMode::DisabledCollision
+            && doc.format.invalid_bytes > 0;
         self.put_clipboard(source);
         true
     }
@@ -174,13 +264,7 @@ impl EditorState {
         let snapshot = eve_text::Text::from(text).snapshot();
         let range = ByteRange::new(eve_text::ByteOff(0), eve_text::ByteOff(text.len()));
         // 文書の外の文字列: 私用文字に不正バイトの意味は無い (貼り付け先では外からの文字列と同じに扱う)
-        self.put_clipboard(ClipboardSource {
-            snapshot,
-            range,
-            notation: false,
-            escape_origin: None,
-            indistinct: false,
-        });
+        self.put_clipboard(ClipboardSource::single(snapshot, range));
     }
 
     /// 内部レジスタへ書き、システムへの書込を依頼する。64 KiB 未満は文字列、それ以上はハンドルで渡す。

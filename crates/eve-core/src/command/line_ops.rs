@@ -2,7 +2,9 @@
 //!
 //! どれも「対象の行」(選択が触れる行) に対する編集で、1 つの Transaction (Undo 1 回) で適用する。対象の行は、各 Range が
 //! 触れる行の和集合を、連続する行のまとまり (ブロック) にしたもの。選択が行頭 (列 0) で終わり、その行より前から始まっているときは、
-//! 最後の行は含めない (選んでいない行を巻き込まない)。
+//! 最後の行は含めない (選んでいない行を巻き込まない)。各 Range は、始まりの行を含むブロックに付いていく (03 §4.5.2)。
+//!
+//! spec: 03 §4.5.2, 03 §15.3, 03 §15.4
 
 use eve_text::{ByteOff, ByteRange, ChangeSet, Edit, LineIdx, Pos, Range, Selection, TextRead};
 use eve_view::{CommandId, DocumentId, ViewId};
@@ -74,6 +76,20 @@ pub(crate) fn target_blocks(doc: &Document, sel: &Selection) -> Vec<Block> {
     out
 }
 
+/// 各 Range の始まりの行を含むブロックの番号 (`blocks` は `target_blocks` の結果)。どの Range にも、始まりの行を含む
+/// ブロックがある (ブロックは全 Range の触れる行から作る)。
+fn block_of_ranges(t: &impl TextRead, sel: &Selection, blocks: &[Block]) -> Vec<usize> {
+    sel.iter()
+        .map(|r| {
+            let line = bl(t, r.start());
+            blocks
+                .iter()
+                .position(|&(a, b)| line >= a && line <= b)
+                .unwrap_or(0)
+        })
+        .collect()
+}
+
 /// 編集を 1 つの Transaction として適用する。`after` は適用後の Selection を (`ChangeSet` を見て) 作る。
 fn commit(
     ctx: &mut CommandCtx<'_>,
@@ -95,7 +111,10 @@ fn commit(
         return CommandResult::Rejected(RejectReason::InvalidArgs);
     };
     let ranges = after(doc, &cs);
-    let Some(after_sel) = Selection::new(ranges, before.primary_index()) else {
+    // 重なった・同じ位置になった Range を併合してから記録する (Undo / Redo で戻す選択も INV-S1〜S3 を満たす)
+    let Some(after_sel) =
+        Selection::new(ranges, before.primary_index()).map(|s| s.merged(cs.len_after()))
+    else {
         return CommandResult::Rejected(RejectReason::InvalidArgs);
     };
     let tx = Transaction::new(cs, Origin::Command(CommandId::new(name)), ctx.state.now())
@@ -218,29 +237,19 @@ fn duplicate_line(ctx: &mut CommandCtx<'_>) -> CommandResult {
     let starts: Vec<(usize, usize, usize)> =
         shifts.iter().map(|&((a, _), s, c)| (a, s, c)).collect();
     let inserted: Vec<usize> = edits.iter().map(|e| e.insert.len()).collect();
+    // 各 Range は、始まりの行を含むブロックの複製に移る (終わりが次の行の行頭でも同じブロック。move_lines と同じ)
+    let block_of = block_of_ranges(t, &sel, &blocks);
     let after_sel = sel.clone();
-    let line_of = {
-        let t = doc.text();
-        sel.iter()
-            .map(|r| (bl(t, r.anchor), bl(t, r.head)))
-            .collect::<Vec<_>>()
-    };
-    let blocks2 = blocks.clone();
     commit(ctx, ids::EDIT_DUPLICATE_LINE, edits, move |_, _| {
-        let pos = |p: Pos, line: usize| -> Pos {
-            // p が属するブロックの番号
-            let i = blocks2
-                .iter()
-                .position(|&(a, b)| line >= a && line <= b)
-                .unwrap_or(0);
+        let pos = |p: Pos, i: usize| -> Pos {
             let (_, s, c) = starts[i];
             let earlier: usize = inserted[..i].iter().sum();
             ByteOff(p.0 - s + c + earlier)
         };
         after_sel
             .iter()
-            .zip(&line_of)
-            .map(|(r, &(la, lh))| Range::new(pos(r.anchor, la), pos(r.head, lh)))
+            .zip(&block_of)
+            .map(|(r, &i)| Range::new(pos(r.anchor, i), pos(r.head, i)))
             .collect()
     })
 }
@@ -258,8 +267,9 @@ fn delete_line(ctx: &mut CommandCtx<'_>) -> CommandResult {
     let t = doc.text();
     let total = t.len_lines();
     let mut edits: Vec<Edit> = Vec::new();
-    let mut cursors: Vec<usize> = Vec::new(); // 削除後に カーソルを置く元の座標
-    for (a, b) in target_blocks(doc, &sel) {
+    let mut cursors: Vec<usize> = Vec::new(); // 削除後に カーソルを置く元の座標 (ブロックごと)
+    let blocks = target_blocks(doc, &sel);
+    for &(a, b) in &blocks {
         let (mut start, end) = (line_span(doc, a).0, line_span(doc, b).1);
         // 最後の行が改行で終わっていなければ、手前の改行も取り除く (空の行を残さない)
         if b + 1 == total && le(t, b) == end && a > 0 {
@@ -271,10 +281,12 @@ fn delete_line(ctx: &mut CommandCtx<'_>) -> CommandResult {
             insert: "".into(),
         });
     }
+    // 各 Range は、始まりの行を含むブロックの削除の位置へ (Range の数と主の番号を保ち、同じ位置は併合で 1 つになる)
+    let block_of = block_of_ranges(t, &sel, &blocks);
     commit(ctx, ids::EDIT_DELETE_LINE, edits, move |_, cs| {
-        cursors
+        block_of
             .iter()
-            .map(|&p| Range::point(cs.map_pos(ByteOff(p), eve_text::Bias::After)))
+            .map(|&i| Range::point(cs.map_pos(ByteOff(cursors[i]), eve_text::Bias::After)))
             .collect()
     })
 }
@@ -296,11 +308,15 @@ fn move_lines(ctx: &mut CommandCtx<'_>, up: bool) -> CommandResult {
     // 動かしたブロックと、ブロックの本文 (`[bs, be]`) の位置のずれ (符号つき)、ブロックの後の行頭の写し先
     // (選択が行頭で終わるとき、その位置もブロックについていく)
     let mut moved: Vec<Moved> = Vec::new();
-    for (a, b) in target_blocks(doc, &sel) {
+    let blocks = target_blocks(doc, &sel);
+    // どれか 1 つのブロックが文書の端で動けなければ、全体を何もしない (一部のブロックだけを動かして並びを崩さない。
+    // 03 §4.5.2)
+    let stuck = |&(a, b): &Block| if up { a == 0 } else { b + 1 >= total };
+    if blocks.iter().any(stuck) {
+        return CommandResult::Done;
+    }
+    for (a, b) in blocks {
         if up {
-            if a == 0 {
-                continue;
-            }
             // [前の行 + 改行][ブロック 本体][ブロックの改行] → [ブロック 本体][前の行の改行][前の行 本体][ブロックの改行]
             let (ps, pe) = (lb(t, a - 1), le(t, a - 1));
             let (bs, be) = (line_span(doc, a).0, le(t, b));
@@ -322,9 +338,6 @@ fn move_lines(ctx: &mut CommandCtx<'_>, up: bool) -> CommandResult {
                 after: (end, ps + (be - bs) + (bs - pe)),
             });
         } else {
-            if b + 1 >= total {
-                continue;
-            }
             let (bs, be) = (line_span(doc, a).0, le(t, b));
             let (ns, ne) = (lb(t, b + 1), le(t, b + 1));
             let end = line_span(doc, b + 1).1;

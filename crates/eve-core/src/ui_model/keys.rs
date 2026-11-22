@@ -39,6 +39,7 @@ pub(crate) const INFO_PANE_NO_ROOM: &str = "info.pane.no_room";
 pub(crate) const INFO_PANE_SINGLE_PANE: &str = "info.pane.single_pane";
 pub(crate) const INFO_PASTE_AS_BYTES: &str = "info.paste.as_bytes";
 pub(crate) const INFO_PASTE_ESCAPE_AS_TEXT: &str = "info.paste.escape_as_text";
+pub(crate) const INFO_PASTE_MULTI_TOO_LARGE: &str = "info.paste.multi_too_large";
 pub(crate) const INFO_PASTE_NOTATION_AS_TEXT: &str = "info.paste.notation_as_text";
 pub(crate) const INFO_PASTE_PUA_AS_TEXT: &str = "info.paste.pua_as_text";
 pub(crate) const INFO_PASTE_SEARCH_NOTATION: &str = "info.paste.search_notation";
@@ -170,6 +171,8 @@ pub(crate) const MSG_SWAP_UNREADABLE: &str = "msg.swap.unreadable";
 pub(crate) const MSG_WORKSPACE_ROOT_INVALID: &str = "msg.workspace.root_invalid";
 pub(crate) const MSG_WORKSPACE_SCAN_FAILED: &str = "msg.workspace.scan_failed";
 pub(crate) const MSG_WORKSPACE_SEARCH_FAILED: &str = "msg.workspace.search_failed";
+pub(crate) const STATUS_CURSORS_LONG: &str = "status.cursors.long";
+pub(crate) const STATUS_CURSORS_SHORT: &str = "status.cursors.short";
 pub(crate) const STATUS_DEGRADED_LONG_LINE_LONG: &str = "status.degraded.long_line.long";
 pub(crate) const STATUS_DEGRADED_LONG_LINE_SHORT: &str = "status.degraded.long_line.short";
 pub(crate) const STATUS_DEGRADED_PANES_LONG: &str = "status.degraded.panes.long";
@@ -325,7 +328,7 @@ pub(crate) const UI_WORKSPACE_SEARCH_TITLE: &str = "ui.workspace_search.title";
 
 /// すべての定数 (キーの順。試験に使う)。
 #[cfg(test)]
-const ALL: [&str; 301] = [
+const ALL: [&str; 304] = [
     HINT_UI_CANCEL,
     INFO_APP_RELEASE_SUMMARY,
     INFO_APP_UPDATED,
@@ -362,6 +365,7 @@ const ALL: [&str; 301] = [
     INFO_PANE_SINGLE_PANE,
     INFO_PASTE_AS_BYTES,
     INFO_PASTE_ESCAPE_AS_TEXT,
+    INFO_PASTE_MULTI_TOO_LARGE,
     INFO_PASTE_NOTATION_AS_TEXT,
     INFO_PASTE_PUA_AS_TEXT,
     INFO_PASTE_SEARCH_NOTATION,
@@ -487,6 +491,8 @@ const ALL: [&str; 301] = [
     MSG_WORKSPACE_ROOT_INVALID,
     MSG_WORKSPACE_SCAN_FAILED,
     MSG_WORKSPACE_SEARCH_FAILED,
+    STATUS_CURSORS_LONG,
+    STATUS_CURSORS_SHORT,
     STATUS_DEGRADED_LONG_LINE_LONG,
     STATUS_DEGRADED_LONG_LINE_SHORT,
     STATUS_DEGRADED_PANES_LONG,

@@ -291,6 +291,14 @@ fn check_state(h: &Harness, revs: &mut BTreeMap<DocumentId, u64>, step: usize) {
                     view.selection,
                     "step {step}: {v:?} の選択が正規化されていない"
                 );
+                // INV-S3 (docs/03 §4.5.1 の MCUR-6): Range の数は上限以下で、主は範囲内
+                assert!(
+                    view.selection.len() <= eve_text::MAX_CURSORS
+                        && view.selection.primary_index() < view.selection.len(),
+                    "step {step}: {v:?} の Range の数 {} / 主 {}",
+                    view.selection.len(),
+                    view.selection.primary_index()
+                );
             }
         }
     }
@@ -749,6 +757,109 @@ fn pane_op(h: &mut Harness, b: &mut Bytes<'_>) -> String {
     }
 }
 
+/// 複数カーソルの操作を 1 つ (docs/03 §4.5、§4.7.1 の fuzz。v0.5 の M32 の段 2)。フォーカスのペインの View に 1〜8 個の
+/// Range (重なり・同じ位置・逆向き・文書の外を含む。置くときに正規化される) を置き、半分は続けて既存の編集・クリップボード・
+/// 行のコマンドを 1 つ実行する (カーソルを足すコマンドは段 3 で、`cmd` の一覧の外の操作として足す)。
+fn multi_cursor_op(h: &mut Harness, b: &mut Bytes<'_>) -> String {
+    const EDITS: &[&str] = &[
+        "edit.insert_text",
+        "edit.newline",
+        "edit.delete_backward",
+        "edit.delete_forward",
+        "edit.delete_word_backward",
+        "edit.indent",
+        "edit.outdent",
+        "edit.duplicate_line",
+        "edit.delete_line",
+        "edit.move_line_up",
+        "edit.move_line_down",
+        "clipboard.copy",
+        "clipboard.cut",
+        "edit.undo",
+        "edit.redo",
+        "paste",
+        "edit.paste",
+        "edit.delete_word_forward",
+        "file.reload",
+        "search.replace_all",
+    ];
+    let st = h.editor.state();
+    let Some(view) = st.first_window().and_then(|w| st.window_view(w)) else {
+        return "multi_cursor (View なし)".to_owned();
+    };
+    let len = st
+        .view(view)
+        .and_then(|v| st.document(v.doc))
+        .map_or(0, eve_core::Document::len_bytes);
+    let n = 1 + usize::from(b.u8() % 8);
+    // 文書の長さ + 2 までを選ぶ (外の位置は正規化で末尾に収まる)
+    let at = |b: &mut Bytes<'_>| {
+        eve_text::ByteOff(usize::from(u16::from_le_bytes([b.u8(), b.u8()])) % (len + 3))
+    };
+    let ranges: Vec<eve_text::Range> = (0..n)
+        .map(|_| {
+            let anchor = at(b);
+            let head = if b.u8() & 1 == 0 { anchor } else { at(b) };
+            eve_text::Range::new(anchor, head)
+        })
+        .collect();
+    let primary = usize::from(b.u8()) % n;
+    let Some(sel) = eve_text::Selection::new(ranges, primary) else {
+        return "multi_cursor (Selection を作れない)".to_owned();
+    };
+    let what = format!("multi_cursor {:?}", sel.ranges());
+    h.set_selection(sel);
+    if b.u8() & 1 == 0 {
+        return what;
+    }
+    match EDITS[usize::from(b.u8()) % EDITS.len()] {
+        "edit.insert_text" => {
+            let t = b.text(8);
+            h.cmd_with("edit.insert_text", Args::new().with_str("text", &t));
+            format!("{what} + insert_text {t:?}")
+        }
+        "paste" => {
+            let t = b.text(24);
+            h.paste(&t);
+            format!("{what} + paste {t:?}")
+        }
+        "edit.paste" => {
+            // システムのクリップボードの応答 (半分は読み取れなかった扱いで内部レジスタを使う)
+            let seen = h.effects().len();
+            h.cmd("edit.paste");
+            let token = h.effects()[seen..].iter().rev().find_map(|e| match e {
+                eve_view::Effect::RequestClipboard { token, .. } => Some(*token),
+                _ => None,
+            });
+            let t = (b.u8() & 1 == 0).then(|| b.text(24));
+            if let Some(token) = token {
+                h.clipboard_content(token, t.as_deref());
+            }
+            format!("{what} + edit.paste {t:?}")
+        }
+        "file.reload" => {
+            h.cmd("file.reload");
+            h.run_jobs();
+            format!("{what} + file.reload")
+        }
+        "search.replace_all" => {
+            let (find, with) = (b.text(4), b.text(4));
+            h.keys("ctrl+r");
+            h.text(&find);
+            h.keys("tab");
+            h.text(&with);
+            h.keys("alt+a");
+            h.run_jobs();
+            h.keys("escape");
+            format!("{what} + search.replace_all {find:?} → {with:?}")
+        }
+        id => {
+            h.cmd(id);
+            format!("{what} + {id}")
+        }
+    }
+}
+
 /// タブラインの操作を 1 つ (docs/03 §9.9 の PANE-12、03 §4.7.1 の fuzz)。`ui.tab_line` の 3 値の切り替え、開いている・
 /// 閉じた文書のタブへのマウス (左の押下・離す・ホイール・右)、文書を足して 2 つ以上にする。
 fn tab_op(h: &mut Harness, b: &mut Bytes<'_>) -> String {
@@ -886,7 +997,7 @@ pub fn editor_sequence(data: &[u8]) {
         // (c) 外から入れた文字列の検査の対象 (入れた文字列と、入れる前の今の文書の ID・エスケープ文字の数)
         let mut outside: Option<(String, Option<(DocumentId, usize)>)> = None;
         // 操作の種類。足すときは剰余を増やし、既存の番号を変えない (コミットした corpus の操作の番号は 24 未満)
-        match b.u8() % 25 {
+        match b.u8() % 26 {
             0 => {
                 let t = b.text(16);
                 log(step, &format!("text {t:?}"));
@@ -1033,6 +1144,11 @@ pub fn editor_sequence(data: &[u8]) {
             24 => {
                 // タブライン (v0.5 の M32。docs/03 §9.9 の PANE-12): `ui.tab_line` の切り替え・タブのマウス・新しい文書
                 let what = tab_op(&mut h, &mut b);
+                log(step, &what);
+            }
+            25 => {
+                // 複数カーソル (v0.5 の M32 の段 2。docs/03 §4.5): 複数の Range を置き、既存の編集を 1 つ
+                let what = multi_cursor_op(&mut h, &mut b);
                 log(step, &what);
             }
             _ => {
