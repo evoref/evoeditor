@@ -31,10 +31,14 @@ pub struct Theme {
     pub pane_bar: Style,
     /// フォーカスのあるペインの見出し (v0.5)。
     pub pane_bar_active: Style,
+    /// タブラインの地と、アクティブでないタブ (v0.5、FR-510)。
+    pub tab_line: Style,
+    /// アクティブなタブ (v0.5、FR-510)。
+    pub tab_line_active: Style,
 }
 
 /// eve-tui が引くロール名 (07 §8.2 の表のロール名と同じ。表との突合は `tests/theme_table.rs`)。
-pub const ROLES: [&str; 21] = [
+pub const ROLES: [&str; 23] = [
     "ui.status_bar",
     "ui.status_bar.chord",
     "ui.message.info",
@@ -56,6 +60,8 @@ pub const ROLES: [&str; 21] = [
     "ui.pane.border",
     "ui.pane.bar",
     "ui.pane.bar.active",
+    "ui.tab_line",
+    "ui.tab_line.active",
 ];
 
 impl Theme {
@@ -83,6 +89,8 @@ impl Theme {
             pane_border: r.get("ui.pane.border"),
             pane_bar: r.get("ui.pane.bar"),
             pane_bar_active: r.get("ui.pane.bar.active"),
+            tab_line: r.get("ui.tab_line"),
+            tab_line_active: r.get("ui.tab_line.active"),
         }
     }
 }

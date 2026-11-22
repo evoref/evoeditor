@@ -258,6 +258,16 @@ config_enum! {
         Same = "same",
     }
 
+    /// タブラインを出すか (`ui.tab_line`、07 §5.3、03 §9.9 の PANE-12)。
+    TabLineMode {
+        /// 開いている文書が 2 つ以上のとき (既定)。
+        Auto = "auto",
+        /// いつも出す (文書が 1 つでも)。
+        Always = "always",
+        /// 出さない。
+        Never = "never",
+    }
+
     /// OSC 52 でクリップボードへ書く方針 (`clipboard.osc52`、05 §8.1)。
     Osc52Policy {
         /// SSH 接続中、またはシステムのクリップボードに書けないとき (既定)。
@@ -467,6 +477,8 @@ config_keys! {
     mouse: bool = true, "ui.mouse", boolean;
     /// `ui.hint_bar`: 画面下のヒントバーを出すか (FR-504、04 §8.5)。`ui.toggle_hint_bar` で実行中に切り替えられる。
     hint_bar: bool = true, "ui.hint_bar", boolean;
+    /// `ui.tab_line`: 画面の最上行のタブライン (FR-510、03 §9.9 の PANE-12)。`config.reload` で即時に効く。
+    tab_line: TabLineMode = TabLineMode::Auto, "ui.tab_line", choice;
     /// `ui.mouse_wheel_lines`: ホイール 1 目盛りのスクロール量 (表示行)。
     mouse_wheel_lines: u8 = 3, "ui.mouse_wheel_lines", int(1, 20);
     /// `ui.which_key_delay_ms`: チョードの保留から which-key を出すまでの時間 (04 §7.4)。

@@ -1,0 +1,4 @@
+0: 0-0 Reset Reset BOLD | 1-10 Reset Reset REVERSED | 39-39 Reset Reset BOLD
+1: 0-2 Reset Reset BOLD
+8: 0-39 Reset Reset REVERSED
+10: 0-1 Reset Reset REVERSED | 8-9 Reset Reset REVERSED | 20-21 Reset Reset REVERSED | 28-29 Reset Reset REVERSED

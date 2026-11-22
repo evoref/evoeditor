@@ -360,6 +360,43 @@ impl Harness {
         }));
     }
 
+    /// タブラインのタブへのマウス操作 (`InputEvent::ChromeMouse`、`ChromeTarget::Tab`。docs/03 §9.9 の PANE-7 (e) /
+    /// PANE-12 (g))。`doc` はタブの文書 (`TabItem.doc`)。
+    pub fn tab_mouse(
+        &mut self,
+        doc: DocumentId,
+        kind: eve_view::MouseKind,
+        mods: eve_view::Modifiers,
+    ) {
+        self.input(InputEvent::ChromeMouse(eve_view::ChromeMouseEvent {
+            kind,
+            mods,
+            target: eve_view::ChromeTarget::Tab { doc },
+            row: 0,
+            col: 1,
+        }));
+    }
+
+    /// タブの左クリック (押して離す)。
+    pub fn click_tab(&mut self, doc: DocumentId) {
+        use eve_view::{Modifiers, MouseButton, MouseKind};
+        self.tab_mouse(doc, MouseKind::Down(MouseButton::Left), Modifiers::NONE);
+        self.tab_mouse(doc, MouseKind::Up(MouseButton::Left), Modifiers::NONE);
+    }
+
+    /// 設定 `ui.tab_line` を替える (`config.reload` で読んだのと同じく即時に効く。docs/03 §9.9 の PANE-12 (f))。
+    #[allow(
+        clippy::disallowed_methods,
+        reason = "設定の 1 キーだけを差し替える入口が無いので、testkit は EditorState に直接触れる (STR-B3)"
+    )]
+    pub fn set_tab_line(&mut self, mode: eve_config::TabLineMode) {
+        let config = eve_config::Config {
+            tab_line: mode,
+            ..self.editor.state().config().clone()
+        };
+        self.editor.state_mut().set_config(config);
+    }
+
     /// 左クリック (押して離す)。
     pub fn click(&mut self, row: i32, col: i32) {
         use eve_view::{Modifiers, MouseButton, MouseKind};

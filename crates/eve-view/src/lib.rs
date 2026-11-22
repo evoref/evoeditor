@@ -30,8 +30,8 @@ pub use frame::{
     CursorPlacement, CursorShape, CutPolicy, Divider, Frame, HelpLine, HelpLineKind, HintContext,
     HintItem, HintModel, InputFieldModel, KeyLabel, ListItem, Message, MessageModel, OverlayModel,
     PaneBarModel, PaneFrame, RenderRow, ReplaceRowModel, RoleStyles, RowSource, SearchBarModel,
-    Span, StatusAlign, StatusItem, StatusKind, StatusModel, Style, StyleMods, WhichKeyItem,
-    WhichKeyModel,
+    Span, StatusAlign, StatusItem, StatusKind, StatusModel, Style, StyleMods, TabItem,
+    TabLineModel, WhichKeyItem, WhichKeyModel,
 };
 pub use ids::{
     ClipboardHandleId, ClipboardToken, DocumentId, JobId, Revision, ViewId, ViewRevision, WindowId,

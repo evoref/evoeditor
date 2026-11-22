@@ -499,6 +499,7 @@ mod tests {
                 "ui.locale",
                 "ui.mouse",
                 "ui.hint_bar",
+                "ui.tab_line",
                 "ui.mouse_wheel_lines",
                 "ui.which_key_delay_ms",
                 "search.newline_sugar",

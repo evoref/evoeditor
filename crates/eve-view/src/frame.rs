@@ -9,7 +9,7 @@
 
 use crate::caps::CellSize;
 use crate::events::MessageLevel;
-use crate::ids::{Revision, ViewId, ViewRevision, WindowId};
+use crate::ids::{DocumentId, Revision, ViewId, ViewRevision, WindowId};
 use crate::input::KeyStroke;
 use crate::query::FocusTarget;
 
@@ -207,6 +207,28 @@ pub struct PaneBarModel {
     /// 見出しの矩形 (1 行。編集面の左上が原点)。
     pub rect: CellRect,
     /// 見出しの項目 (表示順)。
+    pub items: Vec<StatusItem>,
+}
+
+/// タブライン (画面の最上行の 1 行、FR-510、03 §9.9 の PANE-12)。開いている文書の一覧で、frontend が並べ方 (どの範囲を
+/// 出すか・省いた側の印) を決めて画面の最上行に置く。行は core が編集面から引いてある (`Frame.size` はその後の大きさ)。
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct TabLineModel {
+    /// タブ (開いた順。`buffer.next` と同じ順)。
+    pub tabs: Vec<TabItem>,
+    /// アクティブなタブ (フォーカスのペインの文書) の `tabs` の添字。
+    pub active: Option<usize>,
+}
+
+/// タブラインの 1 つのタブ (03 §9.9 の PANE-12 (c))。
+///
+/// `items` はペインの見出しと同じ `StatusItem` の並び (`Path` = 03 §9.9 の PANE-11 の名前 (`cut` は `Middle`)・`Dirty`・
+/// `ReadOnly`)。frontend は種類で描き分けず、見出しと同じく並べる (知らない種類も同じに扱う)。
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TabItem {
+    /// タブの文書 (クリックは `ChromeTarget::Tab { doc }` で返す)。
+    pub doc: DocumentId,
+    /// タブの項目 (表示順)。
     pub items: Vec<StatusItem>,
 }
 
@@ -643,12 +665,15 @@ impl RoleStyles {
 pub struct Frame {
     /// 描く先の Window。
     pub window: WindowId,
-    /// 編集面全体の大きさ (セル。端末の全体からクロームと検索バーの行を除いたもの)。
+    /// 編集面全体の大きさ (セル。端末の全体からクローム・検索バー・タブラインの行を除いたもの)。
     pub size: CellSize,
     /// 編集面のペイン (レイアウト済み。レイアウトの木の葉の順。縮退表示ではフォーカスのペインだけ、03 §9.9 の PANE-10 (a))。
     pub panes: Vec<PaneFrame>,
     /// ペインの間の区切り (core が確保する)。ペインが 1 つのときと縮退表示では空。
     pub dividers: Vec<Divider>,
+    /// タブライン (FR-510)。出すときだけ `Some` で、frontend が画面の最上行に置く (03 §9.9 の PANE-12)。`PaneFrame.rect`・
+    /// 見出し・区切り・`primary_cursor` は編集面の座標のままで、frontend が編集面を置いた位置 (タブラインの下) を足して出す。
+    pub tab_line: Option<TabLineModel>,
     /// 入力の行き先。
     pub focus: FocusTarget,
     /// 編集面にフォーカスがあるときだけ `Some`。

@@ -1,0 +1,12 @@
+<[>lib.rs ] [ mod.rs (a) ]             >
+ 1|lib
+ 2|
+~
+~
+~
+~
+~
+lib.rs (2/4)         行 1, 桁 1 UTF-8 LF
+
+^Q 終了 ^P コマンド ^S 保存 ^F 検索
+cursor: Some(CellPos { col: 3, row: 1 })

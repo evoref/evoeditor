@@ -2,7 +2,7 @@
 //! 端末の癖 (Ctrl+H ⇔ Backspace など) は frontend が吸収し、core は正規化済みのキーだけを見る。
 
 use crate::caps::Capabilities;
-use crate::ids::{ClipboardToken, ViewId};
+use crate::ids::{ClipboardToken, DocumentId, ViewId};
 
 /// frontend から core に届く入力。宛先の Window は `Editor::handle_input` の引数で渡す。
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -17,11 +17,12 @@ pub enum InputEvent {
     /// マウス (docs/03 §5.8.1)。編集面 (ペインの本文) の中だけ。編集面の外 (クローム・オーバーレイ) は frontend が先に判定し、
     /// ここへは渡さない。
     Mouse(MouseEvent),
-    /// core が意味を持つクローム (ペインの見出し) のマウス (02 §7.3、03 §9.9 の PANE-7)。frontend は自分が置いたクローム・
+    /// core が意味を持つクローム (ペインの見出し・タブラインのタブ) のマウス (02 §7.3、03 §9.9 の PANE-7)。frontend は自分が置いたクローム・
     /// オーバーレイを先に判定し、`ChromeTarget` の対象の上の操作だけをここで渡す。
     ChromeMouse(ChromeMouseEvent),
     /// Window の編集面のサイズ (セル単位)。端末の全体からクローム (ステータスバー・ヒントバー) の行を除いた大きさで、
-    /// 検索バーの行は含む (core が引く。`Frame.size` は引いた後の大きさ)。core の扱いは 1 つ (編集面の大きさを置き換える) だが、
+    /// 検索バーとタブライン (03 §9.9 の PANE-12) の行は含む (core が引く。`Frame.size` は引いた後の大きさ。タブラインの
+    /// 出し入れで frontend が送り直す要は無い)。core の扱いは 1 つ (編集面の大きさを置き換える) だが、
     /// frontend が送る契機は 2 つある。
     /// 1. 端末の大きさが変わった (入力スレッドが送る)。
     /// 2. 描こうとした `Frame` の大きさが今の編集面と合わない (ヒントバーの表示の切り替えでクロームの行数が変わった直後など)。
@@ -106,7 +107,7 @@ pub struct ChromeMouseEvent {
     pub mods: Modifiers,
     /// 操作の対象。
     pub target: ChromeTarget,
-    /// 対象の矩形 (見出しの `rect`) の左上を原点とする行 (`MouseAt` と同じく i32)。
+    /// 対象の矩形 (見出しの `rect`・タブの矩形) の左上を原点とする行 (`MouseAt` と同じく i32)。
     pub row: i32,
     /// 対象の矩形の左上を原点とする列 (セル)。
     pub col: i32,
@@ -120,6 +121,12 @@ pub enum ChromeTarget {
     PaneBar {
         /// 見出しのペインが表示している View (`PaneFrame.view`)。
         view: ViewId,
+    },
+    /// タブラインのタブ (`TabItem`、FR-510)。core はその文書をフォーカスのペインに表示する (03 §9.9 の PANE-7 (e) /
+    /// PANE-12 (g))。
+    Tab {
+        /// タブの文書 (`TabItem.doc`)。
+        doc: DocumentId,
     },
 }
 

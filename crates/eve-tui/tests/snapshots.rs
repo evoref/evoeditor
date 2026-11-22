@@ -32,7 +32,8 @@ const DEFAULT_LOOK: Look = Look {
 /// (文字の層, スタイルの層)。
 fn screen(h: &mut Harness, look: Look) -> (String, String) {
     let f = h.frame();
-    let base = f.size.rows + eve_tui::buffer::bar_rows(&f);
+    // 端末の編集面 = Frame の編集面 + 検索バー + タブライン (core が引いた行)
+    let base = f.size.rows + eve_tui::buffer::bar_rows(&f) + eve_tui::buffer::tab_rows(&f);
     let window = CellSize {
         cols: f.size.cols,
         // ヒントバーの表示に合わせた端末の大きさ (本物の frontend なら食い違いで Resize を送る)
@@ -604,4 +605,160 @@ fn ファインダの長いルートと長いパスは中間を詰める() {
     let (text, styles) = screen(&mut h, DEFAULT_LOOK);
     golden::check(&dir().join("finder-long.txt"), &text.replace('\\', "/"));
     golden::check(&dir().join("finder-long.styles.txt"), &styles);
+}
+
+// ---- タブライン (v0.5 の M32、FR-510。03 §4.7.1 の L4) ----
+
+/// `files` を順に開いた Harness (最後に開いた文書を表示する)。
+fn opened_files(h: Harness, files: &[(&str, &[u8])]) -> Harness {
+    let mut h = h;
+    for (p, d) in files {
+        h.fs.add_file(p, d);
+    }
+    for (p, _) in files {
+        h.open(p);
+        h.run_jobs();
+    }
+    h
+}
+
+/// 4 つの文書 (同じ名前の 2 つを含む) を開き、先頭の文書をアクティブにして 1 文字入れた画面。
+fn tab_line_docs(h: Harness) -> Harness {
+    let mut h = opened_files(
+        h,
+        &[
+            ("/w/main.rs", MEMO.as_bytes()),
+            ("/w/lib.rs", b"lib\n"),
+            ("/p/a/mod.rs", b"a\n"),
+            ("/p/b/mod.rs", b"b\n"),
+        ],
+    );
+    h.cmd("buffer.next");
+    h.text("x");
+    h
+}
+
+/// 画面の最上行 (タブライン) の文字列。
+fn top_line(h: &mut Harness, look: Look) -> String {
+    let (text, _) = screen(h, look);
+    text.lines().next().unwrap_or_default().to_owned()
+}
+
+// verifies: AC-FR-510-1
+#[test]
+fn タブライン_全部入る幅ではアクティブなタブを反転と印で示し_編集面を_1_行下げる() {
+    let mut h = tab_line_docs(Harness::new().with_size(80, 14));
+    check("tab-line", &mut h);
+    let line = top_line(&mut h, DEFAULT_LOOK);
+    assert!(
+        line.starts_with("[▶main.rs [+] ] [ lib.rs ] [ mod.rs (a) ] [ mod.rs (b) ]"),
+        "{line}"
+    );
+    // ハードウェアカーソルは編集面の座標に、タブラインの 1 行を足した所
+    let f = h.frame();
+    let c = f.primary_cursor.expect("カーソル").pos;
+    let base = f.size.rows + eve_tui::buffer::tab_rows(&f);
+    let r = render_screen(
+        &f,
+        CellSize {
+            cols: 80,
+            rows: base + eve_tui::buffer::chrome_rows(base, f.hint_bar),
+        },
+        ColorDepth::TrueColor,
+        &Glyphs::unicode(),
+    );
+    assert_eq!(
+        r.cursor,
+        Some(eve_view::CellPos {
+            col: c.col,
+            row: c.row + 1
+        })
+    );
+}
+
+// verifies: AC-FR-510-1
+#[test]
+fn タブライン_無色の段と_ascii_の縮退でも_アクティブと省いた側が分かる() {
+    let mut h = tab_line_docs(Harness::new().with_size(40, 8).with_caps(Capabilities {
+        color_depth: ColorDepth::Mono,
+        ascii_only: true,
+        ..Capabilities::default()
+    }));
+    // 2 つ目のタブ (lib.rs) をアクティブにする: 40 桁には入らない。lib.rs から右の mod.rs (a) を足し、左の main.rs
+    // (15 セル) は入らないので左右に `<` `>`
+    h.cmd("buffer.next");
+    let look = Look {
+        depth: ColorDepth::Mono,
+        glyphs: Glyphs::ascii(),
+    };
+    check_look("tab-line-mono-ascii", &mut h, look);
+    let line = top_line(&mut h, look);
+    assert!(line.starts_with("<[>lib.rs ] [ mod.rs (a) ]"), "{line}");
+    assert!(line.ends_with('>'), "{line}");
+}
+
+/// 描いたタブライン (ASCII の縮退) は、ヘッドレスの ASCII の Frame の最上行 (`eve_testkit::tab_line_text`) と同じ並びに
+/// なる (03 §9.9 の PANE-12 (h)。並べ方を 2 か所に書いているので、食い違いをここで捕まえる)。マウスの幾何のタブの矩形は、
+/// 描いた `[` から `]` までと一致する (PANE-12 (g))。
+// verifies: AC-FR-510-1, AC-FR-510-2
+#[test]
+fn タブライン_描いた並びはヘッドレスの_ascii_の_frame_と同じで_マウスの矩形はタブと一致する() {
+    let files: Vec<(String, Vec<u8>)> = [
+        "/w/a.txt",
+        "/w/全角の名前.txt",
+        "/w/a-quite-long-file-name-that-is-cut-in-the-middle.txt",
+        "/w/b.txt",
+        "/x/b.txt",
+        "/w/\u{202e}evil.txt",
+        "/w/c.txt",
+    ]
+    .iter()
+    .map(|p| ((*p).to_owned(), b"x\n".to_vec()))
+    .collect();
+    let refs: Vec<(&str, &[u8])> = files
+        .iter()
+        .map(|(p, d)| (p.as_str(), d.as_slice()))
+        .collect();
+    for cols in [20u16, 23, 31, 40, 57, 80, 120, 200] {
+        let mut h = opened_files(Harness::new().with_size(cols, 6), &refs);
+        for step in 0..files.len() {
+            if step % 2 == 1 {
+                h.text("x");
+            }
+            let f = h.frame();
+            let model = f.tab_line.as_ref().expect("タブライン");
+            let want = eve_testkit::tab_line_text(model, cols);
+            let look = Look {
+                depth: ColorDepth::Mono,
+                glyphs: Glyphs::ascii(),
+            };
+            let got = top_line(&mut h, look);
+            assert_eq!(got, want, "{cols} 桁、アクティブ {:?}", model.active);
+            // マウスの幾何のタブ: 矩形の両端が `[` と `]` (行の幅で切ったものを除く)
+            let r = render_screen(
+                &f,
+                CellSize {
+                    cols,
+                    rows: f.size.rows + 1 + eve_tui::buffer::chrome_rows(f.size.rows + 1, true),
+                },
+                ColorDepth::Mono,
+                &Glyphs::ascii(),
+            );
+            let g = eve_tui::mouse::Geometry::from_frame(&f, &Glyphs::ascii());
+            let active_doc = model.active.map(|i| model.tabs[i].doc);
+            assert!(
+                g.tabs.iter().any(|t| Some(t.doc) == active_doc),
+                "アクティブなタブは並べた範囲にある"
+            );
+            for t in &g.tabs {
+                let first = r.buffer[(t.rect.col, 0)].symbol().to_owned();
+                assert_eq!(first, "[", "{cols} 桁 {t:?}");
+                let end = t.rect.col + t.rect.cols - 1;
+                if end + 1 < cols {
+                    assert_eq!(r.buffer[(end, 0)].symbol(), "]", "{cols} 桁 {t:?}");
+                }
+            }
+            h.cmd("buffer.next");
+        }
+    }
 }
